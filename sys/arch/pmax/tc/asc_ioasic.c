@@ -1,4 +1,4 @@
-/* $NetBSD: asc_ioasic.c,v 1.25 2012/10/13 06:49:26 tsutsui Exp $ */
+/* $NetBSD: asc_ioasic.c,v 1.20 2008/04/28 20:23:31 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,13 +30,13 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: asc_ioasic.c,v 1.25 2012/10/13 06:49:26 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asc_ioasic.c,v 1.20 2008/04/28 20:23:31 martin Exp $");
 
+#include <sys/types.h>
 #include <sys/param.h>
-#include <sys/buf.h>
-#include <sys/bus.h>
-#include <sys/device.h>
 #include <sys/systm.h>
+#include <sys/device.h>
+#include <sys/buf.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -44,6 +44,8 @@ __KERNEL_RCSID(0, "$NetBSD: asc_ioasic.c,v 1.25 2012/10/13 06:49:26 tsutsui Exp 
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 #include <dev/scsipi/scsi_message.h>
+
+#include <machine/bus.h>
 
 #include <dev/ic/ncr53c9xreg.h>
 #include <dev/ic/ncr53c9xvar.h>
@@ -67,13 +69,6 @@ struct asc_softc {
 #define	ASC_DMAACTIVE		0x0002
 #define	ASC_MAPLOADED		0x0004
 };
-
-#define	ASC_READ_REG(asc, reg)						\
-	((uint8_t)bus_space_read_4((asc)->sc_bst, (asc)->sc_scsi_bsh,	\
-	    (reg) * sizeof(uint32_t)))
-#define	ASC_WRITE_REG(asc, reg, val)					\
-	bus_space_write_4((asc)->sc_bst, (asc)->sc_scsi_bsh,		\
-	    (reg) * sizeof(uint32_t), (uint8_t)(val))
 
 static int  asc_ioasic_match(device_t, cfdata_t, void *);
 static void asc_ioasic_attach(device_t, device_t, void *);
@@ -218,7 +213,7 @@ asc_ioasic_setup(struct ncr53c9x_softc *sc, uint8_t **addr, size_t *len,
 	size_t size;
 	vaddr_t cp;
 
-	NCR_DMA(("%s: start %d@%p,%s\n", device_xname(sc->sc_dev),
+	NCR_DMA(("%s: start %d@%p,%s\n", sc->sc_dev.dv_xname,
 	    *asc->sc_dmalen, *asc->sc_dmaaddr, ispullup ? "IN" : "OUT"));
 
 	/* upto two 4KB pages */
@@ -309,7 +304,7 @@ static int
 asc_ioasic_intr(struct ncr53c9x_softc *sc)
 {
 	struct asc_softc *asc = (struct asc_softc *)sc;
-	ssize_t trans, resid;
+	int trans, resid;
 	u_int tcl, tcm, ssr, scr, intr;
 	
 	if ((asc->sc_flags & ASC_DMAACTIVE) == 0)
@@ -338,8 +333,8 @@ asc_ioasic_intr(struct ncr53c9x_softc *sc)
 
 	if (asc->sc_dmasize == 0) {
 		/* A "Transfer Pad" operation completed */
-		tcl = ASC_READ_REG(asc, NCR_TCL); 
-		tcm = ASC_READ_REG(asc, NCR_TCM);
+		tcl = NCR_READ_REG(sc, NCR_TCL); 
+		tcm = NCR_READ_REG(sc, NCR_TCM);
 		NCR_DMA(("ioasic_intr: discarded %d bytes (tcl=%d, tcm=%d)\n",
 		    tcl | (tcm << 8), tcl, tcm));
 		return 0;
@@ -347,17 +342,17 @@ asc_ioasic_intr(struct ncr53c9x_softc *sc)
 
 	resid = 0;
 	if ((asc->sc_flags & ASC_ISPULLUP) == 0 &&
-	    (resid = (ASC_READ_REG(asc, NCR_FFLAG) & NCRFIFO_FF)) != 0) {
+	    (resid = (NCR_READ_REG(sc, NCR_FFLAG) & NCRFIFO_FF)) != 0) {
 		NCR_DMA(("ioasic_intr: empty FIFO of %d ", resid));
 		DELAY(1);
 	}
 
-	resid += (tcl = ASC_READ_REG(asc, NCR_TCL));
-	resid += (tcm = ASC_READ_REG(asc, NCR_TCM)) << 8;
+	resid += (tcl = NCR_READ_REG(sc, NCR_TCL));
+	resid += (tcm = NCR_READ_REG(sc, NCR_TCM)) << 8;
 
 	trans = asc->sc_dmasize - resid;
 	if (trans < 0) {			/* transferred < 0 ? */
-		printf("ioasic_intr: xfer (%zd) > req (%zu)\n",
+		printf("ioasic_intr: xfer (%d) > req (%d)\n",
 		    trans, asc->sc_dmasize);
 		trans = asc->sc_dmasize;
 	}
@@ -419,8 +414,12 @@ static uint8_t
 asc_read_reg(struct ncr53c9x_softc *sc, int reg)
 {
 	struct asc_softc *asc = (struct asc_softc *)sc;
+	uint32_t v;
 
-	return ASC_READ_REG(asc, reg);
+	v = bus_space_read_4(asc->sc_bst, asc->sc_scsi_bsh,
+	    reg * sizeof(uint32_t));
+
+	return v & 0xff;
 }
 
 static void
@@ -428,15 +427,15 @@ asc_write_reg(struct ncr53c9x_softc *sc, int reg, uint8_t val)
 {
 	struct asc_softc *asc = (struct asc_softc *)sc;
 
-	ASC_WRITE_REG(asc, reg, val);
+	bus_space_write_4(asc->sc_bst, asc->sc_scsi_bsh,
+	    reg * sizeof(uint32_t), val);
 }
 
 static int
 asc_dma_isintr(struct ncr53c9x_softc *sc)
 {
-	struct asc_softc *asc = (struct asc_softc *)sc;
 
-	return (ASC_READ_REG(asc, NCR_STAT) & NCRSTAT_INT) != 0;
+	return (NCR_READ_REG(sc, NCR_STAT) & NCRSTAT_INT) != 0;
 }
 
 static int

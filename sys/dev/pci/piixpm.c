@@ -1,4 +1,4 @@
-/* $NetBSD: piixpm.c,v 1.40 2012/02/14 15:08:07 pgoyette Exp $ */
+/* $NetBSD: piixpm.c,v 1.26.4.1 2010/11/20 18:23:20 riz Exp $ */
 /*	$OpenBSD: piixpm.c,v 1.20 2006/02/27 08:25:02 grange Exp $	*/
 
 /*
@@ -22,13 +22,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: piixpm.c,v 1.40 2012/02/14 15:08:07 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: piixpm.c,v 1.26.4.1 2010/11/20 18:23:20 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
-#include <sys/mutex.h>
+#include <sys/rwlock.h>
 #include <sys/proc.h>
 
 #include <sys/bus.h>
@@ -49,22 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD: piixpm.c,v 1.40 2012/02/14 15:08:07 pgoyette Exp $")
 #define DPRINTF(x)
 #endif
 
-#define PIIXPM_IS_CSB5(id) \
-	(PCI_VENDOR((id)) == PCI_VENDOR_SERVERWORKS && \
-	PCI_PRODUCT((id)) == PCI_PRODUCT_SERVERWORKS_CSB5)
 #define PIIXPM_DELAY	200
 #define PIIXPM_TIMEOUT	1
-
-#define PIIXPM_INDIRECTIO_BASE	0xcd6
-#define PIIXPM_INDIRECTIO_SIZE	2
-#define PIIXPM_INDIRECTIO_INDEX	0
-#define PIIXPM_INDIRECTIO_DATA	1
-
-#define SB800_PM_SMBUS0EN_LO	0x2c
-#define SB800_PM_SMBUS0EN_HI	0x2d
-
-#define SB800_PM_SMBUS0EN_ENABLE	0x0001
-#define SB800_PM_SMBUS0EN_BADDR		0xffe0
 
 struct piixpm_softc {
 	device_t		sc_dev;
@@ -79,10 +65,9 @@ struct piixpm_softc {
 
 	pci_chipset_tag_t	sc_pc;
 	pcitag_t		sc_pcitag;
-	pcireg_t		sc_id;
 
 	struct i2c_controller	sc_i2c_tag;
-	kmutex_t		sc_i2c_mutex;
+	krwlock_t		sc_i2c_rwlock;
 	struct {
 		i2c_op_t     op;
 		void *      buf;
@@ -97,12 +82,9 @@ struct piixpm_softc {
 static int	piixpm_match(device_t, cfdata_t, void *);
 static void	piixpm_attach(device_t, device_t, void *);
 
-static bool	piixpm_suspend(device_t, const pmf_qual_t *);
-static bool	piixpm_resume(device_t, const pmf_qual_t *);
+static bool	piixpm_suspend(device_t PMF_FN_PROTO);
+static bool	piixpm_resume(device_t PMF_FN_PROTO);
 
-static int	piixpm_sb800_init(struct piixpm_softc *,
-    struct pci_attach_args *);
-static void	piixpm_csb5_reset(void *);
 static int	piixpm_i2c_acquire_bus(void *, int);
 static void	piixpm_i2c_release_bus(void *, int);
 static int	piixpm_i2c_exec(void *, i2c_op_t, i2c_addr_t, const void *,
@@ -158,14 +140,19 @@ piixpm_attach(device_t parent, device_t self, void *aux)
 	pcireg_t base, conf;
 	pcireg_t pmmisc;
 	pci_intr_handle_t ih;
+	char devinfo[256];
 	const char *intrstr = NULL;
 
 	sc->sc_dev = self;
-	sc->sc_id = pa->pa_id;
 	sc->sc_pc = pa->pa_pc;
 	sc->sc_pcitag = pa->pa_tag;
 
-	pci_aprint_devinfo(pa, NULL);
+	aprint_naive("\n");
+	aprint_normal("\n");
+
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	aprint_normal_dev(self, "%s (rev. 0x%02x)\n", devinfo,
+	    PCI_REVISION(pa->pa_class));
 
 	if (!pmf_device_register(self, piixpm_suspend, piixpm_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");
@@ -202,17 +189,6 @@ piixpm_attach(device_t parent, device_t self, void *aux)
 		(PCI_REVISION(pa->pa_class) < 3) ? ACPIPMT_BADLATCH : 0 );
 
 nopowermanagement:
-
-	/* SB800 rev 0x40+ needs special initialization */
-	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_ATI &&
-	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_ATI_SB600_SMB &&
-	    PCI_REVISION(pa->pa_class) >= 0x40) {
-		if (piixpm_sb800_init(sc, pa) == 0)
-			goto attach_i2c;
-		aprint_normal_dev(self, "SMBus disabled\n");
-		return;
-	}
-
 	if ((conf & PIIX_SMB_HOSTC_HSTEN) == 0) {
 		aprint_normal_dev(self, "SMBus disabled\n");
 		return;
@@ -249,16 +225,14 @@ nopowermanagement:
 
 	aprint_normal("\n");
 
-attach_i2c:
 	/* Attach I2C bus */
-	mutex_init(&sc->sc_i2c_mutex, MUTEX_DEFAULT, IPL_NONE);
+	rw_init(&sc->sc_i2c_rwlock);
 	sc->sc_i2c_tag.ic_cookie = sc;
 	sc->sc_i2c_tag.ic_acquire_bus = piixpm_i2c_acquire_bus;
 	sc->sc_i2c_tag.ic_release_bus = piixpm_i2c_release_bus;
 	sc->sc_i2c_tag.ic_exec = piixpm_i2c_exec;
 
-	memset(&iba, 0, sizeof(iba));
-	iba.iba_type = I2C_TYPE_SMBUS;
+	bzero(&iba, sizeof(iba));
 	iba.iba_tag = &sc->sc_i2c_tag;
 	config_found_ia(self, "i2cbus", &iba, iicbus_print);
 
@@ -266,7 +240,7 @@ attach_i2c:
 }
 
 static bool
-piixpm_suspend(device_t dv, const pmf_qual_t *qual)
+piixpm_suspend(device_t dv PMF_FN_ARGS)
 {
 	struct piixpm_softc *sc = device_private(dv);
 
@@ -279,7 +253,7 @@ piixpm_suspend(device_t dv, const pmf_qual_t *qual)
 }
 
 static bool
-piixpm_resume(device_t dv, const pmf_qual_t *qual)
+piixpm_resume(device_t dv PMF_FN_ARGS)
 {
 	struct piixpm_softc *sc = device_private(dv);
 
@@ -291,81 +265,15 @@ piixpm_resume(device_t dv, const pmf_qual_t *qual)
 	return true;
 }
 
-/*
- * Extract SMBus base address from SB800 Power Management (PM) registers.
- * The PM registers can be accessed either through indirect I/O (CD6/CD7) or
- * direct mapping if AcpiMMioDecodeEn is enabled. Since this function is only
- * called once it uses indirect I/O for simplicity.
- */
-static int
-piixpm_sb800_init(struct piixpm_softc *sc, struct pci_attach_args *pa)
-{
-	bus_space_tag_t iot = pa->pa_iot;
-	bus_space_handle_t ioh;	/* indirect I/O handle */
-	uint16_t val, base_addr;
-
-	/* Fetch SMB base address */
-	if (bus_space_map(iot,
-	    PIIXPM_INDIRECTIO_BASE, PIIXPM_INDIRECTIO_SIZE, 0, &ioh)) {
-		device_printf(sc->sc_dev, "couldn't map indirect I/O space\n");
-		return EBUSY;
-	}
-	bus_space_write_1(iot, ioh, PIIXPM_INDIRECTIO_INDEX,
-	    SB800_PM_SMBUS0EN_LO);
-	val = bus_space_read_1(iot, ioh, PIIXPM_INDIRECTIO_DATA);
-	bus_space_write_1(iot, ioh, PIIXPM_INDIRECTIO_INDEX,
-	    SB800_PM_SMBUS0EN_HI);
-	val |= bus_space_read_1(iot, ioh, PIIXPM_INDIRECTIO_DATA) << 8;
-	bus_space_unmap(iot, ioh, 2);
-
-	if ((val & SB800_PM_SMBUS0EN_ENABLE) == 0)
-		return ENOENT;
-
-	base_addr = val & SB800_PM_SMBUS0EN_BADDR;
-
-	aprint_debug_dev(sc->sc_dev, "SMBus @ 0x%04x\n", base_addr);
-
-	sc->sc_smb_iot = iot;
-	if (bus_space_map(sc->sc_smb_iot, PCI_MAPREG_IO_ADDR(base_addr),
-	    PIIX_SMB_SIZE, 0, &sc->sc_smb_ioh)) {
-		aprint_error_dev(sc->sc_dev, "can't map smbus I/O space\n");
-		return EBUSY;
-	}
-	aprint_normal_dev(sc->sc_dev, "polling (SB800)\n");
-	sc->sc_poll = 1;
-
-	return 0;
-}
-
-static void
-piixpm_csb5_reset(void *arg)
-{
-	struct piixpm_softc *sc = arg;
-	pcireg_t base, hostc, pmbase;
-
-	base = pci_conf_read(sc->sc_pc, sc->sc_pcitag, PIIX_SMB_BASE);
-	hostc = pci_conf_read(sc->sc_pc, sc->sc_pcitag, PIIX_SMB_HOSTC);
-
-	pmbase = pci_conf_read(sc->sc_pc, sc->sc_pcitag, PIIX_PM_BASE);
-	pmbase |= PIIX_PM_BASE_CSB5_RESET;
-	pci_conf_write(sc->sc_pc, sc->sc_pcitag, PIIX_PM_BASE, pmbase);
-	pmbase &= ~PIIX_PM_BASE_CSB5_RESET;
-	pci_conf_write(sc->sc_pc, sc->sc_pcitag, PIIX_PM_BASE, pmbase);
-
-	pci_conf_write(sc->sc_pc, sc->sc_pcitag, PIIX_SMB_BASE, base);
-	pci_conf_write(sc->sc_pc, sc->sc_pcitag, PIIX_SMB_HOSTC, hostc);
-
-	(void) tsleep(&sc, PRIBIO, "csb5reset", hz/2);
-}
-
 static int
 piixpm_i2c_acquire_bus(void *cookie, int flags)
 {
 	struct piixpm_softc *sc = cookie;
 
-	if (!cold)
-		mutex_enter(&sc->sc_i2c_mutex);
+	if (cold || sc->sc_poll || (flags & I2C_F_POLL))
+		return (0);
 
+	rw_enter(&sc->sc_i2c_rwlock, RW_WRITER);
 	return 0;
 }
 
@@ -374,8 +282,10 @@ piixpm_i2c_release_bus(void *cookie, int flags)
 {
 	struct piixpm_softc *sc = cookie;
 
-	if (!cold)
-		mutex_exit(&sc->sc_i2c_mutex);
+	if (cold || sc->sc_poll || (flags & I2C_F_POLL))
+		return;
+
+	rw_exit(&sc->sc_i2c_rwlock);
 }
 
 static int
@@ -387,7 +297,7 @@ piixpm_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 	u_int8_t ctl = 0, st;
 	int retries;
 
-	DPRINTF(("%s: exec: op %d, addr 0x%x, cmdlen %zu, len %zu, flags 0x%x\n",
+	DPRINTF(("%s: exec: op %d, addr 0x%x, cmdlen %d, len %d, flags 0x%x\n",
 	    device_xname(sc->sc_dev), op, addr, cmdlen, len, flags));
 
 	/* Wait for bus to be idle */
@@ -405,8 +315,7 @@ piixpm_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 	if (cold || sc->sc_poll)
 		flags |= I2C_F_POLL;
 
-	if (!I2C_OP_STOP_P(op) || cmdlen > 1 || len > 2 ||
-	    (cmdlen == 0 && len > 1))
+	if (!I2C_OP_STOP_P(op) || cmdlen > 1 || len > 2)
 		return (1);
 
 	/* Setup transfer */
@@ -430,10 +339,7 @@ piixpm_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 	if (I2C_OP_WRITE_P(op)) {
 		/* Write data */
 		b = buf;
-		if (cmdlen == 0 && len == 1)
-			bus_space_write_1(sc->sc_smb_iot, sc->sc_smb_ioh,
-			    PIIX_SMB_HCMD, b[0]);
-		else if (len > 0)
+		if (len > 0)
 			bus_space_write_1(sc->sc_smb_iot, sc->sc_smb_ioh,
 			    PIIX_SMB_HD0, b[0]);
 		if (len > 1)
@@ -442,12 +348,9 @@ piixpm_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 	}
 
 	/* Set SMBus command */
-	if (cmdlen == 0) {
-		if (len == 0)
-			ctl = PIIX_SMB_HC_CMD_QUICK;
-		else
-			ctl = PIIX_SMB_HC_CMD_BYTE;
-	} else if (len == 1)
+	if (len == 0)
+		ctl = PIIX_SMB_HC_CMD_BYTE;
+	else if (len == 1)
 		ctl = PIIX_SMB_HC_CMD_BDATA;
 	else if (len == 2)
 		ctl = PIIX_SMB_HC_CMD_WDATA;
@@ -461,10 +364,7 @@ piixpm_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 
 	if (flags & I2C_F_POLL) {
 		/* Poll for completion */
-		if (PIIXPM_IS_CSB5(sc->sc_id))
-			DELAY(2*PIIXPM_DELAY);
-		else
-			DELAY(PIIXPM_DELAY);
+		DELAY(PIIXPM_DELAY);
 		for (retries = 1000; retries > 0; retries--) {
 			st = bus_space_read_1(sc->sc_smb_iot, sc->sc_smb_ioh,
 			    PIIX_SMB_HS);
@@ -498,11 +398,6 @@ timeout:
 	if ((st & PIIX_SMB_HS_FAILED) == 0)
 		aprint_error_dev(sc->sc_dev, "transaction abort failed, status 0x%x\n", st);
 	bus_space_write_1(sc->sc_smb_iot, sc->sc_smb_ioh, PIIX_SMB_HS, st);
-	/*
-	 * CSB5 needs hard reset to unlock the smbus after timeout.
-	 */
-	if (PIIXPM_IS_CSB5(sc->sc_id))
-		piixpm_csb5_reset(sc);
 	return (1);
 }
 

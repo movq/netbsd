@@ -1,4 +1,4 @@
-/* $NetBSD: wskbdvar.h,v 1.19 2012/09/02 21:14:56 he Exp $ */
+/* $NetBSD: wskbdvar.h,v 1.16 2008/05/01 20:18:19 cegger Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -33,7 +33,6 @@
 /*
  * WSKBD interfaces.
  */
-#include <dev/wscons/wsksymvar.h>
 
 /*
  * Keyboard access functions (must be provided by all keyboards).
@@ -101,14 +100,6 @@ struct wskbd_softc;
 typedef int (wskbd_hotkey_plugin)(struct wskbd_softc *, void *, u_int, int);
 
 device_t wskbd_hotkey_register(device_t, void *, wskbd_hotkey_plugin *);
-void	 wskbd_hotkey_deregister(device_t);
-
-/*
- * set a translation table for scancodes in event mode
- * parameters are a pointer to the table and its length
- * pass length zero to turn translation off
- */
-void	wskbd_set_evtrans(device_t, keysym_t *, int);
 
 /*
  * Console interface.

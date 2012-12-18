@@ -1,4 +1,4 @@
-/* $NetBSD: tcp_sack.c,v 1.28 2012/01/30 23:31:27 matt Exp $ */
+/* $NetBSD: tcp_sack.c,v 1.24 2008/04/28 20:24:09 martin Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -102,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_sack.c,v 1.28 2012/01/30 23:31:27 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_sack.c,v 1.24 2008/04/28 20:24:09 martin Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -160,16 +160,11 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_sack.c,v 1.28 2012/01/30 23:31:27 matt Exp $");
 #include <netinet/tcpip.h>
 #include <netinet/tcp_debug.h>
 
+#include <machine/stdarg.h>
+
 /* SACK block pool. */
-static struct pool sackhole_pool;
-
-void
-tcp_sack_init(void)
-{
-
-	pool_init(&sackhole_pool, sizeof(struct sackhole), 0, 0, 0,
-	    "sackholepl", NULL, IPL_SOFTNET);
-}
+static POOL_INIT(sackhole_pool, sizeof(struct sackhole), 0, 0, 0, "sackholepl",
+    NULL, IPL_SOFTNET);
 
 static struct sackhole *
 sack_allochole(struct tcpcb *tp)
@@ -224,24 +219,15 @@ sack_removehole(struct tcpcb *tp, struct sackhole *hole)
 	return next;
 }
 
-/*
- * tcp_new_dsack: record the reception of a duplicated segment.
- */
-
 void
 tcp_new_dsack(struct tcpcb *tp, tcp_seq seq, u_int32_t len)
 {
-
 	if (TCP_SACK_ENABLED(tp)) {
 		tp->rcv_dsack_block.left = seq;
 		tp->rcv_dsack_block.right = seq + len;
 		tp->rcv_sack_flags |= TCPSACK_HAVED;
 	}
 }
-
-/*
- * tcp_sack_option: parse the given SACK option and update the scoreboard.
- */
 
 void
 tcp_sack_option(struct tcpcb *tp, const struct tcphdr *th, const u_char *cp,
@@ -401,10 +387,6 @@ tcp_sack_option(struct tcpcb *tp, const struct tcphdr *th, const u_char *cp,
 	}
 }
 
-/*
- * tcp_del_sackholes: remove holes covered by a cumulative ACK.
- */
-
 void
 tcp_del_sackholes(struct tcpcb *tp, const struct tcphdr *th)
 {
@@ -425,10 +407,6 @@ tcp_del_sackholes(struct tcpcb *tp, const struct tcphdr *th)
 			break;
 	}
 }
-
-/*
- * tcp_free_sackholes: clear the scoreboard.
- */
 
 void
 tcp_free_sackholes(struct tcpcb *tp)
@@ -570,10 +548,6 @@ tcp_sack_adjust(struct tcpcb *tp)
 
 	return;
 }
-
-/*
- * tcp_sack_numblks: return the number of SACK blocks to send.
- */
 
 int
 tcp_sack_numblks(const struct tcpcb *tp)

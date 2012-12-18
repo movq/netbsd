@@ -1,4 +1,4 @@
-/*	$NetBSD: gt.c,v 1.28 2012/01/27 18:52:52 para Exp $	*/
+/*	$NetBSD: gt.c,v 1.21 2008/05/09 10:59:55 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -26,29 +26,31 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.28 2012/01/27 18:52:52 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.21 2008/05/09 10:59:55 tsutsui Exp $");
 
 #include "opt_pci.h"
 #include "pci.h"
 
 #include <sys/param.h>
-#include <sys/bus.h>
-#include <sys/conf.h>
-#include <sys/device.h>
-#include <sys/extent.h>
-#include <sys/file.h>
-#include <sys/intr.h>
-#include <sys/ioctl.h>
-#include <sys/kernel.h>
-#include <sys/malloc.h>
-#include <sys/proc.h>
-#include <sys/select.h>
-#include <sys/syslog.h>
 #include <sys/systm.h>
+#include <sys/ioctl.h>
+#include <sys/select.h>
 #include <sys/tty.h>
+#include <sys/proc.h>
+#include <sys/user.h>
+#include <sys/conf.h>
+#include <sys/file.h>
 #include <sys/uio.h>
+#include <sys/kernel.h>
+#include <sys/syslog.h>
+#include <sys/types.h>
+#include <sys/device.h>
+#include <sys/malloc.h>
+#include <sys/extent.h>
 
 #include <machine/autoconf.h>
+#include <machine/bus.h>
+#include <machine/intr.h>
 
 #include <mips/cache.h>
 
@@ -126,17 +128,18 @@ gt_attach(device_t parent, device_t self, void *aux)
 
 #ifdef PCI_NETBSD_CONFIGURE
 	pc->pc_ioext = extent_create("pciio", 0x10001000, 0x11ffffff,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 	pc->pc_memext = extent_create("pcimem", 0x12000000, 0x13ffffff,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 	pci_configure_bus(pc, pc->pc_ioext, pc->pc_memext, NULL, 0,
-	    mips_cache_info.mci_dcache_align);
+	    mips_dcache_align);
 #endif
 	pba.pba_dmat = &pci_bus_dma_tag;
 	pba.pba_dmat64 = NULL;
+	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
+	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
 		PCI_FLAGS_MRL_OKAY | /*PCI_FLAGS_MRM_OKAY|*/ PCI_FLAGS_MWI_OKAY;
 	pba.pba_pc = pc;
 	config_found_ia(self, "pcibus", &pba, gt_print);

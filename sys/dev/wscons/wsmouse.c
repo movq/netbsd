@@ -1,4 +1,4 @@
-/* $NetBSD: wsmouse.c,v 1.64 2011/09/11 22:28:21 jakllsch Exp $ */
+/* $NetBSD: wsmouse.c,v 1.60 2008/06/12 23:04:37 cegger Exp $ */
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -104,7 +104,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsmouse.c,v 1.64 2011/09/11 22:28:21 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsmouse.c,v 1.60 2008/06/12 23:04:37 cegger Exp $");
 
 #include "wsmouse.h"
 #include "wsdisplay.h"
@@ -143,7 +143,6 @@ extern int wsmuxdebug;
 #define INVALID_X	INT_MAX
 #define INVALID_Y	INT_MAX
 #define INVALID_Z	INT_MAX
-#define INVALID_W	INT_MAX
 
 struct wsmouse_softc {
 	struct wsevsrc	sc_base;
@@ -622,7 +621,6 @@ wsmousedoopen(struct wsmouse_softc *sc, struct wseventvar *evp)
 	sc->sc_x = INVALID_X;
 	sc->sc_y = INVALID_Y;
 	sc->sc_z = INVALID_Z;
-	sc->sc_w = INVALID_W;
 
 	/* Stop button repeating when messing with the device. */
 	if (sc->sc_repeat_button != -1) {
@@ -750,9 +748,6 @@ wsmouse_do_ioctl(struct wsmouse_softc *sc, u_long cmd, void *data,
 		memcpy(&sc->sc_repeat, wr, sizeof(sc->sc_repeat));
 
 		return 0;
-
-	case WSMOUSEIO_SETVERSION:
-		return wsevent_setversion(sc->sc_base.me_evp, *(int *)data);
 	}
 
 	/*

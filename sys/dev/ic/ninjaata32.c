@@ -1,7 +1,7 @@
-/*	$NetBSD: ninjaata32.c,v 1.18 2012/07/31 15:50:34 bouyer Exp $	*/
+/*	$NetBSD: ninjaata32.c,v 1.10 2008/03/18 20:46:36 cube Exp $	*/
 
 /*
- * Copyright (c) 2006 ITOH Yasufumi.
+ * Copyright (c) 2006 ITOH Yasufumi <itohy@NetBSD.org>.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ninjaata32.c,v 1.18 2012/07/31 15:50:34 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ninjaata32.c,v 1.10 2008/03/18 20:46:36 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -36,6 +36,8 @@ __KERNEL_RCSID(0, "$NetBSD: ninjaata32.c,v 1.18 2012/07/31 15:50:34 bouyer Exp $
 
 #include <sys/bus.h>
 #include <sys/intr.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/ata/atavar.h>
 #include <dev/ic/wdcreg.h>
@@ -192,7 +194,7 @@ njata32_attach(struct njata32_softc *sc)
 	sc->sc_ch[0].ch_ata_channel.ch_channel = 0;
 	sc->sc_ch[0].ch_ata_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
 	sc->sc_ch[0].ch_ata_channel.ch_queue = &sc->sc_wdc_chqueue;
-	sc->sc_wdcdev.wdc_maxdrives = 2; /* max number of drives per channel */
+	sc->sc_ch[0].ch_ata_channel.ch_ndrive = 2; /* max number of drives */
 
 	/* map ATA registers */
 	for (i = 0; i < WDC_NREG; i++) {
@@ -317,20 +319,20 @@ njata32_setup_channel(struct ata_channel *chp)
 	int drive;
 	uint8_t mode;
 
-	KASSERT(chp->ch_ndrives != 0);
+	KASSERT(chp->ch_ndrive != 0);
 
 	sc->sc_timing_pio = 0;
 #if 0	/* ATA DMA is currently unused */
 	sc->sc_timing_dma = 0;
 #endif
 
-	for (drive = 0; drive < chp->ch_ndrives; drive++) {
+	for (drive = 0; drive < chp->ch_ndrive; drive++) {
 		drvp = &chp->ch_drive[drive];
-		if (drvp->drive_type == ATA_DRIVET_NONE)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;	/* no drive */
 
 #if 0	/* ATA DMA is currently unused */
-		if ((drvp->drive_flags & ATA_DRIVE_DMA) != 0) {
+		if ((drvp->drive_flags & DRIVE_DMA) != 0) {
 			/*
 			 * Multiword DMA
 			 */
@@ -655,7 +657,8 @@ njata32_piobm_done(void *v, int channel, int drive)
 }
 
 int
-njata32_intr(void *arg)
+njata32_intr(arg)
+	void *arg;
 {
 	struct njata32_softc *sc = arg;
 	struct ata_channel *chp;

@@ -1,4 +1,4 @@
-/*	$NetBSD: stat.h,v 1.65 2012/12/01 08:20:55 skrll Exp $	*/
+/*	$NetBSD: stat.h,v 1.57.4.1 2009/12/18 06:12:51 snj Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -46,6 +46,20 @@
 #include <sys/time.h>
 #endif
 
+/*
+ * On systems with 8 byte longs and 4 byte time_ts, padding the time_ts
+ * is required in order to have a consistent ABI.  This is because the
+ * stat structure used to contain timespecs, which had different
+ * alignment constraints than a time_t and a long alone.  The padding
+ * should be removed the next time the stat structure ABI is changed.
+ * (This will happen whever we change to 8 byte time_t.)
+ */
+#if defined(_LP64)	/* XXXX  && _BSD_TIME_T_ == int */
+#define	__STATPAD(x)	int x;
+#else
+#define	__STATPAD(x)	/* nothing */
+#endif
+
 struct stat {
 	dev_t	  st_dev;		/* inode's device */
 	mode_t	  st_mode;		/* inode protection mode */
@@ -61,12 +75,16 @@ struct stat {
 	struct 	  timespec st_birthtimespec; /* time of creation */
 #else
 	time_t	  st_atime;		/* time of last access */
+	__STATPAD(__pad0)
 	long	  st_atimensec;		/* nsec of last access */
 	time_t	  st_mtime;		/* time of last data modification */
+	__STATPAD(__pad1)
 	long	  st_mtimensec;		/* nsec of last data modification */
 	time_t	  st_ctime;		/* time of last file status change */
+	__STATPAD(__pad2)
 	long	  st_ctimensec;		/* nsec of last file status change */
 	time_t	  st_birthtime;		/* time of creation */
+	__STATPAD(__pad3)
 	long	  st_birthtimensec;	/* nsec of time of creation */
 #endif
 	off_t	  st_size;		/* file size, in bytes */
@@ -76,6 +94,8 @@ struct stat {
 	uint32_t  st_gen;		/* file generation number */
 	uint32_t  st_spare[2];
 };
+
+#undef __STATPAD
 
 #if defined(_NETBSD_SOURCE)
 #define	st_atime		st_atimespec.tv_sec
@@ -195,7 +215,6 @@ struct stat {
 /*	SF_NOUNLINK	0x00100000	   [NOT IMPLEMENTED] */
 #define	SF_SNAPSHOT	0x00200000	/* snapshot inode */
 #define	SF_LOG		0x00400000	/* WAPBL log file inode */
-#define	SF_SNAPINVAL	0x00800000	/* snapshot is invalid */
 
 #ifdef _KERNEL
 /*
@@ -207,12 +226,6 @@ struct stat {
 #endif /* _KERNEL */
 #endif /* _NETBSD_SOURCE */
 
-/*
- * Special values for utimensat and futimens
- */
-#define UTIME_NOW	((1 << 30) - 1)
-#define UTIME_OMIT	((1 << 30) - 2)
-
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <sys/cdefs.h>
 
@@ -221,16 +234,16 @@ int	chmod(const char *, mode_t);
 int	mkdir(const char *, mode_t);
 int	mkfifo(const char *, mode_t);
 #ifndef __LIBC12_SOURCE__
-int	stat(const char *, struct stat *) __RENAME(__stat50);
-int	fstat(int, struct stat *) __RENAME(__fstat50);
+int	stat(const char *, struct stat *) __RENAME(__stat30);
+int	fstat(int, struct stat *) __RENAME(__fstat30);
 #endif
 mode_t	umask(mode_t);
 #if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 int	fchmod(int, mode_t);
 #ifndef __LIBC12_SOURCE__
-int	lstat(const char *, struct stat *) __RENAME(__lstat50);
-int	mknod(const char *, mode_t, dev_t) __RENAME(__mknod50);
+int	lstat(const char *, struct stat *) __RENAME(__lstat30);
 #endif
+int	mknod(const char *, mode_t, dev_t);
 #endif /* defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE) */
 
 #if defined(_NETBSD_SOURCE)
@@ -239,24 +252,6 @@ int	fchflags(int, unsigned long);
 int	lchflags(const char *, unsigned long);
 int	lchmod(const char *, mode_t);
 #endif /* defined(_NETBSD_SOURCE) */
-
-#ifndef __LIBC12_SOURCE__
-/*
- * X/Open Extended API set 2 (a.k.a. C063)
- */
-#if (_POSIX_C_SOURCE - 0) >= 200809L || (_XOPEN_SOURCE - 0 >= 700) || \
-    defined(_INCOMPLETE_XOPEN_C063) || defined(_NETBSD_SOURCE)
-int     fstatat(int, const char *, struct stat *, int);
-int     utimensat(int, const char *, const struct timespec *, int);
-#endif
-
-#ifdef _NETBSD_SOURCE
-int utimens(const char *, const struct timespec *);
-int lutimens(const char *, const struct timespec *);
-#endif
-int futimens(int, const struct timespec *);
-#endif
-
 __END_DECLS
 
 #endif /* !_KERNEL && !_STANDALONE */

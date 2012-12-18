@@ -1,4 +1,4 @@
-/*	$NetBSD: ucred.h,v 1.36 2011/10/12 23:03:36 dholland Exp $	*/
+/*	$NetBSD: ucred.h,v 1.34 2007/08/29 10:32:01 pooka Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,11 +34,7 @@
 #ifndef _SYS_UCRED_H_
 #define	_SYS_UCRED_H_
 
-#ifdef _KERNEL
-#include <sys/syslimits.h>
-#else
-#include <limits.h>
-#endif
+#include <sys/param.h>
 
 /*
  * Credentials.
@@ -50,7 +46,7 @@ struct uucred {
 	uid_t		cr_uid;			/* effective user id */
 	gid_t		cr_gid;			/* effective group id */
 	short		cr_ngroups;		/* number of groups */
-	gid_t		cr_groups[NGROUPS_MAX];	/* groups */
+	gid_t		cr_groups[NGROUPS];	/* groups */
 };
 
 #endif /* !_SYS_UCRED_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.c,v 1.6 2012/10/14 16:20:04 tsutsui Exp $	*/
+/*	$NetBSD: installboot.c,v 1.5 2006/09/23 20:10:14 pavel Exp $	*/
 
 /*
  * Copyright (c) 2001 Minoura Makoto
@@ -159,8 +159,7 @@ checkparttype(const char *name, int force)
 
 		lp = (struct disklabel *) &bootblock[LABELBYTEOFFSET];
 		memcpy(&label, lp, sizeof(struct disklabel));
-		if (lp->d_npartitions > MAXPARTITIONS ||
-		    dkcksum(lp) != 0)
+		if (dkcksum(lp) != 0)
 			/* there is no valid label */
 			memset(&label, 0, sizeof(struct disklabel));
 	}

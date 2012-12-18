@@ -1,4 +1,4 @@
-/* $NetBSD: udf_vfsops.c,v 1.63 2012/03/13 18:40:51 elad Exp $ */
+/* $NetBSD: udf_vfsops.c,v 1.52.2.3 2009/07/09 19:44:34 snj Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: udf_vfsops.c,v 1.63 2012/03/13 18:40:51 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_vfsops.c,v 1.52.2.3 2009/07/09 19:44:34 snj Exp $");
 #endif /* not lint */
 
 
@@ -316,6 +316,7 @@ udf_mount(struct mount *mp, const char *path,
 	  void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
+	struct nameidata nd;
 	struct udf_args *args = data;
 	struct udf_mount *ump;
 	struct vnode *devvp;
@@ -352,10 +353,11 @@ udf_mount(struct mount *mp, const char *path,
 	}
 
 	/* lookup name to get its vnode */
-	error = namei_simple_user(args->fspec,
-				NSM_FOLLOW_NOEMULROOT, &devvp);
+	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, args->fspec);
+	error = namei(&nd);
 	if (error)
 		return error;
+	devvp = nd.ni_vp;
 
 #ifdef DEBUG
 	if (udf_verbose & UDF_DEBUG_VOLUMES)
@@ -376,16 +378,17 @@ udf_mount(struct mount *mp, const char *path,
 	 * If mount by non-root, then verify that user has necessary
 	 * permissions on the device.
 	 */
-	accessmode = VREAD;
-	if ((mp->mnt_flag & MNT_RDONLY) == 0)
-		accessmode |= VWRITE;
-	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-	    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp, KAUTH_ARG(accessmode));
-	VOP_UNLOCK(devvp);
-	if (error) {
-		vrele(devvp);
-		return error;
+	if (kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER, NULL)) {
+		accessmode = VREAD;
+		if ((mp->mnt_flag & MNT_RDONLY) == 0)
+			accessmode |= VWRITE;
+		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
+		error = VOP_ACCESS(devvp, accessmode, l->l_cred);
+		VOP_UNLOCK(devvp, 0);
+		if (error) {
+			vrele(devvp);
+			return error;
+		}
 	}
 
 	/*
@@ -396,9 +399,7 @@ udf_mount(struct mount *mp, const char *path,
 	} else {
 		openflags = FREAD | FWRITE;
 	}
-	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_OPEN(devvp, openflags, FSCRED);
-	VOP_UNLOCK(devvp);
 	if (error == 0) {
 		/* opened ok, try mounting */
 		error = udf_mountfs(devvp, mp, l, args);
@@ -409,7 +410,7 @@ udf_mount(struct mount *mp, const char *path,
 			free_udf_mountinfo(mp);
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 			(void) VOP_CLOSE(devvp, openflags, NOCRED);
-			VOP_UNLOCK(devvp);
+			VOP_UNLOCK(devvp, 0);
 		}
 	}
 	if (error) {
@@ -579,9 +580,8 @@ udf_mountfs(struct vnode *devvp, struct mount *mp,
 	mp->mnt_stat.f_fsidx.__fsid_val[0] = (uint32_t) devvp->v_rdev;
 	mp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_UDF);
 	mp->mnt_stat.f_fsid = mp->mnt_stat.f_fsidx.__fsid_val[0];
-	mp->mnt_stat.f_namemax = UDF_MAXNAMLEN;
+	mp->mnt_stat.f_namemax = UDF_MAX_NAMELEN;
 	mp->mnt_flag |= MNT_LOCAL;
-//	mp->mnt_iflag |= IMNT_MPSAFE;
 
 	/* allocate udf part of mount structure; malloc always succeeds */
 	ump = malloc(sizeof(struct udf_mount), M_UDFMNT, M_WAITOK | M_ZERO);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ptyfs.h,v 1.10 2012/10/24 23:36:15 christos Exp $	*/
+/*	$NetBSD: ptyfs.h,v 1.7 2008/06/28 01:34:05 rumble Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -93,7 +93,7 @@ struct ptyfsnode {
 	ptyfstype	ptyfs_type;	/* type of ptyfs node */
 	int		ptyfs_pty;	/* the pty index */
 	u_long		ptyfs_fileno;	/* unique file id */
-	int		ptyfs_status;	/* status flag for times */
+	int		ptyfs_flag;	/* status flag for times */
 #define	PTYFS_ACCESS	1
 #define	PTYFS_MODIFY	2
 #define	PTYFS_CHANGE	4
@@ -108,7 +108,6 @@ struct ptyfsnode {
 struct ptyfsmount {
 	gid_t pmnt_gid;
 	mode_t pmnt_mode;
-	int pmnt_flags;
 };
 
 #define VFSTOPTY(mp)	((struct ptyfsmount *)(mp)->mnt_data)
@@ -119,10 +118,9 @@ struct ptyfs_args {
 	int version;
 	gid_t gid;
 	mode_t mode;
-	int flags;
 };
 
-#define PTYFS_ARGSVERSION	2
+#define PTYFS_ARGSVERSION	1
 
 /*
  * Kernel stuff follows
@@ -139,7 +137,7 @@ struct ptyfs_args {
     pty_makedev((ptyfs)->ptyfs_type == PTYFSpts ? 't' : 'p', (ptyfs)->ptyfs_pty)
 
 #define PTYFS_ITIMES(ptyfs, acc, mod, cre) \
-   while ((ptyfs)->ptyfs_status & (PTYFS_ACCESS|PTYFS_CHANGE|PTYFS_MODIFY)) \
+   while ((ptyfs)->ptyfs_flag & (PTYFS_ACCESS|PTYFS_CHANGE|PTYFS_MODIFY)) \
 	ptyfs_itimes(ptyfs, acc, mod, cre)
 /*
  * Convert between ptyfsnode vnode

@@ -1,4 +1,4 @@
-/*	$NetBSD: math.h,v 1.58 2012/05/05 22:07:57 christos Exp $	*/
+/*	$NetBSD: math.h,v 1.47.8.2 2010/03/12 21:58:42 riz Exp $	*/
 
 /*
  * ====================================================
@@ -88,22 +88,18 @@ extern const union __long_double_u __infinityl;
 #endif
 
 /* 7.12#4 INFINITY */
-#if defined(__INFINITY)
-#define	INFINITY	__INFINITY	/* float constant which overflows */
-#elif __GNUC_PREREQ__(3, 3)
+#if __GNUC_PREREQ__(3, 3)
 #define	INFINITY	__builtin_inff()
+#elif defined(__INFINITY)
+#define	INFINITY	__INFINITY	/* float constant which overflows */
 #else
 #define	INFINITY	HUGE_VALF	/* positive infinity */
 #endif /* __INFINITY */
 
 /* 7.12#5 NAN: a quiet NaN, if supported */
 #ifdef __HAVE_NANF
-#if __GNUC_PREREQ__(3,3)
-#define	NAN	__builtin_nanf("")
-#else
 extern const union __float_u __nanf;
 #define	NAN		__nanf.__val
-#endif
 #endif /* __HAVE_NANF */
 
 /* 7.12#6 number classification macros */
@@ -205,7 +201,6 @@ double	sinh(double);
 double	tanh(double);
 
 double	exp(double);
-double	exp2(double);
 double	frexp(double, int *);
 double	ldexp(double, int);
 double	log(double);
@@ -294,7 +289,6 @@ float	tanhf(float);
 /* 7.12.6 exp / log */
 
 float	expf(float);
-float	exp2f(float);
 float	expm1f(float);
 float	frexpf(float, int *);
 int	ilogbf(float);
@@ -311,7 +305,6 @@ float	scalbnf(float, int);
 
 float	cbrtf(float);
 float	fabsf(float);
-long double	fabsl(long double);
 float	hypotf(float, float);
 float	powf(float, float);
 float	sqrtf(float);
@@ -321,8 +314,6 @@ float	sqrtf(float);
 float	erff(float);
 float	erfcf(float);
 float	lgammaf(float);
-float	tgammaf(float);
-double	tgamma(double);
 
 /* 7.12.9 nearest integer */
 
@@ -351,22 +342,15 @@ long long int	llroundf(float);
 float	fmodf(float, float);
 float	remainderf(float, float);
 
-/* 7.12.10.3 The remquo functions */
-double	remquo(double, double, int *);
-float	remquof(float, float, int *);
-
 /* 7.12.11 manipulation */
 
 float	copysignf(float, float);
-long double	copysignl(long double, long double);
 double	nan(const char *);
 float	nanf(const char *);
 long double	nanl(const char *);
 float	nextafterf(float, float);
-long double     nextafterl(long double, long double);
-double	nexttoward(double, long double);
 
-/* 7.12.14 comparison */
+/* 7.12.14 comparision */
 
 #define isunordered(x, y)	(isnan(x) || isnan(y))
 #define isgreater(x, y)		(!isunordered((x), (y)) && (x) > (y))
@@ -499,11 +483,6 @@ int	__isinfl(long double);
 int	__isnanl(long double);
 int	__signbitl(long double);
 #endif
-
-int		ilogbl(long double);
-long double	logbl(long double);
-long double	scalbnl(long double, int);
-
 __END_DECLS
 
 #endif /* _MATH_H_ */

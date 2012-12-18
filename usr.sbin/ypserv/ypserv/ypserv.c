@@ -1,4 +1,4 @@
-/*	$NetBSD: ypserv.c,v 1.26 2012/03/15 02:02:24 joerg Exp $	*/
+/*	$NetBSD: ypserv.c,v 1.22 2008/05/16 16:41:42 chuck Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -28,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypserv.c,v 1.26 2012/03/15 02:02:24 joerg Exp $");
+__RCSID("$NetBSD: ypserv.c,v 1.22 2008/05/16 16:41:42 chuck Exp $");
 #endif
 
 #include <sys/types.h>
@@ -94,7 +99,7 @@ static void	usage(void) __dead;
 static int	bind_resv_port(int, sa_family_t, in_port_t);
 void		ypserv_sock_hostname(struct host_info *host);
 
-static __printflike(2, 3) void
+static void
 _msgout(int level, const char *msg, ...)
 {
 	va_list ap;
@@ -155,85 +160,85 @@ ypprog_2(struct svc_req *rqstp, SVCXPRT *transp)
 
 	switch (rqstp->rq_proc) {
 	case YPPROC_NULL:
-		xdr_argument = (xdrproc_t)xdr_void;
-		xdr_result = (xdrproc_t)xdr_void;
+		xdr_argument = xdr_void;
+		xdr_result = xdr_void;
 		local = ypproc_null_2_svc;
 		SVCNAME("null_2");
 		break;
 
 	case YPPROC_DOMAIN:
-		xdr_argument = (xdrproc_t)xdr_ypdomain_wrap_string;
-		xdr_result = (xdrproc_t)xdr_bool;
+		xdr_argument = xdr_ypdomain_wrap_string;
+		xdr_result = xdr_bool;
 		local = ypproc_domain_2_svc;
 		SVCNAME("domain_2");
 		break;
 
 	case YPPROC_DOMAIN_NONACK:
-		xdr_argument = (xdrproc_t)xdr_ypdomain_wrap_string;
-		xdr_result = (xdrproc_t)xdr_bool;
+		xdr_argument = xdr_ypdomain_wrap_string;
+		xdr_result = xdr_bool;
 		local = ypproc_domain_nonack_2_svc;
 		SVCNAME("domain_nonack_2");
 		break;
 
 	case YPPROC_MATCH:
-		xdr_argument = (xdrproc_t)xdr_ypreq_key;
-		xdr_result = (xdrproc_t)xdr_ypresp_val;
+		xdr_argument = xdr_ypreq_key;
+		xdr_result = xdr_ypresp_val;
 		local = ypproc_match_2_svc;
 		SVCNAME("match_2");
 		break;
 
 	case YPPROC_FIRST:
-		xdr_argument = (xdrproc_t)xdr_ypreq_nokey;
-		xdr_result = (xdrproc_t)xdr_ypresp_key_val;
+		xdr_argument = xdr_ypreq_nokey;
+		xdr_result = xdr_ypresp_key_val;
 		local = ypproc_first_2_svc;
 		SVCNAME("first_2");
 		break;
 
 	case YPPROC_NEXT:
-		xdr_argument = (xdrproc_t)xdr_ypreq_key;
-		xdr_result = (xdrproc_t)xdr_ypresp_key_val;
+		xdr_argument = xdr_ypreq_key;
+		xdr_result = xdr_ypresp_key_val;
 		local = ypproc_next_2_svc;
 		SVCNAME("next_2");
 		break;
 
 	case YPPROC_XFR:
-		xdr_argument = (xdrproc_t)xdr_ypreq_xfr;
-		xdr_result = (xdrproc_t)xdr_ypresp_xfr;
+		xdr_argument = xdr_ypreq_xfr;
+		xdr_result = xdr_ypresp_xfr;
 		local = ypproc_xfr_2_svc;
 		SVCNAME("xfer_2");
 		break;
 
 	case YPPROC_CLEAR:
-		xdr_argument = (xdrproc_t)xdr_void;
-		xdr_result = (xdrproc_t)xdr_void;
+		xdr_argument = xdr_void;
+		xdr_result = xdr_void;
 		local = ypproc_clear_2_svc;
 		SVCNAME("clear_2");
 		break;
 
 	case YPPROC_ALL:
-		xdr_argument = (xdrproc_t)xdr_ypreq_nokey;
-		xdr_result = (xdrproc_t)xdr_ypresp_all;
+		xdr_argument = xdr_ypreq_nokey;
+		xdr_result = xdr_ypresp_all;
 		local = ypproc_all_2_svc;
 		SVCNAME("all_2");
 		break;
 
 	case YPPROC_MASTER:
-		xdr_argument = (xdrproc_t)xdr_ypreq_nokey;
-		xdr_result = (xdrproc_t)xdr_ypresp_master;
+		xdr_argument = xdr_ypreq_nokey;
+		xdr_result = xdr_ypresp_master;
 		local = ypproc_master_2_svc;
 		SVCNAME("master_2");
 		break;
 
 	case YPPROC_ORDER:
-		xdr_argument = (xdrproc_t)xdr_ypreq_nokey;
-		xdr_result = (xdrproc_t)xdr_ypresp_order;
+		xdr_argument = xdr_ypreq_nokey;
+		xdr_result = xdr_ypresp_order;
 		local = ypproc_order_2_svc;
 		SVCNAME("order_2");
 		break;
 
 	case YPPROC_MAPLIST:
-		xdr_argument = (xdrproc_t)xdr_ypdomain_wrap_string;
-		xdr_result = (xdrproc_t)xdr_ypresp_maplist;
+		xdr_argument = xdr_ypdomain_wrap_string;
+		xdr_result = xdr_ypresp_maplist;
 		local = ypproc_maplist_2_svc;
 		SVCNAME("maplist_2");
 		break;
@@ -438,9 +443,9 @@ usage(void)
 {
 
 #ifdef LIBWRAP
-#define	USAGESTR	"Usage: %s [-dfl] [-p <port>]\n"
+#define	USAGESTR	"Usage: %s [-d] [-l] [-p <port>]\n"
 #else
-#define	USAGESTR	"Usage: %s [-df] [-p <port>]\n"
+#define	USAGESTR	"Usage: %s [-d] [-p <port>]\n"
 #endif
 
 	(void)fprintf(stderr, USAGESTR, getprogname());

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_var.h,v 1.59 2012/06/23 03:14:04 christos Exp $	*/
+/*	$NetBSD: ip6_var.h,v 1.51 2008/08/06 15:01:23 plunky Exp $	*/
 /*	$KAME: ip6_var.h,v 1.33 2000/06/11 14:59:20 jinmei Exp $	*/
 
 /*
@@ -241,6 +241,7 @@ struct ip6flow {
 	u_quad_t ip6f_dropped;            /* ENOBUFS returned by if_output */
 	u_quad_t ip6f_forwarded;          /* packets forwarded */
 	u_int ip6f_timer;               /* lifetime timer */
+	time_t ip6f_start;              /* creation time */
 };
 
 #ifdef _KERNEL
@@ -272,11 +273,6 @@ extern int	ip6_rr_prune;		/* router renumbering prefix
 					 * walk list every 5 sec.    */
 extern int	ip6_mcast_pmtu;		/* enable pMTU discovery for multicast? */
 extern int	ip6_v6only;
-extern int	ip6_neighborgcthresh;	/* Threshold # of NDP entries for GC */
-extern int	ip6_maxifprefixes; /* Max acceptable prefixes via RA per IF */
-extern int	ip6_maxifdefrouters;	/* Max acceptable def routers via RA */
-extern int	ip6_maxdynroutes; /* Max # of routes created via redirect */
-
 
 extern struct socket *ip6_mrouter; 	/* multicast routing daemon */
 extern int	ip6_sendredirects;	/* send IP redirects when forwarding? */
@@ -285,7 +281,6 @@ extern int	ip6_maxfrags;	/* Maximum fragments in reassembly queue */
 extern int	ip6_sourcecheck;	/* Verify source interface */
 extern int	ip6_sourcecheck_interval; /* Interval between log messages */
 extern int	ip6_accept_rtadv;	/* Acts as a host not a router */
-extern int	ip6_rtadv_maxroutes;	/* maximum number of routes via rtadv */
 extern int	ip6_keepfaith;		/* Firewall Aided Internet Translator */
 extern int	ip6_log_interval;
 extern time_t	ip6_log_time;
@@ -331,7 +326,8 @@ struct m_tag *ip6_findaux(struct mbuf *);
 void	ip6_delaux(struct mbuf *);
 
 int	ip6_mforward(struct ip6_hdr *, struct ifnet *, struct mbuf *);
-int	ip6_hopopts_input(u_int32_t *, u_int32_t *, struct mbuf **, int *);
+int	ip6_process_hopopts(struct mbuf *, u_int8_t *, int, u_int32_t *,
+				 u_int32_t *);
 void	ip6_savecontrol(struct in6pcb *, struct mbuf **, struct ip6_hdr *,
 		struct mbuf *);
 void	ip6_notify_pmtu(struct in6pcb *, const struct sockaddr_in6 *,
@@ -350,7 +346,7 @@ int	ip6_ctloutput(int, struct socket *, struct sockopt *);
 int	ip6_raw_ctloutput(int, struct socket *, struct sockopt *);
 void	ip6_initpktopts(struct ip6_pktopts *);
 int	ip6_setpktopts(struct mbuf *, struct ip6_pktopts *,
-			    struct ip6_pktopts *, kauth_cred_t, int);
+			    struct ip6_pktopts *, int, int);
 void	ip6_clearpktopts(struct ip6_pktopts *, int);
 struct ip6_pktopts *ip6_copypktopts(struct ip6_pktopts *, int);
 int	ip6_optlen(struct in6pcb *);
@@ -361,14 +357,10 @@ int	route6_input(struct mbuf **, int *, int);
 
 void	frag6_init(void);
 int	frag6_input(struct mbuf **, int *, int);
-int	ip6_reass_packet(struct mbuf **, int);
 void	frag6_slowtimo(void);
-void	frag6_fasttimo(void);
 void	frag6_drain(void);
-void	frag6_drainstub(void);
 
 int	ip6flow_init(int);
-void	ip6flow_poolinit(void);
 struct  ip6flow *ip6flow_reap(int);
 void    ip6flow_create(const struct route *, struct mbuf *);
 void    ip6flow_slowtimo(void);

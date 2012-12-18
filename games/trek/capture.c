@@ -1,4 +1,4 @@
-/*	$NetBSD: capture.c,v 1.12 2009/08/12 08:54:54 dholland Exp $	*/
+/*	$NetBSD: capture.c,v 1.7 2007/12/15 19:44:44 perry Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,14 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)capture.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: capture.c,v 1.12 2009/08/12 08:54:54 dholland Exp $");
+__RCSID("$NetBSD: capture.c,v 1.7 2007/12/15 19:44:44 perry Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdio.h>
 #include "trek.h"
-
-static struct kling *selectklingon(void);
 
 /*
 **  Ask a Klingon To Surrender
@@ -59,14 +57,16 @@ static struct kling *selectklingon(void);
 
 /*ARGSUSED*/
 void
-capture(int v __unused)
+capture(v)
+	int v __unused;
 {
 	int		i;
 	struct kling	*k;
 	double			x;
 
 	/* check for not cloaked */
-	if (Ship.cloaked) {
+	if (Ship.cloaked)
+	{
 		printf("Ship-ship communications out when cloaked\n");
 		return;
 	}
@@ -75,7 +75,8 @@ capture(int v __unused)
 		return;
 	}
 	/* find out if there are any at all */
-	if (Etc.nkling <= 0) {
+	if (Etc.nkling <= 0)
+	{
 		printf("Uhura: Getting no response, sir\n");
 		return;
 	}
@@ -92,17 +93,17 @@ capture(int v __unused)
 	x /= k->power * Etc.nkling;
 	x *= Param.srndrprob;
 	i = x;
-#ifdef xTRACE
+#	ifdef xTRACE
 	if (Trace)
 		printf("Prob = %d (%.4f)\n", i, x);
-#endif
-	if (i > ranf(100)) {
+#	endif
+	if (i > ranf(100))
+	{
 		/* guess what, he surrendered!!! */
 		printf("Klingon at %d,%d surrenders\n", k->x, k->y);
 		i = ranf(Param.klingcrew);
 		if ( i > 0 )
-			printf("%d klingons commit suicide rather than be "
-			       "taken captive\n", Param.klingcrew - i);
+			printf("%d klingons commit suicide rather than be taken captive\n", Param.klingcrew - i);
 		if (i > Ship.brigfree)
 			i = Ship.brigfree;
 		Ship.brigfree -= i;
@@ -123,8 +124,7 @@ capture(int v __unused)
 **	Cruddy, just takes one at random.  Should ask the captain.
 */
 
-static struct kling *
-selectklingon(void)
+struct kling	*selectklingon()
 {
 	int		i;
 

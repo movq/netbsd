@@ -1,4 +1,4 @@
-/*	$NetBSD: swapcontext.S,v 1.7 2012/09/13 11:47:46 martin Exp $	*/
+/*	$NetBSD: swapcontext.S,v 1.4 2008/04/28 20:22:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -32,9 +32,10 @@
 #include "SYS.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: swapcontext.S,v 1.7 2012/09/13 11:47:46 martin Exp $")
+	RCSID("$NetBSD: swapcontext.S,v 1.4 2008/04/28 20:22:57 martin Exp $")
 #endif /* LIBC_SCCS && !lint */
 
+	.register	%g2,#scratch
 
 ENTRY(swapcontext)
 	mov	%o0, %o2			/* must save pointer */
@@ -50,17 +51,8 @@ ENTRY(swapcontext)
 	add	%o7, 8, %o1
 	stx	%o1, [%o2 + 64 + 1 * 8]		/* gr[_REG_PC] = retaddr */
 
-#ifdef	PIC
-	PIC_PROLOGUE(%g5,%o4)			/* %g5 = _GLOBAL_OFFSET_TABLE */
-#ifdef	BIGPIC
-	set	_C_LABEL(setcontext), %o5
-	ldx	[%g5+%o5], %o4
-#else
-	ldx	[%g5+_C_LABEL(setcontext)], %o4
-#endif
-	jmp	%o4
-	 mov	%o3, %o0
-#else
-	ba,a	_C_LABEL(setcontext)
-	 mov	%o3, %o0
-#endif
+	mov	%o3, %o0
+	mov	%o1, %g2			/* optimize `return' */
+	mov	SYS_setcontext|SYSCALL_G2RFLAG, %g1
+	t	ST_SYSCALL
+	ERROR()

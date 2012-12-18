@@ -1,4 +1,4 @@
-/*	$NetBSD: odsyntax.c,v 1.28 2010/11/27 20:46:38 christos Exp $	*/
+/*	$NetBSD: odsyntax.c,v 1.25 2008/09/03 16:32:57 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)odsyntax.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: odsyntax.c,v 1.28 2010/11/27 20:46:38 christos Exp $");
+__RCSID("$NetBSD: odsyntax.c,v 1.25 2008/09/03 16:32:57 drochner Exp $");
 #endif
 #endif /* not lint */
 
@@ -68,13 +68,13 @@ struct odaddrformat {
 	char const *format2;
 };
 
-int odmode;
+int deprecated;
 
 static void odoffset(int, char ***);
 static void posixtypes(char const *);
 
 void
-odsyntax(int argc, char ***argvp)
+oldsyntax(int argc, char ***argvp)
 {
 	static char empty[] = "", padding[] = PADDING;
 	int ch;
@@ -84,10 +84,10 @@ odsyntax(int argc, char ***argvp)
 	add("\"%07.7_Ao\n\"");
 	add("\"%07.7_ao  \"");
 
-	odmode = 1;
+	deprecated = 1;
 	argv = *argvp;
 	while ((ch = getopt(argc, argv,
-	    "A:aBbcDdeFfHhIij:LlN:Oot:vXx")) != -1)
+	    "A:aBbcDdeFfHhIij:LlN:OoPpst:wvXx")) != -1)
 		switch (ch) {
 		case 'A':
 			switch (*optarg) {
@@ -174,8 +174,17 @@ odsyntax(int argc, char ***argvp)
 		case 'v':
 			vflag = ALL;
 			break;
+		case 'P':
+		case 'p':
+		case 's':
+		case 'w':
 		case '?':
 		default:
+			warnx("od(1) has been deprecated for hexdump(1).");
+			if (ch != '?')
+				warnx(
+"hexdump(1) compatibility doesn't support the -%c option%s\n",
+				    ch, ch == 's' ? "; see strings(1)." : ".");
 			usage();
 		}
 

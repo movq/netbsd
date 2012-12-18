@@ -27,7 +27,7 @@
  *	i4b_i4bdrv.c - i4b userland interface driver
  *	--------------------------------------------
  *
- *	$Id: i4b_i4bdrv.c,v 1.37 2012/10/27 17:18:40 chs Exp $
+ *	$Id: i4b_i4bdrv.c,v 1.34 2008/03/01 18:59:45 veego Exp $
  *
  * $FreeBSD$
  *
@@ -36,7 +36,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_i4bdrv.c,v 1.37 2012/10/27 17:18:40 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_i4bdrv.c,v 1.34 2008/03/01 18:59:45 veego Exp $");
 
 #include "isdn.h"
 
@@ -110,17 +110,17 @@ static void *devfs_token;
 #ifndef __FreeBSD__
 
 #define	PDEVSTATIC	/* - not static - */
-PDEVSTATIC void isdnattach(void);
-PDEVSTATIC int isdnopen(dev_t dev, int flag, int fmt, struct lwp *l);
-PDEVSTATIC int isdnclose(dev_t dev, int flag, int fmt, struct lwp *l);
-PDEVSTATIC int isdnread(dev_t dev, struct uio *uio, int ioflag);
-PDEVSTATIC int isdnioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l);
+PDEVSTATIC void isdnattach __P((void));
+PDEVSTATIC int isdnopen __P((dev_t dev, int flag, int fmt, struct lwp *l));
+PDEVSTATIC int isdnclose __P((dev_t dev, int flag, int fmt, struct lwp *l));
+PDEVSTATIC int isdnread __P((dev_t dev, struct uio *uio, int ioflag));
+PDEVSTATIC int isdnioctl __P((dev_t dev, u_long cmd, void *data, int flag, struct lwp *l));
 
 #ifdef OS_USES_POLL
-PDEVSTATIC int isdnpoll(dev_t dev, int events, struct lwp *l);
-PDEVSTATIC int isdnkqfilter(dev_t dev, struct knote *kn);
+PDEVSTATIC int isdnpoll __P((dev_t dev, int events, struct lwp *l));
+PDEVSTATIC int isdnkqfilter __P((dev_t dev, struct knote *kn));
 #else
-PDEVSTATIC int isdnselect(dev_t dev, int rw, struct lwp *l);
+PDEVSTATIC int isdnselect __P((dev_t dev, int rw, struct lwp *l));
 #endif
 
 #endif /* #ifndef __FreeBSD__ */
@@ -203,7 +203,7 @@ const struct cdevsw isdn_cdevsw = {
 
 #ifdef __bsdi__
 #include <sys/device.h>
-int i4bmatch(device_t parent, cfdata_t cf, void *aux);
+int i4bmatch(struct device *parent, struct cfdata *cf, void *aux);
 void dummy_i4battach(struct device*, struct device *, void *);
 
 #define CDEV_MAJOR 65
@@ -219,13 +219,13 @@ struct devsw i4bsw =
 };
 
 int
-i4bmatch(device_t parent, cfdata_t cf, void *aux)
+i4bmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	printf("i4bmatch: aux=0x%x\n", aux);
 	return 1;
 }
 void
-dummy_i4battach(device_t parent, device_t self, void *aux)
+dummy_i4battach(struct device *parent, struct device *self, void *aux)
 {
 	printf("dummy_i4battach: aux=0x%x\n", aux);
 }
@@ -238,7 +238,7 @@ PDEVSTATIC void
 #ifdef __FreeBSD__
 isdnattach(void *dummy)
 #else
-isdnattach(void)
+isdnattach()
 #endif
 {
 	i4b_rdqueue.ifq_maxlen = IFQ_MAXLEN;

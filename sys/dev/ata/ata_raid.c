@@ -1,4 +1,4 @@
-/*	$NetBSD: ata_raid.c,v 1.35 2012/10/27 17:18:14 chs Exp $	*/
+/*	$NetBSD: ata_raid.c,v 1.32 2008/09/11 11:08:50 tron Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.35 2012/10/27 17:18:14 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.32 2008/09/11 11:08:50 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -77,7 +77,7 @@ static int	ataraid_match(device_t, cfdata_t, void *);
 static void	ataraid_attach(device_t, device_t, void *);
 static int	ataraid_print(void *, const char *);
 
-static int	ata_raid_finalize(device_t);
+static int	ata_raid_finalize(device_t );
 
 ataraid_array_info_list_t ataraid_array_info_list =
     TAILQ_HEAD_INITIALIZER(ataraid_array_info_list);
@@ -177,7 +177,8 @@ ata_raid_finalize(device_t self)
  *	Autoconfiguration glue: match routine.
  */
 static int
-ataraid_match(device_t parent, cfdata_t cf, void *aux)
+ataraid_match(device_t parent, cfdata_t cf,
+    void *aux)
 {
 
 	/* pseudo-device; always present */
@@ -190,7 +191,8 @@ ataraid_match(device_t parent, cfdata_t cf, void *aux)
  *	Autoconfiguration glue: attach routine.  We attach the children.
  */
 static void
-ataraid_attach(device_t parent, device_t self, void *aux)
+ataraid_attach(device_t parent, device_t self,
+    void *aux)
 {
 	struct ataraid_array_info *aai;
 	int locs[ATARAIDCF_NLOCS];
@@ -268,9 +270,13 @@ ata_raid_get_array_info(u_int type, u_int arrayno)
 	aai = malloc(sizeof(*aai), M_DEVBUF, M_WAITOK | M_ZERO);
 	aai->aai_type = type;
 	aai->aai_arrayno = arrayno;
-	aai->aai_curdisk = 0;
 
 	ataraid_array_info_count++;
+
+	if (TAILQ_EMPTY(&ataraid_array_info_list)) {
+		TAILQ_INSERT_TAIL(&ataraid_array_info_list, aai, aai_list);
+		goto out;
+	}
 
 	/* Sort it into the list: type first, then array number. */
 	TAILQ_FOREACH(laai, &ataraid_array_info_list, aai_list) {

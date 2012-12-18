@@ -1,4 +1,4 @@
-/*	$NetBSD: itesio_isavar.h,v 1.9 2012/11/15 04:45:01 msaitoh Exp $	*/
+/*	$NetBSD: itesio_isavar.h,v 1.6 2008/04/26 19:01:53 xtraeme Exp $	*/
 /*	$OpenBSD: itvar.h,v 1.2 2003/11/05 20:57:10 grange Exp $	*/
 
 /*
@@ -61,8 +61,6 @@
 #define ITESIO_ID8712	0x8712
 #define ITESIO_ID8716	0x8716
 #define ITESIO_ID8718	0x8718
-#define ITESIO_ID8720	0x8720
-#define ITESIO_ID8721	0x8721
 #define ITESIO_ID8726	0x8726
 
 /* 
@@ -141,8 +139,9 @@
 
 struct itesio_softc {
 	bus_space_tag_t 	sc_iot;
+	bus_space_handle_t 	sc_ioh;
 
-	bus_space_handle_t 	sc_pnp_ioh;
+	bus_space_tag_t		sc_ec_iot;
 	bus_space_handle_t	sc_ec_ioh;
 
 	struct sysmon_wdog	sc_smw;

@@ -1,4 +1,4 @@
-/*	$NetBSD: vfwscanf.c,v 1.8 2012/03/15 18:22:30 christos Exp $	*/
+/*	$NetBSD: vfwscanf.c,v 1.3 2008/08/28 16:41:21 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -42,14 +42,13 @@
 static char sccsid[] = "@(#)ftell.c	8.2 (Berkeley) 5/4/95";
 __FBSDID("$FreeBSD: src/lib/libc/stdio/vfwscanf.c,v 1.12 2004/05/02 20:13:29 obrien Exp $");
 #else
-__RCSID("$NetBSD: vfwscanf.c,v 1.8 2012/03/15 18:22:30 christos Exp $");
+__RCSID("$NetBSD: vfwscanf.c,v 1.3 2008/08/28 16:41:21 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 #include <ctype.h>
 #include <inttypes.h>
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -121,7 +120,7 @@ vfwscanf(FILE * __restrict fp, const wchar_t * __restrict fmt, va_list ap)
 	_SET_ORIENTATION(fp, 1);
 	ret = __vfwscanf_unlocked(fp, fmt, ap);
 	FUNLOCKFILE(fp);
-	return ret;
+	return (ret);
 }
 
 #define SCANF_SKIP_SPACE() \
@@ -148,7 +147,7 @@ __vfwscanf_unlocked(FILE * __restrict fp, const wchar_t * __restrict fmt, va_lis
 	wchar_t *p0;		/* saves original value of p when necessary */
 	int nassigned;		/* number of fields assigned */
 	int nconversions;	/* number of conversions */
-	size_t nread;		/* number of characters consumed from fp */
+	int nread;		/* number of characters consumed from fp */
 	int base;		/* base argument to conversion function */
 	wchar_t buf[BUF];	/* buffer for numeric conversions */
 	const wchar_t *ccls;	/* character class start */
@@ -175,7 +174,7 @@ __vfwscanf_unlocked(FILE * __restrict fp, const wchar_t * __restrict fmt, va_lis
 	for (;;) {
 		c = *fmt++;
 		if (c == 0)
-			return nassigned;
+			return (nassigned);
 		if (iswspace(c)) {
 			while ((c = __fgetwc_unlock(fp)) != WEOF &&
 			    iswspace(c))
@@ -328,9 +327,9 @@ literal:
 			if (flags & SUPPRESS)	/* ??? */
 				continue;
 			if (flags & SHORTSHORT)
-				*va_arg(ap, char *) = (char)nread;
+				*va_arg(ap, char *) = nread;
 			else if (flags & SHORT)
-				*va_arg(ap, short *) = (short)nread;
+				*va_arg(ap, short *) = nread;
 			else if (flags & LONG)
 				*va_arg(ap, long *) = nread;
 			else if (flags & LONGLONG)
@@ -342,7 +341,7 @@ literal:
 			else if (flags & PTRDIFFT)
 				*va_arg(ap, ptrdiff_t *) = nread;
 			else
-				*va_arg(ap, int *) = (int)nread;
+				*va_arg(ap, int *) = nread;
 			continue;
 
 		default:
@@ -352,7 +351,7 @@ literal:
 		 * Disgusting backwards compatibility hack.	XXX
 		 */
 		case '\0':	/* compat */
-			return EOF;
+			return (EOF);
 		}
 
 		/*
@@ -451,8 +450,7 @@ literal:
 					*p++ = (wchar_t)wi;
 				if (wi != WEOF)
 					ungetwc(wi, fp);
-				_DIAGASSERT(__type_fit(int, p - p0));
-				n = (int)(p - p0);
+				n = p - p0;
 				if (n == 0)
 					goto match_failure;
 				*p = 0;
@@ -701,8 +699,7 @@ literal:
 					*va_arg(ap, int *) = (int)res;
 				nassigned++;
 			}
-			_DIAGASSERT(__type_fit(int, p - buf));
-			nread += (int)(p - buf);
+			nread += p - buf;
 			nconversions++;
 			break;
 
@@ -715,19 +712,23 @@ literal:
 			if ((width = parsefloat(fp, buf, buf + width)) == 0)
 				goto match_failure;
 			if ((flags & SUPPRESS) == 0) {
+#ifdef notyet
 				if (flags & LONGDBL) {
 					long double res = wcstold(buf, &p);
 					*va_arg(ap, long double *) = res;
 				} else
+#endif
 				if (flags & LONG) {
 					double res = wcstod(buf, &p);
 					*va_arg(ap, double *) = res;
+#ifdef notyet
 				} else {
 					float res = wcstof(buf, &p);
 					*va_arg(ap, float *) = res;
+#endif
 				}
 #ifdef DEBUG
-				if (p - buf != (ptrdiff_t)width)
+				if (p - buf != width)
 					abort();
 #endif
 				nassigned++;
@@ -739,9 +740,9 @@ literal:
 		}
 	}
 input_failure:
-	return nconversions != 0 ? nassigned : EOF;
+	return (nconversions != 0 ? nassigned : EOF);
 match_failure:
-	return nassigned;
+	return (nassigned);
 }
 
 #ifndef NO_FLOATING_POINT
@@ -894,7 +895,6 @@ parsedone:
 	while (commit < --p)
 		ungetwc(*p, fp);
 	*++commit = '\0';
-	_DIAGASSERT(__type_fit(int, commit - buf));
-	return (int)(commit - buf);
+	return (commit - buf);
 }
 #endif

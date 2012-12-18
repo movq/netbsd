@@ -1,4 +1,4 @@
-/*	$NetBSD: fdesc_vfsops.c,v 1.86 2011/09/27 01:22:12 christos Exp $	*/
+/*	$NetBSD: fdesc_vfsops.c,v 1.77 2008/06/28 01:34:06 rumble Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.86 2011/09/27 01:22:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.77 2008/06/28 01:34:06 rumble Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -79,6 +79,7 @@ fdesc_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
 	int error = 0;
+	struct fdescmount *fmp;
 	struct vnode *rvp;
 
 	if (mp->mnt_flag & MNT_GETARGS) {
@@ -95,16 +96,19 @@ fdesc_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	if (error)
 		return (error);
 
+	MALLOC(fmp, struct fdescmount *, sizeof(struct fdescmount),
+				M_UFSMNT, M_WAITOK);	/* XXX */
 	rvp->v_type = VDIR;
 	rvp->v_vflag |= VV_ROOT;
-	mp->mnt_stat.f_namemax = FDESC_MAXNAMLEN;
+	fmp->f_root = rvp;
+	mp->mnt_stat.f_namemax = MAXNAMLEN;
 	mp->mnt_flag |= MNT_LOCAL;
-	mp->mnt_data = rvp;
+	mp->mnt_data = fmp;
 	vfs_getnewfsid(mp);
 
 	error = set_statvfs_info(path, UIO_USERSPACE, "fdesc", UIO_SYSSPACE,
 	    mp->mnt_op->vfs_name, mp, l);
-	VOP_UNLOCK(rvp);
+	VOP_UNLOCK(rvp, 0);
 	return error;
 }
 
@@ -119,7 +123,7 @@ fdesc_unmount(struct mount *mp, int mntflags)
 {
 	int error;
 	int flags = 0;
-	struct vnode *rtvp = mp->mnt_data;
+	struct vnode *rtvp = VFSTOFDESC(mp)->f_root;
 
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
@@ -133,23 +137,79 @@ fdesc_unmount(struct mount *mp, int mntflags)
 	 * Blow it away for future re-use
 	 */
 	vgone(rtvp);
+	/*
+	 * Finally, throw away the fdescmount structure
+	 */
+	free(mp->mnt_data, M_UFSMNT);	/* XXX */
 	mp->mnt_data = NULL;
 
 	return (0);
 }
 
 int
-fdesc_root(struct mount *mp, struct vnode **vpp)
+fdesc_root(mp, vpp)
+	struct mount *mp;
+	struct vnode **vpp;
 {
 	struct vnode *vp;
 
 	/*
 	 * Return locked reference to root.
 	 */
-	vp = mp->mnt_data;
-	vref(vp);
+	vp = VFSTOFDESC(mp)->f_root;
+	VREF(vp);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	*vpp = vp;
+	return (0);
+}
+
+int
+fdesc_statvfs(mp, sbp)
+	struct mount *mp;
+	struct statvfs *sbp;
+{
+	struct lwp *l = curlwp;
+	struct filedesc *fdp;
+	struct proc *p;
+	int lim;
+	int i;
+	int last;
+	int freefd;
+
+	/*
+	 * Compute number of free file descriptors.
+	 * [ Strange results will ensue if the open file
+	 * limit is ever reduced below the current number
+	 * of open files... ]
+	 */
+	p = l->l_proc;
+	lim = p->p_rlimit[RLIMIT_NOFILE].rlim_cur;
+	fdp = p->p_fd;
+	last = min(fdp->fd_nfiles, lim);
+	freefd = 0;
+	for (i = fdp->fd_freefile; i < last; i++)
+		if (fdp->fd_ofiles[i] == NULL)
+			freefd++;
+
+	/*
+	 * Adjust for the fact that the fdesc array may not
+	 * have been fully allocated yet.
+	 */
+	if (fdp->fd_nfiles < lim)
+		freefd += (lim - fdp->fd_nfiles);
+
+	sbp->f_bsize = DEV_BSIZE;
+	sbp->f_frsize = DEV_BSIZE;
+	sbp->f_iosize = DEV_BSIZE;
+	sbp->f_blocks = 2;		/* 1K to keep df happy */
+	sbp->f_bfree = 0;
+	sbp->f_bavail = 0;
+	sbp->f_bresvd = 0;
+	sbp->f_files = lim + 1;		/* Allow for "." */
+	sbp->f_ffree = freefd;		/* See comments above */
+	sbp->f_favail = freefd;		/* See comments above */
+	sbp->f_fresvd = 0;
+	copy_statvfs_info(sbp, mp);
 	return (0);
 }
 
@@ -189,7 +249,7 @@ struct vfsops fdesc_vfsops = {
 	fdesc_unmount,
 	fdesc_root,
 	(void *)eopnotsupp,		/* vfs_quotactl */
-	genfs_statvfs,
+	fdesc_statvfs,
 	fdesc_sync,
 	fdesc_vget,
 	(void *)eopnotsupp,		/* vfs_fhtovp */

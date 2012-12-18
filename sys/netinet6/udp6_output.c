@@ -1,4 +1,4 @@
-/*	$NetBSD: udp6_output.c,v 1.43 2011/09/24 17:22:14 christos Exp $	*/
+/*	$NetBSD: udp6_output.c,v 1.37.4.1 2010/07/16 19:12:53 riz Exp $	*/
 /*	$KAME: udp6_output.c,v 1.43 2001/10/15 09:19:52 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udp6_output.c,v 1.43 2011/09/24 17:22:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udp6_output.c,v 1.37.4.1 2010/07/16 19:12:53 riz Exp $");
 
 #include "opt_inet.h"
 
@@ -78,7 +78,6 @@ __KERNEL_RCSID(0, "$NetBSD: udp6_output.c,v 1.43 2011/09/24 17:22:14 christos Ex
 #include <sys/proc.h>
 #include <sys/syslog.h>
 #include <sys/kauth.h>
-#include <sys/domain.h>
 
 #include <net/if.h>
 #include <net/route.h>
@@ -112,9 +111,8 @@ __KERNEL_RCSID(0, "$NetBSD: udp6_output.c,v 1.43 2011/09/24 17:22:14 christos Ex
  */
 
 int
-udp6_output(struct in6pcb * const in6p, struct mbuf *m,
-    struct mbuf * const addr6, struct mbuf * const control,
-    struct lwp * const l)
+udp6_output(struct in6pcb *in6p, struct mbuf *m, struct mbuf *addr6, 
+	struct mbuf *control, struct lwp *l)
 {
 	struct rtentry *rt;
 	u_int32_t ulen = m->m_pkthdr.len;
@@ -130,6 +128,7 @@ udp6_output(struct in6pcb * const in6p, struct mbuf *m,
 	int error = 0;
 	struct ip6_pktopts *optp = NULL;
 	struct ip6_pktopts opt;
+	int priv;
 	int af = AF_INET6, hlen = sizeof(struct ip6_hdr);
 #ifdef INET
 	struct ip *ip;
@@ -137,6 +136,11 @@ udp6_output(struct in6pcb * const in6p, struct mbuf *m,
 	int flags = 0;
 #endif
 	struct sockaddr_in6 tmp;
+
+	priv = 0;
+	if (l && !kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL))
+		priv = 1;
 
 	if (addr6) {
 		if (addr6->m_len != sizeof(*sin6)) {
@@ -169,7 +173,7 @@ udp6_output(struct in6pcb * const in6p, struct mbuf *m,
 
 	if (control) {
 		if ((error = ip6_setpktopts(control, &opt,
-		    in6p->in6p_outputopts, l->l_cred, IPPROTO_UDP)) != 0)
+		    in6p->in6p_outputopts, priv, IPPROTO_UDP)) != 0)
 			goto release;
 		optp = &opt;
 	} else
@@ -182,9 +186,10 @@ udp6_output(struct in6pcb * const in6p, struct mbuf *m,
 		/*
 		 * IPv4 version of udp_output calls in_pcbconnect in this case,
 		 * which needs splnet and affects performance.
-		 * We have to do this as well, since in6_pcbsetport needs to
-		 * know the foreign address for some of the algorithms that
-		 * it employs.
+		 * Since we saw no essential reason for calling in_pcbconnect,
+		 * we get rid of such kind of logic, and call in6_selectsrc
+		 * and in6_pcbsetport in order to fill in the local address
+		 * and the local port.
 		 */
 		if (sin6->sin6_port == 0) {
 			error = EADDRNOTAVAIL;
@@ -279,24 +284,9 @@ udp6_output(struct in6pcb * const in6p, struct mbuf *m,
 				error = EADDRNOTAVAIL;
 			goto release;
 		}
-		if (in6p->in6p_lport == 0) {
-			/*
-			 * Craft a sockaddr_in6 for the local endpoint. Use the
-			 * "any" as a base, set the address, and recover the
-			 * scope.
-			 */
-			struct sockaddr_in6 lsin6 =
-			    *((const struct sockaddr_in6 *)in6p->in6p_socket->so_proto->pr_domain->dom_sa_any);
-			lsin6.sin6_addr = *laddr;
-			error = sa6_recoverscope(&lsin6);
-			if (error)
-				goto release;
-
-			error = in6_pcbconnect(in6p, addr6, l);
-
-			if (error)
-				goto release;
-		}
+		if (in6p->in6p_lport == 0 &&
+		    (error = in6_pcbsetport(laddr, in6p, l)) != 0)
+			goto release;
 	} else {
 		if (IN6_IS_ADDR_UNSPECIFIED(&in6p->in6p_faddr)) {
 			error = ENOTCONN;
@@ -404,7 +394,8 @@ udp6_output(struct in6pcb * const in6p, struct mbuf *m,
 
 		UDP_STATINC(UDP_STAT_OPACKETS);
 		error = ip_output(m, NULL, &in6p->in6p_route, flags /* XXX */,
-		    NULL, (struct socket *)in6p->in6p_socket);
+		    (struct ip_moptions *)NULL,
+		    (struct socket *)in6p->in6p_socket);
 		break;
 #else
 		error = EAFNOSUPPORT;

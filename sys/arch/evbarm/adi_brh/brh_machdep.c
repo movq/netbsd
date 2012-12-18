@@ -1,4 +1,4 @@
-/*	$NetBSD: brh_machdep.c,v 1.41 2012/09/22 00:33:38 matt Exp $	*/
+/*	$NetBSD: brh_machdep.c,v 1.28 2008/04/27 18:58:45 matt Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003 Wasabi Systems, Inc.
@@ -68,12 +68,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependent functions for kernel setup for the ADI Engineering
+ * Machine dependant functions for kernel setup for the ADI Engineering
  * BRH i80200 evaluation platform.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: brh_machdep.c,v 1.41 2012/09/22 00:33:38 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: brh_machdep.c,v 1.28 2008/04/27 18:58:45 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_pmap_debug.h"
@@ -98,7 +98,7 @@ __KERNEL_RCSID(0, "$NetBSD: brh_machdep.c,v 1.41 2012/09/22 00:33:38 matt Exp $"
 #include <ddb/db_extern.h>
 
 #include <machine/bootconfig.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <arm/undefined.h>
@@ -129,6 +129,19 @@ __KERNEL_RCSID(0, "$NetBSD: brh_machdep.c,v 1.41 2012/09/22 00:33:38 matt Exp $"
  */
 #define KERNEL_VM_SIZE		0x0C000000
 
+/*
+ * Address to call from cpu_reset() to reset the machine.
+ * This is machine architecture dependant as it varies depending
+ * on where the ROM appears when you turn the MMU off.
+ */
+
+u_int cpu_reset_address = 0x00000000;
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#define UND_STACK_SIZE	1
+
 BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
@@ -138,6 +151,8 @@ vm_offset_t physical_freestart;
 vm_offset_t physical_freeend;
 vm_offset_t physical_end;
 u_int free_pages;
+vm_offset_t pagetables_start;
+int physmem = 0;
 
 /*int debug_flags;*/
 #ifndef PMAP_STATIC_L1S
@@ -145,9 +160,17 @@ int max_processes = 64;			/* Default number */
 #endif	/* !PMAP_STATIC_L1S */
 
 /* Physical and virtual addresses for some global pages */
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
 pv_addr_t minidataclean;
 
 vm_offset_t msgbufphys;
+
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -164,6 +187,8 @@ extern int pmap_debug_level;
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
+
+struct user *proc0paddr;
 
 /* Prototypes */
 
@@ -213,7 +238,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -242,8 +266,6 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -639,7 +661,7 @@ initarm(void *arg)
 	printf("switching to new L1 page table  @%#lx...", kernel_l1pt.pv_pa);
 #endif
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -647,7 +669,8 @@ initarm(void *arg)
 	 * Move from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+	proc0paddr = (struct user *)kernelstack.pv_va;
+	lwp0.l_addr = proc0paddr;
 
 #ifdef VERBOSE_INIT_ARM
 	printf("done!\n");
@@ -775,6 +798,11 @@ initarm(void *arg)
 	becc_intr_init();
 #ifdef VERBOSE_INIT_ARM
 	printf("done.\n");
+#endif
+
+#if NKSYMS || defined(DDB) || defined(LKM)
+	/* Firmware doesn't load symbols. */
+	ksyms_init(0, NULL, NULL);
 #endif
 
 #ifdef DDB

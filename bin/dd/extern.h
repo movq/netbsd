@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.22 2011/11/07 22:24:23 jym Exp $	*/
+/*	$NetBSD: extern.h,v 1.17 2006/01/09 10:17:05 apb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -37,22 +37,8 @@
 
 #include <sys/cdefs.h>
 
-#ifdef NO_CONV
-__dead void block(void);
-__dead void block_close(void);
-__dead void unblock(void);
-__dead void unblock_close(void);
-#else
 void block(void);
 void block_close(void);
-void unblock(void);
-void unblock_close(void);
-#endif
-
-#ifndef NO_MSGFMT
-int dd_write_msg(const char *, int);
-#endif
-
 void dd_out(int);
 void def(void);
 void def_close(void);
@@ -61,10 +47,10 @@ void pos_in(void);
 void pos_out(void);
 void summary(void);
 void summaryx(int);
-__dead void terminate(int);
+void terminate(int);
 void unblock(void);
 void unblock_close(void);
-ssize_t bwrite(IO *, const void *, size_t);
+ssize_t bwrite(int, const void *, size_t);
 
 extern IO		in, out;
 extern STAT		st;
@@ -79,4 +65,3 @@ extern const u_char	a2e_32V[], a2e_POSIX[];
 extern const u_char	e2a_32V[], e2a_POSIX[];
 extern const u_char	a2ibm_32V[], a2ibm_POSIX[];
 extern u_char		casetab[];
-extern const char	*msgfmt;

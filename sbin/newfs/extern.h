@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.15 2011/03/06 17:08:16 bouyer Exp $	*/
+/*	$NetBSD: extern.h,v 1.13 2006/08/26 22:03:47 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Christos Zoulas.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -55,4 +60,3 @@ extern caddr_t	membase;	/* start address of memory based filesystem */
 extern int	needswap;	/* Filesystem not in native byte order */
 extern int	isappleufs; /* Filesystem is Apple UFS */
 extern char	*appleufs_volname;	/* Apple UFS volume name */
-extern int	quotas;		/* filesystem quota to enable */

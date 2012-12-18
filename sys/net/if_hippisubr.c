@@ -1,4 +1,4 @@
-/*	$NetBSD: if_hippisubr.c,v 1.39 2010/04/05 07:22:23 joerg Exp $	*/
+/*	$NetBSD: if_hippisubr.c,v 1.34 2008/02/20 17:05:53 matt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1989, 1993
@@ -30,10 +30,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_hippisubr.c,v 1.39 2010/04/05 07:22:23 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_hippisubr.c,v 1.34 2008/02/20 17:05:53 matt Exp $");
 
 #include "opt_inet.h"
 
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,7 +56,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_hippisubr.c,v 1.39 2010/04/05 07:22:23 joerg Exp 
 #include <net/if_dl.h>
 #include <net/if_types.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <net/if_hippi.h>
 
@@ -186,7 +189,7 @@ hippi_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 		l->llc_dsap = l->llc_ssap = LLC_SNAP_LSAP;
 		l->llc_snap.org_code[0] = l->llc_snap.org_code[1] =
 			l->llc_snap.org_code[2] = 0;
-		memcpy((void *) &l->llc_snap.ether_type, (void *) &htype,
+		bcopy((void *) &htype, (void *) &l->llc_snap.ether_type,
 		      sizeof(uint16_t));
 	}
 
@@ -336,7 +339,9 @@ hippi_ifattach(struct ifnet *ifp, void *lla)
 	ifp->if_input = hippi_input;
 	ifp->if_baudrate = IF_Mbps(800);	/* XXX double-check */
 
-	if_set_sadl(ifp, lla, 6, true);
+	if_set_sadl(ifp, lla, 6);
 
-	bpf_attach(ifp, DLT_HIPPI, sizeof(struct hippi_header));
+#if NBPFILTER > 0
+	bpfattach(ifp, DLT_HIPPI, sizeof(struct hippi_header));
+#endif
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: sdcd.c,v 1.14 2012/11/22 20:15:49 tsutsui Exp $	*/
+/*	$NetBSD: sdcd.c,v 1.8 2007/11/18 05:00:08 isaki Exp $	*/
 
 /*
  * Copyright (c) 2001 MINOURA Makoto.
@@ -27,6 +27,7 @@
 
 #include <sys/param.h>
 #include <sys/disklabel.h>
+#include <machine/stdarg.h>
 #include <lib/libkern/libkern.h>
 #include <lib/libsa/stand.h>
 
@@ -67,7 +68,7 @@ check_unit(int id)
 	}
 
 	{
-		struct iocs_inquiry *inqdata= buffer;
+		struct iocs_inquiry *inqdata = buffer;
 
 		error = IOCS_S_INQUIRY(100, id, inqdata);
 		if (error < 0) {		/* WHY??? */
@@ -75,7 +76,6 @@ check_unit(int id)
 			goto out;
 		}
 		if ((inqdata->unit != 0) &&	/* direct */
-		    (inqdata->unit != 5) &&	/* cdrom */
 		    (inqdata->unit != 7)) {	/* optical */
 			error = EUNIT;
 			goto out;
@@ -126,8 +126,8 @@ readdisklabel(int id)
 	if (error)
 		return error;
 	if (current_blklen > 4) {
-		printf("FATAL: Unsupported block size %d.\n",
-		    256 << current_blklen);
+		printf ("FATAL: Unsupported block size %d.\n",
+			256 << current_blklen);
 		return ERDLAB;
 	}
 
@@ -268,7 +268,6 @@ sdopen(struct open_file *f, ...)
 int
 sdclose(struct open_file *f)
 {
-
 	dealloc(f->f_devdata, sizeof(struct sdcd_softc));
 	return 0;
 }
@@ -278,7 +277,7 @@ sdstrategy(void *arg, int rw, daddr_t dblk, size_t size,
            void *buf, size_t *rsize)
 {
 	struct sdcd_softc *sc = arg;
-	uint32_t	start = sc->sc_partinfo.start + dblk;
+	u_int32_t	start = sc->sc_partinfo.start + dblk;
 	size_t		nblks;
 	int		error;
 
@@ -328,7 +327,7 @@ cdopen(struct open_file *f, ...)
 
 	if (id < 0 || id > 7)
 		return ENXIO;
-	if (part != 0 && part != 2)
+	if (part == 0 || part == 2)
 		return ENXIO;
 	if (current_id != id) {
 		error = check_unit(id);
@@ -339,19 +338,15 @@ cdopen(struct open_file *f, ...)
 	sc = alloc(sizeof(struct sdcd_softc));
 	current_npart = 3;
 	sc->sc_part = 0;
-	sc->sc_partinfo.start = 0;
-	sc->sc_partinfo.size = current_devsize;
+	sc->sc_partinfo.size = sc->sc_partinfo.size = current_devsize;
 	sc->sc_blocksize = current_blklen << 9;
 	f->f_devdata = sc;
-	current_id = id;
-
 	return 0;
 }
 
 int
 cdclose(struct open_file *f)
 {
-
 	dealloc(f->f_devdata, sizeof(struct sdcd_softc));
 	return 0;
 }
@@ -362,8 +357,6 @@ cdstrategy(void *arg, int rw, daddr_t dblk, size_t size,
 {
 	struct sdcd_softc *sc = arg;
 
-	/* cast dblk to avoid divdi3; 32bit is enough even for BD-ROMs.  */
-	return sdstrategy(arg, rw,
-			  (unsigned int) dblk / (sc->sc_blocksize/DEV_BSIZE),
+	return sdstrategy(arg, rw, dblk * DEV_BSIZE / sc->sc_blocksize,
 	                  size, buf, rsize);
 }

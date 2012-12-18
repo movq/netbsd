@@ -1,4 +1,4 @@
-/*-
+/*
  * Copyright 1998-2003 VIA Technologies, Inc. All Rights Reserved.
  * Copyright 2001-2003 S3 Graphics, Inc. All Rights Reserved.
  *
@@ -21,7 +21,6 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
-
 #ifndef _VIA_DRV_H_
 #define _VIA_DRV_H_
 
@@ -30,15 +29,42 @@
 
 #define DRIVER_NAME		"via"
 #define DRIVER_DESC		"VIA Unichrome / Pro"
-#define DRIVER_DATE		"20070202"
-
-#define DRIVER_MAJOR		2
-#define DRIVER_MINOR		11
-#define DRIVER_PATCHLEVEL	1
 
 #include "via_verifier.h"
 
+/*
+ * Registers go here.
+ */
+
+
+#define CMDBUF_ALIGNMENT_SIZE   (0x100)
+#define CMDBUF_ALIGNMENT_MASK   (0x0ff)
+
+/* defines for VIA 3D registers */
+#define VIA_REG_STATUS	        0x400
+#define VIA_REG_TRANSET	        0x43C
+#define VIA_REG_TRANSPACE       0x440
+
+/* VIA_REG_STATUS(0x400): Engine Status */
+#define VIA_CMD_RGTR_BUSY       0x00000080	/* Command Regulator is busy */
+#define VIA_2D_ENG_BUSY	        0x00000001	/* 2D Engine is busy */
+#define VIA_3D_ENG_BUSY	        0x00000002	/* 3D Engine is busy */
+#define VIA_VR_QUEUE_BUSY       0x00020000	/* Virtual Queue is busy */
+
+
+
+#if defined(__linux__)
 #include "via_dmablit.h"
+
+/*
+ * This define and all its references can be removed when
+ * the DMA blit code has been implemented for FreeBSD.
+ */
+#define VIA_HAVE_DMABLIT 1
+#define VIA_HAVE_CORE_MM 1
+#define VIA_HAVE_FENCE   1
+#define VIA_HAVE_BUFFER  1
+#endif
 
 #define VIA_PCI_BUF_SIZE 60000
 #define VIA_FIRE_BUF_SIZE  1024
@@ -88,14 +114,25 @@ typedef struct drm_via_private {
 	uint32_t irq_enable_mask;
 	uint32_t irq_pending_mask;
 	int *irq_map;
+	/* Memory manager stuff */
+#ifdef VIA_HAVE_CORE_MM
 	unsigned int idle_fault;
 	struct drm_sman sman;
 	int vram_initialized;
 	int agp_initialized;
 	unsigned long vram_offset;
 	unsigned long agp_offset;
+#endif
+#ifdef VIA_HAVE_DMABLIT
 	drm_via_blitq_t blit_queues[VIA_NUM_BLIT_ENGINES];
-	uint32_t dma_diff;
+#endif
+        uint32_t dma_diff;
+#ifdef VIA_HAVE_FENCE
+	spinlock_t fence_lock;
+	uint32_t emit_0_sequence;
+	int have_idlelock;
+	struct timer_list fence_timer;
+#endif
 } drm_via_private_t;
 
 enum via_family {
@@ -127,18 +164,16 @@ extern int via_dma_blit( struct drm_device *dev, void *data, struct drm_file *fi
 
 extern int via_driver_load(struct drm_device *dev, unsigned long chipset);
 extern int via_driver_unload(struct drm_device *dev);
-
-extern int via_init_context(struct drm_device * dev, int context);
 extern int via_final_context(struct drm_device * dev, int context);
 
 extern int via_do_cleanup_map(struct drm_device * dev);
-extern uint32_t via_get_vblank_counter(struct drm_device *dev, unsigned int crtc);
-extern int via_enable_vblank(struct drm_device *dev, unsigned int crtc);
-extern void via_disable_vblank(struct drm_device *dev, unsigned int crtc);
+extern u32 via_get_vblank_counter(struct drm_device *dev, int crtc);
+extern int via_enable_vblank(struct drm_device *dev, int crtc);
+extern void via_disable_vblank(struct drm_device *dev, int crtc);
 
 extern irqreturn_t via_driver_irq_handler(DRM_IRQ_ARGS);
 extern void via_driver_irq_preinstall(struct drm_device * dev);
-extern int via_driver_irq_postinstall(struct drm_device *dev);
+extern int via_driver_irq_postinstall(struct drm_device * dev);
 extern void via_driver_irq_uninstall(struct drm_device * dev);
 
 extern int via_dma_cleanup(struct drm_device * dev);
@@ -148,11 +183,29 @@ extern void via_init_futex(drm_via_private_t *dev_priv);
 extern void via_cleanup_futex(drm_via_private_t *dev_priv);
 extern void via_release_futex(drm_via_private_t *dev_priv, int context);
 
+#ifdef VIA_HAVE_CORE_MM
 extern void via_reclaim_buffers_locked(struct drm_device *dev,
 				       struct drm_file *file_priv);
 extern void via_lastclose(struct drm_device *dev);
+#else
+extern int via_init_context(struct drm_device * dev, int context);
+#endif
 
+#ifdef VIA_HAVE_DMABLIT
 extern void via_dmablit_handler(struct drm_device *dev, int engine, int from_irq);
 extern void via_init_dmablit(struct drm_device *dev);
+#endif
+
+#ifdef VIA_HAVE_BUFFER
+extern struct drm_ttm_backend *via_create_ttm_backend_entry(struct drm_device *dev);
+extern int via_fence_types(struct drm_buffer_object *bo, uint32_t *fclass,
+			   uint32_t *type);
+extern int via_invalidate_caches(struct drm_device *dev, uint64_t buffer_flags);
+extern int via_init_mem_type(struct drm_device *dev, uint32_t type,
+			       struct drm_mem_type_manager *man);
+extern uint64_t via_evict_flags(struct drm_buffer_object *bo);
+extern int via_move(struct drm_buffer_object *bo, int evict,
+		int no_wait, struct drm_bo_mem_reg *new_mem);
+#endif
 
 #endif

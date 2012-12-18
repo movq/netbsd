@@ -1,4 +1,4 @@
-/*	$NetBSD: ldscript,v 1.8 2012/08/06 02:14:16 matt Exp $	*/
+/*	$NetBSD: ldscript,v 1.6 2005/12/11 12:17:10 christos Exp $	*/
 
 OUTPUT_FORMAT("elf32-littlearm", "elf32-bigarm",
 	      "elf32-littlearm")
@@ -15,8 +15,6 @@ MEMORY
 SECTIONS
 {
   FLASH = 0xf0080000;
-
-  /DISCARD/ : { *(.ARM.attributes*) *(.ARM.exidx) }  
 
   /* Read-only sections, merged into text segment: */
   __text_store = FLASH;
@@ -52,7 +50,6 @@ SECTIONS
   __bss_start = .;
   __bss_start__ = .;
   .sbss      :
-  AT (ADDR(.sbss))
   {
     PROVIDE (__sbss_start = .);
     PROVIDE (___sbss_start = .);
@@ -64,7 +61,6 @@ SECTIONS
     PROVIDE (___sbss_end = .);
   } > sdram
   .bss       :
-  AT (ADDR(.bss))
   {
    *(.dynbss)
    *(.bss)

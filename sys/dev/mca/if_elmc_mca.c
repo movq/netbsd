@@ -1,4 +1,4 @@
-/*	$NetBSD: if_elmc_mca.c,v 1.30 2011/06/03 16:28:40 tsutsui Exp $	*/
+/*	$NetBSD: if_elmc_mca.c,v 1.25 2008/04/28 20:23:53 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_elmc_mca.c,v 1.30 2011/06/03 16:28:40 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_elmc_mca.c,v 1.25 2008/04/28 20:23:53 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,8 +72,8 @@ struct elmc_mca_softc {
 	void		*sc_ih;		/* interrupt handle */
 };
 
-int	elmc_mca_match(device_t, cfdata_t, void *);
-void	elmc_mca_attach(device_t, device_t, void *);
+int	elmc_mca_match(struct device *, struct cfdata *, void *);
+void	elmc_mca_attach(struct device *, struct device *, void *);
 
 static void	elmc_mca_copyin(struct ie_softc *, void *, int, size_t);
 static void	elmc_mca_copyout(struct ie_softc *, const void *, int, size_t);
@@ -85,7 +85,7 @@ static void	elmc_mca_hwreset(struct ie_softc *, int);
 static int	elmc_mca_intrhook(struct ie_softc *, int);
 
 int
-elmc_mca_match(device_t parent, cfdata_t cf,
+elmc_mca_match(struct device *parent, struct cfdata *cf,
     void *aux)
 {
 	struct mca_attach_args *ma = aux;
@@ -99,7 +99,7 @@ elmc_mca_match(device_t parent, cfdata_t cf,
 }
 
 void
-elmc_mca_attach(device_t parent, device_t self, void *aux)
+elmc_mca_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct elmc_mca_softc *asc = device_private(self);
 	struct ie_softc *sc = &asc->sc_ie;
@@ -144,7 +144,6 @@ elmc_mca_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 
-	sc->sc_dev = self;
 	pbram_addr = ELMC_MADDR_BASE + (((pos2 & 0x18) >> 3) * 0x8000);
 
 	printf(" slot %d irq %d: 3Com EtherLink/MC Ethernet Adapter (3C523)\n",
@@ -152,7 +151,7 @@ elmc_mca_attach(device_t parent, device_t self, void *aux)
 
 	/* map the pio registers */
 	if (bus_space_map(ma->ma_iot, iobase, ELMC_IOADDR_SIZE, 0, &ioh)) {
-		aprint_error_dev(self, "unable to map i/o space\n");
+		aprint_error_dev(&sc->sc_dev, "unable to map i/o space\n");
 		return;
 	}
 
@@ -162,9 +161,9 @@ elmc_mca_attach(device_t parent, device_t self, void *aux)
 	 * about. Just use the first 16K.
 	 */
 	if (bus_space_map(ma->ma_memt, pbram_addr, ELMC_MADDR_SIZE, 0, &memh)) {
-		aprint_error_dev(self, "unable to map memory space\n");
+		aprint_error_dev(&sc->sc_dev, "unable to map memory space\n");
 		if (pbram_addr == 0xc0000) {
-			aprint_error_dev(self, "memory space 0xc0000 may conflict with vga\n");
+			aprint_error_dev(&sc->sc_dev, "memory space 0xc0000 may conflict with vga\n");
 		}
 
 		bus_space_unmap(ma->ma_iot, ioh, ELMC_IOADDR_SIZE);
@@ -235,7 +234,7 @@ elmc_mca_attach(device_t parent, device_t self, void *aux)
 	bus_space_barrier(sc->bt, sc->bh, 0, sc->sc_msize,
 			  BUS_SPACE_BARRIER_WRITE);
 	if (!i82586_proberam(sc)) {
-		aprint_error_dev(self, "can't talk to i82586!\n");
+		aprint_error_dev(&sc->sc_dev, "can't talk to i82586!\n");
 
 		bus_space_unmap(asc->sc_regt, asc->sc_regh, ELMC_IOADDR_SIZE);
 		bus_space_unmap(sc->bt, sc->bh, ELMC_MADDR_SIZE);
@@ -248,7 +247,7 @@ elmc_mca_attach(device_t parent, device_t self, void *aux)
 
 	/* dump known info */
 	printf("%s: rev %d, i/o %#04x-%#04x, mem %#06x-%#06x, %sternal xcvr\n",
-		device_xname(self), revision,
+		device_xname(&sc->sc_dev), revision,
 		iobase, iobase + ELMC_IOADDR_SIZE - 1,
 		pbram_addr, pbram_addr + ELMC_MADDR_SIZE - 1,
 		(pos2 & 0x20) ? "ex" : "in");
@@ -260,20 +259,24 @@ elmc_mca_attach(device_t parent, device_t self, void *aux)
 	for(i=0; i < MIN(6, ETHER_ADDR_LEN); i++)
 		myaddr[i] = bus_space_read_1(asc->sc_regt, asc->sc_regh, i);
 
-	printf("%s:", device_xname(self));
-	i82586_attach(sc, "3C523", myaddr, NULL, 0, 0);
+	printf("%s:", device_xname(&sc->sc_dev));
+	i82586_attach((void *)sc, "3C523", myaddr, NULL, 0, 0);
 
 	/* establish interrupt handler */
 	asc->sc_ih = mca_intr_establish(ma->ma_mc, irq, IPL_NET, i82586_intr,
 			sc);
 	if (asc->sc_ih == NULL) {
-		aprint_error_dev(self, "couldn't establish interrupt handler\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt handler\n");
 		return;
 	}
 }
 
 static void
-elmc_mca_copyin (struct ie_softc *sc, void *dst, int offset, size_t size)
+elmc_mca_copyin (sc, dst, offset, size)
+        struct ie_softc *sc;
+        void *dst;
+        int offset;
+        size_t size;
 {
 	int dribble;
 	u_int8_t* bptr = dst;
@@ -298,7 +301,11 @@ elmc_mca_copyin (struct ie_softc *sc, void *dst, int offset, size_t size)
 }
 
 static void
-elmc_mca_copyout (struct ie_softc *sc, const void *src, int offset, size_t size)
+elmc_mca_copyout (sc, src, offset, size)
+        struct ie_softc *sc;
+        const void *src;
+        int offset;
+        size_t size;
 {
 	int dribble;
 	int osize = size;
@@ -324,21 +331,28 @@ elmc_mca_copyout (struct ie_softc *sc, const void *src, int offset, size_t size)
 }
 
 static u_int16_t
-elmc_mca_read_16 (struct ie_softc *sc, int offset)
+elmc_mca_read_16 (sc, offset)
+        struct ie_softc *sc;
+        int offset;
 {
 	bus_space_barrier(sc->bt, sc->bh, offset, 2, BUS_SPACE_BARRIER_READ);
         return bus_space_read_2(sc->bt, sc->bh, offset);
 }
 
 static void
-elmc_mca_write_16 (struct ie_softc *sc, int offset, u_int16_t value)
+elmc_mca_write_16 (sc, offset, value)
+        struct ie_softc *sc;
+        int offset;
+        u_int16_t value;
 {
         bus_space_write_2(sc->bt, sc->bh, offset, value);
 	bus_space_barrier(sc->bt, sc->bh, offset, 2, BUS_SPACE_BARRIER_WRITE);
 }
 
 static void
-elmc_mca_write_24 (struct ie_softc *sc, int offset, int addr)
+elmc_mca_write_24 (sc, offset, addr)
+        struct ie_softc *sc;
+        int offset, addr;
 {
         bus_space_write_4(sc->bt, sc->bh, offset, addr +
                                 (u_long) sc->sc_maddr - (u_long) sc->sc_iobase);
@@ -349,7 +363,9 @@ elmc_mca_write_24 (struct ie_softc *sc, int offset, int addr)
  * Channel attention hook.
  */
 static void
-elmc_mca_attn(struct ie_softc *sc, int why)
+elmc_mca_attn(sc, why)
+	struct ie_softc *sc;
+	int why;
 {
     struct elmc_mca_softc* asc = (struct elmc_mca_softc *) sc;
     int intr = 0;
@@ -374,7 +390,9 @@ elmc_mca_attn(struct ie_softc *sc, int why)
  * Do full card hardware reset.
  */
 static void
-elmc_mca_hwreset(struct ie_softc *sc, int why)
+elmc_mca_hwreset(sc, why)
+	struct ie_softc *sc;
+	int why;
 {
     struct elmc_mca_softc* asc = (struct elmc_mca_softc *) sc;
 
@@ -392,7 +410,9 @@ elmc_mca_hwreset(struct ie_softc *sc, int why)
  * Interrupt hook.
  */
 static int
-elmc_mca_intrhook(struct ie_softc *sc, int why)
+elmc_mca_intrhook(sc, why)
+	struct ie_softc *sc;
+	int why;
 {
 	switch (why) {
 	case INTR_ACK:
@@ -406,5 +426,5 @@ elmc_mca_intrhook(struct ie_softc *sc, int why)
 	return (0);
 }
 
-CFATTACH_DECL_NEW(elmc_mca, sizeof(struct elmc_mca_softc),
+CFATTACH_DECL(elmc_mca, sizeof(struct elmc_mca_softc),
     elmc_mca_match, elmc_mca_attach, NULL, NULL);

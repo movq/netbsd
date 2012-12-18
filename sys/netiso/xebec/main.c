@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.17 2009/03/18 10:22:44 cegger Exp $	*/
+/*	$NetBSD: main.c,v 1.14 2007/01/18 12:43:38 cbiere Exp $	*/
 
 /*
  * TODO:
@@ -12,7 +12,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: main.c,v 1.17 2009/03/18 10:22:44 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: main.c,v 1.14 2007/01/18 12:43:38 cbiere Exp $");
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -56,7 +56,8 @@ extern void dump_predtable();
 extern void printprotoerrs();
 
 void
-usage(char *a)
+usage(a)
+	char *a;
 {
 	fprintf(stderr,
 	"usage: %s <transition file> {-D<debug options>} <other options>\n",
@@ -82,7 +83,8 @@ usage(char *a)
 }
 
 void
-openfiles(register char *proto)
+openfiles(proto)
+	register char *proto;
 {
 	register char *junk;
 	register int lenp = strlen(proto);
@@ -136,7 +138,9 @@ openfiles(register char *proto)
 }
 
 void
-includecode(FILE *file, register char *f)
+includecode(file, f)
+	FILE *file;
+	register char *f;
 {
 	register int count=1;
 	static char o='{';
@@ -161,7 +165,7 @@ includecode(FILE *file, register char *f)
 }
 
 void
-putincludes(void)
+putincludes()
 {
 	FakeFilename(actfile, Transfilename, lineno);
 	fprintf(actfile, "\n#include \"%s%s\"\n", kerneldirname, eventfile_h_name);
@@ -174,7 +178,9 @@ putincludes(void)
 }
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+int argc;
+char *argv[];
 {
 	register int i = 2;
 	extern char *strcpy();
@@ -389,7 +395,8 @@ main(int argc, char *argv[])
 int transno = 0;
 
 void
-Exit(int n)
+Exit(n)
+	int n;
 {
 	fprintf(stderr, "Error at line %d\n",lineno);
 	if(transno) fprintf(stderr, "Transition number %d\n",transno);
@@ -401,7 +408,7 @@ Exit(int n)
 }
 
 #if 0
-syntax(void)
+syntax()
 {
 	static char *synt[] = {
 		"*PROTOCOL <string>\n",
@@ -415,7 +422,10 @@ syntax(void)
 #endif
 
 void
-FakeFilename(FILE *outfile, char *name, int l)
+FakeFilename(outfile, name, l)
+	FILE *outfile;
+	char *name;
+	int l;
 {
 #if 0
 	doesn't work

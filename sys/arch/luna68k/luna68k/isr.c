@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.c,v 1.21 2011/11/26 04:40:51 tsutsui Exp $	*/
+/*	$NetBSD: isr.c,v 1.13 2008/07/10 16:14:16 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.21 2011/11/26 04:40:51 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.13 2008/07/10 16:14:16 tsutsui Exp $");
 
 /*
  * Link and dispatch interrupts.
@@ -53,14 +53,14 @@ int	idepth;
 volatile int	ssir;
 
 extern	int intrcnt[];		/* from locore.s */
-extern	void (*vectab[])(void);
-extern	void badtrap(void);
-extern	void intrhand_vectored(void);
+extern	void (*vectab[]) __P((void));
+extern	void badtrap __P((void));
+extern	void intrhand_vectored __P((void));
 
-extern	int getsr(void);	/* in locore.s */
+extern	int getsr __P((void));	/* in locore.s */
 
 void
-isrinit(void)
+isrinit()
 {
 	int i;
 
@@ -75,7 +75,11 @@ isrinit(void)
  * Called by driver attach functions.
  */
 void
-isrlink_autovec(int (*func)(void *), void *arg, int ipl, int priority)
+isrlink_autovec(func, arg, ipl, priority)
+	int (*func) __P((void *));
+	void *arg;
+	int ipl;
+	int priority;
 {
 	struct isr_autovec *newisr, *curisr;
 	isr_autovec_list_t *list;
@@ -146,7 +150,10 @@ isrlink_autovec(int (*func)(void *), void *arg, int ipl, int priority)
  * Called by bus interrupt establish functions.
  */
 void
-isrlink_vectored(int (*func)(void *), void *arg, int ipl, int vec)
+isrlink_vectored(func, arg, ipl, vec)
+	int (*func) __P((void *));
+	void *arg;
+	int ipl, vec;
 {
 	struct isr_vectored *isr;
 
@@ -173,7 +180,8 @@ isrlink_vectored(int (*func)(void *), void *arg, int ipl, int vec)
  * Unhook a vectored interrupt.
  */
 void
-isrunlink_vectored(int vec)
+isrunlink_vectored(vec)
+	int vec;
 {
 
 	if ((vec < ISRVECTORED) || (vec >= ISRVECTORED + NISRVECTORED))
@@ -183,7 +191,7 @@ isrunlink_vectored(int vec)
 		panic("isrunlink_vectored: not vectored interrupt");
 
 	vectab[vec] = badtrap;
-	memset(&isr_vectored[vec - ISRVECTORED], 0, sizeof(struct isr_vectored));
+	bzero(&isr_vectored[vec - ISRVECTORED], sizeof(struct isr_vectored));
 }
 
 /*
@@ -191,8 +199,8 @@ isrunlink_vectored(int vec)
  * assembly language autovectored interrupt routine.
  */
 void
-isrdispatch_autovec(int evec)
-	/* evec:		 format | vector offset */
+isrdispatch_autovec(evec)
+	int evec;		/* format | vector offset */
 {
 	struct isr_autovec *isr;
 	isr_autovec_list_t *list;
@@ -206,7 +214,7 @@ isrdispatch_autovec(int evec)
 	ipl = vec - ISRAUTOVEC;
 
 	intrcnt[ipl]++;
-	curcpu()->ci_data.cpu_nintr++;
+	uvmexp.intrs++;
 
 	list = &isr_autovec[ipl];
 	if (list->lh_first == NULL) {
@@ -235,7 +243,9 @@ isrdispatch_autovec(int evec)
  * assembly language vectored interrupt routine.
  */
 void
-isrdispatch_vectored(int pc, int evec, void *frame)
+isrdispatch_vectored(pc, evec, frame)
+	int pc, evec;
+	void *frame;
 {
 	struct isr_vectored *isr;
 	int ipl, vec;
@@ -245,7 +255,7 @@ isrdispatch_vectored(int pc, int evec, void *frame)
 	ipl = (getsr() >> 8) & 7;
 
 	intrcnt[ipl]++;
-	curcpu()->ci_data.cpu_nintr++;
+	uvmexp.intrs++;
 
 	if ((vec < ISRVECTORED) || (vec >= (ISRVECTORED + NISRVECTORED)))
 		panic("isrdispatch_vectored: bad vec 0x%x", vec);
@@ -279,7 +289,7 @@ const uint16_t ipl2psl_table[NIPL] = {
 	[IPL_SOFTBIO]    = PSL_S|PSL_IPL1,
 	[IPL_SOFTNET]    = PSL_S|PSL_IPL1,
 	[IPL_SOFTSERIAL] = PSL_S|PSL_IPL1,
-	[IPL_VM]         = PSL_S|PSL_IPL4,
-	[IPL_SCHED]      = PSL_S|PSL_IPL5,
+	[IPL_VM]         = PSL_S|PSL_IPL7,
+	[IPL_SCHED]      = PSL_S|PSL_IPL7,
 	[IPL_HIGH]       = PSL_S|PSL_IPL7,
 };

@@ -1,4 +1,4 @@
-/*	$NetBSD: esp_sbus.c,v 1.51 2009/09/17 16:28:12 tsutsui Exp $	*/
+/*	$NetBSD: esp_sbus.c,v 1.46 2008/04/28 20:23:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esp_sbus.c,v 1.51 2009/09/17 16:28:12 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esp_sbus.c,v 1.46 2008/04/28 20:23:57 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,6 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: esp_sbus.c,v 1.51 2009/09/17 16:28:12 tsutsui Exp $"
 
 struct esp_softc {
 	struct ncr53c9x_softc sc_ncr53c9x;	/* glue to MI code */
+	struct sbusdev	sc_sd;			/* sbus device */
 
 	bus_space_tag_t	sc_bustag;
 	bus_dma_tag_t	sc_dmatag;
@@ -131,7 +132,7 @@ static struct ncr53c9x_glue esp_sbus_glue1 = {
 };
 
 int
-espmatch_sbus(device_t parent, cfdata_t cf, void *aux)
+espmatch_sbus(struct device *parent, struct cfdata *cf, void *aux)
 {
 	int rv;
 	struct sbus_attach_args *sa = aux;
@@ -285,6 +286,10 @@ espattach_sbus(device_t parent, device_t self, void *aux)
 
 		esc->sc_pri = sa->sa_pri;
 
+		/* add me to the sbus structures */
+		esc->sc_sd.sd_reset = (void *)ncr53c9x_reset;
+		sbus_establish(&esc->sc_sd, self);
+
 		espattach(esc, &esp_sbus_glue);
 
 		return;
@@ -341,6 +346,10 @@ espattach_sbus(device_t parent, device_t self, void *aux)
 
 	esc->sc_pri = sa->sa_pri;
 
+	/* add me to the sbus structures */
+	esc->sc_sd.sd_reset = (void *)ncr53c9x_reset;
+	sbus_establish(&esc->sc_sd, self);
+
 	if (strcmp("ptscII", sa->sa_name) == 0) {
 		espattach(esc, &esp_sbus_glue1);
 	} else {
@@ -396,6 +405,10 @@ espattach_dma(device_t parent, device_t self, void *aux)
 	}
 
 	esc->sc_pri = sa->sa_pri;
+
+	/* Assume SBus is grandparent */
+	esc->sc_sd.sd_reset = (void *)ncr53c9x_reset;
+	sbus_establish(&esc->sc_sd, parent);
 
 	espattach(esc, &esp_sbus_glue);
 }

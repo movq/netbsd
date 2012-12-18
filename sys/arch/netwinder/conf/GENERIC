@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.114 2012/12/06 06:25:25 msaitoh Exp $
+# $NetBSD: GENERIC,v 1.93 2008/08/10 15:31:21 tls Exp $
 #
 # GENERIC machine description file
 # 
@@ -42,6 +42,10 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 options 	CPU_SA110	# Support the SA110 core
 makeoptions	CPUFLAGS="-march=armv4 -mtune=strongarm"
 
+# FPA options
+
+#options 	ARMFPE		# ARM Ltd FPE
+
 # Default console is wscons, if igsfb(4) and pckbc(4) are configured,
 # or com(4) otherwise.  You can force a serial console with these options
 #options 	CONSDEVNAME="\"com\"",CONCOMADDR=0x3f8,CONSPEED=115200
@@ -60,20 +64,21 @@ file-system	MSDOSFS		# MS-DOS file system
 file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
+#file-system	PORTAL		# portal filesystem (still experimental)
 file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
-file-system	TMPFS		# Efficient memory file-system
+#file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-#options 	QUOTA		# legacy UFS quotas
-#options 	QUOTA2		# new, in-filesystem UFS quotas
-#options 	FFS_EI		# FFS Endian Independent support
+#options 	QUOTA		# UFS quotas
+#options 	FFS_EI		# FFS Endian Independant support
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 options 	NFSSERVER
-options 	WAPBL		# File system journaling support
+options 	SOFTDEP
+options 	WAPBL		# File system journaling support - Experimental
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 
 # Networking options
@@ -116,8 +121,6 @@ options 	NFS_BOOT_DHCP
 # Compatibility options
 
 #options 	COMPAT_43	# 4.3BSD compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_20	# NetBSD 2.0 compatibility.
@@ -139,6 +142,8 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	SHMMAXPGS=1024	# 1024 pages is the default
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 # Device options
 
@@ -149,6 +154,7 @@ options 	SYSVSHM		# System V-like memory sharing
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 options 	IRQSTATS	# manage IRQ statistics
+#options 	LKM		# loadable kernel modules
 #options 	KMEMSTATS	# kernel memory statistics
 #options 	SCSIVERBOSE	# Verbose SCSI errors
 options 	PCIVERBOSE	# Verbose PCI descriptions
@@ -163,12 +169,12 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 #options 	ARM700BUGTRACK	# track the ARM700 swi bug
 #options 	PORTMASTER	# Enable PortMaster only options
-#options 	DIAGNOSTIC	# internal consistency checks
+#options 	DIAGNOSTIC	# internally consistency checks
 #options 	PMAP_DEBUG	# Enable pmap_debug_level code
 options 	DDB		# in-kernel debugger
 options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 makeoptions	DEBUG="-g"	# compile full symbol table
-options 	SYMTAB_SPACE=650000
+options 	SYMTAB_SPACE=480000
 
 config		netbsd	root on ? type ?
 
@@ -246,7 +252,7 @@ options 	WS_KERNEL_COLATTR=WSATTR_HILIT
 # compatibility to other console drivers
 options 	WSDISPLAY_COMPAT_PCVT		# emulate some ioctls
 options 	WSDISPLAY_COMPAT_SYSCONS	# emulate some ioctls
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
+options 	WSDISPLAY_COMPAT_USL		# VT handling
 options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 
 options 	FONT_GALLANT12x22		# Sun PROM font look-alike
@@ -283,10 +289,10 @@ pseudo-device 	crypto		# /dev/crypto device
 pseudo-device	swcrypto	# software crypto implementation
 
 # disk/mass storage pseudo-devices
-#pseudo-device	md			# memory disk device (ramdisk)
+#pseudo-device	md		1	# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	fss			# file system snapshot device
+pseudo-device	fss		4	# file system snapshot device
 #pseudo-device	cgd		4	# cryptographic disk devices
 
 # network pseudo-devices
@@ -304,6 +310,7 @@ pseudo-device   accf_http		# "httpready" accept filter
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
+pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter

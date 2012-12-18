@@ -1,4 +1,4 @@
-/*	$NetBSD: wesc.c,v 1.40 2012/10/27 17:17:31 chs Exp $ */
+/*	$NetBSD: wesc.c,v 1.38 2008/06/13 08:13:37 cegger Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -58,12 +58,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wesc.c,v 1.40 2012/10/27 17:17:31 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wesc.c,v 1.38 2008/06/13 08:13:37 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -76,8 +78,8 @@ __KERNEL_RCSID(0, "$NetBSD: wesc.c,v 1.40 2012/10/27 17:17:31 chs Exp $");
 #include <amiga/dev/siopvar.h>
 #include <amiga/dev/zbusvar.h>
 
-void wescattach(device_t, device_t, void *);
-int wescmatch(device_t, cfdata_t, void *);
+void wescattach(struct device *, struct device *, void *);
+int wescmatch(struct device *, struct cfdata *, void *);
 int wesc_dmaintr(void *);
 #ifdef DEBUG
 void wesc_dump(void);
@@ -87,37 +89,36 @@ void wesc_dump(void);
 #ifdef DEBUG
 #endif
 
-CFATTACH_DECL_NEW(wesc, sizeof(struct siop_softc),
+CFATTACH_DECL(wesc, sizeof(struct siop_softc),
     wescmatch, wescattach, NULL, NULL);
 
 /*
  * if we are an MacroSystemsUS Warp Engine
  */
 int
-wescmatch(device_t parent, cfdata_t cf, void *aux)
+wescmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 	if (zap->manid == 2203 && zap->prodid == 19)
 		return(1);
 	return(0);
 }
 
 void
-wescattach(device_t parent, device_t self, void *aux)
+wescattach(struct device *pdp, struct device *dp, void *auxp)
 {
-	struct siop_softc *sc = device_private(self);
+	struct siop_softc *sc = (struct siop_softc *)dp;
 	struct zbus_args *zap;
 	siop_regmap_p rp;
 	struct scsipi_adapter *adapt = &sc->sc_adapter;
 	struct scsipi_channel *chan = &sc->sc_channel;
 
-	sc->sc_dev = self;
 
 	printf("\n");
 
-	zap = aux;
+	zap = auxp;
 
 	sc->sc_siopp = rp = (siop_regmap_p)((char *)zap->va + 0x40000);
 
@@ -132,7 +133,7 @@ wescattach(device_t parent, device_t self, void *aux)
 	 * Fill in the scsipi_adapter.
 	 */
 	memset(adapt, 0, sizeof(*adapt));
-	adapt->adapt_dev = self;
+	adapt->adapt_dev = &sc->sc_dev;
 	adapt->adapt_nchannels = 1;
 	adapt->adapt_openings = 7;
 	adapt->adapt_max_periph = 1;
@@ -160,7 +161,7 @@ wescattach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(self, chan, scsiprint);
+	config_found(dp, chan, scsiprint);
 }
 
 int

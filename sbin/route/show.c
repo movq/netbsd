@@ -1,4 +1,4 @@
-/*	$NetBSD: show.c,v 1.44 2011/11/11 15:09:32 gdt Exp $	*/
+/*	$NetBSD: show.c,v 1.38 2008/09/10 01:06:58 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)route.c	8.3 (Berkeley) 3/9/94";
 #else
-__RCSID("$NetBSD: show.c,v 1.44 2011/11/11 15:09:32 gdt Exp $");
+__RCSID("$NetBSD: show.c,v 1.38 2008/09/10 01:06:58 dyoung Exp $");
 #endif
 #endif /* not lint */
 
@@ -43,13 +43,11 @@ __RCSID("$NetBSD: show.c,v 1.44 2011/11/11 15:09:32 gdt Exp $");
 #include <sys/socket.h>
 #include <sys/mbuf.h>
 
-#include <arpa/inet.h>
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
 #include <net/route.h>
 #include <netinet/in.h>
-#include <netmpls/mpls.h>
 
 #include <sys/sysctl.h>
 
@@ -63,14 +61,16 @@ __RCSID("$NetBSD: show.c,v 1.44 2011/11/11 15:09:32 gdt Exp $");
 
 #include "keywords.h"
 #include "extern.h"
-#include "prog_ops.h"
 
+#define ROUNDUP(a) \
+	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
+#define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
 
 /*
  * Definitions for showing gateway flags.
  */
 struct bits {
-	int	b_mask;
+	short	b_mask;
 	char	b_val;
 };
 static const struct bits bits[] = {
@@ -90,7 +90,6 @@ static const struct bits bits[] = {
 	{ RTF_CLONED,	'c' },
 	{ RTF_PROTO1,	'1' },
 	{ RTF_PROTO2,	'2' },
-	{ RTF_ANNOUNCE,	'p' },
 	{ 0, '\0' }
 };
 
@@ -139,10 +138,6 @@ parse_show_opts(int argc, char * const *argv, int *afp, int *flagsp,
 			af = AF_ISO;
 			afname = argv[argc - 1] + 1;
 			break;
-		case K_MPLS:
-			af = AF_MPLS;
-			afname = argv[argc - 1] + 1;
-			break;
 #endif /* SMALL */
 		case K_LINK:
 			if (nolink)
@@ -187,13 +182,13 @@ show(int argc, char *const *argv)
 	mib[3] = 0;
 	mib[4] = NET_RT_DUMP;
 	mib[5] = 0;
-	if (prog_sysctl(mib, 6, NULL, &needed, NULL, 0) < 0)
+	if (sysctl(mib, 6, NULL, &needed, NULL, 0) < 0)
 		err(EXIT_FAILURE, "route-sysctl-estimate");
 	buf = lim = NULL;
 	if (needed) {
 		if ((buf = malloc(needed)) == 0)
 			err(EXIT_FAILURE, "malloc");
-		if (prog_sysctl(mib, 6, buf, &needed, NULL, 0) < 0)
+		if (sysctl(mib, 6, buf, &needed, NULL, 0) < 0)
 			err(EXIT_FAILURE, "sysctl of routing table");
 		lim  = buf + needed;
 	}
@@ -288,14 +283,14 @@ p_rtentry(struct rt_msghdr *rtm)
 		else {
 			/* skip to gateway */
 			nm = (struct sockaddr *)
-			    (RT_ROUNDUP(sa->sa_len) + (char *)sa);
+			    (ROUNDUP(sa->sa_len) + (char *)sa);
 			/* skip over gateway to netmask */
 			nm = (struct sockaddr *)
-			    (RT_ROUNDUP(nm->sa_len) + (char *)nm);
+			    (ROUNDUP(nm->sa_len) + (char *)nm);
 		}
 
 		p_sockaddr(sa, nm, rtm->rtm_flags, WID_DST(af));
-		sa = (struct sockaddr *)(RT_ROUNDUP(sa->sa_len) + (char *)sa);
+		sa = (struct sockaddr *)(ROUNDUP(sa->sa_len) + (char *)sa);
 		p_sockaddr(sa, NULL, 0, WID_GW(af));
 	}
 	p_flags(rtm->rtm_flags & interesting);
@@ -323,9 +318,6 @@ pr_family(int af)
 #ifndef SMALL
 	case AF_ISO:
 		afname = "ISO";
-		break;
-	case AF_MPLS:
-		afname = "MPLS";
 		break;
 #endif /* SMALL */
 	case AF_APPLETALK:
@@ -365,31 +357,12 @@ p_sockaddr(struct sockaddr *sa, struct sockaddr *nm, int flags, int width)
 	case AF_INET6:
 		cp = routename(sa, nm, flags);
 		/* make sure numeric address is not truncated */
-		if (strchr(cp, ':') != NULL && (int)strlen(cp) > width)
+		if (strchr(cp, ':') != NULL && strlen(cp) > width)
 			width = strlen(cp);
 		break;
 #endif /* INET6 */
 
 #ifndef SMALL
-	case AF_MPLS:
-		{
-		struct sockaddr_mpls *smpls = (struct sockaddr_mpls *)sa;
-		union mpls_shim ms;
-
-		ms.s_addr = ntohl(smpls->smpls_addr.s_addr);
-
-		snprintf(workbuf, sizeof(workbuf), "%u",
-			ms.shim.label);
-		cp = workbuf;
-		}
-		break;
-	case AF_APPLETALK:
-		if (getnameinfo(sa, sa->sa_len, workbuf, sizeof(workbuf),
-		    NULL, 0, NI_NUMERICHOST) != 0)
-			strlcpy(workbuf, "invalid", sizeof(workbuf));
-		cp = workbuf;
-		break;
-
 #endif /* SMALL */
 
 	default:

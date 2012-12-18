@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuvar.h,v 1.90 2011/08/15 02:19:44 mrg Exp $ */
+/*	$NetBSD: cpuvar.h,v 1.75.10.5 2011/03/08 17:29:46 riz Exp $ */
 
 /*
  *  Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -265,7 +265,7 @@ struct cpu_info {
 	int		mid;		/* Module ID for MP systems */
 	int		mbus;		/* 1 if CPU is on MBus */
 	int		mxcc;		/* 1 if a MBus-level MXCC is present */
-	const char	*cpu_longname;	/* CPU model */
+	const char	*cpu_name;	/* CPU model */
 	int		cpu_impl;	/* CPU implementation code */
 	int		cpu_vers;	/* CPU version code */
 	int		mmu_impl;	/* MMU implementation code */
@@ -336,8 +336,8 @@ struct cpu_info {
 	 */
 	vaddr_t	ci_free_sva1, ci_free_eva1, ci_free_sva2, ci_free_eva2;
 
+	char ci_cpuname[8];	/* "cpu/0", etc. */
 	struct evcnt ci_savefpstate;
-	struct evcnt ci_savefpstate_null;
 	struct evcnt ci_xpmsg_mutex_fail;
 	struct evcnt ci_xpmsg_mutex_fail_call;
 	struct evcnt ci_intrcnt[16];
@@ -419,6 +419,7 @@ struct cpu_info {
 #define CPUFLG_HATCHED		0x1000	/* CPU is alive */
 #define CPUFLG_PAUSED		0x2000	/* CPU is paused */
 #define CPUFLG_GOTMSG		0x4000	/* CPU got an lev13 IPI */
+#define CPUFLG_READY		0x8000	/* CPU available for IPI */
 
 
 #define CPU_INFO_ITERATOR		int
@@ -434,6 +435,11 @@ struct cpu_info {
 #define CPU_INFO_FOREACH(cii, cp)	cii = 0, cp = curcpu(); cp != NULL; cp = NULL
 #endif
 
+/*
+ * Useful macros.
+ */
+#define CPU_NOTREADY(cpi)	((cpi) == NULL || cpuinfo.mid == (cpi)->mid || \
+				    ((cpi)->flags & CPUFLG_READY) == 0)
 
 /*
  * Related function prototypes

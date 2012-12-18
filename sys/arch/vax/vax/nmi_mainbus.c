@@ -1,4 +1,4 @@
-/*	$NetBSD: nmi_mainbus.c,v 1.11 2010/12/14 23:44:49 matt Exp $	   */
+/*	$NetBSD: nmi_mainbus.c,v 1.10 2008/03/15 00:24:13 matt Exp $	   */
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -31,19 +31,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nmi_mainbus.c,v 1.11 2010/12/14 23:44:49 matt Exp $");
-
-#define _VAX_BUS_DMA_PRIVATE
+__KERNEL_RCSID(0, "$NetBSD: nmi_mainbus.c,v 1.10 2008/03/15 00:24:13 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/bus.h>
-#include <sys/cpu.h>
 #include <sys/device.h>
+#include <sys/systm.h>
 
+#define	_VAX_BUS_DMA_PRIVATE
+#include <machine/bus.h>
 #include <machine/nexus.h>
 #include <machine/sid.h>
 #include <machine/scb.h>
+#include <machine/cpu.h>
 #include <machine/ka88.h>
 #include <machine/mainbus.h>
 

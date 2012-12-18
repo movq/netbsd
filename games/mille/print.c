@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.18 2011/08/21 08:50:08 christos Exp $	*/
+/*	$NetBSD: print.c,v 1.12 2007/12/15 19:44:42 perry Exp $	*/
 
 /*
  * Copyright (c) 1982, 1993
@@ -34,24 +34,21 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: print.c,v 1.18 2011/08/21 08:50:08 christos Exp $");
+__RCSID("$NetBSD: print.c,v 1.12 2007/12/15 19:44:42 perry Exp $");
 #endif
 #endif /* not lint */
 
-#include "mille.h"
+# include	"mille.h"
 
 /*
  * @(#)print.c	1.1 (Berkeley) 4/1/82
  */
 
-#define COMP_STRT	20
-#define CARD_STRT	2
-
-static void show_card(int, int, CARD, CARD *);
-static void show_score(int, int, int, int *);
+# define	COMP_STRT	20
+# define	CARD_STRT	2
 
 void
-prboard(void)
+prboard()
 {
 	PLAY	*pp;
 	int	i, j, k, temp;
@@ -105,8 +102,10 @@ prboard(void)
  * show_card:
  *	Show the given card if it is different from the last one shown
  */
-static void
-show_card(int y, int x, CARD c, CARD *lc)
+void
+show_card(y, x, c, lc)
+	int	y, x;
+	CARD	c, *lc;
 {
 	if (c == *lc)
 		return;
@@ -115,10 +114,15 @@ show_card(int y, int x, CARD c, CARD *lc)
 	*lc = c;
 }
 
-static const char Score_fmt[] = "%4d";
+static char	Score_fmt[] = "%4d";
 
 void
-prscore(bool for_real)
+prscore(for_real)
+#ifdef EXTRAP
+	bool	for_real;
+#else
+	bool	for_real __unused;
+#endif
 {
 	PLAY	*pp;
 	int	x;
@@ -163,8 +167,10 @@ prscore(bool for_real)
  *	Show a score value if it is different from the last time we
  *	showed it.
  */
-static void
-show_score(int y, int x, int s, int *ls)
+void
+show_score(y, x, s, ls)
+	int	y, x;
+	int	s, *ls;
 {
 	if (s == *ls)
 		return;

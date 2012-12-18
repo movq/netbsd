@@ -1,5 +1,5 @@
 /*
- * Machine dependent startup code for BEAGLEBOARD boards.
+ * Machine dependant startup code for BEAGLEBOARD boards.
  * Based on omap_start.S
  *
  * Copyright (c) 2002, 2003  Genetec Corporation.  All rights reserved.
@@ -41,6 +41,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -84,21 +90,16 @@
 
 #include "opt_omap.h"
 #include "opt_com.h"
+#include "assym.h"
 
 #include <machine/asm.h>
 #include <arm/armreg.h>
-#include "assym.h"
-
+#undef DOMAIN_CLIENT	/* assym.h defines as 1, but pte.h defines as 0x01 */
+#include <arm/arm32/pmap.h>
 #include <arm/omap/omap2_obioreg.h>
 #include <evbarm/beagle/beagle.h>  
 
-#ifdef MEMSIZE
-#define INIT_MEMSIZE	MEMSIZE
-#else
-#define INIT_MEMSIZE	128
-#endif
-
-RCSID("$NetBSD: beagle_start.S,v 1.12 2012/12/13 01:16:39 matt Exp $")
+RCSID("$NetBSD: beagle_start.S,v 1.2 2008/10/22 17:29:33 matt Exp $")
 
 #define Invalidate_I_cache(reg) \
 	mcr	p15, 0, reg, c7, c5, 0	/* Invalidate Entire I cache */
@@ -113,10 +114,10 @@ RCSID("$NetBSD: beagle_start.S,v 1.12 2012/12/13 01:16:39 matt Exp $")
 	.global	_C_LABEL(beagle_start)
 _C_LABEL(beagle_start):
 	/* Move into supervisor mode and disable IRQs/FIQs. */
-	cpsid	if, #PSR_SVC32_MODE
-
-	ldr	r4, .Luboot_args
-	stmia	r4, {r0-r3}
+	mrs	r0, cpsr
+	bic	r0, r0, #PSR_MODE
+	orr	r0, r0, #(I32_bit | F32_bit | PSR_SVC32_MODE)
+	msr	cpsr, r0
 
 	/*
 	 * Set up a preliminary mapping in the MMU to allow us to run
@@ -153,14 +154,15 @@ _C_LABEL(beagle_start):
 	adr	itable, mmu_init_table
 	ldr	l1sfrm, Ll1_s_frame
 	b	3f
-2:	str	pa, [l1table, va, lsl #2]
-	add	va, va, #1
+2:	str	pa, [l1table, va]
+	add	va, va, #4
 	add	pa, pa, #(L1_S_SIZE)
 	adds	n_sec, n_sec, #-1
 	bhi	2b
 3:	ldmia	itable!, {va,pa,n_sec,attr}
 	/* Convert va to l1 offset:	va = 4 * (va >> L1_S_SHIFT)	*/
-	lsr	va, va, #L1_S_SHIFT
+	mov	va, va, LSR #L1_S_SHIFT
+	mov	va, va, LSL #2
 	/* Convert pa to l1 entry:	pa = (pa & L1_S_FRAME) | attr	*/
 	and	pa, pa, l1sfrm
 	orr	pa, pa, attr
@@ -181,6 +183,8 @@ _C_LABEL(beagle_start):
 	 */
 
 	Invalidate_I_cache(r0)
+
+	mcr	p15, 0, r0, c7, c14, 0	/* Clean and Invalidate Entire Data Cache */
 
         ldr     r2, Lctl_ID_dis		/* Disable I+D caches */
 	mrc	p15, 0, r1, c1, c0, 0	/*  "       "   "     */
@@ -225,13 +229,11 @@ _C_LABEL(beagle_start):
 	
 	/* NOTREACHED */
 
-.Luboot_args:
-	.word	uboot_args
 Ll1_s_frame:
 	.word	L1_S_FRAME
 Ltemp_l1_table:
 	/* Put the temporary L1 translation table at the end of SDRAM. */
-	.word	0x80000000 + INIT_MEMSIZE * 0x100000 - L1_TABLE_SIZE
+	.word	0x80000000 + MEMSIZE * 0x100000 - L1_TABLE_SIZE
 
 /*
  * Coprocessor register initialization values
@@ -243,8 +245,12 @@ Lcontrol_set:
 	.word CPU_CONTROL_MMU_ENABLE  | \
 	      CPU_CONTROL_AFLT_ENABLE | \
 	      CPU_CONTROL_DC_ENABLE   | \
-	      CPU_CONTROL_IC_ENABLE   | \
-	      CPU_CONTROL_BPRD_ENABLE
+	      CPU_CONTROL_WBUF_ENABLE | \
+	      CPU_CONTROL_32BP_ENABLE | \
+	      CPU_CONTROL_32BD_ENABLE | \
+	      CPU_CONTROL_LABT_ENABLE | \
+	      CPU_CONTROL_SYST_ENABLE | \
+	      CPU_CONTROL_IC_ENABLE
 
 	/* bits to clear in the Control Register */
 Lcontrol_clr:
@@ -252,10 +258,12 @@ Lcontrol_clr:
 
 	/* bits to "write as existing" in the Control Register */
 Lcontrol_wax:
-	.word	(1 << 31) | \
-		(1 << 26) | \
-		(0x7ff << 14) | \
-		(0xff << 3)
+	.word	(3 << 30) | \
+		(1 << 29) | \
+		(1 << 28) | \
+		(3 << 26) | \
+		(3 << 19) | \
+		(1 << 17)
 		
 	/* bits to disable the caches */
 Lctl_ID_dis:
@@ -276,39 +284,23 @@ Lauxctl_CZ_restrict:
 mmu_init_table:
 	/* Map KERNEL_BASE VA to SDRAM PA, write-back cacheable */
 	MMU_INIT(KERNEL_BASE, KERNEL_BASE,
-		(INIT_MEMSIZE * L1_S_SIZE + L1_S_SIZE - 1) / L1_S_SIZE,
-		L1_S_PROTO | L1_S_APv7_KRW | L1_S_B | L1_S_C)
+		(MEMSIZE * L1_S_SIZE + L1_S_SIZE - 1) / L1_S_SIZE,
+		L1_S_PROTO | L1_S_AP(AP_KRW) | L1_S_B | L1_S_C)
 
 	/* Map first 1MB of L4 CORE (so console will work) */
-	MMU_INIT(OMAP_L4_CORE_VBASE, OMAP_L4_CORE_BASE,
-		(OMAP_L4_CORE_SIZE + L1_S_SIZE - 1) / L1_S_SIZE,
-		L1_S_PROTO | L1_S_APv7_KRW)
+	MMU_INIT(OMAP3530_L4_CORE_VBASE, OMAP3530_L4_CORE_BASE,
+		1,
+		L1_S_PROTO | L1_S_AP(AP_KRW))
 
-	/* Map first 4MB of L4 PERIPHERAL (so console will work) */
-	MMU_INIT(OMAP_L4_PERIPHERAL_VBASE, OMAP_L4_PERIPHERAL_BASE,
-		(OMAP_L4_PERIPHERAL_SIZE + L1_S_SIZE - 1) / L1_S_SIZE,
-		L1_S_PROTO | L1_S_APv7_KRW)
+	/* Map first(all) 1MB of L4 PERIPHERAL (so console will work) */
+	MMU_INIT(OMAP3530_L4_PERIPHERAL_VBASE, OMAP3530_L4_PERIPHERAL_BASE,
+		1,
+		L1_S_PROTO | L1_S_AP(AP_KRW))
 
-#if defined(OMAP_L4_WAKEUP_BASE) && defined(OMAP_L4_WAKEUP_VBASE)
-	/* Map all 4MB of L4 WAKEUP (so console will work) */
-	MMU_INIT(OMAP_L4_WAKEUP_VBASE, OMAP_L4_WAKEUP_BASE,
-		(OMAP_L4_WAKEUP_SIZE + L1_S_SIZE - 1) / L1_S_SIZE,
-		L1_S_PROTO | L1_S_APv7_KRW)
-#endif
-
-#ifdef OMAP_L4_FAST_BASE
-	/* Map first 1MB of L4 FAST (so console will work) */
-	MMU_INIT(OMAP_L4_FAST_VBASE, OMAP_L4_FAST_BASE,
-		(OMAP_L4_FAST_SIZE + L1_S_SIZE - 1) / L1_S_SIZE,
-		L1_S_PROTO | L1_S_APv7_KRW)
-#endif
-
-#ifdef OMAP_SDRC_BASE
-	/* Map 64KB SDRAM Controller (SDRC) */
-	MMU_INIT(OMAP_SDRC_VBASE, OMAP_SDRC_BASE,
-		(OMAP_SDRC_SIZE + L1_S_SIZE - 1) / L1_S_SIZE,
-		L1_S_PROTO | L1_S_APv7_KRW)
-#endif
+	/* Map all 256KB of L4 WAKEUP (so console will work) */
+	MMU_INIT(OMAP3530_L4_WAKEUP_VBASE, OMAP3530_L4_WAKEUP_BASE,
+		1,
+		L1_S_PROTO | L1_S_AP(AP_KRW))
 
 	/* end of table */
 	MMU_INIT(0, 0, 0, 0)

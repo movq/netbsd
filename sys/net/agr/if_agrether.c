@@ -1,4 +1,4 @@
-/*	$NetBSD: if_agrether.c,v 1.9 2011/10/19 01:49:50 dyoung Exp $	*/
+/*	$NetBSD: if_agrether.c,v 1.6.36.1 2009/06/05 18:49:43 snj Exp $	*/
 
 /*-
  * Copyright (c)2005 YAMAMOTO Takashi,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_agrether.c,v 1.9 2011/10/19 01:49:50 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_agrether.c,v 1.6.36.1 2009/06/05 18:49:43 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -98,8 +98,7 @@ agrether_ctor(struct agr_softc *sc, struct ifnet *ifp_port)
 	agr_mc_init(sc, &priv->aep_multiaddrs);
 
 	sc->sc_iftprivate = priv;
-	/*
-	 * inherit ports capabilities
+	/* inherit ports capabilities
 	 * XXX this really needs to be the intersection of all
 	 * ports capabilities, not just the latest port.
 	 * Okay if ports are the same.
@@ -175,7 +174,9 @@ agrether_portinit(struct agr_softc *sc, struct agr_port *port)
 		 */
 		ec_port->ec_capenable |= ETHERCAP_VLAN_MTU;
 		if (p->if_flags & IFF_UP) {
-			error = if_flags_set(p, p->if_flags);
+			ifr.ifr_flags = p->if_flags;
+			error = (*p->if_ioctl)(p, SIOCSIFFLAGS,
+			    (void *) &ifr);
 			if (error) {
 				if (ec_port->ec_nvlans-- == 1)
 					ec_port->ec_capenable &=
@@ -232,8 +233,9 @@ agrether_portfini(struct agr_softc *sc, struct agr_port *port)
 		 */
 		ec_port->ec_capenable &= ~ETHERCAP_VLAN_MTU;
 		if (port->port_ifp->if_flags & IFF_UP) {
-			(void)if_flags_set(port->port_ifp,
-			    port->port_ifp->if_flags);
+			ifr.ifr_flags = port->port_ifp->if_flags;
+			(void) (*port->port_ifp->if_ioctl)(port->port_ifp,
+			    SIOCSIFFLAGS, (void *) &ifr);
 		}
 	}
 

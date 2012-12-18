@@ -1,4 +1,4 @@
-/*	$NetBSD: rtwreg.h,v 1.28 2010/03/15 23:21:08 dyoung Exp $	*/
+/*	$NetBSD: rtwreg.h,v 1.26 2008/09/08 23:36:54 gmcgarry Exp $	*/
 /*-
  * Copyright (c) 2004, 2005 David Young.  All rights reserved.
  *
@@ -12,6 +12,9 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of David Young may not be used to endorse or promote
+ *    products derived from this software without specific prior
+ *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY David Young ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -1011,6 +1014,45 @@ struct rtw_rxdesc {
 #ifndef BUS_SPACE_BARRIER_WRITE_BEFORE_WRITE
 #define BUS_SPACE_BARRIER_WRITE_BEFORE_WRITE BUS_SPACE_BARRIER_WRITE
 #endif
+
+/*
+ * Bus barrier
+ *
+ * Complete outstanding read and/or write ops on [reg0, reg1]
+ * ([reg1, reg0]) before starting new ops on the same region. See
+ * acceptable bus_space_barrier(9) for the flag definitions.
+ */
+#define RTW_BARRIER(regs, reg0, reg1, flags)			\
+	bus_space_barrier((regs)->r_bh, (regs)->r_bt,		\
+	    MIN(reg0, reg1), MAX(reg0, reg1) - MIN(reg0, reg1) + 4, flags)
+
+/*
+ * Barrier convenience macros.
+ */
+/* sync */
+#define RTW_SYNC(regs, reg0, reg1)				\
+	RTW_BARRIER(regs, reg0, reg1, BUS_SPACE_BARRIER_SYNC)
+
+/* write-before-write */
+#define RTW_WBW(regs, reg0, reg1)				\
+	RTW_BARRIER(regs, reg0, reg1, BUS_SPACE_BARRIER_WRITE_BEFORE_WRITE)
+
+/* write-before-read */
+#define RTW_WBR(regs, reg0, reg1)				\
+	RTW_BARRIER(regs, reg0, reg1, BUS_SPACE_BARRIER_WRITE_BEFORE_READ)
+
+/* read-before-read */
+#define RTW_RBR(regs, reg0, reg1)				\
+	RTW_BARRIER(regs, reg0, reg1, BUS_SPACE_BARRIER_READ_BEFORE_READ)
+
+/* read-before-write */
+#define RTW_RBW(regs, reg0, reg1)				\
+	RTW_BARRIER(regs, reg0, reg1, BUS_SPACE_BARRIER_READ_BEFORE_WRITE)
+
+#define RTW_WBRW(regs, reg0, reg1)				\
+		RTW_BARRIER(regs, reg0, reg1,			\
+		    BUS_SPACE_BARRIER_WRITE_BEFORE_READ |	\
+		    BUS_SPACE_BARRIER_WRITE_BEFORE_WRITE)
 
 /*
  * Registers for RTL8180L's built-in baseband modem.

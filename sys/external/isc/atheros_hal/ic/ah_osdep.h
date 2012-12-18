@@ -26,7 +26,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGES.
  *
- * $Id: ah_osdep.h,v 1.2 2011/07/17 20:54:51 joerg Exp $
+ * $Id: ah_osdep.h,v 1.1.10.2 2009/08/07 06:43:50 snj Exp $
  */
 
 #ifndef _ATH_AH_OSDEP_H_
@@ -38,6 +38,8 @@
 #include <sys/systm.h>
 #include <sys/endian.h>
 #include <sys/bus.h>
+
+#include <machine/stdarg.h>
 
 /*
  * Delay n microseconds.

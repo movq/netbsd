@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.h,v 1.9 2009/08/19 15:02:26 dyoung Exp $	*/
+/*	$NetBSD: isa_machdep.h,v 1.7 2008/04/28 20:23:34 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -43,8 +43,6 @@ extern struct pic_ops *isa_pic;
 /* function mappings */
 #define isa_attach_hook(p, s, iaa)					\
 	genppc_isa_attach_hook(p, s, iaa)
-#define isa_detach_hook(c, s)						\
-	genppc_isa_detach_hook(c, s)
 #define isa_intr_evcnt(ic, irq)						\
 	genppc_isa_intr_evcnt(ic, irq)
 #define isa_intr_establish(ic, irq, type, level, fun, arg)		\

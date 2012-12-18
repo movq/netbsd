@@ -1,4 +1,4 @@
-/*	$NetBSD: at91aicvar.h,v 1.5 2012/11/12 18:00:36 skrll Exp $	*/
+/*	$NetBSD: at91aicvar.h,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -42,7 +48,7 @@ struct intrhand {
 struct intrq {
 	TAILQ_HEAD(, intrhand) iq_list;	/* handler list */
 	struct evcnt iq_ev;		/* event counter */
-	uint32_t iq_levels;		/* IPL_*'s this IRQ has */
+	u_int32_t iq_levels;		/* IPL_*'s this IRQ has */
 	char iq_name[IRQNAMESIZE];	/* interrupt name */
 	int iq_type;			/* interrupt request type: */
 #define	_INTR_LOW_LEVEL		1		/* interrupt when signal at low level */
@@ -57,6 +63,6 @@ void at91aic_init(void);
 void *at91aic_intr_establish(int irq, int ipl, int type, int (*ih_func)(void *), void *arg);
 void at91aic_intr_disestablish(void *cookie);
 void at91aic_intr_poll(void *ihp, int flags);
-void at91aic_intr_dispatch(struct trapframe *frame);
+void at91aic_intr_dispatch(struct irqframe *frame);
 
 #endif /* _AT91AICVAR_H_ */

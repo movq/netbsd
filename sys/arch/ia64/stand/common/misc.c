@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.5 2009/07/20 04:59:03 kiyohara Exp $	*/
+/*	$NetBSD: misc.c,v 1.3 2007/03/04 06:00:03 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
@@ -30,7 +30,6 @@
 /* __FBSDID("$FreeBSD: src/sys/boot/common/misc.c,v 1.8.4.1 2004/09/03 19:25:40 iedowse Exp $"); */
 
 #include <lib/libsa/stand.h>
-#include <lib/libsa/loadfile.h>
 #include <bootstrap.h>
 
 /*
@@ -102,7 +101,7 @@ kern_bzero(vaddr_t dest, size_t len)
 	char buf[256];
 	size_t chunk, resid;
 
-	memset(buf, 0, sizeof(buf));
+	bzero(buf, sizeof(buf));
 	resid = len;
 	while (resid > 0) {
 		chunk = min(sizeof(buf), resid);

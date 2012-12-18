@@ -27,7 +27,6 @@
  * WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. 
  */
 
-#include <stdint.h>
 #include "bitfield.h"
 
 
@@ -44,7 +43,7 @@
 //
 // Global Constants
 //
-const uint32_t masks[] = {
+const unsigned long masks[] = {
     0x00000000,
     0x00000001, 0x00000003, 0x00000007, 0x0000000F,
     0x0000001F, 0x0000003F, 0x0000007F, 0x000000FF,
@@ -70,11 +69,11 @@ const uint32_t masks[] = {
 //
 // Routines
 //
-uint32_t
-bitfield_set(uint32_t *bf, int base, int length, uint32_t value)
+unsigned long
+bitfield_set(unsigned long *bf, int base, int length, unsigned long value)
 {
-    uint32_t t;
-    uint32_t m;
+    unsigned long t;
+    unsigned long m;
     int s;
 
     // compute shift & mask, coerce value to correct number of bits,
@@ -88,10 +87,10 @@ bitfield_set(uint32_t *bf, int base, int length, uint32_t value)
 }
 
 
-uint32_t
-bitfield_get(uint32_t bf, int base, int length)
+unsigned long
+bitfield_get(unsigned long bf, int base, int length)
 {
-    uint32_t m;
+    unsigned long m;
     int s;
 
     // compute shift & mask

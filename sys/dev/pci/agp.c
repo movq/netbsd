@@ -1,4 +1,4 @@
-/*	$NetBSD: agp.c,v 1.80 2012/04/06 20:24:28 plunky Exp $	*/
+/*	$NetBSD: agp.c,v 1.62.4.2 2011/05/19 19:34:14 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -65,7 +65,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp.c,v 1.80 2012/04/06 20:24:28 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp.c,v 1.62.4.2 2011/05/19 19:34:14 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,6 +78,8 @@ __KERNEL_RCSID(0, "$NetBSD: agp.c,v 1.80 2012/04/06 20:24:28 plunky Exp $");
 #include <sys/agpio.h>
 #include <sys/proc.h>
 #include <sys/mutex.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -100,12 +102,12 @@ static int agp_allocate_user(struct agp_softc *, agp_allocate *);
 static int agp_deallocate_user(struct agp_softc *, int);
 static int agp_bind_user(struct agp_softc *, agp_bind *);
 static int agp_unbind_user(struct agp_softc *, agp_unbind *);
-static int agp_generic_enable_v2(struct agp_softc *,
-    const struct pci_attach_args *, int, u_int32_t);
-static int agp_generic_enable_v3(struct agp_softc *,
-    const struct pci_attach_args *, int, u_int32_t);
-static int agpdev_match(const struct pci_attach_args *);
-static bool agp_resume(device_t, const pmf_qual_t *);
+static int agp_generic_enable_v2(struct agp_softc *, struct pci_attach_args *,
+				 int, u_int32_t);
+static int agp_generic_enable_v3(struct agp_softc *, struct pci_attach_args *,
+				 int, u_int32_t);
+static int agpdev_match(struct pci_attach_args *);
+static bool agp_resume(device_t PMF_FN_PROTO);
 
 #include "agp_ali.h"
 #include "agp_amd.h"
@@ -193,26 +195,6 @@ const struct agp_product {
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82Q45_HB,
 	  NULL, 		agp_i810_attach },
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82G45_HB,
-	  NULL, 		agp_i810_attach },
-	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82G41_HB,
-	  NULL, 		agp_i810_attach },
-	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_E7221_HB,
-	  NULL, 		agp_i810_attach },
-	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82965GME_HB,
-	  NULL, 		agp_i810_attach },
-	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82B43_HB,
-	  NULL, 		agp_i810_attach },
-	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_IRONLAKE_D_HB,
-	  NULL, 		agp_i810_attach },
-	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_IRONLAKE_M_HB,
-	  NULL, 		agp_i810_attach },
-	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_IRONLAKE_MA_HB,
-	  NULL, 		agp_i810_attach },
-	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_IRONLAKE_MC2_HB,
-	  NULL, 		agp_i810_attach },
-	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_PINEVIEW_HB,
-	  NULL, 		agp_i810_attach },
-	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_PINEVIEW_M_HB,
 	  NULL, 		agp_i810_attach },
 #endif
 
@@ -349,7 +331,7 @@ agpattach(device_t parent, device_t self, void *aux)
 	 * Work out an upper bound for agp memory allocation. This
 	 * uses a heuristic table from the Linux driver.
 	 */
-	memsize = physmem >> (20 - PAGE_SHIFT); /* memsize is in MB */
+	memsize = ptoa(physmem) >> 20;
 	for (i = 0; i < agp_max_size; i++) {
 		if (memsize <= agp_max[i][0])
 			break;
@@ -374,8 +356,11 @@ agpattach(device_t parent, device_t self, void *aux)
 	else
 		sc->as_chipc = NULL;
 
-	if (!pmf_device_register(self, NULL, agp_resume))
-		aprint_error_dev(self, "couldn't establish power handler\n");
+	if (!device_pmf_is_registered(self)) {
+		if (!pmf_device_register(self, NULL, agp_resume))
+			aprint_error_dev(self, "couldn't establish power "
+			    "handler\n");
+	}
 }
 
 CFATTACH_DECL_NEW(agp, sizeof(struct agp_softc),
@@ -445,7 +430,7 @@ agp_generic_detach(struct agp_softc *sc)
 }
 
 static int
-agpdev_match(const struct pci_attach_args *pa)
+agpdev_match(struct pci_attach_args *pa)
 {
 	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_DISPLAY &&
 	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_DISPLAY_VGA)
@@ -484,7 +469,7 @@ agp_generic_enable(struct agp_softc *sc, u_int32_t mode)
 }
 
 static int
-agp_generic_enable_v2(struct agp_softc *sc, const struct pci_attach_args *pa,
+agp_generic_enable_v2(struct agp_softc *sc, struct pci_attach_args *pa,
     int capoff, u_int32_t mode)
 {
 	pcireg_t tstatus, mstatus;
@@ -538,7 +523,7 @@ agp_generic_enable_v2(struct agp_softc *sc, const struct pci_attach_args *pa,
 }
 
 static int
-agp_generic_enable_v3(struct agp_softc *sc, const struct pci_attach_args *pa,
+agp_generic_enable_v3(struct agp_softc *sc, struct pci_attach_args *pa,
     int capoff, u_int32_t mode)
 {
 	pcireg_t tstatus, mstatus;
@@ -1034,41 +1019,6 @@ agpioctl(dev_t dev, u_long cmd, void *data, int fflag, struct lwp *l)
 	case AGPIOC_SETUP:
 		return agp_setup_user(sc, (agp_setup *)data);
 
-#ifdef __x86_64__
-{
-	/*
-	 * Handle paddr_t change from 32 bit for non PAE kernels
-	 * to 64 bit.
-	 */
-#define AGPIOC_OALLOCATE  _IOWR(AGPIOC_BASE, 6, agp_oallocate)
-
-	typedef struct _agp_oallocate {
-		int key;		/* tag of allocation            */
-		size_t pg_count;	/* number of pages              */
-		uint32_t type;		/* 0 == normal, other devspec   */
-		u_long physical;	/* device specific (some devices
-					 * need a phys address of the
-					 * actual page behind the gatt
-					 * table)                        */
-	} agp_oallocate;
-
-	case AGPIOC_OALLOCATE: {
-		int ret;
-		agp_allocate aga;
-		agp_oallocate *oaga = data;
-
-		aga.type = oaga->type;
-		aga.pg_count = oaga->pg_count;
-
-		if ((ret = agp_allocate_user(sc, &aga)) == 0) {
-			oaga->key = aga.key;
-			oaga->physical = (u_long)aga.physical;
-		}
-
-		return ret;
-	}
-}
-#endif
 	case AGPIOC_ALLOCATE:
 		return agp_allocate_user(sc, (agp_allocate *)data);
 
@@ -1260,7 +1210,7 @@ agp_free_dmamem(bus_dma_tag_t tag, size_t size, bus_dmamap_t map,
 }
 
 static bool
-agp_resume(device_t dv, const pmf_qual_t *qual)
+agp_resume(device_t dv PMF_FN_ARGS)
 {
 	agp_flush_cache();
 

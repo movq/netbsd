@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_machdep.c,v 1.17 2009/11/21 17:40:28 rmind Exp $	*/
+/*	$NetBSD: kgdb_machdep.c,v 1.14 2008/04/28 20:23:35 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 2002 The NetBSD Foundation, Inc.
@@ -42,6 +42,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Matthias Pfaller.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -56,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.17 2009/11/21 17:40:28 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.14 2008/04/28 20:23:35 martin Exp $");
 
 #include "opt_ddb.h"
 
@@ -75,6 +80,7 @@ __KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.17 2009/11/21 17:40:28 rmind Exp 
 #include <sys/systm.h>
 #include <sys/param.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/reboot.h>
 #include <sys/kgdb.h>
 
@@ -253,8 +259,8 @@ void
 kgdb_connect(int verbose)
 {
 
-	if (kgdb_dev == NODEV) {
-		printf("kgdb_dev=%"PRId64"\n", kgdb_dev);
+	if (kgdb_dev < 0) {
+		printf("kgdb_dev=%d\n", kgdb_dev);
 		return;
 	}
 
@@ -274,10 +280,10 @@ kgdb_connect(int verbose)
  * (This is called by panic, like Debugger())
  */
 void
-kgdb_panic(void)
+kgdb_panic()
 {
 
-	if (kgdb_dev != NODEV && kgdb_debug_panic) {
+	if (kgdb_dev >= 0 && kgdb_debug_panic) {
 		printf("entering kgdb\n");
 		kgdb_connect(kgdb_active == 0);
 	}

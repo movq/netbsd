@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bug.c,v 1.4 2009/03/14 15:36:11 dsl Exp $	*/
+/*	$NetBSD: if_bug.c,v 1.2 2008/04/28 20:23:30 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -50,7 +50,7 @@
 static int	bug_match(struct netif *, void *);
 static int	bug_probe(struct netif *, void *);
 static void	bug_init(struct iodesc *, void *);
-static int	bug_get(struct iodesc *, void *, size_t, saseconds_t);
+static int	bug_get(struct iodesc *, void *, size_t, time_t);
 static int	bug_put(struct iodesc *, void *, size_t);
 static void	bug_end(struct netif *);
 
@@ -82,7 +82,9 @@ struct bug_softc {
 static struct bug_softc bug_softc;
 
 int
-bug_match(struct netif *nif, void *machdep_hint)
+bug_match(nif, machdep_hint)
+	struct netif *nif;
+	void   *machdep_hint;
 {
 
 	if (machdep_hint &&
@@ -94,14 +96,18 @@ bug_match(struct netif *nif, void *machdep_hint)
 }
 
 int
-bug_probe(struct netif *nif, void *machdep_hint)
+bug_probe(nif, machdep_hint)
+	struct netif *nif;
+	void   *machdep_hint;
 {
 
 	return (0);
 }
 
 void
-bug_init(struct iodesc *desc, void *machdep_hint)
+bug_init(desc, machdep_hint)
+	struct iodesc *desc;
+	void   *machdep_hint;
 {
 	struct netif *nif = desc->io_netif;
 	struct bug_netio nio;
@@ -137,7 +143,11 @@ bug_init(struct iodesc *desc, void *machdep_hint)
 }
 
 int
-bug_get(struct iodesc *desc, void *pkt, size_t len, saseconds_t timeout)
+bug_get(desc, pkt, len, timeout)
+	struct	iodesc *desc;
+	void	*pkt;
+	size_t	len;
+	time_t	timeout;
 {
 	struct netif *nif = desc->io_netif;
 	struct bug_softc *sc = nif->nif_devdata;
@@ -166,7 +176,10 @@ bug_get(struct iodesc *desc, void *pkt, size_t len, saseconds_t timeout)
 }
 
 int
-bug_put(struct iodesc *desc, void *pkt, size_t len)
+bug_put(desc, pkt, len)
+	struct	iodesc *desc;
+	void	*pkt;
+	size_t	len;
 {
 	struct netif *nif = desc->io_netif;
 	struct bug_softc *sc = nif->nif_devdata;
@@ -192,7 +205,8 @@ bug_put(struct iodesc *desc, void *pkt, size_t len)
 }
 
 void
-bug_end(struct netif *nif)
+bug_end(nif)
+	struct netif *nif;
 {
 	struct bug_netio nio;
 

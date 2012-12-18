@@ -1,4 +1,4 @@
-/*	$NetBSD: wsmux.c,v 1.54 2012/01/30 01:54:08 rmind Exp $	*/
+/*	$NetBSD: wsmux.c,v 1.50 2008/04/28 20:24:01 martin Exp $	*/
 
 /*
  * Copyright (c) 1998, 2005 The NetBSD Foundation, Inc.
@@ -37,10 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsmux.c,v 1.54 2012/01/30 01:54:08 rmind Exp $");
-
-#include "opt_compat_netbsd.h"
-#include "opt_modular.h"
+__KERNEL_RCSID(0, "$NetBSD: wsmux.c,v 1.50 2008/04/28 20:24:01 martin Exp $");
 
 #include "wsdisplay.h"
 #include "wsmux.h"
@@ -141,29 +138,36 @@ wsmuxattach(int n)
 }
 
 /* Keep track of all muxes that have been allocated */
-static struct wsmux_softc **wsmuxdevs = NULL;
 static int nwsmux = 0;
+static struct wsmux_softc **wsmuxdevs;
 
 /* Return mux n, create if necessary */
 struct wsmux_softc *
 wsmux_getmux(int n)
 {
 	struct wsmux_softc *sc;
+	int i;
+	void *new;
 
 	n = WSMUXDEV(n);	/* limit range */
 
 	/* Make sure there is room for mux n in the table */
 	if (n >= nwsmux) {
-		void *new;
-
-		new = realloc(wsmuxdevs, (n + 1) * sizeof(*wsmuxdevs),
-		    M_DEVBUF, M_ZERO | M_NOWAIT);
+		i = nwsmux;
+		nwsmux = n + 1;
+		if (i != 0)
+			new = realloc(wsmuxdevs, nwsmux * sizeof (*wsmuxdevs),
+				      M_DEVBUF, M_NOWAIT);
+		else
+			new = malloc(nwsmux * sizeof (*wsmuxdevs),
+				     M_DEVBUF, M_NOWAIT);
 		if (new == NULL) {
 			printf("wsmux_getmux: no memory for mux %d\n", n);
-			return NULL;
+			return (NULL);
 		}
 		wsmuxdevs = new;
-		nwsmux = n + 1;
+		for (; i < nwsmux; i++)
+			wsmuxdevs[i] = NULL;
 	}
 
 	sc = wsmuxdevs[n];
@@ -408,9 +412,6 @@ wsmux_do_ioctl(device_t dv, u_long cmd, void *data, int flag,
 		 device_xname(sc->sc_base.me_dv), sc, cmd));
 
 	switch (cmd) {
-#if defined(COMPAT_50) || defined(MODULAR)
-	case WSMUXIO_OINJECTEVENT:
-#endif /* defined(COMPAT_50) || defined(MODULAR) */
 	case WSMUXIO_INJECTEVENT:
 		/* Inject an event, e.g., from moused. */
 		DPRINTF(("%s: inject\n", device_xname(sc->sc_base.me_dv)));

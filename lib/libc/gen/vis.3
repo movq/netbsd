@@ -1,4 +1,4 @@
-.\"	$NetBSD: vis.3,v 1.34 2012/12/15 07:34:24 wiz Exp $
+.\"	$NetBSD: vis.3,v 1.22 2006/04/09 15:24:34 jschauma Exp $
 .\"
 .\" Copyright (c) 1989, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,22 +29,16 @@
 .\"
 .\"     @(#)vis.3	8.1 (Berkeley) 6/9/93
 .\"
-.Dd December 14, 2012
+.Dd April 9, 2006
 .Dt VIS 3
 .Os
 .Sh NAME
 .Nm vis ,
-.Nm nvis ,
 .Nm strvis ,
-.Nm strnvis ,
 .Nm strvisx ,
-.Nm strnvisx ,
 .Nm svis ,
-.Nm snvis ,
 .Nm strsvis ,
-.Nm strsnvis ,
 .Nm strsvisx
-.Nm strsnvisx
 .Nd visually encode characters
 .Sh LIBRARY
 .Lb libc
@@ -52,28 +46,16 @@
 .In vis.h
 .Ft char *
 .Fn vis "char *dst" "int c" "int flag" "int nextc"
-.Ft char *
-.Fn nvis "char *dst" "size_t dlen" "int c" "int flag" "int nextc"
 .Ft int
 .Fn strvis "char *dst" "const char *src" "int flag"
 .Ft int
-.Fn strnvis "char *dst" "size_t dlen" "const char *src" "int flag"
-.Ft int
 .Fn strvisx "char *dst" "const char *src" "size_t len" "int flag"
-.Ft int
-.Fn strnvisx "char *dst" "size_t dlen" "const char *src" "size_t len" "int flag"
 .Ft char *
 .Fn svis "char *dst" "int c" "int flag" "int nextc" "const char *extra"
-.Ft char *
-.Fn snvis "char *dst" "size_t dlen" "int c" "int flag" "int nextc" "const char *extra"
 .Ft int
 .Fn strsvis "char *dst" "const char *src" "int flag" "const char *extra"
 .Ft int
-.Fn strsnvis "char *dst" "size_t dlen" "const char *src" "int flag" "const char *extra"
-.Ft int
 .Fn strsvisx "char *dst" "const char *src" "size_t len" "int flag" "const char *extra"
-.Ft int
-.Fn strsnvisx "char *dst" "size_t dlen" "const char *src" "size_t len" "int flag" "const char *extra"
 .Sh DESCRIPTION
 The
 .Fn vis
@@ -104,11 +86,9 @@ is only used when selecting the
 encoding format (explained below).
 .Pp
 The
-.Fn strvis ,
-.Fn strnvis ,
-.Fn strvisx ,
+.Fn strvis
 and
-.Fn strnvisx
+.Fn strvisx
 functions copy into
 .Fa dst
 a visual representation of
@@ -116,18 +96,14 @@ the string
 .Fa src .
 The
 .Fn strvis
-and
-.Fn strnvis
-functions encode characters from
+function encodes characters from
 .Fa src
 up to the
 first
 .Dv NUL .
 The
 .Fn strvisx
-and
-.Fn strnvisx
-functions encode exactly
+function encodes exactly
 .Fa len
 characters from
 .Fa src
@@ -146,44 +122,20 @@ of characters encoded from
 (plus one for the
 .Dv NUL ) .
 Both
-forms return the number of characters in
-.Fa dst
-(not including the trailing
+forms return the number of characters in dst (not including
+the trailing
 .Dv NUL ) .
-The
-.Dq Nm n
-versions of the functions also take an additional argument
-.Fa dlen
-that indicates the length of the
-.Fa dst
-buffer.
-If
-.Fa dlen
-is not large enough to fit the converted string then the
-.Fn strnvis
-and
-.Fn strnvisx
-functions return \-1 and set
-.Va errno
-to
-.Dv ENOSPC .
 .Pp
 The functions
 .Fn svis ,
-.Fn snvis ,
 .Fn strsvis ,
-.Fn strsnvis ,
-.Fn strsvisx ,
 and
-.Fn strsnvisx
+.Fn strsvisx
 correspond to
 .Fn vis ,
-.Fn nvis ,
 .Fn strvis ,
-.Fn strnvis ,
-.Fn strvisx ,
 and
-.Fn strnvisx
+.Fn strvisx
 but have an additional argument
 .Fa extra ,
 pointing to a
@@ -197,37 +149,25 @@ of certain characters to shells.
 The encoding is a unique, invertible representation composed entirely of
 graphic characters; it can be decoded back into the original form using
 the
-.Xr unvis 3 ,
-.Xr strunvis 3
+.Xr unvis 3
 or
-.Xr strnunvis 3
+.Xr strunvis 3
 functions.
 .Pp
 There are two parameters that can be controlled: the range of
 characters that are encoded (applies only to
 .Fn vis ,
-.Fn nvis ,
 .Fn strvis ,
-.Fn strnvis ,
-.Fn strvisx ,
 and
-.Fn strnvisx ) ,
+.Fn strvisx ) ,
 and the type of representation used.
 By default, all non-graphic characters,
-except space, tab, and newline are encoded (see
-.Xr isgraph 3 ) .
+except space, tab, and newline are encoded.
+(See
+.Xr isgraph 3 . )
 The following flags
 alter this:
 .Bl -tag -width VIS_WHITEX
-.It Dv VIS_GLOB
-Also encode the magic characters
-.Ql ( * ,
-.Ql \&? ,
-.Ql \&[
-and
-.Ql # )
-recognized by
-.Xr glob 3 .
 .It Dv VIS_SP
 Also encode space.
 .It Dv VIS_TAB
@@ -242,23 +182,18 @@ Synonym for
 \&|
 .Dv VIS_NL .
 .It Dv VIS_SAFE
-Only encode
-.Dq unsafe
-characters.
+Only encode "unsafe" characters.
 Unsafe means control characters which may cause common terminals to perform
 unexpected functions.
 Currently this form allows space, tab, newline, backspace, bell, and
-return \(em in addition to all graphic characters \(em unencoded.
+return - in addition to all graphic characters - unencoded.
 .El
 .Pp
 (The above flags have no effect for
 .Fn svis ,
-.Fn snvis ,
 .Fn strsvis ,
-.Fn strsnvis ,
-.Fn strsvisx ,
 and
-.Fn strsnvisx .
+.Fn strsvisx .
 When using these functions, place all graphic characters to be
 encoded in an array pointed to by
 .Fa extra .
@@ -275,11 +210,7 @@ sequence; two backslashes are used to represent a real backslash,
 except
 .Dv VIS_HTTPSTYLE
 that uses
-.Ql % ,
-or
-.Dv VIS_MIMESTYLE
-that uses
-.Ql = .
+.Ql % .
 These are the visual formats:
 .Bl -tag -width VIS_CSTYLE
 .It (default)
@@ -288,8 +219,8 @@ Use an
 to represent meta characters (characters with the 8th
 bit set), and use caret
 .Ql ^
-to represent control characters (see
-.Xr iscntrl 3 ) .
+to represent control characters see
+.Pf ( Xr iscntrl 3 ) .
 The following formats are used:
 .Bl -tag -width xxxxx
 .It Dv \e^C
@@ -336,20 +267,19 @@ Use C-style backslash sequences to represent standard non-printable
 characters.
 The following sequences are used to represent the indicated characters:
 .Bd -unfilled -offset indent
-.Li \ea Tn  \(em BEL No (007)
-.Li \eb Tn  \(em BS No (010)
-.Li \ef Tn  \(em NP No (014)
-.Li \en Tn  \(em NL No (012)
-.Li \er Tn  \(em CR No (015)
-.Li \es Tn  \(em SP No (040)
-.Li \et Tn  \(em HT No (011)
-.Li \ev Tn  \(em VT No (013)
-.Li \e0 Tn  \(em NUL No (000)
+.Li \ea Tn  - BEL No (007)
+.Li \eb Tn  - BS No (010)
+.Li \ef Tn  - NP No (014)
+.Li \en Tn  - NL No (012)
+.Li \er Tn  - CR No (015)
+.Li \es Tn  - SP No (040)
+.Li \et Tn  - HT No (011)
+.Li \ev Tn  - VT No (013)
+.Li \e0 Tn  - NUL No (000)
 .Ed
 .Pp
-When using this format, the
-.Fa nextc
-parameter is looked at to determine if a
+When using this format, the nextc parameter is looked at to determine
+if a
 .Dv NUL
 character can be encoded as
 .Ql \e0
@@ -372,15 +302,7 @@ The form is
 .Ql %xx
 where
 .Em x
-represents a lower case hexadecimal digit.
-.It Dv VIS_MIMESTYLE
-Use MIME Quoted-Printable encoding as described in RFC 2045, only don't
-break lines and don't handle CRLF.
-The form is
-.Ql =XX
-where
-.Em X
-represents an upper case hexadecimal digit.
+represents a hexadecimal digit.
 .El
 .Pp
 There is one additional flag,
@@ -394,65 +316,27 @@ meta characters as
 .Ql M-C ) .
 With this flag set, the encoding is
 ambiguous and non-invertible.
-.Sh ERRORS
-The functions
-.Fn nvis
-and
-.Fn snvis
-will return
-.Dv NULL
-and the functions
-.Fn strnvis ,
-.Fn strnvisx ,
-.Fn strsnvis ,
-and
-.Fn strsnvisx ,
-will return \-1 when the
-.Fa dlen
-destination buffer size is not enough to perform the conversion while
-setting
-.Va errno
-to:
-.Bl -tag -width ".Bq Er ENOSPC"
-.It Bq Er ENOSPC
-The destination buffer size is not large enough to perform the conversion.
-.El
 .Sh SEE ALSO
 .Xr unvis 1 ,
 .Xr vis 1 ,
-.Xr glob 3 ,
 .Xr unvis 3
 .Rs
 .%A T. Berners-Lee
 .%T Uniform Resource Locators (URL)
-.%O "RFC 1738"
-.Re
-.Rs
-.%T "Multipurpose Internet Mail Extensions (MIME) Part One: Format of Internet Message Bodies"
-.%O "RFC 2045"
+.%O RFC1738
 .Re
 .Sh HISTORY
 The
-.Fn vis ,
-.Fn strvis ,
+.Fa vis ,
+.Fa strvis ,
 and
-.Fn strvisx
+.Fa strvisx
 functions first appeared in
 .Bx 4.4 .
 The
-.Fn svis ,
-.Fn strsvis ,
+.Fa svis ,
+.Fa strsvis ,
 and
-.Fn strsvisx
+.Fa strsvisx
 functions appeared in
 .Nx 1.5 .
-The buffer size limited versions of the functions
-.Po Fn nvis ,
-.Fn strnvis ,
-.Fn strnvisx ,
-.Fn snvis ,
-.Fn strsnvis ,
-and
-.Fn strsnvisx Pc
-appeared in
-.Nx 6.0 .

@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_cl.c,v 1.11 2009/10/26 19:16:54 cegger Exp $ */
+/*	$NetBSD: ite_cl.c,v 1.9 2007/03/05 20:29:07 he Exp $ */
 
 /*
  * Copyright (c) 1995 Ezra Story
@@ -36,7 +36,7 @@
 #include "opt_amigacons.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite_cl.c,v 1.11 2009/10/26 19:16:54 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite_cl.c,v 1.9 2007/03/05 20:29:07 he Exp $");
 
 #include "grfcl.h"
 #if NGRFCL > 0
@@ -189,9 +189,9 @@ cl_clear(struct ite_softc *ip, int sy, int sx, int h, int w)
     	len = w*h;
 
     	SetTextPlane(ba, 0x00);
-    	memcpy(dst, src, len);
+    	bcopy(src, dst, len);
     	SetTextPlane(ba, 0x01);
-    	memcpy(dst, src, len);
+    	bcopy(src, dst, len);
 }
 
 void
@@ -208,18 +208,18 @@ cl_scroll(struct ite_softc *ip, int sy, int sx, int count, int dir)
 
     	switch (dir) {
     	case SCROLL_UP:
-    	    	memcpy(fb - (count * ip->cols), fb,
+    	    	bcopy(fb, fb - (count * ip->cols),
     	    	    (ip->bottom_margin + 1 - sy) * ip->cols);
     	    	break;
     	case SCROLL_DOWN:
-    	    	memcpy(fb + (count * ip->cols), fb,
+    	    	bcopy(fb, fb + (count * ip->cols),
     	    	    (ip->bottom_margin + 1 - (sy + count)) * ip->cols);
     	    	break;
     	case SCROLL_RIGHT:
-    	    	memcpy(fb+sx+count, fb+sx, ip->cols - (sx + count));
+    	    	bcopy(fb+sx, fb+sx+count, ip->cols - (sx + count));
     	    	break;
     	case SCROLL_LEFT:
-    	    	memcpy(fb+sx-count, fb+sx, ip->cols - sx);
+    	    	bcopy(fb+sx, fb+sx-count, ip->cols - sx);
     	    	break;
     	}
 
@@ -227,18 +227,18 @@ cl_scroll(struct ite_softc *ip, int sy, int sx, int count, int dir)
 
     	switch (dir) {
     	case SCROLL_UP:
-    	    	memcpy(fb - (count * ip->cols), fb,
+    	    	bcopy(fb, fb - (count * ip->cols),
     	    	    (ip->bottom_margin + 1 - sy) * ip->cols);
     	    	break;
     	case SCROLL_DOWN:
-    	    	memcpy(fb + (count * ip->cols), fb,
+    	    	bcopy(fb, fb + (count * ip->cols),
     	    	    (ip->bottom_margin + 1 - (sy + count)) * ip->cols);
     	    	break;
     	case SCROLL_RIGHT:
-    	    	memcpy(fb+sx+count, fb+sx, ip->cols - (sx + count));
+    	    	bcopy(fb+sx, fb+sx+count, ip->cols - (sx + count));
     	    	break;
     	case SCROLL_LEFT:
-    	    	memcpy(fb+sx-count, fb+sx, ip->cols - sx);
+    	    	bcopy(fb+sx, fb+sx-count, ip->cols - sx);
     	    	break;
     	}
 }

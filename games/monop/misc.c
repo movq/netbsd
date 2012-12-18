@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.23 2012/06/19 05:35:32 dholland Exp $	*/
+/*	$NetBSD: misc.c,v 1.20 2008/02/24 03:52:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: misc.c,v 1.23 2012/06/19 05:35:32 dholland Exp $");
+__RCSID("$NetBSD: misc.c,v 1.20 2008/02/24 03:52:09 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -45,14 +45,13 @@ __RCSID("$NetBSD: misc.c,v 1.23 2012/06/19 05:35:32 dholland Exp $");
 
 #include "monop.h"
 
-static void is_monop(MON *, int);
-
 /*
  *	This routine executes a truncated set of commands until a
  * "yes or "no" answer is gotten.
  */
 int
-getyn(const char *prompt)
+getyn(prompt)
+	const char *prompt;
 {
 	int com;
 
@@ -67,7 +66,7 @@ getyn(const char *prompt)
  *	This routine tells the player if he's out of money.
  */
 void
-notify(void)
+notify()
 {
 	if (cur_p->money < 0)
 		printf("That leaves you $%d in debt\n", -cur_p->money);
@@ -83,7 +82,7 @@ notify(void)
  *	This routine switches to the next player
  */
 void
-next_play(void)
+next_play()
 {
 	player = (player + 1) % num_play;
 	cur_p = &play[player];
@@ -95,7 +94,8 @@ next_play(void)
  * given prompt.
  */
 int
-get_int(const char *prompt)
+get_int(prompt)
+	const char *prompt;
 {
 	long num;
 	char *sp;
@@ -104,9 +104,8 @@ get_int(const char *prompt)
 	for (;;) {
 		printf("%s", prompt);
 		fgets(buf, sizeof(buf), stdin);
-		/* if stdin is closed we cant really play anymore */
 		if (feof(stdin))
-			quit();
+			return 0;
 		sp = strchr(buf, '\n');
 		if (sp)
 			*sp = '\0';
@@ -124,7 +123,8 @@ get_int(const char *prompt)
  *	This routine sets the monopoly flag from the list given.
  */
 void
-set_ownlist(int pl)
+set_ownlist(pl)
+	int pl;
 {
 	int num;		/* general counter		*/
 	MON *orig;		/* remember starting monop ptr	*/
@@ -234,8 +234,10 @@ set_ownlist(int pl)
 /*
  *	This routine sets things up as if it is a new monopoly
  */
-static void
-is_monop(MON *mp, int pl)
+void
+is_monop(mp, pl)
+	MON *mp;
+	int pl;
 {
 	int i;
 
@@ -250,7 +252,8 @@ is_monop(MON *mp, int pl)
  *	This routine sets things up as if it is no longer a monopoly
  */
 void
-is_not_monop(MON *mp)
+is_not_monop(mp)
+	MON *mp;
 {
 	int i;
 
@@ -264,7 +267,7 @@ is_not_monop(MON *mp)
  *	This routine gives a list of the current player's routine
  */
 void
-list(void)
+list()
 {
 	printhold(player);
 }
@@ -273,7 +276,7 @@ list(void)
  *	This routine gives a list of a given players holdings
  */
 void
-list_all(void)
+list_all()
 {
 	int pl;
 
@@ -286,14 +289,9 @@ list_all(void)
  *	This routine gives the players a chance before it exits.
  */
 void
-quit(void)
+quit()
 {
 	putchar('\n');
-
-	/* We dont even have a chance to input y/n if stdin is closed */
-	if (feof(stdin))
-		exit(0);
-
 	if (getyn("Do you all really want to quit? ") == 0)
 		exit(0);
 }

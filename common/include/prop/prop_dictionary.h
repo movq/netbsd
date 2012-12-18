@@ -1,7 +1,7 @@
-/*	$NetBSD: prop_dictionary.h,v 1.14 2011/09/30 22:08:18 jym Exp $	*/
+/*	$NetBSD: prop_dictionary.h,v 1.9 2008/04/28 20:22:51 martin Exp $	*/
 
 /*-
- * Copyright (c) 2006, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2006 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -82,12 +82,7 @@ bool		prop_dictionary_keysym_equals(prop_dictionary_keysym_t,
 					      prop_dictionary_keysym_t);
 
 #if defined(__NetBSD__)
-struct plistref;
-
 #if !defined(_KERNEL) && !defined(_STANDALONE)
-bool		prop_dictionary_externalize_to_pref(prop_dictionary_t, struct plistref *);
-bool		prop_dictionary_internalize_from_pref(const struct plistref *,
-		                                      prop_dictionary_t *);
 int		prop_dictionary_send_ioctl(prop_dictionary_t, int,
 					   unsigned long);
 int		prop_dictionary_recv_ioctl(int, unsigned long,
@@ -95,15 +90,9 @@ int		prop_dictionary_recv_ioctl(int, unsigned long,
 int		prop_dictionary_sendrecv_ioctl(prop_dictionary_t,
 					       int, unsigned long,
 					       prop_dictionary_t *);
-int		prop_dictionary_send_syscall(prop_dictionary_t,
-		     struct plistref *);
-int		prop_dictionary_recv_syscall(const struct plistref *,
-					   prop_dictionary_t *);
 #elif defined(_KERNEL)
-int		prop_dictionary_copyin(const struct plistref *,
-				       prop_dictionary_t *);
-int		prop_dictionary_copyout(struct plistref *,
-				       prop_dictionary_t);
+struct plistref;
+
 int		prop_dictionary_copyin_ioctl(const struct plistref *,
 					     const u_long,
 					     prop_dictionary_t *);
@@ -117,8 +106,6 @@ int		prop_dictionary_copyout_ioctl(struct plistref *,
  * Utility routines to make it more convenient to work with values
  * stored in dictionaries.
  */
-bool		prop_dictionary_get_dict(prop_dictionary_t, const char *,
-					 prop_dictionary_t *);
 bool		prop_dictionary_get_bool(prop_dictionary_t, const char *,
 					 bool *);
 bool		prop_dictionary_set_bool(prop_dictionary_t, const char *,
@@ -171,10 +158,6 @@ bool		prop_dictionary_get_cstring_nocopy(prop_dictionary_t,
 bool		prop_dictionary_set_cstring_nocopy(prop_dictionary_t,
 						   const char *,
 						   const char *);
-
-bool		prop_dictionary_set_and_rel(prop_dictionary_t,
-						   const char *,
-						   prop_object_t);
 
 __END_DECLS
 

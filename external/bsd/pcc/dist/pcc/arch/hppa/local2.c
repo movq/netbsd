@@ -1,5 +1,4 @@
-/*	Id: local2.c,v 1.30 2011/06/05 08:54:42 plunky Exp 	*/	
-/*	$NetBSD: local2.c,v 1.1.1.4 2011/09/01 12:46:33 plunky Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * Copyright (c) 2007 Michael Shalayeff
@@ -37,7 +36,7 @@
 void acon(NODE *p);
 void prtprolog(struct interpass_prolog *, int);
 int countargs(NODE *p, int *);
-void fixcalls(NODE *p, void *);
+void fixcalls(NODE *p);
 
 static int stkpos;
 int p2calls;
@@ -319,7 +318,7 @@ static void
 twollcomp(NODE *p)
 {
 	int o = p->n_op;
-	int s = getlab2();
+	int s = getlab();
 	int e = p->n_label;
 	int cb1, cb2;
 
@@ -399,7 +398,7 @@ canaddr(NODE *p)
 	int o = p->n_op;
 
 	if (o == NAME || o == REG || o == ICON || o == OREG ||
-	    (o == UMUL && shumul(p->n_left, SOREG)))
+	    (o == UMUL && shumul(p->n_left)))
 		return(1);
 	return(0);
 }
@@ -416,6 +415,8 @@ fldexpand(NODE *p, int cookie, char **cp)
 int
 flshape(NODE *p)
 {
+	int o = p->n_op;
+
 	if (isreg(p))
 		return SRDIR; /* Direct match */
 
@@ -600,7 +601,7 @@ countargs(NODE *p, int *n)
 }
 
 void
-fixcalls(NODE *p, void *arg)
+fixcalls(NODE *p)
 {
 	int n, o;
 
@@ -634,7 +635,7 @@ myreader(struct interpass *ipole)
 			break;
 
 		case IP_NODE:
-			walkf(ip->ip_node, fixcalls, 0);
+			walkf(ip->ip_node, fixcalls);
 			break;
 		}
 	}
@@ -650,7 +651,7 @@ myreader(struct interpass *ipole)
  * Remove some PCONVs after OREGs are created.
  */
 static void
-pconv2(NODE *p, void *arg)
+pconv2(NODE *p)
 {
 	NODE *q;
 
@@ -675,7 +676,7 @@ pconv2(NODE *p, void *arg)
 void
 mycanon(NODE *p)
 {
-	walkf(p, pconv2, 0);
+	walkf(p, pconv2);
 }
 
 void
@@ -749,7 +750,7 @@ COLORMAP(int c, int *r)
 	return 0; /* XXX gcc */
 }
 
-char * rnames[MAXREGS] = {
+const char * const rnames[MAXREGS] = {
 	"%r0", "%r1", "%rp", "%r3", "%r4", "%r5", "%r6", "%r7", "%r8", "%r9",
 	"%r10", "%r11", "%r12", "%r13", "%r14", "%r15", "%r16", "%r17", "%r18",
 	"%t4", "%t3", "%t2", "%t1", "%arg3", "%arg2", "%arg1", "%arg0", "%dp",
@@ -835,18 +836,6 @@ special(NODE *p, int shape)
 	case SPICON:
 		if (o != ICON || p->n_name[0] ||
 		    p->n_lval < -1024 || p->n_lval >= 1024)
-			break;
-		return SRDIR;
-	case SPCNHW:
-		if (o != ICON || p->n_name[0] || (p->n_lval & 0xffffffffLL))
-			break;
-		return SRDIR;
-	case SPCNLW:
-		if (o != ICON || p->n_name[0] || (p->n_lval & ~0xffffffffLL))
-			break;
-		return SRDIR;
-	case SPCNHI:
-		if (o != ICON || p->n_name[0] || (p->n_lval & ~0xfffff800LL))
 			break;
 		return SRDIR;
 	case SPCON:

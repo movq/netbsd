@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.21 2010/02/19 16:35:27 tnn Exp $	*/
+/*	$NetBSD: main.c,v 1.19 2008/09/16 13:32:04 perry Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -81,7 +81,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993\
 #if 0
 static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 1/3/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.21 2010/02/19 16:35:27 tnn Exp $");
+__RCSID("$NetBSD: main.c,v 1.19 2008/09/16 13:32:04 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -90,7 +90,6 @@ __RCSID("$NetBSD: main.c,v 1.21 2010/02/19 16:35:27 tnn Exp $");
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
 #include <regex.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -136,7 +135,7 @@ int aflag, eflag, nflag, ere;
  * Current file and line number; line numbers restart across compilation
  * units, but span across input files.
  */
-const char *fname;			/* File name. */
+char *fname;			/* File name. */
 u_long linenum;
 int lastline;			/* TRUE on the last line of the last file */
 
@@ -207,17 +206,13 @@ main(int argc, char *argv[])
  * together.  Empty strings and files are ignored.
  */
 char *
-cu_fgets(char **outbuf, size_t *outsize)
+cu_fgets(char *buf, int n)
 {
 	static enum {ST_EOF, ST_FILE, ST_STRING} state = ST_EOF;
 	static FILE *f;		/* Current open file */
 	static char *s;		/* Current pointer inside string */
 	static char string_ident[30];
-	size_t len;
 	char *p;
-
-	if (*outbuf == NULL)
-		*outsize = 0;
 
 again:
 	switch (state) {
@@ -236,7 +231,7 @@ again:
 		case CU_STRING:
 			if ((snprintf(string_ident,
 			    sizeof(string_ident), "\"%s\"", script->s)) >=
-			    (int)(sizeof(string_ident) - 1))
+			    sizeof(string_ident) - 1)
 				(void)strcpy(string_ident +
 				    sizeof(string_ident) - 6, " ...\"");
 			fname = string_ident;
@@ -245,18 +240,11 @@ again:
 			goto again;
 		}
 	case ST_FILE:
-		if ((p = fgetln(f, &len)) != NULL) {
+		if ((p = fgets(buf, n, f)) != NULL) {
 			linenum++;
-			if (len >= *outsize) {
-				free(*outbuf);
-				*outsize = ROUNDLEN(len + 1);
-				*outbuf = xmalloc(*outsize);
-			}
-			memcpy(*outbuf, p, len);
-			(*outbuf)[len] = '\0';
-			if (linenum == 1 && p[0] == '#' && p[1] == 'n')
+			if (linenum == 1 && buf[0] == '#' && buf[1] == 'n')
 				nflag = 1;
-			return (*outbuf);
+			return (p);
 		}
 		script = script->next;
 		(void)fclose(f);
@@ -265,15 +253,12 @@ again:
 	case ST_STRING:
 		if (linenum == 0 && s[0] == '#' && s[1] == 'n')
 			nflag = 1;
-		p = *outbuf;
-		len = *outsize;
+		p = buf;
 		for (;;) {
-			if (len <= 1) {
-				*outbuf = xrealloc(*outbuf,
-				    *outsize + _POSIX2_LINE_MAX);
-				p = *outbuf + *outsize - len;
-				len += _POSIX2_LINE_MAX;
-				*outsize += _POSIX2_LINE_MAX;
+			if (n-- <= 1) {
+				*p = '\0';
+				linenum++;
+				return (buf);
 			}
 			switch (*s) {
 			case '\0':
@@ -285,17 +270,16 @@ again:
 					script = script->next;
 					*p = '\0';
 					linenum++;
-					return (*outbuf);
+					return (buf);
 				}
 			case '\n':
 				*p++ = '\n';
 				*p = '\0';
 				s++;
 				linenum++;
-				return (*outbuf);
+				return (buf);
 			default:
 				*p++ = *s++;
-				len--;
 			}
 		}
 	}

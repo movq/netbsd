@@ -1,4 +1,4 @@
-/*	$NetBSD: powerpc.h,v 1.6 2009/07/21 09:49:16 phx Exp $	*/
+/*	$NetBSD: powerpc.h,v 1.4 2005/12/11 12:16:37 christos Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -39,5 +39,17 @@ struct mem_region {
 };
 
 void mem_regions __P((struct mem_region **, struct mem_region **));
+
+/*
+ * These two functions get used solely in boot() in machdep.c.
+ *
+ * Not sure whether boot itself should be implementation dependent instead.	XXX
+ */
+void ppc_exit __P((void)) __attribute__((__noreturn__));
+void ppc_boot __P((char *bootspec)) __attribute__((__noreturn__));
+
+int dk_match __P((char *name));
+
+void ofrootfound __P((void));
 
 #endif	/* _MACHINE_POWERPC_H_ */

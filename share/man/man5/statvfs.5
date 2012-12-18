@@ -1,4 +1,4 @@
-.\"	$NetBSD: statvfs.5,v 1.12 2010/03/22 18:58:32 joerg Exp $
+.\"	$NetBSD: statvfs.5,v 1.10 2008/06/23 04:22:36 dholland Exp $
 .\"
 .\" Copyright (c) 1989, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)statfs.2	8.5 (Berkeley) 5/24/95
 .\"
-.Dd April 10, 2009
+.Dd June 23, 2008
 .Dt STATVFS 5
 .Os
 .Sh NAME
@@ -40,7 +40,7 @@
 .In sys/statvfs.h
 .Sh DESCRIPTION
 The
-.In sys/statvfs.h
+.Aq Pa sys/statvfs.h
 header defines the structures and functions that
 return information about a mounted file system.
 The
@@ -115,8 +115,8 @@ Never update access times.
 Recognize symbolic link permission.
 .It Dv ST_NODEVMTIME
 Never update modification times for device files.
-.It Dv ST_LOG
-Use logging (journalling).
+.It Dv ST_SOFTDEP
+Use soft dependencies.
 .It Dv ST_LOCAL
 The filesystem resides locally.
 .It Dv ST_QUOTA
@@ -184,6 +184,6 @@ can be easily computed as:
 .Xr statvfs 2
 .Sh HISTORY
 The
-.In sys/statvfs.h
+.Aq Pa sys/statvfs.h
 header first appeared in
 .Nx 3.0 .

@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_debug.c,v 1.11 2010/10/27 18:51:35 christos Exp $	*/
+/*	$NetBSD: cd9660_debug.c,v 1.8 2007/01/30 01:46:33 dogcow Exp $	*/
 
 /*
  * Copyright (c) 2005 Daniel Watt, Walter Deignan, Ryan Gabrys, Alan
@@ -40,7 +40,7 @@
 #include <sys/param.h>
 
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: cd9660_debug.c,v 1.11 2010/10/27 18:51:35 christos Exp $");
+__RCSID("$NetBSD: cd9660_debug.c,v 1.8 2007/01/30 01:46:33 dogcow Exp $");
 #endif  /* !__lint */
 
 #if !HAVE_NBTOOL_CONFIG_H
@@ -105,12 +105,12 @@ debug_print_tree(cd9660node *node, int level)
 		printf("..(%i)\n",
 		    isonum_733(node->isoDirRecord->extent));
 	} else if (node->isoDirRecord->name[0]=='\0') {
-		printf("(ROOT) (%" PRIu32 " to %" PRId64 ")\n",
+		printf("(ROOT) (%i to %i)\n",
 		    node->fileDataSector,
 		    node->fileDataSector +
 			node->fileSectorsUsed - 1);
 	} else {
-		printf("%s (%s) (%" PRIu32 " to %" PRId64 ")\n",
+		printf("%s (%s) (%i to %i)\n",
 		    node->isoDirRecord->name,
 		    (node->isoDirRecord->flags[0]
 			& ISO_FLAG_DIRECTORY) ?  "DIR" : "FILE",
@@ -125,7 +125,7 @@ debug_print_tree(cd9660node *node, int level)
 	TAILQ_FOREACH(cn, &node->cn_children, cn_next_child)
 		debug_print_tree(cn, level + 1);
 #else
-	printf("Sorry, debugging is not supported in host-tools mode.\n");
+	printf("Sorry, debuging is not supported in host-tools mode.\n");
 #endif
 }
 
@@ -153,15 +153,14 @@ void
 debug_print_volume_descriptor_information(void)
 {
 	volume_descriptor *tmp = diskStructure.firstVolumeDescriptor;
-	char temp[CD9660_SECTOR_SIZE];
+	char temp[2048];
 
 	printf("==Listing Volume Descriptors==\n");
 
 	while (tmp != NULL) {
-		memset(temp, 0, CD9660_SECTOR_SIZE);
+		memset(temp, 0, 2048);
 		memcpy(temp, tmp->volumeDescriptorData + 1, 5);
-		printf("Volume descriptor in sector %" PRId64
-		    ": type %i, ID %s\n",
+		printf("Volume descriptor in sector %i: type %i, ID %s\n",
 		    tmp->sector, tmp->volumeDescriptorData[0], temp);
 		switch(tmp->volumeDescriptorData[0]) {
 		case 0:/*boot record*/
@@ -200,14 +199,13 @@ debug_dump_to_xml_ptentry(path_table_entry *pttemp, int num, int mode)
 }
 
 void
-debug_dump_to_xml_path_table(FILE *fd, off_t sector, int size, int mode)
+debug_dump_to_xml_path_table(FILE *fd, int sector, int size, int mode)
 {
 	path_table_entry pttemp;
 	int t = 0;
 	int n = 0;
 
-	if (fseeko(fd, CD9660_SECTOR_SIZE * sector, SEEK_SET) == -1)
-		err(1, "fseeko");
+	fseek(fd, 2048 * sector, SEEK_SET);
 
 	while (t < size) {
 		/* Read fixed data first */
@@ -231,8 +229,8 @@ debug_dump_to_xml_path_table(FILE *fd, off_t sector, int size, int mode)
 void
 debug_dump_to_xml(FILE *fd)
 {
-	unsigned char buf[CD9660_SECTOR_SIZE];
-	off_t sector;
+	unsigned char buf[2048];
+	int sector;
 	int t, t2;
 	struct iso_primary_descriptor primaryVD;
 	struct _boot_volume_descriptor bootVD;
@@ -242,16 +240,15 @@ debug_dump_to_xml(FILE *fd)
 	/* Display Volume Descriptors */
 	sector = 16;
 	do {
-		if (fseeko(fd, CD9660_SECTOR_SIZE * sector, SEEK_SET) == -1)
-			err(1, "fseeko");
-		fread(buf, 1, CD9660_SECTOR_SIZE, fd);
+		fseek(fd, 2048*sector, SEEK_SET);
+		fread(buf, 1, 2048, fd);
 		t = (int)((unsigned char)buf[0]);
 		switch (t) {
 		case 0:
-			memcpy(&bootVD, buf, CD9660_SECTOR_SIZE);
+			memcpy(&bootVD, buf, 2048);
 			break;
 		case 1:
-			memcpy(&primaryVD, buf, CD9660_SECTOR_SIZE);
+			memcpy(&primaryVD, buf, 2048);
 			break;
 		}
 		debug_dump_to_xml_volume_descriptor(buf, sector);

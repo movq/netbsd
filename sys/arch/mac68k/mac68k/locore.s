@@ -1,7 +1,6 @@
-/*	$NetBSD: locore.s,v 1.166 2011/12/22 15:33:29 tsutsui Exp $	*/
+/*	$NetBSD: locore.s,v 1.154 2008/06/19 13:56:22 tsutsui Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -33,7 +32,41 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+/*
+ * Copyright (c) 1988 University of Utah.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
 /*-
  * Copyright (C) 1993	Allen K. Briggs, Chris P. Caputo,
  *			Michael L. Finch, Bradley A. Grantham, and
@@ -81,11 +114,8 @@
 #include "opt_fpu_emulate.h"
 #include "opt_kgdb.h"
 #include "opt_lockdebug.h"
-#include "opt_fpsp.h"
-#include "opt_m68k_arch.h"
-
 #include "assym.h"
-
+#include "opt_fpsp.h"
 #include <machine/asm.h>
 #include <machine/trap.h>
 
@@ -273,11 +303,7 @@ Lstart3:
 	movl	%a1,%d1
 	.word	0xf518			| pflusha
 	.long	0x4e7b1807		| movc %d1,%srp
-#if PGSHIFT == 13
-	movl	#0xc000,%d0
-#else
 	movl	#0x8000,%d0
-#endif
 	.long	0x4e7b0003		| movc %d0,%tc   ;Enable MMU
 	movl	#CACHE40_ON,%d0
 	movc	%d0,%cacr		| turn on both caches
@@ -298,13 +324,8 @@ LnokillTT:
 	movl	%a1,%a0@(4)		| + segtable address
 	pmove	%a0@,%srp		| load the supervisor root pointer
 	movl	#0x80000002,%a0@	| reinit upper half for CRP loads
-	pflusha
 	lea	_ASM_LABEL(longscratch),%a2
-#if PGSHIFT == 13
-	movl	#0x82d08b00,%a2@	| value to load %TC with
-#else
 	movl	#0x82c0aa00,%a2@	| value to load %TC with
-#endif
 	pmove	%a2@,%tc		| load it
 
 Lloaddone:
@@ -312,14 +333,19 @@ Lloaddone:
 /*
  * Should be running mapped from this point on
  */
+/* select the software page size now */
 	lea	_ASM_LABEL(tmpstk),%sp	| temporary stack
-/* call final pmap setup */
-	jbsr	_C_LABEL(pmap_bootstrap_finalize)
+	jbsr	_C_LABEL(uvm_setpagesize)  | select software page size
+
 /* set kernel stack, user SP, lwp0, and initial pcb */
-	movl	_C_LABEL(lwp0uarea),%a1	| get lwp0 uarea
-	lea	%a1@(USPACE-4),%sp	|   set kernel stack to end of area
+	movl	_C_LABEL(proc0paddr),%a1 | get proc0 pcb addr
+	lea	%a1@(USPACE-4),%sp	| set kernel stack to end of area
+	lea	_C_LABEL(lwp0),%a2	| initialize lwp0.l_addr
+	movl	%a2,_C_LABEL(curlwp)	|   and curlwp so that
+	movl	%a1,%a2@(L_ADDR)	|   we don't deref NULL in trap()
 	movl	#USRSTACK-4,%a2
 	movl	%a2,%usp		| init %USP
+	movl	%a1,_C_LABEL(curpcb)	| lwp0 is running
 
 /* flush TLB and turn on caches */
 	cmpl	#MMU_68040,_C_LABEL(mmutype) | 68040?
@@ -342,7 +368,7 @@ Lnocache0:
 	jbsr	_C_LABEL(mac68k_init)
 
 /*
- * Create a fake exception frame so that cpu_lwp_fork() can copy it.
+ * Create a fake exception frame so that cpu_fork() can copy it.
  * main() nevers returns; we exit to user mode from a forked process
  * later on.
  */
@@ -605,8 +631,8 @@ ENTRY_NOPROFILE(fpfault)
 	fsave	%a0@		| save state
 #if defined(M68040) || defined(M68060)
 	/* always null state frame on 68040, 68060 */
-	cmpl	#FPU_68040,_C_LABEL(fputype)
-	jge	Lfptnull
+	cmpl	#CPU_68040,_C_LABEL(cputype)
+	jle	Lfptnull
 #endif
 	tstb	%a0@		| null state frame?
 	jeq	Lfptnull	| yes, safe
@@ -815,11 +841,12 @@ Lbrkpt3:
  *	Level 7:        NMIs: parity errors?, RESET button
  */
 
+#define INTERRUPT_SAVEREG	moveml	#0xC0C0,%sp@-
+#define INTERRUPT_RESTOREREG	moveml	%sp@+,#0x0303
+
 ENTRY_NOPROFILE(spurintr)
 	addql	#1,_C_LABEL(intrcnt)+0
-	INTERRUPT_SAVEREG
-	CPUINFO_INCREMENT(CI_NINTR)
-	INTERRUPT_RESTOREREG
+	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
 	jra	_ASM_LABEL(rei)
 
 ENTRY_NOPROFILE(intrhand)
@@ -865,9 +892,7 @@ ENTRY_NOPROFILE(rtclock_intr)
 	addql	#4,%sp			| pop param
 	jbsr	_C_LABEL(mrg_VBLQueue)	| give programs in the VBLqueue a chance
 	addql	#1,_C_LABEL(intrcnt)+32	| record a clock interrupt
-	INTERRUPT_SAVEREG
-	CPUINFO_INCREMENT(CI_NINTR)
-	INTERRUPT_RESTOREREG
+	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
 	movw	%d2,%sr			| restore SPL
 	movl	%sp@+,%d2		| restore %d2
 	rts				| go back from whence we came
@@ -1015,6 +1040,14 @@ ENTRY(ecacheon)
 ENTRY(ecacheoff)
 	rts
 
+ENTRY_NOPROFILE(getsfc)
+	movc	%sfc,%d0
+	rts
+
+ENTRY_NOPROFILE(getdfc)
+	movc	%dfc,%d0
+	rts
+
 /*
  * Load a new user segment table pointer.
  */
@@ -1057,6 +1090,31 @@ ENTRY(spl0)
 	movw	#PSL_LOWIPL,%sp@	| and new SR
 	jra	Lgotsir			| go handle it
 Lspldone:
+	rts
+
+/*
+ * Save and restore 68881 state.
+ * Pretty awful looking since our assembler does not
+ * recognize FP mnemonics.
+ */
+ENTRY(m68881_save)
+	movl	%sp@(4),%a0		| save area pointer
+	fsave	%a0@			| save state
+	tstb	%a0@			| null state frame?
+	jeq	Lm68881sdone		| yes, all done
+	fmovem	%fp0-%fp7,%a0@(FPF_REGS)	| save FP general registers
+	fmovem	%fpcr/%fpsr/%fpi,%a0@(FPF_FPCR) | save FP control registers
+Lm68881sdone:
+	rts
+
+ENTRY(m68881_restore)
+	movl	%sp@(4),%a0		| save area pointer
+	tstb	%a0@			| null state frame?
+	jeq	Lm68881rdone		| yes, easy
+	fmovem	%a0@(FPF_FPCR),%fpcr/%fpsr/%fpi | restore FP control registers
+	fmovem	%a0@(FPF_REGS),%fp0-%fp7	| restore FP general registers
+Lm68881rdone:
+	frestore %a0@			| restore state
 	rts
 
 /*
@@ -1453,6 +1511,9 @@ GLOBAL(fputype)
 
 GLOBAL(protorp)
 	.long	0,0		| prototype root pointer
+
+GLOBAL(proc0paddr)
+	.long	0		| KVA of lwp0 u-area
 
 GLOBAL(intiolimit)
 	.long	0		| KVA of end of internal IO space

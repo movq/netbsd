@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vrdsiu_mouse.c,v 1.12 2012/10/27 17:17:56 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vrdsiu_mouse.c,v 1.9 2007/03/04 05:59:54 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,6 +61,7 @@ enum vrdsiu_ps2_input_state {
 };
 
 struct vrdsiu_softc {
+	struct device sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 	int sc_unit;
@@ -69,25 +70,25 @@ struct vrdsiu_softc {
 
 	enum vrdsiu_mouse_stat sc_mouse_stat;
 
-	device_t sc_wsmousedev;
+	struct device *sc_wsmousedev;
 };
 
 static int asimOld = 0;
 
-static int vrdsiu_match(device_t, cfdata_t, void *);
-static void vrdsiu_attach(device_t, device_t, void *);
+static int vrdsiu_match __P((struct device *, struct cfdata *, void *));
+static void vrdsiu_attach __P((struct device *, struct device *, void *));
 
-static void vrdsiu_write(struct vrdsiu_softc *, int, unsigned short);
-static unsigned short vrdsiu_read(struct vrdsiu_softc *, int);
+static void vrdsiu_write __P((struct vrdsiu_softc *, int, unsigned short));
+static unsigned short vrdsiu_read __P((struct vrdsiu_softc *, int));
 
 /* Interrupt handlers */
-static int vrdsiu_intr(void *);
-static void vrdsiu_mouse_intr(struct vrdsiu_softc *);
+static int vrdsiu_intr __P((void *));
+static void vrdsiu_mouse_intr __P((struct vrdsiu_softc *));
 
 /* Enable/disable DSIU handling */
-static int vrdsiu_mouse_enable(void *);
-static int vrdsiu_mouse_ioctl(void *, u_long, void *, int, struct lwp *);
-static void vrdsiu_mouse_disable(void *);
+static int vrdsiu_mouse_enable __P((void *));
+static int vrdsiu_mouse_ioctl __P((void *, u_long, void *, int, struct lwp *));
+static void vrdsiu_mouse_disable __P((void *));
 
 /* wsmouse access ops */
 const struct wsmouse_accessops vrdsiu_accessops = {
@@ -96,31 +97,42 @@ const struct wsmouse_accessops vrdsiu_accessops = {
 	vrdsiu_mouse_disable
 };
 
-CFATTACH_DECL_NEW(vrdsiu_mouse, sizeof(struct vrdsiu_softc),
+CFATTACH_DECL(vrdsiu_mouse, sizeof(struct vrdsiu_softc),
     vrdsiu_match, vrdsiu_attach, NULL, NULL);
 
 static inline void
-vrdsiu_write(struct vrdsiu_softc *sc, int port, unsigned short val)
+vrdsiu_write(sc, port, val)
+	struct vrdsiu_softc *sc;
+	int port;
+	unsigned short val;
 {
 	bus_space_write_2(sc->sc_iot, sc->sc_ioh, port, val);
 }
 
 static inline unsigned short
-vrdsiu_read(struct vrdsiu_softc *sc, int port)
+vrdsiu_read(sc, port)
+	struct vrdsiu_softc *sc;
+	int port;
 {
 	return bus_space_read_2(sc->sc_iot, sc->sc_ioh, port);
 }
 
 static int
-vrdsiu_match(device_t parent, cfdata_t cf, void *aux)
+vrdsiu_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	return 1;
 }
 
 static void
-vrdsiu_attach(device_t parent, device_t self, void *aux)
+vrdsiu_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
-	struct vrdsiu_softc *sc = device_private(self);
+	struct vrdsiu_softc *sc = (struct vrdsiu_softc *)self;
 	struct vrip_attach_args *va = aux;
 	struct wsmousedev_attach_args wsmaa;
         int res;
@@ -172,7 +184,8 @@ vrdsiu_attach(device_t parent, device_t self, void *aux)
 }
 
 int
-vrdsiu_mouse_enable(void *v)
+vrdsiu_mouse_enable(v)
+	void *v;
 {
 	struct vrdsiu_softc *sc = v;
 
@@ -191,7 +204,8 @@ vrdsiu_mouse_enable(void *v)
 }
 
 void
-vrdsiu_mouse_disable(void *v)
+vrdsiu_mouse_disable(v)
+	void *v;
 {
 	struct vrdsiu_softc *sc = v;
 
@@ -203,7 +217,12 @@ vrdsiu_mouse_disable(void *v)
 }
 
 int
-vrdsiu_mouse_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
+vrdsiu_mouse_ioctl(v, cmd, data, flag, l)
+	void *v;
+	u_long cmd;
+	void *data;
+	int flag;
+	struct lwp *l;
 {
 	/*struct vrdsiu_softc *sc = v;*/
 
@@ -227,7 +246,8 @@ vrdsiu_mouse_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 }
 
 int
-vrdsiu_intr(void *arg)
+vrdsiu_intr(arg)
+	void *arg;
 {
 	struct vrdsiu_softc *sc = arg;
 
@@ -256,7 +276,8 @@ vrdsiu_intr(void *arg)
 #define WSC_R_BUTTON 0x04
 
 void
-vrdsiu_mouse_intr(struct vrdsiu_softc *sc)
+vrdsiu_mouse_intr(sc)
+	struct vrdsiu_softc *sc;
 {
 	u_int intrReason;
 	unsigned char b;

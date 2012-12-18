@@ -1,4 +1,4 @@
-/*	$NetBSD: cmds.c,v 1.35 2012/02/24 16:03:39 joerg Exp $	*/
+/*	$NetBSD: cmds.c,v 1.32 2006/12/14 17:09:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)cmds.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: cmds.c,v 1.35 2012/02/24 16:03:39 joerg Exp $");
+__RCSID("$NetBSD: cmds.c,v 1.32 2006/12/14 17:09:43 christos Exp $");
 #endif /* not lint */
 
 #include "tip.h"
@@ -55,7 +55,7 @@ static	char *argv[10];		/* argument vector for take and put */
 int	args(char *, char **);
 int	anyof(char *, const char *);
 void	execute(char *);
-__dead static void	intcopy(int);
+void	intcopy(int);
 void	prtime(const char *, time_t);
 void	stopsnd(int);
 void	transfer(char *, int, const char *);
@@ -887,8 +887,8 @@ expand(char aname[])
 	(void)close(pivec[1]);
 	l = read(pivec[0], xname, BUFSIZ);
 	(void)close(pivec[0]);
-	while (wait(&s) != mypid)
-		continue;
+	while (wait(&s) != mypid);
+		;
 	s &= 0377;
 	if (s != 0 && s != SIGPIPE) {
 		(void)fprintf(stderr, "\"Echo\" failed\n");

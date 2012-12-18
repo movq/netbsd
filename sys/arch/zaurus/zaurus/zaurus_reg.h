@@ -1,4 +1,4 @@
-/*	$NetBSD: zaurus_reg.h,v 1.5 2012/08/12 17:25:32 nonaka Exp $	*/
+/*	$NetBSD: zaurus_reg.h,v 1.3 2008/03/31 23:35:39 chris Exp $	*/
 /*	$OpenBSD: zaurus_reg.h,v 1.7 2005/12/14 14:39:38 uwe Exp $	*/
 /*	NetBSD: lubbock_reg.h,v 1.1 2003/06/18 10:51:15 bsh Exp */
 
@@ -49,8 +49,7 @@
 #define ZAURUS_FFUART_VBASE	0xfd600000
 #define ZAURUS_BTUART_VBASE	0xfd700000
 #define ZAURUS_STUART_VBASE	0xfd800000
-#define ZAURUS_POWMAN_VBASE	0xfd900000
-#define ZAURUS_VBASE_FREE	0xfda00000
+#define ZAURUS_VBASE_FREE	0xfd900000
 
 #define ioreg_read(a)		(*(volatile uint32_t *)(a))
 #define ioreg_write(a,v)	(*(volatile uint32_t *)(a)=(v))
@@ -74,11 +73,7 @@
 #define C3000_CF1_IRQ			106
 
 /* processor GPIO pins */
-#define C860_GPIO_SD_DETECT_PIN		9
-#define C860_RC_IRQ_PIN			4	/* remote control */
-#define C860_GPIO_SD_WP_PIN		7
 #define C860_CF0_IRQ_PIN		14
-#define C860_GPIO_SD_POWER_PIN		33
 #define	C3000_GPIO_SD_DETECT_PIN	9
 #define C3000_RC_IRQ_PIN		13	/* remote control */
 #define	C3000_GPIO_SD_WP_PIN		81

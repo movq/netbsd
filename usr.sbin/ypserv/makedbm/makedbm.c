@@ -1,4 +1,4 @@
-/*	$NetBSD: makedbm.c,v 1.25 2011/08/30 21:10:28 joerg Exp $	*/
+/*	$NetBSD: makedbm.c,v 1.22 2008/02/29 03:00:47 lukem Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -28,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: makedbm.c,v 1.25 2011/08/30 21:10:28 joerg Exp $");
+__RCSID("$NetBSD: makedbm.c,v 1.22 2008/02/29 03:00:47 lukem Exp $");
 #endif
 
 #include <sys/param.h>
@@ -50,12 +55,13 @@ __RCSID("$NetBSD: makedbm.c,v 1.25 2011/08/30 21:10:28 joerg Exp $");
 #include "ypdb.h"
 #include "ypdef.h"
 
-__dead static void	usage(void);
-static int	add_record(DBM *, const char *, const char *, int);
-static char	*file_date(char *);
-static void	list_database(char *);
-static void	create_database(char *, char *, char *, char *, char *,
-			        char *, int, int, int);
+int	main(int, char *[]);
+void	usage(void);
+int	add_record(DBM *, char *, char *, int);
+char	*file_date(char *);
+void	list_database(char *);
+void	create_database(char *, char *, char *, char *, char *, char *,
+			int, int, int);
 
 int
 main(int argc, char *argv[])
@@ -142,13 +148,13 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-static int
-add_record(DBM *db, const char *str1, const char *str2, int check)
+int
+add_record(DBM *db, char *str1, char *str2, int check)
 {
 	datum key, val;
 	int status;
 
-	key.dptr = __UNCONST(str1);
+	key.dptr = str1;
 	key.dsize = strlen(str1);
 
 	if (check) {
@@ -157,7 +163,7 @@ add_record(DBM *db, const char *str1, const char *str2, int check)
 		if (val.dptr != NULL)
 			return 0;	/* already there */
 	}
-	val.dptr = __UNCONST(str2);
+	val.dptr = str2;
 	val.dsize = strlen(str2);
 	status = ypdb_store(db, key, val, YPDB_INSERT);
 
@@ -168,7 +174,7 @@ add_record(DBM *db, const char *str1, const char *str2, int check)
 	return 0;
 }
 
-static char *
+char *
 file_date(char *filename)
 {
 	struct stat finfo;
@@ -189,7 +195,7 @@ file_date(char *filename)
 	return datestr;
 }
 
-static void
+void
 list_database(char *database)
 {
 	DBM *db;
@@ -219,7 +225,7 @@ list_database(char *database)
 	ypdb_close(db);
 }
 
-static void
+void
 create_database(char *infile, char *database, char *yp_input_file,
 		char *yp_output_file, char *yp_master_name,
 		char *yp_domain_name, int bflag, int lflag, int sflag)
@@ -345,7 +351,7 @@ bad_record:
 	}
 }
 
-static void
+void
 usage(void)
 {
 

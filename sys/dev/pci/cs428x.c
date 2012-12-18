@@ -1,4 +1,4 @@
-/*	$NetBSD: cs428x.c,v 1.17 2012/10/27 17:18:31 chs Exp $	*/
+/*	$NetBSD: cs428x.c,v 1.15 2008/04/10 19:13:36 cegger Exp $	*/
 
 /*
  * Copyright (c) 2000 Tatoku Ogaito.  All rights reserved.
@@ -33,16 +33,18 @@
 /* Common functions for CS4280 and CS4281 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs428x.c,v 1.17 2012/10/27 17:18:31 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs428x.c,v 1.15 2008/04/10 19:13:36 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/device.h>
-#include <sys/audioio.h>
-#include <sys/bus.h>
 
+#include <dev/pci/pcidevs.h>
+#include <dev/pci/pcivar.h>
+
+#include <sys/audioio.h>
 #include <dev/audio_if.h>
 #include <dev/midi_if.h>
 #include <dev/mulaw.h>
@@ -51,8 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD: cs428x.c,v 1.17 2012/10/27 17:18:31 chs Exp $");
 #include <dev/ic/ac97reg.h>
 #include <dev/ic/ac97var.h>
 
-#include <dev/pci/pcidevs.h>
-#include <dev/pci/pcivar.h>
+#include <sys/bus.h>
+
 #include <dev/pci/cs428xreg.h>
 #include <dev/pci/cs428x.h>
 
@@ -111,7 +113,8 @@ cs428x_query_devinfo(void *addr, mixer_devinfo_t *dip)
 }
 
 void *
-cs428x_malloc(void *addr, int direction, size_t size)
+cs428x_malloc(void *addr, int direction, size_t size,
+    struct malloc_type *pool, int flags)
 {
 	struct cs428x_softc *sc;
 	struct cs428x_dma   *p;
@@ -119,14 +122,14 @@ cs428x_malloc(void *addr, int direction, size_t size)
 
 	sc = addr;
 
-	p = kmem_alloc(sizeof(*p), KM_SLEEP);
+	p = malloc(sizeof(*p), pool, flags);
 	if (p == NULL)
 		return 0;
 
-	error = cs428x_allocmem(sc, size, p);
+	error = cs428x_allocmem(sc, size, pool, flags, p);
 
 	if (error) {
-		kmem_free(p, sizeof(*p));
+		free(p, pool);
 		return 0;
 	}
 
@@ -136,7 +139,7 @@ cs428x_malloc(void *addr, int direction, size_t size)
 }
 
 void
-cs428x_free(void *addr, void *ptr, size_t size)
+cs428x_free(void *addr, void *ptr, struct malloc_type *pool)
 {
 	struct cs428x_softc *sc;
 	struct cs428x_dma **pp, *p;
@@ -148,9 +151,9 @@ cs428x_free(void *addr, void *ptr, size_t size)
 			bus_dmamap_destroy(sc->sc_dmatag, p->map);
 			bus_dmamem_unmap(sc->sc_dmatag, p->addr, p->size);
 			bus_dmamem_free(sc->sc_dmatag, p->segs, p->nsegs);
-			kmem_free(p->dum, p->size);
+			free(p->dum, pool);
 			*pp = p->next;
-			kmem_free(p, sizeof(*p));
+			free(p, pool);
 			return;
 		}
 	}
@@ -244,7 +247,7 @@ cs428x_read_codec(void *addr, uint8_t ac97_addr, uint16_t *ac97_data)
 
 	if (cs428x_src_wait(sc) < 0) {
 		printf("%s: AC97 read prob. (DCV!=0) for add=0x%0x\n",
-		       device_xname(sc->sc_dev), ac97_addr);
+		       device_xname(&sc->sc_dev), ac97_addr);
 		return 1;
 	}
 
@@ -254,7 +257,7 @@ cs428x_read_codec(void *addr, uint8_t ac97_addr, uint16_t *ac97_data)
 		delay(1);
 		while (++n > 1000) {
 			printf("%s: AC97 read fail (VSTS==0) for add=0x%0x\n",
-			       device_xname(sc->sc_dev), ac97_addr);
+			       device_xname(&sc->sc_dev), ac97_addr);
 			return 1;
 		}
 	}
@@ -282,7 +285,7 @@ cs428x_write_codec(void *addr, uint8_t ac97_addr, uint16_t ac97_data)
 
 	if (cs428x_src_wait(sc) < 0) {
 		printf("%s: AC97 write fail (DCV!=0) for add=0x%02x data="
-		       "0x%04x\n", device_xname(sc->sc_dev), ac97_addr, ac97_data);
+		       "0x%04x\n", device_xname(&sc->sc_dev), ac97_addr, ac97_data);
 		return 1;
 	}
 	return 0;
@@ -290,7 +293,9 @@ cs428x_write_codec(void *addr, uint8_t ac97_addr, uint16_t ac97_data)
 
 /* Internal functions */
 int
-cs428x_allocmem(struct cs428x_softc *sc, size_t size, struct cs428x_dma *p)
+cs428x_allocmem(struct cs428x_softc *sc,
+		size_t size, struct malloc_type *pool, int flags,
+		struct cs428x_dma *p)
 {
 	int error;
 	size_t align;
@@ -298,39 +303,39 @@ cs428x_allocmem(struct cs428x_softc *sc, size_t size, struct cs428x_dma *p)
 	align   = sc->dma_align;
 	p->size = sc->dma_size;
 	/* allocate memory for upper audio driver */
-	p->dum  = kmem_alloc(size, KM_SLEEP);
+	p->dum  = malloc(size, pool, flags);
 	if (p->dum == NULL)
 		return 1;
 
 	error = bus_dmamem_alloc(sc->sc_dmatag, p->size, align, 0,
 				 p->segs, sizeof(p->segs)/sizeof(p->segs[0]),
-				 &p->nsegs, BUS_DMA_WAITOK);
+				 &p->nsegs, BUS_DMA_NOWAIT);
 	if (error) {
-		aprint_error_dev(sc->sc_dev, "unable to allocate DMA. error=%d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to allocate DMA. error=%d\n",
 		       error);
 		goto allfree;
 	}
 
 	error = bus_dmamem_map(sc->sc_dmatag, p->segs, p->nsegs, p->size,
-			       &p->addr, BUS_DMA_WAITOK|BUS_DMA_COHERENT);
+			       &p->addr, BUS_DMA_NOWAIT|BUS_DMA_COHERENT);
 	if (error) {
-		aprint_error_dev(sc->sc_dev, "unable to map DMA, error=%d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to map DMA, error=%d\n",
 		       error);
 		goto free;
 	}
 
 	error = bus_dmamap_create(sc->sc_dmatag, p->size, 1, p->size,
-				  0, BUS_DMA_WAITOK, &p->map);
+				  0, BUS_DMA_NOWAIT, &p->map);
 	if (error) {
-		aprint_error_dev(sc->sc_dev, "unable to create DMA map, error=%d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to create DMA map, error=%d\n",
 		       error);
 		goto unmap;
 	}
 
 	error = bus_dmamap_load(sc->sc_dmatag, p->map, p->addr, p->size, NULL,
-				BUS_DMA_WAITOK);
+				BUS_DMA_NOWAIT);
 	if (error) {
-		aprint_error_dev(sc->sc_dev, "unable to load DMA map, error=%d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to load DMA map, error=%d\n",
 		       error);
 		goto destroy;
 	}
@@ -343,7 +348,7 @@ cs428x_allocmem(struct cs428x_softc *sc, size_t size, struct cs428x_dma *p)
  free:
 	bus_dmamem_free(sc->sc_dmatag, p->segs, p->nsegs);
  allfree:
-	kmem_free(p->dum, size);
+	free(p->dum, pool);
 
 	return error;
 }
@@ -363,14 +368,4 @@ cs428x_src_wait(struct cs428x_softc *sc)
 		}
 	}
 	return 0;
-}
-
-void
-cs428x_get_locks(void *addr, kmutex_t **intr, kmutex_t **thread)
-{
-	struct cs428x_softc *sc;
-
-	sc = addr;
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
 }

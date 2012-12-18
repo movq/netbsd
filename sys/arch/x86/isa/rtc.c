@@ -1,4 +1,4 @@
-/*	$NetBSD: rtc.c,v 1.1 2009/06/16 21:05:34 bouyer Exp $	*/
+/*	$NetBSD: rtc.c,v 1.1.2.2 2009/06/19 21:22:11 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -121,7 +121,7 @@ WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.1 2009/06/16 21:05:34 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.1.2.2 2009/06/19 21:22:11 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

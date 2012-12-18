@@ -1,4 +1,4 @@
-/*	$NetBSD: fixdfdi.c,v 1.6 2012/08/05 04:28:58 matt Exp $	*/
+/*	$NetBSD: fixdfdi.c,v 1.4 2003/08/07 16:43:16 agc Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -38,13 +38,9 @@
 #if 0
 static char sccsid[] = "@(#)fixdfdi.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fixdfdi.c,v 1.6 2012/08/05 04:28:58 matt Exp $");
+__RCSID("$NetBSD: fixdfdi.c,v 1.4 2003/08/07 16:43:16 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
-
-#ifdef SOFTFLOAT
-#include "softfloat/softfloat-for-gcc.h"
-#endif
 
 #include "quad.h"
 
@@ -53,7 +49,8 @@ __RCSID("$NetBSD: fixdfdi.c,v 1.6 2012/08/05 04:28:58 matt Exp $");
  * We clamp anything that is out of range.
  */
 quad_t
-__fixdfdi(double x)
+__fixdfdi(x)
+	double x;
 {
 	if (x < 0)
 		if (x <= QUAD_MIN)

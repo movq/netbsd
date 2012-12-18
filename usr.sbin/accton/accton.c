@@ -1,4 +1,4 @@
-/*	$NetBSD: accton.c,v 1.12 2011/08/29 20:38:54 joerg Exp $	*/
+/*	$NetBSD: accton.c,v 1.11 2008/07/21 13:36:57 lukem Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)accton.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: accton.c,v 1.12 2011/08/29 20:38:54 joerg Exp $");
+__RCSID("$NetBSD: accton.c,v 1.11 2008/07/21 13:36:57 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,7 +51,7 @@ __RCSID("$NetBSD: accton.c,v 1.12 2011/08/29 20:38:54 joerg Exp $");
 #include <stdio.h>
 #include <string.h>
 
-__dead static void	usage(void);
+void	usage(void);
 
 int
 main(int argc, char **argv)
@@ -82,7 +82,7 @@ main(int argc, char **argv)
 	exit(0);
 }
 
-static void
+void
 usage(void)
 {
 

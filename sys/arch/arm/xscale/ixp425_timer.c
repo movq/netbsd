@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_timer.c,v 1.18 2012/11/12 18:00:38 skrll Exp $ */
+/*	$NetBSD: ixp425_timer.c,v 1.14 2008/01/20 16:28:24 joerg Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -13,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp425_timer.c,v 1.18 2012/11/12 18:00:38 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_timer.c,v 1.14 2008/01/20 16:28:24 joerg Exp $");
 
 #include "opt_ixp425.h"
 #include "opt_perfctrs.h"
@@ -44,7 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_timer.c,v 1.18 2012/11/12 18:00:38 skrll Exp 
 
 #include <dev/clock_subr.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -53,8 +59,8 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_timer.c,v 1.18 2012/11/12 18:00:38 skrll Exp 
 #include <arm/xscale/ixp425var.h>
 #include <arm/xscale/ixp425_sipvar.h>
 
-static int	ixpclk_match(device_t, cfdata_t, void *);
-static void	ixpclk_attach(device_t, device_t, void *);
+static int	ixpclk_match(struct device *, struct cfdata *, void *);
+static void	ixpclk_attach(struct device *, struct device *, void *);
 static u_int	ixpclk_get_timecount(struct timecounter *);
 
 static uint32_t counts_per_hz;
@@ -65,6 +71,7 @@ static void *clock_ih;
 int	ixpclk_intr(void *);
 
 struct ixpclk_softc {
+	struct device		sc_dev;
 	bus_addr_t		sc_baseaddr;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t      sc_ioh;
@@ -92,26 +99,26 @@ static struct timecounter ixpclk_timecounter = {
 
 static volatile uint32_t ixpclk_base;
 
-CFATTACH_DECL_NEW(ixpclk, sizeof(struct ixpclk_softc),
+CFATTACH_DECL(ixpclk, sizeof(struct ixpclk_softc),
 		ixpclk_match, ixpclk_attach, NULL, NULL);
 
 #define GET_TIMER_VALUE(sc)	(bus_space_read_4((sc)->sc_iot,		\
 						  (sc)->sc_ioh,		\
 						  IXP425_OST_TIM0))
 
-#define GET_TS_VALUE(sc)	(*(volatile uint32_t *) \
+#define GET_TS_VALUE(sc)	(*(volatile u_int32_t *) \
 				  (IXP425_TIMER_VBASE + IXP425_OST_TS))
 
 static int
-ixpclk_match(device_t parent, cfdata_t match, void *aux)
+ixpclk_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	return 2;
 }
 
 static void
-ixpclk_attach(device_t parent, device_t self, void *aux)
+ixpclk_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ixpclk_softc		*sc = device_private(self);
+	struct ixpclk_softc		*sc = (struct ixpclk_softc*) self;
 	struct ixpsip_attach_args	*sa = aux;
 
 	printf("\n");
@@ -123,9 +130,9 @@ ixpclk_attach(device_t parent, device_t self, void *aux)
 
 	if (bus_space_map(sc->sc_iot, sa->sa_addr, sa->sa_size, 0,
 			  &sc->sc_ioh))
-		panic("%s: Cannot map registers", device_xname(self));
+		panic("%s: Cannot map registers", self->dv_xname);
 
-	aprint_normal_dev(self, "IXP425 Interval Timer\n");
+	aprint_normal("%s: IXP425 Interval Timer\n", sc->sc_dev.dv_xname);
 }
 
 /*
@@ -136,7 +143,7 @@ ixpclk_attach(device_t parent, device_t self, void *aux)
 void
 cpu_initclocks(void)
 {
-	struct ixpclk_softc *sc = ixpclk_sc;
+	struct ixpclk_softc* sc = ixpclk_sc;
 	u_int oldirqstate;
 #if defined(PERFCTRS)
 	void *pmu_ih;
@@ -235,7 +242,7 @@ ixpclk_get_timecount(struct timecounter *tc)
 void
 delay(u_int n)
 {
-	uint32_t first, last;
+	u_int32_t first, last;
 	int usecs;
 
 	if (n == 0)
@@ -270,7 +277,7 @@ delay(u_int n)
 int
 ixpclk_intr(void *arg)
 {
-	struct ixpclk_softc *sc = ixpclk_sc;
+	struct ixpclk_softc* sc = ixpclk_sc;
 	struct clockframe *frame = arg;
 
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, IXP425_OST_STATUS,

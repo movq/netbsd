@@ -1,4 +1,4 @@
-/*	$NetBSD: execv.c,v 1.10 2012/06/25 22:32:43 abs Exp $	*/
+/*	$NetBSD: execv.c,v 1.9 2005/11/29 13:30:49 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)exec.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: execv.c,v 1.10 2012/06/25 22:32:43 abs Exp $");
+__RCSID("$NetBSD: execv.c,v 1.9 2005/11/29 13:30:49 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -49,7 +49,9 @@ __weak_alias(execv,_execv)
 extern char **environ;
 
 int
-execv(const char *name, char * const *argv)
+execv(name, argv)
+	const char *name;
+	char * const *argv;
 {
 	return execve(name, argv, environ);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: cnmagic.c,v 1.13 2011/11/19 17:34:41 christos Exp $	*/
+/*	$NetBSD: cnmagic.c,v 1.9.64.1 2010/02/14 13:35:43 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2000 Eduardo Horvath
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Eduardo Horvath.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cnmagic.c,v 1.13 2011/11/19 17:34:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cnmagic.c,v 1.9.64.1 2010/02/14 13:35:43 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,30 +66,33 @@ cn_destroy_magic(cnm_state_t *cnm)
  * machine table.
  */
 int
-cn_set_magic(const char *smagic)
+cn_set_magic(const char *magic)
 {
-	const unsigned char *magic = (const unsigned char *)smagic;
-	unsigned short i, c, n;
+	unsigned int i, c, n;
 	unsigned short m[CNS_LEN];
 
 	for (i = 0; i < CNS_LEN; i++) {
-		c = *magic++;
+		c = (*magic++) & 0xff;
+		n = *magic ? i+1 : CNS_TERM;
 		switch (c) {
 		case 0:
 			/* End of string */
 			if (i == 0) {
 				/* empty string? */
+				cn_magic[0] = 0;
 #ifdef DEBUG
 				printf("cn_set_magic(): empty!\n");
 #endif
+				return (0);
 			}
-			cn_magic[i] = 0;
-			while (i--)
+			do {
 				cn_magic[i] = m[i];
-			return 0;
+			} while (i--);
+			return(0);
 		case 0x27:
 			/* Escape sequence */
-			c = *magic++;
+			c = (*magic++) & 0xff;
+			n = *magic ? i+1 : CNS_TERM;
 			switch (c) {
 			case 0x27:
 				break;
@@ -100,7 +108,6 @@ cn_set_magic(const char *smagic)
 			/* FALLTHROUGH */
 		default:
 			/* Transition to the next state. */
-			n = *magic ? i + 1 : CNS_TERM;
 #ifdef DEBUG
 			if (!cold)
 				aprint_normal("mag %d %x:%x\n", i, c, n);
@@ -109,7 +116,7 @@ cn_set_magic(const char *smagic)
 			break;
 		}
 	}
-	return EINVAL;
+	return (EINVAL);
 }
 
 /*
@@ -119,51 +126,36 @@ cn_set_magic(const char *smagic)
 int
 cn_get_magic(char *magic, size_t maglen)
 {
-	size_t i, n = 0;
+	size_t i, c;
 
-#define ADD_CHAR(x) \
-do \
-	if (n < maglen) \
-		magic[n++] = (x); \
-	else \
-		goto error; \
-while (/*CONSTCOND*/0)
-
-	for (i = 0; i < CNS_LEN; /* empty */) {
-		unsigned short c = cn_magic[i];
-		i = CNS_MAGIC_NEXT(c);
-		if (i == 0)
-			goto finish;
-
+	for (i = 0; i < CNS_LEN;) {
+		c = cn_magic[i];
 		/* Translate a character */
 		switch (CNS_MAGIC_VAL(c)) {
 		case CNC_BREAK:
-			ADD_CHAR(0x27);
-			ADD_CHAR(0x01);
+			*magic++ = 0x27;
+			*magic++ = 0x01;
 			break;
 		case 0:
-			ADD_CHAR(0x27);
-			ADD_CHAR(0x02);
+			*magic++ = 0x27;
+			*magic++ = 0x02;
 			break;
 		case 0x27:
-			ADD_CHAR(0x27);
-			ADD_CHAR(0x27);
+			*magic++ = 0x27;
+			*magic++ = 0x27;
 			break;
 		default:
-			ADD_CHAR(c);
+			*magic++ = (c & 0x0ff);
 			break;
 		}
 		/* Now go to the next state */
-		if (i == CNS_TERM)
-			goto finish;
+		i = CNS_MAGIC_NEXT(c);
+		if (i == CNS_TERM || i == 0) {
+			/* Either termination state or empty machine */
+			*magic++ = 0;
+			return (0);
+		}
 	}
-
-error:
-	return EINVAL;
-
-finish:
-	/* Either termination state or empty machine */
-	ADD_CHAR('\0');
-	return 0;
+	return (EINVAL);
 }
 

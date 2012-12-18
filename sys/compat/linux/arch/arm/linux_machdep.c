@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.30 2012/08/16 16:41:53 matt Exp $	*/
+/*	$NetBSD: linux_machdep.c,v 1.27 2008/04/28 20:23:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 2000 The NetBSD Foundation, Inc.
@@ -31,13 +31,14 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.30 2012/08/16 16:41:53 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.27 2008/04/28 20:23:42 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/buf.h>
 #include <sys/reboot.h>
 #include <sys/conf.h>
@@ -67,7 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.30 2012/08/16 16:41:53 matt Exp 
 #include <compat/linux/linux_syscallargs.h>
 
 void
-linux_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
+linux_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 {
 
 	setregs(l, epp, stack);
@@ -76,14 +77,15 @@ linux_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 void
 linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
-	struct lwp * const l = curlwp;
-	struct proc * const p = l->l_proc;
-	struct trapframe * const tf = lwp_trapframe(l);
+	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
+	struct trapframe *tf;
 	struct linux_sigframe *fp, frame;
 	int onstack, error;
 	const int sig = ksi->ksi_signo;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
 
+	tf = process_frame(l);
 
 	/*
 	 * The Linux version of this code is in
@@ -194,10 +196,12 @@ int
 linux_sys_sigreturn(struct lwp *l, const struct linux_sys_sigreturn_args *v,
 	register_t *retval)
 {
-	struct trapframe * const tf = lwp_trapframe(l);
-	struct proc * const p = l->l_proc;
 	struct linux_sigframe *sfp, frame;
+	struct proc *p = l->l_proc;
+	struct trapframe *tf;
 	sigset_t mask;
+
+	tf = process_frame(l);
 
 	/*
 	 * The trampoline code hands us the context.
@@ -216,6 +220,7 @@ linux_sys_sigreturn(struct lwp *l, const struct linux_sys_sigreturn_args *v,
 		return EINVAL;
 
 	/* Restore register context. */
+	tf = process_frame(l);
 	tf->tf_r0    = frame.sf_sc.sc_r0;
 	tf->tf_r1    = frame.sf_sc.sc_r1;
 	tf->tf_r2    = frame.sf_sc.sc_r2;

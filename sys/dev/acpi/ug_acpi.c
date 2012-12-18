@@ -1,4 +1,4 @@
-/* $NetBSD: ug_acpi.c,v 1.6 2010/03/05 14:00:17 jruoho Exp $ */
+/* $NetBSD: ug_acpi.c,v 1.4.14.1 2009/05/01 01:38:17 snj Exp $ */
 
 /*
  * Copyright (c) 2007 Mihai Chelaru <kefren@netbsd.ro>
@@ -26,13 +26,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ug_acpi.c,v 1.6 2010/03/05 14:00:17 jruoho Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ug_acpi.c,v 1.4.14.1 2009/05/01 01:38:17 snj Exp $");
 
 #include <sys/param.h>
-#include <sys/device.h>
 #include <sys/systm.h>
+#include <sys/errno.h>
+#include <sys/ioctl.h>
+#include <sys/syslog.h>
+#include <sys/device.h>
+#include <sys/proc.h>
+#include <sys/envsys.h>
 
+#include <sys/bus.h>
+
+#include <dev/acpi/acpica.h>
+#include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
+
+#include <dev/sysmon/sysmonvar.h>
 
 #include <dev/ic/ugreg.h>
 #include <dev/ic/ugvar.h>

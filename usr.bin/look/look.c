@@ -1,4 +1,4 @@
-/*	$NetBSD: look.c,v 1.16 2012/02/23 22:57:53 joerg Exp $	*/
+/*	$NetBSD: look.c,v 1.12 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1991, 1993\
 #if 0
 static char sccsid[] = "@(#)look.c	8.2 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: look.c,v 1.16 2012/02/23 22:57:53 joerg Exp $");
+__RCSID("$NetBSD: look.c,v 1.12 2008/07/21 14:19:24 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -84,23 +84,24 @@ __RCSID("$NetBSD: look.c,v 1.16 2012/02/23 22:57:53 joerg Exp $");
 #define	FOLD(c)	(isascii(c) && isupper(c) ? tolower(c) : (c))
 #define	DICT(c)	(isascii(c) && isalnum(c) ? (c) : NO_COMPARE)
 
-static int dflag, fflag;
+int dflag, fflag;
 
-static char	*binary_search(char *, char *, char *);
-static int	 compare(char *, char *, char *);
-static char	*linear_search(char *, char *, char *);
-static int	 look(char *, char *, char *);
-static void	 print_from(char *, char *, char *);
-__dead static void	 usage(void);
+char	*binary_search __P((char *, char *, char *));
+int	 compare __P((char *, char *, char *));
+char	*linear_search __P((char *, char *, char *));
+int	 look __P((char *, char *, char *));
+int	 main __P((int, char **));
+void	 print_from __P((char *, char *, char *));
+void	 usage __P((void));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	struct stat sb;
 	int ch, fd, termchar;
-	char *back, *front, *string, *p;
-	const char *file;
-	size_t len;
+	char *back, *file, *front, *string, *p;
 
 	string = NULL;
 	file = _PATH_WORDS;
@@ -141,20 +142,18 @@ main(int argc, char *argv[])
 
 	if ((fd = open(file, O_RDONLY, 0)) < 0 || fstat(fd, &sb))
 		err(2, "%s", file);
-	len = (size_t)sb.st_size;
-	if ((off_t)len != sb.st_size) {
-		errno = EFBIG;
-		err(2, "%s", file);
-	}
-	if ((front = mmap(NULL, len,
+	if (sb.st_size > SIZE_T_MAX)
+		err(2, "%s: %s", file, strerror(EFBIG));
+	if ((front = mmap(NULL, (size_t)sb.st_size,
 	    PROT_READ, MAP_FILE|MAP_SHARED, fd, (off_t)0)) == NULL)
 		err(2, "%s", file);
-	back = front + len;
+	back = front + sb.st_size;
 	exit(look(string, front, back));
 }
 
-static int
-look(char *string, char *front, char *back)
+int
+look(string, front, back)
+	char *string, *front, *back;
 {
 	int ch;
 	char *readp, *writep;
@@ -218,10 +217,11 @@ look(char *string, char *front, char *back)
  *	more trouble than it's worth.
  */
 #define	SKIP_PAST_NEWLINE(p, back) \
-	while (p < back && *p++ != '\n') continue;
+	while (p < back && *p++ != '\n');
 
-static char *
-binary_search(char *string, char *front, char *back)
+char *
+binary_search(string, front, back)
+	char *string, *front, *back;
 {
 	char *p;
 
@@ -254,8 +254,9 @@ binary_search(char *string, char *front, char *back)
  * 	o front points at the first character in a line. 
  *	o front is before or at the first line to be printed.
  */
-static char *
-linear_search(char *string, char *front, char *back)
+char *
+linear_search(string, front, back)
+	char *string, *front, *back;
 {
 	while (front < back) {
 		switch (compare(string, front, back)) {
@@ -276,8 +277,9 @@ linear_search(char *string, char *front, char *back)
 /*
  * Print as many lines as match string, starting at front.
  */
-static void 
-print_from(char *string, char *front, char *back)
+void 
+print_from(string, front, back)
+	char *string, *front, *back;
 {
 	for (; front < back && compare(string, front, back) == EQUAL; ++front) {
 		for (; front < back && *front != '\n'; ++front)
@@ -301,8 +303,9 @@ print_from(char *string, char *front, char *back)
  * The string "s1" is null terminated.  The string s2 is '\n' terminated (or
  * "back" terminated).
  */
-static int
-compare(char *s1, char *s2, char *back)
+int
+compare(s1, s2, back)
+	char *s1, *s2, *back;
 {
 	int ch;
 
@@ -323,8 +326,8 @@ compare(char *s1, char *s2, char *back)
 	return (*s1 ? GREATER : EQUAL);
 }
 
-static void
-usage(void)
+void
+usage()
 {
 	(void)fprintf(stderr, "usage: look [-df] [-t char] string [file]\n");
 	exit(2);

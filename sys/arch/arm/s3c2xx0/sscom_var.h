@@ -1,4 +1,4 @@
-/* $NetBSD: sscom_var.h,v 1.12 2012/10/27 17:17:41 chs Exp $ */
+/* $NetBSD: sscom_var.h,v 1.7 2006/03/06 20:21:25 rjs Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited
@@ -75,14 +75,11 @@
 #include <sys/device.h>
 #include <sys/termios.h>
 #include <sys/callout.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #ifdef	SSCOM_S3C2410
 #include <arm/s3c2xx0/s3c2410reg.h>
 #include <arm/s3c2xx0/s3c2410var.h>
-#elif defined(SSCOM_S3C2440)
-#include <arm/s3c2xx0/s3c2440reg.h>
-#include <arm/s3c2xx0/s3c2440var.h>
 #endif
 
 /* Hardware flag masks */
@@ -97,7 +94,7 @@
 #define	SSCOM_RING_SIZE	2048
 
 struct sscom_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	void *sc_si;
 	struct tty *sc_tty;
 
@@ -174,8 +171,8 @@ struct sscom_softc {
 	pps_params_t ppsparam;
 #endif
 
-#ifdef RND_COM
-	krndsource_t  rnd_source;
+#if NRND > 0 && defined(RND_COM)
+	rndsource_element_t  rnd_source;
 #endif
 #if (defined(MULTIPROCESSOR) || defined(LOCKDEBUG)) && defined(SSCOM_MPLOCK)
 	struct simplelock	sc_lock;
@@ -226,25 +223,6 @@ struct sscom_uart_info {
 	s3c2410_mask_subinterrupts(_sscom_intbit((sc)->sc_tx_irqno) | \
 			           _sscom_intbit((sc)->sc_rx_irqno))
 
-#elif defined(SSCOM_S3C2440)
-/* RXINTn, TXINTn and ERRn interrupts are cascaded to UARTn irq. */
-
-#define	_sscom_intbit(irqno)	(1<<((irqno)-S3C2440_SUBIRQ_MIN))
-
-#define	sscom_unmask_rxint(sc)	\
-	s3c2440_unmask_subinterrupts(_sscom_intbit((sc)->sc_rx_irqno))
-#define	sscom_mask_rxint(sc)	\
-	s3c2440_mask_subinterrupts(_sscom_intbit((sc)->sc_rx_irqno))
-#define	sscom_unmask_txint(sc)	\
-	s3c2440_unmask_subinterrupts(_sscom_intbit((sc)->sc_tx_irqno))
-#define	sscom_mask_txint(sc)	\
-	s3c2440_mask_subinterrupts(_sscom_intbit((sc)->sc_tx_irqno))
-#define	sscom_unmask_txrxint(sc)                                      \
-	s3c2440_unmask_subinterrupts(_sscom_intbit((sc)->sc_tx_irqno) | \
-			             _sscom_intbit((sc)->sc_rx_irqno))
-#define	sscom_mask_txrxint(sc)	                                    \
-	s3c2440_mask_subinterrupts(_sscom_intbit((sc)->sc_tx_irqno) | \
-			           _sscom_intbit((sc)->sc_rx_irqno))
 #else
 
 /* for S3C2800 and S3C2400 */
@@ -276,10 +254,10 @@ struct sscom_uart_info {
 int	sscomspeed(long, long);
 void	sscom_attach_subr(struct sscom_softc *);
 
-int	sscom_detach(device_t, int);
-int	sscom_activate(device_t, enum devact);
+int	sscom_detach(struct device *, int);
+int	sscom_activate(struct device *, enum devact);
 void	sscom_shutdown(struct sscom_softc *);
-void	sscomdiag(void *);
+void	sscomdiag		(void *);
 void	sscomstart(struct tty *);
 int	sscomparam(struct tty *, struct termios *);
 int	sscomread(dev_t, struct uio *, int);

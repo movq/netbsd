@@ -1,4 +1,4 @@
-/* $NetBSD: ep93xx_intr.c,v 1.18 2012/11/12 18:00:36 skrll Exp $ */
+/* $NetBSD: ep93xx_intr.c,v 1.13 2008/04/28 20:23:14 martin Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ep93xx_intr.c,v 1.18 2012/11/12 18:00:36 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ep93xx_intr.c,v 1.13 2008/04/28 20:23:14 martin Exp $");
 
 /*
  * Interrupt support for the Cirrus Logic EP93XX
@@ -44,7 +44,9 @@ __KERNEL_RCSID(0, "$NetBSD: ep93xx_intr.c,v 1.18 2012/11/12 18:00:36 skrll Exp $
 #include <sys/malloc.h>
 #include <sys/termios.h>
 
-#include <sys/bus.h>
+#include <uvm/uvm_extern.h>
+
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -56,28 +58,28 @@ __KERNEL_RCSID(0, "$NetBSD: ep93xx_intr.c,v 1.18 2012/11/12 18:00:36 skrll Exp $
 struct intrq intrq[NIRQ];
 
 /* Interrupts to mask at each level. */
-static uint32_t vic1_imask[NIPL];
-static uint32_t vic2_imask[NIPL];
+static u_int32_t vic1_imask[NIPL];
+static u_int32_t vic2_imask[NIPL];
 
 /* Current interrupt priority level. */
 volatile int hardware_spl_level;
 
 /* Software copy of the IRQs we have enabled. */
-volatile uint32_t vic1_intr_enabled;
-volatile uint32_t vic2_intr_enabled;
+volatile u_int32_t vic1_intr_enabled;
+volatile u_int32_t vic2_intr_enabled;
 
 /* Interrupts pending. */
 static volatile int ipending;
 
-void	ep93xx_intr_dispatch(struct trapframe *);
+void	ep93xx_intr_dispatch(struct irqframe *frame);
 
-#define VIC1REG(reg)	*((volatile uint32_t*) (EP93XX_AHB_VBASE + \
+#define VIC1REG(reg)	*((volatile u_int32_t*) (EP93XX_AHB_VBASE + \
 	EP93XX_AHB_VIC1 + (reg)))
-#define VIC2REG(reg)	*((volatile uint32_t*) (EP93XX_AHB_VBASE + \
+#define VIC2REG(reg)	*((volatile u_int32_t*) (EP93XX_AHB_VBASE + \
 	EP93XX_AHB_VIC2 + (reg)))
 
 static void
-ep93xx_set_intrmask(uint32_t vic1_irqs, uint32_t vic2_irqs)
+ep93xx_set_intrmask(u_int32_t vic1_irqs, u_int32_t vic2_irqs)
 {
 	VIC1REG(EP93XX_VIC_IntEnClear) = vic1_irqs;
 	VIC1REG(EP93XX_VIC_IntEnable) = vic1_intr_enabled & ~vic1_irqs;
@@ -148,17 +150,9 @@ ep93xx_intr_calculate_masks(void)
 
 	KASSERT(vic1_imask[IPL_NONE] == 0);
 	KASSERT(vic2_imask[IPL_NONE] == 0);
-	KASSERT(vic1_imask[IPL_SOFTCLOCK] == 0);
-	KASSERT(vic2_imask[IPL_SOFTCLOCK] == 0);
-	KASSERT(vic1_imask[IPL_SOFTBIO] == 0);
-	KASSERT(vic2_imask[IPL_SOFTBIO] == 0);
-	KASSERT(vic1_imask[IPL_SOFTNET] == 0);
-	KASSERT(vic2_imask[IPL_SOFTNET] == 0);
-	KASSERT(vic1_imask[IPL_SOFTSERIAL] == 0);
-	KASSERT(vic2_imask[IPL_SOFTSERIAL] == 0);
 
 	/*
-	 * splsched() must block anything that uses the scheduler.
+	 * splclock() must block anything that uses the scheduler.
 	 */
 	vic1_imask[IPL_SCHED] |= vic1_imask[IPL_VM];
 	vic2_imask[IPL_SCHED] |= vic2_imask[IPL_VM];
@@ -324,14 +318,14 @@ ep93xx_intr_disestablish(void *cookie)
 }
 
 void
-ep93xx_intr_dispatch(struct trapframe *frame)
+ep93xx_intr_dispatch(struct irqframe *frame)
 {
 	struct intrq*		iq;
 	struct intrhand*	ih;
 	u_int			oldirqstate;
 	int			pcpl;
-	uint32_t		vic1_hwpend;
-	uint32_t		vic2_hwpend;
+	u_int32_t		vic1_hwpend;
+	u_int32_t		vic2_hwpend;
 	int			irq;
 
 	pcpl = curcpl();
@@ -351,7 +345,7 @@ ep93xx_intr_dispatch(struct trapframe *frame)
 
 		iq = &intrq[irq];
 		iq->iq_ev.ev_count++;
-		curcpu()->ci_data.cpu_nintr++;
+		uvmexp.intrs++;
 		TAILQ_FOREACH(ih, &iq->iq_list, ih_list) {
 			set_curcpl(ih->ih_ipl);
 			oldirqstate = enable_interrupts(I32_bit);
@@ -363,7 +357,7 @@ ep93xx_intr_dispatch(struct trapframe *frame)
 
 		iq = &intrq[irq + VIC_NIRQ];
 		iq->iq_ev.ev_count++;
-		curcpu()->ci_data.cpu_nintr++;
+		uvmexp.intrs++;
 		TAILQ_FOREACH(ih, &iq->iq_list, ih_list) {
 			set_curcpl(ih->ih_ipl);
 			oldirqstate = enable_interrupts(I32_bit);

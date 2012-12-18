@@ -1,4 +1,4 @@
-# $NetBSD: CBMINT%UCS.src,v 1.2 2011/04/28 21:02:34 mbalmer Exp $
+# $NetBSD: CBMINT%UCS.src,v 1.2.2.3 2011/05/19 21:09:26 bouyer Exp $
 
 TYPE		ROWCOL
 NAME		"CBMINT/UCS"

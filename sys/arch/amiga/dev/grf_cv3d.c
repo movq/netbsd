@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_cv3d.c,v 1.29 2012/11/08 18:04:56 rkujawa Exp $ */
+/*	$NetBSD: grf_cv3d.c,v 1.23 2007/10/17 19:53:16 garbled Exp $ */
 
 /*
  * Copyright (c) 1995 Michael Teske
@@ -33,10 +33,8 @@
 #include "opt_amigacons.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_cv3d.c,v 1.29 2012/11/08 18:04:56 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_cv3d.c,v 1.23 2007/10/17 19:53:16 garbled Exp $");
 
-#include "ite.h"
-#include "wsdisplay.h"
 #include "grfcv3d.h"
 #if NGRFCV3D > 0
 
@@ -83,27 +81,14 @@ Note: IO Regbase is needed fo wakeup of the board otherwise use
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
-#include <sys/kauth.h>
 #include <machine/cpu.h>
 #include <dev/cons.h>
-
-#if NWSDISPLAY > 0 
-#include <dev/wscons/wsdisplayvar.h>
-#include <dev/wscons/wsconsio.h>
-#include <dev/wsfont/wsfont.h>
-#include <dev/rasops/rasops.h>
-#include <dev/wscons/wsdisplay_vconsvar.h>
-#endif
-
 #include <amiga/dev/itevar.h>
 #include <amiga/amiga/device.h>
 #include <amiga/dev/grfioctl.h>
-#include <amiga/dev/grfws.h>
 #include <amiga/dev/grfvar.h>
 #include <amiga/dev/grf_cv3dreg.h>
 #include <amiga/dev/zbusvar.h>
-
 
 /*
  * finish all bus operations, flush pipelines
@@ -114,8 +99,8 @@ Note: IO Regbase is needed fo wakeup of the board otherwise use
 #define cpu_sync() __asm volatile ("sync; isync")
 #endif
 
-int	grfcv3dmatch(device_t, cfdata_t, void *);
-void	grfcv3dattach(device_t, device_t, void *);
+int	grfcv3dmatch(struct device *, struct cfdata *, void *);
+void	grfcv3dattach(struct device *, struct device *, void *);
 int	grfcv3dprint(void *, const char *);
 
 static int cv3d_has_4mb(volatile void *);
@@ -144,7 +129,6 @@ void	cv3d_setup_hwc(struct grf_softc *);
 int	cv3d_setspriteinfo(struct grf_softc *,struct grf_spriteinfo *);
 int	cv3d_getspritemax(struct grf_softc *,struct grf_position *);
 #endif	/* CV3D_HARDWARE_CURSOR */
-
 
 /* Graphics display definitions.
  * These are filled by 'grfconfig' using GRFIOCSETMON.
@@ -288,56 +272,8 @@ static volatile void *cv3d_special_register_base;
  */
 long cv3d_memclk = 55000000;
 
-#if NWSDISPLAY > 0 
-/* wsdisplay accessops, emulops */
-static void	cv3d_wscursor(void *, int, int, int);
-static void	cv3d_wsputchar(void *, int, int, u_int, long);
-static void	cv3d_wscopycols(void *, int, int, int, int);
-static void	cv3d_wserasecols(void *, int, int, int, long);
-static void	cv3d_wscopyrows(void *, int, int, int);
-static void	cv3d_wseraserows(void *, int, int, long);
-static int	cv3d_wsallocattr(void *, int, int, int, long *);
-static int	cv3d_wsmapchar(void *, int, unsigned int *);
-
-struct wsdisplay_accessops cv3d_accessops = {
-	.ioctl		= grf_wsioctl,
-	.mmap		= grf_wsmmap
-};
-
-static struct wsdisplay_emulops cv3d_textops = {
-	.cursor		= cv3d_wscursor,
-	.mapchar	= cv3d_wsmapchar, 
-	.putchar	= cv3d_wsputchar,
-	.copycols	= cv3d_wscopycols,
-	.copyrows	= cv3d_wscopyrows,
-	.erasecols	= cv3d_wserasecols,
-	.eraserows	= cv3d_wseraserows,
-	.allocattr	= cv3d_wsallocattr
-};
-
-static struct ws_ao_ioctl cv3d_wsioctl = {
-	grf_wsaoginfo,
-	grf_wsaogetcmap,
-	grf_wsaoputcmap,
-	grf_wsaogvideo,
-	grf_wsaosvideo,
-	grf_wsaogmode,
-	grf_wsaosmode,
-	grf_wsaogtype
-};
-
-static struct wsscreen_descr cv3d_screen = {
-	.name		= "default",
-	.textops	= &cv3d_textops,
-	.fontwidth	= 8,
-	.fontheight	= S3FONTY,
-	.capabilities	= WSSCREEN_HILIT | WSSCREEN_REVERSE |
-			  WSSCREEN_BLINK | WSSCREEN_UNDERLINE
-};
-#endif /* NWSDISPLAY > 0 */
-
 /* standard driver stuff */
-CFATTACH_DECL_NEW(grfcv3d, sizeof(struct grf_softc),
+CFATTACH_DECL(grfcv3d, sizeof(struct grf_softc),
     grfcv3dmatch, grfcv3dattach, NULL, NULL);
 
 static struct cfdata *cfdata;
@@ -380,14 +316,14 @@ cv3d_has_4mb(volatile void *fb)
 }
 
 int
-grfcv3dmatch(device_t parent, cfdata_t cf, void *aux)
+grfcv3dmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 #ifdef CV3DCONSOLE
 	static int cv3dcons_unit = -1;
 #endif
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 
 	if (amiga_realconfig == 0)
 #ifdef CV3DCONSOLE
@@ -406,12 +342,18 @@ grfcv3dmatch(device_t parent, cfdata_t cf, void *aux)
 	if (zap->manid != 8512 || zap->prodid != 67)
 		return (0);
 
+#ifndef CV3DONZORRO2
+	if (!cv3d_zorroIII) {
+		return (0);
+	}
+#endif
+
 	cv3d_boardaddr = zap->va;
 
 #ifdef CV3DCONSOLE
 	if (amiga_realconfig == 0) {
-		cv3dcons_unit = cf->cf_unit;
-		cfdata = cf;
+		cv3dcons_unit = cfp->cf_unit;
+		cfdata = cfp;
 	}
 #endif
 
@@ -419,38 +361,33 @@ grfcv3dmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-grfcv3dattach(device_t parent, device_t self, void *aux)
+grfcv3dattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	static struct grf_softc congrf;
-	static char attachflag = 0;
-	struct device temp;
 	struct zbus_args *zap;
 	struct grf_softc *gp;
+	static char attachflag = 0;
 
-	zap = aux;
+	zap = auxp;
 
 	printf("\n");
 
 	/*
-	 * This function is called twice, once on console init (self == NULL)
+	 * This function is called twice, once on console init (dp == NULL)
 	 * and once on "normal" grf7 init.
 	 */
 
-	if (self == NULL) {
+	if (dp == NULL) /* console init */
 		gp = &congrf;
-		gp->g_device = &temp;
-		temp.dv_private = gp;
-	} else {
-		gp = device_private(self);
-		gp->g_device = self;
-	}
+	else
+		gp = (struct grf_softc *)dp;
 
-	if (self != NULL && congrf.g_regkva != 0) {
+	if (dp != NULL && congrf.g_regkva != 0) {
 		/*
 		 * inited earlier, just copy (not device struct)
 		 */
 
-		memcpy(&gp->g_display, &congrf.g_display,
+		bcopy(&congrf.g_display, &gp->g_display,
 			(char *) &gp[1] - (char *) &gp->g_display);
 	} else {
 		if (cv3d_zorroIII) {
@@ -481,35 +418,25 @@ grfcv3dattach(device_t parent, device_t self, void *aux)
 
 		gp->g_unit = GRF_CV3D_UNIT;
 		gp->g_mode = cv3d_mode;
-#if NITE > 0
 		gp->g_conpri = grfcv3d_cnprobe();
-#endif 
 		gp->g_flags = GF_ALIVE;
 
 		/* wakeup the board */
 		cv3d_boardinit(gp);
 
 #ifdef CV3DCONSOLE
-#if NWSDISPLAY > 0 
-		gp->g_accessops = &cv3d_accessops;
-		gp->g_emulops = &cv3d_textops;
-		gp->g_defaultscreen = cv3d_screen;
-		gp->g_screens[0] = &gp->g_defaultscreen; 
-		gp->g_wsioctl = &cv3d_wsioctl;
-#else
 		grfcv3d_iteinit(gp);
-#endif /* NWSDISPLAY > 0 */
-		(void)cv3d_load_mon(gp, &cv3dconsole_mode);		
+		(void)cv3d_load_mon(gp, &cv3dconsole_mode);
 #endif
 	}
 
 	/*
 	 * attach grf
 	 */
-	if (amiga_config_found(cfdata, gp->g_device, gp, grfcv3dprint)) {
-		if (self != NULL)
+	if (amiga_config_found(cfdata, &gp->g_device, gp, grfcv3dprint)) {
+		if (dp != NULL)
 			printf("%s: CyberVision64/3D with %dMB being used\n",
-			    device_xname(self), cv3d_fbsize / 0x100000);
+			    dp->dv_xname, cv3d_fbsize / 0x100000);
 		attachflag = 1;
 	} else {
 		if (!attachflag)
@@ -518,7 +445,7 @@ grfcv3dattach(device_t parent, device_t self, void *aux)
 }
 
 int
-grfcv3dprint(void *aux, const char *pnp)
+grfcv3dprint(void *auxp, const char *pnp)
 {
 	if (pnp)
 		aprint_normal("ite at %s: ", pnp);
@@ -827,7 +754,7 @@ cv3d_getvmode(struct grf_softc *gp, struct grfvideo_mode *vm)
 #ifdef CV3DCONSOLE
 	/* Handle grabbing console mode */
 	if (vm->mode_num == 255) {
-		memcpy(vm, &cv3dconsole_mode, sizeof(struct grfvideo_mode));
+		bcopy(&cv3dconsole_mode, vm, sizeof(struct grfvideo_mode));
 		/* XXX so grfconfig can tell us the correct text dimensions. */
 		vm->depth = cv3dconsole_mode.fy;
 	} else
@@ -841,7 +768,7 @@ cv3d_getvmode(struct grf_softc *gp, struct grfvideo_mode *vm)
 		if (gv->mode_num == 0)
 			return (EINVAL);
 
-		memcpy(vm, gv, sizeof(struct grfvideo_mode));
+		bcopy(gv, vm, sizeof(struct grfvideo_mode));
 	}
 
 	/* adjust internal values to pixel values */
@@ -901,9 +828,7 @@ cv3d_mode(register struct grf_softc *gp, u_long cmd, void *arg, u_long a2,
 		cv3dscreen(1, cv3d_vcode_switch_base);
 #else
 		cv3d_load_mon(gp, &cv3dconsole_mode);
-#if NITE > 0
 		ite_reinit(gp->g_itedev);
-#endif
 #endif
 		return (0);
 
@@ -996,7 +921,7 @@ cv3d_setmonitor(struct grf_softc *gp, struct grfvideo_mode *gv)
 #ifdef CV3DCONSOLE
 	/* handle interactive setting of console mode */
 	if (gv->mode_num == 255) {
-		memcpy(&cv3dconsole_mode.gv, gv, sizeof(struct grfvideo_mode));
+		bcopy(gv, &cv3dconsole_mode.gv, sizeof(struct grfvideo_mode));
 		cv3dconsole_mode.gv.hblank_start /= 8;
 		cv3dconsole_mode.gv.hsync_start /= 8;
 		cv3dconsole_mode.gv.hsync_stop /= 8;
@@ -1005,9 +930,7 @@ cv3d_setmonitor(struct grf_softc *gp, struct grfvideo_mode *gv)
 		cv3dconsole_mode.cols = gv->disp_width / cv3dconsole_mode.fx;
 		if (!(gp->g_flags & GF_GRFON))
 			cv3d_load_mon(gp, &cv3dconsole_mode);
-#if NITE > 0
 		ite_reinit(gp->g_itedev);
-#endif
 		return (0);
 	}
 #endif
@@ -1024,7 +947,7 @@ cv3d_setmonitor(struct grf_softc *gp, struct grfvideo_mode *gv)
 			return (EINVAL);
 		}
 
-	memcpy(md, gv, sizeof(struct grfvideo_mode));
+	bcopy(gv, md, sizeof(struct grfvideo_mode));
 
 	/* adjust pixel oriented values to internal rep. */
 
@@ -2120,197 +2043,5 @@ cv3d_getspritemax(struct grf_softc *gp, struct grf_position *pos)
 }
 
 #endif /* CV3D_HARDWARE_CURSOR */
-
-#if NWSDISPLAY > 0 
-
-static void
-cv3d_wscursor(void *c, int on, int row, int col) 
-{
-	struct rasops_info *ri;
-	struct vcons_screen *scr;
-	struct grf_softc *gp;
-	volatile void *ba;
-	int offs;
-
-	ri = c;
-	scr = ri->ri_hw;
-	gp = scr->scr_cookie;
-	ba = gp->g_regkva;
-
-	if ((ri->ri_flg & RI_CURSOR) && !on) {
-		/* cursor was visible, but we want to remove it */
-		/*WCrt(ba, CRT_ID_CURSOR_START, | 0x20);*/
-		ri->ri_flg &= ~RI_CURSOR;
-	}
-
-	ri->ri_crow = row;
-	ri->ri_ccol = col;
-
-	if (on) {
-		/* move cursor to new location */
-		if (!(ri->ri_flg & RI_CURSOR)) {
-			/*WCrt(ba, CRT_ID_CURSOR_START, | 0x20);*/
-			ri->ri_flg |= RI_CURSOR;
-		}
-		offs = gp->g_rowoffset[row] + col;
-		WCrt(ba, CRT_ID_CURSOR_LOC_LOW, offs & 0xff);
-		WCrt(ba, CRT_ID_CURSOR_LOC_HIGH, offs >> 8);
-	}
-}
-
-static void
-cv3d_wsputchar(void *cookie, int row, int col, u_int ch, long attr)
-{
-	struct rasops_info *ri;
-	struct vcons_screen *scr;
-	struct grf_softc *gp;
-	volatile unsigned char *cp;
-
-	ri = cookie;
-	scr = ri->ri_hw;
-	gp = scr->scr_cookie;
-	cp = gp->g_fbkva;
-	cp += (gp->g_rowoffset[row] + col) << 2;
-	*cp++ = ch;
-	*cp = attr;
-}
-
-static void     
-cv3d_wscopycols(void *c, int row, int srccol, int dstcol, int ncols) 
-{
-	struct rasops_info *ri;
-	struct vcons_screen *scr;
-	struct grf_softc *gp;
-	volatile uint16_t *src, *dst;
-
-	KASSERT(ncols > 0);
-	ri = c;
-	scr = ri->ri_hw;
-	gp = scr->scr_cookie;
-	src = dst = gp->g_fbkva;
-	src += (gp->g_rowoffset[row] + srccol) << 1;
-	dst += (gp->g_rowoffset[row] + dstcol) << 1;
-	if (src < dst) {
-		/* need to copy backwards */
-		src += (ncols - 1) << 1;
-		dst += (ncols - 1) << 1;
-		while (ncols--) {
-			*dst = *src;
-			src -= 2;
-			dst -= 2;
-		}
-	} else
-		while (ncols--) {
-			*dst = *src;
-			src += 2;
-			dst += 2;
-		}
-}
-
-static void     
-cv3d_wserasecols(void *c, int row, int startcol, int ncols, long fillattr)
-{
-	struct rasops_info *ri;
-	struct vcons_screen *scr;
-	struct grf_softc *gp;
-	volatile uint16_t *cp;
-	uint16_t val;
- 
-	ri = c;
-	scr = ri->ri_hw;
-	gp = scr->scr_cookie;
-	cp = gp->g_fbkva;
-	val = 0x2000 | fillattr;
-	cp += (gp->g_rowoffset[row] + startcol) << 1;
-	while (ncols--) {
-		*cp = val;
-		cp += 2;
-	}
-}
-
-static void     
-cv3d_wscopyrows(void *c, int srcrow, int dstrow, int nrows) 
-{
-	struct rasops_info *ri;
-	struct vcons_screen *scr;
-	struct grf_softc *gp;
-	volatile uint16_t *src, *dst;
-	int n;
-
-	KASSERT(nrows > 0);
-	ri = c;
-	scr = ri->ri_hw;
-	gp = scr->scr_cookie;
-	src = dst = gp->g_fbkva;
-	n = ri->ri_cols * nrows;
-	if (src < dst) {
-		/* need to copy backwards */
-		src += gp->g_rowoffset[srcrow + nrows] << 1;
-		dst += gp->g_rowoffset[dstrow + nrows] << 1;
-		while (n--) {
-			src -= 2;
-			dst -= 2;
-			*dst = *src;
-		}
-	} else {
-		src += gp->g_rowoffset[srcrow] << 1;
-		dst += gp->g_rowoffset[dstrow] << 1;
-		while (n--) {
-			*dst = *src;
-			src += 2;
-			dst += 2;
-		}
-	}
-}
-
-static void     
-cv3d_wseraserows(void *c, int row, int nrows, long fillattr) 
-{
-	struct rasops_info *ri;
-	struct vcons_screen *scr;
-	struct grf_softc *gp;
-	volatile uint16_t *cp;
-	int n;
-	uint16_t val;
- 
-	ri = c;
-	scr = ri->ri_hw;
-	gp = scr->scr_cookie;
-	cp = gp->g_fbkva;
-	val = 0x2000 | fillattr;
-	cp += gp->g_rowoffset[row] << 1;
-	n = ri->ri_cols * nrows;
-	while (n--) {
-		*cp = val;
-		cp += 2;
-	}
-}
-
-/* our font does not support unicode extensions */
-static int      
-cv3d_wsmapchar(void *c, int ch, unsigned int *cp)
-{
-
-	if (ch > 0 && ch < 256) {
-		*cp = ch;
-		return 5;
-	}
-	*cp = ' ';	
-	return 0;
-}
-
-static int
-cv3d_wsallocattr(void *c, int fg, int bg, int flg, long *attr)
-{
-
-	/* XXX color support? */
-	*attr = (flg & WSATTR_REVERSE) ? 0x70 : 0x07;
-	if (flg & WSATTR_UNDERLINE)	*attr = 0x01;
-	if (flg & WSATTR_HILIT)		*attr |= 0x08;
-	if (flg & WSATTR_BLINK)		*attr |= 0x80;
-	return 0;
-}
-
-#endif /* NWSDISPLAY > 0 */
 
 #endif  /* NGRFCV3D */

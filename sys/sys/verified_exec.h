@@ -1,4 +1,4 @@
-/*	$NetBSD: verified_exec.h,v 1.58 2010/11/19 06:44:34 dholland Exp $	*/
+/*	$NetBSD: verified_exec.h,v 1.57 2007/05/19 22:11:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 Elad Efrat <elad@NetBSD.org>
@@ -78,19 +78,27 @@ struct vm_page;
 #if defined(_KERNEL) && !defined(HAVE_NBTOOL_CONFIG_H)
 
 #if NVERIEXEC > 0
-/* FUTURE: remove this macro entirely - dholland 20100215 */
-#define VERIEXEC_PATH_GET(from, cto, to) \
+#define VERIEXEC_PATH_GET(from, seg, cto, to) \
 	do { \
+		if (seg == UIO_USERSPACE) { \
+			to = PNBUF_GET(); \
+			error = copyinstr(from, to, MAXPATHLEN, NULL); \
+			if (error) \
+				goto out; \
+			cto = to; \
+			seg = UIO_SYSSPACE; \
+		} else { \
 			to = NULL; \
 			cto = from; \
 		} \
 	} while (/*CONSTCOND*/0)
 #define VERIEXEC_PATH_PUT(to) \
 	do { \
-		(void)(to); \
+		if (to) \
+			PNBUF_PUT(to); \
 	} while (/*CONSTCOND*/0)
 #else
-#define VERIEXEC_PATH_GET(from, cto, to) \
+#define VERIEXEC_PATH_GET(from, seg, cto, to) \
 	cto = from
 #define VERIEXEC_PATH_PUT(to) \
 	(void)to

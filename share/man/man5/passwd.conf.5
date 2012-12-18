@@ -1,4 +1,4 @@
-.\"	$NetBSD: passwd.conf.5,v 1.10 2010/12/03 21:41:40 jmmv Exp $
+.\"	$NetBSD: passwd.conf.5,v 1.8 2005/09/05 03:37:15 hubertf Exp $
 .\"
 .\" Copyright 1997 Niels Provos <provos@physnet.uni-hamburg.de>
 .\" All rights reserved.
@@ -28,7 +28,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 3, 2010
+.Dd September 4, 2005
 .Dt PASSWD.CONF 5
 .Os
 .Sh NAME
@@ -57,7 +57,6 @@ Some fields and their possible values that can appear in this file are:
 .Bl -tag -width localcipher
 .It Sy localcipher
 The cipher to use for local passwords.
-.Pp
 Possible values are:
 .Dq old ,
 .Dq newsalt,\*[Lt]rounds\*[Gt] ,
@@ -71,21 +70,14 @@ the value of rounds is a 24-bit integer with a minimum of 7250 rounds.
 For
 .Dq sha1
 the value of rounds is a 32-bit integer, 0 means use the default
-of 24680.
+of 24680.  
 For
 .Dq blowfish
 the value can be between 4 and 31.
 It specifies the base 2 logarithm of the number of rounds.
-.Pp
-If not specified, the default value is
-.Dq old .
 .It Sy ypcipher
 The cipher to use for YP passwords.
-.Pp
 The possible values are the same as for localcipher.
-.Pp
-If not specified, the default value is
-.Dq old .
 .El
 .Pp
 To retrieve information from this file use
@@ -95,11 +87,11 @@ To retrieve information from this file use
 .It Pa /etc/passwd.conf
 .El
 .Sh EXAMPLES
-Use SHA1 as the local cipher and old-style DES as the YP cipher.
+Use MD5 as the local cipher and old-style DES as the YP cipher.
 Use blowfish with 2^5 rounds for root:
 .Bd -literal
  default:
-      localcipher = sha1
+      localcipher = md5
       ypcipher = old
 
  root:
@@ -115,12 +107,3 @@ The
 .Nm
 configuration file first appeared in
 .Nx 1.6 .
-.Pp
-The default value of
-.Sy localcipher
-was set to
-.Dq sha1
-in
-.Pa /etc/passwd.conf
-starting from
-.Nx 6.0 .

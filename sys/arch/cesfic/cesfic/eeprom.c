@@ -1,4 +1,4 @@
-/* $NetBSD: eeprom.c,v 1.6 2009/10/26 19:16:55 cegger Exp $ */
+/* $NetBSD: eeprom.c,v 1.3 2005/12/11 12:17:04 christos Exp $ */
 
 /*
  * Copyright (c) 1997, 1999
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eeprom.c,v 1.6 2009/10/26 19:16:55 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eeprom.c,v 1.3 2005/12/11 12:17:04 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -93,7 +93,8 @@ static CHECKSUM CheckSum(CHECKSUM *);
 static int GetEEPROMData(struct EEPROMData *);
 
 static CHECKSUM
-CheckSum(CHECKSUM *data)
+CheckSum(data)
+        CHECKSUM *data;
 {
 	CHECKSUM c;
 	int i;
@@ -104,7 +105,8 @@ CheckSum(CHECKSUM *data)
 }
 
 static int
-GetEEPROMData(struct EEPROMData *data)
+GetEEPROMData(data)
+        struct EEPROMData *data;
 {
 	unsigned char *eep;
 	int i;
@@ -125,7 +127,8 @@ static struct EEPROMData eeprom;
 static int eeprom_read;
 
 int
-cesfic_getetheraddr(unsigned char *buf)
+cesfic_getetheraddr(buf)
+	unsigned char *buf;
 {
 	int res;
 
@@ -137,6 +140,6 @@ cesfic_getetheraddr(unsigned char *buf)
 		}
 		eeprom_read = 1;
 	}
-	memcpy(buf, eeprom.EtherAddr, 6);
+	bcopy(eeprom.EtherAddr, buf, 6);
 	return (0);
 }

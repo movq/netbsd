@@ -1,7 +1,7 @@
-/*	$NetBSD: cmpci.c,v 1.46 2012/10/27 17:18:28 chs Exp $	*/
+/*	$NetBSD: cmpci.c,v 1.38 2008/04/10 19:13:36 cegger Exp $	*/
 
 /*
- * Copyright (c) 2000, 2001, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cmpci.c,v 1.46 2012/10/27 17:18:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cmpci.c,v 1.38 2008/04/10 19:13:36 cegger Exp $");
 
 #if defined(AUDIO_DEBUG) || defined(DEBUG)
 #define DPRINTF(x) if (cmpcidebug) printf x
@@ -57,7 +57,7 @@ int cmpcidebug = 0;
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/proc.h>
 
@@ -106,10 +106,10 @@ static int cmpci_set_in_ports(struct cmpci_softc *);
 /*
  * autoconf interface
  */
-static int cmpci_match(device_t, cfdata_t, void *);
-static void cmpci_attach(device_t, device_t, void *);
+static int cmpci_match(struct device *, struct cfdata *, void *);
+static void cmpci_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(cmpci, sizeof (struct cmpci_softc),
+CFATTACH_DECL(cmpci, sizeof (struct cmpci_softc),
     cmpci_match, cmpci_attach, NULL, NULL);
 
 /* interrupt */
@@ -119,8 +119,10 @@ static int cmpci_intr(void *);
 /*
  * DMA stuffs
  */
-static int cmpci_alloc_dmamem(struct cmpci_softc *, size_t, void **);
-static int cmpci_free_dmamem(struct cmpci_softc *, void *, size_t);
+static int cmpci_alloc_dmamem(struct cmpci_softc *, size_t,
+	struct malloc_type *, int, void **);
+static int cmpci_free_dmamem(struct cmpci_softc *, void *,
+	struct malloc_type *);
 static struct cmpci_dmanode * cmpci_find_dmamem(struct cmpci_softc *,
 	void *);
 
@@ -138,8 +140,8 @@ static int cmpci_getdev(void *, struct audio_device *);
 static int cmpci_set_port(void *, mixer_ctrl_t *);
 static int cmpci_get_port(void *, mixer_ctrl_t *);
 static int cmpci_query_devinfo(void *, mixer_devinfo_t *);
-static void *cmpci_allocm(void *, int, size_t);
-static void cmpci_freem(void *, void *, size_t);
+static void *cmpci_allocm(void *, int, size_t, struct malloc_type *, int);
+static void cmpci_freem(void *, void *, struct malloc_type *);
 static size_t cmpci_round_buffersize(void *, int, size_t);
 static paddr_t cmpci_mappage(void *, void *, off_t, int);
 static int cmpci_get_props(void *);
@@ -147,7 +149,6 @@ static int cmpci_trigger_output(void *, void *, void *, int,
 	void (*)(void *), void *, const audio_params_t *);
 static int cmpci_trigger_input(void *, void *, void *, int,
 	void (*)(void *), void *, const audio_params_t *);
-static void cmpci_get_locks(void *, kmutex_t **, kmutex_t **);
 
 static const struct audio_hw_if cmpci_hw_if = {
 	NULL,			/* open */
@@ -177,7 +178,7 @@ static const struct audio_hw_if cmpci_hw_if = {
 	cmpci_trigger_output,	/* trigger_output */
 	cmpci_trigger_input,	/* trigger_input */
 	NULL,			/* dev_ioctl */
-	cmpci_get_locks,	/* get_locks */
+	NULL,			/* powerstate */
 };
 
 #define CMPCI_NFORMATS	4
@@ -358,7 +359,8 @@ cmpci_index_to_divider(int index)
  * interface to configure the device.
  */
 static int
-cmpci_match(device_t parent, cfdata_t match, void *aux)
+cmpci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -374,22 +376,25 @@ cmpci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-cmpci_attach(device_t parent, device_t self, void *aux)
+cmpci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct cmpci_softc *sc;
 	struct pci_attach_args *pa;
 	struct audio_attach_args aa;
 	pci_intr_handle_t ih;
 	char const *strintr;
+	char devinfo[256];
 	int i, v;
 
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (struct cmpci_softc *)self;
 	pa = (struct pci_attach_args *)aux;
+	aprint_naive(": Audio controller\n");
 
 	sc->sc_id = pa->pa_id;
 	sc->sc_class = pa->pa_class;
-	pci_aprint_devinfo(pa, "Audio controller");
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
+	    PCI_REVISION(sc->sc_class));
 	switch (PCI_PRODUCT(sc->sc_id)) {
 	case PCI_PRODUCT_CMEDIA_CMI8338A:
 		/*FALLTHROUGH*/
@@ -406,41 +411,35 @@ cmpci_attach(device_t parent, device_t self, void *aux)
 	/* map I/O space */
 	if (pci_mapreg_map(pa, CMPCI_PCI_IOBASEREG, PCI_MAPREG_TYPE_IO, 0,
 		&sc->sc_iot, &sc->sc_ioh, NULL, NULL)) {
-		aprint_error_dev(sc->sc_dev, "failed to map I/O space\n");
+		aprint_error_dev(&sc->sc_dev, "failed to map I/O space\n");
 		return;
 	}
-
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
 
 	/* interrupt */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error_dev(sc->sc_dev, "failed to map interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "failed to map interrupt\n");
 		return;
 	}
 	strintr = pci_intr_string(pa->pa_pc, ih);
-	sc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_AUDIO, cmpci_intr,
-	    sc);
+	sc->sc_ih=pci_intr_establish(pa->pa_pc, ih, IPL_AUDIO, cmpci_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "failed to establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "failed to establish interrupt");
 		if (strintr != NULL)
-			aprint_error(" at %s", strintr);
-		aprint_error("\n");
-		mutex_destroy(&sc->sc_lock);
-		mutex_destroy(&sc->sc_intr_lock);
+			aprint_normal(" at %s", strintr);
+		aprint_normal("\n");
 		return;
 	}
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", strintr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", strintr);
 
 	sc->sc_dmat = pa->pa_dmat;
 
-	audio_attach_mi(&cmpci_hw_if, sc, sc->sc_dev);
+	audio_attach_mi(&cmpci_hw_if, sc, &sc->sc_dev);
 
 	/* attach OPL device */
 	aa.type = AUDIODEV_TYPE_OPL;
 	aa.hwif = NULL;
 	aa.hdl = NULL;
-	(void)config_found(sc->sc_dev, &aa, audioprint);
+	(void)config_found(&sc->sc_dev, &aa, audioprint);
 
 	/* attach MPU-401 device */
 	aa.type = AUDIODEV_TYPE_MPU;
@@ -448,7 +447,7 @@ cmpci_attach(device_t parent, device_t self, void *aux)
 	aa.hdl = NULL;
 	if (bus_space_subregion(sc->sc_iot, sc->sc_ioh,
 	    CMPCI_REG_MPU_BASE, CMPCI_REG_MPU_SIZE, &sc->sc_mpu_ioh) == 0)
-		sc->sc_mpudev = config_found(sc->sc_dev, &aa, audioprint);
+		sc->sc_mpudev = config_found(&sc->sc_dev, &aa, audioprint);
 
 	/* get initial value (this is 0 and may be omitted but just in case) */
 	sc->sc_reg_misc = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
@@ -528,15 +527,11 @@ cmpci_intr(void *handle)
 #endif
 	uint32_t intrstat;
 
-	mutex_spin_enter(&sc->sc_intr_lock);
-
 	intrstat = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
 	    CMPCI_REG_INTR_STATUS);
 
-	if (!(intrstat & CMPCI_REG_ANY_INTR)) {
-		mutex_spin_exit(&sc->sc_intr_lock);
+	if (!(intrstat & CMPCI_REG_ANY_INTR))
 		return 0;
-	}
 
 	delay(10);
 
@@ -570,7 +565,6 @@ cmpci_intr(void *handle)
 		mpu_intr(sc_mpu);
 #endif
 
-	mutex_spin_exit(&sc->sc_intr_lock);
 	return 1;
 }
 
@@ -674,7 +668,7 @@ cmpci_set_params(void *handle, int setmode, int usemode,
 		md_divide = cmpci_index_to_divider(md_index);
 		p->sample_rate = cmpci_index_to_rate(md_index);
 		DPRINTF(("%s: sample:%u, divider=%d\n",
-			 device_xname(sc->sc_dev), p->sample_rate, md_divide));
+			 device_xname(&sc->sc_dev), p->sample_rate, md_divide));
 
 		ind = auconv_set_converter(cmpci_formats, CMPCI_NFORMATS,
 					   mode, p, FALSE, fil);
@@ -726,8 +720,10 @@ static int
 cmpci_halt_output(void *handle)
 {
 	struct cmpci_softc *sc;
+	int s;
 
 	sc = handle;
+	s = splaudio();
 	sc->sc_play.intr = NULL;
 	cmpci_reg_clear_4(sc, CMPCI_REG_INTR_CTRL, CMPCI_REG_CH0_INTR_ENABLE);
 	cmpci_reg_clear_4(sc, CMPCI_REG_FUNC_0, CMPCI_REG_CH0_ENABLE);
@@ -735,6 +731,7 @@ cmpci_halt_output(void *handle)
 	cmpci_reg_set_4(sc, CMPCI_REG_FUNC_0, CMPCI_REG_CH0_RESET);
 	delay(10);
 	cmpci_reg_clear_4(sc, CMPCI_REG_FUNC_0, CMPCI_REG_CH0_RESET);
+	splx(s);
 
 	return 0;
 }
@@ -743,8 +740,10 @@ static int
 cmpci_halt_input(void *handle)
 {
 	struct cmpci_softc *sc;
+	int s;
 
 	sc = handle;
+	s = splaudio();
 	sc->sc_rec.intr = NULL;
 	cmpci_reg_clear_4(sc, CMPCI_REG_INTR_CTRL, CMPCI_REG_CH1_INTR_ENABLE);
 	cmpci_reg_clear_4(sc, CMPCI_REG_FUNC_0, CMPCI_REG_CH1_ENABLE);
@@ -752,6 +751,7 @@ cmpci_halt_input(void *handle)
 	cmpci_reg_set_4(sc, CMPCI_REG_FUNC_0, CMPCI_REG_CH1_RESET);
 	delay(10);
 	cmpci_reg_clear_4(sc, CMPCI_REG_FUNC_0, CMPCI_REG_CH1_RESET);
+	splx(s);
 
 	return 0;
 }
@@ -1009,38 +1009,40 @@ cmpci_query_devinfo(void *handle, mixer_devinfo_t *dip)
 }
 
 static int
-cmpci_alloc_dmamem(struct cmpci_softc *sc, size_t size, void **r_addr)
+cmpci_alloc_dmamem(struct cmpci_softc *sc, size_t size, struct malloc_type *type,
+		   int flags, void **r_addr)
 {
 	int error;
 	struct cmpci_dmanode *n;
+	int w;
 
 	error = 0;
-	n = kmem_alloc(sizeof(struct cmpci_dmanode), KM_SLEEP);
+	n = malloc(sizeof(struct cmpci_dmanode), type, flags);
 	if (n == NULL) {
 		error = ENOMEM;
 		goto quit;
 	}
 
+	w = (flags & M_NOWAIT) ? BUS_DMA_NOWAIT : BUS_DMA_WAITOK;
 #define CMPCI_DMABUF_ALIGN    0x4
 #define CMPCI_DMABUF_BOUNDARY 0x0
 	n->cd_tag = sc->sc_dmat;
 	n->cd_size = size;
 	error = bus_dmamem_alloc(n->cd_tag, n->cd_size,
 	    CMPCI_DMABUF_ALIGN, CMPCI_DMABUF_BOUNDARY, n->cd_segs,
-	    sizeof(n->cd_segs)/sizeof(n->cd_segs[0]), &n->cd_nsegs,
-	    BUS_DMA_WAITOK);
+	    sizeof(n->cd_segs)/sizeof(n->cd_segs[0]), &n->cd_nsegs, w);
 	if (error)
 		goto mfree;
 	error = bus_dmamem_map(n->cd_tag, n->cd_segs, n->cd_nsegs, n->cd_size,
-	    &n->cd_addr, BUS_DMA_WAITOK | BUS_DMA_COHERENT);
+	    &n->cd_addr, w | BUS_DMA_COHERENT);
 	if (error)
 		goto dmafree;
 	error = bus_dmamap_create(n->cd_tag, n->cd_size, 1, n->cd_size, 0,
-	    BUS_DMA_WAITOK, &n->cd_map);
+	    w, &n->cd_map);
 	if (error)
 		goto unmap;
 	error = bus_dmamap_load(n->cd_tag, n->cd_map, n->cd_addr, n->cd_size,
-	    NULL, BUS_DMA_WAITOK);
+	    NULL, w);
 	if (error)
 		goto destroy;
 
@@ -1057,13 +1059,13 @@ cmpci_alloc_dmamem(struct cmpci_softc *sc, size_t size, void **r_addr)
 	bus_dmamem_free(n->cd_tag,
 			n->cd_segs, sizeof(n->cd_segs)/sizeof(n->cd_segs[0]));
  mfree:
-	kmem_free(n, sizeof(*n));
+	free(n, type);
  quit:
 	return error;
 }
 
 static int
-cmpci_free_dmamem(struct cmpci_softc *sc, void *addr, size_t size)
+cmpci_free_dmamem(struct cmpci_softc *sc, void *addr, struct malloc_type *type)
 {
 	struct cmpci_dmanode **nnp;
 
@@ -1075,7 +1077,7 @@ cmpci_free_dmamem(struct cmpci_softc *sc, void *addr, size_t size)
 			bus_dmamem_unmap(n->cd_tag, n->cd_addr, n->cd_size);
 			bus_dmamem_free(n->cd_tag, n->cd_segs,
 			    sizeof(n->cd_segs)/sizeof(n->cd_segs[0]));
-			kmem_free(n, sizeof(*n));
+			free(n, type);
 			return 0;
 		}
 	}
@@ -1107,22 +1109,23 @@ cmpci_print_dmamem(struct cmpci_dmanode *p)
 #endif /* DEBUG */
 
 static void *
-cmpci_allocm(void *handle, int direction, size_t size)
+cmpci_allocm(void *handle, int direction, size_t size,
+	     struct malloc_type *type, int flags)
 {
 	void *addr;
 
 	addr = NULL;	/* XXX gcc */
 
-	if (cmpci_alloc_dmamem(handle, size, &addr))
+	if (cmpci_alloc_dmamem(handle, size, type, flags, &addr))
 		return NULL;
 	return addr;
 }
 
 static void
-cmpci_freem(void *handle, void *addr, size_t size)
+cmpci_freem(void *handle, void *addr, struct malloc_type *type)
 {
 
-	cmpci_free_dmamem(handle, addr, size);
+	cmpci_free_dmamem(handle, addr, type);
 }
 
 #define MAXVAL 256
@@ -1740,16 +1743,6 @@ cmpci_trigger_input(void *handle, void *start, void *end, int blksize,
 	cmpci_reg_set_4(sc, CMPCI_REG_FUNC_0, CMPCI_REG_CH1_ENABLE);
 
 	return 0;
-}
-
-static void
-cmpci_get_locks(void *addr, kmutex_t **intr, kmutex_t **thread)
-{
-	struct cmpci_softc *sc;
-
-	sc = addr;
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
 }
 
 /* end of file */

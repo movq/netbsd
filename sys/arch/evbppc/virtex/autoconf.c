@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.5 2012/07/29 18:05:42 mlelstv Exp $ */
+/*	$NetBSD: autoconf.c,v 1.1 2006/12/02 22:18:47 freza Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -61,24 +61,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.5 2012/07/29 18:05:42 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.1 2006/12/02 22:18:47 freza Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
-#include <sys/cpu.h>
-#include <sys/device_if.h>
+#include <sys/device.h>
 #include <sys/systm.h>
 
-#include <powerpc/ibm4xx/spr.h>
-
-#include <powerpc/ibm4xx/cpu.h>
+#include <powerpc/ibm4xx/dcr405gp.h>
 #include <powerpc/ibm4xx/dev/plbvar.h>
 
 
 /* List of port-specific devices to attach to the processor local bus. */
 static const struct plb_dev local_plb_devs [] = {
-	{ XILVIRTEX, "xcvbus" },
-	{ 0, NULL }
+	{ "xcvbus" },
+	{ NULL }
 };
 
 /*
@@ -93,7 +90,13 @@ cpu_configure(void)
 	if (config_rootfound("plb", &local_plb_devs) == NULL)
 		panic("configure: plb not configured");
 
+	printf("biomask %#08x netmask %#08x ttymask %#08x\n",
+	    imask[IPL_BIO], imask[IPL_NET], imask[IPL_TTY]);
+	
 	(void)spl0();
+
+	/* Now allow hardware interrupts. */
+	__asm volatile ("isync ; wrteei 1");
 }
 
 /*
@@ -102,5 +105,5 @@ cpu_configure(void)
 void
 cpu_rootconf(void)
 {
-	rootconf();
+	setroot(booted_device, booted_partition);
 }

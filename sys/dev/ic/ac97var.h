@@ -1,4 +1,4 @@
-/*	$NetBSD: ac97var.h,v 1.23 2012/10/27 17:18:18 chs Exp $	*/
+/*	$NetBSD: ac97var.h,v 1.20 2007/02/21 22:59:59 thorpej Exp $	*/
 /*	$OpenBSD: ac97.h,v 1.4 2000/07/19 09:01:35 csapuntz Exp $	*/
 
 /*
@@ -92,8 +92,9 @@ struct ac97_codec_if {
 	struct ac97_codec_if_vtbl *vtbl;
 };
 
-int ac97_attach_type(struct ac97_host_if *, device_t, int, kmutex_t *);
-int ac97_attach(struct ac97_host_if *, device_t, kmutex_t *);
+struct device;
+int ac97_attach_type(struct ac97_host_if *, struct device *, int);
+int ac97_attach(struct ac97_host_if *, struct device *);
 
 #define AC97_IS_FIXED_RATE(codec)	\
 	!((codec)->vtbl->get_extcaps(codec) & AC97_EXT_AUDIO_VRA)

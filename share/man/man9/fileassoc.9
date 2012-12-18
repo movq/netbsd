@@ -1,4 +1,4 @@
-.\" $NetBSD: fileassoc.9,v 1.25 2010/01/27 06:50:40 wiz Exp $
+.\" $NetBSD: fileassoc.9,v 1.22 2008/09/14 12:51:39 itohy Exp $
 .\"
 .\" Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
 .\" All rights reserved.
@@ -25,7 +25,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 26, 2010
+.Dd May 15, 2007
 .Dt FILEASSOC 9
 .Os
 .Sh NAME
@@ -33,26 +33,6 @@
 .Nd in-kernel, file-system independent, file-meta data association
 .Sh SYNOPSIS
 .In sys/fileassoc.h
-.Ft int
-.Fn fileassoc_register "const char *name" \
-"fileassoc_cleanup_cb_t cleanup_cb" "fileassoc_t *result"
-.Ft int
-.Fn fileassoc_deregister "fileassoc_t id"
-.Ft void *
-.Fn fileassoc_lookup "struct vnode *vp" "fileassoc_t id"
-.Ft int
-.Fn fileassoc_table_delete "struct mount *mp"
-.Ft int
-.Fn fileassoc_table_clear "struct mount *mp" "fileassoc_t id"
-.Ft int
-.Fn fileassoc_table_run "struct mount *mp" "fileassoc_t id" \
-"fileassoc_cb_t cb" "void *cookie"
-.Ft int
-.Fn fileassoc_file_delete "struct vnode *vp"
-.Ft int
-.Fn fileassoc_add "struct vnode *vp" "fileassoc_t id" "void *data"
-.Ft int
-.Fn fileassoc_clear "struct vnode *vp" "fileassoc_t id"
 .Sh DESCRIPTION
 The
 .Nm
@@ -65,7 +45,7 @@ private data to be associated with every file-system mount.
 .Pp
 For example, a developer might choose to associate a custom ACL with every
 file, and a count of total files with ACLs with the mount.
-.Sh KERNEL PROGRAMMING INTERFACE
+.Ss Kernel Programming Interface
 Designed with simplicity in mind, the
 .Nm
 KPI usually accepts four different types of parameters to the most commonly
@@ -98,12 +78,13 @@ routine to
 .Fn fileassoc_register
 (see below)
 to be called whenever an entry for a file or a mount is deleted.
-.Ss REGISTRATION AND DEREGISTRATION ROUTINES
+.Ss Fileassoc Registration and Deregistration Routines
 These routines allow a developer to allocate a
 .Nm
 slot to be used for private data.
 .Bl -tag -width "123456"
-.It Fn fileassoc_register "name" "cleanup_cb" "result"
+.It Ft int Fn fileassoc_register "const char *name" \
+"fileassoc_cleanup_cb_t cleanup_cb" "fileassoc_t *result"
 Registers a new fileassoc as
 .Ar name ,
 and returns a
@@ -134,7 +115,7 @@ See the
 .Sx EXAMPLES
 section for illustration.
 .Pp
-.It Fn fileassoc_deregister "id"
+.It Ft int Fn fileassoc_deregister "fileassoc_t id"
 Deregisters a
 .Nm fileassoc
 whose id is
@@ -147,24 +128,24 @@ only frees the associated slot in the
 subsystem.
 It is up to the developer to take care of garbage collection.
 .El
-.Ss LOOKUP ROUTINES
+.Ss Lookup Routines
 These routines allow lookup of
 .Nm
 mounts, files, and private data attached to them.
 .Bl -tag -width "123456"
-.It Fn fileassoc_lookup "vp" "id"
+.It Ft void * Fn fileassoc_lookup "struct vnode *vp" "fileassoc_t id"
 Returns the private data for the file/id combination
 or
 .Dv NULL
 if not found.
 .El
-.Ss MOUNT-WIDE ROUTINES
+.Ss Mount-wide Routines
 .Bl -tag -width "123456"
-.It Fn fileassoc_table_delete "mp"
+.It Ft int Fn fileassoc_table_delete "struct mount *mp"
 Deletes a fileassoc table for
 .Ar mp .
 .Pp
-.It Fn fileassoc_table_clear "mp" "id"
+.It Ft int Fn fileassoc_table_clear "struct mount *mp" "fileassoc_t id"
 Clear all table entries for
 .Ar fileassoc
 from
@@ -174,7 +155,8 @@ If specified, the fileassoc's
 .Dq cleanup routine
 will be called with a pointer to the private data-structure.
 .Pp
-.It Fn fileassoc_table_run "mp" "id" "cb" "cookie"
+.It Ft int Fn fileassoc_table_run "struct mount *mp" "fileassoc_t id" \
+"fileassoc_cb_t cb" "void *cookie"
 For each entry for
 .Ar id ,
 call
@@ -190,9 +172,9 @@ and receiving one
 .Ft "void *"
 parameter.
 .El
-.Ss FILE-SPECIFIC ROUTINES
+.Ss File-specific Routines
 .Bl -tag -width "123456"
-.It Fn fileassoc_file_delete "vp"
+.It Ft int Fn fileassoc_file_delete "struct vnode *vp"
 Delete the fileassoc entries for
 .Ar vp .
 .Pp
@@ -202,9 +184,9 @@ of all fileassoc types added will be called with a pointer to the corresponding
 private data structure and indication of
 .Dv FILEASSOC_CLEANUP_FILE .
 .El
-.Ss FILEASSOC-SPECIFIC ROUTINES
+.Ss Fileassoc-specific Routines
 .Bl -tag -width "123456"
-.It Fn fileassoc_add "vp" "id" "data"
+.It Ft int Fn fileassoc_add "struct vnode *vp" "fileassoc_t id" "void *data"
 Add private data in
 .Ar data
 for
@@ -217,7 +199,7 @@ If a table for the mount-point
 is on doesn't exist, one will be created automatically.
 .Nm
 manages internally the optimal table sizes as tables are modified.
-.It Fn fileassoc_clear "vp" "id"
+.It Ft int Fn fileassoc_clear "struct vnode *vp" "fileassoc_t id"
 Clear the private data for
 .Ar vp ,
 for the fileassoc specified by
@@ -330,10 +312,7 @@ For example usage of
 .Nm ,
 see the Veriexec code.
 .Sh CODE REFERENCES
-The
-.Nm
-is implemented within
-.Pa src/sys/kern/kern_fileassoc.c .
+.Pa src/sys/kern/kern_fileassoc.c
 .Sh HISTORY
 The
 .Nm

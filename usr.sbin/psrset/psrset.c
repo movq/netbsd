@@ -1,4 +1,4 @@
-/*	$NetBSD: psrset.c,v 1.3 2011/08/31 13:32:39 joerg Exp $	*/
+/*	$NetBSD: psrset.c,v 1.1 2008/06/22 13:53:59 ad Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: psrset.c,v 1.3 2011/08/31 13:32:39 joerg Exp $");
+__RCSID("$NetBSD: psrset.c,v 1.1 2008/06/22 13:53:59 ad Exp $");
 #endif
 
 #include <sys/types.h>
@@ -44,7 +44,7 @@ __RCSID("$NetBSD: psrset.c,v 1.3 2011/08/31 13:32:39 joerg Exp $");
 #include <unistd.h>
 #include <ctype.h>
 
-__dead static void	usage(void);
+static void	usage(void);
 static int	eatopt(char **);
 static int	cmd_a(char **, int);
 static int	cmd_b(char **, int);
@@ -180,7 +180,7 @@ makecpuset(char **argv)
 		} else {
 			j = i;
 		}
-		if (i >= ncpu) {
+		if ((unsigned int)i >= ncpu) {
 			errx(EXIT_FAILURE, "value out of range");
 		}
 		while (i <= j)

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.7 2011/01/22 19:19:19 joerg Exp $	*/
+/*	$NetBSD: main.c,v 1.4 2008/04/06 07:50:04 kochi Exp $	*/
 
 /*-
  * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
@@ -30,7 +30,6 @@
 #include <sys/cdefs.h>
 
 #include <lib/libsa/stand.h>
-#include <lib/libsa/loadfile.h>
 
 
 #include <machine/sal.h>
@@ -46,6 +45,8 @@
 
 extern char bootprog_name[];
 extern char bootprog_rev[];
+extern char bootprog_date[];
+extern char bootprog_maker[];
 
 struct efi_devdesc	currdev;	/* our current device */
 struct arch_switch	archsw;		/* MI/MD interface boundary */
@@ -133,6 +134,7 @@ main(int argc, CHAR16 *argv[])
 
 	printf("\n");
 	printf("%s, Revision %s\n", bootprog_name, bootprog_rev);
+	printf("(%s, %s)\n", bootprog_maker, bootprog_date);
 
 	i = efifs_get_unit(img->DeviceHandle);
 	if (i >= 0) {
@@ -425,7 +427,7 @@ print_trs(int type)
 	for (i = 0; i <= maxtr; i++) {
 		char lbuf[128];
 
-		memset(&buf, 0, sizeof(buf));
+		bzero(&buf, sizeof(buf));
 		res = ia64_call_pal_stacked(PAL_VM_TR_READ, i, type,
 					    (u_int64_t) &buf);
 		if (res.pal_status != 0)
@@ -498,8 +500,9 @@ static int
 command_hcdp(int argc, char *argv[])
 {
 	struct dig64_hcdp_table *tbl;
-	union dev_desc *desc;
-	int i, m, n;
+	struct dig64_hcdp_entry *ent;
+	struct dig64_gas *gas;
+	int i;
 
 	tbl = efi_get_table(&hcdp);
 	if (tbl == NULL) {
@@ -510,7 +513,11 @@ command_hcdp(int argc, char *argv[])
 		printf("HCDP table has invalid signature\n");
 		return (CMD_OK);
 	}
-	printf("HCDP table at 0x%lx\n", (u_long)tbl);
+	if (tbl->length < sizeof(*tbl) - sizeof(*tbl->entry)) {
+		printf("HCDP table too short\n");
+		return (CMD_OK);
+	}
+	printf("HCDP table at 0x%016lx\n", (u_long)tbl);
 	printf("Signature  = %s\n", hcdp_string(tbl->signature, 4));
 	printf("Length     = %u\n", tbl->length);
 	printf("Revision   = %u\n", tbl->revision);
@@ -521,95 +528,32 @@ command_hcdp(int argc, char *argv[])
 	printf("Creator Id = %s\n", hcdp_string(tbl->creator_id, 4));
 	printf("Creator rev= %u\n", tbl->creator_rev);
 	printf("Entries    = %u\n", tbl->entries);
-	n = 0;
-	m = tbl->length - sizeof(struct dig64_hcdp_table);
-	i = 1;
-	while (n < m) {
-		printf("Entry #%d:\n", i);
-		desc = (union dev_desc *)((char *)tbl->entry + n);
-		printf("    Type      = %u\n", desc->type);
-		if (desc->type == DIG64_ENTRYTYPE_TYPE0 ||
-		    desc->type == DIG64_ENTRYTYPE_TYPE1) {
-			struct dig64_hcdp_entry *ent = &desc->uart;
-			struct dig64_gas *gas;
-			printf("    Databits  = %u\n", ent->databits);
-			printf("    Parity    = %u\n", ent->parity);
-			printf("    Stopbits  = %u\n", ent->stopbits);
-			printf("    PCI seg   = %u\n", ent->pci_segment);
-			printf("    PCI bus   = %u\n", ent->pci_bus);
-			printf("    PCI dev   = %u\n", ent->pci_device);
-			printf("    PCI func  = %u\n", ent->pci_function);
-			printf("    Interrupt = %u\n", ent->interrupt);
-			printf("    PCI flag  = %u\n", ent->pci_flag);
-			printf("    Baudrate  = %lu\n",
-			    ((u_long)ent->baud_high << 32) +
-			    (u_long)ent->baud_low);
-			gas = &ent->address;
-			printf("    Addr space= %u\n", gas->addr_space);
-			printf("    Bit width = %u\n", gas->bit_width);
-			printf("    Bit offset= %u\n", gas->bit_offset);
-			printf("    Address   = 0x%lx\n",
-			    ((u_long)gas->addr_high << 32) +
-			    (u_long)gas->addr_low);
-			printf("    PCI type  = %u\n", ent->pci_devid);
-			printf("    PCI vndr  = %u\n", ent->pci_vendor);
-			printf("    IRQ       = %u\n", ent->irq);
-			printf("    PClock    = %u\n", ent->pclock);
-			printf("    PCI iface = %u\n", ent->pci_interface);
-
-			n += sizeof(struct dig64_hcdp_entry);
-		} else {
-			struct dig64_pcdp_entry *pcdp = &desc->pcdp;
-
-			if (tbl->revision < 3) {
-				printf("PCDP not support\n");
-				return (CMD_OK);
-			}
-
-			printf("    Length    = %u\n", pcdp->length);
-			printf("    Index EFI = %u\n", pcdp->index);
-			printf("    Interconn = %u", pcdp->specs.type);
-
-			switch (pcdp->specs.type) {
-			case DIG64_PCDP_SPEC_ACPI:
-			{
-				struct dig64_acpi_spec *acpi =
-				    &pcdp->specs.acpi;
-
-				printf("(ACPI)\n");
-				printf("    Length    = %u\n", acpi->length);
-				printf("    ACPI_UID  = %x\n", acpi->uid);
-				printf("    ACPI_HID  = %x\n", acpi->hid);
-				printf("    ACPI GSI  = %x\n", acpi->acpi_gsi);
-				printf("    MMIO_TRA  = %lx\n", acpi->mmio_tra);
-				printf("    IOPort_TRA= %lx\n",
-				    acpi->ioport_tra);
-				printf("    Flags     = %x\n", acpi->flags);
-				break;
-			}
-			case DIG64_PCDP_SPEC_PCI:
-			{
-				struct dig64_pci_spec *pci = &pcdp->specs.pci;
-
-				printf("(PCI)\n");
-				printf("    Length    = %u\n", pci->length);
-				printf("    Seg GrpNum= %u\n", pci->sgn);
-				printf("    Bus       = %u\n", pci->bus);
-				printf("    Device    = %u\n", pci->device);
-				printf("    Function  = %u\n", pci->function);
-				printf("    Device ID = %u\n", pci->device_id);
-				printf("    Vendor ID = %u\n", pci->vendor_id);
-				printf("    ACPI GSI  = %x\n", pci->acpi_gsi);
-				printf("    MMIO_TRA  = %lx\n", pci->mmio_tra);
-				printf("    IOPort_TRA= %lx\n",
-				    pci->ioport_tra);
-				printf("    Flags     = %x\n", pci->flags);
-				break;
-			}
-			}
-
-			n += pcdp->length;
-		}
+	for (i = 0; i < tbl->entries; i++) {
+		ent = tbl->entry + i;
+		printf("Entry #%d:\n", i + 1);
+		printf("    Type      = %u\n", ent->type);
+		printf("    Databits  = %u\n", ent->databits);
+		printf("    Parity    = %u\n", ent->parity);
+		printf("    Stopbits  = %u\n", ent->stopbits);
+		printf("    PCI seg   = %u\n", ent->pci_segment);
+		printf("    PCI bus   = %u\n", ent->pci_bus);
+		printf("    PCI dev   = %u\n", ent->pci_device);
+		printf("    PCI func  = %u\n", ent->pci_function);
+		printf("    Interrupt = %u\n", ent->interrupt);
+		printf("    PCI flag  = %u\n", ent->pci_flag);
+		printf("    Baudrate  = %lu\n",
+		    ((u_long)ent->baud_high << 32) + (u_long)ent->baud_low);
+		gas = &ent->address;
+		printf("    Addr space= %u\n", gas->addr_space);
+		printf("    Bit width = %u\n", gas->bit_width);
+		printf("    Bit offset= %u\n", gas->bit_offset);
+		printf("    Address   = 0x%016lx\n",
+		    ((u_long)gas->addr_high << 32) + (u_long)gas->addr_low);
+		printf("    PCI type  = %u\n", ent->pci_devid);
+		printf("    PCI vndr  = %u\n", ent->pci_vendor);
+		printf("    IRQ       = %u\n", ent->irq);
+		printf("    PClock    = %u\n", ent->pclock);
+		printf("    PCI iface = %u\n", ent->pci_interface);
 	}
 	printf("<EOT>\n");
 	return (CMD_OK);

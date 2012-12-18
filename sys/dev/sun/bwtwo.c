@@ -1,4 +1,4 @@
-/*	$NetBSD: bwtwo.c,v 1.30 2012/01/11 16:10:13 macallan Exp $ */
+/*	$NetBSD: bwtwo.c,v 1.18.6.4 2009/02/26 07:42:06 snj Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bwtwo.c,v 1.30 2012/01/11 16:10:13 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bwtwo.c,v 1.18.6.4 2009/02/26 07:42:06 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -109,7 +109,7 @@ __KERNEL_RCSID(0, "$NetBSD: bwtwo.c,v 1.30 2012/01/11 16:10:13 macallan Exp $");
 #include "opt_wsemul.h"
 #endif
 
-#include "ioconf.h"
+extern struct cfdriver bwtwo_cd;
 
 dev_type_open(bwtwoopen);
 dev_type_ioctl(bwtwoioctl);
@@ -117,11 +117,11 @@ dev_type_mmap(bwtwommap);
 
 const struct cdevsw bwtwo_cdevsw = {
 	bwtwoopen, nullclose, noread, nowrite, bwtwoioctl,
-	nostop, notty, nopoll, bwtwommap, nokqfilter, D_OTHER
+	nostop, notty, nopoll, bwtwommap, nokqfilter,
 };
 
 /* XXX we do not handle frame buffer interrupts (do not know how) */
-static void	bwtwounblank(device_t);
+static void	bwtwounblank(struct device *);
 
 /* frame buffer generic driver */
 static struct fbdriver bwtwofbdriver = {
@@ -172,9 +172,11 @@ static struct vcons_screen bw2_console_screen;
 #endif /* NWSDISPLAY > 0 */
 
 int
-bwtwo_pfour_probe(void *vaddr, void *arg)
+bwtwo_pfour_probe(vaddr, arg)
+	void *vaddr;
+	void *arg;
 {
-	cfdata_t cf = arg;
+	struct cfdata *cf = arg;
 
 	switch (fb_pfour_id(vaddr)) {
 	case PFOUR_ID_BW:
@@ -190,7 +192,10 @@ bwtwo_pfour_probe(void *vaddr, void *arg)
 }
 
 void
-bwtwoattach(struct bwtwo_softc *sc, const char *name, int isconsole)
+bwtwoattach(sc, name, isconsole)
+	struct	bwtwo_softc *sc;
+	const char *name;
+	int	isconsole;
 {
 	struct fbdevice *fb = &sc->sc_fb;
 	int isoverlay;
@@ -202,7 +207,7 @@ bwtwoattach(struct bwtwo_softc *sc, const char *name, int isconsole)
 
 	/* Fill in the remaining fbdevice values */
 	fb->fb_driver = &bwtwofbdriver;
-	fb->fb_device = sc->sc_dev;
+	fb->fb_device = &sc->sc_dev;
 	fb->fb_type.fb_type = FBTYPE_SUN2BW;
 	fb->fb_type.fb_cmsize = 0;
 	fb->fb_type.fb_size = fb->fb_type.fb_height * fb->fb_linebytes;
@@ -248,8 +253,7 @@ bwtwoattach(struct bwtwo_softc *sc, const char *name, int isconsole)
 			ovnam = "unknown";
 			break;
 		}
-		printf("%s: %s overlay plane\n",
-		    device_xname(sc->sc_dev), ovnam);
+		printf("%s: %s overlay plane\n", device_xname(&sc->sc_dev), ovnam);
 	}
 
 	/*
@@ -315,13 +319,16 @@ bwtwoattach(struct bwtwo_softc *sc, const char *name, int isconsole)
 		aa.console = isconsole;
 	aa.accessops = &bwtwo_accessops;
 	aa.accesscookie = &sc->vd;
-	config_found(sc->sc_dev, &aa, wsemuldisplaydevprint);
+	config_found(&sc->sc_dev, &aa, wsemuldisplaydevprint);
 #endif
 
 }
 
 int
-bwtwoopen(dev_t dev, int flags, int mode, struct lwp *l)
+bwtwoopen(dev, flags, mode, l)
+	dev_t dev;
+	int flags, mode;
+	struct lwp *l;
 {
 	int unit = minor(dev);
 
@@ -332,7 +339,12 @@ bwtwoopen(dev_t dev, int flags, int mode, struct lwp *l)
 }
 
 int
-bwtwoioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
+bwtwoioctl(dev, cmd, data, flags, l)
+	dev_t dev;
+	u_long cmd;
+	void *data;
+	int flags;
+	struct lwp *l;
 {
 	struct bwtwo_softc *sc = device_lookup_private(&bwtwo_cd, minor(dev));
 
@@ -357,7 +369,8 @@ bwtwoioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 }
 
 static void
-bwtwounblank(device_t dev)
+bwtwounblank(dev)
+	struct device *dev;
 {
 	struct bwtwo_softc *sc = device_private(dev);
 
@@ -369,7 +382,10 @@ bwtwounblank(device_t dev)
  * offset, allowing for the given protection, or return -1 for error.
  */
 paddr_t
-bwtwommap(dev_t dev, off_t off, int prot)
+bwtwommap(dev, off, prot)
+	dev_t dev;
+	off_t off;
+	int prot;
 {
 	struct bwtwo_softc *sc = device_lookup_private(&bwtwo_cd, minor(dev));
 
@@ -453,7 +469,7 @@ bwtwo_init_screen(void *cookie, struct vcons_screen *scr,
 
 	memset(sc->sc_fb.fb_pixels, (*defattr >> 16) & 0xff,
 	    sc->sc_stride * sc->sc_height);
-	rasops_init(ri, 0, 0);
+	rasops_init(ri, sc->sc_height/8, sc->sc_width/8);
 	ri->ri_caps = 0;
 	rasops_reconfig(ri, sc->sc_height / ri->ri_font->fontheight,
 		    sc->sc_width / ri->ri_font->fontwidth);

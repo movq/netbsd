@@ -1,4 +1,4 @@
-/* $NetBSD: w83l518dreg.h,v 1.1 2009/09/30 20:44:50 jmcneill Exp $ */
+/* $NetBSD: w83l518dreg.h,v 1.1.2.2 2009/10/08 09:47:09 sborrill Exp $ */
 
 /*
  * Copyright (c) 2009 Jared D. McNeill <jmcneill@invisible.ca>

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_qn.c,v 1.39 2012/10/27 17:17:29 chs Exp $ */
+/*	$NetBSD: if_qn.c,v 1.31 2007/10/17 19:53:16 garbled Exp $ */
 
 /*
  * Copyright (c) 1995 Mika Kortelainen
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.39 2012/10/27 17:17:29 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.31 2007/10/17 19:53:16 garbled Exp $");
 
 #include "qn.h"
 #if NQN > 0
@@ -75,6 +75,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.39 2012/10/27 17:17:29 chs Exp $");
 #define QN_DEBUG1_no /* hides some old tests */
 #define QN_CHECKS_no /* adds some checks (not needed in normal situations) */
 
+#include "bpfilter.h"
 
 /*
  * Fujitsu MB86950 Ethernet Controller (as used in the QuickNet QN2000
@@ -113,6 +114,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.39 2012/10/27 17:17:29 chs Exp $");
 #endif
 
 #include <machine/cpu.h>
+#include <machine/mtpr.h>
 #include <amiga/amiga/device.h>
 #include <amiga/amiga/isr.h>
 #include <amiga/dev/zbusvar.h>
@@ -131,7 +133,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.39 2012/10/27 17:17:29 chs Exp $");
  * This structure contains the output queue for the interface, its address, ...
  */
 struct	qn_softc {
-	device_t sc_dev;
+	struct	device sc_dev;
 	struct	isr sc_isr;
 	struct	ethercom sc_ethercom;	/* Common ethernet structures */
 	u_char	volatile *sc_base;
@@ -146,14 +148,19 @@ struct	qn_softc {
 	u_short	volatile *nic_reset;
 	u_short	volatile *nic_len;
 	u_char	transmit_pending;
+#if NBPFILTER > 0
+	void *	sc_bpf;
+#endif
 } qn_softc[NQN];
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 
-int	qnmatch(device_t, cfdata_t, void *);
-void	qnattach(device_t, device_t, void *);
+int	qnmatch(struct device *, struct cfdata *, void *);
+void	qnattach(struct device *, struct device *, void *);
 int	qnintr(void *);
 int	qnioctl(struct ifnet *, u_long, void *);
 void	qnstart(struct ifnet *);
@@ -172,11 +179,11 @@ static	void qn_get_packet(struct qn_softc *, u_short);
 static	void qn_dump(struct qn_softc *);
 #endif
 
-CFATTACH_DECL_NEW(qn, sizeof(struct qn_softc),
+CFATTACH_DECL(qn, sizeof(struct qn_softc),
     qnmatch, qnattach, NULL, NULL);
 
 int
-qnmatch(device_t parent, cfdata_t cf, void *aux)
+qnmatch(struct device *parent, struct cfdata *cfp, void *aux)
 {
 	struct zbus_args *zap;
 
@@ -195,10 +202,10 @@ qnmatch(device_t parent, cfdata_t cf, void *aux)
  * to accept packets.
  */
 void
-qnattach(device_t parent, device_t self, void *aux)
+qnattach(struct device *parent, struct device *self, void *aux)
 {
 	struct zbus_args *zap;
-	struct qn_softc *sc = device_private(self);
+	struct qn_softc *sc = (struct qn_softc *)self;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	u_int8_t myaddr[ETHER_ADDR_LEN];
 
@@ -231,7 +238,7 @@ qnattach(device_t parent, device_t self, void *aux)
 	/* set interface to stopped condition (reset) */
 	qnstop(sc);
 
-	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
+	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_ioctl = qnioctl;
 	ifp->if_watchdog = qnwatchdog;
@@ -399,14 +406,18 @@ qnstart(struct ifnet *ifp)
 	if (m == 0)
 		return;
 
+#if NBPFILTER > 0
 	/*
 	 * If bpf is listening on this interface, let it
 	 * see the packet before we commit it to the wire
 	 *
 	 * (can't give the copy in QuickNet card RAM to bpf, because
 	 * that RAM is not visible to the host but is read from FIFO)
+	 *
 	 */
-	bpf_mtap(ifp, m);
+	if (sc->sc_bpf)
+		bpf_mtap(sc->sc_bpf, m);
+#endif
 	len = qn_put(sc->nic_fifo, m);
 	m_freem(m);
 
@@ -587,8 +598,10 @@ qn_get_packet(struct qn_softc *sc, u_short len)
 		len -= len1;
 	}
 
-	/* Tap off BPF listeners */
-	bpf_mtap(ifp, head);
+#if NBPFILTER > 0
+	if (sc->sc_bpf)
+		bpf_mtap(sc->sc_bpf, head);
+#endif
 
 	(*ifp->if_input)(ifp, head);
 	return;
@@ -683,7 +696,7 @@ qn_rint(struct qn_softc *sc, u_short rstat)
 		    len < ETHER_HDR_LEN) {
 			log(LOG_WARNING,
 			    "%s: received a %s packet? (%u bytes)\n",
-			    device_xname(sc->sc_dev),
+			    sc->sc_dev.dv_xname,
 			    len < ETHER_HDR_LEN ? "partial" : "big", len);
 			++sc->sc_ethercom.ec_if.if_ierrors;
 			continue;
@@ -693,7 +706,7 @@ qn_rint(struct qn_softc *sc, u_short rstat)
 		if (len < (ETHER_MIN_LEN - ETHER_CRC_LEN))
 			log(LOG_WARNING,
 			    "%s: received a short packet? (%u bytes)\n",
-			    device_xname(sc->sc_dev), len);
+			    sc->sc_dev.dv_xname, len);
 #endif
 
 		/* Read the packet. */
@@ -817,7 +830,7 @@ qnioctl(register struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 
 		switch (ifa->ifa_addr->sa_family) {
@@ -853,9 +866,6 @@ qnioctl(register struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		/* XXX see the comment in ed_ioctl() about code re-use */
 		if ((ifp->if_flags & IFF_UP) == 0 &&
 		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
@@ -903,7 +913,8 @@ qnioctl(register struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ether_ioctl(ifp, cmd, data);
+		log(LOG_INFO, "qnioctl: default\n");
+		error = EINVAL;
 	}
 
 	splx(s);

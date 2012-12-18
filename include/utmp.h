@@ -1,4 +1,4 @@
-/*	$NetBSD: utmp.h,v 1.12 2009/01/11 03:04:12 christos Exp $	*/
+/*	$NetBSD: utmp.h,v 1.11 2005/02/03 04:39:32 perry Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -63,9 +63,7 @@ struct utmp {
 __BEGIN_DECLS
 int utmpname(const char *);
 void setutent(void);
-#ifndef __LIBC12_SOURCE__
-struct utmp *getutent(void) __RENAME(__getutent50);
-#endif
+struct utmp *getutent(void);
 void endutent(void);
 __END_DECLS
 

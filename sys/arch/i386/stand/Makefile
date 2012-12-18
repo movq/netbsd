@@ -1,8 +1,11 @@
-#	$NetBSD: Makefile,v 1.27 2012/01/27 08:41:35 jnemeth Exp $
+#	$NetBSD: Makefile,v 1.25 2007/01/06 20:48:59 dsl Exp $
 
-SUBDIR=		mbr boot
-SUBDIR+=	bootxx cdboot fatboot
+SUBDIR=		genprom .WAIT
+
+SUBDIR+=	mbr boot
+SUBDIR+=	bootxx fatboot
 SUBDIR+=	dosboot misc
+SUBDIR+=	netboot
 SUBDIR+=	pxeboot
 
 .include <bsd.subdir.mk>

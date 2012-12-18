@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_neptune.c,v 1.20 2010/03/03 13:39:57 tsutsui Exp $	*/
+/*	$NetBSD: if_ne_neptune.c,v 1.16.8.1 2010/11/20 00:33:46 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -31,10 +31,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_neptune.c,v 1.20 2010/03/03 13:39:57 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_neptune.c,v 1.16.8.1 2010/11/20 00:33:46 riz Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,6 +65,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_ne_neptune.c,v 1.20 2010/03/03 13:39:57 tsutsui E
 #include <netns/ns_if.h>
 #endif
 
+#if NBPFILTER > 0
+#include <net/bpf.h>
+#include <net/bpfdesc.h>
+#endif
+
 #include <machine/bus.h>
 
 #include <dev/ic/dp8390reg.h>
@@ -76,6 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ne_neptune.c,v 1.20 2010/03/03 13:39:57 tsutsui E
 
 static int ne_neptune_match(device_t, cfdata_t, void *);
 static void ne_neptune_attach(device_t, device_t, void *);
+static int ne_neptune_intr(void *);
 
 #define ne_neptune_softc ne2000_softc
 
@@ -113,7 +120,7 @@ ne_neptune_match(device_t parent, cfdata_t match, void *aux)
 
  out:
 	bus_space_unmap(nict, nich, NE2000_NPORTS);
-	return (rv != 0) ? 1 : 0;
+	return (rv);
 }
 
 void
@@ -185,7 +192,14 @@ ne_neptune_attach(device_t parent, device_t self, void *aux)
 	ne2000_attach(nsc, NULL);
 
 	/* Establish the interrupt handler. */
-	if (neptune_intr_establish(na->na_intr, "ne", dp8390_intr, dsc))
+	if (neptune_intr_establish(na->na_intr, "ne", ne_neptune_intr, dsc))
 		aprint_error_dev(self,
 		    "couldn't establish interrupt handler\n");
+}
+
+static int
+ne_neptune_intr(void *arg)
+{
+	spl4();			/* XXX */
+	return dp8390_intr(arg);
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: isa_machdep.h,v 1.5 2009/12/14 00:46:04 matt Exp $ */
+/* $NetBSD: isa_machdep.h,v 1.3 2008/04/28 20:23:28 martin Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@ struct mips_isa_chipset {
 
 	struct isa_dma_state ic_dmastate;
 
-	void	(*ic_attach_hook)(device_t, device_t,
+	void	(*ic_attach_hook)(struct device *, struct device *,
 		    struct isabus_attach_args *);
 	const struct evcnt *(*ic_intr_evcnt)(void *, int);
 	void	*(*ic_intr_establish)(void *, int, int, int,
@@ -77,7 +77,6 @@ struct mips_isa_chipset {
 	int	(*ic_intr_alloc)(void *, int, int, int *);
 
 	const char *(*ic_intr_string)(void *, int);
-	void    (*ic_detach_hook)(isa_chipset_tag_t, device_t);
 };
 
 
@@ -86,8 +85,6 @@ struct mips_isa_chipset {
  */
 #define	isa_attach_hook(p, s, a)					\
     (*(a)->iba_ic->ic_attach_hook)((p), (s), (a))
-#define	isa_detach_hook(c, s)						\
-    (*(c)->ic_detach_hook)((c), (s))
 #define	isa_intr_evcnt(c, i)						\
     (*(c)->ic_intr_evcnt)((c)->ic_v, (i))
 #define	isa_intr_establish(c, i, t, l, f, a)				\
@@ -99,8 +96,6 @@ struct mips_isa_chipset {
 
 #define	isa_dmainit(ic, bst, dmat, d)					\
 	_isa_dmainit(&(ic)->ic_dmastate, (bst), (dmat), (d))
-#define	isa_dmadestroy(ic)						\
-	_isa_dmadestroy(&(ic)->ic_dmastate)
 #define	isa_dmacascade(ic, c)						\
 	_isa_dmacascade(&(ic)->ic_dmastate, (c))
 #define	isa_dmamaxsize(ic, c)						\

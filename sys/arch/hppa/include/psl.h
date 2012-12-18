@@ -1,9 +1,9 @@
-/*	$NetBSD: psl.h,v 1.8 2012/03/29 21:44:10 skrll Exp $	*/
+/*	$NetBSD: psl.h,v 1.5 2008/01/18 09:42:12 skrll Exp $	*/
 
 /*	$OpenBSD: psl.h,v 1.6 1999/11/25 18:29:01 mickey Exp $	*/
 
 /*
- * Copyright (c) 1999-2004 Michael Shalayeff
+ * Copyright (c) 1999 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,6 +14,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Michael Shalayeff.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,7 +37,7 @@
 #define _HPPA_PSL_H_
 
 /*
- * Reference:
+ * Rference:
  * 1. PA-RISC 1.1 Architecture and Instruction Set Manual
  *    Hewlett Packard, 3rd Edition, February 1994; Part Number 09740-90039
  */
@@ -105,5 +110,9 @@
 #define	RESET_PSW	(PSW_R | PSW_Q | PSW_P | PSW_D | PSW_I)
 #define PSW_MBS		(PSW_C | PSW_Q | PSW_P | PSW_D | PSW_I)
 #define PSW_MBZ		(PSW_Y | PSW_Z | PSW_S | PSW_X | PSW_M | PSW_R)
+
+#ifdef _KERNEL
+#include <machine/intr.h>
+#endif
 
 #endif  /* _HPPA_PSL_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_file.c,v 1.104 2011/10/14 09:23:28 hannken Exp $	*/
+/*	$NetBSD: linux_file.c,v 1.96 2008/04/28 20:23:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2008 The NetBSD Foundation, Inc.
@@ -35,14 +35,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_file.c,v 1.104 2011/10/14 09:23:28 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_file.c,v 1.96 2008/04/28 20:23:43 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/file.h>
-#include <sys/fcntl.h>
 #include <sys/stat.h>
 #include <sys/filedesc.h>
 #include <sys/ioctl.h>
@@ -102,8 +101,6 @@ linux_to_bsd_ioflags(int lflags)
 	res |= cvtto_bsd_mask(lflags, LINUX_O_SYNC, O_FSYNC);
 	res |= cvtto_bsd_mask(lflags, LINUX_FASYNC, O_ASYNC);
 	res |= cvtto_bsd_mask(lflags, LINUX_O_APPEND, O_APPEND);
-	res |= cvtto_bsd_mask(lflags, LINUX_O_DIRECTORY, O_DIRECTORY);
-	res |= cvtto_bsd_mask(lflags, LINUX_O_CLOEXEC, O_CLOEXEC);
 
 	return res;
 }
@@ -124,8 +121,6 @@ bsd_to_linux_ioflags(int bflags)
 	res |= cvtto_linux_mask(bflags, O_FSYNC, LINUX_O_SYNC);
 	res |= cvtto_linux_mask(bflags, O_ASYNC, LINUX_FASYNC);
 	res |= cvtto_linux_mask(bflags, O_APPEND, LINUX_O_APPEND);
-	res |= cvtto_linux_mask(bflags, O_DIRECTORY, LINUX_O_DIRECTORY);
-	res |= cvtto_linux_mask(bflags, O_CLOEXEC, LINUX_O_CLOEXEC);
 
 	return res;
 }
@@ -340,9 +335,7 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 			break;
 		}
 
-		vn_lock(vp, LK_SHARED | LK_RETRY);
 		error = VOP_GETATTR(vp, &va, l->l_cred);
-		VOP_UNLOCK(vp);
 
 		fd_putfile(fd);
 
@@ -362,14 +355,12 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 		if ((long)arg <= 0) {
 			pgid = -(long)arg;
 		} else {
-			struct proc *p1 = proc_find((long)arg);
-			if (p1 == NULL) {
-				mutex_exit(proc_lock);
+			struct proc *p1 = p_find((long)arg, PFIND_LOCKED | PFIND_UNLOCK_FAIL);
+			if (p1 == NULL)
 				return (ESRCH);
-			}
 			pgid = (long)p1->p_pgrp->pg_id;
 		}
-		pgrp = pgrp_find(pgid);
+		pgrp = pg_find(pgid, PFIND_LOCKED);
 		if (pgrp == NULL || pgrp->pg_session != p->p_session) {
 			mutex_exit(proc_lock);
 			return EPERM;
@@ -498,8 +489,7 @@ linux_sys_unlink(struct lwp *l, const struct linux_sys_unlink_args *uap, registe
 	/* {
 		syscallarg(const char *) path;
 	} */
-	int error, error2;
-	struct pathbuf *pb;
+	int error;
 	struct nameidata nd;
 
 	error = sys_unlink(l, (const void *)uap, retval);
@@ -511,14 +501,9 @@ linux_sys_unlink(struct lwp *l, const struct linux_sys_unlink_args *uap, registe
 	 * We return EPERM in such cases. To emulate correct behaviour,
 	 * check if the path points to directory and return EISDIR if this
 	 * is the case.
-	 *
-	 * XXX this should really not copy in the path buffer twice...
 	 */
-	error2 = pathbuf_copyin(SCARG(uap, path), &pb);
-	if (error2) {
-		return error2;
-	}
-	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, pb);
+	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, UIO_USERSPACE,
+	    SCARG(uap, path));
 	if (namei(&nd) == 0) {
 		struct stat sb;
 
@@ -528,7 +513,6 @@ linux_sys_unlink(struct lwp *l, const struct linux_sys_unlink_args *uap, registe
 
 		vput(nd.ni_vp);
 	}
-	pathbuf_destroy(pb);
 
 	return (error);
 }
@@ -552,15 +536,18 @@ linux_sys_mknod(struct lwp *l, const struct linux_sys_mknod_args *uap, register_
 		SCARG(&bma, mode) = SCARG(uap, mode);
 		return sys_mkfifo(l, &bma, retval);
 	} else {
+		struct sys_mknod_args bma;
 
+		SCARG(&bma, path) = SCARG(uap, path);
+		SCARG(&bma, mode) = SCARG(uap, mode);
 		/*
 		 * Linux device numbers uses 8 bits for minor and 8 bits
 		 * for major. Due to how we map our major and minor,
 		 * this just fits into our dev_t. Just mask off the
 		 * upper 16bit to remove any random junk.
 		 */
-		return do_sys_mknod(l, SCARG(uap, path), SCARG(uap, mode),
-		    SCARG(uap, dev) & 0xffff, retval, UIO_USERSPACE);
+		SCARG(&bma, dev) = SCARG(uap, dev) & 0xffff;
+		return sys_mknod(l, &bma, retval);
 	}
 }
 
@@ -624,25 +611,6 @@ linux_sys_pwrite(struct lwp *l, const struct linux_sys_pwrite_args *uap, registe
 	return sys_pwrite(l, &pra, retval);
 }
 
-int
-linux_sys_dup3(struct lwp *l, const struct linux_sys_dup3_args *uap,
-    register_t *retval)
-{
-	/* {
-		syscallarg(int) from;
-		syscallarg(int) to;
-		syscallarg(int) flags;
-	} */
-	int error;
-	if ((error = sys_dup2(l, (const struct sys_dup2_args *)uap, retval)))
-		return error;
-
-	if (SCARG(uap, flags) & LINUX_O_CLOEXEC)
-		fd_set_exclose(l, SCARG(uap, to), true);
-
-	return 0;
-}
-
 #define LINUX_NOT_SUPPORTED(fun) \
 int \
 fun(struct lwp *l, const struct fun##_args *uap, register_t *retval) \
@@ -665,3 +633,4 @@ LINUX_NOT_SUPPORTED(linux_sys_flistxattr)
 LINUX_NOT_SUPPORTED(linux_sys_removexattr)
 LINUX_NOT_SUPPORTED(linux_sys_lremovexattr)
 LINUX_NOT_SUPPORTED(linux_sys_fremovexattr)
+

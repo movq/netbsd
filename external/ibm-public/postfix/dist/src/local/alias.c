@@ -1,4 +1,4 @@
-/*	$NetBSD: alias.c,v 1.1.1.2 2011/03/02 19:32:19 tron Exp $	*/
+/*	$NetBSD: alias.c,v 1.1.1.1.2.3 2011/01/07 01:24:06 riz Exp $	*/
 
 /*++
 /* NAME
@@ -267,8 +267,7 @@ int     deliver_alias(LOCAL_STATE state, USER_ATTR usr_attr,
 	    } else {
 		canon_owner = 0;
 		/* Note: this does not reset the envelope sender. */
-		if (var_reset_owner_attr)
-		    RESET_OWNER_ATTR(state.msg_attr, state.level);
+		RESET_OWNER_ATTR(state.msg_attr, state.level);
 	    }
 
 	    /*

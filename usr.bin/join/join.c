@@ -1,4 +1,4 @@
-/*	$NetBSD: join.c,v 1.31 2011/09/04 20:27:52 joerg Exp $	*/
+/*	$NetBSD: join.c,v 1.29 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1991 The Regents of the University of California.
@@ -47,7 +47,7 @@ __COPYRIGHT("@(#) Copyright (c) 1991\
 #if 0
 static char sccsid[] = "from: @(#)join.c	5.1 (Berkeley) 11/18/91";
 #else
-__RCSID("$NetBSD: join.c,v 1.31 2011/09/04 20:27:52 joerg Exp $");
+__RCSID("$NetBSD: join.c,v 1.29 2008/07/21 14:19:23 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -74,8 +74,7 @@ typedef struct {
 	u_long fieldalloc;	/* line field(s) allocated count */
 } LINE;
 
-static char nolineline[1] = { '\0' };
-static LINE noline = {nolineline, 0, 0, 0, 0};	/* arg for outfield if no line to output */
+LINE noline = {"", 0, 0, 0, 0};	/* arg for outfield if no line to output */
 
 typedef struct {
 	FILE *fp;		/* file descriptor */
@@ -88,35 +87,34 @@ typedef struct {
 	u_long setcnt;		/* set count */
 	u_long setalloc;	/* set allocated count */
 } INPUT;
-
-static INPUT input1 = { NULL, 0, 0, 1, NULL, -1, 0, 0, },
+INPUT input1 = { NULL, 0, 0, 1, NULL, -1, 0, 0, },
       input2 = { NULL, 0, 0, 2, NULL, -1, 0, 0, };
 
 typedef struct {
 	u_long	fileno;		/* file number */
 	u_long	fieldno;	/* field number */
 } OLIST;
+OLIST *olist;			/* output field list */
+u_long olistcnt;		/* output field list count */
+u_long olistalloc;		/* output field allocated count */
 
-static OLIST *olist;			/* output field list */
-static u_long olistcnt;		/* output field list count */
-static u_long olistalloc;		/* output field allocated count */
+int joinout = 1;		/* show lines with matched join fields (-v) */
+int needsep;			/* need separator character */
+int spans = 1;			/* span multiple delimiters (-t) */
+char *empty;			/* empty field replacement string (-e) */
+char *tabchar = " \t";		/* delimiter characters (-t) */
 
-static int joinout = 1;		/* show lines with matched join fields (-v) */
-static int needsep;			/* need separator character */
-static int spans = 1;			/* span multiple delimiters (-t) */
-static char *empty;			/* empty field replacement string (-e) */
-static const char *tabchar = " \t";	/* delimiter characters (-t) */
-
-static int  cmp(LINE *, u_long, LINE *, u_long);
-__dead static void enomem(void);
-static void fieldarg(char *);
-static void joinlines(INPUT *, INPUT *);
-static void obsolete(char **);
-static void outfield(LINE *, u_long);
-static void outoneline(INPUT *, LINE *);
-static void outtwoline(INPUT *, LINE *, INPUT *, LINE *);
-static void slurp(INPUT *);
-__dead static void usage(void);
+int  cmp(LINE *, u_long, LINE *, u_long);
+void enomem(void);
+void fieldarg(char *);
+void joinlines(INPUT *, INPUT *);
+int  main(int, char **);
+void obsolete(char **);
+void outfield(LINE *, u_long);
+void outoneline(INPUT *, LINE *);
+void outtwoline(INPUT *, LINE *, INPUT *, LINE *);
+void slurp(INPUT *);
+void usage(void);
 
 int
 main(int argc, char *argv[])
@@ -296,14 +294,14 @@ main(int argc, char *argv[])
 	return 0;
 }
 
-static void
+void
 slurp(INPUT *F)
 {
 	LINE *lp;
 	LINE tmp;
 	LINE *nline;
 	size_t len;
-	u_long cnt;
+	int cnt;
 	char *bp, *fieldp;
 	u_long nsize;
 
@@ -340,11 +338,11 @@ slurp(INPUT *F)
 		 * but it's probably okay as is.
 		 */
 		lp = &F->set[F->setcnt];
-		if (F->pushback != (u_long)-1) {
+		if (F->pushback != -1) {
 			tmp = F->set[F->setcnt];
 			F->set[F->setcnt] = F->set[F->pushback];
 			F->set[F->pushback] = tmp;
-			F->pushback = (u_long)-1;
+			F->pushback = -1;
 			continue;
 		}
 		if ((bp = fgetln(F->fp, &len)) == NULL)
@@ -402,7 +400,7 @@ slurp(INPUT *F)
 	}
 }
 
-static int
+int
 cmp(LINE *lp1, u_long fieldno1, LINE *lp2, u_long fieldno2)
 {
 
@@ -413,10 +411,10 @@ cmp(LINE *lp1, u_long fieldno1, LINE *lp2, u_long fieldno2)
 	return (strcmp(lp1->fields[fieldno1], lp2->fields[fieldno2]));
 }
 
-static void
+void
 joinlines(INPUT *F1, INPUT *F2)
 {
-	u_long cnt1, cnt2;
+	int cnt1, cnt2;
 
 	/*
 	 * Output the results of a join comparison.  The output may be from
@@ -433,10 +431,10 @@ joinlines(INPUT *F1, INPUT *F2)
 			outtwoline(F1, &F1->set[cnt1], F2, &F2->set[cnt2]);
 }
 
-static void
+void
 outoneline(INPUT *F, LINE *lp)
 {
-	u_long cnt;
+	int cnt;
 
 	/*
 	 * Output a single line from one of the files, according to the
@@ -445,7 +443,7 @@ outoneline(INPUT *F, LINE *lp)
 	 */
 	if (olist)
 		for (cnt = 0; cnt < olistcnt; ++cnt) {
-			if (olist[cnt].fileno == (u_long)F->number)
+			if (olist[cnt].fileno == F->number)
 				outfield(lp, olist[cnt].fieldno);
 			else
 				outfield(&noline, 1);
@@ -459,10 +457,10 @@ outoneline(INPUT *F, LINE *lp)
 	needsep = 0;
 }
 
-static void
+void
 outtwoline(INPUT *F1, LINE *lp1, INPUT *F2, LINE *lp2)
 {
-	u_long cnt;
+	int cnt;
 
 	/* Output a pair of lines according to the join list (if any). */
 	if (olist) {
@@ -490,7 +488,7 @@ outtwoline(INPUT *F1, LINE *lp1, INPUT *F2, LINE *lp2)
 	needsep = 0;
 }
 
-static void
+void
 outfield(LINE *lp, u_long fieldno)
 {
 	if (needsep++)
@@ -513,7 +511,7 @@ outfield(LINE *lp, u_long fieldno)
  * Convert an output list argument "2.1, 1.3, 2.4" into an array of output
  * fields.
  */
-static void
+void
 fieldarg(char *option)
 {
 	u_long fieldno;
@@ -543,10 +541,10 @@ fieldarg(char *option)
 	}
 }
 
-static void
+void
 obsolete(char **argv)
 {
-	size_t len;
+	int len;
 	char **p, *ap, *t;
 
 	while ((ap = *++argv) != NULL) {
@@ -620,13 +618,13 @@ jbad:				errx(1, "illegal option -- %s", ap);
 	}
 }
 
-static void
+void
 enomem(void)
 {
 	errx(1, "no memory");
 }
 
-static void
+void
 usage(void)
 {
 	(void)fprintf(stderr,

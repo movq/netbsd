@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.3 2011/01/22 19:19:19 joerg Exp $	*/
+/*	$NetBSD: main.c,v 1.1 2006/04/07 14:21:32 cherry Exp $	*/
 
 /*-
  * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
@@ -30,7 +30,6 @@
 #include <sys/cdefs.h>
 
 #include <lib/libsa/stand.h>
-#include <lib/libsa/loadfile.h>
 
 #include "bootstrap.h"
 #include "libski.h"
@@ -39,6 +38,9 @@ static int command_quit(int argc, char *argv[]);
 
 extern char bootprog_name[];
 extern char bootprog_rev[];
+extern char bootprog_date[];
+extern char bootprog_maker[];
+
 
 struct bootblk_command commands[] = {
 	COMMON_COMMANDS,
@@ -88,6 +90,7 @@ ski_main(void)
 
 	printf("\n");
 	printf("%s, Revision %s\n", bootprog_name, bootprog_rev);
+	printf("(%s, %s)\n", bootprog_maker, bootprog_date);
 #if 0
 	printf("Memory: %ld k\n", memsize() / 1024);
 #endif

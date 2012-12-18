@@ -1,4 +1,4 @@
-/* $NetBSD: zalloc.c,v 1.7 2009/03/18 16:00:21 cegger Exp $ */
+/* $NetBSD: zalloc.c,v 1.6 2008/04/28 20:24:06 martin Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@ zcalloc(voidpf opaque, unsigned int items, unsigned int size)
 	totalsize = items * size;
 	opaque = alloc(totalsize);
 	if (opaque != NULL)
-		memset(opaque, 0, totalsize);
+		bzero(opaque, totalsize);
 	return opaque;
 }
 

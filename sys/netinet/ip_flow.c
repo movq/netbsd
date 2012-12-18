@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_flow.c,v 1.60 2012/01/19 13:13:48 liamjfoy Exp $	*/
+/*	$NetBSD: ip_flow.c,v 1.56 2008/04/28 20:24:09 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_flow.c,v 1.60 2012/01/19 13:13:48 liamjfoy Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_flow.c,v 1.56 2008/04/28 20:24:09 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,11 +75,13 @@ struct ipflow {
 	u_long ipf_dropped;		/* ENOBUFS retured by if_output */
 	u_long ipf_errors;		/* other errors returned by if_output */
 	u_int ipf_timer;		/* lifetime timer */
+	time_t ipf_start;		/* creation time */
 };
 
 #define	IPFLOW_HASHBITS		6	/* should not be a multiple of 8 */
 
-static struct pool ipflow_pool;
+POOL_INIT(ipflow_pool, sizeof(struct ipflow), 0, 0, 0, "ipflowpl", NULL,
+    IPL_NET);
 
 LIST_HEAD(ipflowhead, ipflow);
 
@@ -137,14 +139,6 @@ ipflow_lookup(const struct ip *ip)
 			break;
 	}
 	return ipf;
-}
-
-void
-ipflow_poolinit(void)
-{
-
-	pool_init(&ipflow_pool, sizeof(struct ipflow), 0, 0, 0, "ipflowpl",
-	    NULL, IPL_NET);
 }
 
 int
@@ -300,14 +294,12 @@ ipflow_fastforward(struct mbuf *m)
 	else
 		dst = rtcache_getdst(&ipf->ipf_ro);
 
-	KERNEL_LOCK(1, NULL);
 	if ((error = (*rt->rt_ifp->if_output)(rt->rt_ifp, m, dst, rt)) != 0) {
 		if (error == ENOBUFS)
 			ipf->ipf_dropped++;
 		else
 			ipf->ipf_errors++;
 	}
-	KERNEL_UNLOCK_ONE(NULL);
 	return 1;
 }
 
@@ -480,7 +472,7 @@ ipflow_create(const struct route *ro, struct mbuf *m)
 	ipf->ipf_src = ip->ip_src;
 	ipf->ipf_tos = ip->ip_tos;
 	PRT_SLOW_ARM(ipf->ipf_timer, IPFLOW_TIMER);
-
+	ipf->ipf_start = time_uptime;
 	/*
 	 * Insert into the approriate bucket of the flow table.
 	 */

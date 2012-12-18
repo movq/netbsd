@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.164 2012/12/11 03:00:00 macallan Exp $	*/
+/*	$NetBSD: machdep.c,v 1.151 2008/09/26 03:39:59 macallan Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.164 2012/12/11 03:00:00 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.151 2008/09/26 03:39:59 macallan Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -45,13 +45,8 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.164 2012/12/11 03:00:00 macallan Exp $
 
 #include <sys/param.h>
 #include <sys/buf.h>
-#include <sys/boot_flag.h>
-#include <sys/bus.h>
-#include <sys/conf.h>
-#include <sys/device.h>
 #include <sys/exec.h>
-#include <sys/kernel.h>
-#include <sys/ksyms.h>
+#include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/mount.h>
 #include <sys/msgbuf.h>
@@ -60,9 +55,18 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.164 2012/12/11 03:00:00 macallan Exp $
 #include <sys/syscallargs.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
+#include <sys/kernel.h>
+#include <sys/user.h>
+#include <sys/boot_flag.h>
+#include <sys/ksyms.h>
+#include <sys/conf.h>
+
+#include <uvm/uvm_extern.h>
+
+#include <net/netisr.h>
 
 #ifdef DDB
-#include <powerpc/db_machdep.h>
+#include <machine/db_machdep.h>
 #include <ddb/db_extern.h>
 #endif
 
@@ -79,9 +83,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.164 2012/12/11 03:00:00 macallan Exp $
 
 #include <machine/autoconf.h>
 #include <machine/powerpc.h>
-
-#include <powerpc/trap.h>
-#include <powerpc/fpu.h>
+#include <machine/trap.h>
+#include <machine/bus.h>
+#include <machine/fpu.h>
 #include <powerpc/oea/bat.h>
 #include <powerpc/spr.h>
 #ifdef ALTIVEC
@@ -89,40 +93,23 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.164 2012/12/11 03:00:00 macallan Exp $
 #endif
 #include <powerpc/ofw_cons.h>
 
-#include <powerpc/pic/picvar.h>
-#ifdef MULTIPROCESSOR
-#include <powerpc/pic/ipivar.h>
-#endif
-
+#include <arch/powerpc/pic/picvar.h>
 #include <macppc/dev/adbvar.h>
 #include <macppc/dev/pmuvar.h>
 #include <macppc/dev/cudavar.h>
-
-#include <macppc/macppc/static_edid.h>
 
 #include "ksyms.h"
 #include "pmu.h"
 #include "cuda.h"
 
+#ifdef MULTIPROCESSOR
+#include <arch/powerpc/pic/ipivar.h>
+#endif
+
 struct genfb_colormap_callback gfb_cb;
-struct genfb_parameter_callback gpc_backlight, gpc_brightness;
-
-/*
- * OpenFirmware gives us no way to check the brightness level or the backlight
- * state so we assume the backlight is on and about 4/5 up which seems 
- * reasonable for most laptops
- */
-
-int backlight_state = 1;
-int brightness_level = 200;
 
 static void of_set_palette(void *, int, int, int, int);
 static void add_model_specifics(prop_dictionary_t);
-static int of_get_backlight(void *, int *);
-static int of_set_backlight(void *, int);
-static int of_get_brightness(void *, int *);
-static int of_set_brightness(void *, int);
-static int of_upd_brightness(void *, int);
 
 void
 initppc(u_int startkernel, u_int endkernel, char *args)
@@ -186,7 +173,7 @@ cpu_reboot(int howto, char *what)
 
 #ifdef MULTIPROCESSOR
 	/* Halt other CPU */
-	cpu_send_ipi(IPI_DST_NOTME, IPI_HALT);
+	ppc_send_ipi(IPI_T_NOTME, PPC_IPI_HALT);
 	delay(100000);	/* XXX */
 #endif
 
@@ -196,8 +183,6 @@ cpu_reboot(int howto, char *what)
 		dumpsys();
 
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN) {
 		delay(1000000);
@@ -268,13 +253,10 @@ callback(void *p)
 #endif
 
 void
-copy_disp_props(device_t dev, int node, prop_dictionary_t dict)
+copy_disp_props(struct device *dev, int node, prop_dictionary_t dict)
 {
-	char name[32];
 	uint32_t temp;
-	uint64_t cmap_cb, backlight_cb, brightness_cb;
-	int have_backlight = 0;
-	int have_palette = 1;
+	uint64_t cmap_cb;
 
 	if (node != console_node) {
 		/*
@@ -319,19 +301,7 @@ copy_disp_props(device_t dev, int node, prop_dictionary_t dict)
 		if (fbaddr != 0)
 			prop_dictionary_set_uint32(dict, "address", fbaddr);
 	}
-	if (of_to_dataprop(dict, node, "EDID", "EDID")) {
-		aprint_verbose("found EDID property...\n");
-	} else if (of_to_dataprop(dict, node, "EDID,A", "EDID")) {
-		aprint_verbose("found EDID,A\n");
-	} else if (of_to_dataprop(dict, node, "EDID,B", "EDID")) {
-		memset(name, 0, sizeof(name));
-		OF_getprop(node, "name", name, sizeof(name));
-		if (strcmp(name, "NVDA,NVMac") == 0) {
-			aprint_verbose("found EDID,B on nvidia - assuming digital output\n");
-			prop_dictionary_set_bool(dict, "no_palette_control", 1);
-			have_palette = 0;
-		}
-	}
+	of_to_dataprop(dict, node, "EDID", "EDID");
 	add_model_specifics(dict);
 
 	temp = 0;
@@ -343,39 +313,10 @@ copy_disp_props(device_t dev, int node, prop_dictionary_t dict)
 	if (temp != 0)
 		prop_dictionary_set_uint32(dict, "refclk", temp / 10);
 
-	if (have_palette) {
-		gfb_cb.gcc_cookie = (void *)console_instance;
-		gfb_cb.gcc_set_mapreg = of_set_palette;
-		cmap_cb = (uint64_t)(uintptr_t)&gfb_cb;
-		prop_dictionary_set_uint64(dict, "cmap_callback", cmap_cb);
-	}
-
-	/* not let's look for backlight control */
-	have_backlight = 0;
-	if (OF_getprop(node, "backlight-control", &temp, sizeof(temp)) == 4) {
-		have_backlight = 1;
-	} else if (OF_getprop(OF_parent(node), "backlight-control", &temp, 
-		    sizeof(temp)) == 4) {
-		have_backlight = 1;
-	}
-	if (have_backlight) {
-
-		gpc_backlight.gpc_cookie = (void *)console_instance;
-		gpc_backlight.gpc_set_parameter = of_set_backlight;
-		gpc_backlight.gpc_get_parameter = of_get_backlight;
-		gpc_backlight.gpc_upd_parameter = NULL;
-		backlight_cb = (uint64_t)(uintptr_t)&gpc_backlight;
-		prop_dictionary_set_uint64(dict, "backlight_callback",
-		    backlight_cb);
-
-		gpc_brightness.gpc_cookie = (void *)console_instance;
-		gpc_brightness.gpc_set_parameter = of_set_brightness;
-		gpc_brightness.gpc_get_parameter = of_get_brightness;
-		gpc_brightness.gpc_upd_parameter = of_upd_brightness;
-		brightness_cb = (uint64_t)(uintptr_t)&gpc_brightness;
-		prop_dictionary_set_uint64(dict, "brightness_callback",
-		    brightness_cb);
-	}
+	gfb_cb.gcc_cookie = (void *)console_instance;
+	gfb_cb.gcc_set_mapreg = of_set_palette;
+	cmap_cb = (uint64_t)&gfb_cb;
+	prop_dictionary_set_uint64(dict, "cmap_callback", cmap_cb);
 }
 
 static void
@@ -383,21 +324,12 @@ add_model_specifics(prop_dictionary_t dict)
 {
 	const char *bl_rev_models[] = {
 		"PowerBook4,3", "PowerBook6,3", "PowerBook6,5", NULL};
-	const char *pismo[] = {
-		"PowerBook3,1", NULL};
 	int node;
 
 	node = OF_finddevice("/");
 
 	if (of_compatible(node, bl_rev_models) != -1) {
 		prop_dictionary_set_bool(dict, "backlight_level_reverted", 1);
-	}
-	if (of_compatible(node, pismo) != -1) {
-		prop_data_t edid;
-
-		edid = prop_data_create_data(edid_pismo, sizeof(edid_pismo));
-		prop_dictionary_set(dict, "EDID", edid);
-		prop_object_release(edid);
 	}
 }
 
@@ -407,72 +339,4 @@ of_set_palette(void *cookie, int index, int r, int g, int b)
 	int ih = (int)cookie;
 
 	OF_call_method_1("color!", ih, 4, r, g, b, index);
-}
-
-static int
-of_get_backlight(void *cookie, int *state)
-{
-	if (backlight_state < 0)
-		return ENODEV;
-	*state = backlight_state;
-	return 0;
-}
-
-static int
-of_set_backlight(void *cookie, int state)
-{
-	int ih = (int)cookie;
-
-	KASSERT(state >= 0 && state <= 1);
-
-	backlight_state = state;
-	if (state)
-		OF_call_method_1("backlight-on", ih, 0);
-	else
-		OF_call_method_1("backlight-off", ih, 0);
-
-	return 0;	/* XXX or use return value of OF_call_method_1? */
-}
-
-static int
-of_get_brightness(void *cookie, int *level)
-{
-	/*
-	 * We don't know how to read the brightness level from OF alone - we
-	 * should read the value from the PMU.  Here, we just return whatever
-	 * we set last (if any).
-	 */
-	if (brightness_level < 0)
-		return ENODEV;
-	*level = brightness_level;
-	return 0;
-}
-
-static int
-of_set_brightness(void *cookie, int level)
-{
-	int ih = (int)cookie;
-
-	KASSERT(level >= 0 && level <= 255);
-
-	brightness_level = level;
-	OF_call_method_1("set-contrast", ih, 1, brightness_level);
-
-	return 0;	/* XXX or use return value of OF_call_method_1? */
-}
-
-static int
-of_upd_brightness(void *cookie, int delta)
-{
-	int ih = (int)cookie;
-
-	if (brightness_level < 0)
-		return ENODEV;
-
-	brightness_level += delta;
-	if (brightness_level < 0) brightness_level = 0;
-	if (brightness_level > 255) brightness_level = 255;
-	OF_call_method_1("set-contrast", ih, 1, brightness_level);
-
-	return 0;	/* XXX or use return value of OF_call_method_1? */
 }

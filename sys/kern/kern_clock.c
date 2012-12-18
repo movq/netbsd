@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_clock.c,v 1.131 2012/12/02 01:05:16 chs Exp $	*/
+/*	$NetBSD: kern_clock.c,v 1.126 2008/10/05 21:57:20 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2004, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -69,9 +69,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_clock.c,v 1.131 2012/12/02 01:05:16 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_clock.c,v 1.126 2008/10/05 21:57:20 pooka Exp $");
 
-#include "opt_dtrace.h"
 #include "opt_ntp.h"
 #include "opt_perfctrs.h"
 
@@ -90,15 +89,10 @@ __KERNEL_RCSID(0, "$NetBSD: kern_clock.c,v 1.131 2012/12/02 01:05:16 chs Exp $")
 #include <sys/cpu.h>
 #include <sys/atomic.h>
 
+#include <uvm/uvm_extern.h>
+
 #ifdef GPROF
 #include <sys/gmon.h>
-#endif
-
-#ifdef KDTRACE_HOOKS
-#include <sys/dtrace_bsd.h>
-#include <sys/cpu.h>
-
-cyclic_clock_func_t	cyclic_clock_func[MAXCPUS];
 #endif
 
 /*
@@ -233,13 +227,6 @@ hardclock(struct clockframe *frame)
 	 * Update real-time timeout queue.
 	 */
 	callout_hardclock();
-
-#ifdef KDTRACE_HOOKS
-	cyclic_clock_func_t func = cyclic_clock_func[cpu_index(ci)];
-	if (func) {
-		(*func)((struct clockframe *)frame);
-	}
-#endif
 }
 
 /*
@@ -330,6 +317,18 @@ proftick(struct clockframe *frame)
 void
 schedclock(struct lwp *l)
 {
+	struct cpu_info *ci;
+
+	ci = l->l_cpu;
+
+	/* Accumulate syscall and context switch counts. */
+	atomic_add_int((unsigned *)&uvmexp.swtch, ci->ci_data.cpu_nswtch);
+	ci->ci_data.cpu_nswtch = 0;
+	atomic_add_int((unsigned *)&uvmexp.syscalls, ci->ci_data.cpu_nsyscall);
+	ci->ci_data.cpu_nsyscall = 0;
+	atomic_add_int((unsigned *)&uvmexp.traps, ci->ci_data.cpu_ntrap);
+	ci->ci_data.cpu_ntrap = 0;
+
 	if ((l->l_flag & LW_IDLE) != 0)
 		return;
 

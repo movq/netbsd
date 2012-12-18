@@ -1,4 +1,4 @@
-/*	$NetBSD: asc.c,v 1.19 2012/10/27 17:17:23 chs Exp $	*/
+/*	$NetBSD: asc.c,v 1.15 2008/06/12 23:22:36 cegger Exp $	*/
 
 /*
  * Copyright (c) 2001 Richard Earnshaw
@@ -98,16 +98,16 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: asc.c,v 1.19 2012/10/27 17:17:23 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asc.c,v 1.15 2008/06/12 23:22:36 cegger Exp $");
 
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/buf.h>
-#include <sys/bus.h>
 
 #include <uvm/uvm_extern.h>
 
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/bootconfig.h>		/* asc_poll */
 
@@ -126,8 +126,8 @@ __KERNEL_RCSID(0, "$NetBSD: asc.c,v 1.19 2012/10/27 17:17:23 chs Exp $");
 #include <acorn32/podulebus/ascreg.h>
 #include <acorn32/podulebus/ascvar.h>
 
-void ascattach		(device_t, device_t, void *);
-int  ascmatch		(device_t, cfdata_t, void *);
+void ascattach		(struct device *, struct device *, void *);
+int  ascmatch		(struct device *, struct cfdata *, void *);
 
 void asc_enintr		(struct sbic_softc *);
 
@@ -146,7 +146,7 @@ void asc_dump		(void);
 int	asc_dmadebug = 0;
 #endif
 
-CFATTACH_DECL_NEW(asc, sizeof(struct asc_softc),
+CFATTACH_DECL(asc, sizeof(struct asc_softc),
     ascmatch, ascattach, NULL, NULL);
 
 extern struct cfdriver asc_cd;
@@ -160,9 +160,9 @@ int asc_poll = 0;
 #endif
 
 int
-ascmatch(device_t parent, cfdata_t cf, void *aux)
+ascmatch(struct device *pdp, struct cfdata *cf, void *auxp)
 {
-	struct podule_attach_args *pa = aux;
+	struct podule_attach_args *pa = (struct podule_attach_args *)auxp;
 
 	/* Look for the card */
 
@@ -181,15 +181,15 @@ ascmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-ascattach(device_t parent, device_t self, void *aux)
+ascattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	/* volatile struct sdmac *rp;*/
 	struct asc_softc *sc;
 	struct sbic_softc *sbic;
 	struct podule_attach_args *pa;
 
-	sc = device_private(self);
-	pa = aux;
+	sc = (struct asc_softc *)dp;
+	pa = (struct podule_attach_args *)auxp;
 
 	if (pa->pa_podule_number == -1)
 		panic("Podule has disappeared !");
@@ -200,7 +200,6 @@ ascattach(device_t parent, device_t self, void *aux)
 
 	sbic = &sc->sc_softc;
 
-	sbic->sc_dev = self;
 	sbic->sc_enintr = asc_enintr;
 	sbic->sc_dmaok = asc_dmaok;
 	sbic->sc_dmasetup = asc_dmasetup;
@@ -213,11 +212,11 @@ ascattach(device_t parent, device_t self, void *aux)
 	if (bus_space_map (sbic->sc_sbicp.sc_sbiciot,
 	    sc->sc_podule->mod_base + ASC_SBIC, ASC_SBIC_SPACE, 0,
 	    &sbic->sc_sbicp.sc_sbicioh))
-		panic("%s: Cannot map SBIC", device_xname(self));
+		panic("%s: Cannot map SBIC", dp->dv_xname);
 
 	sbic->sc_clkfreq = sbic_clock_override ? sbic_clock_override : 143;
 
-	sbic->sc_adapter.adapt_dev = self;
+	sbic->sc_adapter.adapt_dev = &sbic->sc_dev;
 	sbic->sc_adapter.adapt_nchannels = 1;
 	sbic->sc_adapter.adapt_openings = 7; 
 	sbic->sc_adapter.adapt_max_periph = 1;
@@ -269,17 +268,17 @@ ascattach(device_t parent, device_t self, void *aux)
 #endif
 	{
 		evcnt_attach_dynamic(&sc->sc_intrcnt, EVCNT_TYPE_INTR, NULL,
-		    device_xname(self), "intr");
+		    dp->dv_xname, "intr");
 		sc->sc_ih = podulebus_irq_establish(pa->pa_ih, IPL_BIO,
 		    asc_intr, sc, &sc->sc_intrcnt);
 		if (sc->sc_ih == NULL)
-			panic("%s: Cannot claim podule IRQ", device_xname(self));
+			panic("%s: Cannot claim podule IRQ", dp->dv_xname);
 	}
 
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(self, &sbic->sc_channel, scsiprint);
+	config_found(dp, &sbic->sc_channel, scsiprint);
 }
 
 
@@ -338,12 +337,12 @@ void
 asc_dump(void)
 {
 	int i;
-	struct asc_softc *sc;
+	struct sbi_softc *sc;
 
 	for (i = 0; i < asc_cd.cd_ndevs; ++i) {
 		sc = device_lookup_private(&asc_cd, i);
 		if (sc != NULL)
-			sbic_dump(&sc->sc_softc);
+			sbic_dump(sc);
 	}
 }
 
@@ -380,3 +379,4 @@ asc_minphys(struct buf *bp)
 #endif
 	minphys(bp);
 }
+

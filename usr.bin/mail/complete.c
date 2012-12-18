@@ -1,4 +1,4 @@
-/*	$NetBSD: complete.c,v 1.20 2010/01/12 14:44:24 christos Exp $	*/
+/*	$NetBSD: complete.c,v 1.15 2008/04/28 20:24:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997-2000,2005,2006 The NetBSD Foundation, Inc.
@@ -34,10 +34,11 @@
  */
 
 #ifdef USE_EDITLINE
+#undef NO_EDITCOMPLETE
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: complete.c,v 1.20 2010/01/12 14:44:24 christos Exp $");
+__RCSID("$NetBSD: complete.c,v 1.15 2008/04/28 20:24:14 martin Exp $");
 #endif /* not lint */
 
 /*
@@ -53,7 +54,6 @@ __RCSID("$NetBSD: complete.c,v 1.20 2010/01/12 14:44:24 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <stringlist.h>
-#include <termcap.h>
 #include <util.h>
 
 #include <sys/param.h>
@@ -65,7 +65,6 @@ __RCSID("$NetBSD: complete.c,v 1.20 2010/01/12 14:44:24 christos Exp $");
 #ifdef MIME_SUPPORT
 #include "mime.h"
 #endif
-#include "sig.h"
 #ifdef THREAD_SUPPORT
 #include "thread.h"
 #endif
@@ -90,8 +89,8 @@ static int doglob = 1;			/* glob local file names */
 static void
 list_vertical(StringList *sl)
 {
-	int k;
-	size_t i, j, columns, lines;
+	int i, j, k;
+	int columns, lines;
 	char *p;
 	size_t w, width;
 
@@ -145,7 +144,7 @@ list_vertical(StringList *sl)
 static void
 ftpvis(char *dst, size_t dstlen, const char *src, size_t srclen)
 {
-	size_t	di, si;
+	int	di, si;
 
 	for (di = si = 0;
 	    src[si] != '\0' && di < dstlen && si < srclen;
@@ -178,7 +177,7 @@ mail_sl_init(void)
 
 	p = sl_init();
 	if (p == NULL)
-		err(EXIT_FAILURE, "Unable to allocate memory for stringlist");
+		err(1, "Unable to allocate memory for stringlist");
 	return p;
 }
 
@@ -191,7 +190,7 @@ mail_sl_add(StringList *sl, char *i)
 {
 
 	if (sl_add(sl, i) == -1)
-		err(EXIT_FAILURE, "Unable to add `%s' to stringlist", i);
+		err(1, "Unable to add `%s' to stringlist", i);
 }
 
 
@@ -249,7 +248,8 @@ complete_ambiguous(EditLine *el, char *word, int dolist, StringList *words)
 {
 	char insertstr[MAXPATHLEN];
 	char *lastmatch, *p;
-	size_t i, j, matchlen, wordlen;
+	int i, j;
+	size_t matchlen, wordlen;
 
 	wordlen = strlen(word);
 	if (words->sl_cur == 0)
@@ -738,7 +738,6 @@ static int
 is_emacs_mode(EditLine *el)
 {
 	char *mode;
-
 	if (el_get(el, EL_EDITOR, &mode) == -1)
 		return 0;
 	return equal(mode, "emacs");
@@ -748,7 +747,6 @@ static int
 emacs_ctrl_d(EditLine *el, const LineInfo *lf, int ch)
 {
 	static char delunder[3] = { CTRL('f'), CTRL('h'), '\0' };
-
 	if (ch == CTRL('d') && is_emacs_mode(el)) {	/* CTRL-D is special */
 		if (lf->buffer == lf->lastchar)
 			return CC_EOF;
@@ -884,7 +882,7 @@ split_word(int *cmpltype, const char *cmplarray, LineInfo *li)
 	}
 
 	/* check for 'continuation' completes (which are uppercase) */
-	arraylen = (int)strlen(cmplarray);
+	arraylen = strlen(cmplarray);
 	if (cursorc >= arraylen &&
 	    arraylen > 0 &&
 	    isupper((unsigned char)cmplarray[arraylen - 1]))
@@ -1070,10 +1068,12 @@ mime_enc_complete(EditLine *el, int ch)
  *    Initializes of all editline and completion data strutures.
  *
  * my_gets()
- *    Displays prompt, calls el_gets() and deals with history.
- *    Returns the next line of input as a NULL termnated string
- *    without the trailing newline, or NULL if el_gets() sees is an
- *    error or signal.
+ *    Returns the next line of input as a NULL termnated string without
+ *    the trailing newline.
+ *
+ * my_getline()
+ *    Same as my_gets(), but strips leading and trailing whitespace
+ *    and returns an empty line if it gets a SIGINT.
  */
 
 static const char *el_prompt;
@@ -1085,84 +1085,86 @@ show_prompt(EditLine *e __unused)
 	return el_prompt;
 }
 
-/*
- * Write the current INTR character to fp in a friendly form.
- */
-static void
-echo_INTR(void *p)
-{
-	struct termios ttybuf;
-	char buf[5];
-	FILE *fp;
-
-	fp = p;
-	if (tcgetattr(fileno(stdin), &ttybuf) == -1)
-		warn("tcgetattr");
-	else {
-		(void)vis(buf, ttybuf.c_cc[VINTR], VIS_SAFE | VIS_NOSLASH, 0);
-		(void)fprintf(fp, "%s", buf);
-		(void)fflush(fp);
-	}
-}
-
-static sig_t old_sigint;
-static void
-comp_intr(int signo)
-{
-
-	echo_INTR(stdout);
-	old_sigint(signo);
-}
-
 PUBLIC char *
 my_gets(el_mode_t *em, const char *prompt, char *string)
 {
-	static char line[LINE_MAX];
-	size_t len;
 	int cnt;
+	size_t len;
 	const char *buf;
 	HistEvent ev;
-
-	sig_check();
+	static char line[LINE_MAX];
 
 	el_prompt = prompt;
+
 	if (string)
 		el_push(em->el, string);
 
-	/*
-	 * Let el_gets() deal with flow control.  Also, make sure we
-	 * output a ^C when we get a SIGINT as el_gets() doesn't echo
-	 * one.
-	 */
-	old_sigint = sig_signal(SIGINT, comp_intr);
 	buf = el_gets(em->el, &cnt);
-	(void)sig_signal(SIGINT, old_sigint);
 
-	if (buf == NULL) {
-		sig_check();
+	if (buf == NULL || cnt <= 0) {
+		if (cnt == 0)
+			(void)putc('\n', stdout);
 		return NULL;
 	}
 
-	if (cnt > 0) {
-		if (buf[cnt - 1] == '\n')
-			cnt--;	/* trash the trailing LF */
-
-		len = MIN(sizeof(line) - 1, (size_t)cnt);
-		(void)memcpy(line, buf, len);
-	}
+	if (buf[cnt - 1] == '\n')
+		cnt--;	/* trash the trailing LF */
+	len = MIN(sizeof(line) - 1, cnt);
+	(void)memcpy(line, buf, len);
 	line[cnt] = '\0';
 
 	/* enter non-empty lines into history */
 	if (em->hist) {
 		const char *p;
-
 		p = skip_WSP(line);
 		if (*p && history(em->hist, &ev, H_ENTER, line) == 0)
 			(void)printf("Failed history entry: %s", line);
 	}
-	sig_check();
 	return line;
 }
+
+#ifdef MIME_SUPPORT
+/* XXX - do we really want this here? */
+
+static jmp_buf intjmp;
+/*ARGSUSED*/
+static void
+sigint(int signum __unused)
+{
+	siglongjmp(intjmp, 1);
+}
+
+PUBLIC char *
+my_getline(el_mode_t *em, const char *prompt, const char *str)
+{
+	sig_t saveint;
+	char *cp;
+	char *line;
+
+	saveint = signal(SIGINT, sigint);
+	if (sigsetjmp(intjmp, 1)) {
+		(void)signal(SIGINT, saveint);
+		(void)putc('\n', stdout);
+		return __UNCONST("");
+	}
+
+	line = my_gets(em, prompt, __UNCONST(str));
+	/* LINTED */
+	line = line ? savestr(line) : __UNCONST("");
+
+	(void)signal(SIGINT, saveint);
+
+	/* strip trailing white space */
+	for (cp = line + strlen(line) - 1;
+	     cp >= line && is_WSP(*cp); cp--)
+		*cp = '\0';
+
+	/* skip leading white space */
+	cp = skip_WSP(line);
+
+	return cp;
+}
+#endif /* MIME_SUPPORT */
 
 static el_mode_t
 init_el_mode(
@@ -1171,20 +1173,13 @@ init_el_mode(
 	struct name *keys,
 	int history_size)
 {
-	FILE *nullfp;
 	el_mode_t em;
-
 	(void)memset(&em, 0, sizeof(em));
 
-	if ((nullfp = fopen(_PATH_DEVNULL, "w")) == NULL)
-		err(EXIT_FAILURE, "Cannot open `%s'", _PATH_DEVNULL);
-
-	if ((em.el = el_init(getprogname(), stdin, stdout, nullfp)) == NULL) {
+	if ((em.el = el_init(getprogname(), stdin, stdout, stderr)) == NULL) {
 		warn("el_init");
 		return em;
 	}
-	(void)fflush(nullfp);
-	(void)dup2(STDERR_FILENO, fileno(nullfp));
 
 	(void)el_set(em.el, EL_PROMPT, show_prompt);
 	(void)el_set(em.el, EL_SIGNAL, 1); /* editline handles the signals. */

@@ -1,4 +1,4 @@
-/* $NetBSD: mcontext.h,v 1.3 2011/08/13 14:51:58 jmcneill Exp $ */
+/* $NetBSD: mcontext.h,v 1.1 2007/12/29 14:38:34 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *        This product includes software developed by Jared D. McNeill.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -29,14 +35,10 @@
 #ifndef _ARCH_USERMODE_INCLUDE_MCONTEXT_H
 #define _ARCH_USERMODE_INCLUDE_MCONTEXT_H
 
-#include <machine/vmparam.h>
-
 typedef struct {
-	uint8_t	__unknown[PAGE_SIZE];
 } mcontext_t;
 
 typedef struct {
-	uint8_t	__unknown[PAGE_SIZE];
 } mcontext32_t;
 
 #endif /* !_ARCH_USERMODE_INCLUDE_MCONTEXT_H */

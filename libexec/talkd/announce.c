@@ -1,4 +1,4 @@
-/*	$NetBSD: announce.c,v 1.25 2009/03/16 01:13:38 lukem Exp $	*/
+/*	$NetBSD: announce.c,v 1.23 2008/03/04 02:57:33 dholland Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)announce.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: announce.c,v 1.25 2009/03/16 01:13:38 lukem Exp $");
+__RCSID("$NetBSD: announce.c,v 1.23 2008/03/04 02:57:33 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -68,7 +68,9 @@ extern char hostname[];
  * a talk is requested.
  */
 int
-announce(CTL_MSG *request, const char *remote_machine)
+announce(request, remote_machine)
+	CTL_MSG *request;
+	char *remote_machine;
 {
 	char full_tty[32];
 	struct stat stbuf;
@@ -91,9 +93,12 @@ announce(CTL_MSG *request, const char *remote_machine)
  * is in vi at the time.
  */
 int
-print_mesg(const char *tty, CTL_MSG *request, const char *remote_machine)
+print_mesg(tty, request, remote_machine)
+	char *tty;
+	CTL_MSG *request;
+	char *remote_machine;
 {
-	struct timeval clocktv;
+	struct timeval clock;
 	time_t clocktime;
 	struct tm *localclock;
 	struct iovec iovec;
@@ -105,8 +110,8 @@ print_mesg(const char *tty, CTL_MSG *request, const char *remote_machine)
 
 	i = 0;
 	max_size = 0;
-	(void)gettimeofday(&clocktv, NULL);
-	clocktime = clocktv.tv_sec;
+	(void)gettimeofday(&clock, NULL);
+	clocktime = clock.tv_sec;
 	localclock = localtime(&clocktime);
 	(void)snprintf(line_buf[i], N_CHARS, " ");
 	sizes[i] = strlen(line_buf[i]);

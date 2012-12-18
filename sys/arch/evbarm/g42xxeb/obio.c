@@ -1,4 +1,4 @@
-/*	$NetBSD: obio.c,v 1.11 2012/10/27 17:17:47 chs Exp $ */
+/*	$NetBSD: obio.c,v 1.7 2008/04/27 18:58:46 matt Exp $ */
 
 /*
  * Copyright (c) 2002, 2003, 2005  Genetec corp.  All rights reserved.
@@ -37,7 +37,7 @@
 #include <sys/reboot.h>
 
 #include <machine/cpu.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <arm/cpufunc.h>
 
@@ -53,13 +53,14 @@
 #include "locators.h"
 
 /* prototypes */
-static int	obio_match(device_t, cfdata_t, void *);
-static void	obio_attach(device_t, device_t, void *);
-static int 	obio_search(device_t, cfdata_t, const int *, void *);
+static int	obio_match(struct device *, struct cfdata *, void *);
+static void	obio_attach(struct device *, struct device *, void *);
+static int 	obio_search(struct device *, struct cfdata *,
+			    const int *, void *);
 static int	obio_print(void *, const char *);
 
 /* attach structures */
-CFATTACH_DECL_NEW(obio, sizeof(struct obio_softc), obio_match, obio_attach,
+CFATTACH_DECL(obio, sizeof(struct obio_softc), obio_match, obio_attach,
     NULL, NULL);
 
 static int
@@ -188,28 +189,26 @@ obio_print(void *aux, const char *name)
 	struct obio_attach_args *oba = (struct obio_attach_args*)aux;
 
 	if (oba->oba_addr != OBIOCF_ADDR_DEFAULT)
-                aprint_normal(" addr 0x%lx", oba->oba_addr);
+                printf(" addr 0x%lx", oba->oba_addr);
         if (oba->oba_intr > 0)
-                aprint_normal(" intr %d", oba->oba_intr);
+                printf(" intr %d", oba->oba_intr);
         return (UNCONF);
 }
 
 int
-obio_match(device_t parent, cfdata_t match, void *aux)
+obio_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	return 1;
 }
 
 void
-obio_attach(device_t parent, device_t self, void *aux)
+obio_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct obio_softc *sc = device_private(self);
-	struct sa11x0_attach_args *sa = aux;
+	struct obio_softc *sc = (struct obio_softc*)self;
+	struct sa11x0_attach_args *sa = (struct sa11x0_attach_args *)aux;
 	bus_space_tag_t iot = sa->sa_iot;
 	int i;
 	uint16_t reg;
-
-	sc->sc_dev = self;
 
 	/* tweak memory access timing for CS3. 
 	   the value set by redboot is too slow */
@@ -265,13 +264,14 @@ obio_attach(device_t parent, device_t self, void *aux)
 	return;
 
  fail:
-	aprint_error_dev(self, "can't map FPGA registers\n");
+	printf( "%s: can't map FPGA registers\n", self->dv_xname );
 }
 
 int
-obio_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+obio_search(struct device *parent, struct cfdata *cf,
+	    const int *ldesc, void *aux)
 {
-	struct obio_softc *sc = device_private(parent);
+	struct obio_softc *sc = (struct obio_softc *)parent;
 	struct obio_attach_args oba;
 
 	oba.oba_sc = sc;
@@ -369,7 +369,8 @@ obio_intr_disestablish(struct obio_softc *sc, int irq, int (* func)(void *))
 	restore_interrupts(save);
 
 	if (error)
-		aprint_error_dev(sc->sc_dev, "bad intr_disestablish\n");
+		aprint_error("%s: bad intr_disestablish\n", 
+		    sc->sc_dev.dv_xname);
 }
 
 void

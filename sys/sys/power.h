@@ -1,4 +1,4 @@
-/*	$NetBSD: power.h,v 1.17 2012/07/15 18:31:35 pgoyette Exp $	*/
+/*	$NetBSD: power.h,v 1.12 2008/08/22 11:27:50 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -43,10 +43,6 @@
 #define	_SYS_POWER_H_
 
 #include <sys/ioccom.h>
-
-#ifndef _KERNEL
-#include <stdint.h>
-#endif
 
 /*
  * Power Switches:
@@ -158,7 +154,17 @@ struct pswitch_state {
  *
  * 	PENVSYS_EVENT_WARNUNDER		A warning over limit.
  *
- * The folowing event applies to all sensors, when the state is
+ * The following events apply to the same except for batteries:
+ *
+ * 	PENVSYS_EVENT_USER_CRITMAX	User critical max limit.
+ *
+ * 	PENVSYS_EVENT_USER_CRITMIN	User critical min limit.
+ *
+ *	PENVSYS_EVENT_USER_WARNMAX	User warning max limit.
+ *
+ *	PENVSYS_EVENT_USER_WARNMIN	User warning min limit.
+ *
+ * The folowing event apply to all sensors, when the state is
  * valid or the warning or critical limit is not valid anymore:
  *
  * 	PENVSYS_EVENT_NORMAL		Normal state in the sensor.
@@ -170,27 +176,25 @@ struct pswitch_state {
 #define PENVSYS_EVENT_CRITUNDER 	120
 #define PENVSYS_EVENT_WARNOVER 		130
 #define PENVSYS_EVENT_WARNUNDER 	140
+#define PENVSYS_EVENT_USER_CRITMAX 	150
+#define PENVSYS_EVENT_USER_WARNMAX  	155
+#define PENVSYS_EVENT_USER_CRITMIN  	160
+#define PENVSYS_EVENT_USER_WARNMIN  	165
 
 /*
  * The following events apply for battery sensors:
  *
- * 	PENVSYS_EVENT_BATT_CRIT		User critical capacity.
+ * 	PENVSYS_EVENT_BATT_USERCAP	User critical capacity.
  *
- *	PENVSYS_EVENT_BATT_WARN		User warning capacity.
- *
- *	PENVSYS_EVENT_BATT_HIGH		User high capacity.
- *
- *	PENVSYS_EVENT_BATT_MAX		User maximum capacity.
+ *	PENVSYS_EVENT_BATT_USERWARN	User warning capacity.
  *
  * 	PENVSYS_EVENT_LOW_POWER		AC Adapter is OFF and all batteries
  * 					are discharged.
  */
 
-#define PENVSYS_EVENT_BATT_CRIT		170
-#define PENVSYS_EVENT_BATT_WARN		175
-#define PENVSYS_EVENT_BATT_HIGH		177
-#define PENVSYS_EVENT_BATT_MAX		178
-#define PENVSYS_EVENT_LOW_POWER		180
+#define PENVSYS_EVENT_BATT_USERCAP 	170
+#define PENVSYS_EVENT_BATT_USERWARN 	175
+#define PENVSYS_EVENT_LOW_POWER 	180
 
 /*
  * The following event apply for battery state and drive sensors:
@@ -204,15 +208,9 @@ struct pswitch_state {
  * The following events are used internally to associate multiple
  * external states with a single event monitor
  */
-#define PENVSYS_EVENT_LIMITS		200
-#define PENVSYS_EVENT_CAPACITY		210
-
-/*
- * The following pseudo-event is used to force refreshing of a
- * sensor that provides rnd(4) entropy, even if the sensor is not
- * otherwise being monitored.
- */
-#define PENVSYS_EVENT_NULL		220
+#define PENVSYS_EVENT_HW_LIMITS		200
+#define PENVSYS_EVENT_USER_LIMITS	210
+#define PENVSYS_EVENT_BATT_USER_LIMITS	220
 
 /*
  * This structure defines the properties of an envsys event.
@@ -262,7 +260,6 @@ typedef struct power_event {
 struct power_type {
 	char	power_type[32];
 };
-#define	POWER_IOC_GET_TYPE	_IOR('P', 0, struct power_type)
-#define	POWER_IOC_GET_TYPE_WITH_LOSSAGE _IOR('P', 0, sizeof(struct power_type))
+#define	POWER_IOC_GET_TYPE	 _IOR('P', 0, sizeof(struct power_type))
 
 #endif /* _SYS_POWER_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.34 2012/09/22 00:33:42 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.9 2008/04/27 18:58:47 matt Exp $	*/
 /*	$OpenBSD: zaurus_machdep.c,v 1.25 2006/06/20 18:24:04 todd Exp $	*/
 
 /*
@@ -29,7 +29,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- * Machine dependent functions for kernel setup for 
+ * Machine dependant functions for kernel setup for 
  * Intel DBPXA250 evaluation board (a.k.a. Lubbock).
  * Based on iq80310_machhdep.c
  */
@@ -102,25 +102,20 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependent functions for kernel setup for Intel IQ80310 evaluation
+ * Machine dependant functions for kernel setup for Intel IQ80310 evaluation
  * boards using RedBoot firmware.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.34 2012/09/22 00:33:42 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.9 2008/04/27 18:58:47 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "opt_modular.h"
 #include "opt_pmap_debug.h"
 #include "opt_md.h"
 #include "opt_com.h"
+#include "md.h"
 #include "ksyms.h"
-
-#include "opt_kloader.h"
-#ifndef KLOADER_KERNEL_PATH
-#define KLOADER_KERNEL_PATH	"/netbsd"
-#endif
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -131,14 +126,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.34 2012/09/22 00:33:42 matt Exp $");
 #include <sys/msgbuf.h>
 #include <sys/reboot.h>
 #include <sys/termios.h>
-#include <sys/boot_flag.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <dev/cons.h>
 #include <sys/conf.h>
 #include <sys/queue.h>
-#include <sys/bus.h>
 
 #include <machine/db_machdep.h>
 #include <ddb/db_sym.h>
@@ -149,11 +142,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.34 2012/09/22 00:33:42 matt Exp $");
 
 #include <machine/bootconfig.h>
 #include <machine/bootinfo.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
-#ifdef KLOADER
-#include <machine/kloader.h>
-#endif
 
 #include <arm/undefined.h>
 #include <arm/arm32/machdep.h>
@@ -163,14 +154,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.34 2012/09/22 00:33:42 matt Exp $");
 #include <arm/xscale/pxa2x0var.h>
 #include <arm/xscale/pxa2x0_gpio.h>
 
-#include <arm/sa11x0/sa11x0_ostvar.h>
-
 #include <arch/zaurus/zaurus/zaurus_reg.h>
 #include <arch/zaurus/zaurus/zaurus_var.h>
 
 #include <zaurus/dev/scoopreg.h>
-#include <zaurus/dev/zlcdvar.h>
-#include <zaurus/dev/w100lcdvar.h>
 
 #include <dev/ic/comreg.h>
 
@@ -182,16 +169,26 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.34 2012/09/22 00:33:42 matt Exp $");
 #endif
 
 /* Kernel text starts 2MB in from the bottom of the kernel address space. */
-#define	KERNEL_TEXT_BASE	((vaddr_t)&KERNEL_BASE_virt)
-#ifndef	KERNEL_VM_BASE
-#define	KERNEL_VM_BASE		(KERNEL_BASE + 0x01000000)
-#endif
+#define	KERNEL_TEXT_BASE	(KERNEL_BASE + 0x00200000)
+#define	KERNEL_VM_BASE		(KERNEL_BASE + 0x04000000)
 
 /*
  * The range 0xc4000000 - 0xcfffffff is available for kernel VM space
  * Core-logic registers and I/O mappings occupy 0xfd000000 - 0xffffffff
  */
 #define KERNEL_VM_SIZE		0x0c000000
+
+/*
+ * Address to call from cpu_reset() to reset the machine.
+ * This is machine architecture dependant as it varies depending
+ * on where the ROM appears when you turn the MMU off.
+ */
+u_int cpu_reset_address = 0;
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#define UND_STACK_SIZE	1
 
 int zaurusmod;			/* Zaurus model */
 
@@ -204,15 +201,24 @@ paddr_t physical_freestart;
 paddr_t physical_freeend;
 paddr_t physical_end;
 u_int free_pages;
+int physmem = 0;
 
 #ifndef PMAP_STATIC_L1S
 int max_processes = 64;			/* Default number */
 #endif	/* !PMAP_STATIC_L1S */
 
 /* Physical and virtual addresses for some global pages */
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+extern pv_addr_t kernelstack;
 pv_addr_t minidataclean;
 
 paddr_t msgbufphys;
+
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -220,46 +226,27 @@ extern int pmap_debug_level;
 
 #define KERNEL_PT_SYS		0	/* Page table for mapping proc0 zero page */
 #define KERNEL_PT_KERNEL	1	/* Page table for mapping kernel */
-#define	KERNEL_PT_KERNEL_NUM	((KERNEL_VM_BASE - KERNEL_BASE) >> 22)
+#define	KERNEL_PT_KERNEL_NUM	32
 #define KERNEL_PT_VMDATA	(KERNEL_PT_KERNEL + KERNEL_PT_KERNEL_NUM)
 				        /* Page tables for mapping kernel VM */
-#define	KERNEL_PT_VMDATA_NUM	4	/* start with 16MB of KVM */
+#define	KERNEL_PT_VMDATA_NUM	8	/* start with 32MB of KVM */
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
 
-const char *console =
-#ifdef FFUARTCONSOLE
-	"ffuart";
-#else
-	"glass";
-#endif
+struct user *proc0paddr;
+
+const char *console = "glass";
 int glass_console = 0;
 
-#ifdef KLOADER
-pv_addr_t bootinfo_pt;
-pv_addr_t bootinfo_pg;
-struct kloader_bootinfo kbootinfo;
-int kloader_howto = 0;
-#else
-struct bootinfo _bootinfo;
-#endif
-struct bootinfo *bootinfo;
-struct btinfo_howto *bi_howto;
-
-#define	KERNEL_BASE_PHYS	((paddr_t)&KERNEL_BASE_phys)
-#define	BOOTINFO_PAGE		(KERNEL_BASE_PHYS - PAGE_SIZE)
+char bootargs[MAX_BOOT_STRING];
 
 /* Prototypes */
 void	consinit(void);
 void	dumpsys(void);
+void	process_kernel_args(char *);
 #ifdef KGDB
 void	kgdb_port_init(void);
-#endif
-#ifdef KLOADER
-static int parseboot(char *arg, char **filename, int *howto);
-static char *gettrailer(char *arg);
-static int parseopts(const char *opts, int *howto);
 #endif
 
 #if defined(CPU_XSCALE_PXA250)
@@ -298,7 +285,9 @@ static struct pxa2x0_gpioconf pxa27x_boarddep_gpioconf[] = {
 	{  44, GPIO_ALT_FN_1_IN },	/* BTCST */
 	{  45, GPIO_ALT_FN_2_OUT },	/* BTRST */
 
-	{ 104, GPIO_ALT_FN_1_OUT },	/* pSKTSEL */
+	{ 109, GPIO_ALT_FN_1_IN },	/* MMDAT<1> */
+	{ 110, GPIO_ALT_FN_1_IN },	/* MMDAT<2>/MMCCS<0> */
+	{ 111, GPIO_ALT_FN_1_IN },	/* MMDAT<3>/MMCCS<1> */
 
 	{ -1 }
 };
@@ -340,27 +329,6 @@ cpu_reboot(int howto, char *bootstr)
 
 	boothowto = howto;
 
-#ifdef KLOADER
-	if ((howto & RB_HALT) == 0 && panicstr == NULL) {
-		char *filename = NULL;
-
-		if ((howto & RB_STRING) && (bootstr != NULL)) {
-			if (parseboot(bootstr, &filename, &kloader_howto) == 0){
-				filename = NULL;
-				kloader_howto = 0;
-			}
-		}
-		if (kloader_howto != 0) {
-			printf("howto: 0x%x\n", kloader_howto);
-		}
-		if (filename != NULL) {
-			kloader_reboot_setup(filename);
-		} else {
-			kloader_reboot_setup(KLOADER_KERNEL_PATH);
-		}
-	}
-#endif
-
 	/*
 	 * If RB_NOSYNC was not specified sync the discs.
 	 * Note: Unless cold is set to 1 here, syslogd will die during the
@@ -391,8 +359,6 @@ haltsys:
 	/* Run any shutdown hooks */
 	doshutdownhooks();
 
-	pmf_system_shutdown(boothowto);
-
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
 
@@ -407,16 +373,6 @@ haltsys:
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
 	}
-#ifdef KLOADER
-	else if (panicstr == NULL) {
-		delay(1 * 1000 * 1000);
-		kloader_reboot();
-		printf("\n");
-		printf("Failed to load a new kernel.\n");
-		printf("Please press any key to reboot.\n\n");
-		cngetc();
-	}
-#endif
 
 	printf("rebooting...\n");
 	delay(1 * 1000 * 1000);
@@ -438,25 +394,14 @@ zaurus_restart(void)
 {
 	uint32_t rv;
 
-	if (ZAURUS_ISC1000 || ZAURUS_ISC3000) {
-		rv = pxa2x0_memctl_read(MEMCTL_MSC0);
-		if ((rv & 0xffff0000) == 0x7ff00000) {
-			pxa2x0_memctl_write(MEMCTL_MSC0,
-			    (rv & 0xffff) | 0x7ee00000);
-		}
-
-		/* External reset circuit presumably asserts nRESET_GPIO. */
-		pxa2x0_gpio_set_function(89, GPIO_OUT | GPIO_SET);
-	} else {
-		/* SL-C7x0/SL-C860 */
-		/* Clear all reset status */
-		ioreg_write(ZAURUS_POWMAN_VBASE + POWMAN_RCSR,
-		    POWMAN_HWR|POWMAN_WDR|POWMAN_SMR|POWMAN_GPR);
-
-		/* watchdog reset */
-		saost_reset();
+	rv = pxa2x0_memctl_read(MEMCTL_MSC0);
+	if ((rv & 0xffff0000) == 0x7ff00000) {
+		pxa2x0_memctl_write(MEMCTL_MSC0, (rv & 0xffff) | 0x7ee00000);
 	}
-	delay(1 * 1000 * 1000);	/* wait 1s */
+
+	/* External reset circuit presumably asserts nRESET_GPIO. */
+	pxa2x0_gpio_set_function(89, GPIO_OUT | GPIO_SET);
+	delay(1 * 1000* 1000);	/* wait 1s */
 }
 
 static inline pd_entry_t *
@@ -541,12 +486,6 @@ static const struct pmap_devmap zaurus_devmap[] = {
 	    _S(4 * COM_NPORTS),
 	    VM_PROT_READ|VM_PROT_WRITE, PTE_NOCACHE,
     },
-    {
-	    ZAURUS_POWMAN_VBASE,
-	    _A(PXA2X0_POWMAN_BASE),
-	    _S(PXA2X0_POWMAN_SIZE),
-	    VM_PROT_READ|VM_PROT_WRITE, PTE_NOCACHE,
-    },
 
     {0, 0, 0, 0, 0,}
 };
@@ -579,44 +518,13 @@ irda_on(int virt)
 
 	if (virt) {
 		/* XXX scoop1 registers are not page-aligned! */
-		int o = C3000_SCOOP1_BASE - trunc_page(C3000_SCOOP1_BASE);
-		p = (volatile uint16_t *)(ZAURUS_SCOOP1_VBASE + o + SCOOP_GPWR);
+		int ofs = C3000_SCOOP1_BASE - trunc_page(C3000_SCOOP1_BASE);
+		p = (volatile uint16_t *)(ZAURUS_SCOOP1_VBASE + ofs + SCOOP_GPWR);
 	} else {
 		p = (volatile uint16_t *)(C3000_SCOOP1_BASE + SCOOP_GPWR);
 	}
 
 	*p &= ~(1 << SCOOP1_IR_ON);
-}
-
-static int
-hw_isc1000(void)
-{
-	/* XXX scoop1 registers are not page-aligned! */
-	const u_long baseaddr = ZAURUS_SCOOP1_VBASE +
-	    (C3000_SCOOP1_BASE - trunc_page(C3000_SCOOP1_BASE));
-	uint16_t mcr, cdr, csr, cpr, ccr, irr, irm, imr, isr;
-	uint16_t gpcr, gpwr, gprr;
-
-	mcr = ioreg16_read(baseaddr + SCOOP_MCR);
-	cdr = ioreg16_read(baseaddr + SCOOP_CDR);
-	csr = ioreg16_read(baseaddr + SCOOP_CSR);
-	cpr = ioreg16_read(baseaddr + SCOOP_CPR);
-	ccr = ioreg16_read(baseaddr + SCOOP_CCR);
-	irr = ioreg16_read(baseaddr + SCOOP_IRR);
-	irm = ioreg16_read(baseaddr + SCOOP_IRM);
-	imr = ioreg16_read(baseaddr + SCOOP_IMR);
-	isr = ioreg16_read(baseaddr + SCOOP_ISR);
-	gpcr = ioreg16_read(baseaddr + SCOOP_GPCR);
-	gpwr = ioreg16_read(baseaddr + SCOOP_GPWR);
-	gprr = ioreg16_read(baseaddr + SCOOP_GPRR);
-
-	if (mcr == 0 && cdr == 0 && csr == 0 && cpr == 0 && ccr == 0 &&
-	    irr == 0 && irm == 0 && imr == 0 && isr == 0 &&
-	    gpcr == 0 && gpwr == 0 && gprr == 0) {
-	    /* scoop1 isn't found: hardware is SL-C1000 */
-	    return 1;
-	}
-	return 0;
 }
 
 /*
@@ -639,14 +547,12 @@ initarm(void *arg)
 	extern vsize_t xscale_minidata_clean_size; /* used in KASSERT */
 #endif
 	extern vaddr_t xscale_cache_clean_addr;
-	extern char KERNEL_BASE_phys[], KERNEL_BASE_virt[];
 	int loop;
 	int loop1;
 	u_int l1pagetable;
 	paddr_t memstart;
 	psize_t memsize;
 	struct pxa2x0_gpioconf **zaurus_gpioconf;
-	u_int *magicaddr;
 
 	/* Get ready for zaurus_restart() */
 	pxa2x0_memctl_bootstrap(PXA2X0_MEMCTL_BASE);
@@ -675,48 +581,22 @@ initarm(void *arg)
 	 * Examine the boot args string for options we need to know about
 	 * now.
 	 */
-	magicaddr = (u_int *)(KERNEL_BASE_PHYS - BOOTARGS_BUFSIZ);
-	if (*magicaddr == BOOTARGS_MAGIC) {
-#ifdef KLOADER
-		bootinfo = &kbootinfo.bootinfo;
-#else
-		bootinfo = &_bootinfo;
-#endif
-		memcpy(bootinfo, (void *)(KERNEL_BASE_PHYS - BOOTINFO_MAXSIZE),
-		    BOOTINFO_MAXSIZE);
-		bi_howto = lookup_bootinfo(BTINFO_HOWTO);
-		boothowto = (bi_howto != NULL) ? bi_howto->howto : RB_AUTOBOOT;
-	} else {
-		boothowto = RB_AUTOBOOT;
-	}
-	*magicaddr = 0xdeadbeef;
+	/* XXX should really be done after setting up the console, but we
+	 * XXX need to parse the console selection flags right now. */
+	process_kernel_args((char *)0xa0200000 - MAX_BOOT_STRING - 1);
 #ifdef RAMDISK_HOOKS
         boothowto |= RB_DFLTROOT;
 #endif /* RAMDISK_HOOKS */
-	if (boothowto & RB_MD1) {
-		/* serial console */
-		console = "ffuart";
-	}
-
-	memstart = PXA2X0_SDRAM0_START;
-	memsize =  0x04000000; /* 64MB */
 
 	/*
 	 * This test will work for now but has to be revised when support
 	 * for other models is added.
 	 */
 	if ((cputype & ~CPU_ID_XSCALE_COREREV_MASK) == CPU_ID_PXA27X) {
-		if (hw_isc1000())
-			zaurusmod = ZAURUS_C1000;	/* SL-C1000 */
-		else
-			zaurusmod = ZAURUS_C3000;	/* SL-C3x00 */
+		zaurusmod = ZAURUS_C3000;
 		zaurus_gpioconf = pxa27x_zaurus_gpioconf;
 	} else {
-		zaurusmod = ZAURUS_C860;		/* SL-C7x0/860 */
-		if (cputype == CPU_ID_PXA250B) {
-			/* SL-C700 */
-			memsize =  0x02000000;		/* 32MB */
-		}
+		zaurusmod = ZAURUS_C860;
 		zaurus_gpioconf = pxa25x_zaurus_gpioconf;
 	}
 
@@ -730,22 +610,21 @@ initarm(void *arg)
 	kgdb_port_init();
 #endif
 
-#ifdef VERBOSE_INIT_ARM
 	/* Talk to the user */
 	printf("\nNetBSD/zaurus booting ...\n");
-#endif
 
-#ifdef KLOADER
-	/* copy boot parameter for kloader */
-	kloader_bootinfo_set(&kbootinfo, 0, NULL, NULL, true);
-#endif
+	{
+		/* XXX - all Zaurus have this for now, fix memory sizing */
+		memstart = 0xa0000000;
+		memsize =  0x04000000; /* 64MB */
+	}
 
 #ifdef VERBOSE_INIT_ARM
 	printf("initarm: Configuring system ...\n");
 #endif
 
 	/* Fake bootconfig structure for the benefit of pmap.c */
-	/* XXX must make the memory description h/w independent */
+	/* XXX must make the memory description h/w independant */
 	bootconfig.dramblocks = 1;
 	bootconfig.dram[0].address = memstart;
 	bootconfig.dram[0].pages = memsize / PAGE_SIZE;
@@ -765,8 +644,8 @@ initarm(void *arg)
 	physical_start = bootconfig.dram[0].address;
 	physical_end = physical_start + (bootconfig.dram[0].pages * PAGE_SIZE);
 
-	physical_freestart = PXA2X0_SDRAM0_START + 0x9000;
-	physical_freeend = BOOTINFO_PAGE;
+	physical_freestart = 0xa0009000UL;
+	physical_freeend = 0xa0200000UL;
 
 	physmem = (physical_end - physical_start) / PAGE_SIZE;
 
@@ -830,9 +709,6 @@ initarm(void *arg)
 			++loop1;
 		}
 	}
-#ifdef KLOADER
-	valloc_pages(bootinfo_pt, L2_TABLE_SIZE / PAGE_SIZE);
-#endif
 
 	/* This should never be able to happen but better confirm that. */
 	if (!kernel_l1pt.pv_pa || (kernel_l1pt.pv_pa & (L1_TABLE_SIZE-1)) != 0)
@@ -855,11 +731,6 @@ initarm(void *arg)
 	KASSERT(xscale_minidata_clean_size <= PAGE_SIZE);
 	valloc_pages(minidataclean, 1);
 
-#ifdef KLOADER
-	bootinfo_pg.pv_pa = BOOTINFO_PAGE;
-	bootinfo_pg.pv_va = KERNEL_BASE + bootinfo_pg.pv_pa - physical_start;
-#endif
-
 #ifdef VERBOSE_INIT_ARM
 	printf("IRQ stack: p0x%08lx v0x%08lx\n", irqstack.pv_pa,
 	    irqstack.pv_va); 
@@ -872,10 +743,6 @@ initarm(void *arg)
 	printf("minidataclean: p0x%08lx v0x%08lx, size = %ld\n",
 	    minidataclean.pv_pa, minidataclean.pv_va,
 	    xscale_minidata_clean_size);
-#ifdef KLOADER
-	printf("bootinfo_pg: p0x%08lx v0x%08lx\n", bootinfo_pg.pv_pa,
-	    bootinfo_pg.pv_va);
-#endif
 #endif
 
 	/*
@@ -909,9 +776,6 @@ initarm(void *arg)
 	for (loop = 0; loop < KERNEL_PT_VMDATA_NUM; loop++)
 		pmap_link_l2pt(l1pagetable, KERNEL_VM_BASE + loop * 0x00400000,
 		    &kernel_pt_table[KERNEL_PT_VMDATA + loop]);
-#ifdef KLOADER
-	pmap_link_l2pt(l1pagetable, PXA2X0_SDRAM0_START, &bootinfo_pt);
-#endif
 
 	/* update the top of the kernel VM */
 	pmap_curmaxkvaddr =
@@ -931,9 +795,8 @@ initarm(void *arg)
 
 		textsize = (textsize + PGOFSET) & ~PGOFSET;
 		totalsize = (totalsize + PGOFSET) & ~PGOFSET;
-
-		/* offset of kernel in RAM */
-		logical = KERNEL_TEXT_BASE - KERNEL_BASE;
+		
+		logical = 0x00200000;	/* offset of kernel in RAM */
 
 		logical += pmap_map_chunk(l1pagetable, KERNEL_BASE + logical,
 		    physical_start + logical, textsize,
@@ -965,13 +828,6 @@ initarm(void *arg)
 		    kernel_pt_table[loop].pv_pa, L2_TABLE_SIZE,
 		    VM_PROT_READ|VM_PROT_WRITE, PTE_PAGETABLE);
 	}
-
-#ifdef KLOADER
-	pmap_map_chunk(l1pagetable, bootinfo_pt.pv_va, bootinfo_pt.pv_pa,
-	    L2_TABLE_SIZE, VM_PROT_READ|VM_PROT_WRITE, PTE_PAGETABLE);
-	pmap_map_chunk(l1pagetable, bootinfo_pg.pv_va, bootinfo_pg.pv_pa,
-	    PAGE_SIZE, VM_PROT_ALL, PTE_CACHE);
-#endif
 
 	/* Map the Mini-Data cache clean area. */
 	xscale_setup_minidata(l1pagetable, minidataclean.pv_va,
@@ -1029,7 +885,7 @@ initarm(void *arg)
 #endif
 
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -1037,7 +893,8 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+	proc0paddr = (struct user *)kernelstack.pv_va;
+	lwp0.l_addr = proc0paddr;
 
 #ifdef VERBOSE_INIT_ARM
 	printf("bootstrap done.\n");
@@ -1101,17 +958,8 @@ initarm(void *arg)
 #endif
 	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
 
-#ifdef VERBOSE_INIT_ARM
-	printf("\n");
-#endif
-
 #ifdef __HAVE_MEMORY_DISK__
 	md_root_setconf(memory_disk, sizeof memory_disk);
-#endif
-
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-	/* Firmware doesn't load symbols. */
-	ddb_init(0, NULL, NULL);
 #endif
 
 #ifdef KGDB
@@ -1123,6 +971,10 @@ initarm(void *arg)
 
 #ifdef DDB
 	db_machine_init();
+
+	/* Firmware doesn't load symbols. */
+	ddb_init(0, NULL, NULL);
+
 	if (boothowto & RB_KDB)
 		Debugger();
 #endif
@@ -1131,107 +983,87 @@ initarm(void *arg)
 	return (kernelstack.pv_va + USPACE_SVC_STACK_TOP);
 }
 
-void *
-lookup_bootinfo(int type)
+void
+process_kernel_args(char *args)
 {
-	struct btinfo_common *help;
-	int n;
+	char *cp = args;
 
-	if (bootinfo == NULL)
-		return (NULL);
-
-	n = bootinfo->nentries;
-	help = (struct btinfo_common *)(bootinfo->info);
-	while (n--) {
-		if (help->type == type)
-			return (help);
-		help = (struct btinfo_common *)((char *)help + help->len);
+	if (cp == NULL || *(u_int *)cp != BOOTARGS_MAGIC) {
+		boothowto = RB_AUTOBOOT;
+		return;
 	}
-	return (NULL);
-}
 
-#ifdef KLOADER
-static int
-parseboot(char *arg, char **filename, int *howto)
-{
-	char *opts = NULL;
+	/* Eat the cookie */
+	*(u_int *)cp = 0;
+	cp += sizeof(u_int);
 
-	*filename = NULL;
-	*howto = 0;
+	boothowto = 0;
 
-	/* if there were no arguments */
-	if (arg == NULL || *arg == '\0')
-		return 1;
+	/* Make a local copy of the bootargs */
+	strncpy(bootargs, cp, MAX_BOOT_STRING - sizeof(u_int));
 
-	/* format is... */
-	/* [[xxNx:]filename] [-adqsv] */
+	cp = bootargs;
+	boot_file = bootargs;
 
-	/* check for just args */
-	if (arg[0] == '-') {
-		opts = arg;
-	} else {
-		/* there's a file name */
-		*filename = arg;
+	for (;;) {
+		/* Skip white-space */
+		while (*cp == ' ')
+			++cp;
 
-		opts = gettrailer(arg);
-		if (opts == NULL || *opts == '\0') {
-			opts = NULL;
-		} else if (*opts != '-') {
-			printf("invalid arguments\n");
-			return 0;
+		if (*cp == '\0')
+			break;
+
+		if (*cp != '-') {
+			/* kernel image filename */
+			if (boot_file == NULL)
+				boot_file = cp;
+
+			/* Skip the kernel image filename */
+			while (*cp != ' ' && *cp != '\0')
+				++cp;
+			if (*cp == '\0')
+				break;
+
+			*cp++ = '\0';
+			continue;
 		}
-	}
 
-	/* at this point, we have dealt with filenames. */
+		/* options */
+		if (*++cp != '\0') {
+			int fl = 0;
 
-	/* now, deal with options */
-	if (opts) {
-		if (parseopts(opts, howto) == 0) {
-			return 0;
+			switch (*cp) {
+			case 'a':
+				fl |= RB_ASKNAME;
+				break;
+			case 'c':
+				fl |= RB_USERCONF;
+				break;
+			case 'd':
+				fl |= RB_KDB;
+				break;
+			case 's':
+				fl |= RB_SINGLE;
+				break;
+			/* XXX undocumented console switching flags */
+			case '0':
+				console = "ffuart";
+				break;
+			case '1':
+				console = "btuart";
+				break;
+			case '2':
+				console = "stuart";
+				break;
+			default:
+				printf("unknown option `%c'\n", *cp);
+				break;
+			}
+			boothowto |= fl;
 		}
+		++cp;
 	}
-	return 1;
 }
-
-static char *
-gettrailer(char *arg)
-{
-	static char nullstr[] = "";
-	char *options;
-
-	if ((options = strchr(arg, ' ')) == NULL)
-		return nullstr;
-	else
-		*options++ = '\0';
-
-	/* trim leading blanks */
-	while (*options && *options == ' ')
-		options++;
-
-	return options;
-}
-
-static int
-parseopts(const char *opts, int *howto)
-{
-	int r, tmpopt = *howto;
-
-	opts++; 	/* skip - */
-	while (*opts && *opts != ' ') {
-		r = 0;
-		BOOT_FLAG(*opts, r);
-		if (r == 0) {
-			printf("-%c: unknown flag\n", *opts);
-			return 0;
-		}
-		tmpopt |= r;
-		opts++;
-	}
-
-	*howto = tmpopt;
-	return 1;
-}
-#endif
 
 /*
  * Console
@@ -1242,7 +1074,6 @@ parseopts(const char *opts, int *howto)
 #endif
 
 #include "lcd.h"
-#include "w100lcd.h"
 #include "wsdisplay.h"
 
 #ifndef CONSPEED
@@ -1301,16 +1132,11 @@ consinit(void)
 	} else
 #endif
 	if (strcmp(console, "glass") == 0) {
-#if ((NLCD > 0) || (NW100LCD > 0)) && (NWSDISPLAY > 0)
+#if (NLCD > 0) && (NWSDISPLAY > 0)
+		extern void lcd_cnattach(void);
+
 		glass_console = 1;
-#if NLCD > 0
-		if (ZAURUS_ISC1000 || ZAURUS_ISC3000)
-			lcd_cnattach();
-#endif
-#if NW100LCD > 0
-		if (ZAURUS_ISC860)
-			w100lcd_cnattach();
-#endif
+		lcd_cnattach();
 #endif
 	}
 

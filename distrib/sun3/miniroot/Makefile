@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.44 2010/02/11 09:06:51 roy Exp $
+#	$NetBSD: Makefile,v 1.38 2008/10/25 22:27:34 apb Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -25,13 +25,12 @@ PARSELISTENV=	KERNEL3=${KERNEL3} KERNEL3X=${KERNEL3X}
 MAKEDEVTARGETS=	std md0 cd0 st0 st1 sd0 sd1 sd2 xd0 xy0 fd0
 IMAGEDEPENDS=	${CRUNCHBIN} \
 		${KERNEL3} ${KERNEL3X} \
-		fstab install.md profile \
+		fstab install.md profile termcap \
 		${DESTDIR}/dev/MAKEDEV ${DESTDIR}/dev/MAKEDEV.local \
-		${DESTDIR}/etc/group \
+		${DESTDIR}/etc/disktab ${DESTDIR}/etc/group \
 		${DESTDIR}/etc/master.passwd ${DESTDIR}/etc/netconfig \
-		${DESTDIR}/etc/passwd \
-		${DISTRIBDIR}/common/protocols \
-		${DESTDIR}/etc/pwd.db ${DISTRIBDIR}/common/services \
+		${DESTDIR}/etc/passwd ${DESTDIR}/etc/protocols \
+		${DESTDIR}/etc/pwd.db ${DESTDIR}/etc/services \
 		${DESTDIR}/etc/spwd.db \
 		${DESTDIR}/usr/mdec/bootxx \
 		${DESTDIR}/usr/mdec/netboot ${DESTDIR}/usr/mdec/tapeboot \

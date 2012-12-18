@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.10 2011/10/01 15:59:28 chs Exp $	*/
+/*	$NetBSD: cpu.h,v 1.6 2008/04/28 20:23:25 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -78,17 +78,16 @@
 #include <sys/cctr.h>
 #include <machine/frame.h>
 #include <machine/ia64_cpu.h>
-#include <sys/device_if.h>
+
 
 struct cpu_info {
-
+	struct device *ci_dev;		/* pointer to our device */
+	struct cpu_info *ci_self;	/* self-pointer */
 	/*
 	 * Public members.
 	 */
-
-	struct cpu_data ci_data;	/* MI per-cpu data */
-	device_t ci_dev;		/* pointer to our device */
 	struct lwp *ci_curlwp;		/* current owner of the processor */
+	struct cpu_data ci_data;	/* MI per-cpu data */
 	struct cctr_state ci_cc;	/* cycle counter state */
 	struct cpu_info *ci_next;	/* next cpu_info structure */
 
@@ -100,26 +99,19 @@ struct cpu_info {
 	 * Private members.
 	 */
 	cpuid_t ci_cpuid;		/* our CPU ID */
-	uint32_t ci_acpiid;		/* our ACPI/MADT ID */
-	uint32_t ci_initapicid;		/* our intitial APIC ID */
 	struct pmap *ci_pmap;		/* current pmap */
 	struct lwp *ci_fpcurlwp;	/* current owner of the FPU */
 	paddr_t ci_curpcb;		/* PA of current HW PCB */
 	struct pcb *ci_idle_pcb;	/* our idle PCB */
+	struct cpu_softc *ci_softc;	/* pointer to our device */
 	u_long ci_want_resched;		/* preempt current process */
 	u_long ci_intrdepth;		/* interrupt trap depth */
 	struct trapframe *ci_db_regs;	/* registers for debuggers */
-	uint64_t ci_clock;		/* clock counter */
-	uint64_t ci_clockadj;		/* clock adjust */
 };
 
 
 extern struct cpu_info cpu_info_primary;
-extern struct cpu_info *cpu_info_list;
 
-#define	CPU_INFO_ITERATOR		int
-#define	CPU_INFO_FOREACH(cii, ci)	cii = 0, ci = cpu_info_list; \
-					ci != NULL; ci = ci->ci_next
 #ifdef MULTIPROCESSOR
 /*
  * XXX: TODO use percpu infrastructure that yamt proposed or use KR? for
@@ -128,7 +120,6 @@ extern struct cpu_info *cpu_info_list;
 #else
 #define	curcpu() (&cpu_info_primary)
 #endif /* MULTIPROCESSOR */
-#define curlwp	(curcpu()->ci_curlwp)
 
 #define cpu_number() 0              /*XXX: FIXME */
 
@@ -140,9 +131,9 @@ struct clockframe {
 	struct trapframe cf_tf;
 };
 
-#define	CLKF_PC(cf)		(TRAPF_PC(&(cf)->cf_tf))
-#define	CLKF_CPL(cf)		(TRAPF_CPL(&(cf)->cf_tf))
-#define	CLKF_USERMODE(cf)	(TRAPF_USERMODE(&(cf)->cf_tf))
+#define	CLKF_PC(cf)		((cf)->cf_tf.tf_special.iip)
+#define	CLKF_CPL(cf)		((cf)->cf_tf.tf_special.psr & IA64_PSR_CPL)
+#define	CLKF_USERMODE(cf)	(CLKF_CPL(cf) != IA64_PSR_CPL_KERN)
 #define	CLKF_INTR(frame)	(curcpu()->ci_intrdepth)
 
 #define	TRAPF_PC(tf)		((tf)->tf_special.iip)
@@ -177,10 +168,13 @@ int cpu_maxproc(void); /*XXX: Fill in machdep.c */
 
 static inline void cpu_idle(void);
 static inline
-void cpu_idle(void)
+void cpu_idle()
 {
 	asm ("hint @pause" ::: "memory");
 }
+
+/* XXX: revisit later */
+#define __NO_CPU_LWP_FREE
 
 #endif /* _KERNEL_ */
 #endif /* _IA64_CPU_H */

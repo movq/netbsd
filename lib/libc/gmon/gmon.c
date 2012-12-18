@@ -1,4 +1,4 @@
-/*	$NetBSD: gmon.c,v 1.34 2012/03/13 21:13:37 christos Exp $	*/
+/*	$NetBSD: gmon.c,v 1.29 2006/10/15 16:14:46 christos Exp $	*/
 
 /*
  * Copyright (c) 2003, 2004 Wasabi Systems, Inc.
@@ -69,7 +69,7 @@
 #if 0
 static char sccsid[] = "@(#)gmon.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: gmon.c,v 1.34 2012/03/13 21:13:37 christos Exp $");
+__RCSID("$NetBSD: gmon.c,v 1.29 2006/10/15 16:14:46 christos Exp $");
 #endif
 #endif
 
@@ -104,21 +104,24 @@ static u_int	s_scale;
 /* see profil(2) where this is describe (incorrectly) */
 #define		SCALE_1_TO_1	0x10000L
 
-void	moncontrol(int);
-void	monstartup(u_long, u_long);
-void	_mcleanup(void);
-static int hertz(void);
+#define ERR(s) write(STDERR_FILENO, s, sizeof(s))
+
+void	moncontrol __P((int));
+void	monstartup __P((u_long, u_long));
+void	_mcleanup __P((void));
+static int hertz __P((void));
 
 #ifdef _REENTRANT
 static void _m_gmon_destructor(void *);
-struct gmonparam *_m_gmon_alloc(void)
-    __attribute__((__no_instrument_function__));
+struct gmonparam *_m_gmon_alloc(void)  __attribute__((__no_instrument_function__));
 static void _m_gmon_merge(void);
 static void _m_gmon_merge_two(struct gmonparam *, struct gmonparam *);
 #endif
 
 void
-monstartup(u_long lowpc, u_long highpc)
+monstartup(lowpc, highpc)
+	u_long lowpc;
+	u_long highpc;
 {
 	u_long o;
 	char *cp;
@@ -143,11 +146,11 @@ monstartup(u_long lowpc, u_long highpc)
 
 	cp = sbrk((intptr_t)(p->kcountsize + p->fromssize + p->tossize));
 	if (cp == (char *)-1) {
-		warnx("%s: out of memory", __func__);
+		ERR("monstartup: out of memory\n");
 		return;
 	}
 #ifdef notdef
-	(void)memset(cp, 0, p->kcountsize + p->fromssize + p->tossize);
+	memset(cp, 0, p->kcountsize + p->fromssize + p->tossize);
 #endif
 	p->tos = (struct tostruct *)(void *)cp;
 	cp += (size_t)p->tossize;
@@ -228,7 +231,7 @@ _m_gmon_alloc(void)
 		cp = mmap(NULL,
 		    (size_t)(sizeof (struct gmonparam) + 
 			_gmonparam.fromssize + _gmonparam.tossize),
-		    PROT_READ|PROT_WRITE, MAP_ANON|MAP_PRIVATE, -1, (off_t)0);
+		    PROT_READ|PROT_WRITE, MAP_ANON|MAP_PRIVATE, -1, 0LL);
 		p = (void *)cp;
 		*p = _gmonparam;
 		p->kcount = NULL;
@@ -252,11 +255,11 @@ _m_gmon_merge_two(struct gmonparam *p, struct gmonparam *q)
 	u_long fromindex;
 	u_short *frompcindex, qtoindex, toindex;
 	u_long selfpc;
-	u_long endfrom;
+	int endfrom;
 	long count;
 	struct tostruct *top;
 	
-	endfrom = (q->fromssize / sizeof(*q->froms));
+	endfrom = (int)(q->fromssize / sizeof(*q->froms));
 	for (fromindex = 0; fromindex < endfrom; fromindex++) {
 		if (q->froms[fromindex] == 0)
 			continue;
@@ -347,12 +350,10 @@ _m_gmon_merge(void)
 
 	mutex_lock(&_gmonlock);
 
-	for (q = _gmonfree; q != NULL;
-	    q = (struct gmonparam *)(void *)q->kcount)
+	for (q = _gmonfree; q != NULL; q = (struct gmonparam *)(void *)q->kcount)
 		_m_gmon_merge_two(&_gmonparam, q);
 
-	for (q = _gmoninuse; q != NULL;
-	    q = (struct gmonparam *)(void *)q->kcount) {
+	for (q = _gmoninuse; q != NULL; q = (struct gmonparam *)(void *)q->kcount) {
 		q->state = GMON_PROF_OFF;
 		_m_gmon_merge_two(&_gmonparam, q);
 	}
@@ -362,7 +363,7 @@ _m_gmon_merge(void)
 #endif
 
 void
-_mcleanup(void)
+_mcleanup()
 {
 	int fd;
 	int fromindex;
@@ -389,13 +390,13 @@ _mcleanup(void)
 	 * our real one.
 	 */
 	if (issetugid() && (geteuid() != getuid() || getegid() != getgid())) {
-		warnx("%s: Profiling of set{u,g}id binaries is not"
-		    " allowed", __func__);
+		warnx("mcount: Profiling of set{u,g}id binaries is not"
+		    " allowed");
 		return;
 	}
 
 	if (p->state == GMON_PROF_ERROR)
-		warnx("%s: tos overflow", __func__);
+		ERR("_mcleanup: tos overflow\n");
 
 	size = sizeof(clockinfo);
 	mib[0] = CTL_KERN;
@@ -421,9 +422,8 @@ _mcleanup(void)
 			return;
 
 		if (snprintf(buf, sizeof buf, "%s/%d.%s",
-		    profdir, getpid(), getprogname()) >= (int)(sizeof buf)) {
-			warnx("%s: internal buffer overflow, PROFDIR too long",
-			    __func__);
+			    profdir, getpid(), getprogname()) >= sizeof buf) {
+			warnx("_mcleanup: internal buffer overflow, PROFDIR too long");
 			return;
 		}
 		
@@ -434,14 +434,13 @@ _mcleanup(void)
 
 	fd = open(proffile , O_CREAT|O_TRUNC|O_WRONLY, 0666);
 	if (fd < 0) {
-		warn("%s: Cannot open `%s'", __func__, proffile);
+		warn("mcount: Cannot open `%s'", proffile);
 		return;
 	}
 #ifdef DEBUG
 	logfd = open("gmon.log", O_CREAT|O_TRUNC|O_WRONLY, 0664);
 	if (logfd < 0) {
-		warn("%s: Cannot open `%s'", __func__, "gmon.log");
-		(void)close(fd);
+		warn("mcount: Cannot open `gmon.log'");
 		return;
 	}
 	len = snprintf(buf2, sizeof buf2, "[mcleanup1] kcount %p ssiz %lu\n",
@@ -478,13 +477,10 @@ _mcleanup(void)
 			rawarc.raw_frompc = frompc;
 			rawarc.raw_selfpc = p->tos[toindex].selfpc;
 			rawarc.raw_count = p->tos[toindex].count;
-			(void)write(fd, &rawarc, sizeof rawarc);
+			write(fd, &rawarc, sizeof rawarc);
 		}
 	}
-	(void)close(fd);
-#ifdef DEBUG
-	(void)close(logfd);
-#endif
+	close(fd);
 }
 
 /*
@@ -493,7 +489,8 @@ _mcleanup(void)
  *	all the data structures are ready.
  */
 void
-moncontrol(int mode)
+moncontrol(mode)
+	int mode;
 {
 	struct gmonparam *p = &_gmonparam;
 
@@ -514,31 +511,17 @@ moncontrol(int mode)
  * if something goes wrong, we return 0, an impossible hertz.
  */
 static int
-hertz(void)
+hertz()
 {
-        struct itimerspec tim;
-	timer_t t;
-	int rv = 0;
-
-        tim.it_interval.tv_sec = 0;
-        tim.it_interval.tv_nsec = 1;
-        tim.it_value.tv_sec = 0;
-        tim.it_value.tv_nsec = 0;
-
-	if (timer_create(CLOCK_REALTIME, NULL, &t) == -1)
-		return 0;
-
-	if (timer_settime(t, 0, &tim, NULL) == -1)
-		goto out;
-
-	if (timer_gettime(t, &tim) == -1)
-		goto out;
-
-        if (tim.it_interval.tv_nsec < 2)
-		goto out;
-
-	rv = (int)(1000000000LL / tim.it_interval.tv_nsec);
-out:
-	(void)timer_delete(t);
-	return rv;
+	struct itimerval tim;
+	
+	tim.it_interval.tv_sec = 0;
+	tim.it_interval.tv_usec = 1;
+	tim.it_value.tv_sec = 0;
+	tim.it_value.tv_usec = 0;
+	setitimer(ITIMER_REAL, &tim, 0);
+	setitimer(ITIMER_REAL, 0, &tim);
+	if (tim.it_interval.tv_usec < 2)
+		return(0);
+	return (int)(1000000 / tim.it_interval.tv_usec);
 }

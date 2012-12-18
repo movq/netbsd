@@ -1,21 +1,21 @@
-/* $NetBSD: tc_3000_500.h,v 1.6 2012/02/06 02:14:16 matt Exp $ */
+/* $NetBSD: tc_3000_500.h,v 1.4 1998/10/22 01:03:09 briggs Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -104,4 +104,4 @@
 
 #define TC_3000_500_NCOOKIES	9
 
-extern int	tc_3000_500_fb_cnattach(uint64_t);
+extern int	tc_3000_500_fb_cnattach __P((u_int64_t));

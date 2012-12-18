@@ -1,4 +1,4 @@
-/*	$NetBSD: ixdp425_start.S,v 1.7 2011/01/31 06:28:04 matt Exp $ */
+/*	$NetBSD: ixdp425_start.S,v 1.5 2005/12/11 12:17:09 christos Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -13,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,11 +34,9 @@
  */
 #include <machine/asm.h>
 #include <arm/armreg.h>
-#include "assym.h"
+#include <arm/arm32/pte.h>
 
 #include <arm/xscale/ixp425reg.h>
-
-RCSID("$NetBSD: ixdp425_start.S,v 1.7 2011/01/31 06:28:04 matt Exp $")
 
 	.section .start,"ax",%progbits
 
@@ -82,7 +86,7 @@ Lunmapped:
 
 	mov	r1, #(L1_TABLE_SIZE / 4)	/* 4096 entry */
 	mov	r2, #(L1_S_SIZE)		/* 1MB / section */
-	mov	r3, #(L1_S_AP_KRW)		/* kernel read/write */
+	mov	r3, #(L1_S_AP(AP_KRW))		/* kernel read/write */
 	orr	r3, r3, #(L1_TYPE_S)		/* L1 entry is section */
 1:
 	str	r3, [r0], #0x04
@@ -96,7 +100,7 @@ Lunmapped:
         adr     r0, Ltable                      /* r0 = &l1table */
         ldr     r0, [r0]
 
-        mov     r3, #(L1_S_AP_KRW)
+        mov     r3, #(L1_S_AP(AP_KRW))
         orr     r3, r3, #(L1_TYPE_S)
         orr     r3, r3, #0x10000000
         add     r0, r0, #(0xc00 * 4)            /* offset to 0xc00xxxxx */
@@ -116,7 +120,7 @@ Lunmapped:
 	add	r0, r0, #(0xf00 * 4)		/* offset to 0xf0000000 */
 	mov	r3, #0xc8000000
 	add	r3, r3, #0x00100000
-	orr	r3, r3, #(L1_S_AP_KRW)
+	orr	r3, r3, #(L1_S_AP(AP_KRW))
 	orr	r3, r3, #(L1_TYPE_S)
 	str	r3, [r0]
 
@@ -130,7 +134,7 @@ Lunmapped:
 	add	r0, r0, #(0x002 * 4)
 	mov	r3, #0xcc000000
 	add	r3, r3, #0x00100000
-	orr	r3, r3, #(L1_S_AP_KRW)
+	orr	r3, r3, #(L1_S_AP(AP_KRW))
 	orr	r3, r3, #(L1_TYPE_S)
 	str	r3, [r0]
 

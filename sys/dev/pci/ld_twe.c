@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_twe.c,v 1.36 2012/02/02 19:43:06 tls Exp $	*/
+/*	$NetBSD: ld_twe.c,v 1.32 2008/09/09 12:45:40 tron Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -34,7 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_twe.c,v 1.36 2012/02/02 19:43:06 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_twe.c,v 1.32 2008/09/09 12:45:40 tron Exp $");
+
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,9 +48,13 @@ __KERNEL_RCSID(0, "$NetBSD: ld_twe.c,v 1.36 2012/02/02 19:43:06 tls Exp $");
 #include <sys/dkio.h>
 #include <sys/disk.h>
 #include <sys/proc.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <sys/bus.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/ldvar.h>
 
@@ -215,7 +221,7 @@ ld_twe_dobio(struct ld_twe_softc *sc, void *data, int datasize, int blkno,
 	} else {
 		ccb->ccb_tx.tx_handler = ld_twe_handler;
 		ccb->ccb_tx.tx_context = bp;
-		ccb->ccb_tx.tx_dv = sc->sc_ld.sc_dv;
+		ccb->ccb_tx.tx_dv = (struct device *)sc;
 		twe_ccb_enqueue(twe, ccb);
 		rv = 0;
 	}
@@ -241,7 +247,7 @@ ld_twe_handler(struct twe_ccb *ccb, int error)
 
 	tx = &ccb->ccb_tx;
 	bp = tx->tx_context;
-	sc = device_private(tx->tx_dv);
+	sc = (struct ld_twe_softc *)tx->tx_dv;
 	twe = device_private(device_parent(sc->sc_ld.sc_dv));
 
 	twe_ccb_unmap(twe, ccb);
@@ -315,7 +321,7 @@ ld_twe_flush(struct ld_softc *ld, int flags)
 }
 
 static void
-ld_twe_adjqparam(device_t self, int openings)
+ld_twe_adjqparam(struct device *self, int openings)
 {
 	struct ld_twe_softc *sc = device_private(self);
 	struct ld_softc *ld = &sc->sc_ld;

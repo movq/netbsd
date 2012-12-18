@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.26 2011/03/06 14:54:47 tsutsui Exp $	*/
+/*	$NetBSD: intr.h,v 1.23 2008/06/22 17:33:41 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #ifndef _NEWS68K_INTR_H_
 #define	_NEWS68K_INTR_H_
 
-#include <sys/evcnt.h>
+#include <sys/device.h>
 #include <sys/queue.h>
 #include <machine/psl.h>
 #include <m68k/asm_single.h>
@@ -49,13 +49,13 @@
 
 extern int idepth;
 
-static inline bool
+static inline bool    
 cpu_intr_p(void)
 {
 
 	return idepth != 0;
-}
-
+}       
+        
 extern const uint16_t ipl2psl_table[NIPL];
 
 typedef int ipl_t;
@@ -77,7 +77,7 @@ splraiseipl(ipl_cookie_t icookie)
 	return _splraise(icookie._psl);
 }
 
-static inline void
+static __inline void
 splx(int sr)
 {
 

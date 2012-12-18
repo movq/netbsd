@@ -1,4 +1,4 @@
-/*	$NetBSD: rsh.c,v 1.33 2011/08/29 14:22:46 joerg Exp $	*/
+/*	$NetBSD: rsh.c,v 1.30 2008/07/21 14:19:25 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1990, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)rsh.c	8.4 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: rsh.c,v 1.33 2011/08/29 14:22:46 joerg Exp $");
+__RCSID("$NetBSD: rsh.c,v 1.30 2008/07/21 14:19:25 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -75,11 +75,12 @@ int	remerr;
 
 static int sigs[] = { SIGINT, SIGTERM, SIGQUIT };
 
-static char   *copyargs(char **);
-static void	sendsig(int);
-static int	checkfd(struct pollfd *, int);
-static void	talk(int, sigset_t *, pid_t, int);
-__dead static void	usage(void);
+char   *copyargs(char **);
+void	sendsig(int);
+int	checkfd(struct pollfd *, int);
+void	talk(int, sigset_t *, pid_t, int);
+void	usage(void);
+int	main(int, char **);
 #ifdef IN_RCMD
 int	 orcmd(char **, int, const char *,
     const char *, const char *, int *);
@@ -98,8 +99,7 @@ main(int argc, char **argv)
 #ifdef IN_RCMD
 	char	*locuser = 0, *loop;
 #endif /* IN_RCMD */
-	int argoff, asrsh, ch, dflag, nflag, one, rem;
-	size_t i;
+	int argoff, asrsh, ch, dflag, nflag, one, rem, i;
 	int family = AF_UNSPEC;
 	pid_t pid;
 	uid_t uid;
@@ -134,7 +134,7 @@ main(int argc, char **argv)
 	if ((loop = getenv("RCMD_LOOP")) && strcmp(loop, "YES") == 0)
 		warnx("rcmd appears to be looping!");
 
-	setenv("RCMD_LOOP", "YES", 1);
+	putenv("RCMD_LOOP=YES");
 
 #  define	OPTIONS	"468KLdel:np:u:w"
 
@@ -297,7 +297,7 @@ main(int argc, char **argv)
 	exit(0);
 }
 
-static int
+int
 checkfd(struct pollfd *fdp, int outfd)
 {
 	int nr, nw;
@@ -335,7 +335,7 @@ checkfd(struct pollfd *fdp, int outfd)
 	}
 }
 
-static void
+void
 talk(int nflag, sigset_t *oset, __pid_t pid, int rem)
 {
 	int nr, nw, nfds;
@@ -425,7 +425,7 @@ done:
 	while (nfds);
 }
 
-static void
+void
 sendsig(int sig)
 {
 	char signo;
@@ -435,7 +435,7 @@ sendsig(int sig)
 }
 
 
-static char *
+char *
 copyargs(char **argv)
 {
 	int cc;
@@ -457,7 +457,7 @@ copyargs(char **argv)
 	return (args);
 }
 
-static void
+void
 usage(void)
 {
 

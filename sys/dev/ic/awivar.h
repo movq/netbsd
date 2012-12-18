@@ -1,4 +1,4 @@
-/*	$NetBSD: awivar.h,v 1.27 2012/10/27 17:18:19 chs Exp $	*/
+/*	$NetBSD: awivar.h,v 1.23 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 The NetBSD Foundation, Inc.
@@ -66,7 +66,12 @@ struct awi_chanset {
 };
 
 struct awi_softc {
+#ifdef __NetBSD__
+	struct device		sc_dev;
+#endif
+#ifdef __FreeBSD__
 	device_t		sc_dev;
+#endif
 	struct am79c930_softc 	sc_chip;
 	struct ethercom		sc_ec;
 	struct ieee80211com	sc_ic;
@@ -90,7 +95,8 @@ struct awi_softc {
 				sc_busy:1,
 				sc_cansleep:1,
 				sc_enab_intr:1,
-				sc_adhoc_ap:1;
+				sc_adhoc_ap:1,
+				sc_invalid:1;
 	enum ieee80211_state	sc_nstate;
 	enum awi_sub_state	sc_substate;
 	int			sc_sleep_cnt;
@@ -139,8 +145,10 @@ struct awi_softc {
 
 int	awi_attach(struct awi_softc *);
 int	awi_detach(struct awi_softc *);
-int	awi_activate(device_t, enum devact);
+#ifdef __NetBSD__
+int	awi_activate(struct device *, enum devact);
 void	awi_power(int, void *);
+#endif
 void	awi_shutdown(void *);
 int	awi_intr(void *);
 

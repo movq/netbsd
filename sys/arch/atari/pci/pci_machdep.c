@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.52 2011/07/01 20:34:06 dyoung Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.43 2005/12/11 12:16:59 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.  All rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.52 2011/07/01 20:34:06 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.43 2005/12/11 12:16:59 christos Exp $");
 
 #include "opt_mbtype.h"
 
@@ -45,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.52 2011/07/01 20:34:06 dyoung Exp 
 #include <sys/malloc.h>
 
 #define _ATARI_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -101,8 +101,8 @@ typedef LIST_HEAD(pci_memreg_head, pci_memreg) PCI_MEMREG;
 /*
  * Entry points for PCI DMA.  Use only the 'standard' functions.
  */
-int	_bus_dmamap_create(bus_dma_tag_t, bus_size_t, int, bus_size_t,
-	    bus_size_t, int, bus_dmamap_t *);
+int	_bus_dmamap_create __P((bus_dma_tag_t, bus_size_t, int, bus_size_t,
+	    bus_size_t, int, bus_dmamap_t *));
 struct atari_bus_dma_tag pci_bus_dma_tag = {
 	0,
 #if defined(_ATARIHW_)
@@ -120,16 +120,16 @@ struct atari_bus_dma_tag pci_bus_dma_tag = {
 	_bus_dmamap_sync,
 };
 
-int	ataripcibusprint(void *, const char *);
-int	pcibusmatch(device_t, cfdata_t, void *);
-void	pcibusattach(device_t, device_t, void *);
+int	ataripcibusprint __P((void *auxp, const char *));
+int	pcibusmatch __P((struct device *, struct cfdata *, void *));
+void	pcibusattach __P((struct device *, struct device *, void *));
 
-static void enable_pci_devices(void);
-static void insert_into_list(PCI_MEMREG *head, struct pci_memreg *elem);
-static int overlap_pci_areas(struct pci_memreg *p,
-	struct pci_memreg *self, u_int addr, u_int size, u_int what);
+static void enable_pci_devices __P((void));
+static void insert_into_list __P((PCI_MEMREG *head, struct pci_memreg *elem));
+static int overlap_pci_areas __P((struct pci_memreg *p,
+	struct pci_memreg *self, u_int addr, u_int size, u_int what));
 
-CFATTACH_DECL_NEW(pcib, 0,
+CFATTACH_DECL(pcib, sizeof(struct device),
     pcibusmatch, pcibusattach, NULL, NULL);
 
 /*
@@ -139,37 +139,42 @@ CFATTACH_DECL_NEW(pcib, 0,
 static struct atari_bus_space	bs_storage[2];	/* 1 iot, 1 memt */
 
 int
-pcibusmatch(device_t parent, cfdata_t cf, void *aux)
+pcibusmatch(pdp, cfp, auxp)
+struct device	*pdp;
+struct cfdata	*cfp;
+void		*auxp;
 {
 	static int	nmatched = 0;
 
-	if (strcmp((char *)aux, "pcib"))
-		return 0;	/* Wrong number... */
+	if (strcmp((char *)auxp, "pcib"))
+		return (0);	/* Wrong number... */
 
-	if (atari_realconfig == 0)
-		return 1;
+	if(atari_realconfig == 0)
+		return (1);
 
 	if (machineid & (ATARI_HADES|ATARI_MILAN)) {
 		/*
 		 * Both Hades and Milan have only one pci bus
 		 */
 		if (nmatched)
-			return 0;
+			return (0);
 		nmatched++;
-		return 1;
+		return (1);
 	}
-	return 0;
+	return (0);
 }
 
 void
-pcibusattach(device_t parent, device_t self, void *aux)
+pcibusattach(pdp, dp, auxp)
+struct device	*pdp, *dp;
+void		*auxp;
 {
 	struct pcibus_attach_args	pba;
 
 	pba.pba_pc      = NULL;
 	pba.pba_bus     = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags	= PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
+	pba.pba_flags	= PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
 	pba.pba_dmat	= &pci_bus_dma_tag;
 	pba.pba_iot     = leb_alloc_bus_space_tag(&bs_storage[0]);
 	pba.pba_memt    = leb_alloc_bus_space_tag(&bs_storage[1]);
@@ -180,7 +185,7 @@ pcibusattach(device_t parent, device_t self, void *aux)
 	pba.pba_iot->base  = PCI_IO_PHYS;
 	pba.pba_memt->base = PCI_MEM_PHYS;
 
-	if (self == NULL) {
+	if (dp == NULL) {
 		/*
 		 * Scan the bus for a VGA-card that we support. If we
 		 * find one, try to initialize it to a 'standard' text
@@ -198,20 +203,23 @@ pcibusattach(device_t parent, device_t self, void *aux)
 
 	printf("\n");
 
-	config_found_ia(self, "pcibus", &pba, ataripcibusprint);
+	config_found_ia(dp, "pcibus", &pba, ataripcibusprint);
 }
 
 int
-ataripcibusprint(void *aux, const char *name)
+ataripcibusprint(auxp, name)
+void		*auxp;
+const char	*name;
 {
-
-	if (name == NULL)
-		return UNCONF;
-	return QUIET;
+	if(name == NULL)
+		return(UNCONF);
+	return(QUIET);
 }
 
 void
-pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
+pci_attach_hook(parent, self, pba)
+	struct device *parent, *self;
+	struct pcibus_attach_args *pba;
 {
 }
 
@@ -221,7 +229,7 @@ pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
  * later at pcibusattach.
  */
 void
-init_pci_bus(void)
+init_pci_bus()
 {
 	pci_chipset_tag_t	pc = NULL; /* XXX */
 	pcitag_t		tag;
@@ -252,7 +260,9 @@ init_pci_bus(void)
  * pci_memreg) are sorted.
  */
 static void
-insert_into_list(PCI_MEMREG *head, struct pci_memreg *elem)
+insert_into_list(head, elem)
+    PCI_MEMREG *head;
+    struct pci_memreg *elem;
 {
     struct pci_memreg *p, *q;
 
@@ -273,7 +283,9 @@ insert_into_list(PCI_MEMREG *head, struct pci_memreg *elem)
  * pci area.
  */
 static int
-overlap_pci_areas(struct pci_memreg *p, struct pci_memreg *self, u_int addr, u_int size, u_int what)
+overlap_pci_areas(p, self, addr, size, what)
+    struct pci_memreg *p, *self;
+    u_int addr, size, what;
 {
     struct pci_memreg *q;
 
@@ -313,7 +325,7 @@ overlap_pci_areas(struct pci_memreg *p, struct pci_memreg *self, u_int addr, u_i
  * in such a way that they are placed as closed as possible together.
  */
 static void
-enable_pci_devices(void)
+enable_pci_devices()
 {
     PCI_MEMREG memlist;
     PCI_MEMREG iolist;
@@ -597,14 +609,18 @@ enable_pci_devices(void)
 }
 
 pcitag_t
-pci_make_tag(pci_chipset_tag_t pc, int bus, int device, int function)
+pci_make_tag(pc, bus, device, function)
+	pci_chipset_tag_t pc;
+	int bus, device, function;
 {
-
-	return (bus << 16) | (device << 11) | (function << 8);
+	return ((bus << 16) | (device << 11) | (function << 8));
 }
 
 void
-pci_decompose_tag(pci_chipset_tag_t pc, pcitag_t tag, int *bp, int *dp, int *fp)
+pci_decompose_tag(pc, tag, bp, dp, fp)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	int *bp, *dp, *fp;
 {
 
 	if (bp != NULL)
@@ -616,7 +632,9 @@ pci_decompose_tag(pci_chipset_tag_t pc, pcitag_t tag, int *bp, int *dp, int *fp)
 }
 
 int
-pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+pci_intr_map(pa, ihp)
+	struct pci_attach_args *pa;
+	pci_intr_handle_t *ihp;
 {
 	int line = pa->pa_intrline;
 
@@ -673,7 +691,9 @@ bad:
 }
 
 const char *
-pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih)
+pci_intr_string(pc, ih)
+	pci_chipset_tag_t pc;
+	pci_intr_handle_t ih;
 {
 	static char irqstr[8];		/* 4 + 2 + NULL + sanity */
 
@@ -681,12 +701,14 @@ pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 		panic("pci_intr_string: bogus handle 0x%x", ih);
 
 	sprintf(irqstr, "irq %d", ih);
-	return irqstr;
+	return (irqstr);
 	
 }
 
 const struct evcnt *
-pci_intr_evcnt(pci_chipset_tag_t pc, pci_intr_handle_t ih)
+pci_intr_evcnt(pc, ih)
+	pci_chipset_tag_t pc;
+	pci_intr_handle_t ih;
 {
 
 	/* XXX for now, no evcnt parent reported */

@@ -1,21 +1,21 @@
-/* $NetBSD: shared_intr.c,v 1.21 2012/02/06 02:14:12 matt Exp $ */
+/* $NetBSD: shared_intr.c,v 1.19 2008/03/10 14:01:35 ad Exp $ */
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Authors: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: shared_intr.c,v 1.21 2012/02/06 02:14:12 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: shared_intr.c,v 1.19 2008/03/10 14:01:35 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -44,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: shared_intr.c,v 1.21 2012/02/06 02:14:12 matt Exp $"
 #include <sys/atomic.h>
 #include <sys/intr.h>
 
-static const char *intr_typename(int);
+static const char *intr_typename __P((int));
 
 static const char *
 intr_typename(int type)

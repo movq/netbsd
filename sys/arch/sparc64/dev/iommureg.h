@@ -1,4 +1,4 @@
-/*	$NetBSD: iommureg.h,v 1.19 2011/03/20 20:42:06 mrg Exp $	*/
+/*	$NetBSD: iommureg.h,v 1.14 2006/02/13 21:47:12 cdi Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -48,26 +48,11 @@
  * controllers.
  */
 
-/*
- * iommu registers - keep iommureg2 aligned with iommureg, so we can always
- * use offsetof on iommureg2, regardless of the controller.
- */
+/* iommmu registers */
 struct iommureg {
-	volatile uint64_t	iommu_cr;	/* IOMMU control register */
-	volatile uint64_t	iommu_tsb;	/* IOMMU TSB base register */
-	volatile uint64_t	iommu_flush;	/* IOMMU flush register */
-};
-
-/* iommu registers for schizo and newer controllers.  */
-struct iommureg2 {
-	volatile uint64_t	iommu_cr;	/* IOMMU control register */
-	volatile uint64_t	iommu_tsb;	/* IOMMU TSB base register */
-	volatile uint64_t	iommu_flush;	/* IOMMU flush register */
-	volatile u_int64_t	iommu_ctxflush;
-	volatile u_int64_t	iommu_reserved[28];
-	volatile u_int64_t	iommu_cache_flush;
-	volatile u_int64_t	iommu_cache_invalidate;
-	volatile u_int64_t	iommu_reserved2[30];
+	uint64_t	iommu_cr;	/* IOMMU control register */
+	uint64_t	iommu_tsb;	/* IOMMU TSB base register */
+	uint64_t	iommu_flush;	/* IOMMU flush register */
 };
 
 /* streaming buffer registers */
@@ -77,20 +62,8 @@ struct iommu_strbuf {
 	uint64_t	strbuf_flushsync;/* streaming buffer flush sync */
 };
 
-#define	IOMMUREG(x)	(offsetof(struct iommureg2, x))
+#define	IOMMUREG(x)	(offsetof(struct iommureg, x))
 #define	STRBUFREG(x)	(offsetof(struct iommu_strbuf, x))
-
-#define IOMMUREG_READ(is, reg)				\
-	bus_space_read_8((is)->is_bustag,		\
-		(is)->is_iommu,				\
-		IOMMUREG(reg))	
-
-#define IOMMUREG_WRITE(is, reg, v)			\
-	bus_space_write_8((is)->is_bustag,		\
-		(is)->is_iommu,				\
-		IOMMUREG(reg),				\
-		(v))
-
 /* streaming buffer control register */
 #define STRBUF_EN	0x000000000000000001LL
 #define STRBUF_D	0x000000000000000002LL
@@ -165,7 +138,6 @@ struct iommu_strbuf {
 #define INTMAP_TID	0x07c000000LL	/* UPA target ID mask */
 #define INTMAP_TID_SHIFT 26
 #define INTMAP_IGN	0x0000007c0LL	/* Interrupt group no (sbus only). */
-#define INTMAP_IGN_SHIFT 6
 #define INTMAP_INO	0x00000003fLL	/* Interrupt number */
 #define INTMAP_INR	(INTMAP_IGN|INTMAP_INO)
 #define INTMAP_SBUSSLOT	0x000000018LL	/* SBUS slot # */
@@ -180,7 +152,6 @@ struct iommu_strbuf {
 #define INTSLOT(x)	(((x)>>3)&0x7)
 #define	INTPRI(x)	((x)&0x7)
 #define	INTINO(x)	((x)&INTMAP_INO)
-#define INTIGN(x)       ((x)&INTMAP_IGN)
 
 #define	INTPCI_MAXOBINO	0x16		/* maximum OBIO INO value for PCI */
 #define	INTPCIOBINOX(x)	((x)&0x1f)	/* OBIO ino index (for PCI machines) */

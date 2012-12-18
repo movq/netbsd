@@ -1,4 +1,4 @@
-/*	$NetBSD: if_qt.c,v 1.18 2010/04/05 07:21:47 joerg Exp $	*/
+/*	$NetBSD: if_qt.c,v 1.14 2008/03/11 05:34:01 matt Exp $	*/
 /*
  * Copyright (c) 1992 Steven M. Schultz
  * All rights reserved.
@@ -80,9 +80,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_qt.c,v 1.18 2010/04/05 07:21:47 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_qt.c,v 1.14 2008/03/11 05:34:01 matt Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -109,8 +110,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_qt.c,v 1.18 2010/04/05 07:21:47 joerg Exp $");
 #include <netinet/ip.h>
 #endif
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 
 #include <sys/bus.h>
@@ -255,13 +258,12 @@ qtattach(device_t parent, device_t self, void *aux)
 	struct ifnet *ifp = &sc->is_if;
 	struct uba_attach_args *ua = aux;
 
-	sc->sc_dev = self;
-
 	uba_intr_establish(ua->ua_icookie, ua->ua_cvec, qtintr, sc,
 	    &sc->sc_intrcnt);
 	evcnt_attach_dynamic(&sc->sc_intrcnt, EVCNT_TYPE_INTR, ua->ua_evcnt,
 	    device_xname(sc->sc_dev), "intr");
 
+	sc->sc_dev = self;
 	sc->sc_uh = device_private(parent);
 	sc->sc_iot = ua->ua_iot;
 	sc->sc_ioh = ua->ua_ioh;
@@ -458,7 +460,10 @@ qtstart(struct ifnet *ifp)
 		if ((rp->tmd3 & TMD3_OWN) == 0)
 			panic("qtstart");
 
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 
 		len = if_ubaput(&sc->sc_ifuba, &sc->sc_ifw[sc->xnext], m);
 		if (len < MINPACKETSIZE)
@@ -530,7 +535,7 @@ qttint(struct qt_softc *sc)
 			{
 #ifdef QTDEBUG
 			char buf[100];
-			snprintb(buf, sizeof(buf), TMD2_BITS, rp->tmd2);
+			bitmask_snprintf(rp->tmd2, TMD2_BITS, buf, 100);
 			printf("%s: tmd2 %s\n", device_xname(sc->sc_dev), buf);
 #endif
 			sc->is_if.if_oerrors++;
@@ -571,9 +576,9 @@ qtrint(struct qt_softc *sc)
 			{
 #ifdef QTDEBUG
 			char buf[100];
-			snprintb(buf, sizeof(buf), RMD0_BITS, rp->rmd0);
+			bitmask_snprintf(rp->rmd0, RMD0_BITS, buf, 100);
 			printf("%s: rmd0 %s\n", device_xname(sc->sc_dev), buf);
-			snprintb(buf, sizeof(buf), RMD2_BITS, rp->rmd2);
+			bitmask_snprintf(rp->rmd2, RMD2_BITS, buf, 100);
 			printf("%s: rmd2 %s\n", device_xname(sc->sc_dev), buf);
 #endif
 			sc->is_if.if_ierrors++;
@@ -585,7 +590,10 @@ qtrint(struct qt_softc *sc)
 			sc->is_if.if_ierrors++;
 			goto rnext;
 		}
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 		(*ifp->if_input)(ifp, m);
 rnext:
 		--sc->nrcv;
@@ -619,7 +627,7 @@ void
 qtsrr(struct qt_softc *sc, int srrbits)
 {
 	char buf[100];
-	snprintb(buf, sizeof(buf), SRR_BITS, srrbits);
+	bitmask_snprintf(srrbits, SRR_BITS, buf, sizeof buf);
 	printf("%s: srr=%s\n", device_xname(sc->sc_dev), buf);
 }
 

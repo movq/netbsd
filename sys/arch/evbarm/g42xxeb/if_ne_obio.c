@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_obio.c,v 1.8 2012/10/27 17:17:47 chs Exp $ */
+/*	$NetBSD: if_ne_obio.c,v 1.6 2008/03/16 16:08:57 he Exp $ */
 
 /*
  * Copyright (c) 2002, 2003  Genetec corp.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_obio.c,v 1.8 2012/10/27 17:17:47 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_obio.c,v 1.6 2008/03/16 16:08:57 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ne_obio.c,v 1.8 2012/10/27 17:17:47 chs Exp $");
 #include <net/if_media.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -228,9 +228,9 @@ void
 debug_obio_ne(struct dp8390_softc *sc)
 {
 	struct obio_softc *osc =
-	    device_private(device_parent(sc->sc_dev));
+	    (struct obio_softc *)device_parent(&sc->sc_dev);
 	struct pxa2x0_softc *psc =
-	    device_private(device_parent(osc->sc_dev));
+	    (struct pxa2x0_softc *)device_parent(&osc->sc_dev);
 
 	printf( "ISR=%02x obio: pending=(%x,%x) mask=%x pending=%x mask=%x\n",
 	    bus_space_read_1(sc->sc_regt, sc->sc_regh,

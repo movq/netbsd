@@ -1,6 +1,7 @@
-/*	$NetBSD: yppush.c,v 1.24 2011/08/30 21:10:29 joerg Exp $	*/
+/*	$NetBSD: yppush.c,v 1.21 2008/02/29 03:00:47 lukem Exp $	*/
 
 /*
+ *
  * Copyright (c) 1997 Charles D. Cranor
  * All rights reserved.
  *
@@ -12,6 +13,8 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -27,7 +30,7 @@
 
 /*
  * yppush
- * author: Chuck Cranor <chuck@netbsd>
+ * author: Chuck Cranor <chuck@ccrc.wustl.edu>
  * date: 05-Nov-97
  *
  * notes: this is a full rewrite of Mats O Jansson <moj@stacken.kth.se>'s
@@ -89,10 +92,11 @@ int     verbo = 0;		/* verbose */
  * prototypes
  */
 
-static int	pushit(int, char *, int, char *, int, char *);
+int	main(int, char *[]);
+int	pushit(int, char *, int, char *, int, char *);
 void	push(char *, int, struct yppush_info *);
 void	_svc_run(void);
-__dead static void	usage(void);
+void	usage(void);
 
 
 /*
@@ -109,7 +113,7 @@ main(int argc, char *argv[])
 	const char *cp;
 	char   *master;
 	DBM    *ypdb;
-	datum   dat;
+	datum   datum;
 	CLIENT *ypserv;
 	struct timeval tv;
 	enum clnt_stat retval;
@@ -174,16 +178,16 @@ main(int argc, char *argv[])
 	if (ypdb == NULL)
 		err(1, "ypdb_open %s/%s/%s", YP_DB_PATH, ypi.ourdomain,
 		    ypi.map);
-	dat.dptr = YP_LAST_KEY;
-	dat.dsize = YP_LAST_LEN;
-	dat = ypdb_fetch(ypdb, dat);
-	if (dat.dptr == NULL)
+	datum.dptr = YP_LAST_KEY;
+	datum.dsize = YP_LAST_LEN;
+	datum = ypdb_fetch(ypdb, datum);
+	if (datum.dptr == NULL)
 		errx(1,
 		    "unable to fetch %s key: check database with 'makedbm -u'",
 		    YP_LAST_KEY);
 	ypi.order = 0;
-	cp = dat.dptr;
-	while (cp < dat.dptr + dat.dsize) {
+	cp = datum.dptr;
+	while (cp < datum.dptr + datum.dsize) {
 		if (!isdigit((unsigned char)*cp))
 			errx(1,
 		    "invalid order number: check database with 'makedbm -u'");
@@ -277,7 +281,7 @@ main(int argc, char *argv[])
 /*
  * usage: print usage and exit
  */
-static void
+void
 usage(void)
 {
 	fprintf(stderr, "usage: %s [-d domain] [-h host] [-v] map\n",
@@ -289,7 +293,7 @@ usage(void)
  * pushit: called from yp_all_host to push a specific host.
  * the key/value pairs are from the ypservers map.
  */
-static int
+int
 pushit(int instatus, char *inkey, int inkeylen, char *inval,
        int invallen, char *indata)
 {

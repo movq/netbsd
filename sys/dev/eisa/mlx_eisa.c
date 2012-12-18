@@ -1,4 +1,4 @@
-/*	$NetBSD: mlx_eisa.c,v 1.23 2012/10/27 17:18:16 chs Exp $	*/
+/*	$NetBSD: mlx_eisa.c,v 1.20 2008/04/28 20:23:48 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mlx_eisa.c,v 1.23 2012/10/27 17:18:16 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mlx_eisa.c,v 1.20 2008/04/28 20:23:48 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,8 +63,8 @@ __KERNEL_RCSID(0, "$NetBSD: mlx_eisa.c,v 1.23 2012/10/27 17:18:16 chs Exp $");
 #define	MLX_EISA_CFG09			(0x0c94 - MLX_EISA_SLOT_OFFSET)
 #define	MLX_EISA_CFG10			(0x0c95 - MLX_EISA_SLOT_OFFSET)
 
-static void	mlx_eisa_attach(device_t, device_t, void *);
-static int	mlx_eisa_match(device_t, cfdata_t, void *);
+static void	mlx_eisa_attach(struct device *, struct device *, void *);
+static int	mlx_eisa_match(struct device *, struct cfdata *, void *);
 
 static int	mlx_v1_submit(struct mlx_softc *, struct mlx_ccb *);
 static int	mlx_v1_findcomplete(struct mlx_softc *, u_int *, u_int *);
@@ -74,7 +74,7 @@ static int	mlx_v1_fw_handshake(struct mlx_softc *, int *, int *, int *);
 static int	mlx_v1_reset(struct mlx_softc *);
 #endif
 
-CFATTACH_DECL_NEW(mlx_eisa, sizeof(struct mlx_softc),
+CFATTACH_DECL(mlx_eisa, sizeof(struct mlx_softc),
     mlx_eisa_match, mlx_eisa_attach, NULL, NULL);
 
 static struct mlx_eisa_prod {
@@ -92,7 +92,7 @@ static struct mlx_eisa_prod {
 };
 
 static int
-mlx_eisa_match(device_t parent, cfdata_t match,
+mlx_eisa_match(struct device *parent, struct cfdata *match,
     void *aux)
 {
 	struct eisa_attach_args *ea;
@@ -108,7 +108,7 @@ mlx_eisa_match(device_t parent, cfdata_t match,
 }
 
 static void
-mlx_eisa_attach(device_t parent, device_t self, void *aux)
+mlx_eisa_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct eisa_attach_args *ea;
 	bus_space_handle_t ioh;
@@ -130,7 +130,6 @@ mlx_eisa_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 
-	mlx->mlx_dv = self;
 	mlx->mlx_iot = iot;
 	mlx->mlx_ioh = ioh;
 	mlx->mlx_dmat = ea->ea_dmat;

@@ -1,4 +1,4 @@
-/*	$NetBSD: agp_i810.c,v 1.73 2011/04/04 20:37:56 dyoung Exp $	*/
+/*	$NetBSD: agp_i810.c,v 1.56.4.2 2010/11/20 00:18:59 riz Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp_i810.c,v 1.73 2011/04/04 20:37:56 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp_i810.c,v 1.56.4.2 2010/11/20 00:18:59 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,6 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD: agp_i810.c,v 1.73 2011/04/04 20:37:56 dyoung Exp $")
 #include <sys/proc.h>
 #include <sys/device.h>
 #include <sys/conf.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -96,12 +98,12 @@ static int agp_i810_free_memory(struct agp_softc *, struct agp_memory *);
 static int agp_i810_bind_memory(struct agp_softc *, struct agp_memory *, off_t);
 static int agp_i810_unbind_memory(struct agp_softc *, struct agp_memory *);
 
-static bool agp_i810_resume(device_t, const pmf_qual_t *);
+static bool agp_i810_resume(device_t PMF_FN_PROTO);
 static int agp_i810_init(struct agp_softc *);
 
 static int agp_i810_init(struct agp_softc *);
-static int agp_i810_write_gtt_entry(struct agp_i810_softc *, off_t,
-				    bus_addr_t);
+static void agp_i810_write_gtt_entry(struct agp_i810_softc *, off_t,
+				     u_int32_t);
 
 static struct agp_methods agp_i810_methods = {
 	agp_i810_get_aperture,
@@ -116,37 +118,12 @@ static struct agp_methods agp_i810_methods = {
 	agp_i810_unbind_memory,
 };
 
-static int
-agp_i810_write_gtt_entry(struct agp_i810_softc *isc, off_t off, bus_addr_t v)
+static void
+agp_i810_write_gtt_entry(struct agp_i810_softc *isc, off_t off, u_int32_t v)
 {
-	u_int32_t pte;
-	bus_size_t base_off, wroff;
-
-	/* Bits 11:4 (physical start address extension) should be zero. */
-	if ((v & 0xff0) != 0)
-		return EINVAL;
-
-	pte = (u_int32_t)v;
-	/*
-	 * We need to massage the pte if bus_addr_t is wider than 32 bits.
-	 * The compiler isn't smart enough, hence the casts to uintmax_t.
-	 */
-	if (sizeof(bus_addr_t) > sizeof(u_int32_t)) {
-		/* 965+ can do 36-bit addressing, add in the extra bits. */
-		if (isc->chiptype == CHIP_I965 ||
-		    isc->chiptype == CHIP_G33 ||
-		    isc->chiptype == CHIP_G4X) {
-			if (((uintmax_t)v >> 36) != 0)
-				return EINVAL;
-			pte |= (v >> 28) & 0xf0;
-		} else {
-			if (((uintmax_t)v >> 32) != 0)
-				return EINVAL;
-		}
-	}
+	u_int32_t base_off;
 
 	base_off = 0;
-	wroff = (off >> AGP_PAGE_SHIFT) * 4;
 
 	switch (isc->chiptype) {
 	case CHIP_I810:
@@ -162,17 +139,17 @@ agp_i810_write_gtt_entry(struct agp_i810_softc *isc, off_t off, bus_addr_t v)
 		break;
 	case CHIP_I915:
 	case CHIP_G33:
-		bus_space_write_4(isc->gtt_bst, isc->gtt_bsh, wroff, pte);
-		return 0;
+		bus_space_write_4(isc->gtt_bst, isc->gtt_bsh,
+		    (u_int32_t)((off) >> AGP_PAGE_SHIFT) * 4, (v));
+		return;
 	}
-
-	WRITE4(base_off + wroff, pte);
-	return 0;
+		
+	WRITE4(base_off + (u_int32_t)(off >> AGP_PAGE_SHIFT) * 4, v);
 }
 
 /* XXXthorpej -- duplicated code (see arch/x86/pci/pchb.c) */
 static int
-agp_i810_vgamatch(const struct pci_attach_args *pa)
+agp_i810_vgamatch(struct pci_attach_args *pa)
 {
 
 	if (PCI_CLASS(pa->pa_class) != PCI_CLASS_DISPLAY ||
@@ -194,7 +171,6 @@ agp_i810_vgamatch(const struct pci_attach_args *pa)
 	case PCI_PRODUCT_INTEL_82945GM_IGD:
 	case PCI_PRODUCT_INTEL_82945GM_IGD_1:
 	case PCI_PRODUCT_INTEL_82945GME_IGD:
-	case PCI_PRODUCT_INTEL_E7221_IGD:
 	case PCI_PRODUCT_INTEL_82965Q_IGD:
 	case PCI_PRODUCT_INTEL_82965Q_IGD_1:
 	case PCI_PRODUCT_INTEL_82965PM_IGD:
@@ -203,7 +179,6 @@ agp_i810_vgamatch(const struct pci_attach_args *pa)
 	case PCI_PRODUCT_INTEL_82G33_IGD_1:
 	case PCI_PRODUCT_INTEL_82965G_IGD:
 	case PCI_PRODUCT_INTEL_82965G_IGD_1:
-	case PCI_PRODUCT_INTEL_82965GME_IGD:
 	case PCI_PRODUCT_INTEL_82Q35_IGD:
 	case PCI_PRODUCT_INTEL_82Q35_IGD_1:
 	case PCI_PRODUCT_INTEL_82Q33_IGD:
@@ -216,12 +191,6 @@ agp_i810_vgamatch(const struct pci_attach_args *pa)
 	case PCI_PRODUCT_INTEL_82IGD_E_IGD:
 	case PCI_PRODUCT_INTEL_82Q45_IGD:
 	case PCI_PRODUCT_INTEL_82G45_IGD:
-	case PCI_PRODUCT_INTEL_82G41_IGD:
-	case PCI_PRODUCT_INTEL_82B43_IGD:
-	case PCI_PRODUCT_INTEL_IRONLAKE_D_IGD:
-	case PCI_PRODUCT_INTEL_IRONLAKE_M_IGD:
-	case PCI_PRODUCT_INTEL_PINEVIEW_IGD:
-	case PCI_PRODUCT_INTEL_PINEVIEW_M_IGD:
 		return (1);
 	}
 
@@ -305,9 +274,6 @@ agp_i810_attach(device_t parent, device_t self, void *aux)
 	case PCI_PRODUCT_INTEL_82945GM_IGD:
 	case PCI_PRODUCT_INTEL_82945GM_IGD_1:
 	case PCI_PRODUCT_INTEL_82945GME_IGD:
-	case PCI_PRODUCT_INTEL_E7221_IGD:
-	case PCI_PRODUCT_INTEL_PINEVIEW_IGD:
-	case PCI_PRODUCT_INTEL_PINEVIEW_M_IGD:
 		isc->chiptype = CHIP_I915;
 		break;
 	case PCI_PRODUCT_INTEL_82965Q_IGD:
@@ -316,7 +282,6 @@ agp_i810_attach(device_t parent, device_t self, void *aux)
 	case PCI_PRODUCT_INTEL_82965PM_IGD_1:
 	case PCI_PRODUCT_INTEL_82965G_IGD:
 	case PCI_PRODUCT_INTEL_82965G_IGD_1:
-	case PCI_PRODUCT_INTEL_82965GME_IGD:
 	case PCI_PRODUCT_INTEL_82946GZ_IGD:
 	case PCI_PRODUCT_INTEL_82G35_IGD:
 	case PCI_PRODUCT_INTEL_82G35_IGD_1:
@@ -335,10 +300,6 @@ agp_i810_attach(device_t parent, device_t self, void *aux)
 	case PCI_PRODUCT_INTEL_82IGD_E_IGD:
 	case PCI_PRODUCT_INTEL_82Q45_IGD:
 	case PCI_PRODUCT_INTEL_82G45_IGD:
-	case PCI_PRODUCT_INTEL_82G41_IGD:
-	case PCI_PRODUCT_INTEL_82B43_IGD:
-	case PCI_PRODUCT_INTEL_IRONLAKE_D_IGD:
-	case PCI_PRODUCT_INTEL_IRONLAKE_M_IGD:
 		isc->chiptype = CHIP_G4X;
 		break;
 	}
@@ -848,17 +809,18 @@ agp_i810_bind_page(struct agp_softc *sc, off_t offset, bus_addr_t physical)
 		return EINVAL;
 	}
 
-	if (isc->chiptype != CHIP_I810) {
+	if (isc->chiptype != CHIP_I830) {
 		if ((offset >> AGP_PAGE_SHIFT) < isc->stolen) {
 #ifdef AGP_DEBUG
-			printf("%s: trying to bind into stolen memory\n",
+			printf("%s: trying to bind into stolen memory",
 			    device_xname(sc->as_dev));
 #endif
 			return EINVAL;
 		}
 	}
 
-	return agp_i810_write_gtt_entry(isc, offset, physical | 1);
+	agp_i810_write_gtt_entry(isc, offset, physical | 1);
+	return 0;
 }
 
 static int
@@ -872,14 +834,15 @@ agp_i810_unbind_page(struct agp_softc *sc, off_t offset)
 	if (isc->chiptype != CHIP_I810 ) {
 		if ((offset >> AGP_PAGE_SHIFT) < isc->stolen) {
 #ifdef AGP_DEBUG
-			printf("%s: trying to unbind from stolen memory\n",
+			printf("%s: trying to unbind from stolen memory",
 			    device_xname(sc->as_dev));
 #endif
 			return EINVAL;
 		}
 	}
 
-	return agp_i810_write_gtt_entry(isc, offset, 0);
+	agp_i810_write_gtt_entry(isc, offset, 0);
+	return 0;
 }
 
 /*
@@ -995,9 +958,6 @@ agp_i810_bind_memory(struct agp_softc *sc, struct agp_memory *mem,
 	struct agp_i810_softc *isc = sc->as_chipc;
 	u_int32_t regval, i;
 
-	if (mem->am_is_bound != 0)
-		return EINVAL;
-
 	/*
 	 * XXX evil hack: the PGTBL_CTL appearently gets overwritten by the
 	 * X server for mysterious reasons which leads to crashes if we write
@@ -1013,9 +973,7 @@ agp_i810_bind_memory(struct agp_softc *sc, struct agp_memory *mem,
 	}
 
 	if (mem->am_type == 2) {
-		for (i = 0; i < mem->am_size; i += AGP_PAGE_SIZE)
-			agp_i810_bind_page(sc, offset + i,
-			    mem->am_physical + i);
+		agp_i810_write_gtt_entry(isc, offset, mem->am_physical | 1);
 		mem->am_offset = offset;
 		mem->am_is_bound = 1;
 		return 0;
@@ -1028,7 +986,7 @@ agp_i810_bind_memory(struct agp_softc *sc, struct agp_memory *mem,
 		return EINVAL;
 
 	for (i = 0; i < mem->am_size; i += AGP_PAGE_SIZE)
-		agp_i810_write_gtt_entry(isc, i, i | 3);
+		agp_i810_write_gtt_entry(isc, offset, i | 3);
 	mem->am_is_bound = 1;
 	return 0;
 }
@@ -1039,12 +997,8 @@ agp_i810_unbind_memory(struct agp_softc *sc, struct agp_memory *mem)
 	struct agp_i810_softc *isc = sc->as_chipc;
 	u_int32_t i;
 
-	if (mem->am_is_bound == 0)
-		return EINVAL;
-
 	if (mem->am_type == 2) {
-		for (i = 0; i < mem->am_size; i += AGP_PAGE_SIZE)
-			agp_i810_unbind_page(sc, mem->am_offset + i);
+		agp_i810_write_gtt_entry(isc, mem->am_offset, 0);
 		mem->am_offset = 0;
 		mem->am_is_bound = 0;
 		return 0;
@@ -1063,7 +1017,7 @@ agp_i810_unbind_memory(struct agp_softc *sc, struct agp_memory *mem)
 }
 
 static bool
-agp_i810_resume(device_t dv, const pmf_qual_t *qual)
+agp_i810_resume(device_t dv PMF_FN_ARGS)
 {
 	struct agp_softc *sc = device_private(dv);
 	struct agp_i810_softc *isc = sc->as_chipc;

@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_usrreq.c,v 1.41 2011/12/20 23:56:29 christos Exp $	*/
+/*	$NetBSD: tp_usrreq.c,v 1.38 2008/10/22 18:17:46 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -65,7 +65,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_usrreq.c,v 1.41 2011/12/20 23:56:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_usrreq.c,v 1.38 2008/10/22 18:17:46 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -212,7 +212,7 @@ restart:
 		}
 #endif
 		sbunlock(sb);
-		if (so->so_state & SS_NBIO) {
+		if (so->so_nbio) {
 			return EWOULDBLOCK;
 		}
 		sbwait(sb);
@@ -223,7 +223,7 @@ restart:
 	/* Assuming at most one xpd tpdu is in the buffer at once */
 	while (n != NULL) {
 		m->m_len += n->m_len;
-		memcpy(mtod(m, void *), mtod(n, void *), (unsigned) n->m_len);
+		bcopy(mtod(n, void *), mtod(m, void *), (unsigned) n->m_len);
 		m->m_data += n->m_len;	/* so mtod() in bcopy() above gives
 					 * right addr */
 		n = n->m_next;
@@ -306,7 +306,7 @@ tp_sendoob(struct tp_pcb *tpcb, struct socket *so, struct mbuf *xdata,
 	 */
 	if (sb->sb_mb) {	/* Anything already in eXpedited data
 				 * sockbuf? */
-		if (so->so_state & SS_NBIO) {
+		if (so->so_nbio) {
 			return EWOULDBLOCK;
 		}
 		while (sb->sb_mb) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: atw.c,v 1.153 2011/04/02 08:11:32 mbalmer Exp $  */
+/*	$NetBSD: atw.c,v 1.140 2008/07/09 20:07:19 joerg Exp $  */
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002, 2003, 2004 The NetBSD Foundation, Inc.
@@ -34,8 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atw.c,v 1.153 2011/04/02 08:11:32 mbalmer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atw.c,v 1.140 2008/07/09 20:07:19 joerg Exp $");
 
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,12 +48,12 @@ __KERNEL_RCSID(0, "$NetBSD: atw.c,v 1.153 2011/04/02 08:11:32 mbalmer Exp $");
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-#include <sys/kauth.h>
 #include <sys/time.h>
-#include <sys/proc.h>
 #include <lib/libkern/libkern.h>
 
 #include <machine/endian.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -63,7 +64,9 @@ __KERNEL_RCSID(0, "$NetBSD: atw.c,v 1.153 2011/04/02 08:11:32 mbalmer Exp $");
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -127,6 +130,10 @@ __KERNEL_RCSID(0, "$NetBSD: atw.c,v 1.153 2011/04/02 08:11:32 mbalmer Exp $");
  */
 
 #define ATW_REFSLAVE	/* slavishly do what the reference driver does */
+
+#define	VOODOO_DUR_11_ROUNDING		0x01 /* necessary */
+#define	VOODOO_DUR_2_4_SPECIALCASE	0x02 /* NOT necessary */
+int atw_voodoo = VOODOO_DUR_11_ROUNDING;
 
 int atw_pseudo_milli = 1;
 int atw_magic_delay1 = 100 * 1000;
@@ -197,12 +204,14 @@ void	atw_rxdrain(struct atw_softc *);
 void	atw_txdrain(struct atw_softc *);
 
 /* Device (de)activation and power state */
+void	atw_disable(struct atw_softc *);
+int	atw_enable(struct atw_softc *);
 void	atw_reset(struct atw_softc *);
 
 /* Interrupt handlers */
 void	atw_linkintr(struct atw_softc *, u_int32_t);
 void	atw_rxintr(struct atw_softc *);
-void	atw_txintr(struct atw_softc *, uint32_t);
+void	atw_txintr(struct atw_softc *);
 
 /* 802.11 state machine */
 static int	atw_newstate(struct ieee80211com *, enum ieee80211_state, int);
@@ -306,25 +315,58 @@ int
 atw_activate(device_t self, enum devact act)
 {
 	struct atw_softc *sc = device_private(self);
+	int rv = 0, s;
 
+	s = splnet();
 	switch (act) {
+	case DVACT_ACTIVATE:
+		rv = EOPNOTSUPP;
+		break;
+
 	case DVACT_DEACTIVATE:
 		if_deactivate(&sc->sc_if);
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		break;
 	}
+	splx(s);
+	return rv;
 }
 
-bool
-atw_suspend(device_t self, const pmf_qual_t *qual)
+/*
+ * atw_enable:
+ *
+ *	Enable the ADM8211 chip.
+ */
+int
+atw_enable(struct atw_softc *sc)
 {
-	struct atw_softc *sc = device_private(self);
 
-	atw_rxdrain(sc);
-	sc->sc_flags &= ~ATWF_WEP_SRAM_VALID;
+	if (ATW_IS_ENABLED(sc) == 0) {
+		if (sc->sc_enable != NULL && (*sc->sc_enable)(sc) != 0) {
+			aprint_error_dev(sc->sc_dev, "device enable failed\n");
+			return (EIO);
+		}
+		sc->sc_flags |= ATWF_ENABLED;
+                /* Power may have been removed, and WEP keys thus
+                 * reset.
+		 */
+		sc->sc_flags &= ~ATWF_WEP_SRAM_VALID;
+	}
+	return (0);
+}
 
-	return true;
+/*
+ * atw_disable:
+ *
+ *	Disable the ADM8211 chip.
+ */
+void
+atw_disable(struct atw_softc *sc)
+{
+	if (!ATW_IS_ENABLED(sc))
+		return;
+	if (sc->sc_disable != NULL)
+		(*sc->sc_disable)(sc);
+	sc->sc_flags &= ~ATWF_ENABLED;
 }
 
 /* Returns -1 on failure. */
@@ -516,8 +558,6 @@ atw_attach(struct atw_softc *sc)
 	static const char *type_strings[] = {"Intersil (not supported)",
 	    "RFMD", "Marvel (not supported)"};
 
-	pmf_self_suspensor_init(sc->sc_dev, &sc->sc_suspensor, &sc->sc_qual);
-
 	sc->sc_txth = atw_txthresh_tab_lo;
 
 	SIMPLEQ_INIT(&sc->sc_txfreeq);
@@ -534,8 +574,7 @@ atw_attach(struct atw_softc *sc)
 	if ((error = bus_dmamem_alloc(sc->sc_dmat,
 	    sizeof(struct atw_control_data), PAGE_SIZE, 0, &sc->sc_cdseg,
 	    1, &sc->sc_cdnseg, 0)) != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "unable to allocate control data, error = %d\n",
+		aprint_error_dev(sc->sc_dev, "unable to allocate control data, error = %d\n",
 		    error);
 		goto fail_0;
 	}
@@ -543,8 +582,7 @@ atw_attach(struct atw_softc *sc)
 	if ((error = bus_dmamem_map(sc->sc_dmat, &sc->sc_cdseg, sc->sc_cdnseg,
 	    sizeof(struct atw_control_data), (void **)&sc->sc_control_data,
 	    BUS_DMA_COHERENT)) != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "unable to map control data, error = %d\n",
+		aprint_error_dev(sc->sc_dev, "unable to map control data, error = %d\n",
 		    error);
 		goto fail_1;
 	}
@@ -552,17 +590,16 @@ atw_attach(struct atw_softc *sc)
 	if ((error = bus_dmamap_create(sc->sc_dmat,
 	    sizeof(struct atw_control_data), 1,
 	    sizeof(struct atw_control_data), 0, 0, &sc->sc_cddmamap)) != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "unable to create control data DMA map, error = %d\n",
-		    error);
+		aprint_error_dev(sc->sc_dev, "unable to create control data DMA map, "
+		    "error = %d\n", error);
 		goto fail_2;
 	}
 
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_cddmamap,
 	    sc->sc_control_data, sizeof(struct atw_control_data), NULL,
 	    0)) != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "unable to load control data DMA map, error = %d\n", error);
+		aprint_error_dev(sc->sc_dev, "unable to load control data DMA map, error = %d\n",
+		    error);
 		goto fail_3;
 	}
 
@@ -574,9 +611,8 @@ atw_attach(struct atw_softc *sc)
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES,
 		    sc->sc_ntxsegs, MCLBYTES, 0, 0,
 		    &sc->sc_txsoft[i].txs_dmamap)) != 0) {
-			aprint_error_dev(sc->sc_dev,
-			    "unable to create tx DMA map %d, error = %d\n", i,
-			    error);
+			aprint_error_dev(sc->sc_dev, "unable to create tx DMA map %d, "
+			    "error = %d\n", i, error);
 			goto fail_4;
 		}
 	}
@@ -587,9 +623,8 @@ atw_attach(struct atw_softc *sc)
 	for (i = 0; i < ATW_NRXDESC; i++) {
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES, 1,
 		    MCLBYTES, 0, 0, &sc->sc_rxsoft[i].rxs_dmamap)) != 0) {
-			aprint_error_dev(sc->sc_dev,
-			    "unable to create rx DMA map %d, error = %d\n", i,
-			    error);
+			aprint_error_dev(sc->sc_dev, "unable to create rx DMA map %d, "
+			    "error = %d\n", i, error);
 			goto fail_5;
 		}
 	}
@@ -678,7 +713,7 @@ atw_attach(struct atw_softc *sc)
 	 * before this point releases all resources that may have been
 	 * allocated.
 	 */
-	sc->sc_flags |= ATWF_ATTACHED;
+	sc->sc_flags |= ATWF_ATTACHED /* | ATWF_RTSCTS */;
 
 	ATW_DPRINTF((" SROM MAC %04x%04x%04x",
 	    htole16(sc->sc_srom[ATW_SR_MAC00]),
@@ -813,8 +848,16 @@ atw_attach(struct atw_softc *sc)
 	ieee80211_media_init(ic, atw_media_change, ieee80211_media_status);
 	callout_init(&sc->sc_scan_ch, 0);
 
-	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
+#if NBPFILTER > 0
+	bpfattach2(ifp, DLT_IEEE802_11_RADIO,
 	    sizeof(struct ieee80211_frame) + 64, &sc->sc_radiobpf);
+#endif
+
+	if (!pmf_device_register1(sc->sc_dev, NULL, NULL, atw_shutdown)) {
+		aprint_error_dev(sc->sc_dev,
+		    "couldn't establish power handler\n");
+	} else
+		pmf_class_network_register(sc->sc_dev, &sc->sc_if);
 
 	memset(&sc->sc_rxtapu, 0, sizeof(sc->sc_rxtapu));
 	sc->sc_rxtap.ar_ihdr.it_len = htole16(sizeof(sc->sc_rxtapu));
@@ -1110,10 +1153,10 @@ atw_ifs_init(struct atw_softc *sc)
 	 * Go figure.
 	 */
 	ifst = __SHIFTIN(IEEE80211_DUR_DS_SLOT, ATW_IFST_SLOT_MASK) |
-	      __SHIFTIN(22 * 10 /* IEEE80211_DUR_DS_SIFS */ /* # of 22 MHz cycles */,
+	      __SHIFTIN(22 * 5 /* IEEE80211_DUR_DS_SIFS */ /* # of 22 MHz cycles */,
 	             ATW_IFST_SIFS_MASK) |
 	      __SHIFTIN(IEEE80211_DUR_DS_DIFS, ATW_IFST_DIFS_MASK) |
-	      __SHIFTIN(IEEE80211_DUR_DS_EIFS, ATW_IFST_EIFS_MASK);
+	      __SHIFTIN(0x64 /* IEEE80211_DUR_DS_EIFS */, ATW_IFST_EIFS_MASK);
 
 	ATW_WRITE(sc, ATW_IFST, ifst);
 }
@@ -1189,19 +1232,13 @@ atw_init(struct ifnet *ifp)
 	struct atw_rxsoft *rxs;
 	int i, error = 0;
 
-	if (device_is_active(sc->sc_dev)) {
-		/*
-		 * Cancel any pending I/O.
-		 */
-		atw_stop(ifp, 0);
-	} else if (!pmf_device_subtree_resume(sc->sc_dev, &sc->sc_qual) ||
-	           !device_is_active(sc->sc_dev))
-		return 0;
+	if ((error = atw_enable(sc)) != 0)
+		goto out;
 
 	/*
-	 * Reset the chip to a known state.
+	 * Cancel any pending I/O. This also resets.
 	 */
-	atw_reset(sc);
+	atw_stop(ifp, 0);
 
 	DPRINTF(sc, ("%s: channel %d freq %d flags 0x%04x\n",
 	    __func__, ieee80211_chan2ieee(ic, ic->ic_curchan),
@@ -1290,9 +1327,9 @@ atw_init(struct ifnet *ifp)
 		rxs = &sc->sc_rxsoft[i];
 		if (rxs->rxs_mbuf == NULL) {
 			if ((error = atw_add_rxbuf(sc, i)) != 0) {
-				aprint_error_dev(sc->sc_dev,
-				    "unable to allocate or map rx buffer %d, "
-				    "error = %d\n", i, error);
+				aprint_error_dev(sc->sc_dev, "unable to allocate or map rx "
+				    "buffer %d, error = %d\n",
+				    i, error);
 				/*
 				 * XXX Should attempt to run with fewer receive
 				 * XXX buffers instead of just failing.
@@ -1394,6 +1431,7 @@ atw_init(struct ifnet *ifp)
 	 * Note that the interface is now running.
 	 */
 	ifp->if_flags |= IFF_RUNNING;
+	ifp->if_flags &= ~IFF_OACTIVE;
 
 	/* send no beacons, yet. */
 	atw_start_beacon(sc, 0);
@@ -1404,7 +1442,7 @@ atw_init(struct ifnet *ifp)
 		error = ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
  out:
 	if (error) {
-		ifp->if_flags &= ~IFF_RUNNING;
+		ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 		sc->sc_tx_timer = 0;
 		ifp->if_timer = 0;
 		printf("%s: interface not running\n", device_xname(sc->sc_dev));
@@ -2150,7 +2188,7 @@ atw_key_update_end(struct ieee80211com *ic)
 
 	if ((sc->sc_flags & ATWF_WEP_SRAM_VALID) != 0)
 		return;
-	if (!device_activation(sc->sc_dev, DEVACT_LEVEL_DRIVER))
+	if (ATW_IS_ENABLED(sc) == 0)
 		return;
 	atw_idle(sc, ATW_NAR_SR | ATW_NAR_ST);
 	atw_write_wep(sc);
@@ -2300,7 +2338,7 @@ atw_start_beacon(struct atw_softc *sc, int start)
 	uint32_t bcnt, bpli, cap0, cap1, capinfo;
 	size_t len;
 
-	if (!device_is_active(sc->sc_dev))
+	if (ATW_IS_ENABLED(sc) == 0)
 		return;
 
 	/* start beacons */
@@ -2325,7 +2363,7 @@ atw_start_beacon(struct atw_softc *sc, int start)
 	/* TBD use ni_capinfo */
 
 	capinfo = 0;
-	if (ic->ic_flags & IEEE80211_F_SHPREAMBLE)
+	if (sc->sc_flags & ATWF_SHORT_PREAMBLE)
 		capinfo |= IEEE80211_CAPINFO_SHORT_PREAMBLE;
 	if (ic->ic_flags & IEEE80211_F_PRIVACY)
 		capinfo |= IEEE80211_CAPINFO_PRIVACY;
@@ -2618,30 +2656,31 @@ atw_stop(struct ifnet *ifp, int disable)
 
 	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
 
-	if (device_is_active(sc->sc_dev)) {
-		/* Disable interrupts. */
-		ATW_WRITE(sc, ATW_IER, 0);
+	/* Disable interrupts. */
+	ATW_WRITE(sc, ATW_IER, 0);
 
-		/* Stop the transmit and receive processes. */
-		ATW_WRITE(sc, ATW_NAR, 0);
-		DELAY(atw_nar_delay);
-		ATW_WRITE(sc, ATW_TDBD, 0);
-		ATW_WRITE(sc, ATW_TDBP, 0);
-		ATW_WRITE(sc, ATW_RDB, 0);
-	}
-
+	/* Stop the transmit and receive processes. */
 	sc->sc_opmode = 0;
+	ATW_WRITE(sc, ATW_NAR, 0);
+	DELAY(atw_nar_delay);
+	ATW_WRITE(sc, ATW_TDBD, 0);
+	ATW_WRITE(sc, ATW_TDBP, 0);
+	ATW_WRITE(sc, ATW_RDB, 0);
 
 	atw_txdrain(sc);
 
 	/*
 	 * Mark the interface down and cancel the watchdog timer.
 	 */
-	ifp->if_flags &= ~IFF_RUNNING;
+	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	sc->sc_tx_timer = 0;
 	ifp->if_timer = 0;
 
-	if (disable)
-		pmf_device_suspend(sc->sc_dev, &sc->sc_qual);
+	if (disable) {
+		atw_rxdrain(sc);
+		atw_disable(sc);
+	} else
+		atw_reset(sc);
 }
 
 /*
@@ -2733,30 +2772,6 @@ atw_shutdown(device_t self, int flags)
 	return true;
 }
 
-#if 0
-static void
-atw_workaround1(struct atw_softc *sc)
-{
-	uint32_t test1;
-
-	test1 = ATW_READ(sc, ATW_TEST1);
-
-	sc->sc_misc_ev.ev_count++;
-
-	if ((test1 & ATW_TEST1_RXPKT1IN) != 0) {
-		sc->sc_rxpkt1in_ev.ev_count++;
-		return;
-	}
-	if (__SHIFTOUT(test1, ATW_TEST1_RRA_MASK) ==
-	    __SHIFTOUT(test1, ATW_TEST1_RWA_MASK)) {
-		sc->sc_rxamatch_ev.ev_count++;
-		return;
-	}
-	sc->sc_workaround1_ev.ev_count++;
-	(void)atw_init(&sc->sc_if);
-}
-#endif
-
 int
 atw_intr(void *arg)
 {
@@ -2766,7 +2781,7 @@ atw_intr(void *arg)
 	int handled = 0, txthresh;
 
 #ifdef DEBUG
-	if (!device_activation(sc->sc_dev, DEVACT_LEVEL_DRIVER))
+	if (ATW_IS_ENABLED(sc) == 0)
 		panic("%s: atw_intr: not enabled", device_xname(sc->sc_dev));
 #endif
 
@@ -2775,7 +2790,7 @@ atw_intr(void *arg)
 	 * possibly have come from us.
 	 */
 	if ((ifp->if_flags & IFF_RUNNING) == 0 ||
-	    !device_activation(sc->sc_dev, DEVACT_LEVEL_DRIVER))
+	    !device_is_active(sc->sc_dev))
 		return (0);
 
 	for (;;) {
@@ -2843,17 +2858,17 @@ atw_intr(void *arg)
 				    device_xname(sc->sc_dev));
 				/* Get the receive process going again. */
 				ATW_WRITE(sc, ATW_RDR, 0x1);
+				break;
 			}
 		}
 
 		if (txstatus) {
 			/* Sweep up transmit descriptors. */
-			atw_txintr(sc, txstatus);
+			atw_txintr(sc);
 
 			if (txstatus & ATW_INTR_TLT) {
 				DPRINTF(sc, ("%s: tx lifetime exceeded\n",
 				    device_xname(sc->sc_dev)));
-				(void)atw_init(&sc->sc_if);
 			}
 
 			if (txstatus & ATW_INTR_TRT) {
@@ -2883,7 +2898,7 @@ atw_intr(void *arg)
 				 */
 				ATW_WRITE(sc, ATW_NAR, sc->sc_opmode);
 				DELAY(atw_nar_delay);
-				ATW_WRITE(sc, ATW_TDR, 0x1);
+				ATW_WRITE(sc, ATW_RDR, 0x1);
 				/* XXX Log every Nth underrun from
 				 * XXX now on?
 				 */
@@ -3053,7 +3068,7 @@ atw_rxintr(struct atw_softc *sc)
 	int i, len, rate, rate0;
 	u_int32_t rssi, ctlrssi;
 
-	for (i = sc->sc_rxptr;; i = sc->sc_rxptr) {
+	for (i = sc->sc_rxptr;; i = ATW_NEXTRX(i)) {
 		rxs = &sc->sc_rxsoft[i];
 
 		ATW_CDRXSYNC(sc, i, BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
@@ -3062,12 +3077,8 @@ atw_rxintr(struct atw_softc *sc)
 		ctlrssi = le32toh(sc->sc_rxdescs[i].ar_ctlrssi);
 		rate0 = __SHIFTOUT(rxstat, ATW_RXSTAT_RXDR_MASK);
 
-		if (rxstat & ATW_RXSTAT_OWN) {
-			ATW_CDRXSYNC(sc, i, BUS_DMASYNC_PREREAD);
-			break;
-		}
-
-		sc->sc_rxptr = ATW_NEXTRX(i);
+		if (rxstat & ATW_RXSTAT_OWN)
+			break; /* We have processed all receive buffers. */
 
 		DPRINTF3(sc,
 		    ("%s: rx stat %08x ctlrssi %08x buf1 %08x buf2 %08x\n",
@@ -3154,6 +3165,7 @@ atw_rxintr(struct atw_softc *sc)
 		else
 			rssi = ctlrssi;
 
+ #if NBPFILTER > 0
 		/* Pass this up to any BPF listeners. */
 		if (sc->sc_radiobpf != NULL) {
 			struct atw_rx_radiotap_header *tap = &sc->sc_rxtap;
@@ -3170,9 +3182,10 @@ atw_rxintr(struct atw_softc *sc)
 			if ((rxstat & ATW_RXSTAT_CRC32E) != 0)
 				tap->ar_flags |= IEEE80211_RADIOTAP_F_BADFCS;
 
-			bpf_mtap2(sc->sc_radiobpf, tap, sizeof(sc->sc_rxtapu),
-			    m);
+			bpf_mtap2(sc->sc_radiobpf, tap,
+			    sizeof(sc->sc_rxtapu), m);
  		}
+#endif /* NBPFILTER > 0 */
 
 		sc->sc_recv_ev.ev_count++;
 
@@ -3206,6 +3219,9 @@ atw_rxintr(struct atw_softc *sc)
 		ieee80211_input(ic, m, ni, (int)rssi, 0);
 		ieee80211_free_node(ni);
 	}
+
+	/* Update the receive pointer. */
+	sc->sc_rxptr = i;
 }
 
 /*
@@ -3214,7 +3230,7 @@ atw_rxintr(struct atw_softc *sc)
  *	Helper; handle transmit interrupts.
  */
 void
-atw_txintr(struct atw_softc *sc, uint32_t status)
+atw_txintr(struct atw_softc *sc)
 {
 	static char txstat_buf[sizeof("ffffffff<>" ATW_TXSTAT_FMT)];
 	struct ifnet *ifp = &sc->sc_if;
@@ -3252,19 +3268,16 @@ atw_txintr(struct atw_softc *sc, uint32_t status)
 				if (i == txs->txs_lastdesc)
 					break;
 			}
-			ATW_CDTXSYNC(sc, txs->txs_firstdesc,
-			    txs->txs_ndescs - 1, BUS_DMASYNC_PREREAD);
 		}
 #endif
 
 		txstat = le32toh(sc->sc_txdescs[txs->txs_lastdesc].at_stat);
-		if (txstat & ATW_TXSTAT_OWN) {
-			ATW_CDTXSYNC(sc, txs->txs_lastdesc, 1,
-			    BUS_DMASYNC_PREREAD);
+		if (txstat & ATW_TXSTAT_OWN)
 			break;
-		}
 
 		SIMPLEQ_REMOVE_HEAD(&sc->sc_txdirtyq, txs_q);
+
+		sc->sc_txfree += txs->txs_ndescs;
 
 		bus_dmamap_sync(sc->sc_dmat, txs->txs_dmamap,
 		    0, txs->txs_dmamap->dm_mapsize,
@@ -3273,37 +3286,35 @@ atw_txintr(struct atw_softc *sc, uint32_t status)
 		m_freem(txs->txs_mbuf);
 		txs->txs_mbuf = NULL;
 
-		sc->sc_txfree += txs->txs_ndescs;
 		SIMPLEQ_INSERT_TAIL(&sc->sc_txfreeq, txs, txs_q);
 
-		KASSERT(!SIMPLEQ_EMPTY(&sc->sc_txfreeq) && sc->sc_txfree != 0);
-		sc->sc_tx_timer = 0;
+		KASSERT(!(SIMPLEQ_EMPTY(&sc->sc_txfreeq) ||
+		        sc->sc_txfree == 0));
 		ifp->if_flags &= ~IFF_OACTIVE;
 
 		if ((ifp->if_flags & IFF_DEBUG) != 0 &&
 		    (txstat & ATW_TXSTAT_ERRMASK) != 0) {
-			snprintb(txstat_buf, sizeof(txstat_buf),
-			    ATW_TXSTAT_FMT, txstat & ATW_TXSTAT_ERRMASK);
+			bitmask_snprintf(txstat & ATW_TXSTAT_ERRMASK,
+			    ATW_TXSTAT_FMT, txstat_buf, sizeof(txstat_buf));
 			printf("%s: txstat %s %" __PRIuBITS "\n",
 			    device_xname(sc->sc_dev), txstat_buf,
 			    __SHIFTOUT(txstat, ATW_TXSTAT_ARC_MASK));
 		}
 
-		sc->sc_xmit_ev.ev_count++;
-
 		/*
 		 * Check for errors and collisions.
 		 */
 		if (txstat & ATW_TXSTAT_TUF)
-			sc->sc_tuf_ev.ev_count++;
+			sc->sc_stats.ts_tx_tuf++;
 		if (txstat & ATW_TXSTAT_TLT)
-			sc->sc_tlt_ev.ev_count++;
+			sc->sc_stats.ts_tx_tlt++;
 		if (txstat & ATW_TXSTAT_TRT)
-			sc->sc_trt_ev.ev_count++;
+			sc->sc_stats.ts_tx_trt++;
 		if (txstat & ATW_TXSTAT_TRO)
-			sc->sc_tro_ev.ev_count++;
-		if (txstat & ATW_TXSTAT_SOFBR)
-			sc->sc_sofbr_ev.ev_count++;
+			sc->sc_stats.ts_tx_tro++;
+		if (txstat & ATW_TXSTAT_SOFBR) {
+			sc->sc_stats.ts_tx_sofbr++;
+		}
 
 		if ((txstat & ATW_TXSTAT_ES) == 0)
 			ifp->if_collisions +=
@@ -3314,7 +3325,14 @@ atw_txintr(struct atw_softc *sc, uint32_t status)
 		ifp->if_opackets++;
 	}
 
-	KASSERT(txs != NULL || (ifp->if_flags & IFF_OACTIVE) == 0);
+	/*
+	 * If there are no more pending transmissions, cancel the watchdog
+	 * timer.
+	 */
+	if (txs == NULL) {
+		KASSERT((ifp->if_flags & IFF_OACTIVE) == 0);
+		sc->sc_tx_timer = 0;
+	}
 }
 
 /*
@@ -3329,17 +3347,21 @@ atw_watchdog(struct ifnet *ifp)
 	struct ieee80211com *ic = &sc->sc_ic;
 
 	ifp->if_timer = 0;
-	if (!device_is_active(sc->sc_dev))
+	if (ATW_IS_ENABLED(sc) == 0)
 		return;
 
-	if (sc->sc_rescan_timer != 0 && --sc->sc_rescan_timer == 0)
-		(void)ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
-	if (sc->sc_tx_timer != 0 && --sc->sc_tx_timer == 0 &&
-	    !SIMPLEQ_EMPTY(&sc->sc_txdirtyq)) {
-		printf("%s: transmit timeout\n", ifp->if_xname);
-		ifp->if_oerrors++;
-		(void)atw_init(ifp);
-		atw_start(ifp);
+	if (sc->sc_rescan_timer) {
+		if (--sc->sc_rescan_timer == 0)
+			(void)ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
+	}
+	if (sc->sc_tx_timer) {
+		if (--sc->sc_tx_timer == 0 &&
+		    !SIMPLEQ_EMPTY(&sc->sc_txdirtyq)) {
+			printf("%s: transmit timeout\n", ifp->if_xname);
+			ifp->if_oerrors++;
+			(void)atw_init(ifp);
+			atw_start(ifp);
+		}
 	}
 	if (sc->sc_tx_timer != 0 || sc->sc_rescan_timer != 0)
 		ifp->if_timer = 1;
@@ -3355,18 +3377,6 @@ atw_evcnt_detach(struct atw_softc *sc)
 	evcnt_detach(&sc->sc_crc32e_ev);
 	evcnt_detach(&sc->sc_crc16e_ev);
 	evcnt_detach(&sc->sc_recv_ev);
-
-	evcnt_detach(&sc->sc_tuf_ev);
-	evcnt_detach(&sc->sc_tro_ev);
-	evcnt_detach(&sc->sc_trt_ev);
-	evcnt_detach(&sc->sc_tlt_ev);
-	evcnt_detach(&sc->sc_sofbr_ev);
-	evcnt_detach(&sc->sc_xmit_ev);
-
-	evcnt_detach(&sc->sc_rxpkt1in_ev);
-	evcnt_detach(&sc->sc_rxamatch_ev);
-	evcnt_detach(&sc->sc_workaround1_ev);
-	evcnt_detach(&sc->sc_misc_ev);
 }
 
 static void
@@ -3384,28 +3394,6 @@ atw_evcnt_attach(struct atw_softc *sc)
 	    &sc->sc_recv_ev, sc->sc_if.if_xname, "PLCP SFD error");
 	evcnt_attach_dynamic(&sc->sc_sige_ev, EVCNT_TYPE_MISC,
 	    &sc->sc_recv_ev, sc->sc_if.if_xname, "PLCP Signal Field error");
-
-	evcnt_attach_dynamic(&sc->sc_xmit_ev, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_if.if_xname, "xmit");
-	evcnt_attach_dynamic(&sc->sc_tuf_ev, EVCNT_TYPE_MISC,
-	    &sc->sc_xmit_ev, sc->sc_if.if_xname, "transmit underflow");
-	evcnt_attach_dynamic(&sc->sc_tro_ev, EVCNT_TYPE_MISC,
-	    &sc->sc_xmit_ev, sc->sc_if.if_xname, "transmit overrun");
-	evcnt_attach_dynamic(&sc->sc_trt_ev, EVCNT_TYPE_MISC,
-	    &sc->sc_xmit_ev, sc->sc_if.if_xname, "retry count exceeded");
-	evcnt_attach_dynamic(&sc->sc_tlt_ev, EVCNT_TYPE_MISC,
-	    &sc->sc_xmit_ev, sc->sc_if.if_xname, "lifetime exceeded");
-	evcnt_attach_dynamic(&sc->sc_sofbr_ev, EVCNT_TYPE_MISC,
-	    &sc->sc_xmit_ev, sc->sc_if.if_xname, "packet size mismatch");
-
-	evcnt_attach_dynamic(&sc->sc_misc_ev, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_if.if_xname, "misc");
-	evcnt_attach_dynamic(&sc->sc_workaround1_ev, EVCNT_TYPE_MISC,
-	    &sc->sc_misc_ev, sc->sc_if.if_xname, "workaround #1");
-	evcnt_attach_dynamic(&sc->sc_rxamatch_ev, EVCNT_TYPE_MISC,
-	    &sc->sc_misc_ev, sc->sc_if.if_xname, "rra equals rwa");
-	evcnt_attach_dynamic(&sc->sc_rxpkt1in_ev, EVCNT_TYPE_MISC,
-	    &sc->sc_misc_ev, sc->sc_if.if_xname, "rxpkt1in set");
 }
 
 #ifdef ATW_DEBUG
@@ -3448,7 +3436,6 @@ atw_start(struct ifnet *ifp)
 	struct ieee80211_frame_min *whm;
 	struct ieee80211_frame *wh;
 	struct atw_frame *hh;
-	uint16_t hdrctl;
 	struct mbuf *m0, *m;
 	struct atw_txsoft *txs, *last_txs;
 	struct atw_txdesc *txd;
@@ -3480,8 +3467,6 @@ atw_start(struct ifnet *ifp)
 	while ((txs = SIMPLEQ_FIRST(&sc->sc_txfreeq)) != NULL &&
 	       sc->sc_txfree != 0) {
 
-		hdrctl = htole16(ATW_HDRCTL_UNKNOWN1);
-
 		/*
 		 * Grab a packet off the management queue, if it
 		 * is not empty. Otherwise, from the data queue.
@@ -3496,7 +3481,10 @@ atw_start(struct ifnet *ifp)
 			IFQ_DEQUEUE(&ifp->if_snd, m0);
 			if (m0 == NULL)
 				break;
-			bpf_mtap(ifp, m0);
+#if NBPFILTER > 0
+			if (ifp->if_bpf != NULL)
+				bpf_mtap(ifp->if_bpf, m0);
+#endif /* NBPFILTER > 0 */
 			ni = ieee80211_find_txnode(ic,
 			    mtod(m0, struct ether_header *)->ether_dhost);
 			if (ni == NULL) {
@@ -3522,14 +3510,6 @@ atw_start(struct ifnet *ifp)
 			ifp->if_oerrors++;
 			break;
 		}
-#if 0
-		if (IEEE80211_IS_MULTICAST(wh->i_addr1) &&
-		    m0->m_pkthdr.len > ic->ic_fragthreshold)
-			hdrctl |= htole16(ATW_HDRCTL_MORE_FRAG);
-#endif
-
-		if (m0->m_pkthdr.len + IEEE80211_CRC_LEN >= ic->ic_rtsthreshold)
-			hdrctl |= htole16(ATW_HDRCTL_RTSCTS);
 
 		if (ieee80211_compute_duration(whm, k, m0->m_pkthdr.len,
 		    ic->ic_flags, ic->ic_fragthreshold, rate,
@@ -3544,19 +3524,22 @@ atw_start(struct ifnet *ifp)
 		 */
 		*(uint16_t *)whm->i_dur = htole16(txs->txs_d0.d_rts_dur);
 
+#if NBPFILTER > 0
 		/*
 		 * Pass the packet to any BPF listeners.
 		 */
-		bpf_mtap3(ic->ic_rawbpf, m0);
+		if (ic->ic_rawbpf != NULL)
+			bpf_mtap((void *)ic->ic_rawbpf, m0);
 
 		if (sc->sc_radiobpf != NULL) {
 			struct atw_tx_radiotap_header *tap = &sc->sc_txtap;
 
 			tap->at_rate = rate;
 
-			bpf_mtap2(sc->sc_radiobpf, tap, sizeof(sc->sc_txtapu),
-			    m0);
+			bpf_mtap2(sc->sc_radiobpf, tap,
+			    sizeof(sc->sc_txtapu), m0);
 		}
+#endif /* NBPFILTER > 0 */
 
 		M_PREPEND(m0, offsetof(struct atw_frame, atw_ihdr), M_DONTWAIT);
 
@@ -3605,20 +3588,12 @@ atw_start(struct ifnet *ifp)
 		hh->atw_paylen = htole16(m0->m_pkthdr.len -
 		    sizeof(struct atw_frame));
 
-		/* never fragment multicast frames */
-		if (IEEE80211_IS_MULTICAST(hh->atw_dst))
-			hh->atw_fragthr = htole16(IEEE80211_FRAG_MAX);
-		else {
-			if ((ic->ic_flags & IEEE80211_F_SHPREAMBLE) &&
-			    (ni->ni_capinfo & IEEE80211_CAPINFO_SHORT_PREAMBLE))
-				hdrctl |= htole16(ATW_HDRCTL_SHORT_PREAMBLE);
-			hh->atw_fragthr = htole16(ic->ic_fragthreshold);
-		}
-
+		hh->atw_fragthr = htole16(ic->ic_fragthreshold);
 		hh->atw_rtylmt = 3;
+		hh->atw_hdrctl = htole16(ATW_HDRCTL_UNKNOWN1);
 #if 0
 		if (do_encrypt) {
-			hdrctl |= htole16(ATW_HDRCTL_WEP);
+			hh->atw_hdrctl |= htole16(ATW_HDRCTL_WEP);
 			hh->atw_keyid = ic->ic_def_txkey;
 		}
 #endif
@@ -3632,9 +3607,15 @@ atw_start(struct ifnet *ifp)
 		hh->atw_head_dur = htole16(txs->txs_d0.d_rts_dur);
 		hh->atw_tail_dur = htole16(txs->txs_dn.d_rts_dur);
 
-		hh->atw_hdrctl = hdrctl;
-		hh->atw_fragnum = npkt << 4;
+		/* never fragment multicast frames */
+		if (IEEE80211_IS_MULTICAST(hh->atw_dst)) {
+			hh->atw_fragthr = htole16(ic->ic_fragthreshold);
+		} else if (sc->sc_flags & ATWF_RTSCTS) {
+			hh->atw_hdrctl |= htole16(ATW_HDRCTL_RTSCTS);
+		}
+
 #ifdef ATW_DEBUG
+		hh->atw_fragnum = 0;
 
 		if ((ifp->if_flags & IFF_DEBUG) != 0 && atw_debug > 2) {
 			printf("%s: dst = %s, rate = 0x%02x, "
@@ -3847,34 +3828,28 @@ int
 atw_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct atw_softc *sc = ifp->if_softc;
-	struct ieee80211req *ireq;
 	int s, error = 0;
+
+	/* XXX monkey see, monkey do. comes from wi_ioctl. */
+	if (!device_is_active(sc->sc_dev))
+		return ENXIO;
 
 	s = splnet();
 
 	switch (cmd) {
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_UP|IFF_RUNNING:
-			/*
-			 * To avoid rescanning another access point,
-			 * do not call atw_init() here.  Instead,
-			 * only reflect media settings.
-			 */
-			if (device_activation(sc->sc_dev, DEVACT_LEVEL_DRIVER))
+		if (ifp->if_flags & IFF_UP) {
+			if (ATW_IS_ENABLED(sc)) {
+				/*
+				 * To avoid rescanning another access point,
+				 * do not call atw_init() here.  Instead,
+				 * only reflect media settings.
+				 */
 				atw_filter_setup(sc);
-			break;
-		case IFF_UP:
-			error = atw_init(ifp);
-			break;
-		case IFF_RUNNING:
+			} else
+				error = atw_init(ifp);
+		} else if (ATW_IS_ENABLED(sc))
 			atw_stop(ifp, 1);
-			break;
-		case 0:
-			break;
-		}
 		break;
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
@@ -3884,22 +3859,6 @@ atw_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 			error = 0;
 		}
 		break;
-	case SIOCS80211:
-		ireq = data;
-		if (ireq->i_type == IEEE80211_IOC_FRAGTHRESHOLD) {
-			if ((error = kauth_authorize_network(curlwp->l_cred,
-			    KAUTH_NETWORK_INTERFACE,
-			    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp,
-			    (void *)cmd, NULL)) != 0)
-				break;
-			if (!(IEEE80211_FRAG_MIN <= ireq->i_val &&
-			      ireq->i_val <= IEEE80211_FRAG_MAX))
-				error = EINVAL;
-			else
-				sc->sc_ic.ic_fragthreshold = ireq->i_val;
-			break;
-		}
-		/*FALLTHROUGH*/
 	default:
 		error = ieee80211_ioctl(&sc->sc_ic, cmd, data);
 		if (error == ENETRESET || error == ERESTART) {
@@ -3912,7 +3871,7 @@ atw_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	}
 
 	/* Try to get more packets going. */
-	if (device_is_active(sc->sc_dev))
+	if (ATW_IS_ENABLED(sc))
 		atw_start(ifp);
 
 	splx(s);

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.gzboot,v 1.20 2012/08/13 10:25:02 khorben Exp $
+#	$NetBSD: Makefile.gzboot,v 1.14 2006/01/16 19:34:53 he Exp $
 
 NOMAN=  # defined
 
@@ -34,7 +34,6 @@ STARTFILE= srtbegin.o
 
 CPPFLAGS+= -nostdinc -I. -I${EVBARM_STAND}/gzboot -I${EVBARM_STAND}/board
 CPPFLAGS+= -I${S} -I${S}/arch -I${S}/lib/libsa
-CPPFLAGS+= -I${S}/../common/dist/zlib
 
 CPPFLAGS+= -D_STANDALONE
 
@@ -49,9 +48,7 @@ CPPFLAGS+= -DMAXIMAGESIZE=${MAXIMAGESIZE}
 CPPFLAGS+= -DLOADADDR=${LOADADDR}
 
 COPTS+=	-ffreestanding
-COPTS+=	-fno-stack-protector
-CWARNFLAGS+= -Werror
-CWARNFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
+CWARNFLAGS+= -Wno-main
 
 CLEANFILES+= ${STARTFILE} vers.c ${BASE}.list
 CLEANFILES+= ${PROGSYM}
@@ -86,19 +83,19 @@ SA_AS=		library
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=		${SALIB}
 
-cleandir distclean: .WAIT cleanlibdir
+cleandir distclean: cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib
 
-LDFLAGS= -M -T ${LDSCRIPT} --fix-v4bx
+LDFLAGS= -M -T ${LDSCRIPT}
 
 LIBLIST=${LIBSA} ${LIBZ} ${LIBSA} ${LIBKERN} ${LIBSA}
 
 .PHONY: vers.c
 vers.c: ${VERSIONFILE}
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
-	    ${.ALLSRC} '${PLATFORM}' ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${.ALLSRC} '${PLATFORM}' \
+	    ${NEWVERSWHAT}
 
 ${PROG}: ${PROGSYM}
 	${OBJCOPY} -O binary ${PROGSYM} ${.TARGET}
@@ -117,6 +114,5 @@ FILES=	${PROGSYM}
 .include <bsd.prog.mk>
 
 ${PROGSYM}: ${STARTFILE} ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
-	${_MKTARGET_LINK}
 	${LD} -o ${.TARGET} ${LDFLAGS} ${STARTFILE} \
 	    ${OBJS} ${LIBLIST} > ${BASE}.list

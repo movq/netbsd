@@ -1,4 +1,4 @@
-.\"	$NetBSD: getmntopts.3,v 1.12 2010/08/24 12:05:01 christos Exp $
+.\"	$NetBSD: getmntopts.3,v 1.8 2007/08/26 22:53:01 pooka Exp $
 .\"
 .\" Copyright (c) 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)getmntopts.3	8.3 (Berkeley) 3/30/95
 .\"
-.Dd May 4, 2010
+.Dd August 26, 2007
 .Dt GETMNTOPTS 3
 .Os
 .Sh NAME
@@ -51,7 +51,7 @@
 The
 .Fn getmntopts
 function takes a comma separated option list and a list
-of valid option names, and computes the bitmasks
+of valid option names, and computes the bitmask
 corresponding to the requested set of options.
 .Pp
 The string
@@ -141,65 +141,51 @@ Finally, the table must be terminated by an entry with a
 .Dv NULL
 first element.
 .Pp
-.Fn getmntopts
-returns a
-.Li "mntoptparse_t"
-handle that can be used in subsequent
-.Fn getmntoptstr
-and
-.Fn getmntoptnum
-calls to fetch a value for an option and that must be freed with a call
-to
-.Fn freemntopts .
-If an error occurred, then if the external integer value
-.Va getmnt_silent
-is zero then
-.Fn getmntopts
-prints an error message and exits;
-if
-.Va getmnt_silent
-is non-zero then
-.Fn getmntopts
-returns
-.Dv NULL .
-.Pp
 The
 .Fn getmntoptstr
 function returns the string value of the named option, if such a value
-was set in the option string.
-If the value was not set, then if the external integer value
-.Va getmnt_silent
-is zero then
-.Fn getmntoptstr
-prints an error message and exits;
-if
-.Va getmnt_silent
-is non-zero then
-.Fn getmntoptstr
-returns
-.Dv NULL .
+was set it the option string.
 .Pp
 The
 .Fn getmntoptnum
-returns the long value of the named option, if such a value was set in the
+returns the long value of the named option, if such a value was set it the
 option string.
-If the value was not set, or could not be converted from a string to a
-long, then if the external integer value
-.Va getmnt_silent
-is zero then
-.Fn getmntoptnum
-prints an error message and exits;
-if
-.Va getmnt_silent
-is non-zero then
-.Fn getmntoptnum
-returns \-1.
+It prints an error message and exits if the value was not
+set, or could not be converted from a string to a long.
 .Pp
 The
 .Fn freemntopts
 frees the storage used by
 .Fn getmntopts .
-.Sh RETURN VALUES
+.Sh EXAMPLES
+Most commands will use the standard option set.
+Local filesystems which support the
+.Dv MNT_UPDATE
+flag, would also have an
+.Dv MOPT_UPDATE
+entry.
+This can be declared and used as follows:
+.Bd -literal
+#include \*[Lt]mntopts.h\*[Gt]
+
+static const struct mntopt mopts[] = {
+	MOPT_STDOPTS,
+	MOPT_UPDATE,
+	{ NULL }
+};
+
+...
+long val;
+mntflags = mntaltflags = 0;
+mntoptparse_t mp;
+...
+if ((mp = getmntopts(options, mopts, \*[Am]mntflags, \*[Am]mntaltflags)) == NULL)
+	err(1, NULL);
+...
+val = getmntoptnum(mp, "rsize");
+freemntopts(mp);
+.Ed
+.Sh RETURN VALUE
 .Fn getmntopts
 returns
 .Dv NULL
@@ -214,53 +200,16 @@ is returned.
 .Fn getmntoptstr
 returns
 .Dv NULL
-if an error occurred.
+if the option does not have an argument, or the option string.
 .Fn getmntoptnum
 returns \-1 if an error occurred.
-.Sh EXAMPLES
-Most commands will use the standard option set.
-Local filesystems which support the
-.Dv MNT_UPDATE
-flag, would also have an
-.Dv MOPT_UPDATE
-entry.
-This can be declared and used as follows:
-.Bd -literal -offset indent
-#include \*[Lt]mntopts.h\*[Gt]
-
-static const struct mntopt mopts[] = {
-	MOPT_STDOPTS,
-	MOPT_UPDATE,
-	{ NULL }
-};
-
-\&...
-
-long val;
-mntoptparse_t mp;
-mntflags = mntaltflags = 0;
-
-\&...
-
-mp = getmntopts(options, mopts, \*[Am]mntflags, \*[Am]mntaltflags);
-
-if (mp == NULL)
-	err(EXIT_FAILURE, "getmntopts");
-
-\&...
-
-val = getmntoptnum(mp, "rsize");
-freemntopts(mp);
-.Ed
 .Sh DIAGNOSTICS
 If the external integer variable
 .Va getmnt_silent
 is zero then the
-.Fn getmntopts ,
-.Fn getmntoptstr ,
-and
-.Fn getmntoptnum
-functions display an error message and exit if an error occurred.
+.Fn getmntopts
+function displays an error message and exits if an
+unrecognized option is encountered.
 By default
 .Va getmnt_silent
 is zero.

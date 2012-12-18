@@ -1,4 +1,4 @@
-/*	$NetBSD: rarp.c,v 1.31 2011/05/11 16:23:40 zoltan Exp $	*/
+/*	$NetBSD: rarp.c,v 1.28 2008/04/05 05:15:33 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992 Regents of the University of California.
@@ -76,8 +76,8 @@ struct ether_arp {
 #define	arp_pln	ea_hdr.ar_pln
 #define	arp_op	ea_hdr.ar_op
 
-static ssize_t rarpsend(struct iodesc *, void *, size_t);
-static ssize_t rarprecv(struct iodesc *, void *, size_t, saseconds_t);
+static ssize_t rarpsend __P((struct iodesc *, void *, size_t));
+static ssize_t rarprecv __P((struct iodesc *, void *, size_t, time_t));
 
 /*
  * Ethernet (Reverse) Address Resolution Protocol (see RFC 903, and 826).
@@ -88,14 +88,14 @@ rarp_getipaddress(int sock)
 	struct iodesc *d;
 	struct ether_arp *ap;
 	struct {
-		u_char header[ETHERNET_HEADER_SIZE];
+		u_char header[ETHER_SIZE];
 		struct {
 			struct ether_arp arp;
 			u_char pad[18]; 	/* 60 - sizeof(arp) */
 		} data;
 	} wbuf;
 	struct {
-		u_char header[ETHERNET_HEADER_SIZE];
+		u_char header[ETHER_SIZE];
 		struct {
 			struct ether_arp arp;
 			u_char pad[24]; 	/* extra space */
@@ -172,7 +172,7 @@ rarpsend(struct iodesc *d, void *pkt, size_t len)
  * else -1 (and errno == 0)
  */
 static ssize_t
-rarprecv(struct iodesc *d, void *pkt, size_t len, saseconds_t tleft)
+rarprecv(struct iodesc *d, void *pkt, size_t len, time_t tleft)
 {
 	ssize_t n;
 	struct ether_arp *ap;

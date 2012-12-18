@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: xfs.in,v 1.1 2008/12/05 18:55:22 cube Exp $
+# $NetBSD: xfs.in,v 1.1.2.2 2008/12/06 22:03:15 snj Exp $
 #
 
 # PROVIDE: xfs

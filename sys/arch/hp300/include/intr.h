@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.34 2011/03/06 14:51:22 tsutsui Exp $	*/
+/*	$NetBSD: intr.h,v 1.31.6.1 2008/12/27 04:00:19 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #ifndef _HP300_INTR_H_
 #define	_HP300_INTR_H_
 
-#include <sys/evcnt.h>
+#include <sys/device.h>
 #include <sys/queue.h>
 #include <machine/psl.h>
 
@@ -65,9 +65,9 @@
 extern int idepth;
 
 static inline bool
-cpu_intr_p(void)
+cpu_intr_p(void) 
 {
-
+ 
 	return idepth != 0;
 }
 

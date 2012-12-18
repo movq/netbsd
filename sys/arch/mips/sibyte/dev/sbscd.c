@@ -1,4 +1,4 @@
-/* $NetBSD: sbscd.c,v 1.18 2011/02/20 07:47:39 matt Exp $ */
+/* $NetBSD: sbscd.c,v 1.14 2008/06/16 08:36:51 cegger Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,24 +33,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbscd.c,v 1.18 2011/02/20 07:47:39 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbscd.c,v 1.14 2008/06/16 08:36:51 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <mips/sibyte/include/sb1250_int.h>
-#include <mips/sibyte/include/sb1250_regs.h>
-#include <mips/sibyte/include/sb1250_scd.h>
 #include <mips/sibyte/include/zbbusvar.h>
 #include <mips/sibyte/dev/sbscdvar.h>
 
 #include "locators.h"
 
-static int	sbscd_match(device_t, cfdata_t, void *);
-static void	sbscd_attach(device_t, device_t, void *);
+static int	sbscd_match(struct device *, struct cfdata *, void *);
+static void	sbscd_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(sbscd, 0,
+CFATTACH_DECL(sbscd, sizeof(struct device),
     sbscd_match, sbscd_attach, NULL, NULL);
 
 static int	sbscd_print(void *, const char *);
@@ -58,37 +55,21 @@ static const char *sbscd_device_type_name(enum sbscd_device_type type);
 
 static const struct sbscd_attach_locs sb1250_sbscd_devs[] = {
 #if 0
-	{ A_IMR_CPU0_BASE,
-	  { -1, -1 },
-	  SBSCD_DEVTYPE_ICU },
+	{ 0x20000, {-1,-1},	SBSCD_DEVTYPE_ICU,		},
 #endif
-	{ A_SCD_WDOG_0,
-	  { K_INT_WATCHDOG_TIMER_0, -1 },
-	  SBSCD_DEVTYPE_WDOG },
-	{ A_SCD_WDOG_1,
-	  { K_INT_WATCHDOG_TIMER_1, -1 },
-	  SBSCD_DEVTYPE_WDOG },
-	{ A_SCD_TIMER_0,
-	  { K_INT_TIMER_0, -1 },
-	  SBSCD_DEVTYPE_TIMER },
-	{ A_SCD_TIMER_1,
-	  { K_INT_TIMER_1, -1 },
-	  SBSCD_DEVTYPE_TIMER },
-	{ A_SCD_TIMER_2,
-	  { K_INT_TIMER_2, -1 },
-	  SBSCD_DEVTYPE_TIMER },
-	{ A_SCD_TIMER_3,
-	  { K_INT_TIMER_3, -1 },
-	  SBSCD_DEVTYPE_TIMER },
-	{ A_SCD_JTAG_BASE + 0x1FFA0, 	/* XXX magic number for jtag addr */
-	  { -1, -1 },
-	  SBSCD_DEVTYPE_JTAGCONS },
+	{ 0x20050, {0,-1},	SBSCD_DEVTYPE_WDOG,		},
+	{ 0x20150, {1,-1},	SBSCD_DEVTYPE_WDOG,		},
+	{ 0x20070, {2,-1},	SBSCD_DEVTYPE_TIMER,		},
+	{ 0x20078, {3,-1},	SBSCD_DEVTYPE_TIMER,		},
+	{ 0x20170, {4,-1},	SBSCD_DEVTYPE_TIMER,		},
+	{ 0x20178, {5,-1},	SBSCD_DEVTYPE_TIMER,		},
+	{ 0x1FFA0, {-1,-1},	SBSCD_DEVTYPE_JTAGCONS,		},
 	/* XXX others */
 };
 static const int sb1250_sbscd_dev_count = __arraycount(sb1250_sbscd_devs);
 
 static int
-sbscd_match(device_t parent, cfdata_t match, void *aux)
+sbscd_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct zbbus_attach_args *zap = aux;
 
@@ -99,16 +80,17 @@ sbscd_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-sbscd_attach(device_t parent, device_t self, void *aux)
+sbscd_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct sbscd_attach_args sa;
 	int i;
 	int locs[SBSCDCF_NLOCS];
 
-	aprint_normal("\n");
+	printf("\n");
 
 	for (i = 0; i < sb1250_sbscd_dev_count; i++) {
 		memset(&sa, 0, sizeof sa);
+		sa.sa_base = 0x10000000;			/* XXXCGD */
 		sa.sa_locs = sb1250_sbscd_devs[i];
 
 		locs[SBSCDCF_OFFSET] = sb1250_sbscd_devs[i].sa_offset;
@@ -132,11 +114,11 @@ sbscd_print(void *aux, const char *pnp)
 	if (pnp)
 		aprint_normal("%s at %s",
 		    sbscd_device_type_name(sap->sa_locs.sa_type), pnp);
-	aprint_normal(" offset 0x%lx", sap->sa_locs.sa_offset);
+	aprint_normal(" offset 0x%lx", (long)sap->sa_locs.sa_offset);
 	for (i = 0; i < 2; i++) {
 		if (sap->sa_locs.sa_intr[i] != -1)
-			aprint_normal("%s%d", i == 0 ? " intr " : ",",
-			    sap->sa_locs.sa_intr[i]);
+			aprint_normal("%s%ld", i == 0 ? " intr " : ",",
+			    (long)sap->sa_locs.sa_intr[i]);
 	}
 	return (UNCONF);
 }

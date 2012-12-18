@@ -1,4 +1,4 @@
-/*	$NetBSD: aicasm.c,v 1.8 2009/12/27 16:03:49 jakllsch Exp $	*/
+/*	$NetBSD: aicasm.c,v 1.6 2005/12/11 12:22:18 christos Exp $	*/
 
 /*
  * Aic7xxx SCSI host adapter firmware asssembler
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: aicasm.c,v 1.8 2009/12/27 16:03:49 jakllsch Exp $");
+__RCSID("$NetBSD: aicasm.c,v 1.6 2005/12/11 12:22:18 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/mman.h>
@@ -309,7 +309,7 @@ main(int argc, char *argv[])
 }
 
 static void
-usage(void)
+usage()
 {
 
 	(void)fprintf(stderr,
@@ -321,7 +321,7 @@ usage(void)
 }
 
 static void
-back_patch(void)
+back_patch()
 {
 	struct instruction *cur_instr;
 
@@ -350,7 +350,7 @@ back_patch(void)
 }
 
 static void
-output_code(void)
+output_code()
 {
 	struct instruction *cur_instr;
 	patch_t *cur_patch;
@@ -594,7 +594,6 @@ output_listing(char *ifilename)
 			if (isatty(fileno(stdin)) == 0)
 				putchar(input);
 		}
-		free(func_values);
 		fprintf(stdout, "\nThanks!\n");
 	}
 
@@ -726,7 +725,7 @@ stop(const char *string, int err_code)
 }
 
 struct instruction *
-seq_alloc(void)
+seq_alloc()
 {
 	struct instruction *new_instr;
 
@@ -740,7 +739,7 @@ seq_alloc(void)
 }
 
 critical_section_t *
-cs_alloc(void)
+cs_alloc()
 {
 	critical_section_t *new_cs;
 
@@ -754,7 +753,7 @@ cs_alloc(void)
 }
 
 scope_t *
-scope_alloc(void)
+scope_alloc()
 {
 	scope_t *new_scope;
 

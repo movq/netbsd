@@ -1,4 +1,4 @@
-/* $NetBSD: carp.c,v 1.13 2009/09/11 23:22:28 dyoung Exp $ */
+/* $NetBSD: carp.c,v 1.12.2.1 2011/10/16 23:48:11 riz Exp $ */
 
 /*
  * Copyright (c) 2002 Michael Shalayeff. All rights reserved.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: carp.c,v 1.13 2009/09/11 23:22:28 dyoung Exp $");
+__RCSID("$NetBSD: carp.c,v 1.12.2.1 2011/10/16 23:48:11 riz Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>

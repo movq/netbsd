@@ -1,9 +1,7 @@
-/*	$NetBSD: conn.c,v 1.1.1.3 2010/12/12 15:23:10 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/servers/slapd/back-meta/conn.c,v 1.86.2.20 2010/04/13 20:23:30 kurt Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/back-meta/conn.c,v 1.86.2.15 2008/04/14 21:19:57 quanah Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1999-2010 The OpenLDAP Foundation.
+ * Copyright 1999-2008 The OpenLDAP Foundation.
  * Portions Copyright 2001-2003 Pierangelo Masarati.
  * Portions Copyright 1999-2003 Howard Chu.
  * All rights reserved.
@@ -291,12 +289,11 @@ meta_back_init_one_conn(
 	 * don't return the connection */
 	if ( mt->mt_isquarantined ) {
 		slap_retry_info_t	*ri = &mt->mt_quarantine;
-		int			dont_retry = 0;
+		int			dont_retry = 1;
 
 		if ( mt->mt_quarantine.ri_interval ) {
 			ldap_pvt_thread_mutex_lock( &mt->mt_quarantine_mutex );
-			dont_retry = ( mt->mt_isquarantined > LDAP_BACK_FQ_NO );
-			if ( dont_retry ) {
+			if ( mt->mt_isquarantined == LDAP_BACK_FQ_YES ) {
 				dont_retry = ( ri->ri_num[ ri->ri_idx ] == SLAP_RETRYNUM_TAIL
 					|| slap_get_time() < ri->ri_last + ri->ri_interval[ ri->ri_idx ] );
 				if ( !dont_retry ) {
@@ -310,10 +307,9 @@ meta_back_init_one_conn(
 						Debug( LDAP_DEBUG_ANY, "%s %s.\n",
 							op->o_log_prefix, buf, 0 );
 					}
-
-					mt->mt_isquarantined = LDAP_BACK_FQ_RETRYING;
 				}
 
+				mt->mt_isquarantined = LDAP_BACK_FQ_RETRYING;
 			}
 			ldap_pvt_thread_mutex_unlock( &mt->mt_quarantine_mutex );
 		}
@@ -420,13 +416,13 @@ retry_lock:;
 
 	/* automatically chase referrals ("chase-referrals [{yes|no}]" statement) */
 	ldap_set_option( msc->msc_ld, LDAP_OPT_REFERRALS,
-		META_BACK_TGT_CHASE_REFERRALS( mt ) ? LDAP_OPT_ON : LDAP_OPT_OFF );
+		LDAP_BACK_CHASE_REFERRALS( mi ) ? LDAP_OPT_ON : LDAP_OPT_OFF );
 
 #ifdef HAVE_TLS
 	/* start TLS ("tls [try-]{start|propagate}" statement) */
-	if ( ( META_BACK_TGT_USE_TLS( mt )
+	if ( ( LDAP_BACK_USE_TLS( mi )
 		|| ( op->o_conn->c_is_tls
-			&& META_BACK_TGT_PROPAGATE_TLS( mt ) ) )
+			&& LDAP_BACK_PROPAGATE_TLS( mi ) ) )
 		&& !is_ldaps )
 	{
 #ifdef SLAP_STARTTLS_ASYNCHRONOUS
@@ -528,7 +524,7 @@ retry:;
 		 * overlay, where the "uri" can be parsed out of a referral */
 		if ( rs->sr_err == LDAP_SERVER_DOWN
 			|| ( rs->sr_err != LDAP_SUCCESS
-				&& META_BACK_TGT_TLS_CRITICAL( mt ) ) )
+				&& LDAP_BACK_TLS_CRITICAL( mi ) ) )
 		{
 
 #ifdef DEBUG_205
@@ -1026,7 +1022,7 @@ meta_back_getconn(
 {
 	metainfo_t	*mi = ( metainfo_t * )op->o_bd->be_private;
 	metaconn_t	*mc = NULL,
-			mc_curr = {{ 0 }};
+			mc_curr = { 0 };
 	int		cached = META_TARGET_NONE,
 			i = META_TARGET_NONE,
 			err = LDAP_SUCCESS,
@@ -1170,14 +1166,8 @@ retry_lock:;
 					LDAP_BACK_CONN_TAINTED_SET( mc );
 					LDAP_BACK_CONN_CACHED_CLEAR( mc );
 
-					if ( LogTest( LDAP_DEBUG_TRACE ) ) {
-						char buf[STRLENOF("4294967295U") + 1] = { 0 };
-						mi->mi_ldap_extra->connid2str( &mc->mc_base, buf, sizeof(buf) );
-
-						Debug( LDAP_DEBUG_TRACE,
-							"%s meta_back_getconn: mc=%p conn=%s expired (tainted).\n",
-							op->o_log_prefix, (void *)mc, buf );
-					}
+					Debug( LDAP_DEBUG_TRACE, "%s meta_back_getconn: mc=%p conn=%ld expired (tainted).\n",
+						op->o_log_prefix, (void *)mc, LDAP_BACK_PCONN_ID( mc ) );
 				}
 
 				mc->mc_refcnt++;
@@ -1662,14 +1652,10 @@ done:;
 
 			default:
 				LDAP_BACK_CONN_CACHED_CLEAR( mc );
-				if ( LogTest( LDAP_DEBUG_ANY ) ) {
-					char buf[STRLENOF("4294967295U") + 1] = { 0 };
-					mi->mi_ldap_extra->connid2str( &mc->mc_base, buf, sizeof(buf) );
-
-					Debug( LDAP_DEBUG_ANY,
-						"%s meta_back_getconn: candidates=%d conn=%s insert failed\n",
-						op->o_log_prefix, ncandidates, buf );
-				}
+				Debug( LDAP_DEBUG_ANY,
+					"%s meta_back_getconn: candidates=%d conn=%ld insert failed\n",
+					op->o_log_prefix, ncandidates,
+					LDAP_BACK_PCONN_ID( mc ) );
 	
 				mc->mc_refcnt = 0;	
 				meta_back_conn_free( mc );
@@ -1683,24 +1669,16 @@ done:;
 			}
 		}
 
-		if ( LogTest( LDAP_DEBUG_TRACE ) ) {
-			char buf[STRLENOF("4294967295U") + 1] = { 0 };
-			mi->mi_ldap_extra->connid2str( &mc->mc_base, buf, sizeof(buf) );
-
-			Debug( LDAP_DEBUG_TRACE,
-				"%s meta_back_getconn: candidates=%d conn=%s inserted\n",
-				op->o_log_prefix, ncandidates, buf );
-		}
+		Debug( LDAP_DEBUG_TRACE,
+			"%s meta_back_getconn: candidates=%d conn=%ld inserted\n",
+			op->o_log_prefix, ncandidates,
+			LDAP_BACK_PCONN_ID( mc ) );
 
 	} else {
-		if ( LogTest( LDAP_DEBUG_TRACE ) ) {
-			char buf[STRLENOF("4294967295U") + 1] = { 0 };
-			mi->mi_ldap_extra->connid2str( &mc->mc_base, buf, sizeof(buf) );
-
-			Debug( LDAP_DEBUG_TRACE,
-				"%s meta_back_getconn: candidates=%d conn=%s fetched\n",
-				op->o_log_prefix, ncandidates, buf );
-		}
+		Debug( LDAP_DEBUG_TRACE,
+			"%s meta_back_getconn: candidates=%d conn=%ld fetched\n",
+			op->o_log_prefix, ncandidates,
+			LDAP_BACK_PCONN_ID( mc ) );
 	}
 
 	return mc;

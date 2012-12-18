@@ -1,4 +1,4 @@
-/*	$NetBSD: symtab.c,v 1.28 2011/09/16 16:13:18 plunky Exp $	*/
+/*	$NetBSD: symtab.c,v 1.23.28.1 2010/11/21 02:30:17 riz Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)symtab.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: symtab.c,v 1.28 2011/09/16 16:13:18 plunky Exp $");
+__RCSID("$NetBSD: symtab.c,v 1.23.28.1 2010/11/21 02:30:17 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -233,7 +233,7 @@ addentry(const char *name, ino_t inum, int type)
 	}
 	np = freelist;
 	freelist = np->e_next;
-	memset(np, 0, sizeof(struct entry));
+	memset(np, 0, (long)sizeof(struct entry));
 
 	np->e_type = type & ~LINK;
 	ep = lookupparent(name);
@@ -450,7 +450,6 @@ dumpsymtable(const char *filename, int32_t checkpt)
 {
 	struct entry *ep, *tep;
 	ino_t i;
-	long l;
 	struct entry temp, *tentry;
 	long mynum = 1, stroff = 0;
 	FILE *fd;
@@ -506,11 +505,11 @@ dumpsymtable(const char *filename, int32_t checkpt)
 	/*
 	 * Convert entry pointers to indexes, and output
 	 */
-	for (l = 0; l < entrytblsize; l++) {
-		if (entry[l] == NULL)
+	for (i = 0; i < entrytblsize; i++) {
+		if (entry[i] == NULL)
 			tentry = NULL;
 		else
-			tentry = (struct entry *)(long)entry[l]->e_index;
+			tentry = (struct entry *)(long)entry[i]->e_index;
 		(void) fwrite((char *)&tentry, sizeof(struct entry *), 1, fd);
 	}
 	hdr.volno = checkpt;
@@ -549,7 +548,7 @@ initsymtable(const char *filename)
 		entrytblsize = maxino / HASHFACTOR;
 		entry = (struct entry **)
 			calloc((unsigned)entrytblsize, sizeof(struct entry *));
-		if (entry == NULL)
+		if (entry == (struct entry **)NULL)
 			panic("no memory for entry table\n");
 		ep = addentry(".", ROOTINO, NODE);
 		ep->e_flags |= NEW;
@@ -572,7 +571,6 @@ initsymtable(const char *filename)
 		fprintf(stderr, "read: %s\n", strerror(errno));
 		panic("cannot read symbol table file %s\n", filename);
 	}
-	(void)close(fd);
 	switch (command) {
 	case 'r':
 		/*

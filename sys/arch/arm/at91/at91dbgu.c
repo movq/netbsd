@@ -1,5 +1,5 @@
-/*	$Id: at91dbgu.c,v 1.9 2012/11/12 18:00:36 skrll Exp $	*/
-/*	$NetBSD: at91dbgu.c,v 1.9 2012/11/12 18:00:36 skrll Exp $ */
+/*	$Id: at91dbgu.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
+/*	$NetBSD: at91dbgu.c,v 1.2 2008/07/03 01:15:38 matt Exp $ */
 
 /*
  *
@@ -83,13 +83,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91dbgu.c,v 1.9 2012/11/12 18:00:36 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91dbgu.c,v 1.2 2008/07/03 01:15:38 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 
 #include "rnd.h"
-#ifdef RND_COM
+#if NRND > 0 && defined(RND_COM)
 #include <sys/rnd.h>
 #endif
 
@@ -120,7 +120,7 @@ __KERNEL_RCSID(0, "$NetBSD: at91dbgu.c,v 1.9 2012/11/12 18:00:36 skrll Exp $");
 #include <sys/kauth.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/at91/at91reg.h>
 #include <arm/at91/at91var.h>
@@ -161,13 +161,13 @@ static struct at91dbgu_cons_softc {
 	tcflag_t		sc_cflag;
 	int			sc_attached;
 
-	uint8_t			*sc_rx_ptr;
-	uint8_t			sc_rx_fifo[64];
+	u_int8_t		*sc_rx_ptr;
+	u_int8_t		sc_rx_fifo[64];
 } dbgu_cn_sc;
 
 static struct cnm_state at91dbgu_cnm_state;
 
-CFATTACH_DECL_NEW(at91dbgu, sizeof(struct at91dbgu_softc),
+CFATTACH_DECL(at91dbgu, sizeof(struct at91dbgu_softc),
 	      at91dbgu_match, at91dbgu_attach, NULL, NULL);
 
 extern struct cfdriver at91dbgu_cd;
@@ -204,7 +204,10 @@ struct consdev at91dbgu_cons = {
 #define COM_ISALIVE(sc)	((sc)->enabled != 0 && device_is_active((sc)->sc_dev))
 
 static int
-at91dbgu_match(device_t parent, cfdata_t match, void *aux)
+at91dbgu_match(parent, match, aux)
+	device_t parent;
+	cfdata_t match;
+	void *aux;
 {
 	if (strcmp(match->cf_name, "at91dbgu") == 0)
 		return 2;
@@ -215,7 +218,10 @@ static int
 dbgu_intr(void* arg);
 
 static void
-at91dbgu_attach(device_t parent, device_t self, void *aux)
+at91dbgu_attach(parent, self, aux)
+	device_t parent;
+	device_t self;
+	void *aux;
 {
 	struct at91dbgu_softc *sc = device_private(self);
 	struct at91bus_attach_args *sa = aux;
@@ -243,7 +249,7 @@ at91dbgu_attach(device_t parent, device_t self, void *aux)
 		DBGUREG(DBGU_IER) = DBGU_INT_RXRDY; // @@@@@
 	}
 
-	tp = tty_alloc();
+	tp = ttymalloc();
 	tp->t_oproc = at91dbgu_start;
 	tp->t_param = at91dbgu_param;
 	tp->t_hwiflow = at91dbgu_hwiflow;
@@ -270,14 +276,14 @@ at91dbgu_attach(device_t parent, device_t self, void *aux)
 
 		cn_tab->cn_dev = makedev(maj, device_unit(sc->sc_dev));
 
-		aprint_normal("%s: console (maj %u min %u cn_dev %#"PRIx64")\n",
+		aprint_normal("%s: console (maj %u  min %u  cn_dev %u)\n",
 		    device_xname(sc->sc_dev), maj, device_unit(sc->sc_dev),
 		    cn_tab->cn_dev);
 	}
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, at91dbgu_soft, sc);
 
-#ifdef RND_COM
+#if NRND > 0 && defined(RND_COM)
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_TTY, 0);
 #endif
@@ -751,7 +757,7 @@ at91dbgu_stop(struct tty *tp, int flag)
 static u_int
 cflag2lcrhi(tcflag_t cflag)
 {
-	uint32_t	mr;
+	u_int32_t	mr;
 
 	switch (cflag & CSIZE) {
 	default:
@@ -1048,7 +1054,7 @@ dbgu_intr(void* arg)
 #endif
 	u_char *put, *end;
 	u_int cc;
-	uint32_t imr, sr;
+	u_int32_t imr, sr;
 	int c = 0;
 	imr = DBGUREG(DBGU_IMR);
 #if 0
@@ -1138,7 +1144,7 @@ dbgu_intr(void* arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 #if 0
-#ifdef RND_COM
+#if NRND > 0 && defined(RND_COM)
 	rnd_add_uint32(&sc->rnd_source, imr ^ sr ^ c);
 #endif
 #endif

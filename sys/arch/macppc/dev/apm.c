@@ -1,4 +1,4 @@
-/*	$NetBSD: apm.c,v 1.25 2012/10/27 17:18:00 chs Exp $	*/
+/*	$NetBSD: apm.c,v 1.20 2008/06/13 11:54:31 cegger Exp $	*/
 /*	$OpenBSD: apm.c,v 1.5 2002/06/07 07:13:59 miod Exp $	*/
 
 /*-
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.25 2012/10/27 17:18:00 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.20 2008/06/13 11:54:31 cegger Exp $");
 
 #include "apm.h"
 
@@ -76,6 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.25 2012/10/27 17:18:00 chs Exp $");
 #define APM_NEVENTS 16
 
 struct apm_softc {
+	struct device sc_dev;
 	struct selinfo sc_rsel;
 #ifdef __OpenBSD__
 	struct klist sc_note;
@@ -101,16 +102,16 @@ struct apm_softc {
 #define APM_UNLOCK(apmsc)
 #endif
 
-int apmmatch(device_t, cfdata_t, void *);
-void apmattach(device_t, device_t, void *);
+int apmmatch(struct device *, struct cfdata *, void *);
+void apmattach(struct device *, struct device *, void *);
 
 #ifdef __NetBSD__
 #if 0
-static int	apm_record_event(struct apm_softc *, u_int);
+static int	apm_record_event __P((struct apm_softc *, u_int));
 #endif
 #endif
 
-CFATTACH_DECL_NEW(apm, sizeof(struct apm_softc),
+CFATTACH_DECL(apm, sizeof(struct apm_softc),
     apmmatch, apmattach, NULL, NULL);
 
 #ifdef __OpenBSD__
@@ -159,7 +160,10 @@ int	apm_evindex;
 
 
 int
-apmmatch(device_t parent, cfdata_t match, void *aux)
+apmmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct adb_attach_args *aa = (void *)aux;		
 	if (aa->origaddr != ADBADDR_APM ||
@@ -174,9 +178,11 @@ apmmatch(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-apmattach(device_t parent, device_t self, void *aux)
+apmattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct apm_softc *sc = device_private(self);
+	struct apm_softc *sc = (struct apm_softc *) self;
 	struct pmu_battery_info info;
 
 	pm_battery_info(0, &info);

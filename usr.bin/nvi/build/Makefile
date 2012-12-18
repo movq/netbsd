@@ -1,22 +1,21 @@
-#	$NetBSD: Makefile,v 1.17 2012/03/21 05:44:39 matt Exp $
+#	$NetBSD: Makefile,v 1.7.2.1 2009/01/20 02:45:36 snj Exp $
 
 .include <bsd.own.mk>
 
 USE_WIDECHAR?=yes
 
-CWARNFLAGS.clang+=	-Wno-uninitialized -Wno-format-security
-
 CPPFLAGS+=-I${DIST}/include -I${.CURDIR} -I. -DGTAGS
+WARNS=4
 #DBG=-g
 
 #CWARNFLAGS+=-Wno-parentheses -Wno-unused -Wno-missing-prototypes
-#.if defined(HAVE_GCC)
+#.if defined(HAVE_GCC) && ${HAVE_GCC} == 4
 #CWARNFLAGS+=-Wno-pointer-sign
 #COPTS+=-fno-strict-aliasing
 #.endif
 
-LDADD+=	-lcurses -lterminfo
-DPADD+=	${LIBCURSES} ${LIBTERMINFO}
+LDADD+=	-lcurses
+DPADD+=	${LIBCURSES}
 PROG=	vi
 SRCS=	api.c cl_bsd.c cl_funcs.c cl_main.c cl_read.c cl_screen.c cl_term.c \
 	conv.c cut.c db.c db1.c delete.c ex.c ex_abbrev.c ex_append.c \
@@ -56,14 +55,10 @@ options_def.h: options.awk options.c
 .include "../Makefile.inc"
 .include "../../Makefile.inc"
 
-WARNS=	4
-
 .PATH: ${DIST}/vi ${DIST}/ex ${DIST}/cl
 .PATH: ${DIST}/common
 .PATH: ${DIST}/regex
-.PATH: ${DIST}/docs/vi.man
 
-COPTS.exf.c += -Wno-format-nonliteral
-COPTS.msg.c += -Wno-format-nonliteral
+BUILDSYMLINKS=	${DIST}/docs/vi.man/vi.1 vi.1
 
 .include <bsd.prog.mk>

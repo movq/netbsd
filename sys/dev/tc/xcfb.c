@@ -1,4 +1,4 @@
-/* $NetBSD: xcfb.c,v 1.55 2012/01/11 21:12:37 macallan Exp $ */
+/* $NetBSD: xcfb.c,v 1.47 2008/07/09 13:19:33 joerg Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xcfb.c,v 1.55 2012/01/11 21:12:37 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xcfb.c,v 1.47 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,11 +54,13 @@ __KERNEL_RCSID(0, "$NetBSD: xcfb.c,v 1.55 2012/01/11 21:12:37 macallan Exp $");
 #include <dev/ic/ims332reg.h>
 #include <pmax/pmax/maxine.h>
 
+#include <uvm/uvm_extern.h>
+
 struct hwcmap256 {
 #define	CMAP_SIZE	256	/* 256 R/G/B entries */
-	uint8_t r[CMAP_SIZE];
-	uint8_t g[CMAP_SIZE];
-	uint8_t b[CMAP_SIZE];
+	u_int8_t r[CMAP_SIZE];
+	u_int8_t g[CMAP_SIZE];
+	u_int8_t b[CMAP_SIZE];
 };
 
 struct hwcursor64 {
@@ -67,9 +69,9 @@ struct hwcursor64 {
 	struct wsdisplay_curpos cc_size;
 	struct wsdisplay_curpos cc_magic;	/* not used by PMAG-DV */
 #define	CURSOR_MAX_SIZE	64
-	uint8_t cc_color[6];
-	uint64_t cc_image[CURSOR_MAX_SIZE];
-	uint64_t cc_mask[CURSOR_MAX_SIZE];
+	u_int8_t cc_color[6];
+	u_int64_t cc_image[CURSOR_MAX_SIZE];
+	u_int64_t cc_mask[CURSOR_MAX_SIZE];
 };
 
 #define	XCFB_FB_BASE	(XINE_PHYS_CFB_START + 0x2000000)
@@ -92,8 +94,8 @@ struct xcfb_softc {
 	int sc_csr;			/* software copy of IMS332 CSR A */
 };
 
-static int  xcfbmatch(device_t, cfdata_t, void *);
-static void xcfbattach(device_t, device_t, void *);
+static int  xcfbmatch(struct device *, struct cfdata *, void *);
+static void xcfbattach(struct device *, struct device *, void *);
 
 CFATTACH_DECL_NEW(xcfb, sizeof(struct xcfb_softc),
     xcfbmatch, xcfbattach, NULL, NULL);
@@ -149,9 +151,9 @@ static void ims332_loadcmap(struct hwcmap256 *);
 static void ims332_set_curpos(struct xcfb_softc *);
 static void ims332_load_curcmap(struct xcfb_softc *);
 static void ims332_load_curshape(struct xcfb_softc *);
-static void ims332_write_reg(int, uint32_t);
+static void ims332_write_reg(int, u_int32_t);
 #if 0
-static uint32_t ims332_read_reg(int);
+static u_int32_t ims332_read_reg(int);
 #endif
 
 extern long ioasic_base;	/* XXX */
@@ -163,7 +165,7 @@ extern long ioasic_base;	/* XXX */
  *   3 2 1 0 3 2 1 0		3 3 2 2 1 1 0 0
  *   7 6 5 4 7 6 5 4		7 7 6 6 5 5 4 4
  */
-static const uint8_t shuffle[256] = {
+static const u_int8_t shuffle[256] = {
 	0x00, 0x01, 0x04, 0x05, 0x10, 0x11, 0x14, 0x15,
 	0x40, 0x41, 0x44, 0x45, 0x50, 0x51, 0x54, 0x55,
 	0x02, 0x03, 0x06, 0x07, 0x12, 0x13, 0x16, 0x17,
@@ -221,11 +223,11 @@ xcfbattach(device_t parent, device_t self, void *aux)
 	console = (ta->ta_addr == xcfb_consaddr);
 	if (console) {
 		sc->sc_ri = ri = &xcfb_console_ri;
-		ri->ri_flg &= ~RI_NO_AUTO;
 		sc->nscreens = 1;
 	}
 	else {
-		ri = malloc(sizeof(struct rasops_info), M_DEVBUF, M_NOWAIT);
+		MALLOC(ri, struct rasops_info *, sizeof(struct rasops_info),
+			M_DEVBUF, M_NOWAIT);
 		if (ri == NULL) {
 			printf(": can't alloc memory\n");
 			return;
@@ -258,7 +260,7 @@ static void
 xcfb_cmap_init(struct xcfb_softc *sc)
 {
 	struct hwcmap256 *cm;
-	const uint8_t *p;
+	const u_int8_t *p;
 	int index;
 
 	cm = &sc->sc_cmap;
@@ -279,8 +281,6 @@ xcfb_common_init(struct rasops_info *ri)
 	xcfbhwinit((void *)ri->ri_hw);
 
 	ri->ri_flg = RI_CENTER;
-	if (ri == &xcfb_console_ri)
-		ri->ri_flg |= RI_NO_AUTO;
 	ri->ri_depth = 8;
 	ri->ri_width = 1024;
 	ri->ri_height = 768;
@@ -293,10 +293,10 @@ xcfb_common_init(struct rasops_info *ri)
 	wsfont_init();
 	/* prefer 12 pixel wide font */
 	cookie = wsfont_find(NULL, 12, 0, 0, WSDISPLAY_FONTORDER_L2R,
-	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
+	    WSDISPLAY_FONTORDER_L2R);
 	if (cookie <= 0)
 		cookie = wsfont_find(NULL, 0, 0, 0, WSDISPLAY_FONTORDER_L2R,
-		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
+		    WSDISPLAY_FONTORDER_L2R);
 	if (cookie <= 0) {
 		printf("xcfb: font table is empty\n");
 		return;
@@ -335,11 +335,11 @@ xcfb_cnattach(void)
 static void
 xcfbhwinit(void *base)
 {
-	volatile uint32_t *csr;
-	uint32_t i;
-	const uint8_t *p;
+	volatile u_int32_t *csr;
+	u_int32_t i;
+	const u_int8_t *p;
 
-	csr = (volatile uint32_t *)((char *)base + IOASIC_CSR);
+	csr = (volatile u_int32_t *)((char *)base + IOASIC_CSR);
 	i = *csr;
 	i &= ~XINE_CSR_VDAC_ENABLE;
 	*csr = i;
@@ -370,7 +370,7 @@ xcfbhwinit(void *base)
 	/* build sane colormap */
 	p = rasops_cmap;
 	for (i = 0; i < CMAP_SIZE; i++, p += 3) {
-		uint32_t bgr;
+		u_int32_t bgr;
 
 		bgr = p[2] << 16 | p[1] << 8 | p[0];
 		ims332_write_reg(IMS332_REG_LUT_BASE + i, bgr);
@@ -519,9 +519,9 @@ static int
 xcfbintr(void *v)
 {
 	struct xcfb_softc *sc = v;
-	uint32_t *intr, i;
+	u_int32_t *intr, i;
 
-	intr = (uint32_t *)((char *)sc->sc_ri->ri_hw + IOASIC_INTR);
+	intr = (u_int32_t *)((char *)sc->sc_ri->ri_hw + IOASIC_INTR);
 	i = *intr;
 	i &= ~XINE_INTR_VINT;
 	*intr = i;
@@ -678,7 +678,7 @@ static void
 ims332_loadcmap(struct hwcmap256 *cm)
 {
 	int i;
-	uint32_t rgb;
+	u_int32_t rgb;
 
 	for (i = 0; i < CMAP_SIZE; i++) {
 		rgb = cm->b[i] << 16 | cm->g[i] << 8 | cm->r[i];
@@ -690,7 +690,7 @@ static void
 ims332_set_curpos(struct xcfb_softc *sc)
 {
 	struct wsdisplay_curpos *curpos = &sc->sc_cursor.cc_pos;
-	uint32_t pos;
+	u_int32_t pos;
 	int s;
 
 	s = spltty();
@@ -702,8 +702,8 @@ ims332_set_curpos(struct xcfb_softc *sc)
 static void
 ims332_load_curcmap(struct xcfb_softc *sc)
 {
-	uint8_t *cp = sc->sc_cursor.cc_color;
-	uint32_t rgb;
+	u_int8_t *cp = sc->sc_cursor.cc_color;
+	u_int32_t rgb;
 
 	/* cursor background */
 	rgb = cp[5] << 16 | cp[3] << 8 | cp[1];
@@ -718,10 +718,10 @@ static void
 ims332_load_curshape(struct xcfb_softc *sc)
 {
 	u_int i, img, msk, bits;
-	uint8_t u, *ip, *mp;
+	u_int8_t u, *ip, *mp;
 
-	ip = (uint8_t *)sc->sc_cursor.cc_image;
-	mp = (uint8_t *)sc->sc_cursor.cc_mask;
+	ip = (u_int8_t *)sc->sc_cursor.cc_image;
+	mp = (u_int8_t *)sc->sc_cursor.cc_mask;
 
 	i = 0;
 	/* 64 pixel scan line is consisted with 8 halfword cursor ram */
@@ -749,25 +749,25 @@ ims332_load_curshape(struct xcfb_softc *sc)
 }
 
 static void
-ims332_write_reg(int regno, uint32_t val)
+ims332_write_reg(int regno, u_int32_t val)
 {
 	void *high8 = (void *)(ioasic_base + IMS332_HIGH);
 	void *low16 = (void *)(ioasic_base + IMS332_WLOW + (regno << 4));
 
-	*(volatile uint16_t *)high8 = (val & 0xff0000) >> 8;
-	*(volatile uint16_t *)low16 = val;
+	*(volatile u_int16_t *)high8 = (val & 0xff0000) >> 8;
+	*(volatile u_int16_t *)low16 = val;
 }
 
 #if 0
-static uint32_t
+static u_int32_t
 ims332_read_reg(int regno)
 {
 	void *high8 = (void *)(ioasic_base + IMS332_HIGH);
 	void *low16 = (void *)(ioasic_base + IMS332_RLOW) + (regno << 4);
 	u_int v0, v1;
 
-	v1 = *(volatile uint16_t *)high8;
-	v0 = *(volatile uint16_t *)low16;
+	v1 = *(volatile u_int16_t *)high8;
+	v0 = *(volatile u_int16_t *)low16;
 	return (v1 & 0xff00) << 8 | v0;
 }
 #endif

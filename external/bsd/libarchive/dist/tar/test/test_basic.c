@@ -27,19 +27,20 @@ __FBSDID("$FreeBSD: src/usr.bin/tar/test/test_basic.c,v 1.2 2008/05/26 17:10:10 
 
 
 static void
-basic_tar(const char *target, const char *pack_options,
-    const char *unpack_options, const char *flist)
+basic_tar(const char *target, const char *pack_options, const char *unpack_options)
 {
+	struct stat st, st2;
+	char buff[128];
 	int r;
 
-	assertMakeDir(target, 0775);
+	assertEqualInt(0, mkdir(target, 0775));
 
 	/* Use the tar program to create an archive. */
-	r = systemf("%s cf - %s %s >%s/archive 2>%s/pack.err", testprog, pack_options, flist, target, target);
+	r = systemf("%s cf - %s `cat filelist` >%s/archive 2>%s/pack.err", testprog, pack_options, target, target);
 	failure("Error invoking %s cf -", testprog, pack_options);
 	assertEqualInt(r, 0);
 
-	assertChdir(target);
+	chdir(target);
 
 	/* Verify that nothing went to stderr. */
 	assertEmptyFile("pack.err");
@@ -59,57 +60,99 @@ basic_tar(const char *target, const char *pack_options,
 	 */
 
 	/* Regular file with 2 links. */
-	assertIsReg("file", -1);
-	assertFileSize("file", 10);
-	failure("%s", target);
-	assertFileNLinks("file", 2);
+	r = lstat("file", &st);
+	failure("Failed to stat file %s/file, errno=%d", target, errno);
+	assertEqualInt(r, 0);
+	if (r == 0) {
+		assert(S_ISREG(st.st_mode));
+		assertEqualInt(0644, st.st_mode & 0777);
+		assertEqualInt(10, st.st_size);
+		failure("file %s/file", target);
+		assertEqualInt(2, st.st_nlink);
+	}
 
 	/* Another name for the same file. */
-	assertIsReg("linkfile", -1);
-	assertFileSize("linkfile", 10);
-	assertFileNLinks("linkfile", 2);
-	assertIsHardlink("file", "linkfile");
+	r = lstat("linkfile", &st2);
+	failure("Failed to stat file %s/linkfile, errno=%d", target, errno);
+	assertEqualInt(r, 0);
+	if (r == 0) {
+		assert(S_ISREG(st2.st_mode));
+		assertEqualInt(0644, st2.st_mode & 0777);
+		assertEqualInt(10, st2.st_size);
+		failure("file %s/linkfile", target);
+		assertEqualInt(2, st2.st_nlink);
+		/* Verify that the two are really hardlinked. */
+		assertEqualInt(st.st_dev, st2.st_dev);
+		failure("%s/linkfile and %s/file aren't really hardlinks", target, target);
+		assertEqualInt(st.st_ino, st2.st_ino);
+	}
 
 	/* Symlink */
-	if (canSymlink())
-		assertIsSymlink("symlink", "file");
+	r = lstat("symlink", &st);
+	failure("Failed to stat file %s/symlink, errno=%d", target, errno);
+	assertEqualInt(r, 0);
+	if (r == 0) {
+		failure("symlink should be a symlink; actual mode is %o",
+		    st.st_mode);
+		assert(S_ISLNK(st.st_mode));
+		if (S_ISLNK(st.st_mode)) {
+			r = readlink("symlink", buff, sizeof(buff));
+			assertEqualInt(r, 4);
+			buff[r] = '\0';
+			assertEqualString(buff, "file");
+		}
+	}
 
 	/* dir */
-	assertIsDir("dir", 0775);
-	assertChdir("..");
+	r = lstat("dir", &st);
+	if (r == 0) {
+		assertEqualInt(r, 0);
+		assert(S_ISDIR(st.st_mode));
+		assertEqualInt(0775, st.st_mode & 0777);
+	}
+
+	chdir("..");
 }
 
 DEFINE_TEST(test_basic)
 {
-	FILE *f;
-	const char *flist;
+	int fd;
+	int filelist;
+	int oldumask;
 
-	assertUmask(0);
+	oldumask = umask(0);
+
+	/*
+	 * Create an assortment of files on disk.
+	 */
+	filelist = open("filelist", O_CREAT | O_WRONLY, 0644);
 
 	/* File with 10 bytes content. */
-	f = fopen("file", "wb");
-	assert(f != NULL);
-	assertEqualInt(10, fwrite("123456789", 1, 10, f));
-	fclose(f);
+	fd = open("file", O_CREAT | O_WRONLY, 0644);
+	assert(fd >= 0);
+	assertEqualInt(10, write(fd, "123456789", 10));
+	close(fd);
+	write(filelist, "file\n", 5);
 
 	/* hardlink to above file. */
-	assertMakeHardlink("linkfile", "file");
-	assertIsHardlink("file", "linkfile");
+	assertEqualInt(0, link("file", "linkfile"));
+	write(filelist, "linkfile\n", 9);
 
 	/* Symlink to above file. */
-	if (canSymlink())
-		assertMakeSymlink("symlink", "file");
+	assertEqualInt(0, symlink("file", "symlink"));
+	write(filelist, "symlink\n", 8);
 
 	/* Directory. */
-	assertMakeDir("dir", 0775);
+	assertEqualInt(0, mkdir("dir", 0775));
+	write(filelist, "dir\n", 4);
+	/* All done. */
+	close(filelist);
 
-	if (canSymlink())
-		flist = "file linkfile symlink dir";
-	else
-		flist = "file linkfile dir";
 	/* Archive/dearchive with a variety of options. */
-	basic_tar("copy", "", "", flist);
+	basic_tar("copy", "", "");
 	/* tar doesn't handle cpio symlinks correctly */
 	/* basic_tar("copy_odc", "--format=odc", ""); */
-	basic_tar("copy_ustar", "--format=ustar", "", flist);
+	basic_tar("copy_ustar", "--format=ustar", "");
+
+	umask(oldumask);
 }

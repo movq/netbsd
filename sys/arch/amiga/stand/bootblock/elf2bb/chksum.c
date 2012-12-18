@@ -1,4 +1,4 @@
-/* $NetBSD: chksum.c,v 1.5 2009/03/14 15:36:01 dsl Exp $ */
+/* $NetBSD: chksum.c,v 1.4 2008/04/28 20:23:13 martin Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -40,7 +40,9 @@
 #include "chksum.h"
 
 u_int32_t
-chksum(u_int32_t *block, int size)
+chksum(block, size)
+	u_int32_t *block;
+	int size;
 {
 	u_int32_t sum, lastsum;
 	int i;

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_aobj.h,v 1.22 2012/09/14 18:56:15 rmind Exp $	*/
+/*	$NetBSD: uvm_aobj.h,v 1.20 2007/12/01 10:40:03 yamt Exp $	*/
 
 /*
  * Copyright (c) 1998 Chuck Silvers, Charles D. Cranor and
@@ -13,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor and
+ *      Washington University.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -40,31 +46,37 @@
 #define _UVM_UVM_AOBJ_H_
 
 /*
- * Flags for uao_create: UAO_FLAG_KERNOBJ and UAO_FLAG_KERNSWAP are
- * used only once, to initialise UVM.
+ * flags
  */
-#define	UAO_FLAG_KERNOBJ	0x1	/* create kernel object */
-#define	UAO_FLAG_KERNSWAP	0x2	/* enable kernel swap */
-#define	UAO_FLAG_NOSWAP		0x8	/* aobj may not swap */
+
+/* flags for uao_create: can only be used one time (at bootup) */
+#define UAO_FLAG_KERNOBJ	0x1	/* create kernel object */
+#define UAO_FLAG_KERNSWAP	0x2	/* enable kernel swap */
+
+/* internal flags */
+#define UAO_FLAG_NOSWAP		0x8	/* aobj can't swap (kernel obj only!) */
 
 #ifdef _KERNEL
 #if defined(_KERNEL_OPT)
 #include "opt_vmswap.h"
 #endif
 
-void	uao_init(void);
-int	uao_set_swslot(struct uvm_object *, int, int);
+/*
+ * prototypes
+ */
 
-#if	defined(VMSWAP)
-int	uao_find_swslot(struct uvm_object *, int);
-void	uao_dropswap(struct uvm_object *, int);
-bool	uao_swap_off(int, int);
-void	uao_dropswap_range(struct uvm_object *, voff_t, voff_t);
-#else
+void uao_init(void);
+int uao_set_swslot(struct uvm_object *, int, int);
+#if defined(VMSWAP)
+int uao_find_swslot(struct uvm_object *, int);
+void uao_dropswap(struct uvm_object *, int);
+bool uao_swap_off(int, int);
+void uao_dropswap_range(struct uvm_object *, voff_t, voff_t);
+#else /* defined(VMSWAP) */
 #define	uao_find_swslot(obj, off)	0
 #define	uao_dropswap(obj, off)		/* nothing */
 #define	uao_dropswap_range(obj, lo, hi)	/* nothing */
-#endif
+#endif /* defined(VMSWAP) */
 
 #endif /* _KERNEL */
 

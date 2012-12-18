@@ -1,4 +1,4 @@
-/* $NetBSD: adm5120_obio_space.c,v 1.3 2011/07/01 18:38:49 dyoung Exp $ */
+/* $NetBSD: adm5120_obio_space.c,v 1.2 2008/04/28 20:23:27 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -64,11 +64,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adm5120_obio_space.c,v 1.3 2011/07/01 18:38:49 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adm5120_obio_space.c,v 1.2 2008/04/28 20:23:27 martin Exp $");
 
 #include <sys/param.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <mips/adm5120/include/adm5120_obiovar.h>
 
 #define	CHIP			obio

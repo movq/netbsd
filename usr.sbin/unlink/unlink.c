@@ -1,4 +1,4 @@
-/*	$NetBSD: unlink.c,v 1.5 2011/08/30 20:50:24 joerg Exp $	*/
+/*	$NetBSD: unlink.c,v 1.4 2008/07/21 13:37:00 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #ifndef lint
 __COPYRIGHT("@(#) Copyright (c) 1999\
  The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: unlink.c,v 1.5 2011/08/30 20:50:24 joerg Exp $");
+__RCSID("$NetBSD: unlink.c,v 1.4 2008/07/21 13:37:00 lukem Exp $");
 #endif
 
 #include <locale.h>
@@ -41,10 +41,13 @@ __RCSID("$NetBSD: unlink.c,v 1.5 2011/08/30 20:50:24 joerg Exp $");
 #include <stdlib.h>
 #include <unistd.h>
 
-__dead static void	usage(void);
+int		main __P((int, char *[]));
+static void	usage __P((void));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 
 	(void)setlocale(LC_ALL, "");
@@ -62,7 +65,7 @@ main(int argc, char *argv[])
 }
 
 static void
-usage(void)
+usage()
 {
 
 	(void)fprintf(stderr, "usage: unlink file\n");

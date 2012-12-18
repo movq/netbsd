@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_descrip.c,v 1.27 2012/08/05 04:26:10 riastradh Exp $	*/
+/*	$NetBSD: sys_descrip.c,v 1.7.4.2 2012/11/06 20:07:33 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_descrip.c,v 1.27 2012/08/05 04:26:10 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_descrip.c,v 1.7.4.2 2012/11/06 20:07:33 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,7 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: sys_descrip.c,v 1.27 2012/08/05 04:26:10 riastradh E
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/fcntl.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/pool.h>
 #include <sys/syslog.h>
 #include <sys/unistd.h>
@@ -93,8 +93,6 @@ __KERNEL_RCSID(0, "$NetBSD: sys_descrip.c,v 1.27 2012/08/05 04:26:10 riastradh E
 #include <sys/atomic.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
-
-#include <uvm/uvm_readahead.h>
 
 /*
  * Duplicate a file descriptor.
@@ -123,51 +121,38 @@ sys_dup(struct lwp *l, const struct sys_dup_args *uap, register_t *retval)
  * Duplicate a file descriptor to a particular value.
  */
 int
-dodup(struct lwp *l, int from, int to, int flags, register_t *retval)
-{
-	int error;
-	file_t *fp;
-
-	if ((fp = fd_getfile(from)) == NULL)
-		return EBADF;
-	mutex_enter(&fp->f_lock);
-	fp->f_count++;
-	mutex_exit(&fp->f_lock);
-	fd_putfile(from);
-
-	if ((u_int)to >= curproc->p_rlimit[RLIMIT_NOFILE].rlim_cur ||
-	    (u_int)to >= maxfiles)
-		error = EBADF;
-	else if (from == to)
-		error = 0;
-	else
-		error = fd_dup2(fp, to, flags);
-	closef(fp);
-	*retval = to;
-
-	return error;
-}
-
-int
-sys_dup3(struct lwp *l, const struct sys_dup3_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(int)	from;
-		syscallarg(int)	to;
-		syscallarg(int)	flags;
-	} */
-	return dodup(l, SCARG(uap, from), SCARG(uap, to), SCARG(uap, flags),
-	    retval);
-}
-
-int
 sys_dup2(struct lwp *l, const struct sys_dup2_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int)	from;
 		syscallarg(int)	to;
 	} */
-	return dodup(l, SCARG(uap, from), SCARG(uap, to), 0, retval);
+	int old, new, error;
+	file_t *fp;
+
+	old = SCARG(uap, from);
+	new = SCARG(uap, to);
+
+	if ((fp = fd_getfile(old)) == NULL) {
+		return EBADF;
+	}
+	mutex_enter(&fp->f_lock);
+	fp->f_count++;
+	mutex_exit(&fp->f_lock);
+	fd_putfile(old);
+
+	if ((u_int)new >= curproc->p_rlimit[RLIMIT_NOFILE].rlim_cur ||
+	    (u_int)new >= maxfiles) {
+		error = EBADF;
+	} else if (old == new) {
+		error = 0;
+	} else {
+		error = fd_dup2(fp, new);
+	}
+	closef(fp);
+	*retval = new;
+
+	return error;
 }
 
 /*
@@ -328,8 +313,8 @@ sys_fcntl(struct lwp *l, const struct sys_fcntl_args *uap, register_t *retval)
 	int fd, i, tmp, error, cmd, newmin;
 	filedesc_t *fdp;
 	file_t *fp;
+	fdfile_t *ff;
 	struct flock fl;
-	bool cloexec = false;
 
 	fd = SCARG(uap, fd);
 	cmd = SCARG(uap, cmd);
@@ -371,6 +356,7 @@ sys_fcntl(struct lwp *l, const struct sys_fcntl_args *uap, register_t *retval)
 
 	if ((fp = fd_getfile(fd)) == NULL)
 		return (EBADF);
+	ff = fdp->fd_ofiles[fd];
 
 	if ((cmd & F_FSCTL)) {
 		error = fcntl_forfs(fd, fp, cmd, SCARG(uap, arg));
@@ -379,9 +365,6 @@ sys_fcntl(struct lwp *l, const struct sys_fcntl_args *uap, register_t *retval)
 	}
 
 	switch (cmd) {
-	case F_DUPFD_CLOEXEC:
-		cloexec = true;
-		/*FALLTHROUGH*/
 	case F_DUPFD:
 		newmin = (long)SCARG(uap, arg);
 		if ((u_int)newmin >=
@@ -390,29 +373,21 @@ sys_fcntl(struct lwp *l, const struct sys_fcntl_args *uap, register_t *retval)
 			fd_putfile(fd);
 			return EINVAL;
 		}
-		error = fd_dup(fp, newmin, &i, cloexec);
+		error = fd_dup(fp, newmin, &i, false);
 		*retval = i;
 		break;
 
 	case F_GETFD:
-		*retval = fdp->fd_dt->dt_ff[fd]->ff_exclose;
+		*retval = ff->ff_exclose;
 		break;
 
 	case F_SETFD:
-		fd_set_exclose(l, fd,
-		    ((long)SCARG(uap, arg) & FD_CLOEXEC) != 0);
-		break;
-
-	case F_GETNOSIGPIPE:
-		*retval = (fp->f_flag & FNOSIGPIPE) != 0;
-		break;
-
-	case F_SETNOSIGPIPE:
-		if (SCARG(uap, arg))
-			atomic_or_uint(&fp->f_flag, FNOSIGPIPE);
-		else
-			atomic_and_uint(&fp->f_flag, ~FNOSIGPIPE);
-		*retval = 0;
+		if ((long)SCARG(uap, arg) & 1) {
+			ff->ff_exclose = true;
+			fdp->fd_exclose = true;
+		} else {
+			ff->ff_exclose = false;
+		}
 		break;
 
 	case F_GETFL:
@@ -479,22 +454,11 @@ sys_close(struct lwp *l, const struct sys_close_args *uap, register_t *retval)
 	/* {
 		syscallarg(int)	fd;
 	} */
-	int error;
 
 	if (fd_getfile(SCARG(uap, fd)) == NULL) {
 		return EBADF;
 	}
-
-	error = fd_close(SCARG(uap, fd));
-	if (error == ERESTART) {
-#ifdef DIAGNOSTIC
-		printf("pid %d: close returned ERESTART\n",
-		    (int)l->l_proc->p_pid);
-#endif
-		error = EINTR;
-	}
-
-	return error;
+	return fd_close(SCARG(uap, fd));
 }
 
 /*
@@ -520,7 +484,7 @@ do_sys_fstat(int fd, struct stat *sb)
  * Return status information about a file descriptor.
  */
 int
-sys___fstat50(struct lwp *l, const struct sys___fstat50_args *uap,
+sys___fstat30(struct lwp *l, const struct sys___fstat30_args *uap,
 	      register_t *retval)
 {
 	/* {
@@ -619,25 +583,21 @@ sys_flock(struct lwp *l, const struct sys_flock_args *uap, register_t *retval)
 	lf.l_whence = SEEK_SET;
 	lf.l_start = 0;
 	lf.l_len = 0;
-
-	switch (how & ~LOCK_NB) {
-	case LOCK_UN:
+	if (how & LOCK_UN) {
 		lf.l_type = F_UNLCK;
 		atomic_and_uint(&fp->f_flag, ~FHASLOCK);
 		error = VOP_ADVLOCK(vp, fp, F_UNLCK, &lf, F_FLOCK);
 		fd_putfile(fd);
 		return error;
-	case LOCK_EX:
+	}
+	if (how & LOCK_EX) {
 		lf.l_type = F_WRLCK;
-		break;
-	case LOCK_SH:
+	} else if (how & LOCK_SH) {
 		lf.l_type = F_RDLCK;
-		break;
-	default:
+	} else {
 		fd_putfile(fd);
 		return EINVAL;
 	}
-
 	atomic_or_uint(&fp->f_flag, FHASLOCK);
 	p = curproc;
 	if (how & LOCK_NB) {
@@ -653,21 +613,8 @@ int
 do_posix_fadvise(int fd, off_t offset, off_t len, int advice)
 {
 	file_t *fp;
-	vnode_t *vp;
-	off_t endoffset;
 	int error;
 
-	CTASSERT(POSIX_FADV_NORMAL == UVM_ADV_NORMAL);
-	CTASSERT(POSIX_FADV_RANDOM == UVM_ADV_RANDOM);
-	CTASSERT(POSIX_FADV_SEQUENTIAL == UVM_ADV_SEQUENTIAL);
-
-	if (len == 0) {
-		endoffset = INT64_MAX;
-	} else if (len > 0 && (INT64_MAX - offset) >= len) {
-		endoffset = offset + len;
-	} else {
-		return EINVAL;
-	}
 	if ((fp = fd_getfile(fd)) == NULL) {
 		return EBADF;
 	}
@@ -682,22 +629,15 @@ do_posix_fadvise(int fd, off_t offset, off_t len, int advice)
 	}
 
 	switch (advice) {
-	case POSIX_FADV_WILLNEED:
-	case POSIX_FADV_DONTNEED:
-		vp = fp->f_data;
-		if (vp->v_type != VREG && vp->v_type != VBLK) {
-			fd_putfile(fd);
-			return 0;
-		}
-		break;
-	}
-
-	switch (advice) {
 	case POSIX_FADV_NORMAL:
 	case POSIX_FADV_RANDOM:
 	case POSIX_FADV_SEQUENTIAL:
+		KASSERT(POSIX_FADV_NORMAL == UVM_ADV_NORMAL);
+		KASSERT(POSIX_FADV_RANDOM == UVM_ADV_RANDOM);
+		KASSERT(POSIX_FADV_SEQUENTIAL == UVM_ADV_SEQUENTIAL);
+
 		/*
-		 * We ignore offset and size.  Must lock the file to
+		 * We ignore offset and size.  must lock the file to
 		 * do this, as f_advice is sub-word sized.
 		 */
 		mutex_enter(&fp->f_lock);
@@ -707,30 +647,7 @@ do_posix_fadvise(int fd, off_t offset, off_t len, int advice)
 		break;
 
 	case POSIX_FADV_WILLNEED:
-		vp = fp->f_data;
-		error = uvm_readahead(&vp->v_uobj, offset, endoffset - offset);
-		break;
-
 	case POSIX_FADV_DONTNEED:
-		vp = fp->f_data;
-		/*
-		 * Align the region to page boundaries as VOP_PUTPAGES expects
-		 * by shrinking it.  We shrink instead of expand because we
-		 * do not want to deactivate cache outside of the requested
-		 * region.  It means that if the specified region is smaller
-		 * than PAGE_SIZE, we do nothing.
-		 */
-		if (round_page(offset) < trunc_page(endoffset) &&
-		    offset <= round_page(offset)) {
-			mutex_enter(vp->v_interlock);
-			error = VOP_PUTPAGES(vp,
-			    round_page(offset), trunc_page(endoffset),
-			    PGO_DEACTIVATE | PGO_CLEANIT);
-		} else {
-			error = 0;
-		}
-		break;
-
 	case POSIX_FADV_NOREUSE:
 		/* Not implemented yet. */
 		error = 0;
@@ -760,30 +677,5 @@ sys___posix_fadvise50(struct lwp *l,
 	*retval = do_posix_fadvise(SCARG(uap, fd), SCARG(uap, offset),
 	    SCARG(uap, len), SCARG(uap, advice));
 
-	return 0;
-}
-
-int
-sys_pipe(struct lwp *l, const void *v, register_t *retval)
-{
-	return pipe1(l, retval, 0);
-}
-
-int
-sys_pipe2(struct lwp *l, const struct sys_pipe2_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(int[2]) fildes;
-		syscallarg(int) flags;
-	} */
-	int fd[2], error;
-
-	if ((error = pipe1(l, retval, SCARG(uap, flags))) != 0)
-		return error;
-	fd[0] = retval[0];
-	fd[1] = retval[1];
-	if ((error = copyout(fd, SCARG(uap, fildes), sizeof(fd))) != 0)
-		return error;
-	retval[0] = 0;
 	return 0;
 }

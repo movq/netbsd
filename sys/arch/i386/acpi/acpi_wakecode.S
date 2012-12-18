@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_wakecode.S,v 1.15 2012/04/19 18:00:34 jym Exp $	*/
+/*	$NetBSD: acpi_wakecode.S,v 1.12 2008/04/28 20:23:23 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -111,18 +111,6 @@ wakeup_16:
 	movw	%cs,%ax
 	movw	%ax,%ds
 	movw	%ax,%ss
-
-	/* If we need to restore a VESA VBE mode, do it now */
-	cmpb	$0,WAKEUP_vesa_modenum
-	je	1f
-	movw	WAKEUP_vesa_modenum,%bx
-	orw	$0x4000,%bx
-	movw	$0x4f02,%ax
-	int	$0x10
-
-	movw	%cs,%ax
-	movw	%ax,%ds
-	movw	%ax,%ss
 1:
 
 	/* Disable beep again if machdep.acpi_beep_on_reset=1 */
@@ -165,7 +153,7 @@ wakeup_32:
 	movl	WAKEUP_r_cr3 + ACPI_WAKEUP_ADDR,%eax
 	movl	%eax,%cr3
 	movl	%cr0,%eax
-	orl	$(CR0_PE|CR0_PG|CR0_NE|CR0_TS|CR0_EM|CR0_MP|CR0_WP|CR0_AM),%eax
+	orl	$(CR0_PE|CR0_PG|CR0_NE|CR0_TS|CR0_EM|CR0_MP|CR0_WP),%eax
 	movl	%eax,%cr0
 
 	/* Flush the prefetch queue */
@@ -211,7 +199,5 @@ WAKEUP_restorecpu:	.long 0
 
 	.global WAKEUP_vbios_reset
 WAKEUP_vbios_reset:	.byte 0
-	.global WAKEUP_vesa_modenum
-WAKEUP_vesa_modenum:	.word 0
 	.global WAKEUP_beep_on_reset
 WAKEUP_beep_on_reset:	.byte 0

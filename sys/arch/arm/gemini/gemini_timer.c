@@ -1,4 +1,4 @@
-/*	$NetBSD: gemini_timer.c,v 1.5 2011/07/01 19:32:28 dyoung Exp $	*/
+/*	$NetBSD: gemini_timer.c,v 1.1 2008/10/24 04:23:18 matt Exp $	*/
 
 /* adapted from:
  *	NetBSD: omap2_geminitmr.c,v 1.1 2008/08/27 11:03:10 matt Exp
@@ -81,7 +81,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gemini_timer.c,v 1.5 2011/07/01 19:32:28 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gemini_timer.c,v 1.1 2008/10/24 04:23:18 matt Exp $");
 
 #include "opt_gemini.h"
 #include "opt_cpuoptions.h"
@@ -96,7 +96,7 @@ __KERNEL_RCSID(0, "$NetBSD: gemini_timer.c,v 1.5 2011/07/01 19:32:28 dyoung Exp 
 
 #include <dev/clock_subr.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -233,20 +233,18 @@ gemini_get_timecount(struct timecounter *tc)
 int
 clockintr(void *frame)
 {
-	struct geminitmr_softc *sc = clock_sc;
+	struct geminitmr_softc *sc = clock_sc;;
 
 	_timer_intr_clr(sc);
 	_timer_reload(sc, sc->sc_tf.tf_counter);
 	hardclock(frame);
-	if (clock_sc == stat_sc)
-		statclock(frame);
 	return 1;
 }
 
 int
 statintr(void *frame)
 {
-	struct geminitmr_softc *sc = stat_sc;
+	struct geminitmr_softc *sc = stat_sc;;
 
 	_timer_intr_clr(sc);
 	_timer_reload(sc, sc->sc_tf.tf_counter);
@@ -271,7 +269,7 @@ timer_init(geminitmr_softc_t *sc, int schz, boolean_t autoload, boolean_t intr)
 }
 
 void
-gemini_microtime_init(void)
+gemini_microtime_init()
 {
 	if (ref_sc == NULL)
 		panic("microtime reference timer was not configured.");
@@ -283,8 +281,7 @@ setstatclockrate(int schz)
 {
 	if (stat_sc == NULL)
 		panic("Statistics timer was not configured.");
-	if (stat_sc != clock_sc)
-		timer_init(stat_sc, schz, FALSE, TRUE);
+	timer_init(stat_sc, schz, FALSE, TRUE);
 }
 
 /*
@@ -314,13 +311,11 @@ cpu_initclocks(void)
 	intr_establish(clock_sc->sc_intr, IPL_CLOCK, IST_LEVEL_HIGH,
 		clockintr, 0);
 
-	if (clock_sc != stat_sc)
-		intr_establish(stat_sc->sc_intr, IPL_HIGH, IST_LEVEL_HIGH,
-			statintr, 0);
+	intr_establish(stat_sc->sc_intr, IPL_HIGH, IST_LEVEL_HIGH,
+		statintr, 0);
 
-	timer_init(clock_sc, hz, FALSE, TRUE);
-	if (clock_sc != stat_sc)
-		timer_init(stat_sc, stathz, FALSE, TRUE);
+	timer_init(clock_sc,     hz, FALSE, TRUE);
+	timer_init(stat_sc,  stathz, FALSE, TRUE);
 
 	tc_init(&gemini_timecounter);
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: siisata_pci.c,v 1.11 2012/10/20 06:18:54 matt Exp $ */
+/* $NetBSD: siisata_pci.c,v 1.1.14.3 2009/09/28 00:22:36 snj Exp $ */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -25,7 +30,7 @@
  *
  */
 
-/*
+/*-
  * Copyright (c) 2007, 2008, 2009 Jonathan A. Kollasch.
  * All rights reserved.
  *
@@ -48,16 +53,19 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siisata_pci.c,v 1.11 2012/10/20 06:18:54 matt Exp $");
+
 
 #include <sys/types.h>
 #include <sys/malloc.h>
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
@@ -73,7 +81,7 @@ struct siisata_pci_softc {
 static int siisata_pci_match(device_t, cfdata_t, void *);
 static void siisata_pci_attach(device_t, device_t, void *);
 static int siisata_pci_detach(device_t, int);
-static bool siisata_pci_resume(device_t, const pmf_qual_t *);
+static bool siisata_pci_resume(device_t PMF_FN_PROTO);
 
 struct siisata_pci_board {
 	pci_vendor_id_t		spb_vend;
@@ -83,12 +91,6 @@ struct siisata_pci_board {
 };
 
 static const struct siisata_pci_board siisata_pci_boards[] = {
-	{
-		.spb_vend = PCI_VENDOR_CMDTECH,
-		.spb_prod = PCI_PRODUCT_CMDTECH_3114,
-		.spb_port = 4,
-		.spb_chip = 3114,
-	},
 	{
 		.spb_vend = PCI_VENDOR_CMDTECH,
 		.spb_prod = PCI_PRODUCT_CMDTECH_3124,
@@ -144,6 +146,7 @@ siisata_pci_attach(device_t parent, device_t self, void *aux)
 	struct pci_attach_args *pa = aux;
 	struct siisata_pci_softc *psc = device_private(self);
 	struct siisata_softc *sc = &psc->si_sc;
+	char devinfo[256];
 	const char *intrstr;
 	pcireg_t csr, memtype;
 	const struct siisata_pci_board *spbp;
@@ -159,7 +162,9 @@ siisata_pci_attach(device_t parent, device_t self, void *aux)
 	psc->sc_pc = pa->pa_pc;
 	psc->sc_pcitag = pa->pa_tag;
 
-	pci_aprint_devinfo(pa, "SATA-II HBA");
+	pci_devinfo(pa->pa_id, pa->pa_class, 1, devinfo, sizeof(devinfo));
+	aprint_naive(": SATA-II HBA\n");
+	aprint_normal(": %s\n", devinfo);
 
 	/* map BAR 0, global registers */
 	memtype = pci_mapreg_type(pa->pa_pc, pa->pa_tag, SIISATA_PCI_BAR0);
@@ -299,7 +304,7 @@ siisata_pci_detach(device_t dv, int flags)
 }
 
 static bool
-siisata_pci_resume(device_t dv, const pmf_qual_t *qual)
+siisata_pci_resume(device_t dv PMF_FN_ARGS)
 {
 	struct siisata_pci_softc *psc = device_private(dv);
 	struct siisata_softc *sc = &psc->si_sc;

@@ -27,7 +27,7 @@
  *	exec.h - supplemental program/script execution
  *	----------------------------------------------
  *
- *	$Id: exec.c,v 1.11 2012/03/02 02:58:46 joerg Exp $ 
+ *	$Id: exec.c,v 1.9 2006/05/11 07:08:40 mrg Exp $ 
  *
  * $FreeBSD$
  *
@@ -105,7 +105,7 @@ sigchild_handler(int sig)
  *	execute prog as a subprocess and pass an argumentlist
  *---------------------------------------------------------------------------*/
 pid_t
-exec_prog(const char *prog, const char **arglist)
+exec_prog(char *prog, char **arglist)
 {
 	char tmp[MAXPATHLEN];
 	char path[MAXPATHLEN+1];
@@ -152,7 +152,7 @@ exec_prog(const char *prog, const char **arglist)
 		fclose(logfp);
 	
 
-	if (execvp(path, __UNCONST(arglist)) < 0 )
+	if (execvp(path,arglist) < 0 )
 		_exit(127);
 
 	return(-1);
@@ -164,14 +164,14 @@ exec_prog(const char *prog, const char **arglist)
 int
 exec_connect_prog(struct cfg_entry *cep, const char *prog, int link_down)
 {
-	const char *argv[32], **av = argv;
+	char *argv[32], **av = argv;
 	char devicename[MAXPATHLEN], addr[100];
 	int s;
 	struct ifreq ifr;
 
 	/* the obvious things */
 	snprintf(devicename, sizeof(devicename), "%s%d", cep->usrdevicename, cep->usrdeviceunit);
-	*av++ = prog;
+	*av++ = (char*)prog;
 	*av++ = "-d";
 	*av++ = devicename;
 	*av++ = "-f";
@@ -196,7 +196,7 @@ exec_connect_prog(struct cfg_entry *cep, const char *prog, int link_down)
 	/* terminate argv */
 	*av++ = NULL;
 
-	return exec_prog(prog, argv);
+	return exec_prog((char*)prog, argv);
 }
 
 /*---------------------------------------------------------------------------*
@@ -205,7 +205,7 @@ exec_connect_prog(struct cfg_entry *cep, const char *prog, int link_down)
 int
 exec_answer(struct cfg_entry *cep)
 {
-	const char *argv[32];
+	char *argv[32];
 	char devicename[MAXPATHLEN];	
 	int pid;
 
@@ -316,7 +316,7 @@ upd_callstat_file(char *filename, int rotateflag)
 			return;
 		}
 
-		ret = fprintf(fp, "%jd %jd 1", (intmax_t)now, (intmax_t)now);
+		ret = fprintf(fp, "%ld %ld 1", (long)now, (long)now);
 		if (ret <= 0)
 			logit(LL_ERR, "ERROR, upd_callstat_file: fprintf failed: %s", strerror(errno));
 		
@@ -372,7 +372,7 @@ upd_callstat_file(char *filename, int rotateflag)
 				return;
 			}
 
-			ret = fprintf(nfp, "%jd %jd %d", (intmax_t)s, (intmax_t)l, n);
+			ret = fprintf(nfp, "%ld %ld %d", (long)s, (long)l, n);
 			if (ret <= 0)
 				logit(LL_ERR, "ERROR, upd_callstat_file: fprintf failed: %s", strerror(errno));
 			
@@ -382,7 +382,7 @@ upd_callstat_file(char *filename, int rotateflag)
 			n = 0;
 			s = now;
 
-			logit(LL_WRN, "upd_callstat_file: rotate %s, new s=%jd l=%jd n=%d", filename, (intmax_t)s, (intmax_t)l, n);
+			logit(LL_WRN, "upd_callstat_file: rotate %s, new s=%ld l=%ld n=%d", filename, s, l, n);
 		}				
 	}
 
@@ -393,7 +393,7 @@ upd_callstat_file(char *filename, int rotateflag)
 	 * leftovers from previous contents!
 	 */
 
-	ret = fprintf(fp, "%jd %jd %-3d", (time_t)s, (time_t)now, n);	
+	ret = fprintf(fp, "%ld %ld %-3d", (long)s, (long)now, n);	
 
 	if (ret <= 0)
 		logit(LL_ERR, "ERROR, upd_callstat_file: fprintf failed: %s", strerror(errno));

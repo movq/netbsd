@@ -1,4 +1,4 @@
-/*	$NetBSD: yp_passwd.c,v 1.37 2012/03/25 05:55:07 dholland Exp $	*/
+/*	$NetBSD: yp_passwd.c,v 1.32.10.1 2010/11/22 02:41:07 riz Exp $	*/
 
 /*
  * Copyright (c) 1988, 1990, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from:  @(#)local_passwd.c    8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: yp_passwd.c,v 1.37 2012/03/25 05:55:07 dholland Exp $");
+__RCSID("$NetBSD: yp_passwd.c,v 1.32.10.1 2010/11/22 02:41:07 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -70,11 +70,11 @@ __RCSID("$NetBSD: yp_passwd.c,v 1.37 2012/03/25 05:55:07 dholland Exp $");
 static uid_t uid;
 static char *domain;
 
-__dead static void
-pwerror(const char *name, int show_err, int eval)
+static void
+pwerror(char *name, int err, int eval)
 {
 
-	if (show_err)
+	if (err)
 		warn("%s", name);
 	errx(eval, "NIS passwd database unchanged");
 }
@@ -83,10 +83,9 @@ static char *
 getnewpasswd(struct passwd *pw, char **old_pass)
 {
 	int tries;
-	const char *p, *t;
-	char *result;
-	static char buf[_PASSWORD_LEN + 1];
-	char salt[_PASSWORD_LEN + 1];
+	char *p, *t;
+	static char buf[_PASSWORD_LEN+1];
+	char salt[_PASSWORD_LEN+1];
 	char option[LINE_MAX], *key, *opt;
 
 	(void)printf("Changing NIS password for %s.\n", pw->pw_name);
@@ -96,7 +95,7 @@ getnewpasswd(struct passwd *pw, char **old_pass)
 	
 		if (pw->pw_passwd[0]) {
 			if (strcmp(crypt(p = getpass("Old password:"),
-			    pw->pw_passwd),  pw->pw_passwd)) {
+					 pw->pw_passwd),  pw->pw_passwd)) {
 				(void)printf("Sorry.\n");
 				pwerror(NULL, 0, 1);
 			}
@@ -123,9 +122,9 @@ getnewpasswd(struct passwd *pw, char **old_pass)
 		for (t = p; *t && islower((unsigned char)*t); ++t);
 		if (!*t && ++tries < 2) {
 			(void)printf("Please don't use an all-lower case "
-			    "password.\nUnusual capitalization, "
-			    "control characters or digits are "
-			    "suggested.\n");
+				     "password.\nUnusual capitalization, "
+				     "control characters or digits are "
+				     "suggested.\n");
 			continue;
 		}
 		(void)strlcpy(buf, p, sizeof(buf));
@@ -141,12 +140,12 @@ getnewpasswd(struct passwd *pw, char **old_pass)
 		warn("Couldn't generate salt");
 		pwerror(NULL, 0, 0);
 	}
-	result = strdup(crypt(buf, salt));
-	if (!result) {
+	p = strdup(crypt(buf, salt));
+	if (!p) {
 		(void)printf("not enough core.\n");
 		pwerror(NULL, 0, 0);
 	}
-	return result;
+	return (p);
 }
 
 static void
@@ -169,16 +168,15 @@ ypgetpwnam(const char *nam, struct passwd *pwd)
 {
 	char *val;
 	int reason, vallen, namlen = (int)strlen(nam);
-	int flags;
-	int ok;
+	int flags = 0;
+	int ok = 0;
 	
-	flags = ok = 0;
 	val = NULL;
 	reason = yp_match(domain, "master.passwd.byname", nam, namlen,
-	    &val, &vallen);
+                          &val, &vallen);
 	if (reason == YPERR_MAP) {
 		reason = yp_match(domain, "passwd.byname", nam, namlen,
-		    &val, &vallen);
+				  &val, &vallen);
 		flags = _PASSWORD_OLDFMT;
 	}
 	if (reason != 0)
@@ -201,7 +199,7 @@ void
 pwyp_usage(const char *prefix)
 {
 
-	(void)fprintf(stderr, "%s %s [-d nis | -y] [user]\n",
+	(void) fprintf(stderr, "%s %s [-d nis | -y] [user]\n",
 	    prefix, getprogname());
 }
 
@@ -209,7 +207,7 @@ void
 pwyp_argv0_usage(const char *prefix)
 {
 
-	(void)fprintf(stderr, "%s %s [user]\n",
+	(void) fprintf(stderr, "%s %s [user]\n",
 	    prefix, getprogname());
 }
 
@@ -218,7 +216,6 @@ pwyp_process(const char *username, int argc, char **argv)
 {
 	char *master;
 	int ch, r, rpcport, status;
-	enum clnt_stat yr;
 	struct yppasswd ypp;
 	struct passwd pwb, pwb2, *pw;
 	char pwbuf[1024];
@@ -251,12 +248,12 @@ pwyp_process(const char *username, int argc, char **argv)
 		break;
 	default:
 		usage();
-		/*NOTREACHED*/
+		/* NOTREACHED */
 	}
 
 	if (_yp_check(NULL) == 0) {
 		/* can't use YP. */
-		errx(EXIT_FAILURE, "NIS not in use.");
+		errx(1, "NIS not in use.");
 	}
 
 	uid = getuid();
@@ -265,7 +262,7 @@ pwyp_process(const char *username, int argc, char **argv)
 	 * Get local domain
 	 */
 	if ((r = yp_get_default_domain(&domain)) != 0)
-		errx(EXIT_FAILURE, "Can't get local NIS domain (%s)",
+		errx(1, "can't get local NIS domain.  Reason: %s",
 		    yperr_string(r));
 
 	/*
@@ -273,7 +270,7 @@ pwyp_process(const char *username, int argc, char **argv)
 	 * the daemon.
 	 */
 	if ((r = yp_master(domain, "passwd.byname", &master)) != 0)
-		errx(EXIT_FAILURE, "Can't find the master NIS server (%s)",
+		errx(1, "can't find the master NIS server. Reason: %s",
 		    yperr_string(r));
 
 	/*
@@ -281,42 +278,40 @@ pwyp_process(const char *username, int argc, char **argv)
 	 */
 	if ((rpcport = getrpcport(master, YPPASSWDPROG,
 	    YPPASSWDPROC_UPDATE, IPPROTO_UDP)) == 0)
-		errx(EXIT_FAILURE, "Master NIS server not running yppasswd "
-		    "daemon");
+		errx(1, "master NIS server not running yppasswd daemon.\n\t%s\n",
+		    "Can't change NIS password.");
 
 	/*
 	 * Be sure the port is privileged
 	 */
 	if (rpcport >= IPPORT_RESERVED)
-		errx(EXIT_FAILURE, "Yppasswd daemon is on an invalid port");
+		errx(1, "yppasswd daemon is on an invalid port.");
 
 	/* Bail out if this is a local (non-yp) user, */
 	/* then get user's login identity */
 	if (!ypgetpwnam(username, &pwb) ||
 	    getpwnam_r(username, &pwb2, pwbuf, sizeof(pwbuf), &pw) ||
 	    pw == NULL)
-		errx(EXIT_FAILURE, "NIS unknown user %s", username);
+		errx(1, "NIS unknown user %s", username);
 
-	if (uid && uid != pwb.pw_uid) {
-		errno = EACCES;
-		err(EXIT_FAILURE, "You may only change your own password");
-	}
+	if (uid && uid != pwb.pw_uid)
+		errx(1, "you may only change your own password: %s",
+		    strerror(EACCES));
 
 	makeypp(&ypp, &pwb);
 
 	client = clnt_create(master, YPPASSWDPROG, YPPASSWDVERS, "udp");
 	if (client == NULL)
-		errx(EXIT_FAILURE, "Cannot contact yppasswdd on %s (%s)",
+		errx(1, "cannot contact yppasswdd on %s:  Reason: %s",
 		    master, yperr_string(YPERR_YPBIND));
 
 	client->cl_auth = authunix_create_default();
 	tv.tv_sec = 2;
 	tv.tv_usec = 0;
-	yr = clnt_call(client, YPPASSWDPROC_UPDATE,
+	r = clnt_call(client, YPPASSWDPROC_UPDATE,
 	    xdr_yppasswd, &ypp, xdr_int, &status, tv);
-	if (yr != RPC_SUCCESS)
-		errx(EXIT_FAILURE, "RPC to yppasswdd failed (%s)",
-		    clnt_sperrno(yr));
+	if (r)
+		errx(1, "rpc to yppasswdd failed.");
 	else if (status)
 		printf("Couldn't change NIS password.\n");
 	else
@@ -329,7 +324,8 @@ pwyp_process(const char *username, int argc, char **argv)
 static	int yflag;
 
 int
-yp_init(const char *progname)
+yp_init(progname)
+	const char *progname;
 {
 	int yppwd;
 
@@ -341,45 +337,47 @@ yp_init(const char *progname)
 	if (_yp_check(NULL) == 0) {
 		/* can't use YP. */
 		if (yppwd)
-			errx(EXIT_FAILURE, "NIS not in use");
-		return -1;
+			errx(1, "NIS not in use.");
+		return(-1);
 	}
-	return 0;
+	return (0);
 }
 
 int
-yp_arg(char ch, const char *arg)
+yp_arg(ch, arg)
+	char ch;
+	const char *arg;
 {
 	switch (ch) {
 	case 'y':
 		yflag = 1;
 		break;
 	default:
-		return 0;
+		return(0);
 	}
-	return 1;
+	return(1);
 }
 
 int
-yp_arg_end(void)
+yp_arg_end()
 {
 	if (yflag)
-		return PW_USE_FORCE;
-	return PW_USE;
+		return (PW_USE_FORCE);
+	return (PW_USE);
 }
 
 void
-yp_end(void)
+yp_end()
 {
 	/* NOOP */
 }
 
 int
-yp_chpw(const char *username)
+yp_chpw(username)
+	const char *username;
 {
 	char *master;
 	int r, rpcport, status;
-	enum clnt_stat yr;
 	struct yppasswd ypp;
 	struct passwd *pw, pwb;
 	char pwbuf[1024];
@@ -392,7 +390,7 @@ yp_chpw(const char *username)
 	 * Get local domain
 	 */
 	if ((r = yp_get_default_domain(&domain)) != 0)
-		errx(EXIT_FAILURE, "can't get local NIS domain.  Reason: %s",
+		errx(1, "can't get local NIS domain.  Reason: %s",
 		    yperr_string(r));
 
 	/*
@@ -403,7 +401,7 @@ yp_chpw(const char *username)
 		warnx("can't find the master NIS server.  Reason: %s",
 		    yperr_string(r));
 		/* continuation */
-		return -1;
+		return(-1);
 	}
 
 	/*
@@ -411,16 +409,17 @@ yp_chpw(const char *username)
 	 */
 	if ((rpcport = getrpcport(master, YPPASSWDPROG,
 	    YPPASSWDPROC_UPDATE, IPPROTO_UDP)) == 0) {
-		warnx("Master NIS server not running yppasswd daemon");
+		warnx("master NIS server not running yppasswd daemon.\n\t%s\n",
+		    "Can't change NIS password.");
 		/* continuation */
-		return -1;
+		return(-1);
 	}
 
 	/*
 	 * Be sure the port is privileged
 	 */
 	if (rpcport >= IPPORT_RESERVED)
-		errx(EXIT_FAILURE, "Yppasswd daemon is on an invalid port");
+		errx(1, "yppasswd daemon is on an invalid port.");
 
 	/* Bail out if this is a local (non-yp) user, */
 	/* then get user's login identity */
@@ -429,37 +428,35 @@ yp_chpw(const char *username)
 	    pw == NULL) {
 		warnx("NIS unknown user %s", username);
 		/* continuation */
-		return -1;
+		return(-1);
 	}
 
-	if (uid && uid != pw->pw_uid) {
-		errno = EACCES;
-		err(EXIT_FAILURE, "You may only change your own password");
-	}
+	if (uid && uid != pw->pw_uid)
+		errx(1, "you may only change your own password: %s",
+		    strerror(EACCES));
 
 	makeypp(&ypp, pw);
 
 	client = clnt_create(master, YPPASSWDPROG, YPPASSWDVERS, "udp");
 	if (client == NULL) {
-		warnx("Cannot contact yppasswdd on %s (%s)",
+		warnx("cannot contact yppasswdd on %s:  Reason: %s",
 		    master, yperr_string(YPERR_YPBIND));
-		return YPERR_YPBIND;
+		return (YPERR_YPBIND);
 	}
 
 	client->cl_auth = authunix_create_default();
 	tv.tv_sec = 2;
 	tv.tv_usec = 0;
-	yr = clnt_call(client, YPPASSWDPROC_UPDATE,
+	r = clnt_call(client, YPPASSWDPROC_UPDATE,
 	    xdr_yppasswd, &ypp, xdr_int, &status, tv);
-	if (yr != RPC_SUCCESS)
-		errx(EXIT_FAILURE, "RPC to yppasswdd failed (%s)",
-		    clnt_sperrno(yr));
+	if (r)
+		errx(1, "rpc to yppasswdd failed.");
 	else if (status)
 		printf("Couldn't change NIS password.\n");
 	else
 		printf("The NIS password has been changed on %s, %s\n",
 		    master, "the master NIS passwd server.");
-	return 0;
+	return(0);
 }
 
 #endif /* USE_PAM */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ed.h,v 1.35 2011/08/29 14:51:18 joerg Exp $	*/
+/*	$NetBSD: ed.h,v 1.33 2005/06/26 19:10:49 christos Exp $	*/
 
 /* ed.h: type and constant definitions for the ed editor. */
 /*
@@ -194,16 +194,20 @@ void add_line_node(line_t *);
 int append_lines(long);
 int apply_subst_template(char *, regmatch_t *, int, int);
 int build_active_list(int);
+int cbc_decode(char *, FILE *);
+int cbc_encode(char *, int, FILE *);
 int check_addr_range(long, long);
 void clear_active_list(void);
 void clear_undo_stack(void);
 int close_sbuf(void);
 int copy_lines(long);
 int delete_lines(long, long);
+void des_error(const char *);
 int display_lines(long, long, int);
 line_t *dup_line_node(line_t *);
 int exec_command(void);
 long exec_global(int, int);
+void expand_des_key(char *, char *);
 int extract_addr_range(void);
 char *extract_pattern(int);
 int extract_subst_tail(int *, long *);
@@ -223,10 +227,11 @@ char *get_sbuf_line(line_t *);
 int get_shell_command(void);
 int get_stream_line(FILE *);
 int get_tty_line(void);
-__dead void handle_hup(int);
-__dead void handle_int(int);
+void handle_hup(int);
+void handle_int(int);
 void handle_winch(int);
 int has_trailing_escape(char *, char *);
+int hex_to_binary(int, int);
 void init_buffers(void);
 void init_des_cipher(void);
 int is_legal_filename(char *);
@@ -243,11 +248,12 @@ int put_des_char(int, FILE *);
 char *put_sbuf_line(char *);
 int put_stream_line(FILE *, char *, int);
 int put_tty_line(char *, int, long, int);
-__dead void quit(int);
+void quit(int);
 long read_file(char *, long);
 long read_stream(FILE *, long);
 int search_and_replace(pattern_t *, int, int);
 int set_active_node(line_t *);
+void set_des_key(char *);
 void signal_hup(int);
 void signal_int(int);
 char *strip_escapes(const char *);

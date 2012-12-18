@@ -1,4 +1,4 @@
-/*	$NetBSD: gvpbus.c,v 1.26 2012/10/27 17:17:29 chs Exp $ */
+/*	$NetBSD: gvpbus.c,v 1.22 2003/01/01 00:28:58 thorpej Exp $ */
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gvpbus.c,v 1.26 2012/10/27 17:17:29 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gvpbus.c,v 1.22 2003/01/01 00:28:58 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -40,21 +40,21 @@ __KERNEL_RCSID(0, "$NetBSD: gvpbus.c,v 1.26 2012/10/27 17:17:29 chs Exp $");
 #include <amiga/dev/zbusvar.h>
 #include <amiga/dev/gvpbusvar.h>
 
-void gvpbusattach(device_t, device_t, void *);
-int gvpbusmatch(device_t, cfdata_t, void *);
-int gvpbusprint(void *, const char *);
+void gvpbusattach(struct device *, struct device *, void *);
+int gvpbusmatch(struct device *, struct cfdata *, void *);
+int gvpbusprint(void *auxp, const char *);
 
 extern int sbic_no_dma;		/* Kludge for A1291 - mlh */
 
-CFATTACH_DECL_NEW(gvpbus, 0,
+CFATTACH_DECL(gvpbus, sizeof(struct device),
     gvpbusmatch, gvpbusattach, NULL, NULL);
 
 int
-gvpbusmatch(device_t parent, cfdata_t cf, void *aux)
+gvpbusmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 
 	/*
 	 * Check manufacturer and product id.
@@ -69,14 +69,14 @@ gvpbusmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-gvpbusattach(device_t parent, device_t self, void *aux)
+gvpbusattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	struct zbus_args *zap;
 	struct gvpbus_args ga;
 	int flags0, flags;
 
-	zap = aux;
-	memcpy(&ga.zargs, zap, sizeof(struct zbus_args));
+	zap = auxp;
+	bcopy(zap, &ga.zargs, sizeof(struct zbus_args));
 	flags = 0;
 	
 	/*
@@ -145,20 +145,20 @@ gvpbusattach(device_t parent, device_t self, void *aux)
 
 	if (flags & GVP_SCSI) {
 		ga.flags = flags0 | GVP_SCSI;
-		config_found(self, &ga, gvpbusprint);
+		config_found(dp, &ga, gvpbusprint);
 	}
 	if (flags & GVP_IO) {
 		ga.flags = flags0 | GVP_IO;
-		config_found(self, &ga, gvpbusprint);
+		config_found(dp, &ga, gvpbusprint);
 	}
 }
 
 int
-gvpbusprint(void *aux, const char *pnp)
+gvpbusprint(void *auxp, const char *pnp)
 {
 	struct gvpbus_args *gap;
 
-	gap = aux;
+	gap = auxp;
 	if (pnp == NULL)
 		return(QUIET);
 	/*
@@ -170,3 +170,4 @@ gvpbusprint(void *aux, const char *pnp)
 		aprint_normal("gtsc at %s", pnp);
 	return(UNCONF);
 }
+

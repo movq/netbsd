@@ -1,9 +1,9 @@
-/*	$NetBSD: mongoose.c,v 1.23 2012/05/23 16:11:37 skrll Exp $	*/
+/*	$NetBSD: mongoose.c,v 1.11 2005/12/11 12:17:24 christos Exp $	*/
 
-/*	$OpenBSD: mongoose.c,v 1.19 2010/01/01 20:28:42 kettenis Exp $	*/
+/*	$OpenBSD: mongoose.c,v 1.7 2000/08/15 19:42:56 mickey Exp $	*/
 
 /*
- * Copyright (c) 1998-2003 Michael Shalayeff
+ * Copyright (c) 1998,1999 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,6 +14,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Michael Shalayeff.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mongoose.c,v 1.23 2012/05/23 16:11:37 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mongoose.c,v 1.11 2005/12/11 12:17:24 christos Exp $");
 
 #define MONGOOSE_DEBUG 9
 
@@ -38,10 +43,11 @@ __KERNEL_RCSID(0, "$NetBSD: mongoose.c,v 1.23 2012/05/23 16:11:37 skrll Exp $");
 #include <sys/device.h>
 #include <sys/reboot.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/iomod.h>
 #include <machine/autoconf.h>
 
+#include <hp700/hp700/intr.h>
 #include <hp700/dev/cpudevs.h>
 #include <hp700/dev/viper.h>
 
@@ -54,12 +60,12 @@ __KERNEL_RCSID(0, "$NetBSD: mongoose.c,v 1.23 2012/05/23 16:11:37 skrll Exp $");
 /* EISA Bus Adapter registers definitions */
 #define	MONGOOSE_MONGOOSE	0x10000
 struct mongoose_regs {
-	uint8_t	version;
-	uint8_t	lock;
-	uint8_t	liowait;
-	uint8_t	clock;
-	uint8_t	reserved[0xf000 - 4];
-	uint8_t	intack;
+	u_int8_t	version;
+	u_int8_t	lock;
+	u_int8_t	liowait;
+	u_int8_t	clock;
+	u_int8_t	reserved[0xf000 - 4];
+	u_int8_t	intack;
 };
 
 #define	MONGOOSE_CTRL		0x00000
@@ -67,91 +73,91 @@ struct mongoose_regs {
 struct mongoose_ctrl {
 	struct dma0 {
 		struct {
-			uint32_t	addr : 8;
-			uint32_t	count: 8;
+			u_int32_t	addr : 8;
+			u_int32_t	count: 8;
 		} ch[4];
-		uint8_t	command;
-		uint8_t	request;
-		uint8_t	mask_channel;
-		uint8_t	mode;
-		uint8_t	clr_byte_ptr;
-		uint8_t	master_clear;
-		uint8_t	mask_clear;
-		uint8_t	master_write;
-		uint8_t	pad[8];
+		u_int8_t	command;
+		u_int8_t	request;
+		u_int8_t	mask_channel;
+		u_int8_t	mode;
+		u_int8_t	clr_byte_ptr;
+		u_int8_t	master_clear;
+		u_int8_t	mask_clear;
+		u_int8_t	master_write;
+		u_int8_t	pad[8];
 	}	dma0;
 
-	uint8_t	irr0;		/* 0x20 */
-	uint8_t	imr0;
-	uint8_t	iack;		/* 0x22 -- 2 b2b reads generate
+	u_int8_t	irr0;		/* 0x20 */
+	u_int8_t	imr0;
+	u_int8_t	iack;		/* 0x22 -- 2 b2b reads generate
 					(e)isa Iack cycle & returns int level */
-	uint8_t	pad0[29];
+	u_int8_t	pad0[29];
 
 	struct timers {
-		uint8_t	sysclk;
-		uint8_t	refresh;
-		uint8_t	spkr;
-		uint8_t	ctrl;
-		uint32_t	pad;
+		u_int8_t	sysclk;
+		u_int8_t	refresh;
+		u_int8_t	spkr;
+		u_int8_t	ctrl;
+		u_int32_t	pad;
 	}	tmr[2];			/* 0x40 -- timers control */
-	uint8_t	pad1[16];
+	u_int8_t	pad1[16];
 
-	uint16_t	inmi;		/* 0x60 NMI control */
-	uint8_t	pad2[30];
+	u_int16_t	inmi;		/* 0x60 NMI control */
+	u_int8_t	pad2[30];
 	struct {
-		uint8_t	pad0;
-		uint8_t	ch2;
-		uint8_t	ch3;
-		uint8_t	ch1;
-		uint8_t	pad1;
-		uint8_t	pad2[3];
-		uint8_t	ch0;
-		uint8_t	pad4;
-		uint8_t	ch6;
-		uint8_t	ch7;
-		uint8_t	ch5;
-		uint8_t	pad5[3];
-		uint8_t	pad6[16];
+		u_int8_t	pad0;
+		u_int8_t	ch2;
+		u_int8_t	ch3;
+		u_int8_t	ch1;
+		u_int8_t	pad1;
+		u_int8_t	pad2[3];
+		u_int8_t	ch0;
+		u_int8_t	pad4;
+		u_int8_t	ch6;
+		u_int8_t	ch7;
+		u_int8_t	ch5;
+		u_int8_t	pad5[3];
+		u_int8_t	pad6[16];
 	} pr;				/* 0x80 */
 
-	uint8_t	irr1;		/* 0xa0 */
-	uint8_t	imr1;
-	uint8_t	pad3[30];
+	u_int8_t	irr1;		/* 0xa0 */
+	u_int8_t	imr1;
+	u_int8_t	pad3[30];
 
 	struct dma1 {
 		struct {
-			uint32_t	addr : 8;
-			uint32_t	pad0 : 8;
-			uint32_t	count: 8;
-			uint32_t	pad1 : 8;
+			u_int32_t	addr : 8;
+			u_int32_t	pad0 : 8;
+			u_int32_t	count: 8;
+			u_int32_t	pad1 : 8;
 		} ch[4];
-		uint8_t	command;
-		uint8_t	pad0;
-		uint8_t	request;
-		uint8_t	pad1;
-		uint8_t	mask_channel;
-		uint8_t	pad2;
-		uint8_t	mode;
-		uint8_t	pad3;
-		uint8_t	clr_byte_ptr;
-		uint8_t	pad4;
-		uint8_t	master_clear;
-		uint8_t	pad5;
-		uint8_t	mask_clear;
-		uint8_t	pad6;
-		uint8_t	master_write;
-		uint8_t	pad7;
+		u_int8_t	command;
+		u_int8_t	pad0;
+		u_int8_t	request;
+		u_int8_t	pad1;
+		u_int8_t	mask_channel;
+		u_int8_t	pad2;
+		u_int8_t	mode;
+		u_int8_t	pad3;
+		u_int8_t	clr_byte_ptr;
+		u_int8_t	pad4;
+		u_int8_t	master_clear;
+		u_int8_t	pad5;
+		u_int8_t	mask_clear;
+		u_int8_t	pad6;
+		u_int8_t	master_write;
+		u_int8_t	pad7;
 	}	dma1;			/* 0xc0 */
 
-	uint8_t	master_req;	/* 0xe0 master request register */
-	uint8_t	pad4[31];
+	u_int8_t	master_req;	/* 0xe0 master request register */
+	u_int8_t	pad4[31];
 
-	uint8_t	pad5[0x3d0];	/* 0x4d0 */
-	uint8_t	pic0;		/* 0 - edge, 1 - level */
-	uint8_t	pic1;
-	uint8_t	pad6[0x460];
-	uint8_t	nmi;
-	uint8_t	nmi_ext;
+	u_int8_t	pad5[0x3d0];	/* 0x4d0 */
+	u_int8_t	pic0;		/* 0 - edge, 1 - level */
+	u_int8_t	pic1;
+	u_int8_t	pad6[0x460];
+	u_int8_t	nmi;
+	u_int8_t	nmi_ext;
 #define	MONGOOSE_NMI_BUSRESET	0x01
 #define	MONGOOSE_NMI_IOPORT_EN	0x02
 #define	MONGOOSE_NMI_EN		0x04
@@ -176,7 +182,7 @@ struct hppa_isa_iv {
 };
 
 struct mongoose_softc {
-	device_t sc_dev;
+	struct  device sc_dev;
 	void *sc_ih;
 
 	bus_space_tag_t sc_bt;
@@ -203,11 +209,10 @@ union mongoose_attach_args {
 	struct isabus_attach_args mongoose_isa;
 };
 
-void mg_eisa_attach_hook(device_t, device_t, struct eisabus_attach_args *);
+void mg_eisa_attach_hook(struct device *, struct device *, struct eisabus_attach_args *);
 int mg_intr_map(void *, u_int, eisa_intr_handle_t *);
 const char *mg_intr_string(void *, int);
-void mg_isa_attach_hook(device_t, device_t, struct isabus_attach_args *);
-void mg_isa_detach_hook(isa_chipset_tag_t, device_t);
+void mg_isa_attach_hook(struct device *, struct device *, struct isabus_attach_args *);
 void *mg_intr_establish(void *, int, int, int, int (*)(void *), void *);
 void mg_intr_disestablish(void *, void *);
 int mg_intr_check(void *, int, int);
@@ -216,33 +221,33 @@ int mg_eisa_iomap(void *, bus_addr_t, bus_size_t, int, bus_space_handle_t *);
 int mg_eisa_memmap(void *, bus_addr_t, bus_size_t, int, bus_space_handle_t *);
 void mg_eisa_memunmap(void *, bus_space_handle_t, bus_size_t);
 void mg_isa_barrier(void *, bus_space_handle_t, bus_size_t, bus_size_t, int);
-uint16_t mg_isa_r2(void *, bus_space_handle_t, bus_size_t);
-uint32_t mg_isa_r4(void *, bus_space_handle_t, bus_size_t);
-void mg_isa_w2(void *, bus_space_handle_t, bus_size_t, uint16_t);
-void mg_isa_w4(void *, bus_space_handle_t, bus_size_t, uint32_t);
-void mg_isa_rm_2(void *, bus_space_handle_t, bus_size_t, uint16_t *, bus_size_t);
-void mg_isa_rm_4(void *, bus_space_handle_t, bus_size_t, uint32_t *, bus_size_t);
-void mg_isa_wm_2(void *, bus_space_handle_t, bus_size_t, const uint16_t *, bus_size_t);
-void mg_isa_wm_4(void *, bus_space_handle_t, bus_size_t, const uint32_t *, bus_size_t);
-void mg_isa_sm_2(void *, bus_space_handle_t, bus_size_t, uint16_t, bus_size_t);
-void mg_isa_sm_4(void *, bus_space_handle_t, bus_size_t, uint32_t, bus_size_t);
-void mg_isa_rr_2(void *, bus_space_handle_t, bus_size_t, uint16_t *, bus_size_t);
-void mg_isa_rr_4(void *, bus_space_handle_t, bus_size_t, uint32_t *, bus_size_t);
-void mg_isa_wr_2(void *, bus_space_handle_t, bus_size_t, const uint16_t *, bus_size_t);
-void mg_isa_wr_4(void *, bus_space_handle_t, bus_size_t, const uint32_t *, bus_size_t);
-void mg_isa_sr_2(void *, bus_space_handle_t, bus_size_t, uint16_t, bus_size_t);
-void mg_isa_sr_4(void *, bus_space_handle_t, bus_size_t, uint32_t, bus_size_t);
+u_int16_t mg_isa_r2(void *, bus_space_handle_t, bus_size_t);
+u_int32_t mg_isa_r4(void *, bus_space_handle_t, bus_size_t);
+void mg_isa_w2(void *, bus_space_handle_t, bus_size_t, u_int16_t);
+void mg_isa_w4(void *, bus_space_handle_t, bus_size_t, u_int32_t);
+void mg_isa_rm_2(void *, bus_space_handle_t, bus_size_t, u_int16_t *, bus_size_t);
+void mg_isa_rm_4(void *, bus_space_handle_t, bus_size_t, u_int32_t *, bus_size_t);
+void mg_isa_wm_2(void *, bus_space_handle_t, bus_size_t, const u_int16_t *, bus_size_t);
+void mg_isa_wm_4(void *, bus_space_handle_t, bus_size_t, const u_int32_t *, bus_size_t);
+void mg_isa_sm_2(void *, bus_space_handle_t, bus_size_t, u_int16_t, bus_size_t);
+void mg_isa_sm_4(void *, bus_space_handle_t, bus_size_t, u_int32_t, bus_size_t);
+void mg_isa_rr_2(void *, bus_space_handle_t, bus_size_t, u_int16_t *, bus_size_t);
+void mg_isa_rr_4(void *, bus_space_handle_t, bus_size_t, u_int32_t *, bus_size_t);
+void mg_isa_wr_2(void *, bus_space_handle_t, bus_size_t, const u_int16_t *, bus_size_t);
+void mg_isa_wr_4(void *, bus_space_handle_t, bus_size_t, const u_int32_t *, bus_size_t);
+void mg_isa_sr_2(void *, bus_space_handle_t, bus_size_t, u_int16_t, bus_size_t);
+void mg_isa_sr_4(void *, bus_space_handle_t, bus_size_t, u_int32_t, bus_size_t);
 
-int	mgmatch(device_t, cfdata_t, void *);
-void	mgattach(device_t, device_t, void *);
+int	mgmatch(struct device *, struct cfdata *, void *);
+void	mgattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(mongoose, sizeof(struct mongoose_softc),
+CFATTACH_DECL(mongoose, sizeof(struct mongoose_softc),
     mgmatch, mgattach, NULL, NULL);
 
 /* TODO: DMA guts */
 
 void
-mg_eisa_attach_hook(device_t parent, device_t self,
+mg_eisa_attach_hook(struct device *parent, struct device *self,
 	struct eisabus_attach_args *mg)
 {
 }
@@ -264,14 +269,8 @@ mg_intr_string(void *v, int irq)
 }
 
 void
-mg_isa_attach_hook(device_t parent, device_t self,
+mg_isa_attach_hook(struct device *parent, struct device *self,
 	struct isabus_attach_args *iba)
-{
-
-}
-
-void
-mg_isa_detach_hook(isa_chipset_tag_t ic, device_t self)
 {
 
 }
@@ -282,22 +281,26 @@ mg_intr_establish(void *v, int irq, int type, int pri,
 {
 	struct hppa_isa_iv *iv;
 	struct mongoose_softc *sc = v;
-	volatile uint8_t *imr, *pic;
+	volatile u_int8_t *imr, *pic;
 
 	if (!sc || irq < 0 || irq >= MONGOOSE_NINTS ||
 	    (0 <= irq && irq < MONGOOSE_NINTS && sc->sc_iv[irq].iv_handler))
 		return NULL;
 
 	if (type != IST_LEVEL && type != IST_EDGE) {
-		aprint_debug_dev(sc->sc_dev, "bad interrupt level (%d)\n",
+#ifdef DEBUG
+		printf("%s: bad interrupt level (%d)\n", sc->sc_dev.dv_xname,
 		    type);
+#endif
 		return NULL;
 	}
 
 	iv = &sc->sc_iv[irq];
 	if (iv->iv_handler) {
-		aprint_debug_dev(sc->sc_dev, "irq %d already established\n",
+#ifdef DEBUG
+		printf("%s: irq %d already established\n", sc->sc_dev.dv_xname,
 		    irq);
+#endif
 		return NULL;
 	}
 
@@ -328,7 +331,7 @@ mg_intr_disestablish(void *v, void *cookie)
 	struct hppa_isa_iv *iv = cookie;
 	struct mongoose_softc *sc = v;
  	int irq = iv - sc->sc_iv;
- 	volatile uint8_t *imr;
+ 	volatile u_int8_t *imr;
 
 	if (!sc || !cookie)
 		return;
@@ -357,7 +360,7 @@ mg_intr(void *v)
 	int s, irq = 0;
 
 	iv = &sc->sc_iv[irq];
-	s = splraise(iv->iv_pri);
+	s = splraise(imask[iv->iv_pri]);
 	(iv->iv_handler)(iv->iv_arg);
 	splx(s);
 
@@ -401,97 +404,97 @@ mg_isa_barrier(void *v, bus_space_handle_t h, bus_size_t o, bus_size_t l, int op
 	sync_caches();
 }
 
-uint16_t
+u_int16_t
 mg_isa_r2(void *v, bus_space_handle_t h, bus_size_t o)
 {
-	uint16_t r = *((volatile uint16_t *)(h + o));
+	u_int16_t r = *((volatile u_int16_t *)(h + o));
 
 	return le16toh(r);
 }
 
-uint32_t
+u_int32_t
 mg_isa_r4(void *v, bus_space_handle_t h, bus_size_t o)
 {
-	uint32_t r = *((volatile uint32_t *)(h + o));
+	u_int32_t r = *((volatile u_int32_t *)(h + o));
 
 	return le32toh(r);
 }
 
 void
-mg_isa_w2(void *v, bus_space_handle_t h, bus_size_t o, uint16_t vv)
+mg_isa_w2(void *v, bus_space_handle_t h, bus_size_t o, u_int16_t vv)
 {
-	*((volatile uint16_t *)(h + o)) = htole16(vv);
+	*((volatile u_int16_t *)(h + o)) = htole16(vv);
 }
 
 void
-mg_isa_w4(void *v, bus_space_handle_t h, bus_size_t o, uint32_t vv)
+mg_isa_w4(void *v, bus_space_handle_t h, bus_size_t o, u_int32_t vv)
 {
-	*((volatile uint32_t *)(h + o)) = htole32(vv);
+	*((volatile u_int32_t *)(h + o)) = htole32(vv);
 }
 
 void
-mg_isa_rm_2(void *v, bus_space_handle_t h, bus_size_t o, uint16_t *a, bus_size_t c)
+mg_isa_rm_2(void *v, bus_space_handle_t h, bus_size_t o, u_int16_t *a, bus_size_t c)
 {
 	h += o;
 	while (c--)
-		*(a++) = le16toh(*(volatile uint16_t *)h);
+		*(a++) = le16toh(*(volatile u_int16_t *)h);
 }
 
 void
-mg_isa_rm_4(void *v, bus_space_handle_t h, bus_size_t o, uint32_t *a, bus_size_t c)
+mg_isa_rm_4(void *v, bus_space_handle_t h, bus_size_t o, u_int32_t *a, bus_size_t c)
 {
 	h += o;
 	while (c--)
-		*(a++) = le32toh(*(volatile uint32_t *)h);
+		*(a++) = le32toh(*(volatile u_int32_t *)h);
 }
 
 void
-mg_isa_wm_2(void *v, bus_space_handle_t h, bus_size_t o, const uint16_t *a, bus_size_t c)
+mg_isa_wm_2(void *v, bus_space_handle_t h, bus_size_t o, const u_int16_t *a, bus_size_t c)
 {
-	uint16_t r;
+	u_int16_t r;
 
 	h += o;
 	while (c--) {
 		r = *(a++);
-		*(volatile uint16_t *)h = htole16(r);
+		*(volatile u_int16_t *)h = htole16(r);
 	}
 }
 
 void
-mg_isa_wm_4(void *v, bus_space_handle_t h, bus_size_t o, const uint32_t *a, bus_size_t c)
+mg_isa_wm_4(void *v, bus_space_handle_t h, bus_size_t o, const u_int32_t *a, bus_size_t c)
 {
-	uint32_t r;
+	u_int32_t r;
 
 	h += o;
 	while (c--) {
 		r = *(a++);
-		*(volatile uint32_t *)h = htole32(r);
+		*(volatile u_int32_t *)h = htole32(r);
 	}
 }
 
 void
-mg_isa_sm_2(void *v, bus_space_handle_t h, bus_size_t o, uint16_t vv, bus_size_t c)
+mg_isa_sm_2(void *v, bus_space_handle_t h, bus_size_t o, u_int16_t vv, bus_size_t c)
 {
 	vv = htole16(vv);
 	h += o;
 	while (c--)
-		*(volatile uint16_t *)h = vv;
+		*(volatile u_int16_t *)h = vv;
 }
 
 void
-mg_isa_sm_4(void *v, bus_space_handle_t h, bus_size_t o, uint32_t vv, bus_size_t c)
+mg_isa_sm_4(void *v, bus_space_handle_t h, bus_size_t o, u_int32_t vv, bus_size_t c)
 {
 	vv = htole32(vv);
 	h += o;
 	while (c--)
-		*(volatile uint32_t *)h = vv;
+		*(volatile u_int32_t *)h = vv;
 }
 
 void
-mg_isa_rr_2(void *v, bus_space_handle_t h, bus_size_t o, uint16_t *a, bus_size_t c)
+mg_isa_rr_2(void *v, bus_space_handle_t h, bus_size_t o, u_int16_t *a, bus_size_t c)
 {
-	uint16_t r;
-	volatile uint16_t *p;
+	u_int16_t r;
+	volatile u_int16_t *p;
 
 	h += o;
 	p = (void *)h;
@@ -502,10 +505,10 @@ mg_isa_rr_2(void *v, bus_space_handle_t h, bus_size_t o, uint16_t *a, bus_size_t
 }
 
 void
-mg_isa_rr_4(void *v, bus_space_handle_t h, bus_size_t o, uint32_t *a, bus_size_t c)
+mg_isa_rr_4(void *v, bus_space_handle_t h, bus_size_t o, u_int32_t *a, bus_size_t c)
 {
-	uint32_t r;
-	volatile uint32_t *p;
+	u_int32_t r;
+	volatile u_int32_t *p;
 
 	h += o;
 	p = (void *)h;
@@ -516,10 +519,10 @@ mg_isa_rr_4(void *v, bus_space_handle_t h, bus_size_t o, uint32_t *a, bus_size_t
 }
 
 void
-mg_isa_wr_2(void *v, bus_space_handle_t h, bus_size_t o, const uint16_t *a, bus_size_t c)
+mg_isa_wr_2(void *v, bus_space_handle_t h, bus_size_t o, const u_int16_t *a, bus_size_t c)
 {
-	uint16_t r;
-	volatile uint16_t *p;
+	u_int16_t r;
+	volatile u_int16_t *p;
 
 	h += o;
 	p = (void *)h;
@@ -530,10 +533,10 @@ mg_isa_wr_2(void *v, bus_space_handle_t h, bus_size_t o, const uint16_t *a, bus_
 }
 
 void
-mg_isa_wr_4(void *v, bus_space_handle_t h, bus_size_t o, const uint32_t *a, bus_size_t c)
+mg_isa_wr_4(void *v, bus_space_handle_t h, bus_size_t o, const u_int32_t *a, bus_size_t c)
 {
-	uint32_t r;
-	volatile uint32_t *p;
+	u_int32_t r;
+	volatile u_int32_t *p;
 
 	h += o;
 	p = (void *)h;
@@ -544,9 +547,9 @@ mg_isa_wr_4(void *v, bus_space_handle_t h, bus_size_t o, const uint32_t *a, bus_
 }
 
 void
-mg_isa_sr_2(void *v, bus_space_handle_t h, bus_size_t o, uint16_t vv, bus_size_t c)
+mg_isa_sr_2(void *v, bus_space_handle_t h, bus_size_t o, u_int16_t vv, bus_size_t c)
 {
-	volatile uint16_t *p;
+	volatile u_int16_t *p;
 
 	vv = htole16(vv);
 	h += o;
@@ -556,9 +559,9 @@ mg_isa_sr_2(void *v, bus_space_handle_t h, bus_size_t o, uint16_t vv, bus_size_t
 }
 
 void
-mg_isa_sr_4(void *v, bus_space_handle_t h, bus_size_t o, uint32_t vv, bus_size_t c)
+mg_isa_sr_4(void *v, bus_space_handle_t h, bus_size_t o, u_int32_t vv, bus_size_t c)
 {
-	volatile uint32_t *p;
+	volatile u_int32_t *p;
 
 	vv = htole32(vv);
 	h += o;
@@ -568,7 +571,7 @@ mg_isa_sr_4(void *v, bus_space_handle_t h, bus_size_t o, uint32_t vv, bus_size_t
 }
 
 int
-mgmatch(device_t parent, cfdata_t cf, void *aux)
+mgmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct confargs *ca = aux;
 	bus_space_handle_t ioh;
@@ -577,7 +580,7 @@ mgmatch(device_t parent, cfdata_t cf, void *aux)
 	    ca->ca_type.iodc_sv_model != HPPA_BHA_EISA)
 		return 0;
 
-	if (bus_space_map(ca->ca_iot, ca->ca_hpa + MONGOOSE_MONGOOSE,
+	if (bus_space_map(ca->ca_iot, ca->ca_hpa + MONGOOSE_MONGOOSE, 
 			  sizeof(struct mongoose_regs), 0, &ioh))
 		return 0;
 
@@ -589,40 +592,24 @@ mgmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-mgattach(device_t parent, device_t self, void *aux)
+mgattach(struct device *parent, struct device *self, void *aux)
 {
 	struct confargs *ca = aux;
-	struct mongoose_softc *sc = device_private(self);
-	struct cpu_info *ci = &cpus[0];
+	struct mongoose_softc *sc = (struct mongoose_softc *)self;
 	struct hppa_bus_space_tag *bt;
 	union mongoose_attach_args ea;
 	char brid[EISA_IDSTRINGLEN];
 	bus_space_handle_t ioh;
 
-	sc->sc_dev = self;
 	sc->sc_bt = ca->ca_iot;
 	sc->sc_iomap = ca->ca_hpa;
 	if (bus_space_map(ca->ca_iot, ca->ca_hpa + MONGOOSE_MONGOOSE,
-	    sizeof(struct mongoose_regs), 0, &ioh)) {
-		aprint_error(": can't map registers\n");
-		return;
-	}
+			  sizeof(struct mongoose_regs), 0, &ioh))
+		panic("mgattach: can't map registers");
 	sc->sc_regs = (struct mongoose_regs *)ioh;
-
 	if (bus_space_map(ca->ca_iot, ca->ca_hpa + MONGOOSE_CTRL,
-	    sizeof(struct mongoose_ctrl), 0, &ioh)) {
-		aprint_error(": can't map control registers\n");
-		bus_space_unmap(ca->ca_iot, (bus_space_handle_t)sc->sc_regs,
-		    sizeof(struct mongoose_regs));
-		return;
-	}
-
-	ca->ca_irq = hp700_intr_allocate_bit(&ci->ci_ir, ca->ca_irq);
-	if (ca->ca_irq == HP700CF_IRQ_UNDEF) {
-		aprint_error(": can't allocate interrupt\n");
-		return;
-	}
-
+			  sizeof(struct mongoose_ctrl), 0, &ioh))
+		panic("mgattach: can't map control registers");
 	sc->sc_ctrl = (struct mongoose_ctrl *)ioh;
 
 	viper_eisa_en();
@@ -635,9 +622,9 @@ mgattach(device_t parent, device_t self, void *aux)
 
 	/* determine eisa board id */
 	{
-		uint8_t id[4], *p;
+		u_int8_t id[4], *p;
 		/* XXX this is awful */
-		p = (uint8_t *)(ioh + EISA_SLOTOFF_VID);
+		p = (u_int8_t *)(ioh + EISA_SLOTOFF_VID);
 		id[0] = *p++;
 		id[1] = *p++;
 		id[2] = *p++;
@@ -653,8 +640,8 @@ mgattach(device_t parent, device_t self, void *aux)
 		brid[7] = '\0';
 	}
 
-	aprint_normal(": %s rev %d, %d MHz\n", brid, sc->sc_regs->version,
-	    (sc->sc_regs->clock? 33 : 25));
+	printf (": %s rev %d, %d MHz\n", brid, sc->sc_regs->version,
+		(sc->sc_regs->clock? 33 : 25));
 	sc->sc_regs->liowait = 1;	/* disable isa wait states */
 	sc->sc_regs->lock    = 1;	/* bus unlock */
 
@@ -692,7 +679,6 @@ mgattach(device_t parent, device_t self, void *aux)
 
 	sc->sc_ic.ic_v = sc;
 	sc->sc_ic.ic_attach_hook = mg_isa_attach_hook;
-	sc->sc_ic.ic_detach_hook = mg_isa_detach_hook;
 	sc->sc_ic.ic_intr_establish = mg_intr_establish;
 	sc->sc_ic.ic_intr_disestablish = mg_intr_disestablish;
 	sc->sc_ic.ic_intr_check = mg_intr_check;
@@ -716,6 +702,7 @@ mgattach(device_t parent, device_t self, void *aux)
 #undef	R
 
 	/* attach interrupt */
-	sc->sc_ih = hp700_intr_establish(IPL_NONE, mg_intr, sc, &ci->ci_ir,
-	    ca->ca_irq);
+	sc->sc_ih = hp700_intr_establish(&sc->sc_dev, IPL_NONE,
+					 mg_intr, sc,
+					 &int_reg_cpu, ca->ca_irq);
 }

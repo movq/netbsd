@@ -1,4 +1,4 @@
-/*	$NetBSD: connect.h,v 1.1.1.2 2011/03/02 19:32:41 tron Exp $	*/
+/*	$NetBSD: connect.h,v 1.1.1.1.2.3 2011/01/07 01:24:16 riz Exp $	*/
 
 #ifndef _CONNECT_H_INCLUDED_
 #define _CONNECT_H_INCLUDED_
@@ -24,9 +24,7 @@
 extern int unix_connect(const char *, int, int);
 extern int inet_connect(const char *, int, int);
 extern int stream_connect(const char *, int, int);
-extern int stream_pass_connect(const char *, int, int);
-
-#define unix_pass_connect unix_connect
+extern int upass_connect(const char *, int, int);
 
 /* LICENSE
 /* .ad

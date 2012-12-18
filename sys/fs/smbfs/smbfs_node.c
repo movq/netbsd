@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_node.c,v 1.49 2012/11/29 11:58:49 nakayama Exp $	*/
+/*	$NetBSD: smbfs_node.c,v 1.39.6.1 2009/10/03 23:05:25 snj Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_node.c,v 1.49 2012/11/29 11:58:49 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_node.c,v 1.39.6.1 2009/10/03 23:05:25 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -96,7 +96,6 @@ static int
 smbfs_node_alloc(struct mount *mp, struct vnode *dvp,
 	const char *name, int nmlen, struct smbfattr *fap, struct vnode **vpp)
 {
-	struct vattr vattr;
 	struct smbmount *smp = VFSTOSMBFS(mp);
 	struct smbnode_hashhead *nhpp;
 	struct smbnode *np, *np2, *dnp;
@@ -113,11 +112,8 @@ smbfs_node_alloc(struct mount *mp, struct vnode *dvp,
 		if (dvp == NULL)
 			return EINVAL;
 		vp = VTOSMB(VTOSMB(dvp)->n_parent)->n_vnode;
-		vref(vp);
-		if ((error = vn_lock(vp, LK_EXCLUSIVE | LK_RETRY)) == 0)
+		if ((error = vget(vp, LK_EXCLUSIVE | LK_RETRY)) == 0)
 			*vpp = vp;
-		else
-			vrele(vp);
 		return (error);
 	}
 
@@ -136,30 +132,15 @@ retry:
 		    || memcmp(name, np->n_name, nmlen) != 0)
 			continue;
 		vp = SMBTOV(np);
-		mutex_enter((vp)->v_interlock);
+		mutex_enter(&(vp)->v_interlock);
 		mutex_exit(&smp->sm_hashlock);
-		if (vget(vp, LK_EXCLUSIVE) != 0)
+		if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK) != 0)
 			goto retry;
-		/* Force cached attributes to be refreshed if stale. */
-		(void)VOP_GETATTR(vp, &vattr, curlwp->l_cred);
-		/*
-		 * If the file type on the server is inconsistent with
-		 * what it was when we created the vnode, kill the
-		 * bogus vnode now and fall through to the code below
-		 * to create a new one with the right type.
-		 */
-		if ((vp->v_type == VDIR && (np->n_dosattr & SMB_FA_DIR) == 0) ||
-		    (vp->v_type == VREG && (np->n_dosattr & SMB_FA_DIR) != 0)) {
-			VOP_UNLOCK(vp);
-			vgone(vp);
-			goto allocnew;
-		}
 		*vpp = vp;
 		return (0);
 	}
 	mutex_exit(&smp->sm_hashlock);
 
-allocnew:
 	/*
 	 * If we don't have node attributes, then it is an explicit lookup
 	 * for an existing vnode.
@@ -170,7 +151,7 @@ allocnew:
 	np = pool_get(&smbfs_node_pool, PR_WAITOK);
 	memset(np, 0, sizeof(*np));
 
-	error = getnewvnode(VT_SMBFS, mp, smbfs_vnodeop_p, NULL, &vp);
+	error = getnewvnode(VT_SMBFS, mp, smbfs_vnodeop_p, &vp);
 	if (error) {
 		pool_put(&smbfs_node_pool, np);
 		return error;
@@ -270,6 +251,7 @@ smbfs_reclaim(void *v)
 
 	LIST_REMOVE(np, n_hash);
 
+	cache_purge(vp);
 	if (smp->sm_root == np) {
 		SMBVDEBUG0("root vnode\n");
 		smp->sm_root = NULL;
@@ -292,11 +274,11 @@ smbfs_reclaim(void *v)
 }
 
 int
-smbfs_inactive(void *v)
+smbfs_inactive(v)
+     void *v;
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
-		bool *a_recycle;
 	} */ *ap = v;
 	struct lwp *l = curlwp;
 	kauth_cred_t cred = l->l_cred;
@@ -323,9 +305,7 @@ smbfs_inactive(void *v)
 		np->n_flag &= ~NOPEN;
 		smbfs_attr_cacheremove(vp);
 	}
-	*ap->a_recycle = ((np->n_flag & NGONE) != 0);
-	VOP_UNLOCK(vp);
-
+	VOP_UNLOCK(vp, 0);
 	return (0);
 }
 /*

@@ -1,4 +1,4 @@
-.\" $NetBSD: rfcomm_sppd.1,v 1.10 2010/11/03 12:21:50 wiz Exp $
+.\" $NetBSD: rfcomm_sppd.1,v 1.6 2007/12/02 20:41:40 wiz Exp $
 .\"
 .\" Copyright (c) 2006 Itronix Inc.
 .\" All rights reserved.
@@ -52,7 +52,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd November 2, 2010
+.Dd April 10, 2007
 .Dt RFCOMM_SPPD 1
 .Os
 .Sh NAME
@@ -62,10 +62,9 @@
 .Nm
 .Op Fl d Ar device
 .Op Fl m Ar mode
-.Op Fl p Ar psm
 .Op Fl s Ar service
 .Op Fl t Ar tty
-.Brq Fl a Ar address | Op Fl c Ar channel
+.Brq Fl a Ar address | Fl c Ar channel
 .Sh DESCRIPTION
 The
 .Nm
@@ -87,8 +86,7 @@ registers the
 .Ar service
 with the local SDP server and listens on the specified RFCOMM
 .Ar channel
-for an incoming connection, or the first unused channel if none
-was given.
+for an incoming connection.
 .Pp
 The options are as follows:
 .Bl -tag -width ".Fl c Ar channel"
@@ -101,7 +99,8 @@ If given as a name, then the
 utility will attempt to resolve the name via
 .Xr bt_gethostbyname 3 .
 .It Fl c Ar channel
-In server mode, specify the RFCOMM channel number to listen on.
+Server mode.
+Specify the RFCOMM channel number to listen on.
 .Nm
 will register the service with the local
 .Xr sdpd 8
@@ -130,14 +129,8 @@ auth, plus enable encryption.
 .It secure
 encryption, plus change of link key.
 .El
-.It Fl p Ar psm
-Specify the
-.Qq Protocol/Service Multiplexer
-value to be used for the RFCOMM protocol.
-In client mode where Service Discovery is being used, this value
-will be ignored.
 .It Fl s Ar service
-Name of service class to connect to or register.
+This is the service class that will be searched for on the remote device.
 If no
 .Ar service
 is given, the default
@@ -166,6 +159,8 @@ made, and operate over the named
 pair.
 Otherwise, stdin/stdout will be used.
 .El
+.Sh EXIT STATUS
+.Ex -std
 .Sh FILES
 .Bl -tag -width ".Pa /dev/tty[p-sP-S][0-9a-v]" -compact
 .It Pa /dev/pty[p-sP-S][0-9a-v]
@@ -173,8 +168,6 @@ master pseudo terminals
 .It Pa /dev/tty[p-sP-S][0-9a-v]
 slave pseudo terminals
 .El
-.Sh EXIT STATUS
-.Ex -std
 .Sh EXAMPLES
 .Dl rfcomm_sppd -a 00:01:02:03:04:05 -s 1 -t /dev/ttyp1
 .Pp

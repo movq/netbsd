@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.271 2012/12/08 11:43:27 kiyohara Exp $ */
+/*	$NetBSD: machdep.c,v 1.227.4.2 2010/03/17 03:10:39 snj Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -71,11 +71,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.271 2012/12/08 11:43:27 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.227.4.2 2010/03/17 03:10:39 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
-#include "opt_modular.h"
 #include "opt_compat_netbsd.h"
 #include "opt_compat_svr4.h"
 #include "opt_compat_sunos.h"
@@ -85,6 +84,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.271 2012/12/08 11:43:27 kiyohara Exp $
 #include <sys/signal.h>
 #include <sys/signalvar.h>
 #include <sys/proc.h>
+#include <sys/user.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/buf.h>
 #include <sys/device.h>
 #include <sys/ras.h>
@@ -101,12 +103,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.271 2012/12/08 11:43:27 kiyohara Exp $
 #include <sys/exec.h>
 #include <sys/ucontext.h>
 #include <sys/cpu.h>
-#include <sys/module.h>
-#include <sys/ksyms.h>
-
-#include <sys/exec_aout.h>
-
-#include <dev/mm.h>
 
 #include <uvm/uvm.h>
 
@@ -122,10 +118,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.271 2012/12/08 11:43:27 kiyohara Exp $
 
 #define _SPARC_BUS_DMA_PRIVATE
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/frame.h>
 #include <machine/cpu.h>
-#include <machine/pcb.h>
 #include <machine/pmap.h>
 #include <machine/openfirm.h>
 #include <machine/sparc64.h>
@@ -133,7 +128,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.271 2012/12/08 11:43:27 kiyohara Exp $
 #include <sparc64/sparc64/cache.h>
 
 /* #include "fb.h" */
-#include "ksyms.h"
 
 int bus_space_debug = 0; /* This may be used by macros elsewhere. */
 #ifdef DEBUG
@@ -150,12 +144,10 @@ int sigpid = 0;
 #endif
 #endif
 
+struct vm_map *mb_map = NULL;
 extern vaddr_t avail_end;
-#ifdef MODULAR
-vaddr_t module_start, module_end;
-static struct vm_map module_map_store;
-extern struct vm_map *module_map;
-#endif
+
+int	physmem;
 
 extern	void *msgbufaddr;
 
@@ -167,6 +159,12 @@ extern	void *msgbufaddr;
 #define MAX_DMA_SEGS	20
 #endif
 
+/*
+ * safepri is a safe priority for sleep to set for a spin-wait
+ * during autoconfiguration or after a panic.
+ */
+int   safepri = 0;
+
 void	dumpsys(void);
 void	stackdump(void);
 
@@ -175,12 +173,13 @@ void	stackdump(void);
  * Machine-dependent startup code
  */
 void
-cpu_startup(void)
+cpu_startup()
 {
 #ifdef DEBUG
 	extern int pmapdebug;
 	int opmapdebug = pmapdebug;
 #endif
+	vaddr_t minaddr, maxaddr;
 	char pbuf[9];
 
 #ifdef DEBUG
@@ -195,6 +194,14 @@ cpu_startup(void)
 	format_bytes(pbuf, sizeof(pbuf), ctob((uint64_t)physmem));
 	printf("total memory = %s\n", pbuf);
 
+	minaddr = 0;
+
+	/*
+	 * Finally, allocate mbuf cluster submap.
+	 */
+        mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
+	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, FALSE, NULL);
+
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
 #endif
@@ -203,12 +210,6 @@ cpu_startup(void)
 
 #if 0
 	pmap_redzone();
-#endif
-
-#ifdef MODULAR
-	uvm_map_setup(&module_map_store, module_start, module_end, 0);
-	module_map_store.pmap = pmap_kernel();
-	module_map = &module_map_store;
 #endif
 }
 
@@ -228,9 +229,9 @@ cpu_startup(void)
 void
 setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 {
-	struct trapframe64 *tf = l->l_md.md_tf;
-	struct fpstate64 *fs;
-	int64_t tstate;
+	register struct trapframe64 *tf = l->l_md.md_tf;
+	register struct fpstate64 *fs;
+	register int64_t tstate;
 	int pstate = PSTATE_USER;
 #ifdef __arch64__
 	Elf_Ehdr *eh = pack->ep_hdr;
@@ -246,7 +247,7 @@ setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 	 * Set the registers to 0 except for:
 	 *	%o6: stack pointer, built in exec())
 	 *	%tstate: (retain icc and xcc and cwp bits)
-	 *	%g1: p->p_psstrp (used by crt0)
+	 *	%g1: address of p->p_psstr (used by crt0)
 	 *	%tpc,%tnpc: entry point of program
 	 */
 #ifdef __arch64__
@@ -267,8 +268,9 @@ setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 		break;
 	}
 #endif
-	tstate = ((int64_t)ASI_PRIMARY_NO_FAULT << TSTATE_ASI_SHIFT) |
-	    (pstate << TSTATE_PSTATE_SHIFT) | (tf->tf_tstate & TSTATE_CWP);
+	tstate = (ASI_PRIMARY_NO_FAULT<<TSTATE_ASI_SHIFT) |
+		((pstate)<<TSTATE_PSTATE_SHIFT) | 
+		(tf->tf_tstate & TSTATE_CWP);
 	if ((fs = l->l_md.md_fpstate) != NULL) {
 		/*
 		 * We hold an FPU state.  If we own *the* FPU chip state
@@ -281,7 +283,7 @@ setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 	}
 	memset(tf, 0, sizeof *tf);
 	tf->tf_tstate = tstate;
-	tf->tf_global[1] = l->l_proc->p_psstrp;
+	tf->tf_global[1] = (vaddr_t)l->l_proc->p_psstr;
 	/* %g4 needs to point to the start of the data segment */
 	tf->tf_global[4] = 0; 
 	tf->tf_pc = pack->ep_entry & ~3;
@@ -450,7 +452,7 @@ struct sigframe_siginfo {
 	ucontext_t	sf_uc;		/* saved ucontext */
 };
 
-void
+static void
 sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 {
 	struct lwp *l = curlwp;
@@ -466,6 +468,18 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct rwindow *newsp;
 	/* Allocate an aligned sigframe */
 	fp = (void *)((u_long)(fp - 1) & ~0x0f);
+
+	/* Build stack frame for signal trampoline. */
+	switch (ps->sa_sigdesc[sig].sd_vers) {
+	case 0:		/* handled by sendsig_sigcontext */
+	case 1:		/* handled by sendsig_sigcontext */
+	default:	/* unknown version */
+		printf("sendsig_siginfo: bad version %d\n",
+		    ps->sa_sigdesc[sig].sd_vers);
+		sigexit(l, SIGILL);
+	case 2:
+		break;
+	}
 
 	uc.uc_flags = _UC_SIGMASK |
 	    ((l->l_sigstk.ss_flags & SS_ONSTACK)
@@ -516,33 +530,66 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 }
 
-struct pcb dumppcb;
-
-static void
-maybe_dump(int howto)
+void
+sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
-	int s;
-
-	/* Disable interrupts. */
-	s = splhigh();
-
-	/* Do a dump if requested. */
-	if ((howto & (RB_DUMP | RB_HALT)) == RB_DUMP)
-		dumpsys();
-
-	splx(s);
+#ifdef COMPAT_16
+	if (curproc->p_sigacts->sa_sigdesc[ksi->ksi_signo].sd_vers < 2)
+		sendsig_sigcontext(ksi, mask);
+	else
+#endif
+		sendsig_siginfo(ksi, mask);
 }
 
-void
-cpu_reboot(int howto, char *user_boot_string)
+/*
+ * Set the lwp to begin execution in the upcall handler.  The upcall
+ * handler will then simply call the upcall routine and then exit.
+ *
+ * Because we have a bunch of different signal trampolines, the first
+ * two instructions in the signal trampoline call the upcall handler.
+ * Signal dispatch should skip the first two instructions in the signal
+ * trampolines.
+ */
+void 
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+	void *sas, void *ap, void *sp, sa_upcall_t upcall)
 {
-	static bool syncdone = false;
+       	struct trapframe64 *tf;
+	vaddr_t addr;
+
+	tf = l->l_md.md_tf;
+	addr = (vaddr_t) upcall;
+
+	/* Arguments to the upcall... */
+	tf->tf_out[0] = type;
+	tf->tf_out[1] = (vaddr_t) sas;
+	tf->tf_out[2] = nevents;
+	tf->tf_out[3] = ninterrupted;
+	tf->tf_out[4] = (vaddr_t) ap;
+
+	/*
+	 * Ensure the stack is double-word aligned, and provide a
+	 * valid C call frame.
+	 */
+	sp = (void *)(((vaddr_t)sp & ~0xf) - CCFSZ);
+
+	/* Arrange to begin execution at the upcall handler. */
+	tf->tf_pc = addr;
+	tf->tf_npc = addr + 4;
+	tf->tf_out[6] = (vaddr_t)sp - STACK_OFFSET;
+	tf->tf_out[7] = -1;		/* "you lose" if upcall returns */
+}
+
+int	waittime = -1;
+struct pcb dumppcb;
+
+void
+cpu_reboot(register int howto, char *user_boot_string)
+{
 	int i;
 	static char str[128];
-	struct lwp *l;
 
-	l = (curlwp == NULL) ? &lwp0 : curlwp;
-
+	/* If system is cold, just halt. */
 	if (cold) {
 		howto |= RB_HALT;
 		goto haltsys;
@@ -552,47 +599,32 @@ cpu_reboot(int howto, char *user_boot_string)
 	fb_unblank();
 #endif
 	boothowto = howto;
-
-	/* If rebooting and a dump is requested, do it.
-	 *
-	 * XXX used to dump after vfs_shutdown() and before
-	 * detaching devices / shutdown hooks / pmf_system_shutdown().
-	 */
-	maybe_dump(howto);
-
-	if ((howto & RB_NOSYNC) == 0 && !syncdone) {
+	if ((howto & RB_NOSYNC) == 0 && waittime < 0) {
 		extern struct lwp lwp0;
 
-		if (!syncdone) {
-		syncdone = true;
+		/* XXX protect against curlwp->p_stats.foo refs in sync() */
+		if (curlwp == NULL)
+			curlwp = &lwp0;
+		waittime = 0;
 		vfs_shutdown();
-			/* XXX used to force unmount as well, here */
-			vfs_sync_all(l);
-			/*
-			 * If we've been adjusting the clock, the todr
-			 * will be out of synch; adjust it now.
-			 *
-			 * resettodr will only do this only if inittodr()
-			 * has already been called.
-			 *
-			 * XXX used to do this after unmounting all
-			 * filesystems with vfs_shutdown().
-			 */
-			resettodr();
-		}
 
-		while (vfs_unmountall1(l, false, false) ||
-		       config_detach_all(boothowto) ||
-		       vfs_unmount_forceone(l))
-			;	/* do nothing */
-	} else
-		suspendsched();
+		/*
+		 * If we've been adjusting the clock, the todr
+		 * will be out of synch; adjust it now.
+		 * resettodr will only do this only if inittodr()
+		 * has already been called.
+		 */
+		resettodr();
+	}
+	(void) splhigh();		/* ??? */
 
-	pmf_system_shutdown(boothowto);
-
-	splhigh();
+	/* If rebooting and a dump is requested, do it. */
+	if (howto & RB_DUMP)
+		dumpsys();
 
 haltsys:
+	/* Run any shutdown hooks. */
+	doshutdownhooks();
 
 #ifdef MULTIPROCESSOR
 	/* Stop all secondary cpus */
@@ -659,14 +691,20 @@ int	dumpsize = 0;		/* also for savecore */
 long	dumplo = 0;
 
 void
-cpu_dumpconf(void)
+cpu_dumpconf()
 {
-	int nblks, dumpblks;
+	const struct bdevsw *bdev;
+	register int nblks, dumpblks;
 
 	if (dumpdev == NODEV)
 		/* No usable dump device */
 		return;
-	nblks = bdev_size(dumpdev);
+	bdev = bdevsw_lookup(dumpdev);
+	if (bdev == NULL || bdev->d_psize == NULL)
+		/* No usable dump device */
+		return;
+
+	nblks = (*bdev->d_psize)(dumpdev);
 
 	dumpblks = ctod(physmem) + pmap_dumpsize();
 	if (dumpblks > (nblks - ctod(1)))
@@ -702,15 +740,15 @@ reserve_dumppages(void *p)
  * Write a crash dump.
  */
 void
-dumpsys(void)
+dumpsys()
 {
 	const struct bdevsw *bdev;
-	int psize;
+	register int psize;
 	daddr_t blkno;
-	int (*dump)(dev_t, daddr_t, void *, size_t);
+	register int (*dump)(dev_t, daddr_t, void *, size_t);
 	int j, error = 0;
 	uint64_t todo;
-	struct mem_region *mp;
+	register struct mem_region *mp;
 
 	/* copy registers to dumppcb and flush windows */
 	memset(&dumppcb, 0, sizeof(struct pcb));
@@ -734,14 +772,15 @@ dumpsys(void)
 		return;
 	}
 	if (dumplo <= 0) {
-		printf("\ndump to dev %" PRId32 ",%" PRId32 " not possible ("
-		    "partition too small?)\n", major(dumpdev), minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible (partition"
+		    " too small?)\n", major(dumpdev),
+		    minor(dumpdev));
 		return;
 	}
-	printf("\ndumping to dev %" PRId32 ",%" PRId32 " offset %ld\n",
-	    major(dumpdev), minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
+	    minor(dumpdev), dumplo);
 
-	psize = bdev_size(dumpdev);
+	psize = (*bdev->d_psize)(dumpdev);
 	if (psize == -1) {
 		printf("dump area unavailable\n");
 		return;
@@ -772,7 +811,8 @@ dumpsys(void)
 				    todo / (1024*1024));
 			for (off = 0; off < n; off += PAGE_SIZE)
 				pmap_kenter_pa(dumpspace+off, maddr+off,
-				    VM_PROT_READ, 0);
+				    VM_PROT_READ);
+			pmap_update(pmap_kernel());
 			error = (*dump)(dumpdev, blkno,
 					(void *)dumpspace, (size_t)n);
 			pmap_kremove(dumpspace, n);
@@ -783,6 +823,7 @@ dumpsys(void)
 			blkno += btodb(n);
 		}
 	}
+	pmap_update(pmap_kernel());
 
 	switch (error) {
 
@@ -840,42 +881,15 @@ trapdump(struct trapframe64* tf)
 	       (unsigned long long)tf->tf_out[6],
 	       (unsigned long long)tf->tf_out[7]);
 }
-
-static void
-get_symbol_and_offset(const char **mod, const char **sym, vaddr_t *offset, vaddr_t pc)
-{
-	static char symbuf[256];
-	unsigned long symaddr;
-
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-	if (ksyms_getname(mod, sym, pc,
-			  KSYMS_CLOSEST|KSYMS_PROC|KSYMS_ANY) == 0) {
-		if (ksyms_getval(*mod, *sym, &symaddr,
-				 KSYMS_CLOSEST|KSYMS_PROC|KSYMS_ANY) != 0)
-			goto failed;
-
-		*offset = (vaddr_t)(pc - symaddr);
-		return;
-	}
-#endif
- failed:
-	snprintf(symbuf, sizeof symbuf, "%llx", (unsigned long long)pc);
-	*mod = "netbsd";
-	*sym = symbuf;
-	*offset = 0;
-}
-
 /*
  * get the fp and dump the stack as best we can.  don't leave the
  * current stack page
  */
 void
-stackdump(void)
+stackdump()
 {
 	struct frame32 *fp = (struct frame32 *)getfp(), *sfp;
 	struct frame64 *fp64;
-	const char *mod, *sym;
-	vaddr_t offset;
 
 	sfp = fp;
 	printf("Frame pointer is at %p\n", fp);
@@ -884,32 +898,24 @@ stackdump(void)
 		if( ((long)fp) & 1 ) {
 			fp64 = (struct frame64*)(((char*)fp)+BIAS);
 			/* 64-bit frame */
-			get_symbol_and_offset(&mod, &sym, &offset, fp64->fr_pc);
-			printf(" %s:%s+%#llx(%llx, %llx, %llx, %llx, %llx, %llx) fp = %llx\n",
-			       mod, sym,
-			       (unsigned long long)offset,
+			printf("%llx(%llx, %llx, %llx, %llx, %llx, %llx, %llx) fp = %llx\n",
+			       (unsigned long long)fp64->fr_pc,
 			       (unsigned long long)fp64->fr_arg[0],
 			       (unsigned long long)fp64->fr_arg[1],
 			       (unsigned long long)fp64->fr_arg[2],
 			       (unsigned long long)fp64->fr_arg[3],
 			       (unsigned long long)fp64->fr_arg[4],
 			       (unsigned long long)fp64->fr_arg[5],	
+			       (unsigned long long)fp64->fr_arg[6],
 			       (unsigned long long)fp64->fr_fp);
 			fp = (struct frame32 *)(u_long)fp64->fr_fp;
 		} else {
 			/* 32-bit frame */
-			get_symbol_and_offset(&mod, &sym, &offset, fp->fr_pc);
-			printf(" %s:%s+%#lx(%x, %x, %x, %x, %x, %x) fp = %x\n",
-			       mod, sym,
-			       (unsigned long)offset,
-			       fp->fr_arg[0],
-			       fp->fr_arg[1],
-			       fp->fr_arg[2],
-			       fp->fr_arg[3],
-			       fp->fr_arg[4],
-			       fp->fr_arg[5],
+			printf("  pc = %x  args = (%x, %x, %x, %x, %x, %x, %x) fp = %x\n",
+			       fp->fr_pc, fp->fr_arg[0], fp->fr_arg[1], fp->fr_arg[2],
+			       fp->fr_arg[3], fp->fr_arg[4], fp->fr_arg[5], fp->fr_arg[6],
 			       fp->fr_fp);
-			fp = (struct frame32*)(u_long)fp->fr_fp;
+			fp = (struct frame32*)(u_long)(u_short)fp->fr_fp;
 		}
 	}
 }
@@ -1022,6 +1028,7 @@ _bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *sbuf,
 	/*
 	 * We always use just one segment.
 	 */
+	map->dm_mapsize = buflen;
 	i = 0;
 	map->dm_segs[i].ds_addr = 0UL;
 	map->dm_segs[i].ds_len = 0;
@@ -1033,24 +1040,23 @@ _bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *sbuf,
 		incr = min(sgsize, incr);
 
 		(void) pmap_extract(pmap_kernel(), vaddr, &pa);
+		sgsize -= incr;
+		vaddr += incr;
 		if (map->dm_segs[i].ds_len == 0)
 			map->dm_segs[i].ds_addr = pa;
 		if (pa == (map->dm_segs[i].ds_addr + map->dm_segs[i].ds_len)
 		    && ((map->dm_segs[i].ds_len + incr) <= map->dm_maxsegsz)) {
 			/* Hey, waddyaknow, they're contiguous */
 			map->dm_segs[i].ds_len += incr;
-		} else {
-			if (++i >= map->_dm_segcnt)
-				return (EFBIG);
-			map->dm_segs[i].ds_addr = pa;
-			map->dm_segs[i].ds_len = incr;
+			incr = PAGE_SIZE;
+			continue;
 		}
-		sgsize -= incr;
-		vaddr += incr;
-		incr = PAGE_SIZE;
+		if (++i >= map->_dm_segcnt)
+			return (EFBIG);
+		map->dm_segs[i].ds_addr = pa;
+		map->dm_segs[i].ds_len = incr = PAGE_SIZE;
 	}
 	map->dm_nsegs = i + 1;
-	map->dm_mapsize = buflen;
 	/* Mapping is bus dependent */
 	return (0);
 }
@@ -1066,14 +1072,7 @@ _bus_dmamap_load_mbuf(bus_dma_tag_t t, bus_dmamap_t map, struct mbuf *m,
 	int i;
 	size_t len;
 
-	/*
-	 * Make sure that on error condition we return "no valid mappings".
-	 */
-	map->dm_nsegs = 0;
 	KASSERT(map->dm_maxsegsz <= map->_dm_maxmaxsegsz);
-
-	if (m->m_pkthdr.len > map->_dm_size)
-		return EINVAL;
 
 	/* Record mbuf for *_unload */
 	map->_dm_type = _DM_TYPE_MBUF;
@@ -1186,10 +1185,6 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio,
 	struct proc *p = uio->uio_lwp->l_proc;
 	struct pmap *pm;
 
-	/*
-	 * Make sure that on error condition we return "no valid mappings".
-	 */
-	map->dm_nsegs = 0;
 	KASSERT(map->dm_maxsegsz <= map->_dm_maxmaxsegsz);
 
 	if (uio->uio_segflg == UIO_USERSPACE) {
@@ -1208,6 +1203,7 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio,
 		 * Lock the part of the user address space involved
 		 *    in the transfer.
 		 */
+		uvm_lwp_hold(p);
 		if (__predict_false(uvm_vslock(p->p_vmspace, vaddr, buflen,
 			    (uio->uio_rw == UIO_WRITE) ?
 			    VM_PROT_WRITE : VM_PROT_READ) != 0)) {
@@ -1241,6 +1237,7 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio,
 			i++;
 		}
 		uvm_vsunlock(p->p_vmspace, bp->b_data, todo);
+		uvm_lwp_rele(p);
  		if (buflen > 0 && i >= MAX_DMA_SEGS) 
 			/* Exceeded the size of our dmamap */
 			return EFBIG;
@@ -1328,7 +1325,7 @@ _bus_dmamap_sync(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 		 * Don't really need to do anything, but flush any pending
 		 * writes anyway. 
 		 */
-		membar_Sync();
+		__asm("membar #Sync" : );
 	}
 	if (ops & BUS_DMASYNC_POSTREAD) {
 		/* Invalidate the vcache */
@@ -1342,21 +1339,16 @@ _bus_dmamap_sync(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 
 				if (offset < PAGE_SIZE) {
 					start = VM_PAGE_TO_PHYS(pg) + offset;
-					size -= offset;
 					if (size > len)
 						size = len;
 					cache_flush_phys(start, size, 0);
 					len -= size;
-					if (len == 0)
-						goto done;
-					offset = 0;
 					continue;
 				}
 				offset -= size;
 			}
 		}
 	}
- done:
 	if (ops & BUS_DMASYNC_POSTWRITE) {
 		/* Nothing to do.  Handled by the bus controller. */
 	}
@@ -1451,13 +1443,14 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 	size_t size, void **kvap, int flags)
 {
 	vaddr_t va, sva;
-	int r;
+	int r, cbit;
 	size_t oversize;
 	u_long align;
 
 	if (nsegs != 1)
 		panic("_bus_dmamem_map: nsegs = %d", nsegs);
 
+	cbit = PMAP_NC;
 	align = PAGE_SIZE;
 
 	size = round_page(size);
@@ -1496,7 +1489,7 @@ _bus_dmamem_unmap(bus_dma_tag_t t, void *kva, size_t size)
 {
 
 #ifdef DIAGNOSTIC
-	if ((u_long)kva & PGOFSET)
+	if ((u_long)kva & PAGE_MASK)
 		panic("_bus_dmamem_unmap");
 #endif
 
@@ -1574,634 +1567,6 @@ static void	sparc_bus_free(bus_space_tag_t, bus_space_handle_t, bus_size_t);
 
 struct extent *io_space = NULL;
 
-void
-bus_space_barrier(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, bus_size_t s, int f)
-{
-	/*
-	 * We have a bit of a problem with the bus_space_barrier()
-	 * interface.  It defines a read barrier and a write barrier
-	 * which really don't map to the 7 different types of memory
-	 * barriers in the SPARC v9 instruction set.
-	 */
-	if (f == BUS_SPACE_BARRIER_READ)
-		/* A load followed by a load to the same location? */
-		__asm volatile("membar #Lookaside");
-	else if (f == BUS_SPACE_BARRIER_WRITE)
-		/* A store followed by a store? */
-		__asm volatile("membar #StoreStore");
-	else 
-		/* A store followed by a load? */
-		__asm volatile("membar #StoreLoad|#MemIssue|#Lookaside");
-}
-
-int
-bus_space_alloc(bus_space_tag_t t, bus_addr_t rs, bus_addr_t re, bus_size_t s,
-	bus_size_t a, bus_size_t b, int f, bus_addr_t *ap,
-	bus_space_handle_t *hp)
-{
-	_BS_CALL(t, sparc_bus_alloc)(t, rs, re, s, a, b, f, ap, hp);
-}
-
-void
-bus_space_free(bus_space_tag_t t, bus_space_handle_t h, bus_size_t s)
-{
-	_BS_CALL(t, sparc_bus_free)(t, h, s);
-}
-
-int
-bus_space_map(bus_space_tag_t t, bus_addr_t a, bus_size_t s, int f,
-	bus_space_handle_t *hp)
-{
-	_BS_CALL(t, sparc_bus_map)(t, a, s, f, 0, hp);
-}
-
-void
-bus_space_unmap(bus_space_tag_t t, bus_space_handle_t h, bus_size_t s)
-{
-	_BS_VOID_CALL(t, sparc_bus_unmap)(t, h, s);
-}
-
-int
-bus_space_subregion(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-	bus_size_t s, bus_space_handle_t *hp)
-{
-	_BS_CALL(t, sparc_bus_subregion)(t, h, o, s, hp);
-}
-
-paddr_t
-bus_space_mmap(bus_space_tag_t t, bus_addr_t a, off_t o, int p, int f)
-{
-	_BS_CALL(t, sparc_bus_mmap)(t, a, o, p, f);
-}
-
-/*
- *	void bus_space_read_multi_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    uintN_t *addr, bus_size_t count);
- *
- * Read `count' 1, 2, 4, or 8 byte quantities from bus space
- * described by tag/handle/offset and copy into buffer provided.
- */
-void
-bus_space_read_multi_1(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, uint8_t * a, bus_size_t c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_1(t, h, o);
-}
-
-void
-bus_space_read_multi_2(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, uint16_t * a, bus_size_t c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_2(t, h, o);
-}
-
-void
-bus_space_read_multi_4(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, uint32_t * a, bus_size_t c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_4(t, h, o);
-}
-
-void
-bus_space_read_multi_8(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, uint64_t * a, bus_size_t c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_8(t, h, o);
-}
-
-/*
- *	void bus_space_write_multi_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    const uintN_t *addr, bus_size_t count);
- *
- * Write `count' 1, 2, 4, or 8 byte quantities from the buffer
- * provided to bus space described by tag/handle/offset.
- */
-void
-bus_space_write_multi_1(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o,
-	const uint8_t *a, bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_1(t, h, o, *a++);
-}
-
-void
-bus_space_write_multi_2(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o,
-	const uint16_t *a, bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_2(t, h, o, *a++);
-}
-
-void
-bus_space_write_multi_4(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o,
-	const uint32_t *a, bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_4(t, h, o, *a++);
-}
-
-void
-bus_space_write_multi_8(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o,
-	const uint64_t *a, bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_8(t, h, o, *a++);
-}
-
-/*
- *	void bus_space_set_multi_stream_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t val,
- *	    bus_size_t count);
- *
- * Write the 1, 2, 4, or 8 byte value `val' to bus space described
- * by tag/handle/offset `count' times.
- */
-void
-bus_space_set_multi_stream_1(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o, uint8_t v,
-	bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_stream_1(t, h, o, v);
-}
-
-void
-bus_space_set_multi_stream_2(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o, uint16_t v,
-	bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_stream_2(t, h, o, v);
-}
-
-void
-bus_space_set_multi_stream_4(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o, uint32_t v,
-	bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_stream_4(t, h, o, v);
-}
-
-void
-bus_space_set_multi_stream_8(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o, uint64_t v,
-	bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_stream_8(t, h, o, v);
-}
-
-/*
- *	void bus_space_copy_region_stream_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh1, bus_size_t off1,
- *	    bus_space_handle_t bsh2, bus_size_t off2,
- *	    bus_size_t count);
- *
- * Copy `count' 1, 2, 4, or 8 byte values from bus space starting
- * at tag/bsh1/off1 to bus space starting at tag/bsh2/off2.
- */
-void
-bus_space_copy_region_stream_1(bus_space_tag_t t, bus_space_handle_t h1,
-	bus_size_t o1, bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
-{
-	for (; c; c--, o1++, o2++)
-	    bus_space_write_stream_1(t, h1, o1, bus_space_read_stream_1(t, h2, o2));
-}
-
-void
-bus_space_copy_region_stream_2(bus_space_tag_t t, bus_space_handle_t h1,
-	bus_size_t o1, bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
-{
-	for (; c; c--, o1+=2, o2+=2)
-	    bus_space_write_stream_2(t, h1, o1, bus_space_read_stream_2(t, h2, o2));
-}
-
-void
-bus_space_copy_region_stream_4(bus_space_tag_t t, bus_space_handle_t h1,
-	bus_size_t o1, bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
-{
-	for (; c; c--, o1+=4, o2+=4)
-	    bus_space_write_stream_4(t, h1, o1, bus_space_read_stream_4(t, h2, o2));
-}
-
-void
-bus_space_copy_region_stream_8(bus_space_tag_t t, bus_space_handle_t h1,
-	bus_size_t o1, bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
-{
-	for (; c; c--, o1+=8, o2+=8)
-	    bus_space_write_stream_8(t, h1, o1, bus_space_read_8(t, h2, o2));
-}
-
-/*
- *	void bus_space_set_region_stream_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t off,
- *	    uintN_t *addr, bus_size_t count);
- *
- */
-void
-bus_space_set_region_stream_1(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, const uint8_t v, bus_size_t c)
-{
-	for (; c; c--, o++)
-		bus_space_write_stream_1(t, h, o, v);
-}
-
-void
-bus_space_set_region_stream_2(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, const uint16_t v, bus_size_t c)
-{
-	for (; c; c--, o+=2)
-		bus_space_write_stream_2(t, h, o, v);
-}
-
-void
-bus_space_set_region_stream_4(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, const uint32_t v, bus_size_t c)
-{
-	for (; c; c--, o+=4)
-		bus_space_write_stream_4(t, h, o, v);
-}
-
-void
-bus_space_set_region_stream_8(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, const uint64_t v, bus_size_t c)
-{
-	for (; c; c--, o+=8)
-		bus_space_write_stream_8(t, h, o, v);
-}
-
-
-/*
- *	void bus_space_read_multi_stream_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    uintN_t *addr, bus_size_t count);
- *
- * Read `count' 1, 2, 4, or 8 byte quantities from bus space
- * described by tag/handle/offset and copy into buffer provided.
- */
-void
-bus_space_read_multi_stream_1(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o,
-	uint8_t *a, bus_size_t c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_stream_1(t, h, o);
-}
-
-void
-bus_space_read_multi_stream_2(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o,
-	uint16_t *a, bus_size_t c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_stream_2(t, h, o);
-}
-
-void
-bus_space_read_multi_stream_4(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o,
-	uint32_t *a, bus_size_t c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_stream_4(t, h, o);
-}
-
-void
-bus_space_read_multi_stream_8(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o,
-	uint64_t *a, bus_size_t c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_stream_8(t, h, o);
-}
-
-/*
- *	void bus_space_read_region_stream_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t off,
- *	    uintN_t *addr, bus_size_t count);
- *
- */
-void
-bus_space_read_region_stream_1(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, uint8_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o++)
-		*a = bus_space_read_stream_1(t, h, o);
-}
-void
-bus_space_read_region_stream_2(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, uint16_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o+=2)
-		*a = bus_space_read_stream_2(t, h, o);
- }
-void
-bus_space_read_region_stream_4(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, uint32_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o+=4)
-		*a = bus_space_read_stream_4(t, h, o);
-}
-void
-bus_space_read_region_stream_8(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, uint64_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o+=8)
-		*a = bus_space_read_stream_8(t, h, o);
-}
-
-/*
- *	void bus_space_write_multi_stream_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    const uintN_t *addr, bus_size_t count);
- *
- * Write `count' 1, 2, 4, or 8 byte quantities from the buffer
- * provided to bus space described by tag/handle/offset.
- */
-void
-bus_space_write_multi_stream_1(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o,
-	const uint8_t *a, bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_stream_1(t, h, o, *a++);
-}
-
-void
-bus_space_write_multi_stream_2(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o,
-	const uint16_t *a, bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_stream_2(t, h, o, *a++);
-}
-
-void
-bus_space_write_multi_stream_4(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o,
-	const uint32_t *a, bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_stream_4(t, h, o, *a++);
-}
-
-void
-bus_space_write_multi_stream_8(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o,
-	const uint64_t *a, bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_stream_8(t, h, o, *a++);
-}
-
-/*
- *	void bus_space_copy_region_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh1, bus_size_t off1,
- *	    bus_space_handle_t bsh2, bus_size_t off2,
- *	    bus_size_t count);
- *
- * Copy `count' 1, 2, 4, or 8 byte values from bus space starting
- * at tag/bsh1/off1 to bus space starting at tag/bsh2/off2.
- */
-void
-bus_space_copy_region_1(bus_space_tag_t t, bus_space_handle_t h1, bus_size_t o1,
-	bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
-{
-	for (; c; c--, o1++, o2++)
-	    bus_space_write_1(t, h1, o1, bus_space_read_1(t, h2, o2));
-}
-
-void
-bus_space_copy_region_2(bus_space_tag_t t, bus_space_handle_t h1, bus_size_t o1,
-	bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
-{
-	for (; c; c--, o1+=2, o2+=2)
-	    bus_space_write_2(t, h1, o1, bus_space_read_2(t, h2, o2));
-}
-
-void
-bus_space_copy_region_4(bus_space_tag_t t, bus_space_handle_t h1, bus_size_t o1,
-	bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
-{
-	for (; c; c--, o1+=4, o2+=4)
-	    bus_space_write_4(t, h1, o1, bus_space_read_4(t, h2, o2));
-}
-
-void
-bus_space_copy_region_8(bus_space_tag_t t, bus_space_handle_t h1, bus_size_t o1,
-	bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
-{
-	for (; c; c--, o1+=8, o2+=8)
-	    bus_space_write_8(t, h1, o1, bus_space_read_8(t, h2, o2));
-}
-
-/*
- *	void bus_space_set_region_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t off,
- *	    uintN_t *addr, bus_size_t count);
- *
- */
-void
-bus_space_set_region_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-	const uint8_t v, bus_size_t c)
-{
-	for (; c; c--, o++)
-		bus_space_write_1(t, h, o, v);
-}
-
-void
-bus_space_set_region_2(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-	const uint16_t v, bus_size_t c)
-{
-	for (; c; c--, o+=2)
-		bus_space_write_2(t, h, o, v);
-}
-
-void
-bus_space_set_region_4(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-	const uint32_t v, bus_size_t c)
-{
-	for (; c; c--, o+=4)
-		bus_space_write_4(t, h, o, v);
-}
-
-void
-bus_space_set_region_8(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-	const uint64_t v, bus_size_t c)
-{
-	for (; c; c--, o+=8)
-		bus_space_write_8(t, h, o, v);
-}
-
-
-/*
- *	void bus_space_set_multi_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t val,
- *	    bus_size_t count);
- *
- * Write the 1, 2, 4, or 8 byte value `val' to bus space described
- * by tag/handle/offset `count' times.
- */
-void
-bus_space_set_multi_1(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o, uint8_t v,
-	bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_1(t, h, o, v);
-}
-
-void
-bus_space_set_multi_2(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o, uint16_t v,
-	bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_2(t, h, o, v);
-}
-
-void
-bus_space_set_multi_4(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o, uint32_t v,
-	bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_4(t, h, o, v);
-}
-
-void
-bus_space_set_multi_8(bus_space_tag_t t,
-	bus_space_handle_t h, bus_size_t o, uint64_t v,
-	bus_size_t c)
-{
-	while (c-- > 0)
-		bus_space_write_8(t, h, o, v);
-}
-
-/*
- *	void bus_space_write_region_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t off,
- *	    uintN_t *addr, bus_size_t count);
- *
- */
-void
-bus_space_write_region_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-	const uint8_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o++)
-		bus_space_write_1(t, h, o, *a);
-}
-
-void
-bus_space_write_region_2(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-	const uint16_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o+=2)
-		bus_space_write_2(t, h, o, *a);
-}
-
-void
-bus_space_write_region_4(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-	const uint32_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o+=4)
-		bus_space_write_4(t, h, o, *a);
-}
-
-void
-bus_space_write_region_8(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-	const uint64_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o+=8)
-		bus_space_write_8(t, h, o, *a);
-}
-
-
-/*
- *	void bus_space_read_region_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t off,
- *	    uintN_t *addr, bus_size_t count);
- *
- */
-void
-bus_space_read_region_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-	uint8_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o++)
-		*a = bus_space_read_1(t, h, o);
-}
-void
-bus_space_read_region_2(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-	uint16_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o+=2)
-		*a = bus_space_read_2(t, h, o);
- }
-void
-bus_space_read_region_4(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-	uint32_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o+=4)
-		*a = bus_space_read_4(t, h, o);
-}
-void
-bus_space_read_region_8(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
-	uint64_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o+=8)
-		*a = bus_space_read_8(t, h, o);
-}
-
-/*
- *	void bus_space_write_region_stream_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t off,
- *	    uintN_t *addr, bus_size_t count);
- *
- */
-void
-bus_space_write_region_stream_1(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, const uint8_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o++)
-		bus_space_write_stream_1(t, h, o, *a);
-}
-
-void
-bus_space_write_region_stream_2(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, const uint16_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o+=2)
-		bus_space_write_stream_2(t, h, o, *a);
-}
-
-void
-bus_space_write_region_stream_4(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, const uint32_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o+=4)
-		bus_space_write_stream_4(t, h, o, *a);
-}
-
-void
-bus_space_write_region_stream_8(bus_space_tag_t t, bus_space_handle_t h,
-	bus_size_t o, const uint64_t *a, bus_size_t c)
-{
-	for (; c; a++, c--, o+=8)
-		bus_space_write_stream_8(t, h, o, *a);
-}
-
 /*
  * Allocate a new bus tag and have it inherit the methods of the
  * given parent.
@@ -2252,7 +1617,7 @@ bus_space_translate_address_generic(struct openprom_range *ranges, int nranges,
 }
 
 int
-sparc_bus_map(bus_space_tag_t t, bus_addr_t addr, bus_size_t size,
+sparc_bus_map(bus_space_tag_t t, bus_addr_t	addr, bus_size_t size,
 	int flags, vaddr_t unused, bus_space_handle_t *hp)
 {
 	vaddr_t v;
@@ -2267,7 +1632,7 @@ sparc_bus_map(bus_space_tag_t t, bus_addr_t addr, bus_size_t size,
 		 */
 		io_space = extent_create("IOSPACE",
 					 (u_long)IODEV_BASE, (u_long)IODEV_END,
-					 0, 0, EX_NOWAIT);
+					 M_DEVBUF, 0, 0, EX_NOWAIT);
 
 
 	size = round_page(size);
@@ -2284,17 +1649,17 @@ sparc_bus_map(bus_space_tag_t t, bus_addr_t addr, bus_size_t size,
 		 * out of IO mappings, config space will not be mapped in,
 		 * rather it will be accessed through MMU bypass ASI accesses.
 		 */
-		if (flags & BUS_SPACE_MAP_LINEAR)
-			return (-1);
+		if (flags & BUS_SPACE_MAP_LINEAR) return (-1);
 		hp->_ptr = addr;
 		hp->_asi = ASI_PHYS_NON_CACHED_LITTLE;
 		hp->_sasi = ASI_PHYS_NON_CACHED;
-		DPRINTF(BSDB_MAP, ("\n%s: config type %x flags %x "
-			"addr %016llx size %016llx virt %llx\n", __func__,
+		DPRINTF(BSDB_MAP, ("\nsparc_bus_map: type %x flags %x "
+			"addr %016llx size %016llx virt %llx\n",
 			(int)t->type, (int) flags, (unsigned long long)addr,
 			(unsigned long long)size,
 			(unsigned long long)hp->_ptr));
 		return (0);
+		/* FALLTHROUGH */
 	case PCI_IO_BUS_SPACE:
 		map_little = 1;
 		break;
@@ -2319,8 +1684,7 @@ sparc_bus_map(bus_space_tag_t t, bus_addr_t addr, bus_size_t size,
 	}
 #endif
 
-	if (!(flags & BUS_SPACE_MAP_CACHEABLE))
-		pm_flags |= PMAP_NC;
+	if (!(flags & BUS_SPACE_MAP_CACHEABLE)) pm_flags |= PMAP_NC;
 
 	if ((err = extent_alloc(io_space, size, PAGE_SIZE,
 		0, EX_NOWAIT|EX_BOUNDZERO, (u_long *)&v)))
@@ -2334,25 +1698,25 @@ sparc_bus_map(bus_space_tag_t t, bus_addr_t addr, bus_size_t size,
 	else
 		hp->_asi = ASI_PRIMARY;
 
-	pa = trunc_page(addr);
+	pa = addr & ~PAGE_MASK; /* = trunc_page(addr); Will drop high bits */
 	if (!(flags&BUS_SPACE_MAP_READONLY))
 		pm_prot |= VM_PROT_WRITE;
 
-	DPRINTF(BSDB_MAP, ("\n%s: type %x flags %x addr %016llx prot %02x "
-		"pm_flags %x size %016llx virt %llx paddr %016llx\n", __func__,
-		(int)t->type, (int)flags, (unsigned long long)addr, pm_prot,
-		(int)pm_flags, (unsigned long long)size,
-		(unsigned long long)hp->_ptr, (unsigned long long)pa));
+	DPRINTF(BSDB_MAP, ("\nsparc_bus_map: type %x flags %x "
+		"addr %016llx size %016llx virt %llx paddr %016llx\n",
+		(int)t->type, (int) flags, (unsigned long long)addr,
+		(unsigned long long)size, (unsigned long long)hp->_ptr,
+		(unsigned long long)pa));
 
 	do {
-		DPRINTF(BSDB_MAP, ("%s: phys %llx virt %p hp %llx\n",
-			__func__, 
+		DPRINTF(BSDB_MAP, ("sparc_bus_map: phys %llx virt %p hp %llx\n",
 			(unsigned long long)pa, (char *)v,
 			(unsigned long long)hp->_ptr));
-		pmap_kenter_pa(v, pa | pm_flags, pm_prot, 0);
+		pmap_kenter_pa(v, pa | pm_flags, pm_prot);
 		v += PAGE_SIZE;
 		pa += PAGE_SIZE;
 	} while ((size -= PAGE_SIZE) > 0);
+	pmap_update(pmap_kernel());
 	return (0);
 }
 
@@ -2446,7 +1810,7 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 
 	/* First ensure consistent stack state (see sendsig). */ /* XXX? */
 	write_user_windows();
-	if (rwindow_save(l)) {
+	if ((l->l_flag & LW_SA_SWITCHING) == 0 && rwindow_save(l)) {
 		mutex_enter(l->l_proc->p_lock);
 		sigexit(l, SIGILL);
 	}
@@ -2491,7 +1855,7 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 		gr[_REG_nPC] = ras_pc + 4;
 	}
 
-	*flags |= (_UC_CPU|_UC_TLSBASE);
+	*flags |= _UC_CPU;
 
 	mcp->__gwins = NULL;
 
@@ -2525,29 +1889,11 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 }
 
 int
-cpu_mcontext_validate(struct lwp *l, const mcontext_t *mc)
-{
-	const __greg_t *gr = mc->__gregs;
-
-	/*
- 	 * Only the icc bits in the psr are used, so it need not be
- 	 * verified.  pc and npc must be multiples of 4.  This is all
- 	 * that is required; if it holds, just do it.
-	 */
-	if (((gr[_REG_PC] | gr[_REG_nPC]) & 3) != 0 ||
-	    gr[_REG_PC] == 0 || gr[_REG_nPC] == 0)
-		return EINVAL;
-
-	return 0;
-}
-
-int
 cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 {
 	const __greg_t *gr = mcp->__gregs;
 	struct trapframe64 *tf = l->l_md.md_tf;
 	struct proc *p = l->l_proc;
-	int error;
 
 	/* First ensure consistent stack state (see sendsig). */
 	write_user_windows();
@@ -2557,9 +1903,14 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 	}
 
 	if ((flags & _UC_CPU) != 0) {
-		error = cpu_mcontext_validate(l, mcp);
-		if (error)
-			return error;
+		/*
+	 	 * Only the icc bits in the psr are used, so it need not be
+	 	 * verified.  pc and npc must be multiples of 4.  This is all
+	 	 * that is required; if it holds, just do it.
+		 */
+		if (((gr[_REG_PC] | gr[_REG_nPC]) & 3) != 0 ||
+		    gr[_REG_PC] == 0 || gr[_REG_nPC] == 0)
+			return (EINVAL);
 
 		/* Restore general register context. */
 		/* take only tstate CCR (and ASI) fields */
@@ -2580,8 +1931,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_global[4] = (uint64_t)gr[_REG_G4];
 		tf->tf_global[5] = (uint64_t)gr[_REG_G5];
 		tf->tf_global[6] = (uint64_t)gr[_REG_G6];
-		/* done in lwp_setprivate */
-		/* tf->tf_global[7] = (uint64_t)gr[_REG_G7]; */
+		tf->tf_global[7] = (uint64_t)gr[_REG_G7];
 		tf->tf_out[0]    = (uint64_t)gr[_REG_O0];
 		tf->tf_out[1]    = (uint64_t)gr[_REG_O1];
 		tf->tf_out[2]    = (uint64_t)gr[_REG_O2];
@@ -2593,9 +1943,6 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		/* %asi restored above; %fprs not yet supported. */
 
 		/* XXX mcp->__gwins */
-
-		if (flags & _UC_TLSBASE)
-			lwp_setprivate(l, (void *)(uintptr_t)gr[_REG_G7]);
 	}
 
 	/* Restore FP register context, if any. */
@@ -2638,7 +1985,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
 	mutex_exit(p->p_lock);
 
-	return 0;
+	return (0);
 }
 
 /*
@@ -2682,39 +2029,4 @@ cpu_intr_p(void)
 {
 
 	return curcpu()->ci_idepth >= 0;
-}
-
-#ifdef MODULAR
-void
-module_init_md(void)
-{
-}
-#endif
-
-int
-mm_md_physacc(paddr_t pa, vm_prot_t prot)
-{
-
-	return pmap_pa_exists(pa) ? 0 : EFAULT;
-}
-
-int
-mm_md_kernacc(void *ptr, vm_prot_t prot, bool *handled)
-{
-	/* XXX: Don't know where PROMs are on Ultras.  Think it's at f000000 */
-	const vaddr_t prom_vstart = 0xf000000, prom_vend = 0xf0100000;
-	const vaddr_t msgbufpv = (vaddr_t)msgbufp, v = (vaddr_t)ptr;
-	const size_t msgbufsz = msgbufp->msg_bufs +
-	    offsetof(struct kern_msgbuf, msg_bufc);
-
-	*handled = (v >= msgbufpv && v < msgbufpv + msgbufsz) ||
-	    (v >= prom_vstart && v < prom_vend && (prot & VM_PROT_WRITE) == 0);
-	return 0;
-}
-
-int
-mm_md_readwrite(dev_t dev, struct uio *uio)
-{
-
-	return ENXIO;
 }

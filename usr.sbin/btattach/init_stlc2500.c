@@ -1,4 +1,4 @@
-/*	$NetBSD: init_stlc2500.c,v 1.3 2010/03/09 02:01:51 kiyohara Exp $	*/
+/*	$NetBSD: init_stlc2500.c,v 1.1 2008/04/15 11:17:48 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2008 Iain Hibbert
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: init_stlc2500.c,v 1.3 2010/03/09 02:01:51 kiyohara Exp $");
+__RCSID("$NetBSD: init_stlc2500.c,v 1.1 2008/04/15 11:17:48 plunky Exp $");
 
 #include <bluetooth.h>
 #include <err.h>
@@ -113,10 +113,9 @@ init_stlc2500(int fd, unsigned int speed)
 	/* STLC2500 has an ericsson core */
 	init_ericsson(fd, speed);
 
-	if (tcgetattr(fd, &tio) != 0 ||
-	    cfsetspeed(&tio, speed) != 0 ||
-	    tcsetattr(fd, TCSANOW, &tio) != 0)
-		err(EXIT_FAILURE, "can't change baud rate");
+	tcgetattr(fd, &tio);
+	cfsetspeed(&tio, speed);
+	tcsetattr(fd, TCSANOW, &tio);
 
 	uart_send_cmd(fd, HCI_CMD_READ_LOCAL_VER, NULL, 0);
 	n = uart_recv_cc(fd, HCI_CMD_READ_LOCAL_VER, &rp, sizeof(rp));
@@ -125,7 +124,7 @@ init_stlc2500(int fd, unsigned int speed)
 
 	if (firmload_stlc2500(fd, rp.hci_revision, "ptc") < 0)
 		warn("no ROM patch file");
-
+		
 	if (firmload_stlc2500(fd, rp.hci_revision, "ssf") < 0)
 		warn("no static settings file");
 

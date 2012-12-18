@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pglist.c,v 1.62 2011/09/27 01:02:39 jym Exp $	*/
+/*	$NetBSD: uvm_pglist.c,v 1.42 2008/06/04 12:45:28 ad Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -35,10 +35,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_pglist.c,v 1.62 2011/09/27 01:02:39 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_pglist.c,v 1.42 2008/06/04 12:45:28 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/malloc.h>
+#include <sys/proc.h>
 
 #include <uvm/uvm.h>
 #include <uvm/uvm_pdpolicy.h>
@@ -80,6 +82,9 @@ static void
 uvm_pglist_add(struct vm_page *pg, struct pglist *rlist)
 {
 	int free_list, color, pgflidx;
+#ifdef DEBUG
+	struct vm_page *tp;
+#endif
 
 	KASSERT(mutex_owned(&uvm_fpageqlock));
 
@@ -90,11 +95,11 @@ uvm_pglist_add(struct vm_page *pg, struct pglist *rlist)
 	free_list = uvm_page_lookup_freelist(pg);
 	color = VM_PGCOLOR_BUCKET(pg);
 	pgflidx = (pg->flags & PG_ZERO) ? PGFL_ZEROS : PGFL_UNKNOWN;
-#ifdef NOT_DEBUG
-	struct vm_page *tp;
-	LIST_FOREACH(tp,
-	    &uvm.page_free[free_list].pgfl_buckets[color].pgfl_queues[pgflidx],
-	    pageq.list) {
+#ifdef DEBUG
+	for (tp = LIST_FIRST(&uvm.page_free[
+		free_list].pgfl_buckets[color].pgfl_queues[pgflidx]);
+	     tp != NULL;
+	     tp = LIST_NEXT(tp, pageq.list)) {
 		if (tp == pg)
 			break;
 	}
@@ -119,62 +124,30 @@ static int
 uvm_pglistalloc_c_ps(struct vm_physseg *ps, int num, paddr_t low, paddr_t high,
     paddr_t alignment, paddr_t boundary, struct pglist *rlist)
 {
-	signed int try, limit, tryidx, end, idx, skip;
+	int try, limit, tryidx, end, idx;
 	struct vm_page *pgs;
 	int pagemask;
-	bool second_pass;
 #ifdef DEBUG
 	paddr_t idxpa, lastidxpa;
 	int cidx = 0;	/* XXX: GCC */
 #endif
 #ifdef PGALLOC_VERBOSE
-	printf("pgalloc: contig %d pgs from psi %zd\n", num, ps - vm_physmem);
+	printf("pgalloc: contig %d pgs from psi %ld\n", num,
+	(long)(ps - vm_physmem));
 #endif
 
 	KASSERT(mutex_owned(&uvm_fpageqlock));
 
-	low = atop(low);
-	high = atop(high);
-	alignment = atop(alignment);
-
-	/*
-	 * Make sure that physseg falls within with range to be allocated from.
-	 */
-	if (high <= ps->avail_start || low >= ps->avail_end)
-		return 0;
-
-	/*
-	 * We start our search at the just after where the last allocation
-	 * succeeded.
-	 */
-	try = roundup2(max(low, ps->avail_start + ps->start_hint), alignment);
-	limit = min(high, ps->avail_end);
+	try = roundup(max(atop(low), ps->avail_start), atop(alignment));
+	limit = min(atop(high), ps->avail_end);
 	pagemask = ~((boundary >> PAGE_SHIFT) - 1);
-	skip = 0;
-	second_pass = false;
-	pgs = ps->pgs;
 
 	for (;;) {
-		bool ok = true;
-		signed int cnt;
-
 		if (try + num > limit) {
-			if (ps->start_hint == 0 || second_pass) {
-				/*
-				 * We've run past the allowable range.
-				 */
-				return 0; /* FAIL = 0 pages*/
-			}
 			/*
-			 * We've wrapped around the end of this segment
-			 * so restart at the beginning but now our limit
-			 * is were we started.
+			 * We've run past the allowable range.
 			 */
-			second_pass = true;
-			try = roundup2(max(low, ps->avail_start), alignment);
-			limit = min(limit, ps->avail_start + ps->start_hint);
-			skip = 0;
-			continue;
+			return (0); /* FAIL */
 		}
 		if (boundary != 0 &&
 		    ((try ^ (try + num - 1)) & pagemask) != 0) {
@@ -183,8 +156,7 @@ uvm_pglistalloc_c_ps(struct vm_physseg *ps, int num, paddr_t low, paddr_t high,
 			 * just crossed and ensure alignment.
 			 */
 			try = (try + num - 1) & pagemask;
-			try = roundup2(try, alignment);
-			skip = 0;
+			try = roundup(try, atop(alignment));
 			continue;
 		}
 #ifdef DEBUG
@@ -203,31 +175,18 @@ uvm_pglistalloc_c_ps(struct vm_physseg *ps, int num, paddr_t low, paddr_t high,
 #endif
 		tryidx = try - ps->start;
 		end = tryidx + num;
+		pgs = ps->pgs;
 
 		/*
 		 * Found a suitable starting page.  See if the range is free.
 		 */
-#ifdef PGALLOC_VERBOSE
-		printf("%s: ps=%p try=%#x end=%#x skip=%#x, align=%#"PRIxPADDR,
-		    __func__, ps, tryidx, end, skip, alignment);
-#endif
-		/*
-		 * We start at the end and work backwards since if we find a
-		 * non-free page, it makes no sense to continue.
-		 *
-		 * But on the plus size we have "vetted" some number of free
-		 * pages.  If this iteration fails, we may be able to skip
-		 * testing most of those pages again in the next pass.
-		 */
-		for (idx = end - 1; idx >= tryidx + skip; idx--) {
-			if (VM_PAGE_IS_FREE(&pgs[idx]) == 0) {
-				ok = false;
+		for (idx = tryidx; idx < end; idx++) {
+			if (VM_PAGE_IS_FREE(&pgs[idx]) == 0)
 				break;
-			}
 
 #ifdef DEBUG
+			idxpa = VM_PAGE_TO_PHYS(&pgs[idx]);
 			if (idx > tryidx) {
-				idxpa = VM_PAGE_TO_PHYS(&pgs[idx]);
 				lastidxpa = VM_PAGE_TO_PHYS(&pgs[idx - 1]);
 				if ((lastidxpa + PAGE_SIZE) != idxpa) {
 					/*
@@ -246,58 +205,23 @@ uvm_pglistalloc_c_ps(struct vm_physseg *ps, int num, paddr_t low, paddr_t high,
 			}
 #endif
 		}
-
-		if (ok) {
-			while (skip-- > 0) {
-				KDASSERT(VM_PAGE_IS_FREE(&pgs[tryidx + skip]));
-			}
-#ifdef PGALLOC_VERBOSE
-			printf(": ok\n");
-#endif
+		if (idx == end)
 			break;
-		}
 
-#ifdef PGALLOC_VERBOSE
-		printf(": non-free at %#x\n", idx - tryidx);
-#endif
-		/*
-		 * count the number of pages we can advance
-		 * since we know they aren't all free.
-		 */
-		cnt = idx + 1 - tryidx;
-		/*
-		 * now round up that to the needed alignment.
-		 */
-		cnt = roundup2(cnt, alignment);
-		/*
-		 * The number of pages we can skip checking 
-		 * (might be 0 if cnt > num).
-		 */
-		skip = max(num - cnt, 0);
-		try += cnt;
+		try += atop(alignment);
 	}
 
 	/*
 	 * we have a chunk of memory that conforms to the requested constraints.
 	 */
-	for (idx = tryidx, pgs += idx; idx < end; idx++, pgs++)
-		uvm_pglist_add(pgs, rlist);
-
-	/*
-	 * the next time we need to search this segment, start after this
-	 * chunk of pages we just allocated.
-	 */
-	ps->start_hint = try + num - ps->avail_start;
-	KASSERTMSG(ps->start_hint <= ps->avail_end - ps->avail_start,
-	    "%x %u (%#x) <= %#"PRIxPADDR" - %#"PRIxPADDR" (%#"PRIxPADDR")",
-	    try + num,
-	    ps->start_hint, ps->start_hint, ps->avail_end, ps->avail_start,
-	    ps->avail_end - ps->avail_start);
+	idx = tryidx;
+	while (idx < end)
+		uvm_pglist_add(&pgs[idx++], rlist);
 
 #ifdef PGALLOC_VERBOSE
 	printf("got %d pgs\n", num);
 #endif
-	return num; /* number of pages allocated */
+	return (num); /* number of pages allocated */
 }
 
 static int
@@ -336,9 +260,9 @@ uvm_pglistalloc_contig(int num, paddr_t low, paddr_t high, paddr_t alignment,
 						    alignment, boundary, rlist);
 			if (num == 0) {
 #ifdef PGALLOC_VERBOSE
-				printf("pgalloc: %"PRIxMAX"-%"PRIxMAX"\n",
-				       (uintmax_t) VM_PAGE_TO_PHYS(TAILQ_FIRST(rlist)),
-				       (uintmax_t) VM_PAGE_TO_PHYS(TAILQ_LAST(rlist, pglist)));
+				printf("pgalloc: %lx-%lx\n",
+				       VM_PAGE_TO_PHYS(TAILQ_FIRST(rlist)),
+				       VM_PAGE_TO_PHYS(TAILQ_LAST(rlist)));
 #endif
 				error = 0;
 				goto out;
@@ -363,75 +287,35 @@ uvm_pglistalloc_s_ps(struct vm_physseg *ps, int num, paddr_t low, paddr_t high,
 {
 	int todo, limit, try;
 	struct vm_page *pg;
-	bool second_pass;
+#ifdef DEBUG
+	int cidx = 0;	/* XXX: GCC */
+#endif
 #ifdef PGALLOC_VERBOSE
-	printf("pgalloc: simple %d pgs from psi %zd\n", num, ps - vm_physmem);
+	printf("pgalloc: simple %d pgs from psi %ld\n", num,
+	    (long)(ps - vm_physmem));
 #endif
 
 	KASSERT(mutex_owned(&uvm_fpageqlock));
-	KASSERT(ps->start <= ps->avail_start);
-	KASSERT(ps->start <= ps->avail_end);
-	KASSERT(ps->avail_start <= ps->end);
-	KASSERT(ps->avail_end <= ps->end);
 
-	low = atop(low);
-	high = atop(high);
 	todo = num;
-	try = max(low, ps->avail_start + ps->start_hint);
-	limit = min(high, ps->avail_end);
-	pg = &ps->pgs[try - ps->start];
-	second_pass = false;
+	limit = min(atop(high), ps->avail_end);
 
-	/*
-	 * Make sure that physseg falls within with range to be allocated from.
-	 */
-	if (high <= ps->avail_start || low >= ps->avail_end)
-		return 0;
-
-again:
-	for (;; try++, pg++) {
-		if (try >= limit) {
-			if (ps->start_hint == 0 || second_pass) {
-				try = limit - 1;
-				break;
-			}
-			second_pass = true;
-			try = max(low, ps->avail_start);
-			limit = min(limit, ps->avail_start + ps->start_hint);
-			pg = &ps->pgs[try - ps->start];
-			goto again;
-		}
-#if defined(DEBUG)
-		{
-			int cidx = 0;
-			const int bank = vm_physseg_find(try, &cidx);
-			KDASSERTMSG(bank == ps - vm_physmem,
-			    "vm_physseg_find(%#x) (%d) != ps %zd",
-			     try, bank, ps - vm_physmem);
-			KDASSERTMSG(cidx == try - ps->start,
-			    "vm_physseg_find(%#x): %#x != off %"PRIxPADDR,
-			     try, cidx, try - ps->start);
-		}
+	for (try = max(atop(low), ps->avail_start);
+	     try < limit; try ++) {
+#ifdef DEBUG
+		if (vm_physseg_find(try, &cidx) != ps - vm_physmem)
+			panic("pgalloc simple: botch1");
+		if (cidx != (try - ps->start))
+			panic("pgalloc simple: botch2");
 #endif
+		pg = &ps->pgs[try - ps->start];
 		if (VM_PAGE_IS_FREE(pg) == 0)
 			continue;
 
 		uvm_pglist_add(pg, rlist);
-		if (--todo == 0) {
+		if (--todo == 0)
 			break;
-		}
 	}
-
-	/*
-	 * The next time we need to search this segment,
-	 * start just after the pages we just allocated.
-	 */
-	ps->start_hint = try + 1 - ps->avail_start;
-	KASSERTMSG(ps->start_hint <= ps->avail_end - ps->avail_start,
-	    "%#x %u (%#x) <= %#"PRIxPADDR" - %#"PRIxPADDR" (%#"PRIxPADDR")",
-	    try + 1,
-	    ps->start_hint, ps->start_hint, ps->avail_end, ps->avail_start,
-	    ps->avail_end - ps->avail_start);
 
 #ifdef PGALLOC_VERBOSE
 	printf("got %d pgs\n", num - todo);
@@ -502,9 +386,9 @@ out:
 	}
 #ifdef PGALLOC_VERBOSE
 	if (!error)
-		printf("pgalloc: %"PRIxMAX"..%"PRIxMAX"\n",
-		       (uintmax_t) VM_PAGE_TO_PHYS(TAILQ_FIRST(rlist)),
-		       (uintmax_t) VM_PAGE_TO_PHYS(TAILQ_LAST(rlist, pglist)));
+		printf("pgalloc: %lx..%lx\n",
+		       VM_PAGE_TO_PHYS(TAILQ_FIRST(rlist)),
+		       VM_PAGE_TO_PHYS(TAILQ_LAST(rlist, pglist)));
 #endif
 	return (error);
 }
@@ -527,7 +411,7 @@ uvm_pglistalloc(psize_t size, paddr_t low, paddr_t high, paddr_t alignment,
 	if (boundary != 0 && boundary < size)
 		return (EINVAL);
 	num = atop(round_page(size));
-	low = roundup2(low, alignment);
+	low = roundup(low, alignment);
 
 	TAILQ_INIT(rlist);
 

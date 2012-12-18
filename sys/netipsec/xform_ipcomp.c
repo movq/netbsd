@@ -1,4 +1,4 @@
-/*	$NetBSD: xform_ipcomp.c,v 1.29 2012/01/25 20:31:23 drochner Exp $	*/
+/*	$NetBSD: xform_ipcomp.c,v 1.18.12.1 2011/04/03 06:08:35 jdc Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/xform_ipcomp.c,v 1.1.4.1 2003/01/24 05:11:36 sam Exp $	*/
 /* $OpenBSD: ip_ipcomp.c,v 1.1 2001/07/05 12:08:52 jjbg Exp $ */
 
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xform_ipcomp.c,v 1.29 2012/01/25 20:31:23 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xform_ipcomp.c,v 1.18.12.1 2011/04/03 06:08:35 jdc Exp $");
 
 /* IP payload compression protocol (IPComp), see RFC 2393 */
 #include "opt_inet.h"
@@ -45,7 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: xform_ipcomp.c,v 1.29 2012/01/25 20:31:23 drochner E
 #include <sys/kernel.h>
 #include <sys/protosw.h>
 #include <sys/sysctl.h>
-#include <sys/socketvar.h> /* for softnet_lock */
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -89,14 +88,14 @@ SYSCTL_STRUCT(_net_inet_ipcomp, IPSECCTL_STATS,
 static int ipcomp_input_cb(struct cryptop *crp);
 static int ipcomp_output_cb(struct cryptop *crp);
 
-const struct comp_algo *
+struct comp_algo *
 ipcomp_algorithm_lookup(int alg)
 {
 	if (alg >= IPCOMP_ALG_MAX)
 		return NULL;
 	switch (alg) {
 	case SADB_X_CALG_DEFLATE:
-		return &comp_algo_deflate_nogrow;
+		return &comp_algo_deflate;
 	}
 	return NULL;
 }
@@ -105,9 +104,9 @@ ipcomp_algorithm_lookup(int alg)
  * ipcomp_init() is called when an CPI is being set up.
  */
 static int
-ipcomp_init(struct secasvar *sav, const struct xformsw *xsp)
+ipcomp_init(struct secasvar *sav, struct xformsw *xsp)
 {
-	const struct comp_algo *tcomp;
+	struct comp_algo *tcomp;
 	struct cryptoini cric;
 	int ses;
 
@@ -123,10 +122,12 @@ ipcomp_init(struct secasvar *sav, const struct xformsw *xsp)
 	sav->tdb_compalgxform = tcomp;
 
 	/* Initialize crypto session */
-	memset(&cric, 0, sizeof (cric));
+	bzero(&cric, sizeof (cric));
 	cric.cri_alg = sav->tdb_compalgxform->type;
 
+	mutex_spin_enter(&crypto_mtx);
 	ses = crypto_newsession(&sav->tdb_cryptoid, &cric, crypto_support);
+	mutex_spin_exit(&crypto_mtx);
 	return ses;
 }
 
@@ -138,7 +139,9 @@ ipcomp_zeroize(struct secasvar *sav)
 {
 	int err;
 
+	mutex_spin_enter(&crypto_mtx);
 	err = crypto_freesession(sav->tdb_cryptoid);
+	mutex_spin_exit(&crypto_mtx);
 	sav->tdb_cryptoid = 0;
 	return err;
 }
@@ -147,12 +150,12 @@ ipcomp_zeroize(struct secasvar *sav)
  * ipcomp_input() gets called to uncompress an input packet
  */
 static int
-ipcomp_input(struct mbuf *m, const struct secasvar *sav, int skip, int protoff)
+ipcomp_input(struct mbuf *m, struct secasvar *sav, int skip, int protoff)
 {
 	struct tdb_crypto *tc;
 	struct cryptodesc *crdc;
 	struct cryptop *crp;
-	int error, hlen = IPCOMP_HLENGTH;
+	int hlen = IPCOMP_HLENGTH;
 
 	IPSEC_SPLASSERT_SOFTNET("ipcomp_input");
 
@@ -173,22 +176,11 @@ ipcomp_input(struct mbuf *m, const struct secasvar *sav, int skip, int protoff)
 		IPCOMP_STATINC(IPCOMP_STAT_CRYPTO);
 		return ENOBUFS;
 	}
-
-	error = m_makewritable(&m, 0, m->m_pkthdr.len, M_NOWAIT);
-	if (error) {
-		DPRINTF(("ipcomp_input: m_makewritable failed\n"));
-		m_freem(m);
-		free(tc, M_XDATA);
-		crypto_freereq(crp);
-		IPCOMP_STATINC(IPCOMP_STAT_CRYPTO);
-		return error;
-	}
-
 	crdc = crp->crp_desc;
 
 	crdc->crd_skip = skip + hlen;
 	crdc->crd_len = m->m_pkthdr.len - (skip + hlen);
-	crdc->crd_inject = 0; /* unused */
+	crdc->crd_inject = skip;
 
 	tc->tc_ptr = 0;
 
@@ -197,7 +189,6 @@ ipcomp_input(struct mbuf *m, const struct secasvar *sav, int skip, int protoff)
 
 	/* Crypto operation descriptor */
 	crp->crp_ilen = m->m_pkthdr.len - (skip + hlen);
-	crp->crp_olen = MCLBYTES; /* hint to decompression code */
 	crp->crp_flags = CRYPTO_F_IMBUF;
 	crp->crp_buf = m;
 	crp->crp_callback = ipcomp_input_cb;
@@ -267,7 +258,6 @@ ipcomp_input_cb(struct cryptop *crp)
 #endif
 
 	s = splsoftnet();
-	mutex_enter(softnet_lock);
 
 	sav = KEY_ALLOCSA(&tc->tc_dst, tc->tc_proto, tc->tc_spi, sport, dport);
 	if (sav == NULL) {
@@ -280,7 +270,7 @@ ipcomp_input_cb(struct cryptop *crp)
 	saidx = &sav->sah->saidx;
 	IPSEC_ASSERT(saidx->dst.sa.sa_family == AF_INET ||
 		saidx->dst.sa.sa_family == AF_INET6,
-		("ipcomp_input_cb: unexpected protocol family %u",
+		("ah_input_cb: unexpected protocol family %u",
 		 saidx->dst.sa.sa_family));
 
 	/* Check for crypto errors */
@@ -291,7 +281,6 @@ ipcomp_input_cb(struct cryptop *crp)
 
 		if (crp->crp_etype == EAGAIN) {
 			KEY_FREESAV(&sav);
-			mutex_exit(softnet_lock);
 			splx(s);
 			return crypto_dispatch(crp);
 		}
@@ -309,10 +298,6 @@ ipcomp_input_cb(struct cryptop *crp)
 		goto bad;
 	}
 	IPCOMP_STATINC(IPCOMP_STAT_HIST + sav->alg_comp);
-
-	/* Update the counters */
-	IPCOMP_STATADD(IPCOMP_STAT_IBYTES, m->m_pkthdr.len - skip - hlen);
-
 
 	clen = crp->crp_olen;		/* Length of data after processing */
 
@@ -358,13 +343,11 @@ ipcomp_input_cb(struct cryptop *crp)
 	IPSEC_COMMON_INPUT_CB(m, sav, skip, protoff, NULL);
 
 	KEY_FREESAV(&sav);
-	mutex_exit(softnet_lock);
 	splx(s);
 	return error;
 bad:
 	if (sav)
 		KEY_FREESAV(&sav);
-	mutex_exit(softnet_lock);
 	splx(s);
 	if (m)
 		m_freem(m);
@@ -387,8 +370,8 @@ ipcomp_output(
     int protoff
 )
 {
-	const struct secasvar *sav;
-	const struct comp_algo *ipcompx;
+	struct secasvar *sav;
+	struct comp_algo *ipcompx;
 	int error, ralen, hlen, maxpacketsize;
 	struct cryptodesc *crdc;
 	struct cryptop *crp;
@@ -535,7 +518,6 @@ ipcomp_output_cb(struct cryptop *crp)
 	rlen = crp->crp_ilen - skip;
 
 	s = splsoftnet();
-	mutex_enter(softnet_lock);
 
 	isr = tc->tc_isr;
 	sav = KEY_ALLOCSA(&tc->tc_dst, tc->tc_proto, tc->tc_spi, 0, 0);
@@ -555,7 +537,6 @@ ipcomp_output_cb(struct cryptop *crp)
 
 		if (crp->crp_etype == EAGAIN) {
 			KEY_FREESAV(&sav);
-			mutex_exit(softnet_lock);
 			splx(s);
 			return crypto_dispatch(crp);
 		}
@@ -651,13 +632,11 @@ ipcomp_output_cb(struct cryptop *crp)
 	/* NB: m is reclaimed by ipsec_process_done. */
 	error = ipsec_process_done(m, isr);
 	KEY_FREESAV(&sav);
-	mutex_exit(softnet_lock);
 	splx(s);
 	return error;
 bad:
 	if (sav)
 		KEY_FREESAV(&sav);
-	mutex_exit(softnet_lock);
 	splx(s);
 	if (m)
 		m_freem(m);

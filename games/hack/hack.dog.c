@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.dog.c,v 1.12 2011/08/07 06:03:45 dholland Exp $	*/
+/*	$NetBSD: hack.dog.c,v 1.9 2008/01/28 06:55:41 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.dog.c,v 1.12 2011/08/07 06:03:45 dholland Exp $");
+__RCSID("$NetBSD: hack.dog.c,v 1.9 2008/01/28 06:55:41 dholland Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
@@ -79,11 +79,9 @@ const struct permonst dog =
 const struct permonst la_dog =
 {"large dog", 'd', 6, 15, 4, 2, 4, sizeof(struct edog)};
 
-static void initedog(struct monst *);
-static int dogfood(struct obj *);
 
 void
-makedog(void)
+makedog()
 {
 	struct monst   *mtmp = makemon(&li_dog, u.ux, u.uy);
 	if (!mtmp)
@@ -91,8 +89,9 @@ makedog(void)
 	initedog(mtmp);
 }
 
-static void
-initedog(struct monst *mtmp)
+void
+initedog(mtmp)
+	struct monst   *mtmp;
 {
 	mtmp->mtame = mtmp->mpeaceful = 1;
 	EDOG(mtmp)->hungrytime = 1000 + moves;
@@ -109,7 +108,7 @@ struct monst   *fallen_down = 0;/* monsters that fell through a trapdoor */
 /* they will appear on the next level @ goes to, even if he goes up! */
 
 void
-losedogs(void)
+losedogs()
 {
 	struct monst   *mtmp;
 	while ((mtmp = mydogs) != NULL) {
@@ -127,7 +126,7 @@ losedogs(void)
 }
 
 void
-keepdogs(void)
+keepdogs()
 {
 	struct monst   *mtmp;
 	for (mtmp = fmon; mtmp; mtmp = mtmp->nmon)
@@ -144,7 +143,8 @@ keepdogs(void)
 }
 
 void
-fall_down(struct monst *mtmp)
+fall_down(mtmp)
+	struct monst   *mtmp;
 {
 	relmon(mtmp);
 	mtmp->nmon = fallen_down;
@@ -161,8 +161,9 @@ fall_down(struct monst *mtmp)
 #define	APPORT	4
 #define	POISON	5
 #define	UNDEF	6
-static int
-dogfood(struct obj *obj)
+int
+dogfood(obj)
+	struct obj     *obj;
 {
 	switch (obj->olet) {
 	case FOOD_SYM:
@@ -177,7 +178,7 @@ dogfood(struct obj *obj)
 	default:
 		if (!obj->cursed)
 			return (APPORT);
-		/* FALLTHROUGH */
+		/* fall into next case */
 	case BALL_SYM:
 	case CHAIN_SYM:
 	case ROCK_SYM:
@@ -472,23 +473,25 @@ newdogpos:
 
 /* return roomnumber or -1 */
 int
-inroom(xchar x, xchar y)
+inroom(x, y)
+	xchar           x, y;
 {
 #ifndef QUEST
-	int pos = 0;
-
-	while (rooms[pos].hx >= 0) {
-		if (rooms[pos].hx >= x - 1 && rooms[pos].lx <= x + 1 &&
-		    rooms[pos].hy >= y - 1 && rooms[pos].ly <= y + 1)
-			return pos;
-		pos++;
+	struct mkroom  *croom = &rooms[0];
+	while (croom->hx >= 0) {
+		if (croom->hx >= x - 1 && croom->lx <= x + 1 &&
+		    croom->hy >= y - 1 && croom->ly <= y + 1)
+			return (croom - rooms);
+		croom++;
 	}
 #endif	/* QUEST */
 	return (-1);		/* not in room or on door */
 }
 
 int
-tamedog(struct monst *mtmp, struct obj *obj)
+tamedog(mtmp, obj)
+	struct monst   *mtmp;
+	struct obj     *obj;
 {
 	struct monst   *mtmp2;
 

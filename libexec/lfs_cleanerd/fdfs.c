@@ -1,4 +1,4 @@
-/* $NetBSD: fdfs.c,v 1.9 2012/04/12 10:30:17 joerg Exp $	 */
+/* $NetBSD: fdfs.c,v 1.6 2008/04/28 20:23:04 martin Exp $	 */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -52,7 +52,6 @@
 #include "vnode.h"
 #include "bufcache.h"
 #include "fdfs.h"
-#include "kernelops.h"
 
 /*
  * Return a "vnode" interface to a given file descriptor.
@@ -98,7 +97,7 @@ fd_vget(int fd, int bsize, int segsize, int nseg)
 	vp = (struct uvnode *) malloc(sizeof(*vp));
 	if (vp == NULL) {
 		if (fs->fd_bufp) {
-			for (i = 0; i < nseg; i++)
+			for (i = nseg - 1; i >= 0; i--)
 				free(fs->fd_bufp[i].buf);
 			free(fs->fd_bufp);
 		}
@@ -143,7 +142,7 @@ fd_reclaim(struct uvnode *vp)
 		free(fs->fd_bufp[i].buf);
 	free(fs->fd_bufp);
 	free(fs);
-	memset(vp, 0, sizeof(*vp));
+	memset(vp, 0, sizeof(vp));
 }
 
 /*
@@ -203,7 +202,7 @@ fd_preload(struct uvnode *vp, daddr_t start)
 	fs->fd_bufp[fs->fd_bufi].start = start;
 	fs->fd_bufp[fs->fd_bufi].end =	 start + fs->fd_ssize / fs->fd_bsize;
 
-	if ((r = kops.ko_pread(fs->fd_fd, fs->fd_bufp[fs->fd_bufi].buf,
+	if ((r = pread(fs->fd_fd, fs->fd_bufp[fs->fd_bufi].buf,
 		       (size_t)fs->fd_ssize, start * fs->fd_bsize)) < 0) {
 		syslog(LOG_ERR, "preload to segment buffer %d", fs->fd_bufi);
 		return r;
@@ -251,12 +250,12 @@ fd_vop_strategy(struct ubuf * bp)
 			bp->b_flags |= (B_DONTFREE | B_DONE);
 			return 0;
 		}
-		count = kops.ko_pread(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
+		count = pread(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
 			      bp->b_blkno * fs->fd_bsize);
 		if (count == bp->b_bcount)
 			bp->b_flags |= B_DONE;
 	} else {
-		count = kops.ko_pwrite(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
+		count = pwrite(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
 			       bp->b_blkno * fs->fd_bsize);
 		if (count == 0) {
 			perror("pwrite");

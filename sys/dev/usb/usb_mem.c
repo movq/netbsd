@@ -1,4 +1,4 @@
-/*	$NetBSD: usb_mem.c,v 1.53 2012/06/10 06:15:54 mrg Exp $	*/
+/*	$NetBSD: usb_mem.c,v 1.37 2008/06/28 17:42:53 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -38,11 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usb_mem.c,v 1.53 2012/06/10 06:15:54 mrg Exp $");
-
-#ifdef _KERNEL_OPT
-#include "opt_usb.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: usb_mem.c,v 1.37 2008/06/28 17:42:53 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,10 +47,11 @@ __KERNEL_RCSID(0, "$NetBSD: usb_mem.c,v 1.53 2012/06/10 06:15:54 mrg Exp $");
 #include <sys/queue.h>
 #include <sys/device.h>		/* for usbdivar.h */
 #include <sys/bus.h>
-#include <sys/cpu.h>
-#include <sys/once.h>
 
+#ifdef __NetBSD__
 #include <sys/extent.h>
+#include <uvm/uvm_extern.h>
+#endif
 
 #ifdef DIAGNOSTIC
 #include <sys/proc.h>
@@ -66,13 +63,17 @@ __KERNEL_RCSID(0, "$NetBSD: usb_mem.c,v 1.53 2012/06/10 06:15:54 mrg Exp $");
 #include <dev/usb/usb_mem.h>
 
 #ifdef USB_DEBUG
-#define DPRINTF(x)	if (usbdebug) printf x
-#define DPRINTFN(n,x)	if (usbdebug>(n)) printf x
+#define DPRINTF(x)	if (usbdebug) logprintf x
+#define DPRINTFN(n,x)	if (usbdebug>(n)) logprintf x
 extern int usbdebug;
 #else
 #define DPRINTF(x)
 #define DPRINTFN(n,x)
 #endif
+
+MALLOC_DEFINE(M_USB, "USB", "USB misc. memory");
+MALLOC_DEFINE(M_USBDEV, "USB device", "USB device driver");
+MALLOC_DEFINE(M_USBHC, "USB HC", "USB host controller");
 
 #define USB_MEM_SMALL 64
 #define USB_MEM_CHUNKS 64
@@ -89,143 +90,111 @@ Static usbd_status	usb_block_allocmem(bus_dma_tag_t, size_t, size_t,
 					   usb_dma_block_t **);
 Static void		usb_block_freemem(usb_dma_block_t *);
 
-LIST_HEAD(usb_dma_block_qh, usb_dma_block);
-Static struct usb_dma_block_qh usb_blk_freelist =
+Static LIST_HEAD(, usb_dma_block) usb_blk_freelist =
 	LIST_HEAD_INITIALIZER(usb_blk_freelist);
-kmutex_t usb_blk_lock;
-
-#ifdef DEBUG
-Static struct usb_dma_block_qh usb_blk_fraglist =
-	LIST_HEAD_INITIALIZER(usb_blk_fraglist);
-Static struct usb_dma_block_qh usb_blk_fulllist =
-	LIST_HEAD_INITIALIZER(usb_blk_fulllist);
-#endif
-Static u_int usb_blk_nfree = 0;
+Static int usb_blk_nfree = 0;
 /* XXX should have different free list for different tags (for speed) */
 Static LIST_HEAD(, usb_frag_dma) usb_frag_freelist =
 	LIST_HEAD_INITIALIZER(usb_frag_freelist);
-
-Static int usb_mem_init(void);
-
-Static int
-usb_mem_init(void)
-{
-
-	mutex_init(&usb_blk_lock, MUTEX_DEFAULT, IPL_NONE);
-	return 0;
-}
 
 Static usbd_status
 usb_block_allocmem(bus_dma_tag_t tag, size_t size, size_t align,
 		   usb_dma_block_t **dmap)
 {
-	usb_dma_block_t *b;
 	int error;
+        usb_dma_block_t *p;
+	int s;
 
-	DPRINTFN(5, ("usb_block_allocmem: size=%zu align=%zu\n", size, align));
+	DPRINTFN(5, ("usb_block_allocmem: size=%lu align=%lu\n",
+		     (u_long)size, (u_long)align));
 
 #ifdef DIAGNOSTIC
-	if (cpu_intr_p()) {
+	if (!curproc) {
 		printf("usb_block_allocmem: in interrupt context, size=%lu\n",
 		    (unsigned long) size);
 	}
 #endif
 
-	KASSERT(mutex_owned(&usb_blk_lock));
-
+	s = splusb();
 	/* First check the free list. */
-	LIST_FOREACH(b, &usb_blk_freelist, next) {
-		if (b->tag == tag && b->size >= size && b->align >= align) {
-			LIST_REMOVE(b, next);
+	for (p = LIST_FIRST(&usb_blk_freelist); p; p = LIST_NEXT(p, next)) {
+		if (p->tag == tag && p->size >= size && p->align >= align) {
+			LIST_REMOVE(p, next);
 			usb_blk_nfree--;
-			*dmap = b;
-			DPRINTFN(6,("usb_block_allocmem: free list size=%zu\n",
-			    b->size));
+			splx(s);
+			*dmap = p;
+			DPRINTFN(6,("usb_block_allocmem: free list size=%lu\n",
+				    (u_long)p->size));
 			return (USBD_NORMAL_COMPLETION);
 		}
 	}
+	splx(s);
 
 #ifdef DIAGNOSTIC
-	if (cpu_intr_p()) {
+	if (!curproc) {
 		printf("usb_block_allocmem: in interrupt context, failed\n");
 		return (USBD_NOMEM);
 	}
 #endif
 
 	DPRINTFN(6, ("usb_block_allocmem: no free\n"));
-	b = malloc(sizeof *b, M_USB, M_NOWAIT | M_ZERO);
-	if (b == NULL)
+	p = malloc(sizeof *p, M_USB, M_NOWAIT);
+	if (p == NULL)
 		return (USBD_NOMEM);
 
-	b->tag = tag;
-	b->size = size;
-	b->align = align;
-	error = bus_dmamem_alloc(tag, b->size, align, 0,
-				 b->segs, __arraycount(b->segs),
-				 &b->nsegs, BUS_DMA_NOWAIT);
+	p->tag = tag;
+	p->size = size;
+	p->align = align;
+	error = bus_dmamem_alloc(tag, p->size, align, 0,
+				 p->segs, sizeof(p->segs)/sizeof(p->segs[0]),
+				 &p->nsegs, BUS_DMA_NOWAIT);
 	if (error)
 		goto free0;
 
-	error = bus_dmamem_map(tag, b->segs, b->nsegs, b->size,
-			       &b->kaddr, BUS_DMA_NOWAIT|BUS_DMA_COHERENT);
+	error = bus_dmamem_map(tag, p->segs, p->nsegs, p->size,
+			       &p->kaddr, BUS_DMA_NOWAIT|BUS_DMA_COHERENT);
 	if (error)
 		goto free1;
 
-	error = bus_dmamap_create(tag, b->size, 1, b->size,
-				  0, BUS_DMA_NOWAIT, &b->map);
+	error = bus_dmamap_create(tag, p->size, 1, p->size,
+				  0, BUS_DMA_NOWAIT, &p->map);
 	if (error)
 		goto unmap;
 
-	error = bus_dmamap_load(tag, b->map, b->kaddr, b->size, NULL,
+	error = bus_dmamap_load(tag, p->map, p->kaddr, p->size, NULL,
 				BUS_DMA_NOWAIT);
 	if (error)
 		goto destroy;
 
-	*dmap = b;
-#ifdef USB_FRAG_DMA_WORKAROUND
-	memset(b->kaddr, 0, b->size);
-#endif
+	*dmap = p;
 	return (USBD_NORMAL_COMPLETION);
 
  destroy:
-	bus_dmamap_destroy(tag, b->map);
+	bus_dmamap_destroy(tag, p->map);
  unmap:
-	bus_dmamem_unmap(tag, b->kaddr, b->size);
+	bus_dmamem_unmap(tag, p->kaddr, p->size);
  free1:
-	bus_dmamem_free(tag, b->segs, b->nsegs);
+	bus_dmamem_free(tag, p->segs, p->nsegs);
  free0:
-	free(b, M_USB);
+	free(p, M_USB);
 	return (USBD_NOMEM);
 }
 
 #if 0
 void
-usb_block_real_freemem(usb_dma_block_t *b)
+usb_block_real_freemem(usb_dma_block_t *p)
 {
 #ifdef DIAGNOSTIC
-	if (cpu_intr_p()) {
+	if (!curproc) {
 		printf("usb_block_real_freemem: in interrupt context\n");
 		return;
 	}
 #endif
-	bus_dmamap_unload(b->tag, b->map);
-	bus_dmamap_destroy(b->tag, b->map);
-	bus_dmamem_unmap(b->tag, b->kaddr, b->size);
-	bus_dmamem_free(b->tag, b->segs, b->nsegs);
+	bus_dmamap_unload(p->tag, p->map);
+	bus_dmamap_destroy(p->tag, p->map);
+	bus_dmamem_unmap(p->tag, p->kaddr, p->size);
+	bus_dmamem_free(p->tag, p->segs, p->nsegs);
 	free(p, M_USB);
-}
-#endif
-
-#ifdef DEBUG
-static bool
-usb_valid_block_p(usb_dma_block_t *b, struct usb_dma_block_qh *qh)
-{
-	usb_dma_block_t *xb;
-	LIST_FOREACH(xb, qh, next) {
-		if (xb == b)
-			return true;
-	}
-	return false;
 }
 #endif
 
@@ -235,17 +204,15 @@ usb_valid_block_p(usb_dma_block_t *b, struct usb_dma_block_qh *qh)
  * XXX when should we really free?
  */
 Static void
-usb_block_freemem(usb_dma_block_t *b)
+usb_block_freemem(usb_dma_block_t *p)
 {
+	int s;
 
-	KASSERT(mutex_owned(&usb_blk_lock));
-
-	DPRINTFN(6, ("usb_block_freemem: size=%zu\n", b->size));
-#ifdef DEBUG
-	LIST_REMOVE(b, next);
-#endif
-	LIST_INSERT_HEAD(&usb_blk_freelist, b, next);
+	DPRINTFN(6, ("usb_block_freemem: size=%lu\n", (u_long)p->size));
+	s = splusb();
+	LIST_INSERT_HEAD(&usb_blk_freelist, p, next);
 	usb_blk_nfree++;
+	splx(s);
 }
 
 usbd_status
@@ -256,66 +223,46 @@ usb_allocmem(usbd_bus_handle bus, size_t size, size_t align, usb_dma_t *p)
 	struct usb_frag_dma *f;
 	usb_dma_block_t *b;
 	int i;
-	static ONCE_DECL(init_control);
-
-	RUN_ONCE(&init_control, usb_mem_init);
+	int s;
 
 	/* If the request is large then just use a full block. */
 	if (size > USB_MEM_SMALL || align > USB_MEM_SMALL) {
 		DPRINTFN(1, ("usb_allocmem: large alloc %d\n", (int)size));
 		size = (size + USB_MEM_BLOCK - 1) & ~(USB_MEM_BLOCK - 1);
-		mutex_enter(&usb_blk_lock);
 		err = usb_block_allocmem(tag, size, align, &p->block);
 		if (!err) {
-#ifdef DEBUG
-			LIST_INSERT_HEAD(&usb_blk_fulllist, p->block, next);
-#endif
 			p->block->flags = USB_DMA_FULLBLOCK;
 			p->offs = 0;
 		}
-		mutex_exit(&usb_blk_lock);
 		return (err);
 	}
 
-	mutex_enter(&usb_blk_lock);
+	s = splusb();
 	/* Check for free fragments. */
-	LIST_FOREACH(f, &usb_frag_freelist, next) {
-		KDASSERTMSG(usb_valid_block_p(f->block, &usb_blk_fraglist),
-		    "%s: usb frag %p: unknown block pointer %p",
-		     __func__, f, f->block);
+	for (f = LIST_FIRST(&usb_frag_freelist); f; f = LIST_NEXT(f, next))
 		if (f->block->tag == tag)
 			break;
-	}
 	if (f == NULL) {
 		DPRINTFN(1, ("usb_allocmem: adding fragments\n"));
 		err = usb_block_allocmem(tag, USB_MEM_BLOCK, USB_MEM_SMALL,&b);
 		if (err) {
-			mutex_exit(&usb_blk_lock);
+			splx(s);
 			return (err);
 		}
-#ifdef DEBUG
-		LIST_INSERT_HEAD(&usb_blk_fraglist, b, next);
-#endif
 		b->flags = 0;
 		for (i = 0; i < USB_MEM_BLOCK; i += USB_MEM_SMALL) {
 			f = (struct usb_frag_dma *)((char *)b->kaddr + i);
 			f->block = b;
 			f->offs = i;
 			LIST_INSERT_HEAD(&usb_frag_freelist, f, next);
-#ifdef USB_FRAG_DMA_WORKAROUND
-			i += 1 * USB_MEM_SMALL;
-#endif
 		}
 		f = LIST_FIRST(&usb_frag_freelist);
 	}
 	p->block = f->block;
 	p->offs = f->offs;
-#ifdef USB_FRAG_DMA_WORKAROUND
-	p->offs += USB_MEM_SMALL;
-#endif
 	p->block->flags &= ~USB_DMA_RESERVE;
 	LIST_REMOVE(f, next);
-	mutex_exit(&usb_blk_lock);
+	splx(s);
 	DPRINTFN(5, ("usb_allocmem: use frag=%p size=%d\n", f, (int)size));
 	return (USBD_NORMAL_COMPLETION);
 }
@@ -324,32 +271,19 @@ void
 usb_freemem(usbd_bus_handle bus, usb_dma_t *p)
 {
 	struct usb_frag_dma *f;
+	int s;
 
-	mutex_enter(&usb_blk_lock);
 	if (p->block->flags & USB_DMA_FULLBLOCK) {
-		KDASSERTMSG(usb_valid_block_p(p->block, &usb_blk_fulllist),
-		    "%s: dma %p: invalid block pointer %p",
-		     __func__, p, p->block);
 		DPRINTFN(1, ("usb_freemem: large free\n"));
 		usb_block_freemem(p->block);
-		mutex_exit(&usb_blk_lock);
 		return;
 	}
-	KDASSERTMSG(usb_valid_block_p(p->block, &usb_blk_fraglist),
-	    "%s: dma %p: invalid block pointer %p",
-	     __func__, p, p->block);
-	//usb_syncmem(p, 0, USB_MEM_SMALL, BUS_DMASYNC_POSTREAD);
 	f = KERNADDR(p, 0);
-#ifdef USB_FRAG_DMA_WORKAROUND
-	f = (void *)((uintptr_t)f - USB_MEM_SMALL);
-#endif
 	f->block = p->block;
 	f->offs = p->offs;
-#ifdef USB_FRAG_DMA_WORKAROUND
-	f->offs -= USB_MEM_SMALL;
-#endif
+	s = splusb();
 	LIST_INSERT_HEAD(&usb_frag_freelist, f, next);
-	mutex_exit(&usb_blk_lock);
+	splx(s);
 	DPRINTFN(5, ("usb_freemem: frag=%p\n", f));
 }
 
@@ -361,6 +295,7 @@ usb_syncmem(usb_dma_t *p, bus_addr_t offset, bus_size_t len, int ops)
 }
 
 
+#ifdef __NetBSD__
 usbd_status
 usb_reserve_allocm(struct usb_dma_reserve *rs, usb_dma_t *dma, u_int32_t size)
 {
@@ -368,7 +303,7 @@ usb_reserve_allocm(struct usb_dma_reserve *rs, usb_dma_t *dma, u_int32_t size)
 	u_long start;
 	bus_addr_t baddr;
 
-	if (rs->vaddr == 0 || size > USB_MEM_RESERVE)
+	if (rs->vaddr == 0)
 		return USBD_NOMEM;
 
 	dma->block = malloc(sizeof *dma->block, M_USB, M_ZERO | M_NOWAIT);
@@ -443,7 +378,8 @@ usb_setup_reserve(device_t dv, struct usb_dma_reserve *rs, bus_dma_tag_t dtag,
 
 	rs->paddr = rs->map->dm_segs[0].ds_addr;
 	rs->extent = extent_create(device_xname(dv), (u_long)rs->paddr,
-	    (u_long)(rs->paddr + USB_MEM_RESERVE - 1), 0, 0, 0);
+	    (u_long)(rs->paddr + USB_MEM_RESERVE),
+	    M_USB, 0, 0, 0);
 	if (rs->extent == NULL) {
 		rs->vaddr = 0;
 		return ENOMEM;
@@ -462,3 +398,4 @@ usb_setup_reserve(device_t dv, struct usb_dma_reserve *rs, bus_dma_tag_t dtag,
 
 	return error;
 }
+#endif

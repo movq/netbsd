@@ -1,16 +1,10 @@
-/*	$NetBSD: phantglobs.c,v 1.6 2009/08/31 08:27:16 dholland Exp $	*/
+/*	$NetBSD: phantglobs.c,v 1.5 1999/09/08 21:17:54 jsm Exp $	*/
 
 /*
  * phantglobs.c - globals for Phantasia
  */
 
-#include <setjmp.h>
-#include <stdio.h>
-
-#include "phantdefs.h"
-#include "phantstruct.h"
-#include "phantglobs.h"
-
+#include "include.h"
 
 double	Circle;		/* which circle player is in			*/
 double	Shield;		/* force field thrown up in monster battle	*/

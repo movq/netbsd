@@ -1,16 +1,14 @@
-#	$NetBSD: Makefile,v 1.9 2011/08/28 08:24:42 christos Exp $
+#	$NetBSD: Makefile,v 1.6 2007/02/26 00:17:37 matt Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/6/93
 
 .include <bsd.own.mk>
 
+WARNS=2
 CPPFLAGS+=	-DNOT_CSH
 CPPFLAGS+=	-I. -I${NETBSDSRCDIR}/bin
-SRCS=	time.c xtime.c
+SRCS=	time.c strpct.c xtime.c
 PROG=	time
 
 .PATH: ${NETBSDSRCDIR}/bin/csh
-
-LDADD+=-lutil
-DPADD+=${LIBUTIL}
 
 .include <bsd.prog.mk>

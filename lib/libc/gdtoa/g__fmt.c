@@ -1,3 +1,5 @@
+/* $NetBSD: g__fmt.c,v 1.1.1.1 2006/01/25 15:18:41 kleink Exp $ */
+
 /****************************************************************
 
 The author of this software is David M. Gay.
@@ -37,51 +39,24 @@ THIS SOFTWARE.
 
  char *
 #ifdef KR_headers
-g__fmt(b, s, se, decpt, sign, blen) char *b; char *s; char *se; int decpt; ULong sign; size_t blen;
+g__fmt(b, s, se, decpt, sign) char *b; char *s; char *se; int decpt; ULong sign;
 #else
-g__fmt(char *b, char *s, char *se, int decpt, ULong sign, size_t blen)
+g__fmt(char *b, char *s, char *se, int decpt, ULong sign)
 #endif
 {
 	int i, j, k;
-	char *be, *s0;
-	size_t len;
+	char *s0 = s;
 #ifdef USE_LOCALE
-#ifdef NO_LOCALE_CACHE
-	char *decimalpoint = localeconv()->decimal_point;
-	size_t dlen = strlen(decimalpoint);
+	char decimalpoint = *localeconv()->decimal_point;
 #else
-	char *decimalpoint;
-	static char *decimalpoint_cache;
-	static size_t dlen;
-	if (!(s0 = decimalpoint_cache)) {
-		s0 = localeconv()->decimal_point;
-		dlen = strlen(s0);
-		if ((decimalpoint_cache = MALLOC(strlen(s0) + 1)) != NULL) {
-			strcpy(decimalpoint_cache, s0);
-			s0 = decimalpoint_cache;
-			}
-		}
-	decimalpoint = s0;
+#define decimalpoint '.'
 #endif
-#else
-#define dlen 0
-#endif
-	s0 = s;
-	len = (se-s) + dlen + 6; /* 6 = sign + e+dd + trailing null */
-	if (blen < len)
-		goto ret0;
-	be = b + blen - 1;
 	if (sign)
 		*b++ = '-';
 	if (decpt <= -4 || decpt > se - s + 5) {
 		*b++ = *s++;
 		if (*s) {
-#ifdef USE_LOCALE
-			while((*b = *decimalpoint++))
-				++b;
-#else
-			*b++ = '.';
-#endif
+			*b++ = decimalpoint;
 			while((*b = *s++) !=0)
 				b++;
 			}
@@ -96,8 +71,6 @@ g__fmt(char *b, char *s, char *se, int decpt, ULong sign, size_t blen)
 		for(j = 2, k = 10; 10*k <= decpt; j++, k *= 10){}
 		for(;;) {
 			i = decpt / k;
-			if (b >= be)
-				goto ret0;
 			*b++ = i + '0';
 			if (--j <= 0)
 				break;
@@ -107,41 +80,22 @@ g__fmt(char *b, char *s, char *se, int decpt, ULong sign, size_t blen)
 		*b = 0;
 		}
 	else if (decpt <= 0) {
-#ifdef USE_LOCALE
-		while((*b = *decimalpoint++))
-			++b;
-#else
-		*b++ = '.';
-#endif
-		if (be < b - decpt + (se - s))
-			goto ret0;
+		*b++ = decimalpoint;
 		for(; decpt < 0; decpt++)
 			*b++ = '0';
-		while((*b = *s++) != 0)
+		while((*b = *s++) !=0)
 			b++;
 		}
 	else {
-		while((*b = *s++) != 0) {
+		while((*b = *s++) !=0) {
 			b++;
-			if (--decpt == 0 && *s) {
-#ifdef USE_LOCALE
-				while(*b = *decimalpoint++)
-					++b;
-#else
-				*b++ = '.';
-#endif
-				}
-			}
-		if (b + decpt > be) {
- ret0:
-			b = 0;
-			goto ret;
+			if (--decpt == 0 && *s)
+				*b++ = decimalpoint;
 			}
 		for(; decpt > 0; decpt--)
 			*b++ = '0';
 		*b = 0;
 		}
- ret:
 	freedtoa(s0);
 	return b;
  	}

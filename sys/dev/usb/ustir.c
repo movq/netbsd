@@ -1,4 +1,4 @@
-/*	$NetBSD: ustir.c,v 1.32 2012/03/06 03:35:30 mrg Exp $	*/
+/*	$NetBSD: ustir.c,v 1.26 2008/05/24 16:40:58 cube Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ustir.c,v 1.32 2012/03/06 03:35:30 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ustir.c,v 1.26 2008/05/24 16:40:58 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,7 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: ustir.c,v 1.32 2012/03/06 03:35:30 mrg Exp $");
 #include <dev/ir/sir.h>
 
 #ifdef USTIR_DEBUG
-#define DPRINTFN(n,x)	if (ustirdebug>(n)) printf x
+#define DPRINTFN(n,x)	if (ustirdebug>(n)) logprintf x
 int	ustirdebug = 0;
 #else
 #define DPRINTFN(n,x)
@@ -152,7 +152,7 @@ Static enum frameresult deframe_process(struct framestate *, u_int8_t const **,
 					size_t *);
 
 struct ustir_softc {
-	device_t		sc_dev;
+	USBBASEDEVICE		sc_dev;
 	usbd_device_handle	sc_udev;
 	usbd_interface_handle	sc_iface;
 
@@ -201,7 +201,7 @@ struct ustir_softc {
 
 #define USTIR_WR_TIMEOUT 200
 
-Static int ustir_activate(device_t self, enum devact act);
+Static int ustir_activate(device_ptr_t self, enum devact act);
 Static int ustir_open(void *h, int flag, int mode, struct lwp *l);
 Static int ustir_close(void *h, int flag, int mode, struct lwp *l);
 Static int ustir_read(void *h, struct uio *uio, int flag);
@@ -290,10 +290,9 @@ extern struct cfdriver ustir_cd;
 CFATTACH_DECL2_NEW(ustir, sizeof(struct ustir_softc), ustir_match,
     ustir_attach, ustir_detach, ustir_activate, NULL, ustir_childdet);
 
-int 
-ustir_match(device_t parent, cfdata_t match, void *aux)
+USB_MATCH(ustir)
 {
-	struct usb_attach_arg *uaa = aux;
+	USB_MATCH_START(ustir, uaa);
 
 	DPRINTFN(50,("ustir_match\n"));
 
@@ -304,11 +303,9 @@ ustir_match(device_t parent, cfdata_t match, void *aux)
 	return UMATCH_NONE;
 }
 
-void 
-ustir_attach(device_t parent, device_t self, void *aux)
+USB_ATTACH(ustir)
 {
-	struct ustir_softc *sc = device_private(self);
-	struct usb_attach_arg *uaa = aux;
+	USB_ATTACH_START(ustir, sc, uaa);
 	usbd_device_handle dev = uaa->device;
 	usbd_interface_handle iface;
 	char *devinfop;
@@ -321,17 +318,15 @@ ustir_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_dev = self;
 
-	aprint_naive("\n");
-	aprint_normal("\n");
-
 	devinfop = usbd_devinfo_alloc(dev, 0);
+	USB_ATTACH_SETUP;
 	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
 	if (usbd_set_config_index(dev, 0, 1)
 	    || usbd_device2interface_handle(dev, 0, &iface)) {
 		aprint_error_dev(self, "Configuration failed\n");
-		return;
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	sc->sc_udev = dev;
@@ -346,7 +341,7 @@ ustir_attach(device_t parent, device_t self, void *aux)
 		ed = usbd_interface2endpoint_descriptor(iface, i);
 		if (ed == NULL) {
 			aprint_error_dev(self, "couldn't get ep %d\n", i);
-			return;
+			USB_ATTACH_ERROR_RETURN;
 		}
 		if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_IN &&
 		    UE_GET_XFERTYPE(ed->bmAttributes) == UE_BULK) {
@@ -358,13 +353,13 @@ ustir_attach(device_t parent, device_t self, void *aux)
 	}
 	if (sc->sc_rd_addr == -1 || sc->sc_wr_addr == -1) {
 		aprint_error_dev(self, "missing endpoint\n");
-		return;
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	DPRINTFN(10, ("ustir_attach: %p\n", sc->sc_udev));
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-			   sc->sc_dev);
+			   USBDEV(sc->sc_dev));
 
 	ia.ia_type = IR_TYPE_IRFRAME;
 	ia.ia_methods = &ustir_methods;
@@ -374,7 +369,7 @@ ustir_attach(device_t parent, device_t self, void *aux)
 	selinit(&sc->sc_rd_sel);
 	selinit(&sc->sc_wr_sel);
 
-	return;
+	USB_ATTACH_SUCCESS_RETURN;
 }
 
 void
@@ -386,10 +381,9 @@ ustir_childdet(device_t self, device_t child)
 	sc->sc_child = NULL;
 }
 
-int 
-ustir_detach(device_t self, int flags)
+USB_DETACH(ustir)
 {
-	struct ustir_softc *sc = device_private(self);
+	USB_DETACH_START(ustir, sc);
 	int s;
 	int rv = 0;
 
@@ -419,7 +413,7 @@ ustir_detach(device_t self, int flags)
 	s = splusb();
 	if (--sc->sc_refcnt >= 0) {
 		/* Wait for processes to go away. */
-		usb_detach_waitold(sc->sc_dev);
+		usb_detach_wait(USBDEV(sc->sc_dev));
 	}
 	splx(s);
 
@@ -427,7 +421,7 @@ ustir_detach(device_t self, int flags)
 		rv = config_detach(sc->sc_child, flags);
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-			   sc->sc_dev);
+			   USBDEV(sc->sc_dev));
 
 	seldestroy(&sc->sc_rd_sel);
 	seldestroy(&sc->sc_wr_sel);
@@ -729,7 +723,7 @@ ustir_thread(void *arg)
 	wakeup(&sc->sc_closing);
 
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(USBDEV(sc->sc_dev));
 
 	kthread_exit(0);
 }
@@ -862,14 +856,19 @@ Static int
 ustir_activate(device_t self, enum devact act)
 {
 	struct ustir_softc *sc = device_private(self);
+	int error = 0;
 
 	switch (act) {
+	case DVACT_ACTIVATE:
+		return EOPNOTSUPP;
+
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		if (sc->sc_child != NULL)
+			error = config_deactivate(sc->sc_child);
+		break;
 	}
+	return error;
 }
 
 /* ARGSUSED */
@@ -1010,7 +1009,7 @@ ustir_close(void *h, int flag, int mode,
 	}
 
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(USBDEV(sc->sc_dev));
 
 	return 0;
 }
@@ -1081,7 +1080,7 @@ ustir_read(void *h, struct uio *uio, int flag)
 
  ret:
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(USBDEV(sc->sc_dev));
 	return error;
 }
 
@@ -1201,7 +1200,7 @@ ustir_write(void *h, struct uio *uio, int flag)
 
  ret:
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(USBDEV(sc->sc_dev));
 
 	DPRINTFN(1,("%s: sc=%p done\n", __func__, sc));
 	return error;
@@ -1347,7 +1346,7 @@ Static int ustir_ioctl(void *h, u_long cmd, void *addr, int flag, struct lwp *l)
 		*(unsigned int *)addr = regdata;
 		if (err != USBD_NORMAL_COMPLETION) {
 			printf("%s: register read failed: %s\n",
-			       device_xname(sc->sc_dev),
+			       USBDEVNAME(sc->sc_dev),
 			       usbd_errstr(err));
 			error = EIO;
 		}
@@ -1369,7 +1368,7 @@ Static int ustir_ioctl(void *h, u_long cmd, void *addr, int flag, struct lwp *l)
 		err = ustir_write_reg(sc, regnum, regdata);
 		if (err != USBD_NORMAL_COMPLETION) {
 			printf("%s: register write failed: %s\n",
-			       device_xname(sc->sc_dev),
+			       USBDEVNAME(sc->sc_dev),
 			       usbd_errstr(err));
 			error = EIO;
 		}
@@ -1390,7 +1389,7 @@ Static int ustir_ioctl(void *h, u_long cmd, void *addr, int flag, struct lwp *l)
 	}
 
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(USBDEV(sc->sc_dev));
 
 	return error;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_kbd.c,v 1.21 2012/09/19 04:55:06 macallan Exp $	*/
+/*	$NetBSD: adb_kbd.c,v 1.12 2008/03/26 18:04:15 matt Exp $	*/
 
 /*
  * Copyright (C) 1998	Colin Wood
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb_kbd.c,v 1.21 2012/09/19 04:55:06 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb_kbd.c,v 1.12 2008/03/26 18:04:15 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -61,7 +61,6 @@ __KERNEL_RCSID(0, "$NetBSD: adb_kbd.c,v 1.21 2012/09/19 04:55:06 macallan Exp $"
 #include <dev/adb/adb_keymap.h>
 
 #include "opt_wsdisplay_compat.h"
-#include "opt_adbkbd.h"
 #include "adbdebug.h"
 #include "wsmouse.h"
 
@@ -76,7 +75,6 @@ struct adbkbd_softc {
 	struct sysmon_pswitch sc_sm_pbutton;
 	int sc_leds;
 	int sc_have_led_control;
-	int sc_power_button_delay;
 	int sc_msg_len;
 	int sc_event;
 	int sc_poll;
@@ -87,12 +85,10 @@ struct adbkbd_softc {
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	int sc_rawkbd;
 #endif
-	bool sc_emul_usb;
-
-	uint32_t sc_power;
 	uint8_t sc_buffer[16];
 	uint8_t sc_pollbuf[16];
-	uint8_t sc_us, sc_pe;
+	uint8_t sc_us;
+	uint8_t sc_power, sc_pe;
 };	
 
 /*
@@ -152,13 +148,10 @@ const struct wsmouse_accessops adbkms_accessops = {
 	adbkms_disable,
 };
 
-static int  adbkbd_sysctl_mid(SYSCTLFN_ARGS);
-static int  adbkbd_sysctl_right(SYSCTLFN_ARGS);
-static int  adbkbd_sysctl_usb(SYSCTLFN_ARGS);
+static int  adbkbd_sysctl_button(SYSCTLFN_ARGS);
+static void adbkbd_setup_sysctl(struct adbkbd_softc *);
 
 #endif /* NWSMOUSE > 0 */
-
-static void adbkbd_setup_sysctl(struct adbkbd_softc *);
 
 #ifdef ADBKBD_DEBUG
 #define DPRINTF printf
@@ -200,36 +193,13 @@ adbkbd_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_leds = 0;	/* initially off */
 	sc->sc_have_led_control = 0;
-
-	/*
-	 * If this is != 0 then pushing the power button will not immadiately
-	 * send a shutdown event to sysmon but instead require another key
-	 * press within 5 seconds with a gap of at least two seconds. The 
-	 * reason to do this is the fact that some PowerBook keyboards,
-	 * like the 2400, 3400 and original G3 have their power buttons
-	 * right next to the backspace key and it's extremely easy to hit
-	 * it by accident.
-	 * On most other keyboards the power button is sufficiently far out
-	 * of the way so we don't need this.
-	 */
-	sc->sc_power_button_delay = 0;
 	sc->sc_msg_len = 0;
 	sc->sc_poll = 0;
 	sc->sc_capslock = 0;
 	sc->sc_trans[1] = 103;	/* F11 */
 	sc->sc_trans[2] = 111;	/* F12 */
-	
-	/*
-	 * Most ADB keyboards send 0x7f 0x7f when the power button is pressed.
-	 * Some older PowerBooks, like the 3400c, will send a single scancode
-	 * 0x7e instead. Unfortunately Fn-Command on some more recent *Books
-	 * sends the same scancode, so by default sc_power is set to a value
-	 * that can't occur as a scancode and only set to 0x7e on hardware that
-	 * needs it
-	 */
-	sc->sc_power = 0xffff;
+	sc->sc_power = 0x7f;
 	sc->sc_timestamp = 0;
-	sc->sc_emul_usb = FALSE;
 
 	printf(" addr %d: ", sc->sc_adbdev->current_addr);
 
@@ -273,12 +243,10 @@ adbkbd_attach(device_t parent, device_t self, void *aux)
 	case ADB_PBKBD:
 		printf("PowerBook keyboard\n");
 		sc->sc_power = 0x7e;
-		sc->sc_power_button_delay = 1;
 		break;
 	case ADB_PBISOKBD:
 		printf("PowerBook keyboard (ISO layout)\n");
 		sc->sc_power = 0x7e;
-		sc->sc_power_button_delay = 1;
 		break;
 	case ADB_ADJKPD:
 		printf("adjustable keypad\n");
@@ -294,12 +262,10 @@ adbkbd_attach(device_t parent, device_t self, void *aux)
 		break;
 	case ADB_PBEXTISOKBD:
 		printf("PowerBook extended keyboard (ISO layout)\n");
-		sc->sc_power_button_delay = 1;
 		sc->sc_power = 0x7e;
 		break;
 	case ADB_PBEXTJAPKBD:
 		printf("PowerBook extended keyboard (Japanese layout)\n");
-		sc->sc_power_button_delay = 1;
 		sc->sc_power = 0x7e;
 		break;
 	case ADB_JPKBDII:
@@ -307,7 +273,6 @@ adbkbd_attach(device_t parent, device_t self, void *aux)
 		break;
 	case ADB_PBEXTKBD:
 		printf("PowerBook extended keyboard\n");
-		sc->sc_power_button_delay = 1;
 		sc->sc_power = 0x7e;
 		break;
 	case ADB_DESIGNKBD:
@@ -316,14 +281,15 @@ adbkbd_attach(device_t parent, device_t self, void *aux)
 		break;
 	case ADB_PBJPKBD:
 		printf("PowerBook keyboard (Japanese layout)\n");
-		sc->sc_power_button_delay = 1;
 		sc->sc_power = 0x7e;
 		break;
 	case ADB_PBG3KBD:
 		printf("PowerBook G3 keyboard\n");
+		sc->sc_power = 0x7e;
 		break;
 	case ADB_PBG3JPKBD:
 		printf("PowerBook G3 keyboard (Japanese layout)\n");
+		sc->sc_power = 0x7e;
 		break;
 	case ADB_IBOOKKBD:
 		printf("iBook keyboard\n");
@@ -345,10 +311,6 @@ adbkbd_attach(device_t parent, device_t self, void *aux)
 	a.accesscookie = sc;
 
 	sc->sc_wskbddev = config_found_ia(self, "wskbddev", &a, wskbddevprint);
-#ifdef ADBKBD_EMUL_USB
-	sc->sc_emul_usb = TRUE;
-	wskbd_set_evtrans(sc->sc_wskbddev, adb_to_usb, 128);
-#endif /* ADBKBD_EMUL_USB */
 
 #if NWSMOUSE > 0
 	/* attach the mouse device */
@@ -357,8 +319,9 @@ adbkbd_attach(device_t parent, device_t self, void *aux)
 	sc->sc_wsmousedev = config_found_ia(self, "wsmousedev", &am, 
 	    wsmousedevprint);
 
+	if (sc->sc_wsmousedev != NULL)
+		adbkbd_setup_sysctl(sc);
 #endif
-	adbkbd_setup_sysctl(sc);
 
 	/* finally register the power button */
 	sysmon_task_queue_init();
@@ -428,11 +391,11 @@ adbkbd_keys(struct adbkbd_softc *sc, uint8_t k1, uint8_t k2)
 		uint32_t diff = now - sc->sc_timestamp;
 
 		sc->sc_timestamp = now;
-		if (((diff > 1) && (diff < 5)) ||
-		     (sc->sc_power_button_delay == 0)) {
+		if ((diff > 1) && (diff < 5)) {
 
 			/* power button, report to sysmon */
 			sc->sc_pe = k1;
+		
 			sysmon_task_queue_sched(0, adbkbd_powerbutton, sc);
 		}
 	} else {
@@ -588,11 +551,7 @@ adbkbd_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 	switch (cmd) {
 
 	case WSKBDIO_GTYPE:
-		if (sc->sc_emul_usb) {
-			*(int *)data = WSKBD_TYPE_USB;
-		} else {
-			*(int *)data = WSKBD_TYPE_ADB;
-		}
+		*(int *)data = WSKBD_TYPE_ADB;
 		return 0;
 	case WSKBDIO_SETLEDS:
 		adbkbd_set_leds(sc, *(int *)data);
@@ -611,7 +570,7 @@ adbkbd_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 }
 
 int
-adbkbd_cnattach(void)
+adbkbd_cnattach()
 {
 
 	adbkbd_is_console = 1;
@@ -693,127 +652,60 @@ adbkms_disable(void *v)
 {
 }
 
-static int
-adbkbd_sysctl_mid(SYSCTLFN_ARGS)
-{
-	struct sysctlnode node = *rnode;
-	struct adbkbd_softc *sc=(struct adbkbd_softc *)node.sysctl_data;
-	const int *np = newp;
-	int reg;
-
-	DPRINTF("adbkbd_sysctl_mid\n");
-	reg = sc->sc_trans[1];
-	if (np) {
-		/* we're asked to write */	
-		node.sysctl_data = &reg;
-		if (sysctl_lookup(SYSCTLFN_CALL(&node)) == 0) {
-			
-			sc->sc_trans[1] = *(int *)node.sysctl_data;
-			return 0;
-		}
-		return EINVAL;
-	} else {
-		node.sysctl_data = &reg;
-		node.sysctl_size = 4;
-		return (sysctl_lookup(SYSCTLFN_CALL(&node)));
-	}
-}
-
-static int
-adbkbd_sysctl_right(SYSCTLFN_ARGS)
-{
-	struct sysctlnode node = *rnode;
-	struct adbkbd_softc *sc=(struct adbkbd_softc *)node.sysctl_data;
-	const int *np = newp;
-	int reg;
-
-	DPRINTF("adbkbd_sysctl_right\n");
-	reg = sc->sc_trans[2];
-	if (np) {
-		/* we're asked to write */	
-		node.sysctl_data = &reg;
-		if (sysctl_lookup(SYSCTLFN_CALL(&node)) == 0) {
-			
-			sc->sc_trans[2] = *(int *)node.sysctl_data;
-			return 0;
-		}
-		return EINVAL;
-	} else {
-		node.sysctl_data = &reg;
-		node.sysctl_size = 4;
-		return (sysctl_lookup(SYSCTLFN_CALL(&node)));
-	}
-}
-
-#endif /* NWSMOUSE > 0 */
-
-static int
-adbkbd_sysctl_usb(SYSCTLFN_ARGS)
-{
-	struct sysctlnode node = *rnode;
-	struct adbkbd_softc *sc=(struct adbkbd_softc *)node.sysctl_data;
-	const int *np = newp;
-	bool reg;
-
-	DPRINTF("%s\n", __func__);
-	reg = sc->sc_emul_usb;
-	if (np) {
-		/* we're asked to write */	
-		node.sysctl_data = &reg;
-		if (sysctl_lookup(SYSCTLFN_CALL(&node)) == 0) {
-			
-			sc->sc_emul_usb = *(bool *)node.sysctl_data;
-			if (sc->sc_emul_usb) {
-				wskbd_set_evtrans(sc->sc_wskbddev,
-				    adb_to_usb, 128);
-			} else {
-				wskbd_set_evtrans(sc->sc_wskbddev, NULL, 0);
-			}
-			return 0;
-		}
-		return EINVAL;
-	} else {
-		node.sysctl_data = &reg;
-		node.sysctl_size = sizeof(reg);
-		return (sysctl_lookup(SYSCTLFN_CALL(&node)));
-	}
-}
-
 static void
 adbkbd_setup_sysctl(struct adbkbd_softc *sc)
 {
-	const struct sysctlnode *me, *node;
+	struct sysctlnode *node, *me;
 	int ret;
 
 	DPRINTF("%s: sysctl setup\n", device_xname(sc->sc_dev));
-	ret = sysctl_createv(NULL, 0, NULL, &me,
+	ret = sysctl_createv(NULL, 0, NULL, (const struct sysctlnode **)&me,
 	       CTLFLAG_READWRITE,
 	       CTLTYPE_NODE, device_xname(sc->sc_dev), NULL,
 	       NULL, 0, NULL, 0,
 	       CTL_MACHDEP, CTL_CREATE, CTL_EOL);
-	ret = sysctl_createv(NULL, 0, NULL,
-	    (void *)&node, 
-	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC,
-	    CTLTYPE_BOOL, "emulate_usb", "USB keyboard emulation", 
-	    adbkbd_sysctl_usb, 1, (void *)sc, 0, CTL_MACHDEP, 
-	    me->sysctl_num, CTL_CREATE, CTL_EOL);
-#if NWSMOUSE > 0
-	if (sc->sc_wsmousedev != NULL) {
-		ret = sysctl_createv(NULL, 0, NULL,
-		    (void *)&node, 
-		    CTLFLAG_READWRITE | CTLFLAG_OWNDESC,
-		    CTLTYPE_INT, "middle", "middle mouse button", 
-		    adbkbd_sysctl_mid, 1, (void *)sc, 0, CTL_MACHDEP, 
-		    me->sysctl_num, CTL_CREATE, CTL_EOL);
 
-		ret = sysctl_createv(NULL, 0, NULL, 
-		    (void *)&node, 
-		    CTLFLAG_READWRITE | CTLFLAG_OWNDESC,
-		    CTLTYPE_INT, "right", "right mouse button", 
-		    adbkbd_sysctl_right, 2, (void *)sc, 0, CTL_MACHDEP, 
-		    me->sysctl_num, CTL_CREATE, CTL_EOL);
+	ret = sysctl_createv(NULL, 0, NULL,
+	    (const struct sysctlnode **)&node, 
+	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC | CTLFLAG_IMMEDIATE,
+	    CTLTYPE_INT, "middle", "middle mouse button", adbkbd_sysctl_button, 
+		    1, NULL, 0, CTL_MACHDEP, me->sysctl_num, CTL_CREATE, 
+		    CTL_EOL);
+	node->sysctl_data = sc;
+
+	ret = sysctl_createv(NULL, 0, NULL, 
+	    (const struct sysctlnode **)&node, 
+	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC | CTLFLAG_IMMEDIATE,
+	    CTLTYPE_INT, "right", "right mouse button", adbkbd_sysctl_button, 
+		    2, NULL, 0, CTL_MACHDEP, me->sysctl_num, CTL_CREATE, 
+		    CTL_EOL);
+	node->sysctl_data = sc;
+}
+
+static int
+adbkbd_sysctl_button(SYSCTLFN_ARGS)
+{
+	struct sysctlnode node = *rnode;
+	struct adbkbd_softc *sc=(struct adbkbd_softc *)node.sysctl_data;
+	const int *np = newp;
+	int btn = node.sysctl_idata, reg;
+
+	DPRINTF("adbkbd_sysctl_button %d\n", btn);
+	node.sysctl_idata = sc->sc_trans[btn];
+	reg = sc->sc_trans[btn];
+	if (np) {
+		/* we're asked to write */	
+		node.sysctl_data = &reg;
+		if (sysctl_lookup(SYSCTLFN_CALL(&node)) == 0) {
+			
+			sc->sc_trans[btn] = node.sysctl_idata;
+			return 0;
+		}
+		return EINVAL;
+	} else {
+		node.sysctl_size = 4;
+		return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 	}
-#endif /* NWSMOUSE > 0 */
 }
 
 SYSCTL_SETUP(sysctl_adbkbdtrans_setup, "adbkbd translator setup")
@@ -825,3 +717,4 @@ SYSCTL_SETUP(sysctl_adbkbdtrans_setup, "adbkbd translator setup")
 		       NULL, 0, NULL, 0,
 		       CTL_MACHDEP, CTL_EOL);
 }
+#endif /* NWSMOUSE > 0 */

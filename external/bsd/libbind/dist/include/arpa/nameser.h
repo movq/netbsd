@@ -1,4 +1,4 @@
-/*	$NetBSD: nameser.h,v 1.1.1.2 2012/09/09 16:07:50 christos Exp $	*/
+/*	$NetBSD: nameser.h,v 1.1.1.1.4.2 2011/01/06 21:42:14 riz Exp $	*/
 
 /*
  * Portions Copyright (C) 2004, 2005, 2008, 2009  Internet Systems Consortium, Inc. ("ISC")
@@ -51,7 +51,7 @@
  */
 
 /*
- *	Id: nameser.h,v 1.16 2009/03/03 01:52:48 each Exp 
+ *	Id: nameser.h,v 1.16 2009/03/03 01:52:48 each Exp
  */
 
 #ifndef _ARPA_NAMESER_H_

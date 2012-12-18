@@ -1,4 +1,4 @@
-/*	$NetBSD: loadfile_machdep.c,v 1.10 2011/05/21 16:32:00 nakayama Exp $	*/
+/*	$NetBSD: loadfile_machdep.c,v 1.6 2008/08/25 22:31:12 martin Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -30,7 +30,6 @@
  */
 
 #include <lib/libsa/stand.h>
-#include <lib/libkern/libkern.h>
 
 #include <machine/pte.h>
 #include <machine/cpu.h>
@@ -71,9 +70,7 @@ static void*	ofw_memcpy(void *, const void *, size_t);
 static void*	ofw_memset(void *, int, size_t);
 static void	ofw_freeall(void);
 
-#if 0
 static int	nop_mapin(vaddr_t, vsize_t);
-#endif
 static ssize_t	nop_read(int, void *, size_t);
 static void*	nop_memcpy(void *, const void *, size_t);
 static void*	nop_memset(void *, int, size_t);
@@ -184,22 +181,22 @@ tlb_init(void)
 			if (_prom_getprop(child, "upa-portid", &cpu,
 			    sizeof(cpu)) == -1 && _prom_getprop(child, "portid",
 			    &cpu, sizeof(cpu)) == -1)
-				panic("tlb_init: prom_getprop");
+				panic("main: prom_getprop");
 			if (cpu == bootcpu)
 				break;
 		}
 	}
 	if (cpu != bootcpu)
-		panic("tlb_init: no node for bootcpu?!?!");
+		panic("init_tlb: no node for bootcpu?!?!");
 	if (_prom_getprop(child, "#dtlb-entries", &dtlb_slot_max,
 	    sizeof(dtlb_slot_max)) == -1 ||
 	    _prom_getprop(child, "#itlb-entries", &itlb_slot_max,
 	    sizeof(itlb_slot_max)) == -1)
-		panic("tlb_init: prom_getprop");
+		panic("init_tlb: prom_getprop");
 	dtlb_store = alloc(dtlb_slot_max * sizeof(*dtlb_store));
 	itlb_store = alloc(itlb_slot_max * sizeof(*itlb_store));
 	if (dtlb_store == NULL || itlb_store == NULL) {
-		panic("tlb_init: malloc");
+		panic("init_tlb: malloc");
 	}
 
 	dtlb_slot = itlb_slot = 0;
@@ -211,15 +208,14 @@ tlb_init(void)
 static int
 mmu_mapin(vaddr_t rva, vsize_t len)
 {
-	uint64_t data;
-	paddr_t pa;
-	vaddr_t va, mva;
+	int64_t data;
+	vaddr_t va, pa, mva;
 
 	len  = roundup2(len + (rva & PAGE_MASK_4M), PAGE_SIZE_4M);
 	rva &= ~PAGE_MASK_4M;
 
 	tlb_init();
-	for (pa = (paddr_t)-1; len > 0; rva = va) {
+	for (pa = (vaddr_t)-1; len > 0; rva = va) {
 		if ( (len = kvamap_extract(rva, len, &va)) == 0) {
 			/* The rest is already mapped */
 			break;
@@ -228,11 +224,13 @@ mmu_mapin(vaddr_t rva, vsize_t len)
 		if (dtlb_va_to_pa(va) == (u_long)-1 ||
 		    itlb_va_to_pa(va) == (u_long)-1) {
 			/* Allocate a physical page, claim the virtual area */
-			if (pa == (paddr_t)-1) {
-				pa = OF_alloc_phys(PAGE_SIZE_4M, PAGE_SIZE_4M);
-				if (pa == (paddr_t)-1)
+			if (pa == (vaddr_t)-1) {
+				pa = (vaddr_t)OF_alloc_phys(PAGE_SIZE_4M,
+				    PAGE_SIZE_4M);
+				if (pa == (vaddr_t)-1)
 					panic("out of memory");
-				mva = OF_claim_virt(va, PAGE_SIZE_4M);
+				mva = (vaddr_t)OF_claim_virt(va,
+				    PAGE_SIZE_4M, 0);
 				if (mva != va) {
 					panic("can't claim virtual page "
 					    "(wanted %#lx, got %#lx)",
@@ -251,8 +249,7 @@ mmu_mapin(vaddr_t rva, vsize_t len)
 			if (itlb_slot >= itlb_slot_max)
 				panic("mmu_mapin: out of itlb_slots");
 
-			DPRINTF(("mmu_mapin: 0x%lx:0x%x.0x%x\n", va,
-			    hi(pa), lo(pa)));
+			DPRINTF(("mmu_mapin: %p:%p\n", va, pa));
 
 			data = TSB_DATA(0,		/* global */
 					PGSZ_4M,	/* 4mb page */
@@ -270,7 +267,7 @@ mmu_mapin(vaddr_t rva, vsize_t len)
 			dtlb_store[dtlb_slot].te_va = va;
 			dtlb_slot++;
 			dtlb_enter(va, hi(data), lo(data));
-			pa = (paddr_t)-1;
+			pa = (vaddr_t)-1;
 		}
 
 		kvamap_enter(va, PAGE_SIZE_4M);
@@ -279,7 +276,7 @@ mmu_mapin(vaddr_t rva, vsize_t len)
 		va += PAGE_SIZE_4M;
 	}
 
-	if (pa != (paddr_t)-1) {
+	if (pa != (vaddr_t)-1) {
 		OF_free_phys(pa, PAGE_SIZE_4M);
 	}
 

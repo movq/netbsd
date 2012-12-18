@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2010/12/19 13:04:54 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.1.1.1.8.2 2011/01/07 23:57:04 riz Exp $
 
 NOMAN=		1
 
@@ -27,7 +27,7 @@ SRCS+=		bdfread.c bdfutils.c bitmap.c bitmaputil.c fontink.c \
 SRCS+=		bufio.c decompress.c defaults.c fileio.c filewr.c gunzip.c
 
 .PATH:		${X11SRCDIR.Xfont}/src/util
-SRCS+=		atom.c fontaccel.c private.c utilbitmap.c
+SRCS+=		atom.c fontaccel.c miscutil.c private.c utilbitmap.c
 
 LDADD+=		-lz
 

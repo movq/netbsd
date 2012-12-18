@@ -1,4 +1,4 @@
-/*	$NetBSD: cmos.c,v 1.9 2011/07/01 18:11:24 dyoung Exp $	*/
+/*	$NetBSD: cmos.c,v 1.6 2008/06/28 15:09:49 ad Exp $	*/
 
 /*
  * Copyright (C) 2003 JONE System Co., Inc.
@@ -43,6 +43,9 @@
  *    copyright notice, this list of conditions and the following
  *    disclaimer in the documentation and/or other materials provided
  *    with the distribution.
+ * 3. The name of David Young may not be used to endorse or promote
+ *    products derived from this software without specific prior
+ *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -59,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cmos.c,v 1.9 2011/07/01 18:11:24 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cmos.c,v 1.6 2008/06/28 15:09:49 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,7 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: cmos.c,v 1.9 2011/07/01 18:11:24 dyoung Exp $");
 #include <sys/conf.h>
 #include <sys/kauth.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/isa/isareg.h>
@@ -115,8 +118,8 @@ int
 cmos_open(dev_t dev, int flags, int ifmt, struct lwp *l)
 {
 
-	return kauth_authorize_machdep(kauth_cred_get(),
-	    KAUTH_MACHDEP_NVRAM, NULL, NULL, NULL, NULL);
+	return kauth_authorize_generic(kauth_cred_get(),
+	    KAUTH_GENERIC_ISSUSER, NULL);
 }
 
 static void

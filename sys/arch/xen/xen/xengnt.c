@@ -1,4 +1,4 @@
-/*      $NetBSD: xengnt.c,v 1.25 2012/10/24 13:07:46 royger Exp $      */
+/*      $NetBSD: xengnt.c,v 1.10.4.2 2012/10/26 11:31:50 sborrill Exp $      */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xengnt.c,v 1.25 2012/10/24 13:07:46 royger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xengnt.c,v 1.10.4.2 2012/10/26 11:31:50 sborrill Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -35,7 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: xengnt.c,v 1.25 2012/10/24 13:07:46 royger Exp $");
 #include <sys/queue.h>
 #include <sys/extent.h>
 #include <sys/kernel.h>
-#include <sys/mutex.h>
 #include <uvm/uvm.h>
 
 #include <xen/hypervisor.h>
@@ -54,28 +58,24 @@ __KERNEL_RCSID(0, "$NetBSD: xengnt.c,v 1.25 2012/10/24 13:07:46 royger Exp $");
 /* External tools reserve first few grant table entries. */
 #define NR_RESERVED_ENTRIES 8
 
-/* Current number of frames making up the grant table */
 int gnt_nr_grant_frames;
-/* Maximum number of frames that can make up the grant table */
 int gnt_max_grant_frames;
 
 /* table of free grant entries */
 grant_ref_t *gnt_entries;
-/* last free entry */
 int last_gnt_entry;
-/* empty entry in the list */
-#define XENGNT_NO_ENTRY 0xffffffff
 
 /* VM address of the grant table */
 grant_entry_t *grant_table;
-kmutex_t grant_lock;
 
 static grant_ref_t xengnt_get_entry(void);
+#define XENGNT_NO_ENTRY 0xffffffff
 static void xengnt_free_entry(grant_ref_t);
+static void xengnt_resume(void);
 static int xengnt_more_entries(void);
 
 void
-xengnt_init(void)
+xengnt_init()
 {
 	struct gnttab_query_size query;
 	int rc;
@@ -104,68 +104,33 @@ xengnt_init(void)
 	for (i = 0; i <= nr_grant_entries; i++)
 		gnt_entries[i] = XENGNT_NO_ENTRY;
 
-	mutex_init(&grant_lock, MUTEX_DEFAULT, IPL_VM);
-
+	last_gnt_entry = 0;
 	xengnt_resume();
 
 }
 
-/*
- * Resume grant table state
- */
-bool
-xengnt_resume(void)
+static void
+xengnt_resume()
 {
 	int previous_nr_grant_frames = gnt_nr_grant_frames;
-
-	last_gnt_entry = 0;
 	gnt_nr_grant_frames = 0;
-
-	mutex_enter(&grant_lock);
 	while (gnt_nr_grant_frames < previous_nr_grant_frames) {
 		if (xengnt_more_entries() != 0)
 			panic("xengnt_resume: can't restore grant frames");
 	}
-	mutex_exit(&grant_lock);
-	return true;
 }
-
-/*
- * Suspend grant table state
- */
-bool
-xengnt_suspend(void) {
-
-	int i;
-
-	mutex_enter(&grant_lock);
-	KASSERT(gnt_entries[last_gnt_entry] == XENGNT_NO_ENTRY);
-
-	for (i = 0; i < last_gnt_entry; i++) {
-		/* invalidate all grant entries (necessary for resume) */
-		gnt_entries[i] = XENGNT_NO_ENTRY;
-	}
-	
-	/* Remove virtual => machine mapping */
-	pmap_kremove((vaddr_t)grant_table, gnt_nr_grant_frames * PAGE_SIZE);
-	pmap_update(pmap_kernel());
-	mutex_exit(&grant_lock);
-	return true;
-}
-
 
 /*
  * Add another page to the grant table
  * Returns 0 on success, ENOMEM on failure
  */
 static int
-xengnt_more_entries(void)
+xengnt_more_entries()
 {
 	gnttab_setup_table_t setup;
 	u_long *pages;
 	int nframes_new = gnt_nr_grant_frames + 1;
 	int i, start_gnt;
-	KASSERT(mutex_owned(&grant_lock));
 
 	if (gnt_nr_grant_frames == gnt_max_grant_frames)
 		return ENOMEM;
@@ -176,7 +141,7 @@ xengnt_more_entries(void)
 
 	setup.dom = DOMID_SELF;
 	setup.nr_frames = nframes_new;
-	set_xen_guest_handle(setup.frame_list, pages);
+	setup.frame_list = pages;
 
 	/*
 	 * setup the grant table, made of nframes_new frames
@@ -201,9 +166,7 @@ xengnt_more_entries(void)
 	 * the grant table frames
 	 */
 	pmap_kenter_ma(((vaddr_t)grant_table) + gnt_nr_grant_frames * PAGE_SIZE,
-	    ((paddr_t)pages[gnt_nr_grant_frames]) << PAGE_SHIFT,
-	    VM_PROT_WRITE, 0);
-	pmap_update(pmap_kernel());
+	    ((paddr_t)pages[gnt_nr_grant_frames]) << PAGE_SHIFT, VM_PROT_WRITE);
 
 	/*
 	 * add the grant entries associated to the last grant table frame
@@ -230,14 +193,16 @@ xengnt_more_entries(void)
  * Returns a reference to the first free entry in grant table
  */
 static grant_ref_t
-xengnt_get_entry(void)
+xengnt_get_entry()
 {
 	grant_ref_t entry;
+	int s = splvm();
 	static struct timeval xengnt_nonmemtime;
 	static const struct timeval xengnt_nonmemintvl = {5,0};
 
 	if (last_gnt_entry == 0) {
 		if (xengnt_more_entries()) {
+			splx(s);
 			if (ratecheck(&xengnt_nonmemtime, &xengnt_nonmemintvl))
 				printf("xengnt_get_entry: out of grant "
 				    "table entries\n");
@@ -248,9 +213,9 @@ xengnt_get_entry(void)
 	last_gnt_entry--;
 	entry = gnt_entries[last_gnt_entry];
 	gnt_entries[last_gnt_entry] = XENGNT_NO_ENTRY;
+	splx(s);
 	KASSERT(entry != XENGNT_NO_ENTRY && entry > NR_RESERVED_ENTRIES);
-	KASSERT(last_gnt_entry >= 0);
-	KASSERT(last_gnt_entry <= gnt_max_grant_frames * NR_GRANT_ENTRIES_PER_PAGE);
+	KASSERT(last_gnt_entry >= 0 && last_gnt_entry <= gnt_max_grant_frames * NR_GRANT_ENTRIES_PER_PAGE);
 	return entry;
 }
 
@@ -260,37 +225,27 @@ xengnt_get_entry(void)
 static void
 xengnt_free_entry(grant_ref_t entry)
 {
-	mutex_enter(&grant_lock);
+	int s = splvm();
 	KASSERT(entry > NR_RESERVED_ENTRIES);
 	KASSERT(gnt_entries[last_gnt_entry] == XENGNT_NO_ENTRY);
-	KASSERT(last_gnt_entry >= 0);
-	KASSERT(last_gnt_entry <= gnt_max_grant_frames * NR_GRANT_ENTRIES_PER_PAGE);
+	KASSERT(last_gnt_entry >= 0 && last_gnt_entry <= gnt_max_grant_frames * NR_GRANT_ENTRIES_PER_PAGE);
 	gnt_entries[last_gnt_entry] = entry;
 	last_gnt_entry++;
-	mutex_exit(&grant_lock);
+	splx(s);
 }
 
 int
 xengnt_grant_access(domid_t dom, paddr_t ma, int ro, grant_ref_t *entryp)
 {
-	mutex_enter(&grant_lock);
-
 	*entryp = xengnt_get_entry();
-	if (__predict_false(*entryp == XENGNT_NO_ENTRY)) {
-		mutex_exit(&grant_lock);
+	if (__predict_false(*entryp == XENGNT_NO_ENTRY))
 		return ENOMEM;
-	}
 
 	grant_table[*entryp].frame = ma >> PAGE_SHIFT;
-	grant_table[*entryp].domid = dom;
-	/*
-	 * ensure that the above values reach global visibility 
-	 * before permitting frame's access (done when we set flags)
-	 */
-	xen_rmb();
+	grant_table[*entryp].domid  = dom;
+	x86_lfence();
 	grant_table[*entryp].flags =
 	    GTF_permit_access | (ro ? GTF_readonly : 0);
-	mutex_exit(&grant_lock);
 	return 0;
 }
 
@@ -313,23 +268,14 @@ xengnt_revoke_access(grant_ref_t entry)
 int
 xengnt_grant_transfer(domid_t dom, grant_ref_t *entryp)
 {
-	mutex_enter(&grant_lock);
-
 	*entryp = xengnt_get_entry();
-	if (__predict_false(*entryp == XENGNT_NO_ENTRY)) {
-		mutex_exit(&grant_lock);
+	if (__predict_false(*entryp == XENGNT_NO_ENTRY))
 		return ENOMEM;
-	}
 
 	grant_table[*entryp].frame = 0;
-	grant_table[*entryp].domid = dom;
-	/*
-	 * ensure that the above values reach global visibility 
-	 * before permitting frame's transfer (done when we set flags)
-	 */
-	xen_rmb();
+	grant_table[*entryp].domid  =dom;
+	x86_lfence();
 	grant_table[*entryp].flags = GTF_accept_transfer;
-	mutex_exit(&grant_lock);
 	return 0;
 }
 

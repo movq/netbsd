@@ -1,4 +1,4 @@
-/*	$NetBSD: mcontext.h,v 1.16 2012/12/15 22:39:04 dsl Exp $	*/
+/*	$NetBSD: mcontext.h,v 1.11 2008/10/26 00:08:15 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -52,15 +52,17 @@ typedef	__greg_t	__gregset_t[_NGREG];
 
 /*
  * Floating point register state
- * The format of __fpregset_t is that of the fxsave instruction
- * which requires 16 byte alignment. However the mcontext version
- * is never directly accessed.
  */
-typedef char __fpregset_t[512] __aligned(8);
+typedef char __fpregset_t[512];
+
+/*
+ * The padding below is to make __fpregs have a 16-byte aligned offset
+ * within ucontext_t.
+ */
 
 typedef struct {
 	__gregset_t	__gregs;
-	__greg_t	_mc_tlsbase;
+	long 		__pad;
 	__fpregset_t	__fpregs;
 } mcontext_t;
 
@@ -72,25 +74,12 @@ typedef struct {
 
 #define	_UC_MACHINE_SET_PC(uc, pc)	_UC_MACHINE_PC(uc) = (pc)
 
-#define	_UC_TLSBASE	0x00080000
-
 /*
  * mcontext extensions to handle signal delivery.
  */
 #define _UC_SETSTACK	0x00010000
 #define _UC_CLRSTACK	0x00020000
 
-#define	__UCONTEXT_SIZE	784
-
-static __inline void *
-__lwp_getprivate_fast(void)
-{
-	void *__tmp;
-
-	__asm volatile("movq %%fs:0, %0" : "=r" (__tmp));
-
-	return __tmp;
-}
 
 #ifdef _KERNEL
 
@@ -127,32 +116,18 @@ typedef __greg32_t	__gregset32_t[_NGREG32];
 /*
  * Floating point register state
  */
-typedef struct {
-	union {
-		struct {
-			int	__fp_state[27];	/* Environment and registers */
-			int	__fp_status;	/* Software status word */
-		} __fpchip_state;
-		struct {
-			char	__fp_emul[246];
-			char	__fp_epad[2];
-		} __fp_emul_space;
-		struct {
-			char	__fp_xmm[512];
-		} __fp_xmm_state;
-		int	__fp_fpregs[128];
-	} __fp_reg_set;
-	int	__fp_wregs[33];			/* Weitek? */
-} __fpregset32_t;
+typedef struct fxsave64 __fpregset32_t;
 
 typedef struct {
 	__gregset32_t	__gregs;
 	__fpregset32_t	__fpregs;
-	uint32_t	_mc_tlsbase;
 } mcontext32_t;
 
-#define	_UC_MACHINE32_PAD	4
-#define	__UCONTEXT32_SIZE	776
+#define _UC_MACHINE_PAD32	5
+
+struct trapframe;
+struct lwp;
+int check_mcontext(struct lwp *, const mcontext_t *, struct trapframe *);
 
 #endif /* _KERNEL */
 

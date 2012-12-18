@@ -1,4 +1,4 @@
-/*	$NetBSD: virtiovar.h,v 1.1 2011/10/30 12:12:21 hannken Exp $	*/
+/*	$NetBSD: virtiovar.h,v 1.1.8.2 2012/01/25 21:18:15 riz Exp $	*/
 
 /*
  * Copyright (c) 2010 Minoura Makoto.
@@ -67,7 +67,7 @@
 
 #include <sys/types.h>
 #include <sys/queue.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <dev/pci/virtioreg.h>
 
 struct vq_entry {

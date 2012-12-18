@@ -1,4 +1,4 @@
-/*	$NetBSD: necpb.c,v 1.39 2012/10/27 17:17:36 chs Exp $	*/
+/*	$NetBSD: necpb.c,v 1.32.6.1 2010/11/22 03:05:58 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: necpb.c,v 1.39 2012/10/27 17:17:36 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: necpb.c,v 1.32.6.1 2010/11/22 03:05:58 riz Exp $");
 
 #include "opt_pci.h"
 
@@ -77,7 +77,7 @@ __KERNEL_RCSID(0, "$NetBSD: necpb.c,v 1.39 2012/10/27 17:17:36 chs Exp $");
 #include <uvm/uvm_extern.h>
 
 #define _ARC_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <machine/pio.h>
 
@@ -99,10 +99,10 @@ __KERNEL_RCSID(0, "$NetBSD: necpb.c,v 1.39 2012/10/27 17:17:36 chs Exp $");
 
 #include "ioconf.h"
 
-static int	necpbmatch(device_t, cfdata_t, void *);
-static void	necpbattach(device_t, device_t, void *);
+static int	necpbmatch(struct device *, struct cfdata *, void *);
+static void	necpbattach(struct device *, struct device *, void *);
 
-static void	necpb_attach_hook(device_t, device_t,
+static void	necpb_attach_hook(struct device *, struct device *,
 		    struct pcibus_attach_args *);
 static int	necpb_bus_maxdevs(pci_chipset_tag_t, int);
 static pcitag_t	necpb_make_tag(pci_chipset_tag_t, int, int, int);
@@ -110,8 +110,7 @@ static void	necpb_decompose_tag(pci_chipset_tag_t, pcitag_t, int *,
 		    int *, int *);
 static pcireg_t	necpb_conf_read(pci_chipset_tag_t, pcitag_t, int);
 static void	necpb_conf_write(pci_chipset_tag_t, pcitag_t, int, pcireg_t);
-static int	necpb_intr_map(const struct pci_attach_args *,
-		    pci_intr_handle_t *);
+static int	necpb_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
 static const char *necpb_intr_string(pci_chipset_tag_t, pci_intr_handle_t);
 static void	*necpb_intr_establish(pci_chipset_tag_t, pci_intr_handle_t,
 		    int, int (*func)(void *), void *);
@@ -243,11 +242,11 @@ necpbattach(device_t parent, device_t self, void *aux)
 	pc = &sc->sc_ncp->nc_pc;
 #ifdef PCI_NETBSD_CONFIGURE
 	pc->pc_ioext = extent_create("necpbio", 0x00100000, 0x01ffffff,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 	pc->pc_memext = extent_create("necpbmem", 0x08000000, 0x3fffffff,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 	pci_configure_bus(pc, pc->pc_ioext, pc->pc_memext, NULL, 0,
-	    mips_cache_info.mci_dcache_align);
+	    mips_dcache_align);
 #endif
 
 	out32(RD94_SYS_PCI_INTMASK, 0xf);
@@ -262,7 +261,7 @@ necpbattach(device_t parent, device_t self, void *aux)
 	pba.pba_dmat = &sc->sc_ncp->nc_dmat;
 	pba.pba_dmat64 = NULL;
 	pba.pba_pc = pc;
-	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
+	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
 
@@ -270,7 +269,7 @@ necpbattach(device_t parent, device_t self, void *aux)
 }
 
 static void
-necpb_attach_hook(device_t parent, device_t self,
+necpb_attach_hook(struct device *parent, struct device *self,
     struct pcibus_attach_args *pba)
 {
 }
@@ -335,7 +334,7 @@ necpb_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 }
 
 static int
-necpb_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+necpb_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pcitag_t intrtag = pa->pa_intrtag;

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.4 2011/08/11 23:15:37 joerg Exp $
+# $NetBSD: Makefile,v 1.2.6.1 2009/09/17 04:24:30 snj Exp $
 
 MODULE=	r128
 
@@ -7,6 +7,5 @@ SRCS=	r128_context.c r128_lock.c r128_state.c r128_texstate.c r128_dd.c \
 	r128_texmem.c
 
 COPTS.r128_span.c=  -Wno-error	# XXX const
-CWARNFLAGS.clang+=	-Wno-constant-logical-operand
 
 .include "${.CURDIR}/../dri.mk"

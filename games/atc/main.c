@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.21 2012/10/12 10:44:20 dholland Exp $	*/
+/*	$NetBSD: main.c,v 1.19 2008/07/20 01:03:20 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -51,7 +51,7 @@ __COPYRIGHT("@(#) Copyright (c) 1990, 1993\
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.21 2012/10/12 10:44:20 dholland Exp $");
+__RCSID("$NetBSD: main.c,v 1.19 2008/07/20 01:03:20 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,11 +59,6 @@ __RCSID("$NetBSD: main.c,v 1.21 2012/10/12 10:44:20 dholland Exp $");
 #include "pathnames.h"
 
 extern FILE	*yyin;
-
-static int read_file(const char *);
-static const char *default_game(void);
-static const char *okay_game(const char *);
-static int list_games(void);
 
 int
 main(int argc, char *argv[])
@@ -90,17 +85,17 @@ main(int argc, char *argv[])
 		case '?':
 		case 'u':
 		default: 
-			f_usage = 1;
+			f_usage++;
 			break;
 		case 'l':
-			f_list = 1;
+			f_list++;
 			break;
 		case 's':
 		case 't':
-			f_showscore = 1;
+			f_showscore++;
 			break;
 		case 'p':
-			f_printpath = 1;
+			f_printpath++;
 			break;
 		case 'r':
 			seed = atoi(optarg);
@@ -112,7 +107,7 @@ main(int argc, char *argv[])
 		}
 	}
 	if (optind < argc)
-		f_usage = 1;
+		f_usage++;
 	srandom(seed);
 
 	if (f_usage)
@@ -209,7 +204,7 @@ main(int argc, char *argv[])
 	}
 }
 
-static int
+int
 read_file(const char *s)
 {
 	int		retval;
@@ -229,7 +224,7 @@ read_file(const char *s)
 		return (0);
 }
 
-static const char *
+const char *
 default_game(void)
 {
 	FILE		*fp;
@@ -255,7 +250,7 @@ default_game(void)
 	return (file);
 }
 
-static const char *
+const char *
 okay_game(const char *s)
 {
 	FILE		*fp;
@@ -290,7 +285,7 @@ okay_game(const char *s)
 	return (ret);
 }
 
-static int
+int
 list_games(void)
 {
 	FILE		*fp;

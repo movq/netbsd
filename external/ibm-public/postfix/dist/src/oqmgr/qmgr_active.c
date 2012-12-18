@@ -1,4 +1,4 @@
-/*	$NetBSD: qmgr_active.c,v 1.1.1.2 2011/07/31 10:02:44 tron Exp $	*/
+/*	$NetBSD: qmgr_active.c,v 1.1.1.1.2.4 2011/08/09 18:58:17 riz Exp $	*/
 
 /*++
 /* NAME

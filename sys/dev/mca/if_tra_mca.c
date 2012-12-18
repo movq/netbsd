@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tra_mca.c,v 1.16 2012/10/27 17:18:26 chs Exp $	*/
+/*	$NetBSD: if_tra_mca.c,v 1.10 2008/04/28 20:23:53 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -35,14 +35,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tra_mca.c,v 1.16 2012/10/27 17:18:26 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tra_mca.c,v 1.10 2008/04/28 20:23:53 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/socket.h>
 #include <sys/syslog.h>
-#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -57,8 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_tra_mca.c,v 1.16 2012/10/27 17:18:26 chs Exp $");
 #include <dev/mca/mcavar.h>
 #include <dev/mca/mcadevs.h>
 
-int	tiara_mca_match(device_t, cfdata_t, void *);
-void	tiara_mca_attach(device_t, device_t, void *);
+int	tiara_mca_match __P((struct device *, struct cfdata *, void *));
+void	tiara_mca_attach __P((struct device *, struct device *, void *));
 
 #define TIARA_NPORTS 0x20 /* 32 */
 #define TIARA_PROM_ID 24 /* offset to mac addr stored in prom */
@@ -70,7 +69,7 @@ struct tiara_softc {
 	void	*sc_ih;				/* interrupt cookie */
 };
 
-CFATTACH_DECL_NEW(tra_mca, sizeof(struct tiara_softc),
+CFATTACH_DECL(tra_mca, sizeof(struct tiara_softc),
     tiara_mca_match, tiara_mca_attach, NULL, NULL);
 
 static const struct tiara_mca_product {
@@ -83,10 +82,11 @@ static const struct tiara_mca_product {
 	{ 0,			NULL },
 };
 
-static const struct tiara_mca_product *tiara_mca_lookup(u_int32_t);
+static const struct tiara_mca_product *tiara_mca_lookup __P((u_int32_t));
 
 static const struct tiara_mca_product *
-tiara_mca_lookup(u_int32_t id)
+tiara_mca_lookup(id)
+	u_int32_t id;
 {
 	const struct tiara_mca_product *tra_p;
 
@@ -98,7 +98,8 @@ tiara_mca_lookup(u_int32_t id)
 }
 
 int
-tiara_mca_match(device_t parent, cfdata_t match, void *aux)
+tiara_mca_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct mca_attach_args *ma = (struct mca_attach_args *) aux;
 
@@ -120,7 +121,7 @@ static const int smc_irq[] = {
 };
 
 void
-tiara_mca_attach(device_t parent, device_t self, void *aux)
+tiara_mca_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct tiara_softc *isc = device_private(self);
 	struct mb86950_softc *sc = &isc->sc_mb86950;
@@ -186,7 +187,7 @@ tiara_mca_attach(device_t parent, device_t self, void *aux)
 		if ((pos2 & 0x80) != 0)
 			irq = smc_irq[((pos2 & 0x70) >> 4)];
 		else {
-			aprint_error_dev(self, "unsupported irq selected\n");
+			aprint_error_dev(&sc->sc_dev, "unsupported irq selected\n");
 			return;
 		}
 
@@ -204,7 +205,7 @@ tiara_mca_attach(device_t parent, device_t self, void *aux)
 	tra_p = tiara_mca_lookup(ma->ma_id);
 	if (tra_p == NULL) {
 		aprint_normal("\n");
-		aprint_error_dev(self, "where did the card go?\n");
+		aprint_error_dev(&sc->sc_dev, "where did the card go?\n");
 		return;
 	}
 #endif
@@ -213,11 +214,10 @@ tiara_mca_attach(device_t parent, device_t self, void *aux)
 
 	/* Map i/o space. */
 	if (bus_space_map(iot, iobase, TIARA_NPORTS, 0, &ioh)) {
-		aprint_error_dev(self, "can't map i/o space\n");
+		aprint_error_dev(&sc->sc_dev, "can't map i/o space\n");
 		return;
 	}
 
-	sc->sc_dev = self;
 	sc->sc_bst = iot;
 	sc->sc_bsh = ioh;
 
@@ -241,7 +241,7 @@ tiara_mca_attach(device_t parent, device_t self, void *aux)
 	isc->sc_ih = mca_intr_establish(ma->ma_mc, irq, IPL_NET,
 			mb86950_intr, sc);
 	if (isc->sc_ih == NULL) {
-		aprint_error_dev(self, "couldn't establish interrupt handler\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt handler\n");
 		return;
 	}
 }

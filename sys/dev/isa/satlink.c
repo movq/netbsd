@@ -1,4 +1,4 @@
-/*	$NetBSD: satlink.c,v 1.43 2012/10/27 17:18:25 chs Exp $	*/
+/*	$NetBSD: satlink.c,v 1.39 2008/06/08 12:43:52 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: satlink.c,v 1.43 2012/10/27 17:18:25 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: satlink.c,v 1.39 2008/06/08 12:43:52 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,6 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: satlink.c,v 1.43 2012/10/27 17:18:25 chs Exp $");
 #include <dev/isa/satlinkio.h>
 
 struct satlink_softc {
+	struct	device sc_dev;		/* device glue */
 	bus_space_tag_t sc_iot;		/* space tag */
 	bus_space_handle_t sc_ioh;	/* space handle */
 	isa_chipset_tag_t sc_ic;	/* ISA chipset info */
@@ -92,11 +93,11 @@ struct satlink_softc {
  */
 #define	SATLINK_TIMEOUT		(hz/10)
 
-int	satlinkprobe(device_t, cfdata_t, void *);
-void	satlinkattach(device_t, device_t, void *);
+int	satlinkprobe(struct device *, struct cfdata *, void *);
+void	satlinkattach(struct device *, struct device *, void *);
 void	satlinktimeout(void *);
 
-CFATTACH_DECL_NEW(satlink, sizeof(struct satlink_softc),
+CFATTACH_DECL(satlink, sizeof(struct satlink_softc),
     satlinkprobe, satlinkattach, NULL, NULL);
 
 extern struct cfdriver satlink_cd;
@@ -114,7 +115,8 @@ const struct cdevsw satlink_cdevsw = {
 };
 
 int
-satlinkprobe(device_t parent, cfdata_t match, void *aux)
+satlinkprobe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -157,9 +159,9 @@ satlinkprobe(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-satlinkattach(device_t parent, device_t self, void *aux)
+satlinkattach(struct device *parent, struct device *self, void *aux)
 {
-	struct satlink_softc *sc = device_private(self);
+	struct satlink_softc *sc = (struct satlink_softc *)self;
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
@@ -169,7 +171,7 @@ satlinkattach(device_t parent, device_t self, void *aux)
 
 	/* Map the card. */
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, SATLINK_IOSIZE, 0, &ioh)) {
-		aprint_error_dev(self, "can't map i/o space\n");
+		aprint_error_dev(&sc->sc_dev, "can't map i/o space\n");
 		return;
 	}
 
@@ -196,7 +198,7 @@ satlinkattach(device_t parent, device_t self, void *aux)
 	    (bus_space_read_1(iot, ioh, SATLINK_SER_H) << 24);
 
 	printf("%s: mfrid 0x%x, grpid 0x%x, userid 0x%x, serial %d\n",
-	    device_xname(self), sc->sc_id.sid_mfrid,
+	    device_xname(&sc->sc_dev), sc->sc_id.sid_mfrid,
 	    sc->sc_id.sid_grpid, sc->sc_id.sid_userid,
 	    sc->sc_id.sid_serial);
 
@@ -208,19 +210,19 @@ satlinkattach(device_t parent, device_t self, void *aux)
 	/* Allocate and map the ring buffer. */
 	if (isa_dmamem_alloc(sc->sc_ic, sc->sc_drq, sc->sc_bufsize,
 	    &ringaddr, BUS_DMA_NOWAIT)) {
-		aprint_error_dev(self, "can't allocate ring buffer\n");
+		aprint_error_dev(&sc->sc_dev, "can't allocate ring buffer\n");
 		return;
 	}
 	if (isa_dmamem_map(sc->sc_ic, sc->sc_drq, ringaddr, sc->sc_bufsize,
 	    &sc->sc_buf, BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) {
-		aprint_error_dev(self, "can't map ring buffer\n");
+		aprint_error_dev(&sc->sc_dev, "can't map ring buffer\n");
 		isa_dmamem_free(sc->sc_ic, sc->sc_drq, ringaddr,
 		    sc->sc_bufsize);
 		return;
 	}
 
 	if (isa_drq_alloc(sc->sc_ic, sc->sc_drq) != 0) {
-		aprint_error_dev(self, "can't reserve drq %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't reserve drq %d\n",
 		    sc->sc_drq);
 		isa_dmamem_unmap(sc->sc_ic, sc->sc_drq, sc->sc_buf,
 		    sc->sc_bufsize);
@@ -232,7 +234,7 @@ satlinkattach(device_t parent, device_t self, void *aux)
 	/* Create the DMA map. */
 	if (isa_dmamap_create(sc->sc_ic, sc->sc_drq, sc->sc_bufsize,
 	    BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW)) {
-		aprint_error_dev(self, "can't create DMA map\n");
+		aprint_error_dev(&sc->sc_dev, "can't create DMA map\n");
 		isa_dmamem_unmap(sc->sc_ic, sc->sc_drq, sc->sc_buf,
 		    sc->sc_bufsize);
 		isa_dmamem_free(sc->sc_ic, sc->sc_drq, ringaddr,
@@ -296,7 +298,10 @@ satlinkclose(dev_t dev, int flags, int fmt,
 }
 
 int
-satlinkread(dev_t dev, struct uio *uio, int flags)
+satlinkread(dev, uio, flags)
+	dev_t dev;
+	struct uio *uio;
+	int flags;
 {
 	struct satlink_softc *sc;
 	int error, s, count, sptr;
@@ -395,7 +400,10 @@ satlinkioctl(dev_t dev, u_long cmd, void *data, int flags,
 }
 
 int
-satlinkpoll(dev_t dev, int events, struct lwp *l)
+satlinkpoll(dev, events, l)
+	dev_t dev;
+	int events;
+	struct lwp *l;
 {
 	struct satlink_softc *sc;
 	int s, revents;
@@ -486,7 +494,8 @@ satlinkkqfilter(dev_t dev, struct knote *kn)
 }
 
 void
-satlinktimeout(void *arg)
+satlinktimeout(arg)
+	void *arg;
 {
 	struct satlink_softc *sc = arg;
 	bus_size_t resid;

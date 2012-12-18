@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_milan.c,v 1.13 2012/08/12 20:50:39 martin Exp $	*/
+/*	$NetBSD: pci_milan.c,v 1.9 2008/05/30 19:26:35 ad Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_milan.c,v 1.13 2012/08/12 20:50:39 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_milan.c,v 1.9 2008/05/30 19:26:35 ad Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -50,7 +50,9 @@ __KERNEL_RCSID(0, "$NetBSD: pci_milan.c,v 1.13 2012/08/12 20:50:39 martin Exp $"
 #include <atari/dev/grf_etreg.h>
 
 int
-pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
+pci_bus_maxdevs(pc, busno)
+	pci_chipset_tag_t pc;
+	int busno;
 {
 	return (6);
 }
@@ -60,10 +62,13 @@ pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
  */
 pcireg_t	milan_pci_confread(pcitag_t);
 void		milan_pci_confwrite(u_long, pcireg_t);
-extern u_long	plx_status;
+u_long		plx_status;
 
 pcireg_t
-pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
+pci_conf_read(pc, tag, reg)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	int reg;
 {
 	u_long		data;
 
@@ -79,7 +84,11 @@ pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 
 
 void
-pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
+pci_conf_write(pc, tag, reg, data)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	int reg;
+	pcireg_t data;
 {
 	milan_pci_confwrite(tag | reg, bswap32(data));
 }
@@ -98,7 +107,12 @@ pci_intr_setattr(pci_chipset_tag_t pc, pci_intr_handle_t *ih,
 }
 
 void *
-pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih, int level, int (*ih_fun)(void *), void *ih_arg)
+pci_intr_establish(pc, ih, level, ih_fun, ih_arg)
+	pci_chipset_tag_t	pc;
+	pci_intr_handle_t	ih;
+	int			level;
+	int			(*ih_fun) __P((void *));
+	void			*ih_arg;
 {
 	if (ih == 0 || ih >= 16 || ih == 2)
 		panic("pci_intr_establish: bogus handle 0x%x", ih);
@@ -106,7 +120,9 @@ pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih, int level, int (*
 }
 
 void
-pci_intr_disestablish(pci_chipset_tag_t pc, void *cookie)
+pci_intr_disestablish(pc, cookie)
+	pci_chipset_tag_t pc;
+	void *cookie;
 {
 	isa_intr_disestablish(NULL, cookie);
 }
@@ -133,7 +149,12 @@ static u_char crt_tab[] = {
 #define PCI_LINMEMBASE  0x0e000000
 
 void
-milan_vga_init(pci_chipset_tag_t pc, pcitag_t tag, int id, volatile u_char *ba, u_char *fb)
+milan_vga_init(pc, tag, id, ba, fb)
+	pci_chipset_tag_t	pc;
+	pcitag_t		tag;
+	int			id;
+	volatile u_char		*ba;
+	u_char			*fb;
 {
 	int			i, csr;
 

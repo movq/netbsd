@@ -1,5 +1,4 @@
-/*	Id: table.c,v 1.20 2011/11/13 22:30:18 gmcgarry Exp 	*/	
-/*	$NetBSD: table.c,v 1.1.1.3 2012/01/11 20:32:45 plunky Exp $	*/
+/*	$Id: table.c,v 1.1.1.1 2008/08/24 05:32:53 gmcgarry Exp $	*/
 /*-
  * Copyright (c) 2007 Gregory McGarry <g.mcgarry@ieee.org>
  *
@@ -1152,7 +1151,7 @@ struct optab table[] = {
 { STASG,	INAREG|FOREFF,
 	SOREG|SNAME,	TANY,
 	SAREG,		TPTRTO|TANY,
-		NSPECIAL,	RDEST,
+		NSPECIAL,	RRIGHT,
 		"ZQ", },
 
 /*

@@ -1,4 +1,4 @@
-.\"     $NetBSD: namei.9,v 1.30 2012/11/05 22:44:22 wiz Exp $
+.\"     $NetBSD: namei.9,v 1.18 2008/04/30 13:10:58 martin Exp $
 .\"
 .\" Copyright (c) 2001, 2005, 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,18 +27,14 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd November 5, 2012
+.Dd December 28, 2007
 .Dt NAMEI 9
 .Os
 .Sh NAME
 .Nm namei ,
-.Nm lookup_for_nfsd ,
-.Nm lookup_for_nfsd_index ,
+.Nm lookup ,
 .Nm relookup ,
-.Nm NDINIT ,
-.Nm NDAT ,
-.Nm namei_simple_kernel ,
-.Nm namei_simple_user
+.Nm NDINIT
 .Nd pathname lookup
 .Sh SYNOPSIS
 .In sys/namei.h
@@ -47,23 +43,13 @@
 .Ft int
 .Fn namei "struct nameidata *ndp"
 .Ft int
-.Fn lookup_for_nfsd "struct nameidata *ndp" "struct vnode *startdir" \
-"int neverfollow"
-.Ft int
-.Fn lookup_for_nfsd_index "struct nameidata *ndp"
+.Fn lookup "struct nameidata *ndp"
 .Ft int
 .Fn relookup "struct vnode *dvp" "struct vnode **vpp" \
 "struct componentname *cnp"
 .Ft void
 .Fn NDINIT "struct nameidata *ndp" "u_long op" "u_long flags" \
-"struct pathbuf *pathbuf"
-.Fn NDAT "struct nameidata *ndp" "struct vnode *dvp"
-.Ft int
-.Fn namei_simple_kernel "const char *path" "namei_simple_flags_t sflags" \
-"struct vnode **ret"
-.Ft int
-.Fn namei_simple_user "const char *path" "namei_simple_flags_t sflags" \
-"struct vnode **ret"
+"enum uio_seg segflg" "const char *namep"
 .Sh DESCRIPTION
 The
 .Nm
@@ -77,19 +63,17 @@ for name-to-inode conversion, in the days before the
 .Xr vfs 9
 interface was implemented.
 .Pp
-Except for the simple forms, the arguments passed to the functions are
-encapsulated in the
+The arguments passed to the functions are encapsulated in the
 .Em nameidata
 structure.
-It has the following layout:
+It has the following structure:
 .Bd -literal
 struct nameidata {
         /*
          * Arguments to namei/lookup.
          */
-        struct vnode *ni_startdir;      /* starting dir, cwd if null */
-        struct pathbuf *ni_pathbuf;     /* pathname container */
-        char *ni_pnbuf;                 /* extra pathname buffer ref (XXX) */
+        const char *ni_dirp;            /* pathname pointer */
+        enum    uio_seg ni_segflg;      /* location of pathname */
         /*
          * Arguments to lookup.
          */
@@ -103,9 +87,9 @@ struct nameidata {
         /*
          * Shared between namei and lookup/commit routines.
          */
-        size_t ni_pathlen;              /* remaining chars in path */
+        size_t  ni_pathlen;             /* remaining chars in path */
         const char *ni_next;            /* next location in pathname */
-        unsigned int ni_loopcnt;        /* count of symlinks encountered */
+        u_long  ni_loopcnt;             /* count of symlinks encountered */
         /*
          * Lookup parameters
          */
@@ -113,15 +97,17 @@ struct nameidata {
                 /*
                  * Arguments to lookup.
                  */
-                uint32_t cn_nameiop;    /* namei operation */
-                uint32_t cn_flags;      /* flags to namei */
+                u_long  cn_nameiop;     /* namei operation */
+                u_long  cn_flags;       /* flags to namei */
                 kauth_cred_t cn_cred;   /* credentials */
                 /*
                  * Shared between lookup and commit routines.
                  */
+                char    *cn_pnbuf;      /* pathname buffer */
                 const char *cn_nameptr; /* pointer to looked up name */
-                size_t cn_namelen;      /* length of looked up component */
-                size_t cn_consume;      /* chars to consume in lookup() */
+                long    cn_namelen;     /* length of looked up component */
+                u_long  cn_hash;        /* hash value of looked up name */
+                long    cn_consume;     /* chars to consume in lookup() */
         } ni_cnd;
 };
 .Ed
@@ -160,34 +146,34 @@ interface and the vnode operations, these flags are sometimes used
 The additional flags are:
 .Pp
 .Bl -tag -offset indent -width NOCROSSMOUNT -compact
-.It Dv NOCROSSMOUNT
+.It NOCROSSMOUNT
 do not cross mount points
-.It Dv RDONLY
+.It RDONLY
 lookup with read-only semantics
-.It Dv HASBUF
+.It HASBUF
 caller has allocated pathname buffer
 .Em ni_cnd.cn_pnbuf
-.It Dv SAVENAME
+.It SAVENAME
 save pathname buffer
-.It Dv SAVESTART
+.It SAVESTART
 save starting directory
-.It Dv ISDOTDOT
+.It ISDOTDOT
 current pathname component is ..
-.It Dv MAKEENTRY
+.It MAKEENTRY
 add entry to the name cache
-.It Dv ISLASTCN
+.It ISLASTCN
 this is last component of pathname
-.It Dv ISSYMLINK
+.It ISSYMLINK
 symlink needs interpretation
-.It Dv ISWHITEOUT
+.It ISWHITEOUT
 found whiteout
-.It Dv DOWHITEOUT
+.It DOWHITEOUT
 do whiteouts
-.It Dv REQUIREDIR
+.It REQUIREDIR
 must be a directory
-.It Dv CREATEDIR
+.It CREATEDIR
 trailing slashes are ok
-.It Dv PARAMASK
+.It PARAMASK
 mask of parameter descriptors
 .El
 .Pp
@@ -200,13 +186,9 @@ sets the flag, then the buffer must be freed by either the commit
 routine or the
 .Fn VOP_ABORT
 routine.
-The
-.Dv SAVESTART
-flag is set only by the callers of
+The SAVESTART flag is set only by the callers of
 .Fn namei .
-It implies
-.Dv SAVENAME
-plus the addition of saving the parent directory
+It implies SAVENAME plus the addition of saving the parent directory
 that contains the name in
 .Em ni_startdir .
 It allows repeated calls to
@@ -225,91 +207,53 @@ Pathname lookups cannot be done in interrupt context.
 .Bl -tag -width compact
 .It Fn namei "ndp"
 Convert a pathname into a pointer to a vnode.
-The nameidata structure pointed to by
-.Fa ndp
-should be initialized with the
-.Fn NDINIT
-macro.
-Direct initialization of members of struct nameidata is
-.Em not
-supported and may break silently in the future.
+The pathname is specified by
+.Em ndp-\*[Gt]ni_dirp
+and is of length
+.Em ndp-\*[Gt]ni_pathlen .
+The
+.Em ndp-\*[Gt]segflg
+flags defines whether the name in
+.Em ndp-\*[Gt]ni_dirp
+is an address in kernel space (UIO_SYSSPACE) or an address in user
+space (UIO_USERSPACE).
 .Pp
 The vnode for the pathname is returned in
 .Em ndp-\*[Gt]ni_vp .
 The parent directory is returned locked in
 .Em ndp-\*[Gt]ni_dvp
-iff
-.Dv LOCKPARENT
-is specified.
+iff LOCKPARENT is specified.
 .Pp
 If
 .Em ndp-\*[Gt]ni_cnd.cn_flags
-has the
-.Dv FOLLOW
-flag set then symbolic links are followed when they
+has the FOLLOW flag set then symbolic links are followed when they
 occur at the end of the name translation process.
 Symbolic links are always followed for all other pathname components
 other than the last.
+.It Fn lookup "ndp"
+Search for a pathname.
+This is a very central and rather complicated routine.
 .Pp
-Historically
-.Nm
-had a sub-function called
-.Fn lookup .
-This function processed a pathname until either running out of
-material or encountering a symbolic link.
-.Nm
-worked by first setting up the start directory
-.Em ndp-\*[Gt]ni_startdir
-and then calling
-.Fn lookup
-repeatedly.
+The pathname is specified by
+.Em ndp-\*[Gt]ni_dirp
+and is of length
+.Em ndp-\*[Gt]ni_pathlen .
+The starting directory is taken from
+.Em ndp-\*[Gt]ni_startdir .
+The pathname is descended until done, or a symbolic link is
+encountered.
 .Pp
 The semantics of
-.Nm
+.Fn lookup
 are altered by the operation specified by
 .Em ndp-\*[Gt]ni_cnd.cn_nameiop .
-When
-.Dv CREATE ,
-.Dv RENAME ,
-or
-.Dv DELETE
-is specified, information usable in
+When CREATE, RENAME, or DELETE is specified, information usable in
 creating, renaming, or deleting a directory entry may be calculated.
 .Pp
 If the target of the pathname exists and LOCKLEAF is set, the target
 is returned locked in
 .Em ndp-\*[Gt]ni_vp ,
 otherwise it is returned unlocked.
-.Pp
-As of this writing the internal function
-.Fn do_lookup
-is comparable to the historic
-.Fn lookup
-but this code is slated for refactoring.
-.It Fn lookup_for_nfsd "ndp" "startdir" "neverfollow"
-This is a private entry point into
-.Nm
-used by the NFS server code.
-It looks up a path starting from
-.Fa startdir .
-If
-.Fa neverfollow
-is set,
-.Em any
-symbolic link (not just at the end of the path) will cause an error.
-Otherwise, it follows symlinks normally.
-Its semantics are similar to a symlink-following loop around the historic
-.Fn lookup
-function described above.
-It should not be used by new code.
-.It Fn lookup_for_nfsd_index "ndp"
-This is a (second) private entry point into
-.Nm
-used by the NFS server code.
-Its semantics are similar to the historic
-.Fn lookup
-function described above.
-It should not be used by new code.
 .It Fn relookup "dvp" "vpp" "cnp"
 Reacquire a path name component is a directory.
 This is a quicker way to lookup a pathname component when the parent
@@ -320,25 +264,32 @@ and the pathname component by
 .Fa cnp .
 The vnode of the pathname is returned in the address specified by
 .Fa vpp .
-.It Fn NDINIT "ndp" "op" "flags" "pathbuf"
+.It Fn NDINIT "ndp" "op" "flags" "segflg" "namep"
 Initialise a nameidata structure pointed to by
 .Fa ndp
 for use by the
 .Nm
 interface.
+It saves having to deal with the componentname structure inside
+.Fa ndp .
 The operation and flags are specified by
 .Fa op
 and
 .Fa flags
 respectively.
-The pathname is passed as a pathbuf structure, which should be
-initialized using one of the
-.Xr pathbuf 9
-operations.
-Destroying the pathbuf is the responsibility of the caller; this must
-not be done until the caller is finished with all of the
-.Nm
-results and all of the nameidata contents except for the result vnode.
+These are the values to which
+.Em ndp-\*[Gt]ni_cnd.cn_nameiop
+and
+.Em ndp-\*[Gt]ni_cnd.cn_flags
+are respectively set.
+The segment flags which defines whether the pathname is in kernel
+address space or user address space is specified by
+.Fa segflag .
+The argument
+.Fa namep
+is a pointer to the pathname that
+.Em ndp-\*[Gt]ni_dirp
+is set to.
 .Pp
 This routine stores the credentials of the calling thread
 .Va ( curlwp )
@@ -348,93 +299,15 @@ In the rare case that another set of credentials is required for the
 namei operation,
 .Em ndp-\*[Gt]ni_cnd.cn_cred
 must be set manually.
-.Pp
-The following fields of
-.Fa ndp
-are set:
-.Bl -tag -width compact
-.It Fa ni_cnd.cn_nameiop
-is set to
-.Fa op .
-.It Fa ni_cnd.cn_flags
-is set to
-.Fa flags .
-.It Fa ni_startdir
-is set to
-.Dv NULL .
-.It Fa ni_pathbuf
-is set to
-.Fa pathbuf .
-.It Fa ni_cnd.cn_cred
-is set using
-.Xr kauth_cred_get 9 .
-.El
-Other fields of struct nameidata are not
-.Pq normally
-initialized before
-.Nm
-is called.
-Direct assignment of these or other fields other than by using
-.Fn NDINIT
-or
-.Fn NDAT ,
-except as specifically described above, is not supported and may break
-silently in the future.
-.It Fn NDAT "ndp" "dvp"
-This macro is used after
-.Fn NDINIT
-to set the starting directory.
-This supersedes the current process's current working directory as the
-initial point of departure for looking up relative paths.
-This mechanism is used by
-.Xr openat 3
-and related calls.
-.It Fn namei_simple_kernel "path" "sflags" "ret"
-Look up the path
-.Fa path
-and translate it to a vnode, returned in
-.Fa ret .
-The
-.Fa path
-argument must be a kernel
-.Pq Dv UIO_SYSSPACE
-pointer.
-The
-.Fa sflags
-argument chooses the precise behavior.
-It may be set to one of the following symbols:
-.Bl -tag -offset indent -width NSM_NOFOLLOW_TRYEMULROOT -compact
-.It Dv NSM_NOFOLLOW_NOEMULROOT
-.It Dv NSM_NOFOLLOW_TRYEMULROOT
-.It Dv NSM_FOLLOW_NOEMULROOT
-.It Dv NSM_FOLLOW_TRYEMULROOT
-.El
-These select (or not) the
-.Dv FOLLOW/NOFOLLOW
-and
-.Dv TRYEMULROOT
-flags.
-Other flags are not available through this interface, which is
-nonetheless sufficient for more than half the
-.Fn namei
-usage in the kernel.
-Note that the encoding of
-.Fa sflags
-has deliberately been arranged to be type-incompatible with anything
-else.
-This prevents various possible accidents while the
-.Fn namei
-interface is being rototilled.
-.It Fn namei_simple_user "path" "sflags" "ret"
-This function is the same as
-.Fn namei_simple_kernel
-except that the
-.Fa path
-argument shall be a user pointer
-.Pq Dv UIO_USERSPACE
-rather than a kernel pointer.
 .El
 .Sh CODE REFERENCES
+This section describes places within the
+.Nx
+source tree where actual code implementing or using the name
+lookup subsystem can be found.
+All pathnames are relative to
+.Pa /usr/src .
+.Pp
 The name lookup subsystem is implemented within the file
 .Pa sys/kern/vfs_lookup.c .
 .Sh SEE ALSO

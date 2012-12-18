@@ -1,7 +1,7 @@
-#	$NetBSD: airport,v 1.41 2012/11/02 12:07:58 mbalmer Exp $
+#	$NetBSD: airport,v 1.30.26.1 2009/01/16 23:03:27 bouyer Exp $
 #	@(#)airport	8.1 (Berkeley) 6/8/93
 #
-# Some of this information is from http://www.mapping.com/airportcodes.html.
+# Some of this information from http://www.mapping.com/airportcodes.html.
 #
 # Airport Code : Airport
 AAA:Anaa, French Polynesia
@@ -942,7 +942,7 @@ BSH:Brighton, England
 BSI:Blairsville (Jim Shearer South Airport), PA, USA
 BSJ:Bairnsdale, Victoria, Australia
 BSK:Biskra, Algeria
-BSL:EuroAirport Basel-Mulhouse-Freiburg, Switzerland
+BSL:Basel Europort, Switzerland
 BSM:Bergstrom Air Rescue Service, TX, USA
 BSN:Bossangoa, Central African Republic
 BSO:Basco, Philippines
@@ -1945,7 +1945,7 @@ EAG:Eagle Grove Municipal Airport, IA, USA
 EAH:El Arish, Egypt
 EAM:Nejran, Saudi Arabia
 EAN:Wheatland (Phifer Airfield), WY, USA
-EAP:EuroAirport Basel-Mulhouse-Freiburg, Switzerland/France
+EAP:Basel/Mulhouse (EuroAirport), CH/[80]FR
 EAR:Kearney Municipal Airport, NE, USA
 EAS:San Sebastian, Spain
 EAT:Wenatchee (Pangborn Memorial), WA, USA
@@ -2238,7 +2238,7 @@ FDA:Fundacion, Colombia
 FDB:Principe da Beira, RO, Brazil
 FDE:Foerde (Bringeland), Norway
 FDF:Fort De France, MQ
-FDH:Bodensee-Airport Friedrichshafen, Germany
+FDH:Friedrichshafen (Lowenthal), Germany
 FDK:Frederick Municipal Airport, MD, USA
 FDP:Fariopur, Bangladesh
 FDR:Frederick Municipal Airport, OK, USA
@@ -4239,7 +4239,7 @@ LIO:Limon, Costa Rica
 LIP:Lins, SP, Brazil
 LIQ:Lisala, Zaire
 LIR:Liberia (Tomas Guardia), Costa Rica
-LIS:Portela, Lisbon, Portugal
+LIS:Aeroporto da Portela de Sacavem, Lisboa, Portugal
 LIT:Little Rock Regional, Arkansas, USA
 LIV:Livingood, AK, USA
 LIW:Loikaw, Myanmar
@@ -4795,7 +4795,7 @@ MLD:Malad City Airport, ID, USA
 MLE:Male, Hulule, Maldives
 MLF:Milford Municipal Airport, UT, USA
 MLG:Malang, Indonesia
-MLH:EuroAirport Basel-Mulhouse-Freiburg, France
+MLH:Basel/Mulhouse EuroAirport, France
 MLI:Moline Quad City, Alabama, USA
 MLJ:Milledgeville (Baldwin County Airport), GA, USA
 MLK:Malta Airport, MT, USA
@@ -4811,7 +4811,7 @@ MLT:Millinocket Municipal Airport, ME, USA
 MLU:Monroe Regional Airport, LA, USA
 MLV:Merluna, Queensland, Australia
 MLW:Monrovia (Spriggs Payne), Liberia
-MLX:Malatya, Turkey
+MLX:Malatva, Turkey
 MLY:Manley Hot Springs Airport, AK, USA
 MLZ:Melo, Uruguay
 MMA:Malmo, Sweden
@@ -6125,7 +6125,7 @@ PRC:Prescott (Ernest Love Field), AZ, USA
 PRD:Pardoo, Western Australia, Australia
 PRE:Pore, Colombia
 PRF:Port Johnson, AK, USA
-PRG:Prague [Ruzyne] (Vaclav Havel airport Prague), Czech Republic
+PRG:Prague [Ruzyne], Czech Republic
 PRH:Phrae, Thailand
 PRI:Praslin Island, Seychelles
 PRJ:Capri, Italy
@@ -6442,7 +6442,7 @@ QSN:San Nicolas de Bari, Cuba
 QSO:Sousse, Tunisia
 QSP:Sancti Spiritu, Cuba
 QSR:Salerno, Italy
-QSS:Alghero/Sassari, Sardinia, Italy
+QSS:Alhegro/Sassari, Sardinia, Italy
 QSZ:Shizuoka City, Japan
 QTA:Atibaia, SP, Brazil
 QTD:Timbauba, PE, Brazil
@@ -6872,7 +6872,7 @@ SCK:Stockton Metropolitan Airport, CA, USA
 SCL:Santiago, Chile
 SCM:Scammon Bay Airport, AK, USA
 SCN:Saarbrucken (Ensheim), Germany
-SCO:Aktau (Shevchenko), Mangystau, Kazakhstan
+SCO:Aqtan (Shevchenko), Mangghystan, Kazakhstan
 SCP:St.-Crepin, France
 SCQ:Santiago de Compostela (Santiago), Spain
 SCR:Scranton Municipal Airport, PA, USA
@@ -8906,7 +8906,7 @@ YOL:Yola, Nigeria
 YOO:Oshawa, ON, Canada
 YOP:Rainbow Lake, AB, Canada
 YOS:Owen Sound, ON, Canada
-YOW:Ottawa Macdonald-Cartier International Airport, Canada
+YOW:McDonald-Cartier International, Ottawa
 YOX:Rea Point, NT, Canada
 YPA:Prince Albert, SK, Canada
 YPB:Port Alberni, BC, Canada

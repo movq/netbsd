@@ -1,4 +1,4 @@
-/*	$NetBSD: aucc.c,v 1.42 2012/10/27 17:17:27 chs Exp $ */
+/*	$NetBSD: aucc.c,v 1.40 2006/03/08 23:46:22 lukem Exp $ */
 
 /*
  * Copyright (c) 1999 Bernardo Innocenti
@@ -53,7 +53,7 @@
 #if NAUCC > 0
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aucc.c,v 1.42 2012/10/27 17:17:27 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aucc.c,v 1.40 2006/03/08 23:46:22 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,6 +91,12 @@ int     auccdebug = 1;
 #define DPRINTF(x)
 #endif
 
+#ifdef splaudio
+#undef splaudio
+#endif
+
+#define splaudio() spl4();
+
 /* clock frequency.. */
 extern int eclockfreq;
 
@@ -103,6 +109,8 @@ extern struct audio_channel channel[4];
  * Software state.
  */
 struct aucc_softc {
+	struct	device sc_dev;		/* base device */
+
 	int	sc_open;		/* single use device */
 	aucc_data_t sc_channel[4];	/* per channel freq, ... */
 	u_int	sc_encoding;		/* encoding AUDIO_ENCODING_.*/
@@ -114,9 +122,6 @@ struct aucc_softc {
 	int	sc_channelmask;		/* which channels are used ? */
 	void (*sc_decodefunc)(u_char **, u_char *, int);
 				/* pointer to format conversion routine */
-
-	kmutex_t sc_lock;
-	kmutex_t sc_intr_lock;
 };
 
 /* interrupt interfaces */
@@ -128,10 +133,10 @@ static u_int freqtoper(u_int);
 static u_int pertofreq(u_int);
 
 /* autoconfiguration driver */
-void	auccattach(device_t, device_t, void *);
-int	auccmatch(device_t, cfdata_t, void *);
+void	auccattach(struct device *, struct device *, void *);
+int	auccmatch(struct device *, struct cfdata *, void *);
 
-CFATTACH_DECL_NEW(aucc, sizeof(struct aucc_softc),
+CFATTACH_DECL(aucc, sizeof(struct aucc_softc),
     auccmatch, auccattach, NULL, NULL);
 
 struct audio_device aucc_device = {
@@ -200,7 +205,6 @@ void	aucc_encode(int, int, int, int, u_char *, u_short **);
 int	aucc_set_params(void *, int, int, audio_params_t *, audio_params_t *,
 			stream_filter_list_t *, stream_filter_list_t *);
 int	aucc_get_props(void *);
-void	aucc_get_locks(void *, kmutex_t **, kmutex_t **);
 
 
 static void aucc_decode_slinear8_1ch(u_char **, u_char *, int);
@@ -258,13 +262,12 @@ const struct audio_hw_if sa_hw_if = {
 	NULL,
 	NULL,
 	NULL,
-	aucc_get_locks,
 };
 
 /* autoconfig routines */
 
 int
-auccmatch(device_t parent, cfdata_t cf, void *aux)
+auccmatch(struct device *pdp, struct cfdata *cfp, void *aux)
 {
 	static int aucc_matched = 0;
 
@@ -283,12 +286,12 @@ auccmatch(device_t parent, cfdata_t cf, void *aux)
  * Audio chip found.
  */
 void
-auccattach(device_t parent, device_t self, void *args)
+auccattach(struct device *parent, struct device *self, void *args)
 {
 	struct aucc_softc *sc;
 	int i;
 
-	sc = device_private(self);
+	sc = (struct aucc_softc *)self;
 	printf("\n");
 
 	if ((i=init_aucc(sc))) {
@@ -296,7 +299,7 @@ auccattach(device_t parent, device_t self, void *args)
 		return;
 	}
 
-	audio_attach_mi(&sa_hw_if, sc, self);
+	audio_attach_mi(&sa_hw_if, sc, &sc->sc_dev);
 }
 
 
@@ -339,9 +342,6 @@ init_aucc(struct aucc_softc *sc)
 	/* clear interrupts and DMA: */
 	custom.intena = AUCC_ALLINTF;
 	custom.dmacon = AUCC_ALLDMAF;
-
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
 
 	return err;
 }
@@ -907,16 +907,6 @@ aucc_get_props(void *addr)
 	return 0;
 }
 
-
-void
-aucc_get_locks(void *opaque, kmutex_t **intr, kmutex_t **thread)
-{
-	struct aucc_softc *sc = opaque;
-
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
-}
-
 int
 aucc_query_devinfo(void *addr, register mixer_devinfo_t *dip)
 {
@@ -968,7 +958,6 @@ aucc_inthdl(int ch)
 	int i;
 	int mask;
 
-	mutex_spin_enter(&aucc->sc_intr_lock);
 	mask = aucc->sc_channel[ch].nd_mask;
 	/*
 	 * for all channels in this maskgroup:
@@ -1002,7 +991,6 @@ aucc_inthdl(int ch)
 		    (aucc->sc_channel[ch].nd_intrdata);
 	} else
 		DPRINTF(("zero int handler\n"));
-	mutex_spin_exit(&aucc->sc_intr_lock);
 	DPRINTF(("ints done\n"));
 }
 

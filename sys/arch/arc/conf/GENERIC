@@ -1,7 +1,7 @@
-# $NetBSD: GENERIC,v 1.172 2012/10/17 14:48:09 apb Exp $
+# $NetBSD: GENERIC,v 1.157.4.1 2008/11/23 20:58:38 riz Exp $
 #
 # GENERIC machine description file
-#
+# 
 # This machine description file is used to generate the default NetBSD
 # kernel.  The generic kernel does not include all options, subsystems
 # and device drivers, but should be useful for most applications.
@@ -22,7 +22,7 @@ include		"arch/arc/conf/std.arc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.172 $"
+#ident		"GENERIC-$Revision: 1.157.4.1 $"
 
 maxusers	32		# estimated number of users
 
@@ -52,12 +52,15 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
+
+options 	LKM		# loadable kernel modules
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
-# Enable experimental buffer queue strategy for better responsiveness under
+# Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
 #options 	BUFQ_READPRIO
 #options 	BUFQ_PRIOCSCAN
@@ -85,8 +88,6 @@ options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0,
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
@@ -108,7 +109,7 @@ file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay file system
-file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
+file-system 	PORTAL		# portal filesystem (still experimental)
 file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
@@ -118,10 +119,10 @@ file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-options 	QUOTA		# legacy UFS quotas
-options 	QUOTA2		# new, in-filesystem UFS quotas
+options 	QUOTA		# FFS quotas
 #options 	FFS_EI		# FFS Endian Independent support
-options 	WAPBL		# File system journaling support
+options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
@@ -147,7 +148,6 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
-options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -174,7 +174,6 @@ options 	SCSIVERBOSE	# human readable SCSI error messages
 
 # wscons terminal emulation
 options 	WSEMUL_VT100	# VT100 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 # Kernel root file system and dump configuration.
 options 	NFS_BOOT_DHCP,NFS_BOOT_BOOTPARAM
@@ -457,11 +456,10 @@ pseudo-device	raid		8	# RAIDframe disk driver
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss			# file system snapshot device
-pseudo-device	md			# memory disk device (ramdisk)
+pseudo-device	fss		4	# file system snapshot device
+pseudo-device	md		1	# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	putter			# for puffs and pud
 
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
@@ -492,6 +490,7 @@ pseudo-device   accf_http		# "httpready" accept filter
 pseudo-device	pty			# pseudo-terminals
 #pseudo-device	sequencer	1	# MIDI sequencer
 # rnd works; RND_COM does not on port arc yet.
+pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	clockctl		# user control of clock subsystem
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: rtadvd.h,v 1.12 2012/12/13 15:36:36 roy Exp $	*/
+/*	$NetBSD: rtadvd.h,v 1.10 2006/03/05 23:47:08 rpaulo Exp $	*/
 /*	$KAME: rtadvd.h,v 1.30 2005/10/17 14:40:02 suz Exp $	*/
 
 /*
@@ -33,14 +33,8 @@
 #define ALLNODES "ff02::1"
 #define ALLROUTERS_LINK "ff02::2"
 #define ALLROUTERS_SITE "ff05::2"
-
-#define IN6ADDR_SITELOCAL_ALLROUTERS_INIT \
-	{{{ 0xff, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, \
- 	    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02 }}}
-
-//extern struct sockaddr_in6 sin6_linklocal_allnodes;
-//extern struct sockaddr_in6 sin6_linklocal_allrouters;
-extern struct sockaddr_in6 sin6_sitelocal_allrouters;
+#define ANY "::"
+#define RTSOLLEN 8
 
 /* protocol constants and default values */
 #define DEF_MAXRTRADVINTERVAL 600
@@ -68,7 +62,8 @@ extern struct sockaddr_in6 sin6_sitelocal_allrouters;
 #define PREFIX_FROM_DYNAMIC 3
 
 struct prefix {
-	TAILQ_ENTRY(prefix) next;
+	struct prefix *next;	/* forward link */
+	struct prefix *prev;	/* previous link */
 
 	struct rainfo *rainfo;	/* back pointer to the interface */
 
@@ -76,119 +71,91 @@ struct prefix {
 				     * derived from the kernel is deleted.
 				     */
 
-	uint32_t validlifetime; /* AdvValidLifetime */
+	u_int32_t validlifetime; /* AdvValidLifetime */
 	long	vltimeexpire;	/* expiration of vltime; decrement case only */
-	uint32_t preflifetime;	/* AdvPreferredLifetime */
+	u_int32_t preflifetime;	/* AdvPreferredLifetime */
 	long	pltimeexpire;	/* expiration of pltime; decrement case only */
-	uint16_t onlinkflg;	/* bool: AdvOnLinkFlag */
-	uint16_t autoconfflg;	/* bool: AdvAutonomousFlag */
+	u_int onlinkflg;	/* bool: AdvOnLinkFlag */
+	u_int autoconfflg;	/* bool: AdvAutonomousFlag */
 	int prefixlen;
 	int origin;		/* from kernel or config */
 	struct in6_addr prefix;
 };
 
+#ifdef ROUTEINFO
 struct rtinfo {
-	TAILQ_ENTRY(rtinfo) next;
+	struct rtinfo *prev;	/* previous link */
+	struct rtinfo *next;	/* forward link */
 
-	uint32_t ltime;	/* route lifetime */
-	uint16_t rtpref;		/* route preference */
+	u_int32_t ltime;	/* route lifetime */
+	u_int rtpref;		/* route preference */
 	int prefixlen;
 	struct in6_addr prefix;
 };
-
-struct rdnss_addr {
-	TAILQ_ENTRY(rdnss_addr) next;
-
-	struct in6_addr addr;
-};
-
-struct rdnss {
-	TAILQ_ENTRY(rdnss) next;
-
-	TAILQ_HEAD(, rdnss_addr) list;
-	uint32_t lifetime;
-};
-
-struct dnssl_domain {
-	TAILQ_ENTRY(dnssl_domain) next;
-
-	int len;
-	char domain[256];
-};
-
-struct dnssl {
-	TAILQ_ENTRY(dnssl) next;
-
-	TAILQ_HEAD(, dnssl_domain) list;
-	uint32_t lifetime;
-};
+#endif
 
 struct soliciter {
-	TAILQ_ENTRY(soliciter) next;
-
+	struct soliciter *next;
 	struct sockaddr_in6 addr;
 };
 
 struct	rainfo {
-	TAILQ_ENTRY(rainfo) next;
+	/* pointer for list */
+	struct	rainfo *next;
 
 	/* timer related parameters */
 	struct rtadvd_timer *timer;
 	int initcounter; /* counter for the first few advertisements */
 	struct timeval lastsent; /* timestamp when the latest RA was sent */
 	int waiting;		/* number of RS waiting for RA */
-	struct rainfo *leaving;		/* the config which is leaving */
-	struct rainfo *leaving_for;	/* the new config to activate */
-	int leaving_adv;		/* number of RA left to send */
 
 	/* interface information */
-	uint16_t	ifindex;
-	int		ifflags;
+	int	ifindex;
 	int	advlinkopt;	/* bool: whether include link-layer addr opt */
 	struct sockaddr_dl *sdl;
 	char	ifname[16];
-	uint32_t	phymtu;		/* mtu of the physical interface */
+	int	phymtu;		/* mtu of the physical interface */
 
 	/* Router configuration variables */
-	uint16_t	lifetime;	/* AdvDefaultLifetime */
-	uint16_t	maxinterval;	/* MaxRtrAdvInterval */
-	uint16_t	mininterval;	/* MinRtrAdvInterval */
+	u_short lifetime;	/* AdvDefaultLifetime */
+	u_int	maxinterval;	/* MaxRtrAdvInterval */
+	u_int	mininterval;	/* MinRtrAdvInterval */
 	int 	managedflg;	/* AdvManagedFlag */
 	int	otherflg;	/* AdvOtherConfigFlag */
 
 	int	rtpref;		/* router preference */
-	uint32_t linkmtu;	/* AdvLinkMTU */
-	uint32_t reachabletime; /* AdvReachableTime */
-	uint32_t retranstimer;	/* AdvRetransTimer */
-	uint16_t	hoplimit;	/* AdvCurHopLimit */
-	TAILQ_HEAD(, prefix) prefix;	/* AdvPrefixList(link head) */
-	int	pfxs;
-	uint16_t	clockskew;/* used for consisitency check of lifetimes */
+	u_int32_t linkmtu;	/* AdvLinkMTU */
+	u_int32_t reachabletime; /* AdvReachableTime */
+	u_int32_t retranstimer;	/* AdvRetransTimer */
+	u_int	hoplimit;	/* AdvCurHopLimit */
+	struct prefix prefix;	/* AdvPrefixList(link head) */
+	int	pfxs;		/* number of prefixes */
+	long	clockskew;	/* used for consisitency check of lifetimes */
 
-	TAILQ_HEAD(, rtinfo) route;
-	TAILQ_HEAD(, rdnss) rdnss;	/* RDNSS list */
-	TAILQ_HEAD(, dnssl) dnssl;	/* DNS Search List */
+#ifdef ROUTEINFO
+	struct rtinfo route;	/* route information option (link head) */
+	int	routes;		/* number of route information options */
+#endif
 
 	/* actual RA packet data and its length */
 	size_t ra_datalen;
-	char *ra_data;
+	u_char *ra_data;
 
 	/* statistics */
-	uint64_t raoutput;	/* number of RAs sent */
-	uint64_t rainput;	/* number of RAs received */
-	uint64_t rainconsistent; /* number of RAs inconsistent with ours */
-	uint64_t rsinput;	/* number of RSs received */
+	u_quad_t raoutput;	/* number of RAs sent */
+	u_quad_t rainput;	/* number of RAs received */
+	u_quad_t rainconsistent; /* number of RAs inconsistent with ours */
+	u_quad_t rsinput;	/* number of RSs received */
 
 	/* info about soliciter */
-	TAILQ_HEAD(, soliciter) soliciter;	/* recent solication source */
+	struct soliciter *soliciter;	/* recent solication source */
 };
 
-extern TAILQ_HEAD(ralist_head_t, rainfo) ralist;
+struct rtadvd_timer *ra_timeout __P((void *));
+void ra_timer_update __P((void *, struct timeval *));
 
-struct rtadvd_timer *ra_timeout(void *);
-void ra_timer_update(void *, struct timeval *);
-void ra_timer_set_short_delay(struct rainfo *);
+int prefix_match __P((struct in6_addr *, int, struct in6_addr *, int));
+struct rainfo *if_indextorainfo __P((int));
+struct prefix *find_prefix __P((struct rainfo *, struct in6_addr *, int));
 
-int prefix_match(struct in6_addr *, int, struct in6_addr *, int);
-struct rainfo *if_indextorainfo(unsigned int);
-struct prefix *find_prefix(struct rainfo *, struct in6_addr *, int);
+extern struct in6_addr in6a_site_allrouters;

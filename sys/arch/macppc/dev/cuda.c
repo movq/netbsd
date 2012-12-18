@@ -1,4 +1,4 @@
-/*	$NetBSD: cuda.c,v 1.17 2011/07/01 18:41:52 dyoung Exp $ */
+/*	$NetBSD: cuda.c,v 1.8.8.1 2008/12/13 21:38:46 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2006 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cuda.c,v 1.17 2011/07/01 18:41:52 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cuda.c,v 1.8.8.1 2008/12/13 21:38:46 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -36,7 +36,7 @@ __KERNEL_RCSID(0, "$NetBSD: cuda.c,v 1.17 2011/07/01 18:41:52 dyoung Exp $");
 #include <sys/proc.h>
 #include <sys/mutex.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/autoconf.h>
 #include <machine/pio.h>
 #include <dev/clock_subr.h>
@@ -132,8 +132,8 @@ static int cuda_set_handler(void *, int, int (*)(void *, int, uint8_t *), void *
 static int cuda_error_handler(void *, int, uint8_t *);
 
 static int cuda_todr_handler(void *, int, uint8_t *);
-static int cuda_todr_set(todr_chip_handle_t, struct timeval *);
-static int cuda_todr_get(todr_chip_handle_t, struct timeval *);
+static int cuda_todr_set(todr_chip_handle_t, volatile struct timeval *);
+static int cuda_todr_get(todr_chip_handle_t, volatile struct timeval *);
 
 static int cuda_adb_handler(void *, int, uint8_t *);
 static void cuda_final(device_t);
@@ -169,22 +169,22 @@ cuda_match(device_t parent, struct cfdata *cf, void *aux)
 }
 
 static void
-cuda_attach(device_t parent, device_t self, void *aux)
+cuda_attach(device_t parent, device_t dev, void *aux)
 {
 	struct confargs *ca = aux;
-	struct cuda_softc *sc = device_private(self);
+	struct cuda_softc *sc = device_private(dev);
 	struct i2cbus_attach_args iba;
 	static struct cuda_attach_args caa;
 	int irq = ca->ca_intr[0];
 	int node, i, child;
 	char name[32];
 
-	sc->sc_dev = self;
+	sc->sc_dev = dev;
 	node = of_getnode_byname(OF_parent(ca->ca_node), "extint-gpio1");
 	if (node)
 		OF_getprop(node, "interrupts", &irq, 4);
 
-	aprint_normal(" irq %d", irq);
+	printf(" irq %d", irq);
 
 	sc->sc_node = ca->ca_node;
 	sc->sc_memt = ca->ca_tag;
@@ -200,7 +200,7 @@ cuda_attach(device_t parent, device_t self, void *aux)
 	if (bus_space_map(sc->sc_memt, ca->ca_reg[0] + ca->ca_baseaddr,
 	    ca->ca_reg[1], 0, &sc->sc_memh) != 0) {
 
-		aprint_normal(": unable to map registers\n");
+		printf(": unable to map registers\n");
 		return;
 	}
 	sc->sc_ih = intr_establish(irq, IST_EDGE, IPL_TTY, cuda_intr, sc);
@@ -214,7 +214,7 @@ cuda_attach(device_t parent, device_t self, void *aux)
 	cuda_init(sc);
 
 	/* now attach children */
-	config_interrupts(self, cuda_final);
+	config_interrupts(dev, cuda_final);
 	cuda_set_handler(sc, CUDA_ERROR, cuda_error_handler, sc);
 	cuda_set_handler(sc, CUDA_PSEUDO, cuda_todr_handler, sc);
 
@@ -231,7 +231,7 @@ cuda_attach(device_t parent, device_t self, void *aux)
 			sc->sc_adbops.poll = cuda_adb_poll;
 			sc->sc_adbops.autopoll = cuda_autopoll;
 			sc->sc_adbops.set_handler = cuda_adb_set_handler;
-			config_found_ia(self, "adb_bus", &sc->sc_adbops,
+			config_found_ia(dev, "adb_bus", &sc->sc_adbops,
 			    nadb_print);
 		} else if (strncmp(name, "rtc", 4) == 0) {
 
@@ -248,7 +248,7 @@ cuda_attach(device_t parent, device_t self, void *aux)
 	caa.send = cuda_send;
 	caa.poll = cuda_poll;
 #if notyet
-	config_found(self, &caa, cuda_print);
+	config_found(dev, &caa, cuda_print);
 #endif
 	mutex_init(&sc->sc_buslock, MUTEX_DEFAULT, IPL_NONE);
 	iba.iba_tag = &sc->sc_i2c;
@@ -261,7 +261,7 @@ cuda_attach(device_t parent, device_t self, void *aux)
 	sc->sc_i2c.ic_read_byte = NULL;
 	sc->sc_i2c.ic_write_byte = NULL;
 	sc->sc_i2c.ic_exec = cuda_i2c_exec;
-	config_found_ia(self, "i2cbus", &iba, iicbus_print);
+	config_found_ia(sc->sc_dev, "i2cbus", &iba, iicbus_print);
 
 	if (cuda0 == NULL)
 		cuda0 = &caa;
@@ -749,7 +749,7 @@ cuda_todr_handler(void *cookie, int len, uint8_t *data)
 #define DIFF19041970 2082844800
 
 static int
-cuda_todr_get(todr_chip_handle_t tch, struct timeval *tvp)
+cuda_todr_get(todr_chip_handle_t tch, volatile struct timeval *tvp)
 {
 	struct cuda_softc *sc = tch->cookie;
 	int cnt = 0;
@@ -767,13 +767,13 @@ cuda_todr_get(todr_chip_handle_t tch, struct timeval *tvp)
 		return EIO;
 
 	tvp->tv_sec = sc->sc_tod - DIFF19041970;
-	DPRINTF("tod: %" PRIo64 "\n", tvp->tv_sec);
+	DPRINTF("tod: %ld\n", tvp->tv_sec);
 	tvp->tv_usec = 0;
 	return 0;
 }
 
 static int
-cuda_todr_set(todr_chip_handle_t tch, struct timeval *tvp)
+cuda_todr_set(todr_chip_handle_t tch, volatile struct timeval *tvp)
 {
 	struct cuda_softc *sc = tch->cookie;
 	uint32_t sec;
@@ -795,7 +795,7 @@ cuda_todr_set(todr_chip_handle_t tch, struct timeval *tvp)
 /* poweroff and reboot */
 
 void
-cuda_poweroff(void)
+cuda_poweroff()
 {
 	struct cuda_softc *sc;
 	uint8_t cmd[] = {CUDA_PSEUDO, CMD_POWEROFF};
@@ -810,7 +810,7 @@ cuda_poweroff(void)
 }
 
 void
-cuda_restart(void)
+cuda_restart()
 {
 	struct cuda_softc *sc;
 	uint8_t cmd[] = {CUDA_PSEUDO, CMD_RESET};
@@ -925,19 +925,7 @@ cuda_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr, const void *_send,
 	DPRINTF("cuda_i2c_exec(%02x)\n", addr);
 	command[2] = addr;
 
-	/* Copy command and output data bytes, if any, to buffer */
-	if (send_len > 0)
-		memcpy(&command[3], send, min((int)send_len, 12));
-	else if (I2C_OP_READ_P(op) && (recv_len == 0)) {
-		/*
-		 * If no data bytes in either direction, it's a "quick"
-		 * i2c operation.  We don't know how to do a quick_read
-		 * since that requires us to set the low bit of the
-		 * address byte after it has been left-shifted.
-		 */
-		sc->sc_error = 0;
-		return -1;
-	}
+	memcpy(&command[3], send, min((int)send_len, 12));
 
 	sc->sc_iic_done = 0;
 	cuda_send(sc, sc->sc_polling, send_len + 3, command);

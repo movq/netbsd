@@ -1,4 +1,4 @@
-/*	$NetBSD: viomb.c,v 1.1 2011/10/30 12:12:21 hannken Exp $	*/
+/*	$NetBSD: viomb.c,v 1.1.8.2 2012/01/25 21:18:15 riz Exp $	*/
 
 /*
  * Copyright (c) 2010 Minoura Makoto.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: viomb.c,v 1.1 2011/10/30 12:12:21 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: viomb.c,v 1.1.8.2 2012/01/25 21:18:15 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -37,7 +37,7 @@ __KERNEL_RCSID(0, "$NetBSD: viomb.c,v 1.1 2011/10/30 12:12:21 hannken Exp $");
 #include <sys/kthread.h>
 #include <sys/mutex.h>
 #include <sys/sysctl.h>
-#include <uvm/uvm_page.h>
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcireg.h>

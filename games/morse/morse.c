@@ -1,4 +1,4 @@
-/*	$NetBSD: morse.c,v 1.17 2012/06/19 05:46:08 dholland Exp $	*/
+/*	$NetBSD: morse.c,v 1.15 2008/07/20 01:03:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)morse.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: morse.c,v 1.17 2012/06/19 05:46:08 dholland Exp $");
+__RCSID("$NetBSD: morse.c,v 1.15 2008/07/20 01:03:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -91,7 +91,7 @@ static const char
 	"--..",
 };
 
-static const struct punc {
+const struct punc {
 	char c;
 	const char *morse;
 } other[] = {
@@ -111,15 +111,17 @@ static const struct punc {
 };
 
 int	main(int, char *[]);
-static void morse(int);
-static void decode(const char *);
-static void show(const char *);
+void	morse(int);
+void	decode(const char *);
+void	show(const char *);
 
 static int sflag;
 static int dflag;
 
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	int ch;
 	char *p;
@@ -199,7 +201,8 @@ main(int argc, char **argv)
 }
 
 void
-decode(const char *s)
+decode(s)
+	const char *s;
 {
 	int i;
 	
@@ -228,7 +231,8 @@ decode(const char *s)
 }
 
 void
-morse(int c)
+morse(c)
+	int c;
 {
 	int i;
 
@@ -251,7 +255,8 @@ morse(int c)
 }
 
 void
-show(const char *s)
+show(s)
+	const char *s;
 {
 	if (sflag)
 		printf(" %s", s);

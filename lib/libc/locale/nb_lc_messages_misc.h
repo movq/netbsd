@@ -1,4 +1,4 @@
-/* $NetBSD: nb_lc_messages_misc.h,v 1.3 2010/03/27 15:25:22 tnozaki Exp $ */
+/* $NetBSD: nb_lc_messages_misc.h,v 1.2.2.2 2009/01/15 03:24:08 snj Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -39,7 +39,6 @@ _PREFIX(build_cache)(struct _locale_cache_t * __restrict cache,
     _MessagesLocale * __restrict data)
 {
 	_DIAGASSERT(cache != NULL);
-	_DIAGASSERT(cache->items != NULL);
 	_DIAGASSERT(data != NULL);
 
 	cache->items[(size_t)YESSTR ] = data->yesstr;

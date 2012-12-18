@@ -1,4 +1,4 @@
-/*	$NetBSD: rlogind.c,v 1.42 2012/11/04 21:35:45 christos Exp $	*/
+/*	$NetBSD: rlogind.c,v 1.38 2008/07/20 01:09:07 lukem Exp $	*/
 
 /*
  * Copyright (C) 1998 WIDE Project.
@@ -69,7 +69,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)rlogind.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: rlogind.c,v 1.42 2012/11/04 21:35:45 christos Exp $");
+__RCSID("$NetBSD: rlogind.c,v 1.38 2008/07/20 01:09:07 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -104,9 +104,6 @@ __RCSID("$NetBSD: rlogind.c,v 1.42 2012/11/04 21:35:45 christos Exp $");
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef SUPPORT_UTMPX
-#include <utmpx.h>
-#endif
 #include <util.h>
 #include "pathnames.h"
 
@@ -116,38 +113,41 @@ __RCSID("$NetBSD: rlogind.c,v 1.42 2012/11/04 21:35:45 christos Exp $");
 
 #define		OPTIONS			"alnL"
 
-static char	*env[2];
+char	*env[2];
 #define	NMAX 30
-static char	lusername[NMAX+1], rusername[NMAX+1];
+char	lusername[NMAX+1], rusername[NMAX+1];
 static	char term[64] = "TERM=";
 #define	ENVSIZE	(sizeof("TERM=")-1)	/* skip null for concatenation */
-static int	keepalive = 1;
-static int	check_all = 0;
-static int	log_success = 0;
+int	keepalive = 1;
+int	check_all = 0;
+int	log_success = 0;
 
-static struct	passwd *pwd;
+struct	passwd *pwd;
 
-__dead static void	doit(int, struct sockaddr_storage *);
-static int	control(int, char *, int);
-static void	protocol(int, int);
-__dead static void	cleanup(int);
-__dead static void	fatal(int, const char *, int);
-static int	do_rlogin(struct sockaddr *, char *);
-static void	getstr(char *, int, const char *);
-static void	setup_term(int);
+void	doit __P((int, struct sockaddr_storage *));
+int	control __P((int, char *, int));
+void	protocol __P((int, int));
+void	cleanup __P((int));
+void	fatal __P((int, const char *, int));
+int	do_rlogin __P((struct sockaddr *, char *));
+void	getstr __P((char *, int, const char *));
+void	setup_term __P((int));
 #if 0
-static int	do_krb_login(union sockunion *);
+int	do_krb_login __P((union sockunion *));
 #endif
-__dead static void	usage(void);
-static int	local_domain(char *);
-static char	*topdomain(char *);
+void	usage __P((void));
+int	local_domain __P((char *));
+char	*topdomain __P((char *));
+int	main __P((int, char *[]));
 
 extern int __check_rhosts_file;
 extern char *__rcmd_errstr;	/* syslog hook from libc/net/rcmd.c */
 extern char **environ;
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	struct sockaddr_storage from;
 	int ch, on;
@@ -230,14 +230,18 @@ main(int argc, char *argv[])
 #endif
 }
 
-static int	netf;
-static char	line[MAXPATHLEN];
-static int	confirmed;
+int	child;
+int	netf;
+char	line[MAXPATHLEN];
+int	confirmed;
 
-static struct winsize win = { 0, 0, 0, 0 };
+struct winsize win = { 0, 0, 0, 0 };
 
-static void
-doit(int f, struct sockaddr_storage *fromp)
+
+void
+doit(f, fromp)
+	int f;
+	struct sockaddr_storage *fromp;
 {
 	int master, pid, on = 1;
 	int authenticated = 0;
@@ -368,7 +372,7 @@ doit(int f, struct sockaddr_storage *fromp)
 			    "Connection received using IP options (ignored):%s",
 			    lbuf);
 			if (setsockopt(0, ipproto, IP_OPTIONS,
-			    NULL, optsize) != 0) {
+			    (char *)NULL, optsize) != 0) {
 				syslog(LOG_ERR,
 				    "setsockopt IP_OPTIONS NULL: %m");
 				exit(1);
@@ -417,20 +421,23 @@ doit(int f, struct sockaddr_storage *fromp)
 	cleanup(0);
 }
 
-static char	magic[2] = { 0377, 0377 };
-static char	oobdata[] = {TIOCPKT_WINDOW};
+char	magic[2] = { 0377, 0377 };
+char	oobdata[] = {TIOCPKT_WINDOW};
 
 /*
  * Handle a "control" request (signaled by magic being present)
  * in the data stream.  For now, we are only willing to handle
  * window size changes.
  */
-static int
-control(int pty, char *cp, int n)
+int
+control(pty, cp, n)
+	int pty;
+	char *cp;
+	int n;
 {
 	struct winsize w;
 
-	if (n < (int)(4+sizeof (w)) || cp[2] != 's' || cp[3] != 's')
+	if (n < 4+sizeof (w) || cp[2] != 's' || cp[3] != 's')
 		return (0);
 	oobdata[0] &= ~TIOCPKT_WINDOW;	/* we know he heard */
 	memmove(&w, cp+4, sizeof(w));
@@ -445,8 +452,9 @@ control(int pty, char *cp, int n)
 /*
  * rlogin "protocol" machine.
  */
-static void
-protocol(int f, int p)
+void
+protocol(f, p)
+	int f, p;
 {
 	char pibuf[1024+1], fibuf[1024], *pbp = NULL, *fbp = NULL;
 					/* XXX gcc above */
@@ -563,8 +571,9 @@ protocol(int f, int p)
 	}
 }
 
-static void
-cleanup(int signo)
+void
+cleanup(signo)
+	int signo;
 {
 	char *p, c;
 
@@ -589,8 +598,11 @@ cleanup(int signo)
 	exit(1);
 }
 
-static void
-fatal(int f, const char *msg, int syserr)
+void
+fatal(f, msg, syserr)
+	int f;
+	const char *msg;
+	int syserr;
 {
 	int len;
 	char buf[BUFSIZ], *bp, *ep;
@@ -613,8 +625,10 @@ fatal(int f, const char *msg, int syserr)
 	exit(1);
 }
 
-static int
-do_rlogin(struct sockaddr *dest, char *host)
+int
+do_rlogin(dest, host)
+	struct sockaddr *dest;
+	char *host;
 {
 	int retval;
 
@@ -647,8 +661,11 @@ do_rlogin(struct sockaddr *dest, char *host)
 	return(retval);
 }
 
-static void
-getstr(char *buf, int cnt, const char *errmsg)
+void
+getstr(buf, cnt, errmsg)
+	char *buf;
+	int cnt;
+	const char *errmsg;
 {
 	char c;
 
@@ -662,8 +679,9 @@ getstr(char *buf, int cnt, const char *errmsg)
 }
 
 
-static void
-setup_term(int fd)
+void
+setup_term(fd)
+	int fd;
 {
 	char *cp = index(term+ENVSIZE, '/');
 	char *speed;
@@ -703,11 +721,10 @@ setup_term(int fd)
 }
 
 
-static void
-usage(void)
+void
+usage()
 {
 	syslog(LOG_ERR, "usage: rlogind [-alnL]");
-	exit(1);
 }
 
 /*
@@ -718,8 +735,9 @@ usage(void)
  * assume that the host is local, as it will be
  * interpreted as such.
  */
-static int
-local_domain(char *h)
+int
+local_domain(h)
+	char *h;
 {
 	char localhost[MAXHOSTNAMELEN + 1];
 	char *p1, *p2;
@@ -734,8 +752,9 @@ local_domain(char *h)
 	return (0);
 }
 
-static char *
-topdomain(char *h)
+char *
+topdomain(h)
+	char *h;
 {
 	char *p;
 	char *maybe = NULL;

@@ -1,7 +1,7 @@
-/*	$NetBSD: acpi_wakeup.c,v 1.32 2012/08/26 01:04:03 jakllsch Exp $	*/
+/*	$NetBSD: acpi_wakeup.c,v 1.10.4.2 2009/03/24 20:20:57 snj Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2011 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.32 2012/08/26 01:04:03 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.10.4.2 2009/03/24 20:20:57 snj Exp $");
 
 /*-
  * Copyright (c) 2001 Takanori Watanabe <takawata@jp.freebsd.org>
@@ -61,15 +61,11 @@ __KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.32 2012/08/26 01:04:03 jakllsch Ex
  *      FreeBSD: src/sys/i386/acpica/acpi_wakeup.c,v 1.9 2002/01/10 03:26:46 wes Exp
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.32 2012/08/26 01:04:03 jakllsch Exp $");
-
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/bus.h>
-#include <sys/cpu.h>
-#include <sys/kcpuset.h>
+#include <machine/bus.h>
+#include <sys/proc.h>
 #include <sys/sysctl.h>
 
 #include <uvm/uvm_extern.h>
@@ -89,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.32 2012/08/26 01:04:03 jakllsch Ex
 #endif
 #include <machine/i8259.h>
 
-#include "acpica.h"
+#include "acpi.h"
 
 #include <dev/ic/i8253reg.h>
 #include <dev/acpi/acpica.h>
@@ -107,26 +103,22 @@ __KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.32 2012/08/26 01:04:03 jakllsch Ex
 #include <x86/cpuvar.h>
 #include <x86/x86/tsc.h>
 
-#include "opt_vga.h"
-
 #include "acpi_wakecode.h"
 
 /* Address is also hard-coded in acpi_wakecode.S */
 static paddr_t acpi_wakeup_paddr = 3 * PAGE_SIZE;
 static vaddr_t acpi_wakeup_vaddr;
 
+static int acpi_md_node = CTL_EOL;
 int acpi_md_vbios_reset = 1; /* Referenced by dev/pci/vga_pci.c */
-int acpi_md_vesa_modenum = 0; /* Referenced by arch/x86/x86/genfb_machdep.c */
 static int acpi_md_beep_on_reset = 0;
 
-static int	acpi_md_s4bios(void);
 static int	sysctl_md_acpi_vbios_reset(SYSCTLFN_ARGS);
 static int	sysctl_md_acpi_beep_on_reset(SYSCTLFN_ARGS);
 
 /* Implemented in acpi_wakeup_low.S. */
 int	acpi_md_sleep_prepare(int);
-int	acpi_md_sleep_exit(int);
-
+int	acpi_md_sleep_exit(int);	
 /* Referenced by acpi_wakeup_low.S. */
 void	acpi_md_sleep_enter(int);
 
@@ -147,7 +139,7 @@ acpi_md_sleep_patch(struct cpu_info *ci)
 #define WAKECODE_BCOPY(offset, type, val) do	{		\
 	void	**addr;						\
 	addr = (void **)(acpi_wakeup_vaddr + offset);		\
-	memcpy(addr, &(val), sizeof(type));			\
+	bcopy(&(val), addr, sizeof(type));			\
 } while (0)
 
 	paddr_t				tmp_pdir;
@@ -155,14 +147,12 @@ acpi_md_sleep_patch(struct cpu_info *ci)
 	tmp_pdir = pmap_init_tmp_pgtbl(acpi_wakeup_paddr);
 
 	/* Execute Sleep */
-	memcpy((void *)acpi_wakeup_vaddr, wakecode, sizeof(wakecode));
+	bcopy(wakecode, (void *)acpi_wakeup_vaddr, sizeof(wakecode));
 
 	if (CPU_IS_PRIMARY(ci)) {
-		WAKECODE_FIXUP(WAKEUP_vesa_modenum, uint16_t, acpi_md_vesa_modenum);
 		WAKECODE_FIXUP(WAKEUP_vbios_reset, uint8_t, acpi_md_vbios_reset);
 		WAKECODE_FIXUP(WAKEUP_beep_on_reset, uint8_t, acpi_md_beep_on_reset);
 	} else {
-		WAKECODE_FIXUP(WAKEUP_vesa_modenum, uint16_t, 0);
 		WAKECODE_FIXUP(WAKEUP_vbios_reset, uint8_t, 0);
 		WAKECODE_FIXUP(WAKEUP_beep_on_reset, uint8_t, 0);
 	}
@@ -184,36 +174,74 @@ acpi_md_sleep_patch(struct cpu_info *ci)
 #undef WAKECODE_BCOPY
 }
 
-static int
-acpi_md_s4bios(void)
+/*
+ * S4 sleep using S4BIOS support, from FreeBSD.
+ *
+ * FreeBSD: src/sys/dev/acpica/acpica_support.c,v 1.4 2002/03/12 09:45:17 dfr Exp
+ */
+
+static ACPI_STATUS
+enter_s4_with_bios(void)
 {
-	ACPI_TABLE_FACS *facs;
-	ACPI_STATUS rv;
+	ACPI_OBJECT_LIST	ArgList;
+	ACPI_OBJECT		Arg;
+	UINT32			ret;
+	ACPI_STATUS		status;
 
-	rv = AcpiGetTable(ACPI_SIG_FACS, 0, (ACPI_TABLE_HEADER **)&facs);
+	/* run the _PTS and _GTS methods */
 
-	if (ACPI_FAILURE(rv) || facs == NULL)
-		return 0;
+	ACPI_MEMSET(&ArgList, 0, sizeof(ArgList));
+	ArgList.Count = 1;
+	ArgList.Pointer = &Arg;
 
-	if ((facs->Flags & ACPI_FACS_S4_BIOS_PRESENT) == 0)
-		return 0;
+	ACPI_MEMSET(&Arg, 0, sizeof(Arg));
+	Arg.Type = ACPI_TYPE_INTEGER;
+	Arg.Integer.Value = ACPI_STATE_S4;
 
-	return 1;
+	AcpiEvaluateObject(NULL, "\\_PTS", &ArgList, NULL);
+	AcpiEvaluateObject(NULL, "\\_GTS", &ArgList, NULL);
+
+	/* clear wake status */
+
+	AcpiSetRegister(ACPI_BITREG_WAKE_STATUS, 1);
+
+	AcpiHwDisableAllGpes();
+	AcpiHwEnableAllWakeupGpes();
+
+	/* flush caches */
+
+	ACPI_FLUSH_CPU_CACHE();
+
+	/*
+	 * write the value to command port and wait until we enter sleep state
+	 */
+	do {
+		AcpiOsStall(1000000);
+		AcpiOsWritePort(AcpiGbl_FADT.SmiCommand,
+				AcpiGbl_FADT.S4BiosRequest, 8);
+		status = AcpiGetRegister(ACPI_BITREG_WAKE_STATUS, &ret);
+		if (ACPI_FAILURE(status))
+			break;
+	} while (!ret);
+
+	AcpiHwDisableAllGpes();
+	AcpiHwEnableAllRuntimeGpes();
+
+	return (AE_OK);
 }
 
 void
 acpi_md_sleep_enter(int state)
 {
-	static int s4bios = -1;
-	struct cpu_info *ci;
-	ACPI_STATUS rv;
+	ACPI_STATUS			status;
+	struct cpu_info			*ci;
 
 	ci = curcpu();
 
 #ifdef MULTIPROCESSOR
 	if (!CPU_IS_PRIMARY(ci)) {
 		atomic_and_32(&ci->ci_flags, ~CPUF_RUNNING);
-		kcpuset_atomic_clear(kcpuset_running, cpu_index(ci));
+		atomic_and_32(&cpus_running, ~ci->ci_cpumask);
 
 		ACPI_FLUSH_CPU_CACHE();
 
@@ -226,28 +254,26 @@ acpi_md_sleep_enter(int state)
 
 	ACPI_FLUSH_CPU_CACHE();
 
-	switch (state) {
-
-	case ACPI_STATE_S4:
-
-		if (s4bios < 0)
-			s4bios = acpi_md_s4bios();
-
-		if (s4bios == 0) {
-			aprint_error("acpi0: S4 not supported\n");
+	if (state == ACPI_STATE_S4) {
+		ACPI_TABLE_FACS *facs;
+		status = AcpiGetTable(ACPI_SIG_FACS, 0, (ACPI_TABLE_HEADER **)&facs);
+		if (ACPI_FAILURE(status)) {
+			printf("acpi: S4BIOS not supported: cannot load FACS\n");
 			return;
 		}
-
-		rv = AcpiEnterSleepStateS4bios();
-		break;
-
-	default:
-		rv = AcpiEnterSleepState(state);
-		break;
+		if (facs == NULL ||
+		    (facs->Flags & ACPI_FACS_S4_BIOS_PRESENT) == 0) {
+			printf("acpi: S4BIOS not supported: not present");
+			return;
+		}
+		status = enter_s4_with_bios();
+	} else {
+		status = AcpiEnterSleepState(state);
 	}
 
-	if (ACPI_FAILURE(rv)) {
-		aprint_error("acpi0: failed to enter S%d\n", state);
+	if (ACPI_FAILURE(status)) {
+		printf("acpi: AcpiEnterSleepState failed: %s\n",
+		       AcpiFormatException(status));
 		return;
 	}
 
@@ -281,7 +307,8 @@ acpi_cpu_sleep(struct cpu_info *ci)
 #endif
 
 	atomic_or_32(&ci->ci_flags, CPUF_RUNNING);
-	kcpuset_atomic_set(kcpuset_running, cpu_index(ci));
+	atomic_or_32(&cpus_running, ci->ci_cpumask);
+	tsc_sync_ap(ci);
 	tsc_sync_ap(ci);
 
 	x86_enable_intr();
@@ -295,7 +322,6 @@ acpi_md_sleep(int state)
 #ifdef MULTIPROCESSOR
 	struct cpu_info *ci;
 	CPU_INFO_ITERATOR cii;
-	cpuid_t cid;
 #endif
 
 	KASSERT(acpi_wakeup_paddr != 0);
@@ -317,12 +343,10 @@ acpi_md_sleep(int state)
 	x86_disable_intr();
 
 #ifdef MULTIPROCESSOR
-	/* Save and suspend Application Processors. */
+	/* Save and suspend Application Processors */
 	x86_broadcast_ipi(X86_IPI_ACPI_CPU_SLEEP);
-	cid = cpu_index(curcpu());
-	while (kcpuset_isotherset(kcpuset_running, cid)) {
-		delay(1);
-	}
+	while (cpus_running != curcpu()->ci_cpumask)
+		delay(1); 
 #endif
 
 	if (acpi_md_sleep_prepare(state))
@@ -348,26 +372,12 @@ acpi_md_sleep(int state)
 	initrtclock(TIMER_FREQ);
 	inittodr(time_second);
 
-	/*
-	 * The BIOS should always re-enable the SCI upon
-	 * resume from the S3 state. The following is a
-	 * workaround for systems that fail to do this.
-	 */
-	(void)AcpiWriteBitRegister(ACPI_BITREG_SCI_ENABLE, 1);
-
-	/*
-	 * Clear fixed events (see e.g. ACPI 3.0, p. 62).
-	 * Also prevent GPEs from misfiring by disabling
-	 * all GPEs before interrupts are enabled. The
-	 * AcpiLeaveSleepState() function will enable
-	 * and handle the general purpose events later.
-	 */
-	(void)AcpiClearEvent(ACPI_EVENT_PMTIMER);
-	(void)AcpiClearEvent(ACPI_EVENT_GLOBAL);
-	(void)AcpiClearEvent(ACPI_EVENT_POWER_BUTTON);
-	(void)AcpiClearEvent(ACPI_EVENT_SLEEP_BUTTON);
-	(void)AcpiClearEvent(ACPI_EVENT_RTC);
-	(void)AcpiHwDisableAllGpes();
+	AcpiClearEvent(ACPI_EVENT_PMTIMER);
+	AcpiClearEvent(ACPI_EVENT_GLOBAL);
+	AcpiClearEvent(ACPI_EVENT_POWER_BUTTON);
+	AcpiClearEvent(ACPI_EVENT_SLEEP_BUTTON);
+	AcpiClearEvent(ACPI_EVENT_RTC);
+	AcpiHwDisableAllGpes ();
 
 	acpi_pci_link_resume();
 
@@ -385,6 +395,7 @@ out:
 		while ((ci->ci_flags & CPUF_RUNNING) == 0)
 			x86_pause();
 
+		tsc_sync_bp(ci);
 		tsc_sync_bp(ci);
 	}
 #endif
@@ -410,46 +421,29 @@ acpi_md_sleep_init(void)
 		panic("acpi: can't allocate address for wakecode.\n");
 
 	pmap_kenter_pa(acpi_wakeup_vaddr, acpi_wakeup_paddr,
-	    VM_PROT_READ | VM_PROT_WRITE, 0);
+	    VM_PROT_READ | VM_PROT_WRITE);
 	pmap_update(pmap_kernel());
 }
 
-SYSCTL_SETUP(sysctl_md_acpi_setup, "ACPI x86 sysctl setup")
+SYSCTL_SETUP(sysctl_md_acpi_setup, "acpi x86 sysctl setup")
 {
-	const struct sysctlnode *rnode;
-	int err;
+	const struct sysctlnode *node;
+	const struct sysctlnode *ssnode;
 
-	err = sysctl_createv(clog, 0, NULL, &rnode,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "hw",
-	    NULL, NULL, 0, NULL, 0, CTL_HW, CTL_EOL);
-
-	if (err != 0)
+	if (sysctl_createv(NULL, 0, NULL, &node, CTLFLAG_PERMANENT,
+	    CTLTYPE_NODE, "machdep", NULL, NULL, 0, NULL, 0, CTL_MACHDEP,
+	    CTL_EOL) != 0)
+		return;
+	if (sysctl_createv(NULL, 0, &node, &ssnode, CTLFLAG_READWRITE,
+	    CTLTYPE_INT, "acpi_vbios_reset", NULL, sysctl_md_acpi_vbios_reset,
+	    0, NULL, 0, CTL_CREATE, CTL_EOL) != 0)
+		return;
+	if (sysctl_createv(NULL, 0, &node, &ssnode, CTLFLAG_READWRITE,
+	    CTLTYPE_INT, "acpi_beep_on_reset", NULL, sysctl_md_acpi_beep_on_reset,
+	    0, NULL, 0, CTL_CREATE, CTL_EOL) != 0)
 		return;
 
-	err = sysctl_createv(clog, 0, &rnode, &rnode,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "acpi", NULL,
-	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL);
-
-	if (err != 0)
-		return;
-
-	err = sysctl_createv(clog, 0, &rnode, &rnode,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE,
-	    "sleep", SYSCTL_DESCR("ACPI sleep"),
-	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL);
-
-	if (err != 0)
-		return;
-
-	(void)sysctl_createv(NULL, 0, &rnode, NULL,
-	    CTLFLAG_READWRITE, CTLTYPE_BOOL, "beep",
-	    NULL, sysctl_md_acpi_beep_on_reset,
-	    0, NULL, 0, CTL_CREATE, CTL_EOL);
-
-	(void)sysctl_createv(NULL, 0, &rnode, NULL,
-	    CTLFLAG_READWRITE, CTLTYPE_INT, "vbios",
-	    NULL, sysctl_md_acpi_vbios_reset,
-	    0, NULL, 0, CTL_CREATE, CTL_EOL);
+	acpi_md_node = node->sysctl_num;
 }
 
 static int
@@ -467,14 +461,6 @@ sysctl_md_acpi_vbios_reset(SYSCTLFN_ARGS)
 
 	if (t < 0 || t > 2)
 		return EINVAL;
-
-#ifndef VGA_POST
-	if (t == 2) {
-		aprint_error("WARNING: hw.acpi.sleep.vbios=2 "
-		    "unsupported (no option VGA_POST in kernel config)\n");
-		return EINVAL;
-	}
-#endif
 
 	acpi_md_vbios_reset = t;
 

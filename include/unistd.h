@@ -1,4 +1,4 @@
-/*	$NetBSD: unistd.h,v 1.137 2012/12/01 13:28:18 skrll Exp $	*/
+/*	$NetBSD: unistd.h,v 1.118.4.2 2011/09/17 18:47:43 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2008 The NetBSD Foundation, Inc.
@@ -70,9 +70,6 @@
 #include <sys/types.h>
 #include <sys/unistd.h>
 
-#if _FORTIFY_SOURCE > 0
-#include <ssp/unistd.h>
-#endif
 
 /*
  * IEEE Std 1003.1-90
@@ -110,9 +107,7 @@ int	 execve(const char *, char * const *, char * const *);
 int	 execvp(const char *, char * const *);
 pid_t	 fork(void);
 long	 fpathconf(int, int);
-#if __SSP_FORTIFY_LEVEL == 0
 char	*getcwd(char *, size_t);
-#endif
 gid_t	 getegid(void);
 uid_t	 geteuid(void);
 gid_t	 getgid(void);
@@ -128,9 +123,7 @@ int	 link(const char *, const char *);
 long	 pathconf(const char *, int);
 int	 pause(void);
 int	 pipe(int *);
-#if __SSP_FORTIFY_LEVEL == 0
 ssize_t	 read(int, void *, size_t);
-#endif
 int	 rmdir(const char *);
 int	 setgid(gid_t);
 int	 setpgid(pid_t, pid_t);
@@ -260,21 +253,19 @@ int	 lchown(const char *, uid_t, gid_t) __RENAME(__posix_lchown);
 int	 lchown(const char *, uid_t, gid_t);
 #endif
 int	 lockf(int, int, off_t);
-#if __SSP_FORTIFY_LEVEL == 0
 ssize_t	 readlink(const char * __restrict, char * __restrict, size_t);
-#endif
 void	*sbrk(intptr_t);
 /* XXX prototype wrong! */
 int	 setpgrp(pid_t, pid_t);			/* obsoleted by setpgid() */
 int	 setregid(gid_t, gid_t);
 int	 setreuid(uid_t, uid_t);
-void	 swab(const void * __restrict, void * __restrict, ssize_t);
+void	 swab(const void *, void *, size_t);
 int	 symlink(const char *, const char *);
 void	 sync(void);
 useconds_t ualarm(useconds_t, useconds_t);
 int	 usleep(useconds_t);
 #ifndef __LIBC12_SOURCE__
-pid_t	 vfork(void) __RENAME(__vfork14) __returns_twice;
+pid_t	 vfork(void) __RENAME(__vfork14);
 #endif
 
 #ifndef __AUDIT__
@@ -291,27 +282,12 @@ ssize_t	 pread(int, void *, size_t, off_t);
 ssize_t	 pwrite(int, const void *, size_t, off_t);
 #endif
 
-/*
+/* 
  * X/Open Extended API set 2 (a.k.a. C063)
  */
-#if (_POSIX_C_SOURCE - 0) >= 200809L || (_XOPEN_SOURCE - 0 >= 700) || \
-    defined(_INCOMPLETE_XOPEN_C063) || defined(_NETBSD_SOURCE)
-int	linkat(int, const char *, int, const char *, int);
-int	renameat(int, const char *, int, const char *);
-int	mkfifoat(int, const char *, mode_t);
-int	mknodat(int, const char *, mode_t, uint32_t);
-int	mkdirat(int, const char *, mode_t);
-int	faccessat(int, const char *, int, int);
-int	fchmodat(int, const char *, mode_t, int);
-int	fchownat(int, const char *, uid_t, gid_t, int);
-int	readlinkat(int, const char *, char *, size_t);
-int	symlinkat(const char *, int, const char *);
-int	unlinkat(int, const char *, int);
+#if defined(_INCOMPLETE_XOPEN_C063)
+int     linkat(int, const char *, int, const char *, int);
 #endif
-#if defined(_INCOMPLETE_XOPEN_C063) || defined(_KERNEL)
-int	fexecve(int, char * const *, char * const *);
-#endif
-
 
 /*
  * Implementation-defined extensions
@@ -321,7 +297,6 @@ int	 acct(const char *);
 int	 closefrom(int);
 int	 des_cipher(const char *, char *, long, int);
 int	 des_setkey(const char *);
-int	 dup3(int, int, int);
 void	 endusershell(void);
 int	 exect(const char *, char * const *, char * const *);
 int	 fchroot(int);
@@ -330,20 +305,6 @@ int	 getdomainname(char *, size_t);
 int	 getgrouplist(const char *, gid_t, gid_t *, int *);
 int	 getgroupmembership(const char *, gid_t, gid_t *, int, int *);
 mode_t	 getmode(const void *, mode_t);
-char	*getpassfd(const char *, char *, size_t, int *, int, int);
-#define	GETPASS_NEED_TTY	0x001	/* Fail if we cannot set tty */
-#define	GETPASS_FAIL_EOF	0x002	/* Fail on EOF */
-#define	GETPASS_BUF_LIMIT	0x004	/* beep on buffer limit */
-#define	GETPASS_NO_SIGNAL	0x008	/* don't make ttychars send signals */
-#define	GETPASS_NO_BEEP		0x010	/* don't beep */
-#define	GETPASS_ECHO		0x020	/* echo characters as they are typed */
-#define	GETPASS_ECHO_STAR	0x040	/* echo '*' for each character */
-#define	GETPASS_7BIT		0x080	/* mask the high bit each char */
-#define	GETPASS_FORCE_LOWER	0x100	/* lowercase each char */
-#define	GETPASS_FORCE_UPPER	0x200	/* uppercase each char */
-#define	GETPASS_ECHO_NL		0x400	/* echo a newline if successful */
-
-char	*getpass_r(const char *, char *, size_t);
 int	 getpeereid(int, uid_t *, gid_t *);
 int	 getsubopt(char **, char * const *, char **);
 __aconst char *getusershell(void);
@@ -351,12 +312,11 @@ int	 initgroups(const char *, gid_t);
 int	 iruserok(uint32_t, int, const char *, const char *);
 int      issetugid(void);
 int	 nfssvc(int, void *);
-int	 pipe2(int *, int);
 int	 profil(char *, size_t, u_long, u_int);
 #ifndef __PSIGNAL_DECLARED
 #define __PSIGNAL_DECLARED
 /* also in signal.h */
-void	 psignal(int, const char *);
+void	psignal(unsigned int, const char *);
 #endif /* __PSIGNAL_DECLARED */
 int	 rcmd(char **, int, const char *, const char *, const char *, int *);
 int	 reboot(int, char *);
@@ -373,11 +333,7 @@ int	 setrgid(gid_t);
 int	 setruid(uid_t);
 void	 setusershell(void);
 void	 strmode(mode_t, char *);
-#ifndef __STRSIGNAL_DECLARED
-#define __STRSIGNAL_DECLARED
-/* backwards-compatibility; also in string.h */
 __aconst char *strsignal(int);
-#endif /* __STRSIGNAL_DECLARED */
 int	 swapctl(int, void *, int);
 int	 swapon(const char *);			/* obsoleted by swapctl() */
 int	 syscall(int, ...);
@@ -388,7 +344,6 @@ int	 undelete(const char *);
 int	 rcmd_af(char **, int, const char *,
 	    const char *, const char *, int *, int);
 int	 rresvport_af(int *, int);
-int	 rresvport_af_addr(int *, int, void *);
 int	 iruserok_sa(const void *, int, int, const char *, const char *);
 #endif
 
@@ -402,4 +357,8 @@ extern	 char *suboptarg;	/* getsubopt(3) external variable */
 #endif
 
 __END_DECLS
+
+#if _FORTIFY_SOURCE > 0
+#include <ssp/unistd.h>
+#endif
 #endif /* !_UNISTD_H_ */

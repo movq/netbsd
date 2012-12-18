@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_condvar.c,v 1.30 2011/07/27 14:35:33 uebayasi Exp $	*/
+/*	$NetBSD: kern_condvar.c,v 1.25 2008/06/16 12:03:01 ad Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_condvar.c,v 1.30 2011/07/27 14:35:33 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_condvar.c,v 1.25 2008/06/16 12:03:01 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -45,28 +45,13 @@ __KERNEL_RCSID(0, "$NetBSD: kern_condvar.c,v 1.30 2011/07/27 14:35:33 uebayasi E
 #include <sys/lockdebug.h>
 #include <sys/cpu.h>
 
-/*
- * Accessors for the private contents of the kcondvar_t data type.
- *
- *	cv_opaque[0]	sleepq...
- *	cv_opaque[1]	...pointers
- *	cv_opaque[2]	description for ps(1)
- *
- * cv_opaque[0..1] is protected by the interlock passed to cv_wait() (enqueue
- * only), and the sleep queue lock acquired with sleeptab_lookup() (enqueue
- * and dequeue).
- *
- * cv_opaque[2] (the wmesg) is static and does not change throughout the life
- * of the CV.
- */
-#define	CV_SLEEPQ(cv)		((sleepq_t *)(cv)->cv_opaque)
-#define	CV_WMESG(cv)		((const char *)(cv)->cv_opaque[2])
-#define	CV_SET_WMESG(cv, v) 	(cv)->cv_opaque[2] = __UNCONST(v)
+#include <uvm/uvm_extern.h>
 
-#define	CV_DEBUG_P(cv)	(CV_WMESG(cv) != nodebug)
+#define	CV_SLEEPQ(cv)	((sleepq_t *)(cv)->cv_opaque)
+#define	CV_DEBUG_P(cv)	((cv)->cv_wmesg != nodebug)
 #define	CV_RA		((uintptr_t)__builtin_return_address(0))
 
-static void	cv_unsleep(lwp_t *, bool);
+static u_int	cv_unsleep(lwp_t *, bool);
 static void	cv_wakeup_one(kcondvar_t *);
 static void	cv_wakeup_all(kcondvar_t *);
 
@@ -106,7 +91,7 @@ cv_init(kcondvar_t *cv, const char *wmesg)
 	}
 #endif
 	KASSERT(wmesg != NULL);
-	CV_SET_WMESG(cv, wmesg);
+	cv->cv_wmesg = wmesg;
 	sleepq_init(CV_SLEEPQ(cv));
 }
 
@@ -122,7 +107,7 @@ cv_destroy(kcondvar_t *cv)
 	LOCKDEBUG_FREE(CV_DEBUG_P(cv), cv);
 #ifdef DIAGNOSTIC
 	KASSERT(cv_is_valid(cv));
-	CV_SET_WMESG(cv, deadcv);
+	cv->cv_wmesg = deadcv;
 #endif
 }
 
@@ -148,7 +133,7 @@ cv_enter(kcondvar_t *cv, kmutex_t *mtx, lwp_t *l)
 	mp = sleepq_hashlock(cv);
 	sq = CV_SLEEPQ(cv);
 	sleepq_enter(sq, l, mp);
-	sleepq_enqueue(sq, cv, CV_WMESG(cv), &cv_syncobj);
+	sleepq_enqueue(sq, cv, cv->cv_wmesg, &cv_syncobj);
 	mutex_exit(mtx);
 	KASSERT(cv_has_waiters(cv));
 }
@@ -185,7 +170,7 @@ cv_exit(kcondvar_t *cv, kmutex_t *mtx, lwp_t *l, const int error)
  *	interrupted: for example, when a signal is received.  Must be
  *	called with the LWP locked, and must return it unlocked.
  */
-static void
+static u_int
 cv_unsleep(lwp_t *l, bool cleanup)
 {
 	kcondvar_t *cv;
@@ -197,7 +182,7 @@ cv_unsleep(lwp_t *l, bool cleanup)
 	KASSERT(cv_is_valid(cv));
 	KASSERT(cv_has_waiters(cv));
 
-	sleepq_unsleep(l, cleanup);
+	return sleepq_unsleep(l, cleanup);
 }
 
 /*
@@ -222,7 +207,7 @@ cv_wait(kcondvar_t *cv, kmutex_t *mtx)
  *
  *	Wait on a condition variable until a awoken or a signal is received. 
  *	Will also return early if the process is exiting.  Returns zero if
- *	awoken normally, ERESTART if a signal was received and the system
+ *	awoken normallly, ERESTART if a signal was received and the system
  *	call is restartable, or EINTR otherwise.
  */
 int
@@ -263,7 +248,7 @@ cv_timedwait(kcondvar_t *cv, kmutex_t *mtx, int timo)
  *
  *	Wait on a condition variable until a timeout expires, awoken or a
  *	signal is received.  Will also return early if the process is
- *	exiting.  Returns zero if awoken normally, EWOULDBLOCK if the
+ *	exiting.  Returns zero if awoken normallly, EWOULDBLOCK if the
  *	timeout expires, ERESTART if a signal was received and the system
  *	call is restartable, or EINTR otherwise.
  */
@@ -302,6 +287,7 @@ cv_wakeup_one(kcondvar_t *cv)
 {
 	sleepq_t *sq;
 	kmutex_t *mp;
+	int swapin;
 	lwp_t *l;
 
 	KASSERT(cv_is_valid(cv));
@@ -316,8 +302,15 @@ cv_wakeup_one(kcondvar_t *cv)
 	KASSERT(l->l_sleepq == sq);
 	KASSERT(l->l_mutex == mp);
 	KASSERT(l->l_wchan == cv);
-	sleepq_remove(sq, l);
+	swapin = sleepq_remove(sq, l);
 	mutex_spin_exit(mp);
+
+	/*
+	 * If there are newly awakend threads that need to be swapped in,
+	 * then kick the swapper into action.
+	 */
+	if (swapin)
+		uvm_kick_scheduler();
 
 	KASSERT(cv_is_valid(cv));
 }
@@ -344,22 +337,46 @@ cv_wakeup_all(kcondvar_t *cv)
 {
 	sleepq_t *sq;
 	kmutex_t *mp;
+	int swapin;
 	lwp_t *l, *next;
 
 	KASSERT(cv_is_valid(cv));
 
 	mp = sleepq_hashlock(cv);
+	swapin = 0;
 	sq = CV_SLEEPQ(cv);
 	for (l = TAILQ_FIRST(sq); l != NULL; l = next) {
 		KASSERT(l->l_sleepq == sq);
 		KASSERT(l->l_mutex == mp);
 		KASSERT(l->l_wchan == cv);
 		next = TAILQ_NEXT(l, l_sleepchain);
-		sleepq_remove(sq, l);
+		swapin |= sleepq_remove(sq, l);
 	}
 	mutex_spin_exit(mp);
 
+	/*
+	 * If there are newly awakend threads that need to be swapped in,
+	 * then kick the swapper into action.
+	 */
+	if (swapin)
+		uvm_kick_scheduler();
+
 	KASSERT(cv_is_valid(cv));
+}
+
+/*
+ * cv_wakeup:
+ *
+ *	Wake all LWPs waiting on a condition variable.  For cases
+ *	where the address may be waited on by mtsleep()/tsleep().
+ *	Not a documented call.
+ */
+void
+cv_wakeup(kcondvar_t *cv)
+{
+
+	cv_wakeup_all(cv);
+	wakeup(cv);
 }
 
 /*
@@ -385,5 +402,5 @@ bool
 cv_is_valid(kcondvar_t *cv)
 {
 
-	return CV_WMESG(cv) != deadcv && CV_WMESG(cv) != NULL;
+	return cv->cv_wmesg != deadcv && cv->cv_wmesg != NULL;
 }

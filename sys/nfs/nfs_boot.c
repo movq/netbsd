@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_boot.c,v 1.80 2010/10/04 23:48:22 cyber Exp $	*/
+/*	$NetBSD: nfs_boot.c,v 1.77 2008/10/27 13:24:01 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1997 The NetBSD Foundation, Inc.
@@ -35,13 +35,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_boot.c,v 1.80 2010/10/04 23:48:22 cyber Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_boot.c,v 1.77 2008/10/27 13:24:01 cegger Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_nfs.h"
 #include "opt_tftproot.h"
 #include "opt_nfs_boot.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,13 +71,11 @@ __KERNEL_RCSID(0, "$NetBSD: nfs_boot.c,v 1.80 2010/10/04 23:48:22 cyber Exp $");
 #include <nfs/nfsdiskless.h>
 
 /*
- * There are three implementations of NFS diskless boot.
+ * There are two implementations of NFS diskless boot.
  * One implementation uses BOOTP (RFC951, RFC1048),
- * Sun RPC/bootparams or static configuration.  See the
- * files:
- *    nfs_bootdhcp.c:   BOOTP (RFC951, RFC1048)
- *    nfs_bootparam.c:  Sun RPC/bootparams
- *    nfs_bootstatic.c: honour config(1) description
+ * the other uses Sun RPC/bootparams.  See the files:
+ *    nfs_bootp.c:   BOOTP (RFC951, RFC1048)
+ *    nfs_bootsun.c: Sun RPC/bootparams
  */
 #if defined(NFS_BOOT_BOOTP) || defined(NFS_BOOT_DHCP)
 int nfs_boot_rfc951 = 1; /* BOOTP enabled (default) */
@@ -90,8 +86,6 @@ int nfs_boot_bootparam = 1; /* BOOTPARAM enabled (default) */
 #ifdef NFS_BOOT_BOOTSTATIC
 int nfs_boot_bootstatic = 1; /* BOOTSTATIC enabled (default) */
 #endif
-
-#define IP_MIN_MTU 576
 
 /* mountd RPC */
 static int md_mount(struct sockaddr_in *mdsin, char *path,
@@ -156,12 +150,6 @@ nfs_boot_init(struct nfs_diskless *nd, struct lwp *lwp)
 	if (error)
 		return (error);
 
-	/*
-	 * Set MTU if passed
-	 */
-	if (nd->nd_mtu >= IP_MIN_MTU )
-		nfs_boot_setmtu(nd->nd_ifp, nd->nd_mtu, lwp);
-	
 	/*
 	 * If the gateway address is set, add a default route.
 	 * (The mountd RPCs may go across a gateway.)
@@ -242,48 +230,6 @@ nfs_boot_ifupdown(struct ifnet *ifp, struct lwp *lwp, int up)
 out:
 	soclose(so);
 	return (error);
-}
-
-void
-nfs_boot_setmtu(struct ifnet *ifp, int mtu, struct lwp *lwp)
-{
-	struct socket *so;
-	struct ifreq ireq;
-	int error;
-
-	memset(&ireq, 0, sizeof(ireq));
-	memcpy(ireq.ifr_name, ifp->if_xname, IFNAMSIZ);
-
-	/*
-	 * Get a socket to use for various things in here.
-	 * After this, use "goto out" to cleanup and return.
-	 */
-	error = socreate(AF_INET, &so, SOCK_DGRAM, 0, lwp, NULL);
-	if (error) {
-		printf("setmtu: socreate, error=%d\n", error);
-		return;
-	}
-
-	/*
-	 * Get structure, set the new MTU, push structure.
-	 */
-	error = ifioctl(so, SIOCGIFMTU, (void *)&ireq, lwp);
-	if (error) {
-		printf("setmtu: GIFMTU, error=%d\n", error);
-		goto out;
-	}
-
-	ireq.ifr_mtu = mtu;
-
-	error = ifioctl(so, SIOCSIFMTU, &ireq, lwp);
-	if (error) {
-		printf("setmtu: SIFMTU, error=%d\n", error);
-		goto out;
-	}
-
-out:
-	soclose(so);
-	return;
 }
 
 int
@@ -656,7 +602,9 @@ nfs_boot_getfh(struct nfs_dlmount *ndm, struct lwp *l)
 
 	/* Set port number for NFS use. */
 	/* XXX: NFS port is always 2049, right? */
+#ifdef NFS_BOOT_TCP
 retry:
+#endif
 	error = krpc_portmap(sin, NFS_PROG,
 		    (args->flags & NFSMNT_NFSV3) ? NFS_VER3 : NFS_VER2,
 		    (args->sotype == SOCK_STREAM) ? IPPROTO_TCP : IPPROTO_UDP,
@@ -664,10 +612,12 @@ retry:
 	if (port == htons(0))
 		error = EIO;
 	if (error) {
+#ifdef NFS_BOOT_TCP
 		if (args->sotype == SOCK_STREAM) {
 			args->sotype = SOCK_DGRAM;
 			goto retry;
 		}
+#endif
 		printf("nfs_boot: portmap NFS, error=%d\n", error);
 		return (error);
 	}

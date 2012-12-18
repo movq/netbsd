@@ -1,4 +1,4 @@
-/*	$NetBSD: siop_gsc.c,v 1.14 2011/07/01 18:33:09 dyoung Exp $	*/
+/*	$NetBSD: siop_gsc.c,v 1.7 2008/03/30 12:32:13 skrll Exp $	*/
 
 /*	$OpenBSD: siop_gsc.c,v 1.4 2007/08/23 21:01:22 kettenis Exp $	*/
 
@@ -19,7 +19,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siop_gsc.c,v 1.14 2011/07/01 18:33:09 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siop_gsc.c,v 1.7 2008/03/30 12:32:13 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -28,7 +28,7 @@ __KERNEL_RCSID(0, "$NetBSD: siop_gsc.c,v 1.14 2011/07/01 18:33:09 dyoung Exp $")
 #include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/iomod.h>
 
 #include <dev/scsipi/scsi_all.h>
@@ -45,15 +45,15 @@ __KERNEL_RCSID(0, "$NetBSD: siop_gsc.c,v 1.14 2011/07/01 18:33:09 dyoung Exp $")
 #define	SIOP_GSC_RESET	0x0000
 #define	SIOP_GSC_OFFSET	0x0100
 
-int siop_gsc_match(device_t, cfdata_t, void *);
-void siop_gsc_attach(device_t, device_t, void *);
+int siop_gsc_match(struct device *, struct cfdata *, void *);
+void siop_gsc_attach(struct device *, struct device *, void *);
 int siop_gsc_intr(void *);
 void siop_gsc_reset(struct siop_common_softc *);
 
-uint8_t siop_gsc_r1(void *, bus_space_handle_t, bus_size_t);
-uint16_t siop_gsc_r2(void *, bus_space_handle_t, bus_size_t);
-void siop_gsc_w1(void *, bus_space_handle_t, bus_size_t, uint8_t);
-void siop_gsc_w2(void *, bus_space_handle_t, bus_size_t, uint16_t);
+u_int8_t siop_gsc_r1(void *, bus_space_handle_t, bus_size_t);
+u_int16_t siop_gsc_r2(void *, bus_space_handle_t, bus_size_t);
+void siop_gsc_w1(void *, bus_space_handle_t, bus_size_t, u_int8_t);
+void siop_gsc_w2(void *, bus_space_handle_t, bus_size_t, u_int16_t);
 
 struct siop_gsc_softc {
 	struct siop_softc sc_siop;
@@ -62,11 +62,11 @@ struct siop_gsc_softc {
 	struct hppa_bus_space_tag sc_bustag;
 };
 
-CFATTACH_DECL_NEW(siop_gsc, sizeof(struct siop_gsc_softc),
+CFATTACH_DECL(siop_gsc, sizeof(struct siop_gsc_softc),
     siop_gsc_match, siop_gsc_attach, NULL, NULL);
 
 int
-siop_gsc_match(device_t parent, cfdata_t match, void *aux)
+siop_gsc_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct gsc_attach_args *ga = aux;
 
@@ -78,17 +78,16 @@ siop_gsc_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-siop_gsc_attach(device_t parent, device_t self, void *aux)
+siop_gsc_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct siop_gsc_softc *gsc = device_private(self);
-	struct siop_softc *sc = &gsc->sc_siop;
+	struct siop_gsc_softc *gsc = (struct siop_gsc_softc *)self;
+        struct siop_softc *sc = &gsc->sc_siop;
 	struct gsc_attach_args *ga = aux;
 
-	sc->sc_c.sc_dev = self;
 	gsc->sc_iot = ga->ga_iot;
 	if (bus_space_map(gsc->sc_iot, ga->ga_hpa,
 	    IOMOD_HPASIZE, 0, &gsc->sc_ioh)) {
-		aprint_error(": can't map io space\n");
+		printf(": cannot map io space\n");
 		return;
 	}
 
@@ -119,13 +118,13 @@ siop_gsc_attach(device_t parent, device_t self, void *aux)
 	DELAY(1000);
 	siop_gsc_reset(&sc->sc_c);
 
-	aprint_normal(": NCR53C720 rev %d\n", bus_space_read_1(sc->sc_c.sc_rt,
+	printf(": NCR53C720 rev %d\n", bus_space_read_1(sc->sc_c.sc_rt,
 	    sc->sc_c.sc_rh, SIOP_CTEST3) >> 4);
 
 	siop_attach(sc);
 
-	(void)hp700_intr_establish(IPL_BIO, siop_intr, sc, ga->ga_ir,
-	    ga->ga_irq);
+	(void)hp700_intr_establish(&sc->sc_c.sc_dev, IPL_BIO,
+	    siop_intr, sc, ga->ga_int_reg, ga->ga_irq);
 
 }
 
@@ -140,33 +139,33 @@ siop_gsc_reset(struct siop_common_softc *sc)
 	    (0xc << STIME0_SEL_SHIFT));
 }
 
-uint8_t
+u_int8_t
 siop_gsc_r1(void *v, bus_space_handle_t h, bus_size_t o)
 {
-	return *(volatile uint8_t *)(h + (o ^ 3));
+	return *(volatile u_int8_t *)(h + (o ^ 3));
 }
 
-uint16_t
+u_int16_t
 siop_gsc_r2(void *v, bus_space_handle_t h, bus_size_t o)
 {
 	if (o == SIOP_SIST0) {
-		uint16_t reg;
+		u_int16_t reg;
 
 		reg = siop_gsc_r1(v, h, SIOP_SIST0);
 		reg |= siop_gsc_r1(v, h, SIOP_SIST1) << 8;
 		return reg;
 	}
-	return *(volatile uint16_t *)(h + (o ^ 2));
+	return *(volatile u_int16_t *)(h + (o ^ 2));
 }
 
 void
-siop_gsc_w1(void *v, bus_space_handle_t h, bus_size_t o, uint8_t vv)
+siop_gsc_w1(void *v, bus_space_handle_t h, bus_size_t o, u_int8_t vv)
 {
-	*(volatile uint8_t *)(h + (o ^ 3)) = vv;
+	*(volatile u_int8_t *)(h + (o ^ 3)) = vv;
 }
 
 void
-siop_gsc_w2(void *v, bus_space_handle_t h, bus_size_t o, uint16_t vv)
+siop_gsc_w2(void *v, bus_space_handle_t h, bus_size_t o, u_int16_t vv)
 {
-	*(volatile uint16_t *)(h + (o ^ 2)) = vv;
+	*(volatile u_int16_t *)(h + (o ^ 2)) = vv;
 }

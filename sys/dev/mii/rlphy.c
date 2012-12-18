@@ -1,4 +1,4 @@
-/*	$NetBSD: rlphy.c,v 1.27 2011/01/20 14:26:11 pooka Exp $	*/
+/*	$NetBSD: rlphy.c,v 1.22.10.1 2009/05/01 01:29:20 snj Exp $	*/
 /*	$OpenBSD: rlphy.c,v 1.20 2005/07/31 05:27:30 pvalchev Exp $	*/
 
 /*
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rlphy.c,v 1.27 2011/01/20 14:26:11 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rlphy.c,v 1.22.10.1 2009/05/01 01:29:20 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -90,10 +90,6 @@ int
 rlphymatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mii_attach_args *ma = aux;
-	struct mii_data *mii = ma->mii_data;
-
-	if (mii->mii_instance != 0)
-		return 0;
 
 	if (mii_phy_match(ma, rlphys) != NULL)
 		return (10);
@@ -145,12 +141,17 @@ rlphyattach(device_t parent, device_t self, void *aux)
 	if (sc->mii_capabilities & BMSR_MEDIAMASK)
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, mii_phy_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 int
 rlphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 {
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
+
+	int rv;
 
 	/*
 	 * Can't isolate the RTL8139 phy, so it has to be the only one.
@@ -169,7 +170,49 @@ rlphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 		if ((mii->mii_ifp->if_flags & IFF_UP) == 0)
 			break;
 
-		mii_phy_setmedia(sc);
+		switch (IFM_SUBTYPE(ife->ifm_media)) {
+		case IFM_AUTO:
+			/*
+			 * If we're already in auto mode, just return.
+			 */
+			if (PHY_READ(sc, MII_BMCR) & BMCR_AUTOEN)
+				return (0);
+			(void) mii_phy_auto(sc, 0);
+			break;
+		case IFM_100_T4:
+			/*
+			 * XXX Not supported as a manual setting right now.
+			 */
+			return (EINVAL);
+		default:
+			/*
+			 * BMCR data is stored in the ifmedia entry.
+			 */
+			switch (ife->ifm_media &
+			    (IFM_TMASK|IFM_NMASK|IFM_FDX)) {
+				case IFM_ETHER|IFM_10_T:
+					rv = ANAR_10|ANAR_CSMA;
+					break;
+				case IFM_ETHER|IFM_10_T|IFM_FDX:
+					rv = ANAR_10_FD|ANAR_CSMA;
+					break;
+				case IFM_ETHER|IFM_100_TX:
+					rv = ANAR_TX|ANAR_CSMA;
+					break;
+				case IFM_ETHER|IFM_100_TX|IFM_FDX:
+					rv = ANAR_TX_FD|ANAR_CSMA;
+					break;
+				case IFM_ETHER|IFM_100_T4:
+					rv = ANAR_T4|ANAR_CSMA;
+					break;
+				default:
+					rv = 0;
+					break;
+			}
+
+			PHY_WRITE(sc, MII_ANAR, rv);
+			PHY_WRITE(sc, MII_BMCR, ife->ifm_data);
+		}
 		break;
 
 	case MII_TICK:

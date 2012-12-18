@@ -1,4 +1,4 @@
-/*	$NetBSD: ess_ofisa.c,v 1.25 2010/05/22 16:35:00 tsutsui Exp $	*/
+/*	$NetBSD: ess_ofisa.c,v 1.20 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ess_ofisa.c,v 1.25 2010/05/22 16:35:00 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ess_ofisa.c,v 1.20 2008/04/28 20:23:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,14 +51,17 @@ __KERNEL_RCSID(0, "$NetBSD: ess_ofisa.c,v 1.25 2010/05/22 16:35:00 tsutsui Exp $
 #include <dev/isa/essreg.h>
 #include <dev/isa/essvar.h>
 
-int	ess_ofisa_match(device_t, cfdata_t, void *);
-void	ess_ofisa_attach(device_t, device_t, void *);
+int	ess_ofisa_match(struct device *, struct cfdata *, void *);
+void	ess_ofisa_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ess_ofisa, sizeof(struct ess_softc),
+CFATTACH_DECL(ess_ofisa, sizeof(struct ess_softc),
     ess_ofisa_match, ess_ofisa_attach, NULL, NULL);
 
 int
-ess_ofisa_match(device_t parent, cfdata_t cf, void *aux)
+ess_ofisa_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct ofisa_attach_args *aa = aux;
 	static const char *const compatible_strings[] = {
@@ -78,7 +81,9 @@ ess_ofisa_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-ess_ofisa_attach(device_t parent, device_t self, void *aux)
+ess_ofisa_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct ess_softc *sc = device_private(self);
 	struct ofisa_attach_args *aa = aux;
@@ -87,8 +92,6 @@ ess_ofisa_attach(device_t parent, device_t self, void *aux)
 	struct ofisa_dma_desc dma[2];
 	int n, ndrq;
 	char *model;
-
-	sc->sc_dev = self;
 
 	/*
 	 * We're living on an OFW.  We have to ask the OFW what our
@@ -103,15 +106,15 @@ ess_ofisa_attach(device_t parent, device_t self, void *aux)
 
 	n = ofisa_reg_get(aa->oba.oba_phandle, &reg, 1);
 	if (n != 1) {
-		aprint_error(": error getting register data\n");
+		printf(": error getting register data\n");
 		return;
 	}
 	if (reg.type != OFISA_REG_TYPE_IO) {
-		aprint_error(": register type not i/o\n");
+		printf(": register type not i/o\n");
 		return;
 	}
 	if (reg.len != ESS_NPORT) {
-		aprint_error(": weird register size (%lu, expected %d)\n",
+		printf(": weird register size (%lu, expected %d)\n",
 		    (unsigned long)reg.len, ESS_NPORT);
 		return;
 	}
@@ -128,13 +131,13 @@ ess_ofisa_attach(device_t parent, device_t self, void *aux)
 		sc->sc_audio2.irq = intr[1].irq;
 		sc->sc_audio2.ist = intr[1].share;
 	} else {
-		aprint_error(": error getting interrupt data\n");
+		printf(": error getting interrupt data\n");
 		return;
 	}
 
 	ndrq = ofisa_dma_get(aa->oba.oba_phandle, dma, 2);
 	if (ndrq != 2) {
-		aprint_error(": error getting DMA data\n");
+		printf(": error getting DMA data\n");
 		return;
 	}
 	sc->sc_audio1.drq = dma[0].drq;
@@ -146,7 +149,7 @@ ess_ofisa_attach(device_t parent, device_t self, void *aux)
 	sc->sc_iobase = reg.addr;
 	if (bus_space_map(sc->sc_iot, sc->sc_iobase, reg.len, 0,
 	    &sc->sc_ioh)) {
-		aprint_error(": unable to map register space\n");
+		printf(": unable to map register space\n");
 		return;
 	}
 
@@ -158,17 +161,15 @@ ess_ofisa_attach(device_t parent, device_t self, void *aux)
 	if (ess_config_addr(sc))
 		return;
 	if (essmatch(sc) == 0) {
-		aprint_error(": essmatch failed\n");
+		printf(": essmatch failed\n");
 		return;
 	}
 
 	n = OF_getproplen(aa->oba.oba_phandle, "model");
 	if (n > 0) {
 		model = alloca(n);
-		if (OF_getprop(aa->oba.oba_phandle, "model", model, n) == n) {
-			aprint_normal(": %s\n", model);
-			aprint_normal_dev(self, "");
-		}
+		if (OF_getprop(aa->oba.oba_phandle, "model", model, n) == n)
+			printf(": %s\n%s", model, device_xname(&sc->sc_dev));
 	}
 
 	essattach(sc, 0);

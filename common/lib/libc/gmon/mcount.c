@@ -1,4 +1,4 @@
-/*	$NetBSD: mcount.c,v 1.10 2012/03/20 16:21:41 matt Exp $	*/
+/*	$NetBSD: mcount.c,v 1.7 2006/10/27 22:14:13 uwe Exp $	*/
 
 /*
  * Copyright (c) 2003, 2004 Wasabi Systems, Inc.
@@ -76,7 +76,7 @@
 #if 0
 static char sccsid[] = "@(#)mcount.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: mcount.c,v 1.10 2012/03/20 16:21:41 matt Exp $");
+__RCSID("$NetBSD: mcount.c,v 1.7 2006/10/27 22:14:13 uwe Exp $");
 #endif
 #endif
 
@@ -93,23 +93,11 @@ extern struct gmonparam _gmondummy;
 struct gmonparam *_m_gmon_alloc(void);
 #endif
 
-#ifndef __LINT__
-_MCOUNT_DECL(u_long, u_long)
+_MCOUNT_DECL __P((u_long, u_long))
 #ifdef _KERNEL
     __attribute__((__no_instrument_function__))
 #endif
     __used;
-#endif
-
-/* XXX: make these interfaces */
-#ifdef _RUMPKERNEL
-#undef MCOUNT_ENTER
-#define MCOUNT_ENTER
-#undef MCOUNT_EXIT
-#define MCOUNT_EXIT
-#undef MCOUNT
-#define MCOUNT
-#endif
 
 /*
  * mcount is called on entry to each function compiled with the profiling
@@ -126,15 +114,14 @@ _MCOUNT_DECL(u_long, u_long)
  * both frompcindex and frompc.  Any reasonable, modern compiler will
  * perform this optimization.
  */
-#ifndef __LINT__
-/* _mcount; may be static, inline, etc */
-_MCOUNT_DECL(u_long frompc, u_long selfpc)
+_MCOUNT_DECL(frompc, selfpc)	/* _mcount; may be static, inline, etc */
+	u_long frompc, selfpc;
 {
 	u_short *frompcindex;
 	struct tostruct *top, *prevtop;
 	struct gmonparam *p;
 	long toindex;
-#if defined(_KERNEL) && !defined(_RUMPKERNEL)
+#ifdef _KERNEL
 	int s;
 #endif
 
@@ -261,7 +248,6 @@ overflow:
 #endif
 	return;
 }
-#endif
 
 #ifdef MCOUNT
 /*

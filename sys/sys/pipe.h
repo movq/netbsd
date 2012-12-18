@@ -1,4 +1,4 @@
-/* $NetBSD: pipe.h,v 1.32 2009/12/20 09:36:06 dsl Exp $ */
+/* $NetBSD: pipe.h,v 1.24.14.1 2009/02/24 02:34:47 snj Exp $ */
 
 /*
  * Copyright (c) 1996 John S. Dyson
@@ -26,9 +26,9 @@
 #ifndef _SYS_PIPE_H_
 #define _SYS_PIPE_H_
 
+#ifndef _KERNEL
 #include <sys/selinfo.h>		/* for struct selinfo */
-
-#include <uvm/uvm_extern.h>
+#endif
 
 /*
  * Pipe buffer size, keep moderate in value, pipes take kva space.
@@ -81,7 +81,6 @@ struct pipemapping {
 	voff_t		pos;		/* current position within page */
 	int		npages;		/* how many pages allocated */
 	struct vm_page	**pgs;		/* pointers to the pages */
-	u_int		egen;		/* emap generation number */
 };
 
 /*
@@ -96,7 +95,6 @@ struct pipemapping {
 				   pointers/data. */
 #define	PIPE_LWANT	0x200	/* Process wants exclusive access to
 				   pointers/data. */
-#define	PIPE_RESTART	0x400	/* Return ERESTART to blocked syscalls */
 
 /*
  * Per-pipe data structure.
@@ -111,9 +109,9 @@ struct pipe {
 	struct	pipebuf pipe_buffer;	/* data storage */
 	struct	pipemapping pipe_map;	/* pipe mapping for direct I/O */
 	struct	selinfo pipe_sel;	/* for compat with select */
-	struct	timespec pipe_atime;	/* time of last access */
-	struct	timespec pipe_mtime;	/* time of last modify */
-	struct	timespec pipe_btime;	/* time of creation */
+	struct	timeval pipe_atime;	/* time of last access */
+	struct	timeval pipe_mtime;	/* time of last modify */
+	struct	timeval pipe_ctime;	/* time of status change */
 	pid_t	pipe_pgid;		/* process group for sigio */
 	struct	pipe *pipe_peer;	/* link with other direction */
 	u_int	pipe_state;		/* pipe status info */

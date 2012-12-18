@@ -1,4 +1,4 @@
-/*	$NetBSD: uudecode.c,v 1.26 2011/09/06 18:44:26 joerg Exp $	*/
+/*	$NetBSD: uudecode.c,v 1.23.4.1 2008/11/29 23:15:49 snj Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1993
@@ -40,7 +40,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)uudecode.c	8.2 (Berkeley) 4/2/94";
 #endif
-__RCSID("$NetBSD: uudecode.c,v 1.26 2011/09/06 18:44:26 joerg Exp $");
+__RCSID("$NetBSD: uudecode.c,v 1.23.4.1 2008/11/29 23:15:49 snj Exp $");
 #endif /* not lint */
 
 /*
@@ -68,12 +68,13 @@ __RCSID("$NetBSD: uudecode.c,v 1.26 2011/09/06 18:44:26 joerg Exp $");
 #endif
 
 static int decode(void);
-__dead static void usage(void);
+static void usage(void);
 static int checkend(const char *, const char *, const char *);
 static int base64_decode(void);
+int main(int, char *[]);
 
-static int base64, pflag;
-static const char *filename;
+int base64, pflag;
+char *filename;
 
 int
 main(int argc, char *argv[])
@@ -285,7 +286,7 @@ base64_decode(void)
 }
 
 static void
-usage(void)
+usage()
 {
 	(void)fprintf(stderr, "usage: %s [-m | -p] [encoded-file ...]\n",
 		      getprogname());

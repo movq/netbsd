@@ -1,4 +1,4 @@
-/*	$NetBSD: ofdev.c,v 1.33 2012/07/16 11:26:27 tsutsui Exp $	*/
+/*	$NetBSD: ofdev.c,v 1.20 2008/05/18 13:18:19 mlelstv Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -41,7 +41,6 @@
 
 #include <lib/libsa/stand.h>
 #include <lib/libsa/ufs.h>
-#include <lib/libsa/lfs.h>
 #include <lib/libsa/cd9660.h>
 #ifdef NETBOOT
 #include <lib/libsa/nfs.h>
@@ -56,10 +55,8 @@
 
 #include "ofdev.h"
 #include "boot.h"
-#include "net.h"
 
 extern char bootdev[];
-extern bool root_fs_quickseekable;
 
 /*
  * This is ugly.  A path on a sparc machine is something like this:
@@ -125,12 +122,18 @@ filename(char *str, char *ppart)
 				sizeof devtype) < 0)
 			devtype[0] = 0;
 	}
-	DPRINTF(("filename: not found\n"));
+	DPRINTF(("filename: not found\n",lp));
 	return 0;
 }
 
 static int
-strategy(void *devdata, int rw, daddr_t blk, size_t size, void *buf, size_t *rsize)
+strategy(devdata, rw, blk, size, buf, rsize)
+	void *devdata;
+	int rw;
+	daddr_t blk;
+	size_t size;
+	void *buf;
+	size_t *rsize;
 {
 	struct of_dev *dev = devdata;
 	u_quad_t pos;
@@ -180,24 +183,19 @@ devclose(struct open_file *of)
 #endif
 	prom_close(op->handle);
 	op->handle = -1;
-	return 0;
 }
 
 static struct devsw ofdevsw[1] = {
-	{
-		"OpenFirmware",
-		strategy,
-		(int (*)(struct open_file *, ...))nodev,
-		devclose,
-		noioctl
-	}
+	"OpenFirmware",
+	strategy,
+	(int (*)(struct open_file *, ...))nodev,
+	devclose,
+	noioctl
 };
 int ndevs = sizeof ofdevsw / sizeof ofdevsw[0];
 
-
 #ifdef SPARC_BOOT_UFS
-static struct fs_ops file_system_ufs[] = 
-{ FS_OPS(ufs), FS_OPS(ffsv2), FS_OPS(lfsv1), FS_OPS(lfsv2) };
+static struct fs_ops file_system_ufs = FS_OPS(ufs);
 #endif
 #ifdef SPARC_BOOT_CD9660
 static struct fs_ops file_system_cd9660 = FS_OPS(cd9660);
@@ -207,7 +205,7 @@ static struct fs_ops file_system_nfs = FS_OPS(nfs);
 static struct fs_ops file_system_tftp = FS_OPS(tftp);
 #endif
 
-struct fs_ops file_system[7];
+struct fs_ops file_system[3];
 int nfsys;
 
 static struct of_dev ofdev = {
@@ -217,6 +215,13 @@ static struct of_dev ofdev = {
 char opened_name[256];
 int floppyboot;
 
+static u_long
+get_long(const void *p)
+{
+	const unsigned char *cp = p;
+
+	return cp[0] | (cp[1] << 8) | (cp[2] << 16) | (cp[3] << 24);
+}
 /************************************************************************
  *
  * The rest of this was taken from arch/sparc64/scsi/sun_disklabel.c
@@ -322,9 +327,15 @@ static char *
 search_label(struct of_dev *devp, u_long off, char *buf,
 	     struct disklabel *lp, u_long off0)
 {
-	size_t readsize;
+	size_t read;
+	struct mbr_partition *p;
+	int i;
+	u_long poff;
+	static int recursion;
+
 	struct disklabel *dlp;
 	struct sun_disklabel *slp;
+	int error;
 
 	/* minimal requirements for archtypal disk label */
 	if (lp->d_secperunit == 0)
@@ -334,8 +345,8 @@ search_label(struct of_dev *devp, u_long off, char *buf,
 		lp->d_partitions[0].p_size = 0x1fffffff;
 	lp->d_partitions[0].p_offset = 0;
 
-	if (strategy(devp, F_READ, LABELSECTOR, DEV_BSIZE, buf, &readsize)
-	    || readsize != DEV_BSIZE)
+	if (strategy(devp, F_READ, LABELSECTOR, DEV_BSIZE, buf, &read)
+	    || read != DEV_BSIZE)
 		return ("Cannot read label");
 	/* Check for a NetBSD disk label. */
 	dlp = (struct disklabel *) (buf + LABELOFFSET);
@@ -353,7 +364,7 @@ search_label(struct of_dev *devp, u_long off, char *buf,
 		return (disklabel_sun_to_bsd(buf, lp));
 
 
-	memset(buf, 0, sizeof(buf));
+	bzero(buf, sizeof(buf));
 	return ("no disk label");
 }
 
@@ -369,8 +380,8 @@ devopen(struct open_file *of, const char *name, char **file)
 	} b;
 	struct disklabel label;
 	int handle, part, try = 0;
-	size_t readsize;
-	char *errmsg = NULL, *pp = NULL, savedpart = 0;
+	size_t read;
+	char *errmsg = NULL, *pp, savedpart = 0;
 	int error = 0;
 
 	if (ofdev.handle != -1)
@@ -457,7 +468,7 @@ open_again:
 		return ENXIO;
 	}
 	DPRINTF(("devopen: %s is now open\n", fname));
-	memset(&ofdev, 0, sizeof ofdev);
+	bzero(&ofdev, sizeof ofdev);
 	ofdev.handle = handle;
 	if (!strcmp(b.buf, "block")) {
 		ofdev.type = OFDEV_DISK;
@@ -465,13 +476,10 @@ open_again:
 		/* First try to find a disklabel without MBR partitions */
 		DPRINTF(("devopen: trying to read disklabel\n"));
 		if (strategy(&ofdev, F_READ,
-			     LABELSECTOR, DEV_BSIZE, b.buf, &readsize) != 0
-		    || readsize != DEV_BSIZE
+			     LABELSECTOR, DEV_BSIZE, b.buf, &read) != 0
+		    || read != DEV_BSIZE
 		    || (errmsg = getdisklabel(b.buf, &label))) {
-			if (errmsg) {
-				DPRINTF(("devopen: getdisklabel returned %s\n",
-					errmsg));
-			}
+			if (errmsg) printf("devopen: getdisklabel returned %s\n", errmsg);
 			/* Else try MBR partitions */
 			errmsg = search_label(&ofdev, 0, b.buf, &label, 0);
 			if (errmsg) {
@@ -500,12 +508,12 @@ open_again:
 		} else {
 			part = partition ? partition - 'a' : 0;
 			ofdev.partoff = label.d_partitions[part].p_offset;
-			DPRINTF(("devopen: setting partition %d offset %lx\n",
+			DPRINTF(("devopen: setting partition %d offset %x\n",
 			       part, ofdev.partoff));
 			if (label.d_partitions[part].p_fstype == FS_RAID) {
 				ofdev.partoff += RF_PROTECTED_SECTORS;
 				DPRINTF(("devopen: found RAID partition, "
-				    "adjusting offset to %lx\n", ofdev.partoff));
+				    "adjusting offset to %x\n", ofdev.partoff));
 			}
 		}
 
@@ -513,37 +521,34 @@ open_again:
 		of->f_dev = ofdevsw;
 		of->f_devdata = &ofdev;
 #ifdef SPARC_BOOT_UFS
-		memcpy(&file_system[nfsys++], &file_system_ufs[0], sizeof file_system[0]);
-		memcpy(&file_system[nfsys++], &file_system_ufs[1], sizeof file_system[0]);
-		memcpy(&file_system[nfsys++], &file_system_ufs[2], sizeof file_system[0]);
-		memcpy(&file_system[nfsys++], &file_system_ufs[3], sizeof file_system[0]);
+		bcopy(&file_system_ufs, &file_system[nfsys++], sizeof file_system[0]);
 #endif
 #ifdef SPARC_BOOT_CD9660
-		memcpy(&file_system[nfsys++], &file_system_cd9660, sizeof file_system[0]);
+		bcopy(&file_system_cd9660, &file_system[nfsys++],
+		    sizeof file_system[0]);
 #endif
 		DPRINTF(("devopen: return 0\n"));
 		return 0;
 	}
 #ifdef NETBOOT
 	if (!strcmp(b.buf, "network")) {
-		if ((error = net_open(&ofdev)) != 0)
+		if (error = net_open(&ofdev))
 			goto bad;
 
 		ofdev.type = OFDEV_NET;
 		of->f_dev = ofdevsw;
-		of->f_devdata = &ofdev;
+		of->f_devdata = NULL;
 
 		if (!strncmp(*file,"/tftp:",6)) {
 			*file += 6;
-			memcpy(&file_system[0], &file_system_tftp, sizeof file_system[0]);
-			if (net_tftp_bootp((int **)&of->f_devdata)) {
+			bcopy(&file_system_tftp, &file_system[0], sizeof file_system[0]);
+			if (net_tftp_bootp(&of->f_devdata)) {
 				net_close(&ofdev);
 				goto bad;
 			}
-			root_fs_quickseekable = false;
 		} else {
-			memcpy(&file_system[0], &file_system_nfs, sizeof file_system[0]);
-			if ((error = net_mountroot()) != 0) {
+			bcopy(&file_system_nfs, &file_system[0], sizeof file_system[0]);
+			if (error = net_mountroot()) {
 				net_close(&ofdev);
 				goto bad;
 			}

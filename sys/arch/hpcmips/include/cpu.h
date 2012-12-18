@@ -1,6 +1,6 @@
-/*	$NetBSD: cpu.h,v 1.13 2010/01/21 01:23:15 pooka Exp $	*/
+/*	$NetBSD: cpu.h,v 1.12 2002/01/31 17:56:34 uch Exp $	*/
 
 #include <mips/cpu.h>
 #ifndef _LOCORE
-extern char hpcmips_cpuname[];
+extern char cpu_name[];
 #endif

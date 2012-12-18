@@ -26,9 +26,9 @@
 .\" SUCH DAMAGE.
 .\"
 .\"	from: @(#)su.1	8.2 (Berkeley) 4/18/94
-.\"	$NetBSD: su.1,v 1.50 2012/11/21 19:30:53 pgoyette Exp $
+.\"	$NetBSD: su.1,v 1.48 2007/10/27 18:43:37 christos Exp $
 .\"
-.Dd November 20, 2012
+.Dd October 27, 2007
 .Dt SU 1
 .Os
 .Sh NAME
@@ -36,14 +36,14 @@
 .Nd substitute user identity
 .Sh SYNOPSIS
 .Nm
-.Op Fl dfKlm
+.Op Fl Kdflm
 .Op Fl c Ar login-class
 .Oo
 .Ar login Ns Op : Ns Ar group
 .Op Ar "shell arguments"
 .Oc
 .Nm
-.Op Fl dfKlm
+.Op Fl Kdflm
 .Op Fl c Ar login-class
 .Oo
 .Ns : Ns Ar group
@@ -129,6 +129,8 @@ this is the traditional behavior of
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
+.It Fl K
+Do not attempt to use Kerberos to authenticate the user.
 .It Fl c
 Specify a login class.
 You may only override the default class if you're already root.
@@ -153,8 +155,6 @@ this option unsets
 .Ev ENV ,
 thus preventing the shell from executing the startup file pointed to by
 this variable.
-.It Fl K
-Do not attempt to use Kerberos to authenticate the user.
 .It Fl l
 Simulate a full login.
 The environment is discarded except for
@@ -186,12 +186,6 @@ is imported from your current environment.
 The invoked shell is the target login's, and
 .Nm
 will change directory to the target login's home directory.
-The
-.Xr utmp 5 ,
-.Xr wtmp 5 ,
-and
-.Xr lastlogin 5
-databases are not updated.
 .It Fl
 Same as
 .Fl l .

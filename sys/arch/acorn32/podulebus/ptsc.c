@@ -1,4 +1,4 @@
-/*	$NetBSD: ptsc.c,v 1.18 2012/10/27 17:17:23 chs Exp $	*/
+/*	$NetBSD: ptsc.c,v 1.13 2005/12/11 12:16:05 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ptsc.c,v 1.18 2012/10/27 17:17:23 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ptsc.c,v 1.13 2005/12/11 12:16:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,10 +98,10 @@ __KERNEL_RCSID(0, "$NetBSD: ptsc.c,v 1.18 2012/10/27 17:17:23 chs Exp $");
 #include <dev/podulebus/podules.h>
 #include <dev/podulebus/powerromreg.h>
 
-int  ptscmatch(device_t, cfdata_t, void *);
-void ptscattach(device_t, device_t, void *);
+int  ptscmatch  __P((struct device *, struct cfdata *, void *));
+void ptscattach __P((struct device *, struct device *, void *));
 
-CFATTACH_DECL_NEW(ptsc, sizeof(struct ptsc_softc),
+CFATTACH_DECL(ptsc, sizeof(struct ptsc_softc),
     ptscmatch, ptscattach, NULL, NULL);
 
 int ptsc_intr(void *);
@@ -118,9 +118,12 @@ void ptsc_set_dma_mode(struct sfas_softc *, int);
  * if we are a Power-tec SCSI-2 card
  */
 int
-ptscmatch(device_t parent, cfdata_t cf, void *aux)
+ptscmatch(pdp, cf, auxp)
+	struct device	*pdp;
+	struct cfdata	*cf;
+	void		*auxp;
 {
-	struct podule_attach_args *pa = aux;
+	struct podule_attach_args *pa = (struct podule_attach_args *)auxp;
 
 	/* Look for the card */
 
@@ -138,12 +141,17 @@ ptscmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-ptscattach(device_t parent, device_t self, void *aux)
+ptscattach(pdp, dp, auxp)
+	struct device	*pdp;
+	struct device	*dp;
+	void		*auxp;
 {
-	struct ptsc_softc *sc = device_private(self);
-	struct podule_attach_args  *pa = aux;
+	struct ptsc_softc *sc = (struct ptsc_softc *)dp;
+	struct podule_attach_args  *pa;
 	ptsc_regmap_p	   rp = &sc->sc_regmap;
 	vu_char		  *fas;
+
+	pa = (struct podule_attach_args *)auxp;
 
 	if (pa->pa_podule_number == -1)
 		panic("Podule has disappeared !");
@@ -176,7 +184,6 @@ ptscattach(device_t parent, device_t self, void *aux)
 	rp->FAS216.sfas_tc_high	= &fas[PTSC_FASOFFSET_TCH];
 	rp->FAS216.sfas_fifo_bot = &fas[PTSC_FASOFFSET_FIFOBOTTOM];
 
-	sc->sc_softc.sc_dev	= self;
 	sc->sc_softc.sc_fas	= (sfas_regmap_p)rp;
 	sc->sc_softc.sc_spec	= &sc->sc_specific;
 
@@ -196,7 +203,7 @@ ptscattach(device_t parent, device_t self, void *aux)
 
 	sfasinitialize((struct sfas_softc *)sc);
 
-	sc->sc_softc.sc_adapter.adapt_dev = sc->sc_softc.sc_dev;
+	sc->sc_softc.sc_adapter.adapt_dev = &sc->sc_softc.sc_dev;
 	sc->sc_softc.sc_adapter.adapt_nchannels = 1;
 	sc->sc_softc.sc_adapter.adapt_openings = 7;
 	sc->sc_softc.sc_adapter.adapt_max_periph = 1;
@@ -224,11 +231,11 @@ ptscattach(device_t parent, device_t self, void *aux)
 
 #if PTSC_POLL == 0
 	evcnt_attach_dynamic(&sc->sc_softc.sc_intrcnt, EVCNT_TYPE_INTR, NULL,
-	    device_xname(self), "intr");
+	    dp->dv_xname, "intr");
 	sc->sc_softc.sc_ih = podulebus_irq_establish(pa->pa_ih, IPL_BIO,
 	    ptsc_intr, &sc->sc_softc, &sc->sc_softc.sc_intrcnt);
 	if (sc->sc_softc.sc_ih == NULL)
-	    panic("%s: Cannot install IRQ handler", device_xname(self));
+	    panic("%s: Cannot install IRQ handler", dp->dv_xname);
 #else
 	printf(" polling");
 	sc->sc_softc.sc_adapter.adapt_flags = SCSIPI_ADAPT_POLL_ONLY;
@@ -237,12 +244,13 @@ ptscattach(device_t parent, device_t self, void *aux)
 	printf("\n");
 
 	/* attach all scsi units on us */
-	config_found(self, &sc->sc_softc.sc_channel, scsiprint);
+	config_found(dp, &sc->sc_softc.sc_channel, scsiprint);
 }
 
 
 int
-ptsc_intr(void *arg)
+ptsc_intr(arg)
+	void *arg;
 {
 	struct sfas_softc *dev = arg;
 	ptsc_regmap_p	      rp;
@@ -272,7 +280,9 @@ ptsc_intr(void *arg)
 
 /* Load transfer address into DMA register */
 void
-ptsc_set_dma_adr(struct sfas_softc *sc, void *ptr)
+ptsc_set_dma_adr(sc, ptr)
+	struct sfas_softc *sc;
+	void		 *ptr;
 {
 #if 0
 	ptsc_regmap_p	rp;
@@ -296,7 +306,9 @@ ptsc_set_dma_adr(struct sfas_softc *sc, void *ptr)
 
 /* Set DMA transfer counter */
 void
-ptsc_set_dma_tc(struct sfas_softc *sc, unsigned int len)
+ptsc_set_dma_tc(sc, len)
+	struct sfas_softc *sc;
+	unsigned int	  len;
 {
 	printf("ptsc_set_dma_tc(sc, len = 0x%08x)", len);
 
@@ -307,7 +319,9 @@ ptsc_set_dma_tc(struct sfas_softc *sc, unsigned int len)
 
 /* Set DMA mode */
 void
-ptsc_set_dma_mode(struct sfas_softc *sc, int mode)
+ptsc_set_dma_mode(sc, mode)
+	struct sfas_softc *sc;
+	int		  mode;
 {
 #if 0
 	struct csc_specific *spec;
@@ -321,7 +335,11 @@ ptsc_set_dma_mode(struct sfas_softc *sc, int mode)
 
 /* Initialize DMA for transfer */
 int
-ptsc_setup_dma(void *v, void *ptr, int len, int mode)
+ptsc_setup_dma(v, ptr, len, mode)
+	void	*v;
+	void	*ptr;
+	int	len;
+	int	mode;
 {
 	return(0);
 
@@ -364,7 +382,10 @@ ptsc_setup_dma(void *v, void *ptr, int len, int mode)
 
 /* Check if address and len is ok for DMA transfer */
 int
-ptsc_need_bump(void *v, void *ptr, int len)
+ptsc_need_bump(v, ptr, len)
+	void	*v;
+	void	*ptr;
+	int	len;
 {
 	int	p;
 

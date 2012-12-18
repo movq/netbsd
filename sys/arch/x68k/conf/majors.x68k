@@ -1,4 +1,4 @@
-#	$NetBSD: majors.x68k,v 1.26 2012/04/29 07:17:11 tsutsui Exp $
+#	$NetBSD: majors.x68k,v 1.19 2007/12/31 15:32:08 ad Exp $
 #
 # Device majors for x68k
 #
@@ -19,7 +19,7 @@ device-major	zstty		char 12			zstty
 device-major	ite		char 13			ite
 device-major	kbd		char 14			kbd
 device-major	ms		char 15			ms
-device-major	com		char 16			com
+device-major	xcom		char 16			xcom
 device-major	audio		char 17			audio
 device-major	fd		char 18  block 2	fd
 device-major	vnd		char 19  block 6	vnd
@@ -27,9 +27,10 @@ device-major	st		char 20  block 5	st
 device-major	filedesc	char 21
 device-major	bpf		char 22			bpfilter
 device-major	sram		char 23			sram
+device-major	lkm		char 24			lkm
 
 device-major	tun		char 31			tun
-#obsolete	pow		char 32			pow
+device-major	pow		char 32			pow
 device-major	bell		char 33			bell
 device-major	ccd		char 34  block 15	ccd
 device-major	ss		char 35			ss
@@ -57,9 +58,9 @@ device-major	ulpt		char 57			ulpt
 device-major	ucom		char 58			ucom
 device-major	urio		char 59			urio
 device-major	uscanner	char 60			uscanner
-device-major	sysmon		char 61			sysmon_power
+
 device-major	nsmb		char 98			nsmb
 
-# Majors up to 143 are reserved for machine-dependent drivers.
+# Majors up to 143 are reserved for machine-dependant drivers.
 # New machine-independent driver majors are assigned in 
 # sys/conf/majors.

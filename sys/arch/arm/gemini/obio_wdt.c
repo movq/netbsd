@@ -1,4 +1,4 @@
-/*	$NetBSD: obio_wdt.c,v 1.7 2012/10/27 17:17:38 chs Exp $	*/
+/*	$NetBSD: obio_wdt.c,v 1.1.4.1 2008/11/01 19:41:57 snj Exp $	*/
 
 /*
  * Copyright (c) 2007 Microsoft
@@ -36,7 +36,7 @@
 #include "locators.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio_wdt.c,v 1.7 2012/10/27 17:17:38 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio_wdt.c,v 1.1.4.1 2008/11/01 19:41:57 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -47,25 +47,25 @@ __KERNEL_RCSID(0, "$NetBSD: obio_wdt.c,v 1.7 2012/10/27 17:17:38 chs Exp $");
 #include <sys/wdog.h>
 
 #include <machine/param.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <dev/sysmon/sysmonvar.h>
 
 #include <arm/gemini/gemini_obiovar.h>
 #include <arm/gemini/gemini_wdtvar.h>
 #include <arm/gemini/gemini_reg.h>
 
-static int geminiwdt_match(device_t, cfdata_t, void *);
-static void geminiwdt_attach(device_t, device_t, void *);
+static int geminiwdt_match(struct device *, struct cfdata *, void *);
+static void geminiwdt_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(obiowdt, sizeof(struct geminiwdt_softc),
+CFATTACH_DECL(obiowdt, sizeof(struct geminiwdt_softc),
     geminiwdt_match, geminiwdt_attach, NULL, NULL);
 
 static int
-geminiwdt_match(device_t parent, cfdata_t cf, void *aux)
+geminiwdt_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct obio_attach_args *obio = aux;
 
-	if (obio->obio_addr == OBIOCF_ADDR_DEFAULT)
+	if (obio->obio_addr == IICCF_ADDR_DEFAULT)
 		panic("geminiwdt must have addr specified in config.");
 
 	if (obio->obio_addr == GEMINI_WATCHDOG_BASE)
@@ -75,18 +75,17 @@ geminiwdt_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-geminiwdt_attach(device_t parent, device_t self, void *aux)
+geminiwdt_attach(struct device *parent, struct device *self, void *aux)
 {
-	geminiwdt_softc_t *sc = device_private(self);
+	geminiwdt_softc_t *sc = (geminiwdt_softc_t *)self;
 	struct obio_attach_args *obio = aux;
 
-	sc->sc_dev = self;
 	sc->sc_addr = obio->obio_addr;
-	sc->sc_size = (obio->obio_size == OBIOCF_SIZE_DEFAULT)
+	sc->sc_size = (obio->obio_size == IICCF_SIZE_DEFAULT)
 		? GEMINI_WDT_WDINTERLEN + 4
 		: obio->obio_size;
 
-	sc->sc_smw.smw_name = device_xname(sc->sc_dev);
+	sc->sc_smw.smw_name = device_xname(&sc->sc_dev);
 	sc->sc_smw.smw_cookie = sc;
 	sc->sc_smw.smw_setmode = geminiwdt_setmode;
 	sc->sc_smw.smw_tickle = geminiwdt_tickle;
@@ -104,7 +103,7 @@ geminiwdt_attach(device_t parent, device_t self, void *aux)
 	if (sysmon_wdog_register(&sc->sc_smw) != 0) {
 		geminiwdt_sc = NULL;
 		aprint_error("%s: unable to register with sysmon\n",
-			     device_xname(sc->sc_dev));
+			     device_xname(&sc->sc_dev));
 	}
 
 	aprint_normal("\n");

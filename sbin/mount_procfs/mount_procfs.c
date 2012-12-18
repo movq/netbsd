@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_procfs.c,v 1.24 2011/08/29 14:35:02 joerg Exp $	*/
+/*	$NetBSD: mount_procfs.c,v 1.22.2.1 2009/02/26 07:54:01 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -77,7 +77,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)mount_procfs.c	8.4 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_procfs.c,v 1.24 2011/08/29 14:35:02 joerg Exp $");
+__RCSID("$NetBSD: mount_procfs.c,v 1.22.2.1 2009/02/26 07:54:01 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -103,7 +103,7 @@ static const struct mntopt mopts[] = {
 };
 
 int	mount_procfs(int argc, char **argv);
-__dead static void	usage(void);
+static void	usage(void);
 
 #ifndef MOUNT_NOMAIN
 int

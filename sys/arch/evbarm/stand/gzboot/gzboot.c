@@ -1,4 +1,4 @@
-/*	$NetBSD: gzboot.c,v 1.15 2011/01/22 19:19:17 joerg Exp $	*/
+/*	$NetBSD: gzboot.c,v 1.11 2006/01/25 18:28:26 christos Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.
@@ -114,13 +114,15 @@ void	gzcopy(void *, const void *, size_t);
 void
 main(void)
 {
-	extern char bootprog_name[], bootprog_rev[];
+	extern char bootprog_name[], bootprog_rev[],
+	    bootprog_maker[], bootprog_date[];
 	void (*loadaddr)(void) = (void *) md_root_loadaddr;
 
 	cons_init();
 
 	printf("\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
+	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 
 	board_init();
 
@@ -173,7 +175,7 @@ readbuf(struct state *s, void *buf, size_t len)
 
 	if ((s->spinny++ & 7) == 0)
 		twiddle();
-	memcpy(buf, s->srcbuf + s->srcoff, len);
+	bcopy(s->srcbuf + s->srcoff, buf, len);
 	s->srcoff += len;
 
 	return (len);
@@ -241,7 +243,7 @@ void
 zmemcpy(unsigned char *dst, unsigned char *src, unsigned int len)
 {
 
-	memcpy(dst, src, len);
+	bcopy(src, dst, len);
 }
 
 /* gzip utility routines */
@@ -353,7 +355,7 @@ gzcopy(void *dst, const void *src, size_t srclen)
 	unsigned char *cp = dst;
 	ssize_t len;
 
-	memset(&state, 0, sizeof(state));
+	bzero(&state, sizeof(state));
 
 	state.z_err = Z_OK;
 	state.srcbuf = src;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_zbus.c,v 1.16 2012/05/15 17:35:44 rkujawa Exp $ */
+/*	$NetBSD: if_ne_zbus.c,v 1.13 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_zbus.c,v 1.16 2012/05/15 17:35:44 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_zbus.c,v 1.13 2008/04/28 20:23:12 martin Exp $");
 
 /*
  * Thanks to Village Tronic for giving me a card.
@@ -44,11 +44,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_ne_zbus.c,v 1.16 2012/05/15 17:35:44 rkujawa Exp 
 #include <sys/socket.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
 
 #include <net/if.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
+
+#include <machine/bus.h>
 
 #include <dev/ic/dp8390reg.h>
 #include <dev/ic/dp8390var.h>
@@ -95,6 +96,10 @@ ne_zbus_match(device_t parent, cfdata_t cf, void *aux)
 	if (zap->manid == 2167 && zap->prodid == 202)
 		return (1);
 
+	/* X-surf ethernet card */
+	if (zap->manid == 4626 && zap->prodid == 23)
+		return (1);
+
 	return (0);
 }
 
@@ -120,6 +125,8 @@ ne_zbus_attach(device_t parent, device_t self, void *aux)
 	dsc->sc_media_init = rtl80x9_media_init;
 
 	zsc->sc_bst.base = (u_long)zap->va + 0;
+	if (zap->manid == 4626)
+		 zsc->sc_bst.base += 0x8000;
 
 	zsc->sc_bst.absm = &amiga_bus_stride_2;
 

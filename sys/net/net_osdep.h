@@ -1,4 +1,4 @@
-/*	$NetBSD: net_osdep.h,v 1.18 2009/05/06 22:17:41 elad Exp $	*/
+/*	$NetBSD: net_osdep.h,v 1.17 2007/03/04 06:03:17 christos Exp $	*/
 /*	$KAME: net_osdep.h,v 1.51 2001/07/06 06:21:43 itojun Exp $	*/
 
 /*
@@ -79,21 +79,12 @@
  *		of BSDI (the change is not merged - yet).
  *
  * - privileged process
- *	NetBSD 2, 3
- *		struct lwp *l;
- *		if (l->l_proc &&
- *		    !suser(l->l_proc->p_ucred, &l->l_proc->p_acflag))
- *			privileged
- *	NetBSD >= 4
- *		below is the generic authorization call, please see kauth(9)
- *		for more specific alternatives (for proper integration with
- *		secmodels)
- *
+ *	NetBSD
  *		struct lwp *l;
  *		if (l != NULL && kauth_authorize_generic(l->l_cred, 
  *		    KAUTH_GENERIC_ISSUSER, NULL) == 0)
  *			privileged;
- *	NetBSD < 2, FreeBSD 3
+ *	FreeBSD 3
  *		struct proc *p;
  *		if (p && !suser(p->p_ucred, &p->p_acflag))
  *			privileged;

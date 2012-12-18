@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_mchain.c,v 1.22 2012/05/12 01:40:37 nakayama Exp $	*/
+/*	$NetBSD: subr_mchain.c,v 1.15.6.2 2012/05/19 17:03:09 riz Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_mchain.c,v 1.22 2012/05/12 01:40:37 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_mchain.c,v 1.15.6.2 2012/05/19 17:03:09 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,56 +50,58 @@ __KERNEL_RCSID(0, "$NetBSD: subr_mchain.c,v 1.22 2012/05/12 01:40:37 nakayama Ex
 #define MBERROR(x)	aprint_error x
 #define MBPANIC(x)	aprint_error x
 
+#ifdef __NetBSD__
 static struct mbuf *
 m_getm(struct mbuf *m, size_t len, int how, int type)
 {
-	struct mbuf *top, *tail, *mp, *mtail = NULL;
+        struct mbuf *top, *tail, *mp, *mtail = NULL;
 
-	mp = m_get(how, type);
-	if (mp == NULL)
-		return (NULL);
-	else if (len > MINCLSIZE) {
-		m_clget(mp, how);
-		if ((mp->m_flags & M_EXT) == 0) {
-			m_free(mp);
-			return (NULL);
-		}
-	}
-	mp->m_len = 0;
-	len -= min(len, M_TRAILINGSPACE(mp));
+        mp = m_get(how, type);
+        if (mp == NULL)
+                return (NULL);
+        else if (len > MINCLSIZE) {
+                m_clget(mp, how);
+                if ((mp->m_flags & M_EXT) == 0) {
+                        m_free(mp);
+                        return (NULL);
+                }
+        }
+        mp->m_len = 0;
+        len -= min(len, M_TRAILINGSPACE(mp));
 
-	if (m != NULL)
-		for (mtail = m; mtail->m_next != NULL; mtail = mtail->m_next);
-	else
-		m = mp;
+        if (m != NULL)
+                for (mtail = m; mtail->m_next != NULL; mtail = mtail->m_next);
+        else
+                m = mp;
 
-	top = tail = mp;
-	while (len > 0) {
-		mp = m_get(how, type);
-		if (mp == NULL)
-			goto failed;
+        top = tail = mp;
+        while (len > 0) {
+                mp = m_get(how, type);
+                if (mp == NULL)
+                        goto failed;
 
-		tail->m_next = mp;
-		tail = mp;
-		if (len > MINCLSIZE) {
-			m_clget(mp, how);
-			if ((mp->m_flags & M_EXT) == 0)
-				goto failed;
-		}
+                tail->m_next = mp;
+                tail = mp;
+                if (len > MINCLSIZE) {
+                        m_clget(mp, how);
+                        if ((mp->m_flags & M_EXT) == 0)
+                                goto failed;
+                }
 
-		mp->m_len = 0;
-		len -= min(len, M_TRAILINGSPACE(mp));
-	}
+                mp->m_len = 0;
+                len -= min(len, M_TRAILINGSPACE(mp));
+        }
 
-	if (mtail != NULL)
-		mtail->m_next = top;
-	return (m);
+        if (mtail != NULL)
+                mtail->m_next = top;
+        return (m);
 
 failed:
-	m_freem(top);
-	return (NULL);
+        m_freem(top);
+        return (NULL);
 }
 
+#endif /* __NetBSD__ */
 
 /*
  * Various helper functions
@@ -134,7 +136,7 @@ mb_init(struct mbchain *mbp)
 void
 mb_initm(struct mbchain *mbp, struct mbuf *m)
 {
-	memset(mbp, 0, sizeof(*mbp));
+	bzero(mbp, sizeof(*mbp));
 	mbp->mb_top = mbp->mb_cur = m;
 	mbp->mb_mleft = M_TRAILINGSPACE(m);
 }
@@ -279,7 +281,7 @@ mb_put_mem(struct mbchain *mbp, const char *source, size_t size, int type)
 				*dst++ = *src++;
 			break;
 		    case MB_MSYSTEM:
-			memcpy(dst, source, cplen);
+			bcopy(source, dst, cplen);
 			break;
 		    case MB_MUSER:
 			error = copyin(source, dst, cplen);
@@ -287,7 +289,7 @@ mb_put_mem(struct mbchain *mbp, const char *source, size_t size, int type)
 				return error;
 			break;
 		    case MB_MZERO:
-			memset(dst, 0, cplen);
+			bzero(dst, cplen);
 			break;
 		}
 		size -= cplen;
@@ -344,7 +346,7 @@ mb_put_uio(struct mbchain *mbp, struct uio *uiop, size_t size)
 		uiop->uio_offset += left;
 		uiop->uio_resid -= left;
 		uiop->uio_iov->iov_base =
-			(char *)uiop->uio_iov->iov_base + left;
+                        (char *)uiop->uio_iov->iov_base + left;
 		uiop->uio_iov->iov_len -= left;
 		size -= left;
 	}
@@ -370,7 +372,7 @@ md_init(struct mdchain *mdp)
 void
 md_initm(struct mdchain *mdp, struct mbuf *m)
 {
-	memset(mdp, 0, sizeof(*mdp));
+	bzero(mdp, sizeof(*mdp));
 	mdp->md_top = mdp->md_cur = m;
 	mdp->md_pos = mtod(m, u_char*);
 }
@@ -547,7 +549,7 @@ md_get_mem(struct mdchain *mdp, void *targetv, size_t size, int type)
 				return error;
 			break;
 		    case MB_MSYSTEM:
-			memcpy(target, s, count);
+			bcopy(s, target, count);
 			break;
 		    case MB_MINLINE:
 			while (count--)
@@ -597,8 +599,8 @@ md_get_uio(struct mdchain *mdp, struct uio *uiop, size_t size)
 			return error;
 		uiop->uio_offset += left;
 		uiop->uio_resid -= left;
-		uiop->uio_iov->iov_base =
-				(char *)uiop->uio_iov->iov_base + left;
+                uiop->uio_iov->iov_base =
+                                (char *)uiop->uio_iov->iov_base + left;
 		uiop->uio_iov->iov_len -= left;
 		size -= left;
 	}

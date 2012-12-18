@@ -27,13 +27,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/param.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include <limits.h>
-#include <unistd.h>
 
 #ifdef NEED_SETPROCTITLE
 
@@ -45,42 +42,18 @@ setproctitle(const char *fmt, ...)
 	va_list ap;
 	char buf[1024];
 	int len;
-	char *pname, *p, *s;
-	/*
-	 * Assumes that stack grows down, and than environ has not bee
-	 * reallocated because of setenv() required growth. Stack layout:
-	 * 
-	 * argc
-	 * argv[0]
-	 * ...
-	 * argv[n]
-	 * NULL
-	 * environ[0]
-	 * ...
-	 * environ[n]
-	 * NULL
-	 */
+	char *pname, *p;
+	char **args = __environ - 2;
 
-	/* 1 for the first entry, 1 for the NULL */
-	char **args = __environ - 2, *s;
-#ifdef _SC_ARG_MAX
-	s = (char *)sysconf(_SC_ARG_MAX);
-#elifdef ARG_MAX
-	s = (char *)ARG_MAX;
-#elifdef NCARGS
-	s = (char *)NCARGS;
-#else
-	s = (char *)(256 * 1024);
-#endif
 	/*
 	 * Keep going while it looks like a pointer. We'll stop at argc,
-	 * Which is a lot smaller than a pointer, limited by ARG_MAX
+	 * Assume that we have < 10K args.
 	 */
-	while (*args > s)
+	while (*args > (char *)10240)
 		args--;
 
-	*(int *)args = 1; /* *argc = 1; */
-	pname = *++args;  /* pname = argv[0] */
+	pname = *++args;
+	*(int *)((int *)pname - 1) = 1; /* *argc = 1; */
  
 	/* Just the last component of the name */
 	if ((p = strrchr(pname, '/')) != NULL)

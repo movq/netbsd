@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.40 2012/03/14 13:26:43 martin Exp $
+#	$NetBSD: Makefile,v 1.39 2003/07/10 10:34:14 lukem Exp $
 #
 # boot.fs is the image for disk 1 of the two-set floppy based installation
 # method.
@@ -13,7 +13,7 @@
 .include <bsd.kernobj.mk>
 
 IMAGE=		boot.fs
-IMAGESIZE=	2880k
+IMAGESIZE=	1440k
 LISTS=		${.CURDIR}/list
 MTREECONF=	${DISTRIBDIR}/common/mtree.dot
 IMAGEENDIAN=	be
@@ -43,6 +43,14 @@ create-aout=\
 	( printf ${SUN_MAGIC_HEADER}; cat ${.TARGET}.raw ) > ${.TARGET}
 
 CLEANFILES+=	netbsd.ram.aout.raw
+
+
+FD?=		fd0
+FD_RDEV=	/dev/r${FD}a
+
+real-floppy:
+	dd if=${IMAGE} of=${FD_RDEV} bs=32k
+
 
 .include "${DISTRIBDIR}/common/Makefile.image"
 .include "${DISTRIBDIR}/common/Makefile.mdset"

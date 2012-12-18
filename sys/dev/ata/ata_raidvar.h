@@ -1,4 +1,4 @@
-/*	$NetBSD: ata_raidvar.h,v 1.12 2010/07/06 18:03:21 bsh Exp $	*/
+/*	$NetBSD: ata_raidvar.h,v 1.10 2008/09/16 11:45:30 tron Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -65,10 +65,10 @@
 #define	ATA_RAID_MAX_DISKS	8
 
 struct ataraid_disk_info {
-	device_t adi_dev;		/* disk's device */
+	struct device *adi_dev;		/* disk's device */
 	int	adi_status;		/* disk's status */
-	uint64_t	adi_sectors;
-	uint64_t	adi_compsize;		/* in sectors */
+	u_int	adi_sectors;
+	u_int	adi_compsize;		/* in sectors */
 };
 
 /* adi_status */
@@ -79,7 +79,7 @@ struct ataraid_disk_info {
 struct ataraid_array_info {
 	TAILQ_ENTRY(ataraid_array_info) aai_list;
 
-	device_t aai_ld;		/* associated logical disk */
+	struct device *aai_ld;		/* associated logical disk */
 
 	u_int	aai_type;		/* array type */
 	u_int	aai_arrayno;		/* array number */
@@ -94,13 +94,12 @@ struct ataraid_array_info {
 	u_int	aai_heads;		/* tracks/cyl */
 	u_int	aai_sectors;		/* secs/track */
 	u_int	aai_cylinders;		/* cyl/unit */
-	uint64_t	aai_capacity;		/* in sectors */
-	daddr_t		aai_offset;		/* component start offset */
-	uint64_t	aai_reserved;		/* component reserved sectors */
+	u_int	aai_capacity;		/* in sectors */
+	u_int	aai_offset;		/* component start offset */
+	u_int	aai_reserved;		/* component reserved sectors */
 
 	char	aai_name[32];		/* array volume name */
 
-	uint aai_curdisk;	/* to enumerate component disks */
 	struct ataraid_disk_info aai_disks[ATA_RAID_MAX_DISKS];
 };
 
@@ -120,7 +119,7 @@ struct wd_softc;
 typedef TAILQ_HEAD(, ataraid_array_info) ataraid_array_info_list_t;
 extern ataraid_array_info_list_t ataraid_array_info_list;
 
-void	ata_raid_check_component(device_t);
+void	ata_raid_check_component(struct device *);
 const char *ata_raid_type_name(u_int);
 
 struct ataraid_array_info *ata_raid_get_array_info(u_int, u_int);

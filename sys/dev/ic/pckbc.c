@@ -1,4 +1,4 @@
-/* $NetBSD: pckbc.c,v 1.54 2012/10/13 17:51:28 jdc Exp $ */
+/* $NetBSD: pckbc.c,v 1.45 2008/06/04 16:29:14 drochner Exp $ */
 
 /*
  * Copyright (c) 2004 Ben Harris.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pckbc.c,v 1.54 2012/10/13 17:51:28 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pckbc.c,v 1.45 2008/06/04 16:29:14 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,16 +46,21 @@ __KERNEL_RCSID(0, "$NetBSD: pckbc.c,v 1.54 2012/10/13 17:51:28 jdc Exp $");
 
 #include <dev/pckbport/pckbportvar.h>
 
+#include "rnd.h"
 #include "locators.h"
 
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 /* data per slave device */
 struct pckbc_slotdata {
 	int polling;	/* don't process data in interrupt handler */
 	int poll_data;	/* data read from inr handler if polling */
 	int poll_stat;	/* status read from inr handler if polling */
-	krndsource_t	rnd_source;
+#if NRND > 0
+	rndsource_element_t	rnd_source;
+#endif
 };
 
 static void pckbc_init_slotdata(struct pckbc_slotdata *);
@@ -233,7 +238,7 @@ int
 pckbc_is_console(bus_space_tag_t iot, bus_addr_t addr)
 {
 	if (pckbc_console && !pckbc_console_attached &&
-	    bus_space_is_equal(pckbc_consdata.t_iot, iot) &&
+	    pckbc_consdata.t_iot == iot &&
 	    pckbc_consdata.t_addr == addr)
 		return (1);
 	return (0);
@@ -245,7 +250,7 @@ pckbc_attach_slot(struct pckbc_softc *sc, pckbc_slot_t slot)
 	struct pckbc_internal *t = sc->id;
 	struct pckbc_attach_args pa;
 	void *sdata;
-	device_t child;
+	struct device *child;
 	int alloced = 0;
 
 	pa.pa_tag = t;
@@ -270,10 +275,11 @@ pckbc_attach_slot(struct pckbc_softc *sc, pckbc_slot_t slot)
 		t->t_slotdata[slot] = NULL;
 	}
 
+#if NRND > 0
 	if (child != NULL && t->t_slotdata[slot] != NULL)
 		rnd_attach_source(&t->t_slotdata[slot]->rnd_source,
 		    device_xname(child), RND_TYPE_TTY, 0);
-
+#endif
 	return child != NULL;
 }
 
@@ -354,20 +360,6 @@ pckbc_attach(struct pckbc_softc *sc)
 	t->t_haveaux = 1;
 	bus_space_write_1(iot, ioh_d, 0, 0x5a); /* a random value */
 	res = pckbc_poll_data1(t, PCKBC_AUX_SLOT);
-
-	/*
-	 * The following is needed to find the aux port on the Tadpole
-	 * SPARCle.
-	 */
-	if (res == -1 && ISSET(t->t_flags, PCKBC_NEED_AUXWRITE)) {
-		/* Read of aux echo timed out, try again */
-		if (!pckbc_send_cmd(iot, ioh_c, KBC_AUXWRITE))
-			goto nomouse;
-		if (!pckbc_wait_output(iot, ioh_c))
-			goto nomouse;
-		bus_space_write_1(iot, ioh_d, 0, 0x5a);
-		res = pckbc_poll_data1(t, PCKBC_AUX_SLOT);
-	}
 	if (res != -1) {
 		/*
 		 * In most cases, the 0x5a gets echoed.
@@ -379,7 +371,6 @@ pckbc_attach(struct pckbc_softc *sc)
 		if (pckbc_attach_slot(sc, PCKBC_AUX_SLOT))
 			cmdbits |= KC8_MENABLE;
 	} else {
-
 #ifdef PCKBCDEBUG
 		printf("pckbc: aux echo test failed\n");
 #endif
@@ -409,9 +400,6 @@ pckbc_xt_translation(void *self, pckbc_slot_t slot, int on)
 {
 	struct pckbc_internal *t = self;
 	int ison;
-
-	if (ISSET(t->t_flags, PCKBC_CANT_TRANSLATE))
-		return (-1);
 
 	if (slot != PCKBC_KBD_SLOT) {
 		/* translation only for kbd slot */
@@ -473,14 +461,14 @@ pckbc_set_poll(void *self, pckbc_slot_t slot, int on)
 		t->t_slotdata[slot]->poll_data = -1;
 		t->t_slotdata[slot]->poll_stat = -1;
 	} else {
-		int s;
+                int s;
 
-		/*
-		 * If disabling polling on a device that's been configured,
-		 * make sure there are no bytes left in the FIFO, holding up
-		 * the interrupt line.  Otherwise we won't get any further
-		 * interrupts.
-		 */
+                /*
+                 * If disabling polling on a device that's been configured,
+                 * make sure there are no bytes left in the FIFO, holding up
+                 * the interrupt line.  Otherwise we won't get any further
+                 * interrupts.
+                 */
 		if (t->t_sc) {
 			s = spltty();
 			pckbcintr(t->t_sc);
@@ -529,7 +517,9 @@ pckbcintr_hard(void *vsc)
 		KBD_DELAY;
 		data = bus_space_read_1(t->t_iot, t->t_ioh_d, 0);
 
+#if NRND > 0
 		rnd_add_uint32(&q->rnd_source, (stat<<8)|data);
+#endif
 
 		if (q->polling) {
 			q->poll_data = data;
@@ -610,7 +600,9 @@ pckbcintr(void *vsc)
 		KBD_DELAY;
 		data = bus_space_read_1(t->t_iot, t->t_ioh_d, 0);
 
+#if NRND > 0
 		rnd_add_uint32(&q->rnd_source, (stat<<8)|data);
+#endif
 
 		pckbportintr(t->t_pt, slot, data);
 	}
@@ -620,7 +612,7 @@ pckbcintr(void *vsc)
 
 int
 pckbc_cnattach(bus_space_tag_t iot, bus_addr_t addr,
-	bus_size_t cmd_offset, pckbc_slot_t slot, int flags)
+	bus_size_t cmd_offset, pckbc_slot_t slot)
 {
 	bus_space_handle_t ioh_d, ioh_c;
 #ifdef PCKBC_CNATTACH_SELFTEST
@@ -629,10 +621,10 @@ pckbc_cnattach(bus_space_tag_t iot, bus_addr_t addr,
 	int res = 0;
 
 	if (bus_space_map(iot, addr + KBDATAP, 1, 0, &ioh_d))
-		return (ENXIO);
+                return (ENXIO);
 	if (bus_space_map(iot, addr + cmd_offset, 1, 0, &ioh_c)) {
 		bus_space_unmap(iot, ioh_d, 1);
-		return (ENXIO);
+                return (ENXIO);
 	}
 
 	memset(&pckbc_consdata, 0, sizeof(pckbc_consdata));
@@ -640,7 +632,6 @@ pckbc_cnattach(bus_space_tag_t iot, bus_addr_t addr,
 	pckbc_consdata.t_ioh_d = ioh_d;
 	pckbc_consdata.t_ioh_c = ioh_c;
 	pckbc_consdata.t_addr = addr;
-	pckbc_consdata.t_flags = flags;
 	callout_init(&pckbc_consdata.t_cleanup, 0);
 
 	/* flush */
@@ -689,7 +680,7 @@ pckbc_cnattach(bus_space_tag_t iot, bus_addr_t addr,
 }
 
 bool
-pckbc_resume(device_t dv, const pmf_qual_t *qual)
+pckbc_resume(device_t dv PMF_FN_ARGS)
 {
 	struct pckbc_softc *sc = device_private(dv);
 	struct pckbc_internal *t;

@@ -1,4 +1,4 @@
-.\"	$NetBSD: scsipi.9,v 1.25 2010/03/22 18:58:33 joerg Exp $
+.\"	$NetBSD: scsipi.9,v 1.19 2007/07/30 22:48:47 alc Exp $
 .\"
 .\"
 .\" Copyright (c) 2001 Manuel Bouyer.
@@ -11,6 +11,11 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
+.\" 3. All advertising materials mentioning features or use of this software
+.\"    must display the following acknowledgement:
+.\"	This product includes software developed by Manuel Bouyer.
+.\" 4. The name of the author may not be used to endorse or promote products
+.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -76,14 +81,14 @@ A high-level command (command sent from the high-level SCSI/ATAPI
 layer to the low-level HBA layer) is described by a
 .Va struct scsipi_xfer .
 .Pp
-A request is sent to the HBA driver through the
+A request is sent to the HBA driver though the
 .Fn adapt_request
 callback.
 The HBA driver signals completion (with or without errors) of the
-request through
+request though
 .Fn scsipi_done .
 .Nm
-knows the resource's limits of the HBA (max number of concurrent requests per
+knows the resources limits of the HBA (max number of concurrent requests per
 adapter of channel, and per periph), and will make sure the HBA won't receive
 more requests than it can handle.
 .Pp
@@ -189,7 +194,7 @@ adapter's ID on this channel
 .It Va int chan_defquirks
 default device quirks.
 Quirks are defined in
-.In dev/scsipi/scsipiconf.h
+.Pa \*[Lt]dev/scsipi/scsipiconf.h\*[Gt]
 and are usually set in the middle layer based on the device's inquiry
 data.
 For some kinds of adapters it may be convenient to have a set of
@@ -201,7 +206,7 @@ The HBA driver attaches the SCSI or ATAPI bus (depending on the setting of
 by passing a pointer to the
 .Va struct scsipi_channel
 to the
-.Xr autoconf 9
+.Xr autoconf 4
 machinery.
 The print function shall be either
 .Fn scsiprint
@@ -222,7 +227,7 @@ pointer to the device's
 pointer to the channel the device is connected to
 .It Va int periph_quirks
 device quirks, defined in
-.In dev/scsipi/scsipiconf.h
+.Aq Pa dev/scsipi/scsipiconf.h
 .It Va int periph_target
 target ID, or drive number on ATAPI
 .It Va int periph_lun
@@ -373,7 +378,7 @@ ST 32 bit wide transfers
 .It Dv PERIPH_CAP_DT
 DT transfers
 .It Dv PERIPH_CAP_TQING
-tagged queuing
+tagged queueing
 .El
 Whenever the xfer mode changes, the driver should call
 .Fn scsipi_async_event
@@ -439,9 +444,9 @@ Argument is a
 .Va struct scsipi_xfer_mode
 properly filled in.
 An
-.Dv ASYNC_EVENT_XFER_MODE
+.Fa Dv ASYNC_EVENT_XFER_MODE
 call with
-.Dv PERIPH_CAP_TQING
+.Fa Dv PERIPH_CAP_TQING
 set in
 .Va xm_mode
 is mandatory to activate tagged queuing.

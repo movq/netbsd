@@ -1,4 +1,4 @@
-/*	$NetBSD: stack_protector.c,v 1.8 2012/03/13 21:13:39 christos Exp $	*/
+/*	$NetBSD: stack_protector.c,v 1.2.4.1 2009/02/02 22:07:40 snj Exp $	*/
 /*	$OpenBSD: stack_protector.c,v 1.10 2006/03/31 05:34:44 deraadt Exp $	*/
 
 /*
@@ -28,7 +28,7 @@
  *
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: stack_protector.c,v 1.8 2012/03/13 21:13:39 christos Exp $");
+__RCSID("$NetBSD: stack_protector.c,v 1.2.4.1 2009/02/02 22:07:40 snj Exp $");
 
 #ifdef _LIBC
 #include "namespace.h"
@@ -49,22 +49,27 @@ void xprintf(const char *fmt, ...);
 #endif
 
 long __stack_chk_guard[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-static void __fail(const char *) __attribute__((__noreturn__));
-__dead void __stack_chk_fail_local(void);
+static void __fail(const char *);
+void __stack_chk_fail(void);
+void __chk_fail(void);
+void __stack_chk_fail_local(void);
 void __guard_setup(void);
 
 void
 __guard_setup(void)
 {
-	static const int mib[2] = { CTL_KERN, KERN_ARND };
+	int mib[2];
 	size_t len;
 
 	if (__stack_chk_guard[0] != 0)
 		return;
 
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_ARND;
+
 	len = sizeof(__stack_chk_guard);
-	if (__sysctl(mib, (u_int)__arraycount(mib), __stack_chk_guard, &len,
-	    NULL, 0) == -1 || len != sizeof(__stack_chk_guard)) {
+	if (__sysctl(mib, 2, __stack_chk_guard, &len, NULL, 0) == -1 ||
+	    len != sizeof(__stack_chk_guard)) {
 		/* If sysctl was unsuccessful, use the "terminator canary". */
 		((unsigned char *)(void *)__stack_chk_guard)[0] = 0;
 		((unsigned char *)(void *)__stack_chk_guard)[1] = 0;
@@ -90,7 +95,7 @@ __fail(const char *msg)
 
 #ifdef _LIBC
 	/* This may fail on a chroot jail... */
-	syslog_ss(LOG_CRIT, &sdata, "%s", msg);
+	syslog_ss(LOG_CRIT, &sdata, msg);
 #else
 	xprintf("%s: %s\n", getprogname(), msg);
 #endif

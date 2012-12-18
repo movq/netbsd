@@ -1,4 +1,4 @@
-/*	$NetBSD: integrator_machdep.c,v 1.72 2012/09/22 00:33:39 matt Exp $	*/
+/*	$NetBSD: integrator_machdep.c,v 1.58 2008/04/27 18:58:46 matt Exp $	*/
 
 /*
  * Copyright (c) 2001,2002 ARM Ltd
@@ -62,13 +62,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependent functions for kernel setup for integrator board
+ * Machine dependant functions for kernel setup for integrator board
  *
  * Created      : 24/11/97
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: integrator_machdep.c,v 1.72 2012/09/22 00:33:39 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: integrator_machdep.c,v 1.58 2008/04/27 18:58:46 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_pmap_debug.h"
@@ -93,7 +93,7 @@ __KERNEL_RCSID(0, "$NetBSD: integrator_machdep.c,v 1.72 2012/09/22 00:33:39 matt
 #include <ddb/db_extern.h>
 
 #include <machine/bootconfig.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <machine/intr.h>
@@ -118,19 +118,44 @@ void ifpga_reset(void) __attribute__((noreturn));
  */
 #define KERNEL_VM_SIZE		0x0C000000
 
+/*
+ * Address to call from cpu_reset() to reset the machine.
+ * This is machine architecture dependant as it varies depending
+ * on where the ROM appears when you turn the MMU off.
+ */
+
+u_int cpu_reset_address = (u_int) ifpga_reset;
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#define UND_STACK_SIZE	1
+
 BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
 
 vm_offset_t physical_start;
 vm_offset_t physical_end;
+vm_offset_t pagetables_start;
+int physmem = 0;
 
 /*int debug_flags;*/
 #ifndef PMAP_STATIC_L1S
 int max_processes = 64;			/* Default number */
 #endif	/* !PMAP_STATIC_L1S */
 
+/* Physical and virtual addresses for some global pages */
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
+
 vm_offset_t msgbufphys;
+
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -146,6 +171,8 @@ extern int pmap_debug_level;
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
+
+struct user *proc0paddr;
 
 /* Prototypes */
 
@@ -241,7 +268,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -271,8 +297,6 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -360,8 +384,9 @@ initarm(void *arg)
 	psize_t memsize;
 	vm_offset_t physical_freestart;
 	vm_offset_t physical_freeend;
-
-	cpu_reset_address = ifpga_reset;
+#if NPLCOM > 0 && defined(PLCONSOLE)
+	static struct bus_space plcom_bus_space;
+#endif
 
 	/*
 	 * Heads up ... Setup the CPU / MMU / TLB functions
@@ -378,29 +403,13 @@ initarm(void *arg)
 	 */
 
 	if (PLCOMCNUNIT == 0) {
-		static struct bus_space plcom_bus_space;
-		static struct plcom_instance ifpga_pi0 = {
-			.pi_type = PLCOM_TYPE_PL010,
-			.pi_iot = &plcom_bus_space,
-			.pi_size = IFPGA_UART_SIZE,
-			.pi_iobase = 0x0
-		};
-
 		ifpga_create_io_bs_tag(&plcom_bus_space, (void*)0xfd600000);
-		plcomcnattach(&ifpga_pi0, plcomcnspeed, IFPGA_UART_CLK,
-		    plcomcnmode, PLCOMCNUNIT);
+		plcomcnattach(&plcom_bus_space, 0, plcomcnspeed,
+		    IFPGA_UART_CLK, plcomcnmode, PLCOMCNUNIT);
 	} else if (PLCOMCNUNIT == 1) {
-		static struct bus_space plcom_bus_space;
-		static struct plcom_instance ifpga_pi1 = {
-			.pi_type = PLCOM_TYPE_PL010,
-			.pi_iot = &plcom_bus_space,
-			.pi_size = IFPGA_UART_SIZE,
-			.pi_iobase = 0x0
-		};
-
 		ifpga_create_io_bs_tag(&plcom_bus_space, (void*)0xfd700000);
-		plcomcnattach(&ifpga_pi1, plcomcnspeed, IFPGA_UART_CLK,
-		    plcomcnmode, PLCOMCNUNIT);
+		plcomcnattach(&plcom_bus_space, 0, plcomcnspeed,
+		    IFPGA_UART_CLK, plcomcnmode, PLCOMCNUNIT);
 	}
 #endif
 
@@ -652,7 +661,7 @@ initarm(void *arg)
 	printf("switching to new L1 page table  @%#lx...", kernel_l1pt.pv_pa);
 #endif
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -660,7 +669,8 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+	proc0paddr = (struct user *)kernelstack.pv_va;
+	lwp0.l_addr = proc0paddr;
 
 #ifdef PLCONSOLE
 	/*
@@ -766,6 +776,11 @@ initarm(void *arg)
 	printf("done.\n");
 #endif
 
+#if NKSYMS || defined(DDB) || defined(LKM)
+	/* Firmware doesn't load symbols. */
+	ksyms_init(0, NULL, NULL);
+#endif
+
 #ifdef DDB
 	db_machine_init();
 	if (boothowto & RB_KDB)
@@ -780,6 +795,9 @@ void
 consinit(void)
 {
 	static int consinit_called = 0;
+#if NPLCOM > 0 && defined(PLCONSOLE)
+	static struct bus_space plcom_bus_space;
+#endif
 #if 0
 	char *console = CONSDEVNAME;
 #endif
@@ -791,35 +809,17 @@ consinit(void)
 
 #if NPLCOM > 0 && defined(PLCONSOLE)
 	if (PLCOMCNUNIT == 0) {
-		static struct bus_space plcom_bus_space;
-		static struct plcom_instance ifpga_pi1 = {
-			.pi_type = PLCOM_TYPE_PL010,
-			.pi_iot = &plcom_bus_space,
-			.pi_size = IFPGA_UART_SIZE,
-			.pi_iobase = 0x0
-		};
-
 		ifpga_create_io_bs_tag(&plcom_bus_space,
 		    (void*)UART0_BOOT_BASE);
-
-		if (plcomcnattach(&ifpga_pi1, plcomcnspeed, IFPGA_UART_CLK,
-		      plcomcnmode, PLCOMCNUNIT))
+		if (plcomcnattach(&plcom_bus_space, 0, plcomcnspeed,
+		    IFPGA_UART_CLK, plcomcnmode, PLCOMCNUNIT))
 			panic("can't init serial console");
 		return;
 	} else if (PLCOMCNUNIT == 1) {
-		static struct bus_space plcom_bus_space;
-		static struct plcom_instance ifpga_pi1 = {
-			.pi_type = PLCOM_TYPE_PL010,
-			.pi_iot = &plcom_bus_space,
-			.pi_size = IFPGA_UART_SIZE,
-			.pi_iobase = 0x0
-		};
-
 		ifpga_create_io_bs_tag(&plcom_bus_space,
 		    (void*)UART0_BOOT_BASE);
-
-		if (plcomcnattach(&ifpga_pi1, plcomcnspeed, IFPGA_UART_CLK,
-		      plcomcnmode, PLCOMCNUNIT))
+		if (plcomcnattach(&plcom_bus_space, 0, plcomcnspeed,
+		    IFPGA_UART_CLK, plcomcnmode, PLCOMCNUNIT))
 			panic("can't init serial console");
 		return;
 	}

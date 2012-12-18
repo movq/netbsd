@@ -1,4 +1,4 @@
-.\"	$NetBSD: sysctl.3,v 1.200 2010/03/22 19:30:54 joerg Exp $
+.\"	$NetBSD: sysctl.3,v 1.194.4.1 2008/11/12 23:40:25 snj Exp $
 .\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)sysctl.3	8.4 (Berkeley) 5/9/95
 .\"
-.Dd September 26, 2009
+.Dd September 17, 2008
 .Dt SYSCTL 3
 .Os
 .Sh NAME
@@ -48,7 +48,7 @@
 "const void *newp" "size_t newlen"
 .Ft int
 .Fn sysctlbyname "const char *sname" "void *oldp" "size_t *oldlenp" \
-"const void *newp" "size_t newlen"
+"void *newp" "size_t newlen"
 .Ft int
 .Fn sysctlgetmibinfo "const char *sname" "int *name" "u_int *namelenp" \
 "char *cname" "size_t *csz" "struct sysctlnode **rnode" "int v"
@@ -219,7 +219,7 @@ The numeric and text names of sysctl variables are described in
 .Xr sysctl 7 .
 The numeric names are defined as preprocessor macros.
 The top level names are defined with a CTL_ prefix in
-.In sys/sysctl.h .
+.Aq Pa sys/sysctl.h .
 The next and subsequent levels down have different prefixes for each
 subtree.
 .Pp
@@ -268,7 +268,7 @@ tree.
 .Pp
 The core interface to all of these meta-functions is the structure
 that the kernel uses to describe the tree internally, as defined in
-.In sys/sysctl.h
+.Aq Pa sys/sysctl.h
 as:
 .Pp
 .Bd -literal
@@ -596,6 +596,8 @@ Valid flags are:
 .Bl -column CTLFLAGXPERMANENTXXX
 .It Sy Name	Description
 .It CTLFLAG\_READONLY	Node is read-only
+.It CTLFLAG\_READONLY1	Node becomes read-only at securelevel 1
+.It CTLFLAG\_READONLY2	Node becomes read-only at securelevel 2
 .It CTLFLAG\_READWRITE	Node is writable by the superuser
 .It CTLFLAG\_ANYWRITE	Node is writable by anyone
 .It CTLFLAG\_PRIVATE	Node is readable only by the superuser

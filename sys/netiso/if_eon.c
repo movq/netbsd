@@ -1,4 +1,4 @@
-/*	$NetBSD: if_eon.c,v 1.72 2012/07/28 00:43:24 matt Exp $	*/
+/*	$NetBSD: if_eon.c,v 1.68 2008/10/24 17:07:33 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -67,7 +67,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_eon.c,v 1.72 2012/07/28 00:43:24 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_eon.c,v 1.68 2008/10/24 17:07:33 dyoung Exp $");
 
 #include "opt_eon.h"
 
@@ -107,6 +107,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_eon.c,v 1.72 2012/07/28 00:43:24 matt Exp $");
 #include <netiso/iso_errno.h>
 #include <netiso/eonvar.h>
 
+#include <machine/stdarg.h>
+
 #define EOK 0
 
 struct ifnet    eonif[1];
@@ -117,7 +119,6 @@ eonprotoinit(void)
 	(void) eonattach();
 }
 
-struct eon_stat eonstat;
 struct eon_llinfo eon_llinfo;
 #define PROBE_OK 0;
 
@@ -153,7 +154,7 @@ eonattach(void)
 	ifp->if_flags = IFF_BROADCAST;
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
-	eonioctl(ifp, SIOCINITIFADDR, ifp->if_dl);
+	eonioctl(ifp, SIOCSIFADDR, ifp->if_dl);
 	eon_llinfo.el_qhdr.link =
 		eon_llinfo.el_qhdr.rlink = &(eon_llinfo.el_qhdr);
 
@@ -189,13 +190,15 @@ eonioctl(struct ifnet *ifp, u_long cmd, void *data)
 #endif
 
 	switch (cmd) {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
+		if (ifa == NULL)
+			break;
 		ifp->if_flags |= IFF_UP;
 		if (ifa->ifa_addr->sa_family != AF_LINK)
 			ifa->ifa_rtrequest = eonrtrequest;
 		break;
 	default:
-		error = ifioctl_common(ifp, cmd, data);
+		error = EINVAL;
 		break;
 	}
 	splx(s);

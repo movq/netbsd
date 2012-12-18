@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_powerpc.c,v 1.12 2010/09/20 23:23:16 jym Exp $	*/
+/*	$NetBSD: kvm_powerpc.c,v 1.8 2008/01/15 13:57:42 ad Exp $	*/
 
 /*
  * Copyright (c) 2005 Wasabi Systems, Inc.
@@ -71,7 +71,6 @@
 
 #include <sys/param.h>
 #include <sys/exec.h>
-#include <sys/types.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -87,17 +86,18 @@
 #include <machine/kcore.h>
 
 #include <powerpc/spr.h>
-#include <powerpc/oea/spr.h>
 #include <powerpc/oea/bat.h>
 #include <powerpc/oea/pte.h>
 
-static int	_kvm_match_601bat(kvm_t *, vaddr_t, paddr_t *, int *);
-static int	_kvm_match_bat(kvm_t *, vaddr_t, paddr_t *, int *);
-static int	_kvm_match_sr(kvm_t *, vaddr_t, paddr_t *, int *);
-static struct pte *_kvm_scan_pteg(struct pteg *, uint32_t, uint32_t, int);
+static int	_kvm_match_601bat(kvm_t *kd, u_long va, u_long *pa, int *off);
+static int	_kvm_match_bat(kvm_t *kd, u_long va, u_long *pa, int *off);
+static int	_kvm_match_sr(kvm_t *kd, u_long va, u_long *pa, int *off);
+static struct pte *_kvm_scan_pteg(struct pteg *pteg, uint32_t vsid,
+				  uint32_t api, int secondary);
 
 void
-_kvm_freevtop(kvm_t *kd)
+_kvm_freevtop(kd)
+	kvm_t *kd;
 {
 	if (kd->vmst != 0)
 		free(kd->vmst);
@@ -105,7 +105,8 @@ _kvm_freevtop(kvm_t *kd)
 
 /*ARGSUSED*/
 int
-_kvm_initvtop(kvm_t *kd)
+_kvm_initvtop(kd)
+	kvm_t *kd;
 {
 
 	return 0;
@@ -114,7 +115,11 @@ _kvm_initvtop(kvm_t *kd)
 #define BAT601_SIZE(b)  ((((b) << 17) | ~BAT601_BLPI) + 1)
 
 static int
-_kvm_match_601bat(kvm_t *kd, vaddr_t va, paddr_t *pa, int *off)
+_kvm_match_601bat(kd, va, pa, off)
+	kvm_t *kd;
+	u_long va;
+	u_long *pa;
+	int *off;
 {
 	cpu_kcore_hdr_t	*cpu_kh;
 	u_long		pgoff;
@@ -142,7 +147,11 @@ _kvm_match_601bat(kvm_t *kd, vaddr_t va, paddr_t *pa, int *off)
 #define BAT_SIZE(b)     ((((b) << 15) | ~BAT_EPI) + 1)
 
 static int
-_kvm_match_bat(kvm_t *kd, vaddr_t va, paddr_t *pa, int *off)
+_kvm_match_bat(kd, va, pa, off)
+	kvm_t *kd;
+	u_long va;
+	u_long *pa;
+	int *off;
 {
 	cpu_kcore_hdr_t	*cpu_kh;
 	u_long		pgoff;
@@ -172,7 +181,11 @@ _kvm_match_bat(kvm_t *kd, vaddr_t va, paddr_t *pa, int *off)
 #define SR_VSID_HASH_MASK	0x0007ffff
 
 static struct pte *
-_kvm_scan_pteg(struct pteg *pteg, uint32_t vsid, uint32_t api, int secondary)
+_kvm_scan_pteg(pteg, vsid, api, secondary)
+	struct pteg *pteg;
+	uint32_t vsid;
+	uint32_t api;
+	int secondary;
 {
 	struct pte	*pte;
 	u_long		ptehi;
@@ -197,14 +210,18 @@ _kvm_scan_pteg(struct pteg *pteg, uint32_t vsid, uint32_t api, int secondary)
 #define HASH_MASK	0x0007ffff
 
 static int
-_kvm_match_sr(kvm_t *kd, vaddr_t va, paddr_t *pa, int *off)
+_kvm_match_sr(kd, va, pa, off)
+	kvm_t *kd;
+	u_long va;
+	u_long *pa;
+	int *off;
 {
 	cpu_kcore_hdr_t	*cpu_kh;
 	struct pteg	pteg;
 	struct pte	*pte;
 	uint32_t	sr, pgoff, vsid, pgidx, api, hash;
 	uint32_t	htaborg, htabmask, mhash;
-	paddr_t		pteg_vaddr;
+	u_long		pteg_vaddr;
 
 	cpu_kh = kd->cpu_data;
 
@@ -265,7 +282,10 @@ _kvm_match_sr(kvm_t *kd, vaddr_t va, paddr_t *pa, int *off)
  * Translate a KVA to a PA
  */
 int
-_kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
+_kvm_kvatop(kd, va, pa)
+	kvm_t *kd;
+	u_long va;
+	u_long *pa;
 {
 	cpu_kcore_hdr_t	*cpu_kh;
 	int		offs;
@@ -325,12 +345,14 @@ _kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 	}
 
 	/* No hit -- no translation */
-	*pa = (paddr_t)~0UL;
+	*pa = (u_long)~0UL;
 	return 0;
 }
 
 off_t
-_kvm_pa2off(kvm_t *kd, paddr_t pa)
+_kvm_pa2off(kd, pa)
+	kvm_t *kd;
+	u_long pa;
 {
 	cpu_kcore_hdr_t	*cpu_kh;
 	phys_ram_seg_t	*ram;
@@ -349,7 +371,7 @@ _kvm_pa2off(kvm_t *kd, paddr_t pa)
 		off += ram->size;
 	} while ((void *) ram < e && ram->size);
 
-	_kvm_err(kd, 0, "pa2off failed for pa %#" PRIxPADDR "\n", pa);
+	_kvm_err(kd, 0, "pa2off failed for pa 0x%08lx\n", pa);
 	return (off_t) -1;
 }
 
@@ -359,7 +381,8 @@ _kvm_pa2off(kvm_t *kd, paddr_t pa)
  * have to deal with these NOT being constants!  (i.e. m68k)
  */
 int
-_kvm_mdopen(kvm_t *kd)
+_kvm_mdopen(kd)
+	kvm_t	*kd;
 {
 	uintptr_t max_uva;
 	extern struct ps_strings *__ps_strings;

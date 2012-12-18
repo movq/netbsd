@@ -1,4 +1,4 @@
-.\"     $NetBSD: panic.9,v 1.21 2012/06/12 21:06:43 jdf Exp $
+.\"     $NetBSD: panic.9,v 1.17.28.1 2009/12/01 01:25:27 explorer Exp $
 .\"
 .\" Copyright (c) 1996 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,25 +27,21 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd September 29, 2011
+.Dd January 28, 2006
 .Dt PANIC 9
 .Os
 .Sh NAME
 .Nm panic
-.Nd bring down system on fatal error
+.Nd Bring down system on fatal error
 .Sh SYNOPSIS
 .In sys/types.h
 .In sys/systm.h
-.Ft void
-.Fn vpanic "const char *fmt" "va_list ap"
 .Ft void
 .Fn panic "const char *fmt" "..."
 .Sh DESCRIPTION
 The
 .Fn panic
-and
-.Fn vpanic
-functions terminate the
+function terminates the
 .Nx
 system.
 The message
@@ -87,22 +83,10 @@ If during the process of handling the panic,
 is called again
 .Pq from the filesystem synchronization routines, for example ,
 the system is rebooted immediately without synchronizing any filesystems.
-.Pp
-.Fn panic
-is meant to be used in situations where something unexpected has happened
-and it is difficult to recover the system to a stable state, or in
-situations where proceeding might make things worse, leading to data
-corruption and/or loss.
-It is not meant to be used in scenarios where the system could easily
-ignore and/or isolate the condition/subsystem and proceed.
-.Pp
-In general developers should try to reduce the number of
-.Fn panic
-calls in the kernel to improve stability.
 .Sh RETURN VALUES
 The
 .Fn panic
-function never returns.
+function does not return.
 .Sh SEE ALSO
 .Xr sysctl 3 ,
 .Xr ddb 4 ,

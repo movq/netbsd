@@ -1,4 +1,4 @@
-/*	$NetBSD: twevar.h,v 1.30 2012/10/27 17:18:35 chs Exp $	*/
+/*	$NetBSD: twevar.h,v 1.27 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001, 2002 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
 
 /* Callbacks from controller to array. */
 struct twe_callbacks {
-	void	(*tcb_openings)(device_t, int);
+	void	(*tcb_openings)(struct device *, int);
 };
 
 /* Per-array drive information. */
@@ -45,13 +45,13 @@ struct twe_drive {
 	uint8_t			td_type;
 	uint8_t			td_stripe;
 
-	device_t td_dev;
+	struct device		*td_dev;
 	const struct twe_callbacks *td_callbacks;
 };
 
 /* Per-controller state. */
 struct twe_softc {
-	device_t		sc_dev;
+	struct device		sc_dv;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	bus_dma_tag_t		sc_dmat;
@@ -83,7 +83,7 @@ struct twe_softc {
 struct twe_context {
 	void	(*tx_handler)(struct twe_ccb *, int);
 	void 	*tx_context;
-	device_t tx_dv;
+	struct	device	*tx_dv;
 };
 
 /* Command control block. */

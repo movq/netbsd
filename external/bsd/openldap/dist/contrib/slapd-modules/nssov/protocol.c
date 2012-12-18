@@ -1,11 +1,7 @@
-/*	$NetBSD: protocol.c,v 1.1.1.3 2010/12/12 15:19:10 adam Exp $	*/
-
 /* protocol.c - network protocol lookup routines */
-/* OpenLDAP: pkg/ldap/contrib/slapd-modules/nssov/protocol.c,v 1.1.2.6 2010/04/15 21:32:57 quanah Exp */
-/* This work is part of OpenLDAP Software <http://www.openldap.org/>. 
- *
- * Copyright 2008-2010 The OpenLDAP Foundation.
- * Portions Copyright 2008 by Howard Chu, Symas Corp.
+/* $OpenLDAP: pkg/ldap/contrib/slapd-modules/nssov/protocol.c,v 1.1.2.1 2008/07/08 18:53:57 quanah Exp $ */
+/*
+ * Copyright 2008 by Howard Chu, Symas Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -17,7 +13,6 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 /*
-/* ACKNOWLEDGEMENTS:
  * This code references portions of the nss-ldapd package
  * written by Arthur de Jong. The nss-ldapd code was forked
  * from the nss-ldap library written by Luke Howard.
@@ -64,7 +59,7 @@ static int write_protocol(nssov_protocol_cbp *cbp,Entry *entry)
 	a = attr_find( entry->e_attrs, cbp->mi->mi_attrs[0].an_desc );
 	if ( !a || !a->a_vals )
 	{
-		Debug(LDAP_DEBUG_ANY,"protocol entry %s does not contain %s value\n",
+		Debug(LDAP_DEBUG_ANY,"protocol entry %s does not contain %s value",
 			entry->e_name.bv_val, cbp->mi->mi_attrs[0].an_desc->ad_cname.bv_val, 0 );
 		return 0;
 	}
@@ -77,7 +72,7 @@ static int write_protocol(nssov_protocol_cbp *cbp,Entry *entry)
 	} else {
 		dupname = -1;
 		for (i=0; i<numname; i++) {
-			if ( bvmatch(&name, &a->a_nvals[i])) {
+			if ( ber_bvmatch(&name, &a->a_nvals[i])) {
 				dupname = i;
 				break;
 			}
@@ -87,22 +82,22 @@ static int write_protocol(nssov_protocol_cbp *cbp,Entry *entry)
 	a = attr_find( entry->e_attrs, cbp->mi->mi_attrs[1].an_desc );
 	if ( !a || !a->a_vals )
 	{
-		Debug(LDAP_DEBUG_ANY,"protocol entry %s does not contain %s value\n",
+		Debug(LDAP_DEBUG_ANY,"protocol entry %s does not contain %s value",
 			entry->e_name.bv_val, cbp->mi->mi_attrs[1].an_desc->ad_cname.bv_val, 0 );
 		return 0;
 	} else if ( a->a_numvals > 1 ) {
-		Debug(LDAP_DEBUG_ANY,"protocol entry %s contains multiple %s values\n",
+		Debug(LDAP_DEBUG_ANY,"protocol entry %s contains multiple %s values",
 			entry->e_name.bv_val, cbp->mi->mi_attrs[1].an_desc->ad_cname.bv_val, 0 );
 	}
 	proto=(int)strtol(a->a_vals[0].bv_val,&tmp,0);
 	if (*tmp)
 	{
-		Debug(LDAP_DEBUG_ANY,"protocol entry %s contains non-numeric %s value\n",
+		Debug(LDAP_DEBUG_ANY,"protocol entry %s contains non-numeric %s value",
 			entry->e_name.bv_val, cbp->mi->mi_attrs[1].an_desc->ad_cname.bv_val, 0 );
 		return 0;
 	}
 	/* write the entry */
-	WRITE_INT32(cbp->fp,NSLCD_RESULT_BEGIN);
+	WRITE_INT32(cbp->fp,NSLCD_RESULT_SUCCESS);
 	WRITE_BERVAL(cbp->fp,&name);
 	if ( dupname >= 0 ) {
 		WRITE_INT32(cbp->fp,numname-1);
@@ -125,10 +120,10 @@ NSSOV_HANDLE(
 	struct berval filter = {sizeof(fbuf)};
 	filter.bv_val = fbuf;
 	BER_BVZERO(&cbp.numb);
-	READ_STRING(fp,cbp.buf);
+	READ_STRING_BUF2(fp,cbp.buf,sizeof(cbp.buf));
 	cbp.name.bv_len = tmpint32;
 	cbp.name.bv_val = cbp.buf;,
-	Debug(LDAP_DEBUG_TRACE,"nssov_protocol_byname(%s)\n",cbp.name.bv_val,0,0);,
+	Debug(LDAP_DEBUG_TRACE,"nssov_protocol_byname(%s)",cbp.name.bv_val,0,0);,
 	NSLCD_ACTION_PROTOCOL_BYNAME,
 	nssov_filter_byname(cbp.mi,0,&cbp.name,&filter)
 )
@@ -143,7 +138,7 @@ NSSOV_HANDLE(
 	cbp.numb.bv_val = cbp.buf;
 	cbp.numb.bv_len = snprintf(cbp.buf,sizeof(cbp.buf),"%d",protocol);
 	BER_BVZERO(&cbp.name);,
-	Debug(LDAP_DEBUG_TRACE,"nssov_protocol_bynumber(%s)\n",cbp.numb.bv_val,0,0);,
+	Debug(LDAP_DEBUG_TRACE,"nssov_protocol_bynumber(%s)",cbp.numb.bv_val,0,0);,
 	NSLCD_ACTION_PROTOCOL_BYNUMBER,
 	nssov_filter_byid(cbp.mi,1,&cbp.numb,&filter)
 )
@@ -152,7 +147,7 @@ NSSOV_HANDLE(
 	protocol,all,
 	struct berval filter;
 	/* no parameters to read */,
-	Debug(LDAP_DEBUG_TRACE,"nssov_protocol_all()\n",0,0,0);,
+	Debug(LDAP_DEBUG_TRACE,"nssov_protocol_all()",0,0,0);,
 	NSLCD_ACTION_PROTOCOL_ALL,
 	(filter=cbp.mi->mi_filter,0)
 )

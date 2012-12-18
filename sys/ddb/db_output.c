@@ -1,4 +1,4 @@
-/*	$NetBSD: db_output.c,v 1.33 2012/09/01 01:13:51 matt Exp $	*/
+/*	$NetBSD: db_output.c,v 1.29 2005/12/11 12:20:53 christos Exp $	*/
 
 /*
  * Mach Operating System
@@ -30,20 +30,23 @@
  * Printf and character output for debugger.
  */
 
-#ifdef _KERNEL_OPT
-#include "opt_ddbparam.h"
-#endif
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_output.c,v 1.33 2012/09/01 01:13:51 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_output.c,v 1.29 2005/12/11 12:20:53 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/stdarg.h>
+
+#include <machine/stdarg.h>
 
 #include <dev/cons.h>
 
-#include <ddb/ddb.h>
+#include <machine/db_machdep.h>
+
+#include <ddb/db_command.h>
+#include <ddb/db_output.h>
+#include <ddb/db_interface.h>
+#include <ddb/db_sym.h>
+#include <ddb/db_extern.h>
 
 /*
  *	Character output - tracks position in line.

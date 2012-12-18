@@ -1,4 +1,4 @@
-/*	$NetBSD: smallnet.c,v 1.8 2011/01/22 19:19:21 joerg Exp $	*/
+/*	$NetBSD: smallnet.c,v 1.5 2008/04/28 20:23:31 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -42,9 +42,9 @@
 #include "../common/bootinfo.h"
 
 
-typedef void (*entrypt)(int, char **, int, const void *);
+typedef void (*entrypt) __P((int, char **, int, const void *));
 
-int main(int, char **);
+int main __P((int, char **));
 
 /*
  * These variables and array will be patched to contain a kernel image
@@ -68,7 +68,9 @@ char kernel_image[KERNELSIZE] = "|This is the kernel image!\n";
  * The argument "-a" means netbsd should do an automatic reboot.
  */
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	int ret;
 	char *name;
@@ -77,6 +79,7 @@ main(int argc, char **argv)
 
 	printf("NetBSD/pmax " NETBSD_VERS " " BOOT_TYPE_NAME
 	    " Bootstrap, Revision %s\n", bootprog_rev);
+	printf("(%s, %s)\n", bootprog_maker, bootprog_date);
 
 	/* initialise bootinfo structure early */
 	bi_init(BOOTINFO_ADDR);

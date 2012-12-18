@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd4.c,v 1.6 2009/04/11 14:22:32 christos Exp $	*/
+/*	$NetBSD: cmd4.c,v 1.4 2008/04/28 20:24:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
 #if 0
 static char sccsid[] = "@(#)cmd3.c	8.2 (Berkeley) 4/20/95";
 #else
-__RCSID("$NetBSD: cmd4.c,v 1.6 2009/04/11 14:22:32 christos Exp $");
+__RCSID("$NetBSD: cmd4.c,v 1.4 2008/04/28 20:24:14 martin Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,7 +55,6 @@ void showname(struct name *);
 void
 showname(struct name *np)
 {
-
 	for (/*EMPTY*/; np; np = np->n_flink)
 		(void)printf("np: %p  np->n_type: %d  np->n_name: '%s' (%p)\n",
 		    np, np->n_type, np->n_name, np->n_name);
@@ -65,7 +64,6 @@ __unused
 static void
 showsmopts(struct smopts_s *sp)
 {
-
 	(void)printf("%s (%p)\n", sp->s_name, sp);
 	showname(sp->s_smopts);
 }
@@ -76,7 +74,6 @@ static int
 hashcase(const char *key)
 {
 	char *lckey;
-
 	lckey = salloc(strlen(key) + 1);
 	istrcpy(lckey, key);
 	return hash(lckey);
@@ -131,19 +128,18 @@ static void
 printsmoptstbl(void)
 {
 	struct smopts_s *sp;
-	const char **argv;
-	const char **ap;
+	const char **argv, **ap;
 	int h;
 	int cnt;
 
 	cnt = 1;
-	for (h = 0; h < (int)__arraycount(smoptstbl); h++)
+	for (h = 0; h < (int)sizeofarray(smoptstbl); h++ )
 		for (sp = smoptstbl[h]; sp && sp->s_name != NULL; sp = sp->s_link)
 			cnt++;
 
 	argv = salloc(cnt * sizeof(*argv));
 	ap = argv;
-	for (h = 0; h < (int)__arraycount(smoptstbl); h++)
+	for (h = 0; h < (int)sizeofarray(smoptstbl); h++ )
 		for (sp = smoptstbl[h]; sp && sp->s_name != NULL; sp = sp->s_link)
 			*ap++ = sp->s_name;
 	*ap = NULL;
@@ -184,8 +180,7 @@ static void
 smopts_core(const char *sname, char **argv)
 {
 	struct smopts_s *sp;
-	struct name *np;
-	struct name *t;
+	struct name *np, *t;
 	int h;
 	char **ap;
 
@@ -222,9 +217,8 @@ PUBLIC int
 smoptscmd(void *v)
 {
 	struct name *np;
-	char **argv;
+	char **argv = v;
 
-	argv = v;
 	if (*argv == NULL) {
 		printsmoptstbl();
 		return 0;
@@ -246,7 +240,6 @@ static void
 free_name(struct name *np)
 {
 	struct name *next_np;
-
 	for (/*EMPTY*/; np; np = next_np) {
 		next_np = np->n_flink;
 		free(next_np);
@@ -276,112 +269,11 @@ PUBLIC int
 unsmoptscmd(void *v)
 {
 	struct name *np;
-	char **ap;
+	char **argv, **ap;
 
-	for (ap = v; *ap != NULL; ap++)
+	argv = v;
+	for (ap = argv; *ap != NULL; ap++)
 		for (np = name_expand(*ap, GTO); np; np = np->n_flink)
 			delsmopts(np->n_name);
-	return 0;
-}
-
-static struct name *
-alloc_Header(char *str)
-{
-	struct name *np;
-
-	/*
-	 * Don't use salloc() routines here as these strings must persist.
-	 */
-	np = ecalloc(1, sizeof(*np));
-	np->n_name = estrdup(str);
-	np->n_type = GMISC;
-	return np;
-}
-
-static int
-free_Header(char *str)
-{
-	struct name *np;
-	struct name *next_np;
-	size_t len;
-
-	len = strlen(str);
-	for (np = extra_headers; np != NULL; np = next_np) {
-		next_np = np->n_flink;
-		if (strncasecmp(np->n_name, str, len) == 0) {
-			if (np == extra_headers) {
-				extra_headers = np->n_flink;
-				if (extra_headers)
-					extra_headers->n_blink = NULL;
-			}
-			else {
-				struct name *bp;
-				struct name *fp;
-
-				bp = np->n_blink;
-				fp = np->n_flink;
-				if (bp)
-					bp->n_flink = fp;
-				if (fp)
-					fp->n_blink = bp;
-			}
-			if (np->n_name)
-				free(np->n_name);
-			free(np);
-		}
-	}
-	return 0;
-}
-
-/*
- * Takes a string and includes it in the header.
- */
-PUBLIC int
-Header(void *v)
-{
-	struct name *np;
-	char *str;
-	char *p;
-
-	str = v;
-	if (str == NULL)
-		return 0;
-
-	(void)strip_WSP(str);	/* strip trailing whitespace */
-
-	if (str[0] == '\0') {	/* Show the extra headers */
-		for (np = extra_headers; np != NULL; np = np->n_flink)
-			(void)printf("%s\n", np->n_name);
-		return 0;
-	}
-
-	/*
-	 * Check for a valid header line: find the end of its name.
-	 */
-	for (p = str; *p != '\0' && *p != ':' && !is_WSP(*p); p++)
-		continue;
-
-	if (p[0] == ':' && p[1] == '\0') /* free headers of this type */
-		return free_Header(str);
-
-	/*
-	 * Check for a valid header name.
-	 */
-	if (*p != ':' || !is_WSP(p[1])) {
-		(void)printf("invalid header string: `%s'\n", str);
-		return 0;
-	}
-
-	np = alloc_Header(str);
-	if (extra_headers == NULL)
-		extra_headers = np;
-	else {
-		struct name *tp;
-
-		for (tp = extra_headers; tp->n_flink; tp = tp->n_flink)
-			continue;
-		tp->n_flink = np;
-		np->n_blink = tp;
-	}
 	return 0;
 }

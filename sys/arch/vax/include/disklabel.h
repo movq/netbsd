@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.6 2012/07/02 22:42:18 abs Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.4 1997/03/09 15:55:58 ragge Exp $	*/
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
@@ -33,25 +33,10 @@
 #ifndef _MACHINE_DISKLABEL_H_
 #define _MACHINE_DISKLABEL_H_
 
-#define LABELUSESMBR		0	/* no MBR partitionning */
-#define	LABELSECTOR		0	/* sector containing label */
-#define	LABELOFFSET		64	/* offset of label in sector */
-#define	MAXPARTITIONS		16	/* number of partitions */
-#define	OLDMAXPARTITIONS 	8	/* number of partitions before nb-6 */
-#define	RAW_PART		2	/* raw partition: xx?c */
-
-/*
- * We use the highest bit of the minor number for the partition number.
- * This maintains backward compatibility with device nodes created before
- * MAXPARTITIONS was increased.
- */
-#define __VAX_MAXDISKS	((1 << 20) / MAXPARTITIONS)
-#define DISKUNIT(dev)	((minor(dev) / OLDMAXPARTITIONS) % __VAX_MAXDISKS)
-#define DISKPART(dev)	((minor(dev) % OLDMAXPARTITIONS) + \
-    ((minor(dev) / (__VAX_MAXDISKS * OLDMAXPARTITIONS)) * OLDMAXPARTITIONS))
-#define	DISKMINOR(unit, part) \
-    (((unit) * OLDMAXPARTITIONS) + ((part) % OLDMAXPARTITIONS) + \
-     ((part) / OLDMAXPARTITIONS) * (__VAX_MAXDISKS * OLDMAXPARTITIONS))
+#define	LABELSECTOR	0			/* sector containing label */
+#define	LABELOFFSET	64			/* offset of label in sector */
+#define	MAXPARTITIONS	8			/* number of partitions */
+#define	RAW_PART	2			/* raw partition: xx?c */
 
 /* Just a dummy */
 #ifndef _LOCORE

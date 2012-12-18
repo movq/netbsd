@@ -1,4 +1,4 @@
-/*	$NetBSD: udp6_usrreq.c,v 1.91 2012/06/22 14:54:35 christos Exp $	*/
+/*	$NetBSD: udp6_usrreq.c,v 1.86 2008/05/04 07:22:15 thorpej Exp $	*/
 /*	$KAME: udp6_usrreq.c,v 1.86 2001/05/27 17:33:00 itojun Exp $	*/
 
 /*
@@ -62,9 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udp6_usrreq.c,v 1.91 2012/06/22 14:54:35 christos Exp $");
-
-#include "opt_inet.h"
+__KERNEL_RCSID(0, "$NetBSD: udp6_usrreq.c,v 1.86 2008/05/04 07:22:15 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -77,7 +75,6 @@ __KERNEL_RCSID(0, "$NetBSD: udp6_usrreq.c,v 1.91 2012/06/22 14:54:35 christos Ex
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/syslog.h>
-#include <sys/domain.h>
 #include <sys/sysctl.h>
 
 #include <net/if.h>
@@ -116,13 +113,11 @@ extern struct inpcbtable udbtable;
 percpu_t *udp6stat_percpu;
 
 static	void udp6_notify(struct in6pcb *, int);
-static	void sysctl_net_inet6_udp6_setup(struct sysctllog **);
 
 void
 udp6_init(void)
 {
-
-	sysctl_net_inet6_udp6_setup(NULL);
+	/* initialization done in udp_init() due to initialization order */
 }
 
 /*
@@ -200,7 +195,7 @@ udp6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
 			return NULL;
 		}
 
-		memset(&uh, 0, sizeof(uh));
+		bzero(&uh, sizeof(uh));
 		m_copydata(m, off, sizeof(*uhp), (void *)&uh);
 
 		if (cmd == PRC_MSGSIZE) {
@@ -213,7 +208,7 @@ udp6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
 			 */
 			if (in6_pcblookup_connect(&udbtable, &sa6->sin6_addr,
 			    uh.uh_dport, (const struct in6_addr *)&sa6_src->sin6_addr,
-						  uh.uh_sport, 0, 0))
+			    uh.uh_sport, 0))
 				valid++;
 #if 0
 			/*
@@ -256,45 +251,6 @@ udp6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
 	}
 	return NULL;
 }
-
-int
-udp6_ctloutput(int op, struct socket *so, struct sockopt *sopt)
-{
-	int s;
-	int error = 0;
-	int family;
-
-	family = so->so_proto->pr_domain->dom_family;
-
-	s = splsoftnet();
-	switch (family) {
-#ifdef INET
-	case PF_INET:
-		if (sopt->sopt_level != IPPROTO_UDP) {
-			error = ip_ctloutput(op, so, sopt);
-			goto end;
-		}
-		break;
-#endif
-#ifdef INET6
-	case PF_INET6:
-		if (sopt->sopt_level != IPPROTO_UDP) {
-			error = ip6_ctloutput(op, so, sopt);
-			goto end;
-		}
-		break;
-#endif
-	default:
-		error = EAFNOSUPPORT;
-		goto end;
-	}
-	error = EINVAL;
-
-end:
-	splx(s);
-	return error;
-}
-
 
 extern	int udp6_sendspace;
 extern	int udp6_recvspace;
@@ -389,7 +345,7 @@ udp6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr6,
 		}
 		s = splsoftnet();
 		in6_pcbdisconnect(in6p);
-		memset((void *)&in6p->in6p_laddr, 0, sizeof(in6p->in6p_laddr));
+		bzero((void *)&in6p->in6p_laddr, sizeof(in6p->in6p_laddr));
 		splx(s);
 		so->so_state &= ~SS_ISCONNECTED;		/* XXX */
 		in6_pcbstate(in6p, IN6P_BOUND);		/* XXX */
@@ -458,8 +414,7 @@ sysctl_net_inet6_udp6_stats(SYSCTLFN_ARGS)
 	return (NETSTAT_SYSCTL(udp6stat_percpu, UDP6_NSTATS));
 }
 
-static void
-sysctl_net_inet6_udp6_setup(struct sysctllog **clog)
+SYSCTL_SETUP(sysctl_net_inet6_udp6_setup, "sysctl net.inet6.udp6 subtree setup")
 {
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,

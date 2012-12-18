@@ -1,4 +1,4 @@
-/*	$NetBSD: sysmon_power.c,v 1.46 2012/02/02 19:43:07 tls Exp $	*/
+/*	$NetBSD: sysmon_power.c,v 1.40 2008/09/05 21:58:32 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 2007 Juan Romero Pardines.
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysmon_power.c,v 1.46 2012/02/02 19:43:07 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysmon_power.c,v 1.40 2008/09/05 21:58:32 gmcgarry Exp $");
 
 #include "opt_compat_netbsd.h"
 #include <sys/param.h>
@@ -83,7 +83,6 @@ __KERNEL_RCSID(0, "$NetBSD: sysmon_power.c,v 1.46 2012/02/02 19:43:07 tls Exp $"
 #include <sys/kmem.h>
 #include <sys/proc.h>
 #include <sys/device.h>
-#include <sys/rnd.h>
 
 #include <dev/sysmon/sysmonvar.h>
 #include <prop/proplib.h>
@@ -92,7 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: sysmon_power.c,v 1.46 2012/02/02 19:43:07 tls Exp $"
  * Singly linked list for dictionaries to be stored/sent.
  */
 struct power_event_dictionary {
-	SIMPLEQ_ENTRY(power_event_dictionary) pev_dict_head;
+	SLIST_ENTRY(power_event_dictionary) pev_dict_head;
 	prop_dictionary_t dict;
 	int flags;
 };
@@ -134,10 +133,12 @@ static const struct power_event_description penvsys_event_desc[] = {
 	{ PENVSYS_EVENT_CRITUNDER,	"critical-under" },
 	{ PENVSYS_EVENT_WARNOVER,	"warning-over" },
 	{ PENVSYS_EVENT_WARNUNDER,	"warning-under" },
-	{ PENVSYS_EVENT_BATT_CRIT,	"critical-capacity" },
-	{ PENVSYS_EVENT_BATT_WARN,	"warning-capacity" },
-	{ PENVSYS_EVENT_BATT_HIGH,	"high-capacity" },
-	{ PENVSYS_EVENT_BATT_MAX,	"maximum-capacity" },
+	{ PENVSYS_EVENT_USER_CRITMAX,	"critical-over" },
+	{ PENVSYS_EVENT_USER_CRITMIN,	"critical-under" },
+	{ PENVSYS_EVENT_USER_WARNMAX,	"warning-over" },
+	{ PENVSYS_EVENT_USER_WARNMIN,	"warning-under" },
+	{ PENVSYS_EVENT_BATT_USERCAP,	"user-capacity" },
+	{ PENVSYS_EVENT_BATT_USERWARN,	"user-cap-warning" },
 	{ PENVSYS_EVENT_STATE_CHANGED,	"state-changed" },
 	{ PENVSYS_EVENT_LOW_POWER,	"low-power" },
 	{ -1, NULL }
@@ -167,10 +168,8 @@ static int sysmon_power_event_queue_head;
 static int sysmon_power_event_queue_tail;
 static int sysmon_power_event_queue_count;
 
-static krndsource_t sysmon_rndsource;
-
-static SIMPLEQ_HEAD(, power_event_dictionary) pev_dict_list =
-    SIMPLEQ_HEAD_INITIALIZER(pev_dict_list);
+static SLIST_HEAD(, power_event_dictionary) pev_dict_list =
+    SLIST_HEAD_INITIALIZER(&pev_dict_list);
 
 static struct selinfo sysmon_power_event_queue_selinfo;
 static struct lwp *sysmon_power_daemon;
@@ -199,16 +198,12 @@ sysmon_power_init(void)
 	mutex_init(&sysmon_power_event_queue_mtx, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&sysmon_power_event_queue_cv, "smpower");
 	selinit(&sysmon_power_event_queue_selinfo);
-
-	rnd_attach_source(&sysmon_rndsource, "system-power",
-			  RND_TYPE_POWER, 0);
-
 }
 
 /*
  * sysmon_queue_power_event:
  *
- *	Enqueue a power event for the power management daemon.  Returns
+ *	Enqueue a power event for the power mangement daemon.  Returns
  *	non-zero if we were able to enqueue a power event.
  */
 static int
@@ -268,7 +263,7 @@ sysmon_power_event_queue_flush(void)
  * sysmon_power_daemon_task:
  *
  *	Assign required power event members and sends a signal
- *	to the process to notify that an event was enqueued successfully.
+ *	to the process to notify that an event was enqueued succesfully.
  */
 static int
 sysmon_power_daemon_task(struct power_event_dictionary *ped,
@@ -325,10 +320,12 @@ sysmon_power_daemon_task(struct power_event_dictionary *ped,
 	case PENVSYS_EVENT_CRITOVER:
 	case PENVSYS_EVENT_WARNUNDER:
 	case PENVSYS_EVENT_WARNOVER:
-	case PENVSYS_EVENT_BATT_CRIT:
-	case PENVSYS_EVENT_BATT_WARN:
-	case PENVSYS_EVENT_BATT_HIGH:
-	case PENVSYS_EVENT_BATT_MAX:
+	case PENVSYS_EVENT_USER_CRITMAX:
+	case PENVSYS_EVENT_USER_CRITMIN:
+	case PENVSYS_EVENT_USER_WARNMAX:
+	case PENVSYS_EVENT_USER_WARNMIN:
+	case PENVSYS_EVENT_BATT_USERCAP:
+	case PENVSYS_EVENT_BATT_USERWARN:
 	case PENVSYS_EVENT_STATE_CHANGED:
 	case PENVSYS_EVENT_LOW_POWER:
 	    {
@@ -370,7 +367,7 @@ sysmon_power_daemon_task(struct power_event_dictionary *ped,
 		 * dictionary is ready to be fetched.
 		 */
 		ped->flags |= SYSMON_POWER_DICTIONARY_READY;
-		SIMPLEQ_INSERT_TAIL(&pev_dict_list, ped, pev_dict_head);
+		SLIST_INSERT_HEAD(&pev_dict_list, ped, pev_dict_head);
 		cv_broadcast(&sysmon_power_event_queue_cv);
 		mutex_exit(&sysmon_power_event_queue_mtx);
 		selnotify(&sysmon_power_event_queue_selinfo, 0, 0);
@@ -548,7 +545,7 @@ sysmonkqfilter_power(dev_t dev, struct knote *kn)
 /*
  * sysmonioctl_power:
  *
- *	Perform a power management control request.
+ *	Perform a power managmenet control request.
  */
 int
 sysmonioctl_power(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
@@ -557,7 +554,6 @@ sysmonioctl_power(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 
 	switch (cmd) {
 	case POWER_IOC_GET_TYPE:
-	case POWER_IOC_GET_TYPE_WITH_LOSSAGE:
 	    {
 		struct power_type *power_type = (void *) data;
 
@@ -576,7 +572,7 @@ sysmonioctl_power(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		 * as busy.
 		 */
 		mutex_enter(&sysmon_power_event_queue_mtx);
-		ped = SIMPLEQ_FIRST(&pev_dict_list);
+		ped = SLIST_FIRST(&pev_dict_list);
 		if (!ped || !ped->dict) {
 			mutex_exit(&sysmon_power_event_queue_mtx);
 			error = ENOTSUP;
@@ -611,7 +607,7 @@ sysmonioctl_power(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		mutex_enter(&sysmon_power_event_queue_mtx);
 		ped->flags &= ~SYSMON_POWER_DICTIONARY_BUSY;
 		ped->flags &= ~SYSMON_POWER_DICTIONARY_READY;
-		SIMPLEQ_REMOVE_HEAD(&pev_dict_list, pev_dict_head);
+		SLIST_REMOVE_HEAD(&pev_dict_list, pev_dict_head);
 		mutex_exit(&sysmon_power_event_queue_mtx);
 		sysmon_power_destroy_dictionary(ped);
 
@@ -775,7 +771,7 @@ sysmon_power_settype(const char *type)
  * sysmon_penvsys_event:
  *
  * 	Puts an event onto the sysmon power queue and sends the
- * 	appropriate event if the daemon is running, otherwise a
+ * 	appropiate event if the daemon is running, otherwise a
  * 	message is shown.
  */
 void
@@ -785,8 +781,6 @@ sysmon_penvsys_event(struct penvsys_state *pes, int event)
 	const char *mystr = NULL;
 
 	KASSERT(pes != NULL);
-
-	rnd_add_uint32(&sysmon_rndsource, pes->pes_type);
 
 	if (sysmon_power_daemon != NULL) {
 		/*
@@ -813,20 +807,12 @@ sysmon_penvsys_event(struct penvsys_state *pes, int event)
 			    pes->pes_dvname, pes->pes_sensname,
 			    pes->pes_statedesc);
 			break;
-		case PENVSYS_EVENT_BATT_CRIT:
+		case PENVSYS_EVENT_BATT_USERCAP:
 			mystr = "critical capacity";
 			PENVSYS_SHOWSTATE(mystr);
 			break;
-		case PENVSYS_EVENT_BATT_WARN:
+		case PENVSYS_EVENT_BATT_USERWARN:
 			mystr = "warning capacity";
-			PENVSYS_SHOWSTATE(mystr);
-			break;
-		case PENVSYS_EVENT_BATT_HIGH:
-			mystr = "high capacity";
-			PENVSYS_SHOWSTATE(mystr);
-			break;
-		case PENVSYS_EVENT_BATT_MAX:
-			mystr = "maximum capacity";
 			PENVSYS_SHOWSTATE(mystr);
 			break;
 		case PENVSYS_EVENT_NORMAL:
@@ -847,18 +833,22 @@ sysmon_penvsys_event(struct penvsys_state *pes, int event)
 			PENVSYS_SHOWSTATE(mystr);
 			break;
 		case PENVSYS_EVENT_CRITOVER:
+		case PENVSYS_EVENT_USER_CRITMAX:
 			mystr = "critical over";
 			PENVSYS_SHOWSTATE(mystr);
 			break;
 		case PENVSYS_EVENT_CRITUNDER:
+		case PENVSYS_EVENT_USER_CRITMIN:
 			mystr = "critical under";
 			PENVSYS_SHOWSTATE(mystr);
 			break;
 		case PENVSYS_EVENT_WARNOVER:
+		case PENVSYS_EVENT_USER_WARNMAX:
 			mystr = "warning over";
 			PENVSYS_SHOWSTATE(mystr);
 			break;
 		case PENVSYS_EVENT_WARNUNDER:
+		case PENVSYS_EVENT_USER_WARNMIN:
 			mystr = "warning under";
 			PENVSYS_SHOWSTATE(mystr);
 			break;

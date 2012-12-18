@@ -1,4 +1,4 @@
-/*	$NetBSD: trm.c,v 1.33 2012/05/10 03:16:50 macallan Exp $	*/
+/*	$NetBSD: trm.c,v 1.30 2008/05/14 13:29:29 tsutsui Exp $	*/
 /*-
  * Copyright (c) 2002 Izumi Tsutsui.  All rights reserved.
  *
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trm.c,v 1.33 2012/05/10 03:16:50 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trm.c,v 1.30 2008/05/14 13:29:29 tsutsui Exp $");
 
 /* #define TRM_DEBUG */
 #ifdef TRM_DEBUG
@@ -85,6 +85,8 @@ int trm_debug = 1;
 
 #include <sys/bus.h>
 #include <sys/intr.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_spc.h>
 #include <dev/scsipi/scsi_all.h>
@@ -412,12 +414,11 @@ trm_attach(device_t parent, device_t self, void *aux)
 	pci_intr_handle_t ih;
 	pcireg_t command;
 	const char *intrstr;
-	int fl = 0;
 
 	sc->sc_dev = self;
 
 	/*
-	 * Some cards do not allow memory mapped accesses
+	 * These cards do not allow memory mapped accesses
 	 * pa_pc:  chipset tag
 	 * pa_tag: pci tag
 	 */
@@ -431,17 +432,10 @@ trm_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * mask for get correct base address of pci IO port
 	 */
-	if (command & PCI_COMMAND_MEM_ENABLE) {
-		fl = pci_mapreg_map(pa, TRM_BAR_MMIO, PCI_MAPREG_TYPE_MEM, 0, &iot,
-		    &ioh, NULL, NULL);
-	}
-	if (fl != 0) {
-		aprint_verbose_dev(self, "couldn't map MMIO registers, tryion PIO\n");
-		if ((fl = pci_mapreg_map(pa, TRM_BAR_PIO, PCI_MAPREG_TYPE_IO, 0,
-		    &iot, &ioh, NULL, NULL)) != 0) {
-			aprint_error(": unable to map registers (%d)\n", fl);
-			return;
-		}
+	if (pci_mapreg_map(pa, PCI_MAPREG_START, PCI_MAPREG_TYPE_IO, 0,
+	    &iot, &ioh, NULL, NULL)) {
+		aprint_error(": unable to map registers\n");
+		return;
 	}
 	/*
 	 * test checksum of eeprom.. & initialize softc...
@@ -580,7 +574,7 @@ trm_init(struct trm_softc *sc)
 
 	sc->sc_srb = malloc(sizeof(struct trm_srb) * TRM_MAX_SRB,
 	    M_DEVBUF, M_NOWAIT|M_ZERO);
-	DPRINTF(("all SRB size=%zx\n", sizeof(struct trm_srb) * TRM_MAX_SRB));
+	DPRINTF(("all SRB size=%x\n", sizeof(struct trm_srb) * TRM_MAX_SRB));
 	if (sc->sc_srb == NULL) {
 		aprint_error(": can not allocate SRB\n");
 		return 1;

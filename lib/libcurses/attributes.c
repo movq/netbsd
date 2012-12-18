@@ -1,4 +1,4 @@
-/*	$NetBSD: attributes.c,v 1.21 2010/12/25 10:08:20 blymn Exp $	*/
+/*	$NetBSD: attributes.c,v 1.19 2008/06/13 03:15:50 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: attributes.c,v 1.21 2010/12/25 10:08:20 blymn Exp $");
+__RCSID("$NetBSD: attributes.c,v 1.19 2008/06/13 03:15:50 yamt Exp $");
 #endif				/* not lint */
 
 #include "curses.h"
@@ -163,37 +163,37 @@ wattr_on(WINDOW *win, attr_t attr, void *opt)
 	__CTRACE(__CTRACE_ATTR, "wattr_on: win %p, attr %08x\n", win, attr);
 #endif
 	/* If can enter modes, set the relevent attribute bits. */
-	if (exit_attribute_mode != NULL) {
-		if (attr & __BLINK && enter_blink_mode != NULL)
+	if (__tc_me != NULL) {
+		if (attr & __BLINK && __tc_mb != NULL)
 			win->wattr |= __BLINK;
-		if (attr & __BOLD && enter_bold_mode != NULL)
+		if (attr & __BOLD && __tc_md != NULL)
 			win->wattr |= __BOLD;
-		if (attr & __DIM && enter_dim_mode != NULL)
+		if (attr & __DIM && __tc_mh != NULL)
 			win->wattr |= __DIM;
-		if (attr & __BLANK && enter_secure_mode != NULL)
+		if (attr & __BLANK && __tc_mk != NULL)
 			win->wattr |= __BLANK;
-		if (attr & __PROTECT && enter_protected_mode != NULL)
+		if (attr & __PROTECT && __tc_mp != NULL)
 			win->wattr |= __PROTECT;
-		if (attr & __REVERSE && enter_reverse_mode != NULL)
+		if (attr & __REVERSE && __tc_mr != NULL)
 			win->wattr |= __REVERSE;
 #ifdef HAVE_WCHAR
-		if (attr & WA_LOW && enter_low_hl_mode != NULL)
+		if (attr & WA_LOW && __tc_Xo != NULL)
 			win->wattr |= WA_LOW;
-		if (attr & WA_TOP && enter_top_hl_mode != NULL)
+		if (attr & WA_TOP && __tc_Xt != NULL)
 			win->wattr |= WA_TOP;
-		if (attr & WA_LEFT && enter_left_hl_mode != NULL)
+		if (attr & WA_LEFT && __tc_Xl != NULL)
 			win->wattr |= WA_LEFT;
-		if (attr & WA_RIGHT && enter_right_hl_mode != NULL)
+		if (attr & WA_RIGHT && __tc_Xr != NULL)
 			win->wattr |= WA_RIGHT;
-		if (attr & WA_HORIZONTAL && enter_horizontal_hl_mode != NULL)
+		if (attr & WA_HORIZONTAL && __tc_Xh != NULL)
 			win->wattr |= WA_HORIZONTAL;
-		if (attr & WA_VERTICAL && enter_vertical_hl_mode != NULL)
+		if (attr & WA_VERTICAL && __tc_Xv != NULL)
 			win->wattr |= WA_VERTICAL;
 #endif /* HAVE_WCHAR */
 	}
-	if (attr & __STANDOUT && enter_standout_mode != NULL && exit_standout_mode != NULL)
+	if (attr & __STANDOUT && __tc_so != NULL && __tc_se != NULL)
 		wstandout(win);
-	if (attr & __UNDERSCORE && enter_underline_mode != NULL && exit_underline_mode != NULL)
+	if (attr & __UNDERSCORE && __tc_us != NULL && __tc_ue != NULL)
 		wunderscore(win);
 	if ((attr_t) attr & __COLOR)
 		__wcolor_set(win, (attr_t) attr);
@@ -215,7 +215,7 @@ wattr_off(WINDOW *win, attr_t attr, void *opt)
 	__CTRACE(__CTRACE_ATTR, "wattr_off: win %p, attr %08x\n", win, attr);
 #endif
 	/* If can do exit modes, unset the relevent attribute bits. */
-	if (exit_attribute_mode != NULL) {
+	if (__tc_me != NULL) {
 		if (attr & __BLINK)
 			win->wattr &= ~__BLINK;
 		if (attr & __BOLD)
@@ -239,7 +239,7 @@ wattr_off(WINDOW *win, attr_t attr, void *opt)
 			win->wattr &= ~WA_RIGHT;
 		if (attr & WA_HORIZONTAL)
 			win->wattr &= ~WA_HORIZONTAL;
-	if (attr & WA_VERTICAL)
+		if (attr & WA_VERTICAL)
 			win->wattr &= ~WA_VERTICAL;
 #endif /* HAVE_WCHAR */
 	}
@@ -248,7 +248,7 @@ wattr_off(WINDOW *win, attr_t attr, void *opt)
 	if (attr & __UNDERSCORE)
 		wunderend(win);
 	if ((attr_t) attr & __COLOR) {
-		if (max_colors != 0)
+		if (__tc_Co != 0)
 			win->wattr &= ~__COLOR;
 	}
 	return OK;
@@ -357,28 +357,25 @@ termattrs(void)
 #ifdef DEBUG
 	__CTRACE(__CTRACE_ATTR, "termattrs\n");
 #endif
-	if (exit_attribute_mode != NULL) {
-#ifdef DEBUG
-	__CTRACE(__CTRACE_ATTR, "termattrs: have exit attribute mode\n");
-#endif
-		if (enter_blink_mode != NULL)
+	if (__tc_me != NULL) {
+		if (__tc_mb != NULL)
 			ch |= __BLINK;
-		if (enter_bold_mode != NULL)
+		if (__tc_md != NULL)
 			ch |= __BOLD;
-		if (enter_dim_mode != NULL)
+		if (__tc_mh != NULL)
 			ch |= __DIM;
-		if (enter_secure_mode != NULL)
+		if (__tc_mk != NULL)
 			ch |= __BLANK;
-		if (enter_protected_mode != NULL)
+		if (__tc_mp != NULL)
 			ch |= __PROTECT;
-		if (enter_reverse_mode != NULL)
+		if (__tc_mr != NULL)
 			ch |= __REVERSE;
 	}
-	if (enter_standout_mode != NULL && exit_standout_mode != NULL)
+	if (__tc_so != NULL && __tc_se != NULL)
 		ch |= __STANDOUT;
-	if (enter_underline_mode != NULL && exit_underline_mode != NULL)
+	if (__tc_us != NULL && __tc_ue != NULL)
 		ch |= __UNDERSCORE;
-	if (enter_alt_charset_mode != NULL && exit_alt_charset_mode != NULL)
+	if (__tc_as != NULL && __tc_ae != NULL)
 		ch |= __ALTCHARSET;
 
 	return ch;
@@ -396,39 +393,39 @@ term_attrs(void)
 #ifdef DEBUG
 	__CTRACE(__CTRACE_ATTR, "term_attrs\n");
 #endif
-	if (exit_attribute_mode != NULL) {
-		if (enter_blink_mode != NULL)
+	if (__tc_me != NULL) {
+		if (__tc_mb != NULL)
 			attr |= __BLINK;
-		if (enter_bold_mode != NULL)
+		if (__tc_md != NULL)
 			attr |= __BOLD;
-		if (enter_dim_mode != NULL)
+		if (__tc_mh != NULL)
 			attr |= __DIM;
-		if (enter_secure_mode != NULL)
+		if (__tc_mk != NULL)
 			attr |= __BLANK;
-		if (enter_protected_mode != NULL)
+		if (__tc_mp != NULL)
 			attr |= __PROTECT;
-		if (enter_reverse_mode != NULL)
+		if (__tc_mr != NULL)
 			attr |= __REVERSE;
 #ifdef HAVE_WCHAR
-		if (enter_low_hl_mode != NULL)
+		if (__tc_Xo != NULL)
 			attr |= WA_LOW;
-		if (enter_top_hl_mode != NULL)
+		if (__tc_Xt != NULL)
 			attr |= WA_TOP;
-		if (enter_left_hl_mode != NULL)
+		if (__tc_Xl != NULL)
 			attr |= WA_LEFT;
-		if (enter_right_hl_mode != NULL)
+		if (__tc_Xr != NULL)
 			attr |= WA_RIGHT;
-		if (enter_horizontal_hl_mode != NULL)
+		if (__tc_Xh != NULL)
 			attr |= WA_HORIZONTAL;
-		if (enter_vertical_hl_mode != NULL)
+		if (__tc_Xv != NULL)
 			attr |= WA_VERTICAL;
 #endif /* HAVE_WCHAR */
 	}
-	if (enter_standout_mode != NULL && exit_standout_mode != NULL)
+	if (__tc_so != NULL && __tc_se != NULL)
 		attr |= __STANDOUT;
-	if (enter_underline_mode != NULL && exit_underline_mode != NULL)
+	if (__tc_us != NULL && __tc_ue != NULL)
 		attr |= __UNDERSCORE;
-	if (enter_alt_charset_mode != NULL && exit_alt_charset_mode != NULL)
+	if (__tc_as != NULL && __tc_ae != NULL)
 		attr |= __ALTCHARSET;
 
 	return attr;
@@ -444,6 +441,6 @@ __wcolor_set(WINDOW *win, attr_t attr)
 	/* If another color pair is set, turn that off first. */
 	win->wattr &= ~__COLOR;
 	/* If can do color video, set the color pair bits. */
-	if (max_colors != 0 && attr & __COLOR)
+	if (__tc_Co != 0 && attr & __COLOR)
 		win->wattr |= attr & __COLOR;
 }

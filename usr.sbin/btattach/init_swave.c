@@ -1,4 +1,4 @@
-/*	$NetBSD: init_swave.c,v 1.3 2010/03/09 02:01:51 kiyohara Exp $	*/
+/*	$NetBSD: init_swave.c,v 1.1 2008/04/15 11:17:48 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2008 Iain Hibbert
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: init_swave.c,v 1.3 2010/03/09 02:01:51 kiyohara Exp $");
+__RCSID("$NetBSD: init_swave.c,v 1.1 2008/04/15 11:17:48 plunky Exp $");
 
 #include <bluetooth.h>
 #include <err.h>
@@ -58,7 +58,7 @@ typedef struct {
 	uint8_t			d0;	/* ? */
 	hci_param_access_set_cp	cp;
 } __attribute__ ((__packed__)) hci_param_access_set_rp;
-
+	
 void
 init_swave(int fd, unsigned int speed)
 {
@@ -78,7 +78,7 @@ init_swave(int fd, unsigned int speed)
 	case B57600:	cp.transport_rate = 0x01;	break;
 	case B115200:	cp.transport_rate = 0x00;	break;
 	default:
-		errx(EXIT_FAILURE, "invalid speed for swave: %u\n", speed);
+		errx(EXIT_FAILURE, "invalid speed for swave: %d\n", speed);
 	}
 
 	uart_send_cmd(fd, HCI_CMD_SWAVE_PARAM_ACCESS_SET, &cp, sizeof(cp));

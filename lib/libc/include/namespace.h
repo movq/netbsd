@@ -1,4 +1,4 @@
-/*	$NetBSD: namespace.h,v 1.156 2012/08/20 21:38:10 dsl Exp $	*/
+/*	$NetBSD: namespace.h,v 1.133.4.1 2009/07/14 19:48:04 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
@@ -32,14 +32,11 @@
 #include <sys/cdefs.h>
 
 #ifndef __lint__
-#define aio_suspend	_aio_suspend
 #define brk		_brk
 #define catclose	_catclose
 #define catgets		_catgets
 #define catopen		_catopen
 #define daylight	_daylight
-#define difftime	_difftime
-#define devname_r	_devname_r
 #define err		_err
 #define errx		_errx
 #ifdef _REENTRANT
@@ -155,10 +152,6 @@
 #define alarm			_alarm
 #define alphasort		_alphasort
 #define arc4random		_arc4random
-#define arc4random_addrandom	_arc4random_addrandom
-#define arc4random_buf		_arc4random_buf
-#define arc4random_stir		_arc4random_stir
-#define arc4random_uniform	_arc4random_uniform
 #define asctime_r		_asctime_r
 #define asprintf		_asprintf
 #define atoll			_atoll
@@ -172,16 +165,6 @@
 #define bm_exec			_bm_exec
 #define bm_free			_bm_free
 #define callrpc			_callrpc
-#define cdbr_close		_cdbr_close
-#define cdbr_find		_cdbr_find
-#define cdbr_get		_cdbr_get
-#define cdbr_open		_cdbr_open
-#define cdbw_close		_cdbw_close
-#define cdbw_open		_cdbw_open
-#define cdbw_put		_cdbw_put
-#define cdbw_put_data		_cdbw_put_data
-#define cdbw_put_key		_cdbw_put_key
-#define cdbw_output		_cdbw_output
 #define cfgetispeed		_cfgetispeed
 #define cfgetospeed		_cfgetospeed
 #define cfmakeraw		_cfmakeraw
@@ -216,8 +199,6 @@
 #define clnttcp_create		_clnttcp_create
 #define clntudp_bufcreate	_clntudp_bufcreate
 #define clntudp_create		_clntudp_create
-#define clock_gettime		_clock_gettime
-#define clock_getres		_clock_getres
 #define clock_settime		_clock_settime
 #define closedir		_closedir
 #define closelog		_closelog
@@ -226,11 +207,9 @@
 #define csetexpandtc		_csetexpandtc
 #define ctermid			_ctermid
 #define ctime_r			_ctime_r
-#define ctime_rz		_ctime_rz
 #define daemon			_daemon
 #define dbopen			_dbopen
 #define devname			_devname
-#define difftime		_difftime
 #define dirname			_dirname
 #define dn_expand		_dn_expand
 #define drand48			_drand48
@@ -270,11 +249,9 @@
 #define fnmatch			_fnmatch
 #define fparseln		_fparseln
 #define fpgetmask		_fpgetmask
-#define fpgetprec		_fpgetprec
 #define fpgetround		_fpgetround
 #define fpgetsticky		_fpgetsticky
 #define fpsetmask		_fpsetmask
-#define fpsetprec		_fpsetprec
 #define fpsetround		_fpsetround
 #define fpsetsticky		_fpsetsticky
 #define freenetconfigent	_freenetconfigent
@@ -293,7 +270,6 @@
 #define getaddrinfo		_getaddrinfo
 #define getbsize		_getbsize
 #define getcwd			_getcwd
-#define getdelim		_getdelim
 #define getdevmajor		_getdevmajor
 #define getdiskbyname		_getdiskbyname
 #define getdomainname		_getdomainname
@@ -313,7 +289,6 @@
 #define gethostent		_gethostent
 #define gethostname		_gethostname
 #define getifaddrs		_getifaddrs
-#define getline			_getline
 #define getloadavg		_getloadavg
 #define getlogin		_getlogin
 #define getlogin_r		_getlogin_r
@@ -331,8 +306,6 @@
 #define getopt_long		_getopt_long
 #define getpagesize		_getpagesize
 #define getpass			_getpass
-#define getpassfd		_getpassfd
-#define getpass_r		_getpass_r
 #define getprogname		_getprogname
 #define getprotobyname		_getprotobyname
 #define getprotobyname_r	_getprotobyname_r
@@ -442,15 +415,11 @@
 #define llabs			_llabs
 #define lldiv			_lldiv
 #define localtime_r		_localtime_r
-#define localtime_rz		_localtime_rz
 #define lockf			_lockf
 #define lrand48			_lrand48
 #define lseek			_lseek
-#define membar_producer		_membar_producer
 #define mergesort		_mergesort
-#define mi_vector_hash		_mi_vector_hash
 #define mkstemp			_mkstemp
-#define mktime_z		_mktime_z
 #define mmap			_mmap
 #define mpool_close		_mpool_close
 #define mpool_filter		_mpool_filter
@@ -459,13 +428,9 @@
 #define mpool_open		_mpool_open
 #define mpool_put		_mpool_put
 #define mpool_sync		_mpool_sync
-#define mq_timedreceive		_mq_timedreceive
-#define mq_timedsend		_mq_timedsend
 #define mrand48			_mrand48
-#define murmurhash2		_murmurhash2
 #define nc_perror		_nc_perror
 #define nc_sperror		_nc_sperror
-#define nanosleep		_nanosleep
 #define nice			_nice
 #if 0
 #define nlist			_nlist
@@ -475,7 +440,6 @@
 #define nsdispatch		_nsdispatch
 #define offtime			_offtime
 #define opendir			_opendir
-#define fdopendir		_fdopendir
 #define openlog			_openlog
 #define openlog_r		_openlog_r
 #define pause			_pause
@@ -485,20 +449,11 @@
 #define pmap_rmtcall		_pmap_rmtcall
 #define pmap_set		_pmap_set
 #define pmap_unset		_pmap_unset
-#define pollts			_pollts
 #define popen			_popen
 #define posix2time		_posix2time
-#define posix2time_z		_posix2time_z
 #define pread			_pread
-#define pselect			_pselect
 #define psignal			_psignal
 #define pthread_atfork		_pthread_atfork
-#define ptree_init		ptree_init
-#define ptree_insert_node	ptree_insert_node
-#define ptree_insert_mask_node	ptree_insert_mask_node
-#define ptree_find_filtered_node	ptree_find_filtered_node
-#define ptree_remove_node	ptree_remove_node
-#define ptree_iterate		ptree_iterate
 #define putenv			_putenv
 #define pwcache_groupdb		_pwcache_groupdb
 #define pwcache_userdb		_pwcache_userdb
@@ -540,7 +495,6 @@
 #define scandir			_scandir
 #define seed48			_seed48
 #define seekdir			_seekdir
-#define select			_select
 #define send			_send
 #define setdomainname		_setdomainname
 #define setenv			_setenv
@@ -575,7 +529,6 @@
 #define shquote			_shquote
 #define siginterrupt		_siginterrupt
 #define signal			_signal
-#define sigtimedwait		_sigtimedwait
 #define sl_add			_sl_add
 #define sl_create		_sl_create
 #define sl_delete		_sl_delete
@@ -594,7 +547,6 @@
 #define strcasecmp		_strcasecmp
 #define strdup			_strdup
 #define stresep			_stresep
-#define strftime_z		_strftime_z
 #define strndup			_strndup
 #define strncasecmp		_strncasecmp
 #define strptime		_strptime
@@ -602,8 +554,11 @@
 #define strsignal		_strsignal
 #define strsuftoll	 	_strsuftoll
 #define strsuftollx	 	_strsuftollx
+#define strsvis			_strsvis
+#define strsvisx		_strsvisx
 #define strtok_r		_strtok_r
-#define strnunvisx		_strnunvisx
+#define strunvis		_strunvis
+#define strvis			_strvis
 #define strvisx			_strvisx
 #define svc_auth_reg		_svc_auth_reg
 #define svc_create		_svc_create
@@ -636,6 +591,7 @@
 #define svcudp_bufcreate	_svcudp_bufcreate
 #define svcudp_create		_svcudp_create
 #define svcudp_enablecache	_svcudp_enablecache
+#define svis			_svis
 #define sysarch			_sys_sysarch
 #define sysctl			_sysctl
 #define sysctlbyname		_sysctlbyname
@@ -644,9 +600,6 @@
 #define syslog			_syslog
 #define syslog_r		_syslog_r
 #define syslog_ss		_syslog_ss
-#define syslogp			_syslogp
-#define syslogp_r		_syslogp_r
-#define syslogp_ss		_syslogp_ss
 #define taddr2uaddr		_taddr2uaddr
 #define tcdrain			_tcdrain
 #define tcflow			_tcflow
@@ -674,14 +627,14 @@
 #define ualarm			_ualarm
 #define uname			_uname
 #define unsetenv		_unsetenv
+#define unvis			_unvis
 #define user_from_uid		_user_from_uid
 #define usleep			_usleep
 #define utime			_utime
 #define uuid_create_nil		_uuid_create_nil
 #define uuid_is_nil		_uuid_is_nil
 #define valloc			_valloc
-#define vdprintf		_vdprintf
-#define	vdprintf		_vdprintf
+#define vis			_vis
 #ifndef vsnprintf
 #define vsnprintf		_vsnprintf
 #endif
@@ -689,12 +642,8 @@
 #define vsyslog			_vsyslog
 #define vsyslog_r		_vsyslog_r
 #define vsyslog_ss		_vsyslog_ss
-#define vsyslogp		_vsyslogp
-#define vsyslogp_r		_vsyslogp_r
-#define vsyslogp_ss		_vsyslogp_ss
 #define wait			_wait
 #define wait3			_wait3
-#define wait4			_wait4
 #define waitpid			_waitpid
 #define wcscasecmp		_wcscasecmp
 #define wcsdup			_wcsdup
@@ -756,7 +705,6 @@
 #define xdr_rpcbs		_xdr_rpcbs
 #define xdr_rpcbs		_xdr_rpcbs
 #define xdr_short		_xdr_short
-#define xdr_sizeof		_xdr_sizeof
 #define xdr_string		_xdr_string
 #define xdr_u_char		_xdr_u_char
 #define	xdr_u_hyper		_xdr_u_hyper
@@ -809,26 +757,12 @@
 #define yp_unbind		_yp_unbind
 #define yperr_string		_yperr_string
 #define ypprot_err		_ypprot_err
-#define yp_setbindtries		_yp_setbindtries
 #define dlopen			__dlopen
 #define dlclose			__dlclose
 #define dlsym			__dlsym
 #define dlerror			__dlerror
 #define dladdr			__dladdr
 #define fmtcheck		__fmtcheck
-
-/* RB trees */
-#define	rb_tree_init		_rb_tree_init
-#define	rb_tree_find_node	_rb_tree_find_node
-#define	rb_tree_find_node_geq	_rb_tree_find_node_geq
-#define	rb_tree_find_node_leq	_rb_tree_find_node_leq
-#define	rb_tree_insert_node	_rb_tree_insert_node
-#define	rb_tree_remove_node	_rb_tree_remove_node
-#define	rb_tree_iterate		_rb_tree_iterate
-#ifdef RBDEBUG
-#define	rb_tree_check		_rb_tree_check
-#define	rb_tree_depths		_rb_tree_depths
-#endif
 
 /* rpc locks */
 #define authdes_lock		__rpc_authdes_lock

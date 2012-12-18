@@ -1,4 +1,4 @@
-/*	$NetBSD: identcpu.c,v 1.32 2012/06/16 17:30:19 chs Exp $	*/
+/*	$NetBSD: identcpu.c,v 1.10.4.7 2012/11/26 19:44:26 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -30,13 +30,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.32 2012/06/16 17:30:19 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.10.4.7 2012/11/26 19:44:26 riz Exp $");
 
+#include "opt_enhanced_speedstep.h"
+#include "opt_intel_odcm.h"
+#include "opt_intel_coretemp.h"
+#include "opt_via_c7temp.h"
+#include "opt_powernow_k8.h"
 #include "opt_xen.h"
+#ifdef i386	/* XXX */
+#include "opt_powernow_k7.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/device.h>
+#include <sys/malloc.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -48,6 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.32 2012/06/16 17:30:19 chs Exp $");
 #include <x86/cacheinfo.h>
 #include <x86/cpuvar.h>
 #include <x86/cpu_msr.h>
+#include <x86/powernow.h>
 
 static const struct x86_cache_info intel_cpuid_cache_info[] = INTEL_CACHE_INFO;
 
@@ -80,8 +89,7 @@ const int i386_nocpuid_cpus[] = {
 };
 
 static const char cpu_vendor_names[][10] = {
-	"Unknown", "Intel", "NS/Cyrix", "NexGen", "AMD", "IDT/VIA", "Transmeta",
-	"Vortex86"
+	"Unknown", "Intel", "NS/Cyrix", "NexGen", "AMD", "IDT/VIA", "Transmeta"
 };
 
 static const struct x86_cache_info *
@@ -96,7 +104,6 @@ cache_info_lookup(const struct x86_cache_info *cai, uint8_t desc)
 
 	return (NULL);
 }
-
 
 static void
 cpu_probe_amd_cache(struct cpu_info *ci)
@@ -168,7 +175,7 @@ cpu_probe_amd_cache(struct cpu_info *ci)
 	cai = &ci->ci_cinfo[CAI_DCACHE];
 	cai->cai_totalsize = AMD_L1_ECX_DC_SIZE(descs[2]);
 	cai->cai_associativity = AMD_L1_ECX_DC_ASSOC(descs[2]);
-	cai->cai_linesize = AMD_L1_ECX_DC_LS(descs[2]);
+	cai->cai_linesize = AMD_L1_EDX_IC_LS(descs[2]);
 
 	cai = &ci->ci_cinfo[CAI_ICACHE];
 	cai->cai_totalsize = AMD_L1_EDX_IC_SIZE(descs[3]);
@@ -258,10 +265,10 @@ cpu_probe_k5(struct cpu_info *ci)
 		 * support for global PTEs, instead using bit 9 (APIC)
 		 * rather than bit 13 (i.e. "0x200" vs. 0x2000".  Oops!).
 		 */
-		flag = ci->ci_feat_val[0];
+		flag = ci->ci_feature_flags;
 		if ((flag & CPUID_APIC) != 0)
 			flag = (flag & ~CPUID_APIC) | CPUID_PGE;
-		ci->ci_feat_val[0] = flag;
+		ci->ci_feature_flags = flag;
 	}
 
 	cpu_probe_amd_cache(ci);
@@ -280,8 +287,8 @@ cpu_probe_k678(struct cpu_info *ci)
 	x86_cpuid(0x80000000, descs);
 	if (descs[0] >= 0x80000001) {
 		x86_cpuid(0x80000001, descs);
-		ci->ci_feat_val[3] = descs[2]; /* %ecx */
-		ci->ci_feat_val[2] = descs[3]; /* %edx */
+		ci->ci_feature4_flags = descs[2]; /* %ecx */
+		ci->ci_feature3_flags = descs[3]; /* %edx */
 	}
 
 	cpu_probe_amd_cache(ci);
@@ -350,7 +357,7 @@ cpu_probe_cyrix_cmn(struct cpu_info *ci)
 	 * work fine.
 	 */
 	if (ci->ci_signature != 0x552)
-		ci->ci_feat_val[0] &= ~CPUID_TSC;
+		ci->ci_feature_flags &= ~CPUID_TSC;
 
 	/* enable access to ccr4/ccr5 */
 	c3 = cyrix_read_reg(0xC3);
@@ -385,9 +392,9 @@ cpu_probe_winchip(struct cpu_info *ci)
 
 	switch (CPUID2FAMILY(ci->ci_signature)) {
 	case 5:
-		/* WinChip C6 */
+ 		/* WinChip C6 */
 		if (CPUID2MODEL(ci->ci_signature) == 4)
-			ci->ci_feat_val[0] &= ~CPUID_TSC;
+			ci->ci_feature_flags &= ~CPUID_TSC;
 		break;
 	case 6:
 		/*
@@ -402,7 +409,7 @@ cpu_probe_winchip(struct cpu_info *ci)
 		 *    Windows NT. However, this default can be changed via a
 		 *    bit in the FCR MSR.
 		 */
-		ci->ci_feat_val[0] |= CPUID_CX8;
+		ci->ci_feature_flags |= CPUID_CX8;
 		wrmsr(MSR_VIA_FCR, rdmsr(MSR_VIA_FCR) | 0x00000001);
 		break;
 	}
@@ -415,7 +422,7 @@ cpu_probe_c3(struct cpu_info *ci)
 	struct x86_cache_info *cai;
 
 	if (cpu_vendor != CPUVENDOR_IDT ||
-	    CPUID2FAMILY(ci->ci_signature) < 6)
+	    CPUID2FAMILY(ci->ci_signature) != 5)
 	    	return;
 
 	family = CPUID2FAMILY(ci->ci_signature);
@@ -429,64 +436,28 @@ cpu_probe_c3(struct cpu_info *ci)
 	/* Determine the extended feature flags. */
 	if (lfunc >= 0x80000001) {
 		x86_cpuid(0x80000001, descs);
-		ci->ci_feat_val[2] = descs[3];
+		ci->ci_feature_flags |= descs[3];
 	}
 
-	if (family > 6 || model > 0x9 || (model == 0x9 && stepping >= 3)) {
+	if (model >= 0x9) {
 		/* Nehemiah or Esther */
 		x86_cpuid(0xc0000000, descs);
 		lfunc = descs[0];
 		if (lfunc >= 0xc0000001) {	/* has ACE, RNG */
-		    int rng_enable = 0, ace_enable = 0;
-		    x86_cpuid(0xc0000001, descs);
-		    lfunc = descs[3];
-		    ci->ci_feat_val[4] = lfunc;
-		    /* Check for and enable RNG */
-		    if (lfunc & CPUID_VIA_HAS_RNG) {
-		    	if (!(lfunc & CPUID_VIA_DO_RNG)) {
-			    rng_enable++;
-			    ci->ci_feat_val[4] |= CPUID_VIA_DO_RNG;
+			x86_cpuid(0xc0000001, descs);
+			lfunc = descs[3];
+			if (model > 0x9 || stepping >= 8) {	/* ACE */
+				if (lfunc & CPUID_VIA_HAS_ACE) {
+					ci->ci_padlock_flags = lfunc;
+					if ((lfunc & CPUID_VIA_DO_ACE) == 0) {
+						msr = rdmsr(MSR_VIA_ACE);
+						wrmsr(MSR_VIA_ACE, msr |
+						    MSR_VIA_ACE_ENABLE);
+						ci->ci_padlock_flags |=
+						    CPUID_VIA_DO_ACE;
+					}
+				}
 			}
-		    }
-		    /* Check for and enable ACE (AES-CBC) */
-		    if (lfunc & CPUID_VIA_HAS_ACE) {
-			if (!(lfunc & CPUID_VIA_DO_ACE)) {
-			    ace_enable++;
-			    ci->ci_feat_val[4] |= CPUID_VIA_DO_ACE;
-			}
-		    }
-		    /* Check for and enable SHA */
-		    if (lfunc & CPUID_VIA_HAS_PHE) {
-			if (!(lfunc & CPUID_VIA_DO_PHE)) {
-			    ace_enable++;
-			    ci->ci_feat_val[4] |= CPUID_VIA_DO_PHE;
-			}
-		    }
-		    /* Check for and enable ACE2 (AES-CTR) */
-		    if (lfunc & CPUID_VIA_HAS_ACE2) {
-			if (!(lfunc & CPUID_VIA_DO_ACE2)) {
-			    ace_enable++;
-			    ci->ci_feat_val[4] |= CPUID_VIA_DO_ACE2;
-			}
-		    }
-		    /* Check for and enable PMM (modmult engine) */
-		    if (lfunc & CPUID_VIA_HAS_PMM) {
-			if (!(lfunc & CPUID_VIA_DO_PMM)) {
-			    ace_enable++;
-			    ci->ci_feat_val[4] |= CPUID_VIA_DO_PMM;
-			}
-		    }
-
-		    /* Actually do the enables. */
-		    if (rng_enable) {
-			msr = rdmsr(MSR_VIA_RNG);
-			wrmsr(MSR_VIA_RNG, msr | MSR_VIA_RNG_ENABLE);
-		    }
-		    if (ace_enable) {
-			msr = rdmsr(MSR_VIA_ACE);
-			wrmsr(MSR_VIA_ACE, msr | MSR_VIA_ACE_ENABLE);
-		    }
-			
 		}
 	}
 
@@ -514,7 +485,7 @@ cpu_probe_c3(struct cpu_info *ci)
 	cai->cai_totalsize = VIA_L1_ECX_DC_SIZE(descs[2]);
 	cai->cai_associativity = VIA_L1_ECX_DC_ASSOC(descs[2]);
 	cai->cai_linesize = VIA_L1_EDX_IC_LS(descs[2]);
-	if (family == 6 && model == 9 && stepping == 8) {
+	if (model == 9 && stepping == 8) {
 		/* Erratum: stepping 8 reports 4 when it should be 2 */
 		cai->cai_associativity = 2;
 	}
@@ -523,11 +494,11 @@ cpu_probe_c3(struct cpu_info *ci)
 	cai->cai_totalsize = VIA_L1_EDX_IC_SIZE(descs[3]);
 	cai->cai_associativity = VIA_L1_EDX_IC_ASSOC(descs[3]);
 	cai->cai_linesize = VIA_L1_EDX_IC_LS(descs[3]);
-	if (family == 6 && model == 9 && stepping == 8) {
+	if (model == 9 && stepping == 8) {
 		/* Erratum: stepping 8 reports 4 when it should be 2 */
 		cai->cai_associativity = 2;
 	}
-	
+
 	/*
 	 * Determine L2 cache/TLB info.
 	 */
@@ -539,7 +510,7 @@ cpu_probe_c3(struct cpu_info *ci)
 	x86_cpuid(0x80000006, descs);
 
 	cai = &ci->ci_cinfo[CAI_L2CACHE];
-	if (family > 6 || model >= 9) {
+	if (model >= 9) {
 		cai->cai_totalsize = VIA_L2N_ECX_C_SIZE(descs[2]);
 		cai->cai_associativity = VIA_L2N_ECX_C_ASSOC(descs[2]);
 		cai->cai_linesize = VIA_L2N_ECX_C_LS(descs[2]);
@@ -562,47 +533,6 @@ cpu_probe_geode(struct cpu_info *ci)
 	cpu_probe_amd_cache(ci);
 }
 
-static void
-cpu_probe_vortex86(struct cpu_info *ci)
-{
-#define PCI_MODE1_ADDRESS_REG	0x0cf8
-#define PCI_MODE1_DATA_REG	0x0cfc
-#define PCI_MODE1_ENABLE	0x80000000UL
-
-	uint32_t reg;
-
-	if (cpu_vendor != CPUVENDOR_VORTEX86)
-		return;
-	/*
-	 * CPU model available from "Customer ID register" in
-	 * North Bridge Function 0 PCI space
-	 * we can't use pci_conf_read() because the PCI subsystem is not
-	 * not initialised early enough
-	 */
-
-	outl(PCI_MODE1_ADDRESS_REG, PCI_MODE1_ENABLE | 0x90);
-	reg = inl(PCI_MODE1_DATA_REG);
-
-	switch(reg) {
-	case 0x31504d44:
-		strcpy(cpu_brand_string, "Vortex86SX");
-		break;
-	case 0x32504d44:
-		strcpy(cpu_brand_string, "Vortex86DX");
-		break;
-	case 0x33504d44:
-		strcpy(cpu_brand_string, "Vortex86MX");
-		break;
-	default:
-		strcpy(cpu_brand_string, "Unknown Vortex86");
-		break;
-	}
-
-#undef PCI_MODE1_ENABLE
-#undef PCI_MODE1_ADDRESS_REG
-#undef PCI_MODE1_DATA_REG
-}
-
 void
 cpu_probe(struct cpu_info *ci)
 {
@@ -613,15 +543,11 @@ cpu_probe(struct cpu_info *ci)
 	uint32_t miscbytes;
 	uint32_t brand[12];
 
-	cpu_vendor = i386_nocpuid_cpus[cputype << 1];
-	cpu_class = i386_nocpuid_cpus[(cputype << 1) + 1];
+	cpu_vendor = i386_nocpuid_cpus[cpu << 1];
+	cpu_class = i386_nocpuid_cpus[(cpu << 1) + 1];
 
 	if (cpuid_level < 0)
 		return;
-
-	for (i = 0; i < __arraycount(ci->ci_feat_val); i++) {
-		ci->ci_feat_val[i] = 0;
-	}
 
 	x86_cpuid(0, descs);
 	cpuid_level = descs[0];
@@ -642,8 +568,6 @@ cpu_probe(struct cpu_info *ci)
 		cpu_vendor = CPUVENDOR_IDT;
 	else if (memcmp(ci->ci_vendor, "GenuineTMx86", 12) == 0)
 		cpu_vendor = CPUVENDOR_TRANSMETA;
-	else if (memcmp(ci->ci_vendor, "Vortex86 SoC", 12) == 0)
-		cpu_vendor = CPUVENDOR_VORTEX86;
 	else
 		cpu_vendor = CPUVENDOR_UNKNOWN;
 
@@ -663,8 +587,8 @@ cpu_probe(struct cpu_info *ci)
 		x86_cpuid(1, descs);
 		ci->ci_signature = descs[0];
 		miscbytes = descs[1];
-		ci->ci_feat_val[1] = descs[2];
-		ci->ci_feat_val[0] = descs[3];
+		ci->ci_feature2_flags = descs[2];
+		ci->ci_feature_flags = descs[3];
 
 		/* Determine family + class. */
 		cpu_class = CPUID2FAMILY(ci->ci_signature) + (CPUCLASS_386 - 3);
@@ -672,7 +596,7 @@ cpu_probe(struct cpu_info *ci)
 			cpu_class = CPUCLASS_686;
 
 		/* CLFLUSH line size is next 8 bits */
-		if (ci->ci_feat_val[0] & CPUID_CFLUSH)
+		if (ci->ci_feature_flags & CPUID_CFLUSH)
 			ci->ci_cflush_lsize = ((miscbytes >> 8) & 0xff) << 3;
 		ci->ci_initapicid = (miscbytes >> 24) & 0xff;
 	}
@@ -708,38 +632,31 @@ cpu_probe(struct cpu_info *ci)
 	cpu_probe_winchip(ci);
 	cpu_probe_c3(ci);
 	cpu_probe_geode(ci);
-	cpu_probe_vortex86(ci);
 
-	x86_cpu_topology(ci);
+	x86_cpu_toplogy(ci);
 
-	if (cpu_vendor != CPUVENDOR_AMD && (ci->ci_feat_val[0] & CPUID_TM) &&
+	if (cpu_vendor != CPUVENDOR_AMD && (ci->ci_feature_flags & CPUID_TM) &&
 	    (rdmsr(MSR_MISC_ENABLE) & (1 << 3)) == 0) {
 		/* Enable thermal monitor 1. */
 		wrmsr(MSR_MISC_ENABLE, rdmsr(MSR_MISC_ENABLE) | (1<<3));
 	}
 
-	ci->ci_feat_val[0] &= ~CPUID_FEAT_BLACKLIST;
 	if (ci == &cpu_info_primary) {
-		/* If first. Boot Processor is the cpu_feature reference. */
-		for (i = 0; i < __arraycount(cpu_feature); i++) {
-			cpu_feature[i] = ci->ci_feat_val[i];
-		}
-#ifndef XEN
+		/* If first. */
+		cpu_feature = ci->ci_feature_flags;
+		cpu_feature2 = ci->ci_feature2_flags;
+		cpu_feature3 = ci->ci_feature3_flags;
+		cpu_feature4 = ci->ci_feature4_flags;
 		/* Early patch of text segment. */
+#ifndef XEN
 		x86_patch(true);
 #endif
 	} else {
-		/*
-		 * If not first. Warn about cpu_feature mismatch for
-		 * secondary CPUs.
-		 */
-		for (i = 0; i < __arraycount(cpu_feature); i++) {
-			if (cpu_feature[i] != ci->ci_feat_val[i])
-				aprint_error_dev(ci->ci_dev,
-				    "feature mismatch: cpu_feature[%d] is "
-				    "%#x, but CPU reported %#x\n",
-				    i, cpu_feature[i], ci->ci_feat_val[i]);
-		}
+		/* If not first. */
+		cpu_feature &= ci->ci_feature_flags;
+		cpu_feature2 &= ci->ci_feature2_flags;
+		cpu_feature3 &= ci->ci_feature3_flags;
+		cpu_feature4 &= ci->ci_feature4_flags;
 	}
 }
 
@@ -749,14 +666,9 @@ cpu_identify(struct cpu_info *ci)
 
 	snprintf(cpu_model, sizeof(cpu_model), "%s %d86-class",
 	    cpu_vendor_names[cpu_vendor], cpu_class + 3);
-	if (cpu_brand_string[0] != '\0') {
-		aprint_normal(": %s", cpu_brand_string);
-	} else {
-		aprint_normal(": %s", cpu_model);
-		if (ci->ci_data.cpu_cc_freq != 0)
-			aprint_normal(", %dMHz",
-			    (int)(ci->ci_data.cpu_cc_freq / 1000000));
-	}
+	aprint_normal(": %s", cpu_model);
+	if (ci->ci_data.cpu_cc_freq != 0)
+		aprint_normal(", %dMHz", (int)(ci->ci_data.cpu_cc_freq / 1000000));
 	if (ci->ci_signature != 0)
 		aprint_normal(", id 0x%x", ci->ci_signature);
 	aprint_normal("\n");
@@ -767,13 +679,13 @@ cpu_identify(struct cpu_info *ci)
 	if (cpu_class == CPUCLASS_386) {
 		panic("NetBSD requires an 80486DX or later processor");
 	}
-	if (cputype == CPU_486DLC) {
+	if (cpu == CPU_486DLC) {
 		aprint_error("WARNING: BUGGY CYRIX CACHE\n");
 	}
 
 	if ((cpu_vendor == CPUVENDOR_AMD) /* check enablement of an */
 	  && (device_unit(ci->ci_dev) == 0) /* AMD feature only once */
-	  && ((cpu_feature[3] & CPUID_SVM) == CPUID_SVM)
+	  && ((ci->ci_feature4_flags & CPUID_SVM) == CPUID_SVM)
 #if defined(XEN) && !defined(DOM0OPS)
 	  && (false)  /* on Xen rdmsr is for Dom0 only */
 #endif
@@ -799,17 +711,66 @@ cpu_identify(struct cpu_info *ci)
 	}
 
 	/* If we have FXSAVE/FXRESTOR, use them. */
-	if (cpu_feature[0] & CPUID_FXSR) {
+	if (cpu_feature & CPUID_FXSR) {
 		i386_use_fxsave = 1;
 		/*
 		 * If we have SSE/SSE2, enable XMM exceptions, and
 		 * notify userland.
 		 */
-		if (cpu_feature[0] & CPUID_SSE)
+		if (cpu_feature & CPUID_SSE)
 			i386_has_sse = 1;
-		if (cpu_feature[0] & CPUID_SSE2)
+		if (cpu_feature & CPUID_SSE2)
 			i386_has_sse2 = 1;
 	} else
 		i386_use_fxsave = 0;
 #endif	/* i386 */
+
+#ifdef ENHANCED_SPEEDSTEP
+	if (cpu_feature2 & CPUID2_EST) {
+		if (rdmsr(MSR_MISC_ENABLE) & (1 << 16))
+			est_init(cpu_vendor);
+	}
+#endif /* ENHANCED_SPEEDSTEP */
+
+#ifdef INTEL_CORETEMP
+	if (cpu_vendor == CPUVENDOR_INTEL && cpuid_level >= 0x06)
+		coretemp_register(ci);
+#endif
+
+#ifdef VIA_C7TEMP
+	if (cpu_vendor == CPUVENDOR_IDT &&
+	    CPUID2FAMILY(ci->ci_signature) == 6 &&
+	    CPUID2MODEL(ci->ci_signature) >= 0x9) {
+		uint32_t descs[4];
+
+		x86_cpuid(0xc0000000, descs);
+		if (descs[0] >= 0xc0000002)	/* has temp sensor */
+			viac7temp_register(ci);
+	}
+#endif
+
+#if defined(POWERNOW_K7) || defined(POWERNOW_K8)
+	if (cpu_vendor == CPUVENDOR_AMD && powernow_probe(ci)) {
+		switch (CPUID2FAMILY(ci->ci_signature)) {
+#ifdef POWERNOW_K7
+		case 6:
+			k7_powernow_init();
+			break;
+#endif
+#ifdef POWERNOW_K8
+		case 15:
+			k8_powernow_init();
+			break;
+#endif
+		default:
+			break;
+		}
+	}
+#endif /* POWERNOW_K7 || POWERNOW_K8 */
+
+#ifdef INTEL_ONDEMAND_CLOCKMOD
+	if (cpuid_level >= 1) {
+		clockmod_init();
+	}
+#endif
 }

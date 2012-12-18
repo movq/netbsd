@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.43 2012/03/14 13:26:43 martin Exp $
+#	$NetBSD: Makefile.inc,v 1.41 2008/03/18 04:20:37 lukem Exp $
 #
 #	etc.sparc/Makefile.inc -- sparc-specific etc Makefile targets
 #
@@ -14,23 +14,17 @@ BUILD_KERNELS=		INSTALL
 MD_INSTALLATION_DIRS=	installation/miniroot	\
 			installation/netboot	\
 			installation/bootfs	\
-			installation/tape
-
-# XXX floppy overflows, see below (add to above list to re-enable)
-#			installation/floppy
-
+			installation/tape	\
+			installation/floppy
 INSTALLATION_DIRS+=	${MD_INSTALLATION_DIRS}
 
 
 INSTALLATION_SYMLINKS=	\
 		tape/tapefile1.gz	../bootfs/netbsd.ram.aout.gz	\
 		tape/tapefile2		../bootfs/instfs.tgz		\
+		floppy/disk1.gz		../bootfs/boot.fs.gz		\
+		floppy/disk2		../bootfs/instfs.tgz		\
 		netboot/rootfs.tgz	../bootfs/instfs.tgz
-
-# XXX - floppy overflows on boot.fs.gz - so disabled for now,
-# add the following to above list to re-enable
-#		floppy/disk1.gz		../bootfs/boot.fs.gz
-#		floppy/disk2		../bootfs/instfs.tgz
 
 #
 # Install miniroot images and auxiliary scripts to the release tree
@@ -59,4 +53,4 @@ CDBOOTIMAGE=	${CDBOOTIMAGEDIR}/boot.fs
 iso-image-md-post:
 	SUNLABEL=${TOOL_SUNLABEL:Q} \
 	    ${HOST_SH} ${NETBSDSRCDIR}/distrib/common/sunbootcd.sh \
-	    ${CDROM_IMAGE} ${CDBOOTIMAGE} ${CDBOOTIMAGE} ${CDBOOTIMAGE}
+	    ${CDROM.image} ${CDBOOTIMAGE} ${CDBOOTIMAGE} ${CDBOOTIMAGE}

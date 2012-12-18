@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_lebuffer.c,v 1.28 2010/01/19 22:07:43 pooka Exp $	*/
+/*	$NetBSD: if_le_lebuffer.c,v 1.24 2008/04/28 20:23:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -31,9 +31,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le_lebuffer.c,v 1.28 2010/01/19 22:07:43 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le_lebuffer.c,v 1.24 2008/04/28 20:23:57 martin Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,6 +75,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_le_lebuffer.c,v 1.28 2010/01/19 22:07:43 pooka Ex
 
 struct	le_softc {
 	struct	am7990_softc	sc_am7990;	/* glue to MI code */
+	struct	sbusdev		sc_sd;		/* sbus device */
 	bus_space_tag_t		sc_bustag;
 	bus_dma_tag_t		sc_dmatag;
 	bus_space_handle_t	sc_reg;		/* LANCE registers */
@@ -170,6 +172,10 @@ leattach_lebuffer(device_t parent, device_t self, void *aux)
 	/* That old black magic... */
 	sc->sc_conf3 = prom_getpropint(sa->sa_node, "busmaster-regval",
 				  LE_C3_BSWP | LE_C3_ACON | LE_C3_BCON);
+
+	/* Assume SBus is grandparent */
+	lesc->sc_sd.sd_reset = (void *)lance_reset;
+	sbus_establish(&lesc->sc_sd, parent);
 
 	sc->sc_supmedia = lemedia;
 	sc->sc_nsupmedia = NLEMEDIA;

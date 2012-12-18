@@ -1,7 +1,7 @@
-/*      $NetBSD: psbuf.c,v 1.19 2012/11/04 22:46:08 christos Exp $        */
+/*      $NetBSD: psbuf.c,v 1.13 2008/09/06 12:29:57 pooka Exp $        */
 
 /*
- * Copyright (c) 2006-2009  Antti Kantee.  All Rights Reserved.
+ * Copyright (c) 2006, 2007  Antti Kantee.  All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: psbuf.c,v 1.19 2012/11/04 22:46:08 christos Exp $");
+__RCSID("$NetBSD: psbuf.c,v 1.13 2008/09/06 12:29:57 pooka Exp $");
 #endif /* !lint */
 
 /*
@@ -39,7 +39,6 @@ __RCSID("$NetBSD: psbuf.c,v 1.19 2012/11/04 22:46:08 christos Exp $");
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/vnode.h>
-#include <sys/socket.h>
 
 #include <err.h>
 #include <errno.h>
@@ -257,28 +256,16 @@ psbuf_put_str(struct puffs_framebuf *pb, const char *str)
 }
 
 void
-psbuf_put_vattr(struct puffs_framebuf *pb, const struct vattr *va,
-	const struct psshfs_ctx *pctx)
+psbuf_put_vattr(struct puffs_framebuf *pb, const struct vattr *va)
 {
 	uint32_t flags;
-	uint32_t theuid = -1, thegid = -1;
 	flags = 0;
 
-	if (va->va_size != (uint64_t)PUFFS_VNOVAL)
+	if (va->va_size != PUFFS_VNOVAL)
 		flags |= SSH_FILEXFER_ATTR_SIZE;
-	if (va->va_uid != (uid_t)PUFFS_VNOVAL) {
-		theuid = va->va_uid;
-		if (pctx->domangleuid && theuid == pctx->myuid)
-			theuid = pctx->mangleuid;
+	if (va->va_uid != PUFFS_VNOVAL)
 		flags |= SSH_FILEXFER_ATTR_UIDGID;
-	}
-	if (va->va_gid != (gid_t)PUFFS_VNOVAL) {
-		thegid = va->va_gid;
-		if (pctx->domanglegid && thegid == pctx->mygid)
-			thegid = pctx->manglegid;
-		flags |= SSH_FILEXFER_ATTR_UIDGID;
-	}
-	if (va->va_mode != (mode_t)PUFFS_VNOVAL)
+	if (va->va_mode != PUFFS_VNOVAL)
 		flags |= SSH_FILEXFER_ATTR_PERMISSIONS;
 
 	if (va->va_atime.tv_sec != PUFFS_VNOVAL)
@@ -288,8 +275,8 @@ psbuf_put_vattr(struct puffs_framebuf *pb, const struct vattr *va,
 	if (flags & SSH_FILEXFER_ATTR_SIZE)
 		psbuf_put_8(pb, va->va_size);
 	if (flags & SSH_FILEXFER_ATTR_UIDGID) {
-		psbuf_put_4(pb, theuid);
-		psbuf_put_4(pb, thegid);
+		psbuf_put_4(pb, va->va_uid);
+		psbuf_put_4(pb, va->va_gid);
 	}
 	if (flags & SSH_FILEXFER_ATTR_PERMISSIONS)
 		psbuf_put_4(pb, va->va_mode);
@@ -431,7 +418,7 @@ static int emap[] = {
 	EEXIST,			/* FILE_ALREADY_EXISTS	*/
 	ENODEV			/* WRITE_PROTECT	*/
 };
-#define NERRORS ((int)(sizeof(emap) / sizeof(emap[0])))
+#define NERRORS (sizeof(emap) / sizeof(emap[0]))
 
 static int
 sftperr_to_errno(int error)

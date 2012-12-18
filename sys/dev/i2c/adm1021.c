@@ -1,4 +1,4 @@
-/*	$NetBSD: adm1021.c,v 1.8 2012/10/27 17:18:17 chs Exp $ */
+/*	$NetBSD: adm1021.c,v 1.1 2008/10/29 17:26:56 jkunz Exp $ */
 /*	$OpenBSD: adm1021.c,v 1.27 2007/06/24 05:34:35 dlg Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adm1021.c,v 1.8 2012/10/27 17:18:17 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adm1021.c,v 1.1 2008/10/29 17:26:56 jkunz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: adm1021.c,v 1.8 2012/10/27 17:18:17 chs Exp $");
 #define ADM1021_CONFIG_WRITE	0x09
 #define ADM1021_CONFIG_RUN	0x40
 #define ADM1021_COMPANY		0xfe	/* contains 0x41 */
-#define ADM1021_DIE_REVISION	0xff
+#define ADM1021_STEPPING	0xff	/* contains 0x3? */
 
 /* Sensors */
 #define ADMTEMP_INT		0
@@ -46,6 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: adm1021.c,v 1.8 2012/10/27 17:18:17 chs Exp $");
 #define ADMTEMP_NUM_SENSORS	2
 
 struct admtemp_softc {
+	struct device	sc_dev;
 	i2c_tag_t	sc_tag;
 	i2c_addr_t	sc_addr;
 
@@ -54,47 +55,30 @@ struct admtemp_softc {
 	envsys_data_t sc_sensor[ADMTEMP_NUM_SENSORS];
 };
 
-int	admtemp_match(device_t, cfdata_t, void *);
-void	admtemp_attach(device_t, device_t, void *);
+int	admtemp_match(struct device *, cfdata_t, void *);
+void	admtemp_attach(struct device *, struct device *, void *);
 void	admtemp_refresh(struct sysmon_envsys *, envsys_data_t *);
 
 CFATTACH_DECL_NEW(admtemp, sizeof(struct admtemp_softc),
 	admtemp_match, admtemp_attach, NULL, NULL);
 
-static const char * admtemp_compats[] = {
-	"i2c-max1617",
-	NULL
-};
 
 int
-admtemp_match(device_t parent, cfdata_t match, void *aux)
+admtemp_match(struct device *parent, cfdata_t match, void *aux)
 {
 	struct i2c_attach_args *ia = aux;
 
-	if (ia->ia_name == NULL) {
-		/*
-		 * Indirect config - not much we can do!
-		 * Check typical addresses.
-		 */
-		if (((ia->ia_addr >= 0x18) && (ia->ia_addr <= 0x1a)) ||
-		    ((ia->ia_addr >= 0x29) && (ia->ia_addr <= 0x2b)) ||
-		    ((ia->ia_addr >= 0x4c) && (ia->ia_addr <= 0x4e)))
-			return (1);
-	} else {
-		/*
-		 * Direct config - match via the list of compatible
-		 * hardware.
-		 */
-		if (iic_compat_match(ia, admtemp_compats))
-			return 1;
-	}
+	if (((ia->ia_addr >= 0x18) && (ia->ia_addr <= 0x1a)) ||
+	    ((ia->ia_addr >= 0x29) && (ia->ia_addr <= 0x2b)) ||
+	    ((ia->ia_addr >= 0x4c) && (ia->ia_addr <= 0x4e)))
+		return (1);
 
-	return 0;
+	return (0);
 }
 
 
 void
-admtemp_attach(device_t parent, device_t self, void *aux)
+admtemp_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct admtemp_softc *sc = device_private(self);
 	struct i2c_attach_args *ia = aux;
@@ -104,14 +88,13 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 	sc->sc_addr = ia->ia_addr;
 
 	aprint_normal(": ADM1021 or compatible environmental sensor\n");
-	aprint_naive(": Environmental sensor\n");
 
 	iic_acquire_bus(sc->sc_tag, 0);
 	cmd = ADM1021_CONFIG_READ;
 	if (iic_exec(sc->sc_tag, I2C_OP_READ_WITH_STOP,
 	    sc->sc_addr, &cmd, sizeof cmd, &data, sizeof data, 0)) {
 		iic_release_bus(sc->sc_tag, 0);
-		aprint_error_dev(self, "cannot get control register\n");
+		aprint_error_dev(&sc->sc_dev, "cannot get control register\n");
 		return;
 	}
 	if (data & ADM1021_CONFIG_RUN) {
@@ -119,7 +102,7 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 		if (iic_exec(sc->sc_tag, I2C_OP_READ_WITH_STOP,
 		    sc->sc_addr, &cmd, sizeof cmd, &stat, sizeof stat, 0)) {
 			iic_release_bus(sc->sc_tag, 0);
-			aprint_error_dev(self,
+			aprint_error_dev(&sc->sc_dev,
 			    "cannot read status register\n");
 			return;
 		}
@@ -128,7 +111,7 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 			    sc->sc_addr, &cmd, sizeof cmd, &stat, sizeof stat,
 			    0)) {
 				iic_release_bus(sc->sc_tag, 0);
-				aprint_error_dev(self,
+				aprint_error_dev(&sc->sc_dev,
 				    "cannot read status register\n");
 				return;
 			}
@@ -144,7 +127,7 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 		if (iic_exec(sc->sc_tag, I2C_OP_WRITE_WITH_STOP,
 		    sc->sc_addr, &cmd, sizeof cmd, &data, sizeof data, 0)) {
 			iic_release_bus(sc->sc_tag, 0);
-			aprint_error_dev(self,
+			aprint_error_dev(&sc->sc_dev,
 			    "cannot set control register\n");
 			return;
 		}
@@ -152,19 +135,15 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 	iic_release_bus(sc->sc_tag, 0);
 
 	/* Initialize sensor data. */
-	sc->sc_sensor[ADMTEMP_INT].state = ENVSYS_SINVALID;
 	sc->sc_sensor[ADMTEMP_INT].units = ENVSYS_STEMP;
-	sc->sc_sensor[ADMTEMP_EXT].state = ENVSYS_SINVALID;
 	sc->sc_sensor[ADMTEMP_EXT].units = ENVSYS_STEMP;
-	sc->sc_sensor[ADMTEMP_INT].state = ENVSYS_SINVALID;
-	sc->sc_sensor[ADMTEMP_EXT].state = ENVSYS_SINVALID;
 	strlcpy(sc->sc_sensor[ADMTEMP_INT].desc, "internal",sizeof("internal"));
 	strlcpy(sc->sc_sensor[ADMTEMP_EXT].desc, "external",sizeof("external"));
 	sc->sc_sme = sysmon_envsys_create();
 	if (sysmon_envsys_sensor_attach(
 	    sc->sc_sme, &sc->sc_sensor[ADMTEMP_INT])) {
 		sysmon_envsys_destroy(sc->sc_sme);
-		aprint_error_dev(self,
+		aprint_error_dev(&sc->sc_dev,
 		    "unable to attach internal at sysmon\n");
 		return;
 	}
@@ -172,7 +151,7 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 	    sysmon_envsys_sensor_attach(
 	    sc->sc_sme, &sc->sc_sensor[ADMTEMP_EXT])) {
 		sysmon_envsys_destroy(sc->sc_sme);
-		aprint_error_dev(self,
+		aprint_error_dev(&sc->sc_dev,
 		    "unable to attach external at sysmon\n");
 		return;
 	}
@@ -180,7 +159,7 @@ admtemp_attach(device_t parent, device_t self, void *aux)
         sc->sc_sme->sme_cookie = sc;
         sc->sc_sme->sme_refresh = admtemp_refresh;
 	if (sysmon_envsys_register(sc->sc_sme)) {
-		aprint_error_dev(self,
+		aprint_error_dev(&sc->sc_dev,
 		    "unable to register with sysmon\n");
 		sysmon_envsys_destroy(sc->sc_sme);
 		return;

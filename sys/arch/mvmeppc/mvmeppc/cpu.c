@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.10 2011/07/01 20:49:38 dyoung Exp $	*/
+/*	$NetBSD: cpu.c,v 1.8 2008/04/28 20:23:29 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -30,27 +30,27 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.10 2011/07/01 20:49:38 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.8 2008/04/28 20:23:29 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/platform.h>
 
-int cpumatch(device_t, cfdata_t, void *);
-void cpuattach(device_t, device_t, void *);
+int cpumatch(struct device *, struct cfdata *, void *);
+void cpuattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(cpu, 0,
+CFATTACH_DECL(cpu, sizeof(struct device),
     cpumatch, cpuattach, NULL, NULL);
 
 extern struct cfdriver cpu_cd;
 
 int
-cpumatch(device_t parent, cfdata_t cfdata, void *aux)
+cpumatch(struct device *parent, struct cfdata *cfdata, void *aux)
 {
 
 	if (cpu_info[0].ci_dev != NULL)
@@ -59,7 +59,7 @@ cpumatch(device_t parent, cfdata_t cfdata, void *aux)
 }
 
 void
-cpuattach(device_t parent, device_t self, void *aux)
+cpuattach(struct device *parent, struct device *self, void *aux)
 {
 	cpu_attach_common(self, 0);
 

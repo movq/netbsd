@@ -1,4 +1,4 @@
-/*	$NetBSD: flush_in.c,v 1.9 2009/07/20 06:39:06 dholland Exp $	*/
+/*	$NetBSD: flush_in.c,v 1.6 2003/08/07 09:37:36 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,20 +34,18 @@
 #if 0
 static char sccsid[] = "@(#)flush_in.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: flush_in.c,v 1.9 2009/07/20 06:39:06 dholland Exp $");
+__RCSID("$NetBSD: flush_in.c,v 1.6 2003/08/07 09:37:36 agc Exp $");
 #endif
 #endif /* not lint */
 
-#include <stdio.h>
-#include <termios.h>
-#include "robots.h"
+# include	"robots.h"
 
 /*
  * flush_in:
  *	Flush all pending input.
  */
 void
-flush_in(void)
+flush_in()
 {
 	tcflush(fileno(stdin), TCIFLUSH);
 }

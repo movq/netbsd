@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_core.c,v 1.20 2011/09/24 22:53:50 christos Exp $	*/
+/*	$NetBSD: kern_core.c,v 1.12 2008/04/24 18:39:23 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -37,7 +37,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_core.c,v 1.20 2011/09/24 22:53:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_core.c,v 1.12 2008/04/24 18:39:23 ad Exp $");
+
+#include "opt_coredump.h"
 
 #include <sys/param.h>
 #include <sys/vnode.h>
@@ -49,9 +51,17 @@ __KERNEL_RCSID(0, "$NetBSD: kern_core.c,v 1.20 2011/09/24 22:53:50 christos Exp 
 #include <sys/exec.h>
 #include <sys/filedesc.h>
 #include <sys/kauth.h>
-#include <sys/module.h>
 
-MODULE(MODULE_CLASS_MISC, coredump, NULL);
+#if !defined(COREDUMP)
+
+int
+coredump(struct lwp *l, const char *pattern)
+{
+
+	return (ENOSYS);
+}
+
+#else	/* COREDUMP */
 
 struct coredump_iostate {
 	struct lwp *io_lwp;
@@ -60,49 +70,25 @@ struct coredump_iostate {
 	off_t io_offset;
 };
 
-static int	coredump(struct lwp *, const char *);
 static int	coredump_buildname(struct proc *, char *, const char *, size_t);
-
-static int
-coredump_modcmd(modcmd_t cmd, void *arg)
-{
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-		coredump_vec = coredump;
-		return 0;
-	case MODULE_CMD_FINI:
-		/*
-		 * In theory we don't need to patch this, as the various
-		 * exec formats depend on this module.  If this module has
-		 * no references, and so can be unloaded, no user programs
-		 * can be running and so nothing can call *coredump_vec.
-		 */
-		coredump_vec = (int (*)(struct lwp *, const char *))enosys;
-		return 0;
-	default:
-		return ENOTTY;
-	}
-}
 
 /*
  * Dump core, into a file named "progname.core" or "core" (depending on the
  * value of shortcorename), unless the process was setuid/setgid.
  */
-static int
+int
 coredump(struct lwp *l, const char *pattern)
 {
 	struct vnode		*vp;
 	struct proc		*p;
 	struct vmspace		*vm;
 	kauth_cred_t		cred;
-	struct pathbuf		*pb;
 	struct nameidata	nd;
 	struct vattr		vattr;
 	struct coredump_iostate	io;
 	struct plimit		*lim;
 	int			error, error1;
-	char			*name, *lastslash;
+	char			*name;
 
 	name = PNBUF_GET();
 
@@ -133,6 +119,24 @@ coredump(struct lwp *l, const char *pattern)
 	cred = p->p_cred;
 
 	/*
+	 * The core dump will go in the current working directory.  Make
+	 * sure that the directory is still there and that the mount flags
+	 * allow us to write core dumps there.
+	 *
+	 * XXX: this is partially bogus, it should be checking the directory
+	 * into which the file is actually written - which probably needs
+	 * a flag on namei()
+	 */
+	vp = p->p_cwdi->cwdi_cdir;
+	if (vp->v_mount == NULL ||
+	    (vp->v_mount->mnt_flag & MNT_NOCOREDUMP) != 0) {
+		error = EPERM;
+		mutex_exit(p->p_lock);
+		mutex_exit(proc_lock);
+		goto done;
+	}
+
+	/*
 	 * Make sure the process has not set-id, to prevent data leaks,
 	 * unless it was specifically requested to allow set-id coredumps.
 	 */
@@ -146,90 +150,30 @@ coredump(struct lwp *l, const char *pattern)
 		pattern = security_setidcore_path;
 	}
 
-	/* Lock, as p_limit and pl_corename might change. */
+	/* It is (just) possible for p_limit and pl_corename to change */
 	lim = p->p_limit;
 	mutex_enter(&lim->pl_lock);
-	if (pattern == NULL) {
+	if (pattern == NULL)
 		pattern = lim->pl_corename;
-	}
 	error = coredump_buildname(p, name, pattern, MAXPATHLEN);
 	mutex_exit(&lim->pl_lock);
-
-	/*
-	 * On a simple filename, see if the filesystem allow us to write
-	 * core dumps there.
-	 */
-	lastslash = strrchr(name, '/');
-	if (!lastslash) {
-		vp = p->p_cwdi->cwdi_cdir;
-		if (vp->v_mount == NULL ||
-		    (vp->v_mount->mnt_flag & MNT_NOCOREDUMP) != 0)
-			error = EPERM;
-	}
-
 	mutex_exit(p->p_lock);
 	mutex_exit(proc_lock);
 	if (error)
 		goto done;
-
-	/*
-	 * On a complex filename, see if the filesystem allow us to write
-	 * core dumps there.
-	 *
-	 * XXX: We should have an API that avoids double lookups
-	 */
-	if (lastslash) {
-		char c[2];
-
-		if (lastslash - name >= MAXPATHLEN - 2) {
-			error = EPERM;
-			goto done;
-		}
-
-		c[0] = lastslash[1];
-		c[1] = lastslash[2];
-		lastslash[1] = '.';
-		lastslash[2] = '\0';
-		error = namei_simple_kernel(name, NSM_FOLLOW_NOEMULROOT, &vp);
-		if (error)
-			goto done;
-		if (vp->v_mount == NULL ||
-		    (vp->v_mount->mnt_flag & MNT_NOCOREDUMP) != 0)
-			error = EPERM;
-		vrele(vp);
-		if (error)
-			goto done;
-		lastslash[1] = c[0];
-		lastslash[2] = c[1];
-	}
-
-	pb = pathbuf_create(name);
-	if (pb == NULL) {
-		error = ENOMEM;
-		goto done;
-	}
-	NDINIT(&nd, LOOKUP, NOFOLLOW, pb);
+	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_SYSSPACE, name);
 	if ((error = vn_open(&nd, O_CREAT | O_NOFOLLOW | FWRITE,
-	    S_IRUSR | S_IWUSR)) != 0) {
-		pathbuf_destroy(pb);
+	    S_IRUSR | S_IWUSR)) != 0)
 		goto done;
-	}
 	vp = nd.ni_vp;
-	pathbuf_destroy(pb);
 
-	/*
-	 * Don't dump to:
-	 * 	- non-regular files
-	 * 	- files with links
-	 * 	- files we don't own
-	 */
+	/* Don't dump to non-regular files or files with links. */
 	if (vp->v_type != VREG ||
-	    VOP_GETATTR(vp, &vattr, cred) || vattr.va_nlink != 1 ||
-	    vattr.va_uid != kauth_cred_geteuid(cred)) {
-		error = EACCES;
+	    VOP_GETATTR(vp, &vattr, cred) || vattr.va_nlink != 1) {
+		error = EINVAL;
 		goto out;
 	}
-	vattr_null(&vattr);
+	VATTR_NULL(&vattr);
 	vattr.va_size = 0;
 
 	if ((p->p_flag & PK_SUGID) && security_setidcore_dump) {
@@ -249,7 +193,7 @@ coredump(struct lwp *l, const char *pattern)
 	/* Now dump the actual core file. */
 	error = (*p->p_execsw->es_coredump)(l, &io);
  out:
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	error1 = vn_close(vp, FWRITE, cred);
 	if (error == 0)
 		error = error1;
@@ -283,8 +227,8 @@ coredump_buildname(struct proc *p, char *dst, const char *src, size_t len)
 				    p->p_pgrp->pg_session->s_login);
 				break;
 			case 't':
-				i = snprintf(d, end - d, "%lld",
-				    (long long)p->p_stats->p_start.tv_sec);
+				i = snprintf(d, end - d, "%ld",
+				    p->p_stats->p_start.tv_sec);
 				break;
 			default:
 				goto copy;
@@ -323,3 +267,5 @@ coredump_write(void *cookie, enum uio_seg segflg, const void *data, size_t len)
 	io->io_offset += len;
 	return (0);
 }
+
+#endif	/* COREDUMP */

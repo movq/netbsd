@@ -1,4 +1,4 @@
-/*	$NetBSD: mips_opcode.h,v 1.18 2011/08/18 21:04:23 matt Exp $	*/
+/*	$NetBSD: mips_opcode.h,v 1.12 2005/12/11 12:18:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -115,9 +115,9 @@ typedef union {
  * Values for the 'op' field.
  */
 #define OP_SPECIAL	000
-#define OP_REGIMM	001
+#define OP_BCOND	001
 #define OP_J		002
-#define OP_JAL		003
+#define	OP_JAL		003
 #define OP_BEQ		004
 #define OP_BNE		005
 #define OP_BLEZ		006
@@ -147,7 +147,6 @@ typedef union {
 #define OP_LDR		033		/* MIPS-II, for r4000 port */
 
 #define OP_SPECIAL2	034		/* QED opcodes */
-#define OP_SPECIAL3	037
 
 #define OP_LB		040
 #define OP_LH		041
@@ -173,7 +172,7 @@ typedef union {
 #define OP_LWC0		OP_LL	/* backwards source compatibility */
 #define OP_LWC1		061
 #define OP_LWC2		062
-#define OP_PREF		063
+#define OP_LWC3		063
 #define OP_LLD		064		/* MIPS-II, for r4000 port */
 #define OP_LDC1		065
 #define OP_LD		067		/* MIPS-II, for r4000 port */
@@ -182,7 +181,7 @@ typedef union {
 #define OP_SWC0		OP_SC	/* backwards source compatibility */
 #define OP_SWC1		071
 #define OP_SWC2		072
-#define OP_RSVD073	073
+#define OP_SWC3		073
 #define OP_SCD		074		/* MIPS-II, for r4000 port */
 #define OP_SDC1		075
 #define OP_SD		077		/* MIPS-II, for r4000 port */
@@ -256,26 +255,9 @@ typedef union {
 #define OP_MAD		000		/* QED */
 #define OP_MADU		001		/* QED */
 #define OP_MUL		002		/* QED */
-#define OP_MSUB		004		/* MIPS32/64 */
-#define OP_MSUBU	005		/* MIPS32/64 */
-#define OP_CLZ		040		/* MIPS32/64 */
-#define OP_CLO		041		/* MIPS32/64 */
-#define OP_DCLZ		044		/* MIPS32/64 */
-#define OP_DCLO		045		/* MIPS32/64 */
 
 /*
- * Values for the 'func' field when 'op' == OP_SPECIAL3.
- */
-#define	OP_LX		012		/* DSP */
-#define OP_RDHWR	073		/* MIPS32/64 r2 */
-
-#define	OP_LX_LWX	0		/* lwx */
-#define	OP_LX_LHX	4		/* lhx */
-#define	OP_LX_LBUX	6		/* lbux */
-#define	OP_LX_LDX	8		/* ldx */
-
-/*
- * Values for the 'func' field when 'op' == OP_REGIMM.
+ * Values for the 'func' field when 'op' == OP_BCOND.
  */
 #define OP_BLTZ		000
 #define OP_BGEZ		001
@@ -299,14 +281,12 @@ typedef union {
  */
 #define OP_MF		000
 #define OP_DMF		001		/* MIPS-II, for r4000 port */
-#define OP_CF		002
-#define OP_MFH		003
 #define OP_MT		004
 #define OP_DMT		005		/* MIPS-II, for r4000 port */
-#define OP_CT		006
-#define OP_MTH		007
 #define OP_BCx		010
 #define OP_BCy		014
+#define OP_CF		002
+#define OP_CT		006
 
 /*
  * Values for the 'rt' field when 'op' == OP_COPz.

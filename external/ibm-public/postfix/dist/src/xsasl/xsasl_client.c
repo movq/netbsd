@@ -1,4 +1,4 @@
-/*	$NetBSD: xsasl_client.c,v 1.2 2011/02/12 19:07:09 christos Exp $	*/
+/*	$NetBSD: xsasl_client.c,v 1.1.1.1.2.3 2011/01/07 01:24:21 riz Exp $	*/
 
 /*++
 /* NAME
@@ -199,7 +199,6 @@
 
 #include <xsasl.h>
 #include <xsasl_cyrus.h>
-#include <xsasl_saslc.h>
 
  /*
   * Lookup table for available SASL client implementations.
@@ -211,12 +210,9 @@ typedef struct {
 
 static const XSASL_CLIENT_IMPL_INFO client_impl_info[] = {
 #ifdef XSASL_TYPE_CYRUS
-    { XSASL_TYPE_CYRUS, xsasl_cyrus_client_init },
+    XSASL_TYPE_CYRUS, xsasl_cyrus_client_init,
 #endif
-#ifdef XSASL_TYPE_SASLC
-    { XSASL_TYPE_SASLC, xsasl_saslc_client_init },
-#endif
-    { NULL, NULL }
+    0,
 };
 
 /* xsasl_client_init - look up client implementation by name */

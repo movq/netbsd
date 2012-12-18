@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_uuid.c,v 1.18 2011/11/19 22:51:25 tls Exp $	*/
+/*	$NetBSD: kern_uuid.c,v 1.15 2008/07/02 14:47:34 matt Exp $	*/
 
 /*
  * Copyright (c) 2002 Marcel Moolenaar
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.18 2011/11/19 22:51:25 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.15 2008/07/02 14:47:34 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/endian.h>
@@ -44,7 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.18 2011/11/19 22:51:25 tls Exp $");
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 #include <sys/uio.h>
-#include <sys/cprng.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -127,7 +126,7 @@ uuid_node(uint16_t *node)
 	splx(s);
 
 	for (i = 0; i < (UUID_NODE_LEN>>1); i++)
-		node[i] = (uint16_t)cprng_fast32();
+		node[i] = (uint16_t)arc4random();
 	*((uint8_t*)node) |= 0x01;
 }
 
@@ -137,15 +136,19 @@ uuid_node(uint16_t *node)
  * the Unix time since 00:00:00.00, January 1, 1970 to the date of the
  * Gregorian reform to the Christian calendar.
  */
+/*
+ * At present, NetBSD has no timespec source, only timeval sources.  So,
+ * we use timeval.
+ */
 static uint64_t
 uuid_time(void)
 {
-	struct timespec tsp;
+	struct timeval tv;
 	uint64_t xtime = 0x01B21DD213814000LL;
 
-	nanotime(&tsp);
-	xtime += (uint64_t)tsp.tv_sec * 10000000LL;
-	xtime += (uint64_t)(tsp.tv_nsec / 100);
+	microtime(&tv);
+	xtime += (uint64_t)tv.tv_sec * 10000000LL;
+	xtime += (uint64_t)(10 * tv.tv_usec);
 	return (xtime & ((1LL << 60) - 1LL));
 }
 
@@ -166,7 +169,7 @@ uuid_generate(struct uuid_private *uuid, uint64_t *timep, int count)
 	if (uuid_last.time.ll == 0LL || uuid_last.node[0] != uuid->node[0] ||
 	    uuid_last.node[1] != uuid->node[1] ||
 	    uuid_last.node[2] != uuid->node[2])
-		uuid->seq = (uint16_t)cprng_fast32() & 0x3fff;
+		uuid->seq = (uint16_t)arc4random() & 0x3fff;
 	else if (uuid_last.time.ll >= xtime)
 		uuid->seq = (uuid_last.seq + 1) & 0x3fff;
 	else
@@ -178,41 +181,14 @@ uuid_generate(struct uuid_private *uuid, uint64_t *timep, int count)
 	mutex_exit(&uuid_mutex);
 }
 
-static int
-kern_uuidgen(struct uuid *store, int count, bool to_user)
-{
-	struct uuid_private uuid;
-	uint64_t xtime;
-	int error = 0, i;
-
-	KASSERT(count >= 1);
-
-	/* Generate the base UUID. */
-	uuid_generate(&uuid, &xtime, count);
-
-	/* Set sequence and variant and deal with byte order. */
-	uuid.seq = htobe16(uuid.seq | 0x8000);
-
-	for (i = 0; i < count; xtime++, i++) {
-		/* Set time and version (=1) and deal with byte order. */
-		uuid.time.x.low = (uint32_t)xtime;
-		uuid.time.x.mid = (uint16_t)(xtime >> 32);
-		uuid.time.x.hi = ((uint16_t)(xtime >> 48) & 0xfff) | (1 << 12);
-		if (to_user) {
-			error = copyout(&uuid, store + i, sizeof(uuid));
-			if (error != 0)
-				break;
-		} else {
-			memcpy(store + i, &uuid, sizeof(uuid));
-		}
-	}
-
-	return error;
-}
-
 int
 sys_uuidgen(struct lwp *l, const struct sys_uuidgen_args *uap, register_t *retval)
 {
+	struct uuid_private uuid;
+	uint64_t xtime;
+	int error;
+	int i;
+
 	/*
 	 * Limit the number of UUIDs that can be created at the same time
 	 * to some arbitrary number. This isn't really necessary, but I
@@ -222,13 +198,26 @@ sys_uuidgen(struct lwp *l, const struct sys_uuidgen_args *uap, register_t *retva
 	if (SCARG(uap,count) < 1 || SCARG(uap,count) > 2048)
 		return (EINVAL);
 
-	return kern_uuidgen(SCARG(uap, store), SCARG(uap,count), true);
-}
+	/* XXX: pre-validate accessibility to the whole of the UUID store? */
 
-int
-uuidgen(struct uuid *store, int count)
-{
-	return kern_uuidgen(store,count, false);
+	/* Generate the base UUID. */
+	uuid_generate(&uuid, &xtime, SCARG(uap, count));
+
+	/* Set sequence and variant and deal with byte order. */
+	uuid.seq = htobe16(uuid.seq | 0x8000);
+
+	/* XXX: this should copyout larger chunks at a time. */
+	for (i = 0; i < SCARG(uap, count); xtime++, i++) {
+		/* Set time and version (=1) and deal with byte order. */
+		uuid.time.x.low = (uint32_t)xtime;
+		uuid.time.x.mid = (uint16_t)(xtime >> 32);
+		uuid.time.x.hi = ((uint16_t)(xtime >> 48) & 0xfff) | (1 << 12);
+		error = copyout(&uuid, SCARG(uap,store) + i, sizeof(uuid));
+		if (error != 0)
+			return error;
+	}
+
+	return 0;
 }
 
 int

@@ -1,4 +1,4 @@
-.\"	$NetBSD: dosboot.8,v 1.21 2011/04/25 22:26:29 wiz Exp $
+.\"	$NetBSD: dosboot.8,v 1.17 2008/10/13 20:41:21 apb Exp $
 .\"
 .\" Copyright (c) 1997
 .\" 	Matthias Drochner.  All rights reserved.
@@ -27,8 +27,8 @@
 .\"     @(#)boot_i386.8	8.2 (Berkeley) 4/19/94
 .\"
 .Dd October 13, 2008
-.Dt DOSBOOT 8 i386
 .Os
+.Dt DOSBOOT 8 i386
 .Sh NAME
 .Nm dosboot
 .Nd boot NetBSD/i386 from DOS
@@ -42,14 +42,14 @@
 .Nm
 is an
 .Tn MS-DOS
-program.
-It is a boot loader for
+program.  It is a boot loader for
 .Nx Ns Tn /i386
 designed to permit
 .Nx
 to be booted directly from
 .Tn MS-DOS .
-By default, it boots a file with name
+By default, it boots a file with
+name
 .Pa NETBSD
 in the current
 .Tn MS-DOS
@@ -60,6 +60,10 @@ shares common code with the standard boot loader,
 .Pp
 The recognized options are:
 .Bl -tag -width -ads -offset 04n
+.It Fl u
+Boot from a UFS filesystem instead of an
+.Tn MS-DOS
+filesystem.
 .It Fl c
 Execute
 .Ar command
@@ -68,13 +72,9 @@ Execute
 Enter interactive mode.
 .Nm
 will present a prompt, allowing input of commands (see below).
-.It Fl u
-Boot from a UFS file system instead of an
-.Tn MS-DOS
-file system.
-.It Ar path
-Specifies the kernel file.
-In
+.Pp
+.It Pa path
+Specifies the kernel file. In
 .Tn MS-DOS
 mode (default) a normal
 .Tn MS-DOS
@@ -85,14 +85,13 @@ or after a
 .Ic mode ufs
 command), a path in a
 .Nx
-file system is expected.
-By default, the file is looked up in partition
-.Sq a
-of the first hard disk.
-Another device or partition can be specified
+filesystem
+is expected. By default, the file is looked up in partition 'a' of
+the first harddisk. Another device or partition can be specified
 by prepending a block device name in terms of
 .Nx ,
-followed by a colon (see
+followed
+by a colon (see
 .Xr boot 8
 and examples).
 .It Fl adqsv
@@ -107,7 +106,11 @@ flag or in interactive mode are:
 .\" and in other i386-specific *boot.8 files;
 .\" please try to keep all relevant files synchronized.
 .Bl -tag -width 04n -offset 04n
-.It Ic boot Oo Va device : Ns Oc Oo Va filename Oc Oo Fl 1234abcdmqsvxz Oc
+.It Xo Ic boot
+.Op Va device : Ns
+.Op Va filename
+.Op Fl 1234abcdmqsvxz
+.Xc
 Boot
 .Nx .
 See
@@ -116,7 +119,7 @@ in
 .Xr boot 8
 for full details.
 .It Ic dev Op device
-Set the default device and partition for subsequent file system operations.
+Set the default device and partition for subsequent filesystem operations.
 Without an operand, print the current setting.
 This setting doesn't apply to
 .Tn MS-DOS
@@ -126,12 +129,10 @@ Print an overview about commands and arguments.
 .It Ic ls Op Pa path
 Print a directory listing of
 .Pa path ,
-containing inode number, filename and file type.
-This command works in UFS mode only.
-.Pa path
-can contain a device specification.
+containing inode number, filename and file type. This command works in
+UFS mode only. path can contain a device specification.
 .It Ic mode Va fstype
-Switch file system type;
+Switch filesystem type;
 .Va fstype
 should be one of
 .Ar dos
@@ -158,7 +159,7 @@ kernel located on
 .Tn MS-DOS
 drive D, one would issue:
 .Bd -literal -offset indent
-dosboot D:\eNODOS\eNETBSD
+dosboot D:\\NODOS\\NETBSD
 .Ed
 .Pp
 To boot from a
@@ -179,8 +180,8 @@ command first appeared in
 .Nx 1.3 .
 .Sh BUGS
 .Nm
-assumes that the processor is in real mode at startup.
-It does not work well in the presence of
+assumes that the processor is in real mode at startup. It does not work
+well in the presence of
 .Tn MS-DOS
 extenders and memory managers.
 .Pp

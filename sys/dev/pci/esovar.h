@@ -1,4 +1,4 @@
-/*	$NetBSD: esovar.h,v 1.11 2012/10/27 17:18:32 chs Exp $	*/
+/*	$NetBSD: esovar.h,v 1.8 2007/01/12 00:47:51 kleink Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2004 Klaus J. Klein
@@ -85,10 +85,7 @@
  * Software state
  */
 struct eso_softc {
-	device_t		sc_dev;
-	kmutex_t		sc_lock;
-	kmutex_t		sc_intr_lock;
-
+	struct device		sc_dev;
 	pci_intr_handle_t *	sc_ih;
 	unsigned int		sc_revision;	/* PCI Revision ID */
 
@@ -116,7 +113,7 @@ struct eso_softc {
 	/* MPU-401 device */
 	bus_space_tag_t		sc_mpu_iot;
 	bus_space_handle_t	sc_mpu_ioh;
-	device_t 		sc_mpudev;
+	struct device *		sc_mpudev;
 
 	/* Game device */
 	bus_space_tag_t		sc_game_iot;
@@ -127,8 +124,6 @@ struct eso_softc {
 	void *			sc_parg;
 	void			(*sc_rintr)(void *);
 	void *			sc_rarg;
-	kcondvar_t		sc_pcv;
-	kcondvar_t		sc_rcv;
 
 	/* Auto-initialize DMA transfer block drain timeouts, in ticks */
 	int			sc_pdrain;

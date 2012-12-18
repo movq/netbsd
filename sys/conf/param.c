@@ -1,4 +1,4 @@
-/*	$NetBSD: param.c,v 1.64 2012/06/09 02:31:14 christos Exp $	*/
+/*	$NetBSD: param.c,v 1.58 2008/07/12 11:50:07 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1989 Regents of the University of California.
@@ -37,12 +37,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: param.c,v 1.64 2012/06/09 02:31:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: param.c,v 1.58 2008/07/12 11:50:07 gmcgarry Exp $");
 
 #include "opt_hz.h"
 #include "opt_rtc_offset.h"
 #include "opt_sysv.h"
 #include "opt_sysvparam.h"
+#include "opt_nmbclusters.h"
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
@@ -57,8 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: param.c,v 1.64 2012/06/09 02:31:14 christos Exp $");
 #include <ufs/ufs/quota.h>
 #include <sys/kernel.h>
 #include <sys/utsname.h>
-#include <sys/ksem.h>
-#include <sys/lwp.h>
 #ifdef SYSVSHM
 #include <machine/vmparam.h>
 #include <sys/shm.h>
@@ -118,7 +117,6 @@ int	tick = 1000000 / HZ;
 int	tickadj = (240000 / (60 * HZ)) ? (240000 / (60 * HZ)) : 1;
 int	rtc_offset = RTC_OFFSET;
 int	maxproc = NPROC;
-int	maxlwp = MAXLWP;
 int	desiredvnodes = NVNODE;
 u_int	maxfiles = MAXFILES;
 int	fscale = FSCALE;	/* kernel uses `FSCALE', user uses `fscale' */
@@ -136,7 +134,7 @@ size_t	coherency_unit = ALIGNBYTES + 1;
  * Various mbuf-related parameters.  These can also be changed at run-time
  * with sysctl.
  */
-int	nmbclusters = 0;
+int	nmbclusters = NMBCLUSTERS;
 
 #ifndef MBLOWAT
 #define	MBLOWAT		16
@@ -152,10 +150,8 @@ int	mcllowat = MCLLOWAT;
  * Values in support of System V compatible shared memory.	XXX
  */
 #ifdef SYSVSHM
-#if !defined(SHMMAX) && defined(SHMMAXPGS)
+#ifndef	SHMMAX
 #define	SHMMAX	SHMMAXPGS	/* shminit() performs a `*= PAGE_SIZE' */
-#elif !defined(SHMMAX)
-#define SHMMAX 0
 #endif
 #ifndef	SHMMIN
 #define	SHMMIN	1
@@ -166,13 +162,14 @@ int	mcllowat = MCLLOWAT;
 #ifndef	SHMSEG
 #define	SHMSEG	128
 #endif
+#define	SHMALL	SHMMAXPGS
 
 struct	shminfo shminfo = {
 	SHMMAX,
 	SHMMIN,
 	SHMMNI,
 	SHMSEG,
-	0
+	SHMALL
 };
 #endif
 
@@ -214,8 +211,3 @@ struct	msginfo msginfo = {
  */
 const	int msize = MSIZE;
 const	int mclbytes = MCLBYTES;
-
-/*
- * Values in support of POSIX semaphores.
- */
-int	ksem_max = KSEM_MAX;

@@ -1,4 +1,4 @@
-/*	$NetBSD: engine.c,v 1.7 2011/11/19 17:45:11 tnozaki Exp $ */
+/*	$NetBSD: engine.c,v 1.1.1.2.6.3 2009/04/13 20:59:20 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994 Henry Spencer.
@@ -143,7 +143,7 @@ regmatch_t pmatch[];
 int eflags;
 {
 	register RCHAR_T *endp;
-	register size_t i;
+	register int i;
 	struct match mv;
 	register struct match *m = &mv;
 	register RCHAR_T *dp;
@@ -168,8 +168,8 @@ int eflags;
 	/* prescreening; this does wonders for this rather slow code */
 	if (g->must != NULL) {
 		for (dp = start; dp < stop; dp++)
-			if (*dp == g->must[0] && (size_t)(stop - dp) >= g->mlen &&
-				MEMCMP(dp, g->must, g->mlen) == 0)
+			if (*dp == g->must[0] && stop - dp >= g->mlen &&
+				MEMCMP(dp, g->must, (size_t)g->mlen) == 0)
 				break;
 		if (dp == stop)		/* we didn't find g->must */
 			return(REG_NOMATCH);

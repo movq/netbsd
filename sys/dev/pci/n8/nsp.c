@@ -77,8 +77,11 @@
 #include <sys/mbuf.h>
 #include <sys/device.h>
 #include <sys/queue.h>
-#include <sys/module.h>
+
+#include <sys/lkm.h>
 #include <sys/bus.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <opencrypto/cryptodev.h>
 #include <opencrypto/xform.h>
@@ -103,16 +106,16 @@
 
 #include "nspvar.h"
 
-static int nsp_probe(device_t parent, cfdata_t match, void *aux);
-static void nsp_attach(device_t parent, device_t self, void *aux);
+static int nsp_probe(struct device *parent, struct cfdata *match, void *aux);
+static void nsp_attach(struct device *parent, struct device *self, void *aux);
 static int nsp_detach(device_t dev, int flags);
 
 
-#ifdef _MODULE
-CFATTACH_DECL_NEW(nsp2000, sizeof(struct nsp_softc), nsp_probe, nsp_attach, nsp_detach, NULL);
+#ifdef _LKM
+CFATTACH_DECL(nsp2000, sizeof(struct nsp_softc), nsp_probe, nsp_attach, nsp_detach, NULL);
 
 int nsp2000_lkmentry(struct lkm_table *lkmtp, int cmd, int ver);
-CFDRIVER_DEC(nsp2000, DV_DULL, NULL);
+CFDRIVER_DECL(nsp2000, DV_DULL, NULL);
 extern struct cfdriver nsp2000_cd;
 extern struct cfattach nsp2000_ca;
 static int pciloc[] = { -1, -1 }; /* device, function */
@@ -146,8 +149,8 @@ nsp2000_lkmentry(struct lkm_table *lkmtp, int cmd, int ver)
 	LKM_DISPATCH(lkmtp, cmd, NULL, lkm_nofunc, lkm_nofunc, lkm_nofunc);
 
 }
-#else /* _MODULE */
-CFATTACH_DECL_NEW(nsp, sizeof(struct nsp_softc), nsp_probe, nsp_attach, nsp_detach, NULL);
+#else /* _LKM */
+CFATTACH_DECL(nsp, sizeof(struct nsp_softc), nsp_probe, nsp_attach, nsp_detach, NULL);
 #endif
 
 static int nsp_intr(void *arg);
@@ -263,7 +266,7 @@ nsp_lookup(const struct pci_attach_args *pa)
 }
 
 static int
-nsp_probe(device_t parent, cfdata_t match, void *aux)
+nsp_probe(struct device *parent, struct cfdata *match, void *aux)
 {
 	static int		once=0;
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
@@ -312,7 +315,7 @@ n8_sessionInit(struct nsp_softc *sc)
 }
 
 static void
-nsp_attach(device_t parent, device_t self, void *aux)
+nsp_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct nsp_softc *sc;
 	struct pci_attach_args *pa = aux;
@@ -324,8 +327,7 @@ nsp_attach(device_t parent, device_t self, void *aux)
 	int res;
 	int ind;
 
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (struct nsp_softc *)self;
 
 	mutex_init(&sc->sc_intrlock, MUTEX_DEFAULT, IPL_NET);
 
@@ -347,13 +349,13 @@ nsp_attach(device_t parent, device_t self, void *aux)
 	aprint_normal(": %s, rev. %d\n", nspp->nsp_name,
 	    PCI_REVISION(pa->pa_class));
 
-	printf("NetOctave Encryption Processor - %s\n", device_xname(self));
+	printf("NetOctave Encryption Processor - %s\n", sc->device.dv_xname);
 
 	n8_sessionInit(sc);
 
 	NSPcount_g = 1;
 	if (n8_driverInit(N8_EA_POOL_SIZE, N8_PK_POOL_SIZE)) {
-	    DBG(("%s: Failed driver init\n", device_xname(self)));
+	    DBG(("%s: Failed driver init\n", sc->device.dv_xname));
 	    NSPcount_g = 0;
 	    return;
 	}
@@ -384,7 +386,8 @@ nsp_attach(device_t parent, device_t self, void *aux)
 
 	if (pci_mapreg_map(pa, NSP_BAR0, PCI_MAPREG_MEM_TYPE_64BIT, 0,
 		&sc->mem_tag, &sc->mem_handle, NULL, &sc->mem_size)) {
-		aprint_error_dev(self, "can't map mem space %d\n", 0);
+		aprint_error("%s: can't map mem space %d\n",
+		    sc->device.dv_xname, 0);
 		return;
 	}
 
@@ -414,7 +417,7 @@ nsp_attach(device_t parent, device_t self, void *aux)
 
 	/* setup card */
 
-	memset(nip, 0, sizeof (*nip));
+	bzero(nip, sizeof (*nip));
 
 	sc->nip = nip;
 	nip->dev = sc;
@@ -511,7 +514,7 @@ nsp_detach(device_t dev, int flags)
 	int res;
 	int ind;
 
-	sc = device_private(dev);
+	sc = (struct nsp_softc *)dev;
 	mutex_enter(&sc->sc_intrlock);
 	DBG(("nsp.%d detach\n", sc->unit));
 
@@ -1989,7 +1992,7 @@ n8_kprocess(void *arg, struct cryptkop *krp, int hint)
 		 * where b is the second parties private key
 		 */
 
-		event.usrCallback = n8_kcallback_setup;
+		event.usrCallback = n8_kcallback_setup;;
 		event.usrData = (void *)req;
 
 		req->op.dh.keymaterial.p =

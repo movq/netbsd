@@ -1,16 +1,13 @@
-#	$NetBSD: Makefile,v 1.10 2012/07/19 06:33:48 joerg Exp $
+#	$NetBSD: Makefile,v 1.7 2007/08/16 01:09:50 ad Exp $
 #
 
-WARNS?=		5
+WARNS=	2
 
 .include <bsd.own.mk>
 
 LIBPDIR=	${.CURDIR}/../libpthread
 
-.if defined(PTHREAD_MACHINE_ARCH) && !empty(PTHREAD_MACHINE_ARCH) && \
-    exists(${LIBPDIR}/arch/${PTHREAD_MACHINE_ARCH})
-ARCHSUBDIR=	${PTHREAD_MACHINE_ARCH}
-.elif exists(${LIBPDIR}/arch/${MACHINE_ARCH})
+.if exists(${LIBPDIR}/arch/${MACHINE_ARCH})
 ARCHSUBDIR=	${MACHINE_ARCH}
 .elif exists(${LIBPDIR}/arch/${MACHINE_CPU}) 
 ARCHSUBDIR=	${MACHINE_CPU}
@@ -34,8 +31,6 @@ assym.h: genassym.sh ${ARCHDIR}/genassym.cf
 	mv -f assym.h.tmp assym.h
 
 SRCS=	pthread_dbg.c 
-
-CPPFLAGS+=	-D__LIBPTHREAD_SOURCE__
 
 INCS=	pthread_dbg.h
 INCSDIR=/usr/include

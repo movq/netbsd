@@ -1,4 +1,4 @@
-#	$NetBSD: RAMDISK,v 1.52 2010/11/23 11:14:07 hannken Exp $
+#	$NetBSD: RAMDISK,v 1.49 2008/05/16 15:16:15 he Exp $
 
 # RAMDISK: Root/swap on ramdisk
 # This kernel is used to:
@@ -44,7 +44,6 @@ options 	MEMORY_DISK_HOOKS
 options 	MEMORY_DISK_IS_ROOT	# force root on memory disk
 options 	MEMORY_DISK_SERVER=0	# no userspace memory disk support
 options 	MEMORY_DISK_ROOT_SIZE=1200	# size of memory disk, in blocks
-options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
 
 options 	USERCONF	# userconf(4) support
 options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -138,9 +137,9 @@ cd* at scsibus? target ? lun ?		# SCSI CD-ROMs
 #uk* at scsibus? target ? lun ?		# unknown SCSI devices
 
 # Memory-disk drivers (root for install tape)
-pseudo-device	md		
+pseudo-device	md		2
 
 # Misc.
 pseudo-device	loop		1	# network loopback
 pseudo-device	sl			# CSLIP
-#pseudo-device	fss			# file system snapshot device
+#pseudo-device	fss		4	# file system snapshot device

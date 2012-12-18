@@ -1,7 +1,6 @@
-# $NetBSD: Makefile,v 1.8 2011/05/19 22:12:35 tsutsui Exp $
+# $NetBSD: Makefile,v 1.7 2001/12/12 00:05:10 tv Exp $
 # Small Shell (i.e. for boot media)
 
-WARNS?=		4
 PROG=		ssh
 NOMAN=		# defined
 

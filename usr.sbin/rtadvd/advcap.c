@@ -1,4 +1,4 @@
-/*	$NetBSD: advcap.c,v 1.14 2012/12/13 15:36:35 roy Exp $	*/
+/*	$NetBSD: advcap.c,v 1.12 2006/03/18 22:07:15 dan Exp $	*/
 /*	$KAME: advcap.c,v 1.11 2003/05/19 09:46:50 keiichi Exp $	*/
 
 /*
@@ -47,10 +47,6 @@
 #include <string.h>
 #include "pathnames.h"
 
-#ifndef __UNCONST
-#define __UNCONST(a)		((void *)(unsigned long)(const void *)(a))
-#endif
-
 #ifndef BUFSIZ
 #define	BUFSIZ		1024
 #endif
@@ -91,15 +87,15 @@ static	char *remotefile;
 
 extern char *conffile;
 
-int tgetent(char *, char *);
-int getent(char *, char *, char *);
-int tnchktc(void);
-int tnamatch(char *);
-static char *tskip(char *);
-int64_t tgetnum(char *);
-int tgetflag(char *);
-char *tgetstr(char *, char **);
-static char *tdecode(char *, char **);
+int tgetent __P((char *, char *));
+int getent __P((char *, char *, char *));
+int tnchktc __P((void));
+int tnamatch __P((char *));
+static char *tskip __P((char *));
+int64_t tgetnum __P((char *));
+int tgetflag __P((char *));
+char *tgetstr __P((char *, char **));
+static char *tdecode __P((char *, char **));
 
 /*
  * Get an entry for terminal name in buffer bp,
@@ -107,16 +103,18 @@ static char *tdecode(char *, char **);
  * we just notice escaped newlines.
  */
 int
-tgetent(char *bp, char *name)
+tgetent(bp, name)
+	char *bp, *name;
 {
 	char *cp;
 
-	remotefile = cp = conffile ? conffile : __UNCONST(_PATH_RTADVDCONF);
+	remotefile = cp = conffile ? conffile : _PATH_RTADVDCONF;
 	return (getent(bp, name, cp));
 }
 
 int
-getent(char *bp, char *name, char *cp)
+getent(bp, name, cp)
+	char *bp, *name, *cp;
 {
 	int c;
 	int i = 0, cnt = 0;
@@ -185,7 +183,7 @@ getent(char *bp, char *name, char *cp)
  * Note that this works because of the left to right scan.
  */
 int
-tnchktc(void)
+tnchktc()
 {
 	char *p, *q;
 	char tcname[16];	/* name of similar terminal */
@@ -234,7 +232,8 @@ tnchktc(void)
  * name (before the first field) stops us.
  */
 int
-tnamatch(char *np)
+tnamatch(np)
+	char *np;
 {
 	char *Np, *Bp;
 
@@ -260,7 +259,8 @@ tnamatch(char *np)
  * into the termcap file in octal.
  */
 static char *
-tskip(char *bp)
+tskip(bp)
+	char *bp;
 {
 	int dquote;
 
@@ -304,7 +304,8 @@ breakbreak:
  * Note that we handle octal numbers beginning with 0.
  */
 int64_t
-tgetnum(char *id)
+tgetnum(id)
+	char *id;
 {
 	int64_t i;
 	int base;
@@ -339,7 +340,8 @@ tgetnum(char *id)
  * not given.
  */
 int
-tgetflag(char *id)
+tgetflag(id)
+	char *id;
 {
 	char *bp = tbuf;
 
@@ -366,7 +368,8 @@ tgetflag(char *id)
  * No checking on area overflow.
  */
 char *
-tgetstr(char *id, char **area)
+tgetstr(id, area)
+	char *id, **area;
 {
 	char *bp = tbuf;
 
@@ -391,11 +394,13 @@ tgetstr(char *id, char **area)
  * string capability escapes.
  */
 static char *
-tdecode(char *str, char **area)
+tdecode(str, area)
+	char *str;
+	char **area;
 {
 	char *cp;
 	int c;
-	const char *dps = "E\033^^\\\\::n\nr\rt\tb\bf\f\"\"", *dp;
+	char *dp;
 	int i;
 	char term;
 
@@ -414,7 +419,7 @@ again:
 			break;
 
 		case '\\':
-			dp = dps; 
+			dp = "E\033^^\\\\::n\nr\rt\tb\bf\f\"\"";
 			c = *str++;
 nextc:
 			if (*dp++ == c) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: psh3lcd.c,v 1.6 2012/02/12 16:34:08 matt Exp $	*/
+/*	$NetBSD: psh3lcd.c,v 1.4 2008/03/31 15:49:29 kiyohara Exp $	*/
 /*
  * Copyright (c) 2005 KIYOHARA Takashi
  * All rights reserved.
@@ -130,7 +130,7 @@ static int psh3lcd_power(void *, int, long, void *);
 
 
 static inline int
-psh3lcd_x0_bcd_get(void)
+psh3lcd_x0_bcd_get()
 {
 	int i;
 	uint8_t bcr0, bcr1, bcr2;
@@ -150,7 +150,7 @@ psh3lcd_x0_bcd_get(void)
 }
 
 static inline int
-psh3lcd_xx0_bcd_get(void)
+psh3lcd_xx0_bcd_get()
 {
 	int i;
 	uint8_t bcr1, bcr2;
@@ -287,10 +287,6 @@ psh3lcd_attach(device_t parent __unused, device_t self, void *aux __unused)
 	/* LCD on/off hook */
 	config_hook(CONFIG_HOOK_POWERCONTROL,
 	    CONFIG_HOOK_POWERCONTROL_LCD, CONFIG_HOOK_SHARE, psh3lcd_power, sc);
-
- 	/* XXX: TODO: don't rely on CONFIG_HOOK_POWERCONTROL_LCD */
- 	if (!pmf_device_register(self, NULL, NULL))
- 		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.21 2011/07/01 20:34:53 dyoung Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.17 2008/05/30 15:56:32 kiyohara Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.21 2011/07/01 20:34:53 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.17 2008/05/30 15:56:32 kiyohara Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -51,7 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.21 2011/07/01 20:34:53 dyoung Exp 
 #include <uvm/uvm_extern.h>
 
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <powerpc/pio.h>
@@ -86,14 +86,13 @@ bebox_pci_get_chipset_tag(pci_chipset_tag_t pc)
 	pc->pc_intr_evcnt = genppc_pci_intr_evcnt;
 	pc->pc_intr_establish = genppc_pci_intr_establish;
 	pc->pc_intr_disestablish = genppc_pci_intr_disestablish;
-	pc->pc_intr_setattr = genppc_pci_intr_setattr;
 
 	pc->pc_conf_interrupt = bebox_pci_conf_interrupt;
 	pc->pc_decompose_tag = genppc_pci_indirect_decompose_tag;
 	pc->pc_conf_hook = genppc_pci_conf_hook;
 
-	pc->pc_addr = mapiodev(PCI_MODE1_ADDRESS_REG, 4, false);
-	pc->pc_data = mapiodev(PCI_MODE1_DATA_REG, 4, false);
+	pc->pc_addr = mapiodev(PCI_MODE1_ADDRESS_REG, 4);
+	pc->pc_data = mapiodev(PCI_MODE1_DATA_REG, 4);
 	pc->pc_bus = 0;
 	pc->pc_node = 0;
 	pc->pc_memt = 0;
@@ -101,8 +100,8 @@ bebox_pci_get_chipset_tag(pci_chipset_tag_t pc)
 }
 
 void
-bebox_pci_conf_interrupt(void *v, int bus, int dev, int pin, int swiz,
-    int *iline)
+bebox_pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int pin,
+    int swiz, int *iline)
 {
 
 	if (bus == 0) {
@@ -115,6 +114,6 @@ bebox_pci_conf_interrupt(void *v, int bus, int dev, int pin, int swiz,
 			*iline = BEBOX_PCIBUS0_DEV2LINE(dev);
 		}
 	} else
-#define  BEBOX_PCIBUS_SWIZ2LINE(s)	((s) + 14)
-		*iline = BEBOX_PCIBUS_SWIZ2LINE(swiz);
+#define  BEBOX_PCIBUS_DEV2LINE(d, s)	((((d) + (s) + 1) & 0x3) + 26)
+		*iline = BEBOX_PCIBUS_DEV2LINE(dev, swiz);
 }

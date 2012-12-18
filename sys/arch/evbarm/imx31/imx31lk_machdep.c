@@ -1,4 +1,4 @@
-/* $NetBSD: imx31lk_machdep.c,v 1.16 2012/09/22 00:33:39 matt Exp $ */
+/* $NetBSD: imx31lk_machdep.c,v 1.3 2008/06/30 00:49:31 perry Exp $ */
 
 /*
  * Startup routines for the ZOOM iMX31 LITEKIT.
@@ -33,7 +33,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- * Machine dependent functions for kernel setup for 
+ * Machine dependant functions for kernel setup for 
  * Intel DBPXA250 evaluation board (a.k.a. Lubbock).
  * Based on iq80310_machhdep.c
  */
@@ -105,12 +105,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependent functions for kernel setup for Intel IQ80310 evaluation
+ * Machine dependant functions for kernel setup for Intel IQ80310 evaluation
  * boards using RedBoot firmware.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx31lk_machdep.c,v 1.16 2012/09/22 00:33:39 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx31lk_machdep.c,v 1.3 2008/06/30 00:49:31 perry Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -118,6 +118,7 @@ __KERNEL_RCSID(0, "$NetBSD: imx31lk_machdep.c,v 1.16 2012/09/22 00:33:39 matt Ex
 #include "opt_pmap_debug.h"
 #include "opt_md.h"
 #include "opt_com.h"
+#include "md.h"
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -144,7 +145,7 @@ __KERNEL_RCSID(0, "$NetBSD: imx31lk_machdep.c,v 1.16 2012/09/22 00:33:39 matt Ex
 #endif
 
 #include <machine/bootconfig.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <arm/undefined.h>
@@ -152,7 +153,6 @@ __KERNEL_RCSID(0, "$NetBSD: imx31lk_machdep.c,v 1.16 2012/09/22 00:33:39 matt Ex
 #include <arm/arm32/pte.h>
 #include <arm/arm32/machdep.h>
 
-#include <arm/imx/imx31reg.h>
 #include <arm/imx/imxuartreg.h>
 #include <arm/imx/imxuartvar.h>
 #include <evbarm/imx31/imx31lk_reg.h>
@@ -167,6 +167,24 @@ __KERNEL_RCSID(0, "$NetBSD: imx31lk_machdep.c,v 1.16 2012/09/22 00:33:39 matt Ex
  */
 #define KERNEL_VM_SIZE		0x0C000000
 
+
+/*
+ * Address to call from cpu_reset() to reset the machine.
+ * This is machine architecture dependant as it varies depending
+ * on where the ROM appears when you turn the MMU off.
+ */
+
+u_int cpu_reset_address = 0;
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#ifdef IPKDB
+#define UND_STACK_SIZE	2
+#else
+#define UND_STACK_SIZE	1
+#endif
+
 BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
@@ -176,13 +194,25 @@ vm_offset_t physical_freestart;
 vm_offset_t physical_freeend;
 vm_offset_t physical_end;
 u_int free_pages;
+vm_offset_t pagetables_start;
+int physmem = 0;
 
 /*int debug_flags;*/
 #ifndef PMAP_STATIC_L1S
 int max_processes = 64;			/* Default number */
 #endif	/* !PMAP_STATIC_L1S */
 
+/* Physical and virtual addresses for some global pages */
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
+
 vm_offset_t msgbufphys;
+
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -197,6 +227,8 @@ extern int pmap_debug_level;
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
+
+struct user *proc0paddr;
 
 /* Prototypes */
 
@@ -248,7 +280,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -280,8 +311,6 @@ cpu_reboot(int howto, char *bootstr)
 	/* Run any shutdown hooks */
 	doshutdownhooks();
 
-	pmf_system_shutdown(boothowto);
-
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
 
@@ -312,7 +341,7 @@ cpu_reboot(int howto, char *bootstr)
 static const struct pmap_devmap imx31lk_devmap[] = {
     {
 	IMX31LITEKIT_UART1_VBASE,
-	_A(UART1_BASE),
+	_A(IMX_UART1_BASE),
 	_S(L1_S_SIZE),
 	VM_PROT_READ|VM_PROT_WRITE,
 	PTE_NOCACHE,
@@ -370,7 +399,7 @@ initarm(void *arg)
 	/* Calibrate the delay loop. */
 #endif
 
-	consinit();
+	imx31lk_consinit(1);
 
 #ifdef KGDB
 	kgdb_port_init();
@@ -641,16 +670,17 @@ printf("%s: textsize %#lx, totalsize %#lx\n",
 #endif
 
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
-	//imx31lk_consinit(2);
+	imx31lk_consinit(2);
 
 	/*
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+	proc0paddr = (struct user *)kernelstack.pv_va;
+	lwp0.l_addr = proc0paddr;
 
 #ifdef VERBOSE_INIT_ARM
 	printf("bootstrap done.\n");
@@ -781,7 +811,6 @@ int comkgdbmode = KGDB_DEVMODE;
 #endif /* KGDB */
 
 
-#if 0
 void
 imx31lk_consinit(int phase)
 {
@@ -792,22 +821,39 @@ imx31lk_consinit(int phase)
 		ophase = phase;
 		switch (phase) {
 		case 1:
-			imxuart_init(0, UART1_BASE);
+			imxuart_init(0, IMX_UART1_BASE);
 			break;
 		case 2:
 			bh = IMX31LITEKIT_UART1_VBASE;
-			bh |= (UART1_BASE & ~_A(UART1_BASE));
+			bh |= (IMX_UART1_BASE & ~_A(IMX_UART1_BASE));
 			imxuart_init(0, bh);
 			break;
 		}
 	}
 }
-#endif
 
 void
 consinit(void)
 {
-	// imx31lk_consinit(2);
+	imx31lk_consinit(2);
+}
+
+void consinit_test(void);
+void
+consinit_test(void)
+{
+	imxuart_softc_t *sc, softc;
+	extern int imxuart_puts(imxuart_softc_t *sc, const char *s);
+
+	printf("\n%s start\n", __func__);
+	sc = &softc;
+	sc->sc_init_cnt = 0;
+	imxuart_init(sc, IMX_UART1_BASE);
+	imxuart_puts(sc, "test1\r\n");
+	imxuart_init(sc,
+	    IMX31LITEKIT_UART1_VBASE|(IMX_UART1_BASE & ~_A(IMX_UART1_BASE)));
+	imxuart_puts(sc, "test2\r\n");
+	printf("%s done\n", __func__);
 }
 
 #ifdef KGDB

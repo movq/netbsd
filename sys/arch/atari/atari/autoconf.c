@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.64 2012/10/27 17:17:42 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.54.28.1 2010/11/20 00:33:47 riz Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman
@@ -31,9 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.64 2012/10/27 17:17:42 chs Exp $");
-
-#include "opt_md.h"
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.54.28.1 2010/11/20 00:33:47 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,23 +41,14 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.64 2012/10/27 17:17:42 chs Exp $");
 #include <sys/device.h>
 #include <sys/disklabel.h>
 #include <sys/disk.h>
-#include <sys/malloc.h>
 #include <machine/disklabel.h>
 #include <machine/cpu.h>
 #include <atari/atari/device.h>
 
-#if defined(MEMORY_DISK_HOOKS)
-#include <dev/md.h>
-#endif
-
-#include "ioconf.h"
-
-static void findroot(void);
-int mbmatch(device_t, cfdata_t, void *);
-void mbattach(device_t, device_t, void *);
-#if 0
-int mbprint(void *, const char *);
-#endif
+static void findroot __P((void));
+void mbattach __P((struct device *, struct device *, void *));
+int mbprint __P((void *, const char *));
+int mbmatch __P((struct device *, struct cfdata *, void *));
 
 int atari_realconfig;
 #include <sys/kernel.h>
@@ -68,9 +57,10 @@ int atari_realconfig;
  * called at boot time, configure all devices on system
  */
 void
-cpu_configure(void)
+cpu_configure()
 {
-
+	extern int atari_realconfig;
+	
 	atari_realconfig = 1;
 
 	init_sicallback();
@@ -80,54 +70,19 @@ cpu_configure(void)
 }
 
 void
-cpu_rootconf(void)
+cpu_rootconf()
 {
-
 	findroot();
-#if defined(MEMORY_DISK_HOOKS)
-	/*
-	 * XXX
-	 * quick hacks for atari's traditional "auto-load from floppy on open"
-	 * installation md(4) ramdisk.
-	 * See sys/arch/atari/dev/md_root.c for details.
-	 */
-#define RAMD_NDEV	3	/* XXX */
-
-	if ((boothowto & RB_ASKNAME) != 0) {
-		int md_major, i;
-		dev_t md_dev;
-		cfdata_t cf;
-		struct md_softc *sc;
-
-		md_major = devsw_name2blk("md", NULL, 0);
-		if (md_major >= 0) {
-			for (i = 0; i < RAMD_NDEV; i++) {
-				md_dev = MAKEDISKDEV(md_major, i, RAW_PART);
-				cf = malloc(sizeof(*cf), M_DEVBUF,
-				    M_ZERO|M_WAITOK);
-				if (cf == NULL)
-					break;	/* XXX */
-				cf->cf_name = md_cd.cd_name;
-				cf->cf_atname = md_cd.cd_name;
-				cf->cf_unit = i;
-				cf->cf_fstate = FSTATE_STAR;
-				/* XXX mutex */
-				sc = device_private(config_attach_pseudo(cf));
-				if (sc == NULL)
-					break;	/* XXX */
-			}
-		}
-	}
-#endif
-	rootconf();
+	setroot(booted_device, booted_partition);
 }
 
 /*ARGSUSED*/
 int
-simple_devprint(void *aux, const char *pnp)
+simple_devprint(auxp, pnp)
+	void *auxp;
+	const char *pnp;
 {
-
-	return QUIET;
+	return(QUIET);
 }
 
 /*
@@ -137,33 +92,38 @@ simple_devprint(void *aux, const char *pnp)
  * by checking for NULL.
  */
 int
-atari_config_found(cfdata_t pcfp, device_t parent, void *aux, cfprint_t pfn)
+atari_config_found(pcfp, pdp, auxp, pfn)
+	struct cfdata *pcfp;
+	struct device *pdp;
+	void *auxp;
+	cfprint_t pfn;
 {
 	struct device temp;
-	cfdata_t cf;
+	struct cfdata *cf;
 	const struct cfattach *ca;
+	extern int	atari_realconfig;
 
 	if (atari_realconfig)
-		return config_found(parent, aux, pfn) != NULL;
+		return(config_found(pdp, auxp, pfn) != NULL);
 
 	memset(&temp, 0, sizeof(temp));
-	if (parent == NULL)
-		parent = &temp;
+	if (pdp == NULL)
+		pdp = &temp;
 
-	parent->dv_cfdata = pcfp;
-	parent->dv_cfdriver = config_cfdriver_lookup(pcfp->cf_name);
-	parent->dv_unit = pcfp->cf_unit;
+	pdp->dv_cfdata = pcfp;
+	pdp->dv_cfdriver = config_cfdriver_lookup(pcfp->cf_name);
+	pdp->dv_unit = pcfp->cf_unit;
 
-	if ((cf = config_search_ia(NULL, parent, NULL, aux)) != NULL) {
+	if ((cf = config_search_ia(NULL, pdp, NULL, auxp)) != NULL) {
 		ca = config_cfattach_lookup(cf->cf_name, cf->cf_atname);
 		if (ca != NULL) {
-			(*ca->ca_attach)(parent, NULL, aux);
-			parent->dv_cfdata = NULL;
-			return 1;
+			(*ca->ca_attach)(pdp, NULL, auxp);
+			pdp->dv_cfdata = NULL;
+			return(1);
 		}
 	}
-	parent->dv_cfdata = NULL;
-	return 0;
+	pdp->dv_cfdata = NULL;
+	return(0);
 }
 
 /*
@@ -172,9 +132,9 @@ atari_config_found(cfdata_t pcfp, device_t parent, void *aux, cfprint_t pfn)
  * the console. Kinda hacky but it works.
  */
 void
-config_console(void)
+config_console()
 {	
-	cfdata_t cf;
+	struct cfdata *cf;
 
 	config_init();
 
@@ -208,7 +168,19 @@ config_console(void)
 #include "sd.h"
 #include "cd.h"
 #include "wd.h"
-#include "ioconf.h"
+
+#if NWD > 0
+extern	struct cfdriver wd_cd;
+#endif
+#if NSD > 0
+extern	struct cfdriver sd_cd;  
+#endif
+#if NCD > 0
+extern	struct cfdriver cd_cd;
+#endif
+#if NFD > 0
+extern	struct cfdriver fd_cd;
+#endif
 
 struct cfdriver *genericconf[] = {
 #if NWD > 0
@@ -231,7 +203,7 @@ findroot(void)
 {
 	struct disk *dkp;
 	struct partition *pp;
-	device_t *devs;
+	struct device **devs;
 	const struct bdevsw *bdev;
 	int i, maj, unit;
 
@@ -247,8 +219,8 @@ findroot(void)
 			 * Find the disk structure corresponding to the
 			 * current device.
 			 */
-			devs = genericconf[i]->cd_devs;
-			if ((dkp = disk_find(device_xname(devs[unit]))) == NULL)
+			devs = (struct device **)genericconf[i]->cd_devs;
+			if ((dkp = disk_find(devs[unit]->dv_xname)) == NULL)
 				continue;
 
 			if (dkp->dk_driver == NULL ||
@@ -286,56 +258,59 @@ findroot(void)
 /* 
  * mainbus driver 
  */
-CFATTACH_DECL_NEW(mainbus, 0,
+CFATTACH_DECL(mainbus, sizeof(struct device),
     mbmatch, mbattach, NULL, NULL);
 
 static int mb_attached;
 
 int
-mbmatch(device_t parent, cfdata_t cf, void *aux)
+mbmatch(pdp, cfp, auxp)
+	struct device	*pdp;
+	struct cfdata	*cfp;
+	void		*auxp;
 {
-
 	if (mb_attached)
-		return 0;
+		return(0);
 	/*
 	 * We are always here
 	 */
-	return 1;
+	return(1);
 }
 
 /*
  * "find" all the things that should be there.
  */
 void
-mbattach(device_t parent, device_t self, void *aux)
+mbattach(pdp, dp, auxp)
+	struct device *pdp, *dp;
+	void *auxp;
 {
 
 	mb_attached = 1;
 
 	printf ("\n");
-	config_found(self, __UNCONST("clock")   , simple_devprint);
-	config_found(self, __UNCONST("grfbus")  , simple_devprint);
-	config_found(self, __UNCONST("kbd")     , simple_devprint);
-	config_found(self, __UNCONST("fdc")     , simple_devprint);
-	config_found(self, __UNCONST("ser")     , simple_devprint);
-	config_found(self, __UNCONST("zs")      , simple_devprint);
-	config_found(self, __UNCONST("ncrscsi") , simple_devprint);
-	config_found(self, __UNCONST("nvr")     , simple_devprint);
-	config_found(self, __UNCONST("lpt")     , simple_devprint);
-	config_found(self, __UNCONST("wdc")     , simple_devprint);
-	config_found(self, __UNCONST("ne")      , simple_devprint);
-	config_found(self, __UNCONST("isab")    , simple_devprint);
-	config_found(self, __UNCONST("pcib")    , simple_devprint);
-	config_found(self, __UNCONST("avmebus") , simple_devprint);
+	config_found(dp, __UNCONST("clock")   , simple_devprint);
+	config_found(dp, __UNCONST("grfbus")  , simple_devprint);
+	config_found(dp, __UNCONST("kbd")     , simple_devprint);
+	config_found(dp, __UNCONST("fdc")     , simple_devprint);
+	config_found(dp, __UNCONST("ser")     , simple_devprint);
+	config_found(dp, __UNCONST("zs")      , simple_devprint);
+	config_found(dp, __UNCONST("ncrscsi") , simple_devprint);
+	config_found(dp, __UNCONST("nvr")     , simple_devprint);
+	config_found(dp, __UNCONST("lpt")     , simple_devprint);
+	config_found(dp, __UNCONST("wdc")     , simple_devprint);
+	config_found(dp, __UNCONST("ne")      , simple_devprint);
+	config_found(dp, __UNCONST("isab")    , simple_devprint);
+	config_found(dp, __UNCONST("pcib")    , simple_devprint);
+	config_found(dp, __UNCONST("avmebus") , simple_devprint);
 }
 
-#if 0
 int
-mbprint(void *aux, const char *pnp)
+mbprint(auxp, pnp)
+	void *auxp;
+	const char *pnp;
 {
-
 	if (pnp)
-		aprint_normal("%s at %s", (char *)aux, pnp);
-	return UNCONF;
+		aprint_normal("%s at %s", (char *)auxp, pnp);
+	return(UNCONF);
 }
-#endif

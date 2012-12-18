@@ -1,4 +1,4 @@
-/*	$NetBSD: video_subr.c,v 1.13 2012/02/12 16:34:11 matt Exp $	*/
+/*	$NetBSD: video_subr.c,v 1.11 2008/04/28 20:23:48 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: video_subr.c,v 1.13 2012/02/12 16:34:11 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: video_subr.c,v 1.11 2008/04/28 20:23:48 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -112,8 +112,11 @@ __KERNEL_RCSID(0, "$NetBSD: video_subr.c,v 1.13 2012/02/12 16:34:11 matt Exp $")
 })
 
 #define LINEFUNC(b)							\
+static void linebpp##b (struct video_chip *, int, int, int, int);	\
 static void								\
-linebpp##b(struct video_chip *vc, int x0, int y0, int x1, int y1)	\
+linebpp##b(vc, x0, y0, x1, y1)						\
+	struct video_chip *vc;						\
+	int x0, y0, x1, y1;						\
 {									\
 	u_int32_t addr;							\
 	int i, j, k, len, step, kstep;					\
@@ -129,8 +132,11 @@ linebpp##b(struct video_chip *vc, int x0, int y0, int x1, int y1)	\
 }
 
 #define DOTFUNC(b)							\
+static void dotbpp##b (struct video_chip *, int, int);			\
 static void								\
-dotbpp##b(struct video_chip *vc, int x, int y)				\
+dotbpp##b(vc, x, y)							\
+	struct video_chip *vc;						\
+	int x, y;							\
 {									\
 	u_int32_t addr;							\
 	addr = vc->vc_fbvaddr + (((y * vc->vc_fbwidth + x) *		\
@@ -284,7 +290,7 @@ video_dot(struct video_chip *vc, int x, int y)
 }
 
 int
-video_reverse_color(void)
+video_reverse_color()
 {
 	struct {
 		int reverse, normal;

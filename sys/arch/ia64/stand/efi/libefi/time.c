@@ -1,4 +1,4 @@
-/*	$NetBSD: time.c,v 1.3 2009/03/18 10:22:31 cegger Exp $	*/
+/*	$NetBSD: time.c,v 1.2 2006/04/22 07:58:53 cherry Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000
@@ -219,7 +219,7 @@ time(time_t *tloc)
 }
 
 time_t
-getsecs(void)
+getsecs()
 {
     return time(0);
 }

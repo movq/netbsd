@@ -1,4 +1,4 @@
-/*	$NetBSD: snapshot.c,v 1.6 2011/02/24 09:38:57 hannken Exp $	*/
+/*	$NetBSD: snapshot.c,v 1.4.4.1 2011/06/18 17:00:25 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -54,51 +54,25 @@
  * snapshot device path.
  */
 int
-snap_open(char *file, char *backup, time_t *snap_date, char **snap_dev)
+snap_open(char *mountpoint, char *backup, time_t *snap_date, char **snap_dev)
 {
-	int i, n, fd, israw, fsinternal, dounlink;
-	char path[MAXPATHLEN], fss_dev[14], *cp;
+	int i, fd, israw, fsinternal, dounlink;
+	char path[MAXPATHLEN], fss_dev[14];
 	dev_t mountdev;
 	struct fss_set fss;
 	struct fss_get fsg;
 	struct stat sb;
-	struct statvfs *mntbuf, *fs, fsb;
+	struct statvfs fsb;
 
 	dounlink = 0;
 	fd = -1;
-	mntbuf = NULL;
 
-	/*
-	 * Lookup the mount point. `file' is either a directory or a raw
-	 * character device.
-	 */
-	if (lstat(file, &sb) < 0)
-		goto fail;
-	fss.fss_mount = NULL;
-	if (S_ISCHR(sb.st_mode)) {
-		if ((cp = strrchr(file, '/')) == NULL || cp[1] != 'r') {
-			errno = EINVAL;
-			goto fail;
-		}
-		snprintf(path, sizeof(path), "%.*s/%s",
-		    (int)(cp - file), file, cp + 2);
-		n = getmntinfo(&mntbuf, MNT_NOWAIT);
-		for (fs = mntbuf, i = 0; i < n; i++, fs++) {
-			if (strcmp(fs->f_mntfromname, path) == 0) {
-				fss.fss_mount = fs->f_mntonname;
-				if (stat(fss.fss_mount, &sb) < 0)
-					goto fail;
-				break;
-			}
-		}
-	} else if (S_ISDIR(sb.st_mode))
-		fss.fss_mount = file;
-	if (fss.fss_mount == NULL) {
-		errno = EINVAL;
-		goto fail;
-	}
+	fss.fss_mount = mountpoint;
 	fss.fss_bstore = backup ? backup : fss.fss_mount;
 	fss.fss_csize = 0;
+
+	if (stat(fss.fss_mount, &sb) < 0)
+		goto fail;
 	mountdev = sb.st_dev;
 
 	/*
@@ -177,16 +151,12 @@ snap_open(char *file, char *backup, time_t *snap_date, char **snap_dev)
 			goto fail;
 		}
 
-		if (mntbuf)
-			free(mntbuf);
 		if (snap_date != NULL)
 			*snap_date = fsg.fsg_time.tv_sec;
 		return fd;
 	}
 
 fail:
-	if (mntbuf)
-		free(mntbuf);
 	if (dounlink)
 		unlink(fss.fss_bstore);
 	if (fd >= 0)

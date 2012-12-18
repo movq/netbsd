@@ -1,4 +1,4 @@
-/*	$NetBSD: lpr.c,v 1.46 2012/06/02 03:32:53 jnemeth Exp $	*/
+/*	$NetBSD: lpr.c,v 1.40 2008/07/21 13:36:58 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1989, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)lpr.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: lpr.c,v 1.46 2012/06/02 03:32:53 jnemeth Exp $");
+__RCSID("$NetBSD: lpr.c,v 1.40 2008/07/21 13:36:58 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,6 +59,7 @@ __RCSID("$NetBSD: lpr.c,v 1.46 2012/06/02 03:32:53 jnemeth Exp $");
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <a.out.h>
 #include <signal.h>
 #include <syslog.h>
 #include <pwd.h>
@@ -104,8 +105,10 @@ static struct stat statb;
 
 static void	 card(int, const char *);
 static void	 chkprinter(const char *);
-static void	 cleanup(int) __dead;
+static void	 cleanup(int);
 static void	 copy(int, const char *);
+static void	 fatal2(const char *, ...)
+    __attribute__((__format__(__printf__, 1, 2),__noreturn__));
 static char	*itoa(int);
 static const char	*linked(const char *);
 static char	*lmktemp(const char *, int, int);
@@ -260,9 +263,9 @@ main(int argc, char *argv[])
 		printer = DEFLP;
 	chkprinter(printer);
 	if (SC && ncopies > 1)
-		errx(EXIT_FAILURE, "multiple copies are not allowed");
+		fatal2("multiple copies are not allowed");
 	if (MC > 0 && ncopies > MC)
-		errx(EXIT_FAILURE, "only %ld copies are allowed", MC);
+		fatal2("only %ld copies are allowed", MC);
 	/*
 	 * Get the identity of the person doing the lpr using the same
 	 * algorithm as lprm. 
@@ -270,7 +273,7 @@ main(int argc, char *argv[])
 	userid = getuid();
 	if (userid != DU || person == 0) {
 		if ((pw = getpwuid(userid)) == NULL)
-			errx(EXIT_FAILURE, "Who are you?");
+			fatal2("Who are you?");
 		person = pw->pw_name;
 	}
 	/*
@@ -278,8 +281,7 @@ main(int argc, char *argv[])
 	 */
 	if (RG != NULL && userid != DU) {
 		if ((gptr = getgrnam(RG)) == NULL)
-			errx(EXIT_FAILURE,
-			     "Restricted group specified incorrectly");
+			fatal2("Restricted group specified incorrectly");
 		if (gptr->gr_gid != getgid()) {
 			while (*gptr->gr_mem != NULL) {
 				if ((strcmp(person, *gptr->gr_mem)) == 0)
@@ -287,8 +289,7 @@ main(int argc, char *argv[])
 				gptr->gr_mem++;
 			}
 			if (*gptr->gr_mem == NULL)
-				errx(EXIT_FAILURE,
-				     "Not a member of the restricted group");
+				fatal2("Not a member of the restricted group");
 		}
 	}
 	/*
@@ -296,7 +297,7 @@ main(int argc, char *argv[])
 	 */
 	(void)snprintf(buf, sizeof buf, "%s/%s", SD, LO);
 	if (userid && stat(buf, &stb) == 0 && (stb.st_mode & S_IXGRP))
-		errx(EXIT_FAILURE, "Printer queue is disabled");
+		fatal2("Printer queue is disabled");
 	/*
 	 * Initialize the control file.
 	 */
@@ -347,8 +348,7 @@ main(int argc, char *argv[])
 
 		if (sflag && (cp = linked(arg)) != NULL) {
 			(void)snprintf(buf, sizeof buf,
-			    "%llu %llu",
-			    (unsigned long long)statb.st_dev,
+			    "%u %llu", statb.st_dev,
 			    (unsigned long long)statb.st_ino);
 			card('S', buf);
 			if (format == 'p')
@@ -428,8 +428,7 @@ main(int argc, char *argv[])
 static void
 copy(int f, const char *n)
 {
-	int fd, i, nr;
-	size_t nc;
+	int fd, i, nr, nc;
 	char buf[BUFSIZ];
 
 	if (format == 'p')
@@ -515,8 +514,7 @@ card(int c, const char *p2)
 	size_t len = 2;
 
 	if (strlen(p2) > BUFSIZ - 2)
-		errx(EXIT_FAILURE,
-		     "Internal error:  String longer than %d", BUFSIZ);
+		errx(1, "Internal error:  String longer than %d", BUFSIZ);
 
 	*p1++ = c;
 	while ((c = *p2++) != '\0') {
@@ -698,7 +696,7 @@ mktemps(void)
 
 	(void)snprintf(buf, sizeof(buf), "%s/.seq", SD);
 	seteuid(euid);
-	if ((fd = open(buf, O_RDWR|O_CREAT, 0664)) < 0)
+	if ((fd = open(buf, O_RDWR|O_CREAT, 0661)) < 0)
 		err(1, "cannot create %s", buf);
 	if (flock(fd, LOCK_EX))
 		err(1, "cannot lock %s", buf);
@@ -733,9 +731,24 @@ lmktemp(const char *id, int num, int len)
 	char *s;
 
 	if ((s = malloc(len)) == NULL)
-		err(EXIT_FAILURE, NULL);
+		fatal2("out of memory");
 	(void)snprintf(s, len, "%s/%sA%03d%s", SD, id, num, host);
 	return(s);
+}
+
+#include <stdarg.h>
+
+static void
+fatal2(const char *msg, ...)
+{
+	va_list ap;
+
+	va_start(ap, msg);
+	printf("%s: ", getprogname());
+	vprintf(msg, ap);
+	putchar('\n');
+	va_end(ap);
+	exit(1);
 }
 
 static void

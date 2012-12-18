@@ -1,4 +1,4 @@
-/*	$NetBSD: core_elf32.c,v 1.36 2012/01/27 19:48:40 para Exp $	*/
+/*	$NetBSD: core_elf32.c,v 1.32 2008/04/24 15:35:28 ad Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -40,12 +40,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: core_elf32.c,v 1.36 2012/01/27 19:48:40 para Exp $");
+__KERNEL_RCSID(1, "$NetBSD: core_elf32.c,v 1.32 2008/04/24 15:35:28 ad Exp $");
 
-#ifdef _KERNEL_OPT
-#include "opt_coredump.h"
-#endif
-
+/* If not included by core_elf64.c, ELFSIZE won't be defined. */
 #ifndef ELFSIZE
 #define	ELFSIZE		32
 #endif
@@ -57,14 +54,12 @@ __KERNEL_RCSID(1, "$NetBSD: core_elf32.c,v 1.36 2012/01/27 19:48:40 para Exp $")
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
 #include <sys/ptrace.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/kauth.h>
 
 #include <machine/reg.h>
 
 #include <uvm/uvm_extern.h>
-
-#ifdef COREDUMP
 
 struct countsegs_state {
 	int	npsections;
@@ -90,11 +85,7 @@ static int	ELFNAMEEND(coredump_note)(struct proc *, struct lwp *, void *,
 #define	elfround(x)	roundup((x), ELFROUNDSIZE)
 
 #define elf_process_read_regs	CONCAT(process_read_regs, ELFSIZE)
-#ifdef __HAVE_PROCESS_XFPREGS
-#define elf_process_read_xfpregs CONCAT(process_read_xfpregs, ELFSIZE)
-#else
 #define elf_process_read_fpregs	CONCAT(process_read_fpregs, ELFSIZE)
-#endif
 #define elf_reg			CONCAT(process_reg, ELFSIZE)
 #define elf_fpreg		CONCAT(process_fpreg, ELFSIZE)
 
@@ -104,7 +95,6 @@ ELFNAMEEND(coredump)(struct lwp *l, void *cookie)
 	struct proc *p;
 	Elf_Ehdr ehdr;
 	Elf_Phdr phdr, *psections;
-	size_t psectionssize;
 	struct countsegs_state cs;
 	struct writesegs_state ws;
 	off_t notestart, secstart, offset;
@@ -167,10 +157,6 @@ ELFNAMEEND(coredump)(struct lwp *l, void *cookie)
 	ehdr.e_shnum = 0;
 	ehdr.e_shstrndx = 0;
 
-#ifdef ELF_MD_COREDUMP_SETUP
-	ELF_MD_COREDUMP_SETUP(l, &ehdr);
-#endif
-
 	/* Write out the ELF header. */
 	error = coredump_write(cookie, UIO_SYSSPACE, &ehdr, sizeof(ehdr));
 	if (error)
@@ -181,8 +167,8 @@ ELFNAMEEND(coredump)(struct lwp *l, void *cookie)
 	notestart = offset + sizeof(phdr) * cs.npsections;
 	secstart = notestart + notesize;
 
-	psectionssize = cs.npsections * sizeof(Elf_Phdr);
-	psections = kmem_zalloc(psectionssize, KM_SLEEP);
+	psections = malloc(cs.npsections * sizeof(Elf_Phdr),
+	    M_TEMP, M_WAITOK|M_ZERO);
 
 	/* Pass 2: now write the P-section headers. */
 	ws.secoff = secstart;
@@ -251,7 +237,7 @@ ELFNAMEEND(coredump)(struct lwp *l, void *cookie)
 
   out:
 	if (psections)
-		kmem_free(psections, psectionssize);
+		free(psections, M_TEMP);
 	return (error);
 }
 
@@ -441,7 +427,9 @@ ELFNAMEEND(coredump_note)(struct proc *p, struct lwp *l, void *iocookie,
 
 	notesize = sizeof(nhdr) + elfround(namesize) + elfround(sizeof(intreg));
 	if (iocookie) {
+		uvm_lwp_hold(l);
 		error = elf_process_read_regs(l, &intreg);
+		uvm_lwp_rele(l);
 		if (error)
 			return (error);
 
@@ -460,17 +448,14 @@ ELFNAMEEND(coredump_note)(struct proc *p, struct lwp *l, void *iocookie,
 #ifdef PT_GETFPREGS
 	notesize = sizeof(nhdr) + elfround(namesize) + elfround(sizeof(freg));
 	if (iocookie) {
-		size_t freglen = sizeof(freg);
-#ifdef __HAVE_PROCESS_XFPREGS
-		error = elf_process_read_xfpregs(l, &freg, &freglen);
-#else
+		uvm_lwp_hold(l);
 		error = elf_process_read_fpregs(l, &freg);
-#endif
+		uvm_lwp_rele(l);
 		if (error)
 			return (error);
 
 		nhdr.n_namesz = namesize;
-		nhdr.n_descsz = freglen;
+		nhdr.n_descsz = sizeof(freg);
 		nhdr.n_type = PT_GETFPREGS;
 
 		error = ELFNAMEEND(coredump_writenote)(p, iocookie, &nhdr,
@@ -502,14 +487,3 @@ ELFNAMEEND(coredump_writenote)(struct proc *p, void *cookie, Elf_Nhdr *nhdr,
 
 	return coredump_write(cookie, UIO_SYSSPACE, data, nhdr->n_descsz);
 }
-
-#else	/* COREDUMP */
-
-int
-ELFNAMEEND(coredump)(struct lwp *l, void *cookie)
-{
-
-	return ENOSYS;
-}
-
-#endif	/* COREDUMP */

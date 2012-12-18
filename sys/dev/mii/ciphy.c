@@ -1,4 +1,4 @@
-/* $NetBSD: ciphy.c,v 1.19 2009/05/12 14:31:27 cegger Exp $ */
+/* $NetBSD: ciphy.c,v 1.15 2008/05/04 17:06:09 xtraeme Exp $ */
 
 /*-
  * Copyright (c) 2004
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ciphy.c,v 1.19 2009/05/12 14:31:27 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ciphy.c,v 1.15 2008/05/04 17:06:09 xtraeme Exp $");
 
 /*
  * Driver for the Cicada CS8201 10/100/1000 copper PHY.
@@ -97,7 +97,7 @@ static const struct mii_phydesc ciphys[] = {
 };
 
 static int
-ciphymatch(device_t parent, cfdata_t match,
+ciphymatch(struct device *parent, struct cfdata *match,
     void *aux)
 {
 	struct mii_attach_args *ma = aux;
@@ -109,7 +109,7 @@ ciphymatch(device_t parent, cfdata_t match,
 }
 
 static void
-ciphyattach(device_t parent, device_t self, void *aux)
+ciphyattach(struct device *parent, struct device *self, void *aux)
 {
 	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
@@ -142,10 +142,16 @@ ciphyattach(device_t parent, device_t self, void *aux)
 	else
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, mii_phy_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int
-ciphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
+ciphy_service(sc, mii, cmd)
+	struct mii_softc *sc;
+	struct mii_data *mii;
+	int cmd;
 {
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
 	int reg, speed, gig;
@@ -297,7 +303,8 @@ setit:
 }
 
 static void
-ciphy_status(struct mii_softc *sc)
+ciphy_status(sc)
+	struct mii_softc *sc;
 {
 	struct mii_data *mii = sc->mii_pdata;
 	int bmsr, bmcr;

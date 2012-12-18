@@ -1,4 +1,4 @@
-/*	$NetBSD: z8530sc.h,v 1.26 2009/05/22 03:51:30 mrg Exp $	*/
+/*	$NetBSD: z8530sc.h,v 1.25.12.1 2011/01/16 12:54:43 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

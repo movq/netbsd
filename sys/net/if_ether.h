@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ether.h,v 1.61 2012/10/31 10:17:34 msaitoh Exp $	*/
+/*	$NetBSD: if_ether.h,v 1.53 2008/07/25 20:04:50 dsl Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -39,10 +39,6 @@
 #include "opt_mbuftrace.h"
 #endif
 #include <sys/mbuf.h>
-#endif
-
-#ifndef _STANDALONE
-#include <net/if.h>
 #endif
 
 /*
@@ -149,10 +145,6 @@ do {									\
 
 struct mii_data;
 
-struct ethercom;
-
-typedef int (*ether_cb_t)(struct ethercom *);
-
 /*
  * Structure shared between the ethernet driver modules and
  * the multicast list code.  For example, each ec_softc or il_softc
@@ -172,11 +164,6 @@ struct ethercom {
 	int	ec_nvlans;			/* # VLANs on this interface */
 	/* The device handle for the MII bus child device. */
 	struct mii_data				*ec_mii;
-	/* Called after a change to ec_if.if_flags.  Returns
-	 * ENETRESET if the device should be reinitialized with
-	 * ec_if.if_init, 0 on success, not 0 on failure.
-	 */
-	ether_cb_t				ec_ifflags_cb;
 #ifdef MBUFTRACE
 	struct	mowner ec_rx_mowner;		/* mbufs received */
 	struct	mowner ec_tx_mowner;		/* mbufs transmitted */
@@ -187,31 +174,16 @@ struct ethercom {
 #define	ETHERCAP_VLAN_HWTAGGING	0x00000002	/* hardware VLAN tag support */
 #define	ETHERCAP_JUMBO_MTU	0x00000004	/* 9000 byte MTU supported */
 
-#define	ECCAPBITS		\
-	"\020"			\
-	"\1VLAN_MTU"		\
-	"\2VLAN_HWTAGGING"	\
-	"\3JUMBO_MTU"
-
-/* ioctl() for Ethernet capabilities */
-struct eccapreq {
-	char		eccr_name[IFNAMSIZ];	/* if name, e.g. "en0" */
-	int		eccr_capabilities;	/* supported capabiliites */
-	int		eccr_capenable;		/* capabilities enabled */
-};
-
 #ifdef	_KERNEL
 extern const uint8_t etherbroadcastaddr[ETHER_ADDR_LEN];
 extern const uint8_t ethermulticastaddr_slowprotocols[ETHER_ADDR_LEN];
 extern const uint8_t ether_ipmulticast_min[ETHER_ADDR_LEN];
 extern const uint8_t ether_ipmulticast_max[ETHER_ADDR_LEN];
 
-void	ether_set_ifflags_cb(struct ethercom *, ether_cb_t);
 int	ether_ioctl(struct ifnet *, u_long, void *);
 int	ether_addmulti(const struct sockaddr *, struct ethercom *);
 int	ether_delmulti(const struct sockaddr *, struct ethercom *);
 int	ether_multiaddr(const struct sockaddr *, uint8_t[], uint8_t[]);
-void    ether_input(struct ifnet *, struct mbuf *);
 #endif /* _KERNEL */
 
 /*
@@ -248,8 +220,8 @@ struct ether_multistep {
 {									\
 	for ((enm) = LIST_FIRST(&(ec)->ec_multiaddrs);			\
 	    (enm) != NULL &&						\
-	    (memcmp((enm)->enm_addrlo, (addrlo), ETHER_ADDR_LEN) != 0 ||	\
-	     memcmp((enm)->enm_addrhi, (addrhi), ETHER_ADDR_LEN) != 0);	\
+	    (bcmp((enm)->enm_addrlo, (addrlo), ETHER_ADDR_LEN) != 0 ||	\
+	     bcmp((enm)->enm_addrhi, (addrhi), ETHER_ADDR_LEN) != 0);	\
 		(enm) = LIST_NEXT((enm), enm_list));			\
 }
 
@@ -328,19 +300,19 @@ char	*ether_snprintf(char *, size_t, const uint8_t *);
 uint32_t ether_crc32_le(const uint8_t *, size_t);
 uint32_t ether_crc32_be(const uint8_t *, size_t);
 
-int	ether_aton_r(u_char *, size_t, const char *);
+int	ether_nonstatic_aton(u_char *, char *);
 #else
 /*
  * Prototype ethers(3) functions.
  */
 #include <sys/cdefs.h>
 __BEGIN_DECLS
-char *	ether_ntoa(const struct ether_addr *);
+char *	ether_ntoa __P((const struct ether_addr *));
 struct ether_addr *
-	ether_aton(const char *);
-int	ether_ntohost(char *, const struct ether_addr *);
-int	ether_hostton(const char *, struct ether_addr *);
-int	ether_line(const char *, struct ether_addr *, char *);
+	ether_aton __P((const char *));
+int	ether_ntohost __P((char *, const struct ether_addr *));
+int	ether_hostton __P((const char *, struct ether_addr *));
+int	ether_line __P((const char *, struct ether_addr *, char *));
 __END_DECLS
 #endif
 

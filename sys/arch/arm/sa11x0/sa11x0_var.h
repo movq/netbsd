@@ -1,4 +1,4 @@
-/*	$NetBSD: sa11x0_var.h,v 1.11 2011/07/01 20:31:39 dyoung Exp $	*/
+/*	$NetBSD: sa11x0_var.h,v 1.8 2008/04/28 20:23:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001, The NetBSD Foundation, Inc.  All rights reserved.
@@ -34,10 +34,10 @@
 #include <sys/conf.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 struct sa11x0_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 	bus_space_handle_t sc_gpioh;
@@ -52,8 +52,7 @@ struct sa11x0_softc {
 typedef void *sa11x0_chipset_tag_t;
 
 struct sa11x0_attach_args {
-	const char *		sa_name;
-	sa11x0_chipset_tag_t	sa_sc;
+	sa11x0_chipset_tag_t	sa_sc;		
 	bus_space_tag_t		sa_iot;		/* Bus tag */
 	bus_addr_t		sa_addr;	/* i/o address  */
 	bus_size_t		sa_size;
@@ -62,7 +61,7 @@ struct sa11x0_attach_args {
 	int			sa_gpio;
 };
 
-void *sa11x0_intr_establish(sa11x0_chipset_tag_t, int, int, int,
+void *sa11x0_intr_establish(sa11x0_chipset_tag_t, int, int, int, 
 			    int (*)(void *), void *);
 void sa11x0_intr_disestablish(sa11x0_chipset_tag_t, void *);
 

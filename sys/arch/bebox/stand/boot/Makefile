@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.32 2012/09/01 00:29:00 matt Exp $
+#	$NetBSD: Makefile,v 1.25 2008/05/26 16:28:39 kiyohara Exp $
 
 NOMAN= # defined
 
@@ -23,15 +23,13 @@ NEWVERSWHAT=	"BOOT"
 SRCS= srt0.s
 SRCS+= boot.c clock.c com.c conf.c cons.c cpu.c devopen.c
 SRCS+= fd.c filesystem.c inkernel.c io.c kbd.c monitor.c ns16550.c
-SRCS+= pci.c prf.c sd.c siop.c tgets.c vers.c vga.c video.c vreset.c wdc.c wd.c
+SRCS+= prf.c tgets.c vers.c vga.c video.c vreset.c
 SRCS+= setjmp.S
 
 CFLAGS= -Wno-main -ffreestanding
-AFLAGS= -x assembler-with-cpp
+AFLAGS= -x assembler-with-cpp -traditional-cpp
 
-CPPFLAGS= -nostdinc
-CPPFLAGS+= -I${.OBJDIR} -I${S} -I${COMMONLIBDIR}/include -I${S}/lib/libsa
-CPPFLAGS+= -I${ELF2PEF}
+CPPFLAGS= -nostdinc -I${.OBJDIR} -I${ELF2PEF} -I${S} -I${COMMONLIBDIR}/include
 CPPFLAGS+= -Werror -Wall -Wstrict-prototypes -Wmissing-prototypes
 CPPFLAGS+= -D_STANDALONE -DRELOC=${RELOC} -DUSE_SCAN
 CPPFLAGS+= -D__daddr_t=int32_t
@@ -74,11 +72,10 @@ powerpc::
 .endif
 
 vers.c: ${.CURDIR}/../boot/version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
-	    ${.CURDIR}/../boot/version "bebox" ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/../boot/version \
+		"bebox" ${NEWVERSWHAT}
 
 ${PROG}: ${OBJS} ${LIBS}
-	${_MKTARGET_LINK}
 	${LD} -o ${PROG}.elf -N -T ${.CURDIR}/../boot/ld.script \
 		-Ttext ${RELOC} ${OBJS} ${LIBS}
 	${STRIP} -o ${PROG} ${PROG}.elf

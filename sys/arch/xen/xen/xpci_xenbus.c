@@ -1,4 +1,4 @@
-/*      $NetBSD: xpci_xenbus.c,v 1.12 2012/12/05 01:46:22 jakllsch Exp $      */
+/*      $NetBSD: xpci_xenbus.c,v 1.2.6.3 2009/10/04 00:00:14 snj Exp $      */
 
 /*
  * Copyright (c) 2009 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,10 +31,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xpci_xenbus.c,v 1.12 2012/12/05 01:46:22 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xpci_xenbus.c,v 1.2.6.3 2009/10/04 00:00:14 snj Exp $");
 
 #include "opt_xen.h"
-
+#include "rnd.h"
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -48,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: xpci_xenbus.c,v 1.12 2012/12/05 01:46:22 jakllsch Ex
 #include <xen/hypervisor.h>
 #include <xen/evtchn.h>
 #include <xen/granttables.h>
-#include <xen/xen-public/io/pciif.h>
+#include <xen/xen3-public/io/pciif.h>
 #include <xen/xenbus.h>
 
 #include "locators.h"
@@ -91,26 +96,56 @@ CFATTACH_DECL_NEW(xpci_xenbus, sizeof(struct xpci_xenbus_softc),
    xpci_xenbus_match, xpci_xenbus_attach, xpci_xenbus_detach, NULL);
 
 struct x86_bus_dma_tag pci_bus_dma_tag = {
-	._tag_needs_free	= 0,
+	0,			     /* tag_needs_free */
 #if defined(_LP64) || defined(PAE)
-	._bounce_thresh		= PCI32_DMA_BOUNCE_THRESHOLD,
-	._bounce_alloc_lo	= 0,
-	._bounce_alloc_hi	= PCI32_DMA_BOUNCE_THRESHOLD,
+	PCI32_DMA_BOUNCE_THRESHOLD,     /* bounce_thresh */
+	0,       			/* bounce_alloclo */
+	PCI32_DMA_BOUNCE_THRESHOLD,     /* bounce_allochi */
 #else
-	._bounce_thresh		= 0,
-	._bounce_alloc_lo	= 0,
-	._bounce_alloc_hi	= 0,
+	0,
+	0,
+	0,
 #endif
-	._may_bounce		= NULL,
+	NULL,		  /* _may_bounce */
+	_bus_dmamap_create,
+	_bus_dmamap_destroy,
+	_bus_dmamap_load,
+	_bus_dmamap_load_mbuf,
+	_bus_dmamap_load_uio,
+	_bus_dmamap_load_raw,
+	_bus_dmamap_unload,
+	_bus_dmamap_sync,
+	_bus_dmamem_alloc,
+	_bus_dmamem_free,
+	_bus_dmamem_map,
+	_bus_dmamem_unmap,
+	_bus_dmamem_mmap,
+	_bus_dmatag_subregion,
+	_bus_dmatag_destroy,
 };
 
 #ifdef _LP64
 struct x86_bus_dma_tag pci_bus_dma64_tag = {
-	._tag_needs_free	= 0,
-	._bounce_thresh		= 0,
-	._bounce_alloc_lo	= 0,
-	._bounce_alloc_hi	= 0,
-	._may_bounce		= NULL,
+	0,			     /* tag_needs_free */
+	0,
+	0,
+	0,
+	NULL,		  /* _may_bounce */
+	_bus_dmamap_create,
+	_bus_dmamap_destroy,
+	_bus_dmamap_load,
+	_bus_dmamap_load_mbuf,
+	_bus_dmamap_load_uio,
+	_bus_dmamap_load_raw,
+	_bus_dmamap_unload,
+	NULL,
+	_bus_dmamem_alloc,
+	_bus_dmamem_free,
+	_bus_dmamem_map,
+	_bus_dmamem_unmap,
+	_bus_dmamem_mmap,
+	_bus_dmatag_subregion,
+	_bus_dmatag_destroy,
 };
 #endif
 
@@ -352,15 +387,15 @@ xpci_attach_pcibus(int domain, int busn)
 	struct pcibus_attach_args pba;
 
 	memset(&pba, 0, sizeof(struct pcibus_attach_args));
-	pba.pba_iot = x86_bus_space_io;
-	pba.pba_memt = x86_bus_space_mem;
+	pba.pba_iot = X86_BUS_SPACE_IO;
+	pba.pba_memt = X86_BUS_SPACE_MEM;
 	pba.pba_dmat = &pci_bus_dma_tag;
 #ifdef _LP64
 	pba.pba_dmat64 = &pci_bus_dma64_tag;
 #else
 	pba.pba_dmat64 = NULL;
 #endif /* _LP64 */
-	pba.pba_flags = PCI_FLAGS_MEM_OKAY | PCI_FLAGS_IO_OKAY |
+	pba.pba_flags = PCI_FLAGS_MEM_ENABLED | PCI_FLAGS_IO_ENABLED |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 	pba.pba_bridgetag = NULL;
 	pba.pba_bus = busn;
@@ -423,7 +458,7 @@ xpci_do_op(struct xen_pci_op *op)
 	   _XEN_PCIF_active)) {
 		hypervisor_clear_event(xpci_sc->sc_evtchn);
 		/* HYPERVISOR_yield(); */
-	}
+	} 
 	memcpy(op, active_op, sizeof(struct xen_pci_op));
 	__cpu_simple_unlock(&pci_conf_lock);
 	splx(s);
@@ -499,7 +534,7 @@ xpci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, int size,
 	op.bus = bus;
 	op.devfn = (dev << 3) | func;
 	op.offset = reg;
-	op.size   = size;
+	op.size   = 4;
 	op.value = data;
 	xpci_do_op(&op);
 	DPRINTF((" err %d\n", op.err));
@@ -531,7 +566,7 @@ pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 
 int
 xpci_enumerate_bus(struct pci_softc *sc, const int *locators,
-    int (*match)(const struct pci_attach_args *), struct pci_attach_args *pap)
+    int (*match)(struct pci_attach_args *), struct pci_attach_args *pap)
 {
 #if 0
 	char *string;

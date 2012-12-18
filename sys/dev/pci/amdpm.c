@@ -1,4 +1,4 @@
-/*	$NetBSD: amdpm.c,v 1.36 2012/10/27 17:18:28 chs Exp $	*/
+/*	$NetBSD: amdpm.c,v 1.30 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdpm.c,v 1.36 2012/10/27 17:18:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdpm.c,v 1.30 2008/04/28 20:23:54 martin Exp $");
 
 #include "opt_amdpm.h"
 
@@ -61,7 +61,8 @@ static void	amdpm_rnd_callout(void *);
 #endif
 
 static int
-amdpm_match(device_t parent, cfdata_t match, void *aux)
+amdpm_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -83,17 +84,19 @@ amdpm_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-amdpm_attach(device_t parent, device_t self, void *aux)
+amdpm_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct amdpm_softc *sc = device_private(self);
+	struct amdpm_softc *sc = (struct amdpm_softc *) self;
 	struct pci_attach_args *pa = aux;
+	char devinfo[256];
 	pcireg_t confreg, pmptrreg;
 	u_int32_t pmreg;
 	int i;
 
-	pci_aprint_devinfo(pa, NULL);
-
-	sc->sc_dev = self;
+	aprint_naive("\n");
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
+	    PCI_REVISION(pa->pa_class));
 
 	if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_NVIDIA_XBOX_SMBUS)
 		sc->sc_nforce = 1;
@@ -106,7 +109,7 @@ amdpm_attach(device_t parent, device_t self, void *aux)
 	sc->sc_pa = pa;
 
 #if 0
-	aprint_normal_dev(self, "");
+	aprint_normal_dev(&sc->sc_dev, "");
 	pci_conf_print(pa->pa_pc, pa->pa_tag, NULL);
 #endif
 
@@ -122,24 +125,24 @@ amdpm_attach(device_t parent, device_t self, void *aux)
 	confreg = pci_conf_read(pa->pa_pc, pa->pa_tag, AMDPM_CONFREG);
 
 	if ((confreg & AMDPM_PMIOEN) == 0) {
-		aprint_error_dev(self, "PMxx space isn't enabled\n");
+		aprint_error_dev(&sc->sc_dev, "PMxx space isn't enabled\n");
 		return;
 	}
 
 	if (sc->sc_nforce) {
 		pmptrreg = pci_conf_read(pa->pa_pc, pa->pa_tag, NFORCE_PMPTR);
-		aprint_normal_dev(self, "power management at 0x%04x\n",
+		aprint_normal_dev(&sc->sc_dev, "power management at 0x%04x\n",
 		    NFORCE_PMBASE(pmptrreg));
 		if (bus_space_map(sc->sc_iot, NFORCE_PMBASE(pmptrreg),
 		    AMDPM_PMSIZE, 0, &sc->sc_ioh)) {
-			aprint_error_dev(self, "failed to map PMxx space\n");
+			aprint_error_dev(&sc->sc_dev, "failed to map PMxx space\n");
 			return;
 		}
 	} else {
 		pmptrreg = pci_conf_read(pa->pa_pc, pa->pa_tag, AMDPM_PMPTR);
 		if (bus_space_map(sc->sc_iot, AMDPM_PMBASE(pmptrreg),
 		    AMDPM_PMSIZE, 0, &sc->sc_ioh)) {
-			aprint_error_dev(self, "failed to map PMxx space\n");
+			aprint_error_dev(&sc->sc_dev, "failed to map PMxx space\n");
 			return;
 		}
 	}
@@ -147,13 +150,12 @@ amdpm_attach(device_t parent, device_t self, void *aux)
 	/* don't attach a timecounter on nforce boards */
 	if ((confreg & AMDPM_TMRRST) == 0 && (confreg & AMDPM_STOPTMR) == 0 &&
 	    !sc->sc_nforce) {
-		acpipmtimer_attach(self, sc->sc_iot, sc->sc_ioh,
+		acpipmtimer_attach(&sc->sc_dev, sc->sc_iot, sc->sc_ioh,
 		  AMDPM_TMR, ((confreg & AMDPM_TMR32) ? ACPIPMT_32BIT : 0));
 	}
 
 	/* try to attach devices on the smbus */
 	if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_AMD_PBC8111_ACPI ||
-	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_AMD_PBC768_PMC ||
 	    sc->sc_nforce) {
 		amdpm_smbus_attach(sc);
 	}
@@ -170,12 +172,12 @@ amdpm_attach(device_t parent, device_t self, void *aux)
 			delay(1);
 		}
 		if ((pmreg & AMDPM_RNGDONE) != 0) {
-			aprint_normal_dev(self, ""
+			aprint_normal_dev(&sc->sc_dev, ""
 			    "random number generator enabled (apprx. %dms)\n",
 			    i);
 			callout_init(&sc->sc_rnd_ch, 0);
 			rnd_attach_source(&sc->sc_rnd_source,
-			    device_xname(self), RND_TYPE_RNG,
+			    device_xname(&sc->sc_dev), RND_TYPE_RNG,
 			    /*
 			     * XXX Careful!  The use of RND_FLAG_NO_ESTIMATE
 			     * XXX here is unobvious: we later feed raw bits
@@ -190,12 +192,12 @@ amdpm_attach(device_t parent, device_t self, void *aux)
 			    RND_FLAG_NO_ESTIMATE);
 #ifdef AMDPM_RND_COUNTERS
 			evcnt_attach_dynamic(&sc->sc_rnd_hits, EVCNT_TYPE_MISC,
-			    NULL, device_xname(self), "rnd hits");
+			    NULL, device_xname(&sc->sc_dev), "rnd hits");
 			evcnt_attach_dynamic(&sc->sc_rnd_miss, EVCNT_TYPE_MISC,
-			    NULL, device_xname(self), "rnd miss");
+			    NULL, device_xname(&sc->sc_dev), "rnd miss");
 			for (i = 0; i < 256; i++) {
 				evcnt_attach_dynamic(&sc->sc_rnd_data[i],
-				    EVCNT_TYPE_MISC, NULL, device_xname(self),
+				    EVCNT_TYPE_MISC, NULL, device_xname(&sc->sc_dev),
 				    "rnd data");
 			}
 #endif
@@ -204,7 +206,7 @@ amdpm_attach(device_t parent, device_t self, void *aux)
 	}
 }
 
-CFATTACH_DECL_NEW(amdpm, sizeof(struct amdpm_softc),
+CFATTACH_DECL(amdpm, sizeof(struct amdpm_softc),
     amdpm_match, amdpm_attach, NULL, NULL);
 
 static void

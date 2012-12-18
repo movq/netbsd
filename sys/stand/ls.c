@@ -1,4 +1,4 @@
-/*	$NetBSD: ls.c,v 1.17 2011/09/27 01:08:55 christos Exp $	*/
+/*	$NetBSD: ls.c,v 1.13 2005/12/11 12:25:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993\n\
 #if 0
 static char sccsid[] = "@(#)ls.c	8.1 (Berkeley) 6/11/93";
 #else
-__RCSID("$NetBSD: ls.c,v 1.17 2011/09/27 01:08:55 christos Exp $");
+__RCSID("$NetBSD: ls.c,v 1.13 2005/12/11 12:25:20 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,11 +51,11 @@ __RCSID("$NetBSD: ls.c,v 1.17 2011/09/27 01:08:55 christos Exp $");
 #include <sys/ttychars.h>
 #include <lib/libsa/stand.h>
 
-int main(void);
-static void ls(int);
+int main __P((void));
+static void ls __P((int));
 
 int
-main(void)
+main()
 {
 	struct stat st;
 	int fd;
@@ -83,7 +83,8 @@ main(void)
 
 typedef struct dirent	DP;
 static void
-ls(register int fd)
+ls(fd)
+	register int fd;
 {
 	register int size;
 	register char *dp;
@@ -96,7 +97,7 @@ ls(register int fd)
 		    dp += ((DP *)dp)->d_reclen) {
 			if (((DP *)dp)->d_fileno == 0)
 				continue;
-			if (((DP *)dp)->d_namlen > NAME_MAX + 1) {
+			if (((DP *)dp)->d_namlen > MAXNAMLEN+1) {
 				printf("Corrupt file name length!  Run fsck soon!\n");
 				return;
 			}

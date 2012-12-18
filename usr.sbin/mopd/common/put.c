@@ -1,4 +1,4 @@
-/*	$NetBSD: put.c,v 1.7 2011/05/24 13:08:16 joerg Exp $	*/
+/*	$NetBSD: put.c,v 1.3 1997/10/16 23:25:01 lukem Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: put.c,v 1.7 2011/05/24 13:08:16 joerg Exp $");
+__RCSID("$NetBSD: put.c,v 1.3 1997/10/16 23:25:01 lukem Exp $");
 #endif
 
 #include "os.h"
@@ -34,52 +39,66 @@ __RCSID("$NetBSD: put.c,v 1.7 2011/05/24 13:08:16 joerg Exp $");
 #include "put.h"
 
 void
-mopPutChar(u_char *pkt, int *idx, u_char value)
+mopPutChar(pkt, index, value)
+	u_char  *pkt;
+	int     *index;
+	u_char   value;
 {
-	pkt[*idx] = value;
-	*idx = *idx + 1;
+	pkt[*index] = value;
+	*index = *index + 1;
 }
 
 void
-mopPutShort(u_char *pkt, int *idx, u_short value)
+mopPutShort(pkt, index, value)
+	u_char  *pkt;
+	int     *index;
+	u_short  value;
 {
         int i;
 	for (i = 0; i < 2; i++) {
-	  pkt[*idx+i] = value % 256;
+	  pkt[*index+i] = value % 256;
 	  value = value / 256;
 	}
-	*idx = *idx + 2;
+	*index = *index + 2;
 }
 
 void
-mopPutLong(u_char *pkt, int *idx, u_int32_t value)
+mopPutLong(pkt, index, value)
+	u_char	       *pkt;
+	int	       *index;
+	u_int32_t	value;
 {
         int i;
 	for (i = 0; i < 4; i++) {
-	  pkt[*idx+i] = value % 256;
+	  pkt[*index+i] = value % 256;
 	  value = value / 256;
 	}
-	*idx = *idx + 4;
+	*index = *index + 4;
 }
 
 void
-mopPutMulti(u_char *pkt, int *idx, const u_char *value, int size)
+mopPutMulti(pkt, index, value, size)
+	u_char *pkt,*value;
+	int    *index,size;
 {
 	int i;
 
 	for (i = 0; i < size; i++) {
-	  pkt[*idx+i] = value[i];
+	  pkt[*index+i] = value[i];
 	}  
-	*idx = *idx + size;
+	*index = *index + size;
 }
 
 void
-mopPutTime(u_char *pkt, int *idx, time_t value)
+mopPutTime(pkt, index, value)
+	u_char *pkt;
+	int    *index;
+	time_t	value;
 {
 	time_t tnow;
 	struct tm *timenow;
 
-	if (value == 0) {
+	if ((value == 0)) {
 	  tnow = time(NULL);
 	} else {
 	  tnow = value;
@@ -87,71 +106,78 @@ mopPutTime(u_char *pkt, int *idx, time_t value)
 
 	timenow = localtime(&tnow);
 
-	mopPutChar (pkt,idx,10);
-	mopPutChar (pkt,idx,(timenow->tm_year / 100) + 19);
-	mopPutChar (pkt,idx,(timenow->tm_year % 100));
-	mopPutChar (pkt,idx,(timenow->tm_mon + 1));
-	mopPutChar (pkt,idx,(timenow->tm_mday));
-	mopPutChar (pkt,idx,(timenow->tm_hour));
-	mopPutChar (pkt,idx,(timenow->tm_min));
-	mopPutChar (pkt,idx,(timenow->tm_sec));
-	mopPutChar (pkt,idx,0x00);
-	mopPutChar (pkt,idx,0x00);
-	mopPutChar (pkt,idx,0x00);
+	mopPutChar (pkt,index,10);
+	mopPutChar (pkt,index,(timenow->tm_year / 100) + 19);
+	mopPutChar (pkt,index,(timenow->tm_year % 100));
+	mopPutChar (pkt,index,(timenow->tm_mon + 1));
+	mopPutChar (pkt,index,(timenow->tm_mday));
+	mopPutChar (pkt,index,(timenow->tm_hour));
+	mopPutChar (pkt,index,(timenow->tm_min));
+	mopPutChar (pkt,index,(timenow->tm_sec));
+	mopPutChar (pkt,index,0x00);
+	mopPutChar (pkt,index,0x00);
+	mopPutChar (pkt,index,0x00);
 }
 
 void
-mopPutHeader(u_char *pkt, int *idx, const u_char *dst, const u_char *src,
-	     u_short proto, int trans)
+mopPutHeader(pkt, index, dst, src, proto, trans)
+	u_char  *pkt;
+	int     *index;
+	u_char	 dst[], src[];
+	u_short	 proto;
+	int	 trans;
 {
 	
-	mopPutMulti(pkt, idx, dst, 6);
-	mopPutMulti(pkt, idx, src, 6);
+	mopPutMulti(pkt, index, dst, 6);
+	mopPutMulti(pkt, index, src, 6);
 	if (trans == TRANS_8023) {
-		mopPutShort(pkt, idx, 0);
-		mopPutChar (pkt, idx, MOP_K_PROTO_802_DSAP);
-		mopPutChar (pkt, idx, MOP_K_PROTO_802_SSAP);
-		mopPutChar (pkt, idx, MOP_K_PROTO_802_CNTL);
-		mopPutChar (pkt, idx, 0x08);
-		mopPutChar (pkt, idx, 0x00);
-		mopPutChar (pkt, idx, 0x2b);
+		mopPutShort(pkt, index, 0);
+		mopPutChar (pkt, index, MOP_K_PROTO_802_DSAP);
+		mopPutChar (pkt, index, MOP_K_PROTO_802_SSAP);
+		mopPutChar (pkt, index, MOP_K_PROTO_802_CNTL);
+		mopPutChar (pkt, index, 0x08);
+		mopPutChar (pkt, index, 0x00);
+		mopPutChar (pkt, index, 0x2b);
 	}
 #if !defined(__FreeBSD__)
-	mopPutChar(pkt, idx, (proto / 256));
-	mopPutChar(pkt, idx, (proto % 256));
+	mopPutChar(pkt, index, (proto / 256));
+	mopPutChar(pkt, index, (proto % 256));
 #else
 	if (trans == TRANS_8023) {
-		mopPutChar(pkt, idx, (proto / 256));
-		mopPutChar(pkt, idx, (proto % 256));
+		mopPutChar(pkt, index, (proto / 256));
+		mopPutChar(pkt, index, (proto % 256));
 	} else {
-		mopPutChar(pkt, idx, (proto % 256));
-		mopPutChar(pkt, idx, (proto / 256));
+		mopPutChar(pkt, index, (proto % 256));
+		mopPutChar(pkt, index, (proto / 256));
 	}
 #endif
 	if (trans == TRANS_ETHER)
-		mopPutShort(pkt, idx, 0);
+		mopPutShort(pkt, index, 0);
 
 }
 
 void
-mopPutLength(u_char *pkt, int trans, u_short len)
+mopPutLength(pkt, trans, len)
+	u_char  *pkt;
+	int	 trans;
+	u_short	 len;
 {
-	int	 idx = 0;
+	int	 index = 0;
 	
 	switch(trans) {
 	case TRANS_ETHER:
-		idx = 14;
-		mopPutChar(pkt, &idx, ((len - 16) % 256));
-		mopPutChar(pkt, &idx, ((len - 16) / 256));
+		index = 14;
+		mopPutChar(pkt, &index, ((len - 16) % 256));
+		mopPutChar(pkt, &index, ((len - 16) / 256));
 		break;
 	case TRANS_8023:
-		idx = 12;
+		index = 12;
 #if !defined(__FreeBSD__)
-		mopPutChar(pkt, &idx, ((len - 14) / 256));
-		mopPutChar(pkt, &idx, ((len - 14) % 256));
+		mopPutChar(pkt, &index, ((len - 14) / 256));
+		mopPutChar(pkt, &index, ((len - 14) % 256));
 #else
-		mopPutChar(pkt, &idx, ((len - 14) % 256));
-		mopPutChar(pkt, &idx, ((len - 14) / 256));
+		mopPutChar(pkt, &index, ((len - 14) % 256));
+		mopPutChar(pkt, &index, ((len - 14) / 256));
 #endif
 		break;
 	}

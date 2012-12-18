@@ -1,4 +1,4 @@
-/* $NetBSD: irongate_bus_mem.c,v 1.11 2012/02/06 02:14:14 matt Exp $ */
+/* $NetBSD: irongate_bus_mem.c,v 1.8 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(1, "$NetBSD: irongate_bus_mem.c,v 1.11 2012/02/06 02:14:14 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: irongate_bus_mem.c,v 1.8 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,7 +39,9 @@ __KERNEL_RCSID(1, "$NetBSD: irongate_bus_mem.c,v 1.11 2012/02/06 02:14:14 matt E
 #include <sys/syslog.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <uvm/uvm_extern.h>
+
+#include <machine/bus.h>
 
 #include <alpha/pci/irongatereg.h>
 #include <alpha/pci/irongatevar.h>
@@ -51,9 +53,9 @@ __KERNEL_RCSID(1, "$NetBSD: irongate_bus_mem.c,v 1.11 2012/02/06 02:14:14 matt E
 
 #define	CHIP_MEM_SYS_START(v)	IRONGATE_MEM_BASE
 
-/*
- * AMD 751 core logic appears on EV6.  We require at least EV56
- * support for the assembler to emit BWX opcodes.
+/* 
+ * AMD 751 core logic appears on EV6.  We require at least EV56 
+ * support for the assembler to emit BWX opcodes. 
  */
 __asm(".arch ev6");
 

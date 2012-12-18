@@ -1,4 +1,4 @@
-/*	$NetBSD: schedule.c,v 1.11 2009/05/24 22:55:03 dholland Exp $	*/
+/*	$NetBSD: schedule.c,v 1.6.26.1 2009/04/01 21:41:49 snj Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)schedule.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: schedule.c,v 1.11 2009/05/24 22:55:03 dholland Exp $");
+__RCSID("$NetBSD: schedule.c,v 1.6.26.1 2009/04/01 21:41:49 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,25 +54,28 @@ __RCSID("$NetBSD: schedule.c,v 1.11 2009/05/24 22:55:03 dholland Exp $");
 **	The address of the slot is returned.
 */
 
-struct event *
-schedule(int type, double offset, int x, int y, int z)
+struct event *schedule(type, offset, x, y, z)
+int	type;
+double	offset;
+char	x, y;
+char	z;
 {
 	struct event	*e;
 	int		i;
 	double			date;
 
 	date = Now.date + offset;
-	for (i = 0; i < MAXEVENTS; i++) {
+	for (i = 0; i < MAXEVENTS; i++)
+	{
 		e = &Event[i];
 		if (e->evcode)
 			continue;
 		/* got a slot */
-#ifdef xTRACE
+#		ifdef xTRACE
 		if (Trace)
-			printf("schedule: type %d @ %.2f "
-			       "slot %d parm %d %d %d\n",
+			printf("schedule: type %d @ %.2f slot %d parm %d %d %d\n",
 				type, date, i, x, y, z);
-#endif
+#		endif
 		e->evcode = type;
 		e->date = date;
 		e->x = x;
@@ -93,7 +96,9 @@ schedule(int type, double offset, int x, int y, int z)
 */
 
 void
-reschedule(struct event *e1, double offset)
+reschedule(e1, offset)
+struct event	*e1;
+double		offset;
 {
 	double			date;
 	struct event	*e;
@@ -102,11 +107,11 @@ reschedule(struct event *e1, double offset)
 
 	date = Now.date + offset;
 	e->date = date;
-#ifdef xTRACE
+#	ifdef xTRACE
 	if (Trace)
 		printf("reschedule: type %d parm %d %d %d @ %.2f\n",
 			e->evcode, e->x, e->y, e->systemname, date);
-#endif
+#	endif
 	return;
 }
 
@@ -118,17 +123,18 @@ reschedule(struct event *e1, double offset)
 */
 
 void
-unschedule(struct event *e1)
+unschedule(e1)
+struct event	*e1;
 {
 	struct event	*e;
 
 	e = e1;
 
-#ifdef xTRACE
+#	ifdef xTRACE
 	if (Trace)
 		printf("unschedule: type %d @ %.2f parm %d %d %d\n",
 			e->evcode, e->date, e->x, e->y, e->systemname);
-#endif
+#	endif
 	Now.eventptr[e->evcode & E_EVENT] = 0;
 	e->date = TOOLARGE;
 	e->evcode = 0;
@@ -143,15 +149,15 @@ unschedule(struct event *e1)
 **	figure.
 */
 
-struct event *
-xsched(int ev1, int factor, int x, int y, int z)
+struct event *xsched(ev1, factor, x, y, z)
+int	ev1;
+int	factor;
+int	x, y, z;
 {
 	int	ev;
-	double when;
 
 	ev = ev1;
-	when = -Param.eventdly[ev] * Param.time * log(franf()) / factor;
-	return (schedule(ev, when, x, y, z));
+	return (schedule(ev, -Param.eventdly[ev] * Param.time * log(franf()) / factor, x, y, z));
 }
 
 
@@ -163,14 +169,15 @@ xsched(int ev1, int factor, int x, int y, int z)
 */
 
 void
-xresched(struct event *e1, int ev1, int factor)
+xresched(e1, ev1, factor)
+struct event	*e1;
+int		ev1;
+int		factor;
 {
 	int		ev;
 	struct event	*e;
-	double when;
 
 	ev = ev1;
 	e = e1;
-	when = -Param.eventdly[ev] * Param.time * log(franf()) / factor;
-	reschedule(e, when);
+	reschedule(e, -Param.eventdly[ev] * Param.time * log(franf()) / factor);
 }

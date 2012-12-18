@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#	$NetBSD: osrelease.sh,v 1.122 2012/02/16 23:56:57 christos Exp $
+#	$NetBSD: osrelease.sh,v 1.115.4.2 2011/11/03 17:54:03 riz Exp $
 #
 # Copyright (c) 1997 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -32,71 +32,23 @@
 
 # We use the number specified in <sys/param.h>
 
-path="$0"
-[ "${path#/*}" = "$path" ] && path="./$path"
-exec < ${path%/*}/../sys/param.h
+AWK=${AWK:-awk}
+SED=${TOOL_SED:-sed}
+PARAMH="`dirname $0`"/../sys/param.h
+release=`$AWK '/^#define[ 	]*__NetBSD_Version__/ { print $6 }' $PARAMH`
 
-# Search for line
-# #define __NetBSD_Version__ <ver_num> /* NetBSD <ver_text> */
-#
-# <ver_num> and <ver_text> should match!
+# default: return nn.nn.nn
+# -m: return the major number -- -current is the number of the next release
+# -s: return nnnnnn (no dots)
 
-while
-	read define ver_tag rel_num comment_start NetBSD rel_text rest || exit 1
-do
-	[ "$define" = "#define" ] || continue;
-	[ "$ver_tag" = "__NetBSD_Version__" ] || continue
-	break
-done
-
-# default: return MM.mm.pp
-# -m: return MM, representing only the major number; however, for -current,
-#     return the next major number (e.g. for 5.99.nn, return 6)
-# -n: return MM.mm
-# -s: return MMmmpp (no dots)
-# -k: return MM.mm on release branch, MM.mm.pp on current.
-
-option="$1"
-
-# ${rel_num} is [M]Mmm00pp00
-rel_num=${rel_num%??}
-rel_MMmm=${rel_num%????}
-rel_MM=${rel_MMmm%??}
-rel_mm=${rel_MMmm#${rel_MM}}
-# rel_pp=${rel_num#${rel_MMmm}00}
-
-# Get patch from text version
-IFS=.
-set -- - $rel_text
-beta=${3#[0-9]}
-beta=${beta#[0-9]}
-shift 3
-IFS=' '
-set -- $rel_MM ${rel_mm#0}$beta $*
-
-case "$option" in
--k)
-	if [ ${rel_mm#0} = 99 ]
-	then
-		IFS=.
-		echo "$*"
-	else
-		echo "${rel_MM}.${rel_mm#0}"
-	fi
-	;;
-	     
+case $1 in
 -m)
-	echo "$(((${rel_MMmm}+1)/100))"
-	;;
--n)
-	echo "${rel_MM}.${rel_mm#0}"
+	echo $release | $AWK -F. '{print int($1+$2/100+0.01)}'
 	;;
 -s)
-	IFS=
-	echo "$*"
+	echo $release | $SED -e 's,\.,,g'
 	;;
 *)
-	IFS=.
-	echo "$*"
+	echo $release
 	;;
 esac

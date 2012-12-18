@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.69 2012/04/07 16:44:10 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.64 2008/07/20 01:20:22 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)main.c	8.6 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.69 2012/04/07 16:44:10 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.64 2008/07/20 01:20:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -65,7 +65,6 @@ __RCSID("$NetBSD: main.c,v 1.69 2012/04/07 16:44:10 christos Exp $");
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <util.h>
 
 #include "dump.h"
 #include "pathnames.h"
@@ -86,6 +85,7 @@ int	readblksize = 32 * 1024; /* read block size */
 char    default_time_string[] = "%T %Z"; /* default timestamp string */
 char    *time_string = default_time_string; /* timestamp string */
 
+int	main(int, char *[]);
 static long numarg(const char *, long, long);
 static void obsolete(int *, char **[]);
 static void usage(void);
@@ -108,7 +108,6 @@ main(int argc, char *argv[])
 	char *mountpoint;
 	int just_estimate = 0;
 	char labelstr[LBLSIZE];
-	char buf[MAXPATHLEN], rbuf[MAXPATHLEN];
 	char *new_time_format;
 	char *snap_backup = NULL;
 
@@ -135,7 +134,7 @@ main(int argc, char *argv[])
 
 	obsolete(&argc, &argv);
 	while ((ch = getopt(argc, argv,
-	    "0123456789aB:b:cd:eFf:h:ik:l:L:nr:s:StT:uWwx:X")) != -1)
+	    "0123456789aB:b:cd:eFf:h:k:l:L:nr:s:StT:uWwx:X")) != -1)
 		switch (ch) {
 		/* dump level */
 		case '0': case '1': case '2': case '3': case '4':
@@ -180,11 +179,6 @@ main(int argc, char *argv[])
 
 		case 'h':
 			honorlevel = numarg("honor level", 0L, 10L);
-			break;
-
-		case 'i':	/* "true incremental" regardless level */
-			level = 'i';
-			trueinc = 1;
 			break;
 
 		case 'k':
@@ -295,10 +289,7 @@ main(int argc, char *argv[])
 			break;
 		}
 		if ((dt = fstabsearch(argv[i])) != NULL) {
-			if (getfsspecname(buf, sizeof(buf), dt->fs_spec)
-			    == NULL)
-				quit("%s (%s)", buf, strerror(errno));
-			disk = buf;
+			disk = dt->fs_spec;
 			mountpoint = xstrdup(dt->fs_file);
 			goto multicheck;
 		}
@@ -406,19 +397,11 @@ main(int argc, char *argv[])
 	mountpoint = NULL;
 	mntinfo = mntinfosearch(disk);
 	if ((dt = fstabsearch(disk)) != NULL) {
-		if (getfsspecname(buf, sizeof(buf), dt->fs_spec) == NULL)
-			quit("%s (%s)", buf, strerror(errno));
-		if (getdiskrawname(rbuf, sizeof(rbuf), buf) == NULL)
-			quit("Can't get disk raw name for `%s' (%s)",
-			    buf, strerror(errno));
-		disk = rbuf;
+		disk = rawname(dt->fs_spec);
 		mountpoint = dt->fs_file;
 		msg("Found %s on %s in %s\n", disk, mountpoint, _PATH_FSTAB);
 	} else if (mntinfo != NULL) {
-		if (getdiskrawname(rbuf, sizeof(rbuf), mntinfo->f_mntfromname)
-		    == NULL)
-			quit("Can't get disk raw name for `%s' (%s)",
-			    mntinfo->f_mntfromname, strerror(errno));
+		disk = rawname(mntinfo->f_mntfromname);
 		mountpoint = mntinfo->f_mntonname;
 		msg("Found %s on %s in mount table\n", disk, mountpoint);
 	}
@@ -482,8 +465,7 @@ main(int argc, char *argv[])
 
 	needswap = fs_read_sblock(sblock_buf);
 
-	/* true incremental is always a level 10 dump */
-	spcl.c_level = trueinc? iswap32(10): iswap32(level - '0');
+	spcl.c_level = iswap32(level - '0');
 	spcl.c_type = iswap32(TS_TAPE);
 	spcl.c_date = iswap32(spcl.c_date);
 	spcl.c_ddate = iswap32(spcl.c_ddate);
@@ -673,9 +655,9 @@ usage(void)
 	const char *prog = getprogname();
 
 	(void)fprintf(stderr,
-"usage: %s [-0123456789aceFinStuX] [-B records] [-b blocksize]\n"
+"usage: %s [-0123456789aceFnStuX] [-B records] [-b blocksize]\n"
 "            [-d density] [-f file] [-h level] [-k read-blocksize]\n"
-"            [-L label] [-l timeout] [-r cachesize] [-s feet]\n"
+"            [-L label] [-l timeout] [-r read-cache] [-s feet]\n"
 "            [-T date] [-x snap-backup] files-to-dump\n"
 "       %s [-W | -w]\n", prog, prog);
 	exit(X_STARTUP);
@@ -725,6 +707,20 @@ sig(int signo)
 		(void)kill(0, SIGSEGV);
 		/* NOTREACHED */
 	}
+}
+
+char *
+rawname(char *cp)
+{
+	static char rawbuf[MAXPATHLEN];
+	char *dp = strrchr(cp, '/');
+
+	if (dp == NULL)
+		return (NULL);
+	*dp = '\0';
+	(void)snprintf(rawbuf, sizeof rawbuf, "%s/r%s", cp, dp + 1);
+	*dp = '/';
+	return (rawbuf);
 }
 
 /*

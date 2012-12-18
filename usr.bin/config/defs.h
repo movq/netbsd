@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.44 2012/06/08 08:56:45 martin Exp $	*/
+/*	$NetBSD: defs.h,v 1.24 2008/08/30 02:59:55 cube Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -65,29 +65,20 @@
 #ifndef __dead
 #define __dead
 #endif
-#ifndef __printflike
-#define __printflike(a, b)
-#endif
 #ifndef _PATH_DEVNULL
 #define _PATH_DEVNULL "/dev/null"
 #endif
 
 #ifdef	MAKE_BOOTSTRAP
 #undef	dev_t
-#undef	devmajor_t
-#undef	devminor_t
 #undef	NODEV
-#undef	NODEVMAJOR
 #undef	major
 #undef	minor
 #undef	makedev
-#define	dev_t		unsigned int	/* XXX: assumes int is 32 bits */
+#define	dev_t		int		/* XXX: assumes int is 32 bits */
 #define	NODEV		((dev_t)-1)
-#define devmajor_t	int
-#define devminor_t	int
-#define NODEVMAJOR	(-1)
-#define major(x)        ((devmajor_t)((((x) & 0x000fff00) >>  8)))
-#define minor(x)        ((devminor_t)((((x) & 0xfff00000) >> 12) | \
+#define major(x)        ((int)((((x) & 0x000fff00) >>  8)))
+#define minor(x)        ((int)((((x) & 0xfff00000) >> 12) | \
 			       (((x) & 0x000000ff) >>  0)))
 #define makedev(x,y)    ((dev_t)((((x) <<  8) & 0x000fff00) | \
                                  (((y) << 12) & 0xfff00000) | \
@@ -107,7 +98,7 @@ extern const char *progname;
  * The next two lines define the current version of the config(1) binary,
  * and the minimum version of the configuration files it supports.
  */
-#define CONFIG_VERSION		20100430
+#define CONFIG_VERSION		20080830
 #define CONFIG_MINVERSION	0
 
 /*
@@ -119,10 +110,11 @@ struct nvlist {
 	const char	*nv_name;
 	const char	*nv_str;
 	void		*nv_ptr;
-	long long	nv_num;
+	int		nv_int;
 	int		nv_ifunit;		/* XXX XXX XXX */
 	int		nv_flags;
 #define	NV_DEPENDED	1
+#define	NV_OBSOLETE	2
 };
 
 /*
@@ -134,19 +126,8 @@ struct config {
 	int	cf_lineno;		/* source line */
 	const char *cf_fstype;		/* file system type */
 	struct	nvlist *cf_root;	/* "root on ra0a" */
+	struct	nvlist *cf_swap;	/* "swap on ra0b and ra1b" */
 	struct	nvlist *cf_dump;	/* "dumps on ra0b" */
-};
-
-/*
- * Option definition list
- */
-struct defoptlist {
-	struct defoptlist *dl_next;
-	const char *dl_name;
-	const char *dl_value;
-	const char *dl_lintvalue;
-	int dl_obsolete;
-	struct nvlist *dl_depends;
 };
 
 /*
@@ -168,34 +149,12 @@ struct attr {
 	const char *a_name;		/* name of this attribute */
 	int	a_iattr;		/* true => allows children */
 	const char *a_devclass;		/* device class described */
-	struct	loclist *a_locs;	/* locators required */
+	struct	nvlist *a_locs;		/* locators required */
 	int	a_loclen;		/* length of above list */
 	struct	nvlist *a_devs;		/* children */
 	struct	nvlist *a_refs;		/* parents */
-	struct	attrlist *a_deps;	/* we depend on these other attrs */
+	struct	nvlist *a_deps;		/* we depend on these other attrs */
 	int	a_expanding;		/* to detect cycles in attr graph */
-};
-
-/*
- * List of attributes.
- */
-struct attrlist {
-	struct attrlist *al_next;
-	struct attr *al_this;
-};
-
-/*
- * List of locators. (Either definitions or uses...)
- *
- * XXX it would be nice if someone could clarify wtf ll_string and ll_num
- * are actually holding. (This stuff was previously stored in a very ad
- * hoc fashion, and the code is far from clear.)
- */
-struct loclist {
-	const char *ll_name;
-	const char *ll_string;
-	long long ll_num;
-	struct loclist *ll_next;
 };
 
 /*
@@ -241,8 +200,8 @@ struct devbase {
 	TAILQ_ENTRY(devbase) d_next;
 	int	d_isdef;		/* set once properly defined */
 	int	d_ispseudo;		/* is a pseudo-device */
-	devmajor_t d_major;		/* used for "root on sd0", e.g. */
-	struct	attrlist *d_attrs;	/* attributes, if any */
+	int	d_major;		/* used for "root on sd0", e.g. */
+	struct	nvlist *d_attrs;	/* attributes, if any */
 	int	d_umax;			/* highest unit number + 1 */
 	struct	devi *d_ihead;		/* first instance, if any */
 	struct	devi **d_ipp;		/* used for tacking on more instances */
@@ -258,7 +217,7 @@ struct deva {
 	int	d_isdef;		/* set once properly defined */
 	struct	devbase *d_devbase;	/* the base device */
 	struct	nvlist *d_atlist;	/* e.g., "at tg" (attr list) */
-	struct	attrlist *d_attrs;	/* attributes, if any */
+	struct	nvlist *d_attrs;	/* attributes, if any */
 	struct	devi *d_ihead;		/* first instance, if any */
 	struct	devi **d_ipp;		/* used for tacking on more instances */
 };
@@ -295,7 +254,6 @@ struct devi {
 #define	DEVI_ACTIVE	1	/* instance has an active parent */
 #define	DEVI_IGNORED	2	/* instance's parent has been removed */
 #define DEVI_BROKEN	3	/* instance is broken (syntax error) */
-	int	i_pseudoroot;	/* instance is pseudoroot */
 
 	/* created during packing or ioconf.c generation */
 	short	i_collapsed;	/* set => this alias no longer needed */
@@ -327,12 +285,14 @@ struct filetype
 /*
  * Files.  Each file is either standard (always included) or optional,
  * depending on whether it has names on which to *be* optional.  The
- * options field (fi_optx) is an expression tree of type struct
- * condexpr, with nodes for OR, AND, and NOT, as well as atoms (words)
- * representing some particular option.
+ * options field (fi_optx) is actually an expression tree, with nodes
+ * for OR, AND, and NOT, as well as atoms (words) representing some   
+ * particular option.  The node type is stored in the nv_int field.
+ * Subexpressions appear in the `next' field; for the binary operators
+ * AND and OR, the left subexpression is first stored in the nv_ptr field.
  * 
  * For any file marked as needs-count or needs-flag, fixfiles() will
- * build fi_optf, a `flat list' of the options with nv_num fields that
+ * build fi_optf, a `flat list' of the options with nv_int fields that
  * contain counts or `need' flags; this is used in mkheaders().
  */
 struct files {
@@ -340,7 +300,7 @@ struct files {
 	TAILQ_ENTRY(files) fi_next;
 	const  char *fi_tail;	/* name, i.e., strrchr(fi_path, '/') + 1 */
 	const  char *fi_base;	/* tail minus ".c" (or whatever) */
-	struct condexpr *fi_optx; /* options expression */
+	struct nvlist *fi_optx; /* options expression */
 	struct nvlist *fi_optf; /* flattened version of above, if needed */
 	const  char *fi_mkrule;	/* special make rule, if any */
 };
@@ -364,7 +324,7 @@ struct files {
 struct objects {
 	struct  filetype oi_fit;
 	TAILQ_ENTRY(objects) oi_next;
-	struct condexpr *oi_optx;	/* condition expression */
+	struct  nvlist *oi_optx;/* options expression */
 	struct  nvlist *oi_optf;/* flattened version of above, if needed */
 };
 
@@ -379,31 +339,10 @@ struct objects {
 #define	OI_SEL		0x01	/* selected */
 #define	OI_NEEDSFLAG	0x02	/* needs-flag */
 
-/*
- * Condition expressions.
- */
-
-enum condexpr_types {
-	CX_ATOM,
-	CX_NOT,
-	CX_AND,
-	CX_OR,
-};
-struct condexpr {
-	enum condexpr_types cx_type;
-	union {
-		const char *atom;
-		struct condexpr *not;
-		struct {
-			struct condexpr *left;
-			struct condexpr *right;
-		} and, or;
-	} cx_u;
-};
-#define cx_atom	cx_u.atom
-#define cx_not	cx_u.not
-#define cx_and	cx_u.and
-#define cx_or	cx_u.or
+#define	FX_ATOM		0	/* atom (in nv_name) */
+#define	FX_NOT		1	/* NOT expr (subexpression in nv_next) */
+#define	FX_AND		2	/* AND expr (lhs in nv_ptr, rhs in nv_next) */
+#define	FX_OR		3	/* OR expr (lhs in nv_ptr, rhs in nv_next) */
 
 /*
  * File/object prefixes.  These are arranged in a stack, and affect
@@ -422,10 +361,9 @@ struct devm {
 	const char	*dm_srcfile;	/* the name of the "majors" file */
 	u_short		dm_srcline;	/* the line number */
 	const char	*dm_name;	/* [bc]devsw name */
-	devmajor_t	dm_cmajor;	/* character major */
-	devmajor_t	dm_bmajor;	/* block major */
-	struct condexpr	*dm_opts;	/* options */
-	struct nvlist	*dm_devnodes;	/* information on /dev nodes */
+	int		dm_cmajor;	/* character major */
+	int		dm_bmajor;	/* block major */
+	struct nvlist	*dm_opts;	/* options */
 };
 
 /*
@@ -443,7 +381,6 @@ const char *machine;		/* machine type, e.g., "sparc" or "sun3" */
 const char *machinearch;	/* machine arch, e.g., "sparc" or "m68k" */
 struct	nvlist *machinesubarches;
 				/* machine subarches, e.g., "sun68k" or "hpc" */
-const char *ioconfname;		/* ioconf name, mutually exclusive to machine */
 const char *srcdir;		/* path to source directory (rel. to build) */
 const char *builddir;		/* path to build directory */
 const char *defbuilddir;	/* default build directory */
@@ -459,7 +396,7 @@ struct	nvlist *options;	/* options */
 struct	nvlist *fsoptions;	/* filesystems */
 struct	nvlist *mkoptions;	/* makeoptions */
 struct	nvlist *appmkoptions;	/* appending mkoptions */
-struct	nvlist *condmkoptions;	/* conditional makeoption table */
+struct	hashtab *condmkopttab;	/* conditional makeoption table */
 struct	hashtab *devbasetab;	/* devbase lookup */
 struct	hashtab *devroottab;	/* attach at root lookup */
 struct	hashtab *devatab;	/* devbase attachment lookup */
@@ -469,27 +406,27 @@ struct	hashtab *selecttab;	/* selects things that are "optional foo" */
 struct	hashtab *needcnttab;	/* retains names marked "needs-count" */
 struct	hashtab *opttab;	/* table of configured options */
 struct	hashtab *fsopttab;	/* table of configured file systems */
-struct	dlhash *defopttab;	/* options that have been "defopt"'d */
-struct	dlhash *defflagtab;	/* options that have been "defflag"'d */
-struct	dlhash *defparamtab;	/* options that have been "defparam"'d */
-struct	dlhash *defoptlint;	/* lint values for options */
-struct	nvhash *deffstab;	/* defined file systems */
-struct	dlhash *optfiletab;	/* "defopt"'d option .h files */
+struct	hashtab *defopttab;	/* options that have been "defopt"'d */
+struct	hashtab *defflagtab;	/* options that have been "defflag"'d */
+struct	hashtab *defparamtab;	/* options that have been "defparam"'d */
+struct	hashtab *defoptlint;	/* lint values for options */
+struct	hashtab *deffstab;	/* defined file systems */
+struct	hashtab *optfiletab;	/* "defopt"'d option .h files */
 struct	hashtab *attrtab;	/* attributes (locators, etc.) */
 struct	hashtab *bdevmtab;	/* block devm lookup */
 struct	hashtab *cdevmtab;	/* character devm lookup */
 
 TAILQ_HEAD(, devbase)	allbases;	/* list of all devbase structures */
 TAILQ_HEAD(, deva)	alldevas;	/* list of all devbase attachments */
-TAILQ_HEAD(conftq, config) allcf;	/* list of configured kernels */
+TAILQ_HEAD(, config)	allcf;		/* list of configured kernels */
 TAILQ_HEAD(, devi)	alldevi,	/* list of all instances */
 			allpseudo;	/* list of all pseudo-devices */
 TAILQ_HEAD(, devm)	alldevms;	/* list of all device-majors */
 TAILQ_HEAD(, pspec)	allpspecs;	/* list of all parent specs */
 int	ndevi;				/* number of devi's (before packing) */
 int	npspecs;			/* number of parent specs */
-devmajor_t maxbdevm;			/* max number of block major */
-devmajor_t maxcdevm;			/* max number of character major */
+int	maxbdevm;			/* max number of block major */
+int	maxcdevm;			/* max number of character major */
 int	do_devsw;			/* 0 if pre-devsw config */
 int	oktopackage;			/* 0 before setmachine() */
 int	devilevel;			/* used for devi->i_level */
@@ -521,9 +458,8 @@ void	checkfiles(void);
 int	fixfiles(void);		/* finalize */
 int	fixobjects(void);
 int	fixdevsw(void);
-void	addfile(const char *, struct condexpr *, int, const char *);
-void	addobject(const char *, struct condexpr *, int);
-int	expr_eval(struct condexpr *, int (*)(const char *, void *), void *);
+void	addfile(const char *, struct nvlist *, int, const char *);
+void	addobject(const char *, struct nvlist *, int);
 
 /* hash.c */
 struct	hashtab *ht_new(void);
@@ -538,20 +474,6 @@ const char *intern(const char *);
 typedef int (*ht_callback)(const char *, void *, void *);
 int	ht_enumerate(struct hashtab *, ht_callback, void *);
 
-/* typed hash, named struct HT, whose type is string -> struct VT */
-#define DECLHASH(HT, VT) \
-	struct HT;							\
-	struct HT *HT##_create(void);					\
-	int HT##_insert(struct HT *, const char *, struct VT *);	\
-	int HT##_replace(struct HT *, const char *, struct VT *);	\
-	int HT##_remove(struct HT *, const char *);			\
-	struct VT *HT##_lookup(struct HT *, const char *);		\
-	int HT##_enumerate(struct HT *,					\
-			int (*)(const char *, struct VT *, void *),	\
-			void *)
-DECLHASH(nvhash, nvlist);
-DECLHASH(dlhash, defoptlist);
-
 /* lint.c */
 void	emit_instances(void);
 void	emit_options(void);
@@ -562,27 +484,26 @@ void	addoption(const char *, const char *);
 void	addfsoption(const char *);
 void	addmkoption(const char *, const char *);
 void	appendmkoption(const char *, const char *);
-void	appendcondmkoption(struct condexpr *, const char *, const char *);
-void	deffilesystem(struct nvlist *, struct nvlist *);
-void	defoption(const char *, struct defoptlist *, struct nvlist *);
-void	defflag(const char *, struct defoptlist *, struct nvlist *, int);
-void	defparam(const char *, struct defoptlist *, struct nvlist *, int);
+void	appendcondmkoption(const char *, const char *, const char *);
+void	deffilesystem(const char *, struct nvlist *, struct nvlist *);
+void	defoption(const char *, struct nvlist *, struct nvlist *);
+void	defflag(const char *, struct nvlist *, struct nvlist *, int);
+void	defparam(const char *, struct nvlist *, struct nvlist *, int);
 void	deloption(const char *);
 void	delfsoption(const char *);
 void	delmkoption(const char *);
 int	devbase_has_instances(struct devbase *, int);
-int	is_declared_option(const char *);
+struct nvlist * find_declared_option(const char *);
 int	deva_has_instances(struct deva *, int);
 void	setupdirs(void);
-const char *strtolower(const char *);
 
 /* tests on option types */
-#define OPT_FSOPT(n)	(nvhash_lookup(deffstab, (n)) != NULL)
-#define OPT_DEFOPT(n)	(dlhash_lookup(defopttab, (n)) != NULL)
-#define OPT_DEFFLAG(n)	(dlhash_lookup(defflagtab, (n)) != NULL)
-#define OPT_DEFPARAM(n)	(dlhash_lookup(defparamtab, (n)) != NULL)
-#define OPT_OBSOLETE(n)	(dlhash_lookup(obsopttab, (n)) != NULL)
-#define DEFINED_OPTION(n) (is_declared_option((n)))
+#define OPT_FSOPT(n)	(ht_lookup(deffstab, (n)) != NULL)
+#define OPT_DEFOPT(n)	(ht_lookup(defopttab, (n)) != NULL)
+#define OPT_DEFFLAG(n)	(ht_lookup(defflagtab, (n)) != NULL)
+#define OPT_DEFPARAM(n)	(ht_lookup(defparamtab, (n)) != NULL)
+#define OPT_OBSOLETE(n)	(ht_lookup(obsopttab, (n)) != NULL)
+#define DEFINED_OPTION(n) (find_declared_option((n)) != NULL)
 
 /* main.c */
 void	logconfig_include(FILE *, const char *);
@@ -593,8 +514,6 @@ int	mkdevsw(void);
 /* mkheaders.c */
 int	mkheaders(void);
 int	moveifchanged(const char *, const char *);
-int	emitlocs(void);
-int	emitioconfh(void);
 
 /* mkioconf.c */
 int	mkioconf(void);
@@ -623,31 +542,20 @@ void	prefix_push(const char *);
 void	prefix_pop(void);
 char	*sourcepath(const char *);
 void	cfgwarn(const char *, ...)			/* immediate warns */
-     __printflike(1, 2);
+     __attribute__((__format__(__printf__, 1, 2)));	
 void	cfgxwarn(const char *, int, const char *, ...)	/* delayed warns */
-     __printflike(3, 4);
+     __attribute__((__format__(__printf__, 3, 4)));
 void	cfgerror(const char *, ...)			/* immediate errs */
-     __printflike(1, 2);
+     __attribute__((__format__(__printf__, 1, 2)));
 void	cfgxerror(const char *, int, const char *, ...)	/* delayed errs */
-     __printflike(3, 4);
+     __attribute__((__format__(__printf__, 3, 4)));
 __dead void panic(const char *, ...)
-     __printflike(1, 2);
-struct nvlist *newnv(const char *, const char *, void *, long long, struct nvlist *);
+     __attribute__((__format__(__printf__, 1, 2)));
+struct nvlist *newnv(const char *, const char *, void *, int, struct nvlist *);
 void	nvfree(struct nvlist *);
 void	nvfreel(struct nvlist *);
 struct nvlist *nvcat(struct nvlist *, struct nvlist *);
 void	autogen_comment(FILE *, const char *);
-struct defoptlist *defoptlist_create(const char *, const char *, const char *);
-void defoptlist_destroy(struct defoptlist *);
-struct defoptlist *defoptlist_append(struct defoptlist *, struct defoptlist *);
-struct attrlist *attrlist_create(void);
-struct attrlist *attrlist_cons(struct attrlist *, struct attr *);
-void attrlist_destroy(struct attrlist *);
-void attrlist_destroyall(struct attrlist *);
-struct loclist *loclist_create(const char *, const char *, long long);
-void loclist_destroy(struct loclist *);
-struct condexpr *condexpr_create(enum condexpr_types);
-void condexpr_destroy(struct condexpr *);
 
 /* liby */
 void	yyerror(const char *);

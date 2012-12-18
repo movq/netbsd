@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.7 2009/04/17 04:03:39 lukem Exp $	*/
+/*	$NetBSD: util.c,v 1.6 2008/04/28 20:24:17 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -57,7 +57,7 @@
 
 #ifndef lint
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: util.c,v 1.7 2009/04/17 04:03:39 lukem Exp $");
+__RCSID("$NetBSD: util.c,v 1.6 2008/04/28 20:24:17 martin Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -205,8 +205,7 @@ void
 mlx_print_phys_drv(struct mlx_phys_drv *pd, int chn, int targ,
 		   const char *prefix)
 {
-	const char *type;
-	char *device, *vendor, *revision;
+	char *type, *device, *vendor, *revision;
 
 	switch (pd->pd_flags2 & 0x03) {
 		case MLX_PHYS_DRV_DISK:

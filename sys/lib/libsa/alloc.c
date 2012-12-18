@@ -1,4 +1,4 @@
-/*	$NetBSD: alloc.c,v 1.26 2011/07/30 03:43:20 jakllsch Exp $	*/
+/*	$NetBSD: alloc.c,v 1.23 2007/12/02 04:59:24 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -162,7 +162,7 @@ extern char end[];
 static char *top = (char *)HEAP_START;
 #endif /* HEAP_VARIABLE */
 
-__compactcall void *
+void *
 alloc(size_t size)
 {
 	struct fl **f = &freelist, **bestf = NULL;
@@ -214,7 +214,7 @@ alloc(size_t size)
 		top += ALIGN(sizeof(unsigned int)) + ALIGN(size);
 #ifdef HEAP_LIMIT
 		if (top > (char *)HEAP_LIMIT)
-			panic("heap full (%p+%zu)", help, size);
+			panic("heap full (0x%lx+%zu)", help, size);
 #endif
 		*(unsigned int *)(void *)help = (unsigned int)ALIGN(size);
 #ifdef ALLOC_TRACE
@@ -239,7 +239,7 @@ found:
 	return help + ALIGN(sizeof(unsigned int));
 }
 
-__compactcall void
+void
 /*ARGSUSED*/
 dealloc(void *ptr, size_t size)
 {
@@ -251,7 +251,7 @@ dealloc(void *ptr, size_t size)
 #endif
 #ifdef DEBUG
 	if (size > (size_t)f->size) {
-		printf("dealloc %zu bytes @%lx, should be <=%u\n",
+		printf("dealloc %u bytes @%lx, should be <=%u\n",
 			size, (u_long)ptr, f->size);
 	}
 

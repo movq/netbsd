@@ -1,4 +1,4 @@
-/*	$NetBSD: makefs.h,v 1.27 2012/06/22 06:15:18 sjg Exp $	*/
+/*	$NetBSD: makefs.h,v 1.19 2006/10/10 01:55:45 dbj Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -102,8 +102,6 @@ typedef struct _fsnode {
 	uint32_t	 type;		/* type of entry */
 	fsinode		*inode;		/* actual inode data */
 	char		*symlink;	/* symlink target */
-	const char	*root;		/* root path */
-	char		*path;		/* directory name */
 	char		*name;		/* file name */
 	int		flags;		/* misc flags */
 } fsnode;
@@ -136,7 +134,6 @@ typedef struct {
 	int	freeblockpc;	/* free block % */
 	int	needswap;	/* non-zero if byte swapping needed */
 	int	sectorsize;	/* sector size */
-	int	sparse;		/* sparse image, don't fill it with zeros */
 
 	void	*fs_specific;	/* File system specific additions. */
 } fsinfo_t;
@@ -157,10 +154,10 @@ typedef struct {
 
 
 void		apply_specfile(const char *, const char *, fsnode *, int);
-void		dump_fsnodes(fsnode *);
+void		dump_fsnodes(const char *, fsnode *);
 const char *	inode_type(mode_t);
-int		set_option(const option_t *, const char *, const char *);
-fsnode *	walk_dir(const char *, const char *, fsnode *, fsnode *);
+int		set_option(option_t *, const char *, const char *);
+fsnode *	walk_dir(const char *, fsnode *);
 void		free_fsnodes(fsnode *);
 
 void		ffs_prep_opts(fsinfo_t *);
@@ -173,15 +170,6 @@ int		cd9660_parse_opts(const char *, fsinfo_t *);
 void		cd9660_cleanup_opts(fsinfo_t *);
 void		cd9660_makefs(const char *, const char *, fsnode *, fsinfo_t *);
 
-void		chfs_prep_opts(fsinfo_t *);
-int		chfs_parse_opts(const char *, fsinfo_t *);
-void		chfs_cleanup_opts(fsinfo_t *);
-void		chfs_makefs(const char *, const char *, fsnode *, fsinfo_t *);
-
-void		v7fs_prep_opts(fsinfo_t *);
-int		v7fs_parse_opts(const char *, fsinfo_t *);
-void		v7fs_cleanup_opts(fsinfo_t *);
-void		v7fs_makefs(const char *, const char *, fsnode *, fsinfo_t *);
 
 extern	u_int		debug;
 extern	struct timespec	start_time;
@@ -231,9 +219,8 @@ extern	struct timespec	start_time;
 		struct timeval end, td;			\
 		gettimeofday(&end, NULL);		\
 		timersub(&end, &(x), &td);		\
-		printf("%s took %lld.%06ld seconds\n",	\
-		    (d), (long long)td.tv_sec,		\
-		    (long)td.tv_usec);			\
+		printf("%s took %ld.%06ld seconds\n",	\
+		    (d), td.tv_sec, td.tv_usec);	\
 	}
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.c,v 1.99 2012/09/13 11:53:45 martin Exp $	*/
+/*	$NetBSD: netbsd32_machdep.c,v 1.85 2008/10/15 06:51:19 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -27,24 +27,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.99 2012/09/13 11:53:45 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.85 2008/10/15 06:51:19 wrstuden Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
 #include "opt_compat_sunos.h"
-#include "opt_modular.h"
-#include "opt_execfmt.h"
 #include "firm_events.h"
 #endif
 
 #include <sys/param.h>
 #include <sys/exec.h>
-#include <sys/exec_aout.h>
 #include <sys/filedesc.h>
 #include <sys/file.h>
 #include <sys/proc.h>
 #include <sys/signalvar.h>
 #include <sys/systm.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
+#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/mount.h>
 #include <sys/buf.h>
@@ -80,7 +80,6 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.99 2012/09/13 11:53:45 martin
 #define SUN4U	/* see .../sparc/include/frame.h for the reason */
 #endif
 #include <machine/frame.h>
-#include <machine/pcb.h>
 #include <machine/reg.h>
 #include <machine/vmparam.h>
 #include <machine/vuid_event.h>
@@ -102,7 +101,7 @@ static int ev_out32(struct firm_event *, int, struct uio *);
  */
 /* ARGSUSED */
 void
-netbsd32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
+netbsd32_setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 {
 	struct proc *p = l->l_proc;
 	struct trapframe64 *tf = l->l_md.md_tf;
@@ -127,7 +126,7 @@ netbsd32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 	 * Set the registers to 0 except for:
 	 *	%o6: stack pointer, built in exec())
 	 *	%tstate: (retain icc and xcc and cwp bits)
-	 *	%g1: p->p_psstrp (used by crt0)
+	 *	%g1: address of p->p_psstr (used by crt0)
 	 *	%tpc,%tnpc: entry point of program
 	 */
 	tstate = ((PSTATE_USER32)<<TSTATE_PSTATE_SHIFT) 
@@ -144,7 +143,7 @@ netbsd32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 	}
 	memset(tf, 0, sizeof *tf);
 	tf->tf_tstate = tstate;
-	tf->tf_global[1] = p->p_psstrp;
+	tf->tf_global[1] = (u_int)(u_long)p->p_psstr;
 	tf->tf_pc = pack->ep_entry & ~3;
 	tf->tf_npc = tf->tf_pc + 4;
 
@@ -216,7 +215,7 @@ netbsd32_sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	 */
 	sf.sf_signo = sig;
 	sf.sf_code = (u_int)ksi->ksi_trap;
-#if defined(COMPAT_SUNOS) || defined(MODULAR)
+#if defined(COMPAT_SUNOS) || defined(LKM)
 	sf.sf_scp = (u_long)&fp->sf_sc;
 #endif
 	sf.sf_addr = 0;			/* XXX */
@@ -283,7 +282,7 @@ netbsd32_sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	 * Arrange to continue execution at the code copied out in exec().
 	 * It needs the function to call in %g1, and a new stack pointer.
 	 */
-	addr = p->p_psstrp - szsigcode;
+	addr = (long)p->p_psstr - szsigcode;
 	tf->tf_global[1] = (long)catcher;
 	tf->tf_pc = addr;
 	tf->tf_npc = addr + 4;
@@ -414,6 +413,46 @@ netbsd32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	else
 #endif
 		netbsd32_sendsig_siginfo(ksi, mask);
+}
+
+/*
+ * Set the lwp to begin execution in the upcall handler.  The upcall
+ * handler will then simply call the upcall routine and then exit.
+ *
+ * Because we have a bunch of different signal trampolines, the first
+ * two instructions in the signal trampoline call the upcall handler.
+ * Signal dispatch should skip the first two instructions in the signal
+ * trampolines.
+ */
+void 
+netbsd32_cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+	void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+       	struct trapframe *tf;
+	vaddr_t addr;
+
+	tf = l->l_md.md_tf;
+	addr = (vaddr_t) upcall;
+
+	/* Arguments to the upcall... */
+	tf->tf_out[0] = type;
+	tf->tf_out[1] = (vaddr_t) sas;
+	tf->tf_out[2] = nevents;
+	tf->tf_out[3] = ninterrupted;
+	tf->tf_out[4] = (vaddr_t) ap;
+
+	/*
+	 * Ensure the stack is double-word aligned, and provide a
+	 * C call frame.
+	 */
+	sp = (void *)(((vaddr_t)sp & ~0x7) - CCFSZ);
+
+	/* Arrange to begin execution at the upcall handler. */
+
+	tf->tf_pc = addr;
+	tf->tf_npc = addr + 4;
+	tf->tf_out[6] = (vaddr_t) sp;
+	tf->tf_out[7] = -1;		/* "you lose" if upcall returns */
 }
 
 #undef DEBUG
@@ -737,10 +776,10 @@ cpu_coredump32(struct lwp *l, void *iocookie, struct core32 *chdr)
 void netbsd32_cpu_getmcontext(struct lwp *, mcontext_t  *, unsigned int *);
 
 void
-netbsd32_cpu_getmcontext(
-	struct lwp *l,
-	/* netbsd32_mcontext_t XXX */mcontext_t  *mcp,
-	unsigned int *flags)
+netbsd32_cpu_getmcontext(l, mcp, flags)
+	struct lwp *l;
+	/* netbsd32_mcontext_t XXX */mcontext_t  *mcp;
+	unsigned int *flags;
 {
 #if 0
 /* XXX */
@@ -777,7 +816,7 @@ netbsd32_cpu_getmcontext(
 	gr[_REG_O5]  = tf->tf_out[5];
 	gr[_REG_O6]  = tf->tf_out[6];
 	gr[_REG_O7]  = tf->tf_out[7];
-	*flags |= (_UC_CPU|_UC_TLSBASE);
+	*flags |= _UC_CPU;
 
 	mcp->__gwins = 0;
 
@@ -811,13 +850,14 @@ netbsd32_cpu_getmcontext(
 #endif
 }
 
+
 int netbsd32_cpu_setmcontext(struct lwp *, mcontext_t *, unsigned int);
 
 int
-netbsd32_cpu_setmcontext(
-	struct lwp *l,
-	/* XXX const netbsd32_*/mcontext_t *mcp,
-	unsigned int flags)
+netbsd32_cpu_setmcontext(l, mcp, flags)
+	struct lwp *l;
+	/* XXX const netbsd32_*/mcontext_t *mcp;
+	unsigned int flags;
 {
 #ifdef NOT_YET
 /* XXX */
@@ -1135,22 +1175,6 @@ netbsd32_sysarch(struct lwp *l, const struct netbsd32_sysarch_args *uap, registe
 	}
 }
 
-int
-cpu_mcontext32_validate(struct lwp *l, const mcontext32_t *mc)
-{
-	const __greg32_t *gr = mc->__gregs;
-
-	/*
- 	 * Only the icc bits in the psr are used, so it need not be
- 	 * verified.  pc and npc must be multiples of 4.  This is all
- 	 * that is required; if it holds, just do it.
-	 */
-	if (((gr[_REG32_PC] | gr[_REG32_nPC]) & 3) != 0 ||
-	    gr[_REG32_PC] == 0 || gr[_REG32_nPC] == 0)
-		return EINVAL;
-
-	return 0;
-}
 
 int
 cpu_setmcontext32(struct lwp *l, const mcontext32_t *mcp, unsigned int flags)
@@ -1158,7 +1182,6 @@ cpu_setmcontext32(struct lwp *l, const mcontext32_t *mcp, unsigned int flags)
 	struct trapframe *tf = l->l_md.md_tf;
 	const __greg32_t *gr = mcp->__gregs;
 	struct proc *p = l->l_proc;
-	int error;
 
 	/* First ensure consistent stack state (see sendsig). */
 	write_user_windows();
@@ -1169,9 +1192,14 @@ cpu_setmcontext32(struct lwp *l, const mcontext32_t *mcp, unsigned int flags)
 
 	/* Restore register context, if any. */
 	if ((flags & _UC_CPU) != 0) {
-		error = cpu_mcontext32_validate(l, mcp);
-		if (error)
-			return error;
+		/*
+	 	 * Only the icc bits in the psr are used, so it need not be
+	 	 * verified.  pc and npc must be multiples of 4.  This is all
+	 	 * that is required; if it holds, just do it.
+		 */
+		if (((gr[_REG32_PC] | gr[_REG32_nPC]) & 3) != 0 ||
+		    gr[_REG32_PC] == 0 || gr[_REG32_nPC] == 0)
+			return (EINVAL);
 
 		/* Restore general register context. */
 		/* take only tstate CCR (and ASI) fields */
@@ -1186,8 +1214,7 @@ cpu_setmcontext32(struct lwp *l, const mcontext32_t *mcp, unsigned int flags)
 		tf->tf_global[4] = (uint64_t)gr[_REG32_G4];
 		tf->tf_global[5] = (uint64_t)gr[_REG32_G5];
 		tf->tf_global[6] = (uint64_t)gr[_REG32_G6];
-		/* done in lwp_setprivate */
-		/* tf->tf_global[7] = (uint64_t)gr[_REG32_G7]; */
+		tf->tf_global[7] = (uint64_t)gr[_REG32_G7];
 		tf->tf_out[0]    = (uint64_t)gr[_REG32_O0];
 		tf->tf_out[1]    = (uint64_t)gr[_REG32_O1];
 		tf->tf_out[2]    = (uint64_t)gr[_REG32_O2];
@@ -1197,9 +1224,6 @@ cpu_setmcontext32(struct lwp *l, const mcontext32_t *mcp, unsigned int flags)
 		tf->tf_out[6]    = (uint64_t)gr[_REG32_O6];
 		tf->tf_out[7]    = (uint64_t)gr[_REG32_O7];
 		/* %asi restored above; %fprs not yet supported. */
-
-		if (flags & _UC_TLSBASE)
-			lwp_setprivate(l, (void *)(uintptr_t)gr[_REG32_G7]);
 
 		/* XXX mcp->__gwins */
 	}
@@ -1283,11 +1307,11 @@ cpu_getmcontext32(struct lwp *l, mcontext32_t *mcp, unsigned int *flags)
 	gr[_REG32_O5]  = tf->tf_out[5];
 	gr[_REG32_O6]  = tf->tf_out[6];
 	gr[_REG32_O7]  = tf->tf_out[7];
-	*flags |= (_UC_CPU|_UC_TLSBASE);
+	*flags |= _UC_CPU;
 
 	mcp->__gwins = 0;
 	mcp->__xrs.__xrs_id = 0;	/* Solaris extension? */
-	*flags |= (_UC_CPU|_UC_TLSBASE);
+	*flags |= _UC_CPU;
 
 	/* Save FP register context, if any. */
 	if (l->l_md.md_fpstate != NULL) {
@@ -1320,14 +1344,18 @@ cpu_getmcontext32(struct lwp *l, mcontext32_t *mcp, unsigned int *flags)
 void
 startlwp32(void *arg)
 {
+	int err;
 	ucontext32_t *uc = arg;
-	lwp_t *l = curlwp;
-	int error;
+	struct lwp *l = curlwp;
 
-	error = cpu_setmcontext32(l, &uc->uc_mcontext, uc->uc_flags);
-	KASSERT(error == 0);
+	err = cpu_setmcontext32(l, &uc->uc_mcontext, uc->uc_flags);
+#if DIAGNOSTIC
+	if (err) {
+		printf("Error %d from cpu_setmcontext.", err);
+	}
+#endif
+	pool_put(&lwp_uc_pool, uc);
 
-	kmem_free(uc, sizeof(ucontext32_t));
 	userret(l, 0, 0);
 }
 

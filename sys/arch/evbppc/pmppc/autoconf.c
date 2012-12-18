@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.7 2012/07/29 18:05:42 mlelstv Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.4 2008/02/12 17:30:57 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.7 2012/07/29 18:05:42 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.4 2008/02/12 17:30:57 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,7 +64,7 @@ void enable_intr(void);
  * Determine i/o configuration for a machine.
  */
 void
-cpu_configure(void)
+cpu_configure()
 {
 
 	if (config_rootfound("mainbus", NULL) == NULL)
@@ -74,14 +74,14 @@ cpu_configure(void)
 }
 
 void
-cpu_rootconf(void)
+cpu_rootconf()
 {
 	findroot();
 
 	printf("boot device: %s\n",
-	    booted_device ? device_xname(booted_device) : "<unknown>");
+	    booted_device ? booted_device->dv_xname : "<unknown>");
 
-	rootconf();
+	setroot(booted_device, booted_partition);
 }
 
 u_long	bootdev = 0;		/* should be dev_t, but not until 32 bits */

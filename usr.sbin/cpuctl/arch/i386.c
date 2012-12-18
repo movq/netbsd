@@ -1,4 +1,4 @@
-/*	$NetBSD: i386.c,v 1.32 2012/08/29 17:13:23 drochner Exp $	*/
+/*	$NetBSD: i386.c,v 1.13.2.5 2012/03/17 18:41:15 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -57,14 +57,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: i386.c,v 1.32 2012/08/29 17:13:23 drochner Exp $");
+__RCSID("$NetBSD: i386.c,v 1.13.2.5 2012/03/17 18:41:15 bouyer Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/bitops.h>
 #include <sys/sysctl.h>
-#include <sys/cpuio.h>
 
 #include <string.h>
 #include <stdio.h>
@@ -80,7 +79,6 @@ __RCSID("$NetBSD: i386.c,v 1.32 2012/08/29 17:13:23 drochner Exp $");
 #include <x86/cpuvar.h>
 #include <x86/cputypes.h>
 #include <x86/cacheinfo.h>
-#include <x86/cpu_ucode.h>
 
 #include "../cpuctl.h"
 
@@ -96,13 +94,11 @@ struct cpu_info {
 	const char	*ci_dev;
 	int32_t		ci_cpuid_level;
 	uint32_t	ci_signature;	 /* X86 cpuid type */
-	uint32_t	ci_feat_val[5];	 /* X86 CPUID feature bits
-					  *	[0] basic features %edx
-					  *	[1] basic features %ecx
-					  *	[2] extended features %edx
-					  *	[3] extended features %ecx
-					  *	[4] VIA padlock features
-					  */
+	uint32_t	ci_feature_flags;/* X86 %edx CPUID feature bits */
+	uint32_t	ci_feature2_flags;/* X86 %ecx CPUID feature bits */
+	uint32_t	ci_feature3_flags;/* X86 extended %edx feature bits */
+	uint32_t	ci_feature4_flags;/* X86 extended %ecx feature bits */
+	uint32_t	ci_padlock_flags;/* VIA PadLock feature bits */
 	uint32_t	ci_cpu_class;	 /* CPU class */
 	uint32_t	ci_brand_id;	 /* Intel brand id */
 	uint32_t	ci_vendor[4];	 /* vendor string */
@@ -184,7 +180,6 @@ static const char * const amd_brand[] = {
 static int cpu_vendor;
 static char cpu_brand_string[49];
 static char amd_brand_name[48];
-static int use_pae, largepagesize;
 
 static void via_cpu_probe(struct cpu_info *);
 static void amd_family6_probe(struct cpu_info *);
@@ -312,7 +307,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 				"Pentium III (Tualatin)", 0,
 				"Pentium M (Dothan)", 
 				"Pentium M (Yonah)",
-				"Core 2",
+				"Core 2 (Merom)",
 				"Pentium Pro, II or III"	/* Default */
 			},
 			NULL,
@@ -640,8 +635,8 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 static void
 disable_tsc(struct cpu_info *ci)
 {
-	if (ci->ci_feat_val[0] & CPUID_TSC) {
-		ci->ci_feat_val[0] &= ~CPUID_TSC;
+	if (ci->ci_feature_flags & CPUID_TSC) {
+		ci->ci_feature_flags &= ~CPUID_TSC;
 		aprint_error("WARNING: broken TSC disabled\n");
 	}
 }
@@ -675,7 +670,7 @@ identifycpu_cpuids(struct cpu_info *ci)
 	u_int lp_max = 1;	/* logical processors per package */
 	u_int smt_max;		/* smt per core */
 	u_int core_max = 1;	/* core per package */
-	u_int smt_bits, core_bits;
+	int smt_bits, core_bits;
 	uint32_t descs[4];
 
 	aprint_verbose("%s: Initial APIC ID %u\n", cpuname, ci->ci_initapicid);
@@ -690,7 +685,7 @@ identifycpu_cpuids(struct cpu_info *ci)
 	 * 253668.pdf 7.10.2
 	 */
 
-	if ((ci->ci_feat_val[0] & CPUID_HTT) != 0) {
+	if ((ci->ci_feature_flags & CPUID_HTT) != 0) {
 		x86_cpuid(1, descs);
 		lp_max = (descs[1] >> 16) & 0xff;
 	}
@@ -716,7 +711,7 @@ identifycpu_cpuids(struct cpu_info *ci)
 		aprint_verbose("%s: Core ID %u\n", cpuname, ci->ci_coreid);
 	}
 	if (smt_bits) {
-		u_int smt_mask = __BITS((int)0, (int)(smt_bits - 1));
+		u_int smt_mask = __BITS(0, smt_bits - 1);
 
 		ci->ci_smtid = __SHIFTOUT(ci->ci_initapicid, smt_mask);
 		aprint_verbose("%s: SMT ID %u\n", cpuname, ci->ci_smtid);
@@ -742,10 +737,10 @@ via_cpu_probe(struct cpu_info *ci)
 	 */
 	if (lfunc >= 0x80000001) {
 		x86_cpuid(0x80000001, descs);
-		ci->ci_feat_val[2] |= descs[3];
+		ci->ci_feature3_flags |= descs[3];
 	}
 
-	if (model < 0x9 || (model == 0x9 && stepping < 3))
+	if (model < 0x9)
 		return;
 
 	/* Nehemiah or Esther */
@@ -756,7 +751,11 @@ via_cpu_probe(struct cpu_info *ci)
 
 	x86_cpuid(0xc0000001, descs);
 	lfunc = descs[3];
-	ci->ci_feat_val[4] = lfunc;
+	if (model > 0x9 || stepping >= 8) {	/* ACE */
+		if (lfunc & CPUID_VIA_HAS_ACE) {
+			ci->ci_padlock_flags = lfunc;
+		}
+	}
 }
 
 static const char *
@@ -961,22 +960,14 @@ amd_amd64_name(struct cpu_info *ci)
 		}
 		break;
 	case 0x01:
-		ret = "Family 10h";
-		break;
-	case 0x02:
-		ret = "Family 11h";
-		break;
-	case 0x03:
-		ret = "Family 12h";
-		break;
-	case 0x05:
-		ret = "Family 14h";
-		break;
-	case 0x06:
-		ret = "Family 15h";
-		break;
-	default:
-		ret = "Unknown AMD64 CPU";
+		switch (model) {
+			case 0x02:
+				ret = "Family 10h";
+				break;
+			default:
+				ret = "Unknown AMD64 CPU";
+				break;
+		}
 		break;
 	}
 
@@ -1020,8 +1011,8 @@ cpu_probe_base_features(struct cpu_info *ci)
 	x86_cpuid(1, descs);
 	ci->ci_signature = descs[0];
 	miscbytes = descs[1];
-	ci->ci_feat_val[1] = descs[2];
-	ci->ci_feat_val[0] = descs[3];
+	ci->ci_feature2_flags = descs[2];
+	ci->ci_feature_flags = descs[3];
 
 	/* Brand is low order 8 bits of ebx */
 	ci->ci_brand_id = miscbytes & 0xff;
@@ -1063,7 +1054,7 @@ cpu_probe_base_features(struct cpu_info *ci)
 	 * If the processor serial number misfeature is present and supported,
 	 * extract it here.
 	 */
-	if ((ci->ci_feat_val[0] & CPUID_PN) != 0) {
+	if ((ci->ci_feature_flags & CPUID_PN) != 0) {
 		ci->ci_cpu_serial[0] = ci->ci_signature;
 		x86_cpuid(3, descs);
 		ci->ci_cpu_serial[2] = descs[2];
@@ -1119,8 +1110,7 @@ intel_family_new_probe(struct cpu_info *ci)
 	 */
 	if (descs[0] >= 0x80000001) {
 		x86_cpuid(0x80000001, descs);
-		ci->ci_feat_val[2] |= descs[3];
-		ci->ci_feat_val[3] |= descs[2];
+		ci->ci_feature3_flags |= descs[3];
 	}
 }
 
@@ -1129,7 +1119,7 @@ amd_family6_probe(struct cpu_info *ci)
 {
 	uint32_t descs[4];
 	char *p;
-	size_t i;
+	int i;
 
 	x86_cpuid(0x80000000, descs);
 
@@ -1138,8 +1128,8 @@ amd_family6_probe(struct cpu_info *ci)
 	 */
 	if (descs[0] >= 0x80000001) {
 		x86_cpuid(0x80000001, descs);
-		ci->ci_feat_val[2] |= descs[3]; /* %edx */
-		ci->ci_feat_val[3] = descs[2]; /* %ecx */
+		ci->ci_feature3_flags |= descs[3]; /* %edx */
+		ci->ci_feature4_flags = descs[2]; /* %ecx */
 	}
 
 	if (*cpu_brand_string == '\0')
@@ -1165,9 +1155,8 @@ amd_family5_setup(struct cpu_info *ci)
 		 * support for global PTEs, instead using bit 9 (APIC)
 		 * rather than bit 13 (i.e. "0x200" vs. 0x2000".  Oops!).
 		 */
-		if (ci->ci_feat_val[0] & CPUID_APIC)
-			ci->ci_feat_val[0] =
-			    (ci->ci_feat_val[0] & ~CPUID_APIC) | CPUID_PGE;
+		if (ci->ci_feature_flags & CPUID_APIC)
+			ci->ci_feature_flags = (ci->ci_feature_flags & ~CPUID_APIC) | CPUID_PGE;
 		/*
 		 * XXX But pmap_pg_g is already initialized -- need to kick
 		 * XXX the pmap somehow.  How does the MP branch do this?
@@ -1235,7 +1224,7 @@ transmeta_cpu_info(struct cpu_info *ci)
 }
 
 void
-identifycpu(int fd, const char *cpuname)
+identifycpu(const char *cpuname)
 {
 	const char *name = "", *modifier, *vendorname, *brand = "";
 	int class = CPUCLASS_386, i, xmax;
@@ -1248,13 +1237,7 @@ identifycpu(int fd, const char *cpuname)
 	extern int cpu;
 	extern int cpu_info_level;
 	size_t sz;
-	char buf[512];
-	char *bp;
-	struct cpu_ucode_version ucode;
-	union {
-		struct cpu_ucode_version_amd amd;
-		struct cpu_ucode_version_intel1 intel1;
-	} ucvers;
+	char buf[256];
 
 	ci = &cistore;
 	memset(ci, 0, sizeof(*ci));
@@ -1265,7 +1248,7 @@ identifycpu(int fd, const char *cpuname)
 	cpu_probe_features(ci);
 
 	if (ci->ci_cpuid_level == -1) {
-		if ((size_t)cpu >= __arraycount(i386_nocpuid_cpus))
+		if (cpu < 0 || cpu >= __arraycount(i386_nocpuid_cpus))
 			errx(1, "unknown cpu type %d", cpu);
 		name = i386_nocpuid_cpus[cpu].cpu_name;
 		cpu_vendor = i386_nocpuid_cpus[cpu].cpu_vendor;
@@ -1386,9 +1369,6 @@ identifycpu(int fd, const char *cpuname)
 
 	sz = sizeof(ci->ci_tsc_freq);
 	(void)sysctlbyname("machdep.tsc_freq", &ci->ci_tsc_freq, &sz, NULL, 0);
-	sz = sizeof(use_pae);
-	(void)sysctlbyname("machdep.pae", &use_pae, &sz, NULL, 0);
-	largepagesize = (use_pae ? 2 * 1024 * 1024 : 4 * 1024 * 1024);
 
 	snprintf(cpu_model, sizeof(cpu_model), "%s%s%s%s%s%s%s (%s-class)",
 	    vendorname,
@@ -1399,9 +1379,9 @@ identifycpu(int fd, const char *cpuname)
 	aprint_normal("%s: %s", cpuname, cpu_model);
 
 	if (ci->ci_tsc_freq != 0)
-		aprint_normal(", %ju.%02ju MHz",
-		    ((uintmax_t)ci->ci_tsc_freq + 4999) / 1000000,
-		    (((uintmax_t)ci->ci_tsc_freq + 4999) / 10000) % 100);
+		aprint_normal(", %qd.%02qd MHz",
+		    (ci->ci_tsc_freq + 4999) / 1000000,
+		    ((ci->ci_tsc_freq + 4999) / 10000) % 100);
 	if (ci->ci_signature != 0)
 		aprint_normal(", id 0x%x", ci->ci_signature);
 	aprint_normal("\n");
@@ -1409,45 +1389,62 @@ identifycpu(int fd, const char *cpuname)
 	if (ci->ci_info)
 		(*ci->ci_info)(ci);
 
-	/*
-	 * display CPU feature flags
-	 */
-
-#define	MAX_FEATURE_LEN	60	/* XXX Need to find a better way to set this */
-
 	feature_str[0] = CPUID_FLAGS1;
-	feature_str[1] = CPUID2_FLAGS1;
-	feature_str[2] = CPUID_EXT_FLAGS;
-	feature_str[3] = NULL;
-	feature_str[4] = NULL;
+	feature_str[1] = CPUID_FLAGS2;
+	feature_str[2] = CPUID_FLAGS3;
 
 	switch (cpu_vendor) {
 	case CPUVENDOR_AMD:
-		feature_str[3] = CPUID_AMD_FLAGS4;
+		feature_str[3] = CPUID_EXT_FLAGS;
+		feature_str[4] = CPUID_AMD_FLAGS4;
 		break;
 	case CPUVENDOR_INTEL:
-		feature_str[2] = CPUID_INTEL_EXT_FLAGS;
 		feature_str[3] = CPUID_INTEL_FLAGS4;
 		break;
-	case CPUVENDOR_IDT:
-		feature_str[4] = CPUID_FLAGS_PADLOCK;
-		break;
 	default:
+		feature_str[3] = CPUID_EXT_FLAGS;
 		break;
 	}
 	
-	for (i = 0; i <= 4; i++) {
-		if (ci->ci_feat_val[i] && feature_str[i] != NULL) {
-			snprintb_m(buf, sizeof(buf), feature_str[i],
-				   ci->ci_feat_val[i], MAX_FEATURE_LEN);
-			bp = buf;
-			while (*bp != '\0') {
-				aprint_verbose("%s: %sfeatures%c %s\n",
-				    cpuname, (i == 4)?"padlock ":"", 
-				    (i == 4 || i == 0)?' ':'1' + i, bp);
-				bp += strlen(bp) + 1;
-			}
+	if (ci->ci_feature_flags) {
+		if ((ci->ci_feature_flags & CPUID_MASK1) != 0) {
+			snprintb(buf, sizeof(buf), feature_str[0],
+			    ci->ci_feature_flags);
+			aprint_verbose("%s: features %s\n", cpuname, buf);
 		}
+		if ((ci->ci_feature_flags & CPUID_MASK2) != 0) {
+			snprintb(buf, sizeof(buf), feature_str[1],
+			    ci->ci_feature_flags);
+			aprint_verbose("%s: features %s\n", cpuname, buf);
+		}
+		if ((ci->ci_feature_flags & CPUID_MASK3) != 0) {
+			snprintb(buf, sizeof(buf), feature_str[2],
+			    ci->ci_feature_flags);
+			aprint_verbose("%s: features %s\n", cpuname, buf);
+		}
+	}
+
+	if (ci->ci_feature2_flags) {
+		snprintb(buf, sizeof(buf), CPUID2_FLAGS, ci->ci_feature2_flags);
+		aprint_verbose("%s: features2 %s\n", cpuname, buf);
+	}
+
+	if (ci->ci_feature3_flags) {
+		snprintb(buf, sizeof(buf), feature_str[3],
+		    ci->ci_feature3_flags);
+		aprint_verbose("%s: features3 %s\n", cpuname, buf);
+	}
+
+	if (ci->ci_feature4_flags) {
+		snprintb(buf, sizeof(buf), feature_str[4],
+		    ci->ci_feature4_flags);
+		aprint_verbose("%s: features4 %s\n", cpuname, buf);
+	}
+
+	if (ci->ci_padlock_flags) {
+		snprintb(buf, sizeof(buf), CPUID_FLAGS_PADLOCK,
+		    ci->ci_padlock_flags);
+		aprint_verbose("%s: padlock features %s\n", cpuname, buf);
 	}
 
 	if (*cpu_brand_string != '\0')
@@ -1455,7 +1452,7 @@ identifycpu(int fd, const char *cpuname)
 
 	x86_print_cacheinfo(ci);
 
-	if (ci->ci_cpuid_level >= 3 && (ci->ci_feat_val[0] & CPUID_PN)) {
+	if (ci->ci_cpuid_level >= 3 && (ci->ci_feature_flags & CPUID_PN)) {
 		aprint_verbose("%s: serial number %04X-%04X-%04X-%04X-%04X-%04X\n",
 		    cpuname,
 		    ci->ci_cpu_serial[0] / 65536, ci->ci_cpu_serial[0] % 65536,
@@ -1493,28 +1490,7 @@ identifycpu(int fd, const char *cpuname)
 #endif
 
 	if (cpu_vendor == CPUVENDOR_AMD) {
-		uint32_t data[4];
-
-		x86_cpuid(0x80000000, data);
-		if (data[0] >= 0x80000007)
-			powernow_probe(ci);
-
-		if ((data[0] >= 0x8000000a)
-		   && (ci->ci_feat_val[3] & CPUID_SVM) != 0) {
-
-			x86_cpuid(0x8000000a, data);
-			aprint_verbose("%s: SVM Rev. %d\n", cpuname,
-			    data[0] & 0xf);
-			aprint_verbose("%s: SVM NASID %d\n", cpuname, data[1]);
-			snprintb_m(buf, sizeof(buf), CPUID_AMD_SVM_FLAGS,
-				   data[3], MAX_FEATURE_LEN);
-			bp = buf;
-			while (*bp != '\0') {
-				aprint_verbose("%s: SVM features %s\n",
-				    cpuname, bp);
-				bp += strlen(bp) + 1;
-			}
-		}
+		powernow_probe(ci);
 	}
 
 #ifdef INTEL_ONDEMAND_CLOCKMOD
@@ -1526,21 +1502,6 @@ identifycpu(int fd, const char *cpuname)
 	    CPUID2FAMILY(ci->ci_signature), CPUID2MODEL(ci->ci_signature),
 	    CPUID2EXTFAMILY(ci->ci_signature), CPUID2EXTMODEL(ci->ci_signature),
 	    CPUID2STEPPING(ci->ci_signature));
-
-	if (cpu_vendor == CPUVENDOR_AMD)
-		ucode.loader_version = CPU_UCODE_LOADER_AMD;
-	else if (cpu_vendor == CPUVENDOR_INTEL)
-		ucode.loader_version = CPU_UCODE_LOADER_INTEL1;
-	else
-		return;
-	ucode.data = &ucvers;
-	if (ioctl(fd, IOC_CPU_UCODE_GET_VERSION, &ucode) < 0)
-		return;
-	if (cpu_vendor == CPUVENDOR_AMD)
-		printf("%s: UCode version: 0x%"PRIx64"\n", cpuname, ucvers.amd.version);
-	else if (cpu_vendor == CPUVENDOR_INTEL)
-		printf("%s: microcode version 0x%x, platform ID %d\n", cpuname,
-		       ucvers.intel1.ucodeversion, ucvers.intel1.platformid);
 }
 
 static const char *
@@ -1694,12 +1655,12 @@ amd_cpu_cacheinfo(struct cpu_info *ci)
 		cai = &ci->ci_cinfo[CAI_ITLB2];
 		cai->cai_totalsize = AMD_L1_EAX_ITLB_ENTRIES(descs[0]);
 		cai->cai_associativity = AMD_L1_EAX_ITLB_ASSOC(descs[0]);
-		cai->cai_linesize = largepagesize;
+		cai->cai_linesize = (4 * 1024 * 1024);
 
 		cai = &ci->ci_cinfo[CAI_DTLB2];
 		cai->cai_totalsize = AMD_L1_EAX_DTLB_ENTRIES(descs[0]);
 		cai->cai_associativity = AMD_L1_EAX_DTLB_ASSOC(descs[0]);
-		cai->cai_linesize = largepagesize;
+		cai->cai_linesize = (4 * 1024 * 1024);
 	}
 
 	cai = &ci->ci_cinfo[CAI_ITLB];
@@ -1715,7 +1676,7 @@ amd_cpu_cacheinfo(struct cpu_info *ci)
 	cai = &ci->ci_cinfo[CAI_DCACHE];
 	cai->cai_totalsize = AMD_L1_ECX_DC_SIZE(descs[2]);
 	cai->cai_associativity = AMD_L1_ECX_DC_ASSOC(descs[2]);
-	cai->cai_linesize = AMD_L1_ECX_DC_LS(descs[2]);
+	cai->cai_linesize = AMD_L1_EDX_IC_LS(descs[2]);
 
 	cai = &ci->ci_cinfo[CAI_ICACHE];
 	cai->cai_totalsize = AMD_L1_EDX_IC_SIZE(descs[3]);
@@ -1732,50 +1693,6 @@ amd_cpu_cacheinfo(struct cpu_info *ci)
 
 	x86_cpuid(0x80000006, descs);
 
-	cai = &ci->ci_cinfo[CAI_L2_ITLB];
-	cai->cai_totalsize = AMD_L2_EBX_IUTLB_ENTRIES(descs[1]);
-	cai->cai_associativity = AMD_L2_EBX_IUTLB_ASSOC(descs[1]);
-	cai->cai_linesize = (4 * 1024);
-	cp = cache_info_lookup(amd_cpuid_l2cache_assoc_info,
-	    cai->cai_associativity);
-	if (cp != NULL)
-		cai->cai_associativity = cp->cai_associativity;
-	else
-		cai->cai_associativity = 0;	/* XXX Unknown/reserved */
-
-	cai = &ci->ci_cinfo[CAI_L2_ITLB2];
-	cai->cai_totalsize = AMD_L2_EAX_IUTLB_ENTRIES(descs[0]);
-	cai->cai_associativity = AMD_L2_EAX_IUTLB_ASSOC(descs[0]);
-	cai->cai_linesize = largepagesize;
-	cp = cache_info_lookup(amd_cpuid_l2cache_assoc_info,
-	    cai->cai_associativity);
-	if (cp != NULL)
-		cai->cai_associativity = cp->cai_associativity;
-	else
-		cai->cai_associativity = 0;	/* XXX Unknown/reserved */
-
-	cai = &ci->ci_cinfo[CAI_L2_DTLB];
-	cai->cai_totalsize = AMD_L2_EBX_DTLB_ENTRIES(descs[1]);
-	cai->cai_associativity = AMD_L2_EBX_DTLB_ASSOC(descs[1]);
-	cai->cai_linesize = (4 * 1024);
-	cp = cache_info_lookup(amd_cpuid_l2cache_assoc_info,
-	    cai->cai_associativity);
-	if (cp != NULL)
-		cai->cai_associativity = cp->cai_associativity;
-	else
-		cai->cai_associativity = 0;	/* XXX Unknown/reserved */
-
-	cai = &ci->ci_cinfo[CAI_L2_DTLB2];
-	cai->cai_totalsize = AMD_L2_EAX_DTLB_ENTRIES(descs[0]);
-	cai->cai_associativity = AMD_L2_EAX_DTLB_ASSOC(descs[0]);
-	cai->cai_linesize = largepagesize;
-	cp = cache_info_lookup(amd_cpuid_l2cache_assoc_info,
-	    cai->cai_associativity);
-	if (cp != NULL)
-		cai->cai_associativity = cp->cai_associativity;
-	else
-		cai->cai_associativity = 0;	/* XXX Unknown/reserved */
-
 	cai = &ci->ci_cinfo[CAI_L2CACHE];
 	cai->cai_totalsize = AMD_L2_ECX_C_SIZE(descs[2]);
 	cai->cai_associativity = AMD_L2_ECX_C_ASSOC(descs[2]);
@@ -1789,9 +1706,9 @@ amd_cpu_cacheinfo(struct cpu_info *ci)
 		cai->cai_associativity = 0;	/* XXX Unknown/reserved */
 
 	/*
-	 * Determine L3 cache info on AMD Family 10h and newer processors
+	 * Determine L3 cache info on AMD Family 10h processors
 	 */
-	if (family >= 0x10) {
+	if (family == 0x10) {
 		cai = &ci->ci_cinfo[CAI_L3CACHE];
 		cai->cai_totalsize = AMD_L3_EDX_C_SIZE(descs[3]);
 		cai->cai_associativity = AMD_L3_EDX_C_ASSOC(descs[3]);
@@ -1804,60 +1721,6 @@ amd_cpu_cacheinfo(struct cpu_info *ci)
 		else
 			cai->cai_associativity = 0;	/* XXX Unkn/Rsvd */
 	}
-
-	/*
-	 * Determine 1GB TLB info.
-	 */
-	if (lfunc < 0x80000019) {
-		/* No 1GB TLB info available. */
-		return;
-	}
-
-	x86_cpuid(0x80000019, descs);
-
-	cai = &ci->ci_cinfo[CAI_L1_1GBITLB];
-	cai->cai_totalsize = AMD_L1_1GB_EAX_IUTLB_ENTRIES(descs[0]);
-	cai->cai_associativity = AMD_L1_1GB_EAX_IUTLB_ASSOC(descs[0]);
-	cai->cai_linesize = (1024 * 1024 * 1024);
-	cp = cache_info_lookup(amd_cpuid_l2cache_assoc_info,
-	    cai->cai_associativity);
-	if (cp != NULL)
-		cai->cai_associativity = cp->cai_associativity;
-	else
-		cai->cai_associativity = 0;	/* XXX Unknown/reserved */
-
-	cai = &ci->ci_cinfo[CAI_L1_1GBDTLB];
-	cai->cai_totalsize = AMD_L1_1GB_EAX_DTLB_ENTRIES(descs[0]);
-	cai->cai_associativity = AMD_L1_1GB_EAX_DTLB_ASSOC(descs[0]);
-	cai->cai_linesize = (1024 * 1024 * 1024);
-	cp = cache_info_lookup(amd_cpuid_l2cache_assoc_info,
-	    cai->cai_associativity);
-	if (cp != NULL)
-		cai->cai_associativity = cp->cai_associativity;
-	else
-		cai->cai_associativity = 0;	/* XXX Unknown/reserved */
-
-	cai = &ci->ci_cinfo[CAI_L2_1GBITLB];
-	cai->cai_totalsize = AMD_L2_1GB_EBX_IUTLB_ENTRIES(descs[1]);
-	cai->cai_associativity = AMD_L2_1GB_EBX_IUTLB_ASSOC(descs[1]);
-	cai->cai_linesize = (1024 * 1024 * 1024);
-	cp = cache_info_lookup(amd_cpuid_l2cache_assoc_info,
-	    cai->cai_associativity);
-	if (cp != NULL)
-		cai->cai_associativity = cp->cai_associativity;
-	else
-		cai->cai_associativity = 0;	/* XXX Unknown/reserved */
-
-	cai = &ci->ci_cinfo[CAI_L2_1GBDTLB];
-	cai->cai_totalsize = AMD_L2_1GB_EBX_DUTLB_ENTRIES(descs[1]);
-	cai->cai_associativity = AMD_L2_1GB_EBX_DUTLB_ASSOC(descs[1]);
-	cai->cai_linesize = (1024 * 1024 * 1024);
-	cp = cache_info_lookup(amd_cpuid_l2cache_assoc_info,
-	    cai->cai_associativity);
-	if (cp != NULL)
-		cai->cai_associativity = cp->cai_associativity;
-	else
-		cai->cai_associativity = 0;	/* XXX Unknown/reserved */
 }
 
 static void
@@ -1955,11 +1818,6 @@ x86_print_cacheinfo(struct cpu_info *ci)
 		if (sep != NULL)
 			aprint_verbose("\n");
 	}
-	if (ci->ci_cinfo[CAI_L3CACHE].cai_totalsize != 0) {
-		sep = print_cache_config(ci, CAI_L3CACHE, "L3 cache", NULL);
-		if (sep != NULL)
-			aprint_verbose("\n");
-	}
 	if (ci->ci_cinfo[CAI_ITLB].cai_totalsize != 0) {
 		sep = print_tlb_config(ci, CAI_ITLB, "ITLB", NULL);
 		sep = print_tlb_config(ci, CAI_ITLB2, NULL, sep);
@@ -1972,35 +1830,8 @@ x86_print_cacheinfo(struct cpu_info *ci)
 		if (sep != NULL)
 			aprint_verbose("\n");
 	}
-	if (ci->ci_cinfo[CAI_L2_ITLB].cai_totalsize != 0) {
-		sep = print_tlb_config(ci, CAI_L2_ITLB, "L2 ITLB", NULL);
-		sep = print_tlb_config(ci, CAI_L2_ITLB2, NULL, sep);
-		if (sep != NULL)
-			aprint_verbose("\n");
-	}
-	if (ci->ci_cinfo[CAI_L2_DTLB].cai_totalsize != 0) {
-		sep = print_tlb_config(ci, CAI_L2_DTLB, "L2 DTLB", NULL);
-		sep = print_tlb_config(ci, CAI_L2_DTLB2, NULL, sep);
-		if (sep != NULL)
-			aprint_verbose("\n");
-	}
-	if (ci->ci_cinfo[CAI_L1_1GBITLB].cai_totalsize != 0) {
-		sep = print_tlb_config(ci, CAI_L1_1GBITLB, "L1 1GB page ITLB", NULL);
-		if (sep != NULL)
-			aprint_verbose("\n");
-	}
-	if (ci->ci_cinfo[CAI_L1_1GBDTLB].cai_totalsize != 0) {
-		sep = print_tlb_config(ci, CAI_L1_1GBDTLB, "L1 1GB page DTLB", NULL);
-		if (sep != NULL)
-			aprint_verbose("\n");
-	}
-	if (ci->ci_cinfo[CAI_L2_1GBITLB].cai_totalsize != 0) {
-		sep = print_tlb_config(ci, CAI_L2_1GBITLB, "L2 1GB page ITLB", NULL);
-		if (sep != NULL)
-			aprint_verbose("\n");
-	}
-	if (ci->ci_cinfo[CAI_L2_1GBDTLB].cai_totalsize != 0) {
-		sep = print_tlb_config(ci, CAI_L2_1GBDTLB, "L2 1GB page DTLB", NULL);
+	if (ci->ci_cinfo[CAI_L3CACHE].cai_totalsize != 0) {
+		sep = print_cache_config(ci, CAI_L3CACHE, "L3 cache", NULL);
 		if (sep != NULL)
 			aprint_verbose("\n");
 	}
@@ -2012,55 +1843,14 @@ powernow_probe(struct cpu_info *ci)
 	uint32_t regs[4];
 	char buf[256];
 
+	x86_cpuid(0x80000000, regs);
+
+	/* We need CPUID(0x80000007) */
+	if (regs[0] < 0x80000007)
+		return;
 	x86_cpuid(0x80000007, regs);
 
 	snprintb(buf, sizeof(buf), CPUID_APM_FLAGS, regs[3]);
 	aprint_normal_dev(ci->ci_dev, "AMD Power Management features: %s\n",
 	    buf);
-}
-
-int
-ucodeupdate_check(int fd, struct cpu_ucode *uc)
-{
-	struct cpu_info ci;
-	int loader_version, res;
-	struct cpu_ucode_version versreq;
-	extern int cpu_info_level;
-
-	x86_identify();
-	ci.ci_cpuid_level = cpu_info_level;
-	cpu_probe_base_features(&ci);
-	if (!strcmp((char *)ci.ci_vendor, "AuthenticAMD"))
-		loader_version = CPU_UCODE_LOADER_AMD;
-	else if (!strcmp((char *)ci.ci_vendor, "GenuineIntel"))
-		loader_version = CPU_UCODE_LOADER_INTEL1;
-	else
-		return -1;
-
-	/* check whether the kernel understands this loader version */
-	versreq.loader_version = loader_version;
-	versreq.data = 0;
-	res = ioctl(fd, IOC_CPU_UCODE_GET_VERSION, &versreq);
-	if (res)
-		return -1;
-
-	switch (loader_version) {
-	case CPU_UCODE_LOADER_AMD:
-		if (uc->cpu_nr != -1) {
-			/* printf? */
-			return -1;
-		}
-		uc->cpu_nr = CPU_UCODE_ALL_CPUS;
-		break;
-	case CPU_UCODE_LOADER_INTEL1:
-		if (uc->cpu_nr == -1)
-			uc->cpu_nr = CPU_UCODE_ALL_CPUS; /* for Xen */
-		else
-			uc->cpu_nr = CPU_UCODE_CURRENT_CPU;
-		break;
-	default: /* can't happen */
-		return -1;
-	}
-	uc->loader_version = loader_version;
-	return 0;
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: elanpex.4,v 1.6 2011/04/05 08:25:25 wiz Exp $
+.\"	$NetBSD: elanpex.4,v 1.3 2008/04/08 20:30:16 dyoung Exp $
 .\"
 .\"
 .\" Copyright (c) 2008 David Young.  All rights reserved.
@@ -14,6 +14,9 @@
 .\"    copyright notice, this list of conditions and the following
 .\"    disclaimer in the documentation and/or other materials
 .\"    provided with the distribution.
+.\" 3. David Young's name may not be used to endorse or promote
+.\"    products derived from this software without specific prior
+.\"    written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY DAVID YOUNG ``AS IS'' AND ANY
 .\" EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -29,7 +32,7 @@
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
 .Dd January 10, 2008
-.Dt ELANPEX 4 i386
+.Dt elanpex 4 i386
 .Os
 .Sh NAME
 .Nm elanpex
@@ -82,13 +85,13 @@ Failures may occur for the following reasons:
 .It elanpex0: %s %x target data parity
 .El
 .Pp
-Transaction types are alike to failed master exceptions.
+Transaction types are alike to failed master exceptions. 
 .El
 .Sh SEE ALSO
+.Xr dmesg 8 ,
 .Xr elanpar 4 ,
 .Xr elansc 4 ,
-.Xr dmesg 8 ,
-.Xr syslogd 8
+.Xr syslogd 8 .
 .Sh HISTORY
 The
 .Nm

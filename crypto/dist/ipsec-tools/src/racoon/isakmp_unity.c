@@ -1,4 +1,4 @@
-/*	$NetBSD: isakmp_unity.c,v 1.11 2012/01/10 12:07:30 tteras Exp $	*/
+/*	$NetBSD: isakmp_unity.c,v 1.9.12.1 2009/02/08 18:42:17 snj Exp $	*/
 
 /* Id: isakmp_unity.c,v 1.10 2006/07/31 04:49:23 manubsd Exp */
 
@@ -62,9 +62,6 @@
 #endif
 #include <ctype.h>
 #include <resolv.h>
-#ifdef HAVE_STRINGS_H
-#include <strings.h>
-#endif
 
 #include "var.h"
 #include "misc.h"
@@ -308,41 +305,32 @@ int  splitnet_list_add(list, network, count)
 	struct unity_network * network;
 	int *count;
 {
-	struct unity_netentry * nentry;
-
-	/*
-	 * search for network in current list
-	 * to avoid adding duplicates
-	 */
-	for (nentry = *list; nentry != NULL; nentry = nentry->next)
-		if (memcmp(&nentry->network, network,
-			   sizeof(struct unity_network)) == 0)
-			return 0;	/* it's a dupe */
+	struct unity_netentry * newentry;
 
 	/*
 	 * allocate new netentry and copy
-	 * new splitnet network data
+         * new splitnet network data
 	 */
-	nentry = (struct unity_netentry *)
+	newentry = (struct unity_netentry *)
 		racoon_malloc(sizeof(struct unity_netentry));
-	if (nentry == NULL)
+	if (newentry == NULL)
 		return -1;
 
-	memcpy(&nentry->network,network,
+	memcpy(&newentry->network,network,
 		sizeof(struct unity_network));
-	nentry->next = NULL;
+	newentry->next = NULL;
 
 	/*
 	 * locate the last netentry in our
 	 * splitnet list and add our entry
 	 */
 	if (*list == NULL)
-		*list = nentry;
+		*list = newentry;
 	else {
 		struct unity_netentry * tmpentry = *list;
 		while (tmpentry->next != NULL)
 			tmpentry = tmpentry->next;
-		tmpentry->next = nentry;
+		tmpentry->next = newentry;
 	}
 
 	(*count)++;
@@ -366,9 +354,8 @@ void splitnet_list_free(list, count)
 	}
 }
 
-char * splitnet_list_2str(list, splitnet_ipaddr)
+char * splitnet_list_2str(list)
 	struct unity_netentry * list;
-	enum splinet_ipaddr splitnet_ipaddr;
 {
 	struct unity_netentry * netentry;
 	char tmp1[40];
@@ -390,9 +377,8 @@ char * splitnet_list_2str(list, splitnet_ipaddr)
 		netentry = netentry->next;
 	}
 
-	/* allocate network list string; we need the extra byte temporarily
-	 * as sprintf() will write trailing 0-byte after the space. */
-	str = racoon_malloc(len + 1);
+	/* allocate network list string */
+	str = racoon_malloc(len);
 	if (str == NULL)
 		return NULL;
 
@@ -402,24 +388,13 @@ char * splitnet_list_2str(list, splitnet_ipaddr)
 	while (netentry != NULL) {
 
 		inet_ntop(AF_INET, &netentry->network.addr4, tmp1, 40);
-		if (splitnet_ipaddr == CIDR) {
-			uint32_t tmp3;
-			int cidrmask;
+		inet_ntop(AF_INET, &netentry->network.mask4, tmp2, 40);
 
-			tmp3 = ntohl(netentry->network.mask4.s_addr);
-			cidrmask = 33 - ffs(tmp3);
-			if (cidrmask == 33) cidrmask = 0;
-			
-			len += sprintf(str+len, "%s/%d ", tmp1, cidrmask);
-		} else {
-			inet_ntop(AF_INET, &netentry->network.mask4, tmp2, 40);
-			len += sprintf(str+len, "%s/%s ", tmp1, tmp2);
-		}
+		len += sprintf(str+len, "%s/%s ", tmp1, tmp2);
 
 		netentry = netentry->next;
 	}
 
-	/* trim the string to not have trailing spaces */
 	str[len-1]=0;
 
 	return str;

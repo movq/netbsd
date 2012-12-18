@@ -1,4 +1,4 @@
-/* $NetBSD: pdb.c,v 1.16 2010/06/10 06:28:33 dholland Exp $ */
+/* $NetBSD: pdb.c,v 1.12 2003/11/12 13:31:08 grant Exp $ */
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pdb.c,v 1.16 2010/06/10 06:28:33 dholland Exp $");
+__RCSID("$NetBSD: pdb.c,v 1.12 2003/11/12 13:31:08 grant Exp $");
 #endif
 
 #include <sys/types.h>
@@ -49,14 +49,14 @@ __RCSID("$NetBSD: pdb.c,v 1.16 2010/06/10 06:28:33 dholland Exp $");
 #include "extern.h"
 #include "pathnames.h"
 
-static int check_junk(const struct cmdinfo *);
-static void add_ci(const struct cmdinfo *, struct cmdinfo *);
-static void print_ci(const struct cmdinfo *, const struct cmdinfo *);
+static int check_junk __P((struct cmdinfo *));
+static void add_ci __P((const struct cmdinfo *, struct cmdinfo *));
+static void print_ci __P((const struct cmdinfo *, const struct cmdinfo *));
 
 static DB	*pacct_db;
 
 int
-pacct_init(void)
+pacct_init()
 {
 	DB *saved_pacct_db;
 	int error;
@@ -125,14 +125,15 @@ out:	if (error != 0)
 }
 
 void
-pacct_destroy(void)
+pacct_destroy()
 {
 	if (DB_CLOSE(pacct_db) < 0)
 		warn("destroying process accounting stats");
 }
 
 int
-pacct_add(const struct cmdinfo *ci)
+pacct_add(ci)
+	const struct cmdinfo *ci;
 {
 	DBT key, data;
 	struct cmdinfo newci;
@@ -174,7 +175,7 @@ pacct_add(const struct cmdinfo *ci)
 }
 
 int
-pacct_update(void)
+pacct_update()
 {
 	DB *saved_pacct_db;
 	DBT key, data;
@@ -222,7 +223,7 @@ pacct_update(void)
 }
 
 void
-pacct_print(void)
+pacct_print()
 {
 	BTREEINFO bti;
 	DBT key, data, ndata;
@@ -260,7 +261,7 @@ pacct_print(void)
 		/* add to total */
 		add_ci(&ci, &ci_total);
 
-		if (vflag && ci.ci_calls <= (unsigned)cutoff &&
+		if (vflag && ci.ci_calls <= cutoff &&
 		    (fflag || check_junk(&ci))) {
 			/* put it into **junk** */
 			add_ci(&ci, &ci_junk);
@@ -318,7 +319,8 @@ next:		rv = DB_SEQ(pacct_db, &key, &data, R_NEXT);
 }
 
 static int
-check_junk(const struct cmdinfo *cip)
+check_junk(cip)
+	struct cmdinfo *cip;
 {
 	char *cp;
 	size_t len;
@@ -331,7 +333,9 @@ check_junk(const struct cmdinfo *cip)
 }
 
 static void
-add_ci(const struct cmdinfo *fromcip, struct cmdinfo *tocip)
+add_ci(fromcip, tocip)
+	const struct cmdinfo *fromcip;
+	struct cmdinfo *tocip;
 {
 	tocip->ci_calls += fromcip->ci_calls;
 	tocip->ci_etime += fromcip->ci_etime;
@@ -342,7 +346,8 @@ add_ci(const struct cmdinfo *fromcip, struct cmdinfo *tocip)
 }
 
 static void
-print_ci(const struct cmdinfo *cip, const struct cmdinfo *totalcip)
+print_ci(cip, totalcip)
+	const struct cmdinfo *cip, *totalcip;
 {
 	double t, c;
 	int uflow;

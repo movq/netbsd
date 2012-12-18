@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.43 2012/01/29 15:54:35 phx Exp $
+#	$NetBSD: Makefile,v 1.40 2008/09/13 15:43:07 tsutsui Exp $
 #
 
 .include <bsd.own.mk>
@@ -17,9 +17,7 @@ SUBDIR+= amd64
 SUBDIR+= amiga
 SUBDIR+= arc
 SUBDIR+= atari
-SUBDIR+= bebox
 SUBDIR+= cats
-SUBDIR+= emips
 SUBDIR+= evbarm
 SUBDIR+= evbppc
 SUBDIR+= hp300
@@ -36,7 +34,6 @@ SUBDIR+= mvme68k
 SUBDIR+= news68k
 SUBDIR+= newsmips
 SUBDIR+= next68k
-SUBDIR+= ofppc
 SUBDIR+= pmax
 SUBDIR+= prep
 SUBDIR+= sandpoint

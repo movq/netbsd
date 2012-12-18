@@ -1,4 +1,4 @@
-/*	$NetBSD: lpc.c,v 1.26 2011/08/30 19:27:37 joerg Exp $	*/
+/*	$NetBSD: lpc.c,v 1.24 2008/07/21 13:36:58 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -37,7 +37,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)lpc.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: lpc.c,v 1.26 2011/08/30 19:27:37 joerg Exp $");
+__RCSID("$NetBSD: lpc.c,v 1.24 2008/07/21 13:36:58 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -82,9 +82,9 @@ History	*hist;
 HistEvent he;
 EditLine *elptr;
 
-__dead static void	 cmdscanner(int);
+static void		 cmdscanner(int);
 static struct cmd	*getcmd(const char *);
-__dead static void	 intr(int);
+static void		 intr(int);
 static void		 makeargv(void);
 static int		 ingroup(const char *);
 int			 main(int, char *p[]);
@@ -240,7 +240,7 @@ makeargv(void)
 
 	s = strlen(cmdline) + 1;
 	margc = 0;
-	for (cp = cmdline; *cp && (size_t)(cp - cmdline) < s && n < MAX_MARGV; n++) {
+	for (cp = cmdline; *cp && (cp - cmdline) < s && n < MAX_MARGV; n++) {
 		while (isspace((unsigned char)*cp))
 			cp++;
 		if (*cp == '\0')

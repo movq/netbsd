@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.14 2011/05/26 12:56:30 joerg Exp $
+#	$NetBSD: Makefile.inc,v 1.13 2005/12/11 12:17:48 christos Exp $
 #
 #	Configuration variables (default values are below):
 #
@@ -18,8 +18,6 @@ I386DST?=		${.OBJDIR}/lib/i386
 
 #I386DIR=		$S/arch/i386/stand/lib
 I386LIB=		${I386DST}/libi386.a
-
-CWARNFLAGS.clang+=	-Wno-tautological-compare
 
 I386MAKE= \
 	cd ${I386DIR} && MAKEOBJDIRPREFIX= && unset MAKEOBJDIRPREFIX && \

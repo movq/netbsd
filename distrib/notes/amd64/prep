@@ -1,4 +1,4 @@
-.\"$NetBSD: prep,v 1.2 2009/04/25 21:21:48 snj Exp $
+.\"$NetBSD: prep,v 1.1.32.1 2009/04/25 23:16:33 snj Exp $
 .
 .Pp
 It is strongly recommended that as part of the installation procedure, you

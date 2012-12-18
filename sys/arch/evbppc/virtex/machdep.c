@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.21 2012/07/27 22:13:58 matt Exp $ */
+/*	$NetBSD: machdep.c,v 1.6 2008/07/02 17:28:55 ad Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.21 2012/07/27 22:13:58 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.6 2008/07/02 17:28:55 ad Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -43,37 +43,33 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.21 2012/07/27 22:13:58 matt Exp $");
 #include "opt_kgdb.h"
 
 #include <sys/param.h>
-#include <sys/boot_flag.h>
 #include <sys/buf.h>
-#include <sys/bus.h>
-#include <sys/device.h>
 #include <sys/exec.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
-#include <sys/module.h>
 #include <sys/mount.h>
 #include <sys/msgbuf.h>
-#include <sys/kernel.h>
-#include <sys/ksyms.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/syscallargs.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
+#include <sys/kernel.h>
+#include <sys/user.h>
+#include <sys/boot_flag.h>
+#include <sys/ksyms.h>
 
 #include <uvm/uvm_extern.h>
 
+#include <net/netisr.h>
+
 #include <dev/cons.h>
 
+#include <machine/bus.h>
 #include <machine/powerpc.h>
-
-#include <powerpc/trap.h>
-#include <powerpc/pcb.h>
+#include <machine/trap.h>
 
 #include <powerpc/spr.h>
-#include <powerpc/ibm4xx/spr.h>
-
-#include <powerpc/ibm4xx/cpu.h>
 
 #include <evbppc/virtex/dcr.h>
 #include <evbppc/virtex/virtex.h>
@@ -81,7 +77,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.21 2012/07/27 22:13:58 matt Exp $");
 #include "ksyms.h"
 
 #if defined(DDB)
-#include <powerpc/db_machdep.h>
+#include <machine/db_machdep.h>
 #include <ddb/db_extern.h>
 #endif
 
@@ -92,20 +88,55 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.21 2012/07/27 22:13:58 matt Exp $");
 /*
  * Global variables used here and there
  */
+struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 /*
  * This should probably be in autoconf!				XXX
  */
+char cpu_model[80];
 char machine[] = MACHINE;		/* from <machine/param.h> */
 char machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
 
+extern struct user *proc0paddr;
+
 char bootpath[256];
+paddr_t msgbuf_paddr;
 vaddr_t msgbuf_vaddr;
 
-void initppc(vaddr_t, vaddr_t);
+#if NKSYMS || defined(DDB) || defined(LKM)
+void *startsym, *endsym;
+#endif
+
+int lcsplx(int);
+void initppc(u_int, u_int);
 
 static void dumpsys(void);
+static void install_extint(void (*)(void));
+static void trapcpy(int, void *, size_t);
+
+
+/* These two live in powerpc/powerpc/trap_subr.S */
+extern int 		extint, extsize;
+extern u_long 		extint_call;
+
+extern int defaulttrap, defaultsize;
+extern int sctrap, scsize;
+extern int alitrap, alisize;
+extern int dsitrap, dsisize;
+extern int isitrap, isisize;
+extern int mchktrap, mchksize;
+extern int tlbimiss4xx, tlbim4size;
+extern int tlbdmiss4xx, tlbdm4size;
+extern int pitfitwdog, pitfitwdogsize;
+extern int debugtrap, debugsize;
+extern int errata51handler, errata51size;
+#ifdef DDB
+extern int ddblow, ddbsize;
+#endif
+#ifdef IPKDB
+extern int ipkdblow, ipkdbsize;
+#endif
 
 /* BSS segment start & end. */
 extern char 		edata[], end[];
@@ -115,13 +146,43 @@ extern char 		edata[], end[];
 struct mem_region 	physmemr[MEMREGIONS];
 struct mem_region 	availmemr[MEMREGIONS];
 
+static struct {
+	int 	vector;
+	void 	*addr;
+	void 	*size;
+} traps[] = {
+	/* EXC_EXI handled by install_extint(). */
+	{ EXC_SC, 	&sctrap, 	&scsize 	},
+	{ EXC_ALI, 	&alitrap, 	&alisize 	},
+	{ EXC_DSI, 	&dsitrap, 	&dsisize 	},
+	{ EXC_ISI, 	&isitrap, 	&isisize 	},
+	{ EXC_MCHK, 	&mchktrap, 	&mchksize 	},
+	{ EXC_ITMISS, 	&tlbimiss4xx, 	&tlbim4size 	},
+	{ EXC_DTMISS, 	&tlbdmiss4xx, 	&tlbdm4size 	},
+
+	/* EXC_{PIT, FIT, WDOG} handlers are spaced by 0x10 bytes only.. */
+	{ EXC_PIT, 	&pitfitwdog, 	&pitfitwdogsize },
+	{ EXC_DEBUG, 	&debugtrap, 	&debugsize	},
+
+	/* PPC405GP Rev D errata item 51 */	
+	{ EXC_DTMISS|EXC_ALI, &errata51handler, &errata51size },
+
+#if defined(DDB)
+	{ EXC_PGM, 	&ddblow, 	&ddbsize 	},
+#elif defined(IPKDB)
+	{ EXC_PGM, 	&ipkdblow, 	&ipkdbsize 	},
+#endif
+};
+
 /* Maximum TLB page size. */
 #define TLB_PG_SIZE 	(16*1024*1024)
 
 void
-initppc(vaddr_t startkernel, vaddr_t endkernel)
+initppc(u_int startkernel, u_int endkernel)
 {
-	paddr_t			addr, memsize;
+	struct cpu_info * const ci = curcpu();
+	u_int 			addr, memsize;
+	int 			exc, dbcr0, i;
 
         /* Initialize cache info for memcpy, memset, etc. */
         cpu_probe_cache();
@@ -145,8 +206,48 @@ initppc(vaddr_t startkernel, vaddr_t endkernel)
 	virtex_machdep_init(roundup(memsize, TLB_PG_SIZE), TLB_PG_SIZE,
 	    physmemr, availmemr);
 
-	ibm4xx_init(startkernel, endkernel, pic_ext_intr);
+	lwp0.l_cpu = ci;
+	lwp0.l_addr = proc0paddr;
+	memset(lwp0.l_addr, 0, sizeof(*lwp0.l_addr));
 
+	curpcb = &proc0paddr->u_pcb;
+	curpcb->pcb_pm = pmap_kernel();
+
+	for (exc = EXC_RSVD; exc <= EXC_LAST; exc += 0x100)
+		trapcpy(exc, &defaulttrap, (size_t)&defaultsize);
+
+	for (i = 0; i < __arraycount(traps); i++)
+		trapcpy(traps[i].vector, traps[i].addr, (size_t)traps[i].size);
+
+	__syncicache((void *)EXC_RST, EXC_LAST - EXC_RST + 0x100);
+
+	/* set exception vector base */
+	mtspr(SPR_EVPR, 0);
+
+	/* handle trap instruction as PGM exception */
+	dbcr0 = mfspr(SPR_DBCR0) & ~DBCR0_TDE;
+	mtspr(SPR_DBCR0, dbcr0);
+
+	install_extint(ext_intr);
+
+	/* enable translation */
+	__asm volatile (
+	    "	mfmsr %0 	\n"
+	    "	ori %0,%0,%1 	\n"
+	    "	mtmsr %0 	\n"
+	    "   sync 		\n"
+	    "	isync		\n"
+	    : : "r"(0), "K"(PSL_IR | PSL_DR | PSL_ME)); 
+
+	/* now that we enabled MMU, we can map console */
+	consinit();
+
+	uvm_setpagesize();
+	pmap_bootstrap(startkernel, endkernel);
+
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
+#endif
 #ifdef DDB
 	if (boothowto & RB_KDB)
 		Debugger();
@@ -165,16 +266,49 @@ initppc(vaddr_t startkernel, vaddr_t endkernel)
 	 */
 	kgdb_connect(1);
 #endif /* KGDB */
+}
 
-	/*
-	 * Look for the ibm4xx modules in the right place.
-	 */
-	module_machine = module_machine_ibm4xx;
+/*
+ * trapcpy:
+ *
+ * 	Install a trap vector. We cannot use memcpy because the
+ * 	destination may be zero. Borrowed from Explora.
+ */
+static void
+trapcpy(int dest, void *src, size_t len)
+{
+	uint32_t 		*dest_p = (void *)dest;
+	uint32_t 		*src_p = src;
+
+	while (len > 0) {
+		*dest_p++ = *src_p++;
+		len -= sizeof(uint32_t);
+	}
+}
+
+static void
+install_extint(void (*handler)(void))
+{
+	u_long 			offset = (u_long)handler - (u_long)&extint_call;
+
+#ifdef DIAGNOSTIC
+	if (offset > 0x1ffffff)
+		panic("install_extint: too far away");
+#endif
+
+	/* Patch branch target in EXC_EXI handler. */
+	extint_call = (extint_call & 0xfc000003) | offset;
+
+	memcpy((void *)EXC_EXI, &extint, (size_t)&extsize);
+	__syncicache((void *)&extint_call, sizeof(extint_call));
+	__syncicache((void *)EXC_EXI, (int)&extsize);
 }
 
 /*
  * Machine dependent startup code.
  */
+
+char msgbuf[MSGBUFSIZE];
 
 void
 cpu_startup(void)
@@ -277,8 +411,6 @@ cpu_reboot(int howto, char *what)
 
 	doshutdownhooks();
 
-	pmf_system_shutdown(boothowto);
-
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN) {
 		/* Power off here if we know how...*/
 	}
@@ -337,4 +469,10 @@ cpu_reboot(int howto, char *what)
 	while (1)
 		/* nothing */;
 #endif
+}
+
+int
+lcsplx(int ipl)
+{
+	return spllower(ipl); 	/* XXX */
 }

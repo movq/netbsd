@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread.c,v 1.141 2012/11/14 23:25:05 christos Exp $	*/
+/*	$NetBSD: pthread.c,v 1.106.2.4 2012/05/19 16:34:15 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2003, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -30,26 +30,21 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread.c,v 1.141 2012/11/14 23:25:05 christos Exp $");
+__RCSID("$NetBSD: pthread.c,v 1.106.2.4 2012/05/19 16:34:15 riz Exp $");
 
 #define	__EXPOSE_STACK	1
 
 #include <sys/param.h>
-#include <sys/exec_elf.h>
 #include <sys/mman.h>
-#include <sys/lwp.h>
+#include <sys/sysctl.h>
 #include <sys/lwpctl.h>
-#include <sys/tls.h>
 
-#include <assert.h>
-#include <dlfcn.h>
 #include <err.h>
 #include <errno.h>
 #include <lwp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stddef.h>
 #include <string.h>
 #include <syslog.h>
 #include <ucontext.h>
@@ -60,20 +55,18 @@ __RCSID("$NetBSD: pthread.c,v 1.141 2012/11/14 23:25:05 christos Exp $");
 #include "pthread_int.h"
 
 pthread_rwlock_t pthread__alltree_lock = PTHREAD_RWLOCK_INITIALIZER;
-static rb_tree_t	pthread__alltree;
+RB_HEAD(__pthread__alltree, __pthread_st) pthread__alltree;
 
-static signed int	pthread__cmp(void *, const void *, const void *);
+#ifndef lint
+static int	pthread__cmp(struct __pthread_st *, struct __pthread_st *);
+RB_PROTOTYPE_STATIC(__pthread__alltree, __pthread_st, pt_alltree, pthread__cmp)
+#endif
 
-static const rb_tree_ops_t pthread__alltree_ops = {
-	.rbto_compare_nodes = pthread__cmp,
-	.rbto_compare_key = pthread__cmp,
-	.rbto_node_offset = offsetof(struct __pthread_st, pt_alltree),
-	.rbto_context = NULL
-};
-
-static void	pthread__create_tramp(void *);
+static void	pthread__create_tramp(pthread_t, void *(*)(void *), void *);
 static void	pthread__initthread(pthread_t);
 static void	pthread__scrubthread(pthread_t, char *, int);
+static int	pthread__stackid_setup(void *, size_t, pthread_t *);
+static int	pthread__stackalloc(pthread_t *);
 static void	pthread__initmain(pthread_t *);
 static void	pthread__fork_callback(void);
 static void	pthread__reap(pthread_t);
@@ -101,7 +94,7 @@ static int pthread__diagassert;
 int pthread__concurrency;
 int pthread__nspins;
 int pthread__unpark_max = PTHREAD__UNPARK_MAX;
-int pthread__dbg;	/* set by libpthread_dbg if active */
+int pthread__osrev;
 
 /* 
  * We have to initialize the pthread_stack* variables here because
@@ -110,9 +103,12 @@ int pthread__dbg;	/* set by libpthread_dbg if active */
  * pointer to the thread data, it is safe to change the mapping from
  * stack pointer to thread data afterwards.
  */
-size_t	pthread__stacksize;
-size_t	pthread__pagesize;
-static struct __pthread_st pthread__main;
+#define	_STACKSIZE_LG 18
+int	pthread__stacksize_lg = _STACKSIZE_LG;
+size_t	pthread__stacksize = 1 << _STACKSIZE_LG;
+vaddr_t	pthread__stackmask = (1 << _STACKSIZE_LG) - 1;
+vaddr_t pthread__threadmask = (vaddr_t)~((1 << _STACKSIZE_LG) - 1);
+#undef	_STACKSIZE_LG
 
 int _sys___sigprocmask14(int, const sigset_t *, sigset_t *);
 
@@ -158,11 +154,23 @@ pthread__init(void)
 {
 	pthread_t first;
 	char *p;
-	int i;
+	int i, mib[2];
+	size_t len;
 	extern int __isthreaded;
 
-	pthread__pagesize = (size_t)sysconf(_SC_PAGESIZE);
-	pthread__concurrency = (int)sysconf(_SC_NPROCESSORS_CONF);
+	mib[0] = CTL_HW;
+	mib[1] = HW_NCPU; 
+
+	len = sizeof(pthread__concurrency);
+	if (sysctl(mib, 2, &pthread__concurrency, &len, NULL, 0) == -1)
+		err(1, "sysctl(hw.ncpu");
+
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_OSREV; 
+
+	len = sizeof(pthread__osrev);
+	if (sysctl(mib, 2, &pthread__osrev, &len, NULL, 0) == -1)
+		err(1, "sysctl(hw.osrevision");
 
 	/* Initialize locks first; they're needed elsewhere. */
 	pthread__lockprim_init();
@@ -181,8 +189,7 @@ pthread__init(void)
 	pthread_attr_init(&pthread_default_attr);
 	PTQ_INIT(&pthread__allqueue);
 	PTQ_INIT(&pthread__deadqueue);
-
-	rb_tree_init(&pthread__alltree, &pthread__alltree_ops);
+	RB_INIT(&pthread__alltree);
 
 	/* Create the thread structure corresponding to main() */
 	pthread__initmain(&first);
@@ -191,7 +198,7 @@ pthread__init(void)
 
 	first->pt_lid = _lwp_self();
 	PTQ_INSERT_HEAD(&pthread__allqueue, first, pt_allq);
-	(void)rb_tree_insert_node(&pthread__alltree, first);
+	RB_INSERT(__pthread__alltree, &pthread__alltree, first);
 
 	if (_lwp_ctl(LWPCTL_FEATURE_CURCPU, &first->pt_lwpctl) != 0) {
 		err(1, "_lwp_ctl");
@@ -309,70 +316,6 @@ pthread__scrubthread(pthread_t t, char *name, int flags)
 	t->pt_lid = 0;
 }
 
-static int
-pthread__getstack(pthread_t newthread, const pthread_attr_t *attr)
-{
-	void *stackbase, *stackbase2, *redzone;
-	size_t stacksize, guardsize;
-	bool allocated;
-
-	if (attr != NULL) {
-		pthread_attr_getstack(attr, &stackbase, &stacksize);
-	} else {
-		stackbase = NULL;
-		stacksize = 0;
-	}
-	if (stacksize == 0)
-		stacksize = pthread__stacksize;
-
-	if (newthread->pt_stack_allocated) {
-		if (stackbase == NULL &&
-		    newthread->pt_stack.ss_size == stacksize)
-			return 0;
-		stackbase2 = newthread->pt_stack.ss_sp;
-#ifndef __MACHINE_STACK_GROWS_UP
-		stackbase2 = (char *)stackbase2 - newthread->pt_guardsize;
-#endif
-		munmap(stackbase2,
-		    newthread->pt_stack.ss_size + newthread->pt_guardsize);
-		newthread->pt_stack.ss_sp = NULL;
-		newthread->pt_stack.ss_size = 0;
-		newthread->pt_guardsize = 0;
-		newthread->pt_stack_allocated = false;
-	}
-
-	newthread->pt_stack_allocated = false;
-
-	if (stackbase == NULL) {
-		stacksize = ((stacksize - 1) | (pthread__pagesize - 1)) + 1;
-		guardsize = pthread__pagesize;
-		stackbase = mmap(NULL, stacksize + guardsize,
-		    PROT_READ|PROT_WRITE, MAP_ANON|MAP_PRIVATE, -1, (off_t)0);
-		if (stackbase == MAP_FAILED)
-			return ENOMEM;
-		allocated = true;
-	} else {
-		guardsize = 0;
-		allocated = false;
-	}
-#ifdef __MACHINE_STACK_GROWS_UP
-	redzone = (char *)stackbase + stacksize;
-	stackbase2 = (char *)stackbase;
-#else
-	redzone = (char *)stackbase;
-	stackbase2 = (char *)stackbase + guardsize;
-#endif
-	if (allocated && guardsize &&
-	    mprotect(redzone, guardsize, PROT_NONE) == -1) {
-		munmap(stackbase, stacksize + guardsize);
-		return EPERM;
-	}
-	newthread->pt_stack.ss_size = stacksize;
-	newthread->pt_stack.ss_sp = stackbase2;
-	newthread->pt_guardsize = guardsize;
-	newthread->pt_stack_allocated = allocated;
-	return 0;
-}
 
 int
 pthread_create(pthread_t *thread, const pthread_attr_t *attr,
@@ -383,7 +326,6 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 	struct pthread_attr_private *p;
 	char * volatile name;
 	unsigned long flag;
-	void *private_area;
 	int ret;
 
 	/*
@@ -427,12 +369,6 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 		if (newthread)
 			PTQ_REMOVE(&pthread__deadqueue, newthread, pt_deadq);
 		pthread_mutex_unlock(&pthread__deadqueue_lock);
-#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
-		if (newthread && newthread->pt_tls) {
-			_rtld_tls_free(newthread->pt_tls);
-			newthread->pt_tls = NULL;
-		}
-#endif
 	}
 
 	/*
@@ -440,63 +376,37 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 	 * and initialize it.
 	 */
 	if (newthread == NULL) {
-		newthread = malloc(sizeof(*newthread));
-		if (newthread == NULL) {
-			free(name);
-			return ENOMEM;
-		}
-		newthread->pt_stack_allocated = false;
-
-		if (pthread__getstack(newthread, attr)) {
-			free(newthread);
-			free(name);
-			return ENOMEM;
+		ret = pthread__stackalloc(&newthread);
+		if (ret != 0) {
+			if (name)
+				free(name);
+			return ret;
 		}
 
 		/* This is used only when creating the thread. */
 		_INITCONTEXT_U(&newthread->pt_uc);
+#ifdef PTHREAD_MACHINE_HAS_ID_REGISTER
+		pthread__uc_id(&newthread->pt_uc) = newthread;
+#endif
 		newthread->pt_uc.uc_stack = newthread->pt_stack;
 		newthread->pt_uc.uc_link = NULL;
-#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
-		newthread->pt_tls = NULL;
-#endif
 
 		/* Add to list of all threads. */
 		pthread_rwlock_wrlock(&pthread__alltree_lock);
 		PTQ_INSERT_TAIL(&pthread__allqueue, newthread, pt_allq);
-		(void)rb_tree_insert_node(&pthread__alltree, newthread);
+		RB_INSERT(__pthread__alltree, &pthread__alltree, newthread);
 		pthread_rwlock_unlock(&pthread__alltree_lock);
 
 		/* Will be reset by the thread upon exit. */
 		pthread__initthread(newthread);
-	} else {
-		if (pthread__getstack(newthread, attr)) {
-			pthread_mutex_lock(&pthread__deadqueue_lock);
-			PTQ_INSERT_TAIL(&pthread__deadqueue, newthread, pt_deadq);
-			pthread_mutex_unlock(&pthread__deadqueue_lock);
-			return ENOMEM;
-		}
-		_INITCONTEXT_U(&newthread->pt_uc);
-		newthread->pt_uc.uc_stack = newthread->pt_stack;
-		newthread->pt_uc.uc_link = NULL;
 	}
 
 	/*
 	 * Create the new LWP.
 	 */
 	pthread__scrubthread(newthread, name, nattr.pta_flags);
-	newthread->pt_func = startfunc;
-	newthread->pt_arg = arg;
-#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
-	private_area = newthread->pt_tls = _rtld_tls_allocate();
-	newthread->pt_tls->tcb_pthread = newthread;
-#else
-	private_area = newthread;
-#endif
-
-	_lwp_makecontext(&newthread->pt_uc, pthread__create_tramp,
-	    newthread, private_area, newthread->pt_stack.ss_sp,
-	    newthread->pt_stack.ss_size);
+	makecontext(&newthread->pt_uc, pthread__create_tramp, 3,
+	    newthread, startfunc, arg);
 
 	flag = LWP_DETACHED;
 	if ((newthread->pt_flags & PT_FLAG_SUSPENDED) != 0 ||
@@ -504,10 +414,11 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 		flag |= LWP_SUSPENDED;
 	ret = _lwp_create(&newthread->pt_uc, flag, &newthread->pt_lid);
 	if (ret != 0) {
-		ret = errno;
-		pthread_mutex_lock(&newthread->pt_lock);
-		/* Will unlock and free name. */
-		pthread__reap(newthread);
+		free(name);
+		newthread->pt_state = PT_STATE_DEAD;
+		pthread_mutex_lock(&pthread__deadqueue_lock);
+		PTQ_INSERT_HEAD(&pthread__deadqueue, newthread, pt_deadq);
+		pthread_mutex_unlock(&pthread__deadqueue_lock);
 		return ret;
 	}
 
@@ -527,22 +438,22 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 }
 
 
-__dead static void
-pthread__create_tramp(void *cookie)
+static void
+pthread__create_tramp(pthread_t self, void *(*start)(void *), void *arg)
 {
-	pthread_t self;
 	void *retval;
 
-	self = cookie;
+#ifdef PTHREAD__HAVE_THREADREG
+	/* Set up identity register. */
+	pthread__threadreg_set(self);
+#endif
 
 	/*
 	 * Throw away some stack in a feeble attempt to reduce cache
 	 * thrash.  May help for SMT processors.  XXX We should not
 	 * be allocating stacks on fixed 2MB boundaries.  Needs a
-	 * thread register or decent thread local storage.
-	 *
-	 * Note that we may race with the kernel in _lwp_create(),
-	 * and so pt_lid can be unset at this point, but we don't
+	 * thread register or decent thread local storage.  Note
+	 * that pt_lid may not be set by this point, but we don't
 	 * care.
 	 */
 	(void)alloca(((unsigned)self->pt_lid & 7) << 8);
@@ -558,7 +469,7 @@ pthread__create_tramp(void *cookie)
 		err(1, "_lwp_ctl");
 	}
 
-	retval = (*self->pt_func)(self->pt_arg);
+	retval = (*start)(arg);
 
 	pthread_exit(retval);
 
@@ -939,20 +850,24 @@ pthread_testcancel(void)
 /*
  * POSIX requires that certain functions return an error rather than
  * invoking undefined behavior even when handed completely bogus
- * pthread_t values, e.g. stack garbage.
+ * pthread_t values, e.g. stack garbage or (pthread_t)666. This
+ * utility routine searches the list of threads for the pthread_t
+ * value without dereferencing it.
  */
 int
 pthread__find(pthread_t id)
 {
 	pthread_t target;
-	int error;
 
 	pthread_rwlock_rdlock(&pthread__alltree_lock);
-	target = rb_tree_find_node(&pthread__alltree, id);
-	error = (target && target->pt_state != PT_STATE_DEAD) ? 0 : ESRCH;
+	/* LINTED */
+	target = RB_FIND(__pthread__alltree, &pthread__alltree, id);
 	pthread_rwlock_unlock(&pthread__alltree_lock);
 
-	return error;
+	if (target == NULL || target->pt_state == PT_STATE_DEAD)
+		return ESRCH;
+
+	return 0;
 }
 
 
@@ -1240,32 +1155,27 @@ pthread__unpark_all(pthread_queue_t *queue, pthread_t self,
 
 #undef	OOPS
 
-static void
-pthread__initmainstack(void)
+/*
+ * Allocate a stack for a thread, and set it up. It needs to be aligned, so 
+ * that a thread can find itself by its stack pointer. 
+ */
+static int
+pthread__stackalloc(pthread_t *newt)
 {
-	struct rlimit slimit;
-	const AuxInfo *aux;
-	size_t size;
+	void *addr;
 
-	_DIAGASSERT(_dlauxinfo() != NULL);
+	addr = mmap(NULL, pthread__stacksize, PROT_READ|PROT_WRITE,
+	    MAP_ANON|MAP_PRIVATE | MAP_ALIGNED(pthread__stacksize_lg),
+	    -1, (off_t)0);
 
-	if (getrlimit(RLIMIT_STACK, &slimit) == -1)
-		err(1, "Couldn't get stack resource consumption limits");
-	size = slimit.rlim_cur;
-	pthread__main.pt_stack.ss_size = size;
+	if (addr == MAP_FAILED)
+		return ENOMEM;
 
-	for (aux = _dlauxinfo(); aux->a_type != AT_NULL; ++aux) {
-		if (aux->a_type == AT_STACKBASE) {
-			pthread__main.pt_stack.ss_sp = (void *)aux->a_v;
-#ifdef __MACHINE_STACK_GROWS_UP
-			pthread__main.pt_stack.ss_sp = (void *)aux->a_v;
-#else
-			pthread__main.pt_stack.ss_sp = (char *)aux->a_v - size;
-#endif
-			break;
-		}
-	}
+	pthread__assert(((intptr_t)addr & pthread__stackmask) == 0);
+
+	return pthread__stackid_setup(addr, pthread__stacksize, newt); 
 }
+
 
 /*
  * Set up the slightly special stack for the "initial" thread, which
@@ -1275,63 +1185,115 @@ pthread__initmainstack(void)
 static void
 pthread__initmain(pthread_t *newt)
 {
+	struct rlimit slimit;
+	size_t pagesize;
+	pthread_t t;
+	void *base;
+	size_t size;
+	int error, ret;
 	char *value;
 
-	pthread__initmainstack();
+	pagesize = (size_t)sysconf(_SC_PAGESIZE);
+	pthread__stacksize = 0;
+	ret = getrlimit(RLIMIT_STACK, &slimit);
+	if (ret == -1)
+		err(1, "Couldn't get stack resource consumption limits");
 
 	value = pthread__getenv("PTHREAD_STACKSIZE");
 	if (value != NULL) {
 		pthread__stacksize = atoi(value) * 1024;
-		if (pthread__stacksize > pthread__main.pt_stack.ss_size)
-			pthread__stacksize = pthread__main.pt_stack.ss_size;
+		if (pthread__stacksize > slimit.rlim_cur)
+			pthread__stacksize = (size_t)slimit.rlim_cur;
 	}
 	if (pthread__stacksize == 0)
-		pthread__stacksize = pthread__main.pt_stack.ss_size;
-	pthread__stacksize += pthread__pagesize - 1;
-	pthread__stacksize &= ~(pthread__pagesize - 1);
-	if (pthread__stacksize < 4 * pthread__pagesize)
+		pthread__stacksize = (size_t)slimit.rlim_cur;
+	if (pthread__stacksize < 4 * pagesize)
 		errx(1, "Stacksize limit is too low, minimum %zd kbyte.",
-		    4 * pthread__pagesize / 1024);
+		    4 * pagesize / 1024);
 
-	*newt = &pthread__main;
-#ifdef __HAVE___LWP_GETTCB_FAST
-	pthread__main.pt_tls = __lwp_gettcb_fast();
-#else
-	pthread__main.pt_tls = _lwp_getprivate();
+	pthread__stacksize_lg = -1;
+	while (pthread__stacksize) {
+		pthread__stacksize >>= 1;
+		pthread__stacksize_lg++;
+	}
+
+	pthread__stacksize = (1 << pthread__stacksize_lg);
+	pthread__stackmask = pthread__stacksize - 1;
+	pthread__threadmask = ~pthread__stackmask;
+
+	base = (void *)(pthread__sp() & pthread__threadmask);
+	size = pthread__stacksize;
+
+	error = pthread__stackid_setup(base, size, &t);
+	if (error) {
+		/* XXX */
+		errx(2, "failed to setup main thread: error=%d", error);
+	}
+
+	*newt = t;
+
+#ifdef PTHREAD__HAVE_THREADREG
+	/* Set up identity register. */
+	pthread__threadreg_set(t);
 #endif
-	pthread__main.pt_tls->tcb_pthread = &pthread__main;
 }
 
-static signed int
+static int
 /*ARGSUSED*/
-pthread__cmp(void *ctx, const void *n1, const void *n2)
+pthread__stackid_setup(void *base, size_t size, pthread_t *tp)
 {
-	const uintptr_t p1 = (const uintptr_t)n1;
-	const uintptr_t p2 = (const uintptr_t)n2;
+	pthread_t t;
+	void *redaddr;
+	size_t pagesize;
+	int ret;
 
-	if (p1 < p2)
-		return -1;
-	if (p1 > p2)
-		return 1;
+	t = base;
+	pagesize = (size_t)sysconf(_SC_PAGESIZE);
+
+	/*
+	 * Put a pointer to the pthread in the bottom (but
+         * redzone-protected section) of the stack. 
+	 */
+	redaddr = STACK_SHRINK(STACK_MAX(base, size), pagesize);
+	t->pt_stack.ss_size = size - 2 * pagesize;
+#ifdef __MACHINE_STACK_GROWS_UP
+	t->pt_stack.ss_sp = (char *)(void *)base + pagesize;
+#else
+	t->pt_stack.ss_sp = (char *)(void *)base + 2 * pagesize;
+#endif
+
+	/* Protect the next-to-bottom stack page as a red zone. */
+	ret = mprotect(redaddr, pagesize, PROT_NONE);
+	if (ret == -1) {
+		return errno;
+	}
+	*tp = t;
 	return 0;
 }
+
+#ifndef lint
+static int
+pthread__cmp(struct __pthread_st *a, struct __pthread_st *b)
+{
+
+	if ((uintptr_t)a < (uintptr_t)b)
+		return (-1);
+	else if (a == b)
+		return 0;
+	else
+		return 1;
+}
+RB_GENERATE_STATIC(__pthread__alltree, __pthread_st, pt_alltree, pthread__cmp)
+#endif
 
 /* Because getenv() wants to use locks. */
 char *
 pthread__getenv(const char *name)
 {
-	extern char **environ;
-	size_t l_name, offset;
+	extern char *__findenv(const char *, int *);
+	int off;
 
-	l_name = strlen(name);
-	for (offset = 0; environ[offset] != NULL; offset++) {
-		if (strncmp(name, environ[offset], l_name) == 0 &&
-		    environ[offset][l_name] == '=') {
-			return environ[offset] + l_name + 1;
-		}
-	}
-
-	return NULL;
+	return __findenv(name, &off);
 }
 
 pthread_mutex_t *

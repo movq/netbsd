@@ -1,4 +1,4 @@
-/*	$NetBSD: ams.c,v 1.29 2012/10/27 17:18:00 chs Exp $	*/
+/*	$NetBSD: ams.c,v 1.25 2007/03/05 10:47:06 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1998	Colin Wood
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ams.c,v 1.29 2012/10/27 17:18:00 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ams.c,v 1.25 2007/03/05 10:47:06 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -58,14 +58,14 @@ __KERNEL_RCSID(0, "$NetBSD: ams.c,v 1.29 2012/10/27 17:18:00 chs Exp $");
 /*
  * Function declarations.
  */
-static int	amsmatch(device_t, cfdata_t, void *);
-static void	amsattach(device_t, device_t, void *);
+static int	amsmatch(struct device *, struct cfdata *, void *);
+static void	amsattach(struct device *, struct device *, void *);
 static void	ems_init(struct ams_softc *);
 static void	ms_processevent(adb_event_t *event, struct ams_softc *);
 static void	init_trackpad(struct ams_softc *);
 
 /* Driver definition. */
-CFATTACH_DECL_NEW(ams, sizeof(struct ams_softc),
+CFATTACH_DECL(ams, sizeof(struct ams_softc),
     amsmatch, amsattach, NULL, NULL);
 
 int ams_enable(void *);
@@ -88,7 +88,7 @@ const struct wsmouse_accessops ams_accessops = {
 };
 
 static int
-amsmatch(device_t parent, cfdata_t cf, void *aux)
+amsmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct adb_attach_args *aa_args = aux;
 
@@ -99,15 +99,14 @@ amsmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-amsattach(device_t parent, device_t self, void *aux)
+amsattach(struct device *parent, struct device *self, void *aux)
 {
 	ADBSetInfoBlock adbinfo;
-	struct ams_softc *sc = device_private(self);
+	struct ams_softc *sc = (struct ams_softc *)self;
 	struct adb_attach_args *aa_args = aux;
 	int error;
 	struct wsmousedev_attach_args a;
 
-	sc->sc_dev = self;
 	sc->origaddr = aa_args->origaddr;
 	sc->adbaddr = aa_args->adbaddr;
 	sc->handler_id = aa_args->handler_id;
@@ -630,12 +629,6 @@ ams_enable(void *v)
 int
 ams_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 {
-
-	switch (cmd) {
-	case WSMOUSEIO_GTYPE:
-		*(u_int *)data = WSMOUSE_TYPE_ADB;
-		break;
-	}
 	return EPASSTHROUGH;
 }
 
@@ -677,7 +670,7 @@ init_trackpad(struct ams_softc *sc)
 	adb_op_sync((Ptr)buffer, NULL, (Ptr)0, cmd);
 
 	/*
-	 * setup a sysctl node to control whether tapping the pad should
+	 * setup a sysctl node to control wether tapping the pad should
 	 * trigger mouse button events
 	 */
 
@@ -685,7 +678,7 @@ init_trackpad(struct ams_softc *sc)
 	
 	ret = sysctl_createv(NULL, 0, NULL, (const struct sysctlnode **)&me,
 	    CTLFLAG_READWRITE,
-	    CTLTYPE_NODE, device_xname(sc->sc_dev), NULL,
+	    CTLTYPE_NODE, sc->sc_dev.dv_xname, NULL,
 	    NULL, 0, NULL, 0,
 	    CTL_MACHDEP, CTL_CREATE, CTL_EOL);
 

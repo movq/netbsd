@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.c,v 1.87 2012/03/28 20:11:25 christos Exp $	*/
+/*	$NetBSD: expand.c,v 1.79.2.1 2011/11/02 19:31:19 riz Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)expand.c	8.5 (Berkeley) 5/15/95";
 #else
-__RCSID("$NetBSD: expand.c,v 1.87 2012/03/28 20:11:25 christos Exp $");
+__RCSID("$NetBSD: expand.c,v 1.79.2.1 2011/11/02 19:31:19 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,7 +48,6 @@ __RCSID("$NetBSD: expand.c,v 1.87 2012/03/28 20:11:25 christos Exp $");
 #include <dirent.h>
 #include <unistd.h>
 #include <pwd.h>
-#include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -66,7 +65,6 @@ __RCSID("$NetBSD: expand.c,v 1.87 2012/03/28 20:11:25 christos Exp $");
 #include "parser.h"
 #include "jobs.h"
 #include "options.h"
-#include "builtins.h"
 #include "var.h"
 #include "input.h"
 #include "output.h"
@@ -121,7 +119,7 @@ void
 expandhere(union node *arg, int fd)
 {
 	herefd = fd;
-	expandarg(arg, NULL, 0);
+	expandarg(arg, (struct arglist *)NULL, 0);
 	xwrite(fd, stackblock(), expdest - stackblock());
 }
 
@@ -374,7 +372,7 @@ expari(int flag)
 	 */
 /* SPACE_NEEDED is enough for all digits, plus possible "-", plus 2 (why?) */
 #define SPACE_NEEDED ((sizeof(intmax_t) * CHAR_BIT + 2) / 3 + 1 + 2)
-	CHECKSTRSPACE((int)(SPACE_NEEDED - 2), expdest);
+	CHECKSTRSPACE(SPACE_NEEDED - 2, expdest);
 	USTPUTC('\0', expdest);
 	start = stackblock();
 	p = expdest - 1;
@@ -501,21 +499,10 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 	int c = 0;
 	int saveherefd = herefd;
 	struct nodelist *saveargbackq = argbackq;
-	int amount, how;
+	int amount;
 
 	herefd = -1;
-	switch (subtype) {
-	case VSTRIMLEFT:
-	case VSTRIMLEFTMAX:
-	case VSTRIMRIGHT:
-	case VSTRIMRIGHTMAX:
-		how = (varflags & VSQUOTE) ? 0 : EXP_CASE;
-		break;
-	default:
-		how = 0;
-		break;
-	}
-	argstr(p, how);
+	argstr(p, 0);
 	STACKSTRNUL(expdest);
 	herefd = saveherefd;
 	argbackq = saveargbackq;
@@ -534,7 +521,7 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 	case VSQUESTION:
 		if (*p != CTLENDVAR) {
 			outfmt(&errout, "%s\n", startp);
-			error(NULL);
+			error((char *)NULL);
 		}
 		error("%.*s: parameter %snot set",
 		      (int)(p - str - 1),
@@ -1573,7 +1560,7 @@ wordexpcmd(int argc, char **argv)
 	out1c('\0');
 	for (i = 1, len = 0; i < argc; i++)
 		len += strlen(argv[i]);
-	out1fmt("%zu", len);
+	out1fmt("%zd", len);
 	out1c('\0');
 	for (i = 1; i < argc; i++) {
 		out1str(argv[i]);

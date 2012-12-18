@@ -1,4 +1,4 @@
-/*	$NetBSD: strtok.cpp,v 1.3 2011/09/23 16:00:15 nonaka Exp $	*/
+/*	$NetBSD: strtok.cpp,v 1.2 2005/12/11 12:17:30 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -29,7 +29,6 @@
  * SUCH DAMAGE.
  */
 
-#include "stand.h"
 #include <sys/cdefs.h>
 #include <sys/types.h>
 #include <stdlib.h>

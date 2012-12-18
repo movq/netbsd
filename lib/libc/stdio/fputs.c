@@ -1,4 +1,4 @@
-/*	$NetBSD: fputs.c,v 1.15 2012/03/13 21:13:46 christos Exp $	*/
+/*	$NetBSD: fputs.c,v 1.14 2005/06/22 19:45:22 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fputs.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fputs.c,v 1.15 2012/03/13 21:13:46 christos Exp $");
+__RCSID("$NetBSD: fputs.c,v 1.14 2005/06/22 19:45:22 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -53,7 +53,9 @@ __RCSID("$NetBSD: fputs.c,v 1.15 2012/03/13 21:13:46 christos Exp $");
  * Write the given string to the given file.
  */
 int
-fputs(const char *s, FILE *fp)
+fputs(s, fp)
+	const char *s;
+	FILE *fp;
 {
 	struct __suio uio;
 	struct __siov iov;
@@ -66,7 +68,7 @@ fputs(const char *s, FILE *fp)
 		s = "(null)";
 
 	iov.iov_base = __UNCONST(s);
-	uio.uio_resid = iov.iov_len = strlen(s);
+	iov.iov_len = uio.uio_resid = strlen(s);
 	uio.uio_iov = &iov;
 	uio.uio_iovcnt = 1;
 	FLOCKFILE(fp);

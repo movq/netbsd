@@ -1,4 +1,4 @@
-/*	$NetBSD: mpbios.c,v 1.60 2012/11/27 20:32:58 jakllsch Exp $	*/
+/*	$NetBSD: mpbios.c,v 1.47.4.2 2009/09/29 23:55:49 snj Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -96,9 +96,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpbios.c,v 1.60 2012/11/27 20:32:58 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpbios.c,v 1.47.4.2 2009/09/29 23:55:49 snj Exp $");
 
-#include "acpica.h"
+#include "acpi.h"
 #include "lapic.h"
 #include "ioapic.h"
 #include "opt_acpi.h"
@@ -108,7 +108,7 @@ __KERNEL_RCSID(0, "$NetBSD: mpbios.c,v 1.60 2012/11/27 20:32:58 jakllsch Exp $")
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/bus.h>
 #include <sys/reboot.h>
 
@@ -130,7 +130,7 @@ __KERNEL_RCSID(0, "$NetBSD: mpbios.c,v 1.60 2012/11/27 20:32:58 jakllsch Exp $")
 #include <dev/eisa/eisavar.h>	/* for ELCR* def'ns */
 #endif
 
-#if NACPICA > 0
+#if NACPI > 0
 extern int mpacpi_ncpu;
 extern int mpacpi_nioapic;
 #endif
@@ -176,7 +176,7 @@ struct mp_map
 
 int mp_cpuprint(void *, const char *);
 int mp_ioapicprint(void *, const char *);
-static const void *mpbios_search(device_t, paddr_t, int,
+static const void *mpbios_search(struct device *, paddr_t, int,
     struct mp_map *);
 static inline int mpbios_cksum(const void *,int);
 
@@ -194,10 +194,10 @@ static void mp_cfg_eisa_intr(const struct mpbios_int *, uint32_t *);
 static void mp_cfg_isa_intr(const struct mpbios_int *, uint32_t *);
 static void mp_print_isa_intr(int intr);
 
-static void mpbios_cpus(device_t);
-static void mpbios_cpu(const uint8_t *, device_t);
-static void mpbios_bus(const uint8_t *, device_t);
-static void mpbios_ioapic(const uint8_t *, device_t);
+static void mpbios_cpus(struct device *);
+static void mpbios_cpu(const uint8_t *, struct device *);
+static void mpbios_bus(const uint8_t *, struct device *);
+static void mpbios_ioapic(const uint8_t *, struct device *);
 static void mpbios_int(const uint8_t *, int, struct mp_intr_map *);
 
 static const void *mpbios_map(paddr_t, int, struct mp_map *);
@@ -221,7 +221,7 @@ mp_cpuprint(void *aux, const char *pnp)
 
 	if (pnp)
 		aprint_normal("cpu at %s", pnp);
-	aprint_normal(" apid %d", caa->cpu_number);
+	printf(" apid %d", caa->cpu_number);
 	return (UNCONF);
 }
 
@@ -232,7 +232,7 @@ mp_ioapicprint(void *aux, const char *pnp)
 
 	if (pnp)
 		aprint_normal("ioapic at %s", pnp);
-	aprint_normal(" apid %d", aaa->apic_id);
+	printf(" apid %d", aaa->apic_id);
 	return (UNCONF);
 }
 
@@ -256,7 +256,7 @@ mpbios_map(paddr_t pa, int len, struct mp_map *handle)
 	handle->vsize = endpa-pgpa;
 
 	do {
-		pmap_kenter_pa(va, pgpa, VM_PROT_READ, 0);
+		pmap_kenter_pa(va, pgpa, VM_PROT_READ);
 		va += PAGE_SIZE;
 		pgpa += PAGE_SIZE;
 	} while (pgpa < endpa);
@@ -277,7 +277,7 @@ mpbios_unmap(struct mp_map *handle)
  * Look for an Intel MP spec table, indicating SMP capable hardware.
  */
 int
-mpbios_probe(device_t self)
+mpbios_probe(struct device *self)
 {
 	paddr_t  	ebda, memtop;
 
@@ -410,7 +410,7 @@ mpbios_cksum(const void *start, int len)
  */
 
 const void *
-mpbios_search(device_t self, paddr_t start, int count,
+mpbios_search(struct device *self, paddr_t start, int count,
 	      struct mp_map *map)
 {
 	struct mp_map t;
@@ -492,7 +492,7 @@ static struct mp_bus nmi_bus = {
  *	nintrs
  */
 void
-mpbios_scan(device_t self, int *ncpup)
+mpbios_scan(struct device *self, int *ncpup, int *napic)
 {
 	const uint8_t 	*position, *end;
 	int		count;
@@ -506,13 +506,13 @@ mpbios_scan(device_t self, int *ncpup)
 
 	switch (mp_fps->spec_rev) {
 	case 1:
-		aprint_normal("(Version 1.1)");
+		printf("(Version 1.1)");
 		break;
 	case 4:
-		aprint_normal("(Version 1.4)");
+		printf("(Version 1.4)");
 		break;
 	default:
-		aprint_normal("(unrecognized rev %d)", mp_fps->spec_rev);
+		printf("(unrecognized rev %d)", mp_fps->spec_rev);
 	}
 
 	/*
@@ -521,7 +521,7 @@ mpbios_scan(device_t self, int *ncpup)
 	 * XXX is this the right place??
 	 */
 
-#if NACPICA > 0
+#if NACPI > 0
 	if (mpacpi_ncpu == 0) {
 #endif
 		lapic_base = LAPIC_BASE;
@@ -531,7 +531,7 @@ mpbios_scan(device_t self, int *ncpup)
 #if NLAPIC > 0
 		lapic_boot_init(lapic_base);
 #endif
-#if NACPICA > 0
+#if NACPI > 0
 	}
 #endif
 
@@ -541,12 +541,12 @@ mpbios_scan(device_t self, int *ncpup)
 		aprint_normal("\n");
 		aprint_normal_dev(self, "MP default configuration %d\n",
 		    mp_fps->mpfb1);
-#if NACPICA > 0
+#if NACPI > 0
 		if (mpacpi_ncpu == 0)
 #endif
 			mpbios_cpus(self);
 
-#if NACPICA > 0
+#if NACPI > 0
 		if (mpacpi_nioapic == 0)
 #endif
 			mpbios_ioapic((uint8_t *)&default_ioapic, self);
@@ -615,12 +615,10 @@ mpbios_scan(device_t self, int *ncpup)
 			position += mp_conf[type].length;
 		}
 
-		mp_busses = kmem_zalloc(sizeof(struct mp_bus)*mp_nbus,
-		    KM_SLEEP);
-		KASSERT(mp_busses != NULL);
-		mp_intrs = kmem_zalloc(sizeof(struct mp_intr_map)*intr_cnt,
-		    KM_SLEEP);
-		KASSERT(mp_intrs != NULL);
+		mp_busses = malloc(sizeof(struct mp_bus)*mp_nbus,
+		    M_DEVBUF, M_NOWAIT | M_ZERO);
+		mp_intrs = malloc(sizeof(struct mp_intr_map)*intr_cnt,
+		    M_DEVBUF, M_NOWAIT | M_ZERO);
 		mp_nintr = intr_cnt;
 
 		/* re-walk the table, recording info of interest */
@@ -631,7 +629,7 @@ mpbios_scan(device_t self, int *ncpup)
 		while ((count--) && (position < end)) {
 			switch (type = *position) {
 			case MPS_MCT_CPU:
-#if NACPICA > 0
+#if NACPI > 0
 				/* ACPI has done this for us */
 				if (mpacpi_ncpu)
 					break;
@@ -642,7 +640,7 @@ mpbios_scan(device_t self, int *ncpup)
 				mpbios_bus(position, self);
 				break;
 			case MPS_MCT_IOAPIC:
-#if NACPICA > 0
+#if NACPI > 0
 				/* ACPI has done this for us */
 				if (mpacpi_nioapic)
 					break;
@@ -695,10 +693,11 @@ mpbios_scan(device_t self, int *ncpup)
 	mpbios_scanned = 1;
 
 	*ncpup = mpbios_ncpu;
+	*napic = mpbios_nioapic;
 }
 
 static void
-mpbios_cpu(const uint8_t *ent, device_t self)
+mpbios_cpu(const uint8_t *ent, struct device *self)
 {
 	const struct mpbios_proc *entry = (const struct mpbios_proc *)ent;
 	struct cpu_attach_args caa;
@@ -717,7 +716,6 @@ mpbios_cpu(const uint8_t *ent, device_t self)
 	else
 		caa.cpu_role = CPU_ROLE_AP;
 
-	caa.cpu_id = entry->apic_id;
 	caa.cpu_number = entry->apic_id;
 	caa.cpu_func = &mp_cpu_funcs;
 	locs[CPUBUSCF_APID] = caa.cpu_number;
@@ -727,12 +725,14 @@ mpbios_cpu(const uint8_t *ent, device_t self)
 }
 
 static void
-mpbios_cpus(device_t self)
+mpbios_cpus(struct device *self)
 {
 	struct mpbios_proc pe;
 	/* use default addresses */
 	pe.apic_id = lapic_cpu_number();
 	pe.cpu_flags = PROCENTRY_FLAG_EN|PROCENTRY_FLAG_BP;
+	pe.cpu_signature = cpu_info_primary.ci_signature;
+	pe.feature_flags = cpu_info_primary.ci_feature_flags;
 
 	mpbios_cpu((uint8_t *)&pe, self);
 
@@ -947,7 +947,7 @@ mp_print_eisa_intr(int intr)
 #define EXTEND_TAB(a,u)	(!(_TAB_ROUND(a,u) == _TAB_ROUND((a+1),u)))
 
 static void
-mpbios_bus(const uint8_t *ent, device_t self)
+mpbios_bus(const uint8_t *ent, struct device *self)
 {
 	const struct mpbios_bus *entry = (const struct mpbios_bus *)ent;
 	int bus_id = entry->bus_id;
@@ -1006,7 +1006,7 @@ mpbios_bus(const uint8_t *ent, device_t self)
 
 
 static void
-mpbios_ioapic(const uint8_t *ent, device_t self)
+mpbios_ioapic(const uint8_t *ent, struct device *self)
 {
 	const struct mpbios_ioapic *entry = (const struct mpbios_ioapic *)ent;
 
@@ -1025,7 +1025,7 @@ mpbios_ioapic(const uint8_t *ent, device_t self)
 	aaa.apic_version = entry->apic_version;
 	aaa.apic_address = (paddr_t)entry->apic_address;
 	aaa.apic_vecbase = -1;
-	aaa.flags = (mp_fps->mpfb2 & 0x80) ? IOAPIC_PICMODE : IOAPIC_VWIRE;
+	aaa.flags =  (mp_fps->mpfb2 & 0x80) ? IOAPIC_PICMODE : IOAPIC_VWIRE;
 	locs[IOAPICBUSCF_APID] = aaa.apic_id;
 
 	config_found_sm_loc(self, "ioapicbus", locs, &aaa, mp_ioapicprint,
@@ -1159,17 +1159,17 @@ mpbios_int(const uint8_t *ent, int enttype, struct mp_intr_map *mpi)
 
 		(*(mpb->mb_intr_print))(dev);
 
-		snprintb(buf, sizeof(buf), inttype_fmt, type);
-		printf(" (type %s", buf);
+		printf(" (type %s",
+		    bitmask_snprintf(type, inttype_fmt, buf, sizeof(buf)));
 
-		snprintb(buf, sizeof(buf), flagtype_fmt, flags);
-		printf(" flags %s)\n", buf);
+		printf(" flags %s)\n",
+		    bitmask_snprintf(flags, flagtype_fmt, buf, sizeof(buf)));
 	}
 }
 
 #if NPCI > 0
 int
-mpbios_pci_attach_hook(device_t parent, device_t self,
+mpbios_pci_attach_hook(struct device *parent, struct device *self,
 		       struct pcibus_attach_args *pba)
 {
 	struct mp_bus *mpb;
@@ -1193,10 +1193,31 @@ mpbios_pci_attach_hook(device_t parent, device_t self,
 		printf("\n%s: added to list as bus %d", device_xname(parent),
 		    pba->pba_bus);
 
-	mpb->mb_dev = self;
+	mpb->mb_configured = 1;
 	mpb->mb_pci_bridge_tag = pba->pba_bridgetag;
 	mpb->mb_pci_chipset_tag = pba->pba_pc;
 	return 0;
+}
+
+int
+mpbios_scan_pci(struct device *self, struct pcibus_attach_args *pba,
+	        cfprint_t print)
+{
+	int i, cnt = 0;
+	struct mp_bus *mpb;
+	struct pci_attach_args;
+
+	for (i = 0; i < mp_nbus; i++) {
+		mpb = &mp_busses[i];
+		if (mpb->mb_name == NULL)
+			continue;
+		if (!strcmp(mpb->mb_name, "pci") && mpb->mb_configured == 0) {
+			pba->pba_bus = i;
+			config_found_ia(self, "pcibus", pba, print);
+			++cnt;
+		}
+	}
+	return cnt;
 }
 
 #endif

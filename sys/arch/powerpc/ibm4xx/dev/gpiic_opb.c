@@ -1,4 +1,4 @@
-/*	$NetBSD: gpiic_opb.c,v 1.9 2011/06/18 06:41:42 matt Exp $	*/
+/*	$NetBSD: gpiic_opb.c,v 1.6 2008/07/12 02:04:07 tsutsui Exp $	*/
 
 /*
  * Copyright 2002, 2003 Wasabi Systems, Inc.
@@ -47,12 +47,11 @@
 #include <dev/i2c/i2cvar.h>
 #include <dev/i2c/i2c_bitbang.h>
 
-#include <powerpc/ibm4xx/cpu.h>
 #include <powerpc/ibm4xx/dev/opbvar.h>
 #include <powerpc/ibm4xx/dev/gpiicreg.h>
 
 struct gpiic_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	bus_space_tag_t sc_bust;
 	bus_space_handle_t sc_bush;
 	uint8_t sc_txen;
@@ -62,10 +61,10 @@ struct gpiic_softc {
 	kmutex_t sc_buslock;
 };
 
-static int	gpiic_match(device_t, cfdata_t, void *);
-static void	gpiic_attach(device_t, device_t, void *);
+static int	gpiic_match(struct device *, struct cfdata *, void *);
+static void	gpiic_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(gpiic, sizeof(struct gpiic_softc),
+CFATTACH_DECL(gpiic, sizeof(struct gpiic_softc),
     gpiic_match, gpiic_attach, NULL, NULL);
 
 static int	gpiic_acquire_bus(void *, int);
@@ -80,9 +79,9 @@ static void	gpiic_set_bits(void *, uint32_t);
 static uint32_t	gpiic_read_bits(void *);
 
 static int
-gpiic_match(device_t parent, cfdata_t cf, void *args)
+gpiic_match(struct device *parent, struct cfdata *cf, void *args)
 {
-	struct opb_attach_args * const oaa = args;
+	struct opb_attach_args *oaa = args;
 
 	if (strcmp(oaa->opb_name, cf->cf_name) != 0)
 		return 0;
@@ -91,16 +90,15 @@ gpiic_match(device_t parent, cfdata_t cf, void *args)
 }
 
 static void
-gpiic_attach(device_t parent, device_t self, void *args)
+gpiic_attach(struct device *parent, struct device *self, void *args)
 {
-	struct gpiic_softc * const sc = device_private(self);
-	struct opb_attach_args * const oaa = args;
+	struct gpiic_softc *sc = (struct gpiic_softc *)self;
+	struct opb_attach_args *oaa = args;
 	struct i2cbus_attach_args iba;
 
 	aprint_naive(": IIC controller\n");
 	aprint_normal(": On-Chip IIC controller\n");
 
-	sc->sc_dev = self;
 	sc->sc_bust = oaa->opb_bt;
 
 	bus_space_map(sc->sc_bust, oaa->opb_addr, IIC_NREG, 0, &sc->sc_bush);
@@ -137,15 +135,14 @@ gpiic_attach(device_t parent, device_t self, void *args)
 	bus_space_write_1(sc->sc_bust, sc->sc_bush, IIC_DIRECTCNTL,
 	    IIC_DIRECTCNTL_SCC | IIC_DIRECTCNTL_SDAC);
 
-	memset(&iba, 0, sizeof(iba));
 	iba.iba_tag = &sc->sc_i2c;
-	(void) config_found_ia(self, "i2cbus", &iba, iicbus_print);
+	(void) config_found_ia(&sc->sc_dev, "i2cbus", &iba, iicbus_print);
 }
 
 static int
 gpiic_acquire_bus(void *arg, int flags)
 {
-	struct gpiic_softc * const sc = arg;
+	struct gpiic_softc *sc = arg;
 
 	if (flags & I2C_F_POLL)
 		return (0);
@@ -157,7 +154,7 @@ gpiic_acquire_bus(void *arg, int flags)
 static void
 gpiic_release_bus(void *arg, int flags)
 {
-	struct gpiic_softc * const sc = arg;
+	struct gpiic_softc *sc = arg;
 
 	if (flags & I2C_F_POLL)
 		return;
@@ -168,7 +165,7 @@ gpiic_release_bus(void *arg, int flags)
 static int
 gpiic_send_start(void *arg, int flags)
 {
-	struct gpiic_softc * const sc = arg;
+	struct gpiic_softc *sc = arg;
 
 	return (i2c_bitbang_send_start(sc, flags, &sc->sc_bops));
 }
@@ -176,7 +173,7 @@ gpiic_send_start(void *arg, int flags)
 static int
 gpiic_send_stop(void *arg, int flags)
 {
-	struct gpiic_softc * const sc = arg;
+	struct gpiic_softc *sc = arg;
 
 	return (i2c_bitbang_send_stop(sc, flags, &sc->sc_bops));
 }
@@ -184,7 +181,7 @@ gpiic_send_stop(void *arg, int flags)
 static int
 gpiic_initiate_xfer(void *arg, i2c_addr_t addr, int flags)
 {
-	struct gpiic_softc * const sc = arg;
+	struct gpiic_softc *sc = arg;
 
 	return (i2c_bitbang_initiate_xfer(sc, addr, flags, &sc->sc_bops));
 }
@@ -192,7 +189,7 @@ gpiic_initiate_xfer(void *arg, i2c_addr_t addr, int flags)
 static int
 gpiic_read_byte(void *arg, uint8_t *vp, int flags)
 {
-	struct gpiic_softc * const sc = arg;
+	struct gpiic_softc *sc = arg;
 
 	return (i2c_bitbang_read_byte(sc, vp, flags, &sc->sc_bops));
 }
@@ -200,7 +197,7 @@ gpiic_read_byte(void *arg, uint8_t *vp, int flags)
 static int
 gpiic_write_byte(void *arg, uint8_t v, int flags)
 {
-	struct gpiic_softc * const sc = arg;
+	struct gpiic_softc *sc = arg;
 
 	return (i2c_bitbang_write_byte(sc, v, flags, &sc->sc_bops));
 }
@@ -208,7 +205,7 @@ gpiic_write_byte(void *arg, uint8_t v, int flags)
 static void
 gpiic_set_dir(void *arg, uint32_t bits)
 {
-	struct gpiic_softc * const sc = arg;
+	struct gpiic_softc *sc = arg;
 	uint8_t tx, txen;
 
 	txen = (uint8_t)bits;
@@ -226,7 +223,7 @@ gpiic_set_dir(void *arg, uint32_t bits)
 static void
 gpiic_set_bits(void *arg, uint32_t bits)
 {
-	struct gpiic_softc * const sc = arg;
+	struct gpiic_softc *sc = arg;
 
 	sc->sc_tx = (uint8_t)bits;
 	if (sc->sc_txen == 0)
@@ -238,7 +235,7 @@ gpiic_set_bits(void *arg, uint32_t bits)
 static uint32_t
 gpiic_read_bits(void *arg)
 {
-	struct gpiic_softc * const sc = arg;
+	struct gpiic_softc *sc = arg;
 	uint8_t rv;
 
 	rv = bus_space_read_1(sc->sc_bust, sc->sc_bush, IIC_DIRECTCNTL) << 2;

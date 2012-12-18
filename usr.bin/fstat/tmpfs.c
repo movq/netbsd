@@ -1,4 +1,4 @@
-/*	$NetBSD: tmpfs.c,v 1.9 2011/05/29 01:00:50 rmind Exp $	*/
+/*	$NetBSD: tmpfs.c,v 1.7 2008/07/29 09:10:09 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: tmpfs.c,v 1.9 2011/05/29 01:00:50 rmind Exp $");
+__RCSID("$NetBSD: tmpfs.c,v 1.7 2008/07/29 09:10:09 pooka Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -37,9 +37,7 @@ __RCSID("$NetBSD: tmpfs.c,v 1.9 2011/05/29 01:00:50 rmind Exp $");
 #include <sys/vnode.h>
 #include <sys/mount.h>
 
-#define	_KMEMUSER
 #include <fs/tmpfs/tmpfs.h>
-#undef _KMEMUSER
 
 #include <err.h>
 #include <kvm.h>
@@ -63,7 +61,7 @@ tmpfs_filestat(struct vnode *vp, struct filestat *fsp)
 	}
 
 	fsp->fsid = mt.mnt_stat.f_fsidx.__fsid_val[0];
-	fsp->fileid = tn.tn_id;
+	fsp->fileid = (long)tn.tn_id;
 	fsp->mode = tn.tn_mode | getftype(vp->v_type);
 	fsp->size = tn.tn_size;
 	switch (tn.tn_type) {

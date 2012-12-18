@@ -1,4 +1,4 @@
-/*	$NetBSD: gxpcic.c,v 1.12 2011/07/01 20:39:34 dyoung Exp $ */
+/*	$NetBSD: gxpcic.c,v 1.8 2008/05/11 08:23:17 kiyohara Exp $ */
 /*
  * Copyright (C) 2005, 2006 WIDE Project and SOUM Corporation.
  * All rights reserved.
@@ -71,7 +71,7 @@
 #include <sys/malloc.h>
 #include <uvm/uvm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/pcmcia/pcmciareg.h>
@@ -94,10 +94,15 @@
 
 #define HAVE_CARD(r)	(!((r) & GPIO_SET))
 
+#define GXIO_GPIRQ11_CD1	11
+#define GXIO_GPIRQ26_PRDY1	26
+#define GXIO_GPIRQ27_PRDY2	27
+#define GXIO_GPIRQ36_CD2	36
 
-static	int  	gxpcic_match(device_t, cfdata_t, void *);
+
+static	int  	gxpcic_match(device_t, struct cfdata *, void *);
 static	void  	gxpcic_attach(device_t, device_t, void *);
-static	void	gxpcic_socket_setup(struct pxapcic_socket *);
+static	void	gxpcic_pcic_socket_setup(struct pxapcic_socket *);
 
 static	u_int	gxpcic_read(struct pxapcic_socket *, int);
 static	void	gxpcic_write(struct pxapcic_socket *, int, u_int);
@@ -110,10 +115,10 @@ __inline void gxpcic_cpld_clk(void);
 __inline u_char gxpcic_cpld_read_bits(int bits);
 static	int	gxpcic_count_slot(struct pxapcic_softc *);
 
-CFATTACH_DECL_NEW(gxpcic, sizeof(struct pxapcic_softc),
+CFATTACH_DECL(pxapcic_gxpcic, sizeof(struct pxapcic_softc),
     gxpcic_match, gxpcic_attach, NULL, NULL);
 
-static struct pxapcic_tag gxpcic_functions = {
+static struct pxapcic_tag gxpcic_pcic_functions = {
 	gxpcic_read,
 	gxpcic_write,
 	gxpcic_set_power,
@@ -122,17 +127,21 @@ static struct pxapcic_tag gxpcic_functions = {
 	gxpcic_intr_disestablish,
 };
 
+static struct {
+	int cd;
+	int prdy;
+} gxpcic_slot_irqs[] = {
+	{ GXIO_GPIRQ11_CD1, GXIO_GPIRQ26_PRDY1 },
+	{ GXIO_GPIRQ36_CD2, GXIO_GPIRQ27_PRDY2 }
+};
+
 
 static int
-gxpcic_match(device_t parent, cfdata_t match, void *aux)
+gxpcic_match(device_t parent, struct cfdata *cf, void *aux)
 {
-	struct pxaip_attach_args *pxa = aux;
 	struct pxa2x0_gpioconf *gpioconf;
 	u_int reg;
 	int i;
-
-	if (strcmp(pxa->pxa_name, match->cf_name) != 0)
-		return 0;
 
 	/*
 	 * Check GPIO configuration.  If you use these, it is sure already
@@ -143,11 +152,8 @@ gxpcic_match(device_t parent, cfdata_t match, void *aux)
 	for (i = 0; gpioconf[i].pin != -1; i++) {
 		reg = pxa2x0_gpio_get_function(gpioconf[i].pin);
 		if (GPIO_FN(reg) != GPIO_FN(gpioconf[i].value) ||
-		    GPIO_FN_IS_OUT(reg) != GPIO_FN_IS_OUT(gpioconf[i].value)) {
-			if (!CPU_IS_PXA250 && gpioconf[i].pin == 111)
-				continue;
-			return 0;
-		}
+		    GPIO_FN_IS_OUT(reg) != GPIO_FN_IS_OUT(gpioconf[i].value))
+			return (0);
 	}
 
 	return	1;	/* match */
@@ -157,45 +163,38 @@ static void
 gxpcic_attach(device_t parent, device_t self, void *aux)
 {
 	struct pxapcic_softc *sc = device_private(self);
-	struct pxaip_attach_args *pxa = aux;
+	struct pxaip_attach_args *pxa = (struct pxaip_attach_args *)aux;
 	int nslot, i;
 
-	sc->sc_dev = self;
 	sc->sc_iot = pxa->pxa_iot;
 
 	nslot = gxpcic_count_slot(sc);
 
 	for (i = 0; i < nslot; i++) {
-		if (!gxpcic_slot_irqs[i].valid) 
-			continue;
 		sc->sc_irqpin[i] = gxpcic_slot_irqs[i].prdy;
 		sc->sc_irqcfpin[i] = gxpcic_slot_irqs[i].cd;
 	}
 	sc->sc_nslots = nslot;
 
-	pxapcic_attach_common(sc, &gxpcic_socket_setup);
+	pxapcic_attach_common(sc, &gxpcic_pcic_socket_setup);
 }
 
 static void
-gxpcic_socket_setup(struct pxapcic_socket *so)
+gxpcic_pcic_socket_setup(struct pxapcic_socket *so)
 {
-#if 0
 	struct pxapcic_softc *sc = so->sc;
-#endif
 
 	/* 3.3V only? */
 	so->power_capability = PXAPCIC_POWER_3V;
 	so->pcictag_cookie = NULL;
-	so->pcictag = &gxpcic_functions;
+	so->pcictag = &gxpcic_pcic_functions;
 
-#if 0	/* We use already set values by u-boot. */
 	bus_space_write_4(sc->sc_iot, sc->sc_memctl_ioh,
 	    MEMCTL_MCMEM(so->socket), MC_TIMING_VAL(9 ,9, 29));
 	bus_space_write_4(sc->sc_iot, sc->sc_memctl_ioh,
 	    MEMCTL_MCATT(so->socket), MC_TIMING_VAL(9 ,9, 29));
 	bus_space_write_4(sc->sc_iot, sc->sc_memctl_ioh,
 	    MEMCTL_MCIO(so->socket), MC_TIMING_VAL(5 ,5, 16));
-#endif
 }
 
 static u_int
@@ -277,7 +276,7 @@ gxpcic_intr_disestablish(struct pxapcic_socket *so, void *ih)
  * XXXXX: slot count functions from Linux
  */
 __inline void
-gxpcic_cpld_clk(void)
+gxpcic_cpld_clk()
 {
 
 	pxa2x0_gpio_set_function(48, GPIO_OUT | GPIO_CLR);
@@ -317,8 +316,8 @@ gxpcic_count_slot(struct pxapcic_softc *sc)
 	pce1 = pxa2x0_gpio_get_function(52);
 	pce2 = pxa2x0_gpio_get_function(53);
 
-	/* RESET */
-	pxa2x0_gpio_set_function(gxpcic_gpio_reset, GPIO_OUT | GPIO_CLR);
+	/* Reset */
+	pxa2x0_gpio_set_function(8, GPIO_OUT | GPIO_SET);
 
 	/* Setup the shift register */
 	pxa2x0_gpio_set_function(52, GPIO_OUT | GPIO_SET);
@@ -340,8 +339,7 @@ gxpcic_count_slot(struct pxapcic_softc *sc)
 		nslot = 2;
 
 	delay(50);
-	/* clear RESET */
-	pxa2x0_gpio_set_function(gxpcic_gpio_reset, GPIO_OUT | GPIO_CLR);
+	pxa2x0_gpio_set_function(8, GPIO_OUT | GPIO_CLR);	/* clr RESET */
 
 	pxa2x0_gpio_set_function(48, poe);
 	pxa2x0_gpio_set_function(52, pce1);

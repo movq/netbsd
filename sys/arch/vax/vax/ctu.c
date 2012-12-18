@@ -1,4 +1,4 @@
-/*	$NetBSD: ctu.c,v 1.31 2010/12/14 23:44:49 matt Exp $ */
+/*	$NetBSD: ctu.c,v 1.29 2008/03/11 05:34:03 matt Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -40,24 +40,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ctu.c,v 1.31 2010/12/14 23:44:49 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ctu.c,v 1.29 2008/03/11 05:34:03 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/callout.h>
+#include <sys/kernel.h>
 #include <sys/buf.h>
 #include <sys/bufq.h>
-#include <sys/callout.h>
-#include <sys/conf.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
 #include <sys/fcntl.h>
-#include <sys/ioctl.h>
-#include <sys/kernel.h>
 #include <sys/malloc.h>
+#include <sys/ioctl.h>
+#include <sys/device.h>
 #include <sys/proc.h>
+#include <sys/conf.h>
 
+#include <machine/mtpr.h>
 #include <machine/rsp.h>
 #include <machine/scb.h>
+#include <machine/trap.h>
 
 #undef TUDEBUG
 
@@ -179,7 +180,7 @@ ctuclose(dev_t dev, int oflags, int devtype, struct lwp *l)
 {
 	struct buf *bp;
 	int s = spl7();
-	while ((bp = bufq_get(tu_sc.sc_bufq)))
+	while ((bp = BUFQ_GET(tu_sc.sc_bufq)))
 		;
 	splx(s);
 
@@ -207,8 +208,8 @@ ctustrategy(struct buf *bp)
 		return;
 	}
 
-	empty = (bufq_peek(tu_sc.sc_bufq) == NULL);
-	bufq_put(tu_sc.sc_bufq, bp);
+	empty = (BUFQ_PEEK(tu_sc.sc_bufq) == NULL);
+	BUFQ_PUT(tu_sc.sc_bufq, bp);
 	if (empty)
 		ctustart();
 	splx(s);
@@ -220,7 +221,7 @@ ctustart(void)
 	struct rsp *rsp = (struct rsp *)tu_sc.sc_rsp;
 	struct buf *bp;
 
-	bp = bufq_peek(tu_sc.sc_bufq);
+	bp = BUFQ_PEEK(tu_sc.sc_bufq);
 	if (bp == NULL)
 		return;
 #ifdef TUDEBUG
@@ -272,7 +273,7 @@ cturintr(void *arg)
 	unsigned short ck = 0;
 	char *buf;
 
-	bp = bufq_peek(tu_sc.sc_bufq);
+	bp = BUFQ_PEEK(tu_sc.sc_bufq);
 	buf = bp->b_data;
 	switch (tu_sc.sc_state) {
 	case TU_RESET:
@@ -392,7 +393,7 @@ cturintr(void *arg)
 		return;
 	}
 	if (bp->b_error == 0) {
-		(void)bufq_get(tu_sc.sc_bufq);
+		(void)BUFQ_GET(tu_sc.sc_bufq);
 		biodone(bp);
 #ifdef TUDEBUG
 		printf("biodone %p\n", bp);

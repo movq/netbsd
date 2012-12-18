@@ -1,4 +1,4 @@
-/*	$NetBSD: cia.c,v 1.12 2009/03/18 10:22:23 cegger Exp $	*/
+/*	$NetBSD: cia.c,v 1.9 2002/04/25 09:20:27 aymeric Exp $	*/
 
 /*
  * Copyright (c) 1993 Markus Wild
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cia.c,v 1.12 2009/03/18 10:22:23 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cia.c,v 1.9 2002/04/25 09:20:27 aymeric Exp $");
 
 #include <sys/types.h>
 #include <amiga/amiga/cia.h>
@@ -94,7 +94,9 @@ static struct cia_intr_dispatch ciab_ints[] = {
 
 
 void
-dispatch_cia_ints(int which, int mask)
+dispatch_cia_ints(which, mask)
+	int which;
+	int mask;
 {
 	struct cia_intr_dispatch *disp;
 
@@ -106,7 +108,7 @@ dispatch_cia_ints(int which, int mask)
 }
 
 void
-ciaa_intr(void)
+ciaa_intr()
 {
 	dispatch_cia_ints (0, ciaa.icr);
 }
@@ -118,13 +120,14 @@ ciaa_intr(void)
  * the lev6 interrupt handler in locore.s !
  */
 void
-ciab_intr(void)
+ciab_intr()
 {
 	dispatch_cia_ints (1, ciab.icr);
 }
 
 
 static void
-not_used (int mask)
+not_used (mask)
+     int mask;
 {
 }

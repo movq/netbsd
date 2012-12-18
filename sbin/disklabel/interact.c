@@ -1,4 +1,4 @@
-/*	$NetBSD: interact.c,v 1.35 2011/01/06 21:39:01 apb Exp $	*/
+/*	$NetBSD: interact.c,v 1.30.26.1 2010/06/12 01:11:42 riz Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Christos Zoulas.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: interact.c,v 1.35 2011/01/06 21:39:01 apb Exp $");
+__RCSID("$NetBSD: interact.c,v 1.30.26.1 2010/06/12 01:11:42 riz Exp $");
 #endif /* lint */
 
 #include <sys/param.h>
@@ -203,13 +208,13 @@ cmd_info(struct disklabel *lp, char *s, int fd)
 
 	/* d_npartitions */
 	for (;;) {
-		snprintf(def, sizeof(def), "%" PRIu16, lp->d_npartitions);
+		snprintf(def, sizeof(def), "%u", lp->d_npartitions);
 		i = getinput(":", "Number of partitions", def, line);
 		if (i == -1)
 			return;
 		else if (i == 0)
 			break;
-		if (sscanf(line, "%" SCNu32, &u) != 1) {
+		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid number of partitions `%s'\n", line);
 			continue;
 		}
@@ -219,13 +224,13 @@ cmd_info(struct disklabel *lp, char *s, int fd)
 
 	/* d_secsize */
 	for (;;) {
-		snprintf(def, sizeof(def), "%" PRIu32, lp->d_secsize);
+		snprintf(def, sizeof(def), "%u", lp->d_secsize);
 		i = getinput(":", "Sector size (bytes)", def, line);
 		if (i == -1)
 			return;
 		else if (i == 0)
 			break;
-		if (sscanf(line, "%" SCNu32, &u) != 1) {
+		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid sector size `%s'\n", line);
 			continue;
 		}
@@ -235,13 +240,13 @@ cmd_info(struct disklabel *lp, char *s, int fd)
 
 	/* d_nsectors */
 	for (;;) {
-		snprintf(def, sizeof(def), "%" PRIu32, lp->d_nsectors);
+		snprintf(def, sizeof(def), "%u", lp->d_nsectors);
 		i = getinput(":", "Number of sectors per track", def, line);
 		if (i == -1)
 			return;
 		else if (i == 0)
 			break;
-		if (sscanf(line, "%" SCNu32, &u) != 1) {
+		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid number of sectors `%s'\n", line);
 			continue;
 		}
@@ -251,13 +256,13 @@ cmd_info(struct disklabel *lp, char *s, int fd)
 
 	/* d_ntracks */
 	for (;;) {
-		snprintf(def, sizeof(def), "%" PRIu32, lp->d_ntracks);
+		snprintf(def, sizeof(def), "%u", lp->d_ntracks);
 		i = getinput(":", "Number of tracks per cylinder", def, line);
 		if (i == -1)
 			return;
 		else if (i == 0)
 			break;
-		if (sscanf(line, "%" SCNu32, &u) != 1) {
+		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid number of tracks `%s'\n", line);
 			continue;
 		}
@@ -267,13 +272,13 @@ cmd_info(struct disklabel *lp, char *s, int fd)
 
 	/* d_secpercyl */
 	for (;;) {
-		snprintf(def, sizeof(def), "%" PRIu32, lp->d_secpercyl);
+		snprintf(def, sizeof(def), "%u", lp->d_secpercyl);
 		i = getinput(":", "Number of sectors/cylinder", def, line);
 		if (i == -1)
 			return;
 		else if (i == 0)
 			break;
-		if (sscanf(line, "%" SCNu32, &u) != 1) {
+		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid number of sector/cylinder `%s'\n",
 			    line);
 			continue;
@@ -284,13 +289,13 @@ cmd_info(struct disklabel *lp, char *s, int fd)
 
 	/* d_ncylinders */
 	for (;;) {
-		snprintf(def, sizeof(def), "%" PRIu32, lp->d_ncylinders);
+		snprintf(def, sizeof(def), "%u", lp->d_ncylinders);
 		i = getinput(":", "Total number of cylinders", def, line);
 		if (i == -1)
 			return;
 		else if (i == 0)
 			break;
-		if (sscanf(line, "%" SCNu32, &u) != 1) {
+		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid sector size `%s'\n", line);
 			continue;
 		}
@@ -300,13 +305,13 @@ cmd_info(struct disklabel *lp, char *s, int fd)
 
 	/* d_secperunit */
 	for (;;) {
-		snprintf(def, sizeof(def), "%" PRIu32, lp->d_secperunit);
+		snprintf(def, sizeof(def), "%u", lp->d_secperunit);
 		i = getinput(":", "Total number of sectors", def, line);
 		if (i == -1)
 			return;
 		else if (i == 0)
 			break;
-		if (sscanf(line, "%" SCNu32, &u) != 1) {
+		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid number of sectors `%s'\n", line);
 			continue;
 		}
@@ -318,13 +323,13 @@ cmd_info(struct disklabel *lp, char *s, int fd)
 
 	/* d_interleave */
 	for (;;) {
-		snprintf(def, sizeof(def), "%" PRIu16, lp->d_interleave);
+		snprintf(def, sizeof(def), "%u", lp->d_interleave);
 		i = getinput(":", "Hardware sectors interleave", def, line);
 		if (i == -1)
 			return;
 		else if (i == 0)
 			break;
-		if (sscanf(line, "%" SCNu32, &u) != 1) {
+		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid sector interleave `%s'\n", line);
 			continue;
 		}
@@ -334,13 +339,13 @@ cmd_info(struct disklabel *lp, char *s, int fd)
 
 	/* d_trackskew */
 	for (;;) {
-		snprintf(def, sizeof(def), "%" PRIu16, lp->d_trackskew);
+		snprintf(def, sizeof(def), "%u", lp->d_trackskew);
 		i = getinput(":", "Sector 0 skew, per track", def, line);
 		if (i == -1)
 			return;
 		else if (i == 0)
 			break;
-		if (sscanf(line, "%" SCNu32, &u) != 1) {
+		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid track sector skew `%s'\n", line);
 			continue;
 		}
@@ -350,13 +355,13 @@ cmd_info(struct disklabel *lp, char *s, int fd)
 
 	/* d_cylskew */
 	for (;;) {
-		snprintf(def, sizeof(def), "%" PRIu16, lp->d_cylskew);
+		snprintf(def, sizeof(def), "%u", lp->d_cylskew);
 		i = getinput(":", "Sector 0 skew, per cylinder", def, line);
 		if (i == -1)
 			return;
 		else if (i == 0)
 			break;
-		if (sscanf(line, "%" SCNu32, &u) != 1) {
+		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid cylinder sector `%s'\n", line);
 			continue;
 		}
@@ -366,13 +371,13 @@ cmd_info(struct disklabel *lp, char *s, int fd)
 
 	/* d_headswitch */
 	for (;;) {
-		snprintf(def, sizeof(def), "%" PRIu32, lp->d_headswitch);
+		snprintf(def, sizeof(def), "%u", lp->d_headswitch);
 		i = getinput(":", "Head switch time (usec)", def, line);
 		if (i == -1)
 			return;
 		else if (i == 0)
 			break;
-		if (sscanf(line, "%" SCNu32, &u) != 1) {
+		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid head switch time `%s'\n", line);
 			continue;
 		}
@@ -382,13 +387,13 @@ cmd_info(struct disklabel *lp, char *s, int fd)
 
 	/* d_trkseek */
 	for (;;) {
-		snprintf(def, sizeof(def), "%" PRIu32, lp->d_trkseek);
+		snprintf(def, sizeof(def), "%u", lp->d_trkseek);
 		i = getinput(":", "Track seek time (usec)", def, line);
 		if (i == -1)
 			return;
 		else if (i == 0)
 			break;
-		if (sscanf(line, "%" SCNu32, &u) != 1) {
+		if (sscanf(line, "%u", &u) != 1) {
 			printf("Invalid track seek time `%s'\n", line);
 			continue;
 		}
@@ -544,7 +549,7 @@ cmd_part(struct disklabel *lp, char *s, int fd)
 		struct partition *cp = lp->d_partitions;
 		for (i = 0; i < lp->d_npartitions; i++) {
 			if (cp[i].p_fstype != FS_UNUSED) {
-				if (offs != -1 && cp[i].p_offset != (uint32_t)offs) {
+				if (offs != -1 && cp[i].p_offset != offs) {
 					cp[i].p_offset = offs;
 					showpartition(stdout, lp, i, Cflag);
 					}
@@ -647,9 +652,9 @@ alphacmp(const void *a, const void *b)
 static void
 dumpnames(const char *prompt, const char * const *olist, size_t numentries)
 {
-	int	w;
-	size_t	i, entry, lines;
-	int	columns, width;
+	int	i, w;
+	int	entry;
+	int	columns, width, lines;
 	const char *p;
 	const char **list;
 
@@ -704,7 +709,7 @@ static void
 defnum(struct disklabel *lp, char *buf, uint32_t size)
 {
 
-	(void) snprintf(buf, BUFSIZ, "%.40gc, %" PRIu32 "s, %.40gM",
+	(void) snprintf(buf, BUFSIZ, "%gc, %us, %gM",
 	    size / (float) lp->d_secpercyl,
 	    size, size  * (lp->d_secsize / (float) (1024 * 1024)));
 }
@@ -778,7 +783,6 @@ interact(struct disklabel *lp, int fd)
 {
 	char	line[BUFSIZ];
 
-	puts("Enter '?' for help");
 	for (;;) {
 		if (getinput(">", "partition", NULL, line) == -1)
 			return;

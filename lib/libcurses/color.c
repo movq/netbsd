@@ -1,4 +1,4 @@
-/*	$NetBSD: color.c,v 1.38 2011/10/03 12:32:15 roy Exp $	*/
+/*	$NetBSD: color.c,v 1.33 2008/04/28 20:23:01 martin Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: color.c,v 1.38 2011/10/03 12:32:15 roy Exp $");
+__RCSID("$NetBSD: color.c,v 1.33 2008/04/28 20:23:01 martin Exp $");
 #endif				/* not lint */
 
 #include "curses.h"
@@ -60,10 +60,9 @@ __change_pair(short);
 bool
 has_colors(void)
 {
-	if (max_colors > 0 && max_pairs > 0 &&
-	    ((set_a_foreground != NULL && set_a_background != NULL) ||
-		initialize_pair != NULL || initialize_color != NULL ||
-		(set_background != NULL && set_foreground != NULL)))
+	if (__tc_Co > 0 && __tc_pa > 0 && ((__tc_AF != NULL &&
+	    __tc_AB != NULL) || __tc_Ip != NULL || __tc_Ic != NULL ||
+	    (__tc_Sb != NULL && __tc_Sf != NULL)))
 		return(TRUE);
 	else
 		return(FALSE);
@@ -76,7 +75,7 @@ has_colors(void)
 bool
 can_change_color(void)
 {
-	if (can_change)
+	if (__tc_cc)
 		return(TRUE);
 	else
 		return(FALSE);
@@ -99,16 +98,16 @@ start_color(void)
 		return(ERR);
 
 	/* Max colours and colour pairs */
-	if (max_colors == -1)
+	if (__tc_Co == -1)
 		COLORS = 0;
 	else {
-		COLORS = max_colors > MAX_COLORS ? MAX_COLORS : max_colors;
-		if (max_pairs == -1) {
+		COLORS = __tc_Co > MAX_COLORS ? MAX_COLORS : __tc_Co;
+		if (__tc_pa == -1) {
 			COLOR_PAIRS = 0;
 			COLORS = 0;
 		} else {
-			COLOR_PAIRS = (max_pairs > MAX_PAIRS - 1 ?
-			    MAX_PAIRS - 1 : max_pairs);
+			COLOR_PAIRS = (__tc_pa > MAX_PAIRS - 1 ?
+			    MAX_PAIRS - 1 : __tc_pa);
 			 /* Use the last colour pair for curses default. */
 			__default_color = COLOR_PAIR(MAX_PAIRS - 1);
 		}
@@ -120,21 +119,21 @@ start_color(void)
 	_cursesi_screen->COLOR_PAIRS = COLOR_PAIRS;
 
 	/* Reset terminal colour and colour pairs. */
-	if (orig_colors != NULL)
-		tputs(orig_colors, 0, __cputchar);
-	if (orig_pair != NULL) {
-		tputs(orig_pair, 0, __cputchar);
+	if (__tc_oc != NULL)
+		tputs(__tc_oc, 0, __cputchar);
+	if (__tc_op != NULL) {
+		tputs(__tc_op, 0, __cputchar);
 		curscr->wattr &= _cursesi_screen->mask_op;
 	}
 
 	/* Type of colour manipulation - ANSI/TEK/HP/other */
-	if (set_a_foreground != NULL && set_a_background != NULL)
+	if (__tc_AF != NULL && __tc_AB != NULL)
 		_cursesi_screen->color_type = COLOR_ANSI;
-	else if (initialize_pair != NULL)
+	else if (__tc_Ip != NULL)
 		_cursesi_screen->color_type = COLOR_HP;
-	else if (initialize_color != NULL)
+	else if (__tc_Ic != NULL)
 		_cursesi_screen->color_type = COLOR_TEK;
-	else if (set_foreground != NULL && set_background != NULL)
+	else if (__tc_Sb != NULL && __tc_Sf != NULL)
 		_cursesi_screen->color_type = COLOR_OTHER;
 	else
 		return(ERR);		/* Unsupported colour method */
@@ -163,8 +162,8 @@ start_color(void)
 	 * Store these in an attr_t for wattrset()/wattron().
 	 */
 	_cursesi_screen->nca = __NORMAL;
-	if (no_color_video != -1) {
-		temp_nc = (attr_t) t_no_color_video(_cursesi_screen->term);
+	if (__tc_NC != -1) {
+		temp_nc = (attr_t) t_getnum(_cursesi_screen->cursesi_genbuf, "NC");
 		if (temp_nc & 0x0001)
 			_cursesi_screen->nca |= __STANDOUT;
 		if (temp_nc & 0x0002)
@@ -245,8 +244,8 @@ start_color(void)
 			win->battr |= __default_color;
 			for (y = 0; y < win->maxy; y++) {
 				for (x = 0; x < win->maxx; x++) {
-					win->alines[y]->line[x].attr &= ~__COLOR;
-					win->alines[y]->line[x].attr |= __default_color;
+					win->lines[y]->line[x].attr &= ~__COLOR;
+					win->lines[y]->line[x].attr |= __default_color;
 				}
 			}
 			__touchwin(win);
@@ -274,10 +273,6 @@ init_pair(short pair, short fore, short back)
 
 	if (pair < 0 || pair >= COLOR_PAIRS)
 		return (ERR);
-
-	if (pair == 0) /* Ignore request for pair 0, it is default. */
-		return OK;
-
 	if (fore >= COLORS)
 		return (ERR);
 	if (back >= COLORS)
@@ -428,7 +423,7 @@ use_default_colors()
 #ifdef DEBUG
 	__CTRACE(__CTRACE_COLOR, "use_default_colors\n");
 #endif
-
+	
 	return(assume_default_colors(-1, -1));
 }
 
@@ -442,9 +437,7 @@ assume_default_colors(short fore, short back)
 #ifdef DEBUG
 	__CTRACE(__CTRACE_COLOR, "assume_default_colors: %d, %d\n",
 	    fore, back);
-	__CTRACE(__CTRACE_COLOR, "assume_default_colors: default_colour = %d, pair_number = %d\n", __default_color, PAIR_NUMBER(__default_color));
 #endif
-
 	/* Swap red/blue and yellow/cyan */
 	if (_cursesi_screen->color_type == COLOR_OTHER) {
 		switch (fore) {
@@ -496,17 +489,12 @@ assume_default_colors(short fore, short back)
 	return(OK);
 }
 
-/* no_color_video is a terminfo macro, but we need to retain binary compat */
-#ifdef __strong_alias
-#undef no_color_video
-__strong_alias(no_color_video, no_color_attributes)
-#endif
 /*
- * no_color_attributes --
+ * no_color_video --
  *	Return attributes that cannot be combined with color.
  */
 attr_t
-no_color_attributes(void)
+no_color_video(void)
 {
 	return(_cursesi_screen->nca);
 }
@@ -536,12 +524,12 @@ __set_color( /*ARGSUSED*/ WINDOW *win, attr_t attr)
 		    _cursesi_screen->colour_pairs[pair].back < 0)
 			__unset_color(curscr);
 		if (_cursesi_screen->colour_pairs[pair].fore >= 0)
-			tputs(tiparm(t_set_a_foreground(_cursesi_screen->term),
-			    (int)_cursesi_screen->colour_pairs[pair].fore),
+			tputs(__parse_cap(_cursesi_screen->tc_AF,
+			    _cursesi_screen->colour_pairs[pair].fore),
 			    0, __cputchar);
 		if (_cursesi_screen->colour_pairs[pair].back >= 0)
-			tputs(tiparm(t_set_a_background(_cursesi_screen->term),
-			    (int)_cursesi_screen->colour_pairs[pair].back),
+			tputs(__parse_cap(_cursesi_screen->tc_AB,
+			    _cursesi_screen->colour_pairs[pair].back),
 			    0, __cputchar);
 		break;
 	case COLOR_HP:
@@ -555,12 +543,12 @@ __set_color( /*ARGSUSED*/ WINDOW *win, attr_t attr)
 		    _cursesi_screen->colour_pairs[pair].back < 0)
 			__unset_color(curscr);
 		if (_cursesi_screen->colour_pairs[pair].fore >= 0)
-			tputs(tiparm(t_set_foreground(_cursesi_screen->term),
-			    (int)_cursesi_screen->colour_pairs[pair].fore),
+			tputs(__parse_cap(_cursesi_screen->tc_Sf,
+			    _cursesi_screen->colour_pairs[pair].fore),
 			    0, __cputchar);
 		if (_cursesi_screen->colour_pairs[pair].back >= 0)
-			tputs(tiparm(t_set_background(_cursesi_screen->term),
-			    (int)_cursesi_screen->colour_pairs[pair].back),
+			tputs(__parse_cap(_cursesi_screen->tc_Sb,
+			    _cursesi_screen->colour_pairs[pair].back),
 			    0, __cputchar);
 		break;
 	}
@@ -581,8 +569,8 @@ __unset_color(WINDOW *win)
 	switch (_cursesi_screen->color_type) {
 	/* Clear ANSI forground and background colours */
 	case COLOR_ANSI:
-		if (orig_pair != NULL) {
-			tputs(orig_pair, 0, __cputchar);
+		if (__tc_op != NULL) {
+			tputs(__tc_op, 0, __cputchar);
 			win->wattr &= __mask_op;
 		}
 		break;
@@ -593,8 +581,8 @@ __unset_color(WINDOW *win)
 		/* XXX: need to support Tek style */
 		break;
 	case COLOR_OTHER:
-		if (orig_pair != NULL) {
-			tputs(orig_pair, 0, __cputchar);
+		if (__tc_op != NULL) {
+			tputs(__tc_op, 0, __cputchar);
 			win->wattr &= __mask_op;
 		}
 		break;
@@ -608,7 +596,7 @@ __unset_color(WINDOW *win)
 void
 __restore_colors(void)
 {
-	if (can_change != 0)
+	if (__tc_cc != 0)
 		switch (_cursesi_screen->color_type) {
 		case COLOR_HP:
 			/* XXX: need to re-initialise HP style (Ip) */
@@ -648,7 +636,7 @@ __change_pair(short pair)
 			    "__change_pair: win == curscr\n");
 #endif
 			for (y = 0; y < curscr->maxy; y++) {
-				lp = curscr->alines[y];
+				lp = curscr->lines[y];
 				for (x = 0; x < curscr->maxx; x++) {
 					if ((lp->line[x].attr & __COLOR) == cl)
 						lp->line[x].attr &= ~__COLOR;
@@ -657,7 +645,7 @@ __change_pair(short pair)
 		} else {
 			/* Mark dirty those positions with colour pair "pair" */
 			for (y = 0; y < win->maxy; y++) {
-				lp = win->alines[y];
+				lp = win->lines[y];
 				for (x = 0; x < win->maxx; x++)
 					if ((lp->line[x].attr &
 					    __COLOR) == cl) {
@@ -674,12 +662,12 @@ __change_pair(short pair)
 							*lp->lastchp = x;
 					}
 #ifdef DEBUG
-				if ((win->alines[y]->flags & __ISDIRTY))
+				if ((win->lines[y]->flags & __ISDIRTY))
 					__CTRACE(__CTRACE_COLOR,
 					    "__change_pair: first = %d, "
 					    "last = %d\n",
-					    *win->alines[y]->firstchp,
-					    *win->alines[y]->lastchp);
+					    *win->lines[y]->firstchp,
+					    *win->lines[y]->lastchp);
 #endif
 			}
 		}

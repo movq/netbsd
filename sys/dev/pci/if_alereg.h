@@ -1,4 +1,4 @@
-/*	$NetBSD: if_alereg.h,v 1.2 2009/04/25 17:04:40 tsutsui Exp $	*/
+/*	$NetBSD: if_alereg.h,v 1.2.4.2 2009/05/03 23:45:47 snj Exp $	*/
 /*	$OpenBSD: if_alereg.h,v 1.1 2009/02/25 03:05:32 kevlo Exp $	*/
 
 /*-

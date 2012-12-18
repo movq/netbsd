@@ -1,4 +1,4 @@
-/*	$NetBSD: netio.c,v 1.16 2011/05/19 02:37:41 jakllsch Exp $	*/
+/*	$NetBSD: netio.c,v 1.10 2008/04/28 20:23:39 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -41,6 +41,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ * 4. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Gordon W. Ross
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -94,7 +99,7 @@ static struct iodesc desc;
 static int inited = 0;
 
 struct iodesc *
-socktodesc(int sock)
+socktodesc(sock)
 {
 	return &desc;
 }
@@ -110,10 +115,10 @@ net_devinit(struct open_file *f, struct netif_driver *drv, u_char *eaddr) {
 	/* find a free socket */
 	s = &desc;
 
-	memset(s, 0, sizeof(*s));
+	bzero(s, sizeof(*s));
 	best_if.nif_driver = drv;
 	s->io_netif = &best_if;
-	memcpy(s->myea, eaddr, 6);
+	bcopy(eaddr, s->myea, 6);
 
 	/*
 	 * Get info for NFS boot: our IP address, our hostname,
@@ -177,7 +182,7 @@ netif_put(struct iodesc *desc, void *pkt, size_t len)
 }
 
 ssize_t
-netif_get(struct iodesc *desc, void *pkt, size_t len, saseconds_t timo)
+netif_get(struct iodesc *desc, void *pkt, size_t len, time_t timo)
 {
 	return (*((struct netif*)desc->io_netif)->nif_driver->netif_get)
 		(desc, pkt, len, timo);

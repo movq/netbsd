@@ -1,4 +1,4 @@
-/*	$NetBSD: if_pflog.c,v 1.18 2010/04/12 13:57:38 ahoka Exp $	*/
+/*	$NetBSD: if_pflog.c,v 1.12 2008/06/18 09:06:27 yamt Exp $	*/
 /*	$OpenBSD: if_pflog.c,v 1.24 2007/05/26 17:13:30 jason Exp $	*/
 
 /*
@@ -36,12 +36,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_pflog.c,v 1.18 2010/04/12 13:57:38 ahoka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_pflog.c,v 1.12 2008/06/18 09:06:27 yamt Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #endif
 
+#include "bpfilter.h"
 #include "pflog.h"
 
 #include <sys/param.h>
@@ -82,9 +83,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_pflog.c,v 1.18 2010/04/12 13:57:38 ahoka Exp $");
 #endif
 
 void	pflogattach(int);
-#ifdef _MODULE
+#ifdef _LKM
 void	pflogdetach(void);
-#endif /* _MODULE */
+#endif /* _LKM */
 int	pflogoutput(struct ifnet *, struct mbuf *, const struct sockaddr *,
 	    	       struct rtentry *);
 int	pflogioctl(struct ifnet *, u_long, void *);
@@ -109,7 +110,7 @@ pflogattach(int npflog)
 	if_clone_attach(&pflog_cloner);
 }
 
-#ifdef _MODULE
+#ifdef _LKM
 void
 pflogdetach(void)
 {
@@ -121,7 +122,7 @@ pflogdetach(void)
 	}
 	if_clone_detach(&pflog_cloner);
 }
-#endif /* _MODULE */
+#endif /* _LKM */
 
 int
 pflog_clone_create(struct if_clone *ifc, int unit)
@@ -133,8 +134,9 @@ pflog_clone_create(struct if_clone *ifc, int unit)
 	if (unit >= PFLOGIFS_MAX)
 		return (EINVAL);
 
-	if ((pflogif = malloc(sizeof(*pflogif), M_DEVBUF, M_NOWAIT|M_ZERO)) == NULL)
+	if ((pflogif = malloc(sizeof(*pflogif), M_DEVBUF, M_NOWAIT)) == NULL)
 		return (ENOMEM);
+	bzero(pflogif, sizeof(*pflogif));
 
 	pflogif->sc_unit = unit;
 	ifp = &pflogif->sc_if;
@@ -152,11 +154,13 @@ pflog_clone_create(struct if_clone *ifc, int unit)
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
 
+#if NBPFILTER > 0
 #ifdef __NetBSD__
-	bpf_attach(ifp, DLT_PFLOG, PFLOG_HDRLEN);
+	bpfattach(ifp, DLT_PFLOG, PFLOG_HDRLEN);
 #else
 	bpfattach(&pflogif->sc_if.if_bpf, ifp, DLT_PFLOG, PFLOG_HDRLEN);
 #endif /* !__NetBSD__ */
+#endif
 
 	s = splnet();
 	LIST_INSERT_HEAD(&pflogif_list, pflogif, sc_list);
@@ -177,7 +181,9 @@ pflog_clone_destroy(struct ifnet *ifp)
 	LIST_REMOVE(pflogif, sc_list);
 	splx(s);
 
-	bpf_detach(ifp);
+#if NBPFILTER > 0
+	bpfdetach(ifp);
+#endif
 	if_detach(ifp);
 	free(pflogif, M_DEVBUF);
 	return (0);
@@ -217,26 +223,21 @@ pflogoutput(struct ifnet *ifp, struct mbuf *m,
 int
 pflogioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
-	int error = 0;
-
 	switch (cmd) {
-	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		/*FALLTHROUGH*/
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 	case SIOCAIFADDR:
 	case SIOCSIFDSTADDR:
+	case SIOCSIFFLAGS:
 		if (ifp->if_flags & IFF_UP)
 			ifp->if_flags |= IFF_RUNNING;
 		else
 			ifp->if_flags &= ~IFF_RUNNING;
 		break;
 	default:
-		error = ifioctl_common(ifp, cmd, data);
+		return (EINVAL);
 	}
 
-	return error;
+	return (0);
 }
 
 int
@@ -244,6 +245,7 @@ pflog_packet(struct pfi_kif *kif, struct mbuf *m, sa_family_t af, u_int8_t dir,
     u_int8_t reason, struct pf_rule *rm, struct pf_rule *am,
     struct pf_ruleset *ruleset, struct pf_pdesc *pd)
 {
+#if NBPFILTER > 0
 	struct ifnet *ifn;
 	struct pfloghdr hdr;
 
@@ -303,6 +305,7 @@ pflog_packet(struct pfi_kif *kif, struct mbuf *m, sa_family_t af, u_int8_t dir,
 	    BPF_DIRECTION_OUT);
 #endif /* !__NetBSD__ */
 
+#endif
 
 	return (0);
 }

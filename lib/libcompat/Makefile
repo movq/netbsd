@@ -1,14 +1,12 @@
-#	$NetBSD: Makefile,v 1.31 2012/03/21 10:08:30 matt Exp $
+#	$NetBSD: Makefile,v 1.28 2005/07/06 14:43:24 drochner Exp $
 
 .include <bsd.own.mk>
-
-WARNS=	2
 
 LIB=	compat
 CPPFLAGS+=-DLIBC_SCCS -DSYSLIBC_SCCS -D__LIBCOMPAT_SOURCE__
 AFLAGS+=-I${NETBSDSRCDIR}/lib/libc/arch/${MACHINE_ARCH}
 .if defined(DESTDIR)
-AFLAGS+=-nostdinc -isystem ${DESTDIR}/usr/include
+AFLAGS+=-nostdinc -idirafter ${DESTDIR}/usr/include
 .endif
 
 .PATH:	${.CURDIR}/4.1/${MACHINE_ARCH} ${.CURDIR}/4.1 \
@@ -20,7 +18,7 @@ AFLAGS+=-nostdinc -isystem ${DESTDIR}/usr/include
 # missing: getpw.c tell.c vlimit.c vtimes.c
 SRCS=	gtty.c ftime.c stty.c
 
-.if (${MACHINE_ARCH} == "vax")
+.if (${MACHINE} == "vax")
 # missing: (for vax) reset.s
 .endif
 

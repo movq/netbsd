@@ -1,4 +1,4 @@
-/*	$NetBSD: varpush.c,v 1.12 2011/08/31 16:24:56 plunky Exp $	*/
+/*	$NetBSD: varpush.c,v 1.8 2004/01/27 20:30:30 jsm Exp $	*/
 
 /*
  * Copyright (c) 1982, 1993
@@ -34,12 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)varpush.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: varpush.c,v 1.12 2011/08/31 16:24:56 plunky Exp $");
+__RCSID("$NetBSD: varpush.c,v 1.8 2004/01/27 20:30:30 jsm Exp $");
 #endif
 #endif /* not lint */
 
-#include <paths.h>
-#include "mille.h"
+# include	<paths.h>
+# include	"mille.h"
 
 /*
  * @(#)varpush.c	1.1 (Berkeley) 4/1/82
@@ -50,7 +50,9 @@ __RCSID("$NetBSD: varpush.c,v 1.12 2011/08/31 16:24:56 plunky Exp $");
  * channel file.  func() is either read or write.
  */
 bool
-varpush(int file, ssize_t (*func)(int, const struct iovec *, int))
+varpush(file, func)
+	int	file;
+	ssize_t	(*func)(int, const struct iovec *, int); 
 {
 	int		temp;
 	const struct iovec vec[] = {
@@ -70,12 +72,12 @@ varpush(int file, ssize_t (*func)(int, const struct iovec *, int))
 	};
 
 	if (((func)(file, vec, sizeof(vec) / sizeof(vec[0]))) < 0) {
-		error("%s", strerror(errno));
+		error(strerror(errno));
 		return FALSE;
 	}
 	if (func == readv) {
 		if ((read(file, (void *) &temp, sizeof temp)) < 0) {
-			error("%s", strerror(errno));
+			error(strerror(errno));
 			return FALSE;
 		}
 		Topcard = &Deck[temp];
@@ -90,13 +92,13 @@ over:
 				goto over;
 			}
 			if (strcmp(buf, _PATH_DEVNULL) != 0)
-				setbuf(outf, NULL);
+				setbuf(outf, (char *)NULL);
 		}
 #endif
 	} else {
 		temp = Topcard - Deck;
 		if ((write(file, (void *) &temp, sizeof temp)) < 0) {
-			error("%s", strerror(errno));
+			error(strerror(errno));
 			return FALSE;
 		}
 	}

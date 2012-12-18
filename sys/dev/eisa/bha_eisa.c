@@ -1,4 +1,4 @@
-/*	$NetBSD: bha_eisa.c,v 1.35 2012/10/27 17:18:16 chs Exp $	*/
+/*	$NetBSD: bha_eisa.c,v 1.31 2008/04/28 20:23:48 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bha_eisa.c,v 1.35 2012/10/27 17:18:16 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bha_eisa.c,v 1.31 2008/04/28 20:23:48 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,10 +55,10 @@ __KERNEL_RCSID(0, "$NetBSD: bha_eisa.c,v 1.35 2012/10/27 17:18:16 chs Exp $");
 #define	BHA_EISA_IOCONF		0x0c
 
 static int	bha_eisa_address(bus_space_tag_t, bus_space_handle_t, int *);
-static int	bha_eisa_match(device_t, cfdata_t, void *);
-static void	bha_eisa_attach(device_t, device_t, void *);
+static int	bha_eisa_match(struct device *, struct cfdata *, void *);
+static void	bha_eisa_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(bha_eisa, sizeof(struct bha_softc),
+CFATTACH_DECL(bha_eisa, sizeof(struct bha_softc),
     bha_eisa_match, bha_eisa_attach, NULL, NULL);
 
 static int
@@ -99,7 +99,8 @@ bha_eisa_address(bus_space_tag_t iot, bus_space_handle_t ioh, int *portp)
  * the actual probe routine to check it out.
  */
 static int
-bha_eisa_match(device_t parent, cfdata_t match, void *aux)
+bha_eisa_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct eisa_attach_args *ea = aux;
 	bus_space_tag_t iot = ea->ea_iot;
@@ -135,7 +136,7 @@ bha_eisa_match(device_t parent, cfdata_t match, void *aux)
  * Attach all the sub-devices we can find
  */
 static void
-bha_eisa_attach(device_t parent, device_t self, void *aux)
+bha_eisa_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct eisa_attach_args *ea = aux;
 	struct bha_softc *sc = device_private(self);
@@ -146,8 +147,6 @@ bha_eisa_attach(device_t parent, device_t self, void *aux)
 	eisa_chipset_tag_t ec = ea->ea_ec;
 	eisa_intr_handle_t ih;
 	const char *model, *intrstr;
-
-	sc->sc_dev = self;
 
 	if (!strcmp(ea->ea_idstring, "BUS4201"))
 		model = EISA_PRODUCT_BUS4201;
@@ -175,7 +174,7 @@ bha_eisa_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dmaflags = 0;
 
 	if (eisa_intr_map(ec, bpd.sc_irq, &ih)) {
-		aprint_error_dev(sc->sc_dev, "couldn't map interrupt (%d)\n",
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt (%d)\n",
 		    bpd.sc_irq);
 		return;
 	}
@@ -183,13 +182,13 @@ bha_eisa_attach(device_t parent, device_t self, void *aux)
 	sc->sc_ih = eisa_intr_establish(ec, ih, IST_LEVEL, IPL_BIO,
 	    bha_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			printf(" at %s", intrstr);
+		printf("\n");
 		return;
 	}
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+	printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev), intrstr);
 
 	bha_attach(sc);
 }

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.29 2010/03/12 23:07:13 martin Exp $
+#	$NetBSD: Makefile,v 1.26 2006/05/09 19:10:43 he Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -7,7 +7,7 @@
 
 .include "${.CURDIR}/../instfs/Makefile.instfs"
 IMAGE=			miniroot.fs
-IMAGESIZE=	12m
+IMAGESIZE=		8m
 IMAGEPOSTBUILD=		${TOOL_INSTALLBOOT} -v -m ${MACHINE} ${IMAGE} \
 			    ${DESTDIR}/usr/mdec/bootblk
 IMAGE_RELEASEDIR=	installation/miniroot
@@ -23,7 +23,7 @@ ${CRUNCHBIN}: ${CRUNCHBINDIR}/${CRUNCHBIN}
 
 netbsd.gz: ${KERNOBJDIR}/GENERIC/netbsd
 	-rm -f ${.TARGET}
-	gzip -9nc ${.ALLSRC} > ${.TARGET}
+	gzip -9c ${.ALLSRC} > ${.TARGET}
 
 clean:	localclean
 

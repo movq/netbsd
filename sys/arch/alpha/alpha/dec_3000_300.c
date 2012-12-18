@@ -1,21 +1,21 @@
-/* $NetBSD: dec_3000_300.c,v 1.48 2012/10/27 17:17:25 chs Exp $ */
+/* $NetBSD: dec_3000_300.c,v 1.43 2007/03/04 15:18:10 yamt Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_3000_300.c,v 1.48 2012/10/27 17:17:25 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_3000_300.c,v 1.43 2007/03/04 15:18:10 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,9 +58,9 @@ __KERNEL_RCSID(0, "$NetBSD: dec_3000_300.c,v 1.48 2012/10/27 17:17:25 chs Exp $"
 
 #include "wsdisplay.h"
 
-void dec_3000_300_init(void);
-static void dec_3000_300_cons_init(void);
-static void dec_3000_300_device_register(device_t, void *);
+void dec_3000_300_init __P((void));
+static void dec_3000_300_cons_init __P((void));
+static void dec_3000_300_device_register __P((struct device *, void *));
 
 const struct alpha_variation_table dec_3000_300_variations[] = {
 	{ SV_ST_PELICAN, "DEC 3000/300 (\"Pelican\")" },
@@ -71,9 +71,9 @@ const struct alpha_variation_table dec_3000_300_variations[] = {
 };
 
 void
-dec_3000_300_init(void)
+dec_3000_300_init()
 {
-	uint64_t variation;
+	u_int64_t variation;
 
 	platform.family = "DEC 3000/300 (\"Pelican\")";
 
@@ -90,7 +90,7 @@ dec_3000_300_init(void)
 }
 
 static void
-dec_3000_300_cons_init(void)
+dec_3000_300_cons_init()
 {
 	struct ctb *ctb;
 
@@ -143,13 +143,15 @@ dec_3000_300_cons_init(void)
 }
 
 static void
-dec_3000_300_device_register(device_t dev, void *aux)
+dec_3000_300_device_register(dev, aux)
+	struct device *dev;
+	void *aux;
 {
 	static int found, initted, scsiboot, netboot;
-	static device_t scsidev;
-	static device_t tcdsdev;
+	static struct device *scsidev;
+	static struct device *tcdsdev;
 	struct bootdev_data *b = bootdev_data;
-	device_t parent = device_parent(dev);
+	struct device *parent = device_parent(dev);
 
 	if (found)
 		return;
@@ -178,14 +180,14 @@ dec_3000_300_device_register(device_t dev, void *aux)
 
 		tcdsdev = dev;
 #if 0
-		printf("\ntcdsdev = %s\n", device_xname(dev));
+		printf("\ntcdsdev = %s\n", dev->dv_xname);
 #endif
 	}
 	if (scsiboot && tcdsdev &&
 	    device_is_a(dev, "asc")) {
 		struct tcdsdev_attach_args *ta = aux;
 
-		if (parent != tcdsdev)
+		if (parent != (struct device *)tcdsdev)
 			return;
 
 		if (ta->tcdsda_chip != b->channel)
@@ -193,7 +195,7 @@ dec_3000_300_device_register(device_t dev, void *aux)
 
 		scsidev = dev;
 #if 0
-		printf("\nscsidev = %s\n", device_xname(dev));
+		printf("\nscsidev = %s\n", dev->dv_xname);
 #endif
 	}
 
@@ -228,13 +230,13 @@ dec_3000_300_device_register(device_t dev, void *aux)
 		/* we've found it! */
 		booted_device = dev;
 #if 0
-		printf("\nbooted_device = %s\n", device_xname(booted_device));
+		printf("\nbooted_device = %s\n", booted_device->dv_xname);
 #endif
 		found = 1;
 	}
 
 	if (netboot) {
-	        if (b->slot == 5 && device_is_a(dev, "le") &&
+                if (b->slot == 5 && device_is_a(dev, "le") &&
 		    device_is_a(parent, "ioasic")) {
 			/*
 			 * no need to check ioasic_attach_args, since only
@@ -243,7 +245,7 @@ dec_3000_300_device_register(device_t dev, void *aux)
 
 			booted_device = dev;
 #if 0
-			printf("\nbooted_device = %s\n", device_xname(booted_device));
+			printf("\nbooted_device = %s\n", booted_device->dv_xname);
 #endif
 			found = 1;
 			return;
@@ -252,5 +254,5 @@ dec_3000_300_device_register(device_t dev, void *aux)
 		/*
 		 * XXX GENERIC SUPPORT FOR TC NETWORK BOARDS
 		 */
-	}
+        }
 }

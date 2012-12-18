@@ -1,4 +1,4 @@
-/*	$NetBSD: pdq_ifsubr.c,v 1.55 2012/10/27 17:18:22 chs Exp $	*/
+/*	$NetBSD: pdq_ifsubr.c,v 1.52 2008/04/08 12:07:27 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pdq_ifsubr.c,v 1.55 2012/10/27 17:18:22 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pdq_ifsubr.c,v 1.52 2008/04/08 12:07:27 cegger Exp $");
 
 #ifdef __NetBSD__
 #include "opt_inet.h"
@@ -62,8 +62,11 @@ __KERNEL_RCSID(0, "$NetBSD: pdq_ifsubr.c,v 1.55 2012/10/27 17:18:22 chs Exp $");
 #include <net/route.h>
 #endif
 
+#include "bpfilter.h"
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -102,17 +105,34 @@ __KERNEL_RCSID(0, "$NetBSD: pdq_ifsubr.c,v 1.55 2012/10/27 17:18:22 chs Exp $");
 #include "pdqreg.h"
 #endif
 
+#if defined(__bsdi__) && _BSDI_VERSION < 199506 /* XXX */
+static void
+arp_ifinit(
+    struct arpcom *ac,
+    struct ifaddr *ifa)
+{
+    sc->sc_ac.ac_ipaddr = IA_SIN(ifa)->sin_addr;
+    arpwhohas(&sc->sc_ac, &IA_SIN(ifa)->sin_addr);
+#if _BSDI_VERSION >= 199401
+    ifa->ifa_rtrequest = arp_rtrequest;
+    ifa->ifa_flags |= RTF_CLONING;
+#endif
+#endif
+
+
 void
 pdq_ifinit(
     pdq_softc_t *sc)
 {
     if (sc->sc_if.if_flags & IFF_UP) {
 	sc->sc_if.if_flags |= IFF_RUNNING;
+#if NBPFILTER > 0
 	if (sc->sc_if.if_flags & IFF_PROMISC) {
 	    sc->sc_pdq->pdq_flags |= PDQ_PROMISC;
 	} else {
 	    sc->sc_pdq->pdq_flags &= ~PDQ_PROMISC;
 	}
+#endif
 	if (sc->sc_if.if_flags & IFF_LINK1) {
 	    sc->sc_pdq->pdq_flags |= PDQ_PASS_SMT;
 	} else {
@@ -240,8 +260,10 @@ pdq_os_receive_pdu(
     }
 #endif
     m->m_pkthdr.len = pktlen;
+#if NBPFILTER > 0
     if (sc->sc_bpf != NULL)
 	PDQ_BPF_MTAP(sc, m);
+#endif
     fh = mtod(m, struct fddi_header *);
     if (drop || (fh->fddi_fc & (FDDIFC_L|FDDIFC_F)) != FDDIFC_LLC_ASYNC) {
 	PDQ_OS_DATABUF_FREE(pdq, m);
@@ -273,8 +295,10 @@ pdq_os_transmit_done(
     struct mbuf *m)
 {
     pdq_softc_t *sc = pdq->pdq_os_ctx;
+#if NBPFILTER > 0
     if (sc->sc_bpf != NULL)
 	PDQ_BPF_MTAP(sc, m);
+#endif
     PDQ_OS_DATABUF_FREE(pdq, m);
     sc->sc_if.if_opackets++;
 }
@@ -401,25 +425,35 @@ pdq_ifioctl(
     s = PDQ_OS_SPL_RAISE();
 
     switch (cmd) {
-	case SIOCINITIFADDR: {
+	case SIOCSIFADDR: {
 	    struct ifaddr *ifa = (struct ifaddr *)data;
 
 	    ifp->if_flags |= IFF_UP;
-	    pdq_ifinit(sc);
 	    switch(ifa->ifa_addr->sa_family) {
 #if defined(INET)
-		case AF_INET:
+		case AF_INET: {
+		    pdq_ifinit(sc);
 		    PDQ_ARP_IFINIT(sc, ifa);
 		    break;
+		}
 #endif /* INET */
-		default:
+
+
+		default: {
+		    pdq_ifinit(sc);
 		    break;
+		}
 	    }
 	    break;
 	}
+	case SIOCGIFADDR: {
+	    struct ifreq *ifr = (struct ifreq *)data;
+	    error = ifreq_setaddr(cmd, ifr,
+	        (const struct sockaddr *)sc->sc_if.if_sadl);
+	    break;
+	}
+
 	case SIOCSIFFLAGS: {
-	    if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-		break;
 	    pdq_ifinit(sc);
 	    break;
 	}
@@ -466,7 +500,7 @@ pdq_ifioctl(
 #endif
 
 	default: {
-	    error = ether_ioctl(ifp, cmd, data);
+	    error = EINVAL;
 	    break;
 	}
     }
@@ -730,12 +764,12 @@ pdq_os_databuf_alloc(
 
     MGETHDR(m, M_DONTWAIT, MT_DATA);
     if (m == NULL) {
-	aprint_error_dev(sc->sc_dev, "can't alloc small buf\n");
+	aprint_error_dev(&sc->sc_dev, "can't alloc small buf\n");
 	return NULL;
     }
     MCLGET(m, M_DONTWAIT);
     if ((m->m_flags & M_EXT) == 0) {
-	aprint_error_dev(sc->sc_dev, "can't alloc cluster\n");
+	aprint_error_dev(&sc->sc_dev, "can't alloc cluster\n");
         m_free(m);
 	return NULL;
     }
@@ -744,13 +778,13 @@ pdq_os_databuf_alloc(
 
     if (bus_dmamap_create(sc->sc_dmatag, PDQ_OS_DATABUF_SIZE,
 			   1, PDQ_OS_DATABUF_SIZE, 0, BUS_DMA_NOWAIT, &map)) {
-	aprint_error_dev(sc->sc_dev, "can't create dmamap\n");
+	aprint_error_dev(&sc->sc_dev, "can't create dmamap\n");
 	m_free(m);
 	return NULL;
     }
     if (bus_dmamap_load_mbuf(sc->sc_dmatag, map, m,
     			     BUS_DMA_READ|BUS_DMA_NOWAIT)) {
-	aprint_error_dev(sc->sc_dev, "can't load dmamap\n");
+	aprint_error_dev(&sc->sc_dev, "can't load dmamap\n");
 	bus_dmamap_destroy(sc->sc_dmatag, map);
 	m_free(m);
 	return NULL;

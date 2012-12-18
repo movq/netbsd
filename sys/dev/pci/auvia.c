@@ -1,11 +1,11 @@
-/*	$NetBSD: auvia.c,v 1.75 2011/11/24 03:35:58 mrg Exp $	*/
+/*	$NetBSD: auvia.c,v 1.67 2008/10/11 20:08:15 dholland Exp $	*/
 
 /*-
- * Copyright (c) 2000, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Tyler C. Sarna.
+ * by Tyler C. Sarna
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -40,13 +40,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auvia.c,v 1.75 2011/11/24 03:35:58 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auvia.c,v 1.67 2008/10/11 20:08:15 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/audioio.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
@@ -59,8 +61,6 @@ __KERNEL_RCSID(0, "$NetBSD: auvia.c,v 1.75 2011/11/24 03:35:58 mrg Exp $");
 #include <dev/ic/ac97var.h>
 
 #include <dev/pci/auviavar.h>
-
-#define	AUVIA_MINBLKSZ		512
 
 struct auvia_dma {
 	struct auvia_dma *next;
@@ -79,7 +79,7 @@ struct auvia_dma_op {
 #define AUVIA_DMAOP_COUNT(x)	((x)&0x00FFFFFF)
 };
 
-static int	auvia_match(device_t, cfdata_t, void *);
+static int	auvia_match(device_t, struct cfdata *, void *);
 static void	auvia_attach(device_t, device_t, void *);
 static int	auvia_detach(device_t, int);
 static void	auvia_childdet(device_t, device_t);
@@ -99,8 +99,8 @@ static int	auvia_getdev(void *, struct audio_device *);
 static int	auvia_set_port(void *, mixer_ctrl_t *);
 static int	auvia_get_port(void *, mixer_ctrl_t *);
 static int	auvia_query_devinfo(void *, mixer_devinfo_t *);
-static void *	auvia_malloc(void *, int, size_t);
-static void	auvia_free(void *, void *, size_t);
+static void *	auvia_malloc(void *, int, size_t, struct malloc_type *, int);
+static void	auvia_free(void *, void *, struct malloc_type *);
 static size_t	auvia_round_buffersize(void *, int, size_t);
 static paddr_t	auvia_mappage(void *, void *, off_t, int);
 static int	auvia_get_props(void *);
@@ -113,13 +113,9 @@ static int	auvia_trigger_output(void *, void *, void *, int,
 static int	auvia_trigger_input(void *, void *, void *, int,
 				    void (*)(void *), void *,
 				    const audio_params_t *);
-static void	auvia_get_locks(void *, kmutex_t **, kmutex_t **);
-static bool	auvia_resume(device_t, const pmf_qual_t *);
-
+static bool	auvia_resume(device_t PMF_FN_PROTO);
 static int	auvia_intr(void *);
-static void *	auvia_malloc_dmamem(void *, int, size_t);
-static int	auvia_malloc_channel(struct auvia_softc *, struct auvia_softc_chan *,
-				     size_t);
+
 static int	auvia_attach_codec(void *, struct ac97_codec_if *);
 static int	auvia_write_codec(void *, uint8_t, uint16_t);
 static int	auvia_read_codec(void *, uint8_t, uint16_t *);
@@ -128,7 +124,7 @@ static int	auvia_waitready_codec(struct auvia_softc *);
 static int	auvia_waitvalid_codec(struct auvia_softc *);
 static void	auvia_spdif_event(void *, bool);
 
-CFATTACH_DECL2_NEW(auvia, sizeof (struct auvia_softc),
+CFATTACH_DECL2(auvia, sizeof (struct auvia_softc),
     auvia_match, auvia_attach, auvia_detach, NULL, NULL, auvia_childdet);
 
 /* VIA VT823xx revision number */
@@ -237,7 +233,7 @@ static const struct audio_hw_if auvia_hw_if = {
 	auvia_trigger_output,
 	auvia_trigger_input,
 	NULL, /* dev_ioctl */
-	auvia_get_locks,
+	NULL, /* powerstate */
 };
 
 #define AUVIA_FORMATS_4CH_16	2
@@ -271,7 +267,7 @@ static const struct audio_format auvia_spdif_formats[AUVIA_SPDIF_NFORMATS] = {
 
 
 static int
-auvia_match(device_t parent, cfdata_t match, void *aux)
+auvia_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -303,32 +299,21 @@ auvia_detach(device_t self, int flags)
 
 	if ((rc = config_detach_children(self, flags)) != 0)
 		return rc;
+
 	pmf_device_deregister(self);
 
-	mutex_enter(&sc->sc_lock);
 	auconv_delete_encodings(sc->sc_encodings);
 	auconv_delete_encodings(sc->sc_spdif_encodings);
+
 	if (sc->codec_if != NULL)
 		sc->codec_if->vtbl->detach(sc->codec_if);
-	mutex_exit(&sc->sc_lock);
 
 	/* XXX restore compatibility? */
+
 	if (sc->sc_ih != NULL)
 		pci_intr_disestablish(sc->sc_pc, sc->sc_ih);
 
 	bus_space_unmap(sc->sc_iot, sc->sc_ioh, sc->sc_iosize);
-	if (sc->sc_play.sc_dma_ops != NULL) {
-		auvia_free(sc, sc->sc_play.sc_dma_ops,
-		    sc->sc_play.sc_dma_op_count *
-		    sizeof(struct auvia_dma_op));
-	}
-	if (sc->sc_record.sc_dma_ops != NULL) {
-		auvia_free(sc, sc->sc_record.sc_dma_ops,
-		    sc->sc_play.sc_dma_op_count *
-		    sizeof(struct auvia_dma_op));
-	}
-	mutex_destroy(&sc->sc_lock);
-	mutex_destroy(&sc->sc_intr_lock);
 
 	return 0;
 }
@@ -348,7 +333,6 @@ auvia_attach(device_t parent, device_t self, void *aux)
 
 	pa = aux;
 	sc = device_private(self);
-	sc->sc_dev = self;
 	intrstr = NULL;
 	pc = pa->pa_pc;
 	pt = pa->pa_tag;
@@ -425,22 +409,17 @@ auvia_attach(device_t parent, device_t self, void *aux)
 	}
 	intrstr = pci_intr_string(pc, ih);
 
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
-
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_AUDIO, auvia_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, sc->sc_iosize);
-		mutex_destroy(&sc->sc_lock);
-		mutex_destroy(&sc->sc_intr_lock);
 		return;
 	}
 
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	/* disable SBPro compat & others */
 	pr = pci_conf_read(pc, pt, AUVIA_PCICONF_JUNK);
@@ -462,18 +441,15 @@ auvia_attach(device_t parent, device_t self, void *aux)
 	sc->host_if.reset = auvia_reset_codec;
 	sc->host_if.spdif_event = auvia_spdif_event;
 
-	if ((r = ac97_attach(&sc->host_if, self, &sc->sc_lock)) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't attach codec (error 0x%X)\n", r);
+	if ((r = ac97_attach(&sc->host_if, self)) != 0) {
+		aprint_error_dev(&sc->sc_dev, "can't attach codec (error 0x%X)\n", r);
 		pci_intr_disestablish(pc, sc->sc_ih);
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, sc->sc_iosize);
-		mutex_destroy(&sc->sc_lock);
-		mutex_destroy(&sc->sc_intr_lock);
 		return;
 	}
 
 	/* setup audio_format */
 	memcpy(sc->sc_formats, auvia_formats, sizeof(auvia_formats));
-	mutex_enter(&sc->sc_lock);
 	if (sc->sc_play.sc_base != VIA8233_MP_BASE || !AC97_IS_4CH(sc->codec_if)) {
 		AUFMT_INVALIDATE(&sc->sc_formats[AUVIA_FORMATS_4CH_8]);
 		AUFMT_INVALIDATE(&sc->sc_formats[AUVIA_FORMATS_4CH_16]);
@@ -488,40 +464,29 @@ auvia_attach(device_t parent, device_t self, void *aux)
 			sc->sc_formats[r].frequency[0] = 48000;
 		}
 	}
-	mutex_exit(&sc->sc_lock);
 
 	if (0 != auconv_create_encodings(sc->sc_formats, AUVIA_NFORMATS,
 					 &sc->sc_encodings)) {
-		mutex_enter(&sc->sc_lock);
 		sc->codec_if->vtbl->detach(sc->codec_if);
-		mutex_exit(&sc->sc_lock);
 		pci_intr_disestablish(pc, sc->sc_ih);
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, sc->sc_iosize);
-		mutex_destroy(&sc->sc_lock);
-		mutex_destroy(&sc->sc_intr_lock);
-		aprint_error_dev(sc->sc_dev, "can't create encodings\n");
+		aprint_error_dev(&sc->sc_dev, "can't create encodings\n");
 		return;
 	}
 	if (0 != auconv_create_encodings(auvia_spdif_formats,
 	    AUVIA_SPDIF_NFORMATS, &sc->sc_spdif_encodings)) {
-		mutex_enter(&sc->sc_lock);
 		sc->codec_if->vtbl->detach(sc->codec_if);
-		mutex_exit(&sc->sc_lock);
 		pci_intr_disestablish(pc, sc->sc_ih);
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, sc->sc_iosize);
-		mutex_destroy(&sc->sc_lock);
-		mutex_destroy(&sc->sc_intr_lock);
-		aprint_error_dev(sc->sc_dev, "can't create spdif encodings\n");
+		aprint_error_dev(&sc->sc_dev, "can't create spdif encodings\n");
 		return;
 	}
 
 	if (!pmf_device_register(self, NULL, auvia_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
-	audio_attach_mi(&auvia_hw_if, sc, sc->sc_dev);
-	mutex_enter(&sc->sc_lock);
+	audio_attach_mi(&auvia_hw_if, sc, &sc->sc_dev);
 	sc->codec_if->vtbl->unlock(sc->codec_if);
-	mutex_exit(&sc->sc_lock);
 	return;
 }
 
@@ -558,7 +523,7 @@ auvia_reset_codec(void *addr)
 		AUVIA_PCICONF_JUNK) & AUVIA_PCICONF_PRIVALID); i--)
 		DELAY(1);
 	if (i == 0) {
-		printf("%s: codec reset timed out\n", device_xname(sc->sc_dev));
+		printf("%s: codec reset timed out\n", device_xname(&sc->sc_dev));
 		return ETIMEDOUT;
 	}
 	return 0;
@@ -574,7 +539,7 @@ auvia_waitready_codec(struct auvia_softc *sc)
 		AUVIA_CODEC_CTL) & AUVIA_CODEC_BUSY); i++)
 		delay(1);
 	if (i >= TIMEOUT) {
-		printf("%s: codec busy\n", device_xname(sc->sc_dev));
+		printf("%s: codec busy\n", device_xname(&sc->sc_dev));
 		return 1;
 	}
 
@@ -591,7 +556,7 @@ auvia_waitvalid_codec(struct auvia_softc *sc)
 		AUVIA_CODEC_CTL) & AUVIA_CODEC_PRIVALID); i++)
 			delay(1);
 	if (i >= TIMEOUT) {
-		printf("%s: codec invalid\n", device_xname(sc->sc_dev));
+		printf("%s: codec invalid\n", device_xname(&sc->sc_dev));
 		return 1;
 	}
 
@@ -651,9 +616,7 @@ auvia_open(void *addr, int flags)
 	struct auvia_softc *sc;
 
 	sc = (struct auvia_softc *)addr;
-	mutex_spin_exit(&sc->sc_intr_lock);
 	sc->codec_if->vtbl->lock(sc->codec_if);
-	mutex_spin_enter(&sc->sc_intr_lock);
 	return 0;
 }
 
@@ -663,9 +626,7 @@ auvia_close(void *addr)
 	struct auvia_softc *sc;
 
 	sc = (struct auvia_softc *)addr;
-	mutex_spin_exit(&sc->sc_intr_lock);
 	sc->codec_if->vtbl->unlock(sc->codec_if);
-	mutex_spin_enter(&sc->sc_intr_lock);
 }
 
 static int
@@ -791,13 +752,11 @@ auvia_round_blocksize(void *addr, int blk,
 	struct auvia_softc *sc;
 
 	sc = addr;
-
 	/* XXX VT823x might have the limitation of dma_ops size */
 	if (sc->sc_flags & AUVIA_FLAGS_VT8233 && blk < 288)
 		blk = 288;
 
-	/* Avoid too many dma_ops. */
-	return min((blk & -32), AUVIA_MINBLKSZ);
+	return (blk & -32);
 }
 
 static int
@@ -874,84 +833,43 @@ auvia_query_devinfo(void *addr, mixer_devinfo_t *dip)
 	return sc->codec_if->vtbl->query_devinfo(sc->codec_if, dip);
 }
 
-static int
-auvia_malloc_channel(struct auvia_softc *sc, struct auvia_softc_chan *ch,
-		     size_t size)
-{
-	struct auvia_dma *dp;
-	int segs;
-
-	/* if old list is large enough, nothing to do */
-	segs = (size + AUVIA_MINBLKSZ - 1) / AUVIA_MINBLKSZ;
-	if (segs <= ch->sc_dma_op_count) {
-		return 0;
-	}
-
-	if (ch->sc_dma_ops) {
-		auvia_free(sc, ch->sc_dma_ops,
-		    ch->sc_dma_op_count * sizeof(*dp));
-	}
-
-	ch->sc_dma_ops = auvia_malloc_dmamem(sc, 0,
-	    sizeof(struct auvia_dma_op) * segs);
-
-	if (ch->sc_dma_ops == NULL) {
-		aprint_error_dev(sc->sc_dev, "couldn't build dmaops\n");
-		return ENOMEM;
-	}
-
-	for (dp = sc->sc_dmas;
-	    dp && dp->addr != (void *)(ch->sc_dma_ops);
-	    dp = dp->next)
-		continue;
-
-	if (!dp)
-		panic("%s: build_dma_ops: where'd my memory go??? "
-			"address (%p)\n", device_xname(sc->sc_dev),
-			ch->sc_dma_ops);
-
-	ch->sc_dma_op_count = segs;
-	ch->sc_dma_ops_dma = dp;
-
-	return 0;
-}
-
 static void *
-auvia_malloc_dmamem(void *addr, int direction, size_t size)
+auvia_malloc(void *addr, int direction, size_t size,
+    struct malloc_type * pool, int flags)
 {
 	struct auvia_softc *sc;
 	struct auvia_dma *p;
 	int error;
 	int rseg;
 
-	p = kmem_alloc(sizeof(*p), KM_SLEEP);
-	if (p == NULL)
-		return NULL;
+	p = malloc(sizeof(*p), pool, flags);
+	if (!p)
+		return 0;
 	sc = addr;
 	p->size = size;
 	if ((error = bus_dmamem_alloc(sc->sc_dmat, size, PAGE_SIZE, 0, &p->seg,
-				      1, &rseg, BUS_DMA_WAITOK)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to allocate DMA, error = %d\n", error);
+				      1, &rseg, BUS_DMA_NOWAIT)) != 0) {
+		aprint_error_dev(&sc->sc_dev, "unable to allocate DMA, error = %d\n", error);
 		goto fail_alloc;
 	}
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, &p->seg, rseg, size, &p->addr,
-				    BUS_DMA_WAITOK | BUS_DMA_COHERENT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to map DMA, error = %d\n",
+				    BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
+		aprint_error_dev(&sc->sc_dev, "unable to map DMA, error = %d\n",
 		       error);
 		goto fail_map;
 	}
 
 	if ((error = bus_dmamap_create(sc->sc_dmat, size, 1, size, 0,
-				       BUS_DMA_WAITOK, &p->map)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to create DMA map, error = %d\n",
+				       BUS_DMA_NOWAIT, &p->map)) != 0) {
+		aprint_error_dev(&sc->sc_dev, "unable to create DMA map, error = %d\n",
 		       error);
 		goto fail_create;
 	}
 
 	if ((error = bus_dmamap_load(sc->sc_dmat, p->map, p->addr, size, NULL,
-				     BUS_DMA_WAITOK)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to load DMA map, error = %d\n",
+				     BUS_DMA_NOWAIT)) != 0) {
+		aprint_error_dev(&sc->sc_dev, "unable to load DMA map, error = %d\n",
 		       error);
 		goto fail_load;
 	}
@@ -961,6 +879,7 @@ auvia_malloc_dmamem(void *addr, int direction, size_t size)
 
 	return p->addr;
 
+
 fail_load:
 	bus_dmamap_destroy(sc->sc_dmat, p->map);
 fail_create:
@@ -968,35 +887,12 @@ fail_create:
 fail_map:
 	bus_dmamem_free(sc->sc_dmat, &p->seg, 1);
 fail_alloc:
-	kmem_free(p, sizeof(*p));
+	free(p, pool);
 	return NULL;
 }
 
-static void *
-auvia_malloc(void *addr, int direction, size_t size)
-{
-	struct auvia_softc *sc;
-	void *p;
-
-	sc = addr;
-
-	p = auvia_malloc_dmamem(addr, direction, size);
-	if (p == NULL) {
-		return NULL;
-	}
-	if (auvia_malloc_channel(sc, &sc->sc_play, size) != 0) {
-		auvia_free(addr, p, size);
-		return NULL;
-	}
-	if (auvia_malloc_channel(sc, &sc->sc_record, size) != 0) {
-		auvia_free(addr, p, size);
-		return NULL;
-	}
-	return p;
-}
-
 static void
-auvia_free(void *addr, void *ptr, size_t size)
+auvia_free(void *addr, void *ptr, struct malloc_type *pool)
 {
 	struct auvia_softc *sc;
 	struct auvia_dma **pp, *p;
@@ -1010,7 +906,7 @@ auvia_free(void *addr, void *ptr, size_t size)
 			bus_dmamem_free(sc->sc_dmat, &p->seg, 1);
 
 			*pp = p->next;
-			kmem_free(p, sizeof(*p));
+			free(p, pool);
 			return;
 		}
 
@@ -1061,16 +957,6 @@ auvia_get_props(void *addr)
 	return props;
 }
 
-static void
-auvia_get_locks(void *addr, kmutex_t **intr, kmutex_t **thread)
-{
-	struct auvia_softc *sc;
-
-	sc = addr;
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
-}
-
 static int
 auvia_build_dma_ops(struct auvia_softc *sc, struct auvia_softc_chan *ch,
 	struct auvia_dma *p, void *start, void *end, int blksize)
@@ -1079,11 +965,42 @@ auvia_build_dma_ops(struct auvia_softc *sc, struct auvia_softc_chan *ch,
 	struct auvia_dma *dp;
 	bus_addr_t s;
 	size_t l;
+	int segs;
+
+	s = p->map->dm_segs[0].ds_addr;
+	l = ((char *)end - (char *)start);
+	segs = (l + blksize - 1) / blksize;
+
+	if (segs > (ch->sc_dma_op_count)) {
+		/* if old list was too small, free it */
+		if (ch->sc_dma_ops) {
+			auvia_free(sc, ch->sc_dma_ops, M_DEVBUF);
+		}
+
+		ch->sc_dma_ops = auvia_malloc(sc, 0,
+			sizeof(struct auvia_dma_op) * segs, M_DEVBUF, M_WAITOK);
+
+		if (ch->sc_dma_ops == NULL) {
+			aprint_error_dev(&sc->sc_dev, "couldn't build dmaops\n");
+			return 1;
+		}
+
+		for (dp = sc->sc_dmas;
+		     dp && dp->addr != (void *)(ch->sc_dma_ops);
+		     dp = dp->next)
+			continue;
+
+		if (!dp)
+			panic("%s: build_dma_ops: where'd my memory go??? "
+				"address (%p)\n", device_xname(&sc->sc_dev),
+				ch->sc_dma_ops);
+
+		ch->sc_dma_op_count = segs;
+		ch->sc_dma_ops_dma = dp;
+	}
 
 	dp = ch->sc_dma_ops_dma;
 	op = ch->sc_dma_ops;
-	s = p->map->dm_segs[0].ds_addr;
-	l = ((char *)end - (char *)start);
 
 	while (l) {
 		op->ptr = htole32(s);
@@ -1196,9 +1113,8 @@ auvia_intr(void *arg)
 
 	sc = arg;
 	rval = 0;
-	ch = &sc->sc_record;
 
-	mutex_spin_enter(&sc->sc_intr_lock);
+	ch = &sc->sc_record;
 	r = CH_READ1(sc, ch, AUVIA_RP_STAT);
 	if (r & AUVIA_RPSTAT_INTR) {
 		if (sc->sc_record.sc_intr)
@@ -1219,23 +1135,18 @@ auvia_intr(void *arg)
 		CH_WRITE1(sc, ch, AUVIA_RP_STAT, AUVIA_RPSTAT_INTR);
 		rval = 1;
 	}
-	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return rval;
 }
 
 static bool
-auvia_resume(device_t dv, const pmf_qual_t *qual)
+auvia_resume(device_t dv PMF_FN_ARGS)
 {
 	struct auvia_softc *sc = device_private(dv);
 
-	mutex_enter(&sc->sc_lock);
-	mutex_spin_enter(&sc->sc_intr_lock);
 	auvia_reset_codec(sc);
 	DELAY(1000);
-	mutex_spin_exit(&sc->sc_intr_lock);
 	(sc->codec_if->vtbl->restore_ports)(sc->codec_if);
-	mutex_exit(&sc->sc_lock);
 
 	return true;
 }

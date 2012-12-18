@@ -1,4 +1,4 @@
-/*	$NetBSD: platid_mask.c,v 1.25 2011/05/18 12:11:46 nonaka Exp $	*/
+/*	$NetBSD: platid_mask.c,v 1.22 2008/05/10 15:31:04 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001
@@ -161,10 +161,6 @@ platid_t platid_mask_CPU_ARM_XSCALE = {{
 }};
 platid_t platid_mask_CPU_ARM_XSCALE_PXA250 = {{
 	PLATID_CPU_ARM_XSCALE_PXA250,
-	PLATID_WILD
-}};
-platid_t platid_mask_CPU_ARM_XSCALE_PXA270 = {{
-	PLATID_CPU_ARM_XSCALE_PXA270,
 	PLATID_WILD
 }};
 #endif /* hpcarm */
@@ -400,12 +396,11 @@ platid_t platid_mask_MACH_CASIO_CASSIOPEIAA_A55V = {{
 	PLATID_MACH_CASIO_CASSIOPEIAA_A55V
 }};
 #endif /* hpcsh */
-#if defined(hpcmips) || defined(hpcarm)
+#ifdef hpcmips
 platid_t platid_mask_MACH_SHARP = {{
 	PLATID_WILD,
 	PLATID_MACH_SHARP
 }};
-#if defined(hpcmips)
 platid_t platid_mask_MACH_SHARP_TRIPAD = {{
 	PLATID_WILD,
 	PLATID_MACH_SHARP_TRIPAD
@@ -467,33 +462,6 @@ platid_t platid_mask_MACH_SHARP_MOBILON_HC1200 = {{
 	PLATID_MACH_SHARP_MOBILON_HC1200
 }};
 #endif /* hpcmips */
-#if defined(hpcarm)
-platid_t platid_mask_MACH_SHARP_WZERO3 = {{
-	PLATID_WILD,
-	PLATID_MACH_SHARP_WZERO3
-}};
-platid_t platid_mask_MACH_SHARP_WZERO3_WS003SH = {{
-	PLATID_CPU_ARM_XSCALE_PXA270,
-	PLATID_MACH_SHARP_WZERO3_WS003SH
-}};
-platid_t platid_mask_MACH_SHARP_WZERO3_WS004SH = {{
-	PLATID_CPU_ARM_XSCALE_PXA270,
-	PLATID_MACH_SHARP_WZERO3_WS004SH
-}};
-platid_t platid_mask_MACH_SHARP_WZERO3_WS007SH = {{
-	PLATID_CPU_ARM_XSCALE_PXA270,
-	PLATID_MACH_SHARP_WZERO3_WS007SH
-}};
-platid_t platid_mask_MACH_SHARP_WZERO3_WS011SH = {{
-	PLATID_CPU_ARM_XSCALE_PXA270,
-	PLATID_MACH_SHARP_WZERO3_WS011SH
-}};
-platid_t platid_mask_MACH_SHARP_WZERO3_WS020SH = {{
-	PLATID_CPU_ARM_XSCALE_PXA270,
-	PLATID_MACH_SHARP_WZERO3_WS020SH
-}};
-#endif /* hpcarm */
-#endif /* hpcmips || hpcarm */
 #ifdef hpcmips
 platid_t platid_mask_MACH_FUJITSU = {{
 	PLATID_WILD,
@@ -948,17 +916,3 @@ platid_t platid_mask_MACH_AGENDA_VR_VR3 = {{
 	PLATID_MACH_AGENDA_VR_VR3
 }};
 #endif /* hpcmips */
-#ifdef hpcarm
-platid_t platid_mask_MACH_PSIONTEKLOGIX = {{
-	PLATID_WILD,
-	PLATID_MACH_PSIONTEKLOGIX
-}};
-platid_t platid_mask_MACH_PSIONTEKLOGIX_NETBOOK = {{
-	PLATID_WILD,
-	PLATID_MACH_PSIONTEKLOGIX_NETBOOK
-}};
-platid_t platid_mask_MACH_PSIONTEKLOGIX_NETBOOK_PRO = {{
-	PLATID_CPU_ARM_XSCALE_PXA250,
-	PLATID_MACH_PSIONTEKLOGIX_NETBOOK_PRO
-}};
-#endif /* hpcarm */

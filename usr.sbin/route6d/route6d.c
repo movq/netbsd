@@ -1,4 +1,4 @@
-/*	$NetBSD: route6d.c,v 1.66 2011/08/31 16:24:59 plunky Exp $	*/
+/*	$NetBSD: route6d.c,v 1.61 2008/01/21 20:46:58 dyoung Exp $	*/
 /*	$KAME: route6d.c,v 1.94 2002/10/26 20:08:55 itojun Exp $	*/
 
 /*
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef	lint
-__RCSID("$NetBSD: route6d.c,v 1.66 2011/08/31 16:24:59 plunky Exp $");
+__RCSID("$NetBSD: route6d.c,v 1.61 2008/01/21 20:46:58 dyoung Exp $");
 #endif
 
 #include <stdbool.h>
@@ -62,7 +62,11 @@ __RCSID("$NetBSD: route6d.c,v 1.66 2011/08/31 16:24:59 plunky Exp $");
 #if defined(__FreeBSD__) && __FreeBSD__ >= 3
 #include <net/if_var.h>
 #endif /* __FreeBSD__ >= 3 */
+#define	KERNEL	1
+#define	_KERNEL	1
 #include <net/route.h>
+#undef KERNEL
+#undef _KERNEL
 #include <netinet/in.h>
 #include <netinet/in_var.h>
 #include <netinet/ip6.h>
@@ -129,16 +133,16 @@ struct	iff {
 	struct	iff *iff_next;
 };
 
-static struct	ifc *ifc;
-static int	nifc;		/* number of valid ifc's */
-static struct	ifc **index2ifc;
-static int	nindex2ifc;
-static struct	ifc *loopifcp = NULL;	/* pointing to loopback */
-static struct	pollfd set[2];
-static int	rtsock;		/* the routing socket */
-static int	ripsock;	/* socket to send/receive RIP datagram */
+struct	ifc *ifc;
+int	nifc;		/* number of valid ifc's */
+struct	ifc **index2ifc;
+int	nindex2ifc;
+struct	ifc *loopifcp = NULL;	/* pointing to loopback */
+struct	pollfd set[2];
+int	rtsock;		/* the routing socket */
+int	ripsock;	/* socket to send/receive RIP datagram */
 
-static struct	rip6 *ripbuf;	/* packet buffer for sending */
+struct	rip6 *ripbuf;	/* packet buffer for sending */
 
 /*
  * Maintain the routes in a linked list.  When the number of the routes
@@ -163,38 +167,41 @@ struct	riprt {
 	int	rrt_index;		/* ifindex from which this route got */
 };
 
-static struct	riprt *riprt = 0;
+struct	riprt *riprt = 0;
 
-static int	dflag = 0;	/* debug flag */
-static int	qflag = 0;	/* quiet flag */
-static int	nflag = 0;	/* don't update kernel routing table */
-static int	aflag = 0;	/* age out even the statically defined routes */
-static int	hflag = 0;	/* don't split horizon */
-static int	lflag = 0;	/* exchange site local routes */
-static int	sflag = 0;	/* announce static routes w/ split horizon */
-static int	Sflag = 0;	/* announce static routes to every interface */
-static unsigned long routetag = 0;	/* route tag attached on originating case */
+int	dflag = 0;	/* debug flag */
+int	qflag = 0;	/* quiet flag */
+int	nflag = 0;	/* don't update kernel routing table */
+int	aflag = 0;	/* age out even the statically defined routes */
+int	hflag = 0;	/* don't split horizon */
+int	lflag = 0;	/* exchange site local routes */
+int	sflag = 0;	/* announce static routes w/ split horizon */
+int	Sflag = 0;	/* announce static routes to every interface */
+unsigned long routetag = 0;	/* route tag attached on originating case */
 
-static char	*filter[MAXFILTER];
-static int	filtertype[MAXFILTER];
-static int	nfilter = 0;
+char	*filter[MAXFILTER];
+int	filtertype[MAXFILTER];
+int	nfilter = 0;
 
-static pid_t	pid;
+pid_t	pid;
 
-static struct	sockaddr_storage ripsin;
+struct	sockaddr_storage ripsin;
 
-static int	interval = 1;
-static time_t	nextalarm = 0;
+struct	rtentry rtentry;
 
-static FILE	*rtlog = NULL;
+int	interval = 1;
+time_t	nextalarm = 0;
+time_t	sup_trig_update = 0;
 
-static int logopened = 0;
+FILE	*rtlog = NULL;
+
+int logopened = 0;
 
 static	int	seq = 0;
 
-static volatile sig_atomic_t seenalrm;
-static volatile sig_atomic_t seenquit;
-static volatile sig_atomic_t seenusr1;
+volatile sig_atomic_t seenalrm;
+volatile sig_atomic_t seenquit;
+volatile sig_atomic_t seenusr1;
 
 #define	RRTF_AGGREGATE		0x08000000
 #define	RRTF_NOADVERTISE	0x10000000
@@ -202,66 +209,77 @@ static volatile sig_atomic_t seenusr1;
 #define RRTF_SENDANYWAY		0x40000000
 #define	RRTF_CHANGED		0x80000000
 
-static void	sighandler(int);
-static void	ripalarm(void);
-static void	riprecv(void);
-static void	ripsend(struct ifc *, struct sockaddr_in6 *, int);
-static int	out_filter(struct riprt *, struct ifc *);
-static void	init(void);
-static void	ifconfig(void);
-static void	ifconfig1(const char *, const struct sockaddr *, struct ifc *, int);
-static void	rtrecv(void);
-static int	rt_del(const struct sockaddr_in6 *, const struct sockaddr_in6 *,
+int	main(int, char **);
+void	sighandler(int);
+void	ripalarm(void);
+void	riprecv(void);
+void	ripsend(struct ifc *, struct sockaddr_in6 *, int);
+int	out_filter(struct riprt *, struct ifc *);
+void	init(void);
+void	sockopt(struct ifc *);
+void	ifconfig(void);
+void	ifconfig1(const char *, const struct sockaddr *, struct ifc *, int);
+void	rtrecv(void);
+int	rt_del(const struct sockaddr_in6 *, const struct sockaddr_in6 *,
 	    const struct sockaddr_in6 *);
-static int	rt_deladdr(struct ifc *, const struct sockaddr_in6 *,
+int	rt_deladdr(struct ifc *, const struct sockaddr_in6 *,
 	    const struct sockaddr_in6 *);
-static void	filterconfig(void);
-static int	getifmtu(int);
-static const char *
+void	filterconfig(void);
+int	getifmtu(int);
+const char *
 	rttypes(struct rt_msghdr *);
-static const char *
+const char *
 	rtflags(struct rt_msghdr *);
-static const char *
+const char *
 	ifflags(int);
-static int	ifrt(struct ifc *, int);
-static void	ifrt_p2p(struct ifc *, int);
-static void	applyplen(struct in6_addr *, int);
-static void	ifrtdump(int);
-static void	ifdump(int);
-static void	ifdump0(FILE *, const struct ifc *);
-static void	rtdump(int);
-static void	rt_entry(struct rt_msghdr *, int);
-static void	rtdexit(void) __dead;
-static void	riprequest(struct ifc *, struct netinfo6 *, int,
+int	ifrt(struct ifc *, int);
+void	ifrt_p2p(struct ifc *, int);
+void	applymask(struct in6_addr *, struct in6_addr *);
+void	applyplen(struct in6_addr *, int);
+void	ifrtdump(int);
+void	ifdump(int);
+void	ifdump0(FILE *, const struct ifc *);
+void	rtdump(int);
+void	rt_entry(struct rt_msghdr *, int);
+void	rtdexit(void);
+void	riprequest(struct ifc *, struct netinfo6 *, int,
 	    struct sockaddr_in6 *);
-static void	ripflush(struct ifc *, struct sockaddr_in6 *);
-static void	sendrequest(struct ifc *);
-static int	sin6mask2len(const struct sockaddr_in6 *);
-static int	mask2len(const struct in6_addr *, int);
-static int	sendpacket(struct sockaddr_in6 *, int);
-static int	addroute(struct riprt *, const struct in6_addr *, struct ifc *);
-static int	delroute(struct netinfo6 *, struct in6_addr *);
-static void	krtread(int);
-static int	tobeadv(struct riprt *, struct ifc *);
-static char *	allocopy(char *);
-static char *	hms(void);
-static const char *
+void	ripflush(struct ifc *, struct sockaddr_in6 *);
+void	sendrequest(struct ifc *);
+int	sin6mask2len(const struct sockaddr_in6 *);
+int	mask2len(const struct in6_addr *, int);
+int	sendpacket(struct sockaddr_in6 *, int);
+int	addroute(struct riprt *, const struct in6_addr *, struct ifc *);
+int	delroute(struct netinfo6 *, struct in6_addr *);
+struct in6_addr *
+	getroute(struct netinfo6 *, struct in6_addr *);
+void	krtread(int);
+int	tobeadv(struct riprt *, struct ifc *);
+char *	allocopy(char *);
+char *	hms(void);
+const char *
 	inet6_n2p(const struct in6_addr *);
-static struct ifac *
+struct ifac *
 	ifa_match(const struct ifc *, const struct in6_addr *, int);
-static struct in6_addr *
+struct in6_addr *
 	plen2mask(int);
-static struct riprt *
+struct riprt *
 	rtsearch(struct netinfo6 *, struct riprt **);
-static int	ripinterval(int);
-static void	fatal(const char *, ...) __printflike(1, 2) __dead;
-static void	trace(int, const char *, ...) __printflike(2, 3);
-static void	tracet(int, const char *, ...) __printflike(2, 3);
-static struct ifc *
+int	ripinterval(int);
+time_t	ripsuptrig(void);
+void	fatal(const char *, ...)
+	__attribute__((__format__(__printf__, 1, 2)));
+void	trace(int, const char *, ...)
+	__attribute__((__format__(__printf__, 2, 3)));
+void	tracet(int, const char *, ...)
+	__attribute__((__format__(__printf__, 2, 3)));
+unsigned int
+	if_maxindex(void);
+struct ifc *
 	ifc_find(char *);
-static struct iff *
+struct iff *
 	iff_find(struct ifc *, int);
-static void	setindex2ifc(int, struct ifc *);
+void	setindex2ifc(int, struct ifc *);
 
 #define	MALLOC(type)	((type *)malloc(sizeof(type)))
 
@@ -461,7 +479,7 @@ main(int argc, char **argv)
 	}
 }
 
-static void
+void
 sighandler(int signo)
 {
 
@@ -485,7 +503,7 @@ sighandler(int signo)
  * gracefully exits after resetting sockopts.
  */
 /* ARGSUSED */
-static void
+void
 rtdexit(void)
 {
 	struct	riprt *rrt;
@@ -512,7 +530,7 @@ rtdexit(void)
  * routes more precisely.
  */
 /* ARGSUSED */
-static void
+void
 ripalarm(void)
 {
 	struct	ifc *ifcp;
@@ -552,7 +570,7 @@ ripalarm(void)
 	alarm(ripinterval(SUPPLY_INTERVAL6));
 }
 
-static void
+void
 init(void)
 {
 	int	i, error;
@@ -560,7 +578,7 @@ init(void)
 	struct	addrinfo hints, *res;
 	char	port[NI_MAXSERV];
 
-	ifc = NULL;
+	ifc = (struct ifc *)NULL;
 	nifc = 0;
 	nindex2ifc = 0;	/*initial guess*/
 	index2ifc = NULL;
@@ -656,9 +674,9 @@ init(void)
  * ripflush flushes the rip datagram stored in the rip buffer
  */
 static int nrt;
-static struct netinfo6 *nip;
+static struct netinfo6 *np;
 
-static void
+void
 ripflush(struct ifc *ifcp, struct sockaddr_in6 *sin6)
 {
 	int i;
@@ -672,23 +690,23 @@ ripflush(struct ifc *ifcp, struct sockaddr_in6 *sin6)
 		tracet(1, "Send: info(%d) to %s.%d\n",
 			nrt, inet6_n2p(&sin6->sin6_addr), ntohs(sin6->sin6_port));
 	if (dflag >= 2) {
-		nip = ripbuf->rip6_nets;
-		for (i = 0; i < nrt; i++, nip++) {
-			if (nip->rip6_metric == NEXTHOP_METRIC) {
-				if (IN6_IS_ADDR_UNSPECIFIED(&nip->rip6_dest))
+		np = ripbuf->rip6_nets;
+		for (i = 0; i < nrt; i++, np++) {
+			if (np->rip6_metric == NEXTHOP_METRIC) {
+				if (IN6_IS_ADDR_UNSPECIFIED(&np->rip6_dest))
 					trace(2, "    NextHop reset");
 				else {
 					trace(2, "    NextHop %s",
-						inet6_n2p(&nip->rip6_dest));
+						inet6_n2p(&np->rip6_dest));
 				}
 			} else {
 				trace(2, "    %s/%d[%d]",
-					inet6_n2p(&nip->rip6_dest),
-					nip->rip6_plen, nip->rip6_metric);
+					inet6_n2p(&np->rip6_dest),
+					np->rip6_plen, np->rip6_metric);
 			}
-			if (nip->rip6_tag) {
+			if (np->rip6_tag) {
 				trace(2, "  tag=0x%04x",
-					ntohs(nip->rip6_tag) & 0xffff);
+					ntohs(np->rip6_tag) & 0xffff);
 			}
 			trace(2, "\n");
 		}
@@ -701,13 +719,13 @@ ripflush(struct ifc *ifcp, struct sockaddr_in6 *sin6)
 			ifcp->ifc_name, inet6_n2p(&ifcp->ifc_ripsin.sin6_addr));
 		ifcp->ifc_flags &= ~IFF_UP;	/* As if down for AF_INET6 */
 	}
-	nrt = 0; nip = ripbuf->rip6_nets;
+	nrt = 0; np = ripbuf->rip6_nets;
 }
 
 /*
  * Generate RIP6_RESPONSE packets and send them.
  */
-static void
+void
 ripsend(struct ifc *ifcp, struct sockaddr_in6 *sin6, int flag)
 {
 	struct	riprt *rrt;
@@ -726,13 +744,13 @@ ripsend(struct ifc *ifcp, struct sockaddr_in6 *sin6, int flag)
 				sizeof(struct udphdr) - 
 				sizeof(struct rip6) + sizeof(struct netinfo6)) /
 				sizeof(struct netinfo6);
-		nrt = 0; nip = ripbuf->rip6_nets; nh = NULL;
+		nrt = 0; np = ripbuf->rip6_nets; nh = NULL;
 		for (rrt = riprt; rrt; rrt = rrt->rrt_next) {
 			if (rrt->rrt_rflags & RRTF_NOADVERTISE)
 				continue;
 			/* Put the route to the buffer */
-			*nip = rrt->rrt_info;
-			nip++; nrt++;
+			*np = rrt->rrt_info;
+			np++; nrt++;
 			if (nrt == maxrte) {
 				ripflush(NULL, sin6);
 				nh = NULL;
@@ -760,8 +778,8 @@ ripsend(struct ifc *ifcp, struct sockaddr_in6 *sin6, int flag)
 		rrt_info.rip6_metric = 1;
 		rrt_info.rip6_metric += ifcp->ifc_metric;
 		rrt_info.rip6_tag = htons(routetag & 0xffff);
-		nip = ripbuf->rip6_nets;
-		*nip = rrt_info;
+		np = ripbuf->rip6_nets;
+		*np = rrt_info;
 		nrt = 1;
 		ripflush(ifcp, sin6);
 		return;
@@ -772,7 +790,7 @@ ripsend(struct ifc *ifcp, struct sockaddr_in6 *sin6, int flag)
 			sizeof(struct rip6) + sizeof(struct netinfo6)) /
 			sizeof(struct netinfo6);
 
-	nrt = 0; nip = ripbuf->rip6_nets; nh = NULL;
+	nrt = 0; np = ripbuf->rip6_nets; nh = NULL;
 	for (rrt = riprt; rrt; rrt = rrt->rrt_next) {
 		if (rrt->rrt_rflags & RRTF_NOADVERTISE)
 			continue;
@@ -797,14 +815,14 @@ ripsend(struct ifc *ifcp, struct sockaddr_in6 *sin6, int flag)
 			if (nh == NULL || !IN6_ARE_ADDR_EQUAL(nh, &rrt->rrt_gw)) {
 				if (nrt == maxrte - 2)
 					ripflush(ifcp, sin6);
-				nip->rip6_dest = rrt->rrt_gw;
-				if (IN6_IS_ADDR_LINKLOCAL(&nip->rip6_dest))
-					SET_IN6_LINKLOCAL_IFINDEX(nip->rip6_dest, 0);
-				nip->rip6_plen = 0;
-				nip->rip6_tag = 0;
-				nip->rip6_metric = NEXTHOP_METRIC;
+				np->rip6_dest = rrt->rrt_gw;
+				if (IN6_IS_ADDR_LINKLOCAL(&np->rip6_dest))
+					SET_IN6_LINKLOCAL_IFINDEX(np->rip6_dest, 0);
+				np->rip6_plen = 0;
+				np->rip6_tag = 0;
+				np->rip6_metric = NEXTHOP_METRIC;
 				nh = &rrt->rrt_gw;
-				nip++; nrt++;
+				np++; nrt++;
 			}
 		} else if (nh && (rrt->rrt_index != ifcp->ifc_index ||
 			          !IN6_ARE_ADDR_EQUAL(nh, &rrt->rrt_gw) ||
@@ -812,15 +830,15 @@ ripsend(struct ifc *ifcp, struct sockaddr_in6 *sin6, int flag)
 			/* Reset nexthop */
 			if (nrt == maxrte - 2)
 				ripflush(ifcp, sin6);
-			memset(nip, 0, sizeof(struct netinfo6));
-			nip->rip6_metric = NEXTHOP_METRIC;
+			memset(np, 0, sizeof(struct netinfo6));
+			np->rip6_metric = NEXTHOP_METRIC;
 			nh = NULL;
-			nip++; nrt++;
+			np++; nrt++;
 		}
 
 		/* Put the route to the buffer */
-		*nip = rrt->rrt_info;
-		nip++; nrt++;
+		*np = rrt->rrt_info;
+		np++; nrt++;
 		if (nrt == maxrte) {
 			ripflush(ifcp, sin6);
 			nh = NULL;
@@ -833,7 +851,7 @@ ripsend(struct ifc *ifcp, struct sockaddr_in6 *sin6, int flag)
 /*
  * outbound filter logic, per-route/interface.
  */
-static int
+int
 out_filter(struct riprt *rrt, struct ifc *ifcp)
 {
 	struct iff *iffp;
@@ -904,7 +922,7 @@ out_filter(struct riprt *rrt, struct ifc *ifcp)
  * Determine if the route is to be advertised on the specified interface.
  * It checks options specified in the arguments and the split horizon rule.
  */
-static int
+int
 tobeadv(struct riprt *rrt, struct ifc *ifcp)
 {
 
@@ -929,7 +947,7 @@ tobeadv(struct riprt *rrt, struct ifc *ifcp)
 /*
  * Send a rip packet actually.
  */
-static int
+int
 sendpacket(struct sockaddr_in6 *sin6, int len)
 {
 	struct msghdr m;
@@ -988,7 +1006,7 @@ sendpacket(struct sockaddr_in6 *sin6, int len)
  * Receive and process RIP packets.  Update the routes/kernel forwarding
  * table if necessary.
  */
-static void
+void
 riprecv(void)
 {
 	struct	ifc *ifcp, *ic;
@@ -1040,7 +1058,7 @@ riprecv(void)
 	if (idx && IN6_IS_ADDR_LINKLOCAL(&fsock.sin6_addr))
 		SET_IN6_LINKLOCAL_IFINDEX(fsock.sin6_addr, idx);
 
-	if (len < (int)sizeof(struct rip6)) {
+	if (len < sizeof(struct rip6)) {
 		trace(1, "Packet too short\n");
 		return;
 	}
@@ -1056,7 +1074,7 @@ riprecv(void)
 		return;
 	}
 	if (rp->rip6_cmd == RIP6_REQUEST) {
-		if (idx && idx < (unsigned)nindex2ifc) {
+		if (idx && idx < nindex2ifc) {
 			ifcp = index2ifc[idx];
 			riprequest(ifcp, np, nn, &fsock);
 		} else {
@@ -1071,7 +1089,7 @@ riprecv(void)
 		return;		/* Ignore packets from non-link-local addr */
 	}
 	idx = IN6_LINKLOCAL_IFINDEX(fsock.sin6_addr);
-	ifcp = (idx < (unsigned)nindex2ifc) ? index2ifc[idx] : NULL;
+	ifcp = (idx < nindex2ifc) ? index2ifc[idx] : NULL;
 	if (!ifcp) {
 		trace(1, "Packets to unknown interface index %d\n", idx);
 		return;		/* Ignore it */
@@ -1277,7 +1295,7 @@ riprecv(void)
 /*
  * Send all routes request packet to the specified interface.
  */
-static void
+void
 sendrequest(struct ifc *ifcp)
 {
 	struct netinfo6 *np;
@@ -1305,7 +1323,7 @@ sendrequest(struct ifc *ifcp)
 /*
  * Process a RIP6_REQUEST packet.
  */
-static void
+void
 riprequest(struct ifc *ifcp, struct netinfo6 *np, int nn,
 	   struct sockaddr_in6 *sin6)
 {
@@ -1334,7 +1352,7 @@ riprequest(struct ifc *ifcp, struct netinfo6 *np, int nn,
 /*
  * Get information of each interface.
  */
-static void
+void
 ifconfig(void)
 {
 	struct ifaddrs *ifap, *ifa;
@@ -1406,7 +1424,7 @@ ifconfig(void)
 	freeifaddrs(ifap);
 }
 
-static void
+void
 ifconfig1(const char *name, const struct sockaddr *sa, struct ifc *ifcp, int s)
 {
 	struct	in6_ifreq ifr;
@@ -1483,7 +1501,7 @@ ifconfig1(const char *name, const struct sockaddr *sa, struct ifc *ifcp, int s)
  * Receive and process routing messages.
  * Update interface information as necessary.
  */
-static void
+void
 rtrecv(void)
 {
 	char buf[BUFSIZ];
@@ -1503,7 +1521,7 @@ rtrecv(void)
 		perror("read from rtsock");
 		exit(1);
 	}
-	if (len < (int)sizeof(*rtm)) {
+	if (len < sizeof(*rtm)) {
 		trace(1, "short read from rtsock: %d (should be > %lu)\n",
 			len, (u_long)sizeof(*rtm));
 		return;
@@ -1716,7 +1734,7 @@ rtrecv(void)
 /*
  * remove specified route from the internal routing table.
  */
-static int
+int
 rt_del(const struct sockaddr_in6 *sdst, const struct sockaddr_in6 *sgw,
        const struct sockaddr_in6 *smask)
 {
@@ -1813,7 +1831,7 @@ rt_del(const struct sockaddr_in6 *sdst, const struct sockaddr_in6 *sgw,
 /*
  * remove specified address from internal interface/routing table.
  */
-static int
+int
 rt_deladdr(struct ifc *ifcp, const struct sockaddr_in6 *sifa,
 	   const struct sockaddr_in6 *smask)
 {
@@ -1923,7 +1941,7 @@ rt_deladdr(struct ifc *ifcp, const struct sockaddr_in6 *sifa,
  * Get each interface address and put those interface routes to the route
  * list.
  */
-static int
+int
 ifrt(struct ifc *ifcp, int again)
 {
 	struct ifac *ifa;
@@ -2041,7 +2059,7 @@ ifrt(struct ifc *ifcp, int again)
  * you pick one.  it looks that gated behavior fits best with BSDs,
  * since BSD kernels do not look at prefix length on p2p interfaces.
  */
-static void
+void
 ifrt_p2p(struct ifc *ifcp, int again)
 {
 	struct ifac *ifa;
@@ -2210,7 +2228,7 @@ ifrt_p2p(struct ifc *ifcp, int again)
 #undef P2PADVERT_MAX
 }
 
-static int
+int
 getifmtu(int ifindex)
 {
 	int	mib[6];
@@ -2249,7 +2267,7 @@ getifmtu(int ifindex)
 	return mtu;
 }
 
-static const char *
+const char *
 rttypes(struct rt_msghdr *rtm)
 {
 #define	RTTYPE(s, f) \
@@ -2293,7 +2311,7 @@ do { \
 	return NULL;
 }
 
-static const char *
+const char *
 rtflags(struct rt_msghdr *rtm)
 {
 	static char buf[BUFSIZ];
@@ -2358,7 +2376,7 @@ do { \
 	return buf;
 }
 
-static const char *
+const char *
 ifflags(int flags)
 {
 	static char buf[BUFSIZ];
@@ -2397,7 +2415,7 @@ do { \
 	return buf;
 }
 
-static void
+void
 krtread(int again)
 {
 	int mib[6];
@@ -2450,7 +2468,7 @@ krtread(int again)
 	free(buf);
 }
 
-static void
+void
 rt_entry(struct rt_msghdr *rtm, int again)
 {
 	struct	sockaddr_in6 *sin6_dst, *sin6_gw, *sin6_mask;
@@ -2610,7 +2628,7 @@ rt_entry(struct rt_msghdr *rtm, int again)
 	}
 }
 
-static int
+int
 addroute(struct riprt *rrt, const struct in6_addr *gw, struct ifc *ifcp)
 {
 	struct	netinfo6 *np;
@@ -2680,7 +2698,7 @@ addroute(struct riprt *rrt, const struct in6_addr *gw, struct ifc *ifcp)
 	return -1;
 }
 
-static int
+int
 delroute(struct netinfo6 *np, struct in6_addr *gw)
 {
 	u_char	buf[BUFSIZ], buf2[BUFSIZ];
@@ -2745,7 +2763,54 @@ delroute(struct netinfo6 *np, struct in6_addr *gw)
 	return -1;
 }
 
-static const char *
+struct in6_addr *
+getroute(struct netinfo6 *np, struct in6_addr *gw)
+{
+	u_char buf[BUFSIZ];
+	int myseq;
+	int len;
+	struct rt_msghdr *rtm;
+	struct sockaddr_in6 *sin6;
+
+	rtm = (struct rt_msghdr *)buf;
+	len = sizeof(struct rt_msghdr) + sizeof(struct sockaddr_in6);
+	memset(rtm, 0, len);
+	rtm->rtm_type = RTM_GET;
+	rtm->rtm_version = RTM_VERSION;
+	myseq = ++seq;
+	rtm->rtm_seq = myseq;
+	rtm->rtm_addrs = RTA_DST;
+	rtm->rtm_msglen = len;
+	sin6 = (struct sockaddr_in6 *)&buf[sizeof(struct rt_msghdr)];
+	sin6->sin6_len = sizeof(struct sockaddr_in6);
+	sin6->sin6_family = AF_INET6;
+	sin6->sin6_addr = np->rip6_dest;
+	if (write(rtsock, buf, len) < 0) {
+		if (errno == ESRCH)	/* No such route found */
+			return NULL;
+		perror("write to rtsock");
+		exit(1);
+	}
+	do {
+		if ((len = read(rtsock, buf, sizeof(buf))) < 0) {
+			perror("read from rtsock");
+			exit(1);
+		}
+		rtm = (struct rt_msghdr *)buf;
+	} while (rtm->rtm_seq != myseq || rtm->rtm_pid != pid);
+	sin6 = (struct sockaddr_in6 *)&buf[sizeof(struct rt_msghdr)];
+	if (rtm->rtm_addrs & RTA_DST) {
+		sin6 = (struct sockaddr_in6 *)
+			((char *)sin6 + ROUNDUP(sin6->sin6_len));
+	}
+	if (rtm->rtm_addrs & RTA_GATEWAY) {
+		*gw = sin6->sin6_addr;
+		return gw;
+	}
+	return NULL;
+}
+
+const char *
 inet6_n2p(const struct in6_addr *p)
 {
 	static char buf[BUFSIZ];
@@ -2753,7 +2818,7 @@ inet6_n2p(const struct in6_addr *p)
 	return inet_ntop(AF_INET6, (const void *)p, buf, sizeof(buf));
 }
 
-static void
+void
 ifrtdump(int sig)
 {
 
@@ -2761,7 +2826,7 @@ ifrtdump(int sig)
 	rtdump(sig);
 }
 
-static void
+void
 ifdump(int sig)
 {
 	struct ifc *ifcp;
@@ -2796,7 +2861,7 @@ ifdump(int sig)
 		fclose(dump);
 }
 
-static void
+void
 ifdump0(FILE *dump, const struct ifc *ifcp)
 {
 	struct ifac *ifa;
@@ -2853,7 +2918,7 @@ ifdump0(FILE *dump, const struct ifc *ifcp)
 	}
 }
 
-static void
+void
 rtdump(int sig)
 {
 	struct	riprt *rrt;
@@ -2902,7 +2967,7 @@ rtdump(int sig)
  * syntax:	-A 5f09:c400::/32,ef0,ef1  (aggregate)
  * 		-O 5f09:c400::/32,ef0,ef1  (only when match)
  */
-static void
+void
 filterconfig(void)
 {
 	int i;
@@ -3033,7 +3098,7 @@ ifonly:
  * Returns a pointer to ifac whose address and prefix length matches
  * with the address and prefix length specified in the arguments.
  */
-static struct ifac *
+struct ifac *
 ifa_match(const struct ifc *ifcp, const struct in6_addr *ia, int plen)
 {
 	struct ifac *ifa;
@@ -3051,7 +3116,7 @@ ifa_match(const struct ifc *ifcp, const struct in6_addr *ia, int plen)
  * matches with the address and prefix length found in the argument.
  * Note: This is not a rtalloc().  Therefore exact match is necessary.
  */
-static struct riprt *
+struct riprt *
 rtsearch(struct netinfo6 *np, struct riprt **prev_rrt)
 {
 	struct	riprt	*rrt;
@@ -3071,7 +3136,7 @@ rtsearch(struct netinfo6 *np, struct riprt **prev_rrt)
 	return 0;
 }
 
-static int
+int
 sin6mask2len(const struct sockaddr_in6 *sin6)
 {
 
@@ -3079,7 +3144,7 @@ sin6mask2len(const struct sockaddr_in6 *sin6)
 	    sin6->sin6_len - offsetof(struct sockaddr_in6, sin6_addr));
 }
 
-static int
+int
 mask2len(const struct in6_addr *addr, int lenlim)
 {
 	int i = 0, j;
@@ -3106,11 +3171,22 @@ mask2len(const struct in6_addr *addr, int lenlim)
 	return i;
 }
 
+void
+applymask(struct in6_addr *addr, struct in6_addr *mask)
+{
+	int	i;
+	u_long	*p, *q;
+
+	p = (u_long *)addr; q = (u_long *)mask;
+	for (i = 0; i < 4; i++)
+		*p++ &= *q++;
+}
+
 static const u_char plent[8] = {
 	0x00, 0x80, 0xc0, 0xe0, 0xf0, 0xf8, 0xfc, 0xfe
 };
 
-static void
+void
 applyplen(struct in6_addr *ia, int plen)
 {
 	u_char	*p;
@@ -3130,7 +3206,7 @@ static const int pl2m[9] = {
 	0x00, 0x80, 0xc0, 0xe0, 0xf0, 0xf8, 0xfc, 0xfe, 0xff
 };
 
-static struct in6_addr *
+struct in6_addr *
 plen2mask(int n)
 {
 	static struct in6_addr ia;
@@ -3150,7 +3226,7 @@ plen2mask(int n)
 	return &ia;
 }
 
-static char *
+char *
 allocopy(char *p)
 {
 	int len = strlen(p) + 1;
@@ -3165,7 +3241,7 @@ allocopy(char *p)
 	return q;
 }
 
-static char *
+char *
 hms(void)
 {
 	static char buf[BUFSIZ];
@@ -3184,7 +3260,7 @@ hms(void)
 
 #define	RIPRANDDEV	1.0	/* 30 +- 15, max - min = 30 */
 
-static int
+int
 ripinterval(int timer)
 {
 	double r = rand();
@@ -3194,7 +3270,19 @@ ripinterval(int timer)
 	return interval;
 }
 
-static void
+time_t
+ripsuptrig(void)
+{
+	time_t t;
+
+	double r = rand();
+	t  = (int)(RIP_TRIG_INT6_MIN + 
+		(RIP_TRIG_INT6_MAX - RIP_TRIG_INT6_MIN) * (r / RAND_MAX));
+	sup_trig_update = time(NULL) + t;
+	return t;
+}
+
+void
 fatal(const char *fmt, ...)
 {
 	va_list ap;
@@ -3211,7 +3299,7 @@ fatal(const char *fmt, ...)
 	rtdexit();
 }
 
-static void
+void
 tracet(int level, const char *fmt, ...)
 {
 	va_list ap;
@@ -3232,7 +3320,7 @@ tracet(int level, const char *fmt, ...)
 	}
 }
 
-static void
+void
 trace(int level, const char *fmt, ...)
 {
 	va_list ap;
@@ -3252,7 +3340,22 @@ trace(int level, const char *fmt, ...)
 	}
 }
 
-static struct ifc *
+unsigned int
+if_maxindex(void)
+{
+	struct if_nameindex *p, *p0;
+	unsigned int max = 0;
+
+	p0 = if_nameindex();
+	for (p = p0; p && p->if_index && p->if_name; p++) {
+		if (max < p->if_index)
+			max = p->if_index;
+	}
+	if_freenameindex(p0);
+	return max;
+}
+
+struct ifc *
 ifc_find(char *name)
 {
 	struct ifc *ifcp;
@@ -3261,10 +3364,10 @@ ifc_find(char *name)
 		if (strcmp(name, ifcp->ifc_name) == 0)
 			return ifcp;
 	}
-	return NULL;
+	return (struct ifc *)NULL;
 }
 
-static struct iff *
+struct iff *
 iff_find(struct ifc *ifcp, int type)
 {
 	struct iff *iffp;
@@ -3276,7 +3379,7 @@ iff_find(struct ifc *ifcp, int type)
 	return NULL;
 }
 
-static void
+void
 setindex2ifc(int idx, struct ifc *ifcp)
 {
 	int n, nsize;

@@ -1,11 +1,11 @@
-/* $NetBSD: midictl.h,v 1.4 2011/11/23 23:07:31 jmcneill Exp $ */
+/* $NetBSD: midictl.h,v 1.3 2008/04/28 20:23:47 martin Exp $ */
 
 /*-
- * Copyright (c) 2006, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2006 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Chapman Flack and by Andrew Doran.
+ * by Chapman Flack.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -157,10 +157,9 @@ typedef struct {
 	uint16_t rpn;
 	uint16_t nrpn;
 	midictl_store *store;
-	kmutex_t *lock;
 } midictl;
 
-extern int
+extern void
 midictl_open(midictl *);
 
 extern void

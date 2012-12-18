@@ -1,4 +1,4 @@
-/*	$NetBSD: biosdisk_ll.c,v 1.31 2011/02/21 02:58:02 jakllsch Exp $	 */
+/*	$NetBSD: biosdisk_ll.c,v 1.26 2008/04/28 20:23:25 martin Exp $	 */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -69,7 +69,6 @@
  * needs lowlevel parts from bios_disk.S
  */
 
-#include <lib/libkern/libkern.h>
 #include <lib/libsa/stand.h>
 
 #include "biosdisk_ll.h"
@@ -128,8 +127,7 @@ set_geometry(struct biosdisk_ll *d, struct biosdisk_extinfo *ed)
 		d->flags |= BIOSDISK_INT13EXT;
 		if (ed != NULL) {
 			ed->size = sizeof(*ed);
-			if (biosdisk_getextinfo(d->dev, ed) != 0)
-				return -1;
+			biosdisk_getextinfo(d->dev, ed);
 		}
 	}
 
@@ -155,8 +153,8 @@ set_geometry(struct biosdisk_ll *d, struct biosdisk_extinfo *ed)
  * this buffer doesn't cross a 64K DMA boundary.
  */
 static int      ra_dev;
-static daddr_t  ra_end;
-static daddr_t  ra_first;
+static int      ra_end;
+static int      ra_first;
 
 /*
  * Because some older BIOSes have bugs in their int13 extensions, we
@@ -266,8 +264,8 @@ readsects(struct biosdisk_ll *d, daddr_t dblk, int num, char *buf, int cold)
 			while ((nsec = do_read(d, dblk, maxsecs, trbuf)) < 0) {
 #ifdef DISK_DEBUG
 				if (!cold)
-					printf("read error dblk %"PRId64"-%"PRId64"\n",
-					    dblk, (dblk + maxsecs - 1));
+					printf("read error dblk %d-%d\n", (int)dblk,
+					       (int)(dblk + maxsecs - 1));
 #endif
 				if (--retries >= 0)
 					continue;

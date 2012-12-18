@@ -1,4 +1,4 @@
-/*	$NetBSD: ddp_input.c,v 1.26 2011/08/31 18:31:03 plunky Exp $	 */
+/*	$NetBSD: ddp_input.c,v 1.19 2008/04/24 11:38:37 ad Exp $	 */
 
 /*
  * Copyright (c) 1990,1994 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ddp_input.c,v 1.26 2011/08/31 18:31:03 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ddp_input.c,v 1.19 2008/04/24 11:38:37 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,14 +52,14 @@ __KERNEL_RCSID(0, "$NetBSD: ddp_input.c,v 1.26 2011/08/31 18:31:03 plunky Exp $"
 int             ddp_forward = 1;
 int             ddp_firewall = 0;
 extern int      ddp_cksum;
-void            ddp_input(struct mbuf *, struct ifnet *,
-    struct elaphdr *, int);
+void            ddp_input __P((struct mbuf *, struct ifnet *,
+    struct elaphdr *, int));
 
 /*
  * Could probably merge these two code segments a little better...
  */
 void
-atintr(void)
+atintr()
 {
 	struct elaphdr *elhp, elh;
 	struct ifnet   *ifp;
@@ -88,7 +88,7 @@ atintr(void)
 			m_freem(m);
 			continue;
 		}
-		ddp_input(m, ifp, NULL, 2);
+		ddp_input(m, ifp, (struct elaphdr *) NULL, 2);
 	}
 
 	for (;;) {
@@ -122,9 +122,9 @@ atintr(void)
 		m_adj(m, SZ_ELAPHDR);
 
 		if (elhp->el_type == ELAP_DDPEXTEND) {
-			ddp_input(m, ifp, NULL, 1);
+			ddp_input(m, ifp, (struct elaphdr *) NULL, 1);
 		} else {
-			memcpy((void *) & elh, (void *) elhp, SZ_ELAPHDR);
+			bcopy((void *) elhp, (void *) & elh, SZ_ELAPHDR);
 			ddp_input(m, ifp, &elh, 1);
 		}
 	}
@@ -134,7 +134,11 @@ atintr(void)
 struct route    forwro;
 
 void
-ddp_input(struct mbuf *m, struct ifnet *ifp, struct elaphdr *elh, int phase)
+ddp_input(m, ifp, elh, phase)
+	struct mbuf    *m;
+	struct ifnet   *ifp;
+	struct elaphdr *elh;
+	int             phase;
 {
 	struct rtentry *rt;
 	struct sockaddr_at from, to;
@@ -149,7 +153,7 @@ ddp_input(struct mbuf *m, struct ifnet *ifp, struct elaphdr *elh, int phase)
 		struct sockaddr_at	dsta;
 	} u;
 
-	memset((void *) & from, 0, sizeof(struct sockaddr_at));
+	bzero((void *) & from, sizeof(struct sockaddr_at));
 	if (elh) {
 		DDP_STATINC(DDP_STAT_SHORT);
 
@@ -159,7 +163,7 @@ ddp_input(struct mbuf *m, struct ifnet *ifp, struct elaphdr *elh, int phase)
 			return;
 		}
 		dsh = mtod(m, struct ddpshdr *);
-		memcpy((void *) & ddps, (void *) dsh, sizeof(struct ddpshdr));
+		bcopy((void *) dsh, (void *) & ddps, sizeof(struct ddpshdr));
 		ddps.dsh_bytes = ntohl(ddps.dsh_bytes);
 		dlen = ddps.dsh_len;
 
@@ -191,7 +195,7 @@ ddp_input(struct mbuf *m, struct ifnet *ifp, struct elaphdr *elh, int phase)
 			return;
 		}
 		deh = mtod(m, struct ddpehdr *);
-		memcpy((void *) & ddpe, (void *) deh, sizeof(struct ddpehdr));
+		bcopy((void *) deh, (void *) & ddpe, sizeof(struct ddpehdr));
 		ddpe.deh_bytes = ntohl(ddpe.deh_bytes);
 		dlen = ddpe.deh_len;
 
@@ -289,7 +293,7 @@ ddp_input(struct mbuf *m, struct ifnet *ifp, struct elaphdr *elh, int phase)
 		}
 		ddpe.deh_hops++;
 		ddpe.deh_bytes = htonl(ddpe.deh_bytes);
-		memcpy((void *) deh, (void *) & ddpe, sizeof(u_short));/*XXX*/
+		bcopy((void *) & ddpe, (void *) deh, sizeof(u_short));/*XXX*/
 		if (ddp_route(m, &forwro)) {
 			DDP_STATINC(DDP_STAT_CANTFORWARD);
 		} else {
@@ -335,13 +339,15 @@ ddp_input(struct mbuf *m, struct ifnet *ifp, struct elaphdr *elh, int phase)
 #include <ctype.h>
 
 static void
-bprint(char *data, int len)
+bprint(data, len)
+	char *data;
+	int len;
 {
 	char            xout[BPXLEN], aout[BPALEN];
 	int             i = 0;
 
-	memset(xout, 0, BPXLEN);
-	memset(aout, 0, BPALEN);
+	bzero(xout, BPXLEN);
+	bzero(aout, BPALEN);
 
 	for (;;) {
 		if (len < 1) {
@@ -368,8 +374,8 @@ bprint(char *data, int len)
 
 		if (i > BPALEN - 2) {
 			printf("%s\t%s\n", xout, aout);
-			memset(xout, 0, BPXLEN);
-			memset(aout, 0, BPALEN);
+			bzero(xout, BPXLEN);
+			bzero(aout, BPALEN);
 			i = 0;
 			continue;
 		}
@@ -377,7 +383,8 @@ bprint(char *data, int len)
 }
 
 static void
-m_printm(struct mbuf *m)
+m_printm(m)
+	struct mbuf *m;
 {
 	for (; m; m = m->m_next)
 		bprint(mtod(m, char *), m->m_len);

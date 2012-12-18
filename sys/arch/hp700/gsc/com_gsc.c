@@ -1,9 +1,9 @@
-/*	$NetBSD: com_gsc.c,v 1.17 2011/07/01 18:33:09 dyoung Exp $	*/
+/*	$NetBSD: com_gsc.c,v 1.12 2008/03/14 15:09:10 cube Exp $	*/
 
 /*	$OpenBSD: com_gsc.c,v 1.8 2000/03/13 14:39:59 mickey Exp $	*/
 
 /*
- * Copyright (c) 1998-2004 Michael Shalayeff
+ * Copyright (c) 1998 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,22 +14,26 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Michael Shalayeff.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR OR HIS RELATIVES BE LIABLE FOR ANY DIRECT,
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF MIND, USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_gsc.c,v 1.17 2011/07/01 18:33:09 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_gsc.c,v 1.12 2008/03/14 15:09:10 cube Exp $");
 
 #include "opt_kgdb.h"
 
@@ -42,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: com_gsc.c,v 1.17 2011/07/01 18:33:09 dyoung Exp $");
 #include <sys/kgdb.h>
 #endif
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/iomod.h>
 #include <machine/autoconf.h>
@@ -58,7 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: com_gsc.c,v 1.17 2011/07/01 18:33:09 dyoung Exp $");
 #define	COMGSC_FREQUENCY (1843200 * 4) /* 16-bit baud rate divisor */
 
 struct com_gsc_regs {
-	uint8_t reset;
+	u_int8_t reset;
 };
 
 struct com_gsc_softc {
@@ -138,8 +142,8 @@ com_gsc_attach(device_t parent, device_t self, void *aux)
 	COM_INIT_REGS(sc->sc_regs, iot, ioh, iobase);
 
 	com_attach_subr(sc);
-	gsc->sc_ih = hp700_intr_establish(IPL_TTY, comintr, sc, ga->ga_ir,
-	    ga->ga_irq);
+	gsc->sc_ih = hp700_intr_establish(sc->sc_dev, IPL_TTY,
+	    comintr, sc, ga->ga_int_reg, ga->ga_irq);
 }
 
 #ifdef	KGDB

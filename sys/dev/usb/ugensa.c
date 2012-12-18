@@ -1,4 +1,4 @@
-/*	$NetBSD: ugensa.c,v 1.30 2011/12/23 00:51:46 jakllsch Exp $	*/
+/*	$NetBSD: ugensa.c,v 1.22 2008/10/19 11:40:02 joerg Exp $	*/
 
 /*
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ugensa.c,v 1.30 2011/12/23 00:51:46 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ugensa.c,v 1.22 2008/10/19 11:40:02 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,7 +60,7 @@ int ugensadebug = 0;
 #endif
 
 struct ugensa_softc {
-	device_t		sc_dev;		/* base device */
+	USBBASEDEVICE		sc_dev;		/* base device */
 	usbd_device_handle	sc_udev;	/* device */
 	usbd_interface_handle	sc_iface;	/* interface */
 
@@ -93,11 +93,9 @@ struct ugensa_type {
 
 static const struct ugensa_type ugensa_devs[] = {
 	{{ USB_VENDOR_AIRPRIME, USB_PRODUCT_AIRPRIME_PC5220 }, 0 },
-	{{ USB_VENDOR_DELL, USB_PRODUCT_DELL_HSDPA }, 0 },
 	{{ USB_VENDOR_NOVATEL, USB_PRODUCT_NOVATEL_FLEXPACKGPS }, 0 },
 	{{ USB_VENDOR_QUALCOMM_K, USB_PRODUCT_QUALCOMM_K_CDMA_MSM_K }, 0 },
-	{{ USB_VENDOR_QUALCOMMINC, USB_PRODUCT_QUALCOMMINC_AC8700 }, 0 },
-	{{ USB_VENDOR_SIERRA, USB_PRODUCT_SIERRA_USB305 }, 0 },
+	{{ USB_VENDOR_DELL, USB_PRODUCT_DELL_HSDPA }, 0 },
 
 	/*
 	 * The following devices are untested, but they are purported to
@@ -107,8 +105,8 @@ static const struct ugensa_type ugensa_devs[] = {
         {{ USB_VENDOR_ANYDATA, USB_PRODUCT_ANYDATA_ADU_500A }, UNTESTED },
         {{ USB_VENDOR_NOVATEL2, USB_PRODUCT_NOVATEL2_EXPRESSCARD }, UNTESTED },
 	{{ USB_VENDOR_QUALCOMM, USB_PRODUCT_QUALCOMM_MSM_HSDPA }, UNTESTED },
-	{{ USB_VENDOR_SIERRA, USB_PRODUCT_SIERRA_AIRCARD875 }, UNTESTED },
 	{{ USB_VENDOR_SIERRA, USB_PRODUCT_SIERRA_EM5625 }, UNTESTED },
+	{{ USB_VENDOR_SIERRA, USB_PRODUCT_SIERRA_AIRCARD875 }, UNTESTED },
 };
 #define ugensa_lookup(v, p) \
 	((const struct ugensa_type *)usb_lookup(ugensa_devs, v, p))
@@ -122,10 +120,9 @@ extern struct cfdriver ugensa_cd;
 CFATTACH_DECL2_NEW(ugensa, sizeof(struct ugensa_softc), ugensa_match,
     ugensa_attach, ugensa_detach, ugensa_activate, NULL, ugensa_childdet);
 
-int 
-ugensa_match(device_t parent, cfdata_t match, void *aux)
+USB_MATCH(ugensa)
 {
-	struct usb_attach_arg *uaa = aux;
+	USB_MATCH_START(ugensa, uaa);
 
 	DPRINTFN(20,("ugensa: vendor=0x%x, product=0x%x\n",
 		     uaa->vendor, uaa->product));
@@ -134,11 +131,9 @@ ugensa_match(device_t parent, cfdata_t match, void *aux)
 		UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
 }
 
-void 
-ugensa_attach(device_t parent, device_t self, void *aux)
+USB_ATTACH(ugensa)
 {
-	struct ugensa_softc *sc = device_private(self);
-	struct usb_attach_arg *uaa = aux;
+	USB_ATTACH_START(ugensa, sc, uaa);
 	usbd_device_handle dev = uaa->device;
 	usbd_interface_handle iface;
 	usb_interface_descriptor_t *id;
@@ -152,13 +147,6 @@ ugensa_attach(device_t parent, device_t self, void *aux)
 	DPRINTFN(10,("\nugensa_attach: sc=%p\n", sc));
 
 	sc->sc_dev = self;
-
-	aprint_naive("\n");
-	aprint_normal("\n");
-
-	devinfop = usbd_devinfo_alloc(dev, 0);
-	aprint_normal_dev(self, "%s\n", devinfop);
-	usbd_devinfo_free(devinfop);
 
 	/* Move the device into the configured state. */
 	err = usbd_set_config_index(dev, UGENSA_CONFIG_INDEX, 1);
@@ -174,6 +162,11 @@ ugensa_attach(device_t parent, device_t self, void *aux)
 		       devname, usbd_errstr(err));
 		goto bad;
 	}
+
+	devinfop = usbd_devinfo_alloc(dev, 0);
+	USB_ATTACH_SETUP;
+	aprint_normal_dev(self, "%s\n", devinfop);
+	usbd_devinfo_free(devinfop);
 
 	if (ugensa_lookup(uaa->vendor, uaa->product)->ugensa_flags & UNTESTED)
 		aprint_normal_dev(self, "WARNING: This device is marked as "
@@ -196,7 +189,7 @@ ugensa_attach(device_t parent, device_t self, void *aux)
 	uca.arg = sc;
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-			   sc->sc_dev);
+			   USBDEV(sc->sc_dev));
 
 	uca.bulkin = uca.bulkout = -1;
 	for (i = 0; i < id->bNumEndpoints; i++) {
@@ -242,12 +235,12 @@ ugensa_attach(device_t parent, device_t self, void *aux)
 
 	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
-	return;
+	USB_ATTACH_SUCCESS_RETURN;
 
 bad:
 	DPRINTF(("ugensa_attach: ATTACH ERROR\n"));
 	sc->sc_dying = 1;
-	return;
+	USB_ATTACH_ERROR_RETURN;
 }
 
 void
@@ -263,22 +256,27 @@ int
 ugensa_activate(device_t self, enum devact act)
 {
 	struct ugensa_softc *sc = device_private(self);
+	int rv = 0;
 
 	DPRINTF(("ugensa_activate: sc=%p\n", sc));
 
 	switch (act) {
+	case DVACT_ACTIVATE:
+		return (EOPNOTSUPP);
+		break;
+
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		if (sc->sc_subdev)
+			rv = config_deactivate(sc->sc_subdev);
+		break;
 	}
+	return (rv);
 }
 
-int 
-ugensa_detach(device_t self, int flags)
+USB_DETACH(ugensa)
 {
-	struct ugensa_softc *sc = device_private(self);
+	USB_DETACH_START(ugensa, sc);
 	int rv = 0;
 
 	DPRINTF(("ugensa_detach: sc=%p flags=%d\n", sc, flags));
@@ -290,7 +288,7 @@ ugensa_detach(device_t self, int flags)
 		rv = config_detach(sc->sc_subdev, flags);
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-			   sc->sc_dev);
+			   USBDEV(sc->sc_dev));
 
 	return (rv);
 }

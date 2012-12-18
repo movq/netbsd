@@ -1,4 +1,4 @@
-/*	$NetBSD: raster_op.c,v 1.19 2012/01/31 04:28:02 matt Exp $ */
+/*	$NetBSD: raster_op.c,v 1.15 2005/12/11 12:23:44 christos Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: raster_op.c,v 1.19 2012/01/31 04:28:02 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: raster_op.c,v 1.15 2005/12/11 12:23:44 christos Exp $");
 
 #include <sys/types.h>
 #ifdef _KERNEL
@@ -555,8 +555,11 @@ static int raster_blit(struct raster *, u_int32_t *, int, int, int,
 
 /* Performs a bitblit.  Returns 0 on success, -1 on failure. */
 int
-raster_op(struct raster* dst, int dx, int dy, int w, int h, int rop,
-    struct raster* src, int sx, int sy)
+raster_op( dst, dx, dy, w, h, rop, src, sx, sy )
+    struct raster* dst;
+    int dx, dy, w, h, rop;
+    struct raster* src;
+    int sx, sy;
     {
     if ( dst == (struct raster*) 0 )
 	return -1;			/* no destination */
@@ -637,8 +640,11 @@ raster_op(struct raster* dst, int dx, int dy, int w, int h, int rop,
 ** success, -1 on failure.
 */
 int
-raster_op_noclip(struct raster* dst, int dx, int dy, int w, int h, int rop,
-    struct raster* src, int sx, int sy)
+raster_op_noclip( dst, dx, dy, w, h, rop, src, sx, sy )
+    struct raster* dst;
+    int dx, dy, w, h, rop;
+    struct raster* src;
+    int sx, sy;
     {
     int op;
 
@@ -1086,8 +1092,9 @@ raster_op_noclip(struct raster* dst, int dx, int dy, int w, int h, int rop,
 ** on success, -1 on failure.
 */
 int
-raster_op_nosrc_noclip(struct raster* dst,
-    int dx, int dy, int w, int h, int rop)
+raster_op_nosrc_noclip( dst, dx, dy, w, h, rop )
+    struct raster* dst;
+    int dx, dy, w, h, rop;
     {
     int op;
 
@@ -1110,7 +1117,7 @@ raster_op_nosrc_noclip(struct raster* dst,
 	/* Special-case full-width clears. */
 	if ( op == RAS_CLEAR && dst->width == w && dst->linelongs == w >> 5 )
 	    {
-	    memset( (char*) dstlin1, 0, h * dst->linelongs * sizeof(u_int32_t) );
+	    bzero( (char*) dstlin1, h * dst->linelongs * sizeof(u_int32_t) );
 	    return 0;
 	    }
 #endif /*BCOPY_FASTER*/
@@ -1206,7 +1213,7 @@ raster_op_nosrc_noclip(struct raster* dst,
 	/* Special-case full-width clears. */
 	if ( op == RAS_CLEAR && dst->width == w && dst->linelongs == w >> 4 )
 	    {
-	    memset( (char*) dstlin1, 0, h * dst->linelongs * sizeof(u_int32_t) );
+	    bzero( (char*) dstlin1, h * dst->linelongs * sizeof(u_int32_t) );
 	    return 0;
 	    }
 #endif /*BCOPY_FASTER*/
@@ -1313,7 +1320,7 @@ raster_op_nosrc_noclip(struct raster* dst,
 	/* Special-case full-width clears. */
 	if ( op == RAS_CLEAR && dst->width == w && dst->linelongs == w >> 3 )
 	    {
-	    memset( (char*) dstlin1, 0, h * dst->linelongs * sizeof(u_int32_t) );
+	    bzero( (char*) dstlin1, h * dst->linelongs * sizeof(u_int32_t) );
 	    return 0;
 	    }
 #endif /*BCOPY_FASTER*/
@@ -1418,7 +1425,7 @@ raster_op_nosrc_noclip(struct raster* dst,
 	/* Special-case full-width clears. */
 	if ( op == RAS_CLEAR && dst->width == w && dst->linelongs == w >> 2 )
 	    {
-	    memset( (char*) dstlin1, 0, h * dst->linelongs * sizeof(u_int32_t) );
+	    bzero( (char*) dstlin1, h * dst->linelongs * sizeof(u_int32_t) );
 	    return 0;
 	    }
 #endif /*BCOPY_FASTER*/
@@ -1523,7 +1530,7 @@ raster_op_nosrc_noclip(struct raster* dst,
 	/* Special-case full-width clears. */
 	if ( op == RAS_CLEAR && dst->width == w && dst->linelongs == w >> 1 )
 	    {
-	    memset( (char*) dstlin1, 0, h * dst->linelongs * sizeof(u_int32_t) );
+	    bzero( (char*) dstlin1, h * dst->linelongs * sizeof(u_int32_t) );
 	    return 0;
 	    }
 #endif /*BCOPY_FASTER*/
@@ -1618,13 +1625,14 @@ raster_op_nosrc_noclip(struct raster* dst,
 ** destination.  It's used for both the 1-to-1 and 8-to-8 cases.
 */
 static int
-raster_blit(
-    struct raster* src, uint32_t* srclin1,
-    int srcleftignore, int srcrightignore, int srclongs,
-    struct raster* dst,
-    uint32_t* dstlin1,
-    int dstleftignore, int dstrightignore, int dstlongs,
-    int h, int op)
+raster_blit( src, srclin1, srcleftignore, srcrightignore, srclongs, dst, dstlin1, dstleftignore, dstrightignore, dstlongs, h, op )
+    struct raster* src;
+    u_int32_t* srclin1;
+    int srcleftignore, srcrightignore, srclongs;
+    struct raster* dst;
+    u_int32_t* dstlin1;
+    int dstleftignore, dstrightignore, dstlongs;
+    int h, op;
     {
     u_int32_t* srclin2;
     u_int32_t* dstlin2;

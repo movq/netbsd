@@ -1,4 +1,4 @@
-/*	$NetBSD: master_avail.c,v 1.1.1.3 2011/10/28 07:09:53 tron Exp $	*/
+/*	$NetBSD: master_avail.c,v 1.1.1.1.2.5 2011/11/02 20:39:02 riz Exp $	*/
 
 /*++
 /* NAME

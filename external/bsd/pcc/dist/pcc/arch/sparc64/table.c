@@ -1,6 +1,3 @@
-/*	Id: table.c,v 1.29 2011/06/05 08:54:42 plunky Exp 	*/	
-/*	$NetBSD: table.c,v 1.1.1.3 2011/09/01 12:46:50 plunky Exp $	*/
-
 /*
  * Copyright (c) 2008 David Crawshaw <david@zentus.com>
  * 
@@ -71,7 +68,7 @@ struct optab table[] = {
 		"	and AL,0xff,A1	\t\t! (u)int64/32/16 -> uint8\n", },
 
 { SCONV,	INAREG,
-	SAREG,	T64|TINT|TUNSIGNED|TSHORT|TUSHORT|TCHAR|TUCHAR, /* TCHAR|TUCHAR added to handle char -> long (among others) */
+	SAREG,	T64|TINT|TUNSIGNED|TSHORT|TUSHORT,
 	SAREG,	T64,
 		0,	RLEFT,
 		"	              	\t\t! (u)int64...8 -> (u)int64\n", },
@@ -293,7 +290,7 @@ struct optab table[] = {
 { PLUS,	INAREG,
 	SAREG,	TANY,
 	SCON,	TANY,
-		(3*NAREG),	RESC1,
+		(3*NAREG)|NASL,	RESC1,
 		"ZA", },
 
 { MINUS,	INAREG,
@@ -317,7 +314,7 @@ struct optab table[] = {
 { MINUS,	INAREG,
 	SAREG,	TANY,
 	SCON,	TANY,
-		(3*NAREG),	RESC1,
+		(3*NAREG)|NASL,	RESC1,
 		"ZB", },
 
 { UMINUS,	INAREG,
@@ -344,13 +341,13 @@ struct optab table[] = {
 	SAREG,	TINT|TUNSIGNED|TSHORT|TUSHORT|TCHAR|TUCHAR,
 	SAREG|SCON,	TINT|TUNSIGNED|TSHORT|TUSHORT|TCHAR|TUCHAR,
 		NAREG|NASL,	RESC1,
-		"	srl AL,AR,A1			! shift right\n", },
+		"	sra AL,AR,A1			! shift right\n", },
 
 { RS,	INAREG,
 	SAREG,	T64,
 	SAREG|SCON,	T64|TINT|TUNSIGNED|TSHORT|TUSHORT|TCHAR|TUCHAR,
 		NAREG|NASL,	RESC1,
-		"	srlx AL,AR,A1			! shift right\n", },
+		"	srax AL,AR,A1			! shift right\n", },
 
 { LS,	INAREG,
 	SAREG,	TINT|TUNSIGNED|TSHORT|TUSHORT|TCHAR|TUCHAR,
@@ -368,12 +365,12 @@ struct optab table[] = {
 	SAREG,	TANY,
 	SANY,	TANY,
 		NAREG|NASL,	RESC1,
-		"	not AL,A1			! complement\n", },
+		"	orn AL,%g0,A1			! complement\n", },
 
 /* Assignments */
 
-{ ASSIGN,	FOREFF|INAREG,			/* FIXME: Remove [,] here and add them in adrput instead. */
-	SAREG|SOREG,	TINT|TUNSIGNED,
+{ ASSIGN,	FOREFF|INAREG,
+	SOREG,	TINT|TUNSIGNED,
 	SAREG,	TINT|TUNSIGNED,
 		0,	RDEST,
 		"	stw AR,[AL]		! store (u)int32\n"
@@ -522,7 +519,7 @@ struct optab table[] = {
 { STASG,	INAREG|FOREFF,
 	SOREG|SNAME,	TANY,
 	SAREG,		TPTRTO|TANY,
-		NSPECIAL,	RDEST,
+		NSPECIAL,	RRIGHT,
 		"ZQ", },
 
 /* Comparisons. */
@@ -531,7 +528,7 @@ struct optab table[] = {
         SAREG,	TANY,
         SAREG,	TANY,
                 0,      RESCC,
-		"	cmp AL,AR			! eq\n"
+		"	cmp AL,AR\n"
 		"	be LC\n"
 		"	nop\n", },
 
@@ -539,7 +536,7 @@ struct optab table[] = {
         SAREG,	TANY,
         SAREG,	TANY,
                 0,      RESCC,
-		"	cmp AL,AR			! ne\n"
+		"	cmp AL,AR\n"
                 "	bne LC\n"
 		"	nop\n", },
 
@@ -903,57 +900,57 @@ struct optab table[] = {
 		"	O AL,AR,A1\n", },
 
 { UMUL, INAREG,
-	SAREG,	T64,
+	SANY,	T64,
 	SOREG,	T64,
 		NAREG,		RESC1,
 		"	ldx [AL],A1		! (u)int64 load\n"
 		"	nop\n", },
 { UMUL, INAREG,
-	SAREG,	TINT,
+	SANY,	TINT,
 	SOREG,	TINT,
 		NAREG,		RESC1,
 		"	ldsw [AL],A1		! int32 load\n"
 		"	nop\n", },
 { UMUL, INAREG,
-	SAREG,	TUNSIGNED,
+	SANY,	TUNSIGNED,
 	SOREG,	TUNSIGNED,
 		NAREG,		RESC1,
 		"	lduw [AL],A1		! uint32 load\n"
 		"	nop\n", },
 { UMUL, INAREG,
-	SAREG,	TCHAR,
+	SANY,	TCHAR,
 	SOREG,	TCHAR,
 		NAREG,		RESC1,
 		"	ldsb [AL],A1		! int8 load\n"
 		"	nop\n", },
 { UMUL, INAREG,
-	SAREG,	TUCHAR,
+	SANY,	TUCHAR,
 	SOREG,	TUCHAR,
 		NAREG,		RESC1,
 		"	ldub [AL],A1		! uint8 load\n"
 		"	nop\n", },
 { UMUL, INAREG,
-	SAREG,	TSHORT,
+	SANY,	TSHORT,
 	SOREG,	TSHORT,
 		NAREG,		RESC1,
 		"	ldsh [AL],A1		! int16 load\n"
 		"	nop\n", },
 { UMUL, INAREG,
-	SAREG,	TUSHORT,
+	SANY,	TUSHORT,
 	SOREG,	TUSHORT,
 		NAREG,		RESC1,
 		"	lduh [AL],A1		! uint16 load\n"
 		"	nop\n", },
 
 { UMUL, INBREG,
-	SAREG,	TFLOAT,
+	SANY,	TFLOAT,
 	SOREG,	TFLOAT,
 		NBREG,		RESC1,
 		"	ld [AL],A1		! load float\n"
 		"	nop\n", },
 
 { UMUL, INCREG,
-	SAREG,	TDOUBLE,
+	SANY,	TDOUBLE,
 	SOREG,	TDOUBLE,
 		NCREG,		RESC1,
 		"	ldd [AL],A1		! load double\n"

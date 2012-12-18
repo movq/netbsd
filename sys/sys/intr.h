@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.12 2012/07/27 14:05:08 matt Exp $	*/
+/*	$NetBSD: intr.h,v 1.7.10.1 2009/02/02 03:39:18 snj Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -70,22 +70,28 @@ void	softint_dispatch(lwp_t *, int);
 #define	SOFTINT_IMPMASK	0xf000
 
 extern u_int	softint_timing;
+extern int	safepri;
 
 /*
- * Historical aliases.
+ * Historical aliases.  XXX Audio devices should run at
+ * IPL_SCHED, but they need to acquire kernel_lock.
  */
 #define	IPL_BIO		IPL_VM
 #define	IPL_NET		IPL_VM
 #define	IPL_TTY		IPL_VM
-#define	IPL_AUDIO	IPL_SCHED
+#define	IPL_LPT		IPL_VM
+#define	IPL_AUDIO	IPL_VM
 #define	IPL_CLOCK	IPL_SCHED
+#define	IPL_IPI		IPL_HIGH
 #define	IPL_SERIAL	IPL_HIGH
 
 #define	splbio()	splvm()
 #define	splnet()	splvm()
 #define	spltty()	splvm()
-#define	splaudio()	splsched()
+#define	spllpt()	splvm()
+#define	splaudio()	splvm()
 #define	splclock()	splsched()
+#define	splipi()	splhigh()
 #define	splserial()	splhigh()
 
 #endif	/* _KERNEL */

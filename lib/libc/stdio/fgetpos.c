@@ -1,4 +1,4 @@
-/*	$NetBSD: fgetpos.c,v 1.12 2012/01/22 18:36:17 christos Exp $	*/
+/*	$NetBSD: fgetpos.c,v 1.11 2003/08/07 16:43:23 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fgetpos.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fgetpos.c,v 1.12 2012/01/22 18:36:17 christos Exp $");
+__RCSID("$NetBSD: fgetpos.c,v 1.11 2003/08/07 16:43:23 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -45,23 +45,14 @@ __RCSID("$NetBSD: fgetpos.c,v 1.12 2012/01/22 18:36:17 christos Exp $");
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
-#include "reentrant.h"
-#include "local.h"
 
 int
-fgetpos(FILE * __restrict fp, fpos_t * __restrict pos)
+fgetpos(fp, pos)
+	FILE *fp;
+	fpos_t *pos;
 {
-	struct wchar_io_data *wcio;
-
 	_DIAGASSERT(fp != NULL);
 	_DIAGASSERT(pos != NULL);
 
-	wcio = WCIO_GET(fp);
-	if (wcio != NULL && wcio->wcio_mode > 0) {
-		if (fp->_write)
-			pos->_mbstate_in  = wcio->wcio_mbstate_in;
-		if (fp->_read)
-			pos->_mbstate_out = wcio->wcio_mbstate_out;
-	}
-	return (pos->_pos = ftello(fp)) == (off_t)-1;
+	return((*pos = (off_t)ftello(fp)) == (off_t)-1);
 }

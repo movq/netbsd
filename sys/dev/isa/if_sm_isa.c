@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sm_isa.c,v 1.23 2012/10/27 17:18:24 chs Exp $	*/
+/*	$NetBSD: if_sm_isa.c,v 1.20 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sm_isa.c,v 1.23 2012/10/27 17:18:24 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sm_isa.c,v 1.20 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,8 +59,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_sm_isa.c,v 1.23 2012/10/27 17:18:24 chs Exp $");
 
 #include <dev/isa/isavar.h>
 
-int	sm_isa_match(device_t, cfdata_t, void *);
-void	sm_isa_attach(device_t, device_t, void *);
+int	sm_isa_match(struct device *, struct cfdata *, void *);
+void	sm_isa_attach(struct device *, struct device *, void *);
 
 struct sm_isa_softc {
 	struct	smc91cxx_softc sc_smc;		/* real "smc" softc */
@@ -69,11 +69,12 @@ struct sm_isa_softc {
 	void	*sc_ih;				/* interrupt cookie */
 };
 
-CFATTACH_DECL_NEW(sm_isa, sizeof(struct sm_isa_softc),
+CFATTACH_DECL(sm_isa, sizeof(struct sm_isa_softc),
     sm_isa_match, sm_isa_attach, NULL, NULL);
 
 int
-sm_isa_match(device_t parent, cfdata_t match, void *aux)
+sm_isa_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -151,9 +152,9 @@ sm_isa_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-sm_isa_attach(device_t parent, device_t self, void *aux)
+sm_isa_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct sm_isa_softc *isc = device_private(self);
+	struct sm_isa_softc *isc = (struct sm_isa_softc *)self;
 	struct smc91cxx_softc *sc = &isc->sc_smc;
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -165,7 +166,6 @@ sm_isa_attach(device_t parent, device_t self, void *aux)
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, SMC_IOSIZE, 0, &ioh))
 		panic("sm_isa_attach: can't map i/o space");
 
-	sc->sc_dev = self;
 	sc->sc_bst = iot;
 	sc->sc_bsh = ioh;
 
@@ -181,5 +181,5 @@ sm_isa_attach(device_t parent, device_t self, void *aux)
 	isc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_NET, smc91cxx_intr, sc);
 	if (isc->sc_ih == NULL)
-		aprint_error_dev(self, "couldn't establish interrupt handler\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt handler\n");
 }

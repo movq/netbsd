@@ -1,4 +1,4 @@
-/*	$NetBSD: firmload.c,v 1.17 2012/04/29 20:27:31 dsl Exp $	*/
+/*	$NetBSD: firmload.c,v 1.11 2008/04/28 20:23:46 martin Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: firmload.c,v 1.17 2012/04/29 20:27:31 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: firmload.c,v 1.11 2008/04/28 20:23:46 martin Exp $");
 
 /*
  * The firmload API provides an interface for device drivers to access
@@ -46,11 +46,10 @@ __KERNEL_RCSID(0, "$NetBSD: firmload.c,v 1.17 2012/04/29 20:27:31 dsl Exp $");
 #include <sys/sysctl.h>
 #include <sys/vnode.h>
 #include <sys/kauth.h>
-#include <sys/lwp.h>
 
 #include <dev/firmload.h>
 
-MALLOC_DEFINE(M_DEVFIRM, "devfirm", "device firmware buffers");
+static MALLOC_DEFINE(M_DEVFIRM, "devfirm", "device firmware buffers");
 
 struct firmware_handle {
 	struct vnode	*fh_vp;
@@ -218,7 +217,6 @@ firmware_path_first(const char *drvname, const char *imgname, char *pnbuf,
 int
 firmware_open(const char *drvname, const char *imgname, firmware_handle_t *fhp)
 {
-	struct pathbuf *pb;
 	struct nameidata nd;
 	struct vattr va;
 	char *pnbuf, *path, *prefix;
@@ -246,17 +244,10 @@ firmware_open(const char *drvname, const char *imgname, firmware_handle_t *fhp)
 	for (path = firmware_path_first(drvname, imgname, pnbuf, &prefix);
 	     path != NULL;
 	     path = firmware_path_next(drvname, imgname, pnbuf, &prefix)) {
-		pb = pathbuf_create(path);
-		if (pb == NULL) {
-			error = ENOMEM;
-			break;
-		}
-		NDINIT(&nd, LOOKUP, FOLLOW | NOCHROOT, pb);
+		NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, path);
 		error = vn_open(&nd, FREAD, 0);
-		pathbuf_destroy(pb);
-		if (error == ENOENT) {
+		if (error == ENOENT)
 			continue;
-		}
 		break;
 	}
 
@@ -270,14 +261,14 @@ firmware_open(const char *drvname, const char *imgname, firmware_handle_t *fhp)
 
 	error = VOP_GETATTR(vp, &va, kauth_cred_get());
 	if (error) {
-		VOP_UNLOCK(vp);
+		VOP_UNLOCK(vp, 0);
 		(void)vn_close(vp, FREAD, kauth_cred_get());
 		firmware_handle_free(fh);
 		return (error);
 	}
 
 	if (va.va_type != VREG) {
-		VOP_UNLOCK(vp);
+		VOP_UNLOCK(vp, 0);
 		(void)vn_close(vp, FREAD, kauth_cred_get());
 		firmware_handle_free(fh);
 		return (EINVAL);
@@ -288,7 +279,7 @@ firmware_open(const char *drvname, const char *imgname, firmware_handle_t *fhp)
 	fh->fh_vp = vp;
 	fh->fh_size = va.va_size;
 
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 
 	*fhp = fh;
 	return (0);

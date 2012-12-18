@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_ffs.c,v 1.7 2010/01/12 18:43:37 pooka Exp $	*/
+/*	$NetBSD: rump_ffs.c,v 1.3 2008/09/04 15:34:55 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -36,7 +36,6 @@
 #include <unistd.h>
 
 #include <rump/p2k.h>
-#include <rump/ukfs.h>
 
 #include "mount_ffs.h"
 
@@ -44,20 +43,15 @@ int
 main(int argc, char *argv[])
 {
 	struct ufs_args args;
-	char canon_dev[UKFS_DEVICE_MAXPATHLEN], canon_dir[MAXPATHLEN];
-	struct ukfs_part *part;
+	char canon_dev[MAXPATHLEN], canon_dir[MAXPATHLEN];
 	int mntflags;
 	int rv;
 
 	setprogname(argv[0]);
-	puffs_unmountonsignal(SIGINT, true);
-	puffs_unmountonsignal(SIGTERM, true);
 
-	UKFS_DEVICE_ARGVPROBE(&part);
 	mount_ffs_parseargs(argc, argv, &args, &mntflags, canon_dev, canon_dir);
-	rv = p2k_run_diskfs(MOUNT_FFS, canon_dev, part, canon_dir,
-	    mntflags, &args, sizeof(args), 0);
-	ukfs_part_release(part);
+	rv = p2k_run_fs(MOUNT_FFS, canon_dev, canon_dir, mntflags,
+	    &args, sizeof(args), 0);
 	if (rv)
 		err(1, "mount");
 

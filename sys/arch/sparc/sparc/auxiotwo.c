@@ -1,4 +1,4 @@
-/*	$NetBSD: auxiotwo.c,v 1.11 2012/07/29 00:04:05 matt Exp $	*/
+/*	$NetBSD: auxiotwo.c,v 1.9 2008/04/28 20:23:36 martin Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auxiotwo.c,v 1.11 2012/07/29 00:04:05 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auxiotwo.c,v 1.9 2008/04/28 20:23:36 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,23 +48,20 @@ __KERNEL_RCSID(0, "$NetBSD: auxiotwo.c,v 1.11 2012/07/29 00:04:05 matt Exp $");
 #include <sparc/sparc/auxiotwo.h>
 #include <sparc/sparc/vaddrs.h>
 
-volatile u_char *auxiotwo_reg;
-u_char auxiotwo_regval;
-
 static int serial_refcount;
 static int serial_power;
 
-static int auxiotwomatch(device_t, cfdata_t, void *);
-static void auxiotwoattach(device_t, device_t, void *);
+static int auxiotwomatch(struct device *, struct cfdata *, void *);
+static void auxiotwoattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(auxiotwo_obio, 0,
+CFATTACH_DECL(auxiotwo_obio, sizeof(struct device),
      auxiotwomatch, auxiotwoattach, NULL, NULL);
 
 /*
  * The OPENPROM calls this "auxio2".
  */
 static int
-auxiotwomatch(device_t parent, cfdata_t cf, void *aux)
+auxiotwomatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 
@@ -75,7 +72,7 @@ auxiotwomatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-auxiotwoattach(device_t parent, device_t self, void *aux)
+auxiotwoattach(struct device *parent, struct device *self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct sbus_attach_args *sa = &uoba->uoba_sbus;

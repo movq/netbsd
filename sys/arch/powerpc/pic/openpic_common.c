@@ -1,4 +1,4 @@
-/*	$NetBSD: openpic_common.c,v 1.6 2012/02/01 09:54:03 matt Exp $ */
+/*	$NetBSD: openpic_common.c,v 1.3 2008/04/29 06:53:02 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -27,12 +27,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: openpic_common.c,v 1.6 2012/02/01 09:54:03 matt Exp $");
-
-#include "opt_openpic.h"
-#include "opt_interrupt.h"
+__KERNEL_RCSID(0, "$NetBSD: openpic_common.c,v 1.3 2008/04/29 06:53:02 martin Exp $");
 
 #include <sys/param.h>
+#include <sys/malloc.h>
 #include <sys/kernel.h>
 
 #include <uvm/uvm_extern.h>
@@ -40,7 +38,9 @@ __KERNEL_RCSID(0, "$NetBSD: openpic_common.c,v 1.6 2012/02/01 09:54:03 matt Exp 
 #include <machine/pio.h>
 #include <powerpc/openpic.h>
 
-#include <powerpc/pic/picvar.h>
+#include <arch/powerpc/pic/picvar.h>
+
+#include "opt_interrupt.h"
 
 volatile unsigned char *openpic_base;
 

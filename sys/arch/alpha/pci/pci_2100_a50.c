@@ -1,21 +1,21 @@
-/* $NetBSD: pci_2100_a50.c,v 1.40 2012/02/06 02:14:15 matt Exp $ */
+/* $NetBSD: pci_2100_a50.c,v 1.32 2002/09/27 15:35:37 provos Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_2100_a50.c,v 1.40 2012/02/06 02:14:15 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_2100_a50.c,v 1.32 2002/09/27 15:35:37 provos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -38,8 +38,10 @@ __KERNEL_RCSID(0, "$NetBSD: pci_2100_a50.c,v 1.40 2012/02/06 02:14:15 matt Exp $
 #include <sys/errno.h>
 #include <sys/device.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/isa/isavar.h>
@@ -54,18 +56,18 @@ __KERNEL_RCSID(0, "$NetBSD: pci_2100_a50.c,v 1.40 2012/02/06 02:14:15 matt Exp $
 
 #include "sio.h"
 
-int	dec_2100_a50_intr_map(const struct pci_attach_args *,
-	    pci_intr_handle_t *);
-const char *dec_2100_a50_intr_string(void *, pci_intr_handle_t);
-const struct evcnt *dec_2100_a50_intr_evcnt(void *, pci_intr_handle_t);
-void    *dec_2100_a50_intr_establish(void *, pci_intr_handle_t,
-	    int, int (*func)(void *), void *);
-void    dec_2100_a50_intr_disestablish(void *, void *);
+int	dec_2100_a50_intr_map __P((struct pci_attach_args *, pci_intr_handle_t *));
+const char *dec_2100_a50_intr_string __P((void *, pci_intr_handle_t));
+const struct evcnt *dec_2100_a50_intr_evcnt __P((void *, pci_intr_handle_t));
+void    *dec_2100_a50_intr_establish __P((void *, pci_intr_handle_t,
+	    int, int (*func)(void *), void *));
+void    dec_2100_a50_intr_disestablish __P((void *, void *));
 
 #define	APECS_SIO_DEVICE	7	/* XXX */
 
 void
-pci_2100_a50_pickintr(struct apecs_config *acp)
+pci_2100_a50_pickintr(acp)
+	struct apecs_config *acp;
 {
 	bus_space_tag_t iot = &acp->ac_iot;
 	pci_chipset_tag_t pc = &acp->ac_pc;
@@ -74,7 +76,7 @@ pci_2100_a50_pickintr(struct apecs_config *acp)
 
 	/* XXX MAGIC NUMBER */
 	sioclass = pci_conf_read(pc, pci_make_tag(pc, 0, 7, 0), PCI_CLASS_REG);
-	sioII = (sioclass & 0xff) >= 3;
+        sioII = (sioclass & 0xff) >= 3;
 
 	if (!sioII)
 		printf("WARNING: SIO NOT SIO II... NO BETS...\n");
@@ -97,14 +99,16 @@ pci_2100_a50_pickintr(struct apecs_config *acp)
 }
 
 int
-dec_2100_a50_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+dec_2100_a50_intr_map(pa, ihp)
+	struct pci_attach_args *pa;
+	pci_intr_handle_t *ihp;
 {
-	pcitag_t bustag = pa->pa_intrtag;
+        pcitag_t bustag = pa->pa_intrtag;
 	int buspin = pa->pa_intrpin;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	int device, pirq;
 	pcireg_t pirqreg;
-	uint8_t pirqline;
+	u_int8_t pirqline;
 
 #ifndef DIAGNOSTIC
 	pirq = 0;				/* XXX gcc -Wuninitialized */
@@ -189,9 +193,9 @@ dec_2100_a50_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 		break;
 
 	default:
-	        printf("dec_2100_a50_intr_map: weird device number %d\n",
+                printf("dec_2100_a50_intr_map: weird device number %d\n",
 		    device);
-	        return 1;
+                return 1;
 	}
 
 	pirqreg = pci_conf_read(pc, pci_make_tag(pc, 0, APECS_SIO_DEVICE, 0),
@@ -215,7 +219,9 @@ dec_2100_a50_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 }
 
 const char *
-dec_2100_a50_intr_string(void *acv, pci_intr_handle_t ih)
+dec_2100_a50_intr_string(acv, ih)
+	void *acv;
+	pci_intr_handle_t ih;
 {
 #if 0
 	struct apecs_config *acp = acv;
@@ -225,7 +231,9 @@ dec_2100_a50_intr_string(void *acv, pci_intr_handle_t ih)
 }
 
 const struct evcnt *
-dec_2100_a50_intr_evcnt(void *acv, pci_intr_handle_t ih)
+dec_2100_a50_intr_evcnt(acv, ih)
+	void *acv;
+	pci_intr_handle_t ih;
 {
 #if 0
 	struct apecs_config *acp = acv;
@@ -235,7 +243,11 @@ dec_2100_a50_intr_evcnt(void *acv, pci_intr_handle_t ih)
 }
 
 void *
-dec_2100_a50_intr_establish(void *acv, pci_intr_handle_t ih, int level, int (*func)(void *), void *arg)
+dec_2100_a50_intr_establish(acv, ih, level, func, arg)
+	void *acv, *arg;
+	pci_intr_handle_t ih;
+	int level;
+	int (*func) __P((void *));
 {
 #if 0
 	struct apecs_config *acp = acv;
@@ -246,7 +258,8 @@ dec_2100_a50_intr_establish(void *acv, pci_intr_handle_t ih, int level, int (*fu
 }
 
 void
-dec_2100_a50_intr_disestablish(void *acv, void *cookie)
+dec_2100_a50_intr_disestablish(acv, cookie)
+	void *acv, *cookie;
 {
 #if 0
 	struct apecs_config *acp = acv;

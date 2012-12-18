@@ -1,4 +1,4 @@
-/*	$NetBSD: ess.c,v 1.80 2011/11/24 03:35:57 mrg Exp $	*/
+/*	$NetBSD: ess.c,v 1.76 2008/04/08 20:08:49 cegger Exp $	*/
 
 /*
  * Copyright 1997
@@ -66,7 +66,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ess.c,v 1.80 2011/11/24 03:35:57 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ess.c,v 1.76 2008/04/08 20:08:49 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,12 +76,12 @@ __KERNEL_RCSID(0, "$NetBSD: ess.c,v 1.80 2011/11/24 03:35:57 mrg Exp $");
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/kernel.h>
+
 #include <sys/cpu.h>
 #include <sys/intr.h>
 #include <sys/bus.h>
-#include <sys/audioio.h>
-#include <sys/malloc.h>
 
+#include <sys/audioio.h>
 #include <dev/audio_if.h>
 #include <dev/auconv.h>
 #include <dev/mulaw.h>
@@ -147,8 +147,8 @@ int	ess_getdev(void *, struct audio_device *);
 int	ess_set_port(void *, mixer_ctrl_t *);
 int	ess_get_port(void *, mixer_ctrl_t *);
 
-void   *ess_malloc(void *, int, size_t);
-void	ess_free(void *, void *, size_t);
+void   *ess_malloc(void *, int, size_t, struct malloc_type *, int);
+void	ess_free(void *, void *, struct malloc_type *);
 size_t	ess_round_buffersize(void *, int, size_t);
 paddr_t	ess_mappage(void *, void *, off_t, int);
 
@@ -156,7 +156,6 @@ paddr_t	ess_mappage(void *, void *, off_t, int);
 int	ess_query_devinfo(void *, mixer_devinfo_t *);
 int	ess_1788_get_props(void *);
 int	ess_1888_get_props(void *);
-void	ess_get_locks(void *, kmutex_t **, kmutex_t **);
 
 void	ess_speaker_on(struct ess_softc *);
 void	ess_speaker_off(struct ess_softc *);
@@ -241,7 +240,7 @@ const struct audio_hw_if ess_1788_hw_if = {
 	ess_audio1_trigger_output,
 	ess_audio1_trigger_input,
 	NULL,
-	ess_get_locks,
+	NULL,
 };
 
 const struct audio_hw_if ess_1888_hw_if = {
@@ -272,7 +271,7 @@ const struct audio_hw_if ess_1888_hw_if = {
 	ess_audio2_trigger_output,
 	ess_audio1_trigger_input,
 	NULL,
-	ess_get_locks,
+	NULL,
 };
 
 #define ESS_NFORMATS	8
@@ -812,6 +811,9 @@ int
 ess_setup_sc(struct ess_softc *sc, int doinit)
 {
 
+	callout_init(&sc->sc_poll1_ch, 0);
+	callout_init(&sc->sc_poll2_ch, 0);
+
 	/* Reset the chip. */
 	if (ess_reset(sc) != 0) {
 		DPRINTF(("ess_setup_sc: couldn't reset chip\n"));
@@ -920,36 +922,31 @@ essattach(struct ess_softc *sc, int enablejoy)
 		return;
 	}
 
-	aprint_normal(": ESS Technology ES%s [version 0x%04x]\n",
+	printf(": ESS Technology ES%s [version 0x%04x]\n",
 	    essmodel[sc->sc_model], sc->sc_version);
-
-	callout_init(&sc->sc_poll1_ch, CALLOUT_MPSAFE);
-	callout_init(&sc->sc_poll2_ch, CALLOUT_MPSAFE);
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
 
 	sc->sc_audio1.polled = sc->sc_audio1.irq == -1;
 	if (!sc->sc_audio1.polled) {
 		sc->sc_audio1.ih = isa_intr_establish(sc->sc_ic,
 		    sc->sc_audio1.irq, sc->sc_audio1.ist, IPL_AUDIO,
 		    ess_audio1_intr, sc);
-		aprint_normal_dev(sc->sc_dev,
-		    "audio1 interrupting at irq %d\n", sc->sc_audio1.irq);
+		printf("%s: audio1 interrupting at irq %d\n",
+		    device_xname(&sc->sc_dev), sc->sc_audio1.irq);
 	} else
-		aprint_normal_dev(sc->sc_dev, "audio1 polled\n");
+		printf("%s: audio1 polled\n", device_xname(&sc->sc_dev));
 	sc->sc_audio1.maxsize = isa_dmamaxsize(sc->sc_ic, sc->sc_audio1.drq);
 
 	if (isa_drq_alloc(sc->sc_ic, sc->sc_audio1.drq) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't reserve drq %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't reserve drq %d\n",
 		    sc->sc_audio1.drq);
-		goto fail;
+		return;
 	}
 
 	if (isa_dmamap_create(sc->sc_ic, sc->sc_audio1.drq,
 	    sc->sc_audio1.maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW)) {
-		aprint_error_dev(sc->sc_dev, "can't create map for drq %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't create map for drq %d\n",
 		    sc->sc_audio1.drq);
-		goto fail;
+		return;
 	}
 
 	if (!ESS_USE_AUDIO1(sc->sc_model)) {
@@ -958,25 +955,24 @@ essattach(struct ess_softc *sc, int enablejoy)
 			sc->sc_audio2.ih = isa_intr_establish(sc->sc_ic,
 			    sc->sc_audio2.irq, sc->sc_audio2.ist, IPL_AUDIO,
 			    ess_audio2_intr, sc);
-			aprint_normal_dev(sc->sc_dev,
-			    "audio2 interrupting at irq %d\n",
-			    sc->sc_audio2.irq);
+			printf("%s: audio2 interrupting at irq %d\n",
+			    device_xname(&sc->sc_dev), sc->sc_audio2.irq);
 		} else
-			aprint_normal_dev(sc->sc_dev, "audio2 polled\n");
+			printf("%s: audio2 polled\n", device_xname(&sc->sc_dev));
 		sc->sc_audio2.maxsize = isa_dmamaxsize(sc->sc_ic,
 		    sc->sc_audio2.drq);
 
 		if (isa_drq_alloc(sc->sc_ic, sc->sc_audio2.drq) != 0) {
-			aprint_error_dev(sc->sc_dev, "can't reserve drq %d\n",
+			aprint_error_dev(&sc->sc_dev, "can't reserve drq %d\n",
 			    sc->sc_audio2.drq);
-			goto fail;
+			return;
 		}
 
 		if (isa_dmamap_create(sc->sc_ic, sc->sc_audio2.drq,
 		    sc->sc_audio2.maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW)) {
-			aprint_error_dev(sc->sc_dev, "can't create map for drq %d\n",
+			aprint_error_dev(&sc->sc_dev, "can't create map for drq %d\n",
 			    sc->sc_audio2.drq);
-			goto fail;
+			return;
 		}
 	}
 
@@ -1047,14 +1043,14 @@ essattach(struct ess_softc *sc, int enablejoy)
 	    sc->sc_version);
 
 	if (ESS_USE_AUDIO1(sc->sc_model))
-		audio_attach_mi(&ess_1788_hw_if, sc, sc->sc_dev);
+		audio_attach_mi(&ess_1788_hw_if, sc, &sc->sc_dev);
 	else
-		audio_attach_mi(&ess_1888_hw_if, sc, sc->sc_dev);
+		audio_attach_mi(&ess_1888_hw_if, sc, &sc->sc_dev);
 
 	arg.type = AUDIODEV_TYPE_OPL;
 	arg.hwif = 0;
 	arg.hdl = 0;
-	(void)config_found(sc->sc_dev, &arg, audioprint);
+	(void)config_found(&sc->sc_dev, &arg, audioprint);
 
 #if NJOY_ESS > 0
 	if (sc->sc_model == ESS_1888 && enablejoy) {
@@ -1065,7 +1061,7 @@ essattach(struct ess_softc *sc, int enablejoy)
 		ess_write_mix_reg(sc, 0x40, m40);
 
 		arg.type = AUDIODEV_TYPE_AUX;
-		(void)config_found(sc->sc_dev, &arg, audioprint);
+		(void)config_found(&sc->sc_dev, &arg, audioprint);
 	}
 #endif
 
@@ -1073,14 +1069,6 @@ essattach(struct ess_softc *sc, int enablejoy)
 	if (essdebug > 0)
 		ess_printsc(sc);
 #endif
-
-	return;
-
- fail:
-	callout_destroy(&sc->sc_poll1_ch);
-	callout_destroy(&sc->sc_poll2_ch);
-	mutex_destroy(&sc->sc_lock);
-	mutex_destroy(&sc->sc_intr_lock);
 }
 
 /*
@@ -1090,7 +1078,6 @@ essattach(struct ess_softc *sc, int enablejoy)
 int
 ess_open(void *addr, int flags)
 {
-
 	return 0;
 }
 
@@ -1115,17 +1102,8 @@ ess_close(void *addr)
 int
 ess_drain(void *addr)
 {
-	struct ess_softc *sc;
 
-	sc = addr;
-	mutex_exit(&sc->sc_lock);
-	kpause("essdr", FALSE, hz/20, &sc->sc_intr_lock); /* XXX */
-	if (!mutex_tryenter(&sc->sc_lock)) {
-		mutex_spin_exit(&sc->sc_intr_lock);
-		mutex_enter(&sc->sc_lock);
-		mutex_spin_enter(&sc->sc_intr_lock);
-	}
-
+	tsleep(addr, PWAIT | PCATCH, "essdr", hz/20); /* XXX */
 	return 0;
 }
 
@@ -1550,32 +1528,23 @@ ess_audio1_intr(void *arg)
 {
 	struct ess_softc *sc;
 	uint8_t reg;
-	int rv;
 
 	sc = arg;
 	DPRINTFN(1,("ess_audio1_intr: intr=%p\n", sc->sc_audio1.intr));
 
-	mutex_spin_enter(&sc->sc_intr_lock);
-
 	/* Check and clear interrupt on Audio1. */
 	reg = EREAD1(sc->sc_iot, sc->sc_ioh, ESS_DSP_RW_STATUS);
-	if ((reg & ESS_DSP_READ_OFLOW) == 0) {
-		mutex_spin_exit(&sc->sc_intr_lock);
+	if ((reg & ESS_DSP_READ_OFLOW) == 0)
 		return 0;
-	}
 	reg = EREAD1(sc->sc_iot, sc->sc_ioh, ESS_CLEAR_INTR);
 
 	sc->sc_audio1.nintr++;
 
 	if (sc->sc_audio1.active) {
 		(*sc->sc_audio1.intr)(sc->sc_audio1.arg);
-		rv = 1;
+		return 1;
 	} else
-		rv = 0;
-
-	mutex_spin_exit(&sc->sc_intr_lock);
-
-	return rv;
+		return 0;
 }
 
 int
@@ -1583,19 +1552,14 @@ ess_audio2_intr(void *arg)
 {
 	struct ess_softc *sc;
 	uint8_t reg;
-	int rv;
 
 	sc = arg;
 	DPRINTFN(1,("ess_audio2_intr: intr=%p\n", sc->sc_audio2.intr));
 
-	mutex_spin_enter(&sc->sc_intr_lock);
-
 	/* Check and clear interrupt on Audio2. */
 	reg = ess_read_mix_reg(sc, ESS_MREG_AUDIO2_CTRL2);
-	if ((reg & ESS_AUDIO2_CTRL2_IRQ_LATCH) == 0) {
-		mutex_spin_exit(&sc->sc_intr_lock);
+	if ((reg & ESS_AUDIO2_CTRL2_IRQ_LATCH) == 0)
 		return 0;
-	}
 	reg &= ~ESS_AUDIO2_CTRL2_IRQ_LATCH;
 	ess_write_mix_reg(sc, ESS_MREG_AUDIO2_CTRL2, reg);
 
@@ -1603,13 +1567,9 @@ ess_audio2_intr(void *arg)
 
 	if (sc->sc_audio2.active) {
 		(*sc->sc_audio2.intr)(sc->sc_audio2.arg);
-		rv = 1;
+		return 1;
 	} else
-		rv = 0;
-
-	mutex_spin_exit(&sc->sc_intr_lock);
-
-	return rv;
+		return 0;
 }
 
 void
@@ -1619,12 +1579,8 @@ ess_audio1_poll(void *addr)
 	int dmapos, dmacount;
 
 	sc = addr;
-	mutex_spin_enter(&sc->sc_intr_lock);
-
-	if (!sc->sc_audio1.active) {
-		mutex_spin_exit(&sc->sc_intr_lock);
+	if (!sc->sc_audio1.active)
 		return;
-	}
 
 	sc->sc_audio1.nintr++;
 
@@ -1644,7 +1600,6 @@ ess_audio1_poll(void *addr)
 	(*sc->sc_audio1.intr)(sc->sc_audio1.arg, dmacount);
 #endif
 
-	mutex_spin_exit(&sc->sc_intr_lock);
 	callout_reset(&sc->sc_poll1_ch, hz / 30, ess_audio1_poll, sc);
 }
 
@@ -1655,12 +1610,8 @@ ess_audio2_poll(void *addr)
 	int dmapos, dmacount;
 
 	sc = addr;
-	mutex_spin_enter(&sc->sc_intr_lock);
-
-	if (!sc->sc_audio2.active) {
-		mutex_spin_exit(&sc->sc_intr_lock);
+	if (!sc->sc_audio2.active)
 		return;
-	}
 
 	sc->sc_audio2.nintr++;
 
@@ -1680,7 +1631,6 @@ ess_audio2_poll(void *addr)
 	(*sc->sc_audio2.intr)(sc->sc_audio2.arg, dmacount);
 #endif
 
-	mutex_spin_exit(&sc->sc_intr_lock);
 	callout_reset(&sc->sc_poll2_ch, hz / 30, ess_audio2_poll, sc);
 }
 
@@ -2184,7 +2134,8 @@ ess_query_devinfo(void *addr, mixer_devinfo_t *dip)
 }
 
 void *
-ess_malloc(void *addr, int direction, size_t size)
+ess_malloc(void *addr, int direction, size_t size,
+	   struct malloc_type *pool, int flags)
 {
 	struct ess_softc *sc;
 	int drq;
@@ -2194,14 +2145,14 @@ ess_malloc(void *addr, int direction, size_t size)
 		drq = sc->sc_audio2.drq;
 	else
 		drq = sc->sc_audio1.drq;
-	return (isa_malloc(sc->sc_ic, drq, size, M_DEVBUF, M_WAITOK));
+	return (isa_malloc(sc->sc_ic, drq, size, pool, flags));
 }
 
 void
-ess_free(void *addr, void *ptr, size_t size)
+ess_free(void *addr, void *ptr, struct malloc_type *pool)
 {
 
-	isa_free(ptr, M_DEVBUF);
+	isa_free(ptr, pool);
 }
 
 size_t
@@ -2241,17 +2192,6 @@ ess_1888_get_props(void *addr)
 
 	return AUDIO_PROP_MMAP | AUDIO_PROP_INDEPENDENT | AUDIO_PROP_FULLDUPLEX;
 }
-
-void
-ess_get_locks(void *addr, kmutex_t **intr, kmutex_t **thread)
-{
-	struct ess_softc *sc;
-
-	sc = addr;
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
-}
-
 
 /* ============================================
  * Generic functions for ess, not used by audio h/w i/f
@@ -2643,13 +2583,16 @@ ess_write_mix_reg(struct ess_softc *sc, u_char reg, u_char val)
 {
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
+	int s;
 
 	DPRINTFN(2,("ess_write_mix_reg: %x=%x\n", reg, val));
 
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
+	s = splaudio();
 	EWRITE1(iot, ioh, ESS_MIX_REG_SELECT, reg);
 	EWRITE1(iot, ioh, ESS_MIX_REG_DATA, val);
+	splx(s);
 }
 
 /*
@@ -2660,12 +2603,15 @@ ess_read_mix_reg(struct ess_softc *sc, u_char reg)
 {
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
+	int s;
 	u_char val;
 
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
+	s = splaudio();
 	EWRITE1(iot, ioh, ESS_MIX_REG_SELECT, reg);
 	val = EREAD1(iot, ioh, ESS_MIX_REG_DATA);
+	splx(s);
 
 	DPRINTFN(2,("ess_read_mix_reg: %x=%x\n", reg, val));
 	return val;
@@ -2691,9 +2637,12 @@ ess_read_multi_mix_reg(struct ess_softc *sc, u_char reg,
 {
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
+	int s;
 
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
+	s = splaudio();
 	EWRITE1(iot, ioh, ESS_MIX_REG_SELECT, reg);
 	bus_space_read_multi_1(iot, ioh, ESS_MIX_REG_DATA, datap, count);
+	splx(s);
 }

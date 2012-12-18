@@ -1,4 +1,4 @@
-/*	$NetBSD: overlay_vfsops.c,v 1.57 2012/04/30 22:51:27 rmind Exp $	*/
+/*	$NetBSD: overlay_vfsops.c,v 1.53 2008/06/28 01:34:06 rumble Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 National Aeronautics & Space Administration
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: overlay_vfsops.c,v 1.57 2012/04/30 22:51:27 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: overlay_vfsops.c,v 1.53 2008/06/28 01:34:06 rumble Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,7 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: overlay_vfsops.c,v 1.57 2012/04/30 22:51:27 rmind Ex
 #include <miscfs/overlay/overlay.h>
 #include <miscfs/genfs/layer_extern.h>
 
-MODULE(MODULE_CLASS_VFS, overlay, "layerfs");
+MODULE(MODULE_CLASS_VFS, overlay, NULL);
 
 VFS_PROTOS(ov);
 
@@ -136,16 +136,15 @@ ov_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	 * Find lower node
 	 */
 	lowerrootvp = mp->mnt_vnodecovered;
-	vref(lowerrootvp);
-	if ((error = vn_lock(lowerrootvp, LK_EXCLUSIVE | LK_RETRY))) {
-		vrele(lowerrootvp);
+	if ((error = vget(lowerrootvp, LK_EXCLUSIVE | LK_RETRY)))
 		return (error);
-	}
 
 	/*
 	 * First cut at fixing up upper mount point
 	 */
-	nmp = kmem_zalloc(sizeof(struct overlay_mount), KM_SLEEP);
+	nmp = (struct overlay_mount *) malloc(sizeof(struct overlay_mount),
+				M_UFSMNT, M_WAITOK);	/* XXX */
+	memset(nmp, 0, sizeof(struct overlay_mount));
 
 	mp->mnt_data = nmp;
 	nmp->ovm_vfs = lowerrootvp->v_mount;
@@ -177,13 +176,13 @@ ov_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	if (error) {
 		vput(lowerrootvp);
 		hashdone(nmp->ovm_node_hashtbl, HASH_LIST, nmp->ovm_node_hash);
-		kmem_free(nmp, sizeof(struct overlay_mount));
-		return error;
+		free(nmp, M_UFSMNT);	/* XXX */
+		return (error);
 	}
 	/*
 	 * Unlock the node
 	 */
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 
 	/*
 	 * Keep a held reference to the root vnode.
@@ -237,7 +236,7 @@ ov_unmount(struct mount *mp, int mntflags)
 	omp = mp->mnt_data;
 	mutex_destroy(&omp->ovm_hashlock);
 	hashdone(omp->ovm_node_hashtbl, HASH_LIST, omp->ovm_node_hash);
-	kmem_free(omp, sizeof(struct overlay_mount));
+	free(omp, M_UFSMNT);	/* XXX */
 	mp->mnt_data = NULL;
 	return 0;
 }

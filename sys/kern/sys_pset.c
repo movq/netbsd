@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_pset.c,v 1.17 2011/08/07 21:13:05 rmind Exp $	*/
+/*	$NetBSD: sys_pset.c,v 1.9.4.3 2009/03/08 03:15:36 snj Exp $	*/
 
 /*
  * Copyright (c) 2008, Mindaugas Rasiukevicius <rmind at NetBSD org>
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_pset.c,v 1.17 2011/08/07 21:13:05 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_pset.c,v 1.9.4.3 2009/03/08 03:15:36 snj Exp $");
 
 #include <sys/param.h>
 
@@ -56,36 +56,11 @@ __KERNEL_RCSID(0, "$NetBSD: sys_pset.c,v 1.17 2011/08/07 21:13:05 rmind Exp $");
 static pset_info_t **	psets;
 static u_int		psets_max;
 static u_int		psets_count;
-static kauth_listener_t	psets_listener;
 
 static int	psets_realloc(int);
 static int	psid_validate(psetid_t, bool);
 static int	kern_pset_create(psetid_t *);
 static int	kern_pset_destroy(psetid_t);
-
-static int
-psets_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
-    void *arg0, void *arg1, void *arg2, void *arg3)
-{
-	psetid_t id;
-	enum kauth_system_req req;
-	int result;
-
-	result = KAUTH_RESULT_DEFER;
-	req = (enum kauth_system_req)arg0;
-	id = (psetid_t)(unsigned long)arg1;
-
-	if (action != KAUTH_SYSTEM_PSET)
-		return result;
-
-	if ((req == KAUTH_REQ_SYSTEM_PSET_ASSIGN) ||
-	    (req == KAUTH_REQ_SYSTEM_PSET_BIND)) {
-		if (id == PS_QUERY)
-			result = KAUTH_RESULT_ALLOW;
-	}
-
-	return result;
-}
 
 /*
  * Initialization of the processor-sets.
@@ -94,12 +69,9 @@ void
 psets_init(void)
 {
 
-	psets_max = max(maxcpus, 32);
+	psets_max = max(MAXCPUS, 32);
 	psets = kmem_zalloc(psets_max * sizeof(void *), KM_SLEEP);
 	psets_count = 0;
-
-	psets_listener = kauth_listen_scope(KAUTH_SCOPE_SYSTEM,
-	    psets_listener_cb, NULL);
 }
 
 /*
@@ -366,15 +338,14 @@ sys_pset_assign(struct lwp *l, const struct sys_pset_assign_args *uap,
 		 * with this target CPU in it.
 		 */
 		LIST_FOREACH(t, &alllwp, l_list) {
-			if (t->l_affinity == NULL) {
+			if ((t->l_flag & LW_AFFINITY) == 0)
 				continue;
-			}
 			lwp_lock(t);
-			if (t->l_affinity == NULL) {
+			if ((t->l_flag & LW_AFFINITY) == 0) {
 				lwp_unlock(t);
 				continue;
 			}
-			if (kcpuset_isset(t->l_affinity, cpu_index(ci))) {
+			if (kcpuset_isset(cpu_index(ci), t->l_affinity)) {
 				lwp_unlock(t);
 				mutex_exit(proc_lock);
 				mutex_exit(&cpu_lock);
@@ -487,7 +458,7 @@ sys__pset_bind(struct lwp *l, const struct sys__pset_bind_args *uap,
 
 	/* Find the process */
 	mutex_enter(proc_lock);
-	p = proc_find(pid);
+	p = p_find(pid, PFIND_LOCKED);
 	if (p == NULL) {
 		mutex_exit(proc_lock);
 		error = ESRCH;

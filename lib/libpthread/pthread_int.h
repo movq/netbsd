@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_int.h,v 1.88 2012/11/21 19:19:24 christos Exp $	*/
+/*	$NetBSD: pthread_int.h,v 1.70 2008/06/28 10:29:37 ad Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2003, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -37,8 +37,6 @@
 #ifndef _LIB_PTHREAD_INT_H
 #define _LIB_PTHREAD_INT_H
 
-#include <sys/tls.h>
-
 /* #define PTHREAD__DEBUG */
 #define ERRORCHECK
 
@@ -50,12 +48,10 @@
 #include "../../common/lib/libc/atomic/atomic_op_namespace.h"
 
 #include <sys/atomic.h>
-#include <sys/rbtree.h>
+#include <sys/tree.h>
 
-#include <limits.h>
 #include <lwp.h>
 #include <signal.h>
-#include <stdbool.h>
 
 #ifdef __GNUC__
 #define	PTHREAD_HIDE	__attribute__ ((visibility("hidden")))
@@ -63,6 +59,7 @@
 #define	PTHREAD_HIDE	/* nothing */
 #endif
 
+#define PTHREAD_KEYS_MAX 	256
 #define	PTHREAD__UNPARK_MAX	32
 
 /*
@@ -95,9 +92,6 @@ struct pthread_lock_ops {
 
 struct	__pthread_st {
 	pthread_t	pt_self;	/* Must be first. */
-#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
-	struct tls_tcb	*pt_tls;	/* Thread Local Storage area */
-#endif
 	unsigned int	pt_magic;	/* Magic number */
 	int		pt_state;	/* running, blocked, etc. */
 	pthread_mutex_t	pt_lock;	/* lock on state */
@@ -105,8 +99,6 @@ struct	__pthread_st {
 	int		pt_cancel;	/* Deferred cancellation */
 	int		pt_errno;	/* Thread-specific errno. */
 	stack_t		pt_stack;	/* Our stack */
-	bool		pt_stack_allocated;
-	size_t		pt_guardsize;
 	void		*pt_exitval;	/* Read by pthread_join() */
 	char		*pt_name;	/* Thread's name, set by the app. */
 	int		pt_willpark;	/* About to park */
@@ -114,8 +106,6 @@ struct	__pthread_st {
 	struct pthread_lock_ops pt_lockops;/* Cached to avoid PIC overhead */
 	pthread_mutex_t	*pt_droplock;	/* Drop this lock if cancelled */
 	pthread_cond_t	pt_joiners;	/* Threads waiting to join. */
-	void		*(*pt_func)(void *);/* Function to call at start. */
-	void		*pt_arg;	/* Argument to pass at start. */
 
 	/* Threads to defer waking, usually until pthread_mutex_unlock(). */
 	lwpid_t		pt_waiters[PTHREAD__UNPARK_MAX];
@@ -126,7 +116,7 @@ struct	__pthread_st {
 
 	/* LWP ID and entry on the list of all threads. */
 	lwpid_t		pt_lid;
-	rb_node_t	pt_alltree;
+	RB_ENTRY(__pthread_st) pt_alltree;
 	PTQ_ENTRY(__pthread_st) pt_allq;
 	PTQ_ENTRY(__pthread_st)	pt_deadq;
 
@@ -148,10 +138,7 @@ struct	__pthread_st {
 
 	/* Thread-specific data.  Large so it sits close to the end. */
 	int		pt_havespecific;
-	struct pt_specific {
-		void *pts_value;
-		PTQ_ENTRY(pt_specific) pts_next;
-	} pt_specific[PTHREAD_KEYS_MAX];
+	void		*pt_specific[PTHREAD_KEYS_MAX];
 
 	/*
 	 * Context for thread creation.  At the end as it's cached
@@ -181,8 +168,10 @@ struct	__pthread_st {
 #define PT_ATTR_MAGIC	0x22220002
 #define PT_ATTR_DEAD	0xDEAD0002
 
+extern int	pthread__stacksize_lg;
 extern size_t	pthread__stacksize;
-extern size_t	pthread__pagesize;
+extern vaddr_t	pthread__stackmask;
+extern vaddr_t	pthread__threadmask;
 extern int	pthread__nspins;
 extern int	pthread__concurrency;
 extern int 	pthread__osrev;
@@ -242,6 +231,16 @@ int	pthread__simple_locked_p(__cpu_simple_lock_t *) PTHREAD_HIDE;
 #define	pthread__simple_lock_try(alp)	(*pthread__lock_ops->plo_try)(alp)
 #define	pthread__simple_unlock(alp)	(*pthread__lock_ops->plo_unlock)(alp)
 
+#ifndef _getcontext_u
+int	_getcontext_u(ucontext_t *) PTHREAD_HIDE;
+#endif
+#ifndef _setcontext_u
+int	_setcontext_u(const ucontext_t *) PTHREAD_HIDE;
+#endif
+#ifndef _swapcontext_u
+int	_swapcontext_u(ucontext_t *, const ucontext_t *) PTHREAD_HIDE;
+#endif
+
 void	pthread__testcancel(pthread_t) PTHREAD_HIDE;
 int	pthread__find(pthread_t) PTHREAD_HIDE;
 
@@ -258,21 +257,15 @@ int	pthread__find(pthread_t) PTHREAD_HIDE;
 	_INITCONTEXT_U_MD(ucp)						\
 	} while (/*CONSTCOND*/0)
 
+/* Stack location of pointer to a particular thread */
+#define pthread__id(sp) \
+	((pthread_t) (((vaddr_t)(sp)) & pthread__threadmask))
 
-#if !defined(__HAVE_TLS_VARIANT_I) && !defined(__HAVE_TLS_VARIANT_II)
-#error Either __HAVE_TLS_VARIANT_I or __HAVE_TLS_VARIANT_II must be defined
-#endif
-
-static inline pthread_t __constfunc
-pthread__self(void)
-{
-#ifdef __HAVE___LWP_GETTCB_FAST
-	struct tls_tcb * const tcb = __lwp_gettcb_fast();
+#ifdef PTHREAD__HAVE_THREADREG
+#define	pthread__self()		pthread__threadreg_get()
 #else
-	struct tls_tcb * const tcb = __lwp_getprivate_fast();
+#define pthread__self() 	(pthread__id(pthread__sp()))
 #endif
-	return (pthread_t)tcb->tcb_pthread;
-}
 
 #define pthread__abort()						\
 	pthread__assertfunc(__FILE__, __LINE__, __func__, "unreachable")
@@ -290,21 +283,17 @@ pthread__self(void)
         } while (/*CONSTCOND*/0)
 
 void	pthread__destroy_tsd(pthread_t) PTHREAD_HIDE;
-__dead void	pthread__assertfunc(const char *, int, const char *, const char *)
+void	pthread__assertfunc(const char *, int, const char *, const char *)
 			    PTHREAD_HIDE;
 void	pthread__errorfunc(const char *, int, const char *, const char *)
 			   PTHREAD_HIDE;
 char	*pthread__getenv(const char *) PTHREAD_HIDE;
-__dead void	pthread__cancelled(void) PTHREAD_HIDE;
+void	pthread__cancelled(void) PTHREAD_HIDE;
 void	pthread__mutex_deferwake(pthread_t, pthread_mutex_t *) PTHREAD_HIDE;
 int	pthread__checkpri(int) PTHREAD_HIDE;
-int	pthread__add_specific(pthread_t, pthread_key_t, const void *) PTHREAD_HIDE;
 
 #ifndef pthread__smt_pause
 #define	pthread__smt_pause()	/* nothing */
-#endif
-#ifndef pthread__smt_wake
-#define	pthread__smt_wake()	/* nothing */
 #endif
 
 /*

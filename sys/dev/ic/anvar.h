@@ -1,4 +1,4 @@
-/*	$NetBSD: anvar.h,v 1.20 2010/01/17 19:45:06 pooka Exp $	*/
+/*	$NetBSD: anvar.h,v 1.17 2008/07/03 18:10:08 drochner Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ctr.columbia.edu>.  All rights reserved.
@@ -114,6 +114,7 @@ struct an_softc	{
 				    enum ieee80211_state, int);
 
 	int			sc_enabled;
+	int			sc_invalid;
 	int			sc_attached;
 
 	int			sc_bap_id;
@@ -146,7 +147,7 @@ struct an_softc	{
 	}			sc_buf;
 
 	/* radiotap header */
-	struct bpf_if *			sc_drvbpf;
+	void *			sc_drvbpf;
 	union {
 		struct an_rx_radiotap_header	tap;
 		u_int8_t			pad[64];
@@ -163,7 +164,7 @@ struct an_softc	{
 
 int	an_attach(struct an_softc *);
 int	an_detach(struct an_softc *);
-int	an_activate(device_t, enum devact);
+int	an_activate(struct device *, enum devact);
 int	an_intr(void *);
 
 #endif	/* _DEV_IC_ANVAR_H */

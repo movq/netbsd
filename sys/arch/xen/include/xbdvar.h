@@ -1,4 +1,4 @@
-/* $NetBSD: xbdvar.h,v 1.14 2012/02/02 19:43:01 tls Exp $ */
+/* $NetBSD: xbdvar.h,v 1.11 2008/04/16 18:41:48 cegger Exp $ */
 
 /*
  *
@@ -13,6 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Christian Limpach.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,7 +44,9 @@ struct xbd_softc {
 	struct dk_intf		*sc_di;		/* pseudo-disk interface */
 	struct simplelock	sc_slock;	/* our lock */
 	int			sc_shutdown;	/* about to be removed */
-	krndsource_t	sc_rnd_source;
+#if NRND > 0
+	rndsource_element_t	sc_rnd_source;
+#endif
 };
 
 struct xbd_attach_args {

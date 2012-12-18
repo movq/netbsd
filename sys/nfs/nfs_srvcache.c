@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_srvcache.c,v 1.45 2009/03/15 17:20:10 cegger Exp $	*/
+/*	$NetBSD: nfs_srvcache.c,v 1.42 2008/05/05 17:11:17 ad Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -41,7 +41,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_srvcache.c,v 1.45 2009/03/15 17:20:10 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_srvcache.c,v 1.42 2008/05/05 17:11:17 ad Exp $");
+
+#include "opt_iso.h"
 
 #include <sys/param.h>
 #include <sys/vnode.h>
@@ -58,6 +60,9 @@ __KERNEL_RCSID(0, "$NetBSD: nfs_srvcache.c,v 1.45 2009/03/15 17:20:10 cegger Exp
 #include <sys/socketvar.h>
 
 #include <netinet/in.h>
+#ifdef ISO
+#include <netiso/iso.h>
+#endif
 #include <nfs/nfsm_subs.h>
 #include <nfs/rpcv2.h>
 #include <nfs/nfsproto.h>
@@ -82,7 +87,7 @@ static struct mowner nfsd_cache_mowner = MOWNER_INIT("nfsd", "cache");
 #endif /* defined(MBUFTRACE) */
 
 #define	NETFAMILY(rp) \
-		(((rp)->rc_flags & RC_INETADDR) ? AF_INET : -1)
+		(((rp)->rc_flags & RC_INETADDR) ? AF_INET : AF_ISO)
 
 static struct nfsrvcache *nfsrv_lookupcache(struct nfsrv_descript *nd);
 static void nfsrv_unlockcache(struct nfsrvcache *rp);
@@ -155,7 +160,7 @@ cleanentry(struct nfsrvcache *rp)
  * Initialize the server request cache list
  */
 void
-nfsrv_initcache(void)
+nfsrv_initcache()
 {
 
 	mutex_init(&nfsrv_reqcache_lock, MUTEX_DEFAULT, IPL_NONE);
@@ -167,23 +172,12 @@ nfsrv_initcache(void)
 	MOWNER_ATTACH(&nfsd_cache_mowner);
 }
 
-void
-nfsrv_finicache(void)
-{
-
-	nfsrv_cleancache();
-	KASSERT(TAILQ_EMPTY(&nfsrvlruhead));
-	pool_destroy(&nfs_reqcache_pool);
-	hashdone(nfsrvhashtbl, HASH_LIST, nfsrvhash);
-	MOWNER_DETACH(&nfsd_cache_mowner);
-	mutex_destroy(&nfsrv_reqcache_lock);
-}
-
 /*
  * Lookup a cache and lock it
  */
 static struct nfsrvcache *
-nfsrv_lookupcache(struct nfsrv_descript *nd)
+nfsrv_lookupcache(nd)
+	struct nfsrv_descript *nd;
 {
 	struct nfsrvcache *rp;
 
@@ -210,7 +204,8 @@ loop:
  * Unlock a cache
  */
 static void
-nfsrv_unlockcache(struct nfsrvcache *rp)
+nfsrv_unlockcache(rp)
+	struct nfsrvcache *rp;
 {
 
 	KASSERT(mutex_owned(&nfsrv_reqcache_lock));
@@ -235,7 +230,10 @@ nfsrv_unlockcache(struct nfsrvcache *rp)
  * Update/add new request at end of lru list
  */
 int
-nfsrv_getcache(struct nfsrv_descript *nd, struct nfssvc_sock *slp, struct mbuf **repp)
+nfsrv_getcache(nd, slp, repp)
+	struct nfsrv_descript *nd;
+	struct nfssvc_sock *slp;
+	struct mbuf **repp;
 {
 	struct nfsrvcache *rp, *rpdup;
 	struct mbuf *mb;
@@ -309,6 +307,7 @@ found:
 		rp->rc_flags |= RC_INETADDR;
 		rp->rc_inetaddr = saddr->sin_addr.s_addr;
 		break;
+	case AF_ISO:
 	default:
 		rp->rc_flags |= RC_NAM;
 		rp->rc_nam = m_copym(nd->nd_nam, 0, M_COPYALL, M_WAIT);
@@ -342,7 +341,10 @@ found:
  * Update a request cache entry after the rpc has been done
  */
 void
-nfsrv_updatecache(struct nfsrv_descript *nd, int repvalid, struct mbuf *repmbuf)
+nfsrv_updatecache(nd, repvalid, repmbuf)
+	struct nfsrv_descript *nd;
+	int repvalid;
+	struct mbuf *repmbuf;
 {
 	struct nfsrvcache *rp;
 
@@ -378,7 +380,7 @@ nfsrv_updatecache(struct nfsrv_descript *nd, int repvalid, struct mbuf *repmbuf)
  * Clean out the cache. Called when the last nfsd terminates.
  */
 void
-nfsrv_cleancache(void)
+nfsrv_cleancache()
 {
 	struct nfsrvcache *rp;
 

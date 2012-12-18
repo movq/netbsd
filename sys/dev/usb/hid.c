@@ -1,4 +1,4 @@
-/*	$NetBSD: hid.c,v 1.35 2012/02/24 06:48:23 mrg Exp $	*/
+/*	$NetBSD: hid.c,v 1.28.10.1 2010/11/21 03:05:04 riz Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/hid.c,v 1.11 1999/11/17 22:33:39 n_hibma Exp $ */
 
 /*
@@ -32,11 +32,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hid.c,v 1.35 2012/02/24 06:48:23 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hid.c,v 1.28.10.1 2010/11/21 03:05:04 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#if defined(__NetBSD__)
 #include <sys/kernel.h>
+#endif
 #include <sys/malloc.h>
 
 #include <dev/usb/usb.h>
@@ -45,8 +47,8 @@ __KERNEL_RCSID(0, "$NetBSD: hid.c,v 1.35 2012/02/24 06:48:23 mrg Exp $");
 #include <dev/usb/hid.h>
 
 #ifdef UHIDEV_DEBUG
-#define DPRINTF(x)	if (uhidevdebug) printf x
-#define DPRINTFN(n,x)	if (uhidevdebug>(n)) printf x
+#define DPRINTF(x)	if (uhidevdebug) logprintf x
+#define DPRINTFN(n,x)	if (uhidevdebug>(n)) logprintf x
 extern int uhidevdebug;
 #else
 #define DPRINTF(x)
@@ -176,6 +178,7 @@ hid_get_item(struct hid_data *s, struct hid_item *h)
 		case 2:
 			dval = *data++;
 			dval |= *data++ << 8;
+			dval = /*(int16_t)*/ dval;
 			break;
 		case 4:
 			dval = *data++;

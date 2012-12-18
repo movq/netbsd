@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_cv.c,v 1.55 2012/11/08 18:04:56 rkujawa Exp $ */
+/*	$NetBSD: grf_cv.c,v 1.46 2007/10/17 19:53:15 garbled Exp $ */
 
 /*
  * Copyright (c) 1995 Michael Teske
@@ -33,11 +33,9 @@
 #include "opt_amigacons.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_cv.c,v 1.55 2012/11/08 18:04:56 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_cv.c,v 1.46 2007/10/17 19:53:15 garbled Exp $");
 
 #include "grfcv.h"
-#include "ite.h"
-#include "wsdisplay.h"
 #if NGRFCV > 0
 
 /*
@@ -60,28 +58,28 @@ __KERNEL_RCSID(0, "$NetBSD: grf_cv.c,v 1.55 2012/11/08 18:04:56 rkujawa Exp $");
 #include <sys/malloc.h>
 #include <sys/systm.h>
 #include <sys/syslog.h>
-
 #include <machine/cpu.h>
-
 #include <dev/cons.h>
-#if NWSDISPLAY > 0
-#include <dev/wscons/wsconsio.h>
-#include <dev/wscons/wsdisplayvar.h>
-#include <dev/rasops/rasops.h>
-#include <dev/wscons/wsdisplay_vconsvar.h>
-#endif
-
 #include <amiga/dev/itevar.h>
 #include <amiga/amiga/device.h>
 #include <amiga/amiga/isr.h>
 #include <amiga/dev/grfioctl.h>
-#include <amiga/dev/grfws.h>
 #include <amiga/dev/grfvar.h>
 #include <amiga/dev/grf_cvreg.h>
 #include <amiga/dev/zbusvar.h>
 
-int	grfcvmatch(device_t, cfdata_t, void *);
-void	grfcvattach(device_t, device_t, void *);
+/*
+ * finish all bus operations, flush pipelines
+ * XXX is this really needed?
+ */
+#if defined(__m68k__)
+#define cpu_sync() __asm volatile ("nop")
+#elif defined(__powerpc__)
+#define cpu_sync() __asm volatile ("sync; isync")
+#endif
+
+int	grfcvmatch(struct device *, struct cfdata *, void *);
+void	grfcvattach(struct device *, struct device *, void *);
 int	grfcvprint(void *, const char *);
 
 int	cvintr(void *);
@@ -268,56 +266,8 @@ long cv_memclk = 55000000;
 long cv_memclk = 50000000;
 #endif
 
-#if NWSDISPLAY > 0
-/* wsdisplay acessops, emulops */
-static void	cv_wscursor(void *, int, int, int);
-static void	cv_wsputchar(void *, int, int, u_int, long);
-static void	cv_wscopycols(void *, int, int, int, int);
-static void	cv_wserasecols(void *, int, int, int, long);
-static void	cv_wscopyrows(void *, int, int, int);
-static void	cv_wseraserows(void *, int, int, long);
-static int	cv_wsallocattr(void *, int, int, int, long *);
-static int	cv_wsmapchar(void *, int, unsigned int *);
-
-static struct wsdisplay_accessops cv_accessops = {
-	.ioctl		= grf_wsioctl,
-	.mmap		= grf_wsmmap
-};
-
-static struct wsdisplay_emulops cv_textops = {
-	.cursor		= cv_wscursor,
-	.mapchar	= cv_wsmapchar,
-	.putchar	= cv_wsputchar,
-	.copycols	= cv_wscopycols,
-	.erasecols	= cv_wserasecols,
-	.copyrows	= cv_wscopyrows,
-	.eraserows	= cv_wseraserows,
-	.allocattr	= cv_wsallocattr
-};
-
-static struct ws_ao_ioctl cv_wsioctl = {
-	grf_wsaoginfo,
-	grf_wsaogetcmap,
-	grf_wsaoputcmap,
-	grf_wsaogvideo,
-	grf_wsaosvideo,
-	grf_wsaogmode,
-	grf_wsaosmode,
-	grf_wsaogtype
-};
-
-static struct wsscreen_descr cv_screen = {
-	.name		= "default",
-	.textops	= &cv_textops,
-	.fontwidth	= 8,
-	.fontheight	= S3FONTY,
-	.capabilities	= WSSCREEN_HILIT | WSSCREEN_BLINK |
-			  WSSCREEN_REVERSE | WSSCREEN_UNDERLINE
-};
-#endif  /* NWSDISPLAY > 0 */
-
 /* standard driver stuff */
-CFATTACH_DECL_NEW(grfcv, sizeof(struct grf_cv_softc),
+CFATTACH_DECL(grfcv, sizeof(struct grf_cv_softc),
     grfcvmatch, grfcvattach, NULL, NULL);
 
 static struct cfdata *cfdata;
@@ -396,7 +346,7 @@ cvintr(void *arg)
 
 		/* Restore the old CR index */
 		vgaw(ba, CRT_ADDRESS, cridx);
-		amiga_cpu_sync();
+		cpu_sync();
 #endif  /* !CV_NO_HARDWARE_CURSOR */
 		return (1);
 	}
@@ -418,7 +368,7 @@ cv_has_4mb(volatile void *fb)
 	testfbw = (volatile unsigned long *)fb;
 	testfbr = (volatile unsigned long *)((volatile char*)fb + 0x02000000);
 	*testfbw = 0x87654321;
-	amiga_cpu_sync();
+	cpu_sync();
 	if (*testfbr != 0x87654321)
 		return (0);
 
@@ -426,29 +376,29 @@ cv_has_4mb(volatile void *fb)
 	testfbw = (volatile unsigned long *)((volatile char*)fb + 0x00200000);
 	testfbr = (volatile unsigned long *)((volatile char*)fb + 0x02200000);
 	*testfbw = 0x87654321;
-	amiga_cpu_sync();
+	cpu_sync();
 	if (*testfbr != 0x87654321)
 		return (0);
 	*testfbw = 0xAAAAAAAA;
-	amiga_cpu_sync();
+	cpu_sync();
 	if (*testfbr != 0xAAAAAAAA)
 		return (0);
 	*testfbw = 0x55555555;
-	amiga_cpu_sync();
+	cpu_sync();
 	if (*testfbr != 0x55555555)
 		return (0);
 	return (1);
 }
 
 int
-grfcvmatch(device_t paren, cfdata_t cf, void *aux)
+grfcvmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 #ifdef CV64CONSOLE
 	static int cvcons_unit = -1;
 #endif
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 
 	if (amiga_realconfig == 0)
 #ifdef CV64CONSOLE
@@ -464,8 +414,8 @@ grfcvmatch(device_t paren, cfdata_t cf, void *aux)
 
 #ifdef CV64CONSOLE
 	if (amiga_realconfig == 0) {
-		cvcons_unit = cf->cf_unit;
-		cfdata = cf;
+		cvcons_unit = cfp->cf_unit;
+		cfdata = cfp;
 	}
 #endif
 
@@ -473,41 +423,35 @@ grfcvmatch(device_t paren, cfdata_t cf, void *aux)
 }
 
 void
-grfcvattach(device_t parent, device_t self, void *aux)
+grfcvattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	static struct grf_cv_softc congrf;
-	static char attachflag = 0;
-	struct device temp;
 	struct zbus_args *zap;
 	struct grf_softc *gp;
 	struct grf_cv_softc *gcp;
+	static char attachflag = 0;
 
-	zap = aux;
+	zap = auxp;
 
 	/*
-	 * This function is called twice, once on console init (self == NULL)
+	 * This function is called twice, once on console init (dp == NULL)
 	 * and once on "normal" grf5 init.
 	 */
 
-	if (self == NULL) {
+	if (dp == NULL) /* console init */
 		gcp = &congrf;
-		gp = &gcp->gcs_sc;
-		gp->g_device = &temp;
-		temp.dv_private = gp;
-	} else {
-		gcp = device_private(self);
-		gp = &gcp->gcs_sc;
-		gp->g_device = self;
-	}
+	else
+		gcp = (struct grf_cv_softc *)dp;
 
+	gp = &gcp->gcs_sc;
 
-	if (self != NULL && congrf.gcs_sc.g_regkva != 0) {
+	if (dp != NULL && congrf.gcs_sc.g_regkva != 0) {
 		/*
 		 * inited earlier, just copy (not device struct)
 		 */
 
 		printf("\n");
-		memcpy(&gp->g_display, &congrf.gcs_sc.g_display,
+		bcopy(&congrf.gcs_sc.g_display, &gp->g_display,
 			(char *) &gcp->gcs_isr - (char *) &gp->g_display);
 
 		/* ... and transfer the isr */
@@ -524,9 +468,7 @@ grfcvattach(device_t parent, device_t self, void *aux)
 
 		gp->g_unit = GRF_CV64_UNIT;
 		gp->g_mode = cv_mode;
-#if NITE > 0
 		gp->g_conpri = grfcv_cnprobe();
-#endif
 		gp->g_flags = GF_ALIVE;
 
 		/* add Interrupt Handler */
@@ -539,15 +481,7 @@ grfcvattach(device_t parent, device_t self, void *aux)
 		cv_boardinit(gp);
 
 #ifdef CV64CONSOLE
-#if NWSDISPLAY > 0
-		gp->g_accessops = &cv_accessops;
-		gp->g_emulops = &cv_textops;
-		gp->g_defaultscreen = cv_screen;
-		gp->g_screens[0] = &gp->g_defaultscreen;
-		gp->g_wsioctl = &cv_wsioctl;
-#else
 		grfcv_iteinit(gp);
-#endif
 		(void)cv_load_mon(gp, &cvconsole_mode);
 #endif
 	}
@@ -555,8 +489,8 @@ grfcvattach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach grf
 	 */
-	if (amiga_config_found(cfdata, gp->g_device, gp, grfcvprint)) {
-		if (self != NULL)
+	if (amiga_config_found(cfdata, &gp->g_device, gp, grfcvprint)) {
+		if (dp != NULL)
 			printf("grfcv: CyberVision64 with %dMB being used\n",
 			    cv_fbsize/0x100000);
 		attachflag = 1;
@@ -567,7 +501,7 @@ grfcvattach(device_t parent, device_t self, void *aux)
 }
 
 int
-grfcvprint(void *aux, const char *pnp)
+grfcvprint(void *auxp, const char *pnp)
 {
 	if (pnp)
 		aprint_normal("ite at %s: ", pnp);
@@ -661,14 +595,14 @@ cv_boardinit(struct grf_softc *gp)
 	 * Set the roxxler register to use interrupt #2, not #6.
 	 */
 #if CV_INT_NUM == 2
-	cv_write_port(0x8080, (volatile char*)ba - 0x02000000);
+	cv_write_port(0x8080, ba - 0x02000000);
 #endif
 
 	/* Enable board interrupts */
 	cv_write_port(0x8008, (volatile char*)ba - 0x02000000);
 
 	test = RCrt(ba, CRT_ID_SYSTEM_CONFIG);
-	test = test | 0x01;	/* enable enhanced register access */
+	test = test | 0x01;	/* enable enhaced register access */
 	test = test & 0xEF;	/* clear bit 4, 0 wait state */
 	WCrt(ba, CRT_ID_SYSTEM_CONFIG, test);
 
@@ -905,7 +839,7 @@ cv_getvmode(struct grf_softc *gp, struct grfvideo_mode *vm)
 #ifdef CV64CONSOLE
 	/* Handle grabbing console mode */
 	if (vm->mode_num == 255) {
-		memcpy(vm, &cvconsole_mode, sizeof(struct grfvideo_mode));
+		bcopy(&cvconsole_mode, vm, sizeof(struct grfvideo_mode));
 		/* XXX so grfconfig can tell us the correct text dimensions. */
 		vm->depth = cvconsole_mode.fy;
 	} else
@@ -919,7 +853,7 @@ cv_getvmode(struct grf_softc *gp, struct grfvideo_mode *vm)
 		if (gv->mode_num == 0)
 			return (EINVAL);
 
-		memcpy(vm, gv, sizeof(struct grfvideo_mode));
+		bcopy(gv, vm, sizeof(struct grfvideo_mode));
 	}
 
 	/* adjust internal values to pixel values */
@@ -976,13 +910,11 @@ cv_mode(register struct grf_softc *gp, u_long cmd, void *arg, u_long a2,
 
 	    case GM_GRFOFF:
 #ifndef CV64CONSOLE
-		cvscreen(1, (volatile char *)gp->g_regkva - 0x02000000);
+		cvscreen(1, gp->g_regkva - 0x02000000);
 #else
 		cv_load_mon(gp, &cvconsole_mode);
-#if NITE > 0
 		ite_reinit(gp->g_itedev);
 #endif
-#endif  /* CV64CONSOLE */
 		return (0);
 
 	    case GM_GRFCONFIG:
@@ -1074,7 +1006,7 @@ cv_setmonitor(struct grf_softc *gp, struct grfvideo_mode *gv)
 #ifdef CV64CONSOLE
 	/* handle interactive setting of console mode */
 	if (gv->mode_num == 255) {
-		memcpy(&cvconsole_mode.gv, gv, sizeof(struct grfvideo_mode));
+		bcopy(gv, &cvconsole_mode.gv, sizeof(struct grfvideo_mode));
 		cvconsole_mode.gv.hblank_start /= 8;
 		cvconsole_mode.gv.hsync_start /= 8;
 		cvconsole_mode.gv.hsync_stop /= 8;
@@ -1083,9 +1015,7 @@ cv_setmonitor(struct grf_softc *gp, struct grfvideo_mode *gv)
 		cvconsole_mode.cols = gv->disp_width / cvconsole_mode.fx;
 		if (!(gp->g_flags & GF_GRFON))
 			cv_load_mon(gp, &cvconsole_mode);
-#if NITE > 0
 		ite_reinit(gp->g_itedev);
-#endif
 		return (0);
 	}
 #endif
@@ -1102,7 +1032,7 @@ cv_setmonitor(struct grf_softc *gp, struct grfvideo_mode *gv)
 			return (EINVAL);
 		}
 
-	memcpy(md, gv, sizeof(struct grfvideo_mode));
+	bcopy(gv, md, sizeof(struct grfvideo_mode));
 
 	/* adjust pixel oriented values to internal rep. */
 
@@ -1599,7 +1529,7 @@ cv_load_mon(struct grf_softc *gp, struct grfcvtext_mode *md)
 
 	/*
 	 * M-Parameter of Display FIFO
-	 * This is dependent on the pixel clock and the memory clock.
+	 * This is dependant on the pixel clock and the memory clock.
 	 * The FIFO filling bandwidth is 240 MHz  and the FIFO is 96 Byte wide.
 	 * Then the time to fill the FIFO is tfill = (96/240000000) sec, the time
 	 * to empty the FIFO is tempty = (96/pixelclock) sec.
@@ -1930,7 +1860,7 @@ cv_setup_hwc(struct grf_softc *gp)
 	/* reset colour stack */
 #if !defined(__m68k__)
 	test = RCrt(ba, CRT_ID_HWGC_MODE);
-	amiga_cpu_sync();
+	cpu_sync();
 #else
 	/* do it in assembler, the above does't seem to work */
 	__asm volatile ("moveb #0x45, %1@(0x3d4); \
@@ -1945,7 +1875,7 @@ cv_setup_hwc(struct grf_softc *gp)
 
 #if !defined(__m68k__)
 	test = RCrt(ba, CRT_ID_HWGC_MODE);
-	amiga_cpu_sync();
+	cpu_sync();
 #else
 	/* do it in assembler, the above does't seem to work */
 	__asm volatile ("moveb #0x45, %1@(0x3d4); \
@@ -2187,7 +2117,7 @@ cv_setspriteinfo(struct grf_softc *gp, struct grf_spriteinfo *info)
 
 		/* reset colour stack */
 		test = RCrt(ba, CRT_ID_HWGC_MODE);
-		amiga_cpu_sync();
+		cpu_sync();
 		switch (depth) {
 		    case 8:
 		    case 15:
@@ -2206,7 +2136,7 @@ cv_setspriteinfo(struct grf_softc *gp, struct grf_spriteinfo *info)
 		}
 
 		test = RCrt(ba, CRT_ID_HWGC_MODE);
-		amiga_cpu_sync();
+		cpu_sync();
 		switch (depth) {
 		    case 8:
 			WCrt (ba, CRT_ID_HWGC_BG_STACK, 1);
@@ -2259,196 +2189,5 @@ cv_getspritemax (struct grf_softc *gp, struct grf_position *pos)
 }
 
 #endif /* !CV_NO_HARDWARE_CURSOR */
-
-#if NWSDISPLAY > 0
-
-static void
-cv_wscursor(void *c, int on, int row, int col) 
-{
-	struct rasops_info *ri;
-	struct vcons_screen *scr;
-	struct grf_softc *gp;
-	volatile void *ba;
-	int offs;
-
-	ri = c;
-	scr = ri->ri_hw;
-	gp = scr->scr_cookie;
-	ba = gp->g_regkva;
-
-	if ((ri->ri_flg & RI_CURSOR) && !on) {
-		/* cursor was visible, but we want to remove it */
-		/*WCrt(ba, CRT_ID_CURSOR_START, | 0x20);*/
-		ri->ri_flg &= ~RI_CURSOR;
-	}
-
-	ri->ri_crow = row;
-	ri->ri_ccol = col;
-
-	if (on) {
-		/* move cursor to new location */
-		if (!(ri->ri_flg & RI_CURSOR)) {
-			/*WCrt(ba, CRT_ID_CURSOR_START, | 0x20);*/
-			ri->ri_flg |= RI_CURSOR;
-		}
-		offs = gp->g_rowoffset[row] + col;
-		WCrt(ba, CRT_ID_CURSOR_LOC_LOW, offs & 0xff);
-		WCrt(ba, CRT_ID_CURSOR_LOC_HIGH, offs >> 8);
-	}
-}
-
-static void cv_wsputchar(void *c, int row, int col, u_int ch, long attr)
-{
-	struct rasops_info *ri;
-	struct vcons_screen *scr;
-	struct grf_softc *gp;
-	volatile unsigned char *cp;
-
-	ri = c;
-	scr = ri->ri_hw;
-	gp = scr->scr_cookie;
-	cp = gp->g_fbkva;
-	cp += (gp->g_rowoffset[row] + col) << 2;
-	*cp++ = ch;
-	*cp = attr;
-}
-
-static void     
-cv_wscopycols(void *c, int row, int srccol, int dstcol, int ncols) 
-{
-	struct rasops_info *ri;
-	struct vcons_screen *scr;
-	struct grf_softc *gp;
-	volatile uint16_t *src, *dst;
-
-	KASSERT(ncols > 0);
-	ri = c;
-	scr = ri->ri_hw;
-	gp = scr->scr_cookie;
-	src = dst = gp->g_fbkva;
-	src += (gp->g_rowoffset[row] + srccol) << 1;
-	dst += (gp->g_rowoffset[row] + dstcol) << 1;
-	if (src < dst) {
-		/* need to copy backwards */
-		src += (ncols - 1) << 1;
-		dst += (ncols - 1) << 1;
-		while (ncols--) {
-			*dst = *src;
-			src -= 2;
-			dst -= 2;
-		}
-	} else
-		while (ncols--) {
-			*dst = *src;
-			src += 2;
-			dst += 2;
-		}
-}
-
-static void     
-cv_wserasecols(void *c, int row, int startcol, int ncols, long fillattr)
-{
-	struct rasops_info *ri;
-	struct vcons_screen *scr;
-	struct grf_softc *gp;
-	volatile uint16_t *cp;
-	uint16_t val;
-
-	ri = c;
-	scr = ri->ri_hw;
-	gp = scr->scr_cookie;
-	cp = gp->g_fbkva;
-	val = 0x2000 | fillattr;
-	cp += (gp->g_rowoffset[row] + startcol) << 1;
-	while (ncols--) {
-		*cp = val;
-		cp += 2;
-	}
-}
-
-static void     
-cv_wscopyrows(void *c, int srcrow, int dstrow, int nrows) 
-{
-	struct rasops_info *ri;
-	struct vcons_screen *scr;
-	struct grf_softc *gp;
-	volatile uint16_t *src, *dst;
-	int n;
-
-	KASSERT(nrows > 0);
-	ri = c;
-	scr = ri->ri_hw;
-	gp = scr->scr_cookie;
-	src = dst = gp->g_fbkva;
-	n = ri->ri_cols * nrows;
-	if (src < dst) {
-		/* need to copy backwards */
-		src += gp->g_rowoffset[srcrow + nrows] << 1;
-		dst += gp->g_rowoffset[dstrow + nrows] << 1;
-		while (n--) {
-			src -= 2;
-			dst -= 2;
-			*dst = *src;
-		}
-	} else {
-		src += gp->g_rowoffset[srcrow] << 1;
-		dst += gp->g_rowoffset[dstrow] << 1;
-		while (n--) {
-			*dst = *src;
-			src += 2;
-			dst += 2;
-		}
-	}
-}
-
-static void     
-cv_wseraserows(void *c, int row, int nrows, long fillattr) 
-{
-	struct rasops_info *ri;
-	struct vcons_screen *scr;
-	struct grf_softc *gp;
-	volatile uint16_t *cp;
-	int n;
-	uint16_t val;
-
-	ri = c;
-	scr = ri->ri_hw;
-	gp = scr->scr_cookie;
-	cp = gp->g_fbkva;
-	val = 0x2000 | fillattr;
-	cp += gp->g_rowoffset[row] << 1;
-	n = ri->ri_cols * nrows;
-	while (n--) {
-		*cp = val;
-		cp += 2;
-	}
-}
-
-static int
-cv_wsallocattr(void *c, int fg, int bg, int flg, long *attr)
-{
-
-	/* XXX color support? */
-	*attr = (flg & WSATTR_REVERSE) ? 0x70 : 0x07;
-	if (flg & WSATTR_UNDERLINE)	*attr = 0x01;
-	if (flg & WSATTR_HILIT)		*attr |= 0x08;
-	if (flg & WSATTR_BLINK)		*attr |= 0x80;
-	return 0;
-}
-
-/* our font does not support unicode extensions */
-static int      
-cv_wsmapchar(void *c, int ch, unsigned int *cp)
-{
-
-	if (ch > 0 && ch < 256) {
-		*cp = ch;
-		return 5;
-	}
-	*cp = ' ';
-	return 0;
-}
-
-#endif  /* NWSDISPLAY > 0 */
 
 #endif  /* NGRFCV */

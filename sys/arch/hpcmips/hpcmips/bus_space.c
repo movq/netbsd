@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.31 2012/01/27 18:52:56 para Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.26 2008/04/28 20:23:21 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.31 2012/01/27 18:52:56 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.26 2008/04/28 20:23:21 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,7 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.31 2012/01/27 18:52:56 para Exp $");
 #include <uvm/uvm_extern.h>
 
 #include <mips/cache.h>
-#include <mips/locore.h>
 #include <mips/pte.h>
 #include <machine/bus.h>
 #include <machine/bus_space_hpcmips.h>
@@ -153,21 +152,21 @@ static struct bus_space_tag_hpcmips __sys_bus_space = {
 static bus_space_tag_t __sys_bus_space_tag = &__sys_bus_space.bst;
 
 bus_space_tag_t
-hpcmips_system_bus_space(void)
+hpcmips_system_bus_space()
 {
 
 	return (__sys_bus_space_tag);
 }
 
 struct bus_space_tag_hpcmips *
-hpcmips_system_bus_space_hpcmips(void)
+hpcmips_system_bus_space_hpcmips()
 {
 
 	return (&__sys_bus_space);
 }
 
 struct bus_space_tag_hpcmips *
-hpcmips_alloc_bus_space_tag(void)
+hpcmips_alloc_bus_space_tag()
 {
 
 	if (__bus_space_index >= MAX_BUSSPACE_TAG) {
@@ -210,13 +209,13 @@ hpcmips_init_bus_space(struct bus_space_tag_hpcmips *t,
 		t->base = va; /* kseg2 addr */
 				
 		for (; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
-			pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
+			pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
 		}
 		pmap_update(pmap_kernel());
 	}
 
 	t->extent = (void*)extent_create(t->name, t->base, 
-	    t->base + t->size,
+	    t->base + t->size, M_DEVBUF,
 	    0, 0, EX_NOWAIT);
 	if (!t->extent) {
 		panic("hpcmips_init_bus_space_extent:"
@@ -251,7 +250,7 @@ __hpcmips_cacheable(struct bus_space_tag_hpcmips *t, bus_addr_t bpa,
 			/*
 			 * Update the same virtual address entry.
 			 */
-			tlb_update(va, opte);
+			MachTLBUpdate(va, opte);
 		}
 		return (bpa);
 	}

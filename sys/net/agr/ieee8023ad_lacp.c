@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee8023ad_lacp.c,v 1.10 2011/07/01 02:46:24 joerg Exp $	*/
+/*	$NetBSD: ieee8023ad_lacp.c,v 1.8.36.1 2009/06/05 18:49:43 snj Exp $	*/
 
 /*-
  * Copyright (c)2005 YAMAMOTO Takashi,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ieee8023ad_lacp.c,v 1.10 2011/07/01 02:46:24 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee8023ad_lacp.c,v 1.8.36.1 2009/06/05 18:49:43 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -101,7 +101,6 @@ ieee8023ad_lacp_input(struct ifnet *ifp, struct mbuf *m)
 	if (__predict_false(port->port_flags & AGRPORT_DETACHING)) {
 		goto bad;
 	}
-
 	sc = AGR_SC_FROM_PORT(port);
 	KASSERT(port);
 
@@ -447,7 +446,7 @@ ieee8023ad_portinit(struct agr_port *port)
 {
 	struct ieee8023ad_port *iport = IEEE8023AD_PORT(port);
 
-	memset(iport, 0, sizeof(*iport));
+	memset(iport, 0, sizeof(iport));
 
 	lacp_portinit(port);
 }

@@ -1,9 +1,8 @@
-#	$NetBSD: Makefile,v 1.22 2012/10/01 19:27:04 bouyer Exp $
+#	$NetBSD: Makefile,v 1.10 2007/02/19 18:26:22 chs Exp $
 
 .include <bsd.own.mk>
 
-MODULE=		gdb
-GNUHOSTDIST=    ${.CURDIR}/../../external/gpl3/gdb/dist
+MODULE=		gdb6
 
 FIND_ARGS=	\! \( -type d -name sim -prune \)
 
@@ -15,9 +14,9 @@ MAKE_ARGS=	MACHINE= MAKEINFO=${TOOL_MAKEINFO:Q}
 ALL_TARGET=	all-gdb
 INSTALL_TARGET=	install-gdb
 
-.include "${.CURDIR}/../Makefile.gmakehost"
+.include "${.CURDIR}/../Makefile.gnuhost"
 
-CCADDFLAGS=	--sysroot=${DESTDIR} -L${DESTDIR}/lib -L${DESTDIR}/usr/lib -B${DESTDIR}/usr/lib/ -I${.OBJDIR}/.native/gcc/include
+CCADDFLAGS=     ${CPPFLAG_ISYSTEM} ${DESTDIR}/usr/include -L${DESTDIR}/lib -L${DESTDIR}/usr/lib -B${DESTDIR}/usr/lib/
 
 NEWCONFIGDIR?=	${.CURDIR}/../..
 MKNATIVE?=	${.CURDIR}/mknative-gdb
@@ -34,19 +33,11 @@ MKNATIVE_CONFIGURE_PRESET= \
 	bash_cv_func_strcoll_broken=no \
 	bash_cv_must_reinstall_sighandlers=no
 
-# Recent versions of Solaris have ncurses, but they hide the lib in an
-# odd directory. Prevent configure from finding the ncurses headers,
-# Solaris curses is sufficient.
-.if ${BUILD_OSTYPE} == "SunOS"
-CONFIGURE_ENV+=	ac_cv_header_ncurses_h=no \
-		ac_cv_header_ncurses_ncurses_h=no \
-		ac_cv_header_ncurses_term_h=no
-.endif
-
 # Disable sim unless it's known to work (configure's default is to
 # enable sim if supported).
 CONFIGURE_ARGS_SIM=
 .if \
+    ${MACHINE_CPU} != "xxmips" && \
     ${MACHINE_CPU} != "powerpc" && \
     ${MACHINE_CPU} != "powerpc64"
 CONFIGURE_ARGS_SIM+= --disable-sim
@@ -65,7 +56,7 @@ native-gdb: .native/.configure_done
 			CC=${CC:Q}' '${CCADDFLAGS:Q} \
 			CXX=${CXX:Q}' '${CCADDFLAGS:Q} \
 			CPP=${CPP:Q}' '-isystem' '${DESTDIR}/usr/include \
-			CFLAGS= CPPFLAGS= CXXFLAGS= LDFLAGS=${LDADDFLAGS:Q} \
+			CFLAGS= CPPFLAGS= CXXFLAGS= LDFLAGS= \
 			MSGFMT=${TOOLDIR}/bin/${_TOOL_PREFIX}msgfmt \
 			XGETTEXT=${TOOLDIR}/bin/${_TOOL_PREFIX}xgettext \
 			LIBS=-lintl \

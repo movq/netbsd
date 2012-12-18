@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gem_sbus.c,v 1.13 2009/09/17 16:28:12 tsutsui Exp $	*/
+/*	$NetBSD: if_gem_sbus.c,v 1.7 2008/05/06 21:24:40 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gem_sbus.c,v 1.13 2009/09/17 16:28:12 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gem_sbus.c,v 1.7 2008/05/06 21:24:40 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,18 +62,19 @@ __KERNEL_RCSID(0, "$NetBSD: if_gem_sbus.c,v 1.13 2009/09/17 16:28:12 tsutsui Exp
 
 struct gem_sbus_softc {
 	struct	gem_softc	gsc_gem;	/* GEM device */
+	struct sbusdev		gsc_sd;
 	void			*gsc_ih;
 	bus_space_handle_t	gsc_sbus_regs_h;
 };
 
-int	gemmatch_sbus(device_t, cfdata_t, void *);
-void	gemattach_sbus(device_t, device_t, void *);
+int	gemmatch_sbus(struct device *, struct cfdata *, void *);
+void	gemattach_sbus(struct device *, struct device *, void *);
 
-CFATTACH_DECL3_NEW(gem_sbus, sizeof(struct gem_sbus_softc),
-    gemmatch_sbus, gemattach_sbus, NULL, NULL, NULL, NULL, 0);
+CFATTACH_DECL(gem_sbus, sizeof(struct gem_sbus_softc),
+    gemmatch_sbus, gemattach_sbus, NULL, NULL);
 
 int
-gemmatch_sbus(device_t parent, cfdata_t cf, void *aux)
+gemmatch_sbus(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -81,18 +82,22 @@ gemmatch_sbus(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-gemattach_sbus(device_t parent, device_t self, void *aux)
+gemattach_sbus(struct device *parent, struct device *self, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
-	struct gem_sbus_softc *gsc = device_private(self);
+	struct gem_sbus_softc *gsc = (void *)self;
 	struct gem_softc *sc = &gsc->gsc_gem;
 	uint8_t enaddr[ETHER_ADDR_LEN];
-
-	sc->sc_dev = self;
 
 	/* Pass on the bus tags */
 	sc->sc_bustag = sa->sa_bustag;
 	sc->sc_dmatag = sa->sa_dmatag;
+
+	sc->sc_chiprev = prom_getpropint(sa->sa_node, "gem-rev", 0);
+
+	printf(": GEM Ethernet controller (%s), version %s (rev 0x%02x)\n",
+	    sa->sa_name, prom_getpropstring(sa->sa_node, "version"),
+	    sc->sc_chiprev);
 
 	if (sa->sa_nreg < 2) {
 		printf("%s: only %d register sets\n",
@@ -123,12 +128,12 @@ gemattach_sbus(device_t parent, device_t self, void *aux)
 		aprint_error_dev(self, "cannot map registers\n");
 		return;
 	}
+	sbus_establish(&gsc->gsc_sd, self);
 	prom_getether(sa->sa_node, enaddr);
 
 	if (!strcmp("serdes", prom_getpropstring(sa->sa_node, "shared-pins")))
 		sc->sc_flags |= GEM_SERDES;
 	sc->sc_variant = GEM_SUN_GEM;
-	sc->sc_flags &= ~GEM_PCI;
 
 	/*
 	 * SBUS config
@@ -137,12 +142,6 @@ gemattach_sbus(device_t parent, device_t self, void *aux)
 	delay(100);
 	bus_space_write_4(sa->sa_bustag, sc->sc_h2, GEM_SBUS_CONFIG,
 	    GEM_SBUS_CFG_BSIZE128|GEM_SBUS_CFG_PARITY|GEM_SBUS_CFG_BMODE64);
-	sc->sc_chiprev = bus_space_read_4(sa->sa_bustag, sc->sc_h2,
-	    GEM_SBUS_REVISION);
-
-	printf(": GEM Ethernet controller (%s), version %s (rev 0x%02x)\n",
-	    sa->sa_name, prom_getpropstring(sa->sa_node, "version"),
-	    sc->sc_chiprev);
 
 	gem_attach(sc, enaddr);
 

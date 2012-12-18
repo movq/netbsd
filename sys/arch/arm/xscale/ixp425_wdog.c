@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_wdog.c,v 1.4 2012/10/14 14:20:58 msaitoh Exp $	*/
+/*	$NetBSD: ixp425_wdog.c,v 1.2 2008/04/28 20:23:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp425_wdog.c,v 1.4 2012/10/14 14:20:58 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_wdog.c,v 1.2 2008/04/28 20:23:14 martin Exp $");
 
 #include <sys/systm.h>
 #include <sys/param.h>
@@ -44,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_wdog.c,v 1.4 2012/10/14 14:20:58 msaitoh Exp 
 #include <dev/sysmon/sysmonvar.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/xscale/ixp425reg.h>
 #include <arm/xscale/ixp425var.h>
@@ -56,6 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_wdog.c,v 1.4 2012/10/14 14:20:58 msaitoh Exp 
 #endif
 
 struct ixpdog_softc {
+	struct device sc_dev;
 	struct sysmon_wdog sc_smw;
 	bus_space_tag_t sc_bust;
 	bus_space_handle_t sc_bush;
@@ -70,10 +71,10 @@ struct ixpdog_softc {
 #define	IXPDOG_COUNTS_PER_SEC	IXP425_CLOCK_FREQ
 #endif
 
-static int ixpdog_match(device_t, cfdata_t, void *);
-static void ixpdog_attach(device_t, device_t, void *);
+static int ixpdog_match(struct device *, struct cfdata *, void *);
+static void ixpdog_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ixpdog, sizeof(struct ixpdog_softc),
+CFATTACH_DECL(ixpdog, sizeof(struct ixpdog_softc),
     ixpdog_match, ixpdog_attach, NULL, NULL);
 
 static void ixpdog_control(struct ixpdog_softc *, int);
@@ -87,18 +88,18 @@ static void ixpdog_ddb_trap(int);
 
 
 static int
-ixpdog_match(device_t parent, cfdata_t cf, void *aux)
+ixpdog_match(struct device *parent, struct cfdata *match, void *arg)
 {
-	struct ixpsip_attach_args *sa = aux;
+	struct ixpsip_attach_args *sa = arg;
 
 	return (sa->sa_addr == IXP425_OST_WDOG_HWBASE);
 }
 
 static void
-ixpdog_attach(device_t parent, device_t self, void *aux)
+ixpdog_attach(struct device *parent, struct device *self, void *arg)
 {
-	struct ixpdog_softc *sc = device_private(self);
-	struct ixpsip_attach_args *sa = aux;
+	struct ixpdog_softc *sc = (struct ixpdog_softc *)self;
+	struct ixpsip_attach_args *sa = arg;
 
 	aprint_naive("\n");
 	aprint_normal(": Watchdog Timer\n");
@@ -107,7 +108,8 @@ ixpdog_attach(device_t parent, device_t self, void *aux)
 
 	if (bus_space_map(sc->sc_bust, sa->sa_addr, IXP425_OST_WDOG_SIZE, 0,
 	    &sc->sc_bush)) {
-		aprint_error_dev(self, "Failed to map watchdog registers\n");
+		aprint_error("%s: Failed to map watchdog registers\n",
+		    sc->sc_dev.dv_xname);
 		return;
 	}
 
@@ -120,14 +122,15 @@ ixpdog_attach(device_t parent, device_t self, void *aux)
 	db_trap_callback = ixpdog_ddb_trap;
 #endif
 
-	sc->sc_smw.smw_name = device_xname(self);
+	sc->sc_smw.smw_name = sc->sc_dev.dv_xname;
 	sc->sc_smw.smw_cookie = sc;
 	sc->sc_smw.smw_setmode = ixpdog_setmode;
 	sc->sc_smw.smw_tickle = ixpdog_tickle;
 	sc->sc_smw.smw_period = IXPDOG_DEFAULT_PERIOD;
 
 	if (sysmon_wdog_register(&sc->sc_smw) != 0)
-		aprint_error_dev(self, "unable to register watchdog with sysmon\n");
+		aprint_error("%s: unable to register watchdog with sysmon\n",
+		    sc->sc_dev.dv_xname);
 }
 
 static void

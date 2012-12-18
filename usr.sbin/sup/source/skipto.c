@@ -1,4 +1,4 @@
-/*	$NetBSD: skipto.c,v 1.6 2009/10/16 12:41:37 christos Exp $	*/
+/*	$NetBSD: skipto.c,v 1.5 2002/07/10 20:19:43 wiz Exp $	*/
 
 /*
  * Copyright (c) 1991 Carnegie Mellon University
@@ -58,9 +58,9 @@
 static char tab[256] = { 0 };
 
 char *
-skipto(const char *string, const char *charset)
+skipto(char *string, char *charset)
 {
-	const char *setp, *strp;
+	char *setp, *strp;
 
 	tab[0] = 1;		/* Stop on a null, too. */
 	for (setp = charset; *setp; setp++)
@@ -69,13 +69,13 @@ skipto(const char *string, const char *charset)
 		continue;
 	for (setp = charset; *setp; setp++)
 		tab[(unsigned char) *setp] = 0;
-	return __UNCONST(strp);
+	return strp;
 }
 
 char *
-skipover(const char *string, const char *charset)
+skipover(char *string, char *charset)
 {
-	const char *setp, *strp;
+	char *setp, *strp;
 
 	tab[0] = 0;		/* Do not skip over nulls. */
 	for (setp = charset; *setp; setp++)
@@ -84,5 +84,5 @@ skipover(const char *string, const char *charset)
 		continue;
 	for (setp = charset; *setp; setp++)
 		tab[(unsigned char) *setp] = 0;
-	return __UNCONST(strp);
+	return strp;
 }

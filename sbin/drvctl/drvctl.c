@@ -1,4 +1,4 @@
-/* $NetBSD: drvctl.c,v 1.16 2012/01/17 08:22:09 wiz Exp $ */
+/* $NetBSD: drvctl.c,v 1.6.10.4 2011/08/14 23:44:48 riz Exp $ */
 
 /*
  * Copyright (c) 2004
@@ -43,9 +43,8 @@
 	(((mode) == 'd' || (mode) == 'r') ? O_RDWR			\
 					  : O_RDONLY)
 
-__dead static void usage(void);
-static void extract_property(prop_dictionary_t, const char *, bool);
-static void display_object(prop_object_t, bool);
+static void usage(void);
+static void extract_property(prop_dictionary_t, const char *);
 static void list_children(int, char *, bool, bool, int);
 
 static void
@@ -55,7 +54,7 @@ usage(void)
 	fprintf(stderr, "Usage: %s -r [-a attribute] busdevice [locator ...]\n"
 	    "       %s -d device\n"
 	    "       %s [-nt] -l [device]\n"
-	    "       %s [-n] -p device [prop]\n"
+	    "       %s -p device [prop]\n"
 	    "       %s -Q device\n"
 	    "       %s -R device\n"
 	    "       %s -S device\n",
@@ -201,15 +200,12 @@ main(int argc, char **argv)
 
 		if (argc == 1) {
 			xml = prop_dictionary_externalize(data_dict);
-			if (!nflag) {
-				printf("Properties for device `%s':\n",
-				    argv[0]);
-			}
-			printf("%s", xml);
+			printf("Properties for device `%s':\n%s",
+			       argv[0], xml);
 			free(xml);
 		} else {
 			for (i = 1; i < argc; i++)
-				extract_property(data_dict, argv[i], nflag);
+				extract_property(data_dict, argv[i]);
 		}
 
 		prop_object_release(results_dict);
@@ -222,9 +218,9 @@ main(int argc, char **argv)
 }
 
 static void
-extract_property(prop_dictionary_t dict, const char *prop, bool nflag)
+extract_property(prop_dictionary_t dict, const char *prop)
 {
-	char *s, *p, *cur, *ep = NULL;
+	char *s, *p, *cur, *ep = NULL, *xml;
 	prop_object_t obj;
 
 	s = strdup(prop);
@@ -232,53 +228,41 @@ extract_property(prop_dictionary_t dict, const char *prop, bool nflag)
 	while (p) {
 		cur = p;
 		p = strtok_r(NULL, "/", &ep);
+		obj = prop_dictionary_get(dict, cur);
+		if (obj == NULL)
+			exit(EXIT_FAILURE);
 		if (p) {
-			if (prop_dictionary_get_dict(dict, cur, &dict) == false)
+			if (prop_object_type(obj) != PROP_TYPE_DICTIONARY)
 				exit(EXIT_FAILURE);
+			dict = obj;
 		} else {
-			obj = prop_dictionary_get(dict, cur);
-			display_object(obj, nflag);
+			switch (prop_object_type(obj)) {
+			case PROP_TYPE_BOOL:
+				printf("%s\n",
+				    prop_bool_true(obj) ? "true" : "false");
+				break;
+			case PROP_TYPE_NUMBER:
+				printf("%" PRId64 "\n",
+				    prop_number_integer_value(obj));
+				break;
+			case PROP_TYPE_STRING:
+				printf("%s\n",
+				    prop_string_cstring_nocopy(obj));
+				break;
+			case PROP_TYPE_DICTIONARY:
+				xml = prop_dictionary_externalize(obj);
+				printf("%s", xml);
+				free(xml);
+				break;
+			default:
+				fprintf(stderr, "unhandled type %d\n",
+				    prop_object_type(obj));
+				exit(EXIT_FAILURE);
+			}
 		}
 	}
 
 	free(s);
-}
-
-static void
-display_object(prop_object_t obj, bool nflag)
-{
-	char *xml;
-	prop_object_t next_obj;
-	prop_object_iterator_t iter;
-
-	if (obj == NULL)
-		exit(EXIT_FAILURE);
-	switch (prop_object_type(obj)) {
-	case PROP_TYPE_BOOL:
-		printf("%s\n", prop_bool_true(obj) ? "true" : "false");
-		break;
-	case PROP_TYPE_NUMBER:
-		printf("%" PRId64 "\n", prop_number_integer_value(obj));
-		break;
-	case PROP_TYPE_STRING:
-		printf("%s\n", prop_string_cstring_nocopy(obj));
-		break;
-	case PROP_TYPE_DICTIONARY:
-		xml = prop_dictionary_externalize(obj);
-		printf("%s", xml);
-		free(xml);
-		break;
-	case PROP_TYPE_ARRAY:
-		iter = prop_array_iterator(obj);
-		if (!nflag)
-			printf("Array:\n");
-		while ((next_obj = prop_object_iterator_next(iter)) != NULL)
-			display_object(next_obj, nflag);
-		break;
-	default:
-		fprintf(stderr, "unhandled type %d\n", prop_object_type(obj));
-		exit(EXIT_FAILURE);
-	}
 }
 
 static void

@@ -1,4 +1,4 @@
-/*	$NetBSD: joy_isa.c,v 1.14 2011/12/05 19:20:54 christos Exp $	*/
+/*	$NetBSD: joy_isa.c,v 1.12 2008/03/26 18:27:07 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1995 Jean-Marc Zucconi
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: joy_isa.c,v 1.14 2011/12/05 19:20:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: joy_isa.c,v 1.12 2008/03/26 18:27:07 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,15 +48,10 @@ __KERNEL_RCSID(0, "$NetBSD: joy_isa.c,v 1.14 2011/12/05 19:20:54 christos Exp $"
 
 #define JOY_NPORTS    1
 
-struct joy_isa_softc {
-	struct joy_softc	sc_joy;
-	kmutex_t		sc_lock;
-};
-
 static int	joy_isa_probe(device_t, cfdata_t, void *);
 static void	joy_isa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL_NEW(joy_isa, sizeof(struct joy_isa_softc),
+CFATTACH_DECL_NEW(joy_isa, sizeof(struct joy_softc),
     joy_isa_probe, joy_isa_attach, NULL, NULL);
 
 static int
@@ -101,8 +96,7 @@ joy_isa_probe(device_t parent, cfdata_t match, void *aux)
 static void
 joy_isa_attach(device_t parent, device_t self, void *aux)
 {
-	struct joy_isa_softc *isc = device_private(self);
-	struct joy_softc *sc = &isc->sc_joy;
+	struct joy_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 
 	aprint_normal("\n");
@@ -115,9 +109,6 @@ joy_isa_attach(device_t parent, device_t self, void *aux)
 		aprint_error_dev(self, "can't map i/o space\n");
 		return;
 	}
-
-	mutex_init(&isc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	sc->sc_lock = &isc->sc_lock;
 
 	joyattach(sc);
 }

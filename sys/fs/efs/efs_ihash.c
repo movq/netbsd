@@ -1,4 +1,4 @@
-/*	$NetBSD: efs_ihash.c,v 1.9 2012/04/29 20:27:31 dsl Exp $	*/
+/*	$NetBSD: efs_ihash.c,v 1.4 2008/05/05 17:11:16 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -36,11 +36,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: efs_ihash.c,v 1.9 2012/04/29 20:27:31 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: efs_ihash.c,v 1.4 2008/05/05 17:11:16 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/proc.h>
 #include <sys/mutex.h>
@@ -69,6 +68,8 @@ static u_long	ihash;		/* size of hash table - 1 */
 
 static kmutex_t	efs_ihash_lock;
 static kmutex_t	efs_hashlock;
+
+MALLOC_DECLARE(M_EFSINO);
 
 /*
  * Initialize inode hash table.
@@ -143,9 +144,9 @@ efs_ihashget(dev_t dev, ino_t inum, int flags)
 			if (flags == 0) {
 				mutex_exit(&efs_ihash_lock);
 			} else {
-				mutex_enter(vp->v_interlock);
+				mutex_enter(&vp->v_interlock);
 				mutex_exit(&efs_ihash_lock);
-				if (vget(vp, flags))
+				if (vget(vp, flags | LK_INTERLOCK))
 					goto loop;
 			}
 			return (vp);
@@ -166,7 +167,7 @@ efs_ihashins(struct efs_inode *eip)
 	KASSERT(mutex_owned(&efs_hashlock));
 
 	/* lock the inode, then put it on the appropriate hash list */
-	VOP_LOCK(EFS_ITOV(eip), LK_EXCLUSIVE);
+	vlockmgr(&eip->ei_vp->v_lock, LK_EXCLUSIVE);
 
 	mutex_enter(&efs_ihash_lock);
 	ipp = &ihashtbl[INOHASH(eip->ei_dev, eip->ei_number)];

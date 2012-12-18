@@ -1,4 +1,4 @@
-/* $NetBSD: hpet.c,v 1.13 2011/10/31 12:47:15 yamt Exp $ */
+/* $NetBSD: hpet.c,v 1.6.14.1 2012/01/25 21:18:15 riz Exp $ */
 
 /*
  * Copyright (c) 2006 Nicolas Joly
@@ -33,11 +33,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpet.c,v 1.13 2011/10/31 12:47:15 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpet.c,v 1.6.14.1 2012/01/25 21:18:15 riz Exp $");
 
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/module.h>
+#include <sys/malloc.h>
 
 #include <sys/time.h>
 #include <sys/timetc.h>
@@ -48,32 +48,14 @@ __KERNEL_RCSID(0, "$NetBSD: hpet.c,v 1.13 2011/10/31 12:47:15 yamt Exp $");
 #include <dev/ic/hpetvar.h>
 
 static u_int	hpet_get_timecount(struct timecounter *);
-static bool	hpet_resume(device_t, const pmf_qual_t *);
-
-int
-hpet_detach(device_t dv, int flags)
-{
-	struct hpet_softc *sc = device_private(dv);
-	int rc;
-
-	if ((rc = tc_detach(&sc->sc_tc)) != 0)
-		return rc;
-
-	pmf_device_deregister(dv);
-
-	bus_space_write_4(sc->sc_memt, sc->sc_memh, HPET_CONFIG, sc->sc_config);
-
-	return 0;
-}
+static bool	hpet_resume(device_t PMF_FN_PROTO);
 
 void
 hpet_attach_subr(device_t dv)
 {
 	struct hpet_softc *sc = device_private(dv);
 	struct timecounter *tc;
-	uint64_t tmp;
 	uint32_t val;
-	int i;
 
 	tc = &sc->sc_tc;
 
@@ -85,31 +67,14 @@ hpet_attach_subr(device_t dv)
 
 	/* Get frequency */
 	val = bus_space_read_4(sc->sc_memt, sc->sc_memh, HPET_PERIOD);
-	if (val == 0 || val > HPET_PERIOD_MAX) {
+	if (val == 0) {
 		aprint_error_dev(dv, "invalid timer period\n");
 		return;
 	}
-
-	/*
-	 * The following loop is a workaround for AMD SB700 based systems.
-	 * http://kerneltrap.org/mailarchive/git-commits-head/2008/8/17/2964724
-	 * http://git.kernel.org/git/?p=linux/kernel/git/torvalds/linux-2.6.git;a=commit;h=a6825f1c1fa83b1e92b6715ee5771a4d6524d3b9
-	 */
-	for (i = 0; bus_space_read_4(sc->sc_memt, sc->sc_memh, HPET_CONFIG)
-	    == 0xffffffff; i++) {
-		if (i >= 1000) {
-			aprint_error_dev(dv,
-			    "HPET_CONFIG value = 0xffffffff\n");
-			return;
-		}
-	}
-
-	tmp = (1000000000000000ULL * 2) / val;
-	tc->tc_frequency = (tmp / 2) + (tmp & 1);
+	tc->tc_frequency = 1000000000000000ULL / val;
 
 	/* Enable timer */
 	val = bus_space_read_4(sc->sc_memt, sc->sc_memh, HPET_CONFIG);
-	sc->sc_config = val;
 	if ((val & HPET_CONFIG_ENABLE) == 0) {
 		val |= HPET_CONFIG_ENABLE;
 		bus_space_write_4(sc->sc_memt, sc->sc_memh, HPET_CONFIG, val);
@@ -131,7 +96,7 @@ hpet_get_timecount(struct timecounter *tc)
 }
 
 static bool
-hpet_resume(device_t dv, const pmf_qual_t *qual)
+hpet_resume(device_t dv PMF_FN_ARGS)
 {
 	struct hpet_softc *sc = device_private(dv);
 	uint32_t val;
@@ -141,40 +106,4 @@ hpet_resume(device_t dv, const pmf_qual_t *qual)
 	bus_space_write_4(sc->sc_memt, sc->sc_memh, HPET_CONFIG, val);
 
 	return true;
-}
-
-MODULE(MODULE_CLASS_DRIVER, hpet, NULL);
-
-#ifdef _MODULE
-#include "ioconf.c"
-#endif
-
-static int
-hpet_modcmd(modcmd_t cmd, void *aux)
-{
-	int rv = 0;
-
-	switch (cmd) {
-
-	case MODULE_CMD_INIT:
-
-#ifdef _MODULE
-		rv = config_init_component(cfdriver_ioconf_hpet,
-		    cfattach_ioconf_hpet, cfdata_ioconf_hpet);
-#endif
-		break;
-
-	case MODULE_CMD_FINI:
-
-#ifdef _MODULE
-		rv = config_fini_component(cfdriver_ioconf_hpet,
-		    cfattach_ioconf_hpet, cfdata_ioconf_hpet);
-#endif
-		break;
-
-	default:
-		rv = ENOTTY;
-	}
-
-	return rv;
 }

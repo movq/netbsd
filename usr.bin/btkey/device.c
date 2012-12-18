@@ -1,4 +1,4 @@
-/*	$NetBSD: device.c,v 1.3 2009/02/09 12:44:32 plunky Exp $	*/
+/*	$NetBSD: device.c,v 1.2.12.1 2009/12/18 06:00:31 snj Exp $	*/
 
 /*-
  * Copyright (c) 2007 Iain Hibbert
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: device.c,v 1.3 2009/02/09 12:44:32 plunky Exp $");
+__RCSID("$NetBSD: device.c,v 1.2.12.1 2009/12/18 06:00:31 snj Exp $");
 
 #include <bluetooth.h>
 #include <errno.h>

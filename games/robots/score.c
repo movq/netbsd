@@ -1,4 +1,4 @@
-/*	$NetBSD: score.c,v 1.23 2009/08/12 08:30:55 dholland Exp $	*/
+/*	$NetBSD: score.c,v 1.18 2006/03/17 23:11:47 abs Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,44 +34,38 @@
 #if 0
 static char sccsid[] = "@(#)score.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: score.c,v 1.23 2009/08/12 08:30:55 dholland Exp $");
+__RCSID("$NetBSD: score.c,v 1.18 2006/03/17 23:11:47 abs Exp $");
 #endif
 #endif /* not lint */
 
-#include <curses.h>
-#include <err.h>
-#include <fcntl.h>
-#include <pwd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include "robots.h"
-#include "pathnames.h"
+# include	"robots.h"
+# include	"pathnames.h"
 
-const char *Scorefile = _PATH_SCORE;
+const char	*Scorefile = _PATH_SCORE;
 
-int Max_per_uid = MAX_PER_UID;
+int	Max_per_uid = MAX_PER_UID;
 
-static SCORE Top[MAXSCORES];
+static SCORE	Top[MAXSCORES];
 
-static uint32_t numscores, max_uid;
+static u_int32_t	numscores, max_uid;
 
-static int cmp_sc(const void *, const void *);
-static void set_name(SCORE *);
+static void read_score(int);
+static void write_score(int);
 
 /*
  * read_score:
  *	Read the score file in MI format
  */
 static void
-read_score(int inf)
+read_score(inf)
+	int inf;
 {
-	SCORE *scp;
+	SCORE	*scp;
 
-	if (read(inf, &max_uid, sizeof max_uid) == sizeof max_uid &&
-	    read(inf, Top, sizeof Top) == sizeof Top) {
+	if (read(inf, &max_uid, sizeof max_uid) == sizeof max_uid) {
 		max_uid = ntohl(max_uid);
+
+		read(inf, Top, sizeof Top);
 		for (scp = Top; scp < &Top[MAXSCORES]; scp++) {
 			 scp->s_uid = ntohl(scp->s_uid);
 			 scp->s_score = ntohl(scp->s_score);
@@ -91,9 +85,10 @@ read_score(int inf)
  *	Write the score file in MI format
  */
 static void
-write_score(int inf)
+write_score(inf)
+	int inf;
 {
-	SCORE *scp;
+	SCORE	*scp;
 
 	lseek(inf, 0L, SEEK_SET);
 
@@ -117,14 +112,15 @@ write_score(int inf)
  *	top list.
  */
 void
-score(int score_wfd)
+score(score_wfd)
+	int score_wfd;
 {
-	int inf = score_wfd;
-	SCORE *scp;
-	uint32_t uid;
-	bool done_show = false;
+	int			inf = score_wfd;
+	SCORE			*scp;
+	u_int32_t		uid;
+	bool			done_show = FALSE;
 
-	Newscore = false;
+	Newscore = FALSE;
 	if (inf < 0)
 		return;
 
@@ -142,7 +138,7 @@ score(int score_wfd)
 				scp->s_auto = Auto_bot;
 				scp->s_level = Level;
 				set_name(scp);
-				Newscore = true;
+				Newscore = TRUE;
 				break;
 			}
 		if (scp == &Top[MAXSCORES]) {
@@ -151,19 +147,19 @@ score(int score_wfd)
 			Top[MAXSCORES-1].s_auto = Auto_bot;
 			Top[MAXSCORES-1].s_level = Level;
 			set_name(&Top[MAXSCORES-1]);
-			Newscore = true;
+			Newscore = TRUE;
 		}
 		if (Newscore)
 			qsort(Top, MAXSCORES, sizeof Top[0], cmp_sc);
 	}
 
 	if (!Newscore) {
-		Full_clear = false;
+		Full_clear = FALSE;
 		lseek(inf, 0, SEEK_SET);
 		return;
 	}
 	else
-		Full_clear = true;
+		Full_clear = TRUE;
 
 	move(1, 15);
 	printw("%5.5s %5.5s %-9.9s %-8.8s %5.5s", "Rank", "Score", "User",
@@ -180,7 +176,7 @@ score(int score_wfd)
 		    scp->s_auto ? "(autobot)" : "", scp->s_level);
 		if (!done_show && scp->s_uid == uid && scp->s_score == Score) {
 			standend();
-			done_show = true;
+			done_show = TRUE;
 		}
 	}
 	Num_scores = scp - Top;
@@ -192,10 +188,11 @@ score(int score_wfd)
 	lseek(inf, 0, SEEK_SET);
 }
 
-static void
-set_name(SCORE *scp)
+void
+set_name(scp)
+	SCORE	*scp;
 {
-	struct passwd *pp;
+	PASSWD	*pp;
 
 	if ((pp = getpwuid(scp->s_uid)) == NULL)
 		strncpy(scp->s_name, "???", MAXNAME);
@@ -207,8 +204,9 @@ set_name(SCORE *scp)
  * cmp_sc:
  *	Compare two scores.
  */
-static int
-cmp_sc(const void *s1, const void *s2)
+int
+cmp_sc(s1, s2)
+	const void *s1, *s2;
 {
 	return ((const SCORE *)s2)->s_score - ((const SCORE *)s1)->s_score;
 }
@@ -218,10 +216,10 @@ cmp_sc(const void *s1, const void *s2)
  *	Show the score list for the '-s' option.
  */
 void
-show_score(void)
+show_score()
 {
-	SCORE *scp;
-	int inf;
+	SCORE		*scp;
+	int		inf;
 
 	if ((inf = open(Scorefile, O_RDONLY)) < 0) {
 		warn("opening `%s'", Scorefile);

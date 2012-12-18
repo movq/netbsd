@@ -1,4 +1,4 @@
-/* $NetBSD: modf_ieee754.c,v 1.4 2012/03/22 13:25:45 he Exp $ */
+/* $NetBSD: modf_ieee754.c,v 1.2 2003/10/27 00:05:46 kleink Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -46,13 +46,11 @@ modf(double val, double *iptr)
 	u_int64_t frac;
 
 	/*
-	 * If input is +/-Inf or NaN, return +/-0 or NaN.
+	 * If input is Inf or NaN, return it and leave i alone.
 	 */
 	u.dblu_d = val;
-	if (u.dblu_dbl.dbl_exp == DBL_EXP_INFNAN) {
-		*iptr = u.dblu_d;
-		return (0.0 / u.dblu_d);
-	}
+	if (u.dblu_dbl.dbl_exp == DBL_EXP_INFNAN)
+		return (u.dblu_d);
 
 	/*
 	 * If input can't have a fractional part, return
@@ -92,8 +90,8 @@ modf(double val, double *iptr)
 	frac = ((u_int64_t)v.dblu_dbl.dbl_frach << 32) + v.dblu_dbl.dbl_fracl;
 	frac >>= DBL_FRACBITS - (u.dblu_dbl.dbl_exp - DBL_EXP_BIAS);
 	frac <<= DBL_FRACBITS - (u.dblu_dbl.dbl_exp - DBL_EXP_BIAS);
-	v.dblu_dbl.dbl_fracl = (u_int) (frac & 0xffffffffULL);
-	v.dblu_dbl.dbl_frach = (u_int) (frac >> 32);
+	v.dblu_dbl.dbl_fracl = frac & 0xffffffff;
+	v.dblu_dbl.dbl_frach = frac >> 32;
 	*iptr = v.dblu_d;
 
 	u.dblu_d -= v.dblu_d;

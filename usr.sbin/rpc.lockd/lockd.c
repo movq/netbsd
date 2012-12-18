@@ -1,4 +1,4 @@
-/*	$NetBSD: lockd.c,v 1.12 2012/08/13 12:37:18 wiz Exp $	*/
+/*	$NetBSD: lockd.c,v 1.10 2007/12/15 19:44:56 perry Exp $	*/
 
 /*
  * Copyright (c) 1995
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: lockd.c,v 1.12 2012/08/13 12:37:18 wiz Exp $");
+__RCSID("$NetBSD: lockd.c,v 1.10 2007/12/15 19:44:56 perry Exp $");
 #endif
 
 /*
@@ -51,7 +51,6 @@ __RCSID("$NetBSD: lockd.c,v 1.12 2012/08/13 12:37:18 wiz Exp $");
 #include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <errno.h>
 #include <syslog.h>
 #include <signal.h>
@@ -85,16 +84,14 @@ int
 main(int argc, char **argv)
 {
 	SVCXPRT *transp;
-	int ch, i, minindex, maxindex, s;
-	bool use_ipv4, use_ipv6;
+	int ch, i, maxindex, s;
 	struct sigaction sigchild, sigalarm;
 	int grace_period = 30;
 	struct netconfig *nconf;
 	int maxrec = RPC_MAXDATASIZE;
 
 	(void)setprogname(*argv);
-	use_ipv4 = use_ipv6 = false;
-	while ((ch = getopt(argc, argv, "d:g:46")) != (-1)) {
+	while ((ch = getopt(argc, argv, "d:g:")) != (-1)) {
 		switch (ch) {
 		case 'd':
 			debug_level = atoi(optarg);
@@ -110,12 +107,6 @@ main(int argc, char **argv)
 				/* NOTREACHED */
 			}
 			break;
-		case '4':
-			use_ipv4 = true;
-			break;
-		case '6':
-			use_ipv6 = true;
-			break;
 		default:
 		case '?':
 			usage();
@@ -128,31 +119,23 @@ main(int argc, char **argv)
 	(void)rpcb_unset(NLM_PROG, NLM_VERSX, NULL);
 	(void)rpcb_unset(NLM_PROG, NLM_VERS4, NULL);
 
-	if (!use_ipv4 && !use_ipv6) {
-		s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-		if (s < 0)
-			use_ipv4 = true;
-		else {
-			(void)close(s);
-			use_ipv4 = use_ipv6 = true;
-		}
-	}
-	if (use_ipv4)
-		minindex = 0;
-	else
-		minindex = 2;
-
-	if (use_ipv6)
-		maxindex = 4;
-	else
+	/*
+	 * Check if IPv6 support is present.
+	 */
+	s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+	if (s < 0)
 		maxindex = 2;
+	else {
+		(void)close(s);
+		maxindex = 4;
+	}
 
 	(void)rpc_control(RPC_SVC_CONNMAXREC_SET, &maxrec);
 
-	for (i = minindex; i < maxindex; i++) {
+	for (i = 0; i < maxindex; i++) {
 		nconf = getnetconfigent(transports[i]);
 		if (nconf == NULL)
-			errx(1, "cannot get %s netconf.", transports[i]);
+			errx(1, "cannot get udp netconf.");
 
 		transp = svc_tli_create(RPC_ANYFD, nconf, NULL, RPC_MAXDATASIZE,
 		    RPC_MAXDATASIZE);
@@ -234,7 +217,7 @@ sigalarm_handler(int s)
 static void
 usage(void)
 {
-	(void)fprintf(stderr, "Usage: %s [-46] [-d debug_level] [-g grace_period]\n",
+	(void)fprintf(stderr, "Usage: %s[-d <debuglevel>] [-g <grace period>]",
 	    getprogname());
 	exit(1);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_status.c,v 1.36 2009/10/21 21:12:06 rmind Exp $	*/
+/*	$NetBSD: procfs_status.c,v 1.34 2008/04/24 18:39:25 ad Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_status.c,v 1.36 2009/10/21 21:12:06 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_status.c,v 1.34 2008/04/24 18:39:25 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -129,9 +129,8 @@ procfs_dostatus(
 	    pid, ppid, pgid, sid);
 
 	if ((p->p_lflag & PL_CONTROLT) && (tp = sess->s_ttyp))
-		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), "%llu,%llu ",
-		    (unsigned long long)major(tp->t_dev),
-		    (unsigned long long)minor(tp->t_dev));
+		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), "%d,%d ",
+		    major(tp->t_dev), minor(tp->t_dev));
 	else
 		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), "%d,%d ",
 		    -1, -1);
@@ -148,17 +147,19 @@ procfs_dostatus(
 	if (*sep != ',')
 		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), "noflags");
 
-	ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %lld,%ld",
-	    (long long)p->p_stats->p_start.tv_sec,
-	    (long)p->p_stats->p_start.tv_usec);
+	if (l->l_flag & LW_INMEM)
+		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %ld,%ld",
+		    p->p_stats->p_start.tv_sec, p->p_stats->p_start.tv_usec);
+	else
+		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " -1,-1");
 
 	{
 		struct timeval ut, st;
 
 		calcru(p, &ut, &st, (void *) 0, NULL);
 		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf),
-		    " %lld,%ld %lld,%ld", (long long)ut.tv_sec,
-		    (long)ut.tv_usec, (long long)st.tv_sec, (long)st.tv_usec);
+		    " %ld,%ld %ld,%ld", ut.tv_sec, ut.tv_usec, st.tv_sec,
+		    st.tv_usec);
 	}
 
 	lwp_lock(l);

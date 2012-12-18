@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ni.c,v 1.40 2010/11/13 13:51:57 uebayasi Exp $ */
+/*	$NetBSD: if_ni.c,v 1.36 2008/07/09 17:51:21 joerg Exp $ */
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden. All rights reserved.
  *
@@ -36,9 +36,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ni.c,v 1.40 2010/11/13 13:51:57 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ni.c,v 1.36 2008/07/09 17:51:21 joerg Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -48,6 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_ni.c,v 1.40 2010/11/13 13:51:57 uebayasi Exp $");
 #include <sys/sockio.h>
 #include <sys/sched.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <net/if.h>
 #include <net/if_ether.h>
 #include <net/if_dl.h>
@@ -55,8 +58,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_ni.c,v 1.40 2010/11/13 13:51:57 uebayasi Exp $");
 #include <netinet/in.h>
 #include <netinet/if_inarp.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <sys/bus.h>
 #ifdef __vax__
@@ -535,7 +540,10 @@ nistart(struct ifnet *ifp)
 		if (cnt > NTXFRAGS)
 			panic("nistart"); /* XXX */
 
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 		bdp = &bbd[(data->bufs[0]._index & 0x7fff)];
 		for (m0 = m, i = 0, mlen = 0; m0; m0 = m0->m_next) {
 			if (m0->m_len == 0)
@@ -617,7 +625,10 @@ niintr(void *arg)
 			if (m == (void *)data->nd_cmdref)
 				break; /* Out of mbufs */
 
-			bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+			if (ifp->if_bpf)
+				bpf_mtap(ifp->if_bpf, m);
+#endif
 			(*ifp->if_input)(ifp, m);
 			break;
 
@@ -686,7 +697,7 @@ niioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 		switch(ifa->ifa_addr->sa_family) {
 #ifdef INET
@@ -699,33 +710,27 @@ niioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_RUNNING:
+		if ((ifp->if_flags & IFF_UP) == 0 &&
+		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
 			 * If interface is marked down and it is running,
 			 * stop it.
 			 */
 			ifp->if_flags &= ~IFF_RUNNING;
 			ni_setup(sc);
-			break;
-		case IFF_UP:
+		} else if ((ifp->if_flags & IFF_UP) != 0 &&
+			   (ifp->if_flags & IFF_RUNNING) == 0) {
 			/*
 			 * If interface it marked up and it is stopped, then
 			 * start it.
 			 */
 			niinit(sc);
-			break;
-		case IFF_UP|IFF_RUNNING:
+		} else if ((ifp->if_flags & IFF_UP) != 0) {
 			/*
 			 * Send a new setup packet to match any new changes.
 			 * (Like IFF_PROMISC etc)
 			 */
 			ni_setup(sc);
-			break;
-		default:
-			break;
 		}
 		break;
 
@@ -746,8 +751,8 @@ niioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ether_ioctl(ifp, cmd, data);
-		break;
+		error = EINVAL;
+
 	}
 	splx(s);
 	return (error);

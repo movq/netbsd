@@ -1,10 +1,10 @@
 #!/bin/sh
-#	$NetBSD: makeconf,v 1.7 2009/01/24 00:19:47 abs Exp $
+#	$NetBSD: makeconf,v 1.6.132.1 2009/01/26 03:07:52 snj Exp $
 
 emit_file() {
 	echo "Generating $1"
 	echo '#
-# $NetBSD: makeconf,v 1.7 2009/01/24 00:19:47 abs Exp $
+# $NetBSD: makeconf,v 1.6.132.1 2009/01/26 03:07:52 snj Exp $
 #
 # This file was automatically created. Changes will be
 # lost when running makeconf in this directory.

@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.unix.c,v 1.17 2011/09/01 07:18:50 plunky Exp $	*/
+/*	$NetBSD: hack.unix.c,v 1.9.38.2 2009/06/29 23:33:53 snj Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.unix.c,v 1.17 2011/09/01 07:18:50 plunky Exp $");
+__RCSID("$NetBSD: hack.unix.c,v 1.9.38.2 2009/06/29 23:33:53 snj Exp $");
 #endif				/* not lint */
 
 /* This file collects some Unix dependencies; hack.pager.c contains some more */
@@ -95,18 +95,15 @@ __RCSID("$NetBSD: hack.unix.c,v 1.17 2011/09/01 07:18:50 plunky Exp $");
 
 extern int locknum;
 
-static struct tm *getlt(void);
-static int veryold(int);
-
 
 void
-setrandom(void)
+setrandom()
 {
 	(void) srandom((int) time((time_t *) 0));
 }
 
-static struct tm *
-getlt(void)
+struct tm      *
+getlt()
 {
 	time_t          date;
 
@@ -115,13 +112,13 @@ getlt(void)
 }
 
 int
-getyear(void)
+getyear()
 {
 	return (1900 + getlt()->tm_year);
 }
 
 char           *
-getdatestr(void)
+getdate()
 {
 	static char     datestr[7];
 	struct tm      *lt = getlt();
@@ -132,7 +129,7 @@ getdatestr(void)
 }
 
 int
-phase_of_the_moon(void)
+phase_of_the_moon()
 {				/* 0-7, with 0: new, 4: full *//* moon
 				 * period: 29.5306 days */
 	/* year: 365.2422 days */
@@ -149,7 +146,7 @@ phase_of_the_moon(void)
 }
 
 int
-night(void)
+night()
 {
 	int             hour = getlt()->tm_hour;
 
@@ -157,15 +154,16 @@ night(void)
 }
 
 int
-midnight(void)
+midnight()
 {
 	return (getlt()->tm_hour == 0);
 }
 
-static struct stat buf, hbuf;
+struct stat     buf, hbuf;
 
 void
-gethdate(char *name)
+gethdate(name)
+	char           *name;
 {
 #if 0
 	/* old version - for people short of space */
@@ -227,8 +225,9 @@ uptodate(int fd)
 }
 
 /* see whether we should throw away this xlock file */
-static int
-veryold(int fd)
+int
+veryold(fd)
+	int fd;
 {
 	int             i;
 	time_t          date;
@@ -242,7 +241,7 @@ veryold(int fd)
 		int             lockedpid;	/* should be the same size as
 						 * hackpid */
 
-		if (read(fd, &lockedpid, sizeof(lockedpid)) !=
+		if (read(fd, (char *) &lockedpid, sizeof(lockedpid)) !=
 		    sizeof(lockedpid))
 			/* strange ... */
 			return (0);
@@ -267,7 +266,7 @@ veryold(int fd)
 }
 
 void
-getlock(void)
+getlock()
 {
 	int             i = 0, fd;
 
@@ -327,7 +326,7 @@ gotlock:
 	if (fd == -1) {
 		error("cannot creat lock file.");
 	} else {
-		if (write(fd, &hackpid, sizeof(hackpid))
+		if (write(fd, (char *) &hackpid, sizeof(hackpid))
 		    != sizeof(hackpid)) {
 			error("cannot write lock");
 		}
@@ -375,7 +374,7 @@ static char    *mailbox;
 static long     laststattime;
 
 void
-getmailstatus(void)
+getmailstatus()
 {
 	if (!(mailbox = getenv("MAIL")))
 		return;
@@ -390,7 +389,7 @@ getmailstatus(void)
 }
 
 void
-ckmailstatus(void)
+ckmailstatus()
 {
 	if (!mailbox
 #ifdef MAILCKFREQ
@@ -414,7 +413,7 @@ ckmailstatus(void)
 }
 
 void
-newmail(void)
+newmail()
 {
 	/* produce a scroll of mail */
 	struct obj     *obj;
@@ -440,7 +439,9 @@ newmail(void)
 
 /* make md run through the cave */
 void
-mdrush(struct monst *md, boolean away)
+mdrush(md, away)
+	struct monst   *md;
+	boolean         away;
 {
 	int             uroom = inroom(u.ux, u.uy);
 	if (uroom >= 0) {
@@ -498,7 +499,7 @@ mdrush(struct monst *md, boolean away)
 }
 
 void
-readmail(void)
+readmail()
 {
 #ifdef DEF_MAILREADER		/* This implies that UNIX is defined */
 	char           *mr = 0;
@@ -506,7 +507,7 @@ readmail(void)
 	if (!(mr = getenv("MAILREADER")))
 		mr = DEF_MAILREADER;
 	if (child(1)) {
-		execl(mr, mr, (char *)NULL);
+		execl(mr, mr, (char *) 0);
 		exit(1);
 	}
 #else	/* DEF_MAILREADER */
@@ -520,11 +521,10 @@ readmail(void)
 }
 #endif	/* MAIL */
 
-/*
- * normalize file name - we don't like ..'s or /'s
- */
 void
-regularize(char *s)
+regularize(s)			/* normalize file name - we don't like ..'s
+				 * or /'s */
+	char           *s;
 {
 	char           *lp;
 

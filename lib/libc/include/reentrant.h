@@ -1,4 +1,4 @@
-/*	$NetBSD: reentrant.h,v 1.15 2012/06/03 21:27:30 joerg Exp $	*/
+/*	$NetBSD: reentrant.h,v 1.13 2008/04/28 20:23:00 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2003 The NetBSD Foundation, Inc.
@@ -84,6 +84,8 @@
  *
  */
 
+#ifdef _REENTRANT
+
 /*
  * Abstract thread interface for thread-safe libraries.  These routines
  * will use stubs in libc if the application is not linked against the
@@ -122,8 +124,6 @@
 #define	once_t			pthread_once_t
 #define	ONCE_INITIALIZER	PTHREAD_ONCE_INIT
 
-#ifdef _REENTRANT
-
 #ifndef __LIBC_THREAD_STUBS
 
 __BEGIN_DECLS
@@ -153,9 +153,7 @@ int	__libc_cond_init(cond_t *, const condattr_t *);
 int	__libc_cond_signal(cond_t *);
 int	__libc_cond_broadcast(cond_t *);
 int	__libc_cond_wait(cond_t *, mutex_t *);
-#ifndef __LIBC12_SOURCE__
 int	__libc_cond_timedwait(cond_t *, mutex_t *, const struct timespec *);
-#endif
 int	__libc_cond_destroy(cond_t *);
 __END_DECLS
 
@@ -254,15 +252,7 @@ __END_DECLS
 #define	thr_getspecific(k)
 #define	thr_keydelete(k)
 
-static inline int
-thr_once(once_t *once_control, void (*routine)(void))
-{
-	if (__predict_false(once_control->pto_done == 0)) {
-		(*routine)();
-		once_control->pto_done = 1;
-	}
-	return 0;
-}
+#define	thr_once(o, f)
 #define	thr_sigsetmask(f, n, o)
 #define	thr_self()
 #define	thr_errno()

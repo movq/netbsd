@@ -1,4 +1,4 @@
-/* $NetBSD: crt0.c,v 1.22 2011/02/22 05:45:07 joerg Exp $ */
+/* $NetBSD: crt0.c,v 1.19 2005/12/24 22:02:10 perry Exp $ */
 
 /*
  * Copyright (c) 1995 Christopher G. Demetriou
@@ -52,13 +52,13 @@
  *	as well as the usual registers (pc, sp, and t9 == pc for ABI).
  */
 
-void __start(uintptr_t, void (*)(void), const Obj_Entry *,
+void __start(u_long, void (*)(void), const Obj_Entry *,
 		struct ps_strings *);
 
 __asm(".text; .align 4;  .globl _start; _start:");
 
 void
-__start(uintptr_t sp,
+__start(u_long sp,
     void (*cleanup)(void),		/* from shared loader */
     const Obj_Entry *obj,		/* from shared loader */
     struct ps_strings *ps_strings)
@@ -86,15 +86,10 @@ __start(uintptr_t sp,
 	 */
 
 #ifndef DYNAMIC
-#ifdef _LP64
-	__asm volatile("dla $28,_gp");
-#else
 	__asm volatile("la $28,_gp");
-#endif
 #endif
 
 	ksp = (char**)sp;
-#if defined(__mips_n32) || defined(__mips_n64)
 	if (ksp == 0) {
 		/*
 		 * Uh, oh. We're running on a old kernel that passed
@@ -115,10 +110,9 @@ __start(uintptr_t sp,
 		__asm volatile("	addiu	%0,$29,64" : "=r" (ksp));
 #endif
 	}
-#endif
 
 
-	argc = *(long *)ksp;
+	argc = *(int *)ksp;
 	argv = ksp + 1;
 	environ = ksp + 2 + argc;	/* 2: argc + NULL ending argv */
 
@@ -142,14 +136,14 @@ __start(uintptr_t sp,
 		 * XXX If we were loaded by that loader, just abort
 		 * XXX the rtld setup.
 		 */
-		if (&rtld_DYNAMIC != NULL && cleanup != NULL && obj != NULL)
+		if (&_DYNAMIC != NULL && cleanup != NULL && obj != NULL)
 			_rtld_setup(cleanup, obj);
 #endif
 	}
 
 #ifdef MCRT0
 	atexit(_mcleanup);
-	monstartup((uintptr_t)&_eprol, (uintptr_t)&_etext);
+	monstartup((u_long)&_eprol, (u_long)&_etext);
 #endif
 
 	atexit(_fini);
@@ -163,7 +157,7 @@ __start(uintptr_t sp,
  *  is the entrypoint. (Only needed for old toolchains).
  */
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: crt0.c,v 1.22 2011/02/22 05:45:07 joerg Exp $");
+__RCSID("$NetBSD: crt0.c,v 1.19 2005/12/24 22:02:10 perry Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "common.c"

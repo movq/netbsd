@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2009/02/14 12:42:48 abs Exp $
+#	$NetBSD: Makefile,v 1.4.8.2 2009/09/17 04:24:35 snj Exp $
 
 # Makefile for modular-xorg-server and drivers
 

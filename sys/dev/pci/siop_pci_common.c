@@ -1,4 +1,4 @@
-/*	$NetBSD: siop_pci_common.c,v 1.34 2010/11/13 13:52:08 uebayasi Exp $	*/
+/*	$NetBSD: siop_pci_common.c,v 1.28 2008/06/11 02:09:16 kiyohara Exp $	*/
 
 /*
  * Copyright (c) 2000 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -27,7 +32,7 @@
 /* SYM53c8xx PCI-SCSI I/O Processors driver: PCI front-end */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siop_pci_common.c,v 1.34 2010/11/13 13:52:08 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siop_pci_common.c,v 1.28 2008/06/11 02:09:16 kiyohara Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -35,6 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: siop_pci_common.c,v 1.34 2010/11/13 13:52:08 uebayas
 #include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/kernel.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/endian.h>
 
@@ -207,7 +214,7 @@ static const struct siop_product_desc siop_products[] = {
 };
 
 const struct siop_product_desc *
-siop_lookup_product(uint32_t id, int rev)
+siop_lookup_product(u_int32_t id, int rev)
 {
 	const struct siop_product_desc *pp;
 	const struct siop_product_desc *rp = NULL;
@@ -253,7 +260,7 @@ siop_pci_attach_common(struct siop_pci_common_softc *pci_sc,
 #ifdef SIOP_SYMLED    /* XXX Should be a devprop! */
 	siop_sc->features |= SF_CHIP_LED0;
 #endif
-	dict = device_properties(siop_sc->sc_dev);
+	dict = device_properties(&siop_sc->sc_dev);
 	if (prop_dictionary_get_bool(dict, "use_pciclock", &use_pciclock))
 		if (use_pciclock)
 			siop_sc->features |= SF_CHIP_USEPCIC;
@@ -292,8 +299,7 @@ siop_pci_attach_common(struct siop_pci_common_softc *pci_sc,
 		siop_sc->sc_rh = ioh;
 		siop_sc->sc_raddr = ioaddr;
 	} else {
-		aprint_error_dev(siop_sc->sc_dev,
-		    "unable to map device registers\n");
+		aprint_error_dev(&siop_sc->sc_dev, "unable to map device registers\n");
 		return 0;
 	}
 
@@ -307,44 +313,37 @@ siop_pci_attach_common(struct siop_pci_common_softc *pci_sc,
 			bar = 0x1c;
 			break;
 		default:
-			aprint_error_dev(siop_sc->sc_dev,
-			    "invalid memory type %d\n",
+			aprint_error_dev(&siop_sc->sc_dev, "invalid memory type %d\n",
 			    memtype);
 			return 0;
 		}
 		if (pci_mapreg_map(pa, bar, memtype, 0,
                     &siop_sc->sc_ramt, &siop_sc->sc_ramh,
 		    &siop_sc->sc_scriptaddr, NULL) == 0) {
-			aprint_normal_dev(siop_sc->sc_dev,
-			    "using on-board RAM\n");
+			aprint_normal_dev(&siop_sc->sc_dev, "using on-board RAM\n");
 		} else {
-			aprint_error_dev(siop_sc->sc_dev,
-			    "can't map on-board RAM\n");
+			aprint_error_dev(&siop_sc->sc_dev, "can't map on-board RAM\n");
 			siop_sc->features &= ~SF_CHIP_RAM;
 		}
 	}
 
 	if (pci_intr_map(pa, &intrhandle) != 0) {
-		aprint_error_dev(siop_sc->sc_dev, "couldn't map interrupt\n");
+		aprint_error_dev(&siop_sc->sc_dev, "couldn't map interrupt\n");
 		return 0;
 	}
 	intrstr = pci_intr_string(pa->pa_pc, intrhandle);
 	pci_sc->sc_ih = pci_intr_establish(pa->pa_pc, intrhandle, IPL_BIO,
 	    intr, siop_sc);
 	if (pci_sc->sc_ih != NULL) {
-		aprint_normal_dev(siop_sc->sc_dev, "interrupting at %s\n",
+		aprint_normal_dev(&siop_sc->sc_dev, "interrupting at %s\n",
 		    intrstr ? intrstr : "unknown interrupt");
 	} else {
-		aprint_error_dev(siop_sc->sc_dev,
-		    "couldn't establish interrupt");
+		aprint_error_dev(&siop_sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return 0;
 	}
-	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG,
-	    pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG) |
-	    PCI_COMMAND_MASTER_ENABLE);
 	return 1;
 }
 

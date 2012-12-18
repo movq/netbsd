@@ -1,4 +1,4 @@
-/* $NetBSD: hdaudioio.h,v 1.3 2009/10/11 08:50:12 sborrill Exp $ */
+/* $NetBSD: hdaudioio.h,v 1.2.4.3 2009/10/18 16:50:13 bouyer Exp $ */
 
 /*
  * Copyright (c) 2009 Precedence Technologies Ltd <support@precedence.co.uk>

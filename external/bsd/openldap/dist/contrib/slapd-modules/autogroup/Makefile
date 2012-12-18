@@ -1,20 +1,12 @@
-LIBTOOL=../../../libtool
+CPPFLAGS=-I../../../include -I../../../servers/slapd
+#LDFLAGS=-L/usr/local/openldap/lib
+#LDFLAGS=-L/home/mszulczynski/autogroup/openldap/lib/
+CC=gcc
 
-CPPFLAGS+=-I../../../include -I../../../servers/slapd
+all: autogroup.so
 
-all: autogroup.la
-
-autogroup.lo:	autogroup.c
-	$(LIBTOOL) --mode=compile $(CC) $(CPPFLAGS) -Wall -c $?
-
-autogroup.la:	autogroup.lo
-	$(LIBTOOL) --mode=link $(CC) -version-info 0:0:0 \
-	-rpath $(PREFIX)/lib -module -o $@ $? 
+autogroup.so: autogroup.c
+	$(CC) -shared -fPIC $(CPPFLAGS) $(LDFLAGS) -Wall -o $@ $?
 
 clean:
-	rm -f autogroup.lo autogroup.la
-
-install: autogroup.la
-	mkdir -p $(PREFIX)/lib/openldap
-	$(LIBTOOL) --mode=install cp autogroup.la $(PREFIX)/lib/openldap
-	$(LIBTOOL) --finish $(PREFIX)/lib
+	rm autogroup.so

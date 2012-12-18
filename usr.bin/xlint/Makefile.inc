@@ -1,17 +1,14 @@
-#	$NetBSD: Makefile.inc,v 1.12 2010/03/22 05:12:24 mrg Exp $
-
-WARNS?=		3	# XXX: fails -Wsign-compare
+#	$NetBSD: Makefile.inc,v 1.9 2002/02/04 08:37:37 thorpej Exp $
 
 .include <bsd.own.mk>
 
 .PATH:		${.CURDIR}/../common
 
-# Special cases first, then check for a MACHINE_ARCH specific
-# subdir before looking for MACHINE_CPU.
-.if ${MACHINE_ARCH} == "mips64eb" || ${MACHINE_ARCH} == "mips64el"
-ARCHSUBDIR=	mips64
-.elif exists(${.CURDIR}/../arch/${MACHINE_ARCH})
-ARCHSUBDIR=	${MACHINE_ARCH}
+# On the m68000, MACHINE_CPU is "m68k", but we have different
+# target parameters (namely, long double is a different size
+# on the m68000), so we special case the directory name here.
+.if ${MACHINE_ARCH} == "m68000"
+ARCHSUBDIR=	m68000
 .else
 ARCHSUBDIR=	${MACHINE_CPU}
 .endif

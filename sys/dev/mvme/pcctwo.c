@@ -1,4 +1,4 @@
-/*	$NetBSD: pcctwo.c,v 1.11 2012/10/27 17:18:27 chs Exp $	*/
+/*	$NetBSD: pcctwo.c,v 1.8 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcctwo.c,v 1.11 2012/10/27 17:18:27 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcctwo.c,v 1.8 2008/04/28 20:23:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -57,7 +57,10 @@ int pcctwoprint(void *, const char *);
 
 /* ARGSUSED */
 void
-pcctwo_init(struct pcctwo_softc *sc, const struct pcctwo_device *pd, int devoff)
+pcctwo_init(sc, pd, devoff)
+	struct pcctwo_softc *sc;
+	const struct pcctwo_device *pd;
+	int devoff;
 {
 	struct pcctwo_attach_args npa;
 	u_int8_t cid;
@@ -103,12 +106,14 @@ pcctwo_init(struct pcctwo_softc *sc, const struct pcctwo_device *pd, int devoff)
 		pd++;
 
 		/* Attach the device if configured. */
-		(void) config_found(sc->sc_dev, &npa, pcctwoprint);
+		(void) config_found(&sc->sc_dev, &npa, pcctwoprint);
 	}
 }
 
 int
-pcctwoprint(void *aux, const char *cp)
+pcctwoprint(aux, cp)
+	void *aux;
+	const char *cp;
 {
 	struct pcctwo_attach_args *pa;
 
@@ -128,12 +133,11 @@ pcctwoprint(void *aux, const char *cp)
  * pcctwointr_establish: Establish PCCChip2 Interrupt
  */
 void
-pcctwointr_establish(
-	int vec,
-	int (*hand)(void *),
-	int lvl,
-	void *arg,
-	struct evcnt *evcnt)
+pcctwointr_establish(vec, hand, lvl, arg, evcnt)
+	int vec;
+	int (*hand)(void *), lvl;
+	void *arg;
+	struct evcnt *evcnt;
 {
 	int vec2icsr;
 
@@ -165,7 +169,8 @@ pcctwointr_establish(
 }
 
 void
-pcctwointr_disestablish(int vec)
+pcctwointr_disestablish(vec)
+	int vec;
 {
 
 #ifdef DEBUG
@@ -187,7 +192,8 @@ pcctwointr_disestablish(int vec)
 }
 
 struct evcnt *
-pcctwointr_evcnt(int lev)
+pcctwointr_evcnt(lev)
+	int lev;
 {
 
 	return ((*sys_pcctwo->sc_isrevcnt)(sys_pcctwo->sc_isrcookie, lev));

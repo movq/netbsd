@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.12 2011/02/06 18:26:52 tsutsui Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.11 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 2002 The NetBSD Foundation, Inc.
@@ -33,11 +33,6 @@
 #define _HP300_AUTOCONF_H_
 
 #ifdef _KERNEL
-extern  int conscode;			/* select code of console device */
-#define CONSCODE_INTERNAL	(-1)
-#define CONSCODE_INVALID	(-2)
-extern  void *conaddr;			/* KVA of console device */
-
 void	hp300_cninit(void);
 void	iomap_init(void);
 void *	iomap(void *, int);

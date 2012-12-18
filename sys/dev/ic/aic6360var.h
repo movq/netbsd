@@ -1,4 +1,4 @@
-/*	$NetBSD: aic6360var.h,v 1.16 2009/09/22 13:18:28 tsutsui Exp $	*/
+/*	$NetBSD: aic6360var.h,v 1.13 2008/04/08 12:07:25 cegger Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Charles M. Hannum.  All rights reserved.
@@ -115,7 +115,7 @@ struct aic_tinfo {
 };
 
 struct aic_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
@@ -151,7 +151,7 @@ struct aic_softc {
 #define	AIC_ABORTING	0x02	/* Bailing out */
 #define AIC_DOINGDMA	0x04	/* The FIFO data path is active! */
 	u_char	sc_selid;	/* Reselection ID */
-	device_t sc_child;/* Our child */
+	struct device *sc_child;/* Our child */
 
 	/* Message stuff */
 	u_char	sc_msgpriq;	/* Messages we want to send */
@@ -199,7 +199,7 @@ extern int aic_debug; /* AIC_SHOWSTART|AIC_SHOWMISC|AIC_SHOWTRACE; */
 #define	AIC_ASSERT(x)	do { \
 			if (! (x)) { \
 				printf("%s at line %d: assertion failed\n", \
-				    device_xname(sc->sc_dev), __LINE__); \
+				    device_xname(&sc->sc_dev), __LINE__); \
 				Debugger(); \
 			} } while (/* CONSTCOND */ 0)
 #else
@@ -218,10 +218,11 @@ extern int aic_debug; /* AIC_SHOWSTART|AIC_SHOWMISC|AIC_SHOWTRACE; */
 #define AIC_ISA_IOSIZE	0x20	/* XXX */
 
 void	aicattach(struct aic_softc *);
-int	aic_activate(device_t, enum devact);
-int	aic_detach(device_t, int);
+int	aic_activate(struct device *, enum devact);
+int	aic_detach(struct device *, int);
 int	aicintr(void *);
 int	aic_find(bus_space_tag_t, bus_space_handle_t);
+void	aic_isa_attach(struct device *, struct device *, void *);
 void	aic_init(struct aic_softc *, int);
 
 #endif /* _DEV_IC_AIC6360VAR_H_ */

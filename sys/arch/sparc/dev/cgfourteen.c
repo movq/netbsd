@@ -1,4 +1,4 @@
-/*	$NetBSD: cgfourteen.c,v 1.68 2012/10/27 17:18:11 chs Exp $ */
+/*	$NetBSD: cgfourteen.c,v 1.54 2008/06/13 13:10:18 cegger Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -68,17 +68,22 @@
  */
 #undef CG14_MAP_REGS
 
+/*
+ * The following enables 24-bit operation: when opened, the framebuffer
+ * will switch to 24-bit mode (actually 32-bit mode), and provide a
+ * simple cg8 emulation.
+ */
+#define CG14_CG8
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
 #include <sys/malloc.h>
-#include <sys/kmem.h>
 #include <sys/mman.h>
 #include <sys/tty.h>
 #include <sys/conf.h>
-#include <dev/pci/pciio.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -150,7 +155,7 @@ static int  cg14_do_cursor(struct cgfourteen_softc *,
 #endif
 
 #if defined(RASTERCONSOLE) && (NWSDISPLAY > 0)
-#error "You can't have it both ways - either RASTERCONSOLE or wsdisplay"
+#error You can't have it both ways - either RASTERCONSOLE or wsdisplay
 #endif
 
 /*
@@ -227,12 +232,9 @@ cgfourteenattach(device_t parent, device_t self, void *aux)
 	bus_space_handle_t bh;
 	int node, ramsize;
 	volatile uint32_t *lut;
-	int i, isconsole, items;
-	uint32_t fbva[2] = {0, 0};
-	uint32_t *ptr = fbva;
+	int i, isconsole;
 
 	sc->sc_dev = self;
-	sc->sc_opens = 0;
 	node = sa->sa_node;
 
 	/* Remember cookies for cgfourteenmmap() */
@@ -243,9 +245,16 @@ cgfourteenattach(device_t parent, device_t self, void *aux)
 	/* Mask out invalid flags from the user. */
 	fb->fb_flags = device_cfdata(sc->sc_dev)->cf_flags & FB_USERMASK;
 
-	fb->fb_type.fb_type = FBTYPE_MDICOLOR;
+	/*
+	 * We're emulating a cg3/8, so represent ourselves as one
+	 */
+#ifdef CG14_CG8
+	fb->fb_type.fb_type = FBTYPE_MEMCOLOR;
 	fb->fb_type.fb_depth = 32;
-
+#else
+	fb->fb_type.fb_type = FBTYPE_SUN3COLOR;
+	fb->fb_type.fb_depth = 8;
+#endif
 	fb_setsize_obp(fb, sc->sc_fb.fb_type.fb_depth, 1152, 900, node);
 	ramsize = roundup(fb->fb_type.fb_height * fb->fb_linebytes, NBPG);
 
@@ -254,10 +263,10 @@ cgfourteenattach(device_t parent, device_t self, void *aux)
 
 	if (sa->sa_nreg < 2) {
 		printf("%s: only %d register sets\n",
-			device_xname(self), sa->sa_nreg);
+			self->dv_xname, sa->sa_nreg);
 		return;
 	}
-	memcpy(sc->sc_physadr, sa->sa_reg,
+	bcopy(sa->sa_reg, sc->sc_physadr,
 	      sa->sa_nreg * sizeof(struct sbus_reg));
 
 	sc->sc_vramsize = sc->sc_physadr[CG14_PXL_IDX].sbr_size;
@@ -275,16 +284,13 @@ cgfourteenattach(device_t parent, device_t self, void *aux)
 	if (sbus_bus_map(sa->sa_bustag, sa->sa_slot,
 			 sa->sa_offset,
 			 sa->sa_size,
-			 0 /*BUS_SPACE_MAP_LINEAR*/,
+			 BUS_SPACE_MAP_LINEAR,
 			 &bh) != 0) {
-		printf("%s: cannot map control registers\n", device_xname(self));
+		printf("%s: cannot map control registers\n", self->dv_xname);
 		return;
 	}
 	sc->sc_regh = bh;
-	sc->sc_regaddr = BUS_ADDR(sa->sa_slot, sa->sa_offset);
-	sc->sc_fbaddr = BUS_ADDR(sc->sc_physadr[CG14_PXL_IDX].sbr_slot,
-				sc->sc_physadr[CG14_PXL_IDX].sbr_offset);
-	
+
 	sc->sc_ctl   = (struct cg14ctl  *) (bh);
 	sc->sc_hwc   = (struct cg14curs *) (bh + CG14_OFFSET_CURS);
 	sc->sc_dac   = (struct cg14dac  *) (bh + CG14_OFFSET_DAC);
@@ -297,9 +303,13 @@ cgfourteenattach(device_t parent, device_t self, void *aux)
 	/*
 	 * Let the user know that we're here
 	 */
-	printf(": %dx%d",
+#ifdef CG14_CG8
+	printf(": cgeight emulated at %dx%dx24bpp",
 		fb->fb_type.fb_width, fb->fb_type.fb_height);
-
+#else
+	printf(": cgthree emulated at %dx%dx8bpp",
+		fb->fb_type.fb_width, fb->fb_type.fb_height);
+#endif
 	/*
 	 * Enable the video.
 	 */
@@ -339,7 +349,7 @@ cgfourteenattach(device_t parent, device_t self, void *aux)
 		printf("vram at %p\n",(void *)bh);
 		/* XXX should use actual screen size */
 
-		for (i = 0; i < ramsize; i++)
+		for (i = 0; i < 1152 * 900; i++)
 		    ((unsigned char *)bh)[i] = 0;
 		fbrcons_init(&sc->sc_rcfb);
 		cg14_set_rcons_luts(sc);
@@ -350,22 +360,15 @@ cgfourteenattach(device_t parent, device_t self, void *aux)
 #endif
 
 #if NWSDISPLAY > 0
-	prom_getprop(sa->sa_node, "address", 4, &items, &ptr);
-	if (fbva[1] == 0) {
-		if (sbus_bus_map( sc->sc_bustag,
-		    sc->sc_physadr[CG14_PXL_IDX].sbr_slot,
-		    sc->sc_physadr[CG14_PXL_IDX].sbr_offset,
-		    ramsize, BUS_SPACE_MAP_LINEAR | BUS_SPACE_MAP_LARGE,
-		    &bh) != 0) {
-			printf("%s: cannot map pixels\n", 
-				device_xname(sc->sc_dev));
-			return;
-		}
-		sc->sc_fb.fb_pixels = bus_space_vaddr(sc->sc_bustag, bh);
-	} else {
-		sc->sc_fb.fb_pixels = (void *)fbva[1];
+	if (sbus_bus_map( sc->sc_bustag,
+	    sc->sc_physadr[CG14_PXL_IDX].sbr_slot,
+	    sc->sc_physadr[CG14_PXL_IDX].sbr_offset,
+	    ramsize, BUS_SPACE_MAP_LINEAR, &bh) != 0) {
+		printf("%s: cannot map pixels\n", device_xname(sc->sc_dev));
+		return;
 	}
 
+	sc->sc_fb.fb_pixels = bus_space_vaddr(sc->sc_bustag, bh);
 	if (isconsole)
 		printf(" (console)\n");
 	else
@@ -385,17 +388,20 @@ cgfourteenattach(device_t parent, device_t self, void *aux)
  * the last close. This kind of nonsense is needed to give screenblank
  * a fighting chance of working.
  */
+static int cg14_opens = 0;
 
 int
 cgfourteenopen(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	struct cgfourteen_softc *sc;
-	int oldopens;
+	int s, oldopens;
 
 	sc = device_lookup_private(&cgfourteen_cd, minor(dev));
 	if (sc == NULL)
 		return(ENXIO);
-	oldopens = sc->sc_opens++;
+	s = splhigh();
+	oldopens = cg14_opens++;
+	splx(s);
 
 	/* Setup the cg14 as we want it, and save the original PROM state */
 	if (oldopens == 0)	/* first open only, to make screenblank work */
@@ -409,11 +415,13 @@ cgfourteenclose(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	struct cgfourteen_softc *sc = 
 	    device_lookup_private(&cgfourteen_cd, minor(dev));
-	int opens;
+	int s, opens;
 
-	opens = --sc->sc_opens;
-	if (sc->sc_opens < 0)
-		opens = sc->sc_opens = 0;
+	s = splhigh();
+	opens = --cg14_opens;
+	if (cg14_opens < 0)
+		opens = cg14_opens = 0;
+	splx(s);
 
 	/*
 	 * Restore video state to make the PROM happy, on last close.
@@ -457,6 +465,9 @@ cgfourteenioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 	case FBIOPUTCMAP:
 		/* copy to software map */
 #define p ((struct fbcmap *)data)
+#ifdef CG14_CG8
+		p->index &= 0xffffff;
+#endif
 		error = cg14_put_cmap(p, &sc->sc_cmap, CG14_CLUT_SIZE);
 		if (error)
 			return (error);
@@ -474,15 +485,6 @@ cgfourteenioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 		cg14_set_video(sc, *(int *)data);
 		break;
 
-	case CG14_SET_PIXELMODE: {
-		int depth = *(int *)data;
-
-		if (sc->sc_mode == WSDISPLAYIO_MODE_EMUL)
-			return EINVAL;
-
-		cg14_set_depth(sc, depth);
-		}
-		break;
 	default:
 		return (ENOTTY);
 	}
@@ -511,13 +513,34 @@ cgfourteenunblank(device_t dev)
 /*
  * Return the address that would map the given device at the given
  * offset, allowing for the given protection, or return -1 for error.
-  */
+ *
+ * Since we're pretending to be a cg8, we put the main video RAM at the
+ *  same place the cg8 does, at offset 256k.  The cg8 has an enable
+ *  plane in the 256k space; our "enable" plane works differently.  We
+ *  can't emulate the enable plane very well, but all X uses it for is
+ *  to clear it at startup - so we map the first page of video RAM over
+ *  and over to fill that 256k space.  We also map some other views of
+ *  the video RAM space.
+ *
+ * Our memory map thus looks like
+ *
+ *	mmap range		space	base offset
+ *	00000000-00040000	vram	0 (multi-mapped - see above)
+ *	00040000-00434800	vram	00000000
+ *	01000000-01400000	vram	01000000
+ *	02000000-02200000	vram	02000000
+ *	02800000-02a00000	vram	02800000
+ *	03000000-03100000	vram	03000000
+ *	03400000-03500000	vram	03400000
+ *	03800000-03900000	vram	03800000
+ *	03c00000-03d00000	vram	03c00000
+ *	10000000-10010000	regs	00000000 (only if CG14_MAP_REGS)
+ */
 paddr_t
 cgfourteenmmap(dev_t dev, off_t off, int prot)
 {
 	struct cgfourteen_softc *sc =
 	    device_lookup_private(&cgfourteen_cd, minor(dev));
-	off_t offset = -1;
 
 	if (off & PGOFSET)
 		panic("cgfourteenmmap");
@@ -525,40 +548,43 @@ cgfourteenmmap(dev_t dev, off_t off, int prot)
 	if (off < 0)
 		return (-1);
 
-	if (off >= 0 && off < 0x10000) {
-		offset = sc->sc_regaddr;
-	} else if (off >= CG14_CURSOR_VOFF &&
-		   off < (CG14_CURSOR_VOFF + 0x1000)) {
-		offset = sc->sc_regaddr + CG14_OFFSET_CURS;
-		off -= CG14_CURSOR_VOFF;
-	} else if (off >= CG14_DIRECT_VOFF &&
-		   off < (CG14_DIRECT_VOFF + sc->sc_vramsize)) {
-		offset = sc->sc_fbaddr + CG14_FB_VRAM;
-		off -= CG14_DIRECT_VOFF;
-	} else if (off >= CG14_BGR_VOFF &&
-		   off < (CG14_BGR_VOFF + sc->sc_vramsize)) {
-		offset = sc->sc_fbaddr + CG14_FB_CBGR;
-		off -= CG14_BGR_VOFF;
-	} else if (off >= CG14_X32_VOFF &&
-		   off < (CG14_X32_VOFF + (sc->sc_vramsize >> 2))) {
-		offset = sc->sc_fbaddr + CG14_FB_PX32;
-		off -= CG14_X32_VOFF;
-	} else if (off >= CG14_B32_VOFF &&
-		   off < (CG14_B32_VOFF + (sc->sc_vramsize >> 2))) {
-		offset = sc->sc_fbaddr + CG14_FB_PB32;
-		off -= CG14_B32_VOFF;
-	} else if (off >= CG14_G32_VOFF &&
-		   off < (CG14_G32_VOFF + (sc->sc_vramsize >> 2))) {
-		offset = sc->sc_fbaddr + CG14_FB_PG32;
-		off -= CG14_G32_VOFF;
-	} else if (off >= CG14_R32_VOFF &&
-		   off < CG14_R32_VOFF + (sc->sc_vramsize >> 2)) {
-		offset = sc->sc_fbaddr + CG14_FB_PR32;
-		off -= CG14_R32_VOFF;
-	} else
-		return -1;
-	return (bus_space_mmap(sc->sc_bustag, offset, off, prot,
-		    BUS_SPACE_MAP_LINEAR));
+#if defined(CG14_MAP_REGS) /* XXX: security hole */
+	/*
+	 * Map the control registers into user space. Should only be
+	 * used for debugging!
+	 */
+	if ((u_int)off >= 0x10000000 && (u_int)off < 0x10000000 + 16*4096) {
+		off -= 0x10000000;
+		return (bus_space_mmap(sc->sc_bustag,
+			BUS_ADDR(sc->sc_physadr[CG14_CTL_IDX].sbr_slot,
+				   sc->sc_physadr[CG14_CTL_IDX].sbr_offset),
+			off, prot, BUS_SPACE_MAP_LINEAR));
+	}
+#endif
+
+	if (off < COLOUR_OFFSET)
+		off = 0;
+	else if (off < COLOUR_OFFSET+(1152*900*4))
+		off -= COLOUR_OFFSET;
+	else {
+		switch (off >> 20) {
+			case 0x010: case 0x011: case 0x012: case 0x013:
+			case 0x020: case 0x021:
+			case 0x028: case 0x029:
+			case 0x030:
+			case 0x034:
+			case 0x038:
+			case 0x03c:
+				break;
+			default:
+				return(-1);
+		}
+	}
+
+	return (bus_space_mmap(sc->sc_bustag,
+		BUS_ADDR(sc->sc_physadr[CG14_PXL_IDX].sbr_slot,
+			   sc->sc_physadr[CG14_PXL_IDX].sbr_offset),
+		off, prot, BUS_SPACE_MAP_LINEAR));
 }
 
 int
@@ -576,7 +602,6 @@ cgfourteenpoll(dev_t dev, int events, struct lwp *l)
 static void
 cg14_init(struct cgfourteen_softc *sc)
 {
-#if 0
 	volatile uint32_t *clut;
 	volatile uint8_t  *xlut;
 	int i;
@@ -599,13 +624,24 @@ cg14_init(struct cgfourteen_softc *sc)
 		sc->sc_savexlut[i] = xlut[i];
 	}
 
+#ifdef CG14_CG8
+	/*
+	 * Enable the video, and put in 24 bit mode.
+	 */
+	sc->sc_ctl->ctl_mctl = CG14_MCTL_ENABLEVID | CG14_MCTL_PIXMODE_32 |
+		CG14_MCTL_POWERCTL;
+
+	/*
+	 * Zero the xlut to enable direct-color mode
+	 */
+	for (i = 0; i < CG14_CLUT_SIZE; i++)
+		sc->sc_xlut->xlut_lut[i] = 0;
+#else
 	/*
 	 * Enable the video and put it in 8 bit mode
 	 */
 	sc->sc_ctl->ctl_mctl = CG14_MCTL_ENABLEVID | CG14_MCTL_PIXMODE_8 |
 		CG14_MCTL_POWERCTL;
-#else
-	cg14_set_depth(sc, 32);
 #endif
 }
 
@@ -613,7 +649,6 @@ static void
 /* Restore the state saved on cg14_init */
 cg14_reset(struct cgfourteen_softc *sc)
 {
-#if 0
 	volatile uint32_t *clut;
 	volatile uint8_t  *xlut;
 	int i;
@@ -641,9 +676,6 @@ cg14_reset(struct cgfourteen_softc *sc)
 		clut[i] = sc->sc_saveclut.cm_chip[i];
 		xlut[i] = sc->sc_savexlut[i];
 	}
-#else
-	cg14_set_depth(sc, 8);
-#endif
 }
 
 /* Enable/disable video display; power down monitor if DPMS-capable */
@@ -776,11 +808,6 @@ cg14_setup_wsdisplay(struct cgfourteen_softc *sc, int is_cons)
 	if (is_cons) {
 		vcons_init_screen(&sc->sc_vd, &sc->sc_console_screen, 1,
 		    &defattr);
-
-		/* clear the screen with the default background colour */
-		memset(sc->sc_fb.fb_pixels,
-		       (defattr >> 16) & 0xff,
-		       ri->ri_stride * ri->ri_height);
 		sc->sc_console_screen.scr_flags |= VCONS_SCREEN_IS_STATIC;
 
 		sc->sc_defaultscreen_descr.textops = &ri->ri_ops;
@@ -789,7 +816,6 @@ cg14_setup_wsdisplay(struct cgfourteen_softc *sc, int is_cons)
 		sc->sc_defaultscreen_descr.ncols = ri->ri_cols;
 		wsdisplay_cnattach(&sc->sc_defaultscreen_descr, ri, 0, 0,
 		    defattr);
-		vcons_replay_msgbuf(&sc->sc_console_screen);
 	} else {
 		/*
 		 * since we're not the console we can postpone the rest
@@ -885,7 +911,6 @@ cg14_getcmap(struct cgfourteen_softc *sc, struct wsdisplay_cmap *cm)
 
 	return 0;
 }
-
 static int
 cg14_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 	struct lwp *l)
@@ -918,7 +943,7 @@ cg14_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 			    (struct wsdisplay_cmap *)data);
 
 		case WSDISPLAYIO_LINEBYTES:
-			*(u_int *)data = ms->scr_ri.ri_stride << 2;
+			*(u_int *)data = ms->scr_ri.ri_width << 2;
 			return 0;
 
 		case WSDISPLAYIO_SMODE:
@@ -930,14 +955,11 @@ cg14_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 						bus_space_write_1(sc->sc_bustag,
 						    sc->sc_regh,
 						    CG14_CURSOR_CONTROL, 0);
-
 						cg14_set_depth(sc, 8);
 						cg14_init_cmap(sc);
 						vcons_redraw_screen(ms);
-					} else {
-
+					} else
 						cg14_set_depth(sc, 32);
-					}
 				}
 			}
 			return 0;
@@ -976,10 +998,6 @@ cg14_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 
 				return cg14_do_cursor(sc, cursor);
 			}
-		case PCI_IOC_CFGREAD:
-		case PCI_IOC_CFGWRITE:
-			return EINVAL;
-
 	}
 	return EPASSTHROUGH;
 }
@@ -1014,13 +1032,13 @@ cg14_init_screen(void *cookie, struct vcons_screen *scr,
 	ri->ri_flg = RI_CENTER | RI_FULLCLEAR;
 
 	ri->ri_bits = (char *)sc->sc_fb.fb_pixels;
-	scr->scr_flags |= VCONS_DONT_READ;
 
 	if (existing) {
 		ri->ri_flg |= RI_CLEAR;
 	}
 
-	rasops_init(ri, 0, 0);
+	rasops_init(ri, sc->sc_fb.fb_type.fb_height / 8,
+	     sc->sc_fb.fb_type.fb_width / 8);
 	ri->ri_caps = WSSCREEN_WSCOLORS;
 
 	rasops_reconfig(ri,
@@ -1037,7 +1055,6 @@ cg14_set_depth(struct cgfourteen_softc *sc, int depth)
 
 	if (sc->sc_depth == depth)
 		return;
-
 	switch (depth) {
 		case 8:
 			bus_space_write_1(sc->sc_bustag, sc->sc_regh,
@@ -1096,7 +1113,7 @@ cg14_do_cursor(struct cgfourteen_softc *sc, struct wsdisplay_cursor *cur)
 		int i;
 		uint32_t val;
 	
-		for (i = 0; i < min(cur->cmap.count, 3); i++) {
+		for (i = 0; i < cur->cmap.count; i++) {
 			val = (cur->cmap.red[i] ) |
 			      (cur->cmap.green[i] << 8) |
 			      (cur->cmap.blue[i] << 16);
@@ -1109,7 +1126,7 @@ cg14_do_cursor(struct cgfourteen_softc *sc, struct wsdisplay_cursor *cur)
 		uint32_t buffer[32], latch, tmp;
 		int i;
 
-		copyin(cur->mask, buffer, 128);
+		memcpy(buffer, cur->mask, 128);
 		for (i = 0; i < 32; i++) {
 			latch = 0;
 			tmp = buffer[i] & 0x80808080;
@@ -1131,7 +1148,7 @@ cg14_do_cursor(struct cgfourteen_softc *sc, struct wsdisplay_cursor *cur)
 			bus_space_write_4(sc->sc_bustag, sc->sc_regh,
 			    CG14_CURSOR_PLANE0 + (i << 2), latch);
 		}
-		copyin(cur->image, buffer, 128);
+		memcpy(buffer, cur->image, 128);
 		for (i = 0; i < 32; i++) {
 			latch = 0;
 			tmp = buffer[i] & 0x80808080;

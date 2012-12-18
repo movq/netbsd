@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl81x9var.h,v 1.53 2012/02/02 19:43:03 tls Exp $	*/
+/*	$NetBSD: rtl81x9var.h,v 1.41.12.6 2012/01/25 18:02:44 riz Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998
@@ -34,7 +34,11 @@
  *	FreeBSD Id: if_rlreg.h,v 1.9 1999/06/20 18:56:09 wpaul Exp
  */
 
+#include "rnd.h"
+
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #define RTK_ETHER_ALIGN	2
 #define RTK_RXSTAT_LEN	4
@@ -86,12 +90,12 @@ struct rtk_mii_frame {
  * Instead, there are only four register sets, each or which represents
  * one 'descriptor.' Basically, each TX descriptor is just a contiguous
  * packet buffer (32-bit aligned!) and we place the buffer addresses in
- * the registers so the chip knows where they are.
- *
+ * the registers so the chip knows where they are. 
+ * 
  * We can sort of kludge together the same kind of buffer management
  * used in previous drivers, but we have to do buffer copies almost all
  * the time, so it doesn't really buy us much.
- *
+ * 
  * For reception, there's just one large buffer where the chip stores
  * all received packets.
  */
@@ -153,14 +157,14 @@ struct re_list_data {
 	int			re_tx_free;	/* # of free descriptors */
 	int			re_tx_nextfree; /* next descriptor to use */
 	int			re_tx_desc_cnt; /* # of descriptors */
-	bus_dma_segment_t	re_tx_listseg;
+	bus_dma_segment_t 	re_tx_listseg;
 	int			re_tx_listnseg;
 
 	struct re_rxsoft	re_rxsoft[RE_RX_DESC_CNT];
 	bus_dmamap_t		re_rx_list_map;
 	struct re_desc		*re_rx_list;
 	int			re_rx_prodidx;
-	bus_dma_segment_t	re_rx_listseg;
+	bus_dma_segment_t 	re_rx_listseg;
 	int			re_rx_listnseg;
 };
 
@@ -173,13 +177,12 @@ struct rtk_tx_desc {
 };
 
 struct rtk_softc {
-	device_t		sc_dev;
+	device_t sc_dev;		/* generic device structures */
 	struct ethercom		ethercom;	/* interface info */
 	struct mii_data		mii;
 	struct callout		rtk_tick_ch;	/* tick callout */
-	bus_space_tag_t		rtk_btag;	/* bus space tag */
 	bus_space_handle_t	rtk_bhandle;	/* bus space handle */
-	bus_size_t		rtk_bsize;	/* bus space mapping size */
+	bus_space_tag_t		rtk_btag;	/* bus space tag */
 	u_int			sc_quirk;	/* chip quirks */
 #define RTKQ_8129		0x00000001	/* 8129 */
 #define RTKQ_8139CPLUS		0x00000002	/* 8139C+ */
@@ -193,13 +196,13 @@ struct rtk_softc {
 #define RTKQ_CMDSTOP		0x00000200	/* set STOPREQ on stop */
 #define RTKQ_PHYWAKE_PM		0x00000400	/* wake PHY from power down */
 
-	bus_dma_tag_t		sc_dmat;
+	bus_dma_tag_t 		sc_dmat;
 
-	bus_dma_segment_t	sc_dmaseg;	/* for rtk(4) */
+	bus_dma_segment_t 	sc_dmaseg;	/* for rtk(4) */
 	int			sc_dmanseg;	/* for rtk(4) */
 
-	bus_dmamap_t		recv_dmamap;	/* for rtk(4) */
-	uint8_t			*rtk_rx_buf;
+	bus_dmamap_t 		recv_dmamap;	/* for rtk(4) */
+	void *			rtk_rx_buf;
 
 	struct rtk_tx_desc	rtk_tx_descs[RTK_TX_LIST_CNT];
 	SIMPLEQ_HEAD(, rtk_tx_desc) rtk_tx_free;
@@ -222,8 +225,9 @@ struct rtk_softc {
 	/* Power management hooks. */
 	int	(*sc_enable)	(struct rtk_softc *);
 	void	(*sc_disable)	(struct rtk_softc *);
-
-	krndsource_t     rnd_source;
+#if NRND > 0
+	rndsource_element_t     rnd_source;
+#endif
 };
 
 #define RE_TX_DESC_CNT(sc)	((sc)->re_ldata.re_tx_desc_cnt)
@@ -251,7 +255,7 @@ struct rtk_softc {
 /*
  * re(4) hardware ip4csum-tx could be mangled with 28 byte or less IP packets
  */
-#define RE_IP4CSUMTX_MINLEN	28
+#define RE_IP4CSUMTX_MINLEN	28                                
 #define RE_IP4CSUMTX_PADLEN	(ETHER_HDR_LEN + RE_IP4CSUMTX_MINLEN)
 /*
  * XXX
@@ -298,6 +302,6 @@ uint16_t rtk_read_eeprom(struct rtk_softc *, int, int);
 void	rtk_setmulti(struct rtk_softc *);
 void	rtk_attach(struct rtk_softc *);
 int	rtk_detach(struct rtk_softc *);
-int	rtk_activate(device_t, enum devact);
+int	rtk_activate(struct device *, enum devact);
 int	rtk_intr(void *);
 #endif /* _KERNEL */

@@ -1,13 +1,13 @@
-#	$NetBSD: Makefile,v 1.36 2011/01/18 23:12:38 jruoho Exp $
+#	$NetBSD: Makefile,v 1.33 2008/10/25 22:27:36 apb Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/8/93
 
 NOOBJ=	# defined
 
 FILES=	NetBSD.el acronyms acronyms.comp airport ascii \
 	birthtoken bsd-family-tree \
-	country domains operator \
+	country domains \
 	eqnchar flowers indent.pro inter.phone language man.template \
-	mdoc.template na.phone na.postal style zipcodes
+	mdoc.template na.phone na.postal operator style zipcodes
 FILESDIR=${BINDIR}/misc
 
 
@@ -26,8 +26,5 @@ update-domains:
 
 update-na.phone:
 	< /dev/null ${TOOL_AWK} -f nanpa.awk > na.phone
-
-update-country:
-	${.CURDIR}/make.country > country
 
 .include <bsd.prog.mk>

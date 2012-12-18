@@ -1,4 +1,4 @@
-/*	$NetBSD: osiop_pcctwo.c,v 1.14 2009/03/23 18:59:57 scw Exp $	*/
+/*	$NetBSD: osiop_pcctwo.c,v 1.13.10.1 2009/03/26 17:09:33 snj Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osiop_pcctwo.c,v 1.14 2009/03/23 18:59:57 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osiop_pcctwo.c,v 1.13.10.1 2009/03/26 17:09:33 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

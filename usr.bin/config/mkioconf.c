@@ -1,4 +1,4 @@
-/*	$NetBSD: mkioconf.c,v 1.21 2012/03/11 21:16:08 dholland Exp $	*/
+/*	$NetBSD: mkioconf.c,v 1.10 2007/12/12 00:03:33 lukem Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -92,17 +92,14 @@ mkioconf(void)
 	emithdr(fp);
 	emitcfdrivers(fp);
 	emitexterns(fp);
+	emitcfattachinit(fp);
 	emitloc(fp);
 	emitparents(fp);
 	emitcfdata(fp);
-	emitcfattachinit(fp);
-
-	if (ioconfname == NULL) {
-		emitroots(fp);
-		emitpseudo(fp);
-		if (!do_devsw)
-			emitname2blk(fp);
-	}
+	emitroots(fp);
+	emitpseudo(fp);
+	if (!do_devsw)
+		emitname2blk(fp);
 
 	fflush(fp);
 	if (ferror(fp)) {
@@ -127,8 +124,8 @@ cforder(const void *a, const void *b)
 {
 	int n1, n2;
 
-	n1 = (*(const struct devi * const *)a)->i_cfindex;
-	n2 = (*(const struct devi * const *)b)->i_cfindex;
+	n1 = (*(const struct devi **)a)->i_cfindex;
+	n2 = (*(const struct devi **)b)->i_cfindex;
 	return (n1 - n2);
 }
 
@@ -143,7 +140,7 @@ emithdr(FILE *ofp)
 	autogen_comment(ofp, "ioconf.c");
 
 	(void)snprintf(ifnbuf, sizeof(ifnbuf), "arch/%s/conf/ioconf.incl.%s",
-	    machine ? machine : "(null)", machine ? machine : "(null)");
+	    machine, machine);
 	ifn = sourcepath(ifnbuf);
 	if ((ifp = fopen(ifn, "r")) != NULL) {
 		while ((n = fread(buf, 1, sizeof(buf), ifp)) > 0)
@@ -168,7 +165,7 @@ static int
 cf_locators_print(const char *name, void *value, void *arg)
 {
 	struct attr *a;
-	struct loclist *ll;
+	struct nvlist *nv;
 	FILE *fp = arg;
 
 	a = value;
@@ -180,11 +177,11 @@ cf_locators_print(const char *name, void *value, void *arg)
 		    "static const struct cfiattrdata %scf_iattrdata = {\n",
 			    name);
 		fprintf(fp, "\t\"%s\", %d,\n\t{\n", name, a->a_loclen);
-		for (ll = a->a_locs; ll; ll = ll->ll_next)
-			fprintf(fp, "\t\t{ \"%s\", \"%s\", %s },\n",
-				ll->ll_name,
-				(ll->ll_string ? ll->ll_string : "NULL"),
-				(ll->ll_string ? ll->ll_string : "0"));
+		for (nv = a->a_locs; nv; nv = nv->nv_next)
+			fprintf(fp, "\t\t{\"%s\", \"%s\", %s},\n",
+				nv->nv_name,
+				(nv->nv_str ? nv->nv_str : "NULL"),
+				(nv->nv_str ? nv->nv_str : "0"));
 		fprintf(fp, "\t}\n};\n");
 	} else {
 		fprintf(fp,
@@ -200,7 +197,7 @@ static void
 emitcfdrivers(FILE *fp)
 {
 	struct devbase *d;
-	struct attrlist *al;
+	struct nvlist *nv;
 	struct attr *a;
 	int has_iattrs;
 
@@ -212,8 +209,8 @@ emitcfdrivers(FILE *fp)
 		if (!devbase_has_instances(d, WILD))
 			continue;
 		has_iattrs = 0;
-		for (al = d->d_attrs; al != NULL; al = al->al_next) {
-			a = al->al_this;
+		for (nv = d->d_attrs; nv != NULL; nv = nv->nv_next) {
+			a = nv->nv_ptr;
 			if (a->a_iattr == 0)
 				continue;
 			if (has_iattrs == 0)
@@ -236,13 +233,7 @@ emitcfdrivers(FILE *fp)
 	}
 
 	NEWLINE;
-
-	fprintf(fp,
-	    "%sstruct cfdriver * const cfdriver_%s_%s[] = {\n",
-	    ioconfname ? "static " : "",
-	    ioconfname ? "ioconf" : "list",
-	    ioconfname ? ioconfname : "initial");
-
+	fprintf(fp, "struct cfdriver * const cfdriver_list_initial[] = {\n");
 	TAILQ_FOREACH(d, &allbases, d_next) {
 		if (!devbase_has_instances(d, WILD))
 			continue;
@@ -290,10 +281,7 @@ emitcfattachinit(FILE *fp)
 	}
 
 	NEWLINE;
-	fprintf(fp, "%sconst struct cfattachinit cfattach%s%s[] = {\n",
-	    ioconfname ? "static " : "",
-	    ioconfname ? "_ioconf_" : "init",
-	    ioconfname ? ioconfname : "");
+	fprintf(fp, "const struct cfattachinit cfattachinit[] = {\n");
 
 	TAILQ_FOREACH(d, &allbases, d_next) {
 		if (!devbase_has_instances(d, WILD))
@@ -363,9 +351,9 @@ emitcfdata(FILE *fp)
 	struct pspec *ps;
 	int unit, v;
 	const char *state, *basename, *attachment;
-	struct loclist *ll;
+	struct nvlist *nv;
 	struct attr *a;
-	const char *loc;
+	char *loc;
 	char locbuf[20];
 	const char *lastname = "";
 
@@ -373,12 +361,9 @@ emitcfdata(FILE *fp)
 		"#define NORM FSTATE_NOTFOUND\n"
 		"#define STAR FSTATE_STAR\n"
 		"\n"
-		"%sstruct cfdata cfdata%s%s[] = {\n"
+		"struct cfdata cfdata[] = {\n"
 		"    /* driver           attachment    unit state "
-		"loc   flags pspec */\n",
-		    ioconfname ? "static " : "",
-		    ioconfname ? "_ioconf_" : "",
-		    ioconfname ? ioconfname : "");
+		"loc   flags pspec */\n");
 	for (p = packed; (i = *p) != NULL; p++) {
 		/* the description */
 		fprintf(fp, "/*%3d: %s at ", i->i_cfindex, i->i_name);
@@ -394,16 +379,16 @@ emitcfdata(FILE *fp)
 			}
 
 			a = ps->p_iattr;
-			for (ll = a->a_locs, v = 0; ll != NULL;
-			     ll = ll->ll_next, v++) {
-				if (ARRNAME(ll->ll_name, lastname)) {
+			for (nv = a->a_locs, v = 0; nv != NULL;
+			     nv = nv->nv_next, v++) {
+				if (ARRNAME(nv->nv_name, lastname)) {
 					fprintf(fp, " %s %s",
-					    ll->ll_name, i->i_locs[v]);
+					    nv->nv_name, i->i_locs[v]);
 				} else {
 					fprintf(fp, " %s %s",
-						    ll->ll_name,
+						    nv->nv_name,
 						    i->i_locs[v]);
-					lastname = ll->ll_name;
+					lastname = nv->nv_name;
 				}
 			}
 		} else {
@@ -429,18 +414,18 @@ emitcfdata(FILE *fp)
 			loc = locbuf;
 		} else
 			loc = "loc";
-		fprintf(fp, "    { \"%s\",%s\"%s\",%s%2d, %s, %7s, %#6x, ",
+		fprintf(fp, "    {\"%s\",%s\"%s\",%s%2d, %s, %7s, %#6x, ",
 			    basename, strlen(basename) < 8 ? "\t\t"
 			    				   : "\t",
 			    attachment, strlen(attachment) < 5 ? "\t\t"
 			    				       : "\t",
 			    unit, state, loc, i->i_cfflags);
 		if (ps != NULL)
-			fprintf(fp, "&pspec%d },\n", ps->p_inst);
+			fprintf(fp, "&pspec%d},\n", ps->p_inst);
 		else
-			fputs("NULL },\n", fp);
+			fputs("NULL},\n", fp);
 	}
-	fprintf(fp, "    { %s,%s%s,%s%2d, %s, %7s, %#6x, %s }\n};\n",
+	fprintf(fp, "    {%s,%s%s,%s%2d, %s, %7s, %#6x, %s}\n};\n",
 	    "NULL", "\t\t", "NULL", "\t\t", 0, "0", "NULL", 0, "NULL");
 }
 
@@ -501,7 +486,7 @@ emitname2blk(FILE *fp)
 	fprintf(fp, "struct devnametobdevmaj dev_name2blk[] = {\n");
 
 	TAILQ_FOREACH(dev, &allbases, d_next) {
-		if (dev->d_major == NODEVMAJOR)
+		if (dev->d_major == NODEV)
 			continue;
 
 		fprintf(fp, "\t{ \"%s\", %d },\n",

@@ -1,4 +1,4 @@
-/*	$NetBSD: xform_tcp.c,v 1.8 2012/01/11 14:39:08 drochner Exp $ */
+/*	$NetBSD: xform_tcp.c,v 1.4 2007/12/11 12:40:10 lukem Exp $ */
 /*	$FreeBSD: sys/netipsec/xform_tcp.c,v 1.1.2.1 2004/02/14 22:24:09 bms Exp $ */
 
 /*
@@ -31,7 +31,7 @@
 /* TCP MD5 Signature Option (RFC2385) */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xform_tcp.c,v 1.8 2012/01/11 14:39:08 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xform_tcp.c,v 1.4 2007/12/11 12:40:10 lukem Exp $");
 
 #include "opt_inet.h"
 
@@ -85,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: xform_tcp.c,v 1.8 2012/01/11 14:39:08 drochner Exp $
  * Therefore we use this compromise in the meantime.
  */
 static int
-tcpsignature_init(struct secasvar *sav, const struct xformsw *xsp)
+tcpsignature_init(struct secasvar *sav, struct xformsw *xsp)
 {
 	int keylen;
 
@@ -122,7 +122,7 @@ tcpsignature_zeroize(struct secasvar *sav)
 {
 
 	if (sav->key_auth)
-		memset(_KEYBUF(sav->key_auth), 0, _KEYLEN(sav->key_auth));
+		bzero(_KEYBUF(sav->key_auth), _KEYLEN(sav->key_auth));
 
 	sav->tdb_cryptoid = 0;
 	sav->tdb_authalgxform = NULL;
@@ -137,7 +137,7 @@ tcpsignature_zeroize(struct secasvar *sav)
  * We do this from within tcp itself, so this routine is just a stub.
  */
 static int
-tcpsignature_input(struct mbuf *m, const struct secasvar *sav, int skip,
+tcpsignature_input(struct mbuf *m, struct secasvar *sav, int skip,
     int protoff)
 {
 
@@ -160,8 +160,7 @@ tcpsignature_output(struct mbuf *m, struct ipsecrequest *isr,
 static struct xformsw tcpsignature_xformsw = {
 	XF_TCPSIGNATURE,	XFT_AUTH,		"TCPMD5",
 	tcpsignature_init,	tcpsignature_zeroize,
-	tcpsignature_input,	tcpsignature_output,
-	NULL
+	tcpsignature_input,	tcpsignature_output
 };
 
 INITFN void

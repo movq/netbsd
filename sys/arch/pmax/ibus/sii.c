@@ -1,4 +1,4 @@
-/*	$NetBSD: sii.c,v 1.10 2011/07/09 17:32:30 matt Exp $	*/
+/*	$NetBSD: sii.c,v 1.4 2007/10/17 19:56:15 garbled Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sii.c,v 1.10 2011/07/09 17:32:30 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sii.c,v 1.4 2007/10/17 19:56:15 garbled Exp $");
 
 #include "sii.h"
 /*
@@ -50,7 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: sii.c,v 1.10 2011/07/09 17:32:30 matt Exp $");
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <mips/locore.h>
+#include <machine/locore.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsi_message.h>
@@ -132,18 +132,18 @@ static u_char	sii_buf[256];	/* used for extended messages */
  * Forward references
  */
 
-static void	sii_Reset(struct siisoftc *sc, int resetbus);
-static void	sii_StartCmd(struct siisoftc *sc, int target);
-static void	sii_CmdDone(struct siisoftc *sc, int target, int error);
-static void	sii_DoIntr(struct siisoftc *sc, u_int dstat);
-static void	sii_StateChg(struct siisoftc *sc, u_int cstat);
-static int	sii_GetByte(SIIRegs *regs, int phase, int ack);
-static void	sii_DoSync(SIIRegs *regs, State *state);
-static void	sii_StartDMA(SIIRegs *regs, int phase, u_short *dmaAddr,
-				  int size);
+static void	sii_Reset __P((struct siisoftc *sc, int resetbus));
+static void	sii_StartCmd __P((struct siisoftc *sc, int target));
+static void	sii_CmdDone __P((struct siisoftc *sc, int target, int error));
+static void	sii_DoIntr __P((struct siisoftc *sc, u_int dstat));
+static void	sii_StateChg __P((struct siisoftc *sc, u_int cstat));
+static int	sii_GetByte __P((SIIRegs *regs, int phase, int ack));
+static void	sii_DoSync __P((SIIRegs *regs, State *state));
+static void	sii_StartDMA __P((SIIRegs *regs, int phase, u_short *dmaAddr,
+				  int size));
 
 #ifdef DEBUG
-static void	sii_DumpLog(void);
+static void	sii_DumpLog __P((void));
 #endif
 
 
@@ -151,7 +151,8 @@ static void	sii_DumpLog(void);
  * Match driver based on name
  */
 void
-siiattach(struct siisoftc *sc)
+siiattach(sc)
+	struct siisoftc *sc;
 {
 	int i;
 
@@ -172,7 +173,7 @@ siiattach(struct siisoftc *sc)
 	sii_Reset(sc, RESET);
 	printf(": target %d\n", sc->sc_regs->id & SII_IDMSK);
 
-	sc->sc_adapter.adapt_dev = sc->sc_dev;
+	sc->sc_adapter.adapt_dev = &sc->sc_dev;
 	sc->sc_adapter.adapt_nchannels = 1;
 	sc->sc_adapter.adapt_openings = 7; 
 	sc->sc_adapter.adapt_max_periph = 1;
@@ -191,7 +192,7 @@ siiattach(struct siisoftc *sc)
 	/*
 	 * Now try to attach all the sub-devices
 	 */
-	config_found(sc->sc_dev, &sc->sc_channel, scsiprint);
+	config_found(&sc->sc_dev, &sc->sc_channel, scsiprint);
 }
 
 /*
@@ -201,16 +202,17 @@ siiattach(struct siisoftc *sc)
  */
 
 void
-sii_scsi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req, void *arg)
+sii_scsi_request(chan, req, arg)
+	struct scsipi_channel *chan;
+	scsipi_adapter_req_t req;
+	void *arg;
 {
 	struct scsipi_xfer *xs;
 	struct scsipi_periph *periph;
-	struct siisoftc *sc;
+	struct siisoftc *sc = (void *)chan->chan_adapter->adapt_dev;
 	int target;
 	int s;
 	int count;
-
-	sc = device_private(chan->chan_adapter->adapt_dev);
 
 	switch (req) {
 	case ADAPTER_REQ_RUN_XFER:
@@ -268,7 +270,8 @@ sii_scsi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req, void *ar
  * and process as appropriate.
  */
 int
-siiintr(void *xxxsc)
+siiintr(xxxsc)
+	void *xxxsc;
 {
 	struct siisoftc *sc = xxxsc;
 	u_int dstat;
@@ -291,8 +294,9 @@ siiintr(void *xxxsc)
  * since a SCSI bus reset will set UNIT_ATTENTION.
  */
 static void
-sii_Reset(struct siisoftc* sc, int reset)
-	/* reset:				 TRUE => reset SCSI bus */
+sii_Reset(sc, reset)
+	struct siisoftc* sc;
+	int reset;				/* TRUE => reset SCSI bus */
 {
 	SIIRegs *regs = sc->sc_regs;
 
@@ -312,7 +316,7 @@ sii_Reset(struct siisoftc* sc, int reset)
 	 * Set host adapter ID (from PROM sciiidN variable).
 	 */
 	/* XXX device_unit() abuse */
-	regs->id = SII_ID_IO | prom_scsiid(device_unit(sc->sc_dev));
+	regs->id = SII_ID_IO | prom_scsiid(device_unit(&sc->sc_dev));
 	/*
 	 * Enable SII to drive the SCSI bus.
 	 */
@@ -356,9 +360,9 @@ sii_Reset(struct siisoftc* sc, int reset)
  * NOTE: we should be called with interrupts disabled.
  */
 static void
-sii_StartCmd(struct siisoftc *sc, int target)
-	/* sc:	 which SII to use */
-	/* target:		 which command to start */
+sii_StartCmd(sc, target)
+	struct siisoftc *sc;	/* which SII to use */
+	int target;		/* which command to start */
 {
 	SIIRegs *regs;
 	ScsiCmd *scsicmd;
@@ -391,9 +395,9 @@ sii_StartCmd(struct siisoftc *sc, int target)
 #ifdef DEBUG
 	if (sii_debug > 1) {
 		printf("sii_StartCmd: %s target %d cmd 0x%x addr %p size %d DMA %d\n",
-		    device_xname(sc->sc_dev),
-		    target, scsicmd->cmd[0], scsicmd->buf, scsicmd->buflen,
-		    state->dmaDataPhase);
+			sc->sc_dev.dv_xname,
+			target, scsicmd->cmd[0], scsicmd->buf, scsicmd->buflen,
+			state->dmaDataPhase);
 	}
 	sii_debug_cmd = scsicmd->cmd[0];
 	if (scsicmd->cmd[0] == READ_10 ||
@@ -564,7 +568,9 @@ sii_StartCmd(struct siisoftc *sc, int target)
  * Process interrupt conditions.
  */
 static void
-sii_DoIntr(struct siisoftc *sc, u_int dstat)
+sii_DoIntr(sc, dstat)
+	struct siisoftc *sc;
+	u_int dstat;
 {
 	SIIRegs *regs = sc->sc_regs;
 	State *state;
@@ -614,8 +620,7 @@ again:
 
 		/* check for a BUS RESET */
 		if (cstat & SII_RST) {
-			printf("%s: SCSI bus reset!!\n",
-			    device_xname(sc->sc_dev));
+			printf("%s: SCSI bus reset!!\n", sc->sc_dev.dv_xname);
 			/* need to flush disconnected commands */
 			for (i = 0; i < SII_NCMD; i++) {
 				if (!sc->sc_cmd[i])
@@ -663,9 +668,9 @@ again:
 		if (sc->sc_target < 0) {
 			cstat = regs->cstat;
 			printf("%s: target %d DNE?? dev %d,%d cs %x\n",
-			    device_xname(sc->sc_dev), sc->sc_target,
-			    regs->slcsr, regs->destat,
-			    cstat); /* XXX */
+				sc->sc_dev.dv_xname, sc->sc_target,
+				regs->slcsr, regs->destat,
+				cstat); /* XXX */
 			if (cstat & SII_DST) {
 				sc->sc_target = regs->destat;
 				state = &sc->sc_st[sc->sc_target];
@@ -677,8 +682,7 @@ again:
 		/* check for a PARITY ERROR */
 		if (dstat & SII_IPE) {
 			state->flags |= PARITY_ERR;
-			printf("%s: Parity error!!\n",
-			    device_xname(sc->sc_dev));
+			printf("%s: Parity error!!\n", sc->sc_dev.dv_xname);
 			goto abort;
 		}
 		/* dmalen = amount left to transfer, i = amount transfered */
@@ -692,8 +696,7 @@ again:
 				printf("no TCZ?? (%d) ", regs->dmlotc);
 		} else if (!(dstat & SII_TCZ)) {
 			printf("%s: device %d: no TCZ?? (%d)\n",
-			    device_xname(sc->sc_dev),
-			    sc->sc_target, regs->dmlotc);
+				sc->sc_dev.dv_xname, sc->sc_target, regs->dmlotc);
 			sii_DumpLog(); /* XXX */
 		}
 #endif
@@ -773,9 +776,9 @@ again:
 		if (sc->sc_target < 0) {
 			cstat = regs->cstat;
 			printf("%s: target %d MIS?? dev %d,%d cs %x ds %x\n",
-			    device_xname(sc->sc_dev), sc->sc_target,
-			    regs->slcsr, regs->destat,
-			    cstat, dstat); /* XXX */
+				sc->sc_dev.dv_xname, sc->sc_target,
+				regs->slcsr, regs->destat,
+				cstat, dstat); /* XXX */
 			if (cstat & SII_DST) {
 				sc->sc_target = regs->destat;
 				state = &sc->sc_st[sc->sc_target];
@@ -794,8 +797,7 @@ again:
 				/* restart DMA after disconnect/reconnect */
 				if (state->dmaPrevPhase != SII_CMD_PHASE) {
 					printf("%s: device %d: DMA reselect phase doesn't match\n",
-					    device_xname(sc->sc_dev),
-					    sc->sc_target);
+						sc->sc_dev.dv_xname, sc->sc_target);
 					goto abort;
 				}
 				state->dmaCurPhase = SII_CMD_PHASE;
@@ -820,8 +822,7 @@ again:
 				i = state->cmdlen;
 				if (i == 0) {
 					printf("%s: device %d: cmd count exceeded\n",
-					    device_xname(sc->sc_dev),
-					    sc->sc_target);
+						sc->sc_dev.dv_xname, sc->sc_target);
 					goto abort;
 				}
 				sc->sii_copytobuf((u_short *)state->cmd,
@@ -850,9 +851,9 @@ again:
 		case SII_DATA_OUT_PHASE:
 			if (state->cmdlen > 0) {
 				printf("%s: device %d: cmd %x: command data not all sent (%d) 1\n",
-				    device_xname(sc->sc_dev), sc->sc_target,
-				    sc->sc_cmd[sc->sc_target]->cmd[0],
-				    state->cmdlen);
+					sc->sc_dev.dv_xname, sc->sc_target,
+					sc->sc_cmd[sc->sc_target]->cmd[0],
+					state->cmdlen);
 				state->cmdlen = 0;
 #ifdef DEBUG
 				sii_DumpLog();
@@ -863,8 +864,7 @@ again:
 				if (state->dmaPrevPhase !=
 				    (dstat & SII_PHASE_MSK)) {
 					printf("%s: device %d: DMA reselect phase doesn't match\n",
-					    device_xname(sc->sc_dev),
-					    sc->sc_target);
+						sc->sc_dev.dv_xname, sc->sc_target);
 					goto abort;
 				}
 				state->dmaCurPhase = state->dmaPrevPhase;
@@ -898,7 +898,7 @@ again:
 			i = state->buflen;
 			if (i == 0) {
 				printf("%s: device %d: data count exceeded\n",
-				    device_xname(sc->sc_dev), sc->sc_target);
+					sc->sc_dev.dv_xname, sc->sc_target);
 				goto abort;
 			}
 			if (i > SII_MAX_DMA_XFER_LENGTH)
@@ -936,9 +936,9 @@ again:
 		case SII_STATUS_PHASE:
 			if (state->cmdlen > 0) {
 				printf("%s: device %d: cmd %x: command data not all sent (%d) 2\n",
-				    device_xname(sc->sc_dev), sc->sc_target,
-				    sc->sc_cmd[sc->sc_target]->cmd[0],
-				    state->cmdlen);
+					sc->sc_dev.dv_xname, sc->sc_target,
+					sc->sc_cmd[sc->sc_target]->cmd[0],
+					state->cmdlen);
 				state->cmdlen = 0;
 #ifdef DEBUG
 				sii_DumpLog();
@@ -1285,15 +1285,14 @@ again:
 				regs->dstat = SII_DNE;
 				wbflush();
 				printf("%s: device %d: message reject.\n",
-				    device_xname(sc->sc_dev), sc->sc_target);
+					sc->sc_dev.dv_xname, sc->sc_target);
 				break;
 
 			default:
 				if (!(msg & MSG_IDENTIFYFLAG)) {
 					printf("%s: device %d: couldn't handle "
 					    "message 0x%x... rejecting.\n",
-					    device_xname(sc->sc_dev),
-					    sc->sc_target,
+					    sc->sc_dev.dv_xname, sc->sc_target,
 					    msg);
 #ifdef DEBUG
 					sii_DumpLog();
@@ -1359,7 +1358,7 @@ again:
 
 		default:
 			printf("%s: Couldn't handle phase %d... ignoring.\n",
-			    device_xname(sc->sc_dev), dstat & SII_PHASE_MSK);
+				   sc->sc_dev.dv_xname, dstat & SII_PHASE_MSK);
 		}
 	}
 
@@ -1392,7 +1391,7 @@ again:
 abort:
 	/* jump here to abort the current command */
 	printf("%s: device %d: current command terminated\n",
-	    device_xname(sc->sc_dev), sc->sc_target);
+		sc->sc_dev.dv_xname, sc->sc_target);
 #ifdef DEBUG
 	sii_DumpLog();
 #endif
@@ -1441,7 +1440,9 @@ abort:
 }
 
 static void
-sii_StateChg(struct siisoftc *sc, u_int cstat)
+sii_StateChg(sc, cstat)
+	struct siisoftc *sc;
+	u_int cstat;
 {
 	SIIRegs *regs = sc->sc_regs;
 	State *state;
@@ -1463,7 +1464,7 @@ sii_StateChg(struct siisoftc *sc, u_int cstat)
 #endif
 		if (i >= 0 && !sc->sc_st[i].prevComm) {
 			printf("%s: device %d: spurrious disconnect (%d)\n",
-			    device_xname(sc->sc_dev), i, regs->slcsr);
+				sc->sc_dev.dv_xname, i, regs->slcsr);
 			sc->sc_st[i].prevComm = 0;
 		}
 		break;
@@ -1474,7 +1475,7 @@ sii_StateChg(struct siisoftc *sc, u_int cstat)
 		if (sc->sc_target == i)
 			break;
 		printf("%s: device %d: connect to device %d??\n",
-		    device_xname(sc->sc_dev), sc->sc_target, i);
+			sc->sc_dev.dv_xname, sc->sc_target, i);
 		sc->sc_target = i;
 		break;
 
@@ -1506,7 +1507,7 @@ sii_StateChg(struct siisoftc *sc, u_int cstat)
 		wbflush();
 		if (!state->prevComm) {
 			printf("%s: device %d: spurious reselection\n",
-			    device_xname(sc->sc_dev), i);
+				sc->sc_dev.dv_xname, i);
 			break;
 		}
 		state->prevComm = 0;
@@ -1521,7 +1522,7 @@ sii_StateChg(struct siisoftc *sc, u_int cstat)
 	case SII_CON | SII_DST | SII_TGT:
 		/* connected as target */
 		printf("%s: Selected by device %d as target!!\n",
-		    device_xname(sc->sc_dev), regs->destat);
+			sc->sc_dev.dv_xname, regs->destat);
 		regs->comm = SII_DISCON;
 		wbflush();
 		SII_WAIT_UNTIL(!(regs->cstat & SII_CON),
@@ -1534,7 +1535,7 @@ sii_StateChg(struct siisoftc *sc, u_int cstat)
 
 	default:
 		printf("%s: Unknown state change (cs %x)!!\n",
-		    device_xname(sc->sc_dev), cstat);
+			sc->sc_dev.dv_xname, cstat);
 #ifdef DEBUG
 		sii_DumpLog();
 #endif
@@ -1546,7 +1547,9 @@ sii_StateChg(struct siisoftc *sc, u_int cstat)
  * If 'ack' is true, acknowledge the byte.
  */
 static int
-sii_GetByte(SIIRegs *regs, int phase, int ack)
+sii_GetByte(regs, phase, ack)
+	SIIRegs *regs;
+	int phase, ack;
 {
 	u_int dstat;
 	u_int state;
@@ -1609,7 +1612,9 @@ sii_GetByte(SIIRegs *regs, int phase, int ack)
  * Exchange messages to initiate synchronous data transfers.
  */
 static void
-sii_DoSync(SIIRegs *regs, State *state)
+sii_DoSync(regs, state)
+	SIIRegs *regs;
+	State *state;
 {
 	u_int dstat, comm;
 	int i, j;
@@ -1716,11 +1721,11 @@ sii_DoSync(SIIRegs *regs, State *state)
  * NOTE: the data buffer should be word-aligned for DMA out.
  */
 static void
-sii_StartDMA(SIIRegs *regs, int phase, u_short *dmaAddr, int size)
-	/* regs:	 which SII to use */
-	/* phase:		 phase to send/receive data */
-	/* dmaAddr:	 DMA buffer address */
-	/* size:		 # of bytes to transfer */
+sii_StartDMA(regs, phase, dmaAddr, size)
+	SIIRegs *regs;	/* which SII to use */
+	int phase;		/* phase to send/receive data */
+	u_short *dmaAddr;	/* DMA buffer address */
+	int size;		/* # of bytes to transfer */
 {
 
 	if (regs->dstat & SII_DNE) { /* XXX */
@@ -1752,10 +1757,10 @@ sii_StartDMA(SIIRegs *regs, int phase, u_short *dmaAddr, int size)
  * before allowing the same device to start another command.
  */
 static void
-sii_CmdDone(struct siisoftc *sc, int target, int error)
-	/* sc:	 which SII to use */
-	/* target:			 which device is done */
-	/* error:			 error code if any errors */
+sii_CmdDone(sc, target, error)
+	struct siisoftc *sc;	/* which SII to use */
+	int target;			/* which device is done */
+	int error;			/* error code if any errors */
 {
 	ScsiCmd *scsicmd;
 	int i;
@@ -1769,8 +1774,8 @@ sii_CmdDone(struct siisoftc *sc, int target, int error)
 #ifdef DEBUG
 	if (sii_debug > 1) {
 		printf("sii_CmdDone: %s target %d cmd %x err %d resid %d\n",
-		    device_xname(sc->sc_dev),
-		    target, scsicmd->cmd[0], error, sc->sc_st[target].buflen);
+			sc->sc_dev.dv_xname,
+			target, scsicmd->cmd[0], error, sc->sc_st[target].buflen);
 	}
 #endif
 
@@ -1809,7 +1814,7 @@ sii_CmdDone(struct siisoftc *sc, int target, int error)
 
 #ifdef DEBUG
 static void
-sii_DumpLog(void)
+sii_DumpLog()
 {
 	struct sii_log *lp;
 

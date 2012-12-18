@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.c,v 1.79 2012/07/15 15:17:56 dsl Exp $	*/
+/*	$NetBSD: netbsd32_machdep.c,v 1.55.4.4 2012/06/12 23:18:13 riz Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -36,23 +36,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.79 2012/07/15 15:17:56 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.55.4.4 2012/06/12 23:18:13 riz Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
 #include "opt_coredump.h"
 #include "opt_execfmt.h"
 #include "opt_user_ldt.h"
 #include "opt_mtrr.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/exec.h>
-#include <sys/exec_aout.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/signalvar.h>
 #include <sys/systm.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
+#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/mount.h>
 #include <sys/buf.h>
@@ -83,6 +83,8 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.79 2012/07/15 15:17:56 dsl Ex
 const char	machine32[] = "i386";
 const char	machine_arch32[] = "i386";	
 
+extern void (osyscall_return)(void);
+
 #ifdef MTRR
 static int x86_64_get_mtrr32(struct lwp *, void *, register_t *);
 static int x86_64_set_mtrr32(struct lwp *, void *, register_t *);
@@ -91,7 +93,9 @@ static int x86_64_set_mtrr32(struct lwp *, void *, register_t *);
 #define x86_64_set_mtrr32(x, y, z)	ENOSYS
 #endif
 
-static int check_sigcontext32(struct lwp *, const struct netbsd32_sigcontext *);
+static int check_sigcontext32(const struct netbsd32_sigcontext *,
+    struct trapframe *);
+static int check_mcontext32(const mcontext32_t *, struct trapframe *);
 
 #ifdef EXEC_AOUT
 /*
@@ -120,18 +124,16 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 #endif
 
 void
-netbsd32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
+netbsd32_setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 {
-	struct pcb *pcb;
+	struct pcb *pcb = &l->l_addr->u_pcb;
 	struct trapframe *tf;
 	struct proc *p = l->l_proc;
-
-	pcb = lwp_getpcb(l);
+	void **retaddr;
 
 	/* If we were using the FPU, forget about it. */
-	if (pcb->pcb_fpcpu != NULL) {
+	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
 		fpusave_lwp(l, false);
-	}
 
 #if defined(USER_LDT) && 0
 	pmap_ldt_cleanup(p);
@@ -139,24 +141,24 @@ netbsd32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 
 	netbsd32_adjust_limits(p);
 
-	l->l_md.md_flags &= ~MDL_USEDFPU;
-	l->l_md.md_flags |= MDL_COMPAT32;	/* Force iret not sysret */
-	pcb->pcb_flags = PCB_COMPAT32;
+	l->l_md.md_flags &= ~MDP_USEDFPU;
+	pcb->pcb_flags = 0;
         pcb->pcb_savefpu.fp_fxsave.fx_fcw = __NetBSD_NPXCW__;
         pcb->pcb_savefpu.fp_fxsave.fx_mxcsr = __INITIAL_MXCSR__;  
 	pcb->pcb_savefpu.fp_fxsave.fx_mxcsr_mask = __INITIAL_MXCSR_MASK__;
+
 
 	p->p_flag |= PK_32;
 
 	tf = l->l_md.md_regs;
 	tf->tf_ds = LSEL(LUDATA32_SEL, SEL_UPL);
 	tf->tf_es = LSEL(LUDATA32_SEL, SEL_UPL);
-	cpu_fsgs_zero(l);
-	cpu_fsgs_reload(l, tf->tf_ds, tf->tf_es);
+	tf->tf_fs = LSEL(LUDATA32_SEL, SEL_UPL);
+	tf->tf_gs = LSEL(LUDATA32_SEL, SEL_UPL);
 	tf->tf_rdi = 0;
 	tf->tf_rsi = 0;
 	tf->tf_rbp = 0;
-	tf->tf_rbx = (uint32_t)p->p_psstrp;
+	tf->tf_rbx = (uint64_t)p->p_psstr;
 	tf->tf_rdx = 0;
 	tf->tf_rcx = 0;
 	tf->tf_rax = 0;
@@ -165,6 +167,10 @@ netbsd32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 	tf->tf_rflags = PSL_USERSET;
 	tf->tf_rsp = stack;
 	tf->tf_ss = LSEL(LUDATA32_SEL, SEL_UPL);
+
+	/* XXX frob return address to return via old iret method, not sysret */
+	retaddr = (void **)tf - 1;
+	*retaddr = (void *)osyscall_return;
 }
 
 #ifdef COMPAT_16
@@ -261,7 +267,7 @@ netbsd32_sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	tf->tf_gs = GSEL(GUDATA32_SEL, SEL_UPL);
 
 	/* Ensure FP state is reset, if FP is used. */
-	l->l_md.md_flags &= ~MDL_USEDFPU;
+	l->l_md.md_flags &= ~MDP_USEDFPU;
 
 	tf->tf_rip = (uint64_t)catcher;
 	tf->tf_cs = GSEL(GUCODE32_SEL, SEL_UPL);
@@ -272,6 +278,7 @@ netbsd32_sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
+
 	if ((vaddr_t)catcher >= VM_MAXUSER_ADDRESS32) {
 		/*
 		 * process has given an invalid address for the
@@ -364,11 +371,12 @@ netbsd32_sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	tf->tf_ss = GSEL(GUDATA32_SEL, SEL_UPL);
 
 	/* Ensure FP state is reset, if FP is used. */
-	l->l_md.md_flags &= ~MDL_USEDFPU;
+	l->l_md.md_flags &= ~MDP_USEDFPU;
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
+
 	if ((vaddr_t)catcher >= VM_MAXUSER_ADDRESS32) {
 		/*
 		 * process has given an invalid address for the
@@ -411,18 +419,20 @@ compat_16_netbsd32___sigreturn14(struct lwp *l, const struct compat_16_netbsd32_
 	if (copyin(scp, &context, sizeof(*scp)) != 0)
 		return (EFAULT);
 
+	/* Restore register context. */
+	tf = l->l_md.md_regs;
 	/*
 	 * Check for security violations.
 	 */
-	error = check_sigcontext32(l, &context);
+	error = check_sigcontext32(&context, tf);
 	if (error != 0)
 		return error;
 
-	/* Restore register context. */
-	tf = l->l_md.md_regs;
 	tf->tf_ds = context.sc_ds;
 	tf->tf_es = context.sc_es;
-	cpu_fsgs_reload(l, context.sc_fs, context.sc_gs);
+	tf->tf_fs = context.sc_fs;
+	tf->tf_gs = context.sc_gs;
+
 	tf->tf_rflags = context.sc_eflags;
 	tf->tf_rdi = context.sc_edi;
 	tf->tf_rsi = context.sc_esi;
@@ -567,8 +577,7 @@ xmm_to_s87_tag(const uint8_t *fpac, int regno, uint8_t tw)
 int
 netbsd32_process_read_fpregs(struct lwp *l, struct fpreg32 *regs)
 {
-	struct pcb *pcb = lwp_getpcb(l);
-	struct savefpu *sf = &pcb->pcb_savefpu;
+	struct savefpu *sf = &l->l_addr->u_pcb.pcb_savefpu;
 	struct fpreg regs64;
 	struct save87 *s87 = (struct save87 *)regs;
 	int error, i;
@@ -619,21 +628,21 @@ netbsd32_sysarch(struct lwp *l, const struct netbsd32_sysarch_args *uap, registe
 	int error;
 
 	switch (SCARG(uap, op)) {
-	case X86_IOPL:
-		error = x86_iopl(l,
-		    NETBSD32PTR64(SCARG(uap, parms)), retval);
-		break;
-	case X86_GET_MTRR:
-		error = x86_64_get_mtrr32(l,
-		    NETBSD32PTR64(SCARG(uap, parms)), retval);
-		break;
-	case X86_SET_MTRR:
-		error = x86_64_set_mtrr32(l,
-		    NETBSD32PTR64(SCARG(uap, parms)), retval);
-		break;
-	default:
-		error = EINVAL;
-		break;
+		case X86_IOPL:
+			error = x86_iopl(l,
+			    NETBSD32PTR64(SCARG(uap, parms)), retval);
+			break;
+		case X86_GET_MTRR:
+			error = x86_64_get_mtrr32(l,
+			    NETBSD32PTR64(SCARG(uap, parms)), retval);
+			break;
+		case X86_SET_MTRR:
+			error = x86_64_set_mtrr32(l,
+			    NETBSD32PTR64(SCARG(uap, parms)), retval);
+			break;
+		default:
+			error = EINVAL;
+			break;
 	}
 	return error;
 }
@@ -647,7 +656,6 @@ x86_64_get_mtrr32(struct lwp *l, void *args, register_t *retval)
 	int32_t n;
 	struct mtrr32 *m32p, m32;
 	struct mtrr *m64p, *mp;
-	size_t size;
 
 	m64p = NULL;
 
@@ -675,8 +683,7 @@ x86_64_get_mtrr32(struct lwp *l, void *args, register_t *retval)
 	if (n <= 0 || n > (MTRR_I686_NFIXED_SOFT + MTRR_I686_NVAR_MAX))
 		return EINVAL;
 
-	size = n * sizeof(struct mtrr);
-	m64p = kmem_zalloc(size, KM_SLEEP);
+	m64p = malloc(n * sizeof (struct mtrr), M_TEMP, M_WAITOK);
 	if (m64p == NULL) {
 		error = ENOMEM;
 		goto fail;
@@ -700,11 +707,12 @@ x86_64_get_mtrr32(struct lwp *l, void *args, register_t *retval)
 	}
 fail:
 	if (m64p != NULL)
-		kmem_free(m64p, size);
+		free(m64p, M_TEMP);
 	if (error != 0)
 		n = 0;
 	copyout(&n, (void *)(uintptr_t)args32.n, sizeof n);
 	return error;
+		
 }
 
 static int
@@ -715,7 +723,6 @@ x86_64_set_mtrr32(struct lwp *l, void *args, register_t *retval)
 	struct mtrr *m64p, *mp;
 	int error, i;
 	int32_t n;
-	size_t size;
 
 	m64p = NULL;
 
@@ -740,8 +747,7 @@ x86_64_set_mtrr32(struct lwp *l, void *args, register_t *retval)
 		goto fail;
 	}
 
-	size = n * sizeof(struct mtrr);
-	m64p = kmem_zalloc(size, KM_SLEEP);
+	m64p = malloc(n * sizeof (struct mtrr), M_TEMP, M_WAITOK);
 	if (m64p == NULL) {
 		error = ENOMEM;
 		goto fail;
@@ -764,7 +770,7 @@ x86_64_set_mtrr32(struct lwp *l, void *args, register_t *retval)
 	error = mtrr_set(m64p, &n, l->l_proc, 0);
 fail:
 	if (m64p != NULL)
-		kmem_free(m64p, size);
+		free(m64p, M_TEMP);
 	if (error != 0)
 		n = 0;
 	copyout(&n, (void *)(uintptr_t)args32.n, sizeof n);
@@ -845,11 +851,11 @@ cpu_setmcontext32(struct lwp *l, const mcontext32_t *mcp, unsigned int flags)
 		/*
 		 * Check for security violations.
 		 */
-		error = cpu_mcontext32_validate(l, mcp);
+		error = check_mcontext32(mcp, tf);
 		if (error != 0)
 			return error;
-
-		cpu_fsgs_reload(l, gr[_REG32_FS], gr[_REG32_GS]);
+		tf->tf_gs = gr[_REG32_GS];
+		tf->tf_fs = gr[_REG32_FS];
 		tf->tf_es = gr[_REG32_ES];
 		tf->tf_ds = gr[_REG32_DS];
 		/* Only change the user-alterable part of eflags */
@@ -868,23 +874,17 @@ cpu_setmcontext32(struct lwp *l, const mcontext32_t *mcp, unsigned int flags)
 		tf->tf_ss     = gr[_REG32_SS];
 	}
 
-	if ((flags & _UC_TLSBASE) != 0)
-		lwp_setprivate(l, (void *)(uintptr_t)mcp->_mc_tlsbase);
-
 	/* Restore floating point register context, if any. */
 	if ((flags & _UC_FPU) != 0) {
-		struct pcb *pcb = lwp_getpcb(l);
-
 		/*
 		 * If we were using the FPU, forget that we were.
 		 */
-		if (pcb->pcb_fpcpu != NULL) {
+		if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
 			fpusave_lwp(l, false);
-		}
-		memcpy(&pcb->pcb_savefpu.fp_fxsave, &mcp->__fpregs,
-		    sizeof (pcb->pcb_savefpu.fp_fxsave));
+		memcpy(&l->l_addr->u_pcb.pcb_savefpu.fp_fxsave, &mcp->__fpregs,
+		    sizeof (mcp->__fpregs));
 		/* If not set already. */
-		l->l_md.md_flags |= MDL_USEDFPU;
+		l->l_md.md_flags |= MDP_USEDFPU;
 	}
 
 	mutex_enter(p->p_lock);
@@ -931,18 +931,12 @@ cpu_getmcontext32(struct lwp *l, mcontext32_t *mcp, unsigned int *flags)
 
 	*flags |= _UC_CPU;
 
-	mcp->_mc_tlsbase = (uint32_t)(uintptr_t)l->l_private;
-	*flags |= _UC_TLSBASE;
-
 	/* Save floating point register context, if any. */
-	if ((l->l_md.md_flags & MDL_USEDFPU) != 0) {
-		struct pcb *pcb = lwp_getpcb(l);
-
-		if (pcb->pcb_fpcpu) {
+	if ((l->l_md.md_flags & MDP_USEDFPU) != 0) {
+		if (l->l_addr->u_pcb.pcb_fpcpu)
 			fpusave_lwp(l, true);
-		}
-		memcpy(&mcp->__fpregs, &pcb->pcb_savefpu.fp_fxsave,
-		    sizeof (pcb->pcb_savefpu.fp_fxsave));
+		memcpy(&mcp->__fpregs, &l->l_addr->u_pcb.pcb_savefpu.fp_fxsave,
+		    sizeof (mcp->__fpregs));
 		*flags |= _UC_FPU;
 	}
 }
@@ -950,15 +944,13 @@ cpu_getmcontext32(struct lwp *l, mcontext32_t *mcp, unsigned int *flags)
 void
 startlwp32(void *arg)
 {
+	int err;
 	ucontext32_t *uc = arg;
-	lwp_t *l = curlwp;
-	int error;
+	struct lwp *l = curlwp;
 
-	error = cpu_setmcontext32(l, &uc->uc_mcontext, uc->uc_flags);
-	KASSERT(error == 0);
+	err = cpu_setmcontext32(l, &uc->uc_mcontext, uc->uc_flags);
+	pool_put(&lwp_uc_pool, uc);
 
-	/* Note: we are freeing ucontext_t, not ucontext32_t. */
-	kmem_free(uc, sizeof(ucontext_t));
 	userret(l);
 }
 
@@ -967,24 +959,16 @@ startlwp32(void *arg)
  * and rely on catching invalid user contexts on exit from the kernel.
  * These functions perform the needed checks.
  */
-
 static int
-check_sigcontext32(struct lwp *l, const struct netbsd32_sigcontext *scp)
+check_sigcontext32(const struct netbsd32_sigcontext *scp, struct trapframe *tf)
 {
-	struct trapframe *tf;
-	struct pcb *pcb;
-
-	tf = l->l_md.md_regs;
-	pcb = lwp_getpcb(curlwp);
 
 	if (((scp->sc_eflags ^ tf->tf_rflags) & PSL_USERSTATIC) != 0 ||
 	    !VALID_USER_CSEL32(scp->sc_cs))
 		return EINVAL;
-	if (scp->sc_fs != 0 && !VALID_USER_DSEL32(scp->sc_fs) &&
-	    !(VALID_USER_FSEL32(scp->sc_fs) && pcb->pcb_fs != 0))
+	if (scp->sc_fs != 0 && !VALID_USER_DSEL32(scp->sc_fs))
 		return EINVAL;
-	if (scp->sc_gs != 0 && !VALID_USER_DSEL32(scp->sc_gs) &&
-	    !(VALID_USER_GSEL32(scp->sc_gs) && pcb->pcb_gs != 0))
+	if (scp->sc_gs != 0 && !VALID_USER_DSEL32(scp->sc_gs))
 		return EINVAL;
 	if (scp->sc_es != 0 && !VALID_USER_DSEL32(scp->sc_es))
 		return EINVAL;
@@ -995,25 +979,19 @@ check_sigcontext32(struct lwp *l, const struct netbsd32_sigcontext *scp)
 	return 0;
 }
 
-int
-cpu_mcontext32_validate(struct lwp *l, const mcontext32_t *mcp)
+static int
+check_mcontext32(const mcontext32_t *mcp, struct trapframe *tf)
 {
 	const __greg32_t *gr;
-	struct trapframe *tf;
-	struct pcb *pcb;
 
 	gr = mcp->__gregs;
-	tf = l->l_md.md_regs;
-	pcb = lwp_getpcb(l);
 
 	if (((gr[_REG32_EFL] ^ tf->tf_rflags) & PSL_USERSTATIC) != 0 ||
 	    !VALID_USER_CSEL32(gr[_REG32_CS]))
 		return EINVAL;
-	if (gr[_REG32_FS] != 0 && !VALID_USER_DSEL32(gr[_REG32_FS]) &&
-	    !(VALID_USER_FSEL32(gr[_REG32_FS]) && pcb->pcb_fs != 0))
+	if (gr[_REG32_FS] != 0 && !VALID_USER_DSEL32(gr[_REG32_FS]))
 		return EINVAL;
-	if (gr[_REG32_GS] != 0 && !VALID_USER_DSEL32(gr[_REG32_GS]) &&
-	    !(VALID_USER_GSEL32(gr[_REG32_GS]) && pcb->pcb_gs != 0))
+	if (gr[_REG32_GS] != 0 && !VALID_USER_DSEL32(gr[_REG32_GS]))
 		return EINVAL;
 	if (gr[_REG32_ES] != 0 && !VALID_USER_DSEL32(gr[_REG32_ES]))
 		return EINVAL;
@@ -1023,6 +1001,42 @@ cpu_mcontext32_validate(struct lwp *l, const mcontext32_t *mcp)
 	if (gr[_REG32_EIP] >= VM_MAXUSER_ADDRESS32)
 		return EINVAL;
 	return 0;
+}
+
+void
+netbsd32_cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+    void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct trapframe *tf;
+	struct netbsd32_saframe *sf, frame;
+
+	tf = l->l_md.md_regs;
+
+	frame.sa_type = type;
+	NETBSD32PTR32(frame.sa_sas, sas);
+	frame.sa_events = nevents;
+	frame.sa_interrupted = ninterrupted;
+	NETBSD32PTR32(frame.sa_arg, ap);
+	frame.sa_ra = 0;
+
+	sf = (struct netbsd32_saframe *)sp - 1;
+	if (copyout(&frame, sf, sizeof(frame)) != 0) {
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+
+	tf->tf_rip = (uintptr_t)upcall;
+	tf->tf_rsp = (uintptr_t)sf;
+	tf->tf_rbp = 0;
+	tf->tf_gs = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_fs = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_es = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_ds = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_cs = GSEL(GUCODE32_SEL, SEL_UPL);
+	tf->tf_ss = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_rflags &= ~(PSL_T|PSL_VM|PSL_AC);
+
+	l->l_md.md_flags |= MDP_IRET;
 }
 
 vaddr_t
@@ -1065,7 +1079,7 @@ compat_13_netbsd32_sigreturn(struct lwp *l, const struct compat_13_netbsd32_sigr
 	/*
 	 * Check for security violations.
 	 */
-	error = check_sigcontext32(l, (const struct netbsd32_sigcontext *)&context);
+	error = check_sigcontext32((const struct netbsd32_sigcontext *)&context, tf);
 	if (error != 0)
 		return error;
 

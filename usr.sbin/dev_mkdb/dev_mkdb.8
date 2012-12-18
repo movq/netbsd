@@ -26,11 +26,11 @@
 .\" SUCH DAMAGE.
 .\"
 .\"	from: @(#)dev_mkdb.8	8.1 (Berkeley) 6/6/93
-.\"	$NetBSD: dev_mkdb.8,v 1.13 2012/06/03 21:42:47 joerg Exp $
+.\"	$NetBSD: dev_mkdb.8,v 1.10 2003/08/07 11:25:18 agc Exp $
 .\"
-.Dd June 1, 2012
-.Dt DEV_MKDB 8
+.Dd June 6, 1993
 .Os
+.Dt DEV_MKDB 8
 .Sh NAME
 .Nm dev_mkdb
 .Nd create
@@ -38,16 +38,15 @@
 database
 .Sh SYNOPSIS
 .Nm
-.Op Fl c
 .Op Fl o Ar database
 .Op directory
 .Sh DESCRIPTION
 The
 .Nm
 command creates a
-.Xr cdbr 3
-database in
-.Dq Pa /var/run/dev.cdb 
+.Xr db 3
+hash access method database in
+.Dq Pa /var/run/dev.db
 which contains the names of all of the character and block special
 files in the specified directory, using the file type and the
 .Fa st_rdev
@@ -63,14 +62,6 @@ the latter is the st_rdev field.
 .Pp
 The options are as follows:
 .Bl -tag -width indent
-.It Fl c
-Create a
-.Xr db 3
-database for compatibility with libc versions and statically linked programs
-from before
-.Nx 6.0 .
-The default name is
-.Dq Pa /var/run/dev.db .
 .It Fl o Ar database
 Put the output databases in the named file.
 .El
@@ -87,7 +78,8 @@ Database file.
 .Xr db 3 ,
 .Xr devname 3 ,
 .Xr kvm_nlist 3 ,
-.Xr ttyname 3
+.Xr ttyname 3 ,
+.Xr kvm_mkdb 8
 .Sh HISTORY
 The
 .Nm

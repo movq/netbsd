@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_defs.h,v 1.4 2012/12/18 09:10:32 tron Exp $	*/
+/*	$NetBSD: sys_defs.h,v 1.1.1.1.2.6 2011/08/09 18:58:18 riz Exp $	*/
 
 #ifndef _SYS_DEFS_H_INCLUDED_
 #define _SYS_DEFS_H_INCLUDED_
@@ -27,10 +27,9 @@
   */
 #if defined(FREEBSD2) || defined(FREEBSD3) || defined(FREEBSD4) \
     || defined(FREEBSD5) || defined(FREEBSD6) || defined(FREEBSD7) \
-    || defined(FREEBSD8) || defined(FREEBSD9) \
+    || defined(FREEBSD8) \
     || defined(BSDI2) || defined(BSDI3) || defined(BSDI4) \
     || defined(OPENBSD2) || defined(OPENBSD3) || defined(OPENBSD4) \
-    || defined(OPENBSD5) \
     || defined(NETBSD1) || defined(NETBSD2) || defined(NETBSD3) \
     || defined(NETBSD4) \
     || defined(EKKOBSD1)
@@ -419,10 +418,6 @@ extern int opterr;
 #define LOCAL_TRIGGER	stream_trigger
 #define LOCAL_SEND_FD	stream_send_fd
 #define LOCAL_RECV_FD	stream_recv_fd
-#define PASS_CONNECT	stream_pass_connect
-#define PASS_LISTEN	stream_pass_listen
-#define PASS_ACCEPT	stream_pass_accept
-#define PASS_TRIGGER	stream_pass_trigger
 #define HAS_VOLATILE_LOCKS
 #define BROKEN_READ_SELECT_ON_TCP_SOCKET
 #define CANT_WRITE_BEFORE_SENDING_FD
@@ -579,7 +574,6 @@ extern int opterr;
 #define BROKEN_AI_PASSIVE_NULL_HOST
 #define BROKEN_AI_NULL_SERVICE
 #define USE_SYSV_POLL
-#define MYMALLOC_FUZZ	1
 #endif
 
 #ifdef AIX4
@@ -1276,7 +1270,6 @@ extern int dup2_pass_on_exec(int oldd, int newd);
  /*
   * Defaults for systems that pre-date IPv6 support.
   */
-#ifndef __NetBSD__
 #ifndef HAS_IPV6
 #define EMULATE_IPV4_ADDRINFO
 #define MISSING_INET_PTON
@@ -1284,7 +1277,6 @@ extern int dup2_pass_on_exec(int oldd, int newd);
 extern const char *inet_ntop(int, const void *, char *, size_t);
 extern int inet_pton(int, const char *, void *);
 
-#endif
 #endif
 
  /*
@@ -1346,10 +1338,9 @@ extern int inet_pton(int, const char *, void *);
 #endif
 
 #ifndef PASS_LISTEN
-#define PASS_CONNECT	unix_pass_connect
-#define PASS_LISTEN	unix_pass_listen
-#define PASS_ACCEPT	unix_pass_accept
-#define PASS_TRIGGER	unix_pass_trigger
+#define PASS_LISTEN	upass_listen
+#define PASS_ACCEPT	upass_accept
+#define PASS_TRIGGER	upass_trigger
 #endif
 
 #if !defined (HAVE_SYS_NDIR_H) && !defined (HAVE_SYS_DIR_H) \
@@ -1523,20 +1514,6 @@ typedef int pid_t;
 #define PRINTFPTRLIKE(x,y) PRINTFLIKE(x,y)
 #else
 #define PRINTFPTRLIKE(x,y)
-#endif
-#endif
-
- /*
-  * Compiler optimization hint. This makes sense only for code in a
-  * performance-critical loop.
-  */
-#ifndef EXPECTED
-#if defined(__GNUC__) && (__GNUC__ > 2)
-#define EXPECTED(x)	__builtin_expect(!!(x), 1)
-#define UNEXPECTED(x)	__builtin_expect(!!(x), 0)
-#else
-#define EXPECTED(x)	(x)
-#define UNEXPECTED(x)	(x)
 #endif
 #endif
 

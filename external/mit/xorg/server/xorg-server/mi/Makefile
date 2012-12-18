@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2011/08/02 09:11:38 mrg Exp $
+#	$NetBSD: Makefile,v 1.5.2.1 2009/09/17 04:24:41 snj Exp $
 
 .include "../Makefile.serverlib"
 .include "../Makefile.servermod"
@@ -6,13 +6,13 @@
 LIB=		mi
 
 .PATH:		${X11SRCDIR.xorg-server}/mi
-SRCS=		miarc.c mibitblt.c micopy.c \
+SRCS=		miarc.c mibank.c mibitblt.c mibstore.c \
 		micmap.c micursor.c midash.c midispcur.c mieq.c \
 		miexpose.c mifillarc.c mifillrct.c mifpolycon.c \
 		migc.c miglblt.c mioverlay.c mipointer.c mipoly.c \
 		mipolycon.c mipolygen.c mipolypnt.c mipolyrect.c \
 		mipolyseg.c mipolytext.c mipolyutil.c mipushpxl.c \
-		miscrinit.c mispans.c misprite.c \
+		miregion.c miscrinit.c mispans.c misprite.c \
 		mivaltree.c miwideline.c miwindow.c mizerarc.c \
 		mizerclip.c mizerline.c
 

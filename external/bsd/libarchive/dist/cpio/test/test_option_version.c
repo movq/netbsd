@@ -74,14 +74,10 @@ verify(const char *p, size_t s)
 	/* Skip a single trailing a,b,c, or d. */
 	if (*q == 'a' || *q == 'b' || *q == 'c' || *q == 'd')
 		++q;
-	/* All terminated by end-of-line: \r, \r\n, or \n */
+	/* All terminated by a newline. */
 	assert(s >= 1);
 	failure("Version: %s", p);
-	if (*q == '\x0d') {
-		if (q[1] != '\0')
-			assertEqualMem(q, "\x0d\x0a", 2);
-	} else
-		assertEqualMem(q, "\x0a", 1);
+	assertEqualMem(q, "\n", 1);
 }
 
 

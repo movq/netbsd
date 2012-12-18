@@ -1,4 +1,4 @@
-/*	$NetBSD: btuart.c,v 1.26 2011/07/31 13:51:53 uebayasi Exp $	*/
+/*	$NetBSD: btuart.c,v 1.19 2008/06/12 21:47:11 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 KIYOHARA Takashi
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btuart.c,v 1.26 2011/07/31 13:51:53 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btuart.c,v 1.19 2008/06/12 21:47:11 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -82,7 +82,7 @@ struct btuart_softc {
 #define BTUART_RECV_EVENT_DATA	6	/* event packet data */
 
 void btuartattach(int);
-static int btuart_match(device_t, cfdata_t, void *);
+static int btuart_match(device_t, struct cfdata *, void *);
 static void btuart_attach(device_t, device_t, void *);
 static int btuart_detach(device_t, int);
 
@@ -164,7 +164,7 @@ btuartattach(int num __unused)
  * Autoconf match routine.
  */
 static int
-btuart_match(device_t self __unused, cfdata_t cfdata __unused,
+btuart_match(device_t self __unused, struct cfdata *cfdata __unused,
 	     void *arg __unused)
 {
 
@@ -222,14 +222,13 @@ btuartopen(dev_t devno __unused, struct tty *tp)
 {
 	struct btuart_softc *sc;
 	device_t dev;
-	cfdata_t cfdata;
+	struct cfdata *cfdata;
 	struct lwp *l = curlwp;		/* XXX */
 	int error, unit, s;
 
-	error = kauth_authorize_device(l->l_cred, KAUTH_DEVICE_BLUETOOTH_BTUART,
-	    KAUTH_ARG(KAUTH_REQ_DEVICE_BLUETOOTH_BTUART_ADD), NULL, NULL, NULL);
-	if (error)
-		return (error);
+	if ((error = kauth_authorize_device_tty(l->l_cred,
+	    KAUTH_GENERIC_ISSUSER, tp)) != 0)
+		return error;
 
 	s = spltty();
 
@@ -261,9 +260,8 @@ btuartopen(dev_t devno __unused, struct tty *tp)
 	}
 	sc = device_private(dev);
 
-	aprint_normal_dev(dev, "major %llu minor %llu\n",
-	    (unsigned long long)major(tp->t_dev),
-	    (unsigned long long)minor(tp->t_dev));
+	aprint_normal_dev(dev, "major %d minor %d\n",
+	    major(tp->t_dev), minor(tp->t_dev));
 
 	sc->sc_tp = tp;
 	tp->t_sc = sc;
@@ -281,7 +279,7 @@ static int
 btuartclose(struct tty *tp, int flag __unused)
 {
 	struct btuart_softc *sc = tp->t_sc;
-	cfdata_t cfdata;
+	struct cfdata *cfdata;
 	int s;
 
 	s = spltty();
@@ -351,7 +349,8 @@ btuartinput(int c, struct tty *tp)
 			/* new packet */
 			MGETHDR(m, M_DONTWAIT, MT_DATA);
 			if (m == NULL) {
-				aprint_error_dev(sc->sc_dev, "out of memory\n");
+				aprint_error_dev(sc->sc_dev,
+				    "out of memory\n");
 				sc->sc_stats.err_rx++;
 				return 0;	/* (lost sync) */
 			}
@@ -366,7 +365,8 @@ btuartinput(int c, struct tty *tp)
 			/* extend mbuf */
 			MGET(m->m_next, M_DONTWAIT, MT_DATA);
 			if (m->m_next == NULL) {
-				aprint_error_dev(sc->sc_dev, "out of memory\n");
+				aprint_error_dev(sc->sc_dev,
+				    "out of memory\n");
 				sc->sc_stats.err_rx++;
 				return 0;	/* (lost sync) */
 			}

@@ -1,7 +1,7 @@
-/*	$Id: njata_cardbus.c,v 1.15 2011/08/01 11:20:28 drochner Exp $	*/
+/*	$Id: njata_cardbus.c,v 1.7 2008/06/24 19:44:52 drochner Exp $	*/
 
 /*
- * Copyright (c) 2006 ITOH Yasufumi.
+ * Copyright (c) 2006 ITOH Yasufumi <itohy@NetBSD.org>.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: njata_cardbus.c,v 1.15 2011/08/01 11:20:28 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: njata_cardbus.c,v 1.7 2008/06/24 19:44:52 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,15 +47,16 @@ __KERNEL_RCSID(0, "$NetBSD: njata_cardbus.c,v 1.15 2011/08/01 11:20:28 drochner 
 #include <dev/ic/ninjaata32reg.h>
 #include <dev/ic/ninjaata32var.h>
 
-#define NJATA32_CARDBUS_BASEADDR_IO	PCI_BAR0
-#define NJATA32_CARDBUS_BASEADDR_MEM	PCI_BAR1
+#define NJATA32_CARDBUS_BASEADDR_IO	CARDBUS_BASE0_REG
+#define NJATA32_CARDBUS_BASEADDR_MEM	CARDBUS_BASE1_REG
 
 struct njata32_cardbus_softc {
 	struct njata32_softc	sc_njata32;
 
 	/* CardBus-specific goo */
 	cardbus_devfunc_t	sc_ct;		/* our CardBus devfuncs */
-	pcitag_t		sc_tag;
+	cardbus_intr_line_t	sc_intrline;	/* our interrupt line */
+	cardbustag_t		sc_tag;
 
 	bus_space_handle_t	sc_regmaph;
 	bus_size_t		sc_regmap_size;
@@ -65,14 +66,14 @@ static const struct njata32_cardbus_product *njata_cardbus_lookup
 		    (const struct cardbus_attach_args *);
 static int	njata_cardbus_match(device_t, cfdata_t, void *);
 static void	njata_cardbus_attach(device_t, device_t, void *);
-static int	njata_cardbus_detach(device_t, int);
+static int	njata_cardbus_detach(struct device *, int);
 
 CFATTACH_DECL_NEW(njata_cardbus, sizeof(struct njata32_cardbus_softc),
     njata_cardbus_match, njata_cardbus_attach, njata_cardbus_detach, NULL);
 
 static const struct njata32_cardbus_product {
-	pci_vendor_id_t		p_vendor;
-	pci_product_id_t	p_product;
+	cardbus_vendor_id_t	p_vendor;
+	cardbus_product_id_t	p_product;
 	uint8_t			p_flags;
 #define NJATA32_FL_IOMAP_ONLY	1	/* registers are only in the I/O map */
 } njata32_cardbus_products[] = {
@@ -100,8 +101,8 @@ njata_cardbus_lookup(const struct cardbus_attach_args *ca)
 
 	for (p = njata32_cardbus_products;
 	    p->p_vendor != PCI_VENDOR_INVALID; p++) {
-		if (PCI_VENDOR(ca->ca_id) == p->p_vendor &&
-		    PCI_PRODUCT(ca->ca_id) == p->p_product)
+		if (CARDBUS_VENDOR(ca->ca_id) == p->p_vendor &&
+		    CARDBUS_PRODUCT(ca->ca_id) == p->p_product)
 			return p;
 	}
 
@@ -127,6 +128,8 @@ njata_cardbus_attach(device_t parent, device_t self, void *aux)
 	struct njata32_softc *sc = &csc->sc_njata32;
 	const struct njata32_cardbus_product *prod;
 	cardbus_devfunc_t ct = ca->ca_ct;
+	cardbus_chipset_tag_t cc = ct->ct_cc;
+	cardbus_function_tag_t cf = ct->ct_cf;
 	pcireg_t reg;
 	int csr;
 	uint8_t latency = 0x20;
@@ -139,6 +142,7 @@ njata_cardbus_attach(device_t parent, device_t self, void *aux)
 
 	csc->sc_ct = ct;
 	csc->sc_tag = ca->ca_tag;
+	csc->sc_intrline = ca->ca_intrline;
 
 	/*
 	 * Map the device.
@@ -169,6 +173,7 @@ njata_cardbus_attach(device_t parent, device_t self, void *aux)
 #endif
 		csr |= PCI_COMMAND_MEM_ENABLE;
 		sc->sc_flags = NJATA32_MEM_MAPPED;
+		(*ct->ct_cf->cardbus_ctrl)(cc, CARDBUS_MEM_ENABLE);
 	} else {
 	try_io:
 		if (Cardbus_mapreg_map(csc->sc_ct, NJATA32_CARDBUS_BASEADDR_IO,
@@ -180,6 +185,7 @@ njata_cardbus_attach(device_t parent, device_t self, void *aux)
 #endif
 			csr |= PCI_COMMAND_IO_ENABLE;
 			sc->sc_flags = NJATA32_IO_MAPPED;
+			(*ct->ct_cf->cardbus_ctrl)(cc, CARDBUS_IO_ENABLE);
 		} else {
 			aprint_error("%s: unable to map device registers\n",
 			    NJATA32NAME(sc));
@@ -187,21 +193,24 @@ njata_cardbus_attach(device_t parent, device_t self, void *aux)
 		}
 	}
 
+	/* Make sure the right access type is on the CardBus bridge. */
+	(*ct->ct_cf->cardbus_ctrl)(cc, CARDBUS_BM_ENABLE);
+
 	/* Enable the appropriate bits in the PCI CSR. */
-	reg = Cardbus_conf_read(ct, ca->ca_tag, PCI_COMMAND_STATUS_REG);
+	reg = cardbus_conf_read(cc, cf, ca->ca_tag, PCI_COMMAND_STATUS_REG);
 	reg &= ~(PCI_COMMAND_IO_ENABLE|PCI_COMMAND_MEM_ENABLE);
 	reg |= csr;
-	Cardbus_conf_write(ct, ca->ca_tag, PCI_COMMAND_STATUS_REG, reg);
+	cardbus_conf_write(cc, cf, ca->ca_tag, PCI_COMMAND_STATUS_REG, reg);
 
 	/*
 	 * Make sure the latency timer is set to some reasonable
 	 * value.
 	 */
-	reg = Cardbus_conf_read(ct, ca->ca_tag, PCI_BHLC_REG);
-	if (PCI_LATTIMER(reg) < latency) {
-		reg &= ~(PCI_LATTIMER_MASK << PCI_LATTIMER_SHIFT);
-		reg |= (latency << PCI_LATTIMER_SHIFT);
-		Cardbus_conf_write(ct, ca->ca_tag, PCI_BHLC_REG, reg);
+	reg = cardbus_conf_read(cc, cf, ca->ca_tag, CARDBUS_BHLC_REG);
+	if (CARDBUS_LATTIMER(reg) < latency) {
+		reg &= ~(CARDBUS_LATTIMER_MASK << CARDBUS_LATTIMER_SHIFT);
+		reg |= (latency << CARDBUS_LATTIMER_SHIFT);
+		cardbus_conf_write(cc, cf, ca->ca_tag, CARDBUS_BHLC_REG, reg);
 	}
 
 	sc->sc_dmat = ca->ca_dmat;
@@ -209,7 +218,8 @@ njata_cardbus_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * Establish the interrupt.
 	 */
-	sc->sc_ih = Cardbus_intr_establish(ct, IPL_BIO, njata32_intr, sc);
+	sc->sc_ih = cardbus_intr_establish(cc, cf, ca->ca_intrline, IPL_BIO,
+	    njata32_intr, sc);
 	if (sc->sc_ih == NULL) {
 		aprint_error("%s: unable to establish interrupt\n",
 		    NJATA32NAME(sc));
@@ -232,7 +242,8 @@ njata_cardbus_detach(device_t self, int flags)
 		return rv;
 
 	if (sc->sc_ih)
-		Cardbus_intr_disestablish(csc->sc_ct, sc->sc_ih);
+		cardbus_intr_disestablish(csc->sc_ct->ct_cc,
+		    csc->sc_ct->ct_cf, sc->sc_ih);
 
 	if (sc->sc_flags & NJATA32_IO_MAPPED)
 		Cardbus_mapreg_unmap(csc->sc_ct, NJATA32_CARDBUS_BASEADDR_IO,

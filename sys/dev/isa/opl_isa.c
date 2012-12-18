@@ -1,11 +1,11 @@
-/*	$NetBSD: opl_isa.c,v 1.21 2012/04/09 10:18:17 plunky Exp $	*/
+/*	$NetBSD: opl_isa.c,v 1.19 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
- * Copyright (c) 1999, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Lennart Augustsson, and by Andrew Doran.
+ * by Lennart Augustsson.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opl_isa.c,v 1.21 2012/04/09 10:18:17 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opl_isa.c,v 1.19 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,12 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: opl_isa.c,v 1.21 2012/04/09 10:18:17 plunky Exp $");
 int	opl_isa_match(device_t, cfdata_t, void *);
 void	opl_isa_attach(device_t, device_t, void *);
 
-struct opl_isa_softc {
-	struct opl_softc	sc_opl;
-	kmutex_t		sc_lock;
-};
-
-CFATTACH_DECL_NEW(opl_isa, sizeof(struct opl_isa_softc),
+CFATTACH_DECL_NEW(opl_isa, sizeof(struct opl_softc),
     opl_isa_match, opl_isa_attach, NULL, NULL);
 
 int
@@ -102,10 +97,9 @@ void
 opl_isa_attach(device_t parent, device_t self, void *aux)
 {
 	struct opl_softc *sc = device_private(self);
-	struct opl_isa_softc *isa = device_private(self);
 	struct isa_attach_args *ia = aux;
 
-	sc->dev = self;
+	sc->mididev.dev = self;
 	sc->iot = ia->ia_iot;
 
 	if (bus_space_map(sc->iot, ia->ia_io[0].ir_addr, OPL_SIZE,
@@ -114,8 +108,6 @@ opl_isa_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 	sc->offs = 0;
-	sc->lock = &isa->sc_lock;
-	mutex_init(&isa->sc_lock, MUTEX_DEFAULT, IPL_NONE);
 
 	opl_attach(sc);
 }

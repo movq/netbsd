@@ -1,8 +1,8 @@
-.\"	$NetBSD: mq_open.3,v 1.6 2012/03/15 19:04:47 njoly Exp $
+.\"	$NetBSD: mq_open.3,v 1.1.2.2 2009/01/16 01:12:31 snj Exp $
 .\"
 .\" Copyright (c) 2001-2003 The Open Group, All Rights Reserved
 .\"
-.Dd June 7, 2010
+.Dd January 5, 2009
 .Dt MQ_OPEN 3
 .Os
 .Sh NAME
@@ -59,7 +59,7 @@ is the bitwise-inclusive OR of values from the following list.
 Applications must specify exactly one of the first three values
 (access modes) below in the value of
 .Fa oflag :
-.Bl -tag -width ".Dv O_RDONLY"
+.Bl -tag -width It
 .It Dv O_RDONLY
 Open the message queue for receiving messages.
 The process can use the returned message queue descriptor with
@@ -85,7 +85,7 @@ or different processes for sending/receiving messages.
 .Pp
 Any combination of the remaining flags may be specified in the value of
 .Fa oflag :
-.Bl -tag -width ".Dv O_NONBLOCK"
+.Bl -tag -width It
 .It Dv O_CREAT
 Create a message queue.
 It requires two additional arguments:
@@ -178,7 +178,7 @@ or fails with errno set to
 The
 .Fn mq_open
 function does not add or remove messages from the queue.
-.Sh IMPLEMENTATION NOTES
+.Sh NOTES
 The
 .Xr select 2
 and
@@ -249,8 +249,12 @@ is not set and the named message queue does not exist.
 There is insufficient space for the creation of the new message queue.
 .El
 .Sh SEE ALSO
-.Xr mq 3 ,
 .Xr mq_close 3 ,
+.Xr mq_getattr 3 ,
+.Xr mq_notify 3 ,
+.Xr mq_receive 3 ,
+.Xr mq_send 3 ,
+.Xr mq_setattr 3 ,
 .Xr mq_unlink 3
 .Sh STANDARDS
 This function conforms to the
@@ -270,4 +274,4 @@ event of any discrepancy between this version and the original IEEE and
 The Open Group Standard, the original IEEE and The Open Group Standard
 is the referee document.
 The original Standard can be obtained online at
-.Lk http://www.opengroup.org/unix/online.html .
+http://www.opengroup.org/unix/online.html .

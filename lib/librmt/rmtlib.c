@@ -1,4 +1,4 @@
-/*	$NetBSD: rmtlib.c,v 1.26 2012/03/21 10:10:37 matt Exp $	*/
+/*	$NetBSD: rmtlib.c,v 1.21.26.1 2011/09/17 18:50:46 bouyer Exp $	*/
 
 /*
  *	rmt --- remote tape emulator subroutines
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: rmtlib.c,v 1.26 2012/03/21 10:10:37 matt Exp $");
+__RCSID("$NetBSD: rmtlib.c,v 1.21.26.1 2011/09/17 18:50:46 bouyer Exp $");
 
 #define RMTIOCTL	1
 /* #define USE_REXEC	1 */	/* rexec code courtesy of Dan Kegel, srs!dan */
@@ -72,6 +72,8 @@ static	int	remdev(const char *);
 static	void	rmtabort(int);
 static	int	status(int);
 
+	int	isrmt(int);
+
 
 #define BUFMAGIC	64	/* a magic number for buffer sizes */
 #define MAXUNIT		4
@@ -114,7 +116,7 @@ command(int fildes, const char *buf)
 
 	blen = strlen(buf);
 	pstat = signal(SIGPIPE, SIG_IGN);
-	if ((size_t)write(WRITE(fildes), buf, blen) == blen) {
+	if (write(WRITE(fildes), buf, blen) == blen) {
 		signal(SIGPIPE, pstat);
 		return 0;
 	}
@@ -224,7 +226,7 @@ _rmt_rexec(const char *host, const char *user)
 
 	rexecserv = getservbyname("exec", "tcp");
 	if (rexecserv == NULL)
-		errx(1, "exec/tcp: service not available.");
+		errx(1, exec/tcp: service not available.");
 	if ((user != NULL) && *user == '\0')
 		user = NULL;
 	return rexec(&host, rexecserv->s_port, user, NULL,
@@ -254,7 +256,7 @@ _rmt_open(const char *path, int oflag, int mode)
 	char device[BUFMAGIC];
 	char login[BUFMAGIC];
 	char *sys, *dev, *user;
-	const char *rshpath, *rsh;
+	char *rshpath, *rsh;
 
 	_DIAGASSERT(path != NULL);
 
@@ -422,7 +424,7 @@ _rmt_read(int fildes, void *buf, size_t nbyte)
 	if (command(fildes, buffer) == -1 || (rv = status(fildes)) == -1)
 		return -1;
 
-	if (rv > (int)nbyte)
+	if (rv > nbyte)
 		rv = (int)nbyte;
 
 	for (rc = rv, p = buf; rc > 0; rc -= nread, p += nread) {
@@ -453,7 +455,7 @@ _rmt_write(int fildes, const void *buf, size_t nbyte)
 		return -1;
 
 	pstat = signal(SIGPIPE, SIG_IGN);
-	if ((size_t)write(WRITE(fildes), buf, nbyte) == nbyte) {
+	if (write(WRITE(fildes), buf, nbyte) == nbyte) {
 		signal(SIGPIPE, pstat);
 		return status(fildes);
 	}

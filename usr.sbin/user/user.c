@@ -1,4 +1,4 @@
-/* $NetBSD: user.c,v 1.131 2012/11/28 11:31:27 blymn Exp $ */
+/* $NetBSD: user.c,v 1.120.4.2 2009/10/16 14:50:41 sborrill Exp $ */
 
 /*
  * Copyright (c) 1999 Alistair G. Crooks.  All rights reserved.
@@ -33,13 +33,12 @@
 #ifndef lint
 __COPYRIGHT("@(#) Copyright (c) 1999\
  The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: user.c,v 1.131 2012/11/28 11:31:27 blymn Exp $");
+__RCSID("$NetBSD: user.c,v 1.120.4.2 2009/10/16 14:50:41 sborrill Exp $");
 #endif
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/stat.h>
-#include <sys/wait.h>
 
 #include <ctype.h>
 #include <dirent.h>
@@ -49,6 +48,7 @@ __RCSID("$NetBSD: user.c,v 1.131 2012/11/28 11:31:27 blymn Exp $");
 #ifdef EXTENSIONS
 #include <login_cap.h>
 #endif
+#include <paths.h>
 #include <pwd.h>
 #include <regex.h>
 #include <stdarg.h>
@@ -61,7 +61,6 @@ __RCSID("$NetBSD: user.c,v 1.131 2012/11/28 11:31:27 blymn Exp $");
 #include <util.h>
 #include <errno.h>
 
-#include "pathnames.h"
 #include "defs.h"
 #include "usermgmt.h"
 
@@ -72,14 +71,7 @@ typedef struct range_t {
 	int	r_to;		/* high uid */
 } range_t;
 
-typedef struct rangelist_t {
-	unsigned	rl_rsize;		/* size of range array */
-	unsigned	rl_rc;			/* # of ranges */
-	range_t	       *rl_rv;			/* the ranges */
-	unsigned	rl_defrc;		/* # of ranges in defaults */
-} rangelist_t;
-
-/* this struct encapsulates the user and group information */
+/* this struct encapsulates the user information */
 typedef struct user_t {
 	int		u_flags;		/* see below */
 	int		u_uid;			/* uid of user */
@@ -96,30 +88,14 @@ typedef struct user_t {
 	char	       *u_inactive;		/* when account will expire */
 	char	       *u_skeldir;		/* directory for startup files */
 	char	       *u_class;		/* login class */
-	rangelist_t 	u_r;			/* list of ranges */
+	unsigned	u_rsize;		/* size of range array */
+	unsigned	u_rc;			/* # of ranges */
+	range_t	       *u_rv;			/* the ranges */
 	unsigned	u_defrc;		/* # of ranges in defaults */
 	int		u_preserve;		/* preserve uids on deletion */
 	int		u_allow_samba;		/* allow trailing '$' for samba login names */
 	int		u_locked;		/* user account lock */
 } user_t;
-#define u_rsize u_r.rl_rsize
-#define u_rc    u_r.rl_rc
-#define u_rv    u_r.rl_rv
-#define u_defrc u_r.rl_defrc
-
-/* this struct encapsulates the user and group information */
-typedef struct group_t {
-	rangelist_t	g_r;			/* list of ranges */
-} group_t;
-#define g_rsize g_r.rl_rsize
-#define g_rc    g_r.rl_rc
-#define g_rv    g_r.rl_rv
-#define g_defrc g_r.rl_defrc
-
-typedef struct def_t {
-	user_t user;
-	group_t group;
-} def_t;
 
 /* flags for which fields of the user_t replace the passwd entry */
 enum {
@@ -141,6 +117,8 @@ enum {
 #define	UNLOCK		0
 #define LOCK		1
 #define LOCKED		"*LOCKED*"
+
+#define	PATH_LOGINCONF	"/etc/login.conf"
 
 #ifndef DEF_GROUP
 #define DEF_GROUP	"users"
@@ -204,12 +182,25 @@ enum {
 	PasswordLength = 2048,
 
 	DES_Len = 13,
+
+	LowGid = DEF_LOWUID,
+	HighGid = DEF_HIGHUID
 };
+
+/* Full paths of programs used here */
+#define CHMOD		"/bin/chmod"
+#define CHOWN		"/usr/sbin/chown"
+#define MKDIR		"/bin/mkdir"
+#define MV		"/bin/mv"
+#define NOLOGIN		"/sbin/nologin"
+#define PAX		"/bin/pax"
+#define RM		"/bin/rm"
 
 #define UNSET_INACTIVE	"Null (unset)"
 #define UNSET_EXPIRY	"Null (unset)"
 
-static int		asystem(const char *fmt, ...) __printflike(1, 2);
+static int		asystem(const char *fmt, ...)
+			    __attribute__((__format__(__printf__, 1, 2)));
 static int		is_number(const char *);
 static struct group	*find_group_info(const char *);
 static int		verbose;
@@ -255,13 +246,8 @@ asystem(const char *fmt, ...)
 	if (verbose) {
 		(void)printf("Command: %s\n", buf);
 	}
-	ret = system(buf);
-	if (ret == -1) {
+	if ((ret = system(buf)) != 0) {
 		warn("Error running `%s'", buf);
-	} else if (WIFSIGNALED(ret)) {
-		warnx("Error running `%s': Signal %d", buf, WTERMSIG(ret));
-	} else if (WIFEXITED(ret) && WEXITSTATUS(ret) != 0) {
-		warnx("Error running `%s': Exit %d", buf, WEXITSTATUS(ret));
 	}
 	return ret;
 }
@@ -297,8 +283,7 @@ removehomedir(struct passwd *pwp)
 
 	(void)seteuid(pwp->pw_uid);
 	/* we add the "|| true" to keep asystem() quiet if there is a non-zero exit status. */
-	(void)asystem("%s -rf %s > /dev/null 2>&1 || true", _PATH_RM,
-		      pwp->pw_dir);
+	(void)asystem("%s -rf %s > /dev/null 2>&1 || true", RM, pwp->pw_dir);
 	(void)seteuid(0);
 	if (rmdir(pwp->pw_dir) < 0) {
 		warn("Unable to remove all files in `%s'", pwp->pw_dir);
@@ -355,12 +340,12 @@ copydotfiles(char *skeldir, int uid, int gid, char *dir, mode_t homeperm)
 		warnx("No \"dot\" initialisation files found");
 	} else {
 		(void)asystem("cd %s && %s -rw -pe %s . %s",
-			skeldir, _PATH_PAX, (verbose) ? "-v" : "", dir);
+				skeldir, PAX, (verbose) ? "-v" : "", dir);
 	}
-	(void)asystem("%s -R -h %d:%d %s", _PATH_CHOWN, uid, gid, dir);
-	(void)asystem("%s -R u+w %s", _PATH_CHMOD, dir);
+	(void)asystem("%s -R -h %d:%d %s", CHOWN, uid, gid, dir);
+	(void)asystem("%s -R u+w %s", CHMOD, dir);
 #ifdef EXTENSIONS
-	(void)asystem("%s 0%o %s", _PATH_CHMOD, homeperm, dir);
+	(void)asystem("%s 0%o %s", CHMOD, homeperm, dir);
 #endif
 	return n;
 }
@@ -697,30 +682,30 @@ getnextgid(int *gidp, int lo, int hi)
 #ifdef EXTENSIONS
 /* save a range of uids */
 static int
-save_range(rangelist_t *rlp, char *cp)
+save_range(user_t *up, char *cp)
 {
 	int	from;
 	int	to;
 	int	i;
 
-	if (rlp->rl_rsize == 0) {
-		rlp->rl_rsize = 32;
-		NEWARRAY(range_t, rlp->rl_rv, rlp->rl_rsize, return(0));
-	} else if (rlp->rl_rc == rlp->rl_rsize) {
-		rlp->rl_rsize *= 2;
-		RENEW(range_t, rlp->rl_rv, rlp->rl_rsize, return(0));
+	if (up->u_rsize == 0) {
+		up->u_rsize = 32;
+		NEWARRAY(range_t, up->u_rv, up->u_rsize, return(0));
+	} else if (up->u_rc == up->u_rsize) {
+		up->u_rsize *= 2;
+		RENEW(range_t, up->u_rv, up->u_rsize, return(0));
 	}
-	if (rlp->rl_rv && sscanf(cp, "%d..%d", &from, &to) == 2) {
-		for (i = rlp->rl_defrc ; i < rlp->rl_rc ; i++) {
-			if (rlp->rl_rv[i].r_from == from &&
-			    rlp->rl_rv[i].r_to == to) {
+	if (up->u_rv && sscanf(cp, "%d..%d", &from, &to) == 2) {
+		for (i = up->u_defrc ; i < up->u_rc ; i++) {
+			if (up->u_rv[i].r_from == from &&
+			    up->u_rv[i].r_to == to) {
 				break;
 			}
 		}
-		if (i == rlp->rl_rc) {
-			rlp->rl_rv[rlp->rl_rc].r_from = from;
-			rlp->rl_rv[rlp->rl_rc].r_to = to;
-			rlp->rl_rc += 1;
+		if (i == up->u_rc) {
+			up->u_rv[up->u_rc].r_from = from;
+			up->u_rv[up->u_rc].r_to = to;
+			up->u_rc += 1;
 		}
 	} else {
 		warnx("Bad range `%s'", cp);
@@ -793,7 +778,7 @@ setdefaults(user_t *up)
 
 /* read the defaults file */
 static void
-read_defaults(def_t *dp)
+read_defaults(user_t *up)
 {
 	struct stat	st;
 	size_t		lineno;
@@ -801,10 +786,6 @@ read_defaults(def_t *dp)
 	FILE		*fp;
 	char		*cp;
 	char		*s;
-	user_t		*up = &dp->user;
-	group_t		*gp = &dp->group;
-
-	(void)memset(dp, 0, sizeof(*dp));
 
 	memsave(&up->u_primgrp, DEF_GROUP, strlen(DEF_GROUP));
 	memsave(&up->u_basedir, DEF_BASEDIR, strlen(DEF_BASEDIR));
@@ -819,9 +800,6 @@ read_defaults(def_t *dp)
 	NEWARRAY(range_t, up->u_rv, up->u_rsize, exit(1));
 	up->u_inactive = DEF_INACTIVE;
 	up->u_expire = DEF_EXPIRE;
-	gp->g_rsize = 16;
-	gp->g_defrc = 0;
-	NEWARRAY(range_t, gp->g_rv, gp->g_rsize, exit(1));
 	if ((fp = fopen(_PATH_USERMGMT_CONF, "r")) == NULL) {
 		if (stat(_PATH_USERMGMT_CONF, &st) < 0 && !setdefaults(up)) {
 			warn("Can't create `%s' defaults file",
@@ -868,7 +846,7 @@ read_defaults(def_t *dp)
 #ifdef EXTENSIONS
 			} else if (strncmp(s, "range", 5) == 0) {
 				cp = skipspace(s + 5);
-				(void)save_range(&up->u_r, cp);
+				(void)save_range(up, cp);
 #endif
 #ifdef EXTENSIONS
 			} else if (strncmp(s, "preserve", 8) == 0) {
@@ -887,11 +865,6 @@ read_defaults(def_t *dp)
 				} else {
 					memsave(&up->u_expire, cp, strlen(cp));
 				}
-#ifdef EXTENSIONS
-			} else if (strncmp(s, "gid_range", 9) == 0) {
-				cp = skipspace(s + 9);
-				(void)save_range(&gp->g_r, cp);
-#endif
 			}
 			(void)free(s);
 		}
@@ -984,9 +957,9 @@ valid_class(char *class)
 	 * user the actual login class does not exist.
 	 */
 
-	if (access(_PATH_LOGINCONF, R_OK) == -1) {
+	if (access(PATH_LOGINCONF, R_OK) == -1) {
 		warn("Access failed for `%s'; will not validate class `%s'",
-		    _PATH_LOGINCONF, class);
+		    PATH_LOGINCONF, class);
 		return 1;
 	}
 
@@ -1011,7 +984,7 @@ valid_shell(const char *shellname)
 	} 
 
 	/* if nologin is used as a shell, consider it a valid shell */
-	if (strcmp(shellname, _PATH_SBIN_NOLOGIN) == 0)
+	if (strcmp(shellname, NOLOGIN) == 0)
 		return 1;
 
 	while ((shellp = getusershell()) != NULL)
@@ -1110,7 +1083,6 @@ adduser(char *login_name, user_t *up)
 			    "short write to /etc/ptmp", login_name);
 		}
 	}
-	(void)close(masterfd);
 	/* if no uid was specified, get next one in [low_uid..high_uid] range */
 	sync_uid_gid = (strcmp(up->u_primgrp, "=uid") == 0);
 	if (up->u_uid == -1) {
@@ -1252,7 +1224,7 @@ adduser(char *login_name, user_t *up)
 			    "Can't add user `%s': home directory `%s' "
 			    "already exists", login_name, home);
 		} else {
-			if (asystem("%s -p %s", _PATH_MKDIR, home) != 0) {
+			if (asystem("%s -p %s", MKDIR, home) != 0) {
 				(void)close(ptmpfd);
 				(void)pw_abort();
 				errx(EXIT_FAILURE, "Can't add user `%s': "
@@ -1570,21 +1542,15 @@ moduser(char *login_name, char *newlogin, user_t *up, int allow_samba)
 		if (up->u_flags & F_GROUP) {
 			/* if -g=uid was specified, check gid is unused */
 			if (strcmp(up->u_primgrp, "=uid") == 0) {
-				if (getgrgid((gid_t)(pwp->pw_uid)) != NULL) {
+				if (getgrgid((gid_t)(up->u_uid)) != NULL) {
 					(void)close(ptmpfd);
 					(void)pw_abort();
 					errx(EXIT_FAILURE,
 					    "Can't modify user `%s': "
 					    "gid %d is already in use",
-					    login_name, pwp->pw_uid);
+					    login_name, up->u_uid);
 				}
-				pwp->pw_gid = pwp->pw_uid;
-				if (!creategid(newlogin, pwp->pw_uid, "")) {
-					errx(EXIT_FAILURE, 
-					    "Could not create group %s "
-					    "with uid %d", newlogin, 
-					    up->u_uid);
-				}
+				pwp->pw_gid = up->u_uid;
 			} else if ((grp = getgrnam(up->u_primgrp)) != NULL) {
 				pwp->pw_gid = grp->gr_gid;
 			} else if (is_number(up->u_primgrp) &&
@@ -1700,7 +1666,7 @@ moduser(char *login_name, char *newlogin, user_t *up, int allow_samba)
 	}
 	if (up != NULL) {
 		if ((up->u_flags & F_MKDIR) &&
-		    asystem("%s %s %s", _PATH_MV, homedir, pwp->pw_dir) != 0) {
+		    asystem("%s %s %s", MV, homedir, pwp->pw_dir) != 0) {
 			(void)close(ptmpfd);
 			(void)pw_abort();
 			errx(EXIT_FAILURE, "Can't modify user `%s': "
@@ -1842,8 +1808,7 @@ usermgmt_usage(const char *prog)
 int
 useradd(int argc, char **argv)
 {
-	def_t	def;
-	user_t	*up = &def.user;
+	user_t	u;
 	int	defaultfield;
 	int	bigD;
 	int	c;
@@ -1851,8 +1816,9 @@ useradd(int argc, char **argv)
 	int	i;
 #endif
 
-	read_defaults(&def);
-	up->u_uid = -1;
+	(void)memset(&u, 0, sizeof(u));
+	read_defaults(&u);
+	u.u_uid = -1;
 	defaultfield = bigD = 0;
 	while ((c = getopt(argc, argv, "DFG:b:c:d:e:f:g:k:mou:s:"
 	    ADD_OPT_EXTENSIONS)) != -1) {
@@ -1867,13 +1833,13 @@ useradd(int argc, char **argv)
 			 * next log in - passwd(5).
 			 */
 			defaultfield = 1;
-			memsave(&up->u_inactive, "-1", strlen("-1"));
+			memsave(&u.u_inactive, "-1", strlen("-1"));
 			break;
 		case 'G':
-			while (up->u_groupc < NGROUPS_MAX  &&
-			       (up->u_groupv[up->u_groupc] = strsep(&optarg, ",")) != NULL) {
-				if (up->u_groupv[up->u_groupc][0] != 0) {
-					up->u_groupc++;
+			while (u.u_groupc < NGROUPS_MAX  &&
+			       (u.u_groupv[u.u_groupc] = strsep(&optarg, ",")) != NULL) {
+				if (u.u_groupv[u.u_groupc][0] != 0) {
+					u.u_groupc++;
 				}
 			}
 			if (optarg != NULL) {
@@ -1883,72 +1849,72 @@ useradd(int argc, char **argv)
 			break;
 #ifdef EXTENSIONS
 		case 'S':
-			up->u_allow_samba = 1;
+			u.u_allow_samba = 1;
 			break;
 #endif
 		case 'b':
 			defaultfield = 1;
-			memsave(&up->u_basedir, optarg, strlen(optarg));
+			memsave(&u.u_basedir, optarg, strlen(optarg));
 			break;
 		case 'c':
-			memsave(&up->u_comment, optarg, strlen(optarg));
+			memsave(&u.u_comment, optarg, strlen(optarg));
 			break;
 		case 'd':
-			memsave(&up->u_home, optarg, strlen(optarg));
-			up->u_flags |= F_HOMEDIR;
+			memsave(&u.u_home, optarg, strlen(optarg));
+			u.u_flags |= F_HOMEDIR;
 			break;
 		case 'e':
 			defaultfield = 1;
-			memsave(&up->u_expire, optarg, strlen(optarg));
+			memsave(&u.u_expire, optarg, strlen(optarg));
 			break;
 		case 'f':
 			defaultfield = 1;
-			memsave(&up->u_inactive, optarg, strlen(optarg));
+			memsave(&u.u_inactive, optarg, strlen(optarg));
 			break;
 		case 'g':
 			defaultfield = 1;
-			memsave(&up->u_primgrp, optarg, strlen(optarg));
+			memsave(&u.u_primgrp, optarg, strlen(optarg));
 			break;
 		case 'k':
 			defaultfield = 1;
-			memsave(&up->u_skeldir, optarg, strlen(optarg));
+			memsave(&u.u_skeldir, optarg, strlen(optarg));
 			break;
 #ifdef EXTENSIONS
 		case 'L':
 			defaultfield = 1;
-			memsave(&up->u_class, optarg, strlen(optarg));
+			memsave(&u.u_class, optarg, strlen(optarg));
 			break;
 #endif
 		case 'm':
-			up->u_flags |= F_MKDIR;
+			u.u_flags |= F_MKDIR;
 			break;
 #ifdef EXTENSIONS
 		case 'M':
 			defaultfield = 1;
-			up->u_homeperm = strtoul(optarg, NULL, 8);
+			u.u_homeperm = strtoul(optarg, NULL, 8);
 			break;
 #endif
 		case 'o':
-			up->u_flags |= F_DUPUID;
+			u.u_flags |= F_DUPUID;
 			break;
 #ifdef EXTENSIONS
 		case 'p':
-			memsave(&up->u_password, optarg, strlen(optarg));
+			memsave(&u.u_password, optarg, strlen(optarg));
 			break;
 #endif
 #ifdef EXTENSIONS
 		case 'r':
 			defaultfield = 1;
-			(void)save_range(&up->u_r, optarg);
+			(void)save_range(&u, optarg);
 			break;
 #endif
 		case 's':
-			up->u_flags |= F_SHELL;
+			u.u_flags |= F_SHELL;
 			defaultfield = 1;
-			memsave(&up->u_shell, optarg, strlen(optarg));
+			memsave(&u.u_shell, optarg, strlen(optarg));
 			break;
 		case 'u':
-			up->u_uid = check_numeric(optarg, "uid");
+			u.u_uid = check_numeric(optarg, "uid");
 			break;
 #ifdef EXTENSIONS
 		case 'v':
@@ -1963,24 +1929,24 @@ useradd(int argc, char **argv)
 	if (bigD) {
 		if (defaultfield) {
 			checkeuid();
-			return setdefaults(up) ? EXIT_SUCCESS : EXIT_FAILURE;
+			return setdefaults(&u) ? EXIT_SUCCESS : EXIT_FAILURE;
 		}
-		(void)printf("group\t\t%s\n", up->u_primgrp);
-		(void)printf("base_dir\t%s\n", up->u_basedir);
-		(void)printf("skel_dir\t%s\n", up->u_skeldir);
-		(void)printf("shell\t\t%s\n", up->u_shell);
+		(void)printf("group\t\t%s\n", u.u_primgrp);
+		(void)printf("base_dir\t%s\n", u.u_basedir);
+		(void)printf("skel_dir\t%s\n", u.u_skeldir);
+		(void)printf("shell\t\t%s\n", u.u_shell);
 #ifdef EXTENSIONS
-		(void)printf("class\t\t%s\n", up->u_class);
-		(void)printf("homeperm\t0%o\n", up->u_homeperm);
+		(void)printf("class\t\t%s\n", u.u_class);
+		(void)printf("homeperm\t0%o\n", u.u_homeperm);
 #endif
-		(void)printf("inactive\t%s\n", (up->u_inactive == NULL) ?
-		    UNSET_INACTIVE : up->u_inactive);
-		(void)printf("expire\t\t%s\n", (up->u_expire == NULL) ?
-		    UNSET_EXPIRY : up->u_expire);
+		(void)printf("inactive\t%s\n", (u.u_inactive == NULL) ?
+		    UNSET_INACTIVE : u.u_inactive);
+		(void)printf("expire\t\t%s\n", (u.u_expire == NULL) ?
+		    UNSET_EXPIRY : u.u_expire);
 #ifdef EXTENSIONS
-		for (i = 0 ; i < up->u_rc ; i++) {
+		for (i = 0 ; i < u.u_rc ; i++) {
 			(void)printf("range\t\t%d..%d\n",
-			    up->u_rv[i].r_from, up->u_rv[i].r_to);
+			    u.u_rv[i].r_from, u.u_rv[i].r_to);
 		}
 #endif
 		return EXIT_SUCCESS;
@@ -1992,7 +1958,7 @@ useradd(int argc, char **argv)
 	}
 	checkeuid();
 	openlog("useradd", LOG_PID, LOG_USER);
-	return adduser(*argv, up) ? EXIT_SUCCESS : EXIT_FAILURE;
+	return adduser(*argv, &u) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 #ifdef EXTENSIONS
@@ -2004,46 +1970,46 @@ useradd(int argc, char **argv)
 int
 usermod(int argc, char **argv)
 {
-	def_t	def;
-	user_t	*up = &def.user;
+	user_t	u;
 	char	newuser[MaxUserNameLen + 1];
 	int	c, have_new_user;
 
+	(void)memset(&u, 0, sizeof(u));
 	(void)memset(newuser, 0, sizeof(newuser));
-	read_defaults(&def);
+	read_defaults(&u);
 	have_new_user = 0;
-	up->u_locked = -1;
+	u.u_locked = -1;
 	while ((c = getopt(argc, argv, "C:FG:c:d:e:f:g:l:mos:u:"
 	    MOD_OPT_EXTENSIONS)) != -1) {
 		switch(c) {
 		case 'G':
-			while (up->u_groupc < NGROUPS_MAX &&
-			    (up->u_groupv[up->u_groupc] =
+			while (u.u_groupc < NGROUPS_MAX &&
+			    (u.u_groupv[u.u_groupc] =
 			    strsep(&optarg, ",")) != NULL) {
-				if (up->u_groupv[up->u_groupc][0] != 0) {
-					up->u_groupc++;
+				if (u.u_groupv[u.u_groupc][0] != 0) {
+					u.u_groupc++;
 				}
 			}
 			if (optarg != NULL) {
 				warnx("Truncated list of secondary groups "
 				    "to %d entries", NGROUPS_MAX);
 			}
-			up->u_flags |= F_SECGROUP;
+			u.u_flags |= F_SECGROUP;
 			break;
 #ifdef EXTENSIONS
 		case 'S':
-			up->u_allow_samba = 1;
+			u.u_allow_samba = 1;
 			break;
 #endif
 		case 'c':
-			memsave(&up->u_comment, optarg, strlen(optarg));
-			up->u_flags |= F_COMMENT;
+			memsave(&u.u_comment, optarg, strlen(optarg));
+			u.u_flags |= F_COMMENT;
 			break;
 		case 'C':
 			if (strcasecmp(optarg, "yes") == 0) {
-				up->u_locked = LOCK;
+				u.u_locked = LOCK;
 			} else if (strcasecmp(optarg, "no") == 0) {
-				up->u_locked = UNLOCK;
+				u.u_locked = UNLOCK;
 			} else {
 				/* No idea. */
 				errx(EXIT_FAILURE,
@@ -2051,55 +2017,55 @@ usermod(int argc, char **argv)
 			}
 			break;
 		case 'F':
-			memsave(&up->u_inactive, "-1", strlen("-1"));
-			up->u_flags |= F_INACTIVE;
+			memsave(&u.u_inactive, "-1", strlen("-1"));
+			u.u_flags |= F_INACTIVE;
 			break;
 		case 'd':
-			memsave(&up->u_home, optarg, strlen(optarg));
-			up->u_flags |= F_HOMEDIR;
+			memsave(&u.u_home, optarg, strlen(optarg));
+			u.u_flags |= F_HOMEDIR;
 			break;
 		case 'e':
-			memsave(&up->u_expire, optarg, strlen(optarg));
-			up->u_flags |= F_EXPIRE;
+			memsave(&u.u_expire, optarg, strlen(optarg));
+			u.u_flags |= F_EXPIRE;
 			break;
 		case 'f':
-			memsave(&up->u_inactive, optarg, strlen(optarg));
-			up->u_flags |= F_INACTIVE;
+			memsave(&u.u_inactive, optarg, strlen(optarg));
+			u.u_flags |= F_INACTIVE;
 			break;
 		case 'g':
-			memsave(&up->u_primgrp, optarg, strlen(optarg));
-			up->u_flags |= F_GROUP;
+			memsave(&u.u_primgrp, optarg, strlen(optarg));
+			u.u_flags |= F_GROUP;
 			break;
 		case 'l':
 			(void)strlcpy(newuser, optarg, sizeof(newuser));
 			have_new_user = 1;
-			up->u_flags |= F_USERNAME;
+			u.u_flags |= F_USERNAME;
 			break;
 #ifdef EXTENSIONS
 		case 'L':
-			memsave(&up->u_class, optarg, strlen(optarg));
-			up->u_flags |= F_CLASS;
+			memsave(&u.u_class, optarg, strlen(optarg));
+			u.u_flags |= F_CLASS;
 			break;
 #endif
 		case 'm':
-			up->u_flags |= F_MKDIR;
+			u.u_flags |= F_MKDIR;
 			break;
 		case 'o':
-			up->u_flags |= F_DUPUID;
+			u.u_flags |= F_DUPUID;
 			break;
 #ifdef EXTENSIONS
 		case 'p':
-			memsave(&up->u_password, optarg, strlen(optarg));
-			up->u_flags |= F_PASSWORD;
+			memsave(&u.u_password, optarg, strlen(optarg));
+			u.u_flags |= F_PASSWORD;
 			break;
 #endif
 		case 's':
-			memsave(&up->u_shell, optarg, strlen(optarg));
-			up->u_flags |= F_SHELL;
+			memsave(&u.u_shell, optarg, strlen(optarg));
+			u.u_flags |= F_SHELL;
 			break;
 		case 'u':
-			up->u_uid = check_numeric(optarg, "uid");
-			up->u_flags |= F_UID;
+			u.u_uid = check_numeric(optarg, "uid");
+			u.u_flags |= F_UID;
 			break;
 #ifdef EXTENSIONS
 		case 'v':
@@ -2111,10 +2077,10 @@ usermod(int argc, char **argv)
 			/* NOTREACHED */
 		}
 	}
-	if ((up->u_flags & F_MKDIR) && !(up->u_flags & F_HOMEDIR) &&
-	    !(up->u_flags & F_USERNAME)) {
+	if ((u.u_flags & F_MKDIR) && !(u.u_flags & F_HOMEDIR) &&
+	    !(u.u_flags & F_USERNAME)) {
 		warnx("Option 'm' useless without 'd' or 'l' -- ignored");
-		up->u_flags &= ~F_MKDIR;
+		u.u_flags &= ~F_MKDIR;
 	}
 	argc -= optind;
 	argv += optind;
@@ -2123,8 +2089,8 @@ usermod(int argc, char **argv)
 	}
 	checkeuid();
 	openlog("usermod", LOG_PID, LOG_USER);
-	return moduser(*argv, (have_new_user) ? newuser : *argv, up,
-	    up->u_allow_samba) ? EXIT_SUCCESS : EXIT_FAILURE;
+	return moduser(*argv, (have_new_user) ? newuser : *argv, &u,
+	    u.u_allow_samba) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 #ifdef EXTENSIONS
@@ -2137,15 +2103,15 @@ int
 userdel(int argc, char **argv)
 {
 	struct passwd	*pwp;
-	def_t		def;
-	user_t		*up = &def.user;
+	user_t		u;
 	char		password[PasswordLength + 1];
 	int		defaultfield;
 	int		rmhome;
 	int		bigD;
 	int		c;
 
-	read_defaults(&def);
+	(void)memset(&u, 0, sizeof(u));
+	read_defaults(&u);
 	defaultfield = bigD = rmhome = 0;
 	while ((c = getopt(argc, argv, "r" DEL_OPT_EXTENSIONS)) != -1) {
 		switch(c) {
@@ -2156,13 +2122,13 @@ userdel(int argc, char **argv)
 #endif
 #ifdef EXTENSIONS
 		case 'S':
-			up->u_allow_samba = 1;
+			u.u_allow_samba = 1;
 			break;
 #endif
 #ifdef EXTENSIONS
 		case 'p':
 			defaultfield = 1;
-			up->u_preserve = (strcmp(optarg, "true") == 0) ? 1 :
+			u.u_preserve = (strcmp(optarg, "true") == 0) ? 1 :
 					(strcmp(optarg, "yes") == 0) ? 1 :
 					 atoi(optarg);
 			break;
@@ -2184,9 +2150,9 @@ userdel(int argc, char **argv)
 	if (bigD) {
 		if (defaultfield) {
 			checkeuid();
-			return setdefaults(up) ? EXIT_SUCCESS : EXIT_FAILURE;
+			return setdefaults(&u) ? EXIT_SUCCESS : EXIT_FAILURE;
 		}
-		(void)printf("preserve\t%s\n", (up->u_preserve) ? "true" :
+		(void)printf("preserve\t%s\n", (u.u_preserve) ? "true" :
 		    "false");
 		return EXIT_SUCCESS;
 	}
@@ -2204,23 +2170,22 @@ userdel(int argc, char **argv)
 	if (rmhome) {
 		(void)removehomedir(pwp);
 	}
-	if (up->u_preserve) {
-		up->u_flags |= F_SHELL;
-		memsave(&up->u_shell, _PATH_SBIN_NOLOGIN,
-			strlen(_PATH_SBIN_NOLOGIN));
+	if (u.u_preserve) {
+		u.u_flags |= F_SHELL;
+		memsave(&u.u_shell, NOLOGIN, strlen(NOLOGIN));
 		(void)memset(password, '*', DES_Len);
 		password[DES_Len] = 0;
-		memsave(&up->u_password, password, strlen(password));
-		up->u_flags |= F_PASSWORD;
+		memsave(&u.u_password, password, strlen(password));
+		u.u_flags |= F_PASSWORD;
 		openlog("userdel", LOG_PID, LOG_USER);
-		return moduser(*argv, *argv, up, up->u_allow_samba) ?
+		return moduser(*argv, *argv, &u, u.u_allow_samba) ?
 		    EXIT_SUCCESS : EXIT_FAILURE;
 	}
 	if (!rm_user_from_groups(*argv)) {
 		return 0;
 	}
 	openlog("userdel", LOG_PID, LOG_USER);
-	return moduser(*argv, *argv, NULL, up->u_allow_samba) ?
+	return moduser(*argv, *argv, NULL, u.u_allow_samba) ?
 	    EXIT_SUCCESS : EXIT_FAILURE;
 }
 
@@ -2234,15 +2199,16 @@ userdel(int argc, char **argv)
 int
 groupadd(int argc, char **argv)
 {
-	def_t	def;
-	group_t	*gp = &def.group;
 	int	dupgid;
 	int	gid;
 	int	c;
+	int	lowgid;
+	int	highgid;
 
 	gid = -1;
 	dupgid = 0;
-	read_defaults(&def);
+	lowgid = LowGid;
+	highgid = HighGid;
 	while ((c = getopt(argc, argv, "g:o" GROUP_ADD_OPT_EXTENSIONS)) != -1) {
 		switch(c) {
 		case 'g':
@@ -2253,7 +2219,9 @@ groupadd(int argc, char **argv)
 			break;
 #ifdef EXTENSIONS
 		case 'r':
-			(void)save_range(&gp->g_r, optarg);
+			if (sscanf(optarg, "%d..%d", &lowgid, &highgid) != 2) {
+				errx(EXIT_FAILURE, "Bad range `%s'", optarg);
+			}
 			break;
 		case 'v':
 			verbose = 1;
@@ -2269,36 +2237,9 @@ groupadd(int argc, char **argv)
 	if (argc != 1) {
 		usermgmt_usage("groupadd");
 	}
-	if (gp->g_rc == 0) {
-		gp->g_rv[gp->g_rc].r_from = DEF_LOWUID;
-		gp->g_rv[gp->g_rc].r_to = DEF_HIGHUID;
-		gp->g_rc += 1;
-	}
-	gp->g_defrc = gp->g_rc;
 	checkeuid();
-	if (gid == -1) {
-		int	got_id = 0;
-		int	i;
-
-		/*
-		 * Look for a free GID in the command line ranges (if any).
-		 * These start after the ranges specified in the config file.
-		 */
-		for (i = gp->g_defrc; !got_id && i < gp->g_rc ; i++) {
-			got_id = getnextgid(&gid,
-					gp->g_rv[i].r_from, gp->g_rv[i].r_to);
-		}
-		/*
-		 * If there were no free GIDs in the command line ranges,
-		 * try the ranges from the config file (there will always
-		 * be at least one default).
-		 */
-		for (i = 0; !got_id && i < gp->g_defrc; i++) {
-			got_id = getnextgid(&gid,
-					gp->g_rv[i].r_from, gp->g_rv[i].r_to);
-		}
-		if (!got_id)
-			errx(EXIT_FAILURE, "Can't add group: can't get next gid");
+	if (gid < 0 && !getnextgid(&gid, lowgid, highgid)) {
+		err(EXIT_FAILURE, "Can't add group: can't get next gid");
 	}
 	if (!dupgid && getgrgid((gid_t) gid) != NULL) {
 		errx(EXIT_FAILURE, "Can't add group: gid %d is a duplicate",
@@ -2408,10 +2349,6 @@ groupmod(int argc, char **argv)
 	}
 	if (dupgid && gid < 0) {
 		errx(EXIT_FAILURE, "Duplicate which gid?");
-	}
-	if (!dupgid && getgrgid((gid_t) gid) != NULL) {
-		errx(EXIT_FAILURE, "Can't modify group: gid %d is a duplicate",
-		    gid);
 	}
 	if ((grp = find_group_info(*argv)) == NULL) {
 		errx(EXIT_FAILURE, "Can't find group `%s' to modify", *argv);

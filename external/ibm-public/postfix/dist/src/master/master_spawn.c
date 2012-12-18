@@ -1,4 +1,4 @@
-/*	$NetBSD: master_spawn.c,v 1.1.1.2 2011/03/02 19:32:21 tron Exp $	*/
+/*	$NetBSD: master_spawn.c,v 1.1.1.1.2.3 2011/01/07 01:24:07 riz Exp $	*/
 
 /*++
 /* NAME
@@ -306,25 +306,18 @@ void    master_reap_child(void)
 					  (char *) &pid, sizeof(pid))) == 0)
 	    msg_panic("master_reap: unknown pid: %d", pid);
 	serv = proc->serv;
-
-#define MASTER_KILL_SIGNAL	SIGTERM
-#define MASTER_SENT_SIGNAL(serv, status) \
-	(MASTER_MARKED_FOR_DELETION(serv) \
-	    && WTERMSIG(status) == MASTER_KILL_SIGNAL)
-
 	if (!NORMAL_EXIT_STATUS(status)) {
 	    if (WIFEXITED(status))
 		msg_warn("process %s pid %d exit status %d",
 			 serv->path, pid, WEXITSTATUS(status));
-	    if (WIFSIGNALED(status) && !MASTER_SENT_SIGNAL(serv, status))
+	    if (WIFSIGNALED(status))
 		msg_warn("process %s pid %d killed by signal %d",
 			 serv->path, pid, WTERMSIG(status));
-	    /* master_delete_children() throttles first, then kills. */
-	    if (proc->use_count == 0
-		&& (serv->flags & MASTER_FLAG_THROTTLE) == 0) {
-		msg_warn("%s: bad command startup -- throttling", serv->path);
-		master_throttle(serv);
-	    }
+	}
+	if (!NORMAL_EXIT_STATUS(status) && proc->use_count == 0
+	    && (serv->flags & MASTER_FLAG_THROTTLE) == 0) {
+	    msg_warn("%s: bad command startup -- throttling", serv->path);
+	    master_throttle(serv);
 	}
 	master_delete_child(proc);
     }
@@ -347,7 +340,7 @@ void    master_delete_children(MASTER_SERV *serv)
     for (info = list = binhash_list(master_child_table); *info; info++) {
 	proc = (MASTER_PROC *) info[0]->value;
 	if (proc->serv == serv)
-	    (void) kill(proc->pid, MASTER_KILL_SIGNAL);
+	    (void) kill(proc->pid, SIGTERM);
     }
     while (serv->total_proc > 0)
 	master_reap_child();

@@ -1,4 +1,4 @@
-/*	$NetBSD: dir.h,v 1.15 2012/04/07 18:29:08 christos Exp $	*/
+/*	$NetBSD: dir.h,v 1.13 2008/02/15 21:29:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -95,14 +95,14 @@ Boolean Dir_HasWildcards(char *);
 void Dir_Expand(const char *, Lst, Lst);
 char *Dir_FindFile(const char *, Lst);
 int Dir_FindHereOrAbove(char *, char *, char *, int);
-int Dir_MTime(GNode *, Boolean);
+int Dir_MTime(GNode *);
 Path *Dir_AddDir(Lst, const char *);
 char *Dir_MakeFlags(const char *, Lst);
 void Dir_ClearPath(Lst);
 void Dir_Concat(Lst, Lst);
 void Dir_PrintDirectories(void);
 void Dir_PrintPath(Lst);
-void Dir_Destroy(void *);
-void * Dir_CopyDir(void *);
+void Dir_Destroy(ClientData);
+ClientData Dir_CopyDir(ClientData);
 
 #endif /* _DIR */

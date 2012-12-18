@@ -1,4 +1,4 @@
-/*	$NetBSD: getservbyport_r.c,v 1.9 2012/03/13 21:13:41 christos Exp $	*/
+/*	$NetBSD: getservbyport_r.c,v 1.6.18.1 2011/04/05 06:21:19 riz Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,15 +34,16 @@
 #if 0
 static char sccsid[] = "@(#)getservbyport.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: getservbyport_r.c,v 1.9 2012/03/13 21:13:41 christos Exp $");
+__RCSID("$NetBSD: getservbyport_r.c,v 1.6.18.1 2011/04/05 06:21:19 riz Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
-#include <cdbr.h>
+#include <stdio.h>
 #include <netdb.h>
 #include <string.h>
 #include <stdlib.h>
+#include <db.h>
 
 #include "servent.h"
 
@@ -54,50 +55,36 @@ static struct servent *
 _servent_getbyport(struct servent_data *sd, struct servent *sp, int port,
     const char *proto)
 {
-
-	if ((sd->flags & (_SV_CDB | _SV_PLAINFILE)) == 0)
+	if (sd->db == NULL)
 		return NULL;
 
-	if (sd->flags & _SV_CDB) {
-		uint8_t buf[255 + 4];
-		size_t protolen;
-		const uint8_t *data;
-		const void *data_ptr;
-		size_t datalen;
+	if (sd->flags & _SV_DB) {
+		char buf[BUFSIZ];
+		DBT key, data;
+		DB *db = sd->db;
+		key.data = buf;
 
-		port = be16toh(port);
-
-		if (proto != NULL) {
-			protolen = strlen(proto);
-			if (protolen == 0 || protolen > 255)
-				return NULL;
-		} else
-			protolen = 0;
-		if (port < 0 || port > 65536)
+		port = htons(port);
+		if (proto == NULL)
+			key.size = snprintf(buf, sizeof(buf), "\377%d", port);
+		else
+			key.size = snprintf(buf, sizeof(buf), "\377%d/%s", port,
+			    proto);
+		key.size++;
+		if (key.size > sizeof(buf))
+			return NULL;
+			
+		if ((*db->get)(db, &key, &data, 0) != 0)
 			return NULL;
 
-		buf[0] = 0;
-		buf[1] = (uint8_t)protolen;
-		be16enc(buf + 2, port);
-		memcpy(buf + 4, proto, protolen);
-
-		if (cdbr_find(sd->cdb, buf, 4 + protolen,
-		    &data_ptr, &datalen))
+		if ((*db->get)(db, &data, &key, 0) != 0)
 			return NULL;
 
-		if (datalen < protolen + 4)
-			return NULL;
+		if (sd->line)
+			free(sd->line);
 
-		data = data_ptr;
-		if (be16dec(data) != port)
-			return NULL;
-		if (protolen) {
-			if (data[2] != protolen)
-				return NULL;
-			if (memcmp(data + 3, proto, protolen + 1))
-				return NULL;
-		}
-		return _servent_parsedb(sd, sp, data, datalen);
+		sd->line = strdup(key.data);
+		return _servent_parseline(sd, sp);
 	} else {
 		while (_servent_getline(sd) != -1) {
 			if (_servent_parseline(sd, sp) == NULL)

@@ -1,10 +1,10 @@
-#	$NetBSD: Makefile,v 1.8 2010/11/12 17:05:48 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.4.2.2 2009/09/17 04:24:28 snj Exp $
 
 # Top level Makefile to cross build xorg inside the NetBSD tree.
 
 .include <bsd.own.mk>
 
-SUBDIR=		tools .WAIT include .WAIT lib .WAIT bin share server etc
+SUBDIR=		tools .WAIT include .WAIT lib .WAIT bin share server
 
 .if ${MKUPDATE} == "no" && !defined(NOCLEANDIR)
 BUILDTARGETS+=  cleandir
@@ -51,13 +51,13 @@ afterinstall: .PHONY
 
 
 DISTRIBTARGETS=	\
+	bin/lbxproxy \
 	bin/proxymngr \
 	bin/twm \
 	bin/xdm/config \
 	bin/xfs \
 	bin/xinit \
 	bin/xsm \
-	etc \
 	lib/fontconfig/etc \
 	lib/fontconfig/etc/conf.avail \
 	lib/fontconfig/etc/conf.d

@@ -1,4 +1,4 @@
-/* $NetBSD: identd.c,v 1.34 2012/03/15 02:02:21 joerg Exp $ */
+/* $NetBSD: identd.c,v 1.31 2006/09/29 17:02:04 christos Exp $ */
 
 /*
  * identd.c - TCP/IP Ident protocol server.
@@ -8,7 +8,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: identd.c,v 1.34 2012/03/15 02:02:21 joerg Exp $");
+__RCSID("$NetBSD: identd.c,v 1.31 2006/09/29 17:02:04 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -61,9 +61,9 @@ static int   check_noident(const char *);
 static int   check_userident(const char *, char *, size_t);
 static void  random_string(char *, size_t);
 static int   change_format(const char *, struct passwd *, char *, size_t);
-__dead static void  timeout_handler(int);
-__dead static void  fatal(const char *);
-__dead static void  die(const char *, ...) __printflike(1, 2);
+static void  timeout_handler(int);
+static void  fatal(const char *);
+static void  die(const char *, ...);
 
 static int   bflag, eflag, fflag, iflag, Iflag;
 static int   lflag, Lflag, nflag, Nflag, rflag;
@@ -325,7 +325,7 @@ idhandle(int fd, const char *charset, const char *fmt, const char *osname,
 	socklen_t len;
 	uid_t uid;
 	ssize_t n;
-	size_t qlen;
+	ssize_t qlen;
 
 	lport = fport = 0;
 
@@ -672,8 +672,7 @@ sysctl_proxy_getuid(struct sockaddr_storage *ss, struct sockaddr *proxy,
     uid_t *uid)
 {
 	struct sockaddr_storage new[2];
-	int rc, name[CTL_MAXNAME];
-	size_t i;
+	int i, rc, name[CTL_MAXNAME];
 	struct kinfo_pcb *kp;
 	size_t sz, len;
 	const char *list;

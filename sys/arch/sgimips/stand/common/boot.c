@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.19 2011/02/20 07:59:52 matt Exp $	*/
+/*	$NetBSD: boot.c,v 1.17 2008/04/28 20:23:34 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -98,6 +98,7 @@ const char *kernelnames[] = {
 	NULL
 };
 
+extern const struct arcbios_fv *ARCBIOS;
 static int debug = 0;
 
 int main(int, char **);
@@ -134,6 +135,7 @@ main(int argc, char **argv)
 	printf("\n");
 	printf("%s " NETBSD_VERS " Bootstrap, Revision %s\n",
 	    bootprog_name, bootprog_rev);
+	printf("(%s, %s)\n", bootprog_maker, bootprog_date);
 	printf("\n");
 
 	memset(marks, 0, sizeof marks);
@@ -172,7 +174,7 @@ main(int argc, char **argv)
 			goto finish;
 	}
 
-	bootpath = arcbios_GetEnvironmentVariable("OSLoadPartition");
+	bootpath = ARCBIOS->GetEnvironmentVariable("OSLoadPartition");
 
 	if (bootpath == NULL) {
 		/* XXX need to actually do the fixup */
@@ -185,7 +187,7 @@ main(int argc, char **argv)
 	 * Grab OSLoadFilename from ARCS.
 	 */
 
-	kernel = arcbios_GetEnvironmentVariable("OSLoadFilename");
+	kernel = ARCBIOS->GetEnvironmentVariable("OSLoadFilename");
 
 	/*
 	 * argv[1] is assumed to contain the name of the kernel to boot,

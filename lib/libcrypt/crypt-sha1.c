@@ -1,4 +1,4 @@
-/* $NetBSD: crypt-sha1.c,v 1.5 2012/08/30 12:16:49 drochner Exp $ */
+/* $NetBSD: crypt-sha1.c,v 1.3 2006/10/27 18:22:56 drochner Exp $ */
 
 /*
  * Copyright (c) 2004, Juniper Networks, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: crypt-sha1.c,v 1.5 2012/08/30 12:16:49 drochner Exp $");
+__RCSID("$NetBSD: crypt-sha1.c,v 1.3 2006/10/27 18:22:56 drochner Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
@@ -122,7 +122,7 @@ __crypt_sha1 (const char *pw, const char *salt)
     static unsigned char hmac_buf[SHA1_SIZE];
     static char passwd[(2 * sizeof(SHA1_MAGIC)) +
 		       CRYPT_SHA1_SALT_LENGTH + SHA1_SIZE];
-    const char *sp;
+    char *sp;
     char *ep;
     unsigned long ul;
     int sl;
@@ -136,25 +136,26 @@ __crypt_sha1 (const char *pw, const char *salt)
      * $<tag>$<iterations>$salt[$]
      * If it does not start with $ we use our default iterations.
      */
+    sp = __UNCONST(salt);
 
     /* If it starts with the magic string, then skip that */
-    if (!strncmp(salt, magic, strlen(magic))) {
-	salt += strlen(magic);
+    if (!strncmp(sp, magic, strlen(magic))) {
+	sp += strlen(magic);
 	/* and get the iteration count */
-	iterations = strtoul(salt, &ep, 10);
+	iterations = strtoul(sp, &ep, 10);
 	if (*ep != '$')
 	    return NULL;		/* invalid input */
-	salt = ep + 1;			/* skip over the '$' */
+	sp = ep + 1;			/* skip over the '$' */
     } else {
 	iterations = __crypt_sha1_iterations(0);
     }
 
     /* It stops at the next '$', max CRYPT_SHA1_ITERATIONS chars */
-    for (sp = salt; *sp && *sp != '$' && sp < (salt + CRYPT_SHA1_ITERATIONS); sp++)
+    for (ep = sp; *ep && *ep != '$' && ep < (sp + CRYPT_SHA1_ITERATIONS); ep++)
 	continue;
 
     /* Get the length of the actual salt */
-    sl = sp - salt;
+    sl = ep - sp;
     pl = strlen(pw);
 
     /*
@@ -162,17 +163,18 @@ __crypt_sha1 (const char *pw, const char *salt)
      * Prime the pump with <salt><magic><iterations>
      */
     dl = snprintf(passwd, sizeof (passwd), "%.*s%s%u", 
-		  sl, salt, magic, iterations);
+		  sl, sp, magic, iterations);
     /*
      * Then hmac using <pw> as key, and repeat...
      */
-    __hmac_sha1(passwd, dl, pw, pl, hmac_buf);
+    ep = __UNCONST(pw);			/* keep gcc happy */
+    __hmac_sha1(passwd, dl, ep, pl, hmac_buf);
     for (i = 1; i < iterations; i++) {
-	__hmac_sha1(hmac_buf, SHA1_SIZE, pw, pl, hmac_buf);
+	__hmac_sha1(hmac_buf, SHA1_SIZE, ep, pl, hmac_buf);
     }
     /* Now output... */
     pl = snprintf(passwd, sizeof(passwd), "%s%u$%.*s$",
-		  magic, iterations, sl, salt);
+		  magic, iterations, sl, sp);
     ep = passwd + pl;
 
     /* Every 3 bytes of hash gives 24 bits which is 4 base64 chars */
@@ -190,7 +192,7 @@ __crypt_sha1 (const char *pw, const char *salt)
     *ep = '\0';
 
     /* Don't leave anything around in vm they could use. */
-    __explicit_bzero(hmac_buf, sizeof hmac_buf);
+    memset(hmac_buf, 0, sizeof hmac_buf);
 
     return passwd;
 }	

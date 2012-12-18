@@ -1,4 +1,4 @@
-/*	$NetBSD: pw_yp.c,v 1.22 2009/04/11 12:10:02 lukem Exp $	*/
+/*	$NetBSD: pw_yp.c,v 1.21 2005/02/17 17:09:48 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -33,7 +33,7 @@
 #if 0
 static char sccsid[] = "@(#)pw_yp.c	1.0 2/2/93";
 #else
-__RCSID("$NetBSD: pw_yp.c,v 1.22 2009/04/11 12:10:02 lukem Exp $");
+__RCSID("$NetBSD: pw_yp.c,v 1.21 2005/02/17 17:09:48 xtraeme Exp $");
 #endif
 #endif /* not lint */
 
@@ -103,11 +103,11 @@ check_yppasswdd(void)
 }
 
 int
-pw_yp(struct passwd *pw, uid_t ypuid)
+pw_yp(struct passwd *pw, uid_t uid)
 {
 	char *master;
 	int r, rpcport, status;
-	struct yppasswd yppw;
+	struct yppasswd yppasswd;
 	struct timeval tv;
 	CLIENT *client;
 	
@@ -150,38 +150,39 @@ pw_yp(struct passwd *pw, uid_t ypuid)
 	}
 
 	/* prompt for old password */
-	memset(&yppw, 0, sizeof yppw);
-	yppw.oldpass = getpass("Old password:");
-	if (!yppw.oldpass) {
+	memset(&yppasswd, 0, sizeof yppasswd);
+	yppasswd.oldpass = "none";
+	yppasswd.oldpass = getpass("Old password:");
+	if (!yppasswd.oldpass) {
 		warnx("Cancelled.");
 		return (1);
 	}
 
 	/* tell rpc.yppasswdd */
-	yppw.newpw.pw_name	 = strdup(pw->pw_name);
-	if (!yppw.newpw.pw_name) {
+	yppasswd.newpw.pw_name	 = strdup(pw->pw_name);
+	if (!yppasswd.newpw.pw_name) {
 		err(1, "strdup");
 		/*NOTREACHED*/
 	}
-	yppw.newpw.pw_passwd = strdup(pw->pw_passwd);
-	if (!yppw.newpw.pw_passwd) {
+	yppasswd.newpw.pw_passwd = strdup(pw->pw_passwd);
+	if (!yppasswd.newpw.pw_passwd) {
 		err(1, "strdup");
 		/*NOTREACHED*/
 	}
-	yppw.newpw.pw_uid 	 = pw->pw_uid;
-	yppw.newpw.pw_gid	 = pw->pw_gid;
-	yppw.newpw.pw_gecos	 = strdup(pw->pw_gecos);
-	if (!yppw.newpw.pw_gecos) {
+	yppasswd.newpw.pw_uid 	 = pw->pw_uid;
+	yppasswd.newpw.pw_gid	 = pw->pw_gid;
+	yppasswd.newpw.pw_gecos  = strdup(pw->pw_gecos);
+	if (!yppasswd.newpw.pw_gecos) {
 		err(1, "strdup");
 		/*NOTREACHED*/
 	}
-	yppw.newpw.pw_dir	 = strdup(pw->pw_dir);
-	if (!yppw.newpw.pw_dir) {
+	yppasswd.newpw.pw_dir	 = strdup(pw->pw_dir);
+	if (!yppasswd.newpw.pw_dir) {
 		err(1, "strdup");
 		/*NOTREACHED*/
 	}
-	yppw.newpw.pw_shell	 = strdup(pw->pw_shell);
-	if (!yppw.newpw.pw_shell) {
+	yppasswd.newpw.pw_shell	 = strdup(pw->pw_shell);
+	if (!yppasswd.newpw.pw_shell) {
 		err(1, "strdup");
 		/*NOTREACHED*/
 	}
@@ -196,7 +197,7 @@ pw_yp(struct passwd *pw, uid_t ypuid)
 	tv.tv_sec = 5;
 	tv.tv_usec = 0;
 	r = clnt_call(client, YPPASSWDPROC_UPDATE,
-	    xdr_yppasswd, &yppw, xdr_int, &status, tv);
+	    xdr_yppasswd, &yppasswd, xdr_int, &status, tv);
 	if (r) {
 		warnx("rpc to yppasswdd failed.");
 		return (1);
@@ -210,10 +211,10 @@ pw_yp(struct passwd *pw, uid_t ypuid)
 }
 
 void
-yppw_error(const char *name, int yperr, int eval)
+yppw_error(const char *name, int err, int eval)
 {
 
-	if (yperr) {
+	if (err) {
 		if (name)
 			warn("%s", name);
 		else

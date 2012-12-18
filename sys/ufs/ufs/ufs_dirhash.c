@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_dirhash.c,v 1.34 2009/10/05 23:48:08 rmind Exp $	*/
+/*	$NetBSD: ufs_dirhash.c,v 1.27 2008/07/03 09:56:15 ad Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Ian Dowse.  All rights reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_dirhash.c,v 1.34 2009/10/05 23:48:08 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_dirhash.c,v 1.27 2008/07/03 09:56:15 ad Exp $");
 
 /*
  * This implements a hash-based lookup scheme for UFS directories.
@@ -140,7 +140,7 @@ ufsdirhash_build(struct inode *ip)
 	}
 
 	/* Don't hash removed directories. */
-	if (ip->i_nlink == 0)
+	if (ip->i_ffs_effnlink == 0)
 		return (-1);
 
 	vp = ip->i_vnode;
@@ -416,7 +416,7 @@ restart:
 				brelse(bp, 0);
 			blkoff = offset & ~bmask;
 			if (ufs_blkatoff(vp, (off_t)blkoff,
-			    NULL, &bp, false) != 0) {
+			    NULL, &bp, true) != 0) {
 				DIRHASH_UNLOCK(dh);
 				return (EJUSTRETURN);
 			}
@@ -430,7 +430,7 @@ restart:
 			return (EJUSTRETURN);
 		}
 		if (dp->d_namlen == namelen &&
-		    memcmp(dp->d_name, name, namelen) == 0) {
+		    bcmp(dp->d_name, name, namelen) == 0) {
 			/* Found. Get the prev offset if needed. */
 			if (prevoffp != NULL) {
 				if (offset & (dirblksiz - 1)) {
@@ -1086,7 +1086,7 @@ ufsdirhash_recycle(int wanted)
 
 		/* Account for the returned memory, and repeat if necessary. */
 		DIRHASHLIST_LOCK();
-		atomic_add_int(&ufs_dirhashmem, -mem);
+		ufs_dirhashmem -= mem;
 	}
 	/* Success. */
 	return (0);
@@ -1147,7 +1147,7 @@ ufsdirhash_sysctl_init(void)
 }
 
 void
-ufsdirhash_init(void)
+ufsdirhash_init()
 {
 
 	mutex_init(&ufsdirhash_lock, MUTEX_DEFAULT, IPL_NONE);

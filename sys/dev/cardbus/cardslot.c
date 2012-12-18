@@ -1,4 +1,4 @@
-/*	$NetBSD: cardslot.c,v 1.54 2012/10/27 17:18:15 chs Exp $	*/
+/*	$NetBSD: cardslot.c,v 1.45 2008/07/03 18:57:52 drochner Exp $	*/
 
 /*
  * Copyright (c) 1999 and 2000
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by HAYAKAWA Koichi.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -27,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cardslot.c,v 1.54 2012/10/27 17:18:15 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cardslot.c,v 1.45 2008/07/03 18:57:52 drochner Exp $");
 
 #include "opt_cardslot.h"
 
@@ -58,23 +64,22 @@ __KERNEL_RCSID(0, "$NetBSD: cardslot.c,v 1.54 2012/10/27 17:18:15 chs Exp $");
 
 
 
-STATIC void cardslotchilddet(device_t, device_t);
-STATIC void cardslotattach(device_t, device_t, void *);
+STATIC void cardslotattach(struct device *, struct device *, void *);
 STATIC int cardslotdetach(device_t, int);
 
-STATIC int cardslotmatch(device_t, cfdata_t, void *);
+STATIC int cardslotmatch(struct device *, struct cfdata *, void *);
 static void cardslot_event_thread(void *arg);
 
 STATIC int cardslot_cb_print(void *aux, const char *pcic);
 static int cardslot_16_print(void *, const char *);
-static int cardslot_16_submatch(device_t, cfdata_t, const int *, void *);
+static int cardslot_16_submatch(struct device *, struct cfdata *,
+				     const int *, void *);
 
-CFATTACH_DECL3_NEW(cardslot, sizeof(struct cardslot_softc),
-    cardslotmatch, cardslotattach, cardslotdetach, NULL, NULL, cardslotchilddet,
-    DVF_DETACH_SHUTDOWN);
+CFATTACH_DECL_NEW(cardslot, sizeof(struct cardslot_softc),
+    cardslotmatch, cardslotattach, cardslotdetach, NULL);
 
 STATIC int
-cardslotmatch(device_t parent, cfdata_t cf,
+cardslotmatch(struct device *parent, struct cfdata *cf,
     void *aux)
 {
 	struct cardslot_attach_args *caa = aux;
@@ -87,22 +92,11 @@ cardslotmatch(device_t parent, cfdata_t cf,
 	return 1;
 }
 
-STATIC void
-cardslotchilddet(device_t self, device_t child)
-{
-	struct cardslot_softc *sc = device_private(self);
 
-	KASSERT(sc->sc_cb_softc == device_private(child) ||
-	    sc->sc_16_softc == child);
-
-	if (sc->sc_cb_softc == device_private(child))
-		sc->sc_cb_softc = NULL;
-	else if (sc->sc_16_softc == child)
-		sc->sc_16_softc = NULL;
-}
 
 STATIC void
-cardslotattach(device_t parent, device_t self, void *aux)
+cardslotattach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct cardslot_softc *sc = device_private(self);
 	struct cardslot_attach_args *caa = aux;
@@ -209,7 +203,7 @@ cardslot_cb_print(void *aux, const char *pnp)
 
 
 static int
-cardslot_16_submatch(device_t parent, cfdata_t cf,
+cardslot_16_submatch(struct device *parent, struct cfdata *cf,
     const int *ldesc, void *aux)
 {
 
@@ -218,7 +212,7 @@ cardslot_16_submatch(device_t parent, cfdata_t cf,
 		return 0;
 	}
 
-	if (cf->cf_loc[PCMCIABUSCF_CONTROLLER] == PCMCIABUSCF_CONTROLLER_DEFAULT) {
+	if ((cf->cf_loc[PCMCIABUSCF_CONTROLLER] == PCMCIABUSCF_CONTROLLER_DEFAULT)) {
 		return (config_match(parent, cf, aux));
 	}
 
@@ -282,7 +276,8 @@ cardslot_event_throw(struct cardslot_softc *sc, int ev)
  *
  */
 static void
-cardslot_event_thread(void *arg)
+cardslot_event_thread(arg)
+	void *arg;
 {
 	struct cardslot_softc *sc = arg;
 	struct cardslot_event *ce;
@@ -380,7 +375,7 @@ cardslot_event_thread(void *arg)
 			}
 			if (sc->sc_16_softc) {
 				CARDSLOT_SET_CARDTYPE(sc->sc_status, CARDSLOT_STATUS_CARD_16);
-				if (pcmcia_card_attach(sc->sc_16_softc)) {
+				if (pcmcia_card_attach((struct device *)sc->sc_16_softc)) {
 					/* Do not attach */
 					CARDSLOT_SET_WORK(sc->sc_status,
 					    CARDSLOT_STATUS_NOTWORK);

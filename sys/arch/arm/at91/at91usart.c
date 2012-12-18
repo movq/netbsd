@@ -1,5 +1,5 @@
-/*	$Id: at91usart.c,v 1.8 2012/11/12 18:00:36 skrll Exp $	*/
-/*	$NetBSD: at91usart.c,v 1.8 2012/11/12 18:00:36 skrll Exp $ */
+/*	$Id: at91usart.c,v 1.2 2008/07/03 01:15:39 matt Exp $	*/
+/*	$NetBSD: at91usart.c,v 1.2 2008/07/03 01:15:39 matt Exp $ */
 
 /*
  * Copyright (c) 2007 Embedtronics Oy. All rights reserved.
@@ -27,6 +27,13 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *        This product includes software developed by the NetBSD
+ *        Foundation, Inc. and its contributors.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -77,13 +84,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91usart.c,v 1.8 2012/11/12 18:00:36 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91usart.c,v 1.2 2008/07/03 01:15:39 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 
 #include "rnd.h"
-#ifdef RND_COM
+#if NRND > 0 && defined(RND_COM)
 #include <sys/rnd.h>
 #endif
 
@@ -109,13 +116,14 @@ __KERNEL_RCSID(0, "$NetBSD: at91usart.c,v 1.8 2012/11/12 18:00:36 skrll Exp $");
 #include <sys/file.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/tty.h>
 #include <sys/uio.h>
 #include <sys/vnode.h>
 #include <sys/kauth.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/at91/at91reg.h>
 #include <arm/at91/at91var.h>
@@ -148,8 +156,8 @@ static struct at91usart_cons_softc {
 	tcflag_t		sc_cflag;
 	int			sc_attached;
 
-	uint8_t			*sc_rx_ptr;
-	uint8_t			sc_rx_fifo[64];
+	u_int8_t		*sc_rx_ptr;
+	u_int8_t		sc_rx_fifo[64];
 } usart_cn_sc;
 
 static struct cnm_state at91usart_cnm_state;
@@ -161,7 +169,7 @@ inline static void	at91usart_rxsoft(struct at91usart_softc *, struct tty *, unsi
 
 #define	PDC_BLOCK_SIZE	64
 
-//CFATTACH_DECL_NEW(at91usart, sizeof(struct at91usart_softc),
+//CFATTACH_DECL(at91usart, sizeof(struct at91usart_softc),
 //	      at91usart_match, at91usart_attach, NULL, NULL);
 
 //#define	USART_DEBUG	10
@@ -277,7 +285,7 @@ at91usart_attach_subr(struct at91usart_softc *sc, struct at91bus_attach_args *sa
 	}
 #endif	// NOTYET
 
-	tp = tty_alloc();
+	tp = ttymalloc();
 	tp->t_oproc = at91usart_start;
 	tp->t_param = at91usart_param;
 	tp->t_hwiflow = at91usart_hwiflow;
@@ -303,7 +311,7 @@ at91usart_attach_subr(struct at91usart_softc *sc, struct at91bus_attach_args *sa
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, at91usart_soft, sc);
 
-#ifdef RND_COM
+#if NRND > 0 && defined(RND_COM)
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_TTY, 0);
 #endif
@@ -831,7 +839,7 @@ at91usart_stop(struct tty *tp, int flag)
 static u_int
 cflag2lcrhi(tcflag_t cflag)
 {
-	uint32_t	mr;
+	u_int32_t	mr;
 
 	switch (cflag & CSIZE) {
 	default:
@@ -861,7 +869,7 @@ at91usart_set(struct at91usart_softc *sc)
 #if	NOTYET
 int
 at91usart_cn_attach(bus_space_tag_t iot, bus_addr_t iobase, bus_space_handle_t ioh,
-		    uint32_t mstclk, int ospeed, tcflag_t cflag)
+		    u_int32_t mstclk, int ospeed, tcflag_t cflag)
 {
 	cn_tab = &at91usart_cons;
 	cn_init_magic(&at91usart_cnm_state);

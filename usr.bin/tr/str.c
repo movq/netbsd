@@ -1,4 +1,4 @@
-/*	$NetBSD: str.c,v 1.19 2011/09/08 12:00:26 christos Exp $	*/
+/*	$NetBSD: str.c,v 1.11 2007/01/17 00:21:44 hubertf Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)str.c	8.2 (Berkeley) 4/28/95";
 #endif
-__RCSID("$NetBSD: str.c,v 1.19 2011/09/08 12:00:26 christos Exp $");
+__RCSID("$NetBSD: str.c,v 1.11 2007/01/17 00:21:44 hubertf Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -49,35 +49,36 @@ __RCSID("$NetBSD: str.c,v 1.19 2011/09/08 12:00:26 christos Exp $");
 
 #include "extern.h"
 
-static int	backslash(STR *);
-static int	bracket(STR *);
-static int	c_class(const void *, const void *);
-static void	genclass(STR *);
-static void	genequiv(STR *);
-static int	genrange(STR *);
-static void	genseq(STR *);
+static int	backslash __P((STR *));
+static int	bracket __P((STR *));
+static int	c_class __P((const void *, const void *));
+static void	genclass __P((STR *));
+static void	genequiv __P((STR *));
+static int	genrange __P((STR *));
+static void	genseq __P((STR *));
 
 int
-next(STR *s)
+next(s)
+	STR *s;
 {
 	int ch;
 
 	switch (s->state) {
 	case EOS:
-		return 0;
+		return (0);
 	case INFINITE:
-		return 1;
+		return (1);
 	case NORMAL:
 		switch (ch = *s->str) {
 		case '\0':
 			s->state = EOS;
-			return 0;
+			return (0);
 		case '\\':
 			s->lastch = backslash(s);
 			break;
 		case '[':
 			if (bracket(s))
-				return next(s);
+				return (next(s));
 			/* FALLTHROUGH */
 		default:
 			++s->str;
@@ -87,114 +88,117 @@ next(STR *s)
 
 		/* We can start a range at any time. */
 		if (s->str[0] == '-' && genrange(s))
-			return next(s);
-		return 1;
+			return (next(s));
+		return (1);
 	case RANGE:
 		if (s->cnt-- == 0) {
 			s->state = NORMAL;
-			return next(s);
+			return (next(s));
 		}
 		++s->lastch;
-		return 1;
+		return (1);
 	case SEQUENCE:
 		if (s->cnt-- == 0) {
 			s->state = NORMAL;
-			return next(s);
+			return (next(s));
 		}
-		return 1;
+		return (1);
 	case SET:
 		if ((s->lastch = s->set[s->cnt++]) == OOBCH) {
 			s->state = NORMAL;
-			return next(s);
+			return (next(s));
 		}
-		return 1;
+		return (1);
 	}
 	/* NOTREACHED */
-	return 0;
+	return (0);
 }
 
 static int
-bracket(STR *s)
+bracket(s)
+	STR *s;
 {
 	char *p;
 
 	switch (s->str[1]) {
 	case ':':				/* "[:class:]" */
 		if ((p = strstr(s->str + 2, ":]")) == NULL)
-			return 0;
+			return (0);
 		*p = '\0';
 		s->str += 2;
 		genclass(s);
 		s->str = p + 2;
-		return 1;
+		return (1);
 	case '=':				/* "[=equiv=]" */
 		if ((p = strstr(s->str + 2, "=]")) == NULL)
-			return 0;
+			return (0);
 		s->str += 2;
 		genequiv(s);
-		return 1;
+		return (1);
 	default:				/* "[\###*n]" or "[#*n]" */
 		if ((p = strpbrk(s->str + 2, "*]")) == NULL)
-			return 0;
+			return (0);
 		if (p[0] != '*' || strchr(p, ']') == NULL)
-			return 0;
+			return (0);
 		s->str += 1;
 		genseq(s);
-		return 1;
+		return (1);
 	}
 	/* NOTREACHED */
 }
 
 typedef struct {
-	const char *name;
-	int (*func)(int);
+	char *name;
+	int (*func) __P((int));
+	int *set;
 } CLASS;
 
-static const CLASS classes[] = {
-	{ "alnum",  isalnum  },
-	{ "alpha",  isalpha  },
-	{ "blank",  isblank  },
-	{ "cntrl",  iscntrl  },
-	{ "digit",  isdigit  },
-	{ "graph",  isgraph  },
-	{ "lower",  islower  },
-	{ "print",  isprint  },
-	{ "punct",  ispunct  },
-	{ "space",  isspace  },
-	{ "upper",  isupper  },
-	{ "xdigit", isxdigit },
+static CLASS classes[] = {
+	{ "alnum",  isalnum,  },
+	{ "alpha",  isalpha,  },
+	{ "blank",  isblank,  },
+	{ "cntrl",  iscntrl,  },
+	{ "digit",  isdigit,  },
+	{ "graph",  isgraph,  },
+	{ "lower",  islower,  },
+	{ "print",  isprint,  },
+	{ "punct",  ispunct,  },
+	{ "space",  isspace,  },
+	{ "upper",  isupper,  },
+	{ "xdigit", isxdigit, },
 };
 
 static void
-genclass(STR *s)
+genclass(s)
+	STR *s;
 {
-	int cnt;
-	const CLASS *cp;
-	CLASS tmp;
+	int cnt, (*func) __P((int));
+	CLASS *cp, tmp;
 	int *p;
 
 	tmp.name = s->str;
-	if ((cp = bsearch(&tmp, classes, sizeof(classes) /
-	    sizeof(*cp), sizeof(*cp), c_class)) == NULL)
+	if ((cp = (CLASS *)bsearch(&tmp, classes, sizeof(classes) /
+	    sizeof(CLASS), sizeof(CLASS), c_class)) == NULL)
 		errx(1, "unknown class %s", s->str);
 
-	if ((s->set = p = malloc((NCHARS + 1) * sizeof(*p))) == NULL)
+	if ((cp->set = p = malloc((NCHARS + 1) * sizeof(int))) == NULL)
 		err(1, "malloc");
-
-	for (cnt = 0; cnt < NCHARS; ++cnt)
-		if ((*cp->func)(cnt))
+	memset(p, 0, (NCHARS + 1) * sizeof(int));
+	for (cnt = 0, func = cp->func; cnt < NCHARS; ++cnt)
+		if ((func)(cnt))
 			*p++ = cnt;
-	*p++ = OOBCH;
-	memset(p, 0, NCHARS + 1 - (p - s->set));
+	*p = OOBCH;
 
 	s->cnt = 0;
 	s->state = SET;
+	s->set = cp->set;
 }
 
 static int
-c_class(const void *a, const void *b)
+c_class(a, b)
+	const void *a, *b;
 {
-	return strcmp(((const CLASS *)a)->name, ((const CLASS *)b)->name);
+	return (strcmp(((CLASS *)a)->name, ((CLASS *)b)->name));
 }
 
 /*
@@ -202,7 +206,8 @@ c_class(const void *a, const void *b)
  * we just syntax check and grab the character.
  */
 static void
-genequiv(STR *s)
+genequiv(s)
+	STR *s;
 {
 	if (*s->str == '\\') {
 		s->equiv[0] = backslash(s);
@@ -220,7 +225,8 @@ genequiv(STR *s)
 }
 
 static int
-genrange(STR *s)
+genrange(s)
+	STR *s;
 {
 	int stopval;
 	char *savestart;
@@ -229,16 +235,17 @@ genrange(STR *s)
 	stopval = *++s->str == '\\' ? backslash(s) : *s->str++;
 	if (stopval < (u_char)s->lastch) {
 		s->str = savestart;
-		return 0;
+		return (0);
 	}
 	s->cnt = stopval - s->lastch + 1;
 	s->state = RANGE;
 	--s->lastch;
-	return 1;
+	return (1);
 }
 
 static void
-genseq(STR *s)
+genseq(s)
+	STR *s;
 {
 	char *ep;
 
@@ -280,7 +287,8 @@ genseq(STR *s)
  * an escape code or a literal character.
  */
 static int
-backslash(STR *s)
+backslash(s)
+	STR *s;
 {
 	int ch, cnt, val;
 
@@ -295,30 +303,28 @@ backslash(STR *s)
 		}
 	}
 	if (cnt)
-		return val;
+		return (val);
 	if (ch != '\0')
 		++s->str;
 	switch (ch) {
-	case 'a':			/* escape characters */
-		return '\7';
-	case 'b':
-		return '\b';
-	case 'e':
-		return '\033';
-	case 'f':
-		return '\f';
-	case 'n':
-		return '\n';
-	case 'r':
-		return '\r';
-	case 't':
-		return '\t';
-	case 'v':
-		return '\13';
-	case '\0':			/*  \" -> \ */
-		s->state = EOS;
-		return '\\';
-	default:			/* \x" -> x */
-		return ch;
+		case 'a':			/* escape characters */
+			return ('\7');
+		case 'b':
+			return ('\b');
+		case 'f':
+			return ('\f');
+		case 'n':
+			return ('\n');
+		case 'r':
+			return ('\r');
+		case 't':
+			return ('\t');
+		case 'v':
+			return ('\13');
+		case '\0':			/*  \" -> \ */
+			s->state = EOS;
+			return ('\\');
+		default:			/* \x" -> x */
+			return (ch);
 	}
 }

@@ -34,7 +34,7 @@
 
 #ifndef lint
 static char copyright[] =
-"$Id: dhcp.c,v 1.13 2011/10/17 16:35:23 mbalmer Exp $ Copyright (c) 2004-2005 Internet Systems Consortium.  All rights reserved.\n";
+"$Id: dhcp.c,v 1.10.26.1 2009/07/17 05:52:14 snj Exp $ Copyright (c) 2004-2005 Internet Systems Consortium.  All rights reserved.\n";
 #endif /* not lint */
 
 #include "dhcpd.h"
@@ -128,7 +128,6 @@ void dhcp (packet)
 	if (packet -> packet_type == DHCPREQUEST &&
 	    packet -> raw -> ciaddr.s_addr &&
 	    !packet -> raw -> giaddr.s_addr &&
-	    packet -> options != NULL &&
 	    (packet -> options -> universe_count < agent_universe.index ||
 	     !packet -> options -> universes [agent_universe.index]))
 	{
@@ -1380,7 +1379,6 @@ void nak_lease (packet, cip)
 	/* If there were agent options in the incoming packet, return
 	   them. */
 	if (packet -> raw -> giaddr.s_addr &&
-	    packet -> options != NULL &&
 	    packet -> options -> universe_count > agent_universe.index &&
 	    packet -> options -> universes [agent_universe.index]) {
 		option_chain_head_reference
@@ -1538,7 +1536,6 @@ void ack_lease (packet, lease, offer, when, msg, ms_nulltp, hp)
 	   them.  Do not return the agent options if they were stashed
 	   on the lease. */
 	if (packet -> raw -> giaddr.s_addr &&
-	    packet -> options != NULL &&
 	    packet -> options -> universe_count > agent_universe.index &&
 	    packet -> options -> universes [agent_universe.index] &&
 	    (state -> options -> universe_count <= agent_universe.index ||
@@ -2182,7 +2179,6 @@ void ack_lease (packet, lease, offer, when, msg, ms_nulltp, hp)
 	   in with the packet, so that we can use them at renewal time when
 	   the packet won't have gone through a relay agent. */
 	if (packet -> raw -> giaddr.s_addr &&
-	    packet -> options != NULL &&
 	    packet -> options -> universe_count > agent_universe.index &&
 	    packet -> options -> universes [agent_universe.index] &&
 	    (state -> options -> universe_count <= agent_universe.index ||
@@ -2688,7 +2684,7 @@ void ack_lease (packet, lease, offer, when, msg, ms_nulltp, hp)
 		lease -> timestamp = cur_time;
 		icmp_echorequest (&lease -> ip_addr);
 
-		/* Determine whether to use configured or default ping timeout.
+		/* Determine wether to use configured or default ping timeout.
 		 */
 		if ((oc = lookup_option (&server_universe, state -> options,
 						SV_PING_TIMEOUT)) &&

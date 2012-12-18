@@ -1,4 +1,4 @@
-/*	$NetBSD: trpt.c,v 1.27 2011/08/30 20:49:29 joerg Exp $	*/
+/*	$NetBSD: trpt.c,v 1.25 2008/07/21 13:37:00 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1997, 2005, 2006 The NetBSD Foundation, Inc.
@@ -69,7 +69,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)trpt.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: trpt.c,v 1.27 2011/08/30 20:49:29 joerg Exp $");
+__RCSID("$NetBSD: trpt.c,v 1.25 2008/07/21 13:37:00 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -123,14 +123,14 @@ __RCSID("$NetBSD: trpt.c,v 1.27 2011/08/30 20:49:29 joerg Exp $");
 #include <stdlib.h>
 #include <unistd.h>
 
-static struct nlist nl[] = {
+struct nlist nl[] = {
 #define	N_HARDCLOCK_TICKS	0
-	{ "_hardclock_ticks", 0, 0, 0, 0 },
+	{ "_hardclock_ticks" },
 #define	N_TCP_DEBUG		1
-	{ "_tcp_debug", 0, 0, 0, 0 },
+	{ "_tcp_debug" },
 #define	N_TCP_DEBX		2
-	{ "_tcp_debx", 0, 0, 0, 0 },
-	{ NULL, 0, 0, 0, 0 },
+	{ "_tcp_debx" },
+	{ NULL },
 };
 
 static caddr_t tcp_pcbs[TCP_NDEBUG];
@@ -138,27 +138,28 @@ static n_time ntime;
 static int aflag, follow, sflag, tflag;
 
 /* see sys/netinet/tcp_debug.c */
-static struct  tcp_debug tcp_debug[TCP_NDEBUG];
-static int tcp_debx;
+struct  tcp_debug tcp_debug[TCP_NDEBUG];
+int tcp_debx;
 
-static void	dotrace(caddr_t);
-static void	tcp_trace(short, short, struct tcpcb *, struct tcpcb *,
+int	main(int, char *[]);
+void	dotrace(caddr_t);
+void	tcp_trace(short, short, struct tcpcb *, struct tcpcb *,
 	    int, void *, int);
-static int	numeric(const void *, const void *);
-__dead static void	usage(void);
+int	numeric(const void *, const void *);
+void	usage(void);
 
-static kvm_t	*kd;
-static int     use_sysctl;
+kvm_t	*kd;
+int     use_sysctl;
 
 int
 main(int argc, char *argv[])
 {
 	int ch, i, jflag, npcbs;
-	char *kernel, *core, *cp, errbuf[_POSIX2_LINE_MAX];
+	char *system, *core, *cp, errbuf[_POSIX2_LINE_MAX];
 	unsigned long l;
 
 	jflag = npcbs = 0;
-	kernel = core = NULL;
+	system = core = NULL;
 
 	while ((ch = getopt(argc, argv, "afjp:stN:M:")) != -1) {
 		switch (ch) {
@@ -191,7 +192,7 @@ main(int argc, char *argv[])
 			++tflag;
 			break;
 		case 'N':
-			kernel = optarg;
+			system = optarg;
 			break;
 		case 'M':
 			core = optarg;
@@ -207,7 +208,7 @@ main(int argc, char *argv[])
 	if (argc)
 		usage();
 
-	use_sysctl = (kernel == NULL && core == NULL);
+	use_sysctl = (system == NULL && core == NULL);
 
 	if (use_sysctl) {
 		size_t lenx = sizeof(tcp_debx);
@@ -220,12 +221,12 @@ main(int argc, char *argv[])
 		    NULL, 0) == -1)
 			err(1, "net.inet.tcp.debug");
 	} else {
-		kd = kvm_openfiles(kernel, core, NULL, O_RDONLY, errbuf);
+		kd = kvm_openfiles(system, core, NULL, O_RDONLY, errbuf);
 		if (kd == NULL)
 			errx(1, "can't open kmem: %s", errbuf);
 
 		if (kvm_nlist(kd, nl))
-			errx(2, "%s: no namelist", kernel);
+			errx(2, "%s: no namelist", system);
 
 		if (kvm_read(kd, nl[N_TCP_DEBX].n_value, (char *)&tcp_debx,
 		    sizeof(tcp_debx)) != sizeof(tcp_debx))
@@ -276,7 +277,7 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-static void
+void
 dotrace(caddr_t tcpcb)
 {
 	struct tcp_debug *td;
@@ -379,7 +380,7 @@ dotrace(caddr_t tcpcb)
  * Tcp debug routines
  */
 /*ARGSUSED*/
-static void
+void
 tcp_trace(short act, short ostate, struct tcpcb *atp, struct tcpcb *tp,
     int family, void *packet, int req)
 {
@@ -476,7 +477,7 @@ tcp_trace(short act, short ostate, struct tcpcb *atp, struct tcpcb *tp,
 			printf("(win=%x)", win);
 		flags = th->th_flags;
 		if (flags) {
-			const char *cp = "<";
+			char *cp = "<";
 #define	pf(flag, string) { \
 	if (th->th_flags&flag) { \
 		(void)printf("%s%s", cp, string); \
@@ -516,15 +517,15 @@ skipact:
 	}
 	/* print out timers? */
 	if (tflag) {
-		const char *cp = "\t";
+		char *cp = "\t";
 		int i;
 		int hardticks;
 
 		if (use_sysctl) {
-			size_t hlen = sizeof(hardticks);
+			size_t len = sizeof(hardticks);
 
 			if (sysctlbyname("kern.hardclock_ticks", &hardticks,
-			    &hlen, NULL, 0) == -1)
+			    &len, NULL, 0) == -1)
 				err(1, "kern.hardclock_ticks");
 		} else {
 			if (kvm_read(kd, nl[N_HARDCLOCK_TICKS].n_value,
@@ -549,7 +550,7 @@ skipact:
 	}
 }
 
-static int
+int
 numeric(const void *v1, const void *v2)
 {
 	const caddr_t *c1 = v1;
@@ -566,7 +567,7 @@ numeric(const void *v1, const void *v2)
 	return (rv);
 }
 
-static void
+void
 usage(void)
 {
 

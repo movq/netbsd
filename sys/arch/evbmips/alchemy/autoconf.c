@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.19 2012/10/27 17:17:50 chs Exp $ */
+/* $NetBSD: autoconf.c,v 1.16 2008/04/28 20:23:17 martin Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.19 2012/10/27 17:17:50 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.16 2008/04/28 20:23:17 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,11 +74,11 @@ void
 cpu_rootconf(void)
 {
 
-	rootconf();
+	setroot(booted_device, booted_partition);
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 	struct aubus_attach_args *aa = aux;
 
@@ -119,9 +119,9 @@ device_register(device_t dev, void *aux)
 			pd = prop_data_create_data(ethaddr, ETHER_ADDR_LEN);
 			KASSERT(pd != NULL);
 			if (prop_dictionary_set(device_properties(dev),
-						"mac-address", pd) == false) {
+						"mac-addr", pd) == false) {
 				printf("WARNING: unable to set mac-addr "
-				    "property for %s\n", device_xname(dev));
+				    "property for %s\n", dev->dv_xname);
 			}
 			prop_object_release(pd);
 		}

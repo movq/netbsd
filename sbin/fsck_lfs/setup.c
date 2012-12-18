@@ -1,4 +1,4 @@
-/* $NetBSD: setup.c,v 1.38 2011/08/29 18:43:20 bouyer Exp $ */
+/* $NetBSD: setup.c,v 1.36 2008/05/16 09:21:59 hannken Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -68,7 +68,6 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/disklabel.h>
-#include <sys/disk.h>
 #include <sys/file.h>
 
 #include <ufs/ufs/inode.h>
@@ -82,7 +81,6 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <time.h>
 #include <util.h>
@@ -96,6 +94,7 @@
 #include "fsutil.h"
 
 extern u_int32_t cksum(void *, size_t);
+static struct disklabel *getdisklabel(const char *, int);
 static uint64_t calcmaxfilesize(int);
 
 ufs_daddr_t *din_table;
@@ -164,6 +163,7 @@ int
 setup(const char *dev)
 {
 	long bmapsize;
+	struct disklabel *lp;
 	struct stat statb;
 	int doskipclean;
 	u_int64_t maxfilesize;
@@ -215,6 +215,10 @@ setup(const char *dev)
 			printf("%s: ", cdevname());
 		errexit("BAD SUPER BLOCK OR IFILE INODE NOT FOUND");
 	}
+	if ((lp = getdisklabel((char *) NULL, fsreadfd)) != NULL)
+		dev_bsize = secsize = lp->d_secsize;
+	else
+		dev_bsize = secsize = DEV_BSIZE;
 
         /* Resize buffer cache now that we have a superblock to guess from. */ 
         bufrehash((fs->lfs_segtabsz + maxino / fs->lfs_ifpb) << 4);
@@ -367,8 +371,8 @@ setup(const char *dev)
 		}
 	}
 	if (fs->lfs_fbmask != (1 << fs->lfs_fbshift) - 1) {
-		pwarn("INCORRECT FBMASK=%" PRId64 " IN SUPERBLOCK",
-		    fs->lfs_fbmask);
+		pwarn("INCORRECT FFMASK=%" PRId64 " IN SUPERBLOCK",
+		    fs->lfs_ffmask);
 		fs->lfs_fbmask = (1 << fs->lfs_fbshift) - 1;
 		if (preen)
 			printf(" (FIXED)\n");
@@ -462,3 +466,16 @@ setup(const char *dev)
 	return (0);
 }
 
+static struct disklabel *
+getdisklabel(const char *s, int fd)
+{
+	static struct disklabel lab;
+
+	if (ioctl(fd, DIOCGDINFO, (char *) &lab) < 0) {
+		if (s == NULL)
+			return ((struct disklabel *) NULL);
+		pwarn("ioctl (GCINFO): %s\n", strerror(errno));
+		return NULL;
+	}
+	return (&lab);
+}

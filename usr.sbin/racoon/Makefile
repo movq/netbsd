@@ -1,7 +1,6 @@
-# $NetBSD: Makefile,v 1.25 2012/07/14 04:03:44 christos Exp $
+# $NetBSD: Makefile,v 1.21 2008/04/10 15:42:06 tsutsui Exp $
 
-WARNS?=	0	# XXX third-party program, many issues
-NOCLANGERROR=	# defined
+WARNS=	0	# Will be fixed later
 
 .include <bsd.own.mk>
 
@@ -30,6 +29,7 @@ CPPFLAGS+= -I${NETBSDSRCDIR}/lib/libipsec -I.
 CPPFLAGS+= -DIPSEC_DEBUG -DHAVE_CONFIG_H
 CPPFLAGS+= -DADMINPORTDIR=\"/var/run\"
 CPPFLAGS+= -DSYSCONFDIR=\"/etc/racoon\"
+CPPFLAGS+= -DSADB_X_EALG_AESCBC=SADB_X_EALG_AES
 
 LDADD+= -ll -ly -lipsec -lutil
 DPADD+= ${LIBL} ${LIBY} ${LIBCRYPTO} ${LIBUTIL}
@@ -51,7 +51,11 @@ LDADD+= -lgssapi -lkrb5 -lhx509 -lheimntlm -lcom_err \
 DPADD+= ${LIBGSSAPI} ${LIBKRB5} ${LIBHX509} ${LIBHEIMNTLM} ${LIBCOM_ERR} \
 	${LIBROKEN} ${LIBASN1}
 .endif
+.if (${MKCRYPTO_IDEA} != "no")
 CPPFLAGS+=-DHAVE_OPENSSL_IDEA_H
+LDADD+= -lcrypto_idea
+LDADD+= ${LIBCRYPTO_IDEA}
+.endif
 .if (${MKCRYPTO_RC5} != "no")
 CPPFLAGS+=-DHAVE_OPENSSL_RC5_H
 LDADD+= -lcrypto_rc5

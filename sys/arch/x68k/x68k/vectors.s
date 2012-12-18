@@ -1,4 +1,4 @@
-|	$NetBSD: vectors.s,v 1.17 2012/04/29 07:17:12 tsutsui Exp $
+|	$NetBSD: vectors.s,v 1.14 2007/10/17 19:58:05 garbled Exp $
 
 | Copyright (c) 1988 University of Utah
 | Copyright (c) 1990, 1993
@@ -12,7 +12,11 @@
 | 2. Redistributions in binary form must reproduce the above copyright
 |    notice, this list of conditions and the following disclaimer in the
 |    documentation and/or other materials provided with the distribution.
-| 3. Neither the name of the University nor the names of its contributors
+| 3. All advertising materials mentioning features or use of this software
+|    must display the following acknowledgement:
+|	This product includes software developed by the University of
+|	California, Berkeley and its contributors.
+| 4. Neither the name of the University nor the names of its contributors
 |    may be used to endorse or promote products derived from this software
 |    without specific prior written permission.
 |
@@ -117,8 +121,8 @@ GLOBAL(vectab)
 	VECTOR(intiotrap)	/* 62: unassigned, reserved */
 	VECTOR(intiotrap)	/* 63: unassigned, reserved */
 	VECTOR(intiotrap)	/* 64: MFP GPIP0 RTC alarm */
-	VECTOR(intiotrap)	/* 65: MFP GPIP1 ext. power switch */
-	VECTOR(intiotrap)	/* 66: MFP GPIP2 front power switch */
+	VECTOR(powtrap)		/* 65: MFP GPIP1 ext. power switch */
+	VECTOR(powtrap)		/* 66: MFP GPIP2 front power switch */
 	VECTOR(intiotrap)	/* 67: MFP GPIP3 FM sound generator */
 	VECTOR(intiotrap)	/* 68: MFP timer-D */
 	VECTOR(timertrap)	/* 69: MFP timer-C */
@@ -198,8 +202,8 @@ GLOBAL(vectab)
 	BADTRAP16		/* 192-207: user interrupt vectors */
 	BADTRAP16		/* 208-223: user interrupt vectors */
 	BADTRAP16		/* 224-239: user interrupt vectors */
-	VECTOR(intiotrap)	/* 240: PSX16550, port1 */
-	VECTOR(intiotrap)	/* 241: PSX16550, port2 */
+	VECTOR(com0trap)	/* 240: unassigned, reserved */
+	VECTOR(com1trap)	/* 241: unassigned, reserved */
 	VECTOR(intiotrap)	/* 242: unassigned, reserved */
 	VECTOR(intiotrap)	/* 243: unassigned, reserved */
 	VECTOR(intiotrap)	/* 244: unassigned, reserved */

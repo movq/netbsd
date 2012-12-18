@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.25 2009/04/21 16:08:40 tsutsui Exp $	*/
+/*	$NetBSD: conf.c,v 1.24 2005/12/11 12:18:39 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -81,8 +81,7 @@ int	ndevs = (sizeof(devsw)/sizeof(devsw[0]));
 
 #ifndef LIBSA_SINGLE_FILESYSTEM
 #ifdef LIBSA_NO_FS_CLOSE
-#define ffsv1_close	0
-#define ffsv2_close	0
+#define ufs_close	0
 #define lfsv1_close	0
 #define lfsv2_close	0
 #define cd9660_close	0
@@ -90,8 +89,7 @@ int	ndevs = (sizeof(devsw)/sizeof(devsw[0]));
 #define nfs_close	0
 #endif
 #ifdef LIBSA_NO_FS_WRITE
-#define ffsv1_write	0
-#define ffsv2_write	0
+#define ufs_write	0
 #define lfsv1_write	0
 #define lfsv2_write	0
 #define cd9660_write	0
@@ -100,8 +98,7 @@ int	ndevs = (sizeof(devsw)/sizeof(devsw[0]));
 #endif
 
 struct fs_ops file_system[] = {
-	FS_OPS(ffsv1),
-	FS_OPS(ffsv2),
+	FS_OPS(ufs),
 	FS_OPS(lfsv1),
 	FS_OPS(lfsv2),
 	FS_OPS(cd9660),

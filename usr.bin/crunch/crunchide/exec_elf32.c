@@ -1,4 +1,4 @@
-/* $NetBSD: exec_elf32.c,v 1.14 2009/04/11 12:53:52 lukem Exp $ */
+/* $NetBSD: exec_elf32.c,v 1.13 2003/07/26 20:34:12 salo Exp $ */
 
 /*
  * Copyright (c) 1997, 1998 Christopher G. Demetriou
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: exec_elf32.c,v 1.14 2009/04/11 12:53:52 lukem Exp $");
+__RCSID("$NetBSD: exec_elf32.c,v 1.13 2003/07/26 20:34:12 salo Exp $");
 #endif
  
 #ifndef ELFSIZE
@@ -75,7 +75,7 @@ xreadatoff(int fd, void *buf, off_t off, size_t size, const char *fn)
 		perror(fn);
 		return -1;
 	}
-	if ((size_t)(rv = read(fd, buf, size)) != size) {
+	if ((rv = read(fd, buf, size)) != size) {
 		fprintf(stderr, "%s: read error: %s\n", fn,
 		    rv == -1 ? strerror(errno) : "short read");
 		return -1;
@@ -92,7 +92,7 @@ xwriteatoff(int fd, void *buf, off_t off, size_t size, const char *fn)
 		perror(fn);
 		return -1;
 	}
-	if ((size_t)(rv = write(fd, buf, size)) != size) {
+	if ((rv = write(fd, buf, size)) != size) {
 		fprintf(stderr, "%s: write error: %s\n", fn,
 		    rv == -1 ? strerror(errno) : "short write");
 		return -1;
@@ -138,7 +138,7 @@ ELFNAMEEND(check)(int fd, const char *fn)
 	 */
 	if (fstat(fd, &sb) == -1)
 		return 0;
-	if (sb.st_size < (off_t)(sizeof eh))
+	if (sb.st_size < sizeof eh)
 		return 0;
 	if (read(fd, &eh, sizeof eh) != sizeof eh)
 		return 0;
@@ -180,7 +180,7 @@ ELFNAMEEND(hide)(int fd, const char *fn)
 	int symtabsnum, strtabsnum;
 	Elf_Sym *symtabp = NULL;
 	char *strtabp = NULL, *nstrtabp = NULL;
-	Elf_Word j, nsyms;
+	Elf_Word nsyms;
 	Elf_Off stroff, maxoff;
 	const char *weirdreason;
 	ssize_t shdrsize;
@@ -245,7 +245,7 @@ ELFNAMEEND(hide)(int fd, const char *fn)
 	if ((symtabp = xmalloc(shdrp[symtabsnum].sh_size, fn, "symbol table"))
 	    == NULL)
 		goto bad;
-	if ((size_t)xreadatoff(fd, symtabp, shdrp[symtabsnum].sh_offset,
+	if (xreadatoff(fd, symtabp, shdrp[symtabsnum].sh_offset,
 	    shdrp[symtabsnum].sh_size, fn) != shdrp[symtabsnum].sh_size)
 		goto bad;
 
@@ -253,7 +253,7 @@ ELFNAMEEND(hide)(int fd, const char *fn)
 	if ((strtabp = xmalloc(shdrp[strtabsnum].sh_size, fn, "string table"))
 	    == NULL)
 		goto bad;
-	if ((size_t)xreadatoff(fd, strtabp, shdrp[strtabsnum].sh_offset,
+	if (xreadatoff(fd, strtabp, shdrp[strtabsnum].sh_offset,
 	    shdrp[strtabsnum].sh_size, fn) != shdrp[strtabsnum].sh_size)
 		goto bad;
 
@@ -267,8 +267,8 @@ ELFNAMEEND(hide)(int fd, const char *fn)
 
 	fn_size = strlen(fn);
 
-	for (j = 0; j < nsyms; j++) {
-		Elf_Sym *sp = &symtabp[j];
+	for (i = 0; i < nsyms; i++) {
+		Elf_Sym *sp = &symtabp[i];
 		const char *symname = strtabp + sp->st_name;
 		size_t newent_len;
 
@@ -308,10 +308,10 @@ ELFNAMEEND(hide)(int fd, const char *fn)
 	 */
 	if (xwriteatoff(fd, shdrp, ehdr.e_shoff, shdrsize, fn) != shdrsize)
 		goto bad;
-	if ((size_t)xwriteatoff(fd, symtabp, shdrp[symtabsnum].sh_offset,
+	if (xwriteatoff(fd, symtabp, shdrp[symtabsnum].sh_offset,
 	    shdrp[symtabsnum].sh_size, fn) != shdrp[symtabsnum].sh_size)
 		goto bad;
-	if ((size_t)xwriteatoff(fd, nstrtabp, shdrp[strtabsnum].sh_offset,
+	if (xwriteatoff(fd, nstrtabp, shdrp[strtabsnum].sh_offset,
 	    shdrp[strtabsnum].sh_size, fn) != shdrp[strtabsnum].sh_size)
 		goto bad;
 

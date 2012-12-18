@@ -1,4 +1,4 @@
-/*	$NetBSD: utilities.c,v 1.23 2012/01/09 16:08:55 christos Exp $	*/
+/*	$NetBSD: utilities.c,v 1.22 2006/10/07 17:27:57 elad Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)utilities.c	8.3 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: utilities.c,v 1.23 2012/01/09 16:08:55 christos Exp $");
+__RCSID("$NetBSD: utilities.c,v 1.22 2006/10/07 17:27:57 elad Exp $");
 #endif
 #endif /* not lint */
 
@@ -172,7 +172,7 @@ Dump(int direction, unsigned char *buffer, int length)
 
 
 void
-printoption(const char *direction, int cmd, int option)
+printoption(char *direction, int cmd, int option)
 {
 	if (!showoptions)
 		return;
@@ -182,7 +182,7 @@ printoption(const char *direction, int cmd, int option)
 		else
 		    fprintf(NetTrace, "%s IAC %d", direction, option);
 	} else {
-		const char *fmt;
+		char *fmt;
 		fmt = (cmd == WILL) ? "WILL" : (cmd == WONT) ? "WONT" :
 			(cmd == DO) ? "DO" : (cmd == DONT) ? "DONT" : 0;
 		if (fmt) {
@@ -654,7 +654,7 @@ printsub(
 	    break;
 
 	case TELOPT_STATUS: {
-	    const char *cp;
+	    char *cp;
 	    int j, k;
 
 	    fprintf(NetTrace, "STATUS");
@@ -768,8 +768,7 @@ printsub(
 		fprintf(NetTrace, "INFO ");
 	    env_common:
 		{
-		    static const char NQ[] = "\" ";
-		    const char *noquote = NQ;
+		    int noquote = 2;
 #if defined(ENV_HACK) && defined(OLD_ENVIRON)
 		    extern int old_env_var, old_env_value;
 #endif
@@ -781,14 +780,14 @@ printsub(
 			    if (pointer[0] == TELOPT_OLD_ENVIRON) {
 # ifdef	ENV_HACK
 				if (old_env_var == OLD_ENV_VALUE)
-				    fprintf(NetTrace, "%s(VALUE) ", noquote);
+				    fprintf(NetTrace, "\" (VALUE) " + noquote);
 				else
 # endif
-				    fprintf(NetTrace, "%sVAR ", noquote);
+				    fprintf(NetTrace, "\" VAR " + noquote);
 			    } else
 #endif /* OLD_ENVIRON */
-				fprintf(NetTrace, "%sVALUE ", noquote);
-			    noquote = NQ;
+				fprintf(NetTrace, "\" VALUE " + noquote);
+			    noquote = 2;
 			    break;
 
 			case NEW_ENV_VAR:
@@ -797,37 +796,37 @@ printsub(
 			    if (pointer[0] == TELOPT_OLD_ENVIRON) {
 # ifdef	ENV_HACK
 				if (old_env_value == OLD_ENV_VAR)
-				    fprintf(NetTrace, "%s(VAR) ", noquote);
+				    fprintf(NetTrace, "\" (VAR) " + noquote);
 				else
 # endif
-				    fprintf(NetTrace, "%sVALUE ", noquote);
+				    fprintf(NetTrace, "\" VALUE " + noquote);
 			    } else
 #endif /* OLD_ENVIRON */
-				fprintf(NetTrace, "%sVAR ", noquote);
-			    noquote = NQ;
+				fprintf(NetTrace, "\" VAR " + noquote);
+			    noquote = 2;
 			    break;
 
 			case ENV_ESC:
-			    fprintf(NetTrace, "%sESC ", noquote);
-			    noquote = NQ;
+			    fprintf(NetTrace, "\" ESC " + noquote);
+			    noquote = 2;
 			    break;
 
 			case ENV_USERVAR:
-			    fprintf(NetTrace, "%sUSERVAR ", noquote);
-			    noquote = NQ;
+			    fprintf(NetTrace, "\" USERVAR " + noquote);
+			    noquote = 2;
 			    break;
 
 			default:
 			    if (isprint(pointer[i]) && pointer[i] != '"') {
-				if (*noquote) {
+				if (noquote) {
 				    putc('"', NetTrace);
-				    noquote = "";
+				    noquote = 0;
 				}
 				putc(pointer[i], NetTrace);
 			    } else {
-				fprintf(NetTrace, "%s%03o ", noquote,
+				fprintf(NetTrace, "\" %03o " + noquote,
 							pointer[i]);
-				noquote = NQ;
+				noquote = 2;
 			    }
 			    break;
 			}
@@ -917,7 +916,7 @@ Exit(int returnCode)
 }
 
 void
-ExitString(const char *string, int returnCode)
+ExitString(char *string, int returnCode)
 {
     SetForExit();
     fwrite(string, 1, strlen(string), stderr);

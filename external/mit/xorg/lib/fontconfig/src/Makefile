@@ -1,32 +1,14 @@
-#	$NetBSD: Makefile,v 1.9 2012/03/22 23:46:27 joerg Exp $
+#	$NetBSD: Makefile,v 1.4.4.1 2009/09/17 04:24:31 snj Exp $
 
 .include <bsd.own.mk>
 
 LIB=	fontconfig
 
 .PATH:	${X11SRCDIR.${LIB}}/src
-SRCS=	fcatomic.c \
-	fcblanks.c \
-	fccache.c \
-	fccfg.c \
-	fccharset.c \
-	fcdbg.c \
-	fcdefault.c \
-	fcdir.c \
-	fcformat.c \
-	fcfreetype.c \
-	fcfs.c \
-	fcinit.c \
-	fclang.c \
-	fclist.c \
-	fcmatch.c \
-	fcmatrix.c \
-	fcname.c \
-	fcpat.c \
-	fcserialize.c \
-	fcstr.c \
-	fcxml.c \
-	ftglue.c
+SRCS=	fcatomic.c fcblanks.c fccache.c fccfg.c fccharset.c fcdbg.c \
+	fcdefault.c fcdir.c fcfreetype.c fcfs.c fcinit.c fclang.c \
+	fclist.c fcmatch.c fcmatrix.c fcname.c fcpat.c fcserialize.c \
+	fcstr.c fcxml.c ftglue.h ftglue.c
 
 .PATH:	${X11SRCDIR.${LIB}}/doc
 MAN=	FcAtomicCreate.3 FcAtomicDeleteNew.3 FcAtomicDestroy.3 FcAtomicLock.3 \
@@ -84,7 +66,7 @@ MAN=	FcAtomicCreate.3 FcAtomicDeleteNew.3 FcAtomicDestroy.3 FcAtomicLock.3 \
 MAN+=	fonts-conf.5
 
 LIBDPLIBS=\
-	expat		${NETBSDSRCDIR}/external/mit/expat/lib/libexpat \
+	expat		${.CURDIR}/../../expat \
 	freetype	${.CURDIR}/../../freetype
 
 # XXX FONTCONFIG_PATH was arbitrarily chosen
@@ -115,11 +97,6 @@ CLEANFILES+= fcarch.h
 PKGCONFIG=	fontconfig
 # fontconfig uses VERSION and not PACKAGE_VERSION
 PKGCONFIG_VERSION.fontconfig=	2.6.0
-
-# XXX
-CPPFLAGS.fcxml.c=	-Wno-error
-
-CWARNFLAGS.clang+=	-Wno-pointer-sign -Wno-switch
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

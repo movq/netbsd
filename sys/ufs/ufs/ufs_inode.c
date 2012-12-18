@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_inode.c,v 1.88 2011/09/20 14:01:33 chs Exp $	*/
+/*	$NetBSD: ufs_inode.c,v 1.76.4.5 2011/07/16 00:19:13 riz Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_inode.c,v 1.88 2011/09/20 14:01:33 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_inode.c,v 1.76.4.5 2011/07/16 00:19:13 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -98,6 +98,9 @@ ufs_inactive(void *v)
 	 */
 	if (ip->i_mode == 0)
 		goto out;
+	if (ip->i_ffs_effnlink == 0 && DOINGSOFTDEP(vp))
+		softdep_releasefile(ip);
+
 	if (ip->i_nlink <= 0 && (vp->v_mount->mnt_flag & MNT_RDONLY) == 0) {
 #ifdef UFS_EXTATTR
 		ufs_extattr_vnode_inactive(vp, curlwp);
@@ -106,6 +109,9 @@ ufs_inactive(void *v)
 		if (error)
 			goto out;
 		logged = 1;
+#ifdef QUOTA
+		(void)chkiq(ip, -1, NOCRED, 0);
+#endif
 		if (ip->i_size != 0) {
 			/*
 			 * When journaling, only truncate one indirect block
@@ -137,18 +143,23 @@ ufs_inactive(void *v)
 			if (!error)
 				error = UFS_TRUNCATE(vp, (off_t)0, 0, NOCRED);
 		}
-#if defined(QUOTA) || defined(QUOTA2)
-		(void)chkiq(ip, -1, NOCRED, 0);
-#endif
+		/*
+		 * Setting the mode to zero needs to wait for the inode
+		 * to be written just as does a change to the link count.
+		 * So, rather than creating a new entry point to do the
+		 * same thing, we just use softdep_change_linkcnt().
+		 */
 		DIP_ASSIGN(ip, rdev, 0);
 		mode = ip->i_mode;
 		ip->i_mode = 0;
-		ip->i_omode = mode;
 		DIP_ASSIGN(ip, mode, 0);
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
-		/*
-		 * Defer final inode free and update to ufs_reclaim().
-		 */
+		mutex_enter(&vp->v_interlock);
+		vp->v_iflag |= VI_FREEING;
+		mutex_exit(&vp->v_interlock);
+		if (DOINGSOFTDEP(vp))
+			softdep_change_linkcnt(ip);
+		UFS_VFREE(vp, ip->i_number, mode);
 	}
 
 	if (ip->i_flag & (IN_CHANGE | IN_UPDATE | IN_MODIFIED)) {
@@ -168,7 +179,7 @@ out:
 	 * so that it can be reused immediately.
 	 */
 	*ap->a_recycle = (ip->i_mode == 0);
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	fstrans_done(transmp);
 	return (error);
 }
@@ -194,12 +205,15 @@ ufs_reclaim(struct vnode *vp)
 	 * Remove the inode from its hash chain.
 	 */
 	ufs_ihashrem(ip);
-
+	/*
+	 * Purge old data structures associated with the inode.
+	 */
+	cache_purge(vp);
 	if (ip->i_devvp) {
 		vrele(ip->i_devvp);
 		ip->i_devvp = 0;
 	}
-#if defined(QUOTA) || defined(QUOTA2)
+#ifdef QUOTA
 	ufsquota_free(ip);
 #endif
 #ifdef UFS_DIRHASH
@@ -262,13 +276,23 @@ ufs_balloc_range(struct vnode *vp, off_t off, off_t len, kauth_cred_t cred,
 	len += delta;
 
 	genfs_node_wrlock(vp);
-	mutex_enter(uobj->vmobjlock);
+	mutex_enter(&uobj->vmobjlock);
 	error = VOP_GETPAGES(vp, pagestart, pgs, &npages, 0,
 	    VM_PROT_WRITE, 0, PGO_SYNCIO | PGO_PASTEOF | PGO_NOBLOCKALLOC |
 	    PGO_NOTIMESTAMP | PGO_GLOCKHELD);
 	if (error) {
 		goto out;
 	}
+	mutex_enter(&uobj->vmobjlock);
+	mutex_enter(&uvm_pageqlock);
+	for (i = 0; i < npages; i++) {
+		UVMHIST_LOG(ubchist, "got pgs[%d] %p", i, pgs[i],0,0);
+		KASSERT((pgs[i]->flags & PG_RELEASED) == 0);
+		pgs[i]->flags &= ~PG_CLEAN;
+		uvm_pageactivate(pgs[i]);
+	}
+	mutex_exit(&uvm_pageqlock);
+	mutex_exit(&uobj->vmobjlock);
 
 	/*
 	 * now allocate the range.
@@ -278,32 +302,28 @@ ufs_balloc_range(struct vnode *vp, off_t off, off_t len, kauth_cred_t cred,
 	genfs_node_unlock(vp);
 
 	/*
-	 * if the allocation succeeded, clear PG_CLEAN on all the pages
-	 * and clear PG_RDONLY on any pages that are now fully backed
-	 * by disk blocks.  if the allocation failed, we do not invalidate
-	 * the pages since they might have already existed and been dirty,
-	 * in which case we need to keep them around.  if we created the pages,
-	 * they will be clean and read-only, and leaving such pages
-	 * in the cache won't cause any problems.
+	 * clear PG_RDONLY on any pages we are holding
+	 * (since they now have backing store) and unbusy them.
 	 */
 
 	GOP_SIZE(vp, off + len, &eob, 0);
-	mutex_enter(uobj->vmobjlock);
-	mutex_enter(&uvm_pageqlock);
+	mutex_enter(&uobj->vmobjlock);
 	for (i = 0; i < npages; i++) {
-		KASSERT((pgs[i]->flags & PG_RELEASED) == 0);
-		if (!error) {
-			if (off <= pagestart + (i << PAGE_SHIFT) &&
-			    pagestart + ((i + 1) << PAGE_SHIFT) <= eob) {
-				pgs[i]->flags &= ~PG_RDONLY;
-			}
-			pgs[i]->flags &= ~PG_CLEAN;
+		if (off <= pagestart + (i << PAGE_SHIFT) &&
+		    pagestart + ((i + 1) << PAGE_SHIFT) <= eob) {
+			pgs[i]->flags &= ~PG_RDONLY;
+		} else if (error) {
+			pgs[i]->flags |= PG_RELEASED;
 		}
-		uvm_pageactivate(pgs[i]);
 	}
-	mutex_exit(&uvm_pageqlock);
-	uvm_page_unbusy(pgs, npages);
-	mutex_exit(uobj->vmobjlock);
+	if (error) {
+		mutex_enter(&uvm_pageqlock);
+		uvm_page_unbusy(pgs, npages);
+		mutex_exit(&uvm_pageqlock);
+	} else {
+		uvm_page_unbusy(pgs, npages);
+	}
+	mutex_exit(&uobj->vmobjlock);
 
  out:
  	kmem_free(pgs, pgssize);

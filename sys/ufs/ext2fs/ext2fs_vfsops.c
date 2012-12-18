@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_vfsops.c,v 1.167 2012/11/21 23:11:23 jakllsch Exp $	*/
+/*	$NetBSD: ext2fs_vfsops.c,v 1.137.6.6 2011/01/16 12:38:28 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1994
@@ -43,6 +43,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -60,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_vfsops.c,v 1.167 2012/11/21 23:11:23 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_vfsops.c,v 1.137.6.6 2011/01/16 12:38:28 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -102,7 +107,9 @@ __KERNEL_RCSID(0, "$NetBSD: ext2fs_vfsops.c,v 1.167 2012/11/21 23:11:23 jakllsch
 #include <ufs/ext2fs/ext2fs_dir.h>
 #include <ufs/ext2fs/ext2fs_extern.h>
 
-MODULE(MODULE_CLASS_VFS, ext2fs, "ffs");
+MODULE(MODULE_CLASS_VFS, ext2fs, NULL);
+
+extern kmutex_t ufs_hashlock;
 
 int ext2fs_sbupdate(struct ufsmount *, int);
 static int ext2fs_checksb(struct ext2fs *, int);
@@ -159,7 +166,6 @@ static const struct ufs_ops ext2fs_ufsops = {
 	.uo_itimes = ext2fs_itimes,
 	.uo_update = ext2fs_update,
 	.uo_vfree = ext2fs_vfree,
-	.uo_unmark_vnode = (void (*)(vnode_t *))nullop,
 };
 
 /* Fill in the inode uid/gid from ext2 halves.  */
@@ -307,6 +313,7 @@ int
 ext2fs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
+	struct nameidata nd;
 	struct vnode *devvp;
 	struct ufs_args *args = data;
 	struct ufsmount *ump = NULL;
@@ -335,10 +342,10 @@ ext2fs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		/*
 		 * Look up the name and verify that it's sane.
 		 */
-		error = namei_simple_user(args->fspec,
-					NSM_FOLLOW_NOEMULROOT, &devvp);
-		if (error != 0)
+		NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, args->fspec);
+		if ((error = namei(&nd)) != 0)
 			return (error);
+		devvp = nd.ni_vp;
 
 		if (!update) {
 			/*
@@ -378,22 +385,17 @@ ext2fs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	/*
 	 * If mount by non-root, then verify that user has necessary
 	 * permissions on the device.
-	 *
-	 * Permission to update a mount is checked higher, so here we presume
-	 * updating the mount is okay (for example, as far as securelevel goes)
-	 * which leaves us with the normal check.
 	 */
-	if (error == 0) {
+	if (error == 0 && kauth_authorize_generic(l->l_cred,
+	    KAUTH_GENERIC_ISSUSER, NULL) != 0) {
 		accessmode = VREAD;
 		if (update ?
 		    (mp->mnt_iflag & IMNT_WANTRDWR) != 0 :
 		    (mp->mnt_flag & MNT_RDONLY) == 0)
 			accessmode |= VWRITE;
 		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-		    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp,
-		    KAUTH_ARG(accessmode));
-		VOP_UNLOCK(devvp);
+		error = VOP_ACCESS(devvp, accessmode, l->l_cred);
+		VOP_UNLOCK(devvp, 0);
 	}
 
 	if (error) {
@@ -408,16 +410,14 @@ ext2fs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 			xflags = FREAD;
 		else
 			xflags = FREAD|FWRITE;
-		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 		error = VOP_OPEN(devvp, xflags, FSCRED);
-		VOP_UNLOCK(devvp);
 		if (error)
 			goto fail;
 		error = ext2fs_mountfs(devvp, mp);
 		if (error) {
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 			(void)VOP_CLOSE(devvp, xflags, NOCRED);
-			VOP_UNLOCK(devvp);
+			VOP_UNLOCK(devvp, 0);
 			goto fail;
 		}
 
@@ -457,7 +457,7 @@ ext2fs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		}
 
 		if (mp->mnt_flag & MNT_RELOAD) {
-			error = ext2fs_reload(mp, l->l_cred, l);
+			error = ext2fs_reload(mp, l->l_cred);
 			if (error)
 				return (error);
 		}
@@ -518,46 +518,50 @@ fail:
  *	6) re-read inode data for all active vnodes.
  */
 int
-ext2fs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
+ext2fs_reload(struct mount *mountp, kauth_cred_t cred)
 {
+	struct lwp *l = curlwp;
 	struct vnode *vp, *mvp, *devvp;
 	struct inode *ip;
 	struct buf *bp;
 	struct m_ext2fs *fs;
 	struct ext2fs *newfs;
-	int i, error;
+	struct partinfo dpart;
+	int i, size, error;
 	void *cp;
-	struct ufsmount *ump;
 
-	if ((mp->mnt_flag & MNT_RDONLY) == 0)
+	if ((mountp->mnt_flag & MNT_RDONLY) == 0)
 		return (EINVAL);
 
-	ump = VFSTOUFS(mp);
 	/*
 	 * Step 1: invalidate all cached meta-data.
 	 */
-	devvp = ump->um_devvp;
+	devvp = VFSTOUFS(mountp)->um_devvp;
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = vinvalbuf(devvp, 0, cred, l, 0, 0);
-	VOP_UNLOCK(devvp);
+	VOP_UNLOCK(devvp, 0);
 	if (error)
 		panic("ext2fs_reload: dirty1");
 	/*
 	 * Step 2: re-read superblock from disk.
 	 */
-	error = bread(devvp, SBLOCK, SBSIZE, NOCRED, 0, &bp);
+	if (VOP_IOCTL(devvp, DIOCGPART, &dpart, FREAD, NOCRED) != 0)
+		size = DEV_BSIZE;
+	else
+		size = dpart.disklab->d_secsize;
+	error = bread(devvp, (daddr_t)(SBOFF / size), SBSIZE, NOCRED, 0, &bp);
 	if (error) {
 		brelse(bp, 0);
 		return (error);
 	}
 	newfs = (struct ext2fs *)bp->b_data;
-	error = ext2fs_checksb(newfs, (mp->mnt_flag & MNT_RDONLY) != 0);
+	error = ext2fs_checksb(newfs, (mountp->mnt_flag & MNT_RDONLY) != 0);
 	if (error) {
 		brelse(bp, 0);
 		return (error);
 	}
 
-	fs = ump->um_e2fs;
+	fs = VFSTOUFS(mountp)->um_e2fs;
 	/*
 	 * copy in new superblock, and compute in-memory values
 	 */
@@ -565,7 +569,8 @@ ext2fs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 	fs->e2fs_ncg =
 	    howmany(fs->e2fs.e2fs_bcount - fs->e2fs.e2fs_first_dblock,
 	    fs->e2fs.e2fs_bpg);
-	fs->e2fs_fsbtodb = fs->e2fs.e2fs_log_bsize + LOG_MINBSIZE - DEV_BSHIFT;
+	/* XXX assume hw bsize = 512 */
+	fs->e2fs_fsbtodb = fs->e2fs.e2fs_log_bsize + 1;
 	fs->e2fs_bsize = MINBSIZE << fs->e2fs.e2fs_log_bsize;
 	fs->e2fs_bshift = LOG_MINBSIZE + fs->e2fs.e2fs_log_bsize;
 	fs->e2fs_qbmask = fs->e2fs_bsize - 1;
@@ -596,16 +601,17 @@ ext2fs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 	}
 
 	/* Allocate a marker vnode. */
-	mvp = vnalloc(mp);
+	if ((mvp = vnalloc(mountp)) == NULL)
+		return (ENOMEM);
 	/*
 	 * NOTE: not using the TAILQ_FOREACH here since in this loop vgone()
 	 * and vclean() can be called indirectly
 	 */
 	mutex_enter(&mntvnode_lock);
 loop:
-	for (vp = TAILQ_FIRST(&mp->mnt_vnodelist); vp; vp = vunmark(mvp)) {
+	for (vp = TAILQ_FIRST(&mountp->mnt_vnodelist); vp; vp = vunmark(mvp)) {
 		vmark(mvp, vp);
-		if (vp->v_mount != mp || vismarker(vp))
+		if (vp->v_mount != mountp || vismarker(vp))
 			continue;
 		/*
 		 * Step 4: invalidate all inactive vnodes.
@@ -618,9 +624,9 @@ loop:
 		/*
 		 * Step 5: invalidate all cached file data.
 		 */
-		mutex_enter(vp->v_interlock);
+		mutex_enter(&vp->v_interlock);
 		mutex_exit(&mntvnode_lock);
-		if (vget(vp, LK_EXCLUSIVE)) {
+		if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK)) {
 			mutex_enter(&mntvnode_lock);
 			(void)vunmark(mvp);
 			goto loop;
@@ -664,7 +670,8 @@ ext2fs_mountfs(struct vnode *devvp, struct mount *mp)
 	struct ext2fs *fs;
 	struct m_ext2fs *m_fs;
 	dev_t dev;
-	int error, i, ronly;
+	struct partinfo dpart;
+	int error, i, size, ronly;
 	kauth_cred_t cred;
 	struct proc *p;
 
@@ -675,29 +682,35 @@ ext2fs_mountfs(struct vnode *devvp, struct mount *mp)
 	/* Flush out any old buffers remaining from a previous use. */
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = vinvalbuf(devvp, V_SAVE, cred, l, 0, 0);
-	VOP_UNLOCK(devvp);
+	VOP_UNLOCK(devvp, 0);
 	if (error)
 		return (error);
 
 	ronly = (mp->mnt_flag & MNT_RDONLY) != 0;
+	if (VOP_IOCTL(devvp, DIOCGPART, &dpart, FREAD, cred) != 0)
+		size = DEV_BSIZE;
+	else
+		size = dpart.disklab->d_secsize;
 
 	bp = NULL;
 	ump = NULL;
 
 #ifdef DEBUG_EXT2
-	printf("ext2 sb size: %zu\n", sizeof(struct ext2fs));
+	printf("ext2 sb size: %d\n", sizeof(struct ext2fs));
 #endif
-	error = bread(devvp, SBLOCK, SBSIZE, cred, 0, &bp);
+	error = bread(devvp, (SBOFF / size), SBSIZE, cred, 0, &bp);
 	if (error)
 		goto out;
 	fs = (struct ext2fs *)bp->b_data;
 	error = ext2fs_checksb(fs, ronly);
 	if (error)
 		goto out;
-	ump = kmem_zalloc(sizeof(*ump), KM_SLEEP);
+	ump = malloc(sizeof(*ump), M_UFSMNT, M_WAITOK);
+	memset(ump, 0, sizeof(*ump));
 	ump->um_fstype = UFS1;
 	ump->um_ops = &ext2fs_ufsops;
-	ump->um_e2fs = kmem_zalloc(sizeof(struct m_ext2fs), KM_SLEEP);
+	ump->um_e2fs = malloc(sizeof(struct m_ext2fs), M_UFSMNT, M_WAITOK);
+	memset(ump->um_e2fs, 0, sizeof(struct m_ext2fs));
 	e2fs_sbload((struct ext2fs *)bp->b_data, &ump->um_e2fs->e2fs);
 	brelse(bp, 0);
 	bp = NULL;
@@ -705,7 +718,7 @@ ext2fs_mountfs(struct vnode *devvp, struct mount *mp)
 	m_fs->e2fs_ronly = ronly;
 
 #ifdef DEBUG_EXT2
-	printf("ext2 ino size %zu\n", EXT2_DINODE_SIZE(m_fs));
+	printf("ext2 ino size %d\n", EXT2_DINODE_SIZE(m_fs));
 #endif
 	if (ronly == 0) {
 		if (m_fs->e2fs.e2fs_state == E2FS_ISCLEAN)
@@ -719,7 +732,8 @@ ext2fs_mountfs(struct vnode *devvp, struct mount *mp)
 	m_fs->e2fs_ncg =
 	    howmany(m_fs->e2fs.e2fs_bcount - m_fs->e2fs.e2fs_first_dblock,
 	    m_fs->e2fs.e2fs_bpg);
-	m_fs->e2fs_fsbtodb = m_fs->e2fs.e2fs_log_bsize + LOG_MINBSIZE - DEV_BSHIFT;
+	/* XXX assume hw bsize = 512 */
+	m_fs->e2fs_fsbtodb = m_fs->e2fs.e2fs_log_bsize + 1;
 	m_fs->e2fs_bsize = MINBSIZE << m_fs->e2fs.e2fs_log_bsize;
 	m_fs->e2fs_bshift = LOG_MINBSIZE + m_fs->e2fs.e2fs_log_bsize;
 	m_fs->e2fs_qbmask = m_fs->e2fs_bsize - 1;
@@ -729,15 +743,15 @@ ext2fs_mountfs(struct vnode *devvp, struct mount *mp)
 	m_fs->e2fs_ipb = m_fs->e2fs_bsize / EXT2_DINODE_SIZE(m_fs);
 	m_fs->e2fs_itpg = m_fs->e2fs.e2fs_ipg / m_fs->e2fs_ipb;
 
-	m_fs->e2fs_gd = kmem_alloc(m_fs->e2fs_ngdb * m_fs->e2fs_bsize, KM_SLEEP);
+	m_fs->e2fs_gd = malloc(m_fs->e2fs_ngdb * m_fs->e2fs_bsize,
+	    M_UFSMNT, M_WAITOK);
 	for (i = 0; i < m_fs->e2fs_ngdb; i++) {
 		error = bread(devvp ,
 		    fsbtodb(m_fs, m_fs->e2fs.e2fs_first_dblock +
 		    1 /* superblock */ + i),
 		    m_fs->e2fs_bsize, NOCRED, 0, &bp);
 		if (error) {
-			kmem_free(m_fs->e2fs_gd,
-			    m_fs->e2fs_ngdb * m_fs->e2fs_bsize);
+			free(m_fs->e2fs_gd, M_UFSMNT);
 			goto out;
 		}
 		e2fs_cgload((struct ext2_gd *)bp->b_data,
@@ -775,8 +789,8 @@ out:
 	KASSERT(bp != NULL);
 	brelse(bp, 0);
 	if (ump) {
-		kmem_free(ump->um_e2fs, sizeof(struct m_ext2fs));
-		kmem_free(ump, sizeof(*ump));
+		free(ump->um_e2fs, M_UFSMNT);
+		free(ump, M_UFSMNT);
 		mp->mnt_data = NULL;
 	}
 	return (error);
@@ -811,9 +825,9 @@ ext2fs_unmount(struct mount *mp, int mntflags)
 	error = VOP_CLOSE(ump->um_devvp, fs->e2fs_ronly ? FREAD : FREAD|FWRITE,
 	    NOCRED);
 	vput(ump->um_devvp);
-	kmem_free(fs->e2fs_gd, fs->e2fs_ngdb * fs->e2fs_bsize);
-	kmem_free(fs, sizeof(*fs));
-	kmem_free(ump, sizeof(*ump));
+	free(fs->e2fs_gd, M_UFSMNT);
+	free(fs, M_UFSMNT);
+	free(ump, M_UFSMNT);
 	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
 	return (error);
@@ -915,7 +929,8 @@ ext2fs_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 	}
 
 	/* Allocate a marker vnode. */
-	mvp = vnalloc(mp);
+	if ((mvp = vnalloc(mp)) == NULL)
+		return (ENOMEM);
 
 	/*
 	 * Write back each (modified) inode.
@@ -930,7 +945,7 @@ loop:
 		vmark(mvp, vp);
 		if (vp->v_mount != mp || vismarker(vp))
 			continue;
-		mutex_enter(vp->v_interlock);
+		mutex_enter(&vp->v_interlock);
 		ip = VTOI(vp);
 		if (ip == NULL || (vp->v_iflag & (VI_XLOCK|VI_CLEAN)) != 0 ||
 		    vp->v_type == VNON ||
@@ -939,11 +954,11 @@ loop:
 		     LIST_EMPTY(&vp->v_dirtyblkhd) &&
 		     UVM_OBJ_IS_CLEAN(&vp->v_uobj)))
 		{
-			mutex_exit(vp->v_interlock);
+			mutex_exit(&vp->v_interlock);
 			continue;
 		}
 		mutex_exit(&mntvnode_lock);
-		error = vget(vp, LK_EXCLUSIVE | LK_NOWAIT);
+		error = vget(vp, LK_EXCLUSIVE | LK_NOWAIT | LK_INTERLOCK);
 		if (error) {
 			mutex_enter(&mntvnode_lock);
 			if (error == ENOENT) {
@@ -973,7 +988,7 @@ loop:
 		if ((error = VOP_FSYNC(ump->um_devvp, cred,
 		    waitfor == MNT_WAIT ? FSYNC_WAIT : 0, 0, 0)) != 0)
 			allerror = error;
-		VOP_UNLOCK(ump->um_devvp);
+		VOP_UNLOCK(ump->um_devvp, 0);
 	}
 	/*
 	 * Write back modified superblock.
@@ -1012,8 +1027,7 @@ retry:
 		return (0);
 
 	/* Allocate a new vnode/inode. */
-	error = getnewvnode(VT_EXT2FS, mp, ext2fs_vnodeop_p, NULL, &vp);
-	if (error) {
+	if ((error = getnewvnode(VT_EXT2FS, mp, ext2fs_vnodeop_p, &vp)) != 0) {
 		*vpp = NULL;
 		return (error);
 	}
@@ -1075,14 +1089,14 @@ retry:
 
 	/* If the inode was deleted, reset all fields */
 	if (ip->i_e2fs_dtime != 0) {
-		ip->i_e2fs_mode = 0;
+		ip->i_e2fs_mode = ip->i_e2fs_nblock = 0;
 		(void)ext2fs_setsize(ip, 0);
-		(void)ext2fs_setnblock(ip, 0);
 		memset(ip->i_e2fs_blocks, 0, sizeof(ip->i_e2fs_blocks));
 	}
 
 	/*
 	 * Initialize the vnode from the inode, check for aliases.
+	 * Note that the underlying vnode may have changed.
 	 */
 
 	error = ext2fs_vinit(mp, ext2fs_specop_p, ext2fs_fifoop_p, &vp);
@@ -1096,7 +1110,7 @@ retry:
 	 */
 
 	ip->i_devvp = ump->um_devvp;
-	vref(ip->i_devvp);
+	VREF(ip->i_devvp);
 
 	/*
 	 * Set up a generation number for this inode if it does not
@@ -1229,45 +1243,38 @@ ext2fs_cgupdate(struct ufsmount *mp, int waitfor)
 static int
 ext2fs_checksb(struct ext2fs *fs, int ronly)
 {
-	uint32_t u32;
 
 	if (fs2h16(fs->e2fs_magic) != E2FS_MAGIC) {
 		return (EINVAL);		/* XXX needs translation */
 	}
 	if (fs2h32(fs->e2fs_rev) > E2FS_REV1) {
 #ifdef DIAGNOSTIC
-		printf("ext2fs: unsupported revision number: %x\n",
+		printf("Ext2 fs: unsupported revision number: %x\n",
 		    fs2h32(fs->e2fs_rev));
 #endif
 		return (EINVAL);		/* XXX needs translation */
 	}
 	if (fs2h32(fs->e2fs_log_bsize) > 2) { /* block size = 1024|2048|4096 */
 #ifdef DIAGNOSTIC
-		printf("ext2fs: bad block size: %d "
+		printf("Ext2 fs: bad block size: %d "
 		    "(expected <= 2 for ext2 fs)\n",
 		    fs2h32(fs->e2fs_log_bsize));
 #endif
 		return (EINVAL);	   /* XXX needs translation */
 	}
 	if (fs2h32(fs->e2fs_rev) > E2FS_REV0) {
-		char buf[256];
 		if (fs2h32(fs->e2fs_first_ino) != EXT2_FIRSTINO) {
-			printf("ext2fs: unsupported first inode position\n");
+			printf("Ext2 fs: unsupported first inode position\n");
 			return (EINVAL);      /* XXX needs translation */
 		}
-		u32 = fs2h32(fs->e2fs_features_incompat) & ~EXT2F_INCOMPAT_SUPP;
-		if (u32) {
-			snprintb(buf, sizeof(buf), EXT2F_INCOMPAT_BITS, u32);
-			printf("ext2fs: unsupported incompat features: %s\n",
-			    buf);
-			return EINVAL;	/* XXX needs translation */
+		if (fs2h32(fs->e2fs_features_incompat) &
+		    ~EXT2F_INCOMPAT_SUPP) {
+			printf("Ext2 fs: unsupported optional feature\n");
+			return (EINVAL);      /* XXX needs translation */
 		}
-		u32 = fs2h32(fs->e2fs_features_rocompat) & ~EXT2F_ROCOMPAT_SUPP;
-		if (!ronly && u32) {
-			snprintb(buf, sizeof(buf), EXT2F_ROCOMPAT_BITS, u32);
-			printf("ext2fs: unsupported ro-incompat features: %s\n",
-			    buf);
-			return EROFS;	/* XXX needs translation */
+		if (!ronly && fs2h32(fs->e2fs_features_rocompat) &
+		    ~EXT2F_ROCOMPAT_SUPP) {
+			return (EROFS);      /* XXX needs translation */
 		}
 	}
 	return (0);

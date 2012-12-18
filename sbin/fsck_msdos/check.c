@@ -1,4 +1,4 @@
-/*	$NetBSD: check.c,v 1.18 2009/04/11 07:14:50 lukem Exp $	*/
+/*	$NetBSD: check.c,v 1.17 2008/06/13 20:46:09 martin Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997 Wolfgang Solfrank
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: check.c,v 1.18 2009/04/11 07:14:50 lukem Exp $");
+__RCSID("$NetBSD: check.c,v 1.17 2008/06/13 20:46:09 martin Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
@@ -47,8 +47,7 @@ checkfilesys(const char *filename)
 	int dosfs;
 	struct bootblock boot;
 	struct fatEntry *fat = NULL;
-	int finish_dosdirsection=0;
-	u_int i;
+	int i, finish_dosdirsection=0;
 	int mod = 0;
 	int ret = FSCK_EXIT_CHECK_FAILED;
 

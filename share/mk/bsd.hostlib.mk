@@ -1,9 +1,10 @@
-#	$NetBSD: bsd.hostlib.mk,v 1.16 2011/09/10 16:57:35 apb Exp $
+#	$NetBSD: bsd.hostlib.mk,v 1.14 2004/06/10 00:29:58 lukem Exp $
 
 .include <bsd.init.mk>
 .include <bsd.sys.mk>
 
 ##### Basic targets
+clean:		cleanlib
 
 ##### Default values
 CFLAGS+=	${COPTS}
@@ -29,7 +30,7 @@ OBJS+=		${SRCS:N*.h:N*.sh:R:S/$/.lo/g}
 .endif
 
 .if defined(OBJS) && !empty(OBJS)
-.NOPATH: lib${HOSTLIB}.a ${OBJS} ${_YHLSRCS}
+.NOPATH: ${OBJS} ${HOSTPROG} ${_YHLSRCS}
 
 ${OBJS}: ${DPSRCS}
 
@@ -43,7 +44,9 @@ lib${HOSTLIB}.a: ${OBJS} ${DPADD}
 
 realall: lib${HOSTLIB}.a
 
-CLEANFILES+= a.out [Ee]rrs mklog core *.core lib${HOSTLIB}.a ${OBJS}
+cleanlib: .PHONY
+	rm -f a.out [Ee]rrs mklog core *.core \
+	    lib${HOSTLIB}.a ${OBJS} ${CLEANFILES}
 
 beforedepend:
 CFLAGS:=	${HOST_CFLAGS}
@@ -52,6 +55,5 @@ CPPFLAGS:=	${HOST_CPPFLAGS}
 ##### Pull in related .mk logic
 .include <bsd.obj.mk>
 .include <bsd.dep.mk>
-.include <bsd.clean.mk>
 
 ${TARGETS}:	# ensure existence

@@ -1,4 +1,4 @@
-/*	$NetBSD: xen_bus_dma.c,v 1.26 2012/06/30 23:36:20 jym Exp $	*/
+/*	$NetBSD: xen_bus_dma.c,v 1.11.8.3 2010/11/19 23:19:12 riz Exp $	*/
 /*	NetBSD bus_dma.c,v 1.21 2005/04/16 07:53:35 yamt Exp */
 
 /*-
@@ -32,18 +32,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xen_bus_dma.c,v 1.26 2012/06/30 23:36:20 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xen_bus_dma.c,v 1.11.8.3 2010/11/19 23:19:12 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/proc.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/bus_private.h>
 
-#include <uvm/uvm.h>
+#include <uvm/uvm_extern.h>
 
 extern paddr_t avail_end;
 
@@ -68,7 +69,9 @@ _xen_alloc_contig(bus_size_t size, bus_size_t alignment,
 	bus_addr_t pa;
 	struct vm_page *pg, *pgnext;
 	int s, error;
+#ifdef XEN3
 	struct xen_memory_reservation res;
+#endif
 
 	/*
 	 * When requesting a contigous memory region, the hypervisor will
@@ -81,7 +84,7 @@ _xen_alloc_contig(bus_size_t size, bus_size_t alignment,
 	npagesreq = (size >> PAGE_SHIFT);
 	KASSERT(npages >= npagesreq);
 
-	/* get npages from UVM, and give them back to the hypervisor */
+	/* get npages from UWM, and give them back to the hypervisor */
 	error = uvm_pglistalloc(((psize_t)npages) << PAGE_SHIFT,
             0, avail_end, 0, 0, mlistp, npages, (flags & BUS_DMA_NOWAIT) == 0);
 	if (error)
@@ -90,57 +93,86 @@ _xen_alloc_contig(bus_size_t size, bus_size_t alignment,
 	for (pg = mlistp->tqh_first; pg != NULL; pg = pg->pageq.queue.tqe_next) {
 		pa = VM_PAGE_TO_PHYS(pg);
 		mfn = xpmap_ptom(pa) >> PAGE_SHIFT;
-		xpmap_ptom_unmap(pa);
-		set_xen_guest_handle(res.extent_start, &mfn);
+		xpmap_phys_to_machine_mapping[
+		    (pa - XPMAP_OFFSET) >> PAGE_SHIFT] = INVALID_P2M_ENTRY;
+#ifdef XEN3
+		res.extent_start = &mfn;
 		res.nr_extents = 1;
 		res.extent_order = 0;
 		res.address_bits = 0;
 		res.domid = DOMID_SELF;
-		error = HYPERVISOR_memory_op(XENMEM_decrease_reservation, &res);
-		if (error != 1) {
+		if (HYPERVISOR_memory_op(XENMEM_decrease_reservation, &res)
+		    < 0) {
 #ifdef DEBUG
 			printf("xen_alloc_contig: XENMEM_decrease_reservation "
-			    "failed: err %d (pa %#" PRIxPADDR " mfn %#lx)\n",
-			    error, pa, mfn);
+			    "failed!\n");
 #endif
-			xpmap_ptom_map(pa, ptoa(mfn));
+			xpmap_phys_to_machine_mapping[
+			    (pa - XPMAP_OFFSET) >> PAGE_SHIFT] = mfn;
 
 			error = ENOMEM;
 			goto failed;
 		}
+#else
+		if (HYPERVISOR_dom_mem_op(MEMOP_decrease_reservation,
+		    &mfn, 1, 0) != 1) {
+#ifdef DEBUG
+			printf("xen_alloc_contig: MEMOP_decrease_reservation "
+			    "failed!\n");
+#endif
+			xpmap_phys_to_machine_mapping[
+			    (pa - XPMAP_OFFSET) >> PAGE_SHIFT] = mfn;
+			error = ENOMEM;
+			goto failed;
+		}
+#endif
 	}
 	/* Get the new contiguous memory extent */
-	set_xen_guest_handle(res.extent_start, &mfn);
+#ifdef XEN3
+	res.extent_start = &mfn;
 	res.nr_extents = 1;
 	res.extent_order = order;
 	res.address_bits = get_order(high) + PAGE_SHIFT;
 	res.domid = DOMID_SELF;
-	error = HYPERVISOR_memory_op(XENMEM_increase_reservation, &res);
-	if (error != 1) {
+	if (HYPERVISOR_memory_op(XENMEM_increase_reservation, &res) < 0) {
 #ifdef DEBUG
 		printf("xen_alloc_contig: XENMEM_increase_reservation "
-		    "failed: %d (order %d address_bits %d)\n",
-		    error, order, res.address_bits);
+		    "failed!\n");
 #endif
 		error = ENOMEM;
 		pg = NULL;
 		goto failed;
 	}
+#else
+	if (HYPERVISOR_dom_mem_op(MEMOP_increase_reservation,
+	    &mfn, 1, order) != 1) {
+#ifdef DEBUG
+		printf("xen_alloc_contig: MEMOP_increase_reservation "
+		    "failed!\n");
+#endif
+		error = ENOMEM;
+		pg = NULL;
+		goto failed;
+	}
+#endif
 	s = splvm();
 	/* Map the new extent in place of the old pages */
 	for (pg = mlistp->tqh_first, i = 0; pg != NULL; pg = pgnext, i++) {
 		pgnext = pg->pageq.queue.tqe_next;
 		pa = VM_PAGE_TO_PHYS(pg);
-		xpmap_ptom_map(pa, ptoa(mfn+i));
+		xpmap_phys_to_machine_mapping[
+		    (pa - XPMAP_OFFSET) >> PAGE_SHIFT] = mfn+i;
 		xpq_queue_machphys_update(((paddr_t)(mfn+i)) << PAGE_SHIFT, pa);
 		/* while here, give extra pages back to UVM */
 		if (i >= npagesreq) {
 			TAILQ_REMOVE(mlistp, pg, pageq.queue);
 			uvm_pagefree(pg);
 		}
+
 	}
 	/* Flush updates through and flush the TLB */
 	xpq_queue_tlb_flush();
+	xpq_flush_queue();
 	splx(s);
 	return 0;
 
@@ -163,7 +195,8 @@ failed:
 	s = splvm();
 	for (pg = mlistp->tqh_first; pg != NULL; pg = pgnext) {
 		pgnext = pg->pageq.queue.tqe_next;
-		set_xen_guest_handle(res.extent_start, &mfn);
+#ifdef XEN3
+		res.extent_start = &mfn;
 		res.nr_extents = 1;
 		res.extent_order = 0;
 		res.address_bits = 32;
@@ -174,14 +207,24 @@ failed:
 			    "XENMEM_increase_reservation failed!\n");
 			break;
 		}
+#else
+		if (HYPERVISOR_dom_mem_op(MEMOP_increase_reservation,
+		    &mfn, 1, 0) != 1) {
+			printf("xen_alloc_contig: recovery "
+			    "MEMOP_increase_reservation failed!\n");
+			break;
+		}
+#endif
 		pa = VM_PAGE_TO_PHYS(pg);
-		xpmap_ptom_map(pa, ptoa(mfn));
+		xpmap_phys_to_machine_mapping[
+		    (pa - XPMAP_OFFSET) >> PAGE_SHIFT] = mfn;
 		xpq_queue_machphys_update(((paddr_t)mfn) << PAGE_SHIFT, pa);
 		TAILQ_REMOVE(mlistp, pg, pageq.queue);
 		uvm_pagefree(pg);
 	}
 	/* Flush updates through and flush the TLB */
 	xpq_queue_tlb_flush();
+	xpq_flush_queue();
 	splx(s);
 	return error;
 }
@@ -273,13 +316,13 @@ again:
 	return (0);
 
 badaddr:
+#ifdef XEN3
 	if (doingrealloc == 0)
 		goto dorealloc;
 	if (curaddr < low) {
 		/* no way to enforce this */
 		printf("_xen_bus_dmamem_alloc_range: no way to "
-		    "enforce address range (0x%" PRIx64 " - 0x%" PRIx64 ")\n",
-		    (uint64_t)low, (uint64_t)high);
+		    "enforce address range\n");
 		uvm_pglistfree(&mlist);
 		return EINVAL;
 	}
@@ -287,6 +330,18 @@ badaddr:
 	    "curraddr=0x%lx > high=0x%lx\n",
 	    (u_long)curaddr, (u_long)high);
 	panic("xen_bus_dmamem_alloc_range 1");
+#else /* !XEN3 */
+	/*
+	 * If machine addresses are outside the allowed
+	 * range we have to bail. Xen2 doesn't offer an
+	 * interface to get memory in a specific address
+	 * range.
+	 */
+	printf("_xen_bus_dmamem_alloc_range: no way to "
+	    "enforce address range\n");
+	uvm_pglistfree(&mlist);
+	return EINVAL;
+#endif /* XEN3 */
 dorealloc:
 	if (doingrealloc == 1)
 		panic("_xen_bus_dmamem_alloc_range: "

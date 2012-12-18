@@ -1,4 +1,4 @@
-.\"	$NetBSD: proplib.3,v 1.8 2012/03/15 22:35:02 njoly Exp $
+.\"	$NetBSD: proplib.3,v 1.5 2008/04/30 13:10:46 martin Exp $
 .\"
 .\" Copyright (c) 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 17, 2011
+.Dd June 21, 2007
 .Dt PROPLIB 3
 .Os
 .Sh NAME
@@ -51,7 +51,7 @@ them to an external representation.
 This external representation is an XML document whose format is described
 by the following DTD:
 .Bd -literal -offset indent
-.Lk http://www.apple.com/DTDs/PropertyList-1.0.dtd
+http://www.apple.com/DTDs/PropertyList-1.0.dtd
 .Ed
 .Pp
 Property container objects are reference counted.
@@ -75,8 +75,7 @@ If you create an object and do not explicitly maintain a reference to it,
 you must release it.
 .It
 If you get a reference to an object from other code and wish to maintain
-a reference to it, you must retain the object.
-You are responsible for
+a reference to it, you must retain the object.  You are responsible for
 releasing the object once you drop that reference.
 .It
 You must never release an object unless you create it or retain it.
@@ -94,7 +93,6 @@ released using an iterator-specific release function.
 .Xr prop_number 3 ,
 .Xr prop_object 3 ,
 .Xr prop_send_ioctl 3 ,
-.Xr prop_send_syscall 3 ,
 .Xr prop_string 3
 .Sh HISTORY
 The

@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_busclock.c,v 1.13 2011/09/24 10:49:13 jym Exp $	*/
+/*	$NetBSD: intel_busclock.c,v 1.5.10.5 2012/08/22 21:18:19 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -30,19 +30,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_busclock.c,v 1.13 2011/09/24 10:49:13 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_busclock.c,v 1.5.10.5 2012/08/22 21:18:19 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/device.h>
 #include <sys/cpu.h>
 
 #include <machine/specialreg.h>
 #include <machine/pio.h>
+#include <machine/cpufunc.h>
 
 #include <x86/cpuvar.h>
 #include <x86/cpufunc.h>
-#include <x86/est.h>
 
 int
 via_get_bus_clock(struct cpu_info *ci)
@@ -99,16 +98,18 @@ p3_get_bus_clock(struct cpu_info *ci)
 		break;
 	case 0xc: /* Core i7, Atom, model 1 */
 		/*
-		 * XXX (See also case 0xe)
+		 * XXX (See also case 0xe and 0xd)
 		 * Some core i7 CPUs can report model 0xc.
 		 * Newer CPUs will GP when attemping to access MSR_FSB_FREQ.
 		 * In the long-term, use ACPI instead of all this.
 		 */
-		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
-			aprint_debug_dev(ci->ci_dev,
-			    "unable to determine bus speed");
+		switch (CPUID2EXTMODEL(ci->ci_signature)) {
+		case 0x2:
+			aprint_debug("%s: unable to determine bus speed",
+			    device_xname(ci->ci_dev));
 			goto print_msr;
 		}
+		msr = rdmsr(MSR_FSB_FREQ);
 		bus = (msr >> 0) & 0x7;
 		switch (bus) {
 		case 1:
@@ -120,12 +121,20 @@ p3_get_bus_clock(struct cpu_info *ci)
 			goto print_msr;
 		}
 		break;
-	case 0xd: /* Pentium M (90 nm, Dothan) */
-		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
-			aprint_debug_dev(ci->ci_dev,
-			    "unable to determine bus speed");
+	case 0xd: /* Pentium M (90 nm, Dothan), some Xeons */
+		/*
+		 * XXX (See also case 0xc and 0xd)
+		 * Some Xeons can report model 0xd, e.g. E5-2630
+		 * Newer CPUs will GP when attemping to access MSR_FSB_FREQ.
+		 * In the long-term, use ACPI instead of all this.
+		 */
+		switch (CPUID2EXTMODEL(ci->ci_signature)) {
+		case 0x2:
+			aprint_debug("%s: unable to determine bus speed",
+			    device_xname(ci->ci_dev));
 			goto print_msr;
 		}
+		msr = rdmsr(MSR_FSB_FREQ);
 		bus = (msr >> 0) & 0x7;
 		switch (bus) {
 		case 0:
@@ -146,18 +155,15 @@ p3_get_bus_clock(struct cpu_info *ci)
 		 * Newer CPUs will GP when attemping to access MSR_FSB_FREQ.
 		 * In the long-term, use ACPI instead of all this.
 		 */
-		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
-			aprint_debug_dev(ci->ci_dev,
-			    "unable to determine bus speed");
+		switch (CPUID2EXTMODEL(ci->ci_signature)) {
+		case 0x1:
+			aprint_debug("%s: unable to determine bus speed",
+			    device_xname(ci->ci_dev));
 			goto print_msr;
 		}
 		/* FALLTHROUGH */
 	case 0xf: /* Core Xeon */
-		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
-			aprint_debug_dev(ci->ci_dev,
-			    "unable to determine bus speed");
-			goto print_msr;
-		}
+		msr = rdmsr(MSR_FSB_FREQ);
 		bus = (msr >> 0) & 0x7;
 		switch (bus) {
 		case 5:
@@ -203,9 +209,6 @@ p3_get_bus_clock(struct cpu_info *ci)
 			break;
 		case 2:
 			bus_clock = 10000;
-			break;
-		case 3:
-			bus_clock = 10666;
 			break;
 		default:
 			aprint_debug("%s: unknown i686 EBL_CR_POWERON "

@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_x86_64.c,v 1.9 2012/01/10 16:01:16 chs Exp $	*/
+/*	$NetBSD: kvm_x86_64.c,v 1.6 2008/01/15 13:57:42 ad Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1992, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_hp300.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_x86_64.c,v 1.9 2012/01/10 16:01:16 chs Exp $");
+__RCSID("$NetBSD: kvm_x86_64.c,v 1.6 2008/01/15 13:57:42 ad Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,8 +51,7 @@ __RCSID("$NetBSD: kvm_x86_64.c,v 1.9 2012/01/10 16:01:16 chs Exp $");
 #include <sys/proc.h>
 #include <sys/stat.h>
 #include <sys/kcore.h>
-#include <sys/types.h>
-
+#include <machine/kcore.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <nlist.h>
@@ -65,13 +64,13 @@ __RCSID("$NetBSD: kvm_x86_64.c,v 1.9 2012/01/10 16:01:16 chs Exp $");
 
 #include "kvm_private.h"
 
-#include <machine/kcore.h>
 #include <machine/pmap.h>
 #include <machine/pte.h>
 #include <machine/vmparam.h>
 
 void
-_kvm_freevtop(kvm_t *kd)
+_kvm_freevtop(kd)
+	kvm_t *kd;
 {
 
 	/* Not actually used for anything right now, but safe. */
@@ -81,7 +80,8 @@ _kvm_freevtop(kvm_t *kd)
 
 /*ARGSUSED*/
 int
-_kvm_initvtop(kvm_t *kd)
+_kvm_initvtop(kd)
+	kvm_t *kd;
 {
 
 	return (0);
@@ -91,7 +91,10 @@ _kvm_initvtop(kvm_t *kd)
  * Translate a kernel virtual address to a physical address.
  */
 int
-_kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
+_kvm_kvatop(kd, va, pa)
+	kvm_t *kd;
+	u_long va;
+	u_long *pa;
 {
 	cpu_kcore_hdr_t *cpu_kh;
 	u_long page_off;
@@ -105,6 +108,7 @@ _kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 	}
 
 	cpu_kh = kd->cpu_data;
+	page_off = va & PGOFSET;
 
 	/*
 	 * Find and read all entries to get to the pa.
@@ -137,11 +141,6 @@ _kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 		_kvm_err(kd, 0, "invalid translation (invalid level 3 PDE)");
 		goto lose;
 	}
-	if (pde & PG_PS) {
-		page_off = va & (NBPD_L3 - 1);
-		*pa = (pde & PG_1GFRAME) + page_off;
-		return (int)(NBPD_L3 - page_off);
-	}
 
 	/*
 	 * Level 2.
@@ -156,11 +155,7 @@ _kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 		_kvm_err(kd, 0, "invalid translation (invalid level 2 PDE)");
 		goto lose;
 	}
-	if (pde & PG_PS) {
-		page_off = va & (NBPD_L2 - 1);
-		*pa = (pde & PG_2MFRAME) + page_off;
-		return (int)(NBPD_L2 - page_off);
-	}
+
 
 	/*
 	 * Level 1.
@@ -178,7 +173,6 @@ _kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 		_kvm_err(kd, 0, "invalid translation (invalid PTE)");
 		goto lose;
 	}
-	page_off = va & PGOFSET;
 	*pa = (pte & PG_FRAME) + page_off;
 	return (int)(NBPG - page_off);
 
@@ -191,7 +185,9 @@ _kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
  * Translate a physical address to a file-offset in the crash dump.
  */
 off_t
-_kvm_pa2off(kvm_t *kd, paddr_t pa)
+_kvm_pa2off(kd, pa)
+	kvm_t *kd;
+	u_long pa;
 {
 	cpu_kcore_hdr_t *cpu_kh;
 	phys_ram_seg_t *ramsegs;
@@ -220,7 +216,8 @@ _kvm_pa2off(kvm_t *kd, paddr_t pa)
  * have to deal with these NOT being constants!  (i.e. m68k)
  */
 int
-_kvm_mdopen(kvm_t *kd)
+_kvm_mdopen(kd)
+	kvm_t	*kd;
 {
 
 	kd->usrstack = USRSTACK;

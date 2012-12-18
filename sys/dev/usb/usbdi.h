@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdi.h,v 1.84 2012/07/15 21:13:31 mrg Exp $	*/
+/*	$NetBSD: usbdi.h,v 1.76.10.1 2008/12/13 21:44:42 bouyer Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usbdi.h,v 1.18 1999/11/17 22:33:49 n_hibma Exp $	*/
 
 /*
@@ -41,7 +41,7 @@ typedef struct usbd_pipe	*usbd_pipe_handle;
 typedef struct usbd_xfer	*usbd_xfer_handle;
 typedef void			*usbd_private_handle;
 
-typedef enum {		/* keep in sync with usbd_error_strs */
+typedef enum {		/* keep in sync with usbd_status_msgs */
 	USBD_NORMAL_COMPLETION = 0, /* must be 0 */
 	USBD_IN_PROGRESS,	/* 1 */
 	/* errors */
@@ -80,12 +80,13 @@ typedef void (*usbd_callback)(usbd_xfer_handle, usbd_private_handle,
 #define USBD_SYNCHRONOUS	0x02	/* wait for completion */
 /* in usb.h #define USBD_SHORT_XFER_OK	0x04*/	/* allow short reads */
 #define USBD_FORCE_SHORT_XFER	0x08	/* force last short packet on write */
-#define USBD_SYNCHRONOUS_SIG	0x10	/* if waiting for completion,
-					 * also take signals */
 
 #define USBD_NO_TIMEOUT 0
 #define USBD_DEFAULT_TIMEOUT 5000 /* ms = 5 s */
-#define	USBD_CONFIG_TIMEOUT  (3*USBD_DEFAULT_TIMEOUT)
+
+#if defined(__FreeBSD__)
+#define USB_CDEV_MAJOR 108
+#endif
 
 #define DEVINFOSIZE 1024
 
@@ -113,12 +114,12 @@ usb_endpoint_descriptor_t *usbd_interface2endpoint_descriptor
 usbd_status usbd_abort_pipe(usbd_pipe_handle);
 usbd_status usbd_abort_default_pipe(usbd_device_handle);
 usbd_status usbd_clear_endpoint_stall(usbd_pipe_handle);
-void usbd_clear_endpoint_stall_async(usbd_pipe_handle);
+usbd_status usbd_clear_endpoint_stall_async(usbd_pipe_handle);
 void usbd_clear_endpoint_toggle(usbd_pipe_handle);
 usbd_status usbd_endpoint_count(usbd_interface_handle, u_int8_t *);
 usbd_status usbd_interface_count(usbd_device_handle, u_int8_t *);
 void usbd_interface2device_handle(usbd_interface_handle,
-				  usbd_device_handle *);
+					 usbd_device_handle *);
 usbd_status usbd_device2interface_handle(usbd_device_handle,
 			      u_int8_t, usbd_interface_handle *);
 
@@ -127,7 +128,6 @@ void *usbd_alloc_buffer(usbd_xfer_handle, u_int32_t);
 void usbd_free_buffer(usbd_xfer_handle);
 void *usbd_get_buffer(usbd_xfer_handle);
 usbd_status usbd_sync_transfer(usbd_xfer_handle);
-usbd_status usbd_sync_transfer_sig(usbd_xfer_handle);
 usbd_status usbd_open_pipe_intr(usbd_interface_handle, u_int8_t,
 				u_int8_t, usbd_pipe_handle *,
 				usbd_private_handle, void *,
@@ -164,7 +164,7 @@ void usbd_set_polling(usbd_device_handle, int);
 const char *usbd_errstr(usbd_status);
 
 void usbd_add_dev_event(int, usbd_device_handle);
-void usbd_add_drv_event(int, usbd_device_handle, device_t);
+void usbd_add_drv_event(int, usbd_device_handle, device_ptr_t);
 
 char *usbd_devinfo_alloc(usbd_device_handle, int);
 void usbd_devinfo_free(char *);
@@ -187,9 +187,6 @@ typedef struct {
 } usbd_desc_iter_t;
 void usb_desc_iter_init(usbd_device_handle, usbd_desc_iter_t *);
 const usb_descriptor_t *usb_desc_iter_next(usbd_desc_iter_t *);
-
-/* Used to clear endpoint stalls from the softint */
-void usbd_clear_endpoint_stall_async_cb(void *);
 
 /*
  * The usb_task structs form a queue of things to run in the USB event
@@ -275,9 +272,13 @@ struct usbif_attach_arg {
 /* No match */
 #define UMATCH_NONE					 0
 
+/* XXX Perhaps USB should have its own levels? */
 #define splusb splsoftnet
 #define splhardusb splbio
 #define IPL_USB IPL_BIO
+#define splsoftusb splusb
 #define IPL_SOFTUSB IPL_SOFTNET
+#define IPL_HARDUSB IPL_USB
+
 
 #endif /* _USBDI_H_ */

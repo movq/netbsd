@@ -1,7 +1,7 @@
 /*
  * $OpenBSD: util.c,v 1.32 2006/03/11 19:41:30 otto Exp $
  * $DragonFly: src/usr.bin/patch/util.c,v 1.9 2007/09/29 23:11:10 swildner Exp $
- * $NetBSD: util.c,v 1.26 2010/10/02 19:31:14 wiz Exp $
+ * $NetBSD: util.c,v 1.24 2008/09/19 18:33:34 joerg Exp $
  */
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: util.c,v 1.26 2010/10/02 19:31:14 wiz Exp $");
+__RCSID("$NetBSD: util.c,v 1.24 2008/09/19 18:33:34 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/stat.h>
@@ -326,10 +326,8 @@ makedirs(const char *filename, bool striplast)
 
 	if (striplast) {
 		char	*s = strrchr(tmpbuf, '/');
-		if (s == NULL) {
-			free(tmpbuf);
+		if (s == NULL)
 			return;	/* nothing to be done */
-		}
 		*s = '\0';
 	}
 	if (mkpath(tmpbuf) != 0)
@@ -418,7 +416,7 @@ checked_in(char *file)
 void
 version(void)
 {
-	printf("Patch version 2.0-12u8-NetBSD\n");
+	fprintf(stderr, "Patch version 2.0-12u8-NetBSD\n");
 	my_exit(EXIT_SUCCESS);
 }
 

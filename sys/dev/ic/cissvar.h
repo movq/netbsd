@@ -1,4 +1,4 @@
-/*	$NetBSD: cissvar.h,v 1.5 2012/10/27 17:18:19 chs Exp $	*/
+/*	$NetBSD: cissvar.h,v 1.3 2008/05/25 20:08:34 mhitch Exp $	*/
 /*	$OpenBSD: cissvar.h,v 1.2 2005/09/07 04:00:16 mickey Exp $	*/
 
 /*
@@ -33,7 +33,7 @@ struct ciss_ld {
 
 struct ciss_softc {
 	/* Generic device info. */
-	device_t		sc_dev;
+	struct device		sc_dev;
 	kmutex_t		sc_mutex;
 	kmutex_t		sc_mutex_scratch;
 	bus_space_handle_t	sc_ioh;
@@ -70,7 +70,7 @@ struct ciss_softc {
 	struct ciss_ld **sc_lds;
 
 	/* scsi ioctl from sd device */
-	int			(*sc_ioctl)(device_t, u_long, void *);
+	int			(*sc_ioctl)(struct device *, u_long, void *);
 
 	struct sysmon_envsys    *sc_sme;
 	envsys_data_t		*sc_sensor;

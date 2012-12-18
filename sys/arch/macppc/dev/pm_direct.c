@@ -1,4 +1,4 @@
-/*	$NetBSD: pm_direct.c,v 1.37 2009/03/18 10:22:32 cegger Exp $	*/
+/*	$NetBSD: pm_direct.c,v 1.33 2007/11/07 19:47:00 garbled Exp $	*/
 
 /*
  * Copyright (C) 1997 Takashi Hamada
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pm_direct.c,v 1.37 2009/03/18 10:22:32 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pm_direct.c,v 1.33 2007/11/07 19:47:00 garbled Exp $");
 
 #ifdef DEBUG
 #ifndef ADB_DEBUG
@@ -171,23 +171,23 @@ signed char pm_receive_cmd_type[] = {
 
 /* for debugging */
 #ifdef ADB_DEBUG
-void	pm_printerr(const char *, int, int, const char *);
+void	pm_printerr __P((const char *, int, int, const char *));
 #endif
 
-int	pm_wait_busy(int);
-int	pm_wait_free(int);
+int	pm_wait_busy __P((int));
+int	pm_wait_free __P((int));
 
-static int	pm_receive(u_char *);
-static int	pm_send(u_char);
+static int	pm_receive __P((u_char *));
+static int	pm_send __P((u_char));
 
 /* these functions are called from adb_direct.c */
-void	pm_setup_adb(void);
-void	pm_check_adb_devices(int);
-int	pm_adb_op(u_char *, adbComp *, volatile int *, int);
+void	pm_setup_adb __P((void));
+void	pm_check_adb_devices __P((int));
+int	pm_adb_op __P((u_char *, adbComp *, volatile int *, int));
 
 /* these functions also use the variables of adb_direct.c */
-void	pm_adb_get_TALK_result(PMData *);
-void	pm_adb_get_ADB_data(PMData *);
+void	pm_adb_get_TALK_result __P((PMData *));
+void	pm_adb_get_ADB_data __P((PMData *));
 
 
 /*
@@ -212,13 +212,13 @@ struct adbCommand {
 	u_int	unsol;		/* 1 if packet was unsolicited */
 	u_int	ack_only;	/* 1 for no special processing */
 };
-extern	void	adb_pass_up(struct adbCommand *);
+extern	void	adb_pass_up __P((struct adbCommand *));
 
 #if 0
 /*
  * Define the external functions
  */
-extern int	zshard(int);		/* from zs.c */
+extern int	zshard __P((int));		/* from zs.c */
 #endif
 
 #ifdef ADB_DEBUG
@@ -226,7 +226,11 @@ extern int	zshard(int);		/* from zs.c */
  * This function dumps contents of the PMData
  */
 void
-pm_printerr(const char *ttl, int rval, int num, const char *data)
+pm_printerr(ttl, rval, num, data)
+	const char *ttl;
+	int rval;
+	int num;
+	const char *data;
 {
 	int i;
 
@@ -243,7 +247,7 @@ pm_printerr(const char *ttl, int rval, int num, const char *data)
  * Check the hardware type of the Power Manager
  */
 void
-pm_setup_adb(void)
+pm_setup_adb()
 {
 }
 
@@ -336,7 +340,8 @@ pm_init(void)
  * Check the existent ADB devices
  */
 void
-pm_check_adb_devices(int id)
+pm_check_adb_devices(id)
+	int id;
 {
 	u_short ed = 0x1;
 
@@ -349,7 +354,8 @@ pm_check_adb_devices(int id)
  * Wait until PM IC is busy
  */
 int
-pm_wait_busy(int delaycycles)
+pm_wait_busy(delaycycles)
+	int delaycycles;
 {
 	while (PM_IS_ON) {
 #ifdef PM_GRAB_SI
@@ -370,7 +376,8 @@ pm_wait_busy(int delaycycles)
  * Wait until PM IC is free
  */
 int
-pm_wait_free(int delaycycles)
+pm_wait_free(delaycycles)
+	int delaycycles;
 {
 	while (PM_IS_OFF) {
 #ifdef PM_GRAB_SI
@@ -392,7 +399,8 @@ pm_wait_free(int delaycycles)
  * Receive data from PMU
  */
 static int
-pm_receive(u_char *data)
+pm_receive(data)
+	u_char *data;
 {
 	int i;
 	int rval;
@@ -433,7 +441,8 @@ pm_receive(u_char *data)
  * Send data to PMU
  */
 static int
-pm_send(u_char data)
+pm_send(data)
+	u_char data;
 {
 	int rval;
 
@@ -467,7 +476,8 @@ pm_send(u_char data)
  * The PMgrOp routine
  */
 int
-pmgrop(PMData *pmdata)
+pmgrop(pmdata)
+	PMData *pmdata;
 {
 	int i;
 	int s;
@@ -644,7 +654,11 @@ pm_intr(void *arg)
  * Synchronous ADBOp routine for the Power Manager
  */
 int
-pm_adb_op(u_char *buffer, adbComp *compRout, volatile int *data, int command)
+pm_adb_op(buffer, compRout, data, command)
+	u_char *buffer;
+	adbComp *compRout;
+	volatile int *data;
+	int command;
 {
 	int i;
 	int s;
@@ -766,7 +780,8 @@ pm_adb_op(u_char *buffer, adbComp *compRout, volatile int *data, int command)
 
 
 void
-pm_adb_get_TALK_result(PMData *pmdata)
+pm_adb_get_TALK_result(pmdata)
+	PMData *pmdata;
 {
 	int i;
 	struct adbCommand packet;
@@ -794,7 +809,8 @@ pm_adb_get_TALK_result(PMData *pmdata)
 
 
 void
-pm_adb_get_ADB_data(PMData *pmdata)
+pm_adb_get_ADB_data(pmdata)
+	PMData *pmdata;
 {
 	int i;
 	struct adbCommand packet;
@@ -821,7 +837,7 @@ pm_adb_get_ADB_data(PMData *pmdata)
 
 
 void
-pm_adb_restart(void)
+pm_adb_restart()
 {
 	PMData p;
 
@@ -833,7 +849,7 @@ pm_adb_restart(void)
 }
 
 void
-pm_adb_poweroff(void)
+pm_adb_poweroff()
 {
 	PMData p;
 
@@ -846,7 +862,8 @@ pm_adb_poweroff(void)
 }
 
 void
-pm_read_date_time(u_long *t)
+pm_read_date_time(t)
+	u_long *t;
 {
 	PMData p;
 
@@ -860,7 +877,8 @@ pm_read_date_time(u_long *t)
 }
 
 void
-pm_set_date_time(u_long t)
+pm_set_date_time(t)
+	u_long t;
 {
 	PMData p;
 
@@ -872,7 +890,7 @@ pm_set_date_time(u_long t)
 }
 
 int
-pm_read_brightness(void)
+pm_read_brightness()
 {
 	PMData p;
 
@@ -886,7 +904,8 @@ pm_read_brightness(void)
 }
 
 void
-pm_set_brightness(int val)
+pm_set_brightness(val)
+	int val;
 {
 	PMData p;
 
@@ -904,7 +923,7 @@ pm_set_brightness(int val)
 }
 
 void
-pm_init_brightness(void)
+pm_init_brightness()
 {
 	int val;
 
@@ -913,7 +932,8 @@ pm_init_brightness(void)
 }
 
 void
-pm_eject_pcmcia(int slot)
+pm_eject_pcmcia(slot)
+	int slot;
 {
 	PMData p;
 
@@ -1066,7 +1086,8 @@ pm_battery_info(int battery, struct pmu_battery_info *info)
 }
 
 int
-pm_read_nvram(int addr)
+pm_read_nvram(addr)
+	int addr;
 {
 	PMData p;
 
@@ -1081,7 +1102,8 @@ pm_read_nvram(int addr)
 }
 
 void
-pm_write_nvram(int addr, int val)
+pm_write_nvram(addr, val)
+	int addr, val;
 {
 	PMData p;
 

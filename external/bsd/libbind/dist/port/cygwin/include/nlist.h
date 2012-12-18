@@ -1,4 +1,4 @@
-/*	$NetBSD: nlist.h,v 1.1.1.1 2009/04/12 15:33:54 christos Exp $	*/
+/*	$NetBSD: nlist.h,v 1.1.1.1.4.2 2011/01/06 21:42:26 riz Exp $	*/
 
 #ifndef NLIST_H
 #define NLIST_H		1

@@ -1,4 +1,4 @@
-.\"     $NetBSD: suspendsched.9,v 1.5 2010/04/13 18:33:44 jruoho Exp $
+.\"     $NetBSD: suspendsched.9,v 1.4 2008/04/30 13:10:58 martin Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -47,4 +47,5 @@ non-system processes which are on the run queue or the sleep queue.
 The
 .Fn suspendsched
 function must not be called with the scheduler lock held.
-.\".Sh SEE ALSO
+.Sh SEE ALSO
+.Xr scheduler 9

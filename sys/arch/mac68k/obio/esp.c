@@ -1,4 +1,4 @@
-/*	$NetBSD: esp.c,v 1.55 2012/02/18 23:51:27 rmind Exp $	*/
+/*	$NetBSD: esp.c,v 1.51 2008/06/02 12:01:11 hauke Exp $	*/
 
 /*
  * Copyright (c) 1997 Jason R. Thorpe.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esp.c,v 1.55 2012/02/18 23:51:27 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esp.c,v 1.51 2008/06/02 12:01:11 hauke Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -88,8 +88,8 @@ __KERNEL_RCSID(0, "$NetBSD: esp.c,v 1.55 2012/02/18 23:51:27 rmind Exp $");
 #include <sys/device.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/queue.h>
-#include <sys/mutex.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -869,11 +869,11 @@ gotintr:
 	/*
 	 * We have been called from the MI ncr53c9x_intr() handler,
 	 * which protects itself against multiple invocation with a
-	 * lock.  Follow the example of ncr53c9x_poll().
+	 * simple_lock. Follow the example of ncr53c9x_poll().
 	 */
-	mutex_exit(&sc->sc_lock);
+	simple_unlock(&sc->sc_lock);
 	ncr53c9x_intr(sc);
-	mutex_enter(&sc->sc_lock);
+	simple_lock(&sc->sc_lock);
 	if (espspl != -1)
 		splx(espspl);
 	espspl = -1;

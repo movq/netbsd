@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_runq.c,v 1.35 2012/08/30 02:25:35 matt Exp $	*/
+/*	$NetBSD: kern_runq.c,v 1.22.4.4 2010/01/16 17:39:01 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2007, 2008 Mindaugas Rasiukevicius <rmind at NetBSD org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_runq.c,v 1.35 2012/08/30 02:25:35 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_runq.c,v 1.22.4.4 2010/01/16 17:39:01 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -99,13 +99,9 @@ static void	sched_balance(void *);
 /*
  * Preemption control.
  */
-int		sched_upreempt_pri = 0;
-#ifdef __HAVE_PREEMPTION
-# ifdef DEBUG
-int		sched_kpreempt_pri = 0;
-# else
+int		sched_upreempt_pri = PRI_KERNEL;
+#if defined(__HAVE_PREEMPTION)
 int		sched_kpreempt_pri = PRI_USER_RT;
-# endif
 #else
 int		sched_kpreempt_pri = 1000;
 #endif
@@ -147,6 +143,7 @@ sched_cpuattach(struct cpu_info *ci)
 	runqueue_t *ci_rq;
 	void *rq_ptr;
 	u_int i, size;
+	char *cpuname;
 
 	if (ci->ci_schedstate.spc_lwplock == NULL) {
 		ci->ci_schedstate.spc_lwplock =
@@ -179,14 +176,17 @@ sched_cpuattach(struct cpu_info *ci)
 
 	ci->ci_schedstate.spc_sched_info = ci_rq;
 
+	cpuname = kmem_alloc(8, KM_SLEEP);
+	snprintf(cpuname, 8, "cpu%d", cpu_index(ci));
+
 	evcnt_attach_dynamic(&ci_rq->r_ev_pull, EVCNT_TYPE_MISC, NULL,
-	   cpu_name(ci), "runqueue pull");
+	   cpuname, "runqueue pull");
 	evcnt_attach_dynamic(&ci_rq->r_ev_push, EVCNT_TYPE_MISC, NULL,
-	   cpu_name(ci), "runqueue push");
+	   cpuname, "runqueue push");
 	evcnt_attach_dynamic(&ci_rq->r_ev_stay, EVCNT_TYPE_MISC, NULL,
-	   cpu_name(ci), "runqueue stay");
+	   cpuname, "runqueue stay");
 	evcnt_attach_dynamic(&ci_rq->r_ev_localize, EVCNT_TYPE_MISC, NULL,
-	   cpu_name(ci), "runqueue localize");
+	   cpuname, "runqueue localize");
 }
 
 /*
@@ -346,15 +346,15 @@ sched_migratable(const struct lwp *l, struct cpu_info *ci)
 	const struct schedstate_percpu *spc = &ci->ci_schedstate;
 	KASSERT(lwp_locked(__UNCONST(l), NULL));
 
-	/* Is CPU offline? */
+	/* CPU is offline */
 	if (__predict_false(spc->spc_flags & SPCF_OFFLINE))
 		return false;
 
-	/* Is affinity set? */
-	if (__predict_false(l->l_affinity))
-		return kcpuset_isset(l->l_affinity, cpu_index(ci));
+	/* Affinity bind */
+	if (__predict_false(l->l_flag & LW_AFFINITY))
+		return kcpuset_isset(cpu_index(ci), l->l_affinity);
 
-	/* Is there a processor-set? */
+	/* Processor-set */
 	return (spc->spc_psid == l->l_psid);
 }
 
@@ -468,12 +468,10 @@ sched_catchlwp(struct cpu_info *ci)
 
 	for (;;) {
 		/* Check the first and next result from the queue */
-		if (l == NULL) {
+		if (l == NULL)
 			break;
-		}
-		KASSERTMSG(l->l_stat == LSRUN, "%s l %p (%s) l_stat %d",
-		    ci->ci_data.cpu_name,
-		    l, (l->l_name ? l->l_name : l->l_proc->p_comm), l->l_stat);
+		KASSERT(l->l_stat == LSRUN);
+		KASSERT(l->l_flag & LW_INMEM);
 
 		/* Look for threads, whose are allowed to migrate */
 		if ((l->l_pflag & LP_BOUND) || lwp_cache_hot(l) ||
@@ -640,10 +638,6 @@ no_migration:
 
 #else
 
-/*
- * stubs for !MULTIPROCESSOR
- */
-
 struct cpu_info *
 sched_takecpu(struct lwp *l)
 {
@@ -765,10 +759,6 @@ sched_nextlwp(void)
 
 	return l;
 }
-
-/*
- * sched_curcpu_runnable_p: return if curcpu() should exit the idle loop.
- */
 
 bool
 sched_curcpu_runnable_p(void)
@@ -902,6 +892,8 @@ sched_print_runqueue(void (*pr)(const char *, ...)
 	    "LID", "PRI", "EPRI", "FL", "ST", "LWP", "CPU", "TCI", "LRTICKS");
 
 	PROCLIST_FOREACH(p, &allproc) {
+		if ((p->p_flag & PK_MARKER) != 0)
+			continue;
 		(*pr)(" /- %d (%s)\n", (int)p->p_pid, p->p_comm);
 		LIST_FOREACH(l, &p->p_lwps, l_sibling) {
 			ci = l->l_cpu;

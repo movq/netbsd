@@ -1,4 +1,4 @@
-/* $NetBSD: ioeb.c,v 1.8 2012/10/27 17:17:22 chs Exp $ */
+/* $NetBSD: ioeb.c,v 1.5 2002/10/02 03:25:47 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2000 Ben Harris
@@ -29,34 +29,36 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: ioeb.c,v 1.8 2012/10/27 17:17:22 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioeb.c,v 1.5 2002/10/02 03:25:47 thorpej Exp $");
 
 #include <sys/device.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
+
+#include <machine/bus.h>
 
 #include <arch/acorn26/iobus/iocvar.h>
 #include <arch/acorn26/ioc/ioebreg.h>
 #include <arch/acorn26/ioc/ioebvar.h>
 
 struct ioeb_softc {
+	struct device sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 };
 
-static int ioeb_match(device_t, cfdata_t, void *);
-static void ioeb_attach(device_t, device_t, void *);
+static int ioeb_match(struct device *, struct cfdata *, void *);
+static void ioeb_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ioeb, sizeof(struct ioeb_softc),
+CFATTACH_DECL(ioeb, sizeof(struct ioeb_softc),
     ioeb_match, ioeb_attach, NULL, NULL);
 
-device_t the_ioeb;
+struct device *the_ioeb;
 
 /* IOEB is only four bits wide */
 #define ioeb_read(t, h, o) (bus_space_read_1(t, h, o) & 0xf)
 
 static int
-ioeb_match(device_t parent, cfdata_t cf, void *aux)
+ioeb_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct ioc_attach_args *ioc = aux;
 	int id;
@@ -70,9 +72,9 @@ ioeb_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-ioeb_attach(device_t parent, device_t self, void *aux)
+ioeb_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ioeb_softc *sc = device_private(self);
+	struct ioeb_softc *sc = (void *)self;
 	struct ioc_attach_args *ioc = aux;
 
 	if (the_ioeb == NULL)
@@ -85,7 +87,7 @@ ioeb_attach(device_t parent, device_t self, void *aux)
 void
 ioeb_irq_clear(int mask)
 {
-	struct ioeb_softc *sc = device_private(the_ioeb);
+	struct ioeb_softc *sc = (void *)the_ioeb;
 
 	/* The IOEB only controls interrupt 0 */
 	if (mask & IOEB_IRQ_CLEARABLE_MASK)

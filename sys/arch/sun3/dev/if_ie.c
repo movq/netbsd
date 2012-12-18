@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie.c,v 1.55 2010/04/05 07:19:32 joerg Exp $ */
+/*	$NetBSD: if_ie.c,v 1.51 2008/06/28 12:13:38 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 1993, 1994, 1995 Charles M. Hannum.
@@ -98,10 +98,11 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.55 2010/04/05 07:19:32 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.51 2008/06/28 12:13:38 tsutsui Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -119,8 +120,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.55 2010/04/05 07:19:32 joerg Exp $");
 #include <net/if_dl.h>
 #include <net/if_ether.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -653,7 +656,7 @@ ietint(struct ie_softc *sc)
  * version of this...   XXX: Who wanted that? mycroft?
  * I wrote one, but the following is just as efficient.
  * This expands to 10 short m68k instructions! -gwr
- * Note: use this like memcmp()
+ * Note: use this like bcmp()
  */
 static inline uint16_t
 ether_cmp(uint8_t *one, uint8_t *two)
@@ -685,10 +688,12 @@ ether_cmp(uint8_t *one, uint8_t *two)
 static inline int 
 check_eh(struct ie_softc *sc, struct ether_header *eh, int *to_bpf)
 {
+#if NBPFILTER > 0
 	struct ifnet *ifp;
 
 	ifp = &sc->sc_if;
 	*to_bpf = (ifp->if_bpf != 0);
+#endif
 
 	/*
 	 * This is all handled at a higher level now.
@@ -758,12 +763,16 @@ iexmit(struct ie_softc *sc)
 		    sc->xctail);
 #endif
 
+#if NBPFILTER > 0
 	/*
 	 * If BPF is listening on this interface, let it see the packet before
 	 * we push it on the wire.
 	 */
-	bpf_tap(ifp, sc->xmit_cbuffs[sc->xctail],
-	    SWAP(sc->xmit_buffs[sc->xctail]->ie_xmit_flags));
+	if (ifp->if_bpf)
+		bpf_tap(ifp->if_bpf,
+		    sc->xmit_cbuffs[sc->xctail],
+		    SWAP(sc->xmit_buffs[sc->xctail]->ie_xmit_flags));
+#endif
 
 	sc->xmit_buffs[sc->xctail]->ie_xmit_flags |= IE_XMIT_LAST;
 	sc->xmit_buffs[sc->xctail]->ie_xmit_next = SWAP(0xffff);
@@ -936,7 +945,9 @@ ie_readframe(struct ie_softc *sc, int num)
 {
 	int status;
 	struct mbuf *m = 0;
+#if NBPFILTER > 0
 	int bpf_gets_it = 0;
+#endif
 
 	status = sc->rframes[num]->ie_fd_status;
 
@@ -948,7 +959,11 @@ ie_readframe(struct ie_softc *sc, int num)
 	sc->rfhead = (sc->rfhead + 1) % sc->nframes;
 
 	if (status & IE_FD_OK) {
+#if NBPFILTER > 0
 		m = ieget(sc, &bpf_gets_it);
+#else
+		m = ieget(sc, NULL);
+#endif
 		ie_drop_packet_buffer(sc);
 	}
 	if (m == 0) {
@@ -966,6 +981,7 @@ ie_readframe(struct ie_softc *sc, int num)
 	}
 #endif
 
+#if NBPFILTER > 0
 	/*
 	 * Check for a BPF filter; if so, hand it up.
 	 * Note that we have to stick an extra mbuf up front, because
@@ -976,7 +992,7 @@ ie_readframe(struct ie_softc *sc, int num)
 	 */
 	if (bpf_gets_it) {
 		/* Pass it up. */
-		bpf_mtap(&sc->sc_if, m);
+		bpf_mtap(sc->sc_if.if_bpf, m);
 
 		/*
 		 * A signal passed up from the filtering code indicating that
@@ -989,6 +1005,7 @@ ie_readframe(struct ie_softc *sc, int num)
 			return;
 		}
 	}
+#endif	/* NBPFILTER > 0 */
 
 	/*
 	 * In here there used to be code to check destination addresses upon
@@ -1065,8 +1082,11 @@ iestart(struct ifnet *ifp)
 		if ((m0->m_flags & M_PKTHDR) == 0)
 			panic("%s: no header mbuf", __func__);
 
+#if NBPFILTER > 0
 		/* Tap off here if there is a BPF listener. */
-		bpf_mtap(ifp, m0);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m0);
+#endif
 
 #ifdef IEDEBUG
 		if (sc->sc_debug & IED_ENQ)
@@ -1510,7 +1530,7 @@ ieioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 
 		switch (ifa->ifa_addr->sa_family) {
@@ -1544,34 +1564,30 @@ ieioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
 		sc->promisc = ifp->if_flags & (IFF_PROMISC | IFF_ALLMULTI);
 
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_RUNNING:
+		if ((ifp->if_flags & IFF_UP) == 0 &&
+		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
 			 * If interface is marked down and it is running, then
 			 * stop it.
 			 */
 			iestop(sc);
 			ifp->if_flags &= ~IFF_RUNNING;
-			break;
-		case IFF_UP:
+		} else if ((ifp->if_flags & IFF_UP) != 0 &&
+			(ifp->if_flags & IFF_RUNNING) == 0) {
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
 			 */
 			ieinit(sc);
-			break;
-		default:
+		} else {
 			/*
 			 * Reset the interface to pick up changes in any other
 			 * flags that affect hardware registers.
 			 */
 			iestop(sc);
 			ieinit(sc);
-			break;
 		}
 #ifdef IEDEBUG
 		if (ifp->if_flags & IFF_DEBUG)
@@ -1595,8 +1611,7 @@ ieioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ether_ioctl(ifp, cmd, data);
-		break;
+		error = EINVAL;
 	}
 	splx(s);
 	return error;

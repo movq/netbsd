@@ -1,4 +1,4 @@
-/* $NetBSD: isp_stds.h,v 1.5 2010/03/26 20:52:00 mjacob Exp $ */
+/* $NetBSD: isp_stds.h,v 1.2 2008/03/11 05:33:30 mjacob Exp $ */
 /*-
  *  Copyright (c) 1997-2008 by Matthew Jacob
  *  All rights reserved.
@@ -52,7 +52,7 @@ typedef struct {
 	uint8_t		cs_ctl;
 	uint8_t		s_id[3];
 	uint8_t		type;
-	uint8_t		f_ctl[3];
+	uint8_t		f_ctl;
 	uint8_t		seq_id;
 	uint8_t		df_ctl;
 	uint16_t	seq_cnt;
@@ -155,7 +155,6 @@ typedef struct {
 #define	FCP_SNSLEN_VALID		0x02
 #define	FCP_RSPLEN_VALID		0x01
 
-#define FCP_MAX_RSPLEN			0x08
 /*
  * FCP Response Code Definitions
  * Source: NCITS T10, Project 1144D, Revision 08 (aka FCP2r08)
@@ -168,8 +167,6 @@ typedef struct {
 #define	FCP_RSPNS_EROFS			3
 #define	FCP_RSPNS_TMF_REJECT		4
 #define	FCP_RSPNS_TMF_FAILED		5
-#define	FCP_RSPNS_TMF_SUCCEEDED		8
-#define	FCP_RSPNS_TMF_INCORRECT_LUN	9
 
 
 /* unconverted miscellany */

@@ -1,4 +1,4 @@
-#	$NetBSD: files.pci,v 1.15 2012/12/05 16:19:46 christos Exp $
+#	$NetBSD: files.pci,v 1.7 2008/08/03 19:32:03 joerg Exp $
 
 device 	aapic
 attach 	aapic at pci
@@ -6,21 +6,18 @@ file 	arch/x86/pci/aapic.c		aapic
 
 file	arch/x86/pci/agp_machdep.c	agp
 
-define amdnb_miscbus {}
-
 # PCI-Host bridge chipsets
-device	pchb:	pcibus, agpbus,
-		agp_ali, agp_amd, agp_amd64, agp_i810,
+device	pchb:	pcibus, agpbus, agp_ali, agp_amd, agp_amd64, agp_i810,
 		agp_intel, agp_sis, agp_via
 attach	pchb at pci
 file	arch/x86/pci/pchb.c		pchb		needs-flag
+file	arch/x86/pci/pchb_rnd.c		pchb & rnd
 
 # PCI-ISA bridges
 device	pcib: isabus
 attach	pcib at pci
-file	arch/x86/pci/pcib.c		pcib | ichlpcib | gscpcib | piixpcib |
-					viapcib | amdpcib | gcscpcib | rdcpcib |
-					tcpcib
+file	arch/x86/pci/pcib.c		pcib | ichlpcib | gscpcib | piixpcib | viapcib |
+					amdpcib
 
 device	amdpcib {} : isabus
 attach	amdpcib at pci
@@ -30,32 +27,14 @@ attach  hpet at amdpcib with amdpcib_hpet
 file    arch/x86/pci/amdpcib_hpet.c		amdpcib_hpet
 
 # AMD Processors -- Miscellaneous Control
-device	amdnb_misc: amdnb_miscbus
-attach	amdnb_misc at pci
-file	arch/x86/pci/amdnb_misc.c	amdnb_misc
-
 device	amdtemp: sysmon_envsys
-attach	amdtemp at amdnb_miscbus
+attach	amdtemp at pci
 file	arch/x86/pci/amdtemp.c		amdtemp
 
 # PCI-LPC bridges
-device rdcpcib: isabus, sysmon_wdog
-attach rdcpcib at pci
-file 	arch/x86/pci/rdcpcib.c 		rdcpcib
-
-define	fwhichbus {}
 define	hpetichbus {}
-device	ichlpcib: acpipmtimer, isabus, sysmon_wdog, fwhichbus, hpetichbus, gpiobus
+device	ichlpcib: acpipmtimer, isabus, sysmon_wdog, hpetichbus
 attach	ichlpcib at pci
-file 	arch/x86/pci/ichlpcib.c 	ichlpcib
-
 attach	hpet at hpetichbus with ichlpcib_hpet
-file    arch/x86/pci/ichlpcib_hpet.c	ichlpcib_hpet
 
-device	tcpcib: isabus, sysmon_wdog, hpetichbus
-attach	tcpcib at pci
-file	arch/x86/pci/tcpcib.c		tcpcib
-
-device	fwhrng
-attach	fwhrng at fwhichbus
-file	arch/x86/pci/fwhrng.c		fwhrng needs-flag
+file 	arch/x86/pci/ichlpcib.c 	ichlpcib

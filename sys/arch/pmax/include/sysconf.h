@@ -1,4 +1,4 @@
-/*	$NetBSD: sysconf.h,v 1.14 2011/02/20 07:50:25 matt Exp $	*/
+/*	$NetBSD: sysconf.h,v 1.12 2008/01/03 23:02:24 joerg Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -65,12 +65,12 @@ struct platform {
 	 *	intr_disestablish -	disestablish interrupt handler
 	 *	tc_init		-	initialize timecounters
 	 */
-	void	(*bus_reset)(void);
-	void	(*cons_init)(void);
-	void	(*iointr)(uint32_t, vaddr_t, uint32_t);
-	void	(*intr_establish)(device_t, void *, int, int (*)(void *),
-		    void *);
-	int	(*memsize)(void *);
+	void	(*bus_reset) __P((void));
+	void	(*cons_init) __P((void));
+	void	(*iointr) __P((unsigned, unsigned, unsigned, unsigned));
+	void	(*intr_establish) __P((struct device *, void *, int,
+		    int (*)(void *), void *));
+	int	(*memsize) __P((void *));
 	void	(*tc_init)(void);
 };
 
@@ -78,7 +78,7 @@ struct platform {
  * An array of functions to initialize the platform structure.
  */
 struct sysinit {
-	void	(*init)(void);
+	void	(*init) __P((void));
 	const char *option;
 };
 
@@ -86,13 +86,13 @@ struct sysinit {
 #define	sys_init(fn, opt)	{ fn, opt }
 
 extern struct platform platform;
-extern const struct sysinit sysinit[];
-extern const int nsysinit;
+extern struct sysinit sysinit[];
+extern int nsysinit;
 
-int	memsize_scan(void *);
-int	memsize_bitmap(void *);
-void	platform_not_configured(void);
-void	platform_not_supported(void);
+int	memsize_scan __P((void *));
+int	memsize_bitmap __P((void *));
+void	platform_not_configured __P((void));
+void	platform_not_supported __P((void));
 
 #endif /* _KERNEL */
 

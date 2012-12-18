@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.40 2012/07/08 20:14:12 dsl Exp $ */
+/*	$NetBSD: linux_machdep.c,v 1.34 2008/10/26 20:25:49 christos Exp $ */
 
 /*-
  * Copyright (c) 2005 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.40 2012/07/08 20:14:12 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.34 2008/10/26 20:25:49 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -42,6 +42,8 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.40 2012/07/08 20:14:12 dsl Exp $
 #include <sys/exec.h>
 #include <sys/proc.h>
 #include <sys/ptrace.h> /* for process_read_fpregs() */
+#include <sys/user.h>
+#include <sys/wait.h>
 #include <sys/ucontext.h>
 #include <sys/conf.h>
 
@@ -79,20 +81,22 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.40 2012/07/08 20:14:12 dsl Exp $
 static void linux_buildcontext(struct lwp *, void *, void *);
 
 void
-linux_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
+linux_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 {
-	struct pcb *pcb = lwp_getpcb(l);
+	struct pcb *pcb = &l->l_addr->u_pcb;
 	struct trapframe *tf;
 
 	/* If we were using the FPU, forget about it. */
-	if (pcb->pcb_fpcpu != NULL)
+	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
 		fpusave_lwp(l, 0);
 
-	l->l_md.md_flags &= ~MDL_USEDFPU;
+	l->l_md.md_flags &= ~MDP_USEDFPU;
 	pcb->pcb_flags = 0;
 	pcb->pcb_savefpu.fp_fxsave.fx_fcw = __NetBSD_NPXCW__;
 	pcb->pcb_savefpu.fp_fxsave.fx_mxcsr = __INITIAL_MXCSR__;
 	pcb->pcb_savefpu.fp_fxsave.fx_mxcsr_mask = __INITIAL_MXCSR_MASK__;
+	pcb->pcb_fs = 0;
+	pcb->pcb_gs = 0;
 
 	l->l_proc->p_flag &= ~PK_32;
 
@@ -119,7 +123,8 @@ linux_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 	tf->tf_ss = GSEL(GUDATA_SEL, SEL_UPL);
 	tf->tf_ds = 0;
 	tf->tf_es = 0;
-	cpu_fsgs_zero(l);
+	tf->tf_fs = 0;
+	tf->tf_gs = 0;
 
 	return;
 }
@@ -129,7 +134,6 @@ linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
-	struct pcb *pcb = lwp_getpcb(l);
 	struct sigacts *ps = p->p_sigacts;
 	int onstack, error;
 	int sig = ksi->ksi_signo;
@@ -156,7 +160,7 @@ linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	/* 
 	 * Save FPU state, if any 
 	 */
-	if (l->l_md.md_flags & MDL_USEDFPU) {
+	if (l->l_md.md_flags & MDP_USEDFPU) {
 		sp = (char *)
 		    (((long)sp - sizeof(struct linux__fpstate)) & ~0xfUL);
 		fpsp = (struct linux__fpstate *)sp;
@@ -170,7 +174,7 @@ linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	    ((((long)sp - sizeof(struct linux_rt_sigframe)) & ~0xfUL) - 8);
 	sfp = (struct linux_rt_sigframe *)sp;
 
-	memset(&sigframe, 0, sizeof(sigframe));
+	bzero(&sigframe, sizeof(sigframe));
 	if (ps->sa_sigdesc[sig].sd_vers != 0)
 		sigframe.pretcode = 
 		    (char *)(u_long)ps->sa_sigdesc[sig].sd_tramp;
@@ -217,10 +221,60 @@ linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	sigframe.uc.luc_mcontext.trapno = tf->tf_trapno;
 	native_to_linux_sigset(&lmask, mask);
 	sigframe.uc.luc_mcontext.oldmask = lmask.sig[0];
-	sigframe.uc.luc_mcontext.cr2 = (long)pcb->pcb_onfault;
+	sigframe.uc.luc_mcontext.cr2 = (long)l->l_addr->u_pcb.pcb_onfault;
 	sigframe.uc.luc_mcontext.fpstate = fpsp;
 	native_to_linux_sigset(&sigframe.uc.luc_sigmask, mask);
-	native_to_linux_siginfo(&sigframe.info, &ksi->ksi_info);
+
+	/* 
+	 * the siginfo structure
+	 */
+	sigframe.info.lsi_signo = native_to_linux_signo[sig];
+	sigframe.info.lsi_errno = native_to_linux_errno[ksi->ksi_errno];
+	sigframe.info.lsi_code = native_to_linux_si_code(ksi->ksi_code);
+
+	/* XXX This is a rought conversion, taken from i386 code */
+	switch (sigframe.info.lsi_signo) {
+	case LINUX_SIGILL:
+	case LINUX_SIGFPE:
+	case LINUX_SIGSEGV:
+	case LINUX_SIGBUS:
+	case LINUX_SIGTRAP:
+		sigframe.info._sifields._sigfault._addr = ksi->ksi_addr;
+		break;
+	case LINUX_SIGCHLD:
+		sigframe.info._sifields._sigchld._pid = ksi->ksi_pid;
+		sigframe.info._sifields._sigchld._uid = ksi->ksi_uid;
+		sigframe.info._sifields._sigchld._utime = ksi->ksi_utime;
+		sigframe.info._sifields._sigchld._stime = ksi->ksi_stime;
+
+		if (WCOREDUMP(ksi->ksi_status)) {
+			sigframe.info.lsi_code = LINUX_CLD_DUMPED;
+			sigframe.info._sifields._sigchld._status =
+			    _WSTATUS(ksi->ksi_status);
+		} else if (_WSTATUS(ksi->ksi_status)) {
+			sigframe.info.lsi_code = LINUX_CLD_KILLED;
+			sigframe.info._sifields._sigchld._status =
+			    _WSTATUS(ksi->ksi_status);
+		} else {
+			sigframe.info.lsi_code = LINUX_CLD_EXITED;
+			sigframe.info._sifields._sigchld._status =
+			    ((ksi->ksi_status & 0xff00U) >> 8);
+		}
+		break;
+	case LINUX_SIGIO:
+		sigframe.info._sifields._sigpoll._band = ksi->ksi_band;
+		sigframe.info._sifields._sigpoll._fd = ksi->ksi_fd;
+		break;
+	default:
+		sigframe.info._sifields._sigchld._pid = ksi->ksi_pid;
+		sigframe.info._sifields._sigchld._uid = ksi->ksi_uid;
+		if ((sigframe.info.lsi_signo == LINUX_SIGALRM) ||
+		    (sigframe.info.lsi_signo >= LINUX_SIGRTMIN))
+			sigframe.info._sifields._timer._sigval.sival_ptr =
+			     ksi->ksi_value.sival_ptr;
+		break;
+	}
+
 	sendsig_reset(l, sig);
 	mutex_exit(p->p_lock);
 	error = 0;
@@ -230,7 +284,7 @@ linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	 */
 	if (fpsp != NULL) {
 		(void)process_read_fpregs(l, &fpregs);
-		memset(&fpstate, 0, sizeof(fpstate));
+		bzero(&fpstate, sizeof(fpstate));
 		fpstate.cwd = fpregs.fp_fcw;
 		fpstate.swd = fpregs.fp_fsw;
 		fpstate.twd = fpregs.fp_ftw;
@@ -342,7 +396,7 @@ linux_sys_rt_sigreturn(struct lwp *l, const void *v, register_t *retval)
 	luctx = &frame.uc;
 	lsigctx = &luctx->luc_mcontext;
 
-	memset(&uctx, 0, sizeof(uctx));
+	bzero(&uctx, sizeof(uctx));
 	mctx = (mcontext_t *)&uctx.uc_mcontext;
 	fxarea = (struct fxsave64 *)&mctx->__fpregs;
 
@@ -441,27 +495,63 @@ linux_sys_rt_sigreturn(struct lwp *l, const void *v, register_t *retval)
 }
 
 int
-linux_sys_arch_prctl(struct lwp *l,
-    const struct linux_sys_arch_prctl_args *uap, register_t *retval)
+linux_sys_arch_prctl(struct lwp *l, const struct linux_sys_arch_prctl_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) code;
 		syscallarg(unsigned long) addr;
 	} */
-	void *addr = (void *)SCARG(uap, addr);
+	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct trapframe *tf = l->l_md.md_regs;
+	int error;
+	uint64_t taddr;
 
 	switch(SCARG(uap, code)) {
 	case LINUX_ARCH_SET_GS:
-		return x86_set_sdbase(addr, 'g', l, true);
+		taddr = SCARG(uap, addr);
+		if (taddr >= VM_MAXUSER_ADDRESS)
+			return EINVAL;
+		pcb->pcb_gs = taddr;
+		pcb->pcb_flags |= PCB_GS64;
+		if (l == curlwp)
+			wrmsr(MSR_KERNELGSBASE, taddr);
+		break;
 
 	case LINUX_ARCH_GET_GS:
-		return x86_get_sdbase(addr, 'g');
+		if (pcb->pcb_flags & PCB_GS64)
+			taddr = pcb->pcb_gs;
+		else {
+			error = memseg_baseaddr(l, tf->tf_fs, NULL, 0, &taddr);
+			if (error != 0)
+				return error;
+		}
+		error = copyout(&taddr, (char *)SCARG(uap, addr), 8);
+		if (error != 0)
+			return error;
+		break;
 
 	case LINUX_ARCH_SET_FS:
-		return x86_set_sdbase(addr, 'f', l, true);
+		taddr = SCARG(uap, addr);
+		if (taddr >= VM_MAXUSER_ADDRESS)
+			return EINVAL;
+		pcb->pcb_fs = taddr;
+		pcb->pcb_flags |= PCB_FS64;
+		if (l == curlwp)
+			wrmsr(MSR_FSBASE, taddr);
+		break;
 
 	case LINUX_ARCH_GET_FS:
-		return x86_get_sdbase(addr, 'f');
+		if (pcb->pcb_flags & PCB_FS64)
+			taddr = pcb->pcb_fs;
+		else {
+			error = memseg_baseaddr(l, tf->tf_fs, NULL, 0, &taddr);
+			if (error != 0)
+				return error;
+		}
+		error = copyout(&taddr, (char *)SCARG(uap, addr), 8);
+		if (error != 0)
+			return error;
+		break;
 
 	default:
 #ifdef DEBUG_LINUX
@@ -470,7 +560,8 @@ linux_sys_arch_prctl(struct lwp *l,
 #endif
 		return EINVAL;
 	}
-	/* NOTREACHED */
+
+	return 0;
 }
 
 const int linux_vsyscall_to_syscall[] = {
@@ -541,4 +632,24 @@ linux_buildcontext(struct lwp *l, void *catcher, void *f)
 	tf->tf_rflags &= ~PSL_CLEARSIG;
 	tf->tf_rsp = (u_int64_t)f;
 	tf->tf_ss = GSEL(GUDATA_SEL, SEL_UPL);
+}
+
+void *
+linux_get_newtls(struct lwp *l)
+{
+	struct trapframe *tf = l->l_md.md_regs;
+
+	return (void *)tf->tf_r8;
+}
+
+int
+linux_set_newtls(struct lwp *l, void *tls)
+{
+	struct linux_sys_arch_prctl_args cup;
+	register_t retval;
+
+	SCARG(&cup, code) = LINUX_ARCH_SET_FS;
+	SCARG(&cup, addr) = (unsigned long)tls;
+
+	return linux_sys_arch_prctl(l, &cup, &retval);
 }

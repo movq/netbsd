@@ -1,4 +1,4 @@
-/* $NetBSD: db_trace.c,v 1.28 2012/02/06 02:14:10 matt Exp $ */
+/* $NetBSD: db_trace.c,v 1.24 2008/07/02 19:49:58 rmind Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -35,18 +35,19 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.28 2012/02/06 02:14:10 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.24 2008/07/02 19:49:58 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 
 #include <machine/alpha.h>
 #include <machine/db_machdep.h>
 
 #include <alpha/alpha/db_instruction.h>
 
-#include <ddb/db_sym.h>
+#include <ddb/db_sym.h> 
 #include <ddb/db_access.h>
 #include <ddb/db_variables.h>
 #include <ddb/db_output.h>
@@ -57,7 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.28 2012/02/06 02:14:10 matt Exp $");
  */
 struct prologue_info {
 	int	pi_reg_offset[32]; /* offset of registers in stack frame */
-	uint32_t pi_regmask;	   /* which registers are in frame */
+	u_int32_t pi_regmask;	   /* which registers are in frame */
 	int	pi_frame_size;	   /* frame size */
 };
 
@@ -220,7 +221,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 				(*pr)("trace: pid %d ", p->p_pid);
 			} else {
 				(*pr)("trace: pid %d ", (int)addr);
-				p = proc_find_raw(addr);
+				p = p_find(addr, PFIND_LOCKED);
 				if (p == NULL) {
 					(*pr)("not found\n");
 					return;
@@ -229,7 +230,11 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 				KASSERT(l != NULL);
 			}
 			(*pr)("lid %d ", l->l_lid);
-			pcbp = lwp_getpcb(l);
+			if ((l->l_flag & LW_INMEM) == 0) {
+				(*pr)("swapped out\n");
+				return;
+			}
+			pcbp = &l->l_addr->u_pcb;
 			addr = (db_expr_t)pcbp->pcb_hw.apcb_ksp;
 			callpc = pcbp->pcb_context[7];
 			(*pr)("at 0x%lx\n", addr);

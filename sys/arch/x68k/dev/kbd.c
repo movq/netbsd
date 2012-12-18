@@ -1,4 +1,4 @@
-/*	$NetBSD: kbd.c,v 1.37 2011/10/23 13:21:54 tsutsui Exp $	*/
+/*	$NetBSD: kbd.c,v 1.35.6.1 2012/03/17 18:40:20 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kbd.c,v 1.37 2011/10/23 13:21:54 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kbd.c,v 1.35.6.1 2012/03/17 18:40:20 bouyer Exp $");
 
 #include "ite.h"
 #include "bell.h"
@@ -348,7 +348,7 @@ kbdintr(void *arg)
 	}
 	fe->id = KEY_CODE(c);
 	fe->value = KEY_UP(c) ? VKEY_UP : VKEY_DOWN;
-	firm_gettime(fe);
+	getmicrotime(&fe->time);
 	sc->sc_events.ev_put = put;
 	softint_schedule(sc->sc_softintr_cookie);
 

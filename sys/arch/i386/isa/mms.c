@@ -1,4 +1,4 @@
-/*	$NetBSD: mms.c,v 1.53 2011/07/01 18:11:24 dyoung Exp $	*/
+/*	$NetBSD: mms.c,v 1.51 2008/07/09 20:54:13 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994 Charles M. Hannum.
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mms.c,v 1.53 2011/07/01 18:11:24 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mms.c,v 1.51 2008/07/09 20:54:13 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -32,7 +32,7 @@ __KERNEL_RCSID(0, "$NetBSD: mms.c,v 1.53 2011/07/01 18:11:24 dyoung Exp $");
 #include <sys/device.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/isa/isavar.h>
 
@@ -52,7 +52,7 @@ struct mms_softc {		/* driver status information */
 
 	int sc_enabled; /* device is open */
 
-	device_t sc_wsmousedev;
+	struct device *sc_wsmousedev;
 };
 
 static int mmsprobe(device_t, cfdata_t, void *);

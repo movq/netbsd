@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.5 2011/01/22 19:19:22 joerg Exp $	*/
+/*	$NetBSD: boot.c,v 1.2 2007/12/17 19:54:32 garbled Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -40,7 +40,6 @@
 #include <machine/cpu.h>
 #include <machine/iplcb.h>
 #include <powerpc/spr.h>
-#include <powerpc/oea/spr.h>
 
 #include "boot.h"
 
@@ -63,7 +62,7 @@ struct btinfo_console btinfo_console;
 struct ipl_directory ipldir;*/
 
 extern u_long ns_per_tick;
-extern char bootprog_name[], bootprog_rev[];
+extern char bootprog_name[], bootprog_rev[], bootprog_maker[], bootprog_date[];
 
 void boot(void *, void *);
 static void exec_kernel(char *);
@@ -213,6 +212,7 @@ boot(void *iplcb_p, void *extiplcb_p)
 	setled(0x38000000); /* attempting boot */
 	printf("\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
+	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 
 	for (;;) {
 		name = names[n++];
@@ -235,7 +235,7 @@ exec_kernel(char *name)
 	u_long marks[MARK_MAX];
 #ifdef DBMONITOR
 	int go_monitor;
-	extern int db_monitor(void);
+	extern int db_monitor __P((void));
 
 ret:
 #endif /* DBMONITOR */

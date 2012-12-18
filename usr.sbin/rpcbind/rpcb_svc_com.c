@@ -1,4 +1,4 @@
-/*	$NetBSD: rpcb_svc_com.c,v 1.16 2011/08/31 16:25:00 plunky Exp $	*/
+/*	$NetBSD: rpcb_svc_com.c,v 1.13 2007/08/27 19:51:50 dsl Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -170,7 +170,7 @@ map_set(RPCB *regp, char *owner)
 	 * add to the end of the list
 	 */
 	rbl = (rpcblist_ptr) malloc((u_int)sizeof (RPCBLIST));
-	if (rbl == NULL) {
+	if (rbl == (rpcblist_ptr)NULL) {
 		return (FALSE);
 	}
 	a = &(rbl->rpcb_map);
@@ -189,7 +189,7 @@ map_set(RPCB *regp, char *owner)
 		free((void *)rbl);
 		return (FALSE);
 	}
-	rbl->rpcb_next = NULL;
+	rbl->rpcb_next = (rpcblist_ptr)NULL;
 	if (list_rbl == NULL) {
 		list_rbl = rbl;
 	} else {
@@ -284,7 +284,7 @@ map_unset(RPCB *regp, const char *owner)
 }
 
 void
-delete_prog(rpcprog_t prog)
+delete_prog(int prog)
 {
 	RPCB reg;
 	register rpcblist_ptr rbl;
@@ -601,7 +601,7 @@ rpcbproc_callit_com(struct svc_req *rqstp, SVCXPRT *transp,
 	char *buf_alloc = NULL, *outbufp;
 	char *outbuf_alloc = NULL;
 	char buf[RPC_BUF_MAX], outbuf[RPC_BUF_MAX];
-	struct netbuf *na = NULL;
+	struct netbuf *na = (struct netbuf *) NULL;
 	struct rpc_msg call_msg;
 	int outlen;
 	u_int sendsz;
@@ -688,7 +688,7 @@ rpcbproc_callit_com(struct svc_req *rqstp, SVCXPRT *transp,
 	rpcbs_rmtcall(versnum - 2, reply_type, a.rmt_prog, a.rmt_vers,
 			a.rmt_proc, transp->xp_netid, rbl);
 
-	if (rbl == NULL) {
+	if (rbl == (rpcblist_ptr)NULL) {
 #ifdef RPCBIND_DEBUG
 		if (debugging)
 			fprintf(stderr, "not found\n");
@@ -721,7 +721,7 @@ rpcbproc_callit_com(struct svc_req *rqstp, SVCXPRT *transp,
 	if (reply_type == RPCBPROC_INDIRECT) {
 		uaddr = mergeaddr(transp, transp->xp_netid,
 			rbl->rpcb_map.r_addr, NULL);
-		if ((uaddr == NULL) || uaddr[0] == '\0') {
+		if ((uaddr == (char *) NULL) || uaddr[0] == '\0') {
 			svcerr_noprog(transp);
 			if (uaddr != NULL) {
 				free((void *) uaddr);
@@ -733,7 +733,7 @@ rpcbproc_callit_com(struct svc_req *rqstp, SVCXPRT *transp,
 		}
 	}
 	nconf = rpcbind_get_conf(transp->xp_netid);
-	if (nconf == NULL) {
+	if (nconf == (struct netconfig *)NULL) {
 		if (reply_type == RPCBPROC_INDIRECT)
 			svcerr_systemerr(transp);
 		if (debugging)
@@ -777,7 +777,7 @@ rpcbproc_callit_com(struct svc_req *rqstp, SVCXPRT *transp,
 			"rpcbproc_callit_com:  duplicate request\n");
 		free((void *) m_uaddr);
 		goto error;
-	} else 	if (call_msg.rm_xid == (uint32_t)-1) {
+	} else 	if (call_msg.rm_xid == -1) {
 		/*  forward_register failed.  Perhaps no memory. */
 		if (debugging)
 			fprintf(stderr,
@@ -1069,7 +1069,7 @@ netbuffree(struct netbuf *ap)
 extern bool_t __svc_clean_idle(fd_set *, int, bool_t);
 
 void
-my_svc_run(void)
+my_svc_run()
 {
 	size_t nfds;
 	struct pollfd pollfds[FD_SETSIZE];
@@ -1295,8 +1295,8 @@ static void
 find_versions(rpcprog_t prog, char *netid, rpcvers_t *lowvp, rpcvers_t *highvp)
 {
 	register rpcblist_ptr rbl;
-	rpcvers_t lowv = 0;
-	rpcvers_t highv = 0;
+	int lowv = 0;
+	int highv = 0;
 
 	for (rbl = list_rbl; rbl != NULL; rbl = rbl->rpcb_next) {
 		if ((rbl->rpcb_map.r_prog != prog) ||
@@ -1425,7 +1425,7 @@ del_pmaplist(RPCB *arg)
 {
 	struct pmaplist *pml;
 	struct pmaplist *prevpml, *fnd;
-	unsigned long prot;
+	long prot;
 
 	if (strcmp(arg->r_netid, udptrans) == 0) {
 		/* It is UDP! */

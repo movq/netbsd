@@ -1,4 +1,4 @@
-/*	$NetBSD: nextdmavar.h,v 1.16 2012/10/27 17:18:07 chs Exp $	*/
+/*	$NetBSD: nextdmavar.h,v 1.14 2005/12/11 12:18:25 christos Exp $	*/
 /*
  * Copyright (c) 1998 Darrin B. Jewell
  * All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Darrin B. Jewell
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -53,7 +58,7 @@ struct nextdma_status {
 };
 
 struct nextdma_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 	struct nextdma_channel	*sc_chan;
 	bus_space_handle_t	sc_bsh;		/* bus space handle */
 	bus_space_tag_t		sc_bst;		/* bus space tag */

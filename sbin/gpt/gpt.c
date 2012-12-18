@@ -31,7 +31,7 @@
 __FBSDID("$FreeBSD: src/sbin/gpt/gpt.c,v 1.16 2006/07/07 02:44:23 marcel Exp $");
 #endif
 #ifdef __RCSID
-__RCSID("$NetBSD: gpt.c,v 1.17 2012/07/30 00:53:59 matt Exp $");
+__RCSID("$NetBSD: gpt.c,v 1.8.6.2 2010/11/24 19:12:44 riz Exp $");
 #endif
 
 #include <sys/param.h>
@@ -60,7 +60,6 @@ __RCSID("$NetBSD: gpt.c,v 1.17 2012/07/30 00:53:59 matt Exp $");
 #include "gpt.h"
 
 char	device_path[MAXPATHLEN];
-const char *device_arg;
 char	*device_name;
 
 off_t	mediasz;
@@ -196,7 +195,7 @@ utf8_to_utf16(const uint8_t *s8, uint16_t *s16, size_t s16len)
 			/* Initial characters. */
 			if (utfbytes != 0) {
 				/* Incomplete encoding. */
-				s16[s16idx++] = htole16(0xfffd);
+				s16[s16idx++] = 0xfffd;
 				if (s16idx == s16len) {
 					s16[--s16idx] = 0;
 					return;
@@ -227,12 +226,10 @@ utf8_to_utf16(const uint8_t *s8, uint16_t *s16, size_t s16len)
 			if (utfchar >= 0x10000 && s16idx + 2 >= s16len)
 				utfchar = 0xfffd;
 			if (utfchar >= 0x10000) {
-				s16[s16idx++] =
-				    htole16(0xd800 | ((utfchar>>10)-0x40));
-				s16[s16idx++] =
-				    htole16(0xdc00 | (utfchar & 0x3ff));
+				s16[s16idx++] = 0xd800 | ((utfchar>>10)-0x40);
+				s16[s16idx++] = 0xdc00 | (utfchar & 0x3ff);
 			} else
-				s16[s16idx++] = htole16(utfchar);
+				s16[s16idx++] = utfchar;
 			if (s16idx == s16len) {
 				s16[--s16idx] = 0;
 				return;
@@ -305,13 +302,6 @@ parse_uuid(const char *s, uuid_t *uuid)
 		if (strcmp(s, "efi") == 0) {
 			uuid_t efi = GPT_ENT_TYPE_EFI;
 			*uuid = efi;
-			return (0);
-		}
-		break;
-	case 'f':
-		if (strcmp(s, "ffs") == 0) {
-			uuid_t nb_ffs = GPT_ENT_TYPE_NETBSD_FFS;
-			*uuid = nb_ffs;
 			return (0);
 		}
 		break;
@@ -679,7 +669,7 @@ gpt_open(const char *dev)
 
 	mode = readonly ? O_RDONLY : O_RDWR|O_EXCL;
 
-	device_arg = dev;
+	device_name = device_path;
 #ifdef __FreeBSD__
 	strlcpy(device_path, dev, sizeof(device_path));
 	if ((fd = open(device_path, mode)) != -1)
@@ -693,10 +683,10 @@ gpt_open(const char *dev)
  found:
 #endif
 #ifdef __NetBSD__
-	device_name = device_path + strlen(_PATH_DEV);
 	fd = opendisk(dev, mode, device_path, sizeof(device_path), 0);
 	if (fd == -1)
 		return -1;
+	device_name = device_path + strlen(_PATH_DEV);
 #endif
 
 	if (fstat(fd, &sb) == -1)
@@ -765,7 +755,6 @@ static struct {
 	const char *name;
 } cmdsw[] = {
 	{ cmd_add, "add" },
-	{ cmd_biosboot, "biosboot" },
 	{ cmd_create, "create" },
 	{ cmd_destroy, "destroy" },
 	{ NULL, "help" },
@@ -779,17 +768,16 @@ static struct {
 	{ NULL, NULL }
 };
 
-__dead static void
+static void
 usage(void)
 {
-	extern const char addmsg[], biosbootmsg[], createmsg[], destroymsg[];
+	extern const char addmsg[], createmsg[], destroymsg[];
 	extern const char labelmsg1[], labelmsg2[], labelmsg3[];
 	extern const char migratemsg[], recovermsg[], removemsg1[];
 	extern const char removemsg2[], showmsg[];
 
 	fprintf(stderr,
 	    "usage: %s %s\n"
-	    "       %s %s\n"
 	    "       %s %s\n"
 	    "       %s %s\n"
 	    "       %s %s\n"
@@ -801,7 +789,6 @@ usage(void)
 	    "       %s %s\n"
 	    "       %s %s\n",
 	    getprogname(), addmsg,
-	    getprogname(), biosbootmsg,
 	    getprogname(), createmsg,
 	    getprogname(), destroymsg,
 	    getprogname(), labelmsg1,

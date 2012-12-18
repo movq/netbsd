@@ -1,6 +1,4 @@
-#	$NetBSD: Makefile,v 1.20 2009/03/16 02:24:56 lukem Exp $
-
-WARNS?=	2	# XXX: const issues
+#	$NetBSD: Makefile,v 1.19 2006/08/30 12:11:40 christos Exp $
 
 .include <bsd.own.mk>
 

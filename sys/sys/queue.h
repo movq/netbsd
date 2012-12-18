@@ -1,4 +1,4 @@
-/*	$NetBSD: queue.h,v 1.53 2011/11/19 22:51:31 tls Exp $	*/
+/*	$NetBSD: queue.h,v 1.49.6.1 2008/11/20 03:22:38 snj Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -166,10 +166,6 @@ struct {								\
 		(var);							\
 		(var) = ((var)->field.le_next))
 
-#define	LIST_FOREACH_SAFE(var, head, field, tvar)			\
-	for ((var) = LIST_FIRST((head));				\
-		(var) && ((tvar) = LIST_NEXT((var), field), 1);		\
-		(var) = (tvar))
 /*
  * List access methods.
  */
@@ -235,11 +231,6 @@ struct {								\
 
 #define	SLIST_FOREACH(var, head, field)					\
 	for((var) = (head)->slh_first; (var); (var) = (var)->field.sle_next)
-
-#define	SLIST_FOREACH_SAFE(var, head, field, tvar)			\
-	for ((var) = SLIST_FIRST((head));				\
-	    (var) && ((tvar) = SLIST_NEXT((var), field), 1);		\
-	    (var) = (tvar))
 
 /*
  * Singly-linked List access methods.
@@ -315,11 +306,6 @@ struct {								\
 		(var);							\
 		(var) = ((var)->field.stqe_next))
 
-#define	STAILQ_FOREACH_SAFE(var, head, field, tvar)			\
-	for ((var) = STAILQ_FIRST((head));				\
-	    (var) && ((tvar) = STAILQ_NEXT((var), field), 1);		\
-	    (var) = (tvar))
-
 #define	STAILQ_CONCAT(head1, head2) do {				\
 	if (!STAILQ_EMPTY((head2))) {					\
 		*(head1)->stqh_last = (head2)->stqh_first;		\
@@ -327,12 +313,6 @@ struct {								\
 		STAILQ_INIT((head2));					\
 	}								\
 } while (/*CONSTCOND*/0)
-
-#define	STAILQ_LAST(head, type, field)					\
-	(STAILQ_EMPTY((head)) ?						\
-		NULL :							\
-	        ((struct type *)(void *)				\
-		((char *)((head)->stqh_last) - offsetof(struct type, field))))
 
 /*
  * Singly-linked Tail queue access methods.
@@ -407,25 +387,6 @@ struct {								\
 	for ((var) = ((head)->sqh_first);				\
 		(var);							\
 		(var) = ((var)->field.sqe_next))
-
-#define	SIMPLEQ_FOREACH_SAFE(var, head, field, next)			\
-	for ((var) = ((head)->sqh_first);				\
-		(var) && ((next = ((var)->field.sqe_next)), 1);		\
-		(var) = (next))
-
-#define	SIMPLEQ_CONCAT(head1, head2) do {				\
-	if (!SIMPLEQ_EMPTY((head2))) {					\
-		*(head1)->sqh_last = (head2)->sqh_first;		\
-		(head1)->sqh_last = (head2)->sqh_last;		\
-		SIMPLEQ_INIT((head2));					\
-	}								\
-} while (/*CONSTCOND*/0)
-
-#define	SIMPLEQ_LAST(head, type, field)					\
-	(SIMPLEQ_EMPTY((head)) ?						\
-		NULL :							\
-	        ((struct type *)(void *)				\
-		((char *)((head)->sqh_last) - offsetof(struct type, field))))
 
 /*
  * Simple queue access methods.

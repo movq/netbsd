@@ -1,4 +1,4 @@
-/*	$NetBSD: irdaattach.c,v 1.9 2011/08/30 19:07:07 joerg Exp $	*/
+/*	$NetBSD: irdaattach.c,v 1.7 2008/04/28 20:24:16 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -46,14 +46,15 @@
 #include <unistd.h>
 #include <util.h>
 
-__dead static void	usage(void);
+int	main(int, char **);
+void	usage(void);
 
 int
 main(int argc, char **argv)
 {
 	int fd;
 	char *dev, devbuf[100];
-	const char *donglename = "none";
+	char *donglename = "none";
 	struct termios tty;
 	tcflag_t cflag = HUPCL;
 	int ch;
@@ -156,8 +157,8 @@ main(int argc, char **argv)
 		sigsuspend(&nsigset);
 }
 
-static void
-usage(void)
+void
+usage()
 {
 
 	fprintf(stderr, "usage: %s [-d donglename] [-fhHlmnp] ttyname\n",

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_var.h,v 1.97 2011/05/03 17:44:31 dyoung Exp $	*/
+/*	$NetBSD: ip_var.h,v 1.90 2008/10/12 11:15:54 plunky Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -49,7 +49,7 @@ struct ipovly {
 } __packed;
 
 /*
- * IP sequence queue structure.
+ * Ip (reassembly or sequence) queue structures.
  *
  * XXX -- The following explains why the ipqe_m field is here, for TCP's use:
  * We want to avoid doing m_pullup on incoming packets but that
@@ -77,7 +77,25 @@ struct ipqent {
 	u_int32_t ipqe_len;
 	u_int32_t ipqe_flags;
 };
+#define	ipqe_ip		_ipqe_u1._ip
 #define	ipqe_tcp	_ipqe_u1._tcp
+
+/*
+ * Ip reassembly queue structure.  Each fragment
+ * being reassembled is attached to one of these structures.
+ * They are timed out after ipq_ttl drops to 0, and may also
+ * be reclaimed if memory becomes tight.
+ */
+struct ipq {
+	LIST_ENTRY(ipq) ipq_q;		/* to other reass headers */
+	u_int8_t  ipq_ttl;		/* time for reass q to live */
+	u_int8_t  ipq_p;		/* protocol of this fragment */
+	u_int16_t ipq_id;		/* sequence id for reassembly */
+	struct	  ipqehead ipq_fragq;	/* to ip fragment queue */
+	struct	  in_addr ipq_src, ipq_dst;
+	u_int16_t ipq_nfrags;		/* frags in this queue entry */
+	u_int8_t  ipq_tos;		/* TOS of this fragment */
+};
 
 /*
  * Structure stored in mbuf in inpcb.ip_options
@@ -160,6 +178,7 @@ struct ip_moptions {
 
 extern struct domain inetdomain;
 
+extern LIST_HEAD(ipqhead, ipq) ipq[];	/* ip reass. queue */
 extern int   ip_defttl;			/* default IP ttl */
 extern int   ipforwarding;		/* ip forwarding */
 extern int   ip_mtudisc;		/* mtu discovery */
@@ -179,14 +198,15 @@ extern int ip_maxflows;
 extern int ip_hashsize;
 #endif
 extern struct pool inmulti_pool;
+extern struct pool ipqent_pool;
 struct	 inpcb;
 struct   sockopt;
 
 int	 ip_ctloutput(int, struct socket *, struct sockopt *);
 int	 ip_dooptions(struct mbuf *);
 void	 ip_drain(void);
-void	 ip_drainstub(void);
 void	 ip_forward(struct mbuf *, int);
+void	 ip_freef(struct ipq *);
 void	 ip_freemoptions(struct ip_moptions *);
 int	 ip_getmoptions(struct ip_moptions *, struct sockopt *);
 void	 ip_init(void);
@@ -195,19 +215,14 @@ u_int	 ip_optlen(struct inpcb *);
 int	 ip_output(struct mbuf *, ...);
 int	 ip_fragment(struct mbuf *, struct ifnet *, u_long);
 int	 ip_pcbopts(struct mbuf **, const struct sockopt *);
-
-void	 ip_reass_init(void);
-int	 ip_reass_packet(struct mbuf **, struct ip *);
-void	 ip_reass_slowtimo(void);
-void	 ip_reass_drain(void);
-
+struct mbuf *
+	 ip_reass(struct ipqent *, struct ipq *, struct ipqhead *);
 struct in_ifaddr *
 	 ip_rtaddr(struct in_addr);
 void	 ip_savecontrol(struct inpcb *, struct mbuf **, struct ip *,
 	   struct mbuf *);
 int	 ip_setmoptions(struct ip_moptions **, const struct sockopt *);
 void	 ip_slowtimo(void);
-void	 ip_fasttimo(void);
 struct mbuf *
 	 ip_srcroute(void);
 int	 ip_sysctl(int *, u_int, void *, size_t *, void *, size_t);
@@ -221,7 +236,6 @@ int	 rip_output(struct mbuf *, ...);
 int	 rip_usrreq(struct socket *,
 	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct lwp *);
 int	ipflow_init(int);
-void	ipflow_poolinit(void);
 void	ipflow_prune(void);
 void	ipflow_create(const struct route *, struct mbuf *);
 void	ipflow_slowtimo(void);

@@ -1,5 +1,4 @@
-/*	Id: proc.c,v 1.14 2008/12/24 17:40:41 sgk Exp 	*/	
-/*	$NetBSD: proc.c,v 1.1.1.3 2010/06/03 18:57:51 plunky Exp $	*/
+/*	$Id: proc.c,v 1.1.1.1 2008/08/24 05:33:07 gmcgarry Exp $	*/
 /*
  * Copyright(C) Caldera International Inc. 2001-2002. All rights reserved.
  *
@@ -131,14 +130,11 @@ startproc(struct extsym *progname, int class)
 
 	procclass = class;
 	retlabel = newlabel();
-	if (!quietflag) {
-		fprintf(diagfile, "   %s",
-		    (class==CLMAIN ? "MAIN" : "BLOCK DATA") );
-		if (progname)
-			fprintf(diagfile, " %s",
-			    nounder(XL, procname = progname->extname));
-		fprintf(diagfile, ":\n");
-	}
+	fprintf(diagfile, "   %s", (class==CLMAIN ? "MAIN" : "BLOCK DATA") );
+	if(progname)
+		fprintf(diagfile, " %s",
+		    nounder(XL, procname = progname->extname) );
+	fprintf(diagfile, ":\n");
 }
 
 /* subroutine or function statement */
@@ -177,11 +173,9 @@ entrypt(int class, int type, ftnint length, struct extsym *entry, chainp args)
 
 	if(class != CLENTRY)
 		puthead( varstr(XL, procname = entry->extname) );
-	if (!quietflag) {
-		if (class == CLENTRY)
-			fprintf(diagfile, "       entry ");
-		fprintf(diagfile, "   %s:\n", nounder(XL, entry->extname));
-	}
+	if(class == CLENTRY)
+		fprintf(diagfile, "       entry ");
+	fprintf(diagfile, "   %s:\n", nounder(XL, entry->extname));
 	q = mkname(VL, nounder(XL,entry->extname) );
 
 	if( (type = lengtype(type, (int) length)) != TYCHAR)

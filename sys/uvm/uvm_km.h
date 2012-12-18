@@ -1,6 +1,7 @@
-/*	$NetBSD: uvm_km.h,v 1.20 2012/01/27 19:48:41 para Exp $	*/
+/*	$NetBSD: uvm_km.h,v 1.17.54.1 2009/04/19 15:43:14 snj Exp $	*/
 
 /*
+ *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -12,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor and
+ *      Washington University.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -40,8 +47,7 @@
  * prototypes
  */
 
-void uvm_km_bootstrap(vaddr_t, vaddr_t);
-void uvm_km_init(void);
+void uvm_km_init(vaddr_t, vaddr_t);
 void uvm_km_pgremove(vaddr_t, vaddr_t);
 void uvm_km_pgremove_intrsafe(struct vm_map *, vaddr_t, vaddr_t);
 #if defined(DEBUG)
@@ -49,6 +55,7 @@ void uvm_km_check_empty(struct vm_map *, vaddr_t, vaddr_t);
 #else
 #define	uvm_km_check_empty(a, b, c)	/* nothing */
 #endif /* defined(DEBUG) */
+void uvm_km_va_drain(struct vm_map *, uvm_flag_t);
 
 #endif /* _KERNEL */
 

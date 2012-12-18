@@ -1,4 +1,4 @@
-/*	$NetBSD: st_atapi.c,v 1.29 2012/04/19 17:45:21 bouyer Exp $ */
+/*	$NetBSD: st_atapi.c,v 1.20 2006/11/16 01:33:26 christos Exp $ */
 
 /*
  * Copyright (c) 2001 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -22,12 +27,14 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: st_atapi.c,v 1.29 2012/04/19 17:45:21 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: st_atapi.c,v 1.20 2006/11/16 01:33:26 christos Exp $");
 
 #include "opt_scsi.h"
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -40,19 +47,14 @@ __KERNEL_RCSID(0, "$NetBSD: st_atapi.c,v 1.29 2012/04/19 17:45:21 bouyer Exp $")
 #include <dev/scsipi/stvar.h>
 #include <dev/scsipi/atapi_tape.h>
 
-static int	st_atapibus_match(device_t, cfdata_t, void *);
-static void	st_atapibus_attach(device_t, device_t, void *);
+static int	st_atapibus_match(struct device *, struct cfdata *, void *);
+static void	st_atapibus_attach(struct device *, struct device *, void *);
 static int	st_atapibus_ops(struct st_softc *, int, int);
 static int	st_atapibus_mode_sense(struct st_softc *, int);
+static int	st_atapibus_mode_select(struct st_softc *, int);
 
-CFATTACH_DECL_NEW(
-	st_atapibus,
-	sizeof(struct st_softc),
-	st_atapibus_match,
-	st_atapibus_attach,
-	stdetach,
-	NULL
-);
+CFATTACH_DECL(st_atapibus, sizeof(struct st_softc),
+    st_atapibus_match, st_atapibus_attach, stdetach, stactivate);
 
 static const struct scsipi_inquiry_pattern st_atapibus_patterns[] = {
 	{T_SEQUENTIAL, T_REMOV,
@@ -60,24 +62,24 @@ static const struct scsipi_inquiry_pattern st_atapibus_patterns[] = {
 };
 
 static int
-st_atapibus_match(device_t parent, cfdata_t match,  void *aux)
+st_atapibus_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct scsipibus_attach_args *sa = aux;
 	int priority;
 
-	if (SCSIPI_BUSTYPE_TYPE(scsipi_periph_bustype(sa->sa_periph)) !=
-	    SCSIPI_BUSTYPE_ATAPI)
-		return 0;
+	if (scsipi_periph_bustype(sa->sa_periph) != SCSIPI_BUSTYPE_ATAPI)
+		return (0);
 
 	(void)scsipi_inqmatch(&sa->sa_inqbuf,
 	    st_atapibus_patterns,
 	    sizeof(st_atapibus_patterns)/sizeof(st_atapibus_patterns[0]),
 	    sizeof(st_atapibus_patterns[0]), &priority);
-	return priority;
+	return (priority);
 }
 
 static void
-st_atapibus_attach(device_t parent, device_t self, void *aux)
+st_atapibus_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct st_softc *st = device_private(self);
 	struct scsipibus_attach_args *sa = aux;
@@ -89,7 +91,7 @@ st_atapibus_attach(device_t parent, device_t self, void *aux)
 
 		error = scsipi_mode_sense(periph, SMS_DBD,
 		    ATAPI_TAPE_IDENTIFY_PAGE, &identify.header,
-		    sizeof(identify), XS_CTL_DISCOVERY,
+		    sizeof(identify), XS_CTL_DISCOVERY | XS_CTL_DATA_ONSTACK,
 		    ST_RETRIES, ST_CTL_TIME);
 		if (error) {
 			printf("onstream get identify: error %d\n", error);
@@ -98,7 +100,8 @@ st_atapibus_attach(device_t parent, device_t self, void *aux)
 		strncpy(identify.ident, "NBSD", 4);
 		error = scsipi_mode_select(periph, SMS_PF,
 		    &identify.header, sizeof(identify),
-		    XS_CTL_DISCOVERY, ST_RETRIES, ST_CTL_TIME);
+		    XS_CTL_DISCOVERY | XS_CTL_DATA_ONSTACK,
+		    ST_RETRIES, ST_CTL_TIME);
 		if (error) {
 			printf("onstream set identify: error %d\n", error);
 			return;
@@ -106,7 +109,7 @@ st_atapibus_attach(device_t parent, device_t self, void *aux)
 	}
 
 	st->ops = st_atapibus_ops;
-	stattach(parent, self, aux);
+	stattach(parent, st, aux);
 }
 
 static int
@@ -119,7 +122,7 @@ st_atapibus_ops(struct st_softc *st, int op, int flags)
 	case ST_OPS_MODESENSE:
 		return st_atapibus_mode_sense(st, flags);
 	case ST_OPS_MODESELECT:
-		return st_mode_select(st, flags);
+		return st_atapibus_mode_select(st, flags);
 	case ST_OPS_CMPRSS_ON:
 	case ST_OPS_CMPRSS_OFF:
 		return ENODEV;
@@ -140,7 +143,7 @@ st_atapibus_mode_sense(struct st_softc *st, int flags)
 	for (count = 0 ; count < 5 ; count++) {
 		error = scsipi_mode_sense(periph, SMS_DBD,
 		    ATAPI_TAPE_CAP_PAGE, &cappage.header, sizeof(cappage),
-		    flags, ST_RETRIES, ST_CTL_TIME);
+		    flags | XS_CTL_DATA_ONSTACK, ST_RETRIES, ST_CTL_TIME);
 		if (error == 0) {
 			st->numblks = 0; /* unused anyway */
 			if (cappage.cap4 & ATAPI_TAPE_CAP_PAGE_BLK32K)
@@ -172,4 +175,10 @@ st_atapibus_mode_sense(struct st_softc *st, int flags)
 		}
 	}
 	return error;
+}
+
+static int
+st_atapibus_mode_select(struct st_softc *st, int flags)
+{
+	return ENODEV; /* for now ... */
 }

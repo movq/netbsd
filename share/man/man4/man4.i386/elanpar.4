@@ -1,4 +1,4 @@
-.\"	$NetBSD: elanpar.4,v 1.6 2011/04/25 22:27:20 wiz Exp $
+.\"	$NetBSD: elanpar.4,v 1.3 2008/04/08 20:30:16 dyoung Exp $
 .\"
 .\"
 .\" Copyright (c) 2008 David Young.  All rights reserved.
@@ -14,6 +14,9 @@
 .\"    copyright notice, this list of conditions and the following
 .\"    disclaimer in the documentation and/or other materials
 .\"    provided with the distribution.
+.\" 3. David Young's name may not be used to endorse or promote
+.\"    products derived from this software without specific prior
+.\"    written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY DAVID YOUNG ``AS IS'' AND ANY
 .\" EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -29,7 +32,7 @@
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
 .Dd January 10, 2008
-.Dt ELANPAR 4 i386
+.Dt elanpar 4 i386
 .Os
 .Sh NAME
 .Nm elanpar
@@ -66,21 +69,12 @@ has not write-protected
 .Em %u
 bytes of the kernel text.
 .Sh SEE ALSO
+.Xr dmesg 8 ,
 .Xr elanpex 4 ,
 .Xr elansc 4 ,
-.Xr dmesg 8 ,
-.Xr syslogd 8
-.Sh HISTORY
-The
-.Nm
-device first appeared in
-.Nx 5.0 .
-.Sh AUTHORS
-The
-.Nm
-driver was written by
-.An David Young Aq dyoung@NetBSD.org .
+.Xr syslogd 8 .
 .Sh BUGS
+.Pp
 .Nm
 leaves as many as 65535 bytes unprotected at the beginning and
 end of kernel text.
@@ -95,3 +89,13 @@ using
 .Ic drvctl Fl d Ar elanpar0
 before setting a breakpoint with
 .Xr ddb 4 .
+.Sh HISTORY
+The
+.Nm
+device first appeared in
+.Nx 5.0 .
+.Sh AUTHORS
+The
+.Nm
+driver was written by
+.An David Young Aq dyoung@NetBSD.org .

@@ -1,4 +1,4 @@
-/*	$NetBSD: dbrivar.h,v 1.13 2011/11/23 23:07:36 jmcneill Exp $	*/
+/*	$NetBSD: dbrivar.h,v 1.10 2008/05/16 15:38:20 macallan Exp $	*/
 
 /*
  * Copyright (C) 1997 Rudolf Koenig (rfkoenig@immd4.informatik.uni-erlangen.de)
@@ -116,6 +116,7 @@ struct dbri_dma {
 struct dbri_softc {
 	device_t	sc_dev;		/* base device */
 
+	struct sbusdev	sc_sd;		/* sbus device */
 	bus_space_handle_t sc_ioh;
 	bus_space_tag_t	sc_iot;
 	/* DMA buffer for sending commands to the chip */
@@ -124,7 +125,6 @@ struct dbri_softc {
 	bus_dma_segment_t sc_dmaseg;
 	
 	int		sc_have_powerctl;
-	int		sc_init_done;
 	int		sc_powerstate;	/* DBRI's powered up or not */
 	int		sc_pmgrstate;	/* PWR_RESUME etc. */
 	int		sc_burst;	/* DVMA burst size in effect */
@@ -166,9 +166,6 @@ struct dbri_softc {
 	struct audio_params sc_params;
 
 	struct dbri_dma	*sc_dma;
-
-	kmutex_t	sc_lock;
-	kmutex_t	sc_intr_lock;
 };
 
 #define dbri_dma_off(member, elem)	\

@@ -1,5 +1,5 @@
-/*	$Id: at91aic.c,v 1.10 2012/11/12 18:00:36 skrll Exp $	*/
-/*	$NetBSD: at91aic.c,v 1.10 2012/11/12 18:00:36 skrll Exp $	*/
+/*	$Id: at91aic.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
+/*	$NetBSD: at91aic.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy.
@@ -23,6 +23,13 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *        This product includes software developed by the NetBSD
+ *        Foundation, Inc. and its contributors.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,7 +56,7 @@
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -65,17 +72,17 @@
 struct intrq intrq[NIRQ];
 
 /* Interrupts to mask at each level. */
-static uint32_t aic_imask[NIPL];
+static u_int32_t aic_imask[NIPL];
 
 /* Software copy of the IRQs we have enabled. */
-volatile uint32_t aic_intr_enabled;
+volatile u_int32_t aic_intr_enabled;
 
-#define	AICREG(reg)	*((volatile uint32_t*) (AT91AIC_BASE + (reg)))
+#define	AICREG(reg)	*((volatile u_int32_t*) (AT91AIC_BASE + (reg)))
 
 static int	at91aic_match(device_t, cfdata_t, void *);
 static void	at91aic_attach(device_t, device_t, void *);
 
-CFATTACH_DECL_NEW(at91aic, 0,
+CFATTACH_DECL(at91aic, sizeof(struct device),
 	      at91aic_match, at91aic_attach, NULL, NULL);
 
 static int
@@ -89,18 +96,12 @@ at91aic_match(device_t parent, cfdata_t match, void *aux)
 static void
 at91aic_attach(device_t parent, device_t self, void *aux)
 {
-	int i;
-
 	(void)parent; (void)self; (void)aux;
-	for (i = 0; i < NIRQ; i++) {
-		evcnt_attach_dynamic(&intrq[i].iq_ev, EVCNT_TYPE_INTR,
-				     NULL, "aic", intrq[i].iq_name);
-	}
 	printf("\n");
 }
 
 static inline void
-at91_set_intrmask(uint32_t aic_irqs)
+at91_set_intrmask(u_int32_t aic_irqs)
 {
 	AICREG(AIC_IDCR)	= aic_irqs;
 	AICREG(AIC_IECR)	= aic_intr_enabled & ~aic_irqs;
@@ -151,20 +152,23 @@ at91aic_calculate_masks(void)
 		aic_imask[ipl] = aic_irqs;
 	}
 
-	/* IPL_NONE must open up all interrupts */
-	KASSERT(aic_imask[IPL_NONE] == 0);
-	KASSERT(aic_imask[IPL_SOFTCLOCK] == 0);
-	KASSERT(aic_imask[IPL_SOFTBIO] == 0);
-	KASSERT(aic_imask[IPL_SOFTNET] == 0);
-	KASSERT(aic_imask[IPL_SOFTSERIAL] == 0);
+	aic_imask[IPL_NONE] = 0;
 
 	/*
-	 * Enforce a hierarchy that gives "slow" device (or devices with
-	 * limited input buffer space/"real-time" requirements) a better
-	 * chance at not dropping data.
+	 * splvm() blocks all interrupts that use the kernel memory
+	 * allocation facilities.
 	 */
-	aic_imask[IPL_SCHED] |= aic_imask[IPL_VM];
-	aic_imask[IPL_HIGH] |= aic_imask[IPL_SCHED];
+	aic_imask[IPL_VM] |= aic_imask[IPL_NONE];
+
+	/*
+	 * splclock() must block anything that uses the scheduler.
+	 */
+	aic_imask[IPL_CLOCK] |= aic_imask[IPL_VM];
+
+	/*
+	 * splhigh() must block "everything".
+	 */
+	aic_imask[IPL_HIGH] |= aic_imask[IPL_CLOCK];
 
 	/*
 	 * Now compute which IRQs must be blocked when servicing any
@@ -252,6 +256,8 @@ at91aic_init(void)
 		TAILQ_INIT(&iq->iq_list);
 
 		sprintf(iq->iq_name, "irq %d", i);
+		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
+				     NULL, "aic", iq->iq_name);
 	}
 
 	/* All interrupts should use IRQ not FIQ */
@@ -261,7 +267,7 @@ at91aic_init(void)
 	AICREG(AIC_DCR)		= 0;	/* not in debug mode, just to make sure */
 	for (i = 0; i < NIRQ; i++) {
 	  AICREG(AIC_SMR(i))	= 0;	/* disable interrupt */
-	  AICREG(AIC_SVR(i))	= (uint32_t)&intrq[i];	// address of interrupt queue
+	  AICREG(AIC_SVR(i))	= (u_int32_t)&intrq[i];	// address of interrupt queue
 	}
 	AICREG(AIC_FVR)		= 0;	// fast interrupt...
 	AICREG(AIC_SPU)		= 0;	// spurious interrupt vector
@@ -362,10 +368,10 @@ at91aic_intr_disestablish(void *cookie)
 #include <arm/at91/at91dbgureg.h>
 #include <arm/at91/at91pdcreg.h>
 
-static inline void intr_process(struct intrq *iq, int pcpl, struct trapframe *frame);
+static inline void intr_process(struct intrq *iq, int pcpl, struct irqframe *frame);
 
 static inline void
-intr_process(struct intrq *iq, int pcpl, struct trapframe *frame)
+intr_process(struct intrq *iq, int pcpl, struct irqframe *frame)
 {
 	struct intrhand*	ih;
 	u_int			oldirqstate, intr;
@@ -373,7 +379,7 @@ intr_process(struct intrq *iq, int pcpl, struct trapframe *frame)
 	intr = iq - intrq;
 
 	iq->iq_ev.ev_count++;
-	curcpu()->ci_data.cpu_nintr++;
+	uvmexp.intrs++;
 
 	if ((1U << intr) & aic_imask[pcpl]) {
 		panic("interrupt %d should be masked! (aic_imask=0x%X)", intr, aic_imask[pcpl]);
@@ -404,7 +410,7 @@ intr_process(struct intrq *iq, int pcpl, struct trapframe *frame)
 }
 
 void
-at91aic_intr_dispatch(struct trapframe *frame)
+at91aic_intr_dispatch(struct irqframe *frame)
 {
 	struct intrq*		iq;
 	int			pcpl = curcpl();

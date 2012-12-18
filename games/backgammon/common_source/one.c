@@ -1,4 +1,4 @@
-/*	$NetBSD: one.c,v 1.9 2012/10/13 19:19:39 dholland Exp $	*/
+/*	$NetBSD: one.c,v 1.6 2005/07/01 01:12:39 jmc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,57 +34,54 @@
 #if 0
 static char sccsid[] = "@(#)one.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: one.c,v 1.9 2012/10/13 19:19:39 dholland Exp $");
+__RCSID("$NetBSD: one.c,v 1.6 2005/07/01 01:12:39 jmc Exp $");
 #endif
 #endif /* not lint */
 
 #include "back.h"
 
-static int checkd(struct move *, int);
-static int last(void);
-
 int
-makmove(struct move *mm, int i)
+makmove(int i)
 {
 	int     n, d;
 	int     max;
 
-	d = mm->d0;
-	n = abs(mm->g[i] - mm->p[i]);
+	d = d0;
+	n = abs(g[i] - p[i]);
 	max = (*offptr < 0 ? 7 : last());
-	if (board[mm->p[i]] * cturn <= 0)
-		return (checkd(mm, d) + 2);
-	if (mm->g[i] != home && board[mm->g[i]] * cturn < -1)
-		return (checkd(mm, d) + 3);
-	if (i || mm->D0 == mm->D1) {
-		if (n == max ? mm->D1 < n : mm->D1 != n)
-			return (checkd(mm, d) + 1);
+	if (board[p[i]] * cturn <= 0)
+		return (checkd(d) + 2);
+	if (g[i] != home && board[g[i]] * cturn < -1)
+		return (checkd(d) + 3);
+	if (i || D0 == D1) {
+		if (n == max ? D1 < n : D1 != n)
+			return (checkd(d) + 1);
 	} else {
-		if (n == max ? mm->D0 < n && mm->D1 < n : mm->D0 != n && mm->D1 != n)
-			return (checkd(mm, d) + 1);
-		if (n == max ? mm->D0 < n : mm->D0 != n) {
-			if (mm->d0)
-				return (checkd(mm, d) + 1);
-			mswap(mm);
+		if (n == max ? D0 < n && D1 < n : D0 != n && D1 != n)
+			return (checkd(d) + 1);
+		if (n == max ? D0 < n : D0 != n) {
+			if (d0)
+				return (checkd(d) + 1);
+			swap;
 		}
 	}
-	if (mm->g[i] == home && *offptr < 0)
-		return (checkd(mm, d) + 4);
-	mm->h[i] = 0;
-	board[mm->p[i]] -= cturn;
-	if (mm->g[i] != home) {
-		if (board[mm->g[i]] == -cturn) {
+	if (g[i] == home && *offptr < 0)
+		return (checkd(d) + 4);
+	h[i] = 0;
+	board[p[i]] -= cturn;
+	if (g[i] != home) {
+		if (board[g[i]] == -cturn) {
 			board[home] -= cturn;
-			board[mm->g[i]] = 0;
-			mm->h[i] = 1;
-			if (abs(bar - mm->g[i]) < 7) {
+			board[g[i]] = 0;
+			h[i] = 1;
+			if (abs(bar - g[i]) < 7) {
 				(*inopp)--;
 				if (*offopp >= 0)
 					*offopp -= 15;
 			}
 		}
-		board[mm->g[i]] += cturn;
-		if (abs(home - mm->g[i]) < 7 && abs(home - mm->p[i]) > 6) {
+		board[g[i]] += cturn;
+		if (abs(home - g[i]) < 7 && abs(home - p[i]) > 6) {
 			(*inptr)++;
 			if (*inptr + *offptr == 0)
 				*offptr += 15;
@@ -97,7 +94,7 @@ makmove(struct move *mm, int i)
 }
 
 void
-moverr(struct move *mm, int i)
+moverr(int i)
 {
 	int     j;
 
@@ -107,26 +104,26 @@ moverr(struct move *mm, int i)
 		writec('\n');
 	writel("Error:  ");
 	for (j = 0; j <= i; j++) {
-		wrint(mm->p[j]);
+		wrint(p[j]);
 		writec('-');
-		wrint(mm->g[j]);
+		wrint(g[j]);
 		if (j < i)
 			writec(',');
 	}
 	writel("... ");
-	movback(mm, i);
+	movback(i);
 }
 
 
-static int
-checkd(struct move *mm, int d)
+int
+checkd(int d)
 {
-	if (mm->d0 != d)
-		mswap(mm);
+	if (d0 != d)
+		swap;
 	return (0);
 }
 
-static int
+int
 last(void)
 {
 	int     i;
@@ -138,21 +135,21 @@ last(void)
 }
 
 void
-movback(struct move *mm, int i)
+movback(int i)
 {
 	int     j;
 
 	for (j = i - 1; j >= 0; j--)
-		backone(mm, j);
+		backone(j);
 }
 
 void
-backone(struct move *mm, int i)
+backone(int i)
 {
-	board[mm->p[i]] += cturn;
-	if (mm->g[i] != home) {
-		board[mm->g[i]] -= cturn;
-		if (abs(mm->g[i] - home) < 7 && abs(mm->p[i] - home) > 6) {
+	board[p[i]] += cturn;
+	if (g[i] != home) {
+		board[g[i]] -= cturn;
+		if (abs(g[i] - home) < 7 && abs(p[i] - home) > 6) {
 			(*inptr)--;
 			if (*inptr + *offptr < 15 && *offptr >= 0)
 				*offptr -= 15;
@@ -161,10 +158,10 @@ backone(struct move *mm, int i)
 		(*offptr)--;
 		(*inptr)++;
 	}
-	if (mm->h[i]) {
+	if (h[i]) {
 		board[home] += cturn;
-		board[mm->g[i]] = -cturn;
-		if (abs(bar - mm->g[i]) < 7) {
+		board[g[i]] = -cturn;
+		if (abs(bar - g[i]) < 7) {
 			(*inopp)++;
 			if (*inopp + *offopp == 0)
 				*offopp += 15;

@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile,v 1.68 2012/04/21 14:39:35 roy Exp $
+#	$NetBSD: Makefile,v 1.61 2008/10/27 20:56:28 apb Exp $
 #	@(#)Makefile	8.2 (Berkeley) 1/2/94
 
 .include <bsd.own.mk>
 
 WARNS=	2
 
-CPPFLAGS+=-I${.CURDIR} -I${NETBSDSRCDIR}/lib/libterminfo
+CPPFLAGS+=-I${.CURDIR} -I${NETBSDSRCDIR}/lib/libterm
 .if defined(DEBUG_CURSES)
 CPPFLAGS+=-g -DDEBUG
 .endif
@@ -14,22 +14,20 @@ CPPFLAGS+=-DSMALL
 .endif
 LIB=	curses
 SRCS=	acs.c addbytes.c addch.c addchnstr.c addnstr.c attributes.c \
-	background.c bell.c border.c box.c chgat.c clear.c clearok.c \
-	clrtobot.c clrtoeol.c color.c copywin.c cr_put.c \
-	ctrace.c cur_hash.c curs_set.c \
+	background.c bell.c border.c box.c clear.c clearok.c clrtobot.c \
+	clrtoeol.c color.c copywin.c cr_put.c ctrace.c cur_hash.c curs_set.c \
 	curses.c delch.c deleteln.c delwin.c echochar.c erase.c fileio.c \
 	flushok.c fullname.c getch.c getstr.c getyx.c id_subwins.c idlok.c \
 	idcok.c inch.c inchstr.c initscr.c insch.c insdelln.c insertln.c \
-	instr.c keypad.c keyname.c leaveok.c line.c meta.c move.c \
+	instr.c keypad.c keyname.c leaveok.c line.c longname.c meta.c move.c \
 	mvwin.c newwin.c nodelay.c notimeout.c overlay.c overwrite.c pause.c \
 	printw.c putchar.c refresh.c resize.c scanw.c screen.c scroll.c \
 	scrollok.c setterm.c standout.c timeout.c toucholap.c touchwin.c \
-	tstp.c tty.c unctrl.c underscore.c
+	tscroll.c tstp.c tty.c unctrl.c underscore.c
 
 MAN=	curses.3 curses_addch.3 curses_addchstr.3 curses_addstr.3 \
 	curses_attributes.3 curses_background.3 curses_border.3 \
-	curses_chgat.3 curses_clear.3 curses_color.3 \
-	curses_cursor.3 curses_default_colors.3 \
+	curses_clear.3 curses_color.3 curses_cursor.3 curses_default_colors.3 \
 	curses_delch.3 curses_deleteln.3 curses_echochar.3 curses_fileio.3 \
 	curses_inch.3 curses_input.3 curses_insertch.3 curses_insertln.3 \
 	curses_insdelln.3 curses_keyname.3 curses_line.3 curses_pad.3 \
@@ -39,7 +37,9 @@ MAN=	curses.3 curses_addch.3 curses_addchstr.3 curses_addstr.3 \
 INCS=	curses.h unctrl.h
 INCSDIR=/usr/include
 
-LIBDPLIBS+=	terminfo	${.CURDIR}/../libterminfo
+CPPFLAGS+=-DCM_N -DCM_GT -DCM_B -DCM_D
+SRCS+=	termcap.c tgoto.c tputs.c
+.PATH: ${NETBSDSRCDIR}/lib/libterm
 
 .if !defined(DISABLE_WCHAR)
 CPPFLAGS+=-DHAVE_WCHAR
@@ -60,14 +60,11 @@ MLINKS+= curses_addch.3 addch.3 curses_addchstr.3 addchnstr.3 \
 	 curses_attributes.3 attrset.3 curses_tty.3 beep.3 \
 	 curses_background.3 bkgd.3 curses_background.3 bkgdset.3 \
 	 curses_border.3 border.3 curses_border.3 box.3 \
-	 curses_chgat.3 chgat.3 curses_chgat.3 mvchgat.3 \
-	 curses_chgat.3 mvwchgat.3 curses_chgat.3 wchgat.3 \
 	 curses_color.3 can_change_color.3 curses_tty.3 cbreak.3 \
 	 curses_clear.3 clear.3 curses_clear.3 clearok.3 \
 	 curses_clear.3 clrtobot.3 curses_clear.3 clrtoeol.3 \
 	 curses_color.3 color_content.3 curses_attributes.3 color_set.3 \
 	 curses_window.3 copywin.3 curses_tty.3 curs_set.3 \
-	 curses_input.3 define_key.3 \
 	 curses_tty.3 delay_output.3  curses_tty.3 def_prog_mode.3 \
 	 curses_tty.3 def_shell_mode.3 curses_delch.3 delch.3 \
 	 curses_deleteln.3 deleteln.3 curses_screen.3 delscreen.3 \
@@ -79,7 +76,7 @@ MLINKS+= curses_addch.3 addch.3 curses_addchstr.3 addchnstr.3 \
 	 curses_tty.3 flash.3 curses_tty.3 flushinp.3 \
 	 curses_refresh.3 flushok.3 \
 	 curses_termcap.3 fullname.3 curses_attributes.3 getattrs.3  \
-	 curses_background.3 getbkgd.3 \
+	 curses_background.3 getbkgd.3 curses_termcap.3 getcap.3 \
 	 curses_input.3 getch.3 curses_cursor.3 getcury.3 \
 	 curses_cursor.3 getcurx.3 curses_cursor.3 getbegy.3 \
 	 curses_cursor.3 getbegx.3 curses_cursor.3 getmaxx.3 \
@@ -102,7 +99,7 @@ MLINKS+= curses_addch.3 addch.3 curses_addchstr.3 addchnstr.3 \
 	 curses_touch.3 is_wintouched.3 curses_screen.3 isendwin.3 \
 	 curses_keyname.3 keyname.3 \
 	 curses_input.3 keypad.3 curses_tty.3 killchar.3 \
-	 curses_refresh.3 leaveok.3 \
+	 curses_refresh.3 leaveok.3 curses_termcap.3 longname.3 \
 	 curses_tty.3 meta.3 curses_cursor.3 move.3 \
 	 curses_addch.3 mvaddch.3 curses_addchstr.3 mvaddchnstr.3 \
 	 curses_addchstr.3 mvaddchstr.3 curses_addstr.3 mvaddnstr.3 \
@@ -181,7 +178,7 @@ SUBDIR+= PSD.doc
 .endif
 
 fileio.h: shlib_version genfileioh.awk
-	${TOOL_AWK} -f ${.CURDIR}/genfileioh.awk < ${.CURDIR}/shlib_version > ${.CURDIR}/fileio.h
+	${TOOL_AWK} -f genfileioh.awk < shlib_version > fileio.h
 
 .include <bsd.lib.mk>
 .include <bsd.subdir.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: tulipvar.h,v 1.68 2012/07/22 14:32:58 matt Exp $	*/
+/*	$NetBSD: tulipvar.h,v 1.61 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -33,10 +33,14 @@
 #ifndef _DEV_IC_TULIPVAR_H_
 #define	_DEV_IC_TULIPVAR_H_
 
+#include "rnd.h"
+
 #include <sys/queue.h>
 #include <sys/callout.h>
 
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 /*
  * Misc. definitions for the Digital Semiconductor ``Tulip'' (21x4x)
@@ -83,7 +87,7 @@ struct tulip_control_data {
 	/*
 	 * The setup packet.
 	 */
-	uint32_t tcd_setup_packet[TULIP_SETUP_PACKET_LEN / sizeof(uint32_t)];
+	u_int32_t tcd_setup_packet[TULIP_SETUP_PACKET_LEN / sizeof(u_int32_t)];
 };
 
 #define	TULIP_CDOFF(x)		offsetof(struct tulip_control_data, x)
@@ -194,7 +198,7 @@ struct tulip_mediasw {
  * our index, falling back if we encounter the NULL terminator.
  */
 struct tulip_txthresh_tab {
-	uint32_t txth_opmode;		/* OPMODE bits */
+	u_int32_t txth_opmode;		/* OPMODE bits */
 	const char *txth_name;		/* name of mode */
 };
 
@@ -255,9 +259,9 @@ struct tulip_txthresh_tab {
  * Settings for Tulip SIA media.
  */
 struct tulip_sia_media {
-	uint32_t	tsm_siaconn;	/* CSR13 value */
-	uint32_t	tsm_siatxrx;	/* CSR14 value */
-	uint32_t	tsm_siagen;	/* CSR15 value */
+	u_int32_t	tsm_siaconn;	/* CSR13 value */
+	u_int32_t	tsm_siatxrx;	/* CSR14 value */
+	u_int32_t	tsm_siagen;	/* CSR15 value */
 };
 
 /*
@@ -278,11 +282,11 @@ struct tulip_21x4x_media {
 	int		tm_reset_length;/* MII reset sequence length */
 	int		tm_reset_offset;/* MII reset sequence offset */
 
-	uint32_t	tm_opmode;	/* OPMODE bits for this media */
-	uint32_t	tm_gpctl;	/* GPIO control bits for this media */
-	uint32_t	tm_gpdata;	/* GPIO bits for this media */
-	uint32_t	tm_actmask;	/* `active' bits for this data */
-	uint32_t	tm_actdata;	/* active high/low info */
+	u_int32_t	tm_opmode;	/* OPMODE bits for this media */
+	u_int32_t	tm_gpctl;	/* GPIO control bits for this media */
+	u_int32_t	tm_gpdata;	/* GPIO bits for this media */
+	u_int32_t	tm_actmask;	/* `active' bits for this data */
+	u_int32_t	tm_actdata;	/* active high/low info */
 
 	struct tulip_sia_media tm_sia;	/* SIA settings */
 #define	tm_siaconn	tm_sia.tsm_siaconn
@@ -294,13 +298,13 @@ struct tulip_21x4x_media {
  * Table for converting Tulip SROM media info into ifmedia data.
  */
 struct tulip_srom_to_ifmedia {
-	uint8_t	tsti_srom;	/* SROM media type */
+	u_int8_t	tsti_srom;	/* SROM media type */
 	int		tsti_subtype;	/* ifmedia subtype */
 	int		tsti_options;	/* ifmedia options */
 	const char	*tsti_name;	/* media name */
 
-	uint32_t	tsti_opmode;	/* OPMODE bits for this media */
-	uint32_t	tsti_sia_cap;	/* "MII" capabilities for this media */
+	u_int32_t	tsti_opmode;	/* OPMODE bits for this media */
+	u_int32_t	tsti_sia_cap;	/* "MII" capabilities for this media */
 
 	/*
 	 * Settings for 21040, 21041, and 21142/21143 SIA, in the event
@@ -326,7 +330,7 @@ struct tulip_stats {
  * Software state per device.
  */
 struct tulip_softc {
-	device_t sc_dev;		/* generic device information */
+	struct device sc_dev;		/* generic device information */
 	bus_space_tag_t sc_st;		/* bus space tag */
 	bus_space_handle_t sc_sh;	/* bus space handle */
 	bus_dma_tag_t sc_dmat;		/* bus DMA tag */
@@ -337,7 +341,7 @@ struct tulip_softc {
 	/*
 	 * Contents of the SROM.
 	 */
-	uint8_t *sc_srom;
+	u_int8_t *sc_srom;
 	int sc_srom_addrbits;
 
 	/*
@@ -358,8 +362,8 @@ struct tulip_softc {
 	int		sc_rev;		/* chip revision */
 	int		sc_flags;	/* misc flags. */
 	char		sc_name[32];	/* board name */
-	uint32_t	sc_cacheline;	/* cache line size */
-	uint32_t	sc_maxburst;	/* maximum burst length */
+	u_int32_t	sc_cacheline;	/* cache line size */
+	u_int32_t	sc_maxburst;	/* maximum burst length */
 	int		sc_devno;	/* PCI device # */
 
 	struct mii_data sc_mii;		/* MII/media information */
@@ -367,10 +371,10 @@ struct tulip_softc {
 	const struct tulip_txthresh_tab *sc_txth;
 	int		sc_txthresh;	/* current transmit threshold */
 
-	uint8_t	sc_gp_dir;	/* GPIO pin direction bits (21140) */
+	u_int8_t	sc_gp_dir;	/* GPIO pin direction bits (21140) */
 	int		sc_media_seen;	/* ISV media block types seen */
 	int		sc_tlp_minst;	/* Tulip internal media instance */
-	uint32_t	sc_sia_cap;	/* SIA media capabilities (21143) */
+	u_int32_t	sc_sia_cap;	/* SIA media capabilities (21143) */
 
 	/* Reset function. */
 	void		(*sc_reset)(struct tulip_softc *);
@@ -382,7 +386,7 @@ struct tulip_softc {
 	void		(*sc_filter_setup)(struct tulip_softc *);
 
 	/* Media status update function. */
-	void		(*sc_statchg)(struct ifnet *);
+	void		(*sc_statchg)(struct device *);
 
 	/* Media tick function. */
 	void		(*sc_tick)(void *);
@@ -399,14 +403,14 @@ struct tulip_softc {
 	 */
 	int		sc_regshift;
 
-	uint32_t	sc_busmode;	/* copy of CSR_BUSMODE */
-	uint32_t	sc_opmode;	/* copy of CSR_OPMODE */
-	uint32_t	sc_inten;	/* copy of CSR_INTEN */
+	u_int32_t	sc_busmode;	/* copy of CSR_BUSMODE */
+	u_int32_t	sc_opmode;	/* copy of CSR_OPMODE */
+	u_int32_t	sc_inten;	/* copy of CSR_INTEN */
 
-	uint32_t	sc_rxint_mask;	/* mask of Rx interrupts we want */
-	uint32_t	sc_txint_mask;	/* mask of Tx interrupts we want */
+	u_int32_t	sc_rxint_mask;	/* mask of Rx interrupts we want */
+	u_int32_t	sc_txint_mask;	/* mask of Tx interrupts we want */
 
-	uint32_t	sc_filtmode;	/* filter mode we're using */
+	u_int32_t	sc_filtmode;	/* filter mode we're using */
 
 	bus_dma_segment_t sc_cdseg;	/* control data memory */
 	int		sc_cdnseg;	/* number of segments */
@@ -431,10 +435,10 @@ struct tulip_softc {
 	int	sc_txnext;		/* next ready Tx descriptor */
 	int	sc_ntxsegs;		/* number of transmit segs per pkt */
 
-	uint32_t sc_tdctl_ch;		/* conditional desc chaining */
-	uint32_t sc_tdctl_er;		/* conditional desc end-of-ring */
+	u_int32_t sc_tdctl_ch;		/* conditional desc chaining */
+	u_int32_t sc_tdctl_er;		/* conditional desc end-of-ring */
 
-	uint32_t sc_setup_fsls;	/* FS|LS on setup descriptor */
+	u_int32_t sc_setup_fsls;	/* FS|LS on setup descriptor */
 
 	struct tulip_txsq sc_txfreeq;	/* free Tx descsofts */
 	struct tulip_txsq sc_txdirtyq;	/* dirty Tx descsofts */
@@ -443,7 +447,9 @@ struct tulip_softc {
 
 	int	sc_rxptr;		/* next ready RX descriptor/descsoft */
 
-	krndsource_t sc_rnd_source; /* random source */
+#if NRND > 0
+	rndsource_element_t sc_rnd_source; /* random source */
+#endif
 };
 #endif
 
@@ -565,6 +571,8 @@ do {									\
 #define	TULIP_SP_FIELD(x, f)	TULIP_SP_FIELD_C((x)[f * 2], (x)[f * 2 + 1])
 
 #ifdef _KERNEL
+extern const char * const tlp_chip_names[];
+
 extern const struct tulip_mediasw tlp_21040_mediasw;
 extern const struct tulip_mediasw tlp_21040_tp_mediasw;
 extern const struct tulip_mediasw tlp_21040_auibnc_mediasw;
@@ -579,24 +587,23 @@ extern const struct tulip_mediasw tlp_dm9102_mediasw;
 extern const struct tulip_mediasw tlp_asix_mediasw;
 extern const struct tulip_mediasw tlp_rs7112_mediasw;
 
-int	tlp_attach(struct tulip_softc *, const uint8_t *);
-int	tlp_activate(device_t, enum devact);
+void	tlp_attach(struct tulip_softc *, const u_int8_t *);
+int	tlp_activate(struct device *, enum devact);
 int	tlp_detach(struct tulip_softc *);
 int	tlp_intr(void *);
 int	tlp_read_srom(struct tulip_softc *);
-int	tlp_srom_crcok(const uint8_t *);
-int	tlp_isv_srom(const uint8_t *);
-int	tlp_isv_srom_enaddr(struct tulip_softc *, uint8_t *);
-int	tlp_parse_old_srom(struct tulip_softc *, uint8_t *);
+int	tlp_srom_crcok(const u_int8_t *);
+int	tlp_isv_srom(const u_int8_t *);
+int	tlp_isv_srom_enaddr(struct tulip_softc *, u_int8_t *);
+int	tlp_parse_old_srom(struct tulip_softc *, u_int8_t *);
 void	tlp_reset(struct tulip_softc *);
-void	tlp_idle(struct tulip_softc *, uint32_t);
+void	tlp_idle(struct tulip_softc *, u_int32_t);
 
 int	tlp_mediachange(struct ifnet *);
 void	tlp_mediastatus(struct ifnet *, struct ifmediareq *);
 
 void	tlp_21140_gpio_get(struct tulip_softc *sc, struct ifmediareq *ifmr);
 int	tlp_21140_gpio_set(struct tulip_softc *sc);
-const char *tlp_chip_name(tulip_chip_t);
 
 #endif /* _KERNEL */
 

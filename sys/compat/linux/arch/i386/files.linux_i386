@@ -1,4 +1,4 @@
-#	$NetBSD: files.linux_i386,v 1.10 2009/02/23 20:28:58 rmind Exp $
+#	$NetBSD: files.linux_i386,v 1.9.4.1 2009/02/26 20:40:52 snj Exp $
 #
 # Config file description for i386-dependent Linux compat code.
 

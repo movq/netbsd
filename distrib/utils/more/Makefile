@@ -1,8 +1,7 @@
-#	$NetBSD: Makefile,v 1.15 2010/02/03 15:34:38 roy Exp $
+#	$NetBSD: Makefile,v 1.13 2002/02/09 13:49:28 lukem Exp $
 #
 #	@(#)Makefile	8.1 (Berkeley) 6/6/93
 
-WARNS?=		1
 PROG=		more
 NOMAN=		# defined
 
@@ -11,8 +10,8 @@ SRCS=		ch.c command.c decode.c help.c input.c line.c linenum.c main.c \
 		ttyin.c
 
 CPPFLAGS+=	-I${.CURDIR}
-DPADD=		${LIBTERMLIB}
-LDADD=		-ltermlib
+DPADD=		${LIBTERMCAP}
+LDADD=		-ltermcap
 
 beforeinstall:
 	${INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m ${NONBINMODE} \

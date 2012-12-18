@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: httpd,v 1.1 2008/12/11 13:55:17 mishka Exp $
+# $NetBSD: httpd,v 1.1.4.2 2009/01/22 21:28:26 snj Exp $
 #
 
 # PROVIDE: httpd

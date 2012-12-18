@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_pqdegdags.c,v 1.13 2011/08/01 12:28:53 mbalmer Exp $	*/
+/*	$NetBSD: rf_pqdegdags.c,v 1.11 2005/12/11 12:23:37 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_pqdegdags.c,v 1.13 2011/08/01 12:28:53 mbalmer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_pqdegdags.c,v 1.11 2005/12/11 12:23:37 christos Exp $");
 
 #include "rf_archs.h"
 
@@ -121,7 +121,12 @@ RF_CREATE_DAG_FUNC_DECL(rf_PQ_DoubleDegRead)
 }
 
 static void
-applyPDA(RF_Raid_t *raidPtr, RF_PhysDiskAddr_t *pda, RF_PhysDiskAddr_t *ppda, RF_PhysDiskAddr_t *qpda, void *bp)
+applyPDA(raidPtr, pda, ppda, qpda, bp)
+	RF_Raid_t *raidPtr;
+	RF_PhysDiskAddr_t *pda;
+	RF_PhysDiskAddr_t *ppda;
+	RF_PhysDiskAddr_t *qpda;
+	void   *bp;
 {
 	RF_RaidLayout_t *layoutPtr = &(raidPtr->Layout);
 	RF_RaidAddr_t s0off = rf_StripeUnitOffset(layoutPtr, ppda->startSector);
@@ -175,7 +180,7 @@ applyPDA(RF_Raid_t *raidPtr, RF_PhysDiskAddr_t *pda, RF_PhysDiskAddr_t *ppda, RF
 
    pda, pda, ... , p_1 pda, p_2 pda, q_1 pda, q_2 pda, raidptr, asm
 
-   depending on whether two chunks of recovery data were required.
+   depending on wether two chunks of recovery data were required.
 
    The second condition only arises if there are two failed buffers
    whose lengths do not add up a stripe unit.
@@ -183,7 +188,8 @@ applyPDA(RF_Raid_t *raidPtr, RF_PhysDiskAddr_t *pda, RF_PhysDiskAddr_t *ppda, RF
 
 
 int
-rf_PQDoubleRecoveryFunc(RF_DagNode_t *node)
+rf_PQDoubleRecoveryFunc(node)
+	RF_DagNode_t *node;
 {
 	int     np = node->numParams;
 	RF_AccessStripeMap_t *asmap = (RF_AccessStripeMap_t *) node->params[np - 1].p;
@@ -271,7 +277,8 @@ rf_PQDoubleRecoveryFunc(RF_DagNode_t *node)
 }
 
 int
-rf_PQWriteDoubleRecoveryFunc(RF_DagNode_t *node)
+rf_PQWriteDoubleRecoveryFunc(node)
+	RF_DagNode_t *node;
 {
 	/* The situation:
 	 *

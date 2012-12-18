@@ -1,4 +1,4 @@
-/*	$NetBSD: kernfs_vfsops.c,v 1.91 2011/09/27 01:23:05 christos Exp $	*/
+/*	$NetBSD: kernfs_vfsops.c,v 1.86 2008/06/28 01:34:06 rumble Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kernfs_vfsops.c,v 1.91 2011/09/27 01:23:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kernfs_vfsops.c,v 1.86 2008/06/28 01:34:06 rumble Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -76,7 +76,7 @@ void	kernfs_get_rrootdev(void);
 static struct sysctllog *kernfs_sysctl_log;
 
 void
-kernfs_init(void)
+kernfs_init()
 {
 
 	malloc_type_attach(M_KERNFSMNT);
@@ -84,13 +84,13 @@ kernfs_init(void)
 }
 
 void
-kernfs_reinit(void)
+kernfs_reinit()
 {
 	kernfs_hashreinit();
 }
 
 void
-kernfs_done(void)
+kernfs_done()
 {
 
 	kernfs_hashdone();
@@ -98,7 +98,7 @@ kernfs_done(void)
 }
 
 void
-kernfs_get_rrootdev(void)
+kernfs_get_rrootdev()
 {
 	static int tried = 0;
 
@@ -142,10 +142,12 @@ kernfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	if (mp->mnt_flag & MNT_UPDATE)
 		return (EOPNOTSUPP);
 
-	fmp = malloc(sizeof(struct kernfs_mount), M_KERNFSMNT, M_WAITOK|M_ZERO);
+	MALLOC(fmp, struct kernfs_mount *, sizeof(struct kernfs_mount),
+	    M_KERNFSMNT, M_WAITOK);
+	memset(fmp, 0, sizeof(*fmp));
 	TAILQ_INIT(&fmp->nodelist);
 
-	mp->mnt_stat.f_namemax = KERNFS_MAXNAMLEN;
+	mp->mnt_stat.f_namemax = MAXNAMLEN;
 	mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_data = fmp;
 	vfs_getnewfsid(mp);
@@ -188,11 +190,32 @@ kernfs_unmount(struct mount *mp, int mntflags)
 }
 
 int
-kernfs_root(struct mount *mp, struct vnode **vpp)
+kernfs_root(mp, vpp)
+	struct mount *mp;
+	struct vnode **vpp;
 {
 
 	/* setup "." */
 	return (kernfs_allocvp(mp, vpp, KFSkern, &kern_targets[0], 0));
+}
+
+int
+kernfs_statvfs(struct mount *mp, struct statvfs *sbp)
+{
+
+	sbp->f_bsize = DEV_BSIZE;
+	sbp->f_frsize = DEV_BSIZE;
+	sbp->f_iosize = DEV_BSIZE;
+	sbp->f_blocks = 2;		/* 1K to keep df happy */
+	sbp->f_bfree = 0;
+	sbp->f_bavail = 0;
+	sbp->f_bresvd = 0;
+	sbp->f_files = 1024;	/* XXX lie */
+	sbp->f_ffree = 128;	/* XXX lie */
+	sbp->f_favail = 128;	/* XXX lie */
+	sbp->f_fresvd = 0;
+	copy_statvfs_info(sbp, mp);
+	return (0);
 }
 
 /*ARGSUSED*/
@@ -231,7 +254,7 @@ struct vfsops kernfs_vfsops = {
 	kernfs_unmount,
 	kernfs_root,
 	(void *)eopnotsupp,		/* vfs_quotactl */
-	genfs_statvfs,
+	kernfs_statvfs,
 	kernfs_sync,
 	kernfs_vget,
 	(void *)eopnotsupp,		/* vfs_fhtovp */

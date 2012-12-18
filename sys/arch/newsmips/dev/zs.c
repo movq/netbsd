@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.27 2012/07/28 23:08:57 matt Exp $	*/
+/*	$NetBSD: zs.c,v 1.25 2008/06/13 12:26:35 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.27 2012/07/28 23:08:57 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.25 2008/06/13 12:26:35 cegger Exp $");
 
 #include "opt_ddb.h"
 
@@ -55,8 +55,6 @@ __KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.27 2012/07/28 23:08:57 matt Exp $");
 #include <dev/ic/z8530reg.h>
 
 #include "ioconf.h"
-
-void (*zs_delay)(void);
 
 #define ZS_DELAY() (*zs_delay)()
 
@@ -82,21 +80,48 @@ zs_print(void *aux, const char *name)
 }
 
 /*
- * Our ZS chips all share a common interrupt level,
- * but we establish zshard handler per each ZS chips
- * to avoid holding unnecessary locks in interrupt context.
+ * Our ZS chips all share a common, autovectored interrupt,
+ * so we have to look at all of them on each interrupt.
  */
 int
 zshard(void *arg)
 {
-	struct zsc_softc *zsc = arg;
-	int rval;
+	struct zsc_softc *zsc;
+	int unit, rval, softreq;
 
-	rval = zsc_intr_hard(zsc);
-	if (zsc->zsc_cs[0]->cs_softreq || zsc->zsc_cs[1]->cs_softreq)
-		softint_schedule(zsc->zsc_si);
+	rval = 0;
+	for (unit = 0; unit < zsc_cd.cd_ndevs; unit++) {
+		zsc = device_lookup_private(&zsc_cd, unit);
+		if (zsc == NULL)
+			continue;
+		rval |= zsc_intr_hard(zsc);
+		softreq =  zsc->zsc_cs[0]->cs_softreq;
+		softreq |= zsc->zsc_cs[1]->cs_softreq;
+		if (softreq)
+			softint_schedule(zsc->zsc_si);
+	}
 
 	return rval;
+}
+
+/*
+ * Similar scheme as for zshard (look at all of them)
+ */
+void
+zssoft(void *arg)
+{
+	struct zsc_softc *zsc;
+	int s, unit;
+
+	/* Make sure we call the tty layer at spltty. */
+	s = spltty();
+	for (unit = 0; unit < zsc_cd.cd_ndevs; unit++) {
+		zsc = device_lookup_private(&zsc_cd, unit);
+		if (zsc == NULL)
+			continue;
+		(void)zsc_intr_soft(zsc);
+	}
+	splx(s);
 }
 
 /*

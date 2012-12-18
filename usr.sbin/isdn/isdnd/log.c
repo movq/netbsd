@@ -27,7 +27,7 @@
  *	i4b daemon - logging routines
  *	-----------------------------
  *
- *	$Id: log.c,v 1.8 2011/08/31 16:24:59 plunky Exp $ 
+ *	$Id: log.c,v 1.6 2003/10/06 09:43:27 itojun Exp $ 
  *
  * $FreeBSD$
  *
@@ -46,7 +46,7 @@ extern FILE *logfp;
 static void check_reg(char *logstring);
 
 struct logtab {
-	const char *text;
+	char *text;
 	int pri;
 };
 
@@ -82,7 +82,7 @@ init_log(void)
 	
 		/* set unbuffered operation */
 	
-		setvbuf(logfp, NULL, _IONBF, 0);
+		setvbuf(logfp, (char *)NULL, _IONBF, 0);
 	}
 	else
 	{
@@ -240,7 +240,7 @@ check_reg(char *logstring)
 	{
 		if (rarr[i].re_flg && (!regexec(&(rarr[i].re), logstring, (size_t) 0, NULL, 0)))
 		{
-			const char* argv[3];
+			char* argv[3];
 			argv[0] = rarr[i].re_prog;
 			argv[1] = logstring;
 			argv[2] = NULL;

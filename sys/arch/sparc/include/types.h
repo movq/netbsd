@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.62 2012/11/02 00:01:19 chs Exp $ */
+/*	$NetBSD: types.h,v 1.50 2008/01/20 18:09:09 joerg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -51,24 +51,18 @@
 #include "opt_sparc_arch.h"
 #endif
 
-#ifndef _LOCORE
-
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
 #include <machine/int_types.h>
 
 /* The following are unsigned to prevent annoying sign extended pointers. */
 typedef unsigned long int	register_t;
-#define	PRIxREGISTER		"lx"
 typedef unsigned int		register32_t;
-#define	PRIxREGISTER32		"x"
 #ifdef __arch64__
 typedef unsigned long int	register64_t;
-#define	PRIxREGISTER64		"lx"
 #else
 /* LONGLONG */
 typedef unsigned long long int	register64_t;
-#define	PRIxREGISTER64		"llx"
 #endif
 
 #if defined(_KERNEL)
@@ -84,27 +78,17 @@ typedef struct label_t {
 #if defined(_NETBSD_SOURCE)
 typedef unsigned long int	vaddr_t;
 typedef vaddr_t			vsize_t;
-#define	PRIxVADDR		"lx"
-#define	PRIxVSIZE		"lx"
-#define	PRIuVSIZE		"lu"
 #ifdef SUN4U
 #ifdef __arch64__
 typedef unsigned long int	paddr_t;
-#define	PRIxPADDR		"lx"
-#define	PRIuPSIZE		"lu"
 #else
 /* LONGLONG */
 typedef unsigned long long int	paddr_t;
-#define	PRIxPADDR		"llx"
-#define	PRIuPSIZE		"llu"
 #endif /* __arch64__ */
 #else
 typedef unsigned long int	paddr_t;
-#define	PRIxPADDR		"lx"
-#define	PRIuPSIZE		"lu"
 #endif /* SUN4U */
 typedef paddr_t			psize_t;
-#define	PRIxPSIZE		PRIxPADDR
 #endif
 
 typedef	volatile unsigned char		__cpu_simple_lock_t;
@@ -115,27 +99,17 @@ typedef	volatile unsigned char		__cpu_simple_lock_t;
 #define	__SIMPLELOCK_LOCKED	0xff
 #define	__SIMPLELOCK_UNLOCKED	0
 
-#endif /* _LOCORE */
-
-#define	__HAVE_NEW_STYLE_BUS_H
+#define	__HAVE_DEVICE_REGISTER
 #define	__HAVE_SYSCALL_INTERN
 #define	__GENERIC_SOFT_INTERRUPTS_ALL_LEVELS
-#define __HAVE_CPU_DATA_FIRST
-#define	__HAVE_CPU_VMSPACE_EXEC
-#define	__HAVE_RAS
 
 #ifdef SUN4U
-#define	__HAVE_DEVICE_REGISTER_POSTCONFIG
 #define	__HAVE_ATOMIC64_OPS
-#define	__HAVE_CPU_COUNTER	/* sparc v9 CPUs have %tick */
-#define	__HAVE_FAST_SOFTINTS
-#else
-#define	__HAVE_MM_MD_READWRITE
+#define __HAVE_CPU_COUNTER	/* sparc v9 CPUs have %tick */
+#if defined(_KERNEL)
+#define __HAVE_RAS
+#endif
 #endif
 
-#define	__HAVE_CPU_LWP_SETPRIVATE
-#define	__HAVE___LWP_GETPRIVATE_FAST
-#define	__HAVE_TLS_VARIANT_II
-#define	__HAVE_COMMON___TLS_GET_ADDR
 
 #endif	/* _MACHTYPES_H_ */

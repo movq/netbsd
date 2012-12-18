@@ -1,4 +1,4 @@
-/*	$NetBSD: mscp_subr.c,v 1.44 2012/10/27 17:18:27 chs Exp $	*/
+/*	$NetBSD: mscp_subr.c,v 1.35 2008/04/08 20:10:44 cegger Exp $	*/
 /*
  * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mscp_subr.c,v 1.44 2012/10/27 17:18:27 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mscp_subr.c,v 1.35 2008/04/08 20:10:44 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -83,7 +83,6 @@ __KERNEL_RCSID(0, "$NetBSD: mscp_subr.c,v 1.44 2012/10/27 17:18:27 chs Exp $");
 #include <sys/bufq.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/kmem.h>
 
 #include <sys/bus.h>
 #include <machine/sid.h>
@@ -97,14 +96,14 @@ __KERNEL_RCSID(0, "$NetBSD: mscp_subr.c,v 1.44 2012/10/27 17:18:27 chs Exp $");
 
 #define b_forw	b_hash.le_next
 
-int	mscp_match(device_t, cfdata_t, void *);
-void	mscp_attach(device_t, device_t, void *);
-void	mscp_start(struct mscp_softc *);
-int	mscp_init(struct mscp_softc *);
+int	mscp_match(struct device *, struct cfdata *, void *);
+void	mscp_attach(struct device *, struct device *, void *);
+void	mscp_start(struct	mscp_softc *);
+int	mscp_init(struct  mscp_softc *);
 void	mscp_initds(struct mscp_softc *);
 int	mscp_waitstep(struct mscp_softc *, int, int);
 
-CFATTACH_DECL_NEW(mscpbus, sizeof(struct mscp_softc),
+CFATTACH_DECL(mscpbus, sizeof(struct mscp_softc),
     mscp_match, mscp_attach, NULL, NULL);
 
 #define	READ_SA		(bus_space_read_2(mi->mi_iot, mi->mi_sah, 0))
@@ -112,22 +111,7 @@ CFATTACH_DECL_NEW(mscpbus, sizeof(struct mscp_softc),
 #define	WRITE_IP(x)	bus_space_write_2(mi->mi_iot, mi->mi_iph, 0, (x))
 #define	WRITE_SW(x)	bus_space_write_2(mi->mi_iot, mi->mi_swh, 0, (x))
 
-struct	mscp mscp_cold_reply;
-int	     mscp_cold_unit;
-
-#define NITEMS		4
-
-static inline void
-mscp_free_workitems(struct mscp_softc *mi)
-{
-	struct mscp_work *mw;
-
-	while (!SLIST_EMPTY(&mi->mi_freelist)) {
-		mw = SLIST_FIRST(&mi->mi_freelist);
-		SLIST_REMOVE_HEAD(&mi->mi_freelist, mw_list);
-		kmem_free(mw, sizeof(*mw));
-	}
-}
+struct	mscp slavereply;
 
 /*
  * This function is for delay during init. Some MSCP clone card (Dilog)
@@ -137,7 +121,9 @@ mscp_free_workitems(struct mscp_softc *mi)
 
 #define DELAYTEN 1000
 int
-mscp_waitstep(struct mscp_softc *mi, int mask, int result)
+mscp_waitstep(mi, mask, result)
+	struct mscp_softc *mi;
+	int mask, result;
 {
 	int	status = 1;
 
@@ -156,11 +142,14 @@ mscp_waitstep(struct mscp_softc *mi, int mask, int result)
 }
 
 int
-mscp_match(device_t parent, cfdata_t match, void *aux)
+mscp_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct	mscp_attach_args *ma = aux;
 
-#if NRA || NRACD || NRX
+#if NRA || NRX
 	if (ma->ma_type & MSCPBUS_DISK)
 		return 1;
 #endif
@@ -172,16 +161,17 @@ mscp_match(device_t parent, cfdata_t match, void *aux)
 };
 
 void
-mscp_attach(device_t parent, device_t self, void *aux)
+mscp_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct	mscp_attach_args *ma = aux;
 	struct	mscp_softc *mi = device_private(self);
 	struct mscp *mp2;
 	volatile struct mscp *mp;
 	volatile int i;
-	int	timeout, error, unit;
+	int	timeout, next = 0;
 
-	mi->mi_dev = self;
 	mi->mi_mc = ma->ma_mc;
 	mi->mi_me = NULL;
 	mi->mi_type = ma->ma_type;
@@ -196,31 +186,6 @@ mscp_attach(device_t parent, device_t self, void *aux)
 	mi->mi_adapnr = ma->ma_adapnr;
 	mi->mi_ctlrnr = ma->ma_ctlrnr;
 	*ma->ma_softc = mi;
-
-	mutex_init(&mi->mi_mtx, MUTEX_DEFAULT, IPL_VM);
-	SLIST_INIT(&mi->mi_freelist);
-
-	error = workqueue_create(&mi->mi_wq, "mscp_wq", mscp_worker, NULL,
-	    PRI_NONE, IPL_VM, 0);
-	if (error != 0) {
-		aprint_error_dev(mi->mi_dev, "could not create workqueue");
-		return;
-	}
-
-	/* Stick some items on the free list to be used in autoconf */
-	for (i = 0; i < NITEMS; i++) {
-		struct mscp_work *mw;
-
-		if ((mw = kmem_zalloc(sizeof(*mw), KM_SLEEP)) == NULL) {
-			mscp_free_workitems(mi);
-			aprint_error_dev(mi->mi_dev,
-			    "failed to allocate memory for work items");
-			return;
-		}
-	
-		SLIST_INSERT_HEAD(&mi->mi_freelist, mw, mw_list);
-	}
-
 	/*
 	 * Go out to init the bus, so that we can give commands
 	 * to its devices.
@@ -234,7 +199,7 @@ mscp_attach(device_t parent, device_t self, void *aux)
 	bufq_alloc(&mi->mi_resq, "fcfs", 0);
 
 	if (mscp_init(mi)) {
-		aprint_error_dev(mi->mi_dev, "can't init, controller hung\n");
+		aprint_error_dev(&mi->mi_dev, "can't init, controller hung\n");
 		return;
 	}
 	for (i = 0; i < NCMD; i++) {
@@ -247,7 +212,7 @@ mscp_attach(device_t parent, device_t self, void *aux)
 	}
 
 
-#if NRA || NRACD || NRX
+#if NRA
 	if (ma->ma_type & MSCPBUS_DISK) {
 		extern	struct mscp_device ra_device;
 
@@ -265,101 +230,96 @@ mscp_attach(device_t parent, device_t self, void *aux)
 	 * Go out and search for sub-units on this MSCP bus,
 	 * and call config_found for each found.
 	 */
-	for (unit = 0; unit <= MSCP_MAX_UNIT; ++unit) {
-		mp = mscp_getcp(mi, MSCP_DONTWAIT);
-		if (mp == NULL)
-			panic("mscpattach: no packets");
-		mp->mscp_opcode = M_OP_GETUNITST;
-		mp->mscp_unit = unit;
-		mp->mscp_modifier = M_GUM_NEXTUNIT;
-		*mp->mscp_addr |= MSCP_OWN | MSCP_INT;
-		mscp_cold_reply.mscp_opcode = 0;
-		mscp_cold_unit = mp->mscp_unit;
+findunit:
+	mp = mscp_getcp(mi, MSCP_DONTWAIT);
+	if (mp == NULL)
+		panic("mscpattach: no packets");
+	mp->mscp_opcode = M_OP_GETUNITST;
+	mp->mscp_unit = next;
+	mp->mscp_modifier = M_GUM_NEXTUNIT;
+	*mp->mscp_addr |= MSCP_OWN | MSCP_INT;
+	slavereply.mscp_opcode = 0;
 
-		i = bus_space_read_2(mi->mi_iot, mi->mi_iph, 0);
-		mp = &mscp_cold_reply;
-		timeout = 1000;
+	i = bus_space_read_2(mi->mi_iot, mi->mi_iph, 0);
+	mp = &slavereply;
+	timeout = 1000;
+	while (timeout-- > 0) {
+		DELAY(10000);
+		if (mp->mscp_opcode)
+			goto gotit;
+	}
+	printf("%s: no response to Get Unit Status request\n",
+	    device_xname(&mi->mi_dev));
+	return;
 
-		while (!mp->mscp_opcode) {
-			if ( --timeout == 0) {
-				printf("%s: no Get Unit Status response\n",
-				    device_xname(mi->mi_dev));
-				return;
-			}
-			DELAY(10000);
-		}
+gotit:	/*
+	 * Got a slave response.  If the unit is there, use it.
+	 */
+	switch (mp->mscp_status & M_ST_MASK) {
 
+	case M_ST_SUCCESS:	/* worked */
+	case M_ST_AVAILABLE:	/* found another drive */
+		break;		/* use it */
+
+	case M_ST_OFFLINE:
 		/*
-		 * Got a slave response.  If the unit is there, use it.
+		 * Figure out why it is off line.  It may be because
+		 * it is nonexistent, or because it is spun down, or
+		 * for some other reason.
 		 */
+		switch (mp->mscp_status & ~M_ST_MASK) {
 
-		/*
-		 * If we get a lower number, we have circulated around all
-		 * devices and are finished, otherwise try to find next unit.
-		 */
-		if (mp->mscp_unit < unit)
-			return;
-		/*
-		 * If a higher number, use it to skip non-present devices
-		 */
-		if (mp->mscp_unit > unit)
-			unit = mp->mscp_unit;
-
-		switch (mp->mscp_status & M_ST_MASK) {
-
-		case M_ST_SUCCESS:	/* worked */
-		case M_ST_AVAILABLE:	/* found another drive */
-			break;		/* use it */
-
-		case M_ST_OFFLINE:
+		case M_OFFLINE_UNKNOWN:
 			/*
-			 * Figure out why it is off line.  It may be because
-			 * it is nonexistent, or because it is spun down, or
-			 * for some other reason.
+			 * No such drive, and there are none with
+			 * higher unit numbers either, if we are
+			 * using M_GUM_NEXTUNIT.
 			 */
-			switch (mp->mscp_status & ~M_ST_MASK) {
+			mi->mi_ierr = 3;
+			return;
 
-			case M_OFFLINE_UNKNOWN:
-				/*
-				 * No such drive, and there are none with
-				 * higher unit numbers either, if we are
-				 * using M_GUM_NEXTUNIT.
-				 */
-				mi->mi_ierr = 3;
-				break; /* return */
-
-			case M_OFFLINE_UNMOUNTED:
-				/*
-				 * The drive is not spun up.  Use it anyway.
-				 *
-				 * N.B.: this seems to be a common occurrance
-				 * after a power failure.  The first attempt
-				 * to bring it on line seems to spin it up
-				 * (and thus takes several minutes).  Perhaps
-				 * we should note here that the on-line may
-				 * take longer than usual.
-				 */
-				break;
-
-			default:
-				/*
-				 * In service, or something else unusable.
-				 */
-				printf("%s: unit %d off line: ",
-				    device_xname(mi->mi_dev), mp->mscp_unit);
-				mp2 = __UNVOLATILE(mp);
-				mscp_printevent(mp2);
-				break;
-			}
+		case M_OFFLINE_UNMOUNTED:
+			/*
+			 * The drive is not spun up.  Use it anyway.
+			 *
+			 * N.B.: this seems to be a common occurrance
+			 * after a power failure.  The first attempt
+			 * to bring it on line seems to spin it up
+			 * (and thus takes several minutes).  Perhaps
+			 * we should note here that the on-line may
+			 * take longer than usual.
+			 */
 			break;
 
 		default:
-			aprint_error_dev(mi->mi_dev,
-			    "unable to get unit status: ");
-			mscp_printevent(__UNVOLATILE(mp));
-			return;
+			/*
+			 * In service, or something else equally unusable.
+			 */
+			printf("%s: unit %d off line: ", device_xname(&mi->mi_dev),
+				mp->mscp_unit);
+			mp2 = __UNVOLATILE(mp);
+			mscp_printevent(mp2);
+			next++;
+			goto findunit;
 		}
+		break;
+
+	default:
+		aprint_error_dev(&mi->mi_dev, "unable to get unit status: ");
+		mscp_printevent(__UNVOLATILE(mp));
+		return;
 	}
+
+	/*
+	 * If we get a lower number, we have circulated around all
+	 * devices and are finished, otherwise try to find next unit.
+	 * We shouldn't ever get this, it's a workaround.
+	 */
+	if (mp->mscp_unit < next)
+		return;
+
+	next = mp->mscp_unit + 1;
+	goto findunit;
 }
 
 
@@ -369,7 +329,8 @@ mscp_attach(device_t parent, device_t self, void *aux)
  * fails, 0 otherwise.
  */
 int
-mscp_init(struct mscp_softc *mi)
+mscp_init(mi)
+	struct	mscp_softc *mi;
 {
 	struct	mscp *mp;
 	volatile int i;
@@ -392,7 +353,7 @@ mscp_init(struct mscp_softc *mi)
 	if (status == 0)
 		return 1; /* Init failed */
 	if (READ_SA & MP_ERR) {
-		(*mi->mi_mc->mc_saerror)(device_parent(mi->mi_dev), 0);
+		(*mi->mi_mc->mc_saerror)(device_parent(&mi->mi_dev), 0);
 		return 1;
 	}
 
@@ -401,7 +362,7 @@ mscp_init(struct mscp_softc *mi)
 	    MP_IE | (mi->mi_ivec >> 2));
 	status = mscp_waitstep(mi, STEP1MASK, STEP1GOOD);
 	if (status == 0) {
-		(*mi->mi_mc->mc_saerror)(device_parent(mi->mi_dev), 0);
+		(*mi->mi_mc->mc_saerror)(device_parent(&mi->mi_dev), 0);
 		return 1;
 	}
 
@@ -411,7 +372,7 @@ mscp_init(struct mscp_softc *mi)
 	    (vax_cputype == VAX_780 || vax_cputype == VAX_8600 ? MP_PI : 0));
 	status = mscp_waitstep(mi, STEP2MASK, STEP2GOOD(mi->mi_ivec >> 2));
 	if (status == 0) {
-		(*mi->mi_mc->mc_saerror)(device_parent(mi->mi_dev), 0);
+		(*mi->mi_mc->mc_saerror)(device_parent(&mi->mi_dev), 0);
 		return 1;
 	}
 
@@ -419,7 +380,7 @@ mscp_init(struct mscp_softc *mi)
 	WRITE_SW((mi->mi_dmam->dm_segs[0].ds_addr >> 16));
 	status = mscp_waitstep(mi, STEP3MASK, STEP3GOOD);
 	if (status == 0) {
-		(*mi->mi_mc->mc_saerror)(device_parent(mi->mi_dev), 0);
+		(*mi->mi_mc->mc_saerror)(device_parent(&mi->mi_dev), 0);
 		return 1;
 	}
 	i = READ_SA & 0377;
@@ -429,7 +390,7 @@ mscp_init(struct mscp_softc *mi)
 	if (mi->mi_type & MSCPBUS_UDA) {
 		WRITE_SW(MP_GO | (BURST - 1) << 2);
 		printf("%s: DMA burst size set to %d\n",
-		    device_xname(mi->mi_dev), BURST);
+		    device_xname(&mi->mi_dev), BURST);
 	}
 	WRITE_SW(MP_GO);
 
@@ -464,7 +425,7 @@ mscp_init(struct mscp_softc *mi)
 	}
 	if (count == DELAYTEN) {
 out:
-		aprint_error_dev(mi->mi_dev, "couldn't set ctlr characteristics, sa=%x\n", j);
+		aprint_error_dev(&mi->mi_dev, "couldn't set ctlr characteristics, sa=%x\n", j);
 		return 1;
 	}
 	return 0;
@@ -474,7 +435,8 @@ out:
  * Initialise the various data structures that control the mscp protocol.
  */
 void
-mscp_initds(struct mscp_softc *mi)
+mscp_initds(mi)
+	struct mscp_softc *mi;
 {
 	struct mscp_pack *ud = mi->mi_uda;
 	struct mscp *mp;
@@ -501,7 +463,8 @@ mscp_initds(struct mscp_softc *mi)
 static	void mscp_kickaway(struct mscp_softc *);
 
 void
-mscp_intr(struct mscp_softc *mi)
+mscp_intr(mi)
+	struct mscp_softc *mi;
 {
 	struct mscp_pack *ud = mi->mi_uda;
 
@@ -522,12 +485,14 @@ mscp_intr(struct mscp_softc *mi)
 	/*
 	 * If there are any not-yet-handled request, try them now.
 	 */
-	if (bufq_peek(mi->mi_resq))
+	if (BUFQ_PEEK(mi->mi_resq))
 		mscp_kickaway(mi);
 }
 
 int
-mscp_print(void *aux, const char *name)
+mscp_print(aux, name)
+	void *aux;
+	const char *name;
 {
 	struct drive_attach_args *da = aux;
 	struct	mscp *mp = da->da_mp;
@@ -548,25 +513,28 @@ mscp_print(void *aux, const char *name)
  * common strategy routine for all types of MSCP devices.
  */
 void
-mscp_strategy(struct buf *bp, device_t usc)
+mscp_strategy(bp, usc)
+	struct buf *bp;
+	struct device *usc;
 {
 	struct	mscp_softc *mi = (void *)usc;
 	int s = spluba();
 
-	bufq_put(mi->mi_resq, bp);
+	BUFQ_PUT(mi->mi_resq, bp);
 	mscp_kickaway(mi);
 	splx(s);
 }
 
 
 void
-mscp_kickaway(struct mscp_softc *mi)
+mscp_kickaway(mi)
+	struct	mscp_softc *mi;
 {
 	struct buf *bp;
 	struct	mscp *mp;
 	int next;
 
-	while ((bp = bufq_peek(mi->mi_resq)) != NULL) {
+	while ((bp = BUFQ_PEEK(mi->mi_resq)) != NULL) {
 		/*
 		 * Ok; we are ready to try to start a xfer. Get a MSCP packet
 		 * and try to start...
@@ -574,7 +542,7 @@ mscp_kickaway(struct mscp_softc *mi)
 		if ((mp = mscp_getcp(mi, MSCP_DONTWAIT)) == NULL) {
 			if (mi->mi_credits > MSCP_MINCREDITS)
 				printf("%s: command ring too small\n",
-				    device_xname(device_parent(mi->mi_dev)));
+				    device_xname(device_parent(&mi->mi_dev)));
 			/*
 			 * By some (strange) reason we didn't get a MSCP packet.
 			 * Just return and wait for free packets.
@@ -598,14 +566,16 @@ mscp_kickaway(struct mscp_softc *mi)
 		mi->mi_xi[next].mxi_inuse = 1;
 		bp->b_resid = next;
 		(*mi->mi_me->me_fillin)(bp, mp);
-		(*mi->mi_mc->mc_go)(device_parent(mi->mi_dev),
+		(*mi->mi_mc->mc_go)(device_parent(&mi->mi_dev),
 		    &mi->mi_xi[next]);
-		(void)bufq_get(mi->mi_resq);
+		(void)BUFQ_GET(mi->mi_resq);
 	}
 }
 
 void
-mscp_dgo(struct mscp_softc *mi, struct mscp_xi *mxi)
+mscp_dgo(mi, mxi)
+	struct mscp_softc *mi;
+	struct mscp_xi *mxi;
 {
 	volatile int i;
 	struct	mscp *mp;
@@ -626,7 +596,8 @@ mscp_dgo(struct mscp_softc *mi, struct mscp_xi *mxi)
  * for debugging....
  */
 void
-mscp_hexdump(struct mscp *mp)
+mscp_hexdump(mp)
+	struct mscp *mp;
 {
 	long *p = (long *) mp;
 	int i = mp->mscp_msglen;
@@ -818,7 +789,8 @@ struct code_decode {
  * Print the decoded error event from an MSCP error datagram.
  */
 void
-mscp_printevent(struct mscp *mp)
+mscp_printevent(mp)
+	struct mscp *mp;
 {
 	int event = mp->mscp_event;
 	struct code_decode *cdc;
@@ -859,7 +831,10 @@ static const char *codemsg[16] = {
  * NICE IF DEC SOLD DOCUMENTATION FOR THEIR OWN CONTROLLERS.
  */
 int
-mscp_decodeerror(const char *name, struct mscp *mp, struct mscp_softc *mi)
+mscp_decodeerror(name, mp, mi)
+	const char *name;
+	struct mscp *mp;
+	struct mscp_softc *mi;
 {
 	int issoft;
 	/*

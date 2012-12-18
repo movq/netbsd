@@ -1,4 +1,4 @@
-/*	$NetBSD: map_parse.y,v 1.12 2012/10/23 15:30:45 christos Exp $ */
+/*	$NetBSD: map_parse.y,v 1.7 2008/04/28 20:23:09 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -63,12 +63,12 @@ static struct wscons_keymap mapdata[KS_NUMKEYCODES];
 struct wskbd_map_data newkbmap;		/* used in util.c */
 static struct wscons_keymap *cur_mp;
 
-static size_t ksym_lookup(keysym_t);
+static int ksym_lookup(keysym_t);
 
-static size_t
+static int
 ksym_lookup(keysym_t ksym)
 {
-	size_t i;
+	int i;
 	struct wscons_keymap *mp;
 
 	for (i = 0; i < kbmap.maplen; i++) {
@@ -89,7 +89,7 @@ ksym_lookup(keysym_t ksym)
 		int ival;
 	}
 
-%token T_KEYSYM T_KEYCODE T_CMD
+%token T_KEYSYM T_KEYCODE
 %token <kval> T_KEYSYM_VAR T_KEYSYM_CMD_VAR
 %token <ival> T_NUMBER
 
@@ -97,7 +97,7 @@ ksym_lookup(keysym_t ksym)
 
 %%
 
-program		: {
+program		: = {
 			int i;
 			struct wscons_keymap *mp;
 
@@ -123,8 +123,8 @@ expr		: keysym_expr
 		| keycode_expr
 		;
 
-keysym_expr	: T_KEYSYM keysym_var "=" keysym_var {
-			size_t src, dst;
+keysym_expr	: T_KEYSYM keysym_var "=" keysym_var = {
+			int src, dst;
 
 			dst = ksym_lookup($2);
 			src = ksym_lookup($4);
@@ -134,49 +134,40 @@ keysym_expr	: T_KEYSYM keysym_var "=" keysym_var {
 		}
 		;
 
-keycode_expr	: T_KEYCODE T_NUMBER "=" {
+keycode_expr	: T_KEYCODE T_NUMBER "=" = {
 			if ($2 >= KS_NUMKEYCODES)
 				errx(EXIT_FAILURE, "%d: keycode too large", $2);
-			if ((unsigned int)$2 >= newkbmap.maplen)
+			if ($2 >= newkbmap.maplen)
 				newkbmap.maplen = $2 + 1;
 			cur_mp = mapdata + $2;
 		} keysym_cmd keysym_list
 		;
 
 keysym_cmd	: /* empty */
-		| T_KEYSYM_CMD_VAR {
+		| T_KEYSYM_CMD_VAR = {
 			cur_mp->command = $1;
-		}
-		| T_CMD T_KEYSYM_CMD_VAR {
-			cur_mp->command = KS_Cmd;
-			cur_mp->group1[0] = $2;
-		} 
-		| T_CMD T_KEYSYM_VAR {
-			cur_mp->command = KS_Cmd;
-			cur_mp->group1[0] = $2;
 		}
 		;
 
-keysym_list	: /* empty */
-		| keysym_var {
+keysym_list	: keysym_var = {
 			cur_mp->group1[0] = $1;
 			cur_mp->group1[1] = ksym_upcase(cur_mp->group1[0]);
 			cur_mp->group2[0] = cur_mp->group1[0];
 			cur_mp->group2[1] = cur_mp->group1[1];
 		}
-		| keysym_var keysym_var {
+		| keysym_var keysym_var = {
 			cur_mp->group1[0] = $1;
 			cur_mp->group1[1] = $2;
 			cur_mp->group2[0] = cur_mp->group1[0];
 			cur_mp->group2[1] = cur_mp->group1[1];
 		}
-		| keysym_var keysym_var keysym_var {
+		| keysym_var keysym_var keysym_var = {
 			cur_mp->group1[0] = $1;
 			cur_mp->group1[1] = $2;
 			cur_mp->group2[0] = $3;
 			cur_mp->group2[1] = ksym_upcase(cur_mp->group2[0]);
 		}
-		| keysym_var keysym_var keysym_var keysym_var {
+		| keysym_var keysym_var keysym_var keysym_var = {
 			cur_mp->group1[0] = $1;
 			cur_mp->group1[1] = $2;
 			cur_mp->group2[0] = $3;
@@ -184,10 +175,10 @@ keysym_list	: /* empty */
 		}
 		;
 
-keysym_var	: T_KEYSYM_VAR {
+keysym_var	: T_KEYSYM_VAR = {
 			$$ = $1;
 		}
-		| T_NUMBER {
+		| T_NUMBER = {
 			char name[2];
 			int res;
 
@@ -202,11 +193,9 @@ keysym_var	: T_KEYSYM_VAR {
 		};
 %%
 
-__dead static void
+void
 yyerror(const char *msg)
 {
-	extern char *yytext;
-	extern int yyleng;
 
-	errx(EXIT_FAILURE, "parse: %s [%.*s]", msg, yyleng, yytext);
+	errx(EXIT_FAILURE, "parse: %s", msg);
 }

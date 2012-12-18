@@ -1,4 +1,4 @@
-/*	$NetBSD: lom.c,v 1.10 2012/06/02 21:36:42 dsl Exp $	*/
+/*	$NetBSD: lom.c,v 1.1.2.8 2011/07/16 00:14:57 riz Exp $	*/
 /*	$OpenBSD: lom.c,v 1.21 2010/02/28 20:44:39 kettenis Exp $	*/
 /*
  * Copyright (c) 2009 Mark Kettenis
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lom.c,v 1.10 2012/06/02 21:36:42 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lom.c,v 1.1.2.8 2011/07/16 00:14:57 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -351,7 +351,6 @@ lom_attach(device_t parent, device_t self, void *aux)
 	sc->sc_sme = sysmon_envsys_create();
 	for (i = 0; i < sc->sc_num_alarm; i++) {
 		sc->sc_alarm[i].units = ENVSYS_INDICATOR;
-		sc->sc_alarm[i].state = ENVSYS_SINVALID;
 		snprintf(sc->sc_alarm[i].desc, sizeof(sc->sc_alarm[i].desc),
 		    i == 0 ? "Fault LED" : "Alarm%d", i);
 		if (sysmon_envsys_sensor_attach(sc->sc_sme, &sc->sc_alarm[i])) {
@@ -363,7 +362,7 @@ lom_attach(device_t parent, device_t self, void *aux)
 			sysctl_createv(NULL, 0, NULL, &newnode,
 			    CTLFLAG_READWRITE, CTLTYPE_INT, nodename[i],
 			    SYSCTL_DESCR(nodedesc[i]),
-			    lom_sysctl_alarm, 0, (void *)sc, 0,
+			    lom_sysctl_alarm, 0, sc, 0,
 			    CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL);
 			if (newnode != NULL)
 				sc->sc_sysctl_num[i] = newnode->sysctl_num;
@@ -373,7 +372,6 @@ lom_attach(device_t parent, device_t self, void *aux)
 	}
 	for (i = 0; i < sc->sc_num_fan; i++) {
 		sc->sc_fan[i].units = ENVSYS_SFANRPM;
-		sc->sc_fan[i].state = ENVSYS_SINVALID;
 		snprintf(sc->sc_fan[i].desc, sizeof(sc->sc_fan[i].desc),
 		    "fan%d", i + 1);
 		if (sysmon_envsys_sensor_attach(sc->sc_sme, &sc->sc_fan[i])) {
@@ -384,7 +382,6 @@ lom_attach(device_t parent, device_t self, void *aux)
 	}
 	for (i = 0; i < sc->sc_num_psu; i++) {
 		sc->sc_psu[i].units = ENVSYS_INDICATOR;
-		sc->sc_psu[i].state = ENVSYS_SINVALID;
 		snprintf(sc->sc_psu[i].desc, sizeof(sc->sc_psu[i].desc),
 		    "PSU%d", i + 1);
 		if (sysmon_envsys_sensor_attach(sc->sc_sme, &sc->sc_psu[i])) {
@@ -395,7 +392,6 @@ lom_attach(device_t parent, device_t self, void *aux)
 	}
 	for (i = 0; i < sc->sc_num_temp; i++) {
 		sc->sc_temp[i].units = ENVSYS_STEMP;
-		sc->sc_temp[i].state = ENVSYS_SINVALID;
 		snprintf(sc->sc_temp[i].desc, sizeof(sc->sc_temp[i].desc),
 		    "temp%d", i + 1);
 		if (sysmon_envsys_sensor_attach(sc->sc_sme, &sc->sc_temp[i])) {

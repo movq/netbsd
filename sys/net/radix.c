@@ -1,4 +1,4 @@
-/*	$NetBSD: radix.c,v 1.44 2011/07/17 20:54:52 joerg Exp $	*/
+/*	$NetBSD: radix.c,v 1.39 2008/05/11 20:14:41 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1993
@@ -36,12 +36,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radix.c,v 1.44 2011/07/17 20:54:52 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radix.c,v 1.39 2008/05/11 20:14:41 dyoung Exp $");
 
 #ifndef _NET_RADIX_H_
 #include <sys/param.h>
-#include <sys/queue.h>
-#include <sys/kmem.h>
 #ifdef	_KERNEL
 #include "opt_inet.h"
 
@@ -49,9 +47,11 @@ __KERNEL_RCSID(0, "$NetBSD: radix.c,v 1.44 2011/07/17 20:54:52 joerg Exp $");
 #include <sys/malloc.h>
 #define	M_DONTWAIT M_NOWAIT
 #include <sys/domain.h>
+#include <netinet/ip_encap.h>
 #else
 #include <stdlib.h>
 #endif
+#include <machine/stdarg.h>
 #include <sys/syslog.h>
 #include <net/radix.h>
 #endif
@@ -1003,33 +1003,10 @@ rn_walktree(
 	/* NOTREACHED */
 }
 
-struct delayinit {
+int
+rn_inithead(head, off)
 	void **head;
 	int off;
-	SLIST_ENTRY(delayinit) entries;
-};
-static SLIST_HEAD(, delayinit) delayinits = SLIST_HEAD_INITIALIZER(delayheads);
-static int radix_initialized;
-
-/*
- * Initialize a radix tree once radix is initialized.  Only for bootstrap.
- * Assume that no concurrency protection is necessary at this stage.
- */
-void
-rn_delayedinit(void **head, int off)
-{
-	struct delayinit *di;
-
-	KASSERT(radix_initialized == 0);
-
-	di = kmem_alloc(sizeof(*di), KM_SLEEP);
-	di->head = head;
-	di->off = off;
-	SLIST_INSERT_HEAD(&delayinits, di, entries);
-}
-
-int
-rn_inithead(void **head, int off)
 {
 	struct radix_node_head *rnh;
 
@@ -1043,7 +1020,9 @@ rn_inithead(void **head, int off)
 }
 
 int
-rn_inithead0(struct radix_node_head *rnh, int off)
+rn_inithead0(rnh, off)
+	struct radix_node_head *rnh;
+	int off;
 {
 	struct radix_node *t;
 	struct radix_node *tt;
@@ -1068,28 +1047,31 @@ rn_inithead0(struct radix_node_head *rnh, int off)
 }
 
 void
-rn_init(void)
+rn_init()
 {
 	char *cp, *cplim;
-	struct delayinit *di;
 #ifdef _KERNEL
-	struct domain *dp;
+	static int initialized;
+	__link_set_decl(domains, struct domain);
+	struct domain *const *dpp;
 
-	if (radix_initialized)
-		panic("radix already initialized");
-	radix_initialized = 1;
+	if (initialized)
+		return;
+	initialized = 1;
 
-	DOMAIN_FOREACH(dp) {
-		if (dp->dom_maxrtkey > max_keylen)
-			max_keylen = dp->dom_maxrtkey;
+	__link_set_foreach(dpp, domains) {
+		if ((*dpp)->dom_maxrtkey > max_keylen)
+			max_keylen = (*dpp)->dom_maxrtkey;
 	}
+#ifdef INET
+	encap_setkeylen();
+#endif
 #endif
 	if (max_keylen == 0) {
 		log(LOG_ERR,
 		    "rn_init: radix functions require max_keylen be set\n");
 		return;
 	}
-
 	R_Malloc(rn_zeros, char *, 3 * max_keylen);
 	if (rn_zeros == NULL)
 		panic("rn_init");
@@ -1100,11 +1082,4 @@ rn_init(void)
 		*cp++ = -1;
 	if (rn_inithead((void *)&mask_rnhead, 0) == 0)
 		panic("rn_init 2");
-
-	while ((di = SLIST_FIRST(&delayinits)) != NULL) {
-		if (!rn_inithead(di->head, di->off))
-			panic("delayed rn_inithead failed");
-		SLIST_REMOVE_HEAD(&delayinits, entries);
-		kmem_free(di, sizeof(*di));
-	}
 }

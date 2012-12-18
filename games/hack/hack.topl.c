@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.topl.c,v 1.14 2011/08/06 20:29:37 dholland Exp $	*/
+/*	$NetBSD: hack.topl.c,v 1.8.10.2 2009/06/29 23:33:53 snj Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,27 +63,24 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.topl.c,v 1.14 2011/08/06 20:29:37 dholland Exp $");
+__RCSID("$NetBSD: hack.topl.c,v 1.8.10.2 2009/06/29 23:33:53 snj Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
 #include "hack.h"
 #include "extern.h"
 
-static char toplines[BUFSZ];
-static xchar tlx, tly;		/* set by pline; used by addtopl */
+char            toplines[BUFSZ];
+xchar           tlx, tly;	/* set by pline; used by addtopl */
 
-static struct topl {
+struct topl {
 	struct topl    *next_topl;
 	char           *topl_text;
 }              *old_toplines, *last_redone_topl;
 #define	OTLMAX	20		/* max nr of old toplines remembered */
 
-static void redotoplin(void);
-static void xmore(const char *);
-
 int
-doredotopl(void)
+doredotopl()
 {
 	if (last_redone_topl)
 		last_redone_topl = last_redone_topl->next_topl;
@@ -96,8 +93,8 @@ doredotopl(void)
 	return (0);
 }
 
-static void
-redotoplin(void)
+void
+redotoplin()
 {
 	home();
 	if (strchr(toplines, '\n'))
@@ -112,7 +109,7 @@ redotoplin(void)
 }
 
 void
-remember_topl(void)
+remember_topl()
 {
 	struct topl    *tl;
 	int             cnt = OTLMAX;
@@ -123,7 +120,8 @@ remember_topl(void)
 	    !strcmp(toplines, old_toplines->topl_text))
 		return;
 	last_redone_topl = 0;
-	tl = alloc(strlen(toplines) + sizeof(*tl) + 1);
+	tl = (struct topl *)
+		alloc((unsigned) (strlen(toplines) + sizeof(struct topl) + 1));
 	tl->next_topl = old_toplines;
 	tl->topl_text = (char *) (tl + 1);
 	(void) strcpy(tl->topl_text, toplines);
@@ -133,13 +131,14 @@ remember_topl(void)
 		tl = tl->next_topl;
 	}
 	if (tl && tl->next_topl) {
-		free(tl->next_topl);
+		free((char *) tl->next_topl);
 		tl->next_topl = 0;
 	}
 }
 
 void
-addtopl(const char *s)
+addtopl(s)
+	const char           *s;
 {
 	curs(tlx, tly);
 	if (tlx + (int)strlen(s) > CO)
@@ -150,9 +149,9 @@ addtopl(const char *s)
 	flags.toplin = 1;
 }
 
-/* s = allowed chars besides space/return */
-static void
-xmore(const char *s)
+void
+xmore(s)
+	const char *s;	/* allowed chars besides space/return */
 {
 	if (flags.toplin) {
 		curs(tlx, tly);
@@ -175,19 +174,20 @@ xmore(const char *s)
 }
 
 void
-more(void)
+more()
 {
 	xmore("");
 }
 
 void
-cmore(const char *s)
+cmore(s)
+	const char           *s;
 {
 	xmore(s);
 }
 
 void
-clrlin(void)
+clrlin()
 {
 	if (flags.toplin) {
 		home();
@@ -210,7 +210,9 @@ pline(const char *fmt, ...)
 }
 
 void
-vpline(const char *line, va_list ap)
+vpline(line, ap)
+	const char *line;
+	va_list ap;
 {
 	char            pbuf[BUFSZ];
 	char           *bp = pbuf, *tl;
@@ -281,10 +283,9 @@ vpline(const char *line, va_list ap)
 }
 
 void
-putsym(int c1)
+putsym(c)
+	char            c;
 {
-	char c = c1; /* XXX this hack prevents .o diffs -- remove later */
-
 	switch (c) {
 	case '\b':
 		backsp();
@@ -305,7 +306,8 @@ putsym(int c1)
 }
 
 void
-putstr(const char *s)
+putstr(s)
+	const char           *s;
 {
 	while (*s)
 		putsym(*s++);

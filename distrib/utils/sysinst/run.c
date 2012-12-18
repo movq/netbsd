@@ -1,4 +1,4 @@
-/*	$NetBSD: run.c,v 1.70 2012/02/26 10:17:44 mbalmer Exp $	*/
+/*	$NetBSD: run.c,v 1.64.16.1 2009/01/22 22:19:39 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,20 +14,24 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE 
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
  * THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
@@ -66,7 +70,7 @@
 #endif
 
 /*
- * local prototypes
+ * local prototypes 
  */
 int log_flip (menudesc *, void *);
 static int script_flip (menudesc *, void *);
@@ -82,8 +86,7 @@ log_menu_label(menudesc *m, int opt, void *arg)
 {
 	wprintw(m->mw, "%s: %s",
 		msg_string(opt ? MSG_Scripting : MSG_Logging),
-		msg_string((opt ? script != NULL : logfp != NULL) ?
-		    MSG_On : MSG_Off));
+		msg_string((opt ? scripting : logging) ? MSG_On : MSG_Off));
 }
 
 void
@@ -97,7 +100,7 @@ do_logging(void)
 
 	if (menu_no < 0) {
 		(void)fprintf(stderr, "Dynamic menu creation failed.\n");
-		if (logfp)
+		if (logging)
 			(void)fprintf(logfp, "Dynamic menu creation failed.\n");
 		exit(EXIT_FAILURE);
 	}
@@ -112,17 +115,18 @@ log_flip(menudesc *m, void *arg)
 	time_t tloc;
 
 	(void)time(&tloc);
-	if (logfp) {
+	if (logging == 1) {
+		logging = 0;
 		fprintf(logfp, "Log ended at: %s\n", asctime(localtime(&tloc)));
 		fflush(logfp);
 		fclose(logfp);
-		logfp = NULL;
 	} else {
 		logfp = fopen("/tmp/sysinst.log", "a");
 		if (logfp != NULL) {
+			logging = 1;
 			fprintf(logfp,
 			    "Log started at: %s\n", asctime(localtime(&tloc)));
-			fflush(logfp);
+			fflush(logfp);		
 		} else {
 			msg_display(MSG_openfail, "log file", strerror(errno));
 		}
@@ -137,22 +141,21 @@ script_flip(menudesc *m, void *arg)
 	time_t tloc;
 
 	(void)time(&tloc);
-	if (script) {
-		scripting_fprintf(NULL, "# Script ended at: %s\n",
-		    asctime(localtime(&tloc)));
+	if (scripting == 1) {
+		scripting_fprintf(NULL, "# Script ended at: %s\n", asctime(localtime(&tloc)));
+		scripting = 0;
 		fflush(script);
 		fclose(script);
-		script = NULL;
 	} else {
 		script = fopen("/tmp/sysinst.sh", "w");
 		if (script != NULL) {
+			scripting = 1;
 			scripting_fprintf(NULL, "#!/bin/sh\n");
 			scripting_fprintf(NULL, "# Script started at: %s\n",
 			    asctime(localtime(&tloc)));
-			fflush(script);
+			fflush(script);		
 		} else {
-			msg_display(MSG_openfail, "script file",
-			    strerror(errno));
+			msg_display(MSG_openfail, "script file", strerror(errno));
 		}
 	}
 	return(0);
@@ -200,7 +203,7 @@ collect(int kind, char **buffer, const char *name, ...)
 
 	if (fbytes == 0)
 		fbytes = BUFSIZE;
-
+	
 	/* Allocate the buffer size. */
 	*buffer = cp = malloc(fbytes + 1);
 	if (!cp)
@@ -368,7 +371,7 @@ show_cmd(const char *scmd, struct winsize *win)
  */
 static int
 launch_subwin(WINDOW **actionwin, char **args, struct winsize *win, int flags,
-    const char *scmd, const char **errstr)
+	const char *scmd, const char **errstr)
 {
 	int n, i;
 	int selectfailed;
@@ -378,9 +381,11 @@ launch_subwin(WINDOW **actionwin, char **args, struct winsize *win, int flags,
 	char ibuf[MAXBUF];
 	char pktdata;
 	char *cp, *ncp;
-	struct termios rtt, tt;
+	struct termios rtt;
+	struct termios tt;
 	struct timeval tmo;
 	static int do_tioccons = 2;
+
 
 	(void)tcgetattr(STDIN_FILENO, &tt);
 	if (openpty(&master, &slave, NULL, &tt, win) == -1) {
@@ -409,9 +414,9 @@ launch_subwin(WINDOW **actionwin, char **args, struct winsize *win, int flags,
 		}
 	}
 
-	if (logfp)
+	if (logging)
 		fflush(logfp);
-	if (script)
+	if (scripting)
 		fflush(script);
 
 	child = fork();
@@ -430,18 +435,16 @@ launch_subwin(WINDOW **actionwin, char **args, struct winsize *win, int flags,
 		endwin();
 		(void)close(master);
 		rtt = tt;
-		rtt.c_lflag |= (ICANON|ECHO);
+		rtt.c_lflag |= (ICANON|ECHO); 
 		(void)tcsetattr(slave, TCSANOW, &rtt);
 		login_tty(slave);
-		if (logfp) {
+		if (logging) {
 			fprintf(logfp, "executing: %s\n", scmd);
 			fclose(logfp);
-			logfp = NULL;
 		}
-		if (script) {
+		if (scripting) {
 			fprintf(script, "%s\n", scmd);
 			fclose(script);
-			script = NULL;
 		}
 		if (strcmp(args[0], "cd") == 0 && strcmp(args[2], "&&") == 0) {
 			target_chdir_or_die(args[1]);
@@ -483,9 +486,8 @@ launch_subwin(WINDOW **actionwin, char **args, struct winsize *win, int flags,
 
 	for (selectfailed = 0;;) {
 		if (selectfailed) {
-			const char mmsg[] =
-			    "select(2) failed but no child died?";
-			if (logfp)
+			const char *mmsg = "select(2) failed but no child died?";
+			if (logging)
 				(void)fprintf(logfp, mmsg);
 			errx(1, mmsg);
 		}
@@ -498,7 +500,7 @@ launch_subwin(WINDOW **actionwin, char **args, struct winsize *win, int flags,
 		if (i < 0) {
 			if (errno != EINTR) {
 				warn("select");
-				if (logfp)
+				if (logging)
 					(void)fprintf(logfp,
 					    "select failure: %s\n",
 					    strerror(errno));
@@ -530,7 +532,7 @@ launch_subwin(WINDOW **actionwin, char **args, struct winsize *win, int flags,
 			}
 			if (*cp == 0 || flags & RUN_SILENT)
 				continue;
-			if (logfp) {
+			if (logging) {
 				fprintf(logfp, "%s", cp);
 				fflush(logfp);
 			}
@@ -550,7 +552,7 @@ launch_subwin(WINDOW **actionwin, char **args, struct winsize *win, int flags,
 	}
 	close(master);
 	close(slave);
-	if (logfp)
+	if (logging)
 		fflush(logfp);
 
 	/* from here on out, we take tty signals ourselves */
@@ -679,7 +681,7 @@ run_program(int flags, const char *cmd, ...)
 	if (actionwin != NULL) {
 		if (actionwin != stdscr)
 			delwin(actionwin);
-		if (errstr == 0 || !(flags & RUN_NO_CLEAR)) {
+		if (err == 0 || !(flags & RUN_NO_CLEAR)) {
 			wclear(stdscr);
 			touchwin(stdscr);
 			clearok(stdscr, 1);

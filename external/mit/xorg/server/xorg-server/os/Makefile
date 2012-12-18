@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2011/08/02 09:11:38 mrg Exp $
+#	$NetBSD: Makefile,v 1.4.8.1 2009/09/17 04:24:41 snj Exp $
 
 .include "../Makefile.serverlib"
 .include "../Makefile.servermod"
@@ -9,7 +9,7 @@ LIB=	os
 SRCS=	WaitFor.c access.c auth.c connection.c io.c mitauth.c \
 	oscolor.c osinit.c utils.c xdmauth.c \
 	xstrans.c xprintf.c log.c xdmcp.c \
-	rpcauth.c backtrace.c xprintf.c xsha1.c
+	rpcauth.c backtrace.c
 
 CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/include \
 		-I${DESTDIR}${X11INCDIR}/X11 \
@@ -26,8 +26,7 @@ CPPFLAGS+=	${X11FLAGS.DIX} \
 		-DHASXDMAUTH \
 		${X11FLAGS.OS_DEFINES} \
 		-DUSE_RGB_TXT \
-		-UDDXTIME \
-		-DHAVE_SHA1_IN_LIBC
+		-UDDXTIME
 
 .include "../Makefile.common"
 
@@ -60,8 +59,6 @@ CPPFLAGS.xdmcp.c=	${XDMCP_DEFINES} -DBSD44SOCKETS
 
 COPTS.xdmauth.c=	-Wno-error	# XXX
 COPTS.xstrans.c=	-Wno-error	# XXX
-COPTS.access.c=		-Wno-error	# XXX bigreqstr.h
-COPTS.io.c=		-Wno-error	# XXX bigreqstr.h
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

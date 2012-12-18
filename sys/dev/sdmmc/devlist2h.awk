@@ -1,5 +1,5 @@
 #! /usr/bin/awk -f
-#	$NetBSD: devlist2h.awk,v 1.1 2009/04/21 03:00:30 nonaka Exp $
+#	$NetBSD: devlist2h.awk,v 1.1.8.2 2009/10/07 15:41:13 sborrill Exp $
 #	$OpenBSD: devlist2h.awk,v 1.2 2006/06/02 21:16:44 uwe Exp $
 #	NetBSD: devlist2h.awk,v 1.2 1998/07/22 11:47:13 christos Exp
 #
@@ -67,7 +67,7 @@ NR == 1 {
 	VERSION = $0
 	gsub("\\$", "", VERSION)
 
-	printf("/*\t$NetBSD: devlist2h.awk,v 1.1 2009/04/21 03:00:30 nonaka Exp $\t*/\n\n") > hfile
+	printf("/*\t$NetBSD: devlist2h.awk,v 1.1.8.2 2009/10/07 15:41:13 sborrill Exp $\t*/\n\n") > hfile
 	printf("/*\n") > hfile
 	printf(" * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.\n") \
 	    > hfile

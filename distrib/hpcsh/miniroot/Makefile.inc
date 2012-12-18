@@ -1,14 +1,13 @@
-#	$NetBSD: Makefile.inc,v 1.8 2012/10/26 18:15:55 tsutsui Exp $
+#	$NetBSD: Makefile.inc,v 1.1 2002/07/02 04:14:37 itojun Exp $
 
-WARNS=		1
-DBG=		-Os
+DBG=		-O
 
 IMAGESIZE=	4m
 MAKEFS_FLAGS=	-o density=2k
 IMAGEENDIAN=	le
-MAKEDEVTARGETS=	all ipty
-LISTS+=		${DISTRIBDIR}/common/list.sysinst.en
+MAKEDEVTARGETS=	all
+#LISTS+=		${DISTRIBDIR}/common/list.sysinst
 MTREECONF+=	${.CURDIR}/mtree.usr.install
-IMAGEDEPENDS+=	${ARCHDIR}/dot.profile
-
-.include "${DISTRIBDIR}/common/Makefile.dhcpcd"
+IMAGEDEPENDS+=	${ARCHDIR}/dot.profile ${ARCHDIR}/termcap.vt100 \
+		${DESTDIR}/.profile ${DESTDIR}/etc/disktab \
+		${DESTDIR}/etc/spwd.db

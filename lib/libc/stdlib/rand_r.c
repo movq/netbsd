@@ -1,4 +1,4 @@
-/*	$NetBSD: rand_r.c,v 1.6 2012/06/25 22:32:45 abs Exp $	*/
+/*	$NetBSD: rand_r.c,v 1.5 2003/08/07 16:43:43 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -34,7 +34,7 @@
 #if 0
 static char *sccsid = "from: @(#)rand.c	5.6 (Berkeley) 6/24/91";
 #else
-__RCSID("$NetBSD: rand_r.c,v 1.6 2012/06/25 22:32:45 abs Exp $");
+__RCSID("$NetBSD: rand_r.c,v 1.5 2003/08/07 16:43:43 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -43,7 +43,8 @@ __RCSID("$NetBSD: rand_r.c,v 1.6 2012/06/25 22:32:45 abs Exp $");
 #include <stdlib.h>
 
 int
-rand_r(unsigned int *seed)
+rand_r(seed)
+	unsigned int *seed;
 {
 	_DIAGASSERT(seed != NULL);
 

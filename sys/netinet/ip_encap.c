@@ -66,15 +66,11 @@
  *
  * FreeBSD is excluded here as they make max_keylen a static variable, and
  * thus forbid definition of radix table other than proper domains.
- * 
- * !!!!!!!
- * !!NOTE: dom_maxrtkey assumes USE_RADIX is defined.
- * !!!!!!!
  */
 #define USE_RADIX
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_encap.c,v 1.39 2011/07/17 20:54:53 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_encap.c,v 1.32 2008/04/24 11:38:37 ad Exp $");
 
 #include "opt_mrouting.h"
 #include "opt_inet.h"
@@ -109,7 +105,27 @@ __KERNEL_RCSID(0, "$NetBSD: ip_encap.c,v 1.39 2011/07/17 20:54:53 joerg Exp $");
 #include <netinet/icmp6.h>
 #endif
 
+#include <machine/stdarg.h>
+
 #include <net/net_osdep.h>
+
+/* to lookup a pair of address using radix tree */
+struct sockaddr_pack {
+	u_int8_t sp_len;
+	u_int8_t sp_family;	/* not really used */
+	/* followed by variable-length data */
+};
+
+struct pack4 {
+	struct sockaddr_pack p;
+	struct sockaddr_in mine;
+	struct sockaddr_in yours;
+};
+struct pack6 {
+	struct sockaddr_pack p;
+	struct sockaddr_in6 mine;
+	struct sockaddr_in6 yours;
+};
 
 enum direction { INBOUND, OUTBOUND };
 
@@ -140,6 +156,19 @@ struct radix_node_head *encap_head[2];	/* 0 for AF_INET, 1 for AF_INET6 */
 #endif
 
 void
+encap_setkeylen(void)
+{
+#ifdef USE_RADIX
+	if (sizeof(struct pack4) > max_keylen)
+		max_keylen = sizeof(struct pack4);
+#ifdef INET6
+	if (sizeof(struct pack6) > max_keylen)
+		max_keylen = sizeof(struct pack6);
+#endif
+#endif
+}
+
+void
 encap_init(void)
 {
 	static int initialized = 0;
@@ -160,13 +189,13 @@ encap_init(void)
 
 #ifdef USE_RADIX
 	/*
-	 * initialize radix lookup table when the radix subsystem is inited.
+	 * initialize radix lookup table.
+	 * max_keylen initialization happen in the rn_init().
 	 */
-	rn_delayedinit((void *)&encap_head[0],
-	    sizeof(struct sockaddr_pack) << 3);
+	rn_init();
+	rn_inithead((void *)&encap_head[0], sizeof(struct sockaddr_pack) << 3);
 #ifdef INET6
-	rn_delayedinit((void *)&encap_head[1],
-	    sizeof(struct sockaddr_pack) << 3);
+	rn_inithead((void *)&encap_head[1], sizeof(struct sockaddr_pack) << 3);
 #endif
 #endif
 }
@@ -176,7 +205,7 @@ static struct encaptab *
 encap4_lookup(struct mbuf *m, int off, int proto, enum direction dir)
 {
 	struct ip *ip;
-	struct ip_pack4 pack;
+	struct pack4 pack;
 	struct encaptab *ep, *match;
 	int prio, matchprio;
 #ifdef USE_RADIX
@@ -190,7 +219,7 @@ encap4_lookup(struct mbuf *m, int off, int proto, enum direction dir)
 #endif
 	ip = mtod(m, struct ip *);
 
-	memset(&pack, 0, sizeof(pack));
+	bzero(&pack, sizeof(pack));
 	pack.p.sp_len = sizeof(pack);
 	pack.mine.sin_family = pack.yours.sin_family = AF_INET;
 	pack.mine.sin_len = pack.yours.sin_len = sizeof(struct sockaddr_in);
@@ -300,7 +329,7 @@ static struct encaptab *
 encap6_lookup(struct mbuf *m, int off, int proto, enum direction dir)
 {
 	struct ip6_hdr *ip6;
-	struct ip_pack6 pack;
+	struct pack6 pack;
 	int prio, matchprio;
 	struct encaptab *ep, *match;
 #ifdef USE_RADIX
@@ -314,7 +343,7 @@ encap6_lookup(struct mbuf *m, int off, int proto, enum direction dir)
 #endif
 	ip6 = mtod(m, struct ip6_hdr *);
 
-	memset(&pack, 0, sizeof(pack));
+	bzero(&pack, sizeof(pack));
 	pack.p.sp_len = sizeof(pack);
 	pack.mine.sin6_family = pack.yours.sin6_family = AF_INET6;
 	pack.mine.sin6_len = pack.yours.sin6_len = sizeof(struct sockaddr_in6);
@@ -488,9 +517,9 @@ encap_attach(int af, int proto,
 	int error;
 	int s;
 	size_t l;
-	struct ip_pack4 *pack4;
+	struct pack4 *pack4;
 #ifdef INET6
-	struct ip_pack6 *pack6;
+	struct pack6 *pack6;
 #endif
 
 	s = splsoftnet();
@@ -512,12 +541,12 @@ encap_attach(int af, int proto,
 			panic("null pointers in encaptab");
 #endif
 		if (ep->src->sa_len != sp->sa_len ||
-		    memcmp(ep->src, sp, sp->sa_len) != 0 ||
-		    memcmp(ep->srcmask, sm, sp->sa_len) != 0)
+		    bcmp(ep->src, sp, sp->sa_len) != 0 ||
+		    bcmp(ep->srcmask, sm, sp->sa_len) != 0)
 			continue;
 		if (ep->dst->sa_len != dp->sa_len ||
-		    memcmp(ep->dst, dp, dp->sa_len) != 0 ||
-		    memcmp(ep->dstmask, dm, dp->sa_len) != 0)
+		    bcmp(ep->dst, dp, dp->sa_len) != 0 ||
+		    bcmp(ep->dstmask, dm, dp->sa_len) != 0)
 			continue;
 
 		error = EEXIST;
@@ -560,29 +589,29 @@ encap_attach(int af, int proto,
 	ep->maskpack->sa_len = l & 0xff;
 	switch (af) {
 	case AF_INET:
-		pack4 = (struct ip_pack4 *)ep->addrpack;
+		pack4 = (struct pack4 *)ep->addrpack;
 		ep->src = (struct sockaddr *)&pack4->mine;
 		ep->dst = (struct sockaddr *)&pack4->yours;
-		pack4 = (struct ip_pack4 *)ep->maskpack;
+		pack4 = (struct pack4 *)ep->maskpack;
 		ep->srcmask = (struct sockaddr *)&pack4->mine;
 		ep->dstmask = (struct sockaddr *)&pack4->yours;
 		break;
 #ifdef INET6
 	case AF_INET6:
-		pack6 = (struct ip_pack6 *)ep->addrpack;
+		pack6 = (struct pack6 *)ep->addrpack;
 		ep->src = (struct sockaddr *)&pack6->mine;
 		ep->dst = (struct sockaddr *)&pack6->yours;
-		pack6 = (struct ip_pack6 *)ep->maskpack;
+		pack6 = (struct pack6 *)ep->maskpack;
 		ep->srcmask = (struct sockaddr *)&pack6->mine;
 		ep->dstmask = (struct sockaddr *)&pack6->yours;
 		break;
 #endif
 	}
 
-	memcpy(ep->src, sp, sp->sa_len);
-	memcpy(ep->srcmask, sm, sp->sa_len);
-	memcpy(ep->dst, dp, dp->sa_len);
-	memcpy(ep->dstmask, dm, dp->sa_len);
+	bcopy(sp, ep->src, sp->sa_len);
+	bcopy(sm, ep->srcmask, sp->sa_len);
+	bcopy(dp, ep->dst, dp->sa_len);
+	bcopy(dm, ep->dstmask, dp->sa_len);
 	ep->psw = psw;
 	ep->arg = arg;
 
@@ -631,7 +660,7 @@ encap_attach_func(int af, int proto,
 		error = ENOBUFS;
 		goto fail;
 	}
-	memset(ep, 0, sizeof(*ep));
+	bzero(ep, sizeof(*ep));
 
 	ep->af = af;
 	ep->proto = proto;
@@ -844,8 +873,8 @@ mask_match(const struct encaptab *ep,
 	d.ss_len = dp->sa_len;
 	d.ss_family = dp->sa_family;
 
-	if (memcmp(&s, ep->src, ep->src->sa_len) == 0 &&
-	    memcmp(&d, ep->dst, ep->dst->sa_len) == 0) {
+	if (bcmp(&s, ep->src, ep->src->sa_len) == 0 &&
+	    bcmp(&d, ep->dst, ep->dst->sa_len) == 0) {
 		return matchlen;
 	} else
 		return 0;

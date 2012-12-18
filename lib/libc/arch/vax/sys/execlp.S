@@ -1,4 +1,4 @@
-/*	$NetBSD: execlp.S,v 1.4 2011/01/25 02:38:15 matt Exp $	*/
+/*	$NetBSD: execlp.S,v 1.3 2003/08/24 21:04:53 ragge Exp $	*/
 /*
  * Copyright (c) 2001 Ludd, University of Lule}, Sweden. All rights reserved.
  *
@@ -31,10 +31,6 @@
 
 #include "SYS.h"
 
-#ifdef SYSLIBC_SCCS
-RCSID("$NetBSD: execlp.S,v 1.4 2011/01/25 02:38:15 matt Exp $")
-#endif
-
 #ifdef WEAK_ALIAS
 WEAK_ALIAS(execlp, _execlp)
 #endif
@@ -44,4 +40,3 @@ ENTRY(_execlp, 0)
 	pushl	4(%ap)	# Push path
 	calls	$2,_C_LABEL(execvp)
 	ret
-END(_execlp)

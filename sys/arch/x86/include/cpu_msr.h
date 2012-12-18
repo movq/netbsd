@@ -1,4 +1,4 @@
-/* $NetBSD: cpu_msr.h,v 1.7 2009/10/05 23:59:31 rmind Exp $ */
+/* $NetBSD: cpu_msr.h,v 1.6 2007/10/17 19:58:14 garbled Exp $ */
 
 /*-
  * Copyright (c) 2007 Juan Romero Pardines.
@@ -29,36 +29,22 @@
 #define _X86_CPU_MSR_H
 
 #include <sys/param.h>
-#include <sys/types.h>
+#include <machine/cpu.h>
 
 #ifdef _KERNEL
 
-struct msr_rw_info {
-	int		msr_read;
-	int		msr_type;
-	uint64_t	msr_value;
-	uint64_t	msr_mask;
+struct msr_cpu_broadcast {
+	int msr_read;
+	int msr_type;
+	uint64_t msr_value;
+	uint64_t msr_mask;
 };
 
-static inline void
-x86_msr_xcall(void *arg1, void *arg2)
-{
-	struct msr_rw_info *msrdat = arg1;
-	uint64_t msr = 0;
-
-	KASSERT(msrdat->msr_type != 0);
-
-	/* Read the MSR requested and apply the mask if defined. */
-	if (msrdat->msr_read) {
-		msr = rdmsr(msrdat->msr_type);
-		if (msrdat->msr_mask) {
-			msr &= ~msrdat->msr_mask;
-		}
-	}
-	/* Assign (or extract, on read) the value and perform the write. */
-	msr |= msrdat->msr_value;
-	wrmsr(msrdat->msr_type, msr);
-}
+void		x86_init(void);
+void		msr_write_ipi(struct cpu_info *);
+void		msr_cpu_broadcast_initmtx(void);
+void		msr_cpu_broadcast(struct msr_cpu_broadcast *);
 
 #endif /* ! _KERNEL */
+
 #endif /* ! _X86_CPU_MSR_H */

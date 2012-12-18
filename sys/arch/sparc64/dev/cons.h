@@ -1,4 +1,4 @@
-/*	$NetBSD: cons.h,v 1.9 2011/06/03 03:20:39 christos Exp $	*/
+/*	$NetBSD: cons.h,v 1.8 2006/10/16 22:07:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 Eduardo E. Horvath
@@ -35,7 +35,7 @@
  */
 
 struct pconssoftc {
-	device_t of_dev;
+	struct device of_dev;
 	struct tty *of_tty;
 	struct callout sc_poll_ch;
 	int of_flags;

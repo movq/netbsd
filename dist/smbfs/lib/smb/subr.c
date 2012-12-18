@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: subr.c,v 1.7 2011/09/22 16:08:49 he Exp $");
+__RCSID("$NetBSD: subr.c,v 1.5 2008/06/27 02:09:49 gmcgarry Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -164,14 +164,15 @@ smb_printb(char *dest, int flags, const struct smb_bitname *bnp) {
 int
 smb_open_rcfile(void)
 {
-	char *home;
+	char *home, *fn;
 	int error;
 
 	home = getenv("HOME");
 	if (home) {
-		char fn[1024];
-		snprintf(fn, sizeof(fn), "%s/.nsmbrc", home);
+		fn = malloc(strlen(home) + 20);
+		sprintf(fn, "%s/.nsmbrc", home);
 		error = rc_open(fn, "r", &smb_rc);
+		free(fn);
 	}
 	error = rc_merge(SMB_CFG_FILE, &smb_rc);
 	if (smb_rc == NULL)

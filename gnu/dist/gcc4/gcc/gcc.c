@@ -1620,14 +1620,15 @@ init_gcc_specs (struct obstack *obstack, const char *shared_name,
 		"%{!shared:%{!shared-libgcc:", static_name, " ",
 		eh_name, "}%{shared-libgcc:", shared_name, " ",
 		static_name, "}}%{shared:",
-/* XXX NH XXX */
-#if defined(LINK_EH_SPEC) || 1
-		"%{shared-libgcc:", shared_name, "} ",
-		static_name, 
+#ifdef LINK_EH_SPEC
+		"%{shared-libgcc:", shared_name,
+		"}%{!shared-libgcc:", static_name,
 #ifdef LIBGCC_PICSUFFIX
 		LIBGCC_PICSUFFIX ,
 #endif
+		"}"
 #else
+NO NO NO!!!!
 		shared_name,
 #endif
 #endif
@@ -6277,7 +6278,7 @@ main (int argc, const char **argv)
 			      PREFIX_PRIORITY_LAST, 0, 1);
       else if (*cross_compile == '0')
 	{
-#if !defined(NETBSD_NATIVE) && !defined(NETBSD_TOOLS)
+#ifndef NETBSD_NATIVE
 	  if (gcc_exec_prefix)
 	    add_prefix (&startfile_prefixes,
 			concat (gcc_exec_prefix, machine_suffix,
@@ -6295,7 +6296,7 @@ main (int argc, const char **argv)
 #endif /* NETBSD_NATIVE */
 	}
 
-#if !defined(NETBSD_NATIVE) && !defined(NETBSD_TOOLS)
+#ifndef NETBSD_NATIVE
       if (*standard_startfile_prefix_1)
  	add_sysrooted_prefix (&startfile_prefixes,
 			      standard_startfile_prefix_1, "BINUTILS",

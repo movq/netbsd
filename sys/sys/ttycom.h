@@ -1,4 +1,4 @@
-/*	$NetBSD: ttycom.h,v 1.20 2012/10/19 16:49:21 apb Exp $	*/
+/*	$NetBSD: ttycom.h,v 1.18 2005/12/11 12:25:21 christos Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993, 1994
@@ -39,7 +39,6 @@
 #ifndef	_SYS_TTYCOM_H_
 #define	_SYS_TTYCOM_H_
 
-#include <sys/syslimits.h>
 #include <sys/ioccom.h>
 
 /*
@@ -58,12 +57,12 @@ struct winsize {
 	unsigned short	ws_ypixel;	/* vertical size, pixels */
 };
 
-/* ptmget, for /dev/ptm pty getting ioctl TIOCPTMGET, and for TIOCPTSNAME */
+/* ptmget, for /dev/ptm pty getting ioctl PTMGET */
 struct ptmget {
 	int	cfd;
 	int	sfd;
-	char	cn[PATH_MAX];
-	char	sn[PATH_MAX];
+	char	cn[16];
+	char	sn[16];
 };
 
 #define _PATH_PTMDEV	"/dev/ptm"
@@ -154,8 +153,6 @@ typedef char linedn_t[TTLINEDNAMELEN];
 #define TIOCGRANTPT 	 _IO('t', 71) 			/* grantpt(3) */
 #define TIOCPTSNAME 	 _IOR('t', 72, struct ptmget)	/* ptsname(3) */
 
-#define TIOCSQSIZE	 _IOW('t', 128, int)	/* set queue size */
-#define TIOCGQSIZE	 _IOR('t', 129, int)	/* get queue size */
 
 #define	TTYDISC		0		/* termios tty line discipline */
 #define	TABLDISC	3		/* tablet discipline */

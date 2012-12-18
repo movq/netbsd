@@ -150,11 +150,6 @@ enum radeon_family {
 	CHIP_RV730,
 	CHIP_RV710,
 	CHIP_RV740,
-	CHIP_CEDAR,
-	CHIP_REDWOOD,
-	CHIP_JUNIPER,
-	CHIP_CYPRESS,
-	CHIP_HEMLOCK,
 	CHIP_LAST,
 };
 
@@ -473,9 +468,9 @@ extern int radeon_irq_emit(struct drm_device *dev, void *data, struct drm_file *
 extern int radeon_irq_wait(struct drm_device *dev, void *data, struct drm_file *file_priv);
 
 extern void radeon_do_release(struct drm_device * dev);
-extern u32 radeon_get_vblank_counter(struct drm_device *dev, unsigned int crtc);
-extern int radeon_enable_vblank(struct drm_device *dev, unsigned int crtc);
-extern void radeon_disable_vblank(struct drm_device *dev, unsigned int crtc);
+extern u32 radeon_get_vblank_counter(struct drm_device *dev, int crtc);
+extern int radeon_enable_vblank(struct drm_device *dev, int crtc);
+extern void radeon_disable_vblank(struct drm_device *dev, int crtc);
 extern irqreturn_t radeon_driver_irq_handler(DRM_IRQ_ARGS);
 extern void radeon_driver_irq_preinstall(struct drm_device * dev);
 extern int radeon_driver_irq_postinstall(struct drm_device * dev);
@@ -547,10 +542,6 @@ extern void radeon_cp_discard_buffer(struct drm_device * dev, struct drm_buf * b
 /* radeon_cs.c */
 extern int radeon_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *fpriv);
 extern int r600_cs_init(struct drm_device *dev);
-
-/* part of platform code, usually radeon_drv.c */
-int radeon_load_a_microcode(const char *fmt, const char *chip_name, void **codep, size_t *sizep);
-void radeon_free_a_microcode(void *code, size_t size);
 
 /* Flags for stats.boxes
  */

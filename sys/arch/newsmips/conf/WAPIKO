@@ -1,7 +1,7 @@
 #
 # NEWS3400 config file
 #
-# 	$NetBSD: WAPIKO,v 1.43 2012/08/17 20:11:40 abs Exp $
+# 	$NetBSD: WAPIKO,v 1.38 2007/10/17 19:55:54 garbled Exp $
 #
 include		"arch/newsmips/conf/std.newsmips"
 
@@ -38,6 +38,7 @@ options 	COMPAT_16		# NetBSD 1.6 binary compatibility
 options 	COMPAT_20		# NetBSD 2.0 binary compatibility
 options 	COMPAT_30		# NetBSD 3.0 binary compatibility
 options 	COMPAT_40		# NetBSD 4.0 binary compatibility
+#options 	EXEC_AOUT		# exec a.out binaries
 #options 	EXEC_ECOFF		# exec ecoff binaries
 options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
@@ -53,8 +54,6 @@ options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 options 	INET		# Internet protocols
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
-options 	IPFILTER_COMPAT # Compat for IP-Filter
-#options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 
 config	netbsd root on ? type ?
 
@@ -91,7 +90,6 @@ sd*	at scsibus? target ? lun ?	# SCSI disks
 #cd*	at scsibus? target ? lun ?	# SCSI CD-ROMs
 
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	FONT_GALLANT12x22
 
 wsdisplay0 at fb? console ?
@@ -100,9 +98,10 @@ wsmouse0 at ms?
 
 pseudo-device	vnd			# disk-like interface to files
 #pseudo-device	ccd		4	# concatenated and striped disks
-#pseudo-device	fss			# file system snapshot device
+#pseudo-device	fss		4	# file system snapshot device
 pseudo-device	loop			# loopback interface; required
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	bpfilter		# Berkeley Packet Filter
 pseudo-device	ipfilter		# ip filter
+pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem

@@ -1,8 +1,8 @@
-.\"	$NetBSD: rmtops.3,v 1.14 2010/03/22 22:00:37 joerg Exp $
+.\"	$NetBSD: rmtops.3,v 1.9 2004/06/10 13:58:47 uebayasi Exp $
 .\"
 .Dd October 16, 2001
-.Dt RMTOPS 3
 .Os
+.Dt RMTOPS 3
 .Sh NAME
 .Nm rmtops
 .Nd access tape drives on remote machines
@@ -54,7 +54,9 @@ allow the user to open up a tape drive on a remote system on which he
 or she has an account and the appropriate remote permissions.
 .Pp
 A remote tape drive file name has the form
-.Dl [user@]hostname:/dev/???
+.sp
+	[user@]hostname:/dev/???
+.sp
 where
 .Em system
 is the remote system,
@@ -77,8 +79,9 @@ the current user's login name.
 .\" is recognized.
 .Pp
 For transparency, the user should include the file
-.In rmt.h ,
+.Pa \*[Lt]rmt.h\*[Gt] ,
 which has the following defines in it:
+.Pp
 .Bd -literal
 #define access	rmtaccess
 #define close	rmtclose

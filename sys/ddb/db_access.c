@@ -1,4 +1,4 @@
-/*	$NetBSD: db_access.c,v 1.21 2009/09/28 05:53:37 bsh Exp $	*/
+/*	$NetBSD: db_access.c,v 1.18 2007/02/21 22:59:56 thorpej Exp $	*/
 
 /*
  * Mach Operating System
@@ -30,30 +30,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_access.c,v 1.21 2009/09/28 05:53:37 bsh Exp $");
-
-#if defined(_KERNEL_OPT)
-#include "opt_kgdb.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: db_access.c,v 1.18 2007/02/21 22:59:56 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
-#include <sys/endian.h>
 
-#include <ddb/ddb.h>
+#include <machine/db_machdep.h>		/* type definitions */
+#include <machine/endian.h>
+
+#include <ddb/db_access.h>
 
 /*
  * Access unaligned data items on aligned (longword)
  * boundaries.
- *
- * This file is shared by ddb, kgdb and crash(8).
  */
-
-#if defined(DDB) || !defined(DDB) && !defined(KGDB)
-#define	_COMPILE_THIS
-#endif
-
-#if defined(_COMPILE_THIS) || defined(KGDB) && defined(SOFTWARE_SSTEP)
 
 const int db_extend[] = {	/* table for sign-extending */
 	0,
@@ -102,39 +92,3 @@ db_put_value(db_addr_t addr, size_t size, db_expr_t value)
 
 	db_write_bytes(addr, size, data);
 }
-
-#endif	/* _COMPILE_THIS || KGDB && SOFTWARE_SSTEP */
-
-#ifdef	_COMPILE_THIS
-
-void *
-db_read_ptr(const char *name)
-{
-	db_expr_t val;
-	void *p;
-
-	if (!db_value_of_name(name, &val)) {
-		db_printf("db_read_ptr: cannot find `%s'\n", name);
-		db_error(NULL);
-		/* NOTREACHED */
-	}
-	db_read_bytes((db_addr_t)val, sizeof(p), (char *)&p);
-	return p;
-}
-
-int
-db_read_int(const char *name)
-{
-	db_expr_t val;
-	int p;
-
-	if (!db_value_of_name(name, &val)) {
-		db_printf("db_read_int: cannot find `%s'\n", name);
-		db_error(NULL);
-		/* NOTREACHED */
-	}
-	db_read_bytes((db_addr_t)val, sizeof(p), (char *)&p);
-	return p;
-}
-
-#endif	/* _COMPILE_THIS */

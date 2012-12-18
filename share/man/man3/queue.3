@@ -1,4 +1,4 @@
-.\"	$NetBSD: queue.3,v 1.43 2012/10/08 18:20:34 njoly Exp $
+.\"	$NetBSD: queue.3,v 1.39 2008/10/07 13:03:50 apb Exp $
 .\"
 .\" Copyright (c) 2000, 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -53,7 +53,7 @@
 .\"
 .\"	@(#)queue.3	8.1 (Berkeley) 12/13/93
 .\"
-.Dd March 11, 2009
+.Dd October 7, 2008
 .Dt QUEUE 3
 .Os
 .Sh NAME
@@ -66,7 +66,6 @@
 .Nm SLIST_REMOVE_HEAD ,
 .Nm SLIST_REMOVE ,
 .Nm SLIST_FOREACH ,
-.Nm SLIST_FOREACH_SAFE ,
 .Nm SLIST_EMPTY ,
 .Nm SLIST_FIRST ,
 .Nm SLIST_NEXT ,
@@ -80,12 +79,9 @@
 .Nm SIMPLEQ_REMOVE_HEAD ,
 .Nm SIMPLEQ_REMOVE ,
 .Nm SIMPLEQ_FOREACH ,
-.Nm SIMPLEQ_FOREACH_SAFE ,
 .Nm SIMPLEQ_EMPTY ,
 .Nm SIMPLEQ_FIRST ,
 .Nm SIMPLEQ_NEXT ,
-.Nm SIMPLEQ_LAST ,
-.Nm SIMPLEQ_CONCAT ,
 .Nm STAILQ_HEAD ,
 .Nm STAILQ_HEAD_INITIALIZER ,
 .Nm STAILQ_ENTRY ,
@@ -96,11 +92,9 @@
 .Nm STAILQ_REMOVE_HEAD ,
 .Nm STAILQ_REMOVE ,
 .Nm STAILQ_FOREACH ,
-.Nm STAILQ_FOREACH_SAFE ,
 .Nm STAILQ_EMPTY ,
 .Nm STAILQ_FIRST ,
 .Nm STAILQ_NEXT ,
-.Nm STAILQ_LAST ,
 .Nm STAILQ_CONCAT ,
 .Nm LIST_HEAD ,
 .Nm LIST_HEAD_INITIALIZER ,
@@ -124,9 +118,7 @@
 .Nm TAILQ_INSERT_BEFORE ,
 .Nm TAILQ_REMOVE ,
 .Nm TAILQ_FOREACH ,
-.Nm TAILQ_FOREACH_SAFE ,
 .Nm TAILQ_FOREACH_REVERSE ,
-.Nm TAILQ_FOREACH_REVERSE_SAFE ,
 .Nm TAILQ_EMPTY ,
 .Nm TAILQ_FIRST ,
 .Nm TAILQ_NEXT ,
@@ -154,7 +146,7 @@
 .Nd "implementations of singly-linked lists, simple queues, lists, tail queues, and circular queues"
 .Sh SYNOPSIS
 .In sys/queue.h
-.Pp
+.sp
 .Fn SLIST_HEAD "HEADNAME" "TYPE"
 .Fn SLIST_HEAD_INITIALIZER "head"
 .Fn SLIST_ENTRY "TYPE"
@@ -164,14 +156,13 @@
 .Fn SLIST_REMOVE_HEAD "SLIST_HEAD *head" "SLIST_ENTRY NAME"
 .Fn SLIST_REMOVE "SLIST_HEAD *head" "TYPE *elm" "TYPE" "SLIST_ENTRY NAME"
 .Fn SLIST_FOREACH "TYPE *var" "SLIST_HEAD *head" "SLIST_ENTRY NAME"
-.Fn SLIST_FOREACH_SAFE "TYPE *var" "SLIST_HEAD *head" "SLIST_ENTRY NAME" "TYPE *tmp"
 .Ft int
 .Fn SLIST_EMPTY "SLIST_HEAD *head"
 .Ft TYPE *
 .Fn SLIST_FIRST "SLIST_HEAD *head"
 .Ft TYPE *
 .Fn SLIST_NEXT "TYPE *elm" "SLIST_ENTRY NAME"
-.Pp
+.sp
 .Fn SIMPLEQ_HEAD "HEADNAME" "TYPE"
 .Fn SIMPLEQ_HEAD_INITIALIZER "head"
 .Fn SIMPLEQ_ENTRY "TYPE"
@@ -182,17 +173,13 @@
 .Fn SIMPLEQ_REMOVE_HEAD "SIMPLEQ_HEAD *head" "SIMPLEQ_ENTRY NAME"
 .Fn SIMPLEQ_REMOVE "SIMPLEQ_HEAD *head" "TYPE *elm" "TYPE" "SIMPLEQ_ENTRY NAME"
 .Fn SIMPLEQ_FOREACH "TYPE *var" "SIMPLEQ_HEAD *head" "SIMPLEQ_ENTRY NAME"
-.Fn SIMPLEQ_FOREACH_SAFE "TYPE *var" "SIMPLEQ_HEAD *head" "SIMPLEQ_ENTRY NAME" "TYPE *tmp"
 .Ft int
 .Fn SIMPLEQ_EMPTY "SIMPLEQ_HEAD *head"
 .Ft TYPE *
 .Fn SIMPLEQ_FIRST "SIMPLEQ_HEAD *head"
 .Ft TYPE *
 .Fn SIMPLEQ_NEXT "TYPE *elm" "SIMPLEQ_ENTRY NAME"
-.Ft TYPE *
-.Fn SIMPLEQ_LAST "SIMPLEQ_HEAD *head" "TYPE *elm" "SIMPLEQ_ENTRY NAME"
-.Fn SIMPLEQ_CONCAT "SIMPLEQ_HEAD *head1" "SIMPLEQ_HEAD *head2"
-.Pp
+.sp
 .Fn STAILQ_HEAD "HEADNAME" "TYPE"
 .Fn STAILQ_HEAD_INITIALIZER "head"
 .Fn STAILQ_ENTRY "TYPE"
@@ -203,17 +190,14 @@
 .Fn STAILQ_REMOVE_HEAD "STAILQ_HEAD *head" "STAILQ_ENTRY NAME"
 .Fn STAILQ_REMOVE "STAILQ_HEAD *head" "TYPE *elm" "TYPE" "STAILQ_ENTRY NAME"
 .Fn STAILQ_FOREACH "TYPE *var" "STAILQ_HEAD *head" "STAILQ_ENTRY NAME"
-.Fn STAILQ_FOREACH_SAFE "TYPE *var" "STAILQ_HEAD *head" "STAILQ_ENTRY NAME" "TYPE *tmp"
 .Ft int
 .Fn STAILQ_EMPTY "STAILQ_HEAD *head"
 .Ft TYPE *
 .Fn STAILQ_FIRST "STAILQ_HEAD *head"
 .Ft TYPE *
 .Fn STAILQ_NEXT "TYPE *elm" "STAILQ_ENTRY NAME"
-.Ft TYPE *
-.Fn STAILQ_LAST "STAILQ_HEAD *head" "TYPE *elm" "STAILQ_ENTRY NAME"
 .Fn STAILQ_CONCAT "STAILQ_HEAD *head1" "STAILQ_HEAD *head2"
-.Pp
+.sp
 .Fn LIST_HEAD "HEADNAME" "TYPE"
 .Fn LIST_HEAD_INITIALIZER "head"
 .Fn LIST_ENTRY "TYPE"
@@ -229,7 +213,7 @@
 .Fn LIST_FIRST "LIST_HEAD *head"
 .Ft TYPE *
 .Fn LIST_NEXT "TYPE *elm" "LIST_ENTRY NAME"
-.Pp
+.sp
 .Fn TAILQ_HEAD "HEADNAME" "TYPE"
 .Fn TAILQ_HEAD_INITIALIZER "head"
 .Fn TAILQ_ENTRY "TYPE"
@@ -240,9 +224,7 @@
 .Fn TAILQ_INSERT_BEFORE "TYPE *listelm" "TYPE *elm" "TAILQ_ENTRY NAME"
 .Fn TAILQ_REMOVE "TAILQ_HEAD *head" "TYPE *elm" "TAILQ_ENTRY NAME"
 .Fn TAILQ_FOREACH "TYPE *var" "TAILQ_HEAD *head" "TAILQ_ENTRY NAME"
-.Fn TAILQ_FOREACH_SAFE "TYPE *var" "TAILQ_HEAD *head" "TAILQ_ENTRY NAME" "TYPE *tmp"
 .Fn TAILQ_FOREACH_REVERSE "TYPE *var" "TAILQ_HEAD *head" "HEADNAME" "TAILQ_ENTRY NAME"
-.Fn TAILQ_FOREACH_REVERSE_SAFE "TYPE *var" "TAILQ_HEAD *head" "HEADNAME" "TAILQ_ENTRY NAME" "TYPE *tmp"
 .Ft int
 .Fn TAILQ_EMPTY "TAILQ_HEAD *head"
 .Ft TYPE *
@@ -254,7 +236,7 @@
 .Ft TYPE *
 .Fn TAILQ_PREV "TYPE *elm" "HEADNAME" "TAILQ_ENTRY NAME"
 .Fn TAILQ_CONCAT "TAILQ_HEAD *head1" "TAILQ_HEAD *head2" "TAILQ_ENTRY NAME"
-.Pp
+.sp
 .Fn CIRCLEQ_HEAD "HEADNAME" "TYPE"
 .Fn CIRCLEQ_HEAD_INITIALIZER "head"
 .Fn CIRCLEQ_ENTRY "TYPE"
@@ -319,7 +301,7 @@ Each head entry requires two pointers rather than one.
 .El
 .Pp
 Simple queues are ideal for applications with large datasets and few or
-no removals, or for implementing a FIFO queue.
+no removals, or for implementing a FIFO	queue.
 .Pp
 All doubly linked types of data structures (lists, tail queues, and circle
 queues) additionally allow:
@@ -426,14 +408,14 @@ _INSERT_AFTER:+:+:+:+:+:+
 _INSERT_BEFORE:-:+:-:-:+:+
 _INSERT_HEAD:+:+:+:+:+:+
 _INSERT_TAIL:-:-:+:+:+:+
-_LAST:-:-:-:+:+:+
+_LAST:-:-:-:-:+:+
 _LOOP_NEXT:-:-:-:-:-:+
 _LOOP_PREV:-:-:-:-:-:+
 _NEXT:+:+:+:+:+:+
 _PREV:-:-:-:-:+:+
 _REMOVE:+:+:+:+:+:+
 _REMOVE_HEAD:+:-:+:+:-:-
-_CONCAT:-:-:+:+:+:-
+_CONCAT:-:-:-:+:+:-
 .TE
 .Sh SINGLY-LINKED LISTS
 A singly-linked list is headed by a structure defined by the
@@ -493,12 +475,6 @@ traverses the list referenced by
 in the forward direction, assigning each element in
 turn to
 .Fa var .
-.Pp
-The SAFE versions uses
-.Fa tmp
-to hold the next element, so
-.Fa var
-may be freed or removed from the list.
 .Pp
 The macro
 .Nm SLIST_INIT
@@ -588,7 +564,7 @@ structure is declared as follows:
 .Bd -literal -offset indent
 SIMPLEQ_HEAD(HEADNAME, TYPE) head;
 .Ed
-.Pp
+.sp
 where
 .Li HEADNAME
 is the name of the structure to be defined, and
@@ -598,7 +574,7 @@ A pointer to the head of the simple queue can later be declared as:
 .Bd -literal -offset indent
 struct HEADNAME *headp;
 .Ed
-.Pp
+.sp
 (The names
 .Li head
 and
@@ -669,40 +645,18 @@ The macro
 returns the first element of the simple queue
 .Fa head .
 .Pp
-The macros
+The macro
 .Nm SIMPLEQ_FOREACH
-and
-.Nm SIMPLEQ_FOREACH_SAFE
-traverse the tail queue referenced by
+traverses the tail queue referenced by
 .Fa head
 in the forward direction, assigning each element
 in turn to
 .Fa var .
 .Pp
-The SAFE versions uses
-.Fa tmp
-to hold the next element, so
-.Fa var
-may be freed or removed from the list.
-.Pp
 The macro
 .Nm SIMPLEQ_NEXT
 returns the element after the element
 .Fa elm .
-.Pp
-The macro
-.Nm SIMPLEQ_LAST
-returns the last item on the tail queue.
-If the tail queue is empty the return value is
-.Dv NULL .
-.Pp
-The macro
-.Nm SIMPLEQ_CONCAT
-concatenates the tail queue headed by
-.Fa head2
-onto the end of the one headed by
-.Fa head1
-removing all entries from the former.
 .Pp
 The macros prefixed with
 .Dq Nm STAILQ_
@@ -716,13 +670,10 @@ The macros prefixed with
 .Nm STAILQ_REMOVE_HEAD ,
 .Nm STAILQ_REMOVE ,
 .Nm STAILQ_FOREACH ,
-.Nm STAILQ_FOREACH_SAFE ,
 .Nm STAILQ_EMPTY ,
 .Nm STAILQ_FIRST ,
-.Nm STAILQ_NEXT ,
-.Nm STAILQ_LAST ,
 and
-.Nm STAILQ_CONCAT )
+.Nm STAILQ_NEXT )
 are functionally identical to these simple queue functions,
 and are provided for compatibility with
 .Fx .
@@ -771,7 +722,7 @@ structure is declared as follows:
 .Bd -literal -offset indent
 LIST_HEAD(HEADNAME, TYPE) head;
 .Ed
-.Pp
+.sp
 where
 .Fa HEADNAME
 is the name of the structure to be defined, and
@@ -781,7 +732,7 @@ A pointer to the head of the list can later be declared as:
 .Bd -literal -offset indent
 struct HEADNAME *headp;
 .Ed
-.Pp
+.sp
 (The names
 .Li head
 and
@@ -902,7 +853,7 @@ structure is declared as follows:
 .Bd -literal -offset indent
 TAILQ_HEAD(HEADNAME, TYPE) head;
 .Ed
-.Pp
+.sp
 where
 .Li HEADNAME
 is the name of the structure to be defined, and
@@ -912,7 +863,7 @@ A pointer to the head of the tail queue can later be declared as:
 .Bd -literal -offset indent
 struct HEADNAME *headp;
 .Ed
-.Pp
+.sp
 (The names
 .Li head
 and
@@ -981,22 +932,19 @@ The macro
 returns the first element of the tail queue
 .Fa head .
 .Pp
-The macros
-.Nm TAILQ_FOREACH ,
-.Nm TAILQ_FOREACH_REVERSE ,
-.Nm TAILQ_FOREACH_SAFE ,
-and
-.Nm TAILQ_FOREACH_REVERSE_SAFE
-traverse the tail queue referenced by
+The macro
+.Nm TAILQ_FOREACH
+traverses the tail queue referenced by
 .Fa head
-in the forward or reverse direction direction, assigning each element in turn to
+in the forward direction, assigning each element in turn to
 .Fa var .
 .Pp
-The SAFE versions uses
-.Fa tmp
-to hold the next element, so
-.Fa var
-may be freed or removed from the list.
+The macro
+.Nm TAILQ_FOREACH_REVERSE
+traverses the tail queue referenced by
+.Fa head
+in the reverse direction, assigning each element in turn to
+.Fa var .
 .Pp
 The macro
 .Nm TAILQ_NEXT
@@ -1063,7 +1011,7 @@ structure is declared as follows:
 .Bd -literal -offset indent
 CIRCLEQ_HEAD(HEADNAME, TYPE) head;
 .Ed
-.Pp
+.sp
 where
 .Li HEADNAME
 is the name of the structure to be defined, and
@@ -1073,7 +1021,7 @@ A pointer to the head of the circular queue can later be declared as:
 .Bd -literal -offset indent
 struct HEADNAME *headp;
 .Ed
-.Pp
+.sp
 (The names
 .Li head
 and

@@ -1,7 +1,7 @@
-/*	$NetBSD: ymvar.h,v 1.13 2011/11/23 23:07:33 jmcneill Exp $	*/
+/*	$NetBSD: ymvar.h,v 1.11 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
- * Copyright (c) 1999-2000, 2002, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999-2000, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -154,8 +154,7 @@ struct ym_softc {
 	bus_space_handle_t sc_opl_ioh;
 	bus_space_handle_t sc_sb_ioh;	/* only used to disable it */
 
-	callout_t sc_powerdown_ch;
-	kcondvar_t sc_cv;
+	struct callout sc_powerdown_ch;
 
 	int  master_mute, mic_mute;
 	struct ad1848_volume master_gain;
@@ -185,11 +184,11 @@ struct ym_softc {
 #define YM_EQ_OFF(v)	((v)->left < YM_EQ_ON_MIN && (v)->right < YM_EQ_ON_MIN)
 #define YM_WIDE_OFF(v)	((v)->left < YM_3D_ON_MIN && (v)->right < YM_3D_ON_MIN)
 
-	device_t sc_audiodev;
+	struct device *sc_audiodev;
 
 #if NMPU_YM > 0
 	bus_space_handle_t sc_mpu_ioh;
-	device_t sc_mpudev;
+	struct device *sc_mpudev;
 #endif
 
 #ifndef AUDIO_NO_POWER_CTL

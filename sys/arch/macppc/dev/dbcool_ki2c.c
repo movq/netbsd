@@ -1,4 +1,4 @@
-/*	$NetBSD: dbcool_ki2c.c,v 1.8 2011/12/13 08:16:40 riastradh Exp $ */
+/*	$NetBSD: dbcool_ki2c.c,v 1.3.6.1 2009/01/16 21:58:29 bouyer Exp $ */
 
 /*-
  * Copyright (C) 2005 Michael Lorenz
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dbcool_ki2c.c,v 1.8 2011/12/13 08:16:40 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dbcool_ki2c.c,v 1.3.6.1 2009/01/16 21:58:29 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,6 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD: dbcool_ki2c.c,v 1.8 2011/12/13 08:16:40 riastradh Ex
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/sysctl.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/ofw/openfirm.h>
 #include <macppc/dev/ki2cvar.h>
@@ -48,8 +50,8 @@ __KERNEL_RCSID(0, "$NetBSD: dbcool_ki2c.c,v 1.8 2011/12/13 08:16:40 riastradh Ex
 
 static void dbcool_ki2c_attach(device_t, device_t, void *);
 static int dbcool_ki2c_match(device_t, cfdata_t, void *);
-static uint8_t dbcool_ki2c_readreg(struct dbcool_chipset *, uint8_t);
-static void dbcool_ki2c_writereg(struct dbcool_chipset *, uint8_t, uint8_t);
+static uint8_t dbcool_ki2c_readreg(struct dbcool_softc *, uint8_t);
+static void dbcool_ki2c_writereg(struct dbcool_softc *, uint8_t, uint8_t);
 
 CFATTACH_DECL_NEW(dbcool_ki2c, sizeof(struct dbcool_softc),
     dbcool_ki2c_match, dbcool_ki2c_attach, NULL, NULL);
@@ -65,8 +67,7 @@ dbcool_ki2c_match(device_t parent, cfdata_t cf, void *aux)
 
 	memset(compat, 0, sizeof(compat));
 	OF_getprop(ka->ka_node, "compatible", compat, sizeof(compat));
-	if (strcmp(compat, "adt7467") != 0 && strcmp(compat, "adt7460") != 0 &&
-	    strcmp(compat, "adm1030") != 0)
+	if (strcmp(compat, "adt7467") != 0 && strcmp(compat, "adt7460") != 0)
 		return 0;
 	
 	return 1;
@@ -82,26 +83,26 @@ dbcool_ki2c_attach(device_t parent, device_t self, void *aux)
 	aprint_normal("\n");
 	aprint_naive("\n");
 
-	sc->sc_dc.dc_tag = ka->ka_tag;
-	sc->sc_dc.dc_addr = ka->ka_addr & 0xfe;
-	sc->sc_dc.dc_readreg = dbcool_ki2c_readreg;
-	sc->sc_dc.dc_writereg = dbcool_ki2c_writereg;
+	sc->sc_tag = ka->ka_tag;
+	sc->sc_addr = ka->ka_addr & 0xfe;
+	sc->sc_readreg = dbcool_ki2c_readreg;
+	sc->sc_writereg = dbcool_ki2c_writereg;
 
-	if (dbcool_chip_ident(&sc->sc_dc) < 0) {
+	if (dbcool_chip_ident(sc) < 0) {
 		aprint_error_dev(self, "Unrecognized dbCool chip - "
 					"set-up aborted\n");
 		return;
 	}
 
-	ver = sc->sc_dc.dc_readreg(&sc->sc_dc, DBCOOL_REVISION_REG);
+	ver = sc->sc_readreg(sc, DBCOOL_REVISION_REG);
 
-	if (sc->sc_dc.dc_chip->flags & DBCFLAG_4BIT_VER)
+	if (sc->sc_chip->flags & DBCFLAG_4BIT_VER)
 		aprint_normal_dev(self, "%s dBCool(tm) Controller "
-			"(rev 0x%02x, stepping 0x%02x)\n", sc->sc_dc.dc_chip->name,
+			"(rev 0x%02x, stepping 0x%02x)\n", sc->sc_chip->name,
 			ver >> 4, ver & 0x0f);
 	else
 		aprint_normal_dev(self, "%s dBCool(tm) Controller "
-			"(rev 0x%04x)\n", sc->sc_dc.dc_chip->name, ver);
+			"(rev 0x%04x)\n", sc->sc_chip->name, ver);
 
 	dbcool_setup(self);
 
@@ -110,22 +111,23 @@ dbcool_ki2c_attach(device_t parent, device_t self, void *aux)
 }
 
 static uint8_t
-dbcool_ki2c_readreg(struct dbcool_chipset *dc, uint8_t reg)
+dbcool_ki2c_readreg(struct dbcool_softc *sc, uint8_t reg)
 {
 	uint8_t data = 0;
 	
-	iic_acquire_bus(dc->dc_tag, 0);
-	iic_exec(dc->dc_tag, I2C_OP_READ, dc->dc_addr, &reg, 1, &data, 1, 0);
-	iic_release_bus(dc->dc_tag, 0);
+	iic_acquire_bus(sc->sc_tag, 0);
+	iic_exec(sc->sc_tag, I2C_OP_READ, sc->sc_addr, &reg, 1,
+	    &data, 1, 0);
+	iic_release_bus(sc->sc_tag, 0);
 	return data;
 }
 
 static void
-dbcool_ki2c_writereg(struct dbcool_chipset *dc, uint8_t reg, uint8_t data)
+dbcool_ki2c_writereg(struct dbcool_softc *sc, uint8_t reg, uint8_t data)
 {
 	uint8_t mdata[2] = {reg, data};
 	
-	iic_acquire_bus(dc->dc_tag, 0);
-	iic_exec(dc->dc_tag, I2C_OP_WRITE, dc->dc_addr, &mdata, 2, NULL, 0, 0);
-	iic_release_bus(dc->dc_tag, 0);
+	iic_acquire_bus(sc->sc_tag, 0);
+	iic_exec(sc->sc_tag, I2C_OP_WRITE, sc->sc_addr, &mdata, 2, NULL, 0, 0);
+	iic_release_bus(sc->sc_tag, 0);
 }

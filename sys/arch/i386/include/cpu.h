@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.178 2011/12/30 17:57:49 cherry Exp $	*/
+/*	$NetBSD: cpu.h,v 1.175 2008/05/22 13:55:51 ad Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -41,7 +41,7 @@
 
 #ifdef _KERNEL
 
-#if defined(__GNUC__) && !defined(_MODULE)
+#if defined(__GNUC__) && !defined(_LKM)
 static struct cpu_info *x86_curcpu(void);
 static lwp_t *x86_curlwp(void);
 
@@ -68,7 +68,6 @@ x86_curlwp(void)
 	    (*(struct cpu_info * const *)offsetof(struct cpu_info, ci_curlwp)));
 	return l;
 }
-
 __inline static void __unused
 cpu_set_curpri(int pri)
 {
@@ -85,10 +84,6 @@ cpu_set_curpri(int pri)
 #define	CLKF_PC(frame)		((frame)->cf_if.if_eip)
 #define	CLKF_INTR(frame)	(curcpu()->ci_idepth > 0)
 #define	LWP_PC(l)		((l)->l_md.md_regs->tf_eip)
-
-#ifdef PAE
-void cpu_alloc_l3_page(struct cpu_info *);
-#endif /* PAE */
 
 #endif	/* _KERNEL */
 

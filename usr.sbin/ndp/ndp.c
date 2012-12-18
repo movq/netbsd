@@ -1,4 +1,4 @@
-/*	$NetBSD: ndp.c,v 1.40 2011/08/31 13:32:38 joerg Exp $	*/
+/*	$NetBSD: ndp.c,v 1.37 2007/01/16 17:32:04 hubertf Exp $	*/
 /*	$KAME: ndp.c,v 1.121 2005/07/13 11:30:13 keiichi Exp $	*/
 
 /*
@@ -106,6 +106,11 @@
 #include <unistd.h>
 #include "gmt2local.h"
 
+/* packing rule for routing socket */
+#define ROUNDUP(a) \
+	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
+#define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
+
 static pid_t pid;
 static int nflag;
 static int tflag;
@@ -125,7 +130,7 @@ static void dump(struct in6_addr *, int);
 static struct in6_nbrinfo *getnbrinfo(struct in6_addr *, unsigned int, int);
 static char *ether_str(struct sockaddr_dl *);
 static int ndp_ether_aton(char *, u_char *);
-__dead static void usage(void);
+static void usage(void);
 static int rtmsg(int);
 static void ifinfo(char *, int, char **);
 static void rtrlist(void);
@@ -382,7 +387,7 @@ set(int argc, char **argv)
 		/* NOTREACHED */
 	}
 	mysin = (struct sockaddr_in6 *)(void *)(rtm + 1);
-	sdl = (struct sockaddr_dl *)(void *)(RT_ROUNDUP(mysin->sin6_len) + (char *)(void *)mysin);
+	sdl = (struct sockaddr_dl *)(void *)(ROUNDUP(mysin->sin6_len) + (char *)(void *)mysin);
 	if (IN6_ARE_ADDR_EQUAL(&mysin->sin6_addr, &sin_m.sin6_addr)) {
 		if (sdl->sdl_family == AF_LINK &&
 		    (rtm->rtm_flags & RTF_LLINFO) &&
@@ -477,7 +482,7 @@ delete(char *host)
 	if (rtmsg(RTM_GET) < 0)
 		errx(1, "RTM_GET(%s) failed", host);
 	mysin = (struct sockaddr_in6 *)(void *)(rtm + 1);
-	sdl = (struct sockaddr_dl *)(void *)(RT_ROUNDUP(mysin->sin6_len) +
+	sdl = (struct sockaddr_dl *)(void *)(ROUNDUP(mysin->sin6_len) +
 	    (char *)(void *)mysin);
 	if (IN6_ARE_ADDR_EQUAL(&mysin->sin6_addr, &sin_m.sin6_addr)) {
 		if (sdl->sdl_family == AF_LINK &&
@@ -569,7 +574,7 @@ again:;
 
 		rtm = (struct rt_msghdr *)(void *)next;
 		mysin = (struct sockaddr_in6 *)(void *)(rtm + 1);
-		sdl = (struct sockaddr_dl *)(void *)((char *)(void *)mysin + RT_ROUNDUP(mysin->sin6_len));
+		sdl = (struct sockaddr_dl *)(void *)((char *)(void *)mysin + ROUNDUP(mysin->sin6_len));
 
 		/*
 		 * Some OSes can produce a route that has the LINK flag but
@@ -845,7 +850,7 @@ rtmsg(int cmd)
 #define NEXTADDR(w, s) \
 	if (rtm->rtm_addrs & (w)) { \
 		(void)memcpy(cp, &s, sizeof(s)); \
-		RT_ADVANCE(cp, (struct sockaddr *)(void *)&s); \
+		ADVANCE(cp, (struct sockaddr *)(void *)&s); \
 	}
 
 	NEXTADDR(RTA_DST, sin_m);
@@ -936,9 +941,6 @@ ifinfo(char *ifname, int argc, char **argv)
 #ifdef ND6_IFF_ACCEPT_RTADV
 		SETFLAG("accept_rtadv", ND6_IFF_ACCEPT_RTADV);
 #endif
-#ifdef ND6_IFF_OVERRIDE_RTADV
-		SETFLAG("override_rtadv", ND6_IFF_OVERRIDE_RTADV);
-#endif
 #ifdef ND6_IFF_PREFER_SOURCE
 		SETFLAG("prefer_source", ND6_IFF_PREFER_SOURCE);
 #endif
@@ -1012,10 +1014,6 @@ ifinfo(char *ifname, int argc, char **argv)
 #ifdef ND6_IFF_ACCEPT_RTADV
 		if ((ND.flags & ND6_IFF_ACCEPT_RTADV))
 			(void)printf("accept_rtadv ");
-#endif
-#ifdef ND6_IFF_OVERRIDE_RTADV
-		if ((ND.flags & ND6_IFF_OVERRIDE_RTADV))
-			(void)printf("override_rtadv ");
 #endif
 #ifdef ND6_IFF_PREFER_SOURCE
 		if ((ND.flags & ND6_IFF_PREFER_SOURCE))

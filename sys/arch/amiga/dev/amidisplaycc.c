@@ -1,4 +1,4 @@
-/*	$NetBSD: amidisplaycc.c,v 1.26 2012/10/27 17:17:26 chs Exp $ */
+/*	$NetBSD: amidisplaycc.c,v 1.20 2007/03/04 05:59:16 christos Exp $ */
 
 /*-
  * Copyright (c) 2000 Jukka Andberg.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amidisplaycc.c,v 1.26 2012/10/27 17:17:26 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amidisplaycc.c,v 1.20 2007/03/04 05:59:16 christos Exp $");
 
 /*
  * wscons interface to amiga custom chips. Contains the necessary functions
@@ -66,6 +66,8 @@ __KERNEL_RCSID(0, "$NetBSD: amidisplaycc.c,v 1.26 2012/10/27 17:17:26 chs Exp $"
 #include <dev/cons.h>
 #include <dev/wsfont/wsfont.h>
 
+#include <machine/stdarg.h>
+
 /* These can be lowered if you are sure you dont need that much colors. */
 #define MAXDEPTH 8
 #define MAXROWS 128
@@ -77,6 +79,8 @@ __KERNEL_RCSID(0, "$NetBSD: amidisplaycc.c,v 1.26 2012/10/27 17:17:26 chs Exp $"
 struct amidisplaycc_screen;
 struct amidisplaycc_softc
 {
+	struct device dev;
+
 	struct amidisplaycc_screen  * currentscreen;
 
 	/* display turned on? */
@@ -95,10 +99,10 @@ struct amidisplaycc_softc
  * Configuration stuff.
  */
 
-static int  amidisplaycc_match(device_t, cfdata_t, void *);
-static void amidisplaycc_attach(device_t, device_t, void *);
+static int  amidisplaycc_match(struct device *, struct cfdata *, void *);
+static void amidisplaycc_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(amidisplaycc, sizeof(struct amidisplaycc_softc),
+CFATTACH_DECL(amidisplaycc, sizeof(struct amidisplaycc_softc),
     amidisplaycc_match, amidisplaycc_attach, NULL, NULL);
 
 static int amidisplaycc_attached;
@@ -375,6 +379,8 @@ amidisplaycc_cninit(struct consdev  * cd)
 	/*
 	 * This will do the basic stuff we also need.
 	 */
+	config_console();
+
 	grfcc_probe();
 
 #if NVIEW>0
@@ -403,9 +409,9 @@ amidisplaycc_cninit(struct consdev  * cd)
 }
 
 static int
-amidisplaycc_match(device_t parent, cfdata_t cf, void *aux)
+amidisplaycc_match(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
-	char *name = aux;
+	char *name = auxp;
 
 	if (matchname("amidisplaycc", name) == 0)
 		return (0);
@@ -419,14 +425,14 @@ amidisplaycc_match(device_t parent, cfdata_t cf, void *aux)
 
 /* ARGSUSED */
 static void
-amidisplaycc_attach(device_t parent, device_t self, void *aux)
+amidisplaycc_attach(struct device *pdp, struct device *dp, void *auxp)
 {
 	struct wsemuldisplaydev_attach_args    waa;
 	struct amidisplaycc_softc            * adp;
 
 	amidisplaycc_attached = 1;
 
-	adp = device_private(self);
+	adp = (struct amidisplaycc_softc*)dp;
 
 	grfcc_probe();
 
@@ -475,8 +481,8 @@ amidisplaycc_attach(device_t parent, device_t self, void *aux)
 		waa.scrdata = &amidisplaycc_screenlist;
 		waa.console = amidisplaycc_consolescreen.isconsole;
 		waa.accessops = &amidisplaycc_accessops;
-		waa.accesscookie = adp;
-		config_found(self, &waa, wsemuldisplaydevprint);
+		waa.accesscookie = dp;
+		config_found(dp, &waa, wsemuldisplaydevprint);
 
 		wsfont_init();
 	}
@@ -887,10 +893,10 @@ amidisplaycc_copyrows(void *screen, int srcrow, int dstrow, int nrows)
 
 				if (copysize > 0) {
 					/* Do it all */
-					memset(dst, 0, copysize);
+					bzero(dst, copysize);
 				} else {
 					for (i = 0 ; i < fontheight ; i++) {
-						memset(dst, 0, widthbytes);
+						bzero(dst, widthbytes);
 						dst += linebytes;
 					}
 				}
@@ -1257,7 +1263,8 @@ amidisplaycc_alloc_screen(void *dp, const struct wsscreen_descr *screenp,
 
 		scr->isconsole = 1;
 	} else {
-		scr = malloc(sizeof(adccscr_t), M_DEVBUF, M_WAITOK|M_ZERO);
+		scr = malloc(sizeof(adccscr_t), M_DEVBUF, M_WAITOK);
+		bzero(scr, sizeof(adccscr_t));
 	}
 
 	scr->view = view;
@@ -1834,8 +1841,7 @@ amidisplaycc_setfont(struct amidisplaycc_screen *scr, const char *fontname)
 		scr->fontheight,
 		1,
 		WSDISPLAY_FONTORDER_L2R,
-		WSDISPLAY_FONTORDER_L2R,
-		WSFONT_FIND_BITMAP);
+		WSDISPLAY_FONTORDER_L2R);
 
 	if (wsfontcookie == -1)
 		return (EINVAL);

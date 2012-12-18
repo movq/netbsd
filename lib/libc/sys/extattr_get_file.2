@@ -1,4 +1,4 @@
-.\"	$NetBSD: extattr_get_file.2,v 1.5 2011/08/03 09:48:12 wiz Exp $
+.\"	$NetBSD: extattr_get_file.2,v 1.3.32.1 2011/07/17 15:36:03 riz Exp $
 .\"
 .\" Copyright (c) 2001 Dima Dorfman <dima@unixfreak.org>
 .\" Copyright (c) 2003 Robert Watson <rwatson@FreeBSD.org>
@@ -27,7 +27,7 @@
 .\"
 .\" FreeBSD: src/lib/libc/sys/extattr_get_file.2,v 1.14 2004/07/05 17:12:52 ru Exp
 .\"
-.Dd August 3, 2011
+.Dd January 2, 2004
 .Dt EXTATTR_GET_FILE 2
 .Os
 .Sh NAME
@@ -228,15 +228,15 @@ and
 .Fn extattr_delete_file
 calls may also fail due to the following errors:
 .Bl -tag -width Er
-.It Bq Er EACCES
-Search permission is denied for a component of the path prefix.
+.It Bq Er ENOTDIR
+A component of the path prefix is not a directory.
 .It Bq Er ENAMETOOLONG
 A component of a pathname exceeded 255 characters,
 or an entire path name exceeded 1023 characters.
 .It Bq Er ENOENT
 A component of the path name that must exist does not exist.
-.It Bq Er ENOTDIR
-A component of the path prefix is not a directory.
+.It Bq Er EACCES
+Search permission is denied for a component of the path prefix.
 .\" XXX are any missing?
 .El
 .Sh SEE ALSO
@@ -256,7 +256,7 @@ to be associated with each file or directory.
 This interface is under active development, and as such is subject to
 change as applications are adapted to use it.
 Developers are discouraged from relying on its stability.
-.Pp
+.Pp 
 Note that previous versions of this man page incorrectly stated that
-.Fn extattr_list_file
-returned a list of attribute names separated by ASCII 0 (nul).
+.Fn extattr_list_file 
+returned a list of attribute names separated by ASCII 0 (nul). 

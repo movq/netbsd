@@ -1,4 +1,4 @@
-/*	$NetBSD: netif_sun.c,v 1.12 2009/10/21 23:12:09 snj Exp $	*/
+/*	$NetBSD: netif_sun.c,v 1.9 2006/07/13 20:03:34 uwe Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ * 4. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Gordon W. Ross
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -82,7 +87,7 @@ netif_open(void *machdep_hint)
 		errno = ENFILE;
 		return (-1);
 	}
-	memset(io, 0, sizeof(*io));
+	bzero(io, sizeof(*io));
 
 	netif_prom.nif_devdata = pd;
 	io->io_netif = &netif_prom;
@@ -171,10 +176,10 @@ netif_put(struct iodesc *desc, void *pkt, size_t len)
  * Return the total length received (or -1 on error).
  */
 ssize_t
-netif_get(struct iodesc *desc, void *pkt, size_t maxlen, saseconds_t timo)
+netif_get(struct iodesc *desc, void *pkt, size_t maxlen, time_t timo)
 {
 	struct promdata *pd;
-	satime_t tick0;
+	int tick0;
 	ssize_t len;
 
 	pd = (struct promdata *)((struct netif *)desc->io_netif)->nif_devdata;

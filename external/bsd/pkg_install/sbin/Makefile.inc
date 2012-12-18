@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.3 2010/11/05 09:09:01 he Exp $
+# $NetBSD: Makefile.inc,v 1.1.6.1 2009/05/30 16:40:33 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -20,6 +20,3 @@ LDADD+=		-larchive
 
 DPADD+=		${LIBZ} ${LIBBZ2}
 LDADD+=		-lz -lbz2
-
-DPADD+=		${LIBLZMA}
-LDADD+=		-llzma

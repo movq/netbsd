@@ -1,7 +1,7 @@
-# $NetBSD: GENERIC,v 1.117 2012/10/17 14:48:12 apb Exp $
+# $NetBSD: GENERIC,v 1.83.4.1 2010/02/14 13:57:11 bouyer Exp $
 #
 # GENERIC machine description file
-#
+# 
 # This machine description file is used to generate the default NetBSD
 # kernel.  The generic kernel does not include all options, subsystems
 # and device drivers, but should be useful for most applications.
@@ -23,7 +23,7 @@ include 	"arch/hp700/conf/std.hp700"
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
-#ident 		"GENERIC-$Revision: 1.117 $"
+#ident 		"GENERIC-$Revision: 1.83.4.1 $"
 
 maxusers	32		# estimated number of users
 
@@ -33,14 +33,15 @@ options 	HP7100_CPU,HP7150_CPU	# PCX-T
 options 	HP7100LC_CPU		# PCX-L
 options 	HP7200_CPU,HP7250_CPU	# PCX-T'
 options 	HP7300LC_CPU		# PCX-L2
-options 	HP8000_CPU		# PCX-U  (in 32bit mode)
-options 	HP8200_CPU		# PCX-V/U+ (in 32bit mode)
-options 	HP8500_CPU		# PCX-W  (in 32bit mode)
-options 	HP8600_CPU		# PCX-W+ (in 32bit mode)
-options 	HP8700_CPU		# PCX-W2 (in 32bit mode)
+#options 	HP8000_CPU		# PCX-U  (in 32bit mode)
+#options 	HP8200_CPU		# PCX-V/U+ (in 32bit mode)
+#options 	HP8500_CPU		# PCX-W  (in 32bit mode)
+#options 	HP8600_CPU		# PCX-W+ (in 32bit mode)
 
 # CPU-related options.
+options 	FPEMUL		# floating point emulation XXX DO NOT REMOVE
 options 	USELEDS		# blink 'em
+options		POWER_SWITCH	# power/fail manager interface to powerd(8)
 
 # delay between "rebooting ..." message and hardware reset, in milliseconds
 #options 	CPURESET_DELAY=2000
@@ -56,10 +57,12 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
+options 	LKM		# loadable kernel modules
 options 	USERCONF	# userconf(4) support
 
-# Enable experimental buffer queue strategy for better responsiveness under
+# Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
 #options 	BUFQ_READPRIO
 #options 	BUFQ_PRIOCSCAN
@@ -78,8 +81,6 @@ options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 options 	COMPAT_20	# compatability with NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
@@ -100,20 +101,20 @@ file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay file system
-file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
+file-system 	PORTAL		# portal filesystem (still experimental)
 file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
 file-system	CODA		# Coda File System; also needs vcoda (below)
 file-system	PTYFS		# /dev/pts/N support
-file-system	TMPFS		# Efficient memory file-system
+#file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-options 	QUOTA		# legacy UFS quotas
-options 	QUOTA2		# new, in-filesystem UFS quotas
+options 	QUOTA		# UFS quotas
 #options 	FFS_EI		# FFS Endian Independent support
-options 	WAPBL		# File system journaling support
+options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -139,7 +140,6 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
-options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -159,7 +159,6 @@ options 	IPFILTER_COMPAT # Compat for IP-Filter
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!
 options 	GSCVERBOSE	# verbose GSC device autoconfig messages
-options 	PCIVERBOSE	# verbose PCI device autoconfig messages
 options 	EISAVERBOSE	# verbose EISA device autoconfig messages
 options 	MIIVERBOSE	# verbose PHY autoconfig messages
 options 	SCSIVERBOSE	# human readable SCSI error messages
@@ -188,7 +187,7 @@ options 	WSDISPLAY_CUSTOM_BORDER	# border customization from wsconsctl(8)
 # compatibility to other console drivers
 options 	WSDISPLAY_COMPAT_PCVT		# emulate some ioctls
 options 	WSDISPLAY_COMPAT_SYSCONS	# emulate some ioctls
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
+options 	WSDISPLAY_COMPAT_USL		# VT handling
 options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 # see dev/pckbport/wskbdmap_mfii.c for implemented layouts
 #options 	PCKBD_LAYOUT="(KB_DE | KB_NODEAD)"
@@ -224,22 +223,18 @@ mem*	at mainbus0		# /dev/*mem and memory controller
 #fpu*	at mainbus0		# HP PA-RISC fpu (iv N/A)
 #pmu*	at mainbus0		# HP PA-RISC perfomance monitor unit (iv 29)
 
-# Miscellaneous
-pdc0	at mainbus0		# PDC/IODC wrapper for boot console
-power0	at mainbus0		# power/fail manager
-lcd0	at mainbus0		# LCD
+# STI graphics
+sti*	at mainbus0		# [H]CRX-{8,24,48}[Z] and Visualize graphics
+sti*	at phantomas?		# [H]CRX-{8,24,48}[Z] and Visualize graphics
 
 # Basic Bus Support
-lasi0	at mainbus0 irq 28	# LASI host adapter
-lasi0	at phantomas0 irq 28	# LASI on [AB]*
-lasi0	at uturn? irq 28	# LASI on [CJ]*
-lasi1	at mainbus0 irq 27	# 712 GIO card
-asp*	at mainbus0 irq 28	# this one comes w/ Viper and LEDs
+lasi*	at mainbus0		# LASI host adapter (LSI PN??? )
+asp*	at mainbus0		# this one comes w/ Viper and leds
 wax*	at mainbus0		# Wax GSC to GSC Bus Adapter
-mongoose* at mainbus0		# EISA Bus Adapter ( i82350 or TI??? )
+mongoose* at mainbus0 irq 17	# EISA Bus Adapter (i82350 or TI??? )
 #vmeb*	at mainbus0 irq ?	# VME bus adapter
+pdc0	at mainbus0		# PDC/IODC wrapper for boot console
 phantomas*	at mainbus0	# Phantom PseudoBC GSC+ Port
-
 lasi*	at phantomas?		# LASI on [ABCJ?]*
 dino*	at phantomas?		# PCI bus bridge
 wax*	at phantomas?		# Wax GSC to GSC Bus Adapter
@@ -253,37 +248,18 @@ gsc*	at wax?			# {725,715}/{64,80,100}, C*, B*, J*
 #weisa*	at mainbus0		# 7xx
 #weisa*	at gsc?			# C*, B*
 
-# Uturn/U2 IOA
-uturn0	at mainbus0		# U2/UTurn Runway IOA
-uturn1	at mainbus0
-lasi*	at uturn?		# LASI on [CJ]*
-dino*	at uturn?		# PCI bus bridge
-#wax*	at uturn?		# Wax on C*
-
-#gecko*	at uturn?		# GeckoBOA
-#lasi*	at gecko?		# LASI
-#dino*	at gecko?		# PCI bus bridge
-#wax*	at gecko?		# Wax GSC to GSC Bus Adapter
-
-# Astro memory & I/O controller 
-astro*	at mainbus0		# Astro memory & I/O controller
-elroy*	at astro?
-
 # PCI bus support
-pci*	at elroy?
 pci*	at dino?
 com*	at dino?
 ppb*	at pci? dev ? function ?
 pci*	at ppb?
-
-ssio*	at pci?
 
 # EISA bus support
 eisa*	at mongoose?
 #eisa*	at weisa?
 
 # ISA bus support
-# Beware: Most ISA MI drivers are not endianness clean!
+# Beware: Most ISA MI drivers are not endianes clean!
 #isa*	at mongoose?
 #isa*	at weisa?
 
@@ -292,17 +268,10 @@ eisa*	at mongoose?
 
 # Console Devices
 
-# STI graphics
-sti*	at mainbus0		# [H]CRX-{8,24,48}[Z] and Visualize graphics
-sti*	at phantomas?		# [H]CRX-{8,24,48}[Z] and Visualize graphics
-sti*	at uturn?
-sti*	at pci?			# EG-PCI, FX*
-
 # Human Interface Loop
-hil*		at gsc? irq 1	# Human Interface Loop, kbd and mouse
-hilkbd*		at hil?		# keyboard, knob and buttons
-hilms*		at hil?		# mouse and tablets
-hilid*		at hil?		# ID module
+#hil*		at gsc? 
+#hkbd*		at hil? code 0	# keyboard
+#hms*		at hil? code 1	# mice & trackballs
 
 # wscons
 gsckbc*		at gsc?			# pc keyboard controller
@@ -310,15 +279,11 @@ pckbd*		at gsckbc?		# PC keyboard
 pms*		at gsckbc?		# PS/2 mouse for wsmouse
 wskbd*		at pckbd? console ?
 wsmouse*	at pms? mux 0
-wskbd*		at hilkbd? console ?
-wsmouse*	at hilms? mux 0
+#wskbd*		at hkbd? console ?
+#wsmouse*	at hms? mux 0
 wsdisplay*	at sti?
 
 # Serial Devices
-
-# SSIO serial interfaces
-com0	at ssio? irq 4
-com1	at ssio? irq 3
 
 # GSC serial interfaces
 com*	at gsc?				# RS/232 serial port
@@ -331,9 +296,6 @@ cz*	at pci? dev ? function ?	# Cyclades-Z multi-port serial boards
 
 # Parallel Printer Interfaces
 
-# SSIO parallel printer interface
-lpt0	at ssio?
-
 # GSC parallel printer interface
 lpt*	at gsc?
 
@@ -345,10 +307,9 @@ lpt*	at puc? port ?			# || ports on "universal" comm boards
 # GSC SCSI controllers
 oosiop*	at gsc?				# NCR 53c700
 osiop*	at gsc? flags 0x00000		# NCR 53c710
-siop*	at gsc?				# NCR 53c720 (Fast/Wide)
-siop*	at mainbus0			# NCR 53c720 (Fast/Wide)
-siop*	at phantomas?			# NCR 53c720 (Fast/Wide)
-siop*	at uturn? 			# NCR 53c720 (Fast/Wide)
+siop*	at gsc? irq 3			# NCR 53c720 (Fast/Wide)
+siop*	at mainbus0 irq 3		# NCR 53c720 (Fast/Wide)
+siop*	at phantomas? irq 3		# NCR 53c720 (Fast/Wide)
 
 # PCI SCSI controllers
 adv*	at pci? dev ? function ?	# AdvanSys 1200[A,B], 9xx[U,UA] SCSI
@@ -420,7 +381,6 @@ cmdide* 	at pci? dev ? function ?	# CMD tech IDE controllers
 cypide* 	at pci? dev ? function ?	# Cypress IDE controllers
 geodeide* 	at pci? dev ? function ?	# AMD Geode IDE controllers
 hptide* 	at pci? dev ? function ?	# Triones/HighPoint IDE controllers
-nside*  	at pci? dev ? function ?	# National Semiconductor IDE controllers
 optiide* 	at pci? dev ? function ?	# Opti IDE controllers
 pdcide* 	at pci? dev ? function ?	# Promise IDE controllers
 pdcsata*	at pci? dev ? function ?	# Promise SATA150 controllers
@@ -552,164 +512,6 @@ harmony* at gsc?			# Audio Type 2 (CS4215)
 #com*	at harmony?			# Telephone add-in card
 audio*	at audiobus?
 
-# USB Controller and Devices
-
-# PCI USB controllers
-ehci*	at pci?	dev ? function ?	# Enhanced Host Controller
-ohci*	at pci?	dev ? function ?	# Open Host Controller
-uhci*	at pci?	dev ? function ?	# Universal Host Controller (Intel)
-
-# USB bus support
-usb*	at ehci?
-usb*	at ohci?
-usb*	at uhci?
-
-# USB Hubs
-uhub*	at usb?
-uhub*	at uhub? port ?
-
-# USB HID device
-uhidev* at uhub? port ? configuration ? interface ?
-
-# USB Mice
-ums*	at uhidev? reportid ?
-wsmouse* at ums? mux 0
-
-# USB eGalax touch-panel
-uep*	at uhub? port ?
-wsmouse* at uep? mux 0
-
-# USB Keyboards
-ukbd*	at uhidev? reportid ?
-wskbd*	at ukbd? console ? mux 1
-
-# USB serial adapter
-ucycom* at uhidev? reportid ?
-
-# USB Generic HID devices
-uhid*	at uhidev? reportid ?
-
-# USB LCDs and USB-VGA adaptors
-udl*	at uhub? port ?		# DisplayLink DL-1x0/1x5
-wsdisplay* at udl?
-
-# USB Printer
-ulpt*	at uhub? port ? configuration ? interface ?
-
-# USB Modem
-umodem* at uhub? port ? configuration ?
-ucom*	at umodem?
-
-# Option N.V. Wireless WAN modems
-uhso*	at uhub? port ? configuration ?
-
-# USB Mass Storage
-umass*	at uhub? port ? configuration ? interface ?
-wd*	at umass?
-
-# USB audio
-uaudio* at uhub? port ? configuration ?
-
-# USB MIDI
-umidi* at uhub? port ? configuration ?
-
-# USB IrDA
-# USB-IrDA bridge spec
-uirda* at uhub? port ? configuration ? interface ?
-irframe* at uirda?
-
-stuirda* at uhub? port ? configuration ? interface ?
-irframe* at stuirda?
-
-# SigmaTel STIr4200 USB/IrDA Bridge
-ustir* at uhub? port ?
-irframe* at ustir?
-
-# USB Ethernet adapters
-aue*	at uhub? port ?		# ADMtek AN986 Pegasus based adapters
-axe*	at uhub? port ?		# ASIX AX88172 based adapters
-cdce*	at uhub? port ?		# CDC, Ethernet Networking Control Model
-cue*	at uhub? port ?		# CATC USB-EL1201A based adapters
-kue*	at uhub? port ?		# Kawasaki LSI KL5KUSB101B based adapters
-udav*	at uhub? port ?		# Davicom DM9601 based adapters
-url*	at uhub? port ?		# Realtek RTL8150L based adapters
-
-# USB 802.11 adapters
-atu*	at uhub? port ?		# Atmel AT76C50XX based adapters
-ural*	at uhub? port ?		# Ralink Technology RT2500USB 802.11a/b/g
-rum*	at uhub? port ?		# Ralink Technology RT2501/RT2601 802.11a/b/g
-zyd*	at uhub? port ?		# Zydas ZD1211
-
-# Prolific PL2301/PL2302 host-to-host adapter
-upl*	at uhub? port ?
-
-# Serial adapters
-ubsa*	at uhub? port ?		# Belkin serial adapter
-ucom*	at ubsa? portno ?
-
-uchcom* at uhub? port ? 	# WinChipHead CH341/CH340 serial adapter
-ucom*	at uchcom? portno ?
-
-uftdi*	at uhub? port ?		# FTDI FT8U100AX serial adapter
-ucom*	at uftdi? portno ?
-
-uipaq*	at uhub? port ?		# iPAQ PDAs
-ucom*	at uipaq? portno ?
-
-umct*	at uhub? port ?		# MCT USB-RS232 serial adapter
-ucom*	at umct? portno ?
-
-uplcom* at uhub? port ? 	# I/O DATA USB-RSAQ2 serial adapter
-ucom*	at uplcom? portno ?
-
-uslsa*	at uhub? port ?		# Silicon Labs USB-RS232 serial adapter
-ucom*	at uslsa? portno ?
-
-uvscom* at uhub? port ? 	# SUNTAC Slipper U VS-10U serial adapter
-ucom*	at uvscom? portno ?
-
-# RIM BlackBerry
-uberry* at uhub? port ?
-
-# Diamond Multimedia Rio 500
-urio*	at uhub? port ?
-
-# USB Handspring Visor
-uvisor* at uhub? port ?
-ucom*	at uvisor?
-
-# Kyocera AIR-EDGE PHONE
-ukyopon* at uhub? port ?
-ucom*	at ukyopon? portno ?
-
-# USB scanners
-uscanner* at uhub? port ?
-
-# USB scanners that use SCSI emulation, e.g., HP5300
-usscanner* at uhub? port ?
-
-# Topfield TF5000PVR range of DVB recorders
-utoppy* at uhub? port ?
-
-# Y@P firmware loader
-uyap*	at uhub? port ?
-
-# D-Link DSB-R100 USB radio
-udsbr*	at uhub? port ?
-radio*	at udsbr?
-
-# USB Generic driver
-ugen*	at uhub? port ?
-
-# USB 3G datacards
-u3ginit* at uhub? port ?
-u3g*	at uhub? port ?
-ucom*	at u3g?
-
-# USB generic serial port (e.g., data over cellular)
-ugensa* at uhub? port ?
-ucom*	at ugensa?
-
 # Pseudo-Devices
 
 pseudo-device 	crypto			# /dev/crypto device
@@ -728,11 +530,10 @@ options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss			# file system snapshot device
-pseudo-device	md			# memory disk device (ramdisk)
+pseudo-device	fss		4	# file system snapshot device
+pseudo-device	md		1	# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	putter			# for puffs and pud
 
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
@@ -764,6 +565,7 @@ pseudo-device   accf_http		# "httpready" accept filter
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	sequencer	1	# MIDI sequencer
 # rnd works; RND_COM does not on port hp700 yet.
+pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	clockctl		# user control of clock subsystem
 
@@ -776,9 +578,6 @@ pseudo-device	wsfont
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
-
-# userland interface to drivers, including autoconf and properties retrieval
-pseudo-device	drvctl
 
 # Veriexec
 #

@@ -1,4 +1,4 @@
-/*	$NetBSD: system.c,v 1.24 2012/06/25 22:32:45 abs Exp $	*/
+/*	$NetBSD: system.c,v 1.22 2008/08/27 06:45:02 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)system.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: system.c,v 1.24 2012/06/25 22:32:45 abs Exp $");
+__RCSID("$NetBSD: system.c,v 1.22 2008/08/27 06:45:02 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -46,12 +46,16 @@ __RCSID("$NetBSD: system.c,v 1.24 2012/06/25 22:32:45 abs Exp $");
 #include <stdlib.h>
 #include <unistd.h>
 #include <paths.h>
-
-#include "env.h"
 #include "reentrant.h"
 
+#ifdef _REENTRANT
+extern rwlock_t __environ_lock;
+#endif
+extern char **environ;
+
 int
-system(const char *command)
+system(command)
+	const char *command;
 {
 	pid_t pid;
 	struct sigaction intsa, quitsa, sa;
@@ -89,10 +93,10 @@ system(const char *command)
 		return -1;
 	}
 
-	(void)__readlockenv();
+	rwlock_rdlock(&__environ_lock);
 	switch(pid = vfork()) {
 	case -1:			/* error */
-		(void)__unlockenv();
+		rwlock_unlock(&__environ_lock);
 		sigaction(SIGINT, &intsa, NULL);
 		sigaction(SIGQUIT, &quitsa, NULL);
 		(void)sigprocmask(SIG_SETMASK, &omask, NULL);
@@ -104,7 +108,7 @@ system(const char *command)
 		execve(_PATH_BSHELL, __UNCONST(argp), environ);
 		_exit(127);
 	}
-	(void)__unlockenv();
+	rwlock_unlock(&__environ_lock);
 
 	while (waitpid(pid, &pstat, 0) == -1) {
 		if (errno != EINTR) {

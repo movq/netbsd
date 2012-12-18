@@ -1,4 +1,4 @@
-#	$NetBSD: RAMDISK,v 1.80 2012/03/10 21:51:49 joerg Exp $
+#	$NetBSD: RAMDISK,v 1.75.20.1 2008/11/23 20:58:38 riz Exp $
 #
 #	memory disk based configuration file for MIPS R4x00 ARC Systems
 #
@@ -10,7 +10,6 @@ options 	MEMORY_DISK_HOOKS
 options 	MEMORY_DISK_IS_ROOT		# force root on memory disk
 options 	MEMORY_DISK_SERVER=0		# no userspace md(4) support
 options 	MEMORY_DISK_ROOT_SIZE=5120	# size of memory disk, in blocks
-options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
 
 makeoptions	COPTS="-Os -mmemcpy"	# generates smaller code than -O2, -O1
 
@@ -22,6 +21,7 @@ no options 	NTP
 no options 	SYSVMSG
 no options 	SYSVSEM
 no options 	SYSVSHM
+no options 	P1003_1B_SEMAPHORE
 no options 	SYSCTL_INCLUDE_DESCR
 no options 	COMPAT_10
 no options 	COMPAT_11
@@ -37,13 +37,13 @@ no file-system	FDESC
 no file-system	KERNFS
 no file-system	NULLFS
 no file-system	OVERLAY
+no file-system	PORTAL
 no file-system	UMAPFS
 no file-system	UNION
 no file-system	TMPFS
 no file-system	PTYFS
 
 no options 	QUOTA
-no options 	QUOTA2
 no options 	NFSSERVER
 no options 	PPP_FILTER
 no options 	NETATALK

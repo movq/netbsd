@@ -1,4 +1,4 @@
-/*	$NetBSD: mba.c,v 1.39 2010/12/14 23:38:30 matt Exp $ */
+/*	$NetBSD: mba.c,v 1.37 2008/10/16 12:47:22 hans Exp $ */
 /*
  * Copyright (c) 1994, 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -38,23 +38,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mba.c,v 1.39 2010/12/14 23:38:30 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mba.c,v 1.37 2008/10/16 12:47:22 hans Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
-#include <sys/cpu.h>
 #include <sys/device.h>
 #include <sys/queue.h>
 #include <sys/buf.h>
 #include <sys/bufq.h>
 #include <sys/proc.h>
 
+#include <uvm/uvm_extern.h>
+
+#include <machine/bus.h>
 #include <machine/scb.h>
 #include <machine/nexus.h>
 #include <machine/pte.h>
+#include <machine/pcb.h>
 #include <machine/sid.h>
-#include <machine/sid.h>
+#include <machine/cpu.h>
 
 #include <vax/mba/mbareg.h>
 #include <vax/mba/mbavar.h>
@@ -186,7 +188,7 @@ mbaintr(void *mba)
 		return;	/* During autoconfig */
 
 	md = STAILQ_FIRST(&sc->sc_xfers);
-	bp = bufq_peek(md->md_q);
+	bp = BUFQ_PEEK(md->md_q);
 	/*
 	 * A data-transfer interrupt. Current operation is finished,
 	 * call that device's finish routine to see what to do next.
@@ -202,9 +204,9 @@ mbaintr(void *mba)
 			 * If more to transfer, start the adapter again
 			 * by calling mbastart().
 			 */
-			(void)bufq_get(md->md_q);
+			(void)BUFQ_GET(md->md_q);
 			STAILQ_REMOVE_HEAD(&sc->sc_xfers, md_link);
-			if (bufq_peek(md->md_q) != NULL) {
+			if (BUFQ_PEEK(md->md_q) != NULL) {
 				STAILQ_INSERT_TAIL(&sc->sc_xfers, md, md_link);
 			}
 	
@@ -272,7 +274,7 @@ void
 mbastart(struct mba_softc *sc)
 {
 	struct mba_device * const md = STAILQ_FIRST(&sc->sc_xfers);
-	struct buf *bp = bufq_peek(md->md_q);
+	struct buf *bp = BUFQ_PEEK(md->md_q);
 
 	disk_reallymapin(bp, (void *)(sc->sc_ioh + MAPREG(0)), 0, PG_V);
 

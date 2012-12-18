@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_ledma.c,v 1.35 2010/01/19 22:07:43 pooka Exp $	*/
+/*	$NetBSD: if_le_ledma.c,v 1.30.10.1 2009/06/19 21:25:21 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -31,9 +31,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le_ledma.c,v 1.35 2010/01/19 22:07:43 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le_ledma.c,v 1.30.10.1 2009/06/19 21:25:21 snj Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,6 +77,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_le_ledma.c,v 1.35 2010/01/19 22:07:43 pooka Exp $
 
 struct	le_softc {
 	struct	am7990_softc	sc_am7990;	/* glue to MI code */
+	struct	sbusdev		sc_sd;		/* sbus device */
 	bus_space_tag_t		sc_bustag;
 	bus_dmamap_t		sc_dmamap;
 	bus_space_handle_t	sc_reg;		/* LANCE registers */
@@ -386,6 +388,10 @@ leattach_ledma(device_t parent, device_t self, void *aux)
 	sc->sc_addr = lesc->sc_laddr & 0xffffff;
 	sc->sc_conf3 = LE_C3_BSWP | LE_C3_ACON | LE_C3_BCON;
 	lesc->sc_lostcount = 0;
+
+	/* Assume SBus is grandparent */
+	lesc->sc_sd.sd_reset = (void *)lance_reset;
+	sbus_establish(&lesc->sc_sd, parent);
 
 	sc->sc_mediachange = lemediachange;
 	sc->sc_mediastatus = lemediastatus;

@@ -1,4 +1,4 @@
-/*	$NetBSD: btattach.h,v 1.3 2009/12/06 12:55:46 kiyohara Exp $	*/
+/*	$NetBSD: btattach.h,v 1.1 2008/04/15 11:17:48 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2008 Iain Hibbert
@@ -36,7 +36,7 @@ struct devtype {
 	const char *	descr;	/* long description */
 	devinit_t *	init;	/* init function */
 	tcflag_t	cflag;	/* default cflags */
-	unsigned int	speed;	/* default baudrate */
+	int		speed;	/* default baudrate */
 };
 
 devinit_t init_bcm2035;
@@ -47,7 +47,6 @@ devinit_t init_ericsson;
 devinit_t init_st;
 devinit_t init_stlc2500;
 devinit_t init_swave;
-devinit_t init_unistone;
 
 void uart_send_cmd(int, uint16_t, void *, size_t);
 size_t uart_recv_ev(int, uint8_t, void *, size_t);

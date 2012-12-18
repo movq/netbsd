@@ -1,4 +1,4 @@
-/* $NetBSD: elantechreg.h,v 1.1 2008/12/14 00:42:33 jmcneill Exp $ */
+/* $NetBSD: elantechreg.h,v 1.1.10.2 2009/09/13 22:07:47 snj Exp $ */
 
 /*-
  * Copyright (c) 2008 Jared D. McNeill <jmcneill@invisible.ca>

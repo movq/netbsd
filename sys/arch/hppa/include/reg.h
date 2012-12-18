@@ -1,9 +1,9 @@
-/*	$NetBSD: reg.h,v 1.12 2010/06/06 12:13:36 skrll Exp $	*/
+/*	$NetBSD: reg.h,v 1.6 2008/01/10 21:08:41 skrll Exp $	*/
 
 /*	$OpenBSD: reg.h,v 1.7 2000/06/15 17:00:37 mickey Exp $	*/
 
 /*
- * Copyright (c) 1998-2004 Michael Shalayeff
+ * Copyright (c) 1998 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,18 +14,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Michael Shalayeff.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR OR HIS RELATIVES BE LIABLE FOR ANY DIRECT,
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF MIND, USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /* 
  * Copyright (c) 1990,1994 The University of Utah and
@@ -80,20 +84,14 @@
 #define	CR_IOR		21
 #define	CR_IPSW		22
 #define	CR_EIRR		23
-
-/* Temporary control registers */
-#ifdef MULTIPROCESSOR
-#define	CR_CURCPU	24	/* tr0: curcpu				*/
-#else
-#define	CR_CURLWP	24	/* tr0: curlwp				*/
-#endif
-#define	CR_VTOP		25	/* tr1: virt to phys table address	*/
-#define	CR_TR2		26	/* tr2: temporary			*/
-#define	CR_TLS		27	/* tr3: thread local storage pointer	*/
-#define	CR_HVTP		28	/* tr4: faulted HVT slot ptr on LC cpus */
-#define	CR_TR5		29	/* tr5: emu / TLB_STATS_{PRE,AFT}	*/
-#define	CR_FPPADDR	30	/* tr6: paddr of FP regs of curlwp	*/
-#define	CR_TR7		31	/* tr7: trap temporary register		*/
+#define	CR_HPTMASK	24
+#define	CR_VTOP		25
+#define	CR_TR2		26
+#define	CR_TR3		27
+#define	CR_HVTP		28	/* points to a faulted HVT slot on LC cpus */
+#define	CR_TR5		29
+#define	CR_UPADDR	30	/* paddr of U-area of curproc */
+#define	CR_TR7		31
 
 /*
  * Diagnostic registers and bit positions
@@ -187,30 +185,30 @@
 #ifndef __ASSEMBLER__
 
 struct reg {
-	uint32_t r_regs[HPPA_NREGS];	/* r0 is psw */
+	u_int32_t r_regs[HPPA_NREGS];	/* r0 is psw */
 
-	uint32_t r_sar;
+	u_int32_t r_sar;
 
-	uint32_t r_pcsqh;
-	uint32_t r_pcsqt;
-	uint32_t r_pcoqh;
-	uint32_t r_pcoqt;
+	u_int32_t r_pcsqh;
+	u_int32_t r_pcsqt;
+	u_int32_t r_pcoqh;
+	u_int32_t r_pcoqt;
 	
-	uint32_t r_sr0;
-	uint32_t r_sr1;
-	uint32_t r_sr2;
-	uint32_t r_sr3;
-	uint32_t r_sr4;
-	uint32_t r_sr5;	/* !mcontext */
-	uint32_t r_sr6;	/* !mcontext */
-	uint32_t r_sr7;	/* !mcontext */
+	u_int32_t r_sr0;
+	u_int32_t r_sr1;
+	u_int32_t r_sr2;
+	u_int32_t r_sr3;
+	u_int32_t r_sr4;
+	u_int32_t r_sr5;	/* !mcontext */
+	u_int32_t r_sr6;	/* !mcontext */
+	u_int32_t r_sr7;	/* !mcontext */
 
-	uint32_t r_cr26;
-	uint32_t r_cr27;
+	u_int32_t r_cr26;
+	u_int32_t r_cr27;
 };
 
 struct fpreg {
-	uint64_t fpr_regs[HPPA_NFPREGS];
+	u_int64_t fpr_regs[HPPA_NFPREGS];
 };
 #endif /* !__ASSEMBLER__ */
 

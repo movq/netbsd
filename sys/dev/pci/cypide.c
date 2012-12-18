@@ -1,4 +1,4 @@
-/*	$NetBSD: cypide.c,v 1.29 2012/07/31 15:50:36 bouyer Exp $	*/
+/*	$NetBSD: cypide.c,v 1.21 2008/03/18 20:46:36 cube Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cypide.c,v 1.29 2012/07/31 15:50:36 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cypide.c,v 1.21 2008/03/18 20:46:36 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: cypide.c,v 1.29 2012/07/31 15:50:36 bouyer Exp $");
 #include <dev/pci/pciide_cy693_reg.h>
 #include <dev/pci/cy82c693var.h>
 
-static void cy693_chip_map(struct pciide_softc*, const struct pci_attach_args*);
+static void cy693_chip_map(struct pciide_softc*, struct pci_attach_args*);
 static void cy693_setup_channel(struct ata_channel*);
 
 static int  cypide_match(device_t, cfdata_t, void *);
@@ -89,10 +94,11 @@ cypide_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-cy693_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
+cy693_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	pcireg_t interface = PCI_INTERFACE(pa->pa_class);
+	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
@@ -139,7 +145,6 @@ cy693_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -151,6 +156,7 @@ cy693_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 	cp->ata_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
 	cp->ata_channel.ch_queue =
 	    malloc(sizeof(struct ata_queue), M_DEVBUF, M_NOWAIT);
+	cp->ata_channel.ch_ndrive = 2;
 	if (cp->ata_channel.ch_queue == NULL) {
 		aprint_error("%s primary channel: "
 		    "can't allocate memory for command queue",
@@ -163,10 +169,12 @@ cy693_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 	    "configured" : "wired");
 	if (interface & PCIIDE_INTERFACE_PCI(0)) {
 		aprint_normal("native-PCI mode\n");
-		pciide_mapregs_native(pa, cp, pciide_pci_intr);
+		pciide_mapregs_native(pa, cp, &cmdsize, &ctlsize,
+		    pciide_pci_intr);
 	} else {
 		aprint_normal("compatibility mode\n");
-		pciide_mapregs_compat(pa, cp, sc->sc_cy_compatchan);
+		pciide_mapregs_compat(pa, cp, sc->sc_cy_compatchan, &cmdsize,
+		    &ctlsize);
 		if ((cp->ata_channel.ch_flags & ATACH_DISABLED) == 0)
 			pciide_map_compat_intr(pa, cp, sc->sc_cy_compatchan);
 	}
@@ -195,10 +203,10 @@ cy693_setup_channel(struct ata_channel *chp)
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if (drvp->drive_type == ATA_DRIVET_NONE)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
 		/* add timing values, setup DMA if needed */
-		if (drvp->drive_flags & ATA_DRIVE_DMA) {
+		if (drvp->drive_flags & DRIVE_DMA) {
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
 			/* use Multiword DMA */
 			if (dma_mode == -1 || dma_mode > drvp->DMA_mode)

@@ -1,4 +1,4 @@
-/*	$NetBSD: rtsold.c,v 1.36 2011/08/29 20:38:55 joerg Exp $	*/
+/*	$NetBSD: rtsold.c,v 1.34 2008/06/23 04:55:27 dholland Exp $	*/
 /*	$KAME: rtsold.c,v 1.77 2004/01/03 01:35:13 itojun Exp $	*/
 
 /*
@@ -102,7 +102,7 @@ int main __P((int, char **));
 static int mobile_node = 0;
 #ifndef SMALL
 static int do_dump;
-static const char *dumpfilename = "/var/run/rtsold.dump"; /* XXX: should be configurable */
+static char *dumpfilename = "/var/run/rtsold.dump"; /* XXX: should be configurable */
 #endif
 
 #if 0
@@ -114,7 +114,7 @@ static struct timeval *rtsol_check_timer __P((void));
 #ifndef SMALL
 static void rtsold_set_dump_file __P((int));
 #endif
-__dead static void usage(char *);
+static void usage __P((char *));
 
 int
 main(int argc, char **argv)

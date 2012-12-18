@@ -1,4 +1,4 @@
-/*	$NetBSD: twavar.h,v 1.12 2012/10/27 17:18:35 chs Exp $ */
+/*	$NetBSD: twavar.h,v 1.8 2008/05/07 17:47:20 joerg Exp $ */
 /*	$wasabi: twavar.h,v 1.12 2006/05/01 15:16:59 simonb Exp $	*/
 
 /*-
@@ -42,20 +42,20 @@
 #include "locators.h"
 
 struct twa_callbacks {
-	void	(*tcb_openings)(device_t, int);
+	void	(*tcb_openings)(struct device *, int);
 };
 
 struct twa_drive {
 	uint32_t	td_id;
 	uint64_t	td_size;
 	int		td_openings;
-	device_t	td_dev;
+	struct device	*td_dev;
 	const struct twa_callbacks *td_callbacks;
 };
 
 /* Per-controller structure. */
 struct twa_softc {
-	device_t		twa_dv;
+	struct device		twa_dv;
 	bus_space_tag_t		twa_bus_iot;	/* bus space tag */
 	bus_space_handle_t	twa_bus_ioh;	/* bus space handle */
 	bus_dma_tag_t		twa_dma_tag;	/* data buffer DMA tag */
@@ -107,7 +107,6 @@ struct twa_softc {
 
 	struct twa_request      *sc_twa_request;
 	uint32_t		sc_product_id;
-	unsigned		sc_quirks;
 };
 
 
@@ -145,9 +144,6 @@ struct twa_softc {
 /* Possible values of sc->twa_ioctl_lock.lock. */
 #define TWA_LOCK_FREE		0x0	/* lock is free */
 #define TWA_LOCK_HELD		0x1	/* lock is held */
-
-/* Possible values of sc->sc_quirks. */
-#define TWA_QUIRK_QUEUEFULL_BUG	0x1
 
 /* Driver's request packet. */
 struct twa_request {

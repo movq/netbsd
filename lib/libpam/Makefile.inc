@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.15 2012/01/27 08:45:10 jnemeth Exp $
+# $NetBSD: Makefile.inc,v 1.8.4.1 2011/01/06 05:20:24 riz Exp $
 # Copyright 1998 Juniper Networks, Inc.
 # All rights reserved.
 #
@@ -32,13 +32,7 @@
 
 USE_FORT?= yes	# network client software *and* authentication software
 
-.if defined(MLIBDIR)
-MODLIBDIR=/usr/lib/${MLIBDIR}/security
-.else
-MODLIBDIR=/usr/lib/security
-.endif
-
-CPPFLAGS+= -DOPENPAM_MODULES_DIR=\"${MODLIBDIR}\"
+CPPFLAGS+= -DOPENPAM_MODULES_DIR=\"/usr/lib/security\"
 # No debugging
 #CPPFLAGS+= -DDEBUG
 
@@ -48,8 +42,5 @@ CSHLIBFLAGS+= -DNO_STATIC_MODULES
 
 # Define the shared library version here.  libpam and the modules share a
 # version, and we need these variables early for module install rules.
-SHLIB_MAJOR=	3
+SHLIB_MAJOR=	1
 SHLIB_MINOR=	0
-
-# openpam requires the files to be owned by root
-BINOWN=        root

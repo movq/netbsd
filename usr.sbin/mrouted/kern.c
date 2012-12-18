@@ -1,4 +1,4 @@
-/*	$NetBSD: kern.c,v 1.12 2011/08/31 16:24:59 plunky Exp $	*/
+/*	$NetBSD: kern.c,v 1.10 2006/05/09 20:18:09 mrg Exp $	*/
 
 /*
  * The mrouted program is covered by the license in the accompanying file
@@ -21,12 +21,12 @@ void k_set_rcvbuf(int bufsize)
 }
 
 
-void k_hdr_include(int onoff)
+void k_hdr_include(int bool)
 {
 #ifdef IP_HDRINCL
     if (setsockopt(igmp_socket, IPPROTO_IP, IP_HDRINCL,
-		   (char *)&onoff, sizeof(onoff)) < 0)
-	logit(LOG_ERR, errno, "setsockopt IP_HDRINCL %u", onoff);
+		   (char *)&bool, sizeof(bool)) < 0)
+	logit(LOG_ERR, errno, "setsockopt IP_HDRINCL %u", bool);
 #endif
 }
 
@@ -99,7 +99,7 @@ void k_init_dvmrp(void)
 {
 #ifdef OLD_KERNEL
     if (setsockopt(igmp_socket, IPPROTO_IP, MRT_INIT,
-		   NULL, 0) < 0)
+		   (char *)NULL, 0) < 0)
 #else
     int v=1;
 
@@ -113,7 +113,7 @@ void k_init_dvmrp(void)
 void k_stop_dvmrp(void)
 {
     if (setsockopt(igmp_socket, IPPROTO_IP, MRT_DONE,
-		   NULL, 0) < 0)
+		   (char *)NULL, 0) < 0)
 	logit(LOG_WARNING, errno, "can't disable Multicast routing in kernel");
 }
 

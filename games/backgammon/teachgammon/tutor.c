@@ -1,4 +1,4 @@
-/*	$NetBSD: tutor.c,v 1.11 2012/10/13 19:19:39 dholland Exp $	*/
+/*	$NetBSD: tutor.c,v 1.7 2005/07/01 01:12:39 jmc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)tutor.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: tutor.c,v 1.11 2012/10/13 19:19:39 dholland Exp $");
+__RCSID("$NetBSD: tutor.c,v 1.7 2005/07/01 01:12:39 jmc Exp $");
 #endif
 #endif				/* not lint */
 
@@ -44,11 +44,8 @@ __RCSID("$NetBSD: tutor.c,v 1.11 2012/10/13 19:19:39 dholland Exp $");
 static const char better[] = 
 	"That is a legal move, but there is a better one.\n";
 
-static int brdeq(const int *, const int *);
-static void clrest(void);
-
 void
-tutor(struct move *mm)
+tutor(void)
 {
 	int     i, j;
 
@@ -72,57 +69,57 @@ tutor(struct move *mm)
 				curmove(18, 0);
 			writel(better);
 			nexturn();
-			movback(mm, mm->mvlim);
+			movback(mvlim);
 			if (tflag) {
 				refresh();
 				clrest();
 			}
 			if ((!tflag) || curr == 19) {
-				proll(mm);
+				proll();
 				writec('\t');
 			} else
 				curmove(curr > 19 ? curr - 2 : curr + 4, 25);
-			getmove(mm);
+			getmove();
 			if (cturn == 0)
 				leave();
 			continue;
 		}
 		if (tflag)
 			curmove(18, 0);
-		wrtext(*test[i].com);
+		text(*test[i].com);
 		if (!tflag)
 			writec('\n');
 		if (i == maxmoves)
 			break;
-		mm->D0 = test[i].roll1;
-		mm->D1 = test[i].roll2;
-		mm->d0 = 0;
-		mm->mvlim = 0;
+		D0 = test[i].roll1;
+		D1 = test[i].roll2;
+		d0 = 0;
+		mvlim = 0;
 		for (j = 0; j < 4; j++) {
 			if (test[i].mp[j] == test[i].mg[j])
 				break;
-			mm->p[j] = test[i].mp[j];
-			mm->g[j] = test[i].mg[j];
-			mm->mvlim++;
+			p[j] = test[i].mp[j];
+			g[j] = test[i].mg[j];
+			mvlim++;
 		}
-		if (mm->mvlim)
-			for (j = 0; j < mm->mvlim; j++)
-				if (makmove(mm, j))
+		if (mvlim)
+			for (j = 0; j < mvlim; j++)
+				if (makmove(j))
 					writel("AARGH!!!\n");
 		if (tflag)
 			refresh();
 		nexturn();
-		mm->D0 = test[i].new1;
-		mm->D1 = test[i].new2;
-		mm->d0 = 0;
+		D0 = test[i].new1;
+		D1 = test[i].new2;
+		d0 = 0;
 		i++;
-		mm->mvlim = movallow(mm);
-		if (mm->mvlim) {
+		mvlim = movallow();
+		if (mvlim) {
 			if (tflag)
 				clrest();
-			proll(mm);
+			proll();
 			writec('\t');
-			getmove(mm);
+			getmove();
 			if (tflag)
 				refresh();
 			if (cturn == 0)
@@ -132,7 +129,7 @@ tutor(struct move *mm)
 	leave();
 }
 
-static void
+void
 clrest(void)
 {
 	int     r, c, j;
@@ -146,7 +143,7 @@ clrest(void)
 	curmove(r, c);
 }
 
-static int
+int
 brdeq(const int *b1, const int *b2)
 {
 	const int    *e;

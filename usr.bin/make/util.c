@@ -1,15 +1,15 @@
-/*	$NetBSD: util.c,v 1.53 2012/06/04 22:45:05 sjg Exp $	*/
+/*	$NetBSD: util.c,v 1.45.2.1 2008/11/09 05:07:23 snj Exp $	*/
 
 /*
  * Missing stuff from OS's
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: util.c,v 1.53 2012/06/04 22:45:05 sjg Exp $";
+static char rcsid[] = "$NetBSD: util.c,v 1.45.2.1 2008/11/09 05:07:23 snj Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: util.c,v 1.53 2012/06/04 22:45:05 sjg Exp $");
+__RCSID("$NetBSD: util.c,v 1.45.2.1 2008/11/09 05:07:23 snj Exp $");
 #endif
 #endif
 
@@ -18,7 +18,6 @@ __RCSID("$NetBSD: util.c,v 1.53 2012/06/04 22:45:05 sjg Exp $");
 #include <errno.h>
 #include <stdio.h>
 #include <time.h>
-#include <signal.h>
 
 #include "make.h"
 
@@ -48,26 +47,17 @@ findenv(const char *name, int *offset)
 	size_t i, len;
 	char *p, *q;
 
-	len = strlen(name);
 	for (i = 0; (q = environ[i]); i++) {
-		p = strchr(q, '=');
-		if (p == NULL || p - q != len)
+		char *p = strchr(q, '=');
+		if (p == NULL)
 			continue;
-		if (strncmp(name, q, len) == 0) {
+		if (strncmp(name, q, len = p - q) == 0) {
 			*offset = i;
 			return q + len + 1;
 		}
 	}
 	*offset = i;
 	return NULL;
-}
-
-char *
-getenv(const char *name)
-{
-    int offset;
-
-    return(findenv(name, &offset));
 }
 
 int
@@ -92,6 +82,7 @@ unsetenv(const char *name)
 int
 setenv(const char *name, const char *value, int rewrite)
 {
+	static char **saveenv;	/* copy of previously allocated space */
 	char *c, **newenv;
 	const char *cc;
 	size_t l_value, size;
@@ -114,20 +105,20 @@ setenv(const char *name, const char *value, int rewrite)
 			goto copy;
 	} else {					/* create new slot */
 		size = sizeof(char *) * (offset + 2);
-		if (savedEnv == environ) {		/* just increase size */
-			if ((newenv = realloc(savedEnv, size)) == NULL)
+		if (saveenv == environ) {		/* just increase size */
+			if ((newenv = realloc(saveenv, size)) == NULL)
 				return -1;
-			savedEnv = newenv;
+			saveenv = newenv;
 		} else {				/* get new space */
 			/*
 			 * We don't free here because we don't know if
 			 * the first allocation is valid on all OS's
 			 */
-			if ((savedEnv = malloc(size)) == NULL)
+			if ((saveenv = malloc(size)) == NULL)
 				return -1;
-			(void)memcpy(savedEnv, environ, size - sizeof(char *));
+			(void)memcpy(saveenv, environ, size - sizeof(char *));
 		}
-		environ = savedEnv;
+		environ = saveenv;
 		environ[offset + 1] = NULL;
 	}
 	for (cc = name; *cc && *cc != '='; ++cc)	/* no `=' in name */
@@ -240,6 +231,24 @@ random(void)
 }
 #endif
 
+/* turn into bsd signals */
+void (*
+signal(int s, void (*a)(int)))(int)
+{
+    struct sigvec osv, sv;
+
+    (void)sigvector(s, NULL, &osv);
+    sv = osv;
+    sv.sv_handler = a;
+#ifdef SV_BSDSIG
+    sv.sv_flags = SV_BSDSIG;
+#endif
+
+    if (sigvector(s, &sv, NULL) == -1)
+        return (BADSIG);
+    return (osv.sv_handler);
+}
+
 #if !defined(__hpux__) && !defined(__hpux)
 int
 utimes(char *file, struct timeval tvp[2])
@@ -277,7 +286,7 @@ getwd(char *pathname)
     if (stat("/", &st_root) == -1) {
 	(void)sprintf(pathname,
 			"getwd: Cannot stat \"/\" (%s)", strerror(errno));
-	return NULL;
+	return (NULL);
     }
     pathbuf[MAXPATHLEN - 1] = '\0';
     pathptr = &pathbuf[MAXPATHLEN - 1];
@@ -288,7 +297,7 @@ getwd(char *pathname)
     if (lstat(".", &st_cur) == -1) {
 	(void)sprintf(pathname,
 			"getwd: Cannot stat \".\" (%s)", strerror(errno));
-	return NULL;
+	return (NULL);
     }
     nextpathptr = strrcpy(nextpathptr, "../");
 
@@ -307,13 +316,13 @@ getwd(char *pathname)
 	    (void)sprintf(pathname,
 			    "getwd: Cannot stat directory \"%s\" (%s)",
 			    nextpathptr, strerror(errno));
-	    return NULL;
+	    return (NULL);
 	}
 	if ((dp = opendir(nextpathptr)) == NULL) {
 	    (void)sprintf(pathname,
 			    "getwd: Cannot open directory \"%s\" (%s)",
 			    nextpathptr, strerror(errno));
-	    return NULL;
+	    return (NULL);
 	}
 
 	/* look in the parent for the entry with the same inode */
@@ -337,7 +346,7 @@ getwd(char *pathname)
 			"getwd: Cannot stat \"%s\" (%s)",
 			d->d_name, strerror(errno));
 		    (void)closedir(dp);
-		    return NULL;
+		    return (NULL);
 		}
 		/* check if we found it yet */
 		if (st_next.st_ino == st_cur.st_ino &&
@@ -349,7 +358,7 @@ getwd(char *pathname)
 	    (void)sprintf(pathname,
 		"getwd: Cannot find \".\" in \"..\"");
 	    (void)closedir(dp);
-	    return NULL;
+	    return (NULL);
 	}
 	st_cur = st_dotdot;
 	pathptr = strrcpy(pathptr, d->d_name);
@@ -361,9 +370,12 @@ getwd(char *pathname)
 } /* end getwd */
 #endif /* __hpux */
 
-/* force posix signals */
+#if defined(sun) && defined(__svr4__)
+#include <signal.h>
+
+/* turn into bsd signals */
 void (*
-bmake_signal(int s, void (*a)(int)))(int)
+signal(int s, void (*a)(int)))(int)
 {
     struct sigaction sa, osa;
 
@@ -376,6 +388,7 @@ bmake_signal(int s, void (*a)(int)))(int)
     else
 	return osa.sa_handler;
 }
+#endif
 
 #if !defined(MAKE_NATIVE) && !defined(HAVE_VSNPRINTF)
 #include <stdarg.h>
@@ -473,10 +486,10 @@ strftime(char *buf, size_t len, const char *fmt, const struct tm *tm)
 			s = snprintf(buf, len, "%s", months[tm->tm_mon]);
 			break;
 		case 'd':
-			s = snprintf(buf, len, "%02d", tm->tm_mday);
+			s = snprintf(buf, len, "%s", tm->tm_mday);
 			break;
 		case 'Y':
-			s = snprintf(buf, len, "%d", 1900 + tm->tm_year);
+			s = snprintf(buf, len, "%s", 1900 + tm->tm_year);
 			break;
 		default:
 			s = snprintf(buf, len, "Unsupported format %c",

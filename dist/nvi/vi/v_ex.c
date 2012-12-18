@@ -1,4 +1,4 @@
-/*	$NetBSD: v_ex.c,v 1.4 2009/08/11 21:24:49 aymeric Exp $ */
+/*	$NetBSD: v_ex.c,v 1.2.2.2 2009/10/18 09:58:03 sborrill Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994

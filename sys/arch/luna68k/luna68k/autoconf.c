@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.14 2012/10/13 06:16:19 tsutsui Exp $ */
+/* $NetBSD: autoconf.c,v 1.11 2008/05/03 23:55:54 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.14 2012/10/13 06:16:19 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.11 2008/05/03 23:55:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.14 2012/10/13 06:16:19 tsutsui Exp $"
  * Determine mass storage and memory configuration for a machine.
  */
 void
-cpu_configure(void)
+cpu_configure()
 {
 	booted_device = NULL;	/* set by device drivers (if found) */
 
@@ -62,7 +62,7 @@ cpu_configure(void)
 }
 
 void
-cpu_rootconf(void)
+cpu_rootconf()
 {
 #if 1 /* XXX to be reworked with helps of 2nd stage loaders XXX */
 	int i;
@@ -85,7 +85,7 @@ cpu_rootconf(void)
 
 #endif
 	printf("boot device: %s\n",
-		(booted_device) ? device_xname(booted_device) : "<unknown>");
+		(booted_device) ? booted_device->dv_xname : "<unknown>");
 
-	rootconf();
+	setroot(booted_device, 0); /* XXX partition 'a' XXX */
 }

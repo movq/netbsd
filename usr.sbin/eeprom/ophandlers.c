@@ -1,4 +1,4 @@
-/*	$NetBSD: ophandlers.c,v 1.11 2011/01/04 09:25:21 wiz Exp $	*/
+/*	$NetBSD: ophandlers.c,v 1.10 2008/04/28 20:24:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -114,10 +114,8 @@ op_handler(keyword, arg)
 		if (strcmp(ex->ex_keyword, keyword) == 0)
 			break;
 
-	if (ioctl(fd, OPIOCGETOPTNODE, (char *)&optnode) < 0) {
-		(void)close(fd);
+	if (ioctl(fd, OPIOCGETOPTNODE, (char *)&optnode) < 0)
 		BARF("OPIOCGETOPTNODE", strerror(errno));
-	}
 
 	memset(&opio_buf[0], 0, sizeof(opio_buf));
 	memset(&opio, 0, sizeof(opio));
@@ -131,10 +129,8 @@ op_handler(keyword, arg)
 
 			opio.op_buf = &opio_buf[0];
 			opio.op_buflen = sizeof(opio_buf);
-			if (ioctl(fd, OPIOCGET, (char *)&opio) < 0) {
-				(void)close(fd);
+			if (ioctl(fd, OPIOCGET, (char *)&opio) < 0)
 				BARF("OPIOCGET", strerror(errno));
-			}
 
 			if (opio.op_buflen <= 0) {
 				printf("nothing available for %s\n", keyword);
@@ -154,10 +150,8 @@ op_handler(keyword, arg)
 			opio.op_buflen = strlen(arg);
 		}
 
-		if (ioctl(fd, OPIOCSET, (char *)&opio) < 0) {
-			(void)close(fd);
+		if (ioctl(fd, OPIOCSET, (char *)&opio) < 0)
 			BARF("invalid keyword", keyword);
-		}
 
 		if (verbose) {
 			printf("new: ");
@@ -169,10 +163,8 @@ op_handler(keyword, arg)
 	} else {
 		opio.op_buf = &opio_buf[0];
 		opio.op_buflen = sizeof(opio_buf);
-		if (ioctl(fd, OPIOCGET, (char *)&opio) < 0) {
-			(void)close(fd);
+		if (ioctl(fd, OPIOCGET, (char *)&opio) < 0)
 			BARF("OPIOCGET", strerror(errno));
-		}
 
 		if (opio.op_buflen <= 0) {
 			(void)snprintf(err_str, sizeof err_str,

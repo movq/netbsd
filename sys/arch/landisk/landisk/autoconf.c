@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.7 2012/10/27 17:17:58 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.4 2008/04/28 20:23:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.7 2012/10/27 17:17:58 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.4 2008/04/28 20:23:26 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,14 +60,14 @@ cpu_configure(void)
 }
 
 static int
-is_valid_disk(device_t dv)
+is_valid_disk(struct device *dv)
 {
 	const char *name;
 
-	if (device_class(dv) != DV_DISK)
+	if (dv->dv_class != DV_DISK)
 		return (0);
 	
-	name = device_cfdata(dv)->cf_name;
+	name = dv->dv_cfdata->cf_name;
 
 	return (strcmp(name, "sd") == 0 || strcmp(name, "wd") == 0 ||
 		strcmp(name, "ld") == 0);
@@ -78,7 +78,7 @@ is_valid_disk(device_t dv)
  * Return non-zero if disk device matches bootinfo.
  */
 static int
-match_bootdisk(device_t dv, struct btinfo_bootdisk *bid)
+match_bootdisk(struct device *dv, struct btinfo_bootdisk *bid)
 {
 	struct vnode *tmpvn;
 	int error;
@@ -97,7 +97,7 @@ match_bootdisk(device_t dv, struct btinfo_bootdisk *bid)
 	/*
 	 * Lookup major number for disk block device.
 	 */
-	bmajor = devsw_name2blk(device_xname(dv), NULL, 0);
+	bmajor = devsw_name2blk(dv->dv_xname, NULL, 0);
 	if (bmajor == -1)
 		return (0);	/* XXX panic ??? */
 
@@ -105,7 +105,7 @@ match_bootdisk(device_t dv, struct btinfo_bootdisk *bid)
 	 * Fake a temporary vnode for the disk, open it, and read
 	 * the disklabel for comparison.
 	 */
-	if (bdevvp(MAKEDISKDEV(bmajor, device_unit(dv), RAW_PART), &tmpvn))
+	if (bdevvp(MAKEDISKDEV(bmajor, dv->dv_unit, RAW_PART), &tmpvn))
 		panic("match_bootdisk: can't alloc vnode");
 	error = VOP_OPEN(tmpvn, FREAD, NOCRED);
 	if (error) {
@@ -117,7 +117,7 @@ match_bootdisk(device_t dv, struct btinfo_bootdisk *bid)
 		if (error != ENXIO && error != ENODEV)
 #endif
 			printf("match_bootdisk: can't open dev %s (%d)\n",
-			    device_xname(dv), error);
+			    dv->dv_xname, error);
 		vput(tmpvn);
 		return (0);
 	}
@@ -128,7 +128,7 @@ match_bootdisk(device_t dv, struct btinfo_bootdisk *bid)
 		 * or faked one up.
 		 */
 		printf("match_bootdisk: can't get label for dev %s (%d)\n",
-		    device_xname(dv), error);
+		    dv->dv_xname, error);
 		goto closeout;
 	}
 
@@ -153,8 +153,7 @@ static void
 findroot(void)
 {
 	struct btinfo_bootdisk *bid;
-	device_t dv;
-	deviter_t di;
+	struct device *dv;
 
 	if (booted_device)
 		return;
@@ -167,10 +166,9 @@ findroot(void)
 		 * because lower device numbers are more likely to be the
 		 * boot device.
 		 */
-		for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
-		     dv != NULL;
-		     dv = deviter_next(&di)) {
-			if (device_class(dv) != DV_DISK)
+		for (dv = TAILQ_FIRST(&alldevs); dv != NULL;
+		     dv = TAILQ_NEXT(dv, dv_list)) {
+			if (dv->dv_class != DV_DISK)
 				continue;
 
 			if (is_valid_disk(dv)) {
@@ -184,13 +182,12 @@ bootdisk_found:
 			if (booted_device) {
 				printf("WARNING: double match for boot "
 				    "device (%s, %s)\n",
-				    device_xname(booted_device), device_xname(dv));
+				    booted_device->dv_xname, dv->dv_xname);
 				continue;
 			}
 			booted_device = dv;
 			booted_partition = bid->partition;
 		}
-		deviter_release(&di);
 
 		if (booted_device)
 			return;
@@ -204,6 +201,6 @@ cpu_rootconf(void)
 	findroot();
 
 	printf("boot device: %s\n",
-	    booted_device ? device_xname(booted_device) : "<unknown>");
-	rootconf();
+	    booted_device ? booted_device->dv_xname : "<unknown>");
+	setroot(booted_device, booted_partition);
 }

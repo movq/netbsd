@@ -1,4 +1,4 @@
-/*	$NetBSD: limits.h,v 1.14 2012/03/28 17:03:29 christos Exp $	*/
+/*	$NetBSD: limits.h,v 1.11 2008/09/13 07:33:26 skrll Exp $	*/
 
 /*	$OpenBSD: limits.h,v 1.2 2000/07/31 20:06:02 millert Exp $	*/
 
@@ -62,6 +62,8 @@
 #include <sys/featuretest.h>
 
 #define	CHAR_BIT	8		/* number of bits in a char */
+#define	MB_LEN_MAX	6		/* Allow 31 bit UTF2 */
+
 
 /*
  * According to ANSI (section 2.2.4.2), the values below must be usable by
@@ -73,9 +75,12 @@
  * These numbers work for pcc as well.  The UINT_MAX and ULONG_MAX values
  * are written as hex so that GCC will be quiet about large integer constants.
  */
-#define	UCHAR_MAX	0xff		/* max value for an unsigned char */
 #define	SCHAR_MAX	0x7f		/* max value for a signed char */
 #define	SCHAR_MIN	(-0x7f-1)	/* min value for a signed char */
+
+#define	UCHAR_MAX	0xff		/* max value for an unsigned char */
+#define	CHAR_MAX	0x7f		/* max value for a char */
+#define	CHAR_MIN	(-0x7f-1)	/* min value for a char */
 
 #define	USHRT_MAX	0xffff		/* max value for an unsigned short */
 #define	SHRT_MAX	0x7fff		/* max value for a short */
@@ -114,54 +119,13 @@
 #define LONG_BIT	32
 #define WORD_BIT	32
 
-#ifndef DBL_DIG
-#ifdef __DBL_DIG__
-#define DBL_DIG         __DBL_DIG__
-#else
 #define DBL_DIG		15
-#endif
-#endif
-
-#ifndef DBL_MAX
-#ifdef __DBL_MAX__
-#define DBL_MAX		__DBL_MAX__
-#else
 #define DBL_MAX		1.7976931348623157E+308
-#endif
-#endif
-
-#ifndef DBL_MIN
-#ifdef __DBL_MIN__
-#define DBL_MIN		__DBL_MIN__
-#else
 #define DBL_MIN		2.2250738585072014E-308
-#endif
-#endif
 
-#ifndef FLT_DIG
-#ifdef __FLT_DIG__
-#define FLT_DIG         __FLT_DIG__
-#else
 #define FLT_DIG         6
-#endif
-#endif
-
-#ifndef FLT_MAX
-#ifdef __FLT_MAX__
-#define FLT_MAX		__FLT_MAX__
-#else
 #define FLT_MAX		3.40282347E+38F 
-#endif
-#endif
-
-#ifndef FLT_MIN
-#ifdef __FLT_MIN__
-#define FLT_MIN		__FLT_MIN__
-#else
 #define FLT_MIN		1.17549435E-38F 
-#endif
-#endif
-
 #endif
 
 #endif /* _MACHINE_LIMITS_H_ */

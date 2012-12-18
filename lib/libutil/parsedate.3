@@ -1,4 +1,4 @@
-.\"     $NetBSD: parsedate.3,v 1.11 2012/04/06 11:36:04 wiz Exp $
+.\"     $NetBSD: parsedate.3,v 1.4.6.1 2010/11/21 20:38:38 riz Exp $
 .\"
 .\" Copyright (c) 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 20, 2010
+.Dd Aug 28, 2010
 .Dt PARSEDATE 3
 .Os
 .Sh NAME
@@ -41,10 +41,10 @@
 .Fn parsedate "const char *datestr" "const time_t *time" "const int *tzoff"
 .Sh DESCRIPTION
 The
-.Fn parsedate
+.Nm parsedate
 function parses a datetime from
 .Ar datestr
-described in English relative to an optional
+described in english relative to an optional
 .Ar time
 point and an optional timezone offset in seconds specified in
 .Ar tzoff .
@@ -69,32 +69,30 @@ The following words have the indicated numeric meanings:
 \-1,
 .Dv this =
 0,
-.Dv first, next, or one =
+.Dv first or next
 1,
 .Dv second
 is unused so that it is not confused with
 .Dq seconds ,
-.Dv two =
-2,
-.Dv third or three =
+.Dv third =
 3,
-.Dv fourth or four =
+.Dv fourth =
 4,
-.Dv fifth or five  =
+.Dv fifth =
 5,
-.Dv sixth or six  =
+.Dv sixth =
 6,
-.Dv seventh or seven =
+.Dv seventh =
 7,
-.Dv eighth or eight =
+.Dv eighth =
 8,
-.Dv ninth or nine =
+.Dv ninth =
 9,
-.Dv tenth or ten =
+.Dv tenth =
 10,
-.Dv eleventh or eleven =
+.Dv eleventh =
 11,
-.Dv twelfth or twelve =
+.Dv twelfth =
 12.
 .Pp
 The following words are recognized in English only:
@@ -197,7 +195,7 @@ Timezone names:
 .Dv idle .
 .Pp
 A variety of unambiguous dates are recognized:
-.Bl -tag -compact -width "20 Jun 1994"
+.Bl -tag -compact
 .It 69-09-10
 For years between 69-99 we assume 1900+ and for years between 0-68
 we assume 2000+.
@@ -214,7 +212,7 @@ the year can be omitted
 .El
 .Pp
 As well as times:
-.Bl -tag -compact -width 12:11:01.000012
+.Bl -tag -compact
 .It 10:01
 .It 10:12pm
 .It 12:11:01.000012
@@ -222,7 +220,7 @@ As well as times:
 .El
 .Pp
 Relative items are also supported:
-.Bl -tag -compact -width "this thursday"
+.Bl -tag -compact
 .It -1 month
 .It last friday
 .It one week ago
@@ -244,6 +242,8 @@ if the date could not be parsed properly.
 .Sh SEE ALSO
 .Xr date 1 ,
 .Xr eeprom 8
+.Sh BUGS
+The parsedate function is not re-entrant or thread-safe.
 .Sh HISTORY
 The parser used in
 .Fn parsedate
@@ -256,23 +256,3 @@ The
 .Fn parsedate
 function first appeared in
 .Nx 4.0 .
-.Sh BUGS
-.Bl -tag -compact -width 1
-.It 1
-The
-.Fn parsedate
-function is not re-entrant or thread-safe.
-.It 2
-The
-.Fn parsedate
-function cannot compute days before the unix epoch (19700101).
-.It 3
-The
-.Fn parsedate
-function assumes years less than 0 mean -
-.Fa year ,
-years less than 70 mean 2000 +
-.Fa year ,
-years less than 100 mean 1900 +
-.Fa year .
-.El

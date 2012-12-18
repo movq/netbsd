@@ -1,4 +1,4 @@
-/*	$NetBSD: what.c,v 1.11 2011/09/06 18:45:49 joerg Exp $	*/
+/*	$NetBSD: what.c,v 1.10 2008/07/21 14:19:28 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)what.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: what.c,v 1.11 2011/09/06 18:45:49 joerg Exp $");
+__RCSID("$NetBSD: what.c,v 1.10 2008/07/21 14:19:28 lukem Exp $");
 #endif /* not lint */
 
 #include <locale.h>
@@ -47,8 +47,9 @@ __RCSID("$NetBSD: what.c,v 1.11 2011/09/06 18:45:49 joerg Exp $");
 #include <stdlib.h>
 #include <unistd.h>
 
-static void search(void);
-__dead static void usage(void);
+int main __P((int, char **));
+static void search __P((void));
+static void usage __P((void));
 
 static int matches;
 static int sflag;
@@ -58,7 +59,9 @@ static int sflag;
  */
 /* ARGSUSED */
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	int c;
 
@@ -95,7 +98,7 @@ main(int argc, char **argv)
 }
 
 static void
-search(void)
+search()
 {
 	int c;
 
@@ -120,7 +123,7 @@ loop:		if (c != '@')
 }
 
 static void
-usage(void)
+usage()
 {
 
 	(void)fprintf(stderr, "usage: what [-s] file ...\n");

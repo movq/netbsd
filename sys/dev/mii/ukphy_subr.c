@@ -1,4 +1,4 @@
-/*	$NetBSD: ukphy_subr.c,v 1.11 2009/02/16 08:00:42 cegger Exp $	*/
+/*	$NetBSD: ukphy_subr.c,v 1.10.10.1 2009/05/01 01:29:21 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ukphy_subr.c,v 1.11 2009/02/16 08:00:42 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ukphy_subr.c,v 1.10.10.1 2009/05/01 01:29:21 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

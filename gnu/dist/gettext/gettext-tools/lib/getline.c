@@ -32,7 +32,7 @@
 /* Get ssize_t.  */
 #include <sys/types.h>
 
-#if HAVE_GETDELIM
+#if defined __GNU_LIBRARY__ && HAVE_GETDELIM
 
 ssize_t
 getline (char **lineptr, size_t *linesize, FILE *stream)

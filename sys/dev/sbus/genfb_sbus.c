@@ -1,4 +1,4 @@
-/*	$NetBSD: genfb_sbus.c,v 1.10 2010/10/07 07:53:54 macallan Exp $ */
+/*	$NetBSD: genfb_sbus.c,v 1.5 2008/04/29 06:53:03 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -29,7 +29,7 @@
 /* an SBus frontend for the generic fb console driver */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genfb_sbus.c,v 1.10 2010/10/07 07:53:54 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genfb_sbus.c,v 1.5 2008/04/29 06:53:03 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,24 +52,25 @@ __KERNEL_RCSID(0, "$NetBSD: genfb_sbus.c,v 1.10 2010/10/07 07:53:54 macallan Exp
 
 struct genfb_sbus_softc {
 	struct genfb_softc sc_gen;
+	struct sbusdev sc_sd;
 	bus_space_tag_t sc_tag;
 	paddr_t sc_paddr;
 };
 
-static int	genfb_match_sbus(device_t, cfdata_t, void *);
-static void	genfb_attach_sbus(device_t, device_t, void *);
+static int	genfb_match_sbus(struct device *, struct cfdata *, void *);
+static void	genfb_attach_sbus(struct device *, struct device *, void *);
 static int	genfb_ioctl_sbus(void *, void *, u_long, void *, int,
 				 struct lwp*);
 static paddr_t	genfb_mmap_sbus(void *, void *, off_t, int);
 
-CFATTACH_DECL_NEW(genfb_sbus, sizeof(struct genfb_sbus_softc),
+CFATTACH_DECL(genfb_sbus, sizeof(struct genfb_sbus_softc),
     genfb_match_sbus, genfb_attach_sbus, NULL, NULL);
 
 /*
  * Match a graphics device.
  */
 static int
-genfb_match_sbus(device_t parent, cfdata_t cf, void *aux)
+genfb_match_sbus(struct device *parent,	struct cfdata *cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -87,9 +88,10 @@ genfb_match_sbus(device_t parent, cfdata_t cf, void *aux)
  * Attach a display.  We need to notice if it is the console, too.
  */
 static void
-genfb_attach_sbus(device_t parent, device_t self, void *args)
+genfb_attach_sbus(struct device *parent, struct device *self, void *args)
 {
-	struct genfb_sbus_softc *sc = device_private(self);
+	struct genfb_sbus_softc *sc = (struct genfb_sbus_softc *)self;
+	struct sbusdev *sd = &sc->sc_sd;
 	struct sbus_attach_args *sa = args;
 	struct genfb_ops ops;
 	prop_dictionary_t dict;
@@ -100,7 +102,6 @@ genfb_attach_sbus(device_t parent, device_t self, void *args)
 	int isconsole;
 
 	aprint_normal("\n");
-	sc->sc_gen.sc_dev = self;
 	/* Remember cookies for genfb_mmap_sbus() */
 	sc->sc_tag = sa->sa_bustag;
 	sc->sc_paddr = sbus_bus_addr(sa->sa_bustag, sa->sa_slot, sa->sa_offset);
@@ -148,6 +149,7 @@ genfb_attach_sbus(device_t parent, device_t self, void *args)
 	}
 	sc->sc_gen.sc_fbaddr = (void *)bus_space_vaddr(sa->sa_bustag, bh);
 
+	sbus_establish(sd, self);
 	ops.genfb_ioctl = genfb_ioctl_sbus;
 	ops.genfb_mmap = genfb_mmap_sbus;
 

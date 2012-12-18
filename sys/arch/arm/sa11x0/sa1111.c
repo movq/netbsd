@@ -1,4 +1,4 @@
-/*      $NetBSD: sa1111.c,v 1.24 2011/07/01 20:31:39 dyoung Exp $	*/
+/*      $NetBSD: sa1111.c,v 1.22 2008/04/28 20:23:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sa1111.c,v 1.24 2011/07/01 20:31:39 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sa1111.c,v 1.22 2008/04/28 20:23:14 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: sa1111.c,v 1.24 2011/07/01 20:31:39 dyoung Exp $");
 #include <sys/malloc.h>
 #include <sys/uio.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <arm/sa11x0/sa11x0_reg.h>
@@ -69,7 +69,7 @@ static void	sacc_intr_setpolarity(sacc_chipset_tag_t *, int , int);
 #endif
 
 int
-sacc_probe(device_t parent, cfdata_t match, void *aux)
+sacc_probe(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct sa11x0_attach_args *sa = aux;
 	bus_space_handle_t ioh;
@@ -89,7 +89,7 @@ sacc_probe(device_t parent, cfdata_t match, void *aux)
 
 
 int
-sa1111_search(device_t parent, cfdata_t cf, const int *ldesc,
+sa1111_search(struct device *parent, struct cfdata *cf, const int *ldesc,
     void *aux)
 {
 	struct sa1111_attach_args aa;

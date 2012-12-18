@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.48 2011/06/20 19:56:12 matt Exp $	*/
+/*	$NetBSD: locore.S,v 1.39 2008/04/08 02:33:03 garbled Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -34,7 +34,6 @@
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
 #include "opt_lockdebug.h"
-#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_ppcparam.h"
 #include "assym.h"
@@ -42,12 +41,14 @@
 #include <sys/syscall.h>
 
 #include <machine/param.h>
+#include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
+#define _NOREGNAMES
 #include <machine/asm.h>
+#include <machine/vmparam.h>
 
 #include <powerpc/spr.h>
-#include <powerpc/oea/spr.h>
 
 #include "ksyms.h"
 
@@ -62,6 +63,8 @@
 	.data
 GLOBAL(esym)
 	.long	0			/* end of symbol table */
+GLOBAL(proc0paddr)
+	.long	0			/* proc0 p_addr */
 GLOBAL(oeacpufeat)
 	.long	0			/* cpu features */
 
@@ -82,35 +85,35 @@ _C_LABEL(kernel_text):
 __start:
 	bl	_C_LABEL(ofwinit)	/* init our OF hooks */
 
-	li	%r0,0
-	mtmsr	%r0			/* Disable FPU/MMU/exceptions */
+	li	0,0
+	mtmsr	0			/* Disable FPU/MMU/exceptions */
 
 	bl	_C_LABEL(cpu_model_init)
-	lis	%r12,oeacpufeat@ha
-	lwz	%r12,oeacpufeat@l(%r12)
-	andi.	%r12,%r12,OEACPU_64_BRIDGE	/* Compare against OEACPU_64_BRIDGE */
+	lis	12,oeacpufeat@ha
+	lwz	12,oeacpufeat@l(12)
+	andi.	12,12,OEACPU_64_BRIDGE	/* Compare against OEACPU_64_BRIDGE */
 	beq	2f			/* skip if this is a 32bit part */
-	li	%r0,0
+	li	0,0
 	sync
 	slbia				/* invalidate the slb table */
 	sync
-	clrldi	%r0,%r0,32		/* clear SF/ISF (high order bits) */
-	mtmsrd	%r0
+	clrldi	0,0,32			/* clear SF/ISF (high order bits) */
+	mtmsrd	0
 	mtspr	0x118,0		/* clear ASR[V] to enable segregs */
 2:
 	isync
 	/* compute end of kernel memory */
-        lis	%r4,_C_LABEL(end)@ha
-        addi	%r4,%r4,_C_LABEL(end)@l
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+        lis	4,_C_LABEL(end)@ha
+        addi	4,4,_C_LABEL(end)@l
+#if NKSYMS || defined(DDB) || defined(LKM)
 	/* skip symbol table */
-	cmpwi	%r6,0
+	cmpwi	6,0
 	beq	1f
-	add	%r9,%r6,%r7			/* r9 = args + l */
-	lwz	%r9,-8(%r9)			/* esym */
-	cmpwi	%r9,0
+	add	9,6,7			/* r9 = args + l */
+	lwz	9,-8(9)			/* esym */
+	cmpwi	9,0
 	beq	1f
-	mr	%r4,%r9
+	mr	4,9
 1:
 #endif
 
@@ -118,15 +121,15 @@ __start:
 	/*
 	 * Initialize cpu_info[0]
 	 */
-	INIT_CPUINFO(%r4,%r1,%r9,%r0)
+	INIT_CPUINFO(4,1,9,0)
 
-	lis	%r3,__start@ha
-	addi	%r3,%r3,__start@l
-	mr	%r5,%r6			/* args string */
+	lis	3,__start@ha
+	addi	3,3,__start@l
+	mr	5,6			/* args string */
 	bl	_C_LABEL(initppc)
 	bl	_C_LABEL(main)
 	b	_C_LABEL(OF_exit)
-
+	
 /*
  * Pull in common OFW code.
  */

@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.52 2012/11/09 10:05:59 nakayama Exp $ */
+/*	$NetBSD: psl.h,v 1.40 2008/03/02 15:07:02 nakayama Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -224,28 +224,6 @@
 #define VER_MAXTL_SHIFT	8
 #define VER_MAXWIN	0x000000000000001fLL
 
-#define MANUF_FUJITSU		0x04 /* Fujitsu SPARC64 */
-#define MANUF_SUN		0x17 /* Sun UltraSPARC */
-
-#define IMPL_SPARC64		0x01 /* SPARC64 */
-#define IMPL_SPARC64_II		0x02 /* SPARC64-II */
-#define IMPL_SPARC64_III	0x03 /* SPARC64-III */
-#define IMPL_SPARC64_IV		0x04 /* SPARC64-IV */
-#define IMPL_ZEUS		0x05 /* SPARC64-V */
-#define IMPL_OLYMPUS_C		0x06 /* SPARC64-VI */
-#define IMPL_JUPITER		0x07 /* SPARC64-VII */
-
-#define IMPL_SPITFIRE		0x10 /* UltraSPARC-I */
-#define IMPL_BLACKBIRD		0x11 /* UltraSPARC-II */
-#define IMPL_SABRE		0x12 /* UltraSPARC-IIi */
-#define IMPL_HUMMINGBIRD	0x13 /* UltraSPARC-IIe */
-#define IMPL_CHEETAH		0x14 /* UltraSPARC-III */
-#define IMPL_CHEETAH_PLUS	0x15 /* UltraSPARC-III+ */
-#define IMPL_JALAPENO		0x16 /* UltraSPARC-IIIi */
-#define IMPL_JAGUAR		0x18 /* UltraSPARC-IV */
-#define IMPL_PANTHER		0x19 /* UltraSPARC-IV+ */
-#define IMPL_SERRANO		0x22 /* UltraSPARC-IIIi+ */
-
 /*
  * Here are a few things to help us transition between user and kernel mode:
  */
@@ -264,103 +242,53 @@
 
 #define CWP		0x01f
 
-/*
- * UltraSPARC Ancillary State Registers
- */
-#define SET_SOFTINT	%asr20	/* Set Software Interrupt register bits */
-#define CLEAR_SOFTINT	%asr21	/* Clear Software Interrupt register bits */
-#define SOFTINT		%asr22	/* Software Interrupt register */
-#define TICK_CMPR	%asr23	/* TICK Compare register */
-#define STICK		%asr24	/* STICK register */
-#define STICK_CMPR	%asr25	/* STICK Compare register */
-
-/* SOFTINT bit descriptions */
-#define TICK_INT	0x01		/* CPU clock timer interrupt */
-#define STICK_INT	(0x1<<16)	/* system clock timer interrupt */
-
 /* 64-byte alignment -- this seems the best place to put this. */
-#define SPARC64_BLOCK_SIZE	64
-#define SPARC64_BLOCK_ALIGN	0x3f
+#define BLOCK_SIZE	64
+#define BLOCK_ALIGN	0x3f
 
 #if defined(_KERNEL) && !defined(_LOCORE)
 
 /*
- * Inlines for manipulating privileged and ancillary state registers
+ * Inlines for manipulating privileged registers
  */
-#define SPARC64_RD_DEF(rd, name, reg, type)				\
-static __inline type get##name(void)					\
-{									\
-	type _val;							\
-	__asm volatile(#rd " %" #reg ",%0" : "=r" (_val));		\
-	return _val;							\
-}
-#define SPARC64_WR_DEF(wr, name, reg, type)				\
-static __inline void set##name(type _val)				\
-{									\
-	__asm volatile(#wr " %0,0,%" #reg : : "r" (_val) : "memory");	\
+static __inline int
+getpstate(void)
+{
+	int pstate;
+
+	__asm volatile("rdpr %%pstate,%0" : "=r" (pstate));
+	return (pstate);
 }
 
-#ifdef __arch64__
-#define SPARC64_RD64_DEF(rd, name, reg) SPARC64_RD_DEF(rd, name, reg, uint64_t)
-#define SPARC64_WR64_DEF(wr, name, reg) SPARC64_WR_DEF(wr, name, reg, uint64_t)
-#else
-#define SPARC64_RD64_DEF(rd, name, reg)					\
-static __inline uint64_t get##name(void)				\
-{									\
-	uint32_t _hi, _lo;						\
-	__asm volatile(#rd " %" #reg ",%0; srl %0,0,%1; srlx %0,32,%0"	\
-		: "=r" (_hi), "=r" (_lo));				\
-	return ((uint64_t)_hi << 32) | _lo;				\
+static __inline void
+setpstate(int newpstate)
+{
+	__asm volatile("wrpr %0,0,%%pstate" : : "r" (newpstate) : "memory");
 }
-#define SPARC64_WR64_DEF(wr, name, reg)					\
-static __inline void set##name(uint64_t _val)				\
-{									\
-	uint32_t _hi = _val >> 32, _lo = _val;				\
-	__asm volatile("sllx %1,32,%0; or %0,%2,%0; " #wr " %0,0,%" #reg\
-		       : "=&r" (_hi) /* scratch register */		\
-		       : "r" (_hi), "r" (_lo) : "memory");		\
+
+static __inline int
+getcwp(void)
+{
+	int cwp;
+
+	__asm volatile("rdpr %%cwp,%0" : "=r" (cwp));
+	return (cwp);
 }
-#endif
 
-#define SPARC64_RDPR_DEF(name, reg, type) SPARC64_RD_DEF(rdpr, name, reg, type)
-#define SPARC64_WRPR_DEF(name, reg, type) SPARC64_WR_DEF(wrpr, name, reg, type)
-#define SPARC64_RDPR64_DEF(name, reg)	SPARC64_RD64_DEF(rdpr, name, reg)
-#define SPARC64_WRPR64_DEF(name, reg)	SPARC64_WR64_DEF(wrpr, name, reg)
-#define SPARC64_RDASR64_DEF(name, reg)	SPARC64_RD64_DEF(rd, name, reg)
-#define SPARC64_WRASR64_DEF(name, reg)	SPARC64_WR64_DEF(wr, name, reg)
+static __inline void
+setcwp(int newcwp)
+{
+	__asm volatile("wrpr %0,0,%%cwp" : : "r" (newcwp) : "memory");
+}
 
-/* Tick Register (PR 4) */
-SPARC64_RDPR64_DEF(tick, %tick)			/* gettick() */
-SPARC64_WRPR64_DEF(tick, %tick)			/* settick() */
+static __inline uint64_t
+getver(void)
+{
+	uint64_t ver;
 
-/* Processor State Register (PR 6) */
-SPARC64_RDPR_DEF(pstate, %pstate, int)		/* getpstate() */
-SPARC64_WRPR_DEF(pstate, %pstate, int)		/* setpstate() */
-
-/* Trap Level Register (PR 7) */
-SPARC64_RDPR_DEF(tl, %tl, int)			/* gettl() */
-
-/* Current Window Pointer Register (PR 9) */
-SPARC64_RDPR_DEF(cwp, %cwp, int)		/* getcwp() */
-SPARC64_WRPR_DEF(cwp, %cwp, int)		/* setcwp() */
-
-/* Version Register (PR 31) */
-SPARC64_RDPR64_DEF(ver, %ver)			/* getver() */
-
-/* System Tick Register (ASR 24) */
-SPARC64_RDASR64_DEF(stick, STICK)		/* getstick() */
-SPARC64_WRASR64_DEF(stick, STICK)		/* setstick() */
-
-/* Some simple macros to check the cpu type. */
-#define GETVER_CPU_IMPL()	((getver() & VER_IMPL) >> VER_IMPL_SHIFT)
-#define GETVER_CPU_MANUF()	((getver() & VER_MANUF) >> VER_MANUF_SHIFT)
-#define CPU_IS_SPITFIRE()	(GETVER_CPU_IMPL() == IMPL_SPITFIRE)
-#define CPU_IS_HUMMINGBIRD()	(GETVER_CPU_IMPL() == IMPL_HUMMINGBIRD)
-#define CPU_IS_USIIIi()		((GETVER_CPU_IMPL() == IMPL_JALAPENO) || \
-				 (GETVER_CPU_IMPL() == IMPL_SERRANO))
-#define CPU_IS_USIII_UP()	(GETVER_CPU_IMPL() >= IMPL_CHEETAH)
-#define CPU_IS_SPARC64_V_UP()	(GETVER_CPU_MANUF() == MANUF_FUJITSU && \
-				 GETVER_CPU_IMPL() >= IMPL_ZEUS)
+	__asm volatile("rdpr %%ver,%0" : "=r" (ver));
+	return (ver);
+}
 
 static __inline int
 intr_disable(void)
@@ -368,7 +296,7 @@ intr_disable(void)
 	int pstate = getpstate();
 
 	setpstate(pstate & ~PSTATE_IE);
-	return pstate;
+	return (pstate);
 }
 
 static __inline void
@@ -443,7 +371,7 @@ typedef struct {
 	ipl_t _ipl;
 } ipl_cookie_t;
 
-static __inline ipl_cookie_t
+static inline ipl_cookie_t
 makeiplcookie(ipl_t ipl)
 {
 
@@ -460,10 +388,10 @@ splraiseipl(ipl_cookie_t icookie)
 	 * NetBSD/sparc64's IPL_* constants equate directly to the
 	 * corresponding PIL_* names; no need to map them here.
 	 */
-	__asm volatile("rdpr %%pil,%0" : "=r" (oldpil));
+	__asm __volatile("rdpr %%pil,%0" : "=r" (oldpil));
 	if (newpil <= oldpil)
 		return (oldpil);
-	__asm volatile("wrpr %0,0,%%pil" : : "r" (newpil) : "memory");
+	__asm __volatile("wrpr %0,0,%%pil" : : "r" (newpil) : "memory");
 	return (oldpil);
 }
 
@@ -502,6 +430,8 @@ SPLHOLD(splstatclock, PIL_STATCLOCK)
 SPLHOLD(splsched, PIL_SCHED)
 SPLHOLD(spllock, PIL_LOCK)
 
+SPLHOLD(splipi, PIL_HIGH)
+
 SPLHOLD(splhigh, PIL_HIGH)
 
 /* splx does not have a return value */
@@ -522,6 +452,7 @@ SPLHOLD(splhigh, PIL_HIGH)
 #define	spllock()	spllockX(__FILE__, __LINE__)
 #define	splhigh()	splhighX(__FILE__, __LINE__)
 #define splx(x)		splxX((x),__FILE__, __LINE__)
+#define splipi()	splhighX(__FILE__, __LINE__)
 
 static __inline void splxX(int newpil, const char *file, int line)
 #else

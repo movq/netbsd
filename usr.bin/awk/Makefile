@@ -1,22 +1,20 @@
-#	$NetBSD: Makefile,v 1.16 2011/06/20 07:44:00 mrg Exp $
-
-WARNS?=	1	# fails -Wshadow -Wcast-qual
+#	$NetBSD: Makefile,v 1.12 2008/10/20 18:16:54 apb Exp $
 
 .include <bsd.own.mk>
 
-DIST=	${NETBSDSRCDIR}/external/historical/nawk/dist/
-.PATH:	${DIST}
+DIST=	${NETBSDSRCDIR}/dist
+.PATH:	${DIST}/nawk
 
 PROG=	awk
 SRCS=	awkgram.y b.c lex.c lib.c main.c parse.c proctab.c run.c tran.c
-CPPFLAGS+=	-I${DIST} -I. -DHAS_ISBLANK
+CPPFLAGS+=	-I${DIST}/nawk -I. -DHAS_ISBLANK
 LDADD+=	-lm
 .if !defined(HOSTPROG)
 DPADD+=	${LIBM}
 .endif
 YHEADER=	yes
-.if defined(HAVE_GCC) || defined(HAVE_PCC)
-COPTS+=	-Wno-pointer-sign
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
+COPTS=	-Wno-pointer-sign
 .endif
 
 # info file originally from GNU awk 3.1.3, adjusted for nawk slightly

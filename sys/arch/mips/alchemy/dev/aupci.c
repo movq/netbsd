@@ -1,4 +1,4 @@
-/* $NetBSD: aupci.c,v 1.13 2012/01/27 18:52:58 para Exp $ */
+/* $NetBSD: aupci.c,v 1.8 2007/02/28 04:21:53 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -35,7 +35,7 @@
 #include "pci.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aupci.c,v 1.13 2012/01/27 18:52:58 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aupci.c,v 1.8 2007/02/28 04:21:53 thorpej Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: aupci.c,v 1.13 2012/01/27 18:52:58 para Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/pte.h>
 
@@ -69,7 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: aupci.c,v 1.13 2012/01/27 18:52:58 para Exp $");
 #include <mips/alchemy/dev/aupcivar.h>
 
 struct aupci_softc {
-	device_t			sc_dev;
+	struct device			sc_dev;
 	struct mips_pci_chipset		sc_pc;
 	struct mips_bus_space		sc_mem_space;
 	struct mips_bus_space		sc_io_space;
@@ -89,11 +89,12 @@ struct aupci_softc {
 	/* XXX: dma tag */
 };
 
-int		aupcimatch(device_t, struct cfdata *, void *);
-void		aupciattach(device_t, device_t, void *);
+int		aupcimatch(struct device *, struct cfdata *, void *);
+void		aupciattach(struct device *, struct device *, void *);
 
 #if NPCI > 0
-static void aupci_attach_hook(device_t, device_t, struct pcibus_attach_args *);
+static void aupci_attach_hook(struct device *, struct device *,
+    struct pcibus_attach_args *);
 static int aupci_bus_maxdevs(void *, int);
 static pcitag_t aupci_make_tag(void *, int, int, int);
 static void aupci_decompose_tag(void *, pcitag_t, int *, int *, int *);
@@ -115,7 +116,7 @@ static struct extent	*mem_ex = NULL;
 
 #endif	/* NPCI > 0 */
 
-CFATTACH_DECL_NEW(aupci, sizeof(struct aupci_softc),
+CFATTACH_DECL(aupci, sizeof(struct aupci_softc),
     aupcimatch, aupciattach, NULL, NULL);
 
 int aupci_found = 0;
@@ -131,7 +132,7 @@ int aupci_found = 0;
 #endif
 
 int
-aupcimatch(device_t parent, struct cfdata *match, void *aux)
+aupcimatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct aubus_attach_args *aa = (struct aubus_attach_args *)aux;
 
@@ -145,9 +146,9 @@ aupcimatch(device_t parent, struct cfdata *match, void *aux)
 }
 
 void
-aupciattach(device_t parent, device_t self, void *aux)
+aupciattach(struct device *parent, struct device *self, void *aux)
 {
-	struct aupci_softc		*sc = device_private(self);
+	struct aupci_softc		*sc = (struct aupci_softc *)self;
 	struct aubus_attach_args	*aa = (struct aubus_attach_args *)aux;
 	uint32_t			cfg;
 #if NPCI > 0
@@ -158,11 +159,11 @@ aupciattach(device_t parent, device_t self, void *aux)
 	
 	aupci_found = 1;
 
-	sc->sc_dev = self;
 	sc->sc_bust = aa->aa_st;
 	if (bus_space_map(sc->sc_bust, aa->aa_addrs[0], 512, 0,
 		&sc->sc_bush) != 0) {
-		aprint_error(": unable to map PCI registers\n");
+		printf("\n%s: unable to map PCI registers\n",
+		    sc->sc_dev.dv_xname);
 		return;
 	}
 
@@ -203,9 +204,13 @@ aupciattach(device_t parent, device_t self, void *aux)
 
 	cfg = bus_space_read_4(sc->sc_bust, sc->sc_bush, AUPCI_COMMAND_STATUS);
 
-	aprint_normal(": Alchemy Host-PCI Bridge, %sMHz\n",
-	    (cfg & PCI_STATUS_66MHZ_SUPPORT) ? "66" : "33");
-	aprint_naive("\n");
+	printf(": Alchemy Host-PCI Bridge");
+	if (cfg & PCI_STATUS_66MHZ_SUPPORT)
+		printf(", 66MHz");
+	else
+		printf(", 33MHz");
+
+	printf("\n");
 
 #if NPCI > 0
 	/*
@@ -259,13 +264,13 @@ aupciattach(device_t parent, device_t self, void *aux)
 
 #ifdef PCI_NETBSD_CONFIGURE
 	mem_ex = extent_create("pcimem", mstart, 0xffffffff,
-	    NULL, 0, EX_WAITOK);
+	    M_DEVBUF, NULL, 0, EX_WAITOK);
 
 	io_ex = extent_create("pciio", AUPCI_IO_START, AUPCI_IO_END,
-	    NULL, 0, EX_WAITOK);
+	    M_DEVBUF, NULL, 0, EX_WAITOK);
 
 	pci_configure_bus(&sc->sc_pc,
-	    io_ex, mem_ex, NULL, 0, mips_cache_info.mci_dcache_align);
+	    io_ex, mem_ex, NULL, 0, mips_dcache_align);
 	extent_destroy(mem_ex);
 	extent_destroy(io_ex);
 #endif
@@ -276,7 +281,7 @@ aupciattach(device_t parent, device_t self, void *aux)
 	pba.pba_dmat = aa->aa_dt;
 	pba.pba_dmat64 = NULL;
 	pba.pba_pc = &sc->sc_pc;
-	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
+	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
 
@@ -287,7 +292,7 @@ aupciattach(device_t parent, device_t self, void *aux)
 #if NPCI > 0
 
 void
-aupci_attach_hook(device_t parent, device_t self,
+aupci_attach_hook(struct device *parent, struct device *self,
     struct pcibus_attach_args *pba)
 {
 }

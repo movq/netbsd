@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.14 2010/12/13 20:48:44 pooka Exp $	*/
+/*	$NetBSD: main.c,v 1.3 2008/04/28 20:23:09 martin Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -28,11 +28,10 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: main.c,v 1.14 2010/12/13 20:48:44 pooka Exp $");
+__RCSID("$NetBSD: main.c,v 1.3 2008/04/28 20:23:09 martin Exp $");
 #endif /* !lint */
 
 #include <sys/module.h>
-#include <sys/queue.h>
 
 #include <assert.h>
 #include <stdbool.h>
@@ -44,61 +43,33 @@ __RCSID("$NetBSD: main.c,v 1.14 2010/12/13 20:48:44 pooka Exp $");
 
 #include <prop/proplib.h>
 
-#include "prog_ops.h"
-
 int		main(int, char **);
 static void	parse_bool_param(prop_dictionary_t, const char *,
-				 const char *);
+		    const char *);
 static void	parse_int_param(prop_dictionary_t, const char *,
-				const char *);
+		    const char *);
 static void	parse_param(prop_dictionary_t, const char *,
-			    void (*)(prop_dictionary_t, const char *,
-			    const char *));
+		    void (*)(prop_dictionary_t, const char *, const char *));
 static void	parse_string_param(prop_dictionary_t, const char *,
-				   const char *);
+		    const char *);
 static void	usage(void) __dead;
-static void	merge_dicts(prop_dictionary_t, const prop_dictionary_t);
 
 int
 main(int argc, char **argv)
 {
-	SIMPLEQ_HEAD(del_head, del_item) del_head;
 	modctl_load_t cmdargs;
-	prop_dictionary_t ext_props, props;
-	bool del_props, merge_props, output_props;
-	const char *ext_file;
+	prop_dictionary_t props;
 	char *propsstr;
 	int ch;
 	int flags;
 
-	struct del_item {
-		SIMPLEQ_ENTRY(del_item) del_items;
-		const char *del_key;
-	} *delp;
-
-	SIMPLEQ_INIT(&del_head);
-	ext_file = NULL;
-	ext_props = NULL;
-	props = prop_dictionary_create();
-	del_props = merge_props = output_props = false;
 	flags = 0;
+	props = prop_dictionary_create();
 
-	while ((ch = getopt(argc, argv, "Pb:d:fi:m:ps:")) != -1) {
+	while ((ch = getopt(argc, argv, "b:fi:s:")) != -1) {
 		switch (ch) {
-		case 'P':
-			flags |= MODCTL_NO_PROP;
-			break;
 		case 'b':
 			parse_param(props, optarg, parse_bool_param);
-			break;
-
-		case 'd':
-			del_props = true;
-			delp = malloc(sizeof(struct del_item));
-			if (delp == NULL)
-				errx(EXIT_FAILURE, "Out of memory");
-			delp->del_key = optarg;
-			SIMPLEQ_INSERT_TAIL(&del_head, delp, del_items);
 			break;
 
 		case 'f':
@@ -107,15 +78,6 @@ main(int argc, char **argv)
 
 		case 'i':
 			parse_param(props, optarg, parse_int_param);
-			break;
-
-		case 'm':
-			merge_props = true;
-			ext_file = optarg;
-			break;
-
-		case 'p':
-			output_props = true;
 			break;
 
 		case 's':
@@ -130,48 +92,20 @@ main(int argc, char **argv)
 
 	argc -= optind;
 	argv += optind;
+	if (argc != 1)
+		usage();
 
 	propsstr = prop_dictionary_externalize(props);
 	if (propsstr == NULL)
 		errx(EXIT_FAILURE, "Failed to process properties");
 
-	if (output_props) {
-		if (merge_props) {
-			ext_props =
-			    prop_dictionary_internalize_from_file(ext_file);
-			if (ext_props == NULL) {
-				errx(EXIT_FAILURE, "Failed to read existing "
-				    "property list");
-			}
+	cmdargs.ml_filename = argv[0];
+	cmdargs.ml_flags = flags;
+	cmdargs.ml_props = propsstr;
+	cmdargs.ml_propslen = strlen(propsstr);
 
-			free(propsstr);
-			merge_dicts(ext_props, props);
-
-			if (del_props)
-				SIMPLEQ_FOREACH(delp, &del_head, del_items)
-					prop_dictionary_remove(ext_props,
-					    delp->del_key);
-
-			propsstr = prop_dictionary_externalize(ext_props);
-			if (propsstr == NULL)
-				errx(EXIT_FAILURE, "Failed to process "
-				    "properties");
-		}
-				
-		fputs(propsstr, stdout);
-	} else {
-		if (argc != 1)
-			usage();
-		if (prog_init && prog_init() == -1)
-			err(1, "prog init failed");
-		cmdargs.ml_filename = argv[0];
-		cmdargs.ml_flags = flags;
-		cmdargs.ml_props = propsstr;
-		cmdargs.ml_propslen = strlen(propsstr);
-
-		if (prog_modctl(MODCTL_LOAD, &cmdargs)) {
-			err(EXIT_FAILURE, NULL);
-		}
+	if (modctl(MODCTL_LOAD, &cmdargs)) {
+		err(EXIT_FAILURE, NULL);
 	}
 
 	free(propsstr);
@@ -180,9 +114,10 @@ main(int argc, char **argv)
 	exit(EXIT_SUCCESS);
 }
 
-static void
+static
+void
 parse_bool_param(prop_dictionary_t props, const char *name,
-		 const char *value)
+    const char *value)
 {
 	bool boolvalue;
 
@@ -203,9 +138,10 @@ parse_bool_param(prop_dictionary_t props, const char *name,
 	prop_dictionary_set(props, name, prop_bool_create(boolvalue));
 }
 
-static void
+static
+void
 parse_int_param(prop_dictionary_t props, const char *name,
-		const char *value)
+    const char *value)
 {
 	int64_t intvalue;
 
@@ -219,9 +155,10 @@ parse_int_param(prop_dictionary_t props, const char *name,
 	    prop_number_create_integer(intvalue));
 }
 
-static void
+static
+void
 parse_param(prop_dictionary_t props, const char *origstr,
-	    void (*fmt_handler)(prop_dictionary_t, const char *, const char *))
+    void (*fmt_handler)(prop_dictionary_t, const char *, const char *))
 {
 	char *name, *value;
 
@@ -239,9 +176,10 @@ parse_param(prop_dictionary_t props, const char *origstr,
 	free(name);
 }
 
-static void
+static
+void
 parse_string_param(prop_dictionary_t props, const char *name,
-		   const char *value)
+    const char *value)
 {
 
 	assert(name != NULL);
@@ -255,38 +193,9 @@ usage(void)
 {
 
 	(void)fprintf(stderr,
-	    "Usage: %s [-fP] [-b var=boolean] [-i var=integer] "
-	    "[-s var=string] module\n"
-	    "       %s -p [-b var=boolean] [-d var] [-i var=integer] "
-	    "[-m plist]\n               [-s var=string]\n",
-	    getprogname(), getprogname());
+	    "Usage: %s [-b var=boolean] [-f] [-i var=integer] "
+	    "[-s var=string]\n"
+	    "       <module_name>\n",
+	    getprogname());
 	exit(EXIT_FAILURE);
-}
-
-static void
-merge_dicts(prop_dictionary_t existing_dict, const prop_dictionary_t new_dict)
-{
-	prop_dictionary_keysym_t props_keysym;
-	prop_object_iterator_t props_iter;
-	prop_object_t props_obj;
-	const char *props_key;
-
-	props_iter = prop_dictionary_iterator(new_dict);
-	if (props_iter == NULL) {
-		errx(EXIT_FAILURE, "Failed to iterate new property list");
-	}
-
-	while ((props_obj = prop_object_iterator_next(props_iter)) != NULL) {
-		props_keysym = (prop_dictionary_keysym_t)props_obj;
-		props_key = prop_dictionary_keysym_cstring_nocopy(props_keysym);
-		props_obj = prop_dictionary_get_keysym(new_dict, props_keysym);
-		if ((props_obj == NULL) || !prop_dictionary_set(existing_dict,
-		    props_key, props_obj)) {
-			errx(EXIT_FAILURE, "Failed to copy "
-			    "existing property list");
-		}
-	}
-	prop_object_iterator_release(props_iter);
-
-	return;
 }

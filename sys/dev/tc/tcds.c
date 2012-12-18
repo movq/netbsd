@@ -1,4 +1,4 @@
-/* $NetBSD: tcds.c,v 1.25 2009/08/22 17:38:06 tsutsui Exp $ */
+/* $NetBSD: tcds.c,v 1.23 2008/07/09 13:19:33 joerg Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcds.c,v 1.25 2009/08/22 17:38:06 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcds.c,v 1.23 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -222,7 +222,7 @@ tcdsattach(device_t parent, device_t self, void *aux)
 		char *cp;
 
 		slotc = &sc->sc_slots[i];
-		memset(slotc, 0, sizeof *slotc);	/* clear everything */
+		bzero(slotc, sizeof *slotc);	/* clear everything */
 
 		cp = slotc->sc_name;
 		snprintf(cp, sizeof(slotc->sc_name), "chip %d", i);
@@ -363,7 +363,7 @@ tcds_intrnull(void *val)
 void
 tcds_scsi_reset(struct tcds_slotconfig *sc)
 {
-	uint32_t cir;
+	u_int32_t cir;
 
 	tcds_dma_enable(sc, 0);
 	tcds_scsi_enable(sc, 0);
@@ -385,7 +385,7 @@ tcds_scsi_reset(struct tcds_slotconfig *sc)
 void
 tcds_scsi_enable(struct tcds_slotconfig *sc, int on)
 {
-	uint32_t imer;
+	u_int32_t imer;
 
 	imer = bus_space_read_4(sc->sc_bst, sc->sc_bsh, TCDS_IMER);
 
@@ -400,7 +400,7 @@ tcds_scsi_enable(struct tcds_slotconfig *sc, int on)
 void
 tcds_dma_enable(struct tcds_slotconfig *sc, int on)
 {
-	uint32_t cir;
+	u_int32_t cir;
 
 	cir = bus_space_read_4(sc->sc_bst, sc->sc_bsh, TCDS_CIR);
 
@@ -416,7 +416,7 @@ tcds_dma_enable(struct tcds_slotconfig *sc, int on)
 int
 tcds_scsi_isintr(struct tcds_slotconfig *sc, int clear)
 {
-	uint32_t cir;
+	u_int32_t cir;
 
 	cir = bus_space_read_4(sc->sc_bst, sc->sc_bsh, TCDS_CIR);
 
@@ -434,7 +434,7 @@ tcds_scsi_isintr(struct tcds_slotconfig *sc, int clear)
 int
 tcds_scsi_iserr(struct tcds_slotconfig *sc)
 {
-	uint32_t cir;
+	u_int32_t cir;
 
 	cir = bus_space_read_4(sc->sc_bst, sc->sc_bsh, TCDS_CIR);
 	return ((cir & sc->sc_errorbits) != 0);
@@ -444,7 +444,7 @@ int
 tcds_intr(void *arg)
 {
 	struct tcds_softc *sc = arg;
-	uint32_t ir, ir0;
+	u_int32_t ir, ir0;
 
 	/*
 	 * XXX
@@ -510,11 +510,11 @@ static void
 tcds_params(struct tcds_softc *sc, int chip, int *idp, int *fastp)
 {
 	int id, fast;
-	uint32_t ids;
+	u_int32_t ids;
 
 #ifdef __alpha__
 	if (sc->sc_flags & TCDSF_BASEBOARD) {
-		extern uint8_t dec_3000_scsiid[], dec_3000_scsifast[];
+		extern u_int8_t dec_3000_scsiid[], dec_3000_scsifast[];
 
 		id = dec_3000_scsiid[chip];
 		fast = dec_3000_scsifast[chip];

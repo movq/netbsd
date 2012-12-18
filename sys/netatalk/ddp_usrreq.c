@@ -1,4 +1,4 @@
-/*	$NetBSD: ddp_usrreq.c,v 1.40 2011/05/08 13:51:31 bouyer Exp $	 */
+/*	$NetBSD: ddp_usrreq.c,v 1.33.10.1 2011/06/30 09:31:15 sborrill Exp $	 */
 
 /*
  * Copyright (c) 1990,1991 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ddp_usrreq.c,v 1.40 2011/05/08 13:51:31 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ddp_usrreq.c,v 1.33.10.1 2011/06/30 09:31:15 sborrill Exp $");
 
 #include "opt_mbuftrace.h"
 
@@ -56,12 +56,12 @@ __KERNEL_RCSID(0, "$NetBSD: ddp_usrreq.c,v 1.40 2011/05/08 13:51:31 bouyer Exp $
 #include <netatalk/aarp.h>
 #include <netatalk/at_extern.h>
 
-static void at_pcbdisconnect(struct ddpcb *);
-static void at_sockaddr(struct ddpcb *, struct mbuf *);
-static int at_pcbsetaddr(struct ddpcb *, struct mbuf *, struct lwp *);
-static int at_pcbconnect(struct ddpcb *, struct mbuf *, struct lwp *);
-static void at_pcbdetach(struct socket *, struct ddpcb *);
-static int at_pcballoc(struct socket *);
+static void at_pcbdisconnect __P((struct ddpcb *));
+static void at_sockaddr __P((struct ddpcb *, struct mbuf *));
+static int at_pcbsetaddr __P((struct ddpcb *, struct mbuf *, struct lwp *));
+static int at_pcbconnect __P((struct ddpcb *, struct mbuf *, struct lwp *));
+static void at_pcbdetach __P((struct socket *, struct ddpcb *));
+static int at_pcballoc __P((struct socket *));
 
 struct ifqueue atintrq1, atintrq2;
 struct ddpcb   *ddp_ports[ATPORT_LAST];
@@ -78,7 +78,13 @@ struct mowner atalk_tx_mowner = MOWNER_INIT("atalk", "tx");
 
 /* ARGSUSED */
 int
-ddp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr, struct mbuf *rights, struct lwp *l)
+ddp_usrreq(so, req, m, addr, rights, l)
+	struct socket  *so;
+	int             req;
+	struct mbuf    *m;
+	struct mbuf    *addr;
+	struct mbuf    *rights;
+	struct lwp *l;
 {
 	struct ddpcb   *ddp;
 	int             error = 0;
@@ -223,7 +229,9 @@ release:
 }
 
 static void
-at_sockaddr(struct ddpcb *ddp, struct mbuf *addr)
+at_sockaddr(ddp, addr)
+	struct ddpcb   *ddp;
+	struct mbuf    *addr;
 {
 	struct sockaddr_at *sat;
 
@@ -233,7 +241,10 @@ at_sockaddr(struct ddpcb *ddp, struct mbuf *addr)
 }
 
 static int
-at_pcbsetaddr(struct ddpcb *ddp, struct mbuf *addr, struct lwp *l)
+at_pcbsetaddr(ddp, addr, l)
+	struct ddpcb   *ddp;
+	struct mbuf    *addr;
+	struct lwp	*l;
 {
 	struct sockaddr_at lsat, *sat;
 	struct at_ifaddr *aa;
@@ -263,20 +274,17 @@ at_pcbsetaddr(struct ddpcb *ddp, struct mbuf *addr, struct lwp *l)
 				return (EADDRNOTAVAIL);
 		}
 		if (sat->sat_port != ATADDR_ANYPORT) {
-			int error;
-
 			if (sat->sat_port < ATPORT_FIRST ||
 			    sat->sat_port >= ATPORT_LAST)
 				return (EINVAL);
 
 			if (sat->sat_port < ATPORT_RESERVED && l &&
-			    (error = kauth_authorize_network(l->l_cred,
-			    KAUTH_NETWORK_BIND, KAUTH_REQ_NETWORK_BIND_PRIVPORT,
-			    ddpcb->ddp_socket, sat, NULL)) != 0)
-				return (error);
+			    kauth_authorize_generic(l->l_cred,
+			    KAUTH_GENERIC_ISSUSER, NULL))
+				return (EACCES);
 		}
 	} else {
-		memset((void *) & lsat, 0, sizeof(struct sockaddr_at));
+		bzero((void *) & lsat, sizeof(struct sockaddr_at));
 		lsat.sat_len = sizeof(struct sockaddr_at);
 		lsat.sat_addr.s_node = ATADDR_ANYNODE;
 		lsat.sat_addr.s_net = ATADDR_ANYNET;
@@ -328,7 +336,10 @@ at_pcbsetaddr(struct ddpcb *ddp, struct mbuf *addr, struct lwp *l)
 }
 
 static int
-at_pcbconnect(struct ddpcb *ddp, struct mbuf *addr, struct lwp *l)
+at_pcbconnect(ddp, addr, l)
+	struct ddpcb   *ddp;
+	struct mbuf    *addr;
+	struct lwp     *l;
 {
 	struct rtentry *rt;
 	const struct sockaddr_at *cdst;
@@ -419,7 +430,8 @@ at_pcbconnect(struct ddpcb *ddp, struct mbuf *addr, struct lwp *l)
 }
 
 static void
-at_pcbdisconnect(struct ddpcb *ddp)
+at_pcbdisconnect(ddp)
+	struct ddpcb   *ddp;
 {
 	ddp->ddp_fsat.sat_addr.s_net = ATADDR_ANYNET;
 	ddp->ddp_fsat.sat_addr.s_node = ATADDR_ANYNODE;
@@ -427,11 +439,12 @@ at_pcbdisconnect(struct ddpcb *ddp)
 }
 
 static int
-at_pcballoc(struct socket *so)
+at_pcballoc(so)
+	struct socket  *so;
 {
 	struct ddpcb   *ddp;
 
-	ddp = malloc(sizeof(*ddp), M_PCB, M_WAITOK|M_ZERO);
+	MALLOC(ddp, struct ddpcb *, sizeof(*ddp), M_PCB, M_WAITOK|M_ZERO);
 	if (!ddp)
 		panic("at_pcballoc");
 	ddp->ddp_lsat.sat_port = ATADDR_ANYPORT;
@@ -455,7 +468,9 @@ at_pcballoc(struct socket *so)
 }
 
 static void
-at_pcbdetach(struct socket *so, struct ddpcb *ddp)
+at_pcbdetach(so, ddp)
+	struct socket  *so;
+	struct ddpcb   *ddp;
 {
 	soisdisconnected(so);
 	so->so_pcb = 0;
@@ -559,7 +574,7 @@ ddp_init(void)
 
 #if 0
 static void
-ddp_clean(void)
+ddp_clean()
 {
 	struct ddpcb   *ddp;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_machdep.c,v 1.26 2011/07/01 18:14:15 dyoung Exp $	*/
+/*	$NetBSD: rbus_machdep.c,v 1.23 2008/05/18 02:06:14 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 1999
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by HAYAKAWA Koichi.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.26 2011/07/01 18:14:15 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.23 2008/05/18 02:06:14 jmcneill Exp $");
 
 #include "opt_pcibios.h"
 #include "opt_pcifixup.h"
@@ -39,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.26 2011/07/01 18:14:15 dyoung Exp
 
 #include <sys/sysctl.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <dev/cardbus/rbus.h>
 
 #include <sys/device.h>
@@ -82,10 +87,10 @@ bus_addr_t rbus_min_start = RBUS_MIN_START;
  * or 2046 vs 2048.
  */
 void
-rbus_min_start_hint(psize_t ram)
+rbus_min_start_hint(size_t ram)
 {
 #ifdef RBUS_MIN_START_FORCED
-	aprint_debug("rbus: rbus_min_start from config at %#0" PRIxPADDR "\n",
+	aprint_debug("rbus: rbus_min_start from config at 0x%0lx\n",
 	    rbus_min_start);
 #else
         if (ram <= 192*1024*1024UL) {
@@ -113,7 +118,7 @@ rbus_min_start_hint(psize_t ram)
 		rbus_min_start =  3 * 1024 * 1024 * 1024UL;
 	}
 
-	aprint_debug("rbus: rbus_min_start set to %#0" PRIxPADDR "\n",
+	aprint_debug("rbus: rbus_min_start set to 0x%0lx\n",
 	   rbus_min_start);
 #endif
 }

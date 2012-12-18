@@ -1,6 +1,6 @@
-/*	$NetBSD: stivar.h,v 1.7 2011/07/11 02:30:49 matt Exp $	*/
+/* $NetBSD: stivar.h,v 1.2 2005/12/11 12:21:28 christos Exp $ */
 
-/*	$OpenBSD: stivar.h,v 1.24 2009/02/06 22:51:04 miod Exp $	*/
+/*	$OpenBSD: stivar.h,v 1.15 2003/12/16 06:07:13 mickey Exp $	*/
 
 /*
  * Copyright (c) 2000-2003 Michael Shalayeff
@@ -31,104 +31,52 @@
 #ifndef _IC_STIVAR_H_
 #define _IC_STIVAR_H_
 
-struct sti_softc;
-
-/*
- * STI ROM information - one per device
- */
-struct sti_rom {
-	struct sti_softc	*rom_softc;	/* backpointer to device */
-	int			 rom_devtype;
-
-	bus_space_tag_t		 iot, memt;	/* XXX iot unused */
-	bus_space_handle_t	 romh;
-	bus_addr_t		*bases;
-
-	struct sti_dd		 rom_dd;	/* in word format */
-
-	vaddr_t			 rom_code;
-	sti_init_t		 init;
-	sti_mgmt_t		 mgmt;
-	sti_unpmv_t		 unpmv;
-	sti_blkmv_t		 blkmv;
-	sti_test_t		 test;
-	sti_exhdl_t		 exhdl;
-	sti_inqconf_t		 inqconf;
-	sti_scment_t		 scment;
-	sti_dmac_t		 dmac;
-	sti_flowc_t		 flowc;
-	sti_utiming_t		 utiming;
-	sti_pmgr_t		 pmgr;
-	sti_util_t		 util;
-};
-
-/*
- * STI screen information - one per head
- */
-struct sti_screen {
-	struct sti_rom		*scr_rom;
-
-#ifdef notyet
-	u_int			 scr_flags;
-#endif
-
-	int			 scr_bpp;
-
-	struct sti_font		 scr_curfont;
-	struct sti_cfg		 scr_cfg;
-	struct sti_ecfg		 scr_ecfg;
-	char			 name[STI_DEVNAME_LEN];
-
-	void			*scr_romfont;	/* ROM font copy in memory... */
-	u_int			 scr_fontmaxcol;/* ...or in off-screen area */
-	u_int			 scr_fontbase;
-
-	uint8_t			 scr_rcmap[STI_NCMAP],
-				 scr_gcmap[STI_NCMAP],
-				 scr_bcmap[STI_NCMAP];
-
-	uint16_t		 fbheight, fbwidth;
-	uint16_t		 oheight, owidth;	/* offscreen size */
-	bus_addr_t		 fbaddr;
-	bus_size_t		 fblen;
-
-	/* wsdisplay information */
-	int			 scr_nscreens;
-	u_int			 scr_wsmode;
-	struct	wsscreen_descr	 scr_wsd;
-	const struct wsscreen_descr	*scr_scrlist[1];
-	struct	wsscreen_list	 scr_screenlist;
-};
-
-/*
- * STI Device state
- */
 struct sti_softc {
-	device_t sc_dev;
-#if notyet
+	struct device sc_dev;
 	void *sc_ih;
-#endif
 
-	u_int			sc_flags;
-#define	STI_CONSOLE	0x0001	/* first head is console... */
-#define	STI_ATTACHED	0x0002	/* ... and wsdisplay_cnattach() has been done */
-#define	STI_ROM_ENABLED	0x0004	/* PCI ROM is enabled */
+	u_int	sc_wsmode;
+	u_int	sc_flags;
+#define	STI_TEXTMODE	0x0001
+#define	STI_CLEARSCR	0x0002
+#define	STI_CONSOLE	0x0004
+	int	sc_devtype;
+	int	sc_nscreens;
+	int	sc_bpp;
 
-	bus_addr_t		bases[STI_REGION_MAX];
-	struct sti_rom		*sc_rom;
-	struct sti_screen	*sc_scr;
+	bus_space_tag_t iot, memt;
+	bus_space_handle_t romh;
+	bus_addr_t base, fbaddr;
+	bus_size_t fblen;
 
-	/* optional, required for PCI */
-	void			(*sc_enable_rom)(struct sti_softc *);
-	void			(*sc_disable_rom)(struct sti_softc *);
+	struct sti_dd sc_dd;		/* in word format */
+	struct sti_font sc_curfont;
+	struct sti_cfg sc_cfg;
+	struct sti_ecfg sc_ecfg;
+
+	void	*sc_romfont;		/* ROM font copy, either in memory... */
+	u_int	sc_fontmaxcol;		/* ...or in off-screen frame buffer */
+	u_int	sc_fontbase;
+
+	u_int8_t sc_rcmap[STI_NCMAP], sc_gcmap[STI_NCMAP], sc_bcmap[STI_NCMAP];
+	vaddr_t	sc_code;
+
+	sti_init_t	init;
+	sti_mgmt_t	mgmt;
+	sti_unpmv_t	unpmv;
+	sti_blkmv_t	blkmv;
+	sti_test_t	test;
+	sti_exhdl_t	exhdl;
+	sti_inqconf_t	inqconf;
+	sti_scment_t	scment;
+	sti_dmac_t	dmac;
+	sti_flowc_t	flowc;
+	sti_utiming_t	utiming;
+	sti_pmgr_t	pmgr;
+	sti_util_t	util;
 };
 
-int	sti_attach_common(struct sti_softc *, bus_space_tag_t, bus_space_tag_t,
-	    bus_space_handle_t, u_int);
-int	sti_cnattach(struct sti_rom *, struct sti_screen *, bus_space_tag_t,
-	    bus_addr_t *, u_int);
-void	sti_describe(struct sti_softc *);
-void	sti_end_attach(struct sti_softc *);
-u_int	sti_rom_size(bus_space_tag_t, bus_space_handle_t);
+void sti_attach_common(struct sti_softc *sc);
+int sti_intr(void *v);
 
 #endif /* _IC_STIVAR_H_ */

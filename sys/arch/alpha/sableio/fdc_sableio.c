@@ -1,4 +1,4 @@
-/* $NetBSD: fdc_sableio.c,v 1.12 2012/02/02 19:42:57 tls Exp $ */
+/* $NetBSD: fdc_sableio.c,v 1.9 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -31,16 +31,18 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: fdc_sableio.c,v 1.12 2012/02/02 19:42:57 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdc_sableio.c,v 1.9 2008/04/28 20:23:12 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/device.h>
 #include <sys/buf.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/isa/isavar.h>
@@ -116,8 +118,8 @@ fdc_sableio_attach(device_t parent, device_t self, void *aux)
 	if (fdc->sc_ih == NULL) {
 		aprint_error_dev(self, "unable to establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);

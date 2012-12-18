@@ -1,4 +1,4 @@
-/* $NetBSD: fpsetround.c,v 1.12 2012/03/21 20:07:52 he Exp $ */
+/* $NetBSD: fpsetround.c,v 1.10 2005/12/24 23:10:08 perry Exp $ */
 
 /*
  * Copyright (c) 1995 Christopher G. Demetriou
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fpsetround.c,v 1.12 2012/03/21 20:07:52 he Exp $");
+__RCSID("$NetBSD: fpsetround.c,v 1.10 2005/12/24 23:10:08 perry Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -49,22 +49,22 @@ __weak_alias(fpsetround,_fpsetround)
 #endif
 
 fp_rnd
-fpsetround(fp_rnd rnd_dir)
+fpsetround(rnd_dir)
+	fp_rnd rnd_dir;
 {
-	union {
-		double d;
-		uint64_t u64;
-	} fpcrval;
-	fp_rnd old;
+	double fpcrval;
+	u_int64_t old, new;
 
-	__asm("excb; mf_fpcr %0; excb" : "=f" (fpcrval.d));
-	old = (fp_rnd)(fpcrval.u64 >> 58) & 0x3;
+	__asm("excb");
+	__asm("mf_fpcr %0" : "=f" (fpcrval));
+	old = *(u_int64_t *)(void *)&fpcrval;
 
-	rnd_dir ^= old;
+	new = old & ~(long)0x0c00000000000000;
+	new = (long)rnd_dir << 58;
+	*(u_int64_t *)(void *)&fpcrval = new;
 
-	fpcrval.u64 ^= (long)rnd_dir << 58;
+	__asm("mt_fpcr %0" : : "f" (fpcrval));
+	__asm("excb");
 
-	__asm("excb; mt_fpcr %0; excb" : : "f" (fpcrval.d));
-
-	return old;
+	return ((old >> 58) & 0x3);
 }

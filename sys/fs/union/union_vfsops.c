@@ -1,4 +1,4 @@
-/*	$NetBSD: union_vfsops.c,v 1.68 2012/04/30 22:51:27 rmind Exp $	*/
+/*	$NetBSD: union_vfsops.c,v 1.57.6.2 2011/09/17 18:54:38 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1994 The Regents of the University of California.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.68 2012/04/30 22:51:27 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.57.6.2 2011/09/17 18:54:38 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -101,6 +101,9 @@ MODULE(MODULE_CLASS_VFS, union, NULL);
 VFS_PROTOS(union);
 
 static struct sysctllog *union_sysctl_log;
+static const char *warn_user =
+    "WARNING: the union file system is experimental\n"
+    "WARNING: it can cause crashes and file system corruption\n";
 
 /*
  * Mount union filesystem
@@ -109,6 +112,7 @@ int
 union_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
+	struct nameidata nd;
 	int error = 0;
 	struct union_args *args = data;
 	struct vnode *lowerrootvp = NULLVP;
@@ -148,23 +152,31 @@ union_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		goto bad;
 	}
 
+	if (warn_user != NULL) {
+		printf("%s", warn_user);
+		warn_user = NULL;
+	}
+
 	lowerrootvp = mp->mnt_vnodecovered;
-	vref(lowerrootvp);
+	VREF(lowerrootvp);
 
 	/*
 	 * Find upper node.
 	 */
-	error = namei_simple_user(args->target,
-				NSM_FOLLOW_NOEMULROOT, &upperrootvp);
-	if (error != 0)
+	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, args->target);
+
+	if ((error = namei(&nd)) != 0)
 		goto bad;
+
+	upperrootvp = nd.ni_vp;
 
 	if (upperrootvp->v_type != VDIR) {
 		error = EINVAL;
 		goto bad;
 	}
 
-	um = kmem_zalloc(sizeof(struct union_mount), KM_SLEEP);
+	um = (struct union_mount *) malloc(sizeof(struct union_mount),
+				M_UFSMNT, M_WAITOK);	/* XXX */
 
 	/*
 	 * Keep a held reference to the target vnodes.
@@ -199,17 +211,12 @@ union_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		goto bad;
 	}
 
-	mp->mnt_iflag |= IMNT_MPSAFE;
-
 	/*
 	 * Unless the mount is readonly, ensure that the top layer
 	 * supports whiteout operations
 	 */
 	if ((mp->mnt_flag & MNT_RDONLY) == 0) {
-		vn_lock(um->um_uppervp, LK_EXCLUSIVE | LK_RETRY);
-		error = VOP_WHITEOUT(um->um_uppervp,
-		    (struct componentname *) 0, LOOKUP);
-		VOP_UNLOCK(um->um_uppervp);
+		error = VOP_WHITEOUT(um->um_uppervp, (struct componentname *) 0, LOOKUP);
 		if (error)
 			goto bad;
 	}
@@ -290,7 +297,7 @@ union_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 
 bad:
 	if (um)
-		kmem_free(um, sizeof(struct union_mount));
+		free(um, M_UFSMNT);
 	if (upperrootvp)
 		vrele(upperrootvp);
 	if (lowerrootvp)
@@ -371,9 +378,9 @@ union_unmount(struct mount *mp, int mntflags)
 	/*
 	 * Finally, throw away the union_mount structure
 	 */
-	kmem_free(um, sizeof(struct union_mount));
+	free(mp->mnt_data, M_UFSMNT);	/* XXX */
 	mp->mnt_data = NULL;
-	return 0;
+	return (0);
 }
 
 int
@@ -385,10 +392,10 @@ union_root(struct mount *mp, struct vnode **vpp)
 	/*
 	 * Return locked reference to root.
 	 */
-	vref(um->um_uppervp);
+	VREF(um->um_uppervp);
 	vn_lock(um->um_uppervp, LK_EXCLUSIVE | LK_RETRY);
 	if (um->um_lowervp)
-		vref(um->um_lowervp);
+		VREF(um->um_lowervp);
 	error = union_allocvp(vpp, mp, NULL, NULL, NULL,
 			      um->um_uppervp, um->um_lowervp, 1);
 
@@ -517,7 +524,7 @@ struct vfsops union_vfsops = {
 	(void *)eopnotsupp,		/* vfs_fhtovp */
 	(void *)eopnotsupp,		/* vfs_vptofh */
 	union_init,
-	union_reinit,
+	NULL,				/* vfs_reinit */
 	union_done,
 	NULL,				/* vfs_mountroot */
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,

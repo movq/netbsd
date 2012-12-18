@@ -1,4 +1,4 @@
-/*	$NetBSD: view.c,v 1.32 2010/04/13 11:31:11 tsutsui Exp $	*/
+/*	$NetBSD: view.c,v 1.25 2008/03/23 15:50:51 cube Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -38,7 +38,7 @@
  * a interface to graphics. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: view.c,v 1.32 2010/04/13 11:31:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: view.c,v 1.25 2008/03/23 15:50:51 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,11 +55,11 @@ __KERNEL_RCSID(0, "$NetBSD: view.c,v 1.32 2010/04/13 11:31:11 tsutsui Exp $");
 #include <atari/dev/viewvar.h>
 #include "view.h"
 
-static void view_display(struct view_softc *);
-static void view_remove(struct view_softc *);
-static int  view_setsize(struct view_softc *, struct view_size *);
-static int  view_get_colormap(struct view_softc *, colormap_t *);
-static int  view_set_colormap(struct view_softc *, colormap_t *);
+static void view_display __P((struct view_softc *));
+static void view_remove __P((struct view_softc *));
+static int  view_setsize __P((struct view_softc *, struct view_size *));
+static int  view_get_colormap __P((struct view_softc *, colormap_t *));
+static int  view_set_colormap __P((struct view_softc *, colormap_t *));
 
 struct view_softc views[NVIEW];
 static int view_inited;
@@ -83,10 +83,11 @@ const struct cdevsw view_cdevsw = {
 /* 
  *  functions for probeing.
  */
-void	viewattach(int);
+void	viewattach __P((int));
 
 void
-viewattach(int cnt)
+viewattach(cnt)
+	int cnt;
 {
 	viewprobe();
 	printf("%d view%s configured\n", NVIEW, NVIEW > 1 ? "s" : "");
@@ -94,20 +95,20 @@ viewattach(int cnt)
 
 /* this function is called early to set up a display. */
 int
-viewprobe(void)
+viewprobe()
 {
     	int i;
 	
-	if (view_inited)
-		return 1;
+	if(view_inited)
+		return(1);
 
 	view_inited = 1;
 
-	for (i = 0; i < NVIEW; i++) {
+	for(i=0; i<NVIEW; i++) {
 		views[i].view = NULL;
 		views[i].flags = 0;
 	}
-	return 1;
+	return(1);
 }
 
 
@@ -116,7 +117,8 @@ viewprobe(void)
  */
 
 static void
-view_display (struct view_softc *vu)
+view_display (vu)
+	struct view_softc *vu;
 {
 	int s, i;
 
@@ -129,7 +131,7 @@ view_display (struct view_softc *vu)
 	 * mark views that share this monitor as not displaying 
 	 */
 	for (i = 0; i < NVIEW; i++) {
-		if (views[i].flags & VUF_DISPLAY) {
+		if(views[i].flags & VUF_DISPLAY) {
 			if (vu->view && (vu->view == views[i].view)) {
 				splx(s);
 				return;
@@ -162,7 +164,8 @@ view_display (struct view_softc *vu)
  * switch to a new display.
  */
 static void
-view_remove(struct view_softc *vu)
+view_remove(vu)
+	struct view_softc *vu;
 {
 	int i;
 
@@ -172,7 +175,7 @@ view_remove(struct view_softc *vu)
 	vu->flags &= ~VUF_ADDED;
 	if (vu->flags & VUF_DISPLAY) {
 		for (i = 0; i < NVIEW; i++) {
-			if ((views[i].flags & VUF_ADDED) && &views[i] != vu) {
+			if((views[i].flags & VUF_ADDED) && &views[i] != vu) {
 				view_display(&views[i]);
 				break;
 			}
@@ -183,7 +186,9 @@ view_remove(struct view_softc *vu)
 }
 
 static int
-view_setsize(struct view_softc *vu, struct view_size *vs)
+view_setsize(vu, vs)
+	struct view_softc *vu;
+	struct view_size *vs;
 {
 	view_t	*new, *old;
 	dmode_t	*dmode;
@@ -200,21 +205,21 @@ view_setsize(struct view_softc *vu, struct view_size *vs)
 		cs = 1;
 
 	if (cs == 0 && co == 0)
-		return 0;
+		return(0);
     
 	ns.width  = vs->width;
 	ns.height = vs->height;
 
-	if ((dmode = grf_get_best_mode(&ns, vs->depth)) != NULL) {
+	if((dmode = grf_get_best_mode(&ns, vs->depth)) != NULL) {
 		/*
 		 * If we can't do better, leave it
 		 */
-		if (dmode == vu->view->mode)
-			return 0;
+		if(dmode == vu->view->mode)
+			return(0);
 	}
 	new = grf_alloc_view(dmode, &ns, vs->depth);
 	if (new == NULL)
-		return ENOMEM;
+		return(ENOMEM);
 	
 	old = vu->view;
 	vu->view = new;
@@ -233,58 +238,61 @@ view_setsize(struct view_softc *vu, struct view_size *vs)
 		view_display(vu);
 	}
 	grf_free_view(old);
-	return 0;
+	return(0);
 }
 
 static int
-view_get_colormap (struct view_softc *vu, colormap_t *ucm)
+view_get_colormap (vu, ucm)
+struct view_softc	*vu;
+colormap_t		*ucm;
 {
 	int	error;
 	long	*cme;
 	long	*uep;
 
-	if (ucm->size > MAX_CENTRIES)
-		return EINVAL;
+	if(ucm->size > MAX_CENTRIES)
+		return(EINVAL);
 		
 	/* add one incase of zero, ick. */
 	cme = malloc(sizeof(ucm->entry[0])*(ucm->size+1), M_TEMP,M_WAITOK);
 	if (cme == NULL)
-		return ENOMEM;
+		return(ENOMEM);
 
 	error      = 0;	
 	uep        = ucm->entry;
 	ucm->entry = cme;	  /* set entry to out alloc. */
-	if (vu->view == NULL || grf_get_colormap(vu->view, ucm))
+	if(vu->view == NULL || grf_get_colormap(vu->view, ucm))
 		error = EINVAL;
-	else
-		error = copyout(cme, uep, sizeof(ucm->entry[0]) * ucm->size);
+	else error = copyout(cme, uep, sizeof(ucm->entry[0]) * ucm->size);
 	ucm->entry = uep;	  /* set entry back to users. */
 	free(cme, M_TEMP);
-	return error;
+	return(error);
 }
 
 static int
-view_set_colormap(struct view_softc *vu, colormap_t *ucm)
+view_set_colormap(vu, ucm)
+struct view_softc	*vu;
+colormap_t		*ucm;
 {
 	colormap_t	*cm;
 	int		error = 0;
 
-	if (ucm->size > MAX_CENTRIES)
-		return EINVAL;
+	if(ucm->size > MAX_CENTRIES)
+		return(EINVAL);
 		
-	cm = malloc(sizeof(ucm->entry[0])*ucm->size + sizeof(*cm),
-	    M_TEMP, M_WAITOK);
-	if (cm == NULL)
-		return ENOMEM;
+	cm = malloc(sizeof(ucm->entry[0])*ucm->size + sizeof(*cm), M_TEMP,
+								M_WAITOK);
+	if(cm == NULL)
+		return(ENOMEM);
 
-	memcpy(cm, ucm, sizeof(colormap_t));
+	bcopy(ucm, cm, sizeof(colormap_t));
 	cm->entry = (long *)&cm[1];		 /* table directly after. */
 	if (((error = 
 	    copyin(ucm->entry,cm->entry,sizeof(ucm->entry[0])*ucm->size)) == 0)
 	    && (vu->view == NULL || grf_use_colormap(vu->view, cm)))
 		error = EINVAL;
 	free(cm, M_TEMP);
-	return error;
+	return(error);
 }
 
 /*
@@ -293,17 +301,21 @@ view_set_colormap(struct view_softc *vu, colormap_t *ucm)
 
 /*ARGSUSED*/
 int
-viewopen(dev_t dev, int flags, int mode, struct lwp *l)
+viewopen(dev, flags, mode, l)
+dev_t		dev;
+int		flags;
+int		mode;
+struct lwp	*l;
 {
 	dimen_t			size;
 	struct view_softc	*vu;
 
 	vu = &views[minor(dev)];
 
-	if (minor(dev) >= NVIEW)
-		return EXDEV;
-	if (vu->flags & VUF_OPEN)
-		return EBUSY;
+	if(minor(dev) >= NVIEW)
+		return(EXDEV);
+	if(vu->flags & VUF_OPEN)
+		return(EBUSY);
 
 	vu->size.x = view_default_x;
 	vu->size.y = view_default_y;
@@ -312,7 +324,7 @@ viewopen(dev_t dev, int flags, int mode, struct lwp *l)
 	vu->size.depth = view_default_depth;
 	vu->view = grf_alloc_view(NULL, &size, vu->size.depth);
 	if (vu->view == NULL)
-		return ENOMEM;
+		return(ENOMEM);
 
 	vu->size.x = vu->view->display.x;
 	vu->size.y = vu->view->display.y;
@@ -320,30 +332,39 @@ viewopen(dev_t dev, int flags, int mode, struct lwp *l)
 	vu->size.height = vu->view->display.height;
 	vu->size.depth = vu->view->bitmap->depth;
        	vu->flags |= VUF_OPEN;
-       	return 0;
+       	return(0);
 }
 
 /*ARGSUSED*/
 int
-viewclose (dev_t dev, int flags, int mode, struct lwp *l)
+viewclose (dev, flags, mode, l)
+	dev_t		dev;
+	int 		flags;
+	int		mode;
+	struct lwp	*l;
 {
 	struct view_softc *vu;
 
 	vu = &views[minor(dev)];
 
 	if ((vu->flags & VUF_OPEN) == 0)
-		return 0; /* XXX not open? */
+		return (0); /* XXX not open? */
 	view_remove (vu);
 	grf_free_view (vu->view);
 	vu->flags = 0;
 	vu->view = NULL;
-	return 0;
+	return (0);
 }
 
 
 /*ARGSUSED*/
 int
-viewioctl (dev_t dev, u_long cmd, void * data, int flag, struct lwp *l)
+viewioctl (dev, cmd, data, flag, l)
+dev_t		dev;
+u_long		cmd;
+void *		data;
+int		flag;
+struct lwp	*l;
 {
 	struct view_softc	*vu;
 	bmap_t			*bm;
@@ -360,14 +381,14 @@ viewioctl (dev_t dev, u_long cmd, void * data, int flag, struct lwp *l)
 		view_remove(vu);
 		break;
 	case VIOCGSIZE:
-		memcpy(data, &vu->size, sizeof (struct view_size)); 
+		bcopy(&vu->size, data, sizeof (struct view_size)); 
 		break;
 	case VIOCSSIZE:
 		error = view_setsize(vu, (struct view_size *)data);
 		break;
 	case VIOCGBMAP:
 		bm = (bmap_t *)data;
-		memcpy(bm, vu->view->bitmap, sizeof(bmap_t));
+		bcopy(vu->view->bitmap, bm, sizeof(bmap_t));
 		if (l != NOLWP) {
 			bm->plane      = NULL;
 			bm->hw_address = NULL;
@@ -385,12 +406,15 @@ viewioctl (dev_t dev, u_long cmd, void * data, int flag, struct lwp *l)
 		error = EPASSTHROUGH;
 		break;
 	}
-	return error;
+	return(error);
 }
 
 /*ARGSUSED*/
 paddr_t
-viewmmap(dev_t dev, off_t off, int prot)
+viewmmap(dev, off, prot)
+	dev_t	dev;
+	off_t	off;
+	int	prot;
 {
 	struct view_softc	*vu;
 	bmap_t			*bm;
@@ -407,26 +431,26 @@ viewmmap(dev_t dev, off_t off, int prot)
 	 * control registers
 	 */
 	if (off >= 0 && off < bm->reg_size)
-		return ((paddr_t)bm->hw_regs + off) >> PGSHIFT;
+		return(((paddr_t)bm->hw_regs + off) >> PGSHIFT);
 
 	/*
 	 * VGA memory
 	 */
 	if (off >= bmd_vga && off < (bmd_vga + bm->vga_mappable))
-		return ((paddr_t)bm->vga_address - bmd_vga + off) >> PGSHIFT;
+		return(((paddr_t)bm->vga_address - bmd_vga + off) >> PGSHIFT);
 
 	/*
 	 * frame buffer
 	 */
 	if (off >= bmd_lin && off < (bmd_lin + bm->phys_mappable))
-		return ((paddr_t)bmd_start - bmd_lin + off) >> PGSHIFT;
+		return(((paddr_t)bmd_start - bmd_lin + off) >> PGSHIFT);
 
-	return -1;
+	return(-1);
 }
 
 view_t	*
-viewview(dev_t dev)
+viewview(dev)
+dev_t	dev;
 {
-
-	return views[minor(dev)].view;
+	return(views[minor(dev)].view);
 }

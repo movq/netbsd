@@ -1,4 +1,4 @@
-/*	$NetBSD: i82557var.h,v 1.50 2012/02/02 19:43:03 tls Exp $	*/
+/*	$NetBSD: i82557var.h,v 1.40.4.1 2008/12/14 11:52:40 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2001 The NetBSD Foundation, Inc.
@@ -166,7 +166,6 @@ struct fxp_softc {
 	device_t sc_dev;
 	bus_space_tag_t sc_st;		/* bus space tag */
 	bus_space_handle_t sc_sh;	/* bus space handle */
-	bus_size_t sc_size;		/* bus space size */
 	bus_dma_tag_t sc_dmat;		/* bus dma tag */
 	struct ethercom sc_ethercom;	/* ethernet common part */
 	void *sc_ih;			/* interrupt handler cookie */
@@ -192,7 +191,7 @@ struct fxp_softc {
 	bus_dmamap_t sc_rxmaps[FXP_NRFABUFS]; /* free receive buffer DMA maps */
 	int	sc_rxfree;		/* free map index */
 	int	sc_rxidle;		/* # of seconds RX has been idle */
-	uint16_t sc_txcmd;		/* transmit command (LITTLE ENDIAN) */
+	u_int16_t sc_txcmd;		/* transmit command (LITTLE ENDIAN) */
 
 	/*
 	 * Control data structures.
@@ -220,12 +219,11 @@ struct fxp_softc {
 #define	FXPF_MWI		0x0010	/* enable PCI MWI */
 #define	FXPF_READ_ALIGN		0x0020	/* align read access w/ cacheline */
 #define	FXPF_WRITE_ALIGN	0x0040	/* end write on cacheline */
-#define	FXPF_EXT_TXCB		0x0080	/* has extended TxCB */
+#define	FXPF_EXT_TXCB		0x0080	/* enable extended TxCB */
 #define	FXPF_UCODE_LOADED	0x0100	/* microcode is loaded */
-#define	FXPF_EXT_RFA		0x0200	/* has extended RFD and IPCB (82550) */
+#define	FXPF_EXT_RFA		0x0200	/* enable extended RFD */
+#define	FXPF_IPCB		0x0400	/* use IPCB */
 #define	FXPF_RECV_WORKAROUND	0x0800	/* receiver lock-up workaround */
-#define	FXPF_FC			0x1000	/* has flow control */
-#define	FXPF_82559_RXCSUM	0x2000	/* has 82559 compat RX checksum */
 
 	int	sc_int_delay;		/* interrupt delay */
 	int	sc_bundle_max;		/* max packet bundle */
@@ -241,7 +239,10 @@ struct fxp_softc {
 	void	(*sc_disable)(struct fxp_softc *);
 
 	int	sc_eeprom_size;		/* log2 size of EEPROM */
-	krndsource_t rnd_source;	/* random source */
+#if NRND > 0
+	rndsource_element_t rnd_source;	/* random source */
+#endif
+
 };
 
 #ifdef FXP_EVENT_COUNTERS
@@ -306,7 +307,7 @@ do {									\
 	bus_dmamap_t __rxmap = M_GETCTX((m), bus_dmamap_t);		\
 	struct mbuf *__p_m;						\
 	struct fxp_rfa *__rfa, *__p_rfa;				\
-	uint32_t __v;							\
+	u_int32_t __v;							\
 									\
 	(m)->m_data = (m)->m_ext.ext_buf + (sc)->sc_rfa_size +		\
 	    RFA_ALIGNMENT_FUDGE;					\
@@ -362,8 +363,8 @@ do {									\
 	bus_space_write_4((sc)->sc_st, (sc)->sc_sh, (reg), (val))
 
 void	fxp_attach(struct fxp_softc *);
-int	fxp_activate(device_t, enum devact);
-int	fxp_detach(struct fxp_softc *, int);
+int	fxp_activate(struct device *, enum devact);
+int	fxp_detach(struct fxp_softc *);
 int	fxp_intr(void *);
 
 int	fxp_enable(struct fxp_softc*);

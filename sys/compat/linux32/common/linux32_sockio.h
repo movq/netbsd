@@ -1,4 +1,4 @@
-/* $NetBSD: linux32_sockio.h,v 1.3 2009/11/13 21:45:03 joerg Exp $ */
+/* $NetBSD: linux32_sockio.h,v 1.2.6.1 2009/11/28 15:45:02 bouyer Exp $ */
 
 /*
  * Copyright (c) 2008 Nicolas Joly

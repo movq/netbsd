@@ -1,4 +1,4 @@
-/*	$NetBSD: libhfs.c,v 1.12 2012/07/28 00:43:23 matt Exp $	*/
+/*	$NetBSD: libhfs.c,v 1.5 2007/12/11 12:04:23 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2007 The NetBSD Foundation, Inc.
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: libhfs.c,v 1.12 2012/07/28 00:43:23 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: libhfs.c,v 1.5 2007/12/11 12:04:23 lukem Exp $");
 
 #include "libhfs.h"
 
@@ -65,15 +65,6 @@ hfs_catalog_key_t* hfs_gPrivateObjectKeys[4] = {
 extern uint16_t be16tohp(void** inout_ptr);
 extern uint32_t be32tohp(void** inout_ptr);
 extern uint64_t be64tohp(void** inout_ptr);
-
-hfs_callbacks	hfs_gcb;	/* global callbacks */
- 
-/*    
- * global case folding table
- * (lazily initialized; see comments at bottom of hfs_open_volume())     
- */   
-unichar_t* hfs_gcft;
-
 
 int hfslib_create_casefolding_table(void);
 
@@ -170,7 +161,6 @@ hfslib_open_volume(
 	void*		buffer;
 	void*		buffer2;	/* used as temporary pointer for realloc() */
 	int			result;
-	int		isopen = 0;
 	
 	result = 1;
 	buffer = NULL;
@@ -183,7 +173,6 @@ hfslib_open_volume(
 
 	if(hfslib_openvoldevice(out_vol, in_device, cbargs) != 0)
 		HFS_LIBERR("could not open device");
-	isopen = 1;
 
 	/*
 	 *	Read the volume header.
@@ -235,9 +224,7 @@ hfslib_open_volume(
 			break;
 			
 		default:
-			/* HFS_LIBERR("unrecognized volume format"); */
-			goto error;
-			break;
+			HFS_LIBERR("unrecognized volume format");
 	}
 
 
@@ -366,8 +353,6 @@ hfslib_open_volume(
 
 	/* FALLTHROUGH */
 error:	
-	if (result != 0 && isopen)
-		hfslib_close_volume(out_vol, cbargs);
 	if(buffer!=NULL)
 		hfslib_free(buffer, cbargs);
 
@@ -469,11 +454,14 @@ hfslib_path_to_cnid(hfs_volume* in_vol,
 		goto exit;
 	
 	/* copy only the bytes that are actually used */
-	memcpy(*out_unicode + 2, path + path_offset, total_path_length*2);
+	memcpy(*out_unicode+2, path + path_offset, total_path_length*2);
 
 	/* insert forward slash at start */
-	uchar = be16toh(0x2F);
-	memcpy(*out_unicode, &uchar, sizeof(uchar));
+	(*out_unicode)[0] = 0x00;
+	(*out_unicode)[1] = 0x2F;
+	ptr = (uint16_t*)*out_unicode;
+	uchar = be16tohp((void*)&ptr);
+	*(ptr-1) = uchar;
 
 	/* insert null char at end */
 	(*out_unicode)[total_path_length*2+2] = 0x00;
@@ -821,7 +809,7 @@ hfslib_get_file_extents(hfs_volume* in_vol,
 	hfs_file_record_t		file;
 	hfs_catalog_key_t		filekey;
 	hfs_thread_record_t	fileparent;
-	hfs_fork_t		fork = {.logical_size = 0};
+	hfs_fork_t				fork;
 	hfs_extent_record_t	nextextentrec;
 	uint32_t	numblocks;
 	uint16_t	numextents, n;
@@ -1667,32 +1655,34 @@ hfslib_read_header_node(void** in_recs,
 {
 	void*	ptr;
 	int		i;
-
-	KASSERT(out_hr != NULL);
-
+	
 	if(in_recs==NULL || in_rec_sizes==NULL)
 		return 0;
 	
-	ptr = in_recs[0];
-	out_hr->tree_depth = be16tohp(&ptr);
-	out_hr->root_node = be32tohp(&ptr);
-	out_hr->leaf_recs = be32tohp(&ptr);
-	out_hr->first_leaf = be32tohp(&ptr);
-	out_hr->last_leaf = be32tohp(&ptr);
-	out_hr->node_size = be16tohp(&ptr);
-	out_hr->max_key_len = be16tohp(&ptr);
-	out_hr->total_nodes = be32tohp(&ptr);
-	out_hr->free_nodes = be32tohp(&ptr);
-	out_hr->reserved = be16tohp(&ptr);
-	out_hr->clump_size = be32tohp(&ptr);
-	out_hr->btree_type = *(((uint8_t*)ptr));
-	ptr = (uint8_t*)ptr + 1;
-	out_hr->keycomp_type = *(((uint8_t*)ptr));
-	ptr = (uint8_t*)ptr + 1;
-	out_hr->attributes = be32tohp(&ptr);
-	for(i=0;i<16;i++)
-		out_hr->reserved2[i] = be32tohp(&ptr);
-
+	if(out_hr!=NULL)
+	{
+		ptr = in_recs[0];
+		
+		out_hr->tree_depth = be16tohp(&ptr);
+		out_hr->root_node = be32tohp(&ptr);
+		out_hr->leaf_recs = be32tohp(&ptr);
+		out_hr->first_leaf = be32tohp(&ptr);
+		out_hr->last_leaf = be32tohp(&ptr);
+		out_hr->node_size = be16tohp(&ptr);
+		out_hr->max_key_len = be16tohp(&ptr);
+		out_hr->total_nodes = be32tohp(&ptr);
+		out_hr->free_nodes = be32tohp(&ptr);
+		out_hr->reserved = be16tohp(&ptr);
+		out_hr->clump_size = be32tohp(&ptr);
+		out_hr->btree_type = *(((uint8_t*)ptr));
+		ptr = (uint8_t*)ptr + 1;
+		out_hr->keycomp_type = *(((uint8_t*)ptr));
+		ptr = (uint8_t*)ptr + 1;
+		out_hr->attributes = be32tohp(&ptr);
+		for(i=0;i<16;i++)
+			out_hr->reserved2[i] = be32tohp(&ptr);
+	}
+	
 	if(out_userdata!=NULL)
 	{
 		memcpy(out_userdata, in_recs[1], in_rec_sizes[1]);

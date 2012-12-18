@@ -1,4 +1,4 @@
-/*	$NetBSD: utmpx.c,v 1.30 2012/06/24 15:26:03 christos Exp $	 */
+/*	$NetBSD: utmpx.c,v 1.25 2008/04/28 20:22:59 martin Exp $	 */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: utmpx.c,v 1.30 2012/06/24 15:26:03 christos Exp $");
+__RCSID("$NetBSD: utmpx.c,v 1.25 2008/04/28 20:22:59 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -56,41 +56,15 @@ __RCSID("$NetBSD: utmpx.c,v 1.30 2012/06/24 15:26:03 christos Exp $");
 
 static FILE *fp;
 static int readonly = 0;
-static int version = 1;
 static struct utmpx ut;
 static char utfile[MAXPATHLEN] = _PATH_UTMPX;
 
 static struct utmpx *utmp_update(const struct utmpx *);
 
-static const char vers[] = "utmpx-2.00";
-
-struct otimeval {
-	long tv_sec;
-	long tv_usec;
-};
-
-static void
-old2new(struct utmpx *utx)
-{
-	struct otimeval otv;
-	struct timeval *tv = &utx->ut_tv;
-	(void)memcpy(&otv, tv, sizeof(otv));
-	tv->tv_sec = otv.tv_sec;
-	tv->tv_usec = (suseconds_t)otv.tv_usec;
-}
-
-static void
-new2old(struct utmpx *utx)
-{
-	struct timeval tv;
-	struct otimeval *otv = (void *)&utx->ut_tv;
-	(void)memcpy(&tv, otv, sizeof(tv));
-	otv->tv_sec = (long)tv.tv_sec;
-	otv->tv_usec = (long)tv.tv_usec;
-}
+static const char vers[] = "utmpx-1.00";
 
 void
-setutxent(void)
+setutxent()
 {
 
 	(void)memset(&ut, 0, sizeof(ut));
@@ -101,7 +75,7 @@ setutxent(void)
 
 
 void
-endutxent(void)
+endutxent()
 {
 
 	(void)memset(&ut, 0, sizeof(ut));
@@ -114,13 +88,13 @@ endutxent(void)
 
 
 struct utmpx *
-getutxent(void)
+getutxent()
 {
 
 	if (fp == NULL) {
 		struct stat st;
 
-		if ((fp = fopen(utfile, "re+")) == NULL)
+		if ((fp = fopen(utfile, "r+")) == NULL)
 			if ((fp = fopen(utfile, "w+")) == NULL) {
 				if ((fp = fopen(utfile, "r")) == NULL)
 					goto fail;
@@ -144,17 +118,14 @@ getutxent(void)
 			/* old file, read signature record */
 			if (fread(&ut, sizeof(ut), 1, fp) != 1)
 				goto failclose;
-			if (memcmp(ut.ut_user, vers, 5) != 0 ||
+			if (memcmp(ut.ut_user, vers, sizeof(vers)) != 0 ||
 			    ut.ut_type != SIGNATURE)
 				goto failclose;
 		}
-		version = ut.ut_user[6] - '0';
 	}
 
 	if (fread(&ut, sizeof(ut), 1, fp) != 1)
 		goto fail;
-	if (version == 1)
-		old2new(&ut);
 
 	return &ut;
 failclose:
@@ -247,15 +218,9 @@ pututxline(const struct utmpx *utx)
 	if (utx == NULL)
 		return NULL;
 
-	if (strcmp(_PATH_UTMPX, utfile) == 0) {
-		if (geteuid() == 0) {
-			if (fp != NULL && readonly)
-				endutxent();
-		} else {
-			if (fp == NULL || readonly)
-				return utmp_update(utx);
-		}
-	}
+	if (strcmp(_PATH_UTMPX, utfile) == 0)
+		if ((fp != NULL && readonly) || (fp == NULL && geteuid() != 0))
+			return utmp_update(utx);
 
 
 	(void)memcpy(&temp, utx, sizeof(temp));
@@ -283,8 +248,6 @@ pututxline(const struct utmpx *utx)
 			return NULL;
 	}
 
-	if (version == 1)
-		new2old(&temp);
 	if (fwrite(&temp, sizeof (temp), 1, fp) != 1)
 		goto fail;
 

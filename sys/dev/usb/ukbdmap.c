@@ -1,4 +1,4 @@
-/*	$NetBSD: ukbdmap.c,v 1.28 2010/04/16 11:29:06 ahoka Exp $	*/
+/*	$NetBSD: ukbdmap.c,v 1.20.8.2 2010/11/21 02:38:07 riz Exp $	*/
 
 /*
  * Copyright (c) 1999,2001 The NetBSD Foundation, Inc.
@@ -31,13 +31,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ukbdmap.c,v 1.28 2010/04/16 11:29:06 ahoka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ukbdmap.c,v 1.20.8.2 2010/11/21 02:38:07 riz Exp $");
 
 #include <sys/types.h>
 #include <dev/wscons/wsksymdef.h>
 #include <dev/wscons/wsksymvar.h>
 
-#include <dev/usb/usb.h>
+#include <dev/usb/usb_port.h>
 
 #define KC(n)		KS_KEYCODE(n)
 
@@ -273,7 +273,6 @@ Static const keysym_t ukbd_keydesc_us_colemak[] = {
     KC(55), 			KS_period,	KS_greater,	KS_asciitilde,	KS_asciitilde,
     KC(56), 			KS_slash,	KS_question,	KS_questiondown, KS_asciitilde,
     KC(57), 			KS_BackSpace,
-    KC(100), 			KS_minus,	KS_underscore,	KS_asciitilde,	KS_asciitilde,
     KC(230), KS_Mode_switch,	KS_Multi_key,
 };
 
@@ -353,7 +352,7 @@ Static const keysym_t ukbd_keydesc_sv[] = {
 /*  pos      normal		shifted		altgr		shift-altgr */
     KC(45),  KS_plus,		KS_question,	KS_backslash,
     KC(48),  KS_dead_diaeresis,	KS_dead_circumflex, KS_dead_tilde,
-    KC(50),  KS_apostrophe,	KS_asterisk,
+    KC(50),  KS_comma,		KS_asterisk,
     KC(51),  KS_odiaeresis,
     KC(52),  KS_adiaeresis,
     KC(53),  KS_paragraph,	KS_onehalf,

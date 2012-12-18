@@ -1,4 +1,4 @@
-/*	$NetBSD: frame.h,v 1.20 2012/02/19 21:06:26 rmind Exp $	*/
+/*	$NetBSD: frame.h,v 1.18 2008/10/15 06:51:18 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc. All rights reserved.
@@ -161,8 +161,17 @@ struct sigframe_sigcontext {
 };
 #endif
 
-#ifdef _KERNEL
-void *getframe(const struct lwp *, int, int *);
+/*
+ * Scheduler activations upcall frame
+ */
+struct saframe {
+#if 0 /* in registers on entry to upcallcode */
+	int		sa_type;	/* r4 */
+	struct sa_t **	sa_sas;		/* r5 */
+	int		sa_events;	/* r6 */
+	int		sa_interrupted;	/* r7 */
 #endif
+	void *		sa_arg;
+};
 
 #endif /* !_SH3_FRAME_H_ */

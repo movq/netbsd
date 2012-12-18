@@ -1,4 +1,4 @@
-/*	$NetBSD: xenfunc.c,v 1.13 2011/11/06 11:40:47 cherry Exp $	*/
+/*	$NetBSD: xenfunc.c,v 1.7 2008/05/11 16:23:05 ad Exp $	*/
 
 /*
  *
@@ -13,6 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Christian Limpach.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -27,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xenfunc.c,v 1.13 2011/11/06 11:40:47 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xenfunc.c,v 1.7 2008/05/11 16:23:05 ad Exp $");
 
 #include <sys/param.h>
 
@@ -55,13 +60,14 @@ invlpg(vaddr_t addr)
 {
 	int s = splvm();
 	xpq_queue_invlpg(addr);
+	xpq_flush_queue();
 	splx(s);
 }  
 
+#ifndef __x86_64__
 void
 lldt(u_short sel)
 {
-#ifndef __x86_64__
 	struct cpu_info *ci;
 
 	ci = curcpu();
@@ -75,25 +81,25 @@ lldt(u_short sel)
 		xen_set_ldt(ci->ci_gdt[IDXSELN(sel)].ld.ld_base,
 		    ci->ci_gdt[IDXSELN(sel)].ld.ld_entries);
 	ci->ci_curldt = sel;
-#endif
 }
+#endif
 
 void
 ltr(u_short sel)
 {
-	panic("XXX ltr not supported\n");
+	__PRINTK(("XXX ltr not supported\n"));
 }
 
 void
 lcr0(u_long val)
 {
-	panic("XXX lcr0 not supported\n");
+	__PRINTK(("XXX lcr0 not supported\n"));
 }
 
 u_long
 rcr0(void)
 {
-	/* XXX: handle X86_CR0_TS ? */
+	__PRINTK(("XXX rcr0 not supported\n"));
 	return 0;
 }
 
@@ -103,6 +109,7 @@ lcr3(vaddr_t val)
 {
 	int s = splvm();
 	xpq_queue_pt_switch(xpmap_ptom_masked(val));
+	xpq_flush_queue();
 	splx(s);
 }
 #endif
@@ -112,6 +119,7 @@ tlbflush(void)
 {
 	int s = splvm();
 	xpq_queue_tlb_flush();
+	xpq_flush_queue();
 	splx(s);
 }
 
@@ -147,5 +155,9 @@ wbinvd(void)
 vaddr_t
 rcr2(void)
 {
+#ifdef XEN3
 	return curcpu()->ci_vcpu->arch.cr2;
+#else
+	return 0;
+#endif
 }

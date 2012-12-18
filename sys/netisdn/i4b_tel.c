@@ -27,7 +27,7 @@
  *	i4b_tel.c - device driver for ISDN telephony
  *	--------------------------------------------
  *
- *	$Id: i4b_tel.c,v 1.25 2012/10/27 17:18:40 chs Exp $
+ *	$Id: i4b_tel.c,v 1.22 2008/03/01 14:16:52 rmind Exp $
  *
  * $FreeBSD$
  *
@@ -36,7 +36,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_tel.c,v 1.25 2012/10/27 17:18:40 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_tel.c,v 1.22 2008/03/01 14:16:52 rmind Exp $");
 
 #include "isdntel.h"
 
@@ -175,19 +175,19 @@ static u_char sinetab[];
 
 #ifndef __FreeBSD__
 #define	PDEVSTATIC	/* - not static - */
-PDEVSTATIC void isdntelattach(void);
-PDEVSTATIC int isdntelioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l);
+PDEVSTATIC void isdntelattach __P((void));
+PDEVSTATIC int isdntelioctl __P((dev_t dev, u_long cmd, void *data, int flag, struct lwp *l));
 
-int isdntelopen(dev_t dev, int flag, int fmt, struct lwp *l);
-int isdntelclose(dev_t dev, int flag, int fmt, struct lwp *l);
-int isdntelread(dev_t dev, struct uio *uio, int ioflag);
-int isdntelwrite(dev_t dev, struct uio * uio, int ioflag);
+int isdntelopen __P((dev_t dev, int flag, int fmt, struct lwp *l));
+int isdntelclose __P((dev_t dev, int flag, int fmt, struct lwp *l));
+int isdntelread __P((dev_t dev, struct uio *uio, int ioflag));
+int isdntelwrite __P((dev_t dev, struct uio * uio, int ioflag));
 
 #ifdef OS_USES_POLL
-int isdntelpoll(dev_t dev, int events, struct lwp *l);
-int isdntelkqfilter(dev_t dev, struct knote *kn);
+int isdntelpoll	__P((dev_t dev, int events, struct lwp *l));
+int isdntelkqfilter __P((dev_t dev, struct knote *kn));
 #else
-int isdntelsel(dev_t dev, int rw, struct lwp *l);
+int isdntelsel __P((dev_t dev, int rw, struct lwp *l));
 #endif
 
 #endif /* __FreeBSD__ */
@@ -274,7 +274,7 @@ SYSINIT(i4bteldev, SI_SUB_DRIVERS,
 #ifdef __bsdi__
 
 int i4btelsel(dev_t dev, int rw, struct lwp *l);
-int i4btelmatch(device_t parent, cfdata_t cf, void *aux);
+int i4btelmatch(struct device *parent, struct cfdata *cf, void *aux);
 void dummy_i4btelattach(struct device*, struct device *, void *);
 
 #define CDEV_MAJOR 62
@@ -290,14 +290,14 @@ struct devsw i4btelsw =
 };
 
 int
-i4btelmatch(device_t parent, cfdata_t cf, void *aux)
+i4btelmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	NDBGL4(L4_TELDBG, "aux=0x%x", aux);
 	return 1;
 }
 
 void
-dummy_i4btelattach(device_t parent, device_t self, void *aux)
+dummy_i4btelattach(struct device *parent, struct device *self, void *aux)
 {
 	NDBGL4(L4_TELDBG, "aux=0x%x", aux);
 }
@@ -327,7 +327,7 @@ PDEVSTATIC void
 #ifdef __FreeBSD__
 isdntelattach(void *dummy)
 #else
-isdntelattach(void)
+isdntelattach()
 #endif
 {
 	int i, j;

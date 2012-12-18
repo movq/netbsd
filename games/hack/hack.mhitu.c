@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.mhitu.c,v 1.7 2009/06/07 18:30:39 dholland Exp $	*/
+/*	$NetBSD: hack.mhitu.c,v 1.6 2003/04/02 18:36:37 jsm Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.mhitu.c,v 1.7 2009/06/07 18:30:39 dholland Exp $");
+__RCSID("$NetBSD: hack.mhitu.c,v 1.6 2003/04/02 18:36:37 jsm Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
@@ -74,7 +74,8 @@ __RCSID("$NetBSD: hack.mhitu.c,v 1.7 2009/06/07 18:30:39 dholland Exp $");
  *	  returns 1 if monster dies (e.g. 'y', 'F'), 0 otherwise
  */
 int
-mhitu(struct monst *mtmp)
+mhitu(mtmp)
+	struct monst   *mtmp;
 {
 	const struct permonst *mdat = mtmp->data;
 	int             tmp, ctmp;
@@ -401,7 +402,9 @@ mhitu(struct monst *mtmp)
 }
 
 int
-hitu(struct monst *mtmp, int dam)
+hitu(mtmp, dam)
+	struct monst   *mtmp;
+	int dam;
 {
 	int tmp, res;
 

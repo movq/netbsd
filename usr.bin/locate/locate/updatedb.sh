@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#	$NetBSD: updatedb.sh,v 1.14 2011/07/13 07:58:35 apb Exp $
+#	$NetBSD: updatedb.sh,v 1.11 2006/04/23 03:04:08 christos Exp $
 #
 # Copyright (c) 1989, 1993
 #	The Regents of the University of California.  All rights reserved.
@@ -51,89 +51,47 @@ ignorefs='! -fstype local -o -fstype cd9660 -o -fstype fdesc -o -fstype kernfs -
 ignore=
 SRCHPATHS=
 
-# Quote args to make them safe in the shell.
-# Usage: quotedlist="$(shell_quote args...)"
-#
-# After building up a quoted list, use it by evaling it inside
-# double quotes, like this:
-#    eval "set -- $quotedlist"
-# or like this:
-#    eval "\$command $quotedlist \$filename"
-#
-shell_quote()
-{
-	local result=''
-	local arg
-	for arg in "$@" ; do
-		# Append a space if necessary
-		result="${result}${result:+ }"
-		# Convert each embedded ' to '\'',
-		# then insert ' at the beginning of the first line,
-		# and append ' at the end of the last line.
-		result="${result}$(printf "%s\n" "$arg" | \
-			sed -e "s/'/'\\\\''/g" -e "1s/^/'/" -e "\$s/\$/'/")"
-	done
-	printf "%s\n" "$result"
-}
-
 # read configuration file
 if [ -f "$CONF" ]; then
-	while read -r com args; do
+	exec 5<&0 < "$CONF"
+	while read com args; do
+		case "$com/$args" in /) continue;; esac	# skip blank lines
 		case "$com" in
-		''|'#'*)
-			continue ;;	# skip blank lines and comment lines
-		esac
-		eval "set -- $args"	# set "$@" from $args, obeying quotes
-		case "$com" in
+		'#'*)	;;			# lines start with # is comment
 		searchpath)
-			SRCHPATHS="${SRCHPATHS}${SRCHPATHS:+ }$(shell_quote "$@")"
-			;;
+			SRCHPATHS="$SRCHPATHS $args";;
 		ignorefs)
-			for i in "$@"; do
-				q="$(shell_quote "${i#\!}")"
-				fs=
+			for i in $args; do
 				case "$i" in
-				none)	ignorefs=
-					;;
-				\!*)	fs="! -fstype $q"
-					;;
-				*)	fs="-fstype $q"
-					;;
+				none)	ignorefs=;;
+				*)	fs=`echo "$i" | sed -e 's/^!/! -fstype /' -e t -e 's/^/-fstype /'`
+					ignorefs="${ignorefs:+${ignorefs} -o }${fs}"
 				esac
-				case "$fs" in
-				'')	;;
-				*)	ignorefs="${ignorefs:+${ignorefs} -o }${fs}"
-					;;
-				esac
-			done
-			;;
+			done;;
 		ignore)
-			for i in "$@"; do
-				q="$(shell_quote "$i")"
-				ignore="${ignore:+${ignore} -o }-path ${q}"
+			set -f
+			for i in $args; do
+				ignore="${ignore:+${ignore} -o }-path ${i}"
 			done
-			;;
+			set +f;;
 		ignorecontents)
-			for i in "$@"; do
-				q="$(shell_quote "$i")"
-				ignore="${ignore:+${ignore} -o }-path ${q} -print"
+			set -f
+			for i in $args; do
+				ignore="${ignore:+${ignore} -o }-path ${i} -print"
 			done
-			;;
+			set +f;;
 		workdir)
-			if [ $# -ne 1 ]; then
-				echo "$CONF: workdir takes exactly one argument" >&2
-			elif [ -d "$1" ]; then
-				TMPDIR="$1"
+			if [ -d "$args" ]; then
+				TMPDIR="$args"
 			else
-				echo "$CONF: workdir: $1 nonexistent" >&2
-			fi
-			;;
+				echo "$CONF: workdir: $args nonexistent" >&2
+			fi;;
 		*)
-			echo "$CONF: $com: unknown config command" >&2
-			exit 1
-			;;
+			echo "$CONF: $com: unknown config command"	>&2
+			exit 1;;
 		esac
-	done < "$CONF"
+	done
+	exec <&5 5>&-
 fi
 
 : ${SRCHPATHS:=/}			# directories to be put in the database
@@ -141,26 +99,26 @@ export TMPDIR
 
 case "$ignorefs/$ignore" in
 /)	lp= ;   rp= ;;
-*)	lp='\('; rp='\) -prune -o' ;;
+*)	lp='('; rp=') -prune -o' ;;
 esac
 
 # insert '-o' if neither $ignorefs or $ignore are empty
 case "$ignorefs $ignore" in
 ' '*|*' ')	;;
-*)		ignore="-o $ignore" ;;
+*)		ignore="-o $ignore";;
 esac
 
 FILELIST=$(mktemp -t locate.list) || exit 1
-trap 'rm -f "$FILELIST"' EXIT
-trap 'rm -f "$FILELIST"; exit 1' INT QUIT TERM
+trap "rm -f '$FILELIST'" EXIT
+trap "rm -f '$FILELIST'; exit 1" INT QUIT TERM
 
 # Make a file list and compute common bigrams.
 # Entries of each directory shall be sorted (find -s).
-# The "cat" process is not useless; it lets us detect write errors.
 
-(eval "find -s ${SRCHPATHS} $lp $ignorefs $ignore $rp -print"; true) \
-	| cat >> "$FILELIST"
-if [ $? != 0 ]; then
+set -f
+(find -s ${SRCHPATHS} $lp $ignorefs $ignore $rp -print; true) | cat  >> "$FILELIST"
+if [ $? != 0 ]
+then
 	exit 1
 fi
 
@@ -169,7 +127,6 @@ BIGRAMS=$($LIBDIR/locate.bigram <"$FILELIST")
 # code the file list
 if [ -z "$BIGRAMS" ]; then
 	echo 'locate: updatedb failed' >&2
-	exit 1
 else
 	$LIBDIR/locate.code "$BIGRAMS" <"$FILELIST" >"$FCODES"
 	chmod 644 "$FCODES"

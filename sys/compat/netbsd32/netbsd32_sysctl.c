@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_sysctl.c,v 1.33 2012/01/20 14:08:07 joerg Exp $	*/
+/*	$NetBSD: netbsd32_sysctl.c,v 1.28 2008/01/07 16:12:53 ad Exp $	*/
 
 /*
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_sysctl.c,v 1.33 2012/01/20 14:08:07 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_sysctl.c,v 1.28 2008/01/07 16:12:53 ad Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_sysctl.c,v 1.33 2012/01/20 14:08:07 joerg E
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -57,7 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_sysctl.c,v 1.33 2012/01/20 14:08:07 joerg E
 #include <compat/netbsd32/netbsd32_syscall.h>
 #include <compat/netbsd32/netbsd32_syscallargs.h>
 #include <compat/netbsd32/netbsd32_conv.h>
-#include <compat/netbsd32/netbsd32_sysctl.h>
 
 #if defined(DDB)
 #include <ddb/ddbvar.h>
@@ -70,8 +70,6 @@ struct sysctlnode netbsd32_sysctl_root = {
 	sysc_init_field(_sysctl_size, sizeof(struct sysctlnode)),
 };
 
-static struct sysctllog *netbsd32_clog;
-
 /*
  * sysctl helper routine for netbsd32's kern.boottime node
  */
@@ -79,9 +77,9 @@ static int
 netbsd32_sysctl_kern_boottime(SYSCTLFN_ARGS)
 {
 	struct sysctlnode node;
-	struct netbsd32_timespec bt32;
+	struct netbsd32_timeval bt32;
 
-	netbsd32_from_timespec(&boottime, &bt32);
+	netbsd32_from_timeval(&boottime, &bt32);
 
 	node = *rnode;
 	node.sysctl_data = &bt32;
@@ -104,65 +102,51 @@ netbsd32_sysctl_vm_loadavg(SYSCTLFN_ARGS)
 	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }
 
-void
-netbsd32_sysctl_init(void)
+SYSCTL_SETUP(netbsd32_sysctl_emul_setup, "sysctl netbsd32 shadow tree setup")
 {
 	const struct sysctlnode *_root = &netbsd32_sysctl_root;
 	extern const char machine_arch32[];
 	extern const char machine32[];
 
-	sysctl_createv(&netbsd32_clog, 0, &_root, NULL,
+	sysctl_createv(clog, 0, &_root, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "kern", NULL,
 		       NULL, 0, NULL, 0,
 		       CTL_KERN, CTL_EOL);
-	sysctl_createv(&netbsd32_clog, 0, &_root, NULL,
+	sysctl_createv(clog, 0, &_root, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "boottime", NULL,
 		       netbsd32_sysctl_kern_boottime, 0, NULL,
 		       sizeof(struct netbsd32_timeval),
 		       CTL_KERN, KERN_BOOTTIME, CTL_EOL);
 
-	sysctl_createv(&netbsd32_clog, 0, &_root, NULL,
+	sysctl_createv(clog, 0, &_root, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "vm", NULL,
 		       NULL, 0, NULL, 0,
 		       CTL_VM, CTL_EOL);
-	sysctl_createv(&netbsd32_clog, 0, &_root, NULL,
+	sysctl_createv(clog, 0, &_root, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "loadavg", NULL,
 		       netbsd32_sysctl_vm_loadavg, 0, NULL,
 		       sizeof(struct netbsd32_loadavg),
 		       CTL_VM, VM_LOADAVG, CTL_EOL);
 
-	sysctl_createv(&netbsd32_clog, 0, &_root, NULL,
+	sysctl_createv(clog, 0, &_root, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "hw", NULL,
 		       NULL, 0, NULL, 0,
 		       CTL_HW, CTL_EOL);
-	sysctl_createv(&netbsd32_clog, 0, &_root, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
-		       CTLTYPE_INT, "alignbytes", NULL,
-		       NULL, ALIGNBYTES32, NULL, 0,
-		       CTL_HW, HW_ALIGNBYTES, CTL_EOL);
-	sysctl_createv(&netbsd32_clog, 0, &_root, NULL,
+	sysctl_createv(clog, 0, &_root, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRING, "machine", NULL,
-		       NULL, 0, __UNCONST(&machine32), 0,
+		       NULL, 0, &machine32, 0,
 		       CTL_HW, HW_MACHINE, CTL_EOL);
-	sysctl_createv(&netbsd32_clog, 0, &_root, NULL,
+	sysctl_createv(clog, 0, &_root, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRING, "machine_arch", NULL,
-		       NULL, 0, __UNCONST(&machine_arch32), 0,
+		       NULL, 0, &machine_arch32, 0,
 		       CTL_HW, HW_MACHINE_ARCH, CTL_EOL);
-}
-
-void
-netbsd32_sysctl_fini(void)
-{
-
-	sysctl_teardown(&netbsd32_clog);
-	sysctl_free(&netbsd32_sysctl_root);
 }
 
 int

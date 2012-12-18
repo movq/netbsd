@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tl.c,v 1.98 2012/07/22 14:33:04 matt Exp $	*/
+/*	$NetBSD: if_tl.c,v 1.90 2008/10/04 21:00:28 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *  This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.98 2012/07/22 14:33:04 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.90 2008/10/04 21:00:28 bouyer Exp $");
 
 #undef TLDEBUG
 #define TL_PRIV_STATS
@@ -62,10 +67,16 @@ __KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.98 2012/07/22 14:33:04 matt Exp $");
 #include <net/route.h>
 #include <net/netisr.h>
 
+#include "bpfilter.h"
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
+#include "rnd.h"
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -77,6 +88,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.98 2012/07/22 14:33:04 matt Exp $");
 
 #if defined(__NetBSD__)
 #include <net/if_ether.h>
+#include <uvm/uvm_extern.h>
 #if defined(INET)
 #include <netinet/if_inarp.h>
 #endif
@@ -113,7 +125,7 @@ static int tl_intr(void *);
 static int tl_ifioctl(struct ifnet *, ioctl_cmd_t, void *);
 static int tl_mediachange(struct ifnet *);
 static void tl_ifwatchdog(struct ifnet *);
-static bool tl_shutdown(device_t, int);
+static void tl_shutdown(void *);
 
 static void tl_ifstart(struct ifnet *);
 static void tl_reset(tl_softc_t *);
@@ -142,7 +154,7 @@ static void ether_printheader(struct ether_header *);
 int tl_mii_read(device_t, int, int);
 void tl_mii_write(device_t, int, int, int);
 
-void tl_statchg(struct ifnet *);
+void tl_statchg(device_t);
 
 	/* I2C glue */
 static int tl_i2c_acquire_bus(void *, int);
@@ -373,7 +385,7 @@ tl_pci_attach(device_t parent, device_t self, void *aux)
 	sc->sc_i2c.ic_write_byte = tl_i2c_write_byte;
 
 #ifdef TLDEBUG
-	aprint_debug_dev(self, "default values of INTreg: 0x%x\n",
+	aprint_debug_dev(sefl, "default values of INTreg: 0x%x\n",
 	    tl_intreg_read(sc, TL_INT_Defaults));
 #endif
 
@@ -417,6 +429,12 @@ tl_pci_attach(device_t parent, device_t self, void *aux)
 		aprint_error_dev(self, "can't allocate DMA memory for lists\n");
 		return;
 	}
+	/*
+	 * Add shutdown hook so that DMA is disabled prior to reboot. Not
+	 * doing
+	 * reboot before the driver initializes.
+	 */
+	(void)shutdownhook_establish(tl_shutdown, ifp);
 
 	/*
 	 * Initialize our media structures and probe the MII.
@@ -459,17 +477,10 @@ tl_pci_attach(device_t parent, device_t self, void *aux)
 	if_attach(ifp);
 	ether_ifattach(&(sc)->tl_if, (sc)->tl_enaddr);
 
-	/*
-	 * Add shutdown hook so that DMA is disabled prior to reboot.
-	 * Not doing reboot before the driver initializes.
-	 */
-	if (pmf_device_register1(self, NULL, NULL, tl_shutdown))
-		pmf_class_network_register(self, ifp);
-	else
-		aprint_error_dev(self, "couldn't establish power handler\n");
-
+#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
+#endif
 }
 
 static void
@@ -512,15 +523,11 @@ tl_reset(tl_softc_t *sc)
 	sc->tl_mii.mii_media_status &= ~IFM_ACTIVE;
 }
 
-static bool
-tl_shutdown(device_t self, int howto)
+static void
+tl_shutdown(void *v)
 {
-	tl_softc_t *sc = device_private(self);
-	struct ifnet *ifp = &sc->tl_if;
 
-	tl_stop(ifp, 1);
-
-	return true;
+	tl_stop(v, 1);
 }
 
 static void
@@ -891,9 +898,9 @@ tl_mii_write(device_t self, int phy, int reg, int val)
 }
 
 void
-tl_statchg(struct ifnet *ifp)
+tl_statchg(device_t self)
 {
-	tl_softc_t *sc = ifp->if_softc;
+	tl_softc_t *sc = device_private(self);
 	uint32_t reg;
 
 #ifdef TLDEBUG
@@ -1076,7 +1083,10 @@ tl_intr(void *v)
 					ether_printheader(eh);
 				}
 #endif
-				bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+				if (ifp->if_bpf)
+					bpf_mtap(ifp->if_bpf, m);
+#endif /* NBPFILTER > 0 */
 				(*ifp->if_input)(ifp, m);
 			}
 		}
@@ -1221,7 +1231,10 @@ tl_intr(void *v)
 		/* Ack the interrupt and enable interrupts */
 		TL_HR_WRITE(sc, TL_HOST_CMD, ack | int_type | HOST_CMD_ACK |
 		    HOST_CMD_IntOn);
-		rnd_add_uint32(&sc->rnd_source, int_reg);
+#if NRND > 0
+		if (RND_ENABLED(&sc->rnd_source))
+			rnd_add_uint32(&sc->rnd_source, int_reg);
+#endif
 		return 1;
 	}
 	/* ack = 0 ; interrupt was perhaps not our. Just enable interrupts */
@@ -1403,8 +1416,11 @@ tbdinit:
 			    sc->last_Rx->hw_list->fwd);
 #endif
 	}
+#if NBPFILTER > 0
 	/* Pass packet to bpf if there is a listener */
-	bpf_mtap(ifp, mb_head);
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, mb_head);
+#endif
 	/*
 	 * Set a 5 second timer just in case we don't hear from the card again.
 	 */

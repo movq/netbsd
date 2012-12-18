@@ -1,4 +1,4 @@
-/*	$NetBSD: mopchk.c,v 1.13 2011/08/30 19:49:11 joerg Exp $	*/
+/*	$NetBSD: mopchk.c,v 1.10 2003/04/20 00:19:56 christos Exp $	*/
 
 /*
  * Copyright (c) 1995-96 Mats O Jansson.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mopchk.c,v 1.13 2011/08/30 19:49:11 joerg Exp $");
+__RCSID("$NetBSD: mopchk.c,v 1.10 2003/04/20 00:19:56 christos Exp $");
 #endif
 
 /*
@@ -49,8 +54,9 @@ __RCSID("$NetBSD: mopchk.c,v 1.13 2011/08/30 19:49:11 joerg Exp $");
  */
 struct if_info *iflist;
 
-__dead static void	Usage(void);
-void	mopProcess(struct if_info *, u_char *);
+void	Usage __P((void));
+int	main __P((int, char **));
+void	mopProcess __P((struct if_info *, u_char *));
 
 int     AllFlag = 0;		/* listen on "all" interfaces  */
 int	VersionFlag = 0;	/* Show version */
@@ -59,13 +65,15 @@ int	promisc = 0;		/* promisc mode not needed */
 extern char	version[];
 
 int
-main(int argc, char  **argv)
+main(argc, argv)
+	int     argc;
+	char  **argv;
 {
 	struct dllist dl;
 	int     op, i;
 	char   *filename;
 	struct if_info *ii;
-	int	error;
+	int	err;
 
 	mopInteractive = 1;
 
@@ -118,17 +126,17 @@ main(int argc, char  **argv)
 		if (dl.ldfd == -1)
 			printf("Unknown file.\n");
 		else {
-			if ((error = CheckElfFile(dl.ldfd)) == 0) {
+			if ((err = CheckElfFile(dl.ldfd)) == 0) {
 				if (GetElfFileInfo(&dl) < 0) {
 					printf(
 					"Some failure in GetElfFileInfo\n");
 				}
-			} else if ((error = CheckAOutFile(dl.ldfd)) == 0) {
+			} else if ((err = CheckAOutFile(dl.ldfd)) == 0) {
 				if (GetAOutFileInfo(&dl) < 0) {
 					printf(
 					"Some failure in GetAOutFileInfo\n");
 				}
-			} else if ((error = CheckMopFile(dl.ldfd)) == 0) {
+			} else if ((err = CheckMopFile(dl.ldfd)) == 0) {
 				if (GetMopFileInfo(&dl) < 0) {
 					printf(
 					    "Some failure in GetMopFileInfo\n");
@@ -140,8 +148,8 @@ main(int argc, char  **argv)
 	return (0);
 }
 
-static void
-Usage(void)
+void
+Usage()
 {
 	(void) fprintf(stderr, "usage: %s [-a] [-v] [filename...]\n",
 	    getprogname());
@@ -153,6 +161,8 @@ Usage(void)
  * Doesn't actually do anything for mopchk(1)
  */
 void
-mopProcess(struct if_info *ii, u_char *pkt)
+mopProcess(ii, pkt)
+	struct if_info *ii;
+	u_char *pkt;
 {
 }

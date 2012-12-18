@@ -1,4 +1,4 @@
-/*	$NetBSD: anvil_clnt.c,v 1.1.1.1 2009/06/23 10:08:44 tron Exp $	*/
+/*	$NetBSD: anvil_clnt.c,v 1.1.1.1.2.3 2011/01/07 01:24:01 riz Exp $	*/
 
 /*++
 /* NAME

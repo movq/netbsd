@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2009/06/12 04:26:32 mrg Exp $
+#	$NetBSD: Makefile,v 1.2.8.1 2009/09/17 04:24:36 snj Exp $
 
 DRIVER=		xf86-video-siliconmotion
 DRIVER_NAME=	siliconmotion_drv

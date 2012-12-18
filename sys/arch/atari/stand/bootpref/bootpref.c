@@ -1,4 +1,4 @@
-/*	$NetBSD: bootpref.c,v 1.6 2009/03/17 00:18:40 he Exp $	*/
+/*	$NetBSD: bootpref.c,v 1.3 2008/04/28 20:23:15 martin Exp $	*/
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -38,27 +38,27 @@
 #include <sys/mman.h>
 #include "bootpref.h"
 
-static void	usage(void);
-static int	openNVRAM(void);
-static void	closeNVRAM(int);
-static u_char	readNVRAM(int, int);
-static void	writeNVRAM(int, int, u_char);
-static void	getNVpref(int, u_char[]);
-static void	setNVpref(int, u_char[], int, int);
-static void	showOS(u_char);
-static void	showLang(u_char);
-static void	showKbdLang(u_char);
-static void	showDateFmt(u_char);
-static void	showDateSep(u_char);
-static void	showVideo2(u_char);
-static void	showVideo1(u_char, u_char);
-static int	checkOS(u_char *, char *);
-static int	checkLang(u_char *, char *);
-static int	checkKbdLang(u_char *, char *);
-static int	checkInt(u_char *, char *, int, int);
-static int 	checkDateFmt(u_char *, char *);
-static void 	checkDateSep(u_char *, char *);
-static int 	checkColours(u_char *, char *);
+static void	usage __P ((void));
+static int	openNVRAM __P ((void));
+static void	closeNVRAM __P ((int));
+static u_char	readNVRAM __P ((int, int));
+static void	writeNVRAM __P ((int, int, u_char));
+static void	getNVpref __P ((int, u_char[]));
+static void	setNVpref __P ((int, u_char[], int, int));
+static void	showOS __P ((u_char));
+static void	showLang __P ((u_char));
+static void	showKbdLang __P ((u_char));
+static void	showDateFmt __P ((u_char));
+static void	showDateSep __P ((u_char));
+static void	showVideo2 __P ((u_char));
+static void	showVideo1 __P ((u_char, u_char));
+static int	checkOS __P ((u_char *, char *));
+static int	checkLang __P ((u_char *, char *));
+static int	checkKbdLang __P ((u_char *, char *));
+static int	checkInt __P ((u_char *, char *, int, int));
+static int 	checkDateFmt __P ((u_char *, char *));
+static void 	checkDateSep __P ((u_char *, char *));
+static int 	checkColours __P ((u_char *, char *));
 
 #define SET_OS		0x001
 #define SET_LANG	0x002
@@ -83,7 +83,9 @@ static int 	checkColours(u_char *, char *);
 static const char	nvrdev[] = PATH_NVRAM;
 
 int
-main (int argc, char *argv[])
+main (argc, argv)
+	int	argc;
+	char	*argv[];
 {
 	int	c, set = 0, verbose = 0;
 	int	fd;
@@ -313,7 +315,8 @@ openNVRAM ()
 }
 
 static void
-closeNVRAM (int fd)
+closeNVRAM (fd)
+	int fd;
 {
 	if (close (fd) < 0) {
 		err (EXIT_FAILURE, "%s", nvrdev);
@@ -321,7 +324,8 @@ closeNVRAM (int fd)
 }
 
 static u_char
-readNVRAM (int fd, int pos)
+readNVRAM (fd, pos)
+	int fd, pos;
 {
 	u_char val;
 
@@ -335,7 +339,9 @@ readNVRAM (int fd, int pos)
 }
 
 static void
-writeNVRAM (int fd, int pos, u_char val)
+writeNVRAM (fd, pos, val)
+	int fd, pos;
+	u_char val;
 {
 	if (lseek(fd, (off_t)pos, SEEK_SET) != pos) {
 		err(EXIT_FAILURE, "%s", nvrdev);
@@ -346,7 +352,9 @@ writeNVRAM (int fd, int pos, u_char val)
 }
 
 static void
-getNVpref (int fd, u_char bootpref[])
+getNVpref (fd, bootpref)
+	int fd;
+	u_char bootpref[];
 {
 	/* Boot OS */
 	printf ("Boot OS is ");
@@ -379,7 +387,10 @@ getNVpref (int fd, u_char bootpref[])
 }
 
 static void
-setNVpref (int fd, u_char bootpref[], int set, int verbose)
+setNVpref (fd, bootpref, set, verbose)
+	int fd;
+	u_char bootpref[];
+	int verbose;
 {
 	/* Boot OS */
 	if (set & SET_OS) {
@@ -459,7 +470,8 @@ setNVpref (int fd, u_char bootpref[], int set, int verbose)
 }
 
 static void
-showOS (u_char bootos)
+showOS (bootos)
+	u_char bootos;
 {
 	switch (bootos) {
 	case BOOTPREF_NETBSD:
@@ -488,7 +500,8 @@ showOS (u_char bootos)
 }
 
 static void
-showLang (u_char lang)
+showLang (lang)
+	u_char lang;
 {
 	switch (lang) {
 	case LANG_USA:
@@ -515,7 +528,8 @@ showLang (u_char lang)
 }
 
 static void
-showKbdLang (u_char lang)
+showKbdLang (lang)
+	u_char lang;
 {
 	switch (lang) {
 	case KBDLANG_USA:
@@ -550,7 +564,8 @@ showKbdLang (u_char lang)
 }
 
 static void
-showDateFmt (u_char fmt)
+showDateFmt (fmt)
+	u_char fmt;
 {
 	if (fmt & DATIME_24H) {
 		printf ("24 hour clock, ");
@@ -578,7 +593,8 @@ showDateFmt (u_char fmt)
 }
 
 static void
-showDateSep (u_char sep)
+showDateSep (sep)
+	u_char sep;
 {
 	if (sep) {
 		if (sep >= 0x20) {
@@ -591,7 +607,8 @@ showDateSep (u_char sep)
 }
 
 static void
-showVideo2 (u_char vid2)
+showVideo2 (vid2)
+	u_char vid2;
 {
 	u_char colours;
 
@@ -647,7 +664,8 @@ showVideo2 (u_char vid2)
 }
 
 static void
-showVideo1 (u_char vid1, u_char vid2)
+showVideo1 (vid1, vid2)
+	u_char vid1, vid2;
 {
 	if (vid2 & VID2_VGA) {
 		printf ("\tDouble line ");
@@ -668,7 +686,9 @@ showVideo1 (u_char vid1, u_char vid2)
 }
 
 static int
-checkOS (u_char *val, char *str)
+checkOS (val, str)
+	u_char *val;
+	char *str;
 {
 	if (!strncasecmp (str, "ne", 2)) {
 		*val = BOOTPREF_NETBSD;
@@ -698,7 +718,9 @@ checkOS (u_char *val, char *str)
 }
 
 static int
-checkLang (u_char *val, char *str)
+checkLang (val, str)
+	u_char *val;
+	char *str;
 {
 	if (!strncasecmp (str, "e", 1)) {
 		*val = LANG_GB;
@@ -724,7 +746,9 @@ checkLang (u_char *val, char *str)
 }
 
 static int
-checkKbdLang (u_char *val, char *str)
+checkKbdLang (val, str)
+	u_char *val;
+	char *str;
 {
 	if (!strncasecmp (str, "a", 1)) {
 		*val = KBDLANG_USA;
@@ -762,7 +786,10 @@ checkKbdLang (u_char *val, char *str)
 }
 
 static int
-checkInt (u_char *val, char *str, int min, int max)
+checkInt (val, str, min, max)
+	u_char *val;
+	char *str;
+	int min, max;
 {
 	int num;
 	if (1 == sscanf (str, "%d", &num) && num >= min && num <= max) {
@@ -773,7 +800,9 @@ checkInt (u_char *val, char *str, int min, int max)
 }
 
 static int
-checkDateFmt (u_char *val, char *str)
+checkDateFmt (val, str)
+	u_char *val;
+	char *str;
 {
 	if (!strncasecmp (str, "m", 1)) {
 		*val |= DATIME_MMDDYY;
@@ -795,7 +824,9 @@ checkDateFmt (u_char *val, char *str)
 }
 
 static void
-checkDateSep (u_char *val, char *str)
+checkDateSep (val, str)
+	u_char *val;
+	char *str;
 {
 	if (str[0] == '/') {
 		*val = 0;
@@ -805,7 +836,9 @@ checkDateSep (u_char *val, char *str)
 }
 	
 static int
-checkColours (u_char *val, char *str)
+checkColours (val, str)
+	u_char *val;
+	char *str;
 {
 	*val &= ~0x07;
 	if (!strncasecmp (str, "6", 1)) {

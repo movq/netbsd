@@ -1,4 +1,4 @@
-/*	$NetBSD: input.c,v 1.24 2009/08/12 04:48:03 dholland Exp $	*/
+/*	$NetBSD: input.c,v 1.22 2007/12/15 19:44:38 perry Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -46,39 +46,12 @@
 #if 0
 static char sccsid[] = "@(#)input.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: input.c,v 1.24 2009/08/12 04:48:03 dholland Exp $");
+__RCSID("$NetBSD: input.c,v 1.22 2007/12/15 19:44:38 perry Exp $");
 #endif
 #endif /* not lint */
 
 #include "include.h"
 #include "pathnames.h"
-
-static void rezero(void);
-static void noise(void);
-static int gettoken(void);
-static const char *setplane(int);
-static const char *turn(int);
-static const char *circle(int);
-static const char *left(int);
-static const char *right(int);
-static const char *Left(int);
-static const char *Right(int);
-static const char *delayb(int);
-static const char *beacon(int);
-static const char *ex_it(int);
-static const char *airport(int);
-static const char *climb(int);
-static const char *descend(int);
-static const char *setalt(int);
-static const char *setrelalt(int);
-static const char *benum(int);
-static const char *to_dir(int);
-static const char *rel_dir(int);
-static const char *mark(int);
-static const char *unmark(int);
-static const char *ignore(int);
-
-
 
 #define MAXRULES	6
 #define MAXDEPTH	15
@@ -120,7 +93,7 @@ typedef struct {
 
 #define NUMSTATES	NUMELS(st)
 
-static
+
 RULE	state0[] = {	{ ALPHATOKEN,	1,	"%c:",		setplane},
 			{ RETTOKEN,	-1,	"",		NULL	},
 			{ HELPTOKEN,	12,	" [a-z]<ret>",	NULL	}},
@@ -187,7 +160,7 @@ RULE	state0[] = {	{ ALPHATOKEN,	1,	"%c:",		setplane},
 
 #define DEF_STATE(s)	{ NUMELS(s),	(s)	}
 
-static STATE st[] = {
+STATE	st[] = {
 	DEF_STATE(state0), DEF_STATE(state1), DEF_STATE(state2),
 	DEF_STATE(state3), DEF_STATE(state4), DEF_STATE(state5),
 	DEF_STATE(state6), DEF_STATE(state7), DEF_STATE(state8),
@@ -195,13 +168,13 @@ static STATE st[] = {
 	DEF_STATE(state12)
 };
 
-static PLANE p;
-static STACK stack[MAXDEPTH];
-static int level;
-static int tval;
-static int dest_type, dest_no, dir;
+PLANE	p;
+STACK	stack[MAXDEPTH];
+int	level;
+int	tval;
+int	dest_type, dest_no, dir;
 
-static int
+int
 pop(void)
 {
 	if (level == 0)
@@ -216,7 +189,7 @@ pop(void)
 	return (0);
 }
 
-static void
+void
 rezero(void)
 {
 	iomove(0);
@@ -229,14 +202,13 @@ rezero(void)
 	(void)strcpy(T_STR, "");
 }
 
-static void
+void
 push(int ruleno, int ch)
 {
 	int	newstate, newpos;
 
 	assert(level < (MAXDEPTH - 1));
-	(void)snprintf(T_STR, sizeof(T_STR),
-		st[T_STATE].rule[ruleno].str, tval);
+	(void)sprintf(T_STR, st[T_STATE].rule[ruleno].str, tval);
 	T_RULE = ruleno;
 	T_CH = ch;
 	newstate = st[T_STATE].rule[ruleno].to_state;
@@ -313,14 +285,14 @@ getcommand(void)
 	return (0);
 }
 
-static void
+void
 noise(void)
 {
 	(void)putchar('\07');
 	(void)fflush(stdout);
 }
 
-static int
+int
 gettoken(void)
 {
 	while ((tval = getAChar()) == REDRAWTOKEN || tval == SHELLTOKEN)
@@ -384,7 +356,7 @@ gettoken(void)
 		return (tval);
 }
 
-static const char *
+const char *
 setplane(int c)
 {
 	PLANE	*pp;
@@ -398,7 +370,7 @@ setplane(int c)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 turn(int c __unused)
 {
 	if (p.altitude == 0)
@@ -407,7 +379,7 @@ turn(int c __unused)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 circle(int c __unused)
 {
 	if (p.altitude == 0)
@@ -417,7 +389,7 @@ circle(int c __unused)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 left(int c __unused)
 {
 	dir = D_LEFT;
@@ -428,7 +400,7 @@ left(int c __unused)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 right(int c __unused)
 {
 	dir = D_RIGHT;
@@ -439,7 +411,7 @@ right(int c __unused)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 Left(int c __unused)
 {
 	p.new_dir = p.dir - 2;
@@ -449,7 +421,7 @@ Left(int c __unused)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 Right(int c __unused)
 {
 	p.new_dir = p.dir + 2;
@@ -458,7 +430,7 @@ Right(int c __unused)
 	return (NULL);
 }
 
-static const char *
+const char *
 delayb(int c)
 {
 	int	xdiff, ydiff;
@@ -503,7 +475,7 @@ delayb(int c)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 beacon(int c __unused)
 {
 	dest_type = T_BEACON;
@@ -511,7 +483,7 @@ beacon(int c __unused)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 ex_it(int c __unused)
 {
 	dest_type = T_EXIT;
@@ -519,7 +491,7 @@ ex_it(int c __unused)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 airport(int c __unused)
 {
 	dest_type = T_AIRPORT;
@@ -527,7 +499,7 @@ airport(int c __unused)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 climb(int c __unused)
 {
 	dir = D_UP;
@@ -535,14 +507,14 @@ climb(int c __unused)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 descend(int c __unused)
 {
 	dir = D_DOWN;
 	return (NULL);
 }
 
-static const char *
+const char *
 setalt(int c)
 {
 	int newalt = c - '0';
@@ -555,7 +527,7 @@ setalt(int c)
 	return (NULL);
 }
 
-static const char *
+const char *
 setrelalt(int c)
 {
 	int newalt;
@@ -586,7 +558,7 @@ setrelalt(int c)
 	return (NULL);
 }
 
-static const char *
+const char *
 benum(int c)
 {
 	dest_no = c -= '0';
@@ -616,14 +588,14 @@ benum(int c)
 	return (NULL);
 }
 
-static const char *
+const char *
 to_dir(int c)
 {
 	p.new_dir = dir_no(c);
 	return (NULL);
 }
 
-static const char *
+const char *
 rel_dir(int c)
 {
 	int	angle;
@@ -647,7 +619,7 @@ rel_dir(int c)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 mark(int c __unused)
 {
 	if (p.altitude == 0)
@@ -659,7 +631,7 @@ mark(int c __unused)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 unmark(int c __unused)
 {
 	if (p.altitude == 0)
@@ -671,7 +643,7 @@ unmark(int c __unused)
 }
 
 /* ARGSUSED */
-static const char *
+const char *
 ignore(int c __unused)
 {
 	if (p.altitude == 0)

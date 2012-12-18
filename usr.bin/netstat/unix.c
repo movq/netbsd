@@ -1,4 +1,4 @@
-/*	$NetBSD: unix.c,v 1.34 2012/03/20 20:34:58 matt Exp $	*/
+/*	$NetBSD: unix.c,v 1.28 2008/02/27 16:36:54 ad Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)unix.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: unix.c,v 1.34 2012/03/20 20:34:58 matt Exp $");
+__RCSID("$NetBSD: unix.c,v 1.28 2008/02/27 16:36:54 ad Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,8 +53,9 @@ __RCSID("$NetBSD: unix.c,v 1.34 2012/03/20 20:34:58 matt Exp $");
 #include <sys/un.h>
 #include <sys/unpcb.h>
 #define _KERNEL
+struct uio;
+struct proc;
 #include <sys/file.h>
-#undef _KERNEL
 
 #include <netinet/in.h>
 
@@ -64,7 +65,6 @@ __RCSID("$NetBSD: unix.c,v 1.34 2012/03/20 20:34:58 matt Exp $");
 #include <kvm.h>
 #include <err.h>
 #include "netstat.h"
-#include "prog_ops.h"
 
 static	void unixdomainprhdr(void);
 static	void unixdomainpr0(u_long, u_long, u_long, u_long, u_long, u_long,
@@ -73,6 +73,7 @@ static	void unixdomainpr(struct socket *, void *);
 
 static struct	file *file, *fileNFILE;
 static int	ns_nfiles;
+extern	kvm_t *kvmd;
 
 static void
 unixdomainprhdr(void)
@@ -83,7 +84,7 @@ unixdomainprhdr(void)
 	       "Nextref");
 }
 
-static	const char * const socktype[] =
+static	char *socktype[] =
     { "#0", "stream", "dgram", "raw", "rdm", "seqpacket" };
 
 static void
@@ -102,7 +103,9 @@ unixdomainpr0(u_long so_pcb, u_long so_type, u_long rcvq, u_long sndq,
 }
 
 static void
-unixdomainpr(struct socket *so, void *soaddr)
+unixdomainpr(so, soaddr)
+	struct socket *so;
+	void *soaddr;
 {
 	struct unpcb unp, runp;
 	struct sockaddr_un sun, rsun;
@@ -138,7 +141,8 @@ unixdomainpr(struct socket *so, void *soaddr)
 }
 
 void
-unixpr(u_long off)
+unixpr(off)
+	u_long	off;
 {
 	struct file *fp;
 	struct socket sock, *so = &sock;
@@ -149,70 +153,66 @@ unixpr(u_long off)
 		struct kinfo_pcb *pcblist;
 		int mib[8];
 		size_t namelen = 0, size = 0, i;
-		const char *mibnames[] = {
-			"net.local.stream.pcblist",
-			"net.local.dgram.pcblist",
-			"net.local.seqpacket.pcblist",
-			NULL,
-		};
-		const char **mibname;
+		char *mibname = "net.local.stream.pcblist";
 		static int first = 1;
+		int done = 0;
 
-		for (mibname = mibnames; *mibname; mibname++) {
-			memset(mib, 0, sizeof(mib));
+ again:
+		memset(mib, 0, sizeof(mib));
 
-			if (sysctlnametomib(*mibname, mib,
-					    &namelen) == -1)
-				err(1, "sysctlnametomib: %s", *mibname);
+		if (sysctlnametomib(mibname, mib,
+				    &namelen) == -1)
+			err(1, "sysctlnametomib: %s", mibname);
 
-			if (prog_sysctl(mib, sizeof(mib) / sizeof(*mib),
-			    NULL, &size, NULL, 0) == -1)
-				err(1, "sysctl (query)");
+		if (sysctl(mib, sizeof(mib) / sizeof(*mib), NULL, &size,
+			   NULL, 0) == -1)
+			err(1, "sysctl (query)");
 
-			if ((pcblist = malloc(size)) == NULL)
-				err(1, "malloc");
-			memset(pcblist, 0, size);
+		if ((pcblist = malloc(size)) == NULL)
+			err(1, "malloc");
+		memset(pcblist, 0, size);
 
-			mib[6] = sizeof(*pcblist);
-			mib[7] = size / sizeof(*pcblist);
+		mib[6] = sizeof(*pcblist);
+		mib[7] = size / sizeof(*pcblist);
 
-			if (prog_sysctl(mib, sizeof(mib) / sizeof(*mib), 
-					pcblist, &size, NULL, 0) == -1)
-				err(1, "sysctl (copy)");
+		if (sysctl(mib, sizeof(mib) / sizeof(*mib), pcblist,
+			   &size, NULL, 0) == -1)
+			err(1, "sysctl (copy)");
 
-			for (i = 0; i < size / sizeof(*pcblist); i++) {
-				struct kinfo_pcb *ki = &pcblist[i];
-				struct sockaddr_un *sun;
-				int remote = 0;
+		for (i = 0; i < size / sizeof(*pcblist); i++) {
+			struct kinfo_pcb *ki = &pcblist[i];
+			struct sockaddr_un *sun;
+			int remote = 0;
 
-				if (first) {
-					unixdomainprhdr();
-					first = 0;
-				}
-
-				sun = (struct sockaddr_un *)&ki->ki_dst;
-				if (sun->sun_path[0] != '\0') {
-					remote = 1;
-				} else {
-					sun = (struct sockaddr_un *)&ki->ki_src;
-				}
-
-				unixdomainpr0(ki->ki_pcbaddr, ki->ki_type, 
-					      ki->ki_rcvq, ki->ki_sndq,
-					      ki->ki_vnode, ki->ki_conn, 
-					      ki->ki_refs, ki->ki_nextref, 
-					      ki->ki_sockaddr, sun, remote);
+			if (first) {
+				unixdomainprhdr();
+				first = 0;
 			}
 
-			free(pcblist);
+			sun = (struct sockaddr_un *)&ki->ki_dst;
+			if (sun->sun_path[0] != '\0') {
+				remote = 1;
+			} else {
+				sun = (struct sockaddr_un *)&ki->ki_src;
+			}
+
+			unixdomainpr0(ki->ki_pcbaddr, ki->ki_type, 
+				      ki->ki_rcvq, ki->ki_sndq,
+				      ki->ki_vnode, ki->ki_conn, ki->ki_refs,
+				      ki->ki_nextref, ki->ki_sockaddr, sun, remote);
 		}
 
+		free(pcblist);
+
+		if (!done && mibname) {
+			mibname = "net.local.dgram.pcblist";
+			done = 1;
+			goto again;
+		}
 	} else {
-		filebuf = (char *)kvm_getfiles(get_kvmd(), KERN_FILE, 
-					       0, &ns_nfiles);
+		filebuf = (char *)kvm_getfiles(kvmd, KERN_FILE, 0, &ns_nfiles);
 		if (filebuf == 0) {
-			printf("file table read error: %s", 
-			       kvm_geterr(get_kvmd()));
+			printf("file table read error: %s", kvm_geterr(kvmd));
 			return;
 		}
 		file = (struct file *)(filebuf + sizeof(fp));

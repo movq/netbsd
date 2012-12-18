@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660.c,v 1.29 2012/07/23 00:49:20 mhitch Exp $	*/
+/*	$NetBSD: cd9660.c,v 1.23 2007/11/24 13:20:54 isaki Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -129,7 +129,7 @@ dirmatch(const char *path, struct iso_directory_record *dp)
 	return 1;
 }
 
-__compactcall int
+int
 cd9660_open(const char *path, struct open_file *f)
 {
 	struct file *fp = 0;
@@ -196,14 +196,13 @@ cd9660_open(const char *path, struct open_file *f)
 	bno = isonum_732(pp->block) + isonum_711(pp->extlen);
 
 	rc = ENOENT;
+	/*
+	 * Remove extra separators
+	 */
+	while (*path == '/')
+		path++;
 
 	while (*path) {
-		/*
-		 * Remove extra separators
-		 */
-		while (*path == '/')
-			path++;
-
 		if ((char *)pp >= (char *)buf + psize)
 			break;
 		if (isonum_722(pp->parent) != parent)
@@ -278,7 +277,6 @@ cd9660_open(const char *path, struct open_file *f)
 	fp->bno = isonum_733(dp->extent);
 	fp->size = isonum_733(dp->size);
 	dealloc(buf, buf_size);
-	fsmod = "cd9660";
 
 	return 0;
 
@@ -291,7 +289,7 @@ out:
 }
 
 #if !defined(LIBSA_NO_FS_CLOSE)
-__compactcall int
+int
 cd9660_close(struct open_file *f)
 {
 	struct file *fp = (struct file *)f->f_fsdata;
@@ -303,7 +301,7 @@ cd9660_close(struct open_file *f)
 }
 #endif /* !defined(LIBSA_NO_FS_CLOSE) */
 
-__compactcall int
+int
 cd9660_read(struct open_file *f, void *start, size_t size, size_t *resid)
 {
 	struct file *fp = (struct file *)f->f_fsdata;
@@ -318,7 +316,6 @@ cd9660_read(struct open_file *f, void *start, size_t size, size_t *resid)
 			break;
 		bno = fp->off / ISO_DEFAULT_BLOCK_SIZE + fp->bno;
 		if (fp->off & (ISO_DEFAULT_BLOCK_SIZE - 1)
-		    || (fp->off + ISO_DEFAULT_BLOCK_SIZE) > fp->size
 		    || size < ISO_DEFAULT_BLOCK_SIZE)
 			dp = buf;
 		else
@@ -337,8 +334,6 @@ cd9660_read(struct open_file *f, void *start, size_t size, size_t *resid)
 			if (nread > off + size)
 				nread = off + size;
 			nread -= off;
-			if (nread > fp->size - fp->off)
-				nread = fp->size - fp->off;
 			memcpy(start, buf + off, nread);
 			start = (char *)start + nread;
 			fp->off += nread;
@@ -349,15 +344,13 @@ cd9660_read(struct open_file *f, void *start, size_t size, size_t *resid)
 			size -= ISO_DEFAULT_BLOCK_SIZE;
 		}
 	}
-	if(fp->off > fp->size)
-		size += fp->off - fp->size;
 	if (resid)
 		*resid = size;
 	return rc;
 }
 
 #if !defined(LIBSA_NO_FS_WRITE)
-__compactcall int
+int
 cd9660_write(struct open_file *f, void *start, size_t size, size_t *resid)
 {
 
@@ -366,7 +359,7 @@ cd9660_write(struct open_file *f, void *start, size_t size, size_t *resid)
 #endif /* !defined(LIBSA_NO_FS_WRITE) */
 
 #if !defined(LIBSA_NO_FS_SEEK)
-__compactcall off_t
+off_t
 cd9660_seek(struct open_file *f, off_t offset, int where)
 {
 	struct file *fp = (struct file *)f->f_fsdata;
@@ -388,7 +381,7 @@ cd9660_seek(struct open_file *f, off_t offset, int where)
 }
 #endif /* !defined(LIBSA_NO_FS_SEEK) */
 
-__compactcall int
+int
 cd9660_stat(struct open_file *f, struct stat *sb)
 {
 	struct file *fp = (struct file *)f->f_fsdata;
@@ -399,12 +392,3 @@ cd9660_stat(struct open_file *f, struct stat *sb)
 	sb->st_size = fp->size;
 	return 0;
 }
-
-#if defined(LIBSA_ENABLE_LS_OP)
-__compactcall void
-cd9660_ls(struct open_file *f, const char *pattern)
-{
-	printf("Currently ls command is unsupported by cd9660\n");
-	return;
-}
-#endif

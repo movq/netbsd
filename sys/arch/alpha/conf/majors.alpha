@@ -1,4 +1,4 @@
-#	$NetBSD: majors.alpha,v 1.27 2011/06/30 20:09:18 wiz Exp $
+#	$NetBSD: majors.alpha,v 1.22 2007/12/31 15:31:45 ad Exp $
 #
 # Device majors for alpha
 #
@@ -19,6 +19,7 @@ device-major	st		char 12  block 2	st
 device-major	cd		char 13  block 3	cd
 device-major	ch		char 14			ch
 device-major	zstty		char 15			zstty
+device-major	lkm		char 16			lkm
 
 device-major	prom		char 23
 device-major	audio		char 24			audio
@@ -37,7 +38,7 @@ device-major	wd		char 36  block 4	wd
 device-major	se		char 37			se
 device-major	satlink		char 38			satlink
 device-major	rnd		char 39			rnd
-#device-major	obsolete	char 40			obsolete
+device-major	a12dc		char 40			a12dc
 device-major	spkr		char 41			spkr
 device-major	scsibus		char 42			scsibus
 device-major	raid		char 43  block 16	raid
@@ -77,6 +78,6 @@ device-major	nsmb		char 77			nsmb
 device-major	joy		char 78			joy
 device-major	twe		char 79			twe
 
-# Majors up to 143 are reserved for machine-dependent drivers.
+# Majors up to 143 are reserved for machine-dependant drivers.
 # New machine-independent driver majors are assigned in 
 # sys/conf/majors.

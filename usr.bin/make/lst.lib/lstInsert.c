@@ -1,4 +1,4 @@
-/*	$NetBSD: lstInsert.c,v 1.14 2009/01/23 21:26:30 dsl Exp $	*/
+/*	$NetBSD: lstInsert.c,v 1.12 2006/10/27 21:37:25 dsl Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -33,14 +33,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: lstInsert.c,v 1.14 2009/01/23 21:26:30 dsl Exp $";
+static char rcsid[] = "$NetBSD: lstInsert.c,v 1.12 2006/10/27 21:37:25 dsl Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)lstInsert.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lstInsert.c,v 1.14 2009/01/23 21:26:30 dsl Exp $");
+__RCSID("$NetBSD: lstInsert.c,v 1.12 2006/10/27 21:37:25 dsl Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -73,7 +73,7 @@ __RCSID("$NetBSD: lstInsert.c,v 1.14 2009/01/23 21:26:30 dsl Exp $");
  *-----------------------------------------------------------------------
  */
 ReturnStatus
-Lst_InsertBefore(Lst l, LstNode ln, void *d)
+Lst_InsertBefore(Lst l, LstNode ln, ClientData d)
 {
     ListNode	nLNode;	/* new lnode for d */
     ListNode	lNode = ln;
@@ -83,7 +83,7 @@ Lst_InsertBefore(Lst l, LstNode ln, void *d)
     /*
      * check validity of arguments
      */
-    if (LstValid (l) && (LstIsEmpty (l) && ln == NULL))
+    if (LstValid (l) && (LstIsEmpty (l) && ln == NILLNODE))
 	goto ok;
 
     if (!LstValid (l) || LstIsEmpty (l) || !LstNodeValid (ln, l)) {
@@ -96,18 +96,18 @@ Lst_InsertBefore(Lst l, LstNode ln, void *d)
     nLNode->datum = d;
     nLNode->useCount = nLNode->flags = 0;
 
-    if (ln == NULL) {
+    if (ln == NILLNODE) {
 	if (list->isCirc) {
 	    nLNode->prevPtr = nLNode->nextPtr = nLNode;
 	} else {
-	    nLNode->prevPtr = nLNode->nextPtr = NULL;
+	    nLNode->prevPtr = nLNode->nextPtr = NilListNode;
 	}
 	list->firstPtr = list->lastPtr = nLNode;
     } else {
 	nLNode->prevPtr = lNode->prevPtr;
 	nLNode->nextPtr = lNode;
 
-	if (nLNode->prevPtr != NULL) {
+	if (nLNode->prevPtr != NilListNode) {
 	    nLNode->prevPtr->nextPtr = nLNode;
 	}
 	lNode->prevPtr = nLNode;

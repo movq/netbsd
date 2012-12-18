@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.20 2012/10/27 17:18:11 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.14 2008/06/11 23:31:35 rafal Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.20 2012/10/27 17:18:11 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.14 2008/06/11 23:31:35 rafal Exp $");
 
 #include "opt_md.h"
 
@@ -53,47 +53,44 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.20 2012/10/27 17:18:11 chs Exp $");
 #include <sys/disklabel.h>
 #include <sys/device.h>
 #include <sys/conf.h>
-#include <sys/intr.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
-
-#include <uvm/uvm_extern.h>
-
 #include <arm/arm32/machdep.h>
-
 #include <machine/bootconfig.h>
+#include <machine/intr.h>
 #include <machine/irqhandler.h>
 
 #include "isa.h"
 
 #ifdef SHARK
 #include <shark/shark/sequoia.h>
-extern void	ofrootfound(void);
-extern void	ofw_device_register(device_t, void *);
-extern void	startrtclock(void);
+extern void	ofrootfound __P((void));
+extern void	ofw_device_register __P((struct device *, void *aux));
+extern void	startrtclock __P((void));
 #endif
 
 #if defined(OFWGENCFG) || defined(SHARK)
 /* Temporary for SHARK! */
-extern void ofw_device_register(device_t, void *);
+extern void ofw_device_register(struct device *dev, void *aux);
 #include <machine/ofw.h>
 #endif
 
 extern dev_t dumpdev;
 
-void dumpconf(void);
-void isa_intr_init(void);
+void dumpconf __P((void));
+void isa_intr_init __P((void));
 
 #ifndef MEMORY_DISK_IS_ROOT
-static void get_device(char *name);
-static void set_root_device(void);
+static void get_device __P((char *name));
+static void set_root_device __P((void));
 #endif
 
 #ifndef MEMORY_DISK_IS_ROOT
 /* Decode a device name to a major and minor number */
 
 static void
-get_device(char *name)
+get_device(name)
+	char *name;
 {
 	int unit, part;
 	char devname[16], *cp;
@@ -128,7 +125,7 @@ get_device(char *name)
 /* Set the rootdev variable from the root specifier in the boot args */
 
 static void
-set_root_device(void)
+set_root_device()
 {
 	char *ptr;
             
@@ -144,15 +141,15 @@ set_root_device(void)
  * Set up the root device from the boot args
  */
 void
-cpu_rootconf(void)
+cpu_rootconf()
 {
 #ifndef MEMORY_DISK_IS_ROOT
 	set_root_device();
 
 	printf("boot device: %s\n",
-	    booted_device != NULL ? device_xname(booted_device) : "<unknown>");
+	    booted_device != NULL ? booted_device->dv_xname : "<unknown>");
 #endif
-	rootconf();
+	setroot(booted_device, booted_partition);
 }
 
 
@@ -164,7 +161,7 @@ cpu_rootconf(void)
  */
 
 void
-cpu_configure(void)
+cpu_configure()
 {
 	/*
 	 * Configure all the roots.
@@ -203,7 +200,7 @@ cpu_configure(void)
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 #if defined(OFWGENCFG) || defined(SHARK)
 	/* Temporary for SHARK! */

@@ -1,4 +1,4 @@
-/*	$NetBSD: vprintf.c,v 1.12 2012/03/15 18:22:31 christos Exp $	*/
+/*	$NetBSD: vprintf.c,v 1.10 2003/08/07 16:43:34 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,20 +37,21 @@
 #if 0
 static char sccsid[] = "@(#)vprintf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: vprintf.c,v 1.12 2012/03/15 18:22:31 christos Exp $");
+__RCSID("$NetBSD: vprintf.c,v 1.10 2003/08/07 16:43:34 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
 #include <errno.h>
-#include <stdarg.h>
 #include <stdio.h>
 
 int
-vprintf(const char *fmt, va_list ap)
+vprintf(fmt, ap)
+	char const *fmt;
+	_BSD_VA_LIST_ ap;
 {
 
 	_DIAGASSERT(fmt != NULL);
 
-	return vfprintf(stdout, fmt, ap);
+	return (vfprintf(stdout, fmt, ap));
 }

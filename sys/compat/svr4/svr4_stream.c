@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_stream.c,v 1.79 2011/06/26 16:42:41 christos Exp $	 */
+/*	$NetBSD: svr4_stream.c,v 1.77 2008/04/28 20:23:45 martin Exp $	 */
 
 /*-
  * Copyright (c) 1994, 2008 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_stream.c,v 1.79 2011/06/26 16:42:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_stream.c,v 1.77 2008/04/28 20:23:45 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -299,22 +299,16 @@ show_msg(const char *str, int fd, struct svr4_strbuf *ctl, struct svr4_strbuf *d
 static int
 clean_pipe(struct lwp *l, const char *path)
 {
-	struct pathbuf *pb;
 	struct nameidata nd;
 	struct vattr va;
 	int error;
 
-	pb = pathbuf_create(path);
-	if (pb == NULL) {
-		return ENOMEM;
-	}
+	NDINIT(&nd, DELETE, NOFOLLOW | LOCKPARENT | LOCKLEAF | TRYEMULROOT,
+	    UIO_SYSSPACE, path);
 
-	NDINIT(&nd, DELETE, NOFOLLOW | LOCKPARENT | LOCKLEAF | TRYEMULROOT, pb);
 	error = namei(&nd);
-	if (error != 0) {
-		pathbuf_destroy(pb);
+	if (error != 0)
 		return error;
-	}
 
 	/*
 	 * Make sure we are dealing with a mode 0 named pipe.
@@ -327,9 +321,7 @@ clean_pipe(struct lwp *l, const char *path)
 	if ((va.va_mode & ALLPERMS) != 0)
 		goto bad;
 
-	error = VOP_REMOVE(nd.ni_dvp, nd.ni_vp, &nd.ni_cnd);
-	pathbuf_destroy(pb);
-	return error;
+	return VOP_REMOVE(nd.ni_dvp, nd.ni_vp, &nd.ni_cnd);
 
     bad:
 	if (nd.ni_dvp == nd.ni_vp)
@@ -337,7 +329,6 @@ clean_pipe(struct lwp *l, const char *path)
 	else
 		vput(nd.ni_dvp);
 	vput(nd.ni_vp);
-	pathbuf_destroy(pb);
 	return error;
 }
 
@@ -1682,8 +1673,7 @@ svr4_sys_getmsg(struct lwp *l, const struct svr4_sys_getmsg_args *uap, register_
 		 * We are after a listen, so we try to accept...
 		 */
 
-		error = do_sys_accept(l, SCARG(uap, fd), &name, retval,
-		    NULL, 0, FNONBLOCK);
+		error = do_sys_accept(l, SCARG(uap, fd), &name, retval);
 		if (error != 0) {
 			DPRINTF(("getmsg: accept failed %d\n", error));
 			goto out;

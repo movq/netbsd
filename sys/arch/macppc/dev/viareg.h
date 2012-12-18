@@ -1,4 +1,4 @@
-/*	$NetBSD: viareg.h,v 1.9 2012/02/01 02:02:07 matt Exp $	*/
+/*	$NetBSD: viareg.h,v 1.7 2007/10/17 19:55:20 garbled Exp $	*/
 
 /*-
  * Copyright (C) 1993	Allen K. Briggs, Chris P. Caputo,
@@ -201,41 +201,46 @@ static inline void write_via_reg(int, int, int);
 static inline int read_via_reg(int, int);
 
 static inline void
-via_reg_and(int ign, int reg, int val) 
+via_reg_and(ign, reg, val) 
+	int ign, reg, val;
 {
-	volatile uint8_t *addr = Via1Base + reg;
+	volatile unsigned char *addr = Via1Base + reg;
 
 	out8(addr, in8(addr) & val);
 }
 
 static inline void
-via_reg_or(int ign, int reg, int val) 
+via_reg_or(ign, reg, val) 
+	int ign, reg, val;
 {
-	volatile uint8_t *addr = Via1Base + reg;
+	volatile unsigned char *addr = Via1Base + reg;
 
 	out8(addr, in8(addr) | val);
 }
 
 static inline void
-via_reg_xor(int ign, int reg, int val) 
+via_reg_xor(ign, reg, val) 
+	int ign, reg, val;
 {
-	volatile uint8_t *addr = Via1Base + reg;
+	volatile unsigned char *addr = Via1Base + reg;
 
 	out8(addr, in8(addr) ^ val);
 }
 
 static inline int
-read_via_reg(int ign, int reg)
+read_via_reg(ign, reg)
+	int ign, reg;
 {
-	volatile uint8_t *addr = Via1Base + reg;
+	volatile unsigned char *addr = Via1Base + reg;
 
 	return in8(addr);
 }
 
 static inline void
-write_via_reg(int ign, int reg, int val)
+write_via_reg(ign, reg, val)
+	int ign, reg, val;
 {
-	volatile uint8_t *addr = Via1Base + reg;
+	volatile unsigned char *addr = Via1Base + reg;
 
 	out8(addr, val);
 }
@@ -244,14 +249,14 @@ write_via_reg(int ign, int reg, int val)
 
 #define vDirA_ADBState	0x30
 
-void	via_init(void);
-int	rbv_vidstatus(void);
-void	via_shutdown(void);
-void	via_set_modem(int);
-int	add_nubus_intr(int, void (*)(void *, int), void *);
-void	enable_nubus_intr(void);
-void	via1_register_irq(int, void (*)(void *), void *);
-void	via2_register_irq(int, void (*)(void *), void *);
+void	via_init __P((void));
+int	rbv_vidstatus __P((void));
+void	via_shutdown __P((void));
+void	via_set_modem __P((int));
+int	add_nubus_intr   __P((int, void (*) __P((void *, int)), void *));
+void	enable_nubus_intr __P((void));
+void	via1_register_irq __P((int, void (*)(void *), void *));
+void	via2_register_irq __P((int, void (*)(void *), void *));
 
-extern void	(*via1itab[7])(void *);
-extern void	(*via2itab[7])(void *);
+extern void	(*via1itab[7]) __P((void *));
+extern void	(*via2itab[7]) __P((void *));

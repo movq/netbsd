@@ -14,7 +14,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ar5315_gpio.c,v 1.2 2011/03/07 11:25:44 cegger Exp $
+ * $Id: ar5315_gpio.c,v 1.1.1.1.10.2 2009/08/07 06:43:45 snj Exp $
  */
 #include "opt_ah.h"
 
@@ -35,7 +35,7 @@
  * Configure GPIO Output lines
  */
 HAL_BOOL
-ar5315GpioCfgOutput(struct ath_hal *ah, uint32_t gpio, HAL_GPIO_MUX_TYPE type)
+ar5315GpioCfgOutput(struct ath_hal *ah, uint32_t gpio)
 {
 	uint32_t gpioOffset = (AR5315_GPIO_BASE - ((uint32_t) ah->ah_sh));
 

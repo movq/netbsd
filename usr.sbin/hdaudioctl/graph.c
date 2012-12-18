@@ -1,4 +1,4 @@
-/* $NetBSD: graph.c,v 1.2 2010/08/10 13:52:13 joerg Exp $ */
+/* $NetBSD: graph.c,v 1.1.2.2 2009/10/18 16:50:13 bouyer Exp $ */
 
 /*
  * Copyright (c) 2009 Precedence Technologies Ltd <support@precedence.co.uk>
@@ -112,20 +112,18 @@ hdaudioctl_graph(int fd, int argc, char *argv[])
 
 		switch (type) {
 		case COP_AWCAP_TYPE_AUDIO_OUTPUT:
-			printf(" %s [label=\"%s\\naudio output\",shape=box,style=filled,fillcolor=\""
-			    "#88ff88\"];\n", buf, buf);
+			printf(" %s [shape=box,style=filled,fillcolor=\""
+			    "#88ff88\"];\n", buf);
 			break;
 		case COP_AWCAP_TYPE_AUDIO_INPUT:
-			printf(" %s [label=\"%s\\naudio input\",shape=box,style=filled,fillcolor=\""
-			    "#ff8888\"];\n", buf, buf);
+			printf(" %s [shape=box,style=filled,fillcolor=\""
+			    "#ff8888\"];\n", buf);
 			break;
 		case COP_AWCAP_TYPE_AUDIO_MIXER:
-			printf(" %s [label=\"%s\\naudio mixer\","
-			    "shape=invhouse];\n", buf, buf);
+			printf(" %s [shape=invhouse];\n", buf);
 			break;
 		case COP_AWCAP_TYPE_AUDIO_SELECTOR:
-			printf(" %s [label=\"%s\\naudio selector\","
-			    "shape=invtrapezium];\n", buf, buf);
+			printf(" %s [shape=invtrapezium];\n", buf);
 			break;
 		case COP_AWCAP_TYPE_PIN_COMPLEX:
 			printf(" %s [label=\"%s\\ndevice=%s\",style=filled",
@@ -133,30 +131,14 @@ hdaudioctl_graph(int fd, int argc, char *argv[])
 			    pin_devices[COP_CFG_DEFAULT_DEVICE(config)]);
 			if (cap & COP_PINCAP_OUTPUT_CAPABLE &&
 			    cap & COP_PINCAP_INPUT_CAPABLE)
-				puts(",shape=doublecircle,fillcolor=\""
-				    "#ffff88\"];");
+				printf(",shape=doublecircle,fillcolor=\""
+				    "#ffff88\"];\n");
 			else if (cap & COP_PINCAP_OUTPUT_CAPABLE)
-				puts(",shape=circle,fillcolor=\"#88ff88\"];");
+				printf(",shape=circle,fillcolor=\"#88ff88\"];\n");
 			else if (cap & COP_PINCAP_INPUT_CAPABLE)
-				puts(",shape=circle,fillcolor=\"#ff8888\"];");
+				printf(",shape=circle,fillcolor=\"#ff8888\"];\n");
 			else
-				puts(",shape=circle,fillcolor=\"#888888\"];");
-			break;
-		case COP_AWCAP_TYPE_POWER_WIDGET:
-			printf(" %s [label=\"%s\\npower widget\","
-			    "shape=box];\n", buf, buf);
-			break;
-		case COP_AWCAP_TYPE_VOLUME_KNOB:
-			printf(" %s [label=\"%s\\nvolume knob\","
-			    "shape=box];\n", buf, buf);
-			break;
-		case COP_AWCAP_TYPE_BEEP_GENERATOR:
-			printf(" %s [label=\"%s\\nbeep generator\","
-			    "shape=box];\n", buf, buf);
-			break;
-		case COP_AWCAP_TYPE_VENDOR_DEFINED:
-			printf(" %s [label=\"%s\\nvendor defined\","
-			    "shape=box];\n", buf, buf);
+				printf(",shape=circle,fillcolor=\"#888888\"];\n");
 			break;
 		}
 		connlist = prop_dictionary_get(response, "connlist");

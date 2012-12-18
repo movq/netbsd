@@ -1,4 +1,4 @@
-/*	$NetBSD: pstat.c,v 1.120 2012/11/10 11:01:52 apb Exp $	*/
+/*	$NetBSD: pstat.c,v 1.110.4.3 2009/09/26 19:02:27 snj Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)pstat.c	8.16 (Berkeley) 5/9/95";
 #else
-__RCSID("$NetBSD: pstat.c,v 1.120 2012/11/10 11:01:52 apb Exp $");
+__RCSID("$NetBSD: pstat.c,v 1.110.4.3 2009/09/26 19:02:27 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -73,7 +73,6 @@ __RCSID("$NetBSD: pstat.c,v 1.120 2012/11/10 11:01:52 apb Exp $");
 #include <sys/sysctl.h>
 
 #include <err.h>
-#include <errno.h>
 #include <kvm.h>
 #include <limits.h>
 #include <nlist.h>
@@ -86,19 +85,19 @@ __RCSID("$NetBSD: pstat.c,v 1.120 2012/11/10 11:01:52 apb Exp $");
 
 struct nlist nl[] = {
 #define	V_MOUNTLIST	0
-	{ "_mountlist", 0, 0, 0, 0 },	/* address of head of mount list. */
+	{ "_mountlist" },	/* address of head of mount list. */
 #define	V_NUMV		1
-	{ "_numvnodes", 0, 0, 0, 0 },
+	{ "_numvnodes" },
 #define	FNL_NFILE	2
-	{ "_nfiles", 0, 0, 0, 0 },
+	{ "_nfiles" },
 #define FNL_MAXFILE	3
-	{ "_maxfiles", 0, 0, 0, 0 },
+	{ "_maxfiles" },
 #define TTY_NTTY	4
-	{ "_tty_count", 0, 0, 0, 0 },
+	{ "_tty_count" },
 #define TTY_TTYLIST	5
-	{ "_ttylist", 0, 0, 0, 0 },
+	{ "_ttylist" },
 #define NLMANDATORY TTY_TTYLIST	/* names up to here are mandatory */
-	{ "", 0, 0, 0, 0 }
+	{ "" }
 };
 
 int	usenumflag;
@@ -177,7 +176,7 @@ void	ttyprt(struct tty *);
 void	ufs_header(void);
 int	ufs_print(struct vnode *, int);
 int	ext2fs_print(struct vnode *, int);
-__dead void	usage(void);
+void	usage(void);
 void	vnode_header(void);
 int	vnode_print(struct vnode *, struct vnode *);
 void	vnodemode(void);
@@ -287,14 +286,6 @@ main(int argc, char *argv[])
 						 when pointer is printed
 						 in hexadecimal. */
 
-static void
-devprintf(char *buf, size_t buflen, dev_t dev)
-{
-	(void)snprintf(buf, buflen, "%llu,%llu",
-	    (unsigned long long)major(dev),
-	    (unsigned long long)minor(dev));
-}
-
 void
 vnodemode(void)
 {
@@ -402,8 +393,7 @@ vnode_header(void)
 int
 vnode_print(struct vnode *avnode, struct vnode *vp)
 {
-	const char *type;
-	char flags[sizeof(vnode_flags) / sizeof(vnode_flags[0])];
+	char *type, flags[sizeof(vnode_flags) / sizeof(vnode_flags[0])];
 	int ovflw;
 
 	/*
@@ -454,6 +444,7 @@ const struct flagbit_desc ufs_flags[] = {
 	{ IN_UPDATE,	'U' },
 	{ IN_MODIFIED,	'M' },
 	{ IN_ACCESSED,	'a' },
+	{ IN_RENAME,	'R' },
 	{ IN_SHLOCK,	'S' },
 	{ IN_EXLOCK,	'E' },
 	{ IN_CLEANING,	'c' },
@@ -491,7 +482,7 @@ ufs_print(struct vnode *vp, int ovflw)
 	if (ump.um_fstype == UFS1) {
 		KGETRET(ip->i_din.ffs1_din, &dip, sizeof (struct ufs1_dinode),
 		    "inode's dinode");
-		rdev = (uint32_t)dip.dp1.di_rdev;
+		rdev = dip.dp1.di_rdev;
 	} else {
 		KGETRET(ip->i_din.ffs2_din, &dip, sizeof (struct ufs2_dinode),
 		    "inode's UFS2 dinode");
@@ -509,7 +500,8 @@ ufs_print(struct vnode *vp, int ovflw)
 	if (S_ISCHR(ip->i_mode) || S_ISBLK(ip->i_mode)) {
 		if (usenumflag ||
 		    (name = devname(rdev, type)) == NULL) {
-			devprintf(dev, sizeof(dev), rdev);
+			snprintf(dev, sizeof(dev), "%d,%d",
+			    major(rdev), minor(rdev));
 			name = dev;
 		}
 		PRWORD(ovflw, " %*s", 8, 1, name);
@@ -543,7 +535,8 @@ ext2fs_print(struct vnode *vp, int ovflw)
 	if (S_ISCHR(dip.e2di_mode) || S_ISBLK(dip.e2di_mode)) {
 		if (usenumflag ||
 		    (name = devname(dip.e2di_rdev, type)) == NULL) {
-			devprintf(dev, sizeof(dev), dip.e2di_rdev);
+			snprintf(dev, sizeof(dev), "%d,%d",
+			    major(dip.e2di_rdev), minor(dip.e2di_rdev));
 			name = dev;
 		}
 		PRWORD(ovflw, " %*s", 8, 1, name);
@@ -595,7 +588,8 @@ nfs_print(struct vnode *vp, int ovflw)
 		type = S_IFBLK;
 	device:
 		if (usenumflag || (name = devname(va.va_rdev, type)) == NULL) {
-			devprintf(dev, sizeof(dev), va.va_rdev);
+			(void)snprintf(dev, sizeof(dev), "%d,%d",
+			    major(va.va_rdev), minor(va.va_rdev));
 			name = dev;
 		}
 		PRWORD(ovflw, " %*s", 8, 1, name);
@@ -661,7 +655,7 @@ mount_print(struct mount *mp)
 	(void)printf("*** MOUNT %s %s on %s", ST.f_fstypename,
 	    ST.f_mntfromname, ST.f_mntonname);
 	if ((flags = mp->mnt_flag) != 0) {
-		size_t i;
+		int i;
 		const char *sep = " (";
 
 		for (i = 0; i < sizeof mnt_flags / sizeof mnt_flags[0]; i++) {
@@ -682,8 +676,7 @@ char *
 loadvnodes(int *avnodes)
 {
 	int mib[2];
-	int status;
-	size_t copysize, oldsize;
+	size_t copysize;
 	char *vnodebase;
 
 	if (totalflag) {
@@ -698,34 +691,12 @@ loadvnodes(int *avnodes)
 	}
 	mib[0] = CTL_KERN;
 	mib[1] = KERN_VNODE;
-	/*
-	 * First sysctl call gets the necessary buffer size; second
-	 * sysctl call gets the data.  We allow for some growth in the
-	 * data size between the two sysctl calls (increases of a few
-	 * thousand vnodes in between the two calls have been observed).
-	 * We ignore ENOMEM from the second sysctl call, which can
-	 * happen if the kernel's data grew by even more than we allowed
-	 * for.
-	 */
 	if (sysctl(mib, 2, NULL, &copysize, NULL, 0) == -1)
 		err(1, "sysctl: KERN_VNODE");
-	oldsize = copysize;
-	copysize += 100 * sizeof(struct vnode) + copysize / 20;
 	if ((vnodebase = malloc(copysize)) == NULL)
 		err(1, "malloc");
-	status = sysctl(mib, 2, vnodebase, &copysize, NULL, 0);
-	if (status == -1 && errno != ENOMEM)
+	if (sysctl(mib, 2, vnodebase, &copysize, NULL, 0) == -1)
 		err(1, "sysctl: KERN_VNODE");
-#if 0 /* for debugging the amount of growth allowed for */
-	if (copysize != oldsize) {
-		warnx("count changed from %ld to %ld (%+ld)%s",
-		    (long)(oldsize / sizeof(struct vnode)),
-		    (long)(copysize / sizeof(struct vnode)),
-		    (long)(copysize / sizeof(struct vnode)) -
-			(long)(oldsize / sizeof(struct vnode)),
-		    (status == 0 ? "" : ", and errno = ENOMEM"));
-	}
-#endif
 	if (copysize % (VPTRSZ + VNODESZ))
 		errx(1, "vnode size mismatch");
 	*avnodes = copysize / (VPTRSZ + VNODESZ);
@@ -739,7 +710,7 @@ loadvnodes(int *avnodes)
 char *
 kinfo_vnodes(int *avnodes)
 {
-	struct mntlist mlist;
+	struct mntlist mountlist;
 	struct mount *mp, mount;
 	struct vnode *vp, vnode;
 	char *beg, *bp, *ep;
@@ -750,8 +721,8 @@ kinfo_vnodes(int *avnodes)
 		err(1, "malloc");
 	beg = bp;
 	ep = bp + (numvnodes + 20) * (VPTRSZ + VNODESZ);
-	KGET(V_MOUNTLIST, mlist);
-	for (mp = mlist.cqh_first;;
+	KGET(V_MOUNTLIST, mountlist);
+	for (mp = mountlist.cqh_first;;
 	    mp = mount.mnt_list.cqe_next) {
 		KGET2(mp, &mount, sizeof(mount), "mount entry");
 		TAILQ_FOREACH(vp, &mount.mnt_vnodelist, v_mntvnodes) {
@@ -764,7 +735,7 @@ kinfo_vnodes(int *avnodes)
 			memmove(bp, &vnode, VNODESZ);
 			bp += VNODESZ;
 		}
-		if (mp == mlist.cqh_last)
+		if (mp == mountlist.cqh_last)
 			break;
 	}
 	*avnodes = (bp - beg) / (VPTRSZ + VNODESZ);
@@ -821,7 +792,8 @@ ttyprt(struct tty *tp)
 	int n, ovflw;
 
 	if (usenumflag || (name = devname(tp->t_dev, S_IFCHR)) == NULL) {
-		devprintf(dev, sizeof(dev), tp->t_dev);
+		(void)snprintf(dev, sizeof(dev), "0x%3x:%x",
+		    major(tp->t_dev), minor(tp->t_dev));
 		name = dev;
 	}
 	ovflw = 0;
@@ -907,7 +879,7 @@ filemode(void)
 		PRWORD(ovflw, " %*d", 5, 1, ki->ki_msgcount);
 		PRWORD(ovflw, "  %*lx", PTRSTRWIDTH + 1, 2, (long)ki->ki_fdata);
 		PRWORD(ovflw, " %*x", 5, 1, 0);
-		if ((off_t)ki->ki_foffset < 0)
+		if (ki->ki_foffset < 0)
 			PRWORD(ovflw, "  %-*lld\n", PTRSTRWIDTH + 1, 2,
 			    (long long)ki->ki_foffset);
 		else
@@ -949,7 +921,6 @@ getfiles(char **abuf, int *alen, char **aoffset)
 		err(1, "malloc");
 	if (sysctl(mib, 6, buf + offset, &len, NULL, 0) == -1) {
 		warn("sysctl: 2nd KERN_FILE2");
-		free(buf);
 		return (-1);
 	}
 	*abuf = buf;

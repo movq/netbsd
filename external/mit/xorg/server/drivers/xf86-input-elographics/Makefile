@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2009/11/28 17:27:30 mbalmer Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2011/02/16 20:27:30 bouyer Exp $
 
 DRIVER=		xf86-input-elographics
 DRIVER_NAME=	elographics_drv

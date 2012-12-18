@@ -1,4 +1,4 @@
-/*	$NetBSD: sfcmp.c,v 1.4 2012/02/04 17:03:10 skrll Exp $	*/
+/*	$NetBSD: sfcmp.c,v 1.3 2005/12/11 12:17:40 christos Exp $	*/
 
 /*	$OpenBSD: sfcmp.c,v 1.4 2001/03/29 03:58:19 mickey Exp $	*/
 
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sfcmp.c,v 1.4 2012/02/04 17:03:10 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sfcmp.c,v 1.3 2005/12/11 12:17:40 christos Exp $");
 
 #include "../spmath/float.h"
 #include "../spmath/sgl_float.h"
@@ -51,9 +51,11 @@ __KERNEL_RCSID(0, "$NetBSD: sfcmp.c,v 1.4 2012/02/04 17:03:10 skrll Exp $");
  * sgl_cmp: compare two values
  */
 int
-sgl_fcmp(sgl_floating_point *leftptr, sgl_floating_point *rightptr,
-    unsigned int cond, unsigned int *status)
-{
+sgl_fcmp(leftptr, rightptr, cond, status)
+    sgl_floating_point *leftptr, *rightptr;
+    unsigned int cond; /* The predicate to be tested */
+    unsigned int *status;
+    {
     register unsigned int left, right;
     register int xorresult;
 

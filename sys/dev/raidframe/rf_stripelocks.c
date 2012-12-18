@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_stripelocks.c,v 1.32 2011/05/05 08:21:29 mrg Exp $	*/
+/*	$NetBSD: rf_stripelocks.c,v 1.29 2006/11/16 01:33:23 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_stripelocks.c,v 1.32 2011/05/05 08:21:29 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_stripelocks.c,v 1.29 2006/11/16 01:33:23 christos Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -182,19 +182,8 @@ rf_ConfigureStripeLockFreeList(RF_ShutdownList_t **listp)
 	return (0);
 }
 
-static void
-rf_DestroyLockTable(RF_LockTableEntry_t *lockTable)
-{
-	int     i;
-
-	for (i = 0; i < rf_lockTableSize; i++) {
-		rf_destroy_mutex2(lockTable[i].mutex);
-	}
-	RF_Free(lockTable, rf_lockTableSize * sizeof(RF_LockTableEntry_t));
-}
-
 static RF_LockTableEntry_t *
-rf_MakeLockTable(void)
+rf_MakeLockTable()
 {
 	RF_LockTableEntry_t *lockTable;
 	int     i;
@@ -205,7 +194,7 @@ rf_MakeLockTable(void)
 	if (lockTable == NULL)
 		return (NULL);
 	for (i = 0; i < rf_lockTableSize; i++) {
-		rf_init_mutex2(lockTable[i].mutex, IPL_VM);
+		rf_mutex_init(&lockTable[i].mutex);
 	}
 	return (lockTable);
 }
@@ -219,7 +208,7 @@ rf_ShutdownStripeLocks(RF_LockTableEntry_t * lockTable)
 		PrintLockedStripes(lockTable);
 	}
 #endif
-	rf_DestroyLockTable(lockTable);
+	RF_Free(lockTable, rf_lockTableSize * sizeof(RF_LockTableEntry_t));
 }
 
 static void
@@ -279,7 +268,7 @@ rf_AcquireStripeLock(RF_LockTableEntry_t *lockTable, RF_StripeNum_t stripeID,
 	lockReqDesc->next = NULL;	/* just to be sure */
 	newlockDesc = AllocStripeLockDesc(stripeID);
 
-	rf_lock_mutex2(lockTable[hashval].mutex);
+	RF_LOCK_MUTEX(lockTable[hashval].mutex);
 	for (lockDesc = lockTable[hashval].descList; lockDesc;
 	     lockDesc = lockDesc->next) {
 		if (lockDesc->stripeID == stripeID)
@@ -365,7 +354,7 @@ rf_AcquireStripeLock(RF_LockTableEntry_t *lockTable, RF_StripeNum_t stripeID,
 		}
 	}
 
-	rf_unlock_mutex2(lockTable[hashval].mutex);
+	RF_UNLOCK_MUTEX(lockTable[hashval].mutex);
 	return (retcode);
 }
 
@@ -398,7 +387,7 @@ rf_ReleaseStripeLock(RF_LockTableEntry_t *lockTable, RF_StripeNum_t stripeID,
 	if (stripeID == -1)
 		return;
 
-	rf_lock_mutex2(lockTable[hashval].mutex);
+	RF_LOCK_MUTEX(lockTable[hashval].mutex);
 
 	/* find the stripe lock descriptor */
 	for (ld_t = NULL, lockDesc = lockTable[hashval].descList;
@@ -611,7 +600,7 @@ rf_ReleaseStripeLock(RF_LockTableEntry_t *lockTable, RF_StripeNum_t stripeID,
 		FreeStripeLockDesc(lockDesc);
 		lockDesc = NULL;/* only for the ASSERT below */
 	}
-	rf_unlock_mutex2(lockTable[hashval].mutex);
+	RF_UNLOCK_MUTEX(lockTable[hashval].mutex);
 
 	/* now that we've unlocked the mutex, invoke the callback on
 	 * all the descriptors in the list */
@@ -669,7 +658,7 @@ PrintLockedStripes(RF_LockTableEntry_t *lockTable)
 	RF_StripeLockDesc_t *p;
 	RF_LockReqDesc_t *q;
 
-	rf_lock_mutex2(rf_printf_mutex);
+	RF_LOCK_MUTEX(rf_printf_mutex);
 	printf("Locked stripes:\n");
 	for (i = 0; i < rf_lockTableSize; i++)
 		if (lockTable[i].descList) {
@@ -725,6 +714,6 @@ PrintLockedStripes(RF_LockTableEntry_t *lockTable)
 		printf("(none)\n");
 	else
 		printf("\n");
-	rf_unlock_mutex2(rf_printf_mutex);
+	RF_UNLOCK_MUTEX(rf_printf_mutex);
 }
 #endif

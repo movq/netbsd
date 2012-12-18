@@ -1,4 +1,4 @@
-/*	$NetBSD: vme_machdep.c,v 1.21 2011/07/01 20:34:06 dyoung Exp $	*/
+/*	$NetBSD: vme_machdep.c,v 1.15 2008/04/28 20:23:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.21 2011/07/01 20:34:06 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.15 2008/04/28 20:23:15 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -38,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.21 2011/07/01 20:34:06 dyoung Exp 
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/iomap.h>
 #include <machine/mfp.h>
@@ -46,28 +46,32 @@ __KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.21 2011/07/01 20:34:06 dyoung Exp 
 #include <atari/atari/device.h>
 #include <atari/vme/vmevar.h>
 
-static int	vmebusprint(void *, const char *);
-static int	vmebusmatch(device_t, cfdata_t, void *);
-static void	vmebusattach(device_t, device_t, void *);
+static int	vmebusprint __P((void *auxp, const char *));
+static int	vmebusmatch __P((struct device *, struct cfdata *, void *));
+static void	vmebusattach __P((struct device *, struct device *, void *));
 
-CFATTACH_DECL_NEW(avmebus, 0,
+CFATTACH_DECL(avmebus, sizeof(struct device),
     vmebusmatch, vmebusattach, NULL, NULL);
 
 int vmebus_attached;
 
 int
-vmebusmatch(device_t parent, cfdata_t cf, void *aux)
+vmebusmatch(pdp, cfp, auxp)
+struct device	*pdp;
+struct cfdata	*cfp;
+void		*auxp;
 {
-
-	if (atari_realconfig == 0)
-		return 0;
-	if (strcmp((char *)aux, "avmebus") || vmebus_attached)
-		return 0;
-	return (machineid & ATARI_FALCON) ? 0 : 1;
+	if(atari_realconfig == 0)
+		return (0);
+	if (strcmp((char *)auxp, "avmebus") || vmebus_attached)
+		return(0);
+	return(machineid & ATARI_FALCON ? 0 : 1);
 }
 
 void
-vmebusattach(device_t parent, device_t self, void *aux)
+vmebusattach(pdp, dp, auxp)
+struct device	*pdp, *dp;
+void		*auxp;
 {
 	struct vmebus_attach_args	vba;
 
@@ -88,14 +92,15 @@ vmebusattach(device_t parent, device_t self, void *aux)
 	vba.vba_memt->base = 0;
 
 	printf("\n");
-	config_found(self, &vba, vmebusprint);
+	config_found(dp, &vba, vmebusprint);
 }
 
 int
-vmebusprint(void *aux, const char *name)
+vmebusprint(auxp, name)
+void		*auxp;
+const char	*name;
 {
-
-	if (name == NULL)
-		return UNCONF;
-	return QUIET;
+	if(name == NULL)
+		return(UNCONF);
+	return(QUIET);
 }

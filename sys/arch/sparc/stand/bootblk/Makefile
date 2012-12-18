@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.13 2010/02/13 23:38:17 eeh Exp $
+#	$NetBSD: Makefile,v 1.11 2008/10/19 22:05:21 apb Exp $
 
 CURDIR=	${.CURDIR}
 S=	${CURDIR}/../../../..
@@ -10,7 +10,7 @@ S=	${CURDIR}/../../../..
 PROG=	bootblk
 SRCS=		bootblk.fth
 OBJS=
-CLEANFILES=	ffs.fth.h lfs.fth.h assym.fth.h.tmp machine sparc \
+CLEANFILES=	assym.fth.h assym.fth.h.tmp machine sparc \
 		bootblk bootblk.text bootblk.text.tmp
 
 NOMAN=		# defined
@@ -32,22 +32,17 @@ sparc:
 machine:
 	ln -s ${.CURDIR}/../../../${MACHINE}/include machine
 
-ffs.fth.h: genfth.cf machine sparc
+assym.fth.h: genfth.cf machine
 	${TOOL_GENASSYM} -f -- ${CC} ${CFLAGS} ${CPPFLAGS} ${PROF} \
-	    <${.CURDIR}/genfth.cf >ffs.fth.h.tmp && \
-	    mv -f ffs.fth.h.tmp ffs.fth.h
+	    <${.CURDIR}/genfth.cf >assym.fth.h.tmp && \
+	    mv -f assym.fth.h.tmp assym.fth.h
 
-lfs.fth.h: genlfs.cf machine sparc
-	${TOOL_GENASSYM} -f -- ${CC} ${CFLAGS} ${CPPFLAGS} ${PROF} \
-	    <${.CURDIR}/genlfs.cf >lfs.fth.h.tmp && \
-	    mv -f lfs.fth.h.tmp lfs.fth.h
-
-bootblk.text: bootblk.fth ffs.fth.h lfs.fth.h
+bootblk.text: bootblk.fth assym.fth.h
 	${TOOL_AWK} '/fload/ { print "#include \"" $$2 "\"" }; !/fload/' \
 	    ${.CURDIR}/bootblk.fth | /usr/bin/cpp -P >bootblk.text.tmp &&
 	    mv -f bootblk.text.tmp bootblk.text
 
-bootblk: bootblk.fth ffs.fth.h lfs.fth.h
+bootblk: bootblk.fth assym.fth.h
 	${TOOL_FGEN} -o bootblk ${.CURDIR}/bootblk.fth
 
 beforedepend:

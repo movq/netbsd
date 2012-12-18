@@ -1,4 +1,4 @@
-.\" $NetBSD: xargs.1,v 1.23 2012/10/13 14:18:17 njoly Exp $
+.\" $NetBSD: xargs.1,v 1.20.12.1 2011/02/16 21:17:51 bouyer Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -166,6 +166,7 @@ directory to
 .Pa destdir :
 .Pp
 .Dl /bin/ls -1d [A-Z]* | xargs -J % cp -rp % destdir
+.Pp
 .It Fl L Ar number
 Call
 .Ar utility

@@ -1,4 +1,4 @@
-/*	$NetBSD: repulse.c,v 1.19 2012/10/27 17:17:30 chs Exp $ */
+/*	$NetBSD: repulse.c,v 1.16 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: repulse.c,v 1.19 2012/10/27 17:17:30 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: repulse.c,v 1.16 2008/04/28 20:23:12 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -38,7 +38,8 @@ __KERNEL_RCSID(0, "$NetBSD: repulse.c,v 1.19 2012/10/27 17:17:30 chs Exp $");
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/fcntl.h>		/* FREAD */
-#include <sys/bus.h>
+
+#include <machine/bus.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -85,7 +86,6 @@ int rep_set_port(void *, mixer_ctrl_t *);
 int rep_get_port(void *, mixer_ctrl_t *);
 int rep_query_devinfo(void *, mixer_devinfo_t *);
 size_t rep_round_buffersize(void *, int, size_t);
-void rep_get_locks(void *, kmutex_t **, kmutex_t **);
 
 int rep_start_input(void *, void *, int, void (*)(void *), void *);
 int rep_start_output(void *, void *, int, void (*)(void *), void *);
@@ -123,7 +123,6 @@ const struct audio_hw_if rep_hw_if = {
 	/* trigger_output */ 0,
 	/* trigger_input */ 0,
 	/* dev_ioctl */ 0,
-	rep_get_locks,
 };
 
 /* hardware registers */
@@ -198,7 +197,7 @@ void rep_write_8_mono(struct repulse_hw *, uint8_t *, int, unsigned);
 /* NetBSD device attachment */
 
 struct repulse_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 	struct isr		sc_isr;
 	struct ac97_host_if	sc_achost;
 	struct ac97_codec_if	*sc_codec_if;
@@ -221,18 +220,16 @@ struct repulse_softc {
 	int	  sc_playscale;
 	unsigned  sc_playflags;
 
-	kmutex_t  sc_lock;
-	kmutex_t  sc_intr_lock;
 };
 
-int repulse_match (device_t, cfdata_t, void *);
-void repulse_attach (device_t, device_t, void *);
+int repulse_match (struct device *, struct cfdata *, void *);
+void repulse_attach (struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(repulse, sizeof(struct repulse_softc),
+CFATTACH_DECL(repulse, sizeof(struct repulse_softc),
     repulse_match, repulse_attach, NULL, NULL);
 
 int
-repulse_match(device_t parent, cfdata_t cf, void *aux)
+repulse_match(struct device *parent, struct cfdata *cfp, void *aux)
 {
 	struct zbus_args *zap;
 
@@ -248,7 +245,7 @@ repulse_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-repulse_attach(device_t parent, device_t self, void *aux)
+repulse_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct repulse_softc *sc;
 	struct zbus_args *zap;
@@ -257,8 +254,7 @@ repulse_attach(device_t parent, device_t self, void *aux)
 	int needs_firmware;
 	uint16_t a;
 
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (struct repulse_softc *)self;
 	zap = aux;
 	bp = (struct repulse_hw *)zap->va;
 	sc->sc_boardp = bp;
@@ -315,11 +311,8 @@ repulse_attach(device_t parent, device_t self, void *aux)
 	sc->sc_achost.attach = repac_attach;
 	sc->sc_achost.flags = 0;
 
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
-
-	if (ac97_attach(&sc->sc_achost, self, &sc->sc_lock)) {
-		printf("%s: error attaching codec\n", device_xname(self));
+	if (ac97_attach(&sc->sc_achost, self)) {
+		printf("%s: error attaching codec\n", self->dv_xname);
 		return;
 	}
 
@@ -337,7 +330,7 @@ repulse_attach(device_t parent, device_t self, void *aux)
 	if (!(a & AC97_EXT_AUDIO_VRA)) {
 		printf("%s: warning: codec doesn't support "
 		    "hardware AC'97 2.0 Variable Rate Audio\n",
-			device_xname(self));
+			sc->sc_dev.dv_xname);
 	}
 #endif
 
@@ -346,12 +339,12 @@ repulse_attach(device_t parent, device_t self, void *aux)
 	sc->sc_isr.isr_intr = rep_intr;
 	add_isr(&sc->sc_isr);
 
-	audio_attach_mi(&rep_hw_if, sc, self);
+	audio_attach_mi(&rep_hw_if, sc, &sc->sc_dev);
 
 	return;
 
 Initerr:
-	printf("\n%s: firmware not successfully loaded\n", device_xname(self));
+	printf("\n%s: firmware not successfully loaded\n", self->dv_xname);
 	return;
 
 }
@@ -372,7 +365,7 @@ repac_reset(void *arg)
 	a = bp->rhw_status;
 #ifdef DIAGNOSTIC
 	if ((a & REPSTATUS_CODECRESET) == 0)
-		panic("%s: cannot set reset bit", device_xname(sc->sc_dev));
+		panic("%s: cannot set reset bit", sc->sc_dev.dv_xname);
 #endif
 
 	a = bp->rhw_status;
@@ -585,15 +578,6 @@ size_t
 rep_round_buffersize(void *arg, int direction, size_t size)
 {
 	return size;
-}
-
-void
-rep_get_locks(void *opaque, kmutex_t **intr, kmutex_t **thread)
-{
-	struct repulse_softc *sc = opaque;
-
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
 }
 
 
@@ -965,9 +949,6 @@ rep_intr(void *tag)
 	foundone = 0;
 
 	sc = tag;
-
-	mutex_spin_enter(&sc->sc_intr_lock);
-
 	bp = sc->sc_boardp;
 	status = bp->rhw_status;
 
@@ -986,8 +967,6 @@ rep_intr(void *tag)
 			sc->sc_captflags);
 		(*sc->sc_captmore)(sc->sc_captarg);
 	}
-
-	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return foundone;
 }

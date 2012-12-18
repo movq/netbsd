@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_proto.c,v 1.12 2009/09/13 18:45:11 pooka Exp $	*/
+/*	$NetBSD: bt_proto.c,v 1.10 2008/04/24 11:38:37 ad Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bt_proto.c,v 1.12 2009/09/13 18:45:11 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bt_proto.c,v 1.10 2008/04/24 11:38:37 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/domain.h>
@@ -78,7 +78,6 @@ const struct protosw btsw[] = {
 		.pr_domain = &btdomain,
 		.pr_protocol = BTPROTO_HCI,
 		.pr_flags = (PR_ADDR | PR_ATOMIC),
-		.pr_init = hci_init,
 		.pr_ctloutput = hci_ctloutput,
 		.pr_usrreq = hci_usrreq,
 	},
@@ -97,7 +96,6 @@ const struct protosw btsw[] = {
 		.pr_flags = (PR_CONNREQUIRED | PR_ATOMIC | PR_LISTEN),
 		.pr_ctloutput = l2cap_ctloutput,
 		.pr_usrreq = l2cap_usrreq,
-		.pr_init = l2cap_init,
 	},
 	{ /* RFCOMM */
 		.pr_type = SOCK_STREAM,
@@ -106,7 +104,6 @@ const struct protosw btsw[] = {
 		.pr_flags = (PR_CONNREQUIRED | PR_LISTEN | PR_WANTRCVD),
 		.pr_ctloutput = rfcomm_ctloutput,
 		.pr_usrreq = rfcomm_usrreq,
-		.pr_init = rfcomm_init,
 	},
 };
 

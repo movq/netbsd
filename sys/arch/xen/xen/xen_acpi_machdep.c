@@ -1,9 +1,9 @@
-/*	$NetBSD: xen_acpi_machdep.c,v 1.5 2009/08/18 16:41:03 jmcneill Exp $	*/
+/*	$NetBSD: xen_acpi_machdep.c,v 1.4 2008/02/17 14:03:16 bouyer Exp $	*/
 
-#include "acpica.h"
+#include "acpi.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xen_acpi_machdep.c,v 1.5 2009/08/18 16:41:03 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xen_acpi_machdep.c,v 1.4 2008/02/17 14:03:16 bouyer Exp $");
 
 #include <dev/acpi/acpica.h>
 #include <dev/acpi/acpivar.h>

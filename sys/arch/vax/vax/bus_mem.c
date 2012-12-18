@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_mem.c,v 1.13 2010/12/14 23:44:49 matt Exp $ */
+/*	$NetBSD: bus_mem.c,v 1.12 2005/11/24 13:08:34 yamt Exp $ */
 /*
  * Copyright (c) 1998 Matt Thomas
  * All rights reserved.
@@ -33,19 +33,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_mem.c,v 1.13 2010/12/14 23:44:49 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_mem.c,v 1.12 2005/11/24 13:08:34 yamt Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/types.h>
-#include <sys/cpu.h>
-#include <sys/bus.h>
 #include <sys/device.h>
-#include <sys/intr.h>
 #include <sys/kernel.h>
+#include <sys/systm.h>
 
 #include <uvm/uvm_extern.h>
 
+#include <machine/cpu.h>
+#include <machine/pmap.h>
+#include <machine/bus.h>
+#include <machine/intr.h>
 
 static int
 vax_mem_bus_space_map(

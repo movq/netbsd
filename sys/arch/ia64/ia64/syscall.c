@@ -1,11 +1,11 @@
-/* $NetBSD: syscall.c,v 1.6 2012/11/05 15:14:34 chs Exp $ */
+/* $NetBSD: syscall.c,v 1.3 2008/04/28 20:23:25 martin Exp $ */
 
 /*
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  *
- * Author:
+ * Author: 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,14 +32,13 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.6 2012/11/05 15:14:34 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.3 2008/04/28 20:23:25 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 
 #include <machine/frame.h>
-#include <machine/userret.h>
 
 void	syscall_intern(struct proc *);
 void	syscall_plain(struct lwp *, u_int64_t, struct trapframe *);
@@ -48,11 +47,7 @@ void	syscall_fancy(struct lwp *, u_int64_t, struct trapframe *);
 void
 syscall_intern(struct proc *p)
 {
-
-	if (trace_is_enabled(p))
-		p->p_md.md_syscall = syscall_fancy;
-	else
-		p->p_md.md_syscall = syscall_plain;
+	return;
 }
 
 /*
@@ -61,14 +56,12 @@ syscall_intern(struct proc *p)
 void
 syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 {
-printf("%s: not yet\n", __func__);
 	return;
 }
 
 void
 syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
 {
-printf("%s: not yet\n", __func__);
 	return;
 }
 
@@ -78,16 +71,5 @@ printf("%s: not yet\n", __func__);
 void
 child_return(void *arg)
 {
-printf("%s: not yet\n", __func__);
 	return;
-}
-
-/*
- * Process the tail end of a posix_spawn() for the child.
- */
-void
-cpu_spawn_return(struct lwp *l)
-{
-
-	userret(l);
 }

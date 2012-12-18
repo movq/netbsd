@@ -1,4 +1,4 @@
-/* $NetBSD: utils.c,v 1.21 2012/03/20 18:50:30 matt Exp $ */
+/* $NetBSD: utils.c,v 1.19 2008/05/11 03:15:21 elric Exp $ */
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: utils.c,v 1.21 2012/03/20 18:50:30 matt Exp $");
+__RCSID("$NetBSD: utils.c,v 1.19 2008/05/11 03:15:21 elric Exp $");
 #endif
 
 #include <sys/param.h>
@@ -139,7 +139,7 @@ struct string {
 };
 
 string_t *
-string_zero(void)
+string_zero()
 {
 	string_t *out;
 
@@ -303,7 +303,7 @@ bits_len(bits_t *in)
 int
 bits_match(const bits_t *b1, const bits_t *b2)
 {
-	size_t i;
+	int i;
 
 	if (b1->length != b2->length)
 		return 0;
@@ -319,7 +319,7 @@ bits_t *
 bits_xor(const bits_t *x1, const bits_t *x2)
 {
 	bits_t	*b;
-	size_t	 i;
+	int	 i;
 
 	b = emalloc(sizeof(*b));
 	b->length = MAX(x1->length, x2->length);

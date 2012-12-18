@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.c,v 1.25 2011/11/05 00:34:01 christos Exp $	*/
+/*	$NetBSD: installboot.c,v 1.20.88.2 2009/01/16 22:57:33 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens
@@ -53,18 +53,18 @@
 
 #include "installboot.h"
 
-static void	usage(void);
-static void	oscheck(void);
-static u_int	abcksum(void *);
-static void	setNVpref(void);
-static void	setIDEpar(u_int8_t *, size_t);
-static void	mkahdiboot(struct ahdi_root *, char *,
-						char *, u_int32_t);
-static void	mkbootblock(struct bootblock *, char *,
-				char *, struct disklabel *, u_int);
-static void	install_fd(char *, struct disklabel *);
-static void	install_sd(char *, struct disklabel *);
-static void	install_wd(char *, struct disklabel *);
+static void	usage __P((void));
+static void	oscheck __P((void));
+static u_int	abcksum __P((void *));
+static void	setNVpref __P((void));
+static void	setIDEpar __P((u_int8_t *, size_t));
+static void	mkahdiboot __P((struct ahdi_root *, char *,
+						char *, u_int32_t));
+static void	mkbootblock __P((struct bootblock *, char *,
+				char *, struct disklabel *, u_int));
+static void	install_fd __P((char *, struct disklabel *));
+static void	install_sd __P((char *, struct disklabel *));
+static void	install_wd __P((char *, struct disklabel *));
 
 static struct bootblock	bootarea;
 static struct ahdi_root ahdiboot;
@@ -78,7 +78,7 @@ static int		secpertrack = 0;
 static int		milan = 0;
 
 static void
-usage(void)
+usage ()
 {
 	fprintf(stderr,
 		"usage: installboot [options] device\n"
@@ -92,7 +92,9 @@ usage(void)
 }
 
 int
-main(int argc, char *argv[])
+main (argc, argv)
+	int	argc;
+	char	*argv[];
 {
 	struct disklabel dl;
 	char		 *dn;
@@ -176,12 +178,10 @@ main(int argc, char *argv[])
 }
 
 static void
-oscheck(void)
+oscheck ()
 {
-	struct nlist kbv[] = {
-		{ .n_name = "_bootversion" },
-		{ .n_name = NULL }
-	};
+	struct nlist	kbv[] = { { "_bootversion" },
+				  { NULL } };
 	kvm_t		*kd_kern;
 	char		errbuf[_POSIX2_LINE_MAX];
 	u_short		kvers;
@@ -199,16 +199,19 @@ oscheck(void)
 		errx(EXIT_FAILURE, "kvm_nlist: %s", kvm_geterr(kd_kern));
 	if (kbv[0].n_value == 0)
 		errx(EXIT_FAILURE, "%s not in namelist", kbv[0].n_name);
-	if (kvm_read(kd_kern, kbv[0].n_value, &kvers, sizeof(kvers)) == -1)
+	if (kvm_read(kd_kern, kbv[0].n_value, (char *)&kvers,
+						sizeof(kvers)) == -1)
 		errx(EXIT_FAILURE, "kvm_read: %s", kvm_geterr(kd_kern));
 	kvm_close(kd_kern);
 	if (kvers != BOOTVERSION)
 		errx(EXIT_FAILURE, "Kern bootversion: %d, expected: %d",
-		    kvers, BOOTVERSION);
+					kvers, BOOTVERSION);
 }
 
 static void
-install_fd(char *devnm, struct disklabel *label)
+install_fd (devnm, label)
+	char		 *devnm;
+	struct disklabel *label;
 {
 	const char	 *machpath;
 	char		 *xxboot, *bootxx;
@@ -262,7 +265,9 @@ install_fd(char *devnm, struct disklabel *label)
 }
 
 static void
-install_sd(char *devnm, struct disklabel *label)
+install_sd (devnm, label)
+	char		 *devnm;
+	struct disklabel *label;
 {
 	const char	 *machpath;
 	char		 *xxb00t, *xxboot, *bootxx;
@@ -317,17 +322,16 @@ install_sd(char *devnm, struct disklabel *label)
 		if (write(fd, &bootarea, sizeof(bootarea)) != sizeof(bootarea))
 			err(EXIT_FAILURE, "%s", devnm);
 		if (verbose)
-			printf("Boot block installed on %s (sector %d)\n",
-			    devnm, bbsec);
+			printf("Boot block installed on %s (sector %d)\n", devnm,
+								    bbsec);
 		if (xxb00t) {
 			if (lseek(fd, (off_t)0, SEEK_SET) != 0)
 				err(EXIT_FAILURE, "%s", devnm);
-			if (write(fd, &ahdiboot, sizeof(ahdiboot)) !=
-			    sizeof(ahdiboot))
+			if (write(fd, &ahdiboot, sizeof(ahdiboot)) != sizeof(ahdiboot))
 				err(EXIT_FAILURE, "%s", devnm);
 			if (verbose)
 				printf("AHDI root  installed on %s (0)\n",
-				    devnm);
+								devnm);
 		}
 		if (close(fd))
 			err(EXIT_FAILURE, "%s", devnm);
@@ -335,7 +339,9 @@ install_sd(char *devnm, struct disklabel *label)
 }
 
 static void
-install_wd(char *devnm, struct disklabel *label)
+install_wd (devnm, label)
+	char		 *devnm;
+	struct disklabel *label;
 {
 	const char	 *machpath;
 	char		 *xxb00t, *xxboot, *bootxx;
@@ -390,8 +396,8 @@ install_wd(char *devnm, struct disklabel *label)
 		if (write(fd, &bootarea, sizeof(bootarea)) != sizeof(bootarea))
 			err(EXIT_FAILURE, "%s", devnm);
 		if (verbose)
-			printf("Boot block installed on %s (sector %d)\n",
-			    devnm, bbsec);
+			printf("Boot block installed on %s (sector %d)\n", devnm,
+								    bbsec);
 		if (xxb00t) {
 			if (lseek(fd, (off_t)0, SEEK_SET) != 0)
 				err(EXIT_FAILURE, "%s", devnm);
@@ -399,8 +405,8 @@ install_wd(char *devnm, struct disklabel *label)
 							!= sizeof(ahdiboot))
 				err(EXIT_FAILURE, "%s", devnm);
 			if (verbose)
-				printf("AHDI root installed on %s (sector 0)\n",
-				    devnm);
+				printf("AHDI root  installed on %s (sector 0)\n",
+									devnm);
 		}
 		if (close(fd))
 			err(EXIT_FAILURE, "%s", devnm);
@@ -408,8 +414,11 @@ install_wd(char *devnm, struct disklabel *label)
 }
 
 static void
-mkahdiboot(struct ahdi_root *newroot, char *xxb00t, char *devnm,
-    u_int32_t bbsec)
+mkahdiboot (newroot, xxb00t, devnm, bbsec)
+	struct ahdi_root *newroot;
+	char		 *xxb00t,
+			 *devnm;
+	u_int32_t	 bbsec;
 {
 	struct ahdi_root tmproot;
 	struct ahdi_part *pd;
@@ -454,8 +463,12 @@ gotit:	/* copy code from prototype and set new checksum */
 }
 
 static void
-mkbootblock(struct bootblock *bb, char *xxb, char *bxx,
-    struct disklabel *label, u_int magic)
+mkbootblock (bb, xxb, bxx, label, magic)
+	struct bootblock *bb;
+	char		 *xxb,
+			 *bxx;
+	u_int		 magic;
+	struct disklabel *label;
 {
 	int		 fd;
 
@@ -499,7 +512,9 @@ mkbootblock(struct bootblock *bb, char *xxb, char *bxx,
 }
 
 static void
-setIDEpar (u_int8_t *start, size_t size)
+setIDEpar (start, size)
+	u_int8_t	*start;
+	size_t		size;
 {
 	static const u_int8_t	mark[] = { 'N', 'e', 't', 'B', 'S', 'D' };
 
@@ -541,7 +556,7 @@ setIDEpar (u_int8_t *start, size_t size)
 }
 
 static void
-setNVpref(void)
+setNVpref ()
 {
 	static const u_char	bootpref = BOOTPREF_NETBSD;
 	static const char	nvrdev[] = PATH_NVRAM;
@@ -563,7 +578,8 @@ setNVpref(void)
 }
 
 static u_int
-abcksum (void *bs)
+abcksum (bs)
+	void	*bs;
 {
 	u_int16_t sum  = 0,
 		  *st  = (u_int16_t *)bs,

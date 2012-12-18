@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_time.c,v 1.9 2011/12/18 22:30:25 christos Exp $	*/
+/*	$NetBSD: subr_time.c,v 1.4 2008/07/15 16:18:08 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_time.c,v 1.9 2011/12/18 22:30:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_time.c,v 1.4 2008/07/15 16:18:08 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -89,15 +89,12 @@ tvtohz(const struct timeval *tv)
 	sec = tv->tv_sec;
 	usec = tv->tv_usec;
 
-	KASSERT(usec >= 0 && usec < 1000000);
+	if (usec < 0) {
+		sec--;
+		usec += 1000000;
+	}
 
-	/* catch overflows in conversion time_t->int */
-	if (tv->tv_sec > INT_MAX)
-		return INT_MAX;
-	if (tv->tv_sec < 0)
-		return 0;
-
-	if (sec < 0 || (sec == 0 && usec == 0)) {
+	if (sec < 0 || (sec == 0 && usec <= 0)) {
 		/*
 		 * Would expire now or in the past.  Return 0 ticks.
 		 * This is different from the legacy tvhzto() interface,
@@ -129,18 +126,6 @@ tshzto(const struct timespec *tsp)
 	timespecsub(&ts, &now, &ts);
 	return tstohz(&ts);
 }
-
-int
-tshztoup(const struct timespec *tsp)
-{
-	struct timespec now, ts;
-
-	ts = *tsp;	/* Don't modify original tsp. */
-	getnanouptime(&now);
-	timespecsub(&ts, &now, &ts);
-	return tstohz(&ts);
-}
-
 /*
  * Compute number of ticks in the specified amount of time.
  */
@@ -183,55 +168,4 @@ itimespecfix(struct timespec *ts)
 	if (ts->tv_sec == 0 && ts->tv_nsec != 0 && ts->tv_nsec < tick * 1000)
 		ts->tv_nsec = tick * 1000;
 	return (0);
-}
-
-int
-inittimeleft(struct timespec *ts, struct timespec *sleepts)
-{
-
-	if (itimespecfix(ts)) {
-		return -1;
-	}
-	getnanouptime(sleepts);
-	return 0;
-}
-
-int
-gettimeleft(struct timespec *ts, struct timespec *sleepts)
-{
-	struct timespec sleptts;
-
-	/*
-	 * Reduce ts by elapsed time based on monotonic time scale.
-	 */
-	getnanouptime(&sleptts);
-	timespecadd(ts, sleepts, ts);
-	timespecsub(ts, &sleptts, ts);
-	*sleepts = sleptts;
-
-	return tstohz(ts);
-}
-
-/*
- * Calculate delta and convert from struct timespec to the ticks.
- */
-int
-abstimeout2timo(struct timespec *ts, int *timo)
-{
-	struct timespec tsd;
-	int error;
-
-	getnanotime(&tsd);
-	timespecsub(ts, &tsd, &tsd);
-	if (tsd.tv_sec < 0 || (tsd.tv_sec == 0 && tsd.tv_nsec <= 0)) {
-		return ETIMEDOUT;
-	}
-	error = itimespecfix(&tsd);
-	if (error) {
-		return error;
-	}
-	*timo = tstohz(&tsd);
-	KASSERT(*timo != 0);
-
-	return 0;
 }

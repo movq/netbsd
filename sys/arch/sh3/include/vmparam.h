@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.21 2010/11/14 13:33:22 uebayasi Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.18 2008/04/28 20:23:35 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -69,6 +69,13 @@
 #define	DFLSSIZ			(2 * 1024 * 1024)
 #endif
 
+/*
+ * Size of shared memory map
+ */
+#ifndef SHMMAXPGS
+#define	SHMMAXPGS		1024
+#endif
+
 /* Size of user raw I/O map */
 #ifndef USRIOSIZE
 #define	USRIOSIZE		(MAXBSIZE / PAGE_SIZE * 8)
@@ -78,9 +85,30 @@
 
 /* Physical memory segments */
 #define	VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH
+#define	VM_PHYSSEG_NOADD
 
 #define	sh3_round_page(x)	((((uint32_t)(x)) + PGOFSET) & ~PGOFSET)
 #define	sh3_trunc_page(x)	((uint32_t)(x) & ~PGOFSET)
 #define	sh3_btop(x)		((uint32_t)(x) >> PGSHIFT)
 #define	sh3_ptob(x)		((uint32_t)(x) << PGSHIFT)
+
+/* pmap-specific data store in the vm_page structure. */
+#define	__HAVE_VM_PAGE_MD
+#define	PVH_REFERENCED		1
+#define	PVH_MODIFIED		2
+
+#ifndef _LOCORE
+struct pv_entry;
+struct vm_page_md {
+	SLIST_HEAD(, pv_entry) pvh_head;
+	int pvh_flags;
+};
+
+#define	VM_MDPAGE_INIT(pg)						\
+do {									\
+	struct vm_page_md *pvh = &(pg)->mdpage;				\
+	SLIST_INIT(&pvh->pvh_head);					\
+	pvh->pvh_flags = 0;						\
+} while (/*CONSTCOND*/0)
+#endif /* _LOCORE */
 #endif /* !_SH3_VMPARAM_H_ */

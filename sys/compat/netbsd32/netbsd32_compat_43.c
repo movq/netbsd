@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_43.c,v 1.53 2010/04/23 23:05:40 joerg Exp $	*/
+/*	$NetBSD: netbsd32_compat_43.c,v 1.50 2008/05/29 14:51:26 mrg Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_43.c,v 1.53 2010/04/23 23:05:40 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_43.c,v 1.50 2008/05/29 14:51:26 mrg Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_43.h"
@@ -37,6 +37,7 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_43.c,v 1.53 2010/04/23 23:05:40 joer
 #include <sys/systm.h>
 #include <sys/fcntl.h>
 #include <sys/filedesc.h>
+#include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
@@ -342,7 +343,7 @@ int
 compat_43_netbsd32_ommap(struct lwp *l, const struct compat_43_netbsd32_ommap_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(netbsd32_voidp) addr;
+		syscallarg(netbsd32_caddr_t) addr;
 		syscallarg(netbsd32_size_t) len;
 		syscallarg(int) prot;
 		syscallarg(int) flags;
@@ -366,7 +367,7 @@ compat_43_netbsd32_oaccept(struct lwp *l, const struct compat_43_netbsd32_oaccep
 {
 	/* {
 		syscallarg(int) s;
-		syscallarg(netbsd32_voidp) name;
+		syscallarg(netbsd32_caddr_t) name;
 		syscallarg(netbsd32_intp) anamelen;
 	} */
 	struct compat_43_sys_accept_args ua;
@@ -382,7 +383,7 @@ compat_43_netbsd32_osend(struct lwp *l, const struct compat_43_netbsd32_osend_ar
 {
 	/* {
 		syscallarg(int) s;
-		syscallarg(netbsd32_voidp) buf;
+		syscallarg(netbsd32_caddr_t) buf;
 		syscallarg(int) len;
 		syscallarg(int) flags;
 	} */
@@ -400,7 +401,7 @@ compat_43_netbsd32_orecv(struct lwp *l, const struct compat_43_netbsd32_orecv_ar
 {
 	/* {
 		syscallarg(int) s;
-		syscallarg(netbsd32_voidp) buf;
+		syscallarg(netbsd32_caddr_t) buf;
 		syscallarg(int) len;
 		syscallarg(int) flags;
 	} */
@@ -455,7 +456,7 @@ compat_43_netbsd32_orecvmsg(struct lwp *l, const struct compat_43_netbsd32_orecv
 	    NETBSD32PTR64(omsg.msg_accrights) != NULL ? &control : NULL,
 	    retval);
 	if (error != 0)
-		goto out;
+		return error;
 
 	/*
 	 * If there is any control information and it's SCM_RIGHTS,
@@ -492,10 +493,7 @@ compat_43_netbsd32_orecvmsg(struct lwp *l, const struct compat_43_netbsd32_orecv
 
 	if (error != 0)
 		 error = copyout(&omsg, SCARG_P32(uap, msg), sizeof(omsg));
-out:
-	if (iov != aiov) {
-		kmem_free(iov, omsg.msg_iovlen * sizeof(*iov));
-	}
+
 	return error;
 }
 
@@ -504,16 +502,16 @@ compat_43_netbsd32_osendmsg(struct lwp *l, const struct compat_43_netbsd32_osend
 {
 	/* {
 		syscallarg(int) s;
-		syscallarg(netbsd32_voidp) msg;
+		syscallarg(netbsd32_caddr_t) msg;
 		syscallarg(int) flags;
 	} */
 	struct iovec *iov, aiov[UIO_SMALLIOV];
 	struct netbsd32_omsghdr omsg;
 	struct msghdr msg;
+	int error;
 	struct mbuf *nam;
 	struct osockaddr *osa;
 	struct sockaddr *sa;
-	int error;
 
 	error = copyin(SCARG_P32(uap, msg), &omsg, sizeof (struct omsghdr));
 	if (error != 0)
@@ -551,7 +549,7 @@ compat_43_netbsd32_osendmsg(struct lwp *l, const struct compat_43_netbsd32_osend
 
     out:
 	if (iov != aiov)
-		kmem_free(iov, omsg.msg_iovlen * sizeof(*iov));
+		free(iov, M_TEMP);
 	return (error);
 }
 
@@ -560,10 +558,10 @@ compat_43_netbsd32_orecvfrom(struct lwp *l, const struct compat_43_netbsd32_orec
 {
 	/* {
 		syscallarg(int) s;
-		syscallarg(netbsd32_voidp) buf;
+		syscallarg(netbsd32_caddr_t) buf;
 		syscallarg(netbsd32_size_t) len;
 		syscallarg(int) flags;
-		syscallarg(netbsd32_voidp) from;
+		syscallarg(netbsd32_caddr_t) from;
 		syscallarg(netbsd32_intp) fromlenaddr;
 	} */
 	struct compat_43_sys_recvfrom_args ua;
@@ -582,7 +580,7 @@ compat_43_netbsd32_ogetsockname(struct lwp *l, const struct compat_43_netbsd32_o
 {
 	/* {
 		syscallarg(int) fdec;
-		syscallarg(netbsd32_voidp) asa;
+		syscallarg(netbsd32_caddr_t) asa;
 		syscallarg(netbsd32_intp) alen;
 	} */
 	struct compat_43_sys_getsockname_args ua;
@@ -598,7 +596,7 @@ compat_43_netbsd32_ogetpeername(struct lwp *l, const struct compat_43_netbsd32_o
 {
 	/* {
 		syscallarg(int) fdes;
-		syscallarg(netbsd32_voidp) asa;
+		syscallarg(netbsd32_caddr_t) asa;
 		syscallarg(netbsd32_intp) alen;
 	} */
 	struct compat_43_sys_getpeername_args ua;

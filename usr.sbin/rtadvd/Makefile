@@ -1,6 +1,4 @@
-# $NetBSD: Makefile,v 1.17 2012/08/10 12:10:30 joerg Exp $
-
-WARNS?=	4
+# $NetBSD: Makefile,v 1.12 2008/08/29 00:02:26 gmcgarry Exp $
 
 .include <bsd.own.mk>
 
@@ -21,6 +19,6 @@ FILES=	rtadvd.conf
 
 .include <bsd.prog.mk>
 
-.if defined(HAVE_GCC) || defined(HAVE_LLVM)
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4)
 COPTS.dump.c=-fno-strict-aliasing
 .endif

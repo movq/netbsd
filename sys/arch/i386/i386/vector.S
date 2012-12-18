@@ -1,4 +1,4 @@
-/*	$NetBSD: vector.S,v 1.60 2012/06/15 14:23:46 yamt Exp $	*/
+/*	$NetBSD: vector.S,v 1.42.6.4 2011/11/18 21:09:24 sborrill Exp $	*/
 
 /*
  * Copyright 2002 (c) Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 /*-
- * Copyright (c) 1998, 2007, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -65,14 +65,13 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: vector.S,v 1.60 2012/06/15 14:23:46 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vector.S,v 1.42.6.4 2011/11/18 21:09:24 sborrill Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
 #include "opt_ipkdb.h"
 #include "opt_vm86.h"
 #include "opt_xen.h"
-#include "opt_dtrace.h"
 
 #include <machine/i8259.h>
 #include <machine/i82093reg.h>
@@ -110,6 +109,8 @@ __KERNEL_RCSID(0, "$NetBSD: vector.S,v 1.60 2012/06/15 14:23:46 yamt Exp $");
  *
  */
 
+#define MY_COUNT _C_LABEL(uvmexp)
+
 /*
  * Store address of TSS in %eax, given a selector in %eax.
  * Clobbers %eax, %ecx, %edx, but that's ok for its usage.
@@ -127,23 +128,6 @@ __KERNEL_RCSID(0, "$NetBSD: vector.S,v 1.60 2012/06/15 14:23:46 yamt Exp $");
 	movzbl	7(%eax),%eax				;\
 	shl	$24,%eax				;\
 	orl	%edx,%eax
-
-#ifdef KDTRACE_HOOKS
-	.bss
-	.globl	dtrace_invop_jump_addr
-	.align	4
-	.type	dtrace_invop_jump_addr, @object
-        .size	dtrace_invop_jump_addr, 4
-dtrace_invop_jump_addr:
-	.zero	4
-	.globl	dtrace_invop_calltrap_addr
-	.align	4
-	.type	dtrace_invop_calltrap_addr, @object
-        .size	dtrace_invop_calltrap_addr, 4
-dtrace_invop_calltrap_addr:
-	.zero	8
-	.text
-#endif
 
 #ifndef XEN
 #if NLAPIC > 0
@@ -166,14 +150,14 @@ IDTVEC(intr_lapic_ipi)
 	INTRENTRY		
 	movl	$0,_C_LABEL(local_apic)+LAPIC_EOI
 	movl	CPUVAR(ILEVEL),%ebx
-	cmpl	$IPL_HIGH,%ebx
+	cmpl	$IPL_IPI,%ebx
 	jae	2f
 IDTVEC_END(intr_lapic_ipi)
 IDTVEC(resume_lapic_ipi)
 1:
 	pushl	%ebx
 	IDEPTH_INCR
-	movl	$IPL_HIGH,CPUVAR(ILEVEL)
+	movl	$IPL_IPI,CPUVAR(ILEVEL)
 	sti
 	call	_C_LABEL(x86_ipi_handler)
 	cli
@@ -184,16 +168,119 @@ IDTVEC(resume_lapic_ipi)
 IDTVEC_END(resume_lapic_ipi)
 
 /*
- * TLB shootdown handler.
+ * Multicast TLB shootdown handler for !kernel_pmap.
  */
-IDTVEC(intr_lapic_tlb)
-	pushl	$0
-	pushl	$T_ASTFLT
-	INTRENTRY
+IDTVEC(intr_lapic_tlb_mcast)
+	/* Save state. */
+	pushl	%eax
+	pushl	%ebx
+	pushl	%ecx
+	pushl	%edx
+	pushl	%ds
+	pushl	%fs
+	movl	$GSEL(GDATA_SEL, SEL_KPL), %eax
+	movl	$GSEL(GCPU_SEL, SEL_KPL), %edx
+	movl	%eax, %ds
+	movl	%edx, %fs
+	/* Count it. */
+	addl	$1, CPUVAR(TLB_EVCNT)+EV_COUNT
+	adcl	$0, CPUVAR(TLB_EVCNT)+EV_COUNT+4
+	/* Find out what we need to invalidate. */
+	movl	CPUVAR(PMAP_CPU), %ecx
+	movl	MB_ADDR1(%ecx), %eax
+	movl	MB_ADDR2(%ecx), %edx
+	xorl	%ebx, %ebx
+	xchgl	MB_POINTER(%ecx), %ebx
 	movl	$0, _C_LABEL(local_apic)+LAPIC_EOI
-	call	_C_LABEL(pmap_tlb_intr)
-	INTRFASTEXIT
-IDTVEC_END(intr_lapic_tlb)
+	cmpl	$-1, %eax
+	je	4f
+1:
+	/* Invalidate a single page or a range of pages. */
+	invlpg	(%eax)
+	addl	$PAGE_SIZE, %eax
+	cmpl	%edx, %eax
+	jb	1b
+2:
+	/* Ack the request. */
+	lock
+	incl	(%ebx)
+	/*
+	 * Check the current TLB state.  If we don't want further
+	 * invalidations for this pmap, then take the CPU out of
+	 * the pmap's bitmask.
+	 */
+	cmpl	$TLBSTATE_LAZY, CPUVAR(TLBSTATE)
+	jne	3f
+	movl	CPUVAR(PMAP), %edx
+	movl	CPUVAR(CPUMASK), %ecx
+	notl	%ecx
+	lock
+	andl	%ecx, PM_CPUS(%edx)
+	movl	$TLBSTATE_STALE, CPUVAR(TLBSTATE)
+3:
+	/* Restore state and return. */
+	popl	%fs
+	popl	%ds
+	popl	%edx
+	popl	%ecx
+	popl	%ebx
+	popl	%eax
+	iret
+4:
+	/* Invalidate all user pages. */
+	movl	%cr3, %eax
+	movl	%eax, %cr3
+	jmp	2b
+IDTVEC_END(intr_lapic_tlb_mcast)
+
+/*
+ * Broadcast TLB shootdown handler for kernel_pmap.
+ */
+IDTVEC(intr_lapic_tlb_bcast)
+	/* Save state and ack the interrupt. */
+	pushl	%eax
+	pushl	%ebx
+	pushl	%edx
+	/* Find out what we need to invalidate. */
+	movl	%ss:_C_LABEL(pmap_mbox)+MB_ADDR1, %eax
+	movl	%ss:_C_LABEL(pmap_mbox)+MB_ADDR2, %edx
+	movl	%ss:_C_LABEL(pmap_mbox)+MB_GLOBAL, %ebx
+	movl	$0, %ss:_C_LABEL(local_apic)+LAPIC_EOI
+	cmpl	$-1, %eax
+	je,pn	3f
+1:
+	/* Invalidate a single page or a range of pages. */
+	invlpg	%ss:(%eax)
+	addl	$PAGE_SIZE, %eax
+	cmpl	%edx, %eax
+	jb	1b
+2:
+	/* Ack the request, restore state & return. */
+	lock
+	incl	%ss:_C_LABEL(pmap_mbox)+MB_TAIL
+	popl	%edx
+	popl	%ebx
+	popl	%eax
+	iret
+3:
+	testl	%ebx, %ebx
+	jz	4f
+	/*
+	 * If the CPU understands global pages and we have been asked
+	 * to invalidate the entire TLB we arrive here.
+	 */
+	movl	%cr4, %eax
+	movl	%eax, %edx
+	andl	$~CR4_PGE, %edx
+	movl	%edx, %cr4
+	movl	%eax, %cr4
+	jmp	2b
+4:
+	/* Invalidate user TLB entries. */
+	movl	%cr3, %eax
+	movl	%eax, %cr3
+	jmp	2b
+IDTVEC_END(intr_lapic_tlb_bcast)
 
 #if defined(DDB)
 IDTVEC(intrddbipi)
@@ -262,27 +349,27 @@ IDTVEC_END(intr_lapic_ltimer)
  */
 
 #define	INTRSTUB(name, num, early_ack, late_ack, mask, unmask, level_mask) \
-IDTVEC(recurse_ ## name ## num)						;\
+IDTVEC(recurse_/**/name/**/num)						;\
 	pushfl								;\
 	pushl	%cs							;\
 	pushl	%esi							;\
 	subl	$4,%esp							;\
 	pushl	$T_ASTFLT		/* trap # for doing ASTs */	;\
 	INTRENTRY							;\
-IDTVEC_END(recurse_ ## name ## num)					;\
-IDTVEC(resume_ ## name ## num)						\
+IDTVEC_END(recurse_/**/name/**/num)					;\
+IDTVEC(resume_/**/name/**/num)						\
 	movl	$IREENT_MAGIC,TF_ERR(%esp)				;\
 	movl	%ebx,%esi						;\
 	movl	CPUVAR(ISOURCES) + (num) * 4, %ebp			;\
 	movl	IS_MAXLEVEL(%ebp),%ebx					;\
 	jmp	1f							;\
-IDTVEC_END(resume_ ## name ## num)					;\
-IDTVEC(intr_ ## name ## num)						;\
+IDTVEC_END(resume_/**/name/**/num)					;\
+IDTVEC(intr_/**/name/**/num)						;\
 	pushl	$0			/* dummy error code */		;\
 	pushl	$T_ASTFLT		/* trap # for doing ASTs */	;\
 	INTRENTRY							;\
 	movl	CPUVAR(ISOURCES) + (num) * 4, %ebp			;\
-	mask(num)			/* mask it in hardware */	;\
+	mask(num)		/* mask it in hardware */		;\
 	early_ack(num)			/* and allow other intrs */	;\
 	testl	%ebp,%ebp						;\
 	jz	9f			/* stray */			;\
@@ -290,14 +377,12 @@ IDTVEC(intr_ ## name ## num)						;\
 	movl	CPUVAR(ILEVEL),%esi					;\
 	cmpl	%ebx,%esi						;\
 	jae	10f			/* currently masked; hold it */	;\
-	addl	$1,CPUVAR(NINTR)	/* statistical info */		;\
-	adcl	$0,CPUVAR(NINTR)+4					;\
+	incl	MY_COUNT+V_INTR		/* statistical info */		;\
 	addl	$1,IS_EVCNTLO(%ebp)	/* inc event counter */		;\
 	adcl	$0,IS_EVCNTHI(%ebp)					;\
 1:									\
-	pushl	%esi			/* if_ppi */			;\
+	pushl	%esi							;\
 	movl	%ebx,CPUVAR(ILEVEL)					;\
-	/* switch stack if necessary, and push a ptr to our intrframe */ \
 	IDEPTH_INCR							;\
 	sti								;\
 	movl	IS_HANDLERS(%ebp),%ebx					;\
@@ -334,7 +419,7 @@ IDTVEC(intr_ ## name ## num)						;\
 	late_ack(num)							;\
 	addl	$4,%esp							;\
 	INTRFASTEXIT							;\
-IDTVEC_END(intr_ ## name ## num)
+IDTVEC_END(intr_/**/name/**/num)
 
 #define ICUADDR IO_ICU1
 
@@ -618,7 +703,7 @@ _C_LABEL(ioapic_level_stubs):
 #define voidop(num)
 
 #define	XENINTRSTUB(name, num, early_ack, late_ack, mask, unmask, level_mask) \
-IDTVEC(recurse_ ## name ## num)						;\
+IDTVEC(recurse_/**/name/**/num)						;\
 	pushfl								;\
 	pushl	%cs							;\
 	pushl	%esi							;\
@@ -626,7 +711,7 @@ IDTVEC(recurse_ ## name ## num)						;\
 	pushl	$T_ASTFLT		/* trap # for doing ASTs */	;\
 	INTRENTRY							;\
 	movl	$_C_LABEL(Xdoreti), %esi; /* we now have a trap frame, so loop using doreti instead */ ;\
-IDTVEC(resume_ ## name ## num)						\
+IDTVEC(resume_/**/name/**/num)						\
 	movl	$IREENT_MAGIC,TF_ERR(%esp)				;\
 	pushl	%ebx							;\
 	movl	CPUVAR(ISOURCES) + (num) * 4, %ebp			;\
@@ -766,47 +851,8 @@ IDTVEC(trap04)
 	ZTRAP(T_OFLOW)
 IDTVEC(trap05)
 	ZTRAP(T_BOUND)
-/*
- * Privileged instruction fault.
- */
-#ifdef KDTRACE_HOOKS
-	SUPERALIGN_TEXT
-IDTVEC(trap06)
-	/* Check if there is no DTrace hook registered. */
-	cmpl	$0,dtrace_invop_jump_addr
-	je	norm_ill
-
-	/* Check if this is a user fault. */
-	/* XXX this was 0x0020 in FreeBSD */
-	cmpl	$GSEL(GCODE_SEL, SEL_KPL), 4(%esp)   /* Check code segment. */
-
-	/* If so, just handle it as a normal trap. */
-	jne	norm_ill
-              
-	/*
-	 * This is a kernel instruction fault that might have been caused
-	 * by a DTrace provider.
-	 */
-	pushal				/* Push all registers onto the stack. */
-
-	/*
-	 * Set our jump address for the jump back in the event that
-	 * the exception wasn't caused by DTrace at all.
-	 */
-	movl	$norm_ill, dtrace_invop_calltrap_addr
-
-	/* Jump to the code hooked in by DTrace. */
-	jmpl	*dtrace_invop_jump_addr
-
-	/*
-	 * Process the instruction fault in the normal way.
-	 */
-norm_ill:
-	ZTRAP(T_PRIVINFLT)
-#else
 IDTVEC(trap06)
 	ZTRAP(T_PRIVINFLT)
-#endif
 IDTVEC(trap07)
 #if NNPX > 0
 	pushl	$0			# dummy error code
@@ -853,8 +899,92 @@ IDTVEC(trap0e)
 	movb	$T_PRIVINFLT,TF_TRAPNO(%esp)
 	jmp	calltrap
 #else /* !XEN */
+#ifdef XEN3
 IDTVEC(trap0e)
 	TRAP(T_PAGEFLT)
+#else /* XEN3 */
+IDTVEC(trap0e)
+	INTRENTRY
+	movl	TF_TRAPNO(%esp),%eax
+	movl	$T_PAGEFLT,TF_TRAPNO(%esp)
+#ifdef DIAGNOSTIC
+	movl	CPUVAR(ILEVEL),%ebx
+#endif /* DIAGNOSTIC */
+	#pushl	%esp
+	pushl	%eax
+	movl	%esp,%eax
+	addl	$4,%eax
+	incl	CPUVAR(NTRAP)
+	pushl	%eax
+	call	_C_LABEL(trap)
+	addl	$8,%esp
+.Ltrap0e_checkusr:
+	testb	$CHK_UPL,TF_CS(%esp)
+	jnz	trap0e_checkast
+#ifdef VM86
+	testl	$PSL_VM,TF_EFLAGS(%esp)
+	jz	6f
+#else
+	jmp	6f
+#endif
+trap0e_checkast:
+	/* Check for ASTs on exit to user mode. */
+	CLI(%eax)
+	movl	CPUVAR(CURLWP),%eax
+	CHECK_ASTPENDING(%eax)
+	jz	3f
+5:	CLEAR_ASTPENDING(%eax)
+	STI(%eax)
+	movl	$T_ASTFLT,TF_TRAPNO(%esp)
+	incl	CPUVAR(NTRAP)
+	pushl	%esp
+	call	_C_LABEL(trap)
+	addl	$4,%esp
+	jmp	trap0e_checkast		/* re-check ASTs */
+3:	CHECK_DEFERRED_SWITCH
+	jnz	9f
+6:	STIC(%eax)
+    	jz	4f
+	call	_C_LABEL(stipending)
+	testl	%eax,%eax
+	jz	4f
+	/* process for pending interrupts */
+	CLI(%eax)
+	movl	CPUVAR(ILEVEL), %ebx
+	movl	$.Ltrap0e_resume, %esi # address to resume loop at
+.Ltrap0e_resume:
+	movl    %ebx,%eax		# get cpl
+	movl    CPUVAR(IUNMASK)(,%eax,4),%eax
+	andl    CPUVAR(IPENDING),%eax   # any non-masked bits left?
+	jz	7f
+	bsrl    %eax,%eax
+	btrl    %eax,CPUVAR(IPENDING)
+	movl    CPUVAR(ISOURCES)(,%eax,4),%eax
+	jmp     *IS_RESUME(%eax)
+7:	movl	%ebx, CPUVAR(ILEVEL) #restore cpl
+	jmp 	.Ltrap0e_checkusr
+4:
+#ifndef DIAGNOSTIC
+	INTRFASTEXIT
+#else
+	cmpl	CPUVAR(ILEVEL),%ebx
+	jne	3f
+	INTRFASTEXIT
+3:	pushl	$4f
+	call	_C_LABEL(printf)
+	addl	$4,%esp
+#ifdef DDB
+	movl	CPUVAR(ILEVEL), %eax
+	int	$3
+#endif /* DDB */
+	movl	%ebx,CPUVAR(ILEVEL)
+	jmp	trap0e_checkast		/* re-check ASTs */
+4:	.asciz	"WARNING: SPL NOT LOWERED ON TRAP EXIT\n"
+#endif /* DIAGNOSTIC */
+9:	STI(%eax)
+	call	_C_LABEL(pmap_load)
+	jmp	trap0e_checkast		/* re-check ASTs */
+#endif /* XEN3 */
 #endif /* !XEN */
 
 IDTVEC(intrspurious)
@@ -890,8 +1020,7 @@ IDTVEC(trap10)
 	pushl	%ebx
 	pushl	%esp
 	pushl	$0			# dummy arg
-	addl	$1,CPUVAR(NTRAP)	# statistical info
-	adcl	$0,CPUVAR(NTRAP)+4
+	incl	_C_LABEL(uvmexp)+V_TRAP
 	call	_C_LABEL(npxintr)
 	addl	$12,%esp
 	jmp	_C_LABEL(trapreturn)
@@ -977,8 +1106,7 @@ calltrap:
 #ifdef DIAGNOSTIC
 	movl	CPUVAR(ILEVEL),%ebx
 #endif /* DIAGNOSTIC */
-	addl	$1,CPUVAR(NTRAP)	# statistical info
-	adcl	$0,CPUVAR(NTRAP)+4
+	incl	CPUVAR(NTRAP)
 	pushl	%esp
 	call	_C_LABEL(trap)
 	addl	$4,%esp
@@ -999,8 +1127,7 @@ _C_LABEL(trapreturn):	.globl	trapreturn
 5:	CLEAR_ASTPENDING(%eax)
 	STI(%eax)
 	movl	$T_ASTFLT,TF_TRAPNO(%esp)
-	addl	$1,CPUVAR(NTRAP)	# statistical info
-	adcl	$0,CPUVAR(NTRAP)+4
+	incl	CPUVAR(NTRAP)
 	pushl	%esp
 	call	_C_LABEL(trap)
 	addl	$4,%esp
@@ -1037,13 +1164,13 @@ _C_LABEL(trapreturn):	.globl	trapreturn
 	INTRFASTEXIT
 3:	STI(%eax)
 	pushl	$4f
-	call	_C_LABEL(panic)
+	call	_C_LABEL(printf)
 	addl	$4,%esp
 	pushl	%ebx
 	call	_C_LABEL(spllower)
 	addl	$4,%esp
 	jmp	.Lalltraps_checkast	/* re-check ASTs */
-4:	.asciz	"SPL NOT LOWERED ON TRAP EXIT\n"
+4:	.asciz	"WARNING: SPL NOT LOWERED ON TRAP EXIT\n"
 #endif /* DIAGNOSTIC */
 9:	STI(%eax)
 	call	_C_LABEL(pmap_load)

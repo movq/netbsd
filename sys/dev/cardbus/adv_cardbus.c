@@ -1,4 +1,4 @@
-/*	$NetBSD: adv_cardbus.c,v 1.29 2012/10/27 17:18:15 chs Exp $	*/
+/*	$NetBSD: adv_cardbus.c,v 1.19 2008/06/24 19:44:52 drochner Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adv_cardbus.c,v 1.29 2012/10/27 17:18:15 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adv_cardbus.c,v 1.19 2008/06/24 19:44:52 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,58 +61,62 @@ __KERNEL_RCSID(0, "$NetBSD: adv_cardbus.c,v 1.29 2012/10/27 17:18:15 chs Exp $")
 #include <dev/ic/advlib.h>
 #include <dev/ic/adv.h>
 
-#define ADV_CARDBUS_IOBA PCI_BAR0
-#define ADV_CARDBUS_MMBA PCI_BAR1
+#define ADV_CARDBUS_IOBA CARDBUS_BASE0_REG
+#define ADV_CARDBUS_MMBA CARDBUS_BASE1_REG
 
 #define ADV_CARDBUS_DEBUG
 #define ADV_CARDBUS_ALLOW_MEMIO
 
-#define DEVNAME(sc) device_xname((sc)->sc_dev)
+#define DEVNAME(sc) device_xname(&(sc)->sc_dev)
 
 struct adv_cardbus_softc {
 	struct asc_softc sc_adv;	/* real ADV */
 
 	/* CardBus-specific goo. */
 	cardbus_devfunc_t sc_ct;	/* our CardBus devfuncs */
-	pcitag_t sc_tag;
+	cardbus_intr_line_t sc_intrline; /* our interrupt line */
+	cardbustag_t sc_tag;
 
-	int	sc_bar;
-	pcireg_t	sc_csr;
+	int	sc_cbenable;		/* what CardBus access type to enable */
+	int	sc_csr;			/* CSR bits */
 	bus_size_t sc_size;
 };
 
-int	adv_cardbus_match(device_t, cfdata_t, void *);
-void	adv_cardbus_attach(device_t, device_t, void *);
-int	adv_cardbus_detach(device_t, int);
+int	adv_cardbus_match(struct device *, struct cfdata *, void *);
+void	adv_cardbus_attach(struct device *, struct device *, void *);
+int	adv_cardbus_detach(struct device *, int);
 
-CFATTACH_DECL_NEW(adv_cardbus, sizeof(struct adv_cardbus_softc),
+CFATTACH_DECL(adv_cardbus, sizeof(struct adv_cardbus_softc),
     adv_cardbus_match, adv_cardbus_attach, adv_cardbus_detach, NULL);
 
 int
-adv_cardbus_match(device_t parent, cfdata_t match, void *aux)
+adv_cardbus_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct cardbus_attach_args *ca = aux;
 
-	if (PCI_VENDOR(ca->ca_id) == PCI_VENDOR_ADVSYS &&
-	    PCI_PRODUCT(ca->ca_id) == PCI_PRODUCT_ADVSYS_ULTRA)
+	if (CARDBUS_VENDOR(ca->ca_id) == PCI_VENDOR_ADVSYS &&
+	    CARDBUS_PRODUCT(ca->ca_id) == PCI_PRODUCT_ADVSYS_ULTRA)
 		return (1);
 
 	return (0);
 }
 
 void
-adv_cardbus_attach(device_t parent, device_t self, void *aux)
+adv_cardbus_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct cardbus_attach_args *ca = aux;
 	struct adv_cardbus_softc *csc = device_private(self);
 	struct asc_softc *sc = &csc->sc_adv;
 	cardbus_devfunc_t ct = ca->ca_ct;
+	cardbus_chipset_tag_t cc = ct->ct_cc;
+	cardbus_function_tag_t cf = ct->ct_cf;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	pcireg_t reg;
 	u_int8_t latency = 0x20;
 
-	sc->sc_dev = self;
 	sc->sc_flags = 0;
 
 	if (PCI_VENDOR(ca->ca_id) == PCI_VENDOR_ADVSYS) {
@@ -147,6 +151,8 @@ adv_cardbus_attach(device_t parent, device_t self, void *aux)
 
 	csc->sc_ct = ct;
 	csc->sc_tag = ca->ca_tag;
+	csc->sc_intrline = ca->ca_intrline;
+	csc->sc_cbenable = 0;
 
 	/*
 	 * Map the device.
@@ -160,7 +166,7 @@ adv_cardbus_attach(device_t parent, device_t self, void *aux)
 #ifdef ADV_CARDBUS_DEBUG
 		printf("%s: memio enabled\n", DEVNAME(sc));
 #endif
-		csc->sc_bar = ADV_CARDBUS_MMBA;
+		csc->sc_cbenable = CARDBUS_MEM_ENABLE;
 		csc->sc_csr |= PCI_COMMAND_MEM_ENABLE;
 	} else
 #endif
@@ -169,29 +175,32 @@ adv_cardbus_attach(device_t parent, device_t self, void *aux)
 #ifdef ADV_CARDBUS_DEBUG
 		printf("%s: io enabled\n", DEVNAME(sc));
 #endif
-		csc->sc_bar = ADV_CARDBUS_IOBA;
+		csc->sc_cbenable = CARDBUS_IO_ENABLE;
 		csc->sc_csr |= PCI_COMMAND_IO_ENABLE;
 	} else {
-		csc->sc_bar = 0;
-		aprint_error_dev(sc->sc_dev, "unable to map device registers\n");
+		aprint_error_dev(&sc->sc_dev, "unable to map device registers\n");
 		return;
 	}
 
+	/* Make sure the right access type is on the CardBus bridge. */
+	(*ct->ct_cf->cardbus_ctrl)(cc, csc->sc_cbenable);
+	(*ct->ct_cf->cardbus_ctrl)(cc, CARDBUS_BM_ENABLE);
+
 	/* Enable the appropriate bits in the PCI CSR. */
-	reg = Cardbus_conf_read(ct, ca->ca_tag, PCI_COMMAND_STATUS_REG);
+	reg = cardbus_conf_read(cc, cf, ca->ca_tag, PCI_COMMAND_STATUS_REG);
 	reg &= ~(PCI_COMMAND_IO_ENABLE|PCI_COMMAND_MEM_ENABLE);
 	reg |= csc->sc_csr;
-	Cardbus_conf_write(ct, ca->ca_tag, PCI_COMMAND_STATUS_REG, reg);
+	cardbus_conf_write(cc, cf, ca->ca_tag, PCI_COMMAND_STATUS_REG, reg);
 
 	/*
 	 * Make sure the latency timer is set to some reasonable
 	 * value.
 	 */
-	reg = Cardbus_conf_read(ct, ca->ca_tag, PCI_BHLC_REG);
+	reg = cardbus_conf_read(cc, cf, ca->ca_tag, PCI_BHLC_REG);
 	if (PCI_LATTIMER(reg) < latency) {
 		reg &= ~(PCI_LATTIMER_MASK << PCI_LATTIMER_SHIFT);
 		reg |= (latency << PCI_LATTIMER_SHIFT);
-		Cardbus_conf_write(ct, ca->ca_tag, PCI_BHLC_REG, reg);
+		cardbus_conf_write(cc, cf, ca->ca_tag, PCI_BHLC_REG, reg);
 	}
 
 	ASC_SET_CHIP_CONTROL(iot, ioh, ASC_CC_HALT);
@@ -215,9 +224,10 @@ adv_cardbus_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * Establish the interrupt.
 	 */
-	sc->sc_ih = Cardbus_intr_establish(ct, IPL_BIO, adv_intr, sc);
+	sc->sc_ih = cardbus_intr_establish(cc, cf, ca->ca_intrline, IPL_BIO,
+	    adv_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(&sc->sc_dev,
 				 "unable to establish interrupt\n");
 		return;
 	}
@@ -229,7 +239,9 @@ adv_cardbus_attach(device_t parent, device_t self, void *aux)
 }
 
 int
-adv_cardbus_detach(device_t self, int flags)
+adv_cardbus_detach(self, flags)
+	struct device *self;
+	int flags;
 {
 	struct adv_cardbus_softc *csc = device_private(self);
 	struct asc_softc *sc = &csc->sc_adv;
@@ -241,14 +253,24 @@ adv_cardbus_detach(device_t self, int flags)
 		return rv;
 
 	if (sc->sc_ih) {
-		Cardbus_intr_disestablish(csc->sc_ct, sc->sc_ih);
+		cardbus_intr_disestablish(csc->sc_ct->ct_cc,
+		    csc->sc_ct->ct_cf, sc->sc_ih);
 		sc->sc_ih = 0;
 	}
 
-	if (csc->sc_bar != 0) {
-		Cardbus_mapreg_unmap(csc->sc_ct, csc->sc_bar,
-		    sc->sc_iot, sc->sc_ioh, csc->sc_size);
-		csc->sc_bar = 0;
+	if (csc->sc_cbenable) {
+#ifdef ADV_CARDBUS_ALLOW_MEMIO
+		if (csc->sc_cbenable == CARDBUS_MEM_ENABLE) {
+			Cardbus_mapreg_unmap(csc->sc_ct, ADV_CARDBUS_MMBA,
+			    sc->sc_iot, sc->sc_ioh, csc->sc_size);
+		} else {
+#endif
+			Cardbus_mapreg_unmap(csc->sc_ct, ADV_CARDBUS_IOBA,
+			    sc->sc_iot, sc->sc_ioh, csc->sc_size);
+#ifdef ADV_CARDBUS_ALLOW_MEMIO
+		}
+#endif
+		csc->sc_cbenable = 0;
 	}
 
 	return 0;

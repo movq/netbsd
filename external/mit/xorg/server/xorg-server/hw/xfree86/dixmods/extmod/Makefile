@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.10 2010/11/23 08:22:32 mrg Exp $
+# $NetBSD: Makefile,v 1.5.8.1 2009/09/17 04:24:39 snj Exp $
 
 XMODULEDIR=     ${X11USRLIBDIR}/modules/extensions
 
@@ -20,19 +20,18 @@ CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/hw/xfree86/${LIB} \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86/dbe \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86/hw/xfree86/loader \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86/miext/shadow \
-		-I${X11SRCDIR.xorg-server}/hw/xfree86/common \
 		-I${X11SRCDIR.xorg-server}/Xext \
 		-I${DESTDIR}${X11INCDIR}/X11 \
 		-I${DESTDIR}${X11INCDIR}/pixman-1 \
-		-I${DESTDIR}${X11INCDIR}/xorg
+		-I${DESTDIR}${X11INCDIR}/xorg \
+		-I${X11SRCDIR.xorg-server}/../include
 
-CPPFLAGS+=	${X11FLAGS.DIX} ${X11INCS.DIX} \
+CPPFLAGS+=	${X11FLAGS.DIX} \
 		-DHAVE_XORG_CONFIG_H
 
 # XXX
 CPPFLAGS.xf86RandR12.c=	-Wno-error
 CPPFLAGS.xf86dga2.c=	-Wno-error
-CPPFLAGS.xf86vmode.c=	-Wno-error	# XXX xf86vmstr.h
 
 XEXTMODULEOBJDIR!=  cd ${NETBSDSRCDIR}/external/mit/xorg/server/xorg-server/Xext/Xextmodule && ${PRINTOBJDIR}
 LIBXEXTMODULE=	${XEXTMODULEOBJDIR}/libXextmodule.a

@@ -1,4 +1,4 @@
-/*	$NetBSD: lockd_lock.c,v 1.33 2012/09/13 11:09:41 wiz Exp $	*/
+/*	$NetBSD: lockd_lock.c,v 1.28.12.1 2009/12/01 19:48:05 snj Exp $	*/
 
 /*
  * Copyright (c) 2000 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -397,7 +402,7 @@ unlock(nlm4_lock *lck, int flags)
 			/* nothing to do */
 			break;
 		default:
-			syslog(LOG_NOTICE, "unknown status %d for %s",
+			syslog(LOG_NOTICE, "unknow status %d for %s",
 			    fl->status, fl->client_name);
 		}
 		sigunlock();
@@ -458,7 +463,7 @@ sigchild_handler(int sig)
 				break;
 		}
 		if (fl == NULL) {
-			syslog(LOG_NOTICE, "unknown child %d", pid);
+			syslog(LOG_NOTICE, "unknow child %d", pid);
 		} else {
 			/*
 			 * protect from pid reusing.
@@ -532,11 +537,10 @@ do_lock(struct file_lock *fl, int block)
 		    fl->client_name);
 	}
 	syslog(LOG_DEBUG, "lock from %s.%" PRIu32 " for file%s%s: "
-	    "dev %llu ino %llu (uid %d), flags %d",
+	    "dev %u ino %llu (uid %d), flags %d",
 	    fl->client_name, fl->client.svid,
 	    fl->client.exclusive ? " (exclusive)":"", block ? " (block)":"",
-	    (unsigned long long)st.st_dev,
-	    (unsigned long long)st.st_ino, st.st_uid, fl->flags);
+	    st.st_dev, (unsigned long long)st.st_ino, st.st_uid, fl->flags);
 	lflags = LOCK_NB;
 	if (fl->client.exclusive == 0)
 		lflags |= LOCK_SH;
@@ -791,9 +795,8 @@ do_mon(const char *hostname)
 	my_mon.mon_id.my_id.my_prog = NLM_PROG;
 	my_mon.mon_id.my_id.my_vers = NLM_SM;
 	my_mon.mon_id.my_id.my_proc = NLM_SM_NOTIFY;
-	if ((retval = callrpc(localhost, SM_PROG, SM_VERS, SM_MON,
-	    (xdrproc_t)xdr_mon, (void *)&my_mon,
-	    (xdrproc_t)xdr_sm_stat_res, (void *)&result)) != 0) {
+	if ((retval = callrpc(localhost, SM_PROG, SM_VERS, SM_MON, xdr_mon,
+	    (void *)&my_mon, xdr_sm_stat_res, (void *)&result)) != 0) {
 		syslog(LOG_WARNING, "rpc to statd failed (%s)",
 		    clnt_sperrno((enum clnt_stat)retval));
 		free(hp);
@@ -839,7 +842,7 @@ notify(const char *hostname, int state)
 			case LKST_DYING:
 				break;
 			default:
-				syslog(LOG_NOTICE, "unknown status %d for %s",
+				syslog(LOG_NOTICE, "unknow status %d for %s",
 				    fl->status, fl->client_name);
 			}
 		}

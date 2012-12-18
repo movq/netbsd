@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.26 2012/10/04 21:23:45 dsl Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.15.8.1 2009/04/04 17:39:09 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007, 2009 The NetBSD Foundation, Inc.
@@ -30,14 +30,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.26 2012/10/04 21:23:45 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.15.8.1 2009/04/04 17:39:09 snj Exp $");
 
+#include "opt_compat_netbsd.h"
 #include "opt_mtrr.h"
 #include "opt_perfctrs.h"
 #include "opt_user_ldt.h"
-#ifdef i386
 #include "opt_vm86.h"
-#endif
 #include "opt_xen.h"
 
 #include <sys/param.h>
@@ -46,6 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.26 2012/10/04 21:23:45 dsl Exp $")
 #include <sys/file.h>
 #include <sys/time.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/uio.h>
 #include <sys/kernel.h>
 #include <sys/buf.h>
@@ -70,6 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.26 2012/10/04 21:23:45 dsl Exp $")
 /* Need to be checked. */
 #undef	USER_LDT
 #undef	PERFCTRS
+#undef	VM86
 #undef	IOPERM
 #else
 #if defined(XEN)
@@ -93,12 +94,10 @@ int x86_get_ioperm(struct lwp *, void *, register_t *);
 int x86_set_ioperm(struct lwp *, void *, register_t *);
 int x86_get_mtrr(struct lwp *, void *, register_t *);
 int x86_set_mtrr(struct lwp *, void *, register_t *);
-int x86_set_sdbase32(void *, char, lwp_t *, bool);
-int x86_set_sdbase(void *, char, lwp_t *, bool);
-int x86_get_sdbase32(void *, char);
-int x86_get_sdbase(void *, char);
+int x86_set_sdbase(void *arg, char which);
+int x86_get_sdbase(void *arg, char which);
 
-#if defined(USER_LDT) && defined(LDT_DEBUG)
+#ifdef LDT_DEBUG
 static void x86_print_ldt(int, const struct segment_descriptor *);
 
 static void
@@ -407,19 +406,24 @@ x86_iopl(struct lwp *l, void *args, register_t *retval)
 		iopl = SEL_UPL;
 	else
 		iopl = SEL_KPL;
-
-    {
-	struct physdev_op physop;
-	struct pcb *pcb;
-
-	pcb = lwp_getpcb(l);
-	pcb->pcb_iopl = iopl;
-
+	l->l_addr->u_pcb.pcb_iopl = iopl;
 	/* Force the change at ring 0. */
-	physop.cmd = PHYSDEVOP_SET_IOPL;
-	physop.u.set_iopl.iopl = iopl;
-	HYPERVISOR_physdev_op(&physop);
-    }
+#ifdef XEN3
+	{
+		struct physdev_op physop;
+		physop.cmd = PHYSDEVOP_SET_IOPL;
+		physop.u.set_iopl.iopl = iopl;
+		HYPERVISOR_physdev_op(&physop);
+	}
+#else /* XEN3 */
+	{
+		dom0_op_t op;
+		op.cmd = DOM0_IOPL;
+		op.u.iopl.domain = DOMID_SELF;
+		op.u.iopl.iopl = iopl;
+		HYPERVISOR_dom0_op(&op);
+	}
+#endif /* XEN3 */
 #elif defined(__x86_64__)
 	if (ua.iopl)
 		tf->tf_rflags |= PSL_IOPL;
@@ -440,7 +444,7 @@ x86_get_ioperm(struct lwp *l, void *args, register_t *retval)
 {
 #ifdef IOPERM
 	int error;
-	struct pcb *pcb = lwp_getpcb(l);
+	struct pcb *pcb = &l->l_addr->u_pcb;
 	struct x86_get_ioperm_args ua;
 	void *dummymap = NULL;
 	void *iomap;
@@ -474,7 +478,7 @@ x86_set_ioperm(struct lwp *l, void *args, register_t *retval)
 #ifdef IOPERM
 	struct cpu_info *ci;
 	int error;
-	struct pcb *pcb = lwp_getpcb(l);
+	struct pcb *pcb = &l->l_addr->u_pcb;
 	struct x86_set_ioperm_args ua;
 	void *new;
 	void *old;
@@ -584,172 +588,67 @@ x86_set_mtrr(struct lwp *l, void *args, register_t *retval)
 #endif
 }
 
-#ifdef __x86_64__
-#define pcb_fsd pcb_fs
-#define pcb_gsd pcb_gs
-#define segment_descriptor mem_segment_descriptor
-#endif
-
 int
-x86_set_sdbase32(void *arg, char which, lwp_t *l, bool direct)
-{
-	struct trapframe *tf = l->l_md.md_regs;
-	union descriptor usd;
-	struct pcb *pcb;
-	uint32_t base;
-	int error;
-
-	if (direct) {
-		base = (vaddr_t)arg;
-	} else {
-		error = copyin(arg, &base, sizeof(base));
-		if (error != 0)
-			return error;
-	}
-
-	memset(&usd, 0, sizeof(usd));
-	usd.sd.sd_lobase = base & 0xffffff;
-	usd.sd.sd_hibase = (base >> 24) & 0xff;
-	usd.sd.sd_lolimit = 0xffff;
-	usd.sd.sd_hilimit = 0xf;
-	usd.sd.sd_type = SDT_MEMRWA;
-	usd.sd.sd_dpl = SEL_UPL;
-	usd.sd.sd_p = 1;
-	usd.sd.sd_def32 = 1;
-	usd.sd.sd_gran = 1;
-
-	pcb = lwp_getpcb(l);
-	kpreempt_disable();
-	if (which == 'f') {
-		memcpy(&pcb->pcb_fsd, &usd.sd,
-		    sizeof(struct segment_descriptor));
-		if (l == curlwp) {
-			update_descriptor(&curcpu()->ci_gdt[GUFS_SEL], &usd);
-#ifdef __x86_64__
-			setfs(GSEL(GUFS_SEL, SEL_UPL));
-#endif
-		}
-		tf->tf_fs = GSEL(GUFS_SEL, SEL_UPL);
-	} else /* which == 'g' */ {
-		memcpy(&pcb->pcb_gsd, &usd.sd,
-		    sizeof(struct segment_descriptor));
-		if (l == curlwp) {
-			update_descriptor(&curcpu()->ci_gdt[GUGS_SEL], &usd);
-#ifdef __x86_64__
-#ifndef XEN
-			setusergs(GSEL(GUGS_SEL, SEL_UPL));
-#else
-			HYPERVISOR_set_segment_base(SEGBASE_GS_USER_SEL,
-						    GSEL(GUGS_SEL, SEL_UPL));
-#endif
-#endif
-		}
-		tf->tf_gs = GSEL(GUGS_SEL, SEL_UPL);
-	}
-	kpreempt_enable();
-	return 0;
-}
-
-int
-x86_set_sdbase(void *arg, char which, lwp_t *l, bool direct)
+x86_set_sdbase(void *arg, char which)
 {
 #ifdef i386
-	return x86_set_sdbase32(arg, which, l, direct);
-#else
-	struct pcb *pcb;
+	struct segment_descriptor sd;
 	vaddr_t base;
 	int error;
 
-	if (l->l_proc->p_flag & PK_32) {
-		return x86_set_sdbase32(arg, which, l, direct);
-	}
-
-	if (direct) {
-		base = (vaddr_t)arg;
-	} else {
-		error = copyin(arg, &base, sizeof(base));
-		if (error != 0)
-			return error;
-	}
-
-	if (base >= VM_MAXUSER_ADDRESS)
-		return EINVAL;
-
-	if (error) {
+	error = copyin(arg, &base, sizeof(base));
+	if (error != 0)
 		return error;
-	}
 
-	pcb = lwp_getpcb(l);
+	sd.sd_lobase = base & 0xffffff;
+	sd.sd_hibase = (base >> 24) & 0xff;
+	sd.sd_lolimit = 0xffff;
+	sd.sd_hilimit = 0xf;
+	sd.sd_type = SDT_MEMRWA;
+	sd.sd_dpl = SEL_UPL;
+	sd.sd_p = 1;
+	sd.sd_xx = 0;
+	sd.sd_def32 = 1;
+	sd.sd_gran = 1;
 
 	kpreempt_disable();
-	switch(which) {
-	case 'f':
-		pcb->pcb_fs = base;
-		if (l == curlwp)
-			wrmsr(MSR_FSBASE, pcb->pcb_fs);
-		break;
-	case 'g':
-		pcb->pcb_gs = base;
-		if (l == curlwp)
-			wrmsr(MSR_KERNELGSBASE, pcb->pcb_gs);
-		break;
-	default:
-		panic("x86_get_sdbase");
+	if (which == 'f') {
+		memcpy(&curpcb->pcb_fsd, &sd, sizeof(sd));
+		memcpy(&curcpu()->ci_gdt[GUFS_SEL], &sd, sizeof(sd));
+	} else /* which == 'g' */ {
+		memcpy(&curpcb->pcb_gsd, &sd, sizeof(sd));
+		memcpy(&curcpu()->ci_gdt[GUGS_SEL], &sd, sizeof(sd));
 	}
 	kpreempt_enable();
 
-	return error;
+	return 0;
+#else
+	return EINVAL;
 #endif
-}
-
-int
-x86_get_sdbase32(void *arg, char which)
-{
-	struct segment_descriptor *sd;
-	uint32_t base;
-
-	switch (which) {
-	case 'f':
-		sd = (void *)&curpcb->pcb_fsd;
-		break;
-	case 'g':
-		sd = (void *)&curpcb->pcb_gsd;
-		break;
-	default:
-		panic("x86_get_sdbase");
-	}
-
-	base = sd->sd_hibase << 24 | sd->sd_lobase;
-	return copyout(&base, arg, sizeof(base));
 }
 
 int
 x86_get_sdbase(void *arg, char which)
 {
 #ifdef i386
-	return x86_get_sdbase32(arg, which);
-#else
+	struct segment_descriptor *sd;
 	vaddr_t base;
-	struct pcb *pcb;
 
-	if (curproc->p_flag & PK_32) {
-		return x86_get_sdbase32(arg, which);
-	}
-
-	pcb = lwp_getpcb(curlwp);
-
-	switch(which) {
+	switch (which) {
 	case 'f':
-		base = pcb->pcb_fs;
+		sd = (struct segment_descriptor *)&curpcb->pcb_fsd;
 		break;
 	case 'g':
-		base = pcb->pcb_gs;
+		sd = (struct segment_descriptor *)&curpcb->pcb_gsd;
 		break;
 	default:
 		panic("x86_get_sdbase");
 	}
 
-	return copyout(&base, arg, sizeof(base));
+	base = sd->sd_hibase << 24 | sd->sd_lobase;
+	return copyout(&base, &arg, sizeof(base));
+#else
+	return EINVAL;
 #endif
 }
 
@@ -794,9 +693,11 @@ sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retva
 	case X86_VM86:
 		error = x86_vm86(l, SCARG(uap, parms), retval);
 		break;
+#ifdef COMPAT_16
 	case X86_OLD_VM86:
 		error = compat_16_x86_vm86(l, SCARG(uap, parms), retval);
 		break;
+#endif
 #endif
 
 #ifdef PERFCTRS
@@ -820,11 +721,11 @@ sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retva
 #endif
 
 	case X86_SET_FSBASE:
-		error = x86_set_sdbase(SCARG(uap, parms), 'f', curlwp, false);
+		error = x86_set_sdbase(SCARG(uap, parms), 'f');
 		break;
 
 	case X86_SET_GSBASE:
-		error = x86_set_sdbase(SCARG(uap, parms), 'g', curlwp, false);
+		error = x86_set_sdbase(SCARG(uap, parms), 'g');
 		break;
 
 	case X86_GET_FSBASE:
@@ -840,16 +741,4 @@ sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retva
 		break;
 	}
 	return (error);
-}
-
-int
-cpu_lwp_setprivate(lwp_t *l, void *addr)
-{
-
-#ifdef __x86_64__
-	if ((l->l_proc->p_flag & PK_32) == 0) {
-		return x86_set_sdbase(addr, 'f', l, true);
-	}
-#endif	
-	return x86_set_sdbase(addr, 'g', l, true);
 }

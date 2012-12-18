@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_termios.h,v 1.21 2011/09/25 13:40:07 chs Exp $	*/
+/*	$NetBSD: linux_termios.h,v 1.18 2008/06/28 21:34:32 chris Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -185,9 +185,13 @@ static void bsd_termios_to_linux_termios(struct termios *,
 
 static void
 #ifdef COMPAT_LINUX32
-linux32_termio_to_bsd_termios(struct linux32_termio *lt, struct termios *bts)
+linux32_termio_to_bsd_termios(lt, bts)
+	struct linux32_termio *lt;
+	struct termios *bts;
 #else
-linux_termio_to_bsd_termios(struct linux_termio *lt, struct termios *bts)
+linux_termio_to_bsd_termios(lt, bts)
+	struct linux_termio *lt;
+	struct termios *bts;
 #endif
 {
 	int index;
@@ -263,18 +267,20 @@ linux_termio_to_bsd_termios(struct linux_termio *lt, struct termios *bts)
 	bts->c_cc[VQUIT] = lt->c_cc[LINUX_OLD_VQUIT];
 	bts->c_cc[VERASE] = lt->c_cc[LINUX_OLD_VERASE];
 	bts->c_cc[VKILL] = lt->c_cc[LINUX_OLD_VKILL];
-#if LINUX_VEOF < LINUX_NCC
 	bts->c_cc[VEOF] = lt->c_cc[LINUX_OLD_VEOF];
-#endif
 	bts->c_cc[VTIME] = lt->c_cc[LINUX_OLD_VTIME];
 	bts->c_cc[VMIN] = lt->c_cc[LINUX_OLD_VMIN];
 }
 
 static void
 #ifdef COMPAT_LINUX32
-bsd_termios_to_linux32_termio(struct termios *bts, struct linux32_termio *lt)
+bsd_termios_to_linux32_termio(bts, lt)
+	struct termios *bts;
+	struct linux32_termio *lt;
 #else
-bsd_termios_to_linux_termio(struct termios *bts, struct linux_termio *lt)
+bsd_termios_to_linux_termio(bts, lt)
+	struct termios *bts;
+	struct linux_termio *lt;
 #endif
 {
 	int i, mask;
@@ -345,16 +351,14 @@ bsd_termios_to_linux_termio(struct termios *bts, struct linux_termio *lt)
 	}
 	lt->c_cflag |= mask;
 
-	lt->c_cc[LINUX_OLD_VINTR] = bts->c_cc[VINTR];
-	lt->c_cc[LINUX_OLD_VQUIT] = bts->c_cc[VQUIT];
-	lt->c_cc[LINUX_OLD_VERASE] = bts->c_cc[VERASE];
-	lt->c_cc[LINUX_OLD_VKILL] = bts->c_cc[VKILL];
-#if LINUX_OLD_VEOF < LINUX_NCC
-	lt->c_cc[LINUX_OLD_VEOF] = bts->c_cc[VEOF];
-#endif
-	lt->c_cc[LINUX_OLD_VTIME] = bts->c_cc[VTIME];
-	lt->c_cc[LINUX_OLD_VMIN] = bts->c_cc[VMIN];
-	lt->c_cc[LINUX_OLD_VSWTC] = 0;
+	lt->c_cc[LINUX_VINTR] = bts->c_cc[VINTR];
+	lt->c_cc[LINUX_VQUIT] = bts->c_cc[VQUIT];
+	lt->c_cc[LINUX_VERASE] = bts->c_cc[VERASE];
+	lt->c_cc[LINUX_VKILL] = bts->c_cc[VKILL];
+	lt->c_cc[LINUX_VEOF] = bts->c_cc[VEOF];
+	lt->c_cc[LINUX_VTIME] = bts->c_cc[VTIME];
+	lt->c_cc[LINUX_VMIN] = bts->c_cc[VMIN];
+	lt->c_cc[LINUX_VSWTC] = 0;
 
 	/* XXX should be fixed someday */
 	lt->c_line = 0;
@@ -362,9 +366,13 @@ bsd_termios_to_linux_termio(struct termios *bts, struct linux_termio *lt)
 
 static void
 #ifdef COMPAT_LINUX32
-linux32_termios_to_bsd_termios(struct linux32_termios *lts, struct termios *bts)
+linux32_termios_to_bsd_termios(lts, bts)
+	struct linux32_termios *lts;
+	struct termios *bts;
 #else
-linux_termios_to_bsd_termios(struct linux_termios *lts, struct termios *bts)
+linux_termios_to_bsd_termios(lts, bts)
+	struct linux_termios *lts;
+	struct termios *bts;
 #endif
 {
 	int index;
@@ -459,9 +467,13 @@ linux_termios_to_bsd_termios(struct linux_termios *lts, struct termios *bts)
 
 static void
 #ifdef COMPAT_LINUX32
-bsd_termios_to_linux32_termios(struct termios *bts, struct linux32_termios *lts)
+bsd_termios_to_linux32_termios(bts, lts)
+	struct termios *bts;
+	struct linux32_termios *lts;
 #else
-bsd_termios_to_linux_termios(struct termios *bts, struct linux_termios *lts)
+bsd_termios_to_linux_termios(bts, lts)
+	struct termios *bts;
+	struct linux_termios *lts;
 #endif
 {
 	int i, mask;

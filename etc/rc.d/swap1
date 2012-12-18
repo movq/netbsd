@@ -1,10 +1,10 @@
 #!/bin/sh
 #
-# $NetBSD: swap1,v 1.11 2009/09/24 16:45:48 apb Exp $
+# $NetBSD: swap1,v 1.9 2004/08/13 18:08:03 mycroft Exp $
 #
 
 # PROVIDE: localswap
-# REQUIRE: DISKS root
+# REQUIRE: disks
 # KEYWORD: shutdown
 
 $_rc_subr_loaded . /etc/rc.subr
@@ -18,11 +18,8 @@ stop_cmd="swap1_stop"
 #
 swap1_start()
 {
-	# Treat exit status 2 from swapctl(8) as successful; it means
-	# "no error, but no suitable swap devices were configured".
-	#
 	if ! checkyesno no_swap; then
-		swapctl -A -t blk || [ $? = 2 ]
+		swapctl -A -t blk
 	fi
 }
 
@@ -32,7 +29,7 @@ swap1_stop()
 {
 	if checkyesno swapoff || [ -n "$rc_force" ]; then
 		echo "Removing block-type swap devices"
-		swapctl -U -t blk || [ $? = 2 ]
+		swapctl -U -t blk
 	fi
 }
 

@@ -1,6 +1,6 @@
-#	$NetBSD: Makefile,v 1.27 2011/12/25 06:09:09 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.24 2008/10/20 03:02:07 christos Exp $
 
-S=	${.CURDIR}/../../../..
+S=	${.CURDIR}/../../../../
 
 BASE= dosboot
 PROG= ${BASE}.com
@@ -9,15 +9,11 @@ NEWVERSWHAT=	"DOS Boot"
 STARTFILE=	${DOSSTART}
 RELOC=		0x100
 
-AFLAGS.dosboot.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
-AFLAGS.start_dos.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
-
 SRCS= main.c devopen.c exec.c
 
 CPPFLAGS+= -DSLOW	# for libz
 CPPFLAGS+= -DCOMPAT_386BSD_MBRPART
 CPPFLAGS+= -DXMS
-CPPFLAGS+= -DLIBSA_ENABLE_LS_OP
 #uncomment if there are problems with memory detection
 #CPPFLAGS+= -DCONSERVATIVE_MEMDETECT
 
@@ -31,7 +27,7 @@ SRCS+= getopt.c
 # XXX these should depend on the size of the image
 CPPFLAGS+= -DSTACK_START=0x10000
 SAMISCCPPFLAGS+= -DHEAP_START=0x20000 -DHEAP_LIMIT=0x50000
-SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_INCLUDE_NET=no SA_ENABLE_LS_OP=yes
+SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_INCLUDE_NET=no
 I386MISCMAKEFLAGS= I386_INCLUDE_DOS=yes
 
 VERSIONFILE= ${.CURDIR}/version

@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_cas.S,v 1.11 2011/02/22 18:45:10 pooka Exp $	*/
+/*	$NetBSD: atomic_cas.S,v 1.7 2008/05/25 15:56:12 chs Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
@@ -29,10 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/param.h>
 #include "atomic_op_asm.h"
 
-#if defined(_HARDKERNEL)
+#if defined(_KERNEL)
 
 #include <machine/psl.h>
 
@@ -52,40 +51,26 @@
 	nop								;\
 	nop
 
-#else	/* _HARDKERNEL */
+#else	/* _KERNEL */
 
 #define	MULTIPROCESSOR	1
 #define	DISABLE_INTERRUPTS		/* nothing */
 #define	RESTORE_INTERRUPTS		/* nothing */
 
-#endif	/* _HARDKERNEL */
+#endif	/* _KERNEL */
 
 #if defined(MULTIPROCESSOR)
 	.section .bss
 	.align	1024
-#ifdef PIC
-	.globl _C_LABEL(_atomic_cas_locktab)
-#endif
 OTYPE(_C_LABEL(_atomic_cas_locktab))
 _C_LABEL(_atomic_cas_locktab):
 	.space	1024
-
-#ifdef PIC
-/* o4 is not used for PSR in PIC cases, so we can use it here */
-#define GETLOCKTAB							\
-	PIC_PROLOGUE(%o3,%o4)						;\
-	set _C_LABEL(_atomic_cas_locktab), %o4				;\
-	ld [%o3 + %o4], %o3
-#else
-#define GETLOCKTAB							\
-	sethi	%hi(_C_LABEL(_atomic_cas_locktab)), %o3
-#endif
 
 #define	ACQUIRE_INTERLOCK						 \
 	DISABLE_INTERRUPTS						;\
 	srl	%o0, 3, %o5			/* get lock address */	;\
 	and	%o5, 1023, %o5						;\
-	GETLOCKTAB							;\
+	sethi	%hi(_C_LABEL(_atomic_cas_locktab)), %o3			;\
 	add	%o5, %o3, %o5						;\
 									;\
 	/* %o5 has interlock address */					;\

@@ -1,4 +1,4 @@
-/*	$NetBSD: data.c,v 1.6 2010/05/12 18:28:20 plunky Exp $	*/
+/*	$NetBSD: data.c,v 1.5.26.1 2010/11/21 02:32:26 riz Exp $	*/
 
 /*
  * Copyright (c) 1999 Lennart Augustsson <augustss@NetBSD.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: data.c,v 1.6 2010/05/12 18:28:20 plunky Exp $");
+__RCSID("$NetBSD: data.c,v 1.5.26.1 2010/11/21 02:32:26 riz Exp $");
 
 #include <assert.h>
 #include <stdlib.h>

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.22 2012/03/20 12:37:01 minoura Exp $
+#	$NetBSD: Makefile,v 1.15 2008/10/19 22:05:21 apb Exp $
 
 NOMAN=		# defined
 
@@ -24,7 +24,7 @@ OBJCOPY?=	/usr/bin/objcopy
 
 SRCS=		srt0.S boot.c conf.c exec_image.S
 S=		${.CURDIR}/../../../..
-M=		${.CURDIR}/../..
+M=		$S/arch/${MACHINE}
 COMMONDIR=	$M/stand/common
 .PATH:		${COMMONDIR}
 
@@ -32,27 +32,27 @@ SRCS+=		vers.c
 CLEANFILES+=	vers.c
 vers.c:	${VERSIONFILE}
 	${_MKTARGET_CREATE}
-	${HOST_SH} ${S}/conf/newvers_stand.sh \
-	    ${.ALLSRC} ${MACHINE} ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${.ALLSRC} ${MACHINE} ${NEWVERSWHAT}
 
 CPPFLAGS+=	-nostdinc -I$S -I${.OBJDIR} -I$M/stand/libsa
 CPPFLAGS+=	-I$M/stand/libiocs -I${COMMONDIR}
 CPPFLAGS+=	-D_STANDALONE -DHEAP_VARIABLE
 CPPFLAGS+=	-DTEXTADDR="0x${TEXT}" 
 CPPFLAGS+=	-DBOOT=\"${BOOT}\" -DBOOT_VERS=\"${VERSION}\"
-CPPFLAGS+=	-DLIBSA_ENABLE_LS_OP
 CFLAGS=		-Wno-main -Os -m68020-60
+.if ${OBJECT_FMT} == "ELF"
 LINKFLAGS=	-N -static -T ${.CURDIR}/boot.ldscript
+.else
+LINKFLAGS=	-N -static -Ttext ${TEXT}
+.endif
 LIBIOCS!=	cd $M/stand/libiocs && ${PRINTOBJDIR}
 LIBSA!=		cd $M/stand/libsa && ${PRINTOBJDIR}
-L=		${LIBSA}/lib
-LDLIBS= 	${L}/sa/libsa.a ${L}/kern/libkern.a ${L}/z/libz.a
-LDLIBS+=	${LIBIOCS}/libiocs.a
+LDLIBS=		-L${LIBSA} -lsa -L${LIBIOCS} -liocs
 
 .include "../Makefile.booters"
 
-realall: ${PROG}
-${PROG}:	${OBJS} ${LDLIBS}
+realall: machine-links ${PROG}
+${PROG}:	${OBJS} ${LIBSA}/libsa.a ${LIBIOCS}/libiocs.a
 	${_MKTARGET_LINK}
 	${LD} ${LINKFLAGS} -o ${PROG}.sym ${OBJS} ${LDLIBS}
 	${STRIP} -F ${BFDNAME} -o ${PROG} ${PROG}.sym

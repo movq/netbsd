@@ -1,4 +1,4 @@
-/*	$NetBSD: fts.c,v 1.46 2012/09/26 15:33:43 msaitoh Exp $	*/
+/*	$NetBSD: fts.c,v 1.34.4.2 2009/08/16 22:41:23 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)fts.c	8.6 (Berkeley) 8/14/94";
 #else
-__RCSID("$NetBSD: fts.c,v 1.46 2012/09/26 15:33:43 msaitoh Exp $");
+__RCSID("$NetBSD: fts.c,v 1.34.4.2 2009/08/16 22:41:23 bouyer Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -79,23 +79,6 @@ static int	 fts_safe_changedir(const FTS *, const FTSENT *, int,
 #undef	FTS_ALLOC_ALIGNED
 #endif
 
-#ifndef ftsent_namelen_truncate
-#define ftsent_namelen_truncate(a)	\
-    ((a) > UINT_MAX ? UINT_MAX : (unsigned int)(a))
-#endif
-#ifndef ftsent_pathlen_truncate
-#define ftsent_pathlen_truncate(a) \
-    ((a) > UINT_MAX ? UINT_MAX : (unsigned int)(a))
-#endif
-#ifndef fts_pathlen_truncate
-#define fts_pathlen_truncate(a)	\
-    ((a) > UINT_MAX ? UINT_MAX : (unsigned int)(a))
-#endif
-#ifndef fts_nitems_truncate
-#define fts_nitems_truncate(a) \
-    ((a) > UINT_MAX ? UINT_MAX : (unsigned int)(a))
-#endif
-
 #define	ISDOT(a)	(a[0] == '.' && (!a[1] || (a[1] == '.' && !a[2])))
 
 #define	CLR(opt)	(sp->fts_options &= ~(opt))
@@ -133,7 +116,7 @@ fts_open(char * const *argv, int options,
 	}
 
 	/* Allocate/initialize the stream */
-	if ((sp = malloc(sizeof(FTS))) == NULL)
+	if ((sp = malloc((unsigned int)sizeof(FTS))) == NULL)
 		return (NULL);
 	memset(sp, 0, sizeof(FTS));
 	sp->fts_compar = compar;
@@ -205,18 +188,19 @@ fts_open(char * const *argv, int options,
 	sp->fts_cur->fts_info = FTS_INIT;
 
 	/*
-	 * If using chdir(2), grab a file descriptor pointing to dot to ensure
+	 * If using chdir(2), grab a file descriptor pointing to dot to insure
 	 * that we can get back here; this could be avoided for some paths,
 	 * but almost certainly not worth the effort.  Slashes, symbolic links,
 	 * and ".." are all fairly nasty problems.  Note, if we can't get the
 	 * descriptor we run anyway, just more slowly.
 	 */
-#ifndef O_CLOEXEC
-#define O_CLOEXEC 0
-#endif
 	if (!ISSET(FTS_NOCHDIR)) {
-		if ((sp->fts_rfd = open(".", O_RDONLY | O_CLOEXEC, 0)) == -1)
+		if ((sp->fts_rfd = open(".", O_RDONLY, 0)) == -1)
 			SET(FTS_NOCHDIR);
+		else if (fcntl(sp->fts_rfd, F_SETFD, FD_CLOEXEC) == -1) {
+			close(sp->fts_rfd);
+			SET(FTS_NOCHDIR);
+		}
 	}
 
 	if (nitems == 0)
@@ -252,7 +236,7 @@ fts_load(FTS *sp, FTSENT *p)
 	if ((cp = strrchr(p->fts_name, '/')) && (cp != p->fts_name || cp[1])) {
 		len = strlen(++cp);
 		memmove(p->fts_name, cp, len + 1);
-		p->fts_namelen = ftsent_namelen_truncate(len);
+		p->fts_namelen = len;
 	}
 	p->fts_accpath = p->fts_path = sp->fts_path;
 	sp->fts_dev = p->fts_dev;
@@ -368,10 +352,13 @@ fts_read(FTS *sp)
 	    (p->fts_info == FTS_SL || p->fts_info == FTS_SLNONE)) {
 		p->fts_info = fts_stat(sp, p, 1);
 		if (p->fts_info == FTS_D && !ISSET(FTS_NOCHDIR)) {
-			if ((p->fts_symfd = open(".", O_RDONLY | O_CLOEXEC, 0))
-			    == -1) {
+			if ((p->fts_symfd = open(".", O_RDONLY, 0)) == -1) {
 				p->fts_errno = errno;
 				p->fts_info = FTS_ERR;
+			} else if (fcntl(p->fts_symfd, F_SETFD, FD_CLOEXEC) == -1) {
+				p->fts_errno = errno;
+				p->fts_info = FTS_ERR;
+				close(p->fts_symfd);
 			} else
 				p->fts_flags |= FTS_SYMFOLLOW;
 		}
@@ -459,9 +446,13 @@ next:	tmp = p;
 			p->fts_info = fts_stat(sp, p, 1);
 			if (p->fts_info == FTS_D && !ISSET(FTS_NOCHDIR)) {
 				if ((p->fts_symfd =
-				    open(".", O_RDONLY | O_CLOEXEC, 0)) == -1) {
+				    open(".", O_RDONLY, 0)) == -1) {
 					p->fts_errno = errno;
 					p->fts_info = FTS_ERR;
+				} else if (fcntl(p->fts_symfd, F_SETFD, FD_CLOEXEC) == -1) {
+					p->fts_errno = errno;
+					p->fts_info = FTS_ERR;
+					close(p->fts_symfd);
 				} else
 					p->fts_flags |= FTS_SYMFOLLOW;
 			}
@@ -488,7 +479,7 @@ name:		t = sp->fts_path + NAPPEND(p->fts_parent);
 		return (sp->fts_cur = NULL);
 	}
 
-	/* NUL terminate the pathname. */
+	/* Nul terminate the pathname. */
 	sp->fts_path[p->fts_pathlen] = '\0';
 
 	/*
@@ -636,8 +627,8 @@ fts_build(FTS *sp, int type)
 	DIR *dirp;
 	void *oldaddr;
 	size_t dnamlen;
-	int cderrno, descend, level, nlinks, saved_errno, nostat, doadjust;
-	size_t len, maxlen;
+	int cderrno, descend, len, level, nlinks, saved_errno, nostat, doadjust;
+	size_t maxlen;
 #ifdef FTS_WHITEOUT
 	int oflag;
 #endif
@@ -735,7 +726,6 @@ fts_build(FTS *sp, int type)
 	len++;
 	maxlen = sp->fts_pathlen - len;
 
-#if defined(__FTS_COMPAT_LEVEL)
 	if (cur->fts_level == SHRT_MAX) {
 		(void)closedir(dirp);
 		cur->fts_info = FTS_ERR;
@@ -743,7 +733,6 @@ fts_build(FTS *sp, int type)
 		errno = ENAMETOOLONG;
 		return (NULL);
 	}
-#endif
 
 	level = cur->fts_level + 1;
 
@@ -807,7 +796,7 @@ mem1:				saved_errno = errno;
 		}
 #endif
 		p->fts_level = level;
-		p->fts_pathlen = ftsent_pathlen_truncate(len + dnamlen);
+		p->fts_pathlen = len + dnamlen;
 		p->fts_parent = sp->fts_cur;
 
 #ifdef FTS_WHITEOUT
@@ -1011,7 +1000,7 @@ fts_sort(FTS *sp, FTSENT *head, size_t nitems)
 		if (new == 0)
 			return (head);
 		sp->fts_array = new;
-		sp->fts_nitems = fts_nitems_truncate(nitems + 40);
+		sp->fts_nitems = nitems + 40;
 	}
 	for (ap = sp->fts_array, p = head; p; p = p->fts_link)
 		*ap++ = p;
@@ -1063,13 +1052,10 @@ fts_alloc(FTS *sp, const char *name, size_t namelen)
 		}
 #endif
 
-        if (ISSET(FTS_NOSTAT))
-                p->fts_statp = NULL;
-
 	/* Copy the name plus the trailing NULL. */
 	memmove(p->fts_name, name, namelen + 1);
 
-	p->fts_namelen = ftsent_namelen_truncate(namelen);
+	p->fts_namelen = namelen;
 	p->fts_path = sp->fts_path;
 	p->fts_errno = 0;
 	p->fts_flags = 0;
@@ -1148,7 +1134,7 @@ fts_palloc(FTS *sp, size_t size)
 	if (new == 0)
 		return (1);
 	sp->fts_path = new;
-	sp->fts_pathlen = fts_pathlen_truncate(size);
+	sp->fts_pathlen = size;
 	return (0);
 }
 

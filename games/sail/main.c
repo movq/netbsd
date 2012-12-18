@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.26 2010/08/06 09:14:40 dholland Exp $	*/
+/*	$NetBSD: main.c,v 1.22 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,14 +39,11 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.26 2010/08/06 09:14:40 dholland Exp $");
+__RCSID("$NetBSD: main.c,v 1.22 2008/07/20 01:03:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
-#include <ctype.h>
-#include <err.h>
 #include <fcntl.h>
-#include <pwd.h>
 #include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,16 +51,14 @@ __RCSID("$NetBSD: main.c,v 1.26 2010/08/06 09:14:40 dholland Exp $");
 #include <time.h>
 #include <unistd.h>
 #include "extern.h"
-#include "pathnames.h"
 #include "restart.h"
 
-static void
-initialize(void)
+int
+main(int argc, char **argv)
 {
+	char *p;
+	int a,i;
 	int fd;
-	const char *name;
-	struct passwd *pw;
-	char *s;
 
 	gid = getgid();
 	egid = getegid();
@@ -74,48 +69,7 @@ initialize(void)
 		exit(1);
 	close(fd);
 
-	if (chdir(_PATH_SAILDIR) < 0) {
-		err(1, "%s", _PATH_SAILDIR);
-	}
-
 	srandom((u_long)time(NULL));
-
-	name = getenv("SAILNAME");
-	if (name != NULL && *name != '\0') {
-		strlcpy(myname, name, sizeof(myname));
-	} else {
-		pw = getpwuid(getuid());
-		if (pw != NULL) {
-			strlcpy(myname, pw->pw_gecos, sizeof(myname));
-			/* trim to just the realname */
-			s = strchr(myname, ',');
-			if (s != NULL) {
-				*s = '\0';
-			}
-			/* use just the first name */
-			s = strchr(myname, ' ');
-			if (s != NULL) {
-				*s = '\0';
-			}
-			/* should really do &-expansion properly */
-			if (!strcmp(myname, "&")) {
-				strlcpy(myname, pw->pw_name, sizeof(myname));
-				myname[0] = toupper((unsigned char)myname[0]);
-			}
-		}
-	}
-	if (*myname == '\0') {
-		strlcpy(myname, "Anonymous", sizeof(myname));
-	}
-}
-
-int
-main(int argc, char **argv)
-{
-	char *p;
-	int a, i;
-
-	initialize();
 
 	if ((p = strrchr(*argv, '/')) != NULL)
 		p++;
@@ -138,16 +92,17 @@ main(int argc, char **argv)
 			mode = MODE_LOGGER;
 			break;
 		case 'x':
-			randomize = true;
+			randomize++;
 			break;
 		case 'l':
-			longfmt = true;
+			longfmt++;
 			break;
 		case 'b':
-			nobells = true;
+			nobells++;
 			break;
 		default:
-			errx(1, "Usage: %s [-bdlsx] [scenario-number]", p);
+			fprintf(stderr, "SAIL: Unknown flag %s.\n", p);
+			exit(1);
 		}
 
 	argc -= optind;
@@ -163,16 +118,13 @@ main(int argc, char **argv)
 
 	switch (mode) {
 	case MODE_PLAYER:
-		initscreen();
-		startup();
-		cleanupscreen();
-		return 0;
+		return pl_main();
 	case MODE_DRIVER:
 		return dr_main();
 	case MODE_LOGGER:
 		return lo_main();
 	default:
-		warnx("Unknown mode %d", mode);
+		fprintf(stderr, "SAIL: Unknown mode %d.\n", mode);
 		abort();
 	}
 	/*NOTREACHED*/

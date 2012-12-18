@@ -1,4 +1,4 @@
-/*	$NetBSD: forward.c,v 1.1.1.2 2011/03/02 19:32:19 tron Exp $	*/
+/*	$NetBSD: forward.c,v 1.1.1.1.2.3 2011/01/07 01:24:06 riz Exp $	*/
 
 /*++
 /* NAME
@@ -179,9 +179,6 @@ static FORWARD_INFO *forward_open(DELIVER_REQUEST *request, const char *sender)
 	rec_fprintf((fp), REC_TYPE_ATTR, "%s=%s", (name), (value)); \
     } while (0)
 
-    /*
-     * XXX encapsulate these as one object.
-     */
     PASS_ATTR(cleanup, MAIL_ATTR_LOG_CLIENT_NAME, request->client_name);
     PASS_ATTR(cleanup, MAIL_ATTR_LOG_CLIENT_ADDR, request->client_addr);
     PASS_ATTR(cleanup, MAIL_ATTR_LOG_PROTO_NAME, request->client_proto);
@@ -189,7 +186,6 @@ static FORWARD_INFO *forward_open(DELIVER_REQUEST *request, const char *sender)
     PASS_ATTR(cleanup, MAIL_ATTR_SASL_METHOD, request->sasl_method);
     PASS_ATTR(cleanup, MAIL_ATTR_SASL_USERNAME, request->sasl_username);
     PASS_ATTR(cleanup, MAIL_ATTR_SASL_SENDER, request->sasl_sender);
-    PASS_ATTR(cleanup, MAIL_ATTR_LOG_IDENT, request->log_ident);
     PASS_ATTR(cleanup, MAIL_ATTR_RWR_CONTEXT, request->rewrite_context);
 
     vstring_free(buffer);

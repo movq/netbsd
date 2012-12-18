@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_net.c,v 1.13 2011/01/11 09:22:33 pooka Exp $	*/
+/*	$NetBSD: rump_net.c,v 1.3 2008/10/16 19:27:24 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -26,41 +26,31 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump_net.c,v 1.13 2011/01/11 09:22:33 pooka Exp $");
-
 #include <sys/param.h>
 
 #include <sys/domain.h>
 #include <sys/mbuf.h>
 #include <sys/socketvar.h>
 
-#include <net/bpf.h>
-#include <net/radix.h>
-#include <net/route.h>
-
-#include "rump_private.h"
 #include "rump_net_private.h"
 
-void nocomponent(void);
-void nocomponent() {}
-__weak_alias(rump_net_components,nocomponent);
-
+/* XXX: tempkludge */
+void __rumpnet_unimpl(void);
 void
-rump_net_init(void)
+__rumpnet_unimpl()
 {
 
-	bpf_setops();
+	panic("XXX");
+}
+__weak_alias(ifunit,__rumpnet_unimpl);
+
+void
+rump_net_init()
+{
 
 	mbinit();
+	domaininit();
 	soinit();
-
-	domaininit(false);
-
-	rump_component_init(RUMP_COMPONENT_NET);
-	rump_component_init(RUMP_COMPONENT_NET_ROUTE);
-	rump_component_init(RUMP_COMPONENT_NET_IF);
-	rump_component_init(RUMP_COMPONENT_NET_IFCFG);
-	rump_net_components();
-
+	soinit2();
 	rump_netisr_init();
 }

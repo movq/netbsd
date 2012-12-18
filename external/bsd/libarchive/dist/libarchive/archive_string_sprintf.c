@@ -24,7 +24,7 @@
  */
 
 #include "archive_platform.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/archive_string_sprintf.c 189435 2009-03-06 05:14:55Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/archive_string_sprintf.c,v 1.10 2008/03/14 22:00:09 kientzle Exp $");
 
 /*
  * The use of printf()-family functions can be troublesome
@@ -32,7 +32,7 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_string_sprintf.c 189435 2009-03-
  * implementing this function in terms of vsnprintf() requires
  * two calls (one to determine the size, another to format the
  * result), which in turn requires duplicating the argument list
- * using va_copy, which isn't yet universally available. <sigh>
+ * using va_copy, which isn't yet universally available.
  *
  * So, I've implemented a bare minimum of printf()-like capability
  * here.  This is only used to format error messages, so doesn't
@@ -43,30 +43,6 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_string_sprintf.c 189435 2009-03-
 
 #include "archive_string.h"
 #include "archive_private.h"
-
-/*
- * Utility functions to format signed/unsigned integers and append
- * them to an archive_string.
- */
-static void
-append_uint(struct archive_string *as, uintmax_t d, unsigned base)
-{
-	static const char *digits = "0123456789abcdef";
-	if (d >= base)
-		append_uint(as, d/base, base);
-	archive_strappend_char(as, digits[d % base]);
-}
-
-static void
-append_int(struct archive_string *as, intmax_t d, unsigned base)
-{
-	if (d < 0) {
-		archive_strappend_char(as, '-');
-		d = -d;
-	}
-	append_uint(as, d, base);
-}
-
 
 void
 __archive_string_sprintf(struct archive_string *as, const char *fmt, ...)
@@ -99,6 +75,7 @@ __archive_string_vsprintf(struct archive_string *as, const char *fmt,
 		return;
 	}
 
+	long_flag = '\0';
 	for (p = fmt; *p != '\0'; p++) {
 		const char *saved_p = p;
 
@@ -109,7 +86,6 @@ __archive_string_vsprintf(struct archive_string *as, const char *fmt,
 
 		p++;
 
-		long_flag = '\0';
 		switch(*p) {
 		case 'j':
 			long_flag = 'j';
@@ -135,7 +111,7 @@ __archive_string_vsprintf(struct archive_string *as, const char *fmt,
 			case 'l': s = va_arg(ap, long); break;
 			default:  s = va_arg(ap, int); break;
 			}
-		        append_int(as, s, 10);
+			archive_strappend_int(as, s, 10);
 			break;
 		case 's':
 			p2 = va_arg(ap, char *);
@@ -150,9 +126,9 @@ __archive_string_vsprintf(struct archive_string *as, const char *fmt,
 			}
 			/* Format it in the correct base. */
 			switch (*p) {
-			case 'o': append_uint(as, u, 8); break;
-			case 'u': append_uint(as, u, 10); break;
-			default: append_uint(as, u, 16); break;
+			case 'o': archive_strappend_int(as, u, 8); break;
+			case 'u': archive_strappend_int(as, u, 10); break;
+			default: archive_strappend_int(as, u, 16); break;
 			}
 			break;
 		default:

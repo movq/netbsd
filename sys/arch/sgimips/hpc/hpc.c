@@ -1,4 +1,4 @@
-/*	$NetBSD: hpc.c,v 1.67 2012/10/27 17:18:09 chs Exp $	*/
+/*	$NetBSD: hpc.c,v 1.60.30.1 2009/09/26 18:03:06 snj Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpc.c,v 1.67 2012/10/27 17:18:09 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpc.c,v 1.60.30.1 2009/09/26 18:03:06 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: hpc.c,v 1.67 2012/10/27 17:18:09 chs Exp $");
 #include <sys/callout.h>
 
 #define _SGIMIPS_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/machtype.h>
 #include <machine/sysconf.h>
 
@@ -144,6 +144,12 @@ static const struct hpc_device hpc1_devices[] = {
 	  23,
 	  HPCDEV_IP24 },
 
+	{ "dpclock",	/* Personal Iris/Indigo clock */
+	  HPC_BASE_ADDRESS_0,
+	  HPC1_PBUS_BBRAM, 0,
+	  -1,
+	  HPCDEV_IP12 | HPCDEV_IP20 },
+
 	{ NULL,
 	  0,
 	  0, 0,
@@ -190,6 +196,12 @@ static const struct hpc_device hpc3_devices[] = {
 	  2,	/* XXX 2 = IRQ_LOCAL0 + 2 */
 	  HPCDEV_IP22 },
 
+	{ "dsclock",	/* Indigo2/Indy/Challenge S/Challenge M clock */
+	  HPC_BASE_ADDRESS_0,
+	  HPC3_PBUS_BBRAM, 0,
+	  -1,
+	  HPCDEV_IP22 | HPCDEV_IP24 },
+
 	{ "haltwo",	/* Indigo2/Indy onboard audio */
 	  HPC_BASE_ADDRESS_0,
 	  HPC3_PBUS_CH0_DEVREGS, HPC3_PBUS_DMAREGS,
@@ -217,7 +229,7 @@ static const struct hpc_device hpc3_devices[] = {
 };
 
 struct hpc_softc {
-	device_t		sc_dev;
+	struct device 		sc_dev;
 
 	bus_addr_t		sc_base;
 
@@ -351,13 +363,14 @@ static struct hpc_values hpc3_values = {
 
 static int powerintr_established;
 
-static int	hpc_match(device_t, cfdata_t, void *);
-static void	hpc_attach(device_t, device_t, void *);
+static int	hpc_match(struct device *, struct cfdata *, void *);
+static void	hpc_attach(struct device *, struct device *, void *);
 static int	hpc_print(void *, const char *);
 
 static int	hpc_revision(struct hpc_softc *, struct gio_attach_args *);
 
-static int	hpc_submatch(device_t, cfdata_t, const int *, void *);
+static int	hpc_submatch(struct device *, struct cfdata *,
+		     const int *, void *);
 
 //static int	hpc_power_intr(void *);
 
@@ -369,29 +382,26 @@ static void	hpc_blink(void *);
 static int	hpc_read_eeprom(int, bus_space_tag_t, bus_space_handle_t,
 		    uint8_t *, size_t);
 
-CFATTACH_DECL_NEW(hpc, sizeof(struct hpc_softc),
+CFATTACH_DECL(hpc, sizeof(struct hpc_softc),
     hpc_match, hpc_attach, NULL, NULL);
 
 static int
-hpc_match(device_t parent, cfdata_t cf, void *aux)
+hpc_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct gio_attach_args* ga = aux;
 
-	if (mach_type == MACH_SGI_IP12 || mach_type == MACH_SGI_IP20 ||
-	    mach_type == MACH_SGI_IP22) {
-		/* Make sure it's actually there and readable */
-		if (!platform.badaddr((void*)MIPS_PHYS_TO_KSEG1(ga->ga_addr),
-		    sizeof(uint32_t)))
-			return 1;
-	}
+	/* Make sure it's actually there and readable */
+	if (platform.badaddr((void*)MIPS_PHYS_TO_KSEG1(ga->ga_addr),
+	    sizeof(u_int32_t)))
+		return 0;
 
-	return 0;
+	return 1;
 }
 
 static void
-hpc_attach(device_t parent, device_t self, void *aux)
+hpc_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct hpc_softc *sc = device_private(self);
+	struct hpc_softc *sc = (struct hpc_softc *)self;
 	struct gio_attach_args* ga = aux;
 	struct hpc_attach_args ha;
 	const struct hpc_device *hd;
@@ -399,8 +409,6 @@ hpc_attach(device_t parent, device_t self, void *aux)
 	int isonboard;
 	int isioplus;
 	int sysmask;
-
-	sc->sc_dev = self;
 
 #ifdef BLINK
 	callout_init(&hpc_blink_ch, 0);
@@ -468,12 +476,11 @@ hpc_attach(device_t parent, device_t self, void *aux)
 		if (gio_arb_config(arb_slot, GIO_ARB_LB | GIO_ARB_MST |
 		    GIO_ARB_64BIT | GIO_ARB_HPC2_64BIT)) {
 			printf("%s: failed to configure GIO bus arbiter\n",
-			    device_xname(sc->sc_dev));
+			    sc->sc_dev.dv_xname);
 			return;
 		}
 
-		printf("%s: using EXP%d's DMA channel\n",
-		    device_xname(sc->sc_dev),
+		printf("%s: using EXP%d's DMA channel\n", sc->sc_dev.dv_xname,
 		    (arb_slot == GIO_SLOT_EXP0) ? 0 : 1);
 
 		bus_space_write_4(ga->ga_iot, ga->ga_ioh,
@@ -493,7 +500,7 @@ hpc_attach(device_t parent, device_t self, void *aux)
 
 		if (gio_arb_config(arb_slot, GIO_ARB_RT | GIO_ARB_MST)) {
 			printf("%s: failed to configure GIO bus arbiter\n",
-			    device_xname(sc->sc_dev));
+			    sc->sc_dev.dv_xname);
 			return;
 		}
 	}
@@ -592,7 +599,7 @@ hpc_revision(struct hpc_softc *sc, struct gio_attach_args *ga)
 		return (0);
 
 	if (mach_type == MACH_SGI_IP12 || mach_type == MACH_SGI_IP20) {
-		uint32_t reg;
+		u_int32_t reg;
 
 		if (!platform.badaddr((void *)MIPS_PHYS_TO_KSEG1(ga->ga_addr +
 		    HPC1_BIGENDIAN), 4)) {
@@ -638,7 +645,8 @@ hpc_revision(struct hpc_softc *sc, struct gio_attach_args *ga)
 }
 
 static int
-hpc_submatch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+hpc_submatch(struct device *parent, struct cfdata *cf,
+	     const int *ldesc, void *aux)
 {
 	struct hpc_attach_args *ha = aux;
 
@@ -657,7 +665,7 @@ hpc_print(void *aux, const char *pnp)
 	if (pnp)
 		printf("%s at %s", ha->ha_name, pnp);
 
-	printf(" offset %#" PRIxVADDR, (vaddr_t)ha->ha_devoff);
+	printf(" offset 0x%lx", (vaddr_t)ha->ha_devoff);
 
 	return (UNCONF);
 }
@@ -666,10 +674,10 @@ hpc_print(void *aux, const char *pnp)
 static int
 hpc_power_intr(void *arg)
 {
-	uint32_t pwr_reg;
+	u_int32_t pwr_reg;
 
-	pwr_reg = *((volatile uint32_t *)MIPS_PHYS_TO_KSEG1(0x1fbd9850));
-	*((volatile uint32_t *)MIPS_PHYS_TO_KSEG1(0x1fbd9850)) = pwr_reg;
+	pwr_reg = *((volatile u_int32_t *)MIPS_PHYS_TO_KSEG1(0x1fbd9850));
+	*((volatile u_int32_t *)MIPS_PHYS_TO_KSEG1(0x1fbd9850)) = pwr_reg;
 
 	printf("hpc_power_intr: panel reg = %08x\n", pwr_reg);
 
@@ -682,9 +690,9 @@ hpc_power_intr(void *arg)
 
 #if defined(BLINK)
 static void
-hpc_blink(void *arg)
+hpc_blink(void *self)
 {
-	struct hpc_softc *sc = arg;
+	struct hpc_softc *sc = (struct hpc_softc *) self;
 	register int	s;
 	int	value;
 
@@ -693,7 +701,7 @@ hpc_blink(void *arg)
 	value = *(volatile uint8_t *)MIPS_PHYS_TO_KSEG1(HPC_BASE_ADDRESS_0 +
 	    HPC1_AUX_REGS);
 	value ^= HPC1_AUX_CONSLED;
-	*(volatile uint8_t *)MIPS_PHYS_TO_KSEG1(HPC_BASE_ADDRESS_0 +
+	*(volatile u_int8_t *)MIPS_PHYS_TO_KSEG1(HPC_BASE_ADDRESS_0 +
 	    HPC1_AUX_REGS) = value;
 	splx(s);
 

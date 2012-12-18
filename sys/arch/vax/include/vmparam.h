@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.47 2010/11/14 13:33:23 uebayasi Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.44 2008/03/11 05:34:02 matt Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -77,7 +77,16 @@
 #define MAXSSIZ		(8*1024*1024)		/* max stack size */
 #endif
 
+/* 
+ * Size of shared memory map
+ */
+
+#ifndef SHMMAXPGS
+#define SHMMAXPGS	1024
+#endif
+
 #define VM_PHYSSEG_MAX		1
+#define VM_PHYSSEG_NOADD
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH /* XXX */
 
 #define	VM_NFREELIST		1
@@ -107,5 +116,16 @@
 
 #define	USRIOSIZE		(8 * VAX_NPTEPG)	/* 512MB */
 #define	VM_PHYS_SIZE		(USRIOSIZE*VAX_NBPG)
+
+#if 0
+#define	__HAVE_VM_PAGE_MD
+
+struct vm_page_md {
+	unsigned int md_attrs;
+};
+
+#define	VM_MDPAGE_INIT(pg)	((pg)->mdpage.md_attrs = 0)
+#endif
+
 
 #endif

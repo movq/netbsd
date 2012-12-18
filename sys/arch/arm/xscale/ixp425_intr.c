@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_intr.c,v 1.25 2012/11/12 18:00:38 skrll Exp $ */
+/*	$NetBSD: ixp425_intr.c,v 1.19 2008/04/27 18:58:45 matt Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -13,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -62,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp425_intr.c,v 1.25 2012/11/12 18:00:38 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_intr.c,v 1.19 2008/04/27 18:58:45 matt Exp $");
 
 #ifndef EVBARM_SPL_NOINLINE
 #define	EVBARM_SPL_NOINLINE
@@ -76,7 +82,9 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_intr.c,v 1.25 2012/11/12 18:00:38 skrll Exp $
 #include <sys/systm.h>
 #include <sys/malloc.h>
 
-#include <sys/bus.h>
+#include <uvm/uvm_extern.h>
+
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -162,11 +170,11 @@ ixp425_disable_irq(int irq)
 	ixp425_set_intrmask();
 }
 
-static inline uint32_t
+static inline u_int32_t
 ixp425_irq2gpio_bit(int irq)
 {
 
-	static const uint8_t int2gpio[32] __attribute__ ((aligned(32))) = {
+	static const u_int8_t int2gpio[32] __attribute__ ((aligned(32))) = {
 		0xff, 0xff, 0xff, 0xff, 0xff, 0xff,	/* INT#0 -> INT#5 */
 		0x00, 0x01,				/* GPIO#0 -> GPIO#1 */
 		0xff, 0xff, 0xff, 0xff, 0xff, 0xff,	/* INT#8 -> INT#13 */
@@ -224,11 +232,6 @@ ixp425_intr_calculate_masks(void)
 	ixp425_imask[IPL_SOFTBIO] = SI_TO_IRQBIT(SI_SOFTBIO);
 	ixp425_imask[IPL_SOFTNET] = SI_TO_IRQBIT(SI_SOFTNET);
 	ixp425_imask[IPL_SOFTSERIAL] = SI_TO_IRQBIT(SI_SOFTSERIAL);
-#else
-	KASSERT(ixp425_imask[IPL_SOFTCLOCK] == 0);
-	KASSERT(ixp425_imask[IPL_SOFTBIO] == 0);
-	KASSERT(ixp425_imask[IPL_SOFTNET] == 0);
-	KASSERT(ixp425_imask[IPL_SOFTSERIAL] == 0);
 #endif
 
 	/*
@@ -236,6 +239,10 @@ ixp425_intr_calculate_masks(void)
 	 * limited input buffer space/"real-time" requirements) a better
 	 * chance at not dropping data.
 	 */
+	ixp425_imask[IPL_SOFTBIO] |= ixp425_imask[IPL_SOFTCLOCK];
+	ixp425_imask[IPL_SOFTNET] |= ixp425_imask[IPL_SOFTBIO];
+	ixp425_imask[IPL_SOFTSERIAL] |= ixp425_imask[IPL_SOFTNET];
+	ixp425_imask[IPL_VM] |= ixp425_imask[IPL_SOFTSERIAL];
 	ixp425_imask[IPL_SCHED] |= ixp425_imask[IPL_VM];
 	ixp425_imask[IPL_HIGH] |= ixp425_imask[IPL_SCHED];
 
@@ -308,25 +315,14 @@ ixp425_intr_init(void)
 		TAILQ_INIT(&iq->iq_list);
 
 		sprintf(iq->iq_name, "irq %d", i);
+		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
+				     NULL, "ixp425", iq->iq_name);
 	}
 
 	ixp425_intr_calculate_masks();
 
 	/* Enable IRQs (don't yet use FIQs). */
 	enable_interrupts(I32_bit);
-}
-
-void
-ixp425_intr_evcnt_attach(void)
-{
-	struct intrq *iq;
-	int i;
-
-	for (i = 0; i < NIRQ; i++) {
-		iq = &intrq[i];
-		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
-		    NULL, "ixp425", iq->iq_name);
-	}
 }
 
 void *
@@ -340,7 +336,7 @@ ixp425_intr_establish(int irq, int ipl, int (*func)(void *), void *arg)
 		panic("ixp425_intr_establish: IRQ %d out of range", irq);
 #ifdef DEBUG
 	printf("ixp425_intr_establish(irq=%d, ipl=%d, func=%08x, arg=%08x)\n",
-	       irq, ipl, (uint32_t) func, (uint32_t) arg);
+	       irq, ipl, (u_int32_t) func, (u_int32_t) arg);
 #endif
 
 	ih = malloc(sizeof(*ih), M_DEVBUF, M_NOWAIT);
@@ -422,7 +418,7 @@ ixp425_intr_dispatch(struct clockframe *frame)
 
 		iq = &intrq[irq];
 		iq->iq_ev.ev_count++;
-		ci->ci_data.cpu_nintr++;
+		uvmexp.intrs++;
 
 		/* Clear down non-level triggered GPIO interrupts now */
 		if ((ibit & IXP425_INT_GPIOMASK) && iq->iq_ist != IST_LEVEL) {

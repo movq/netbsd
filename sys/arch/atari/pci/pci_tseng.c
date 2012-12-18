@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_tseng.c,v 1.11 2009/10/20 19:10:11 snj Exp $	*/
+/*	$NetBSD: pci_tseng.c,v 1.9 2007/04/29 20:23:35 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1999 Leo Weppelman.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Leo Weppelman.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -25,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_tseng.c,v 1.11 2009/10/20 19:10:11 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_tseng.c,v 1.9 2007/04/29 20:23:35 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/queue.h>
@@ -71,7 +76,12 @@ static u_char ras_cas_tab[] = {
 	0x11, 0x14, 0x15 };
 
 void
-tseng_init(pci_chipset_tag_t pc, pcitag_t tag, int id, volatile u_char *ba, u_char *fb)
+tseng_init(pc, tag, id, ba, fb)
+	pci_chipset_tag_t	pc;
+	pcitag_t		tag;
+	int			id;
+	volatile u_char		*ba;
+	u_char			*fb;
 {
 	int			i, j, csr;
 	int			is_et6000 = 0;
@@ -158,7 +168,10 @@ tseng_init(pci_chipset_tag_t pc, pcitag_t tag, int id, volatile u_char *ba, u_ch
  */
 
 static void
-et6000_init(volatile u_char *ba, u_char *fb, int iter)
+et6000_init(ba, fb, iter)
+volatile u_char *ba;
+u_char		*fb;
+int		iter;
 {
 
 	int		i;

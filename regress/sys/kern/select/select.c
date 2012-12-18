@@ -1,4 +1,4 @@
-/*	$NetBSD: select.c,v 1.3 2011/11/02 16:49:12 yamt Exp $	*/
+/*	$NetBSD: select.c,v 1.2 2008/03/21 16:03:33 ad Exp $	*/
 
 /*-
  * Copyright (c)2008 YAMAMOTO Takashi,
@@ -29,13 +29,10 @@
 #define	FD_SETSIZE	65536
 #include <sys/select.h>
 #include <sys/atomic.h>
-#include <sys/time.h>
 
-#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,7 +40,6 @@
 
 #define	NPIPE	128
 #define	NTHREAD	64
-#define	NBALLS	5
 #define	VERBOSE	0
 
 #if !defined(RANDOM_MAX)
@@ -52,7 +48,7 @@
 
 int fds[NPIPE][2];
 
-volatile unsigned count;
+unsigned count;
 
 pthread_barrier_t barrier;
 
@@ -101,11 +97,10 @@ f(void *dummy)
 					abort();
 				}
 				if (random() & 1) {
-					assert(!FD_ISSET(fd, &set));
 					FD_SET(fd, &set);
-					nfd++;
 					if (fd > maxfd) {
 						maxfd = fd;
+						nfd++;
 					}
 				}
 			}
@@ -129,12 +124,6 @@ f(void *dummy)
 		}
 		if (ret > nfd) {
 			fprintf(stderr, "[%p] unexpected return value %d\n",
-			    (void *)pthread_self(), ret);
-			abort();
-		}
-		if (ret > NBALLS) {
-			fprintf(stderr, "[%p] unexpected return value %d"
-			    " > NBALLS\n",
 			    (void *)pthread_self(), ret);
 			abort();
 		}
@@ -178,10 +167,6 @@ main(int argc, char *argv[])
 	pthread_t pt[NTHREAD];
 	int i;
 	unsigned int secs;
-	struct timeval start_tv;
-	struct timeval end_tv;
-	uint64_t usecs;
-	unsigned int result;
 
 	secs = atoi(argv[1]);
 
@@ -205,17 +190,12 @@ main(int argc, char *argv[])
 		}
 	}
 	pthread_barrier_wait(&barrier);
-	gettimeofday(&start_tv, NULL);
-	assert(count == 0);
-	for (i = 0; i < NBALLS; i++) {
-		dowrite();
-	}
+	dowrite();
+	dowrite();
+	dowrite();
+	dowrite();
+
 	sleep(secs);
-	gettimeofday(&end_tv, NULL);
-	result = count;
-	usecs = (end_tv.tv_sec - start_tv.tv_sec) * 1000000
-	    + end_tv.tv_usec - start_tv.tv_usec;
-	printf("%u / %f = %f\n", result, (double)usecs / 1000000,
-	    (double)result / usecs * 1000000);
+	printf("%u / %u = %lf\n", count, secs, (double)count / secs);
 	exit(EXIT_SUCCESS);
 }

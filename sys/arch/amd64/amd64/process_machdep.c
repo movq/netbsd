@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.21 2012/07/08 20:14:11 dsl Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.16 2008/04/28 20:23:12 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -53,15 +53,18 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.21 2012/07/08 20:14:11 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.16 2008/04/28 20:23:12 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/vnode.h>
 #include <sys/ptrace.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/psl.h>
 #include <machine/reg.h>
@@ -85,9 +88,8 @@ process_frame(struct lwp *l)
 static inline struct fxsave64 *
 process_fpframe(struct lwp *l)
 {
-	struct pcb *pcb = lwp_getpcb(l);
 
-	return &pcb->pcb_savefpu.fp_fxsave;
+	return (&l->l_addr->u_pcb.pcb_savefpu.fp_fxsave);
 }
 
 int
@@ -107,7 +109,7 @@ process_read_fpregs(struct lwp *l, struct fpreg *regs)
 {
 	struct fxsave64 *frame = process_fpframe(l);
 
-	if (l->l_md.md_flags & MDL_USEDFPU) {
+	if (l->l_md.md_flags & MDP_USEDFPU) {
 		fpusave_lwp(l, true);
 	} else {
 		uint16_t cw;
@@ -124,10 +126,10 @@ process_read_fpregs(struct lwp *l, struct fpreg *regs)
 		memset(frame, 0, sizeof(*regs));
 		frame->fx_fcw = cw;
 		frame->fx_fsw = 0x0000;
-		frame->fx_ftw = 0x00;	/* abridged tag; all empty */
+		frame->fx_ftw = 0xff;
 		frame->fx_mxcsr = mxcsr;
 		frame->fx_mxcsr_mask = mxcsr_mask;
-		l->l_md.md_flags |= MDL_USEDFPU;
+		l->l_md.md_flags |= MDP_USEDFPU;
 	}
 
 	memcpy(&regs->fxstate, frame, sizeof(*regs));
@@ -146,7 +148,7 @@ process_write_regs(struct lwp *l, const struct reg *regp)
 	 * Note that struct regs is compatible with
 	 * the __gregs array in mcontext_t.
 	 */
-	error = cpu_mcontext_validate(l, (const mcontext_t *)regs);
+	error = check_mcontext(l, (const mcontext_t *)regs, tf);
 	if (error != 0)
 		return error;
 
@@ -162,10 +164,10 @@ process_write_fpregs(struct lwp *l, const struct fpreg *regs)
 {
 	struct fxsave64 *frame = process_fpframe(l);
 
-	if (l->l_md.md_flags & MDL_USEDFPU) {
+	if (l->l_md.md_flags & MDP_USEDFPU) {
 		fpusave_lwp(l, false);
 	} else {
-		l->l_md.md_flags |= MDL_USEDFPU;
+		l->l_md.md_flags |= MDP_USEDFPU;
 	}
 
 	memcpy(frame, &regs->fxstate, sizeof(*regs));

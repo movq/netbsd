@@ -1,4 +1,4 @@
-/*	$NetBSD: ecoff_machdep.h,v 1.21 2012/03/20 11:28:04 nonaka Exp $	*/
+/*	$NetBSD: ecoff_machdep.h,v 1.19 2003/01/17 23:36:08 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1997 Jonathan Stone
@@ -46,7 +46,7 @@
 #include <mips/cpu.h>		/* mips CPU architecture levels */
 #define _MIPS3_OK() CPUISMIPS3
 #else
-#define _MIPS3_OK() /*CONSTCOND*/1
+#define _MIPS3_OK() 1
 #endif
 
 
@@ -71,7 +71,7 @@
 #ifdef _KERNEL
 struct proc;
 struct exec_package;
-void	cpu_exec_ecoff_setregs(struct lwp *, struct exec_package *, vaddr_t);
+void	cpu_exec_ecoff_setregs(struct lwp *, struct exec_package *, u_long);
 #endif	/* _KERNEL */
 
 

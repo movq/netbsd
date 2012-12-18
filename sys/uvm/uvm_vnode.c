@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_vnode.c,v 1.99 2012/07/30 23:56:48 matt Exp $	*/
+/*	$NetBSD: uvm_vnode.c,v 1.90 2008/01/02 11:49:21 ad Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -20,7 +20,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor,
+ *	Washington University, the University of California, Berkeley and
+ *	its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -45,13 +50,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_vnode.c,v 1.99 2012/07/30 23:56:48 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_vnode.c,v 1.90 2008/01/02 11:49:21 ad Exp $");
 
+#include "fs_nfs.h"
 #include "opt_uvmhist.h"
+#include "opt_ddb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/proc.h>
+#include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/disklabel.h>
 #include <sys/ioctl.h>
@@ -64,10 +73,6 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_vnode.c,v 1.99 2012/07/30 23:56:48 matt Exp $");
 
 #include <uvm/uvm.h>
 #include <uvm/uvm_readahead.h>
-
-#ifdef UVMHIST
-UVMHIST_DEFINE(ubchist);
-#endif
 
 /*
  * functions
@@ -111,7 +116,7 @@ const struct uvm_pagerops uvm_vnodeops = {
 static void
 uvn_reference(struct uvm_object *uobj)
 {
-	vref((struct vnode *)uobj);
+	VREF((struct vnode *)uobj);
 }
 
 
@@ -143,7 +148,7 @@ uvn_put(struct uvm_object *uobj, voff_t offlo, voff_t offhi, int flags)
 	struct vnode *vp = (struct vnode *)uobj;
 	int error;
 
-	KASSERT(mutex_owned(vp->v_interlock));
+	KASSERT(mutex_owned(&vp->v_interlock));
 	error = VOP_PUTPAGES(vp, offlo, offhi, flags);
 
 	return error;
@@ -174,8 +179,7 @@ uvn_get(struct uvm_object *uobj, voff_t offset,
 
 	UVMHIST_LOG(ubchist, "vp %p off 0x%x", vp, (int)offset, 0,0);
 
-	if (vp->v_type == VREG && (access_type & VM_PROT_WRITE) == 0
-	    && (flags & PGO_LOCKED) == 0) {
+	if ((access_type & VM_PROT_WRITE) == 0 && (flags & PGO_LOCKED) == 0) {
 		vn_ra_allocctx(vp);
 		uvm_ra_request(vp->v_ractx, advice, uobj, offset,
 		    *npagesp << PAGE_SHIFT);
@@ -184,7 +188,7 @@ uvn_get(struct uvm_object *uobj, voff_t offset,
 	error = VOP_GETPAGES(vp, offset, pps, npagesp, centeridx,
 			     access_type, advice, flags);
 
-	KASSERT(((flags & PGO_LOCKED) != 0 && mutex_owned(vp->v_interlock)) ||
+	KASSERT(((flags & PGO_LOCKED) != 0 && mutex_owned(&vp->v_interlock)) ||
 	    (flags & PGO_LOCKED) == 0);
 	return error;
 }
@@ -239,8 +243,6 @@ uvn_findpage(struct uvm_object *uobj, voff_t offset, struct vm_page **pgp,
 	UVMHIST_FUNC("uvn_findpage"); UVMHIST_CALLED(ubchist);
 	UVMHIST_LOG(ubchist, "vp %p off 0x%lx", uobj, offset,0,0);
 
-	KASSERT(mutex_owned(uobj->vmobjlock));
-
 	if (*pgp != NULL) {
 		UVMHIST_LOG(ubchist, "dontcare", 0,0,0,0);
 		return 0;
@@ -255,20 +257,18 @@ uvn_findpage(struct uvm_object *uobj, voff_t offset, struct vm_page **pgp,
 				UVMHIST_LOG(ubchist, "noalloc", 0,0,0,0);
 				return 0;
 			}
-			pg = uvm_pagealloc(uobj, offset, NULL,
-			    UVM_FLAG_COLORMATCH);
+			pg = uvm_pagealloc(uobj, offset, NULL, 0);
 			if (pg == NULL) {
 				if (flags & UFP_NOWAIT) {
 					UVMHIST_LOG(ubchist, "nowait",0,0,0,0);
 					return 0;
 				}
-				mutex_exit(uobj->vmobjlock);
+				mutex_exit(&uobj->vmobjlock);
 				uvm_wait("uvn_fp1");
-				mutex_enter(uobj->vmobjlock);
+				mutex_enter(&uobj->vmobjlock);
 				continue;
 			}
-			UVMHIST_LOG(ubchist, "alloced %p (color %u)", pg,
-			    VM_PGCOLOR_BUCKET(pg), 0,0);
+			UVMHIST_LOG(ubchist, "alloced %p", pg,0,0,0);
 			break;
 		} else if (flags & UFP_NOCACHE) {
 			UVMHIST_LOG(ubchist, "nocache",0,0,0,0);
@@ -282,11 +282,10 @@ uvn_findpage(struct uvm_object *uobj, voff_t offset, struct vm_page **pgp,
 				return 0;
 			}
 			pg->flags |= PG_WANTED;
-			UVMHIST_LOG(ubchist, "wait %p (color %u)", pg,
-			    VM_PGCOLOR_BUCKET(pg), 0,0);
-			UVM_UNLOCK_AND_WAIT(pg, uobj->vmobjlock, 0,
+			UVMHIST_LOG(ubchist, "wait %p", pg,0,0,0);
+			UVM_UNLOCK_AND_WAIT(pg, &uobj->vmobjlock, 0,
 					    "uvn_fp2", 0);
-			mutex_enter(uobj->vmobjlock);
+			mutex_enter(&uobj->vmobjlock);
 			continue;
 		}
 
@@ -310,8 +309,7 @@ uvn_findpage(struct uvm_object *uobj, voff_t offset, struct vm_page **pgp,
 		/* mark the page BUSY and we're done. */
 		pg->flags |= PG_BUSY;
 		UVM_PAGE_OWN(pg, "uvn_findpage");
-		UVMHIST_LOG(ubchist, "found %p (color %u)",
-		    pg, VM_PGCOLOR_BUCKET(pg), 0,0);
+		UVMHIST_LOG(ubchist, "found %p", pg,0,0,0);
 		break;
 	}
 	*pgp = pg;
@@ -337,7 +335,7 @@ uvm_vnp_setsize(struct vnode *vp, voff_t newsize)
 	voff_t oldsize;
 	UVMHIST_FUNC("uvm_vnp_setsize"); UVMHIST_CALLED(ubchist);
 
-	mutex_enter(uobj->vmobjlock);
+	mutex_enter(&uobj->vmobjlock);
 	UVMHIST_LOG(ubchist, "vp %p old 0x%x new 0x%x",
 	    vp, vp->v_size, newsize, 0);
 
@@ -356,24 +354,52 @@ uvm_vnp_setsize(struct vnode *vp, voff_t newsize)
 
 	if (oldsize > pgend) {
 		(void) uvn_put(uobj, pgend, 0, PGO_FREE | PGO_SYNCIO);
-		mutex_enter(uobj->vmobjlock);
+		mutex_enter(&uobj->vmobjlock);
 	}
 	vp->v_size = vp->v_writesize = newsize;
-	mutex_exit(uobj->vmobjlock);
+	mutex_exit(&uobj->vmobjlock);
 }
 
 void
 uvm_vnp_setwritesize(struct vnode *vp, voff_t newsize)
 {
 
-	mutex_enter(vp->v_interlock);
+	mutex_enter(&vp->v_interlock);
 	KASSERT(newsize != VSIZENOTSET);
 	KASSERT(vp->v_size != VSIZENOTSET);
 	KASSERT(vp->v_writesize != VSIZENOTSET);
 	KASSERT(vp->v_size <= vp->v_writesize);
 	KASSERT(vp->v_size <= newsize);
 	vp->v_writesize = newsize;
-	mutex_exit(vp->v_interlock);
+	mutex_exit(&vp->v_interlock);
+}
+
+/*
+ * uvm_vnp_zerorange:  set a range of bytes in a file to zero.
+ */
+
+void
+uvm_vnp_zerorange(struct vnode *vp, off_t off, size_t len)
+{
+	void *win;
+	int flags;
+
+	/*
+	 * XXXUBC invent kzero() and use it
+	 */
+
+	while (len) {
+		vsize_t bytelen = len;
+
+		win = ubc_alloc(&vp->v_uobj, off, &bytelen, UVM_ADV_NORMAL,
+		    UBC_WRITE);
+		memset(win, 0, bytelen);
+		flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
+		ubc_release(win, flags);
+
+		off += bytelen;
+		len -= bytelen;
+	}
 }
 
 bool

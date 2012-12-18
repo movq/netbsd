@@ -1,4 +1,4 @@
-/*	$NetBSD: elf32.c,v 1.9 2011/02/05 13:32:32 yamt Exp $	*/
+/*	$NetBSD: elf32.c,v 1.7 2008/04/28 20:24:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -65,7 +65,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: elf32.c,v 1.9 2011/02/05 13:32:32 yamt Exp $");
+__RCSID("$NetBSD: elf32.c,v 1.7 2008/04/28 20:24:16 martin Exp $");
 #endif
 
 #ifndef ELFSIZE
@@ -148,7 +148,7 @@ NAME(loadsym)(int fd)
 
 	if ((symp = malloc(symhdr.sh_size)) == NULL)
 		err(EXIT_FAILURE, "malloc (symbol table)");
-	sz = pread(fd, symp, symhdr.sh_size, symhdr.sh_offset);
+	sz = pread(fd, symp, symhdr.sh_size, symhdr.sh_offset	);
 	if (sz != symhdr.sh_size)
 		err(EXIT_FAILURE, "pread (symbol table)");
 
@@ -168,8 +168,7 @@ NAME(findsym)(findsym_t find, char *name, uintptr_t *start, uintptr_t *end)
 {
 	static int lastptr[FIND_MAX];
 	uintptr_t sa, ea;
-	int i, rv, off;
-	Elf_Byte st;
+	int i, rv, st, off;
 
 	switch (find) {
 	case LOCK_BYNAME:

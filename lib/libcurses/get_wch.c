@@ -1,4 +1,4 @@
-/*   $NetBSD: get_wch.c,v 1.10 2012/06/29 10:40:29 blymn Exp $ */
+/*   $NetBSD: get_wch.c,v 1.6.8.1 2012/09/30 17:52:06 bouyer Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation Inc.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: get_wch.c,v 1.10 2012/06/29 10:40:29 blymn Exp $");
+__RCSID("$NetBSD: get_wch.c,v 1.6.8.1 2012/09/30 17:52:06 bouyer Exp $");
 #endif						  /* not lint */
 
 #include <string.h>
@@ -99,7 +99,7 @@ inkey(wchar_t *wc, int to, int delay)
 		if (wstate == INKEY_NORM) {
 			if (delay && __timeout(delay) == ERR)
 				return ERR;
-			c = fgetc(infd);
+			c = getchar();
 			if (c == WEOF) {
 				clearerr(infd);
 				return ERR;
@@ -147,7 +147,7 @@ inkey(wchar_t *wc, int to, int delay)
 					return ERR;
 			}
 
-			c = fgetc(infd);
+			c = getchar();
 			if (ferror(infd)) {
 				clearerr(infd);
 				return ERR;
@@ -187,7 +187,7 @@ inkey(wchar_t *wc, int to, int delay)
 #endif /* DEBUG */
 			}
 		} else if (wstate == INKEY_WCASSEMBLING) {
-			/* assembling a wide-char sequence */
+			/* assembling a wide char sequence */
 			if (delay) {
 				if (__timeout(to ? (ESCDELAY / 100) : delay)
 						== ERR)
@@ -197,7 +197,7 @@ inkey(wchar_t *wc, int to, int delay)
 					return ERR;
 			}
 
-			c = fgetc(infd);
+			c = getchar();
 			if (ferror(infd)) {
 				clearerr(infd);
 				return ERR;
@@ -322,7 +322,7 @@ inkey(wchar_t *wc, int to, int delay)
 				|| ((current->key[mapping]->type
 					== KEYMAP_LEAF)
 				&& (current->key[mapping]->enable == FALSE))) {
-			/* wide-character specific code */
+			/* wide character specific code */
 #ifdef DEBUG
 			__CTRACE(__CTRACE_INPUT,
 			    "inkey: Checking for wide char\n");
@@ -557,8 +557,10 @@ wget_wch(WINDOW *win, wint_t *ch)
 					win->flags & __NOTIMEOUT ? 0 : 1, 0);
 				break;
 			case 0:
-				if (__nodelay() == ERR)
+				if (__nodelay() == ERR) {
+					__restore_termios();
 					return ERR;
+				}
 				ret = inkey(&inp, 0, 0);
 				break;
 			default:
@@ -574,12 +576,16 @@ wget_wch(WINDOW *win, wint_t *ch)
 			case -1:
 				break;
 			case 0:
-				if (__nodelay() == ERR)
+				if (__nodelay() == ERR) {
+					__restore_termios();
 					return ERR;
+				}
 				break;
 			default:
-				if (__timeout(win->delay) == ERR)
+				if (__timeout(win->delay) == ERR) {
+					__restore_termios();
 					return ERR;
+				}
 				break;
 		}
 
@@ -610,8 +616,10 @@ wget_wch(WINDOW *win, wint_t *ch)
 		__CTRACE(__CTRACE_INPUT, "wget_wch got '%s'\n", unctrl(inp));
 #endif
 	if (win->delay > -1) {
-		if (__delay() == ERR)
+		if (__delay() == ERR) {
+			__restore_termios();
 			return ERR;
+		}
 	}
 
 	__restore_termios();

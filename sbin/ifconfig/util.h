@@ -2,9 +2,6 @@
 #define _IFCONFIG_UTIL_H
 
 #include <netinet/in.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <ifaddrs.h>
 
 #include "parse.h"
 
@@ -17,7 +14,7 @@ struct afswtch {
 };
 
 void print_link_addresses(prop_dictionary_t, bool);
-const char *get_string(const char *, const char *, u_int8_t *, int *, bool);
+const char *get_string(const char *, const char *, u_int8_t *, int *);
 const struct afswtch *lookup_af_byname(const char *);
 const struct afswtch *lookup_af_bynum(int);
 void	print_string(const u_int8_t *, int);
@@ -28,8 +25,5 @@ int indirect_ioctl(prop_dictionary_t, unsigned long, void *);
 #ifdef INET6
 void in6_fillscopeid(struct sockaddr_in6 *sin6);
 #endif /* INET6	*/
-bool ifa_any_preferences(const char *, struct ifaddrs *, int);
-void ifa_print_preference(const char *, const struct sockaddr *);
-int16_t ifa_get_preference(const char *, const struct sockaddr *);
 
 #endif /* _IFCONFIG_UTIL_H */

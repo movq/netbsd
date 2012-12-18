@@ -1,4 +1,4 @@
-/* $NetBSD: radeonfb_bios.c,v 1.4 2010/11/03 00:49:02 macallan Exp $ */
+/* $NetBSD: radeonfb_bios.c,v 1.2 2007/10/19 12:00:55 ad Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeonfb_bios.c,v 1.4 2010/11/03 00:49:02 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeonfb_bios.c,v 1.2 2007/10/19 12:00:55 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,9 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: radeonfb_bios.c,v 1.4 2010/11/03 00:49:02 macallan E
 #include <dev/pci/radeonfbreg.h>
 #include <dev/pci/radeonfbvar.h>
 
-#include "opt_radeonfb.h"
-
-#ifdef RADEONFB_BIOS_INIT
+#ifdef RADEON_BIOS_INIT
 
 /*
  * Globals for the entire BIOS.
@@ -108,7 +106,7 @@ __KERNEL_RCSID(0, "$NetBSD: radeonfb_bios.c,v 1.4 2010/11/03 00:49:02 macallan E
 #define	PLL_WAIT_CHK_SET_CLK_PWRMGT_CNTL24	5
 
 
-#ifdef	RADEONFB_BIOS_DEBUG
+#ifdef	RADEON_BIOS_DEBUG
 #define	DPRINTF(x)	printf x
 #else
 #define	DPRINTF(x)
@@ -573,7 +571,7 @@ radeonfb_bios_init(struct radeonfb_softc *sc)
 		DPRINTF(("%s: parsing table %s\n", XNAME(sc), tp->name));
 
 		if (tp->offset != 0) {
-			uint16_t	temp, offset;
+			uint16_t	temp, offset;;
 
 			temp = GETBIOS16(sc, ROM_HEADER_OFFSET);
 			offset = GETBIOS16(sc, temp + tp->offset);

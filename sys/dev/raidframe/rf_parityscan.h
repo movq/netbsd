@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_parityscan.h,v 1.8 2009/11/17 18:54:26 jld Exp $	*/
+/*	$NetBSD: rf_parityscan.h,v 1.7.86.1 2009/12/10 22:59:17 snj Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.

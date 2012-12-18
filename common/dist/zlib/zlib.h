@@ -1,4 +1,4 @@
-/*	$NetBSD: zlib.h,v 1.3 2009/03/25 18:41:06 tls Exp $	*/
+/*	$NetBSD: zlib.h,v 1.2.34.1 2009/05/03 17:31:41 snj Exp $	*/
 
 /* zlib.h -- interface of the 'zlib' general purpose compression library
   version 1.2.3, July 18th, 2005

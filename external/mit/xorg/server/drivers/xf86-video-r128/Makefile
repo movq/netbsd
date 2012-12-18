@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2011/08/11 23:15:40 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2012/03/17 19:11:19 bouyer Exp $
 
 DRIVER=		xf86-video-r128
 DRIVER_NAME=	r128_drv
@@ -16,9 +16,5 @@ CPPFLAGS+= -DAVOID_FBDEV
 .if ${MACHINE} == "amd64" || ${MACHINE} == "i386"
 CPPFLAGS+=	-DWITH_VGAHW
 .endif
-
-CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/libdrm
-
-CWARNFLAGS.clang+=	-Wno-format -Wno-pointer-sign
 
 .include "../Makefile.xf86-driver"

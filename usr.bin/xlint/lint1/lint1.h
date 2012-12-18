@@ -1,4 +1,4 @@
-/* $NetBSD: lint1.h,v 1.25 2011/06/24 01:10:31 christos Exp $ */
+/* $NetBSD: lint1.h,v 1.21 2008/05/01 21:52:19 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,19 +35,9 @@
 #include "lint.h"
 #include "op.h"
 
-/*
- * XXX - Super conservative so that works for most systems, but we should
- * not depend on the host settings but the target settings in determining
- * the alignment. The only valid use for this is in mem1.c; uses in decl.c
- * are bogus.
- */
-#ifndef WORST_ALIGN
-#ifdef _LP64
-# define AVAL	15
-#else
-# define AVAL	7
-#endif
-#define WORST_ALIGN(x) (((x) + AVAL) & ~AVAL)
+/* XXX - works for most systems, but the whole ALIGN thing needs to go away */
+#ifndef ALIGN
+#define ALIGN(x) (((x) + 7) & ~7)
 #endif
 
 /*
@@ -91,7 +81,7 @@ typedef	struct strg {
  * qualifiers (only for lex/yacc interface)
  */
 typedef enum {
-	CONST, VOLATILE, RESTRICT
+	CONST, VOLATILE
 } tqual_t;
 
 /*
@@ -153,7 +143,6 @@ struct type {
 	u_int	t_typedef : 1;	/* type defined with typedef */
 	u_int	t_isfield : 1;	/* type is bitfield */
 	u_int	t_isenum : 1;	/* type is (or was) enum (t_enum valid) */
-	u_int	t_ispacked : 1;	/* type is packed */
 	union {
 		int	_t_dim;		/* dimension */
 		str_t	*_t_str;	/* struct/union tag */
@@ -339,7 +328,6 @@ typedef	struct dinfo {
 	u_int	d_proto : 1;	/* current funct. decl. is prototype */
 	u_int	d_notyp : 1;	/* set if no type specifier was present */
 	u_int	d_asm : 1;	/* set if d_ctx == AUTO and asm() present */
-	u_int	d_ispacked : 1;	/* packed */
 	type_t	*d_tagtyp;	/* tag during member declaration */
 	sym_t	*d_fargs;	/* list of arguments during function def. */
 	pos_t	d_fdpos;	/* position of function definition */

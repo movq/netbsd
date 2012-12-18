@@ -1,4 +1,4 @@
-/*	$NetBSD: disklbl.c,v 1.6 2009/03/14 21:04:07 dsl Exp $	*/
+/*	$NetBSD: disklbl.c,v 1.4 2001/07/26 23:07:57 wiz Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens.
@@ -45,7 +45,8 @@ static int	ahdi_display PROTO((disk_t *));
 static u_int	ahdi_getparts PROTO((disk_t *, u_int, u_int));
 
 int
-readdisklabel(disk_t *dd)
+readdisklabel(dd)
+	disk_t	*dd;
 {
 	int	e;
 
@@ -85,7 +86,9 @@ readdisklabel(disk_t *dd)
 }
 
 static int
-bsd_label(disk_t *dd, u_int offset)
+bsd_label(dd, offset)
+	disk_t		*dd;
+	u_int		offset;
 {
 	u_char		*bblk;
 	u_int		nsec;
@@ -123,7 +126,8 @@ bsd_label(disk_t *dd, u_int offset)
 }
 
 static int
-dkcksum(struct disklabel *dl)
+dkcksum(dl)
+	struct disklabel *dl;
 {
 	u_short	*start, *end, sum = 0;
 
@@ -135,7 +139,8 @@ dkcksum(struct disklabel *dl)
 }
 
 int
-ahdi_label(disk_t *dd)
+ahdi_label(dd)
+	disk_t	*dd;
 {
 	u_int	i;
 	int	e;
@@ -187,7 +192,8 @@ ahdi_label(disk_t *dd)
 }
 
 static int
-root_cmp(const void *x1, const void *x2)
+root_cmp(x1, x2)
+	const void	*x1, *x2;
 {
 	const u_int	*r1 = x1,
 			*r2 = x2;
@@ -200,7 +206,8 @@ root_cmp(const void *x1, const void *x2)
 }
 
 static int
-part_cmp(const void *x1, const void *x2)
+part_cmp(x1, x2)
+	const void	*x1, *x2;
 {
 	const part_t	*p1 = x1,
 			*p2 = x2;
@@ -225,7 +232,8 @@ part_cmp(const void *x1, const void *x2)
 }
 
 static int
-ahdi_display(disk_t *dd)
+ahdi_display(dd)
+	disk_t	*dd;
 {
 	int	i, j, rv = 0;
 

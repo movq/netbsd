@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2011/08/11 23:15:40 joerg Exp $
+#	$NetBSD: Makefile,v 1.3.2.1 2009/09/17 04:24:35 snj Exp $
 
 DRIVER=		xf86-video-mach64
 DRIVER_NAME=	mach64_drv
@@ -20,13 +20,10 @@ SRCS.exa=	atimach64exa.c
 
 CPPFLAGS+=	-DUSE_XAA
 
-.if ${MACHINE_ARCH} == "powerpc" || ${MACHINE_ARCH} == "sparc64" || \
-    ${MACHINE_ARCH} == "sparc"
+.if ${MACHINE_ARCH} == "powerpc" || ${MACHINE_ARCH} == "sparc64"
 CPPFLAGS+= -DAVOID_CPIO
 .endif
 
 MAN=		# defined
-
-CWARNFLAGS.clang+=	-Wno-pointer-sign
 
 .include "../Makefile.xf86-driver"

@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_certkey.c,v 1.1.1.3 2010/11/27 10:35:45 tron Exp $	*/
+/*	$NetBSD: tls_certkey.c,v 1.1.1.1.2.4 2011/01/07 01:24:15 riz Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-/*	$NetBSD: job.c,v 1.163 2012/07/03 21:03:40 sjg Exp $	*/
+/*	$NetBSD: job.c,v 1.141.2.1 2010/11/21 18:45:00 riz Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -70,14 +70,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: job.c,v 1.163 2012/07/03 21:03:40 sjg Exp $";
+static char rcsid[] = "$NetBSD: job.c,v 1.141.2.1 2010/11/21 18:45:00 riz Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)job.c	8.2 (Berkeley) 3/19/94";
 #else
-__RCSID("$NetBSD: job.c,v 1.163 2012/07/03 21:03:40 sjg Exp $");
+__RCSID("$NetBSD: job.c,v 1.141.2.1 2010/11/21 18:45:00 riz Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -184,7 +184,7 @@ int not_parallel = 0;		    /* set if .NOT_PARALLEL */
  * .END target but we keep it around to avoid having to search for it
  * all the time.
  */
-static GNode   	  *postCommands = NULL;
+static GNode   	  *postCommands = NILGNODE;
 				    /* node containing commands to execute when
 				     * everything else is done */
 static int     	  numCommands; 	    /* The number of commands actually printed
@@ -321,7 +321,10 @@ static int readyfd(Job *);
 
 STATIC GNode   	*lastNode;	/* The node for which output was most recently
 				 * produced. */
-static char *targPrefix = NULL; /* What we print at the start of TARG_FMT */
+STATIC const char *targFmt;   	/* Format string to use to head output from a
+				 * job when it's not the most-recent job heard
+				 * from */
+static char *targPrefix = NULL; /* What we print at the start of targFmt */
 static Job tokenWaitJob;	/* token wait pseudo-job */
 
 static Job childExitJob;	/* child exit pseudo-job */
@@ -330,8 +333,7 @@ static Job childExitJob;	/* child exit pseudo-job */
 
 #define TARG_FMT  "%s %s ---\n" /* Default format */
 #define MESSAGE(fp, gn) \
-	if (maxJobs != 1) \
-	    (void)fprintf(fp, TARG_FMT, targPrefix, gn->name)
+	(void)fprintf(fp, targFmt, targPrefix, gn->name)
 
 static sigset_t caught_signals;	/* Set of signals we handle */
 #if defined(SYSV)
@@ -342,9 +344,9 @@ static sigset_t caught_signals;	/* Set of signals we handle */
 
 static void JobChildSig(int);
 static void JobContinueSig(int);
-static Job *JobFindPid(int, int, Boolean);
-static int JobPrintCommand(void *, void *);
-static int JobSaveCommand(void *, void *);
+static Job *JobFindPid(int, int);
+static int JobPrintCommand(ClientData, ClientData);
+static int JobSaveCommand(ClientData, ClientData);
 static void JobClose(Job *);
 static void JobExec(Job *, char **);
 static void JobMakeArgv(Job *, char **);
@@ -352,7 +354,7 @@ static int JobStart(GNode *, int);
 static char *JobOutput(Job *, char *, char *, int);
 static void JobDoOutput(Job *, Boolean);
 static Shell *JobMatchShell(const char *);
-static void JobInterrupt(int, int) MAKE_ATTR_DEAD;
+static void JobInterrupt(int, int);
 static void JobRestartJobs(void);
 static void JobTokenAdd(void);
 static void JobSigLock(sigset_t *);
@@ -475,7 +477,7 @@ JobCondPassSig(int signo)
  *-----------------------------------------------------------------------
  */
 static void
-JobChildSig(int signo MAKE_ATTR_UNUSED)
+JobChildSig(int signo __unused)
 {
     write(childExitJob.outPipe, CHILD_EXIT, 1);
 }
@@ -498,7 +500,7 @@ JobChildSig(int signo MAKE_ATTR_UNUSED)
  *-----------------------------------------------------------------------
  */
 static void
-JobContinueSig(int signo MAKE_ATTR_UNUSED)
+JobContinueSig(int signo __unused)
 {
     /*
      * Defer sending to SIGCONT to our stopped children until we return
@@ -523,14 +525,14 @@ JobContinueSig(int signo MAKE_ATTR_UNUSED)
  *
  *-----------------------------------------------------------------------
  */
-MAKE_ATTR_DEAD static void
+static void
 JobPassSig_int(int signo)
 {
     /* Run .INTERRUPT target then exit */
     JobInterrupt(TRUE, signo);
 }
 
-MAKE_ATTR_DEAD static void
+static void
 JobPassSig_term(int signo)
 {
     /* Dont run .INTERRUPT target then exit */
@@ -614,7 +616,7 @@ JobPassSig_suspend(int signo)
  *-----------------------------------------------------------------------
  */
 static Job *
-JobFindPid(int pid, int status, Boolean isJobs)
+JobFindPid(int pid, int status)
 {
     Job *job;
 
@@ -622,7 +624,7 @@ JobFindPid(int pid, int status, Boolean isJobs)
 	if ((job->job_state == status) && job->pid == pid)
 	    return job;
     }
-    if (DEBUG(JOB) && isJobs)
+    if (DEBUG(JOB))
 	job_table_dump("no pid");
     return NULL;
 }
@@ -659,7 +661,7 @@ JobFindPid(int pid, int status, Boolean isJobs)
  *-----------------------------------------------------------------------
  */
 static int
-JobPrintCommand(void *cmdp, void *jobp)
+JobPrintCommand(ClientData cmdp, ClientData jobp)
 {
     Boolean	  noSpecials;	    /* true if we shouldn't worry about
 				     * inserting special commands into
@@ -893,7 +895,7 @@ JobPrintCommand(void *cmdp, void *jobp)
  *-----------------------------------------------------------------------
  */
 static int
-JobSaveCommand(void *cmd, void *gn)
+JobSaveCommand(ClientData cmd, ClientData gn)
 {
     cmd = Var_Subst(NULL, (char *)cmd, (GNode *)gn, FALSE);
     (void)Lst_AtEnd(postCommands->commands, cmd);
@@ -1015,20 +1017,12 @@ JobFinish(Job *job, int status)
 		    MESSAGE(stdout, job->node);
 		    lastNode = job->node;
 		}
-#ifdef USE_META
-		if (useMeta) {
-		    meta_job_error(job, job->node, job->flags, WEXITSTATUS(status));
-		}
-#endif
 		(void)printf("*** [%s] Error code %d%s\n",
 				job->node->name,
 			       WEXITSTATUS(status),
 			       (job->flags & JOB_IGNERR) ? " (ignored)" : "");
-		if (job->flags & JOB_IGNERR) {
+		if (job->flags & JOB_IGNERR)
 		    status = 0;
-		} else {
-		    PrintOnError(job->node, NULL);
-		}
 	    } else if (DEBUG(JOB)) {
 		if (job->node != lastNode) {
 		    MESSAGE(stdout, job->node);
@@ -1048,12 +1042,6 @@ JobFinish(Job *job, int status)
 	(void)fflush(stdout);
     }
 
-#ifdef USE_META
-    if (useMeta) {
-	meta_job_finish(job);
-    }
-#endif
-    
     return_job_token = FALSE;
 
     Trace_Log(JOBEND, job);
@@ -1071,7 +1059,7 @@ JobFinish(Job *job, int status)
 	 * the parents. In addition, any saved commands for the node are placed
 	 * on the .END target.
 	 */
-	if (job->tailCmds != NULL) {
+	if (job->tailCmds != NILLNODE) {
 	    Lst_ForEachFrom(job->node->commands, job->tailCmds,
 			     JobSaveCommand,
 			    job->node);
@@ -1133,8 +1121,7 @@ Job_Touch(GNode *gn, Boolean silent)
     int		  streamID;   	/* ID of stream opened to do the touch */
     struct utimbuf times;	/* Times for utime() call */
 
-    if (gn->type & (OP_JOIN|OP_USE|OP_USEBEFORE|OP_EXEC|OP_OPTIONAL|
-	OP_SPECIAL|OP_PHONY)) {
+    if (gn->type & (OP_JOIN|OP_USE|OP_USEBEFORE|OP_EXEC|OP_OPTIONAL|OP_PHONY)) {
 	/*
 	 * .JOIN, .USE, .ZEROTIME and .OPTIONAL targets are "virtual" targets
 	 * and, as such, shouldn't really be created.
@@ -1210,7 +1197,7 @@ Job_CheckCommands(GNode *gn, void (*abortProc)(const char *, ...))
 	 * No commands. Look for .DEFAULT rule from which we might infer
 	 * commands
 	 */
-	if ((DEFAULT != NULL) && !Lst_IsEmpty(DEFAULT->commands) &&
+	if ((DEFAULT != NILGNODE) && !Lst_IsEmpty(DEFAULT->commands) &&
 		(gn->type & OP_SPECIAL) == 0) {
 	    char *p1;
 	    /*
@@ -1226,7 +1213,7 @@ Job_CheckCommands(GNode *gn, void (*abortProc)(const char *, ...))
 	    Var_Set(IMPSRC, Var_Value(TARGET, gn, &p1), gn, 0);
 	    if (p1)
 		free(p1);
-	} else if (Dir_MTime(gn, 0) == 0 && (gn->type & OP_SPECIAL) == 0) {
+	} else if (Dir_MTime(gn) == 0 && (gn->type & OP_SPECIAL) == 0) {
 	    /*
 	     * The node wasn't the target of an operator we have no .DEFAULT
 	     * rule to go on and the target doesn't already exist. There's
@@ -1237,8 +1224,8 @@ Job_CheckCommands(GNode *gn, void (*abortProc)(const char *, ...))
 	    static const char msg[] = ": don't know how to make";
 
 	    if (gn->flags & FROM_DEPEND) {
-		fprintf(stdout, "%s: ignoring stale %s for %s\n",
-			progname, makeDependfile, gn->name);
+		fprintf(stdout, "%s: ignoring stale .depend for %s\n",
+			progname, gn->name);
 		return TRUE;
 	    }
 
@@ -1313,19 +1300,13 @@ JobExec(Job *job, char **argv)
     /* Pre-emptively mark job running, pid still zero though */
     job->job_state = JOB_ST_RUNNING;
 
-    cpid = vFork();
+    cpid = vfork();
     if (cpid == -1)
 	Punt("Cannot vfork: %s", strerror(errno));
 
     if (cpid == 0) {
 	/* Child */
-	sigset_t tmask;
 
-#ifdef USE_META
-	if (useMeta) {
-	    meta_job_child(job);
-	}
-#endif
 	/*
 	 * Reset all signal handlers; this is necessary because we also
 	 * need to unblock signals before we exec(2).
@@ -1333,8 +1314,8 @@ JobExec(Job *job, char **argv)
 	JobSigReset();
 
 	/* Now unblock signals */
-	sigemptyset(&tmask);
-	JobSigUnlock(&tmask);
+	sigemptyset(&mask);
+	JobSigUnlock(&mask);
 
 	/*
 	 * Must duplicate the input stream down to the child's input and
@@ -1525,7 +1506,7 @@ JobStart(GNode *gn, int flags)
 	flags |= JOB_SPECIAL;
 
     job->node = gn;
-    job->tailCmds = NULL;
+    job->tailCmds = NILLNODE;
 
     /*
      * Set the initial value of the flags for this job based on the global
@@ -1558,22 +1539,24 @@ JobStart(GNode *gn, int flags)
 	    (!noExecute && !touchFlag)) {
 	/*
 	 * tfile is the name of a file into which all shell commands are
-	 * put. It is removed before the child shell is executed, unless
-	 * DEBUG(SCRIPT) is set.
+	 * put. It is used over by removing it before the child shell is
+	 * executed. The XXXXXX in the string are replaced by the pid of
+	 * the make process in a 6-character field with leading zeroes.
 	 */
-	char *tfile;
+	char     tfile[sizeof(TMPPAT)];
 	sigset_t mask;
 	/*
 	 * We're serious here, but if the commands were bogus, we're
 	 * also dead...
 	 */
 	if (!cmdsOK) {
-	    PrintOnError(gn, NULL);	/* provide some clue */
 	    DieHorribly();
 	}
 
 	JobSigLock(&mask);
-	tfd = mkTempFile(TMPPAT, &tfile);
+	(void)strcpy(tfile, TMPPAT);
+	if ((tfd = mkstemp(tfile)) == -1)
+	    Punt("Could not create temporary file %s", strerror(errno));
 	if (!DEBUG(SCRIPT))
 		(void)eunlink(tfile);
 	JobSigUnlock(&mask);
@@ -1589,14 +1572,6 @@ JobStart(GNode *gn, int flags)
 	 */
 	noExec = FALSE;
 
-#ifdef USE_META
-	if (useMeta) {
-	    meta_job_start(job, gn);
-	    if (Targ_Silent(gn)) {	/* might have changed */
-		job->flags |= JOB_SILENT;
-	    }
-	}
-#endif
 	/*
 	 * We can do all the commands at once. hooray for sanity
 	 */
@@ -1610,8 +1585,6 @@ JobStart(GNode *gn, int flags)
 	if (numCommands == 0) {
 	    noExec = TRUE;
 	}
-
-	free(tfile);
     } else if (NoExecute(gn)) {
 	/*
 	 * Not executing anything -- just print all the commands to stdout
@@ -1669,7 +1642,7 @@ JobStart(GNode *gn, int flags)
 	 * the commands for the job were no good.
 	 */
 	if (cmdsOK && aborting == 0) {
-	    if (job->tailCmds != NULL) {
+	    if (job->tailCmds != NILLNODE) {
 		Lst_ForEachFrom(job->node->commands, job->tailCmds,
 				JobSaveCommand,
 			       job->node);
@@ -1869,11 +1842,6 @@ end_loop:
 		    MESSAGE(stdout, job->node);
 		    lastNode = job->node;
 		}
-#ifdef USE_META
-		if (useMeta) {
-		    meta_job_output(job, cp, gotNL ? "\n" : "");
-		}
-#endif
 		(void)fprintf(stdout, "%s%s", cp, gotNL ? "\n" : "");
 		(void)fflush(stdout);
 	    }
@@ -1916,7 +1884,7 @@ JobRun(GNode *targ)
     Lst lst = Lst_Init(FALSE);
     Lst_AtEnd(lst, targ);
     (void)Make_Run(lst);
-    Lst_Destroy(lst, NULL);
+    Lst_Destroy(lst, NOFREE);
     JobStart(targ, JOB_SPECIAL);
     while (jobTokensRunning) {
 	Job_CatchOutput();
@@ -1924,7 +1892,7 @@ JobRun(GNode *targ)
 #else
     Compat_Make(targ, targ);
     if (targ->made == ERROR) {
-	PrintOnError(targ, "\n\nStop.");
+	PrintOnError("\n\nStop.");
 	exit(1);
     }
 #endif
@@ -1956,6 +1924,7 @@ void
 Job_CatchChildren(void)
 {
     int    	  pid;	    	/* pid of dead child */
+    Job		  *job;	    	/* job descriptor for dead child */
     int	  	  status;   	/* Exit/termination status */
 
     /*
@@ -1969,60 +1938,41 @@ Job_CatchChildren(void)
 	    (void)fprintf(debug_file, "Process %d exited/stopped status %x.\n", pid,
 	      status);
 	}
-	JobReapChild(pid, status, TRUE);
-    }
-}
 
-/*
- * It is possible that wait[pid]() was called from elsewhere,
- * this lets us reap jobs regardless.
- */
-void
-JobReapChild(pid_t pid, int status, Boolean isJobs)
-{
-    Job		  *job;	    	/* job descriptor for dead child */
-
-    /*
-     * Don't even bother if we know there's no one around.
-     */
-    if (jobTokensRunning == 0)
-	return;
-
-    job = JobFindPid(pid, JOB_ST_RUNNING, isJobs);
-    if (job == NULL) {
-	if (isJobs) {
+	job = JobFindPid(pid, JOB_ST_RUNNING);
+	if (job == NULL) {
 	    if (!lurking_children)
 		Error("Child (%d) status %x not in table?", pid, status);
+	    continue;
 	}
-	return;				/* not ours */
-    }
-    if (WIFSTOPPED(status)) {
-	if (DEBUG(JOB)) {
-	    (void)fprintf(debug_file, "Process %d (%s) stopped.\n",
-			  job->pid, job->node->name);
-	}
-	if (!make_suspended) {
-	    switch (WSTOPSIG(status)) {
-	    case SIGTSTP:
-		(void)printf("*** [%s] Suspended\n", job->node->name);
-		break;
-	    case SIGSTOP:
-		(void)printf("*** [%s] Stopped\n", job->node->name);
-		break;
-	    default:
-		(void)printf("*** [%s] Stopped -- signal %d\n",
-			     job->node->name, WSTOPSIG(status));
+	if (WIFSTOPPED(status)) {
+	    if (DEBUG(JOB)) {
+		(void)fprintf(debug_file, "Process %d (%s) stopped.\n",
+				job->pid, job->node->name);
 	    }
-	    job->job_suspended = 1;
+	    if (!make_suspended) {
+		    switch (WSTOPSIG(status)) {
+		    case SIGTSTP:
+			(void)printf("*** [%s] Suspended\n", job->node->name);
+			break;
+		    case SIGSTOP:
+			(void)printf("*** [%s] Stopped\n", job->node->name);
+			break;
+		    default:
+			(void)printf("*** [%s] Stopped -- signal %d\n",
+			    job->node->name, WSTOPSIG(status));
+		    }
+		    job->job_suspended = 1;
+	    }
+	    (void)fflush(stdout);
+	    continue;
 	}
-	(void)fflush(stdout);
-	return;
+
+	job->job_state = JOB_ST_FINISHED;
+	job->exit_status = status;
+
+	JobFinish(job, status);
     }
-
-    job->job_state = JOB_ST_FINISHED;
-    job->exit_status = status;
-
-    JobFinish(job, status);
 }
 
 /*-
@@ -2177,7 +2127,17 @@ Job_Init(void)
     aborting = 	  0;
     errors = 	  0;
 
-    lastNode =	  NULL;
+    lastNode =	  NILGNODE;
+
+    if (maxJobs == 1) {
+	/*
+	 * If only one job can run at a time, there's no need for a banner,
+	 * is there?
+	 */
+	targFmt = "";
+    } else {
+	targFmt = TARG_FMT;
+    }
 
     /*
      * There is a non-zero chance that we already have children.
@@ -2212,13 +2172,13 @@ Job_Init(void)
     /*
      * Install a SIGCHLD handler.
      */
-    (void)bmake_signal(SIGCHLD, JobChildSig);
+    (void)signal(SIGCHLD, JobChildSig);
     sigaddset(&caught_signals, SIGCHLD);
 
 #define ADDSIG(s,h)				\
-    if (bmake_signal(s, SIG_IGN) != SIG_IGN) {	\
+    if (signal(s, SIG_IGN) != SIG_IGN) {	\
 	sigaddset(&caught_signals, s);		\
-	(void)bmake_signal(s, h);			\
+	(void)signal(s, h);			\
     }
 
     /*
@@ -2245,10 +2205,10 @@ Job_Init(void)
 
     begin = Targ_FindNode(".BEGIN", TARG_NOCREATE);
 
-    if (begin != NULL) {
+    if (begin != NILGNODE) {
 	JobRun(begin);
 	if (begin->made == ERROR) {
-	    PrintOnError(begin, "\n\nStop.");
+	    PrintOnError("\n\nStop.");
 	    exit(1);
 	}
     }
@@ -2259,7 +2219,7 @@ static void JobSigReset(void)
 {
 #define DELSIG(s)					\
     if (sigismember(&caught_signals, s)) {		\
-	(void)bmake_signal(s, SIG_DFL);			\
+	(void)signal(s, SIG_DFL);			\
     }
 
     DELSIG(SIGINT)
@@ -2272,7 +2232,7 @@ static void JobSigReset(void)
     DELSIG(SIGWINCH)
     DELSIG(SIGCONT)
 #undef DELSIG
-    (void)bmake_signal(SIGCHLD, SIG_DFL);
+    (void)signal(SIGCHLD, SIG_DFL);
 }
 
 /*-
@@ -2297,7 +2257,7 @@ JobMatchShell(const char *name)
 	if (strcmp(name, sh->name) == 0)
 		return (sh);
     }
-    return NULL;
+    return (NULL);
 }
 
 /*-
@@ -2371,10 +2331,6 @@ Job_ParseShell(char *line)
      * Parse the specification by keyword
      */
     words = brk_string(line, &argc, TRUE, &path);
-    if (words == NULL) {
-	Error("Unterminated quoted string [%s]", line);
-	return FAILURE;
-    }
     shellArgv = path;
 
     for (path = NULL, argv = words; argc != 0; argc--, argv++) {
@@ -2423,7 +2379,7 @@ Job_ParseShell(char *line)
 	 * If no path was given, the user wants one of the pre-defined shells,
 	 * yes? So we find the one s/he wants with the help of JobMatchShell
 	 * and set things up the right way. shellPath will be set up by
-	 * Shell_Init.
+	 * Job_Init.
 	 */
 	if (newShell.name == NULL) {
 	    Parse_Error(PARSE_FATAL, "Neither path nor name specified");
@@ -2438,12 +2394,6 @@ Job_ParseShell(char *line)
 	    }
 	    commandShell = sh;
 	    shellName = newShell.name;
-	    if (shellPath) {
-		/* Shell_Init has already been called!  Do it again. */
-		free(UNCONST(shellPath));
-		shellPath = NULL;
-		Shell_Init();
-	    }
 	}
     } else {
 	/*
@@ -2556,7 +2506,7 @@ JobInterrupt(int runINTERRUPT, int signo)
 
     if (runINTERRUPT && !touchFlag) {
 	interrupt = Targ_FindNode(".INTERRUPT", TARG_NOCREATE);
-	if (interrupt != NULL) {
+	if (interrupt != NILGNODE) {
 	    ignoreErrors = FALSE;
 	    JobRun(interrupt);
 	}
@@ -2581,7 +2531,7 @@ JobInterrupt(int runINTERRUPT, int signo)
 int
 Job_Finish(void)
 {
-    if (postCommands != NULL &&
+    if (postCommands != NILGNODE &&
 	(!Lst_IsEmpty(postCommands->commands) ||
 	 !Lst_IsEmpty(postCommands->children))) {
 	if (errors) {

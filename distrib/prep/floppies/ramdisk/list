@@ -1,6 +1,6 @@
-#	$NetBSD: list,v 1.20 2011/06/19 06:44:05 tsutsui Exp $
+#	$NetBSD: list,v 1.12 2008/05/06 15:32:06 dyoung Exp $
 
-SRCDIRS	bin sbin usr.bin usr.sbin
+SRCDIRS	bin sbin usr.bin usr.sbin gnu/usr.bin
 
 PROG	bin/cat
 PROG	bin/chmod
@@ -21,7 +21,6 @@ PROG	bin/sh
 PROG	bin/stty
 PROG	bin/sync
 
-PROG	sbin/chown	bin/chgrp
 PROG	sbin/disklabel
 PROG	sbin/dmesg
 PROG	sbin/fdisk
@@ -44,11 +43,12 @@ PROG	sbin/shutdown
 PROG	sbin/umount
 
 PROG	usr/bin/ftp
-PROG	usr/bin/gzip	usr/bin/gzcat usr/bin/gunzip
+PROG	usr/bin/gzip	usr/bin/gunzip usr/bin/gzcat
 PROG	usr/bin/more	usr/bin/less
 PROG	usr/bin/sed
 PROG	usr/bin/tset
 
+PROG	usr/sbin/chown	usr/bin/chgrp
 PROG	usr/sbin/chroot
 
 # init invokes the shell as -sh
@@ -62,14 +62,20 @@ SPECIAL	route		srcdir	distrib/utils/x_route
 SPECIAL	ed		srcdir	distrib/utils/x_ed
 SPECIAL	umount		srcdir	distrib/utils/x_umount
 
-LIBS	libhack.o -ledit -lutil -lcurses -lterminfo -lcrypt -ll -lm -lz -lprop
+LIBS	libhack.o -ledit -lutil -lcurses -ltermcap -lcrypt -ll -lm -lz -lprop
+
+# and the termcap file
+COPY	${CURDIR}/termcap.src 			usr/share/misc/termcap
 
 # various files that we need in /etc for the install
 COPY	${NETBSDSRCDIR}/etc/group		etc/group
 COPY	${NETBSDSRCDIR}/etc/master.passwd	etc/master.passwd
 COPY	${NETBSDSRCDIR}/etc/netconfig		etc/netconfig
-COPY	${DISTRIBDIR}/common/protocols		etc/protocols
-COPY	${DISTRIBDIR}/common/services		etc/services
+COPY	${NETBSDSRCDIR}/distrib/common/protocols	etc/protocols
+COPY	${NETBSDSRCDIR}/distrib/common/services		etc/services
+
+# the disktab explanation file
+COPY	${CURDIR}/disktab.preinstall		etc/disktab.preinstall
 
 # and the installation scripts
 COPY	${CURDIR}/dot.profile			.profile

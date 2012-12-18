@@ -1,7 +1,6 @@
-/*	$NetBSD: grfvar.h,v 1.14 2012/10/27 17:17:42 chs Exp $	*/
+/*	$NetBSD: grfvar.h,v 1.10 2007/03/04 05:59:40 christos Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -37,9 +36,48 @@
  *
  *	@(#)grfvar.h	7.3 (Berkeley) 5/7/91
  */
+/*
+ * Copyright (c) 1988 University of Utah.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: grfvar.h 1.9 91/01/21$
+ *
+ *	@(#)grfvar.h	7.3 (Berkeley) 5/7/91
+ */
 
 /*
- * Structure passed as 'aux' during autoconf.
+ * Structure passed as 'auxp' during autoconf.
  */
 typedef struct {
 	cfprint_t	busprint;	/* grfbusprint function		*/
@@ -55,7 +93,7 @@ struct ite_softc;
  * uses it... 
  */
 struct	grf_softc {
-	device_t	g_device;	/* config sets this up.		*/
+	struct device	g_device;	/* config sets this up.		*/
 	struct grfinfo	g_display;	/* hardware descr. (for ioctl)	*/
 	int		g_flags;	/* software flags		*/
 	int		g_unit;		/* grf unit we want/have	*/
@@ -63,18 +101,18 @@ struct	grf_softc {
 	dev_t		g_grfdev;	/* grf device number		*/
 	dev_t		g_viewdev;	/* view device number		*/
 	void *		g_data;		/* device dependent data	*/
-	int		(*g_mode)(struct grf_softc *, int, void *,
-								int, int);
+	int		(*g_mode) __P((struct grf_softc *, int, void *,
+								int, int));
 	int		g_conpri;	/* priority of ite as console	*/
-	void		(*g_iteinit)(struct ite_softc *);
-	void		(*g_itedeinit)(struct ite_softc *);
-	void		(*g_iteclear)(struct ite_softc *, int, int,
-								int, int);
-	void		(*g_iteputc)(struct ite_softc *, int, int,
-								int, int);
-	void		(*g_itecursor)(struct ite_softc *, int);
-	void		(*g_itescroll)(struct ite_softc *, int, int,
-								int, int);
+	void		(*g_iteinit)   __P((struct ite_softc *));
+	void		(*g_itedeinit) __P((struct ite_softc *));
+	void		(*g_iteclear)  __P((struct ite_softc *, int, int,
+								int, int));
+	void		(*g_iteputc)   __P((struct ite_softc *, int, int,
+								int, int));
+	void		(*g_itecursor) __P((struct ite_softc *, int));
+	void		(*g_itescroll) __P((struct ite_softc *, int, int,
+								int, int));
 };
 
 /* flags */
@@ -107,8 +145,8 @@ struct	grf_softc {
 
 #ifdef _KERNEL
 
-int  grf_mode(struct grf_softc *, int, void *, int, int);
-void grf_viewsync(struct grf_softc *);
+int  grf_mode __P((struct grf_softc *, int, void *, int, int));
+void grf_viewsync __P((struct grf_softc *));
 
 extern struct grf_softc *grfsp[]; /* XXX */
 #endif /* _KERNEL */

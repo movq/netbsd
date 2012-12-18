@@ -1,4 +1,4 @@
-/*	$NetBSD: z8530var.h,v 1.10 2011/07/01 21:00:21 dyoung Exp $	*/
+/*	$NetBSD: z8530var.h,v 1.9 2008/03/29 19:15:35 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -83,7 +83,7 @@
  *	@(#)zsvar.h	8.1 (Berkeley) 6/11/93
  */
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <dev/ic/z8530sc.h>
 
 struct zs_channel {

@@ -30,7 +30,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-const char *copyright =
+char *copyright =
     "Copyright (c) 1984 through 2008, William LeFebvre";
 
 /*
@@ -112,7 +112,7 @@ static char stdoutbuf[BUFFERSIZE];
 static jmp_buf jmp_int;
 
 /* globals */
-char *myname;
+char *myname = "top";
 
 void
 quit(int status)
@@ -128,7 +128,7 @@ quit(int status)
  *  signal handlers
  */
 
-static void
+void
 set_signal(int sig, RETSIGTYPE (*handler)(int))
 
 {
@@ -143,7 +143,7 @@ set_signal(int sig, RETSIGTYPE (*handler)(int))
 #endif
 }
 
-static void
+void
 release_signal(int sig)
 
 {
@@ -163,7 +163,7 @@ release_signal(int sig)
 #endif
 }
 
-static RETSIGTYPE
+RETSIGTYPE
 sig_leave(int i)	/* exit under normal conditions -- INT handler */
 
 {
@@ -171,7 +171,7 @@ sig_leave(int i)	/* exit under normal conditions -- INT handler */
     exit(EX_OK);
 }
 
-static RETSIGTYPE
+RETSIGTYPE
 sig_tstop(int i)	/* SIGTSTP handler */
 
 {
@@ -201,7 +201,7 @@ sig_tstop(int i)	/* SIGTSTP handler */
 }
 
 #ifdef SIGWINCH
-static RETSIGTYPE
+RETSIGTYPE
 sig_winch(int i)		/* SIGWINCH handler */
 
 {
@@ -217,8 +217,8 @@ sig_winch(int i)		/* SIGWINCH handler */
 static sigset_t signalset;
 #endif
 
-static void *
-hold_signals(void)
+void *
+hold_signals()
 
 {
 #ifdef HAVE_SIGACTION
@@ -256,8 +256,8 @@ hold_signals(void)
 
 }
 
-static void
-set_signals(void)
+void
+set_signals()
 
 {
     (void) set_signal(SIGINT, sig_leave);
@@ -268,7 +268,7 @@ set_signals(void)
 #endif
 }
 
-static void
+void
 release_signals(void *parm)
 
 {
@@ -325,7 +325,7 @@ static struct option longopts[] = {
 #endif
 
 
-static void
+void
 do_arguments(globalstate *gstate, int ac, char **av)
 
 {
@@ -345,6 +345,8 @@ do_arguments(globalstate *gstate, int ac, char **av)
 	{
 	case '1':
 	    gstate->percpustates = !gstate->percpustates;
+	    gstate->fulldraw = Yes;
+	    gstate->max_topn += display_setmulti(gstate->percpustates);
 	    break;
 #ifdef ENABLE_COLOR
 	case 'C':
@@ -466,8 +468,7 @@ do_arguments(globalstate *gstate, int ac, char **av)
 	default:
 	    fprintf(stderr, "\
 Top version %s\n\
-Usage: %s [-1CISTabcinqtuv] [-d count] [-m mode] [-o field] [-p pid]\n\
-           [-s time] [-U username] [number]\n",
+Usage: %s [-1ISTabcinqu] [-d x] [-s x] [-o field] [-U username] [-p pid] [number]\n",
 		    version_string(), myname);
 	    exit(EX_USAGE);
 	}
@@ -487,7 +488,7 @@ Usage: %s [-1CISTabcinqtuv] [-d count] [-m mode] [-o field] [-p pid]\n\
     }
 }
 
-static void
+void
 do_display(globalstate *gstate)
 
 {
@@ -600,7 +601,7 @@ timeval_xdprint(char *s, struct timeval tv)
 }
 #endif
 
-static void
+void
 do_wait(globalstate *gstate)
 
 {
@@ -610,7 +611,7 @@ do_wait(globalstate *gstate)
     select(0, NULL, NULL, NULL, &wait);
 }
 
-static void
+void
 do_command(globalstate *gstate)
 
 {
@@ -685,7 +686,7 @@ do_command(globalstate *gstate)
     } while (timercmp(&now, &(gstate->refresh), < ));
 }
 
-static void
+void
 do_minidisplay(globalstate *gstate)
 
 {
@@ -719,8 +720,7 @@ main(int argc, char *argv[])
     char **preset_argv;
     int preset_argc = 0;
     void *mask;
-    volatile int need_mini = 1;
-    static char top[] = "top";
+    int need_mini = 1;
 
     struct statics statics;
     globalstate *gstate;
@@ -736,9 +736,7 @@ main(int argc, char *argv[])
 	{
 	    myname++;
 	}
-    } else
-	myname = top;
-
+    }
 
     /* binary compatibility check */
 #ifdef HAVE_UNAME
@@ -758,7 +756,7 @@ main(int argc, char *argv[])
 #endif
 
     /* initialization */
-    gstate = ecalloc(1, sizeof(globalstate));
+    gstate = (globalstate *)calloc(1, sizeof(globalstate));
     gstate->statics = &statics;
     time_mark(NULL);
 
@@ -769,7 +767,7 @@ main(int argc, char *argv[])
     gstate->fulldraw = Yes;
     gstate->use_color = Yes;
     gstate->interactive = Maybe;
-    gstate->percpustates = No;
+    gstate->percpustates = Yes;
 
     /* preset defaults for process selection */
     gstate->pselect.idle = Yes;
@@ -892,7 +890,7 @@ main(int argc, char *argv[])
     /* initialize display */
     if ((gstate->max_topn = display_init(&statics, gstate->percpustates)) == -1)
     {
-	fprintf(stderr, "%s: display too small\n", myname);
+	fprintf(stderr, "%s: can't allocate sufficient memory\n", myname);
 	exit(EX_OSERR);
     }
 

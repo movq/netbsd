@@ -1,4 +1,4 @@
-/*	$NetBSD: cosc.c,v 1.18 2012/10/27 17:17:23 chs Exp $	*/
+/*	$NetBSD: cosc.c,v 1.13 2005/12/11 12:16:05 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Mark Brinicombe
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cosc.c,v 1.18 2012/10/27 17:17:23 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cosc.c,v 1.13 2005/12/11 12:16:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,10 +65,10 @@ __KERNEL_RCSID(0, "$NetBSD: cosc.c,v 1.18 2012/10/27 17:17:23 chs Exp $");
 #include <acorn32/podulebus/coscvar.h>
 #include <dev/podulebus/podules.h>
 
-void coscattach(device_t, device_t, void *);
-int coscmatch(device_t, cfdata_t, void *);
+void coscattach(struct device *, struct device *, void *);
+int coscmatch(struct device *, struct cfdata *, void *);
 
-CFATTACH_DECL_NEW(cosc, sizeof(struct cosc_softc),
+CFATTACH_DECL(cosc, sizeof(struct cosc_softc),
     coscmatch, coscattach, NULL, NULL);
 
 int cosc_intr(void *);
@@ -86,9 +86,12 @@ int cosc_poll = 1;
 #endif
 
 int
-coscmatch(device_t parent, cfdata_t cf, void *aux)
+coscmatch(pdp, cf, auxp)
+	struct device *pdp;
+	struct cfdata *cf;
+	void *auxp;
 {
-	struct podule_attach_args *pa = aux;
+	struct podule_attach_args *pa = (struct podule_attach_args *)auxp;
 
 	/* Look for the card */
 
@@ -106,12 +109,16 @@ coscmatch(device_t parent, cfdata_t cf, void *aux)
 static int dummy[6];
 
 void
-coscattach(device_t parent, device_t self, void *aux)
+coscattach(pdp, dp, auxp)
+	struct device *pdp, *dp;
+	void *auxp;
 {
-	struct cosc_softc *sc = device_private(self);
-	struct podule_attach_args *pa = aux;
+	struct cosc_softc *sc = (struct cosc_softc *)dp;
+	struct podule_attach_args *pa;
 	cosc_regmap_p	   rp = &sc->sc_regmap;
 	vu_char		  *esc;
+
+	pa = (struct podule_attach_args *)auxp;
 
 	if (pa->pa_podule_number == -1)
 		panic("Podule has disappeared !");
@@ -234,10 +241,9 @@ coscattach(device_t parent, device_t self, void *aux)
 	sc->sc_softc.sc_bump_sz = PAGE_SIZE;
 	sc->sc_softc.sc_bump_pa = 0x0;
 
-	escinitialize(&sc->sc_softc);
+	escinitialize((struct esc_softc *)sc);
 
-	sc->sc_softc.sc_dev = self;
-	sc->sc_softc.sc_adapter.adapt_dev = sc->sc_softc.sc_dev;
+	sc->sc_softc.sc_adapter.adapt_dev = &sc->sc_softc.sc_dev;
 	sc->sc_softc.sc_adapter.adapt_nchannels = 1;
 	sc->sc_softc.sc_adapter.adapt_openings = 7;
 	sc->sc_softc.sc_adapter.adapt_max_periph = 1;
@@ -270,25 +276,27 @@ coscattach(device_t parent, device_t self, void *aux)
 #endif
 	{
 		evcnt_attach_dynamic(&sc->sc_intrcnt, EVCNT_TYPE_INTR, NULL,
-		    device_xname(self), "intr");
+		    dp->dv_xname, "intr");
 		sc->sc_ih = podulebus_irq_establish(pa->pa_ih, IPL_BIO,
 		    cosc_intr, sc, &sc->sc_intrcnt);
 		if (sc->sc_ih == NULL)
 			panic("%s: Cannot install IRQ handler",
-			    device_xname(self));
+			    dp->dv_xname);
 	}
 
 	printf("\n");
 
 	/* attach all scsi units on us */
-	config_found(self, &sc->sc_softc.sc_channel, scsiprint);
+	config_found(dp, &sc->sc_softc.sc_channel, scsiprint);
 }
 
 
 /* Turn on/off led */
 
 void
-cosc_led(struct esc_softc *sc, int mode)
+cosc_led(sc, mode)
+	struct esc_softc *sc;
+	int		  mode;
 {
 	cosc_regmap_p		rp;
 
@@ -305,7 +313,8 @@ cosc_led(struct esc_softc *sc, int mode)
 
 
 int
-cosc_intr(void *arg)
+cosc_intr(arg)
+	void *arg;
 {
 	struct esc_softc *dev = arg;
 	cosc_regmap_p	      rp;
@@ -339,7 +348,9 @@ cosc_intr(void *arg)
 /* Load transfer address into dma register */
 
 void
-cosc_set_dma_adr(struct esc_softc *sc, void *ptr)
+cosc_set_dma_adr(sc, ptr)
+	struct esc_softc *sc;
+	void		 *ptr;
 {
 	printf("cosc_set_dma_adr(sc = 0x%08x, ptr = 0x%08x)\n", (u_int)sc, (u_int)ptr);
 	return;
@@ -349,7 +360,9 @@ cosc_set_dma_adr(struct esc_softc *sc, void *ptr)
 /* Set DMA transfer counter */
 
 void
-cosc_set_dma_tc(struct esc_softc *sc, unsigned int len)
+cosc_set_dma_tc(sc, len)
+	struct esc_softc *sc;
+	unsigned int	  len;
 {
 	printf("cosc_set_dma_tc(sc, len = 0x%08x)", len);
 
@@ -364,7 +377,9 @@ cosc_set_dma_tc(struct esc_softc *sc, unsigned int len)
 /* Set DMA mode */
 
 void
-cosc_set_dma_mode(struct esc_softc *sc, int mode)
+cosc_set_dma_mode(sc, mode)
+	struct esc_softc *sc;
+	int		  mode;
 {
 	printf("cosc_set_dma_mode(sc, mode = %d)", mode);
 }
@@ -373,7 +388,11 @@ cosc_set_dma_mode(struct esc_softc *sc, int mode)
 /* Initialize DMA for transfer */
 
 int
-cosc_setup_dma(struct esc_softc *sc, void *ptr, int len, int mode)
+cosc_setup_dma(sc, ptr, len, mode)
+	struct esc_softc *sc;
+	void		 *ptr;
+	int		  len;
+	int		  mode;
 {
 /*	printf("cosc_setup_dma(sc, ptr = 0x%08x, len = 0x%08x, mode = 0x%08x)\n", (u_int)ptr, len, mode);*/
 	return(0);
@@ -384,7 +403,10 @@ cosc_setup_dma(struct esc_softc *sc, void *ptr, int len, int mode)
 /* Check if address and len is ok for DMA transfer */
 
 int
-cosc_need_bump(struct esc_softc *sc, void *ptr, int len)
+cosc_need_bump(sc, ptr, len)
+	struct esc_softc *sc;
+	void		 *ptr;
+	int		  len;
 {
 	int	p;
 
@@ -404,7 +426,11 @@ cosc_need_bump(struct esc_softc *sc, void *ptr, int len)
 /* Interrupt driven routines */
 
 int
-cosc_build_dma_chain(struct esc_softc *sc, struct esc_dma_chain *chain, void *p, int l)
+cosc_build_dma_chain(sc, chain, p, l)
+	struct esc_softc	*sc;
+	struct esc_dma_chain	*chain;
+	void			*p;
+	int			 l;
 {
 	printf("cosc_build_dma_chain()\n");
 	return(0);

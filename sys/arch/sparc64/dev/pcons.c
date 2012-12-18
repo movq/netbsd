@@ -1,4 +1,4 @@
-/*	$NetBSD: pcons.c,v 1.31 2011/06/03 03:20:39 christos Exp $	*/
+/*	$NetBSD: pcons.c,v 1.29 2008/06/13 13:10:49 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2000 Eduardo E. Horvath
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcons.c,v 1.31 2011/06/03 03:20:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcons.c,v 1.29 2008/06/13 13:10:49 cegger Exp $");
 
 #include "opt_ddb.h"
 
@@ -61,10 +61,10 @@ __KERNEL_RCSID(0, "$NetBSD: pcons.c,v 1.31 2011/06/03 03:20:39 christos Exp $");
 
 #include <sparc64/dev/cons.h>
 
-static int pconsmatch(device_t, cfdata_t, void *);
-static void pconsattach(device_t, device_t, void *);
+static int pconsmatch(struct device *, struct cfdata *, void *);
+static void pconsattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(pcons, sizeof(struct pconssoftc),
+CFATTACH_DECL(pcons, sizeof(struct pconssoftc),
     pconsmatch, pconsattach, NULL, NULL);
 
 extern struct cfdriver pcons_cd;
@@ -88,7 +88,7 @@ static int pconsprobe(void);
 extern struct consdev *cn_tab;
 
 static int
-pconsmatch(device_t parent, cfdata_t match, void *aux)
+pconsmatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	extern int  prom_cngetc(dev_t);
@@ -100,10 +100,9 @@ pconsmatch(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-pconsattach(device_t parent, device_t self, void *aux)
+pconsattach(struct device *parent, struct device *self, void *aux)
 {
-	struct pconssoftc *sc = device_private(self);
-	sc->of_dev = self;
+	struct pconssoftc *sc = (struct pconssoftc *) self;
 
 	printf("\n");
 	if (!pconsprobe())
@@ -131,7 +130,7 @@ pconsopen(dev_t dev, int flag, int mode, struct lwp *l)
 	if (!sc)
 		return ENXIO;
 	if (!(tp = sc->of_tty))
-		sc->of_tty = tp = tty_alloc();
+		sc->of_tty = tp = ttymalloc();
 	tp->t_oproc = pconsstart;
 	tp->t_param = pconsparam;
 	tp->t_dev = dev;

@@ -1,4 +1,4 @@
-/*	$NetBSD: yp_all.c,v 1.13 2012/06/25 22:32:46 abs Exp $	 */
+/*	$NetBSD: yp_all.c,v 1.12 2003/12/10 12:06:25 agc Exp $	 */
 
 /*
  * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@fsa.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: yp_all.c,v 1.13 2012/06/25 22:32:46 abs Exp $");
+__RCSID("$NetBSD: yp_all.c,v 1.12 2003/12/10 12:06:25 agc Exp $");
 #endif
 
 #include "namespace.h"
@@ -46,8 +46,10 @@ __weak_alias(yp_all,_yp_all)
 #endif
 
 int
-yp_all(const char *indomain, const char *inmap,
-    struct ypall_callback *incallback)
+yp_all(indomain, inmap, incallback)
+	const char     *indomain;
+	const char     *inmap;
+	struct ypall_callback *incallback;
 {
 	struct ypreq_nokey yprnk;
 	struct dom_binding *ysd;

@@ -1,4 +1,4 @@
-/* $NetBSD: ppbus_msq.c,v 1.10 2011/07/17 20:54:51 joerg Exp $ */
+/* $NetBSD: ppbus_msq.c,v 1.9 2008/04/18 14:56:40 cegger Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999 Nicolas Souchu
@@ -30,7 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ppbus_msq.c,v 1.10 2011/07/17 20:54:51 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ppbus_msq.c,v 1.9 2008/04/18 14:56:40 cegger Exp $");
+
+#include <machine/stdarg.h>
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: pl_6.c,v 1.14 2009/03/15 03:33:56 dholland Exp $	*/
+/*	$NetBSD: pl_6.c,v 1.11 2003/08/07 09:37:44 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pl_6.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: pl_6.c,v 1.14 2009/03/15 03:33:56 dholland Exp $");
+__RCSID("$NetBSD: pl_6.c,v 1.11 2003/08/07 09:37:44 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -42,7 +42,7 @@ __RCSID("$NetBSD: pl_6.c,v 1.14 2009/03/15 03:33:56 dholland Exp $");
 #include "extern.h"
 #include "player.h"
 
-static int turned(void);
+static int	turned(void);
 
 void
 repair(void)
@@ -81,7 +81,7 @@ repair(void)
 			int max = ptr->guns/4;
 			if (ptr->hull < max) {
 				FIX(hull, max);
-				send_hull(ms, ptr->hull);
+				Write(W_HULL, ms, ptr->hull, 0, 0, 0);
 			}
 			break;
 			}
@@ -90,13 +90,15 @@ repair(void)
 				int max = ptr->guns/5 - ptr->carL;
 				if (ptr->gunL < max) {
 					FIX(gunL, max);
-					send_gunl(ms, ptr->gunL, ptr->carL);
+					Write(W_GUNL, ms, ptr->gunL,
+						ptr->carL, 0, 0);
 				}
 			} else {
 				int max = ptr->guns/5 - ptr->carR;
 				if (ptr->gunR < max) {
 					FIX(gunR, max);
-					send_gunr(ms, ptr->gunR, ptr->carR);
+					Write(W_GUNR, ms, ptr->gunR,
+						ptr->carR, 0, 0);
 				}
 			}
 			break;
@@ -104,19 +106,19 @@ repair(void)
 #define X 2
 			if (ptr->rig4 >= 0 && ptr->rig4 < X) {
 				FIX(rig4, X);
-				send_rig4(ms, ptr->rig4);
+				Write(W_RIG4, ms, ptr->rig4, 0, 0, 0);
 			}
 			if (count && ptr->rig3 < X) {
 				FIX(rig3, X);
-				send_rig3(ms, ptr->rig3);
+				Write(W_RIG3, ms, ptr->rig3, 0, 0, 0);
 			}
 			if (count && ptr->rig2 < X) {
 				FIX(rig2, X);
-				send_rig2(ms, ptr->rig2);
+				Write(W_RIG2, ms, ptr->rig2, 0, 0, 0);
 			}
 			if (count && ptr->rig1 < X) {
 				FIX(rig1, X);
-				send_rig1(ms, ptr->rig1);
+				Write(W_RIG1, ms, ptr->rig1, 0, 0, 0);
 			}
 			break;
 		}
@@ -125,8 +127,14 @@ repair(void)
 			*repairs = 2;
 		} else {
 			*repairs = 0;
+			blockalarm();
+			draw_stat();
+			unblockalarm();
 		}
 	}
+	blockalarm();
+	draw_slot();
+	unblockalarm();
 	repaired = 1;
 }
 

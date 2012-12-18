@@ -1,9 +1,9 @@
-/*	$NetBSD: wax.c,v 1.21 2012/10/10 15:46:34 skrll Exp $	*/
+/*	$NetBSD: wax.c,v 1.9 2008/03/29 15:59:26 skrll Exp $	*/
 
 /*	$OpenBSD: wax.c,v 1.1 1998/11/23 03:04:10 mickey Exp $	*/
 
 /*
- * Copyright (c) 1998-2003 Michael Shalayeff
+ * Copyright (c) 1998 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,22 +14,26 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Michael Shalayeff.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR OR HIS RELATIVES BE LIABLE FOR ANY DIRECT,
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF MIND, USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wax.c,v 1.21 2012/10/10 15:46:34 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wax.c,v 1.9 2008/03/29 15:59:26 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,24 +51,24 @@ __KERNEL_RCSID(0, "$NetBSD: wax.c,v 1.21 2012/10/10 15:46:34 skrll Exp $");
 #define	WAX_REGS	0xc000
 
 struct wax_regs {
-	uint32_t wax_irr;	/* int requset register */
-	uint32_t wax_imr;	/* int mask register */
-	uint32_t wax_ipr;	/* int pending register */
-	uint32_t wax_icr;	/* int control register */
-	uint32_t wax_iar;	/* int address register */
+	u_int32_t wax_irr;	/* int requset register */
+	u_int32_t wax_imr;	/* int mask register */
+	u_int32_t wax_ipr;	/* int pending register */
+	u_int32_t wax_icr;	/* int control register */
+	u_int32_t wax_iar;	/* int address register */
 };
 
 struct wax_softc {
-	device_t sc_dv;
-	struct hp700_interrupt_register sc_ir;
+	struct device sc_dv;
+	struct hp700_int_reg sc_int_reg;
 	struct wax_regs volatile *sc_regs;
 };
 
-int	waxmatch(device_t, cfdata_t, void *);
-void	waxattach(device_t, device_t, void *);
+int	waxmatch(struct device *, struct cfdata *, void *);
+void	waxattach(struct device *, struct device *, void *);
 
 
-CFATTACH_DECL_NEW(wax, sizeof(struct wax_softc),
+CFATTACH_DECL(wax, sizeof(struct wax_softc),
     waxmatch, waxattach, NULL, NULL);
 
 static int wax_attached;
@@ -91,7 +95,7 @@ wax_fix_args(void *_sc, struct gsc_attach_args *ga)
 }
 
 int
-waxmatch(device_t parent, cfdata_t cf, void *aux)
+waxmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -101,26 +105,27 @@ waxmatch(device_t parent, cfdata_t cf, void *aux)
 	    ca->ca_type.iodc_sv_model != HPPA_BHA_WAX)
 		return 0;
 
+	/* Make sure we have an IRQ. */
+	if (ca->ca_irq == HP700CF_IRQ_UNDEF) {
+		ca->ca_irq = hp700_intr_allocate_bit(&int_reg_cpu);
+		if (ca->ca_irq == HP700CF_IRQ_UNDEF) {
+			aprint_normal("waxmatch: Can't allocate IRQ\n");
+			return 0;
+		}
+	}
+
 	return 1;
 }
 
 void
-waxattach(device_t parent, device_t self, void *aux)
+waxattach(struct device *parent, struct device *self, void *aux)
 {
 	struct confargs *ca = aux;
-	struct wax_softc *sc = device_private(self);
+	struct wax_softc *sc = (struct wax_softc *)self;
 	struct gsc_attach_args ga;
-	struct cpu_info *ci = &cpus[0];
 	bus_space_handle_t ioh;
 	int s, in;
 
-	ca->ca_irq = hp700_intr_allocate_bit(&ci->ci_ir, ca->ca_irq);
-	if (ca->ca_irq == HP700CF_IRQ_UNDEF) {
-		aprint_error(": can't allocate interrupt\n");
-		return;
-	}
-
-	sc->sc_dv = self;
 	wax_attached = 1;
 
 	aprint_normal("\n");
@@ -128,16 +133,14 @@ waxattach(device_t parent, device_t self, void *aux)
 	/*
 	 * Map the WAX interrupt registers.
 	 */
-	if (bus_space_map(ca->ca_iot, ca->ca_hpa, sizeof(struct wax_regs),
-	    0, &ioh)) {
-		aprint_error(": can't map interrupt registers\n");
-		return;
-	}
+	if (bus_space_map(ca->ca_iot, ca->ca_hpa, sizeof(struct wax_regs), 
+	    0, &ioh))
+		panic("waxattach: can't map interrupt registers");
 	sc->sc_regs = (struct wax_regs *)ca->ca_hpa;
 
 	/* interrupts guts */
 	s = splhigh();
-	sc->sc_regs->wax_iar = ci->ci_hpa | (31 - ca->ca_irq);
+	sc->sc_regs->wax_iar = cpu_gethpa(0) | (31 - ca->ca_irq);
 	sc->sc_regs->wax_icr = 0;
 	sc->sc_regs->wax_imr = ~0U;
 	in = sc->sc_regs->wax_irr;
@@ -145,25 +148,14 @@ waxattach(device_t parent, device_t self, void *aux)
 	splx(s);
 
 	/* Establish the interrupt register. */
-	hp700_interrupt_register_establish(ci, &sc->sc_ir);
-	sc->sc_ir.ir_name = device_xname(self);
-	sc->sc_ir.ir_mask = &sc->sc_regs->wax_imr;
-	sc->sc_ir.ir_req = &sc->sc_regs->wax_irr;
+	hp700_intr_reg_establish(&sc->sc_int_reg);
+	sc->sc_int_reg.int_reg_mask = &sc->sc_regs->wax_imr;
+	sc->sc_int_reg.int_reg_req = &sc->sc_regs->wax_irr;
 
 	/* Attach the GSC bus. */
 	ga.ga_ca = *ca;	/* clone from us */
-	if (strcmp(device_xname(parent), "mainbus0") == 0) {
-		ga.ga_dp.dp_bc[0] = ga.ga_dp.dp_bc[1];
-		ga.ga_dp.dp_bc[1] = ga.ga_dp.dp_bc[2];
-		ga.ga_dp.dp_bc[2] = ga.ga_dp.dp_bc[3];
-		ga.ga_dp.dp_bc[3] = ga.ga_dp.dp_bc[4];
-		ga.ga_dp.dp_bc[4] = ga.ga_dp.dp_bc[5];
-		ga.ga_dp.dp_bc[5] = ga.ga_dp.dp_mod;
-		ga.ga_dp.dp_mod = 0;
-	}
-
 	ga.ga_name = "gsc";
-	ga.ga_ir = &sc->sc_ir;
+	ga.ga_int_reg = &sc->sc_int_reg;
 	ga.ga_fix_args = wax_fix_args;
 	ga.ga_fix_args_cookie = sc;
 	ga.ga_scsi_target = 7; /* XXX */

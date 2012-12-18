@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.32 2012/11/13 14:10:24 chs Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.18.20.1 2009/12/01 19:29:54 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -34,10 +34,8 @@
  *	@(#)vmparam.h	5.9 (Berkeley) 5/12/91
  */
 
-#ifndef _X86_64_VMPARAM_H_
-#define _X86_64_VMPARAM_H_
-
-#ifdef __x86_64__
+#ifndef _VMPARAM_H_
+#define _VMPARAM_H_
 
 #include <sys/tree.h>
 #include <sys/mutex.h>
@@ -72,7 +70,7 @@
 /*
  * Virtual memory related constants, all in bytes
  */
-#define	MAXTSIZ		(256*1024*1024)		/* max text size */
+#define	MAXTSIZ		(64*1024*1024)		/* max text size */
 #ifndef DFLDSIZ
 #define	DFLDSIZ		(256*1024*1024)		/* initial data size limit */
 #endif
@@ -80,17 +78,17 @@
 #define	MAXDSIZ		(8L*1024*1024*1024)	/* max data size */
 #endif
 #ifndef	DFLSSIZ
-#define	DFLSSIZ		(4*1024*1024)		/* initial stack size limit */
+#define	DFLSSIZ		(2*1024*1024)		/* initial stack size limit */
 #endif
 #ifndef	MAXSSIZ
-#define	MAXSSIZ		(128*1024*1024)		/* max stack size */
+#define	MAXSSIZ		(32*1024*1024)		/* max stack size */
 #endif
 
 /*
  * 32bit memory related constants.
  */
 
-#define MAXTSIZ32	(256*1024*1024)
+#define MAXTSIZ32	(64*1024*1024)
 #ifndef DFLDSIZ32
 #define	DFLDSIZ32	(256*1024*1024)		/* initial data size limit */
 #endif
@@ -102,6 +100,13 @@
 #endif
 #ifndef	MAXSSIZ32
 #define	MAXSSIZ32	(64*1024*1024)		/* max stack size */
+#endif
+
+/*
+ * Size of shared memory map
+ */
+#ifndef SHMMAXPGS
+#define SHMMAXPGS	2048
 #endif
 
 /*
@@ -122,7 +127,7 @@
 #else /* XEN */
 #define VM_MIN_KERNEL_ADDRESS	0xffffa00000000000
 #endif
-#define VM_MAX_KERNEL_ADDRESS	0xfffffe8000000000
+#define VM_MAX_KERNEL_ADDRESS	0xffffff8000000000
 
 #define VM_MAXUSER_ADDRESS32	0xfffff000
 
@@ -148,18 +153,24 @@
 /* virtual sizes (bytes) for various kernel submaps */
 #define VM_PHYS_SIZE		(USRIOSIZE*PAGE_SIZE)
 
-#define VM_PHYSSEG_MAX		32	/* 1 "hole" + 31 free lists */
+#define VM_PHYSSEG_MAX		10	/* 1 "hole" + 9 free lists */
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BIGFIRST
+#define VM_PHYSSEG_NOADD		/* can't add RAM after vm_mem_init */
 
 #define	VM_NFREELIST		3
 #define	VM_FREELIST_DEFAULT	0
 #define	VM_FREELIST_FIRST4G	1
 #define	VM_FREELIST_FIRST16	2
 
-#else	/*	!__x86_64__	*/
+#include <x86/pmap_pv.h>
 
-#include <i386/vmparam.h>
+#define	__HAVE_VM_PAGE_MD
+#define	VM_MDPAGE_INIT(pg) \
+	memset(&(pg)->mdpage, 0, sizeof((pg)->mdpage)); \
+	PMAP_PAGE_INIT(&(pg)->mdpage.mp_pp)
 
-#endif	/*	__x86_64__	*/
+struct vm_page_md {
+	struct pmap_page mp_pp;
+};
 
-#endif /* _X86_64_VMPARAM_H_ */
+#endif /* _VMPARAM_H_ */

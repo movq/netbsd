@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.c,v 1.36 2011/11/03 20:46:41 martin Exp $	*/
+/*	$NetBSD: installboot.c,v 1.30 2008/04/28 20:24:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -34,8 +34,8 @@
 #endif
 
 #include <sys/cdefs.h>
-#if !defined(__lint)
-__RCSID("$NetBSD: installboot.c,v 1.36 2011/11/03 20:46:41 martin Exp $");
+#if defined(__RCSID) && !defined(__lint)
+__RCSID("$NetBSD: installboot.c,v 1.30 2008/04/28 20:24:16 martin Exp $");
 #endif	/* !__lint */
 
 #include <sys/ioctl.h>
@@ -53,10 +53,11 @@ __RCSID("$NetBSD: installboot.c,v 1.36 2011/11/03 20:46:41 martin Exp $");
 
 #include "installboot.h"
 
+int		main(int, char *[]);
 static	void	getmachine(ib_params *, const char *, const char *);
 static	void	getfstype(ib_params *, const char *, const char *);
 static	void	parseoptions(ib_params *, const char *);
-__dead static	void	usage(void);
+static	void	usage(void);
 static	void	options_usage(void);
 static	void	machine_usage(void);
 static	void	fstype_usage(void);
@@ -86,14 +87,10 @@ const struct option {
 	{ "speed",	IB_CONSPEED,	OPT_INT,	OFFSET(conspeed) },
 	{ "sunsum",	IB_SUNSUM,	OPT_BOOL,	0 },
 	{ "timeout",	IB_TIMEOUT,	OPT_INT,	OFFSET(timeout) },
-	{ "modules",	IB_MODULES,	OPT_BOOL,	0 },
-	{ "bootconf",	IB_BOOTCONF,	OPT_BOOL,	0 },
 	{ .name = NULL },
 };
 #undef OFFSET
 #define OPTION(params, type, opt) (*(type *)((char *)(params) + (opt)->offset))
-
-#define DFL_SECSIZE	512	/* Don't use DEV_BSIZE. It's host's value. */
 
 int
 main(int argc, char *argv[])
@@ -237,8 +234,6 @@ main(int argc, char *argv[])
 		op = "write";
 		mode = O_RDWR;
 	}
-	/* XXX should be specified via option */
-	params->sectorsize = DFL_SECSIZE;
 	if ((params->fsfd = open(params->filesystem, mode, 0600)) == -1)
 		err(1, "Opening file system `%s' read-%s",
 		    params->filesystem, op);
@@ -375,9 +370,10 @@ parseoptions(ib_params *params, const char *option)
 			val = strtoul(option, &cp, 0);
 			if (cp > option + len || (*cp != 0 && *cp != ','))
 				break;
-			if (val > INT_MAX)
+			OPTION(params, int, opt) = val;
+			if (OPTION(params, int, opt) != val)
+				/* value got truncated on int convertion */
 				break;
-			OPTION(params, int, opt) = (int)val;
 			continue;
 		default:
 			errx(1, "Internal error: option `%s' has invalid type %d",
@@ -488,7 +484,7 @@ machine_usage(void)
 #ifdef TIOCGWINSZ
 	struct winsize win;
 
-	if (ioctl(fileno(stderr), TIOCGWINSZ, &win) == 0 && win.ws_col > 0)
+	if (ioctl(fileno(stderr), TIOCGWINSZ, &win) == 0)
 		wincol = win.ws_col;
 #endif
 
@@ -533,7 +529,6 @@ getfstype(ib_params *param, const char *fstype, const char *provider)
 static void
 fstype_usage(void)
 {
-#ifndef NO_STAGE2
 	const char *prefix;
 	int	i;
 
@@ -547,7 +542,6 @@ fstype_usage(void)
 		prefix=", ";
 	}
 	fputs("\n", stderr);
-#endif
 }
 
 static void

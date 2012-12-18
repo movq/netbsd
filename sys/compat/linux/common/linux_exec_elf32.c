@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec_elf32.c,v 1.86 2012/02/12 16:34:10 matt Exp $	*/
+/*	$NetBSD: linux_exec_elf32.c,v 1.81 2008/04/28 20:23:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.86 2012/02/12 16:34:10 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.81 2008/04/28 20:23:43 martin Exp $");
 
 #ifndef ELFSIZE
 /* XXX should die */
@@ -66,8 +66,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.86 2012/02/12 16:34:10 matt E
 #include <compat/linux/common/linux_util.h>
 #include <compat/linux/common/linux_exec.h>
 #include <compat/linux/common/linux_machdep.h>
-#include <compat/linux/common/linux_ipc.h>
-#include <compat/linux/common/linux_sem.h>
 
 #include <compat/linux/linux_syscallargs.h>
 #include <compat/linux/linux_syscall.h>
@@ -86,10 +84,10 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.86 2012/02/12 16:34:10 matt E
  * have a Linux binary if we find this section.
  */
 int
-ELFNAME2(linux,atexit_signature)(
-	struct lwp *l,
-	struct exec_package *epp,
-	Elf_Ehdr *eh)
+ELFNAME2(linux,atexit_signature)(l, epp, eh)
+	struct lwp *l;
+	struct exec_package *epp;
+	Elf_Ehdr *eh;
 {
 	size_t shsize;
 	int strndx;
@@ -162,10 +160,10 @@ out:
  * XXX NetBSD binaries as Linux.
  */
 int
-ELFNAME2(linux,gcc_signature)(
-	struct lwp *l,
-	struct exec_package *epp,
-	Elf_Ehdr *eh)
+ELFNAME2(linux,gcc_signature)(l, epp, eh)
+	struct lwp *l;
+	struct exec_package *epp;
+	Elf_Ehdr *eh;
 {
 	size_t shsize;
 	size_t i;
@@ -221,7 +219,10 @@ out:
  * Look for a .gnu_debuglink, specific to x86_64 interpeter
  */
 int
-ELFNAME2(linux,debuglink_signature)(struct lwp *l, struct exec_package *epp, Elf_Ehdr *eh)
+ELFNAME2(linux,debuglink_signature)(l, epp, eh)
+	struct lwp *l;
+	struct exec_package *epp;
+	Elf_Ehdr *eh;
 {
 	size_t shsize;
 	int strndx;
@@ -283,7 +284,11 @@ out:
 #endif
 
 int
-ELFNAME2(linux,signature)(struct lwp *l, struct exec_package *epp, Elf_Ehdr *eh, char *itp)
+ELFNAME2(linux,signature)(l, epp, eh, itp)
+	struct lwp *l;
+	struct exec_package *epp;
+	Elf_Ehdr *eh;
+	char *itp;
 {
 	size_t i;
 	Elf_Phdr *ph;
@@ -383,7 +388,6 @@ ELFNAME2(linux,probe)(struct lwp *l, struct exec_package *epp, void *eh,
 		if ((error = emul_find_interp(l, epp, itp)))
 			return (error);
 	}
-	epp->ep_flags |= EXEC_FORCEAUX;
 	DPRINTF(("linux_probe: returning 0\n"));
 	return 0;
 }
@@ -442,7 +446,8 @@ ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
 		a->a_v = ap->arg_entry;
 		a++;
 
-		exec_free_emul_arg(pack);
+		free(pack->ep_emul_arg, M_TEMP);
+		pack->ep_emul_arg = NULL;
 	}
 
 	/* Linux-specific items */

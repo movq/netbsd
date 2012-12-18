@@ -1,4 +1,4 @@
-// OpenLDAP: pkg/ldap/contrib/ldapc++/src/LDAPAttrType.cpp,v 1.3.4.4 2008/09/02 23:58:15 quanah Exp
+// $OpenLDAP: pkg/ldap/contrib/ldapc++/src/LDAPAttrType.cpp,v 1.3.4.3 2008/05/01 21:28:42 quanah Exp $
 /*
  * Copyright 2003, OpenLDAP Foundation, All Rights Reserved.
  * COPYING RESTRICTIONS APPLY, see COPYRIGHT file
@@ -19,7 +19,7 @@ LDAPAttrType::LDAPAttrType(){
     usage = 0;
 }
 
-LDAPAttrType::LDAPAttrType (string at_item, int flags ) { 
+LDAPAttrType::LDAPAttrType (string at_item) { 
 
     DEBUG(LDAP_DEBUG_CONSTRUCT,
             "LDAPAttrType::LDAPAttrType( )" << endl);
@@ -27,7 +27,7 @@ LDAPAttrType::LDAPAttrType (string at_item, int flags ) {
     LDAPAttributeType *a;
     int ret;
     const char *errp;
-    a = ldap_str2attributetype (at_item.c_str(), &ret, &errp, flags);
+    a = ldap_str2attributetype (at_item.c_str(), &ret, &errp,SCHEMA_PARSE_FLAG);
 
     if (a) {
 	this->setNames( a->at_names );

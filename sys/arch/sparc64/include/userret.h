@@ -1,4 +1,4 @@
-/*	$NetBSD: userret.h,v 1.9 2009/10/17 08:50:49 nakayama Exp $ */
+/*	$NetBSD: userret.h,v 1.8.6.1 2009/10/19 07:25:44 sborrill Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.

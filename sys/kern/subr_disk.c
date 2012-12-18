@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_disk.c,v 1.100 2010/10/14 00:47:16 mrg Exp $	*/
+/*	$NetBSD: subr_disk.c,v 1.93.10.3 2011/01/07 06:33:45 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999, 2000, 2009 The NetBSD Foundation, Inc.
@@ -67,16 +67,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.100 2010/10/14 00:47:16 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.93.10.3 2011/01/07 06:33:45 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/syslog.h>
 #include <sys/disklabel.h>
 #include <sys/disk.h>
 #include <sys/sysctl.h>
+#include <sys/fcntl.h>
+#include <sys/kauth.h>
+#include <sys/vnode_if.h>
 #include <lib/libkern/libkern.h>
 
 /*
@@ -85,21 +88,20 @@ __KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.100 2010/10/14 00:47:16 mrg Exp $");
 u_int
 dkcksum(struct disklabel *lp)
 {
-
 	return dkcksum_sized(lp, lp->d_npartitions);
 }
 
 u_int
 dkcksum_sized(struct disklabel *lp, size_t npartitions)
 {
-	uint16_t *start, *end;
-	uint16_t sum = 0;
+	u_short *start, *end;
+	u_short sum = 0;
 
-	start = (uint16_t *)lp;
-	end = (uint16_t *)&lp->d_partitions[npartitions];
+	start = (u_short *)lp;
+	end = (u_short *)&lp->d_partitions[npartitions];
 	while (start < end)
 		sum ^= *start++;
-	return sum;
+	return (sum);
 }
 
 /*
@@ -203,37 +205,23 @@ disk_attach(struct disk *diskp)
 {
 
 	/*
-	 * Allocate and initialize the disklabel structures.
+	 * Allocate and initialize the disklabel structures.  Note that
+	 * it's not safe to sleep here, since we're probably going to be
+	 * called during autoconfiguration.
 	 */
-	diskp->dk_label = kmem_zalloc(sizeof(struct disklabel), KM_SLEEP);
-	diskp->dk_cpulabel = kmem_zalloc(sizeof(struct cpu_disklabel),
-	    KM_SLEEP);
+	diskp->dk_label = malloc(sizeof(struct disklabel), M_DEVBUF, M_NOWAIT);
+	diskp->dk_cpulabel = malloc(sizeof(struct cpu_disklabel), M_DEVBUF,
+	    M_NOWAIT);
 	if ((diskp->dk_label == NULL) || (diskp->dk_cpulabel == NULL))
 		panic("disk_attach: can't allocate storage for disklabel");
+
+	memset(diskp->dk_label, 0, sizeof(struct disklabel));
+	memset(diskp->dk_cpulabel, 0, sizeof(struct cpu_disklabel));
 
 	/*
 	 * Set up the stats collection.
 	 */
 	diskp->dk_stats = iostat_alloc(IOSTAT_DISK, diskp, diskp->dk_name);
-}
-
-int
-disk_begindetach(struct disk *dk, int (*lastclose)(device_t),
-    device_t self, int flags)
-{
-	int rc;
-
-	rc = 0;
-	mutex_enter(&dk->dk_openlock);
-	if (dk->dk_openmask == 0)
-		;	/* nothing to do */
-	else if ((flags & DETACH_FORCE) == 0)
-		rc = EBUSY;
-	else if (lastclose != NULL)
-		rc = (*lastclose)(self);
-	mutex_exit(&dk->dk_openlock);
-
-	return rc;
 }
 
 /*
@@ -259,8 +247,8 @@ disk_detach(struct disk *diskp)
 	/*
 	 * Free the space used by the disklabel structures.
 	 */
-	kmem_free(diskp->dk_label, sizeof(*diskp->dk_label));
-	kmem_free(diskp->dk_cpulabel, sizeof(*diskp->dk_cpulabel));
+	free(diskp->dk_label, M_DEVBUF);
+	free(diskp->dk_cpulabel, M_DEVBUF);
 }
 
 void
@@ -315,8 +303,8 @@ disk_blocksize(struct disk *diskp, int blocksize)
 
 /*
  * Bounds checking against the media size, used for the raw partition.
- * secsize, mediasize and b_blkno must all be the same units.
- * Possibly this has to be DEV_BSIZE (512).
+ * The sector size passed in should currently always be DEV_BSIZE,
+ * and the media size the size of the device in DEV_BSIZE sectors.
  */
 int
 bounds_check_with_mediasize(struct buf *bp, int secsize, uint64_t mediasize)
@@ -338,7 +326,7 @@ bounds_check_with_mediasize(struct buf *bp, int secsize, uint64_t mediasize)
 			return 0;
 		}
 		/* Otherwise, truncate request. */
-		bp->b_bcount = sz * secsize;
+		bp->b_bcount = sz << DEV_BSHIFT;
 	}
 
 	return 1;
@@ -507,4 +495,32 @@ disk_ioctl(struct disk *diskp, u_long cmd, void *data, int flag,
 	}
 
 	return (error);
+}
+
+int
+getdisksize(struct vnode *vp, uint64_t *numsecp, unsigned *secsizep)
+{
+	struct partinfo dpart;
+	struct dkwedge_info dkw;
+	struct disk *pdk;
+	int error;
+
+	error = VOP_IOCTL(vp, DIOCGPART, &dpart, FREAD, NOCRED);
+	if (error == 0) {
+		*secsizep = dpart.disklab->d_secsize;
+		*numsecp  = dpart.part->p_size;
+		return 0;
+	}
+
+	error = VOP_IOCTL(vp, DIOCGWEDGEINFO, &dkw, FREAD, NOCRED);
+	if (error == 0) {
+		pdk = disk_find(dkw.dkw_parent);
+		if (pdk != NULL) {
+			*secsizep = DEV_BSIZE << pdk->dk_blkshift;
+			*numsecp  = dkw.dkw_size;
+		} else
+			error = ENODEV;
+	}
+
+	return error;
 }

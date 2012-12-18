@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cs_isa.c,v 1.26 2012/02/02 19:43:04 tls Exp $	*/
+/*	$NetBSD: if_cs_isa.c,v 1.20 2008/04/08 20:08:49 cegger Exp $	*/
 
 /*
  * Copyright 1997
@@ -34,14 +34,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cs_isa.c,v 1.26 2012/02/02 19:43:04 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cs_isa.c,v 1.20 2008/04/08 20:08:49 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/socket.h>
 #include <sys/device.h>
 
+#include "rnd.h"
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -58,14 +61,15 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_isa.c,v 1.26 2012/02/02 19:43:04 tls Exp $");
 #include <dev/ic/cs89x0var.h>
 #include <dev/isa/cs89x0isavar.h>
 
-static int	cs_isa_probe(device_t, cfdata_t, void *);
-static void	cs_isa_attach(device_t, device_t, void *);
+int	cs_isa_probe(struct device *, struct cfdata *, void *);
+void	cs_isa_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(cs_isa, sizeof(struct cs_softc_isa),
+CFATTACH_DECL(cs_isa, sizeof(struct cs_softc),
     cs_isa_probe, cs_isa_attach, NULL, NULL);
 
 int
-cs_isa_probe(device_t parent, cfdata_t cf, void *aux)
+cs_isa_probe(struct device *parent, struct cfdata *cf,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -210,13 +214,12 @@ cs_isa_probe(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-cs_isa_attach(device_t parent, device_t self, void *aux)
+cs_isa_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct cs_softc_isa *isc = device_private(self);
-	struct cs_softc *sc = &isc->sc_cs;
+	struct cs_softc *sc = (struct cs_softc *) self;
+	struct cs_softc_isa *isc = (void *) self;
 	struct isa_attach_args *ia = aux;
 
-	sc->sc_dev = self;
 	isc->sc_ic = ia->ia_ic;
 	sc->sc_iot = ia->ia_iot;
 	sc->sc_memt = ia->ia_memt;
@@ -235,7 +238,7 @@ cs_isa_attach(device_t parent, device_t self, void *aux)
 	 */
 	if (bus_space_map(sc->sc_iot, ia->ia_io[0].ir_addr, CS8900_IOSIZE,
 	    0, &sc->sc_ioh)) {
-		aprint_error_dev(self, "unable to map i/o space\n");
+		aprint_error_dev(&sc->sc_dev, "unable to map i/o space\n");
 		return;
 	}
 
@@ -243,7 +246,7 @@ cs_isa_attach(device_t parent, device_t self, void *aux)
 	 * Validate IRQ.
 	 */
 	if (CS8900_IRQ_ISVALID(sc->sc_irq) == 0) {
-		aprint_error_dev(self, "invalid IRQ %d\n", sc->sc_irq);
+		aprint_error_dev(&sc->sc_dev, "invalid IRQ %d\n", sc->sc_irq);
 		return;
 	}
 
@@ -257,7 +260,7 @@ cs_isa_attach(device_t parent, device_t self, void *aux)
 	    CS8900_MEMBASE_ISVALID(ia->ia_iomem[0].ir_addr)) {
 		if (bus_space_map(sc->sc_memt, ia->ia_iomem[0].ir_addr,
 		    CS8900_MEMSIZE, 0, &sc->sc_memh)) {
-			aprint_error_dev(self, "unable to map memory space\n");
+			aprint_error_dev(&sc->sc_dev, "unable to map memory space\n");
 		} else {
 			sc->sc_cfgflags |= CFGFLG_MEM_MODE;
 			sc->sc_pktpgaddr = ia->ia_iomem[0].ir_addr;
@@ -267,7 +270,7 @@ cs_isa_attach(device_t parent, device_t self, void *aux)
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, sc->sc_irq, IST_EDGE,
 	    IPL_NET, cs_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(self, "unable to establish interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "unable to establish interrupt\n");
 		return;
 	}
 

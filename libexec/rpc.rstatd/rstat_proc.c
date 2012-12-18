@@ -1,4 +1,4 @@
-/*	$NetBSD: rstat_proc.c,v 1.47 2012/06/19 06:09:36 dholland Exp $	*/
+/*	$NetBSD: rstat_proc.c,v 1.43 2006/04/14 13:19:03 blymn Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 static char sccsid[] = "from: @(#)rpc.rstatd.c 1.1 86/09/25 Copyr 1984 Sun Micro";
 static char sccsid[] = "from: @(#)rstat_proc.c	2.2 88/08/01 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: rstat_proc.c,v 1.47 2012/06/19 06:09:36 dholland Exp $");
+__RCSID("$NetBSD: rstat_proc.c,v 1.43 2006/04/14 13:19:03 blymn Exp $");
 #endif
 #endif
 
@@ -96,15 +96,15 @@ int	cp_xlat[CPUSTATES] = { CP_USER, CP_NICE, CP_SYS, CP_IDLE };
 
 struct nlist nl[] = {
 #define	X_IFNET		0
-	{ "_ifnet", 0, 0, 0, 0 },
-	{ NULL, 0, 0, 0, 0 },
+	{ "_ifnet" },
+	{ NULL },
 };
 
 int hz;
 char *memf = NULL, *nlistf = NULL;
 
 struct ifnet_head ifnetq;	/* chain of ethernet interfaces */
-unsigned int numintfs;
+int numintfs;
 
 extern int from_inetd;
 int sincelastreq = 0;		/* number of alarms since last request */
@@ -131,7 +131,7 @@ static int stat_is_init = 0;
 #endif
 
 void
-stat_init(void)
+stat_init()
 {
 	stat_is_init = 1;
 	setup();
@@ -197,7 +197,7 @@ void
 updatestat(int dummy)
 {
 	long off;
-	unsigned int i;
+	int i;
 	size_t len;
 	int mib[2];
 	struct uvmexp_sysctl uvmexp;
@@ -306,7 +306,7 @@ updatestat(int dummy)
 }
 
 void
-setup_kd_once(void)
+setup_kd_once()
 {
         char errbuf[_POSIX2_LINE_MAX];
         kfd = kvm_openfiles(NULL, NULL, NULL, O_RDONLY, errbuf);
@@ -317,7 +317,7 @@ setup_kd_once(void)
 }
 
 void
-setup(void)
+setup()
 {
 	struct ifnet ifnet;
 	long off;
@@ -361,7 +361,7 @@ setup(void)
  * returns true if have a disk
  */
 int
-havedisk(void)
+havedisk()
 {
 	return ndrive != 0;
 }
@@ -378,7 +378,7 @@ rstat_service(struct svc_req *rqstp, SVCXPRT *transp)
 
 	switch (rqstp->rq_proc) {
 	case NULLPROC:
-		(void)svc_sendreply(transp, (xdrproc_t)xdr_void, NULL);
+		(void)svc_sendreply(transp, xdr_void, (char *)NULL);
 		goto leave;
 
 	case RSTATPROC_STATS:

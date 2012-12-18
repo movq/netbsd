@@ -1,4 +1,4 @@
-.\"	$NetBSD: passwd.5,v 1.30 2012/04/22 10:19:00 wiz Exp $
+.\"	$NetBSD: passwd.5,v 1.27 2007/06/21 15:12:59 ginsbach Exp $
 .\"
 .\" Copyright (c) 1988, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -52,7 +52,7 @@
 .\"
 .\"     @(#)passwd.5	8.1 (Berkeley) 6/5/93
 .\"
-.Dd April 5, 2012
+.Dd June 21, 2007
 .Dt PASSWD 5
 .Os
 .Sh NAME
@@ -141,14 +141,14 @@ The
 .Em name
 field is the login used to access the computer account, and the
 .Em uid
-field is the number associated with it.
-They should both be unique across the system (and often across a
-group of systems) since they control file access.
+field is the number associated with it.  They should both be unique
+across the system (and often across a group of systems) since they
+control file access.
 .Pp
 While it is possible to have multiple entries with identical login names
-and/or identical user id's, it is usually a mistake to do so.
-Routines that manipulate these files will often return only one of
-the multiple entries, and that one by random selection.
+and/or identical user id's, it is usually a mistake to do so.  Routines
+that manipulate these files will often return only one of the multiple
+entries, and that one by random selection.
 .Pp
 The login name must never begin with a hyphen
 .Pq Dq \&- ;
@@ -167,8 +167,7 @@ form of the password.
 If the
 .Em password
 field is empty, no password will be required to gain access to the
-machine.
-This is almost invariably a mistake.
+machine.  This is almost invariably a mistake.
 Because these files contain the encrypted user passwords, they should
 not be readable by anyone without appropriate privileges.
 For the possible ciphers used in this field see
@@ -187,7 +186,7 @@ field is a key for a user's login class.
 Login classes are defined in
 .Xr login.conf 5 ,
 which is a
-.Xr capfile 5
+.Xr termcap 5
 style database of user attributes, accounting, resource and
 environment settings.
 .Pp
@@ -349,8 +348,7 @@ or
 fields, the specified numbers will override the information retrieved
 from the Hesiod domain or the
 .Tn NIS
-maps.
-As well, if the
+maps. As well, if the
 .Em gecos ,
 .Em home_dir
 or
@@ -361,24 +359,6 @@ Hesiod or
 On some systems, the
 .Em passwd
 field may also be overridden.
-.Sh COMPATIBILITY
-The password file format has changed since
-.Bx 4.3 .
-The following awk script can be used to convert your old-style password
-file into a new style password file.
-The additional fields
-.Dq class ,
-.Dq change
-and
-.Dq expire
-are added, but are turned off by default.
-To set them,
-use the current day in seconds from the epoch + whatever number of seconds
-of offset you want.
-.Bd -literal -offset indent
-BEGIN { FS = ":"}
-{ print $1 ":" $2 ":" $3 ":" $4 "::0:0:" $5 ":" $6 ":" $7 }
-.Ed
 .Sh SEE ALSO
 .Xr chpass 1 ,
 .Xr login 1 ,
@@ -397,6 +377,24 @@ BEGIN { FS = ":"}
 .Pp
 .%T "Managing NFS and NIS"
 (O'Reilly \*[Am] Associates)
+.Sh COMPATIBILITY
+The password file format has changed since
+.Bx 4.3 .
+The following awk script can be used to convert your old-style password
+file into a new style password file.
+The additional fields
+.Dq class ,
+.Dq change
+and
+.Dq expire
+are added, but are turned off by default.
+To set them,
+use the current day in seconds from the epoch + whatever number of seconds
+of offset you want.
+.Bd -literal -offset indent
+BEGIN { FS = ":"}
+{ print $1 ":" $2 ":" $3 ":" $4 "::0:0:" $5 ":" $6 ":" $7 }
+.Ed
 .Sh HISTORY
 A
 .Nm

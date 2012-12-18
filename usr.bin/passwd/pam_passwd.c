@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_passwd.c,v 1.6 2010/03/09 16:14:08 joerg Exp $	*/
+/*	$NetBSD: pam_passwd.c,v 1.4.18.2 2010/11/20 00:12:37 riz Exp $	*/
 
 /*-
  * Copyright (c) 2002 Networks Associates Technologies, Inc.
@@ -38,7 +38,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/usr.bin/passwd/passwd.c,v 1.23 2003/04/18 21:27:09 nectar Exp $");
 #else
-__RCSID("$NetBSD: pam_passwd.c,v 1.6 2010/03/09 16:14:08 joerg Exp $");
+__RCSID("$NetBSD: pam_passwd.c,v 1.4.18.2 2010/11/20 00:12:37 riz Exp $");
 #endif
 
 #include <sys/param.h>

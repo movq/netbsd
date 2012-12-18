@@ -1,4 +1,4 @@
-/* $NetBSD: strtodI.c,v 1.3 2011/03/20 23:15:35 christos Exp $ */
+/* $NetBSD: strtodI.c,v 1.2 2008/03/21 23:13:48 christos Exp $ */
 
 /****************************************************************
 
@@ -35,16 +35,16 @@ THIS SOFTWARE.
 
  static double
 #ifdef KR_headers
-ulpdown(d) U *d;
+ulpdown(d) double *d;
 #else
-ulpdown(U *d)
+ulpdown(double *d)
 #endif
 {
 	double u;
-	ULong *L = d->L;
+	ULong *L = (ULong*)d;
 
-	u = ulp(d);
-	if (!(L[_1] | (L[_0] & 0xfffff))
+	u = ulp(*d);
+	if (!(L[_1] | L[_0] & 0xfffff)
 	 && (L[_0] & 0x7ff00000) > 0x00100000)
 		u *= 0.5;
 	return u;
@@ -61,6 +61,10 @@ strtodI(CONST char *s, char **sp, double *dd)
 	ULong bits[2], sign;
 	Long exp;
 	int j, k;
+	typedef union {
+		double d[2];
+		ULong L[4];
+		} U;
 	U *u;
 
 	k = strtodg(s, sp, &fpi, &exp, bits);
@@ -70,17 +74,17 @@ strtodI(CONST char *s, char **sp, double *dd)
 	sign = k & STRTOG_Neg ? 0x80000000L : 0;
 	switch(k & STRTOG_Retmask) {
 	  case STRTOG_NoNumber:
-		dval(&u[0]) = dval(&u[1]) = 0.;
+		u->d[0] = u->d[1] = 0.;
 		break;
 
 	  case STRTOG_Zero:
-		dval(&u[0]) = dval(&u[1]) = 0.;
+		u->d[0] = u->d[1] = 0.;
 #ifdef Sudden_Underflow
 		if (k & STRTOG_Inexact) {
 			if (sign)
-				word0(&u[0]) = 0x80100000L;
+				u->L[_0] = 0x80100000L;
 			else
-				word0(&u[1]) = 0x100000L;
+				u->L[2+_0] = 0x100000L;
 			}
 		break;
 #else
@@ -88,80 +92,80 @@ strtodI(CONST char *s, char **sp, double *dd)
 #endif
 
 	  case STRTOG_Denormal:
-		word1(&u[0]) = bits[0];
-		word0(&u[0]) = bits[1];
+		u->L[_1] = bits[0];
+		u->L[_0] = bits[1];
 		goto contain;
 
 	  case STRTOG_Normal:
-		word1(&u[0]) = bits[0];
-		word0(&u[0]) = (bits[1] & ~0x100000) | ((exp + 0x3ff + 52) << 20);
+		u->L[_1] = bits[0];
+		u->L[_0] = (bits[1] & ~0x100000) | ((exp + 0x3ff + 52) << 20);
 	  contain:
 		j = k & STRTOG_Inexact;
 		if (sign) {
-			word0(&u[0]) |= sign;
+			u->L[_0] |= sign;
 			j = STRTOG_Inexact - j;
 			}
 		switch(j) {
 		  case STRTOG_Inexlo:
 #ifdef Sudden_Underflow
 			if ((u->L[_0] & 0x7ff00000) < 0x3500000) {
-				word0(&u[1]) = word0(&u[0]) + 0x3500000;
-				word1(&u[1]) = word1(&u[0]);
-				dval(&u[1]) += ulp(&u[1]);
-				word0(&u[1]) -= 0x3500000;
-				if (!(word0(&u[1]) & 0x7ff00000)) {
-					word0(&u[1]) = sign;
-					word1(&u[1]) = 0;
+				u->L[2+_0] = u->L[_0] + 0x3500000;
+				u->L[2+_1] = u->L[_1];
+				u->d[1] += ulp(u->d[1]);
+				u->L[2+_0] -= 0x3500000;
+				if (!(u->L[2+_0] & 0x7ff00000)) {
+					u->L[2+_0] = sign;
+					u->L[2+_1] = 0;
 					}
 				}
 			else
 #endif
-			dval(&u[1]) = dval(&u[0]) + ulp(&u[0]);
+			u->d[1] = u->d[0] + ulp(u->d[0]);
 			break;
 		  case STRTOG_Inexhi:
-			dval(&u[1]) = dval(&u[0]);
+			u->d[1] = u->d[0];
 #ifdef Sudden_Underflow
-			if ((word0(&u[0]) & 0x7ff00000) < 0x3500000) {
-				word0(&u[0]) += 0x3500000;
-				dval(&u[0]) -= ulpdown(u);
-				word0(&u[0]) -= 0x3500000;
-				if (!(word0(&u[0]) & 0x7ff00000)) {
-					word0(&u[0]) = sign;
-					word1(&u[0]) = 0;
+			if ((u->L[_0] & 0x7ff00000) < 0x3500000) {
+				u->L[_0] += 0x3500000;
+				u->d[0] -= ulpdown(u->d);
+				u->L[_0] -= 0x3500000;
+				if (!(u->L[_0] & 0x7ff00000)) {
+					u->L[_0] = sign;
+					u->L[_1] = 0;
 					}
 				}
 			else
 #endif
-			dval(&u[0]) -= ulpdown(u);
+			u->d[0] -= ulpdown(u->d);
 			break;
 		  default:
-			dval(&u[1]) = dval(&u[0]);
+			u->d[1] = u->d[0];
 		  }
 		break;
 
 	  case STRTOG_Infinite:
-		word0(&u[0]) = word0(&u[1]) = sign | 0x7ff00000;
-		word1(&u[0]) = word1(&u[1]) = 0;
+		u->L[_0] = u->L[2+_0] = sign | 0x7ff00000;
+		u->L[_1] = u->L[2+_1] = 0;
 		if (k & STRTOG_Inexact) {
 			if (sign) {
-				word0(&u[1]) = 0xffefffffL;
-				word1(&u[1]) = 0xffffffffL;
+				u->L[2+_0] = 0xffefffffL;
+				u->L[2+_1] = 0xffffffffL;
 				}
 			else {
-				word0(&u[0]) = 0x7fefffffL;
-				word1(&u[0]) = 0xffffffffL;
+				u->L[_0] = 0x7fefffffL;
+				u->L[_1] = 0xffffffffL;
 				}
 			}
 		break;
 
 	  case STRTOG_NaN:
-		u->L[0] = (u+1)->L[0] = d_QNAN0;
-		u->L[1] = (u+1)->L[1] = d_QNAN1;
+		u->L[0] = u->L[2] = d_QNAN0;
+		u->L[1] = u->L[3] = d_QNAN1;
 		break;
 
 	  case STRTOG_NaNbits:
-		word0(&u[0]) = word0(&u[1]) = 0x7ff00000 | sign | bits[1];
-		word1(&u[0]) = word1(&u[1]) = bits[0];
+		u->L[_0] = u->L[2+_0] = 0x7ff00000 | sign | bits[1];
+		u->L[_1] = u->L[2+_1] = bits[0];
 	  }
 	return k;
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.49 2011/11/18 04:07:43 christos Exp $	*/
+/*	$NetBSD: linux_machdep.c,v 1.43 2008/04/28 20:23:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -35,13 +35,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.49 2011/11/18 04:07:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.43 2008/04/28 20:23:42 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/buf.h>
 #include <sys/reboot.h>
 #include <sys/conf.h>
@@ -91,7 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.49 2011/11/18 04:07:43 christos 
  */
 
 void
-linux_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
+linux_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 {
 #ifdef DEBUG
 	struct trapframe *tfp = l->l_md.md_tf;
@@ -108,15 +109,13 @@ linux_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 }
 
 void
-setup_linux_rt_sigframe(struct trapframe *tf, const ksiginfo_t *ksi,
-    const sigset_t *mask)
+setup_linux_rt_sigframe(struct trapframe *tf, int sig, const sigset_t *mask)
 {
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
 	struct linux_rt_sigframe *sfp, sigframe;
 	int onstack, error;
 	int fsize, rndfsize;
-	int sig = ksi->ksi_signo;
 	extern char linux_rt_sigcode[], linux_rt_esigcode[];
 
 	/* Do we need to jump onto the signal stack? */
@@ -156,8 +155,7 @@ setup_linux_rt_sigframe(struct trapframe *tf, const ksiginfo_t *ksi,
 	frametoreg(tf, (struct reg *)sigframe.uc.uc_mcontext.sc_regs);
 	sigframe.uc.uc_mcontext.sc_regs[R_SP] = alpha_pal_rdusp();
 
-	fpu_load();
-	alpha_pal_wrfen(1);
+	alpha_enable_fp(l, 1);
 	sigframe.uc.uc_mcontext.sc_fpcr = alpha_read_fpcr();
 	sigframe.uc.uc_mcontext.sc_fp_control = alpha_read_fp_c(l);
 	alpha_pal_wrfen(0);
@@ -165,7 +163,19 @@ setup_linux_rt_sigframe(struct trapframe *tf, const ksiginfo_t *ksi,
 	sigframe.uc.uc_mcontext.sc_traparg_a0 = tf->tf_regs[FRAME_A0];
 	sigframe.uc.uc_mcontext.sc_traparg_a1 = tf->tf_regs[FRAME_A1];
 	sigframe.uc.uc_mcontext.sc_traparg_a2 = tf->tf_regs[FRAME_A2];
-	native_to_linux_siginfo(&sigframe.info, &ksi->ksi_info);
+
+	/*
+	 * XXX XAX Create bogus siginfo data.  This can't really
+	 * XXX be fixed until NetBSD has realtime signals.
+	 * XXX Or we do the emuldata thing.
+	 * XXX -erh
+	 */
+	memset(&sigframe.info, 0, sizeof(struct linux_siginfo));
+	sigframe.info.lsi_signo = sig;
+	sigframe.info.lsi_code = LINUX_SI_USER;
+	sigframe.info.lsi_pid = p->p_pid;
+	sigframe.info.lsi_uid = kauth_cred_geteuid(l->l_cred);	/* Use real uid here? */
+
 	sendsig_reset(l, sig);
 	mutex_exit(p->p_lock);
 	error = copyout((void *)&sigframe, (void *)sfp, fsize);
@@ -191,7 +201,7 @@ setup_linux_rt_sigframe(struct trapframe *tf, const ksiginfo_t *ksi,
 
 	/* Address of trampoline code.  End up at this PC after mi_switch */
 	tf->tf_regs[FRAME_PC] =
-	    (u_int64_t)(p->p_psstrp - (linux_rt_esigcode - linux_rt_sigcode));
+	    (u_int64_t)(p->p_psstr - (linux_rt_esigcode - linux_rt_sigcode));
 
 	/* Adjust the stack */
 	alpha_pal_wrusp((unsigned long)sfp);
@@ -201,15 +211,16 @@ setup_linux_rt_sigframe(struct trapframe *tf, const ksiginfo_t *ksi,
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 }
 
-void setup_linux_sigframe(struct trapframe *tf, const ksiginfo_t *ksi,
-    const sigset_t *mask)
+void setup_linux_sigframe(tf, sig, mask)
+	struct trapframe *tf;
+	int sig;
+	const sigset_t *mask;
 {
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
 	struct linux_sigframe *sfp, sigframe;
 	int onstack, error;
 	int fsize, rndfsize;
-	int sig = ksi->ksi_signo;
 	extern char linux_sigcode[], linux_esigcode[];
 
 	/* Do we need to jump onto the signal stack? */
@@ -245,13 +256,11 @@ void setup_linux_sigframe(struct trapframe *tf, const ksiginfo_t *ksi,
 	sigframe.sf_sc.sc_regs[R_SP] = alpha_pal_rdusp();
 
 	if (l == fpcurlwp) {
-		struct pcb *pcb = lwp_getpcb(l);
-
-		alpha_pal_wrfen(1);
-		savefpstate(&pcb->pcb_fp);
-		alpha_pal_wrfen(0);
-		sigframe.sf_sc.sc_fpcr = pcb->pcb_fp.fpr_cr;
-		fpcurlwp = NULL;
+	    alpha_pal_wrfen(1);
+	    savefpstate(&l->l_addr->u_pcb.pcb_fp);
+	    alpha_pal_wrfen(0);
+	    sigframe.sf_sc.sc_fpcr = l->l_addr->u_pcb.pcb_fp.fpr_cr;
+	    fpcurlwp = NULL;
 	}
 	/* XXX ownedfp ? etc...? */
 
@@ -284,7 +293,7 @@ void setup_linux_sigframe(struct trapframe *tf, const ksiginfo_t *ksi,
 
 	/* Address of trampoline code.  End up at this PC after mi_switch */
 	tf->tf_regs[FRAME_PC] =
-	    (u_int64_t)(p->p_psstrp - (linux_esigcode - linux_sigcode));
+	    (u_int64_t)(p->p_psstr - (linux_esigcode - linux_sigcode));
 
 	/* Adjust the stack */
 	alpha_pal_wrusp((unsigned long)sfp);
@@ -325,10 +334,10 @@ linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	edp = 0;
 #endif
 	if (edp && sigismember(&edp->ps_siginfo, sig))
-		setup_linux_rt_sigframe(tf, ksi, mask);
+		setup_linux_rt_sigframe(tf, sig, mask);
 	else
 #endif /* notyet */
-		setup_linux_sigframe(tf, ksi, mask);
+		setup_linux_sigframe(tf, sig, mask);
 
 	/* Signal handler for trampoline code */
 	tf->tf_regs[FRAME_T12] = (u_int64_t)catcher;
@@ -365,7 +374,6 @@ linux_restore_sigcontext(struct lwp *l, struct linux_sigcontext context,
 			 sigset_t *mask)
 {
 	struct proc *p = l->l_proc;
-	struct pcb *pcb;
 
 	/*
 	 * Linux doesn't (yet) have alternate signal stacks.
@@ -399,8 +407,7 @@ linux_restore_sigcontext(struct lwp *l, struct linux_sigcontext context,
 	    fpcurlwp = NULL;
 
 	/* Restore fp regs and fpr_cr */
-	pcb = lwp_getpcb(l);
-	memcpy(&pcb->pcb_fp, (struct fpreg *)context.sc_fpregs,
+	bcopy((struct fpreg *)context.sc_fpregs, &l->l_addr->u_pcb.pcb_fp,
 	    sizeof(struct fpreg));
 	/* XXX sc_ownedfp ? */
 	/* XXX sc_fp_control ? */

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.60 2012/11/04 21:14:59 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.56 2008/07/20 01:09:07 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -40,11 +40,13 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "from: @(#)main.c	8.1 (Berkeley) 6/20/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.60 2012/11/04 21:14:59 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.56 2008/07/20 01:09:07 lukem Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
+#include <sys/stat.h>
+#include <termios.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/utsname.h>
@@ -56,12 +58,10 @@ __RCSID("$NetBSD: main.c,v 1.60 2012/11/04 21:14:59 christos Exp $");
 #include <pwd.h>
 #include <setjmp.h>
 #include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
-#include <term.h>
-#include <termios.h>
+#include <termcap.h>
 #include <time.h>
 #include <ttyent.h>
 #include <unistd.h>
@@ -173,11 +173,10 @@ timeoverrun(int signo)
 static int	getname(void);
 static void	oflush(void);
 static void	prompt(void);
-static int	putchr(int);
+static void	putchr(int);
 static void	putf(const char *);
+static void	putpad(const char *);
 static void	xputs(const char *);
-
-#define putpad(s) tputs(s, 1, putchr)
 
 int
 main(int argc, char *argv[], char *envp[])
@@ -567,6 +566,43 @@ getname(void)
 }
 
 static void
+putpad(const char *s)
+{
+	int pad = 0;
+	speed_t ospd = cfgetospeed(&tmode);
+
+	if (isdigit((unsigned char)*s)) {
+		while (isdigit((unsigned char)*s)) {
+			pad *= 10;
+			pad += *s++ - '0';
+		}
+		pad *= 10;
+		if (*s == '.' && isdigit((unsigned char)s[1])) {
+			pad += s[1] - '0';
+			s += 2;
+		}
+	}
+
+	xputs(s);
+	/*
+	 * If no delay needed, or output speed is
+	 * not comprehensible, then don't try to delay.
+	 */
+	if (pad == 0)
+		return;
+
+	/*
+	 * Round up by a half a character frame, and then do the delay.
+	 * Too bad there are no user program accessible programmed delays.
+	 * Transmitting pad characters slows many terminals down and also
+	 * loads the system.
+	 */
+	pad = (pad * ospd + 50000) / 100000;
+	while (pad--)
+		putchr(*PC);
+}
+
+static void
 xputs(const char *s)
 {
 	while (*s)
@@ -576,7 +612,7 @@ xputs(const char *s)
 char	outbuf[OBUFSIZ];
 size_t	obufcnt = 0;
 
-static int
+static void
 putchr(int cc)
 {
 	unsigned char c;
@@ -591,9 +627,8 @@ putchr(int cc)
 		outbuf[obufcnt++] = c;
 		if (obufcnt >= OBUFSIZ)
 			oflush();
-		return 1;
-	}
-	return write(STDOUT_FILENO, &c, 1);
+	} else
+		(void)write(STDOUT_FILENO, &c, 1);
 }
 
 static void
@@ -642,7 +677,8 @@ putf(const char *cp)
 		case 'd':
 			(void)time(&t);
 			(void)strftime(db, sizeof(db),
-			    "%l:%M%p on %A, %d %B %Y", localtime(&t));
+			    /* SCCS eats %M% */
+			    "%l:%M" "%p on %A, %d %B %Y", localtime(&t));
 			xputs(db);
 			break;
 
@@ -675,7 +711,8 @@ static void
 clearscreen(void)
 {
 	struct ttyent *typ;
-	int err;
+	struct tinfo *tinfo;
+	char *cs;
 
 	if (rawttyn == NULL)
 		return;
@@ -686,12 +723,12 @@ clearscreen(void)
 	    (typ->ty_type[0] == 0))
 		return;
 
-	if (setupterm(typ->ty_type, 0, &err) == ERR)
+	if (t_getent(&tinfo, typ->ty_type) <= 0)
 		return;
 
-	if (clear_screen)
-		putpad(clear_screen);
+	cs = t_agetstr(tinfo, "cl");
+	if (cs == NULL)
+		return;
 
-	del_curterm(cur_term);
-	cur_term = NULL;
+	putpad(cs);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: com_isa.c,v 1.39 2010/02/24 22:37:58 dyoung Exp $	*/
+/*	$NetBSD: com_isa.c,v 1.34 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_isa.c,v 1.39 2010/02/24 22:37:58 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_isa.c,v 1.34 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,6 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: com_isa.c,v 1.39 2010/02/24 22:37:58 dyoung Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/file.h>
 #include <sys/uio.h>
 #include <sys/kernel.h>
@@ -95,8 +96,8 @@ struct com_isa_softc {
 	int	sc_irq;
 };
 
-static bool com_isa_suspend(device_t, const pmf_qual_t *);
-static bool com_isa_resume(device_t, const pmf_qual_t *);
+static bool com_isa_suspend(device_t PMF_FN_PROTO);
+static bool com_isa_resume(device_t PMF_FN_PROTO);
 
 int com_isa_probe(device_t, cfdata_t , void *);
 void com_isa_attach(device_t, device_t, void *);
@@ -106,9 +107,8 @@ int com_isa_isHAYESP(bus_space_handle_t, struct com_softc *);
 #endif
 
 
-CFATTACH_DECL3_NEW(com_isa, sizeof(struct com_isa_softc),
-    com_isa_probe, com_isa_attach, com_isa_detach, NULL,
-    NULL, NULL, DVF_DETACH_SHUTDOWN);
+CFATTACH_DECL_NEW(com_isa, sizeof(struct com_isa_softc),
+    com_isa_probe, com_isa_attach, com_isa_detach, com_activate);
 
 int
 com_isa_probe(device_t parent, cfdata_t match, void *aux)
@@ -218,11 +218,11 @@ com_isa_attach(device_t parent, device_t self, void *aux)
 }
 
 static bool
-com_isa_suspend(device_t self, const pmf_qual_t *qual)
+com_isa_suspend(device_t self PMF_FN_ARGS)
 {
 	struct com_isa_softc *isc = device_private(self);
 
-	if (!com_suspend(self, qual))
+	if (!com_suspend(self PMF_FN_CALL))
 		return false;
 
 	isa_intr_disestablish(isc->sc_ic, isc->sc_ih);
@@ -232,7 +232,7 @@ com_isa_suspend(device_t self, const pmf_qual_t *qual)
 }
 
 static bool
-com_isa_resume(device_t self, const pmf_qual_t *qual)
+com_isa_resume(device_t self PMF_FN_ARGS)
 {
 	struct com_isa_softc *isc = device_private(self);
 	struct com_softc *sc = &isc->sc_com;
@@ -240,7 +240,7 @@ com_isa_resume(device_t self, const pmf_qual_t *qual)
 	isc->sc_ih = isa_intr_establish(isc->sc_ic, isc->sc_irq, IST_EDGE,
 	    IPL_SERIAL, comintr, sc);
 
-	return com_resume(self, qual);
+	return com_resume(self PMF_FN_CALL);
 }
 
 static int
@@ -251,13 +251,13 @@ com_isa_detach(device_t self, int flags)
 	const struct com_regs *cr = &sc->sc_regs;
 	int rc;
 
-	if ((rc = com_detach(self, flags)) != 0)
-		return rc;
-
 	if (isc->sc_ih != NULL)
 		isa_intr_disestablish(isc->sc_ic, isc->sc_ih);
 
 	pmf_device_deregister(self);
+
+	if ((rc = com_detach(self, flags)) != 0)
+		return rc;
 
 	com_cleanup(self, 0);
 

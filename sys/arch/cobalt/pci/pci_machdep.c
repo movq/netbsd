@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.33 2012/10/27 17:17:44 chs Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.27 2008/05/30 19:26:35 ad Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -26,18 +26,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.33 2012/10/27 17:17:44 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.27 2008/05/30 19:26:35 ad Exp $");
 
-#define _COBALT_BUS_DMA_PRIVATE
-
+#include <sys/types.h>
 #include <sys/param.h>
-#include <sys/bus.h>
+#include <sys/time.h>
+#include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
 #include <sys/extent.h>
-#include <sys/intr.h>
-#include <sys/systm.h>
-#include <sys/time.h>
+
+#define _COBALT_BUS_DMA_PRIVATE
+#include <machine/bus.h>
+#include <machine/intr.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -68,7 +69,8 @@ struct cobalt_bus_dma_tag pci_bus_dma_tag = {
 };
 
 void
-pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
+pci_attach_hook(struct device *parent, struct device *self,
+    struct pcibus_attach_args *pba)
 {
 	/* XXX */
 
@@ -107,8 +109,6 @@ pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 	pcireg_t data;
 	int bus, dev, func;
 
-	KASSERT(pc != NULL);
-
 	pci_decompose_tag(pc, tag, &bus, &dev, &func);
 
 	/*
@@ -141,7 +141,7 @@ pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 }
 
 int
-pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pcitag_t intrtag = pa->pa_intrtag;
@@ -265,7 +265,7 @@ pci_conf_hook(pci_chipset_tag_t pc, int bus, int dev, int func, pcireg_t id)
 	if (bus == 0 && dev == 31)
 		return 0;
 
-	/* Don't configure the bridge and PCI probe. */
+	/* Don't configure the bridge and PCI probe. */ 
 	if (PCI_VENDOR(id) == PCI_VENDOR_MARVELL &&
 	    PCI_PRODUCT(id) == PCI_PRODUCT_MARVELL_GT64011)
 	        return 0;

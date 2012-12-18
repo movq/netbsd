@@ -1,4 +1,4 @@
-/*	$NetBSD: rfcomm_session.c,v 1.18 2011/07/27 10:25:09 plunky Exp $	*/
+/*	$NetBSD: rfcomm_session.c,v 1.14.4.1 2010/01/03 17:52:13 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rfcomm_session.c,v 1.18 2011/07/27 10:25:09 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rfcomm_session.c,v 1.14.4.1 2010/01/03 17:52:13 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -95,7 +95,8 @@ struct rfcomm_session_list
 struct rfcomm_session_list
 	rfcomm_session_listen = LIST_HEAD_INITIALIZER(rfcomm_session_listen);
 
-static struct pool rfcomm_credit_pool;
+POOL_INIT(rfcomm_credit_pool, sizeof(struct rfcomm_credit),
+		0, 0, 0, "rfcomm_credit", NULL, IPL_SOFTNET);
 
 /*
  * RFCOMM System Parameters (see section 5.3)
@@ -150,14 +151,6 @@ static const uint8_t crctable[256] = {	/* reversed, 8-bit, poly=0x07 */
 };
 
 #define FCS(f, d)	crctable[(f) ^ (d)]
-
-void
-rfcomm_init(void)
-{
-
-	pool_init(&rfcomm_credit_pool, sizeof(struct rfcomm_credit),
-	    0, 0, 0, "rfcomm_credit", NULL, IPL_SOFTNET);
-}
 
 /*
  * rfcomm_session_alloc(list, sockaddr)
@@ -389,13 +382,6 @@ rfcomm_session_disconnected(void *arg, int err)
 
 	DPRINTF("Disconnected\n");
 
-	/*
-	 * If we have any DLCs outstanding in the unlikely case that the
-	 * L2CAP channel disconnected normally, close them with an error
-	 */
-	if (err == 0)
-		err = ECONNRESET;
-
 	rs->rs_state = RFCOMM_SESSION_CLOSED;
 
 	while (!LIST_EMPTY(&rs->rs_dlcs)) {
@@ -456,11 +442,12 @@ rfcomm_session_complete(void *arg, int count)
 	 */
 	while (count-- > 0) {
 		credit = SIMPLEQ_FIRST(&rs->rs_credits);
+#ifdef DIAGNOSTIC
 		if (credit == NULL) {
 			printf("%s: too many packets completed!\n", __func__);
 			break;
 		}
-
+#endif
 		dlc = credit->rc_dlc;
 		if (dlc != NULL) {
 			dlc->rd_pending--;
@@ -822,7 +809,7 @@ rfcomm_session_recv_disc(struct rfcomm_session *rs, int dlci)
 		return;
 	}
 
-	rfcomm_dlc_close(dlc, 0);
+	rfcomm_dlc_close(dlc, ECONNRESET);
 	rfcomm_session_send_frame(rs, RFCOMM_FRAME_UA, dlci);
 }
 

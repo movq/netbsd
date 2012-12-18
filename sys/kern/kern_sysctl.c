@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sysctl.c,v 1.236 2012/06/06 05:10:54 matt Exp $	*/
+/*	$NetBSD: kern_sysctl.c,v 1.218 2008/10/23 20:41:14 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2007, 2008 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.236 2012/06/06 05:10:54 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.218 2008/10/23 20:41:14 christos Exp $");
 
 #include "opt_defcorename.h"
 #include "ksyms.h"
@@ -84,7 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.236 2012/06/06 05:10:54 matt Exp $
 #include <sys/syscallargs.h>
 #include <sys/kauth.h>
 #include <sys/ktrace.h>
-#include <sys/cprng.h>
+#include <machine/stdarg.h>
 
 #define	MAXDESCLEN	1024
 MALLOC_DEFINE(M_SYSCTLNODE, "sysctlnode", "sysctl node structures");
@@ -101,8 +101,6 @@ static int sysctl_cvt_out(struct lwp *, int, const struct sysctlnode *,
 
 static int sysctl_log_add(struct sysctllog **, const struct sysctlnode *);
 static int sysctl_log_realloc(struct sysctllog *);
-
-typedef void (*sysctl_setup_func)(struct sysctllog **);
 
 struct sysctllog {
 	const struct sysctlnode *log_root;
@@ -141,8 +139,6 @@ __link_set_decl(sysctl_funcs, sysctl_setup_func);
  */
 krwlock_t sysctl_treelock;
 
-kmutex_t sysctl_file_marker_lock;
-
 /*
  * Attributes stored in the kernel.
  */
@@ -159,8 +155,6 @@ long hostid;
 #endif
 char defcorename[MAXPATHLEN] = DEFCORENAME;
 
-cprng_strong_t *sysctl_prng;
-
 /*
  * ********************************************************************
  * Section 0: Some simple glue
@@ -169,7 +163,7 @@ cprng_strong_t *sysctl_prng;
  * stop caring about who's calling us and simplify some code a bunch.
  * ********************************************************************
  */
-int
+static inline int
 sysctl_copyin(struct lwp *l, const void *uaddr, void *kaddr, size_t len)
 {
 	int error;
@@ -184,7 +178,7 @@ sysctl_copyin(struct lwp *l, const void *uaddr, void *kaddr, size_t len)
 	return error;
 }
 
-int
+static inline int
 sysctl_copyout(struct lwp *l, const void *kaddr, void *uaddr, size_t len)
 {
 	int error;
@@ -199,7 +193,7 @@ sysctl_copyout(struct lwp *l, const void *kaddr, void *uaddr, size_t len)
 	return error;
 }
 
-int
+static inline int
 sysctl_copyinstr(struct lwp *l, const void *uaddr, void *kaddr,
 		 size_t len, size_t *done)
 {
@@ -240,25 +234,13 @@ sysctl_init(void)
 		(*f)(NULL);
 	}
 
-	mutex_init(&sysctl_file_marker_lock, MUTEX_DEFAULT, IPL_NONE);
-}
-
-/*
- * Setting this means no more permanent nodes can be added,
- * trees that claim to be readonly at the root now are, and if
- * the main tree is readonly, *everything* is.
- *
- * Also starts up the PRNG used for the "random" sysctl: it's
- * better to start it later than sooner.
- *
- * Call this at the end of kernel init.
- */
-void
-sysctl_finalize(void)
-{
-        sysctl_prng = cprng_strong_create("sysctl", IPL_NONE,
-					  CPRNG_INIT_ANY|CPRNG_REKEY_ANY);
+	/*
+	 * setting this means no more permanent nodes can be added,
+	 * trees that claim to be readonly at the root now are, and if
+	 * the main tree is readonly, *everything* is.
+	 */
 	sysctl_root.sysctl_flags |= CTLFLAG_PERMANENT;
+
 }
 
 /*
@@ -709,7 +691,7 @@ sysctl_create(SYSCTLFN_ARGS)
 #endif
 {
 	struct sysctlnode nnode, *node, *pnode;
-	int error, ni, at, nm, type, nsz, sz, flags, anum, v;
+	int error, ni, at, nm, type, sz, flags, anum, v;
 	void *own;
 
 	KASSERT(rw_write_held(&sysctl_treelock));
@@ -747,11 +729,11 @@ sysctl_create(SYSCTLFN_ARGS)
 
 	/*
 	 * nothing can add a node if:
-	 * we've finished initial set up of this tree and
-	 * (the tree itself is not writeable or
-	 * the entire sysctl system is not writeable)
+	 * we've finished initial set up and
+	 * the tree itself is not writeable or
+	 * the entire sysctl system is not writeable
 	 */
-	if ((sysctl_rootof(rnode)->sysctl_flags & CTLFLAG_PERMANENT) &&
+	if ((sysctl_root.sysctl_flags & CTLFLAG_PERMANENT) &&
 	    (!(sysctl_rootof(rnode)->sysctl_flags & CTLFLAG_READWRITE) ||
 	     !(sysctl_root.sysctl_flags & CTLFLAG_READWRITE)))
 		return (EPERM);
@@ -791,33 +773,33 @@ sysctl_create(SYSCTLFN_ARGS)
 #endif /* NKSYMS > 0 */
 	if (nm < 0 && nm != CTL_CREATE)
 		return (EINVAL);
+	sz = 0;
 
 	/*
 	 * the name can't start with a digit
 	 */
-	if (nnode.sysctl_name[0] >= '0' &&
-	    nnode.sysctl_name[0] <= '9')
+	if (nnode.sysctl_name[sz] >= '0' &&
+	    nnode.sysctl_name[sz] <= '9')
 		return (EINVAL);
 
 	/*
 	 * the name must be only alphanumerics or - or _, longer than
 	 * 0 bytes and less that SYSCTL_NAMELEN
 	 */
-	nsz = 0;
-	while (nsz < SYSCTL_NAMELEN && nnode.sysctl_name[nsz] != '\0') {
-		if ((nnode.sysctl_name[nsz] >= '0' &&
-		     nnode.sysctl_name[nsz] <= '9') ||
-		    (nnode.sysctl_name[nsz] >= 'A' &&
-		     nnode.sysctl_name[nsz] <= 'Z') ||
-		    (nnode.sysctl_name[nsz] >= 'a' &&
-		     nnode.sysctl_name[nsz] <= 'z') ||
-		    nnode.sysctl_name[nsz] == '-' ||
-		    nnode.sysctl_name[nsz] == '_')
-			nsz++;
+	while (sz < SYSCTL_NAMELEN && nnode.sysctl_name[sz] != '\0') {
+		if ((nnode.sysctl_name[sz] >= '0' &&
+		     nnode.sysctl_name[sz] <= '9') ||
+		    (nnode.sysctl_name[sz] >= 'A' &&
+		     nnode.sysctl_name[sz] <= 'Z') ||
+		    (nnode.sysctl_name[sz] >= 'a' &&
+		     nnode.sysctl_name[sz] <= 'z') ||
+		    nnode.sysctl_name[sz] == '-' ||
+		    nnode.sysctl_name[sz] == '_')
+			sz++;
 		else
 			return (EINVAL);
 	}
-	if (nsz == 0 || nsz == SYSCTL_NAMELEN)
+	if (sz == 0 || sz == SYSCTL_NAMELEN)
 		return (EINVAL);
 
 	/*
@@ -1159,8 +1141,8 @@ sysctl_create(SYSCTLFN_ARGS)
 		 * and...reparent any children of any moved nodes
 		 */
 		for (ni = at; ni <= pnode->sysctl_clen; ni++)
-			if (node[ni].sysctl_child != NULL)
-				for (t = 0; t < node[ni].sysctl_csize; t++)
+			if (SYSCTL_TYPE(node[ni].sysctl_flags) == CTLTYPE_NODE)
+				for (t = 0; t < node[ni].sysctl_clen; t++)
 					node[ni].sysctl_child[t].sysctl_parent =
 						&node[ni];
 	}
@@ -1182,7 +1164,7 @@ sysctl_create(SYSCTLFN_ARGS)
 	} else if (flags & CTLFLAG_IMMEDIATE) {
 		switch (type) {
 		case CTLTYPE_BOOL:
-			node->sysctl_bdata = nnode.sysctl_bdata;
+			node->sysctl_idata = nnode.sysctl_bdata;
 			break;
 		case CTLTYPE_INT:
 			node->sysctl_idata = nnode.sysctl_idata;
@@ -1464,9 +1446,8 @@ sysctl_lookup(SYSCTLFN_ARGS)
 	 */
 	if (l != NULL && newp != NULL &&
 	    !(rnode->sysctl_flags & CTLFLAG_ANYWRITE) &&
-	    (error = kauth_authorize_system(l->l_cred,
-	    KAUTH_SYSTEM_SYSCTL, KAUTH_REQ_SYSTEM_SYSCTL_MODIFY, NULL, NULL,
-	    NULL)) != 0)
+	    (error = kauth_authorize_generic(l->l_cred,
+	    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
 		return (error);
 
 	/*
@@ -1528,7 +1509,7 @@ sysctl_lookup(SYSCTLFN_ARGS)
 	sz = rnode->sysctl_size;
 	switch (SYSCTL_TYPE(rnode->sysctl_flags)) {
 	case CTLTYPE_BOOL: {
-		bool tmp;
+		u_char tmp;
 		/*
 		 * these data must be *exactly* the same size coming
 		 * in.  bool may only be true or false.
@@ -1536,8 +1517,6 @@ sysctl_lookup(SYSCTLFN_ARGS)
 		if (newlen != sz)
 			return (EINVAL);
 		error = sysctl_copyin(l, newp, &tmp, sz);
-		if (tmp != true && tmp != false)
-			return EINVAL;
 		if (error)
 			break;
 		*(bool *)d = tmp;
@@ -1581,7 +1560,7 @@ sysctl_lookup(SYSCTLFN_ARGS)
 		}
 
 		/*
-		 * did they NUL terminate it, or do we have space
+		 * did they null terminate it, or do we have space
 		 * left to do it ourselves?
 		 */
 		if (newbuf[len - 1] != '\0' && len == sz) {
@@ -1918,7 +1897,6 @@ out:
  * own nodes without orphaning the others when they are done.
  * ********************************************************************
  */
-#undef sysctl_createv
 int
 sysctl_createv(struct sysctllog **log, int cflags,
 	       const struct sysctlnode **rnode, const struct sysctlnode **cnode,
@@ -1957,26 +1935,19 @@ sysctl_createv(struct sysctllog **log, int cflags,
 	 */
 	va_start(ap, newlen);
 	namelen = 0;
-	error = 0;
 	ni = -1;
 	do {
-		if (++ni == CTL_MAXNAME) {
-			error = ENAMETOOLONG;
-			break;
-		}
+		if (++ni == CTL_MAXNAME)
+			return (ENAMETOOLONG);
 		name[ni] = va_arg(ap, int);
 		/*
 		 * sorry, this is not supported from here
 		 */
-		if (name[ni] == CTL_CREATESYM) {
-			error = EINVAL;
-			break;
-		}
+		if (name[ni] == CTL_CREATESYM)
+			return (EINVAL);
 	} while (name[ni] != CTL_EOL && name[ni] != CTL_CREATE);
-	va_end(ap);
-	if (error)
-		return error;
 	namelen = ni + (name[ni] == CTL_CREATE ? 1 : 0);
+	va_end(ap);
 
 	/*
 	 * what's it called
@@ -2023,7 +1994,7 @@ sysctl_createv(struct sysctllog **log, int cflags,
 	 * initialize lock state -- we need locks if the main tree has
 	 * been marked as complete, but since we could be called from
 	 * either there, or from a device driver (say, at device
-	 * insertion), or from a module (at module load time, say), we
+	 * insertion), or from an lkm (at lkm load time, say), we
 	 * don't really want to "wait"...
 	 */
 	sysctl_lock(true);
@@ -2339,43 +2310,9 @@ sysctl_free(struct sysctlnode *rnode)
 	rw_exit(&sysctl_treelock);
 }
 
-void
-sysctl_log_print(const struct sysctllog *slog)
-{
-	int i, len;
-
-	printf("root %p left %d size %d content", (const void *)slog->log_root,
-	    slog->log_left, slog->log_size);
-
-	for (len = 0, i = slog->log_left; i < slog->log_size; i++) {
-		switch (len) {
-		case 0:
-			len = -1;
-			printf(" version %d", slog->log_num[i]);
-			break;
-		case -1:
-			len = -2;
-			printf(" type %d", slog->log_num[i]);
-			break;
-		case -2:
-			len =  slog->log_num[i];
-			printf(" len %d:", slog->log_num[i]);
-			if (len <= 0)
-				len = -1;
-			break;
-		default:
-			len--;
-			printf(" %d", slog->log_num[i]);
-			break;
-		}
-	}
-	printf(" end\n");
-}
-
 int
 sysctl_log_add(struct sysctllog **logp, const struct sysctlnode *node)
 {
-	const int size0 = 16;
 	int name[CTL_MAXNAME], namelen, i;
 	const struct sysctlnode *pnode;
 	struct sysctllog *log;
@@ -2393,17 +2330,17 @@ sysctl_log_add(struct sysctllog **logp, const struct sysctlnode *node)
 			/* XXX print error message? */
 			return (-1);
 		}
-		log->log_num = malloc(size0 * sizeof(int),
+		log->log_num = malloc(16 * sizeof(int),
 		       M_SYSCTLDATA, M_WAITOK|M_CANFAIL);
 		if (log->log_num == NULL) {
 			/* XXX print error message? */
 			free(log, M_SYSCTLDATA);
 			return (-1);
 		}
-		memset(log->log_num, 0, size0 * sizeof(int));
+		memset(log->log_num, 0, 16 * sizeof(int));
 		log->log_root = NULL;
-		log->log_size = size0;
-		log->log_left = size0;
+		log->log_size = 16;
+		log->log_left = 16;
 		*logp = log;
 	} else
 		log = *logp;
@@ -2595,18 +2532,6 @@ sysctl_null(SYSCTLFN_ARGS)
 	return (0);
 }
 
-u_int
-sysctl_map_flags(const u_int *map, u_int word)
-{
-	u_int rv;
-
-	for (rv = 0; *map != 0; map += 2)
-		if ((word & map[0]) != 0)
-			rv |= map[1];
-
-	return rv;
-}
-
 /*
  * ********************************************************************
  * Section 5: The machinery that makes it all go
@@ -2650,7 +2575,7 @@ sysctl_alloc(struct sysctlnode *p, int x)
 static int
 sysctl_realloc(struct sysctlnode *p)
 {
-	int i, j, olen;
+	int i, j;
 	struct sysctlnode *n;
 
 	assert(p->sysctl_csize == p->sysctl_clen);
@@ -2658,8 +2583,8 @@ sysctl_realloc(struct sysctlnode *p)
 	/*
 	 * how many do we have...how many should we make?
 	 */
-	olen = p->sysctl_clen;
-	n = malloc(2 * olen * sizeof(struct sysctlnode), M_SYSCTLNODE,
+	i = p->sysctl_clen;
+	n = malloc(2 * i * sizeof(struct sysctlnode), M_SYSCTLNODE,
 		   M_WAITOK|M_CANFAIL);
 	if (n == NULL)
 		return (ENOMEM);
@@ -2667,9 +2592,9 @@ sysctl_realloc(struct sysctlnode *p)
 	/*
 	 * move old children over...initialize new children
 	 */
-	memcpy(n, p->sysctl_child, olen * sizeof(struct sysctlnode));
-	memset(&n[olen], 0, olen * sizeof(struct sysctlnode));
-	p->sysctl_csize = 2 * olen;
+	memcpy(n, p->sysctl_child, i * sizeof(struct sysctlnode));
+	memset(&n[i], 0, i * sizeof(struct sysctlnode));
+	p->sysctl_csize = 2 * i;
 
 	/*
 	 * reattach moved (and new) children to parent; if a moved

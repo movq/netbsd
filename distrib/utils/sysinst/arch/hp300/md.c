@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.32 2012/01/05 21:32:35 christos Exp $ */
+/*	$NetBSD: md.c,v 1.26 2008/10/07 09:58:14 abs Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,7 +15,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -47,17 +51,6 @@
 #include "msg_defs.h"
 #include "menu_defs.h"
 
-void
-md_init(void)
-{
-}
-
-void
-md_init_set_status(int flags)
-{
-	(void)flags;
-}
-
 int
 md_get_info(void)
 {
@@ -70,14 +63,14 @@ md_get_info(void)
 
 	fd = open(dev_name, O_RDONLY, 0);
 	if (fd < 0) {
-		if (logfp)
+		if (logging)
 			(void)fprintf(logfp, "Can't open %s\n", dev_name);
 		endwin();
 		fprintf(stderr, "Can't open %s\n", dev_name);
 		exit(1);
 	}
 	if (ioctl(fd, DIOCGDINFO, &disklabel) == -1) {
-		if (logfp)
+		if (logging)
 			(void)fprintf(logfp, "Can't read disklabel on %s.\n",
 				dev_name);
 		endwin();
@@ -115,6 +108,61 @@ md_get_info(void)
 }
 
 /*
+ * hook called before writing new disklabel.
+ */
+int
+md_pre_disklabel(void)
+{
+
+	return 0;
+}
+
+/*
+ * hook called after writing disklabel to new target disk.
+ */
+int
+md_post_disklabel(void)
+{
+
+	if (get_ramsize() < 6)
+		set_swap(diskdev, bsdlabel);
+
+	return 0;
+}
+
+/*
+ * MD hook called after upgrade() or install() has finished setting
+ * up the target disk but immediately before the user is given the
+ * ``disks are now set up'' message, so that if power fails, they can
+ * continue installation by booting the target disk and doing an
+ * `upgrade'.
+ *
+ * On hp300, we use this opportunity to install the boot blocks.
+ */
+int
+md_post_newfs(void)
+{
+
+	/* boot blocks ... */
+	msg_display(MSG_dobootblks, diskdev);
+	if (run_program(RUN_DISPLAY | RUN_NO_CLEAR,
+	    "/usr/sbin/installboot /dev/r%sc /usr/mdec/uboot.lif", diskdev))
+		process_menu(MENU_ok,
+		    deconst("Warning: disk is probably not bootable"));
+	return 0;
+}
+
+/*
+ * some ports use this to copy the MD filesystem, we do not.
+ */
+int
+md_copy_filesystem(void)
+{
+
+	return 0;
+}
+
+/*
  * md back-end code for menu-driven BSD disklabel editor.
  */
 int
@@ -131,8 +179,7 @@ int
 md_check_partitions(void)
 {
 	/* hp300 partitions must be in order of the range. */
-	int part, last;
-	uint32_t start;
+	int part, start, last;
 
 	start = 0;
 	last = PART_A - 1;
@@ -161,55 +208,25 @@ md_check_partitions(void)
 	return 1;
 }
 
-/*
- * hook called before writing new disklabel.
- */
+/* Upgrade support */
 int
-md_pre_disklabel(void)
+md_update(void)
 {
-	return 0;
-}
 
-/*
- * hook called after writing disklabel to new target disk.
- */
-int
-md_post_disklabel(void)
-{
-	if (get_ramsize() < 6)
-		set_swap(diskdev, bsdlabel);
-
-	return 0;
-}
-
-/*
- * hook called after upgrade() or install() has finished setting
- * up the target disk but immediately before the user is given the
- * ``disks are now set up'' message.
- *
- * On hp300, we use this opportunity to install the boot blocks.
- */
-int
-md_post_newfs(void)
-{
-	/* boot blocks ... */
-	msg_display(MSG_dobootblks, diskdev);
-	if (run_program(RUN_DISPLAY | RUN_NO_CLEAR,
-	    "/usr/sbin/installboot /dev/r%sc /usr/mdec/uboot.lif", diskdev))
-		process_menu(MENU_ok,
-		    deconst("Warning: disk is probably not bootable"));
-	return 0;
-}
-
-int
-md_post_extract(void)
-{
-	return 0;
+	endwin();
+	md_copy_filesystem();
+	md_post_newfs();
+	wrefresh(curscr);
+	wmove(stdscr, 0, 0);
+	wclear(stdscr);
+	wrefresh(stdscr);
+	return 1;
 }
 
 void
 md_cleanup_install(void)
 {
+
 #ifdef notyet			/* sed is too large for ramdisk */
 	enable_rc_conf();
 #endif
@@ -218,22 +235,23 @@ md_cleanup_install(void)
 int
 md_pre_update(void)
 {
+
 	if (get_ramsize() < 6)
 		set_swap(diskdev, NULL);
 	return 1;
 }
 
-/* Upgrade support */
-int
-md_update(void)
+void
+md_init(void)
 {
-	md_post_newfs();
-	return 1;
 }
 
-/*
- * Used in bsddisklabel.c as BOOT_SIZE
- */
+void
+md_init_set_status(int minimal)
+{
+	(void)minimal;
+}
+
 int
 hp300_boot_size(void)
 {
@@ -247,7 +265,7 @@ hp300_boot_size(void)
 }
 
 int
-md_pre_mount()
+md_post_extract(void)
 {
 	return 0;
 }

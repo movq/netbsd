@@ -1,4 +1,4 @@
-/* $NetBSD: exec_aout.c,v 1.12 2009/08/20 17:40:26 he Exp $ */
+/* $NetBSD: exec_aout.c,v 1.9 2000/06/14 06:49:20 cgd Exp $ */
 
 /*
  * Copyright (c) 1997 Christopher G. Demetriou.  All rights reserved.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: exec_aout.c,v 1.12 2009/08/20 17:40:26 he Exp $");
+__RCSID("$NetBSD: exec_aout.c,v 1.9 2000/06/14 06:49:20 cgd Exp $");
 #endif
  
 #include <unistd.h>
@@ -37,15 +37,13 @@ __RCSID("$NetBSD: exec_aout.c,v 1.12 2009/08/20 17:40:26 he Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <a.out.h>
 #include <sys/types.h>
-#include <sys/stat.h>
+#include <sys/stat.h> 
 
 #include "extern.h"
 
 #if defined(NLIST_AOUT)
-
-#include <a.out.h>
-#include <sys/exec_aout.h>
 
 int nsyms, ntextrel, ndatarel;
 struct exec *hdrp;
@@ -85,7 +83,7 @@ int check_aout(int inf, const char *filename)
 
     if(fstat(inf, &infstat) == -1)
 	return 0;
-    if(infstat.st_size < (ssize_t)sizeof eh)
+    if(infstat.st_size < sizeof eh)
 	return 0;
     if(read(inf, &eh, sizeof eh) != sizeof eh)
 	return 0;

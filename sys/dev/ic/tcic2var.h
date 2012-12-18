@@ -1,4 +1,4 @@
-/*	$NetBSD: tcic2var.h,v 1.13 2012/10/27 17:18:23 chs Exp $	*/
+/*	$NetBSD: tcic2var.h,v 1.10 2007/07/09 21:00:39 ad Exp $	*/
 
 /*
  * Copyright (c) 1998, 1999 Christoph Badura.  All rights reserved.
@@ -75,7 +75,7 @@ struct tcic_handle {
 		int		speed;		/* in ns */
 	} io[TCIC_IO_WINS];
 	int	ih_irq;
-	device_t pcmcia;
+	struct device *pcmcia;
 
 	int shutdown;
 	struct lwp *event_thread;
@@ -96,7 +96,8 @@ struct tcic_handle {
 #define	TCIC_NSLOTS	2
 
 struct tcic_softc {
-	device_t sc_dev;
+	struct device dev;
+
 	bus_space_tag_t memt;
 	bus_space_handle_t memh;
 	bus_space_tag_t iot;
@@ -184,21 +185,27 @@ void	tcic_chip_socket_settype(pcmcia_chipset_handle_t, int);
 
 static __inline int tcic_read_1(struct tcic_handle *, int);
 static __inline int
-tcic_read_1(struct tcic_handle *h, int reg)
+tcic_read_1(h, reg)
+	struct tcic_handle *h;
+	int reg;
 {
 	return (bus_space_read_1(h->sc->iot, h->sc->ioh, reg));
 }
 
 static __inline int tcic_read_2(struct tcic_handle *, int);
 static __inline int
-tcic_read_2(struct tcic_handle *h, int reg)
+tcic_read_2(h, reg)
+	struct tcic_handle *h;
+	int reg;
 {
 	return (bus_space_read_2(h->sc->iot, h->sc->ioh, reg));
 }
 
 static __inline int tcic_read_4(struct tcic_handle *, int);
 static __inline int
-tcic_read_4(struct tcic_handle *h, int reg)
+tcic_read_4(h, reg)
+	struct tcic_handle *h;
+	int reg;
 {
 	int val;
 	val = bus_space_read_2(h->sc->iot, h->sc->ioh, reg);
@@ -208,21 +215,30 @@ tcic_read_4(struct tcic_handle *h, int reg)
 
 static __inline void tcic_write_1(struct tcic_handle *, int, int);
 static __inline void
-tcic_write_1(struct tcic_handle *h, int reg, int data)
+tcic_write_1(h, reg, data)
+	struct tcic_handle *h;
+	int reg;
+	int data;
 {
 	bus_space_write_1(h->sc->iot, h->sc->ioh, reg, (data));
 }
 
 static __inline void tcic_write_2(struct tcic_handle *, int, int);
 static __inline void
-tcic_write_2(struct tcic_handle *h, int reg, int data)
+tcic_write_2(h, reg, data)
+	struct tcic_handle *h;
+	int reg;
+	int data;
 {
 	bus_space_write_2(h->sc->iot, h->sc->ioh, reg, (data));
 }
 
 static __inline void tcic_write_4(struct tcic_handle *, int, int);
 static __inline void
-tcic_write_4(struct tcic_handle *h, int reg, int data)
+tcic_write_4(h, reg, data)
+	struct tcic_handle *h;
+	int reg;
+	int data;
 {
 	bus_space_write_2(h->sc->iot, h->sc->ioh, reg, (data));
 	bus_space_write_2(h->sc->iot, h->sc->ioh, reg+2, (data)>>16);
@@ -230,7 +246,9 @@ tcic_write_4(struct tcic_handle *h, int reg, int data)
 
 static __inline int tcic_read_ind_2(struct tcic_handle *, int);
 static __inline int
-tcic_read_ind_2(struct tcic_handle *h, int reg)
+tcic_read_ind_2(h, reg)
+	struct tcic_handle *h;
+	int reg;
 {
 	int r_addr, val;
 	r_addr = tcic_read_4(h, TCIC_R_ADDR);
@@ -242,7 +260,10 @@ tcic_read_ind_2(struct tcic_handle *h, int reg)
 
 static __inline void tcic_write_ind_2(struct tcic_handle *, int, int);
 static __inline void
-tcic_write_ind_2(struct tcic_handle *h, int reg, int data)
+tcic_write_ind_2(h, reg, data)
+	struct tcic_handle *h;
+	int reg;
+	int data;
 {
 	int r_addr;
 	r_addr = tcic_read_4(h, TCIC_R_ADDR);
@@ -253,7 +274,8 @@ tcic_write_ind_2(struct tcic_handle *h, int reg, int data)
 
 static __inline void tcic_sel_sock(struct tcic_handle *);
 static __inline void
-tcic_sel_sock(struct tcic_handle *h)
+tcic_sel_sock(h)
+	struct tcic_handle *h;
 {
 	int r_addr;
 	r_addr = tcic_read_2(h, TCIC_R_ADDR2);
@@ -263,7 +285,8 @@ tcic_sel_sock(struct tcic_handle *h)
 
 static __inline void tcic_wait_ready(struct tcic_handle *);
 static __inline void
-tcic_wait_ready(struct tcic_handle *h)
+tcic_wait_ready(h)
+	struct tcic_handle *h;
 {
 	int i;
 
@@ -281,7 +304,11 @@ tcic_wait_ready(struct tcic_handle *h)
 
 static __inline int tcic_read_aux_1(bus_space_tag_t, bus_space_handle_t, int, int);
 static __inline int
-tcic_read_aux_1(bus_space_tag_t iot, bus_space_handle_t ioh, int auxreg, int reg)
+tcic_read_aux_1(iot, ioh, auxreg, reg)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	int auxreg;
+	int reg;
 {
 	int mode, val;
 	mode = bus_space_read_1(iot, ioh, TCIC_R_MODE);
@@ -292,7 +319,10 @@ tcic_read_aux_1(bus_space_tag_t iot, bus_space_handle_t ioh, int auxreg, int reg
 
 static __inline int tcic_read_aux_2(bus_space_tag_t, bus_space_handle_t, int);
 static __inline int
-tcic_read_aux_2(bus_space_tag_t iot, bus_space_handle_t ioh, int auxreg)
+tcic_read_aux_2(iot, ioh, auxreg)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	int auxreg;
 {
 	int mode, val;
 	mode = bus_space_read_1(iot, ioh, TCIC_R_MODE);
@@ -303,7 +333,10 @@ tcic_read_aux_2(bus_space_tag_t iot, bus_space_handle_t ioh, int auxreg)
 
 static __inline void tcic_write_aux_1(bus_space_tag_t, bus_space_handle_t, int, int, int);
 static __inline void
-tcic_write_aux_1(bus_space_tag_t iot, bus_space_handle_t ioh, int auxreg, int reg, int val)
+tcic_write_aux_1(iot, ioh, auxreg, reg, val)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	int auxreg, reg, val;
 {
 	int mode;
 	mode = bus_space_read_1(iot, ioh, TCIC_R_MODE);
@@ -313,7 +346,10 @@ tcic_write_aux_1(bus_space_tag_t iot, bus_space_handle_t ioh, int auxreg, int re
 
 static __inline void tcic_write_aux_2(bus_space_tag_t, bus_space_handle_t, int, int);
 static __inline void
-tcic_write_aux_2(bus_space_tag_t iot, bus_space_handle_t ioh, int auxreg, int val)
+tcic_write_aux_2(iot, ioh, auxreg, val)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	int auxreg, val;
 {
 	int mode;
 	mode = bus_space_read_1(iot, ioh, TCIC_R_MODE);

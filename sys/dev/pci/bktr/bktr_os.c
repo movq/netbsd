@@ -1,6 +1,6 @@
 /* $SourceForge: bktr_os.c,v 1.5 2003/03/11 23:11:25 thomasklausner Exp $ */
 
-/*	$NetBSD: bktr_os.c,v 1.61 2012/10/27 17:18:36 chs Exp $	*/
+/*	$NetBSD: bktr_os.c,v 1.53 2008/06/24 10:22:03 gmcgarry Exp $	*/
 /* $FreeBSD: src/sys/dev/bktr/bktr_os.c,v 1.20 2000/10/20 08:16:53 roger Exp$ */
 
 /*
@@ -9,7 +9,7 @@
  * chipset.
  * Copyright Roger Hardiman and Amancio Hasty.
  *
- * bktr_os : This has all the Operating System dependent code,
+ * bktr_os : This has all the Operating System dependant code,
  *             probe/attach and open/close/ioctl/read/mmap
  *             memory allocation
  *             PCI bus interfacing
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bktr_os.c,v 1.61 2012/10/27 17:18:36 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bktr_os.c,v 1.53 2008/06/24 10:22:03 gmcgarry Exp $");
 
 #ifdef __FreeBSD__
 #include "bktr.h"
@@ -1329,11 +1329,11 @@ static	int		bktr_intr(void *arg) { return common_bktr_intr(arg); }
 
 static int      bktr_probe(struct device *, void *, void *);
 #else
-static int      bktr_probe(device_t, cfdata_t, void *);
+static int      bktr_probe(struct device *, struct cfdata *, void *);
 #endif
-static void     bktr_attach(device_t, device_t, void *);
+static void     bktr_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(bktr, sizeof(struct bktr_softc),
+CFATTACH_DECL(bktr, sizeof(struct bktr_softc),
     bktr_probe, bktr_attach, NULL, NULL);
 
 #if defined(__NetBSD__)
@@ -1360,7 +1360,8 @@ static struct radio_hw_if bktr_hw_if = {
 #endif
 
 int
-bktr_probe(device_t parent, cfdata_t match, void *aux)
+bktr_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
         struct pci_attach_args *pa = aux;
 
@@ -1379,7 +1380,7 @@ bktr_probe(device_t parent, cfdata_t match, void *aux)
  * the attach routine.
  */
 static void
-bktr_attach(device_t parent, device_t self, void *aux)
+bktr_attach(struct device *parent, struct device *self, void *aux)
 {
 	bktr_ptr_t	bktr;
 	u_int		latency;
@@ -1428,7 +1429,7 @@ bktr_attach(device_t parent, device_t self, void *aux)
 	intrstr = pci_intr_string(pa->pa_pc, ih);
 
 	bktr->ih = pci_intr_establish(pa->pa_pc, ih, IPL_VIDEO,
-				      bktr_intr, bktr, device_xname(bktr->bktr_dev));
+				      bktr_intr, bktr, device_xname(&bktr->bktr_dev));
 	if (bktr->ih == NULL) {
 		printf(": couldn't establish interrupt");
 		if (intrstr != NULL)
@@ -1449,9 +1450,8 @@ bktr_attach(device_t parent, device_t self, void *aux)
 	int retval;
 	int unit;
 
-	bktr = device_private(self);
-	bktr->bktr_dev = self;
-	unit = device_unit(bktr->bktr_dev);
+	bktr = (bktr_ptr_t)self;
+	unit = device_unit(&bktr->bktr_dev);
         bktr->dmat = pa->pa_dmat;
 
 	printf("\n");
@@ -1471,8 +1471,9 @@ bktr_attach(device_t parent, device_t self, void *aux)
 				| PCI_MAPREG_MEM_TYPE_32BIT, 0,
 				&bktr->memt, &bktr->memh, NULL,
 				&bktr->obmemsz);
-	DPR(("pci_mapreg_map: size %lx\n",
-	     (unsigned long)bktr->obmemsz));
+	DPR(("pci_mapreg_map: memt %lx, memh %x, size %x\n",
+	     (unsigned long)bktr->memt, (u_int)bktr->memh,
+	     (u_int)bktr->obmemsz));
 	if (retval) {
 		printf("%s: couldn't map memory\n", bktr_name(bktr));
 		return;
@@ -1536,7 +1537,7 @@ bktr_attach(device_t parent, device_t self, void *aux)
 #if NRADIO > 0
 	/* attach to radio(4) */
 	if (bktr->card.tuner->pllControl[3] != 0x00)
-		radio_attach_mi(&bktr_hw_if, bktr, bktr->bktr_dev);
+		radio_attach_mi(&bktr_hw_if, bktr, &bktr->bktr_dev);
 #endif
 }
 
@@ -1549,7 +1550,10 @@ vaddr_t
 #else
 vm_offset_t
 #endif
-get_bktr_mem(bktr_ptr_t bktr, bus_dmamap_t *dmapp, unsigned int size)
+get_bktr_mem(bktr, dmapp, size)
+        bktr_ptr_t bktr;
+        bus_dmamap_t *dmapp;
+        unsigned int size;
 {
         bus_dma_tag_t dmat = bktr->dmat;
         bus_dma_segment_t seg;
@@ -1607,7 +1611,14 @@ get_bktr_mem(bktr_ptr_t bktr, bus_dmamap_t *dmapp, unsigned int size)
 }
 
 void
-free_bktr_mem(bktr_ptr_t bktr, bus_dmamap_t dmap, vaddr_t kva)
+free_bktr_mem(bktr, dmap, kva)
+        bktr_ptr_t bktr;
+        bus_dmamap_t dmap;
+#if defined(__NetBSD__)
+        vaddr_t kva;
+#else
+        vm_offset_t kva;
+#endif
 {
         bus_dma_tag_t dmat = bktr->dmat;
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: sysctl.9,v 1.18 2011/12/04 18:34:20 jym Exp $
+.\"	$NetBSD: sysctl.9,v 1.12 2008/08/15 21:10:14 wiz Exp $
 .\"
 .\" Copyright (c) 2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 4, 2011
+.Dd August 15, 2008
 .Dt SYSCTL 9
 .Os
 .Sh NAME
@@ -129,7 +129,6 @@ appropriate, though any changes made via
 .Fn sysctl_lookup ,
 or by any helper function will be done with effective superuser
 privileges).
-.Pp
 The
 .Fa oldp
 and
@@ -161,21 +160,20 @@ an array of integers at least
 long, which is to be located in kernel space, in order to determine
 which function to call to handle the specific request.
 .Pp
-The following algorithm is used by
 .Fn sysctl_dispatch
-to determine the function to call:
+uses the following algorithm to determine the function to call:
 .Pp
-.Bl -bullet -offset indent
+.Bl -bullet
 .It
 Scan the tree using
-.Fn sysctl_locate .
+.Fn sysctl_locate
 .It
 If the node returned has a
 .Dq helper
-function, call it.
+function, call it
 .It
 If the requested node was found but has no function, call
-.Fn sysctl_lookup .
+.Fn sysctl_lookup
 .It
 If the node was not found and
 .Fa name
@@ -184,11 +182,11 @@ specifies one of
 .Fn sysctl_create ,
 or
 .Fn sysctl_destroy ,
-call the appropriate function.
+call the appropriate function
 .It
 If none of these options applies and no other error was yet recorded,
 return
-.Er EOPNOTSUPP .
+.Er EOPNOTSUPP
 .Pp
 .El
 The
@@ -239,9 +237,8 @@ If
 .Dv NULL ,
 the main tree will be used.
 .Pp
-The
 .Fn sysctl_locate
-function scans a tree for the node most specific to a request.
+scans a tree for the node most specific to a request.
 If the pointer referenced by
 .Fa rnode
 is not
@@ -284,7 +281,6 @@ when creating a new node, or
 .Dv CTL_DESTROY
 when destroying
 a node.
-.Pp
 The
 .Fa newp
 and
@@ -316,9 +312,7 @@ If the
 .Fa log
 argument is not
 .Dv NULL ,
-a
-.Em sysctllog
-structure will be allocated and the pointer referenced
+a sysctllog structure will be allocated and the pointer referenced
 will be changed to address it.
 The same log may be used for any number of nodes, provided they are
 all inserted into the same tree.
@@ -327,7 +321,6 @@ the tree in a single transaction (via
 .Fn sysctl_teardown )
 without the need for any record
 keeping on the caller's part.
-.Pp
 The
 .Fa cflags
 argument is currently unused and must be zero.
@@ -360,22 +353,12 @@ arguments are combined into the
 field, and the current value for
 .Dv SYSCTL_VERSION
 is added in.
-The following types are defined:
-.Bl -tag -width ".Dv CTLTYPE_STRING    " -offset indent
-.It Dv CTLTYPE_NODE
-A node intended to be a parent for other nodes.
-.It Dv CTLTYPE_INT
-A signed integer.
-.It Dv CTLTYPE_STRING
-A NUL-terminated string.
-.It Dv CTLTYPE_QUAD
-An unsigned 64-bit integer.
-.It Dv CTLTYPE_STRUCT
-A structure.
-.It Dv CTLTYPE_BOOL
-A boolean.
-.El
-.Pp
+Note: the
+.Dv CTLFLAG_PERMANENT
+flag can only be set from SYSCTL setup routines (see
+.Sx SETUP FUNCTIONS )
+as called by
+.Fn sysctl_init .
 The
 .Fa namep
 argument is copied into the
@@ -388,18 +371,7 @@ The string indicated by
 will be copied if the
 .Dv CTLFLAG_OWNDESC
 flag is set, and will be used as the node's description.
-.Pp
-Two additional remarks:
-.Bl -enum -offset indent
-.It
-The
-.Dv CTLFLAG_PERMANENT
-flag can only be set from SYSCTL setup routines (see
-.Sx SETUP FUNCTIONS )
-as called by
-.Fn sysctl_init .
-.It
-If
+Note: if
 .Fn sysctl_destroyv
 attempts to delete a node that does not own its own description (and
 is not marked as permanent), but the deletion fails, the description
@@ -408,7 +380,6 @@ will be copied and
 will set the
 .Dv CTLFLAG_OWNDESC
 flag.
-.El
 .Pp
 The
 .Fa func
@@ -421,7 +392,6 @@ If the
 flag is set, the
 .Fa qv
 argument will be interpreted as the initial value for the new
-.Dq bool ,
 .Dq int
 or
 .Dq quad
@@ -498,25 +468,23 @@ like the following:
 .Pp
 .Bd -literal -offset indent -compact
 static int sysctl_helper(SYSCTLFN_PROTO);
-
+.sp
 static int
 sysctl_helper(SYSCTLFN_ARGS)
 {
 	struct sysctlnode node;
 	int t, error;
-
-	t = *(int *)rnode-\*[Gt]sysctl_data;
-
+.sp
 	node = *rnode;
 	node.sysctl_data = \*[Am]t;
 	error = sysctl_lookup(SYSCTLFN_CALL(\*[Am]node));
 	if (error || newp == NULL)
 		return (error);
-
+.sp
 	if (t \*[Lt] 0 || t \*[Gt] 20)
 		return (EINVAL);
-
-	*(int *)rnode-\*[Gt]sysctl_data = t;
+.sp
+	*(int*)rnode-\*[Gt]sysctl_data = t;
 	return (0);
 }
 .Ed
@@ -596,9 +564,7 @@ deactivated are not mistakenly destroyed.
 The SYSCTL lock must be held when calling this function.
 .Pp
 .Fn sysctl_teardown
-unwinds a
-.Em sysctllog
-and deletes the nodes in the opposite order in
+unwinds a sysctllog and deletes the nodes in the opposite order in
 which they were created.
 .Pp
 .Fn old_sysctl
@@ -630,7 +596,7 @@ autoconfiguration -- when devices are being probed at boot time
 device attachment -- when a PC-Card, USB, or other device is plugged
 in or attached
 .It
-module initialization -- when a module is being loaded
+LKM initialization -- when an LKM is being loaded
 .It
 .Dq run-time
 -- when a process creates a node via the
@@ -652,7 +618,7 @@ any tree that is marked with
 at its root, and no nodes can be added at all if the main tree's root
 is so marked.
 .Pp
-Nodes added by device drivers, modules, and at device insertion time can
+Nodes added by device drivers, LKMs, and at device insertion time can
 be added to (and removed from)
 .Dq read-only
 parent nodes.

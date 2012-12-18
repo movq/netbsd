@@ -1,4 +1,4 @@
-/*	$NetBSD: filecopy.c,v 1.5 2009/10/17 22:26:13 christos Exp $	*/
+/*	$NetBSD: filecopy.c,v 1.4 2002/07/10 20:19:39 wiz Exp $	*/
 
 /*
  * Copyright (c) 1991 Carnegie Mellon University
@@ -57,13 +57,13 @@
 #include "supcdefs.h"
 #include "supextern.h"
 
-ssize_t 
+int 
 filecopy(int here, int there)
 {
-	ssize_t kount;
+	int kount;
 	char buffer[BUFFERSIZE];
 	kount = 0;
 	while (kount == 0 && (kount = read(here, buffer, BUFFERSIZE)) > 0)
-		kount -= write(there, buffer, (size_t)kount);
+		kount -= write(there, buffer, kount);
 	return (kount ? -1 : 0);
 }

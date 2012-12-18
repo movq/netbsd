@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2011/08/17 09:03:47 christos Exp $
+#	$NetBSD: Makefile,v 1.1 2008/09/19 21:38:40 christos Exp $
 
 .include "${.CURDIR}/../Makefile.inc"
 
@@ -16,7 +16,7 @@ SRCS=	am_ops.c amd.c amfs_auto.c amfs_generic.c amfs_direct.c \
 	info_union.c map.c mapc.c mntfs.c nfs_prot_svc.c nfs_start.c \
 	nfs_subr.c ops_cdfs.c ops_efs.c \
 	ops_mfs.c ops_nfs.c ops_nfs3.c ops_nullfs.c ops_pcfs.c \
-	ops_tfs.c ops_tmpfs.c ops_udf.c ops_ufs.c ops_umapfs.c ops_unionfs.c \
+	ops_tfs.c ops_tmpfs.c ops_ufs.c ops_umapfs.c ops_unionfs.c \
 	opts.c readdir.c restart.c rpc_fwd.c sched.c srvr_amfs_auto.c \
 	srvr_nfs.c sun_map.c sun_map_parse.y sun_map_tok.l \
 	conf_parse.y conf_tok.l
@@ -44,6 +44,10 @@ LDADD+=	-lssl -lcrypto
 SRCS+=	info_nis.c
 .endif
 
+.if ${HAVE_GCC} == 4
+COPTS.amq_subr.c+=	-fno-strict-aliasing
+.endif
+
 # the following are not supported on NetBSD
 #	info_ldap.c info_nisplus.c ops_cachefs.c ops_efs.c ops_lofs.c ops_xfs.c
 MAN+=	amd.8
@@ -58,8 +62,6 @@ YHEADER=	1
 YPREFIX.sun_map_parse.y =	sun_map_
 LPREFIX.sun_map_tok.l =	sun_map_
 CPPFLAGS.sun_map_tok.c += -Dyylval=sun_map_lval -Dyyerror=sun_map_error
-
-CWARNFLAGS.clang+=	-Wno-unneeded-internal-declaration
 
 YPREFIX.conf_parse.y =	conf_
 LPREFIX.conf_tok.l =	conf_

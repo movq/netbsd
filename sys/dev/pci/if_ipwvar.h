@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ipwvar.h,v 1.16 2012/10/27 17:18:33 chs Exp $	*/
+/*	$NetBSD: if_ipwvar.h,v 1.13.8.1 2008/11/09 04:00:06 snj Exp $	*/
 
 /*-
  * Copyright (c) 2004
@@ -81,7 +81,7 @@ struct ipw_tx_radiotap_header {
 	((1 << IEEE80211_RADIOTAP_CHANNEL))
 
 struct ipw_softc {
-	device_t			sc_dev;
+	struct device			sc_dev;
 
 	struct ethercom			sc_ec;
 	struct ieee80211com		sc_ic;
@@ -146,6 +146,7 @@ struct ipw_softc {
 
 	int				dwelltime;
 
+#if NBPFILTER > 0
 	struct bpf_if			*sc_drvbpf;
 
 	union {
@@ -161,6 +162,7 @@ struct ipw_softc {
 	} sc_txtapu;
 #define sc_txtap	sc_txtapu.th
 	int				sc_txtap_len;
+#endif
 };
 
 #define	sc_if	sc_ec.ec_if

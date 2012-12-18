@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_stat.c,v 1.47 2009/06/29 05:08:16 dholland Exp $	*/
+/*	$NetBSD: ibcs2_stat.c,v 1.46 2008/06/24 11:18:15 ad Exp $	*/
 /*
  * Copyright (c) 1995, 1998 Scott Bartram
  * All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_stat.c,v 1.47 2009/06/29 05:08:16 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_stat.c,v 1.46 2008/06/24 11:18:15 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -139,15 +139,15 @@ ibcs2_sys_statfs(struct lwp *l, const struct ibcs2_sys_statfs_args *uap, registe
 	struct mount *mp;
 	struct statvfs *sp;
 	int error;
-	struct vnode *vp;
+	struct nameidata nd;
 
-	error = namei_simple_user(SCARG(uap, path),
-				NSM_FOLLOW_TRYEMULROOT, &vp);
-	if (error != 0)
+	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
+	    SCARG(uap, path));
+	if ((error = namei(&nd)) != 0)
 		return (error);
-	mp = vp->v_mount;
+	mp = nd.ni_vp->v_mount;
 	sp = &mp->mnt_stat;
-	vrele(vp);
+	vrele(nd.ni_vp);
 	if ((error = VFS_STATVFS(mp, sp)) != 0)
 		return (error);
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
@@ -192,15 +192,15 @@ ibcs2_sys_statvfs(struct lwp *l, const struct ibcs2_sys_statvfs_args *uap, regis
 	struct mount *mp;
 	struct statvfs *sp;
 	int error;
-	struct vnode *vp;
+	struct nameidata nd;
 
-	error = namei_simple_user(SCARG(uap, path),
-				NSM_FOLLOW_TRYEMULROOT, &vp);
-	if (error != 0)
+	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
+	    SCARG(uap, path));
+	if ((error = namei(&nd)) != 0)
 		return (error);
-	mp = vp->v_mount;
+	mp = nd.ni_vp->v_mount;
 	sp = &mp->mnt_stat;
-	vrele(vp);
+	vrele(nd.ni_vp);
 	if ((error = VFS_STATVFS(mp, sp)) != 0)
 		return (error);
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;

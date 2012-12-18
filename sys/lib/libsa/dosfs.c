@@ -1,4 +1,4 @@
-/*	$NetBSD: dosfs.c,v 1.18 2011/12/25 06:09:08 tsutsui Exp $	*/
+/*	$NetBSD: dosfs.c,v 1.14 2008/03/25 21:23:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Robert Nordier
@@ -218,7 +218,7 @@ dosunmount(DOS_FS *fs)
 /*
  * Open DOS file
  */
-__compactcall int
+int
 dosfs_open(const char *path, struct open_file *fd)
 {
 	const struct direntry *de;
@@ -261,7 +261,6 @@ dosfs_open(const char *path, struct open_file *fd)
 	fs->links++;
 	f->de = *de;
 	fd->f_fsdata = (void *)f;
-	fsmod = "msdos";
 
 out:
 	return err;
@@ -270,7 +269,7 @@ out:
 /*
  * Read from file
  */
-__compactcall int
+int
 dosfs_read(struct open_file *fd, void *vbuf, size_t nbyte, size_t *resid)
 {
 	off_t   size;
@@ -327,7 +326,7 @@ out:
 /*
  * Not implemented.
  */
-__compactcall int
+int
 dosfs_write(struct open_file *fd, void *start, size_t size, size_t *resid)
 {
 
@@ -339,7 +338,7 @@ dosfs_write(struct open_file *fd, void *start, size_t size, size_t *resid)
 /*
  * Reposition within file
  */
-__compactcall off_t
+off_t
 dosfs_seek(struct open_file *fd, off_t offset, int whence)
 {
 	off_t   off;
@@ -373,7 +372,7 @@ dosfs_seek(struct open_file *fd, off_t offset, int whence)
 /*
  * Close open file
  */
-__compactcall int
+int
 dosfs_close(struct open_file *fd)
 {
 	DOS_FILE *f = (DOS_FILE *)fd->f_fsdata;
@@ -389,7 +388,7 @@ dosfs_close(struct open_file *fd)
 /*
  * Return some stat information on a file.
  */
-__compactcall int
+int
 dosfs_stat(struct open_file *fd, struct stat *sb)
 {
 	DOS_FILE *f = (DOS_FILE *)fd->f_fsdata;
@@ -404,15 +403,6 @@ dosfs_stat(struct open_file *fd, struct stat *sb)
 		return EINVAL;
 	return 0;
 }
-
-#if defined(LIBSA_ENABLE_LS_OP)
-__compactcall void
-dosfs_ls(struct open_file *f, const char *pattern)
-{
-	printf("Currently ls command is unsupported by dosfs\n");
-	return;
-}
-#endif
 
 /*
  * Parse DOS boot sector

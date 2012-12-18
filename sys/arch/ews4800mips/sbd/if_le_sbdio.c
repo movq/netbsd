@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_sbdio.c,v 1.7 2012/10/13 06:08:30 tsutsui Exp $	*/
+/*	$NetBSD: if_le_sbdio.c,v 1.5 2008/04/28 20:23:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 2005 The NetBSD Foundation, Inc.
@@ -30,9 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le_sbdio.c,v 1.7 2012/10/13 06:08:30 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le_sbdio.c,v 1.5 2008/04/28 20:23:18 martin Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,8 +74,8 @@ struct le_sbdio_softc {
 	bus_dmamap_t sc_dmamap;
 };
 
-int le_sbdio_match(device_t, cfdata_t, void *);
-void le_sbdio_attach(device_t, device_t, void *);
+int le_sbdio_match(device_t, struct cfdata *, void *);
+void le_sbdio_attach(device_t, struct device *, void *);
 static void le_sbdio_wrcsr(struct lance_softc *, uint16_t, uint16_t);
 static uint16_t le_sbdio_rdcsr(struct lance_softc *, uint16_t);
 

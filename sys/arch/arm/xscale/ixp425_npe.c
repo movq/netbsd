@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_npe.c,v 1.9 2012/10/14 14:20:58 msaitoh Exp $	*/
+/*	$NetBSD: ixp425_npe.c,v 1.3 2008/01/08 02:07:53 matt Exp $	*/
 
 /*-
  * Copyright (c) 2006 Sam Leffler, Errno Consulting
@@ -62,7 +62,7 @@
 #if 0
 __FBSDID("$FreeBSD: src/sys/arm/xscale/ixp425/ixp425_npe.c,v 1.1 2006/11/19 23:55:23 sam Exp $");
 #endif
-__KERNEL_RCSID(0, "$NetBSD: ixp425_npe.c,v 1.9 2012/10/14 14:20:58 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_npe.c,v 1.3 2008/01/08 02:07:53 matt Exp $");
 
 /*
  * Intel XScale Network Processing Engine (NPE) support.
@@ -92,7 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_npe.c,v 1.9 2012/10/14 14:20:58 msaitoh Exp $
 
 #include <dev/firmload.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/intr.h>
 
@@ -102,9 +102,29 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_npe.c,v 1.9 2012/10/14 14:20:58 msaitoh Exp $
 
 #include <arm/xscale/ixp425_npereg.h>
 #include <arm/xscale/ixp425_npevar.h>
-#include <arm/xscale/ixp425_if_npereg.h>
 
 #include "locators.h"
+
+struct ixpnpe_softc {
+    struct device	sc_dev;
+    bus_dma_tag_t	sc_dt;
+    bus_space_tag_t	sc_iot;
+    bus_space_handle_t	sc_ioh;
+    bus_size_t		sc_size;	/* size of mapped register window */
+    int			sc_unit;
+    void		*sc_ih;		/* interrupt handler */
+    struct simplelock	sc_lock;	/* mailbox lock */
+    uint32_t		sc_msg[2];	/* reply msg collected in ixpnpe_intr */
+    int			sc_msgwaiting;	/* sc_msg holds valid data */
+
+    int			validImage;	/* valid ucode image loaded */
+    int			started;	/* NPE is started */
+    uint8_t		functionalityId;/* ucode functionality ID */
+    int			insMemSize;	/* size of instruction memory */
+    int			dataMemSize;	/* size of data memory */
+    uint32_t		savedExecCount;
+    uint32_t		savedEcsDbgCtxtReg2;
+};
 
 /*
  * IXP425_NPE_MICROCODE will be defined by ixp425-fw.mk IFF the
@@ -242,16 +262,17 @@ npe_reg_write(struct ixpnpe_softc *sc, bus_size_t off, uint32_t val)
     bus_space_write_4(sc->sc_iot, sc->sc_ioh, off, val);
 }
 
-static int	ixpnpe_match(device_t, cfdata_t, void *);
-static void	ixpnpe_attach(device_t, device_t, void *);
+static int	ixpnpe_match(struct device *, struct cfdata *, void *);
+static void	ixpnpe_attach(struct device *, struct device *, void *);
 static int	ixpnpe_print(void *, const char *);
-static int	ixpnpe_search(device_t, cfdata_t, const int *, void *);
+static int	ixpnpe_search(struct device *, struct cfdata *, const int *,
+		    void *);
 
-CFATTACH_DECL_NEW(ixpnpe, sizeof(struct ixpnpe_softc),
+CFATTACH_DECL(ixpnpe, sizeof(struct ixpnpe_softc),
     ixpnpe_match, ixpnpe_attach, NULL, NULL);
 
 static int
-ixpnpe_match(device_t parent, cfdata_t match, void *arg)
+ixpnpe_match(struct device *parent, struct cfdata *match, void *arg)
 {
 	struct ixme_attach_args *ixa = arg;
 
@@ -259,9 +280,9 @@ ixpnpe_match(device_t parent, cfdata_t match, void *arg)
 }
 
 static void
-ixpnpe_attach(device_t parent, device_t self, void *arg)
+ixpnpe_attach(struct device *parent, struct device *self, void *arg)
 {
-    struct ixpnpe_softc *sc = device_private(self);
+    struct ixpnpe_softc *sc = (void *)self;
     struct ixme_attach_args *ixa = arg;
     bus_addr_t base;
     int irq;
@@ -269,7 +290,6 @@ ixpnpe_attach(device_t parent, device_t self, void *arg)
     aprint_naive("\n");
     aprint_normal("\n");
 
-    sc->sc_dev = self;
     sc->sc_iot = ixa->ixa_iot;
     sc->sc_dt = ixa->ixa_dt;
     sc->sc_unit = ixa->ixa_npe;
@@ -280,7 +300,7 @@ ixpnpe_attach(device_t parent, device_t self, void *arg)
 
     switch (ixa->ixa_npe) {
     default:
-	panic("%s: Invalid NPE!", device_xname(self));
+	panic("%s: Invalid NPE!", sc->sc_dev.dv_xname);
 
     case 1:
 	base = IXP425_NPE_B_HWBASE;
@@ -305,14 +325,14 @@ ixpnpe_attach(device_t parent, device_t self, void *arg)
 	break;
     }
     if (bus_space_map(sc->sc_iot, base, sc->sc_size, 0, &sc->sc_ioh))
-	panic("%s: Cannot map registers", device_xname(self));
+	panic("%s: Cannot map registers", sc->sc_dev.dv_xname);
 
     /*
      * Setup IRQ and handler for NPE message support.
      */
     sc->sc_ih = ixp425_intr_establish(irq, IPL_NET, ixpnpe_intr, sc);
     if (sc->sc_ih == NULL)
-	panic("%s: Unable to establish irq %u", device_xname(self), irq);
+	panic("%s: Unable to establish irq %u", sc->sc_dev.dv_xname, irq);
     /* enable output fifo interrupts (NB: must also set OFIFO Write Enable) */ 
     npe_reg_write(sc, IX_NPECTL,
 	npe_reg_read(sc, IX_NPECTL) | (IX_NPECTL_OFE | IX_NPECTL_OFWE));
@@ -328,9 +348,10 @@ ixpnpe_print(void *arg, const char *name)
 }
 
 static int
-ixpnpe_search(device_t parent, cfdata_t cf, const int *ldesc, void *arg)
+ixpnpe_search(struct device *parent, struct cfdata *cf, const int *ldesc,
+    void *arg)
 {
-	struct ixpnpe_softc *sc = device_private(parent);
+	struct ixpnpe_softc *sc = (void *)parent;
 	struct ixme_attach_args *ixa = arg;
 	struct ixpnpe_attach_args na;
 
@@ -444,7 +465,7 @@ npe_findimage(struct ixpnpe_softc *sc,
         /* 2 consecutive NPE_IMAGE_MARKER's indicates end of library */
         if (image->id == NPE_IMAGE_MARKER) {
 	    printf("%s: imageId 0x%08x not found in image library header\n",
-	        device_xname(sc->sc_dev), imageId);
+	        sc->sc_dev.dv_xname, imageId);
             /* reached end of library, image not found */
             return EIO;
         }
@@ -539,12 +560,12 @@ npe_load_ins(struct ixpnpe_softc *sc,
     npeMemAddress = bp->npeMemAddress;
     blockSize = bp->size;		/* NB: instruction/data count */
     if (npeMemAddress + blockSize > sc->insMemSize) {
-	printf("%s: Block size too big for NPE memory\n", device_xname(sc->sc_dev));
+	printf("%s: Block size too big for NPE memory\n", sc->sc_dev.dv_xname);
 	return EINVAL;	/* XXX */
     }
     for (i = 0; i < blockSize; i++, npeMemAddress++) {
 	if (npe_ins_write(sc, npeMemAddress, bp->data[i], verify) != 0) {
-	    printf("%s: NPE instruction write failed", device_xname(sc->sc_dev));
+	    printf("%s: NPE instruction write failed", sc->sc_dev.dv_xname);
 	    return EIO;
 	}
     }
@@ -561,12 +582,12 @@ npe_load_data(struct ixpnpe_softc *sc,
     npeMemAddress = bp->npeMemAddress;
     blockSize = bp->size;		/* NB: instruction/data count */
     if (npeMemAddress + blockSize > sc->dataMemSize) {
-	printf("%s: Block size too big for NPE memory\n", device_xname(sc->sc_dev));
+	printf("%s: Block size too big for NPE memory\n", sc->sc_dev.dv_xname);
 	return EINVAL;
     }
     for (i = 0; i < blockSize; i++, npeMemAddress++) {
 	if (npe_data_write(sc, npeMemAddress, bp->data[i], verify) != 0) {
-	    printf("%s: NPE data write failed\n", device_xname(sc->sc_dev));
+	    printf("%s: NPE data write failed\n", sc->sc_dev.dv_xname);
 	    return EIO;
 	}
     }
@@ -595,27 +616,27 @@ npe_load_stateinfo(struct ixpnpe_softc *sc,
 	
 	/* error-check Context Register No. and Context Number values  */
 	if (!(0 <= reg && reg < IX_NPEDL_CTXT_REG_MAX)) {
-	    printf("%s: invalid Context Register %u\n", device_xname(sc->sc_dev),
+	    printf("%s: invalid Context Register %u\n", sc->sc_dev.dv_xname,
 		reg);
 	    error = EINVAL;
 	    break;
 	}    
 	if (!(0 <= cNum && cNum < IX_NPEDL_CTXT_NUM_MAX)) {
-	    printf("%s: invalid Context Number %u\n", device_xname(sc->sc_dev),
+	    printf("%s: invalid Context Number %u\n", sc->sc_dev.dv_xname,
 	        cNum);
 	    error = EINVAL;
 	    break;
 	}    
 	/* NOTE that there is no STEVT register for Context 0 */
 	if (cNum == 0 && reg == IX_NPEDL_CTXT_REG_STEVT) {
-	    printf("%s: no STEVT for Context 0\n", device_xname(sc->sc_dev));
+	    printf("%s: no STEVT for Context 0\n", sc->sc_dev.dv_xname);
 	    error = EINVAL;
 	    break;
 	}
 
 	if (npe_ctx_reg_write(sc, cNum, reg, regVal, verify) != 0) {
 	    printf("%s: write of state-info to NPE failed\n",
-	        device_xname(sc->sc_dev));
+	        sc->sc_dev.dv_xname);
 	    error = EIO;
 	    break;
 	}
@@ -634,7 +655,7 @@ npe_load_image(struct ixpnpe_softc *sc,
     int i, error;
 
     if (!npe_isstopped(sc)) {		/* verify NPE is stopped */
-	printf("%s: cannot load image, NPE not stopped\n", device_xname(sc->sc_dev));
+	printf("%s: cannot load image, NPE not stopped\n", sc->sc_dev.dv_xname);
 	return EIO;
     }
 
@@ -665,7 +686,7 @@ npe_load_image(struct ixpnpe_softc *sc,
 	    break;
 	default:
 	    printf("%s: unknown block type 0x%x in download map\n",
-		device_xname(sc->sc_dev), downloadMap->entry[i].block.type);
+		sc->sc_dev.dv_xname, downloadMap->entry[i].block.type);
 	    error = EIO;		/* XXX */
 	    break;
 	}
@@ -855,7 +876,7 @@ npe_cpu_reset(struct ixpnpe_softc *sc)
 
     /* un-fuse and un-reset the NPE & coprocessor */
     DPRINTFn(2, sc->sc_dev, "%s: FCTRL unfuse parity, write 0x%x\n",
-	__func__, regVal & ~resetNpeParity);
+	__func__, regVal & resetNpeParity);
     EXP_BUS_WRITE_4(ixp425_softc, EXP_FCTRL_OFFSET, regVal &~ resetNpeParity);
 
     /*
@@ -1295,7 +1316,7 @@ ixpnpe_ofifo_wait(struct ixpnpe_softc *sc)
 	    return 1;
 	DELAY(10);
     }
-    printf("%s: %s: timeout, last status 0x%x\n", device_xname(sc->sc_dev),
+    printf("%s: %s: timeout, last status 0x%x\n", sc->sc_dev.dv_xname,
         __func__, npe_reg_read(sc, IX_NPESTAT));
     return 0;
 }
@@ -1309,7 +1330,7 @@ ixpnpe_intr(void *arg)
     status = npe_reg_read(sc, IX_NPESTAT);
     if ((status & IX_NPESTAT_OFINT) == 0) {
 	/* NB: should not happen */
-	printf("%s: %s: status 0x%x\n", device_xname(sc->sc_dev), __func__, status);
+	printf("%s: %s: status 0x%x\n", sc->sc_dev.dv_xname, __func__, status);
 	/* XXX must silence interrupt? */
 	return(1);
     }
@@ -1326,20 +1347,7 @@ ixpnpe_intr(void *arg)
 	    sc->sc_msgwaiting = 1;	/* successful fetch */
 	}
     }
-    if (sc->sc_msg[0] == (NPE_MACRECOVERYSTART << NPE_MAC_MSGID_SHL)) {
-	    int s;
-
-	    s = splnet();
-	    delay(100); /* delay 100usec */
-	    if (sc->macresetcbfunc != NULL)
-		    sc->macresetcbfunc(sc->macresetcbarg);
-	    splx(s);
-    }
-
-#if 0
-    /* XXX Too dangerous! see ixpnpe_recvmsg_locked() */
     wakeup(sc);
-#endif
 
     return (1);
 }
@@ -1374,7 +1382,7 @@ ixpnpe_sendmsg_locked(struct ixpnpe_softc *sc, const uint32_t msg[2])
 
     if (error)
 	printf("%s: input FIFO timeout, msg [0x%x,0x%x]\n",
-	    device_xname(sc->sc_dev), msg[0], msg[1]);
+	    sc->sc_dev.dv_xname, msg[0], msg[1]);
     return error;
 }
 
@@ -1382,13 +1390,11 @@ static int
 ixpnpe_recvmsg_locked(struct ixpnpe_softc *sc, uint32_t msg[2])
 {
 
-	if (!sc->sc_msgwaiting) {
-		/* XXX interrupt context - cannot sleep */
-		delay(1000);	/* wait 1ms (is it ok?)*/
-	}
-	memcpy(msg, sc->sc_msg, sizeof(sc->sc_msg));
-	/* NB: sc_msgwaiting != 1 means the ack fetch failed */
-	return sc->sc_msgwaiting != 1 ? EIO : 0;
+    if (!sc->sc_msgwaiting)
+	ltsleep(sc, 0, "npemh", 0, &sc->sc_lock);
+    bcopy(sc->sc_msg, msg, sizeof(sc->sc_msg));
+    /* NB: sc_msgwaiting != 1 means the ack fetch failed */
+    return sc->sc_msgwaiting != 1 ? EIO : 0;
 }
 
 /*
@@ -1435,7 +1441,7 @@ ixpnpe_recvmsg(struct ixpnpe_softc *sc, uint32_t msg[2])
 
     simple_lock(&sc->sc_lock);
     if (sc->sc_msgwaiting)
-	memcpy(msg, sc->sc_msg, sizeof(sc->sc_msg));
+	bcopy(sc->sc_msg, msg, sizeof(sc->sc_msg));
     /* NB: sc_msgwaiting != 1 means the ack fetch failed */
     error = sc->sc_msgwaiting != 1 ? EIO : 0;
     simple_unlock(&sc->sc_lock);

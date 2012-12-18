@@ -1,4 +1,4 @@
-/* $NetBSD: ofwpci.c,v 1.11 2012/01/27 18:52:59 para Exp $ */
+/* $NetBSD: ofwpci.c,v 1.8 2008/04/28 20:23:31 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofwpci.c,v 1.11 2012/01/27 18:52:59 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofwpci.c,v 1.8 2008/04/28 20:23:31 martin Exp $");
 
 #include "opt_pci.h"
 
@@ -50,16 +50,16 @@ __KERNEL_RCSID(0, "$NetBSD: ofwpci.c,v 1.11 2012/01/27 18:52:59 para Exp $");
 #include <machine/pio.h>
 
 struct ofwpci_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	struct genppc_pci_chipset sc_pc;
 	struct powerpc_bus_space sc_iot;
 	struct powerpc_bus_space sc_memt;
 };
 
-static void ofwpci_attach(device_t, device_t, void *);
-static int ofwpci_match(device_t, cfdata_t, void *);
+static void ofwpci_attach(struct device *, struct device *, void *);
+static int ofwpci_match(struct device *, struct cfdata *, void *);
 
-CFATTACH_DECL_NEW(ofwpci, sizeof(struct ofwpci_softc),
+CFATTACH_DECL(ofwpci, sizeof(struct ofwpci_softc),
     ofwpci_match, ofwpci_attach, NULL, NULL);
 
 extern struct genppc_pci_chipset *genppc_pct;
@@ -98,7 +98,7 @@ ofwpci_get_chipset_tag(pci_chipset_tag_t pc)
 }
 
 static int
-ofwpci_match(device_t parent, cfdata_t cf, void *aux)
+ofwpci_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct confargs *ca = aux;
 	char name[32];
@@ -115,9 +115,9 @@ ofwpci_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-ofwpci_attach(device_t parent, device_t self, void *aux)
+ofwpci_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ofwpci_softc *sc = device_private(self);
+	struct ofwpci_softc *sc = (void *)self;
 	pci_chipset_tag_t pc = &sc->sc_pc;
 	struct confargs *ca = aux;
 	struct pcibus_attach_args pba;
@@ -131,8 +131,6 @@ ofwpci_attach(device_t parent, device_t self, void *aux)
 #endif
 
 	aprint_normal("\n");
-
-	sc->sc_dev = self;
 
 	/* PCI bus number */
 	if (OF_getprop(node, "bus-range", busrange, sizeof(busrange)) != 8)
@@ -202,9 +200,9 @@ ofwpci_attach(device_t parent, device_t self, void *aux)
 	ioext  = extent_create("pciio",
 	    modeldata.pciiodata[device_unit(self)].start,
 	    modeldata.pciiodata[device_unit(self)].limit,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", sc->sc_memt.pbs_base,
-	    sc->sc_memt.pbs_limit-1, NULL, 0, EX_NOWAIT);
+	    sc->sc_memt.pbs_limit-1, M_DEVBUF, NULL, 0, EX_NOWAIT);
 
 	if (pci_configure_bus(pc, ioext, memext, NULL, 0, CACHELINESIZE))
 		aprint_error("pci_configure_bus() failed\n");
@@ -220,6 +218,6 @@ ofwpci_attach(device_t parent, device_t self, void *aux)
 	pba.pba_bus = pc->pc_bus;
 	pba.pba_bridgetag = NULL;
 	pba.pba_pc = pc;
-	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
+	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }

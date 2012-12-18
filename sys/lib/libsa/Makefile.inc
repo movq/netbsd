@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.21 2012/12/12 15:12:11 matt Exp $
+#	$NetBSD: Makefile.inc,v 1.19 2006/01/26 14:05:49 christos Exp $
 #
 #	Configuration variables (default values are below):
 #
@@ -21,8 +21,6 @@ SADST?=		${.OBJDIR}/lib/sa
 SA_AS?=		library
 SADOTDIR?= ../../.
 
-CWARNFLAGS.clang+=	-Wno-format-extra-args
-
 SADIR=		${S:S@^.@${SADOTDIR}@:Q}/lib/libsa
 .if (${SA_AS} == "obj")
 SALIB=		${SADST}/libsa.o
@@ -37,7 +35,7 @@ SAMISCCPPFLAGS+=-I${ZLIBSRCDIR}
 SAMAKE= \
 	cd ${SADST} && ${MAKE} -f ${SADIR:Q}/Makefile \
 	    SADIR=${SADIR:Q} \
-	    CC=${CC:Q} CFLAGS=${CFLAGS:Q} CPUFLAGS= \
+	    CC=${CC:Q} CFLAGS=${CFLAGS:Q} \
 	    AS=${AS:Q} AFLAGS=${AFLAGS:Q} \
 	    LORDER=${LORDER:Q} \
 	    TSORT=${TSORT:Q} \

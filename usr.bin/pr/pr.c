@@ -1,11 +1,9 @@
-/*	$NetBSD: pr.c,v 1.24 2012/08/01 02:27:48 ginsbach Exp $	*/
+/*	$NetBSD: pr.c,v 1.19 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1991 Keith Muller.
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
- * Copyright (c) 2012
- *	The NetBSD Foundation, Inc.
  *
  * This code is derived from software contributed to Berkeley by
  * Keith Muller of the University of California, San Diego.
@@ -45,7 +43,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993\
 #if 0
 from: static char sccsid[] = "@(#)pr.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: pr.c,v 1.24 2012/08/01 02:27:48 ginsbach Exp $");
+__RCSID("$NetBSD: pr.c,v 1.19 2008/07/21 14:19:24 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -79,61 +77,43 @@ __RCSID("$NetBSD: pr.c,v 1.24 2012/08/01 02:27:48 ginsbach Exp $");
 /*
  * parameter variables
  */
-static int	pgnm;			/* starting page number */
-static int	clcnt;			/* number of columns */
-static int	colwd;			/* column data width - multiple columns */
-static int	across;			/* mult col flag; write across page */
-static int	dspace;			/* double space flag */
-static char	inchar;			/* expand input char */
-static int	ingap;			/* expand input gap */
-static int	formfeed;		/* use formfeed as trailer */
-static char	*header;		/* header name instead of file name */
-static char	ochar;			/* contract output char */
-static int	ogap;			/* contract output gap */
-static int	lines;			/* number of lines per page */
-static int	merge;			/* merge multiple files in output */
-static char	nmchar;			/* line numbering append char */
-static int	nmwd;			/* width of line number field */
-static int	offst;			/* number of page offset spaces */
-static int	nodiag;			/* do not report file open errors */
-static char	schar;			/* text column separation character */
-static int	sflag;			/* -s option for multiple columns */
-static int	ttyout;			/* output is a tty */
-static int	nohead;			/* do not write head and trailer */
-static int	pgpause;		/* pause before each page */
-static int	pgwd;			/* page width with multiple col output */
-static const char *timefrmt = TIMEFMT;	/* time conversion string */
-static FILE	*ttyinf;		/* input terminal for page pauses */
+int	pgnm;			/* starting page number */
+int	clcnt;			/* number of columns */
+int	colwd;			/* column data width - multiple columns */
+int	across;			/* mult col flag; write across page */
+int	dspace;			/* double space flag */
+char	inchar;			/* expand input char */
+int	ingap;			/* expand input gap */
+int	formfeed;		/* use formfeed as trailer */
+char	*header;		/* header name instead of file name */
+char	ochar;			/* contract output char */
+int	ogap;			/* contract output gap */
+int	lines;			/* number of lines per page */
+int	merge;			/* merge multiple files in output */
+char	nmchar;			/* line numbering append char */
+int	nmwd;			/* width of line number field */
+int	offst;			/* number of page offset spaces */
+int	nodiag;			/* do not report file open errors */
+char	schar;			/* text column separation character */
+int	sflag;			/* -s option for multiple columns */
+int	nohead;			/* do not write head and trailer */
+int	pgwd;			/* page width with multiple col output */
+char	*timefrmt = TIMEFMT;	/* time conversion string */
 
 /*
  * misc globals
  */
-static FILE	*errf;			/* error message file pointer */
-static int	addone;			/* page length is odd with double space */
-static int	errcnt;			/* error count on file processing */
-static const char	digs[] = "0123456789";	/* page number translation map */
+FILE	*err;			/* error message file pointer */
+int	addone;			/* page length is odd with double space */
+int	errcnt;			/* error count on file processing */
+char	digs[] = "0123456789";	/* page number translation map */
 
-static void	 addnum(char *, int, int);
-static void	 flsh_errs(void);
-static int	 horzcol(int, char **);
-static int	 inln(FILE *, char *, int, int *, int, int *);
-static int	 inskip(FILE *, int, int);
-static void	 mfail(void);
-static int	 mulfile(int, char **);
-static FILE	*nxtfile(int, char **, const char **, char *, int);
-static int	 onecol(int, char **);
-static int	 otln(char *, int, int *, int *, int);
-static void	 pfail(void);
-static int	 prhead(char *, const char *, int);
-static void	 prpause(int);
-static int	 prtail(int, int);
-static int	 setup(int, char **);
-__dead static void	 terminate(int);
-static void	 usage(void);
-static int	 vertcol(int, char **);
+int	main __P((int, char **));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+        int argc;
+        char *argv[];
 {
 	int ret_val;
 
@@ -164,8 +144,10 @@ main(int argc, char *argv[])
  * onecol:	print files with only one column of output.
  *		Line length is unlimited.
  */
-static int
-onecol(int argc, char *argv[])
+int
+onecol(argc, argv)
+        int argc;
+        char *argv[];
 {
 	int cnt = -1;
 	int off;
@@ -183,7 +165,7 @@ onecol(int argc, char *argv[])
 	char *hbuf = NULL;
 	char *ohbuf;
 	FILE *inf = NULL;
-	const char *fname;
+	char *fname;
 	int mor;
 	int error = 1;
 
@@ -248,14 +230,9 @@ onecol(int argc, char *argv[])
 				 */
 				if ((cnt = inln(inf,lbuf,LBUF,&cps,0,&mor)) < 0)
 					break;
-				if (!linecnt) {
-					if (pgpause)
-						prpause(pagecnt);
-
-				        if (!nohead &&
-					    prhead(hbuf, fname, pagecnt))
-						goto out;
-				}
+				if (!linecnt && !nohead &&
+					prhead(hbuf, fname, pagecnt))
+					goto out;
 
 				/*
 				 * start of new line.
@@ -308,8 +285,10 @@ onecol(int argc, char *argv[])
 oomem:
 	mfail();
 out:
-	free(obuf);
-	free(hbuf);
+	if (obuf)
+		free(obuf);
+	if (hbuf)
+		free(hbuf);
 	if (inf != NULL && inf != stdin)
 		(void)fclose(inf);
 	return error;
@@ -318,8 +297,10 @@ out:
 /*
  * vertcol:	print files with more than one column of output down a page
  */
-static int
-vertcol(int argc, char *argv[])
+int
+vertcol(argc, argv)
+        int argc;
+        char *argv[];
 {
 	char *ptbf;
 	char **lstdat = NULL;
@@ -344,7 +325,7 @@ vertcol(int argc, char *argv[])
 	char *buf = NULL;
 	char *hbuf = NULL;
 	char *ohbuf;
-	const char *fname;
+	char *fname;
 	FILE *inf = NULL;
 	int ips = 0;
 	int cps = 0;
@@ -520,9 +501,6 @@ vertcol(int argc, char *argv[])
 				if (cvc % clcnt)
 					++pln;
 
-				if (pgpause)
-					prpause(pagecnt);
-
 				/*
 				 * print header
 				 */
@@ -592,13 +570,8 @@ vertcol(int argc, char *argv[])
 			/*
 			 * print header
 			 */
-			if (pln) {
-				if (pgpause)
-					prpause(pagecnt);
-
-			        if (!nohead && prhead(hbuf, fname, pagecnt))
-					goto out;
-			}
+			if (pln && !nohead && prhead(hbuf, fname, pagecnt))
+				goto out;
 
 			/*
 			 * output each line
@@ -634,11 +607,16 @@ vertcol(int argc, char *argv[])
 oomem:
 	mfail();
 out:
-	free(buf);
-	free(hbuf);
-	free(vc);
-	free(lstdat);
-	free(lindy);
+	if (buf)
+		free(buf);
+	if (hbuf)
+		free(hbuf);
+	if (vc)
+		free(vc);
+	if (lstdat)
+		free(lstdat);
+	if (indy)
+		free(lindy);
 	if (inf != NULL && inf != stdin)
 		(void)fclose(inf);
 	return error;
@@ -647,8 +625,10 @@ out:
 /*
  * horzcol:	print files with more than one column of output across a page
  */
-static int
-horzcol(int argc, char *argv[])
+int
+horzcol(argc, argv)
+        int argc;
+        char *argv[];
 {
 	char *ptbf;
 	int pln;
@@ -662,7 +642,7 @@ horzcol(int argc, char *argv[])
 	char *buf = NULL;
 	char *hbuf = NULL;
 	char *ohbuf;
-	const char *fname;
+	char *fname;
 	FILE *inf = NULL;
 	int ips = 0;
 	int cps = 0;
@@ -750,14 +730,9 @@ horzcol(int argc, char *argv[])
 				 */
 				if ((j = lstdat - buf) <= offst)
 					break;
-				if (!i) {
-					if (pgpause)
-						prpause(pagecnt);
-
-				        if (!nohead &&
-					    prhead(hbuf, fname, pagecnt))
-						goto out;
-				}
+				if (!i && !nohead &&
+					prhead(hbuf, fname, pagecnt))
+					goto out;
 				/*
 				 * output line
 				 */
@@ -788,8 +763,10 @@ horzcol(int argc, char *argv[])
 oomem:
 	mfail();
 out:
-	free(buf);
-	free(hbuf);
+	if (buf)
+		free(buf);
+	if (hbuf)
+		free(hbuf);
 	if (inf != NULL && inf != stdin)
 		(void)fclose(inf);
 	return error;
@@ -799,8 +776,10 @@ out:
  * mulfile:	print files with more than one column of output and
  *		more than one file concurrently
  */
-static int
-mulfile(int argc, char *argv[])
+int
+mulfile(argc, argv)
+        int argc;
+        char *argv[];
 {
 	char *ptbf;
 	int j;
@@ -817,7 +796,7 @@ mulfile(int argc, char *argv[])
 	char *buf = NULL;
 	char *hbuf = NULL;
 	char *ohbuf;
-	const char *fname;
+	char *fname;
 	int ips = 0;
 	int cps = 0;
 	int ops = 0;
@@ -871,7 +850,7 @@ mulfile(int argc, char *argv[])
 		pgwd = ((colwd + 1) * clcnt) - 1;
 	}
 	if (colwd < 1) {
-		(void)fprintf(errf,
+		(void)fprintf(err,
 		  "pr: page width too small for %d columns\n", clcnt);
 		goto out;
 	}
@@ -965,13 +944,8 @@ mulfile(int argc, char *argv[])
 			if ((j = lstdat - buf) <= offst)
 				break;
 
-			if (!i) {
-				if (pgpause)
-					prpause(pagecnt);
-
-			        if (!nohead && prhead(hbuf, fname, pagecnt))
-					goto out;
-			}
+			if (!i && !nohead && prhead(hbuf, fname, pagecnt))
+				goto out;
 
 			/*
 			 * output line
@@ -1008,8 +982,10 @@ out:
 				(void)fclose(fbuf[j]);
 		free(fbuf);
 	}
-	free(hbuf);
-	free(buf);
+	if (hbuf)
+		free(hbuf);
+	if (buf)
+		free(buf);
 	return error;
 }
 
@@ -1024,8 +1000,14 @@ out:
  *	trnc:	throw away data more than lim up to \n 
  *	mor:	set if more data in line (not truncated)
  */
-static int
-inln(FILE *inf, char *buf, int lim, int *cps, int trnc, int *mor)
+int
+inln(inf, buf, lim, cps, trnc, mor)
+	FILE *inf;
+	char *buf;
+	int lim;
+	int *cps;
+	int trnc;
+	int *mor;
 {
 	int col;
 	int gap = ingap;
@@ -1129,8 +1111,13 @@ inln(FILE *inf, char *buf, int lim, int *cps, int trnc, int *mor)
  *	mor:	output line not complete in this buf; more data to come.	
  *		1 is more, 0 is complete, -1 is no \n's
  */
-static int
-otln(char *buf, int cnt, int *svips, int *svops, int mor)
+int
+otln(buf, cnt, svips, svops, mor)
+	char *buf;
+	int cnt;
+	int *svops;
+	int *svips;
+	int mor;
 {
 	int ops;		/* last col output */
 	int ips;		/* last col in buf examined */
@@ -1167,7 +1154,14 @@ otln(char *buf, int cnt, int *svips, int *svops, int mor)
 			/*
 			 * got a non space char; contract out spaces
 			 */
-			while (ips - ops > 1) {
+			while (ops < ips) {
+				/*
+				 * use one space if necessary
+				 */
+				if (ips - ops == 1) {
+					putchar(' ');
+					break;
+				}
 				/*
 				 * use as many ochar as will fit
 				 */
@@ -1212,7 +1206,14 @@ otln(char *buf, int cnt, int *svips, int *svops, int mor)
 		}
 
 		if (mor < 0) {
-			while (ips - ops > 1) {
+			while (ops < ips) {
+				/*
+				 * use one space if necessary
+				 */
+				if (ips - ops == 1) {
+					putchar(' ');
+					break;
+				}
 				/*
 				 * use as many ochar as will fit
 				 */
@@ -1266,8 +1267,11 @@ otln(char *buf, int cnt, int *svips, int *svops, int mor)
  *	pgcnt	number of pages to skip
  *	lncnt	number of lines per page
  */
-static int
-inskip(FILE *inf, int pgcnt, int lncnt)
+int
+inskip(inf, pgcnt, lncnt)
+	FILE *inf;
+	int pgcnt;
+	int lncnt;
 {
 	int c;
 	int cnt;
@@ -1294,8 +1298,13 @@ inskip(FILE *inf, int pgcnt, int lncnt)
  *	buf	array to store proper date for the header.
  *	dt	if set skips the date processing (used with -m)
  */
-static FILE *
-nxtfile(int argc, char **argv, const char **fname, char *buf, int dt)
+FILE *
+nxtfile(argc, argv, fname, buf, dt)
+	int argc;
+	char **argv;
+	char **fname;
+	char *buf;
+	int dt;
 {
 	FILE *inf = NULL;
 	struct timeval tv;
@@ -1322,7 +1331,7 @@ nxtfile(int argc, char **argv, const char **fname, char *buf, int dt)
 			return(inf);
 		if (gettimeofday(&tv, &tz) < 0) {
 			++errcnt;
-			(void)fprintf(errf, "pr: cannot get time of day, %s\n",
+			(void)fprintf(err, "pr: cannot get time of day, %s\n",
 				strerror(errno));
 			eoptind = argc - 1;
 			return(NULL);
@@ -1346,7 +1355,7 @@ nxtfile(int argc, char **argv, const char **fname, char *buf, int dt)
 				return(inf);
 			if (gettimeofday(&tv, &tz) < 0) {
 				++errcnt;
-				(void)fprintf(errf,
+				(void)fprintf(err,
 					"pr: cannot get time of day, %s\n",
 					strerror(errno));
 				return(NULL);
@@ -1361,7 +1370,7 @@ nxtfile(int argc, char **argv, const char **fname, char *buf, int dt)
 				++errcnt;
 				if (nodiag)
 					continue;
-				(void)fprintf(errf, "pr: Cannot open %s, %s\n",
+				(void)fprintf(err, "pr: Cannot open %s, %s\n",
 					argv[eoptind], strerror(errno));
 				continue;
 			}
@@ -1378,7 +1387,7 @@ nxtfile(int argc, char **argv, const char **fname, char *buf, int dt)
 			if (dt) {
 				if (gettimeofday(&tv, &tz) < 0) {
 					++errcnt;
-					(void)fprintf(errf,
+					(void)fprintf(err,
 					     "pr: cannot get time of day, %s\n",
 					     strerror(errno));
 					return(NULL);
@@ -1389,7 +1398,7 @@ nxtfile(int argc, char **argv, const char **fname, char *buf, int dt)
 				if (fstat(fileno(inf), &statbuf) < 0) {
 					++errcnt;
 					(void)fclose(inf);
-					(void)fprintf(errf, 
+					(void)fprintf(err, 
 						"pr: Cannot stat %s, %s\n",
 						argv[eoptind], strerror(errno));
 					return(NULL);
@@ -1409,7 +1418,7 @@ nxtfile(int argc, char **argv, const char **fname, char *buf, int dt)
 		++errcnt;
 		if (inf != stdin)
 			(void)fclose(inf);
-		(void)fputs("pr: time conversion failed\n", errf);
+		(void)fputs("pr: time conversion failed\n", err);
 		return(NULL);
 	}
 	return(inf);
@@ -1431,7 +1440,10 @@ nxtfile(int argc, char **argv, const char **fname, char *buf, int dt)
  *		numbers as part of the column so spaces may be replaced.
  */
 void
-addnum(char *buf, int wdth, int line)
+addnum(buf, wdth, line)
+	char *buf;
+	int wdth;
+	int line;
 {
 	char *pt = buf + wdth;
 
@@ -1448,32 +1460,6 @@ addnum(char *buf, int wdth, int line)
 }
 
 /*
- * prpause():	pause before printing each page
- *
- *	pagcnt	page number
- */
-static void
-prpause(int pagcnt)
-{
-
-	if (ttyout) {
-		int c;
-
-		(void)putc('\a', stderr);
-		(void)fflush(stderr);
-
-		while ((c = getc(ttyinf)) != '\n' && c != EOF)
-			;
-
-		/*
-		 * pause ONLY before first page of first file
-		 */
-		if (pgpause == FIRSTPAGE && pagcnt == 1)
-			pgpause = NO_PAUSE;
-	}
-}
-
-/*
  * prhead():	prints the top of page header
  *
  *	buf	buffer with time field (and offset)
@@ -1481,8 +1467,11 @@ prpause(int pagcnt)
  *	fname	fname field for header
  *	pagcnt	page number
  */
-static int
-prhead(char *buf, const char *fname, int pagcnt)
+int
+prhead(buf, fname, pagcnt)
+	char *buf;
+	char *fname;
+	int pagcnt;
 {
 	int ips = 0;
 	int ops = 0;
@@ -1516,8 +1505,10 @@ prhead(char *buf, const char *fname, int pagcnt)
  *	cnt	number of lines of padding needed
  *	incomp	was a '\n' missing from last line output
  */
-static int
-prtail(int cnt, int incomp)
+int
+prtail(cnt, incomp)
+	int cnt;
+	int incomp;
 {
 	if (nohead) {
 		/*
@@ -1569,8 +1560,9 @@ prtail(int cnt, int incomp)
 /*
  * terminate():	when a SIGINT is recvd
  */
-static void
-terminate(int which_sig)
+void
+terminate(which_sig)
+	int which_sig;
 {
 	flsh_errs();
 	(void)raise_default_signal(which_sig);
@@ -1582,52 +1574,51 @@ terminate(int which_sig)
  * flsh_errs():	output saved up diagnostic messages after all normal
  *		processing has completed
  */
-static void
-flsh_errs(void)
+void
+flsh_errs()
 {
 	char buf[BUFSIZ];
 
 	(void)fflush(stdout);
-	(void)fflush(errf);
-	if (errf == stderr)
+	(void)fflush(err);
+	if (err == stderr)
 		return;
-	rewind(errf);
-	while (fgets(buf, BUFSIZ, errf) != NULL)
+	rewind(err);
+	while (fgets(buf, BUFSIZ, err) != NULL)
 		(void)fputs(buf, stderr);
 }
 
-static void
-mfail(void)
+void
+mfail()
 {
-	(void)fputs("pr: memory allocation failed\n", errf);
+	(void)fputs("pr: memory allocation failed\n", err);
 }
 
-static void
-pfail(void)
+void
+pfail()
 {
-	(void)fprintf(errf, "pr: write failure, %s\n", strerror(errno));
+	(void)fprintf(err, "pr: write failure, %s\n", strerror(errno));
 }
 
-static void
-usage(void)
+void
+usage()
 {
 	(void)fputs(
-	 "usage: pr [+page] [-col] [-adFfmprt] [-e[ch][gap]] [-h header]\n",
-		    errf);
+	 "usage: pr [+page] [-col] [-adFmrt] [-e[ch][gap]] [-h header]\n",err);
 	(void)fputs(
-	 "          [-i[ch][gap]] [-l line] [-n[ch][width]] [-o offset]\n",
-		    errf);
+	 "          [-i[ch][gap]] [-l line] [-n[ch][width]] [-o offset]\n",err);
 	(void)fputs(
-	 "          [-s[ch]] [-T timefmt] [-w width] [-] [file ...]\n",
-		    errf);
+	 "          [-s[ch]] [-w width] [-] [file ...]\n", err);
 }
 
 /*
  * setup:	Validate command args, initialize and perform sanity 
  *		checks on options
  */
-static int
-setup(int argc, char **argv)
+int
+setup(argc, argv)
+	int argc;
+	char **argv;
 {
 	int c;
 	int eflag = 0;
@@ -1635,31 +1626,28 @@ setup(int argc, char **argv)
 	int wflag = 0;
 	int cflag = 0;
 
-	ttyinf = stdin;
-
 	if (isatty(fileno(stdout))) {
 		/*
 		 * defer diagnostics until processing is done
 		 */
-		if ((errf = tmpfile()) == NULL) {
+		if ((err = tmpfile()) == NULL) {
 		       (void)fputs("Cannot defer diagnostic messages\n",stderr);
 		       return(1);
 		}
-		ttyout = 1;
 	} else
-		errf = stderr;
-	while ((c = egetopt(argc, argv, "#adFfmrte?h:i?l:n?o:ps?T:w:")) != -1) {
+		err = stderr;
+	while ((c = egetopt(argc, argv, "#adFmrte?h:i?l:n?o:s?T:w:")) != -1) {
 		switch (c) {
 		case '+':
 			if ((pgnm = atoi(eoptarg)) < 1) {
 			    (void)fputs("pr: +page number must be 1 or more\n",
-				errf);
+				err);
 			    return(1);
 			}
 			break;
 		case '-':
 			if ((clcnt = atoi(eoptarg)) < 1) {
-			    (void)fputs("pr: -columns must be 1 or more\n",errf);
+			    (void)fputs("pr: -columns must be 1 or more\n",err);
 			    return(1);
 			}
 			if (clcnt > 1)
@@ -1682,21 +1670,18 @@ setup(int argc, char **argv)
 			    isdigit((unsigned char)*eoptarg)) {
 				if ((ingap = atoi(eoptarg)) < 0) {
 					(void)fputs(
-					"pr: -e gap must be 0 or more\n", errf);
+					"pr: -e gap must be 0 or more\n", err);
 					return(1);
 				}
 				if (ingap == 0)
 					ingap = INGAP;
 			} else if ((eoptarg != NULL) && (*eoptarg != '\0')) {
-				(void)fprintf(errf,
+				(void)fprintf(err,
 				      "pr: invalid value for -e %s\n", eoptarg);
 				return(1);
 			} else
 				ingap = INGAP;
 			break;
-		case 'f':
-			pgpause |= FIRSTPAGE;
-			/*FALLTHROUGH*/
 		case 'F':
 			++formfeed;
 			break;
@@ -1714,13 +1699,13 @@ setup(int argc, char **argv)
 			    isdigit((unsigned char)*eoptarg)) {
 				if ((ogap = atoi(eoptarg)) < 0) {
 					(void)fputs(
-					"pr: -i gap must be 0 or more\n", errf);
+					"pr: -i gap must be 0 or more\n", err);
 					return(1);
 				}
 				if (ogap == 0)
 					ogap = OGAP;
 			} else if ((eoptarg != NULL) && (*eoptarg != '\0')) {
-				(void)fprintf(errf,
+				(void)fprintf(err,
 				      "pr: invalid value for -i %s\n", eoptarg);
 				return(1);
 			} else
@@ -1730,7 +1715,7 @@ setup(int argc, char **argv)
 			if (!isdigit((unsigned char)*eoptarg) ||
 			    ((lines=atoi(eoptarg)) < 1)) {
 				(void)fputs(
-				 "pr: Number of lines must be 1 or more\n",errf);
+				 "pr: Number of lines must be 1 or more\n",err);
 				return(1);
 			}
 			break;
@@ -1747,11 +1732,11 @@ setup(int argc, char **argv)
 			    isdigit((unsigned char)*eoptarg)) {
 				if ((nmwd = atoi(eoptarg)) < 1) {
 					(void)fputs(
-					"pr: -n width must be 1 or more\n",errf);
+					"pr: -n width must be 1 or more\n",err);
 					return(1);
 				}
 			} else if ((eoptarg != NULL) && (*eoptarg != '\0')) {
-				(void)fprintf(errf,
+				(void)fprintf(err,
 				      "pr: invalid value for -n %s\n", eoptarg);
 				return(1);
 			} else
@@ -1761,12 +1746,9 @@ setup(int argc, char **argv)
 			if (!isdigit((unsigned char)*eoptarg) ||
 			    ((offst = atoi(eoptarg))< 1)){
 				(void)fputs("pr: -o offset must be 1 or more\n",
-					errf);
+					err);
 				return(1);
 			}
-			break;
-		case 'p':
-			pgpause |= EACHPAGE;
 			break;
 		case 'r':
 			++nodiag;
@@ -1778,7 +1760,7 @@ setup(int argc, char **argv)
 			else
 				schar = *eoptarg++;
 			if (eoptarg && *eoptarg != '\0') {
-				(void)fprintf(errf,
+				(void)fprintf(err,
 				      "pr: invalid value for -s %s\n", eoptarg);
 				return(1);
 			}
@@ -1794,7 +1776,7 @@ setup(int argc, char **argv)
 			if (!isdigit((unsigned char)*eoptarg) ||
 			    ((pgwd = atoi(eoptarg)) < 1)){
 				(void)fputs(
-				   "pr: -w width must be 1 or more \n",errf);
+				   "pr: -w width must be 1 or more \n",err);
 				return(1);
 			}
 			break;
@@ -1819,11 +1801,11 @@ setup(int argc, char **argv)
 	if (across) {
 		if (clcnt == 1) {
 			(void)fputs("pr: -a flag requires multiple columns\n",
-				errf);
+				err);
 			return(1);
 		}
 		if (merge) {
-			(void)fputs("pr: -m cannot be used with -a\n", errf);
+			(void)fputs("pr: -m cannot be used with -a\n", err);
 			return(1);
 		}
 	}
@@ -1846,7 +1828,7 @@ setup(int argc, char **argv)
 	if (cflag) {
 		if (merge) {
 			(void)fputs(
-			  "pr: -m cannot be used with multiple columns\n", errf);
+			  "pr: -m cannot be used with multiple columns\n", err);
 			return(1);
 		}
 		if (nmwd) {
@@ -1857,7 +1839,7 @@ setup(int argc, char **argv)
 			pgwd = ((colwd + 1) * clcnt) - 1;
 		}
 		if (colwd < 1) {
-			(void)fprintf(errf,
+			(void)fprintf(err,
 			  "pr: page width is too small for %d columns\n",clcnt);
 			return(1);
 		}
@@ -1883,17 +1865,6 @@ setup(int argc, char **argv)
 			if (lines & 1)
 				++addone;
 			lines /= 2;
-		}
-	}
-
-	/*
-	 * open /dev/tty if we are to pause before each page
-	 * but only if stdout is a terminal and stdin is not a terminal
-	 */
-	if (ttyout && pgpause && !isatty(fileno(stdin))) {
-		if ((ttyinf = fopen("/dev/tty", "r")) == NULL) {
-			(void)fprintf(errf, "pr: cannot open terminal\n");
-			return(1);
 		}
 	}
 

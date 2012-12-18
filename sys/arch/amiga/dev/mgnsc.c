@@ -1,4 +1,4 @@
-/*	$NetBSD: mgnsc.c,v 1.46 2012/10/27 17:17:30 chs Exp $ */
+/*	$NetBSD: mgnsc.c,v 1.43 2008/06/13 08:13:37 cegger Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -58,12 +58,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mgnsc.c,v 1.46 2012/10/27 17:17:30 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mgnsc.c,v 1.43 2008/06/13 08:13:37 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -76,8 +78,8 @@ __KERNEL_RCSID(0, "$NetBSD: mgnsc.c,v 1.46 2012/10/27 17:17:30 chs Exp $");
 #include <amiga/dev/siopvar.h>
 #include <amiga/dev/zbusvar.h>
 
-void mgnscattach(device_t, device_t, void *);
-int mgnscmatch(device_t, cfdata_t, void *);
+void mgnscattach(struct device *, struct device *, void *);
+int mgnscmatch(struct device *, struct cfdata *, void *);
 int mgnsc_dmaintr(void *);
 #ifdef DEBUG
 void mgnsc_dump(void);
@@ -87,36 +89,34 @@ void mgnsc_dump(void);
 #ifdef DEBUG
 #endif
 
-CFATTACH_DECL_NEW(mgnsc, sizeof(struct siop_softc),
+CFATTACH_DECL(mgnsc, sizeof(struct siop_softc),
     mgnscmatch, mgnscattach, NULL, NULL);
 
 /*
  * if we are a CSA Magnum 40 SCSI
  */
 int
-mgnscmatch(device_t parent, cfdata_t cf, void *aux)
+mgnscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 	if (zap->manid == 1058 && zap->prodid == 17)
 		return(1);
 	return(0);
 }
 
 void
-mgnscattach(device_t parent, device_t self, void *aux)
+mgnscattach(struct device *pdp, struct device *dp, void *auxp)
 {
-	struct siop_softc *sc = device_private(self);
+	struct siop_softc *sc = (struct siop_softc *)dp;
 	struct zbus_args *zap;
 	siop_regmap_p rp;
 	struct scsipi_adapter *adapt = &sc->sc_adapter;
 	struct scsipi_channel *chan = &sc->sc_channel;
 
-	sc->sc_dev = self;
-
 	printf("\n");
-	zap = aux;
+	zap = auxp;
 
 	sc->sc_siopp = rp = (siop_regmap_p)((char *)zap->va + 0x8000);
 
@@ -127,14 +127,13 @@ mgnscattach(device_t parent, device_t self, void *aux)
 	sc->sc_ctest7 = SIOP_CTEST7_TT1;
 	sc->sc_dcntl = 0x00;
 
-	sc->sc_siop_si = softint_establish(SOFTINT_BIO,
-	    (void (*)(void *))siopintr, sc);
+	alloc_sicallback();
 
 	/*
 	 * Fill in the scsipi_adapter.
 	 */
 	memset(adapt, 0, sizeof(*adapt));
-	adapt->adapt_dev = self;
+	adapt->adapt_dev = &sc->sc_dev;
 	adapt->adapt_nchannels = 1;
 	adapt->adapt_openings = 7;
 	adapt->adapt_max_periph = 1;
@@ -162,14 +161,15 @@ mgnscattach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(self, chan, scsiprint);
+	config_found(dp, chan, scsiprint);
 }
 
 /*
  * Level 6 interrupt processing for the Magnum/40 SCSI. Because the
  * level 6 interrupt is above splbio, the interrupt status is saved
- * and a softint scheduled.  This way, the actual processing of the
- * interrupt can be deferred until splbio is unblocked.
+ * and an sicallback to the level 2 interrupt handler scheduled.
+ * This way, the actual processing of the interrupt can be deferred
+ * until splbio is unblocked.
  */
 
 int
@@ -199,7 +199,7 @@ mgnsc_dmaintr(void *arg)
 	rp->siop_sien = 0;
 	rp->siop_dien = 0;
 	sc->sc_flags |= SIOP_INTDEFER | SIOP_INTSOFF;
-	softint_schedule(sc->sc_siop_si);
+	add_sicallback((sifunc_t)siopintr, sc, NULL);
 	return (1);
 }
 

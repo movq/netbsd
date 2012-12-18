@@ -1,5 +1,4 @@
-/*	Id: defs.h,v 1.23 2011/12/12 09:18:25 plunky Exp 	*/	
-/*	$NetBSD: defs.h,v 1.1.1.4 2012/01/11 20:33:25 plunky Exp $	*/
+/*	$Id: defs.h,v 1.1.1.1 2008/08/24 05:33:06 gmcgarry Exp $	*/
 /*
  * Copyright(C) Caldera International Inc. 2001-2002. All rights reserved.
  *
@@ -37,11 +36,6 @@
 #include <ctype.h>
 #include <stdlib.h>
 
-/* Copied from ../../cc/ccom/pass1.h. */
-#define DATA	1
-#define RDATA	2
-#define UDATA	4
-
 #define VL 6
 #define XL 8
 
@@ -72,7 +66,6 @@ extern int mflag, tflag;
 
 extern flag profileflag;
 extern flag optimflag;
-extern flag quietflag;
 extern flag nowarnflag;
 extern flag ftn66flag;
 extern flag shiftcase;
@@ -558,6 +551,12 @@ void setloc(int);
 void prnloc(char *name);
 void fprint(bigptr p, int indx);
 void ckfree(void *p);
+
+
+int fno;
+int type;
+chainp args;
+
 
 #undef expptr
 #undef tagptr

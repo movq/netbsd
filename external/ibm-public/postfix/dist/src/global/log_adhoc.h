@@ -1,4 +1,4 @@
-/*	$NetBSD: log_adhoc.h,v 1.1.1.1 2009/06/23 10:08:46 tron Exp $	*/
+/*	$NetBSD: log_adhoc.h,v 1.1.1.1.2.3 2011/01/07 01:24:03 riz Exp $	*/
 
 #ifndef _LOG_ADHOC_H_INCLUDED_
 #define _LOG_ADHOC_H_INCLUDED_

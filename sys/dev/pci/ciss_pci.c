@@ -1,4 +1,4 @@
-/*	$NetBSD: ciss_pci.c,v 1.10 2012/10/27 17:18:28 chs Exp $	*/
+/*	$NetBSD: ciss_pci.c,v 1.5 2008/04/10 19:13:36 cegger Exp $	*/
 /*	$OpenBSD: ciss_pci.c,v 1.9 2005/12/13 15:56:01 brad Exp $	*/
 
 /*
@@ -19,7 +19,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ciss_pci.c,v 1.10 2012/10/27 17:18:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ciss_pci.c,v 1.5 2008/04/10 19:13:36 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,10 +41,10 @@ __KERNEL_RCSID(0, "$NetBSD: ciss_pci.c,v 1.10 2012/10/27 17:18:28 chs Exp $");
 
 #define	CISS_BAR	0x10
 
-int	ciss_pci_match(device_t, cfdata_t, void *);
-void	ciss_pci_attach(device_t, device_t, void *);
+int	ciss_pci_match(struct device *, struct cfdata *, void *);
+void	ciss_pci_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ciss_pci, sizeof(struct ciss_softc),
+CFATTACH_DECL(ciss_pci, sizeof(struct ciss_softc),
 	ciss_pci_match, ciss_pci_attach, NULL, NULL);
 
 const struct {
@@ -225,7 +225,8 @@ const struct {
 };
 
 int
-ciss_pci_match(device_t parent, cfdata_t match, void *aux)
+ciss_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	pcireg_t reg = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_SUBSYS_ID_REG);
@@ -244,9 +245,9 @@ ciss_pci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-ciss_pci_attach(device_t parent, device_t self, void *aux)
+ciss_pci_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ciss_softc *sc = device_private(self);
+	struct ciss_softc *sc = (struct ciss_softc *)self;
 	struct pci_attach_args *pa = aux;
 	bus_size_t size, cfgsz;
 	pci_intr_handle_t ih;
@@ -254,8 +255,6 @@ ciss_pci_attach(device_t parent, device_t self, void *aux)
 	int cfg_bar, memtype;
 	pcireg_t reg = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_SUBSYS_ID_REG);
 	int i;
-
-	sc->sc_dev = self;
 
 	for (i = 0; ciss_pci_devices[i].vendor; i++)
 	{
@@ -326,17 +325,17 @@ ciss_pci_attach(device_t parent, device_t self, void *aux)
 	intrstr = pci_intr_string(pa->pa_pc, ih);
 	sc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_BIO, ciss_intr, sc);
 	if (!sc->sc_ih) {
-		aprint_error_dev(sc->sc_dev, "can't establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "can't establish interrupt");
 		if (intrstr)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			printf(" at %s", intrstr);
+		printf("\n");
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, size);
 		if (cfg_bar != CISS_BAR)
 			bus_space_unmap(sc->sc_iot, sc->cfg_ioh, cfgsz);
 	}
 
-	printf("%s: interrupting at %s\n%s", device_xname(sc->sc_dev), intrstr,
-	       device_xname(sc->sc_dev));
+	printf("%s: interrupting at %s\n%s", device_xname(&sc->sc_dev), intrstr,
+	       device_xname(&sc->sc_dev));
 
 	if (ciss_attach(sc)) {
 		pci_intr_disestablish(pa->pa_pc, sc->sc_ih);

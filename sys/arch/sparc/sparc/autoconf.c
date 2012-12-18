@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.246 2012/10/27 17:18:12 chs Exp $ */
+/*	$NetBSD: autoconf.c,v 1.229.4.1 2009/05/30 16:57:18 snj Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -48,11 +48,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.246 2012/10/27 17:18:12 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.229.4.1 2009/05/30 16:57:18 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_sparc_arch.h"
 
@@ -73,19 +72,17 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.246 2012/10/27 17:18:12 chs Exp $");
 #include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/msgbuf.h>
+#include <sys/user.h>
 #include <sys/boot_flag.h>
 #include <sys/ksyms.h>
-#include <sys/userconf.h>
 
 #include <net/if.h>
-#include <net/if_ether.h>
 
 #include <dev/cons.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/pcb.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/promlib.h>
 #include <machine/autoconf.h>
 #include <machine/bootinfo.h>
@@ -122,7 +119,7 @@ extern	int kgdb_debug_panic;
 #endif
 extern void *bootinfo;
 
-#if !NKSYMS && !defined(DDB) && !defined(MODULAR)
+#if !NKSYMS && !defined(DDB) && !defined(LKM)
 void bootinfo_relocate(void *);
 #endif
 
@@ -132,8 +129,8 @@ static	void crazymap(const char *, int *);
 int	st_crazymap(int);
 int	sd_crazymap(int);
 void	sync_crash(void);
-int	mainbus_match(device_t, cfdata_t, void *);
-static	void mainbus_attach(device_t, device_t, void *);
+int	mainbus_match(struct device *, struct cfdata *, void *);
+static	void mainbus_attach(struct device *, struct device *, void *);
 
 struct	bootpath bootpath[8];
 int	nbootpath;
@@ -158,7 +155,7 @@ int autoconf_debug = 0;
  * device names with our internal names.
  */
 int
-matchbyname(device_t parent, cfdata_t cf, void *aux)
+matchbyname(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	printf("%s: WARNING: matchbyname\n", cf->cf_name);
@@ -265,22 +262,20 @@ static void bootstrapIIep(void);
 void
 bootstrap(void)
 {
-	extern uint8_t u0[];
-	extern struct consdev consdev_prom;
-
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+	extern struct user *proc0paddr;
+#if NKSYMS || defined(DDB) || defined(LKM)
 	struct btinfo_symtab *bi_sym;
 #else
 	extern int end[];
 #endif
-	struct btinfo_boothowto *bi_howto;
 
-	cn_tab = &consdev_prom;
 	prom_init();
 
 	/* Find the number of CPUs as early as possible */
 	sparc_ncpus = find_cpus();
-	uvm_lwp_setuarea(&lwp0, (vaddr_t)u0);
+
+	/* Attach user structure to proc0 */
+	lwp0.l_addr = proc0paddr;
 
 	cpuinfo.master = 1;
 	getcpuinfo(&cpuinfo, 0);
@@ -294,7 +289,7 @@ bootstrap(void)
 	}
 #endif /* SUN4M || SUN4D */
 
-#if !NKSYMS && !defined(DDB) && !defined(MODULAR)
+#if !NKSYMS && !defined(DDB) && !defined(LKM)
 	/*
 	 * We want to reuse the memory where the symbols were stored
 	 * by the loader. Relocate the bootinfo array which is loaded
@@ -339,29 +334,25 @@ bootstrap(void)
 		/* Map Interrupt Enable Register */
 		pmap_kenter_pa(INTRREG_VA,
 		    INT_ENABLE_REG_PHYSADR | PMAP_NC | PMAP_OBIO,
-		    VM_PROT_READ | VM_PROT_WRITE, 0);
+		    VM_PROT_READ | VM_PROT_WRITE);
 		pmap_update(pmap_kernel());
 		/* Disable all interrupts */
 		*((unsigned char *)INTRREG_VA) = 0;
 	}
 #endif /* SUN4 || SUN4C */
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+
+#if NKSYMS || defined(DDB) || defined(LKM)
 	if ((bi_sym = lookup_bootinfo(BTINFO_SYMTAB)) != NULL) {
 		if (bi_sym->ssym < KERNBASE) {
 			/* Assume low-loading boot loader */
 			bi_sym->ssym += KERNBASE;
 			bi_sym->esym += KERNBASE;
 		}
-		ksyms_addsyms_elf(bi_sym->nsym, (void*)bi_sym->ssym,
-		    (void*)bi_sym->esym);
+		ksyms_init(bi_sym->nsym, (int *)bi_sym->ssym,
+		    (int *)bi_sym->esym);
 	}
 #endif
-
-	if ((bi_howto = lookup_bootinfo(BTINFO_BOOTHOWTO)) != NULL) {
-		boothowto = bi_howto->boothowto;
-printf("initialized boothowt from bootloader: %x\n", boothowto);
-	}
 }
 
 #if defined(SUN4M) && !defined(MSIIEP)
@@ -513,7 +504,7 @@ bootpath_build(void)
 	/*
 	 * Grab boot path from PROM and split into `bootpath' components.
 	 */
-	memset(bootpath, 0, sizeof(bootpath));
+	bzero(bootpath, sizeof(bootpath));
 	bp = bootpath;
 	cp = prom_getbootpath();
 	switch (prom_version()) {
@@ -924,22 +915,12 @@ st_crazymap(int n)
 void
 cpu_configure(void)
 {
-	struct pcb *pcb0;
-	bool userconf = (boothowto & RB_USERCONF) != 0;
 
 	/* initialise the softintr system */
 	sparc_softintr_init();
 
 	/* build the bootpath */
 	bootpath_build();
-	if (((boothowto & RB_USERCONF) != 0) && !userconf)
-		/*
-		 * Old bootloaders do not pass boothowto, and MI code
-		 * has already handled userconfig before we get here
-		 * and finally fetch the right options. So if we missed
-		 * it, just do it here.
- 		 */
-		userconf_prompt();
 
 #if defined(SUN4)
 	if (CPU_ISSUN4) {
@@ -989,12 +970,14 @@ cpu_configure(void)
 		panic("mainbus not configured");
 
 	/*
-	 * XXX Re-zero lwp0's pcb, to nullify the effect of the
+	 * XXX Re-zero proc0's user area, to nullify the effect of the
 	 * XXX stack running into it during auto-configuration.
 	 * XXX - should fix stack usage.
 	 */
-	pcb0 = lwp_getpcb(&lwp0);
-	memset(pcb0, 0, sizeof(struct pcb));
+	{
+		extern struct user *proc0paddr;
+		bzero(proc0paddr, sizeof(struct user));
+	}
 
 	spl0();
 }
@@ -1003,15 +986,17 @@ void
 cpu_rootconf(void)
 {
 	struct bootpath *bp;
+	int bootpartition;
 
 	bp = nbootpath == 0 ? NULL : &bootpath[nbootpath-1];
 	if (bp == NULL)
-		booted_partition = 0;
+		bootpartition = 0;
 	else if (booted_device != bp->dev)
-		booted_partition = 0;
+		bootpartition = 0;
 	else
-		booted_partition = bp->val[2];
-	rootconf();
+		bootpartition = bp->val[2];
+
+	setroot(booted_device, bootpartition);
 }
 
 /*
@@ -1061,7 +1046,7 @@ mbprint(void *aux, const char *name)
 }
 
 int
-mainbus_match(device_t parent, cfdata_t cf, void *aux)
+mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	return (1);
@@ -1086,7 +1071,7 @@ static int	prom_getprop_address1(int, void **);
  * We also record the `node id' of the default frame buffer, if any.
  */
 static void
-mainbus_attach(device_t parent, device_t dev, void *aux)
+mainbus_attach(struct device *parent, struct device *dev, void *aux)
 {
 extern struct sparc_bus_dma_tag mainbus_dma_tag;
 extern struct sparc_bus_space_tag mainbus_space_tag;
@@ -1199,7 +1184,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 #if defined(SUN4)
 	if (CPU_ISSUN4) {
 
-		memset(&ma, 0, sizeof(ma));
+		bzero(&ma, sizeof(ma));
 		/* Configure the CPU. */
 		ma.ma_bustag = &mainbus_space_tag;
 		ma.ma_dmatag = &mainbus_dma_tag;
@@ -1262,7 +1247,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 					continue;
 			}
 
-			memset(&ma, 0, sizeof(ma));
+			bzero(&ma, sizeof(ma));
 			ma.ma_bustag = &mainbus_space_tag;
 			ma.ma_dmatag = &mainbus_dma_tag;
 			ma.ma_node = node;
@@ -1274,7 +1259,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 			}
 		}
 	} else if (CPU_ISSUN4C) {
-		memset(&ma, 0, sizeof(ma));
+		bzero(&ma, sizeof(ma));
 		ma.ma_bustag = &mainbus_space_tag;
 		ma.ma_dmatag = &mainbus_dma_tag;
 		ma.ma_node = findroot();
@@ -1290,7 +1275,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 			panic(sp);
 		}
 
-		memset(&ma, 0, sizeof ma);
+		bzero(&ma, sizeof ma);
 		ma.ma_bustag = &mainbus_space_tag;
 		ma.ma_dmatag = &mainbus_dma_tag;
 		ma.ma_name = prom_getpropstringA(node, "name",
@@ -1337,7 +1322,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 		if (sp != NULL)
 			continue; /* an "early" device already configured */
 
-		memset(&ma, 0, sizeof ma);
+		bzero(&ma, sizeof ma);
 		ma.ma_bustag = &mainbus_space_tag;
 		ma.ma_dmatag = &mainbus_dma_tag;
 		ma.ma_name = prom_getpropstringA(node, "name",
@@ -1382,7 +1367,8 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 #endif /* SUN4C || SUN4M || SUN4D */
 }
 
-CFATTACH_DECL_NEW(mainbus, 0, mainbus_match, mainbus_attach, NULL, NULL);
+CFATTACH_DECL(mainbus, sizeof(struct device),
+    mainbus_match, mainbus_attach, NULL, NULL);
 
 
 #if defined(SUN4C) || defined(SUN4M) || defined(SUN4D)
@@ -1399,7 +1385,7 @@ prom_getprop_reg1(int node, struct openprom_addr *rrp)
 		if (error == ENOENT &&
 		    strcmp(prom_getpropstringA(node, "device_type", buf, sizeof buf),
 			   "hierarchical") == 0) {
-			memset(rrp, 0, sizeof(struct openprom_addr));
+			bzero(rrp, sizeof(struct openprom_addr));
 			error = 0;
 		}
 		return (error);
@@ -1501,11 +1487,10 @@ romgetcursoraddr(int **rowp, int **colp)
 #define BUSCLASS_PCIC		9
 #define BUSCLASS_PCI		10
 
-static int bus_class(device_t);
+static int bus_class(struct device *);
 static const char *bus_compatible(const char *);
-static int instance_match(device_t, void *, struct bootpath *);
-static void nail_bootdev(device_t, struct bootpath *);
-static void set_network_props(device_t, void *);
+static int instance_match(struct device *, void *, struct bootpath *);
+static void nail_bootdev(struct device *, struct bootpath *);
 
 static struct {
 	const char	*name;
@@ -1564,7 +1549,7 @@ bus_compatible(const char *bpname)
 }
 
 static int
-bus_class(device_t dev)
+bus_class(struct device *dev)
 {
 	int i, class;
 
@@ -1586,47 +1571,8 @@ bus_class(device_t dev)
 	return (class);
 }
 
-static void
-set_network_props(device_t dev, void *aux)
-{
-	struct mainbus_attach_args *ma;
-	struct sbus_attach_args *sa;
-	struct iommu_attach_args *iom;
-	struct pci_attach_args *pa;
-	uint8_t eaddr[ETHER_ADDR_LEN];
-	prop_dictionary_t dict;
-	prop_data_t blob;
-	int ofnode;
-
-	ofnode = 0;
-	switch (bus_class(device_parent(dev))) {
-	case BUSCLASS_MAINBUS:
-		ma = aux;
-		ofnode = ma->ma_node;
-		break;
-	case BUSCLASS_SBUS:
-		sa = aux;
-		ofnode = sa->sa_node;
-		break;
-	case BUSCLASS_IOMMU:
-		iom = aux;
-		ofnode = iom->iom_node;
-		break;
-	case BUSCLASS_PCI:
-		pa = aux;
-		ofnode = PCITAG_NODE(pa->pa_tag);
-		break;
-	}
-
-	prom_getether(ofnode, eaddr);
-	dict = device_properties(dev);
-	blob = prop_data_create_data(eaddr, ETHER_ADDR_LEN);
-	prop_dictionary_set(dict, "mac-address", blob);
-	prop_object_release(blob);
-}
-
 int
-instance_match(device_t dev, void *aux, struct bootpath *bp)
+instance_match(struct device *dev, void *aux, struct bootpath *bp)
 {
 	struct mainbus_attach_args *ma;
 	struct sbus_attach_args *sa;
@@ -1724,12 +1670,12 @@ instance_match(device_t dev, void *aux, struct bootpath *bp)
 }
 
 void
-nail_bootdev(device_t dev, struct bootpath *bp)
+nail_bootdev(struct device *dev, struct bootpath *bp)
 {
 
 	if (bp->dev != NULL)
 		panic("device_register: already got a boot device: %s",
-			device_xname(bp->dev));
+			bp->dev->dv_xname);
 
 	/*
 	 * Mark this bootpath component by linking it to the matched
@@ -1746,7 +1692,7 @@ nail_bootdev(device_t dev, struct bootpath *bp)
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 	struct bootpath *bp = bootpath_store(0, NULL);
 	const char *bpname;
@@ -1765,8 +1711,8 @@ device_register(device_t dev, void *aux)
 
 	DPRINTF(ACDB_BOOTDEV,
 	    ("\n%s: device_register: dvname %s(%s) bpname %s(%s)\n",
-	    device_xname(dev), device_cfdata(dev)->cf_name,
-	    device_xname(dev), bpname, bp->name));
+	    dev->dv_xname, device_cfdata(dev)->cf_name, dev->dv_xname,
+	    bpname, bp->name));
 
 	/* First, match by name */
 	if (!device_is_a(dev, bpname))
@@ -1794,23 +1740,19 @@ device_register(device_t dev, void *aux)
 			booted_device = bp->dev = dev;
 			bootpath_store(1, bp + 1);
 			DPRINTF(ACDB_BOOTDEV, ("\t-- found bus controller %s\n",
-			    device_xname(dev)));
+			    dev->dv_xname));
 			return;
 		}
 	} else if (device_is_a(dev, "le") ||
 		   device_is_a(dev, "hme") ||
-		   device_is_a(dev, "be") ||
-		   device_is_a(dev, "ie")) {
-
-		set_network_props(dev, aux);
-
+		   device_is_a(dev, "be")) {
 		/*
 		 * LANCE, Happy Meal, or BigMac ethernet device
 		 */
 		if (instance_match(dev, aux, bp) != 0) {
 			nail_bootdev(dev, bp);
 			DPRINTF(ACDB_BOOTDEV, ("\t-- found ethernet controller %s\n",
-			    device_xname(dev)));
+			    dev->dv_xname));
 			return;
 		}
 	} else if (device_is_a(dev, "sd") ||
@@ -1864,7 +1806,7 @@ device_register(device_t dev, void *aux)
 		    periph->periph_lun == lun) {
 			nail_bootdev(dev, bp);
 			DPRINTF(ACDB_BOOTDEV, ("\t-- found [cs]d disk %s\n",
-			    device_xname(dev)));
+			    dev->dv_xname));
 			return;
 		}
 #endif /* NSCSIBUS */
@@ -1875,7 +1817,7 @@ device_register(device_t dev, void *aux)
 		if (instance_match(dev, aux, bp) != 0) {
 			nail_bootdev(dev, bp);
 			DPRINTF(ACDB_BOOTDEV, ("\t-- found x[dy] disk %s\n",
-			    device_xname(dev)));
+			    dev->dv_xname));
 			return;
 		}
 
@@ -1889,7 +1831,7 @@ device_register(device_t dev, void *aux)
 		 */
 		nail_bootdev(dev, bp);
 		DPRINTF(ACDB_BOOTDEV, ("\t-- found floppy drive %s\n",
-		    device_xname(dev)));
+		    dev->dv_xname));
 		return;
 	} else {
 		/*
@@ -1927,7 +1869,7 @@ lookup_bootinfo(int type)
 	return (NULL);
 }
 
-#if !NKSYMS && !defined(DDB) && !defined(MODULAR)
+#if !NKSYMS && !defined(DDB) && !defined(LKM)
 /*
  * Move bootinfo from the current kernel top to the proposed
  * location. As a side-effect, `kernel_top' is adjusted to point
@@ -1989,4 +1931,4 @@ bootinfo_relocate(void *newloc)
 	bootinfo = newloc;
 	kernel_top = (char *)newloc + ALIGN(bi_size);
 }
-#endif /* !NKSYMS && !defined(DDB) && !defined(MODULAR) */
+#endif /* !NKSYMS && !defined(DDB) && !defined(LKM) */

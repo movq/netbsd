@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.34 2010/11/12 13:18:59 uebayasi Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.32 2008/06/04 12:41:41 ad Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.34 2010/11/12 13:18:59 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.32 2008/06/04 12:41:41 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,7 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.34 2010/11/12 13:18:59 uebayasi Exp $"
 #include <sys/vnode.h>
 #include <sys/device.h>
 
-#include <uvm/uvm.h>
+#include <uvm/uvm_extern.h>
 
 #define _VAX_BUS_DMA_PRIVATE
 #include <machine/bus.h>
@@ -102,7 +102,7 @@ _bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 	    (flags & BUS_DMA_NOWAIT) ? M_NOWAIT : M_WAITOK)) == NULL)
 		return (ENOMEM);
 
-	memset(mapstore, 0, mapsize);
+	bzero(mapstore, mapsize);
 	map = (struct vax_bus_dmamap *)mapstore;
 	map->_dm_size = size;
 	map->_dm_segcnt = nsegments;

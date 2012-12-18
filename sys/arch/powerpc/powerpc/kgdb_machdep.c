@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_machdep.c,v 1.22 2010/03/02 21:53:20 matt Exp $	*/
+/*	$NetBSD: kgdb_machdep.c,v 1.20 2008/02/05 22:31:50 garbled Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.22 2010/03/02 21:53:20 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.20 2008/02/05 22:31:50 garbled Exp $");
 
 #include "opt_ddb.h"
 
@@ -54,23 +54,8 @@ __KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.22 2010/03/02 21:53:20 matt Exp $
 #include <machine/trap.h>
 #include <machine/pmap.h>
 
-#include <powerpc/spr.h>
-#if defined (PPC_OEA) || defined (PPC_OEA601) || defined (PPC_OEA64_BRIDGE)
-#include <powerpc/oea/spr.h>
 #include <powerpc/oea/bat.h>
-
-#elif defined (PPC_OEA64)
-#include <powerpc/oea/spr.h>
-
-#elif defined (PPC_IBM4XX)
-#include <powerpc/booke/spr.h>
-
-#elif defined (PPC_BOOKE)
-#include <powerpc/booke/spr.h>
-
-#else
-#error unknown architecture
-#endif
+#include <powerpc/spr.h>
 
 /*
  * Determine if the memory at va..(va+len) is valid.
@@ -81,7 +66,7 @@ kgdb_acc(vaddr_t va, size_t len)
 	vaddr_t   last_va;
 	paddr_t   pa;
 	u_int msr;
-#if defined (PPC_OEA) || defined (PPC_OEA601) || defined (PPC_OEA64_BRIDGE)
+#if !defined (PPC_OEA64) && !defined (PPC_IBM4XX)
 	u_int batu, batl;
 #endif
 
@@ -91,7 +76,7 @@ kgdb_acc(vaddr_t va, size_t len)
 		return 1;
 	}
 
-#if defined (PPC_OEA) || defined (PPC_OEA601) || defined (PPC_OEA64_BRIDGE)
+#if !defined (PPC_OEA64) && !defined (PPC_IBM4XX)
 	/* Now check battable registers */
 #ifdef PPC_OEA601
 	if ((mfpvr() >> 16) == MPC601) {
@@ -144,7 +129,7 @@ kgdb_acc(vaddr_t va, size_t len)
 		}
 #endif
 	}
-#endif /* PPC_OEA || PPC_OEA601 || PPC_OEA64_BRIDGE */
+#endif /* !defined (PPC_OEA64) && !defined (PPC_IBM4XX) */
 
 #if defined(PPC_IBM4XX)
 	/* Is it (supposed to be) TLB-reserved mapping? */
@@ -178,7 +163,7 @@ int
 kgdb_signal(int type)
 {
 	switch (type) {
-#if defined (PPC_IBM4XX) || defined (PPC_BOOKE)
+#ifdef PPC_IBM4XX
 	case EXC_PIT:		/* 40x - Programmable interval timer */
 	case EXC_FIT:		/* 40x - Fixed interval timer */
 		return SIGALRM;
@@ -193,7 +178,7 @@ kgdb_signal(int type)
 		return SIGSEGV;
 #endif
 
-#if defined (PPC_OEA) || defined (PPC_OEA601) || defined (PPC_OEA64_BRIDGE)
+#if !defined(PPC_OEA64) && !defined (PPC_IBM4XX)
 	case EXC_PERF:		/* 604/750/7400 - Performance monitoring */
 	case EXC_BPT:		/* 604/750/7400 - Instruction breakpoint */
 	case EXC_SMI:		/* 604/750/7400 - System management interrupt */
@@ -284,7 +269,7 @@ kgdb_setregs(db_regs_t *regs, kgdb_reg_t *gdb_regs)
 void
 kgdb_connect(int verbose)
 {
-	if (kgdb_dev == NODEV)
+	if (kgdb_dev < 0)
 		return;
 
 	if (verbose)
@@ -306,7 +291,7 @@ kgdb_connect(int verbose)
 void
 kgdb_panic(void)
 {
-	if (kgdb_dev != NODEV && kgdb_debug_panic) {
+	if (kgdb_dev >= 0 && kgdb_debug_panic) {
 		printf("entering kgdb\n");
 		kgdb_connect(kgdb_active == 0);
 	}

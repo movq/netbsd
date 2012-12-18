@@ -1,4 +1,4 @@
-/*	$NetBSD: bthub.c,v 1.18 2012/04/03 09:32:53 plunky Exp $	*/
+/*	$NetBSD: bthub.c,v 1.14 2008/06/12 21:47:11 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bthub.c,v 1.18 2012/04/03 09:32:53 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bthub.c,v 1.14 2008/06/12 21:47:11 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -59,7 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: bthub.c,v 1.18 2012/04/03 09:32:53 plunky Exp $");
  */
 
 /* autoconf(9) glue */
-static int	bthub_match(device_t, cfdata_t, void *);
+static int	bthub_match(device_t, struct cfdata *, void *);
 static void	bthub_attach(device_t, device_t, void *);
 static int	bthub_detach(device_t, int);
 
@@ -86,7 +86,7 @@ static int	bthub_pioctl(dev_t, unsigned long, prop_dictionary_t, int, struct lwp
  */
 
 static int
-bthub_match(device_t self, cfdata_t cfdata, void *arg)
+bthub_match(device_t self, struct cfdata *cfdata, void *arg)
 {
 
 	return 1;
@@ -110,15 +110,11 @@ bthub_attach(device_t parent, device_t self, void *aux)
 			addr->b[2], addr->b[1], addr->b[0]);
 
 	aprint_normal("\n");
-
-	pmf_device_register(self, NULL, NULL);
 }
 
 static int
 bthub_detach(device_t self, int flags)
 {
-
-	pmf_device_deregister(self);
 
 	return config_detach_children(self, flags);
 }

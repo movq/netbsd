@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cuereg.h,v 1.18 2012/02/02 19:43:07 tls Exp $	*/
+/*	$NetBSD: if_cuereg.h,v 1.14 2001/01/21 22:09:24 augustss Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -165,13 +165,20 @@ struct cue_cdata {
 };
 
 struct cue_softc {
-	device_t cue_dev;
+	USBBASEDEVICE		cue_dev;
 
+#if defined(__FreeBSD__) || defined(__OpenBSD__)
+	struct arpcom		arpcom;
+#define GET_IFP(sc) (&(sc)->arpcom.ac_if)
+#elif defined(__NetBSD__)
 	struct ethercom		cue_ec;
-	krndsource_t	rnd_source;
+#if NRND > 0
+	rndsource_element_t	rnd_source;
+#endif
 #define GET_IFP(sc) (&(sc)->cue_ec.ec_if)
+#endif
 
-	struct callout cue_stat_ch;
+	usb_callout_t		cue_stat_ch;
 
 	usbd_device_handle	cue_udev;
 	usbd_interface_handle	cue_iface;

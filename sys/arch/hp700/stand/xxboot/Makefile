@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.15 2011/06/20 08:46:28 mrg Exp $
+#	$NetBSD: Makefile,v 1.12 2008/10/25 22:27:37 apb Exp $
 
 PROG=	xxboot
 NOMAN=	# defined
@@ -18,6 +18,10 @@ COPTS+=		-funsigned-char	-mdisable-fpregs
 
 .include <bsd.own.mk>
 
+.if defined(HAVE_GCC) && ${HAVE_GCC} != 4
+COPTS+=	-fwritable-strings
+.endif
+
 LINKS=	${BINDIR}/${PROG} ${BINDIR}/sdboot
 
 BINDIR=		/usr/mdec
@@ -29,8 +33,6 @@ LIBCRTBEGIN=
 LIBCRT0=
 LIBCRTEND=
 LIBC=
-
-S=		${.CURDIR}/../../../..
 
 ${PROG}: iplsum ${OBJS}
 	${_MKTARGET_LINK}
@@ -53,7 +55,6 @@ CLEANFILES+=	${PROG}1 ${PROG}2 ${PROG}1.bin ${PROG}2.bin ${PROG}.bin iplsum
 CLEANFILES+=	${SRCS:M*.c:S/.c$/.o.S/}
 
 .include <bsd.prog.mk>
-.include <bsd.klinks.mk>
 
 # override default rules
 

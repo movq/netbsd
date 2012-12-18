@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bootpef.c,v 1.10 2011/08/29 20:38:54 joerg Exp $");
+__RCSID("$NetBSD: bootpef.c,v 1.8 2008/05/02 19:22:10 xtraeme Exp $");
 #endif
 
 
@@ -82,7 +82,7 @@ __RCSID("$NetBSD: bootpef.c,v 1.10 2011/08/29 20:38:54 joerg Exp $");
  */
 
 static void mktagfile(struct host *);
-__dead static void usage(void);
+static void usage(void);
 int main(int, char **);
 
 
@@ -306,7 +306,7 @@ mktagfile(struct host *hp)
 		return;
 	}
 	len = vp - buffer;
-	if ((size_t)len != fwrite(buffer, 1, len, fp)) {
+	if (len != fwrite(buffer, 1, len, fp)) {
 		report(LOG_ERR, "write failed on \"%s\" : %s",
 			   hp->exten_file->string, get_errmsg());
 	}

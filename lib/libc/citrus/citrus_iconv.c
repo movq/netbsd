@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_iconv.c,v 1.10 2011/11/19 18:34:21 tnozaki Exp $	*/
+/*	$NetBSD: citrus_iconv.c,v 1.7 2008/07/25 14:05:25 christos Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -28,25 +28,22 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_iconv.c,v 1.10 2011/11/19 18:34:21 tnozaki Exp $");
+__RCSID("$NetBSD: citrus_iconv.c,v 1.7 2008/07/25 14:05:25 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 #include "reentrant.h"
-
-#include <sys/types.h>
-#include <sys/queue.h>
-
 #include <assert.h>
-#include <dirent.h>
-#include <errno.h>
-#include <limits.h>
-#include <paths.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <limits.h>
 #include <unistd.h>
+#include <paths.h>
+#include <dirent.h>
+#include <sys/types.h>
+#include <sys/queue.h>
 
 #include "citrus_namespace.h"
 #include "citrus_bcs.h"
@@ -68,8 +65,7 @@ __RCSID("$NetBSD: citrus_iconv.c,v 1.10 2011/11/19 18:34:21 tnozaki Exp $");
 #ifdef _REENTRANT
 static rwlock_t lock = RWLOCK_INITIALIZER;
 #endif
-
-static bool isinit = false;
+static int isinit = 0;
 static _CITRUS_HASH_HEAD(, _citrus_iconv_shared, CI_HASH_SIZE) shared_pool;
 static TAILQ_HEAD(, _citrus_iconv_shared) shared_unused;
 static int shared_num_unused, shared_max_reuse;
@@ -86,7 +82,7 @@ init_cache(void)
 			shared_max_reuse = atoi(getenv(CI_ENV_MAX_REUSE));
 		if (shared_max_reuse < 0)
 			shared_max_reuse = CI_INITIAL_MAX_REUSE;
-		isinit = true;
+		isinit = 1;
 	}
 	rwlock_unlock(&lock);
 }
@@ -111,7 +107,7 @@ lookup_iconv_entry(const char *curdir, const char *key,
 	char *p, path[PATH_MAX];
 
 	/* iconv.dir path */
-	snprintf(path, (size_t)PATH_MAX, ("%s/" _CITRUS_ICONV_DIR), curdir);
+	snprintf(path, (size_t)PATH_MAX, "%s/" _CITRUS_ICONV_DIR, curdir);
 
 	/* lookup db */
 	cp = p = _lookup_simple(path, key, linebuf, linebufsize,
@@ -222,10 +218,8 @@ open_shared(struct _citrus_iconv_shared * __restrict * __restrict rci,
 	    ci->ci_ops->io_uninit_shared == NULL ||
 	    ci->ci_ops->io_init_context == NULL ||
 	    ci->ci_ops->io_uninit_context == NULL ||
-	    ci->ci_ops->io_convert == NULL) {
-		ret = EINVAL;
+	    ci->ci_ops->io_convert == NULL)
 		goto err;
-	}
 
 	/* initialize the converter */
 	ret = (*ci->ci_ops->io_init_shared)(ci, basedir, src, dst,

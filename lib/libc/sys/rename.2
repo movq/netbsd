@@ -1,4 +1,4 @@
-.\"	$NetBSD: rename.2,v 1.26 2012/12/01 21:07:00 wiz Exp $
+.\"	$NetBSD: rename.2,v 1.22 2005/12/27 17:24:07 chs Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,12 +29,11 @@
 .\"
 .\"     @(#)rename.2	8.1 (Berkeley) 6/4/93
 .\"
-.Dd November 18, 2012
+.Dd December 27, 2005
 .Dt RENAME 2
 .Os
 .Sh NAME
-.Nm rename ,
-.Nm renameat ,
+.Nm rename
 .Nd change the name of a file
 .Sh LIBRARY
 .Lb libc
@@ -42,8 +41,6 @@
 .In stdio.h
 .Ft int
 .Fn rename "const char *from" "const char *to"
-.Ft int
-.Fn rename "int fromfd" "const char *from" "int tofd" "const char *to"
 .Sh DESCRIPTION
 .Fn rename
 causes the link named
@@ -79,31 +76,6 @@ and
 are pathnames of the same existing file in the file system's name space,
 .Fn rename
 returns successfully and performs no other action.
-.Pp
-.Fn renameat
-works the same way as
-.Fn rename
-except if
-.Fa from
-(resp.
-.Fa to )
-is relative.
-In that case, it is looked up from a directory whose file
-descriptor was passed as
-.Fa fromfd
-(resp.
-.Fa tofd ).
-Search permission is required on
-passed directory file descriptors
-except if they were opened with the
-.Dv O_SEARCH
-option.
-.Fa fromfd
-or
-.Fa tofd
-can be set to
-.Dv AT_FDCWD
-in order to specify the current directory.
 .Sh RETURN VALUES
 A 0 value is returned if the operation succeeds, otherwise
 .Fn rename
@@ -117,9 +89,9 @@ affected if:
 .Bl -tag -width Er
 .It Bq Er ENAMETOOLONG
 A component of a pathname exceeded
-.Brq Dv NAME_MAX
+.Dv {NAME_MAX}
 characters, or an entire path name exceeded
-.Brq Dv PATH_MAX
+.Dv {PATH_MAX}
 characters.
 .It Bq Er ENOENT
 A component of the
@@ -241,9 +213,6 @@ function conforms to
 .St -p1003.1-90
 and
 .St -xpg4.2 .
-.Fn renameat
-conforms to
-.St -p1003.1-2008 .
 .Sh BUGS
 The system can deadlock if a loop in the file system graph is present.
 This loop takes the form of an entry in directory

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.15 2011/10/16 17:12:11 joerg Exp $	*/
+/*	$NetBSD: main.c,v 1.14 2007/06/24 18:00:49 christos Exp $	*/
 
 /*
  * startup, main loop, environments and error handling
@@ -7,7 +7,7 @@
 #include <locale.h>
 
 #ifndef lint
-__RCSID("$NetBSD: main.c,v 1.15 2011/10/16 17:12:11 joerg Exp $");
+__RCSID("$NetBSD: main.c,v 1.14 2007/06/24 18:00:49 christos Exp $");
 #endif
 
 
@@ -565,7 +565,7 @@ shell(s, toplevel)
 		  case LSHELL:
 			if (interactive) {
 				if (i == LINTR)
-					shellf("%s", newline);
+					shellf(newline);
 				/* Reset any eof that was read as part of a
 				 * multiline command.
 				 */
@@ -864,6 +864,6 @@ aerror(ap, msg)
 	const char *msg;
 {
 	internal_errorf(1, "alloc: %s", msg);
-	errorf("%s", null); /* this is never executed - keeps gcc quiet */
+	errorf(null); /* this is never executed - keeps gcc quiet */
 	/*NOTREACHED*/
 }

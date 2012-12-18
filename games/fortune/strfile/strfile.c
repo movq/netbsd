@@ -1,4 +1,4 @@
-/*	$NetBSD: strfile.c,v 1.35 2012/10/13 20:42:56 dholland Exp $	*/
+/*	$NetBSD: strfile.c,v 1.28 2008/09/29 12:30:12 agc Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -43,37 +43,54 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)strfile.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: strfile.c,v 1.35 2012/10/13 20:42:56 dholland Exp $");
+__RCSID("$NetBSD: strfile.c,v 1.28 2008/09/29 12:30:12 agc Exp $");
 #endif
 #endif /* not lint */
 #endif /* __NetBSD__ */
 
 /* n.b.: this file is used at build-time - i.e. during build.sh. */
 
-#include <sys/types.h>
-#include <sys/param.h>
-#include <ctype.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-#include <unistd.h>
-#include <inttypes.h>
-#include <err.h>
+# include	<sys/types.h>
+# include	<sys/param.h>
+# include	<ctype.h>
+# include	<stdio.h>
+# include	<stdlib.h>
+# include	<string.h>
+# include	<time.h>
+# include	<unistd.h>
+# include	<inttypes.h>
 
-#include "strfile.h"
+# include	"strfile.h"
 
-#ifndef MAXPATHLEN
-#define	MAXPATHLEN	1024
-#endif	/* MAXPATHLEN */
+# ifndef MAXPATHLEN
+# define	MAXPATHLEN	1024
+# endif	/* MAXPATHLEN */
 
-#if defined(__NetBSD__) || defined(__dead)
-#define NORETURN	__dead
-#elif defined __GNUC__
-#define NORETURN	__attribute__((__noreturn__))
-#else
-#define NORETURN
-#endif
+static uint32_t h2nl(uint32_t h);
+static void getargs(int argc, char **argv);
+static void usage(void);
+static void die(const char *str);
+static void dieperror(const char *fmt, char *file);
+static void add_offset(FILE *fp, off_t off);
+static void do_order(void);
+static int cmp_str(const void *vp1, const void *vp2);
+static void randomize(void);
+static void fwrite_be_offt(off_t off, FILE *f);
+
+static uint32_t
+h2nl(uint32_t h)
+{
+        unsigned char c[4];
+        uint32_t rv;
+
+        c[0] = (h >> 24) & 0xff;
+        c[1] = (h >> 16) & 0xff;
+        c[2] = (h >>  8) & 0xff;
+        c[3] = (h >>  0) & 0xff;
+        memcpy(&rv, c, sizeof rv);
+
+        return (rv);
+}
 
 /*
  *	This program takes a file composed of strings separated by
@@ -110,7 +127,7 @@ __RCSID("$NetBSD: strfile.c,v 1.35 2012/10/13 20:42:56 dholland Exp $");
 			else if (((sz) + 1) % CHUNKSIZE == 0) \
 				ptr = realloc(ptr, ((sz) + CHUNKSIZE) * sizeof *ptr); \
 			if (ptr == NULL) \
-				err(1, "out of space"); \
+				die("out of space"); \
 		} while (0)
 
 typedef struct {
@@ -118,34 +135,45 @@ typedef struct {
 	off_t	pos;
 } STR;
 
-static char *Infile = NULL;		/* input file name */
-static char Outfile[MAXPATHLEN] = "";	/* output file name */
-static char Delimch = '%';		/* delimiting character */
+char	*Infile		= NULL,		/* input file name */
+	Outfile[MAXPATHLEN] = "",	/* output file name */
+	Delimch		= '%';		/* delimiting character */
 
-static int Sflag	= FALSE;	/* silent run flag */
-static int Oflag	= FALSE;	/* ordering flag */
-static int Iflag	= FALSE;	/* ignore case flag */
-static int Rflag	= FALSE;	/* randomize order flag */
-static int Xflag	= FALSE;	/* set rotated bit */
-static long Num_pts	= 0;		/* number of pointers/strings */
+int	Sflag		= FALSE;	/* silent run flag */
+int	Oflag		= FALSE;	/* ordering flag */
+int	Iflag		= FALSE;	/* ignore case flag */
+int	Rflag		= FALSE;	/* randomize order flag */
+int	Xflag		= FALSE;	/* set rotated bit */
+long	Num_pts		= 0;		/* number of pointers/strings */
 
-static off_t *Seekpts;
+off_t	*Seekpts;
 
-static FILE *Sort_1, *Sort_2;		/* pointers for sorting */
+FILE	*Sort_1, *Sort_2;		/* pointers for sorting */
 
-static STRFILE Tbl;			/* statistics table */
+STRFILE	Tbl;				/* statistics table */
 
-static STR *Firstch;			/* first chars of each string */
+STR	*Firstch;			/* first chars of each string */
 
+#ifdef __GNUC__
+#define NORETURN	__dead
+#else
+#define NORETURN
+#endif
 
-static uint32_t h2nl(uint32_t h);
-static void getargs(int argc, char **argv);
-static void usage(void) NORETURN;
-static void add_offset(FILE *fp, off_t off);
-static void do_order(void);
-static int cmp_str(const void *vp1, const void *vp2);
-static void randomize(void);
-static void fwrite_be_offt(off_t off, FILE *f);
+#ifndef __dead /* not NetBSD, presumably */
+#define __dead ;
+#endif
+
+void	add_offset(FILE *, off_t);
+int	cmp_str(const void *, const void *);
+void	die(const char *) NORETURN;
+void	dieperror(const char *, char *) NORETURN;
+void	do_order(void);
+void	fwrite_be_offt(off_t, FILE *);
+void	getargs(int, char *[]);
+int	main(int, char *[]);
+void	randomize(void);
+void	usage(void) NORETURN;
 
 
 /*
@@ -162,24 +190,23 @@ main(int ac, char **av)
 {
 	char		*sp, dc;
 	FILE		*inf, *outf;
-	off_t		last_off, length, pos;
-	int		first;
+	off_t		last_off, length, pos, *p;
+	int		first, cnt;
 	char		*nsp;
 	STR		*fp;
 	static char	string[257];
-	long		i;
 
 	/* sanity test */
 	if (sizeof(uint32_t) != 4)
-		errx(1, "sizeof(uint32_t) != 4");
+		die("sizeof(uint32_t) != 4");
 
 	getargs(ac, av);		/* evalute arguments */
 	dc = Delimch;
 	if ((inf = fopen(Infile, "r")) == NULL)
-		err(1, "open `%s'", Infile);
+		dieperror("open `%s'", Infile);
 
 	if ((outf = fopen(Outfile, "w")) == NULL)
-		err(1, "open `%s'", Outfile);
+		dieperror("open `%s'", Outfile);
 	if (!STORING_PTRS)
 		(void) fseek(outf, sizeof Tbl, SEEK_SET);
 
@@ -257,12 +284,12 @@ main(int ac, char **av)
 	Tbl.str_flags = h2nl(Tbl.str_flags);
 	(void) fwrite((char *) &Tbl, sizeof Tbl, 1, outf);
 	if (STORING_PTRS) {
-		for (i = 0; i < Num_pts; i++)
-			fwrite_be_offt(Seekpts[i], outf);
+		for (p = Seekpts, cnt = Num_pts; cnt--; ++p)
+			fwrite_be_offt(*p, outf);
 	}
 	fflush(outf);
 	if (ferror(outf))
-		err(1, "fwrite %s", Outfile);
+		dieperror("fwrite %s", Outfile);
 	(void) fclose(outf);
 	exit(0);
 }
@@ -326,8 +353,24 @@ static void
 usage(void)
 {
 	(void) fprintf(stderr,
-	    "Usage: %s [-iorsx] [-c char] sourcefile [datafile]\n",
-	    getprogname());
+	    "strfile [-iorsx] [-c char] sourcefile [datafile]\n");
+	exit(1);
+}
+
+static void
+die(const char *str)
+{
+	fprintf(stderr, "strfile: %s\n", str);
+	exit(1);
+}
+
+static void
+dieperror(const char *fmt, char *file)
+{
+	fprintf(stderr, "strfile: ");
+	fprintf(stderr, fmt, file);
+	fprintf(stderr, ": ");
+	perror(NULL);
 	exit(1);
 }
 
@@ -434,7 +477,7 @@ randomize(void)
 	off_t	tmp;
 	off_t	*sp;
 
-	srandom((int)(time(NULL) + getpid()));
+	srandom((int)(time((time_t *) NULL) + getpid()));
 
 	Tbl.str_flags |= STR_RANDOM;
 	cnt = Tbl.str_numstr;
@@ -467,19 +510,4 @@ fwrite_be_offt(off_t off, FILE *f)
 		off >>= 8;
 	}
 	fwrite(c, sizeof(c), 1, f);
-}
-
-static uint32_t
-h2nl(uint32_t h)
-{
-        unsigned char c[4];
-        uint32_t rv;
-
-        c[0] = (h >> 24) & 0xff;
-        c[1] = (h >> 16) & 0xff;
-        c[2] = (h >>  8) & 0xff;
-        c[3] = (h >>  0) & 0xff;
-        memcpy(&rv, c, sizeof rv);
-
-        return (rv);
 }

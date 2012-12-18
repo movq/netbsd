@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: makeerrnos.sh,v 1.6 2012/03/12 22:02:07 dyoung Exp $
+#	$NetBSD: makeerrnos.sh,v 1.5.2.1 2012/03/17 19:16:08 bouyer Exp $
 
 if [ $# -ne 3 ]; then
 	echo "usage: makeerrnos.sh errno.h signal.h output"

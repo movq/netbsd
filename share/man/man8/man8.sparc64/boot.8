@@ -1,4 +1,4 @@
-.\"	$NetBSD: boot.8,v 1.17 2012/03/11 23:42:07 njoly Exp $
+.\"	$NetBSD: boot.8,v 1.14.2.1 2008/12/02 01:31:06 snj Exp $
 .\"
 .\" Copyright (c) 1992, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -101,7 +101,7 @@ On older models of
 .Tn Sun
 keyboards, the
 .Sq STOP
-key is labeled
+key is labelled
 .Sq L1 .
 .Pp
 If the console is a serial port the same is
@@ -226,7 +226,7 @@ boot net tftp:netbsd -a
 .Ed
 .Pp
 to boot a kernel named netbsd obtained via tftp and have it ask for
-root file system, swap partition and init location once it is up.
+root filesystem, swap partition and init location once it is up.
 .Pp
 During installation from a different operating system
 .Bd -literal -offset indent
@@ -235,7 +235,7 @@ boot disk:b
 .Pp
 is used to boot a
 .Dq miniroot
-file system from the swap partition.
+filesystem from the swap partition.
 .Sh SEE ALSO
 .Xr sparc/boot 8 ,
 .Xr disklabel 8 ,
@@ -252,7 +252,7 @@ file system from the swap partition.
 developed its firmware and promoted it to become
 .St -ieee1275-94 .
 .Pp
-.Lk http://www.openfirmware.org/1275/ "IEEE 1275 Open Firmware"
+.Pa http://playground.sun.com/1275/
 .Sh BUGS
 .Nx
 provides no way to boot

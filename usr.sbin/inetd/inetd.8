@@ -1,4 +1,4 @@
-.\"	$NetBSD: inetd.8,v 1.57 2011/04/25 22:12:05 wiz Exp $
+.\"	$NetBSD: inetd.8,v 1.50 2008/08/28 21:39:08 wiz Exp $
 .\"
 .\" Copyright (c) 1998 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -213,8 +213,7 @@ reliably delivered message, or sequenced packet socket.
 Optionally, an
 .Xr accept_filter 9
 can be specified by appending a colon to the socket-type, followed by
-the name of the desired accept filter.
-In this case
+the name of the desired accept filter.  In this case
 .Nm
 will not see new connections for the specified service until the accept
 filter decides they are ready to be handled.
@@ -303,7 +302,7 @@ entry.
 .Xr comsat 8
 .Pq Xr biff 1
 and
-.Xr ntalkd 8
+.Xr talkd 8
 are both examples of the latter type of
 datagram server.
 .Xr tftpd 8
@@ -330,11 +329,8 @@ When omitted,
 defaults to 40.
 If it reaches this maximum spawn rate,
 .Nm
-will log the problem (via the syslogger using the
-.Dv LOG_DAEMON
-facility and
-.Dv LOG_ERR
-level)
+will log the problem (via the syslogger using the LOG_DAEMON
+facility and LOG_ERR level)
 and stop handling the specific service for ten minutes.
 .Pp
 Stream servers are usually marked as
@@ -495,18 +491,16 @@ logs an error message using
 .Xr syslog 3
 and terminates itself.
 .Ss IPv6 TCP/UDP behavior
-If you wish to run a server for both IPv4 and IPv6 traffic,
-you will need to run two separate processes for the same server program,
-specified as two separate lines in
-.Pa /etc/inetd.conf
-using
+If you wish to run a server for IPv4 and IPv6 traffic,
+you'll need to run two separate process for the same server program,
+specified as two separate lines on
+.Pa /etc/inetd.conf ,
+for
 .Dq tcp4
 and
-.Dq tcp6
-respectively.
-Plain
+.Dq tcp6 .
 .Dq tcp
-means TCP on top of the current default IP version,
+means TCP on top of currently-default IP version,
 which is, at this moment, IPv4.
 .Pp
 Under various combination of IPv4/v6 daemon settings,

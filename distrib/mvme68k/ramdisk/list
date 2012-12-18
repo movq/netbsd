@@ -1,6 +1,6 @@
-#	$NetBSD: list,v 1.20 2011/06/19 06:44:05 tsutsui Exp $
+#	$NetBSD: list,v 1.15 2008/05/06 15:32:06 dyoung Exp $
 
-SRCDIRS	bin sbin usr.bin usr.sbin
+SRCDIRS	bin sbin usr.bin usr.sbin gnu/usr.bin
 
 PROG	bin/cat
 PROG	bin/chmod
@@ -19,6 +19,7 @@ PROG	bin/sh
 PROG	bin/tftp
 
 PROG	sbin/disklabel
+PROG	sbin/edlabel
 PROG	sbin/ifconfig
 PROG	sbin/init
 PROG	sbin/installboot
@@ -49,8 +50,8 @@ LIBS	libhack.o -lutil -lz -ll -lrmt -lprop
 COPY	${CURDIR}/rd.fstab			etc/fstab
 COPY	${NETBSDSRCDIR}/etc/master.passwd	etc/master.passwd
 COPY	${NETBSDSRCDIR}/etc/netconfig		etc/netconfig
-COPY	${DISTRIBDIR}/common/protocols	etc/protocols
-COPY	${DISTRIBDIR}/common/services		etc/services
+COPY	${NETBSDSRCDIR}/etc/protocols		etc/protocols
+COPY	${NETBSDSRCDIR}/distrib/common/services		etc/services
 COPY	${DESTDIR}/usr/mdec/bootsd		bootsd
 COPY	${DESTDIR}/usr/mdec/bootst		bootst
 COPY	${DESTDIR}/usr/mdec/bootxx		bootxx

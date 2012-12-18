@@ -1,4 +1,4 @@
-/*	$NetBSD: kernfs.h,v 1.37 2012/03/22 20:34:38 drochner Exp $	*/
+/*	$NetBSD: kernfs.h,v 1.34 2008/08/01 16:55:48 apb Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -54,6 +54,10 @@ typedef enum {
 	KFSavenrun,		/* loadavg */
 	KFSdevice,		/* device file (rootdev/rrootdev) */
 	KFSmsgbuf,		/* msgbuf */
+	KFSipsecsadir,	/* ipsec security association (top dir) */
+	KFSipsecspdir,	/* ipsec security policy (top dir) */
+	KFSipsecsa,		/* ipsec security association entry */
+	KFSipsecsp,		/* ipsec security policy entry */
 	KFSsubdir,		/* directory */
 	KFSlasttype,		/* last used type */
 	KFSmaxtype = (1<<6) - 1	/* last possible type */
@@ -114,8 +118,6 @@ struct kernfs_mount {
 #define VFSTOKERNFS(mp)	((struct kernfs_mount *)((mp)->mnt_data))
 #define	VTOKERN(vp)	((struct kernfs_node *)(vp)->v_data)
 #define KERNFSTOV(kfs)	((kfs)->kfs_vnode)
-
-#define KERNFS_MAXNAMLEN	255
 
 extern const struct kern_target kern_targets[];
 extern int nkern_targets;
@@ -193,14 +195,5 @@ kfstype kernfs_alloctype(int, const struct kernfs_fileop *);
 } while (/*CONSTCOND*/0)
 #define	KERNFS_ENTOPARENTDIR(dkt) &(dkt)->dkt_kt
 int kernfs_addentry(kernfs_parentdir_t *, kernfs_entry_t *);
-
-#ifdef IPSEC
-__weak_extern(key_freesp)
-__weak_extern(key_getspbyid)
-__weak_extern(key_setdumpsa_spi)
-__weak_extern(key_setdumpsp)
-__weak_extern(satailq)
-__weak_extern(sptailq)
-#endif
 
 #endif /* _KERNEL */

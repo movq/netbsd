@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.55 2010/12/22 03:22:43 nisimura Exp $	*/
+/*	$NetBSD: cpu.h,v 1.53 2008/03/22 03:23:27 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc. All rights reserved.
@@ -70,7 +70,12 @@ extern struct cpu_info cpu_info_store;
  * referenced in generic code
  */
 #define	cpu_number()			0
-
+/*
+ * Can't swapout u-area, (__SWAP_BROKEN)
+ * since we use P1 converted address for trapframe.
+ */
+#define	cpu_swapin(p)			/* nothing */
+#define	cpu_swapout(p)			panic("cpu_swapout: can't get here");
 #define	cpu_proc_fork(p1, p2)		/* nothing */
 
 /*
@@ -92,8 +97,8 @@ struct clockframe {
  * This is used during profiling to integrate system time.  It can safely
  * assume that the process is resident.
  */
-#define	LWP_PC(l)							\
-	(((struct trapframe *)(l)->l_md.md_regs)->tf_spc)
+#define	PROC_PC(p)							\
+	(((struct trapframe *)(p)->p_md.md_regs)->tf_spc)
 
 /*
  * Preempt the current process if in interrupt from user mode,

@@ -1,4 +1,4 @@
-/*	$NetBSD: wdcvar.h,v 1.96 2012/11/19 22:22:56 rkujawa Exp $	*/
+/*	$NetBSD: wdcvar.h,v 1.89 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003, 2004 The NetBSD Foundation, Inc.
@@ -43,17 +43,13 @@
 #define WDC_NREG	8 /* number of command registers */
 #define	WDC_NSHADOWREG	2 /* number of command "shadow" registers */
 
-#define WDC_MAXDRIVES	2 /* absolute max number of drives per channel */
-
 struct wdc_regs {
 	/* Our registers */
 	bus_space_tag_t       cmd_iot;
 	bus_space_handle_t    cmd_baseioh;
-	bus_size_t            cmd_ios;
 	bus_space_handle_t    cmd_iohs[WDC_NREG+WDC_NSHADOWREG];
 	bus_space_tag_t       ctl_iot;
 	bus_space_handle_t    ctl_ioh;
-	bus_size_t            ctl_ios;
 
 	/* data32{iot,ioh} are only used for 32-bit data xfers */
 	bus_space_tag_t       data32iot;
@@ -76,13 +72,10 @@ struct wdc_softc {
 
 	struct wdc_regs *regs;		/* register array (per-channel) */
 
-	int		wdc_maxdrives;	/* max number of drives per channel */
-
-	int		cap;		/* controller capabilities */
+	int           cap;		/* controller capabilities */
 #define WDC_CAPABILITY_NO_EXTRA_RESETS 0x0100 /* only reset once */
 #define WDC_CAPABILITY_PREATA	0x0200	/* ctrl can be a pre-ata one */
-#define WDC_CAPABILITY_WIDEREGS 0x0400  /* ctrl has wide (16bit) registers  */
-#define WDC_CAPABILITY_NO_AUXCTL 0x0800 /* ctrl has no aux control registers */
+#define WDC_CAPABILITY_WIDEREGS 0x0400  /* Ctrl has wide (16bit) registers  */
 
 #if NATA_DMA || NATA_PIOBM
 	/* if WDC_CAPABILITY_DMA set in 'cap' */
@@ -148,6 +141,7 @@ int	wdcprobe(struct ata_channel *);
 void	wdcattach(struct ata_channel *);
 int	wdcdetach(device_t, int);
 void	wdc_childdetached(device_t, device_t);
+int	wdcactivate(device_t, enum devact);
 int	wdcintr(void *);
 
 void	wdc_sataprobe(struct ata_channel *);
@@ -166,10 +160,10 @@ int	wdc_dmawait(struct ata_channel *, struct ata_xfer *, int);
 void	wdccommand(struct ata_channel *, u_int8_t, u_int8_t, u_int16_t,
 		   u_int8_t, u_int8_t, u_int8_t, u_int8_t);
 void	wdccommandext(struct ata_channel *, u_int8_t, u_int8_t, u_int64_t,
-		      u_int16_t, u_int16_t);
+		      u_int16_t);
 void	wdccommandshort(struct ata_channel *, int, int);
 void	wdctimeout(void *arg);
-void	wdc_reset_drive(struct ata_drive_datas *, int, uint32_t *);
+void	wdc_reset_drive(struct ata_drive_datas *, int);
 void	wdc_reset_channel(struct ata_channel *, int);
 void	wdc_do_reset(struct ata_channel *, int);
 

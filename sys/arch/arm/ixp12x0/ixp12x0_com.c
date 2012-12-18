@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp12x0_com.c,v 1.42 2012/11/12 18:00:37 skrll Exp $ */
+/*	$NetBSD: ixp12x0_com.c,v 1.34 2008/06/11 22:37:21 cegger Exp $ */
 /*
  * Copyright (c) 1998, 1999, 2001, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -66,13 +66,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp12x0_com.c,v 1.42 2012/11/12 18:00:37 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp12x0_com.c,v 1.34 2008/06/11 22:37:21 cegger Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 
 #include "rnd.h"
-#ifdef RND_COM
+#if NRND > 0 && defined(RND_COM)
 #include <sys/rnd.h>
 #endif
 
@@ -88,10 +88,9 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0_com.c,v 1.42 2012/11/12 18:00:37 skrll Exp $
 #include <sys/uio.h>
 #include <sys/vnode.h>
 #include <sys/kauth.h>
-#include <sys/lwp.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/ixp12x0/ixp12x0_comreg.h>
 #include <arm/ixp12x0/ixp12x0_comvar.h>
@@ -122,8 +121,8 @@ inline static void	ixpcom_rxsoft(struct ixpcom_softc *, struct tty *);
 void            ixpcomcnprobe(struct consdev *);
 void            ixpcomcninit(struct consdev *);
 
-uint32_t	ixpcom_cr = 0;		/* tell cr to *_intr.c */
-uint32_t	ixpcom_imask = 0;	/* intrrupt mask from *_intr.c */
+u_int32_t	ixpcom_cr = 0;		/* tell cr to *_intr.c */
+u_int32_t	ixpcom_imask = 0;	/* intrrupt mask from *_intr.c */
 
 
 static struct ixpcom_cons_softc {
@@ -171,7 +170,7 @@ struct consdev ixpcomcons = {
 #define COMDIALOUT(x)	(minor(x) & COMDIALOUT_MASK)
 
 #define COM_ISALIVE(sc)	((sc)->enabled != 0 && \
-			 device_is_active((sc)->sc_dev))
+			 device_is_active(&(sc)->sc_dev))
 
 #define COM_BARRIER(t, h, f) bus_space_barrier((t), (h), 0, COM_NPORTS, (f))
 
@@ -200,7 +199,7 @@ ixpcom_attach_subr(struct ixpcom_softc *sc)
 		SET(sc->sc_swflags, TIOCFLAG_SOFTCAR);
 	}
 
-	tp = tty_alloc();
+	tp = ttymalloc();
 	tp->t_oproc = ixpcomstart;
 	tp->t_param = ixpcomparam;
 	tp->t_hwiflow = ixpcomhwiflow;
@@ -211,7 +210,7 @@ ixpcom_attach_subr(struct ixpcom_softc *sc)
 	sc->sc_rbavail = IXPCOM_RING_SIZE;
 	if (sc->sc_rbuf == NULL) {
 		printf("%s: unable to allocate ring buffer\n",
-		    device_xname(sc->sc_dev));
+		    sc->sc_dev.dv_xname);
 		return;
 	}
 	sc->sc_ebuf = sc->sc_rbuf + (IXPCOM_RING_SIZE << 1);
@@ -229,15 +228,15 @@ ixpcom_attach_subr(struct ixpcom_softc *sc)
 		/* locate the major number */
 		maj = cdevsw_lookup_major(&ixpcom_cdevsw);
 
-		cn_tab->cn_dev = makedev(maj, device_unit(sc->sc_dev));
+		cn_tab->cn_dev = makedev(maj, device_unit(&sc->sc_dev));
 
-		aprint_normal("%s: console\n", device_xname(sc->sc_dev));
+		aprint_normal("%s: console\n", sc->sc_dev.dv_xname);
 	}
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, ixpcomsoft, sc);
 
-#ifdef RND_COM
-	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
+#if NRND > 0 && defined(RND_COM)
+	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
 			  RND_TYPE_TTY, 0);
 #endif
 
@@ -257,7 +256,7 @@ ixpcomparam(struct tty *tp, struct termios *t)
 {
 	struct ixpcom_softc *sc
 		= device_lookup_private(&ixpcom_cd, COMUNIT(tp->t_dev));
-	uint32_t cr;
+	u_int32_t cr;
 	int s;
 
 	if (COM_ISALIVE(sc) == 0)
@@ -338,7 +337,9 @@ ixpcomparam(struct tty *tp, struct termios *t)
 }
 
 static int
-ixpcomhwiflow(struct tty *tp, int block)
+ixpcomhwiflow(tp, block)
+	struct tty *tp;
+	int block;
 {
 	return (0);
 }
@@ -471,7 +472,7 @@ ixpcomopen(dev_t dev, int flag, int mode, struct lwp *l)
 		sc->sc_rbuf == NULL)
 		return (ENXIO);
 
-	if (!device_is_active(sc->sc_dev))
+	if (!device_is_active(&sc->sc_dev))
 		return (ENXIO);
 
 #ifdef KGDB
@@ -506,7 +507,7 @@ ixpcomopen(dev_t dev, int flag, int mode, struct lwp *l)
 				splx(s2);
 				splx(s);
 				printf("%s: device enable failed\n",
-				       device_xname(sc->sc_dev));
+				       sc->sc_dev.dv_xname);
 				return (EIO);
 			}
 			sc->enabled = 1;
@@ -754,7 +755,8 @@ ixpcomstop(struct tty *tp, int flag)
 }
 
 static u_int
-cflag2cr(tcflag_t cflag)
+cflag2cr(cflag)
+	tcflag_t cflag;
 {
 	u_int cr;
 
@@ -767,7 +769,8 @@ cflag2cr(tcflag_t cflag)
 }
 
 static void
-ixpcom_iflush(struct ixpcom_softc *sc)
+ixpcom_iflush(sc)
+	struct ixpcom_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -791,7 +794,7 @@ ixpcom_iflush(struct ixpcom_softc *sc)
 			bus_space_read_4(iot, ioh, IXPCOM_DR);
 #ifdef DIAGNOSTIC
 	if (!timo)
-		printf("%s: com_iflush timeout %02x\n", device_xname(sc->sc_dev),
+		printf("%s: com_iflush timeout %02x\n", sc->sc_dev.dv_xname,
 		       reg);
 #endif
 }
@@ -807,7 +810,12 @@ ixpcom_set_cr(struct ixpcom_softc *sc)
 }
 
 int
-ixpcomcnattach(bus_space_tag_t iot, bus_addr_t iobase, bus_space_handle_t ioh, int ospeed, tcflag_t cflag)
+ixpcomcnattach(iot, iobase, ioh, ospeed, cflag)
+	bus_space_tag_t iot;
+	bus_addr_t iobase;
+	bus_space_handle_t ioh;
+	int ospeed;
+	tcflag_t cflag;
 {
 	int cr;
 
@@ -847,18 +855,23 @@ ixpcomcnattach(bus_space_tag_t iot, bus_addr_t iobase, bus_space_handle_t ioh, i
 }
 
 void
-ixpcomcnprobe(struct consdev *cp)
+ixpcomcnprobe(cp)
+	struct consdev *cp;
 {
 	cp->cn_pri = CN_REMOTE;
 }
 
 void
-ixpcomcnpollc(dev_t dev, int on)
+ixpcomcnpollc(dev, on)
+	dev_t dev;
+	int on;
 {
 }
 
 void
-ixpcomcnputc(dev_t dev, int c)
+ixpcomcnputc(dev, c)
+	dev_t dev;
+	int c;
 {
 	int			s;
 	bus_space_tag_t		iot = ixpcomcn_sc.sc_iot;
@@ -882,7 +895,8 @@ ixpcomcnputc(dev_t dev, int c)
 }
 
 int
-ixpcomcngetc(dev_t dev)
+ixpcomcngetc(dev)
+        dev_t dev;
 {
 	int			c;
 	int			s;
@@ -902,7 +916,9 @@ ixpcomcngetc(dev_t dev)
 }
 
 inline static void
-ixpcom_txsoft(struct ixpcom_softc *sc, struct tty *tp)
+ixpcom_txsoft(sc, tp)
+	struct ixpcom_softc *sc;
+	struct tty *tp;
 {
 	CLR(tp->t_state, TS_BUSY);
 	if (ISSET(tp->t_state, TS_FLUSH))
@@ -913,9 +929,11 @@ ixpcom_txsoft(struct ixpcom_softc *sc, struct tty *tp)
 }
 
 inline static void
-ixpcom_rxsoft(struct ixpcom_softc *sc, struct tty *tp)
+ixpcom_rxsoft(sc, tp)
+	struct ixpcom_softc *sc;
+	struct tty *tp;
 {
-	int (*rint)(int, struct tty *) = tp->t_linesw->l_rint;
+	int (*rint) __P((int, struct tty *)) = tp->t_linesw->l_rint;
 	u_char *get, *end;
 	u_int cc, scc;
 	u_char lsr;
@@ -1037,7 +1055,7 @@ ixpcomintr(void* arg)
 	u_int cc;
 	u_int cr;
 	u_int sr;
-	uint32_t c;
+	u_int32_t c;
 
 	if (COM_ISALIVE(sc) == 0)
 		return (0);
@@ -1173,7 +1191,7 @@ ixpcomintr(void* arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#ifdef RND_COM
+#if NRND > 0 && defined(RND_COM)
 	rnd_add_uint32(&sc->rnd_source, iir | lsr);
 #endif
 	return (1);

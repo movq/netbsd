@@ -1,4 +1,3 @@
-/*	$NetBSD: in6_src.c,v 1.53 2012/06/25 15:28:39 christos Exp $	*/
 /*	$KAME: in6_src.c,v 1.159 2005/10/19 01:40:32 t-momose Exp $	*/
 
 /*
@@ -66,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.53 2012/06/25 15:28:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.43 2008/04/15 03:57:04 thorpej Exp $");
 
 #include "opt_inet.h"
 
@@ -77,7 +76,14 @@ __KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.53 2012/06/25 15:28:39 christos Exp $"
 #include <sys/protosw.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
+#ifndef __FreeBSD__
 #include <sys/ioctl.h>
+#else
+#include <sys/sockio.h>
+#endif
+#ifdef __FreeBSD__
+#include <sys/sysctl.h>
+#endif
 #include <sys/errno.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
@@ -93,10 +99,11 @@ __KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.53 2012/06/25 15:28:39 christos Exp $"
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #include <netinet/in_pcb.h>
-#include <netinet/portalgo.h>
 #include <netinet6/in6_var.h>
 #include <netinet/ip6.h>
+#ifndef __OpenBSD__
 #include <netinet6/in6_pcb.h>
+#endif
 #include <netinet6/ip6_var.h>
 #include <netinet6/ip6_private.h>
 #include <netinet6/nd6.h>
@@ -113,7 +120,12 @@ __KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.53 2012/06/25 15:28:39 christos Exp $"
 #endif /* NMIP > 0 */
 #endif /* MIP6 */
 
-#include <netinet/tcp_vtw.h>
+#ifndef __OpenBSD__
+#include "loop.h"
+#endif
+#ifdef __NetBSD__
+extern struct ifnet loif[NLOOP];
+#endif
 
 #define ADDR_LABEL_NOTAPP (-1)
 struct in6_addrpolicy defaultaddrpolicy;
@@ -225,7 +237,7 @@ in6_selectsrc(struct sockaddr_in6 *dstsock, struct ip6_pktopts *opts,
 		 * the interface must be specified; otherwise, ifa_ifwithaddr()
 		 * will fail matching the address.
 		 */
-		memset(&srcsock, 0, sizeof(srcsock));
+		bzero(&srcsock, sizeof(srcsock));
 		srcsock.sin6_family = AF_INET6;
 		srcsock.sin6_len = sizeof(srcsock);
 		srcsock.sin6_addr = pi->ipi6_addr;
@@ -591,7 +603,11 @@ selectroute(struct sockaddr_in6 *dstsock, struct ip6_pktopts *opts,
 	/* If the caller specify the outgoing interface explicitly, use it. */
 	if (opts && (pi = opts->ip6po_pktinfo) != NULL && pi->ipi6_ifindex) {
 		/* XXX boundary check is assumed to be already done. */
+#ifdef __FreeBSD__
+		ifp = ifnet_byindex(pi->ipi6_ifindex);
+#else
 		ifp = ifindex2ifnet[pi->ipi6_ifindex];
+#endif
 		if (ifp != NULL &&
 		    (norouteok || retrt == NULL ||
 		    IN6_IS_ADDR_MULTICAST(dst))) {
@@ -798,40 +814,67 @@ in6_selecthlim(struct in6pcb *in6p, struct ifnet *ifp)
  * Find an empty port and set it to the specified PCB.
  */
 int
-in6_pcbsetport(struct sockaddr_in6 *sin6, struct in6pcb *in6p, struct lwp *l)
+in6_pcbsetport(struct in6_addr *laddr, struct in6pcb *in6p, struct lwp *l)
 {
 	struct socket *so = in6p->in6p_socket;
 	struct inpcbtable *table = in6p->in6p_table;
+	int cnt;
+	u_int16_t minport, maxport;
 	u_int16_t lport, *lastport;
-	enum kauth_network_req req;
-	int error = 0;
-	
+	int wild = 0;
+	void *t;
+
+	/* XXX: this is redundant when called from in6_pcbbind */
+	if ((so->so_options & (SO_REUSEADDR|SO_REUSEPORT)) == 0 &&
+	   ((so->so_proto->pr_flags & PR_CONNREQUIRED) == 0 ||
+	    (so->so_options & SO_ACCEPTCONN) == 0))
+		wild = 1;
+
 	if (in6p->in6p_flags & IN6P_LOWPORT) {
 #ifndef IPNOPRIVPORTS
-		req = KAUTH_REQ_NETWORK_BIND_PRIVPORT;
-#else
-		req = KAUTH_REQ_NETWORK_BIND_PORT;
+		if (l == 0 || (kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, NULL) != 0))
+			return (EACCES);
 #endif
+		minport = ip6_lowportmin;
+		maxport = ip6_lowportmax;
 		lastport = &table->inpt_lastlow;
 	} else {
-		req = KAUTH_REQ_NETWORK_BIND_PORT;
-
+		minport = ip6_anonportmin;
+		maxport = ip6_anonportmax;
 		lastport = &table->inpt_lastport;
 	}
 
-	/* XXX-kauth: KAUTH_REQ_NETWORK_BIND_AUTOASSIGN_{,PRIV}PORT */
-	error = kauth_authorize_network(l->l_cred, KAUTH_NETWORK_BIND, req, so,
-	    sin6, NULL);
-	if (error)
-		return (EACCES);
+	if (minport > maxport) {	/* sanity check */
+		u_int16_t swp;
+		
+		swp = minport;
+		minport = maxport;
+		maxport = swp;
+	}
 
-       /*
-        * Use RFC6056 randomized port selection
-        */
-	error = portalgo_randport(&lport, &in6p->in6p_head, l->l_cred);
-	if (error)
-		return error;
-	
+	lport = *lastport - 1;
+	for (cnt = maxport - minport + 1; cnt; cnt--, lport--) {
+		if (lport < minport || lport > maxport)
+			lport = maxport;
+#ifdef INET
+		if (IN6_IS_ADDR_V4MAPPED(laddr)) {
+			t = in_pcblookup_port(table,
+			    *(struct in_addr *)&laddr->s6_addr32[3],
+			    htons(lport), wild);
+		} else
+#endif
+		{
+			t = in6_pcblookup_port(table, laddr, htons(lport),
+			    wild);
+		}
+		if (t == 0)
+			goto found;
+	}
+
+	return (EAGAIN);
+
+found:
 	in6p->in6p_flags |= IN6P_ANONPORT;
 	*lastport = lport;
 	in6p->in6p_lport = htons(lport);
@@ -845,7 +888,7 @@ addrsel_policy_init(void)
 	init_policy_queue();
 
 	/* initialize the "last resort" policy */
-	memset(&defaultaddrpolicy, 0, sizeof(defaultaddrpolicy));
+	bzero(&defaultaddrpolicy, sizeof(defaultaddrpolicy));
 	defaultaddrpolicy.label = ADDR_LABEL_NOTAPP;
 }
 
@@ -867,7 +910,7 @@ lookup_addrsel_policy(struct sockaddr_in6 *key)
 /*
  * Subroutines to manage the address selection policy table via sysctl.
  */
-struct sel_walkarg {
+struct walkarg {
 	size_t	w_total;
 	size_t	w_given;
 	void *	w_where;
@@ -891,7 +934,7 @@ in6_src_sysctl(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 		goto end;
 	}
 	if (oldp || oldlenp) {
-		struct sel_walkarg w;
+		struct walkarg w;
 		size_t oldlen = *oldlenp;
 
 		memset(&w, 0, sizeof(w));
@@ -983,7 +1026,9 @@ add_addrsel_policyent(struct in6_addrpolicy *newpolicy)
 		}
 	}
 
-	new = malloc(sizeof(*new), M_IFADDR, M_WAITOK|M_ZERO);
+	MALLOC(new, struct addrsel_policyent *, sizeof(*new), M_IFADDR,
+	       M_WAITOK);
+	bzero(new, sizeof(*new));
 
 	/* XXX: should validate entry */
 	new->ape_policy = *newpolicy;
@@ -1035,7 +1080,7 @@ static int
 dump_addrsel_policyent(struct in6_addrpolicy *pol, void *arg)
 {
 	int error = 0;
-	struct sel_walkarg *w = arg;
+	struct walkarg *w = arg;
 
 	if (w->w_where && (char *)w->w_where + sizeof(*pol) <= (char *)w->w_limit) {
 		if ((error = copyout(pol, w->w_where, sizeof(*pol))) != 0)

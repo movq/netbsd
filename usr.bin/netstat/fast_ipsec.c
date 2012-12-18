@@ -1,4 +1,4 @@
-/*	$NetBSD: fast_ipsec.c,v 1.19 2012/03/22 20:34:43 drochner Exp $ */
+/*	$NetBSD: fast_ipsec.c,v 1.11 2008/04/24 04:09:27 thorpej Exp $ */
 /* 	$FreeBSD: src/tools/tools/crypto/ipsecstats.c,v 1.1.4.1 2003/06/03 00:13:13 sam Exp $ */
 
 /*-
@@ -33,7 +33,7 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #ifdef __NetBSD__
-__RCSID("$NetBSD: fast_ipsec.c,v 1.19 2012/03/22 20:34:43 drochner Exp $");
+__RCSID("$NetBSD: fast_ipsec.c,v 1.11 2008/04/24 04:09:27 thorpej Exp $");
 #endif
 #endif /* not lint*/
 
@@ -52,6 +52,7 @@ __RCSID("$NetBSD: fast_ipsec.c,v 1.19 2012/03/22 20:34:43 drochner Exp $");
 #include <netipsec/ipip_var.h>
 #include <netipsec/ipcomp_var.h>
 #include <netipsec/ipsec_var.h>
+#include <netipsec/keydb.h>
 
 #include <machine/int_fmtio.h>
 
@@ -62,6 +63,42 @@ __RCSID("$NetBSD: fast_ipsec.c,v 1.19 2012/03/22 20:34:43 drochner Exp $");
 #include <string.h>
 
 #include "netstat.h"
+
+/*
+ * Cache the check to see if we have fast_ipsec so that we don't
+ * have to go to the kernel repeatedly.
+ */
+static int
+have_fast_ipsec(void)
+{
+	static int haveit = -1;
+
+	if (haveit == -1) {
+		if (sysctlbyname("net.inet.ipsec.ipsecstats", NULL, NULL,
+		    NULL, 0) == -1)
+			haveit = 0;
+		else
+			haveit = 1;
+	}
+
+	return (haveit);
+}
+
+/*
+ * Dispatch between fetching and printing (KAME) IPsec statistics,
+ * and FAST_IPSEC statistics, so the rest of netstat need not know
+ * about the vagaries of the two implementations.
+ */
+void
+ipsec_switch(u_long off, char * name)
+{
+
+	if (have_fast_ipsec())
+		return fast_ipsec_stats(off, name);
+
+	return ipsec_stats(off, name);
+}
+
 
 /*
  * Table-driven mapping from SADB algorithm codes to string names.
@@ -80,10 +117,6 @@ static const struct alg aalgs[] = {
 	{ SADB_X_AALG_SHA2_256,	"hmac-sha2-256", },
 	{ SADB_X_AALG_SHA2_384,	"hmac-sha2-384", },
 	{ SADB_X_AALG_SHA2_512,	"hmac-sha2-512", },
-	{ SADB_X_AALG_AES_XCBC_MAC, "aes-xcbc-mac", },
-	{ SADB_X_AALG_AES128GMAC, "aes-128-gmac", },
-	{ SADB_X_AALG_AES192GMAC, "aes-192-gmac", },
-	{ SADB_X_AALG_AES256GMAC, "aes-256-gmac", },
 };
 static const struct alg espalgs[] = {
 	{ SADB_EALG_NONE,	"none", },
@@ -93,10 +126,6 @@ static const struct alg espalgs[] = {
 	{ SADB_X_EALG_CAST128CBC, "cast128-cbc", },
 	{ SADB_X_EALG_BLOWFISHCBC, "blowfish-cbc", },
 	{ SADB_X_EALG_RIJNDAELCBC, "aes-cbc", },
-	{ SADB_X_EALG_CAMELLIACBC, "camellia-cbc", },
-	{ SADB_X_EALG_AESCTR,	"aes-ctr", },
-	{ SADB_X_EALG_AESGCM16,	"aes-gcm-16", },
-	{ SADB_X_EALG_AESGMAC, "aes-gmac", },
 };
 static const struct alg ipcompalgs[] = {
 	{ SADB_X_CALG_NONE,	"none", },
@@ -127,7 +156,7 @@ algname(int a, const struct alg algs[], int nalgs)
  * if that happens when we are running on KAME IPsec.
  */
 void
-fast_ipsec_stats(u_long off, const char *name)
+fast_ipsec_stats(u_long off, char *name)
 {
 	uint64_t ipsecstats[IPSEC_NSTATS];
 	uint64_t ahstats[AH_NSTATS];
@@ -148,6 +177,10 @@ fast_ipsec_stats(u_long off, const char *name)
 	memset(espstats, 0, sizeof(espstats));
 	memset(ipcs, 0, sizeof(ipcs));
 	memset(ipips, 0, sizeof(ipips));
+
+	/* silence check */
+	if (!have_fast_ipsec())
+		return;
 
 	slen = sizeof(ipsecstats);
 	status = sysctlbyname("net.inet.ipsec.ipsecstats", ipsecstats, &slen,
@@ -276,14 +309,14 @@ fast_ipsec_stats(u_long off, const char *name)
 
 	IPCOMP(ipcs[IPCOMP_STAT_HDROPS],"packets too short for header length");
 	IPCOMP(ipcs[IPCOMP_STAT_NOPF],	"protocol family not supported");
-	IPCOMP(ipcs[IPCOMP_STAT_NOTDB],	"packets with no SA");
+	IPCOMP(ipcs[IPCOMP_STAT_NOTDB],	"not db");
 	IPCOMP(ipcs[IPCOMP_STAT_BADKCR],"packets dropped by crypto returning NULL mbuf");
 	IPCOMP(ipcs[IPCOMP_STAT_QFULL],	"queue full");
         IPCOMP(ipcs[IPCOMP_STAT_NOXFORM],"no support for transform");
 	IPCOMP(ipcs[IPCOMP_STAT_WRAP],  "packets dropped for replay counter wrap");
 	IPCOMP(ipcs[IPCOMP_STAT_INPUT],	"input IPcomp packets");
 	IPCOMP(ipcs[IPCOMP_STAT_OUTPUT],"output IPcomp packets");
-	IPCOMP(ipcs[IPCOMP_STAT_INVALID],"packets with an invalid SA");
+	IPCOMP(ipcs[IPCOMP_STAT_INVALID],"specified an invalid TDB");
 	IPCOMP(ipcs[IPCOMP_STAT_TOOBIG],"packets decompressed as too big");
 	IPCOMP(ipcs[IPCOMP_STAT_MINLEN], "packets too short to be compressed");
 	IPCOMP(ipcs[IPCOMP_STAT_USELESS],"packet for which compression was useless");

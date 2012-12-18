@@ -1,4 +1,4 @@
-/*	$NetBSD: ms_pckbport.c,v 1.9 2012/10/27 17:18:11 chs Exp $ */
+/*	$NetBSD: ms_pckbport.c,v 1.4 2008/04/07 13:31:15 tsutsui Exp $ */
 
 /*
  * Copyright (c) 2002 Valeriy E. Ushakov
@@ -27,7 +27,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ms_pckbport.c,v 1.9 2012/10/27 17:18:11 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ms_pckbport.c,v 1.4 2008/04/07 13:31:15 tsutsui Exp $");
 
 /*
  * Attach PS/2 mouse at pckbport aux port
@@ -43,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: ms_pckbport.c,v 1.9 2012/10/27 17:18:11 chs Exp $");
 #include <sys/proc.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/pckbport/pckbportvar.h>
@@ -74,8 +74,8 @@ CFATTACH_DECL_NEW(ms_pckbport, sizeof(struct ms_pckbport_softc),
     ms_pckbport_match, ms_pckbport_attach, NULL, NULL);
 
 
-static int	ms_pckbport_iopen(device_t, int);
-static int	ms_pckbport_iclose(device_t, int);
+static int	ms_pckbport_iopen(struct device *, int);
+static int	ms_pckbport_iclose(struct device *, int);
 static void	ms_pckbport_input(void *, int);
 
 
@@ -135,7 +135,7 @@ ms_pckbport_attach(device_t parent, device_t self, void *aux)
 
 
 static int
-ms_pckbport_iopen(device_t self, int flags)
+ms_pckbport_iopen(struct device *self, int flags)
 {
 	struct ms_pckbport_softc *sc = device_private(self);
 	struct ms_softc *ms = &sc->sc_ms;
@@ -152,7 +152,7 @@ ms_pckbport_iopen(device_t self, int flags)
 	res = pckbport_enqueue_cmd(sc->sc_kbctag, sc->sc_kbcslot,
 				cmd, 1, 0, 1, NULL);
 	if (res) {
-		printf("%s: command error\n", __func__);
+		printf("pms_enable: command error\n");
 		return (res);
 	}
 
@@ -162,7 +162,7 @@ ms_pckbport_iopen(device_t self, int flags)
 
 
 static int
-ms_pckbport_iclose(device_t self, int flags)
+ms_pckbport_iclose(struct device *self, int flags)
 {
 	struct ms_pckbport_softc *sc = device_private(self);
 	u_char cmd[1];
@@ -172,7 +172,7 @@ ms_pckbport_iclose(device_t self, int flags)
 	res = pckbport_enqueue_cmd(sc->sc_kbctag, sc->sc_kbcslot,
 				cmd, 1, 0, 1, NULL);
 	if (res)
-		printf("%s: command error\n", __func__);
+		printf("pms_disable: command error\n");
 
 	pckbport_slot_enable(sc->sc_kbctag, sc->sc_kbcslot, 0);
 
@@ -265,7 +265,7 @@ ms_pckbport_input(void *vsc, int data)
 		d = to_one[d - 1];		/* from 1..7 to {1,2,4} */
 		fe->id = to_id[d - 1];		/* from {1,2,4} to ID */
 		fe->value = (mb & d) ? VKEY_DOWN : VKEY_UP;
-		firm_gettime(fe);
+		getmicrotime(&fe->time);
 		ADVANCE;
 		ub ^= d;	/* reflect the button state change */
 	}
@@ -274,7 +274,7 @@ ms_pckbport_input(void *vsc, int data)
 		NEXT;
 		fe->id = LOC_X_DELTA;
 		fe->value = ms->ms_dx;
-		firm_gettime(fe);
+		getmicrotime(&fe->time);
 		ADVANCE;
 		ms->ms_dx = 0;
 	}
@@ -283,7 +283,7 @@ ms_pckbport_input(void *vsc, int data)
 		NEXT;
 		fe->id = LOC_Y_DELTA;
 		fe->value = ms->ms_dy;
-		firm_gettime(fe);
+		getmicrotime(&fe->time);
 		ADVANCE;
 		ms->ms_dy = 0;
 	}

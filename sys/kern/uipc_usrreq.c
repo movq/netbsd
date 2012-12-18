@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_usrreq.c,v 1.140 2012/10/06 22:58:08 christos Exp $	*/
+/*	$NetBSD: uipc_usrreq.c,v 1.119.4.5 2012/06/03 08:47:28 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2004, 2008, 2009 The NetBSD Foundation, Inc.
@@ -96,7 +96,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_usrreq.c,v 1.140 2012/10/06 22:58:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_usrreq.c,v 1.119.4.5 2012/06/03 08:47:28 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -223,8 +223,7 @@ unp_setpeerlocks(struct socket *so, struct socket *so2)
 	 * with the head when the pair of sockets stand completely
 	 * on their own.
 	 */
-	KASSERT(so->so_head == NULL);
-	if (so2->so_head != NULL)
+	if (so->so_head != NULL || so2->so_head != NULL)
 		return;
 
 	/*
@@ -382,7 +381,7 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 #endif
 	p = l ? l->l_proc : NULL;
 	if (req != PRU_ATTACH) {
-		if (unp == NULL) {
+		if (unp == 0) {
 			error = EINVAL;
 			goto release;
 		}
@@ -392,7 +391,7 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	switch (req) {
 
 	case PRU_ATTACH:
-		if (unp != NULL) {
+		if (unp != 0) {
 			error = EISCONN;
 			break;
 		}
@@ -414,7 +413,7 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		 * locked by uipc_lock.
 		 */
 		unp_resetlock(so);
-		if (unp->unp_vnode == NULL)
+		if (unp->unp_vnode == 0)
 			error = EINVAL;
 		break;
 
@@ -454,7 +453,7 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		 * is not locked, so when changing so2->so_lock
 		 * another thread can grab it while so->so_lock is still
 		 * pointing to the (locked) uipc_lock.
-		 * this should be harmless, except that this makes
+		 * this should be harmless, exept that this makes
 		 * solocked2() and solocked() unreliable.
 		 * Another problem is that unp_setaddr() expects the
 		 * the socket locked. Grabing sotounpcb(so2)->unp_streamlock
@@ -634,7 +633,7 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 
 		KASSERT(so->so_head == NULL);
 #ifdef DIAGNOSTIC
-		if (so->so_pcb == NULL)
+		if (so->so_pcb == 0)
 			panic("uipc 5: drop killed pcb");
 #endif
 		unp_detach(unp);
@@ -825,7 +824,7 @@ unp_attach(struct socket *so)
 	unp = malloc(sizeof(*unp), M_PCB, M_NOWAIT);
 	if (unp == NULL)
 		return (ENOBUFS);
-	memset(unp, 0, sizeof(*unp));
+	memset((void *)unp, 0, sizeof(*unp));
 	unp->unp_socket = so;
 	so->so_pcb = unp;
 	nanotime(&unp->unp_ctime);
@@ -845,7 +844,7 @@ unp_detach(struct unpcb *unp)
 		sounlock(so);
 		/* Acquire v_interlock to protect against unp_connect(). */
 		/* XXXAD racy */
-		mutex_enter(vp->v_interlock);
+		mutex_enter(&vp->v_interlock);
 		vp->v_socket = NULL;
 		vrelel(vp, 0);
 		solock(so);
@@ -885,7 +884,6 @@ unp_bind(struct socket *so, struct mbuf *nam, struct lwp *l)
 	struct vattr vattr;
 	size_t addrlen;
 	int error;
-	struct pathbuf *pb;
 	struct nameidata nd;
 	proc_t *p;
 
@@ -913,18 +911,12 @@ unp_bind(struct socket *so, struct mbuf *nam, struct lwp *l)
 	m_copydata(nam, 0, nam->m_len, (void *)sun);
 	*(((char *)sun) + nam->m_len) = '\0';
 
-	pb = pathbuf_create(sun->sun_path);
-	if (pb == NULL) {
-		error = ENOMEM;
-		goto bad;
-	}
-	NDINIT(&nd, CREATE, FOLLOW | LOCKPARENT | TRYEMULROOT, pb);
+	NDINIT(&nd, CREATE, FOLLOW | LOCKPARENT | TRYEMULROOT, UIO_SYSSPACE,
+	    sun->sun_path);
 
 /* SHOULD BE ABLE TO ADOPT EXISTING AND wakeup() ALA FIFO's */
-	if ((error = namei(&nd)) != 0) {
-		pathbuf_destroy(pb);
+	if ((error = namei(&nd)) != 0)
 		goto bad;
-	}
 	vp = nd.ni_vp;
 	if (vp != NULL) {
 		VOP_ABORTOP(nd.ni_dvp, &nd.ni_cnd);
@@ -933,18 +925,15 @@ unp_bind(struct socket *so, struct mbuf *nam, struct lwp *l)
 		else
 			vput(nd.ni_dvp);
 		vrele(vp);
-		pathbuf_destroy(pb);
 		error = EADDRINUSE;
 		goto bad;
 	}
-	vattr_null(&vattr);
+	VATTR_NULL(&vattr);
 	vattr.va_type = VSOCK;
 	vattr.va_mode = ACCESSPERMS & ~(p->p_cwdi->cwdi_cmask);
 	error = VOP_CREATE(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd, &vattr);
-	if (error) {
-		pathbuf_destroy(pb);
+	if (error)
 		goto bad;
-	}
 	vp = nd.ni_vp;
 	solock(so);
 	vp->v_socket = unp->unp_socket;
@@ -955,9 +944,8 @@ unp_bind(struct socket *so, struct mbuf *nam, struct lwp *l)
 	unp->unp_connid.unp_euid = kauth_cred_geteuid(l->l_cred);
 	unp->unp_connid.unp_egid = kauth_cred_getegid(l->l_cred);
 	unp->unp_flags |= UNP_EIDSBIND;
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	unp->unp_flags &= ~UNP_BUSY;
-	pathbuf_destroy(pb);
 	return (0);
 
  bad:
@@ -976,7 +964,6 @@ unp_connect(struct socket *so, struct mbuf *nam, struct lwp *l)
 	struct unpcb *unp, *unp2, *unp3;
 	size_t addrlen;
 	int error;
-	struct pathbuf *pb;
 	struct nameidata nd;
 
 	unp = sotounpcb(so);
@@ -1001,52 +988,44 @@ unp_connect(struct socket *so, struct mbuf *nam, struct lwp *l)
 	m_copydata(nam, 0, nam->m_len, (void *)sun);
 	*(((char *)sun) + nam->m_len) = '\0';
 
-	pb = pathbuf_create(sun->sun_path);
-	if (pb == NULL) {
-		error = ENOMEM;
-		goto bad2;
-	}
+	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, UIO_SYSSPACE,
+	    sun->sun_path);
 
-	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, pb);
-
-	if ((error = namei(&nd)) != 0) {
-		pathbuf_destroy(pb);
+	if ((error = namei(&nd)) != 0)
 		goto bad2;
-	}
 	vp = nd.ni_vp;
 	if (vp->v_type != VSOCK) {
 		error = ENOTSOCK;
 		goto bad;
 	}
-	pathbuf_destroy(pb);
 	if ((error = VOP_ACCESS(vp, VWRITE, l->l_cred)) != 0)
 		goto bad;
 	/* Acquire v_interlock to protect against unp_detach(). */
-	mutex_enter(vp->v_interlock);
+	mutex_enter(&vp->v_interlock);
 	so2 = vp->v_socket;
 	if (so2 == NULL) {
-		mutex_exit(vp->v_interlock);
+		mutex_exit(&vp->v_interlock);
 		error = ECONNREFUSED;
 		goto bad;
 	}
 	if (so->so_type != so2->so_type) {
-		mutex_exit(vp->v_interlock);
+		mutex_exit(&vp->v_interlock);
 		error = EPROTOTYPE;
 		goto bad;
 	}
 	solock(so);
 	unp_resetlock(so);
-	mutex_exit(vp->v_interlock);
+	mutex_exit(&vp->v_interlock);
 	if ((so->so_proto->pr_flags & PR_CONNREQUIRED) != 0) {
 		/*
 		 * This may seem somewhat fragile but is OK: if we can
 		 * see SO_ACCEPTCONN set on the endpoint, then it must
 		 * be locked by the domain-wide uipc_lock.
 		 */
-		KASSERT((so2->so_options & SO_ACCEPTCONN) == 0 ||
+		KASSERT((so->so_options & SO_ACCEPTCONN) == 0 ||
 		    so2->so_lock == uipc_lock);
 		if ((so2->so_options & SO_ACCEPTCONN) == 0 ||
-		    (so3 = sonewconn(so2, 0)) == NULL) {
+		    (so3 = sonewconn(so2, 0)) == 0) {
 			error = ECONNREFUSED;
 			sounlock(so);
 			goto bad;
@@ -1096,13 +1075,12 @@ unp_connect2(struct socket *so, struct socket *so2, int req)
 	 *
 	 * local endpoint (so)
 	 * remote endpoint (so2)
-	 * queue head (so2->so_head, only if PR_CONNREQUIRED)
+	 * queue head (so->so_head, only if PR_CONNREQUIRED)
 	 */
 	KASSERT(solocked2(so, so2));
-	KASSERT(so->so_head == NULL);
-	if (so2->so_head != NULL) {
-		KASSERT(so2->so_lock == uipc_lock);
-		KASSERT(solocked2(so2, so2->so_head));
+	if (so->so_head != NULL) {
+		KASSERT(so->so_lock == uipc_lock);
+		KASSERT(solocked2(so, so->so_head));
 	}
 
 	unp2 = sotounpcb(so2);
@@ -1131,10 +1109,8 @@ unp_connect2(struct socket *so, struct socket *so2, int req)
 		 * require that the locks already match (the sockets
 		 * are created that way).
 		 */
-		if (req == PRU_CONNECT) {
-			KASSERT(so2->so_head != NULL);
+		if (req == PRU_CONNECT)
 			unp_setpeerlocks(so, so2);
-		}
 		break;
 
 	default:
@@ -1233,68 +1209,80 @@ unp_drain(void)
 #endif
 
 int
-unp_externalize(struct mbuf *rights, struct lwp *l, int flags)
+unp_externalize(struct mbuf *rights, struct lwp *l)
 {
-	struct cmsghdr * const cm = mtod(rights, struct cmsghdr *);
-	struct proc * const p = l->l_proc;
+	struct cmsghdr *cm = mtod(rights, struct cmsghdr *);
+	struct proc *p = l->l_proc;
+	int i, *fdp;
 	file_t **rp;
-	int error = 0;
+	file_t *fp;
+	int nfds, error = 0;
 
-	const size_t nfds = (cm->cmsg_len - CMSG_ALIGN(sizeof(*cm))) /
+	nfds = (cm->cmsg_len - CMSG_ALIGN(sizeof(*cm))) /
 	    sizeof(file_t *);
+	rp = (file_t **)CMSG_DATA(cm);
 
-	int * const fdp = kmem_alloc(nfds * sizeof(int), KM_SLEEP);
+	fdp = malloc(nfds * sizeof(int), M_TEMP, M_WAITOK);
 	rw_enter(&p->p_cwdi->cwdi_lock, RW_READER);
 
 	/* Make sure the recipient should be able to see the files.. */
-	rp = (file_t **)CMSG_DATA(cm);
-	for (size_t i = 0; i < nfds; i++) {
-		file_t * const fp = *rp++;
-		if (fp == NULL) {
-			error = EINVAL;
-			goto out;
-		}
-		/*
-		 * If we are in a chroot'ed directory, and
-		 * someone wants to pass us a directory, make
-		 * sure it's inside the subtree we're allowed
-		 * to access.
-		 */
-		if (p->p_cwdi->cwdi_rdir != NULL && fp->f_type == DTYPE_VNODE) {
-			vnode_t *vp = (vnode_t *)fp->f_data;
-			if ((vp->v_type == VDIR) &&
-			    !vn_isunder(vp, p->p_cwdi->cwdi_rdir, l)) {
-				error = EPERM;
-				goto out;
+	if (p->p_cwdi->cwdi_rdir != NULL) {
+		rp = (file_t **)CMSG_DATA(cm);
+		for (i = 0; i < nfds; i++) {
+			fp = *rp++;
+			/*
+			 * If we are in a chroot'ed directory, and
+			 * someone wants to pass us a directory, make
+			 * sure it's inside the subtree we're allowed
+			 * to access.
+			 */
+			if (fp->f_type == DTYPE_VNODE) {
+				vnode_t *vp = (vnode_t *)fp->f_data;
+				if ((vp->v_type == VDIR) &&
+				    !vn_isunder(vp, p->p_cwdi->cwdi_rdir, l)) {
+					error = EPERM;
+					break;
+				}
 			}
 		}
 	}
 
  restart:
+	rp = (file_t **)CMSG_DATA(cm);
+	if (error != 0) {
+		for (i = 0; i < nfds; i++) {
+			fp = *rp;
+			*rp++ = 0;
+			unp_discard_now(fp);
+		}
+		goto out;
+	}
+
 	/*
 	 * First loop -- allocate file descriptor table slots for the
 	 * new files.
 	 */
-	for (size_t i = 0; i < nfds; i++) {
+	for (i = 0; i < nfds; i++) {
+		fp = *rp++;
 		if ((error = fd_alloc(p, 0, &fdp[i])) != 0) {
 			/*
 			 * Back out what we've done so far.
 			 */
-			while (i-- > 0) {
+			for (--i; i >= 0; i--) {
 				fd_abort(p, NULL, fdp[i]);
 			}
 			if (error == ENOSPC) {
 				fd_tryexpand(p);
 				error = 0;
-				goto restart;
+			} else {
+				/*
+				 * This is the error that has historically
+				 * been returned, and some callers may
+				 * expect it.
+				 */
+				error = EMSGSIZE;
 			}
-			/*
-			 * This is the error that has historically
-			 * been returned, and some callers may
-			 * expect it.
-			 */
-			error = EMSGSIZE;
-			goto out;
+			goto restart;
 		}
 	}
 
@@ -1303,17 +1291,10 @@ unp_externalize(struct mbuf *rights, struct lwp *l, int flags)
 	 * file passing state and affix the descriptors.
 	 */
 	rp = (file_t **)CMSG_DATA(cm);
-	int *ofdp = (int *)CMSG_DATA(cm);
-	for (size_t i = 0; i < nfds; i++) {
-		file_t * const fp = *rp++;
-		const int fd = fdp[i];
+	for (i = 0; i < nfds; i++) {
+		fp = *rp++;
 		atomic_dec_uint(&unp_rights);
-		fd_set_exclose(l, fd, (flags & O_CLOEXEC) != 0);
-		fd_affix(p, fp, fd);
-		/*
-		 * Done with this file pointer, replace it with a fd;
-		 */
-		*ofdp++ = fd;
+		fd_affix(p, fp, fdp[i]);
 		mutex_enter(&fp->f_lock);
 		fp->f_msgcount--;
 		mutex_exit(&fp->f_lock);
@@ -1327,26 +1308,16 @@ unp_externalize(struct mbuf *rights, struct lwp *l, int flags)
 	}
 
 	/*
-	 * Adjust length, in case of transition from large file_t
-	 * pointers to ints.
+	 * Copy temporary array to message and adjust length, in case of
+	 * transition from large file_t pointers to ints.
 	 */
-	if (sizeof(file_t *) != sizeof(int)) {
-		cm->cmsg_len = CMSG_LEN(nfds * sizeof(int));
-		rights->m_len = CMSG_SPACE(nfds * sizeof(int));
-	}
+	memcpy(CMSG_DATA(cm), fdp, nfds * sizeof(int));
+	cm->cmsg_len = CMSG_LEN(nfds * sizeof(int));
+	rights->m_len = CMSG_SPACE(nfds * sizeof(int));
  out:
-	if (__predict_false(error != 0)) {
-		rp = (file_t **)CMSG_DATA(cm);
-		for (size_t i = 0; i < nfds; i++) {
-			file_t * const fp = *rp;
-			*rp++ = 0;
-			unp_discard_now(fp);
-		}
-	}
-
 	rw_exit(&p->p_cwdi->cwdi_lock);
-	kmem_free(fdp, nfds * sizeof(int));
-	return error;
+	free(fdp, M_TEMP);
+	return (error);
 }
 
 int
@@ -1414,7 +1385,7 @@ unp_internalize(struct mbuf **controlp)
 	fdp = (int *)CMSG_DATA(cm) + nfds;
 	rp = files + nfds;
 	for (i = 0; i < nfds; i++) {
-		fp = fdescp->fd_dt->dt_ff[*--fdp]->ff_file;
+		fp = fdescp->fd_ofiles[*--fdp]->ff_file;
 		KASSERT(fp != NULL);
 		mutex_enter(&fp->f_lock);
 		*--rp = fp;

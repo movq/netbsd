@@ -1,4 +1,4 @@
-/*	$NetBSD: nslu2_machdep.c,v 1.23 2012/11/12 18:00:39 skrll Exp $	*/
+/*	$NetBSD: nslu2_machdep.c,v 1.7 2008/04/28 20:23:17 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -41,6 +41,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -89,12 +95,12 @@
  */
 
 /*
- * Machine dependent functions for kernel setup for Linksys NSLU2
+ * Machine dependant functions for kernel setup for Linksys NSLU2
  * using RedBoot firmware.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nslu2_machdep.c,v 1.23 2012/11/12 18:00:39 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nslu2_machdep.c,v 1.7 2008/04/28 20:23:17 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -120,7 +126,7 @@ __KERNEL_RCSID(0, "$NetBSD: nslu2_machdep.c,v 1.23 2012/11/12 18:00:39 skrll Exp
 #include <ddb/db_extern.h>
 
 #include <machine/bootconfig.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <arm/undefined.h>
@@ -151,6 +157,20 @@ __KERNEL_RCSID(0, "$NetBSD: nslu2_machdep.c,v 1.23 2012/11/12 18:00:39 skrll Exp
  */
 #define	KERNEL_VM_SIZE		0x0C000000
 
+
+/*
+ * Address to call from cpu_reset() to reset the machine.
+ * This is machine architecture dependant as it varies depending
+ * on where the ROM appears when you turn the MMU off.
+ */
+
+u_int cpu_reset_address = 0x00000000;
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#define UND_STACK_SIZE	1
+
 BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
@@ -160,12 +180,21 @@ vm_offset_t physical_freestart;
 vm_offset_t physical_freeend;
 vm_offset_t physical_end;
 u_int free_pages;
+vm_offset_t pagetables_start;
+int physmem = 0;
 
 /* Physical and virtual addresses for some global pages */
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
 pv_addr_t minidataclean;
 
 vm_offset_t msgbufphys;
 
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 extern int end;
 
 #ifdef PMAP_DEBUG
@@ -184,10 +213,12 @@ extern int pmap_debug_level;
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
 
+struct user *proc0paddr;
+
 /* Prototypes */
 
 void	consinit(void);
-u_int	cpu_get_control(void);
+u_int	cpu_get_control   __P((void));
 
 /*
  * Define the default console speed for the board.  This is generally
@@ -254,7 +285,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -282,8 +312,6 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -473,7 +501,7 @@ initarm(void *arg)
 	bootconfig.dram[0].address = 0x10000000;
 	bootconfig.dram[0].pages = ixp425_sdram_size() / PAGE_SIZE;
 
-	kerneldatasize = (uint32_t)&end - (uint32_t)KERNEL_TEXT_BASE;
+	kerneldatasize = (u_int32_t)&end - (u_int32_t)KERNEL_TEXT_BASE;
 
 #ifdef VERBOSE_INIT_ARM
         printf("kernsize=0x%x\n", kerneldatasize);
@@ -716,7 +744,7 @@ initarm(void *arg)
 	printf("switching to new L1 page table  @%#lx...", kernel_l1pt.pv_pa);
 #endif
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -724,7 +752,8 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+	proc0paddr = (struct user *)kernelstack.pv_va;
+	lwp0.l_addr = proc0paddr;
 
 #ifdef VERBOSE_INIT_ARM
 	printf("bootstrap done.\n");
@@ -799,6 +828,11 @@ initarm(void *arg)
 
 #ifdef BOOTHOWTO
 	boothowto = BOOTHOWTO;
+#endif
+
+#if NKSYMS || defined(DDB) || defined(LKM)
+	/* Firmware doesn't load symbols. */
+	ksyms_init(0, NULL, NULL);
 #endif
 
 #ifdef DDB

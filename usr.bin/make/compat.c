@@ -1,4 +1,4 @@
-/*	$NetBSD: compat.c,v 1.90 2012/10/07 19:17:31 sjg Exp $	*/
+/*	$NetBSD: compat.c,v 1.71 2008/02/15 21:29:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -70,14 +70,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: compat.c,v 1.90 2012/10/07 19:17:31 sjg Exp $";
+static char rcsid[] = "$NetBSD: compat.c,v 1.71 2008/02/15 21:29:50 christos Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)compat.c	8.2 (Berkeley) 3/19/94";
 #else
-__RCSID("$NetBSD: compat.c,v 1.90 2012/10/07 19:17:31 sjg Exp $");
+__RCSID("$NetBSD: compat.c,v 1.71 2008/02/15 21:29:50 christos Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -119,7 +119,7 @@ __RCSID("$NetBSD: compat.c,v 1.90 2012/10/07 19:17:31 sjg Exp $");
 
 static char 	    meta[256];
 
-static GNode	    *curTarg = NULL;
+static GNode	    *curTarg = NILGNODE;
 static GNode	    *ENDNode;
 static void CompatInterrupt(int);
 
@@ -159,7 +159,7 @@ CompatInterrupt(int signo)
 {
     GNode   *gn;
 
-    if ((curTarg != NULL) && !Targ_Precious (curTarg)) {
+    if ((curTarg != NILGNODE) && !Targ_Precious (curTarg)) {
 	char	  *p1;
 	char 	  *file = Var_Value(TARGET, curTarg, &p1);
 
@@ -174,16 +174,13 @@ CompatInterrupt(int signo)
 	 */
 	if (signo == SIGINT) {
 	    gn = Targ_FindNode(".INTERRUPT", TARG_NOCREATE);
-	    if (gn != NULL) {
+	    if (gn != NILGNODE) {
 		Compat_Make(gn, gn);
 	    }
 	}
 
     }
-    if (signo == SIGQUIT)
-	_exit(signo);
-    bmake_signal(signo, SIG_DFL);
-    kill(myPid, signo);
+    exit(signo);
 }
 
 /*-
@@ -205,7 +202,7 @@ CompatInterrupt(int signo)
  *-----------------------------------------------------------------------
  */
 int
-CompatRunCommand(void *cmdp, void *gnp)
+CompatRunCommand(ClientData cmdp, ClientData gnp)
 {
     char    	  *cmdStart;	/* Start of expanded command */
     char 	  *cp, *bp;
@@ -214,8 +211,8 @@ CompatRunCommand(void *cmdp, void *gnp)
     volatile Boolean errCheck; 	/* Check errors */
     int 	  reason;   	/* Reason for child's death */
     int	    	  status;   	/* Description of child's death */
-    pid_t	  cpid;	    	/* Child actually found */
-    pid_t	  retstat;    	/* Result of wait */
+    int	    	  cpid;	    	/* Child actually found */
+    ReturnStatus  retstat;    	/* Status of fork */
     LstNode 	  cmdNode;  	/* Node where current command is located */
     const char  ** volatile av;	/* Argument vector for thing to exec */
     char	** volatile mav;/* Copy of the argument vector for freeing */
@@ -244,16 +241,17 @@ CompatRunCommand(void *cmdp, void *gnp)
 
     if (*cmdStart == '\0') {
 	free(cmdStart);
+	Error("%s expands to empty string", cmd);
 	return(0);
+    } else {
+	cmd = cmdStart;
     }
-    cmd = cmdStart;
     Lst_Replace(cmdNode, cmdStart);
 
     if ((gn->type & OP_SAVE_CMDS) && (gn != ENDNode)) {
 	(void)Lst_AtEnd(ENDNode->commands, cmdStart);
 	return(0);
-    }
-    if (strcmp(cmdStart, "...") == 0) {
+    } else if (strcmp(cmdStart, "...") == 0) {
 	gn->type |= OP_SAVE_CMDS;
 	return(0);
     }
@@ -277,12 +275,6 @@ CompatRunCommand(void *cmdp, void *gnp)
 
     while (isspace((unsigned char)*cmd))
 	cmd++;
-
-    /*
-     * If we did not end up with a command, just skip it.
-     */
-    if (!*cmd)
-	return (0);
 
 #if !defined(MAKE_NATIVE)
     /*
@@ -320,10 +312,7 @@ CompatRunCommand(void *cmdp, void *gnp)
     if (!doIt && NoExecute(gn)) {
 	return (0);
     }
-    if (DEBUG(JOB))
-	fprintf(debug_file, "Execute: '%s'\n", cmd);
 
-again:
     if (useShell) {
 	/*
 	 * We need to pass the command off to the shell, typically
@@ -350,37 +339,22 @@ again:
 	 * No meta-characters, so no need to exec a shell. Break the command
 	 * into words to form an argument vector we can execute.
 	 */
-	mav = brk_string(cmd, &argc, TRUE, &bp);
-	if (mav == NULL) {
-		useShell = 1;
-		goto again;
-	}
-	av = (void *)mav;
+	mav =  brk_string(cmd, &argc, TRUE, &bp);
+	av = (const char **)mav;
     }
 
     local = TRUE;
 
-#ifdef USE_META
-    if (useMeta) {
-	meta_compat_start();
-    }
-#endif
-    
     /*
      * Fork and execute the single command. If the fork fails, we abort.
      */
-    cpid = vFork();
+    cpid = vfork();
     if (cpid < 0) {
 	Fatal("Could not fork");
     }
     if (cpid == 0) {
 	Check_Cwd(av);
 	Var_ExportVars();
-#ifdef USE_META
-	if (useMeta) {
-	    meta_compat_child();
-	}
-#endif
 	if (local)
 	    (void)execvp(av[0], (char *const *)UNCONST(av));
 	else
@@ -394,20 +368,12 @@ again:
 	free(bp);
     Lst_Replace(cmdNode, NULL);
 
-#ifdef USE_META
-    if (useMeta) {
-	meta_compat_parent();
-    }
-#endif
-
     /*
      * The child is off and running. Now all we can do is wait...
      */
     while (1) {
 
 	while ((retstat = wait(&reason)) != cpid) {
-	    if (retstat > 0)
-		JobReapChild(retstat, reason, FALSE); /* not ours? */
 	    if (retstat == -1 && errno != EINTR) {
 		break;
 	    }
@@ -418,11 +384,6 @@ again:
 		status = WSTOPSIG(reason);		/* stopped */
 	    } else if (WIFEXITED(reason)) {
 		status = WEXITSTATUS(reason);		/* exited */
-#if defined(USE_META) && defined(USE_FILEMON_ONCE)
-		if (useMeta) {
-		    meta_cmd_finish(NULL);
-		}
-#endif
 		if (status != 0) {
 		    if (DEBUG(ERROR)) {
 		        fprintf(debug_file, "\n*** Failed target:  %s\n*** Failed command: ",
@@ -439,7 +400,7 @@ again:
 		        }
 			fprintf(debug_file, "\n");
 		    }
-		    printf("*** Error code %d", status);
+		    fprintf(debug_file, "*** Error code %d", status);
 		}
 	    } else {
 		status = WTERMSIG(reason);		/* signaled */
@@ -449,11 +410,6 @@ again:
 
 	    if (!WIFEXITED(reason) || (status != 0)) {
 		if (errCheck) {
-#ifdef USE_META
-		    if (useMeta) {
-			meta_job_error(NULL, gn, 0, status);
-		    }
-#endif
 		    gn->made = ERROR;
 		    if (keepgoing) {
 			/*
@@ -500,7 +456,7 @@ again:
  *-----------------------------------------------------------------------
  */
 int
-Compat_Make(void *gnp, void *pgnp)
+Compat_Make(ClientData gnp, ClientData pgnp)
 {
     GNode *gn = (GNode *)gnp;
     GNode *pgn = (GNode *)pgnp;
@@ -527,7 +483,7 @@ Compat_Make(void *gnp, void *pgnp)
 	    goto cohorts;
 	}
 
-	if (Lst_Member(gn->iParents, pgn) != NULL) {
+	if (Lst_Member(gn->iParents, pgn) != NILLNODE) {
 	    char *p1;
 	    Var_Set(IMPSRC, Var_Value(TARGET, gn, &p1), pgn, 0);
 	    if (p1)
@@ -535,10 +491,10 @@ Compat_Make(void *gnp, void *pgnp)
 	}
 
 	/*
-	 * All the children were made ok. Now cmgn->mtime contains the
-	 * modification time of the newest child, we need to find out if we
-	 * exist and when we were modified last. The criteria for datedness
-	 * are defined by the Make_OODate function.
+	 * All the children were made ok. Now cmtime contains the modification
+	 * time of the newest child, we need to find out if we exist and when
+	 * we were modified last. The criteria for datedness are defined by the
+	 * Make_OODate function.
 	 */
 	if (DEBUG(MAKE)) {
 	    fprintf(debug_file, "Examining %s...", gn->name);
@@ -586,24 +542,14 @@ Compat_Make(void *gnp, void *pgnp)
 	     */
 	    if (!touchFlag || (gn->type & OP_MAKE)) {
 		curTarg = gn;
-#ifdef USE_META
-		if (useMeta && !NoExecute(gn)) {
-		    meta_job_start(NULL, gn);
-		}
-#endif
 		Lst_ForEach(gn->commands, CompatRunCommand, gn);
-		curTarg = NULL;
+		curTarg = NILGNODE;
 	    } else {
 		Job_Touch(gn, gn->type & OP_SILENT);
 	    }
 	} else {
 	    gn->made = ERROR;
 	}
-#ifdef USE_META
-	if (useMeta && !NoExecute(gn)) {
-	    meta_job_finish(NULL);
-	}
-#endif
 
 	if (gn->made != ERROR) {
 	    /*
@@ -621,7 +567,7 @@ Compat_Make(void *gnp, void *pgnp)
 	} else if (keepgoing) {
 	    pgn->flags &= ~REMAKE;
 	} else {
-	    PrintOnError(gn, "\n\nStop.");
+	    PrintOnError("\n\nStop.");
 	    exit(1);
 	}
     } else if (gn->made == ERROR) {
@@ -631,7 +577,7 @@ Compat_Make(void *gnp, void *pgnp)
 	 */
 	pgn->flags &= ~REMAKE;
     } else {
-	if (Lst_Member(gn->iParents, pgn) != NULL) {
+	if (Lst_Member(gn->iParents, pgn) != NILLNODE) {
 	    char *p1;
 	    Var_Set(IMPSRC, Var_Value(TARGET, gn, &p1), pgn, 0);
 	    if (p1)
@@ -688,17 +634,17 @@ Compat_Run(Lst targs)
 
     Compat_Init();
 
-    if (bmake_signal(SIGINT, SIG_IGN) != SIG_IGN) {
-	bmake_signal(SIGINT, CompatInterrupt);
+    if (signal(SIGINT, SIG_IGN) != SIG_IGN) {
+	signal(SIGINT, CompatInterrupt);
     }
-    if (bmake_signal(SIGTERM, SIG_IGN) != SIG_IGN) {
-	bmake_signal(SIGTERM, CompatInterrupt);
+    if (signal(SIGTERM, SIG_IGN) != SIG_IGN) {
+	signal(SIGTERM, CompatInterrupt);
     }
-    if (bmake_signal(SIGHUP, SIG_IGN) != SIG_IGN) {
-	bmake_signal(SIGHUP, CompatInterrupt);
+    if (signal(SIGHUP, SIG_IGN) != SIG_IGN) {
+	signal(SIGHUP, CompatInterrupt);
     }
-    if (bmake_signal(SIGQUIT, SIG_IGN) != SIG_IGN) {
-	bmake_signal(SIGQUIT, CompatInterrupt);
+    if (signal(SIGQUIT, SIG_IGN) != SIG_IGN) {
+	signal(SIGQUIT, CompatInterrupt);
     }
 
     ENDNode = Targ_FindNode(".END", TARG_CREATE);
@@ -709,10 +655,10 @@ Compat_Run(Lst targs)
      */
     if (!queryFlag) {
 	gn = Targ_FindNode(".BEGIN", TARG_NOCREATE);
-	if (gn != NULL) {
+	if (gn != NILGNODE) {
 	    Compat_Make(gn, gn);
             if (gn->made == ERROR) {
-                PrintOnError(gn, "\n\nStop.");
+                PrintOnError("\n\nStop.");
                 exit(1);
             }
 	}
@@ -753,7 +699,7 @@ Compat_Run(Lst targs)
     if (errors == 0) {
 	Compat_Make(ENDNode, ENDNode);
 	if (gn->made == ERROR) {
-	    PrintOnError(gn, "\n\nStop.");
+	    PrintOnError("\n\nStop.");
 	    exit(1);
 	}
     }

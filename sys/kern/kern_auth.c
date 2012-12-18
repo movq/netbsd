@@ -1,4 +1,30 @@
-/* $NetBSD: kern_auth.c,v 1.72 2012/09/16 14:35:26 christos Exp $ */
+/* $NetBSD: kern_auth.c,v 1.61 2008/08/15 01:31:02 matt Exp $ */
+
+/*-
+ * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*-
  * Copyright (c) 2005, 2006 Elad Efrat <elad@NetBSD.org>
@@ -28,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.72 2012/09/16 14:35:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.61 2008/08/15 01:31:02 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -39,18 +65,15 @@ __KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.72 2012/09/16 14:35:26 christos Exp 
 #include <sys/kauth.h>
 #include <sys/kmem.h>
 #include <sys/rwlock.h>
-#include <sys/sysctl.h>
+#include <sys/sysctl.h>		/* for pi_[p]cread */
 #include <sys/atomic.h>
 #include <sys/specificdata.h>
-#include <sys/vnode.h>
-
-#include <secmodel/secmodel.h>
 
 /*
  * Secmodel-specific credentials.
  */
 struct kauth_key {
-	secmodel_t ks_secmodel;		/* secmodel */
+	const char *ks_secmodel;	/* secmodel */
 	specificdata_key_t ks_key;	/* key */
 };
 
@@ -66,7 +89,7 @@ struct kauth_cred {
 	 * Ensure that the first part of the credential resides in its own
 	 * cache line.  Due to sharing there aren't many kauth_creds in a
 	 * typical system, but the reference counts change very often.
-	 * Keeping it separate from the rest of the data prevents false
+	 * Keeping it seperate from the rest of the data prevents false
 	 * sharing between CPUs.
 	 */
 	u_int cr_refcnt;		/* reference count */
@@ -119,11 +142,11 @@ static kauth_scope_t kauth_builtin_scope_network;
 static kauth_scope_t kauth_builtin_scope_machdep;
 static kauth_scope_t kauth_builtin_scope_device;
 static kauth_scope_t kauth_builtin_scope_cred;
-static kauth_scope_t kauth_builtin_scope_vnode;
+
+static unsigned int nsecmodels = 0;
 
 static specificdata_domain_t kauth_domain;
 static pool_cache_t kauth_cred_cache;
-
 krwlock_t	kauth_lock;
 
 /* Allocate new, empty kauth credentials. */
@@ -156,7 +179,7 @@ kauth_cred_hold(kauth_cred_t cred)
 	KASSERT(cred != NULL);
 	KASSERT(cred->cr_refcnt > 0);
 
-	atomic_inc_uint(&cred->cr_refcnt);
+        atomic_inc_uint(&cred->cr_refcnt);
 }
 
 /* Decrease reference count to cred. If reached zero, free it. */
@@ -166,7 +189,6 @@ kauth_cred_free(kauth_cred_t cred)
 
 	KASSERT(cred != NULL);
 	KASSERT(cred->cr_refcnt > 0);
-	ASSERT_SLEEPABLE();
 
 	if (atomic_dec_uint_nv(&cred->cr_refcnt) > 0)
 		return;
@@ -258,12 +280,6 @@ kauth_proc_fork(struct proc *parent, struct proc *child)
 	/* XXX: relies on parent process stalling during fork() */
 	kauth_cred_hook(parent->p_cred, KAUTH_CRED_FORK, parent,
 	    child);
-}
-
-void
-kauth_proc_chroot(kauth_cred_t cred, struct cwdinfo *cwdi)
-{
-	kauth_cred_hook(cred, KAUTH_CRED_CHROOT, cwdi, NULL);
 }
 
 uid_t
@@ -372,7 +388,7 @@ kauth_cred_setsvgid(kauth_cred_t cred, gid_t gid)
 int
 kauth_cred_ismember_gid(kauth_cred_t cred, gid_t gid, int *resultp)
 {
-	uint32_t i;
+	int i;
 
 	KASSERT(cred != NULL);
 	KASSERT(resultp != NULL);
@@ -487,7 +503,7 @@ kauth_cred_getgroups(kauth_cred_t cred, gid_t *grbuf, size_t len,
 }
 
 int
-kauth_register_key(secmodel_t secmodel, kauth_key_t *result)
+kauth_register_key(const char *secmodel, kauth_key_t *result)
 {
 	kauth_key_t k;
 	specificdata_key_t key;
@@ -616,7 +632,7 @@ kauth_cred_uucmp(kauth_cred_t cred, const struct uucred *uuc)
 
 	if (cred->cr_euid == uuc->cr_uid &&
 	    cred->cr_egid == uuc->cr_gid &&
-	    cred->cr_ngroups == (uint32_t)uuc->cr_ngroups) {
+	    cred->cr_ngroups == uuc->cr_ngroups) {
 		int i;
 
 		/* Check if all groups from uuc appear in cred. */
@@ -814,10 +830,6 @@ kauth_init(void)
 	/* Register device scope. */
 	kauth_builtin_scope_device = kauth_register_scope(KAUTH_SCOPE_DEVICE,
 	    NULL, NULL);
-
-	/* Register vnode scope. */
-	kauth_builtin_scope_vnode = kauth_register_scope(KAUTH_SCOPE_VNODE,
-	    NULL, NULL);
 }
 
 /*
@@ -911,16 +923,11 @@ kauth_unlisten_scope(kauth_listener_t listener)
  * credential - credentials of the user ("actor") making the request.
  * action - request identifier.
  * arg[0-3] - passed unmodified to listener(s).
- *
- * Returns the aggregated result:
- *     - KAUTH_RESULT_ALLOW if there is at least one KAUTH_RESULT_ALLOW and
- *       zero KAUTH_DESULT_DENY
- *     - KAUTH_RESULT_DENY if there is at least one KAUTH_RESULT_DENY
- *     - KAUTH_RESULT_DEFER if there is nothing but KAUTH_RESULT_DEFER
  */
-static int
-kauth_authorize_action_internal(kauth_scope_t scope, kauth_cred_t cred,
-    kauth_action_t action, void *arg0, void *arg1, void *arg2, void *arg3)
+int
+kauth_authorize_action(kauth_scope_t scope, kauth_cred_t cred,
+		       kauth_action_t action, void *arg0, void *arg1,
+		       void *arg2, void *arg3)
 {
 	kauth_listener_t listener;
 	int error, allow, fail;
@@ -930,7 +937,7 @@ kauth_authorize_action_internal(kauth_scope_t scope, kauth_cred_t cred,
 
 	/* Short-circuit requests coming from the kernel. */
 	if (cred == NOCRED || cred == FSCRED)
-		return KAUTH_RESULT_ALLOW;
+		return (0);
 
 	KASSERT(scope != NULL);
 
@@ -950,34 +957,16 @@ kauth_authorize_action_internal(kauth_scope_t scope, kauth_cred_t cred,
 	/* rw_exit(&kauth_lock); */
 
 	if (fail)
-		return (KAUTH_RESULT_DENY);
-
-	if (allow)
-		return (KAUTH_RESULT_ALLOW);
-
-	return (KAUTH_RESULT_DEFER);
-};
-
-int
-kauth_authorize_action(kauth_scope_t scope, kauth_cred_t cred,
-    kauth_action_t action, void *arg0, void *arg1, void *arg2, void *arg3)
-{
-	int r;
-
-	r = kauth_authorize_action_internal(scope, cred, action, arg0, arg1,
-	    arg2, arg3);
-
-	if (r == KAUTH_RESULT_DENY)
 		return (EPERM);
 
-	if (r == KAUTH_RESULT_ALLOW)
+	if (allow)
 		return (0);
 
-	if (secmodel_nsecmodels() == 0)
+	if (!nsecmodels)
 		return (0);
 
 	return (EPERM);
-}
+};
 
 /*
  * Generic scope authorization wrapper.
@@ -1063,72 +1052,6 @@ kauth_authorize_device_passthru(kauth_cred_t cred, dev_t dev, u_long bits,
 	    data, NULL));
 }
 
-kauth_action_t
-kauth_mode_to_action(mode_t mode)
-{
-	kauth_action_t action = 0;
-
-	if (mode & VREAD)
-		action |= KAUTH_VNODE_READ_DATA;
-	if (mode & VWRITE)
-		action |= KAUTH_VNODE_WRITE_DATA;
-	if (mode & VEXEC)
-		action |= KAUTH_VNODE_EXECUTE;
-
-	return action;
-}
-
-kauth_action_t
-kauth_access_action(mode_t access_mode, enum vtype vn_type, mode_t file_mode)
-{
-	kauth_action_t action = kauth_mode_to_action(access_mode);
-
-	if (FS_OBJECT_CAN_EXEC(vn_type, file_mode))
-		action |= KAUTH_VNODE_IS_EXEC;
-
-	return action;
-}
-
-kauth_action_t
-kauth_extattr_action(mode_t access_mode)
-{
-	kauth_action_t action = 0;
-
-	if (access_mode & VREAD)
-		action |= KAUTH_VNODE_READ_EXTATTRIBUTES;
-	if (access_mode & VWRITE)
-		action |= KAUTH_VNODE_WRITE_EXTATTRIBUTES;
-
-	return action;
-}
-
-int
-kauth_authorize_vnode(kauth_cred_t cred, kauth_action_t action,
-    struct vnode *vp, struct vnode *dvp, int fs_decision)
-{
-	int error;
-
-	error = kauth_authorize_action_internal(kauth_builtin_scope_vnode, cred,
-	    action, vp, dvp, NULL, NULL);
-
-	if (error == KAUTH_RESULT_DENY)
-		return (EACCES);
-
-	if (error == KAUTH_RESULT_ALLOW)
-		return (0);
-
-	/*
-	 * If the file-system does not support decision-before-action, we can
-	 * only short-circuit the operation (deny). If we're here, it means no
-	 * listener denied it, so our only alternative is to supposedly-allow
-	 * it and let the file-system have the last word.
-	 */
-	if (fs_decision == KAUTH_VNODE_REMOTEFS)
-		return (0);
-
-	return (fs_decision);
-}
-
 static int
 kauth_cred_hook(kauth_cred_t cred, kauth_action_t action, void *arg0,
     void *arg1)
@@ -1144,4 +1067,24 @@ kauth_cred_hook(kauth_cred_t cred, kauth_action_t action, void *arg0,
 #endif /* DIAGNOSTIC */
 
 	return (r);
+}
+
+void
+secmodel_register(void)
+{
+	KASSERT(nsecmodels + 1 != 0);
+
+	rw_enter(&kauth_lock, RW_WRITER);
+	nsecmodels++;
+	rw_exit(&kauth_lock);
+}
+
+void
+secmodel_deregister(void)
+{
+	KASSERT(nsecmodels != 0);
+
+	rw_enter(&kauth_lock, RW_WRITER);
+	nsecmodels--;
+	rw_exit(&kauth_lock);
 }

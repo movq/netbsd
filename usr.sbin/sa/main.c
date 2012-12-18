@@ -1,4 +1,4 @@
-/* $NetBSD: main.c,v 1.28 2010/06/10 06:28:33 dholland Exp $ */
+/* $NetBSD: main.c,v 1.22 2008/07/21 13:36:59 lukem Exp $ */
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
@@ -39,7 +39,7 @@
 __COPYRIGHT("@(#) Copyright (c) 1994\
  Christopher G. Demetriou.  All rights reserved.");
 
-__RCSID("$NetBSD: main.c,v 1.28 2010/06/10 06:28:33 dholland Exp $");
+__RCSID("$NetBSD: main.c,v 1.22 2008/07/21 13:36:59 lukem Exp $");
 #endif
 
 /*
@@ -60,30 +60,32 @@ __RCSID("$NetBSD: main.c,v 1.28 2010/06/10 06:28:33 dholland Exp $");
 #include "extern.h"
 #include "pathnames.h"
 
-static int acct_load(const char *, int);
-static u_quad_t decode_comp_t(comp_t);
-static int cmp_comm(const char *, const char *);
-static int cmp_usrsys(const DBT *, const DBT *);
-static int cmp_avgusrsys(const DBT *, const DBT *);
-static int cmp_dkio(const DBT *, const DBT *);
-static int cmp_avgdkio(const DBT *, const DBT *);
-static int cmp_cpumem(const DBT *, const DBT *);
-static int cmp_avgcpumem(const DBT *, const DBT *);
-static int cmp_calls(const DBT *, const DBT *);
-static void usage(void) __dead;
+static int	acct_load	__P((char *, int));
+static u_quad_t	decode_comp_t	__P((comp_t));
+static int	cmp_comm	__P((const char *, const char *));
+static int	cmp_usrsys	__P((const DBT *, const DBT *));
+static int	cmp_avgusrsys	__P((const DBT *, const DBT *));
+static int	cmp_dkio	__P((const DBT *, const DBT *));
+static int	cmp_avgdkio	__P((const DBT *, const DBT *));
+static int	cmp_cpumem	__P((const DBT *, const DBT *));
+static int	cmp_avgcpumem	__P((const DBT *, const DBT *));
+static int	cmp_calls	__P((const DBT *, const DBT *));
+static void	usage		__P((void)) __dead;
 
 int aflag, bflag, cflag, dflag, Dflag, fflag, iflag, jflag, kflag;
 int Kflag, lflag, mflag, qflag, rflag, sflag, tflag, uflag, vflag;
 int cutoff = 1;
 
-static const char	*dfltargv[] = { _PATH_ACCT };
-static const int	dfltargc = (sizeof(dfltargv)/sizeof(char *));
+static char	*dfltargv[] = { _PATH_ACCT };
+static int	dfltargc = (sizeof(dfltargv)/sizeof(char *));
 
 /* default to comparing by sum of user + system time */
 cmpf_t   sa_cmp = cmp_usrsys;
 
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	int ch;
 	int error;
@@ -199,7 +201,7 @@ main(int argc, char **argv)
 
 	if (argc == 0) {
 		argc = dfltargc;
-		argv = __UNCONST(dfltargv);
+		argv = dfltargv;
 	}
 
 	/* for each file specified */
@@ -295,11 +297,13 @@ main(int argc, char **argv)
 }
 
 static int
-acct_load(const char *pn, int wr)
+acct_load(pn, wr)
+	char *pn;
+	int wr;
 {
 	struct acct ac;
 	struct cmdinfo ci;
-	size_t i;
+	int i;
 	FILE *fp;
 
 	/*
@@ -369,7 +373,8 @@ acct_load(const char *pn, int wr)
 }
 
 static u_quad_t
-decode_comp_t(comp_t comp)
+decode_comp_t(comp)
+	comp_t comp;
 {
 	u_quad_t rv;
 
@@ -389,7 +394,8 @@ decode_comp_t(comp_t comp)
 
 /* sort commands, doing the right thing in terms of reversals */
 static int
-cmp_comm(const char *s1, const char *s2)
+cmp_comm(s1, s2)
+	const char *s1, *s2;
 {
 	int rv;
 
@@ -401,7 +407,8 @@ cmp_comm(const char *s1, const char *s2)
 
 /* sort by total user and system time */
 static int
-cmp_usrsys(const DBT *d1, const DBT *d2)
+cmp_usrsys(d1, d2)
+	const DBT *d1, *d2;
 {
 	struct cmdinfo c1, c2;
 	u_quad_t t1, t2;
@@ -422,7 +429,8 @@ cmp_usrsys(const DBT *d1, const DBT *d2)
 
 /* sort by average user and system time */
 static int
-cmp_avgusrsys(const DBT *d1, const DBT *d2)
+cmp_avgusrsys(d1, d2)
+	const DBT *d1, *d2;
 {
 	struct cmdinfo c1, c2;
 	double t1, t2;
@@ -446,7 +454,8 @@ cmp_avgusrsys(const DBT *d1, const DBT *d2)
 
 /* sort by total number of disk I/O operations */
 static int
-cmp_dkio(const DBT *d1, const DBT *d2)
+cmp_dkio(d1, d2)
+	const DBT *d1, *d2;
 {
 	struct cmdinfo c1, c2;
 
@@ -463,7 +472,8 @@ cmp_dkio(const DBT *d1, const DBT *d2)
 
 /* sort by average number of disk I/O operations */
 static int
-cmp_avgdkio(const DBT *d1, const DBT *d2)
+cmp_avgdkio(d1, d2)
+	const DBT *d1, *d2;
 {
 	struct cmdinfo c1, c2;
 	double n1, n2;
@@ -484,7 +494,8 @@ cmp_avgdkio(const DBT *d1, const DBT *d2)
 
 /* sort by the CPU-storage integral */
 static int
-cmp_cpumem(const DBT *d1, const DBT *d2)
+cmp_cpumem(d1, d2)
+	const DBT *d1, *d2;
 {
 	struct cmdinfo c1, c2;
 
@@ -501,7 +512,8 @@ cmp_cpumem(const DBT *d1, const DBT *d2)
 
 /* sort by the CPU-time average memory usage */
 static int
-cmp_avgcpumem(const DBT *d1, const DBT *d2)
+cmp_avgcpumem(d1, d2)
+	const DBT *d1, *d2;
 {
 	struct cmdinfo c1, c2;
 	u_quad_t t1, t2;
@@ -526,7 +538,8 @@ cmp_avgcpumem(const DBT *d1, const DBT *d2)
 
 /* sort by the number of invocations */
 static int
-cmp_calls(const DBT *d1, const DBT *d2)
+cmp_calls(d1, d2)
+	const DBT *d1, *d2;
 {
 	struct cmdinfo c1, c2;
 
@@ -542,7 +555,7 @@ cmp_calls(const DBT *d1, const DBT *d2)
 }
 
 static void
-usage(void)
+usage()
 {
 
 	(void)fprintf(stderr,
@@ -552,7 +565,8 @@ usage(void)
 }
 
 const char *
-fmt(const DBT *key)
+fmt(key)
+	const DBT *key;
 {
 	static char *buf = NULL;
 	static size_t len = 0;

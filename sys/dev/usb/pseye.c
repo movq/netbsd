@@ -1,4 +1,4 @@
-/* $NetBSD: pseye.c,v 1.21 2011/05/24 16:42:31 joerg Exp $ */
+/* $NetBSD: pseye.c,v 1.10 2008/10/15 06:51:20 wrstuden Exp $ */
 
 /*-
  * Copyright (c) 2008 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 /*
- * Sony PlayStation Eye Driver
+ * Sony PLAYSTATION(R) Eye Driver
  *
  * The only documentation we have for this part is based on a series
  * of forum postings by Jim Paris on ps2dev.org. Many thanks for
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pseye.c,v 1.21 2011/05/24 16:42:31 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pseye.c,v 1.10 2008/10/15 06:51:20 wrstuden Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,22 +50,20 @@ __KERNEL_RCSID(0, "$NetBSD: pseye.c,v 1.21 2011/05/24 16:42:31 joerg Exp $");
 #include <sys/mutex.h>
 #include <sys/kthread.h>
 #include <sys/condvar.h>
-#include <sys/module.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
-#include <dev/usb/usbdivar.h>
 #include <dev/usb/usbdi_util.h>
 #include <dev/usb/usbdevs.h>
-#include <dev/usb/uvideoreg.h>
 
 #include <dev/video_if.h>
 
 #define PRI_PSEYE	PRI_BIO
 
-/* Bulk-in buffer length -- make room for payload + UVC headers */
-#define PSEYE_BULKIN_BUFLEN	((640 * 480 * 2) + 4096)
-#define PSEYE_BULKIN_BLKLEN	2048
+/* Bulk-in buffer length */
+#define PSEYE_BULKIN_BUFLEN	(640 * 480 * 2)
 
 /* SCCB/sensor interface */
 #define PSEYE_SCCB_ADDRESS	0xf1
@@ -80,7 +78,7 @@ __KERNEL_RCSID(0, "$NetBSD: pseye.c,v 1.21 2011/05/24 16:42:31 joerg Exp $");
 #define PSEYE_SCCB_OP_READ_2	0xf9
 
 struct pseye_softc {
-	device_t		sc_dev;
+	USBBASEDEVICE		sc_dev;
 
 	usbd_device_handle	sc_udev;
 	usbd_interface_handle	sc_iface;
@@ -98,8 +96,6 @@ struct pseye_softc {
 	int			sc_bulkin_bufferlen;
 
 	char			sc_dying;
-
-	char			sc_businfo[32];
 };
 
 static int	pseye_match(device_t, cfdata_t, void *);
@@ -122,14 +118,12 @@ static bool	pseye_sccb_status(struct pseye_softc *);
 static int	pseye_init_pipes(struct pseye_softc *);
 static int	pseye_close_pipes(struct pseye_softc *);
 
-static usbd_status	pseye_get_frame(struct pseye_softc *, uint32_t *);
-static void	pseye_submit_payload(struct pseye_softc *, uint32_t);
+static usbd_status	pseye_get_frame(struct pseye_softc *);
 
 /* video(9) API */
 static int		pseye_open(void *, int);
 static void		pseye_close(void *);
 static const char *	pseye_get_devname(void *);
-static const char *	pseye_get_businfo(void *);
 static int		pseye_enum_format(void *, uint32_t,
 					  struct video_format *);
 static int		pseye_get_format(void *, struct video_format *);
@@ -146,7 +140,6 @@ static const struct video_hw_if pseye_hw_if = {
 	.open = pseye_open,
 	.close = pseye_close,
 	.get_devname = pseye_get_devname,
-	.get_businfo = pseye_get_businfo,
 	.enum_format = pseye_enum_format,
 	.get_format = pseye_get_format,
 	.set_format = pseye_set_format,
@@ -188,21 +181,17 @@ pseye_attach(device_t parent, device_t self, void *opaque)
 	usbd_device_handle dev = uaa->device;
 	usb_interface_descriptor_t *id = NULL;
 	usb_endpoint_descriptor_t *ed = NULL, *ed_bulkin = NULL;
-	char *devinfop;
+	char *devinfo;
 	int i;
 
+	devinfo = usbd_devinfo_alloc(dev, 0);
 	aprint_naive("\n");
-	aprint_normal("\n");
-
-	devinfop = usbd_devinfo_alloc(dev, 0);
-	aprint_normal_dev(self, "%s\n", devinfop);
-	usbd_devinfo_free(devinfop);
+	aprint_normal(": %s\n", devinfo);
+	usbd_devinfo_free(devinfo);
 
 	sc->sc_dev = self;
 	sc->sc_udev = dev;
 	sc->sc_iface = uaa->iface;
-	snprintf(sc->sc_businfo, sizeof(sc->sc_businfo), "usb:%08x",
-	    sc->sc_udev->cookie.cookie);
 	sc->sc_bulkin_bufferlen = PSEYE_BULKIN_BUFLEN;
 
 	sc->sc_dying = sc->sc_running = 0;
@@ -266,7 +255,7 @@ pseye_attach(device_t parent, device_t self, void *opaque)
 	}
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-	    self);
+	    USBDEV(self));
 
 }
 
@@ -305,23 +294,28 @@ pseye_detach(device_t self, int flags)
 	mutex_destroy(&sc->sc_mtx);
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-	    sc->sc_dev);
+	    USBDEV(sc->sc_dev));
 
 	return 0;
 }
 
 int
-pseye_activate(device_t self, enum devact act)
+pseye_activate(device_ptr_t self, enum devact act)
 {
 	struct pseye_softc *sc = device_private(self);
+	int rv;
+
+	rv = 0;
 
 	switch (act) {
+	case DVACT_ACTIVATE:
+		break;
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		break;
 	}
+
+	return rv;
 }
 
 static void
@@ -356,6 +350,9 @@ pseye_init(struct pseye_softc *sc)
 	pseye_setregv(sc, 0xe2, 0x00);
 	pseye_setregv(sc, 0xe7, 0x3e);
 
+	pseye_setreg(sc, 0x1c, 0x0a);
+	pseye_setreg(sc, 0x1d, 0x22);
+	pseye_setreg(sc, 0x1d, 0x06);
 	pseye_setregv(sc, 0x96, 0x00);
 
 	pseye_setreg(sc, 0x97, 0x20);
@@ -382,15 +379,11 @@ pseye_init(struct pseye_softc *sc)
 
 	pseye_setreg(sc, 0x1c, 0x00);
 	pseye_setreg(sc, 0x1d, 0x40);
-	pseye_setreg(sc, 0x1d, 0x02);	/* payload size 0x0200 * 4 == 2048 */
+	pseye_setreg(sc, 0x1d, 0x02);
 	pseye_setreg(sc, 0x1d, 0x00);
-	pseye_setreg(sc, 0x1d, 0x02);	/* frame size 0x025800 * 4 == 614400 */
-	pseye_setreg(sc, 0x1d, 0x58);
-	pseye_setreg(sc, 0x1d, 0x00);
-
-	pseye_setreg(sc, 0x1c, 0x0a);
-	pseye_setreg(sc, 0x1d, 0x08);	/* enable UVC header */
-	pseye_setreg(sc, 0x1d, 0x0e);
+	pseye_setreg(sc, 0x1d, 0x02);
+	pseye_setreg(sc, 0x1d, 0x57);
+	pseye_setreg(sc, 0x1d, 0xff);
 
 	pseye_setregv(sc, 0x8d, 0x1c);
 	pseye_setregv(sc, 0x8e, 0x80);
@@ -616,14 +609,16 @@ pseye_sccb_status(struct pseye_softc *sc)
 }
 
 static usbd_status
-pseye_get_frame(struct pseye_softc *sc, uint32_t *plen)
+pseye_get_frame(struct pseye_softc *sc)
 {
+	uint32_t len = sc->sc_bulkin_bufferlen;
+
 	if (sc->sc_dying)
 		return USBD_IOERROR;
 
 	return usbd_bulk_transfer(sc->sc_bulkin_xfer, sc->sc_bulkin_pipe,
-	    USBD_SHORT_XFER_OK|USBD_NO_COPY, 1000,
-	    sc->sc_bulkin_buffer, plen, "pseyerb");
+	    USBD_SHORT_XFER_OK|USBD_NO_COPY, 50,
+	    sc->sc_bulkin_buffer, &len, "pseyerb");
 }
 
 static int
@@ -662,57 +657,23 @@ pseye_close_pipes(struct pseye_softc *sc)
 }
 
 static void
-pseye_submit_payload(struct pseye_softc *sc, uint32_t tlen)
-{
-	struct video_payload payload;
-	uvideo_payload_header_t *uvchdr;
-	uint8_t *buf = sc->sc_bulkin_buffer;
-	uint32_t len;
-	uint32_t brem = (640*480*2);
-
-	while (brem > 0 && tlen > 0) {
-		len = min(tlen, PSEYE_BULKIN_BLKLEN);
-		if (len < UVIDEO_PAYLOAD_HEADER_SIZE) {
-			printf("pseye_submit_payload: len=%u\n", len);
-			return;
-		}
-
-		uvchdr = (uvideo_payload_header_t *)buf;
-		if (uvchdr->bHeaderLength != UVIDEO_PAYLOAD_HEADER_SIZE)
-			goto next;
-		if (uvchdr->bHeaderLength == len &&
-		    !(uvchdr->bmHeaderInfo & UV_END_OF_FRAME))
-			goto next;
-		if (uvchdr->bmHeaderInfo & UV_ERROR)
-			return;
-		if ((uvchdr->bmHeaderInfo & UV_PRES_TIME) == 0)
-			goto next;
-
-		payload.data = buf + uvchdr->bHeaderLength;
-		payload.size = min(brem, len - uvchdr->bHeaderLength);
-		payload.frameno = UGETDW(&buf[2]);
-		payload.end_of_frame = uvchdr->bmHeaderInfo & UV_END_OF_FRAME;
-		video_submit_payload(sc->sc_videodev, &payload);
-
-next:
-		tlen -= len;
-		buf += len;
-		brem -= payload.size;
-	}
-}
-
-static void
 pseye_transfer_thread(void *opaque)
 {
 	struct pseye_softc *sc = opaque;
-	uint32_t len;
 	int error;
+	struct video_payload payload;
+
+	payload.frameno = 0;
 
 	while (sc->sc_running) {
-		len = sc->sc_bulkin_bufferlen;
-		error = pseye_get_frame(sc, &len);
-		if (error == USBD_NORMAL_COMPLETION)
-			pseye_submit_payload(sc, len);
+		error = pseye_get_frame(sc);
+		if (error == USBD_NORMAL_COMPLETION) {
+			payload.data = sc->sc_bulkin_buffer;
+			payload.size = sc->sc_bulkin_bufferlen;
+			payload.frameno = (payload.frameno + 1) & 1;
+			payload.end_of_frame = 1;
+			video_submit_payload(sc->sc_videodev, &payload);
+		}
 	}
 
 	mutex_enter(&sc->sc_mtx);
@@ -745,15 +706,7 @@ pseye_close(void *opaque)
 static const char *
 pseye_get_devname(void *opaque)
 {
-	return "PlayStation Eye";
-}
-
-static const char *
-pseye_get_businfo(void *opaque)
-{
-	struct pseye_softc *sc = opaque;
-
-	return sc->sc_businfo;
+	return "PLAYSTATION(R) Eye";
 }
 
 static int
@@ -812,7 +765,7 @@ pseye_start_transfer(void *opaque)
 	if (sc->sc_running == 0) {
 		sc->sc_running = 1;
 		err = kthread_create(PRI_PSEYE, 0, NULL, pseye_transfer_thread,
-		    opaque, NULL, "%s", device_xname(sc->sc_dev));
+		    opaque, NULL, device_xname(sc->sc_dev));
 	} else
 		aprint_error_dev(sc->sc_dev, "transfer already in progress\n");
 	mutex_exit(&sc->sc_mtx);
@@ -833,33 +786,4 @@ pseye_stop_transfer(void *opaque)
 	mutex_exit(&sc->sc_mtx);
 
 	return 0;
-}
-
-MODULE(MODULE_CLASS_DRIVER, pseye, NULL);
-
-#ifdef _MODULE
-#include "ioconf.c"
-#endif
-
-static int
-pseye_modcmd(modcmd_t cmd, void *opaque)
-{
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-#ifdef _MODULE
-		return config_init_component(cfdriver_ioconf_pseye,
-		    cfattach_ioconf_pseye, cfdata_ioconf_pseye);
-#else
-		return 0;
-#endif
-	case MODULE_CMD_FINI:
-#ifdef _MODULE
-		return config_fini_component(cfdriver_ioconf_pseye,
-		    cfattach_ioconf_pseye, cfdata_ioconf_pseye);
-#else
-		return 0;
-#endif
-	default:
-		return ENOTTY;
-	}
 }

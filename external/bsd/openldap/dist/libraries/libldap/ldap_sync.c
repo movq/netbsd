@@ -1,9 +1,7 @@
-/*	$NetBSD: ldap_sync.c,v 1.1.1.3 2010/12/12 15:21:33 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/libraries/libldap/ldap_sync.c,v 1.2.2.6 2010/04/13 20:22:58 kurt Exp */
+/* $OpenLDAP: pkg/ldap/libraries/libldap/ldap_sync.c,v 1.2.2.3 2008/02/11 23:26:41 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2006-2010 The OpenLDAP Foundation.
+ * Copyright 2006-2008 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -693,7 +691,7 @@ ldap_sync_init( ldap_sync_t *ls, int mode )
 		rc ? "!!! " : "",
 		rc );
 #endif /* LDAP_SYNC_TRACE */
-	if ( rc < 0 ) {
+	if ( rc == LBER_ERROR ) {
 		rc = LDAP_OTHER;
                 goto done;
         }

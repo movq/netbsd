@@ -1,4 +1,4 @@
-/*	$NetBSD: v_ch.c,v 1.2 2011/11/23 19:25:28 tnozaki Exp $ */
+/*	$NetBSD: v_ch.c,v 1.1.1.2 2008/05/18 14:31:40 aymeric Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -140,8 +140,7 @@ v_chf(SCR *sp, VICMD *vp)
 {
 	size_t len;
 	u_long cnt;
-	int isempty;
-	ARG_CHAR_T key;
+	int isempty, key;
 	CHAR_T *endp, *p, *startp;
 
 	/*
@@ -222,8 +221,7 @@ v_chF(SCR *sp, VICMD *vp)
 {
 	size_t len;
 	u_long cnt;
-	int isempty;
-	ARG_CHAR_T key;
+	int isempty, key;
 	CHAR_T *endp, *p;
 
 	/*

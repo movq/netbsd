@@ -1,4 +1,4 @@
-/*	$NetBSD: bios_disk.S,v 1.21 2011/06/16 13:27:59 joerg Exp $	*/
+/*	$NetBSD: bios_disk.S,v 1.18 2005/12/11 12:17:48 christos Exp $	*/
 
 /*
  * Ported to boot 386BSD by Julian Elischer (julian@tfs.com) Sept 1992
@@ -63,9 +63,13 @@ WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *			%al = 0x0 on success; err code on failure
  */
 ENTRY(biosdisk_reset)
-	pusha
+	pushl	%ebp
+	movl	%esp, %ebp
+	pushl	%ebx
+	push	%edx
+	push	%edi
 
-	movb	%al, %dl	# device
+	movb	8(%ebp), %dl	# device
 
 	call	_C_LABEL(prot_to_real)	# enter real mode
 	.code16
@@ -78,10 +82,13 @@ ENTRY(biosdisk_reset)
 	calll	_C_LABEL(real_to_prot) # back to protected mode
 	.code32
 
-	movzwl	%bx, %eax	# return value in %eax
-	movl	%eax, 28(%esp)
+	xorl	%eax, %eax
+	movw	%bx, %ax	# return value in %ax
 
-	popa
+	pop	%edi
+	pop	%edx
+	popl	%ebx
+	popl	%ebp
 	ret
 
 /*
@@ -102,18 +109,24 @@ ENTRY(biosdisk_reset)
  *        sending another command.
  */
 ENTRY(biosdisk_read)
-	pusha
+	pushl	%ebp
+	movl	%esp, %ebp
+	pushl	%ebx
+	push	%ecx
+	push	%edx
+	push	%esi
+	push	%edi
 
-	movb	44(%esp), %dh
-	movw	40(%esp), %cx
+	movb	16(%ebp), %dh
+	movw	12(%ebp), %cx
 	xchgb	%ch, %cl	# cylinder; the highest 2 bits of cyl is in %cl
 	rorb	$2, %cl
-	movb	48(%esp), %al
+	movb	20(%ebp), %al
 	orb	%al, %cl
 	incb	%cl		# sector; sec starts from 1, not 0
-	movb	36(%esp), %dl	# device
-	movl	56(%esp), %ebx	# buffer address (may be >64k)
-	movb	52(%esp), %al	# number of sectors
+	movb	8(%ebp), %dl	# device
+	movl	28(%ebp), %ebx	# buffer address (may be >64k)
+	movb	24(%ebp), %al	# number of sectors
 
 	call	_C_LABEL(prot_to_real)	# enter real mode
 	.code16
@@ -133,9 +146,14 @@ ENTRY(biosdisk_read)
 	calll	_C_LABEL(real_to_prot) # back to protected mode
 	.code32
 
-	movl	%eax, 28(%esp)
+	andl	$0xffff, %eax
 
-	popa
+	pop	%edi
+	pop	%esi
+	pop	%edx
+	pop	%ecx
+	popl	%ebx
+	popl	%ebp
 	ret
 
 /*
@@ -143,10 +161,16 @@ ENTRY(biosdisk_read)
  *	max number of sectors, heads and cylinders for this device
  */
 ENTRY(biosdisk_getinfo)
+	pushl	%ebp
+	movl	%esp, %ebp
 	push	%es
-	pusha
+	pushl	%ebx
+	push	%ecx
+	push	%edx
+	push	%esi
+	push	%edi
 
-	movb	%al, %dl		# diskinfo(drive #)
+	movb	8(%ebp), %dl		# diskinfo(drive #)
 
 	call	_C_LABEL(prot_to_real)	# enter real mode
 	.code16
@@ -186,10 +210,14 @@ ok:
 	shrl	$8, %ecx
 	movb	%dh, %cl		# max head
 	orl	%ecx, %eax		# return value in %eax
-	movl	%eax, 28(%esp)
 
-	popa
+	pop	%edi
+	pop	%esi
+	pop	%edx
+	pop	%ecx
+	popl	%ebx
 	pop	%es
+	popl	%ebp
 	ret
 
 /*
@@ -197,9 +225,15 @@ ok:
  *	check for availibility of int13 extensions.
  */
 ENTRY(biosdisk_int13ext)
-	pusha
+	pushl	%ebp
+	movl	%esp, %ebp
+	pushl	%ebx
+	pushl	%ecx
+	pushl	%edx
+	pushl	%esi
+	pushl	%edi
 
-	movb	%al, %dl		# drive #
+	movb	8(%ebp), %dl		# drive #
 	movw	$0x55aa, %bx
 
 	call	_C_LABEL(prot_to_real)	# enter real mode
@@ -212,16 +246,21 @@ ENTRY(biosdisk_int13ext)
 	calll	_C_LABEL(real_to_prot)	# switch back
 	.code32
 
-	movzbl	%dl, %eax		# return value in %eax
+	xorl	%eax, %eax
+	movb	%dl, %al	# return value in %ax
 
 	cmpw	$0xaa55, %bx
 	sete	%dl
 	andb	%dl, %al
 
 	andb	%cl, %al
-	movl	%eax, 28(%esp)
 
-	popa
+	popl	%edi
+	popl	%esi
+	popl	%edx
+	popl	%ecx
+	popl	%ebx
+	popl	%ebp
 	ret
 
 /*
@@ -234,15 +273,20 @@ ENTRY(biosdisk_int13ext)
  *			%al = 0x0 on success; err code on failure
  */
 ENTRY(biosdisk_extread)
-	pusha
+	pushl	%ebp
+	movl	%esp, %ebp
+	pushl	%ebx
+	push	%ecx
+	push	%edx
+	push	%esi
+	push	%edi
 
-	movl	%edx, %esi	# parameter block
-	movb	%al, %dl	# device
+	movb	8(%ebp), %dl	# device
+	movl	12(%ebp), %esi	# parameter block
 
 	call	_C_LABEL(prot_to_real)	# enter real mode
 	.code16
 
-	push	%ds
 	movl	%esi, %eax
 	shrl	$4, %eax
 	movw	%ds, %bx
@@ -254,27 +298,36 @@ ENTRY(biosdisk_extread)
 	int	$0x13
 	setc	%bl
 	movb	%ah, %bh	# save error code
-	pop	%ds
 
 	calll	_C_LABEL(real_to_prot) # back to protected mode
 	.code32
 
-	movzwl	%bx, %eax	# return value in %eax
-	movl	%eax, 28(%esp)
+	xorl	%eax, %eax
+	movw	%bx, %ax	# return value in %ax
 
-	popa
+	pop	%edi
+	pop	%esi
+	pop	%edx
+	pop	%ecx
+	popl	%ebx
+	popl	%ebp
 	ret
 
 ENTRY(biosdisk_getextinfo)
-	pusha
+	pushl	%ebp
+	movl	%esp, %ebp
+	pushl	%ebx
+	push	%ecx
+	push	%edx
+	push	%esi
+	push	%edi
 
-	movl	%edx, %esi	# parameter block
-	movb	%al, %dl	# device
+	movb	8(%ebp), %dl	# device
+	movl	12(%ebp), %esi	# parameter block
 
 	call	_C_LABEL(prot_to_real)	# enter real mode
 	.code16
 
-	push	%ds
 	movl	%esi, %eax
 	shrl	$4, %eax
 	andw	$0xf, %si
@@ -285,13 +338,17 @@ ENTRY(biosdisk_getextinfo)
 	movb	$0x48, %ah	# subfunction
 	int	$0x13
 	setc	%bl
-	pop	%ds
 
 	calll	_C_LABEL(real_to_prot) # back to protected mode
 	.code32
 
-	movzbl	%bl, %eax	# return value in %eax
-	movl	%eax, 28(%esp)
+	xorl	%eax, %eax
+	movb	%bl, %al	# return value in %ax
 
-	popa
+	pop	%edi
+	pop	%esi
+	pop	%edx
+	pop	%ecx
+	popl	%ebx
+	popl	%ebp
 	ret

@@ -1,4 +1,4 @@
-/* 	$NetBSD: initfini.c,v 1.10 2012/02/16 23:00:39 joerg Exp $	 */
+/* 	$NetBSD: initfini.c,v 1.5.6.1 2010/07/16 18:34:08 riz Exp $	 */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,68 +30,23 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: initfini.c,v 1.10 2012/02/16 23:00:39 joerg Exp $");
+__RCSID("$NetBSD: initfini.c,v 1.5.6.1 2010/07/16 18:34:08 riz Exp $");
 
 #ifdef _LIBC
 #include "namespace.h"
 #endif
 
-#include <sys/param.h>
-#include <sys/exec.h>
-#include <sys/tls.h>
-#include <stdbool.h>
-
-void	_libc_init(void) __attribute__((__constructor__, __used__));
+void	__libc_init(void) __attribute__((__constructor__, __used__));
 
 void	__guard_setup(void);
 void	__libc_thr_init(void);
 void	__libc_atomic_init(void);
 void	__libc_atexit_init(void);
-void	__libc_env_init(void);
 
-#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
-__dso_hidden void	__libc_static_tls_setup(void);
-#endif
-
-#ifdef __weak_alias
-__weak_alias(_dlauxinfo,___dlauxinfo)
-static void *__libc_dlauxinfo;
-
-void *___dlauxinfo(void) __pure;
-
-void *
-___dlauxinfo(void)
-{
-	return __libc_dlauxinfo;
-}
-#endif
-
-static bool libc_initialised;
-
-void _libc_init(void);
-
-/*
- * Declare as common symbol to allow new libc with older binaries to
- * not trigger an undefined reference.
- */
-struct ps_strings *__ps_strings;
-
-/*
- * _libc_init is called twice.  The first time explicitly by crt0.o
- * (for newer versions) and the second time as indirectly via _init().
- */
+/* LINTED used */
 void
-_libc_init(void)
+__libc_init(void)
 {
-
-	if (libc_initialised)
-		return;
-
-	libc_initialised = 1;
-
-	if (__ps_strings != NULL)
-		__libc_dlauxinfo = __ps_strings->ps_argvstr +
-		    __ps_strings->ps_nargvstr + __ps_strings->ps_nenvstr + 2;
 
 	/* For -fstack-protector */
 	__guard_setup();
@@ -99,17 +54,9 @@ _libc_init(void)
 	/* Atomic operations */
 	__libc_atomic_init();
 
-#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
-	/* Initialize TLS for statically linked programs. */
-	__libc_static_tls_setup();
-#endif
-
 	/* Threads */
 	__libc_thr_init();
 
 	/* Initialize the atexit mutexes */
 	__libc_atexit_init();
-
-	/* Initialize environment memory RB tree. */
-	__libc_env_init();
 }

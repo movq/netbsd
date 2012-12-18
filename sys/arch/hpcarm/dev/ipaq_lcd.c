@@ -1,4 +1,4 @@
-/*	$NetBSD: ipaq_lcd.c,v 1.19 2011/07/19 15:37:38 dyoung Exp $	*/
+/*	$NetBSD: ipaq_lcd.c,v 1.17 2008/04/28 20:23:21 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipaq_lcd.c,v 1.19 2011/07/19 15:37:38 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipaq_lcd.c,v 1.17 2008/04/28 20:23:21 martin Exp $");
 
 #define IPAQ_LCD_DEBUG
 
@@ -40,13 +40,13 @@ __KERNEL_RCSID(0, "$NetBSD: ipaq_lcd.c,v 1.19 2011/07/19 15:37:38 dyoung Exp $")
 #include <sys/kernel.h>
 #include <sys/time.h>
 #include <sys/device.h>
-#include <sys/bus.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <dev/wscons/wsconsio.h>
 
 #include <machine/bootinfo.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <arm/cpufunc.h>
 #include <arm/arm32/katelib.h>
@@ -60,15 +60,15 @@ __KERNEL_RCSID(0, "$NetBSD: ipaq_lcd.c,v 1.19 2011/07/19 15:37:38 dyoung Exp $")
 #include <hpcarm/dev/ipaq_lcdvar.h>
 
 #ifdef IPAQ_LCD_DEBUG
-#define DPRINTFN(n, x)  if (ipaqlcddebug > (n)) aprint_normal x
+#define DPRINTFN(n, x)  if (ipaqlcddebug > (n)) printf x
 int     ipaqlcddebug = 0xff;
 #else
 #define DPRINTFN(n, x)
 #endif
 #define DPRINTF(x) DPRINTFN(0, x)
 
-static int	ipaqlcd_match(device_t, cfdata_t, void *);
-static void	ipaqlcd_attach(device_t, device_t, void *);
+static int	ipaqlcd_match(struct device *, struct cfdata *, void *);
+static void	ipaqlcd_attach(struct device *, struct device *, void *);
 static void	ipaqlcd_init(struct ipaqlcd_softc *);
 static int	ipaqlcd_fbinit(struct ipaqlcd_softc *);
 static int	ipaqlcd_ioctl(void *, u_long, void *, int, struct lwp *);
@@ -81,7 +81,7 @@ static paddr_t	ipaqlcd_mmap(void *, off_t, int);
 #error "define btop, ptob."
 #endif
 
-CFATTACH_DECL_NEW(ipaqlcd, sizeof(struct ipaqlcd_softc),
+CFATTACH_DECL(ipaqlcd, sizeof(struct ipaqlcd_softc),
     ipaqlcd_match, ipaqlcd_attach, NULL, NULL);
 
 struct hpcfb_accessops ipaqlcd_ha = {
@@ -90,27 +90,26 @@ struct hpcfb_accessops ipaqlcd_ha = {
 static int console_flag = 0;
 
 static int
-ipaqlcd_match(device_t parent, cfdata_t match, void *aux)
+ipaqlcd_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	return (1);
 }
 
 void
-ipaqlcd_attach(device_t parent, device_t self, void *aux)
+ipaqlcd_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ipaqlcd_softc *sc = device_private(self);
+	struct ipaqlcd_softc *sc = (struct ipaqlcd_softc*)self;
 	struct hpcfb_attach_args ha;
-	struct ipaq_softc *psc = device_private(parent);
+	struct ipaq_softc *psc = (struct ipaq_softc *)parent;
 
-	sc->sc_dev = self;
 	sc->sc_iot = psc->sc_iot;
-	sc->sc_parent = psc;
+	sc->sc_parent = (struct ipaq_softc *)parent;
 
 	ipaqlcd_init(sc);
 	ipaqlcd_fbinit(sc);
 
-	aprint_normal("\n");
-	aprint_normal_dev(self, "iPAQ internal LCD controller\n");
+	printf("\n");
+	printf("%s: iPAQ internal LCD controller\n",  sc->sc_dev.dv_xname);
 
 	DPRINTF(("framebuffer_baseaddr=%lx\n", (u_long)bootinfo->fb_addr));
 
@@ -124,7 +123,7 @@ ipaqlcd_attach(device_t parent, device_t self, void *aux)
         ha.ha_ndspconf = 1;
         ha.ha_dspconflist = &sc->sc_dspconf;
 
-        config_found(sc->sc_dev, &ha, hpcfbprint);
+        config_found(&sc->sc_dev, &ha, hpcfbprint);
 }
 
 void
@@ -190,7 +189,7 @@ ipaqlcd_fbinit(struct ipaqlcd_softc *sc)
 	if (bus_space_map(sc->sc_iot, (bus_addr_t)bootinfo->fb_addr,
 			   bootinfo->fb_height * bootinfo->fb_line_bytes,
 			   0, &fb->hf_baseaddr)) {
-		aprint_normal("unable to map framebuffer\n");
+		printf("unable to map framebuffer\n");
 		return (-1);
 	}
 
@@ -256,8 +255,7 @@ ipaqlcd_fbinit(struct ipaqlcd_softc *sc)
 			fb->hf_u.hf_rgb.hf_alpha_shift = 0;
 			break;
 		default :
-			aprint_normal("unknown type (=%d).\n",
-				      bootinfo->fb_type);
+			printf("unknown type (=%d).\n", bootinfo->fb_type);
 			return (-1);
 			break;
 	}

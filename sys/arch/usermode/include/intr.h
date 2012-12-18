@@ -1,4 +1,4 @@
-/* $NetBSD: intr.h,v 1.9 2012/03/03 21:15:16 reinoud Exp $ */
+/* $NetBSD: intr.h,v 1.1 2007/12/29 14:38:33 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *        This product includes software developed by Jared D. McNeill.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -30,24 +36,30 @@
 #define _ARCH_USERMODE_INCLUDE_INTR_H
 
 #include <machine/intrdefs.h>
-#include <sys/siginfo.h>
 
-/* spl */
-void	splinit(void);
-int	splraise(int);
-void	spllower(int);
+__inline static int
+splraise(int x)
+{
+	extern int usermode_x;
+	int oldx = usermode_x;
+
+	usermode_x = x;
+
+	return oldx;
+}
+
+__inline static void
+spllower(int x)
+{
+	extern int usermode_x;
+
+	usermode_x = x;
+}
 
 #define	spl0()		spllower(IPL_NONE)
 #define splx(x)		spllower(x)
 
-/* traps */
-typedef void (sigfunc_t)(siginfo_t *info, vaddr_t from_userland, vaddr_t pc, vaddr_t va);
-extern void setup_signal_handlers(void);
-extern void  signal_intr_establish(int sig, sigfunc_t f);
-extern void *sigio_intr_establish(int (*)(void *), void *);
-
-/* spl implementation */
-typedef uint8_t ipl_t;
+typedef uint8_t	ipl_t;
 typedef struct {
 	ipl_t _ipl;
 } ipl_cookie_t;
@@ -65,7 +77,5 @@ splraiseipl(ipl_cookie_t icookie)
 }
 
 #include <sys/spl.h>
-
-/* for trap.c */
 
 #endif /* !_ARCH_USERMODE_INCLUDE_INTR_H */

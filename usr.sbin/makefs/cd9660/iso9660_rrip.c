@@ -1,4 +1,4 @@
-/*	$NetBSD: iso9660_rrip.c,v 1.11 2012/04/29 13:32:21 joerg Exp $	*/
+/*	$NetBSD: iso9660_rrip.c,v 1.4.18.5 2011/07/15 22:39:02 riz Exp $	*/
 
 /*
  * Copyright (c) 2005 Daniel Watt, Walter Deignan, Ryan Gabrys, Alan
@@ -43,7 +43,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: iso9660_rrip.c,v 1.11 2012/04/29 13:32:21 joerg Exp $");
+__RCSID("$NetBSD: iso9660_rrip.c,v 1.4.18.5 2011/07/15 22:39:02 riz Exp $");
 #endif  /* !__lint */
 
 static void cd9660_rrip_initialize_inode(cd9660node *);
@@ -421,9 +421,9 @@ cd9660_rrip_initialize_node(cd9660node *node, cd9660node *parent,
 		}
 		else if ((node->node != NULL) &&
 			((strlen(node->node->name) !=
-			    (uint8_t)node->isoDirRecord->name_len[0]) ||
+			    (int)node->isoDirRecord->name_len[0]) ||
 			(memcmp(node->node->name,node->isoDirRecord->name,
-				(uint8_t)node->isoDirRecord->name_len[0]) != 0))) {
+				(int) node->isoDirRecord->name_len[0]) != 0))) {
 			cd9660_rrip_NM(node);
 		}
 

@@ -1,4 +1,4 @@
-#	$NetBSD: files.prep,v 1.62 2012/12/08 11:03:36 kiyohara Exp $
+#	$NetBSD: files.prep,v 1.60 2008/02/20 21:43:35 drochner Exp $
 #
 # prep-specific configuration info
 #
@@ -75,7 +75,6 @@ include "dev/pci/files.agp"
 file	arch/prep/pci/pci_machdep.c		pci
 file	arch/prep/pci/prep_pciconf_direct.c	pci
 file	arch/powerpc/pci/pci_machdep_common.c	pci
-file    arch/powerpc/pci/pci_module.c		pci & modular
 file	arch/powerpc/pci/pciconf_indirect.c	pci
 
 # PCI-Host bridge chipsets
@@ -178,7 +177,7 @@ file arch/prep/pnpbus/wdc_pnpbus.c	wdc_pnpbus needs-flag
 attach fdc at pnpbus with fdc_pnpbus: isadma
 file arch/prep/pnpbus/fdc_pnpbus.c	fdc_pnpbus
 
-device nvram: mk48txx
+device nvram
 attach nvram at pnpbus with nvram_pnpbus
 file arch/prep/pnpbus/nvram_pnpbus.c	nvram_pnpbus
 

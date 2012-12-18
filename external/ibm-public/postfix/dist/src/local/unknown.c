@@ -1,4 +1,4 @@
-/*	$NetBSD: unknown.c,v 1.3 2012/06/09 11:32:20 tron Exp $	*/
+/*	$NetBSD: unknown.c,v 1.1.1.1.2.4 2011/08/09 18:58:17 riz Exp $	*/
 
 /*++
 /* NAME
@@ -74,7 +74,6 @@
 #include <mail_addr.h>
 #include <sent.h>
 #include <deliver_pass.h>
-#include <defer.h>
 
 /* Application-specific. */
 
@@ -123,8 +122,7 @@ int     deliver_unknown(LOCAL_STATE state, USER_ATTR usr_attr)
     } else if (dict_errno != 0) {
 	/* Details in the logfile. */
 	dsb_simple(state.msg_attr.why, "4.3.0", "table lookup failure");
-	return (defer_append(BOUNCE_FLAGS(state.request),
-			     BOUNCE_ATTR(state.msg_attr)));
+	return (DEL_STAT_DEFER);
     }
     if (*var_fallback_transport) {
 	state.msg_attr.rcpt.offset = -1L;

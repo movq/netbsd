@@ -1,4 +1,4 @@
-/*	$NetBSD: stalloc.c,v 1.13 2010/04/13 11:22:22 tsutsui Exp $	*/
+/*	$NetBSD: stalloc.c,v 1.10 2005/12/11 12:16:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman (Atari modifications)
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: stalloc.c,v 1.13 2010/04/13 11:22:22 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: stalloc.c,v 1.10 2005/12/11 12:16:54 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -58,7 +58,7 @@ static CIRCLEQ_HEAD(freelist, mem_node) free_list;
 u_long   stmem_total;		/* total free.		*/
 
 void
-init_stmem(void)
+init_stmem()
 {
 	int s = splhigh ();
 	struct mem_node *mem;
@@ -77,7 +77,9 @@ init_stmem(void)
 }
 
 void *
-alloc_stmem(u_long size, void **phys_addr)
+alloc_stmem(size, phys_addr)
+u_long	size;
+void	**phys_addr;
 {
 	struct mem_node *mn, *new, *bfit;
 	int		s;
@@ -95,14 +97,14 @@ alloc_stmem(u_long size, void **phys_addr)
 	 */
 	bfit = NULL;
 	mn   = free_list.cqh_first;
-	for (; mn != (void *)&free_list; mn = mn->free_link.cqe_next) {
-		if (size <= mn->size) {
-			if ((bfit != NULL) && (bfit->size < mn->size))
+	for(; mn != (void *)&free_list; mn = mn->free_link.cqe_next) {
+		if(size <= mn->size) {
+			if((bfit != NULL) && (bfit->size < mn->size))
 				continue;
 			bfit = mn;
 		}
 	}
-	if (bfit != NULL)
+	if(bfit != NULL)
 		mn = bfit;
 	if (mn == (void *)&free_list) {
 		printf("St-mem pool exhausted, binpatch 'st_pool_size'"
@@ -147,7 +149,8 @@ alloc_stmem(u_long size, void **phys_addr)
 }
 
 void
-free_stmem(void *mem)
+free_stmem(mem)
+void *mem;
 {
 	struct mem_node *mn, *next, *prev;
 	int		s;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_mroute.c,v 1.126 2012/09/24 03:05:53 msaitoh Exp $	*/
+/*	$NetBSD: ip_mroute.c,v 1.116 2008/10/01 16:01:51 rmind Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -93,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_mroute.c,v 1.126 2012/09/24 03:05:53 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_mroute.c,v 1.116 2008/10/01 16:01:51 rmind Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -113,7 +113,6 @@ __KERNEL_RCSID(0, "$NetBSD: ip_mroute.c,v 1.126 2012/09/24 03:05:53 msaitoh Exp 
 #include <sys/errno.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
 #include <sys/ioctl.h>
 #include <sys/syslog.h>
 
@@ -137,10 +136,17 @@ __KERNEL_RCSID(0, "$NetBSD: ip_mroute.c,v 1.126 2012/09/24 03:05:53 msaitoh Exp 
 #endif
 #include <netinet/ip_encap.h>
 
+#ifdef IPSEC
+#include <netinet6/ipsec.h>
+#include <netkey/key.h>
+#endif
+
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
 #include <netipsec/key.h>
 #endif
+
+#include <machine/stdarg.h>
 
 #define IP_MULTICASTOPTS 0
 #define	M_PULLUP(m, len)						 \
@@ -624,7 +630,7 @@ ip_mrouter_init(struct socket *so, int v)
 	ip_mrouter = so;
 
 	mfchashtbl = hashinit(MFCTBLSIZ, HASH_LIST, true, &mfchash);
-	memset((void *)nexpire, 0, sizeof(nexpire));
+	bzero((void *)nexpire, sizeof(nexpire));
 
 	pim_assert = 0;
 
@@ -687,12 +693,12 @@ ip_mrouter_done(void)
 		}
 	}
 
-	memset((void *)nexpire, 0, sizeof(nexpire));
+	bzero((void *)nexpire, sizeof(nexpire));
 	hashdone(mfchashtbl, HASH_LIST, mfchash);
 	mfchashtbl = NULL;
 
 	bw_upcalls_n = 0;
-	memset(bw_meter_timers, 0, sizeof(bw_meter_timers));
+	bzero(bw_meter_timers, sizeof(bw_meter_timers));
 
 	/* Reset de-encapsulation cache. */
 
@@ -783,6 +789,7 @@ add_vif(struct vifctl *vifcp)
 	struct vif *vifp;
 	struct ifaddr *ifa;
 	struct ifnet *ifp;
+	struct ifreq ifr;
 	int error, s;
 	struct sockaddr_in sin;
 
@@ -834,12 +841,13 @@ add_vif(struct vifctl *vifcp)
 			return (EINVAL);
 
 		/* Create a fake encapsulation interface. */
-		ifp = malloc(sizeof(*ifp), M_MRTABLE, M_WAITOK|M_ZERO);
+		ifp = (struct ifnet *)malloc(sizeof(*ifp), M_MRTABLE, M_WAITOK);
+		bzero(ifp, sizeof(*ifp));
 		snprintf(ifp->if_xname, sizeof(ifp->if_xname),
 			 "mdecap%d", vifcp->vifc_vifi);
 
 		/* Prepare cached route entry. */
-		memset(&vifp->v_route, 0, sizeof(vifp->v_route));
+		bzero(&vifp->v_route, sizeof(vifp->v_route));
 #ifdef PIM
 	} else if (vifcp->vifc_flags & VIFF_REGISTER) {
 		ifp = &multicast_register_if;
@@ -847,11 +855,11 @@ add_vif(struct vifctl *vifcp)
 			log(LOG_DEBUG, "Adding a register vif, ifp: %p\n",
 			    (void *)ifp);
 		if (reg_vif_num == VIFI_INVALID) {
-			memset(ifp, 0, sizeof(*ifp));
+			bzero(ifp, sizeof(*ifp));
 			snprintf(ifp->if_xname, sizeof(ifp->if_xname),
 				 "register_vif");
 			ifp->if_flags = IFF_LOOPBACK;
-			memset(&vifp->v_route, 0, sizeof(vifp->v_route));
+			bzero(&vifp->v_route, sizeof(vifp->v_route));
 			reg_vif_num = vifcp->vifc_vifi;
 		}
 #endif
@@ -862,7 +870,8 @@ add_vif(struct vifctl *vifcp)
 
 		/* Enable promiscuous reception of all IP multicasts. */
 		sockaddr_in_init(&sin, &zeroin_addr, 0);
-		error = if_mcast_op(ifp, SIOCADDMULTI, sintosa(&sin));
+		ifreq_setaddr(SIOCADDMULTI, &ifr, sintosa(&sin));
+		error = (*ifp->if_ioctl)(ifp, SIOCADDMULTI, &ifr);
 		if (error)
 			return (error);
 	}
@@ -920,6 +929,7 @@ reset_vif(struct vif *vifp)
 {
 	struct mbuf *m, *n;
 	struct ifnet *ifp;
+	struct ifreq ifr;
 	struct sockaddr_in sin;
 
 	callout_stop(&vifp->v_repq_ch);
@@ -944,10 +954,11 @@ reset_vif(struct vif *vifp)
 #endif
 	} else {
 		sockaddr_in_init(&sin, &zeroin_addr, 0);
+		ifreq_setaddr(SIOCDELMULTI, &ifr, sintosa(&sin));
 		ifp = vifp->v_ifp;
-		if_mcast_op(ifp, SIOCDELMULTI, sintosa(&sin));
+		(*ifp->if_ioctl)(ifp, SIOCDELMULTI, &ifr);
 	}
-	memset((void *)vifp, 0, sizeof(*vifp));
+	bzero((void *)vifp, sizeof(*vifp));
 }
 
 /*
@@ -1267,7 +1278,8 @@ static int
 socket_send(struct socket *s, struct mbuf *mm, struct sockaddr_in *src)
 {
 	if (s) {
-		if (sbappendaddr(&s->so_rcv, sintosa(src), mm, NULL) != 0) {
+		if (sbappendaddr(&s->so_rcv, sintosa(src), mm,
+		    (struct mbuf *)NULL) != 0) {
 			sorwakeup(s);
 			return (0);
 		}
@@ -1344,7 +1356,7 @@ ip_mforward(struct mbuf *m, struct ifnet *ifp)
 			    (vifp->v_flags & VIFF_TUNNEL) ? "tunnel on " : "",
 			    vifp->v_ifp->if_xname);
 		}
-		return (ip_mdq(m, ifp, NULL, vifi));
+		return (ip_mdq(m, ifp, (struct mfc *)NULL, vifi));
 	}
 	if (rsvpdebug && ip->ip_p == IPPROTO_RSVP) {
 		printf("Warning: IPPROTO_RSVP from %x to %x without vif option\n",
@@ -1572,7 +1584,7 @@ expire_upcalls(void *v)
 				struct bw_meter *x = rt->mfc_bw_meter;
 
 				rt->mfc_bw_meter = x->bm_mfc_next;
-				kmem_free(x, sizeof(*x));
+				free(x, M_BWMETER);
 			}
 
 			++mrtstat.mrts_cache_cleanups;
@@ -2118,7 +2130,9 @@ tbf_send_packet(struct vif *vifp, struct mbuf *m)
 
 	if (vifp->v_flags & VIFF_TUNNEL) {
 		/* If tunnel options */
-		ip_output(m, NULL, &vifp->v_route, IP_FORWARDING, NULL, NULL);
+		ip_output(m, (struct mbuf *)NULL, &vifp->v_route,
+		    IP_FORWARDING, (struct ip_moptions *)NULL,
+		    (struct socket *)NULL);
 	} else {
 		/* if physical interface option, extract the options and then send */
 		struct ip_moptions imo;
@@ -2512,7 +2526,7 @@ add_bw_upcall(struct bw_upcall *req)
     }
 
     /* Allocate the new bw_meter entry */
-    x = kmem_intr_alloc(sizeof(*x), KM_NOSLEEP);
+    x = (struct bw_meter *)malloc(sizeof(*x), M_BWMETER, M_NOWAIT);
     if (x == NULL) {
 	splx(s);
 	return ENOBUFS;
@@ -2548,7 +2562,7 @@ free_bw_list(struct bw_meter *list)
 
 	list = list->bm_mfc_next;
 	unschedule_bw_meter(x);
-	kmem_free(x, sizeof(*x));
+	free(x, M_BWMETER);
     }
 }
 
@@ -2607,7 +2621,7 @@ del_bw_upcall(struct bw_upcall *req)
 	    unschedule_bw_meter(x);
 	    splx(s);
 	    /* Free the bw_meter entry */
-	    kmem_free(x, sizeof(*x));
+	    free(x, M_BWMETER);
 	    return 0;
 	} else {
 	    splx(s);
@@ -3023,7 +3037,7 @@ pim_register_send(struct ip *ip, struct vif *vifp,
     struct mbuf *mb_copy, *mm;
 
     if (mrtdebug & DEBUG_PIM)
-        log(LOG_DEBUG, "pim_register_send: \n");
+        log(LOG_DEBUG, "pim_register_send: ");
 
     mb_copy = pim_register_prepare(ip, m);
     if (mb_copy == NULL)
@@ -3143,7 +3157,7 @@ pim_register_send_upcall(struct ip *ip, struct vif *vifp,
     if (socket_send(ip_mrouter, mb_first, &k_igmpsrc) < 0) {
 	if (mrtdebug & DEBUG_PIM)
 	    log(LOG_WARNING,
-		"mcast: pim_register_send_upcall: ip_mrouter socket queue full\n");
+		"mcast: pim_register_send_upcall: ip_mrouter socket queue full");
 	++mrtstat.mrts_upq_sockfull;
 	return ENOBUFS;
     }
@@ -3311,7 +3325,7 @@ pim_input(struct mbuf *m, ...)
     } else if (in_cksum(m, datalen)) {
 	pimstat.pims_rcv_badsum++;
 	if (mrtdebug & DEBUG_PIM)
-	    log(LOG_DEBUG, "pim_input: invalid checksum\n");
+	    log(LOG_DEBUG, "pim_input: invalid checksum");
 	m_freem(m);
 	return;
     }
@@ -3464,7 +3478,7 @@ pim_input(struct mbuf *m, ...)
 		reg_vif_num);
 	}
 	/* NB: vifp was collected above; can it change on us? */
-	looutput(vifp, m, (struct sockaddr *)&dst, NULL);
+	looutput(vifp, m, (struct sockaddr *)&dst, (struct rtentry *)NULL);
 
 	/* prepare the register head to send to the mrouting daemon */
 	m = mcp;

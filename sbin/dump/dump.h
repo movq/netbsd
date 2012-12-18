@@ -1,4 +1,4 @@
-/*	$NetBSD: dump.h,v 1.47 2012/05/05 21:03:02 christos Exp $	*/
+/*	$NetBSD: dump.h,v 1.45 2008/02/16 17:58:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -110,7 +110,6 @@ int	lflag;		/* autoload flag */
 int	diskfd;		/* disk file descriptor */
 int	tapefd;		/* tape file descriptor */
 int	pipeout;	/* true => output to standard output */
-int	trueinc;	/* true => "true incremental", i.e use last 9 as ref */
 ino_t	curino;		/* current inumber; used globally */
 int	newtape;	/* new tape flag */
 u_int64_t	tapesize;	/* estimated tape size, blocks */
@@ -281,6 +280,18 @@ void	putdumptime(void);
 		for (ddp = ddatev[i = 0]; i < nddates; ddp = ddatev[++i])
 
 void	sig(int signo);
+
+/*
+ * Compatibility with old systems.
+ */
+#ifdef COMPAT
+#include <sys/file.h>
+#define	strchr(a,b)	index(a,b)
+#define	strrchr(a,b)	rindex(a,b)
+extern char *strdup(), *ctime();
+extern int read(), write();
+extern int errno;
+#endif
 
 #ifndef	_PATH_FSTAB
 #define	_PATH_FSTAB	"/etc/fstab"

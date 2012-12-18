@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus_io.c,v 1.22 2012/07/15 20:53:23 matt Exp $	*/
+/*	$NetBSD: mainbus_io.c,v 1.17 2005/11/24 13:08:32 yamt Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus_io.c,v 1.22 2012/07/15 20:53:23 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus_io.c,v 1.17 2005/11/24 13:08:32 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus_io.c,v 1.22 2012/07/15 20:53:23 matt Exp $")
 
 #include <uvm/uvm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/pmap.h>
 
 /* Proto types for all the bus_space structure functions */
@@ -129,51 +129,17 @@ struct bus_space mainbus_bs_tag = {
 	bs_notimpl_bs_c_2,
 	bs_notimpl_bs_c_4,
 	bs_notimpl_bs_c_8,
-
-#ifdef __BUS_SPACE_HAS_STREAM_METHODS
-	/* stream methods */
-	/* read (single) */
-	mainbus_bs_r_1,
-	mainbus_bs_r_2,
-	mainbus_bs_r_4,
-	bs_notimpl_bs_r_8,
-
-	/* read multiple */
-	bs_notimpl_bs_rm_1,
-	mainbus_bs_rm_2,
-	bs_notimpl_bs_rm_4,
-	bs_notimpl_bs_rm_8,
-
-	/* read region */
-	bs_notimpl_bs_rr_1,
-	bs_notimpl_bs_rr_2,
-	bs_notimpl_bs_rr_4,
-	bs_notimpl_bs_rr_8,
-
-	/* write (single) */
-	mainbus_bs_w_1,
-	mainbus_bs_w_2,
-	mainbus_bs_w_4,
-	bs_notimpl_bs_w_8,
-
-	/* write multiple */
-	mainbus_bs_wm_1,
-	mainbus_bs_wm_2,
-	bs_notimpl_bs_wm_4,
-	bs_notimpl_bs_wm_8,
-
-	/* write region */
-	bs_notimpl_bs_wr_1,
-	bs_notimpl_bs_wr_2,
-	bs_notimpl_bs_wr_4,
-	bs_notimpl_bs_wr_8,
-#endif
 };
 
 /* bus space functions */
 
 int
-mainbus_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int flags, bus_space_handle_t *bshp)
+mainbus_bs_map(t, bpa, size, flags, bshp)
+	void *t;
+	bus_addr_t bpa;
+	bus_size_t size;
+	int flags;
+	bus_space_handle_t *bshp;
 {
 	u_long startpa, endpa, pa;
 	vaddr_t va;
@@ -198,7 +164,7 @@ mainbus_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int flags, bus_space_ha
 	*bshp = (bus_space_handle_t)(va + (bpa - startpa));
 
 	for(pa = startpa; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
 		if ((flags & BUS_SPACE_MAP_CACHEABLE) == 0) {
 			pte = vtopte(va);
 			*pte &= ~L2_S_CACHE_MASK;
@@ -211,17 +177,24 @@ mainbus_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int flags, bus_space_ha
 }
 
 int
-mainbus_bs_alloc(void *t, bus_addr_t rstart, bus_addr_t rend,
-    bus_size_t size, bus_size_t alignment, bus_size_t boundary,
-    int cacheable,
-    bus_addr_t *bpap, bus_space_handle_t *bshp)
+mainbus_bs_alloc(t, rstart, rend, size, alignment, boundary, cacheable,
+    bpap, bshp)
+	void *t;
+	bus_addr_t rstart, rend;
+	bus_size_t size, alignment, boundary;
+	int cacheable;
+	bus_addr_t *bpap;
+	bus_space_handle_t *bshp;
 {
 	panic("mainbus_bs_alloc(): Help!");
 }
 
 
 void
-mainbus_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
+mainbus_bs_unmap(t, bsh, size)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
 {
 	/*
 	 * Temporary implementation
@@ -229,7 +202,10 @@ mainbus_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
 }
 
 void    
-mainbus_bs_free(void *t, bus_space_handle_t bsh, bus_size_t size)
+mainbus_bs_free(t, bsh, size)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
 {
 
 	panic("mainbus_bs_free(): Help!");
@@ -238,7 +214,11 @@ mainbus_bs_free(void *t, bus_space_handle_t bsh, bus_size_t size)
 }
 
 int
-mainbus_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
+mainbus_bs_subregion(t, bsh, offset, size, nbshp)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t offset, size;
+	bus_space_handle_t *nbshp;
 {
 
 	*nbshp = bsh + (offset << 2);
@@ -246,7 +226,12 @@ mainbus_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_siz
 }
 
 paddr_t
-mainbus_bs_mmap(void *t, bus_addr_t paddr, off_t offset, int prot, int flags)
+mainbus_bs_mmap(t, paddr, offset, prot, flags)
+	void *t;
+	bus_addr_t paddr;
+	off_t offset;
+	int prot;
+	int flags;
 {
 	/*
 	 * mmap from address `paddr+offset' for one page
@@ -255,7 +240,11 @@ mainbus_bs_mmap(void *t, bus_addr_t paddr, off_t offset, int prot, int flags)
 }
 
 void
-mainbus_bs_barrier(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t len, int flags)
+mainbus_bs_barrier(t, bsh, offset, len, flags)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t offset, len;
+	int flags;
 {
 }	
 

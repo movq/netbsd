@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.5 2011/01/02 09:40:51 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.4 2005/12/11 12:18:20 christos Exp $
 
 SRCS=   boot.c conf.c devopen.c
 PROG=	boot.elf
-LIBS=	${LIBSA} ${LIBKERN}
+LIBS=	${LIBSA}
 DPADD=	${LIBS}
 CLEANFILES+= boot.bin
 

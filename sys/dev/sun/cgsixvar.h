@@ -1,4 +1,4 @@
-/*	$NetBSD: cgsixvar.h,v 1.13 2012/07/12 01:20:22 macallan Exp $ */
+/*	$NetBSD: cgsixvar.h,v 1.9.10.1 2009/02/26 07:47:44 snj Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,6 @@
 
 #include "wsdisplay.h"
 #include <dev/wscons/wsdisplay_vconsvar.h>
-#include <dev/wscons/wsdisplay_glyphcachevar.h>
 
 /*
  * color display (cgsix) driver; common definitions.
@@ -53,7 +52,7 @@ struct cg6_cursor {		/* cg6 hardware cursor status */
 
 /* per-display variables */
 struct cgsix_softc {
-	device_t	sc_dev;		/* base device */
+	struct device	sc_dev;		/* base device */
 	struct fbdevice	sc_fb;		/* frame buffer device */
 	bus_space_tag_t	sc_bustag;
 	bus_addr_t	sc_paddr;	/* phys address for device mmap() */
@@ -72,20 +71,13 @@ struct cgsix_softc {
 	uint32_t sc_stride;
 	uint32_t sc_mono_width;	/* how many monochrome pixels to write */
 	uint32_t sc_ramsize;		/* VRAM size in bytes */
-	int sc_fb_is_open;
 #if NWSDISPLAY > 0	
 	int sc_mode;
 	uint32_t sc_bg;
 	struct vcons_data vd;
-	uint8_t sc_default_cmap[768];
-	glyphcache sc_gc;	
-#endif
+#endif	
 	union	bt_cmap sc_cmap;	/* Brooktree color map */
 };
-
-#define IS_IN_EMUL_MODE(sc) \
-	((sc->sc_fb_is_open == 0) && \
-	 (sc->sc_mode == WSDISPLAYIO_MODE_EMUL))
 
 #ifdef RASTERCONSOLE
 extern int cgsix_use_rasterconsole;

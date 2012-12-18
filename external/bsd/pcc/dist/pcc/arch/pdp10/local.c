@@ -1,5 +1,4 @@
-/*	Id: local.c,v 1.77 2011/06/05 17:21:17 ragge Exp 	*/	
-/*	$NetBSD: local.c,v 1.1.1.4 2011/09/01 12:46:42 plunky Exp $	*/
+/*	$Id: local.c,v 1.1.1.1 2008/08/24 05:32:58 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -12,6 +11,8 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -287,7 +288,7 @@ rmpc:			l->n_type = p->n_type;
 				cerror("unknown type %d", m);
 			}
 			l->n_type = m;
-			l->n_sue = 0;
+			l->n_sue = MKSUE(m);
 			nfree(p);
 			return l;
 		}
@@ -344,7 +345,7 @@ rmpc:			l->n_type = p->n_type;
 				l = p->n_left;
 			} else {
 				l = block(ADDROF, l, NIL, INCREF(l->n_type),
-				    0, 0);
+				    0, MKSUE(INT));
 			}
 		}
 		if ((l->n_type != (STRTY+PTR) && l->n_type != (UNIONTY+PTR)) ||
@@ -353,9 +354,9 @@ rmpc:			l->n_type = p->n_type;
 		q = newfun("__structcpy", p->n_type);
 
 		/* structure pointer block */
-		l = block(CM, l, r, INT, 0, 0);
+		l = block(CM, l, r, INT, 0, MKSUE(INT));
 		/* Size block */
-		r = block(CM, l, bcon(siz), INT, 0, 0);
+		r = block(CM, l, bcon(siz), INT, 0, MKSUE(INT));
 
 		l = xbcon(0, q, q->stype);
 		p->n_left = l;
@@ -367,7 +368,7 @@ rmpc:			l->n_type = p->n_type;
 	case FORCE:
 		p->n_op = ASSIGN;
 		p->n_right = p->n_left;
-		p->n_left = block(REG, NIL, NIL, p->n_type, 0, 0);
+		p->n_left = block(REG, NIL, NIL, p->n_type, 0, MKSUE(INT));
 		p->n_left->n_rval = RETREG(p->n_type);
 		break;
 
@@ -435,6 +436,15 @@ int
 andable(NODE *p)
 {
 	return(1);  /* all names can have & taken on them */
+}
+
+/*
+ * at the end of the arguments of a ftn, set the automatic offset
+ */
+void
+cendarg()
+{
+	autooff = AUTOINIT;
 }
 
 /*
@@ -746,6 +756,57 @@ ctype(TWORD type)
 	return (type);
 }
 
+/*
+ * Print out a string of characters.
+ * Assume that the assembler understands C-style escape
+ * sequences.
+ */
+void
+instring(struct symtab *sp)
+{
+	char *s, *str;
+
+	defloc(sp);
+	str = sp->sname;
+
+	/* be kind to assemblers and avoid long strings */
+	printf("\t.ascii \"");
+	for (s = str; *s != 0; ) {
+		if (*s++ == '\\') {
+			(void)esccon(&s);
+		}
+		if (s - str > 60) {
+			fwrite(str, 1, s - str, stdout);
+			printf("\"\n\t.ascii \"");
+			str = s;
+		}
+	}
+	fwrite(str, 1, s - str, stdout);
+	printf("\\0\"\n");
+}
+
+/*		
+ * Print out a wide string by calling ninval().
+ */
+void
+inwstring(struct symtab *sp)
+{
+	char *s = sp->sname;
+	NODE *p;
+
+	defloc(sp);
+	p = bcon(0);
+	do {
+		if (*s++ == '\\')
+			p->n_lval = esccon(&s);
+		else
+			p->n_lval = (unsigned char)s[-1];
+		ninval(0, (MKSUE(WCHAR_TYPE))->suesize, p);
+	} while (s[-1] != 0);
+	nfree(p);
+}
+
+
 /* curid is a variable which is defined but
  * is not initialized (and not a function );
  * This routine returns the stroage class for an uninitialized declaration
@@ -808,7 +869,7 @@ infld(CONSZ off, int fsz, CONSZ val)
  * off is bit offset from the beginning of the aggregate
  * fsz is the number of bits this is referring to
  */
-int
+void
 ninval(CONSZ off, int fsz, NODE *p)
 {
 	cerror("ninval");
@@ -819,10 +880,9 @@ ninval(CONSZ off, int fsz, NODE *p)
  * Give target the opportunity of handling pragmas.
  */
 int
-mypragma(char *str)
+mypragma(char **ary)
 {
-	return 0;
-}
+	return 0; }
 
 /*
  * Called when a identifier has been declared, to give target last word.

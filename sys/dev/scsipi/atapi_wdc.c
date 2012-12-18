@@ -1,4 +1,4 @@
-/*	$NetBSD: atapi_wdc.c,v 1.119 2012/07/31 15:59:57 bouyer Exp $	*/
+/*	$NetBSD: atapi_wdc.c,v 1.108.4.1 2008/11/20 02:45:36 snj Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -25,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atapi_wdc.c,v 1.119 2012/07/31 15:59:57 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atapi_wdc.c,v 1.108.4.1 2008/11/20 02:45:36 snj Exp $");
 
 #ifndef ATADEBUG
 #define ATADEBUG
@@ -102,7 +107,6 @@ static const struct scsipi_bustype wdc_atapi_bustype = {
 	atapi_interpret_sense,
 	atapi_print_addr,
 	wdc_atapi_kill_pending,
-	NULL,
 };
 
 void
@@ -198,6 +202,13 @@ wdc_atapi_get_params(struct scsipi_channel *chan, int drive,
 	struct ata_channel *chp = atac->atac_channels[chan->chan_channel];
 	struct ata_command ata_c;
 
+	/* if no ATAPI device detected at wdc attach time, skip */
+	if ((chp->ch_drive[drive].drive_flags & DRIVE_ATAPI) == 0) {
+		ATADEBUG_PRINT(("wdc_atapi_get_params: drive %d not present\n",
+		    drive), DEBUG_PROBE);
+		return -1;
+	}
+
 	memset(&ata_c, 0, sizeof(struct ata_command));
 	ata_c.r_command = ATAPI_SOFT_RESET;
 	ata_c.r_st_bmask = 0;
@@ -252,13 +263,6 @@ wdc_atapi_probe_device(struct atapibus_softc *sc, int target)
 	if (scsipi_lookup_periph(chan, target, 0) != NULL)
 		return;
 
-	/* if no ATAPI device detected at wdc attach time, skip */
-	if (drvp->drive_type != ATA_DRIVET_ATAPI) {
-		ATADEBUG_PRINT(("wdc_atapi_probe_device: "
-		    "drive %d not present\n", target), DEBUG_PROBE);
-		return;
-	}
-
 	if (wdc_atapi_get_params(chan, target, id) == 0) {
 #ifdef ATAPI_DEBUG_PROBE
 		printf("%s drive %d: cmdsz 0x%x drqtype 0x%x\n",
@@ -290,7 +294,7 @@ wdc_atapi_probe_device(struct atapibus_softc *sc, int target)
 			periph->periph_flags |= PERIPH_REMOVABLE;
 		if (periph->periph_type == T_SEQUENTIAL) {
 			s = splbio();
-			drvp->drive_flags |= ATA_DRIVE_ATAPIDSCW;
+			drvp->drive_flags |= DRIVE_ATAPIST;
 			splx(s);
 		}
 
@@ -321,12 +325,12 @@ wdc_atapi_probe_device(struct atapibus_softc *sc, int target)
 			ata_probe_caps(drvp);
 		else {
 			s = splbio();
-			drvp->drive_type = ATA_DRIVET_NONE;
+			drvp->drive_flags &= ~DRIVE_ATAPI;
 			splx(s);
 		}
 	} else {
 		s = splbio();
-		drvp->drive_type = ATA_DRIVET_NONE;
+		drvp->drive_flags &= ~DRIVE_ATAPI;
 		splx(s);
 	}
 }
@@ -370,7 +374,7 @@ wdc_atapi_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 			xfer->c_flags |= C_POLL;
 #if NATA_DMA
 		if ((atac->atac_channels[channel]->ch_drive[drive].drive_flags &
-		    (ATA_DRIVE_DMA | ATA_DRIVE_UDMA)) && sc_xfer->datalen > 0)
+		    (DRIVE_DMA | DRIVE_UDMA)) && sc_xfer->datalen > 0)
 			xfer->c_flags |= C_DMA;
 #endif
 #if NATA_DMA && NATA_PIOBM
@@ -474,7 +478,7 @@ wdc_atapi_start(struct ata_channel *chp, struct ata_xfer *xfer)
 		}
 		/*
 		 * disable interrupts, all commands here should be quick
-		 * enough to be able to poll, and we don't go here that often
+		 * enouth to be able to poll, and we don't go here that often
 		 */
 		 bus_space_write_1(wdr->ctl_iot, wdr->ctl_ioh, wd_aux_ctlr,
 		     WDCTL_4BIT | WDCTL_IDS);
@@ -486,7 +490,7 @@ wdc_atapi_start(struct ata_channel *chp, struct ata_xfer *xfer)
 		if (atac->atac_set_modes == NULL)
 			goto ready;
 		/* Also don't try if the drive didn't report its mode */
-		if ((drvp->drive_flags & ATA_DRIVE_MODE) == 0)
+		if ((drvp->drive_flags & DRIVE_MODE) == 0)
 			goto ready;
 		errstring = "unbusy";
 		if (wdc_wait_for_unbusy(chp, ATAPI_DELAY, wait_flags))
@@ -515,12 +519,12 @@ wdc_atapi_start(struct ata_channel *chp, struct ata_xfer *xfer)
 		}
 #if NATA_DMA
 #if NATA_UDMA
-		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
+		if (drvp->drive_flags & DRIVE_UDMA) {
 			wdccommand(chp, drvp->drive, SET_FEATURES, 0, 0, 0,
 			    0x40 | drvp->UDMA_mode, WDSF_SET_MODE);
 		} else
 #endif
-		if (drvp->drive_flags & ATA_DRIVE_DMA) {
+		if (drvp->drive_flags & DRIVE_DMA) {
 			wdccommand(chp, drvp->drive, SET_FEATURES, 0, 0, 0,
 			    0x20 | drvp->DMA_mode, WDSF_SET_MODE);
 		} else {
@@ -532,7 +536,7 @@ wdc_atapi_start(struct ata_channel *chp, struct ata_xfer *xfer)
 		if (chp->ch_status & WDCS_ERR) {
 			if (chp->ch_error == WDCE_ABRT) {
 #if NATA_UDMA
-				if (drvp->drive_flags & ATA_DRIVE_UDMA)
+				if (drvp->drive_flags & DRIVE_UDMA)
 					goto error;
 				else
 #endif
@@ -568,7 +572,7 @@ ready:
 		wdc->select(chp, xfer->c_drive);
 	bus_space_write_1(wdr->cmd_iot, wdr->cmd_iohs[wd_sdh], 0,
 	    WDSD_IBM | (xfer->c_drive << 4));
-	switch (wdc_wait_for_unbusy(chp, ATAPI_DELAY, wait_flags)) {
+	switch (wdc_wait_for_unbusy(chp, ATAPI_DELAY, wait_flags)  < 0) {
 	case WDCWAIT_OK:
 		break;
 	case WDCWAIT_TOUT:
@@ -995,7 +999,7 @@ wdc_atapi_phase_complete(struct ata_xfer *xfer)
 	struct ata_drive_datas *drvp = &chp->ch_drive[xfer->c_drive];
 
 	/* wait for DSC if needed */
-	if (drvp->drive_flags & ATA_DRIVE_ATAPIDSCW) {
+	if (drvp->drive_flags & DRIVE_ATAPIST) {
 		ATADEBUG_PRINT(("wdc_atapi_phase_complete(%s:%d:%d) "
 		    "polldsc %d\n", device_xname(atac->atac_dev),
 		    chp->ch_channel,
@@ -1085,9 +1089,9 @@ wdc_atapi_done(struct ata_channel *chp, struct ata_xfer *xfer)
 	chp->ch_queue->active_xfer = NULL;
 	ata_free_xfer(chp, xfer);
 
-	if (chp->ch_drive[drive].drive_flags & ATA_DRIVE_WAITDRAIN) {
+	if (chp->ch_drive[drive].drive_flags & DRIVE_WAITDRAIN) {
 		sc_xfer->error = XS_DRIVER_STUFFUP;
-		chp->ch_drive[drive].drive_flags &= ~ATA_DRIVE_WAITDRAIN;
+		chp->ch_drive[drive].drive_flags &= ~DRIVE_WAITDRAIN;
 		wakeup(&chp->ch_queue->active_xfer);
 	}
 

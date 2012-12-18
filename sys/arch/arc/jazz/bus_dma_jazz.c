@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma_jazz.c,v 1.17 2011/07/01 19:25:41 dyoung Exp $	*/
+/*	$NetBSD: bus_dma_jazz.c,v 1.15 2008/05/14 13:29:27 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2003 Izumi Tsutsui.  All rights reserved.
@@ -51,18 +51,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma_jazz.c,v 1.17 2011/07/01 19:25:41 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma_jazz.c,v 1.15 2008/05/14 13:29:27 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
 #include <sys/device.h>
-#include <sys/proc.h>
 
 #include <uvm/uvm_extern.h>
 
 #define _ARC_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arc/jazz/jazzdmatlbreg.h>
 #include <arc/jazz/jazzdmatlbvar.h>

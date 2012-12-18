@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.31 2011/12/25 06:09:09 tsutsui Exp $	 */
+/*	$NetBSD: main.c,v 1.24 2008/09/26 14:12:49 christos Exp $	 */
 
 /*
  * Copyright (c) 1996, 1997
@@ -83,11 +83,12 @@ const struct bootblk_command commands[] = {
 };
 
 int
-parsebootfile(const char *fname, char **fsmode, char **devname, int *unit, int *partition, const char **file)
-	/* fsmode:  out */
-	/* devname:  out */
-	/* unit, *partition:  out */
-	/* file:  out */
+parsebootfile(fname, fsmode, devname, unit, partition, file)
+	const char     *fname;
+	char          **fsmode; /* out */
+	char          **devname; /* out */
+	int            *unit, *partition; /* out */
+	const char    **file; /* out */
 {
 	const char     *col, *help;
 
@@ -153,7 +154,8 @@ parsebootfile(const char *fname, char **fsmode, char **devname, int *unit, int *
 }
 
 char *
-sprint_bootsel(const char *filename)
+sprint_bootsel(filename)
+	const char *filename;
 {
 	char *fsname, *devname;
 	int unit, partition;
@@ -175,7 +177,9 @@ bad:
 }
 
 static void
-bootit(const char *filename, int howto, int tell)
+bootit(filename, howto, tell)
+	const char     *filename;
+	int             howto, tell;
 {
 	int floppy = strncmp(default_devname, "fd", 2) == 0;
 	if (tell) {
@@ -185,7 +189,7 @@ bootit(const char *filename, int howto, int tell)
 		printf("\n");
 	}
 #ifdef SUPPORT_LYNX
-	if(exec_netbsd(filename, 0, howto, floppy, NULL) < 0)
+	if(exec_netbsd(filename, 0, howto, floppy) < 0)
 		printf("boot netbsd: %s: %s\n", sprint_bootsel(filename),
 		       strerror(errno));
 	else {
@@ -198,7 +202,7 @@ bootit(const char *filename, int howto, int tell)
 	else
 		printf("boot lynx returned\n");
 #else
-	if (exec_netbsd(filename, 0, howto, floppy, NULL) < 0)
+	if (exec_netbsd(filename, 0, howto, floppy) < 0)
 		printf("boot: %s: %s\n", sprint_bootsel(filename),
 		       strerror(errno));
 	else
@@ -211,8 +215,6 @@ print_banner(void)
 {
 	int extmem = getextmem();
 	char *s = "";
-
-	clear_pc_screen();
 
 #ifdef XMS
 	u_long xmsmem;
@@ -238,13 +240,15 @@ print_banner(void)
 }
 
 void 
-usage(void)
+usage()
 {
 	printf("dosboot [-u] [-c <commands>] [-i] [filename [-bootopts]]\n");
 }
 
 int 
-main(int argc, char **argv)
+main(argc, argv)
+	int             argc;
+	char          **argv;
 {
 	int             ch;
 	int             interactive = 0;
@@ -307,7 +311,8 @@ main(int argc, char **argv)
 
 /* ARGSUSED */
 void
-command_help(char *arg)
+command_help(arg)
+	char *arg;
 {
 	printf("commands are:\n"
 	       "boot [xdNx:][filename] [-acdqsv]\n"
@@ -320,24 +325,31 @@ command_help(char *arg)
 }
 
 void
-command_ls(char *arg)
+command_ls(arg)
+	char *arg;
 {
 	char *help = default_filename;
+	if (strcmp(current_fsmode, "ufs")) {
+		printf("UFS only\n");
+		return;
+	}
 	default_filename = "/";
-	ls(arg);
+	ufs_ls(arg);
 	default_filename = help;
 }
 
 /* ARGSUSED */
 void
-command_quit(char *arg)
+command_quit(arg)
+	char *arg;
 {
 	printf("Exiting... goodbye...\n");
-	_rtt();
+	exit(0);
 }
 
 void
-command_boot(char *arg)
+command_boot(arg)
+	char *arg;
 {
 	char *filename;
 	int howto;
@@ -347,7 +359,8 @@ command_boot(char *arg)
 }
 
 void
-command_mode(char *arg)
+command_mode(arg)
+	char *arg;
 {
 	if (!strcmp("dos", arg))
 		current_fsmode = "dos";
@@ -358,7 +371,8 @@ command_mode(char *arg)
 }
 
 void
-command_dev(char *arg)
+command_dev(arg)
+	char *arg;
 {
 	static char savedevname[MAXDEVNAME + 1];
 	char *fsname, *devname;

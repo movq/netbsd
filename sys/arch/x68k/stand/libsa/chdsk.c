@@ -1,4 +1,4 @@
-/*	$NetBSD: chdsk.c,v 1.4 2011/04/11 14:00:02 tsutsui Exp $	*/
+/*	$NetBSD: chdsk.c,v 1.1 2001/09/28 15:19:33 minoura Exp $	*/
 
 /*
  * Copyright (c) 2001 MINOURA Makoto.
@@ -26,7 +26,6 @@
  */
 
 #include <lib/libsa/stand.h>
-#include <lib/libkern/libkern.h>
 
 #include "libx68k.h"
 #include "iocs.h"
@@ -36,39 +35,22 @@
 int
 changedisk_hook(struct open_file *f)
 {
-
 	if (strcmp(f->f_dev->dv_name, "fd") == 0) {
 		struct fd_softc *sc = f->f_devdata;
-		int drive[2];
+		int unit = (0x90 + sc->unit) << 8;
 
-		drive[0] = 0x90 << 8;
-		drive[1] = 0x91 << 8;
-
-		/* unlock current unit */
-		IOCS_B_DRVCHK(drive[sc->unit], 3);
-		/* eject current */
-		IOCS_B_DRVCHK(drive[sc->unit], 1);
+		/* unlock */
+		IOCS_B_DRVCHK(unit, 3);
+		/* eject */
+		IOCS_B_DRVCHK(unit, 1);
 		awaitkey_1sec();
-		/* prompt both */
-		IOCS_B_DRVCHK(drive[0], 4);
-		IOCS_B_DRVCHK(drive[1], 4);
+		/* prompt */
+		IOCS_B_DRVCHK(unit, 4);
 		/* poll for medium */
-		for (;;) {
-			if ((IOCS_B_DRVCHK(drive[0], 0) & 2)) {
-				sc->unit = 0;
-				break;
-			}
-			if ((IOCS_B_DRVCHK(drive[1], 0) & 2)) {
-				sc->unit = 1;
-				break;
-			}
+		while ((IOCS_B_DRVCHK(unit, 0) & 2) == 0)
 			awaitkey_1sec();
-		}
-		/* prompt off */
-		IOCS_B_DRVCHK(drive[0], 5);
-		IOCS_B_DRVCHK(drive[1], 5);
-		/* lock new unit */
-		IOCS_B_DRVCHK(drive[sc->unit], 2);
+		/* lock */
+		IOCS_B_DRVCHK(unit, 2);
 	}
 
 	return 0;

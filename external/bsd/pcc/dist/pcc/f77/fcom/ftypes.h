@@ -1,5 +1,4 @@
-/*	Id: ftypes.h,v 1.5 2008/12/19 08:08:48 ragge Exp 	*/	
-/*	$NetBSD: ftypes.h,v 1.1.1.3 2010/06/03 18:57:48 plunky Exp $	*/
+/*	$Id: ftypes.h,v 1.1.1.1 2008/08/24 05:33:06 gmcgarry Exp $	*/
 /*
  * Copyright(C) Caldera International Inc. 2001-2002. All rights reserved.
  *
@@ -39,10 +38,6 @@
  *	TYDREAL-TYREAL = TYDCOMPLEX-TYCOMPLEX
  */
 
-#ifndef _FTYPES_H_
-#define _FTYPES_H_
-
-
 #define TYUNKNOWN 0
 #define TYADDR 1
 #define TYSHORT 2
@@ -71,7 +66,7 @@
 #define	ALIDOUBLE	(ALDOUBLE/ALCHAR)
 
 #ifndef SZINT
-#include "macdefs.h"
+#error macdefs.h
 #endif
 #if SZINT == SZSHORT
 #define TYINT	TYSHORT
@@ -80,4 +75,3 @@
 #endif
 
 #define TYLENG  TYLONG
-#endif /* !_FTYPES_H_ */

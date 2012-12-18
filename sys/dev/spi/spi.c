@@ -1,4 +1,4 @@
-/* $NetBSD: spi.c,v 1.6 2011/07/08 03:29:15 mrg Exp $ */
+/* $NetBSD: spi.c,v 1.3 2008/05/04 14:21:56 xtraeme Exp $ */
 
 /*-
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spi.c,v 1.6 2011/07/08 03:29:15 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spi.c,v 1.3 2008/05/04 14:21:56 xtraeme Exp $");
 
 #include "locators.h"
 
@@ -50,8 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: spi.c,v 1.6 2011/07/08 03:29:15 mrg Exp $");
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <sys/mutex.h>
-#include <sys/condvar.h>
+#include <sys/proc.h>
 #include <sys/errno.h>
 
 #include <dev/spi/spivar.h>
@@ -91,7 +90,7 @@ spibus_print(void *aux, const char *pnp)
 static int
 spi_match(device_t parent, cfdata_t cf, void *aux)
 {
-
+	
 	return 1;
 }
 
@@ -189,7 +188,7 @@ spi_configure(struct spi_handle *sh, int mode, int speed)
 	if ((sc->sc_mode >= 0) && (sc->sc_mode != mode))
 		return EINVAL;
 
-	s = splbio();
+	s = splserial();
 	/* pick lowest configured speed */
 	if (speed == 0)
 		speed = sc->sc_speed;
@@ -211,9 +210,7 @@ void
 spi_transfer_init(struct spi_transfer *st)
 {
 
-	mutex_init(&st->st_lock, MUTEX_DEFAULT, IPL_BIO);
-	cv_init(&st->st_cv, "spicv");
-
+	simple_lock_init(&st->st_lock);
 	st->st_flags = 0;
 	st->st_errno = 0;
 	st->st_done = NULL;
@@ -228,7 +225,7 @@ spi_chunk_init(struct spi_chunk *chunk, int cnt, const uint8_t *wptr,
 {
 
 	chunk->chunk_write = chunk->chunk_wptr = wptr;
-	chunk->chunk_read = chunk->chunk_rptr = rptr;
+	chunk->chunk_read = chunk->chunk_read = rptr;
 	chunk->chunk_rresid = chunk->chunk_wresid = chunk->chunk_count = cnt;
 	chunk->chunk_next = NULL;
 }
@@ -270,19 +267,24 @@ spi_transfer(struct spi_handle *sh, struct spi_transfer *st)
 void
 spi_wait(struct spi_transfer *st)
 {
+	int	s;
 
-	mutex_enter(&st->st_lock);
-	while (!(st->st_flags & SPI_F_DONE)) {
-		cv_wait(&st->st_cv, &st->st_lock);
+	s = splserial();
+	simple_lock(&st->st_lock);
+	while (!st->st_flags & SPI_F_DONE) {
+		ltsleep(st, PWAIT, "spi_wait", 0, &st->st_lock);
 	}
-	mutex_exit(&st->st_lock);
+	simple_unlock(&st->st_lock);
+	splx(s);
 }
 
 void
 spi_done(struct spi_transfer *st, int err)
 {
+	int	s;
 
-	mutex_enter(&st->st_lock);
+	s = splserial();
+	
 	if ((st->st_errno = err) != 0) {
 		st->st_flags |= SPI_F_ERROR;
 	}
@@ -290,9 +292,12 @@ spi_done(struct spi_transfer *st, int err)
 	if (st->st_done != NULL) {
 		(*st->st_done)(st);
 	} else {
-		cv_broadcast(&st->st_cv);
+
+		simple_lock(&st->st_lock);
+		wakeup(st);
+		simple_unlock(&st->st_lock);
 	}
-	mutex_exit(&st->st_lock);
+	splx(s);
 }
 
 /*

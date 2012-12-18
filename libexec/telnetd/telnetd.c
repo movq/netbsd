@@ -1,4 +1,4 @@
-/*	$NetBSD: telnetd.c,v 1.54 2012/01/10 23:39:11 joerg Exp $	*/
+/*	$NetBSD: telnetd.c,v 1.51 2008/07/20 01:09:07 lukem Exp $	*/
 
 /*
  * Copyright (C) 1997 and 1998 WIDE Project.
@@ -65,7 +65,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)telnetd.c	8.4 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: telnetd.c,v 1.54 2012/01/10 23:39:11 joerg Exp $");
+__RCSID("$NetBSD: telnetd.c,v 1.51 2008/07/20 01:09:07 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -83,7 +83,7 @@ __RCSID("$NetBSD: telnetd.c,v 1.54 2012/01/10 23:39:11 joerg Exp $");
 #define	Authenticator	k5_Authenticator
 #include <krb5.h>
 #undef	Authenticator
-#include <krb5/com_err.h>
+#include <com_err.h>
 #endif
 
 #ifdef AUTHENTICATION
@@ -118,13 +118,14 @@ int	hostinfo = 1;			/* do we print login banner? */
 
 static int debug = 0;
 int keepalive = 1;
-const char *gettyname = "default";
+char *gettyname = "default";
 char *progname;
 
-void usage(void) __dead;
+int main(int, char *[]);
+void usage(void);
 int getterminaltype(char *, size_t);
-int getent(char *, const char *);
-static void doit(struct sockaddr *) __dead;
+int getent(char *, char *);
+void doit(struct sockaddr *);
 void _gettermname(void);
 int terminaltypeok(char *);
 char *getstr(const char *, char **);
@@ -359,7 +360,7 @@ main(int argc, char *argv[])
 	if (debug) {
 	    int s, ns, error;
 	    socklen_t foo;
-	    const char *service = "telnet";
+	    char *service = "telnet";
 	    struct addrinfo hints, *res;
 
 	    if (argc > 1) {
@@ -669,12 +670,12 @@ char *hostname;
 char host_name[MAXHOSTNAMELEN + 1];
 char remote_host_name[MAXHOSTNAMELEN + 1];
 
-static void telnet(int, int) __dead;
+extern void telnet(int, int);
 
 /*
  * Get a pty, scan input lines.
  */
-static void
+void
 doit(struct sockaddr *who)
 {
 	char *host;
@@ -738,7 +739,7 @@ doit(struct sockaddr *who)
  * Main loop.  Select from pty and network, and
  * hand data to telnet receiver finite state machine.
  */
-static void
+void
 telnet(int f, int p)
 {
 	int on = 1;
@@ -746,8 +747,7 @@ telnet(int f, int p)
 	char	defent[TABBUFSIZ];
 	char	defstrs[TABBUFSIZ];
 #undef	TABBUFSIZ
-	char *HE, *HN, *IF, *ptyibuf2ptr;
-	const char *IM;
+	char *HE, *HN, *IM, *IF, *ptyibuf2ptr;
 	struct pollfd set[2];
 
 	/*

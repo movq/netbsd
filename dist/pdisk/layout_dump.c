@@ -29,7 +29,6 @@
 #include <stdio.h>
 // for strlen()
 #include <string.h>
-#include <inttypes.h>
 #include "layout_dump.h"
 
 
@@ -46,7 +45,7 @@
 /*
  * Global Constants
  */
-uint8_t bitmasks[] = {
+unsigned char bitmasks[] = {
     0x01, 0x03, 0x07, 0x0F,
     0x1F, 0x3F, 0x7F, 0xFF
 };
@@ -91,49 +90,49 @@ dump_using_layout(void *buffer, layout *desc)
 	    byte_length = entry->bit_length / 8;
 	    
 	    if (entry->bit_offset != 0 || (entry->bit_length % 8) != 0) {
-		printf("entry %d, can't handle bitfields yet.\n", (int)(entry - desc));
+		printf("entry %d, can't handle bitfields yet.\n", entry - desc);
 		continue;
 	    }
 	    
 	    value = 0;
 	    for (i = entry->byte_offset; byte_length > 0;i++) {
 		value = value << 8;
-		value |= ((uint8_t *)buffer)[i];
+		value |= ((unsigned char *)buffer)[i];
 		byte_length--;
 	    }
 	} else {
 	    if (entry->bit_offset < 0 || entry->bit_offset > 8) {
-		printf("entry %d, bad bit offset (%d).\n", (int)(entry - desc), entry->bit_offset);
+		printf("entry %d, bad bit offset (%d).\n", entry - desc, entry->bit_offset);
 		continue;
 	    } else if (entry->bit_length <= 0 
 		    || entry->bit_length > (entry->bit_offset + 1)) {
-		printf("entry %d, bad bit length (%d,%d).\n", (int)(entry - desc),
+		printf("entry %d, bad bit length (%d,%d).\n", entry - desc,
 			entry->bit_offset, entry->bit_length);
 		continue;
 	    }
-	    value = (((uint8_t *)buffer)[entry->byte_offset]
+	    value = (((unsigned char *)buffer)[entry->byte_offset]
 		    & bitmasks[entry->bit_offset])
 		    >> ((entry->bit_offset + 1) - entry->bit_length);
 	}
 	
 	switch (entry->format) {
 	case kHex:
-	    printf("0x%x\n", (uint32_t) value);
+	    printf("0x%x\n", (unsigned int) value);
 	    break;
 	case kDec:
 	    byte_length = entry->bit_length / 8;
 	    switch (byte_length) {
-	    case 4: printf("%"PRId32"\n", (int32_t)value); break;
-	    case 2: printf("%"PRId16"\n", (int16_t)value); break;
-	    case 1: printf("%"PRId8"\n", (int8_t)value); break;
+	    case 4: printf("%ld\n", (signed long)value); break;
+	    case 2: printf("%d\n", (signed short)value); break;
+	    case 1: printf("%d\n", (signed char)value); break;
 	    }
 	    break;
 	case kUns:
 	    byte_length = entry->bit_length / 8;
 	    switch (byte_length) {
-	    case 4: printf("%"PRIu32"\n", (uint32_t)value); break;
-	    case 2: printf("%"PRIu16"\n", (uint16_t)value); break;
-	    case 1: printf("%"PRIu8"\n", (uint8_t)value); break;
+	    case 4: printf("%lu\n", (unsigned long)value); break;
+	    case 2: printf("%u\n", (unsigned short)value); break;
+	    case 1: printf("%u\n", (unsigned char)value); break;
 	    }
 	    break;
 	case kBit:
@@ -142,7 +141,7 @@ dump_using_layout(void *buffer, layout *desc)
 	    }
 	    break;
 	default:
-	    printf("entry %d, unknown format (%d).\n", (int)(entry - desc), entry->format);
+	    printf("entry %d, unknown format (%d).\n", entry - desc, entry->format);
 	    break;
 	}
     }
@@ -150,7 +149,7 @@ dump_using_layout(void *buffer, layout *desc)
 
 
 void
-DumpRawBuffer(uint8_t *bufferPtr, int length )
+DumpRawBuffer(unsigned char *bufferPtr, int length )
 {
 	register int            i;
 	int                     lineStart;

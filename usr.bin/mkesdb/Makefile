@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2009/10/28 22:22:44 christos Exp $
+#	$NetBSD: Makefile,v 1.4 2008/03/10 01:08:05 dholland Exp $
 
 NOMAN=# defined (must come before bsd.own.mk)
 
@@ -8,6 +8,7 @@ NOMAN=# defined (must come before bsd.own.mk)
 
 .PATH: ${NETBSDSRCDIR}/lib/libc/citrus
 
+WARNS?=		2
 PROG=		mkesdb
 SRCS=		yacc.y lex.l \
 		citrus_bcs.c citrus_db_factory.c citrus_db_hash.c \

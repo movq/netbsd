@@ -1,4 +1,4 @@
-/*	$NetBSD: adutil.c,v 1.15 2011/06/12 03:35:52 rmind Exp $	*/
+/*	$NetBSD: adutil.c,v 1.8 2008/01/30 09:50:19 ad Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -32,28 +32,32 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adutil.c,v 1.15 2011/06/12 03:35:52 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adutil.c,v 1.8 2008/01/30 09:50:19 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
+#include <sys/malloc.h>
 #include <sys/time.h>
 #include <sys/queue.h>
 #include <sys/buf.h>
+#include <sys/simplelock.h>
 #include <fs/adosfs/adosfs.h>
 
 /*
  * look for anode in the mount's hash table, return locked.
  */
 #define AHASH(an) ((an) & (ANODEHASHSZ - 1))
-static int CapitalChar(int, int);
+static int CapitalChar __P((int, int));
 
-extern kmutex_t adosfs_hashlock;
+extern struct simplelock adosfs_hashlock;
 
 struct vnode *
-adosfs_ahashget(struct mount *mp, ino_t an)
+adosfs_ahashget(mp, an)
+	struct mount *mp;
+	ino_t an;
 {
 	struct anodechain *hp;
 	struct anode *ap;
@@ -62,18 +66,18 @@ adosfs_ahashget(struct mount *mp, ino_t an)
 	hp = &VFSTOADOSFS(mp)->anodetab[AHASH(an)];
 
 start_over:
-	mutex_enter(&adosfs_hashlock);
+	simple_lock(&adosfs_hashlock);
 	for (ap = hp->lh_first; ap != NULL; ap = ap->link.le_next) {
 		if (ap->block == an) {
 			vp = ATOV(ap);
-			mutex_enter(vp->v_interlock);
-			mutex_exit(&adosfs_hashlock);
-			if (vget(vp, LK_EXCLUSIVE))
+			mutex_enter(&vp->v_interlock);
+			simple_unlock(&adosfs_hashlock);
+			if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK))
 				goto start_over;
 			return (ATOV(ap));
 		}
 	}
-	mutex_exit(&adosfs_hashlock);
+	simple_unlock(&adosfs_hashlock);
 	return (NULL);
 }
 
@@ -83,25 +87,30 @@ start_over:
  * ap->vp must have been initialized before this call.
  */
 void
-adosfs_ainshash(struct adosfsmount *amp, struct anode *ap)
+adosfs_ainshash(amp, ap)
+	struct adosfsmount *amp;
+	struct anode *ap;
 {
-	VOP_LOCK(ATOV(ap), LK_EXCLUSIVE);
+	vlockmgr(&ap->vp->v_lock, LK_EXCLUSIVE);
 
-	mutex_enter(&adosfs_hashlock);
+	simple_lock(&adosfs_hashlock);
 	LIST_INSERT_HEAD(&amp->anodetab[AHASH(ap->block)], ap, link);
-	mutex_exit(&adosfs_hashlock);
+	simple_unlock(&adosfs_hashlock);
 }
 
 void
-adosfs_aremhash(struct anode *ap)
+adosfs_aremhash(ap)
+	struct anode *ap;
 {
-	mutex_enter(&adosfs_hashlock);
+	simple_lock(&adosfs_hashlock);
 	LIST_REMOVE(ap, link);
-	mutex_exit(&adosfs_hashlock);
+	simple_unlock(&adosfs_hashlock);
 }
 
 int
-adosfs_getblktype(struct adosfsmount *amp, struct buf *bp)
+adosfs_getblktype(amp, bp)
+	struct adosfsmount *amp;
+	struct buf *bp;
 {
 	if (adoscksum(bp, amp->nwords)) {
 #ifdef DIAGNOSTIC
@@ -149,7 +158,8 @@ adosfs_getblktype(struct adosfsmount *amp, struct buf *bp)
 }
 
 int
-adunixprot(int adprot)
+adunixprot(adprot)
+	int adprot;
 {
 	if (adprot & 0xc000ee00) {
 		adprot = (adprot & 0xee0e) >> 1;
@@ -164,7 +174,8 @@ adunixprot(int adprot)
 }
 
 static int
-CapitalChar(int ch, int inter)
+CapitalChar(ch, inter)
+	int ch, inter;
 {
 	if ((ch >= 'a' && ch <= 'z') ||
 	    (inter && ch >= 0xe0 && ch <= 0xfe && ch != 0xf7))
@@ -173,7 +184,9 @@ CapitalChar(int ch, int inter)
 }
 
 u_int32_t
-adoscksum(struct buf *bp, int n)
+adoscksum(bp, n)
+	struct buf *bp;
+	int n;
 {
 	u_int32_t sum, *lp;
 
@@ -186,7 +199,9 @@ adoscksum(struct buf *bp, int n)
 }
 
 int
-adoscaseequ(const u_char *name1, const u_char *name2, int len, int inter)
+adoscaseequ(name1, name2, len, inter)
+	const u_char *name1, *name2;
+	int len, inter;
 {
 	while (len-- > 0)
 		if (CapitalChar(*name1++, inter) !=
@@ -197,7 +212,9 @@ adoscaseequ(const u_char *name1, const u_char *name2, int len, int inter)
 }
 
 int
-adoshash(const u_char *nam, int namlen, int nelt, int inter)
+adoshash(nam, namlen, nelt, inter)
+	const u_char *nam;
+	int namlen, nelt, inter;
 {
 	int val;
 
@@ -212,7 +229,9 @@ adoshash(const u_char *nam, int namlen, int nelt, int inter)
  * datestamp is local time, tv is to be UTC
  */
 int
-dstotv(struct datestamp *dsp, struct timeval *tvp)
+dstotv(dsp, tvp)
+	struct datestamp *dsp;
+	struct timeval *tvp;
 {
 }
 
@@ -220,14 +239,18 @@ dstotv(struct datestamp *dsp, struct timeval *tvp)
  * tv is UTC, datestamp is to be local time
  */
 int
-tvtods(struct timeval *tvp, struct datestamp *dsp)
+tvtods(tvp, dsp)
+	struct timeval *tvp;
+	struct datestamp *dsp;
 {
 }
 #endif
 
 #if BYTE_ORDER != BIG_ENDIAN
 u_int32_t
-adoswordn(struct buf *bp, int wn)
+adoswordn(bp, wn)
+	struct buf *bp;
+	int wn;
 {
 	/*
 	 * ados stored in network (big endian) order

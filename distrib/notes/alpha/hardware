@@ -1,4 +1,4 @@
-.\"	$NetBSD: hardware,v 1.17 2009/04/25 21:21:47 snj Exp $
+.\"	$NetBSD: hardware,v 1.15.2.1 2009/04/25 23:16:33 snj Exp $
 .
 .Nx*M
 \*V runs on most of the

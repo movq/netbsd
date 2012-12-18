@@ -1,4 +1,4 @@
-/*	$NetBSD: lam.c,v 1.8 2011/09/04 20:28:09 joerg Exp $	*/
+/*	$NetBSD: lam.c,v 1.6 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993\
 #if 0
 static char sccsid[] = "@(#)lam.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: lam.c,v 1.8 2011/09/04 20:28:09 joerg Exp $");
+__RCSID("$NetBSD: lam.c,v 1.6 2008/07/21 14:19:23 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -61,22 +61,25 @@ struct	openfile {		/* open file structure */
 	short	eof;		/* eof flag */
 	short	pad;		/* pad flag for missing columns */
 	char	eol;		/* end of line character */
-	const char *sepstring;	/* string to print before each line */
-	const char *format;	/* printf(3) style string spec. */
+	char	*sepstring;	/* string to print before each line */
+	char	*format;	/* printf(3) style string spec. */
 }	input[MAXOFILES];
 
-static int	morefiles;		/* set by getargs(), changed by gatherline() */
-static int	nofinalnl;		/* normally append \n to each output line */
-static char	line[BIGBUFSIZ];
-static char	*linep;
+int	morefiles;		/* set by getargs(), changed by gatherline() */
+int	nofinalnl;		/* normally append \n to each output line */
+char	line[BIGBUFSIZ];
+char	*linep;
 
-__dead static void	 error(const char *, const char *);
-static char	*gatherline(struct openfile *);
-static void	 getargs(char *[]);
-static char	*pad(struct openfile *);
+void	 error __P((char *, char *));
+char	*gatherline __P((struct openfile *));
+void	 getargs __P((char *[]));
+int	 main __P((int, char **));
+char	*pad __P((struct openfile *));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	struct	openfile *ip;
 
@@ -96,8 +99,9 @@ main(int argc, char *argv[])
 	}
 }
 
-static void
-getargs(char *av[])
+void
+getargs(av)
+	char *av[];
 {
 	struct openfile *ip = input;
 	char *p, *c;
@@ -173,8 +177,9 @@ getargs(char *av[])
 		ip->sepstring = "";
 }
 
-static char *
-pad(struct openfile *ip)
+char *
+pad(ip)
+	struct openfile *ip;
 {
 	char *lp = linep;
 
@@ -187,8 +192,9 @@ pad(struct openfile *ip)
 	return (lp);
 }
 
-static char *
-gatherline(struct openfile *ip)
+char *
+gatherline(ip)
+	struct openfile *ip;
 {
 	char s[BUFSIZ];
 	int c;
@@ -216,8 +222,9 @@ gatherline(struct openfile *ip)
 	return (lp);
 }
 
-static void
-error(const char *msg, const char *s)
+void
+error(msg, s)
+	char *msg, *s;
 {
 	warnx(msg, s);
 	fprintf(stderr,

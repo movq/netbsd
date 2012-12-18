@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.68 2012/08/17 20:11:37 abs Exp $
+# $NetBSD: GENERIC,v 1.55 2008/08/10 15:31:20 tls Exp $
 #
 # GENERIC machine description file
 # 
@@ -54,22 +54,22 @@ file-system	NTFS		# Windows/NT file system (experimental)
 file-system	NFS		# Sun NFS-compatible file system client
 file-system	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay filesystem
-file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
+file-system	PORTAL		# portal filesystem (still experimental)
 file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
 file-system	PROCFS		# /proc
 file-system	KERNFS		# /kern
 file-system	FDESC		# /dev/fd
 file-system	PTYFS		# /dev/pts/N support
-file-system	TMPFS		# Efficient memory file-system
+#file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-options 	QUOTA		# legacy UFS quotas
-options 	QUOTA2		# new, in-filesystem UFS quotas
+options 	QUOTA		# UFS quotas
 options 	NFSSERVER	# Sun NFS-compatible file system server
 options 	FFS_EI		# FFS endianness-independence support
-options 	WAPBL		# File system journaling support
+options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
@@ -121,10 +121,12 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like shared memory
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 #options 	IRQSTATS	# manage IRQ statistics
+#options 	LKM		# loadable kernel modules
 #options 	KMEMSTATS	# kernel memory statistics
 #options 	SCSIVERBOSE	# Verbose SCSI errors
 options 	NTP		# Kernel PLL for ntpd(8).
@@ -149,7 +151,6 @@ options 	NFS_BOOT_RWSIZE=1024	# XXX "ea" driver bug workaround
 #options 	WSEMUL_NODUMB
 #options 	WSEMUL_SUN
 options 	WSEMUL_VT100
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	FONT_VT220L8x8		# 8x8 font for console
 
 config		netbsd	root on ? type ?
@@ -168,8 +169,10 @@ iic0		at iociic0
 pcfrtc0		at iic0 addr 0x50	# Real-time clock
 
 arckbd0 	at ioc0 bank 0 offset 0x04 # System keyboard
-wskbd0		at arckbd0
-wsmouse0	at arckbd0
+arcwskbd0	at arckbd0		# Logical devices...
+wskbd0		at arcwskbd0
+arcwsmouse0	at arckbd0
+wsmouse0	at arcwsmouse0
 
 ioeb0		at ioc0 bank 5		# I/O Extension Block (A5000)
 latches0	at ioc0 bank 5		# Printer/FDC control latches (Arc)
@@ -238,10 +241,10 @@ options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # options	RF_INCLUDE_INTERDECLUSTER=1
 # options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 # options	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss			# file system snapshot device
-#pseudo-device	ipfilter
-pseudo-device	loop
-pseudo-device	md		
+pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	ipfilter	1
+pseudo-device	loop		1
+pseudo-device	md		1
 #options 	MEMORY_DISK_HOOKS
 #options 	MEMORY_DISK_ROOT_SIZE=
 pseudo-device	ppp		
@@ -260,11 +263,11 @@ pseudo-device	bridge			# simple inter-network bridging
 pseudo-device	agr			# IEEE 802.3ad link aggregation
 pseudo-device	sequencer	1	# MIDI sequencer
 pseudo-device	wsmux			# keyboard/mouse multiplexor
+pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
-pseudo-device	putter		# for puffs and pud
 
 # Veriexec
 #

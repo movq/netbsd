@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space_large.c,v 1.8 2011/07/01 19:28:00 dyoung Exp $	*/
+/*	$NetBSD: bus_space_large.c,v 1.7 2008/04/28 20:23:13 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space_large.c,v 1.8 2011/07/01 19:28:00 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space_large.c,v 1.7 2008/04/28 20:23:13 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: bus_space_large.c,v 1.8 2011/07/01 19:28:00 dyoung E
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/wired_map.h>
 
 static int arc_large_bus_space_compose_handle(bus_space_tag_t, bus_addr_t,

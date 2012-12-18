@@ -1,4 +1,4 @@
-/*	$NetBSD: acardide.c,v 1.30 2012/07/31 15:50:35 bouyer Exp $	*/
+/*	$NetBSD: acardide.c,v 1.23 2008/05/14 13:29:29 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2001 Izumi Tsutsui.  All rights reserved.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acardide.c,v 1.30 2012/07/31 15:50:35 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acardide.c,v 1.23 2008/05/14 13:29:29 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -36,7 +36,7 @@ __KERNEL_RCSID(0, "$NetBSD: acardide.c,v 1.30 2012/07/31 15:50:35 bouyer Exp $")
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_acard_reg.h>
 
-static void acard_chip_map(struct pciide_softc*, const struct pci_attach_args*);
+static void acard_chip_map(struct pciide_softc*, struct pci_attach_args*);
 static void acard_setup_channel(struct ata_channel*);
 #if 0 /* XXX !! */
 static int  acard_pci_intr(void *);
@@ -110,11 +110,12 @@ acardide_attach(device_t parent, device_t self, void *aux)
 	((sc)->sc_pp->ide_product == PCI_PRODUCT_ACARD_ATP850U)
 
 static void
-acard_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
+acard_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int i;
 	pcireg_t interface;
+	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
@@ -159,7 +160,6 @@ acard_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 	sc->sc_wdcdev.sc_atac.atac_set_modes = acard_setup_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 2;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -167,7 +167,8 @@ acard_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 		cp = &sc->pciide_channels[i];
 		if (pciide_chansetup(sc, i, interface) == 0)
 			continue;
-		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
+		    pciide_pci_intr);
 	}
 	if (!ACARD_IS_850(sc)) {
 		u_int32_t reg;
@@ -203,8 +204,8 @@ acard_setup_channel(struct ata_channel *chp)
 		udma_mode &= ~ATP860_UDMA_MASK(channel);
 
 		/* check 80 pins cable */
-		if ((chp->ch_drive[0].drive_flags & ATA_DRIVE_UDMA) ||
-		    (chp->ch_drive[1].drive_flags & ATA_DRIVE_UDMA)) {
+		if ((chp->ch_drive[0].drive_flags & DRIVE_UDMA) ||
+		    (chp->ch_drive[1].drive_flags & DRIVE_UDMA)) {
 			if (pci_conf_read(sc->sc_pc, sc->sc_tag, ATP8x0_CTRL)
 			    & ATP860_CTRL_80P(chp->ch_channel)) {
 				if (chp->ch_drive[0].UDMA_mode > 2)
@@ -221,11 +222,11 @@ acard_setup_channel(struct ata_channel *chp)
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if (drvp->drive_type == ATA_DRIVET_NONE)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
 		/* add timing values, setup DMA if needed */
 		if ((atac->atac_cap & ATAC_CAP_UDMA) &&
-		    (drvp->drive_flags & ATA_DRIVE_UDMA)) {
+		    (drvp->drive_flags & DRIVE_UDMA)) {
 			/* use Ultra/DMA */
 			if (ACARD_IS_850(sc)) {
 				idetime |= ATP850_SETTIME(drive,
@@ -242,10 +243,10 @@ acard_setup_channel(struct ata_channel *chp)
 			}
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
 		} else if ((atac->atac_cap & ATAC_CAP_DMA) &&
-		    (drvp->drive_flags & ATA_DRIVE_DMA)) {
+		    (drvp->drive_flags & DRIVE_DMA)) {
 			/* use Multiword DMA */
 			s = splbio();
-			drvp->drive_flags &= ~ATA_DRIVE_UDMA;
+			drvp->drive_flags &= ~DRIVE_UDMA;
 			splx(s);
 			if (ACARD_IS_850(sc)) {
 				idetime |= ATP850_SETTIME(drive,
@@ -260,7 +261,7 @@ acard_setup_channel(struct ata_channel *chp)
 		} else {
 			/* PIO only */
 			s = splbio();
-			drvp->drive_flags &= ~(ATA_DRIVE_UDMA | ATA_DRIVE_DMA);
+			drvp->drive_flags &= ~(DRIVE_UDMA | DRIVE_DMA);
 			splx(s);
 			if (ACARD_IS_850(sc)) {
 				idetime |= ATP850_SETTIME(drive,

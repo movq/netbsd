@@ -1,10 +1,8 @@
-/*	$NetBSD: time.c,v 1.1.1.3 2010/12/12 15:23:16 adam Exp $	*/
-
 /* time.c - deal with time subsystem */
-/* OpenLDAP: pkg/ldap/servers/slapd/back-monitor/time.c,v 1.37.2.6 2010/04/19 16:53:03 quanah Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/back-monitor/time.c,v 1.37.2.3 2008/02/11 23:26:47 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2001-2010 The OpenLDAP Foundation.
+ * Copyright 2001-2008 The OpenLDAP Foundation.
  * Portions Copyright 2001-2003 Pierangelo Masarati.
  * All rights reserved.
  *
@@ -197,7 +195,10 @@ monitor_subsys_time_update(
 	dnRdn( &e->e_nname, &rdn );
 	
 	if ( dn_match( &rdn, &bv_current ) ) {
-		struct tm	tm;
+		struct tm	*tm;
+#ifdef HAVE_GMTIME_R
+		struct tm	tm_buf;
+#endif
 		char		tmbuf[ LDAP_LUTIL_GENTIME_BUFSIZE ];
 		Attribute	*a;
 		ber_len_t	len;
@@ -205,8 +206,27 @@ monitor_subsys_time_update(
 
 		currtime = slap_get_time();
 
-		ldap_pvt_gmtime( &currtime, &tm );
-		lutil_gentime( tmbuf, sizeof( tmbuf ), &tm );
+#ifndef HAVE_GMTIME_R
+		ldap_pvt_thread_mutex_lock( &gmtime_mutex );
+#endif
+#ifdef HACK_LOCAL_TIME
+# ifdef HAVE_LOCALTIME_R
+		tm = localtime_r( &currtime, &tm_buf );
+# else
+		tm = localtime( &currtime );
+# endif /* HAVE_LOCALTIME_R */
+		lutil_localtime( tmbuf, sizeof( tmbuf ), tm, -timezone );
+#else /* !HACK_LOCAL_TIME */
+# ifdef HAVE_GMTIME_R
+		tm = gmtime_r( &currtime, &tm_buf );
+# else
+		tm = gmtime( &currtime );
+# endif /* HAVE_GMTIME_R */
+		lutil_gentime( tmbuf, sizeof( tmbuf ), tm );
+#endif /* !HACK_LOCAL_TIME */
+#ifndef HAVE_GMTIME_R
+		ldap_pvt_thread_mutex_unlock( &gmtime_mutex );
+#endif
 
 		len = strlen( tmbuf );
 

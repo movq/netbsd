@@ -1,4 +1,4 @@
-/*	$NetBSD: iostat.c,v 1.37 2009/04/13 23:20:27 lukem Exp $	*/
+/*	$NetBSD: iostat.c,v 1.36 2006/04/14 13:14:06 blymn Exp $	*/
 
 /*
  * Copyright (c) 1980, 1992, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)iostat.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: iostat.c,v 1.37 2009/04/13 23:20:27 lukem Exp $");
+__RCSID("$NetBSD: iostat.c,v 1.36 2006/04/14 13:14:06 blymn Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -125,8 +125,7 @@ labeliostat(void)
 static int
 numlabels(int row)
 {
-	int col, regions;
-	size_t i, ndrives;
+	int i, col, regions, ndrives;
 
 #define COLWIDTH	(9 + secs * 5 + 1 + read_write * 9 + 1)
 #define DRIVESPERLINE	((getmaxx(wnd) + 1) / COLWIDTH)
@@ -175,7 +174,7 @@ numlabels(int row)
 static int
 barlabels(int row)
 {
-	size_t i;
+	int i;
 
 	mvwaddstr(wnd, row++, INSET,
 	    "/0   /10  /20  /30  /40  /50  /60  /70  /80  /90  /100");
@@ -202,8 +201,7 @@ barlabels(int row)
 void
 showiostat(void)
 {
-	int row, col;
-	size_t i;
+	int i, row, col;
 
 	if (ndrive == 0)
 		return;
@@ -300,7 +298,7 @@ stats(int row, int col, int dn)
 static void
 stat1(int row, int o)
 {
-	size_t i;
+	int i;
 	double total_time;
 
 	total_time = 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: lsi64854.c,v 1.38 2012/10/27 17:18:21 chs Exp $ */
+/*	$NetBSD: lsi64854.c,v 1.33 2008/04/28 20:23:50 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lsi64854.c,v 1.38 2012/10/27 17:18:21 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lsi64854.c,v 1.33 2008/04/28 20:23:50 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,6 +38,8 @@ __KERNEL_RCSID(0, "$NetBSD: lsi64854.c,v 1.38 2012/10/27 17:18:21 chs Exp $");
 #include <sys/errno.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 #include <machine/autoconf.h>
@@ -378,18 +380,15 @@ lsi64854_scsi_intr(void *arg)
 	uint32_t csr;
 
 	csr = L64854_GCSR(sc);
-#ifdef DEBUG
-	snprintb(bits, sizeof(bits), DDMACSR_BITS, csr);
-#endif
+
 	DPRINTF(LDB_SCSI, ("%s: %s: addr 0x%x, csr %s\n",
 	    device_xname(sc->sc_dev), __func__,
 	    bus_space_read_4(sc->sc_bustag, sc->sc_regs, L64854_REG_ADDR),
-	    bits));
-	    
+	    bitmask_snprintf(csr, DDMACSR_BITS, bits, sizeof(bits))));
 
 	if (csr & (D_ERR_PEND|D_SLAVE_ERR)) {
-		snprintb(bits, sizeof(bits), DDMACSR_BITS, csr);
-		printf("%s: error: csr=%s\n", device_xname(sc->sc_dev), bits);
+		printf("%s: error: csr=%s\n", device_xname(sc->sc_dev),
+		    bitmask_snprintf(csr, DDMACSR_BITS, bits,sizeof(bits)));
 		csr &= ~D_EN_DMA;	/* Stop DMA */
 		/* Invalidate the queue; SLAVE_ERR bit is write-to-clear */
 		csr |= D_INVALIDATE|D_SLAVE_ERR;
@@ -460,7 +459,7 @@ lsi64854_scsi_intr(void *arg)
 		 * another target.  As such, don't print the warning.
 		 */
 		printf("%s: xfer (%d) > req (%d)\n",
-		    device_xname(sc->sc_dev), trans, sc->sc_dmasize);
+		    device_xname(&sc->sc_dev), trans, sc->sc_dmasize);
 #endif
 		trans = sc->sc_dmasize;
 	}
@@ -513,8 +512,8 @@ lsi64854_enet_intr(void *arg)
 	rv = ((csr & E_INT_PEND) != 0) ? 1 : 0;
 
 	if (csr & (E_ERR_PEND|E_SLAVE_ERR)) {
-		snprintb(bits, sizeof(bits), EDMACSR_BITS, csr);
-		printf("%s: error: csr=%s\n", device_xname(sc->sc_dev), bits);
+		printf("%s: error: csr=%s\n", device_xname(sc->sc_dev),
+		    bitmask_snprintf(csr, EDMACSR_BITS, bits,sizeof(bits)));
 		csr &= ~L64854_EN_DMA;	/* Stop DMA */
 		/* Invalidate the queue; SLAVE_ERR bit is write-to-clear */
 		csr |= E_INVALIDATE|E_SLAVE_ERR;
@@ -616,20 +615,17 @@ lsi64854_pp_intr(void *arg)
 
 	csr = L64854_GCSR(sc);
 
-#ifdef DEBUG
-	snprintb(bits, sizeof(bits), PDMACSR_BITS, csr);
-#endif
 	DPRINTF(LDB_PP, ("%s: pp intr: addr 0x%x, csr %s\n",
 	    device_xname(sc->sc_dev),
 	    bus_space_read_4(sc->sc_bustag, sc->sc_regs, L64854_REG_ADDR),
-	    bits));
+	    bitmask_snprintf(csr, PDMACSR_BITS, bits, sizeof(bits))));
 
 	if (csr & (P_ERR_PEND|P_SLAVE_ERR)) {
 		resid = bus_space_read_4(sc->sc_bustag, sc->sc_regs,
 		    L64854_REG_CNT);
-		snprintb(bits, sizeof(bits), PDMACSR_BITS, csr);
 		printf("%s: pp error: resid %d csr=%s\n",
-		    device_xname(sc->sc_dev), resid, bits);
+		    device_xname(sc->sc_dev), resid,
+		    bitmask_snprintf(csr, PDMACSR_BITS, bits,sizeof(bits)));
 		csr &= ~P_EN_DMA;	/* Stop DMA */
 		/* Invalidate the queue; SLAVE_ERR bit is write-to-clear */
 		csr |= P_INVALIDATE|P_SLAVE_ERR;

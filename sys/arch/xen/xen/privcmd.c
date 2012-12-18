@@ -1,4 +1,4 @@
-/* $NetBSD: privcmd.c,v 1.44 2012/06/27 00:37:10 jym Exp $ */
+/* $NetBSD: privcmd.c,v 1.33.4.2 2010/01/30 19:12:26 snj Exp $ */
 
 /*-
  * Copyright (c) 2004 Christian Limpach.
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Christian Limpach.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -27,7 +32,9 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: privcmd.c,v 1.44 2012/06/27 00:37:10 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: privcmd.c,v 1.33.4.2 2010/01/30 19:12:26 snj Exp $");
+
+#include "opt_compat_netbsd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -267,10 +274,12 @@ privcmd_ioctl(void *v)
 
 	switch (ap->a_command) {
 	case IOCTL_PRIVCMD_HYPERCALL:
+#ifdef COMPAT_40
 	case IOCTL_PRIVCMD_HYPERCALL_OLD:
 	/*
 	 * oprivcmd_hypercall_t is privcmd_hypercall_t without the last entry
 	 */
+#endif
 	{
 		privcmd_hypercall_t *hc = ap->a_data;
 		if (hc->op >= (PAGE_SIZE >> 5))
@@ -286,9 +295,13 @@ privcmd_ioctl(void *v)
 			"movl 16(%%eax),%%esi ;"
 			"movl 20(%%eax),%%edi ;"
 			"movl   (%%eax),%%eax ;"
+#if defined(XEN3) && !defined(XEN_COMPAT_030001)
 			"shll $5,%%eax ;"
 			"addl $hypercall_page,%%eax ;"
 			"call *%%eax ;"
+#else
+			TRAP_INSTR "; "
+#endif
 			"popl %%edi; popl %%esi; popl %%edx;"
 			"popl %%ecx; popl %%ebx"
 			: "=a" (error) : "0" (ap->a_data) : "memory" );
@@ -326,6 +339,23 @@ privcmd_ioctl(void *v)
 		}
 		break;
 	}
+#ifndef XEN3
+#if defined(COMPAT_30)
+	case IOCTL_PRIVCMD_INITDOMAIN_EVTCHN_OLD:
+		{
+		extern int initdom_ctrlif_domcontroller_port;
+		error = initdom_ctrlif_domcontroller_port;
+		}
+		break;
+#endif /* defined(COMPAT_30) */
+	case IOCTL_PRIVCMD_INITDOMAIN_EVTCHN:
+		{
+		extern int initdom_ctrlif_domcontroller_port;
+		*(int *)ap->a_data = initdom_ctrlif_domcontroller_port;
+		}
+		error = 0;
+		break;
+#endif /* XEN3 */
 	case IOCTL_PRIVCMD_MMAP:
 	{
 		int i, j;
@@ -412,8 +442,6 @@ privcmd_ioctl(void *v)
 			va = va0 + (i * PAGE_SIZE);
 			error = copyin(&pmb->arr[i], &mfn, sizeof(mfn));
 			if (error != 0) {
-				/* XXX: mappings */
-				pmap_update(pmap_kernel());
 				kmem_free(maddr, sizeof(paddr_t) * pmb->num);
 				uvm_km_free(kernel_map, trymap, PAGE_SIZE,
 				    UVM_KMF_VAONLY);
@@ -431,16 +459,26 @@ privcmd_ioctl(void *v)
 				maddr[i] = ma;
 			}
 		}
-		pmap_update(pmap_kernel());
-
-		error = privcmd_map_obj(vmm, va0, maddr, pmb->num, pmb->dom);
-		uvm_km_free(kernel_map, trymap, PAGE_SIZE, UVM_KMF_VAONLY);
-
-		if (error != 0)
+		error  = privcmd_map_obj(vmm, va0, maddr, pmb->num, pmb->dom);
+		if (error) {
+			uvm_km_free(kernel_map, trymap, PAGE_SIZE,
+			    UVM_KMF_VAONLY);
 			return error;
-
+		}
+		uvm_km_free(kernel_map, trymap, PAGE_SIZE,
+		    UVM_KMF_VAONLY);
+		error = 0;
 		break;
 	}
+#ifndef XEN3
+	case IOCTL_PRIVCMD_GET_MACH2PHYS_START_MFN:
+		{
+		unsigned long *mfn_start = ap->a_data;
+		*mfn_start = HYPERVISOR_shared_info->arch.mfn_to_pfn_start;
+		error = 0;
+		}
+		break;
+#endif /* !XEN3 */
 	default:
 		error = EINVAL;
 	}
@@ -457,25 +495,24 @@ static struct uvm_pagerops privpgops = {
 static void
 privpgop_reference(struct uvm_object *uobj)
 {
-	mutex_enter(uobj->vmobjlock);
+	mutex_enter(&uobj->vmobjlock);
 	uobj->uo_refs++;
-	mutex_exit(uobj->vmobjlock);
+	mutex_exit(&uobj->vmobjlock);
 }
 
 static void
 privpgop_detach(struct uvm_object *uobj)
 {
 	struct privcmd_object *pobj = (struct privcmd_object *)uobj;
-
-	mutex_enter(uobj->vmobjlock);
+	mutex_enter(&uobj->vmobjlock);
 	if (uobj->uo_refs > 1) {
 		uobj->uo_refs--;
-		mutex_exit(uobj->vmobjlock);
+		mutex_exit(&uobj->vmobjlock);
 		return;
 	}
-	mutex_exit(uobj->vmobjlock);
+	mutex_exit(&uobj->vmobjlock);
 	kmem_free(pobj->maddr, sizeof(paddr_t) * pobj->npages);
-	uvm_obj_destroy(uobj, true);
+	UVM_OBJ_DESTROY(uobj);
 	kmem_free(pobj, sizeof(struct privcmd_object));
 	privcmd_nobjects--;
 }
@@ -487,30 +524,35 @@ privpgop_fault(struct uvm_faultinfo *ufi, vaddr_t vaddr, struct vm_page **pps,
 	struct vm_map_entry *entry = ufi->entry;
 	struct uvm_object *uobj = entry->object.uvm_obj;
 	struct privcmd_object *pobj = (struct privcmd_object*)uobj;
-	int maddr_i, i, error = 0;
+	int maddr_i;
+	int i, error = 0;
 
 	/* compute offset from start of map */
 	maddr_i = (entry->offset + (vaddr - entry->start)) >> PAGE_SHIFT;
-	if (maddr_i + npages > pobj->npages) {
+	if (maddr_i + npages > pobj->npages)
 		return EINVAL;
-	}
 	for (i = 0; i < npages; i++, maddr_i++, vaddr+= PAGE_SIZE) {
 		if ((flags & PGO_ALLPAGES) == 0 && i != centeridx)
 			continue;
 		if (pps[i] == PGO_DONTCARE)
 			continue;
 		if (pobj->maddr[maddr_i] == INVALID_PAGE) {
-			/* This has already been flagged as error. */
-			error = EFAULT;
-			break;
+			/* this has already been flagged as error */
+			uvmfault_unlockall(ufi, ufi->entry->aref.ar_amap,
+			    uobj, NULL);
+			pmap_update(ufi->orig_map->pmap);
+			return EFAULT;
 		}
 		error = pmap_enter_ma(ufi->orig_map->pmap, vaddr,
 		    pobj->maddr[maddr_i], 0, ufi->entry->protection,
 		    PMAP_CANFAIL | ufi->entry->protection,
 		    pobj->domid);
 		if (error == ENOMEM) {
-			error = ERESTART;
-			break;
+			uvmfault_unlockall(ufi, ufi->entry->aref.ar_amap,
+			    uobj, NULL);
+			pmap_update(ufi->orig_map->pmap);
+			uvm_wait("udv_fault");
+			return (ERESTART);
 		}
 		if (error) {
 			/* XXX for proper ptp accountings */
@@ -518,13 +560,9 @@ privpgop_fault(struct uvm_faultinfo *ufi, vaddr_t vaddr, struct vm_page **pps,
 			    vaddr + PAGE_SIZE);
 		}
 	}
+	uvmfault_unlockall(ufi, ufi->entry->aref.ar_amap, uobj, NULL);
 	pmap_update(ufi->orig_map->pmap);
-	uvmfault_unlockall(ufi, ufi->entry->aref.ar_amap, uobj);
-
-	if (error == ERESTART) {
-		uvm_wait("privpgop_fault");
-	}
-	return error;
+	return (error);
 }
 
 static int
@@ -563,12 +601,12 @@ privcmd_map_obj(struct vm_map *map, vaddr_t start, paddr_t *maddr,
 	}
 
 	privcmd_nobjects++;
-	uvm_obj_init(&obj->uobj, &privpgops, true, 1);
-	mutex_enter(obj->uobj.vmobjlock);
+	UVM_OBJ_INIT(&obj->uobj, &privpgops, 1);
+	mutex_enter(&obj->uobj.vmobjlock);
 	obj->maddr = maddr;
 	obj->npages = npages;
 	obj->domid = domid;
-	mutex_exit(obj->uobj.vmobjlock);
+	mutex_exit(&obj->uobj.vmobjlock);
 	uvmflag = UVM_MAPFLAG(prot, prot, UVM_INH_NONE, UVM_ADV_NORMAL,
 	    UVM_FLAG_FIXED | UVM_FLAG_NOMERGE);
 	error = uvm_map(map, &newstart, size, &obj->uobj, 0, 0, uvmflag);
@@ -590,7 +628,7 @@ static const struct kernfs_fileop privcmd_fileops[] = {
 };
 
 void
-xenprivcmd_init(void)
+xenprivcmd_init()
 {
 	kernfs_entry_t *dkt;
 	kfstype kfst;

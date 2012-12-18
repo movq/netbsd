@@ -1,7 +1,7 @@
-/*	$Id: omap2_obio.c,v 1.17 2012/12/11 19:18:56 riastradh Exp $	*/
+/*	$Id: omap2_obio.c,v 1.5 2008/10/21 18:50:25 matt Exp $	*/
 
 /* adapted from: */
-/*	$NetBSD: omap2_obio.c,v 1.17 2012/12/11 19:18:56 riastradh Exp $ */
+/*	$NetBSD: omap2_obio.c,v 1.5 2008/10/21 18:50:25 matt Exp $ */
 
 
 /*
@@ -103,7 +103,7 @@
 
 #include "opt_omap.h"
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap2_obio.c,v 1.17 2012/12/11 19:18:56 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap2_obio.c,v 1.5 2008/10/21 18:50:25 matt Exp $");
 
 #include "locators.h"
 #include "obio.h"
@@ -115,7 +115,7 @@ __KERNEL_RCSID(0, "$NetBSD: omap2_obio.c,v 1.17 2012/12/11 19:18:56 riastradh Ex
 #include <sys/reboot.h>
 
 #include <machine/cpu.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/cpufunc.h>
 #include <arm/mainbus/mainbus.h>
@@ -130,6 +130,16 @@ typedef struct {
 	ulong		cs_size;
 } obio_csconfig_t;
 
+struct obio_softc {
+	struct device		sc_dev;
+	bus_dma_tag_t		sc_dmat;
+	bus_space_tag_t		sc_iot;
+	bus_space_handle_t	sc_ioh;
+	bus_addr_t		sc_base;
+	bus_size_t		sc_size;
+};
+
+
 /* prototypes */
 static int	obio_match(device_t, cfdata_t, void *);
 static void	obio_attach(device_t, device_t, void *);
@@ -139,7 +149,7 @@ static int	obio_print(void *, const char *);
 static void	obio_attach_critical(struct obio_softc *);
 
 /* attach structures */
-CFATTACH_DECL_NEW(obio, sizeof(struct obio_softc),
+CFATTACH_DECL(obio, sizeof(struct obio_softc),
 	obio_match, obio_attach, NULL, NULL);
 
 static uint8_t obio_attached;
@@ -177,21 +187,7 @@ obio_match(device_t parent, cfdata_t match, void *aux)
 		return 1;
 #endif
 
-#ifdef TI_AM335X
-	if (obio_attached == 0)
-		return 1;
-#endif
-
 	return 0;
-}
-
-static void
-obio_attach1(device_t self)
-{
-	/*
-	 * Attach the rest of our devices
-	 */
-	config_search_ia(obio_search, self, "obio", NULL);
 }
 
 static void
@@ -200,13 +196,14 @@ obio_attach(device_t parent, device_t self, void *aux)
 	struct obio_softc *sc = device_private(self);
 	struct mainbus_attach_args *mb = (struct mainbus_attach_args *)aux;
 
-	sc->sc_dev = self;
 	sc->sc_iot = &omap_bs_tag;
 
 	aprint_normal(": On-Board IO\n");
 
 	sc->sc_ioh = 0;
+#ifdef NOTYET
 	sc->sc_dmat = &omap_bus_dma_tag;
+#endif
 	sc->sc_base = mb->mb_iobase;
 	sc->sc_size = mb->mb_iosize;
 
@@ -226,20 +223,15 @@ obio_attach(device_t parent, device_t self, void *aux)
 	else if (mb->mb_iobase == OMAP2_OBIO_3_BASE)
 		obio_attached |= 8;
 #endif
-#ifdef TI_AM335X
-	obio_attached = 1;
-#endif
 
 	/*
 	 * Attach critical devices first.
 	 */
 	obio_attach_critical(sc);
-
 	/*
-	 * Attach the rest of our devices once all obio devices
-	 * have attached.
+	 * Then attach the rest of our devices
 	 */
-	config_defer(self, obio_attach1);
+	config_search_ia(obio_search, self, "obio", NULL);
 }
 
 static int
@@ -357,30 +349,12 @@ static const struct {
 	bus_addr_t addr;
 	bool required;
 } critical_devs[] = {
-#if defined(OMAP_2430) || defined(OMAP_2420)
 	{ .name = "avic", .addr = INTC_BASE, .required = true },
-#endif
-#if defined(OMAP_3430)
-	{ .name = "avic", .addr = INTC_BASE_3430, .required = true },
-#endif
-#if defined(OMAP_3530)
-	{ .name = "avic", .addr = INTC_BASE_3530, .required = true },
-#endif
 	{ .name = "gpio1", .addr = GPIO1_BASE, .required = false },
 	{ .name = "gpio2", .addr = GPIO2_BASE, .required = false },
 	{ .name = "gpio3", .addr = GPIO3_BASE, .required = false },
-#if defined(GPIO4_BASE)
-	{ .name = "gpio4", .addr = GPIO4_BASE, .required = false },
-#endif
-#if defined(GPIO5_BASE)
-	{ .name = "gpio5", .addr = GPIO5_BASE, .required = false },
-#endif
 #if 0
 	{ .name = "dmac", .addr = DMAC_BASE, .required = true },
-#endif
-#if defined(TI_AM335X)
-	{ .name = "omapicu", .addr = 0x48200000, .required = true },
-	{ .name = "prcm", .addr = 0x44e00000, .required = true },
 #endif
 };
 
@@ -407,22 +381,16 @@ obio_attach_critical(struct obio_softc *sc)
 		        || oa.obio_addr >= sc->sc_base + sc->sc_size))
 			continue;
 
-		cf = config_search_ia(obio_find, sc->sc_dev, "obio", &oa);
-		if (cf == NULL) {
-			if (critical_devs[i].required)
-				panic(
-				    "obio_attach_critical: failed to find %s!",
-				    critical_devs[i].name);
-			continue;
-		}
+		cf = config_search_ia(obio_find, &sc->sc_dev, "obio", &oa);
+		if (cf == NULL && critical_devs[i].required)
+			panic("obio_attach_critical: failed to find %s!",
+			    critical_devs[i].name);
 
-		if (oa.obio_size == OBIOCF_SIZE_DEFAULT)
-			oa.obio_size = cf->cf_loc[OBIOCF_SIZE];
-		if (oa.obio_intr == OBIOCF_INTR_DEFAULT)
-			oa.obio_intr = cf->cf_loc[OBIOCF_INTR];
-		if (oa.obio_intrbase == OBIOCF_INTRBASE_DEFAULT)
-			oa.obio_intrbase = cf->cf_loc[OBIOCF_INTRBASE];
-		config_attach(sc->sc_dev, cf, &oa, obio_print);
+		oa.obio_addr = cf->cf_loc[OBIOCF_ADDR];
+		oa.obio_size = cf->cf_loc[OBIOCF_SIZE];
+		oa.obio_intr = cf->cf_loc[OBIOCF_INTR];
+		oa.obio_intrbase = cf->cf_loc[OBIOCF_INTRBASE];
+		config_attach(&sc->sc_dev, cf, &oa, obio_print);
 	}
 }
 

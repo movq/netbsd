@@ -1,4 +1,4 @@
-/* $NetBSD: crt0.c,v 1.30 2011/03/12 07:56:36 matt Exp $ */
+/* $NetBSD: crt0.c,v 1.26 2006/05/18 17:54:19 christos Exp $ */
 
 /*
  * Copyright (c) 1997 Jason R. Thorpe.
@@ -41,8 +41,8 @@
  * Small Data Area designators.  If not defined, will show up as being
  * at address zero.
  */
-__weakref_visible int rtld_SDA_BASE_[] __weak_reference(_SDA_BASE_);
-__weakref_visible int rtld_SDA2_BASE_[] __weak_reference(_SDA2_BASE_);
+extern int _SDA_BASE_[] __weak_reference(_SDA_BASE_);
+extern int _SDA2_BASE_[] __weak_reference(_SDA2_BASE_);
 
 /*
  * First 5 arguments are specified by the PowerPC SVR4 ABI.  The
@@ -62,15 +62,12 @@ _start(int argc, char **argv, char **envp,
 	/*
 	 * Initialize the Small Data Area registers.
 	 * _SDA_BASE is defined in the SVR4 ABI for PPC.
-	 *
-	 * Do the initialization in a PIC manner.
+	 * _SDA2_BASE is defined in the E[mbedded] ABI for PPC.
 	 */
-	__asm(
-		"bcl 20,31,1f;"
-		"1: mflr 11;"
-		"addis 13,11,rtld_SDA_BASE_-1b@ha;"
-		"addi 13,13,rtld_SDA_BASE_-1b@l;"
-	    ::: "lr" );
+	__asm(  "lis %r13,_SDA_BASE_@ha;"
+		"addi %r13,%r13,_SDA_BASE_@l;"
+		"lis %r2,_SDA2_BASE_@ha;"
+		"addi %r2,%r2,_SDA2_BASE_@l" );
 
 	if ((namep = argv[0]) != NULL) {	/* NULL ptr if argc = 0 */
 		if ((__progname = _strrchr(namep, '/')) == NULL)
@@ -85,11 +82,9 @@ _start(int argc, char **argv, char **envp,
 		__ps_strings = ps_strings;
 
 #ifdef DYNAMIC
-	if (&rtld_DYNAMIC != NULL)
+	if (&_DYNAMIC != NULL)
 		_rtld_setup(cleanup, obj);
 #endif
-
-	_libc_init();
 
 #ifdef MCRT0
 	atexit(_mcleanup);
@@ -106,7 +101,7 @@ _start(int argc, char **argv, char **envp,
  * NOTE: Leave the RCS ID _after_ __start(), in case it gets placed in .text.
  */
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: crt0.c,v 1.30 2011/03/12 07:56:36 matt Exp $");
+__RCSID("$NetBSD: crt0.c,v 1.26 2006/05/18 17:54:19 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "common.c"

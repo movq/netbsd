@@ -1,4 +1,4 @@
-/*	$NetBSD: i2c_exec.c,v 1.8 2012/04/22 14:10:36 pgoyette Exp $	*/
+/*	$NetBSD: i2c_exec.c,v 1.6 2007/12/11 12:09:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i2c_exec.c,v 1.8 2012/04/22 14:10:36 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i2c_exec.c,v 1.6 2007/12/11 12:09:22 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -115,17 +115,6 @@ iic_exec(i2c_tag_t tag, i2c_op_t op, i2c_addr_t addr, const void *vcmd,
 			if ((error = iic_write_byte(tag, *cmd++, flags)) != 0)
 				goto bad;
 		}
-	} else if (buflen == 0) {
-		/*
-		 * This is a quick_read()/quick_write() command with
-		 * neither command nor data bytes
-		 */
-		if (I2C_OP_STOP_P(op))
-			flags |= I2C_F_STOP;
-		if (I2C_OP_READ_P(op))
-			flags |= I2C_F_READ;
-		if ((error = iic_initiate_xfer(tag, addr, flags)) != 0)
-			goto bad;
 	}
 
 	if (I2C_OP_READ_P(op))
@@ -284,7 +273,7 @@ iic_smbus_block_read(i2c_tag_t tag, i2c_addr_t addr, uint8_t cmd,
     uint8_t *vbuf, size_t buflen, int flags)
 {
 
-	return (iic_exec(tag, I2C_OP_READ_BLOCK, addr, &cmd, 1,
+	return (iic_exec(tag, I2C_OP_READ_WITH_STOP, addr, &cmd, 1,
 			 vbuf, buflen, flags));
 }
 
@@ -298,7 +287,7 @@ iic_smbus_block_write(i2c_tag_t tag, i2c_addr_t addr, uint8_t cmd,
     uint8_t *vbuf, size_t buflen, int flags)
 {
 
-	return (iic_exec(tag, I2C_OP_WRITE_BLOCK, addr, &cmd, 1,
+	return (iic_exec(tag, I2C_OP_WRITE_WITH_STOP, addr, &cmd, 1,
 			 vbuf, buflen, flags));
 }
 

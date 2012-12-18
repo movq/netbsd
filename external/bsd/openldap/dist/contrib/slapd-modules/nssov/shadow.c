@@ -1,11 +1,7 @@
-/*	$NetBSD: shadow.c,v 1.1.1.3 2010/12/12 15:19:11 adam Exp $	*/
-
 /* shadow.c - shadow account lookup routines */
-/* OpenLDAP: pkg/ldap/contrib/slapd-modules/nssov/shadow.c,v 1.1.2.5 2010/04/15 21:32:57 quanah Exp */
-/* This work is part of OpenLDAP Software <http://www.openldap.org/>. 
- *
- * Copyright 2008-2010 The OpenLDAP Foundation.
- * Portions Copyright 2008 by Howard Chu, Symas Corp.
+/* $OpenLDAP: pkg/ldap/contrib/slapd-modules/nssov/shadow.c,v 1.1.2.1 2008/07/08 18:53:58 quanah Exp $ */
+/*
+ * Copyright 2008 by Howard Chu, Symas Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -16,7 +12,7 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>.
  */
-/* ACKNOWLEDGEMENTS:
+/*
  * This code references portions of the nss-ldapd package
  * written by Arthur de Jong. The nss-ldapd code was forked
  * from the nss-ldap library written by Luke Howard.
@@ -95,7 +91,7 @@ static long to_date(struct berval *date,AttributeDescription *attr)
 		value=strtol(buffer,&tmp,0);
 		if ((buffer[0]=='\0')||(*tmp!='\0'))
 		{
-			Debug(LDAP_DEBUG_ANY,"shadow entry contains non-numeric %s value\n",
+			Debug(LDAP_DEBUG_ANY,"shadow entry contains non-numeric %s value",
 				attr->ad_cname.bv_val,0,0);
 			return 0;
 		}
@@ -106,7 +102,7 @@ static long to_date(struct berval *date,AttributeDescription *attr)
 	value=strtol(date->bv_val,&tmp,0);
 	if ((date->bv_val[0]=='\0')||(*tmp!='\0'))
 	{
-		Debug(LDAP_DEBUG_ANY,"shadow entry contains non-numeric %s value\n",
+		Debug(LDAP_DEBUG_ANY,"shadow entry contains non-numeric %s value",
 			attr->ad_cname.bv_val,0,0);
 		return 0;
 	}
@@ -125,13 +121,13 @@ static long to_date(struct berval *date,AttributeDescription *attr)
 	{ \
 		if (a->a_numvals > 1) \
 		{ \
-			Debug(LDAP_DEBUG_ANY,"shadow entry %s contains multiple %s values\n", \
+			Debug(LDAP_DEBUG_ANY,"shadow entry %s contains multiple %s values", \
 				entry->e_name.bv_val, cbp->mi->mi_attrs[key].an_desc->ad_cname.bv_val,0); \
 		} \
 		var=strtol(a->a_vals[0].bv_val,&tmp,0); \
 		if ((a->a_vals[0].bv_val[0]=='\0')||(*tmp!='\0')) \
 		{ \
-			Debug(LDAP_DEBUG_ANY,"shadow entry %s contains non-numeric %s value\n", \
+			Debug(LDAP_DEBUG_ANY,"shadow entry %s contains non-numeric %s value", \
 				entry->e_name.bv_val, cbp->mi->mi_attrs[key].an_desc->ad_cname.bv_val,0); \
 			return 0; \
 		} \
@@ -145,7 +141,7 @@ static long to_date(struct berval *date,AttributeDescription *attr)
 	{ \
 		if (a->a_numvals > 1) \
 		{ \
-			Debug(LDAP_DEBUG_ANY,"shadow entry %s contains multiple %s values\n", \
+			Debug(LDAP_DEBUG_ANY,"shadow entry %s contains multiple %s values", \
 				entry->e_name.bv_val, cbp->mi->mi_attrs[key].an_desc->ad_cname.bv_val,0); \
 		} \
 		var=to_date(&a->a_vals[0],cbp->mi->mi_attrs[key].an_desc); \
@@ -177,7 +173,7 @@ static int write_shadow(nssov_shadow_cbp *cbp,Entry *entry)
 		a = attr_find(entry->e_attrs, cbp->mi->mi_attrs[UID_KEY].an_desc);
 		if (!a)
 		{
-			Debug(LDAP_DEBUG_ANY,"shadow entry %s does not contain %s value\n",
+			Debug(LDAP_DEBUG_ANY,"shadow entry %s does not contain %s value",
 				entry->e_name.bv_val, cbp->mi->mi_attrs[UID_KEY].an_desc->ad_cname.bv_val,0);
 			return 0;
 		}
@@ -219,7 +215,7 @@ static int write_shadow(nssov_shadow_cbp *cbp,Entry *entry)
 	/* write the entries */
 	for (i=0;!BER_BVISNULL(&names[i]);i++)
 	{
-		WRITE_INT32(cbp->fp,NSLCD_RESULT_BEGIN);
+		WRITE_INT32(cbp->fp,NSLCD_RESULT_SUCCESS);
 		WRITE_BERVAL(cbp->fp,&names[i]);
 		WRITE_BERVAL(cbp->fp,&passwd);
 		WRITE_INT32(cbp->fp,lastchangedate);
@@ -240,10 +236,10 @@ NSSOV_HANDLE(
 	char fbuf[1024];
 	struct berval filter = {sizeof(fbuf)};
 	filter.bv_val = fbuf;
-	READ_STRING(fp,cbp.buf);,
+	READ_STRING_BUF2(fp,cbp.buf,sizeof(cbp.buf));,
 	cbp.name.bv_len = tmpint32;
 	cbp.name.bv_val = cbp.buf;
-	Debug(LDAP_DEBUG_ANY,"nssov_shadow_byname(%s)\n",cbp.name.bv_val,0,0);,
+	Debug(LDAP_DEBUG_ANY,"nssov_shadow_byname(%s)",cbp.name.bv_val,0,0);,
 	NSLCD_ACTION_SHADOW_BYNAME,
 	nssov_filter_byname(cbp.mi,UID_KEY,&cbp.name,&filter)
 )
@@ -253,7 +249,7 @@ NSSOV_HANDLE(
 	struct berval filter;
 	/* no parameters to read */
 	BER_BVZERO(&cbp.name);,
-	Debug(LDAP_DEBUG_ANY,"nssov_shadow_all()\n",0,0,0);,
+	Debug(LDAP_DEBUG_ANY,"nssov_shadow_all()",0,0,0);,
 	NSLCD_ACTION_SHADOW_ALL,
 	(filter=cbp.mi->mi_filter,0)
 )

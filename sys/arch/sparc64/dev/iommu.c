@@ -1,4 +1,4 @@
-/*	$NetBSD: iommu.c,v 1.107 2012/03/25 03:51:33 mrg Exp $	*/
+/*	$NetBSD: iommu.c,v 1.85 2008/10/18 03:31:10 nakayama Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Matthew R. Green
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iommu.c,v 1.107 2012/03/25 03:51:33 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iommu.c,v 1.85 2008/10/18 03:31:10 nakayama Exp $");
 
 #include "opt_ddb.h"
 
@@ -70,9 +70,9 @@ __KERNEL_RCSID(0, "$NetBSD: iommu.c,v 1.107 2012/03/25 03:51:33 mrg Exp $");
 #include <sys/device.h>
 #include <sys/proc.h>
 
-#include <uvm/uvm.h>
+#include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <sparc64/dev/iommureg.h>
 #include <sparc64/dev/iommuvar.h>
 
@@ -86,10 +86,8 @@ __KERNEL_RCSID(0, "$NetBSD: iommu.c,v 1.107 2012/03/25 03:51:33 mrg Exp $");
 #define	IDB_SYNC	0x8
 int iommudebug = 0x0;
 #define DPRINTF(l, s)   do { if (iommudebug & l) printf s; } while (0)
-#define IOTTE_DEBUG(n)	(n)
 #else
 #define DPRINTF(l, s)
-#define IOTTE_DEBUG(n)	0
 #endif
 
 #define iommu_strbuf_flush(i, v) do {					\
@@ -134,14 +132,14 @@ iommu_init(char *name, struct iommu_state *is, int tsbsize, uint32_t iovabase)
 	 * be hard-wired, so we read the start and size from the PROM and
 	 * just use those values.
 	 */
-	is->is_cr = IOMMUCR_EN;
+	is->is_cr = (tsbsize << 16) | IOMMUCR_EN;
 	is->is_tsbsize = tsbsize;
 	if (iovabase == -1) {
 		is->is_dvmabase = IOTSB_VSTART(is->is_tsbsize);
-		is->is_dvmaend = IOTSB_VEND - 1;
+		is->is_dvmaend = IOTSB_VEND;
 	} else {
 		is->is_dvmabase = iovabase;
-		is->is_dvmaend = iovabase + IOTSB_VSIZE(tsbsize) - 1;
+		is->is_dvmaend = iovabase + IOTSB_VSIZE(tsbsize);
 	}
 
 	/*
@@ -164,8 +162,7 @@ iommu_init(char *name, struct iommu_state *is, int tsbsize, uint32_t iovabase)
 	/* Map the pages */
 	TAILQ_FOREACH(pg, &pglist, pageq.queue) {
 		pa = VM_PAGE_TO_PHYS(pg);
-		pmap_kenter_pa(va, pa | PMAP_NVC,
-		    VM_PROT_READ | VM_PROT_WRITE, 0);
+		pmap_kenter_pa(va, pa | PMAP_NVC, VM_PROT_READ | VM_PROT_WRITE);
 		va += PAGE_SIZE;
 	}
 	pmap_update(pmap_kernel());
@@ -176,13 +173,20 @@ iommu_init(char *name, struct iommu_state *is, int tsbsize, uint32_t iovabase)
 	{
 		/* Probe the iommu */
 
+		printf("iommu regs at: cr=%lx tsb=%lx flush=%lx\n",
+			(u_long)bus_space_read_8(is->is_bustag, is->is_iommu,
+				offsetof (struct iommureg, iommu_cr)),
+			(u_long)bus_space_read_8(is->is_bustag, is->is_iommu,
+				offsetof (struct iommureg, iommu_tsb)),
+			(u_long)bus_space_read_8(is->is_bustag, is->is_iommu,
+				offsetof (struct iommureg, iommu_flush)));
 		printf("iommu cr=%llx tsb=%llx\n",
 			(unsigned long long)bus_space_read_8(is->is_bustag,
 				is->is_iommu,
-				offsetof(struct iommureg, iommu_cr)),
+				offsetof (struct iommureg, iommu_cr)),
 			(unsigned long long)bus_space_read_8(is->is_bustag,
 				is->is_iommu,
-				offsetof(struct iommureg, iommu_tsb)));
+				offsetof (struct iommureg, iommu_tsb)));
 		printf("TSB base %p phys %llx\n", (void *)is->is_tsb,
 			(unsigned long long)is->is_ptsb);
 		delay(1000000); /* 1 s */
@@ -190,34 +194,22 @@ iommu_init(char *name, struct iommu_state *is, int tsbsize, uint32_t iovabase)
 #endif
 
 	/*
-	 * Now all the hardware's working we need to allocate a dvma map.
-	 */
-	aprint_debug("DVMA map: %x to %x\n",
-		(unsigned int)is->is_dvmabase,
-		(unsigned int)is->is_dvmaend);
-	aprint_debug("IOTSB: %llx to %llx\n",
-		(unsigned long long)is->is_ptsb,
-		(unsigned long long)(is->is_ptsb + size - 1));
-	is->is_dvmamap = extent_create(name,
-	    is->is_dvmabase, is->is_dvmaend,
-	    0, 0, EX_NOWAIT);
-	/* XXXMRG Check is_dvmamap is valid. */
-
-	mutex_init(&is->is_lock, MUTEX_DEFAULT, IPL_HIGH);
-
-	/*
-	 * Set the TSB size.  The relevant bits were moved to the TSB
-	 * base register in the PCIe host bridges.
-	 */
-	if (is->is_flags & IOMMU_TSBSIZE_IN_PTSB)
-		is->is_ptsb |= is->is_tsbsize;
-	else
-		is->is_cr |= (is->is_tsbsize << 16);
-
-	/*
 	 * now actually start up the IOMMU
 	 */
 	iommu_reset(is);
+
+	/*
+	 * Now all the hardware's working we need to allocate a dvma map.
+	 */
+	printf("DVMA map: %x to %x\n",
+		(unsigned int)is->is_dvmabase,
+		(unsigned int)is->is_dvmaend);
+	printf("IOTSB: %llx to %llx\n",
+		(unsigned long long)is->is_ptsb,
+		(unsigned long long)(is->is_ptsb + size));
+	is->is_dvmamap = extent_create(name,
+	    is->is_dvmabase, is->is_dvmaend - PAGE_SIZE,
+	    M_DEVBUF, 0, 0, EX_NOWAIT);
 }
 
 /*
@@ -231,10 +223,13 @@ iommu_reset(struct iommu_state *is)
 	int i;
 	struct strbuf_ctl *sb;
 
-	IOMMUREG_WRITE(is, iommu_tsb, is->is_ptsb);
+	/* Need to do 64-bit stores */
+	bus_space_write_8(is->is_bustag, is->is_iommu, IOMMUREG(iommu_tsb),
+		is->is_ptsb);
 
 	/* Enable IOMMU in diagnostic mode */
-	IOMMUREG_WRITE(is, iommu_cr, is->is_cr|IOMMUCR_DE);
+	bus_space_write_8(is->is_bustag, is->is_iommu, IOMMUREG(iommu_cr),
+		is->is_cr|IOMMUCR_DE);
 
 	for (i = 0; i < 2; i++) {
 		if ((sb = is->is_sb[i])) {
@@ -242,8 +237,6 @@ iommu_reset(struct iommu_state *is)
 			/* Enable diagnostics mode? */
 			bus_space_write_8(is->is_bustag, is->is_sb[i]->sb_sb,
 				STRBUFREG(strbuf_ctl), STRBUF_EN);
-
-			membar_Lookaside();
 
 			/* No streaming buffers? Disable them */
 			if (bus_space_read_8(is->is_bustag,
@@ -255,16 +248,12 @@ iommu_reset(struct iommu_state *is)
 				/*
 				 * locate the pa of the flush buffer.
 				 */
-				if (pmap_extract(pmap_kernel(),
-				     (vaddr_t)is->is_sb[i]->sb_flush,
-				     &is->is_sb[i]->sb_flushpa) == FALSE)
-					is->is_sb[i]->sb_flush = NULL;
+				(void)pmap_extract(pmap_kernel(),
+					(vaddr_t)is->is_sb[i]->sb_flush,
+					&is->is_sb[i]->sb_flushpa);
 			}
 		}
 	}
-
-	if (is->is_flags & IOMMU_FLUSH_CACHE)
-		IOMMUREG_WRITE(is, iommu_cache_invalidate, -1ULL);
 }
 
 /*
@@ -283,9 +272,10 @@ iommu_enter(struct strbuf_ctl *sb, vaddr_t va, int64_t pa, int flags)
 #endif
 
 	/* Is the streamcache flush really needed? */
-	if (sb->sb_flush)
+	if (sb->sb_flush) {
 		iommu_strbuf_flush(sb, va);
-	else
+		iommu_strbuf_flush_done(sb);
+	} else
 		/* If we can't flush the strbuf don't enable it. */
 		strbuf = 0;
 
@@ -295,11 +285,12 @@ iommu_enter(struct strbuf_ctl *sb, vaddr_t va, int64_t pa, int flags)
 	tte |= (flags & 0xff000LL)<<(4*8);
 #endif
 
+	DPRINTF(IDB_IOMMU, ("Clearing TSB slot %d for va %p\n",
+		       (int)IOTSBSLOT(va,is->is_tsbsize), (void *)(u_long)va));
 	is->is_tsb[IOTSBSLOT(va,is->is_tsbsize)] = tte;
 	bus_space_write_8(is->is_bustag, is->is_iommu,
 		IOMMUREG(iommu_flush), va);
-	DPRINTF(IDB_IOMMU, ("iommu_enter: slot %d va %lx pa %lx "
-		"TSB[%lx]@%p=%lx\n", (int)IOTSBSLOT(va,is->is_tsbsize),
+	DPRINTF(IDB_IOMMU, ("iommu_enter: va %lx pa %lx TSB[%lx]@%p=%lx\n",
 		va, (long)pa, (u_long)IOTSBSLOT(va,is->is_tsbsize),
 		(void *)(u_long)&is->is_tsb[IOTSBSLOT(va,is->is_tsbsize)],
 		(u_long)tte));
@@ -313,7 +304,7 @@ iommu_extract(struct iommu_state *is, vaddr_t dva)
 {
 	int64_t tte = 0;
 
-	if (dva >= is->is_dvmabase && dva <= is->is_dvmaend)
+	if (dva >= is->is_dvmabase && dva < is->is_dvmaend)
 		tte = is->is_tsb[IOTSBSLOT(dva, is->is_tsbsize)];
 
 	if ((tte & IOTTE_V) == 0)
@@ -331,7 +322,6 @@ iommu_extract(struct iommu_state *is, vaddr_t dva)
 void
 iommu_remove(struct iommu_state *is, vaddr_t va, size_t len)
 {
-	int slot;
 
 #ifdef DIAGNOSTIC
 	if (va < is->is_dvmabase || va > is->is_dvmaend)
@@ -357,28 +347,10 @@ iommu_remove(struct iommu_state *is, vaddr_t va, size_t len)
 		else
 			len -= PAGE_SIZE;
 
-#if 0
-		/*
-		 * XXX Zero-ing the entry would not require RMW
-		 *
-		 * Disabling valid bit while a page is used by a device
-		 * causes an uncorrectable DMA error.
-		 * Workaround to avoid an uncorrectable DMA error is
-		 * eliminating the next line, but the page is mapped
-		 * until the next iommu_enter call.
-		 */
+		/* XXX Zero-ing the entry would not require RMW */
 		is->is_tsb[IOTSBSLOT(va,is->is_tsbsize)] &= ~IOTTE_V;
-		membar_StoreStore();
-#endif
-		IOMMUREG_WRITE(is, iommu_flush, va);
-
-		/* Flush cache if necessary. */
-		slot = IOTSBSLOT(trunc_page(va), is->is_tsbsize);
-		if ((is->is_flags & IOMMU_FLUSH_CACHE) &&
-		    (len == 0 || (slot % 8) == 7))
-			IOMMUREG_WRITE(is, iommu_cache_flush,
-			    is->is_ptsb + slot * 8);
-
+		bus_space_write_8(is->is_bustag, is->is_iommu,
+			IOMMUREG(iommu_flush), va);
 		va += PAGE_SIZE;
 	}
 }
@@ -424,20 +396,20 @@ iommu_strbuf_flush_done(struct strbuf_ctl *sb)
 	cur = flushtimeout;
 	BUMPTIME(&flushtimeout, 500000); /* 1/2 sec */
 
-	DPRINTF(IDB_IOMMU, ("%s: flush = %lx at va = %lx pa = %lx now="
-		"%"PRIx64":%"PRIx32" until = %"PRIx64":%"PRIx32"\n", __func__,
+	DPRINTF(IDB_IOMMU, ("iommu_strbuf_flush_done: flush = %lx "
+		"at va = %lx pa = %lx now=%lx:%lx until = %lx:%lx\n",
 		(long)*sb->sb_flush, (long)sb->sb_flush, (long)sb->sb_flushpa,
 		cur.tv_sec, cur.tv_usec,
 		flushtimeout.tv_sec, flushtimeout.tv_usec));
 
 	/* Bypass non-coherent D$ */
 	while ((!ldxa(sb->sb_flushpa, ASI_PHYS_CACHED)) &&
-	       timercmp(&cur, &flushtimeout, <=))
+		timercmp(&cur, &flushtimeout, <=))
 		microtime(&cur);
 
 #ifdef DIAGNOSTIC
 	if (!ldxa(sb->sb_flushpa, ASI_PHYS_CACHED)) {
-		printf("%s: flush timeout %p, at %p\n", __func__,
+		printf("iommu_strbuf_flush_done: flush timeout %p, at %p\n",
 			(void *)(u_long)*sb->sb_flush,
 			(void *)(u_long)sb->sb_flushpa); /* panic? */
 #ifdef DDB
@@ -445,7 +417,7 @@ iommu_strbuf_flush_done(struct strbuf_ctl *sb)
 #endif
 	}
 #endif
-	DPRINTF(IDB_IOMMU, ("%s: flushed\n", __func__));
+	DPRINTF(IDB_IOMMU, ("iommu_strbuf_flush_done: flushed\n"));
 	return (*sb->sb_flush);
 }
 
@@ -458,15 +430,15 @@ iommu_dvmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 {
 	struct strbuf_ctl *sb = (struct strbuf_ctl *)map->_dm_cookie;
 	struct iommu_state *is = sb->sb_is;
-	int err, needsflush;
+	int s;
+	int err;
 	bus_size_t sgsize;
 	paddr_t curaddr;
-	u_long dvmaddr, sgstart, sgend, bmask;
+	u_long dvmaddr, sgstart, sgend;
 	bus_size_t align, boundary, len;
 	vaddr_t vaddr = (vaddr_t)buf;
 	int seg;
 	struct pmap *pmap;
-	int slot;
 
 	if (map->dm_nsegs) {
 		/* Already in use?? */
@@ -480,8 +452,6 @@ iommu_dvmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	 * Make sure that on error condition we return "no valid mappings".
 	 */
 	map->dm_nsegs = 0;
-	KASSERT(map->dm_maxsegsz <= map->_dm_maxmaxsegsz);
-
 	if (buflen > map->_dm_size) {
 		DPRINTF(IDB_BUSDMA,
 		    ("iommu_dvmamap_load(): error %d > %d -- "
@@ -503,12 +473,11 @@ iommu_dvmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	 * If our segment size is larger than the boundary we need to
 	 * split the transfer up int little pieces ourselves.
 	 */
-	KASSERT(is->is_dvmamap);
-	mutex_enter(&is->is_lock);
+	s = splhigh();
 	err = extent_alloc(is->is_dvmamap, sgsize, align,
 	    (sgsize > boundary) ? 0 : boundary,
 	    EX_NOWAIT|EX_BOUNDZERO, &dvmaddr);
-	mutex_exit(&is->is_lock);
+	splx(s);
 
 #ifdef DEBUG
 	if (err || (dvmaddr == (u_long)-1)) {
@@ -540,13 +509,9 @@ iommu_dvmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	DPRINTF(IDB_INFO, ("iommu_dvmamap_load: boundary %lx boundary - 1 %lx "
 	    "~(boundary - 1) %lx\n", (long)boundary, (long)(boundary - 1),
 	    (long)~(boundary - 1)));
-	bmask = ~(boundary - 1);
-	while ((sgstart & bmask) != (sgend & bmask) ||
-	       sgend - sgstart + 1 > map->dm_maxsegsz) {
-		/* Oops. We crossed a boundary or large seg. Split the xfer. */
-		len = map->dm_maxsegsz;
-		if ((sgstart & bmask) != (sgend & bmask))
-			len = min(len, boundary - (sgstart & (boundary - 1)));
+	while ((sgstart & ~(boundary - 1)) != (sgend & ~(boundary - 1))) {
+		/* Oops.  We crossed a boundary.  Split the xfer. */
+		len = boundary - (sgstart & (boundary - 1));
 		map->dm_segs[seg].ds_len = len;
 		DPRINTF(IDB_INFO, ("iommu_dvmamap_load: "
 		    "seg %d start %lx size %lx\n", seg,
@@ -556,15 +521,13 @@ iommu_dvmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 			/* Too many segments.  Fail the operation. */
 			DPRINTF(IDB_INFO, ("iommu_dvmamap_load: "
 			    "too many segments %d\n", seg));
-			mutex_enter(&is->is_lock);
+			s = splhigh();
+			/* How can this fail?  And if it does what can we do? */
 			err = extent_free(is->is_dvmamap,
 			    dvmaddr, sgsize, EX_NOWAIT);
 			map->_dm_dvmastart = 0;
 			map->_dm_dvmasize = 0;
-			mutex_exit(&is->is_lock);
-			if (err != 0)
-				printf("warning: %s: %" PRId64
-				    " of DVMA space lost\n", __func__, sgsize);
+			splx(s);
 			return (EFBIG);
 		}
 		sgstart += len;
@@ -582,7 +545,6 @@ iommu_dvmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	else
 		pmap = pmap_kernel();
 
-	needsflush = 0;
 	for (; buflen > 0; ) {
 
 		/*
@@ -607,25 +569,14 @@ iommu_dvmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 		    ("iommu_dvmamap_load: map %p loading va %p "
 		    "dva %lx at pa %lx\n",
 		    map, (void *)vaddr, (long)dvmaddr,
-		    (long)trunc_page(curaddr)));
+		    (long)(curaddr & ~(PAGE_SIZE-1))));
 		iommu_enter(sb, trunc_page(dvmaddr), trunc_page(curaddr),
-		    flags | IOTTE_DEBUG(0x4000));
-		needsflush = 1;
-
-		vaddr += sgsize;
-		buflen -= sgsize;
-
-		/* Flush cache if necessary. */
-		slot = IOTSBSLOT(trunc_page(dvmaddr), is->is_tsbsize);
-		if ((is->is_flags & IOMMU_FLUSH_CACHE) &&
-		    (buflen <= 0 || (slot % 8) == 7))
-			IOMMUREG_WRITE(is, iommu_cache_flush,
-			    is->is_ptsb + slot * 8);
+		    flags|0x4000);
 
 		dvmaddr += PAGE_SIZE;
+		vaddr += sgsize;
+		buflen -= sgsize;
 	}
-	if (needsflush)
-		iommu_strbuf_flush_done(sb);
 #ifdef DIAGNOSTIC
 	for (seg = 0; seg < map->dm_nsegs; seg++) {
 		if (map->dm_segs[seg].ds_addr < is->is_dvmabase ||
@@ -648,7 +599,7 @@ iommu_dvmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
 {
 	struct strbuf_ctl *sb = (struct strbuf_ctl *)map->_dm_cookie;
 	struct iommu_state *is = sb->sb_is;
-	int error;
+	int error, s;
 	bus_size_t sgsize = map->_dm_dvmasize;
 
 	/* Flush the iommu */
@@ -665,15 +616,18 @@ iommu_dvmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
 	/* Flush the caches */
 	bus_dmamap_unload(t->_parent, map);
 
-	mutex_enter(&is->is_lock);
+	/* Mark the mappings as invalid. */
+	map->dm_mapsize = 0;
+	map->dm_nsegs = 0;
+
+	s = splhigh();
 	error = extent_free(is->is_dvmamap, map->_dm_dvmastart,
 		map->_dm_dvmasize, EX_NOWAIT);
 	map->_dm_dvmastart = 0;
 	map->_dm_dvmasize = 0;
-	mutex_exit(&is->is_lock);
+	splx(s);
 	if (error != 0)
-		printf("warning: %s: %" PRId64 " of DVMA space lost\n",
-		    __func__, sgsize);
+		printf("warning: %qd of DVMA space lost\n", (long long)sgsize);
 
 	/* Clear the map */
 }
@@ -686,19 +640,16 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 	struct strbuf_ctl *sb = (struct strbuf_ctl *)map->_dm_cookie;
 	struct iommu_state *is = sb->sb_is;
 	struct vm_page *pg;
-	int i, j;
+	int i, j, s;
 	int left;
-	int err, needsflush;
+	int err;
 	bus_size_t sgsize;
 	paddr_t pa;
 	bus_size_t boundary, align;
-	u_long dvmaddr, sgstart, sgend, bmask;
+	u_long dvmaddr, sgstart, sgend;
 	struct pglist *pglist;
-	const int pagesz = PAGE_SIZE;
-	int slot;
-#ifdef DEBUG
-	int npg = 0;
-#endif
+	int pagesz = PAGE_SIZE;
+	int npg = 0; /* DEBUG */
 
 	if (map->dm_nsegs) {
 		/* Already in use?? */
@@ -722,20 +673,19 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 	 */
 	map->dm_nsegs = 0;
 	/* Count up the total number of pages we need */
-	pa = trunc_page(segs[0].ds_addr);
+	pa = segs[0].ds_addr;
 	sgsize = 0;
 	left = size;
-	for (i = 0; left > 0 && i < nsegs; i++) {
+	for (i = 0; left && i < nsegs; i++) {
 		if (round_page(pa) != round_page(segs[i].ds_addr))
-			sgsize = round_page(sgsize) +
-			    (segs[i].ds_addr & PGOFSET);
+			sgsize = round_page(sgsize);
 		sgsize += min(left, segs[i].ds_len);
 		left -= segs[i].ds_len;
 		pa = segs[i].ds_addr + segs[i].ds_len;
 	}
-	sgsize = round_page(sgsize);
+	sgsize = round_page(sgsize) + PAGE_SIZE; /* XXX reserve extra dvma page */
 
-	mutex_enter(&is->is_lock);
+	s = splhigh();
 	/*
 	 * If our segment size is larger than the boundary we need to
 	 * split the transfer up into little pieces ourselves.
@@ -744,7 +694,7 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 		(sgsize > boundary) ? 0 : boundary,
 		((flags & BUS_DMA_NOWAIT) == 0 ? EX_WAITOK : EX_NOWAIT) |
 		EX_BOUNDZERO, &dvmaddr);
-	mutex_exit(&is->is_lock);
+	splx(s);
 
 	if (err != 0)
 		return (err);
@@ -766,12 +716,10 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 	map->_dm_dvmastart = dvmaddr;
 	map->_dm_dvmasize = sgsize;
 
-	bmask = ~(boundary - 1);
 	if ((pglist = segs[0]._ds_mlist) == NULL) {
-		u_long prev_va = 0UL, last_va = dvmaddr;
+		u_long prev_va = 0UL;
 		paddr_t prev_pa = 0;
 		int end = 0, offset;
-		bus_size_t len = size;
 
 		/*
 		 * This segs is made up of individual physical
@@ -779,15 +727,16 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 		 * _bus_dmamap_load_mbuf().  Ignore the mlist and
 		 * load each one individually.
 		 */
+		map->dm_mapsize = size;
+
 		j = 0;
-		needsflush = 0;
 		for (i = 0; i < nsegs ; i++) {
 
 			pa = segs[i].ds_addr;
 			offset = (pa & PGOFSET);
 			pa = trunc_page(pa);
 			dvmaddr = trunc_page(dvmaddr);
-			left = min(len, segs[i].ds_len);
+			left = min(size, segs[i].ds_len);
 
 			DPRINTF(IDB_INFO, ("iommu_dvmamap_load_raw: converting "
 				"physseg %d start %lx size %lx\n", i,
@@ -804,22 +753,17 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 
 			/* Are the segments virtually adjacent? */
 			if ((j > 0) && (end == offset) &&
-			    ((offset == 0) || (pa == prev_pa)) &&
-			    (map->dm_segs[j-1].ds_len + left <=
-			     map->dm_maxsegsz)) {
+				((offset == 0) || (pa == prev_pa))) {
 				/* Just append to the previous segment. */
 				map->dm_segs[--j].ds_len += left;
-				/* Restore sgstart for boundary check */
-				sgstart = map->dm_segs[j].ds_addr;
 				DPRINTF(IDB_INFO, ("iommu_dvmamap_load_raw: "
 					"appending seg %d start %lx size %lx\n", j,
 					(long)map->dm_segs[j].ds_addr,
 					(long)map->dm_segs[j].ds_len));
 			} else {
 				if (j >= map->_dm_segcnt) {
-					iommu_remove(is, map->_dm_dvmastart,
-					    last_va - map->_dm_dvmastart);
-					goto fail;
+					iommu_dvmamap_unload(t, map);
+					return (EFBIG);
 				}
 				map->dm_segs[j].ds_addr = sgstart;
 				map->dm_segs[j].ds_len = left;
@@ -831,7 +775,8 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 			end = (offset + left) & PGOFSET;
 
 			/* Check for boundary issues */
-			while ((sgstart & bmask) != (sgend & bmask)) {
+			while ((sgstart & ~(boundary - 1)) !=
+				(sgend & ~(boundary - 1))) {
 				/* Need a new segment. */
 				map->dm_segs[j].ds_len =
 					boundary - (sgstart & (boundary - 1));
@@ -840,11 +785,10 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 					(long)map->dm_segs[j].ds_addr,
 					(long)map->dm_segs[j].ds_len));
 				if (++j >= map->_dm_segcnt) {
-					iommu_remove(is, map->_dm_dvmastart,
-					    last_va - map->_dm_dvmastart);
-					goto fail;
+					iommu_dvmamap_unload(t, map);
+					return (EFBIG);
 				}
-				sgstart += map->dm_segs[j-1].ds_len;
+				sgstart = roundup(sgstart, boundary);
 				map->dm_segs[j].ds_addr = sgstart;
 				map->dm_segs[j].ds_len = sgend - sgstart + 1;
 			}
@@ -860,38 +804,24 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 						map, (long)dvmaddr,
 						(long)(pa)));
 				/* Enter it if we haven't before. */
-				if (prev_va != dvmaddr) {
+				if (prev_va != dvmaddr)
 					iommu_enter(sb, prev_va = dvmaddr,
-					    prev_pa = pa,
-					    flags | IOTTE_DEBUG(++npg << 12));
-					needsflush = 1;
-
-					/* Flush cache if necessary. */
-					slot = IOTSBSLOT(trunc_page(dvmaddr), is->is_tsbsize);
-					if ((is->is_flags & IOMMU_FLUSH_CACHE) &&
-					    ((dvmaddr + pagesz) > sgend || (slot % 8) == 7))
-						IOMMUREG_WRITE(is, iommu_cache_flush,
-						    is->is_ptsb + slot * 8);
-				}
-
+						prev_pa = pa,
+						flags | (++npg << 12));
 				dvmaddr += pagesz;
 				pa += pagesz;
-				last_va = dvmaddr;
 			}
 
-			len -= left;
+			size -= left;
 			++j;
 		}
-		if (needsflush)
-			iommu_strbuf_flush_done(sb);
 
-		map->dm_mapsize = size;
 		map->dm_nsegs = j;
 #ifdef DIAGNOSTIC
 		{ int seg;
 	for (seg = 0; seg < map->dm_nsegs; seg++) {
 		if (map->dm_segs[seg].ds_addr < is->is_dvmabase ||
-		    map->dm_segs[seg].ds_addr > is->is_dvmaend) {
+			map->dm_segs[seg].ds_addr > is->is_dvmaend) {
 			printf("seg %d dvmaddr %lx out of range %x - %x\n",
 				seg, (long)map->dm_segs[seg].ds_addr,
 				is->is_dvmabase, is->is_dvmaend);
@@ -909,11 +839,12 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 	 * This was allocated with bus_dmamem_alloc.
 	 * The pages are on a `pglist'.
 	 */
+	map->dm_mapsize = size;
 	i = 0;
 	sgstart = dvmaddr;
 	sgend = sgstart + size - 1;
 	map->dm_segs[i].ds_addr = sgstart;
-	while ((sgstart & bmask) != (sgend & bmask)) {
+	while ((sgstart & ~(boundary - 1)) != (sgend & ~(boundary - 1))) {
 		/* Oops.  We crossed a boundary.  Split the xfer. */
 		map->dm_segs[i].ds_len = boundary - (sgstart & (boundary - 1));
 		DPRINTF(IDB_INFO, ("iommu_dvmamap_load_raw: "
@@ -922,9 +853,16 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 			(long)map->dm_segs[i].ds_len));
 		if (++i >= map->_dm_segcnt) {
 			/* Too many segments.  Fail the operation. */
-			goto fail;
+			s = splhigh();
+			/* How can this fail?  And if it does what can we do? */
+			err = extent_free(is->is_dvmamap,
+				dvmaddr, sgsize, EX_NOWAIT);
+			map->_dm_dvmastart = 0;
+			map->_dm_dvmasize = 0;
+			splx(s);
+			return (EFBIG);
 		}
-		sgstart += map->dm_segs[i-1].ds_len;
+		sgstart = roundup(sgstart, boundary);
 		map->dm_segs[i].ds_addr = sgstart;
 	}
 	DPRINTF(IDB_INFO, ("iommu_dvmamap_load_raw: "
@@ -932,7 +870,6 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 			(long)map->dm_segs[i].ds_addr, (long)map->dm_segs[i].ds_len));
 	map->dm_segs[i].ds_len = sgend - sgstart + 1;
 
-	needsflush = 0;
 	TAILQ_FOREACH(pg, pglist, pageq.queue) {
 		if (sgsize == 0)
 			panic("iommu_dmamap_load_raw: size botch");
@@ -941,22 +878,11 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 		DPRINTF(IDB_BUSDMA,
 		    ("iommu_dvmamap_load_raw: map %p loading va %lx at pa %lx\n",
 		    map, (long)dvmaddr, (long)(pa)));
-		iommu_enter(sb, dvmaddr, pa, flags | IOTTE_DEBUG(0x8000));
-		needsflush = 1;
-
-		sgsize -= pagesz;
-
-		/* Flush cache if necessary. */
-		slot = IOTSBSLOT(trunc_page(dvmaddr), is->is_tsbsize);
-		if ((is->is_flags & IOMMU_FLUSH_CACHE) &&
-		    (sgsize == 0 || (slot % 8) == 7))
-			IOMMUREG_WRITE(is, iommu_cache_flush,
-			    is->is_ptsb + slot * 8);
+		iommu_enter(sb, dvmaddr, pa, flags|0x8000);
 
 		dvmaddr += pagesz;
+		sgsize -= pagesz;
 	}
-	if (needsflush)
-		iommu_strbuf_flush_done(sb);
 	map->dm_mapsize = size;
 	map->dm_nsegs = i+1;
 #ifdef DIAGNOSTIC
@@ -975,18 +901,6 @@ iommu_dvmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 	}
 #endif
 	return (0);
-
-fail:
-	mutex_enter(&is->is_lock);
-	err = extent_free(is->is_dvmamap, map->_dm_dvmastart, sgsize,
-	    EX_NOWAIT);
-	map->_dm_dvmastart = 0;
-	map->_dm_dvmasize = 0;
-	mutex_exit(&is->is_lock);
-	if (err != 0)
-		printf("warning: %s: %" PRId64 " of DVMA space lost\n",
-		    __func__, sgsize);
-	return (EFBIG);
 }
 
 
@@ -1006,14 +920,14 @@ iommu_dvmamap_sync_range(struct strbuf_ctl *sb, vaddr_t va, bus_size_t len)
 #endif
 
 	if ((is->is_tsb[IOTSBSLOT(va, is->is_tsbsize)] & IOTTE_STREAM) == 0) {
-		DPRINTF(IDB_SYNC, 
+		DPRINTF(IDB_BUSDMA, 
 			("iommu_dvmamap_sync_range: attempting to flush "
 			 "non-streaming entry\n"));
 		return (0);
 	}
 
-	vaend = round_page(va + len) - 1;
-	va = trunc_page(va);
+	vaend = (va + len + PGOFSET) & ~PGOFSET;
+	va &= ~PGOFSET;
 
 #ifdef DIAGNOSTIC
 	if (va < is->is_dvmabase || vaend > is->is_dvmaend)
@@ -1024,7 +938,7 @@ iommu_dvmamap_sync_range(struct strbuf_ctl *sb, vaddr_t va, bus_size_t len)
 #endif
 
 	for ( ; va <= vaend; va += PAGE_SIZE) {
-		DPRINTF(IDB_SYNC,
+		DPRINTF(IDB_BUSDMA,
 		    ("iommu_dvmamap_sync_range: flushing va %p\n",
 		    (void *)(u_long)va));
 		iommu_strbuf_flush(sb, va);
@@ -1051,7 +965,7 @@ _iommu_dvmamap_sync(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 	}
 
 	if (i == map->dm_nsegs)
-		panic("%s: segment too short %llu", __func__,
+		panic("iommu_dvmamap_sync: segment too short %llu", 
 		    (unsigned long long)offset);
 
 	if (ops & (BUS_DMASYNC_PREREAD | BUS_DMASYNC_POSTWRITE)) {
@@ -1071,7 +985,7 @@ _iommu_dvmamap_sync(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 		}
 #ifdef DIAGNOSTIC
 		if (i == map->dm_nsegs && len > 0)
-			panic("%s: leftover %llu", __func__,
+			panic("iommu_dvmamap_sync: leftover %llu",
 			    (unsigned long long)len);
 #endif
 
@@ -1084,10 +998,6 @@ void
 iommu_dvmamap_sync(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 	bus_size_t len, int ops)
 {
-
-	/* If len is 0, then there is nothing to do */
-	if (len == 0)
-		return;
 
 	if (ops & (BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE)) {
 		/* Flush the CPU then the IOMMU */
@@ -1160,7 +1070,7 @@ iommu_dvmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 	cbit = 0;
 	if (flags & BUS_DMA_COHERENT)	/* Disable vcache */
 		cbit |= PMAP_NVC;
-	if (flags & BUS_DMA_NOCACHE)	/* side effects */
+	if (flags & BUS_DMA_NOCACHE)	/* sideffects */
 		cbit |= PMAP_NC;
 
 	/*
@@ -1175,8 +1085,7 @@ iommu_dvmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 		addr = VM_PAGE_TO_PHYS(pg);
 		DPRINTF(IDB_BUSDMA, ("iommu_dvmamem_map: "
 		    "mapping va %lx at %llx\n", va, (unsigned long long)addr | cbit));
-		pmap_kenter_pa(va, addr | cbit,
-		    VM_PROT_READ | VM_PROT_WRITE, 0);
+		pmap_kenter_pa(va, addr | cbit, VM_PROT_READ | VM_PROT_WRITE);
 		va += PAGE_SIZE;
 		size -= PAGE_SIZE;
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.c,v 1.41 2012/03/11 21:16:08 dholland Exp $	*/
+/*	$NetBSD: sem.c,v 1.30 2008/07/07 16:10:27 cube Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -70,7 +70,7 @@ static struct attr errattr;
 static struct devbase errdev;
 static struct deva errdeva;
 
-static int has_errobj(struct attrlist *, struct attr *);
+static int has_errobj(struct nvlist *, void *);
 static struct nvlist *addtoattr(struct nvlist *, struct devbase *);
 static int resolve(struct nvlist **, const char *, const char *,
 		   struct nvlist *, int);
@@ -82,10 +82,10 @@ static const char *concat(const char *, int);
 static char *extend(char *, const char *);
 static int split(const char *, size_t, char *, size_t, int *);
 static void selectbase(struct devbase *, struct deva *);
-static const char **fixloc(const char *, struct attr *, struct loclist *);
-static const char *makedevstr(devmajor_t, devminor_t);
-static const char *major2name(devmajor_t);
-static devmajor_t dev2major(struct devbase *);
+static const char **fixloc(const char *, struct attr *, struct nvlist *);
+static const char *makedevstr(int, int);
+static const char *major2name(int);
+static int dev2major(struct devbase *);
 
 extern const char *yyfile;
 extern int vflag;
@@ -194,12 +194,11 @@ setident(const char *i)
  * all locator lists include a dummy head node, which we discard here.
  */
 int
-defattr(const char *name, struct loclist *locs, struct attrlist *deps,
+defattr(const char *name, struct nvlist *locs, struct nvlist *deps,
     int devclass)
 {
 	struct attr *a, *dep;
-	struct attrlist *al;
-	struct loclist *ll;
+	struct nvlist *nv;
 	int len;
 
 	if (locs != NULL && devclass)
@@ -212,8 +211,8 @@ defattr(const char *name, struct loclist *locs, struct attrlist *deps,
 	 * If this attribute depends on any others, make sure none of
 	 * the dependencies are interface attributes.
 	 */
-	for (al = deps; al != NULL; al = al->al_next) {
-		dep = al->al_this;
+	for (nv = deps; nv != NULL; nv = nv->nv_next) {
+		dep = nv->nv_ptr;
 		if (dep->a_iattr) {
 			cfgerror("`%s' dependency `%s' is an interface "
 			    "attribute", name, dep->a_name);
@@ -225,17 +224,15 @@ defattr(const char *name, struct loclist *locs, struct attrlist *deps,
 	if (ht_insert(attrtab, name, a)) {
 		free(a);
 		cfgerror("attribute `%s' already defined", name);
-		loclist_destroy(locs);
+		nvfreel(locs);
 		return (1);
 	}
 
 	a->a_name = name;
 	if (locs != NULL) {
 		a->a_iattr = 1;
-		/* unwrap */
-		a->a_locs = locs->ll_next;
-		locs->ll_next = NULL;
-		loclist_destroy(locs);
+		a->a_locs = locs->nv_next;
+		nvfree(locs);
 	} else {
 		a->a_iattr = 0;
 		a->a_locs = NULL;
@@ -259,7 +256,7 @@ defattr(const char *name, struct loclist *locs, struct attrlist *deps,
 	} else
 		a->a_devclass = NULL;
 	len = 0;
-	for (ll = a->a_locs; ll != NULL; ll = ll->ll_next)
+	for (nv = a->a_locs; nv != NULL; nv = nv->nv_next)
 		len++;
 	a->a_loclen = len;
 	a->a_devs = NULL;
@@ -278,11 +275,11 @@ defattr(const char *name, struct loclist *locs, struct attrlist *deps,
  * pointer list.
  */
 static int
-has_errobj(struct attrlist *al, struct attr *obj)
+has_errobj(struct nvlist *nv, void *obj)
 {
 
-	for (; al != NULL; al = al->al_next)
-		if (al->al_this == obj)
+	for (; nv != NULL; nv = nv->nv_next)
+		if (nv->nv_ptr == obj)
 			return (1);
 	return (0);
 }
@@ -292,15 +289,15 @@ has_errobj(struct attrlist *al, struct attr *obj)
  * pointer list.
  */
 int
-has_attr(struct attrlist *al, const char *attr)
+has_attr(struct nvlist *nv, const char *attr)
 {
 	struct attr *a;
 
 	if ((a = getattr(attr)) == NULL)
 		return (0);
 
-	for (; al != NULL; al = al->al_next)
-		if (al->al_this == a)
+	for (; nv != NULL; nv = nv->nv_next)
+		if (nv->nv_ptr == a)
 			return (1);
 	return (0);
 }
@@ -324,11 +321,10 @@ addtoattr(struct nvlist *l, struct devbase *dev)
  * attribute and/or refer to existing attributes.
  */
 void
-defdev(struct devbase *dev, struct loclist *loclist, struct attrlist *attrs,
+defdev(struct devbase *dev, struct nvlist *loclist, struct nvlist *attrs,
        int ispseudo)
 {
-	struct loclist *ll;
-	struct attrlist *al;
+	struct nvlist *nv;
 	struct attr *a;
 
 	if (dev == &errdev)
@@ -349,13 +345,13 @@ defdev(struct devbase *dev, struct loclist *loclist, struct attrlist *attrs,
 	 * (where you can plug in a foo-bus extender to a foo-bus).
 	 */
 	if (loclist != NULL) {
-		ll = loclist;
+		nv = loclist;
 		loclist = NULL;	/* defattr disposes of them for us */
-		if (defattr(dev->d_name, ll, NULL, 0))
+		if (defattr(dev->d_name, nv, NULL, 0))
 			goto bad;
-		attrs = attrlist_cons(attrs, getattr(dev->d_name));
-		/* This used to be stored but was never used */
-		/* attrs->al_name = dev->d_name; */
+		attrs = newnv(dev->d_name, NULL, getattr(dev->d_name), 0,
+		    attrs);
+
 	}
 
 	/*
@@ -363,10 +359,10 @@ defdev(struct devbase *dev, struct loclist *loclist, struct attrlist *attrs,
 	 * attaching at root.
 	 */
 	if (ispseudo) {
-		for (al = attrs; al != NULL; al = al->al_next)
-			if (al->al_this->a_iattr)
+		for (nv = attrs; nv != NULL; nv = nv->nv_next)
+			if (((struct attr *)(nv->nv_ptr))->a_iattr)
 				break;
-		if (al != NULL) {
+		if (nv != NULL) {
 			if (ispseudo < 2) {
 				if (version >= 20080610)
 					cfgerror("interface attribute on "
@@ -393,8 +389,8 @@ defdev(struct devbase *dev, struct loclist *loclist, struct attrlist *attrs,
 	 * class if any are devclass attributes (and error out if the
 	 * device has two classes).
 	 */
-	for (al = attrs; al != NULL; al = al->al_next) {
-		a = al->al_this;
+	for (nv = attrs; nv != NULL; nv = nv->nv_next) {
+		a = nv->nv_ptr;
 		if (a->a_iattr)
 			a->a_refs = addtoattr(a->a_refs, dev);
 		if (a->a_devclass != NULL) {
@@ -409,8 +405,8 @@ defdev(struct devbase *dev, struct loclist *loclist, struct attrlist *attrs,
 	}
 	return;
  bad:
-	loclist_destroy(loclist);
-	attrlist_destroyall(attrs);
+	nvfreel(loclist);
+	nvfreel(attrs);
 }
 
 /*
@@ -440,7 +436,7 @@ getdevbase(const char *name)
 		dev = ecalloc(1, sizeof *dev);
 		dev->d_name = name;
 		dev->d_isdef = 0;
-		dev->d_major = NODEVMAJOR;
+		dev->d_major = NODEV;
 		dev->d_attrs = NULL;
 		dev->d_ihead = NULL;
 		dev->d_ipp = &dev->d_ihead;
@@ -460,10 +456,9 @@ getdevbase(const char *name)
  */
 void
 defdevattach(struct deva *deva, struct devbase *dev, struct nvlist *atlist,
-	     struct attrlist *attrs)
+	     struct nvlist *attrs)
 {
 	struct nvlist *nv;
-	struct attrlist *al;
 	struct attr *a;
 	struct deva *da;
 
@@ -489,8 +484,8 @@ defdevattach(struct deva *deva, struct devbase *dev, struct nvlist *atlist,
 	deva->d_isdef = 1;
 	if (has_errobj(attrs, &errattr))
 		goto bad;
-	for (al = attrs; al != NULL; al = al->al_next) {
-		a = al->al_this;
+	for (nv = attrs; nv != NULL; nv = nv->nv_next) {
+		a = nv->nv_ptr;
 		if (a == &errattr)
 			continue;		/* already complained */
 		if (a->a_iattr || a->a_devclass != NULL)
@@ -543,7 +538,7 @@ defdevattach(struct deva *deva, struct devbase *dev, struct nvlist *atlist,
 	return;
  bad:
 	nvfreel(atlist);
-	attrlist_destroyall(attrs);
+	nvfreel(attrs);
 }
 
 /*
@@ -608,7 +603,7 @@ getattr(const char *name)
 void
 expandattr(struct attr *a, void (*callback)(struct attr *))
 {
-	struct attrlist *al;
+	struct nvlist *nv;
 	struct attr *dep;
 
 	if (a->a_expanding) {
@@ -619,8 +614,8 @@ expandattr(struct attr *a, void (*callback)(struct attr *))
 	a->a_expanding = 1;
 
 	/* First expand all of this attribute's dependencies. */
-	for (al = a->a_deps; al != NULL; al = al->al_next) {
-		dep = al->al_this;
+	for (nv = a->a_deps; nv != NULL; nv = nv->nv_next) {
+		dep = nv->nv_ptr;
 		expandattr(dep, callback);
 	}
 
@@ -636,10 +631,10 @@ expandattr(struct attr *a, void (*callback)(struct attr *))
  * as a root/dumps "on" device in a configuration.
  */
 void
-setmajor(struct devbase *d, devmajor_t n)
+setmajor(struct devbase *d, int n)
 {
 
-	if (d != &errdev && d->d_major != NODEVMAJOR)
+	if (d != &errdev && d->d_major != NODEV)
 		cfgerror("device `%s' is already major %d",
 		    d->d_name, d->d_major);
 	else
@@ -647,7 +642,7 @@ setmajor(struct devbase *d, devmajor_t n)
 }
 
 const char *
-major2name(devmajor_t maj)
+major2name(int maj)
 {
 	struct devbase *dev;
 	struct devm *dm;
@@ -666,7 +661,7 @@ major2name(devmajor_t maj)
 	return (NULL);
 }
 
-devmajor_t
+int
 dev2major(struct devbase *dev)
 {
 	struct devm *dm;
@@ -678,14 +673,14 @@ dev2major(struct devbase *dev)
 		if (strcmp(dm->dm_name, dev->d_name) == 0)
 			return (dm->dm_bmajor);
 	}
-	return (NODEVMAJOR);
+	return (NODEV);
 }
 
 /*
  * Make a string description of the device at maj/min.
  */
 static const char *
-makedevstr(devmajor_t maj, devminor_t min)
+makedevstr(int maj, int min)
 {
 	const char *devicename;
 	char buf[32];
@@ -712,13 +707,11 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 	struct nvlist *nv;
 	struct devbase *dev;
 	const char *cp;
-	devmajor_t maj;
-	devminor_t min;
-	int i, l;
+	int maj, min, i, l;
 	int unit;
 	char buf[NAMESIZE];
 
-	if ((part -= 'a') >= maxpartitions || part < 0)
+	if ((u_int)(part -= 'a') >= maxpartitions)
 		panic("resolve");
 	if ((nv = *nvp) == NULL) {
 		dev_t	d = NODEV;
@@ -726,9 +719,9 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 		 * Apply default.  Easiest to do this by number.
 		 * Make sure to retain NODEVness, if this is dflt's disposition.
 		 */
-		if ((dev_t)dflt->nv_num != NODEV) {
-			maj = major(dflt->nv_num);
-			min = ((minor(dflt->nv_num) / maxpartitions) *
+		if (dflt->nv_int != NODEV) {
+			maj = major(dflt->nv_int);
+			min = ((minor(dflt->nv_int) / maxpartitions) *
 			    maxpartitions) + part;
 			d = makedev(maj, min);
 			cp = makedevstr(maj, min);
@@ -736,13 +729,13 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 			cp = NULL;
 		*nvp = nv = newnv(NULL, cp, NULL, d, NULL);
 	}
-	if ((dev_t)nv->nv_num != NODEV) {
+	if (nv->nv_int != NODEV) {
 		/*
 		 * By the numbers.  Find the appropriate major number
 		 * to make a name.
 		 */
-		maj = major(nv->nv_num);
-		min = minor(nv->nv_num);
+		maj = major(nv->nv_int);
+		min = minor(nv->nv_int);
 		nv->nv_str = makedevstr(maj, min);
 		return (0);
 	}
@@ -781,16 +774,16 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 	 * don't bother making a device number.
 	 */
 	if (has_attr(dev->d_attrs, s_ifnet)) {
-		nv->nv_num = NODEV;
+		nv->nv_int = NODEV;
 		nv->nv_ifunit = unit;	/* XXX XXX XXX */
 	} else {
 		maj = dev2major(dev);
-		if (maj == NODEVMAJOR) {
+		if (maj == NODEV) {
 			cfgerror("%s: can't make %s device from `%s'",
 			    name, what, nv->nv_str);
 			return (1);
 		}
-		nv->nv_num = makedev(maj, unit * maxpartitions + part);
+		nv->nv_int = makedev(maj, unit * maxpartitions + part);
 	}
 
 	nv->nv_name = dev->d_name;
@@ -927,7 +920,6 @@ newdevi(const char *name, int unit, struct devbase *d)
 	i->i_srcfile = yyfile;
 	i->i_active = DEVI_ORPHAN; /* Proper analysis comes later */
 	i->i_level = devilevel;
-	i->i_pseudoroot = 0;
 	if (unit >= d->d_umax)
 		d->d_umax = unit + 1;
 	return (i);
@@ -938,14 +930,14 @@ newdevi(const char *name, int unit, struct devbase *d)
  * another device instead) plus unit number.
  */
 void
-adddev(const char *name, const char *at, struct loclist *loclist, int flags)
+adddev(const char *name, const char *at, struct nvlist *loclist, int flags)
 {
 	struct devi *i;		/* the new instance */
 	struct pspec *p;	/* and its pspec */
 	struct attr *attr;	/* attribute that allows attach */
 	struct devbase *ib;	/* i->i_base */
 	struct devbase *ab;	/* not NULL => at another dev */
-	struct attrlist *al;
+	struct nvlist *nv;
 	struct deva *iba;	/* devbase attachment used */
 	const char *cp;
 	int atunit;
@@ -1037,8 +1029,8 @@ adddev(const char *name, const char *at, struct loclist *loclist, int flags)
 		 * See if the named parent carries an attribute
 		 * that allows it to supervise device ib.
 		 */
-		for (al = ab->d_attrs; al != NULL; al = al->al_next) {
-			attr = al->al_this;
+		for (nv = ab->d_attrs; nv != NULL; nv = nv->nv_next) {
+			attr = nv->nv_ptr;
 			if (onlist(attr->a_devs, ib))
 				goto findattachment;
 		}
@@ -1078,7 +1070,7 @@ adddev(const char *name, const char *at, struct loclist *loclist, int flags)
 
 	/* all done, fall into ... */
  bad:
-	loclist_destroy(loclist);
+	nvfreel(loclist);
 	return;
 }
 
@@ -1412,89 +1404,6 @@ deldev(const char *name)
 	nvfreel(stack);
 }
 
-/*
- * Insert given device "name" into devroottab.  In case "name"
- * designates a pure interface attribute, create a fake device
- * instance for the attribute and insert that into the roottab
- * (this scheme avoids mucking around with the orphanage analysis).
- */
-void
-addpseudoroot(const char *name)
-{
-	char buf[NAMESIZE];
-	int unit;
-	struct attr *attr;
-	struct devi *i;
-	struct deva *iba;
-	struct devbase *ib;
-
-	fprintf(stderr, "WARNING: pseudo-root is an experimental feature\n");
-
-	if (split(name, strlen(name), buf, sizeof(buf), &unit)) {
-		cfgerror("invalid pseudo-root name `%s'", name);
-		return;
-	}
-
-	/*
-	 * Prefer device because devices with locators define an
-	 * implicit interface attribute.  However, if a device is
-	 * not available, try to attach to the interface attribute.
-	 * This makes sure adddev() doesn't get confused when we
-	 * are really attaching to a device (alternatively we maybe
-	 * could specify a non-NULL atlist to defdevattach() below).
-	 */
-	ib = ht_lookup(devbasetab, intern(buf));
-	if (ib == NULL) {
-		struct devbase *fakedev;
-		char fakename[NAMESIZE];
-
-		attr = ht_lookup(attrtab, intern(buf));
-		if (!(attr && attr->a_iattr)) {
-			cfgerror("pseudo-root `%s' not available", name);
-			return;
-		}
-
-		/*
-		 * here we cheat a bit: create a fake devbase with the
-		 * interface attribute and instantiate it.  quick, cheap,
-		 * dirty & bad for you, much like the stuff in the fridge.
-		 * and, it works, since the pseudoroot device is not included
-		 * in ioconf, just used by config to make sure we start from
-		 * the right place.
-		 */ 
-		snprintf(fakename, sizeof(fakename), "%s_devattrs", buf);
-		fakedev = getdevbase(intern(fakename));
-		fakedev->d_isdef = 1;
-		fakedev->d_ispseudo = 0;
-		fakedev->d_attrs = attrlist_cons(NULL, attr);
-		defdevattach(NULL, fakedev, NULL, NULL);
-
-		if (unit == STAR)
-			snprintf(buf, sizeof(buf), "%s*", fakename);
-		else
-			snprintf(buf, sizeof(buf), "%s%d", fakename, unit);
-		name = buf;
-	}
-
-	/* ok, everything should be set up, so instantiate a fake device */
-	i = getdevi(name);
-	if (i == NULL)
-		panic("device `%s' expected to be present", name);
-	ib = i->i_base;
-	iba = ib->d_ahead;
-
-	i->i_atdeva = iba;
-	i->i_cfflags = 0;
-	i->i_locs = fixloc(name, &errattr, NULL);
-	i->i_pseudoroot = 1;
-	i->i_active = DEVI_ORPHAN; /* set active by kill_orphans() */
-
-	*iba->d_ipp = i;
-	iba->d_ipp = &i->i_asame;
-
-	ht_insert(devroottab, ib->d_name, ib);
-}
-
 void
 addpseudo(const char *name, int number)
 {
@@ -1552,28 +1461,24 @@ delpseudo(const char *name)
 }
 
 void
-adddevm(const char *name, devmajor_t cmajor, devmajor_t bmajor,
-	struct condexpr *cond, struct nvlist *nv_nodes)
+adddevm(const char *name, int cmajor, int bmajor, struct nvlist *options)
 {
 	struct devm *dm;
 
-	if (cmajor != NODEVMAJOR && (cmajor < 0 || cmajor >= 4096)) {
+	if (cmajor < -1 || cmajor >= 4096) {
 		cfgerror("character major %d is invalid", cmajor);
-		condexpr_destroy(cond);
-		nvfreel(nv_nodes);
+		nvfreel(options);
 		return;
 	}
 
-	if (bmajor != NODEVMAJOR && (bmajor < 0 || bmajor >= 4096)) {
+	if (bmajor < -1 || bmajor >= 4096) {
 		cfgerror("block major %d is invalid", bmajor);
-		condexpr_destroy(cond);
-		nvfreel(nv_nodes);
+		nvfreel(options);
 		return;
 	}
-	if (cmajor == NODEVMAJOR && bmajor == NODEVMAJOR) {
+	if (cmajor == -1 && bmajor == -1) {
 		cfgerror("both character/block majors are not specified");
-		condexpr_destroy(cond);
-		nvfreel(nv_nodes);
+		nvfreel(options);
 		return;
 	}
 
@@ -1583,8 +1488,7 @@ adddevm(const char *name, devmajor_t cmajor, devmajor_t bmajor,
 	dm->dm_name = name;
 	dm->dm_cmajor = cmajor;
 	dm->dm_bmajor = bmajor;
-	dm->dm_opts = cond;
-	dm->dm_devnodes = nv_nodes;
+	dm->dm_opts = options;
 
 	TAILQ_INSERT_TAIL(&alldevms, dm, dm_next);
 
@@ -1774,17 +1678,17 @@ static void
 selectbase(struct devbase *d, struct deva *da)
 {
 	struct attr *a;
-	struct attrlist *al;
+	struct nvlist *nv;
 
 	(void)ht_insert(selecttab, d->d_name, __UNCONST(d->d_name));
-	for (al = d->d_attrs; al != NULL; al = al->al_next) {
-		a = al->al_this;
+	for (nv = d->d_attrs; nv != NULL; nv = nv->nv_next) {
+		a = nv->nv_ptr;
 		expandattr(a, selectattr);
 	}
 	if (da != NULL) {
 		(void)ht_insert(selecttab, da->d_name, __UNCONST(da->d_name));
-		for (al = da->d_attrs; al != NULL; al = al->al_next) {
-			a = al->al_this;
+		for (nv = da->d_attrs; nv != NULL; nv = nv->nv_next) {
+			a = nv->nv_ptr;
 			expandattr(a, selectattr);
 		}
 	}
@@ -1820,9 +1724,9 @@ extend(char *p, const char *name)
  * given as "?" and have defaults.  Return 0 on success.
  */
 static const char **
-fixloc(const char *name, struct attr *attr, struct loclist *got)
+fixloc(const char *name, struct attr *attr, struct nvlist *got)
 {
-	struct loclist *m, *n;
+	struct nvlist *m, *n;
 	int ord;
 	const char **lp;
 	int nmissing, nextra, nnodefault;
@@ -1839,23 +1743,23 @@ fixloc(const char *name, struct attr *attr, struct loclist *got)
 		lp = nullvec;
 	else
 		lp = emalloc((attr->a_loclen + 1) * sizeof(const char *));
-	for (n = got; n != NULL; n = n->ll_next)
-		n->ll_num = -1;
+	for (n = got; n != NULL; n = n->nv_next)
+		n->nv_int = -1;
 	nmissing = 0;
 	mp = missing;
 	/* yes, this is O(mn), but m and n should be small */
-	for (ord = 0, m = attr->a_locs; m != NULL; m = m->ll_next, ord++) {
-		for (n = got; n != NULL; n = n->ll_next) {
-			if (n->ll_name == m->ll_name) {
-				n->ll_num = ord;
+	for (ord = 0, m = attr->a_locs; m != NULL; m = m->nv_next, ord++) {
+		for (n = got; n != NULL; n = n->nv_next) {
+			if (n->nv_name == m->nv_name) {
+				n->nv_int = ord;
 				break;
 			}
 		}
-		if (n == NULL && m->ll_num == 0) {
+		if (n == NULL && m->nv_int == 0) {
 			nmissing++;
-			mp = extend(mp, m->ll_name);
+			mp = extend(mp, m->nv_name);
 		}
-		lp[ord] = m->ll_string;
+		lp[ord] = m->nv_str;
 	}
 	if (ord != attr->a_loclen)
 		panic("fixloc");
@@ -1864,17 +1768,17 @@ fixloc(const char *name, struct attr *attr, struct loclist *got)
 	ep = extra;
 	nnodefault = 0;
 	ndp = nodefault;
-	for (n = got; n != NULL; n = n->ll_next) {
-		if (n->ll_num >= 0) {
-			if (n->ll_string != NULL)
-				lp[n->ll_num] = n->ll_string;
-			else if (lp[n->ll_num] == NULL) {
+	for (n = got; n != NULL; n = n->nv_next) {
+		if (n->nv_int >= 0) {
+			if (n->nv_str != NULL)
+				lp[n->nv_int] = n->nv_str;
+			else if (lp[n->nv_int] == NULL) {
 				nnodefault++;
-				ndp = extend(ndp, n->ll_name);
+				ndp = extend(ndp, n->nv_name);
 			}
 		} else {
 			nextra++;
-			ep = extend(ep, n->ll_name);
+			ep = extend(ep, n->nv_name);
 		}
 	}
 	if (nextra) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: wall.c,v 1.29 2011/09/06 18:45:21 joerg Exp $	*/
+/*	$NetBSD: wall.c,v 1.26 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*
  * Copyright (c) 1988, 1990, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1990, 1993\
 #if 0
 static char sccsid[] = "@(#)wall.c	8.2 (Berkeley) 11/16/93";
 #endif
-__RCSID("$NetBSD: wall.c,v 1.29 2011/09/06 18:45:21 joerg Exp $");
+__RCSID("$NetBSD: wall.c,v 1.26 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -52,7 +52,6 @@ __RCSID("$NetBSD: wall.c,v 1.29 2011/09/06 18:45:21 joerg Exp $");
 #include <sys/time.h>
 #include <sys/uio.h>
 
-#include <ctype.h>
 #include <err.h>
 #include <grp.h>
 #include <errno.h>
@@ -67,20 +66,21 @@ __RCSID("$NetBSD: wall.c,v 1.29 2011/09/06 18:45:21 joerg Exp $");
 #include "utmpentry.h"
 #include "term_chk.h"
 
-static void	addgroup(char *);
-static void	makemsg(const char *);
-__dead static void	usage(void);
+void	addgroup(char *);
+void	makemsg(const char *);
+int	main(int, char **);
+void	usage(void);
 
-static struct wallgroup {
+struct wallgroup {
 	gid_t	gid;
 	char	*name;
 	char	**mem;
 	struct wallgroup *next;
 } *grouplist;
 
-static int nobanner;
-static size_t mbufsize;
-static char *mbuf;
+int nobanner;
+size_t mbufsize;
+char *mbuf;
 
 /* ARGSUSED */
 int
@@ -145,18 +145,13 @@ main(int argc, char **argv)
 			if (ingroup == 0)
 				continue;
 		}
-
-		/* skip [xgk]dm/xserver entries (":0", ":1", etc.) */
-		if (ep->line[0] == ':' && isdigit((unsigned char)ep->line[1]))
-			continue;
-
 		if ((p = ttymsg(&iov, 1, ep->line, 60*5)) != NULL)
 			warnx("%s", p);
 	}
 	exit(0);
 }
 
-static void
+void
 addgroup(char *name)
 {
 	int i;
@@ -187,7 +182,7 @@ addgroup(char *name)
 	grouplist = g;
 }
 
-static void
+void
 makemsg(const char *fname)
 {
 	int ch, cnt;
@@ -197,8 +192,8 @@ makemsg(const char *fname)
 	time_t now;
 	FILE *fp;
 	int fd;
-	const char *whom, *tty;
-	char *p, tmpname[MAXPATHLEN], lbuf[100],
+	const char *whom;
+	char *p, *tty, tmpname[MAXPATHLEN], lbuf[100],
 	    hostname[MAXHOSTNAMELEN+1];
 
 	(void)snprintf(tmpname, sizeof tmpname, "%s/wall.XXXXXX", _PATH_TMP);
@@ -256,7 +251,7 @@ makemsg(const char *fname)
 
 	if (fstat(fd, &sbuf))
 		err(1, "can't stat temporary file");
-	if ((uint64_t)sbuf.st_size > SIZE_T_MAX)
+	if (sbuf.st_size > SIZE_T_MAX)
 		errx(1, "file too big");
 	mbufsize = sbuf.st_size;
 	if (!(mbuf = malloc(mbufsize)))
@@ -266,7 +261,7 @@ makemsg(const char *fname)
 	(void)fclose(fp);
 }
 
-static void
+void
 usage(void)
 {
 

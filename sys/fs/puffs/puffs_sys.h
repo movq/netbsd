@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_sys.h,v 1.82 2012/08/11 01:10:11 manu Exp $	*/
+/*	$NetBSD: puffs_sys.h,v 1.70.20.3 2011/09/17 18:53:29 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006  Antti Kantee.  All Rights Reserved.
@@ -53,7 +53,6 @@ extern const struct vnodeopv_desc puffs_fifoop_opv_desc;
 extern const struct vnodeopv_desc puffs_msgop_opv_desc;
 
 extern struct pool puffs_pnpool;
-extern struct pool puffs_vapool;
 
 #ifdef DEBUG
 #ifndef PUFFSDEBUG
@@ -90,10 +89,6 @@ extern int puffsdebug; /* puffs_subr.c */
     (((pmp)->pmp_flags & PUFFS_KFLAG_NOCACHE_PAGE) == 0)
 #define PUFFS_USE_FULLPNBUF(pmp)	\
     ((pmp)->pmp_flags & PUFFS_KFLAG_LOOKUP_FULLPNBUF)
-#define PUFFS_USE_FS_TTL(pmp)	\
-    ((pmp)->pmp_flags & PUFFS_KFLAG_CACHE_FS_TTL)
-#define PUFFS_USE_DOTDOTCACHE(pmp)	\
-    ((pmp)->pmp_flags & PUFFS_KFLAG_CACHE_DOTDOT)
 
 #define PUFFS_WCACHEINFO(pmp)	0
 
@@ -103,30 +98,22 @@ struct puffs_newcookie {
 	LIST_ENTRY(puffs_newcookie) pnc_entries;
 };
 
-#define PUFFS_SOPREQ_EXPIRE_TIMEOUT 1000
-extern int puffs_sopreq_expire_timeout;
-
 enum puffs_sopreqtype {
-	PUFFS_SOPREQSYS_EXIT,
+	PUFFS_SOPREQ_EXIT,
 	PUFFS_SOPREQ_FLUSH,
-	PUFFS_SOPREQ_UNMOUNT,
-	PUFFS_SOPREQ_EXPIRE,
 };
 
 struct puffs_sopreq {
 	union {
-		struct puffs_req preq;
+		struct puffs_req preq;      
 		struct puffs_flush pf;
-		puffs_cookie_t ck;
 	} psopr_u;
 
 	enum puffs_sopreqtype psopr_sopreq;
 	TAILQ_ENTRY(puffs_sopreq) psopr_entries;
-	int psopr_at;
 };
 #define psopr_preq psopr_u.preq
 #define psopr_pf psopr_u.pf
-#define psopr_ck psopr_u.ck
 
 TAILQ_HEAD(puffs_wq, puffs_msgpark);
 LIST_HEAD(puffs_node_hashlist, puffs_node);
@@ -177,9 +164,7 @@ struct puffs_mount {
 	kmutex_t			pmp_sopmtx;
 	kcondvar_t			pmp_sopcv;
 	int				pmp_sopthrcount;
-	TAILQ_HEAD(, puffs_sopreq)	pmp_sopfastreqs;
-	TAILQ_HEAD(, puffs_sopreq)	pmp_sopnodereqs;
-	bool				pmp_docompat;
+	TAILQ_HEAD(, puffs_sopreq)	pmp_sopreqs;
 };
 
 #define PUFFSTAT_BEFOREINIT	0
@@ -188,11 +173,9 @@ struct puffs_mount {
 #define PUFFSTAT_DYING		3 /* Do you want your possessions identified? */
 
 
-#define PNODE_NOREFS	0x001	/* no backend reference			*/
-#define PNODE_DYING	0x002	/* NOREFS + inactive			*/
-#define PNODE_FAF	0x004	/* issue all operations as FAF		*/
-#define PNODE_DOINACT 	0x008	/* if inactive-on-demand, call inactive */
-#define PNODE_SOPEXP	0x100	/* Node reclaim postponed in sop thread	*/
+#define PNODE_NOREFS	0x01	/* no backend reference			*/
+#define PNODE_SUSPEND	0x04	/* issue all operations as FAF		*/
+#define PNODE_DOINACT	0x08	/* if inactive-on-demand, call inactive */
 
 #define PNODE_METACACHE_ATIME	0x10	/* cache atime metadata */
 #define PNODE_METACACHE_CTIME	0x20	/* cache atime metadata */
@@ -205,7 +188,6 @@ struct puffs_node {
 
 	kmutex_t	pn_mtx;
 	int		pn_refcount;
-	int		pn_nlookup;
 
 	puffs_cookie_t	pn_cookie;	/* userspace pnode cookie	*/
 	struct vnode	*pn_vp;		/* backpointer to vnode		*/
@@ -221,16 +203,9 @@ struct puffs_node {
 	u_quad_t	pn_mc_size;
 
 	voff_t		pn_serversize;
-
-	struct lockf *	pn_lockf;
+	struct lockf *  pn_lockf;
 
 	kmutex_t	pn_sizemtx;	/* size modification mutex	*/
-	
-	int		pn_cn_timeout;	/* path cache */
-	int		pn_cn_grace;	/* grace time before reclaim */
-	int		pn_va_timeout;	/* attribute cache */
-	struct vattr *	pn_va_cache;	/* attribute cache */
-	struct vnode *  pn_parent;	/* parent cache */
 
 	LIST_ENTRY(puffs_node) pn_hashent;
 };
@@ -288,9 +263,6 @@ void	puffs_gop_markupdate(struct vnode *, int);
 
 void	puffs_senderr(struct puffs_mount *, int, int, const char *,
 		      puffs_cookie_t);
-
-bool	puffs_compat_outgoing(struct puffs_req *, struct puffs_req**, ssize_t*);
-void	puffs_compat_incoming(struct puffs_req *, struct puffs_req *);
 
 void	puffs_updatenode(struct puffs_node *, int, voff_t);
 #define PUFFS_UPDATEATIME	0x01

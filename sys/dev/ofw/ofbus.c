@@ -1,4 +1,4 @@
-/*	$NetBSD: ofbus.c,v 1.25 2011/06/03 07:39:30 matt Exp $	*/
+/*	$NetBSD: ofbus.c,v 1.20 2005/12/11 12:22:48 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofbus.c,v 1.25 2011/06/03 07:39:30 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofbus.c,v 1.20 2005/12/11 12:22:48 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,15 +40,17 @@ __KERNEL_RCSID(0, "$NetBSD: ofbus.c,v 1.25 2011/06/03 07:39:30 matt Exp $");
 
 #include <dev/ofw/openfirm.h>
 
-int ofbus_match(device_t, cfdata_t, void *);
-void ofbus_attach(device_t, device_t, void *);
+int ofbus_match(struct device *, struct cfdata *, void *);
+void ofbus_attach(struct device *, struct device *, void *);
 static int ofbus_print(void *, const char *);
 
-CFATTACH_DECL_NEW(ofbus, 0,
+CFATTACH_DECL(ofbus, sizeof(struct device),
     ofbus_match, ofbus_attach, NULL, NULL);
 
 static int
-ofbus_print(void *aux, const char *pnp)
+ofbus_print(aux, pnp)
+	void *aux;
+	const char *pnp;
 {
 	struct ofbus_attach_args *oba = aux;
 
@@ -60,7 +62,10 @@ ofbus_print(void *aux, const char *pnp)
 }
 
 int
-ofbus_match(device_t parent, cfdata_t cf, void *aux)
+ofbus_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct ofbus_attach_args *oba = aux;
 
@@ -72,7 +77,9 @@ ofbus_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-ofbus_attach(device_t parent, device_t dev, void *aux)
+ofbus_attach(parent, dev, aux)
+	struct device *parent, *dev;
+	void *aux;
 {
 	struct ofbus_attach_args *oba = aux;
 	struct ofbus_attach_args oba2;

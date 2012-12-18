@@ -1,4 +1,4 @@
-/*	$NetBSD: sdhcreg.h,v 1.10 2012/10/15 13:38:52 jakllsch Exp $	*/
+/*	$NetBSD: sdhcreg.h,v 1.1.8.2 2009/10/07 15:41:13 sborrill Exp $	*/
 /*	$OpenBSD: sdhcreg.h,v 1.4 2006/07/30 17:20:40 fgsch Exp $	*/
 
 /*
@@ -17,14 +17,12 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef _SDHCREG_H_
-#define _SDHCREG_H_
+#ifndef	_SDHCREG_H_
+#define	_SDHCREG_H_
 
 /* Host standard register set */
 #define SDHC_DMA_ADDR			0x00
 #define SDHC_BLOCK_SIZE			0x04
-#define  SDHC_DMA_BOUNDARY_SHIFT	12
-#define  SDHC_DMA_BOUNDARY_MASK		0x7
 #define SDHC_BLOCK_COUNT		0x06
 #define  SDHC_BLOCK_COUNT_MAX		512
 #define SDHC_ARGUMENT			0x08
@@ -75,7 +73,6 @@
 #define  SDHC_CMD_INHIBIT_MASK		0x0003
 #define SDHC_HOST_CTL			0x28
 #define  SDHC_HIGH_SPEED		(1<<2)
-#define  SDHC_ESDHC_8BIT_MODE		(1<<2)	/* eSDHC */
 #define  SDHC_4BIT_MODE			(1<<1)
 #define  SDHC_LED_ON			(1<<0)
 #define SDHC_POWER_CTL			0x29
@@ -90,18 +87,12 @@
 #define SDHC_CLOCK_CTL			0x2c
 #define  SDHC_SDCLK_DIV_SHIFT		8
 #define  SDHC_SDCLK_DIV_MASK		0xff
-#define  SDHC_SDCLK_XDIV_SHIFT		6
-#define  SDHC_SDCLK_XDIV_MASK		0x3
-#define  SDHC_SDCLK_CGM			(1<<5)
-#define  SDHC_SDCLK_DVS_SHIFT		4
-#define  SDHC_SDCLK_DVS_MASK		0xf
 #define  SDHC_SDCLK_ENABLE		(1<<2)
 #define  SDHC_INTCLK_STABLE		(1<<1)
 #define  SDHC_INTCLK_ENABLE		(1<<0)
 #define SDHC_TIMEOUT_CTL		0x2e
 #define  SDHC_TIMEOUT_MAX		0x0e
 #define SDHC_SOFTWARE_RESET		0x2f
-#define  SDHC_INIT_ACTIVE		(1<<3)
 #define  SDHC_RESET_MASK		0x5
 #define  SDHC_RESET_DAT			(1<<2)
 #define  SDHC_RESET_CMD			(1<<1)
@@ -119,7 +110,6 @@
 #define  SDHC_COMMAND_COMPLETE		(1<<0)
 #define  SDHC_NINTR_STATUS_MASK		0x81ff
 #define SDHC_EINTR_STATUS		0x32
-#define  SDHC_DMA_ERROR			(1<<12)
 #define  SDHC_AUTO_CMD12_ERROR		(1<<8)
 #define  SDHC_CURRENT_LIMIT_ERROR	(1<<7)
 #define  SDHC_DATA_END_BIT_ERROR	(1<<6)
@@ -146,20 +136,13 @@
 #define  SDHC_MAX_BLK_LEN_512		0
 #define  SDHC_MAX_BLK_LEN_1024		1
 #define  SDHC_MAX_BLK_LEN_2048		2
-#define  SDHC_MAX_BLK_LEN_4096		3
 #define  SDHC_MAX_BLK_LEN_SHIFT		16
 #define  SDHC_MAX_BLK_LEN_MASK		0x3
 #define  SDHC_BASE_FREQ_SHIFT		8
 #define  SDHC_BASE_FREQ_MASK		0x3f
-#define  SDHC_BASE_V3_FREQ_MASK		0xff
 #define  SDHC_TIMEOUT_FREQ_UNIT		(1<<7)	/* 0=KHz, 1=MHz */
 #define  SDHC_TIMEOUT_FREQ_SHIFT	0
 #define  SDHC_TIMEOUT_FREQ_MASK		0x1f
-#define SDHC_WATERMARK_LEVEL		0x44	/* ESDHC */
-#define  SDHC_WATERMARK_WRITE_SHIFT	16
-#define  SDHC_WATERMARK_WRITE_MASK	0xff
-#define  SDHC_WATERMARK_READ_SHIFT	0
-#define  SDHC_WATERMARK_READ_MASK	0xff
 #define SDHC_MAX_CAPABILITIES		0x48
 #define SDHC_SLOT_INTR_STATUS		0xfc
 #define SDHC_HOST_CTL_VERSION		0xfe
@@ -167,17 +150,8 @@
 #define  SDHC_SPEC_VERS_MASK		0xff
 #define  SDHC_VENDOR_VERS_SHIFT		8
 #define  SDHC_VENDOR_VERS_MASK		0xff
-#define SDHC_DMA_CTL			0x40c	/* eSDHC */
-#define  SDHC_DMA_SNOOP			0x40
-
-/* SDHC_SPEC_VERS */
-#define SDHC_SPEC_VERS_100		0x00
-#define SDHC_SPEC_VERS_200		0x01
-#define SDHC_SPEC_VERS_300		0x02
 
 /* SDHC_CAPABILITIES decoding */
-#define SDHC_BASE_V3_FREQ_KHZ(cap)					\
-	((((cap) >> SDHC_BASE_FREQ_SHIFT) & SDHC_BASE_V3_FREQ_MASK) * 1000)
 #define SDHC_BASE_FREQ_KHZ(cap)						\
 	((((cap) >> SDHC_BASE_FREQ_SHIFT) & SDHC_BASE_FREQ_MASK) * 1000)
 #define SDHC_TIMEOUT_FREQ(cap)						\
@@ -204,4 +178,4 @@
 #define SDHC_CAPABILITIES_BITS						\
 	"\20\33Vdd1.8V\32Vdd3.0V\31Vdd3.3V\30SUSPEND\27DMA\26HIGHSPEED"
 
-#endif /* _SDHCREG_H_ */
+#endif	/* _SDHCREG_H_ */

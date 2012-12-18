@@ -1,4 +1,4 @@
-/*	$NetBSD: iopi2c.c,v 1.7 2012/01/10 18:55:37 jakllsch Exp $	*/
+/*	$NetBSD: iopi2c.c,v 1.5 2007/12/06 17:00:32 ad Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iopi2c.c,v 1.7 2012/01/10 18:55:37 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iopi2c.c,v 1.5 2007/12/06 17:00:32 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/mutex.h>
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: iopi2c.c,v 1.7 2012/01/10 18:55:37 jakllsch Exp $");
 #include <sys/device.h>
 #include <sys/kernel.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/i2c/i2cvar.h>
@@ -80,7 +80,7 @@ iopiic_attach(struct iopiic_softc *sc)
 	sc->sc_i2c.ic_write_byte = iopiic_write_byte;
 
 	iba.iba_tag = &sc->sc_i2c;
-	(void) config_found_ia(sc->sc_dev, "i2cbus", &iba, iicbus_print);
+	(void) config_found_ia(&sc->sc_dev, "i2cbus", &iba, iicbus_print);
 }
 
 static int
@@ -148,9 +148,8 @@ iopiic_wait(struct iopiic_softc *sc, int bit, int flags)
 		error = ETIMEDOUT;
 
 	if (error)
-		device_printf(sc->sc_dev,
-		    "iopiic_wait, (%08x) error %d: ISR = 0x%08x\n",
-		    bit, error, isr);
+		printf("%s: iopiic_wait, (%08x) error %d: ISR = 0x%08x\n",
+		    sc->sc_dev.dv_xname, bit, error, isr);
 
 	/*
 	 * The IIC_ISR is Read/Clear apart from the bottom 4 bits, which are
@@ -217,7 +216,7 @@ iopiic_initiate_xfer(void *cookie, uint16_t addr, int flags)
 	error = iopiic_wait(sc, IIC_ISR_ITE, flags);
 #if 0
 	if (error)
-		device_printf(sc->sc_dev, "failed to initiate %s xfer\n",
+		printf("%s: failed to initiate %s xfer\n", sc->sc_dev.dv_xname,
 		    rd_req ? "read" : "write");
 #endif
 	return (error);
@@ -237,7 +236,7 @@ iopiic_read_byte(void *cookie, uint8_t *bytep, int flags)
 		*bytep = bus_space_read_4(sc->sc_st, sc->sc_sh, IIC_IDBR);
 #if 0
 	if (error)
-		device_printf(sc->sc_dev, "read byte failed\n");
+		printf("%s: read byte failed\n", sc->sc_dev.dv_xname);
 #endif
 
 	return (error);
@@ -256,7 +255,7 @@ iopiic_write_byte(void *cookie, uint8_t byte, int flags)
 
 #if 0
 	if (error)
-		device_printf(sc->sc_dev, "write byte failed\n");
+		printf("%s: write byte failed\n", sc->sc_dev.dv_xname);
 #endif
 
 	return (error);

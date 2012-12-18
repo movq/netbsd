@@ -1,4 +1,4 @@
-/*	$NetBSD: limits.h,v 1.17 2012/03/28 17:03:31 christos Exp $	*/
+/*	$NetBSD: limits.h,v 1.15 2007/10/17 19:56:40 garbled Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -37,6 +37,7 @@
 #include <sys/featuretest.h>
 
 #define	CHAR_BIT	8		/* number of bits in a char */
+#define	MB_LEN_MAX	32		/* Allow 31 bit UTF2 */
 
 /*
  * According to ANSI (section 2.2.4.2), the values below must be usable by
@@ -48,9 +49,12 @@
  * These numbers work for pcc as well.  The UINT_MAX and ULONG_MAX values
  * are written as hex so that GCC will be quiet about large integer constants.
  */
+#define	SCHAR_MAX	0x7f		/* min value for a signed char */
+#define	SCHAR_MIN	(-0x7f-1)	/* max value for a signed char */
+
 #define	UCHAR_MAX	0xff		/* max value for an unsigned char */
-#define	SCHAR_MAX	0x7f		/* max value for a signed char */
-#define	SCHAR_MIN	(-0x7f-1)	/* min value for a signed char */
+#define	CHAR_MAX	0xff		/* max value for a char */
+#define	CHAR_MIN	0		/* min value for a char */
 
 #define	USHRT_MAX	0xffff		/* max value for an unsigned short */
 #define	SHRT_MAX	0x7fff		/* max value for a short */

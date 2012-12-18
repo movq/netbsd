@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2009/09/07 21:07:03 mrg Exp $
+#	$NetBSD: Makefile,v 1.2.6.1 2009/09/17 04:24:30 snj Exp $
 
 SUBDIR=	conf.d conf.avail
 

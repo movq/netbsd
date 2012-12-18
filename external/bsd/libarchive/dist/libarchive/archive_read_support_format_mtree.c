@@ -25,7 +25,7 @@
  */
 
 #include "archive_platform.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/archive_read_support_format_mtree.c 201165 2009-12-29 05:52:13Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/archive_read_support_format_mtree.c,v 1.9 2008/06/21 19:06:37 kientzle Exp $");
 
 #ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>
@@ -148,8 +148,8 @@ archive_read_support_format_mtree(struct archive *_a)
 	memset(mtree, 0, sizeof(*mtree));
 	mtree->fd = -1;
 
-	r = __archive_read_register_format(a, mtree, "mtree",
-	    mtree_bid, NULL, read_header, read_data, skip, cleanup);
+	r = __archive_read_register_format(a, mtree,
+	    mtree_bid, read_header, read_data, skip, cleanup);
 
 	if (r != ARCHIVE_OK)
 		free(mtree);
@@ -187,17 +187,32 @@ cleanup(struct archive_read *a)
 static int
 mtree_bid(struct archive_read *a)
 {
+	struct mtree *mtree;
+	ssize_t bytes_read;
+	const void *h;
 	const char *signature = "#mtree";
 	const char *p;
+	int bid;
+
+	mtree = (struct mtree *)(a->format->data);
 
 	/* Now let's look at the actual header and see if it matches. */
-	p = __archive_read_ahead(a, strlen(signature), NULL);
-	if (p == NULL)
-		return (-1);
+	bytes_read = (a->decompressor->read_ahead)(a, &h, strlen(signature));
 
-	if (strncmp(p, signature, strlen(signature)) == 0)
-		return (8 * (int)strlen(signature));
-	return (0);
+	if (bytes_read <= 0)
+		return (bytes_read);
+
+	p = h;
+	bid = 0;
+	while (bytes_read > 0 && *signature != '\0') {
+		if (*p != *signature)
+			return (bid = 0);
+		bid += 8;
+		p++;
+		signature++;
+		bytes_read--;
+	}
+	return (bid);
 }
 
 /*
@@ -370,7 +385,7 @@ process_add_entry(struct archive_read *a, struct mtree *mtree,
 		line = next;
 		next = line + strcspn(line, " \t\r\n");
 		eq = strchr(line, '=');
-		if (eq == NULL || eq > next)
+		if (eq > next)
 			len = next - line;
 		else
 			len = eq - line;
@@ -393,23 +408,21 @@ read_mtree(struct archive_read *a, struct mtree *mtree)
 	struct mtree_entry *last_entry;
 	int r;
 
-	mtree->archive_format = ARCHIVE_FORMAT_MTREE;
+	mtree->archive_format = ARCHIVE_FORMAT_MTREE_V1;
 	mtree->archive_format_name = "mtree";
 
 	global = NULL;
 	last_entry = NULL;
+	r = ARCHIVE_OK;
 
 	for (counter = 1; ; ++counter) {
 		len = readline(a, mtree, &p, 256);
 		if (len == 0) {
 			mtree->this_entry = mtree->entries;
-			free_options(global);
 			return (ARCHIVE_OK);
 		}
-		if (len < 0) {
-			free_options(global);
+		if (len < 0)
 			return (len);
-		}
 		/* Leading whitespace is never significant, ignore it. */
 		while (*p == ' ' || *p == '\t') {
 			++p;
@@ -434,16 +447,13 @@ read_mtree(struct archive_read *a, struct mtree *mtree)
 		} else
 			break;
 
-		if (r != ARCHIVE_OK) {
-			free_options(global);
+		if (r != ARCHIVE_OK)
 			return r;
-		}
 	}
 
 	archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
 	    "Can't parse line %ju", counter);
-	free_options(global);
-	return (ARCHIVE_FATAL);
+	return ARCHIVE_FATAL;
 }
 
 /*
@@ -587,7 +597,8 @@ parse_file(struct archive_read *a, struct archive_entry *entry,
 
 	if (archive_entry_filetype(entry) == AE_IFREG ||
 	    archive_entry_filetype(entry) == AE_IFDIR) {
-		mtree->fd = open(path, O_RDONLY | O_BINARY);
+		mtree->fd = open(path,
+		    O_RDONLY | O_BINARY);
 		if (mtree->fd == -1 &&
 		    (errno != ENOENT ||
 		     archive_strlen(&mtree->contents_name) > 0)) {
@@ -676,15 +687,6 @@ parse_file(struct archive_read *a, struct archive_entry *entry,
 #elif HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC
 			archive_entry_set_mtime(entry, st->st_mtime,
 			    st->st_mtim.tv_nsec);
-#elif HAVE_STRUCT_STAT_ST_MTIME_N
-			archive_entry_set_mtime(entry, st->st_mtime,
-			    st->st_mtime_n);
-#elif HAVE_STRUCT_STAT_ST_UMTIME
-			archive_entry_set_mtime(entry, st->st_mtime,
-			    st->st_umtime*1000);
-#elif HAVE_STRUCT_STAT_ST_MTIME_USEC
-			archive_entry_set_mtime(entry, st->st_mtime,
-			    st->st_mtime_usec*1000);
 #else
 			archive_entry_set_mtime(entry, st->st_mtime, 0);
 #endif
@@ -895,17 +897,8 @@ parse_keyword(struct archive_read *a, struct mtree *mtree,
 			break;
 		}
 		if (strcmp(key, "time") == 0) {
-			time_t m;
-			long ns;
-
 			*parsed_kws |= MTREE_HAS_MTIME;
-			m = (time_t)mtree_atol10(&val);
-			if (*val == '.') {
-				++val;
-				ns = (long)mtree_atol10(&val);
-			} else
-				ns = 0;
-			archive_entry_set_mtime(entry, m, ns);
+			archive_entry_set_mtime(entry, mtree_atol10(&val), 0);
 			break;
 		}
 		if (strcmp(key, "type") == 0) {
@@ -988,8 +981,8 @@ read_data(struct archive_read *a, const void **buff, size_t *size, off_t *offset
 		if (mtree->buff == NULL) {
 			archive_set_error(&a->archive, ENOMEM,
 			    "Can't allocate memory");
-			return (ARCHIVE_FATAL);
 		}
+		return (ARCHIVE_FATAL);
 	}
 
 	*buff = mtree->buff;
@@ -1036,7 +1029,11 @@ parse_escapes(char *src, struct mtree_entry *mentry)
 	char *dest = src;
 	char c;
 
-	if (mentry != NULL && strcmp(src, ".") == 0)
+	/*
+	 * The current directory is somewhat special, it should be archived
+	 * only once as it will confuse extraction otherwise.
+	 */
+	if (strcmp(src, ".") == 0)
 		mentry->full = 1;
 
 	while (*src != '\0') {
@@ -1155,7 +1152,7 @@ mtree_atol10(char **p)
 	digit = **p - '0';
 	while (digit >= 0 && digit < base) {
 		if (l > limit || (l == limit && digit > last_digit_limit)) {
-			l = INT64_MAX; /* Truncate on overflow. */
+			l = UINT64_MAX; /* Truncate on overflow. */
 			break;
 		}
 		l = (l * base) + digit;
@@ -1196,7 +1193,7 @@ mtree_atol16(char **p)
 		digit = -1;
 	while (digit >= 0 && digit < base) {
 		if (l > limit || (l == limit && digit > last_digit_limit)) {
-			l = INT64_MAX; /* Truncate on overflow. */
+			l = UINT64_MAX; /* Truncate on overflow. */
 			break;
 		}
 		l = (l * base) + digit;
@@ -1234,7 +1231,6 @@ readline(struct archive_read *a, struct mtree *mtree, char **start, ssize_t limi
 {
 	ssize_t bytes_read;
 	ssize_t total_size = 0;
-	ssize_t find_off = 0;
 	const void *t;
 	const char *s;
 	void *p;
@@ -1243,8 +1239,8 @@ readline(struct archive_read *a, struct mtree *mtree, char **start, ssize_t limi
 	/* Accumulate line in a line buffer. */
 	for (;;) {
 		/* Read some more. */
-		t = __archive_read_ahead(a, 1, &bytes_read);
-		if (t == NULL)
+		bytes_read = (a->decompressor->read_ahead)(a, &t, 1);
+		if (bytes_read == 0)
 			return (0);
 		if (bytes_read < 0)
 			return (ARCHIVE_FATAL);
@@ -1267,12 +1263,14 @@ readline(struct archive_read *a, struct mtree *mtree, char **start, ssize_t limi
 			return (ARCHIVE_FATAL);
 		}
 		memcpy(mtree->line.s + total_size, t, bytes_read);
-		__archive_read_consume(a, bytes_read);
+		(a->decompressor->consume)(a, bytes_read);
 		total_size += bytes_read;
 		/* Null terminate. */
 		mtree->line.s[total_size] = '\0';
 		/* If we found an unescaped '\n', clean up and return. */
-		for (u = mtree->line.s + find_off; *u; ++u) {
+		if (p == NULL)
+			continue;
+		for (u = mtree->line.s; *u; ++u) {
 			if (u[0] == '\n') {
 				*start = mtree->line.s;
 				return total_size;
@@ -1293,12 +1291,8 @@ readline(struct archive_read *a, struct mtree *mtree, char **start, ssize_t limi
 				memmove(u, u + 1,
 				    total_size - (u - mtree->line.s) + 1);
 				--total_size;
-				++u;
-				break;
+				continue;    
 			}
-			if (u[1] == '\0')
-				break;
 		}
-		find_off = u - mtree->line.s;
 	}
 }

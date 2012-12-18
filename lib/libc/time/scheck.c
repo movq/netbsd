@@ -1,42 +1,37 @@
-/*	$NetBSD: scheck.c,v 1.9 2012/10/24 00:10:03 christos Exp $	*/
-
-/*
-** This file is in the public domain, so clarified as of
-** 2006-07-17 by Arthur David Olson.
-*/
-
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
+/*	$NetBSD: scheck.c,v 1.6 1997/09/05 02:11:58 jtc Exp $	*/
 
 #include <sys/cdefs.h>
-
 #ifndef lint
+#ifndef NOID
 #if 0
-static char	elsieid[] = "@(#)scheck.c	8.19";
+static char	elsieid[] = "@(#)scheck.c	8.15";
 #else
-__RCSID("$NetBSD: scheck.c,v 1.9 2012/10/24 00:10:03 christos Exp $");
+__RCSID("$NetBSD: scheck.c,v 1.6 1997/09/05 02:11:58 jtc Exp $");
 #endif
 #endif /* !defined lint */
+#endif /* !defined NOID */
 
 /*LINTLIBRARY*/
 
 #include "private.h"
 
-const char *
-scheck(const char *const string, const char *const format)
+char *
+scheck(string, format)
+const char * const	string;
+const char * const	format;
 {
 	register char *		fbuf;
 	register const char *	fp;
 	register char *		tp;
 	register int		c;
-	register const char *	result;
+	register char *		result;
 	char			dummy;
+	static char		nada;
 
-	result = "";
+	result = &nada;
 	if (string == NULL || format == NULL)
 		return result;
-	fbuf = malloc(2 * strlen(format) + 4);
+	fbuf = imalloc((int) (2 * strlen(format) + 4));
 	if (fbuf == NULL)
 		return result;
 	fp = format;
@@ -65,7 +60,7 @@ scheck(const char *const string, const char *const format)
 	*tp++ = 'c';
 	*tp = '\0';
 	if (sscanf(string, fbuf, &dummy) != 1)
-		result = format;
-	free(fbuf);
+		result = (char *) format;
+	ifree(fbuf);
 	return result;
 }

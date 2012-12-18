@@ -1,4 +1,4 @@
-/*	$NetBSD: rsbus_io.c,v 1.4 2012/05/10 10:27:10 skrll Exp $	*/
+/*	$NetBSD: rsbus_io.c,v 1.2 2005/12/11 12:16:05 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -37,11 +37,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rsbus_io.c,v 1.4 2012/05/10 10:27:10 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rsbus_io.c,v 1.2 2005/12/11 12:16:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 /* Proto types for all the bus_space structure functions */
 
@@ -132,7 +132,7 @@ struct bus_space rsbus_bs_tag = {
 /* Rough-and-ready implementations from arm26 */
 void
 rsbus_bs_rr_1(void *cookie, bus_space_handle_t bsh,
-			bus_size_t offset, uint8_t *datap, bus_size_t count)
+			bus_size_t offset, u_int8_t *datap, bus_size_t count)
 {
 	int i;
 
@@ -142,7 +142,7 @@ rsbus_bs_rr_1(void *cookie, bus_space_handle_t bsh,
 
 void
 rsbus_bs_rr_2(void *cookie, bus_space_handle_t bsh,
-			bus_size_t offset, uint16_t *datap, bus_size_t count)
+			bus_size_t offset, u_int16_t *datap, bus_size_t count)
 {
 	int i;
 
@@ -152,7 +152,7 @@ rsbus_bs_rr_2(void *cookie, bus_space_handle_t bsh,
 
 void
 rsbus_bs_wr_1(void *cookie, bus_space_handle_t bsh,
-			 bus_size_t offset, uint8_t const *datap,
+			 bus_size_t offset, u_int8_t const *datap,
 			 bus_size_t count)
 {
 	int i;
@@ -163,7 +163,7 @@ rsbus_bs_wr_1(void *cookie, bus_space_handle_t bsh,
 
 void
 rsbus_bs_wr_2(void *cookie, bus_space_handle_t bsh,
-			 bus_size_t offset, uint16_t const *datap,
+			 bus_size_t offset, u_int16_t const *datap,
 			 bus_size_t count)
 {
 	int i;
@@ -174,7 +174,7 @@ rsbus_bs_wr_2(void *cookie, bus_space_handle_t bsh,
 
 void
 rsbus_bs_sr_1(void *cookie, bus_space_handle_t bsh,
-		       bus_size_t offset, uint8_t value, bus_size_t count)
+		       bus_size_t offset, u_int8_t value, bus_size_t count)
 {
 	int i;
 
@@ -184,7 +184,7 @@ rsbus_bs_sr_1(void *cookie, bus_space_handle_t bsh,
 
 void
 rsbus_bs_sr_2(void *cookie, bus_space_handle_t bsh,
-		       bus_size_t offset, uint16_t value, bus_size_t count)
+		       bus_size_t offset, u_int16_t value, bus_size_t count)
 {
 	int i;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: mpt.c,v 1.16 2012/03/18 21:05:21 martin Exp $	*/
+/*	$NetBSD: mpt.c,v 1.10.42.1 2010/12/02 23:45:59 snj Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 by Greg Ansley
@@ -110,7 +110,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpt.c,v 1.16 2012/03/18 21:05:21 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpt.c,v 1.10.42.1 2010/12/02 23:45:59 snj Exp $");
 
 #include <dev/ic/mpt.h>
 
@@ -504,7 +504,7 @@ mpt_get_iocfacts(mpt_softc_t *mpt, MSG_IOC_FACTS_REPLY *freplp)
 	MSG_IOC_FACTS f_req;
 	int error;
 
-	memset(&f_req, 0, sizeof f_req);
+	bzero(&f_req, sizeof f_req);
 	f_req.Function = MPI_FUNCTION_IOC_FACTS;
 	f_req.MsgContext = htole32(0x12071942);
 	error = mpt_send_handshake_cmd(mpt, sizeof f_req, &f_req);
@@ -521,7 +521,7 @@ mpt_get_portfacts(mpt_softc_t *mpt, MSG_PORT_FACTS_REPLY *freplp)
 	int error;
 
 	/* XXX: Only getting PORT FACTS for Port 0 */
-	memset(&f_req, 0, sizeof f_req);
+	bzero(&f_req, sizeof f_req);
 	f_req.Function = MPI_FUNCTION_PORT_FACTS;
 	f_req.MsgContext =  htole32(0x12071943);
 	error = mpt_send_handshake_cmd(mpt, sizeof f_req, &f_req);
@@ -544,7 +544,7 @@ mpt_send_ioc_init(mpt_softc_t *mpt, u_int32_t who)
 	MSG_IOC_INIT init;
 	MSG_IOC_INIT_REPLY reply;
 
-	memset(&init, 0, sizeof init);
+	bzero(&init, sizeof init);
 	init.WhoInit = who;
 	init.Function = MPI_FUNCTION_IOC_INIT;
 	init.MaxDevices = mpt->mpt_max_devices;
@@ -580,7 +580,7 @@ mpt_read_cfg_header(mpt_softc_t *mpt, int PageType, int PageNumber,
 	req = mpt_get_request(mpt);
 
 	cfgp = req->req_vbuf;
-	memset(cfgp, 0, sizeof *cfgp);
+	bzero(cfgp, sizeof *cfgp);
 
 	cfgp->Action = MPI_CONFIG_ACTION_PAGE_HEADER;
 	cfgp->Function = MPI_FUNCTION_CONFIG;
@@ -611,7 +611,7 @@ mpt_read_cfg_header(mpt_softc_t *mpt, int PageType, int PageNumber,
 		mpt_free_reply(mpt, (req->sequence << 1));
 		return (-1);
 	}
-	memcpy(rslt, &reply->Header, sizeof (fCONFIG_PAGE_HEADER));
+	bcopy(&reply->Header, rslt, sizeof (fCONFIG_PAGE_HEADER));
 	mpt_free_reply(mpt, (req->sequence << 1));
 	mpt_free_request(mpt, req);
 	return (0);
@@ -632,7 +632,7 @@ mpt_read_cfg_page(mpt_softc_t *mpt, int PageAddress, fCONFIG_PAGE_HEADER *hdr)
 	req = mpt_get_request(mpt);
 
 	cfgp = req->req_vbuf;
-	memset(cfgp, 0, MPT_REQUEST_AREA);
+	bzero(cfgp, MPT_REQUEST_AREA);
 	cfgp->Action = MPI_CONFIG_ACTION_PAGE_READ_CURRENT;
 	cfgp->Function = MPI_FUNCTION_CONFIG;
 	cfgp->Header = *hdr;
@@ -707,7 +707,7 @@ mpt_write_cfg_page(mpt_softc_t *mpt, int PageAddress, fCONFIG_PAGE_HEADER *hdr)
 	req = mpt_get_request(mpt);
 
 	cfgp = req->req_vbuf;
-	memset(cfgp, 0, sizeof *cfgp);
+	bzero(cfgp, sizeof *cfgp);
 
 	hdr_attr = hdr->PageType & MPI_CONFIG_PAGEATTR_MASK;
 	if (hdr_attr != MPI_CONFIG_PAGEATTR_CHANGEABLE &&
@@ -1014,7 +1014,7 @@ mpt_send_port_enable(mpt_softc_t *mpt, int port)
 	req = mpt_get_request(mpt);
 
 	enable_req = req->req_vbuf;
-	memset(enable_req, 0, sizeof *enable_req);
+	bzero(enable_req, sizeof *enable_req);
 
 	enable_req->Function   = MPI_FUNCTION_PORT_ENABLE;
 	enable_req->MsgContext = htole32(req->index | 0x80000000);
@@ -1054,7 +1054,7 @@ mpt_send_event_request(mpt_softc_t *mpt, int onoff)
 	req = mpt_get_request(mpt);
 
 	enable_req = req->req_vbuf;
-	memset(enable_req, 0, sizeof *enable_req);
+	bzero(enable_req, sizeof *enable_req);
 
 	enable_req->Function   = MPI_FUNCTION_EVENT_NOTIFICATION;
 	enable_req->MsgContext = htole32(req->index | 0x80000000);
@@ -1131,9 +1131,7 @@ mpt_init(mpt_softc_t *mpt, u_int32_t who)
         int try;
         MSG_IOC_FACTS_REPLY facts;
         MSG_PORT_FACTS_REPLY pfp;
-        prop_dictionary_t dict;
-        uint32_t ini_id;
-        uint32_t pptr;
+	u_int32_t pptr;
         int val;
 
 	/* Put all request buffers (back) on the free list */
@@ -1152,8 +1150,6 @@ mpt_init(mpt_softc_t *mpt, u_int32_t who)
 	 */
 	if (mpt_hw_init(mpt) != 0)
 		return (EIO);
-
-	dict = device_properties(mpt->sc_dev);
 
 	for (try = 0; try < MPT_MAX_TRYS; try++) {
 		/*
@@ -1213,11 +1209,7 @@ mpt_init(mpt_softc_t *mpt, u_int32_t who)
 			return (ENXIO);
 		}
 
-		if (!mpt->is_sas && !mpt->is_fc &&
-		    prop_dictionary_get_uint32(dict, "scsi-initiator-id", &ini_id))
-			mpt->mpt_ini_id = ini_id;
-		else
-			mpt->mpt_ini_id = pfp.PortSCSIID;
+		mpt->mpt_ini_id = pfp.PortSCSIID;
 
 		if (mpt_send_ioc_init(mpt, who) != MPT_OK) {
 			mpt_prt(mpt, "mpt_send_ioc_init failed");

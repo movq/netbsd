@@ -1,4 +1,4 @@
-/*	$NetBSD: getnetent.c,v 1.21 2012/03/20 17:44:18 matt Exp $	*/
+/*	$NetBSD: getnetent.c,v 1.18 2007/01/27 22:27:35 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -44,7 +44,7 @@
 static char sccsid[] = "@(#)getnetent.c	8.1 (Berkeley) 6/4/93";
 static char rcsid[] = "Id: getnetent.c,v 8.4 1997/06/01 20:34:37 vixie Exp ";
 #else
-__RCSID("$NetBSD: getnetent.c,v 1.21 2012/03/20 17:44:18 matt Exp $");
+__RCSID("$NetBSD: getnetent.c,v 1.18 2007/01/27 22:27:35 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -71,11 +71,12 @@ static struct netent net;
 static char *net_aliases[MAXALIASES];
 int _net_stayopen;
 
-static void __setnetent(int);
-static void __endnetent(void);
+static void __setnetent __P((int));
+static void __endnetent __P((void));
 
 void
-setnetent(int stayopen)
+setnetent(stayopen)
+	int stayopen;
 {
 
 	sethostent(stayopen);
@@ -83,7 +84,7 @@ setnetent(int stayopen)
 }
 
 void
-endnetent(void)
+endnetent()
 {
 
 	endhostent();
@@ -91,18 +92,19 @@ endnetent(void)
 }
 
 static void
-__setnetent(int f)
+__setnetent(f)
+	int f;
 {
 
 	if (netf == NULL)
-		netf = fopen(_PATH_NETWORKS, "re");
+		netf = fopen(_PATH_NETWORKS, "r" );
 	else
 		rewind(netf);
 	_net_stayopen |= f;
 }
 
 static void
-__endnetent(void)
+__endnetent()
 {
 
 	if (netf) {
@@ -113,12 +115,12 @@ __endnetent(void)
 }
 
 struct netent *
-getnetent(void)
+getnetent()
 {
 	char *p;
 	register char *cp, **q;
 
-	if (netf == NULL && (netf = fopen(_PATH_NETWORKS, "re")) == NULL)
+	if (netf == NULL && (netf = fopen(_PATH_NETWORKS, "r" )) == NULL)
 		return (NULL);
 #if (defined(__sparc__) && defined(_LP64)) ||		\
     defined(__alpha__) ||				\
@@ -127,7 +129,7 @@ getnetent(void)
 	net.__n_pad0 = 0;
 #endif
 again:
-	p = fgets(line, (int)sizeof line, netf);
+	p = fgets(line, sizeof line, netf);
 	if (p == NULL)
 		return (NULL);
 	if (*p == '#')

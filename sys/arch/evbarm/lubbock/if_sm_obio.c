@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sm_obio.c,v 1.6 2012/11/12 18:00:39 skrll Exp $ */
+/*	$NetBSD: if_sm_obio.c,v 1.2 2008/04/28 20:23:17 martin Exp $ */
 
 /*
  * Copyright (c) 2002, 2003  Genetec Corporation.  All rights reserved.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sm_obio.c,v 1.6 2012/11/12 18:00:39 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sm_obio.c,v 1.2 2008/04/28 20:23:17 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,7 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_sm_obio.c,v 1.6 2012/11/12 18:00:39 skrll Exp $")
 #include <net/if_media.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -94,8 +94,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_sm_obio.c,v 1.6 2012/11/12 18:00:39 skrll Exp $")
 
 #include "opt_lubbock.h"	/* LUBBOCK_SMC91C96_16BIT */
 
-int	sm_obio_match(device_t, cfdata_t, void *);
-void	sm_obio_attach(device_t, device_t, void *);
+int	sm_obio_match(struct device *, struct cfdata *, void *);
+void	sm_obio_attach(struct device *, struct device *, void *);
 
 struct sm_obio_softc {
 	struct	smc91cxx_softc sc_smc;		/* real "smc" softc */
@@ -104,7 +104,7 @@ struct sm_obio_softc {
 	void	*sc_ih;				/* interrupt handler */
 };
 
-CFATTACH_DECL_NEW(sm_obio, sizeof(struct sm_obio_softc), sm_obio_match, 
+CFATTACH_DECL(sm_obio, sizeof(struct sm_obio_softc), sm_obio_match, 
     sm_obio_attach, NULL, NULL);
 
 extern struct bus_space  smobio8_bs_tag;
@@ -124,12 +124,12 @@ smc_obio_intr(void *arg)
 #endif /* SM_OBIO_INTR_PARANOIA */
 
 int
-sm_obio_match(device_t parent, cfdata_t match, void *aux)
+sm_obio_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct obio_attach_args *oba = aux;
 	bus_space_tag_t iot = &smobio8_bs_tag;
 	bus_space_handle_t ioh;
-	uint16_t tmp;
+	u_int16_t tmp;
 	int rv = 0;
 	extern const char *smc91cxx_idstrs[];
 
@@ -177,9 +177,9 @@ sm_obio_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-sm_obio_attach(device_t parent, device_t self, void *aux)
+sm_obio_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct sm_obio_softc *isc = device_private(self);
+	struct sm_obio_softc *isc = (struct sm_obio_softc *)self;
 	struct smc91cxx_softc *sc = &isc->sc_smc;
 	struct obio_attach_args *oba = aux;
 	bus_space_handle_t ioh;
@@ -218,7 +218,6 @@ sm_obio_attach(device_t parent, device_t self, void *aux)
 
 #endif /* LUBBOCK_SMC91C96_16BIT */
 
-	sc->sc_dev = self;
 	sc->sc_bst = iot;
 	sc->sc_bsh = ioh;
 
@@ -229,9 +228,10 @@ sm_obio_attach(device_t parent, device_t self, void *aux)
 	smc91cxx_attach(sc, NULL);
 
 	/* Establish the interrupt handler. */
-	isc->sc_ih = obio_intr_establish(device_private(parent),
+	isc->sc_ih = obio_intr_establish((struct obio_softc *)parent,
 					 oba->oba_intr, IPL_NET, smintr, sc);
 
 	if (isc->sc_ih == NULL)
-		aprint_normal_dev(self, "couldn't establish interrupt handler\n");
+		printf("%s: couldn't establish interrupt handler\n",
+		    sc->sc_dev.dv_xname);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: pom.c,v 1.20 2010/12/05 04:34:22 pgoyette Exp $	*/
+/*	$NetBSD: pom.c,v 1.17 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -41,7 +41,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)pom.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: pom.c,v 1.20 2010/12/05 04:34:22 pgoyette Exp $");
+__RCSID("$NetBSD: pom.c,v 1.17 2008/07/20 01:03:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -84,12 +84,12 @@ __RCSID("$NetBSD: pom.c,v 1.20 2010/12/05 04:34:22 pgoyette Exp $");
 #define	Pzero	  36.340410	/* lunar mean long of perigee at EPOCH */
 #define	Nzero	  318.510107	/* lunar mean long of node at EPOCH */
 
+void	adj360(double *);
+double	dtor(double);
 int	main(int, char *[]);
-static void adj360(double *);
-static double dtor(double);
-static double potm(double);
-static time_t parsetime(char *);
-static void badformat(void) __dead;
+double	potm(double);
+time_t	parsetime(char *);
+void	badformat(void) __dead;
 
 int
 main(int argc, char *argv[])
@@ -148,7 +148,7 @@ main(int argc, char *argv[])
  * potm --
  *	return phase of the moon
  */
-static double
+double
 potm(double days)
 {
 	double N, Msol, Ec, LambdaSol, l, Mm, Ev, Ac, A3, Mmprime;
@@ -184,7 +184,7 @@ potm(double days)
  * dtor --
  *	convert degrees to radians
  */
-static double
+double
 dtor(double deg)
 {
 	return(deg * PI / 180);
@@ -194,7 +194,7 @@ dtor(double deg)
  * adj360 --
  *	adjust value so 0 <= deg <= 360
  */
-static void
+void
 adj360(double *deg)
 {
 	for (;;)
@@ -207,17 +207,17 @@ adj360(double *deg)
 }
 
 #define	ATOI2(ar)	((ar)[0] - '0') * 10 + ((ar)[1] - '0'); (ar) += 2;
-static time_t
+time_t
 parsetime(char *p)
 {
 	struct tm *lt;
 	int bigyear;
 	int yearset = 0;
 	time_t tval;
-	char *t;
+	unsigned char *t;
 	
 	for (t = p; *t; ++t) {
-		if (isdigit((unsigned char) *t))
+		if (isdigit(*t))
 			continue;
 		badformat();
 	}
@@ -268,11 +268,10 @@ parsetime(char *p)
 	return (tval);
 }
 
-static void
+void
 badformat(void)
 {
 	warnx("illegal time format");
-	(void)fprintf(stderr, "usage: %s [[[[[cc]yy]mm]dd]HH]\n",
-	    getprogname());
+	(void)fprintf(stderr, "usage: pom [[[[[cc]yy]mm]dd]HH]\n");
 	exit(EXIT_FAILURE);
 }

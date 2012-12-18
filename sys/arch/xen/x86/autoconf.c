@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.16 2012/10/03 18:58:33 dsl Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.7.2.1 2009/02/23 08:32:53 snj Exp $	*/
 /*	NetBSD: autoconf.c,v 1.75 2003/12/30 12:33:22 pk Exp 	*/
 
 /*-
@@ -45,12 +45,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.16 2012/10/03 18:58:33 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.7.2.1 2009/02/23 08:32:53 snj Exp $");
 
 #include "opt_xen.h"
 #include "opt_compat_oldboot.h"
 #include "opt_multiprocessor.h"
 #include "opt_nfs_boot.h"
+#include "xennet_hypervisor.h"
+#include "xennet_xenbus.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,10 +64,12 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.16 2012/10/03 18:58:33 dsl Exp $");
 #include <sys/reboot.h>
 #endif
 #include <sys/device.h>
+#include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/fcntl.h>
 #include <sys/dkio.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/kauth.h>
 
 #ifdef NFS_BOOT_BOOTSTATIC
@@ -88,6 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.16 2012/10/03 18:58:33 dsl Exp $");
 
 static void findroot(void);
 static int is_valid_disk(device_t);
+static void handle_wedges(device_t, int);
 
 struct disklist *x86_alldisks;
 int x86_ndisks;
@@ -104,22 +109,32 @@ int x86_ndisks;
 #include <i386/pci/pcibios.h>
 #endif
 
+#include "opt_kvm86.h"
+#ifdef KVM86
+#include <machine/kvm86.h>
+#endif
+
 /*
  * Determine i/o configuration for a machine.
  */
 void
 cpu_configure(void)
 {
-	struct pcb *pcb;
 
 	startrtclock();
 
 #if NBIOS32 > 0 && defined(DOM0OPS)
+#ifdef XEN3
 	if (xendomain_is_dom0())
+#endif
 		bios32_init();
 #endif /* NBIOS32 > 0 && DOM0OPS */
 #ifdef PCIBIOS
 	pcibios_init();
+#endif
+
+#ifdef KVM86
+	kvm86_init();
 #endif
 
 	if (config_rootfound("mainbus", NULL) == NULL)
@@ -130,8 +145,7 @@ cpu_configure(void)
 #endif
 
 	/* resync cr0 after FPU configuration */
-	pcb = lwp_getpcb(&lwp0);
-	pcb->pcb_cr0 = rcr0();
+	lwp0.l_addr->u_pcb.pcb_cr0 = rcr0();
 #ifdef MULTIPROCESSOR
 	/* propagate this to the idle pcb's. */
 	cpu_init_idle_lwps();
@@ -145,9 +159,16 @@ cpu_rootconf(void)
 {
 	findroot();
 
-	printf("boot device: %s\n",
-	    booted_device ? device_xname(booted_device) : "<unknown>");
-	rootconf();
+	if (booted_wedge) {
+		KASSERT(booted_device != NULL);
+		printf("boot device: %s (%s)\n",
+		    device_xname(booted_wedge), device_xname(booted_device));
+		setroot(booted_wedge, 0);
+	} else {
+		printf("boot device: %s\n",
+		    booted_device ? device_xname(booted_device) : "<unknown>");
+		setroot(booted_device, booted_partition);
+	}
 }
 
 
@@ -160,7 +181,6 @@ void
 findroot(void)
 {
 	device_t dv;
-	deviter_t di;
 	union xen_cmdline_parseinfo xcp;
 
 	if (booted_device)
@@ -168,9 +188,7 @@ findroot(void)
 
 	xen_parse_cmdline(XEN_PARSE_BOOTDEV, &xcp);
 
-	for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
-	     dv != NULL;
-	     dv = deviter_next(&di)) {
+	TAILQ_FOREACH(dv, &alldevs, dv_list) {
 		bool is_ifnet, is_disk;
 		const char *devname;
 
@@ -182,7 +200,7 @@ findroot(void)
 			continue;
 
 		if (is_disk && xcp.xcp_bootdev[0] == 0) {
-			booted_device = dv;
+			handle_wedges(dv, 0);
 			break;
 		}
 
@@ -197,7 +215,6 @@ findroot(void)
 		booted_device = dv;
 		break;
 	}
-	deviter_release(&di);
 }
 
 #include "pci.h"
@@ -335,6 +352,15 @@ found:
 		return;
 	}
 	booted_device = dev;
+}
+
+static void
+handle_wedges(device_t dv, int par)
+{
+	if (config_handle_wedges(dv, par) == 0)
+		return;
+	booted_device = dv;
+	booted_partition = par;
 }
 
 static int

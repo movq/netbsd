@@ -1,4 +1,4 @@
-/*	$NetBSD: hmevar.h,v 1.23 2012/02/02 19:43:03 tls Exp $	*/
+/*	$NetBSD: hmevar.h,v 1.17 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -29,9 +29,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "rnd.h"
 
 #include <sys/callout.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 
 struct hme_ring {
@@ -54,7 +57,7 @@ struct hme_ring {
 };
 
 struct hme_softc {
-	device_t	sc_dev;		/* boilerplate device view */
+	struct device	sc_dev;		/* boilerplate device view */
 	struct ethercom	sc_ethercom;	/* Ethernet common part */
 	struct mii_data	sc_mii;		/* MII media control */
 	struct callout	sc_tick_ch;	/* tick callout */
@@ -83,17 +86,21 @@ struct hme_softc {
 #endif
 
 	int			sc_debug;
+	void			*sc_sh;		/* shutdownhook cookie */
 	int			sc_ec_capenable;
 	short			sc_if_flags;
-	uint8_t			sc_enaddr[ETHER_ADDR_LEN]; /* MAC address */
+	u_int8_t		sc_enaddr[ETHER_ADDR_LEN]; /* MAC address */
 
 	/* Special hardware hooks */
 	void	(*sc_hwreset)(struct hme_softc *);
 	void	(*sc_hwinit)(struct hme_softc *);
 
-	krndsource_t	rnd_source;
+#if NRND > 0
+	rndsource_element_t	rnd_source;
+#endif
 };
 
 
 void	hme_config(struct hme_softc *);
+void	hme_reset(struct hme_softc *);
 int	hme_intr(void *);

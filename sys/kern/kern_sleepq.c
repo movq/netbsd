@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_sleepq.c,v 1.47 2012/07/27 05:36:13 matt Exp $	*/
+/*	$NetBSD: kern_sleepq.c,v 1.35.4.1 2012/02/04 16:57:58 bouyer Exp $	*/
 
 /*-
- * Copyright (c) 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -35,37 +35,29 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sleepq.c,v 1.47 2012/07/27 05:36:13 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sleepq.c,v 1.35.4.1 2012/02/04 16:57:58 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/cpu.h>
-#include <sys/intr.h>
 #include <sys/pool.h>
 #include <sys/proc.h> 
 #include <sys/resourcevar.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/sched.h>
 #include <sys/systm.h>
 #include <sys/sleepq.h>
 #include <sys/ktrace.h>
 
-/*
- * for sleepq_abort:
- * During autoconfiguration or after a panic, a sleep will simply lower the
- * priority briefly to allow interrupts, then return.  The priority to be
- * used (IPL_SAFEPRI) is machine-dependent, thus this value is initialized and
- * maintained in the machine-dependent layers.  This priority will typically
- * be 0, or the lowest priority that is safe for use on the interrupt stack;
- * it can be made higher to block network software interrupts after panics.
- */
-#ifndef	IPL_SAFEPRI
-#define	IPL_SAFEPRI	0
-#endif
+#include <uvm/uvm_extern.h>
 
-static int	sleepq_sigtoerror(lwp_t *, int);
+#include "opt_sa.h"
 
-/* General purpose sleep table, used by mtsleep() and condition variables. */
-sleeptab_t	sleeptab	__cacheline_aligned;
+int	sleepq_sigtoerror(lwp_t *, int);
+
+/* General purpose sleep table, used by ltsleep() and condition variables. */
+sleeptab_t	sleeptab;
 
 /*
  * sleeptab_init:
@@ -80,8 +72,8 @@ sleeptab_init(sleeptab_t *st)
 
 	for (i = 0; i < SLEEPTAB_HASH_SIZE; i++) {
 		sq = &st->st_queues[i].st_queue;
-		st->st_queues[i].st_mutex =
-		    mutex_obj_alloc(MUTEX_DEFAULT, IPL_SCHED);
+		mutex_init(&st->st_queues[i].st_mutex, MUTEX_DEFAULT,
+		    IPL_SCHED);
 		sleepq_init(sq);
 	}
 }
@@ -101,9 +93,11 @@ sleepq_init(sleepq_t *sq)
 /*
  * sleepq_remove:
  *
- *	Remove an LWP from a sleep queue and wake it up.
+ *	Remove an LWP from a sleep queue and wake it up.  Return non-zero if
+ *	the LWP is swapped out; if so the caller needs to awaken the swapper
+ *	to bring the LWP into memory.
  */
-void
+int
 sleepq_remove(sleepq_t *sq, lwp_t *l)
 {
 	struct schedstate_percpu *spc;
@@ -127,7 +121,7 @@ sleepq_remove(sleepq_t *sq, lwp_t *l)
 	if (l->l_stat != LSSLEEP) {
 		KASSERT(l->l_stat == LSSTOP || l->l_stat == LSSUSPENDED);
 		lwp_setlock(l, spc->spc_lwplock);
-		return;
+		return 0;
 	}
 
 	/*
@@ -138,7 +132,7 @@ sleepq_remove(sleepq_t *sq, lwp_t *l)
 		l->l_stat = LSONPROC;
 		l->l_slptime = 0;
 		lwp_setlock(l, spc->spc_lwplock);
-		return;
+		return 0;
 	}
 
 	/* Update sleep time delta, call the wake-up handler of scheduler */
@@ -155,11 +149,20 @@ sleepq_remove(sleepq_t *sq, lwp_t *l)
 	 */
 	spc_lock(ci);
 	lwp_setlock(l, spc->spc_mutex);
+#ifdef KERN_SA
+	if (l->l_proc->p_sa != NULL)
+		sa_awaken(l);
+#endif /* KERN_SA */
 	sched_setrunnable(l);
 	l->l_stat = LSRUN;
 	l->l_slptime = 0;
-	sched_enqueue(l, false);
+	if ((l->l_flag & LW_INMEM) != 0) {
+		sched_enqueue(l, false);
+		spc_unlock(ci);
+		return 0;
+	}
 	spc_unlock(ci);
+	return 1;
 }
 
 /*
@@ -167,14 +170,13 @@ sleepq_remove(sleepq_t *sq, lwp_t *l)
  *
  *	Insert an LWP into the sleep queue, optionally sorting by priority.
  */
-static void
+inline void
 sleepq_insert(sleepq_t *sq, lwp_t *l, syncobj_t *sobj)
 {
+	lwp_t *l2;
+	const int pri = lwp_eprio(l);
 
 	if ((sobj->sobj_flag & SOBJ_SLEEPQ_SORTED) != 0) {
-		lwp_t *l2;
-		const int pri = lwp_eprio(l);
-
 		TAILQ_FOREACH(l2, sq, l_sleepchain) {
 			if (lwp_eprio(l2) < pri) {
 				TAILQ_INSERT_BEFORE(l2, l, l_sleepchain);
@@ -256,10 +258,15 @@ sleepq_block(int timo, bool catch)
 		/* lwp_unsleep() will release the lock */
 		lwp_unsleep(l, true);
 	} else {
-		if (timo) {
+		if (timo)
 			callout_schedule(&l->l_timeout_ch, timo);
-		}
-		mi_switch(l);
+
+#ifdef KERN_SA
+		if (((l->l_flag & LW_SA) != 0) && (~l->l_pflag & LP_SA_NOBLOCK))
+			sa_switch(l);
+		else
+#endif
+			mi_switch(l);
 
 		/* The LWP and sleep queue are now unlocked. */
 		if (timo) {
@@ -309,6 +316,7 @@ lwp_t *
 sleepq_wake(sleepq_t *sq, wchan_t wchan, u_int expected, kmutex_t *mp)
 {
 	lwp_t *l, *next;
+	int swapin = 0;
 
 	KASSERT(mutex_owned(mp));
 
@@ -318,12 +326,20 @@ sleepq_wake(sleepq_t *sq, wchan_t wchan, u_int expected, kmutex_t *mp)
 		next = TAILQ_NEXT(l, l_sleepchain);
 		if (l->l_wchan != wchan)
 			continue;
-		sleepq_remove(sq, l);
+		swapin |= sleepq_remove(sq, l);
 		if (--expected == 0)
 			break;
 	}
 
 	mutex_spin_exit(mp);
+
+	/*
+	 * If there are newly awakend threads that need to be swapped in,
+	 * then kick the swapper into action.
+	 */
+	if (swapin)
+		uvm_kick_scheduler();
+
 	return l;
 }
 
@@ -334,19 +350,25 @@ sleepq_wake(sleepq_t *sq, wchan_t wchan, u_int expected, kmutex_t *mp)
  *	sleepq_unsleep() is called with the LWP's mutex held, and will
  *	always release it.
  */
-void
+u_int
 sleepq_unsleep(lwp_t *l, bool cleanup)
 {
 	sleepq_t *sq = l->l_sleepq;
 	kmutex_t *mp = l->l_mutex;
+	int swapin;
 
 	KASSERT(lwp_locked(l, mp));
 	KASSERT(l->l_wchan != NULL);
 
-	sleepq_remove(sq, l);
+	swapin = sleepq_remove(sq, l);
+
 	if (cleanup) {
 		mutex_spin_exit(mp);
+		if (swapin)
+			uvm_kick_scheduler();
 	}
+
+	return swapin;
 }
 
 /*
@@ -380,7 +402,7 @@ sleepq_timeout(void *arg)
  *
  *	Given a signal number, interpret and return an error code.
  */
-static int
+int
 sleepq_sigtoerror(lwp_t *l, int sig)
 {
 	struct proc *p = l->l_proc;
@@ -410,10 +432,11 @@ sleepq_sigtoerror(lwp_t *l, int sig)
 int
 sleepq_abort(kmutex_t *mtx, int unlock)
 { 
+	extern int safepri;
 	int s;
 
 	s = splhigh();
-	splx(IPL_SAFEPRI);
+	splx(safepri);
 	splx(s);
 	if (mtx != NULL && unlock != 0)
 		mutex_exit(mtx);
@@ -422,16 +445,26 @@ sleepq_abort(kmutex_t *mtx, int unlock)
 }
 
 /*
- * sleepq_reinsert:
+ * sleepq_changepri:
  *
- *	Move the possition of the lwp in the sleep queue after a possible
- *	change of the lwp's effective priority.
+ *	Adjust the priority of an LWP residing on a sleepq.  This method
+ *	will only alter the user priority; the effective priority is
+ *	assumed to have been fixed at the time of insertion into the queue.
  */
-static void
-sleepq_reinsert(sleepq_t *sq, lwp_t *l)
+void
+sleepq_changepri(lwp_t *l, pri_t pri)
 {
+	sleepq_t *sq = l->l_sleepq;
+	pri_t opri;
 
-	KASSERT(l->l_sleepq == sq);
+	KASSERT(lwp_locked(l, NULL));
+
+	opri = lwp_eprio(l);
+	l->l_priority = pri;
+
+	if (lwp_eprio(l) == opri) {
+		return;
+	}
 	if ((l->l_syncobj->sobj_flag & SOBJ_SLEEPQ_SORTED) == 0) {
 		return;
 	}
@@ -449,34 +482,33 @@ sleepq_reinsert(sleepq_t *sq, lwp_t *l)
 	sleepq_insert(sq, l, l->l_syncobj);
 }
 
-/*
- * sleepq_changepri:
- *
- *	Adjust the priority of an LWP residing on a sleepq.
- */
-void
-sleepq_changepri(lwp_t *l, pri_t pri)
-{
-	sleepq_t *sq = l->l_sleepq;
-
-	KASSERT(lwp_locked(l, NULL));
-
-	l->l_priority = pri;
-	sleepq_reinsert(sq, l);
-}
-
-/*
- * sleepq_changepri:
- *
- *	Adjust the lended priority of an LWP residing on a sleepq.
- */
 void
 sleepq_lendpri(lwp_t *l, pri_t pri)
 {
 	sleepq_t *sq = l->l_sleepq;
+	pri_t opri;
 
 	KASSERT(lwp_locked(l, NULL));
 
+	opri = lwp_eprio(l);
 	l->l_inheritedprio = pri;
-	sleepq_reinsert(sq, l);
+
+	if (lwp_eprio(l) == opri) {
+		return;
+	}
+	if ((l->l_syncobj->sobj_flag & SOBJ_SLEEPQ_SORTED) == 0) {
+		return;
+	}
+
+	/*
+	 * Don't let the sleep queue become empty, even briefly.
+	 * cv_signal() and cv_broadcast() inspect it without the
+	 * sleep queue lock held and need to see a non-empty queue
+	 * head if there are waiters.
+	 */
+	if (TAILQ_FIRST(sq) == l && TAILQ_NEXT(l, l_sleepchain) == NULL) {
+		return;
+	}
+	TAILQ_REMOVE(sq, l, l_sleepchain);
+	sleepq_insert(sq, l, l->l_syncobj);
 }

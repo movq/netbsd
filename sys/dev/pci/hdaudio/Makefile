@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2009/09/16 20:58:07 sborrill Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2009/10/18 18:24:31 snj Exp $
 
 INCSDIR= /usr/include/dev/pci/hdaudio
 

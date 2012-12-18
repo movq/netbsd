@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.41 2011/07/17 20:54:35 joerg Exp $
+#	$NetBSD: Makefile,v 1.37 2008/01/09 11:26:15 simonb Exp $
 
 # For now, we install the machine and arch includes, and symlink 'machine'
 # to the location of the machine includes (usually).
@@ -46,7 +46,7 @@ SUBDIR+= xen
 #	m68k mac68k macppc mips mipsco mmeye mvme68k \
 #	netwinder news68k newsmips next68k \
 #	ofppc \
-#	pmax powerpc prep \
+#	playstation2 pmax powerpc prep \
 #	sandpoint sbmips sgimips sh3 shark sparc sparc64 sun2 sun3 sun68k \
 #	rs6000 \
 #	vax \
@@ -55,6 +55,7 @@ SUBDIR+= xen
 
 INCSYMLINKS= ${MACHINE} /usr/include/machine
 
-INCSYMLINKS+= machine/float.h /usr/include/float.h
+INCSYMLINKS+= machine/float.h /usr/include/float.h \
+	machine/stdarg.h /usr/include/stdarg.h
 
 .include <bsd.kinc.mk>

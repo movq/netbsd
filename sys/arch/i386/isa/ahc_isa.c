@@ -1,4 +1,4 @@
-/*	$NetBSD: ahc_isa.c,v 1.39 2011/07/01 18:11:24 dyoung Exp $	*/
+/*	$NetBSD: ahc_isa.c,v 1.35 2008/04/28 20:23:24 martin Exp $	*/
 
 /*
  * Product specific probe and attach routines for:
@@ -110,7 +110,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahc_isa.c,v 1.39 2011/07/01 18:11:24 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahc_isa.c,v 1.35 2008/04/28 20:23:24 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -120,7 +120,7 @@ __KERNEL_RCSID(0, "$NetBSD: ahc_isa.c,v 1.39 2011/07/01 18:11:24 dyoung Exp $");
 #include <sys/malloc.h>
 #include <sys/reboot.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/scsipi/scsi_all.h>
@@ -162,12 +162,12 @@ __KERNEL_RCSID(0, "$NetBSD: ahc_isa.c,v 1.39 2011/07/01 18:11:24 dyoung Exp $");
 int	ahc_isa_idstring(bus_space_tag_t, bus_space_handle_t, char *);
 int	ahc_isa_match(struct isa_attach_args *, bus_addr_t);
 
-int	ahc_isa_probe(device_t, cfdata_t, void *);
-void	ahc_isa_attach(device_t, device_t, void *);
+int	ahc_isa_probe(struct device *, struct cfdata *, void *);
+void	ahc_isa_attach(struct device *, struct device *, void *);
 void	aha2840_load_seeprom(struct ahc_softc *ahc);
 static int verify_seeprom_cksum(struct seeprom_config *sc);
 
-CFATTACH_DECL_NEW(ahc_isa, sizeof(struct ahc_softc),
+CFATTACH_DECL(ahc_isa, sizeof(struct ahc_softc),
     ahc_isa_probe, ahc_isa_attach, NULL, NULL);
 
 /*
@@ -303,7 +303,7 @@ ahc_isa_match(struct isa_attach_args *ia, bus_addr_t iobase)
  * the actual probe routine to check it out.
  */
 int
-ahc_isa_probe(device_t parent, cfdata_t match, void *aux)
+ahc_isa_probe(struct device *parent, struct cfdata *match, void *aux)
 {       
 	struct isa_attach_args *ia = aux;
 	struct ahc_isa_slot *as;
@@ -360,9 +360,9 @@ ahc_isa_probe(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-ahc_isa_attach(device_t parent, device_t self, void *aux)
+ahc_isa_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ahc_softc *ahc = device_private(self);
+	struct ahc_softc *ahc = (void *)self;
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
@@ -371,7 +371,6 @@ ahc_isa_attach(device_t parent, device_t self, void *aux)
 	char idstring[EISA_IDSTRINGLEN];
 	u_char intdef;
 
-	ahc->sc_dev = self;
 	aprint_naive(": SCSI controller\n");
 
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, ia->ia_io[0].ir_size,
@@ -403,7 +402,7 @@ ahc_isa_attach(device_t parent, device_t self, void *aux)
 	 */
 	ahc->sc_dmaflags = ISABUS_DMA_32BIT;
 
-	ahc_set_name(ahc, device_xname(ahc->sc_dev));
+	ahc_set_name(ahc, device_xname(&ahc->sc_dev));
 	ahc->parent_dmat = ia->ia_dmat;
 	ahc->channel = 'A';
 	ahc->chip =  AHC_AIC7770|AHC_VL;
@@ -433,17 +432,17 @@ ahc_isa_attach(device_t parent, device_t self, void *aux)
 	ahc->ih = isa_intr_establish(ia->ia_ic, irq,
 	    intrtype, IPL_BIO, ahc_intr, ahc);
 	if (ahc->ih == NULL) {
-		aprint_error_dev(ahc->sc_dev, "couldn't establish %s interrupt\n",
+		aprint_error_dev(&ahc->sc_dev, "couldn't establish %s interrupt\n",
 		       intrtypestr);
 		goto free_io;
 	}
 
 	/*
 	 * Tell the user what type of interrupts we're using.
-	 * useful for debugging irq problems
+	 * usefull for debugging irq problems
 	 */
 	if (bootverbose) {
-		aprint_verbose_dev(ahc->sc_dev, "Using %s interrupts\n",
+		aprint_verbose_dev(&ahc->sc_dev, "Using %s interrupts\n",
 		       intrtypestr);
 	}
 

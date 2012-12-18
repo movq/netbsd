@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.15 2012/08/12 05:05:47 matt Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.10 2008/04/27 18:58:44 matt Exp $	*/
 
 /*
  * Copyright (c) 1995-1997 Mark Brinicombe.
@@ -35,32 +35,28 @@
  *
  * sys_machdep.c
  *
- * Machine dependent syscalls
+ * Machine dependant syscalls
  *
  * Created      : 10/01/96
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.15 2012/08/12 05:05:47 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.10 2008/04/27 18:58:44 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/mbuf.h>
 #include <sys/mount.h>
-#include <sys/cpu.h>
 #include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
 #include <sys/syscallargs.h>
 
 #include <machine/sysarch.h>
-#include <machine/pcb.h>
-#include <arm/vfpreg.h>
 
 /* Prototypes */
 static int arm32_sync_icache(struct lwp *, const void *, register_t *);
 static int arm32_drain_writebuf(struct lwp *, const void *, register_t *);
-static int arm32_vfp_fpscr(struct lwp *, const void *, register_t *);
 
 static int
 arm32_sync_icache(struct lwp *l, const void *args, register_t *retval)
@@ -89,34 +85,6 @@ arm32_drain_writebuf(struct lwp *l, const void *args, register_t *retval)
 	return(0);
 }
 
-static int
-arm32_vfp_fpscr(struct lwp *l, const void *uap, register_t *retval)
-{
-	struct pcb * const pcb = lwp_getpcb(l);
-
-#ifdef FPU_VFP
-	/*
-	 * Save the current VFP state (to make sure the FPSCR copy is
-	 * up to date).
-	 */
-	vfp_savecontext();
-#endif
-
-	retval[0] = pcb->pcb_vfp.vfp_fpscr;
-	if (uap) {
-		struct arm_vfp_fpscr_args ua;
-		int error;
-		if ((error = copyin(uap, &ua, sizeof(ua))) != 0)
-			return (error);
-		if (((ua.fpscr_clear|ua.fpscr_set) & ~VFP_FPSCR_RMODE) != 0)
-			return EINVAL;
-		pcb->pcb_vfp.vfp_fpscr &= ~ua.fpscr_clear;
-		pcb->pcb_vfp.vfp_fpscr |= ua.fpscr_set;
-	}
-
-	return 0;
-}
-
 int
 sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retval)
 {
@@ -135,10 +103,6 @@ sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retva
 		error = arm32_drain_writebuf(l, SCARG(uap, parms), retval);
 		break;
 
-	case ARM_VFP_FPSCR :
-		error = arm32_vfp_fpscr(l, SCARG(uap, parms), retval);
-		break;
-
 	default:
 		error = EINVAL;
 		break;
@@ -146,17 +110,4 @@ sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retva
 	return (error);
 }
   
-int
-cpu_lwp_setprivate(lwp_t *l, void *addr)
-{
-#ifdef _ARM_ARCH_6
-	if (l == curlwp) {
-		kpreempt_disable();
-		__asm("mcr p15, 0, %0, c13, c0, 3" : : "r" (addr));
-		kpreempt_enable();
-	}
-	return 0;
-#else
-	return 0;
-#endif
-}
+/* End of sys_machdep.c */

@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.76 2012/11/13 14:10:24 chs Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.68 2008/01/23 19:46:44 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -34,8 +34,8 @@
  *	@(#)vmparam.h	5.9 (Berkeley) 5/12/91
  */
 
-#ifndef _I386_VMPARAM_H_
-#define _I386_VMPARAM_H_
+#ifndef _VMPARAM_H_
+#define _VMPARAM_H_
 
 #include <sys/tree.h>
 #include <sys/mutex.h>
@@ -63,7 +63,7 @@
 /*
  * Virtual memory related constants, all in bytes
  */
-#define	MAXTSIZ		(256*1024*1024)		/* max text size */
+#define	MAXTSIZ		(64*1024*1024)		/* max text size */
 #ifndef DFLDSIZ
 #define	DFLDSIZ		(256*1024*1024)		/* initial data size limit */
 #endif
@@ -86,6 +86,13 @@
 #define I386_MAX_EXE_ADDR	(USRSTACK - MAXSSIZ)
 
 /*
+ * Size of shared memory map
+ */
+#ifndef SHMMAXPGS
+#define SHMMAXPGS	2048
+#endif
+
+/*
  * Size of User Raw I/O map
  */
 #define	USRIOSIZE 	300
@@ -100,7 +107,7 @@
 #define	VM_MAX_ADDRESS		\
 	((vaddr_t)((PDIR_SLOT_PTE << L2_SHIFT) + (PDIR_SLOT_PTE << L1_SHIFT)))
 #define	VM_MIN_KERNEL_ADDRESS	((vaddr_t)(PDIR_SLOT_KERN << L2_SHIFT))
-#define	VM_MAX_KERNEL_ADDRESS	((vaddr_t)((PDIR_SLOT_KERN + NKL2_MAX_ENTRIES) << L2_SHIFT))
+#define	VM_MAX_KERNEL_ADDRESS	((vaddr_t)(PDIR_SLOT_APTE << L2_SHIFT))
 
 /*
  * The address to which unspecified mapping requests default
@@ -122,15 +129,27 @@
 #define VM_PHYS_SIZE		(USRIOSIZE*PAGE_SIZE)
 
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BIGFIRST
+#define VM_PHYSSEG_NOADD		/* can't add RAM after vm_mem_init */
 
 #ifdef XEN
 #define	VM_PHYSSEG_MAX		1
 #define	VM_NFREELIST		1
 #else
-#define	VM_PHYSSEG_MAX		32	/* 1 "hole" + 31 free lists */
+#define	VM_PHYSSEG_MAX		10	/* 1 "hole" + 9 free lists */
 #define	VM_NFREELIST		2
 #define	VM_FREELIST_FIRST16	1
 #endif /* XEN */
 #define	VM_FREELIST_DEFAULT	0
 
-#endif /* _I386_VMPARAM_H_ */
+#include <x86/pmap_pv.h>
+
+#define	__HAVE_VM_PAGE_MD
+#define	VM_MDPAGE_INIT(pg) \
+	memset(&(pg)->mdpage, 0, sizeof((pg)->mdpage)); \
+	PMAP_PAGE_INIT(&(pg)->mdpage.mp_pp)
+
+struct vm_page_md {
+	struct pmap_page mp_pp;
+};
+
+#endif /* _VMPARAM_H_ */

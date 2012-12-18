@@ -1,4 +1,4 @@
-/*	$NetBSD: cs4280.c,v 1.65 2012/10/27 17:18:28 chs Exp $	*/
+/*	$NetBSD: cs4280.c,v 1.51 2008/03/21 08:20:04 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Tatoku Ogaito.  All rights reserved.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs4280.c,v 1.65 2012/10/27 17:18:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs4280.c,v 1.51 2008/03/21 08:20:04 dyoung Exp $");
 
 #include "midi.h"
 
@@ -64,10 +64,14 @@ __KERNEL_RCSID(0, "$NetBSD: cs4280.c,v 1.65 2012/10/27 17:18:28 chs Exp $");
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
-#include <sys/audioio.h>
-#include <sys/bus.h>
-#include <sys/bswap.h>
 
+#include <dev/pci/pcidevs.h>
+#include <dev/pci/pcivar.h>
+#include <dev/pci/cs4280reg.h>
+#include <dev/pci/cs4280_image.h>
+#include <dev/pci/cs428xreg.h>
+
+#include <sys/audioio.h>
 #include <dev/audio_if.h>
 #include <dev/midi_if.h>
 #include <dev/mulaw.h>
@@ -76,19 +80,17 @@ __KERNEL_RCSID(0, "$NetBSD: cs4280.c,v 1.65 2012/10/27 17:18:28 chs Exp $");
 #include <dev/ic/ac97reg.h>
 #include <dev/ic/ac97var.h>
 
-#include <dev/pci/pcidevs.h>
-#include <dev/pci/pcivar.h>
-#include <dev/pci/cs4280reg.h>
-#include <dev/pci/cs4280_image.h>
-#include <dev/pci/cs428xreg.h>
 #include <dev/pci/cs428x.h>
+
+#include <sys/bus.h>
+#include <sys/bswap.h>
 
 #define BA1READ4(sc, r) bus_space_read_4((sc)->ba1t, (sc)->ba1h, (r))
 #define BA1WRITE4(sc, r, x) bus_space_write_4((sc)->ba1t, (sc)->ba1h, (r), (x))
 
 /* IF functions for audio driver */
-static int  cs4280_match(device_t, cfdata_t, void *);
-static void cs4280_attach(device_t, device_t, void *);
+static int  cs4280_match(struct device *, struct cfdata *, void *);
+static void cs4280_attach(struct device *, struct device *, void *);
 static int  cs4280_intr(void *);
 static int  cs4280_query_encoding(void *, struct audio_encoding *);
 static int  cs4280_set_params(void *, int, int, audio_params_t *,
@@ -108,12 +110,12 @@ static int cs4280_reset_codec(void *);
 #endif
 static enum ac97_host_flags cs4280_flags_codec(void *);
 
-static bool cs4280_resume(device_t, const pmf_qual_t *);
-static bool cs4280_suspend(device_t, const pmf_qual_t *);
+static bool cs4280_resume(device_t PMF_FN_PROTO);
+static bool cs4280_suspend(device_t PMF_FN_PROTO);
 
 /* Internal functions */
-static const struct cs4280_card_t * cs4280_identify_card(const struct pci_attach_args *);
-static int  cs4280_piix4_match(const struct pci_attach_args *);
+static const struct cs4280_card_t * cs4280_identify_card(struct pci_attach_args *);
+static int  cs4280_piix4_match(struct pci_attach_args *);
 static void cs4280_clkrun_hack(struct cs428x_softc *, int);
 static void cs4280_clkrun_hack_init(struct cs428x_softc *);
 static void cs4280_set_adc_rate(struct cs428x_softc *, int );
@@ -185,7 +187,7 @@ static const struct audio_hw_if cs4280_hw_if = {
 	cs4280_trigger_output,
 	cs4280_trigger_input,
 	NULL,
-	cs428x_get_locks,
+	NULL,
 };
 
 #if NMIDI > 0
@@ -202,11 +204,10 @@ static const struct midi_hw_if cs4280_midi_hw_if = {
 	cs4280_midi_output,
 	cs4280_midi_getinfo,
 	0,
-	cs428x_get_locks,
 };
 #endif
 
-CFATTACH_DECL_NEW(clcs, sizeof(struct cs428x_softc),
+CFATTACH_DECL(clcs, sizeof(struct cs428x_softc),
     cs4280_match, cs4280_attach, NULL, NULL);
 
 static struct audio_device cs4280_device = {
@@ -217,7 +218,8 @@ static struct audio_device cs4280_device = {
 
 
 static int
-cs4280_match(device_t parent, cfdata_t match, void *aux)
+cs4280_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -234,40 +236,32 @@ cs4280_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-cs4280_attach(device_t parent, device_t self, void *aux)
+cs4280_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct cs428x_softc *sc;
 	struct pci_attach_args *pa;
 	pci_chipset_tag_t pc;
 	const struct cs4280_card_t *cs_card;
 	char const *intrstr;
-	const char *vendor, *product;
 	pcireg_t reg;
+	char devinfo[256];
 	uint32_t mem;
 	int error;
 
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (struct cs428x_softc *)self;
 	pa = (struct pci_attach_args *)aux;
 	pc = pa->pa_pc;
+	aprint_naive(": Audio controller\n");
 
-	pci_aprint_devinfo(pa, "Audio controller");
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
+	    PCI_REVISION(pa->pa_class));
 
 	cs_card = cs4280_identify_card(pa);
 	if (cs_card != NULL) {
-		vendor = pci_findvendor(cs_card->id);
-		product = pci_findproduct(cs_card->id); 
-		if (vendor == NULL)
-			aprint_normal_dev(sc->sc_dev,
-					  "vendor 0x%04x product 0x%04x\n",
-					  PCI_VENDOR(cs_card->id),
-					  PCI_PRODUCT(cs_card->id));
-		else if (product == NULL)
-			aprint_normal_dev(sc->sc_dev, "%s product 0x%04x\n",
-					  vendor, PCI_PRODUCT(cs_card->id));
-		else
-			aprint_normal_dev(sc->sc_dev, "%s %s\n",
-					  vendor, product);
+		aprint_normal_dev(&sc->sc_dev, "%s %s\n",
+			      pci_findvendor(cs_card->id),
+			      pci_findproduct(cs_card->id));
 		sc->sc_flags = cs_card->flags;
 	} else {
 		sc->sc_flags = CS428X_FLAG_NONE;
@@ -280,13 +274,13 @@ cs4280_attach(device_t parent, device_t self, void *aux)
 	if (pci_mapreg_map(pa, PCI_BA0,
 	    PCI_MAPREG_TYPE_MEM|PCI_MAPREG_MEM_TYPE_32BIT, 0,
 	    &sc->ba0t, &sc->ba0h, NULL, NULL)) {
-		aprint_error_dev(sc->sc_dev, "can't map BA0 space\n");
+		aprint_error_dev(&sc->sc_dev, "can't map BA0 space\n");
 		return;
 	}
 	if (pci_mapreg_map(pa, PCI_BA1,
 	    PCI_MAPREG_TYPE_MEM|PCI_MAPREG_MEM_TYPE_32BIT, 0,
 	    &sc->ba1t, &sc->ba1h, NULL, NULL)) {
-		aprint_error_dev(sc->sc_dev, "can't map BA1 space\n");
+		aprint_error_dev(&sc->sc_dev, "can't map BA1 space\n");
 		return;
 	}
 
@@ -295,7 +289,7 @@ cs4280_attach(device_t parent, device_t self, void *aux)
 	/* power up chip */
 	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, self,
 	    pci_activate_null)) && error != EOPNOTSUPP) {
-		aprint_error_dev(sc->sc_dev, "cannot activate %d\n", error);
+		aprint_error_dev(&sc->sc_dev, "cannot activate %d\n", error);
 		return;
 	}
 
@@ -317,33 +311,25 @@ cs4280_attach(device_t parent, device_t self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &sc->intrh)) {
-		aprint_error_dev(sc->sc_dev, "couldn't map interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, sc->intrh);
 
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
-
 	sc->sc_ih = pci_intr_establish(sc->sc_pc, sc->intrh, IPL_AUDIO,
 	    cs4280_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
-		mutex_destroy(&sc->sc_lock);
-		mutex_destroy(&sc->sc_intr_lock);
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	/* Initialization */
-	if(cs4280_init(sc, 1) != 0) {
-		mutex_destroy(&sc->sc_lock);
-		mutex_destroy(&sc->sc_intr_lock);
+	if(cs4280_init(sc, 1) != 0)
 		return;
-	}
 
 	sc->type = TYPE_CS4280;
 	sc->halt_input  = cs4280_halt_input;
@@ -365,15 +351,15 @@ cs4280_attach(device_t parent, device_t self, void *aux)
 	sc->host_if.reset  = NULL;
 #endif
 	sc->host_if.flags  = cs4280_flags_codec;
-	if (ac97_attach(&sc->host_if, self, &sc->sc_lock) != 0) {
-		aprint_error_dev(sc->sc_dev, "ac97_attach failed\n");
+	if (ac97_attach(&sc->host_if, self) != 0) {
+		aprint_error_dev(&sc->sc_dev, "ac97_attach failed\n");
 		return;
 	}
 
-	audio_attach_mi(&cs4280_hw_if, sc, sc->sc_dev);
+	audio_attach_mi(&cs4280_hw_if, sc, &sc->sc_dev);
 
 #if NMIDI > 0
-	midi_attach_mi(&cs4280_midi_hw_if, sc, sc->sc_dev);
+	midi_attach_mi(&cs4280_midi_hw_if, sc, &sc->sc_dev);
 #endif
 
 	if (!pmf_device_register(self, cs4280_suspend, cs4280_resume))
@@ -413,18 +399,13 @@ cs4280_intr(void *p)
 
 	sc = p;
 	handled = 0;
-
-	mutex_spin_enter(&sc->sc_intr_lock);
-
 	/* grab interrupt register then clear it */
 	intr = BA0READ4(sc, CS4280_HISR);
 	BA0WRITE4(sc, CS4280_HICR, HICR_CHGM | HICR_IEV);
 
 	/* not for us ? */
-	if ((intr & HISR_INTENA) == 0) {
-		mutex_spin_exit(&sc->sc_intr_lock);
+	if ((intr & HISR_INTENA) == 0)
 		return 0;
-	}
 
 	/* Playback Interrupt */
 	if (intr & HISR_PINT) {
@@ -444,7 +425,7 @@ cs4280_intr(void *p)
 			if (sc->sc_pn >= sc->sc_pe)
 				sc->sc_pn = sc->sc_ps;
 		} else {
-			aprint_error_dev(sc->sc_dev, "unexpected play intr\n");
+			aprint_error_dev(&sc->sc_dev, "unexpected play intr\n");
 		}
 		BA1WRITE4(sc, CS4280_PFIE, mem);
 	}
@@ -506,7 +487,7 @@ cs4280_intr(void *p)
 				break;
 			default:
 				/* Should not reach here */
-				aprint_error_dev(sc->sc_dev,
+				aprint_error_dev(&sc->sc_dev,
 				    "unknown sc->sc_rparam: %d\n",
 				    sc->sc_rparam);
 			}
@@ -519,7 +500,7 @@ cs4280_intr(void *p)
 			if ((sc->sc_ri%(sc->sc_rcount)) == 0)
 				sc->sc_rintr(sc->sc_rarg);
 		} else {
-			aprint_error_dev(sc->sc_dev,
+			aprint_error_dev(&sc->sc_dev,
 			    "unexpected record intr\n");
 		}
 	}
@@ -562,7 +543,6 @@ cs4280_intr(void *p)
 	}
 #endif
 
-	mutex_spin_exit(&sc->sc_intr_lock);
 	return handled;
 }
 
@@ -929,12 +909,9 @@ cs4280_trigger_input(void *addr, void *start, void *end, int blksize,
 }
 
 static bool
-cs4280_suspend(device_t dv, const pmf_qual_t *qual)
+cs4280_suspend(device_t dv PMF_FN_ARGS)
 {
 	struct cs428x_softc *sc = device_private(dv);
-
-	mutex_exit(&sc->sc_lock);
-	mutex_spin_enter(&sc->sc_intr_lock);
 
 	if (sc->sc_prun) {
 		sc->sc_suspend_state.cs4280.pctl = BA1READ4(sc, CS4280_PCTL);
@@ -963,23 +940,20 @@ cs4280_suspend(device_t dv, const pmf_qual_t *qual)
 	BA1WRITE4(sc, CS4280_PCTL, sc->sc_suspend_state.cs4280.pctl & ~PCTL_MASK);
 	BA1WRITE4(sc, CS4280_CCTL, BA1READ4(sc, CS4280_CCTL) & ~CCTL_MASK);
 
-	mutex_spin_exit(&sc->sc_intr_lock);
-	mutex_exit(&sc->sc_lock);
-
 	return true;
 }
 
 static bool
-cs4280_resume(device_t dv, const pmf_qual_t *qual)
+cs4280_resume(device_t dv PMF_FN_ARGS)
 {
 	struct cs428x_softc *sc = device_private(dv);
 
-	mutex_exit(&sc->sc_lock);
-	mutex_spin_enter(&sc->sc_intr_lock);
 	cs4280_init(sc, 0);
 #if 0
 	cs4280_reset_codec(sc);
 #endif
+	/* restore ac97 registers */
+	(*sc->codec_if->vtbl->restore_ports)(sc->codec_if);
 
 	/* restore DMA related status */
 	if(sc->sc_prun) {
@@ -1005,13 +979,6 @@ cs4280_resume(device_t dv, const pmf_qual_t *qual)
 		BA1WRITE4(sc, CS4280_CIE,  sc->sc_suspend_state.cs4280.cie);
 		BA1WRITE4(sc, CS4280_CCTL, sc->sc_suspend_state.cs4280.cctl);
 	}
-
-	mutex_spin_exit(&sc->sc_intr_lock);
-
-	/* restore ac97 registers */
-	(*sc->codec_if->vtbl->restore_ports)(sc->codec_if);
-
-	mutex_exit(&sc->sc_lock);
 
 	return true;
 }
@@ -1083,8 +1050,7 @@ cs4280_reset_codec(void *addr)
 }
 #endif
 
-static enum ac97_host_flags
-cs4280_flags_codec(void *addr)
+static enum ac97_host_flags cs4280_flags_codec(void *addr)
 {
 	struct cs428x_softc *sc;
 
@@ -1098,7 +1064,7 @@ cs4280_flags_codec(void *addr)
 /* Internal functions */
 
 static const struct cs4280_card_t *
-cs4280_identify_card(const struct pci_attach_args *pa)
+cs4280_identify_card(struct pci_attach_args *pa)
 {
 	pcireg_t idreg;
 	u_int16_t i;
@@ -1113,7 +1079,7 @@ cs4280_identify_card(const struct pci_attach_args *pa)
 }
 
 static int
-cs4280_piix4_match(const struct pci_attach_args *pa)
+cs4280_piix4_match(struct pci_attach_args *pa)
 {
 	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_INTEL &&
 	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_INTEL_82371AB_PMC) {
@@ -1153,11 +1119,11 @@ cs4280_clkrun_hack_init(struct cs428x_softc *sc)
 
 	if (pci_find_device(&smbuspa, cs4280_piix4_match)) {
 		sc->sc_active = 0;
-		aprint_normal_dev(sc->sc_dev, "enabling CLKRUN hack\n");
+		aprint_normal_dev(&sc->sc_dev, "enabling CLKRUN hack\n");
 
 		reg = pci_conf_read(smbuspa.pa_pc, smbuspa.pa_tag, 0x40);
 		port = reg & 0xffc0;
-		aprint_normal_dev(sc->sc_dev, "power management port 0x%x\n",
+		aprint_normal_dev(&sc->sc_dev, "power management port 0x%x\n",
 		    port);
 
 		sc->sc_pm_iot = smbuspa.pa_iot;
@@ -1168,7 +1134,7 @@ cs4280_clkrun_hack_init(struct cs428x_softc *sc)
 
 	/* handle error */
 	sc->sc_flags &= ~CS428X_FLAG_CLKRUNHACK;
-	aprint_normal_dev(sc->sc_dev, "disabling CLKRUN hack\n");
+	aprint_normal_dev(&sc->sc_dev, "disabling CLKRUN hack\n");
 }
 
 static void
@@ -1383,7 +1349,7 @@ cs4280_download_image(struct cs428x_softc *sc)
 				  BA1Struct.memory[idx].offset,
 				  BA1Struct.memory[idx].size);
 		if (err != 0) {
-			aprint_error_dev(sc->sc_dev,
+			aprint_error_dev(&sc->sc_dev,
 			    "load_image failed at %d\n", idx);
 			return -1;
 		}
@@ -1476,7 +1442,7 @@ cs4280_init(struct cs428x_softc *sc, int init)
 	while ((BA0READ4(sc, CS428X_ACSTS) & ACSTS_CRDY) == 0) {
 		delay(125);
 		if (++n > 1000) {
-			aprint_error_dev(sc->sc_dev, "codec ready timeout\n");
+			aprint_error_dev(&sc->sc_dev, "codec ready timeout\n");
 			goto exit;
 		}
 	}
@@ -1503,7 +1469,7 @@ cs4280_init(struct cs428x_softc *sc, int init)
 
 	/* Download the image to the processor */
 	if (cs4280_download_image(sc) != 0) {
-		aprint_error_dev(sc->sc_dev, "image download error\n");
+		aprint_error_dev(&sc->sc_dev, "image download error\n");
 		goto exit;
 	}
 
@@ -1654,8 +1620,7 @@ cs4280_midi_close(void *addr)
 
 	DPRINTF(("midi_close\n"));
 	sc = addr;
-	/* give uart a chance to drain */
-	kpause("cs0clm", false, hz/10, &sc->sc_intr_lock);
+	tsleep(sc, PWAIT, "cs0clm", hz/10); /* give uart a chance to drain */
 	mem = BA0READ4(sc, CS4280_MIDCR);
 	mem &= ~MIDCR_MASK;
 	BA0WRITE4(sc, CS4280_MIDCR, mem);
@@ -1745,7 +1710,7 @@ cs4280_check_images(struct cs428x_softc *sc)
 				      BA1Struct.memory[idx].offset,
 				      BA1Struct.memory[idx].size);
 		if (err != 0) {
-			aprint_error_dev(sc->sc_dev,
+			aprint_error_dev(&sc->sc_dev,
 			    "check_image failed at %d\n", idx);
 		}
 		offset += BA1Struct.memory[idx].size / sizeof(uint32_t);

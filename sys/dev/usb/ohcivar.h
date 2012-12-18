@@ -1,4 +1,5 @@
-/*	$NetBSD: ohcivar.h,v 1.53 2012/06/10 06:15:53 mrg Exp $	*/
+/*	$NetBSD: ohcivar.h,v 1.45 2008/06/28 17:42:53 bouyer Exp $	*/
+/*	$FreeBSD: src/sys/dev/usb/ohcivar.h,v 1.13 1999/11/17 22:33:41 n_hibma Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -86,10 +87,6 @@ typedef struct ohci_softc {
 	bus_space_handle_t ioh;
 	bus_size_t sc_size;
 
-	kmutex_t sc_lock;
-	kmutex_t sc_intr_lock;
-	void *sc_rhsc_si;
-
 	usb_dma_t sc_hccadma;
 	struct ohci_hcca *sc_hcca;
 	ohci_soft_ed_t *sc_eds[OHCI_NO_EDS];
@@ -112,8 +109,9 @@ typedef struct ohci_softc {
 #define	OHCI_BIG_ENDIAN		1	/* big endian OHCI? never seen it */
 #define	OHCI_HOST_ENDIAN	2	/* if OHCI always matches CPU */
 
+#ifdef USB_USE_SOFTINTR
 	char sc_softwake;
-	kcondvar_t sc_softwake_cv;
+#endif /* USB_USE_SOFTINTR */
 
 	ohci_soft_ed_t *sc_freeeds;
 	ohci_soft_td_t *sc_freetds;
@@ -123,7 +121,7 @@ typedef struct ohci_softc {
 
 	usbd_xfer_handle sc_intrxfer;
 
-	char sc_vendor[32];
+	char sc_vendor[16];
 	int sc_id_vendor;
 
 	u_int32_t sc_control;		/* Preserved during suspend/standby */
@@ -132,10 +130,14 @@ typedef struct ohci_softc {
 	u_int sc_overrun_cnt;
 	struct timeval sc_overrun_ntc;
 
-	struct callout sc_tmo_rhsc;
-	device_t sc_child;
+	usb_callout_t sc_tmo_rhsc;
+#if defined(__NetBSD__) || defined(__OpenBSD__)
+	device_ptr_t sc_child;
+#endif
 	char sc_dying;
+#ifdef __NetBSD__
 	struct usb_dma_reserve sc_dma_reserve;
+#endif
 } ohci_softc_t;
 
 struct ohci_xfer {
@@ -145,9 +147,11 @@ struct ohci_xfer {
 
 usbd_status	ohci_init(ohci_softc_t *);
 int		ohci_intr(void *);
+#if defined(__NetBSD__) || defined(__OpenBSD__)
 int		ohci_detach(ohci_softc_t *, int);
 bool		ohci_shutdown(device_t, int);
 void		ohci_childdet(device_t, device_t);
 int		ohci_activate(device_t, enum devact);
-bool		ohci_resume(device_t, const pmf_qual_t *);
-bool		ohci_suspend(device_t, const pmf_qual_t *);
+#endif
+bool		ohci_resume(device_t PMF_FN_PROTO);
+bool		ohci_suspend(device_t PMF_FN_PROTO);

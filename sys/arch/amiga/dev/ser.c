@@ -1,4 +1,4 @@
-/*	$NetBSD: ser.c,v 1.80 2012/10/27 17:17:31 chs Exp $ */
+/*	$NetBSD: ser.c,v 1.78 2008/06/11 12:59:10 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -40,7 +40,7 @@
 #include "opt_kgdb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ser.c,v 1.80 2012/10/27 17:17:31 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ser.c,v 1.78 2008/06/11 12:59:10 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,6 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: ser.c,v 1.80 2012/10/27 17:17:31 chs Exp $");
 #include <sys/tty.h>
 #include <sys/proc.h>
 #include <sys/file.h>
+#include <sys/malloc.h>
 #include <sys/uio.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
@@ -67,14 +68,15 @@ __KERNEL_RCSID(0, "$NetBSD: ser.c,v 1.80 2012/10/27 17:17:31 chs Exp $");
 #include "ser.h"
 #if NSER > 0
 
-void serattach(device_t, device_t, void *);
-int sermatch(device_t, cfdata_t, void *);
+void serattach(struct device *, struct device *, void *);
+int sermatch(struct device *, struct cfdata *, void *);
 
 struct ser_softc {
+	struct device dev;
 	struct tty *ser_tty;
 };
 
-CFATTACH_DECL_NEW(ser, sizeof(struct ser_softc),
+CFATTACH_DECL(ser, sizeof(struct ser_softc),
     sermatch, serattach, NULL, NULL);
 
 extern struct cfdriver ser_cd;
@@ -188,13 +190,13 @@ long	sermintcount[16];
 void	sermint(register int unit);
 
 int
-sermatch(device_t parent, cfdata_t cf, void *aux)
+sermatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	static int ser_matched = 0;
 	static int ser_matched_real = 0;
 
 	/* Allow only once instance. */
-	if (matchname("ser", (char *)aux) == 0)
+	if (matchname("ser", (char *)auxp) == 0)
 		return(0);
 
 	if (amiga_realconfig) {
@@ -215,13 +217,13 @@ sermatch(device_t parent, cfdata_t cf, void *aux)
 
 
 void
-serattach(device_t parent, device_t self, void *aux)
+serattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	struct ser_softc *sc;
 	struct tty *tp;
 	u_short ir;
 
-	sc = device_private(self);
+	sc = device_private(dp);
 
 	ir = custom.intenar;
 	if (serconsole == 0)
@@ -255,14 +257,14 @@ serattach(device_t parent, device_t self, void *aux)
 	if (0 == serconsole)
 		serconsinit = 0;
 
-	tp = tty_alloc();
+	tp = ttymalloc();
 	tp->t_oproc = (void (*) (struct tty *)) serstart;
 	tp->t_param = serparam;
 	tp->t_hwiflow = serhwiflow;
 	tty_attach(tp);
 	sc->ser_tty = ser_tty = tp;
 
-	if (self)
+	if (dp)
 		printf(": input fifo %d output fifo %d\n", SERIBUF_SIZE,
 		    SEROBUF_SIZE);
 }
@@ -417,7 +419,7 @@ ser_shutdown(struct ser_softc *sc)
 #if not_yet
 	if (tp != &ser_cons) {
 		remove_vbl_function(&ser_vbl_node);
-		tty_free(tp);
+		ttyfree(tp);
 		ser_tty = (struct tty *) NULL;
 	}
 #endif

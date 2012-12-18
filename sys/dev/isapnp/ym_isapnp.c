@@ -1,4 +1,4 @@
-/*	$NetBSD: ym_isapnp.c,v 1.25 2011/06/02 14:12:25 tsutsui Exp $ */
+/*	$NetBSD: ym_isapnp.c,v 1.22 2008/04/08 20:09:27 cegger Exp $ */
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ym_isapnp.c,v 1.25 2011/06/02 14:12:25 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ym_isapnp.c,v 1.22 2008/04/08 20:09:27 cegger Exp $");
 
 #include "mpu_ym.h"
 
@@ -71,10 +71,10 @@ __KERNEL_RCSID(0, "$NetBSD: ym_isapnp.c,v 1.25 2011/06/02 14:12:25 tsutsui Exp $
 #include <dev/isa/wssreg.h>
 #include <dev/isa/ymvar.h>
 
-int	ym_isapnp_match(device_t, cfdata_t, void *);
-void	ym_isapnp_attach(device_t, device_t, void *);
+int	ym_isapnp_match(struct device *, struct cfdata *, void *);
+void	ym_isapnp_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ym_isapnp, sizeof(struct ym_softc),
+CFATTACH_DECL(ym_isapnp, sizeof(struct ym_softc),
     ym_isapnp_match, ym_isapnp_attach, NULL, NULL);
 
 /*
@@ -85,7 +85,8 @@ CFATTACH_DECL_NEW(ym_isapnp, sizeof(struct ym_softc),
  * Probe for the Yamaha hardware.
  */
 int
-ym_isapnp_match(device_t parent, cfdata_t match, void *aux)
+ym_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -100,7 +101,7 @@ ym_isapnp_match(device_t parent, cfdata_t match, void *aux)
  * pseudo-device driver.
  */
 void
-ym_isapnp_attach(device_t parent, device_t self, void *aux)
+ym_isapnp_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ym_softc *sc;
 	struct ad1848_softc *ac;
@@ -108,7 +109,6 @@ ym_isapnp_attach(device_t parent, device_t self, void *aux)
 
 	sc = device_private(self);
 	ac = &sc->sc_ad1848.sc_ad1848;
-	ac->sc_dev = self;
 	ipa = aux;
 	printf("\n");
 

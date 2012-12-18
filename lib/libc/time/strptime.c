@@ -1,4 +1,4 @@
-/*	$NetBSD: strptime.c,v 1.36 2012/03/13 21:13:48 christos Exp $	*/
+/*	$NetBSD: strptime.c,v 1.28 2008/04/28 20:23:01 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2005, 2008 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: strptime.c,v 1.36 2012/03/13 21:13:48 christos Exp $");
+__RCSID("$NetBSD: strptime.c,v 1.28 2008/04/28 20:23:01 martin Exp $");
 #endif
 
 #include "namespace.h"
@@ -41,7 +41,6 @@ __RCSID("$NetBSD: strptime.c,v 1.36 2012/03/13 21:13:48 christos Exp $");
 #include <string.h>
 #include <time.h>
 #include <tzfile.h>
-#include "private.h"
 
 #ifdef __weak_alias
 __weak_alias(strptime,_strptime)
@@ -57,15 +56,7 @@ __weak_alias(strptime,_strptime)
 #define ALT_O			0x02
 #define	LEGAL_ALT(x)		{ if (alt_format & ~(x)) return NULL; }
 
-static char gmt[] = { "GMT" };
-static char utc[] = { "UTC" };
-/* RFC-822/RFC-2822 */
-static const char * const nast[5] = {
-       "EST",    "CST",    "MST",    "PST",    "\0\0\0"
-};
-static const char * const nadt[5] = {
-       "EDT",    "CDT",    "MDT",    "PDT",    "\0\0\0"
-};
+static const char gmt[4] = { "GMT" };
 
 static const u_char *conv_num(const unsigned char *, int *, uint, uint);
 static const u_char *find_string(const u_char *, int *, const char * const *,
@@ -76,8 +67,8 @@ char *
 strptime(const char *buf, const char *fmt, struct tm *tm)
 {
 	unsigned char c;
-	const unsigned char *bp, *ep;
-	int alt_format, i, split_year = 0, neg = 0, offs;
+	const unsigned char *bp;
+	int alt_format, i, split_year = 0;
 	const char *new_fmt;
 
 	bp = (const u_char *)buf;
@@ -250,36 +241,6 @@ literal:
 			LEGAL_ALT(ALT_O);
 			continue;
 
-#ifndef TIME_MAX
-#define TIME_MAX	INT64_MAX
-#endif
-		case 's':	/* seconds since the epoch */
-			{
-				time_t sse = 0;
-				uint64_t rulim = TIME_MAX;
-
-				if (*bp < '0' || *bp > '9') {
-					bp = NULL;
-					continue;
-				}
-
-				do {
-					sse *= 10;
-					sse += *bp++ - '0';
-					rulim /= 10;
-				} while ((sse * 10 <= TIME_MAX) &&
-					 rulim && *bp >= '0' && *bp <= '9');
-
-				if (sse < 0 || (uint64_t)sse > TIME_MAX) {
-					bp = NULL;
-					continue;
-				}
-
-				if (localtime_r(&sse, tm) == NULL)
-					bp = NULL;
-			}
-			continue;
-
 		case 'U':	/* The week of year, beginning on sunday. */
 		case 'W':	/* The week of year, beginning on monday. */
 			/*
@@ -295,30 +256,6 @@ literal:
 		case 'w':	/* The day of week, beginning on sunday. */
 			bp = conv_num(bp, &tm->tm_wday, 0, 6);
 			LEGAL_ALT(ALT_O);
-			continue;
-
-		case 'u':	/* The day of week, monday = 1. */
-			bp = conv_num(bp, &i, 1, 7);
-			tm->tm_wday = i % 7;
-			LEGAL_ALT(ALT_O);
-			continue;
-
-		case 'g':	/* The year corresponding to the ISO week
-				 * number but without the century.
-				 */
-			bp = conv_num(bp, &i, 0, 99);
-			continue;
-
-		case 'G':	/* The year corresponding to the ISO week
-				 * number with century.
-				 */
-			do
-				bp++;
-			while (isdigit(*bp));
-			continue;
-
-		case 'V':	/* The ISO 8601:1988 week number as decimal */
-			bp = conv_num(bp, &i, 0, 53);
 			continue;
 
 		case 'Y':	/* The year. */
@@ -357,6 +294,8 @@ literal:
 #endif
 				bp += 3;
 			} else {
+				const unsigned char *ep;
+
 				ep = find_string(bp, &i,
 					       	 (const char * const *)tzname,
 					       	  NULL, 2);
@@ -371,135 +310,6 @@ literal:
 				}
 				bp = ep;
 			}
-			continue;
-
-		case 'z':
-			/*
-			 * We recognize all ISO 8601 formats:
-			 * Z	= Zulu time/UTC
-			 * [+-]hhmm
-			 * [+-]hh:mm
-			 * [+-]hh
-			 * We recognize all RFC-822/RFC-2822 formats:
-			 * UT|GMT
-			 *          North American : UTC offsets
-			 * E[DS]T = Eastern : -4 | -5
-			 * C[DS]T = Central : -5 | -6
-			 * M[DS]T = Mountain: -6 | -7
-			 * P[DS]T = Pacific : -7 | -8
-			 *          Military
-			 * [A-IL-M] = -1 ... -9 (J not used)
-			 * [N-Y]  = +1 ... +12
-			 */
-			while (isspace(*bp))
-				bp++;
-
-			switch (*bp++) {
-			case 'G':
-				if (*bp++ != 'M')
-					return NULL;
-				/*FALLTHROUGH*/
-			case 'U':
-				if (*bp++ != 'T')
-					return NULL;
-				/*FALLTHROUGH*/
-			case 'Z':
-				tm->tm_isdst = 0;
-#ifdef TM_GMTOFF
-				tm->TM_GMTOFF = 0;
-#endif
-#ifdef TM_ZONE
-				tm->TM_ZONE = utc;
-#endif
-				continue;
-			case '+':
-				neg = 0;
-				break;
-			case '-':
-				neg = 1;
-				break;
-			default:
-				--bp;
-				ep = find_string(bp, &i, nast, NULL, 4);
-				if (ep != NULL) {
-#ifdef TM_GMTOFF
-					tm->TM_GMTOFF = -5 - i;
-#endif
-#ifdef TM_ZONE
-					tm->TM_ZONE = __UNCONST(nast[i]);
-#endif
-					bp = ep;
-					continue;
-				}
-				ep = find_string(bp, &i, nadt, NULL, 4);
-				if (ep != NULL) {
-					tm->tm_isdst = 1;
-#ifdef TM_GMTOFF
-					tm->TM_GMTOFF = -4 - i;
-#endif
-#ifdef TM_ZONE
-					tm->TM_ZONE = __UNCONST(nadt[i]);
-#endif
-					bp = ep;
-					continue;
-				}
-
-				if ((*bp >= 'A' && *bp <= 'I') ||
-				    (*bp >= 'L' && *bp <= 'Y')) {
-#ifdef TM_GMTOFF
-					/* Argh! No 'J'! */
-					if (*bp >= 'A' && *bp <= 'I')
-						tm->TM_GMTOFF =
-						    ('A' - 1) - (int)*bp;
-					else if (*bp >= 'L' && *bp <= 'M')
-						tm->TM_GMTOFF = 'A' - (int)*bp;
-					else if (*bp >= 'N' && *bp <= 'Y')
-						tm->TM_GMTOFF = (int)*bp - 'M';
-#endif
-#ifdef TM_ZONE
-					tm->TM_ZONE = NULL; /* XXX */
-#endif
-					bp++;
-					continue;
-				}
-				return NULL;
-			}
-			offs = 0;
-			for (i = 0; i < 4; ) {
-				if (isdigit(*bp)) {
-					offs = offs * 10 + (*bp++ - '0');
-					i++;
-					continue;
-				}
-				if (i == 2 && *bp == ':') {
-					bp++;
-					continue;
-				}
-				break;
-			}
-			switch (i) {
-			case 2:
-				offs *= 100;
-				break;
-			case 4:
-				i = offs % 100;
-				if (i >= 60)
-					return NULL;
-				/* Convert minutes into decimal */
-				offs = (offs / 100) * 100 + (i * 50) / 30;
-				break;
-			default:
-				return NULL;
-			}
-			if (neg)
-				offs = -offs;
-			tm->tm_isdst = 0;	/* XXX */
-#ifdef TM_GMTOFF
-			tm->TM_GMTOFF = offs;
-#endif
-#ifdef TM_ZONE
-			tm->TM_ZONE = NULL;	/* XXX */
-#endif
 			continue;
 
 		/*
@@ -554,7 +364,7 @@ find_string(const u_char *bp, int *tgt, const char * const *n1,
 		const char * const *n2, int c)
 {
 	int i;
-	size_t len;
+	unsigned int len;
 
 	/* check full name - then abbreviated ones */
 	for (; n1 != NULL; n1 = n2, n2 = NULL) {

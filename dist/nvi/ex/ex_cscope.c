@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_cscope.c,v 1.8 2011/06/22 03:57:46 mrg Exp $ */
+/*	$NetBSD: ex_cscope.c,v 1.1.1.2.6.3 2009/11/28 16:03:26 bouyer Exp $ */
 
 /*-
  * Copyright (c) 1994, 1996
@@ -128,18 +128,18 @@ ex_cscope(SCR *sp, EXCMD *cmdp)
 
 	/* Skip leading whitespace. */
 	for (p = cmdp->argv[0]->bp, i = cmdp->argv[0]->len; i > 0; --i, ++p)
-		if (!ISBLANK((UCHAR_T)*p))
+		if (!isspace(*p))
 			break;
 	if (i == 0)
 		goto usage;
 
 	/* Skip the command to any arguments. */
 	for (cmd = p; i > 0; --i, ++p)
-		if (ISBLANK((UCHAR_T)*p))
+		if (isspace(*p))
 			break;
 	if (*p != '\0') {
 		*p++ = '\0';
-		for (; *p && ISBLANK((UCHAR_T)*p); ++p);
+		for (; *p && isspace(*p); ++p);
 	}
 
 	INT2CHAR(sp, cmd, STRLEN(cmd) + 1, np, nlen);
@@ -322,7 +322,7 @@ get_paths(SCR *sp, CSC *csc)
 		len = sb.st_size;
 		MALLOC_RET(sp, csc->pbuf, char *, len + 1);
 		if ((fd = open(buf, O_RDONLY, 0)) < 0 ||
-		    (size_t)read(fd, csc->pbuf, len) != len) {
+		    read(fd, csc->pbuf, len) != len) {
 			 msgq_str(sp, M_SYSERR, buf, "%s");
 			 if (fd >= 0)
 				(void)close(fd);
@@ -379,7 +379,7 @@ run_cscope(SCR *sp, CSC *csc, const char *dbname)
 	 * Cscope reads from to_cs[0] and writes to from_cs[1]; vi reads from
 	 * from_cs[0] and writes to to_cs[1].
 	 */
-	to_cs[0] = to_cs[1] = from_cs[0] = from_cs[1] = -1;
+	to_cs[0] = to_cs[1] = from_cs[0] = from_cs[0] = -1;
 	if (pipe(to_cs) < 0 || pipe(from_cs) < 0) {
 		msgq(sp, M_SYSERR, "pipe");
 		goto err;
@@ -606,8 +606,8 @@ create_cs_cmd(SCR *sp, const char *pattern, size_t *searchp)
 		goto usage;
 
 	/* Skip leading blanks, check for command character. */
-	for (; isblank((unsigned char)pattern[0]); ++pattern);
-	if (pattern[0] == '\0' || !isblank((unsigned char)pattern[1]))
+	for (; isblank(pattern[0]); ++pattern);
+	if (pattern[0] == '\0' || !isblank(pattern[1]))
 		goto usage;
 	for (*searchp = 0, p = CSCOPE_QUERIES;
 	    *p != '\0' && *p != pattern[0]; ++*searchp, ++p);
@@ -619,7 +619,7 @@ create_cs_cmd(SCR *sp, const char *pattern, size_t *searchp)
 	}
 
 	/* Skip <blank> characters to the pattern. */
-	for (p = pattern + 1; *p != '\0' && isblank((unsigned char)*p); ++p);
+	for (p = pattern + 1; *p != '\0' && isblank(*p); ++p);
 	if (*p == '\0') {
 usage:		(void)csc_help(sp, "find");
 		return (NULL);

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.26 2009/03/21 06:11:08 uwe Exp $	*/
+/*	$NetBSD: intr.h,v 1.25.10.1 2009/03/24 20:24:38 snj Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.

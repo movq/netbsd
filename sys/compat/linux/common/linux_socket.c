@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket.c,v 1.114 2012/06/20 15:03:18 christos Exp $	*/
+/*	$NetBSD: linux_socket.c,v 1.98.4.2 2009/11/28 15:45:02 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2008 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.114 2012/06/20 15:03:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.98.4.2 2009/11/28 15:45:02 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_inet.h"
@@ -70,12 +70,13 @@ __KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.114 2012/06/20 15:03:18 christos 
 #include <sys/kauth.h>
 #include <sys/syscallargs.h>
 #include <sys/ktrace.h>
-#include <sys/fcntl.h>
 
 #include <lib/libkern/libkern.h>
 
+#ifdef INET6
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
+#endif
 
 #include <compat/sys/socket.h>
 #include <compat/sys/sockio.h>
@@ -85,7 +86,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.114 2012/06/20 15:03:18 christos 
 #include <compat/linux/common/linux_signal.h>
 #include <compat/linux/common/linux_ioctl.h>
 #include <compat/linux/common/linux_socket.h>
-#include <compat/linux/common/linux_fcntl.h>
 #if !defined(__alpha__) && !defined(__amd64__)
 #include <compat/linux/common/linux_socketcall.h>
 #endif
@@ -124,8 +124,6 @@ static int linux_get_sa(struct lwp *, int, struct mbuf **,
 static int linux_sa_put(struct osockaddr *osa);
 static int linux_to_bsd_msg_flags(int);
 static int bsd_to_linux_msg_flags(int);
-static void linux_to_bsd_msghdr(struct linux_msghdr *, struct msghdr *);
-static void bsd_to_linux_msghdr(struct msghdr *, struct linux_msghdr *);
 
 static const int linux_to_bsd_domain_[LINUX_AF_MAX] = {
 	AF_UNSPEC,
@@ -202,13 +200,13 @@ static const struct {
 	{MSG_DONTWAIT,		LINUX_MSG_DONTWAIT},
 	{MSG_BCAST,		0},		/* not supported, clear */
 	{MSG_MCAST,		0},		/* not supported, clear */
-	{MSG_NOSIGNAL,		LINUX_MSG_NOSIGNAL},
 	{-1, /* not supp */	LINUX_MSG_PROBE},
 	{-1, /* not supp */	LINUX_MSG_FIN},
 	{-1, /* not supp */	LINUX_MSG_SYN},
 	{-1, /* not supp */	LINUX_MSG_CONFIRM},
 	{-1, /* not supp */	LINUX_MSG_RST},
 	{-1, /* not supp */	LINUX_MSG_ERRQUEUE},
+	{-1, /* not supp */	LINUX_MSG_NOSIGNAL},
 	{-1, /* not supp */	LINUX_MSG_MORE},
 };
 
@@ -299,52 +297,14 @@ linux_sys_socket(struct lwp *l, const struct linux_sys_socket_args *uap, registe
 		syscallarg(int) protocol;
 	} */
 	struct sys___socket30_args bsa;
-	struct sys_fcntl_args fsa;
-	register_t fretval[2];
-	int error, flags;
-
+	int error;
 
 	SCARG(&bsa, protocol) = SCARG(uap, protocol);
-	SCARG(&bsa, type) = SCARG(uap, type) & LINUX_SOCK_TYPE_MASK;
+	SCARG(&bsa, type) = SCARG(uap, type);
 	SCARG(&bsa, domain) = linux_to_bsd_domain(SCARG(uap, domain));
 	if (SCARG(&bsa, domain) == -1)
 		return EINVAL;
-	/*
-	 * Apparently linux uses this to talk to ISDN sockets. If we fail
-	 * now programs seems to handle it, but if we don't we are going
-	 * to fail when we bind and programs don't handle this well.
-	 */
-	if (SCARG(&bsa, domain) == AF_ROUTE && SCARG(&bsa, type) == SOCK_RAW)
-		return ENOTSUP;
-	flags = SCARG(uap, type) & ~LINUX_SOCK_TYPE_MASK;
-	if (flags & ~(LINUX_SOCK_CLOEXEC | LINUX_SOCK_NONBLOCK))
-		return EINVAL;
 	error = sys___socket30(l, &bsa, retval);
-
-	/*
-	 * Linux overloads the "type" parameter to include some
-	 * fcntl flags to be set on the file descriptor.
-	 * Process those if creating the socket succeeded.
-	 */
-
-	if (!error && flags & LINUX_SOCK_CLOEXEC) {
-		SCARG(&fsa, fd) = *retval;
-		SCARG(&fsa, cmd) = F_SETFD;
-		SCARG(&fsa, arg) = (void *)(uintptr_t)FD_CLOEXEC;
-		(void) sys_fcntl(l, &fsa, fretval);
-	}
-	if (!error && flags & LINUX_SOCK_NONBLOCK) {
-		SCARG(&fsa, fd) = *retval;
-		SCARG(&fsa, cmd) = F_SETFL;
-		SCARG(&fsa, arg) = (void *)(uintptr_t)O_NONBLOCK;
-		error = sys_fcntl(l, &fsa, fretval);
-		if (error) {
-			struct sys_close_args csa;
-
-			SCARG(&csa, fd) = *retval;
-			(void) sys_close(l, &csa, fretval);
-		}
-	}
 
 #ifdef INET6
 	/*
@@ -437,50 +397,24 @@ linux_sys_sendto(struct lwp *l, const struct linux_sys_sendto_args *uap, registe
 	return do_sys_sendmsg(l, SCARG(uap, s), &msg, bflags, retval);
 }
 
-static void
-linux_to_bsd_msghdr(struct linux_msghdr *lmsg, struct msghdr *bmsg)
-{
-	bmsg->msg_name = lmsg->msg_name;
-	bmsg->msg_namelen = lmsg->msg_namelen;
-	bmsg->msg_iov = lmsg->msg_iov;
-	bmsg->msg_iovlen = lmsg->msg_iovlen;
-	bmsg->msg_control = lmsg->msg_control;
-	bmsg->msg_controllen = lmsg->msg_controllen;
-	bmsg->msg_flags = lmsg->msg_flags;
-}
-
-static void
-bsd_to_linux_msghdr(struct msghdr *bmsg, struct linux_msghdr *lmsg)
-{
-	lmsg->msg_name = bmsg->msg_name;
-	lmsg->msg_namelen = bmsg->msg_namelen;
-	lmsg->msg_iov = bmsg->msg_iov;
-	lmsg->msg_iovlen = bmsg->msg_iovlen;
-	lmsg->msg_control = bmsg->msg_control;
-	lmsg->msg_controllen = bmsg->msg_controllen;
-	lmsg->msg_flags = bmsg->msg_flags;
-}
-
 int
 linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) s;
-		syscallarg(struct linux_msghdr *) msg;
+		syscallarg(struct msghdr *) msg;
 		syscallarg(u_int) flags;
 	} */
 	struct msghdr	msg;
-	struct linux_msghdr lmsg;
 	int		error;
 	int		bflags;
 	struct mbuf     *nam;
 	u_int8_t	*control;
 	struct mbuf     *ctl_mbuf = NULL;
 
-	error = copyin(SCARG(uap, msg), &lmsg, sizeof(lmsg));
+	error = copyin(SCARG(uap, msg), &msg, sizeof(msg));
 	if (error)
 		return error;
-	linux_to_bsd_msghdr(&lmsg, &msg);
 
 	msg.msg_flags = MSG_IOVUSRSPACE;
 
@@ -492,7 +426,7 @@ linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, regis
 		/* Some supported flag */
 		return EINVAL;
 
-	if (lmsg.msg_name) {
+	if (msg.msg_name) {
 		/* Read in and convert the sockaddr */
 		error = linux_get_sa(l, SCARG(uap, s), &nam, msg.msg_name,
 		    msg.msg_namelen);
@@ -505,7 +439,7 @@ linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, regis
 	/*
 	 * Handle cmsg if there is any.
 	 */
-	if (LINUX_CMSG_FIRSTHDR(&lmsg)) {
+	if (CMSG_FIRSTHDR(&msg)) {
 		struct linux_cmsghdr l_cmsg, *l_cc;
 		struct cmsghdr *cmsg;
 		ssize_t resid = msg.msg_controllen;
@@ -515,7 +449,7 @@ linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, regis
 		clen = MLEN;
 		control = mtod(ctl_mbuf, void *);
 
-		l_cc = LINUX_CMSG_FIRSTHDR(&lmsg);
+		l_cc = LINUX_CMSG_FIRSTHDR(&msg);
 		do {
 			error = copyin(l_cc, &l_cmsg, sizeof(l_cmsg));
 			if (error)
@@ -544,14 +478,6 @@ linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, regis
 				case LINUX_SCM_RIGHTS:
 					/* Linux SCM_RIGHTS is same as NetBSD */
 					break;
-
-				case LINUX_SCM_CREDENTIALS:
-					/* no native equivalent, just drop it */
-					m_free(ctl_mbuf);
-					ctl_mbuf = NULL;
-					msg.msg_control = NULL;
-					msg.msg_controllen = 0;
-					goto skipcmsg;
 
 				default:
 					/* other types not supported */
@@ -593,13 +519,13 @@ linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, regis
 			cmsg->cmsg_level = l_cmsg.cmsg_level;
 			cmsg->cmsg_type = l_cmsg.cmsg_type;
 
-			/* Zero area between header and data */
+			/* Zero are between header and data */
 			memset(cmsg + 1, 0, 
-				CMSG_ALIGN(sizeof(*cmsg)) - sizeof(*cmsg));
+				CMSG_ALIGN(sizeof(cmsg)) - sizeof(cmsg));
 
 			/* Copyin the data */
 			error = copyin(LINUX_CMSG_DATA(l_cc),
-				CMSG_DATA(cmsg),
+				CMSG_DATA(control),
 				l_cmsg.cmsg_len - sizeof(l_cmsg));
 			if (error)
 				goto done;
@@ -618,12 +544,8 @@ linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, regis
 
 		msg.msg_control = ctl_mbuf;
 		msg.msg_flags |= MSG_CONTROLMBUF;
-
-		ktrkuser("mbcontrol", mtod(ctl_mbuf, void *),
-		    msg.msg_controllen);
 	}
 
-skipcmsg:
 	error = do_sys_sendmsg(l, SCARG(uap, s), &msg, bflags, retval);
 	/* Freed internally */
 	ctl_mbuf = NULL;
@@ -682,8 +604,6 @@ linux_copyout_msg_control(struct lwp *l, struct msghdr *mp, struct mbuf *control
 		return 0;
 	}
 
-	ktrkuser("msgcontrol", mtod(control, void *), mp->msg_controllen);
-
 	q = (char *)mp->msg_control;
 	q_end = q + mp->msg_controllen;
 
@@ -728,7 +648,7 @@ linux_copyout_msg_control(struct lwp *l, struct msghdr *mp, struct mbuf *control
 				error = EINVAL;
 				goto done;
 			}
-			/* machine dependent ! */
+			/* machine dependant ! */
 			break;
 		default:
 			/* pray and leave intact */
@@ -736,7 +656,7 @@ linux_copyout_msg_control(struct lwp *l, struct msghdr *mp, struct mbuf *control
 		}
 
 		/* There can be padding between the header and data... */
-		error = copyout(&linux_cmsg, q, sizeof linux_cmsg);
+		error = copyout(&linux_cmsg, q, sizeof *cmsg);
 		if (error != 0) {
 			error = copyout(CCMSG_DATA(cmsg), q + sizeof linux_cmsg,
 			    dlen);
@@ -747,11 +667,11 @@ linux_copyout_msg_control(struct lwp *l, struct msghdr *mp, struct mbuf *control
 			break;
 		}
 		m = m->m_next;
-		if (m == NULL || q + LINUX_CMSG_SPACE(dlen) > q_end) {
-			q += LINUX_CMSG_LEN(dlen);
+		if (m == NULL || q + LINUX_CMSG_ALIGN(dlen) > q_end) {
+			q += dlen;
 			break;
 		}
-		q += LINUX_CMSG_SPACE(dlen);
+		q += LINUX_CMSG_ALIGN(dlen);
 	}
 
   done:
@@ -766,18 +686,16 @@ linux_sys_recvmsg(struct lwp *l, const struct linux_sys_recvmsg_args *uap, regis
 {
 	/* {
 		syscallarg(int) s;
-		syscallarg(struct linux_msghdr *) msg;
+		syscallarg(struct msghdr *) msg;
 		syscallarg(u_int) flags;
 	} */
 	struct msghdr	msg;
-	struct linux_msghdr lmsg;
 	int		error;
 	struct mbuf	*from, *control;
 
-	error = copyin(SCARG(uap, msg), &lmsg, sizeof(lmsg));
+	error = copyin(SCARG(uap, msg), &msg, sizeof(msg));
 	if (error)
 		return (error);
-	linux_to_bsd_msghdr(&lmsg, &msg);
 
 	msg.msg_flags = linux_to_bsd_msg_flags(SCARG(uap, flags));
 	if (msg.msg_flags < 0) {
@@ -810,11 +728,8 @@ linux_sys_recvmsg(struct lwp *l, const struct linux_sys_recvmsg_args *uap, regis
 		if (msg.msg_flags < 0)
 			/* Some flag unsupported by Linux */
 			error = EINVAL;
-		else {
-			ktrkuser("msghdr", &msg, sizeof(msg));
-			bsd_to_linux_msghdr(&msg, &lmsg);
-			error = copyout(&lmsg, SCARG(uap, msg), sizeof(lmsg));
-		}
+		else
+			error = copyout(&msg, SCARG(uap, msg), sizeof(msg));
 	}
 
 	return (error);
@@ -898,8 +813,6 @@ linux_to_bsd_ip_sockopt(int lopt)
 		return IP_TOS;
 	case LINUX_IP_TTL:
 		return IP_TTL;
-	case LINUX_IP_HDRINCL:
-		return IP_HDRINCL;
 	case LINUX_IP_MULTICAST_TTL:
 		return IP_MULTICAST_TTL;
 	case LINUX_IP_MULTICAST_LOOP:
@@ -1203,7 +1116,7 @@ linux_getifhwaddr(struct lwp *l, register_t *retval, u_int fd,
 
 	if (strncmp(lreq.ifr_name, "eth", 3) == 0) {
 		for (ifnum = 0, index = 3;
-		     index < LINUX_IFNAMSIZ && lreq.ifr_name[index] != '\0';
+		     lreq.ifr_name[index] != '\0' && index < LINUX_IFNAMSIZ;
 		     index++) {
 			ifnum *= 10;
 			ifnum += lreq.ifr_name[index] - '0';
@@ -1326,9 +1239,6 @@ linux_ioctl_socket(struct lwp *l, const struct linux_sys_ioctl_args *uap, regist
 	case LINUX_SIOCGIFNETMASK:
 		SCARG(&ia, com) = OOSIOCGIFNETMASK;
 		break;
-	case LINUX_SIOCGIFMTU:
-		SCARG(&ia, com) = OSIOCGIFMTU;
-		break;
 	case LINUX_SIOCADDMULTI:
 		SCARG(&ia, com) = OSIOCADDMULTI;
 		break;
@@ -1376,7 +1286,7 @@ linux_sys_connect(struct lwp *l, const struct linux_sys_connect_args *uap, regis
 
 	if (error == EISCONN) {
 		struct socket *so;
-		int state, prflags;
+		int state, prflags, nbio;
 
 		/* fd_getsock() will use the descriptor for us */
 	    	if (fd_getsock(SCARG(uap, s), &so) != 0)
@@ -1384,6 +1294,7 @@ linux_sys_connect(struct lwp *l, const struct linux_sys_connect_args *uap, regis
 
 		solock(so);
 		state = so->so_state;
+		nbio = so->so_nbio;
 		prflags = so->so_proto->pr_flags;
 		sounlock(so);
 		fd_putfile(SCARG(uap, s));
@@ -1392,8 +1303,7 @@ linux_sys_connect(struct lwp *l, const struct linux_sys_connect_args *uap, regis
 		 * non-blocking connect; however we don't have
 		 * a convenient place to keep that state..
 		 */
-		if ((state & (SS_ISCONNECTED|SS_NBIO)) ==
-		    (SS_ISCONNECTED|SS_NBIO) &&
+		if (nbio && (state & SS_ISCONNECTED) &&
 		    (prflags & PR_CONNREQUIRED))
 			return 0;
 	}
@@ -1495,7 +1405,7 @@ linux_get_sa(struct lwp *l, int s, struct mbuf **mp,
 		goto bad;
 	}
 
-	ktrkuser("linux/sockaddr", kosa, salen);
+	ktrkuser("linux sockaddr", kosa, salen);
 
 	bdom = linux_to_bsd_domain(kosa->sa_family);
 	if (bdom == -1) {
@@ -1521,6 +1431,7 @@ linux_get_sa(struct lwp *l, int s, struct mbuf **mp,
 		DPRINTF(("AF_UNSPEC family adjusted to %d\n", bdom));
 	}
 
+#ifdef INET6
 	/*
 	 * Older Linux IPv6 code uses obsolete RFC2133 struct sockaddr_in6,
 	 * which lacks the scope id compared with RFC2553 one. If we detect
@@ -1549,6 +1460,7 @@ linux_get_sa(struct lwp *l, int s, struct mbuf **mp,
 		salen = sizeof (struct sockaddr_in6);
 		sin6->sin6_scope_id = 0;
 	}
+#endif
 
 	if (bdom == AF_INET)
 		salen = sizeof(struct sockaddr_in);
@@ -1557,7 +1469,7 @@ linux_get_sa(struct lwp *l, int s, struct mbuf **mp,
 	sa->sa_family = bdom;
 	sa->sa_len = salen;
 	m->m_len = salen;
-	ktrkuser("mbsoname", kosa, salen);
+	ktrkuser("new sockaddr", kosa, salen);
 
 #ifdef DEBUG_LINUX
 	DPRINTF(("family %d, len = %d [ ", sa->sa_family, sa->sa_len));

@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_msgif.c,v 1.93 2012/11/05 17:27:38 dholland Exp $	*/
+/*	$NetBSD: puffs_msgif.c,v 1.72.4.5 2011/11/02 20:11:12 riz Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -30,11 +30,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_msgif.c,v 1.93 2012/11/05 17:27:38 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_msgif.c,v 1.72.4.5 2011/11/02 20:11:12 riz Exp $");
 
 #include <sys/param.h>
-#include <sys/kernel.h>
 #include <sys/atomic.h>
+#include <sys/fstrans.h>
 #include <sys/kmem.h>
 #include <sys/kthread.h>
 #include <sys/lock.h>
@@ -68,9 +68,6 @@ struct puffs_msgpark {
 	size_t			park_copylen;	/* userspace copylength	*/
 	size_t			park_maxlen;	/* max size in comeback */
 
-	struct puffs_req	*park_creq;	/* non-compat preq	*/
-	size_t			park_creqlen;	/* non-compat preq len	*/
-
 	parkdone_fn		park_done;	/* "biodone" a'la puffs	*/
 	void			*park_donearg;
 
@@ -95,8 +92,6 @@ static pool_cache_t parkpc;
 static int totalpark;
 #endif
 
-int puffs_sopreq_expire_timeout = PUFFS_SOPREQ_EXPIRE_TIMEOUT;
-
 static int
 makepark(void *arg, void *obj, int flags)
 {
@@ -118,7 +113,7 @@ nukepark(void *arg, void *obj)
 }
 
 void
-puffs_msgif_init(void)
+puffs_msgif_init()
 {
 
 	parkpc = pool_cache_init(sizeof(struct puffs_msgpark), 0, 0, 0,
@@ -126,11 +121,13 @@ puffs_msgif_init(void)
 }
 
 void
-puffs_msgif_destroy(void)
+puffs_msgif_destroy()
 {
 
 	pool_cache_destroy(parkpc);
 }
+
+static int alloced;
 
 static struct puffs_msgpark *
 puffs_msgpark_alloc(int waitok)
@@ -138,13 +135,12 @@ puffs_msgpark_alloc(int waitok)
 	struct puffs_msgpark *park;
 
 	KASSERT(curlwp != uvm.pagedaemon_lwp || !waitok);
-
 	park = pool_cache_get(parkpc, waitok ? PR_WAITOK : PR_NOWAIT);
 	if (park == NULL)
 		return park;
 
 	park->park_refcount = 1;
-	park->park_preq = park->park_creq = NULL;
+	park->park_preq = NULL;
 	park->park_flags = PARKFLAG_WANTREPLY;
 
 #ifdef PUFFSDEBUG
@@ -169,7 +165,6 @@ static void
 puffs_msgpark_release1(struct puffs_msgpark *park, int howmany)
 {
 	struct puffs_req *preq = park->park_preq;
-	struct puffs_req *creq = park->park_creq;
 	int refcnt;
 
 	KASSERT(mutex_owned(&park->park_mtx));
@@ -179,12 +174,9 @@ puffs_msgpark_release1(struct puffs_msgpark *park, int howmany)
 	KASSERT(refcnt >= 0);
 
 	if (refcnt == 0) {
+		alloced--;
 		if (preq)
 			kmem_free(preq, park->park_maxlen);
-#if 1
-		if (creq)
-			kmem_free(creq, park->park_creqlen);
-#endif
 		pool_cache_put(parkpc, park);
 
 #ifdef PUFFSDEBUG
@@ -337,32 +329,10 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 {
 	struct lwp *l = curlwp;
 	struct mount *mp;
-	struct puffs_req *preq, *creq;
-	ssize_t delta;
-
-	/*
-	 * Some clients reuse a park, so reset some flags.  We might
-	 * want to provide a caller-side interface for this and add
-	 * a few more invariant checks here, but this will do for now.
-	 */
-	park->park_flags &= ~(PARKFLAG_DONE | PARKFLAG_HASERROR);
-	KASSERT((park->park_flags & PARKFLAG_WAITERGONE) == 0);
+	struct puffs_req *preq;
 
 	mp = PMPTOMP(pmp);
 	preq = park->park_preq;
-
-#if 1
-	/* check if we do compat adjustments */
-	if (pmp->pmp_docompat && puffs_compat_outgoing(preq, &creq, &delta)) {
-		park->park_creq = park->park_preq;
-		park->park_creqlen = park->park_maxlen;
-
-		park->park_maxlen += delta;
-		park->park_copylen += delta;
-		park->park_preq = preq = creq;
-	}
-#endif
-
 	preq->preq_buflen = park->park_maxlen;
 	KASSERT(preq->preq_id == 0
 	    || (preq->preq_opclass & PUFFSOPFLAG_ISRESPONSE));
@@ -386,34 +356,65 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 	if (__predict_false((park->park_flags & PARKFLAG_WANTREPLY)
 	   && (park->park_flags & PARKFLAG_CALL) == 0
 	   && (l->l_flag & LW_PENDSIG) != 0 && sigispending(l, 0))) {
-		sigset_t ss;
+	       sigset_t ss;
 
-		/*
-		 * see the comment about signals in puffs_msg_wait.
-		 */
-		sigpending1(l, &ss);
-		if (sigismember(&ss, SIGINT) ||
-		    sigismember(&ss, SIGTERM) ||
-		    sigismember(&ss, SIGKILL) ||
-		    sigismember(&ss, SIGHUP) ||
-		    sigismember(&ss, SIGQUIT)) {
-			park->park_flags |= PARKFLAG_HASERROR;
-			preq->preq_rv = EINTR;
-			if (PUFFSOP_OPCLASS(preq->preq_opclass) == PUFFSOP_VN
-			    && (preq->preq_optype == PUFFS_VN_INACTIVE
-			     || preq->preq_optype == PUFFS_VN_RECLAIM)) {
-				park->park_preq->preq_opclass |=
-				    PUFFSOPFLAG_FAF;
-				park->park_flags &= ~PARKFLAG_WANTREPLY;
-				DPRINTF(("puffs_msg_enqueue: "
-				    "converted to FAF %p\n", park));
-			} else {
-				return;
-			}
+	       /*
+		* see the comment about signals in puffs_msg_wait.
+		*/
+	       sigpending1(l, &ss);
+	       if (sigismember(&ss, SIGINT) ||
+		   sigismember(&ss, SIGTERM) ||
+		   sigismember(&ss, SIGKILL) ||
+		   sigismember(&ss, SIGHUP) ||
+		   sigismember(&ss, SIGQUIT)) {
+		       park->park_flags |= PARKFLAG_HASERROR;
+		       preq->preq_rv = EINTR;
+		       if (PUFFSOP_OPCLASS(preq->preq_opclass) == PUFFSOP_VN
+			   && (preq->preq_optype == PUFFS_VN_INACTIVE
+			    || preq->preq_optype == PUFFS_VN_RECLAIM)) {
+			       park->park_preq->preq_opclass |=
+				   PUFFSOPFLAG_FAF;
+			       park->park_flags &= ~PARKFLAG_WANTREPLY;
+			       DPRINTF(("puffs_msg_enqueue: "
+				   "converted to FAF %p\n", park));
+		       } else {
+			       return;
+		       }
 		}
 	}
 
+	/*
+	 * test for suspension lock.
+	 *
+	 * Note that we *DO NOT* keep the lock, since that might block
+	 * lock acquiring PLUS it would give userlandia control over
+	 * the lock.  The operation queue enforces a strict ordering:
+	 * when the fs server gets in the op stream, it knows things
+	 * are in order.  The kernel locks can't guarantee that for
+	 * userspace, in any case.
+	 *
+	 * BUT: this presents a problem for ops which have a consistency
+	 * clause based on more than one operation.  Unfortunately such
+	 * operations (read, write) do not reliably work yet.
+	 *
+	 * Ya, Ya, it's wrong wong wrong, me be fixink this someday.
+	 *
+	 * XXX: and there is one more problem.  We sometimes need to
+	 * take a lazy lock in case the fs is suspending and we are
+	 * executing as the fs server context.  This might happen
+	 * e.g. in the case that the user server triggers a reclaim
+	 * in the kernel while the fs is suspending.  It's not a very
+	 * likely event, but it needs to be fixed some day.
+	 */
+
+	/*
+	 * MOREXXX: once PUFFS_WCACHEINFO is enabled, we can't take
+	 * the mutex here, since getpages() might be called locked.
+	 */
+	fstrans_start(mp, FSTRANS_NORMAL);
 	mutex_enter(&pmp->pmp_lock);
+	fstrans_done(mp);
+
 	if (pmp->pmp_status != PUFFSTAT_RUNNING) {
 		mutex_exit(&pmp->pmp_lock);
 		park->park_flags |= PARKFLAG_HASERROR;
@@ -449,9 +450,10 @@ puffs_msg_wait(struct puffs_mount *pmp, struct puffs_msgpark *park)
 {
 	lwp_t *l = curlwp;
 	proc_t *p = l->l_proc;
-	struct puffs_req *preq = park->park_preq; /* XXX: hmmm */
+        struct puffs_req *preq = park->park_preq; /* XXX: hmmm */
 	sigset_t ss;
 	sigset_t oss;
+	struct mount *mp = PMPTOMP(pmp);
 	int error = 0;
 	int rv;
 
@@ -476,18 +478,18 @@ puffs_msg_wait(struct puffs_mount *pmp, struct puffs_msgpark *park)
 	mutex_exit(&pmp->pmp_lock);
 
 	mutex_enter(&park->park_mtx);
+	if ((park->park_flags & PARKFLAG_WANTREPLY) == 0
+	    || (park->park_flags & PARKFLAG_CALL)) {
+		mutex_exit(&park->park_mtx);
+		rv = 0;
+		goto skipwait;
+	}
+
 	/* did the response beat us to the wait? */
 	if (__predict_false((park->park_flags & PARKFLAG_DONE)
 	    || (park->park_flags & PARKFLAG_HASERROR))) {
 		rv = park->park_preq->preq_rv;
 		mutex_exit(&park->park_mtx);
-		goto skipwait;
-	}
-
-	if ((park->park_flags & PARKFLAG_WANTREPLY) == 0
-	    || (park->park_flags & PARKFLAG_CALL)) {
-		mutex_exit(&park->park_mtx);
-		rv = 0;
 		goto skipwait;
 	}
 
@@ -537,6 +539,20 @@ puffs_msg_wait(struct puffs_mount *pmp, struct puffs_msgpark *park)
 	} else {
 		rv = preq->preq_rv;
 		mutex_exit(&park->park_mtx);
+	}
+
+	/*
+	 * retake the lock and release.  This makes sure (haha,
+	 * I'm humorous) that we don't process the same vnode in
+	 * multiple threads due to the locks hacks we have in
+	 * puffs_lock().  In reality this is well protected by
+	 * the biglock, but once that's gone, well, hopefully
+	 * this will be fixed for real.  (and when you read this
+	 * comment in 2017 and subsequently barf, my condolences ;).
+	 */
+	if (rv == 0 && !fstrans_is_owner(mp)) {
+		fstrans_start(mp, FSTRANS_NORMAL);
+		fstrans_done(mp);
 	}
 
  skipwait:
@@ -611,8 +627,8 @@ puffs_msgif_getout(void *this, size_t maxsize, int nonblock,
 	uint8_t **data, size_t *dlen, void **parkptr)
 {
 	struct puffs_mount *pmp = this;
-	struct puffs_msgpark *park = NULL;
-	struct puffs_req *preq = NULL;
+	struct puffs_msgpark *park;
+	struct puffs_req *preq;
 	int error;
 
 	error = 0;
@@ -804,31 +820,13 @@ puffsop_msg(void *this, struct puffs_req *preq)
 		DPRINTF(("puffsop_msg: bad service - waiter gone for "
 		    "park %p\n", park));
 	} else {
-#if 1
-		if (park->park_creq) {
-			struct puffs_req *creq;
-			size_t csize;
-
-			KASSERT(pmp->pmp_docompat);
-			puffs_compat_incoming(preq, park->park_creq);
-			creq = park->park_creq;
-			csize = park->park_creqlen;
-			park->park_creq = park->park_preq;
-			park->park_creqlen = park->park_maxlen;
-
-			park->park_preq = creq;
-			park->park_maxlen = csize;
-
-			memcpy(park->park_creq, preq, pth->pth_framelen);
-		} else {
-#endif
-			memcpy(park->park_preq, preq, pth->pth_framelen);
-		}
-
 		if (park->park_flags & PARKFLAG_CALL) {
 			DPRINTF(("puffsop_msg: call for %p, arg %p\n",
 			    park->park_preq, park->park_donearg));
 			park->park_done(pmp, preq, park->park_donearg);
+		} else {
+			/* XXX: yes, I know */
+			memcpy(park->park_preq, preq, pth->pth_framelen);
 		}
 	}
 
@@ -843,27 +841,60 @@ puffsop_msg(void *this, struct puffs_req *preq)
 }
 
 /*
- * Node expiry. We come here after an inactive on an unexpired node.
- * The expiry has been queued and is done in sop thread.
+ * helpers
  */
 static void
-puffsop_expire(struct puffs_mount *pmp, puffs_cookie_t cookie)
+dosuspendresume(void *arg)
 {
-	struct vnode *vp;
+	struct puffs_mount *pmp = arg;
+	struct mount *mp;
+	int rv;
 
-	KASSERT(PUFFS_USE_FS_TTL(pmp));
-
-	/* 
-	 * If it still exists and has no reference,
-	 * vrele should cause it to be reclaimed.
-	 * Otherwise, we have nothing to do.
+	mp = PMPTOMP(pmp);
+	/*
+	 * XXX?  does this really do any good or is it just
+	 * paranoid stupidity?  or stupid paranoia?
 	 */
-	if (puffs_cookie2vnode(pmp, cookie, 0, 0, &vp) == 0) {
-		VPTOPP(vp)->pn_stat &= ~PNODE_SOPEXP;
-		vrele(vp); 
+	if (mp->mnt_iflag & IMNT_UNMOUNT) {
+		printf("puffs dosuspendresume(): detected suspend on "
+		    "unmounting fs\n");
+		goto out;
 	}
 
-	return;
+	/* Do the dance.  Allow only one concurrent suspend */
+	rv = vfs_suspend(PMPTOMP(pmp), 1);
+	if (rv == 0)
+		vfs_resume(PMPTOMP(pmp));
+
+ out:
+	mutex_enter(&pmp->pmp_lock);
+	KASSERT(pmp->pmp_suspend == 1);
+	pmp->pmp_suspend = 0;
+	puffs_mp_release(pmp);
+	mutex_exit(&pmp->pmp_lock);
+
+	kthread_exit(0);
+}
+
+static void
+puffsop_suspend(struct puffs_mount *pmp)
+{
+	int rv = 0;
+
+	mutex_enter(&pmp->pmp_lock);
+	if (pmp->pmp_suspend || pmp->pmp_status != PUFFSTAT_RUNNING) {
+		rv = EBUSY;
+	} else {
+		puffs_mp_reference(pmp);
+		pmp->pmp_suspend = 1;
+	}
+	mutex_exit(&pmp->pmp_lock);
+	if (rv)
+		return;
+	rv = kthread_create(PRI_NONE, 0, NULL, dosuspendresume,
+	    pmp, NULL, "puffsusp");
+
+	/* XXX: "return" rv */
 }
 
 static void
@@ -873,7 +904,10 @@ puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 	voff_t offlo, offhi;
 	int rv, flags = 0;
 
-	KASSERT(pf->pf_req.preq_pth.pth_framelen == sizeof(struct puffs_flush));
+	if (pf->pf_req.preq_pth.pth_framelen != sizeof(struct puffs_flush)) {
+		puffs_msg_sendresp(pmp, &pf->pf_req, EINVAL); /* E2SMALL */
+		return;
+	}
 
 	/* XXX: slurry */
 	if (pf->pf_op == PUFFS_INVAL_NAMECACHE_ALL) {
@@ -905,6 +939,7 @@ puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 	struct componentname *pf_cn;
 	char *name;
 		/* get comfortab^Wcomponentname */
+		KASSERT(curlwp != uvm.pagedaemon_lwp);
 		pf_cn = kmem_alloc(componentname);
 		memset(pf_cn, 0, sizeof(struct componentname));
 		break;
@@ -915,7 +950,7 @@ puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 			rv = EINVAL;
 			break;
 		}
-		cache_purge1(vp, NULL, 0, PURGE_CHILDREN);
+		cache_purge1(vp, NULL, PURGE_CHILDREN);
 		break;
 
 	case PUFFS_INVAL_PAGECACHE_NODE_RANGE:
@@ -937,7 +972,7 @@ puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 			break;
 		}
 
-		mutex_enter(vp->v_uobj.vmobjlock);
+		mutex_enter(&vp->v_uobj.vmobjlock);
 		rv = VOP_PUTPAGES(vp, offlo, offhi, flags);
 		break;
 
@@ -969,12 +1004,11 @@ puffs_msgif_dispatch(void *this, struct putter_hdr *pth)
 		DPRINTF(("dispatch: vn/vfs message 0x%x\n", preq->preq_optype));
 		puffsop_msg(pmp, preq);
 		break;
-
 	case PUFFSOP_FLUSH: /* process in sop thread */
 	{
 		struct puffs_flush *pf;
 
-		DPRINTF(("dispatch: flush 0x%x\n", preq->preq_optype));
+ 		DPRINTF(("dispatch: flush 0x%x\n", preq->preq_optype));
 
 		if (preq->preq_pth.pth_framelen != sizeof(struct puffs_flush)) {
 			puffs_msg_sendresp(pmp, preq, EINVAL); /* E2SMALL */
@@ -988,52 +1022,24 @@ puffs_msgif_dispatch(void *this, struct putter_hdr *pth)
 		psopr->psopr_sopreq = PUFFS_SOPREQ_FLUSH;
 
 		mutex_enter(&pmp->pmp_sopmtx);
-		if (pmp->pmp_sopthrcount == 0) {
-			mutex_exit(&pmp->pmp_sopmtx);
-			kmem_free(psopr, sizeof(*psopr));
-			puffs_msg_sendresp(pmp, preq, ENXIO);
-		} else {
-			TAILQ_INSERT_TAIL(&pmp->pmp_sopfastreqs,
-			    psopr, psopr_entries);
-			cv_signal(&pmp->pmp_sopcv);
-			mutex_exit(&pmp->pmp_sopmtx);
-		}
-		break;
+		TAILQ_INSERT_TAIL(&pmp->pmp_sopreqs, psopr, psopr_entries);
+		cv_signal(&pmp->pmp_sopcv);
+		mutex_exit(&pmp->pmp_sopmtx);
+ 		break;
 	}
-
-	case PUFFSOP_UNMOUNT: /* process in sop thread */
-	{
-
-		DPRINTF(("dispatch: unmount 0x%x\n", preq->preq_optype));
-
-		KASSERT(curlwp != uvm.pagedaemon_lwp);
-		psopr = kmem_alloc(sizeof(*psopr), KM_SLEEP);
-		psopr->psopr_preq = *preq;
-		psopr->psopr_sopreq = PUFFS_SOPREQ_UNMOUNT;
-
-		mutex_enter(&pmp->pmp_sopmtx);
-		if (pmp->pmp_sopthrcount == 0) {
-			mutex_exit(&pmp->pmp_sopmtx);
-			kmem_free(psopr, sizeof(*psopr));
-			puffs_msg_sendresp(pmp, preq, ENXIO);
-		} else {
-			TAILQ_INSERT_TAIL(&pmp->pmp_sopfastreqs,
-			    psopr, psopr_entries);
-			cv_signal(&pmp->pmp_sopcv);
-			mutex_exit(&pmp->pmp_sopmtx);
-		}
+	case PUFFSOP_SUSPEND:
+		DPRINTF(("dispatch: suspend\n"));
+		puffsop_suspend(pmp);
 		break;
-	}
-
 	default:
 		DPRINTF(("dispatch: invalid class 0x%x\n", preq->preq_opclass));
-		puffs_msg_sendresp(pmp, preq, EOPNOTSUPP);
+		puffs_msg_sendresp(pmp, preq, EINVAL);
 		break;
 	}
 
 	return 0;
 }
-
+ 
 /*
  * Work loop for thread processing all ops from server which
  * cannot safely be handled in caller context.  This includes
@@ -1041,68 +1047,28 @@ puffs_msgif_dispatch(void *this, struct putter_hdr *pth)
  * server, i.e. a long-term kernel lock which will be released only
  * once the file server acknowledges a request
  */
-#define TIMED_OUT(expire) \
-    ((int)((unsigned int)hardclock_ticks - (unsigned int)expire) > 0)
 void
 puffs_sop_thread(void *arg)
 {
 	struct puffs_mount *pmp = arg;
-	struct mount *mp = PMPTOMP(pmp);
 	struct puffs_sopreq *psopr;
-	bool keeprunning;
-	bool unmountme = false;
-	int timeo;
-
-	timeo = PUFFS_USE_FS_TTL(pmp) ? puffs_sopreq_expire_timeout : 0;
+	struct puffs_req *preq;
+	bool keeprunning = true;
 
 	mutex_enter(&pmp->pmp_sopmtx);
-	for (keeprunning = true; keeprunning; ) {
-		/*
-		 * We have a fast queue for flush and umount, and a node 
-		 * queue for delayes node reclaims. Requests on node queue 			 * are not honoured before clock reaches psopr_at. This 
-		 * code assumes that requests are ordered by psopr_at.
-		 */
-		do {
-			psopr = TAILQ_FIRST(&pmp->pmp_sopfastreqs);
-			if (psopr != NULL) {
-				TAILQ_REMOVE(&pmp->pmp_sopfastreqs,
-					     psopr, psopr_entries);
-				break;
-			}
-
-			psopr = TAILQ_FIRST(&pmp->pmp_sopnodereqs);
-			if ((psopr != NULL) && TIMED_OUT(psopr->psopr_at)) {
-				TAILQ_REMOVE(&pmp->pmp_sopnodereqs,
-					     psopr, psopr_entries);
-				break;
-			}
-
-			cv_timedwait(&pmp->pmp_sopcv, &pmp->pmp_sopmtx, timeo);
-		} while (1 /* CONSTCOND */);
-
+	while (keeprunning) {
+		while ((psopr = TAILQ_FIRST(&pmp->pmp_sopreqs)) == NULL)
+			cv_wait(&pmp->pmp_sopcv, &pmp->pmp_sopmtx);
+		TAILQ_REMOVE(&pmp->pmp_sopreqs, psopr, psopr_entries);
 		mutex_exit(&pmp->pmp_sopmtx);
 
+		preq = &psopr->psopr_preq;
 		switch (psopr->psopr_sopreq) {
-		case PUFFS_SOPREQSYS_EXIT:
+		case PUFFS_SOPREQ_EXIT:
 			keeprunning = false;
 			break;
 		case PUFFS_SOPREQ_FLUSH:
-			puffsop_flush(pmp, &psopr->psopr_pf);
-			break;
-		case PUFFS_SOPREQ_EXPIRE:
-			puffsop_expire(pmp, psopr->psopr_ck);
-			break;
-		case PUFFS_SOPREQ_UNMOUNT:
-			puffs_msg_sendresp(pmp, &psopr->psopr_preq, 0);
-
-			unmountme = true;
-			keeprunning = false;
-
-			/*
-			 * We know the mountpoint is still alive because
-			 * the thread that is us (poetic?) is still alive.
-			 */
-			atomic_inc_uint((unsigned int*)&mp->mnt_refcnt);
+			puffsop_flush(pmp, (struct puffs_flush *)preq);
 			break;
 		}
 
@@ -1111,39 +1077,19 @@ puffs_sop_thread(void *arg)
 	}
 
 	/*
-	 * Purge remaining ops.
+	 * Purge remaining ops.  could send error, but that is highly
+	 * unlikely to reach the caller.
 	 */
-	while ((psopr = TAILQ_FIRST(&pmp->pmp_sopfastreqs)) != NULL) {
-		TAILQ_REMOVE(&pmp->pmp_sopfastreqs, psopr, psopr_entries);
+	while ((psopr = TAILQ_FIRST(&pmp->pmp_sopreqs)) != NULL) {
+		TAILQ_REMOVE(&pmp->pmp_sopreqs, psopr, psopr_entries);
 		mutex_exit(&pmp->pmp_sopmtx);
-		puffs_msg_sendresp(pmp, &psopr->psopr_preq, ENXIO);
-		kmem_free(psopr, sizeof(*psopr));
-		mutex_enter(&pmp->pmp_sopmtx);
-	}
-
-	while ((psopr = TAILQ_FIRST(&pmp->pmp_sopnodereqs)) != NULL) {
-		TAILQ_REMOVE(&pmp->pmp_sopnodereqs, psopr, psopr_entries);
-		mutex_exit(&pmp->pmp_sopmtx);
-		KASSERT(psopr->psopr_sopreq == PUFFS_SOPREQ_EXPIRE);
 		kmem_free(psopr, sizeof(*psopr));
 		mutex_enter(&pmp->pmp_sopmtx);
 	}
 
 	pmp->pmp_sopthrcount--;
-	cv_broadcast(&pmp->pmp_sopcv);
+	cv_signal(&pmp->pmp_sopcv);
 	mutex_exit(&pmp->pmp_sopmtx); /* not allowed to access fs after this */
-
-	/*
-	 * If unmount was requested, we can now safely do it here, since
-	 * our context is dead from the point-of-view of puffs_unmount()
-	 * and we are just another thread.  dounmount() makes internally
-	 * sure that VFS_UNMOUNT() isn't called reentrantly and that it
-	 * is eventually completed.
-	 */
-	if (unmountme) {
-		(void)dounmount(mp, MNT_FORCE, curlwp);
-		vfs_destroy(mp);
-	}
 
 	kthread_exit(0);
 }

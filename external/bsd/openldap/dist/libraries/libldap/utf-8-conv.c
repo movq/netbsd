@@ -1,9 +1,7 @@
-/*	$NetBSD: utf-8-conv.c,v 1.1.1.3 2010/12/12 15:21:41 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/libraries/libldap/utf-8-conv.c,v 1.16.2.6 2010/04/13 20:23:01 kurt Exp */
+/* $OpenLDAP: pkg/ldap/libraries/libldap/utf-8-conv.c,v 1.16.2.3 2008/02/11 23:26:41 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2010 The OpenLDAP Foundation.
+ * Copyright 1998-2008 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -193,10 +191,7 @@ ldap_x_wc_to_utf8 ( char *utf8char, wchar_t wchar, size_t count )
 			return 4;
 		if( wchar < 0x4000000 ) 
 			return 5;
-#if SIZEOF_WCHAR_T > 4
-		/* UL is not strictly needed by ANSI C */
-		if( wchar < (wchar_t)0x80000000UL )
-#endif /* SIZEOF_WCHAR_T > 4 */
+		if( wchar < 0x80000000 )
 			return 6;
 		return -1;
 	}
@@ -240,12 +235,7 @@ ldap_x_wc_to_utf8 ( char *utf8char, wchar_t wchar, size_t count )
 			utf8char[len++] = 0x80 | ( wchar & 0x3f );
 		}
 
-	} else
-#if SIZEOF_WCHAR_T > 4
-		/* UL is not strictly needed by ANSI C */
-		if( wchar < (wchar_t)0x80000000UL )
-#endif /* SIZEOF_WCHAR_T > 4 */
-	{
+	} else if( wchar < 0x80000000 ) {
 		if (count >= 6) {
 			utf8char[len++] = 0xfc | ( wchar >> 30 );
 			utf8char[len++] = 0x80 | ( (wchar >> 24) & 0x3f );
@@ -255,11 +245,8 @@ ldap_x_wc_to_utf8 ( char *utf8char, wchar_t wchar, size_t count )
 			utf8char[len++] = 0x80 | ( wchar & 0x3f );
 		}
 
-#if SIZEOF_WCHAR_T > 4
-	} else {
+	} else
 		len = -1;
-#endif /* SIZEOF_WCHAR_T > 4 */
-	}
 	
 	return len;
 
@@ -480,4 +467,4 @@ ldap_x_mbs_to_utf8s ( char *utf8str, const char *mbstr, size_t count,
 	return n;	
 }
 
-#endif /* SIZEOF_WCHAR_T >= 4 */
+#endif

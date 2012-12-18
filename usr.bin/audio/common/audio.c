@@ -1,4 +1,4 @@
-/*	$NetBSD: audio.c,v 1.21 2011/09/06 22:41:53 jmcneill Exp $	*/
+/*	$NetBSD: audio.c,v 1.19 2008/05/29 14:51:27 mrg Exp $	*/
 
 /*
  * Copyright (c) 1999 Matthew R. Green
@@ -32,7 +32,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: audio.c,v 1.21 2011/09/06 22:41:53 jmcneill Exp $");
+__RCSID("$NetBSD: audio.c,v 1.19 2008/05/29 14:51:27 mrg Exp $");
 #endif
 
 
@@ -51,7 +51,7 @@ __RCSID("$NetBSD: audio.c,v 1.21 2011/09/06 22:41:53 jmcneill Exp $");
 
 /* what format am i? */
 
-static const struct {
+struct {
 	const char *fname;
 	int fno;
 } formats[] = {
@@ -67,7 +67,8 @@ static const struct {
 };
 
 int
-audio_format_from_str(char *str)
+audio_format_from_str(str)
+	char *str;
 {
 	int	i;
 
@@ -80,7 +81,7 @@ audio_format_from_str(char *str)
 
 
 /* back and forth between encodings */
-static const struct {
+struct {
 	const char *ename;
 	int eno;
 } encs[] = {
@@ -104,13 +105,13 @@ static const struct {
 	{ AudioEmpeg_l2_stream,	AUDIO_ENCODING_MPEG_L2_STREAM },
 	{ AudioEmpeg_l2_packets,AUDIO_ENCODING_MPEG_L2_PACKETS },
 	{ AudioEmpeg_l2_system,	AUDIO_ENCODING_MPEG_L2_SYSTEM },
-	{ AudioEac3,		AUDIO_ENCODING_AC3 },
 	{ NULL, -1 }
 };
 
 
 const char *
-audio_enc_from_val(int val)
+audio_enc_from_val(val)
+	int	val;
 {
 	int	i;
 
@@ -121,7 +122,8 @@ audio_enc_from_val(int val)
 }
 
 int
-audio_enc_to_val(const char *enc)
+audio_enc_to_val(enc)
+	const	char *enc;
 {
 	int	i;
 
@@ -135,7 +137,9 @@ audio_enc_to_val(const char *enc)
 }
 
 void
-decode_int(const char *arg, int *intp)
+decode_int(arg, intp)
+	const char *arg;
+	int *intp;
 {
 	char	*ep;
 	int	ret;
@@ -150,7 +154,9 @@ decode_int(const char *arg, int *intp)
 }
 
 void
-decode_time(const char *arg, struct timeval *tvp)
+decode_time(arg, tvp)
+	const char *arg;
+	struct timeval *tvp;
 {
 	char	*s, *colon, *dot;
 	char	*copy = strdup(arg);
@@ -200,7 +206,9 @@ decode_time(const char *arg, struct timeval *tvp)
  * decode a string into an encoding value.
  */
 void
-decode_encoding(const char *arg, int *encp)
+decode_encoding(arg, encp)
+	const char *arg;
+	int *encp;
 {
 	size_t	len;
 	int i;
@@ -214,7 +222,7 @@ decode_encoding(const char *arg, int *encp)
 	errx(1, "unknown encoding `%s'", arg);
 }
 
-static const char *const audio_errlist[] = {
+const char *const audio_errlist[] = {
 	"error zero",				/* nothing? */
 	"no audio entry",			/* AUDIO_ENOENT */
 	"short header",				/* AUDIO_ESHORTHDR */
@@ -225,7 +233,8 @@ static const char *const audio_errlist[] = {
 };
 
 const char *
-audio_errstring(int errval)
+audio_errstring(errval)
+	int	errval;
 {
 
 	errval = -errval;

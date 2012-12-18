@@ -1,4 +1,4 @@
-/*	$NetBSD: rijndaeltest.c,v 1.8 2011/05/14 16:26:23 christos Exp $	*/
+/*	$NetBSD: rijndaeltest.c,v 1.7 2006/05/12 01:56:39 mrg Exp $	*/
 /*	$KAME: rijndaeltest.c,v 1.7 2001/05/27 01:56:45 itojun Exp $	*/
 
 /*
@@ -92,7 +92,7 @@ hex2key(p, l, s)
 	size_t l;
 	const char *s;
 {
-	size_t i;
+	int i;
 	u_int v;
 
 	for (i = 0; i < l && *s; i++) {

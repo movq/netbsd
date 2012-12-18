@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_isa.c,v 1.59 2012/07/31 15:50:35 bouyer Exp $ */
+/*	$NetBSD: wdc_isa.c,v 1.55 2008/04/28 20:23:52 martin Exp $ */
 
 /*-
  * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_isa.c,v 1.59 2012/07/31 15:50:35 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_isa.c,v 1.55 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,9 +71,9 @@ static int	wdc_isa_probe(device_t , cfdata_t, void *);
 static void	wdc_isa_attach(device_t, device_t, void *);
 static int	wdc_isa_detach(device_t, int);
 
-CFATTACH_DECL3_NEW(wdc_isa, sizeof(struct wdc_isa_softc),
+CFATTACH_DECL2_NEW(wdc_isa, sizeof(struct wdc_isa_softc),
     wdc_isa_probe, wdc_isa_attach, wdc_isa_detach, NULL, NULL,
-    wdc_childdetached, DVF_DETACH_SHUTDOWN);
+    wdc_childdetached);
 
 #if 0
 static void	wdc_isa_dma_setup(struct wdc_isa_softc *);
@@ -224,10 +224,10 @@ wdc_isa_attach(device_t parent, device_t self, void *aux)
 	sc->wdc_chanlist[0] = &sc->ata_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanlist;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 	sc->ata_channel.ch_channel = 0;
 	sc->ata_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
 	sc->ata_channel.ch_queue = &sc->wdc_chqueue;
+	sc->ata_channel.ch_ndrive = 2;
 	wdc_init_shadow_regs(&sc->ata_channel);
 
 	aprint_normal("\n");

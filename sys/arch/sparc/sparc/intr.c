@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.116 2012/04/13 06:26:04 mrg Exp $ */
+/*	$NetBSD: intr.c,v 1.100.20.3 2011/03/08 17:29:46 riz Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.116 2012/04/13 06:26:04 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.100.20.3 2011/03/08 17:29:46 riz Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_sparc_arch.h"
@@ -52,7 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.116 2012/04/13 06:26:04 mrg Exp $");
 #include <sys/malloc.h>
 #include <sys/cpu.h>
 #include <sys/intr.h>
-#include <sys/atomic.h>
+#include <sys/simplelock.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -71,8 +71,6 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.116 2012/04/13 06:26:04 mrg Exp $");
 #endif
 
 #if defined(MULTIPROCESSOR)
-static int intr_biglock_wrapper(void *);
-
 void *xcall_cookie;
 #endif
 
@@ -92,7 +90,7 @@ strayintr(struct clockframe *fp)
 	static int straytime, nstray;
 	char bits[64];
 	int timesince;
-
+ 
 #if defined(MULTIPROCESSOR)
 	/*
 	 * XXX
@@ -106,9 +104,9 @@ strayintr(struct clockframe *fp)
 		return;
 #endif
 
-	snprintb(bits, sizeof(bits), PSR_BITS, fp->psr);
 	printf("stray interrupt cpu%d ipl 0x%x pc=0x%x npc=0x%x psr=%s\n",
-	    cpu_number(), fp->ipl, fp->pc, fp->npc, bits);
+		cpu_number(), fp->ipl, fp->pc, fp->npc,
+		bitmask_snprintf(fp->psr, PSR_BITS, bits, sizeof(bits)));
 
 	timesince = time_uptime - straytime;
 	if (timesince <= 10) {
@@ -131,17 +129,10 @@ bogusintr(struct clockframe *fp)
 {
 	char bits[64];
 
-#if defined(MULTIPROCESSOR)
-	/*
-	 * XXX as above.
-	 */
-	if (fp->ipl == ZS_INTR_IPL)
-		return;
-#endif
-
-	snprintb(bits, sizeof(bits), PSR_BITS, fp->psr);
 	printf("cpu%d: bogus interrupt ipl 0x%x pc=0x%x npc=0x%x psr=%s\n",
-	    cpu_number(), fp->ipl, fp->pc, fp->npc, bits);
+		cpu_number(),
+		fp->ipl, fp->pc, fp->npc, bitmask_snprintf(fp->psr,
+		       PSR_BITS, bits, sizeof(bits)));
 }
 #endif /* DIAGNOSTIC */
 
@@ -195,8 +186,9 @@ int	(*vmeerr_handler)(void);
 int	(*moduleerr_handler)(void);
 
 #if defined(MULTIPROCESSOR)
-static volatile u_int	nmi_hard_wait = 0;
-int			drop_into_rom_on_fatal = 1;
+volatile int nmi_hard_wait = 0;
+struct simplelock nmihard_lock = SIMPLELOCK_INITIALIZER;
+int drop_into_rom_on_fatal = 1;
 #endif
 
 void
@@ -212,13 +204,12 @@ nmi_hard(void)
 
 	/* Tally */
 	cpuinfo.ci_intrcnt[15].ev_count++;
-	cpuinfo.ci_data.cpu_nintr++;
 
 	afsr = afva = 0;
 	if ((*cpuinfo.get_asyncflt)(&afsr, &afva) == 0) {
-		snprintb(bits, sizeof(bits), AFSR_BITS, afsr);
 		printf("Async registers (mid %d): afsr=%s; afva=0x%x%x\n",
-			cpuinfo.mid, bits,
+			cpuinfo.mid,
+			bitmask_snprintf(afsr, AFSR_BITS, bits, sizeof(bits)),
 			(afsr & AFSR_AFA) >> AFSR_AFA_RSHIFT, afva);
 	}
 
@@ -228,7 +219,9 @@ nmi_hard(void)
 	 * variable is non-zero.  If we are the master, loop while this
 	 * variable is less than the number of cpus.
 	 */
-	atomic_inc_uint(&nmi_hard_wait);
+	simple_lock(&nmihard_lock);
+	nmi_hard_wait++;
+	simple_unlock(&nmihard_lock);
 
 	if (cpuinfo.master == 0) {
 		while (nmi_hard_wait)
@@ -251,9 +244,8 @@ nmi_hard(void)
 	 * Examine pending system interrupts.
 	 */
 	si = *((uint32_t *)ICR_SI_PEND);
-	snprintb(bits, sizeof(bits), SINTR_BITS, si);
-	printf("cpu%d: NMI: system interrupts: %s\n", cpu_number(), bits);
-		
+	printf("cpu%d: NMI: system interrupts: %s\n", cpu_number(),
+		bitmask_snprintf(si, SINTR_BITS, bits, sizeof(bits)));
 
 	if ((si & SINTR_M) != 0) {
 		/* ECC memory error */
@@ -280,7 +272,9 @@ nmi_hard(void)
 	/*
 	 * Tell everyone else we've finished dealing with the hard NMI.
 	 */
+	simple_lock(&nmihard_lock);
 	nmi_hard_wait = 0;
+	simple_unlock(&nmihard_lock);
 	if (fatal && drop_into_rom_on_fatal) {
 		prom_abort();
 		return;
@@ -300,7 +294,6 @@ nmi_soft(struct trapframe *tf)
 
 	/* Tally */
 	cpuinfo.ci_sintrcnt[15].ev_count++;
-	cpuinfo.ci_data.cpu_nintr++;
 
 	if (cpuinfo.mailbox) {
 		/* Check PROM messages */
@@ -310,6 +303,7 @@ nmi_soft(struct trapframe *tf)
 		case OPENPROM_MBX_WD:
 			/* In case there's an xcall in progress (unlikely) */
 			spl0();
+			cpuinfo.flags &= ~CPUFLG_READY;
 #ifdef MULTIPROCESSOR
 			cpu_ready_mask &= ~(1 << cpu_number());
 #endif
@@ -358,8 +352,6 @@ void
 xcallintr(void *v)
 {
 
-	kpreempt_disable();
-
 	/* Tally */
 	if (v != xcallintr)
 		cpuinfo.ci_sintrcnt[13].ev_count++;
@@ -377,8 +369,6 @@ xcallintr(void *v)
 	}
 	cpuinfo.msg.tag = 0;
 	cpuinfo.msg.complete = 1;
-
-	kpreempt_enable();
 }
 #endif /* MULTIPROCESSOR */
 #endif /* SUN4M || SUN4D */
@@ -405,9 +395,8 @@ nmi_hard_msiiep(void)
 	int fatal = 0;
 
 	si = mspcic_read_4(pcic_sys_ipr);
-	snprintb(bits, sizeof(bits), MSIIEP_SYS_IPR_BITS, si);
-	printf("NMI: system interrupts: %s\n", bits);
-	       
+	printf("NMI: system interrupts: %s\n",
+	       bitmask_snprintf(si, MSIIEP_SYS_IPR_BITS, bits, sizeof(bits)));
 
 	if (si & MSIIEP_SYS_IPR_MEM_FAULT) {
 		uint32_t afsr, afar, mfsr, mfar;
@@ -418,15 +407,17 @@ nmi_hard_msiiep(void)
 		mfar = *(volatile uint32_t *)MSIIEP_MFAR;
 		mfsr = *(volatile uint32_t *)MSIIEP_MFSR;
 
-		if (afsr & MSIIEP_AFSR_ERR) {
-			snprintb(bits, sizeof(bits), MSIIEP_AFSR_BITS, afsr);
-			printf("async fault: afsr=%s; afar=%08x\n", bits, afsr);
-		}
+		if (afsr & MSIIEP_AFSR_ERR)
+			printf("async fault: afsr=%s; afar=%08x\n",
+			       bitmask_snprintf(afsr, MSIIEP_AFSR_BITS,
+						bits, sizeof(bits)),
+			       afar);
 
-		if (mfsr & MSIIEP_MFSR_ERR) {
-			snprintb(bits, sizeof(bits), MSIIEP_MFSR_BITS, mfsr);
-			printf("mem fault: mfsr=%s; mfar=%08x\n", bits, mfsr);
-		}
+		if (mfsr & MSIIEP_MFSR_ERR)
+			printf("mem fault: mfsr=%s; mfar=%08x\n",
+			       bitmask_snprintf(mfsr, MSIIEP_MFSR_BITS,
+						bits, sizeof(bits)),
+			       mfar);
 
 		fatal = 0;
 	}
@@ -629,19 +620,9 @@ uninst_fasttrap(int level)
  */
 void
 intr_establish(int level, int classipl,
-	       struct intrhand *ih, void (*vec)(void),
-	       bool maybe_mpsafe)
+	       struct intrhand *ih, void (*vec)(void))
 {
 	int s = splhigh();
-#ifdef MULTIPROCESSOR
-	bool mpsafe;
-#endif /* MULTIPROCESSOR */
-	if (classipl == 0)
-		classipl = level;
-
-#ifdef MULTIPROCESSOR
-	mpsafe = (classipl != IPL_VM) || maybe_mpsafe;
-#endif
 
 #ifdef DIAGNOSTIC
 	if (CPU_ISSUN4C) {
@@ -668,6 +649,9 @@ intr_establish(int level, int classipl,
 		inst_fasttrap(level, vec);
 	}
 
+	if (classipl == 0)
+		classipl = level;
+
 	/* A requested IPL cannot exceed its device class level */
 	if (classipl < level)
 		panic("intr_establish: class lvl (%d) < pil (%d)\n",
@@ -675,15 +659,6 @@ intr_establish(int level, int classipl,
 
 	/* pre-shift to PIL field in %psr */
 	ih->ih_classipl = (classipl << 8) & PSR_PIL;
-
-#ifdef MULTIPROCESSOR
-	if (!mpsafe) {
-		ih->ih_realfun = ih->ih_fun;
-		ih->ih_realarg = ih->ih_arg;
-		ih->ih_fun = intr_biglock_wrapper;
-		ih->ih_arg = ih;
-	}
-#endif /* MULTIPROCESSOR */
 
 	ih_insert(&intrhand[level], ih);
 	splx(s);
@@ -734,9 +709,6 @@ sparc_softintr_establish(int level, void (*fun)(void *), void *arg)
 	struct intrhand *ih;
 	int pilreq;
 	int pil;
-#ifdef MULTIPROCESSOR
-	bool mpsafe = (level != IPL_VM);
-#endif /* MULTIPROCESSOR */
 
 	/*
 	 * On a sun4m, the processor interrupt level is stored
@@ -765,18 +737,8 @@ sparc_softintr_establish(int level, void (*fun)(void *), void *arg)
 	sic->sic_pil = pil;
 	sic->sic_pilreq = pilreq;
 	ih = &sic->sic_hand;
-#ifdef MULTIPROCESSOR
-	if (!mpsafe) {
-		ih->ih_realfun = (int (*)(void *))fun;
-		ih->ih_realarg = arg;
-		ih->ih_fun = intr_biglock_wrapper;
-		ih->ih_arg = ih;
-	} else
-#endif /* MULTIPROCESSOR */
-	{
-		ih->ih_fun = (int (*)(void *))fun;
-		ih->ih_arg = arg;
-	}
+	ih->ih_fun = (int (*)(void *))fun;
+	ih->ih_arg = arg;
 
 	/*
 	 * Always run the handler at the requested level, which might
@@ -828,35 +790,27 @@ sparc_softintr_schedule(void *cookie)
 #endif
 
 #ifdef MULTIPROCESSOR
-
 /*
- * intr_biglock_wrapper: grab biglock and call a real interrupt handler.
+ * Called by interrupt stubs, etc., to lock/unlock the kernel.
  */
-
-static int
-intr_biglock_wrapper(void *vp)
+void
+intr_lock_kernel(void)
 {
-	struct intrhand *ih = vp;
-	int ret;
 
 	KERNEL_LOCK(1, NULL);
+}
 
-	ret = (*ih->ih_realfun)(ih->ih_realarg);
+void
+intr_unlock_kernel(void)
+{
 
 	KERNEL_UNLOCK_ONE(NULL);
-
-	return ret;
 }
-#endif /* MULTIPROCESSOR */
+#endif
 
 bool
 cpu_intr_p(void)
 {
-	int idepth;
 
-	kpreempt_disable();
-	idepth = curcpu()->ci_idepth;
-	kpreempt_enable();
-
-	return idepth != 0;
+	return curcpu()->ci_idepth != 0;
 }

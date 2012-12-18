@@ -1,4 +1,4 @@
-/*	$NetBSD: tms320av110.c,v 1.23 2012/10/27 17:18:23 chs Exp $	*/
+/*	$NetBSD: tms320av110.c,v 1.21 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tms320av110.c,v 1.23 2012/10/27 17:18:23 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tms320av110.c,v 1.21 2008/04/28 20:23:51 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,7 +72,6 @@ int tav_set_port(void *, mixer_ctrl_t *);
 int tav_get_port(void *, mixer_ctrl_t *);
 int tav_query_devinfo(void *, mixer_devinfo_t *);
 int tav_get_props(void *);
-void tav_get_locks(void *, kmutex_t **, kmutex_t **);
 
 const struct audio_hw_if tav_audio_if = {
 	tav_open,
@@ -99,10 +98,7 @@ const struct audio_hw_if tav_audio_if = {
 	0 /* round_buffersize */,	/* optional */
 	0 /* mappage */,		/* optional */
 	tav_get_props,
-	0, /* trigger_output */
-	0, /* trigger_input */
-	0, /* dev_ioctl */		/* optional */
-	tav_get_locks,
+	0 /* dev_ioctl */		/* optional */
 };
 
 void
@@ -140,7 +136,7 @@ tms320av110_attach_mi(struct tav_softc *sc)
 	tav_write_byte(iot, ioh, TAV_SYNC_ECM, TAV_ECM_REPEAT);
 	tav_write_byte(iot, ioh, TAV_CRC_ECM, TAV_ECM_REPEAT);
 
-	audio_attach_mi(&tav_audio_if, sc, sc->sc_dev);
+	audio_attach_mi(&tav_audio_if, sc, &sc->sc_dev);
 }
 
 int
@@ -150,9 +146,6 @@ tms320av110_intr(void *p)
 	uint16_t intlist;
 
 	sc = p;
-
-	mutex_spin_enter(&sc->sc_intr_lock);
-
 	intlist = tav_read_short(sc->sc_iot, sc->sc_ioh, TAV_INTR)
 	    /* & tav_read_short(sc->sc_iot, sc->sc_ioh, TAV_INTR_EN)*/;
 
@@ -168,10 +161,8 @@ tms320av110_intr(void *p)
 	}
 
 	if (intlist & TAV_INTR_PCM_OUTPUT_UNDERFLOW) {
-		 cv_broadcast(&sc->sc_cv);
+		 wakeup(sc);
 	}
-
-	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return 1;
 }
@@ -220,10 +211,8 @@ tav_drain(void *hdl)
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
 
-	mutex_spin_enter(&sc->sc_intr_lock);
-
 	/*
-	 * wait for underflow interrupt.
+	 * tsleep waiting for underflow interrupt.
 	 */
 	if (tav_read_short(iot, ioh, TAV_BUFF)) {
 		mask = tav_read_short(iot, ioh, TAV_INTR_EN);
@@ -231,10 +220,8 @@ tav_drain(void *hdl)
 		    mask|TAV_INTR_PCM_OUTPUT_UNDERFLOW);
 
 		/* still more than zero? */
-		if (tav_read_short(iot, ioh, TAV_BUFF)) {
-			(void)cv_timedwait_sig(&sc->sc_cv,
-			    &sc->sc_intr_lock, 32*hz);
-		}
+		if (tav_read_short(iot, ioh, TAV_BUFF))
+			(void)tsleep(sc, PCATCH, "tavdrain", 32*hz);
 
 		/* can be really that long for mpeg */
 
@@ -242,8 +229,6 @@ tav_drain(void *hdl)
 		tav_write_short(iot, ioh, TAV_INTR_EN,
 		    mask & ~TAV_INTR_PCM_OUTPUT_UNDERFLOW);
 	}
-
-	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return 0;
 }
@@ -350,7 +335,7 @@ tav_getdev(void *hdl, struct audio_device *ret)
 	/* guaranteed to be <= 4 in length */
 	snprintf(ret->version, sizeof(ret->version), "%u",
 	    tav_read_byte(iot, ioh, TAV_VERSION));
-	strlcpy(ret->config, device_xname(sc->sc_dev), sizeof(ret->config));
+	strlcpy(ret->config, device_xname(&sc->sc_dev), sizeof(ret->config));
 
 	return 0;
 }
@@ -384,16 +369,6 @@ int
 tav_get_props(void *hdl)
 {
 	return 0;
-}
-
-void
-tav_get_locks(void *hdl, kmutex_t **intr, kmutex_t **thread)
-{
-	struct tav_softc *sc;
-
-	sc = hdl;
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
 }
 
 int

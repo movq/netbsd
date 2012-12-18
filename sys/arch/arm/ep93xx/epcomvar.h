@@ -1,4 +1,4 @@
-/*      $NetBSD: epcomvar.h,v 1.7 2012/10/27 17:17:37 chs Exp $        */
+/*      $NetBSD: epcomvar.h,v 1.3 2005/12/11 12:16:45 christos Exp $        */
 /*-
  * Copyright (c) 2004 Jesse Off
  *
@@ -10,7 +10,13 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- *
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by the NetBSD
+ *      Foundation, Inc. and its contributors.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -43,7 +49,7 @@
 #define EPCOM_RING_SIZE	2048
 
 struct epcom_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 	bus_addr_t		sc_hwbase;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t 	sc_ioh;
@@ -82,8 +88,8 @@ struct epcom_softc {
 	int			(*disable)(struct epcom_softc *);
 
 	int			enabled;
-#ifdef RND_COM
-	krndsource_t  rnd_source;
+#if NRND > 0 && defined(RND_COM)
+	rndsource_element_t  rnd_source;
 #endif
 };
 

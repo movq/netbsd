@@ -1,4 +1,4 @@
-/* $NetBSD: if_ea.c,v 1.17 2012/10/10 22:17:44 skrll Exp $ */
+/* $NetBSD: if_ea.c,v 1.14 2008/04/05 20:08:52 cegger Exp $ */
 
 /*
  * Copyright (c) 2000, 2001 Ben Harris
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ea.c,v 1.17 2012/10/10 22:17:44 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ea.c,v 1.14 2008/04/05 20:08:52 cegger Exp $");
 
 #include <sys/param.h>
 
@@ -71,12 +71,12 @@ struct ea_softc {
  * prototypes
  */
 
-int eaprobe(device_t, cfdata_t, void *);
-void eaattach(device_t, device_t, void *);
+int eaprobe(struct device *, struct cfdata *, void *);
+void eaattach(struct device *, struct device *, void *);
 
 /* driver structure for autoconf */
 
-CFATTACH_DECL_NEW(ea, sizeof(struct ea_softc),
+CFATTACH_DECL(ea, sizeof(struct ea_softc),
     eaprobe, eaattach, NULL, NULL);
 
 /*
@@ -88,7 +88,7 @@ CFATTACH_DECL_NEW(ea, sizeof(struct ea_softc),
  */
 
 int
-eaprobe(device_t parent, cfdata_t cf, void *aux)
+eaprobe(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct podulebus_attach_args *pa = aux;
 
@@ -101,7 +101,7 @@ eaprobe(device_t parent, cfdata_t cf, void *aux)
  */
 
 void
-eaattach(device_t parent, device_t self, void *aux)
+eaattach(struct device *parent, struct device *self, void *aux)
 {
 	struct ea_softc *sc = device_private(self);
 	struct podulebus_attach_args *pa = aux;
@@ -109,9 +109,7 @@ eaattach(device_t parent, device_t self, void *aux)
 	char *ptr;
 	int i;
 
-	sc->sc_8005.sc_dev = self;
-
-/*	dprintf(("Attaching %s...\n", device_xname(self)));*/
+/*	dprintf(("Attaching %s...\n", device_xname(&sc->sc_dev)));*/
 
 	/* Set the address of the controller for easy access */
 	podulebus_shift_tag(pa->pa_mod_t, EA_8005_SHIFT, &sc->sc_8005.sc_iot);

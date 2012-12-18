@@ -1,4 +1,4 @@
-/*	$NetBSD: evbppc_machdep.c,v 1.13 2011/07/01 20:46:39 dyoung Exp $	*/
+/*	$NetBSD: evbppc_machdep.c,v 1.8 2006/08/31 22:53:40 freza Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: evbppc_machdep.c,v 1.13 2011/07/01 20:46:39 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: evbppc_machdep.c,v 1.8 2006/08/31 22:53:40 freza Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,13 +77,8 @@ __KERNEL_RCSID(0, "$NetBSD: evbppc_machdep.c,v 1.13 2011/07/01 20:46:39 dyoung E
 #include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/pmap.h>
-
-/*
- * ibm4xx kernels need to set module_machine to this for modules to work.
- */
-char module_machine_ibm4xx[] = "powerpc-ibm4xx";
 
 int fake_mapiodev = 1;
 
@@ -94,14 +89,12 @@ int fake_mapiodev = 1;
  * 	mapping if one is found.
  */
 void *
-mapiodev(paddr_t pa, psize_t len, bool prefetchable)
+mapiodev(paddr_t pa, psize_t len)
 {
 	void *p;
 	paddr_t faddr;
 	vaddr_t taddr, va;
 	int off;
-
-	KASSERT(!prefetchable);
 
 	/*
 	 * See if we have reserved TLB entry for the pa. This needs to be
@@ -125,7 +118,7 @@ mapiodev(paddr_t pa, psize_t len, bool prefetchable)
 
 	for (; len > 0; len -= PAGE_SIZE) {
 		pmap_kenter_pa(taddr, faddr, 
-			VM_PROT_READ|VM_PROT_WRITE, PMAP_NOCACHE);
+			VM_PROT_READ|VM_PROT_WRITE|PME_NOCACHE);
 		faddr += PAGE_SIZE;
 		taddr += PAGE_SIZE;
 	}

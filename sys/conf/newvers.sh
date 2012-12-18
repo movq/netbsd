@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: newvers.sh,v 1.57 2010/01/10 23:55:03 snj Exp $
+#	$NetBSD: newvers.sh,v 1.52 2007/11/17 08:59:51 skrll Exp $
 #
 # Copyright (c) 1984, 1986, 1990, 1993
 #	The Regents of the University of California.  All rights reserved.
@@ -13,7 +13,11 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. Neither the name of the University nor the names of its contributors
+# 3. All advertising materials mentioning features or use of this software
+#    must display the following acknowledgement:
+#	This product includes software developed by the University of
+#	California, Berkeley and its contributors.
+# 4. Neither the name of the University nor the names of its contributors
 #    may be used to endorse or promote products derived from this software
 #    without specific prior written permission.
 #
@@ -36,35 +40,17 @@ if [ ! -e version ]; then
 fi
 
 v=$(cat version)
-t=$(LC_ALL=C date)
+t=$(date)
 u=${USER-root}
 h=$(hostname)
 d=$(pwd)
 cwd=$(dirname $0)
 copyright=$(awk '{ printf("\"%s\\n\"", $0); }' ${cwd}/copyright)
 
-while [ $# -gt 0 ]; do
-	case "$1" in
-	-r)
-		rflag=true
-		;;
-	-i)
-		id="$2"
-		shift
-		;;
-	-n)
-		nflag=true
-		;;
-	esac
-	shift
-done
-
-if [ -z "${id}" ]; then
-	if [ -f ident ]; then
-		id="$(cat ident)"
-	else
-		id=$(basename ${d})
-	fi
+if [ -f ident ]; then
+	id="$(cat ident)"
+else
+	id=$(basename ${d})
 fi
 
 osrelcmd=${cwd}/osrelease.sh
@@ -72,13 +58,7 @@ osrelcmd=${cwd}/osrelease.sh
 ost="NetBSD"
 osr=$(sh $osrelcmd)
 
-if [ ! -z "${rflag}" ]; then
-	fullversion="${ost} ${osr} (${id})\n"
-else
-	fullversion="${ost} ${osr} (${id}) #${v}: ${t}\n\t${u}@${h}:${d}\n"
-fi
-
-echo $(expr ${v} + 1) > version
+fullversion="${ost} ${osr} (${id}) #${v}: ${t}\n\t${u}@${h}:${d}\n"
 
 cat << _EOF > vers.c
 /*
@@ -99,11 +79,6 @@ const char kernel_ident[] = "${id}";
 const char copyright[] =
 ${copyright}
 "\n";
-_EOF
-
-[ ! -z "${nflag}" ] && exit 0
-
-cat << _EOF >> vers.c
 
 /*
  * NetBSD identity note.
@@ -127,3 +102,4 @@ __asm(
 );
 
 _EOF
+echo $(expr ${v} + 1) > version

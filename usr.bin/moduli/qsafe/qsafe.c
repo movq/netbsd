@@ -1,4 +1,4 @@
-/* $NetBSD: qsafe.c,v 1.3 2011/09/04 20:55:43 joerg Exp $ */
+/* $NetBSD: qsafe.c,v 1.1 2006/01/24 18:59:23 elad Exp $ */
 
 /*-
  * Copyright 1994 Phil Karn <karn@qualcomm.com>
@@ -61,7 +61,7 @@
 /* define DEBUGPRINT     1 */
 #define TRIAL_MINIMUM           (4)
 
-__dead static void     usage(void);
+static void     usage(void);
 
 /*
  * perform a Miller-Rabin primality test
@@ -194,7 +194,7 @@ main(int argc, char *argv[])
 		 * due to earlier inconsistencies in interpretation, check the
 		 * proposed bit size.
 		 */
-		if ((uint32_t)BN_num_bits(p) != (in_size + 1)) {
+		if (BN_num_bits(p) != (in_size + 1)) {
 #ifdef  DEBUGPRINT
 			(void)fprintf(stderr, "%10lu: bit size %ul "
 				      "mismatch\n", count_in, in_size);

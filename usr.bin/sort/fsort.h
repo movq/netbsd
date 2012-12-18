@@ -1,4 +1,4 @@
-/*	$NetBSD: fsort.h,v 1.17 2009/09/26 21:16:55 dsl Exp $	*/
+/*	$NetBSD: fsort.h,v 1.13.6.1 2009/10/14 20:41:53 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2000-2003 The NetBSD Foundation, Inc.

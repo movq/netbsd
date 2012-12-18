@@ -1,7 +1,7 @@
-/*	$NetBSD: sbdsp.c,v 1.135 2011/11/23 23:07:32 jmcneill Exp $	*/
+/*	$NetBSD: sbdsp.c,v 1.131 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
- * Copyright (c) 1999, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbdsp.c,v 1.135 2011/11/23 23:07:32 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbdsp.c,v 1.131 2008/04/28 20:23:52 martin Exp $");
 
 #include "midi.h"
 #include "mpu.h"
@@ -88,7 +88,7 @@ __KERNEL_RCSID(0, "$NetBSD: sbdsp.c,v 1.135 2011/11/23 23:07:32 jmcneill Exp $")
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/buf.h>
-#include <sys/malloc.h>
+
 #include <sys/cpu.h>
 #include <sys/intr.h>
 #include <sys/bus.h>
@@ -224,7 +224,7 @@ static	int sbdsp_adjust(int, int);
 
 int	sbdsp_midi_intr(void *);
 
-static bool	sbdsp_resume(device_t, const pmf_qual_t *);
+static bool	sbdsp_resume(device_t PMF_FN_PROTO);
 
 #ifdef AUDIO_DEBUG
 void	sb_printsc(struct sbdsp_softc *);
@@ -362,9 +362,6 @@ sbdsp_attach(struct sbdsp_softc *sc)
 	int i, error;
 	u_int v;
 
-	mutex_enter(&sc->sc_lock);
-	mutex_spin_enter(&sc->sc_intr_lock);
-
 	sbdsp_set_in_ports(sc, 1 << SB_MIC_VOL);
 
 	if (sc->sc_mixer_model != SBM_NONE) {
@@ -404,11 +401,7 @@ sbdsp_attach(struct sbdsp_softc *sc)
 		sc->in_filter = 0;	/* no filters turned on, please */
 	}
 
-	mutex_spin_exit(&sc->sc_intr_lock);
-	mutex_exit(&sc->sc_lock);
-
-	aprint_naive("\n");
-	aprint_normal(": dsp v%d.%02d%s\n",
+	printf(": dsp v%d.%02d%s\n",
 	       SBVER_MAJOR(sc->sc_version), SBVER_MINOR(sc->sc_version),
 	       sc->sc_model == SB_JAZZ ? ": <Jazz16>" : "");
 
@@ -420,7 +413,7 @@ sbdsp_attach(struct sbdsp_softc *sc)
 		sc->sc_drq8_maxsize = isa_dmamaxsize(sc->sc_ic,
 		    sc->sc_drq8);
 		error = isa_dmamap_create(sc->sc_ic, sc->sc_drq8,
-		    sc->sc_drq8_maxsize, BUS_DMA_WAITOK|BUS_DMA_ALLOCNOW);
+		    sc->sc_drq8_maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW);
 		if (error) {
 			aprint_error_dev(sc->sc_dev,
 			    "can't create map for drq %d\n", sc->sc_drq8);
@@ -432,7 +425,7 @@ sbdsp_attach(struct sbdsp_softc *sc)
 		sc->sc_drq16_maxsize = isa_dmamaxsize(sc->sc_ic,
 		    sc->sc_drq16);
 		error = isa_dmamap_create(sc->sc_ic, sc->sc_drq16,
-		    sc->sc_drq16_maxsize, BUS_DMA_WAITOK|BUS_DMA_ALLOCNOW);
+		    sc->sc_drq16_maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW);
 		if (error) {
 			aprint_error_dev(sc->sc_dev,
 			    "can't create map for drq %d\n", sc->sc_drq16);
@@ -446,16 +439,12 @@ sbdsp_attach(struct sbdsp_softc *sc)
 }
 
 static bool
-sbdsp_resume(device_t dv, const pmf_qual_t *qual)
+sbdsp_resume(device_t dv PMF_FN_ARGS)
 {
 	struct sbdsp_softc *sc = device_private(dv);
 
 	/* Reset the mixer. */
-	mutex_enter(&sc->sc_lock);
-	mutex_spin_enter(&sc->sc_intr_lock);
 	sbdsp_mix_write(sc, SBP_MIX_RESET, SBP_MIX_RESET);
-	mutex_spin_exit(&sc->sc_intr_lock);
-	mutex_exit(&sc->sc_lock);
 
 	return true;
 }
@@ -465,13 +454,16 @@ sbdsp_mix_write(struct sbdsp_softc *sc, int mixerport, int val)
 {
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
+	int s;
 
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
+	s = splaudio();
 	bus_space_write_1(iot, ioh, SBP_MIXER_ADDR, mixerport);
 	delay(20);
 	bus_space_write_1(iot, ioh, SBP_MIXER_DATA, val);
 	delay(30);
+	splx(s);
 }
 
 int
@@ -480,13 +472,16 @@ sbdsp_mix_read(struct sbdsp_softc *sc, int mixerport)
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	int val;
+	int s;
 
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
+	s = splaudio();
 	bus_space_write_1(iot, ioh, SBP_MIXER_ADDR, mixerport);
 	delay(20);
 	val = bus_space_read_1(iot, ioh, SBP_MIXER_DATA);
 	delay(30);
+	splx(s);
 	return val;
 }
 
@@ -582,7 +577,6 @@ sbdsp_set_params(
 	int mode;
 
 	sc = addr;
-
 	if (sc->sc_open == SB_OPEN_MIDI)
 		return EBUSY;
 
@@ -793,7 +787,6 @@ sbdsp_set_ifilter(void *addr, int which)
 	int mixval;
 
 	sc = addr;
-
 	mixval = sbdsp_mix_read(sc, SBP_INFILTER) & ~SBP_IFILTER_MASK;
 	switch (which) {
 	case 0:
@@ -835,9 +828,6 @@ sbdsp_set_in_ports(struct sbdsp_softc *sc, int mask)
 {
 	int bitsl, bitsr;
 	int sbport;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
-	KASSERT(mutex_owned(&sc->sc_intr_lock));
 
 	if (sc->sc_open == SB_OPEN_MIDI)
 		return EBUSY;
@@ -1096,10 +1086,7 @@ void
 sbdsp_pause(struct sbdsp_softc *sc)
 {
 
-	KASSERT(mutex_owned(&sc->sc_intr_lock));
-	mutex_spin_exit(&sc->sc_intr_lock);
-	(void)kpause("sbpause", false, hz/8, &sc->sc_lock);
-	mutex_spin_enter(&sc->sc_intr_lock);
+	(void) tsleep(sbdsp_pause, PWAIT, "sbpause", hz / 8);
 }
 
 /*
@@ -1551,12 +1538,9 @@ sbdsp_intr(void *arg)
 
 	DPRINTFN(2, ("sbdsp_intr: intr8=%p, intr16=%p\n",
 		   sc->sc_intr8, sc->sc_intr16));
-
-	mutex_spin_enter(&sc->sc_intr_lock);
 	if (ISSB16CLASS(sc)) {
 		irq = sbdsp_mix_read(sc, SBP_IRQ_STATUS);
 		if ((irq & (SBP_IRQ_DMA8 | SBP_IRQ_DMA16 | SBP_IRQ_MPU401)) == 0) {
-			mutex_spin_exit(&sc->sc_intr_lock);
 			DPRINTF(("sbdsp_intr: Spurious interrupt 0x%x\n", irq));
 			return 0;
 		}
@@ -1584,8 +1568,6 @@ sbdsp_intr(void *arg)
 		mpu_intr(sc_mpu);
 	}
 #endif
-
-	mutex_spin_exit(&sc->sc_intr_lock);
 	return 1;
 }
 
@@ -1605,9 +1587,6 @@ void
 sbdsp_set_mixer_gain(struct sbdsp_softc *sc, int port)
 {
 	int src, gain;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
-	KASSERT(mutex_owned(&sc->sc_intr_lock));
 
 	switch(sc->sc_mixer_model) {
 	case SBM_NONE:
@@ -1714,12 +1693,8 @@ sbdsp_mixer_set_port(void *addr, mixer_ctrl_t *cp)
 	int mask, bits;
 	int lmask, rmask, lbits, rbits;
 	int mute, swap;
-	int error;
 
 	sc = addr;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
-
 	if (sc->sc_open == SB_OPEN_MIDI)
 		return EBUSY;
 
@@ -1729,50 +1704,37 @@ sbdsp_mixer_set_port(void *addr, mixer_ctrl_t *cp)
 	if (sc->sc_mixer_model == SBM_NONE)
 		return EINVAL;
 
-	mutex_spin_enter(&sc->sc_intr_lock);
-	error = 0;
-
 	switch (cp->dev) {
 	case SB_TREBLE:
 	case SB_BASS:
 		if (sc->sc_mixer_model == SBM_CT1345 ||
 		    sc->sc_mixer_model == SBM_CT1XX5) {
-			if (cp->type != AUDIO_MIXER_ENUM) {
-				mutex_spin_exit(&sc->sc_intr_lock);
+			if (cp->type != AUDIO_MIXER_ENUM)
 				return EINVAL;
-			}
 			switch (cp->dev) {
 			case SB_TREBLE:
 				sbdsp_set_ifilter(addr, cp->un.ord ? SB_TREBLE : 0);
-				mutex_spin_exit(&sc->sc_intr_lock);
 				return 0;
 			case SB_BASS:
 				sbdsp_set_ifilter(addr, cp->un.ord ? SB_BASS : 0);
-				mutex_spin_exit(&sc->sc_intr_lock);
 				return 0;
 			}
 		}
 	case SB_PCSPEAKER:
 	case SB_INPUT_GAIN:
 	case SB_OUTPUT_GAIN:
-		if (!ISSBM1745(sc)) {
-			error = EINVAL;
-			break;
-		}
+		if (!ISSBM1745(sc))
+			return EINVAL;
 	case SB_MIC_VOL:
 	case SB_LINE_IN_VOL:
-		if (sc->sc_mixer_model == SBM_CT1335) {
-			error = EINVAL;
-			break;
-		}
+		if (sc->sc_mixer_model == SBM_CT1335)
+			return EINVAL;
 	case SB_VOICE_VOL:
 	case SB_MIDI_VOL:
 	case SB_CD_VOL:
 	case SB_MASTER_VOL:
-		if (cp->type != AUDIO_MIXER_VALUE) {
-			error = EINVAL;
-			break;
-		}
+		if (cp->type != AUDIO_MIXER_VALUE)
+			return EINVAL;
 
 		/*
 		 * All the mixer ports are stereo except for the microphone.
@@ -1782,19 +1744,15 @@ sbdsp_mixer_set_port(void *addr, mixer_ctrl_t *cp)
 
 		switch (cp->dev) {
 		case SB_MIC_VOL:
-			if (cp->un.value.num_channels != 1) {
-				error = EINVAL;
-				break;
-			}
+			if (cp->un.value.num_channels != 1)
+				return EINVAL;
 
 			lgain = rgain = SB_ADJUST_MIC_GAIN(sc,
 			    cp->un.value.level[AUDIO_MIXER_LEVEL_MONO]);
 			break;
 		case SB_PCSPEAKER:
-			if (cp->un.value.num_channels != 1) {
-				error = EINVAL;
-				break;
-			}
+			if (cp->un.value.num_channels != 1)
+				return EINVAL;
 			/* fall into */
 		case SB_INPUT_GAIN:
 		case SB_OUTPUT_GAIN:
@@ -1808,49 +1766,41 @@ sbdsp_mixer_set_port(void *addr, mixer_ctrl_t *cp)
 				    cp->un.value.level[AUDIO_MIXER_LEVEL_MONO]);
 				break;
 			case 2:
-				if (sc->sc_mixer_model == SBM_CT1335) {
-					error = EINVAL;
-					break;
-				}
+				if (sc->sc_mixer_model == SBM_CT1335)
+					return EINVAL;
 				lgain = SB_ADJUST_GAIN(sc,
 				    cp->un.value.level[AUDIO_MIXER_LEVEL_LEFT]);
 				rgain = SB_ADJUST_GAIN(sc,
 				    cp->un.value.level[AUDIO_MIXER_LEVEL_RIGHT]);
 				break;
 			default:
-				error = EINVAL;
-				break;
+				return EINVAL;
 			}
 			break;
 		}
-		if (error == 0) {
-			sc->gain[cp->dev][SB_LEFT]  = lgain;
-			sc->gain[cp->dev][SB_RIGHT] = rgain;
-			sbdsp_set_mixer_gain(sc, cp->dev);
-		}
+		sc->gain[cp->dev][SB_LEFT]  = lgain;
+		sc->gain[cp->dev][SB_RIGHT] = rgain;
+
+		sbdsp_set_mixer_gain(sc, cp->dev);
 		break;
 
 	case SB_RECORD_SOURCE:
 		if (ISSBM1745(sc)) {
 			if (cp->type != AUDIO_MIXER_SET)
-				error = EINVAL;
-			else
-				error = sbdsp_set_in_ports(sc, cp->un.mask);
+				return EINVAL;
+			return sbdsp_set_in_ports(sc, cp->un.mask);
 		} else {
 			if (cp->type != AUDIO_MIXER_ENUM)
-				error = EINVAL;
-			else {
-				sc->in_port = cp->un.ord;
-				error = sbdsp_set_in_ports(sc, 1 << cp->un.ord);
-			}
+				return EINVAL;
+			sc->in_port = cp->un.ord;
+			return sbdsp_set_in_ports(sc, 1 << cp->un.ord);
 		}
 		break;
 
 	case SB_AGC:
 		if (!ISSBM1745(sc) || cp->type != AUDIO_MIXER_ENUM)
-			error = EINVAL;
-		else
-			sbdsp_mix_write(sc, SB16P_AGC, cp->un.ord & 1);
+			return EINVAL;
+		sbdsp_mix_write(sc, SB16P_AGC, cp->un.ord & 1);
 		break;
 
 	case SB_CD_OUT_MUTE:
@@ -1862,10 +1812,8 @@ sbdsp_mixer_set_port(void *addr, mixer_ctrl_t *cp)
 	case SB_LINE_OUT_MUTE:
 		mask = SB16P_SW_LINE;
 	omute:
-		if (cp->type != AUDIO_MIXER_ENUM) {
-			error = EINVAL;
-			break;
-		}
+		if (cp->type != AUDIO_MIXER_ENUM)
+			return EINVAL;
 		bits = sbdsp_mix_read(sc, SB16P_OSWITCH);
 		sc->gain[cp->dev][SB_LR] = cp->un.ord != 0;
 		if (cp->un.ord)
@@ -1894,10 +1842,8 @@ sbdsp_mixer_set_port(void *addr, mixer_ctrl_t *cp)
 		lmask = SB16P_SW_MIDI_L;
 		rmask = SB16P_SW_MIDI_R;
 	imute:
-		if (cp->type != AUDIO_MIXER_ENUM) {
-			error = EINVAL;
-			break;
-		}
+		if (cp->type != AUDIO_MIXER_ENUM)
+			return EINVAL;
 		mask = lmask | rmask;
 		lbits = sbdsp_mix_read(sc, SB16P_ISWITCH_L) & ~mask;
 		rbits = sbdsp_mix_read(sc, SB16P_ISWITCH_R) & ~mask;
@@ -1923,12 +1869,10 @@ sbdsp_mixer_set_port(void *addr, mixer_ctrl_t *cp)
 		break;
 
 	default:
-		error = EINVAL;
-		break;
+		return EINVAL;
 	}
 
-	mutex_spin_exit(&sc->sc_intr_lock);
-	return error;
+	return 0;
 }
 
 int
@@ -1937,9 +1881,6 @@ sbdsp_mixer_get_port(void *addr, mixer_ctrl_t *cp)
 	struct sbdsp_softc *sc;
 
 	sc = addr;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
-
 	if (sc->sc_open == SB_OPEN_MIDI)
 		return EBUSY;
 
@@ -1948,8 +1889,6 @@ sbdsp_mixer_get_port(void *addr, mixer_ctrl_t *cp)
 	if (sc->sc_mixer_model == SBM_NONE)
 		return EINVAL;
 
-	mutex_spin_enter(&sc->sc_intr_lock);
-	
 	switch (cp->dev) {
 	case SB_TREBLE:
 	case SB_BASS:
@@ -1958,27 +1897,21 @@ sbdsp_mixer_get_port(void *addr, mixer_ctrl_t *cp)
 			switch (cp->dev) {
 			case SB_TREBLE:
 				cp->un.ord = sbdsp_get_ifilter(addr) == SB_TREBLE;
-				mutex_spin_exit(&sc->sc_intr_lock);
 				return 0;
 			case SB_BASS:
 				cp->un.ord = sbdsp_get_ifilter(addr) == SB_BASS;
-				mutex_spin_exit(&sc->sc_intr_lock);
 				return 0;
 			}
 		}
 	case SB_PCSPEAKER:
 	case SB_INPUT_GAIN:
 	case SB_OUTPUT_GAIN:
-		if (!ISSBM1745(sc)) {
-			mutex_spin_exit(&sc->sc_intr_lock);
+		if (!ISSBM1745(sc))
 			return EINVAL;
-		}
 	case SB_MIC_VOL:
 	case SB_LINE_IN_VOL:
-		if (sc->sc_mixer_model == SBM_CT1335) {
-			mutex_spin_exit(&sc->sc_intr_lock);
+		if (sc->sc_mixer_model == SBM_CT1335)
 			return EINVAL;
-		}
 	case SB_VOICE_VOL:
 	case SB_MIDI_VOL:
 	case SB_CD_VOL:
@@ -1986,10 +1919,8 @@ sbdsp_mixer_get_port(void *addr, mixer_ctrl_t *cp)
 		switch (cp->dev) {
 		case SB_MIC_VOL:
 		case SB_PCSPEAKER:
-			if (cp->un.value.num_channels != 1) {
-				mutex_spin_exit(&sc->sc_intr_lock);
+			if (cp->un.value.num_channels != 1)
 				return EINVAL;
-			}
 			/* fall into */
 		default:
 			switch (cp->un.value.num_channels) {
@@ -2004,7 +1935,6 @@ sbdsp_mixer_get_port(void *addr, mixer_ctrl_t *cp)
 				    sc->gain[cp->dev][SB_RIGHT];
 				break;
 			default:
-				mutex_spin_exit(&sc->sc_intr_lock);
 				return EINVAL;
 			}
 			break;
@@ -2019,10 +1949,8 @@ sbdsp_mixer_get_port(void *addr, mixer_ctrl_t *cp)
 		break;
 
 	case SB_AGC:
-		if (!ISSBM1745(sc)) {
-			mutex_spin_exit(&sc->sc_intr_lock);
+		if (!ISSBM1745(sc))
 			return EINVAL;
-		}
 		cp->un.ord = sbdsp_mix_read(sc, SB16P_AGC);
 		break;
 
@@ -2041,11 +1969,8 @@ sbdsp_mixer_get_port(void *addr, mixer_ctrl_t *cp)
 		break;
 
 	default:
-		mutex_spin_exit(&sc->sc_intr_lock);
 		return EINVAL;
 	}
-
-	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return 0;
 }
@@ -2059,8 +1984,6 @@ sbdsp_mixer_query_devinfo(void *addr, mixer_devinfo_t *dip)
 	sc = addr;
 	DPRINTF(("sbdsp_mixer_query_devinfo: model=%d index=%d\n",
 		 sc->sc_mixer_model, dip->index));
-
-	KASSERT(mutex_owned(&sc->sc_lock));
 
 	if (sc->sc_mixer_model == SBM_NONE)
 		return ENXIO;
@@ -2348,7 +2271,8 @@ sbdsp_mixer_query_devinfo(void *addr, mixer_devinfo_t *dip)
 }
 
 void *
-sb_malloc(void *addr, int direction, size_t size)
+sb_malloc(void *addr, int direction, size_t size,
+    struct malloc_type *pool, int flags)
 {
 	struct sbdsp_softc *sc;
 	int drq;
@@ -2358,14 +2282,14 @@ sb_malloc(void *addr, int direction, size_t size)
 		drq = sc->sc_drq8;
 	else
 		drq = sc->sc_drq16;
-	return isa_malloc(sc->sc_ic, drq, size, M_DEVBUF, M_WAITOK);
+	return isa_malloc(sc->sc_ic, drq, size, pool, flags);
 }
 
 void
-sb_free(void *addr, void *ptr, size_t size)
+sb_free(void *addr, void *ptr, struct malloc_type *pool)
 {
 
-	isa_free(ptr, M_DEVBUF);
+	isa_free(ptr, pool);
 }
 
 size_t
@@ -2400,16 +2324,6 @@ sbdsp_get_props(void *addr)
 	sc = addr;
 	return AUDIO_PROP_MMAP | AUDIO_PROP_INDEPENDENT |
 	       (sc->sc_fullduplex ? AUDIO_PROP_FULLDUPLEX : 0);
-}
-
-void
-sbdsp_get_locks(void *addr, kmutex_t **intr, kmutex_t **proc)
-{
-	struct sbdsp_softc *sc;
-
-	sc = addr;
-	*intr = &sc->sc_intr_lock;
-	*proc = &sc->sc_lock;
 }
 
 #if NMPU > 0
@@ -2488,10 +2402,9 @@ sbdsp_midi_intr(void *addr)
 	struct sbdsp_softc *sc;
 
 	sc = addr;
-
-	KASSERT(mutex_owned(&sc->sc_intr_lock));
-
 	sc->sc_intrm(sc->sc_argm, sbdsp_rdsp(sc));
 	return (0);
 }
+
 #endif
+

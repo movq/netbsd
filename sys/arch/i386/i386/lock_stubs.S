@@ -1,4 +1,4 @@
-/*	$NetBSD: lock_stubs.S,v 1.25 2011/01/12 23:12:12 joerg Exp $	*/
+/*	$NetBSD: lock_stubs.S,v 1.21.6.2 2009/05/13 00:35:16 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -30,12 +30,12 @@
  */
 
 /*
- * Where possible we make each routine fit into an assumed 64-byte cache
- * line.  Please check alignment with 'objdump -d' after making changes. 
+ * Where possible we make * each routine fit into an assumed 64-byte cache
+ * line.  Please check * alignment with 'objdump -d' after making changes. 
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: lock_stubs.S,v 1.25 2011/01/12 23:12:12 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lock_stubs.S,v 1.21.6.2 2009/05/13 00:35:16 snj Exp $");
 
 #include "opt_lockdebug.h"
 
@@ -45,8 +45,8 @@ __KERNEL_RCSID(0, "$NetBSD: lock_stubs.S,v 1.25 2011/01/12 23:12:12 joerg Exp $"
 
 #define	ALIGN64		.align	64
 #define	ALIGN32		.align	32
-#define	LOCK(num)	.Lpatch ## num:	lock
-#define	RET(num)	.Lret ## num: ret; nop; nop; ret
+#define	LOCK(num)	.Lpatch/**/num:	lock
+#define	RET(num)	.Lret/**/num: ret; nop; nop; ret
 #define	ENDLABEL(name,a) .align	a; LABEL(name)
 
 #if !defined(LOCKDEBUG)

@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_pgsql.c,v 1.1.1.2 2011/03/02 19:32:14 tron Exp $	*/
+/*	$NetBSD: dict_pgsql.c,v 1.1.1.1.2.3 2011/01/07 01:24:02 riz Exp $	*/
 
 /*++
 /* NAME
@@ -34,7 +34,7 @@
 /*	obtain main.cf configuration parameters for this search.
 /*
 /*	In the first case, the configuration parameters below are
-/*	specified in the file as \fIname\fR=\fIvalue\fR pairs.
+/*	specified in the file as \fIname\fR=\fBvalue\fR pairs.
 /*
 /*	In the second case, the configuration parameters are
 /*	prefixed with the value of \fIname\fR and an underscore,
@@ -50,25 +50,29 @@
 /*
 /* .PP
 /*	Configuration parameters:
-/* .IP user
+/*
+/*	The parameters encode a number of pieces of information:
+/*	username, password, databasename, table, select_field,
+/*	where_field, and hosts:
+/* .IP \fIuser\fR
 /*	Username for connecting to the database.
-/* .IP password
+/* .IP \fIpassword\fR
 /*	Password for the above.
-/* .IP dbname
+/* .IP \fIdbname\fR
 /*	Name of the database.
-/* .IP query
+/* .IP \fIquery\fR
 /*	Query template. If not defined a default query template is constructed
 /*	from the legacy \fIselect_function\fR or failing that the \fItable\fR,
 /*	\fIselect_field\fR, \fIwhere_field\fR, and \fIadditional_conditions\fR
 /*	parameters. Before the query is issues, variable substitutions are
 /*	performed. See pgsql_table(5).
-/* .IP domain
+/* .IP \fIdomain\fR
 /*	List of domains the queries should be restricted to.  If
 /*	specified, only FQDN addresses whose domain parts matching this
 /*	list will be queried against the SQL database.  Lookups for
 /*	partial addresses are also supressed.  This can significantly
 /*	reduce the query load on the server.
-/* .IP result_format
+/* .IP \fIresult_format\fR
 /*	The format used to expand results from queries.  Substitutions
 /*	are performed as described in pgsql_table(5). Defaults to returning
 /*	the lookup result unchanged.
@@ -77,24 +81,24 @@
 /*	exceed the limit fail with dict_errno=DICT_ERR_RETRY. Note that each
 /*	non-empty (and non-NULL) column of a multi-column result row counts as
 /*	one result.
-/* .IP select_function
+/* .IP \fIselect_function\fR
 /*	When \fIquery\fR is not defined, the function to be used instead of
 /*	the default query based on the legacy \fItable\fR, \fIselect_field\fR,
 /*	\fIwhere_field\fR, and \fIadditional_conditions\fR parameters.
-/* .IP table
+/* .IP \fItable\fR
 /*	When \fIquery\fR and \fIselect_function\fR are not defined, the name of the
 /*	FROM table used to construct the default query template, see pgsql_table(5).
-/* .IP select_field
+/* .IP \fIselect_field\fR
 /*	When \fIquery\fR and \fIselect_function\fR are not defined, the name of the
 /*	SELECT field used to construct the default query template, see pgsql_table(5).
-/* .IP where_field
+/* .IP \fIwhere_field\fR
 /*	When \fIquery\fR and \fIselect_function\fR are not defined, the name of the
 /*	WHERE field used to construct the default query template, see pgsql_table(5).
-/* .IP additional_conditions
+/* .IP \fIadditional_conditions\fR
 /*	When \fIquery\fR and \fIselect_function\fR are not defined, the name of the
 /*	additional text to add to the WHERE field in the default query template (this
 /*	usually begins with "and") see pgsql_table(5).
-/* .IP hosts
+/* .IP \fIhosts\fR
 /*	List of hosts to connect to.
 /* .PP
 /*	For example, if you want the map to reference databases of
@@ -105,19 +109,19 @@
 /*	"postfix" and password "passwd" then the configuration file
 /*	should read:
 /* .PP
-/*	user = postfix
+/*	\fIuser\fR = \fBpostfix\fR
 /* .br
-/*	password = passwd
+/*	\fIpassword\fR = \fBpasswd\fR
 /* .br
-/*	dbname = postfix_info
+/*	\fIdbname\fR = \fBpostfix_info\fR
 /* .br
-/*	table = aliases
+/*	\fItable\fR = \fBaliases\fR
 /* .br
-/*	select_field = forw_addr
+/*	\fIselect_field\fR = \fBforw_addr\fR
 /* .br
-/*	where_field = alias
+/*	\fIwhere_field\fR = \fBalias\fR
 /* .br
-/*	hosts = host1.some.domain\fR \fBhost2.some.domain
+/*	\fIhosts\fR = \fBhost1.some.domain\fR \fBhost2.some.domain\fR
 /* .PP
 /* SEE ALSO
 /*	dict(3) generic dictionary manager

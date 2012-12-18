@@ -1,4 +1,4 @@
-/*	$NetBSD: route.c,v 1.79 2012/03/20 20:34:58 matt Exp $	*/
+/*	$NetBSD: route.c,v 1.71 2008/04/23 15:35:37 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)route.c	8.3 (Berkeley) 3/9/94";
 #else
-__RCSID("$NetBSD: route.c,v 1.79 2012/03/20 20:34:58 matt Exp $");
+__RCSID("$NetBSD: route.c,v 1.71 2008/04/23 15:35:37 thorpej Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,11 +48,12 @@ __RCSID("$NetBSD: route.c,v 1.79 2012/03/20 20:34:58 matt Exp $");
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
+#define _KERNEL
 #include <net/route.h>
+#undef _KERNEL
 #include <netinet/in.h>
 #include <netatalk/at.h>
 #include <netiso/iso.h>
-#include <netmpls/mpls.h>
 
 #include <sys/sysctl.h>
 
@@ -69,6 +70,11 @@ __RCSID("$NetBSD: route.c,v 1.79 2012/03/20 20:34:58 matt Exp $");
 #include "netstat.h"
 
 #define kget(p, d) (kread((u_long)(p), (char *)&(d), sizeof (d)))
+
+/* alignment constraint for routing socket */
+#define ROUNDUP(a) \
+	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
+#define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
 
 /*
  * XXX we put all of the sockaddr types in here to force the alignment
@@ -99,10 +105,11 @@ static void p_krtentry(struct rtentry *);
  * Print routing tables.
  */
 void
-routepr(u_long rtree)
+routepr(rtree)
+	u_long rtree;
 {
 	struct radix_node_head *rnh, head;
-	struct radix_node_head *rt_nodes[AF_MAX+1];
+	struct radix_node_head *rt_tables[AF_MAX+1];
 	int i;
 
 	printf("Routing tables\n");
@@ -112,9 +119,9 @@ routepr(u_long rtree)
 		return;
 	}
 
-	kget(rtree, rt_nodes);
+	kget(rtree, rt_tables);
 	for (i = 0; i <= AF_MAX; i++) {
-		if ((rnh = rt_nodes[i]) == 0)
+		if ((rnh = rt_tables[i]) == 0)
 			continue;
 		kget(rnh, head);
 		if (i == AF_UNSPEC) {
@@ -142,7 +149,8 @@ kgetsa(const struct sockaddr *dst)
 }
 
 static void
-p_tree(struct radix_node *rn)
+p_tree(rn)
+	struct radix_node *rn;
 {
 
 again:
@@ -160,7 +168,7 @@ again:
 			if (Aflag)
 				p_rtnode();
 		} else {
-			p_sockaddr(kgetsa((const struct sockaddr *)rnode.rn_key),
+			p_sockaddr(kgetsa((struct sockaddr *)rnode.rn_key),
 			    NULL, 0, 44);
 			putchar('\n');
 		}
@@ -178,7 +186,7 @@ again:
 }
 
 static void
-p_rtnode(void)
+p_rtnode()
 {
 	struct radix_mask *rm = rnode.rn_mklist;
 	char	nbuf[20];
@@ -186,7 +194,7 @@ p_rtnode(void)
 	if (rnode.rn_b < 0) {
 		if (rnode.rn_mask) {
 			printf("\t  mask ");
-			p_sockaddr(kgetsa((const struct sockaddr *)rnode.rn_mask),
+			p_sockaddr(kgetsa((struct sockaddr *)rnode.rn_mask),
 				    NULL, 0, -1);
 		} else if (rm == 0)
 			return;
@@ -204,10 +212,10 @@ p_rtnode(void)
 			struct radix_node rnode_aux;
 			printf(" <normal>, ");
 			kget(rmask.rm_leaf, rnode_aux);
-			p_sockaddr(kgetsa((const struct sockaddr *)rnode_aux.rn_mask),
+			p_sockaddr(kgetsa((struct sockaddr *)rnode_aux.rn_mask),
 				    NULL, 0, -1);
 		} else
-			p_sockaddr(kgetsa((const struct sockaddr *)rmask.rm_mask),
+			p_sockaddr(kgetsa((struct sockaddr *)rmask.rm_mask),
 			    NULL, 0, -1);
 		putchar('}');
 		if ((rm = rmask.rm_mklist) != NULL)
@@ -216,14 +224,17 @@ p_rtnode(void)
 	putchar('\n');
 }
 
-static struct sockaddr *sockcopy(struct sockaddr *, union sockaddr_union *);
+static struct sockaddr *sockcopy __P((struct sockaddr *,
+    union sockaddr_union *));
 
 /*
  * copy a sockaddr into an allocated region, allocate at least sockaddr
  * bytes and zero unused
  */
 static struct sockaddr *
-sockcopy(struct sockaddr *sp, union sockaddr_union *dp)
+sockcopy(sp, dp)
+	struct sockaddr *sp;
+	union sockaddr_union *dp;
 {
 	int len;
 
@@ -237,11 +248,13 @@ sockcopy(struct sockaddr *sp, union sockaddr_union *dp)
 }
 
 static void
-p_krtentry(struct rtentry *rt)
+p_krtentry(rt)
+	struct rtentry *rt;
 {
 	static struct ifnet ifnet, *lastif;
 	union sockaddr_union addr_un, mask_un;
 	struct sockaddr *addr, *mask;
+	int af;
 
 	if (Lflag && (rt->rt_flags & RTF_LLINFO))
 		return;
@@ -249,6 +262,7 @@ p_krtentry(struct rtentry *rt)
 	memset(&addr_un, 0, sizeof(addr_un));
 	memset(&mask_un, 0, sizeof(mask_un));
 	addr = sockcopy(kgetsa(rt_getkey(rt)), &addr_un);
+	af = addr->sa_family;
 	if (rt_mask(rt))
 		mask = sockcopy(kgetsa(rt_mask(rt)), &mask_un);
 	else
@@ -256,29 +270,12 @@ p_krtentry(struct rtentry *rt)
 	p_addr(addr, mask, rt->rt_flags);
 	p_gwaddr(kgetsa(rt->rt_gateway), kgetsa(rt->rt_gateway)->sa_family);
 	p_flags(rt->rt_flags, "%-6.6s ");
-	printf("%6d %8"PRIu64" ", rt->rt_refcnt, rt->rt_use);
+	printf("%6d %8lu ", rt->rt_refcnt, rt->rt_use);
 	if (rt->rt_rmx.rmx_mtu)
-		printf("%6"PRIu64, rt->rt_rmx.rmx_mtu); 
+		printf("%6lu", rt->rt_rmx.rmx_mtu); 
 	else
 		printf("%6s", "-");
 	putchar((rt->rt_rmx.rmx_locks & RTV_MTU) ? 'L' : ' ');
-	if (tagflag == 1) {
-		if (rt->rt_tag != NULL) {
-			const struct sockaddr *tagsa = kgetsa(rt->rt_tag);
-			char *tagstr;
-
-			if (tagsa->sa_family == AF_MPLS) {
-				tagstr = mpls_ntoa(tagsa);
-				if (strlen(tagstr) < 7)
-					printf("%7s", tagstr);
-				else
-					printf("%s", tagstr);
-			}
-			else
-				printf("%7s", "-");
-		} else
-			printf("%7s", "-");
-	}
 	if (rt->rt_ifp) {
 		if (rt->rt_ifp != lastif) {
 			kget(rt->rt_ifp, ifnet);
@@ -289,23 +286,23 @@ p_krtentry(struct rtentry *rt)
 	}
 	putchar('\n');
  	if (vflag) {
- 		printf("\texpire   %10"PRId64"%c  recvpipe %10"PRIu64"%c  "
-		       "sendpipe %10"PRIu64"%c\n",
- 			(int64_t)rt->rt_rmx.rmx_expire, 
+ 		printf("\texpire   %10lu%c  recvpipe %10ld%c  "
+		       "sendpipe %10ld%c\n",
+ 			rt->rt_rmx.rmx_expire, 
  			(rt->rt_rmx.rmx_locks & RTV_EXPIRE) ? 'L' : ' ',
  			rt->rt_rmx.rmx_recvpipe,
  			(rt->rt_rmx.rmx_locks & RTV_RPIPE) ? 'L' : ' ',
  			rt->rt_rmx.rmx_sendpipe,
  			(rt->rt_rmx.rmx_locks & RTV_SPIPE) ? 'L' : ' ');
- 		printf("\tssthresh %10"PRIu64"%c  rtt      %10"PRIu64"%c  "
-		       "rttvar   %10"PRIu64"%c\n",
+ 		printf("\tssthresh %10lu%c  rtt      %10ld%c  "
+		       "rttvar   %10ld%c\n",
  			rt->rt_rmx.rmx_ssthresh, 
  			(rt->rt_rmx.rmx_locks & RTV_SSTHRESH) ? 'L' : ' ',
  			rt->rt_rmx.rmx_rtt, 
  			(rt->rt_rmx.rmx_locks & RTV_RTT) ? 'L' : ' ',
  			rt->rt_rmx.rmx_rttvar, 
 			(rt->rt_rmx.rmx_locks & RTV_RTTVAR) ? 'L' : ' ');
- 		printf("\thopcount %10"PRIu64"%c\n",
+ 		printf("\thopcount %10lu%c\n",
  			rt->rt_rmx.rmx_hopcount, 
 			(rt->rt_rmx.rmx_locks & RTV_HOPCOUNT) ? 'L' : ' ');
  	}
@@ -315,42 +312,44 @@ p_krtentry(struct rtentry *rt)
  * Print routing statistics
  */
 void
-rt_stats(u_long off)
+rt_stats(off)
+	u_long off;
 {
-	struct rtstat rtstats;
+	struct rtstat rtstat;
 
 	if (use_sysctl) {
-		size_t rtsize = sizeof(rtstats);
+		size_t rtsize = sizeof(rtstat);
 
-		if (sysctlbyname("net.route.stats", &rtstats, &rtsize,
+		if (sysctlbyname("net.route.stats", &rtstat, &rtsize,
 		    NULL, 0) == -1)
 			err(1, "rt_stats: sysctl");
 	} else 	if (off == 0) {
 		printf("rtstat: symbol not in namelist\n");
 		return;
 	} else
-		kread(off, (char *)&rtstats, sizeof(rtstats));
+		kread(off, (char *)&rtstat, sizeof (rtstat));
 
 	printf("routing:\n");
 	printf("\t%llu bad routing redirect%s\n",
-		(unsigned long long)rtstats.rts_badredirect,
-		plural(rtstats.rts_badredirect));
+		(unsigned long long)rtstat.rts_badredirect,
+		plural(rtstat.rts_badredirect));
 	printf("\t%llu dynamically created route%s\n",
-		(unsigned long long)rtstats.rts_dynamic,
-		plural(rtstats.rts_dynamic));
+		(unsigned long long)rtstat.rts_dynamic,
+		plural(rtstat.rts_dynamic));
 	printf("\t%llu new gateway%s due to redirects\n",
-		(unsigned long long)rtstats.rts_newgateway,
-		plural(rtstats.rts_newgateway));
+		(unsigned long long)rtstat.rts_newgateway,
+		plural(rtstat.rts_newgateway));
 	printf("\t%llu destination%s found unreachable\n",
-		(unsigned long long)rtstats.rts_unreach,
-		plural(rtstats.rts_unreach));
+		(unsigned long long)rtstat.rts_unreach,
+		plural(rtstat.rts_unreach));
 	printf("\t%llu use%s of a wildcard route\n",
-		(unsigned long long)rtstats.rts_wildcard,
-		plural(rtstats.rts_wildcard));
+		(unsigned long long)rtstat.rts_wildcard,
+		plural(rtstat.rts_wildcard));
 }
 
 void
-upHex(char *p0)
+upHex(p0)
+	char *p0;
 {
 	char *p = p0;
 
@@ -365,3 +364,5 @@ upHex(char *p0)
 			*p += ('A' - 'a');
 		}
 }
+
+

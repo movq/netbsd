@@ -1,4 +1,4 @@
-/*	$NetBSD: opendisk.c,v 1.12 2009/10/13 22:00:31 pooka Exp $	*/
+/*	$NetBSD: opendisk.c,v 1.10.6.2 2009/10/14 09:13:54 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: opendisk.c,v 1.12 2009/10/13 22:00:31 pooka Exp $");
+__RCSID("$NetBSD: opendisk.c,v 1.10.6.2 2009/10/14 09:13:54 sborrill Exp $");
 #endif
 
 #include <sys/param.h>

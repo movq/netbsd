@@ -1,4 +1,4 @@
-/* $NetBSD: setnetbootinfo.c,v 1.13 2009/03/14 21:04:03 dsl Exp $ */
+/* $NetBSD: setnetbootinfo.c,v 1.12 2002/09/22 05:38:30 mycroft Exp $ */
 
 /*
  * Copyright (c) 1997 Christopher G. Demetriou
@@ -66,7 +66,9 @@ usage(void)
 }
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	struct netbbinfo *netbbinfop;
 	struct stat sb;

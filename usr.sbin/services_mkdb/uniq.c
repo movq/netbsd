@@ -1,4 +1,4 @@
-/*	$NetBSD: uniq.c,v 1.5 2010/04/25 00:54:46 joerg Exp $	*/
+/*	$NetBSD: uniq.c,v 1.4 2008/04/28 20:24:17 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: uniq.c,v 1.5 2010/04/25 00:54:46 joerg Exp $");
+__RCSID("$NetBSD: uniq.c,v 1.4 2008/04/28 20:24:17 martin Exp $");
 
 #include <stdio.h>
 #include <string.h>
@@ -40,17 +40,9 @@ __RCSID("$NetBSD: uniq.c,v 1.5 2010/04/25 00:54:46 joerg Exp $");
 #include <ctype.h>
 #include <fcntl.h>
 
-#include "extern.h"
+extern const HASHINFO hinfo;
 
-static const HASHINFO hinfo = {
-	.bsize = 256,
-	.ffactor = 4,
-	.nelem = 32768,
-	.cachesize = 1024,
-	.hash = NULL,
-	.lorder = 0
-};
-
+void uniq(const char *);
 static int comp(const char *, char **, size_t *);
 
 /*

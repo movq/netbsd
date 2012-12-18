@@ -1,4 +1,4 @@
-/*	$NetBSD: vga.c,v 1.10 2009/03/18 10:22:27 cegger Exp $	*/
+/*	$NetBSD: vga.c,v 1.8 2008/05/26 16:28:39 kiyohara Exp $	*/
 
 /*-
  * Copyright (C) 1995-1997 Gary Thomas (gdt@linuxppc.org)
@@ -95,7 +95,7 @@ void video_off(void);
  * cursor() sets an offset (0-1999) into the 80x25 text area
  */
 static void
-cursor(void)
+cursor()
 {
  	int pos = screen.cp - Crtat;
 
@@ -109,7 +109,7 @@ cursor(void)
 }
 
 static void
-initscreen(void)
+initscreen()
 {
 	struct screen *d = &screen;
 
@@ -401,7 +401,7 @@ vga_puts(char *s)
 }
 
 void
-video_on(void)
+video_on()
 {
 
 	/* Enable video */
@@ -410,7 +410,7 @@ video_on(void)
 }
 
 void
-video_off(void)
+video_off()
 {
 
 	/* Disable video */
@@ -419,7 +419,8 @@ video_off(void)
 }
 
 void
-vga_init(u_char *ISA_mem)
+vga_init(ISA_mem)
+	u_char *ISA_mem;
 {
 	struct screen *d = &screen;
 

@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: gram.y,v 1.4 2011/09/23 14:14:38 nonaka Exp $	*/
+/*	$NetBSD: gram.y,v 1.3 2001/03/03 12:51:44 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999
@@ -37,10 +37,8 @@
 
 #include <stdio.h>
 #include <strings.h>
-#include <ctype.h>
 
 #include "platid_gen.h"
-#include "gram.h"
 
 #define LIST_NEW(l)	{ \
 	(l) = new_node(N_LIST, 0, NULL, NULL, NULL); \
@@ -131,8 +129,6 @@ sym:
   MOD  { $$ = $1; };
 
 %%
-
-extern int YYLEX_DECL();
 
 char*
 touppers(s)

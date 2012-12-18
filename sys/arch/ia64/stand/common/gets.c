@@ -1,4 +1,4 @@
-/*	$NetBSD: gets.c,v 1.2 2009/07/20 04:59:03 kiyohara Exp $	*/
+/*	$NetBSD: gets.c,v 1.1 2006/04/07 14:21:29 cherry Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -36,9 +36,6 @@
  */
 
 #include <sys/cdefs.h>
-
-#include "lib/libsa/stand.h"
-#include "lib/libsa/loadfile.h"
 
 #include "bootstrap.h"
 

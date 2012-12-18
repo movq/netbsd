@@ -1,4 +1,4 @@
-/*	$NetBSD: dma.c,v 1.22 2012/10/13 06:32:11 tsutsui Exp $ */
+/*	$NetBSD: dma.c,v 1.20 2008/04/13 04:55:53 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1994 Paul Kranenburg.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dma.c,v 1.22 2012/10/13 06:32:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dma.c,v 1.20 2008/04/13 04:55:53 tsutsui Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -313,16 +313,13 @@ espdmaintr(struct dma_softc *sc)
 
 	csr = DMA_GCSR(sc);
 
-#ifdef NCR53C9X_DEBUG
-        if (ncr53c9x_debug & NCR_SHOWDMA)
-		snprintb(bits, sizeof(bits), DMACSRBITS, csr);
-#endif
 	NCR_DMA(("%s: intr: addr 0x%x, csr %s\n",
-	    device_xname(sc->sc_dev), DMADDR(sc), bits));
+	    device_xname(sc->sc_dev), DMADDR(sc),
+	    bitmask_snprintf(csr, DMACSRBITS, bits, sizeof(bits))));
 
 	if (csr & D_ERR_PEND) {
-		snprintb(bits, sizeof(bits), DMACSRBITS, csr);
-		printf("%s: error: csr=%s\n", device_xname(sc->sc_dev), bits);
+		printf("%s: error: csr=%s\n", device_xname(sc->sc_dev),
+		    bitmask_snprintf(csr, DMACSRBITS, bits, sizeof(bits)));
 		csr &= ~D_EN_DMA;	/* Stop DMA */
 		DMA_SCSR(sc, csr);
 		csr |= D_FLUSH;
@@ -389,7 +386,7 @@ espdmaintr(struct dma_softc *sc)
 		 * another target.  As such, don't print the warning.
 		 */
 		printf("%s: xfer (%d) > req (%d)\n",
-		    device_xname(sc->sc_dev), trans, sc->sc_dmasize);
+		    sc->sc_dev.dv_xname, trans, sc->sc_dmasize);
 #endif
 		trans = sc->sc_dmasize;
 	}

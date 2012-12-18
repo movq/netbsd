@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.10 2011/06/22 18:06:34 matt Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.6 2008/05/30 19:26:35 ad Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.10 2011/06/22 18:06:34 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.6 2008/05/30 19:26:35 ad Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -52,10 +52,11 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.10 2011/06/22 18:06:34 matt Exp $"
 #include <sys/errno.h>
 #include <sys/device.h>
 #include <sys/extent.h>
-#include <sys/bus.h>
-#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
+
+#include <machine/bus.h>
+#include <machine/intr.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -63,7 +64,6 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.10 2011/06/22 18:06:34 matt Exp $"
 #include <dev/pci/pciconf.h>
 
 #include <powerpc/ibm4xx/ibm405gp.h>
-#include <powerpc/ibm4xx/pci_machdep.h>
 #include <powerpc/ibm4xx/dev/pcicreg.h>
 
 static struct powerpc_bus_space pci_iot = {
@@ -76,7 +76,7 @@ static struct powerpc_bus_space pci_iot = {
 static bus_space_handle_t pci_ioh;
 
 void
-ibm4xx_pci_machdep_init(void)
+pci_machdep_init(void)
 {
 
 	if (pci_ioh == 0 &&
@@ -86,8 +86,8 @@ ibm4xx_pci_machdep_init(void)
 }
 
 void
-ibm4xx_pci_attach_hook(device_t parent, device_t self,
-    struct pcibus_attach_args *pba)
+pci_attach_hook(struct device *parent, struct device *self,
+		struct pcibus_attach_args *pba)
 {
 
 #ifdef PCI_CONFIGURE_VERBOSE
@@ -100,8 +100,19 @@ ibm4xx_pci_attach_hook(device_t parent, device_t self,
 #endif
 }
 
+int
+pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
+{
+
+	/*
+	 * Bus number is irrelevant.  Configuration Mechanism 1 is in
+	 * use, can have devices 0-32 (i.e. the `normal' range).
+	 */
+	return 31;
+}
+
 pcitag_t
-ibm4xx_pci_make_tag(void *v, int bus, int device, int function)
+pci_make_tag(pci_chipset_tag_t pc, int bus, int device, int function)
 {
 	pcitag_t tag;
 
@@ -115,7 +126,7 @@ ibm4xx_pci_make_tag(void *v, int bus, int device, int function)
 }
 
 void
-ibm4xx_pci_decompose_tag(void *v, pcitag_t tag, int *bp, int *dp, int *fp)
+pci_decompose_tag(pci_chipset_tag_t pc, pcitag_t tag, int *bp, int *dp, int *fp)
 {
 
 	if (bp != NULL)
@@ -127,7 +138,7 @@ ibm4xx_pci_decompose_tag(void *v, pcitag_t tag, int *bp, int *dp, int *fp)
 }
 
 pcireg_t
-ibm4xx_pci_conf_read(void *v, pcitag_t tag, int reg)
+pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 {
 	pcireg_t data;
 
@@ -140,7 +151,7 @@ ibm4xx_pci_conf_read(void *v, pcitag_t tag, int reg)
 }
 
 void
-ibm4xx_pci_conf_write(void *v, pcitag_t tag, int reg, pcireg_t data)
+pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 {
 
 	bus_space_write_4(&pci_iot, pci_ioh, PCIC_CFGADDR, tag | reg);
@@ -149,9 +160,31 @@ ibm4xx_pci_conf_write(void *v, pcitag_t tag, int reg, pcireg_t data)
 	bus_space_write_4(&pci_iot, pci_ioh, PCIC_CFGADDR, 0);
 }
 
+const char *
+pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih)
+{
+	static char irqstr[8];		/* 4 + 2 + NUL + sanity */
+
+	/* Make sure it looks sane, intr_establish does the real check. */
+	if (ih < 0 || ih > 99)
+		panic("pci_intr_string: handle %d won't fit two digits", ih);
+
+	sprintf(irqstr, "irq %d", ih);
+	return (irqstr);
+	
+}
+
+const struct evcnt *
+pci_intr_evcnt(pci_chipset_tag_t pc, pci_intr_handle_t ih)
+{
+
+	/* XXX for now, no evcnt parent reported */
+	return NULL;
+}
+
 int
-ibm4xx_pci_intr_setattr(void *v, pci_intr_handle_t *ihp, int attr,
-    uint64_t data)
+pci_intr_setattr(pci_chipset_tag_t pc, pci_intr_handle_t *ih,
+		 int attr, uint64_t data)
 {
 
 	switch (attr) {
@@ -162,9 +195,23 @@ ibm4xx_pci_intr_setattr(void *v, pci_intr_handle_t *ihp, int attr,
 	}
 }
 
+void *
+pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih, int level,
+		   int (*func)(void *), void *arg)
+{
+	return intr_establish(ih, IST_LEVEL, level, func, arg);
+}
+
+void
+pci_intr_disestablish(pci_chipset_tag_t pc, void *cookie)
+{
+
+	intr_disestablish(cookie);
+}
+
 /* Avoid overconfiguration */
 int
-ibm4xx_pci_conf_hook(void *v, int bus, int dev, int func, pcireg_t id)
+pci_conf_hook(pci_chipset_tag_t pc, int bus, int dev, int func, pcireg_t id)
 {
 
 	if ((PCI_VENDOR(id) == PCI_VENDOR_IBM && PCI_PRODUCT(id) == PCI_PRODUCT_IBM_405GP) ||

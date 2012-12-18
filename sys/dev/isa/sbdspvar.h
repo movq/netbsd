@@ -1,4 +1,4 @@
-/*	$NetBSD: sbdspvar.h,v 1.61 2011/11/23 23:07:33 jmcneill Exp $	*/
+/*	$NetBSD: sbdspvar.h,v 1.59 2008/03/15 21:09:02 cube Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -97,8 +97,6 @@ struct sbdsp_softc {
 	bus_space_tag_t sc_iot;		/* tag */
 	bus_space_handle_t sc_ioh;	/* handle */
 	void	*sc_ih;			/* interrupt vectoring */
-	kmutex_t sc_lock;
-	kmutex_t sc_intr_lock;
 
 	/* XXX These are only for setting chip configuration registers. */
 	int	sc_iobase;		/* I/O port base address */
@@ -184,7 +182,7 @@ struct sbdsp_softc {
 #define SBMPU_EXTERNAL	1
 #define SBMPU_INTERNAL	0
 #define SBMPU_NONE	-1
-	device_t sc_mpudev;
+	struct device *sc_mpudev;
 	bus_space_tag_t sc_mpu_iot;	/* tag */
 	bus_space_handle_t sc_mpu_ioh;	/* handle */
 #endif
@@ -248,13 +246,13 @@ int	sbdsp_mixer_set_port(void *, mixer_ctrl_t *);
 int	sbdsp_mixer_get_port(void *, mixer_ctrl_t *);
 int	sbdsp_mixer_query_devinfo(void *, mixer_devinfo_t *);
 
-void	*sb_malloc(void *, int, size_t);
-void	sb_free(void *, void *, size_t);
+void	*sb_malloc(void *, int, size_t, struct malloc_type *, int);
+void	sb_free(void *, void *, struct malloc_type *);
 size_t	sb_round_buffersize(void *, int, size_t);
 paddr_t	sb_mappage(void *, void *, off_t, int);
 
 int	sbdsp_get_props(void *);
-void	sbdsp_get_locks(void *, kmutex_t **, kmutex_t **);
+
 
 int	sbdsp_midi_open(void *, int, void (*iintr)(void *, int),
 	    void (*ointr)(void *), void *);

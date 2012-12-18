@@ -1,4 +1,4 @@
-/*	$NetBSD: ldiv.c,v 1.8 2012/06/25 22:32:45 abs Exp $	*/
+/*	$NetBSD: ldiv.c,v 1.7 2003/08/07 16:43:41 agc Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -37,14 +37,15 @@
 #if 0
 static char sccsid[] = "@(#)ldiv.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: ldiv.c,v 1.8 2012/06/25 22:32:45 abs Exp $");
+__RCSID("$NetBSD: ldiv.c,v 1.7 2003/08/07 16:43:41 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdlib.h>		/* ldiv_t */
 
 ldiv_t
-ldiv(long num, long denom)
+ldiv(num, denom)
+	long num, denom;
 {
 	ldiv_t r;
 

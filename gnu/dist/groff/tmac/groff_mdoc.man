@@ -44,7 +44,7 @@
 .\" for an already extremely slow package.
 .\"
 .
-.Dd November 17, 2009
+.Dd August 28, 2005
 .Os
 .Dt GROFF_MDOC 7
 .
@@ -562,8 +562,8 @@ The body of a man page is easily constructed from a basic template:
 .Bd -literal -offset indent
 \&.\e" The following commands are required for all man pages.
 \&.Dd Month day, year
-\&.Dt DOCUMENT_TITLE [section number] [architecture/volume]
 \&.Os [OPERATING_SYSTEM] [version/release]
+\&.Dt DOCUMENT_TITLE [section number] [architecture/volume]
 \&.Sh NAME
 \&.Nm name
 \&.Nd one line description of name
@@ -599,14 +599,13 @@ The body of a man page is easily constructed from a basic template:
 .
 The first items in the template are the commands
 .Ql .Dd ,
-.Ql .Dt ,
+.Ql .Os ,
 and
-.Ql .Os ;
-the document date, the man page title (in
+.Ql .Dt ;
+the document date, the operating system the man page or subject source is
+developed or modified for, and the man page title (in
 .Em upper case )
-along with the section of the manual the page belongs in, and
-the operating system the man page or subject source is
-developed or modified for.
+along with the section of the manual the page belongs in.
 These commands identify the page and are discussed below in
 .Sx TITLE MACROS .
 .Pp
@@ -1689,8 +1688,6 @@ and their results are:
 .Lb libintl
 .It Li libipsec
 .Lb libipsec
-.It Li libisns
-.Lb libisns
 .It Li libkvm
 .Lb libkvm
 .It Li libm
@@ -1719,8 +1716,6 @@ and their results are:
 .Lb libresolv
 .It Li librt
 .Lb librt
-.It Li libsaslc
-.Lb libsaslc
 .It Li libtermcap
 .Lb libtermcap
 .It Li libusbhid
@@ -1941,8 +1936,6 @@ are:
 .St -isoC-90
 .It Li -isoC-99
 .St -isoC-99
-.It Li -isoC-2011
-.St -isoC-2011
 .El
 .Pp
 .
@@ -1974,8 +1967,6 @@ Part 1: System API
 .St -p1003.1-2001
 .It Li -p1003.1-2004
 .St -p1003.1-2004
-.It Li -p1003.1-2008
-.St -p1003.1-2008
 .El
 .Pp
 .
@@ -1995,8 +1986,8 @@ Part 2: Shell and Utilities
 .Pp
 .
 X/Open
-.Pp
 .Bl -tag -width ".Li -p1003.1g-2000" -compact -offset indent
+.Pp
 .It Li -susv2
 .St -susv2
 .It Li -svid4
@@ -2284,16 +2275,16 @@ respectively.
 .
 .Bd -filled -offset 4n
 .Bl -column "quote" "close" "open" "Angle Bracket Enclosure" "`string' or string"
-.It Em Quote Ta Em Open Ta Em Close Ta Em Function               Ta Em Result
-.It No .Aq   Ta    .Ao  Ta    .Ac   Ta "Angle Bracket Enclosure" Ta Ao string Ac
-.It No .Bq   Ta    .Bo  Ta    .Bc   Ta "Bracket Enclosure"       Ta Bo string Bc
-.It No .Brq  Ta    .Bro Ta    .Brc  Ta "Brace Enclosure"         Ta Bro string Brc
-.It No .Dq   Ta    .Do  Ta    .Dc   Ta "Double Quote"            Ta Do string Dc
-.It No .Eq   Ta    .Eo  Ta    .Ec   Ta "Enclose String (in XX)"  Ta XXstringXX
-.It No .Pq   Ta    .Po  Ta    .Pc   Ta "Parenthesis Enclosure"   Ta Po string Pc
-.It No .Ql   Ta         Ta          Ta "Quoted Literal"          Ta So string Sc or Li string
-.It No .Qq   Ta    .Qo  Ta    .Qc   Ta "Straight Double Quote"   Ta Qo string Qc
-.It No .Sq   Ta    .So  Ta    .Sc   Ta "Single Quote"            Ta So string Sc
+.Em Quote Ta Em Open Ta Em Close Ta Em Function               Ta Em Result
+.No .Aq   Ta    .Ao  Ta    .Ac   Ta "Angle Bracket Enclosure" Ta Ao string Ac
+.No .Bq   Ta    .Bo  Ta    .Bc   Ta "Bracket Enclosure"       Ta Bo string Bc
+.No .Brq  Ta    .Bro Ta    .Brc  Ta "Brace Enclosure"         Ta Bro string Brc
+.No .Dq   Ta    .Do  Ta    .Dc   Ta "Double Quote"            Ta Do string Dc
+.No .Eq   Ta    .Eo  Ta    .Ec   Ta "Enclose String (in XX)"  Ta XXstringXX
+.No .Pq   Ta    .Po  Ta    .Pc   Ta "Parenthesis Enclosure"   Ta Po string Pc
+.No .Ql   Ta         Ta          Ta "Quoted Literal"          Ta So string Sc or Li string
+.No .Qq   Ta    .Qo  Ta    .Qc   Ta "Straight Double Quote"   Ta Qo string Qc
+.No .Sq   Ta    .So  Ta    .Sc   Ta "Single Quote"            Ta So string Sc
 .El
 .Ed
 .Pp
@@ -2537,8 +2528,6 @@ Corporate or foreign author.
 Report name.
 .It Li .%T
 Title of article.
-.It Li .%U
-Optional hypertext reference.
 .It Li .%V
 Volume.
 .El
@@ -2885,8 +2874,7 @@ Currently
 style references are not accommodated.
 .Pp
 It is recommended that the cross references are sorted on the section
-number, then alphabetically (case-insensitive) on the names within
-a section, and placed
+number, then alphabetically on the names within a section, and placed
 in that order and comma separated.
 Example:
 .Pp

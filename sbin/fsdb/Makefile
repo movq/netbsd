@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.34 2012/08/10 12:20:11 joerg Exp $
+#	$NetBSD: Makefile,v 1.24 2008/08/29 00:02:23 gmcgarry Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/5/93
 
 .include <bsd.own.mk>
@@ -17,31 +17,22 @@ CPPFLAGS+= -I${FSCK} -I${FSCK_FFS}
 .PATH:	${FSCK} ${FSCK_FFS} ${NETBSDSRCDIR}/sys/ufs/ffs
 
 SRCS+=	vfs_wapbl.c wapbl.c
-
-.PATH:	${NETBSDSRCDIR}/sys/ufs/ufs
-SRCS+=	quota2_subr.c
-
 .PATH:	${NETBSDSRCDIR}/sys/kern
 CPPFLAGS+=-DWAPBL_DEBUG_PRINT=0
 
-SRCS+=	quota2.c
-
-LDADD+= -lutil -ledit -lterminfo -lprop
+LDADD+= -lutil -ledit -ltermcap
 .ifndef HOSTPROG
-DPADD+= ${LIBUTIL} ${LIBEDIT} ${LIBTERMINFO} ${LIBPROP}
+DPADD+= ${LIBUTIL} ${LIBEDIT} ${LIBTERMCAP}
 .endif
 
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 .for f in fsdb ffs_appleufs
 COPTS.${f}.c+=	-Wno-pointer-sign
 .endfor
+.endif
 
 .if ${MACHINE_ARCH} == "m68000"
 COPTS.pass1.c+=	-fno-tree-fre -fno-tree-lrs
 .endif
 
 .include <bsd.prog.mk>
-
-# XXX
-.if defined(HAVE_GCC) && ${HAVE_GCC} == 45 && ${MACHINE_ARCH} == "vax"
-COPTS.fsdb.c+=	-O0
-.endif

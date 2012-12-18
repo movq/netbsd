@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.c,v 1.31 2011/07/09 17:32:30 matt Exp $ */
+/* $NetBSD: cpu.c,v 1.24 2005/12/11 12:18:39 christos Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -28,46 +28,44 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.31 2011/07/09 17:32:30 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.24 2005/12/11 12:18:39 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
-#include <sys/cpu.h>
 
 #include <mips/locore.h>
 
-#include <pmax/autoconf.h>
+#include <machine/autoconf.h>
 
-#include "ioconf.h"
+static int	cpumatch __P((struct device *, struct cfdata *, void *));
+static void	cpuattach __P((struct device *, struct device *, void *));
 
-static int	cpumatch(device_t, cfdata_t, void *);
-static void	cpuattach(device_t, device_t, void *);
-
-CFATTACH_DECL_NEW(cpu, 0,
+CFATTACH_DECL(cpu, sizeof (struct device),
     cpumatch, cpuattach, NULL, NULL);
+extern struct cfdriver cpu_cd;
 
 static int
-cpumatch(device_t parent, cfdata_t cf, void *aux)
+cpumatch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct mainbus_attach_args *ma = aux;
 
 	/* make sure that we're looking for a CPU. */
 	if (strcmp(ma->ma_name, cpu_cd.cd_name) != 0) {
-		return 0;
+		return (0);
 	}
-	return 1;
+	return (1);
 }
 
 static void
-cpuattach(device_t parent, device_t self, void *aux)
+cpuattach(parent, dev, aux)
+	struct device *parent, *dev;
+	void *aux;
 {
 
-	struct cpu_info * const ci = curcpu();
-
-	ci->ci_dev = self;
-	self->dv_private = ci;
-
-	aprint_normal(": ");
-	cpu_identify(self);
+	printf(": ");
+	cpu_identify();
 }

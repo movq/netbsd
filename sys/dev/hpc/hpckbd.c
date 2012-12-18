@@ -1,4 +1,4 @@
-/*	$NetBSD: hpckbd.c,v 1.30 2012/10/27 17:18:17 chs Exp $ */
+/*	$NetBSD: hpckbd.c,v 1.25 2008/04/28 20:23:48 martin Exp $ */
 
 /*-
  * Copyright (c) 1999-2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpckbd.c,v 1.30 2012/10/27 17:18:17 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpckbd.c,v 1.25 2008/04/28 20:23:48 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,21 +79,21 @@ struct hpckbd_core {
 	struct hpckbd_eventq	*hc_head, *hc_tail;
 	int			hc_nevents;
 	int			hc_enabled;
-	device_t		hc_wskbddev;
-	struct hpckbd_softc	*hc_sc;	/* back link */
+	struct device		*hc_wskbddev;
+	struct hpckbd_softc*	hc_sc;	/* back link */
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	int			hc_rawkbd;
 #endif
 };
 
 struct hpckbd_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 	struct hpckbd_core	*sc_core;
 	struct hpckbd_core	sc_coredata;
 };
 
-int	hpckbd_match(device_t, cfdata_t, void *);
-void	hpckbd_attach(device_t, device_t, void *);
+int	hpckbd_match(struct device *, struct cfdata *, void *);
+void	hpckbd_attach(struct device *, struct device *, void *);
 
 void	hpckbd_initcore(struct hpckbd_core *, struct hpckbd_ic_if *, int);
 void	hpckbd_initif(struct hpckbd_core *);
@@ -104,7 +104,7 @@ void	hpckbd_keymap_setup(struct hpckbd_core *, const keysym_t *, int);
 int	__hpckbd_input(void *, int, int);
 void	__hpckbd_input_hook(void *);
 
-CFATTACH_DECL_NEW(hpckbd, sizeof(struct hpckbd_softc),
+CFATTACH_DECL(hpckbd, sizeof(struct hpckbd_softc),
     hpckbd_match, hpckbd_attach, NULL, NULL);
 
 /* wskbd accessopts */
@@ -139,20 +139,19 @@ struct wskbd_mapdata hpckbd_keymapdata = {
 };
 
 int
-hpckbd_match(device_t parent, cfdata_t cf, void *aux)
+hpckbd_match(struct device *parent,
+	     struct cfdata *cf, void *aux)
 {
 	return (1);
 }
 
 void
-hpckbd_attach(device_t parent, device_t self, void *aux)
+hpckbd_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct hpckbd_attach_args *haa = aux;
 	struct hpckbd_softc *sc = device_private(self);
 	struct hpckbd_ic_if *ic = haa->haa_ic;
 	struct wskbddev_attach_args wa;
-
-	sc->sc_dev = self;
 
 	/*
 	 * Initialize core if it isn't console
@@ -183,9 +182,6 @@ hpckbd_attach(device_t parent, device_t self, void *aux)
 	wa.accessops = &hpckbd_accessops;
 	wa.accesscookie = sc->sc_core;
 	sc->sc_core->hc_wskbddev = config_found(self, &wa, wskbddevprint);
-
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 int

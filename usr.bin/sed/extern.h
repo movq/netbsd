@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.11 2010/02/19 16:35:27 tnn Exp $	*/
+/*	$NetBSD: extern.h,v 1.9 2003/08/07 11:15:49 agc Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -32,7 +32,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)extern.h	8.1 (Berkeley) 6/6/93
- *	$NetBSD: extern.h,v 1.11 2010/02/19 16:35:27 tnn Exp $
+ *	$NetBSD: extern.h,v 1.9 2003/08/07 11:15:49 agc Exp $
  */
 
 /*-
@@ -70,7 +70,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)extern.h	8.1 (Berkeley) 6/6/93
- *	$NetBSD: extern.h,v 1.11 2010/02/19 16:35:27 tnn Exp $
+ *	$NetBSD: extern.h,v 1.9 2003/08/07 11:15:49 agc Exp $
  */
 
 extern struct s_command *prog;
@@ -82,16 +82,16 @@ extern int appendnum;
 extern int lastline;
 extern int aflag, eflag, nflag;
 extern int ere;
-extern const char *fname;
+extern char *fname;
 
 void	 cfclose(struct s_command *, struct s_command *);
 void	 compile(void);
-void	 cspace(SPACE *, const char *, size_t, enum e_spflag);
-char	*cu_fgets(char **, size_t *);
+void	 cspace(SPACE *, char *, size_t, enum e_spflag);
+char	*cu_fgets(char *, int);
 void	 err(int, const char *, ...)
      __attribute__((__format__(__printf__, 2, 3)));
 int	 mf_fgets(SPACE *, enum e_spflag);
 void	 process(void);
 char	*strregerror(int, regex_t *);
-void	*xmalloc(size_t);
-void	*xrealloc(void *, size_t);
+void	*xmalloc(u_int);
+void	*xrealloc(void *, u_int);

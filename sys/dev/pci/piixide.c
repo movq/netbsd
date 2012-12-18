@@ -1,4 +1,4 @@
-/*	$NetBSD: piixide.c,v 1.64 2012/11/14 01:05:49 jakllsch Exp $	*/
+/*	$NetBSD: piixide.c,v 1.47.4.2 2012/03/17 19:05:39 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -25,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.64 2012/11/14 01:05:49 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.47.4.2 2012/03/17 19:05:39 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -36,19 +41,17 @@ __KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.64 2012/11/14 01:05:49 jakllsch Exp $"
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_piix_reg.h>
 
-static void piix_chip_map(struct pciide_softc*,
-    const struct pci_attach_args *);
+static void piix_chip_map(struct pciide_softc*, struct pci_attach_args *);
 static void piix_setup_channel(struct ata_channel *);
 static void piix3_4_setup_channel(struct ata_channel *);
 static u_int32_t piix_setup_idetim_timings(u_int8_t, u_int8_t, u_int8_t);
 static u_int32_t piix_setup_idetim_drvs(struct ata_drive_datas *);
 static u_int32_t piix_setup_sidetim_timings(u_int8_t, u_int8_t, u_int8_t);
-static void piixsata_chip_map(struct pciide_softc*,
-    const struct pci_attach_args *);
+static void piixsata_chip_map(struct pciide_softc*, struct pci_attach_args *);
 static int piix_dma_init(void *, int, int, void *, size_t, int);
 
-static bool piixide_resume(device_t, const pmf_qual_t *);
-static bool piixide_suspend(device_t, const pmf_qual_t *);
+static bool piixide_resume(device_t PMF_FN_PROTO);
+static bool piixide_suspend(device_t PMF_FN_PROTO);
 static int  piixide_match(device_t, cfdata_t, void *);
 static void piixide_attach(device_t, device_t, void *);
 
@@ -238,55 +241,29 @@ static const struct pciide_product_desc pciide_intel_products[] =  {
 	  "Intel 82801I Serial ATA Controller (ICH9)",
 	  piixsata_chip_map,
 	},
-	{ PCI_PRODUCT_INTEL_82801I_SATA_4,
-	  0,
-	  "Intel 82801I Mobile Serial ATA Controller (ICH9)",
-	  piixsata_chip_map,
-	},
-	{ PCI_PRODUCT_INTEL_82801I_SATA_5,
-	  0,
-	  "Intel 82801I Mobile Serial ATA Controller (ICH9)",
-	  piixsata_chip_map,
-	},
-	{ PCI_PRODUCT_INTEL_82801I_SATA_6,
-	  0,
-	  "Intel 82801I Mobile Serial ATA Controller (ICH9)",
-	  piixsata_chip_map,
-	},
-	{ PCI_PRODUCT_INTEL_82801I_SATA_7,
-	  0,
-	  "Intel 82801I Mobile Serial ATA Controller (ICH9)",
-	  piixsata_chip_map,
-	},
 	{ PCI_PRODUCT_INTEL_63XXESB_SATA,
 	  0,
 	  "Intel 631xESB/632xESB Serial ATA Controller",
 	  piixsata_chip_map,
 	},
-	{ PCI_PRODUCT_INTEL_82801JD_SATA_IDE2,
+	{ PCI_PRODUCT_INTEL_ICH10_SATA2_2x1,
 	  0,
-	  "Intel 82801JD Serial ATA Controller (ICH10)",
+	  "Intel ICH10 Serial ATA 2 Controller 2x1",
 	  piixsata_chip_map,
 	},
-	{ PCI_PRODUCT_INTEL_82801JI_SATA_IDE2,
+	{ PCI_PRODUCT_INTEL_ICH10_SATA2_2x2,
 	  0,
-	  "Intel 82801JI Serial ATA Controller (ICH10)",
+	  "Intel ICH10 Serial ATA 2 Controller 2x2",
 	  piixsata_chip_map,
 	},
-	{ PCI_PRODUCT_INTEL_82801JD_SATA_IDE,
+	{ PCI_PRODUCT_INTEL_ICH10_SATA2_4x1,
 	  0,
-	  "Intel 82801JD Serial ATA Controller (ICH10)",
+	  "Intel ICH10 Serial ATA 2 Controller 4x1",
 	  piixsata_chip_map,
 	},
-	{ PCI_PRODUCT_INTEL_82801JI_SATA_IDE,
+	{ PCI_PRODUCT_INTEL_ICH10_SATA2_4x2,
 	  0,
-	  "Intel 82801JI Serial ATA Controller (ICH10)",
-	  piixsata_chip_map,
-	},
-	{
-	  PCI_PRODUCT_INTEL_82965PM_IDE,
-	  0,
-	  "Intel 82965PM IDE controller",
+	  "Intel ICH10 Serial ATA 2 Controller 4x2",
 	  piixsata_chip_map,
 	},
 	{
@@ -363,7 +340,7 @@ static const struct pciide_product_desc pciide_intel_products[] =  {
 };
 
 CFATTACH_DECL_NEW(piixide, sizeof(struct pciide_softc),
-    piixide_match, piixide_attach, pciide_detach, NULL);
+    piixide_match, piixide_attach, NULL, NULL);
 
 static int
 piixide_match(device_t parent, cfdata_t match, void *aux)
@@ -393,7 +370,7 @@ piixide_attach(device_t parent, device_t self, void *aux)
 }
 
 static bool
-piixide_resume(device_t dv, const pmf_qual_t *qual)
+piixide_resume(device_t dv PMF_FN_ARGS)
 {
 	struct pciide_softc *sc = device_private(dv);
 
@@ -406,7 +383,7 @@ piixide_resume(device_t dv, const pmf_qual_t *qual)
 }
 
 static bool
-piixide_suspend(device_t dv, const pmf_qual_t *qual)
+piixide_suspend(device_t dv PMF_FN_ARGS)
 {
 	struct pciide_softc *sc = device_private(dv);
 
@@ -419,11 +396,12 @@ piixide_suspend(device_t dv, const pmf_qual_t *qual)
 }
 
 static void
-piix_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
+piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int channel;
 	u_int32_t idetim;
+	bus_size_t cmdsize, ctlsize;
 	pcireg_t interface = PCI_INTERFACE(pa->pa_class);
 
 	if (pciide_chipen(sc, pa) == 0)
@@ -486,7 +464,6 @@ piix_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 		sc->sc_wdcdev.sc_atac.atac_set_modes = piix3_4_setup_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	ATADEBUG_PRINT(("piix_setup_chip: old idetim=0x%x",
 	    pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_IDETIM)),
@@ -549,7 +526,8 @@ piix_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 			    channel, idetim, interface);
 #endif
 		}
-		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface,
+		    &cmdsize, &ctlsize, pciide_pci_intr);
 	}
 
 	ATADEBUG_PRINT(("piix_setup_chip: idetim=0x%x",
@@ -612,8 +590,8 @@ piix_setup_channel(struct ata_channel *chp)
 	 */
 
 	/* If both drives supports DMA, take the lower mode */
-	if ((drvp[0].drive_flags & ATA_DRIVE_DMA) &&
-	    (drvp[1].drive_flags & ATA_DRIVE_DMA)) {
+	if ((drvp[0].drive_flags & DRIVE_DMA) &&
+	    (drvp[1].drive_flags & DRIVE_DMA)) {
 		mode[0] = mode[1] =
 		    min(drvp[0].DMA_mode, drvp[1].DMA_mode);
 		    drvp[0].DMA_mode = mode[0];
@@ -624,7 +602,7 @@ piix_setup_channel(struct ata_channel *chp)
 	 * If only one drive supports DMA, use its mode, and
 	 * put the other one in PIO mode 0 if mode not compatible
 	 */
-	if (drvp[0].drive_flags & ATA_DRIVE_DMA) {
+	if (drvp[0].drive_flags & DRIVE_DMA) {
 		mode[0] = drvp[0].DMA_mode;
 		mode[1] = drvp[1].PIO_mode;
 		if (piix_isp_pio[mode[1]] != piix_isp_dma[mode[0]] ||
@@ -632,7 +610,7 @@ piix_setup_channel(struct ata_channel *chp)
 			mode[1] = drvp[1].PIO_mode = 0;
 		goto ok;
 	}
-	if (drvp[1].drive_flags & ATA_DRIVE_DMA) {
+	if (drvp[1].drive_flags & DRIVE_DMA) {
 		mode[1] = drvp[1].DMA_mode;
 		mode[0] = drvp[0].PIO_mode;
 		if (piix_isp_pio[mode[0]] != piix_isp_dma[mode[1]] ||
@@ -658,7 +636,7 @@ piix_setup_channel(struct ata_channel *chp)
 	}
 ok:	/* The modes are setup */
 	for (drive = 0; drive < 2; drive++) {
-		if (drvp[drive].drive_flags & ATA_DRIVE_DMA) {
+		if (drvp[drive].drive_flags & DRIVE_DMA) {
 			idetim |= piix_setup_idetim_timings(
 			    mode[drive], 1, chp->ch_channel);
 			goto end;
@@ -677,10 +655,10 @@ end:	/*
 	 */
 	for (drive = 0; drive < 2; drive++) {
 		/* If no drive, skip */
-		if (drvp[drive].drive_type == ATA_DRIVET_NONE)
+		if ((drvp[drive].drive_flags & DRIVE) == 0)
 			continue;
 		idetim |= piix_setup_idetim_drvs(&drvp[drive]);
-		if (drvp[drive].drive_flags & ATA_DRIVE_DMA)
+		if (drvp[drive].drive_flags & DRIVE_DMA)
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
 	}
 	if (idedma_ctl != 0) {
@@ -722,10 +700,10 @@ piix3_4_setup_channel(struct ata_channel *chp)
 		    PIIX_UDMATIM_SET(0x3, channel, drive));
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if (drvp->drive_type == ATA_DRIVET_NONE)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
-		if (((drvp->drive_flags & ATA_DRIVE_DMA) == 0 &&
-		    (drvp->drive_flags & ATA_DRIVE_UDMA) == 0))
+		if (((drvp->drive_flags & DRIVE_DMA) == 0 &&
+		    (drvp->drive_flags & DRIVE_UDMA) == 0))
 			goto pio;
 
 		if (sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801AA_IDE ||
@@ -782,10 +760,10 @@ piix3_4_setup_channel(struct ata_channel *chp)
 				ideconf &= ~PIIX_CONFIG_UDMA66(channel, drive);
 		}
 		if ((wdc->sc_atac.atac_cap & ATAC_CAP_UDMA) &&
-		    (drvp->drive_flags & ATA_DRIVE_UDMA)) {
+		    (drvp->drive_flags & DRIVE_UDMA)) {
 			/* use Ultra/DMA */
 			s = splbio();
-			drvp->drive_flags &= ~ATA_DRIVE_DMA;
+			drvp->drive_flags &= ~DRIVE_DMA;
 			splx(s);
 			udmareg |= PIIX_UDMACTL_DRV_EN( channel, drive);
 			udmareg |= PIIX_UDMATIM_SET(
@@ -793,7 +771,7 @@ piix3_4_setup_channel(struct ata_channel *chp)
 		} else {
 			/* use Multiword DMA */
 			s = splbio();
-			drvp->drive_flags &= ~ATA_DRIVE_UDMA;
+			drvp->drive_flags &= ~DRIVE_UDMA;
 			splx(s);
 			if (drive == 0) {
 				idetim |= piix_setup_idetim_timings(
@@ -833,7 +811,10 @@ pio:		/* use PIO mode */
 
 /* setup ISP and RTC fields, based on mode */
 static u_int32_t
-piix_setup_idetim_timings(u_int8_t mode, u_int8_t dma, u_int8_t channel)
+piix_setup_idetim_timings(mode, dma, channel)
+	u_int8_t mode;
+	u_int8_t dma;
+	u_int8_t channel;
 {
 
 	if (dma)
@@ -850,7 +831,8 @@ piix_setup_idetim_timings(u_int8_t mode, u_int8_t dma, u_int8_t channel)
 
 /* setup DTE, PPE, IE and TIME field based on PIO mode */
 static u_int32_t
-piix_setup_idetim_drvs(struct ata_drive_datas *drvp)
+piix_setup_idetim_drvs(drvp)
+	struct ata_drive_datas *drvp;
 {
 	u_int32_t ret = 0;
 	struct ata_channel *chp = drvp->chnl_softc;
@@ -861,9 +843,9 @@ piix_setup_idetim_drvs(struct ata_drive_datas *drvp)
 	 * If drive is using UDMA, timings setups are independent
 	 * So just check DMA and PIO here.
 	 */
-	if (drvp->drive_flags & ATA_DRIVE_DMA) {
+	if (drvp->drive_flags & DRIVE_DMA) {
 		/* if mode = DMA mode 0, use compatible timings */
-		if ((drvp->drive_flags & ATA_DRIVE_DMA) &&
+		if ((drvp->drive_flags & DRIVE_DMA) &&
 		    drvp->DMA_mode == 0) {
 			drvp->PIO_mode = 0;
 			return ret;
@@ -905,7 +887,10 @@ piix_setup_idetim_drvs(struct ata_drive_datas *drvp)
 
 /* setup values in SIDETIM registers, based on mode */
 static u_int32_t
-piix_setup_sidetim_timings(u_int8_t mode, u_int8_t dma, u_int8_t channel)
+piix_setup_sidetim_timings(mode, dma, channel)
+	u_int8_t mode;
+	u_int8_t dma;
+	u_int8_t channel;
 {
 	if (dma)
 		return PIIX_SIDETIM_ISP_SET(piix_isp_dma[mode], channel) |
@@ -916,9 +901,10 @@ piix_setup_sidetim_timings(u_int8_t mode, u_int8_t dma, u_int8_t channel)
 }
 
 static void
-piixsata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
+piixsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
+	bus_size_t cmdsize, ctlsize;
 	pcireg_t interface, cmdsts;
 	int channel;
 
@@ -944,7 +930,6 @@ piixsata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	cmdsts = pci_conf_read(sc->sc_pc, sc->sc_tag, PCI_COMMAND_STATUS_REG);
 	cmdsts &= ~PCI_COMMAND_INTERRUPT_DISABLE;
@@ -963,7 +948,8 @@ piixsata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 		cp = &sc->pciide_channels[channel];
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
-		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
+		    pciide_pci_intr);
 	}
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: index.S,v 1.4 2011/01/25 02:38:15 matt Exp $	*/
+/*	$NetBSD: index.S,v 1.3 2003/08/07 16:42:32 agc Exp $	*/
 /*
  * Copyright (c) 1980, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -38,10 +38,6 @@
  */
 #include "DEFS.h"
 
-#ifdef LIBC_SCCS
-RCSID("$NetSBD$")
-#endif
-
 /* Alas not quite twice as fast as the generic C version on a uvax2 */
 
 ENTRY(index, 0)
@@ -61,4 +57,3 @@ ENTRY(index, 0)
 	jneq	3b
 	decl	%r0
 	jbr	2b
-END(index)

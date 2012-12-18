@@ -1,4 +1,4 @@
-/*	$NetBSD: iomd_clock.c,v 1.29 2012/05/18 21:09:50 skrll Exp $	*/
+/*	$NetBSD: iomd_clock.c,v 1.24 2008/01/08 02:07:50 matt Exp $	*/
 
 /*
  * Copyright (c) 1994-1997 Mark Brinicombe.
@@ -47,14 +47,14 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: iomd_clock.c,v 1.29 2012/05/18 21:09:50 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iomd_clock.c,v 1.24 2008/01/08 02:07:50 matt Exp $");
 
 #include <sys/systm.h>
-#include <sys/types.h>
 #include <sys/kernel.h>
 #include <sys/time.h>
 #include <sys/timetc.h>
 #include <sys/device.h>
+#include <sys/simplelock.h>
 #include <sys/intr.h>
 
 #include <dev/clock_subr.h>
@@ -65,7 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: iomd_clock.c,v 1.29 2012/05/18 21:09:50 skrll Exp $"
 #include <arm/iomd/iomdreg.h>
 
 struct clock_softc {
-	device_t 		sc_dev;
+	struct device 		sc_dev;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 };
@@ -78,20 +78,22 @@ static void *statclockirq;
 static struct clock_softc *clock_sc;
 static int timer0_count;
 
-static int clockmatch(device_t parent, cfdata_t cf, void *aux);
-static void clockattach(device_t parent, device_t self, void *aux);
+static int clockmatch(struct device *parent, struct cfdata *cf, void *aux);
+static void clockattach(struct device *parent, struct device *self, void *aux);
 #ifdef DIAGNOSTIC
 static void checkdelay(void);
 #endif
 
 static u_int iomd_timecounter0_get(struct timecounter *tc);
 
+
 static volatile uint32_t timer0_lastcount;
 static volatile uint32_t timer0_offset;
 static volatile int timer0_ticked;
 /* TODO: Get IRQ status */
 
-static kmutex_t tmr_lock;
+static struct simplelock tmr_lock = SIMPLELOCK_INITIALIZER;  /* protect TC timer variables */
+
 
 static struct timecounter iomd_timecounter = {
 	iomd_timecounter0_get,
@@ -105,17 +107,17 @@ static struct timecounter iomd_timecounter = {
 int clockhandler(void *);
 int statclockhandler(void *);
 
-CFATTACH_DECL_NEW(clock, sizeof(struct clock_softc),
+CFATTACH_DECL(clock, sizeof(struct clock_softc),
     clockmatch, clockattach, NULL, NULL);
 
 /*
- * int clockmatch(device_t parent, void *match, void *aux)
+ * int clockmatch(struct device *parent, void *match, void *aux)
  *
  * Just return ok for this if it is device 0
  */ 
  
 static int
-clockmatch(device_t parent, cfdata_t cf, void *aux)
+clockmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct clk_attach_args *ca = aux;
 
@@ -126,44 +128,42 @@ clockmatch(device_t parent, cfdata_t cf, void *aux)
 
 
 /*
- * void clockattach(device_t parent, device_t dev, void *aux)
+ * void clockattach(struct device *parent, struct device *dev, void *aux)
  *
  * Map the IOMD and identify it.
  * Then configure the child devices based on the IOMD ID.
  */
   
 static void
-clockattach(device_t parent, device_t self, void *aux)
+clockattach(struct device *parent, struct device *self,	void *aux)
 {
-	struct clock_softc *sc = device_private(self);
+	struct clock_softc *sc = (struct clock_softc *)self;
 	struct clk_attach_args *ca = aux;
 
-	sc->sc_dev = self;
 	sc->sc_iot = ca->ca_iot;
 	sc->sc_ioh = ca->ca_ioh; /* This is a handle for the whole IOMD */
 
 	clock_sc = sc;
-	mutex_init(&tmr_lock, MUTEX_DEFAULT, IPL_CLOCK);
 
 	/* Cannot do anything until cpu_initclocks() has been called */
-
-	aprint_normal("\n");
+	
+	printf("\n");
 }
 
 
 static void
-tickle_tc(void)
+tickle_tc(void) 
 {
 	if (timer0_count && 
 	    timecounter->tc_get_timecount == iomd_timecounter0_get) {
-		mutex_spin_enter(&tmr_lock);
+		simple_lock(&tmr_lock);
 		if (timer0_ticked)
 			timer0_ticked    = 0;
 		else {
 			timer0_offset   += timer0_count;
 			timer0_lastcount = 0;
 		}
-		mutex_spin_exit(&tmr_lock);
+		simple_unlock(&tmr_lock);
 	}
 
 }
@@ -219,7 +219,7 @@ setstatclockrate(int newhz)
     
 	count = TIMER_FREQUENCY / newhz;
 
-	aprint_normal("Setting statclock to %dHz (%d ticks)\n", newhz, count);
+	printf("Setting statclock to %dHz (%d ticks)\n", newhz, count);
 
 	bus_space_write_1(clock_sc->sc_iot, clock_sc->sc_ioh,
 	    IOMD_T1LOW, (count >> 0) & 0xff);
@@ -247,7 +247,7 @@ checkdelay(void)
 		return;
 	if (diff.tv_usec > 10000)
 		return;
-	aprint_normal("WARNING: delay(10000) took %d us\n", diff.tv_usec);
+	printf("WARNING: delay(10000) took %ld us\n", diff.tv_usec);
 }
 #endif
 
@@ -268,7 +268,7 @@ cpu_initclocks(void)
 	 * This timer generates 100Hz interrupts for the system clock
 	 */
 
-	aprint_normal("clock: hz=%d stathz = %d profhz = %d\n", hz, stathz, profhz);
+	printf("clock: hz=%d stathz = %d profhz = %d\n", hz, stathz, profhz);
 
 	timer0_count = TIMER_FREQUENCY / hz;
 
@@ -287,7 +287,7 @@ cpu_initclocks(void)
 
 	if (clockirq == NULL)
 		panic("%s: Cannot installer timer 0 IRQ handler",
-		    device_xname(clock_sc->sc_dev));
+		    clock_sc->sc_dev.dv_xname);
 
 	if (stathz) {
 		setstatclockrate(stathz);
@@ -295,7 +295,7 @@ cpu_initclocks(void)
        		    "tmr1 stat clk", statclockhandler, 0);
 		if (statclockirq == NULL)
 			panic("%s: Cannot installer timer 1 IRQ handler",
-			    device_xname(clock_sc->sc_dev));
+			    clock_sc->sc_dev.dv_xname);
 	}
 #ifdef DIAGNOSTIC
 	checkdelay();
@@ -312,7 +312,7 @@ static u_int iomd_timecounter0_get(struct timecounter *tc)
 
 	/*
 	 * Latch the current value of the timer and then read it.
-	 * This guarantees an atomic reading of the time.
+	 * This garentees an atmoic reading of the time.
 	 */
 	s = splhigh();
 	bus_space_write_1(clock_sc->sc_iot, clock_sc->sc_ioh,
@@ -323,9 +323,10 @@ static u_int iomd_timecounter0_get(struct timecounter *tc)
 	tm += (bus_space_read_1(clock_sc->sc_iot, clock_sc->sc_ioh,
 	    IOMD_T0HIGH) << 8);
 	splx(s);
+	simple_lock(&tmr_lock);
 
-	mutex_spin_enter(&tmr_lock);
 	tm = timer0_count - tm;
+	
 
 	if (timer0_count &&
 	    (tm < timer0_lastcount || (!timer0_ticked && false/* XXX: clkintr_pending */))) {
@@ -335,8 +336,8 @@ static u_int iomd_timecounter0_get(struct timecounter *tc)
 
 	timer0_lastcount = tm;
 	tm += timer0_offset;
-	mutex_spin_exit(&tmr_lock);
 
+	simple_unlock(&tmr_lock);
 	return tm;
 }
 

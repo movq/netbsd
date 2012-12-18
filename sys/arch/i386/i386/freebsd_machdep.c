@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_machdep.c,v 1.55 2009/12/10 14:13:50 matt Exp $	*/
+/*	$NetBSD: freebsd_machdep.c,v 1.52 2008/09/19 19:15:58 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: freebsd_machdep.c,v 1.55 2009/12/10 14:13:50 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: freebsd_machdep.c,v 1.52 2008/09/19 19:15:58 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: freebsd_machdep.c,v 1.55 2009/12/10 14:13:50 matt Ex
 #include <sys/signalvar.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
+#include <sys/user.h>
 #include <sys/mount.h>
 
 #include <compat/sys/signal.h>
@@ -59,9 +60,12 @@ __KERNEL_RCSID(0, "$NetBSD: freebsd_machdep.c,v 1.55 2009/12/10 14:13:50 matt Ex
 #include <compat/freebsd/freebsd_ptrace.h>
 
 void
-freebsd_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
+freebsd_setregs(l, epp, stack)
+	struct lwp *l;
+	struct exec_package *epp;
+	u_long stack;
 {
-	struct pcb *pcb = lwp_getpcb(l);
+	struct pcb *pcb = &l->l_addr->u_pcb;
 
 	setregs(l, epp, stack);
 	if (i386_use_fxsave)
@@ -261,7 +265,10 @@ freebsd_sys_sigreturn(struct lwp *l, const struct freebsd_sys_sigreturn_args *ua
  */
 
 void
-netbsd_to_freebsd_ptrace_regs(struct reg *nregs, struct fpreg *nfpregs, struct freebsd_ptrace_reg *fregs)
+netbsd_to_freebsd_ptrace_regs(nregs, nfpregs, fregs)
+	struct reg *nregs;
+	struct fpreg *nfpregs;
+	struct freebsd_ptrace_reg *fregs;
 {
 	struct save87 *nframe = (struct save87 *)nfpregs;
 
@@ -315,7 +322,10 @@ netbsd_to_freebsd_ptrace_regs(struct reg *nregs, struct fpreg *nfpregs, struct f
 }
 
 void
-freebsd_to_netbsd_ptrace_regs(struct freebsd_ptrace_reg *fregs, struct reg *nregs, struct fpreg *nfpregs)
+freebsd_to_netbsd_ptrace_regs(fregs, nregs, nfpregs)
+	struct freebsd_ptrace_reg *fregs;
+	struct reg *nregs;
+	struct fpreg *nfpregs;
 {
 	struct save87 *nframe = (struct save87 *)nfpregs;
 
@@ -357,7 +367,10 @@ freebsd_to_netbsd_ptrace_regs(struct freebsd_ptrace_reg *fregs, struct reg *nreg
 #define	FREEBSD_REGS_OFFSET 0x2000
 
 int
-freebsd_ptrace_getregs(struct freebsd_ptrace_reg *fregs, void *addr, register_t *datap)
+freebsd_ptrace_getregs(fregs, addr, datap)
+	struct freebsd_ptrace_reg *fregs;
+	void *addr;
+	register_t *datap;
 {
 	vaddr_t offset = (vaddr_t)addr;
 
@@ -384,7 +397,10 @@ freebsd_ptrace_getregs(struct freebsd_ptrace_reg *fregs, void *addr, register_t 
 }
 
 int
-freebsd_ptrace_setregs(struct freebsd_ptrace_reg *fregs, void *addr, int data)
+freebsd_ptrace_setregs(fregs, addr, data)
+	struct freebsd_ptrace_reg *fregs;
+	void *addr;
+	int data;
 {
 	vaddr_t offset = (vaddr_t)addr;
 

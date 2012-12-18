@@ -1,5 +1,5 @@
-/*	$Id: at91ohci.c,v 1.5 2011/11/04 17:13:15 aymeric Exp $	*/
-/*	$NetBSD: at91ohci.c,v 1.5 2011/11/04 17:13:15 aymeric Exp $	*/
+/*	$Id: at91ohci.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
+/*	$NetBSD: at91ohci.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
 
 /*-
  * Copyright (c) 2007 Embedtronics Oy.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91ohci.c,v 1.5 2011/11/04 17:13:15 aymeric Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91ohci.c,v 1.2 2008/07/03 01:15:38 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,7 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: at91ohci.c,v 1.5 2011/11/04 17:13:15 aymeric Exp $")
 #include <sys/mbuf.h>
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
@@ -75,7 +75,7 @@ struct at91ohci_softc {
 	int	sc_pid;
 };
 
-CFATTACH_DECL_NEW(at91ohci, sizeof(struct at91ohci_softc),
+CFATTACH_DECL(at91ohci, sizeof(struct at91ohci_softc),
     at91ohci_match, at91ohci_attach, NULL, NULL);
 
 int
@@ -90,13 +90,11 @@ at91ohci_match(device_t parent, cfdata_t match, void *aux)
 void
 at91ohci_attach(device_t parent, device_t self, void *aux)
 {
-	struct at91ohci_softc *sc = device_private(self);
+	struct at91ohci_softc *sc = (struct at91ohci_softc *)self;
 	struct at91bus_attach_args *sa = aux;
 
-	sc->sc.sc_dev = self;
-	sc->sc.sc_bus.hci_private = sc;
-	sc->sc.sc_bus.dmatag = sa->sa_dmat;
 	sc->sc.iot = sa->sa_iot;
+	sc->sc.sc_bus.dmatag = sa->sa_dmat;
 	sc->sc_pid = sa->sa_pid;
 
 	/* Map I/O space */
@@ -105,8 +103,6 @@ at91ohci_attach(device_t parent, device_t self, void *aux)
 		printf(": cannot map mem space\n");
 		return;
 	}
-
-	sc->sc.sc_size = sa->sa_size;
 
 	/* enable peripheral clock */
 	at91_peripheral_clock(sc->sc_pid, 1);
@@ -118,9 +114,10 @@ at91ohci_attach(device_t parent, device_t self, void *aux)
 }
 
 void
-at91ohci_callback(device_t self)
+at91ohci_callback(self)
+        device_t self;
 {
-	struct at91ohci_softc *sc = device_private(self);
+	struct at91ohci_softc *sc = (struct at91ohci_softc *)self;
 	usbd_status r;
 
 	/* Disable interrupts, so we don't get any spurious ones. */
@@ -140,5 +137,5 @@ at91ohci_callback(device_t self)
 	}
 
 	/* Attach usb device. */
-	sc->sc.sc_child = config_found(self, &sc->sc.sc_bus, usbctlprint);
+	sc->sc.sc_child = config_found((void *) sc, &sc->sc.sc_bus, usbctlprint);
 }

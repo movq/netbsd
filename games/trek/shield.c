@@ -1,4 +1,4 @@
-/*	$NetBSD: shield.c,v 1.13 2009/08/12 08:54:54 dholland Exp $	*/
+/*	$NetBSD: shield.c,v 1.8 2003/08/07 09:37:54 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)shield.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: shield.c,v 1.13 2009/08/12 08:54:54 dholland Exp $");
+__RCSID("$NetBSD: shield.c,v 1.8 2003/08/07 09:37:54 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,14 +59,16 @@ __RCSID("$NetBSD: shield.c,v 1.13 2009/08/12 08:54:54 dholland Exp $");
 **	so you get partial hits.
 */
 
-static const struct cvntab Udtab[] = {
+const struct cvntab Udtab[] =
+{
 	{ "u",		"p",		(cmdfun)1,	0 },
 	{ "d",		"own",		(cmdfun)0,	0 },
 	{ NULL,		NULL,		NULL,		0 }
 };
 
 void
-shield(int f)
+shield(f)
+int	f;
 {
 	int		i;
 	const struct cvntab	*r;
@@ -77,11 +79,11 @@ shield(int f)
 
 	if (f > 0 && (Ship.shldup || damaged(SRSCAN)))
 		return;
-	if (f < 0) {
+	if (f < 0)
+	{
 		/* cloaking device */
 		if (Ship.ship == QUEENE) {
-			printf("Ye Faire Queene does not have the "
-			       "cloaking device.\n");
+			printf("Ye Faire Queene does not have the cloaking device.\n");
 			return;
 		}
 		device = "Cloaking device";
@@ -89,7 +91,9 @@ shield(int f)
 		ind = CLOAK;
 		dev3 = "it";
 		stat = &Ship.cloaked;
-	} else {
+	}
+	else
+	{
 		/* shields */
 		device = "Shields";
 		dev2 = "are";
@@ -97,32 +101,34 @@ shield(int f)
 		ind = SHIELD;
 		stat = &Ship.shldup;
 	}
-	if (damaged(ind)) {
+	if (damaged(ind))
+	{
 		if (f <= 0)
 			out(ind);
 		return;
 	}
-	if (Ship.cond == DOCKED) {
+	if (Ship.cond == DOCKED)
+	{
 		printf("%s %s down while docked\n", device, dev2);
 		return;
 	}
-	if (f <= 0 && !testnl()) {
+	if (f <= 0 && !testnl())
+	{
 		r = getcodpar("Up or down", Udtab);
 		i = (long) r->value;
-	} else {
+	}
+	else
+	{
 		if (*stat)
-			(void)snprintf(s, sizeof(s),
-				"%s %s up.  Do you want %s down",
-				device, dev2, dev3);
+			(void)sprintf(s, "%s %s up.  Do you want %s down", device, dev2, dev3);
 		else
-			(void)snprintf(s, sizeof(s),
-				"%s %s down.  Do you want %s up",
-				device, dev2, dev3);
+			(void)sprintf(s, "%s %s down.  Do you want %s up", device, dev2, dev3);
 		if (!getynpar(s))
 			return;
 		i = !*stat;
 	}
-	if (*stat == i) {
+	if (*stat == i)
+	{
 		printf("%s already ", device);
 		if (i)
 			printf("up\n");

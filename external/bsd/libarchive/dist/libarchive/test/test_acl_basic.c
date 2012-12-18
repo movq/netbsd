@@ -23,11 +23,12 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: src/lib/libarchive/test/test_acl_basic.c,v 1.6 2008/10/19 00:13:57 kientzle Exp $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_acl_basic.c,v 1.4 2007/07/06 15:43:11 kientzle Exp $");
 
 /*
  * Exercise the system-independent portion of the ACL support.
- * Check that archive_entry objects can save and restore ACL data.
+ * Check that archive_entry objects can save and restore ACL data
+ * and that pax archive can save and restore ACL data.
  *
  * This should work on all systems, regardless of whether local
  * filesystems support ACLs or not.
@@ -41,7 +42,7 @@ struct acl_t {
 	const char *name; /* Name of user/group, depending on tag. */
 };
 
-static struct acl_t acls0[] = {
+struct acl_t acls0[] = {
 	{ ARCHIVE_ENTRY_ACL_TYPE_ACCESS, ARCHIVE_ENTRY_ACL_EXECUTE,
 	  ARCHIVE_ENTRY_ACL_USER_OBJ, 0, "" },
 	{ ARCHIVE_ENTRY_ACL_TYPE_ACCESS, ARCHIVE_ENTRY_ACL_READ,
@@ -50,7 +51,7 @@ static struct acl_t acls0[] = {
 	  ARCHIVE_ENTRY_ACL_OTHER, 0, "" },
 };
 
-static struct acl_t acls1[] = {
+struct acl_t acls1[] = {
 	{ ARCHIVE_ENTRY_ACL_TYPE_ACCESS, ARCHIVE_ENTRY_ACL_EXECUTE,
 	  ARCHIVE_ENTRY_ACL_USER_OBJ, -1, "" },
 	{ ARCHIVE_ENTRY_ACL_TYPE_ACCESS, ARCHIVE_ENTRY_ACL_READ,
@@ -61,7 +62,7 @@ static struct acl_t acls1[] = {
 	  ARCHIVE_ENTRY_ACL_OTHER, -1, "" },
 };
 
-static struct acl_t acls2[] = {
+struct acl_t acls2[] = {
 	{ ARCHIVE_ENTRY_ACL_TYPE_ACCESS, ARCHIVE_ENTRY_ACL_EXECUTE | ARCHIVE_ENTRY_ACL_READ,
 	  ARCHIVE_ENTRY_ACL_USER_OBJ, -1, "" },
 	{ ARCHIVE_ENTRY_ACL_TYPE_ACCESS, ARCHIVE_ENTRY_ACL_READ,
@@ -164,7 +165,7 @@ compare_acls(struct archive_entry *ae, struct acl_t *acls, int n, int mode)
 			assert(matched == 1);
 		}
 	}
-#if ARCHIVE_VERSION_NUMBER < 1009000
+#if ARCHIVE_VERSION_STAMP < 1009000
 	/* Known broken before 1.9.0. */
 	skipping("archive_entry_acl_next() exits with ARCHIVE_EOF");
 #else

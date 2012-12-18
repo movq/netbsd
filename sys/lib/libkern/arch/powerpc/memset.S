@@ -1,4 +1,4 @@
-/*	$NetBSD: memset.S,v 1.7 2011/01/17 07:07:36 matt Exp $ */
+/*	$NetBSD: memset.S,v 1.6 2007/03/04 06:03:12 christos Exp $ */
 
 /*-
  * Copyright (C) 2003	Matt Thomas <matt@3am-software.com>
@@ -29,6 +29,7 @@
  */
 /*----------------------------------------------------------------------*/
 
+#define _NOREGNAMES
 #include <machine/asm.h>
 
 /*----------------------------------------------------------------------*/

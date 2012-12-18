@@ -1,4 +1,4 @@
-/*	$NetBSD: sdmmcdevs.h,v 1.2 2009/04/21 03:10:41 nonaka Exp $	*/
+/*	$NetBSD: sdmmcdevs.h,v 1.2.8.2 2009/10/07 15:41:13 sborrill Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.

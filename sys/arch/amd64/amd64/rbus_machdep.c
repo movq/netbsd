@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_machdep.c,v 1.5 2011/07/01 19:24:14 dyoung Exp $	*/
+/*	$NetBSD: rbus_machdep.c,v 1.2 2008/05/18 02:06:14 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 1999
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by HAYAKAWA Koichi.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.5 2011/07/01 19:24:14 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.2 2008/05/18 02:06:14 jmcneill Exp $");
 
 #include "opt_pcifixup.h"
 
@@ -34,9 +39,11 @@ __KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.5 2011/07/01 19:24:14 dyoung Exp 
 #include <sys/systm.h>
 #include <sys/extent.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <sys/sysctl.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <dev/cardbus/rbus.h>
 
 #include <sys/device.h>

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.18 2011/04/13 16:18:14 macallan Exp $
+#	$NetBSD: Makefile,v 1.6.8.2 2009/09/17 04:24:38 snj Exp $
 
 .include <bsd.sys.mk> # for HOST_SH
 
@@ -17,11 +17,10 @@ SRCS=	xf86Configure.c xf86ShowOpts.c xf86Bus.c xf86Config.c \
 	xf86Events.c xf86Globals.c xf86AutoConfig.c \
 	xf86Option.c \
 	xf86VidMode.c xf86fbman.c xf86cmap.c \
-	xf86Helper.c xf86PM.c xf86Xinput.c xisb.c \
+	xf86Helper.c xf86PM.c xf86RAC.c xf86Xinput.c xisb.c \
 	xf86Mode.c xorgHelper.c \
 	${SRCS.xv} ${SRCS.bus} ${SRCS.randr} \
-	xf86DefModeSet.c \
-	xf86VGAarbiter.c
+	xf86DefModeSet.c
 
 .if ${MACHINE_ARCH} == "sparc" || ${MACHINE_ARCH} == "sparc64"
 SRCS.bus+=	xf86sbusBus.c
@@ -74,25 +73,17 @@ CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/hw/xfree86/common \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86/int10 \
 		-I${X11SRCDIR.xorg-server}/render \
 		-I${X11SRCDIR.xorg-server}/randr \
-		-I. \
-		-I${X11SRCDIR.xorg-server}/../include \
-		-D__${MACHINE}
+		-I.
 
 CPPFLAGS+=	${X11FLAGS.EXTENSION} ${X11FLAGS.OS_DEFINES} \
 		${X11FLAGS.DIX} \
 		-DXFree86LOADER -DWSCONS_SUPPORT -D__XKBDEFRULES__='"xorg"' \
 		-D__XSERVERNAME__='"Xorg"' -D__XCONFIGFILE__='"xorg.conf"' \
 		-D__VENDORDWEBSUPPORT__='"http://wiki.X.Org"' \
-		-DXVENDORNAME='"The X.Org Foundation"' \
-		-DHAVE_XORG_CONFIG_H \
-		-DHAVE_PCI_DEVICE_IS_BOOT_VGA
+		-DXVENDORNAME='"The X.Org Foundation"'
 
 .if ${MACHINE_ARCH} == "i386"
 CPPFLAGS+=	-DPCCONS_SUPPORT -DPCVT_SUPPORT
-.endif
-
-.if ${MACHINE} == "cats" || ${MACHINE} == "ofppc"
-CPPFLAGS+=	-DPCVT_SUPPORT
 .endif
 
 OS_RELEASE!=	${HOST_SH} ${NETBSDSRCDIR}/sys/conf/osrelease.sh
@@ -130,8 +121,6 @@ COPTS.xf86Cursor.c=		-Wno-error
 COPTS.xf86RandR.c=		-Wno-error
 COPTS.xf86Helper.c=		-Wno-error
 COPTS.xf86cmap.c=		-Wno-error
-COPTS.xf86Cursor.c=		-Wno-error	# XXX xf86dgastr.h
-COPTS.xf86DGA.c=		-Wno-error	# XXX xf86dgastr.h
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

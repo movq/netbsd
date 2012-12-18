@@ -1,5 +1,5 @@
 /*	$OpenBSD: ts102.c,v 1.14 2005/01/27 17:03:23 millert Exp $	*/
-/*	$NetBSD: ts102.c,v 1.17 2012/10/27 17:18:11 chs Exp $ */
+/*	$NetBSD: ts102.c,v 1.13 2008/08/04 03:14:43 macallan Exp $ */
 /*
  * Copyright (c) 2003, 2004, Miodrag Vallat.
  * Copyright (c) 2005, Michael Lorenz.
@@ -77,7 +77,7 @@
 #include <dev/pcmcia/pcmciavar.h>
 #include <dev/pcmcia/pcmciachip.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/autoconf.h>
 
@@ -137,6 +137,7 @@ struct	tslot_data {
 
 struct	tslot_softc {
 	device_t	sc_dev;
+	struct sbusdev	sc_sd;
 	
 	bus_space_tag_t	sc_bustag;		/* socket control io	*/
 	bus_space_handle_t	sc_regh;	/*  space		*/
@@ -319,14 +320,14 @@ tslot_attach(device_t parent, device_t self, void *args)
 			 sa->sa_offset,
 			 sa->sa_size,
 			 0, &sc->sc_regh) != 0) {
-		printf("%s: cannot map registers\n", device_xname(self));
+		printf("%s: cannot map registers\n", self->dv_xname);
 		return;
 	}
 	regs = (uint8_t *)bus_space_vaddr(sa->sa_bustag, sc->sc_regh);
 
 	tag = bus_space_tag_alloc(sa->sa_bustag, sc);
 	if (tag == NULL) {
-		printf("%s: attach: out of memory\n", device_xname(self));
+		printf("%s: attach: out of memory\n", self->dv_xname);
 		return;
 	}
 	tag->sparc_read_2 = ts102_read_2;
@@ -335,6 +336,8 @@ tslot_attach(device_t parent, device_t self, void *args)
 	tag->sparc_write_2 = ts102_write_2;
 	tag->sparc_write_4 = ts102_write_4;
 	tag->sparc_write_8 = ts102_write_8;
+
+	sbus_establish(&sc->sc_sd, self);
 
 	bus_intr_establish(sa->sa_bustag, sa->sa_intr[0].oi_pri,
 	    IPL_NONE, tslot_intr, sc);
@@ -379,7 +382,7 @@ tslot_attach(device_t parent, device_t self, void *args)
 				 	TS102_ARBITRARY_MAP_SIZE,
 					0, &hrang) != 0) {
 				printf("%s: cannot map registers\n",
-				    device_xname(self));
+				    self->dv_xname);
 				return;
 			}
 			TSPRINTF("%08x: %08x ",(uint32_t)ranges[base + 3],
@@ -407,6 +410,8 @@ tslot_reset(struct tslot_data *td, uint32_t iosize)
 	paa.paa_busname = "pcmcia";
 	paa.pct = (pcmcia_chipset_tag_t)td->td_parent->sc_pct;
 	paa.pch = (pcmcia_chipset_handle_t)td;
+	paa.iobase = 0;
+	paa.iosize = iosize;
 
 	td->td_pcmcia = config_found(td->td_parent->sc_dev, &paa, tslot_print);
 
@@ -621,7 +626,7 @@ tslot_slot_disable(pcmcia_chipset_handle_t pch)
 	struct tslot_data *td = (struct tslot_data *)pch;
 #ifdef TSLOT_DEBUG
 	printf("%s: disable slot %d\n",
-	    device_xname(td->td_parent->sc_dev), td->td_slot);
+	    td->td_parent->sc_dev.dv_xname, td->td_slot);
 #endif
 
 	/*
@@ -645,7 +650,7 @@ tslot_slot_enable(pcmcia_chipset_handle_t pch)
 
 #ifdef TSLOT_DEBUG
 	printf("%s: enable slot %d\n",
-	    device_xname(td->td_parent->sc_dev), td->td_slot);
+	    td->td_parent->sc_dev.dv_xname, td->td_slot);
 #endif
 
 	/* Power down the socket to reset it */

@@ -22,7 +22,6 @@
 /* Specification.  */
 #include "uniname.h"
 
-#include <sys/types.h>
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -32,6 +31,8 @@
 
 
 /* Table of Unicode character names, derived from UnicodeData.txt.  */
+#define uint16_t unsigned short
+#define uint32_t unsigned int
 #include "uninames.h"
 /* It contains:
   static const char unicode_name_words[26496] = ...;

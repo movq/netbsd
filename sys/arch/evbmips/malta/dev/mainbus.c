@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.12 2011/06/06 17:13:05 matt Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.10 2005/12/11 12:17:11 christos Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.12 2011/06/06 17:13:05 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.10 2005/12/11 12:17:11 christos Exp $");
 
 #include "opt_pci.h"
 
@@ -67,16 +67,17 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.12 2011/06/06 17:13:05 matt Exp $");
 #include "locators.h"
 #include "pci.h"
 
-static int	mainbus_match(device_t, cfdata_t, void *);
-static void	mainbus_attach(device_t, device_t, void *);
-static int	mainbus_submatch(device_t, cfdata_t, const int *, void *);
+static int	mainbus_match(struct device *, struct cfdata *, void *);
+static void	mainbus_attach(struct device *, struct device *, void *);
+static int	mainbus_submatch(struct device *, struct cfdata *,
+				 const int *, void *);
 static int	mainbus_print(void *, const char *);
 
-CFATTACH_DECL_NEW(mainbus, 0,
+CFATTACH_DECL(mainbus, sizeof(struct device),
     mainbus_match, mainbus_attach, NULL, NULL);
 
 /* There can be only one. */
-bool mainbus_found;
+int	mainbus_found;
 
 struct mainbusdev {
 	const char *md_name;
@@ -84,7 +85,7 @@ struct mainbusdev {
 	int md_intr;
 };
 
-const struct mainbusdev mainbusdevs[] = {
+struct mainbusdev mainbusdevs[] = {
 	{ "cpu",		-1,			-1 },
 	{ "gt",			MALTA_CORECTRL_BASE,	-1 },
 	{ "com",		MALTA_CBUSUART,		MALTA_CBUSUART_INTR },
@@ -94,7 +95,10 @@ const struct mainbusdev mainbusdevs[] = {
 };
 
 static int
-mainbus_match(device_t parent, cfdata_t match, void *aux)
+mainbus_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 
 	if (mainbus_found)
@@ -104,10 +108,13 @@ mainbus_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-mainbus_attach(device_t parent, device_t self, void *aux)
+mainbus_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct mainbus_attach_args ma;
-	const struct mainbusdev *md;
+	struct mainbusdev *md;
 #if defined(PCI_NETBSD_CONFIGURE)
 	struct extent *ioext, *memext;
 #endif
@@ -118,7 +125,7 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 	pcireg_t idetim;
 #endif
 
-	mainbus_found = true;
+	mainbus_found = 1;
 	printf("\n");
 
 #if defined(PCI_NETBSD_CONFIGURE)
@@ -161,7 +168,7 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 }
 
 static int
-mainbus_submatch(device_t parent, cfdata_t cf,
+mainbus_submatch(struct device *parent, struct cfdata *cf,
 		 const int *ldesc, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;

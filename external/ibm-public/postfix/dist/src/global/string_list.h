@@ -1,4 +1,4 @@
-/*	$NetBSD: string_list.h,v 1.1.1.1 2009/06/23 10:08:48 tron Exp $	*/
+/*	$NetBSD: string_list.h,v 1.1.1.1.2.3 2011/01/07 01:24:05 riz Exp $	*/
 
 #ifndef _STRING_LIST_H_INCLUDED_
 #define _STRING_LIST_H_INCLUDED_

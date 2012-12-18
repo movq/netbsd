@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_acct.c,v 1.93 2011/09/03 14:09:03 christos Exp $	*/
+/*	$NetBSD: kern_acct.c,v 1.86.12.1 2011/05/20 19:28:56 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_acct.c,v 1.93 2011/09/03 14:09:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_acct.c,v 1.86.12.1 2011/05/20 19:28:56 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -294,7 +294,6 @@ sys_acct(struct lwp *l, const struct sys_acct_args *uap, register_t *retval)
 	/* {
 		syscallarg(const char *) path;
 	} */
-	struct pathbuf *pb;
 	struct nameidata nd;
 	int error;
 
@@ -310,23 +309,17 @@ sys_acct(struct lwp *l, const struct sys_acct_args *uap, register_t *retval)
 	if (SCARG(uap, path) != NULL) {
 		struct vattr va;
 		size_t pad;
-
-		error = pathbuf_copyin(SCARG(uap, path), &pb);
-		if (error) {
-			return error;
-		}
-		NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, pb);
-		if ((error = vn_open(&nd, FWRITE|O_APPEND, 0)) != 0) {
-			pathbuf_destroy(pb);
-			return error;
-		}
+		NDINIT(&nd, LOOKUP, NOFOLLOW | TRYEMULROOT, UIO_USERSPACE,
+		    SCARG(uap, path));
+		if ((error = vn_open(&nd, FWRITE|O_APPEND, 0)) != 0)
+			return (error);
 		if (nd.ni_vp->v_type != VREG) {
-			VOP_UNLOCK(nd.ni_vp);
+			VOP_UNLOCK(nd.ni_vp, 0);
 			error = EACCES;
 			goto bad;
 		}
 		if ((error = VOP_GETATTR(nd.ni_vp, &va, l->l_cred)) != 0) {
-			VOP_UNLOCK(nd.ni_vp);
+			VOP_UNLOCK(nd.ni_vp, 0);
 			goto bad;
 		}
 
@@ -337,15 +330,15 @@ sys_acct(struct lwp *l, const struct sys_acct_args *uap, register_t *retval)
 			    "%lu - incomplete record truncated\n",
 			    (unsigned long)sizeof(struct acct));
 #endif
-			vattr_null(&va);
+			VATTR_NULL(&va);
 			va.va_size = size;
 			error = VOP_SETATTR(nd.ni_vp, &va, l->l_cred);
 			if (error != 0) {
-				VOP_UNLOCK(nd.ni_vp);
+				VOP_UNLOCK(nd.ni_vp, 0);
 				goto bad;
 			}
 		}
-		VOP_UNLOCK(nd.ni_vp);
+		VOP_UNLOCK(nd.ni_vp, 0);
 	}
 
 	rw_enter(&acct_lock, RW_WRITER);
@@ -368,8 +361,6 @@ sys_acct(struct lwp *l, const struct sys_acct_args *uap, register_t *retval)
 	acct_cred = l->l_cred;
 	kauth_cred_hold(acct_cred);
 
-	pathbuf_destroy(pb);
-
 	error = acct_chkfree();		/* Initial guess. */
 	if (error != 0) {
 		acct_stop();
@@ -388,7 +379,6 @@ sys_acct(struct lwp *l, const struct sys_acct_args *uap, register_t *retval)
 	return (error);
  bad:
 	vn_close(nd.ni_vp, FWRITE, l->l_cred);
-	pathbuf_destroy(pb);
 	return error;
 }
 
@@ -411,8 +401,6 @@ acct_process(struct lwp *l)
 	if (acct_state != ACCT_ACTIVE)
 		return 0;
 
-	memset(&acct, 0, sizeof(acct));	/* to zerofill padded data */
-
 	rw_enter(&acct_lock, RW_READER);
 
 	/* If accounting isn't enabled, don't bother */
@@ -425,7 +413,7 @@ acct_process(struct lwp *l)
 	 *
 	 * XXX We should think about the CPU limit, too.
 	 */
-	lim_privatise(p);
+	lim_privatise(p, false);
 	orlim = p->p_rlimit[RLIMIT_FSIZE];
 	/* Set current and max to avoid illegal values */
 	p->p_rlimit[RLIMIT_FSIZE].rlim_cur = RLIM_INFINITY;
@@ -436,7 +424,7 @@ acct_process(struct lwp *l)
 	 */
 
 	/* (1) The name of the command that ran */
-	strncpy(acct.ac_comm, p->p_comm, sizeof(acct.ac_comm));
+	memcpy(acct.ac_comm, p->p_comm, sizeof(acct.ac_comm));
 
 	/* (2) The amount of user and system time that was used */
 	mutex_enter(p->p_lock);

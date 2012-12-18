@@ -12,7 +12,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: k_standard.c,v 1.17 2011/04/11 15:17:33 drochner Exp $");
+__RCSID("$NetBSD: k_standard.c,v 1.12.26.1 2010/01/23 18:02:33 bouyer Exp $");
 #endif
 
 #include "math.h"
@@ -137,9 +137,9 @@ __kernel_standard(double x, double y, int type)
 		exc.type = DOMAIN;
 		exc.name = type < 100 ? "atan2" : "atan2f";
 		exc.retval = zero;
-		if(_LIB_VERSION == _POSIX_) {
-		  exc.retval = copysign(signbit(y) ? M_PI : zero, x);
-		} else if (!matherr(&exc)) {
+		if(_LIB_VERSION == _POSIX_)
+		  errno = EDOM;
+		else if (!matherr(&exc)) {
 		  if(_LIB_VERSION == _SVID_) {
 			(void) WRITE2("atan2: DOMAIN error\n", 20);
 		      }
@@ -370,7 +370,7 @@ __kernel_standard(double x, double y, int type)
 		if (_LIB_VERSION == _SVID_)
 		  exc.retval = -HUGE;
 		else
-		  exc.retval = zero/zero;
+		  exc.retval = -HUGE_VAL;
 		if (_LIB_VERSION == _POSIX_)
 		  errno = EDOM;
 		else if (!matherr(&exc)) {
@@ -406,7 +406,7 @@ __kernel_standard(double x, double y, int type)
 		if (_LIB_VERSION == _SVID_)
 		  exc.retval = -HUGE;
 		else
-		  exc.retval = zero/zero;
+		  exc.retval = -HUGE_VAL;
 		if (_LIB_VERSION == _POSIX_)
 		  errno = EDOM;
 		else if (!matherr(&exc)) {
@@ -800,7 +800,7 @@ __kernel_standard(double x, double y, int type)
 		if (_LIB_VERSION == _SVID_)
 		  exc.retval = -HUGE;
 		else
-		  exc.retval = zero/zero;
+		  exc.retval = -HUGE_VAL;
 		if (_LIB_VERSION == _POSIX_)
 		  errno = EDOM;
 		else if (!matherr(&exc)) {

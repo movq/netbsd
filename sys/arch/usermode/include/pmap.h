@@ -1,4 +1,4 @@
-/* $NetBSD: pmap.h,v 1.5 2011/08/24 19:59:26 reinoud Exp $ */
+/* $NetBSD: pmap.h,v 1.1 2007/12/29 14:38:35 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *        This product includes software developed by Jared D. McNeill.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -30,5 +36,10 @@
 #define _ARCH_USERMODE_INCLUDE_PMAP_H
 
 #define	PMAP_GROWKERNEL		1
+#define PMAP_MAP_POOLPAGE(x)	(x)
+#define PMAP_UNMAP_POOLPAGE(x)	(x)
+
+typedef struct pmap {
+} *pmap_t;
 
 #endif /* !_ARCH_USERMODE_INCLUDE_PMAP_H */

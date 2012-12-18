@@ -1,4 +1,4 @@
-/*	$NetBSD: cryptosoft.h,v 1.7 2011/02/10 21:00:42 drochner Exp $ */
+/*	$NetBSD: cryptosoft.h,v 1.5.52.1 2009/05/03 17:24:45 snj Exp $ */
 /*	$OpenBSD: cryptosoft.h,v 1.10 2002/04/22 23:10:09 deraadt Exp $	*/
 
 /*
@@ -40,6 +40,8 @@ struct swcr_data {
 			const struct swcr_enc_xform *SW_exf;
 		} SWCR_ENC;
 		struct {
+			u_int32_t	 SW_size;
+			u_int32_t	 SW_crc;
 			const struct swcr_comp_algo *SW_cxf;
 		} SWCR_COMP;
 	} SWCR_UN;
@@ -50,6 +52,7 @@ struct swcr_data {
 #define sw_axf		SWCR_UN.SWCR_AUTH.SW_axf
 #define sw_kschedule	SWCR_UN.SWCR_ENC.SW_kschedule
 #define sw_exf		SWCR_UN.SWCR_ENC.SW_exf
+#define sw_size		SWCR_UN.SWCR_COMP.SW_size
 #define sw_cxf		SWCR_UN.SWCR_COMP.SW_cxf
 
 	struct swcr_data *sw_next;
@@ -57,7 +60,7 @@ struct swcr_data {
 
 #ifdef _KERNEL
 int swcr_authcompute(struct cryptop *crp, struct cryptodesc *crd,
-    const struct swcr_data *sw, void *buf, int outtype);
+    struct swcr_data *sw, void *buf, int outtype);
 #endif /* _KERNEL */
 
 #endif /* _CRYPTO_CRYPTO_H_ */

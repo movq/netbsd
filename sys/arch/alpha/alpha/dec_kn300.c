@@ -1,4 +1,4 @@
-/* $NetBSD: dec_kn300.c,v 1.40 2012/10/13 17:58:54 jdc Exp $ */
+/* $NetBSD: dec_kn300.c,v 1.34.54.1 2009/09/26 18:41:42 snj Exp $ */
 
 /*
  * Copyright (c) 1998 by Matthew Jacob
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_kn300.c,v 1.40 2012/10/13 17:58:54 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_kn300.c,v 1.34.54.1 2009/09/26 18:41:42 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -83,11 +83,11 @@ __KERNEL_RCSID(0, "$NetBSD: dec_kn300.c,v 1.40 2012/10/13 17:58:54 jdc Exp $");
 #endif
 static int comcnrate = CONSPEED;
 
-void dec_kn300_init(void);
-void dec_kn300_cons_init(void);
-static void dec_kn300_device_register(device_t, void *);
+void dec_kn300_init __P((void));
+void dec_kn300_cons_init __P((void));
+static void dec_kn300_device_register __P((struct device *, void *));
 static void dec_kn300_mcheck_handler
-(unsigned long, struct trapframe *, unsigned long, unsigned long);
+	__P((unsigned long, struct trapframe *, unsigned long, unsigned long));
 
 #ifdef KGDB
 #include <machine/db_machdep.h>
@@ -106,9 +106,9 @@ const struct alpha_variation_table dec_kn300_variations[] = {
 };
 
 void
-dec_kn300_init(void)
+dec_kn300_init()
 {
-	uint64_t variation;
+	u_int64_t variation;
 	int cachesize;
 
 	platform.family = ALPHASERVER_4100;
@@ -159,7 +159,7 @@ dec_kn300_init(void)
 }
 
 void
-dec_kn300_cons_init(void)
+dec_kn300_cons_init()
 {
 	struct ctb *ctb;
 	struct mcpcia_config *ccp;
@@ -171,7 +171,7 @@ dec_kn300_cons_init(void)
 	ctb = (struct ctb *)(((char *)hwrpb) + hwrpb->rpb_ctb_off);
 
 	switch (ctb->ctb_term_type) {
-	case CTB_PRINTERPORT:
+	case CTB_PRINTERPORT: 
 		/* serial console ... */
 		/*
 		 * Delay to allow PROM putchars to complete.
@@ -192,7 +192,7 @@ dec_kn300_cons_init(void)
 		/* display console ... */
 		/* XXX */
 		(void) pckbc_cnattach(&ccp->cc_iot, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT, 0);
+		    PCKBC_KBD_SLOT);
 
 		if (CTB_TURBOSLOT_TYPE(ctb->ctb_turboslot) ==
 		    CTB_TURBOSLOT_TYPE_ISA)
@@ -221,12 +221,14 @@ dec_kn300_cons_init(void)
 
 /* #define	BDEBUG	1 */
 static void
-dec_kn300_device_register(device_t dev, void *aux)
+dec_kn300_device_register(dev, aux)
+	struct device *dev;
+	void *aux;
 {
 	static int found, initted, diskboot, netboot;
-	static device_t primarydev, pcidev, ctrlrdev;
+	static struct device *primarydev, *pcidev, *ctrlrdev;
 	struct bootdev_data *b = bootdev_data;
-	device_t parent = device_parent(dev);
+	struct device *parent = device_parent(dev);
 
 	if (found)
 		return;
@@ -261,7 +263,7 @@ dec_kn300_device_register(device_t dev, void *aux)
 				return;
 			primarydev = dev;
 #ifdef BDEBUG
-			printf("\nprimarydev = %s\n", device_xname(dev));
+			printf("\nprimarydev = %s\n", dev->dv_xname);
 #endif
 			return;
 		}
@@ -289,7 +291,7 @@ dec_kn300_device_register(device_t dev, void *aux)
 	
 			pcidev = dev;
 #ifdef BDEBUG
-			printf("\npcidev = %s\n", device_xname(dev));
+			printf("\npcidev = %s\n", dev->dv_xname);
 #endif
 			return;
 		}
@@ -310,13 +312,13 @@ dec_kn300_device_register(device_t dev, void *aux)
 			if (netboot) {
 				booted_device = dev;
 #ifdef BDEBUG
-				printf("\nbooted_device = %s\n", device_xname(dev));
+				printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 				found = 1;
 			} else {
 				ctrlrdev = dev;
 #ifdef BDEBUG
-				printf("\nctrlrdev = %s\n", device_xname(dev));
+				printf("\nctrlrdev = %s\n", dev->dv_xname);
 #endif
 			}
 			return;
@@ -345,7 +347,7 @@ dec_kn300_device_register(device_t dev, void *aux)
 		/* we've found it! */
 		booted_device = dev;
 #ifdef BDEBUG
-		printf("\nbooted_device = %s\n", device_xname(dev));
+		printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 		found = 1;
 	}
@@ -366,7 +368,7 @@ dec_kn300_device_register(device_t dev, void *aux)
 		/* we've found it! */
 		booted_device = dev;
 #if 0
-		printf("\nbooted_device = %s\n", device_xname(dev));
+		printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 		found = 1;
 	}
@@ -376,11 +378,11 @@ dec_kn300_device_register(device_t dev, void *aux)
 /*
  * KN300 Machine Check Handlers.
  */
-static void kn300_softerr(unsigned long, unsigned long,
-    unsigned long, struct trapframe *);
+static void kn300_softerr __P((unsigned long, unsigned long,
+    unsigned long, struct trapframe *));
 
-static void kn300_mcheck(unsigned long, unsigned long,
-    unsigned long, struct trapframe *);
+static void kn300_mcheck __P((unsigned long, unsigned long,
+    unsigned long, struct trapframe *));
 
 /*
  * "soft" error structure in system area for KN300 processor.
@@ -393,30 +395,34 @@ typedef struct {
 	 * Should be mc_cc_ev5 structure. Contents are the same,
 	 * just in different places.
 	 */
-	uint64_t	ei_stat;
-	uint64_t	ei_addr;
-	uint64_t	fill_syndrome;
-	uint64_t	isr;
+	u_int64_t	ei_stat;
+	u_int64_t	ei_addr;
+	u_int64_t	fill_syndrome;
+	u_int64_t	isr;
 	/*
 	 * Platform Specific Area
 	 */
-	uint32_t	whami;
-	uint32_t	sys_env;
-	uint64_t	mcpcia_regs;
-	uint32_t	pci_rev;
-	uint32_t	mc_err0;
-	uint32_t	mc_err1;
-	uint32_t	cap_err;
-	uint32_t	mdpa_stat;
-	uint32_t	mdpa_syn;
-	uint32_t	mdpb_stat;
-	uint32_t	mdpb_syn;
-	uint64_t	end_rsvd;
+	u_int32_t	whami;
+	u_int32_t	sys_env;
+	u_int64_t	mcpcia_regs;
+	u_int32_t	pci_rev;
+	u_int32_t	mc_err0;
+	u_int32_t	mc_err1;
+	u_int32_t	cap_err;
+	u_int32_t	mdpa_stat;
+	u_int32_t	mdpa_syn;
+	u_int32_t	mdpb_stat;
+	u_int32_t	mdpb_syn;
+	u_int64_t	end_rsvd;
 } mc_soft300;
 #define	CAP_ERR_CRDX	204
 
 static void
-kn300_softerr(unsigned long mces, unsigned long type, unsigned long logout, struct trapframe *framep)
+kn300_softerr(mces, type, logout, framep)
+	unsigned long mces;
+	unsigned long type;
+	unsigned long logout;
+	struct trapframe *framep;
 {
 	static const char *sys = "system";
 	static const char *proc = "processor";
@@ -477,7 +483,11 @@ kn300_softerr(unsigned long mces, unsigned long type, unsigned long logout, stru
  */
 
 static void
-kn300_mcheck(unsigned long mces, unsigned long type, unsigned long logout, struct trapframe *framep)
+kn300_mcheck(mces, type, logout, framep)
+	unsigned long mces;
+	unsigned long type;
+	unsigned long logout;
+	struct trapframe *framep;
 {
 	struct mchkinfo *mcp;
 	static const char *fmt1 = "        %-25s = 0x%l016x\n";
@@ -540,7 +550,11 @@ kn300_mcheck(unsigned long mces, unsigned long type, unsigned long logout, struc
 }
 
 static void
-dec_kn300_mcheck_handler(unsigned long mces, struct trapframe *framep, unsigned long vector, unsigned long param)
+dec_kn300_mcheck_handler(mces, framep, vector, param)
+	unsigned long mces;
+	struct trapframe *framep;
+	unsigned long vector;
+	unsigned long param;
 {
 	switch (vector) {
 	case ALPHA_SYS_ERROR:

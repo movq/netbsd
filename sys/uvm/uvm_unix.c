@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_unix.c,v 1.44 2011/02/02 20:07:25 chuck Exp $	*/
+/*	$NetBSD: uvm_unix.c,v 1.40 2008/01/02 11:49:21 ad Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -19,7 +19,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor,
+ *	Washington University, the University of California, Berkeley and
+ *	its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -45,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_unix.c,v 1.44 2011/02/02 20:07:25 chuck Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_unix.c,v 1.40 2008/01/02 11:49:21 ad Exp $");
 
 #include "opt_pax.h"
 
@@ -81,8 +86,7 @@ sys_obreak(struct lwp *l, const struct sys_obreak_args *uap, register_t *retval)
 	mutex_enter(&p->p_auxlock);
 	old = (vaddr_t)vm->vm_daddr;
 	new = round_page((vaddr_t)SCARG(uap, nsize));
-	if (new == 0 ||
-	    ((new - old) > p->p_rlimit[RLIMIT_DATA].rlim_cur && new > old)) {
+	if ((new - old) > p->p_rlimit[RLIMIT_DATA].rlim_cur && new > old) {
 		mutex_exit(&p->p_auxlock);
 		return (ENOMEM);
 	}
@@ -113,10 +117,8 @@ sys_obreak(struct lwp *l, const struct sys_obreak_args *uap, register_t *retval)
 				UVM_ADV_NORMAL, UVM_FLAG_AMAPPAD|UVM_FLAG_FIXED|
 				UVM_FLAG_OVERLAY|UVM_FLAG_COPYONW));
 		if (error) {
-#ifdef DEBUG
-			uprintf("sbrk: grow %#"PRIxVADDR" failed, error = %d\n",
-			    new - old, error);
-#endif
+			uprintf("sbrk: grow %ld failed, error = %d\n",
+				new - old, error);
 			mutex_exit(&p->p_auxlock);
 			return (error);
 		}

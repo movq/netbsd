@@ -1,8 +1,10 @@
-#	$NetBSD: Makefile,v 1.12 2011/08/16 12:49:13 christos Exp $
+#	$NetBSD: Makefile,v 1.9 2008/05/03 14:48:31 lukem Exp $
 
 LIBISPRIVATE=	yes
 
 .include <bsd.own.mk>
+
+#WARNS=	2
 
 LIB=	altq
 SRCS=	parser.c qop.c qop_blue.c qop_cbq.c qop_cdnr.c qop_conf.c \

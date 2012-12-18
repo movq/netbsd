@@ -1,4 +1,4 @@
-/*	$NetBSD: smc83c170.c,v 1.81 2012/07/22 14:32:58 matt Exp $	*/
+/*	$NetBSD: smc83c170.c,v 1.76 2008/07/06 14:32:56 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -36,8 +36,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smc83c170.c,v 1.81 2012/07/22 14:32:58 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smc83c170.c,v 1.76 2008/07/06 14:32:56 tsutsui Exp $");
 
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,12 +51,16 @@ __KERNEL_RCSID(0, "$NetBSD: smc83c170.c,v 1.81 2012/07/22 14:32:58 matt Exp $");
 #include <sys/errno.h>
 #include <sys/device.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -72,7 +77,7 @@ int	epic_ioctl(struct ifnet *, u_long, void *);
 int	epic_init(struct ifnet *);
 void	epic_stop(struct ifnet *, int);
 
-bool	epic_shutdown(device_t, int);
+void	epic_shutdown(void *);
 
 void	epic_reset(struct epic_softc *);
 void	epic_rxdrain(struct epic_softc *);
@@ -85,7 +90,7 @@ void	epic_mii_write(device_t, int, int, int);
 int	epic_mii_wait(struct epic_softc *, uint32_t);
 void	epic_tick(void *);
 
-void	epic_statchg(struct ifnet *);
+void	epic_statchg(device_t);
 int	epic_mediachange(struct ifnet *);
 
 #define	INTMASK	(INTSTAT_FATAL_INT | INTSTAT_TXU | \
@@ -296,12 +301,10 @@ epic_attach(struct epic_softc *sc)
 	/*
 	 * Make sure the interface is shutdown during reboot.
 	 */
-	if (pmf_device_register1(sc->sc_dev, NULL, NULL, epic_shutdown))
-		pmf_class_network_register(sc->sc_dev, ifp);
-	else
+	sc->sc_sdhook = shutdownhook_establish(epic_shutdown, sc);
+	if (sc->sc_sdhook == NULL)
 		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
-
+		    "WARNING: unable to establish shutdown hook\n");
 	return;
 
 	/*
@@ -337,14 +340,12 @@ epic_attach(struct epic_softc *sc)
 /*
  * Shutdown hook.  Make sure the interface is stopped at reboot.
  */
-bool
-epic_shutdown(device_t self, int howto)
+void
+epic_shutdown(void *arg)
 {
-	struct epic_softc *sc = device_private(self);
+	struct epic_softc *sc = arg;
 
 	epic_stop(&sc->sc_ethercom.ec_if, 1);
-
-	return true;
 }
 
 /*
@@ -489,10 +490,13 @@ epic_start(struct ifnet *ifp)
 		sc->sc_txpending++;
 		sc->sc_txlast = nexttx;
 
+#if NBPFILTER > 0
 		/*
 		 * Pass the packet to any BPF listeners.
 		 */
-		bpf_mtap(ifp, m0);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m0);
+#endif
 	}
 
 	if (sc->sc_txpending == EPIC_NTXDESC) {
@@ -707,11 +711,14 @@ epic_intr(void *arg)
 			m->m_pkthdr.rcvif = ifp;
 			m->m_pkthdr.len = m->m_len = len;
 
+#if NBPFILTER > 0
 			/*
 			 * Pass this up to any BPF listeners, but only
 			 * pass it up the stack if it's for us.
 			 */
-			bpf_mtap(ifp, m);
+			if (ifp->if_bpf)
+				bpf_mtap(ifp->if_bpf, m);
+#endif
 
 			/* Pass it on. */
 			(*ifp->if_input)(ifp, m);
@@ -1381,9 +1388,9 @@ epic_mii_write(device_t self, int phy, int reg, int val)
  * Callback from PHY when media changes.
  */
 void
-epic_statchg(struct ifnet *ifp)
+epic_statchg(device_t self)
 {
-	struct epic_softc *sc = ifp->if_softc;
+	struct epic_softc *sc = device_private(self);
 	uint32_t txcon, miicfg;
 
 	/*
@@ -1459,7 +1466,7 @@ epic_mediachange(struct ifnet *ifp)
 		mii->mii_media_active = media;
 		mii->mii_media_status = 0;
 
-		epic_statchg(mii->mii_ifp);
+		epic_statchg(sc->sc_dev);
 		return 0;
 	}
 

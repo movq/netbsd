@@ -1,4 +1,4 @@
-/*	$NetBSD: zsms.c,v 1.18 2009/05/12 14:47:05 cegger Exp $	*/
+/*	$NetBSD: zsms.c,v 1.17 2008/03/29 19:15:36 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zsms.c,v 1.18 2009/05/12 14:47:05 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zsms.c,v 1.17 2008/03/29 19:15:36 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,7 +105,7 @@ struct zsms_softc {		/* driver status information */
 	u_int buttons;
 	int dx, dy;
 
-	device_t sc_wsmousedev;
+	struct device *sc_wsmousedev;
 };
 
 static struct zsops zsops_zsms;

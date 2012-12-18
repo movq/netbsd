@@ -1,4 +1,4 @@
-/*	$NetBSD: pl_4.c,v 1.16 2009/03/14 22:52:52 dholland Exp $	*/
+/*	$NetBSD: pl_4.c,v 1.15 2004/11/05 21:30:32 dsl Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pl_4.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: pl_4.c,v 1.16 2009/03/14 22:52:52 dholland Exp $");
+__RCSID("$NetBSD: pl_4.c,v 1.15 2004/11/05 21:30:32 dsl Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,12 +57,12 @@ changesail(void)
 			if (sgetch("Increase to Full sails? ",
 				(struct ship *)0, 1) == 'y') {
 				changed = 1;
-				send_fs(ms, 1);
+				Write(W_FS, ms, 1, 0, 0, 0);
 			}
 		} else {
 			if (sgetch("Reduce to Battle sails? ",
 				(struct ship *)0, 1) == 'y') {
-				send_fs(ms, 0);
+				Write(W_FS, ms, 0, 0, 0, 0);
 				changed = 1;
 			}
 		}
@@ -82,7 +82,7 @@ acceptsignal(void)
 		;
 	p[-1] = '"';
 	*p = 0;
-	send_signal(ms, buf);
+	Writestr(W_SIGNAL, ms, buf);
 }
 
 void

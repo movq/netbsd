@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs.S,v 1.3 2011/07/04 11:18:23 mrg Exp $	*/
+/*	$NetBSD: ffs.S,v 1.1 2005/12/20 19:28:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -40,7 +40,7 @@
 #if 0
 	.asciz "@(#)ffs.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: ffs.S,v 1.3 2011/07/04 11:18:23 mrg Exp $")
+	RCSID("$NetBSD: ffs.S,v 1.1 2005/12/20 19:28:50 christos Exp $")
 #endif
 #endif  /* LIBC_SCCS and not lint */
 
@@ -58,12 +58,11 @@
  * one, we just return the table value plus 24.  This means
  * that ffstab[0] must be -24 so that ffs(0) will return 0.
  */
-WEAK_ALIAS(__ffssi2,ffs)
 ENTRY(ffs)
 #ifdef PIC
-	PICCY_SET(ffstab, %o2, %o3)
+	PICCY_SET(_C_LABEL(__ffstab), %o2, %o3)
 #else
-	set	ffstab, %o2
+	set	_C_LABEL(__ffstab), %o2
 #endif
 	andcc	%o0, 0xff, %o1	! get low byte
 	be,a	1f		! try again if 0
@@ -95,7 +94,7 @@ ENTRY(ffs)
 	retl
 	 add	%o0, 24, %o0
 
-ffstab:
+RODATA(__ffstab)
 	.byte	-24,1,2,1,3,1,2,1,4,1,2,1,3,1,2,1 /* 00-0f */
 	.byte	5,1,2,1,3,1,2,1,4,1,2,1,3,1,2,1	/* 10-1f */
 	.byte	6,1,2,1,3,1,2,1,4,1,2,1,3,1,2,1	/* 20-2f */

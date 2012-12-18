@@ -1,4 +1,4 @@
-/*	$NetBSD: mopcopy.c,v 1.5 2011/08/30 19:49:11 joerg Exp $	*/
+/*	$NetBSD: mopcopy.c,v 1.3 2002/11/05 05:06:05 thorpej Exp $	*/
 
 /* mopcopy - Convert a Unix format kernel into something that
  * can be transfered via MOP.
@@ -49,21 +49,19 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mopcopy.c,v 1.5 2011/08/30 19:49:11 joerg Exp $");
+__RCSID("$NetBSD: mopcopy.c,v 1.3 2002/11/05 05:06:05 thorpej Exp $");
 #endif
 
 #include "os.h"
 #include "common.h"
 #include "mopdef.h"
 #include "file.h"
-#if !defined(NOAOUT)
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/exec_aout.h>
 #endif
 #if defined(__FreeBSD__)
 #include <sys/imgact_aout.h>
 #endif
-#endif /* !NOAOUT */
 #if defined(__bsdi__)
 #include <a.out.h>
 #define NOAOUT
@@ -84,12 +82,10 @@ __RCSID("$NetBSD: mopcopy.c,v 1.5 2011/08/30 19:49:11 joerg Exp $");
 #endif /* NOELF */
 
 u_char header[512];		/* The VAX header we generate is 1 block. */
-#if !defined(NOAOUT)
 struct exec ex, ex_swap;
-#endif
 
 int
-main(int argc, char **argv)
+main (int argc, char **argv)
 {
 	FILE   *out;		/* A FILE because that is easier. */
 	int	i, j;

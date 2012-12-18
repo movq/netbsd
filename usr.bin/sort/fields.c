@@ -1,4 +1,4 @@
-/*	$NetBSD: fields.c,v 1.32 2010/12/18 23:09:48 christos Exp $	*/
+/*	$NetBSD: fields.c,v 1.19.6.1 2009/10/14 20:41:53 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2000-2003 The NetBSD Foundation, Inc.
@@ -65,7 +65,10 @@
 
 #include "sort.h"
 
-__RCSID("$NetBSD: fields.c,v 1.32 2010/12/18 23:09:48 christos Exp $");
+#ifndef lint
+__RCSID("$NetBSD: fields.c,v 1.19.6.1 2009/10/14 20:41:53 sborrill Exp $");
+__SCCSID("@(#)fields.c	8.1 (Berkeley) 6/6/93");
+#endif /* not lint */
 
 #define SKIP_BLANKS(ptr) {					\
 	if (BLANK & d_mask[*(ptr)])				\
@@ -80,7 +83,6 @@ __RCSID("$NetBSD: fields.c,v 1.32 2010/12/18 23:09:48 christos Exp $");
 		
 static u_char *enterfield(u_char *, const u_char *, struct field *, int);
 static u_char *number(u_char *, const u_char *, u_char *, u_char *, int);
-static u_char *length(u_char *, const u_char *, u_char *, u_char *, int);
 
 #define DECIMAL_POINT '.'
 
@@ -201,8 +203,6 @@ enterfield(u_char *tablepos, const u_char *endkey, struct field *cur_fld,
 			end = tcol.p->end;
 	}
 
-	if (flags & L)
-		return length(tablepos, endkey, start, end, flags);
 	if (flags & N)
 		return number(tablepos, endkey, start, end, flags);
 
@@ -363,15 +363,4 @@ number(u_char *pos, const u_char *bufend, u_char *line, u_char *lineend,
 	*last_nz_pos++ = negate;
 
 	return (last_nz_pos);
-}
-
-static u_char *
-length(u_char *pos, const u_char *bufend, u_char *line, u_char *lineend,
-    int flag)
-{
-	u_char buf[32];
-	int l;
-	SKIP_BLANKS(line);
-	l = snprintf((char *)buf, sizeof(buf), "%td", lineend - line);
-	return number(pos, bufend, buf, buf + l, flag);
 }

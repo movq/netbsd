@@ -1,4 +1,4 @@
-/*	$NetBSD: cmp.c,v 1.18 2011/08/29 14:14:11 joerg Exp $	*/
+/*	$NetBSD: cmp.c,v 1.16 2008/07/21 14:19:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1987, 1990, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1990, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)cmp.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: cmp.c,v 1.18 2011/08/29 14:14:11 joerg Exp $");
+__RCSID("$NetBSD: cmp.c,v 1.16 2008/07/21 14:19:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,7 +59,7 @@ __RCSID("$NetBSD: cmp.c,v 1.18 2011/08/29 14:14:11 joerg Exp $");
 
 int	lflag, sflag;
 
-__dead static void usage(void);
+static void usage(void);
 
 int
 main(int argc, char *argv[])
@@ -67,7 +67,7 @@ main(int argc, char *argv[])
 	struct stat sb1, sb2;
 	off_t skip1 = 0, skip2 = 0;
 	int ch, fd1, fd2, special;
-	const char *file1, *file2;
+	char *file1, *file2;
 
 	setlocale(LC_ALL, "");
 

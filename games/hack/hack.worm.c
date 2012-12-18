@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.worm.c,v 1.9 2011/08/06 20:29:37 dholland Exp $	*/
+/*	$NetBSD: hack.worm.c,v 1.6 2006/05/13 22:43:02 christos Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.worm.c,v 1.9 2011/08/06 20:29:37 dholland Exp $");
+__RCSID("$NetBSD: hack.worm.c,v 1.6 2006/05/13 22:43:02 christos Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -76,10 +76,9 @@ struct wseg    *wsegs[32];	/* linked list, tail first */
 struct wseg    *wheads[32];
 long            wgrowtime[32];
 
-static void remseg(struct wseg *);
-
 int
-getwn(struct monst *mtmp)
+getwn(mtmp)
+	struct monst   *mtmp;
 {
 	int	tmp;
 	for (tmp = 1; tmp < 32; tmp++)
@@ -92,7 +91,8 @@ getwn(struct monst *mtmp)
 
 /* called to initialize a worm unless cut in half */
 void
-initworm(struct monst *mtmp)
+initworm(mtmp)
+	struct monst   *mtmp;
 {
 	struct wseg    *wtmp;
 	int	tmp = mtmp->wormno;
@@ -107,7 +107,8 @@ initworm(struct monst *mtmp)
 }
 
 void
-worm_move(struct monst *mtmp)
+worm_move(mtmp)
+	struct monst   *mtmp;
 {
 	struct wseg    *wtmp, *whd = NULL;
 	int		tmp = mtmp->wormno;
@@ -139,7 +140,8 @@ worm_move(struct monst *mtmp)
 }
 
 void
-worm_nomove(struct monst *mtmp)
+worm_nomove(mtmp)
+	struct monst   *mtmp;
 {
 	int		tmp;
 	struct wseg    *wtmp;
@@ -155,7 +157,8 @@ worm_nomove(struct monst *mtmp)
 }
 
 void
-wormdead(struct monst *mtmp)
+wormdead(mtmp)
+	struct monst   *mtmp;
 {
 	int		tmp = mtmp->wormno;
 	struct wseg    *wtmp, *wtmp2;
@@ -170,7 +173,8 @@ wormdead(struct monst *mtmp)
 }
 
 void
-wormhit(struct monst *mtmp)
+wormhit(mtmp)
+	struct monst   *mtmp;
 {
 	int		tmp = mtmp->wormno;
 	struct wseg    *wtmp;
@@ -181,7 +185,8 @@ wormhit(struct monst *mtmp)
 }
 
 void
-wormsee(unsigned tmp)
+wormsee(tmp)
+	unsigned        tmp;
 {
 	struct wseg    *wtmp = wsegs[tmp];
 	if (!wtmp)
@@ -194,7 +199,8 @@ wormsee(unsigned tmp)
 }
 
 void
-pwseg(struct wseg *wtmp)
+pwseg(wtmp)
+	struct wseg    *wtmp;
 {
 	if (!wtmp->wdispl) {
 		atl(wtmp->wx, wtmp->wy, '~');
@@ -202,9 +208,11 @@ pwseg(struct wseg *wtmp)
 	}
 }
 
-/* weptyp is uwep->otyp or 0 */
 void
-cutworm(struct monst *mtmp, xchar x, xchar y, uchar weptyp)
+cutworm(mtmp, x, y, weptyp)
+	struct monst   *mtmp;
+	xchar           x, y;
+	uchar           weptyp;	/* uwep->otyp or 0 */
 {
 	struct wseg    *wtmp, *wtmp2;
 	struct monst   *mtmp2;
@@ -274,11 +282,12 @@ cutworm(struct monst *mtmp, xchar x, xchar y, uchar weptyp)
 	panic("Cannot find worm segment");
 }
 
-static void
-remseg(struct wseg *wtmp)
+void
+remseg(wtmp)
+	struct wseg    *wtmp;
 {
 	if (wtmp->wdispl)
 		newsym(wtmp->wx, wtmp->wy);
-	free(wtmp);
+	free((char *) wtmp);
 }
 #endif	/* NOWORM */

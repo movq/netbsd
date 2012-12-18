@@ -1,4 +1,4 @@
-/*	$NetBSD: wstsc.c,v 1.33 2012/10/27 17:17:32 chs Exp $ */
+/*	$NetBSD: wstsc.c,v 1.32 2005/12/11 12:16:28 christos Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wstsc.c,v 1.33 2012/10/27 17:17:32 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wstsc.c,v 1.32 2005/12/11 12:16:28 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,8 +73,8 @@ __KERNEL_RCSID(0, "$NetBSD: wstsc.c,v 1.33 2012/10/27 17:17:32 chs Exp $");
 #include <amiga/dev/scivar.h>
 #include <amiga/dev/zbusvar.h>
 
-void wstscattach(device_t, device_t, void *);
-int wstscmatch(device_t, cfdata_t, void *);
+void wstscattach(struct device *, struct device *, void *);
+int wstscmatch(struct device *, struct cfdata *, void *);
 
 int wstsc_dma_xfer_in(struct sci_softc *dev, int len,
     register u_char *buf, int phase);
@@ -97,18 +97,18 @@ extern int sci_data_wait;
 
 int supradma_pseudo = 0;	/* 0=none, 1=byte, 2=word */
 
-CFATTACH_DECL_NEW(wstsc, sizeof(struct sci_softc),
+CFATTACH_DECL(wstsc, sizeof(struct sci_softc),
     wstscmatch, wstscattach, NULL, NULL);
 
 /*
  * if this a Supra WordSync board
  */
 int
-wstscmatch(device_t parent, cfdata_t cf, void *aux)
+wstscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 
 	/*
 	 * Check manufacturer and product id.
@@ -122,19 +122,17 @@ wstscmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-wstscattach(device_t parent, device_t self, void *aux)
+wstscattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	volatile u_char *rp;
-	struct sci_softc *sc = device_private(self);
+	struct sci_softc *sc = (struct sci_softc *)dp;
 	struct zbus_args *zap;
 	struct scsipi_adapter *adapt = &sc->sc_adapter;
 	struct scsipi_channel *chan = &sc->sc_channel;
 
-	sc->sc_dev = self;
-
 	printf("\n");
 
-	zap = aux;
+	zap = auxp;
 
 	rp = zap->va;
 	/*
@@ -176,7 +174,7 @@ wstscattach(device_t parent, device_t self, void *aux)
 	 * Fill in the scsipi_adapter.
 	 */
 	memset(adapt, 0, sizeof(*adapt));
-	adapt->adapt_dev = self;
+	adapt->adapt_dev = &sc->sc_dev;
 	adapt->adapt_nchannels = 1;
 	adapt->adapt_openings = 7;
 	adapt->adapt_max_periph = 1;
@@ -197,7 +195,7 @@ wstscattach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(self, chan, scsiprint);
+	config_found(dp, chan, scsiprint);
 }
 
 int

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bgevar.h,v 1.9 2012/02/02 19:43:05 tls Exp $	*/
+/*	$NetBSD: if_bgevar.h,v 1.1.8.3 2010/11/19 23:58:40 riz Exp $	*/
 /*
  * Copyright (c) 2001 Wind River Systems
  * Copyright (c) 1997, 1998, 1999, 2001
@@ -66,7 +66,7 @@
 #ifndef _DEV_PCI_IF_BGEVAR_H_
 #define _DEV_PCI_IF_BGEVAR_H_
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <net/if_ether.h>
 #include <dev/pci/pcivar.h>
 
@@ -287,9 +287,9 @@ struct bge_softc {
 	SLIST_HEAD(, txdmamap_pool_entry) txdma_list;
 	struct txdmamap_pool_entry *txdma[BGE_TX_RING_CNT];
 
-	struct sysctllog	*bge_log;
-
-	krndsource_t	rnd_source;	/* random source */
+#if NRND > 0
+	rndsource_element_t	rnd_source;	/* random source */
+#endif
 };
 
 #endif /* _DEV_PCI_IF_BGEVAR_H_ */

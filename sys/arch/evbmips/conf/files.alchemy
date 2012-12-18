@@ -1,4 +1,4 @@
-#	$NetBSD: files.alchemy,v 1.11 2011/02/20 07:48:34 matt Exp $
+#	$NetBSD: files.alchemy,v 1.9 2008/02/20 21:43:33 drochner Exp $
 
 # Platform support - select just one, please
 defflag		opt_alchemy.h	ALCHEMY_GENERIC
@@ -26,6 +26,7 @@ file	arch/evbmips/evbmips/yamon.c
 
 file	arch/mips/mips/mips3_clock.c
 file	arch/mips/mips/mips3_clockintr.c
+file	arch/mips/mips/softintr.c
 
 # System bus
 device	mainbus { }
@@ -34,7 +35,7 @@ file	arch/evbmips/alchemy/mainbus.c		mainbus
 
 device	cpu
 attach	cpu at mainbus
-file	arch/evbmips/evbmips/cpu.c		cpu
+file	arch/evbmips/alchemy/cpu.c		cpu
 
 # Alchemy on-board devices
 device	obio { [addr=-1] }

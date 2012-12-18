@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC32_IP2x,v 1.92 2012/10/17 14:48:16 apb Exp $
+#	$NetBSD: GENERIC32_IP2x,v 1.75.4.1 2009/09/26 18:08:58 snj Exp $
 #
 # GENERIC32_IP2x machine description file
 # 
@@ -29,7 +29,7 @@ makeoptions	TEXTADDR=0x88069000	# entry point
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC32-IP2x-$Revision: 1.92 $"
+#ident		"GENERIC32-IP2x-$Revision: 1.75.4.1 $"
 
 maxusers	32
 
@@ -54,6 +54,9 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V message queues
 options 	SYSVSEM		# System V semaphores
 options 	SYSVSHM		# System V shared memory
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
+
+#options 	LKM		# loadable kernel modules (XXX: working?)
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -81,11 +84,10 @@ options 	COMPAT_16	# NetBSD 1.6
 options 	COMPAT_20	# NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
-options 	COMPAT_LINUX	# binary compatibility with Linux
+options 	COMPAT_IRIX	# binary compatibility with IRIX
+#options 	COMPAT_LINUX	# binary compatibility with Linux
 #options 	COMPAT_ULTRIX	# binary compatibility with Ultrix 
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
@@ -102,7 +104,7 @@ file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay file system
-file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
+file-system 	PORTAL		# portal filesystem (still experimental)
 file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
@@ -113,10 +115,10 @@ file-system	TMPFS		# Efficient memory file-system
 file-system	EFS		# Silicon Graphics Extent File System
 
 # File system options
-options 	QUOTA		# legacy UFS quotas
-options 	QUOTA2		# new, in-filesystem UFS quotas
+options 	QUOTA		# UFS quotas
 #options 	FFS_EI		# FFS Endian Independent support
-options 	WAPBL		# File system journaling support
+options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -178,7 +180,6 @@ options 	NFS_BOOT_DHCP,NFS_BOOT_BOOTPARAM
 # builtin terminal emulations
 #options 	WSEMUL_SUN		# sun terminal emulation
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 # different kernel output - see dev/wscons/wsdisplayvar.h
 options 	WS_KERNEL_FG=WSCOL_GREEN
 #options 	WS_KERNEL_BG=WSCOL_BLACK
@@ -211,12 +212,7 @@ gio0		at pic0
 imc0 		at mainbus0 addr 0x1fa00000
 gio0 		at imc0
 eisa0 		at imc0
-
 int0		at mainbus0		# Interrupt controller
-
-# Some clocks actually in HPC space, but not all
-dpclock0	at mainbus0 addr 0x1fb80e00	# IP12 / IP20
-dsclock0	at mainbus0 addr 0x1fbe0000	# IP22 / 24
 
 hpc0 		at gio? addr 0x1fb80000
 hpc1 		at gio? addr 0x1fb00000
@@ -246,6 +242,8 @@ tlphy*		at mii? phy ?		 # ThunderLAN PHY (unused)
 # HPC devices
 sq* 		at hpc? offset ?	# On-board ethernet / E++ adapter
 wdsc* 		at hpc? offset ?	# On-board SCSI / GIO32 SCSI adapter
+dpclock*	at hpc0 offset ?	# IP12 / IP20
+dsclock*	at hpc0 offset ?	# IP22 / 24
 haltwo*         at hpc0 offset ?	# IP22 / 24
 panel*		at hpc0 offset ?	# front panel buttons on Indy
 pckbc*		at hpc0 offset ?
@@ -287,8 +285,8 @@ pseudo-device	ccd		4	# concatenated/striped disk devices
 #pseudo-device	cgd		4	# cryptographic disk devices
 #pseudo-device	raid		4	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
-pseudo-device	fss			# file system snapshot device
-pseudo-device	md			# memory disk device (ramdisk)
+pseudo-device	fss		4	# file system snapshot device
+pseudo-device	md		1	# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
 
@@ -318,14 +316,18 @@ pseudo-device   accf_http		# "httpready" accept filter
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	sequencer	1	# MIDI sequencer
+pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 pseudo-device	wsmux                   # mouse & keyboard multiplexor
 pseudo-device	wsfont
-pseudo-device	putter			# for puffs and pud
 
 # a pseudo device needed for Coda	# also needs CODA (above)
 pseudo-device	vcoda		4	# coda minicache <-> venus comm.
+
+# pseudo devices used for IRIX binary compatibility
+pseudo-device	irix_kmem		# IRIX /dev/kmem
+pseudo-device	irix_usema		# IRIX /dev/usema
 
 # Veriexec
 #

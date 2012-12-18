@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.12 2011/04/03 23:14:12 dyoung Exp $
+#	$NetBSD: Makefile,v 1.11 2008/10/25 22:27:36 apb Exp $
 #	$OpenBSD: Makefile,v 1.5 1997/05/19 10:34:53 pefo Exp $
 #	from: @(#)Makefile	8.1 (Berkeley) 6/16/93
 
@@ -7,12 +7,11 @@
 # Find where mips source files are for inclusion in tags
 .include <../mips/Makefile.inc>
 
-TARC=	${SYSDIR}/arch/arc/tags
-SARC=	${SYSDIR}/arch/arc/arc/*.[ch] ${SYSDIR}/arch/arc/dev/*.[ch] \
-	${SYSDIR}/arch/arc/dti/*.[ch] ${SYSDIR}/arch/arc/include/*.h \
-	${SYSDIR}/arch/arc/isa/*.[ch] \
-	${SYSDIR}/arch/arc/pci/*.[ch] ${SYSDIR}/arch/arc/jazz/*.[ch]
-AARC=	${SYSDIR}/arch/arc/arc/*.S
+TARC=	../arc/tags
+SARC=	../arc/arc/*.[ch] ../arc/dev/*.[ch] \
+	../arc/dti/*.[ch] ../arc/include/*.h ../arc/isa/*.[ch] \
+	../arc/pci/*.[ch] ../arc/jazz/*.[ch]
+AARC=	../arc/arc/*.S
 
 # Directories in which to place tags links
 DARC=	arc dev dti include isa pci jazz
@@ -20,9 +19,7 @@ DARC=	arc dev dti include isa pci jazz
 .include "../../kern/Make.tags.inc"
 
 tags:
-	-rm -f ${TARC}
-	-echo ${SARC} ${SMIPS} | xargs ctags -wadtf ${TARC}
-	-${FINDCOMM} | xargs ctags -wadtf ${TARC}
+	-ctags -wdtf ${TARC} ${SARC} ${SMIPS} ${COMM}
 	egrep "^LEAF(.*)|^[AN]LEAF(.*)|^NON_LEAF(.*)" ${AARC} ${AMIPS} | \
 	    ${TOOL_SED} "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 	    >> ${TARC}

@@ -231,7 +231,7 @@ printable(char *str)
  */
 
 char *
-strcpyend(char *to, const char *from)
+strcpyend(char *to, char *from)
 
 {
     while ((*to++ = *from++) != '\0');
@@ -240,13 +240,13 @@ strcpyend(char *to, const char *from)
 
 /*
  * char *
- * homogenize(const char *str)
+ * homogenize(char *str)
  *
  * Remove unwanted characters from "str" and make everything lower case.
  * Newly allocated string is returned: the original is not altered.
  */
 
-char *homogenize(const char *str)
+char *homogenize(char *str)
 
 {
     char *ans;
@@ -254,7 +254,7 @@ char *homogenize(const char *str)
     char *to;
     int ch;
 
-    to = fr = ans = estrdup(str);
+    to = fr = ans = strdup(str);
     while ((ch = *fr++) != '\0')
     {
 	if (isalnum(ch))
@@ -272,7 +272,7 @@ char *homogenize(const char *str)
  */
 
 int
-string_index(const char *string, const char **array)
+string_index(char *string, char **array)
 
 {
     register int i = 0;
@@ -297,12 +297,12 @@ string_index(const char *string, const char **array)
  * caller is done.  Note that this is not an efficient function.
  */
 
-char *string_list(const char **strings)
+char *string_list(char **strings)
 
 {
     int cnt = 0;
-    const char **pp;
-    const char *p;
+    char **pp;
+    char *p;
     char *result = NULL;
     char *resp = NULL;
 
@@ -314,7 +314,7 @@ char *string_list(const char **strings)
 
     if (cnt > 0)
     {
-	resp = result = emalloc(cnt);
+	resp = result = (char *)malloc(cnt);
 	pp = strings;
 	while ((p = *pp++) != NULL)
 	{
@@ -371,10 +371,10 @@ argparse(char *line, int *cntp)
     cnt += 3;
 
     /* allocate a char * array to hold the pointers */
-    argarray = emalloc(cnt * sizeof(char *));
+    argarray = (char **)malloc(cnt * sizeof(char *));
 
     /* allocate another array to hold the strings themselves */
-    args = emalloc(length+2);
+    args = (char *)malloc(length+2);
 
     /* initialization for main loop */
     from = line;
@@ -484,7 +484,7 @@ extern char *sys_errlist[];
 extern int sys_nerr;
 #endif
 
-const char *
+char *
 errmsg(int errnum)
 
 {
@@ -611,12 +611,12 @@ format_k(long amt)
 
 {
     static char retarray[NUM_STRINGS][16];
-    static int idx = 0;
+    static int index = 0;
     register char *ret;
     register char tag = 'K';
 
-    ret = retarray[idx];
-    idx = (idx + 1) % NUM_STRINGS;
+    ret = retarray[index];
+    index = (index + 1) % NUM_STRINGS;
 
     if (amt >= 10000)
     {
@@ -629,7 +629,7 @@ format_k(long amt)
 	}
     }
 
-    snprintf(ret, sizeof(retarray[idx])-1, "%ld%c", amt, tag);
+    snprintf(ret, sizeof(retarray[index])-1, "%ld%c", amt, tag);
 
     return(ret);
 }

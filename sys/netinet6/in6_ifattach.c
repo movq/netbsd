@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_ifattach.c,v 1.87 2011/12/31 20:41:59 christos Exp $	*/
+/*	$NetBSD: in6_ifattach.c,v 1.80 2008/04/24 11:38:38 ad Exp $	*/
 /*	$KAME: in6_ifattach.c,v 1.124 2001/07/18 08:32:51 jinmei Exp $	*/
 
 /*
@@ -31,11 +31,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_ifattach.c,v 1.87 2011/12/31 20:41:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_ifattach.c,v 1.80 2008/04/24 11:38:38 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/kmem.h>
 #include <sys/malloc.h>
 #include <sys/socket.h>
 #include <sys/sockio.h>
@@ -43,7 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: in6_ifattach.c,v 1.87 2011/12/31 20:41:59 christos E
 #include <sys/syslog.h>
 #include <sys/md5.h>
 #include <sys/socketvar.h>
-#include <sys/cprng.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -178,6 +176,7 @@ generate_tmp_ifid(u_int8_t *seed0, const u_int8_t *seed1, u_int8_t *ret)
 {
 	MD5_CTX ctxt;
 	u_int8_t seed[16], digest[16], nullbuf[8];
+	u_int32_t val32;
 	/*
 	 * interface ID for subnet anycast addresses.
 	 * XXX: we assume the unicast address range that requires IDs
@@ -191,7 +190,12 @@ generate_tmp_ifid(u_int8_t *seed0, const u_int8_t *seed1, u_int8_t *ret)
 	/* If there's no hisotry, start with a random seed. */
 	memset(nullbuf, 0, sizeof(nullbuf));
 	if (memcmp(nullbuf, seed0, sizeof(nullbuf)) == 0) {
-		cprng_fast(seed, sizeof(seed));
+		int i;
+
+		for (i = 0; i < 2; i++) {
+			val32 = arc4random();
+			memcpy(seed + sizeof(val32) * i, &val32, sizeof(val32));
+		}
 	} else
 		memcpy(seed, seed0, 8);
 
@@ -311,9 +315,9 @@ generate_tmp_ifid(u_int8_t *seed0, const u_int8_t *seed1, u_int8_t *ret)
 
 	return 0;
 }
-
 /*
  * Get interface identifier for the specified interface.
+ * XXX assumes single sockaddr_dl (AF_LINK address) per an interfacea
  *
  * in6 - upper 64bits are preserved
  */
@@ -321,7 +325,7 @@ int
 in6_get_hw_ifid(struct ifnet *ifp, struct in6_addr *in6)
 {
 	struct ifaddr *ifa;
-	const struct sockaddr_dl *sdl = NULL, *tsdl;
+	const struct sockaddr_dl *sdl;
 	const char *addr;
 	size_t addrlen;
 	static u_int8_t allzero[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -331,18 +335,18 @@ in6_get_hw_ifid(struct ifnet *ifp, struct in6_addr *in6)
 	IFADDR_FOREACH(ifa, ifp) {
 		if (ifa->ifa_addr->sa_family != AF_LINK)
 			continue;
-		tsdl = satocsdl(ifa->ifa_addr);
-		if (tsdl == NULL || tsdl->sdl_alen == 0)
+		sdl = satocsdl(ifa->ifa_addr);
+		if (sdl == NULL)
 			continue;
-		if (sdl == NULL || ifa == ifp->if_dl || ifa == ifp->if_hwdl)
-			sdl = tsdl;
-		if (ifa == ifp->if_hwdl)
-			break;
+		if (sdl->sdl_alen == 0)
+			continue;
+
+		goto found;
 	}
 
-	if (sdl == NULL)
-		return -1;
+	return -1;
 
+found:
 	addr = CLLADDR(sdl);
 	addrlen = sdl->sdl_alen;
 
@@ -575,7 +579,7 @@ in6_ifattach_linklocal(struct ifnet *ifp, struct ifnet *altifp)
 	    IN6_IFAUPDATE_DADDELAY)) != 0) {
 		/*
 		 * XXX: When the interface does not support IPv6, this call
-		 * would fail in the SIOCINITIFADDR ioctl.  I believe the
+		 * would fail in the SIOCSIFADDR ioctl.  I believe the
 		 * notification is rather confusing in this case, so just
 		 * suppress it.  (jinmei@kame.net 20010130)
 		 */
@@ -884,7 +888,7 @@ in6_ifdetach(struct ifnet *ifp)
 			rtrequest(RTM_DELETE, (struct sockaddr *)&ia->ia_addr,
 			    (struct sockaddr *)&ia->ia_addr,
 			    (struct sockaddr *)&ia->ia_prefixmask,
-			    rtflags, NULL);
+			    rtflags, (struct rtentry **)0);
 		}
 
 		/* remove from the linked list */

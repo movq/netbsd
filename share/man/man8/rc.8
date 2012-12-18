@@ -1,4 +1,4 @@
-.\" 	$NetBSD: rc.8,v 1.36 2010/05/14 16:19:58 jruoho Exp $
+.\" 	$NetBSD: rc.8,v 1.31 2008/04/30 13:10:57 martin Exp $
 .\"
 .\" Copyright (c) 2000-2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,18 +27,16 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd May 14, 2010
+.Dd April 6, 2007
 .Dt RC 8
 .Os
 .Sh NAME
 .Nm rc ,
-.Nm rc.local ,
 .Nm rc.shutdown ,
 .Nm rc.d/
 .Nd startup and shutdown scripts
 .Sh SYNOPSIS
 .Nm rc
-.Nm rc.local
 .Nm rc.shutdown
 .Nm rc.d/
 .Sh DESCRIPTION
@@ -54,12 +52,6 @@ is starting the automatic reboot process,
 .Nm
 is invoked with the argument of
 .Sq autoboot .
-.Pp
-.Nm rc.local
-is a command script to which local boot-time actions can be added.
-It is (nearly) the last thing invoked by
-.Nm rc
-during a normal boot.
 .Pp
 .Nm rc.shutdown
 is the command script which shuts down various services, and is invoked by
@@ -124,27 +116,6 @@ and sources the script in a subshell.
 If the script has a
 .Sq .sh
 suffix then it is sourced directly into the current shell.
-.It
-The output from the above steps is sent to a post-processor.
-If
-.Sy rc_silent
-is false, then the post-processor displays the output.
-If
-.Sy rc_silent
-is true, then the post-processor invokes the command specified in
-.Va rc_silent_cmd
-once for each line, without otherwise displaying the output.
-Useful values for
-.Va rc_silent_cmd
-include
-.Dq \&:
-to display nothing at all, and
-.Dq twiddle
-to display a spinning symbol on the console.
-Regardless of the value of
-.Sy rc_silent ,
-the post-processor saves the output in
-.Pa /var/run/rc.log .
 .El
 .Ss Operation of rc.shutdown
 .Bl -enum
@@ -331,8 +302,6 @@ Startup script called by
 .Xr init 8 .
 .It Pa /etc/rc.d/
 Directory containing control scripts for each service.
-.It Pa /etc/rc.local
-Local startup script.
 .It Pa /etc/rc.shutdown
 Shutdown script called by
 .Xr shutdown 8 .
@@ -342,9 +311,6 @@ Contains
 functions used by various scripts.
 .It Pa /etc/rc.conf
 System startup configuration file.
-.It Pa /var/run/rc.log
-Log file created by
-.Nm .
 .El
 .Sh SEE ALSO
 .Xr rc.conf 5 ,
@@ -353,14 +319,6 @@ Log file created by
 .Xr rcorder 8 ,
 .Xr reboot 8 ,
 .Xr shutdown 8
-.Rs
-.%A Luke Mewburn
-.%T The Design and Implementation of the NetBSD rc.d system
-.%I USENIX Association
-.%B Proceedings of the FREENIX Track: 2001 USENIX Annual Technical Conference
-.%D June 25-30, 2001
-.%U http://www.usenix.org/publications/library/proceedings/usenix01/freenix01/full_papers/mewburn/mewburn.pdf
-.Re
 .Sh HISTORY
 The
 .Nm
@@ -373,9 +331,3 @@ support was implemented in
 by
 .An Luke Mewburn
 .Aq lukem@NetBSD.org .
-The post-processor, support for
-.Va rc_silent ,
-and saving output to a file, was implemented in
-.Nx 6.0
-by
-.An Alan Barrett .

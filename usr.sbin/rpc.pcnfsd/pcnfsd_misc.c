@@ -1,4 +1,4 @@
-/*	$NetBSD: pcnfsd_misc.c,v 1.15 2012/11/04 22:26:04 christos Exp $	*/
+/*	$NetBSD: pcnfsd_misc.c,v 1.11 2008/09/30 05:20:42 dholland Exp $	*/
 
 /* RE_SID: @(%)/usr/dosnfs/shades_SCCS/unix/pcnfsd/v2/src/SCCS/s.pcnfsd_misc.c 1.5 92/01/24 19:59:13 SMI */
 /*
@@ -37,9 +37,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <util.h>
-#ifdef SUPPORT_UTMPX
-#include <utmpx.h>
-#endif
 
 #ifdef ISC_2_0
 #include <sys/fcntl.h>
@@ -127,9 +124,9 @@ get_password(usrnam)
 	setpwent();
 	if (shadowfile)
 		(void) setspent();	/* Setting the shadow password file */
-	if ((p = getpwnam(usrnam)) == NULL ||
-	    (shadowfile && (sp = getspnam(usrnam)) == NULL))
-		return (NULL);
+	if ((p = getpwnam(usrnam)) == (struct passwd *) NULL ||
+	    (shadowfile && (sp = getspnam(usrnam)) == (struct spwd *) NULL))
+		return ((struct passwd *) NULL);
 
 	if (shadowfile) {
 		pswd = sp->sp_pwdp;
@@ -139,8 +136,8 @@ get_password(usrnam)
 
 #else
 	p = getpwnam(usrnam);
-	if (p == NULL)
-		return (NULL);
+	if (p == (struct passwd *) NULL)
+		return ((struct passwd *) NULL);
 	pswd = p->pw_passwd;
 #endif
 
@@ -152,7 +149,7 @@ get_password(usrnam)
 		struct spwd *shadow = getspnam(usrnam);
 
 		if (!shadow)
-			return (NULL);
+			return ((struct passwd *) NULL);
 		pswd = shadow->sp_pwdp;
 	}
 #endif
@@ -169,17 +166,17 @@ get_password(usrnam)
 	}
 	endusershell();
 	if (!ok)
-		return (NULL);
+		return ((struct passwd *) NULL);
 #else
 /*
 * the best we can do is to ensure that the shell ends in "sh"
 */
 	ushell = localp.pw_shell;
 	if (strlen(ushell) < 2)
-		return (NULL);
+		return ((struct passwd *) NULL);
 	ushell += strlen(ushell) - 2;
 	if (strcmp(ushell, "sh"))
-		return (NULL);
+		return ((struct passwd *) NULL);
 
 #endif
 	return (&localp);
@@ -195,7 +192,10 @@ get_password(usrnam)
 
 
 char   *
-mapfont(char f, char i, char b)
+mapfont(f, i, b)
+	char    f;
+	char    i;
+	char    b;
 {
 	static char fontname[64];
 

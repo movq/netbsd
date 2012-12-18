@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2011/10/25 16:56:23 christos Exp $
+#	$NetBSD: Makefile,v 1.3.4.2 2009/09/17 04:24:28 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -27,11 +27,11 @@ CPPFLAGS.resource.c=	\
 	-DDEF_GREETER_LIB=\"${XDMGREETERLIB}\"
 
 LDADD+=		-lXau -lXdmcp -lXft -lXinerama -lXpm
-LDADD+=		-lXmu -lXt -lSM -lICE -lXext -lXrender -lX11
-LDADD+=		-lcrypt -lfreetype -lutil
+LDADD+=		-lXmu -lXt -lSM -lICE -lXext -lX11
+LDADD+=		-lcrypt -lfreetype
 DPADD+=		${LIBXAU} ${LIBXDMCP} ${LIBXFT} ${LIBXINERAMA} ${LIBXPM}
 DPADD+=		${LIBXMU} ${LIBXT} ${LIBSM} ${LIBICE} ${LIBXEXT} ${LIBX11}
-DPADD+=		${LIBCRYPT} ${LIBFREETYPE} ${LIBUTIL}
+DPADD+=		${LIBCRYPT} ${LIBFREETYPE}
 
 .if (${USE_PAM} != "no")
 LDADD+= -lpam ${PAM_STATIC_LDADD}
@@ -56,7 +56,7 @@ X11EXTRAMANDEFS+=	-DARC4_RANDOM \
 			-DCHOOSERPATH=${XDMCHOOSERPATH} \
 			-DGREETERLIBPATH=${XDMGREETERLIB} \
 			-DXDMDIR=${XDMDIR} \
-			-DXDMXAUTHDIR=${XDMVARDIR} \
+			-DXDMAUTHDIR=${XDMVARDIR} \
 			-DXDMLOGDIR=${XDMLOGDIR} \
 			-DXDMPIDDIR=${XDMPIDDIR}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: btmagic.c,v 1.3 2012/06/02 21:36:43 dsl Exp $	*/
+/*	$NetBSD: btmagic.c,v 1.1.8.2 2010/11/21 03:05:03 riz Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -85,7 +85,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btmagic.c,v 1.3 2012/06/02 21:36:43 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btmagic.c,v 1.1.8.2 2010/11/21 03:05:03 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -342,7 +342,7 @@ btmagic_attach(device_t parent, device_t self, void *aux)
 			CTLTYPE_INT, "soft_resolution",
 			NULL,
 			btmagic_sysctl_resolution, 0,
-			(void *)sc, 0,
+			sc, 0,
 			CTL_HW, node->sysctl_num,
 			CTL_CREATE, CTL_EOL);
 
@@ -369,7 +369,7 @@ btmagic_attach(device_t parent, device_t self, void *aux)
 			CTLTYPE_INT, "scroll_downscale_factor",
 			NULL,
 			btmagic_sysctl_scale, 0,
-			(void *)sc, 0,
+			sc, 0,
 			CTL_HW, node->sysctl_num,
 			CTL_CREATE, CTL_EOL);
 	}
@@ -384,8 +384,6 @@ btmagic_attach(device_t parent, device_t self, void *aux)
 		aprint_error_dev(self, "failed to attach wsmouse\n");
 		return;
 	}
-
-	pmf_device_register(self, NULL, NULL);
 
 	/*
 	 * start bluetooth connections
@@ -434,8 +432,6 @@ btmagic_detach(device_t self, int flags)
 	callout_destroy(&sc->sc_timeout);
 
 	mutex_exit(bt_lock);
-
-	pmf_device_deregister(self);
 
 	sockopt_destroy(&sc->sc_mode);
 

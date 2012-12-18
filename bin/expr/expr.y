@@ -1,4 +1,4 @@
-/* $NetBSD: expr.y,v 1.38 2012/03/15 02:02:20 joerg Exp $ */
+/* $NetBSD: expr.y,v 1.34 2008/04/30 13:39:13 martin Exp $ */
 
 /*_
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 %{
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: expr.y,v 1.38 2012/03/15 02:02:20 joerg Exp $");
+__RCSID("$NetBSD: expr.y,v 1.34 2008/04/30 13:39:13 martin Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -49,7 +49,7 @@ __RCSID("$NetBSD: expr.y,v 1.38 2012/03/15 02:02:20 joerg Exp $");
 
 static const char * const *av;
 
-static void yyerror(const char *, ...) __dead;
+static void yyerror(const char *, ...);
 static int yylex(void);
 static int is_zero_or_null(const char *);
 static int is_integer(const char *);
@@ -430,7 +430,7 @@ yylex(void)
 /*
  * Print error message and exit with error 2 (syntax error).
  */
-static __printflike(1, 2) void
+static void
 yyerror(const char *fmt, ...)
 {
 	va_list arg;

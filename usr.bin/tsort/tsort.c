@@ -1,4 +1,4 @@
-/*	$NetBSD: tsort.c,v 1.23 2011/09/06 18:34:37 joerg Exp $	*/
+/*	$NetBSD: tsort.c,v 1.22 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -43,7 +43,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)tsort.c	8.3 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: tsort.c,v 1.23 2011/09/06 18:34:37 joerg Exp $");
+__RCSID("$NetBSD: tsort.c,v 1.22 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -97,21 +97,24 @@ typedef struct _buf {
 	int b_bsize;
 } BUF;
 
-static DB *db;
-static NODE *graph, **cycle_buf, **longest_cycle;
-static int debug, longest, quiet;
+DB *db;
+NODE *graph, **cycle_buf, **longest_cycle;
+int debug, longest, quiet;
 
-static void	 add_arc(char *, char *);
-static void	 clear_cycle(void);
-static int	 find_cycle(NODE *, NODE *, int, int);
-static NODE	*get_node(char *);
-static void	*grow_buf(void *, int);
-static void	 remove_node(NODE *);
-static void	 tsort(void);
-__dead static void	 usage(void);
+void	 add_arc __P((char *, char *));
+void	 clear_cycle __P((void));
+int	 find_cycle __P((NODE *, NODE *, int, int));
+NODE	*get_node __P((char *));
+void	*grow_buf __P((void *, int));
+int	 main __P((int, char **));
+void	 remove_node __P((NODE *));
+void	 tsort __P((void));
+void	 usage __P((void));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	BUF *b;
 	int c, n;
@@ -188,8 +191,10 @@ main(int argc, char *argv[])
 }
 
 /* double the size of oldbuf and return a pointer to the new buffer. */
-static void *
-grow_buf(void *bp, int size)
+void *
+grow_buf(bp, size)
+	void *bp;
+	int size;
 {
 	void *n;
 
@@ -203,8 +208,9 @@ grow_buf(void *bp, int size)
  * add an arc from node s1 to node s2 in the graph.  If s1 or s2 are not in
  * the graph, then add them.
  */
-static void
-add_arc(char *s1, char *s2)
+void
+add_arc(s1, s2)
+	char *s1, *s2;
 {
 	NODE *n1;
 	NODE *n2;
@@ -238,8 +244,9 @@ add_arc(char *s1, char *s2)
 }
 
 /* Find a node in the graph (insert if not found) and return a pointer to it. */
-static NODE *
-get_node(char *name)
+NODE *
+get_node(name)
+	char *name;
 {
 	DBT data, key;
 	NODE *n;
@@ -290,8 +297,8 @@ get_node(char *name)
 /*
  * Clear the NODEST flag from all nodes.
  */
-static void
-clear_cycle(void)
+void
+clear_cycle()
 {
 	NODE *n;
 
@@ -300,8 +307,8 @@ clear_cycle(void)
 }
 
 /* do topological sort on graph */
-static void
-tsort(void)
+void
+tsort()
 {
 	NODE *n, *next;
 	int cnt, i;
@@ -363,8 +370,9 @@ tsort(void)
 }
 
 /* print node and remove from graph (does not actually free node) */
-static void
-remove_node(NODE *n)
+void
+remove_node(n)
+	NODE *n;
 {
 	NODE **np;
 	int i;
@@ -380,8 +388,10 @@ remove_node(NODE *n)
 
 
 /* look for the longest? cycle from node from to node to. */
-static int
-find_cycle(NODE *from, NODE *to, int longest_len, int depth)
+int
+find_cycle(from, to, longest_len, depth)
+	NODE *from, *to;
+	int depth, longest_len;
 {
 	NODE **np;
 	int i, len;
@@ -425,8 +435,8 @@ find_cycle(NODE *from, NODE *to, int longest_len, int depth)
 	return (longest_len);
 }
 
-static void
-usage(void)
+void
+usage()
 {
 	(void)fprintf(stderr, "usage: tsort [-lq] [file]\n");
 	exit(1);

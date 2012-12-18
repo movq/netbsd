@@ -1,4 +1,4 @@
-/*	$NetBSD: if_de.c,v 1.140 2012/10/27 17:18:32 chs Exp $	*/
+/*	$NetBSD: if_de.c,v 1.128 2008/04/10 19:13:36 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1994-1997 Matt Thomas (matt@3am-software.com)
@@ -37,7 +37,7 @@
  *   board which support 21040, 21041, or 21140 (mostly).
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.140 2012/10/27 17:18:32 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.128 2008/04/10 19:13:36 cegger Exp $");
 
 #define	TULIP_HDR_DATA
 
@@ -63,7 +63,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.140 2012/10/27 17:18:32 chs Exp $");
 #endif
 
 #if defined(__NetBSD__)
+#include "rnd.h"
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 #endif
 
 #include <net/if.h>
@@ -80,14 +83,22 @@ __KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.140 2012/10/27 17:18:32 chs Exp $");
 #include <dev/mii/miivar.h>
 #endif
 
+#include "bpfilter.h"
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #ifdef INET
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
+#endif
+
+
+#if defined(__NetBSD__)
+#include <uvm/uvm_extern.h>
 #endif
 
 #if defined(__FreeBSD__)
@@ -189,32 +200,6 @@ static int tulip_ifmedia_change(struct ifnet * const ifp);
 static void tulip_ifmedia_status(struct ifnet * const ifp, struct ifmediareq *req);
 #endif
 /* static void tulip_21140_map_media(tulip_softc_t *sc); */
-
-
-static bus_dmamap_t
-tulip_alloc_rxmap(tulip_softc_t *sc)
-{
-	return (sc->tulip_free_rxmaps[--sc->tulip_num_free_rxmaps]);
-}
-
-static void
-tulip_free_rxmap(tulip_softc_t *sc, bus_dmamap_t map)
-{
-	sc->tulip_free_rxmaps[sc->tulip_num_free_rxmaps++] = map;
-}
-
-static bus_dmamap_t
-tulip_alloc_txmap(tulip_softc_t *sc)
-{
-	return (sc->tulip_free_txmaps[--sc->tulip_num_free_txmaps]);
-}
-
-static void
-tulip_free_txmap(tulip_softc_t *sc, bus_dmamap_t map)
-{
-	sc->tulip_free_txmaps[sc->tulip_num_free_txmaps++] = map;
-}
-
 
 static void
 tulip_timeout_callback(
@@ -2471,7 +2456,7 @@ tulip_identify_compex_nic(
 	 * copied from tulip_read_macaddr.
 	 */
 	sc->tulip_features |= TULIP_HAVE_SHAREDINTR;
-	for (root_unit = tulip_unit(sc) - 1; root_unit >= 0; root_unit--) {
+	for (root_unit = sc->tulip_unit - 1; root_unit >= 0; root_unit--) {
 	    root_sc = TULIP_UNIT_TO_SOFTC(root_unit);
 	    if (root_sc == NULL
 		|| !(root_sc->tulip_features & TULIP_HAVE_SLAVEDINTR))
@@ -2486,7 +2471,7 @@ tulip_identify_compex_nic(
 	    root_sc->tulip_slaves = sc;
 	} else if(sc->tulip_features & TULIP_HAVE_SLAVEDINTR) {
 	    printf("\nCannot find master device for de%d interrupts",
-		   tulip_unit(sc));
+		   sc->tulip_unit);
 	}
     } else {
 	strlcat(sc->tulip_boardid, "unknown ", sizeof(sc->tulip_boardid));
@@ -3011,7 +2996,7 @@ tulip_read_macaddr(
 	if (idx == sizeof(sc->tulip_rombuf)) {
 	    int root_unit;
 	    tulip_softc_t *root_sc = NULL;
-	    for (root_unit = tulip_unit(sc) - 1; root_unit >= 0; root_unit--) {
+	    for (root_unit = sc->tulip_unit - 1; root_unit >= 0; root_unit--) {
 		root_sc = TULIP_UNIT_TO_SOFTC(root_unit);
 		if (root_sc == NULL || (root_sc->tulip_features & (TULIP_HAVE_OKROM|TULIP_HAVE_SLAVEDROM)) == TULIP_HAVE_OKROM)
 		    break;
@@ -3032,7 +3017,7 @@ tulip_read_macaddr(
 		} else {
 		    memcpy(sc->tulip_enaddr, root_sc->tulip_enaddr,
 			ETHER_ADDR_LEN);
-		    sc->tulip_enaddr[5] += tulip_unit(sc) - tulip_unit(root_sc);
+		    sc->tulip_enaddr[5] += sc->tulip_unit - root_sc->tulip_unit;
 		}
 		/*
 		 * Now for a truly disgusting kludge: all 4 21040s on
@@ -3367,7 +3352,7 @@ tulip_reset(
     TULIP_CSR_WRITE(sc, csr_rxlist, TULIP_KVATOPHYS(sc, &sc->tulip_rxinfo.ri_first[0]));
 #endif
     TULIP_CSR_WRITE(sc, csr_busmode,
-		    (1 << (TULIP_BURSTSIZE(tulip_unit(sc)) + 8))
+		    (1 << (TULIP_BURSTSIZE(sc->tulip_unit) + 8))
 		    |TULIP_BUSMODE_CACHE_ALIGN8
 		    |TULIP_BUSMODE_READMULTIPLE
 		    |(BYTE_ORDER != LITTLE_ENDIAN ?
@@ -3389,7 +3374,7 @@ tulip_reset(
 #if defined(TULIP_BUS_DMA) && !defined(TULIP_BUS_DMA_NOTX)
 	map = M_GETCTX(m, bus_dmamap_t);
 	bus_dmamap_unload(sc->tulip_dmatag, map);
-	tulip_free_txmap(sc, map);
+	sc->tulip_txmaps[sc->tulip_txmaps_free++] = map;
 #endif
 	m_freem(m);
     }
@@ -3435,7 +3420,7 @@ tulip_reset(
 #if defined(TULIP_BUS_DMA) && !defined(TULIP_BUS_DMA_NORX)
 	map = M_GETCTX(m, bus_dmamap_t);
 	bus_dmamap_unload(sc->tulip_dmatag, map);
-	tulip_free_rxmap(sc, map);
+	sc->tulip_rxmaps[sc->tulip_rxmaps_free++] = map;
 #endif
 	m_freem(m);
     }
@@ -3602,7 +3587,7 @@ tulip_rx_intr(
 		map = M_GETCTX(me, bus_dmamap_t);
 		TULIP_RXMAP_POSTSYNC(sc, map);
 		bus_dmamap_unload(sc->tulip_dmatag, map);
-		tulip_free_rxmap(sc, map);
+		sc->tulip_rxmaps[sc->tulip_rxmaps_free++] = map;
 #if defined(DIAGNOSTIC)
 		M_SETCTX(me, NULL);
 #endif
@@ -3634,19 +3619,21 @@ tulip_rx_intr(
 	    bus_dmamap_sync(sc->tulip_dmatag, map, 0, me->m_len,
 			    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
 	    bus_dmamap_unload(sc->tulip_dmatag, map);
-	    tulip_free_rxmap(sc, map);
+	    sc->tulip_rxmaps[sc->tulip_rxmaps_free++] = map;
 #if defined(DIAGNOSTIC)
 	    M_SETCTX(me, NULL);
 #endif
 #endif /* TULIP_BUS_DMA */
 
 	    eh = *mtod(ms, struct ether_header *);
+#if NBPFILTER > 0
 	    if (sc->tulip_bpf != NULL) {
 		if (me == ms)
-		    bpf_tap(ifp, mtod(ms, void *), total_len);
+		    TULIP_BPF_TAP(sc, mtod(ms, void *), total_len);
 		else
-		    bpf_mtap(ifp, ms);
+		    TULIP_BPF_MTAP(sc, ms);
 	    }
+#endif
 	    sc->tulip_flags |= TULIP_RXACT;
 	    if ((sc->tulip_flags & (TULIP_PROMISC|TULIP_HASHONLY))
 		    && (eh.ether_dhost[0] & 1) == 0
@@ -3694,7 +3681,7 @@ tulip_rx_intr(
 #if defined(TULIP_BUS_DMA) && !defined(TULIP_BUS_DMA_NORX)
 	    map = M_GETCTX(me, bus_dmamap_t);
 	    bus_dmamap_unload(sc->tulip_dmatag, map);
-	    tulip_free_rxmap(sc, map);
+	    sc->tulip_rxmaps[sc->tulip_rxmaps_free++] = map;
 #if defined(DIAGNOSTIC)
 	    M_SETCTX(me, NULL);
 #endif
@@ -3752,7 +3739,7 @@ tulip_rx_intr(
 #if defined(__NetBSD__)
 		(*ifp->if_input)(ifp, ms);
 #else
-		m_adj(ms, sizeof(struct ether_header));
+		m_adj(ms, sizeof(struct ether_header);
 		ether_input(ifp, &eh, ms);
 #endif /* __NetBSD__ */
 #else
@@ -3766,7 +3753,7 @@ tulip_rx_intr(
 #if defined(__NetBSD__)
 		(*ifp->if_input)(ifp, m0);
 #else
-		m_adj(m0, sizeof(struct ether_header));
+		m_adj(m0, sizeof(struct ether_header);
 		ether_input(ifp, &eh, m0);
 #endif /* __NetBSD__ */
 		m0 = ms;
@@ -3794,8 +3781,8 @@ tulip_rx_intr(
 	do {
 	    tulip_desc_t * const nextout = ri->ri_nextout;
 #if defined(TULIP_BUS_DMA) && !defined(TULIP_BUS_DMA_NORX)
-	    if (sc->tulip_num_free_rxmaps > 0) {
-		map = tulip_alloc_rxmap(sc);
+	    if (sc->tulip_rxmaps_free > 0) {
+		map = sc->tulip_rxmaps[--sc->tulip_rxmaps_free];
 	    } else {
 		m_freem(ms);
 		sc->tulip_flags |= TULIP_RXBUFSLOW;
@@ -3895,10 +3882,12 @@ tulip_tx_intr(
 #if defined(TULIP_BUS_DMA) && !defined(TULIP_BUS_DMA_NOTX)
 		    bus_dmamap_t map = M_GETCTX(m, bus_dmamap_t);
 		    TULIP_TXMAP_POSTSYNC(sc, map);
-		    tulip_free_txmap(sc, map);
+		    sc->tulip_txmaps[sc->tulip_txmaps_free++] = map;
 #endif /* TULIP_BUS_DMA */
+#if NBPFILTER > 0
 		    if (sc->tulip_bpf != NULL)
-			bpf_mtap(&sc->tulip_if, m);
+			TULIP_BPF_MTAP(sc, m);
+#endif
 		    m_freem(m);
 #if defined(TULIP_DEBUG)
 		} else {
@@ -4026,7 +4015,9 @@ tulip_intr_handler(
     while ((csr = TULIP_CSR_READ(sc, csr_status)) & sc->tulip_intrmask) {
 #if defined(__NetBSD__) && !defined(TULIP_USE_SOFTINTR)
         if (only_once == 1) {
+#if NRND > 0
 	    rnd_add_uint32(&sc->tulip_rndsource, csr);
+#endif
 	    only_once = 0;
 	}
 #endif
@@ -4152,9 +4143,9 @@ tulip_hardintr_handler(
     /*
      * mark it as needing a software interrupt
      */
-    tulip_softintr_mask |= (1U << tulip_unit(sc));
+    tulip_softintr_mask |= (1U << sc->tulip_unit);
 
-#if defined(__NetBSD__)
+#if defined(__NetBSD__) && NRND > 0
     /*
      * This isn't all that random (the value we feed in) but it is
      * better than a constant probably.  It isn't used in entropy
@@ -4390,14 +4381,14 @@ tulip_txput(
     /*
      * Reclaim some DMA maps from if we are out.
      */
-    if (sc->tulip_num_free_txmaps == 0) {
+    if (sc->tulip_txmaps_free == 0) {
 #if defined(TULIP_DEBUG)
 	sc->tulip_dbg.dbg_no_txmaps++;
 #endif
 	freedescs += tulip_tx_intr(sc);
     }
-    if (sc->tulip_num_free_txmaps > 0) {
-	map = tulip_alloc_txmap(sc);
+    if (sc->tulip_txmaps_free > 0) {
+	map = sc->tulip_txmaps[sc->tulip_txmaps_free-1];
     } else {
 	sc->tulip_flags |= TULIP_WANTTXSTART;
 #if defined(TULIP_DEBUG)
@@ -4418,7 +4409,6 @@ tulip_txput(
 #if defined(TULIP_DEBUG)
 		sc->tulip_dbg.dbg_txput_finishes[2]++;
 #endif
-		tulip_free_txmap(sc, map);
 		goto finish;
 	    }
 	    error = bus_dmamap_load_mbuf(sc->tulip_dmatag, map, m, BUS_DMA_NOWAIT);
@@ -4429,7 +4419,6 @@ tulip_txput(
 #if defined(TULIP_DEBUG)
 	    sc->tulip_dbg.dbg_txput_finishes[3]++;
 #endif
-	    tulip_free_txmap(sc, map);
 	    goto finish;
 	}
     }
@@ -4449,7 +4438,6 @@ tulip_txput(
 	sc->tulip_dbg.dbg_txput_finishes[4]++;
 #endif
 	bus_dmamap_unload(sc->tulip_dmatag, map);
-	tulip_free_txmap(sc, map);
 	goto finish;
     }
     for (; map->dm_nsegs - segcnt > 1; segcnt += 2) {
@@ -4478,6 +4466,7 @@ tulip_txput(
     TULIP_TXMAP_PRESYNC(sc, map);
     M_SETCTX(m, map);
     map = NULL;
+    --sc->tulip_txmaps_free;		/* commit to using the dmamap */
 
 #else /* !TULIP_BUS_DMA */
 
@@ -4755,7 +4744,10 @@ tulip_txput_setup(
  * defined or not.
  */
 static int
-tulip_ifioctl(struct ifnet *ifp, unsigned long cmd, void *data)
+tulip_ifioctl(
+    struct ifnet * ifp,
+    ioctl_cmd_t cmd,
+    void *data)
 {
     TULIP_PERFSTART(ifioctl)
     tulip_softc_t * const sc = TULIP_IFP_TO_SOFTC(ifp);
@@ -4770,24 +4762,32 @@ tulip_ifioctl(struct ifnet *ifp, unsigned long cmd, void *data)
     s = TULIP_RAISESPL();
 #endif
     switch (cmd) {
-	case SIOCINITIFADDR: {
+	case SIOCSIFADDR: {
 	    ifp->if_flags |= IFF_UP;
-	    tulip_init(sc);
 	    switch(ifa->ifa_addr->sa_family) {
 #ifdef INET
-		case AF_INET:
+		case AF_INET: {
+		    tulip_init(sc);
 		    TULIP_ARP_IFINIT(sc, ifa);
 		    break;
+		}
 #endif /* INET */
-		default:
+
+
+		default: {
+		    tulip_init(sc);
 		    break;
+		}
 	    }
+	    break;
+	}
+	case SIOCGIFADDR: {
+	    memcpy((void *) ((struct sockaddr *)&ifr->ifr_data)->sa_data,
+		(void *) sc->tulip_enaddr, ETHER_ADDR_LEN);
 	    break;
 	}
 
 	case SIOCSIFFLAGS: {
-	    if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-		break;
 #if !defined(IFM_ETHER)
 	    int flags = 0;
 	    if (ifp->if_flags & IFF_LINK0) flags |= 1;
@@ -4882,7 +4882,7 @@ tulip_ifioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 	}
 #endif
 	default: {
-	    error = ether_ioctl(ifp, cmd, data);
+	    error = EINVAL;
 	    break;
 	}
     }
@@ -5141,8 +5141,8 @@ tulip_attach(
 #endif
 #endif /* __bsdi__ */
 
-#if defined(__NetBSD__)
-    rnd_attach_source(&sc->tulip_rndsource, device_xname(sc->tulip_dev),
+#if defined(__NetBSD__) && NRND > 0
+    rnd_attach_source(&sc->tulip_rndsource, device_xname(&sc->tulip_dev),
 		      RND_TYPE_NET, 0);
 #endif
 }
@@ -5219,18 +5219,18 @@ tulip_busdma_init(
     }
 
     /*
-     * Allocate dmamaps for each transmit descriptor, and place on the
-     * free list.
+     * Allocate dmamaps for each transmit descriptors
      */
     if (error == 0) {
-	while (error == 0 && sc->tulip_num_free_txmaps < TULIP_TXDESCS) {
+	while (error == 0 && sc->tulip_txmaps_free < TULIP_TXDESCS) {
 	    bus_dmamap_t map;
 	    if ((error = TULIP_TXMAP_CREATE(sc, &map)) == 0)
-		tulip_free_txmap(sc, map);
+		sc->tulip_txmaps[sc->tulip_txmaps_free++] = map;
 	}
 	if (error) {
-	    while (sc->tulip_num_free_txmaps > 0)
-		bus_dmamap_destroy(sc->tulip_dmatag, tulip_alloc_txmap(sc));
+	    while (sc->tulip_txmaps_free > 0)
+		bus_dmamap_destroy(sc->tulip_dmatag,
+				   sc->tulip_txmaps[--sc->tulip_txmaps_free]);
 	}
     }
 #else
@@ -5251,18 +5251,18 @@ tulip_busdma_init(
     }
 
     /*
-     * Allocate dmamaps for each receive descriptor, and place on the
-     * free list.
+     * Allocate dmamaps for each receive descriptors
      */
     if (error == 0) {
-	while (error == 0 && sc->tulip_num_free_rxmaps < TULIP_RXDESCS) {
+	while (error == 0 && sc->tulip_rxmaps_free < TULIP_RXDESCS) {
 	    bus_dmamap_t map;
 	    if ((error = TULIP_RXMAP_CREATE(sc, &map)) == 0)
-		tulip_free_rxmap(sc, map);
+		sc->tulip_rxmaps[sc->tulip_rxmaps_free++] = map;
 	}
 	if (error) {
-	    while (sc->tulip_num_free_rxmaps > 0)
-		bus_dmamap_destroy(sc->tulip_dmatag, tulip_alloc_rxmap(sc));
+	    while (sc->tulip_rxmaps_free > 0)
+		bus_dmamap_destroy(sc->tulip_dmatag,
+				   sc->tulip_rxmaps[--sc->tulip_rxmaps_free]);
 	}
     }
 #else
@@ -5433,7 +5433,7 @@ tulip_pci_match(
 static int
 tulip_probe(
     struct device *parent,
-    cfdata_t cf,
+    struct cfdata *cf,
     void *aux)
 {
     struct isa_attach_args * const ia = (struct isa_attach_args *) aux;
@@ -5550,15 +5550,15 @@ struct cfdriver decd = {
 #endif /* __bsdi__ */
 
 #if defined(__NetBSD__)
-#define	TULIP_PCI_ATTACH_ARGS	device_t parent, device_t self, void *const aux
+#define	TULIP_PCI_ATTACH_ARGS	struct device * const parent, struct device * const self, void *const aux
 #define	TULIP_SHUTDOWN_ARGS	void *arg
 static int
 tulip_pci_probe(
-    device_t parent,
-    cfdata_t match,
+    struct device *parent,
+    struct cfdata *match,
     void *aux)
 {
-    struct pci_attach_args *pa = aux;
+    struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
     /* Don't match lmc cards */
     if (PCI_VENDOR(pci_conf_read(pa->pa_pc, pa->pa_tag,
@@ -5577,7 +5577,7 @@ tulip_pci_probe(
 
 static void tulip_pci_attach(TULIP_PCI_ATTACH_ARGS);
 
-CFATTACH_DECL_NEW(de, sizeof(tulip_softc_t),
+CFATTACH_DECL(de, sizeof(tulip_softc_t),
     tulip_pci_probe, tulip_pci_attach, NULL, NULL);
 
 #endif /* __NetBSD__ */
@@ -5615,10 +5615,9 @@ tulip_pci_attach(
 					(sc)->tulip_pci_devno = pa->d_agent))
 #endif
 #if defined(__NetBSD__)
-    tulip_softc_t * const sc = device_private(self);
-    sc->tulip_dev = self;
+    tulip_softc_t * const sc = (tulip_softc_t *) self;
     struct pci_attach_args * const pa = (struct pci_attach_args *) aux;
-    const int unit = device_unit(sc->tulip_dev);
+    const int unit = sc->tulip_dev.dv_unit;
 #define	PCI_CONF_WRITE(r, v)	pci_conf_write(pa->pa_pc, pa->pa_tag, (r), (v))
 #define	PCI_CONF_READ(r)	pci_conf_read(pa->pa_pc, pa->pa_tag, (r))
 #define	PCI_GETBUSDEVINFO(sc)	do { \
@@ -5701,7 +5700,7 @@ tulip_pci_attach(
     sc = (tulip_softc_t *) malloc(sizeof(*sc), M_DEVBUF, M_NOWAIT);
     if (sc == NULL)
 	return;
-    memset(sc, 0, sizeof(*sc));				/* Zero out the softc*/
+    bzero(sc, sizeof(*sc));				/* Zero out the softc*/
 #endif
 
     PCI_GETBUSDEVINFO(sc);
@@ -5758,7 +5757,7 @@ tulip_pci_attach(
     sc->tulip_dmatag = pa->pa_dmat;
 #endif
 #else
-//    sc->tulip_unit = unit;
+    sc->tulip_unit = unit;
     sc->tulip_name = "de";
 #endif
     sc->tulip_revinfo = revinfo;
@@ -5872,20 +5871,20 @@ tulip_pci_attach(
 	    const char *intrstr;
 
 	    if (pci_intr_map(pa, &intrhandle)) {
-		aprint_error_dev(sc->tulip_dev, "couldn't map interrupt\n");
+		aprint_error_dev(&sc->tulip_dev, "couldn't map interrupt\n");
 		return;
 	    }
 	    intrstr = pci_intr_string(pa->pa_pc, intrhandle);
 	    sc->tulip_ih = pci_intr_establish(pa->pa_pc, intrhandle, IPL_NET,
 					      intr_rtn, sc);
 	    if (sc->tulip_ih == NULL) {
-		aprint_error_dev(sc->tulip_dev, "couldn't establish interrupt");
+		aprint_error_dev(&sc->tulip_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-		    aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+		    printf(" at %s", intrstr);
+		printf("\n");
 		return;
 	    }
-	    printf("%s: interrupting at %s\n", device_xname(sc->tulip_dev), intrstr);
+	    printf("%s: interrupting at %s\n", device_xname(&sc->tulip_dev), intrstr);
 	}
 	sc->tulip_ats = shutdownhook_establish(tulip_shutdown, sc);
 	if (sc->tulip_ats == NULL)
@@ -5918,8 +5917,8 @@ tulip_pci_attach(
 	atshutdown(&sc->tulip_ats, ATSH_ADD);
 #endif
 #if defined(TULIP_USE_SOFTINTR)
-	if (tulip_unit(sc) > tulip_softintr_max_unit)
-	    tulip_softintr_max_unit = tulip_unit(sc);
+	if (sc->tulip_unit > tulip_softintr_max_unit)
+	    tulip_softintr_max_unit = sc->tulip_unit;
 #endif
 
 	s = TULIP_RAISESPL();

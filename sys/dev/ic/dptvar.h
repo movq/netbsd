@@ -1,4 +1,4 @@
-/*	$NetBSD: dptvar.h,v 1.16 2012/10/27 17:18:20 chs Exp $	*/
+/*	$NetBSD: dptvar.h,v 1.14 2007/03/04 06:01:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Andrew Doran <ad@NetBSD.org>
@@ -64,8 +64,7 @@ struct dpt_ccb {
 };
 
 struct dpt_softc {
-	device_t	sc_dev;		/* generic device data */
-	kmutex_t	sc_lock;
+	struct device	sc_dv;		/* generic device data */
 	struct scsipi_adapter sc_adapt;	/* scsipi adapter */
 	struct scsipi_channel sc_chans[3]; /* each channel */
 	bus_space_handle_t sc_ioh;	/* bus space handle */
@@ -84,6 +83,7 @@ struct dpt_softc {
 	int		sc_nccbs;	/* number of CCBs available */
 	SLIST_HEAD(, dpt_ccb) sc_ccb_free;/* free ccb list */
 	struct eata_cfg sc_ec;		/* EATA configuration data */
+	int		sc_uactive;	/* user command active */
 	int		sc_bustype;	/* SysInfo bus type */
 	int		sc_isadrq;	/* ISA DRQ */
 	int		sc_isairq;	/* ISA IRQ */

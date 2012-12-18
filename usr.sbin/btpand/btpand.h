@@ -1,7 +1,7 @@
-/*	$NetBSD: btpand.h,v 1.4 2012/10/14 08:35:45 plunky Exp $	*/
+/*	$NetBSD: btpand.h,v 1.1 2008/08/17 13:20:57 plunky Exp $	*/
 
 /*-
- * Copyright (c) 2008-2009 Iain Hibbert
+ * Copyright (c) 2008 Iain Hibbert
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,8 +32,8 @@
 #include <net/if_ether.h>
 
 #include <assert.h>
-#include <bluetooth.h>
 #include <event.h>
+#include <bluetooth.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,7 +56,7 @@ enum channel_state {
 	CHANNEL_CLOSED,
 	CHANNEL_WAIT_CONNECT_REQ,
 	CHANNEL_WAIT_CONNECT_RSP,
-	CHANNEL_OPEN
+	CHANNEL_OPEN,
 };
 
 #define CHANNEL_MAXQLEN		128
@@ -87,7 +87,6 @@ struct channel {
 
 	bool			(*send)(channel_t *, packet_t *);
 	bool			(*recv)(packet_t *);
-	void			(*down)(channel_t *);
 
 	int			tick;
 
@@ -135,9 +134,7 @@ struct pkthdr {
 
 /* global variables */
 extern const char *	control_path;
-extern const char *	service_type;
 extern const char *	service_name;
-extern const char *	service_desc;
 extern const char *	interface_name;
 extern bdaddr_t		local_bdaddr;
 extern bdaddr_t		remote_bdaddr;
@@ -191,6 +188,7 @@ void		pkthdr_free(pkthdr_t *);
 
 /* server.c */
 void		server_init(void);
+void		server_update(int);
 
 /* tap.c */
 void		tap_init(void);

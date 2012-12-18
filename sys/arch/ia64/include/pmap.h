@@ -86,12 +86,14 @@ struct pmap {
 	TAILQ_HEAD(,pv_entry)	pm_pvlist;	/* list of mappings in pmap */
 	int			pm_count;	/* pmap reference count */
 	kmutex_t		pm_slock;	/* lock on pmap */
-	uint32_t		pm_rid[5];	/* base RID for pmap */
+	u_int32_t		pm_rid[5];	/* base RID for pmap */
 	int			pm_active;	/* active flag */
 	struct pmap_statistics	pm_stats;	/* pmap statistics */
 	unsigned long		pm_cpus;	/* mask of CPUs using pmap */
 
 };
+
+typedef struct pmap	*pmap_t;
 
 /*
  * For each vm_page_t, there is a list of all currently valid virtual
@@ -108,6 +110,10 @@ typedef struct pv_entry {
 #define	PGA_MODIFIED		0x01		/* modified */
 #define	PGA_REFERENCED		0x02		/* referenced */
 
+
+extern struct pmap	kernel_pmap_store;
+
+#define pmap_kernel()			(&kernel_pmap_store)
 
 #define	pmap_resident_count(pmap)	((pmap)->pm_stats.resident_count)
 #define	pmap_wired_count(pmap)		((pmap)->pm_stats.wired_count)
@@ -145,24 +151,5 @@ void pmap_bootstrap(void);
 
 #define PMAP_VHPT_LOG2SIZE 16 
 
-
-#include <sys/queue.h>
-#include <sys/mutex.h>
-/*
- * pmap-specific data store in the vm_page structure.
- */
-#define	__HAVE_VM_PAGE_MD
-struct vm_page_md {
-	TAILQ_HEAD(,pv_entry) pv_list;	/* pv_entry list */
-	int pv_list_count;
-	kmutex_t pv_mutex;		/* lock on this head */
-	int pvh_attrs;			/* page attributes */
-};
-
-#define	VM_MDPAGE_INIT(pg)						\
-do {									\
-	TAILQ_INIT(&(pg)->mdpage.pv_list);				\
-	mutex_init(&(pg)->mdpage.pv_mutex, MUTEX_DEFAULT, IPL_NONE);	\
-} while (/*CONSTCOND*/0)
 
 #endif /* _PMAP_MACHINE_ */

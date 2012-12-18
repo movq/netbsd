@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ath_cardbus.c,v 1.45 2011/10/07 20:47:42 dyoung Exp $ */
+/*	$NetBSD: if_ath_cardbus.c,v 1.31.4.1 2009/08/07 18:25:33 snj Exp $ */
 /*
  * Copyright (c) 2003
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,9 +36,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ath_cardbus.c,v 1.45 2011/10/07 20:47:42 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ath_cardbus.c,v 1.31.4.1 2009/08/07 18:25:33 snj Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,6 +60,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_ath_cardbus.c,v 1.45 2011/10/07 20:47:42 dyoung E
 
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
+
+#if NBPFILTER > 0
+#include <net/bpf.h>
+#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -81,7 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ath_cardbus.c,v 1.45 2011/10/07 20:47:42 dyoung E
 /*
  * PCI configuration space registers
  */
-#define ATH_PCI_MMBA PCI_BAR(0)	/* memory mapped base */
+#define	ATH_PCI_MMBA		0x10	/* memory mapped base */
 
 struct ath_cardbus_softc {
 	struct ath_softc	sc_ath;
@@ -89,11 +100,12 @@ struct ath_cardbus_softc {
 	/* CardBus-specific goo. */
 	void	*sc_ih;			/* interrupt handle */
 	cardbus_devfunc_t sc_ct;	/* our CardBus devfuncs */
-	pcitag_t sc_tag;		/* our CardBus tag */
+	cardbustag_t sc_tag;		/* our CardBus tag */
 	bus_size_t sc_mapsize;		/* the size of mapped bus space region */
 
 	pcireg_t sc_bar_val;		/* value of the BAR */
 
+	cardbus_intr_line_t sc_intrline; /* interrupt line */
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 };
@@ -108,25 +120,27 @@ CFATTACH_DECL_NEW(ath_cardbus, sizeof(struct ath_cardbus_softc),
 void	ath_cardbus_setup(struct ath_cardbus_softc *);
 
 static bool
-ath_cardbus_suspend(device_t self, const pmf_qual_t *qual)
+ath_cardbus_suspend(device_t self PMF_FN_ARGS)
 {
 	struct ath_cardbus_softc *csc = device_private(self);
 
 	ath_suspend(&csc->sc_ath);
 	if (csc->sc_ih != NULL) {
-		Cardbus_intr_disestablish(csc->sc_ct, csc->sc_ih);
+		cardbus_intr_disestablish(csc->sc_ct->ct_cc, csc->sc_ct->ct_cf,
+		    csc->sc_ih);
 		csc->sc_ih = NULL;
 	}
 	return true;
 }
 
 static bool
-ath_cardbus_resume(device_t self, const pmf_qual_t *qual)
+ath_cardbus_resume(device_t self PMF_FN_ARGS)
 {
 	struct ath_cardbus_softc *csc = device_private(self);
 
-	csc->sc_ih = Cardbus_intr_establish(csc->sc_ct,
-	    IPL_NET, ath_intr, &csc->sc_ath);
+	csc->sc_ih = cardbus_intr_establish(csc->sc_ct->ct_cc,
+	    csc->sc_ct->ct_cf, csc->sc_intrline, IPL_NET, ath_intr,
+	    &csc->sc_ath);
 
 	if (csc->sc_ih == NULL) {
 		aprint_error_dev(self,
@@ -138,7 +152,7 @@ ath_cardbus_resume(device_t self, const pmf_qual_t *qual)
 }
 
 int
-ath_cardbus_match(device_t parent, cfdata_t match, void *aux)
+ath_cardbus_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct cardbus_attach_args *ca = aux;
 	const char *devname;
@@ -172,6 +186,10 @@ ath_cardbus_attach(device_t parent, device_t self, void *aux)
 	 */
 	if (Cardbus_mapreg_map(ct, ATH_PCI_MMBA, PCI_MAPREG_TYPE_MEM, 0,
 	    &csc->sc_iot, &csc->sc_ioh, &adr, &csc->sc_mapsize) == 0) {
+#if rbus
+#else
+		(*ct->ct_cf->cardbus_mem_open)(cc, 0, adr, adr+csc->sc_mapsize);
+#endif
 		csc->sc_bar_val = adr | PCI_MAPREG_TYPE_MEM;
 	} else {
 		aprint_error_dev(self, "unable to map device registers\n");
@@ -186,18 +204,23 @@ ath_cardbus_attach(device_t parent, device_t self, void *aux)
 	 */
 	ath_cardbus_setup(csc);
 
+	/* Remember which interrupt line. */
+	csc->sc_intrline = ca->ca_intrline;
+
+	ATH_LOCK_INIT(sc);
+
 	/*
 	 * Finish off the attach.
 	 */
 	if (ath_attach(PCI_PRODUCT(ca->ca_id), sc) != 0)
 		return;
 
-	if (pmf_device_register(self,
-	    ath_cardbus_suspend, ath_cardbus_resume)) {
-		pmf_class_network_register(self, &sc->sc_if);
-		pmf_device_suspend(self, &sc->sc_qual);
-	} else
+	if (!pmf_device_register(self, ath_cardbus_suspend, ath_cardbus_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");
+	else {
+		pmf_class_network_register(self, &sc->sc_if);
+		pmf_device_suspend_self(self);
+	}
 }
 
 int
@@ -223,7 +246,7 @@ ath_cardbus_detach(device_t self, int flags)
 	 * Unhook the interrupt handler.
 	 */
 	if (csc->sc_ih != NULL) {
-		Cardbus_intr_disestablish(ct, csc->sc_ih);
+		cardbus_intr_disestablish(ct->ct_cc, ct->ct_cf, csc->sc_ih);
 		csc->sc_ih = NULL;
 	}
 
@@ -233,6 +256,8 @@ ath_cardbus_detach(device_t self, int flags)
 	Cardbus_mapreg_unmap(ct, ATH_PCI_MMBA, csc->sc_iot, csc->sc_ioh,
 	    csc->sc_mapsize);
 
+	ATH_LOCK_DESTROY(sc);
+
 	return (0);
 }
 
@@ -240,6 +265,8 @@ void
 ath_cardbus_setup(struct ath_cardbus_softc *csc)
 {
 	cardbus_devfunc_t ct = csc->sc_ct;
+	cardbus_chipset_tag_t cc = ct->ct_cc;
+	cardbus_function_tag_t cf = ct->ct_cf;
 	int rc;
 	pcireg_t reg;
 
@@ -247,11 +274,11 @@ ath_cardbus_setup(struct ath_cardbus_softc *csc)
 		aprint_debug("%s: cardbus_set_powerstate %d\n", __func__, rc);
 
 	/* Program the BAR. */
-	Cardbus_conf_write(ct, csc->sc_tag, ATH_PCI_MMBA, csc->sc_bar_val);
+	cardbus_conf_write(cc, cf, csc->sc_tag, ATH_PCI_MMBA, csc->sc_bar_val);
 
 	/* Enable the appropriate bits in the PCI CSR. */
-	reg = Cardbus_conf_read(ct, csc->sc_tag,
+	reg = cardbus_conf_read(cc, cf, csc->sc_tag,
 	    PCI_COMMAND_STATUS_REG);
 	reg |= PCI_COMMAND_MASTER_ENABLE | PCI_COMMAND_MEM_ENABLE;
-	Cardbus_conf_write(ct, csc->sc_tag, PCI_COMMAND_STATUS_REG, reg);
+	cardbus_conf_write(cc, cf, csc->sc_tag, PCI_COMMAND_STATUS_REG, reg);
 }

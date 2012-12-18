@@ -1,6 +1,7 @@
-/*	$NetBSD: uvm_pager.c,v 1.108 2012/01/27 19:48:42 para Exp $	*/
+/*	$NetBSD: uvm_pager.c,v 1.92.14.1 2010/11/21 18:09:00 riz Exp $	*/
 
 /*
+ *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -12,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor and
+ *      Washington University.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_pager.c,v 1.108 2012/01/27 19:48:42 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_pager.c,v 1.92.14.1 2010/11/21 18:09:00 riz Exp $");
 
 #include "opt_uvmhist.h"
 #include "opt_readahead.h"
@@ -40,8 +47,10 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_pager.c,v 1.108 2012/01/27 19:48:42 para Exp $")
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/proc.h>
+#include <sys/malloc.h>
+#include <sys/pool.h>
 #include <sys/vnode.h>
-#include <sys/buf.h>
 
 #include <uvm/uvm.h>
 
@@ -60,6 +69,8 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_pager.c,v 1.108 2012/01/27 19:48:42 para Exp $")
 #endif
 
 size_t pager_map_size = PAGER_MAP_SIZE;
+
+struct pool *uvm_aiobuf_pool;
 
 /*
  * list of uvm pagers in the system
@@ -80,47 +91,7 @@ struct vm_map *pager_map;		/* XXX */
 kmutex_t pager_map_wanted_lock;
 bool pager_map_wanted;	/* locked by pager map */
 static vaddr_t emergva;
-static int emerg_ncolors;
 static bool emerginuse;
-
-void
-uvm_pager_realloc_emerg(void)
-{
-	vaddr_t new_emergva, old_emergva;
-	int old_emerg_ncolors;
-
-	if (__predict_true(emergva != 0 && emerg_ncolors >= uvmexp.ncolors))
-		return;
-
-	KASSERT(!emerginuse);
-
-	new_emergva = uvm_km_alloc(kernel_map,
-	    round_page(MAXPHYS) + ptoa(uvmexp.ncolors), ptoa(uvmexp.ncolors),
-	    UVM_KMF_VAONLY);
-
-	KASSERT(new_emergva != 0);
-
-	old_emergva = emergva;
-	old_emerg_ncolors = emerg_ncolors;
-
-	/*
-	 * don't support re-color in late boot anyway.
-	 */
-	if (0) /* XXX */
-		mutex_enter(&pager_map_wanted_lock);
-
-	emergva = new_emergva;
-	emerg_ncolors = uvmexp.ncolors;
-	wakeup(&old_emergva);
-
-	if (0) /* XXX */
-		mutex_exit(&pager_map_wanted_lock);
-
-	if (old_emergva)
-		uvm_km_free(kernel_map, old_emergva,
-		    round_page(MAXPHYS) + ptoa(old_emerg_ncolors),
-		    UVM_KMF_VAONLY);
-}
 
 /*
  * uvm_pager_init: init pagers (at boot time)
@@ -141,8 +112,13 @@ uvm_pager_init(void)
 	    false, NULL);
 	mutex_init(&pager_map_wanted_lock, MUTEX_DEFAULT, IPL_NONE);
 	pager_map_wanted = false;
-
-	uvm_pager_realloc_emerg();
+	emergva = uvm_km_alloc(kernel_map, round_page(MAXPHYS), 0,
+	    UVM_KMF_VAONLY);
+#if defined(DEBUG)
+	if (emergva == 0)
+		panic("emergva");
+#endif
+	emerginuse = false;
 
 	/*
 	 * init ASYNC I/O queue
@@ -174,12 +150,10 @@ uvm_pagermapin(struct vm_page **pps, int npages, int flags)
 	vaddr_t cva;
 	struct vm_page *pp;
 	vm_prot_t prot;
-	const bool pdaemon = (curlwp == uvm.pagedaemon_lwp);
-	const u_int first_color = VM_PGCOLOR_BUCKET(*pps);
+	const bool pdaemon = curlwp == uvm.pagedaemon_lwp;
 	UVMHIST_FUNC("uvm_pagermapin"); UVMHIST_CALLED(maphist);
 
-	UVMHIST_LOG(maphist,"(pps=0x%x, npages=%d, first_color=%u)",
-		pps, npages, first_color, 0);
+	UVMHIST_LOG(maphist,"(pps=0x%x, npages=%d)", pps, npages,0,0);
 
 	/*
 	 * compute protection.  outgoing I/O only needs read
@@ -191,12 +165,11 @@ uvm_pagermapin(struct vm_page **pps, int npages, int flags)
 		prot |= VM_PROT_WRITE;
 
 ReStart:
-	size = ptoa(npages);
+	size = npages << PAGE_SHIFT;
 	kva = 0;			/* let system choose VA */
 
-	if (uvm_map(pager_map, &kva, size, NULL, UVM_UNKNOWN_OFFSET,
-	    first_color, UVM_FLAG_COLORMATCH | UVM_FLAG_NOMERGE
-	    | (pdaemon ? UVM_FLAG_NOWAIT : 0)) != 0) {
+	if (uvm_map(pager_map, &kva, size, NULL, UVM_UNKNOWN_OFFSET, 0,
+	    UVM_FLAG_NOMERGE | (pdaemon ? UVM_FLAG_NOWAIT : 0)) != 0) {
 		if (pdaemon) {
 			mutex_enter(&pager_map_wanted_lock);
 			if (emerginuse) {
@@ -207,7 +180,7 @@ ReStart:
 			}
 			emerginuse = true;
 			mutex_exit(&pager_map_wanted_lock);
-			kva = emergva + ptoa(first_color);
+			kva = emergva;
 			/* The shift implicitly truncates to PAGE_SIZE */
 			KASSERT(npages <= (MAXPHYS >> PAGE_SHIFT));
 			goto enter;
@@ -226,12 +199,11 @@ ReStart:
 
 enter:
 	/* got it */
-	for (cva = kva; npages != 0; npages--, cva += PAGE_SIZE) {
+	for (cva = kva ; size != 0 ; size -= PAGE_SIZE, cva += PAGE_SIZE) {
 		pp = *pps++;
 		KASSERT(pp);
-		// KASSERT(!((VM_PAGE_TO_PHYS(pp) ^ cva) & uvmexp.colormask));
 		KASSERT(pp->flags & PG_BUSY);
-		pmap_kenter_pa(cva, VM_PAGE_TO_PHYS(pp), prot, 0);
+		pmap_kenter_pa(cva, VM_PAGE_TO_PHYS(pp), prot);
 	}
 	pmap_update(vm_map_pmap(pager_map));
 
@@ -249,7 +221,7 @@ enter:
 void
 uvm_pagermapout(vaddr_t kva, int npages)
 {
-	vsize_t size = ptoa(npages);
+	vsize_t size = npages << PAGE_SHIFT;
 	struct vm_map_entry *entries;
 	UVMHIST_FUNC("uvm_pagermapout"); UVMHIST_CALLED(maphist);
 
@@ -259,12 +231,11 @@ uvm_pagermapout(vaddr_t kva, int npages)
 	 * duplicate uvm_unmap, but add in pager_map_wanted handling.
 	 */
 
-	pmap_kremove(kva, size);
+	pmap_kremove(kva, npages << PAGE_SHIFT);
 	pmap_update(pmap_kernel());
 
-	if ((kva & ~ptoa(uvmexp.colormask)) == emergva) {
+	if (kva == emergva) {
 		mutex_enter(&pager_map_wanted_lock);
-		KASSERT(emerginuse);
 		emerginuse = false;
 		wakeup(&emergva);
 		mutex_exit(&pager_map_wanted_lock);
@@ -272,7 +243,7 @@ uvm_pagermapout(vaddr_t kva, int npages)
 	}
 
 	vm_map_lock(pager_map);
-	uvm_unmap_remove(pager_map, kva, kva + size, &entries, 0);
+	uvm_unmap_remove(pager_map, kva, kva + size, &entries, NULL, 0);
 	mutex_enter(&pager_map_wanted_lock);
 	if (pager_map_wanted) {
 		pager_map_wanted = false;
@@ -283,6 +254,28 @@ uvm_pagermapout(vaddr_t kva, int npages)
 	if (entries)
 		uvm_unmap_detach(entries, 0);
 	UVMHIST_LOG(maphist,"<- done",0,0,0,0);
+}
+
+/*
+ * interrupt-context iodone handler for nested i/o bufs.
+ *
+ * => the buffer is private so need not be locked here
+ */
+
+void
+uvm_aio_biodone1(struct buf *bp)
+{
+	struct buf *mbp = bp->b_private;
+
+	KASSERT(mbp != bp);
+	if (bp->b_error != 0) {
+		mbp->b_error = bp->b_error;
+	}
+	mbp->b_resid -= bp->b_bcount;
+	putiobuf(bp);
+	if (mbp->b_resid == 0) {
+		biodone(mbp);
+	}
 }
 
 /*
@@ -305,7 +298,7 @@ uvm_aio_aiodone_pages(struct vm_page **pgs, int npages, bool write, int error)
 	struct uvm_object *uobj;
 	struct vm_page *pg;
 	kmutex_t *slock;
-	int pageout_done;	/* number of PG_PAGEOUT pages processed */
+	int pageout_done;
 	int swslot;
 	int i;
 	bool swap;
@@ -320,7 +313,7 @@ uvm_aio_aiodone_pages(struct vm_page **pgs, int npages, bool write, int error)
 		(pg->pqflags & PQ_AOBJ) != 0;
 	if (!swap) {
 		uobj = pg->uobject;
-		slock = uobj->vmobjlock;
+		slock = &uobj->vmobjlock;
 		mutex_enter(slock);
 		mutex_enter(&uvm_pageqlock);
 	} else {
@@ -340,10 +333,6 @@ uvm_aio_aiodone_pages(struct vm_page **pgs, int npages, bool write, int error)
 #endif /* defined(VMSWAP) */
 	}
 	for (i = 0; i < npages; i++) {
-#if defined(VMSWAP)
-		bool anon_disposed = false; /* XXX gcc */
-#endif /* defined(VMSWAP) */
-
 		pg = pgs[i];
 		KASSERT(swap || pg->uobject == uobj);
 		UVMHIST_LOG(ubchist, "pg %p", pg, 0,0,0);
@@ -356,15 +345,12 @@ uvm_aio_aiodone_pages(struct vm_page **pgs, int npages, bool write, int error)
 
 		if (swap) {
 			if (pg->uobject != NULL) {
-				slock = pg->uobject->vmobjlock;
+				slock = &pg->uobject->vmobjlock;
 			} else {
-				slock = pg->uanon->an_lock;
+				slock = &pg->uanon->an_lock;
 			}
 			mutex_enter(slock);
 			mutex_enter(&uvm_pageqlock);
-			anon_disposed = (pg->flags & PG_RELEASED) != 0;
-			KASSERT(!anon_disposed || pg->uobject != NULL ||
-			    pg->uanon->an_ref == 0);
 		}
 #endif /* defined(VMSWAP) */
 
@@ -446,7 +432,8 @@ uvm_aio_aiodone_pages(struct vm_page **pgs, int npages, bool write, int error)
 		 */
 
 		if (swap) {
-			if (pg->uobject == NULL && anon_disposed) {
+			if (pg->uobject == NULL && pg->uanon->an_ref == 0 &&
+			    (pg->flags & PG_RELEASED) != 0) {
 				mutex_exit(&uvm_pageqlock);
 				uvm_anon_release(pg->uanon);
 			} else {
@@ -500,6 +487,9 @@ uvm_aio_aiodone(struct buf *bp)
 
 	error = bp->b_error;
 	write = (bp->b_flags & B_READ) == 0;
+	/* XXXUBC BC_NOCACHE is for swap pager, should be done differently */
+	if (write && !(bp->b_cflags & BC_NOCACHE) && bioopsp != NULL)
+		(*bioopsp->io_pageiodone)(bp);
 
 	for (i = 0; i < npages; i++) {
 		pgs[i] = uvm_pageratop((vaddr_t)bp->b_data + (i << PAGE_SHIFT));

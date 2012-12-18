@@ -1,4 +1,4 @@
-/*	$NetBSD: p9100.c,v 1.59 2012/10/27 17:18:37 chs Exp $ */
+/*	$NetBSD: p9100.c,v 1.39 2008/06/11 21:25:31 drochner Exp $ */
 
 /*-
  * Copyright (c) 1998, 2005, 2006 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: p9100.c,v 1.59 2012/10/27 17:18:37 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: p9100.c,v 1.39 2008/06/11 21:25:31 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,30 +62,20 @@ __KERNEL_RCSID(0, "$NetBSD: p9100.c,v 1.59 2012/10/27 17:18:37 chs Exp $");
 
 #include <dev/sbus/sbusvar.h>
 
-#include <dev/wscons/wsdisplayvar.h>
+/*#include <dev/wscons/wsdisplayvar.h>*/
 #include <dev/wscons/wsconsio.h>
 #include <dev/wsfont/wsfont.h>
 #include <dev/rasops/rasops.h>
 
 #include <dev/wscons/wsdisplay_vconsvar.h>
-#include <dev/wscons/wsdisplay_glyphcachevar.h>
 
 #include "opt_wsemul.h"
 #include "rasops_glue.h"
-#include "opt_pnozz.h"
-
-#include "ioconf.h"
 
 #include "tctrl.h"
 #if NTCTRL > 0
 #include <machine/tctrl.h>
-#include <sparc/dev/tctrlvar.h>	/*XXX*/
-#endif
-
-#ifdef PNOZZ_DEBUG
-#define DPRINTF aprint_normal
-#else
-#define DPRINTF while (0) aprint_normal
+#include <sparc/dev/tctrlvar.h>/*XXX*/
 #endif
 
 struct pnozz_cursor {
@@ -100,7 +90,8 @@ struct pnozz_cursor {
 
 /* per-display variables */
 struct p9100_softc {
-	device_t	sc_dev;		/* base device */
+	struct device	sc_dev;		/* base device */
+	struct sbusdev	sc_sd;		/* sbus device */
 	struct fbdevice	sc_fb;		/* frame buffer device */
 
 	bus_space_tag_t	sc_bustag;
@@ -109,31 +100,30 @@ struct p9100_softc {
 	bus_size_t	sc_ctl_psize;	/*   for device mmap() */
 	bus_space_handle_t sc_ctl_memh;	/*   bus space handle */
 
+	bus_addr_t	sc_cmd_paddr;	/* phys address description */
+	bus_size_t	sc_cmd_psize;	/*   for device mmap() */
+	bus_space_handle_t sc_cmd_memh;	/*   bus space handle */
+
 	bus_addr_t	sc_fb_paddr;	/* phys address description */
 	bus_size_t	sc_fb_psize;	/*   for device mmap() */
-#ifdef PNOZZ_USE_LATCH
 	bus_space_handle_t sc_fb_memh;	/*   bus space handle */
-#endif
-	volatile uint32_t sc_junk;
-	uint32_t 	sc_mono_width;	/* for setup_mono */
 
-	uint32_t	sc_width;
-	uint32_t	sc_height;	/* panel width / height */
-	uint32_t	sc_stride;
-	uint32_t	sc_depth;
-	int		sc_depthshift;	/* blitter works on bytes not pixels */
-	
+	volatile uint32_t sc_junk;
+	uint32_t sc_mono_width;	/* for setup_mono */
+
+	uint32_t sc_width;
+	uint32_t sc_height;	/* panel width / height */
+	uint32_t sc_stride;
+	uint32_t sc_depth;
 	union	bt_cmap sc_cmap;	/* Brooktree color map */
 
 	struct pnozz_cursor sc_cursor;
 
-	int 		sc_mode;
-	int 		sc_video, sc_powerstate;
-	uint32_t 	sc_bg;
+	int sc_mode;
+	int sc_video, sc_powerstate;
+	uint32_t sc_bg;
 	volatile uint32_t sc_last_offset;
 	struct vcons_data vd;
-	uint8_t		sc_dac_power;
-	glyphcache	sc_gc;
 };
 
 
@@ -155,21 +145,22 @@ const struct wsscreen_descr *_p9100_scrlist[] = {
 };
 
 struct wsscreen_list p9100_screenlist = {
-	sizeof(_p9100_scrlist) / sizeof(struct wsscreen_descr *),
-	_p9100_scrlist
+	sizeof(_p9100_scrlist) / sizeof(struct wsscreen_descr *), _p9100_scrlist
 };
 
 /* autoconfiguration driver */
-static int	p9100_sbus_match(device_t, cfdata_t, void *);
-static void	p9100_sbus_attach(device_t, device_t, void *);
+static int	p9100_sbus_match(struct device *, struct cfdata *, void *);
+static void	p9100_sbus_attach(struct device *, struct device *, void *);
 
-static void	p9100unblank(device_t);
+static void	p9100unblank(struct device *);
+static void	p9100_shutdown(void *);
 
-CFATTACH_DECL_NEW(pnozz, sizeof(struct p9100_softc),
+CFATTACH_DECL(pnozz, sizeof(struct p9100_softc),
     p9100_sbus_match, p9100_sbus_attach, NULL, NULL);
 
+extern struct cfdriver pnozz_cd;
+
 static dev_type_open(p9100open);
-static dev_type_close(p9100close);
 static dev_type_ioctl(p9100ioctl);
 static dev_type_mmap(p9100mmap);
 
@@ -180,7 +171,7 @@ const struct cdevsw pnozz_cdevsw = {
 
 /* frame buffer generic driver */
 static struct fbdriver p9100fbdriver = {
-	p9100unblank, p9100open, p9100close, p9100ioctl, nopoll,
+	p9100unblank, p9100open, nullclose, p9100ioctl, nopoll,
 	p9100mmap, nokqfilter
 };
 
@@ -196,11 +187,10 @@ static uint8_t	p9100_ramdac_read_ctl(struct p9100_softc *, int);
 static void	p9100_ramdac_write_ctl(struct p9100_softc *, int, uint8_t);
 
 static void 	p9100_init_engine(struct p9100_softc *);
-static int	p9100_set_depth(struct p9100_softc *, int);
 
 #if NWSDISPLAY > 0
 static void	p9100_sync(struct p9100_softc *);
-static void	p9100_bitblt(void *, int, int, int, int, int, int, int);
+static void	p9100_bitblt(void *, int, int, int, int, int, int, uint32_t);
 static void 	p9100_rectfill(void *, int, int, int, int, uint32_t);
 static void	p9100_clearscreen(struct p9100_softc *);
 
@@ -215,8 +205,10 @@ static void	p9100_copyrows(void *, int, int, int);
 static void	p9100_eraserows(void *, int, int, long);
 /*static int	p9100_mapchar(void *, int, u_int *);*/
 static void	p9100_putchar(void *, int, int, u_int, long);
-static void	p9100_putchar_aa(void *, int, int, u_int, long);
 static void	p9100_cursor(void *, int, int, int);
+static int	p9100_allocattr(void *, int, int, int, long *);
+
+/*static void	p9100_scroll(void *, void *, int);*/
 
 static int	p9100_putcmap(struct p9100_softc *, struct wsdisplay_cmap *);
 static int 	p9100_getcmap(struct p9100_softc *, struct wsdisplay_cmap *);
@@ -226,7 +218,7 @@ static paddr_t	p9100_mmap(void *, void *, off_t, int);
 /*static int	p9100_load_font(void *, void *, struct wsdisplay_font *);*/
 
 static void	p9100_init_screen(void *, struct vcons_screen *, int,
-		    long *);
+	    long *);
 #endif
 
 static void	p9100_init_cursor(struct p9100_softc *);
@@ -235,17 +227,12 @@ static void	p9100_set_fbcursor(struct p9100_softc *);
 static void	p9100_setcursorcmap(struct p9100_softc *);
 static void	p9100_loadcursor(struct p9100_softc *);
 
-#if 0
 static int	p9100_intr(void *);
-#endif
 
 /* power management stuff */
-static bool p9100_suspend(device_t, const pmf_qual_t *);
-static bool p9100_resume(device_t, const pmf_qual_t *);
+static void p9100_power_hook(int, void *);
 
-#if NTCTRL > 0
 static void p9100_set_extvga(void *, int);
-#endif
 
 #if NWSDISPLAY > 0
 struct wsdisplay_accessops p9100_accessops = {
@@ -260,26 +247,20 @@ struct wsdisplay_accessops p9100_accessops = {
 };
 #endif
 
-#ifdef PNOZZ_USE_LATCH
-#define PNOZZ_LATCH(sc, off) if(sc->sc_last_offset != (off & 0xffffff80)) { \
+#define PNOZZ_LATCH(sc, off) if(sc->sc_last_offset == (off & 0xffffff80)) { \
 		sc->sc_junk = bus_space_read_4(sc->sc_bustag, sc->sc_fb_memh, \
 		    off); \
 		sc->sc_last_offset = off & 0xffffff80; }
-#else
-#define PNOZZ_LATCH(a, b)
-#endif
 
 /*
  * Match a p9100.
  */
 static int
-p9100_sbus_match(device_t parent, cfdata_t cf, void *aux)
+p9100_sbus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
-	if (strcmp("p9100", sa->sa_name) == 0)
-		return 100;
-	return 0;
+	return (strcmp("p9100", sa->sa_name) == 0);
 }
 
 
@@ -287,15 +268,15 @@ p9100_sbus_match(device_t parent, cfdata_t cf, void *aux)
  * Attach a display.  We need to notice if it is the console, too.
  */
 static void
-p9100_sbus_attach(device_t parent, device_t self, void *args)
+p9100_sbus_attach(struct device *parent, struct device *self, void *args)
 {
 	struct p9100_softc *sc = device_private(self);
 	struct sbus_attach_args *sa = args;
 	struct fbdevice *fb = &sc->sc_fb;
 	int isconsole;
-	int node = sa->sa_node;
+	int node;
 	int i, j;
-	uint8_t ver, cmap[768];
+	uint8_t ver;
 
 #if NWSDISPLAY > 0
 	struct wsemuldisplaydev_attach_args aa;
@@ -304,77 +285,24 @@ p9100_sbus_attach(device_t parent, device_t self, void *args)
 #endif
 
 	sc->sc_last_offset = 0xffffffff;
-	sc->sc_dev = self;
-
-	/*
-	 * When the ROM has mapped in a p9100 display, the address
-	 * maps only the video RAM, so in any case we have to map the
-	 * registers ourselves.
-	 */
-
-	if (sa->sa_npromvaddrs != 0)
-		fb->fb_pixels = (void *)sa->sa_promvaddrs[0];
 
 	/* Remember cookies for p9100_mmap() */
 	sc->sc_bustag = sa->sa_bustag;
-
 	sc->sc_ctl_paddr = sbus_bus_addr(sa->sa_bustag,
 		sa->sa_reg[0].oa_space, sa->sa_reg[0].oa_base);
 	sc->sc_ctl_psize = 0x8000;/*(bus_size_t)sa->sa_reg[0].oa_size;*/
+
+	sc->sc_cmd_paddr = sbus_bus_addr(sa->sa_bustag,
+		sa->sa_reg[1].oa_space, sa->sa_reg[1].oa_base);
+	sc->sc_cmd_psize = (bus_size_t)sa->sa_reg[1].oa_size;
 
 	sc->sc_fb_paddr = sbus_bus_addr(sa->sa_bustag,
 		sa->sa_reg[2].oa_space, sa->sa_reg[2].oa_base);
 	sc->sc_fb_psize = (bus_size_t)sa->sa_reg[2].oa_size;
 
-	if (sbus_bus_map(sc->sc_bustag,
-	    sa->sa_reg[0].oa_space,
-	    sa->sa_reg[0].oa_base,
-	    /*
-	     * XXX for some reason the SBus resources don't cover
-	     * all registers, so we just map what we need
-	     */
-	    0x8000,
-	    0, &sc->sc_ctl_memh) != 0) {
-		printf("%s: cannot map control registers\n",
-		    device_xname(self));
-		return;
-	}
-
-	/*
-	 * we need to map the framebuffer even though we never write to it,
-	 * thanks to some weirdness in the SPARCbook's SBus glue for the
-	 * P9100 - all register accesses need to be 'latched in' whenever we
-	 * go to another 0x80 aligned 'page' by reading the framebuffer at the
-	 * same offset
-	 * XXX apparently the latter isn't true - my SP3GX works fine without
-	 */
-#ifdef PNOZZ_USE_LATCH
-	if (fb->fb_pixels == NULL) {
-		if (sbus_bus_map(sc->sc_bustag,
-		    sa->sa_reg[2].oa_space,
-		    sa->sa_reg[2].oa_base,
-		    sc->sc_fb_psize,
-		    BUS_SPACE_MAP_LINEAR | BUS_SPACE_MAP_LARGE,
-		    &sc->sc_fb_memh) != 0) {
-			printf("%s: cannot map framebuffer\n",
-			    device_xname(self));
-			return;
-		}
-		fb->fb_pixels = (char *)sc->sc_fb_memh;
-	} else {
-		sc->sc_fb_memh = (bus_space_handle_t) fb->fb_pixels;
-	}
-#endif
-	sc->sc_width = prom_getpropint(node, "width", 800);
-	sc->sc_height = prom_getpropint(node, "height", 600);
-	sc->sc_depth = prom_getpropint(node, "depth", 8) >> 3;
-
-	sc->sc_stride = prom_getpropint(node, "linebytes",
-	    sc->sc_width * sc->sc_depth);
-
 	fb->fb_driver = &p9100fbdriver;
-	fb->fb_device = sc->sc_dev;
-	fb->fb_flags = device_cfdata(sc->sc_dev)->cf_flags & FB_USERMASK;
+	fb->fb_device = &sc->sc_dev;
+	fb->fb_flags = device_cfdata(&sc->sc_dev)->cf_flags & FB_USERMASK;
 #ifdef PNOZZ_EMUL_CG3
 	fb->fb_type.fb_type = FBTYPE_SUN3COLOR;
 #else
@@ -384,47 +312,110 @@ p9100_sbus_attach(device_t parent, device_t self, void *args)
 
 	sc->sc_mode = WSDISPLAYIO_MODE_EMUL;
 
+	node = sa->sa_node;
 	isconsole = fb_is_console(node);
-#if 0
 	if (!isconsole) {
 		aprint_normal("\n");
 		aprint_error_dev(self, "fatal error: PROM didn't configure device\n");
 		return;
 	}
-#endif
 
-    	fb->fb_type.fb_depth = 8;
-	sc->sc_depth = 1;
-	sc->sc_depthshift = 0;
+	/*
+	 * When the ROM has mapped in a p9100 display, the address
+	 * maps only the video RAM, so in any case we have to map the
+	 * registers ourselves.  We only need the video RAM if we are
+	 * going to print characters via rconsole.
+	 */
+	if (sbus_bus_map(sc->sc_bustag,
+			 sa->sa_reg[0].oa_space,
+			 sa->sa_reg[0].oa_base,
+			 /*
+			  * XXX for some reason the SBus resources don't cover
+			  * all registers, so we just map what we need
+			  */
+			 /*sc->sc_ctl_psize*/ 0x8000,
+			 /*BUS_SPACE_MAP_LINEAR*/0, &sc->sc_ctl_memh) != 0) {
+		aprint_error_dev(self, "cannot map control registers\n");
+		return;
+	}
+
+	if (sa->sa_npromvaddrs != 0)
+		fb->fb_pixels = (void *)sa->sa_promvaddrs[0];
+
+	if (fb->fb_pixels == NULL) {
+		if (sbus_bus_map(sc->sc_bustag,
+				sa->sa_reg[2].oa_space,
+				sa->sa_reg[2].oa_base,
+				sc->sc_fb_psize,
+				BUS_SPACE_MAP_LINEAR, &sc->sc_fb_memh) != 0) {
+			aprint_error_dev(self, "cannot map framebuffer\n");
+			return;
+		}
+		fb->fb_pixels = (char *)sc->sc_fb_memh;
+	} else {
+		sc->sc_fb_memh = (bus_space_handle_t) fb->fb_pixels;
+	}
+
+	i = p9100_ctl_read_4(sc, 0x0004);
+	switch ((i >> 26) & 7) {
+	    case 5: fb->fb_type.fb_depth = 32; break;
+	    case 7: fb->fb_type.fb_depth = 24; break;
+	    case 3: fb->fb_type.fb_depth = 16; break;
+	    case 2: fb->fb_type.fb_depth = 8; break;
+	    default: {
+		panic("pnozz: can't determine screen depth (0x%02x)", i);
+	    }
+	}
+	sc->sc_depth = (fb->fb_type.fb_depth >> 3);
+
+	/* XXX for some reason I get a kernel trap with this */
+	sc->sc_width = prom_getpropint(node, "width", 800);
+	sc->sc_height = prom_getpropint(node, "height", 600);
+
+	sc->sc_stride = prom_getpropint(node, "linebytes", sc->sc_width *
+	    (fb->fb_type.fb_depth >> 3));
 
 	/* check the RAMDAC */
 	ver = p9100_ramdac_read_ctl(sc, DAC_VERSION);
 
 	p9100_init_engine(sc);
-	p9100_set_depth(sc, 8);
-	
+
 	fb_setsize_obp(fb, fb->fb_type.fb_depth, sc->sc_width, sc->sc_height,
 	    node);
 
-#if 0
+	sbus_establish(&sc->sc_sd, &sc->sc_dev);
 	bus_intr_establish(sc->sc_bustag, sa->sa_pri, IPL_BIO,
 	    p9100_intr, sc);
-#endif
+
+	fb->fb_type.fb_size = fb->fb_type.fb_height * fb->fb_linebytes;
+	printf(": rev %d / %x, %dx%d, depth %d mem %x",
+	       (i & 7), ver, fb->fb_type.fb_width, fb->fb_type.fb_height,
+	       fb->fb_type.fb_depth, (unsigned int)sc->sc_fb_psize);
 
 	fb->fb_type.fb_cmsize = prom_getpropint(node, "cmsize", 256);
 	if ((1 << fb->fb_type.fb_depth) != fb->fb_type.fb_cmsize)
 		printf(", %d entry colormap", fb->fb_type.fb_cmsize);
 
+	/* Initialize the default color map. */
+	/*bt_initcmap(&sc->sc_cmap, 256);*/
+	j = 0;
+	for (i = 0; i < 256; i++) {
+		sc->sc_cmap.cm_map[i][0] = rasops_cmap[j];
+		j++;
+		sc->sc_cmap.cm_map[i][1] = rasops_cmap[j];
+		j++;
+		sc->sc_cmap.cm_map[i][2] = rasops_cmap[j];
+		j++;
+	}
+	p9100loadcmap(sc, 0, 256);
+
 	/* make sure we are not blanked */
 	if (isconsole)
 		p9100_set_video(sc, 1);
 
-	/* register with power management */
-	sc->sc_video = 1;
-	sc->sc_powerstate = PWR_RESUME;
-	if (!pmf_device_register(self, p9100_suspend, p9100_resume)) {
-		panic("%s: could not register with PMF",
-		      device_xname(sc->sc_dev));
+	if (shutdownhook_establish(p9100_shutdown, sc) == NULL) {
+		panic("%s: could not establish shutdown hook",
+		      device_xname(&sc->sc_dev));
 	}
 
 	if (isconsole) {
@@ -439,34 +430,11 @@ p9100_sbus_attach(device_t parent, device_t self, void *args)
 #if NWSDISPLAY > 0
 	wsfont_init();
 
-#ifdef PNOZZ_DEBUG
-	/* make the glyph cache visible */
-	sc->sc_height -= 100;
-#endif
-
-	sc->sc_gc.gc_bitblt = p9100_bitblt;
-	sc->sc_gc.gc_blitcookie = sc;
-	sc->sc_gc.gc_rop = ROP_SRC;
-
 	vcons_init(&sc->vd, sc, &p9100_defscreendesc, &p9100_accessops);
 	sc->vd.init_screen = p9100_init_screen;
 
 	vcons_init_screen(&sc->vd, &p9100_console_screen, 1, &defattr);
 	p9100_console_screen.scr_flags |= VCONS_SCREEN_IS_STATIC;
-
-	/* Initialize the default color map. */
-	rasops_get_cmap(&p9100_console_screen.scr_ri, cmap, 768);
-
-	j = 0;
-	for (i = 0; i < 256; i++) {
-		sc->sc_cmap.cm_map[i][0] = cmap[j];
-		j++;
-		sc->sc_cmap.cm_map[i][1] = cmap[j];
-		j++;
-		sc->sc_cmap.cm_map[i][2] = cmap[j];
-		j++;
-	}
-	p9100loadcmap(sc, 0, 256);
 
 	sc->sc_bg = (defattr >> 16) & 0xff;
 	p9100_clearscreen(sc);
@@ -478,16 +446,8 @@ p9100_sbus_attach(device_t parent, device_t self, void *args)
 	p9100_defscreendesc.textops = &ri->ri_ops;
 	p9100_defscreendesc.capabilities = ri->ri_caps;
 
-	glyphcache_init(&sc->sc_gc, sc->sc_height + 5,
-			(0x200000 / sc->sc_stride) - sc->sc_height - 5,
-			sc->sc_width,
-			ri->ri_font->fontwidth,
-			ri->ri_font->fontheight,
-			defattr);
-
 	if(isconsole) {
 		wsdisplay_cnattach(&p9100_defscreendesc, ri, 0, 0, defattr);
-		vcons_replay_msgbuf(&p9100_console_screen);
 	}
 
 	aa.console = isconsole;
@@ -497,21 +457,43 @@ p9100_sbus_attach(device_t parent, device_t self, void *args)
 
 	config_found(self, &aa, wsemuldisplaydevprint);
 #endif
-	fb->fb_type.fb_size = fb->fb_type.fb_height * fb->fb_linebytes;
-	printf("%s: rev %d / %x, %dx%d, depth %d mem %x\n",
-		device_xname(self),
-		(i & 7), ver, fb->fb_type.fb_width, fb->fb_type.fb_height,
-		fb->fb_type.fb_depth, (unsigned int)sc->sc_fb_psize);
 	/* cursor sprite handling */
 	p9100_init_cursor(sc);
 
 	/* attach the fb */
 	fb_attach(fb, isconsole);
 
+	/* register with power management */
+	sc->sc_video = 1;
+	sc->sc_powerstate = PWR_RESUME;
+	powerhook_establish(device_xname(&sc->sc_dev), p9100_power_hook, sc);
+
 #if NTCTRL > 0
 	/* register callback for external monitor status change */
 	tadpole_register_callback(p9100_set_extvga, sc);
 #endif
+}
+
+static void
+p9100_shutdown(arg)
+	void *arg;
+{
+	struct p9100_softc *sc = arg;
+
+#ifdef RASTERCONSOLE
+	sc->sc_cmap.cm_map[0][0] = 0xff;
+	sc->sc_cmap.cm_map[0][1] = 0xff;
+	sc->sc_cmap.cm_map[0][2] = 0xff;
+	sc->sc_cmap.cm_map[1][0] = 0;
+	sc->sc_cmap.cm_map[1][1] = 0;
+	sc->sc_cmap.cm_map[1][2] = 0x00;
+	p9100loadcmap(sc, 0, 2);
+	sc->sc_cmap.cm_map[255][0] = 0;
+	sc->sc_cmap.cm_map[255][1] = 0;
+	sc->sc_cmap.cm_map[255][2] = 0;
+	p9100loadcmap(sc, 255, 1);
+#endif
+	p9100_set_video(sc, 1);
 }
 
 int
@@ -522,22 +504,6 @@ p9100open(dev_t dev, int flags, int mode, struct lwp *l)
 	if (device_lookup(&pnozz_cd, unit) == NULL)
 		return (ENXIO);
 	return (0);
-}
-
-int
-p9100close(dev_t dev, int flags, int mode, struct lwp *l)
-{
-	struct p9100_softc *sc = device_lookup_private(&pnozz_cd, minor(dev));
-
-#if NWSDISPLAY > 0
-	p9100_init_engine(sc);
-	p9100_set_depth(sc, 8);
-	p9100loadcmap(sc, 0, 256);
-	p9100_clearscreen(sc);
-	glyphcache_wipe(&sc->sc_gc);
-	vcons_redraw_screen(sc->vd.active);
-#endif
-	return 0;
 }
 
 int
@@ -725,14 +691,13 @@ p9100_init_engine(struct p9100_softc *sc)
 	p9100_ctl_write_4(sc, WINDOW_MIN, 0);
 	p9100_ctl_write_4(sc, WINDOW_MAX, rmax);
 	p9100_ctl_write_4(sc, BYTE_CLIP_MIN, 0);
-	p9100_ctl_write_4(sc, BYTE_CLIP_MAX, 0x3fff3fff);
+	p9100_ctl_write_4(sc, BYTE_CLIP_MAX, rmax);
 	p9100_ctl_write_4(sc, DRAW_MODE, 0);
 	p9100_ctl_write_4(sc, PLANE_MASK, 0xffffffff);
 	p9100_ctl_write_4(sc, PATTERN0, 0xffffffff);
 	p9100_ctl_write_4(sc, PATTERN1, 0xffffffff);
 	p9100_ctl_write_4(sc, PATTERN2, 0xffffffff);
 	p9100_ctl_write_4(sc, PATTERN3, 0xffffffff);
-
 }
 
 /* we only need these in the wsdisplay case */
@@ -769,7 +734,7 @@ p9100_set_color_reg(struct p9100_softc *sc, int reg, int32_t col)
 /* screen-to-screen blit */
 static void
 p9100_bitblt(void *cookie, int xs, int ys, int xd, int yd, int wi,
-    int he, int rop)
+    int he, uint32_t rop)
 {
 	struct p9100_softc *sc = cookie;
 	uint32_t src, dst, srcw, dstw;
@@ -780,17 +745,14 @@ p9100_bitblt(void *cookie, int xs, int ys, int xd, int yd, int wi,
 	dst = ((xd & 0x3fff) << 16) | (yd & 0x3fff);
 	srcw = (((xs + wi - 1) & 0x3fff) << 16) | ((ys + he - 1) & 0x3fff);
 	dstw = (((xd + wi - 1) & 0x3fff) << 16) | ((yd + he - 1) & 0x3fff);
-
 	p9100_sync(sc);
-	
 	p9100_ctl_write_4(sc, RASTER_OP, rop);
-	p9100_ctl_write_4(sc, BYTE_CLIP_MAX, 0x3fff3fff);
 
-	p9100_ctl_write_4(sc, ABS_XY0, src << sc->sc_depthshift);
-	p9100_ctl_write_4(sc, ABS_XY1, srcw << sc->sc_depthshift);
-	p9100_ctl_write_4(sc, ABS_XY2, dst << sc->sc_depthshift);
-	p9100_ctl_write_4(sc, ABS_XY3, dstw << sc->sc_depthshift);
+	p9100_ctl_write_4(sc, ABS_XY0, src);
 
+	p9100_ctl_write_4(sc, ABS_XY1, srcw);
+	p9100_ctl_write_4(sc, ABS_XY2, dst);
+	p9100_ctl_write_4(sc, ABS_XY3, dstw);
 	sc->sc_junk = p9100_ctl_read_4(sc, COMMAND_BLIT);
 }
 
@@ -806,7 +768,6 @@ p9100_rectfill(void *cookie, int xs, int ys, int wi, int he, uint32_t col)
 	src = ((xs & 0x3fff) << 16) | (ys & 0x3fff);
 	srcw = (((xs + wi) & 0x3fff) << 16) | ((ys + he) & 0x3fff);
 	p9100_sync(sc);
-	p9100_ctl_write_4(sc, BYTE_CLIP_MAX, 0x3fff3fff);
 	p9100_set_color_reg(sc, FOREGROUND_COLOR, col);
 	p9100_set_color_reg(sc, BACKGROUND_COLOR, col);
 	p9100_ctl_write_4(sc, RASTER_OP, ROP_PAT);
@@ -833,7 +794,6 @@ p9100_setup_mono(struct p9100_softc *sc, int x, int y, int wi, int he,
 	p9100_set_color_reg(sc,FOREGROUND_COLOR,bg);
 	p9100_set_color_reg(sc,BACKGROUND_COLOR,fg);
 
-	p9100_ctl_write_4(sc, BYTE_CLIP_MAX, 0x3fff3fff);
 	p9100_ctl_write_4(sc, RASTER_OP, ROP_SRC);
 	p9100_ctl_write_4(sc, ABS_X0, x);
 	p9100_ctl_write_4(sc, ABS_XY1, (x << 16) | (y & 0xFFFFL));
@@ -860,15 +820,17 @@ p9100_feed_line(struct p9100_softc *sc, int count, uint8_t *data)
 		if (shift == 0) {
 			/* check how many bits are significant */
 			if (to_go > 31) {
-				bus_space_write_4(sc->sc_bustag, 
-				    sc->sc_ctl_memh,
+				bus_space_write_4(sc->sc_bustag, sc->sc_ctl_memh,
 				    (PIXEL_1 + (31 << 2)), latch);
+				/*p9100_ctl_write_4(sc, (PIXEL_1 +
+				    (31 << 2)), latch);*/
 				to_go -= 32;
 			} else
 			{
-				bus_space_write_4(sc->sc_bustag, 
-				    sc->sc_ctl_memh,
+				bus_space_write_4(sc->sc_bustag, sc->sc_ctl_memh,
 				    (PIXEL_1 + ((to_go - 1) << 2)), latch);
+				/*p9100_ctl_write_4(sc, (PIXEL_1 +
+				    ((to_go - 1) << 2)), latch);*/
 				to_go = 0;
 			}
 			latch = 0;
@@ -926,11 +888,11 @@ p9100_ramdac_write_ctl(struct p9100_softc *sc, int off, uint8_t val)
  * Undo the effect of an FBIOSVIDEO that turns the video off.
  */
 static void
-p9100unblank(device_t dev)
+p9100unblank(struct device *dev)
 {
 	struct p9100_softc *sc = device_private(dev);
 
-	p9100_set_video(sc, 1);
+	p9100_set_video((struct p9100_softc *)dev, 1);
 
 	/*
 	 * Check if we're in terminal mode. If not force the console screen
@@ -943,8 +905,6 @@ p9100unblank(device_t dev)
 			sc->vd.active = &p9100_console_screen;
 			SCREEN_VISIBLE(&p9100_console_screen);
 		}
-		p9100_init_engine(sc);
-		p9100_set_depth(sc, 8);
 		vcons_redraw_screen(&p9100_console_screen);
 	}
 }
@@ -952,7 +912,7 @@ p9100unblank(device_t dev)
 static void
 p9100_set_video(struct p9100_softc *sc, int enable)
 {
-	uint32_t v = p9100_ctl_read_4(sc, SCRN_RPNT_CTL_1);
+	u_int32_t v = p9100_ctl_read_4(sc, SCRN_RPNT_CTL_1);
 
 	if (enable)
 		v |= VIDEO_ENABLED;
@@ -972,40 +932,27 @@ p9100_get_video(struct p9100_softc *sc)
 	return (p9100_ctl_read_4(sc, SCRN_RPNT_CTL_1) & VIDEO_ENABLED) != 0;
 }
 
-static bool
-p9100_suspend(device_t dev, const pmf_qual_t *qual)
+static void
+p9100_power_hook(int why, void *cookie)
 {
-	struct p9100_softc *sc = device_private(dev);
+	struct p9100_softc *sc = cookie;
 
-	if (sc->sc_powerstate == PWR_SUSPEND)
-		return TRUE;
+	if (why == sc->sc_powerstate)
+		return;
 
-	sc->sc_video = p9100_get_video(sc);
-	sc->sc_dac_power = p9100_ramdac_read_ctl(sc, DAC_POWER_MGT);
-	p9100_ramdac_write_ctl(sc, DAC_POWER_MGT,
-		DAC_POWER_SCLK_DISABLE |
-		DAC_POWER_DDOT_DISABLE |
-		DAC_POWER_SYNC_DISABLE |
-		DAC_POWER_ICLK_DISABLE |
-		DAC_POWER_IPWR_DISABLE);
-	p9100_set_video(sc, 0);
-	sc->sc_powerstate = PWR_SUSPEND;
-	return TRUE;
-}
-
-static bool
-p9100_resume(device_t dev, const pmf_qual_t *qual)
-{
-	struct p9100_softc *sc = device_private(dev);
-
-	if (sc->sc_powerstate == PWR_RESUME)
-		return TRUE;
-
-	p9100_ramdac_write_ctl(sc, DAC_POWER_MGT, sc->sc_dac_power);	
-	p9100_set_video(sc, sc->sc_video);
-
-	sc->sc_powerstate = PWR_RESUME;
-	return TRUE;
+	switch(why)
+	{
+		case PWR_SUSPEND:
+		case PWR_STANDBY:
+			sc->sc_video = p9100_get_video(sc);
+			p9100_set_video(sc, 0);
+			sc->sc_powerstate = why;
+			break;
+		case PWR_RESUME:
+			p9100_set_video(sc, sc->sc_video);
+			sc->sc_powerstate = why;
+			break;
+	}
 }
 
 /*
@@ -1015,6 +962,7 @@ static void
 p9100loadcmap(struct p9100_softc *sc, int start, int ncolors)
 {
 	int i;
+
 	sc->sc_last_offset = 0xffffffff;
 
 	p9100_ramdac_write(sc, DAC_CMAP_WRIDX, start);
@@ -1057,7 +1005,7 @@ p9100mmap(dev_t dev, off_t off, int prot)
 	}
 #endif
 
-	if (off >= sc->sc_fb_psize + sc->sc_ctl_psize/* + sc->sc_cmd_psize*/)
+	if (off >= sc->sc_fb_psize + sc->sc_ctl_psize + sc->sc_cmd_psize)
 		return (-1);
 
 	if (off < sc->sc_fb_psize) {
@@ -1067,7 +1015,6 @@ p9100mmap(dev_t dev, off_t off, int prot)
 			prot,
 			BUS_SPACE_MAP_LINEAR));
 	}
-
 	off -= sc->sc_fb_psize;
 	if (off < sc->sc_ctl_psize) {
 		return (bus_space_mmap(sc->sc_bustag,
@@ -1076,8 +1023,13 @@ p9100mmap(dev_t dev, off_t off, int prot)
 			prot,
 			BUS_SPACE_MAP_LINEAR));
 	}
+	off -= sc->sc_ctl_psize;
 
-	return EINVAL;
+	return (bus_space_mmap(sc->sc_bustag,
+		sc->sc_cmd_paddr,
+		off,
+		prot,
+		BUS_SPACE_MAP_LINEAR));
 }
 
 /* wscons stuff */
@@ -1100,10 +1052,8 @@ p9100_cursor(void *cookie, int on, int row, int col)
 		p9100_bitblt(sc, x, y, x, y, wi, he, ROP_SRC ^ 0xff);
 		ri->ri_flg &= ~RI_CURSOR;
 	}
-
 	ri->ri_crow = row;
 	ri->ri_ccol = col;
-
 	if (on)
 	{
 		x = ri->ri_ccol * wi + ri->ri_xorigin;
@@ -1125,137 +1075,36 @@ static void
 p9100_putchar(void *cookie, int row, int col, u_int c, long attr)
 {
 	struct rasops_info *ri = cookie;
-	struct wsdisplay_font *font = PICK_FONT(ri, c);
 	struct vcons_screen *scr = ri->ri_hw;
 	struct p9100_softc *sc = scr->scr_cookie;
 
-	int fg, bg, i;
+	int fg, bg, uc, i;
 	uint8_t *data;
-	int x, y, wi, he;
+	int x, y, wi,he;
 
-	wi = font->fontwidth;
-	he = font->fontheight;
+	wi = ri->ri_font->fontwidth;
+	he = ri->ri_font->fontheight;
 
-	if (!CHAR_IN_FONT(c, font))
+	if (!CHAR_IN_FONT(c, ri->ri_font))
 		return;
-
 	bg = (u_char)ri->ri_devcmap[(attr >> 16) & 0xff];
 	fg = (u_char)ri->ri_devcmap[(attr >> 24) & 0xff];
 	x = ri->ri_xorigin + col * wi;
 	y = ri->ri_yorigin + row * he;
-
 	if (c == 0x20) {
 		p9100_rectfill(sc, x, y, wi, he, bg);
 	} else {
-		data = WSFONT_GLYPH(c, font);
+		uc = c-ri->ri_font->firstchar;
+		data = (uint8_t *)ri->ri_font->data + uc *
+		    ri->ri_fontscale;
 
 		p9100_setup_mono(sc, x, y, wi, 1, fg, bg);
 		for (i = 0; i < he; i++) {
-			p9100_feed_line(sc, font->stride,
+			p9100_feed_line(sc, ri->ri_font->stride,
 			    data);
-			data += font->stride;
+			data += ri->ri_font->stride;
 		}
-	}
-}
-
-static void
-p9100_putchar_aa(void *cookie, int row, int col, u_int c, long attr)
-{
-	struct rasops_info *ri = cookie;
-	struct wsdisplay_font *font = PICK_FONT(ri, c);
-	struct vcons_screen *scr = ri->ri_hw;
-	struct p9100_softc *sc = scr->scr_cookie;
-	uint32_t bg, latch = 0, bg8, fg8, pixel;
-	int i, j, x, y, wi, he, r, g, b, aval, rwi;
-	int r1, g1, b1, r0, g0, b0, fgo, bgo;
-	uint8_t *data8;
-	int rv;
-
-	if (sc->sc_mode != WSDISPLAYIO_MODE_EMUL) 
-		return;
-
-	if (!CHAR_IN_FONT(c, font))
-		return;
-
-	wi = font->fontwidth;
-	rwi = (wi + 3) & ~3;
-	he = font->fontheight;
-
-	bg = ri->ri_devcmap[(attr >> 16) & 0xf];
-	x = ri->ri_xorigin + col * wi;
-	y = ri->ri_yorigin + row * he;
-
-	if (c == 0x20) {
-		p9100_rectfill(sc, x, y, wi, he, bg);
-		return;
-	}
-
-	rv = glyphcache_try(&sc->sc_gc, c, x, y, attr);
-	if (rv == GC_OK)
-		return;
-
-	data8 = WSFONT_GLYPH(c, font);
-
-	p9100_sync(sc);
-
-	p9100_ctl_write_4(sc, RASTER_OP, ROP_SRC);
-	p9100_ctl_write_4(sc, ABS_X0, x);
-	p9100_ctl_write_4(sc, ABS_XY1, (x << 16) | (y & 0xFFFFL));
-	p9100_ctl_write_4(sc, ABS_X2, (x + rwi));
-	p9100_ctl_write_4(sc, ABS_Y3, 1);
-	p9100_ctl_write_4(sc, BYTE_CLIP_MAX, ((x + wi - 1) << 16) | 0x3fff);
-
-	/*
-	 * we need the RGB colours here, so get offsets into rasops_cmap
-	 */
-	fgo = ((attr >> 24) & 0xf) * 3;
-	bgo = ((attr >> 16) & 0xf) * 3;
-
-	r0 = rasops_cmap[bgo];
-	r1 = rasops_cmap[fgo];
-	g0 = rasops_cmap[bgo + 1];
-	g1 = rasops_cmap[fgo + 1];
-	b0 = rasops_cmap[bgo + 2];
-	b1 = rasops_cmap[fgo + 2];
-#define R3G3B2(r, g, b) ((r & 0xe0) | ((g >> 3) & 0x1c) | (b >> 6))
-	bg8 = R3G3B2(r0, g0, b0);
-	fg8 = R3G3B2(r1, g1, b1);
-
-	//r128fb_wait(sc, 16);
-
-	for (i = 0; i < he; i++) {
-		for (j = 0; j < wi; j++) {
-			aval = *data8;
-			if (aval == 0) {
-				pixel = bg8;
-			} else if (aval == 255) {
-				pixel = fg8;
-			} else {
-			r = aval * r1 + (255 - aval) * r0;
-				g = aval * g1 + (255 - aval) * g0;
-				b = aval * b1 + (255 - aval) * b0;
-				pixel = ((r & 0xe000) >> 8) |
-					((g & 0xe000) >> 11) |
-					((b & 0xc000) >> 14);
-			}
-			latch = (latch << 8) | pixel;
-			/* write in 32bit chunks */
-			if ((j & 3) == 3) {
-				bus_space_write_4(sc->sc_bustag, sc->sc_ctl_memh,
-				    COMMAND_PIXEL8, latch);
-				latch = 0;
-			}
-			data8++;
-		}
-		/* if we have pixels left in latch write them out */
-		if ((j & 3) != 0) {
-			latch = latch << ((4 - (j & 3)) << 3);	
-			bus_space_write_4(sc->sc_bustag, sc->sc_ctl_memh,
-			    COMMAND_PIXEL8, latch);
-		}
-	}
-	if (rv == GC_ADD) {
-		glyphcache_add(&sc->sc_gc, c, x, y);
+		/*p9100_sync(sc);*/
 	}
 }
 
@@ -1310,10 +1159,8 @@ p9100_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 					if (new_mode == WSDISPLAYIO_MODE_EMUL)
 					{
 						p9100_init_engine(sc);
-						p9100_set_depth(sc, 8);
 						p9100loadcmap(sc, 0, 256);
 						p9100_clearscreen(sc);
-						glyphcache_wipe(&sc->sc_gc);
 						vcons_redraw_screen(ms);
 					}
 				}
@@ -1365,15 +1212,13 @@ p9100_init_screen(void *cookie, struct vcons_screen *scr,
 	ri->ri_height = sc->sc_height;
 	ri->ri_stride = sc->sc_stride;
 	ri->ri_flg = RI_CENTER | RI_FULLCLEAR;
-	if (ri->ri_depth == 8)
-		ri->ri_flg |= RI_8BIT_IS_RGB | RI_ENABLE_ALPHA;
 
-#ifdef PNOZZ_USE_LATCH
 	ri->ri_bits = bus_space_vaddr(sc->sc_bustag, sc->sc_fb_memh);
-	DPRINTF("addr: %08lx\n",(ulong)ri->ri_bits);
-#endif
 
-	rasops_init(ri, 0, 0);
+#ifdef DEBUG_P9100
+	printf("addr: %08lx\n",(ulong)ri->ri_bits);
+#endif
+	rasops_init(ri, sc->sc_height/8, sc->sc_width/8);
 	ri->ri_caps = WSSCREEN_WSCOLORS;
 	rasops_reconfig(ri, sc->sc_height / ri->ri_font->fontheight,
 		    sc->sc_width / ri->ri_font->fontwidth);
@@ -1384,10 +1229,8 @@ p9100_init_screen(void *cookie, struct vcons_screen *scr,
 	ri->ri_ops.eraserows = p9100_eraserows;
 	ri->ri_ops.copycols  = p9100_copycols;
 	ri->ri_ops.erasecols = p9100_erasecols;
-	if (FONT_IS_ALPHA(ri->ri_font)) {
-		ri->ri_ops.putchar = p9100_putchar_aa;
-	} else
-		ri->ri_ops.putchar = p9100_putchar;
+	ri->ri_ops.putchar   = p9100_putchar;
+	ri->ri_ops.allocattr = p9100_allocattr;
 }
 
 static int
@@ -1524,6 +1367,24 @@ p9100_eraserows(void *cookie, int row, int nrows, long fillattr)
 	p9100_rectfill(scr->scr_cookie, x, y, width, height, bg);
 }
 
+
+static int
+p9100_allocattr(void *cookie, int fg, int bg, int flags, long *attrp)
+{
+	if ((fg == 0) && (bg == 0))
+	{
+		fg = WS_DEFAULT_FG;
+		bg = WS_DEFAULT_BG;
+	}
+	if (flags & WSATTR_REVERSE) {
+		*attrp = (bg & 0xff) << 24 | (fg & 0xff) << 16 |
+		    (flags & 0xff) << 8;
+	} else
+		*attrp = (fg & 0xff) << 24 | (bg & 0xff) << 16 |
+		    (flags & 0xff) << 8;
+	return 0;
+}
+
 #if 0
 static int
 p9100_load_font(void *v, void *cookie, struct wsdisplay_font *data)
@@ -1535,15 +1396,13 @@ p9100_load_font(void *v, void *cookie, struct wsdisplay_font *data)
 
 #endif /* NWSDISPLAY > 0 */
 
-#if 0
 static int
 p9100_intr(void *arg)
 {
-	/*p9100_softc *sc=arg;*/
-	DPRINTF(".");
+	/*p9100_softc *sc=arg;
+	printf(".");*/
 	return 1;
 }
-#endif
 
 static void
 p9100_init_cursor(struct p9100_softc *sc)
@@ -1671,7 +1530,7 @@ p9100_loadcursor(struct p9100_softc *sc)
 			p9100_ramdac_write(sc, DAC_INDX_DATA, latch2);
 		}
 	}
-#ifdef PNOZZ_DEBUG_CURSOR
+#ifdef DEBUG_CURSOR
 	printf("image:\n");
 	for (i=0;i<0x80;i+=2)
 		printf("%08x %08x\n", image[i], image[i+1]);
@@ -1684,7 +1543,6 @@ p9100_loadcursor(struct p9100_softc *sc)
 #endif
 }
 
-#if NTCTRL > 0
 static void
 p9100_set_extvga(void *cookie, int status)
 {
@@ -1694,197 +1552,22 @@ p9100_set_extvga(void *cookie, int status)
 
 	s = splhigh();
 #endif
-
-#ifdef PNOZZ_DEBUG
-	printf("%s: external VGA %s\n", device_xname(sc->sc_dev),
+#ifdef DEBUG
+	printf("%s: external VGA %s\n", device_xname(&sc->sc_dev),
 	    status ? "on" : "off");
 #endif
-
 	sc->sc_last_offset = 0xffffffff;
 
 	if (status) {
-		p9100_ramdac_write_ctl(sc, DAC_POWER_MGT,
-		    p9100_ramdac_read_ctl(sc, DAC_POWER_MGT) &
+		p9100_ramdac_write_ctl(sc, DAC_POWER,
+		    p9100_ramdac_read_ctl(sc, DAC_POWER) &
 		    ~DAC_POWER_IPWR_DISABLE);
 	} else {
-		p9100_ramdac_write_ctl(sc, DAC_POWER_MGT,
-		    p9100_ramdac_read_ctl(sc, DAC_POWER_MGT) |
+		p9100_ramdac_write_ctl(sc, DAC_POWER,
+		    p9100_ramdac_read_ctl(sc, DAC_POWER) |
 		    DAC_POWER_IPWR_DISABLE);
 	}
 #ifdef PNOZZ_PARANOID
 	splx(s);
 #endif
-}
-#endif /* NTCTRL > 0 */
-
-static int
-upper_bit(uint32_t b)
-{
-        uint32_t mask=0x80000000;
-        int cnt = 31;
-        if (b == 0)  
-                return -1;
-        while ((mask != 0) && ((b & mask) == 0)) {
-                mask = mask >> 1;
-                cnt--;
-        }
-        return cnt;
-}
-
-static int
-p9100_set_depth(struct p9100_softc *sc, int depth)
-{
-	int new_sls;
-	uint32_t bits, scr, memctl, mem;
-	int s0, s1, s2, s3, ps, crtcline;
-	uint8_t pf, mc3, es;
-
-	switch (depth) {
-		case 8:
-			sc->sc_depthshift = 0;
-			ps = 2;
-			pf = 3;
-			mc3 = 0;
-			es = 0;	/* no swapping */
-			memctl = 3;
-			break;
-		case 16:
-			sc->sc_depthshift = 1;
-			ps = 3;
-			pf = 4;
-			mc3 = 0;
-			es = 2;	/* swap bytes in 16bit words */
-			memctl = 2;
-			break;
-		case 24:
-			/* boo */
-			printf("We don't DO 24bit pixels dammit!\n");
-			return 0;
-		case 32:
-			sc->sc_depthshift = 2;
-			ps = 5;
-			pf = 6;
-			mc3 = 0;
-			es = 6;	/* swap both half-words and bytes */
-			memctl = 1;	/* 0 */
-			break;
-		default:
-			aprint_error("%s: bogus colour depth (%d)\n",
-			    __func__, depth);
-			return FALSE;
-	}
-	/*
-	 * this could be done a lot shorter and faster but then nobody would 
-	 * understand what the hell we're doing here without getting a major 
-	 * headache. Scanline size is encoded as 4 shift values, 3 of them 3 bits 
-	 * wide, 16 << n for n>0, one 2 bits, 512 << n for n>0. n==0 means 0
-	 */
-	new_sls = sc->sc_width << sc->sc_depthshift;
-	sc->sc_stride = new_sls;
-	bits = new_sls;
-	s3 = upper_bit(bits);
-	if (s3 > 9) {
-		bits &= ~(1 << s3);
-		s3 -= 9;
-	} else
-		s3 = 0;
-	s2 = upper_bit(bits);
-	if (s2 > 0) {
-		bits &= ~(1 << s2);
-		s2 -= 4;
-	} else
-		s2 = 0;
-	s1 = upper_bit(bits);
-	if (s1 > 0) {
-	        bits &= ~(1 << s1);
-	        s1 -= 4;
-	} else
-		s1 = 0;
-	s0 = upper_bit(bits);
-	if (s0 > 0) {
-	        bits &= ~(1 << s0);
-	        s0 -= 4;
-	} else
-		s0 = 0;
-
-
-	DPRINTF("sls: %x sh: %d %d %d %d leftover: %x\n", new_sls, s0, s1,
-	    s2, s3, bits);
-
-	/* 
-	 * now let's put these values into the System Config Register. No need to 
-	 * read it here since we (hopefully) just saved the content 
-	 */
-	scr = p9100_ctl_read_4(sc, SYS_CONF);
-	scr = (s0 << SHIFT_0) | (s1 << SHIFT_1) | (s2 << SHIFT_2) | 
-	        (s3 << SHIFT_3) | (ps << PIXEL_SHIFT) | (es << SWAP_SHIFT);
-
-	DPRINTF("new scr: %x DAC %x %x\n", scr, pf, mc3);
-    
-	mem = p9100_ctl_read_4(sc, VID_MEM_CONFIG);
-
-	DPRINTF("old memctl: %08x\n", mem);
-
-	/* set shift and crtc clock */
-	mem &= ~(0x0000fc00);
-	mem |= (memctl << 10) | (memctl << 13);
-	p9100_ctl_write_4(sc, VID_MEM_CONFIG, mem);
-
-	DPRINTF("new memctl: %08x\n", mem);
-
-	/* whack the engine... */
-	p9100_ctl_write_4(sc, SYS_CONF, scr);
-    
-	/* ok, whack the DAC */
-	p9100_ramdac_write_ctl(sc, DAC_MISC_1, 0x11);
-	p9100_ramdac_write_ctl(sc, DAC_MISC_2, 0x45);
-	p9100_ramdac_write_ctl(sc, DAC_MISC_3, mc3);
-	/* 
-	 * despite the 3GX manual saying otherwise we don't need to mess with
-	 * any clock dividers here
-	 */
-	p9100_ramdac_write_ctl(sc, DAC_MISC_CLK, 1);
-	p9100_ramdac_write_ctl(sc, 3, 0);
-	p9100_ramdac_write_ctl(sc, 4, 0);
-
-	p9100_ramdac_write_ctl(sc, DAC_POWER_MGT, 0);
-	p9100_ramdac_write_ctl(sc, DAC_OPERATION, 0);
-	p9100_ramdac_write_ctl(sc, DAC_PALETTE_CTRL, 0);
-
-	p9100_ramdac_write_ctl(sc, DAC_PIXEL_FMT, pf);
-
-	/* TODO: distinguish between 15 and 16 bit */
-	p9100_ramdac_write_ctl(sc, DAC_8BIT_CTRL, 0);
-	/* direct colour, linear, 565 */
-	p9100_ramdac_write_ctl(sc, DAC_16BIT_CTRL, 0xc6);
-	/* direct colour */
-	p9100_ramdac_write_ctl(sc, DAC_32BIT_CTRL, 3);
-
-	/* From the 3GX manual. Needs magic number reduction */
-	p9100_ramdac_write_ctl(sc, 0x10, 2);
-	p9100_ramdac_write_ctl(sc, 0x11, 0);
-	p9100_ramdac_write_ctl(sc, 0x14, 5);
-	p9100_ramdac_write_ctl(sc, 0x08, 1);
-	p9100_ramdac_write_ctl(sc, 0x15, 5);
-	p9100_ramdac_write_ctl(sc, 0x16, 0x63);
-
-	/* whack the CRTC */
-	/* we always transfer 64bit in one go */
-	crtcline = sc->sc_stride >> 3;
-
-	DPRINTF("crtcline: %d\n", crtcline);
-
-	p9100_ctl_write_4(sc, VID_HTOTAL, (24 << sc->sc_depthshift) + crtcline);
-	p9100_ctl_write_4(sc, VID_HSRE, 8 << sc->sc_depthshift);
-	p9100_ctl_write_4(sc, VID_HBRE, 18 << sc->sc_depthshift);
-	p9100_ctl_write_4(sc, VID_HBFE, (18 << sc->sc_depthshift) + crtcline);
-
-#ifdef PNOZZ_DEBUG
-	{
-		uint32_t sscr;
-		sscr = p9100_ctl_read_4(sc, SYS_CONF);
-		printf("scr: %x\n", sscr);
-	}
-#endif
-	return TRUE;
 }

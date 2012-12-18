@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs.S,v 1.3 2011/07/04 12:18:05 mrg Exp $	*/
+/*	$NetBSD: ffs.S,v 1.2 2008/04/28 20:22:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #include <machine/asm.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: ffs.S,v 1.3 2011/07/04 12:18:05 mrg Exp $")
+	RCSID("$NetBSD: ffs.S,v 1.2 2008/04/28 20:22:52 martin Exp $")
 #endif
 
 /*
@@ -42,7 +42,6 @@
  * The remaining 8bit is tested in every 2bit.
  */
 
-WEAK_ALIAS(__ffssi2,ffs)
 ENTRY(ffs)
 	mov	r4,r0		! using r0 specific instructions
 	tst	#0xff,r0

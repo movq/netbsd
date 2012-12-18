@@ -1,4 +1,4 @@
-/*	$NetBSD: memcpy.S,v 1.5 2011/07/12 07:51:33 mrg Exp $	*/
+/*	$NetBSD: memcpy.S,v 1.2 2001/08/01 05:52:12 eeh Exp $	*/
 
 /*
  * Copyright (c) 2001	Eduardo E. Horvath
@@ -46,24 +46,19 @@
 #include <machine/psl.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: memcpy.S,v 1.5 2011/07/12 07:51:33 mrg Exp $")
+	RCSID("$NetBSD: memcpy.S,v 1.2 2001/08/01 05:52:12 eeh Exp $")
 #endif  /* LIBC_SCCS and not lint */
 
 #define	EMPTY	nop
 #define	NOTREACHED	ta	1
 
 #define	BCOPY_SMALL	16
-#define	BLOCK_SIZE	SPARC64_BLOCK_SIZE
-#define	BLOCK_ALIGN	SPARC64_BLOCK_ALIGN
+#define	BLOCK_SIZE	64
 
 #if 0
 #define ASI_STORE	ASI_BLK_COMMIT_P
 #else
 #define ASI_STORE	ASI_BLK_P
-#endif
-
-#ifndef	_ALIGN
-#define _ALIGN	.align 8
 #endif
 
 #if 1
@@ -733,7 +728,7 @@ Lbcopy_complete:
 	.data
 0:	.asciz	"bcopy failed: %x@%p != %x@%p byte %d\n"
 1:	.asciz	"bcopy(%p, %p, %lx)\n"
-	_ALIGN
+	.align 8
 	.text
 2:	
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: bounce_notify_util.c,v 1.1.1.1 2009/06/23 10:08:42 tron Exp $	*/
+/*	$NetBSD: bounce_notify_util.c,v 1.1.1.1.2.3 2011/01/07 01:23:59 riz Exp $	*/
 
 /*++
 /* NAME

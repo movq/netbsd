@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.do.c,v 1.11 2011/08/06 20:29:37 dholland Exp $	*/
+/*	$NetBSD: hack.do.c,v 1.7 2004/01/27 20:30:29 jsm Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,29 +63,29 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.do.c,v 1.11 2011/08/06 20:29:37 dholland Exp $");
+__RCSID("$NetBSD: hack.do.c,v 1.7 2004/01/27 20:30:29 jsm Exp $");
 #endif				/* not lint */
 
 /* Contains code for 'd', 'D' (drop), '>', '<' (up, down) and 't' (throw) */
 
+#include "hack.h"
+#include "extern.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include "hack.h"
-#include "extern.h"
 
 
 static int drop(struct obj *);
-static void dropy(struct obj *);
 
 int
-dodrop(void)
+dodrop()
 {
 	return (drop(getobj("0$#", "drop")));
 }
 
 static int
-drop(struct obj *obj)
+drop(obj)
+	struct obj     *obj;
 {
 	if (!obj)
 		return (0);
@@ -101,7 +101,7 @@ drop(struct obj *obj)
 			if (Invisible)
 				newsym(u.ux, u.uy);
 		}
-		free(obj);
+		free((char *) obj);
 		return (1);
 	}
 	if (obj->owornmask & (W_ARMOR | W_RING)) {
@@ -122,14 +122,16 @@ drop(struct obj *obj)
 
 /* Called in several places - should not produce texts */
 void
-dropx(struct obj *obj)
+dropx(obj)
+	struct obj     *obj;
 {
 	freeinv(obj);
 	dropy(obj);
 }
 
-static void
-dropy(struct obj *obj)
+void
+dropy(obj)
+	struct obj     *obj;
 {
 	if (obj->otyp == CRYSKNIFE)
 		obj->otyp = WORM_TOOTH;
@@ -145,13 +147,13 @@ dropy(struct obj *obj)
 
 /* drop several things */
 int
-doddrop(void)
+doddrop()
 {
 	return (ggetobj("drop", drop, 0));
 }
 
 int
-dodown(void)
+dodown()
 {
 	if (u.ux != xdnstair || u.uy != ydnstair) {
 		pline("You can't go down here.");
@@ -170,7 +172,7 @@ dodown(void)
 }
 
 int
-doup(void)
+doup()
 {
 	if (u.ux != xupstair || u.uy != yupstair) {
 		pline("You can't go up here.");
@@ -189,7 +191,9 @@ doup(void)
 }
 
 void
-goto_level(int newlevel, boolean at_stairs)
+goto_level(newlevel, at_stairs)
+	int             newlevel;
+	boolean         at_stairs;
 {
 	int fd;
 	boolean         up = (newlevel < dlevel);
@@ -314,13 +318,13 @@ goto_level(int newlevel, boolean at_stairs)
 }
 
 int
-donull(void)
+donull()
 {
 	return (1);		/* Do nothing, but let other things happen */
 }
 
 int
-dopray(void)
+dopray()
 {
 	nomovemsg = "You finished your prayer.";
 	nomul(-3);
@@ -328,7 +332,7 @@ dopray(void)
 }
 
 int
-dothrow(void)
+dothrow()
 {
 	struct obj     *obj;
 	struct monst   *mon;
@@ -527,7 +531,9 @@ dothrow(void)
 /* split obj so that it gets size num */
 /* remainder is put in the object structure delivered by this call */
 struct obj     *
-splitobj(struct obj *obj, int num)
+splitobj(obj, num)
+	struct obj     *obj;
+	int             num;
 {
 	struct obj     *otmp;
 	otmp = newobj(0);
@@ -545,7 +551,8 @@ splitobj(struct obj *obj, int num)
 }
 
 void
-more_experienced(int exp, int rexp)
+more_experienced(exp, rexp)
+	int             exp, rexp;
 {
 	u.uexp += exp;
 	u.urexp += 4 * exp + rexp;
@@ -556,7 +563,9 @@ more_experienced(int exp, int rexp)
 }
 
 void
-set_wounded_legs(long side, int timex)
+set_wounded_legs(side, timex)
+	long            side;
+	int             timex;
 {
 	if (!Wounded_legs || (Wounded_legs & TIMEOUT))
 		Wounded_legs |= side + timex;
@@ -565,7 +574,7 @@ set_wounded_legs(long side, int timex)
 }
 
 void
-heal_legs(void)
+heal_legs()
 {
 	if (Wounded_legs) {
 		if ((Wounded_legs & BOTH_SIDES) == BOTH_SIDES)

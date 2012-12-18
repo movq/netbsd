@@ -1,4 +1,4 @@
-/*  $NetBSD: bswap64.c,v 1.3 2009/03/16 05:59:21 cegger Exp $    */
+/*  $NetBSD: bswap64.c,v 1.2 2008/02/16 17:37:13 apb Exp $    */
 
 /*
  * Written by Manuel Bouyer <bouyer@NetBSD.org>.
@@ -7,7 +7,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: bswap64.c,v 1.3 2009/03/16 05:59:21 cegger Exp $");
+__RCSID("$NetBSD: bswap64.c,v 1.2 2008/02/16 17:37:13 apb Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -16,7 +16,8 @@ __RCSID("$NetBSD: bswap64.c,v 1.3 2009/03/16 05:59:21 cegger Exp $");
 #undef bswap64
 
 uint64_t
-bswap64(uint64_t x)
+bswap64(x)
+	uint64_t x;
 {
 #ifdef _LP64
 	/*

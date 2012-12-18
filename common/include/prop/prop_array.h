@@ -1,7 +1,7 @@
-/*     $NetBSD: prop_array.h,v 1.13 2011/09/30 22:08:18 jym Exp $    */
+/*     $NetBSD: prop_array.h,v 1.8 2008/09/11 13:15:13 haad Exp $    */
 
 /*-
- * Copyright (c) 2006, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2006 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -66,20 +66,12 @@ bool		prop_array_externalize_to_file(prop_array_t, const char *);
 prop_array_t	prop_array_internalize_from_file(const char *);
 
 #if defined(__NetBSD__)
-struct plistref;
-
 #if !defined(_KERNEL) && !defined(_STANDALONE)
-bool		prop_array_externalize_to_pref(prop_array_t, struct plistref *);
-bool		prop_array_internalize_from_pref(const struct plistref *,
-		                                 prop_array_t *);
 int		prop_array_send_ioctl(prop_array_t, int, unsigned long);
 int		prop_array_recv_ioctl(int, unsigned long, prop_array_t *);
-int		prop_array_send_syscall(prop_array_t, struct plistref *);
-int		prop_array_recv_syscall(const struct plistref *,
-					prop_array_t *);
 #elif defined(_KERNEL)
-int		prop_array_copyin(const struct plistref *, prop_array_t *);
-int		prop_array_copyout(struct plistref *, prop_array_t);
+struct plistref;
+
 int		prop_array_copyin_ioctl(const struct plistref *, const u_long,
 					prop_array_t *);
 int		prop_array_copyout_ioctl(struct plistref *, const u_long,
@@ -155,8 +147,6 @@ bool		prop_array_get_cstring_nocopy(prop_array_t,
 bool		prop_array_set_cstring_nocopy(prop_array_t,
 						   unsigned int,
 						   const char *);
-
-bool		prop_array_add_and_rel(prop_array_t, prop_object_t);
 
 __END_DECLS
 

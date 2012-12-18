@@ -27,14 +27,14 @@
  *	i4b_bchan.c - B channel handling L1 procedures
  *	----------------------------------------------
  *
- *	$Id: isic_bchan.c,v 1.15 2012/10/27 17:18:21 chs Exp $
+ *	$Id: isic_bchan.c,v 1.13 2008/04/08 12:07:26 cegger Exp $
  *
  *      last edit-date: [Fri Jan  5 11:36:11 2001]
  *
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_bchan.c,v 1.15 2012/10/27 17:18:21 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_bchan.c,v 1.13 2008/04/08 12:07:26 cegger Exp $");
 
 #include <sys/param.h>
 #if defined(__FreeBSD__) && __FreeBSD__ >= 3
@@ -45,6 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: isic_bchan.c,v 1.15 2012/10/27 17:18:21 chs Exp $");
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
+#include <machine/stdarg.h>
 
 #ifdef __FreeBSD__
 #include <machine/clock.h>
@@ -100,7 +101,7 @@ isic_bchannel_setup(isdn_layer1token t, int h_chan, int bprot, int activate)
 	}
 
 	NDBGL1(L1_BCHAN, "%s, channel=%d, %s",
-		device_xname(sc->sc_dev), h_chan, activate ? "activate" : "deactivate");
+		device_xname(&sc->sc_dev), h_chan, activate ? "activate" : "deactivate");
 
 	/* general part */
 

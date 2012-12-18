@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.8 2009/04/13 00:27:38 lukem Exp $ */
+/*	$NetBSD: pmap.h,v 1.7.6.1 2012/05/20 17:32:24 riz Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -55,6 +55,9 @@
 #include <uvm/uvm_device.h>
 
 #include <ufs/ufs/inode.h>
+#undef i_endoff
+#undef i_diroff
+#undef i_offset
 #undef doff_t
 #undef IN_ACCESS
 #include <isofs/cd9660/iso.h>
@@ -92,7 +95,7 @@
 
 /* suck the data from the kernel */
 #define _KDEREFOK(kd, addr, dst, sz) \
-	((size_t)kvm_read((kd), (addr), (dst), (sz)) == (size_t)(sz))
+	(kvm_read((kd), (addr), (dst), (sz)) == (sz))
 #define _KDEREF(kd, addr, dst, sz) do { \
 	if (!_KDEREFOK((kd), (addr), (dst), (sz))) \
 		errx(1, "trying to read %lu bytes from %lx: %s", \

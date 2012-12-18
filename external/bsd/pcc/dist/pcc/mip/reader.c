@@ -1,5 +1,4 @@
-/*	Id: reader.c,v 1.278 2012/03/22 18:51:41 plunky Exp 	*/	
-/*	$NetBSD: reader.c,v 1.1.1.6 2012/03/26 14:27:14 plunky Exp $	*/
+/*	$Id: reader.c,v 1.1.1.1 2008/08/24 05:33:09 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -12,6 +11,8 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -60,8 +61,12 @@
  */
 
 /*
- * Everything is entered via pass2_compile().  No functions are 
- * allowed to recurse back into pass2_compile().
+ * Everything is entered via pass2_compile().  Three functions are 
+ * allowed to recurse into pass2_compile(), so be careful:
+ * - deluseless()
+ * - myreader()
+ * Especially in myreader note that trees may be rewritten twice if
+ * things are not carefully handled.
  */
 
 # include "pass2.h"
@@ -72,189 +77,50 @@
 
 /*	some storage declarations */
 int nrecur;
+int lflag;
+int x2debug;
+int udebug = 0;
 int thisline;
 int fregs;
 int p2autooff, p2maxautooff;
 
 NODE *nodepole;
 FILE *prfil;
-struct interpass prepole;
+static struct interpass prepole;
 
 void saveip(struct interpass *ip);
-void deltemp(NODE *p, void *);
+void deltemp(NODE *p);
 static void cvtemps(struct interpass *ipole, int op, int off);
 NODE *store(NODE *);
-static void fixxasm(struct p2env *);
+static void fixxasm(struct interpass *ip);
 
 static void gencode(NODE *p, int cookie);
 static void genxasm(NODE *p);
-static void afree(void);
 
-struct p2env p2env;
+char *ltyp[] = { "", "LREG", "LOREG", "LTEMP" };
+char *rtyp[] = { "", "RREG", "ROREG", "RTEMP" };
 
-int
-getlab2(void)
-{
-	extern int getlab(void);
-	int rv = getlab();
-#ifdef PCC_DEBUG
-	if (p2env.epp->ip_lblnum != rv)
-		comperr("getlab2 error: %d != %d", p2env.epp->ip_lblnum, rv);
-#endif
-	p2env.epp->ip_lblnum++;
-	return rv;
-}
+/* used when removing nodes */
+struct tmpsave {
+	struct tmpsave *next;
+	CONSZ tempaddr;
+	int tempno;
+} *tmpsave;
 
 #ifdef PCC_DEBUG
-static int *lbldef, *lbluse;
 static void
-cktree(NODE *p, void *arg)
+cktree(NODE *p)
 {
-	int i;
-
 	if (p->n_op > MAXOP)
 		cerror("%p) op %d slipped through", p, p->n_op);
-#ifndef FIELDOPS
-	if (p->n_op == FLD)
-		cerror("%p) FLD slipped through", p);
-#endif
 	if (BTYPE(p->n_type) > MAXTYPES)
 		cerror("%p) type %x slipped through", p, p->n_type);
-	if (p->n_op == CBRANCH) {
-		 if (!logop(p->n_left->n_op))
-			cerror("%p) not logop branch", p);
-		i = (int)p->n_right->n_lval;
-		if (i < p2env.ipp->ip_lblnum || i >= p2env.epp->ip_lblnum)
-			cerror("%p) label %d outside boundaries %d-%d",
-			    p, i, p2env.ipp->ip_lblnum, p2env.epp->ip_lblnum);
-		lbluse[i-p2env.ipp->ip_lblnum] = 1;
-	}
+	if (p->n_op == CBRANCH && !logop(p->n_left->n_op))
+		cerror("%p) not logop branch", p);
 	if ((dope[p->n_op] & ASGOPFLG) && p->n_op != RETURN)
 		cerror("%p) asgop %d slipped through", p, p->n_op);
-	if (p->n_op == TEMP &&
-	    (regno(p) < p2env.ipp->ip_tmpnum || regno(p) >= p2env.epp->ip_tmpnum))
-		cerror("%p) temporary %d outside boundaries %d-%d",
-		    p, regno(p), p2env.ipp->ip_tmpnum, p2env.epp->ip_tmpnum);
-	if (p->n_op == GOTO && p->n_left->n_op == ICON) {
-		i = (int)p->n_left->n_lval;
-		if (i < p2env.ipp->ip_lblnum || i >= p2env.epp->ip_lblnum)
-			cerror("%p) label %d outside boundaries %d-%d",
-			    p, i, p2env.ipp->ip_lblnum, p2env.epp->ip_lblnum);
-		lbluse[i-p2env.ipp->ip_lblnum] = 1;
-	}
-}
-
-/*
- * Check that the trees are in a suitable state for pass2.
- */
-static void
-sanitychecks(struct p2env *p2e)
-{
-	struct interpass *ip;
-	int i;
-#ifdef notyet
-	TMPMARK();
-#endif
-	lbldef = tmpcalloc(sizeof(int) * (p2e->epp->ip_lblnum - p2e->ipp->ip_lblnum));
-	lbluse = tmpcalloc(sizeof(int) * (p2e->epp->ip_lblnum - p2e->ipp->ip_lblnum));
-
-	DLIST_FOREACH(ip, &p2env.ipole, qelem) {
-		if (ip->type == IP_DEFLAB) {
-			i = ip->ip_lbl;
-			if (i < p2e->ipp->ip_lblnum || i >= p2e->epp->ip_lblnum)
-				cerror("label %d outside boundaries %d-%d",
-				    i, p2e->ipp->ip_lblnum, p2e->epp->ip_lblnum);
-			lbldef[i-p2e->ipp->ip_lblnum] = 1;
-		}
-		if (ip->type == IP_NODE)
-			walkf(ip->ip_node, cktree, 0);
-	}
-	for (i = 0; i < (p2e->epp->ip_lblnum - p2e->ipp->ip_lblnum); i++)
-		if (lbluse[i] != 0 && lbldef[i] == 0)
-			cerror("internal label %d not defined",
-			    i + p2e->ipp->ip_lblnum);
-
-#ifdef notyet
-	TMPFREE();
-#endif
 }
 #endif
-
-/*
- * Look if a temporary comes from a on-stack argument, in that case
- * use the already existing stack position instead of moving it to
- * a new place, and remove the move-to-temp statement.
- */
-static int
-stkarg(int tnr, int (*soff)[2])
-{
-	struct p2env *p2e = &p2env;
-	struct interpass *ip;
-	NODE *p;
-
-	ip = DLIST_NEXT((struct interpass *)p2e->ipp, qelem);
-	while (ip->type != IP_DEFLAB) /* search for first DEFLAB */
-		ip = DLIST_NEXT(ip, qelem);
-
-	ip = DLIST_NEXT(ip, qelem); /* first NODE */
-
-	for (; ip->type != IP_DEFLAB; ip = DLIST_NEXT(ip, qelem)) {
-		if (ip->type != IP_NODE)
-			continue;
-
-		p = ip->ip_node;
-		if (p->n_op == XASM)
-			continue; /* XXX - hack for x86 PIC */
-#ifdef notdef
-		if (p->n_op != ASSIGN || p->n_left->n_op != TEMP)
-			comperr("temparg");
-#endif
-		if (p->n_op != ASSIGN || p->n_left->n_op != TEMP)
-			continue; /* unknown tree */
-
-		if (p->n_right->n_op != OREG && p->n_right->n_op != UMUL)
-			continue; /* arg in register */
-		if (tnr != regno(p->n_left))
-			continue; /* wrong assign */
-		p = p->n_right;
-		if (p->n_op == UMUL &&
-		    p->n_left->n_op == PLUS &&
-		    p->n_left->n_left->n_op == REG &&
-		    p->n_left->n_right->n_op == ICON) {
-			soff[0][0] = regno(p->n_left->n_left);
-			soff[0][1] = (int)p->n_left->n_right->n_lval;
-		} else if (p->n_op == OREG) {
-			soff[0][0] = regno(p);
-			soff[0][1] = (int)p->n_lval;
-		} else
-			comperr("stkarg: bad arg");
-		tfree(ip->ip_node);
-		DLIST_REMOVE(ip, qelem);
-		return 1;
-	}
-	return 0;
-}
-
-/*
- * See if an ADDROF is somewhere inside the expression tree.
- * If so, fill in the offset table.
- */
-static void
-findaof(NODE *p, void *arg)
-{
-	int (*aof)[2] = arg;
-	int tnr;
-
-	if (p->n_op != ADDROF || p->n_left->n_op != TEMP)
-		return;
-	tnr = regno(p->n_left);
-	if (aof[tnr][0])
-		return; /* already gotten stack address */
-	if (stkarg(tnr, &aof[tnr]))
-		return;	/* argument was on stack */
-	aof[tnr][0] = FPREG;
-	aof[tnr][1] = BITOOR(freetemp(szty(p->n_left->n_type)));
-}
 
 /*
  * Check if a node has side effects.
@@ -287,7 +153,7 @@ isuseless(NODE *n)
 /*
  * Delete statements with no meaning (like a+b; or 513.4;)
  */
-NODE *
+static NODE *
 deluseless(NODE *p)
 {
 	struct interpass *ip;
@@ -321,79 +187,50 @@ deluseless(NODE *p)
 	return NULL;
 }
 
+static struct interpass ipole;
+struct interpass_prolog *ipp, *epp;
+
 /*
  * Receives interpass structs from pass1.
  */
 void
 pass2_compile(struct interpass *ip)
 {
-	void deljumps(struct p2env *);
-	struct p2env *p2e = &p2env;
-	int (*addrp)[2];
-	MARK mark;
-
 	if (ip->type == IP_PROLOG) {
-		memset(p2e, 0, sizeof(struct p2env));
-		p2e->ipp = (struct interpass_prolog *)ip;
-		DLIST_INIT(&p2e->ipole, qelem);
+		tmpsave = NULL;
+		ipp = (struct interpass_prolog *)ip;
+		DLIST_INIT(&ipole, qelem);
 	}
-	DLIST_INSERT_BEFORE(&p2e->ipole, ip, qelem);
+	DLIST_INSERT_BEFORE(&ipole, ip, qelem);
 	if (ip->type != IP_EPILOG)
 		return;
 
 #ifdef PCC_DEBUG
 	if (e2debug) {
 		printf("Entering pass2\n");
-		printip(&p2e->ipole);
+		printip(&ipole);
 	}
 #endif
 
-	afree();
-	p2e->epp = (struct interpass_prolog *)DLIST_PREV(&p2e->ipole, qelem);
-	p2maxautooff = p2autooff = p2e->epp->ipp_autos;
+	epp = (struct interpass_prolog *)DLIST_PREV(&ipole, qelem);
+	p2maxautooff = p2autooff = epp->ipp_autos;
 
-#ifdef PCC_DEBUG
-	sanitychecks(p2e);
-#endif
-	myreader(&p2e->ipole); /* local massage of input */
+	myreader(&ipole); /* local massage of input */
 
-	/*
-	 * Do initial modification of the trees.  Two loops;
-	 * - first, search for ADDROF of TEMPs, these must be
-	 *   converterd to OREGs on stack.
-	 * - second, do the actual conversions, in case of not xtemps
-	 *   convert all temporaries to stack references.
-	 */
-	markset(&mark);
-	if (p2e->epp->ip_tmpnum != p2e->ipp->ip_tmpnum) {
-		addrp = tmpcalloc(sizeof(*addrp) *
-		    (p2e->epp->ip_tmpnum - p2e->ipp->ip_tmpnum));
-		addrp -= p2e->ipp->ip_tmpnum;
-	} else
-		addrp = NULL;
-	if (xtemps) {
-		DLIST_FOREACH(ip, &p2e->ipole, qelem) {
-			if (ip->type == IP_NODE)
-				walkf(ip->ip_node, findaof, addrp);
-		}
+	DLIST_FOREACH(ip, &ipole, qelem) {
+		if (ip->type != IP_NODE)
+			continue;
+		if (xtemps == 0)
+			walkf(ip->ip_node, deltemp);
 	}
-	DLIST_FOREACH(ip, &p2e->ipole, qelem)
-		if (ip->type == IP_NODE)
-			walkf(ip->ip_node, deltemp, addrp);
-	markfree(&mark);
-
-#ifdef PCC_DEBUG
-	if (e2debug) {
-		printf("Efter ADDROF/TEMP\n");
-		printip(&p2e->ipole);
-	}
-#endif
-
 	DLIST_INIT(&prepole, qelem);
-	DLIST_FOREACH(ip, &p2e->ipole, qelem) {
+	DLIST_FOREACH(ip, &ipole, qelem) {
 		if (ip->type != IP_NODE)
 			continue;
 		canon(ip->ip_node);
+#ifdef PCC_DEBUG
+		walkf(ip->ip_node, cktree);
+#endif
 		if ((ip->ip_node = deluseless(ip->ip_node)) == NULL) {
 			DLIST_REMOVE(ip, qelem);
 		} else while (!DLIST_ISEMPTY(&prepole, qelem)) {
@@ -405,15 +242,12 @@ pass2_compile(struct interpass *ip)
 		}
 	}
 
-	fixxasm(p2e); /* setup for extended asm */
+	fixxasm(&ipole); /* setup for extended asm */
 
-	optimize(p2e);
-	ngenregs(p2e);
+	optimize(&ipole);
+	ngenregs(&ipole);
 
-	if (xssa && xtemps && xdeljumps)
-		deljumps(p2e);
-
-	DLIST_FOREACH(ip, &p2e->ipole, qelem)
+	DLIST_FOREACH(ip, &ipole, qelem)
 		emit(ip);
 }
 
@@ -429,11 +263,10 @@ emit(struct interpass *ip)
 		p = ip->ip_node;
 
 		nodepole = p;
+//printf("bu:\n");
+//fwalk(p, e2print, 0);
 		canon(p); /* may convert stuff after genregs */
-		if (c2debug > 1) {
-			printf("emit IP_NODE:\n");
-			fwalk(p, e2print, 0);
-		}
+//fwalk(p, e2print, 0);
 		switch (p->n_op) {
 		case CBRANCH:
 			/* Only emit branch insn if RESCC */
@@ -471,6 +304,7 @@ emit(struct interpass *ip)
 		break;
 	case IP_EPILOG:
 		eoftn((struct interpass_prolog *)ip);
+		tmpsave = NULL;	/* Always forget old nodes */
 		p2maxautooff = p2autooff = AUTOINIT/SZCHAR;
 		break;
 	case IP_DEFLAB:
@@ -539,23 +373,23 @@ prcook(int cookie)
 	}
 	return buf;
 }
+
 #endif
+
+int odebug = 0;
 
 int
 geninsn(NODE *p, int cookie)
 {
 	NODE *p1, *p2;
-	int q, o, rv = 0;
+	int o, rv = 0;
 
 #ifdef PCC_DEBUG
-	if (o2debug) {
+	if (odebug) {
 		printf("geninsn(%p, %s)\n", p, prcook(cookie));
 		fwalk(p, e2print, 0);
 	}
 #endif
-
-	q = cookie & QUIET;
-	cookie &= ~QUIET; /* XXX - should not be necessary */
 
 again:	switch (o = p->n_op) {
 	case EQ:
@@ -570,15 +404,10 @@ again:	switch (o = p->n_op) {
 	case UGT:
 		p1 = p->n_left;
 		p2 = p->n_right;
-		if (p2->n_op == ICON && p2->n_lval == 0 && *p2->n_name == 0 &&
-		    (dope[p1->n_op] & (FLOFLG|DIVFLG|SIMPFLG|SHFFLG))) {
-#ifdef mach_pdp11 /* XXX all targets? */
-			if ((rv = geninsn(p1, FORCC|QUIET)) != FFAIL)
+		if (p2->n_op == ICON && p2->n_lval == 0 &&
+		    optype(p1->n_op) == BITYPE) {
+			if (findops(p1, FORCC) == 0)
 				break;
-#else
-			if (findops(p1, FORCC) > 0)
-				break;
-#endif
 		}
 		rv = relops(p);
 		break;
@@ -597,11 +426,6 @@ again:	switch (o = p->n_op) {
 		break;
 
 	case ASSIGN:
-#ifdef FINDMOPS
-		if ((rv = findmops(p, cookie)) != FFAIL)
-			break;
-		/* FALLTHROUGH */
-#endif
 	case STASG:
 		rv = findasg(p, cookie);
 		break;
@@ -623,8 +447,8 @@ again:	switch (o = p->n_op) {
 	case CALL:
 		/* CALL arguments are handled special */
 		for (p1 = p->n_right; p1->n_op == CM; p1 = p1->n_left)
-			(void)geninsn(p1->n_right, FOREFF);
-		(void)geninsn(p1, FOREFF);
+			geninsn(p1->n_right, FOREFF);
+		geninsn(p1, FOREFF);
 		/* FALLTHROUGH */
 	case FLD:
 	case COMPL:
@@ -644,42 +468,34 @@ again:	switch (o = p->n_op) {
 	case CBRANCH:
 		p1 = p->n_left;
 		p2 = p->n_right;
-		p1->n_label = (int)p2->n_lval;
-		(void)geninsn(p1, FORCC);
+		p1->n_label = p2->n_lval;
+		geninsn(p1, FORCC);
 		p->n_su = 0;
 		break;
 
 	case FORCE: /* XXX needed? */
-		(void)geninsn(p->n_left, INREGS);
+		geninsn(p->n_left, INREGS);
 		p->n_su = 0; /* su calculations traverse left */
 		break;
 
 	case XASM:
 		for (p1 = p->n_left; p1->n_op == CM; p1 = p1->n_left)
-			(void)geninsn(p1->n_right, FOREFF);
-		(void)geninsn(p1, FOREFF);
+			geninsn(p1->n_right, FOREFF);
+		geninsn(p1, FOREFF);
 		break;	/* all stuff already done? */
 
 	case XARG:
 		/* generate code for correct class here */
-#if 0
-		geninsn(p->n_left, 1 << p->n_label);
-#endif
+//		geninsn(p->n_left, 1 << p->n_label);
 		break;
 
 	default:
 		comperr("geninsn: bad op %s, node %p", opst[o], p);
 	}
-	if (rv == FFAIL && !q)
+	if (rv == FFAIL)
 		comperr("Cannot generate code, node %p op %s", p,opst[p->n_op]);
 	if (rv == FRETRY)
 		goto again;
-#ifdef PCC_DEBUG
-	if (o2debug) {
-		printf("geninsn(%p, %s) rv %d\n", p, prcook(cookie), rv);
-		fwalk(p, e2print, 0);
-	}
-#endif
 	return rv;
 }
 
@@ -712,31 +528,18 @@ store(NODE *p)
 
 /*
  * Do a register-register move if necessary.
- * Called if a RLEFT or RRIGHT is found.
  */
 static void
 ckmove(NODE *p, NODE *q)
 {
-	struct optab *t = &table[TBLIDX(p->n_su)];
-	int reg;
-
 	if (q->n_op != REG || p->n_reg == -1)
 		return; /* no register */
-
-	/* do we have a need for special reg? */
-	if ((t->needs & NSPECIAL) &&
-	    (reg = rspecial(t, p->n_left == q ? NLEFT : NRIGHT)) >= 0)
-		;
-	else
-		reg = DECRA(p->n_reg, 0);
-
-	if (reg < 0 || reg == DECRA(q->n_reg, 0))
+	if (DECRA(p->n_reg, 0) == DECRA(q->n_reg, 0))
 		return; /* no move necessary */
-
 	CDEBUG(("rmove: node %p, %s -> %s\n", p, rnames[DECRA(q->n_reg, 0)],
-	    rnames[reg]));
-	rmove(DECRA(q->n_reg, 0), reg, p->n_type);
-	q->n_reg = q->n_rval = reg;
+	    rnames[DECRA(p->n_reg, 0)]));
+	rmove(DECRA(q->n_reg, 0), DECRA(p->n_reg, 0), p->n_type);
+	q->n_reg = q->n_rval = DECRA(p->n_reg, 0);
 }
 
 /*
@@ -755,7 +558,7 @@ rewrite(NODE *p, int dorewrite, int cookie)
 	p->n_lval = 0;
 	p->n_name = "";
 
-	if (o == ASSIGN || o == STASG) {
+	if (o == ASSIGN) {
 		/* special rewrite care */
 		int reg = DECRA(p->n_reg, 0);
 #define	TL(x) (TBLIDX(x->n_su) || x->n_op == REG)
@@ -803,7 +606,7 @@ genxasm(NODE *p)
 	if (p->n_left->n_op != ICON || p->n_left->n_type != STRTY) {
 		for (q = p->n_left; q->n_op == CM; q = q->n_left)
 			n++;
-		nary = tmpcalloc(sizeof(NODE *)*(n+1));
+		nary = tmpalloc(sizeof(NODE *)*n);
 		o = n;
 		for (q = p->n_left; q->n_op == CM; q = q->n_left) {
 			gencode(q->n_right->n_left, INREGS);
@@ -824,13 +627,8 @@ genxasm(NODE *p)
 				; /* handled by target */
 			else if (w[1] < '0' || w[1] > (n + '0'))
 				uerror("bad xasm arg number %c", w[1]);
-			else {
-				if (w[1] == (n + '0'))
-					q = nary[(int)w[1]-'0' - 1]; /* XXX */
-				else
-					q = nary[(int)w[1]-'0'];
-				adrput(stdout, q->n_left);
-			}
+			else
+				adrput(stdout, nary[(int)w[1]-'0']->n_left);
 			w++;
 		} else if (*w == '\\') { /* Always 3-digit octal */
 			int num = *++w - '0';
@@ -844,55 +642,12 @@ genxasm(NODE *p)
 	putchar('\n');
 }
 
-/*
- * Allocate temporary registers for use while emitting this table entry.
- */
-static void
-allo(NODE *p, struct optab *q)
-{
-	extern int stktemp;
-	int i, n = ncnt(q->needs);
-
-	for (i = 0; i < NRESC; i++)
-		if (resc[i].n_op != FREE)
-			comperr("allo: used reg");
-	if (n == 0 && (q->needs & NTMASK) == 0)
-		return;
-	for (i = 0; i < n+1; i++) {
-		resc[i].n_op = REG;
-		resc[i].n_type = p->n_type; /* XXX should be correct type */
-		resc[i].n_rval = DECRA(p->n_reg, i);
-		resc[i].n_su = p->n_su; /* ??? */
-	}
-	if (i > NRESC)
-		comperr("allo: too many allocs");
-	if (q->needs & NTMASK) {
-		resc[i].n_op = OREG;
-		resc[i].n_lval = stktemp;
-		resc[i].n_rval = FPREG;
-		resc[i].n_su = p->n_su; /* ??? */
-		resc[i].n_name = "";
-	}
-}
-
-static void
-afree(void)
-{
-	int i;
-
-	for (i = 0; i < NRESC; i++)
-		resc[i].n_op = FREE;
-}
-
 void
 gencode(NODE *p, int cookie)
 {
 	struct optab *q = &table[TBLIDX(p->n_su)];
 	NODE *p1, *l, *r;
 	int o = optype(p->n_op);
-#ifdef FINDMOPS
-	int ismops = (p->n_op == ASSIGN && (p->n_flags & 1));
-#endif
 
 	l = p->n_left;
 	r = p->n_right;
@@ -929,12 +684,7 @@ gencode(NODE *p, int cookie)
 	}
 	if (o != LTYPE) {
 		gencode(l, INREGS);
-#ifdef FINDMOPS
-		if (ismops)
-			;
-		else
-#endif
-		     if (q->rewrite & RLEFT)
+		if (q->rewrite & RLEFT)
 			ckmove(p, l);
 	}
 	if (o == BITYPE && !(p->n_su & DORIGHT)) {
@@ -942,18 +692,6 @@ gencode(NODE *p, int cookie)
 		if (q->rewrite & RRIGHT)
 			ckmove(p, r);
 	}
-
-#ifdef FINDMOPS
-	if (ismops) {
-		/* reduce right tree to make expand() work */
-		if (optype(r->n_op) != LTYPE) {
-			p->n_op = r->n_op;
-			r = tcopy(r->n_right);
-			tfree(p->n_right);
-			p->n_right = r;
-		}
-	}
-#endif
 
 	canon(p);
 
@@ -985,8 +723,7 @@ gencode(NODE *p, int cookie)
 
 	if (p->n_op == ASSIGN &&
 	    p->n_left->n_op == REG && p->n_right->n_op == REG &&
-	    p->n_left->n_rval == p->n_right->n_rval &&
-	    (p->n_su & RVCC) == 0) { /* XXX should check if necessary */
+	    p->n_left->n_rval == p->n_right->n_rval){
 		/* do not emit anything */
 		CDEBUG(("gencode(%p) assign nothing\n", p));
 		rewrite(p, q->rewrite, cookie);
@@ -997,15 +734,7 @@ gencode(NODE *p, int cookie)
 	if (TBLIDX(p->n_su) == 0)
 		return;
 
-	allo(p, q);
 	expand(p, cookie, q->cstring);
-
-#ifdef FINDMOPS
-	if (ismops && DECRA(p->n_reg, 0) != regno(l) && cookie != FOREFF) {
-		CDEBUG(("gencode(%p) rmove\n", p));
-		rmove(regno(l), DECRA(p->n_reg, 0), p->n_type);
-	} else
-#endif
 	if (callop(p->n_op) && cookie != FOREFF &&
 	    DECRA(p->n_reg, 0) != RETREG(p->n_type)) {
 		CDEBUG(("gencode(%p) retreg\n", p));
@@ -1023,7 +752,7 @@ gencode(NODE *p, int cookie)
 		rmove(DECRA(p->n_reg, 1), DECRA(p->n_reg, 0), p->n_type);
 	}
 #if 0
-		/* XXX - kolla upp det h{r */
+		/* XXX - kolla upp det här */
 	   else if (p->n_op == ASSIGN) {
 		/* may need move added if RLEFT/RRIGHT */
 		/* XXX should be handled in sucomp() */
@@ -1039,7 +768,6 @@ gencode(NODE *p, int cookie)
 	}
 #endif
 	rewrite(p, q->rewrite, cookie);
-	afree();
 }
 
 int negrel[] = { NE, EQ, GT, GE, LT, LE, UGT, UGE, ULT, ULE } ;  /* negatives of relationals */
@@ -1065,11 +793,6 @@ e2print(NODE *p, int down, int *a, int *b)
 
 	fprintf(prfil, "%p) %s", p, opst[p->n_op] );
 	switch( p->n_op ) { /* special cases */
-
-	case FLD:
-		fprintf(prfil, " sz=%d, shift=%d",
-		    UPKFSZ(p->n_rval), UPKFOFF(p->n_rval));
-		break;
 
 	case REG:
 		fprintf(prfil, " %s", rnames[p->n_rval] );
@@ -1105,7 +828,7 @@ e2print(NODE *p, int down, int *a, int *b)
 	fprintf(prfil, ", " );
 
 	prtreg(prfil, p);
-	fprintf(prfil, ", SU= %d(%cREG,%s,%s,%s,%s,%s,%s)\n",
+	fprintf(prfil, ", SU= %d(%cREG,%s,%s,%s,%s)\n",
 	    TBLIDX(p->n_su), 
 	    TCLASS(p->n_su)+'@',
 #ifdef PRTABLE
@@ -1114,9 +837,66 @@ e2print(NODE *p, int down, int *a, int *b)
 #else
 	    "",
 #endif
-	    p->n_su & LREG ? "LREG" : "", p->n_su & RREG ? "RREG" : "",
-	    p->n_su & RVEFF ? "RVEFF" : "", p->n_su & RVCC ? "RVCC" : "",
-	    p->n_su & DORIGHT ? "DORIGHT" : "");
+	    ltyp[LMASK&p->n_su],
+	    rtyp[(p->n_su&RMASK) >> 2], p->n_su & DORIGHT ? "DORIGHT" : "");
+}
+#endif
+
+#ifndef FIELDOPS
+/*
+ * do this if there is no special hardware support for fields
+ */
+static void
+ffld(NODE *p, int down, int *down1, int *down2 )
+{
+	/*
+	 * look for fields that are not in an lvalue context,
+	 * and rewrite them...
+	 */
+	NODE *shp;
+	int s, o, v, ty;
+
+	*down1 =  asgop( p->n_op );
+	*down2 = 0;
+
+	if( !down && p->n_op == FLD ){ /* rewrite the node */
+
+		if( !rewfld(p) ) return;
+
+		ty = p->n_type;
+		v = p->n_rval;
+		s = UPKFSZ(v);
+# ifdef RTOLBYTES
+		o = UPKFOFF(v);  /* amount to shift */
+# else
+		o = szty(p->n_type)*SZINT - s - UPKFOFF(v);  /* amount to shift */
+#endif
+
+		/* make & mask part */
+
+		if (ISUNSIGNED(ty)) {
+
+			p->n_left->n_type = ty;
+			p->n_op = AND;
+			p->n_right = mklnode(ICON, ((CONSZ)1 << s)-1, 0, ty);
+
+			/* now, if a shift is needed, do it */
+			if( o != 0 ){
+				shp = mkbinode(RS, p->n_left,
+				    mklnode(ICON, o, 0, INT), ty);
+				p->n_left = shp;
+				/* whew! */
+			}
+		} else {
+			/* must sign-extend, assume RS will do */
+			/* if not, arch must use rewfld() */
+			p->n_left->n_type = INT; /* Ok? */
+			p->n_op = RS;
+			p->n_right = mklnode(ICON, SZINT-s, 0, INT);
+			p->n_left = mkbinode(LS, p->n_left, 
+			    mklnode(ICON, SZINT-s-o, 0, INT), INT);
+		}
+	}
 }
 #endif
 
@@ -1124,33 +904,36 @@ e2print(NODE *p, int down, int *a, int *b)
  * change left TEMPs into OREGs
  */
 void
-deltemp(NODE *p, void *arg)
+deltemp(NODE *p)
 {
-	int (*aor)[2] = arg;
+	struct tmpsave *w;
 	NODE *l, *r;
 
 	if (p->n_op == TEMP) {
-		if (aor[regno(p)][0] == 0) {
-			if (xtemps)
-				return;
-			aor[regno(p)][0] = FPREG;
-			aor[regno(p)][1] = BITOOR(freetemp(szty(p->n_type)));
+		/* Check if already existing */
+		for (w = tmpsave; w; w = w->next)
+			if (w->tempno == regno(p))
+				break;
+		if (w == NULL) {
+			/* new on stack */
+			w = tmpalloc(sizeof(struct tmpsave));
+			w->tempno = regno(p);
+			w->tempaddr = BITOOR(freetemp(szty(p->n_type)));
+			w->next = tmpsave;
+			tmpsave = w;
 		}
-		l = mklnode(REG, 0, aor[regno(p)][0], INCREF(p->n_type));
-		r = mklnode(ICON, aor[regno(p)][1], 0, INT);
+		l = mklnode(REG, 0, FPREG, INCREF(p->n_type));
+		r = mklnode(ICON, w->tempaddr, 0, INT);
 		p->n_left = mkbinode(PLUS, l, r, INCREF(p->n_type));
 		p->n_op = UMUL;
-	} else if (p->n_op == ADDROF && p->n_left->n_op == OREG) {
+	} else if (p->n_op == ADDROF && p->n_left->n_op != NAME) {
+		/* TEMPs are already converted to OREGs */
+		if ((l = p->n_left)->n_op != OREG)
+			comperr("bad U&");
 		p->n_op = PLUS;
-		l = p->n_left;
 		l->n_op = REG;
 		l->n_type = INCREF(l->n_type);
 		p->n_right = mklnode(ICON, l->n_lval, 0, INT);
-	} else if (p->n_op == ADDROF && p->n_left->n_op == UMUL) {
-		l = p->n_left;
-		*p = *p->n_left->n_left;
-		nfree(l->n_left);
-		nfree(l);
 	}
 }
 
@@ -1158,7 +941,7 @@ deltemp(NODE *p, void *arg)
  * for pointer/integer arithmetic, set pointer at left node
  */
 static void
-setleft(NODE *p, void *arg)
+setleft(NODE *p)          
 {        
 	NODE *q;
 
@@ -1273,7 +1056,7 @@ ormake(NODE *p)
  * look for situations where we can turn * into OREG
  */
 void
-oreg2(NODE *p, void *arg)
+oreg2(NODE *p)
 {
 	if (p->n_op != UMUL)
 		return;
@@ -1287,8 +1070,11 @@ void
 canon(p) NODE *p; {
 	/* put p in canonical form */
 
-	walkf(p, setleft, 0);	/* ptrs at left node for arithmetic */
-	walkf(p, oreg2, 0);	/* look for and create OREG nodes */
+	walkf(p, setleft);	/* ptrs at left node for arithmetic */
+	walkf(p, oreg2);	/* look for and create OREG nodes */
+#ifndef FIELDOPS
+	fwalk(p, ffld, 0);	/* look for field operators */
+# endif
 	mycanon(p);		/* your own canonicalization routine(s) */
 
 }
@@ -1332,11 +1118,8 @@ freetemp(int k)
 #ifndef BACKTEMP
 	int t;
 
-	if (k > 1) {
+	if (k > 1)
 		SETOFF(p2autooff, ALDOUBLE/ALCHAR);
-	} else {
-		SETOFF(p2autooff, ALINT/ALCHAR);
-	}
 
 	t = p2autooff;
 	p2autooff += k*(SZINT/SZCHAR);
@@ -1346,11 +1129,8 @@ freetemp(int k)
 
 #else
 	p2autooff += k*(SZINT/SZCHAR);
-	if (k > 1) {
+	if (k > 1)
 		SETOFF(p2autooff, ALDOUBLE/ALCHAR);
-	} else {
-		SETOFF(p2autooff, ALINT/ALCHAR);
-	}
 
 	if (p2autooff > p2maxautooff)
 		p2maxautooff = p2autooff;
@@ -1366,7 +1146,6 @@ mklnode(int op, CONSZ lval, int rval, TWORD type)
 	p->n_name = "";
 	p->n_qual = 0;
 	p->n_op = op;
-	p->n_label = 0;
 	p->n_lval = lval;
 	p->n_rval = rval;
 	p->n_type = type;
@@ -1383,7 +1162,6 @@ mkbinode(int op, NODE *left, NODE *right, TWORD type)
 	p->n_name = "";
 	p->n_qual = 0;
 	p->n_op = op;
-	p->n_label = 0;
 	p->n_left = left;
 	p->n_right = right;
 	p->n_type = type;
@@ -1400,7 +1178,6 @@ mkunode(int op, NODE *left, int rval, TWORD type)
 	p->n_name = "";
 	p->n_qual = 0;
 	p->n_op = op;
-	p->n_label = 0;
 	p->n_left = left;
 	p->n_rval = rval;
 	p->n_type = type;
@@ -1448,7 +1225,7 @@ delnums(NODE *p, void *arg)
 	NODE *r = ip->ip_node->n_left;
 	NODE *q;
 	TWORD t;
-	int cnt, num;
+	int cnt;
 
 	if (p->n_name[0] < '0' || p->n_name[0] > '9')
 		return; /* not numeric */
@@ -1461,20 +1238,18 @@ delnums(NODE *p, void *arg)
 
 	/* Delete number by adding move-to/from-temp.  Later on */
 	/* the temps may be rewritten to other LTYPEs */
-	num = p2env.epp->ip_tmpnum++;
+	t = p->n_left->n_type;
+	r = mklnode(TEMP, 0, epp->ip_tmpnum++, t);
 
 	/* pre node */
-	t = p->n_left->n_type;
-	r = mklnode(TEMP, 0, num, t);
 	ip2 = ipnode(mkbinode(ASSIGN, tcopy(r), p->n_left, t));
 	DLIST_INSERT_BEFORE(ip, ip2, qelem);
-	p->n_left = r;
 
 	/* post node */
-	t = q->n_left->n_type;
-	r = mklnode(TEMP, 0, num, t);
 	ip2 = ipnode(mkbinode(ASSIGN, q->n_left, tcopy(r), t));
 	DLIST_INSERT_AFTER(ip, ip2, qelem);
+
+	p->n_left = tcopy(r);
 	q->n_left = r;
 
 	p->n_name = tmpstrdup(q->n_name);
@@ -1492,7 +1267,7 @@ ltypify(NODE *p, void *arg)
 	struct interpass *ip2;
 	TWORD t = p->n_left->n_type;
 	NODE *q, *r;
-	int cw, ooff, ww;
+	int cw, ooff;
 	char *c;
 
 again:
@@ -1500,7 +1275,7 @@ again:
 		return;	/* handled by target-specific code */
 
 	cw = xasmcode(p->n_name);
-	switch (ww = XASMVAL(cw)) {
+	switch (XASMVAL(cw)) {
 	case 'p':
 		/* pointer */
 		/* just make register of it */
@@ -1509,19 +1284,14 @@ again:
 		*c = 'r';
 		/* FALLTHROUGH */
 	case 'g':  /* general; any operand */
-		if (ww == 'g' && p->n_left->n_op == ICON) {
-			/* should only be input */
-			p->n_name = "i";
-			break;
-		}
 	case 'r': /* general reg */
 		/* set register class */
 		p->n_label = gclass(p->n_left->n_type);
-		if (p->n_left->n_op == REG)
+		if (p->n_left->n_op == REG || p->n_left->n_op == TEMP)
 			break;
 		q = p->n_left;
 		r = (cw & XASMINOUT ? tcopy(q) : q);
-		p->n_left = mklnode(TEMP, 0, p2env.epp->ip_tmpnum++, t);
+		p->n_left = mklnode(TEMP, 0, epp->ip_tmpnum++, t);
 		if ((cw & XASMASG) == 0) {
 			ip2 = ipnode(mkbinode(ASSIGN, tcopy(p->n_left), r, t));
 			DLIST_INSERT_BEFORE(ip, ip2, qelem);
@@ -1549,7 +1319,7 @@ again:
 		} else if (q->n_op == UMUL && 
 		    (q->n_left->n_op != TEMP && q->n_left->n_op != REG)) {
 			t = q->n_left->n_type;
-			ooff = p2env.epp->ip_tmpnum++;
+			ooff = epp->ip_tmpnum++;
 			ip2 = ipnode(mkbinode(ASSIGN,
 			    mklnode(TEMP, 0, ooff, t), q->n_left, t));
 			q->n_left = mklnode(TEMP, 0, ooff, t);
@@ -1577,9 +1347,8 @@ again:
 
 /* Extended assembler hacks */
 static void
-fixxasm(struct p2env *p2e)
+fixxasm(struct interpass *pole)
 {
-	struct interpass *pole = &p2e->ipole;
 	struct interpass *ip;
 	NODE *p;
 
@@ -1608,24 +1377,19 @@ fixxasm(struct p2env *p2e)
 int
 xasmcode(char *s)
 {
-	int cw = 0, nm = 0;
+	int cw = 0;
 
 	while (*s) {
 		switch ((int)*s) {
 		case '=': cw |= XASMASG; break;
 		case '&': cw |= XASMCONSTR; break;
 		case '+': cw |= XASMINOUT; break;
-		case '%': break;
 		default:
 			if ((*s >= 'a' && *s <= 'z') ||
 			    (*s >= 'A' && *s <= 'Z') ||
 			    (*s >= '0' && *s <= '9')) {
-				if (nm == 0)
-					cw |= *s;
-				else
-					cw |= (*s << ((nm + 1) * 8));
-				nm++;
-				break;
+				cw |= *s;
+				return cw;
 			}
 			uerror("bad xasm constraint %c", *s);
 		}
@@ -1637,7 +1401,7 @@ xasmcode(char *s)
 static int xasnum, xoffnum;
 
 static void
-xconv(NODE *p, void *arg)
+xconv(NODE *p)
 {
 	if (p->n_op != TEMP || p->n_rval != xasnum)
 		return;
@@ -1659,6 +1423,6 @@ cvtemps(struct interpass *ipl, int tnum, int off)
 
 	DLIST_FOREACH(ip, ipl, qelem)
 		if (ip->type == IP_NODE)
-			walkf(ip->ip_node, xconv, 0);
-	walkf(ipl->ip_node, xconv, 0);
+			walkf(ip->ip_node, xconv);
+	walkf(ipl->ip_node, xconv);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_readwrite.c,v 1.62 2012/11/21 23:11:23 jakllsch Exp $	*/
+/*	$NetBSD: ext2fs_readwrite.c,v 1.52 2008/05/16 09:22:00 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -43,6 +43,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -60,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_readwrite.c,v 1.62 2012/11/21 23:11:23 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_readwrite.c,v 1.52 2008/05/16 09:22:00 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,11 +110,12 @@ ext2fs_read(void *v)
 	struct m_ext2fs *fs;
 	struct buf *bp;
 	struct ufsmount *ump;
+	void *win;
 	vsize_t bytelen;
 	daddr_t lbn, nextlbn;
 	off_t bytesinfile;
 	long size, xfersize, blkoffset;
-	int error;
+	int error, flags;
 
 	vp = ap->a_vp;
 	ip = VTOI(vp);
@@ -123,13 +129,13 @@ ext2fs_read(void *v)
 
 	if (vp->v_type == VLNK) {
 		if (ext2fs_size(ip) < ump->um_maxsymlinklen ||
-		    (ump->um_maxsymlinklen == 0 && ext2fs_nblock(ip) == 0))
+		    (ump->um_maxsymlinklen == 0 && ip->i_e2fs_nblock == 0))
 			panic("%s: short symlink", "ext2fs_read");
 	} else if (vp->v_type != VREG && vp->v_type != VDIR)
 		panic("%s: type %d", "ext2fs_read", vp->v_type);
 #endif
 	fs = ip->i_e2fs;
-	if ((uint64_t)uio->uio_offset > ump->um_maxfilesize)
+	if ((u_int64_t)uio->uio_offset > ump->um_maxfilesize)
 		return (EFBIG);
 	if (uio->uio_resid == 0)
 		return (0);
@@ -145,8 +151,11 @@ ext2fs_read(void *v)
 			if (bytelen == 0)
 				break;
 
-			error = ubc_uiomove(&vp->v_uobj, uio, bytelen, advice,
-			    UBC_READ | UBC_PARTIALOK | UBC_UNMAP_FLAG(vp));
+			win = ubc_alloc(&vp->v_uobj, uio->uio_offset,
+			    &bytelen, advice, UBC_READ);
+			error = uiomove(win, bytelen, uio);
+			flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
+			ubc_release(win, flags);
 			if (error)
 				break;
 		}
@@ -224,18 +233,18 @@ ext2fs_write(void *v)
 	struct inode *ip;
 	struct m_ext2fs *fs;
 	struct buf *bp;
+	struct proc *p;
 	struct ufsmount *ump;
 	daddr_t lbn;
 	off_t osize;
 	int blkoffset, error, flags, ioflag, resid, xfersize;
 	vsize_t bytelen;
+	void *win;
 	off_t oldoff = 0;					/* XXX */
 	bool async;
 	int extended = 0;
-	int advice;
 
 	ioflag = ap->a_ioflag;
-	advice = IO_ADV_DECODE(ioflag);
 	uio = ap->a_uio;
 	vp = ap->a_vp;
 	ip = VTOI(vp);
@@ -267,8 +276,21 @@ ext2fs_write(void *v)
 
 	fs = ip->i_e2fs;
 	if (uio->uio_offset < 0 ||
-	    (uint64_t)uio->uio_offset + uio->uio_resid > ump->um_maxfilesize)
+	    (u_int64_t)uio->uio_offset + uio->uio_resid > ump->um_maxfilesize)
 		return (EFBIG);
+	/*
+	 * Maybe this should be above the vnode op call, but so long as
+	 * file servers have no limits, I don't think it matters.
+	 */
+	p = curproc;
+	if (vp->v_type == VREG && p &&
+	    uio->uio_offset + uio->uio_resid >
+	    p->p_rlimit[RLIMIT_FSIZE].rlim_cur) {
+		mutex_enter(proc_lock);
+		psignal(p, SIGXFSZ);
+		mutex_exit(proc_lock);
+		return (EFBIG);
+	}
 	if (uio->uio_resid == 0)
 		return (0);
 
@@ -290,8 +312,11 @@ ext2fs_write(void *v)
 			    bytelen, ap->a_cred, 0);
 			if (error)
 				break;
-			error = ubc_uiomove(&vp->v_uobj, uio, bytelen, advice,
-			    UBC_WRITE | UBC_UNMAP_FLAG(vp));
+			win = ubc_alloc(&vp->v_uobj, uio->uio_offset,
+			    &bytelen, UVM_ADV_NORMAL, UBC_WRITE);
+			error = uiomove(win, bytelen, uio);
+			flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
+			ubc_release(win, flags);
 			if (error)
 				break;
 
@@ -311,14 +336,13 @@ ext2fs_write(void *v)
 			 */
 
 			if (!async && oldoff >> 16 != uio->uio_offset >> 16) {
-				mutex_enter(vp->v_interlock);
+				mutex_enter(&vp->v_interlock);
 				error = VOP_PUTPAGES(vp, (oldoff >> 16) << 16,
-				    (uio->uio_offset >> 16) << 16,
-				    PGO_CLEANIT | PGO_LAZY);
+				    (uio->uio_offset >> 16) << 16, PGO_CLEANIT);
 			}
 		}
 		if (error == 0 && ioflag & IO_SYNC) {
-			mutex_enter(vp->v_interlock);
+			mutex_enter(&vp->v_interlock);
 			error = VOP_PUTPAGES(vp, trunc_page(oldoff),
 			    round_page(blkroundup(fs, uio->uio_offset)),
 			    PGO_CLEANIT | PGO_SYNCIO);
@@ -375,21 +399,9 @@ ext2fs_write(void *v)
 
 out:
 	ip->i_flag |= IN_CHANGE | IN_UPDATE;
-	if (vp->v_mount->mnt_flag & MNT_RELATIME)
-		ip->i_flag |= IN_ACCESS;
-	if (resid > uio->uio_resid && ap->a_cred) {
-		if (ip->i_e2fs_mode & ISUID) {
-			if (kauth_authorize_vnode(ap->a_cred,
-			    KAUTH_VNODE_RETAIN_SUID, vp, NULL, EPERM) != 0)
-				ip->i_e2fs_mode &= ISUID;
-		}
-
-		if (ip->i_e2fs_mode & ISGID) {
-			if (kauth_authorize_vnode(ap->a_cred,
-			    KAUTH_VNODE_RETAIN_SGID, vp, NULL, EPERM) != 0)
-				ip->i_e2fs_mode &= ~ISGID;
-		}
-	}
+	if (resid > uio->uio_resid && ap->a_cred &&
+	    kauth_authorize_generic(ap->a_cred, KAUTH_GENERIC_ISSUSER, NULL))
+		ip->i_e2fs_mode &= ~(ISUID | ISGID);
 	if (resid > uio->uio_resid)
 		VN_KNOTE(vp, NOTE_WRITE | (extended ? NOTE_EXTEND : 0));
 	if (error) {

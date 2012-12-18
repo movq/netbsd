@@ -1,4 +1,4 @@
-/*	$NetBSD: atphy.c,v 1.12 2012/07/23 00:09:49 matt Exp $ */
+/*	$NetBSD: atphy.c,v 1.5.2.2 2009/05/03 23:45:47 snj Exp $ */
 /*	$OpenBSD: atphy.c,v 1.1 2008/09/25 20:47:16 brad Exp $	*/
 
 /*-
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atphy.c,v 1.12 2012/07/23 00:09:49 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atphy.c,v 1.5.2.2 2009/05/03 23:45:47 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -81,7 +81,6 @@ static int atphy_service(struct mii_softc *, struct mii_data *, int);
 static void atphy_reset(struct mii_softc *);
 static void atphy_status(struct mii_softc *);
 static int atphy_mii_phy_auto(struct mii_softc *);
-static bool atphy_is_gige(const struct mii_phydesc *);
 
 CFATTACH_DECL_NEW(atphy, sizeof(struct mii_softc),
 	atphy_match, atphy_attach, mii_phy_detach, mii_phy_activate);
@@ -95,29 +94,9 @@ static const struct mii_phydesc etphys[] = {
 	  MII_STR_ATHEROS_F1 },
 	{ MII_OUI_ATTANSIC,	MII_MODEL_ATTANSIC_L1,
 	  MII_STR_ATTANSIC_L1 },
-	{ MII_OUI_ATTANSIC,	MII_MODEL_ATTANSIC_L2,
-	  MII_STR_ATTANSIC_L2 },
-	{ MII_OUI_ATTANSIC,	MII_MODEL_ATTANSIC_AR8021,
-	  MII_STR_ATTANSIC_AR8021 },
-	{ MII_OUI_ATTANSIC,	MII_MODEL_ATTANSIC_AR8035,
-	  MII_STR_ATTANSIC_AR8035 },
 	{ 0,			0,
 	  NULL },
 };
-
-static bool
-atphy_is_gige(const struct mii_phydesc *mpd)
-{
-	switch (mpd->mpd_oui) {
-	case MII_OUI_ATTANSIC:
-		switch (mpd->mpd_model) {
-		case MII_MODEL_ATTANSIC_L2:
-			return false;
-		}
-	}
-
-	return true;
-}
 
 static int
 atphy_match(device_t parent, cfdata_t match, void *aux)
@@ -137,7 +116,6 @@ atphy_attach(device_t parent, device_t self, void *aux)
 	struct mii_attach_args *ma = aux;
 	struct mii_data *mii = ma->mii_data;
 	const struct mii_phydesc *mpd;
-	uint16_t bmsr;
 
 	mpd = mii_phy_match(ma, etphys);
 	aprint_naive(": Media interface\n");
@@ -149,18 +127,14 @@ atphy_attach(device_t parent, device_t self, void *aux)
 	sc->mii_funcs = &atphy_funcs;
 	sc->mii_pdata = mii;
 	sc->mii_flags = ma->mii_flags;
-	if (atphy_is_gige(mpd))
-		sc->mii_anegticks = MII_ANEGTICKS_GIGE;
-	else
-		sc->mii_anegticks = MII_ANEGTICKS;
+	sc->mii_anegticks = MII_ANEGTICKS_GIGE;
 
 	sc->mii_flags |= MIIF_NOLOOP;
 
 	PHY_RESET(sc);
 
-	bmsr = PHY_READ(sc, MII_BMSR) | PHY_READ(sc, MII_BMSR);
-	sc->mii_capabilities = bmsr & ma->mii_capmask;
-	if (atphy_is_gige(mpd) && (sc->mii_capabilities & BMSR_EXTSTAT))
+	sc->mii_capabilities = PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
+	if (sc->mii_capabilities & BMSR_EXTSTAT)
 		sc->mii_extcapabilities = PHY_READ(sc, MII_EXTSR);
 
 	aprint_normal_dev(self, "");
@@ -217,7 +191,7 @@ atphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 			/*
 			 * XXX
 			 * Due to an unknown reason powering down PHY resulted
-			 * in unexpected results such as inaccessibility of
+			 * in unexpected results such as inaccessbility of
 			 * hardware of freshly rebooted system. Disable
 			 * powering down PHY until I got more information for
 			 * Attansic/Atheros PHY hardwares.
@@ -233,7 +207,7 @@ atphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 			bmcr |= BMCR_FDX;
 			/* Enable pause. */
 			if (sc->mii_flags & MIIF_DOPAUSE)
-				anar |= ANAR_X_PAUSE_TOWARDS;
+				anar |= (3 << 10);
 		}
 
 		if ((sc->mii_extcapabilities & (EXTSR_1000TFDX |
@@ -242,9 +216,10 @@ atphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 		PHY_WRITE(sc, MII_ANAR, anar);
 
 		/*
-		 * Start autonegotiation.
+		 * Reset the PHY so all changes take effect.
 		 */
-		PHY_WRITE(sc, MII_BMCR, bmcr | BMCR_AUTOEN | BMCR_STARTNEG);
+		PHY_WRITE(sc, MII_BMCR, bmcr | BMCR_RESET | BMCR_AUTOEN |
+		    BMCR_STARTNEG);
 done:
 		break;
 
@@ -387,11 +362,8 @@ atphy_reset(struct mii_softc *sc)
 	reg |= ATPHY_SCR_POLARITY_REVERSAL;
 	PHY_WRITE(sc, ATPHY_SCR, reg);
 
-	atphy_mii_phy_auto(sc);
-
 	/* Workaround F1 bug to reset phy. */
-	reg = PHY_READ(sc, MII_BMCR) | BMCR_RESET;
-	PHY_WRITE(sc, MII_BMCR, reg);
+	atphy_mii_phy_auto(sc);
 
 	for (i = 0; i < 1000; i++) {
 		DELAY(1);
@@ -407,12 +379,12 @@ atphy_mii_phy_auto(struct mii_softc *sc)
 
 	anar = BMSR_MEDIA_TO_ANAR(sc->mii_capabilities) | ANAR_CSMA;
 	if (sc->mii_flags & MIIF_DOPAUSE)
-		anar |= ANAR_X_PAUSE_TOWARDS;
+		anar |= (3 << 10);
 	PHY_WRITE(sc, MII_ANAR, anar);
 	if (sc->mii_extcapabilities & (EXTSR_1000TFDX | EXTSR_1000THDX))
 		PHY_WRITE(sc, MII_100T2CR, GTCR_ADV_1000TFDX |
 		    GTCR_ADV_1000THDX);
-	PHY_WRITE(sc, MII_BMCR, BMCR_AUTOEN | BMCR_STARTNEG);
+	PHY_WRITE(sc, MII_BMCR, BMCR_RESET | BMCR_AUTOEN | BMCR_STARTNEG);
 
 	return EJUSTRETURN;
 }

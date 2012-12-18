@@ -1,4 +1,4 @@
-/*	$NetBSD: adv.c,v 1.46 2012/10/27 17:18:18 chs Exp $	*/
+/*	$NetBSD: adv.c,v 1.42 2008/04/08 12:07:25 cegger Exp $	*/
 
 /*
  * Generic driver for the Advanced Systems Inc. Narrow SCSI controllers
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adv.c,v 1.46 2012/10/27 17:18:18 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adv.c,v 1.42 2008/04/08 12:07:25 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,9 +50,12 @@ __KERNEL_RCSID(0, "$NetBSD: adv.c,v 1.46 2012/10/27 17:18:18 chs Exp $");
 #include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 
 #include <sys/bus.h>
 #include <sys/intr.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -103,7 +106,8 @@ static void adv_watchdog(void *);
 
 
 static int
-adv_alloc_control_data(ASC_SOFTC *sc)
+adv_alloc_control_data(sc)
+	ASC_SOFTC      *sc;
 {
 	int error;
 
@@ -113,7 +117,7 @@ adv_alloc_control_data(ASC_SOFTC *sc)
 	if ((error = bus_dmamem_alloc(sc->sc_dmat, sizeof(struct adv_control),
 			   PAGE_SIZE, 0, &sc->sc_control_seg, 1,
 			   &sc->sc_control_nsegs, BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to allocate control structures,"
+		aprint_error_dev(&sc->sc_dev, "unable to allocate control structures,"
 		       " error = %d\n", error);
 		return (error);
 	}
@@ -121,7 +125,7 @@ adv_alloc_control_data(ASC_SOFTC *sc)
 			   sc->sc_control_nsegs, sizeof(struct adv_control),
 			   (void **) & sc->sc_control,
 			   BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to map control structures, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to map control structures, error = %d\n",
 		       error);
 		return (error);
 	}
@@ -131,14 +135,14 @@ adv_alloc_control_data(ASC_SOFTC *sc)
 	if ((error = bus_dmamap_create(sc->sc_dmat, sizeof(struct adv_control),
 			   1, sizeof(struct adv_control), 0, BUS_DMA_NOWAIT,
 				       &sc->sc_dmamap_control)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to create control DMA map, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to create control DMA map, error = %d\n",
 		       error);
 		return (error);
 	}
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_dmamap_control,
 			   sc->sc_control, sizeof(struct adv_control), NULL,
 				     BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to load control DMA map, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to load control DMA map, error = %d\n",
 		       error);
 		return (error);
 	}
@@ -153,7 +157,8 @@ adv_alloc_control_data(ASC_SOFTC *sc)
 }
 
 static void
-adv_free_control_data(ASC_SOFTC *sc)
+adv_free_control_data(sc)
+	ASC_SOFTC *sc;
 {
 
 	bus_dmamap_unload(sc->sc_dmat, sc->sc_dmamap_control);
@@ -171,7 +176,10 @@ adv_free_control_data(ASC_SOFTC *sc)
  * by adv_init().  We return the number of CCBs successfully created.
  */
 static int
-adv_create_ccbs(ASC_SOFTC *sc, ADV_CCB *ccbstore, int count)
+adv_create_ccbs(sc, ccbstore, count)
+	ASC_SOFTC      *sc;
+	ADV_CCB        *ccbstore;
+	int             count;
 {
 	ADV_CCB        *ccb;
 	int             i, error;
@@ -180,7 +188,7 @@ adv_create_ccbs(ASC_SOFTC *sc, ADV_CCB *ccbstore, int count)
 	for (i = 0; i < count; i++) {
 		ccb = &ccbstore[i];
 		if ((error = adv_init_ccb(sc, ccb)) != 0) {
-			aprint_error_dev(sc->sc_dev, "unable to initialize ccb, error = %d\n",
+			aprint_error_dev(&sc->sc_dev, "unable to initialize ccb, error = %d\n",
 			       error);
 			return (i);
 		}
@@ -195,7 +203,9 @@ adv_create_ccbs(ASC_SOFTC *sc, ADV_CCB *ccbstore, int count)
  * A ccb is put onto the free list.
  */
 static void
-adv_free_ccb(ASC_SOFTC *sc, ADV_CCB *ccb)
+adv_free_ccb(sc, ccb)
+	ASC_SOFTC      *sc;
+	ADV_CCB        *ccb;
 {
 	int             s;
 
@@ -207,7 +217,8 @@ adv_free_ccb(ASC_SOFTC *sc, ADV_CCB *ccb)
 
 
 static void
-adv_reset_ccb(ADV_CCB *ccb)
+adv_reset_ccb(ccb)
+	ADV_CCB        *ccb;
 {
 
 	ccb->flags = 0;
@@ -215,7 +226,9 @@ adv_reset_ccb(ADV_CCB *ccb)
 
 
 static int
-adv_init_ccb(ASC_SOFTC *sc, ADV_CCB *ccb)
+adv_init_ccb(sc, ccb)
+	ASC_SOFTC      *sc;
+	ADV_CCB        *ccb;
 {
 	int	hashnum, error;
 
@@ -229,7 +242,7 @@ adv_init_ccb(ASC_SOFTC *sc, ADV_CCB *ccb)
 			 ASC_MAX_SG_LIST, (ASC_MAX_SG_LIST - 1) * PAGE_SIZE,
 		   0, BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW, &ccb->dmamap_xfer);
 	if (error) {
-		aprint_error_dev(sc->sc_dev, "unable to create DMA map, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to create DMA map, error = %d\n",
 		       error);
 		return (error);
 	}
@@ -255,7 +268,8 @@ adv_init_ccb(ASC_SOFTC *sc, ADV_CCB *ccb)
  * If there are none, see if we can allocate a new one
  */
 static ADV_CCB *
-adv_get_ccb(ASC_SOFTC *sc)
+adv_get_ccb(sc)
+	ASC_SOFTC      *sc;
 {
 	ADV_CCB        *ccb = 0;
 	int             s;
@@ -275,7 +289,9 @@ adv_get_ccb(ASC_SOFTC *sc)
  * Given a physical address, find the ccb that it corresponds to.
  */
 ADV_CCB *
-adv_ccb_phys_kv(ASC_SOFTC *sc, u_long ccb_phys)
+adv_ccb_phys_kv(sc, ccb_phys)
+	ASC_SOFTC	*sc;
+	u_long		ccb_phys;
 {
 	int hashnum = CCB_HASH(ccb_phys);
 	ADV_CCB *ccb = sc->sc_ccbhash[hashnum];
@@ -293,7 +309,9 @@ adv_ccb_phys_kv(ASC_SOFTC *sc, u_long ccb_phys)
  * Queue a CCB to be sent to the controller, and send it if possible.
  */
 static void
-adv_queue_ccb(ASC_SOFTC *sc, ADV_CCB *ccb)
+adv_queue_ccb(sc, ccb)
+	ASC_SOFTC      *sc;
+	ADV_CCB        *ccb;
 {
 
 	TAILQ_INSERT_TAIL(&sc->sc_waiting_ccb, ccb, chain);
@@ -303,7 +321,8 @@ adv_queue_ccb(ASC_SOFTC *sc, ADV_CCB *ccb)
 
 
 static void
-adv_start_ccbs(ASC_SOFTC *sc)
+adv_start_ccbs(sc)
+	ASC_SOFTC      *sc;
 {
 	ADV_CCB        *ccb;
 
@@ -333,7 +352,8 @@ adv_start_ccbs(ASC_SOFTC *sc)
 
 
 int
-adv_init(ASC_SOFTC *sc)
+adv_init(sc)
+	ASC_SOFTC      *sc;
 {
 	int             warn;
 
@@ -348,7 +368,7 @@ adv_init(ASC_SOFTC *sc)
 	AscInitASC_SOFTC(sc);
 	warn = AscInitFromEEP(sc);
 	if (warn) {
-		aprint_error_dev(sc->sc_dev, "-get: ");
+		aprint_error_dev(&sc->sc_dev, "-get: ");
 		switch (warn) {
 		case -1:
 			aprint_normal("Chip is not halted\n");
@@ -391,7 +411,7 @@ adv_init(ASC_SOFTC *sc)
 	 */
 	warn = AscInitFromASC_SOFTC(sc);
 	if (warn) {
-		aprint_error_dev(sc->sc_dev, "-set: ");
+		aprint_error_dev(&sc->sc_dev, "-set: ");
 		switch (warn) {
 		case ASC_WARN_CMD_QNG_CONFLICT:
 			aprint_normal("tag queuing enabled w/o disconnects\n");
@@ -412,7 +432,8 @@ adv_init(ASC_SOFTC *sc)
 
 
 void
-adv_attach(ASC_SOFTC *sc)
+adv_attach(sc)
+	ASC_SOFTC      *sc;
 {
 	struct scsipi_adapter *adapt = &sc->sc_adapter;
 	struct scsipi_channel *chan = &sc->sc_channel;
@@ -427,29 +448,29 @@ adv_attach(ASC_SOFTC *sc)
 		break;
 
 	case 1:
-		panic("%s: bad signature", device_xname(sc->sc_dev));
+		panic("%s: bad signature", device_xname(&sc->sc_dev));
 		break;
 
 	case 2:
 		panic("%s: unable to load MicroCode",
-		      device_xname(sc->sc_dev));
+		      device_xname(&sc->sc_dev));
 		break;
 
 	case 3:
 		panic("%s: unable to initialize MicroCode",
-		      device_xname(sc->sc_dev));
+		      device_xname(&sc->sc_dev));
 		break;
 
 	default:
 		panic("%s: unable to initialize board RISC chip",
-		      device_xname(sc->sc_dev));
+		      device_xname(&sc->sc_dev));
 	}
 
 	/*
 	 * Fill in the scsipi_adapter.
 	 */
 	memset(adapt, 0, sizeof(*adapt));
-	adapt->adapt_dev = sc->sc_dev;
+	adapt->adapt_dev = &sc->sc_dev;
 	adapt->adapt_nchannels = 1;
 	/* adapt_openings initialized below */
 	/* adapt_max_periph initialized below */
@@ -482,10 +503,10 @@ adv_attach(ASC_SOFTC *sc)
 	 */
 	i = adv_create_ccbs(sc, sc->sc_control->ccbs, ADV_MAX_CCB);
 	if (i == 0) {
-		aprint_error_dev(sc->sc_dev, "unable to create control blocks\n");
+		aprint_error_dev(&sc->sc_dev, "unable to create control blocks\n");
 		return; /* (ENOMEM) */ ;
 	} else if (i != ADV_MAX_CCB) {
-		aprint_error_dev(sc->sc_dev, 
+		aprint_error_dev(&sc->sc_dev, 
 		    "WARNING: only %d of %d control blocks created\n",
 		    i, ADV_MAX_CCB);
 	}
@@ -493,11 +514,13 @@ adv_attach(ASC_SOFTC *sc)
 	adapt->adapt_openings = i;
 	adapt->adapt_max_periph = adapt->adapt_openings;
 
-	sc->sc_child = config_found(sc->sc_dev, chan, scsiprint);
+	sc->sc_child = config_found(&sc->sc_dev, chan, scsiprint);
 }
 
 int
-adv_detach(ASC_SOFTC *sc, int flags)
+adv_detach(sc, flags)
+	ASC_SOFTC *sc;
+	int flags;
 {
 	int rv = 0;
 
@@ -510,7 +533,8 @@ adv_detach(ASC_SOFTC *sc, int flags)
 }
 
 static void
-advminphys(struct buf *bp)
+advminphys(bp)
+	struct buf     *bp;
 {
 
 	if (bp->b_bcount > ((ASC_MAX_SG_LIST - 1) * PAGE_SIZE))
@@ -525,11 +549,14 @@ advminphys(struct buf *bp)
  */
 
 static void
-adv_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req, void *arg)
+adv_scsipi_request(chan, req, arg)
+ 	struct scsipi_channel *chan;
+ 	scsipi_adapter_req_t req;
+ 	void *arg;
 {
  	struct scsipi_xfer *xs;
  	struct scsipi_periph *periph;
- 	ASC_SOFTC      *sc = device_private(chan->chan_adapter->adapt_dev);
+ 	ASC_SOFTC      *sc = (void *)chan->chan_adapter->adapt_dev;
  	bus_dma_tag_t   dmat = sc->sc_dmat;
  	ADV_CCB        *ccb;
  	int             s, flags, error, nsegs;
@@ -634,11 +661,11 @@ adv_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req, void *
  			default:
  				xs->error = XS_DRIVER_STUFFUP;
 				if (error == EFBIG) {
-					aprint_error_dev(sc->sc_dev, "adv_scsi_cmd, more than %d"
+					aprint_error_dev(&sc->sc_dev, "adv_scsi_cmd, more than %d"
 					    " DMA segments\n",
 					    ASC_MAX_SG_LIST);
 				} else {
-					aprint_error_dev(sc->sc_dev, "adv_scsi_cmd, error %d"
+					aprint_error_dev(&sc->sc_dev, "adv_scsi_cmd, error %d"
 					    " loading DMA map\n",
 					    error);
 				}
@@ -738,7 +765,8 @@ out_bad:
 }
 
 int
-adv_intr(void *arg)
+adv_intr(arg)
+	void           *arg;
 {
 	ASC_SOFTC      *sc = arg;
 
@@ -765,7 +793,10 @@ adv_intr(void *arg)
  * Poll a particular unit, looking for a particular xs
  */
 static int
-adv_poll(ASC_SOFTC *sc, struct scsipi_xfer *xs, int count)
+adv_poll(sc, xs, count)
+	ASC_SOFTC      *sc;
+	struct scsipi_xfer *xs;
+	int             count;
 {
 
 	/* timeouts are in msec, so we loop in 1000 usec cycles */
@@ -781,13 +812,14 @@ adv_poll(ASC_SOFTC *sc, struct scsipi_xfer *xs, int count)
 
 
 static void
-adv_timeout(void *arg)
+adv_timeout(arg)
+	void           *arg;
 {
 	ADV_CCB        *ccb = arg;
 	struct scsipi_xfer *xs = ccb->xs;
 	struct scsipi_periph *periph = xs->xs_periph;
 	ASC_SOFTC      *sc =
-	    device_private(periph->periph_channel->chan_adapter->adapt_dev);
+	    (void *)periph->periph_channel->chan_adapter->adapt_dev;
 	int             s;
 
 	scsipi_printaddr(periph);
@@ -822,13 +854,14 @@ adv_timeout(void *arg)
 
 
 static void
-adv_watchdog(void *arg)
+adv_watchdog(arg)
+	void           *arg;
 {
 	ADV_CCB        *ccb = arg;
 	struct scsipi_xfer *xs = ccb->xs;
 	struct scsipi_periph *periph = xs->xs_periph;
 	ASC_SOFTC      *sc =
-	    device_private(periph->periph_channel->chan_adapter->adapt_dev);
+	    (void *)periph->periph_channel->chan_adapter->adapt_dev;
 	int             s;
 
 	s = splbio();
@@ -851,7 +884,9 @@ adv_watchdog(void *arg)
  * Interrupt callback function for the Narrow SCSI Asc Library.
  */
 static void
-adv_narrow_isr_callback(ASC_SOFTC *sc, ASC_QDONE_INFO *qdonep)
+adv_narrow_isr_callback(sc, qdonep)
+	ASC_SOFTC      *sc;
+	ASC_QDONE_INFO *qdonep;
 {
 	bus_dma_tag_t   dmat = sc->sc_dmat;
 	ADV_CCB        *ccb;
@@ -882,7 +917,7 @@ adv_narrow_isr_callback(ASC_SOFTC *sc, ASC_QDONE_INFO *qdonep)
 		bus_dmamap_unload(dmat, ccb->dmamap_xfer);
 	}
 	if ((ccb->flags & CCB_ALLOC) == 0) {
-		aprint_error_dev(sc->sc_dev, "exiting ccb not allocated!\n");
+		aprint_error_dev(&sc->sc_dev, "exiting ccb not allocated!\n");
 		Debugger();
 		return;
 	}

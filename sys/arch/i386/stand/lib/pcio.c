@@ -1,4 +1,4 @@
-/*	$NetBSD: pcio.c,v 1.30 2011/06/08 16:04:40 joerg Exp $	 */
+/*	$NetBSD: pcio.c,v 1.23.8.2 2009/11/28 15:40:47 bouyer Exp $	 */
 
 /*
  * Copyright (c) 1996, 1997
@@ -38,6 +38,10 @@
 #include "libi386.h"
 #include "bootinfo.h"
 
+extern void conputc(int);
+extern int congetc(void);
+extern int conisshift(void);
+extern int coniskey(void);
 extern struct x86_boot_params boot_params;
 
 struct btinfo_console btinfo_console;
@@ -97,16 +101,6 @@ getcomaddr(int idx)
 #endif
 
 void
-clear_pc_screen(void)
-{
-#ifdef SUPPORT_SERIAL
-	/* Clear the screen if we are on a glass tty. */
-	if (iodev == CONSDEV_PC)
-		conclr();
-#endif
-}
-
-void
 initio(int dev)
 {
 #ifdef SUPPORT_SERIAL
@@ -120,10 +114,10 @@ initio(int dev)
 
 	switch (dev) {
 	case CONSDEV_AUTO:
-		for (i = 0; i < 3; i++) {
+		for(i = 0; i < 3; i++) {
 			iodev = CONSDEV_COM0 + i;
 			btinfo_console.addr = getcomaddr(i);
-			if (!btinfo_console.addr)
+			if(!btinfo_console.addr)
 				break;
 			conputc('0' + i); /* to tell user what happens */
 			cominit_x();
@@ -167,7 +161,7 @@ ok:
 	case CONSDEV_COM3:
 		iodev = dev;
 		btinfo_console.addr = getcomaddr(iodev - CONSDEV_COM0);
-		if (!btinfo_console.addr)
+		if(!btinfo_console.addr)
 			goto nocom;
 		cominit_x();
 		break;
@@ -178,7 +172,7 @@ ok:
 		iodev = dev - CONSDEV_COM0KBD + CONSDEV_COM0;
 		i = iodev - CONSDEV_COM0;
 		btinfo_console.addr = getcomaddr(i);
-		if (!btinfo_console.addr)
+		if(!btinfo_console.addr)
 			goto nocom;
 		conputc('0' + i); /* to tell user what happens */
 		cominit_x();
@@ -221,6 +215,10 @@ nocom:
 	conputc('\n');
 	strncpy(btinfo_console.devname, iodev == CONSDEV_PC ? "pc" : "com", 16);
 
+	if (iodev == CONSDEV_PC) {
+		/* Clear screen if on a glass tty. */
+		conclr();
+	}
 #else /* !SUPPORT_SERIAL */
 	btinfo_console.devname[0] = 'p';
 	btinfo_console.devname[1] = 'c';
@@ -267,8 +265,6 @@ getchar(void)
 	default: /* to make gcc -Wall happy... */
 	case CONSDEV_PC:
 #endif
-		while (!coniskey())
-			;
 		c = congetc();
 #ifdef CONSOLE_KEYMAP
 		{
@@ -368,11 +364,4 @@ out:
 		printf("0 seconds.     \n");
 
 	return c;
-}
-
-void
-wait_sec(int sec)
-{
-
-	wait(sec * 1000000);
 }

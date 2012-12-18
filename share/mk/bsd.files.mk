@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.files.mk,v 1.42 2011/09/10 16:57:35 apb Exp $
+#	$NetBSD: bsd.files.mk,v 1.39.2.1 2008/12/06 21:58:43 snj Exp $
 
 .if !defined(_BSD_FILES_MK_)
 _BSD_FILES_MK_=1
@@ -41,7 +41,7 @@ __fileinstall: .USE
 _FDIR:=		${FILESDIR_${F}:U${FILESDIR}}		# dir override
 _FNAME:=	${FILESNAME_${F}:U${FILESNAME:U${F:T}}}	# name override
 _F:=		${DESTDIR}${_FDIR}/${_FNAME}		# installed path
-_FDOBUILD:=	${FILESBUILD_${F}:U${FILESBUILD:Uno}}
+_FDOBUILD:=	${FILESBUILD_${F}:Uno}
 
 .if ${MKUPDATE} == "no"
 ${_F}!		${F} __fileinstall			# install rule
@@ -74,7 +74,7 @@ configinstall:	configfilesinstall
 _FDIR:=		${FILESDIR_${F}:U${FILESDIR}}		# dir override
 _FNAME:=	${FILESNAME_${F}:U${FILESNAME:U${F:T}}}	# name override
 _F:=		${DESTDIR}${_FDIR}/${_FNAME}		# installed path
-_FDOBUILD:=	${FILESBUILD_${F}:U${FILESBUILD:Uno}}
+_FDOBUILD:=	${FILESBUILD_${F}:Uno}
 
 .if ${MKUPDATE} == "no"
 ${_F}!		${F} __fileinstall	# install rule
@@ -118,7 +118,9 @@ ${_TL}: ${_SL}
 
 realall: ${BUILDSYMLINKS.t}
 
-CLEANDIRFILES+= ${BUILDSYMLINKS.t}
+cleandir: cleanbuildsymlinks
+cleanbuildsymlinks: .PHONY
+	rm -f ${BUILDSYMLINKS.t}
 
 .endif								# }
 
@@ -147,12 +149,13 @@ CLEANUUDECODE_FILES=${UUDECODE_FILES} ${UUDECODE_FILES:=.tmp}
 CLEANUUDECODE_FILES+=${UUDECODE_FILES_RENAME_${i}}
 .endfor
 
-CLEANFILES+= ${CLEANUUDECODE_FILES}
+clean: cleanuudecodefiles
+cleanuudecodefiles: .PHONY
+	rm -f ${CLEANUUDECODE_FILES}
 .endif								# }
 
 ##### Pull in related .mk logic
 .include <bsd.obj.mk>
 .include <bsd.sys.mk>
-.include <bsd.clean.mk>
 
 .endif	# !defined(_BSD_FILES_MK_)

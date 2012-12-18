@@ -14,7 +14,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ar5212_power.c,v 1.2 2011/03/07 11:25:43 cegger Exp $
+ * $Id: ar5212_power.c,v 1.1.1.1.10.2 2009/08/07 06:43:42 snj Exp $
  */
 #include "opt_ah.h"
 
@@ -39,7 +39,7 @@ ar5212SetPowerModeAwake(struct ath_hal *ah, int setChip)
 {
 #define	AR_SCR_MASK \
     (AR_SCR_SLDUR|AR_SCR_SLE|AR_SCR_SLE|AR_SCR_SLDTP|AR_SCR_SLDWP|\
-     AR_SCR_SLEPOL|AR_SCR_MIBIE|AR_SCR_UNKNOWN)
+     AR_SCR_SLEPOL|AR_SCR_MIBIE)
 #define	POWER_UP_TIME	2000
 	uint32_t scr, val;
 	int i;

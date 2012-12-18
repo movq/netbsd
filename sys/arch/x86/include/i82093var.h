@@ -1,4 +1,4 @@
-/* $NetBSD: i82093var.h,v 1.12 2012/06/15 13:55:22 yamt Exp $ */
+/* $NetBSD: i82093var.h,v 1.10 2008/07/03 15:44:19 drochner Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -34,7 +34,6 @@
 #ifndef _X86_I82093VAR_H_
 #define _X86_I82093VAR_H_
 
-#include <sys/device.h>
 #include <machine/apicvar.h>
 
 struct ioapic_pin 
@@ -67,8 +66,6 @@ struct ioapic_softc {
  * ih&0x10000000 -> if 0, old-style isa irq; if 1, routed via ioapic.
  * (ih&0xff0000)>>16 -> ioapic id.
  * (ih&0x00ff00)>>8 -> ioapic pin.
- *
- * 0x80000000 is used by pci_intr_machdep.c for MPSAFE_MASK
  */
 
 #define APIC_INT_VIA_APIC	0x10000000

@@ -1,4 +1,4 @@
-/*	$NetBSD: link_proto.c,v 1.7 2011/10/07 16:34:31 dyoung Exp $	*/
+/*	$NetBSD: link_proto.c,v 1.4 2008/05/13 18:09:22 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: link_proto.c,v 1.7 2011/10/07 16:34:31 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: link_proto.c,v 1.4 2008/05/13 18:09:22 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -144,7 +144,7 @@ link_control(struct socket *so, unsigned long cmd, void *data,
 				}
 			}
 			if (ifa == NULL) {
-				error = EADDRNOTAVAIL;
+				error = EADDRNOTAVAIL; 
 				break;
 			}
 
@@ -153,9 +153,6 @@ link_control(struct socket *so, unsigned long cmd, void *data,
 			else
 				iflr->flags = 0;
 
-			if (ifa == ifp->if_hwdl)
-				iflr->flags |= IFLR_FACTORY;
-
 			sockaddr_copy(sstosa(&iflr->addr), sizeof(iflr->addr),
 			    ifa->ifa_addr);
 
@@ -163,7 +160,7 @@ link_control(struct socket *so, unsigned long cmd, void *data,
 		case SIOCDLIFADDR:
 			if (ifa == NULL)
 				error = EADDRNOTAVAIL;
-			else if (ifa == ifp->if_dl || ifa == ifp->if_hwdl)
+			else if (ifa == ifp->if_dl)
 				error = EBUSY;
 			else {
 				/* TBD routing socket */
@@ -189,7 +186,6 @@ link_control(struct socket *so, unsigned long cmd, void *data,
 
 			if (!isactive && mkactive) {
 				if_activate_sadl(ifp, ifa, nsdl);
-				rt_newaddrmsg(RTM_CHANGE, ifa, 0, NULL);
 				error = ENETRESET;
 			}
 			break;

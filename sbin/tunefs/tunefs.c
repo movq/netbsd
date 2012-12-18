@@ -1,4 +1,4 @@
-/*	$NetBSD: tunefs.c,v 1.45 2012/04/07 04:52:21 christos Exp $	*/
+/*	$NetBSD: tunefs.c,v 1.37.2.2 2009/10/03 22:49:42 snj Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)tunefs.c	8.3 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: tunefs.c,v 1.45 2012/04/07 04:52:21 christos Exp $");
+__RCSID("$NetBSD: tunefs.c,v 1.37.2.2 2009/10/03 22:49:42 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,7 +51,6 @@ __RCSID("$NetBSD: tunefs.c,v 1.45 2012/04/07 04:52:21 christos Exp $");
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
 #include <ufs/ufs/ufs_wapbl.h>
-#include <ufs/ufs/quota2.h>
 
 #include <machine/bswap.h>
 
@@ -81,11 +80,6 @@ long	dev_bsize = 512;
 int	needswap = 0;
 int	is_ufs2 = 0;
 off_t	sblockloc;
-int	userquota = 0;
-int	groupquota = 0;
-#define Q2_EN  (1)
-#define Q2_IGN (0)
-#define Q2_DIS (-1)
 
 static off_t sblock_try[] = SBLOCKSEARCH;
 
@@ -95,11 +89,18 @@ static	void	change_log_info(long long);
 static	void	getsb(struct fs *, const char *);
 static	int	openpartition(const char *, int, char *, size_t);
 static	void	show_log_info(void);
-__dead static	void	usage(void);
+static	void	usage(void);
 
 int
 main(int argc, char *argv[])
 {
+#define	OPTSTRINGBASE	"AFNe:g:h:l:m:o:"
+#ifdef TUNEFS_SOFTDEP
+	int		softdep;
+#define	OPTSTRING	OPTSTRINGBASE ## "n:"
+#else
+#define	OPTSTRING	OPTSTRINGBASE
+#endif
 	int		i, ch, Aflag, Fflag, Nflag, openflags;
 	const char	*special, *chg[2];
 	char		device[MAXPATHLEN];
@@ -111,10 +112,13 @@ main(int argc, char *argv[])
 	maxbpg = minfree = optim = -1;
 	avgfilesize = avgfpdir = -1;
 	logfilesize = -1;
+#ifdef TUNEFS_SOFTDEP
+	softdep = -1;
+#endif
 	chg[FS_OPTSPACE] = "space";
 	chg[FS_OPTTIME] = "time";
 
-	while ((ch = getopt(argc, argv, "AFNe:g:h:l:m:o:q:")) != -1) {
+	while ((ch = getopt(argc, argv, OPTSTRING)) != -1) {
 		switch (ch) {
 
 		case 'A':
@@ -156,6 +160,19 @@ main(int argc, char *argv[])
 			    optarg, 0, 99);
 			break;
 
+#ifdef TUNEFS_SOFTDEP
+		case 'n':
+			if (strcmp(optarg, "enable") == 0)
+				softdep = 1;
+			else if (strcmp(optarg, "disable") == 0)
+				softdep = 0;
+			else {
+				errx(10, "bad soft dependencies "
+					"(options are `enable' or `disable')");
+			}
+			break;
+#endif
+
 		case 'o':
 			if (strcmp(optarg, chg[FS_OPTSPACE]) == 0)
 				optim = FS_OPTSPACE;
@@ -166,18 +183,7 @@ main(int argc, char *argv[])
 				    "bad %s (options are `space' or `time')",
 				    "optimization preference");
 			break;
-		case 'q':
-			if      (strcmp(optarg, "user") == 0)
-				userquota = Q2_EN;
-			else if (strcmp(optarg, "group") == 0)
-				groupquota = Q2_EN;
-			else if (strcmp(optarg, "nouser") == 0)
-				userquota = Q2_DIS;
-			else if (strcmp(optarg, "nogroup") == 0)
-				groupquota = Q2_DIS;
-			else
-			    errx(11, "invalid quota type %s", optarg);
-			break;
+
 		default:
 			usage();
 		}
@@ -224,6 +230,15 @@ main(int argc, char *argv[])
 		    sblock.fs_optim == FS_OPTTIME)
 			warnx(OPTWARN, "space", "<", MINFREE);
 	}
+#ifdef TUNEFS_SOFTDEP
+	if (softdep == 1) {
+		sblock.fs_flags |= FS_DOSOFTDEP;
+		warnx("soft dependencies set");
+	} else if (softdep == 0) {
+		sblock.fs_flags &= ~FS_DOSOFTDEP;
+		warnx("soft dependencies cleared");
+	}
+#endif
 	if (optim != -1) {
 		if (sblock.fs_optim == optim) {
 			warnx("%s remains unchanged as %s",
@@ -249,51 +264,6 @@ main(int argc, char *argv[])
 
 	if (logfilesize >= 0)
 		change_log_info(logfilesize);
-	if (userquota == Q2_EN || groupquota == Q2_EN)
-		sblock.fs_flags |= FS_DOQUOTA2;
-	if (sblock.fs_flags & FS_DOQUOTA2) {
-		sblock.fs_quota_magic = Q2_HEAD_MAGIC;
-		switch(userquota) {
-		case Q2_EN:
-			if ((sblock.fs_quota_flags & FS_Q2_DO_TYPE(USRQUOTA))
-			    == 0) {
-				printf("enabling user quotas\n");
-				sblock.fs_quota_flags |=
-				    FS_Q2_DO_TYPE(USRQUOTA);
-				sblock.fs_quotafile[USRQUOTA] = 0;
-			}
-			break;
-		case Q2_DIS:
-			if ((sblock.fs_quota_flags & FS_Q2_DO_TYPE(USRQUOTA))
-			    != 0) {
-				printf("disabling user quotas\n");
-				sblock.fs_quota_flags &=
-				    ~FS_Q2_DO_TYPE(USRQUOTA);
-			}
-		}
-		switch(groupquota) {
-		case Q2_EN:
-			if ((sblock.fs_quota_flags & FS_Q2_DO_TYPE(GRPQUOTA))
-			    == 0) {
-				printf("enabling group quotas\n");
-				sblock.fs_quota_flags |=
-				    FS_Q2_DO_TYPE(GRPQUOTA);
-				sblock.fs_quotafile[GRPQUOTA] = 0;
-			}
-			break;
-		case Q2_DIS:
-			if ((sblock.fs_quota_flags & FS_Q2_DO_TYPE(GRPQUOTA))
-			    != 0) {
-				printf("disabling group quotas\n");
-				sblock.fs_quota_flags &=
-				    ~FS_Q2_DO_TYPE(GRPQUOTA);
-			}
-		}
-	}
-	/*
-	 * if we disabled all quotas, FS_DOQUOTA2 and associated inode(s) will
-	 * be cleared by kernel or fsck.
-	 */
 
 	if (Nflag) {
 		printf("tunefs: current settings of %s\n", special);
@@ -303,25 +273,15 @@ main(int argc, char *argv[])
 		    sblock.fs_maxbpg);
 		printf("\tminimum percentage of free space %d%%\n",
 		    sblock.fs_minfree);
+#ifdef TUNEFS_SOFTDEP
+		printf("\tsoft dependencies: %s\n",
+		    (sblock.fs_flags & FS_DOSOFTDEP) ? "on" : "off");
+#endif
 		printf("\toptimization preference: %s\n", chg[sblock.fs_optim]);
 		printf("\taverage file size: %d\n", sblock.fs_avgfilesize);
 		printf("\texpected number of files per directory: %d\n",
 		    sblock.fs_avgfpdir);
 		show_log_info();
-		printf("\tquotas");
-		if (sblock.fs_flags & FS_DOQUOTA2) {
-			if (sblock.fs_quota_flags & FS_Q2_DO_TYPE(USRQUOTA)) {
-				printf(" user");
-				if (sblock.fs_quota_flags &
-				    FS_Q2_DO_TYPE(GRPQUOTA))
-					printf(",");
-			}
-			if (sblock.fs_quota_flags & FS_Q2_DO_TYPE(GRPQUOTA))
-				printf(" group");
-			printf(" enabled\n");
-		} else {
-			printf("disabled\n");
-		}
 		printf("tunefs: no changes made\n");
 		exit(0);
 	}
@@ -444,7 +404,7 @@ change_log_info(long long logfilesize)
 	if (!in_fs_log && logfilesize > 0 && old_size > 0)
 		errx(1, "Can't change size of non-in-filesystem log");
 
-	if (old_size == (uint64_t)logfilesize && logfilesize > 0) {
+	if (old_size == logfilesize && logfilesize > 0) {
 		/* no action */
 		warnx("log file size remains unchanged at %lld", logfilesize);
 		return;
@@ -478,8 +438,10 @@ usage(void)
 	fprintf(stderr, "\t-h expected number of files per directory\n");
 	fprintf(stderr, "\t-l journal log file size (`0' to clear journal)\n");
 	fprintf(stderr, "\t-m minimum percentage of free space\n");
+#ifdef TUNEFS_SOFTDEP
+	fprintf(stderr, "\t-n soft dependencies (`enable' or `disable')\n");
+#endif
 	fprintf(stderr, "\t-o optimization preference (`space' or `time')\n");
-	fprintf(stderr, "\t-q quota type (`[no]user' or `[no]group')\n");
 	exit(2);
 }
 
@@ -549,22 +511,18 @@ bread(daddr_t blk, char *buffer, int cnt, const char *file)
 static int
 openpartition(const char *name, int flags, char *device, size_t devicelen)
 {
-	char		rawspec[MAXPATHLEN], xbuf[MAXPATHLEN], *p;
+	char		rawspec[MAXPATHLEN], *p;
 	struct fstab	*fs;
 	int		fd, oerrno;
 
 	fs = getfsfile(name);
 	if (fs) {
-		const char *fsspec;
-		fsspec = getfsspecname(xbuf, sizeof(xbuf), fs->fs_spec);
-		if (fsspec == NULL)
-			err(4, "%s", xbuf);
-		if ((p = strrchr(fsspec, '/')) != NULL) {
+		if ((p = strrchr(fs->fs_spec, '/')) != NULL) {
 			snprintf(rawspec, sizeof(rawspec), "%.*s/r%s",
-			    (int)(p - fsspec), fsspec, p + 1);
+			    (int)(p - fs->fs_spec), fs->fs_spec, p + 1);
 			name = rawspec;
 		} else
-			name = fsspec;
+			name = fs->fs_spec;
 	}
 	fd = opendisk(name, flags, device, devicelen, 0);
 	if (fd == -1 && errno == ENOENT) {

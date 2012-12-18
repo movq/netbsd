@@ -1,7 +1,7 @@
-/*	$NetBSD: dict_dbm.h,v 1.1.1.2 2011/03/02 19:32:42 tron Exp $	*/
+/*	$NetBSD: dict_dbm.h,v 1.1.1.1.2.3 2011/01/07 01:24:16 riz Exp $	*/
 
-#ifndef _DICT_DBM_H_INCLUDED_
-#define _DICT_DBM_H_INCLUDED_
+#ifndef _DICT_DBN_H_INCLUDED_
+#define _DICT_DBN_H_INCLUDED_
 
 /*++
 /* NAME

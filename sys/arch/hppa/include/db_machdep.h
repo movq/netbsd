@@ -1,9 +1,9 @@
-/*	$NetBSD: db_machdep.h,v 1.12 2012/01/18 09:35:48 skrll Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.7 2007/04/07 08:38:28 skrll Exp $	*/
 
 /*	$OpenBSD: db_machdep.h,v 1.5 2001/02/16 19:20:13 mickey Exp $	*/
 
 /*
- * Copyright (c) 1998-2004 Michael Shalayeff
+ * Copyright (c) 1998 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,44 +14,39 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Michael Shalayeff.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR OR HIS RELATIVES BE LIABLE FOR ANY DIRECT,
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF MIND, USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef	_HPPA_DB_MACHDEP_H_
 #define	_HPPA_DB_MACHDEP_H_
 
-#include <sys/param.h>
-
 #include <uvm/uvm_extern.h>
-
-#include <machine/pcb.h>
-#include <machine/frame.h>
 
 #define	DB_ELF_SYMBOLS
 #define	DB_ELFSIZE	32
 
 /* types the generic ddb module needs */
 typedef	vaddr_t db_addr_t;
-#define	DDB_EXPR_FMT	"l"		/* expression is long */
 typedef	long db_expr_t;
 
 typedef struct trapframe db_regs_t;
 extern db_regs_t	ddb_regs;
 #define	DDB_REGS	(&ddb_regs)
-
-/* DDB commands not in db_interface.c */
-void	db_dump_trap(db_expr_t, bool, db_expr_t, const char *);
 
 /*
  * Things needed by kgdb:
@@ -120,8 +115,6 @@ static __inline int inst_trap_return(u_int ins)	{
 
 #define db_clear_single_step(r)	((r)->tf_ipsw &= ~PSW_R)
 #define db_set_single_step(r)	((r)->tf_ipsw |= PSW_R)
-
-#define DB_MACHINE_COMMANDS
 
 int db_valid_breakpoint(db_addr_t);
 int kdb_trap(int, int, db_regs_t *);

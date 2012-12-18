@@ -1,4 +1,4 @@
-/*	$NetBSD: gemini_space.c,v 1.3 2011/07/01 19:32:28 dyoung Exp $	*/
+/*	$NetBSD: gemini_space.c,v 1.1 2008/10/24 04:23:18 matt Exp $	*/
 
 /* adapted from:
  *	NetBSD: pxa2x0_space.c,v 1.8 2005/11/24 13:08:32 yamt Exp
@@ -79,14 +79,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gemini_space.c,v 1.3 2011/07/01 19:32:28 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gemini_space.c,v 1.1 2008/10/24 04:23:18 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 /* Prototypes for all the bus_space structure functions */
 bs_protos(gemini);
@@ -199,7 +199,7 @@ gemini_bs_map(void *t, bus_addr_t bpa, bus_size_t size,
 	*bshp = (bus_space_handle_t)(va + (bpa - startpa));
 
 	for (pa = startpa; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
 		if ((flag & BUS_SPACE_MAP_CACHEABLE) == 0) {
 			pte = vtopte(va);
 			*pte &= ~L2_S_CACHE_MASK;

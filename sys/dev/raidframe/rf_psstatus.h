@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_psstatus.h,v 1.14 2011/05/03 08:18:43 mrg Exp $	*/
+/*	$NetBSD: rf_psstatus.h,v 1.13 2006/02/14 01:13:33 oster Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -56,20 +56,21 @@
 #define RF_HASH_PSID(_raid_,_psid_) ( (_psid_) % ((_raid_)->pssTableSize) )	/* simple hash function */
 #define RF_LOCK_PSS_MUTEX(_raidPtr, _psid)                                                      \
   do {                                                                                          \
-     rf_lock_mutex2((_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].mutex);  \
+     RF_LOCK_MUTEX((_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].mutex);   \
      while((_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].lock) {           \
-          rf_wait_cond2((_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].cond,\
-	                (_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].mutex);\
+          ltsleep(&(_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].lock,     \
+	          PRIBIO, "rflockpss", 0,                                                       \
+	          &(_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].mutex);   \
      }                                                                                          \
      (_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].lock = 1;               \
-     rf_unlock_mutex2((_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].mutex);\
+     RF_UNLOCK_MUTEX((_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].mutex); \
   } while (0);
 
 #define RF_UNLOCK_PSS_MUTEX(_raidPtr, _psid)                                                    \
-  rf_lock_mutex2((_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].mutex);     \
+  RF_LOCK_MUTEX((_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].mutex);      \
   (_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].lock = 0;                  \
-  rf_broadcast_cond2((_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].cond);  \
-  rf_unlock_mutex2((_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].mutex);
+  wakeup(&(_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].lock);             \
+  RF_UNLOCK_MUTEX((_raidPtr)->reconControl->pssTable[ RF_HASH_PSID(_raidPtr,_psid) ].mutex);
 
 struct RF_ReconParityStripeStatus_s {
 	RF_StripeNum_t parityStripeID;	/* the parity stripe ID */
@@ -98,10 +99,9 @@ struct RF_ReconParityStripeStatus_s {
 };
 
 struct RF_PSStatusHeader_s {
-	rf_declare_mutex2(mutex);	/* mutex for this hash chain */
-	rf_declare_cond2(cond);		/* and cv for it */
-	int lock;             		/* 1 if this hash chain is locked,
-					   0 otherwise */
+	RF_DECLARE_MUTEX(mutex)	/* mutex for this hash chain */
+	int lock;               /* 1 if this hash chain is locked,
+				   0 otherwise */
 	RF_ReconParityStripeStatus_t *chain;	/* the hash chain */
 };
 /* masks for the "flags" field above */

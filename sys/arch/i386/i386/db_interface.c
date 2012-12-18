@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.70 2012/12/08 14:40:10 jakllsch Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.62 2008/10/15 08:13:17 ad Exp $	*/
 
 /*
  * Mach Operating System
@@ -33,13 +33,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.70 2012/12/08 14:40:10 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.62 2008/10/15 08:13:17 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
-
-#include "ioapic.h"
-#include "lapic.h"
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -56,13 +53,9 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.70 2012/12/08 14:40:10 jakllsch E
 #include <machine/cpufunc.h>
 #include <machine/db_machdep.h>
 #include <machine/cpuvar.h>
-#if NIOAPIC > 0
 #include <machine/i82093var.h>
-#endif
-#if NLAPIC > 0
 #include <machine/i82489reg.h>
 #include <machine/i82489var.h>
-#endif
 
 #include <ddb/db_sym.h>
 #include <ddb/db_command.h>
@@ -71,7 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.70 2012/12/08 14:40:10 jakllsch E
 #include <ddb/db_output.h>
 #include <ddb/ddbvar.h>
 
-extern const char *const trap_type[];
+extern char *trap_type[];
 extern int trap_types;
 
 int	db_active = 0;
@@ -81,8 +74,7 @@ void db_mach_cpu (db_expr_t, bool, db_expr_t, const char *);
 
 const struct db_command db_machine_command_table[] = {
 #ifdef MULTIPROCESSOR
-	{ DDB_ADD_CMD("cpu",	db_mach_cpu,	0,
-	  "switch to another cpu", "cpu-no", NULL) },
+	{ DDB_ADD_CMD("cpu",	db_mach_cpu,	0, NULL,NULL,NULL) },
 #endif
 		
 	{ DDB_ADD_CMD(NULL, NULL, 0,  NULL,NULL,NULL) },
@@ -93,9 +85,7 @@ void kdbprinttrap(int, int);
 extern void ddb_ipi(int, struct trapframe);
 extern void ddb_ipi_tss(struct i386tss *);
 static void ddb_suspend(struct trapframe *);
-#ifndef XEN
 int ddb_vec;
-#endif /* XEN */
 static bool ddb_mp_online;
 #endif
 
@@ -109,16 +99,12 @@ typedef void (vector)(void);
 extern vector Xintrddbipi;
 
 void
-db_machine_init(void)
+db_machine_init()
 {
 
 #ifdef MULTIPROCESSOR
-#ifndef XEN
 	ddb_vec = idt_vec_alloc(0xf0, 0xff);
 	idt_vec_set(ddb_vec, &Xintrddbipi);
-#else
-	/* Initialised as part of xen_ipi_init() */
-#endif /* XEN */
 #endif
 }
 
@@ -132,10 +118,8 @@ db_suspend_others(void)
 	int cpu_me = cpu_number();
 	int win;
 
-#ifndef XEN
 	if (ddb_vec == 0)
 		return 1;
-#endif /* XEN */
 
 	__cpu_simple_lock(&db_lock);
 	if (ddb_cpu == NOCPU)
@@ -143,11 +127,7 @@ db_suspend_others(void)
 	win = (ddb_cpu == cpu_me);
 	__cpu_simple_unlock(&db_lock);
 	if (win) {
-#ifdef XEN
-		xen_broadcast_ipi(XEN_IPI_DDB);
-#else
 		x86_ipi(ddb_vec, LAPIC_DEST_ALLEXCL, LAPIC_DLMODE_FIXED);
-#endif /* XEN */
 	}
 	ddb_mp_online = x86_mp_online;
 	x86_mp_online = false;
@@ -177,7 +157,8 @@ db_resume_others(void)
  * Print trap reason.
  */
 void
-kdbprinttrap(int type, int code)
+kdbprinttrap(type, code)
+	int type, code;
 {
 	db_printf("kernel: %s trap ", (type & T_USER) ? "user" : "supervisor");
 	type &= ~T_USER;
@@ -192,7 +173,9 @@ kdbprinttrap(int type, int code)
  *  kdb_trap - field a TRACE or BPT trap
  */
 int
-kdb_trap(int type, int code, db_regs_t *regs)
+kdb_trap(type, code, regs)
+	int type, code;
+	db_regs_t *regs;
 {
 	int s, flags;
 	db_regs_t dbreg;
@@ -201,11 +184,9 @@ kdb_trap(int type, int code, db_regs_t *regs)
 	regs->tf_err &= ~TC_FLAGMASK;
 
 	switch (type) {
-	case T_NMI:	/* NMI */
-		printf("NMI ... going to debugger\n");
-		/*FALLTHROUGH*/
 	case T_BPTFLT:	/* breakpoint */
 	case T_TRCTRAP:	/* single_step */
+	case T_NMI:	/* NMI */
 	case -1:	/* keyboard interrupt */
 		break;
 	default:
@@ -283,7 +264,7 @@ kdb_trap(int type, int code, db_regs_t *regs)
 }
 
 void
-cpu_Debugger(void)
+cpu_Debugger()
 {
 	breakpoint();
 }

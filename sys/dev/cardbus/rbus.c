@@ -1,5 +1,4 @@
-/*	$NetBSD: rbus.c,v 1.29 2012/01/27 18:53:07 para Exp $	*/
-
+/*	$NetBSD: rbus.c,v 1.25 2007/10/19 11:59:39 ad Exp $	*/
 /*
  * Copyright (c) 1999 and 2000
  *     HAYAKAWA Koichi.  All rights reserved.
@@ -12,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by HAYAKAWA Koichi.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rbus.c,v 1.29 2012/01/27 18:53:07 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rbus.c,v 1.25 2007/10/19 11:59:39 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,7 +61,14 @@ static rbus_tag_t rbus_new_body(bus_space_tag_t bt, rbus_tag_t parent,
 
 
 int
-rbus_space_alloc(rbus_tag_t rbt, bus_addr_t addr, bus_size_t size, bus_addr_t mask, bus_addr_t align, int flags, bus_addr_t *addrp, bus_space_handle_t *bshp)
+rbus_space_alloc(rbt, addr, size, mask, align, flags, addrp, bshp)
+	rbus_tag_t rbt;
+	bus_addr_t addr;
+	bus_size_t size;
+	bus_addr_t mask, align;
+	int flags;
+	bus_addr_t *addrp;
+	bus_space_handle_t *bshp;
 {
 	return rbus_space_alloc_subregion(rbt, rbt->rb_start, rbt->rb_end,
 	    addr, size, mask, align, flags, addrp, bshp);
@@ -67,7 +78,16 @@ rbus_space_alloc(rbus_tag_t rbt, bus_addr_t addr, bus_size_t size, bus_addr_t ma
 
 
 int
-rbus_space_alloc_subregion(rbus_tag_t rbt, bus_addr_t substart, bus_addr_t subend, bus_addr_t addr, bus_size_t size, bus_addr_t mask, bus_addr_t align, int flags, bus_addr_t *addrp, bus_space_handle_t *bshp)
+rbus_space_alloc_subregion(rbt, substart, subend, addr, size, mask, align, flags, addrp, bshp)
+	rbus_tag_t rbt;
+	bus_addr_t addr;
+	bus_addr_t substart;
+	bus_addr_t subend;
+	bus_size_t size;
+	bus_addr_t mask, align;
+	int flags;
+	bus_addr_t *addrp;
+	bus_space_handle_t *bshp;
 {
 	bus_addr_t decodesize = mask + 1;
 	bus_addr_t boundary, search_addr;
@@ -166,7 +186,11 @@ rbus_space_alloc_subregion(rbus_tag_t rbt, bus_addr_t substart, bus_addr_t suben
 
 
 int
-rbus_space_free(rbus_tag_t rbt, bus_space_handle_t bsh, bus_size_t size, bus_addr_t *addrp)
+rbus_space_free(rbt, bsh, size, addrp)
+	rbus_tag_t rbt;
+	bus_space_handle_t bsh;
+	bus_size_t size;
+	bus_addr_t *addrp;
 {
 	int exflags = EX_FAST | EX_NOWAIT;
 	bus_addr_t addr;
@@ -201,7 +225,12 @@ rbus_space_free(rbus_tag_t rbt, bus_space_handle_t bsh, bus_size_t size, bus_add
  *
  */
 static rbus_tag_t
-rbus_new_body(bus_space_tag_t bt, rbus_tag_t parent, struct extent *ex, bus_addr_t start, bus_addr_t end, bus_addr_t offset, int flags)
+rbus_new_body(bt, parent, ex, start, end, offset, flags)
+	bus_space_tag_t bt;
+	rbus_tag_t parent;
+	struct extent *ex;
+	bus_addr_t start, end, offset;
+	int flags;
 {
 	rbus_tag_t rb;
 
@@ -249,7 +278,12 @@ rbus_new_body(bus_space_tag_t bt, rbus_tag_t parent, struct extent *ex, bus_addr
  *  This function makes a new child rbus instance.
  */
 rbus_tag_t
-rbus_new(rbus_tag_t parent, bus_addr_t start, bus_size_t size, bus_addr_t offset, int flags)
+rbus_new(parent, start, size, offset, flags)
+	rbus_tag_t parent;
+	bus_addr_t start;
+	bus_size_t size;
+	bus_addr_t offset;
+	int flags;
 {
 	rbus_tag_t rb;
 	struct extent *ex = NULL;
@@ -258,7 +292,7 @@ rbus_new(rbus_tag_t parent, bus_addr_t start, bus_size_t size, bus_addr_t offset
 	if (flags == RBUS_SPACE_SHARE) {
 		ex = parent->rb_ext;
 	} else if (flags == RBUS_SPACE_DEDICATE) {
-		if (NULL == (ex = extent_create("rbus", start, end,
+		if (NULL == (ex = extent_create("rbus", start, end, M_DEVBUF,
 		    NULL, 0, EX_NOCOALESCE|EX_NOWAIT))) {
 			return NULL;
 		}
@@ -289,13 +323,17 @@ rbus_new(rbus_tag_t parent, bus_addr_t start, bus_size_t size, bus_addr_t offset
  *  This function makes a root rbus instance.
  */
 rbus_tag_t
-rbus_new_root_delegate(bus_space_tag_t bt, bus_addr_t start, bus_size_t size, bus_addr_t offset)
+rbus_new_root_delegate(bt, start, size, offset)
+	bus_space_tag_t bt;
+	bus_addr_t start;
+	bus_size_t size;
+	bus_addr_t offset;
 {
 	rbus_tag_t rb;
 	struct extent *ex;
 
 	if (NULL == (ex = extent_create("rbus root", start, start + size,
-	    NULL, 0, EX_NOCOALESCE|EX_NOWAIT))) {
+	    M_DEVBUF, NULL, 0, EX_NOCOALESCE|EX_NOWAIT))) {
 		return NULL;
 	}
 
@@ -318,7 +356,12 @@ rbus_new_root_delegate(bus_space_tag_t bt, bus_addr_t start, bus_size_t size, bu
  *  This function makes a root rbus instance.
  */
 rbus_tag_t
-rbus_new_root_share(bus_space_tag_t bt, struct extent *ex, bus_addr_t start, bus_size_t size, bus_addr_t offset)
+rbus_new_root_share(bt, ex, start, size, offset)
+	bus_space_tag_t bt;
+	struct extent *ex;
+	bus_addr_t start;
+	bus_size_t size;
+	bus_addr_t offset;
 {
 	/* sanity check */
 	if (start < ex->ex_start || start + size > ex->ex_end) {
@@ -344,7 +387,8 @@ rbus_new_root_share(bus_space_tag_t bt, struct extent *ex, bus_addr_t start, bus
  *   This function deletes the rbus structure pointed in the argument.
  */
 int
-rbus_delete(rbus_tag_t rb)
+rbus_delete(rb)
+	rbus_tag_t rb;
 {
 	DPRINTF(("rbus_delete called [%s]\n",
 	    rb->rb_ext != NULL ? rb->rb_ext->ex_name : "noname"));

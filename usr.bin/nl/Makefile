@@ -1,7 +1,5 @@
-#	$NetBSD: Makefile,v 1.4 2011/08/16 12:00:46 christos Exp $
+#	$NetBSD: Makefile,v 1.3 2006/10/08 17:52:29 peter Exp $
 
 PROG=	nl
-
-COPTS.nl.c += -Wno-format-nonliteral
 
 .include <bsd.prog.mk>

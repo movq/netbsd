@@ -1,21 +1,21 @@
-/* $NetBSD: disksubr.c,v 1.41 2012/02/06 02:14:11 matt Exp $ */
+/* $NetBSD: disksubr.c,v 1.36 2008/01/02 11:48:21 ad Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Authors: Keith Bostic, Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.41 2012/02/06 02:14:11 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.36 2008/01/02 11:48:21 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,7 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.41 2012/02/06 02:14:11 matt Exp $");
 #include <machine/cpu.h>
 #include <machine/autoconf.h>
 
-extern device_t bootdv;
+extern struct device *bootdv;
 
 /*
  * Attempt to read a disk label from a device
@@ -53,7 +53,11 @@ extern device_t bootdv;
  * Returns null on success and an error string on failure.
  */
 const char *
-readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp, struct cpu_disklabel *clp)
+readdisklabel(dev, strat, lp, clp)
+	dev_t dev;
+	void (*strat) __P((struct buf *));
+	struct disklabel *lp;
+	struct cpu_disklabel *clp;
 {
 	struct buf *bp;
 	struct disklabel *dlp;
@@ -65,7 +69,7 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp, stru
 	if (lp->d_secsize == 0)
 		lp->d_secsize = DEV_BSIZE;
 	if (lp->d_secperunit == 0)
-		lp->d_secperunit = 0x1fffffff;
+		lp->d_secperunit = 0x1fffffff; 
 	lp->d_npartitions = RAW_PART + 1;
 	if (lp->d_partitions[RAW_PART].p_size == 0)
 		lp->d_partitions[RAW_PART].p_size = lp->d_secperunit;
@@ -80,7 +84,7 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp, stru
 	bp->b_cylinder = 0;
 	bp->b_bcount = lp->d_secsize;
 	bp->b_flags |= B_READ;
-	(*strat)(bp);
+	(*strat)(bp);  
 
 	/* if successful, locate disk label within block and validate */
 	if (biowait(bp)) {
@@ -144,7 +148,10 @@ done:
  * Check new disk label for sensibility before setting it.
  */
 int
-setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask, struct cpu_disklabel *clp)
+setdisklabel(olp, nlp, openmask, clp)
+	struct disklabel *olp, *nlp;
+	u_long openmask;
+	struct cpu_disklabel *clp;
 {
 	int i;
 	struct partition *opp, *npp;
@@ -157,7 +164,7 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask, stru
 #ifdef notdef
 	/* XXX WHY WAS THIS HERE?! */
 	/* special case to allow disklabel to be invalidated */
-	if (nlp->d_magic == 0xffffffff) {
+	if (nlp->d_magic == 0xffffffff) { 
 		*olp = *nlp;
 		return (0);
 	}
@@ -190,18 +197,22 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask, stru
 	nlp->d_checksum = 0;
 	nlp->d_checksum = dkcksum(nlp);
 	*olp = *nlp;
-	return (0);
+	return (0);     
 }
 
 /*
  * Write disk label back to device after modification.
- * This means write out the rigid disk blocks to represent the
+ * This means write out the rigid disk blocks to represent the 
  * label.  Hope the user was careful.
  */
 int
-writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp, struct cpu_disklabel *clp)
+writedisklabel(dev, strat, lp, clp)
+	dev_t dev;
+	void (*strat) __P((struct buf *));
+	struct disklabel *lp;
+	struct cpu_disklabel *clp;
 {
-	struct buf *bp;
+	struct buf *bp; 
 	struct disklabel *dlp;
 	int error = 0;
 
@@ -241,5 +252,5 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp, str
 
 done:
 	brelse(bp, 0);
-	return (error);
+	return (error); 
 }

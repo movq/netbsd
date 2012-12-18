@@ -1,10 +1,8 @@
-/*	$NetBSD: tavl.c,v 1.1.1.3 2010/12/12 15:22:11 adam Exp $	*/
-
 /* avl.c - routines to implement an avl tree */
-/* OpenLDAP: pkg/ldap/libraries/liblutil/tavl.c,v 1.12.2.8 2010/04/13 20:23:07 kurt Exp */
+/* $OpenLDAP: pkg/ldap/libraries/liblutil/tavl.c,v 1.12.2.4 2008/02/11 23:26:42 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2005-2010 The OpenLDAP Foundation.
+ * Copyright 2005-2008 The OpenLDAP Foundation.
  * Portions Copyright (c) 2005 by Howard Chu, Symas Corp.
  * All rights reserved.
  *
@@ -23,7 +21,6 @@
 
 #include "portable.h"
 
-#include <limits.h>
 #include <stdio.h>
 #include <ac/stdlib.h>
 
@@ -37,9 +34,6 @@
 
 #define AVL_INTERNAL
 #include "avl.h"
-
-/* Maximum tree depth this host's address space could support */
-#define MAX_TREE_DEPTH	(sizeof(void *) * CHAR_BIT)
 
 static const int avl_bfs[] = {LH, RH};
 
@@ -195,8 +189,8 @@ tavl_delete( Avlnode **root, void* data, AVL_CMP fcmp )
 	int side, side_bf, shorter, nside = -1;
 
 	/* parent stack */
-	Avlnode *pptr[MAX_TREE_DEPTH];
-	unsigned char pdir[MAX_TREE_DEPTH];
+	Avlnode *pptr[sizeof(void *)*8];
+	unsigned char pdir[sizeof(void *)*8];
 	int depth = 0;
 
 	if ( *root == NULL )
@@ -454,13 +448,13 @@ tavl_free( Avlnode *root, AVL_FREE dfree )
 /*
  * tavl_find2 - returns Avlnode instead of data pointer.
  * tavl_find3 - as above, but returns Avlnode even if no match is found.
- *				also set *ret = last comparison result, or -1 if root == NULL.
+ *				also return the last comparison result in ret.
  */
 Avlnode *
 tavl_find3( Avlnode *root, const void *data, AVL_CMP fcmp, int *ret )
 {
-	int	cmp = -1, dir;
-	Avlnode *prev = root;
+	int	cmp, dir;
+	Avlnode *prev;
 
 	while ( root != 0 && (cmp = (*fcmp)( data, root->avl_data )) != 0 ) {
 		prev = root;

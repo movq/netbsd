@@ -1,4 +1,4 @@
-/*	$NetBSD: gettext_iconv.c,v 1.8 2009/02/18 13:08:22 yamt Exp $	*/
+/*	$NetBSD: gettext_iconv.c,v 1.7 2004/08/02 13:38:21 tshiozak Exp $	*/
 
 /*-
  * Copyright (c) 2004 Citrus Project,
@@ -93,13 +93,7 @@ cache_cmp(const void *va, const void *vb)
 	const struct cache *b = vb;
 	int result;
 
-	if (a->c_origmsg > b->c_origmsg) {
-		result = 1;
-	} else if (a->c_origmsg < b->c_origmsg) {
-		result = -1;
-	} else {
-		result = 0;
-	}
+	result = a->c_origmsg - b->c_origmsg;
 
 	return result;
 }

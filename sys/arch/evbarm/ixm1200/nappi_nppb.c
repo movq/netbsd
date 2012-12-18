@@ -1,4 +1,4 @@
-/*	$NetBSD: nappi_nppb.c,v 1.11 2012/11/12 18:00:39 skrll Exp $ */
+/*	$NetBSD: nappi_nppb.c,v 1.6 2003/03/25 06:53:16 igy Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -27,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nappi_nppb.c,v 1.11 2012/11/12 18:00:39 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nappi_nppb.c,v 1.6 2003/03/25 06:53:16 igy Exp $");
 
 #include "pci.h"
 #include "opt_pci.h"
@@ -39,19 +45,19 @@ __KERNEL_RCSID(0, "$NetBSD: nappi_nppb.c,v 1.11 2012/11/12 18:00:39 skrll Exp $"
 #include <sys/extent.h>
 #include <sys/malloc.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pciconf.h>
 
-static int	nppbmatch(device_t, cfdata_t, void *);
-static void	nppbattach(device_t, device_t, void *);
+static int	nppbmatch(struct device *, struct cfdata *, void *);
+static void	nppbattach(struct device *, struct device *, void *);
 
 int	nppb_intr(void *); /* XXX into i21555var.h */
 
-CFATTACH_DECL_NEW(nppb, 0,
+CFATTACH_DECL(nppb, sizeof(struct device),
     nppbmatch, nppbattach, NULL, NULL);
 
 #define NPPB_MMBA	0x10
@@ -72,6 +78,7 @@ CFATTACH_DECL_NEW(nppb, 0,
 	bus_space_write_4(sc->sc_st, sc->sc_sh, reg, val)
 
 struct nppb_softc {  /* XXX into i21555var.h */
+	struct device sc_dev;		/* generic device information */
 	bus_space_tag_t sc_st;		/* bus space tag */
 	bus_space_handle_t sc_sh;	/* bus space handle */
 
@@ -86,10 +93,10 @@ struct nppb_pci_softc {
 };
 
 static int
-nppbmatch(device_t parent, cfdata_t cf, void *aux)
+nppbmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	uint32_t class, id;
+	u_int32_t class, id;
 
 	class = pa->pa_class;
 	id = pa->pa_id;
@@ -109,10 +116,10 @@ nppbmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-nppbattach(device_t parent, device_t self, void *aux)
+nppbattach(struct device *parent, struct device *self, void *aux)
 {
-	struct nppb_pci_softc *psc = device_private(self);
-	struct nppb_softc *sc = &psc->psc_nppb;
+	struct nppb_pci_softc *psc = (struct nppb_pci_softc *)self;
+	struct nppb_softc *sc = (struct nppb_softc *)self;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
@@ -159,20 +166,20 @@ nppbattach(device_t parent, device_t self, void *aux)
 
 	/* Map and establish our interrupt */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", device_xname(self));
+		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, nppb_intr, sc);
 	if (sc->sc_ih == NULL) {
 		printf("%s: couldn't establish interrupt",
-		    device_xname(self));
+		    sc->sc_dev.dv_xname);
 		if (intrstr != NULL)
 			printf(" at %s", intrstr);
 		printf("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", device_xname(self), intrstr);
+	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
 
 }
 

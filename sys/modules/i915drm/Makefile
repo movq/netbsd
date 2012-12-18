@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.6 2011/08/28 15:40:50 jmcneill Exp $
+# $NetBSD: Makefile,v 1.3.6.2 2009/06/23 07:08:23 snj Exp $
 
 .include "../Makefile.inc"
 
@@ -6,7 +6,6 @@
 .PATH:	${S}/external/bsd/drm/dist/shared-core
 
 KMOD=   i915drm
-IOCONF=	i915drm.ioconf
 
 SRCS=	i915_drv.c
 SRCS+=	i915_dma.c

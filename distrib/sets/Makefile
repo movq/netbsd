@@ -1,11 +1,4 @@
-#	$NetBSD: Makefile,v 1.84 2011/08/09 15:02:30 jmcneill Exp $
-
-# Experimental RCS METALOG versioning
-# (Needs host's rcs(1) commands)
-#
-# TODO:
-# - In 'build.sh distribution', print diff to previous
-#RCSMETALOG=1
+#	$NetBSD: Makefile,v 1.63.2.2 2009/10/04 11:48:39 bouyer Exp $
 
 # The `all' target must appear before bsd.own.mk is pulled in.
 all:
@@ -14,16 +7,11 @@ all:
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
+GREP?= grep
 
-.if ${USE_PIGZGZIP} != "no"
-COMPRESS_PROGRAM=${TOOL_PIGZ:Q}
-.else
-COMPRESS_PROGRAM=gzip
-.endif
-
-SETSENV=	DESTDIR=${DESTDIR:Q} \
-		MACHINE=${MACHINE:Q} \
-		MACHINE_ARCH=${MACHINE_ARCH:Q} \
+SETSCMD=	cd ${.CURDIR} && \
+		DESTDIR=${DESTDIR:Q} \
+		MACHINE=${MACHINE:Q} MACHINE_ARCH=${MACHINE_ARCH:Q} \
 		AWK=${TOOL_AWK:Q} \
 		CKSUM=${TOOL_CKSUM:Q} \
 		DB=${TOOL_DB:Q} \
@@ -32,31 +20,20 @@ SETSENV=	DESTDIR=${DESTDIR:Q} \
 		MKTEMP=${TOOL_MKTEMP:Q} \
 		MTREE=${TOOL_MTREE:Q} \
 		PAX=${TOOL_PAX:Q} \
-		COMPRESS_PROGRAM=${COMPRESS_PROGRAM:Q} \
-		PKG_CREATE=${TOOL_PKG_CREATE:Q} \
 		SED=${TOOL_SED:Q} \
-		TSORT=${TSORT:Q}
-SETSCMD=	cd ${.CURDIR} && \
-		${SETSENV} \
+		TSORT=${TSORT:Q} \
 		${HOST_SH}
 
 MAKETARS_FLAGS=
 .if ${MKX11} != "no"
-MAKESRCTARS_X11_FLAGS=	-x ${X11SRCDIR}
-.endif
-.if ${MKEXTSRC} != "no"
-MAKESRCTARS_EXTSRC_FLAGS=	-y ${EXTSRCSRCDIR}
-.endif
-.if ${MKX11} != "no"
-MAKEFLIST_X11_FLAGS=	,x
-.endif
-.if ${MKEXTSRC} != "no"
-MAKEFLIST_EXTSRC_FLAGS=	,ext
-.endif
-MAKEFLIST_FLAGS=	-L base${MAKEFLIST_X11_FLAGS}${MAKEFLIST_EXTSRC_FLAGS}
+MAKEFLIST_FLAGS=	-b
+MAKESRCTARS_FLAGS=	-x ${X11SRCDIR} -N ${NETBSDSRCDIR}/etc
+.else
+MAKEFLIST_FLAGS=
 MAKESRCTARS_FLAGS= 	-N ${NETBSDSRCDIR}/etc
+.endif
 
-.if ${MAKEVERBOSE} < 2
+.if ${MAKEVERBOSE} != 2
 MAKETARS_FLAGS+=	-q
 MAKESRCTARS_FLAGS+= 	-q
 .endif
@@ -83,97 +60,9 @@ print_object_fmt: .PHONY
 print_toolchain_missing: .PHONY
 	@echo "${TOOLCHAIN_MISSING}"
 
-print_mkvars \
-print_set_lists_base print_set_lists_x print_set_lists_ext \
-list_set_lists_base list_set_lists_x list_set_lists_ext \
-list_set_files_base list_set_files_x list_set_files_ext \
-		: .PHONY
-	@${SETSENV}; rundir="${.CURDIR}"; . ./sets.subr; ${.TARGET}
-
-#
-# METALOG MANIPULATION TARGETS
-#
-# METALOG is the name of a metadata log file, and is set in <bsd.own.mk>
-# if MKUNPRIVED is not "no".
-#
-# METALOG.unpriv is a command line option passed to various scripts;
-# it is either blank or "-M ${METALOG}.sanitised", depending on the
-# MKUNPRIVED flag.
-#
-# The sanitise_METALOG target creates METALOG.sanitised from METALOG,
-# without modifying METALOG itself.  METALOG.sanitised is sorted, and
-# has duplicates merged.  This is used near the end of a build, after
-# build products have been installed in DESTDIR and corresponding lines
-# have been added to METALOG, but before METALOG.sanitised is used in
-# the creation of sets in RELEASEDIR.
-#
-# The clean_METALOG either deletes METALOG or replaces METALOG with
-# a sanitised version of itself, depending on the MKUPDATE flag, and
-# deletes old METALOG.* files.  This is intended to be used at the start
-# of a build, to ensure that repeated MKUPDATE builds do not cause
-# unbounded growth of METALOG.
-#
-
-.if ${MKUNPRIVED} == "no"
-METALOG.unpriv=
-sanitise_METALOG: .PHONY
-	@true
-clean_METALOG: .PHONY
-	@true
-.else	# MKUNPRIVED
-METALOG.unpriv= -M ${METALOG}.sanitised
-sanitise_METALOG: .PHONY ${METALOG}.sanitised
-${METALOG}.sanitised: ${METALOG}
-	sort ${METALOG} | \
-	    ${TOOL_MTREE} -CSM -k all -N ${NETBSDSRCDIR}/etc \
-	    >${METALOG}.new
-	mv ${METALOG}.new ${METALOG}.sanitised
-.if defined(RCSMETALOG)
-	. ./metalog.subr; \
-	xrcs_descr="build distribution METALOG"; \
-	xrcs_msg="$$(date)"; \
-	xrcs_cur=${METALOG}.sanitised; \
-	xrcs update
-.endif
-.if ${MKUPDATE} == "no" || !exists(${METALOG})
-clean_METALOG: .PHONY
-	rm -f ${METALOG} ${METALOG}.*
-.else	# MKUPDATE
-clean_METALOG: .PHONY ${METALOG}.sanitised
-	mv ${METALOG}.sanitised ${METALOG}
-.if defined(RCSMETALOG)
-	[ -f ${METALOG}.sanitised,v ] && mv ${METALOG}.sanitised,v ${METALOG},v
-.endif
-	rm -f ${METALOG}.*
-.if defined(RCSMETALOG)
-	[ -f ${METALOG},v ] && mv ${METALOG},v ${METALOG}.sanitised,v
-.endif
-.endif	# MKUPDATE
-.endif	# MKUNPRIVED
-
-#
-# FILE LIST TARGETS
-#
-
 # This target has debugging value only, really.
 makeflist: .PHONY .PRECIOUS check_DESTDIR
 	${SETSCMD} ./makeflist ${MAKEFLIST_FLAGS}
-
-checkflist: .PRECIOUS .PHONY check_DESTDIR sanitise_METALOG
-	${SETSCMD} ${.CURDIR}/checkflist \
-	    ${MAKEFLIST_FLAGS} ${CHECKFLIST_FLAGS} ${METALOG.unpriv}
-
-checkflist-x11: .PHONY check_DESTDIR
-	${SETSCMD} ./checkflist -x ${CHECKFLIST_FLAGS}
-
-checkflist-extsrc: .PHONY check_DESTDIR
-	${SETSCMD} ./checkflist -y ${CHECKFLIST_FLAGS}
-
-.if defined(DESTDIR) && ${DESTDIR} != ""
-checkflist_if_DESTDIR: checkflist
-.else
-checkflist_if_DESTDIR:
-.endif
 
 #
 # SET BUILDING TARGETS
@@ -181,6 +70,44 @@ checkflist_if_DESTDIR:
 
 TARDIR=		${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/sets
 SOURCETARDIR=	${RELEASEDIR}/source/sets
+
+.if ${MKUNPRIVED} == "no"
+METALOG.unpriv=
+METALOG.sanitised.unpriv=
+.else
+METALOG.unpriv=	-M ${METALOG}
+METALOG.sanitised= ${METALOG}.sanitised
+METALOG.sanitised.unpriv= -M ${METALOG.sanitised}
+.endif
+
+.if ${MKUNPRIVED} == "no"
+sanitise_METALOG: .PHONY
+	@true
+.else
+sanitise_METALOG: .PHONY ${METALOG.sanitised}
+${METALOG.sanitised}: ${METALOG}
+	( cat ${NETBSDSRCDIR}/etc/mtree/NetBSD.dist ; \
+		echo '/unset all' ; \
+		cat ${METALOG} ) \
+	| ${TOOL_MTREE} -C -k all -N ${NETBSDSRCDIR}/etc > ${METALOG}.new && \
+		( rm -f ${METALOG} ; \
+		mv ${METALOG}.new ${METALOG} )
+	cat ${METALOG} | ${GREP} -v " optional" > ${.TARGET}
+.endif
+
+.if defined(DESTDIR) && ${DESTDIR} != ""
+checkflist_if_DESTDIR: checkflist
+.else
+checkflist_if_DESTDIR:
+.endif
+
+checkflist: .PRECIOUS .PHONY check_DESTDIR sanitise_METALOG
+	${SETSCMD} ${.CURDIR}/checkflist \
+	    ${MAKEFLIST_FLAGS} ${CHECKFLIST_FLAGS} ${METALOG.sanitised.unpriv}
+
+checkflist-x11: .PHONY check_DESTDIR
+	${SETSCMD} ./checkflist -x ${CHECKFLIST_FLAGS}
+
 
 # If MAKETARS_SERIAL is set to "YES" or "yes", then the tar sets will be
 # made in series, even if make's "-j" flag requests multiple parallel
@@ -212,19 +139,19 @@ maketarsetup: .EXEC
 		rm -f ${TARDIR}/$$i ${TARDIR}/$$i.tmp; \
 	done
 
-makesetfiles: .PHONY sanitise_METALOG
+makesetfiles: .PHONY
 	${_MKMSG_CREATE} "set lists"
-	${SETSCMD} ./maketars -S -d ${DESTDIR:S,^$,/,} ${MAKETARS_FLAGS} \
-	    ${METALOG.unpriv} \
+	${SETSCMD} ./maketars -S -d ${DESTDIR:S,^$,/,} ${METALOG.unpriv} \
+	    ${MAKETARS_FLAGS} \
 	    -N ${NETBSDSRCDIR}/etc ${MAKEFLIST_FLAGS} -t ${TARDIR}
 
 .for tar in ${MAKETARSETS}
 do-${tar}: .PHONY sanitise_METALOG
 	${_MKMSG_CREATE} "${tar}.tgz"
 	${SETSCMD} ./maketars -d ${DESTDIR:S,^$,/,} ${MAKETARS_FLAGS} \
-	    ${METALOG.unpriv} \
+	    ${METALOG.sanitised.unpriv} \
 	    -N ${NETBSDSRCDIR}/etc -t ${TARDIR} ${tar} \
-	|| { rm -f ${TARDIR}/${tar}.tgz; false; }
+	|| rm -f ${TARDIR}/${tar}.tgz
 .endfor
 
 
@@ -232,7 +159,6 @@ makesrctars: .PRECIOUS .PHONY check_RELEASEDIR
 	${_MKMSG_CREATE} "source tar files"
 	mkdir -p ${SOURCETARDIR}
 	${SETSCMD} ./makesrctars ${MAKESRCTARS_FLAGS} \
-	    ${MAKESRCTARS_X11_FLAGS} ${MAKESRCTARS_EXTSRC_FLAGS} \
 	    ${NETBSDSRCDIR} ${SOURCETARDIR}
 
 
@@ -259,7 +185,7 @@ installsets: .PHONY check_DESTDIR sanitise_METALOG
 	@false
 .endif
 	${SETSCMD} ./maketars -d ${DESTDIR:S,^$,/,} ${MAKETARS_FLAGS} \
-	    ${METALOG.unpriv} -N ${NETBSDSRCDIR}/etc \
+	    ${METALOG.sanitised.unpriv} -N ${NETBSDSRCDIR}/etc \
 	    ${MAKEFLIST_FLAGS} -i ${INSTALLDIR} ${INSTALLSETS}
 
 # Should we ignore errors like extra or missing files in the flists?
@@ -273,7 +199,7 @@ REGPKG.sloppy=		-m
 REGPKG.verbose?= -q
 .elif ${MAKEVERBOSE} == 1
 REGPKG.verbose?=
-.else	# MAKEVERBOSE >= 2
+.else	# MAKEVERBOSE == 2
 REGPKG.verbose?= -v
 .endif
 REGPKG.force?=		# -f, or empty
@@ -286,7 +212,7 @@ makesyspkgs: .PHONY check_DESTDIR check_RELEASEDIR \
 	${SETSCMD} ${.CURDIR}/regpkgset \
 	    ${REGPKG.verbose} ${REGPKG.force} ${REGPKG.sloppy} \
 	    ${REGPKG.cache} ${REGPKG.update} \
-	    -d ${DESTDIR:S,^$,/,} ${METALOG.unpriv} \
+	    -d ${DESTDIR:S,^$,/,} ${METALOG.sanitised.unpriv} \
 	    -N ${NETBSDSRCDIR}/etc \
 	    -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/syspkgs ${SYSPKGSETS}
 

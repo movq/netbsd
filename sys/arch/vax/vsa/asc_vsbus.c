@@ -1,4 +1,4 @@
-/*	$NetBSD: asc_vsbus.c,v 1.43 2012/10/27 17:18:13 chs Exp $	*/
+/*	$NetBSD: asc_vsbus.c,v 1.40 2008/04/28 20:23:39 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,30 +31,36 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: asc_vsbus.c,v 1.43 2012/10/27 17:18:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asc_vsbus.c,v 1.40 2008/04/28 20:23:39 martin Exp $");
 
 #include "locators.h"
 #include "opt_cputype.h"
 
+#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/errno.h>
 #include <sys/ioctl.h>
+#include <sys/device.h>
 #include <sys/buf.h>
+#include <sys/proc.h>
+#include <sys/user.h>
+#include <sys/reboot.h>
+#include <sys/queue.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 #include <dev/scsipi/scsi_message.h>
 
+#include <machine/bus.h>
+#include <machine/vmparam.h>
+
 #include <dev/ic/ncr53c9xreg.h>
 #include <dev/ic/ncr53c9xvar.h>
 
-#include <machine/vmparam.h>
+#include <machine/cpu.h>
 #include <machine/sid.h>
 #include <machine/scb.h>
 #include <machine/vsbus.h>
@@ -410,7 +416,7 @@ asc_vsbus_dma_setup(struct ncr53c9x_softc *sc, uint8_t **addr, size_t *len,
 		panic("%s: DMA address (%p) outside of kernel",
 		    __func__, *asc->sc_dmaaddr);
 
-        NCR_DMA(("%s: start %d@%p,%d\n", device_xname(sc->sc_dev),
+        NCR_DMA(("%s: start %d@%p,%d\n", device_xname(&sc->sc_dev),
             (int)*asc->sc_dmalen, *asc->sc_dmaaddr,
 	    (asc->sc_flags & ASC_FROMMEMORY)));
 	*dmasize = asc->sc_dmasize = min(*dmasize, ASC_MAXXFERSIZE);

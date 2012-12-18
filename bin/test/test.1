@@ -1,4 +1,4 @@
-.\"	$NetBSD: test.1,v 1.28 2012/12/16 17:57:49 wiz Exp $
+.\"	$NetBSD: test.1,v 1.23 2007/05/15 22:00:51 uwe Exp $
 .\"
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"     @(#)test.1	8.1 (Berkeley) 5/31/93
 .\"
-.Dd December 16, 2012
+.Dd May 31, 1993
 .Dt TEST 1
 .Os
 .Sh NAME
@@ -40,31 +40,24 @@
 .Nm \&[
 .Nd condition evaluation utility
 .Sh SYNOPSIS
-.Nm
+.Nm test
 .Ar expression
 .Nm \&[
-.Ar expression Cm \&]
+.Ar expression Cm ]
 .Sh DESCRIPTION
 The
-.Nm
-utility evaluates
-.Ar expression
-and, if it evaluates
+.Nm test
+utility evaluates the expression and, if it evaluates
 to true, returns a zero (true) exit status; otherwise
 it returns 1 (false).
-If
-.Ar expression
-is not given,
-.Nm
-also
+If there is no expression, test also
 returns 1 (false).
 .Pp
 All operators and flags are separate arguments to the
-.Nm
+.Nm test
 utility.
 .Pp
-The following primaries are used to construct
-.Ar expression :
+The following primaries are used to construct expression:
 .Bl -tag -width Ar
 .It Fl b Ar file
 True if
@@ -276,10 +269,8 @@ True if either
 or
 .Ar expression2
 are true.
-.It Cm \&( Ar expression Cm \&)
-True if
-.Ar expression
-is true.
+.It Cm \&( Ns Ar expression Ns Cm \&)
+True if expression is true.
 .El
 .Pp
 The
@@ -287,35 +278,9 @@ The
 operator has higher precedence than the
 .Fl o
 operator.
-.Pp
-Note that all file tests with the exception of
-.Fl h
-and
-.Fl L
-follow symbolic links and thus evaluate the test for the file pointed at.
-.Sh EXIT STATUS
+.Sh GRAMMAR AMBIGUITY
 The
-.Nm
-utility exits with one of the following values:
-.Bl -tag -width Ds
-.It 0
-.Ar expression
-evaluated to true.
-.It 1
-.Ar expression
-evaluated to false or was missing.
-.It \*[Gt]1
-An error occurred.
-.El
-.Sh STANDARDS
-The
-.Nm
-utility implements a superset of the
-.St -p1003.2
-specification.
-.Sh CAVEATS
-The
-.Nm
+.Nm test
 grammar is inherently ambiguous.
 In order to assure a degree of consistency, the cases described in
 .St -p1003.2
@@ -323,3 +288,22 @@ section 4.62.4,
 are evaluated consistently according to the rules specified in the
 standards document.
 All other cases are subject to the ambiguity in the command semantics.
+.Sh EXIT STATUS
+The
+.Nm test
+utility exits with one of the following values:
+.Bl -tag -width Ds
+.It 0
+expression evaluated to true.
+.It 1
+expression evaluated to false or expression was
+missing.
+.It \*[Gt]1
+An error occurred.
+.El
+.Sh STANDARDS
+The
+.Nm test
+utility implements a superset of the
+.St -p1003.2
+specification.

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vioif.c,v 1.2 2011/11/19 12:32:54 jmcneill Exp $	*/
+/*	$NetBSD: if_vioif.c,v 1.2.6.2 2012/01/25 21:18:15 riz Exp $	*/
 
 /*
  * Copyright (c) 2010 Minoura Makoto.
@@ -26,7 +26,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vioif.c,v 1.2 2011/11/19 12:32:54 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vioif.c,v 1.2.6.2 2012/01/25 21:18:15 riz Exp $");
+
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,7 +52,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_vioif.c,v 1.2 2011/11/19 12:32:54 jmcneill Exp $"
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 
 /*
@@ -728,7 +732,10 @@ vioif_start(struct ifnet *ifp)
 		virtio_enqueue(vsc, vq, slot, sc->sc_tx_dmamaps[slot], true);
 		virtio_enqueue_commit(vsc, vq, slot, false);
 		queued++;
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 	}
 
 	if (queued > 0) {
@@ -880,7 +887,10 @@ vioif_rx_deq(struct vioif_softc *sc)
 		m->m_pkthdr.rcvif = ifp;
 		m->m_len = m->m_pkthdr.len = len;
 		ifp->if_ipackets++;
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 		(*ifp->if_input)(ifp, m);
 	}
 	

@@ -1,4 +1,4 @@
-/*	$NetBSD: uyap.c,v 1.19 2011/12/23 00:51:50 jakllsch Exp $	*/
+/*	$NetBSD: uyap.c,v 1.14 2008/05/24 16:40:58 cube Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,13 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uyap.c,v 1.19 2011/12/23 00:51:50 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uyap.c,v 1.14 2008/05/24 16:40:58 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/conf.h>
+#include <sys/tty.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
@@ -50,20 +51,14 @@ const struct ezdata uyap_firmware[] = {
 const struct ezdata *uyap_firmwares[] = { uyap_firmware, NULL };
 
 struct uyap_softc {
-	device_t		sc_dev;		/* base device */
+	USBBASEDEVICE		sc_dev;		/* base device */
 };
 
-int             uyap_match(device_t, cfdata_t, void *);
-void            uyap_attach(device_t, device_t, void *);
-int             uyap_detach(device_t, int);
-int             uyap_activate(device_t, enum devact);
-extern struct cfdriver uyap_cd;
-CFATTACH_DECL_NEW(uyap, sizeof(struct uyap_softc), uyap_match, uyap_attach, uyap_detach, uyap_activate);
+USB_DECLARE_DRIVER(uyap);
 
-int 
-uyap_match(device_t parent, cfdata_t match, void *aux)
+USB_MATCH(uyap)
 {
-	struct usb_attach_arg *uaa = aux;
+	USB_MATCH_START(uyap, uaa);
 
 	/* Match the boot device. */
 	if (uaa->vendor == USB_VENDOR_SILICONPORTALS &&
@@ -73,21 +68,17 @@ uyap_match(device_t parent, cfdata_t match, void *aux)
 	return (UMATCH_NONE);
 }
 
-void 
-uyap_attach(device_t parent, device_t self, void *aux)
+USB_ATTACH(uyap)
 {
-	struct uyap_softc *sc = device_private(self);
-	struct usb_attach_arg *uaa = aux;
+	USB_ATTACH_START(uyap, sc, uaa);
 	usbd_device_handle dev = uaa->device;
 	usbd_status err;
 	char *devinfop;
 
 	sc->sc_dev = self;
 
-	aprint_naive("\n");
-	aprint_normal("\n");
-
 	devinfop = usbd_devinfo_alloc(dev, 0);
+	USB_ATTACH_SETUP;
 	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
@@ -97,26 +88,23 @@ uyap_attach(device_t parent, device_t self, void *aux)
 	if (err) {
 		aprint_error_dev(self, "download ezdata error: %s\n",
 		    usbd_errstr(err));
-		return;
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	aprint_verbose_dev(self,
 	    "firmware download complete, disconnecting.\n");
-	return;
+	USB_ATTACH_SUCCESS_RETURN;
 }
 
-int 
-uyap_detach(device_t self, int flags)
+USB_DETACH(uyap)
 {
-#if 0
-	struct uyap_softc *sc = device_private(self);
-#endif
+	/*USB_DETACH_START(uyap, sc);*/
 
 	return (0);
 }
 
 int
-uyap_activate(device_t self, enum devact act)
+uyap_activate(device_ptr_t self, enum devact act)
 {
 	return 0;
 }

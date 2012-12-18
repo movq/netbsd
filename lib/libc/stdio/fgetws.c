@@ -1,4 +1,4 @@
-/* $NetBSD: fgetws.c,v 1.3 2012/03/15 18:22:30 christos Exp $ */
+/* $NetBSD: fgetws.c,v 1.2 2006/07/03 17:06:36 tnozaki Exp $ */
 
 /*-
  * Copyright (c) 2002 Tim J. Robbins.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIB_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fgetws.c,v 1.3 2012/03/15 18:22:30 christos Exp $");
+__RCSID("$NetBSD: fgetws.c,v 1.2 2006/07/03 17:06:36 tnozaki Exp $");
 #endif
 
 #include <assert.h>
@@ -43,7 +43,10 @@ __RCSID("$NetBSD: fgetws.c,v 1.3 2012/03/15 18:22:30 christos Exp $");
 #include "local.h"
 
 wchar_t *
-fgetws(wchar_t * __restrict ws, int n, FILE * __restrict fp)
+fgetws(ws, n, fp)
+	wchar_t * __restrict ws;
+	int n;
+	FILE * __restrict fp;
 {
 	wchar_t *wsp;
 	wint_t wc;
@@ -80,9 +83,9 @@ fgetws(wchar_t * __restrict ws, int n, FILE * __restrict fp)
 	*wsp++ = L'\0';
 	FUNLOCKFILE(fp);
 
-	return ws;
+	return (ws);
 
 error:
 	FUNLOCKFILE(fp);
-	return NULL;
+	return (NULL);
 }

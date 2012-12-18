@@ -1,4 +1,4 @@
-/*	$NetBSD: set.c,v 1.17 2012/04/21 12:27:30 roy Exp $	*/
+/*	$NetBSD: set.c,v 1.11 2006/05/01 23:18:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -30,25 +30,29 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: set.c,v 1.17 2012/04/21 12:27:30 roy Exp $");
+#ifndef lint
+#if 0
+static char sccsid[] = "@(#)set.c	8.2 (Berkeley) 2/28/94";
+#endif
+__RCSID("$NetBSD: set.c,v 1.11 2006/05/01 23:18:37 christos Exp $");
+#endif /* not lint */
 
-#include <err.h>
 #include <stdio.h>
-#include <term.h>
+#include <termcap.h>
 #include <termios.h>
 #include <unistd.h>
 #include "extern.h"
 
 #define	CHK(val, dft)	(val <= 0 ? dft : val)
 
-static int	set_tabs(void);
+int	set_tabs __P((void));
 
 /*
  * Reset the terminal mode bits to a sensible state.  Very useful after
  * a child program dies in raw mode.
  */
 void
-reset_mode(void)
+reset_mode()
 {
 	tcgetattr(STDERR_FILENO, &mode);
 
@@ -145,24 +149,34 @@ reset_mode(void)
 }
 
 /*
- * Determine the erase, interrupt, and kill characters from the terminfo
+ * Determine the erase, interrupt, and kill characters from the termcap
  * entry and command line and update their values in 'mode'.
  */
 void
 set_control_chars(int erasechar, int intrchar, int killchar)
 {
-	
-	if (mode.c_cc[VERASE] == 0 || erasechar != 0) {
-		if (erasechar == 0) {
-			if (over_strike &&
-			    key_backspace != NULL &&
-			    key_backspace[1] == '\0')
-				mode.c_cc[VERASE] = key_backspace[1];
-			else
-				mode.c_cc[VERASE] = CERASE;
-		} else
-			mode.c_cc[VERASE] = erasechar;
+	char *bp, *p, bs_char, buf[1024];
+
+	bp = buf;
+	p = tgetstr("kb", &bp);
+	if (p == NULL || p[1] != '\0')
+		p = tgetstr("bc", &bp);
+	if (p != NULL && p[1] == '\0')
+		bs_char = p[0];
+	else if (tgetflag("bs"))
+		bs_char = CTRL('h');
+	else
+		bs_char = 0;
+
+	if (erasechar == 0 && !tgetflag("os") && mode.c_cc[VERASE] != CERASE) {
+		if (tgetflag("bs") || bs_char != 0)
+			erasechar = -1;
 	}
+	if (erasechar < 0)
+		erasechar = (bs_char != 0) ? bs_char : CTRL('h');
+
+	if (mode.c_cc[VERASE] == 0 || erasechar != 0)
+		mode.c_cc[VERASE] = erasechar ? erasechar : CERASE;
 
 	if (mode.c_cc[VINTR] == 0 || intrchar != 0)
 		 mode.c_cc[VINTR] = intrchar ? intrchar : CINTR;
@@ -173,13 +187,34 @@ set_control_chars(int erasechar, int intrchar, int killchar)
 
 /*
  * Set up various conversions in 'mode', including parity, tabs, returns,
- * echo, and case, according to the terminfo entry.  If the program we're
+ * echo, and case, according to the termcap entry.  If the program we're
  * running was named with a leading upper-case character, map external
  * uppercase to internal lowercase.
  */
 void
 set_conversions(int usingupper)
 {
+	if (tgetflag("UC") || usingupper) {
+#ifdef IUCLC
+		mode.c_iflag |= IUCLC;
+		mode.c_oflag |= OLCUC;
+#endif
+	} else if (tgetflag("LC")) {
+#ifdef IUCLC
+		mode.c_iflag &= ~IUCLC;
+		mode.c_oflag &= ~OLCUC;
+#endif
+	}
+	mode.c_iflag &= ~(PARMRK | INPCK);
+	mode.c_lflag |= ICANON;
+	if (tgetflag("EP")) {
+		mode.c_cflag |= PARENB;
+		mode.c_cflag &= ~PARODD;
+	}
+	if (tgetflag("OP")) {
+		mode.c_cflag |= PARENB;
+		mode.c_cflag |= PARODD;
+	}
 
 #ifdef ONLCR
 	mode.c_oflag |= ONLCR;
@@ -187,23 +222,29 @@ set_conversions(int usingupper)
 	mode.c_iflag |= ICRNL;
 	mode.c_lflag |= ECHO;
 	mode.c_oflag |= OXTABS;
-	if (newline != NULL && newline[0] == '\n' && !newline[1]) {			/* Newline, not linefeed. */
+	if (tgetflag("NL")) {			/* Newline, not linefeed. */
 #ifdef ONLCR
 		mode.c_oflag &= ~ONLCR;
 #endif
 		mode.c_iflag &= ~ICRNL;
 	}
-	if (tab)	/* Print tabs. */
+	if (tgetflag("HD"))			/* Half duplex. */
+		mode.c_lflag &= ~ECHO;
+	if (tgetflag("pt"))			/* Print tabs. */
 		mode.c_oflag &= ~OXTABS;
 	mode.c_lflag |= (ECHOE | ECHOK);
 }
 
 /* Output startup string. */
 void
-set_init(void)
+set_init()
 {
-	const char *bp;
+	char *bp, buf[1024];
 	int settle;
+
+	bp = buf;
+	if (tgetstr("pc", &bp) != 0)		/* Get/set pad character. */
+		PC = buf[0];
 
 #ifdef TAB3
 	if (oldmode.c_oflag & (TAB3 | ONLCR | OCRNL | ONLRET)) {
@@ -214,16 +255,14 @@ set_init(void)
 	settle = set_tabs();
 
 	if (isreset) {
-		if (reset_1string) {
-			tputs(reset_1string, 0, outc);
+		bp = buf;
+		if (tgetstr("rs", &bp) != 0 || tgetstr("is", &bp) != 0) {
+			tputs(buf, 0, outc);
 			settle = 1;
 		}
-		if (reset_2string) {
-			tputs(reset_2string, 0, outc);
-			settle = 1;
-		}
-		if ((bp = reset_file) || (bp = init_file)) {
-			tset_cat(bp);
+		bp = buf;
+		if (tgetstr("rf", &bp) != 0 || tgetstr("if", &bp) != 0) {
+			tset_cat(buf);
 			settle = 1;
 		}
 	}
@@ -241,25 +280,35 @@ set_init(void)
  * This is done before if and is, so they can patch in case we blow this.
  * Return nonzero if we set any tab stops, zero if not.
  */
-static int
-set_tabs(void)
+int
+set_tabs()
 {
 	int c;
-	char *out;
+	char *capsp, *clear_tabs;
+	char *set_column, *set_tab, *tg_out;
+	char caps[1024];
+
+	capsp = caps;
+	set_tab = tgetstr("st", &capsp);
+
+	if (set_tab && (clear_tabs = tgetstr("ct", &capsp))) {
+		(void)putc('\r', stderr);	/* Force to left margin. */
+		tputs(clear_tabs, 0, outc);
+	}
+
+	set_column = tgetstr("ch", &capsp);
 
 	if (set_tab) {
-		if (clear_all_tabs) {
-			(void)putc('\r', stderr);   /* Force to left margin. */
-			tputs(clear_all_tabs, 0, outc);
-		}
-		
-		for (c = 8; c < ncolumns; c += 8) {
-			if (column_address)
-				out = tiparm(column_address, c);
-			else
-				out = NULL;
-			if (out)
-				tputs(out, 1, outc);
+		for (c = 8; c < columns; c += 8) {
+			/*
+			 * Get to the right column.  "OOPS" is returned by
+			 * tgoto() if it can't do the job.  (*snarl*)
+			 */
+			tg_out = "OOPS";
+			if (set_column)
+				tg_out = tgoto(set_column, 0, c);
+			if (*tg_out != 'O')
+				tputs(tg_out, 1, outc);
 			else
 				(void)fprintf(stderr, "%s", "        ");
 			/* Set the tab. */

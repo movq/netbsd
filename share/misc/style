@@ -1,4 +1,4 @@
-/* $NetBSD: style,v 1.50 2012/06/27 22:04:02 riastradh Exp $ */
+/* $NetBSD: style,v 1.44 2008/09/09 19:18:41 jschauma Exp $ */
 
 /*
  * The revision control tag appears first, with a blank line after it.
@@ -30,7 +30,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2008\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: style,v 1.50 2012/06/27 22:04:02 riastradh Exp $");
+__RCSID("$NetBSD: style,v 1.44 2008/09/09 19:18:41 jschauma Exp $");
 
 /*
  * VERY important single-line comments look like this.
@@ -77,12 +77,7 @@ __RCSID("$NetBSD: style,v 1.50 2012/06/27 22:04:02 riastradh Exp $");
 /*
  * Kernel include files come first.
  */
-#include <sys/param.h>		/* <sys/param.h> first, */
-#include <sys/types.h>		/*   <sys/types.h> next, */
-#include <sys/ioctl.h>		/*   and then the rest, */
-#include <sys/socket.h>		/*   sorted lexicographically.  */
-#include <sys/stat.h>
-#include <sys/wait.h>		/* Non-local includes in brackets.  */
+#include <sys/types.h>		/* Non-local includes in brackets. */
 
 /*
  * If it's a network program, put the network include files next.
@@ -96,7 +91,7 @@ __RCSID("$NetBSD: style,v 1.50 2012/06/27 22:04:02 riastradh Exp $");
 
 /*
  * Then there's a blank line, followed by the /usr include files.
- * The /usr include files should be sorted lexicographically!
+ * The /usr include files should be sorted!
  */
 #include <assert.h>
 #include <errno.h>
@@ -115,7 +110,7 @@ __RCSID("$NetBSD: style,v 1.50 2012/06/27 22:04:02 riastradh Exp $");
 
 /*
  * ANSI function declarations for private functions (i.e. functions not used
- * elsewhere) and the main() function go at the top of the source module.
+ * elsewhere) and the main() function go at the top of the source module. 
  * Don't associate a name with the types.  I.e. use:
  *	void function(int);
  * Use your discretion on indenting between the return type and the name, and
@@ -126,7 +121,8 @@ __RCSID("$NetBSD: style,v 1.50 2012/06/27 22:04:02 riastradh Exp $");
 static char *function(int, int, float, int);
 static int dirinfo(const char *, struct stat *, struct dirent *,
 		   struct statfs *, int *, char **[]);
-static void usage(void) __dead;	/* declare functions that don't return dead */
+static void usage(void);
+int main(int, char *[]);
 
 /*
  * Macros are capitalized, parenthesized, and should avoid side-effects.
@@ -359,28 +355,15 @@ function(int a1, int a2, float fl, int a4)
 	 * not:
 	 *	!(p = f())
 	 *
-	 * The notable exception here is varyadic functions. Since our
-	 * code is designed to compile and work on different environments
-	 * where we don't have control over the NULL definition (on NetBSD
-	 * it is defined as ((void *)0), but on other systems it can be
-	 * defined as (0) and both definitions are valid under ANSI C), it
-	 * it advised to cast NULL to a pointer on varyadic functions,
-	 * because on machines where sizeof(pointer) != sizeof(int) and in
-	 * the absence of a prototype in scope, passing an un-casted NULL,
-	 * will result in passing an int on the stack instead of a pointer.
-	 *
 	 * Don't use `!' for tests unless it's a boolean.
 	 * E.g. use "if (*p == '\0')", not "if (!*p)".
 	 *
 	 * Routines returning ``void *'' should not have their return
 	 * values cast to more specific pointer types.
 	 *
-	 * Prefer sizeof(*var) over sizeof(type) because if type changes,
-	 * the change needs to be done in one place.
-	 *
 	 * Use err/warn(3), don't roll your own!
 	 */
-	if ((four = malloc(sizeof(*four))) == NULL)
+	if ((four = malloc(sizeof(struct foo))) == NULL)
 		err(1, NULL);
 	if ((six = (int *)overflow()) == NULL)
 		errx(1, "Number overflowed.");
@@ -446,7 +429,7 @@ vaf(const char *fmt, ...)
 
 	va_start(ap, fmt);
 	STUFF;
-	va_end(ap);
+	va_end(ap);	
 				/* No return needed for void functions. */
 }
 

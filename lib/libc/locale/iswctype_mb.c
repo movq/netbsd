@@ -1,4 +1,4 @@
-/* $NetBSD: iswctype_mb.c,v 1.11 2010/06/13 04:14:57 tnozaki Exp $ */
+/* $NetBSD: iswctype_mb.c,v 1.2.2.3 2009/01/22 22:04:29 snj Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -28,22 +28,24 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: iswctype_mb.c,v 1.11 2010/06/13 04:14:57 tnozaki Exp $");
+__RCSID("$NetBSD: iswctype_mb.c,v 1.2.2.3 2009/01/22 22:04:29 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 #include <sys/types.h>
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
+#include <langinfo.h>
 #define __SETLOCALE_SOURCE__
 #include <locale.h>
+#include <stdlib.h>
 #include <string.h>
-#include <wchar.h>
 #include <wctype.h>
 
 #include "setlocale_local.h"
 
-#include "runetype_local.h"
+#include "rune.h"
 #include "_wctype_local.h"
 #include "_wctrans_local.h"
 
@@ -83,7 +85,7 @@ tow##name(wint_t wc)					\
 							\
 	rl = _RUNE_LOCALE();				\
 	te = &rl->rl_wctrans[index];			\
-	return _towctrans_priv(wc, te);			\
+	return _towctrans_priv(rl, wc, te);		\
 }
 _TOWCTRANS_FUNC(upper, _WCTRANS_INDEX_UPPER)
 _TOWCTRANS_FUNC(lower, _WCTRANS_INDEX_LOWER)
@@ -128,21 +130,23 @@ iswctype(wint_t wc, wctype_t charclass)
 		return 0;
 	}
 	rl = _RUNE_LOCALE();
-	te = (_WCTypeEntry const *)(void *)charclass;
+	te = (_WCTypeEntry const *)charclass;
 	return _iswctype_priv(rl, wc, te);
 }
 
 wint_t
 towctrans(wint_t wc, wctrans_t charmap)
 {
+	_RuneLocale const *rl;
 	_WCTransEntry const *te;
 
 	if (charmap == NULL) {
 		errno = EINVAL;
 		return wc;
 	}
-	te = (_WCTransEntry const *)(void *)charmap;
-	return _towctrans_priv(wc, te);
+	rl = _RUNE_LOCALE();
+	te = (_WCTransEntry const *)charmap;
+	return _towctrans_priv(rl, wc, te);
 }
 
 __weak_alias(wcwidth,_wcwidth)
@@ -157,8 +161,8 @@ wcwidth(wchar_t wc)
 		return 0;
 	rl = _RUNE_LOCALE();
 	x = _runetype_priv(rl, wc);
-	if (x & _RUNETYPE_R)
-		return ((unsigned)x & _RUNETYPE_SWM) >> _RUNETYPE_SWS;
+	if (x & _CTYPE_R)
+		return ((unsigned)x & _CTYPE_SWM) >> _CTYPE_SWS;
 	return -1;
 }
 
@@ -175,9 +179,9 @@ wcswidth(const wchar_t * __restrict ws, size_t wn)
 	width = 0;
 	while (wn > 0 && *ws != L'\0') {
 		x = _runetype_priv(rl, *ws);
-		if ((x & _RUNETYPE_R) == 0)
+		if ((x & _CTYPE_R) == 0)
 			return -1;
-		width += ((unsigned)x & _RUNETYPE_SWM) >> _RUNETYPE_SWS;
+		width += ((unsigned)x & _CTYPE_SWM) >> _CTYPE_SWS;
 		++ws, --wn;
 	}
 	return width;

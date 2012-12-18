@@ -1,4 +1,4 @@
-/*	$NetBSD: file.c,v 1.2 2011/06/25 20:27:01 christos Exp $	*/
+/*	$NetBSD: file.c,v 1.1.1.2.4.2 2010/02/03 00:25:23 snj Exp $	*/
 /*-
  * Copyright (c) 1998-2004 Dag-Erling Coïdan Smørgrav
  * Copyright (c) 2008, 2009 Joerg Sonnenberger <joerg@NetBSD.org>
@@ -204,8 +204,7 @@ fetch_stat_file(int fd, struct url_stat *us)
 }
 
 int
-/*ARGSUSED*/
-fetchStatFile(struct url *u, struct url_stat *us, const char *flags __unused)
+fetchStatFile(struct url *u, struct url_stat *us, const char *flags)
 {
 	char *path;
 	int fd, rv;
@@ -230,9 +229,7 @@ fetchStatFile(struct url *u, struct url_stat *us, const char *flags __unused)
 }
 
 int
-/*ARGSUSED*/
-fetchListFile(struct url_list *ue, struct url *u, const char *pattern,
-    const char *flags __unused)
+fetchListFile(struct url_list *ue, struct url *u, const char *pattern, const char *flags)
 {
 	char *path;
 	struct dirent *de;

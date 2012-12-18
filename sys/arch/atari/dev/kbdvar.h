@@ -1,4 +1,4 @@
-/*	$NetBSD: kbdvar.h,v 1.10 2012/10/27 17:17:42 chs Exp $	*/
+/*	$NetBSD: kbdvar.h,v 1.5 2003/02/02 17:56:55 thomas Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Leo Weppelman.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,18 +44,17 @@ struct kbd_softc {
 	int		k_event_mode;	/* if 1, collect events,	*/
 					/*   else pass to ite		*/
 	struct evvar	k_events;	/* event queue state		*/
-	uint8_t		k_soft_cs;	/* control-reg. copy		*/
-	uint8_t		k_package[20];	/* XXX package being build	*/
-	uint8_t		k_pkg_size;	/* Size of the package		*/
-	uint8_t		k_pkg_idx;	/* Running pkg assembly index	*/
-	uint8_t		k_pkg_type;	/* Type of package		*/
-	const uint8_t	*k_sendp;	/* Output pointer		*/
+	u_char		k_soft_cs;	/* control-reg. copy		*/
+	u_char		k_package[20];	/* XXX package being build	*/
+	u_char		k_pkg_size;	/* Size of the package		*/
+	u_char		k_pkg_idx;	/* Running pkg assembly index	*/
+	u_char		k_pkg_type;	/* Type of package		*/
+	u_char		*k_sendp;	/* Output pointer		*/
 	int		k_send_cnt;	/* Chars left for output	*/
 #if NWSKBD>0
-	device_t	k_wskbddev;	/* pointer to wskbd for sending strokes */
+	struct device	*k_wskbddev;	/* pointer to wskbd for sending strokes */
 	int		k_pollingmode;	/* polling mode on? whatever it isss... */
 #endif
-	void		*k_sicookie;	/* softint(9) cookie		*/
 };
 
 /*
@@ -65,14 +69,14 @@ struct kbd_softc {
 #define	KBD_TIMEO_PKG	6		/* Timeout package		*/
 
 #ifdef _KERNEL
-extern	uint8_t	kbd_modifier;
+extern	u_char	kbd_modifier;
 
-void	kbd_bell_gparms(u_int *, u_int *, u_int *);
-void	kbd_bell_sparms(u_int, u_int, u_int);
-void	kbd_write(const uint8_t *, int);
-int	kbdgetcn(void);
-void	kbdbell(void);
-void	kbdenable(void);
+void	kbd_bell_gparms __P((u_int *, u_int *, u_int *));
+void	kbd_bell_sparms __P((u_int, u_int, u_int));
+void	kbd_write __P((u_char *, int));
+int	kbdgetcn __P((void));
+void	kbdbell __P((void));
+void	kbdenable __P((void));
 #endif /* _KERNEL */
 
 #endif /* _KBDVAR_H */

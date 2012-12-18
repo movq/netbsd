@@ -1,4 +1,4 @@
-/* $NetBSD: clockvar.h,v 1.11 2009/05/23 19:11:19 he Exp $ */
+/* $NetBSD: clockvar.h,v 1.9 2008/01/03 23:02:25 joerg Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -27,8 +27,6 @@
  * rights to redistribute these changes.
  */
 
-#include <sys/device.h>
-
 /*
  * Definitions for CPU-independent clock handling for the alpha and pmax.
  */
@@ -40,7 +38,7 @@
  * chip-dependent routines.
  */
 struct clockfns {
-	void	(*cf_init)(device_t);
+	void	(*cf_init)(struct device *);
 };
 
-void clockattach(device_t, const struct clockfns *);
+void clockattach(struct device *, const struct clockfns *);

@@ -1,4 +1,4 @@
-/* $NetBSD: cons_machdep.c,v 1.13 2011/12/11 03:19:20 kiyohara Exp $ */
+/* $NetBSD: cons_machdep.c,v 1.7 2007/03/05 15:42:23 he Exp $ */
 /*-
  * Copyright (c) 1998 Ben Harris
  * All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cons_machdep.c,v 1.13 2011/12/11 03:19:20 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cons_machdep.c,v 1.7 2007/03/05 15:42:23 he Exp $");
 
 #include <sys/param.h>
 #include <sys/syslog.h>
@@ -41,25 +41,21 @@ __KERNEL_RCSID(0, "$NetBSD: cons_machdep.c,v 1.13 2011/12/11 03:19:20 kiyohara E
 
 #include "arcvideo.h"
 #include "opt_ddb.h"
-#include "opt_modular.h"
 #include "ksyms.h"
 
 #ifdef DDB
 #include <machine/db_machdep.h>
 #include <ddb/db_extern.h>
 #include <ddb/db_interface.h>
-#endif
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+
 #include <machine/boot.h>
 #include <machine/memcreg.h>
 #endif
 
-#if NARCVIDEO > 0
-#include <arch/acorn26/vidc/arcvideovar.h>
-#endif
+extern void arccons_init __P((void));
 
 void
-consinit(void)
+consinit()
 {
 
 #if NARCVIDEO > 0
@@ -70,8 +66,8 @@ consinit(void)
 #ifdef DDB
 	db_machine_init();
 #endif /* DDB */
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-	ksyms_addsyms_elf(bootconfig.esym - bootconfig.ssym,
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init(bootconfig.esym - bootconfig.ssym,
 		 (char*)MEMC_PHYS_BASE + bootconfig.ssym,
 		 (char*)MEMC_PHYS_BASE + bootconfig.esym);
 #endif

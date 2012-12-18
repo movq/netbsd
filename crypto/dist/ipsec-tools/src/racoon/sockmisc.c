@@ -1,4 +1,4 @@
-/*	$NetBSD: sockmisc.c,v 1.19 2011/03/14 17:18:13 tteras Exp $	*/
+/*	$NetBSD: sockmisc.c,v 1.12.4.1 2009/02/08 18:42:19 snj Exp $	*/
 
 /* Id: sockmisc.c,v 1.24 2006/05/07 21:32:59 manubsd Exp */
 
@@ -56,28 +56,75 @@
 
 #include "var.h"
 #include "misc.h"
-#include "vmbuf.h"
 #include "plog.h"
 #include "sockmisc.h"
 #include "debug.h"
 #include "gcmalloc.h"
 #include "debugrm.h"
 #include "libpfkey.h"
-#include "isakmp_var.h"
 
-#ifdef NOUSE_PRIVSEP
-#define BIND bind
-#define SOCKET socket
-#define SETSOCKOPT setsockopt
-#else
-#include "admin.h"
-#include "privsep.h"
-#define BIND privsep_bind
-#define SOCKET privsep_socket
-#define SETSOCKOPT privsep_setsockopt
+#ifndef IP_IPSEC_POLICY
+#define IP_IPSEC_POLICY 16	/* XXX: from linux/in.h */
+#endif
+
+#ifndef IPV6_IPSEC_POLICY
+#define IPV6_IPSEC_POLICY 34	/* XXX: from linux/???.h per
+				   "Tom Lendacky" <toml@us.ibm.com> */
 #endif
 
 const int niflags = 0;
+
+/*
+ * compare two sockaddr without port number.
+ * OUT:	0: equal.
+ *	1: not equal.
+ */
+int
+cmpsaddrwop(addr1, addr2)
+	const struct sockaddr *addr1;
+	const struct sockaddr *addr2;
+{
+	caddr_t sa1, sa2;
+
+	if (addr1 == 0 && addr2 == 0)
+		return 0;
+	if (addr1 == 0 || addr2 == 0)
+		return 1;
+
+#ifdef __linux__
+	if (addr1->sa_family != addr2->sa_family)
+		return 1;
+#else
+	if (addr1->sa_len != addr2->sa_len
+	 || addr1->sa_family != addr2->sa_family)
+		return 1;
+
+#endif /* __linux__ */
+
+	switch (addr1->sa_family) {
+	case AF_INET:
+		sa1 = (caddr_t)&((struct sockaddr_in *)addr1)->sin_addr;
+		sa2 = (caddr_t)&((struct sockaddr_in *)addr2)->sin_addr;
+		if (memcmp(sa1, sa2, sizeof(struct in_addr)) != 0)
+			return 1;
+		break;
+#ifdef INET6
+	case AF_INET6:
+		sa1 = (caddr_t)&((struct sockaddr_in6 *)addr1)->sin6_addr;
+		sa2 = (caddr_t)&((struct sockaddr_in6 *)addr2)->sin6_addr;
+		if (memcmp(sa1, sa2, sizeof(struct in6_addr)) != 0)
+			return 1;
+		if (((struct sockaddr_in6 *)addr1)->sin6_scope_id !=
+		    ((struct sockaddr_in6 *)addr2)->sin6_scope_id)
+			return 1;
+		break;
+#endif
+	default:
+		return 1;
+	}
+
+	return 0;
+}
 
 /*
  * compare two sockaddr with port, taking care wildcard.
@@ -86,34 +133,40 @@ const int niflags = 0;
  *	1: not equal.
  */
 int
-cmpsaddr(addr1, addr2)
+cmpsaddrwild(addr1, addr2)
 	const struct sockaddr *addr1;
 	const struct sockaddr *addr2;
 {
 	caddr_t sa1, sa2;
-	u_short port1 = IPSEC_PORT_ANY;
-	u_short port2 = IPSEC_PORT_ANY;
+	u_short port1, port2;
 
-	if (addr1 == NULL && addr2 == NULL)
-		return CMPSADDR_MATCH;
+	if (addr1 == 0 && addr2 == 0)
+		return 0;
+	if (addr1 == 0 || addr2 == 0)
+		return 1;
 
-	if (addr1 == NULL || addr2 == NULL)
-		return CMPSADDR_MISMATCH;
+#ifdef __linux__
+	if (addr1->sa_family != addr2->sa_family)
+		return 1;
+#else
+	if (addr1->sa_len != addr2->sa_len
+	 || addr1->sa_family != addr2->sa_family)
+		return 1;
 
-	if (addr1->sa_family != addr2->sa_family ||
-	    sysdep_sa_len(addr1) != sysdep_sa_len(addr2))
-		return CMPSADDR_MISMATCH;
+#endif /* __linux__ */
 
 	switch (addr1->sa_family) {
-	case AF_UNSPEC:
-		break;
 	case AF_INET:
 		sa1 = (caddr_t)&((struct sockaddr_in *)addr1)->sin_addr;
 		sa2 = (caddr_t)&((struct sockaddr_in *)addr2)->sin_addr;
 		port1 = ((struct sockaddr_in *)addr1)->sin_port;
 		port2 = ((struct sockaddr_in *)addr2)->sin_port;
+		if (!(port1 == IPSEC_PORT_ANY ||
+		      port2 == IPSEC_PORT_ANY ||
+		      port1 == port2))
+			return 1;
 		if (memcmp(sa1, sa2, sizeof(struct in_addr)) != 0)
-			return CMPSADDR_MISMATCH;
+			return 1;
 		break;
 #ifdef INET6
 	case AF_INET6:
@@ -121,25 +174,83 @@ cmpsaddr(addr1, addr2)
 		sa2 = (caddr_t)&((struct sockaddr_in6 *)addr2)->sin6_addr;
 		port1 = ((struct sockaddr_in6 *)addr1)->sin6_port;
 		port2 = ((struct sockaddr_in6 *)addr2)->sin6_port;
+		if (!(port1 == IPSEC_PORT_ANY ||
+		      port2 == IPSEC_PORT_ANY ||
+		      port1 == port2))
+			return 1;
 		if (memcmp(sa1, sa2, sizeof(struct in6_addr)) != 0)
-			return CMPSADDR_MISMATCH;
+			return 1;
 		if (((struct sockaddr_in6 *)addr1)->sin6_scope_id !=
 		    ((struct sockaddr_in6 *)addr2)->sin6_scope_id)
-			return CMPSADDR_MISMATCH;
+			return 1;
 		break;
 #endif
 	default:
-		return CMPSADDR_MISMATCH;
+		return 1;
 	}
 
-	if (port1 == port2)
-		return CMPSADDR_MATCH;
+	return 0;
+}
 
-	if (port1 == IPSEC_PORT_ANY ||
-	    port2 == IPSEC_PORT_ANY)
-		return CMPSADDR_WILDPORT_MATCH;
+/*
+ * compare two sockaddr with strict match on port.
+ * OUT:	0: equal.
+ *	1: not equal.
+ */
+int
+cmpsaddrstrict(addr1, addr2)
+	const struct sockaddr *addr1;
+	const struct sockaddr *addr2;
+{
+	caddr_t sa1, sa2;
+	u_short port1, port2;
 
-	return CMPSADDR_WOP_MATCH;
+	if (addr1 == 0 && addr2 == 0)
+		return 0;
+	if (addr1 == 0 || addr2 == 0)
+		return 1;
+
+#ifdef __linux__
+	if (addr1->sa_family != addr2->sa_family)
+		return 1;
+#else
+	if (addr1->sa_len != addr2->sa_len
+	 || addr1->sa_family != addr2->sa_family)
+		return 1;
+
+#endif /* __linux__ */
+
+	switch (addr1->sa_family) {
+	case AF_INET:
+		sa1 = (caddr_t)&((struct sockaddr_in *)addr1)->sin_addr;
+		sa2 = (caddr_t)&((struct sockaddr_in *)addr2)->sin_addr;
+		port1 = ((struct sockaddr_in *)addr1)->sin_port;
+		port2 = ((struct sockaddr_in *)addr2)->sin_port;
+		if (port1 != port2)
+			return 1;
+		if (memcmp(sa1, sa2, sizeof(struct in_addr)) != 0)
+			return 1;
+		break;
+#ifdef INET6
+	case AF_INET6:
+		sa1 = (caddr_t)&((struct sockaddr_in6 *)addr1)->sin6_addr;
+		sa2 = (caddr_t)&((struct sockaddr_in6 *)addr2)->sin6_addr;
+		port1 = ((struct sockaddr_in6 *)addr1)->sin6_port;
+		port2 = ((struct sockaddr_in6 *)addr2)->sin6_port;
+		if (port1 != port2)
+			return 1;
+		if (memcmp(sa1, sa2, sizeof(struct in6_addr)) != 0)
+			return 1;
+		if (((struct sockaddr_in6 *)addr1)->sin6_scope_id !=
+		    ((struct sockaddr_in6 *)addr2)->sin6_scope_id)
+			return 1;
+		break;
+#endif
+	default:
+		return 1;
+	}
+
+	return 0;
 }
 
 /* get local address against the destination. */
@@ -159,7 +270,7 @@ getlocaladdr(remote)
 	}
 	
 	/* get real interface received packet */
-	if ((s = SOCKET(remote->sa_family, SOCK_DGRAM, 0)) < 0) {
+	if ((s = socket(remote->sa_family, SOCK_DGRAM, 0)) < 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"socket (%s)\n", strerror(errno));
 		goto err;
@@ -206,9 +317,8 @@ recvfromto(s, buf, buflen, flags, from, fromlen, to, tolen)
 	u_int *tolen;
 {
 	int otolen;
-	socklen_t slen;
-	int len;
-	union sockaddr_any sa;
+	u_int len;
+	struct sockaddr_storage ss;
 	struct msghdr m;
 	struct cmsghdr *cm;
 	struct iovec iov[2];
@@ -221,8 +331,8 @@ recvfromto(s, buf, buflen, flags, from, fromlen, to, tolen)
 	struct sockaddr_in6 *sin6;
 #endif
 
-	slen = sizeof(sa);
-	if (getsockname(s, &sa.sa, &slen) < 0) {
+	len = sizeof(ss);
+	if (getsockname(s, (struct sockaddr *)&ss, &len) < 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"getsockname (%s)\n", strerror(errno));
 		return -1;
@@ -255,7 +365,7 @@ recvfromto(s, buf, buflen, flags, from, fromlen, to, tolen)
 			"cmsg %d %d\n", cm->cmsg_level, cm->cmsg_type);)
 #endif
 #if defined(INET6) && defined(INET6_ADVAPI)
-		if (sa.sa.sa_family == AF_INET6
+		if (ss.ss_family == AF_INET6
 		 && cm->cmsg_level == IPPROTO_IPV6
 		 && cm->cmsg_type == IPV6_PKTINFO
 		 && otolen >= sizeof(*sin6)) {
@@ -274,13 +384,14 @@ recvfromto(s, buf, buflen, flags, from, fromlen, to, tolen)
 				sin6->sin6_scope_id = pi->ipi6_ifindex;
 			else
 				sin6->sin6_scope_id = 0;
-			sin6->sin6_port = sa.sin6.sin6_port;
+			sin6->sin6_port =
+				((struct sockaddr_in6 *)&ss)->sin6_port;
 			otolen = -1;	/* "to" already set */
 			continue;
 		}
 #endif
 #ifdef __linux__
-		if (sa.sa.sa_family == AF_INET
+		if (ss.ss_family == AF_INET
 		 && cm->cmsg_level == IPPROTO_IP
 		 && cm->cmsg_type == IP_PKTINFO
 		 && otolen >= sizeof(sin)) {
@@ -291,13 +402,14 @@ recvfromto(s, buf, buflen, flags, from, fromlen, to, tolen)
 			sin->sin_family = AF_INET;
 			memcpy(&sin->sin_addr, &pi->ipi_addr,
 				sizeof(sin->sin_addr));
-			sin->sin_port = sa.sin.sin_port;
+			sin->sin_port =
+				((struct sockaddr_in *)&ss)->sin_port;
 			otolen = -1;	/* "to" already set */
 			continue;
 		}
 #endif
 #if defined(INET6) && defined(IPV6_RECVDSTADDR)
-		if (sa.sa.sa_family == AF_INET6
+		if (ss.ss_family == AF_INET6
 		      && cm->cmsg_level == IPPROTO_IPV6
 		      && cm->cmsg_type == IPV6_RECVDSTADDR
 		      && otolen >= sizeof(*sin6)) {
@@ -308,13 +420,14 @@ recvfromto(s, buf, buflen, flags, from, fromlen, to, tolen)
 			sin6->sin6_len = sizeof(*sin6);
 			memcpy(&sin6->sin6_addr, CMSG_DATA(cm),
 				sizeof(sin6->sin6_addr));
-			sin6->sin6_port = sa.sin6.sin6_port;
+			sin6->sin6_port =
+				((struct sockaddr_in6 *)&ss)->sin6_port;
 			otolen = -1;	/* "to" already set */
 			continue;
 		}
 #endif
 #ifndef __linux__
-		if (sa.sa.sa_family == AF_INET
+		if (ss.ss_family == AF_INET
 		 && cm->cmsg_level == IPPROTO_IP
 		 && cm->cmsg_type == IP_RECVDSTADDR
 		 && otolen >= sizeof(*sin)) {
@@ -325,7 +438,7 @@ recvfromto(s, buf, buflen, flags, from, fromlen, to, tolen)
 			sin->sin_len = sizeof(*sin);
 			memcpy(&sin->sin_addr, CMSG_DATA(cm),
 				sizeof(sin->sin_addr));
-			sin->sin_port = sa.sin.sin_port;
+			sin->sin_port = ((struct sockaddr_in *)&ss)->sin_port;
 			otolen = -1;	/* "to" already set */
 			continue;
 		}
@@ -345,8 +458,7 @@ sendfromto(s, buf, buflen, src, dst, cnt)
 	struct sockaddr *dst;
 {
 	struct sockaddr_storage ss;
-	socklen_t slen;
-	int len = 0;
+	u_int len;
 	int i;
 
 	if (src->sa_family != dst->sa_family) {
@@ -355,8 +467,8 @@ sendfromto(s, buf, buflen, src, dst, cnt)
 		return -1;
 	}
 
-	slen = sizeof(ss);
-	if (getsockname(s, (struct sockaddr *)&ss, &slen) < 0) {
+	len = sizeof(ss);
+	if (getsockname(s, (struct sockaddr *)&ss, &len) < 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"getsockname (%s)\n", strerror(errno));
 		return -1;
@@ -524,7 +636,7 @@ sendfromto(s, buf, buflen, src, dst, cnt)
 			 * Better approach is to prepare bind'ed udp sockets for
 			 * each of the interface addresses.
 			 */
-			sendsock = SOCKET(src->sa_family, SOCK_DGRAM, 0);
+			sendsock = socket(src->sa_family, SOCK_DGRAM, 0);
 			if (sendsock < 0) {
 				plog(LLV_ERROR, LOCATION, NULL,
 					"socket (%s)\n", strerror(errno));
@@ -559,8 +671,7 @@ sendfromto(s, buf, buflen, src, dst, cnt)
 				return -1;
 			}
 
-			if (BIND(sendsock, (struct sockaddr *)src,
-				 sysdep_sa_len(src)) < 0) {
+			if (bind(sendsock, (struct sockaddr *)src, sysdep_sa_len(src)) < 0) {
 				plog(LLV_ERROR, LOCATION, NULL,
 					"bind 1 (%s)\n", strerror(errno));
 				close(sendsock);
@@ -624,7 +735,7 @@ setsockopt_bypass(so, family)
 			ipsec_strerror());
 		return -1;
 	}
-	if (SETSOCKOPT(so, level,
+	if (setsockopt(so, level,
 	               (level == IPPROTO_IP ?
 	                         IP_IPSEC_POLICY : IPV6_IPSEC_POLICY),
 	               buf, ipsec_get_policylen(buf)) < 0) {
@@ -643,7 +754,7 @@ setsockopt_bypass(so, family)
 			ipsec_strerror());
 		return -1;
 	}
-	if (SETSOCKOPT(so, level,
+	if (setsockopt(so, level,
 	               (level == IPPROTO_IP ?
 	                         IP_IPSEC_POLICY : IPV6_IPSEC_POLICY),
 	               buf, ipsec_get_policylen(buf)) < 0) {
@@ -936,13 +1047,13 @@ naddr_score(const struct netaddr *naddr, const struct sockaddr *saddr)
 		free(a2);
 		free(a3);
 	}
-	if (cmpsaddr(&sa, &naddr->sa.sa) <= CMPSADDR_WOP_MATCH)
+	if (cmpsaddrwop(&sa, &naddr->sa.sa) == 0)
 		return naddr->prefix + port_score;
 
 	return -1;
 }
 
-/* Some useful functions for sockaddr port manipulations. */
+/* Some usefull functions for sockaddr port manipulations. */
 u_int16_t
 extract_port (const struct sockaddr *addr)
 {
@@ -952,8 +1063,6 @@ extract_port (const struct sockaddr *addr)
     return port;
 
   switch (addr->sa_family) {
-    case AF_UNSPEC:
-      break;
     case AF_INET:
       port = ((struct sockaddr_in *)addr)->sin_port;
       break;

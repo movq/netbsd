@@ -1,4 +1,4 @@
-/*	$NetBSD: if_udavreg.h,v 1.9 2012/08/24 09:01:23 msaitoh Exp $	*/
+/*	$NetBSD: if_udavreg.h,v 1.4 2007/12/05 07:15:54 ad Exp $	*/
 /*	$nabe: if_udavreg.h,v 1.2 2003/08/21 16:26:40 nabe Exp $	*/
 /*
  * Copyright (c) 2003
@@ -156,7 +156,7 @@ struct udav_cdata {
 	struct udav_chain	udav_tx_chain[UDAV_TX_LIST_CNT];
 	struct udav_chain	udav_rx_chain[UDAV_TX_LIST_CNT];
 #if 0
-	/* XXX: Interrupt Endpoint is not yet supported! */
+	/* XXX: Intrrupt Endpoint is not yet supported! */
 	struct udav_intrpkg	udav_ibuf;
 #endif
 	int			udav_tx_prod;
@@ -166,7 +166,7 @@ struct udav_cdata {
 };
 
 struct udav_softc {
-	device_t		sc_dev;	/* base device */
+	USBBASEDEVICE		sc_dev;	/* base device */
 	usbd_device_handle	sc_udev;
 
 	/* USB */
@@ -178,7 +178,7 @@ struct udav_softc {
 	usbd_pipe_handle	sc_pipe_rx;
 	usbd_pipe_handle	sc_pipe_tx;
 	usbd_pipe_handle	sc_pipe_intr;
-	struct callout		sc_stat_ch;
+	usb_callout_t		sc_stat_ch;
 	u_int			sc_rx_errs;
 	/* u_int		sc_intr_errs; */
 	struct timeval		sc_rx_notice;
@@ -189,12 +189,14 @@ struct udav_softc {
 	kmutex_t		sc_mii_lock;
 	int			sc_link;
 #define	sc_media udav_mii.mii_media
-	krndsource_t	rnd_source;
+#if NRND > 0
+	rndsource_element_t	rnd_source;
+#endif
 	struct udav_cdata	sc_cdata;
 
 	int                     sc_attached;
 	int			sc_dying;
-	int                     sc_refcnt;
+        int                     sc_refcnt;
 
 	struct usb_task		sc_tick_task;
 	struct usb_task		sc_stop_task;

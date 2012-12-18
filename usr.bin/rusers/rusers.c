@@ -1,4 +1,4 @@
-/*	$NetBSD: rusers.c,v 1.25 2011/09/06 18:29:35 joerg Exp $	*/
+/*	$NetBSD: rusers.c,v 1.23 2006/05/11 01:25:23 mrg Exp $	*/
 
 /*-
  *  Copyright (c) 1993 John Brezak
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rusers.c,v 1.25 2011/09/06 18:29:35 joerg Exp $");
+__RCSID("$NetBSD: rusers.c,v 1.23 2006/05/11 01:25:23 mrg Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -58,18 +58,19 @@ __RCSID("$NetBSD: rusers.c,v 1.25 2011/09/06 18:29:35 joerg Exp $");
 
 #define MAX_INT 0x7fffffff
 
-static struct timeval timeout = { 25, 0 };
-static int longopt;
-static int allopt;
+struct timeval timeout = { 25, 0 };
+int longopt;
+int allopt;
 
-static void	allhosts(void);
-static void	onehost(char *);
-static void	remember_host(struct sockaddr *);
-static int	rusers_reply(char *, struct netbuf *, struct netconfig *);
-static int	search_host(struct sockaddr *);
-__dead static void	usage(void);
+void	allhosts(void);
+int	main(int, char *[]);
+void	onehost(char *);
+void	remember_host(struct sockaddr *);
+int	rusers_reply(char *, struct netbuf *, struct netconfig *);
+int	search_host(struct sockaddr *);
+void	usage(void);
 
-static struct host_list {
+struct host_list {
 	struct host_list *next;
 	int family;
 	union {
@@ -81,7 +82,7 @@ static struct host_list {
 #define addr6 addr._addr6
 #define addr4 addr._addr4
 
-static int
+int
 search_host(struct sockaddr *sa)
 {
 	struct host_list *hp;
@@ -110,7 +111,7 @@ search_host(struct sockaddr *sa)
 	return(0);
 }
 
-static void
+void
 remember_host(struct sockaddr *sa)
 {
 	struct host_list *hp;
@@ -137,7 +138,7 @@ remember_host(struct sockaddr *sa)
 	hosts = hp;
 }
 
-static int
+int
 rusers_reply(char *replyp, struct netbuf *raddrp, struct netconfig *nconf)
 {
 	char host[NI_MAXHOST];
@@ -222,7 +223,7 @@ rusers_reply(char *replyp, struct netbuf *raddrp, struct netconfig *nconf)
 	return(0);
 }
 
-static void
+void
 onehost(char *host)
 {
 	struct utmpidlearr up;
@@ -253,7 +254,7 @@ onehost(char *host)
 	freeaddrinfo(ai);
 }
 
-static void
+void
 allhosts(void)
 {
 	struct utmpidlearr up;
@@ -261,14 +262,13 @@ allhosts(void)
 
 	memset((char *)&up, 0, sizeof(up));
 	clnt_stat = rpc_broadcast(RUSERSPROG, RUSERSVERS_IDLE,
-	    RUSERSPROC_NAMES, (xdrproc_t)xdr_void, NULL,
-	    (xdrproc_t)xdr_utmpidlearr, (char *)&up,
-	    (resultproc_t)rusers_reply, "udp");
+	    RUSERSPROC_NAMES, xdr_void, NULL, xdr_utmpidlearr,
+	    (char *)&up, (resultproc_t)rusers_reply, "udp");
 	if (clnt_stat != RPC_SUCCESS && clnt_stat != RPC_TIMEDOUT)
 		errx(1, "%s", clnt_sperrno(clnt_stat));
 }
 
-static void
+void
 usage(void)
 {
 	fprintf(stderr, "usage: %s [-la] [hosts ...]\n", getprogname());

@@ -1,4 +1,4 @@
-/* $NetBSD: mount_ados.c,v 1.29 2011/08/29 14:35:00 joerg Exp $ */
+/* $NetBSD: mount_ados.c,v 1.28 2008/08/05 20:57:45 pooka Exp $ */
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mount_ados.c,v 1.29 2011/08/29 14:35:00 joerg Exp $");
+__RCSID("$NetBSD: mount_ados.c,v 1.28 2008/08/05 20:57:45 pooka Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -65,7 +65,7 @@ static const struct mntopt mopts[] = {
 };
 
 int	mount_ados(int argc, char **argv);
-__dead static void	usage(void);
+static void	usage(void);
 
 #ifndef MOUNT_NOMAIN
 int

@@ -1,4 +1,4 @@
-/*	$NetBSD: fixcoff.c,v 1.11 2009/03/14 15:36:09 dsl Exp $ */
+/*	$NetBSD: fixcoff.c,v 1.10 2006/04/07 02:34:55 gdamore Exp $ */
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -121,13 +121,15 @@ struct aouthdr {
 #define RS6K_AOUTHDR_ZMAGIC     0x010B
 
 void
-usage(char *prog)
+usage(prog)
+	char	*prog;
 {
 	fprintf(stderr, "Usage: %s [-h] | [<file to fix>]\n", prog);
 }
 
 void
-help(char *prog)
+help(prog)
+	char	*prog;
 {
 	fprintf(stderr, "%s\tis designed to fix the xcoff headers in a\n",prog);
 	fprintf(stderr,
@@ -136,7 +138,9 @@ help(char *prog)
 	exit(0);
 }
 
-main(int argc, char * const *argv)
+main(argc, argv)
+	int		argc;
+	char * const	*argv;
 {
 	int	fd, i, n, ch;
 	struct	filehdr	fh;

@@ -1,4 +1,4 @@
-/*	$NetBSD: virtio.c,v 1.3 2011/11/02 23:05:52 njoly Exp $	*/
+/*	$NetBSD: virtio.c,v 1.3.6.2 2012/01/25 21:18:15 riz Exp $	*/
 
 /*
  * Copyright (c) 2010 Minoura Makoto.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: virtio.c,v 1.3 2011/11/02 23:05:52 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: virtio.c,v 1.3.6.2 2012/01/25 21:18:15 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,9 +52,8 @@ static int	virtio_intr(void *arg);
 static void	virtio_init_vq(struct virtio_softc *,
 		    struct virtqueue *, const bool);
 
-CFATTACH_DECL3_NEW(virtio, sizeof(struct virtio_softc),
-    virtio_match, virtio_attach, virtio_detach, NULL, NULL, NULL,
-    DVF_DETACH_SHUTDOWN);
+CFATTACH_DECL_NEW(virtio, sizeof(struct virtio_softc),
+    virtio_match, virtio_attach, virtio_detach, NULL);
 
 static void
 virtio_set_status(struct virtio_softc *sc, int status)
@@ -77,11 +76,11 @@ virtio_match(device_t parent, cfdata_t match, void *aux)
 
 	pa = (struct pci_attach_args *)aux;
 	switch (PCI_VENDOR(pa->pa_id)) {
-	case PCI_VENDOR_QUMRANET:
-		if ((PCI_PRODUCT_QUMRANET_VIRTIO_1000 <=
+	case 0x1af4 /*PCI_VENDOR_QUMRANET*/:
+		if ((0x1000 /*PCI_PRODUCT_QUMRANET_VIRTIO_1000*/ <=
 		     PCI_PRODUCT(pa->pa_id)) &&
 		    (PCI_PRODUCT(pa->pa_id) <=
-		     PCI_PRODUCT_QUMRANET_VIRTIO_103F))
+		     0x103f /*PCI_PRODUCT_QUMRANET_VIRTIO_103F*/))
 			return 1;
 		break;
 	}

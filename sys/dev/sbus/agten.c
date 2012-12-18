@@ -1,4 +1,4 @@
-/*	$NetBSD: agten.c,v 1.30 2012/10/23 11:53:18 macallan Exp $ */
+/*	$NetBSD: agten.c,v 1.15 2008/06/12 23:06:14 cegger Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -27,14 +27,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agten.c,v 1.30 2012/10/23 11:53:18 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agten.c,v 1.15 2008/06/12 23:06:14 cegger Exp $");
 
 /*
  * a driver for the Fujitsu AG-10e SBus framebuffer
  *
  * this thing is Frankenstein's Monster among graphics boards.
  * it contains three graphics chips:
- * a GLint 300SX - 24bit stuff, double-buffered
+ * a GLint - 24bit stuff, double-buffered
  * an Imagine 128 which provides an 8bit overlay
  * a Weitek P9100 which provides WIDs
  * so here we need to mess only with the P9100 and the I128 - for X we just
@@ -68,7 +68,6 @@ __KERNEL_RCSID(0, "$NetBSD: agten.c,v 1.30 2012/10/23 11:53:18 macallan Exp $");
 #include <dev/wsfont/wsfont.h>
 
 #include <dev/wscons/wsdisplay_vconsvar.h>
-#include <dev/wscons/wsdisplay_glyphcachevar.h>
 
 #include <dev/sbus/p9100reg.h>
 #include <dev/ic/ibm561reg.h>
@@ -76,9 +75,8 @@ __KERNEL_RCSID(0, "$NetBSD: agten.c,v 1.30 2012/10/23 11:53:18 macallan Exp $");
 #include <dev/ic/i128var.h>
 
 #include "opt_agten.h"
-#include "ioconf.h"
 
-static int	agten_match(device_t, cfdata_t, void *);
+static int	agten_match(device_t, struct cfdata *, void *);
 static void	agten_attach(device_t, device_t, void *);
 
 static int	agten_ioctl(void *, void *, u_long, void *, int, struct lwp *);
@@ -87,6 +85,7 @@ static void	agten_init_screen(void *, struct vcons_screen *, int, long *);
 
 struct agten_softc {
 	device_t	sc_dev;		/* base device */
+	struct sbusdev	sc_sd;		/* sbus device */
 	struct fbdevice	sc_fb;		/* frame buffer device */
 
 	struct vcons_screen sc_console_screen;
@@ -120,11 +119,7 @@ struct agten_softc {
 
 	int sc_mode;
 	uint32_t sc_bg;
-
-	void (*sc_putchar)(void *, int, int, u_int, long);
-
 	struct vcons_data vd;
-	glyphcache sc_gc;
 };
 
 CFATTACH_DECL_NEW(agten, sizeof(struct agten_softc),
@@ -136,16 +131,10 @@ static int 	agten_getcmap(struct agten_softc *, struct wsdisplay_cmap *);
 static int 	agten_putpalreg(struct agten_softc *, uint8_t, uint8_t,
 			    uint8_t, uint8_t);
 static void	agten_init(struct agten_softc *);
-static void	agten_init_cmap(struct agten_softc *, struct rasops_info *);
 static void	agten_gfx(struct agten_softc *);
 static void	agten_set_video(struct agten_softc *, int);
 static int	agten_get_video(struct agten_softc *);
 
-static void	agten_bitblt(void *, int, int, int, int, int, int, int);
-static void 	agten_rectfill(void *, int, int, int, int, long);
-
-static void	agten_putchar(void *, int, int, u_int, long);
-static void	agten_cursor(void *, int, int, int);
 static void	agten_copycols(void *, int, int, int, int);
 static void	agten_erasecols(void *, int, int, int, long);
 static void	agten_copyrows(void *, int, int, int);
@@ -174,6 +163,7 @@ struct wsdisplay_accessops agten_accessops = {
 };
 
 /* /dev/fb* stuff */
+extern struct cfdriver agten_cd;
 
 static int agten_fb_open(dev_t, int, int, struct lwp *);
 static int agten_fb_close(dev_t, int, int, struct lwp *);
@@ -210,7 +200,7 @@ agten_write_dac_10(struct agten_softc *sc, int reg, uint16_t val)
 }
 	
 static int
-agten_match(device_t dev, cfdata_t cf, void *aux)
+agten_match(device_t dev, struct cfdata *cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -247,7 +237,6 @@ agten_attach(device_t parent, device_t dev, void *aux)
 	sc->sc_fb_is_open = 0;
 	sc->sc_video = -1;
 	sc->sc_bustag = sa->sa_bustag;
-	sc->sc_putchar = NULL;
 
 	sc->sc_width = prom_getpropint(node, "ffb_width", 1152);
 	sc->sc_height = prom_getpropint(node, "ffb_height", 900);
@@ -258,8 +247,7 @@ agten_attach(device_t parent, device_t dev, void *aux)
 	sc->sc_i128_fbsz = prom_getpropint(node, "i128_fb_size", -1);
 	if (sbus_bus_map(sc->sc_bustag,
 	    sa->sa_reg[0].oa_space, sa->sa_reg[0].oa_base + reg,
-	    round_page(sc->sc_stride * sc->sc_height),
-	    BUS_SPACE_MAP_LINEAR | BUS_SPACE_MAP_LARGE, 
+	    sc->sc_stride * sc->sc_height, BUS_SPACE_MAP_LINEAR, 
 	    &sc->sc_i128_fbh) != 0) {
 
 		aprint_error_dev(dev, "unable to map the framebuffer\n");
@@ -293,6 +281,8 @@ agten_attach(device_t parent, device_t dev, void *aux)
 	sc->sc_glint_regs = sbus_bus_addr(sc->sc_bustag,
 	    sa->sa_reg[0].oa_space, sa->sa_reg[0].oa_base + reg);
 
+	sbus_establish(&sc->sc_sd, sc->sc_dev);
+
 #if 0
 	bus_intr_establish(sc->sc_bustag, sa->sa_pri, IPL_BIO,
 	    agten_intr, sc);
@@ -309,15 +299,6 @@ agten_attach(device_t parent, device_t dev, void *aux)
 
 	ri = &sc->sc_console_screen.scr_ri;
 
-	sc->sc_gc.gc_bitblt = agten_bitblt;
-	sc->sc_gc.gc_rectfill = agten_rectfill;
-	sc->sc_gc.gc_blitcookie = sc;
-	sc->sc_gc.gc_rop = CR_COPY;
-
-#if defined(AGTEN_DEBUG)
-	sc->sc_height -= 200;
-#endif
-
 	if (console) {
 		vcons_init_screen(&sc->vd, &sc->sc_console_screen, 1,
 		    &defattr);
@@ -327,41 +308,19 @@ agten_attach(device_t parent, device_t dev, void *aux)
 		sc->sc_defaultscreen_descr.capabilities = ri->ri_caps;
 		sc->sc_defaultscreen_descr.nrows = ri->ri_rows;
 		sc->sc_defaultscreen_descr.ncols = ri->ri_cols;
-		glyphcache_init(&sc->sc_gc,
-		    sc->sc_height + 5,
-		    (0x400000 / sc->sc_stride) - sc->sc_height - 5,
-		    sc->sc_width,
-		    ri->ri_font->fontwidth,
-		    ri->ri_font->fontheight,
-		    defattr);
-
 		wsdisplay_cnattach(&sc->sc_defaultscreen_descr, ri, 0, 0,
 		    defattr);
 		i128_rectfill(sc->sc_bustag, sc->sc_i128_regh, 0, 0,
 		    sc->sc_width, sc->sc_height,
 		    ri->ri_devcmap[(defattr >> 16) & 0xff]);
-		vcons_replay_msgbuf(&sc->sc_console_screen);
 	} else {
 		/*
 		 * since we're not the console we can postpone the rest
 		 * until someone actually allocates a screen for us
 		 */
-		if (sc->sc_console_screen.scr_ri.ri_rows == 0) {
-			/* do some minimal setup to avoid weirdnesses later */
-			vcons_init_screen(&sc->vd, &sc->sc_console_screen, 1,
-			    &defattr);
-		}
-		glyphcache_init(&sc->sc_gc,
-		    sc->sc_height + 5,
-		    (0x400000 / sc->sc_stride) - sc->sc_height - 5,
-		    sc->sc_width,
-		    ri->ri_font->fontwidth,
-		    ri->ri_font->fontheight,
-		    defattr);
 	}
 
 	/* Initialize the default color map. */
-	agten_init_cmap(sc, ri);
 
 	aa.console = console;
 	aa.scrdata = &sc->sc_screenlist;
@@ -379,7 +338,7 @@ agten_attach(device_t parent, device_t dev, void *aux)
 	fb->fb_type.fb_width = sc->sc_width;
 	fb->fb_type.fb_height = sc->sc_height;
 	fb->fb_type.fb_depth = 32;
-	fb->fb_linebytes = sc->sc_stride << 2;
+	fb->fb_linebytes = sc->sc_stride;
 	fb_attach(fb, console);
 	agten_set_video(sc, 1);	/* make sure video's on */
 }
@@ -436,8 +395,6 @@ agten_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 					sc->sc_mode = new_mode;
 					if(new_mode == WSDISPLAYIO_MODE_EMUL) {
 						agten_init(sc);
-						agten_init_cmap(sc,
-						    &ms->scr_ri);
 						vcons_redraw_screen(ms);
 					} else {
 						agten_gfx(sc);
@@ -505,7 +462,7 @@ agten_init_screen(void *cookie, struct vcons_screen *scr,
 	ri->ri_width = sc->sc_width;
 	ri->ri_height = sc->sc_height;
 	ri->ri_stride = sc->sc_stride;
-	ri->ri_flg = RI_CENTER | RI_FULLCLEAR | RI_8BIT_IS_RGB | RI_ENABLE_ALPHA;
+	ri->ri_flg = RI_CENTER | RI_FULLCLEAR;
 
 	ri->ri_bits = (char *)sc->sc_fb.fb_pixels;
 
@@ -513,17 +470,13 @@ agten_init_screen(void *cookie, struct vcons_screen *scr,
 		ri->ri_flg |= RI_CLEAR;
 	}
 
-	rasops_init(ri, 0, 0);
-	sc->sc_putchar = ri->ri_ops.putchar;
-
+	rasops_init(ri, sc->sc_height / 8, sc->sc_width / 8);
 	ri->ri_caps = WSSCREEN_WSCOLORS;
 
 	rasops_reconfig(ri, sc->sc_height / ri->ri_font->fontheight,
 		    sc->sc_width / ri->ri_font->fontwidth);
 
 	ri->ri_hw = scr;
-	ri->ri_ops.putchar   = agten_putchar;
-	ri->ri_ops.cursor    = agten_cursor;
 	ri->ri_ops.copyrows  = agten_copyrows;
 	ri->ri_ops.eraserows = agten_eraserows;
 	ri->ri_ops.copycols  = agten_copycols;
@@ -614,9 +567,18 @@ agten_putpalreg(struct agten_softc *sc, uint8_t idx, uint8_t r, uint8_t g,
 static void
 agten_init(struct agten_softc *sc)
 {
-	int i;
+	int i, j;
 	uint32_t src, srcw;
 	volatile uint32_t junk;
+
+	/* first we set up the colour map */
+	j = 0;
+	for (i = 0; i < 256; i++) {
+
+		agten_putpalreg(sc, i, rasops_cmap[j], rasops_cmap[j + 1],
+		    rasops_cmap[j + 2]);
+		j += 3;
+	}
 
 	/* then we set up a linear LUT for 24bit colour */
 	agten_write_idx(sc, IBM561_CMAP_TABLE + 256);
@@ -690,21 +652,6 @@ agten_init(struct agten_softc *sc)
 }
 
 static void
-agten_init_cmap(struct agten_softc *sc, struct rasops_info *ri)
-{
-	int i, j;
-	uint8_t cmap[768];
-
-	rasops_get_cmap(ri, cmap, 768);
-	j = 0;
-	for (i = 0; i < 256; i++) {
-
-		agten_putpalreg(sc, i, cmap[j], cmap[j + 1], cmap[j + 2]);
-		j += 3;
-	}
-}
-
-static void
 agten_gfx(struct agten_softc *sc)
 {
 	/* enable overlay transparency on colour 0x00 */
@@ -739,103 +686,6 @@ agten_get_video(struct agten_softc *sc)
 {
 
 	return sc->sc_video;
-}
-
-static void
-agten_bitblt(void *cookie, int xs, int ys, int xd, int yd, int wi, int he,
-             int rop)
-{
-	struct agten_softc *sc = cookie;
-
-	i128_bitblt(sc->sc_bustag, sc->sc_i128_regh,
-	    xs, ys, xd, yd, wi, he, rop);
-}
-	
-static void
-agten_rectfill(void *cookie, int x, int y, int wi, int he, long fg)
-{
-	struct agten_softc *sc = cookie;
-	struct vcons_screen *scr = sc->vd.active;
-	uint32_t col;
-
-	if (scr == NULL)
-		return;
-	col = scr->scr_ri.ri_devcmap[fg];
-	i128_rectfill(sc->sc_bustag, sc->sc_i128_regh, x, y, wi, he, col);	
-}
-
-static void
-agten_putchar(void *cookie, int row, int col, u_int c, long attr)
-{
-	struct rasops_info *ri = cookie;
-	struct wsdisplay_font *font = PICK_FONT(ri, c);
-	struct vcons_screen *scr = ri->ri_hw;
-	struct agten_softc *sc = scr->scr_cookie;
-	uint32_t fg, bg;
-	int x, y, wi, he, rv;
-
-	wi = font->fontwidth;
-	he = font->fontheight;
-
-	bg = ri->ri_devcmap[(attr >> 16) & 0xf];
-	fg = ri->ri_devcmap[(attr >> 24) & 0xf];
-
-	x = ri->ri_xorigin + col * wi;
-	y = ri->ri_yorigin + row * he;
-
-	if (c == 0x20) {
-		i128_rectfill(sc->sc_bustag, sc->sc_i128_regh, x, y, wi, he,
-		    bg);
-		if (attr & 1)
-			i128_rectfill(sc->sc_bustag, sc->sc_i128_regh, x,
-			    y + he - 2, wi, 1, fg);
-		return;
-	}
-	rv = glyphcache_try(&sc->sc_gc, c, x, y, attr);
-	if (rv == GC_OK)
-		return;
-	i128_sync(sc->sc_bustag, sc->sc_i128_regh);
-	sc->sc_putchar(cookie, row, col, c, attr & ~1);
-
-	if (rv == GC_ADD) {
-		glyphcache_add(&sc->sc_gc, c, x, y);
-	} else {
-		if (attr & 1)
-			i128_rectfill(sc->sc_bustag, sc->sc_i128_regh, x,
-			    y + he - 2, wi, 1, fg);
-	}
-}
-
-static void
-agten_cursor(void *cookie, int on, int row, int col)
-{
-	struct rasops_info *ri = cookie;
-	struct vcons_screen *scr = ri->ri_hw;
-	struct agten_softc *sc = scr->scr_cookie;
-	int x, y, wi,he;
-
-	wi = ri->ri_font->fontwidth;
-	he = ri->ri_font->fontheight;
-
-	if (ri->ri_flg & RI_CURSOR) {
-		x = ri->ri_ccol * wi + ri->ri_xorigin;
-		y = ri->ri_crow * he + ri->ri_yorigin;
-		i128_bitblt(sc->sc_bustag, sc->sc_i128_regh, x, y, x, y, wi, he,
-		    CR_COPY_INV);
-		ri->ri_flg &= ~RI_CURSOR;
-	}
-
-	ri->ri_crow = row;
-	ri->ri_ccol = col;
-
-	if (on)
-	{
-		x = ri->ri_ccol * wi + ri->ri_xorigin;
-		y = ri->ri_crow * he + ri->ri_yorigin;
-		i128_bitblt(sc->sc_bustag, sc->sc_i128_regh, x, y, x, y, wi, he,
-		    CR_COPY_INV);
-		ri->ri_flg |= RI_CURSOR;
-	}
 }
 
 static void

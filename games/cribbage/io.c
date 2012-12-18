@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.27 2012/10/13 20:36:06 dholland Exp $	*/
+/*	$NetBSD: io.c,v 1.21 2007/12/15 19:44:39 perry Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)io.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: io.c,v 1.27 2012/10/13 20:36:06 dholland Exp $");
+__RCSID("$NetBSD: io.c,v 1.21 2007/12/15 19:44:39 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,35 +58,29 @@ __RCSID("$NetBSD: io.c,v 1.27 2012/10/13 20:36:06 dholland Exp $");
 #endif
 #define	CTRL(X)			(X - 'A' + 1)
 
-static int msgcrd(CARD, BOOLEAN, const char *, BOOLEAN);
-static void printcard(WINDOW *, unsigned, CARD, BOOLEAN);
-static int incard(CARD *);
-static void wait_for(int);
-static int readchar(void);
+char    linebuf[LINESIZE];
 
-static char linebuf[LINESIZE];
-
-static const char *const rankname[RANKS] = {
+const char   *const rankname[RANKS] = {
 	"ACE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN",
 	"EIGHT", "NINE", "TEN", "JACK", "QUEEN", "KING"
 };
 
-static const char *const rankchar[RANKS] = {
+const char   *const rankchar[RANKS] = {
 	"A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K"
 };
 
-static const char *const suitname[SUITS] = {
-	"SPADES", "HEARTS", "DIAMONDS", "CLUBS"
-};
+const char *const suitname[SUITS] = {"SPADES", "HEARTS", "DIAMONDS", "CLUBS"};
 
-static const char *const suitchar[SUITS] = {"S", "H", "D", "C"};
+const char   *const suitchar[SUITS] = {"S", "H", "D", "C"};
 
 /*
  * msgcard:
  *	Call msgcrd in one of two forms
  */
 int
-msgcard(CARD c, BOOLEAN brief)
+msgcard(c, brief)
+	CARD c;
+	BOOLEAN brief;
 {
 	if (brief)
 		return (msgcrd(c, TRUE, NULL, TRUE));
@@ -98,7 +92,7 @@ msgcard(CARD c, BOOLEAN brief)
  * msgcrd:
  *	Print the value of a card in ascii
  */
-static int
+int
 msgcrd(CARD c, BOOLEAN brfrank, const char *mid, BOOLEAN brfsuit)
 {
 	if (c.rank == EMPTY || c.suit == EMPTY)
@@ -106,13 +100,13 @@ msgcrd(CARD c, BOOLEAN brfrank, const char *mid, BOOLEAN brfsuit)
 	if (brfrank)
 		addmsg("%1.1s", rankchar[c.rank]);
 	else
-		addmsg("%s", rankname[c.rank]);
+		addmsg(rankname[c.rank]);
 	if (mid != NULL)
-		addmsg("%s", mid);
+		addmsg(mid);
 	if (brfsuit)
 		addmsg("%1.1s", suitchar[c.suit]);
 	else
-		addmsg("%s", suitname[c.suit]);
+		addmsg(suitname[c.suit]);
 	return (TRUE);
 }
 
@@ -120,8 +114,8 @@ msgcrd(CARD c, BOOLEAN brfrank, const char *mid, BOOLEAN brfsuit)
  * printcard:
  *	Print out a card.
  */
-static void
-printcard(WINDOW *win, unsigned cardno, CARD c, BOOLEAN blank)
+void
+printcard(WINDOW *win, int cardno, CARD c, BOOLEAN blank)
 {
 	prcard(win, cardno * 2, cardno, c, blank);
 }
@@ -154,9 +148,9 @@ prcard(WINDOW *win, int y, int x, CARD c, BOOLEAN blank)
  *	Print a hand of n cards
  */
 void
-prhand(const CARD h[], unsigned n, WINDOW *win, BOOLEAN blank)
+prhand(const CARD h[], int n, WINDOW *win, BOOLEAN blank)
 {
-	unsigned i;
+	int i;
 
 	werase(win);
 	for (i = 0; i < n; i++)
@@ -180,7 +174,7 @@ infrom(const CARD hand[], int n, const char *prompt)
 		exit(74);
 	}
 	for (;;) {
-		msg("%s", prompt);
+		msg(prompt);
 		if (incard(&crd)) {	/* if card is full card */
 			if (!is_one(crd, hand, n))
 				msg("That's not in your hand");
@@ -222,7 +216,7 @@ infrom(const CARD hand[], int n, const char *prompt)
  *	Inputs a card in any format.  It reads a line ending with a CR
  *	and then parses it.
  */
-static int
+int
 incard(CARD *crd)
 {
 	int i;
@@ -232,7 +226,7 @@ incard(CARD *crd)
 
 	retval = FALSE;
 	rnk = sut = EMPTY;
-	if (!(line = get_line()))
+	if (!(line = getline()))
 		goto gotit;
 	p = p1 = line;
 	while (*p1 != ' ' && *p1 != '\0')
@@ -330,8 +324,8 @@ number(int lo, int hi, const char *prompt)
 	int sum;
 
 	for (sum = 0;;) {
-		msg("%s", prompt);
-		if (!(p = get_line()) || *p == '\0') {
+		msg(prompt);
+		if (!(p = getline()) || *p == '\0') {
 			msg(quiet ? "Not a number" :
 			    "That doesn't look like a number");
 			continue;
@@ -363,8 +357,8 @@ number(int lo, int hi, const char *prompt)
  * msg:
  *	Display a message at the top of the screen.
  */
-static char Msgbuf[BUFSIZ] = {'\0'};
-static int Mpos = 0;
+char    Msgbuf[BUFSIZ] = {'\0'};
+int     Mpos = 0;
 static int Newpos = 0;
 
 void
@@ -373,7 +367,7 @@ msg(const char *fmt, ...)
 	va_list ap;
 
 	va_start(ap, fmt);
-	(void)vsnprintf(&Msgbuf[Newpos], sizeof(Msgbuf)-Newpos, fmt, ap);
+	(void)vsprintf(&Msgbuf[Newpos], fmt, ap);
 	Newpos = strlen(Msgbuf);
 	va_end(ap);
 	endmsg();
@@ -389,7 +383,7 @@ addmsg(const char *fmt, ...)
 	va_list ap;
 
 	va_start(ap, fmt);
-	(void)vsnprintf(&Msgbuf[Newpos], sizeof(Msgbuf)-Newpos, fmt, ap);
+	(void)vsprintf(&Msgbuf[Newpos], fmt, ap);
 	Newpos = strlen(Msgbuf);
 	va_end(ap);
 }
@@ -398,7 +392,7 @@ addmsg(const char *fmt, ...)
  * endmsg:
  *	Display a new msg.
  */
-static int Lineno = 0;
+int     Lineno = 0;
 
 void
 endmsg(void)
@@ -471,7 +465,7 @@ do_wait(void)
  * wait_for
  *	Sit around until the guy types the right key
  */
-static void
+void
 wait_for(int ch)
 {
 	int c;
@@ -488,7 +482,7 @@ wait_for(int ch)
  * readchar:
  *	Reads and returns a character, checking for gross input errors
  */
-static int
+int
 readchar(void)
 {
 	int cnt;
@@ -512,14 +506,14 @@ over:
 }
 
 /*
- * get_line:
+ * getline:
  *      Reads the next line up to '\n' or EOF.  Multiple spaces are
  *	compressed to one space; a space is inserted before a ','
  */
 char *
-get_line(void)
+getline(void)
 {
-	size_t pos;
+	char *sp;
 	int c, oy, ox;
 	WINDOW *oscr;
 
@@ -528,36 +522,36 @@ get_line(void)
 	getyx(stdscr, oy, ox);
 	refresh();
 	/* loop reading in the string, and put it in a temporary buffer */
-	for (pos = 0; (c = readchar()) != '\n'; clrtoeol(), refresh()) {
+	for (sp = linebuf; (c = readchar()) != '\n'; clrtoeol(), refresh()) {
 			if (c == erasechar()) {	/* process erase character */
-				if (pos > 0) {
+				if (sp > linebuf) {
 					int i;
 
-					pos--;
-					for (i = strlen(unctrl(linebuf[pos])); i; i--)
+					sp--;
+					for (i = strlen(unctrl(*sp)); i; i--)
 						addch('\b');
 				}
 				continue;
 			} else
 				if (c == killchar()) {	/* process kill
 							 * character */
-					pos = 0;
+					sp = linebuf;
 					move(oy, ox);
 					continue;
 				} else
-					if (pos == 0 && c == ' ')
+					if (sp == linebuf && c == ' ')
 						continue;
-		if (pos >= LINESIZE - 1 || !(isprint(c) || c == ' '))
+		if (sp >= &linebuf[LINESIZE - 1] || !(isprint(c) || c == ' '))
 			putchar(CTRL('G'));
 		else {
 			if (islower(c))
 				c = toupper(c);
-			linebuf[pos++] = c;
+			*sp++ = c;
 			addstr(unctrl(c));
 			Mpos++;
 		}
 	}
-	linebuf[pos] = '\0';
+	*sp = '\0';
 	stdscr = oscr;
 	return (linebuf);
 }

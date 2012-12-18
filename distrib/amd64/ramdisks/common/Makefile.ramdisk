@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.ramdisk,v 1.10 2012/10/16 08:23:20 apb Exp $
+#	$NetBSD: Makefile.ramdisk,v 1.3 2008/02/01 13:43:12 tsutsui Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -12,10 +12,7 @@ DBG=		-Os -fno-asynchronous-unwind-tables
 CRUNCHGEN_FLAGS= -d "${DBG}"
 
 CRUNCHBIN=	ramdiskbin
-
-# Use ${.CURDIR}/list only if LISTS was not already defined by the caller.
-LISTS?=		${.CURDIR}/list
-LISTS+=		${AMD64COMMON}/list.ramdisk
+LISTS=		${.CURDIR}/list ${AMD64COMMON}/list.ramdisk
 MTREECONF=	${DISTRIBDIR}/common/mtree.common
 IMAGEENDIAN=	le
 IMAGEDEPENDS+= 	${CRUNCHBIN} \
@@ -26,8 +23,9 @@ IMAGEDEPENDS+= 	${CRUNCHBIN} \
 		${DESTDIR}/usr/mdec/mbr_ext \
 		${DESTDIR}/usr/mdec/mbr_bootsel \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
-		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \
-		${DISTRIBDIR}/common/services
+		${NETBSDSRCDIR}/etc/netconfig ${NETBSDSRCDIR}/etc/protocols \
+		${NETBSDSRCDIR}/distrib/common/services \
+		${NETBSDSRCDIR}/distrib/common/termcap.mini
 PARSELISTENV+=	BOOTMODEL=${BOOTMODEL:Q}
 
 .if defined(USE_SYSINST)
@@ -41,7 +39,6 @@ HACKSRC=	${DISTRIBDIR}/utils/libhack
 ${CRUNCHBIN}:	libhack.o
 
 .include "${DISTRIBDIR}/common/Makefile.crunch"
-.include "${DISTRIBDIR}/common/Makefile.dhcpcd"
 .include "${DISTRIBDIR}/common/Makefile.makedev"
 .include "${DISTRIBDIR}/common/Makefile.image"
 

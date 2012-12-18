@@ -1,7 +1,6 @@
-# OpenLDAP: pkg/ldap/contrib/slapd-modules/addpartial/Makefile,v 1.1.2.4 2009/01/21 00:18:19 quanah Exp
-OPENLDAP_SRC=../../..
-OPENLDAP_BLD=../../..
-CPPFLAGS+=-I${OPENLDAP_SRC}/include -I${OPENLDAP_SRC}/servers/slapd -I${OPENLDAP_BLD}/include
+OPENLDAP_SRC=/usr/local/src/openldap-2.4.6
+CPPFLAGS+=-I${OPENLDAP_SRC}/include -I${OPENLDAP_SRC}/servers/slapd
+LDFLAGS+=-L/usr/local/openldap-2.4.6
 CC=gcc
 
 all: addpartial-overlay.so

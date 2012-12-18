@@ -1,12 +1,10 @@
-#	$NetBSD: Makefile,v 1.3 2011/11/11 22:27:33 njoly Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2008/07/29 05:01:22 mrg Exp $
 
 .include <bsd.own.mk>
 
 PROG=	ucs2any
 
-X11EXTRAMANDEFS+= 	-e 's,__mapfilesdir__,${LIBDIR}/X11/fonts/util,'
-
-.PATH:	${X11SRCDIR.font-util} ${X11SRCDIR.font-util}/man
+.PATH:	${X11SRCDIR.font-util}
 
 .include <bsd.x11.mk>
 .include <bsd.prog.mk>

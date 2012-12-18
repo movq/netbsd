@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.options.c,v 1.11 2011/05/23 22:53:25 joerg Exp $	*/
+/*	$NetBSD: hack.options.c,v 1.7.38.1 2009/06/29 23:31:28 snj Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.options.c,v 1.11 2011/05/23 22:53:25 joerg Exp $");
+__RCSID("$NetBSD: hack.options.c,v 1.7.38.1 2009/06/29 23:31:28 snj Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -71,10 +71,8 @@ __RCSID("$NetBSD: hack.options.c,v 1.11 2011/05/23 22:53:25 joerg Exp $");
 #include "hack.h"
 #include "extern.h"
 
-static void parseoptions(char *, boolean);
-
 void
-initoptions(void)
+initoptions()
 {
 	char           *opts;
 
@@ -90,8 +88,10 @@ initoptions(void)
 		parseoptions(opts, TRUE);
 }
 
-static void
-parseoptions(char *opts, boolean from_env)
+void
+parseoptions(opts, from_env)
+	char           *opts;
+	boolean         from_env;
 {
 	char           *op, *op2;
 	unsigned        num;
@@ -237,7 +237,7 @@ bad:
 }
 
 int
-doset(void)
+doset()
 {
 	char buf[BUFSZ];
 	size_t pos;
@@ -271,7 +271,7 @@ doset(void)
 			if (*--eop == ',')
 				*eop = 0;
 		}
-		pline("%s", buf);
+		pline(buf);
 	} else
 		parseoptions(buf, FALSE);
 

@@ -1,4 +1,4 @@
-/* $NetBSD: bsd44.h,v 1.6 2011/12/04 19:25:00 jym Exp $ */
+/* $NetBSD: bsd44.h,v 1.4 2007/01/16 00:11:39 elad Exp $ */
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
  * All rights reserved.
@@ -29,13 +29,12 @@
 #ifndef _SECMODEL_BSD44_BSD44_H_
 #define	_SECMODEL_BSD44_BSD44_H_
 
-#define SECMODEL_BSD44_ID   "org.netbsd.secmodel.bsd44"
-#define SECMODEL_BSD44_NAME "Traditional NetBSD: 4.4BSD"
-
 void secmodel_bsd44_init(void);
 void secmodel_bsd44_start(void);
-void secmodel_bsd44_stop(void);
 
-void sysctl_security_bsd44_setup(struct sysctllog **);
+#if defined(_LKM)
+void secmodel_bsd44_stop(void);
+SYSCTL_SETUP_PROTO(sysctl_security_bsd44_setup);
+#endif /* _LKM */
 
 #endif /* !_SECMODEL_BSD44_BSD44_H_ */

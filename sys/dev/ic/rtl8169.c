@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl8169.c,v 1.136 2012/07/22 14:32:57 matt Exp $	*/
+/*	$NetBSD: rtl8169.c,v 1.105.4.9 2012/01/25 18:02:44 riz Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998-2003
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.136 2012/07/22 14:32:57 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.105.4.9 2012/01/25 18:02:44 riz Exp $");
 /* $FreeBSD: /repoman/r/ncvs/src/sys/dev/re/if_re.c,v 1.20 2004/04/11 20:34:08 ru Exp $ */
 
 /*
@@ -82,7 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.136 2012/07/22 14:32:57 matt Exp $");
  *
  *	o Jumbo frames
  *
- *	o GMII and TBI ports/registers for interfacing with copper
+ * 	o GMII and TBI ports/registers for interfacing with copper
  *	  or fiber PHYs
  *
  *      o RX and TX DMA rings can have up to 1024 descriptors
@@ -111,6 +111,8 @@ __KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.136 2012/07/22 14:32:57 matt Exp $");
  * driver is 7500 bytes.
  */
 
+#include "bpfilter.h"
+#include "vlan.h"
 
 #include <sys/param.h>
 #include <sys/endian.h>
@@ -133,7 +135,9 @@ __KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.136 2012/07/22 14:32:57 matt Exp $");
 #include <netinet/in.h>		/* XXX for IP_MAXPACKET */
 #include <netinet/ip.h>		/* XXX for IP_MAXPACKET */
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <sys/bus.h>
 
@@ -162,12 +166,12 @@ static void re_watchdog(struct ifnet *);
 static int re_enable(struct rtk_softc *);
 static void re_disable(struct rtk_softc *);
 
-static int re_gmii_readreg(device_t, int, int);
-static void re_gmii_writereg(device_t, int, int, int);
+static int re_gmii_readreg(struct device *, int, int);
+static void re_gmii_writereg(struct device *, int, int, int);
 
-static int re_miibus_readreg(device_t, int, int);
-static void re_miibus_writereg(device_t, int, int, int);
-static void re_miibus_statchg(struct ifnet *);
+static int re_miibus_readreg(struct device *, int, int);
+static void re_miibus_writereg(struct device *, int, int, int);
+static void re_miibus_statchg(struct device *);
 
 static void re_reset(struct rtk_softc *);
 
@@ -362,7 +366,7 @@ re_miibus_writereg(device_t dev, int phy, int reg, int data)
 }
 
 static void
-re_miibus_statchg(struct ifnet *ifp)
+re_miibus_statchg(device_t dev)
 {
 
 	return;
@@ -570,7 +574,6 @@ re_attach(struct rtk_softc *sc)
 		case RTK_HWREV_8169S:
 		case RTK_HWREV_8110S:
 		case RTK_HWREV_8169_8110SB:
-		case RTK_HWREV_8169_8110SBL:
 		case RTK_HWREV_8169_8110SC:
 			sc->sc_quirk |= RTKQ_MACLDPS;
 			break;
@@ -583,12 +586,11 @@ re_attach(struct rtk_softc *sc)
 		case RTK_HWREV_8168C_SPIN2:
 		case RTK_HWREV_8168CP:
 		case RTK_HWREV_8168D:
-		case RTK_HWREV_8168DP:
 			sc->sc_quirk |= RTKQ_DESCV2 | RTKQ_NOEECMD |
 			    RTKQ_MACSTAT | RTKQ_CMDSTOP;
 			/*
 			 * From FreeBSD driver:
-			 *
+			 * 
 			 * These (8168/8111) controllers support jumbo frame
 			 * but it seems that enabling it requires touching
 			 * additional magic registers. Depending on MAC
@@ -605,10 +607,6 @@ re_attach(struct rtk_softc *sc)
 			sc->sc_quirk |= RTKQ_DESCV2 | RTKQ_NOEECMD |
 			    RTKQ_MACSTAT | RTKQ_CMDSTOP | RTKQ_PHYWAKE_PM |
 			    RTKQ_NOJUMBO;
-			break;
-		case RTK_HWREV_8168E_VL:
-			sc->sc_quirk |= RTKQ_DESCV2 | RTKQ_NOEECMD |
-			    RTKQ_MACSTAT | RTKQ_CMDSTOP | RTKQ_NOJUMBO;
 			break;
 		case RTK_HWREV_8100E:
 		case RTK_HWREV_8100E_SPIN2:
@@ -701,7 +699,7 @@ re_attach(struct rtk_softc *sc)
 	    BUS_DMA_COHERENT | BUS_DMA_NOWAIT)) != 0) {
 		aprint_error_dev(sc->sc_dev,
 		    "can't map tx list, error = %d\n", error);
-		goto fail_1;
+	  	goto fail_1;
 	}
 	memset(sc->re_ldata.re_tx_list, 0, RE_TX_LIST_SZ(sc));
 
@@ -844,12 +842,6 @@ re_attach(struct rtk_softc *sc)
 	if_attach(ifp);
 	ether_ifattach(ifp, eaddr);
 
-	if (pmf_device_register(sc->sc_dev, NULL, NULL))
-		pmf_class_network_register(sc->sc_dev, ifp);
-	else
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
-
 	return;
 
  fail_8:
@@ -900,14 +892,21 @@ int
 re_activate(device_t self, enum devact act)
 {
 	struct rtk_softc *sc = device_private(self);
+	int s, error = 0;
 
+	s = splnet();
 	switch (act) {
+	case DVACT_ACTIVATE:
+		error = EOPNOTSUPP;
+		break;
 	case DVACT_DEACTIVATE:
+		mii_activate(&sc->mii, act, MII_PHY_ANY, MII_OFFSET_ANY);
 		if_deactivate(&sc->ethercom.ec_if);
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		break;
 	}
+	splx(s);
+
+	return error;
 }
 
 /*
@@ -965,11 +964,6 @@ re_detach(struct rtk_softc *sc)
 	    (void *)sc->re_ldata.re_tx_list, RE_TX_LIST_SZ(sc));
 	bus_dmamem_free(sc->sc_dmat,
 	    &sc->re_ldata.re_tx_listseg, sc->re_ldata.re_tx_listnseg);
-
-	pmf_device_deregister(sc->sc_dev);
-
-	/* we don't want to run again */
-	sc->sc_flags &= ~RTK_ATTACHED;
 
 	return 0;
 }
@@ -1316,7 +1310,10 @@ re_rxeof(struct rtk_softc *sc)
 			     bswap16(rxvlan & RE_RDESC_VLANCTL_DATA),
 			     continue);
 		}
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 		(*ifp->if_input)(ifp, m);
 	}
 
@@ -1401,7 +1398,7 @@ re_tick(void *arg)
 	struct rtk_softc *sc = arg;
 	int s;
 
-	/* XXX: just return for 8169S/8110S with rev 2 or newer phy */
+	/*XXX: just return for 8169S/8110S with rev 2 or newer phy */
 	s = splnet();
 
 	mii_tick(&sc->mii);
@@ -1648,9 +1645,12 @@ re_start(struct ifnet *ifp)
 			    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 		}
 		if (__predict_false(pad)) {
+			bus_addr_t paddaddr;
+
 			d = &sc->re_ldata.re_tx_list[curdesc];
 			d->re_vlanctl = htole32(vlanctl);
-			re_set_bufaddr(d, RE_TXPADDADDR(sc));
+			paddaddr = RE_TXPADDADDR(sc);
+			re_set_bufaddr(d, paddaddr);
 			cmdstat = re_flags |
 			    RE_TDESC_CMD_OWN | RE_TDESC_CMD_EOF |
 			    (RE_IP4CSUMTX_PADLEN + 1 - m->m_pkthdr.len);
@@ -1680,11 +1680,14 @@ re_start(struct ifnet *ifp)
 		sc->re_ldata.re_tx_free -= nsegs;
 		sc->re_ldata.re_tx_nextfree = curdesc;
 
+#if NBPFILTER > 0
 		/*
 		 * If there's a BPF listener, bounce a copy of this frame
 		 * to him.
 		 */
-		bpf_mtap(ifp, m);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 	}
 
 	if (sc->re_ldata.re_txq_free < ofree) {
@@ -1755,7 +1758,7 @@ re_init(struct ifnet *ifp)
 	if ((sc->sc_quirk & RTKQ_8169NONS) != 0)
 		cfg |= (0x1 << 14);
 
-	if ((sc->ethercom.ec_capenable & ETHERCAP_VLAN_HWTAGGING) != 0)
+	if ((ifp->if_capenable & ETHERCAP_VLAN_HWTAGGING) != 0)
 		cfg |= RE_CPLUSCMD_VLANSTRIP;
 	if ((ifp->if_capenable & (IFCAP_CSUM_IPv4_Rx |
 	     IFCAP_CSUM_TCPv4_Rx | IFCAP_CSUM_UDPv4_Rx)) != 0)

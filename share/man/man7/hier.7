@@ -1,4 +1,4 @@
-.\"	$NetBSD: hier.7,v 1.101 2012/06/03 23:19:10 joerg Exp $
+.\"	$NetBSD: hier.7,v 1.81 2008/05/22 12:51:43 lukem Exp $
 .\"
 .\" Copyright (c) 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)hier.7	8.5 (Berkeley) 6/1/94
 .\"
-.Dd June 3, 2012
+.Dd May 22, 2008
 .Dt HIER 7
 .Os
 .Sh NAME
@@ -67,10 +67,6 @@ utilities used in both single and multi-user environments
 .It Sy /boot*
 second-stage boot loader(s) for some platforms; see
 .Xr installboot 8
-.It Sy /cdrom/
-empty directory commonly used by
-system administrators as a temporary mount point for CD devices
-for ISO-9660 file systems
 .It Sy /dev/
 block, character and other special device files
 .Pp
@@ -104,9 +100,6 @@ kernel physical memory device; see
 .It Sy null
 the null device; see
 .Xr null 4
-.It Sy pts/
-mount point for the pseudo-terminal device file system; see
-.Xr mount_ptyfs 8
 .It Sy stderr
 .It Sy stdin
 .It Sy stdout
@@ -321,9 +314,17 @@ database form of master.passwd file; see
 .Xr syslogd 8
 configuration file; see
 .Xr syslog.conf 5
+.It Sy termcap
+terminal type database; see
+.Xr termcap 3
 .It Sy ttys
 terminal initialization information; see
 .Xr ttys 5
+.It Sy uucp/
+UUCP configuration files; see
+.Xr uucp 1
+and
+.Xr uucico 8 .
 .It Sy weekly
 script run each week by
 .Xr cron 8
@@ -336,9 +337,6 @@ see
 .It Sy /home/
 mount point for the automounter; see
 .Xr amd 8
-.It Sy /kern/
-mount point for the kern file system; see
-.Xr mount_kernfs 8
 .It Sy /lib/
 dynamic linked libraries used by dynamic linked programs
 (such as those in
@@ -359,9 +357,6 @@ system administrators as a temporary mount point
 .It Sy /netbsd
 pure kernel executable (the operating system loaded into memory
 at boot time).
-.It Sy /proc/
-mount point for the process file system; see
-.Xr mount_procfs 8
 .It Sy /rescue/
 statically linked rescue tools, for use in system recovery
 .It Sy /root/
@@ -377,6 +372,7 @@ super-user start-up file
 .It Sy \&.rhosts
 super-user id mapping between machines
 .El
+.ne 1i
 .It Sy /sbin/
 system programs and administration utilities
 used in both single-user and multi-user environments
@@ -395,8 +391,6 @@ contains the majority of the system utilities and files
 .Pp
 .Bl -tag -width "libdata/" -compact
 .It Sy X11R6/
-X11 files
-.It Sy X11R7/
 X11 files
 .Pp
 .Bl -tag -width "include/" -compact
@@ -420,7 +414,7 @@ standard C include files
 include files for Internet service protocols
 .It Sy atf/
 include files for the Automated Testing Framework; see
-.Xr atf 7
+.Xr atf 1
 .It Sy g++/
 include files for the C++ compiler
 .It Sy machine/
@@ -457,20 +451,18 @@ C include files for UFS (The U-word File System)
 .Pp
 .It Sy lib/
 archive, profiled, position independent archive, and shared libraries
-.Pp
-.Bl -tag -width "lua/" -compact
-.It Sy lua/
-.Bl -tag -width "5.1/" -compact
-.It Sy 5.1/
-Lua 5.1 modules
-.El
-.El
-.Pp
 .It Sy libdata/
 miscellaneous utility data files
 .It Sy libexec/
 system daemons \*[Am] system utilities (executed by other programs)
 .Pp
+.Bl -tag -width "uucp/" -compact
+.It Sy uucp/
+UUCP binaries and scripts (historically placed; to be moved)
+.El
+.Pp
+.It Sy lkm/
+loadable kernel modules
 .It Sy mdec/
 boot blocks, etc.
 .It Sy obj/
@@ -555,6 +547,8 @@ text files used by various games
 .It Sy i18n/
 internationalization databases; see
 .Xr iconv 3
+.It Sy lkm/
+documentation on the loadable kernel modules interface
 .It Sy locale/
 locale databases and gettext message catalogs; see
 .Xr setlocale 3
@@ -569,14 +563,11 @@ macro package
 .It Sy misc/
 miscellaneous system-wide text files
 .Pp
-.Bl -tag -width "terminfo.cdb" -compact
-.It Sy terminfo
+.Bl -tag -width "termcap" -compact
+.It Sy termcap
 terminal characteristics database;
 see
-.Xr terminfo 5
-.It Sy terminfo.cdb
-database form of terminfo file; see
-.Xr tic 1
+.Xr termcap 5
 .El
 .Pp
 .It Sy mk/
@@ -591,6 +582,11 @@ message catalogs; see
 .Xr catgets 3
 .It Sy skel/
 sample initialization files for new user accounts
+.It Sy tabset/
+tab description files for a variety of terminals, used in
+the termcap file;
+see
+.Xr termcap 5
 .It Sy tmac/
 text processing macros;
 see
@@ -623,9 +619,7 @@ cryptographic source, which may have import or export restrictions
 .It Sy dist/
 third-party
 .Sq virgin
-source code, referenced by other parts of the source tree (deprecated, use
-.Sy external/
-instead)
+source code, referenced by other parts of the source tree
 .It Sy distrib/
 tools and data-files for making distributions
 .It Sy doc/
@@ -641,36 +635,11 @@ source for programs from external third parties
 is the not the primary maintainer),
 grouped by license, and then products per license
 .Pp
-.Bl -tag -width "intel-fw-public/" -compact
-.It Sy apache2/
-Apache 2.0 license.
+.Bl -tag -width "bsd/" -compact
 .It Sy bsd/
 BSD (or equivalent) licensed software,
 possibly with the
-.Dq advertising clause .
-.It Sy cddl/
-Common Development and Distribution License (the Sun license which is
-based on the Mozilla Public License version 1.1).
-.It Sy gpl2/
-GNU Public License, version 2 (or earlier).
-.It Sy gpl3/
-GNU Public License, version 3.
-.It Sy historical/
-Lucent's old license.
-.It Sy ibm-public/
-IBM's public license.
-.It Sy intel-fw-eula/
-Intel firmware license with redistribution restricted to OEM.
-.It Sy intel-fw-public/
-Intel firmware license permitting redistribution with
-terms similar to BSD licensed software.
-.It Sy intel-public/
-Intel license permitting redistribution with terms similar to
-BSD licensed software.
-.It Sy mit/
-MIT (X11) style license.
-.It Sy zlib/
-BSD-like zlib license.
+.Dq advertising clause
 .El
 .Pp
 .It Sy games/
@@ -679,11 +648,7 @@ source for utilities/files in
 .It Sy gnu/
 source for programs covered by the
 .Tn GNU
-license (or similar) (deprecated; use
-.Sy external/gpl2/
-or
-.Sy external/gpl3/
-as appropriate)
+license (or similar)
 .It Sy include/
 source for files in
 .Pa /usr/include
@@ -726,7 +691,7 @@ kernel source files
 .It Sy arch/
 architecture-specific support
 .Pp
-.Bl -tag -width "ews4800mips/" -compact
+.Bl -tag -width "playstation2/" -compact
 .It Sy acorn26/
 Acorn Archimedes, A-series and R-series systems
 .It Sy acorn32/
@@ -757,8 +722,6 @@ CES FIC8234 VME processor board
 Cobalt Networks' MIPS-based Microserver
 .It Sy dreamcast/
 Sega Dreamcast game console
-.It Sy emips/
-Machines based on Extensible MIPS
 .It Sy evbarm/
 ARM based evaluation boards
 .It Sy evbmips/
@@ -815,6 +778,8 @@ Sony's MIPS-based NEWS workstations
 NeXT 68k "black" hardware
 .It Sy ofppc/
 Open Firmware PowerPC workstations
+.It Sy playstation2/
+SONY PlayStation 2
 .It Sy pmax/
 Digital MIPS-based DECstations and DECsystems
 .It Sy powerpc/
@@ -892,6 +857,11 @@ formerly
 binaries
 .It Sy ossaudio/
 support for OSS audio
+.It Sy pecoff/
+support for
+.Tn Win32
+binaries; see
+.Xr compat_pecoff 8
 .It Sy sunos/
 support for
 .Tn SunOS 4.x
@@ -965,6 +935,24 @@ machine independent stand alone kernel library
 compression library
 .El
 .Pp
+.It Sy lkm/
+loadable kernel modules
+.Pp
+.Bl -tag -width "gdbscripts/" -compact
+.It Sy compat/
+LKM support compatibility modules;  currently unsupported.
+.It Sy netinet/
+LKM support networking modules
+.Pp
+.Bl -tag -width "if_ipl/" -compact
+.It Sy if_ipl/
+LKM for IP-Filter
+.El
+.Pp
+.It Sy vfs/
+LKM support for file systems.
+.El
+.Pp
 .It Sy miscfs/
 miscellaneous file systems
 .Pp
@@ -987,6 +975,9 @@ loop back file system; see
 .It Sy overlay/
 overlay file system; see
 .Xr mount_overlay 8
+.It Sy portal/
+portal file system; see
+.Xr mount_portal 8
 .It Sy procfs/
 process file system; see
 .Xr mount_procfs 8
@@ -1087,7 +1078,7 @@ and persistent files used in the maintenance of third party software.
 default location for metadata related to third party software
 packages.
 See
-.Xr pkg_add 1
+.Xr pkg_install 1
 for more details of the
 .Nx
 Packages Collection, or pkgsrc.
@@ -1225,8 +1216,7 @@ Databases and configuration for the NIS (YP) system; see
 .Xr ls 1 ,
 .Xr whatis 1 ,
 .Xr whereis 1 ,
-.Xr which 1 ,
-.Xr paths 3
+.Xr which 1
 .Sh HISTORY
 A
 .Nm

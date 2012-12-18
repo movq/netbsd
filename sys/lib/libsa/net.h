@@ -1,4 +1,4 @@
-/*	$NetBSD: net.h,v 1.26 2011/05/11 16:23:40 zoltan Exp $	*/
+/*	$NetBSD: net.h,v 1.22 2008/03/25 22:54:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1993 Adam Glass
@@ -38,9 +38,6 @@
  * SUCH DAMAGE.
  */
 
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-
 #ifndef _KERNEL	/* XXX - see <netinet/in.h> */
 #undef __IPADDR
 #define __IPADDR(x)	htonl((u_int32_t)(x))
@@ -67,27 +64,14 @@
 #define RECV_SIZE 1536	/* XXX delete this */
 
 /*
- * How much room to leave for headers in UDP packets:
+ * How much room to leave for headers:
  *  14: struct ether_header
  *  20: struct ip
  *   8: struct udphdr
  * That's 42 but let's pad it out to 48 bytes.
  */
-#define ETHERNET_HEADER_SIZE 14
-#define IP_HEADER_SIZE 20
-#define UDP_HEADER_SIZE 8
-
-#define	UDP_TOTAL_HEADER_SIZE (ETHERNET_HEADER_SIZE + IP_HEADER_SIZE + UDP_HEADER_SIZE)
-
-/*
- * How much room to leave for headers in TCP packets:
- *  14: struct ether_header
- *  20: struct ip
- *  20: struct tcphdr
- */
-#define TCP_HEADER_SIZE 20
-
-#define TCP_TOTAL_HEADER_SIZE (ETHERNET_HEADER_SIZE + IP_HEADER_SIZE + TCP_HEADER_SIZE)
+#define ETHER_SIZE 14
+#define	HEADER_SIZE 48
 
 extern	u_char bcea[6];
 extern	char rootpath[FNAME_SIZE];
@@ -103,33 +87,25 @@ extern	n_long netmask;
 extern	int debug;			/* defined in the machdep sources */
 
 /* ARP/RevARP functions: */
-u_char	*arpwhohas(struct iodesc *, struct in_addr);
-void	arp_reply(struct iodesc *, void *);
-int	rarp_getipaddress(int);
+u_char	*arpwhohas __P((struct iodesc *, struct in_addr));
+void	arp_reply __P((struct iodesc *, void *));
+int	rarp_getipaddress __P((int));
 
 /* Link functions: */
-ssize_t sendether(struct iodesc *, void *, size_t, u_char *, int);
-ssize_t readether(struct iodesc *, void *, size_t, saseconds_t, u_int16_t *);
+ssize_t sendether __P((struct iodesc *, void *, size_t, u_char *, int));
+ssize_t readether __P((struct iodesc *, void *, size_t, time_t, u_int16_t *));
 
-ssize_t	sendip __P((struct iodesc *, void *, size_t, u_int8_t));
-ssize_t	readip __P((struct iodesc *, void *, size_t, time_t, u_int8_t));
-
-ssize_t	sendudp(struct iodesc *, void *, size_t);
-ssize_t	readudp(struct iodesc *, void *, size_t, saseconds_t);
-
-int	tcp_connect __P((struct iodesc *));
-ssize_t	sendtcp __P((struct iodesc *, void *, size_t));
-ssize_t	readtcp __P((struct iodesc *, void *, size_t, time_t));
-
-ssize_t	sendrecv(struct iodesc *, ssize_t (*)(struct iodesc *, void *, size_t),
-    void *, size_t, ssize_t (*)(struct iodesc *, void *, size_t, saseconds_t),
-    void *, size_t);
+ssize_t	sendudp __P((struct iodesc *, void *, size_t));
+ssize_t	readudp __P((struct iodesc *, void *, size_t, time_t));
+ssize_t	sendrecv __P((struct iodesc *,
+			ssize_t (*)(struct iodesc *, void *, size_t),
+			void *, size_t,
+			ssize_t (*)(struct iodesc *, void *, size_t, time_t),
+			void *, size_t));
 
 /* Utilities: */
-char	*ether_sprintf(const u_char *);
-int	ip_cksum(const void *, size_t);
+char	*ether_sprintf __P((const u_char *));
+int	ip_cksum __P((const void *, size_t));
 
 /* Machine-dependent functions: */
-#ifdef _STANDALONE	/* XXX for mount_nfs(8) SMALLPROG hack */
-satime_t	getsecs(void);
-#endif
+time_t	getsecs __P((void));

@@ -1,4 +1,4 @@
-/*	$NetBSD: hci.h,v 1.35 2011/09/17 08:23:36 plunky Exp $	*/
+/*	$NetBSD: hci.h,v 1.28 2008/09/08 23:36:55 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -54,7 +54,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: hci.h,v 1.35 2011/09/17 08:23:36 plunky Exp $
+ * $Id: hci.h,v 1.28 2008/09/08 23:36:55 gmcgarry Exp $
  * $FreeBSD: src/sys/netgraph/bluetooth/include/ng_hci.h,v 1.6 2005/01/07 01:45:43 imp Exp $
  */
 
@@ -93,13 +93,12 @@
 #define HCI_COMMANDS_SIZE		64  /* supported commands mask */
 
 /* HCI specification */
-#define HCI_SPEC_V10			0x00 /* v1.0b */
+#define HCI_SPEC_V10			0x00 /* v1.0 */
 #define HCI_SPEC_V11			0x01 /* v1.1 */
 #define HCI_SPEC_V12			0x02 /* v1.2 */
-#define HCI_SPEC_V20			0x03 /* v2.0 + EDR */
-#define HCI_SPEC_V21			0x04 /* v2.1 + EDR */
-#define HCI_SPEC_V30			0x05 /* v3.0 + HS */
-/* 0x06 - 0xFF - reserved for future use */
+#define HCI_SPEC_V20			0x03 /* v2.0 */
+#define HCI_SPEC_V21			0x04 /* v2.1 */
+/* 0x05 - 0xFF - reserved for future use */
 
 /* LMP features (and page 0 of extended features) */
 /* ------------------- byte 0 --------------------*/
@@ -168,12 +167,7 @@
 /* ------------------- byte 7 --------------------*/
 #define HCI_LMP_LINK_SUPERVISION_TO	0x01
 #define HCI_LMP_INQ_RSP_TX_POWER	0x02
-#define HCI_LMP_ENHANCED_POWER_CONTROL	0x04
 #define HCI_LMP_EXTENDED_FEATURES	0x80
-
-/* page 1 of extended features */
-/* ------------------- byte 0 --------------------*/
-#define HCI_LMP_SSP			0x01
 
 /* Link types */
 #define HCI_LINK_SCO			0x00 /* Voice */
@@ -2269,7 +2263,7 @@ hci_filter_clr(uint8_t bit, struct hci_filter *filter)
 }
 
 static __inline int
-hci_filter_test(uint8_t bit, const struct hci_filter *filter)
+hci_filter_test(uint8_t bit, struct hci_filter *filter)
 {
 	uint8_t off = bit - 1;
 
@@ -2296,8 +2290,6 @@ hci_filter_test(uint8_t bit, const struct hci_filter *filter)
 
 #define SIOCBTDUMP	 _IOW('b', 13, struct btreq) /* print debug info */
 #define SIOCSBTSCOMTU	_IOWR('b', 17, struct btreq) /* set sco_mtu value */
-
-#define SIOCGBTFEAT	_IOWR('b', 18, struct btreq) /* get unit features */
 
 struct bt_stats {
 	uint32_t	err_tx;
@@ -2326,13 +2318,7 @@ struct btreq {
 		uint16_t btri_sco_mtu;		/* SCO mtu */
 		uint16_t btri_link_policy;	/* Link Policy */
 		uint16_t btri_packet_type;	/* Packet Type */
-		uint16_t btri_max_acl;		/* max ACL buffers */
-		uint16_t btri_max_sco;		/* max SCO buffers */
 	    } btri;
-	    struct {
-		uint8_t btrf_page0[HCI_FEATURES_SIZE];	/* basic */
-		uint8_t btrf_page1[HCI_FEATURES_SIZE];	/* extended */
-	    } btrf;
 	    struct bt_stats btrs;   /* unit stats */
 	} btru;
 };
@@ -2346,10 +2332,6 @@ struct btreq {
 #define btr_sco_mtu	btru.btri.btri_sco_mtu
 #define btr_link_policy btru.btri.btri_link_policy
 #define btr_packet_type btru.btri.btri_packet_type
-#define btr_max_acl	btru.btri.btri_max_acl
-#define btr_max_sco	btru.btri.btri_max_sco
-#define btr_features0	btru.btrf.btrf_page0
-#define btr_features1	btru.btrf.btrf_page1
 #define btr_stats	btru.btrs
 
 /* hci_unit & btr_flags */
@@ -2364,7 +2346,6 @@ struct btreq {
 #define BTF_INIT_FEATURES	(1<<7)	/* waiting for features */
 #define BTF_POWER_UP_NOOP	(1<<8)	/* should wait for No-op on power up */
 #define BTF_INIT_COMMANDS	(1<<9)	/* waiting for supported commands */
-#define BTF_MASTER		(1<<10) /* request Master role */
 
 #define BTF_INIT		(BTF_INIT_BDADDR	\
 				| BTF_INIT_BUFFER_SIZE	\
@@ -2493,18 +2474,14 @@ struct hci_unit {
 	uint16_t	 hci_link_policy;	/* link policy */
 	uint16_t	 hci_lmp_mask;		/* link policy capabilities */
 
-	uint8_t		 hci_feat0[HCI_FEATURES_SIZE]; /* features mask */
-	uint8_t		 hci_feat1[HCI_FEATURES_SIZE]; /* extended */
 	uint8_t		 hci_cmds[HCI_COMMANDS_SIZE]; /* opcode bitmask */
 
 	/* flow control */
 	uint16_t	 hci_max_acl_size;	/* ACL payload mtu */
 	uint16_t	 hci_num_acl_pkts;	/* free ACL packet buffers */
-	uint16_t	 hci_max_acl_pkts;	/* max ACL packet buffers */
 	uint8_t		 hci_num_cmd_pkts;	/* free CMD packet buffers */
 	uint8_t		 hci_max_sco_size;	/* SCO payload mtu */
 	uint16_t	 hci_num_sco_pkts;	/* free SCO packet buffers */
-	uint16_t	 hci_max_sco_pkts;	/* max SCO packet buffers */
 
 	TAILQ_HEAD(,hci_link)	hci_links;	/* list of ACL/SCO links */
 	LIST_HEAD(,hci_memo)	hci_memos;	/* cached memo list */
@@ -2566,7 +2543,6 @@ void hci_memo_free(struct hci_memo *);
 
 /* hci_socket.c */
 void hci_drop(void *);
-void hci_init(void);
 int hci_usrreq(struct socket *, int, struct mbuf *, struct mbuf *, struct mbuf *, struct lwp *);
 int hci_ctloutput(int, struct socket *, struct sockopt *);
 void hci_mtap(struct mbuf *, struct hci_unit *);
@@ -2576,7 +2552,7 @@ struct hci_unit *hci_attach(const struct hci_if *, device_t, uint16_t);
 void hci_detach(struct hci_unit *);
 int hci_enable(struct hci_unit *);
 void hci_disable(struct hci_unit *);
-struct hci_unit *hci_unit_lookup(const bdaddr_t *);
+struct hci_unit *hci_unit_lookup(bdaddr_t *);
 int hci_send_cmd(struct hci_unit *, uint16_t, void *, uint8_t);
 void hci_num_cmds(struct hci_unit *, uint8_t);
 bool hci_input_event(struct hci_unit *, struct mbuf *);

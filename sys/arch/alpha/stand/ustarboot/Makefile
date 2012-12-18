@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.9 2012/07/20 15:23:02 matt Exp $
+# $NetBSD: Makefile,v 1.6.134.1 2009/02/06 02:09:05 snj Exp $
 
 PROG = ustarboot
 
@@ -12,12 +12,12 @@ CPPFLAGS += ${UNIFIED_CPPFLAGS} \
 		-DLIBSA_SINGLE_DEVICE=blkdev \
 		  -D"blkdevioctl(x,y,z)=EINVAL" \
 		-DLIBSA_SINGLE_FILESYSTEM=ustarfs \
-		-DNO_LOAD_BACKWARDS
+		-DNO_LOAD_NOTE
 
 CLEANFILES+= ${PROG}.sym
 
 ${PROG}: ${PROG}.sym
-	${_MKTARGET_CREATE}
+	@echo creating ${PROG} from ${PROG}.sym...
 	@${OBJCOPY} --output-target=binary ${PROG}.sym ${PROG}
 	@chmod 644 ${PROG}
 	@ls -l ${PROG}
@@ -28,7 +28,6 @@ SAMISCMAKEFLAGS= SA_INCLUDE_NET=no SA_USE_CREAD=yes
 .include "../Makefile.bootprogs"
 
 ${PROG}.sym: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
-	${_MKTARGET_LINK}
 	${LD} -Ttext ${BOOT_RELOC} -N -e start -o ${PROG}.sym \
 	    ${OBJS} ${LIBSA} ${LIBZ} ${LIBSA} ${LIBKERN}
 	${SIZE} ${PROG}.sym

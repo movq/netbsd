@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_lookup.c,v 1.26 2012/11/05 17:27:37 dholland Exp $	*/
+/*	$NetBSD: msdosfs_lookup.c,v 1.16.8.2 2010/11/21 18:46:40 riz Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_lookup.c,v 1.26 2012/11/05 17:27:37 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_lookup.c,v 1.16.8.2 2010/11/21 18:46:40 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -81,7 +81,8 @@ __KERNEL_RCSID(0, "$NetBSD: msdosfs_lookup.c,v 1.26 2012/11/05 17:27:37 dholland
  * memory denode's will be in synch.
  */
 int
-msdosfs_lookup(void *v)
+msdosfs_lookup(v)
+	void *v;
 {
 	struct vop_lookup_args /* {
 		struct vnode *a_dvp;
@@ -146,10 +147,8 @@ msdosfs_lookup(void *v)
 	 * check the name cache to see if the directory/name pair
 	 * we are looking for is known already.
 	 */
-	if (cache_lookup(vdp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags, NULL, vpp)) {
-		return *vpp == NULLVP ? ENOENT: 0;
-	}
+	if ((error = cache_lookup(vdp, vpp, cnp)) >= 0)
+		return (error);
 
 	/*
 	 * If they are going after the . or .. entry in the root directory,
@@ -383,10 +382,13 @@ notfound:
 		 * We return ni_vp == NULL to indicate that the entry
 		 * does not currently exist; we leave a pointer to
 		 * the (locked) directory inode in ndp->ni_dvp.
+		 * The pathname buffer is saved so that the name
+		 * can be obtained later.
 		 *
 		 * NB - if the directory is unlocked, then this
 		 * information cannot be used.
 		 */
+		cnp->cn_flags |= SAVENAME;
 		return (EJUSTRETURN);
 	}
 
@@ -401,9 +403,8 @@ notfound:
 	 * e.g. creating a file 'foo' won't invalidate a negative entry 
 	 * for 'FOO'.
 	 */
-	if (nameiop != CREATE)
-		cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-			    cnp->cn_flags);
+	if ((cnp->cn_flags & MAKEENTRY) && nameiop != CREATE)
+		cache_enter(vdp, *vpp, cnp);
 #endif
 
 	return (ENOENT);
@@ -475,7 +476,7 @@ foundroot:
 		 * Save directory inode pointer in ndp->ni_dvp for dirremove().
 		 */
 		if (dp->de_StartCluster == scn && isadir) {	/* "." */
-			vref(vdp);
+			VREF(vdp);
 			*vpp = vdp;
 			return (0);
 		}
@@ -513,6 +514,7 @@ foundroot:
 		if ((error = deget(pmp, cluster, blkoff, &tdp)) != 0)
 			return (error);
 		*vpp = DETOV(tdp);
+		cnp->cn_flags |= SAVENAME;
 		return (0);
 	}
 
@@ -537,7 +539,7 @@ foundroot:
 	 */
 	pdp = vdp;
 	if (flags & ISDOTDOT) {
-		VOP_UNLOCK(pdp);	/* race to get the inode */
+		VOP_UNLOCK(pdp, 0);	/* race to get the inode */
 		error = deget(pmp, cluster, blkoff, &tdp);
 		vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY);
 		if (error) {
@@ -545,7 +547,7 @@ foundroot:
 		}
 		*vpp = DETOV(tdp);
 	} else if (dp->de_StartCluster == scn && isadir) {
-		vref(vdp);	/* we want ourself, ie "." */
+		VREF(vdp);	/* we want ourself, ie "." */
 		*vpp = vdp;
 	} else {
 		if ((error = deget(pmp, cluster, blkoff, &tdp)) != 0)
@@ -556,9 +558,10 @@ foundroot:
 	/*
 	 * Insert name into cache if appropriate.
 	 */
-	cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen, cnp->cn_flags);
+	if (cnp->cn_flags & MAKEENTRY)
+		cache_enter(vdp, *vpp, cnp);
 
-	return 0;
+	return (0);
 }
 
 /*
@@ -569,7 +572,11 @@ foundroot:
  * cnp  - componentname needed for Win95 long filenames
  */
 int
-createde(struct denode *dep, struct denode *ddep, struct denode **depp, struct componentname *cnp)
+createde(dep, ddep, depp, cnp)
+	struct denode *dep;
+	struct denode *ddep;
+	struct denode **depp;
+	struct componentname *cnp;
 {
 	int error, rberror;
 	u_long dirclust, clusoffset;
@@ -768,7 +775,8 @@ createde(struct denode *dep, struct denode *ddep, struct denode **depp, struct c
  * return 0 if not empty or error.
  */
 int
-dosdirempty(struct denode *dep)
+dosdirempty(dep)
+	struct denode *dep;
 {
 	int blsize;
 	int error;
@@ -846,7 +854,9 @@ dosdirempty(struct denode *dep)
  * The target inode is always unlocked on return.
  */
 int
-doscheckpath(struct denode *source, struct denode *target)
+doscheckpath(source, target)
+	struct denode *source;
+	struct denode *target;
 {
 	u_long scn;
 	struct msdosfsmount *pmp;
@@ -933,7 +943,11 @@ out:
  * directory entry within the block.
  */
 int
-readep(struct msdosfsmount *pmp, u_long dirclust, u_long diroffset, struct buf **bpp, struct direntry **epp)
+readep(pmp, dirclust, diroffset, bpp, epp)
+	struct msdosfsmount *pmp;
+	u_long dirclust, diroffset;
+	struct buf **bpp;
+	struct direntry **epp;
 {
 	int error;
 	daddr_t bn;
@@ -961,7 +975,10 @@ readep(struct msdosfsmount *pmp, u_long dirclust, u_long diroffset, struct buf *
  * entry within the block.
  */
 int
-readde(struct denode *dep, struct buf **bpp, struct direntry **epp)
+readde(dep, bpp, epp)
+	struct denode *dep;
+	struct buf **bpp;
+	struct direntry **epp;
 {
 	return (readep(dep->de_pmp, dep->de_dirclust, dep->de_diroffset,
 			bpp, epp));
@@ -976,9 +993,9 @@ readde(struct denode *dep, struct buf **bpp, struct direntry **epp)
  * msdosfs_reclaim() which will remove the denode from the denode cache.
  */
 int
-removede(struct denode *pdep, struct denode *dep)
-	/* pdep:	 directory where the entry is removed */
-	/* dep:	 file to be removed */
+removede(pdep, dep)
+	struct denode *pdep;	/* directory where the entry is removed */
+	struct denode *dep;	/* file to be removed */
 {
 	int error;
 	struct direntry *ep;
@@ -1047,7 +1064,10 @@ removede(struct denode *pdep, struct denode *dep)
  * Create a unique DOS name in dvp
  */
 int
-uniqdosname(struct denode *dep, struct componentname *cnp, u_char *cp)
+uniqdosname(dep, cnp, cp)
+	struct denode *dep;
+	struct componentname *cnp;
+	u_char *cp;
 {
 	struct msdosfsmount *pmp = dep->de_pmp;
 	struct direntry *dentp;
@@ -1110,7 +1130,8 @@ uniqdosname(struct denode *dep, struct componentname *cnp, u_char *cp)
  * Find any Win'95 long filename entry in directory dep
  */
 int
-findwin95(struct denode *dep)
+findwin95(dep)
+	struct denode *dep;
 {
 	struct msdosfsmount *pmp = dep->de_pmp;
 	struct direntry *dentp;

@@ -1,20 +1,18 @@
-/* $NetBSD: joy_eap.c,v 1.13 2011/11/23 23:07:35 jmcneill Exp $ */
+/* $NetBSD: joy_eap.c,v 1.10 2008/04/10 19:13:37 cegger Exp $ */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: joy_eap.c,v 1.13 2011/11/23 23:07:35 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: joy_eap.c,v 1.10 2008/04/10 19:13:37 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/audioio.h>
-#include <sys/bus.h>
-
 #include <dev/audio_if.h>
+#include <sys/bus.h>
 
 #include <dev/pci/eapreg.h>
 #include <dev/pci/eapvar.h>
-
 #include <dev/ic/joyvar.h>
 
 struct joy_eap_aa {
@@ -70,7 +68,7 @@ int
 eap_joy_detach(device_t joydev, struct eap_gameport_args *gpa)
 {
 	int res;
-	struct joy_softc *sc = device_private(joydev);
+	struct joy_softc *sc = (struct joy_softc *)joydev;
 	u_int32_t icsc;
 
 	res = config_detach(joydev, 0);
@@ -100,7 +98,6 @@ static void
 joy_eap_attach(device_t parent, device_t self, void *aux)
 {
 	struct joy_softc *sc = device_private(self);
-	struct eap_softc *esc = device_private(parent);
 	struct joy_eap_aa *eaa = aux;
 
 	aprint_normal("\n");
@@ -108,7 +105,6 @@ joy_eap_attach(device_t parent, device_t self, void *aux)
 	sc->sc_iot = eaa->aa_iot;
 	sc->sc_ioh = eaa->aa_ioh;
 	sc->sc_dev = self;
-	sc->sc_lock = &esc->sc_lock;
 
 	joyattach(sc);
 }
@@ -117,7 +113,7 @@ static int
 joy_eap_detach(device_t self, int flags)
 {
 
-	return joydetach(device_private(self), flags);
+	return joydetach((struct joy_softc *)self, flags);
 }
 
 CFATTACH_DECL_NEW(joy_eap, sizeof (struct joy_softc),

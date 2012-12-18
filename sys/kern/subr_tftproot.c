@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_tftproot.c,v 1.12 2012/12/01 11:41:50 mbalmer Exp $ */
+/*	$NetBSD: subr_tftproot.c,v 1.5.12.1 2009/09/05 13:04:26 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2007 Emmanuel Dreyfus, all rights reserved.
@@ -39,7 +39,7 @@
 #include "opt_md.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_tftproot.c,v 1.12 2012/12/01 11:41:50 mbalmer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_tftproot.c,v 1.5.12.1 2009/09/05 13:04:26 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -114,19 +114,20 @@ struct tftproot_handle {
 
 #define TRH_FINISHED	1
 
-int tftproot_dhcpboot(device_t);
+int tftproot_dhcpboot(struct device *);
 
 static int tftproot_getfile(struct tftproot_handle *, struct lwp *);
-static int tftproot_recv(struct mbuf *, void *);
+static int tftproot_recv __P((struct mbuf*, void*));
 
 int
-tftproot_dhcpboot(device_t bootdv)
+tftproot_dhcpboot(bootdv)
+	struct device *bootdv;
 {
 	struct nfs_diskless *nd = NULL;
 	struct ifnet *ifp = NULL;
 	struct lwp *l;
 	struct tftproot_handle trh;
-	device_t dv;
+	struct device *dv;
 	int error = -1;
 
 	if (rootspec != NULL) {
@@ -181,7 +182,7 @@ tftproot_dhcpboot(device_t bootdv)
 
 	printf("tftproot: bootfile=%s\n", nd->nd_bootfile);
 
-	memset(&trh, 0, sizeof(trh));
+	bzero(&trh, sizeof(trh));
 	trh.trh_nd = nd;
 	trh.trh_block = 1;
 
@@ -201,7 +202,9 @@ out:
 }
 
 static int 
-tftproot_getfile(struct tftproot_handle *trh, struct lwp *l)
+tftproot_getfile(trh, l)
+	struct tftproot_handle *trh;
+	struct lwp *l;
 {
 	struct socket *so = NULL;
 	struct mbuf *m_serv = NULL;
@@ -213,6 +216,7 @@ tftproot_getfile(struct tftproot_handle *trh, struct lwp *l)
 	const char octetstr[] = "octet";
 	size_t hdrlen = sizeof(*tftp) - sizeof(tftp->th_data);
 	char *cp;
+	/* struct device *dv; */
 	
 	if ((error = socreate(AF_INET, &so, SOCK_DGRAM, 0, l, NULL)) != 0) {
 		DPRINTF(("%s():%d socreate returned %d\n", 
@@ -349,7 +353,9 @@ out:
 }
 
 static int
-tftproot_recv(struct mbuf *m, void *ctx)
+tftproot_recv(m, ctx)
+	struct mbuf *m;
+	void *ctx;
 {
 	struct tftproot_handle *trh = ctx;
 	struct tftphdr *tftp;
@@ -439,7 +445,7 @@ tftproot_recv(struct mbuf *m, void *ctx)
 	}
 
 	/* 
-	 * Grow the receiving buffer to accommodate new data
+	 * Grow the receiving buffer to accomodate new data
 	 */
 	newlen = trh->trh_len + (m->m_pkthdr.len - hdrlen);
 	if ((trh->trh_base = realloc(trh->trh_base, 

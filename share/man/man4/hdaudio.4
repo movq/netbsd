@@ -1,4 +1,4 @@
-.\"	$NetBSD: hdaudio.4,v 1.10 2012/08/13 20:31:15 rkujawa Exp $
+.\"	$NetBSD: hdaudio.4,v 1.4.2.3 2010/10/15 23:34:03 snj Exp $
 .\"
 .\" Copyright (c) 2009, 2010 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd August 13, 2012
+.Dd September 28, 2010
 .Dt HDAUDIO 4
 .Os
 .Sh NAME
@@ -39,7 +39,7 @@
 .Cd "audio* at audiobus?"
 .Pp
 .Cd "options HDAUDIO_DEBUG"
-.Cd "options HDAFG_DEBUG"
+.Cd "options HDAUDIO_AFG_DEBUG"
 .Sh DESCRIPTION
 The
 .Nm
@@ -93,10 +93,8 @@ be supported without requiring per-device quirks.
 .Xr mixer 4 ,
 .Xr pci 4 ,
 .Xr hdaudioctl 8 ,
-.Pp
-.Lk http://www.intel.com/design/chipsets/hdaudio.htm "Intel High Definition Audio"
-.Pp
-.Lk http://www.microsoft.com/whdc/device/audio/ "Audio Device Technologies for Windows"
+.Pa http://www.intel.com/standards/hdaudio/
+.Pa http://www.microsoft.com/whdc/device/audio/
 .Sh HISTORY
 The
 .Nm
@@ -108,7 +106,7 @@ The
 driver was written by
 .An Jared McNeill Aq jmcneill@NetBSD.org
 under contract by
-.Lk http://www.precedence.co.uk/ "Precedence Technologies Ltd."
+.An Precedence Technologies Ltd Aq http://www.precedence.co.uk/ .
 The UAA-compliant widget parser is derived from the
 .Fx
 snd_hda(4) driver.

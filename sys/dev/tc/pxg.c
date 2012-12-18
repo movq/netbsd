@@ -1,4 +1,4 @@
-/* 	$NetBSD: pxg.c,v 1.34 2012/03/13 18:40:34 elad Exp $	*/
+/* 	$NetBSD: pxg.c,v 1.30 2008/07/09 13:19:33 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pxg.c,v 1.34 2012/03/13 18:40:34 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pxg.c,v 1.30 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,14 +80,14 @@ __KERNEL_RCSID(0, "$NetBSD: pxg.c,v 1.34 2012/03/13 18:40:34 elad Exp $");
 #define	PXG_I860_START_OFFSET	0x380000	/* i860 start register */
 #define	PXG_I860_RESET_OFFSET	0x3c0000	/* i860 stop register */
 
-static void	pxg_attach(device_t, device_t, void *);
+static void	pxg_attach(struct device *, struct device *, void *);
 static int	pxg_intr(void *);
-static int	pxg_match(device_t, cfdata_t, void *);
+static int	pxg_match(struct device *, struct cfdata *, void *);
 
 static void	pxg_init(struct stic_info *);
 static int	pxg_ioctl(struct stic_info *, u_long, void *, int, struct lwp *);
 static uint32_t	*pxg_pbuf_get(struct stic_info *);
-static int	pxg_pbuf_post(struct stic_info *, uint32_t *);
+static int	pxg_pbuf_post(struct stic_info *, u_int32_t *);
 static int	pxg_probe_planes(struct stic_info *);
 static int	pxg_probe_sram(struct stic_info *);
 
@@ -184,16 +184,16 @@ pxg_cnattach(tc_addr_t addr)
 static void
 pxg_init(struct stic_info *si)
 {
-	volatile uint32_t *slot;
+	volatile u_int32_t *slot;
 	char *kva;
 
 	kva = (void *)si->si_slotbase;
 
-	si->si_vdac = (uint32_t *)(kva + PXG_VDAC_OFFSET);
-	si->si_vdac_reset = (uint32_t *)(kva + PXG_VDAC_RESET_OFFSET);
+	si->si_vdac = (u_int32_t *)(kva + PXG_VDAC_OFFSET);
+	si->si_vdac_reset = (u_int32_t *)(kva + PXG_VDAC_RESET_OFFSET);
 	si->si_stic = (volatile struct stic_regs *)(kva + PXG_STIC_OFFSET);
-	si->si_stamp = (uint32_t *)(kva + PXG_STAMP_OFFSET);
-	si->si_buf = (uint32_t *)(kva + PXG_SRAM_OFFSET);
+	si->si_stamp = (u_int32_t *)(kva + PXG_STAMP_OFFSET);
+	si->si_buf = (u_int32_t *)(kva + PXG_SRAM_OFFSET);
 	si->si_buf_phys = STIC_KSEG_TO_PHYS(si->si_buf);
 	si->si_buf_size = pxg_probe_sram(si);
 	si->si_disptype = WSDISPLAY_TYPE_PXG;
@@ -204,7 +204,7 @@ pxg_init(struct stic_info *si)
 	si->si_ioctl = pxg_ioctl;
 
 	/* Disable the co-processor. */
-	slot = (volatile uint32_t *)kva;
+	slot = (volatile u_int32_t *)kva;
 	slot[PXG_I860_RESET_OFFSET >> 2] = 0;
 	tc_wmb();
 	slot[PXG_HOST_INTR_OFFSET >> 2] = 0;
@@ -224,9 +224,9 @@ pxg_init(struct stic_info *si)
 static int
 pxg_probe_sram(struct stic_info *si)
 {
-	volatile uint32_t *a, *b;
+	volatile u_int32_t *a, *b;
 
-	a = (volatile uint32_t *)si->si_slotbase + (PXG_SRAM_OFFSET >> 2);
+	a = (volatile u_int32_t *)si->si_slotbase + (PXG_SRAM_OFFSET >> 2);
 	b = a + (0x20000 >> 2);
 	*a = 4321;
 	*b = 1234;
@@ -237,7 +237,7 @@ pxg_probe_sram(struct stic_info *si)
 static int
 pxg_probe_planes(struct stic_info *si)
 {
-	volatile uint32_t *vdac;
+	volatile u_int32_t *vdac;
 	int id;
 
 	/*
@@ -272,15 +272,15 @@ pxg_intr(void *cookie)
 #ifdef notyet
 	struct stic_info *si;
 	volatile struct stic_regs *sr;
-	volatile uint32_t *hi;
-	uint32_t state;
+	volatile u_int32_t *hi;
+	u_int32_t state;
 	int it;
 
 	si = cookie;
 	sr = si->si_stic;
 	state = sr->sr_ipdvint;
-	hi = (volatile uint32_t *)si->si_slotbase +
-	    (PXG_HOST_INTR_OFFSET / sizeof(uint32_t));
+	hi = (volatile u_int32_t *)si->si_slotbase +
+	    (PXG_HOST_INTR_OFFSET / sizeof(u_int32_t));
 
 	/* Clear the interrupt condition */
 	it = hi[0] & 15;
@@ -309,13 +309,13 @@ pxg_pbuf_get(struct stic_info *si)
 
 	si->si_pbuf_select ^= STIC_PACKET_SIZE;
 	off = si->si_pbuf_select + STIC_XCOMM_SIZE;
-	return ((uint32_t *)((char *)si->si_buf + off));
+	return ((u_int32_t *)((char *)si->si_buf + off));
 }
 
 static int
-pxg_pbuf_post(struct stic_info *si, uint32_t *buf)
+pxg_pbuf_post(struct stic_info *si, u_int32_t *buf)
 {
-	volatile uint32_t *poll, junk;
+	volatile u_int32_t *poll, junk;
 	volatile struct stic_regs *sr;
 	u_long v;
 	int c;
@@ -324,7 +324,7 @@ pxg_pbuf_post(struct stic_info *si, uint32_t *buf)
 
 	/* Get address of poll register for this buffer. */
 	v = ((u_long)buf - (u_long)si->si_buf) >> 9;
-	poll = (volatile uint32_t *)((char *)si->si_slotbase + v);
+	poll = (volatile u_int32_t *)((char *)si->si_slotbase + v);
 
 	/*
 	 * Read the poll register and make sure the stamp wants to accept
@@ -353,19 +353,18 @@ pxg_ioctl(struct stic_info *si, u_long cmd, void *data, int flag,
 	  struct lwp *l)
 {
 	struct stic_xinfo *sxi;
-	volatile uint32_t *ptr = NULL;
+	volatile u_int32_t *ptr = NULL;
 	int rv, s;
 
 	switch (cmd) {
 	case STICIO_START860:
 	case STICIO_RESET860:
-		if ((rv = kauth_authorize_machdep(l->l_cred,
-		    KAUTH_MACHDEP_PXG, KAUTH_ARG(cmd == STICIO_START860 ? 1 : 0),
-		    NULL, NULL, NULL)) != 0)
+		if ((rv = kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
 			return (rv);
 		if (si->si_dispmode != WSDISPLAYIO_MODE_MAPPED)
 			return (EBUSY);
-		ptr = (volatile uint32_t *)si->si_slotbase;
+		ptr = (volatile u_int32_t *)si->si_slotbase;
 		break;
 	}
 
@@ -411,11 +410,11 @@ pxg_ioctl(struct stic_info *si, u_long cmd, void *data, int flag,
 void
 pxg_load_fwseg(struct stic_info *si, struct pxg_fwseg *pfs)
 {
-	const uint32_t *src;
-	uint32_t *dst;
+	const u_int32_t *src;
+	u_int32_t *dst;
 	u_int left, i;
 
-	dst = (uint32_t *)((void *)si->si_buf + pfs->pfs_addr);
+	dst = (u_int32_t *)((void *)si->si_buf + pfs->pfs_addr);
 	src = pfs->pfs_data;
 
 	for (left = pfs->pfs_compsize; left != 0; left -= 4) {

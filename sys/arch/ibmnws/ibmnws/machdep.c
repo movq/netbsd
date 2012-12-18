@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.17 2012/07/28 23:11:00 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.11 2008/06/14 12:01:28 mjf Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,18 +32,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.17 2012/07/28 23:11:00 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.11 2008/06/14 12:01:28 mjf Exp $");
 
 #include "opt_compat_netbsd.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
-#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/exec.h>
 #include <sys/extent.h>
-#include <sys/intr.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
@@ -52,22 +50,26 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.17 2012/07/28 23:11:00 matt Exp $");
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/syscallargs.h>
-#include <sys/sysctl.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
+#include <sys/user.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/autoconf.h>
-#include <machine/powerpc.h>
+#include <sys/sysctl.h>
 
-#include <powerpc/pmap.h>
-#include <powerpc/trap.h>
+#include <net/netisr.h>
+
+#include <machine/autoconf.h>
+#include <machine/bus.h>
+#include <machine/intr.h>
+#include <machine/pmap.h>
+#include <machine/powerpc.h>
+#include <machine/trap.h>
 
 #include <powerpc/oea/bat.h>
-#include <powerpc/pic/picvar.h>
-#include <powerpc/include/pio.h>
-
+#include <arch/powerpc/pic/picvar.h>
+#include <arch/powerpc/include/pio.h>
 #include <dev/pci/pcivar.h>
 #include <dev/ic/ibm82660reg.h>
 
@@ -76,7 +78,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.17 2012/07/28 23:11:00 matt Exp $");
 void initppc(u_long, u_long, u_int, void *);
 void dumpsys(void);
 vaddr_t prep_intr_reg;			/* PReP interrupt vector register */
-uint32_t prep_intr_reg_off;
 
 #define	OFMEMREGIONS	32
 struct mem_region physmemr[OFMEMREGIONS], availmemr[OFMEMREGIONS];
@@ -161,7 +162,7 @@ cpu_startup(void)
 	/*
 	 * Mapping PReP interrput vector register.
 	 */
-	prep_intr_reg = (vaddr_t) mapiodev(PREP_INTR_REG, PAGE_SIZE, false);
+	prep_intr_reg = (vaddr_t) mapiodev(PREP_INTR_REG, PAGE_SIZE);
 	if (!prep_intr_reg)
 		panic("startup: no room for interrupt register");
 	prep_intr_reg_off = INTR_VECTOR_REG;
@@ -223,18 +224,16 @@ cpu_reboot(int howto, char *what)
 halt_sys:
 	doshutdownhooks();
 
-	pmf_system_shutdown(boothowto);
-
 	if (howto & RB_HALT) {
-                aprint_normal("\n");
-                aprint_normal("The operating system has halted.\n");
-                aprint_normal("Please press any key to reboot.\n\n");
+                printf("\n");
+                printf("The operating system has halted.\n");
+                printf("Please press any key to reboot.\n\n");
                 cnpollc(1);	/* for proper keyboard command handling */
                 cngetc();
                 cnpollc(0);
 	}
 
-	aprint_normal("rebooting...\n\n");
+	printf("rebooting...\n\n");
 
 
         {

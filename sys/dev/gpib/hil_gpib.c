@@ -1,7 +1,7 @@
-/*	$NetBSD: hil_gpib.c,v 1.12 2012/10/27 17:18:16 chs Exp $	*/
+/*	$NetBSD: hil_gpib.c,v 1.7 2008/04/08 07:38:35 cegger Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hil_gpib.c,v 1.12 2012/10/27 17:18:16 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hil_gpib.c,v 1.7 2008/04/08 07:38:35 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -26,6 +26,7 @@ int     hildebug = 0;
 #endif
 
 struct  hil_softc {
+	struct device sc_dev;
 	gpib_chipset_tag_t sc_ic;
 	gpib_handle_t sc_hdl;
 
@@ -38,8 +39,8 @@ struct  hil_softc {
 #define HILF_DELAY	0x10
 };
 
-int     hilmatch(device_t, cfdata_t, void *);
-void    hilattach(device_t, device_t, void *);
+int     hilmatch(struct device *, struct cfdata *, void *);
+void    hilattach(struct device *, struct device *, void *);
 
 const struct cfattach hil_ca = {
 	sizeof(struct hil_softc), hilmatch, hilattach,
@@ -49,7 +50,10 @@ void	hilcallback(void *, int);
 void	hilstart(void *);
 
 int
-hilmatch(device_t parent, cfdata_t match, void *aux)
+hilmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct gpib_attach_args *ga = aux;
 	u_int8_t *cmd = "SE;";
@@ -64,7 +68,9 @@ hilmatch(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-hilattach(device_t parent, device_t self, void *aux)
+hilattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct hil_softc *sc = device_private(self);
 	struct gpib_attach_args *ga = aux;
@@ -76,7 +82,7 @@ hilattach(device_t parent, device_t self, void *aux)
 
 	if (gpibregister(sc->sc_ic, sc->sc_address, hilcallback, sc,
 	    &sc->sc_hdl)) {
-		aprint_error_dev(self, "can't register callback\n");
+		aprint_error_dev(&sc->sc_dev, "can't register callback\n");
 		return;
 	}
 
@@ -84,7 +90,9 @@ hilattach(device_t parent, device_t self, void *aux)
 }
 
 void
-hilcallback(void *v, int action)
+hilcallback(v, action)
+	void *v;
+	int action;
 {
 	struct hil_softc *sc = v;
 
@@ -106,11 +114,12 @@ hilcallback(void *v, int action)
 }
 
 void
-hilstart(void *v)
+hilstart(v)
+	void *v;
 {
 	struct hil_softc *sc = v;
 
-	DPRINTF(HDB_FOLLOW, ("hilstart\n"));
+	DPRINTF(HDB_FOLLOW, ("hilstart(%x)\n", device_unit(&sc->sc_dev)));
 
 	sc->sc_flags &= ~HILF_DELAY;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: zssc.c,v 1.45 2012/10/27 17:17:32 chs Exp $ */
+/*	$NetBSD: zssc.c,v 1.41 2008/06/13 08:13:37 cegger Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -58,12 +58,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zssc.c,v 1.45 2012/10/27 17:17:32 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zssc.c,v 1.41 2008/06/13 08:13:37 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -76,32 +78,32 @@ __KERNEL_RCSID(0, "$NetBSD: zssc.c,v 1.45 2012/10/27 17:17:32 chs Exp $");
 #include <amiga/dev/siopvar.h>
 #include <amiga/dev/zbusvar.h>
 
-void zsscattach(device_t, device_t, void *);
-int  zsscmatch(device_t, cfdata_t, void *);
+void zsscattach(struct device *, struct device *, void *);
+int  zsscmatch(struct device *, struct cfdata *, void *);
 int  zssc_dmaintr(void *);
 #ifdef DEBUG
 void zssc_dump(void);
 #endif
 
-CFATTACH_DECL_NEW(zssc, sizeof(struct siop_softc),
+CFATTACH_DECL(zssc, sizeof(struct siop_softc),
     zsscmatch, zsscattach, NULL, NULL);
 
 /*
  * if we are an PPI Zeus
  */
 int
-zsscmatch(device_t parent, cfdata_t cf, void *aux)
+zsscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 	if (zap->manid == 2026 && zap->prodid == 150)
 		return(1);
 	return(0);
 }
 
 void
-zsscattach(device_t parent, device_t self, void *aux)
+zsscattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	struct siop_softc *sc;
 	struct zbus_args *zap;
@@ -109,9 +111,9 @@ zsscattach(device_t parent, device_t self, void *aux)
 
 	printf("\n");
 
-	zap = aux;
+	zap = auxp;
 
-	sc = device_private(self);
+	sc = (struct siop_softc *)dp;
 	sc->sc_siopp = rp = (siop_regmap_p)((char *)zap->va + 0x4000);
 
 	/*
@@ -121,10 +123,9 @@ zsscattach(device_t parent, device_t self, void *aux)
 	sc->sc_ctest7 = 0x00;
 	sc->sc_dcntl = 0x00;
 
-	sc->sc_siop_si = softint_establish(SOFTINT_BIO,
-	    (void (*)(void *))siopintr, sc);
+	alloc_sicallback();
 
-	sc->sc_adapter.adapt_dev = self;
+	sc->sc_adapter.adapt_dev = &sc->sc_dev;
 	sc->sc_adapter.adapt_nchannels = 1;
 	sc->sc_adapter.adapt_openings = 7;
 	sc->sc_adapter.adapt_max_periph = 1;
@@ -149,15 +150,15 @@ zsscattach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(self, &sc->sc_channel, scsiprint);
+	config_found(dp, &sc->sc_channel, scsiprint);
 }
 
 /*
  * Level 6 interrupt processing for the Progressive Peripherals Inc
  * Zeus SCSI.  Because the level 6 interrupt is above splbio, the
- * interrupt status is saved and a softint scheduled.  This way,
- * the actual processing of the interrupt can be deferred until 
- * splbio is unblocked.
+ * interrupt status is saved and an sicallback to the level 2 interrupt
+ * handler scheduled.  This way, the actual processing of the interrupt
+ * can be deferred until splbio is unblocked.
  */
 
 int
@@ -187,7 +188,7 @@ zssc_dmaintr(void *arg)
 	rp->siop_sien = 0;
 	rp->siop_dien = 0;
 	sc->sc_flags |= SIOP_INTDEFER | SIOP_INTSOFF;
-	softint_schedule(sc->sc_siop_si);
+	add_sicallback((sifunc_t)siopintr, sc, NULL);
 	return(1);
 }
 
@@ -199,10 +200,9 @@ zssc_dump(void)
 	struct siop_softc *sc;
 	int i;
 
-	for (i = 0; i < zssc_cd.cd_ndevs; ++i) {
-		sc = device_lookup_private(&zssc_cd, i);
+	for (i = 0; i < zssc_cd.cd_ndevs; ++i)
+		sc = device_lookup_softc(&zssc_cd, i);
 		if (sc != NULL)
 			siop_dump(sc);
-	}
 }
 #endif

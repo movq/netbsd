@@ -1,4 +1,4 @@
-.\"	$NetBSD: pset.3,v 1.12 2010/05/06 10:49:53 jruoho Exp $
+.\"	$NetBSD: pset.3,v 1.7.2.3 2009/02/02 20:15:40 snj Exp $
 .\"
 .\" Copyright (c) 2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd May 6, 2010
+.Dd January 28, 2009
 .Dt PSET 3
 .Os
 .Sh NAME
@@ -53,7 +53,7 @@ or threads.
 After processes or threads are bound to a group of processors by
 the API, the group henceforth runs only those processes or threads.
 This section describes the functions used to control processor sets.
-.Sh FUNCTIONS
+.Ss FUNCTIONS
 .Bl -tag -width compact
 .It Fn pset_create psid
 Creates a processor set, and returns its ID into
@@ -70,9 +70,6 @@ into
 if the pointer is not
 .Dv NULL .
 .Pp
-The following actions can be specified:
-.Bl -enum -offset 2n
-.It
 If
 .Fa psid
 is set to
@@ -80,7 +77,7 @@ is set to
 then the current processor set ID will be returned into
 .Fa psid ,
 and no assignment will be performed.
-.It
+.Pp
 If
 .Fa psid
 is set to
@@ -88,13 +85,12 @@ is set to
 then the processor set ID of the calling process will be used, and
 .Fa psid
 will be ignored.
-.It
+.Pp
 If
 .Fa psid
 is set to
 .Dv PS_NONE ,
 any assignment to the processor will be cleared.
-.El
 .It Fn pset_bind psid type id opsid
 Dedicates the processor set specified by
 .Fa psid
@@ -109,16 +105,13 @@ if the pointer is not
 .Nx
 supports the following types of targets specified by
 .Fa type :
-.Bl -tag -width P_LWPID -offset 2n
+.Bl -tag -width P_PID
 .It Dv P_PID
 Process identified by the PID.
 .It Dv P_LWPID
 Thread of the calling process indentified by the LID.
 .El
 .Pp
-The following actions can be specified:
-.Bl -enum -offset 2n
-.It
 If
 .Fa psid
 is set to
@@ -128,19 +121,17 @@ then the current processor set ID to which the target is bound or
 will be returned in
 .Fa opsid ,
 and no binding will be performed.
-.It
 If
 .Fa psid
 is set to
 .Dv PS_MYID ,
 then the processor set ID of the calling process will be used.
-.It
+.Pp
 If
 .Fa psid
 is set to
 .Dv PS_NONE ,
 the specified target will be unbound from the processor set.
-.El
 .It Fn pset_destroy psid
 Destroys the processor set specified by
 .Fa psid .
@@ -153,9 +144,9 @@ is
 .Dv PS_MYID ,
 the processor set ID of the caller thread will be used.
 .El
-.Sh IMPLEMENTATION NOTES
+.Sh NOTES
 The
-.Fn pset_bind
+.Fa pset_bind
 function can return the current processor set ID to which the
 target is bound, or
 .Dv PS_NONE .

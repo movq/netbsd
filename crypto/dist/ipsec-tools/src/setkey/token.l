@@ -1,4 +1,4 @@
-/*	$NetBSD: token.l,v 1.18 2012/11/29 15:31:25 vanhu Exp $	*/
+/*	$NetBSD: token.l,v 1.12.18.1 2009/02/08 18:42:19 snj Exp $	*/
 
 /*	$KAME: token.l,v 1.44 2003/10/21 07:20:58 itojun Exp $	*/
 
@@ -111,9 +111,7 @@ hostname	{name}(({dot}{name})+{dot}?)?
 
 %s S_PL S_AUTHALG S_ENCALG
 
-%option noinput nounput
 %%
-
 
 add		{ return(ADD); }
 delete		{ return(DELETE); }
@@ -127,7 +125,6 @@ bye		{ return(EXIT); }
 
 	/* for management SPD */
 spdadd		{ return(SPDADD); }
-spdupdate	{ return(SPDUPDATE); }
 spddelete	{ return(SPDDELETE); }
 spddump		{ return(SPDDUMP); }
 spdflush	{ return(SPDFLUSH); }
@@ -223,26 +220,6 @@ tcp		{
 	yylval.num = SADB_X_EALG_CAMELLIACBC; BEGIN INITIAL; return(ALG_ENC); 
 #endif
 }
-<S_ENCALG>aes-gcm-16	{
-#ifdef SADB_X_EALG_AESGCM16
-	yylval.num = SADB_X_EALG_AESGCM16; BEGIN INITIAL; return(ALG_ENC);
-#endif
-}
-<S_ENCALG>aes-gmac	{
-#ifdef SADB_X_EALG_AESGMAC
-	yylval.num = SADB_X_EALG_AESGMAC; BEGIN INITIAL; return(ALG_ENC);
-#endif
-}
-<S_ENCALG>aes-gcm-16   {
-#ifdef SADB_X_EALG_AESGCM16
-	yylval.num = SADB_X_EALG_AESGCM16; BEGIN INITIAL; return(ALG_ENC);
-#endif
-}
-<S_ENCALG>aes-gmac     {
-#ifdef SADB_X_EALG_AESGMAC
-	yylval.num = SADB_X_EALG_AESGMAC; BEGIN INITIAL; return(ALG_ENC);
-#endif
-}
 
 	/* compression algorithms */
 {hyphen}C	{ return(F_COMP); }
@@ -267,7 +244,6 @@ nocyclic-seq	{ return(NOCYCLICSEQ); }
 {hyphen}bh	{ return(F_LIFEBYTE_HARD); }
 {hyphen}bs	{ return(F_LIFEBYTE_SOFT); }
 {hyphen}ctx	{ return(SECURITY_CTX); }
-{hyphen}esp_frag { return(F_ESPFRAG); }
 
 	/* ... */
 any		{ return(ANY); }

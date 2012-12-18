@@ -1,4 +1,4 @@
-/*	$NetBSD: bivideo.c,v 1.33 2012/10/27 17:18:17 chs Exp $	*/
+/*	$NetBSD: bivideo.c,v 1.28 2008/04/06 20:28:36 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bivideo.c,v 1.33 2012/10/27 17:18:17 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bivideo.c,v 1.28 2008/04/06 20:28:36 cegger Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_hpcfb.h"
@@ -47,6 +47,8 @@ __KERNEL_RCSID(0, "$NetBSD: bivideo.c,v 1.33 2012/10/27 17:18:17 chs Exp $");
 #include <sys/buf.h>
 #include <sys/ioctl.h>
 #include <sys/reboot.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 #include <machine/autoconf.h>
@@ -77,14 +79,16 @@ int bivideo_dont_attach = 0;
 /*
  *  function prototypes
  */
-int	bivideomatch(device_t, cfdata_t, void *);
-void	bivideoattach(device_t, device_t, void *);
+int	bivideomatch(struct device *, struct cfdata *, void *);
+void	bivideoattach(struct device *, struct device *, void *);
 int	bivideo_ioctl(void *, u_long, void *, int, struct lwp *);
 paddr_t	bivideo_mmap(void *, off_t, int);
 
 struct bivideo_softc {
+	struct device		sc_dev;
 	struct hpcfb_fbconf	sc_fbconf;
 	struct hpcfb_dspconf	sc_dspconf;
+	void			*sc_powerhook;	/* power management hook */
 	int			sc_powerstate;
 #define PWRSTAT_SUSPEND		(1<<0)
 #define PWRSTAT_VIDEOOFF	(1<<1)
@@ -106,8 +110,6 @@ struct bivideo_softc {
 static int bivideo_init(struct hpcfb_fbconf *);
 static void bivideo_power(int, void *);
 static void bivideo_update_powerstate(struct bivideo_softc *, int);
-static bool bivideo_suspend(device_t, const pmf_qual_t *);
-static bool bivideo_resume(device_t, const pmf_qual_t *);
 void	bivideo_init_backlight(struct bivideo_softc *, int);
 void	bivideo_init_brightness(struct bivideo_softc *, int);
 void	bivideo_init_contrast(struct bivideo_softc *, int);
@@ -124,7 +126,7 @@ void	bivideo_set_contrast(struct bivideo_softc *, int);
 /*
  *  static variables
  */
-CFATTACH_DECL_NEW(bivideo, sizeof(struct bivideo_softc),
+CFATTACH_DECL(bivideo, sizeof(struct bivideo_softc),
     bivideomatch, bivideoattach, NULL, NULL);
 
 struct hpcfb_accessops bivideo_ha = {
@@ -138,7 +140,7 @@ static int attach_flag = 0;
  *  function bodies
  */
 int
-bivideomatch(device_t parent, cfdata_t match, void *aux)
+bivideomatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -150,7 +152,7 @@ bivideomatch(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-bivideoattach(device_t parent, device_t self, void *aux)
+bivideoattach(struct device *parent, struct device *self, void *aux)
 {
 	struct bivideo_softc *sc = device_private(self);
 	struct hpcfb_attach_args ha;
@@ -172,12 +174,14 @@ bivideoattach(device_t parent, device_t self, void *aux)
 	}
 	printf("\n");
 	printf("%s: framebuffer address: 0x%08lx\n",
-		device_xname(self), (u_long)bootinfo->fb_addr);
+		device_xname(&sc->sc_dev), (u_long)bootinfo->fb_addr);
 
 	/* Add a suspend hook to power saving */
 	sc->sc_powerstate = 0;
-	if (!pmf_device_register(self, bivideo_suspend, bivideo_resume))
-		aprint_error_dev(self, "unable to establish power handler\n");
+	sc->sc_powerhook = powerhook_establish(device_xname(&sc->sc_dev),
+	    bivideo_power, sc);
+	if (sc->sc_powerhook == NULL)
+		aprint_error_dev(&sc->sc_dev, "WARNING: unable to establish power hook\n");
 
 	/* initialize backlight brightness and lcd contrast */
 	sc->sc_lcd_inited = 0;
@@ -366,24 +370,6 @@ bivideo_update_powerstate(struct bivideo_softc *sc, int updates)
 		    (void*)(!(sc->sc_powerstate &
 				(PWRSTAT_VIDEOOFF|PWRSTAT_SUSPEND)) &&
 			     (sc->sc_powerstate & PWRSTAT_BACKLIGHT)));
-}
-
-static bool
-bivideo_suspend(device_t self, const pmf_qual_t *qual)
-{
-	struct bivideo_softc *sc = device_private(self);
-
-	bivideo_power(PWR_SUSPEND, sc);
-	return true;
-}
-
-static bool
-bivideo_resume(device_t self, const pmf_qual_t *qual)
-{
-	struct bivideo_softc *sc = device_private(self);
-
-	bivideo_power(PWR_RESUME, sc);
-	return true;
 }
 
 int

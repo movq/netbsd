@@ -1,4 +1,4 @@
-/*	$NetBSD: biosgetrtc.S,v 1.7 2011/06/16 13:27:59 joerg Exp $	*/
+/*	$NetBSD: biosgetrtc.S,v 1.6 2005/12/11 12:17:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -29,8 +29,13 @@
 #include <machine/asm.h>
 
 ENTRY(biosgetrtc)
-	pusha
-	pushl	%eax
+	pushl	%ebp
+	movl	%esp, %ebp
+	pushl	%ebx
+	pushl	%ecx
+	pushl	%edx
+	push	%esi
+	push	%edi
 
 	xorl	%ebx, %ebx
 
@@ -46,13 +51,18 @@ ok:
 	calll	_C_LABEL(real_to_prot) # back to protected mode
 	.code32
 
-	popl	%eax
+	movl	8(%ebp), %eax
+	movl	$0, (%eax)
 	movb	%ch, (%eax)
 	movb	%cl, 1(%eax)
 	movb	%dh, 2(%eax)
-	movb	$0,  3(%eax)
 
-	movl	%ebx, 28(%esp)
+	movl	%ebx, %eax
 
-	popa
+	pop	%edi
+	pop	%esi
+	popl	%edx
+	popl	%ecx
+	popl	%ebx
+	popl	%ebp
 	ret

@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec_netbsd.c,v 1.34 2012/06/02 21:36:48 dsl Exp $	*/
+/*	$NetBSD: ipsec_netbsd.c,v 1.32 2008/05/04 07:22:15 thorpej Exp $	*/
 /*	$KAME: esp_input.c,v 1.60 2001/09/04 08:43:19 itojun Exp $	*/
 /*	$KAME: ah_input.c,v 1.64 2001/09/04 08:43:19 itojun Exp $	*/
 
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipsec_netbsd.c,v 1.34 2012/06/02 21:36:48 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipsec_netbsd.c,v 1.32 2008/05/04 07:22:15 thorpej Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -81,6 +81,10 @@ __KERNEL_RCSID(0, "$NetBSD: ipsec_netbsd.c,v 1.34 2012/06/02 21:36:48 dsl Exp $"
 #include <netinet6/ip6protosw.h>
 #include <netinet/icmp6.h>
 #endif
+
+#include <machine/stdarg.h>
+
+
 
 #include <netipsec/key.h>
 
@@ -716,7 +720,7 @@ SYSCTL_SETUP(sysctl_net_inet6_fast_ipsec6_setup,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "def_policy",
 		       SYSCTL_DESCR("Default action for non-IPSec packets"),
-		       sysctl_fast_ipsec, 0, (void *)&ip6_def_policy, 0,
+		       sysctl_fast_ipsec, 0, &ip6_def_policy, 0,
 		       CTL_NET, PF_INET6, IPPROTO_AH,
 		       IPSECCTL_DEF_POLICY, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,

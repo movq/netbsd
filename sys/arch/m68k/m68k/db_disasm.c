@@ -1,4 +1,4 @@
-/*	$NetBSD: db_disasm.c,v 1.39 2012/01/31 21:17:57 mlelstv Exp $	*/
+/*	$NetBSD: db_disasm.c,v 1.38 2007/02/21 22:59:46 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -63,12 +63,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.39 2012/01/31 21:17:57 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.38 2007/02/21 22:59:46 thorpej Exp $");
 
 #include <sys/param.h>
-#ifdef _KERNEL
 #include <sys/systm.h>
-#endif
 
 #include <machine/db_machdep.h>
 
@@ -170,9 +168,6 @@ static const char *const dregs[8] = {"d0","d1","d2","d3","d4","d5","d6","d7"};
 static const char *const fpregs[8] = {
 	"fp0","fp1","fp2","fp3","fp4","fp5","fp6","fp7" };
 static const char *const fpcregs[3] = { "fpiar", "fpsr", "fpcr" };
-#ifndef _KERNEL
-static const char hexdigits[] = "0123456789abcdef";
-#endif
 
 /*
  * Disassemble intruction at location ``loc''.

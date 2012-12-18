@@ -1,4 +1,4 @@
-/*	$NetBSD: ioasicvar.h,v 1.22 2011/06/04 01:49:44 tsutsui Exp $	*/
+/*	$NetBSD: ioasicvar.h,v 1.19 2005/12/11 12:24:00 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
@@ -30,8 +30,6 @@
 #ifndef _DEV_TC_IOASICVAR_H_
 #define _DEV_TC_IOASICVAR_H_
 
-#include <sys/device.h>
-
 struct ioasic_dev {
 	const char	*iad_modname;
 	tc_offset_t	iad_offset;
@@ -47,7 +45,7 @@ struct ioasicdev_attach_args {
 };
 
 struct ioasic_softc {
-	device_t sc_dev;
+	struct	device sc_dv;
 	bus_space_tag_t sc_bst;
 	bus_space_handle_t sc_bsh;
 	bus_dma_tag_t sc_dmat;
@@ -62,10 +60,10 @@ extern struct cfdriver ioasic_cd;
  */
 extern tc_addr_t ioasic_base;
 
-const struct evcnt *ioasic_intr_evcnt(device_t, void *);
-void    ioasic_intr_establish(device_t, void *,
+const struct evcnt *ioasic_intr_evcnt(struct device *, void *);
+void    ioasic_intr_establish(struct device *, void *,
 	    int, int (*)(void *), void *);
-void    ioasic_intr_disestablish(device_t, void *);
+void    ioasic_intr_disestablish(struct device *, void *);
 void	ioasic_attach_devs(struct ioasic_softc *,
 	    struct ioasic_dev *, int);
 

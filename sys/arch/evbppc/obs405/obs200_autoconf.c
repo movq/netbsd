@@ -1,4 +1,4 @@
-/*	$NetBSD: obs200_autoconf.c,v 1.7 2011/12/12 11:23:57 kiyohara Exp $	*/
+/*	$NetBSD: obs200_autoconf.c,v 1.4 2006/10/07 14:59:53 tsutsui Exp $	*/
 
 /*
  * Copyright 2004 Shigeyuki Fukushima.
@@ -33,18 +33,14 @@
  * DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obs200_autoconf.c,v 1.7 2011/12/12 11:23:57 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obs200_autoconf.c,v 1.4 2006/10/07 14:59:53 tsutsui Exp $");
 
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/cpu.h>
 
 #include <machine/obs200.h>
 
-#include <powerpc/ibm4xx/cpu.h>
-#include <powerpc/ibm4xx/dcr4xx.h>
-
-#include <dev/ic/comreg.h>
+#include <powerpc/ibm4xx/dcr405gp.h>
 
 
 /*
@@ -67,9 +63,14 @@ cpu_configure(void)
 	    imask[IPL_BIO], imask[IPL_NET], imask[IPL_TTY]);
 
 	(void)spl0();
+
+	/*
+	 * Now allow hardware interrupts.
+	 */
+	__asm volatile ("wrteei 1");
 }
 
-void device_register(device_t dev, void *aux)
+void device_register(struct device *dev, void *aux)
 {
 
 	obs405_device_register(dev, aux, OBS200_COM_FREQ);

@@ -1,4 +1,4 @@
-/*	$NetBSD: hci_link.c,v 1.23 2011/07/27 10:25:09 plunky Exp $	*/
+/*	$NetBSD: hci_link.c,v 1.20.12.1 2010/11/21 21:36:07 riz Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hci_link.c,v 1.23 2011/07/27 10:25:09 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hci_link.c,v 1.20.12.1 2010/11/21 21:36:07 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -162,8 +162,9 @@ hci_acl_close(struct hci_link *link, int err)
 /*
  * Incoming ACL connection.
  *
- * Check the L2CAP listeners list and only accept when there is a
- * potential listener available.
+ * For now, we accept all connections but it would be better to check
+ * the L2CAP listen list and only accept when there is a listener
+ * available.
  *
  * There should not be a link to the same bdaddr already, we check
  * anyway though its left unhandled for now.
@@ -172,28 +173,10 @@ struct hci_link *
 hci_acl_newconn(struct hci_unit *unit, bdaddr_t *bdaddr)
 {
 	struct hci_link *link;
-	struct l2cap_channel *chan;
-
-	LIST_FOREACH(chan, &l2cap_listen_list, lc_ncid) {
-		if (bdaddr_same(&unit->hci_bdaddr, &chan->lc_laddr.bt_bdaddr)
-		    || bdaddr_any(&chan->lc_laddr.bt_bdaddr))
-			break;
-	}
-
-	if (chan == NULL) {
-		DPRINTF("%s: rejecting connection (no listeners)\n",
-		    device_xname(unit->hci_dev));
-
-		return NULL;
-	}
 
 	link = hci_link_lookup_bdaddr(unit, bdaddr, HCI_LINK_ACL);
-	if (link != NULL) {
-		DPRINTF("%s: rejecting connection (link exists)\n",
-		    device_xname(unit->hci_dev));
-
+	if (link != NULL)
 		return NULL;
-	}
 
 	link = hci_link_alloc(unit, bdaddr, HCI_LINK_ACL);
 	if (link != NULL) {
@@ -432,21 +415,28 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 	KASSERT(m != NULL);
 	KASSERT(unit != NULL);
 
-	if (m->m_pkthdr.len < sizeof(hdr))
-		goto bad;
-		
+	KASSERT(m->m_pkthdr.len >= sizeof(hdr));
 	m_copydata(m, 0, sizeof(hdr), &hdr);
 	m_adj(m, sizeof(hdr));
 
-	KASSERT(hdr.type == HCI_ACL_DATA_PKT);
+#ifdef DIAGNOSTIC
+	if (hdr.type != HCI_ACL_DATA_PKT) {
+		aprint_error_dev(unit->hci_dev, "bad ACL packet type\n");
+		goto bad;
+	}
+
+	if (m->m_pkthdr.len != le16toh(hdr.length)) {
+		aprint_error_dev(unit->hci_dev,
+		    "bad ACL packet length (%d != %d)\n",
+		    m->m_pkthdr.len, le16toh(hdr.length));
+		goto bad;
+	}
+#endif
 
 	hdr.length = le16toh(hdr.length);
 	hdr.con_handle = le16toh(hdr.con_handle);
 	handle = HCI_CON_HANDLE(hdr.con_handle);
 	pb = HCI_PB_FLAG(hdr.con_handle);
-
-	if (m->m_pkthdr.len != hdr.length)
-		goto bad;
 
 	link = hci_link_lookup_handle(unit, handle);
 	if (link == NULL) {
@@ -479,8 +469,10 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 			aprint_error_dev(unit->hci_dev,
 			    "dropped incomplete ACL packet\n");
 
-		if (m->m_pkthdr.len < sizeof(l2cap_hdr_t))
+		if (m->m_pkthdr.len < sizeof(l2cap_hdr_t)) {
+			aprint_error_dev(unit->hci_dev, "short ACL packet\n");
 			goto bad;
+		}
 
 		link->hl_rxp = m;
 		got = m->m_pkthdr.len;
@@ -501,9 +493,7 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 		break;
 
 	default:
-		DPRINTF("%s: unknown packet type\n",
-		    device_xname(unit->hci_dev));
-
+		aprint_error_dev(unit->hci_dev, "unknown packet type\n");
 		goto bad;
 	}
 
@@ -830,19 +820,27 @@ hci_sco_recv(struct mbuf *m, struct hci_unit *unit)
 	KASSERT(m != NULL);
 	KASSERT(unit != NULL);
 
-	if (m->m_pkthdr.len < sizeof(hdr))
-		goto bad;
-
+	KASSERT(m->m_pkthdr.len >= sizeof(hdr));
 	m_copydata(m, 0, sizeof(hdr), &hdr);
 	m_adj(m, sizeof(hdr));
 
-	KASSERT(hdr.type == HCI_SCO_DATA_PKT);
+#ifdef DIAGNOSTIC
+	if (hdr.type != HCI_SCO_DATA_PKT) {
+		aprint_error_dev(unit->hci_dev, "bad SCO packet type\n");
+		goto bad;
+	}
+
+	if (m->m_pkthdr.len != hdr.length) {
+		aprint_error_dev(unit->hci_dev,
+		    "bad SCO packet length (%d != %d)\n",
+		    m->m_pkthdr.len, hdr.length);
+
+		goto bad;
+	}
+#endif
 
 	hdr.con_handle = le16toh(hdr.con_handle);
 	handle = HCI_CON_HANDLE(hdr.con_handle);
-
-	if (m->m_pkthdr.len != hdr.length)
-		goto bad;
 
 	link = hci_link_lookup_handle(unit, handle);
 	if (link == NULL || link->hl_type == HCI_LINK_ACL) {

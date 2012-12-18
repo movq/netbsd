@@ -1,5 +1,4 @@
-/*	Id: main.c,v 1.17 2012/03/22 18:51:40 plunky Exp 	*/	
-/*	$NetBSD: main.c,v 1.1.1.5 2012/03/26 14:27:08 plunky Exp $	*/
+/*	$Id: main.c,v 1.1.1.1 2008/08/24 05:33:07 gmcgarry Exp $	*/
 /*
  * Copyright(C) Caldera International Inc. 2001-2002. All rights reserved.
  *
@@ -42,15 +41,11 @@ char xxxvers[] = "\nFORTRAN 77 PASS 1, VERSION 1.16,  3 NOVEMBER 1978\n";
 
 void mkdope(void);
 
-int ndebug;
-int b2debug, c2debug, e2debug, f2debug, g2debug, o2debug;
-int r2debug, s2debug, t2debug, u2debug, x2debug;
-int kflag;
-int xdeljumps, xtemps, xssa, xdce;
+int f2debug, e2debug, odebug, rdebug, b2debug, c2debug, t2debug;
+int s2debug, udebug, x2debug, nflag, kflag;
+int xdeljumps, xtemps, xssaflag;
 
 int mflag, tflag;
-
-char *ftitle = "<unknown>";
 
 #if 1 /* RAGGE */
 FILE *initfile, *sortfile;
@@ -61,7 +56,7 @@ LOCAL int nch   = 0;
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: fcom [qw:UuOdpC1I:Z:]\n");
+	fprintf(stderr, "usage: fcom [w:UuOdpC1I:Z:]\n");
 	exit(1);
 }
 
@@ -84,12 +79,8 @@ main(int argc, char **argv)
 
 #define DONE(c)	{ retcode = c; goto finis; }
 
-	while ((ch = getopt(argc, argv, "qw:UuOdpC1I:Z:X:")) != -1)
+	while ((ch = getopt(argc, argv, "w:UuOdpC1I:Z:X:")) != -1)
 		switch (ch) {
-		case 'q':
-			quietflag = YES;
-			break;
-
 		case 'w':
 			if(optarg[0]=='6' && optarg[1]=='6') {
 				ftn66flag = YES;
@@ -142,45 +133,34 @@ main(int argc, char **argv)
 			tylogical = tyint;
 			break;
 
-		case 'Z':	/* pass2 debugging */
+		case 'Z':
 			while (*optarg)
 				switch (*optarg++) {
+				case 'f': /* instruction matching */
+					++f2debug;
+					break;
+				case 'e': /* print tree upon pass2 enter */
+					++e2debug;
+					break;
+				case 'o': ++odebug; break;
+				case 'r': /* register alloc/graph coloring */
+					++rdebug;
+					break;
 				case 'b': /* basic block and SSA building */
 					++b2debug;
 					break;
 				case 'c': /* code printout */
 					++c2debug;
 					break;
-				case 'e': /* print tree upon pass2 enter */
-					++e2debug;
-					break;
-				case 'f': /* instruction matching */
-					++f2debug;
-					break;
-				case 'g':
-					++g2debug;
-					break;
-				case 'n':
-					++ndebug;
-					break;
-				case 'o':
-					++o2debug;
-					break;
-				case 'r': /* register alloc/graph coloring */
-					++r2debug;
-					break;
+				case 't': ++t2debug; break;
 				case 's': /* shape matching */
 					++s2debug;
 					break;
-				case 't':
-					++t2debug;
-					break;
 				case 'u': /* Sethi-Ullman debugging */
-					++u2debug;
+					++udebug;
 					break;
-				case 'x':
-					++x2debug;
-					break;
+				case 'x': ++x2debug; break;
+				case 'n': ++nflag; break;
 				default:
 					fprintf(stderr, "unknown Z flag '%c'\n",
 					    optarg[-1]);
@@ -188,14 +168,14 @@ main(int argc, char **argv)
 				}
 			break;
 
-		case 'X':	/* pass1 debugging */
+		case 'X':
 			while (*optarg)
 				switch (*optarg++) {
-				case 'm': /* memory allocation */
-					++mflag;
-					break;
 				case 't': /* tree debugging */
 					tflag++;
+					break;
+				case 'm': /* memory allocation */
+					++mflag;
 					break;
 				default:
 					usage();
@@ -213,8 +193,7 @@ main(int argc, char **argv)
 	if (argc > 0) {
 		if (inilex(copys(argv[0])))
 			DONE(1);
-		if (!quietflag)
-			fprintf(diagfile, "%s:\n", argv[0]);
+		fprintf(diagfile, "%s:\n", argv[0]);
 		if (argc != 1)
 			if (freopen(argv[1], "w", stdout) == NULL) {
 				fprintf(stderr, "open output file '%s':",
@@ -363,7 +342,6 @@ dodata(char *file)
 	ovlen = 0;
 	totlen = 0;
 	nch = 0;
-	ftitle = file;
 
 	if( (sortfile = fopen(file, "r")) == NULL)
 		fatal1(file);

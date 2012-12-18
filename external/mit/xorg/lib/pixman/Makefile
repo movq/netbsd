@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.14 2011/08/03 18:22:29 mrg Exp $
+#	$NetBSD: Makefile,v 1.6.2.3 2009/12/01 23:25:20 snj Exp $
 
 NOLINT=	1	# defined
 
@@ -31,7 +31,6 @@ SRCS=	\
 	pixman-utils.c				\
 	pixman-edge.c				\
 	pixman-edge-accessors.c			\
-	pixman-noop.c				\
 	pixman-trap.c				\
 	pixman-timer.c				\
 	pixman-matrix.c
@@ -45,10 +44,10 @@ COPTS.pixman-mmx.c=	-mmmx -fvisibility=hidden
 MKDEPFLAGS+=		-mmmx -fvisibility=hidden
 .elif ${MACHINE_ARCH} == "x86_64"
 SRCS+=	pixman-mmx.c
-# XXX sse2 is broken with pixman 0.21.2; GCC generates unaligned accesses
-#SRCS+=	pixman-sse2.c
+SRCS+=	pixman-sse2.c
 COPTS.pixman-mmx.c=	-mmmx -fvisibility=hidden
-#COPTS.pixman-sse2.c=	-msse2 -fvisibility=hidden
+COPTS.pixman-sse2.c=	-msse2 -fvisibility=hidden
+MKDEPFLAGS+=		-mmmx -msse2 -fvisibility=hidden
 .endif
 
 # .if VMX
@@ -58,13 +57,10 @@ COPTS.pixman-mmx.c=	-mmmx -fvisibility=hidden
 INCS=	pixman.h pixman-version.h
 INCSDIR=${X11INCDIR}/pixman-1
 
-CPPFLAGS+=	-DHAVE_CONFIG_H \
+CPPFLAGS+=	-DPIXMAN_DISABLE_DEPRECATED -DHAVE_CONFIG_H \
 		-I${X11SRCDIR.pixman}/../include \
 		-I${X11SRCDIR.pixman}/../combine \
 		-I${X11SRCDIR.pixman}/pixman
-
-# XXX!  wants __thread
-CPPFLAGS+=	-DPIXMAN_NO_TLS
 
 LIBDPLIBS=	m	${.CURDIR}/../../../../../lib/libm
 

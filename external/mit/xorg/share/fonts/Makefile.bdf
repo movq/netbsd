@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.bdf,v 1.2 2009/03/31 21:18:36 perry Exp $
+#	$NetBSD: Makefile.bdf,v 1.1.1.1.8.1 2009/09/17 04:24:42 snj Exp $
 
 # Font files built using this makefile are cleaned in two ways:
 #

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ep_isa.c,v 1.44 2009/03/14 21:04:20 dsl Exp $	*/
+/*	$NetBSD: if_ep_isa.c,v 1.43 2008/08/27 05:33:47 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ep_isa.c,v 1.44 2009/03/14 21:04:20 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ep_isa.c,v 1.43 2008/08/27 05:33:47 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -127,7 +127,8 @@ static struct epcard {
 static int nepcards;
 
 static void
-epaddcard(int bus, int iobase, int irq, int model)
+epaddcard(bus, iobase, irq, model)
+	int bus, iobase, irq, model;
 {
 
 	if (nepcards >= MAXEPCARDS)

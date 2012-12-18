@@ -1,4 +1,4 @@
-/*	$NetBSD: twiddle.c,v 1.5 2009/03/18 10:22:23 cegger Exp $	*/
+/*	$NetBSD: twiddle.c,v 1.4 2005/12/11 12:16:36 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -31,14 +31,14 @@
  *	@(#)printf.c	8.1 (Berkeley) 6/11/93
  */
 
-/*	From: $NetBSD: twiddle.c,v 1.5 2009/03/18 10:22:23 cegger Exp $	*/
+/*	From: $NetBSD: twiddle.c,v 1.4 2005/12/11 12:16:36 christos Exp $	*/
 
 #include <lib/libsa/stand.h>
 
 const static char chars[4] = {'|', '/', '-', '\\'};
 
 void
-twiddle(void)
+twiddle()
 {
 	static short int pos;
 

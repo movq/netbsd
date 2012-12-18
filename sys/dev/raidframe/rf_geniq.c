@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_geniq.c,v 1.6 2009/03/18 10:22:41 cegger Exp $	*/
+/*	$NetBSD: rf_geniq.c,v 1.4 2001/11/13 07:11:14 lukem Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -32,7 +32,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_geniq.c,v 1.6 2009/03/18 10:22:41 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_geniq.c,v 1.4 2001/11/13 07:11:14 lukem Exp $");
 
 #define RF_UTILITY 1
 #include "rf_pqdeg.h"
@@ -44,7 +44,8 @@ __KERNEL_RCSID(0, "$NetBSD: rf_geniq.c,v 1.6 2009/03/18 10:22:41 cegger Exp $");
    val  = value;
 */
 int 
-lsfr_shift(unsigned val, unsigned poly)
+lsfr_shift(val, poly)
+	unsigned val, poly;
 {
 	unsigned new;
 	unsigned int i;
@@ -67,7 +68,7 @@ lsfr_shift(unsigned val, unsigned poly)
 RF_ua32_t rf_qfor[32];
 
 void 
-main(void)
+main()
 {
 	unsigned int i, j, l, a, b;
 	unsigned int val;

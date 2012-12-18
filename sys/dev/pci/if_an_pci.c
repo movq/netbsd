@@ -1,4 +1,4 @@
-/*	$NetBSD: if_an_pci.c,v 1.34 2012/09/23 01:10:59 chs Exp $	*/
+/*	$NetBSD: if_an_pci.c,v 1.27 2008/07/03 18:10:08 drochner Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.34 2012/09/23 01:10:59 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.27 2008/07/03 18:10:08 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,7 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.34 2012/09/23 01:10:59 chs Exp $");
 #include <dev/pci/pcidevs.h>
 
 #define	AN_PCI_PLX_IOBA		0x14	/* i/o base for PLX chip */
-#define AN_PCI_IOBA PCI_BAR(2)	/* i/o base */
+#define	AN_PCI_IOBA		0x18	/* i/o base */
 
 struct an_pci_softc {
 	struct an_softc sc_an;		/* real "an" softc */
@@ -81,8 +81,8 @@ struct an_pci_softc {
 	void	*sc_ih;			/* interrupt handle */
 };
 
-static int	an_pci_match(device_t, cfdata_t, void *);
-static void	an_pci_attach(device_t, device_t, void *);
+static int	an_pci_match(struct device *, struct cfdata *, void *);
+static void	an_pci_attach(struct device *, struct device *, void *);
 
 CFATTACH_DECL_NEW(an_pci, sizeof(struct an_pci_softc),
     an_pci_match, an_pci_attach, NULL, NULL);
@@ -95,12 +95,12 @@ static const struct an_pci_product {
 	{ PCI_VENDOR_AIRONET,		PCI_PRODUCT_AIRONET_PC4500 },
 	{ PCI_VENDOR_AIRONET,		PCI_PRODUCT_AIRONET_PC4800 },
 	{ PCI_VENDOR_AIRONET,		PCI_PRODUCT_AIRONET_PCI350 },
-	{ PCI_VENDOR_AIRONET,		PCI_PRODUCT_AIRONET_MPI350 },
 	{ 0,				0			   }
 };
 
 static int
-an_pci_match(device_t parent, cfdata_t match, void *aux)
+an_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	const struct an_pci_product *app;
@@ -114,11 +114,12 @@ an_pci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-an_pci_attach(device_t parent, device_t self, void *aux)
+an_pci_attach(struct device *parent, struct device *self, void *aux)
 {
         struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 	struct an_pci_softc *psc = device_private(self);
 	struct an_softc *sc = &psc->sc_an;
+        char devinfo[256];
 	char const *intrstr;
 	pci_intr_handle_t ih;
 	bus_size_t iosize;
@@ -128,7 +129,10 @@ an_pci_attach(device_t parent, device_t self, void *aux)
 	psc->sc_pct = pa->pa_pc;
 	psc->sc_pcitag = pa->pa_tag;
 
-	pci_aprint_devinfo(pa, "802.11 controller");
+	aprint_naive(": 802.11 controller\n");
+
+        pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+        aprint_normal(": %s\n", devinfo);
 
         /* Map I/O registers */
         if (pci_mapreg_map(pa, AN_PCI_IOBA, PCI_MAPREG_TYPE_IO, 0,
@@ -152,8 +156,8 @@ an_pci_attach(device_t parent, device_t self, void *aux)
 	if (psc->sc_ih == NULL) {
 		aprint_error_dev(self, "unable to establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
@@ -165,8 +169,8 @@ an_pci_attach(device_t parent, device_t self, void *aux)
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, iosize);
 	}
 
-	if (pmf_device_register(self, NULL, NULL))
-		pmf_class_network_register(self, &sc->sc_if);
-	else
+	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
+	else
+		pmf_class_network_register(self, &sc->sc_if);
 }

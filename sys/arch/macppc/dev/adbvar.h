@@ -1,4 +1,4 @@
-/*	$NetBSD: adbvar.h,v 1.15 2012/10/27 17:18:00 chs Exp $	*/
+/*	$NetBSD: adbvar.h,v 1.12 2007/03/04 06:00:10 christos Exp $	*/
 
 /*-
  * Copyright (C) 1994	Bradley A. Grantham
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Bradley A. Grantham.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -69,6 +74,7 @@ typedef struct {
 } ADBDataBlock;
 
 struct adb_softc {
+	struct device sc_dev;
 	char *sc_regbase;
 };
 
@@ -89,19 +95,19 @@ extern int adbHardware;
 #define ADBLISTEN(dev, reg)	((((u_int8_t)(dev) & 0x0f) << 4) | 0x08 | (reg))
 #define ADBTALK(dev, reg)	((((u_int8_t)(dev) & 0x0f) << 4) | 0x0c | (reg))
 
-int	adb_intr(void *);
-int	adb_poweroff(void);
-void	adb_restart(void);
-void	adb_cuda_autopoll(void);
-int	adb_intr_cuda(void *);
-int	CountADBs(void);
-void	ADBReInit(void);
-int	GetIndADB(ADBDataBlock * info, int index);
-int	GetADBInfo(ADBDataBlock * info, int adbAddr);
-int	SetADBInfo(ADBSetInfoBlock * info, int adbAddr);
-int	ADBOp(Ptr buffer, adbComp *compRout, Ptr data, short commandNum);
-int	adb_read_date_time(unsigned long *t);
-int	adb_set_date_time(unsigned long t);
+int	adb_intr __P((void *));
+int	adb_poweroff __P((void));
+void	adb_restart __P((void));
+void	adb_cuda_autopoll __P((void));
+int	adb_intr_cuda __P((void *));
+int	CountADBs __P((void));
+void	ADBReInit __P((void));
+int	GetIndADB __P((ADBDataBlock * info, int index));
+int	GetADBInfo __P((ADBDataBlock * info, int adbAddr));
+int	SetADBInfo __P((ADBSetInfoBlock * info, int adbAddr));
+int	ADBOp __P((Ptr buffer, adbComp *compRout, Ptr data, short commandNum));
+int	adb_read_date_time __P((unsigned long *t));
+int	adb_set_date_time __P((unsigned long t));
 
-int	adb_op_sync(Ptr, adbComp *, Ptr, short);
-void	adb_op_comprout(void *, volatile int *, int);
+int	adb_op_sync __P((Ptr, adbComp *, Ptr, short));
+void	adb_op_comprout __P((void *, volatile int *, int));

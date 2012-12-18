@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_syspuffs.c,v 1.12 2011/08/31 13:32:39 joerg Exp $	*/
+/*	$NetBSD: rump_syspuffs.c,v 1.5 2008/10/07 23:23:43 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -55,11 +55,11 @@ main(int argc, char *argv[])
 	struct syspuffs_args args;
 	int mntflags, rv;
 
-#if 0
-	extern int rumpns_puffsdebug;
-	extern int rumpns_putterdebug;
+#if 1
+	extern int puffsdebug;
+	extern int putterdebug;
 
-	rumpns_puffsdebug = rumpns_putterdebug = 1;
+	puffsdebug = putterdebug = 1;
 #endif
 
 	setprogname(argv[0]);
@@ -76,7 +76,7 @@ main(int argc, char *argv[])
 }
 #endif /* MOUNT_NOMAIN */
 
-__dead static void
+static void
 usage(void)
 {
 
@@ -129,18 +129,16 @@ mount_syspuffs_parseargs(int argc, char *argv[],
 		err(1, "mp 1");
 	if (len > MAXPATHLEN)
 		err(1, "mntpath > MAXPATHLEN");
-	if ((size_t)read(sv[1], canon_dir, len) != len)
+	if (read(sv[1], canon_dir, len) != len)
 		err(1, "mp 2");
 	if (read(sv[1], &len, sizeof(len)) != sizeof(len))
 		err(1, "fn 1");
 	if (len > MAXPATHLEN)
 		err(1, "devpath > MAXPATHLEN");
-	if ((size_t)read(sv[1], canon_dev, len) != len)
+	if (read(sv[1], canon_dev, len) != len)
 		err(1, "fn 2");
 	if (read(sv[1], mntflags, sizeof(*mntflags)) != sizeof(*mntflags))
 		err(1, "mntflags");
-	if (read(sv[1], kargs, sizeof(len)) != sizeof(len)) /* unused now */
-		err(1, "unused len");
 	if (read(sv[1], kargs, sizeof(*kargs)) != sizeof(*kargs))
 		err(1, "puffs_args");
 	if (read(sv[1], pflags, sizeof(*pflags)) != sizeof(*pflags))
@@ -150,6 +148,6 @@ mount_syspuffs_parseargs(int argc, char *argv[],
 	*pflags |= PUFFS_KFLAG_NOCACHE;
 	*pflags &= ~PUFFS_FLAG_BUILDPATH;
 
-	rv = rump_pub_syspuffs_glueinit(sv[1], &kargs->pa_fd);
+	rv = syspuffs_glueinit(sv[1], &kargs->pa_fd);
 	assert(rv == 0);
 }

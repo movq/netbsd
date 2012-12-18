@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pmap.h,v 1.37 2011/06/30 00:49:14 matt Exp $	*/
+/*	$NetBSD: uvm_pmap.h,v 1.23 2008/07/16 14:33:09 matt Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -70,9 +70,6 @@
 
 struct lwp;		/* for pmap_activate()/pmap_deactivate() proto */
 
-struct pmap;
-typedef struct pmap *pmap_t;
-
 /*
  * Each machine dependent implementation is expected to
  * keep certain statistics.  They may do this anyway they
@@ -86,32 +83,6 @@ struct pmap_statistics {
 typedef struct pmap_statistics	*pmap_statistics_t;
 
 #ifdef _KERNEL
-
-extern struct pmap	*const kernel_pmap_ptr;
-#define pmap_kernel()	kernel_pmap_ptr
-
-#endif
-
-/*
- * Cache Type Encodings
- */
-#define PMAP_CACHE_MASK		0x00000f00
-
-/* All accesses are uncacheable. No speculative accesses. */
-#define PMAP_NOCACHE		0x00000100	/* [BOTH] */
-
-/* All accesses are uncacheable. No speculative accesses.
- * Writes are combined. */
-#define PMAP_WRITE_COMBINE	0x00000200	/* [BOTH] */
-
-/* On reads, cachelines become shared or exclusive if allocated on cache miss.
- * On writes, cachelines become modified on a cache miss.  */
-#define PMAP_WRITE_BACK		0x00000300	/* [BOTH] */
-
-/* = PMAP_NOCACHE but overrideable (e.g. on x86 by MTRRs) */
-#define PMAP_NOCACHE_OVR	0x00000400	/* [BOTH] */
-
-#ifdef _KERNEL
 #include <machine/pmap.h>
 #endif
 
@@ -119,25 +90,24 @@ extern struct pmap	*const kernel_pmap_ptr;
  * Flags passed to pmap_enter().  Note the bottom 3 bits are VM_PROT_*
  * bits, used to indicate the access type that was made (to seed modified
  * and referenced information).
- *
- * Flags marked [PA] are for pmap_kenter_pa() only.  Flags marked [BOTH]
- * apply to pmap_kenter_pa() and pmap_enter().  All other flags are valid
- * for pmap_enter() only.
  */
 #define	PMAP_WIRED	0x00000010	/* wired mapping */
 #define	PMAP_CANFAIL	0x00000020	/* can fail if resource shortage */
-#if defined(PMAP_ENABLE_PMAP_KMPAGE)
-#define	PMAP_KMPAGE	0x00000040	/* [PA] page used for kernel memory */
-#else
-#define	PMAP_KMPAGE	0x00000000
-#endif /* PMAP_ENABLE_PMAP_KMPAGE */
-
-#define	PMAP_MD_MASK	0xff000000	/* [BOTH] Machine-dependent bits */
-#define PMAP_PROT_MASK	0x0000000f	/* [BOTH] VM_PROT_* bit mask */
+/*
+ * Flags passed to pmap_kenter_pa().  Note the bottom 3 bits are VM_PROT_*
+ * bits, used to indicate the access type.
+ */
+#ifndef PMAP_KMPAGE
+#define	PMAP_KMPAGE	0x00000000	/* this is from the kmem allocator */
+#endif
 
 #ifndef PMAP_EXCLUDE_DECLS	/* Used in Sparc port to virtualize pmap mod */
 #ifdef _KERNEL
 __BEGIN_DECLS
+#if !defined(pmap_kernel)
+struct pmap	*pmap_kernel(void);
+#endif
+
 void		pmap_activate(struct lwp *);
 void		pmap_deactivate(struct lwp *);
 void		pmap_unwire(pmap_t, vaddr_t);
@@ -149,6 +119,9 @@ bool		pmap_clear_modify(struct vm_page *);
 bool		pmap_clear_reference(struct vm_page *);
 #endif
 
+#if !defined(pmap_collect)
+void		pmap_collect(pmap_t);
+#endif
 #if !defined(pmap_copy)
 void		pmap_copy(pmap_t, pmap_t, vaddr_t, vsize_t, vaddr_t);
 #endif
@@ -157,7 +130,7 @@ void		pmap_copy_page(paddr_t, paddr_t);
 #endif
 struct pmap	*pmap_create(void);
 void		pmap_destroy(pmap_t);
-int		pmap_enter(pmap_t, vaddr_t, paddr_t, vm_prot_t, u_int);
+int		pmap_enter(pmap_t, vaddr_t, paddr_t, vm_prot_t, int);
 bool		pmap_extract(pmap_t, vaddr_t, paddr_t *);
 #if defined(PMAP_GROWKERNEL)
 vaddr_t		pmap_growkernel(vaddr_t);
@@ -165,7 +138,7 @@ vaddr_t		pmap_growkernel(vaddr_t);
 
 void		pmap_init(void);
 
-void		pmap_kenter_pa(vaddr_t, paddr_t, vm_prot_t, u_int);
+void		pmap_kenter_pa(vaddr_t, paddr_t, vm_prot_t);
 void		pmap_kremove(vaddr_t, vsize_t);
 #if !defined(pmap_is_modified)
 bool		pmap_is_modified(struct vm_page *);
@@ -178,9 +151,6 @@ void		pmap_page_protect(struct vm_page *, vm_prot_t);
 
 #if !defined(pmap_phys_address)
 paddr_t		pmap_phys_address(paddr_t);
-#endif
-#if !defined(pmap_mmap_flags)
-#define pmap_mmap_flags(x)	0
 #endif
 void		pmap_protect(pmap_t, vaddr_t, vaddr_t, vm_prot_t);
 #if !defined(pmap_reference)

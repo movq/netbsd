@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.19 2012/07/27 05:36:09 matt Exp $	*/
+/*	$NetBSD: psl.h,v 1.17 2008/06/11 23:31:35 rafal Exp $	*/
 
 /*
  * Copyright (c) 1995 Mark Brinicombe.
@@ -62,13 +62,11 @@
 #define splsched()	raisespl(IPL_SCHED)
 #define splhigh()	raisespl(IPL_HIGH)
 
-#define	IPL_SAFEPRI	IPL_NONE		/* for kern_sleepq.c */
-
 #ifdef _KERNEL
 #ifndef _LOCORE
 int raisespl	(int);
 int lowerspl	(int);
-void splx	(int);
+int splx	(int);
 
 #ifdef __HAVE_FAST_SOFTINTS
 void _setsoftintr	(int si);

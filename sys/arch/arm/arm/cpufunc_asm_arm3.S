@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc_asm_arm3.S,v 1.2 2011/12/11 03:30:23 kiyohara Exp $	*/
+/*	$NetBSD: cpufunc_asm_arm3.S,v 1.1 2001/11/10 23:14:09 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1997,1998 Mark Brinicombe.
@@ -38,7 +38,6 @@
 #include <machine/cpu.h>
 #include <machine/asm.h>
 
-#ifdef CPU_ARM3
 /*
  * The ARM3 has its own control register in a different place.
  */
@@ -51,12 +50,11 @@ ENTRY(arm3_control)
 	mcrne	p15, 0, r2, c2, c0, 0	/* Write new control register */
 	mov	r0, r3			/* Return old value */
 	mov	pc, lr
-#endif /* CPU_ARM3 */
 
 /*
  * Cache functions.
  */
 
-ENTRY(arm3_cache_flush)		/* Also ARM2 and ARM250 */
+ENTRY(arm3_cache_flush)
 	mcr	p15, 0, r0, c1, c0, 0
 	mov	pc, lr

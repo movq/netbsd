@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp12x0_io.c,v 1.15 2011/07/01 20:27:50 dyoung Exp $ */
+/*	$NetBSD: ixp12x0_io.c,v 1.11 2005/11/24 13:08:32 yamt Exp $ */
 
 /*
  * Copyright (c) 2002, 2003
@@ -13,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp12x0_io.c,v 1.15 2011/07/01 20:27:50 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp12x0_io.c,v 1.11 2005/11/24 13:08:32 yamt Exp $");
 
 /*
  * bus_space I/O functions for ixp12x0
@@ -40,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0_io.c,v 1.15 2011/07/01 20:27:50 dyoung Exp $
 
 #include <uvm/uvm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/ixp12x0/ixp12x0reg.h>
 #include <arm/ixp12x0/ixp12x0var.h>
@@ -161,7 +167,7 @@ ixp12x0_bs_map(void *t, bus_addr_t bpa, bus_size_t size,
 	*bshp = va + offset;
 
 	for (pa = startpa; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
 		pte = vtopte(va);
 		*pte &= ~L2_S_CACHE_MASK;
 		PTE_SYNC(pte);
@@ -190,7 +196,11 @@ ixp12x0_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
 }
 
 int
-ixp12x0_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
+ixp12x0_bs_subregion(t, bsh, offset, size, nbshp)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t offset, size;
+	bus_space_handle_t *nbshp;
 {
 
 	*nbshp = bsh + offset;
@@ -198,7 +208,9 @@ ixp12x0_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_siz
 }
 
 void *
-ixp12x0_bs_vaddr(void *t, bus_space_handle_t bsh)
+ixp12x0_bs_vaddr(t, bsh)
+	void *t;
+	bus_space_handle_t bsh;
 {
 	return ((void *)bsh);
 }
@@ -220,7 +232,11 @@ ixp12x0_bs_free(void *t, bus_space_handle_t bsh, bus_size_t size)
 }
 
 void
-ixp12x0_bs_barrier(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t len, int flags)
+ixp12x0_bs_barrier(t, bsh, offset, len, flags)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t offset, len;
+	int flags;
 {
 /* NULL */
 }	

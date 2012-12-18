@@ -32,7 +32,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-static char const n8_id[] = "$Id: config.c,v 1.3 2010/11/13 13:52:09 uebayasi Exp $";
+static char const n8_id[] = "$Id: config.c,v 1.1 2008/10/30 12:02:14 darran Exp $";
 /*****************************************************************************/
 /** @file config.c
  *  @brief NSP2000 Device Driver Configuration Manager.
@@ -172,8 +172,11 @@ static char const n8_id[] = "$Id: config.c,v 1.3 2010/11/13 13:52:09 uebayasi Ex
 #include <sys/mbuf.h>
 #include <sys/device.h>
 #include <sys/queue.h>
-#include <sys/module.h>
+
+#include <sys/lkm.h>
 #include <sys/bus.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <opencrypto/cryptodev.h>
 #include <opencrypto/xform.h>

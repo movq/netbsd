@@ -1,4 +1,4 @@
-/* $NetBSD: copy.c,v 1.7 2012/01/14 17:42:52 reinoud Exp $ */
+/* $NetBSD: copy.c,v 1.1 2007/12/29 14:38:36 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *        This product includes software developed by Jared D. McNeill.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -27,19 +33,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: copy.c,v 1.7 2012/01/14 17:42:52 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: copy.c,v 1.1 2007/12/29 14:38:36 jmcneill Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>
-#include <machine/thunk.h>
-
-/* XXX until strnlen(3) has been added to the kernel, we *could* panic on it */
-#define strnlen(str, maxlen) min(strlen((str)), maxlen)
 
 int
 copyin(const void *uaddr, void *kaddr, size_t len)
 {
-//	thunk_printf("copyin uaddr %p, kaddr %p, len %d\n", uaddr, kaddr, (int) len);
 	memcpy(kaddr, uaddr, len);
 	return 0;
 }
@@ -47,7 +48,6 @@ copyin(const void *uaddr, void *kaddr, size_t len)
 int
 copyout(const void *kaddr, void *uaddr, size_t len)
 {
-//	thunk_printf("copyout kaddr %p, uaddr %p, len %d\n", kaddr, uaddr, (int) len);
 	memcpy(uaddr, kaddr, len);
 	return 0;
 }
@@ -55,30 +55,27 @@ copyout(const void *kaddr, void *uaddr, size_t len)
 int
 copyinstr(const void *uaddr, void *kaddr, size_t len, size_t *done)
 {
-	len = min(strnlen(uaddr, len), len) + 1;
 	strncpy(kaddr, uaddr, len);
 	if (done)
-		*done = len;
+		*done = min(strlen(uaddr), len);
 	return 0;
 }
 
 int
 copyoutstr(const void *kaddr, void *uaddr, size_t len, size_t *done)
 {
-	len = min(strnlen(kaddr, len), len) + 1;
 	strncpy(uaddr, kaddr, len);
 	if (done)
-		*done = len;
+		*done = min(strlen(kaddr), len);
 	return 0;
 }
 
 int
 copystr(const void *kfaddr, void *kdaddr, size_t len, size_t *done)
 {
-	len = min(strnlen(kfaddr, len), len) + 1;
 	strncpy(kdaddr, kfaddr, len);
 	if (done)
-		*done = len;
+		*done = min(strlen(kfaddr), len);
 	return 0;
 }
 
@@ -86,10 +83,6 @@ int
 kcopy(const void *src, void *dst, size_t len)
 {
 	memcpy(dst, src, len);
-#ifdef DEBUG
-	if (memcmp(dst, src, len) != 0)
-		panic("kcopy not finished correctly\n");
-#endif
 	return 0;
 }
 

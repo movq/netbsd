@@ -1,7 +1,7 @@
-/*	$NetBSD: uvm_readahead.c,v 1.8 2011/06/12 03:36:04 rmind Exp $	*/
+/*	$NetBSD: uvm_readahead.c,v 1.5 2008/01/02 11:49:20 ad Exp $	*/
 
 /*-
- * Copyright (c)2003, 2005, 2009 YAMAMOTO Takashi,
+ * Copyright (c)2003, 2005 YAMAMOTO Takashi,
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_readahead.c,v 1.8 2011/06/12 03:36:04 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_readahead.c,v 1.5 2008/01/02 11:49:20 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/pool.h>
@@ -66,8 +66,8 @@ struct uvm_ractx {
 	off_t ra_next;		/* next offset to read-ahead */
 };
 
-#if defined(sun2) || defined(sun3)
-/* XXX: on sun2 and sun3 MAXPHYS is 0xe000 */
+#if defined(sun2) || (defined(sun3) && defined(_SUN3_))
+/* XXX: on sun2 and sun3 (but not sun3x) MAXPHYS is 0xe000 */
 #undef MAXPHYS	
 #define MAXPHYS		0x8000	/* XXX */
 #endif
@@ -145,11 +145,11 @@ ra_startio(struct uvm_object *uobj, off_t off, size_t sz)
 		 * use UVM_ADV_RANDOM to avoid recursion.
 		 */
 
-		mutex_enter(uobj->vmobjlock);
 		error = (*uobj->pgops->pgo_get)(uobj, off, NULL,
 		    &npages, 0, VM_PROT_READ, UVM_ADV_RANDOM, 0);
 		DPRINTF(("%s:  off=%" PRIu64 ", bytelen=%zu -> %d\n",
 		    __func__, off, bytelen, error));
+		mutex_enter(&uobj->vmobjlock);
 		if (error != 0 && error != EBUSY) {
 			if (error != EINVAL) { /* maybe past EOF */
 				DPRINTF(("%s: error=%d\n", __func__, error));
@@ -207,7 +207,7 @@ uvm_ra_request(struct uvm_ractx *ra, int advice, struct uvm_object *uobj,
     off_t reqoff, size_t reqsize)
 {
 
-	KASSERT(mutex_owned(uobj->vmobjlock));
+	KASSERT(mutex_owned(&uobj->vmobjlock));
 
 	if (ra == NULL || advice == UVM_ADV_RANDOM) {
 		return;
@@ -313,12 +313,7 @@ do_readahead:
 		 */
 
 		if (rasize >= RA_MINSIZE) {
-			off_t next;
-
-			mutex_exit(uobj->vmobjlock);
-			next = ra_startio(uobj, raoff, rasize);
-			mutex_enter(uobj->vmobjlock);
-			ra->ra_next = next;
+			ra->ra_next = ra_startio(uobj, raoff, rasize);
 		}
 	}
 
@@ -333,18 +328,4 @@ do_readahead:
 	ra->ra_winsize = MIN(RA_WINSIZE_MAX, ra->ra_winsize + reqsize);
 
 done:;
-}
-
-int
-uvm_readahead(struct uvm_object *uobj, off_t off, off_t size)
-{
-
-	/*
-	 * don't allow too much read-ahead.
-	 */
-	if (size > RA_WINSIZE_MAX) {
-		size = RA_WINSIZE_MAX;
-	}
-	ra_startio(uobj, off, size);
-	return 0;
 }

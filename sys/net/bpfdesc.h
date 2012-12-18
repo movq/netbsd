@@ -1,4 +1,4 @@
-/*	$NetBSD: bpfdesc.h,v 1.37 2012/10/28 21:12:44 alnsn Exp $	*/
+/*	$NetBSD: bpfdesc.h,v 1.28 2008/04/24 15:35:30 ad Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993
@@ -44,7 +44,6 @@
 #include <sys/callout.h>
 #include <sys/selinfo.h>		/* for struct selinfo */
 #include <net/if.h>			/* for IFNAMSIZ */
-#include <net/bpfjit.h>			/* for bpfjit_function_t */
 
 /*
  * Descriptor associated with each open bpf file.
@@ -80,7 +79,6 @@ struct bpf_d {
 	u_char		bd_immediate;	/* true to return on packet arrival */
 	int		bd_hdrcmplt;	/* false to fill in src lladdr */
 	int		bd_seesent;	/* true if bpf should see sent packets */
-	int 		bd_feedback;	/* true to feed back sent packets */
 	int		bd_async;	/* non-zero if packet reception should generate signal */
 	pid_t		bd_pgid;	/* process or group id for signal */
 #if BSD < 199103
@@ -95,13 +93,6 @@ struct bpf_d {
 	pid_t		bd_pid;		/* corresponding PID */
 	LIST_ENTRY(bpf_d) bd_list;	/* list of all BPF's */
 	void		*bd_sih;	/* soft interrupt handle */
-	struct timespec bd_atime;	/* access time */
-	struct timespec bd_mtime;	/* modification time */
-	struct timespec bd_btime;	/* birth time */
-#ifdef _LP64
-	int		bd_compat32;	/* 32-bit stream on LP64 system */
-#endif
-	bpfjit_function_t	bd_jitcode; /* compiled filter program */
 };
 
 
@@ -138,11 +129,11 @@ struct bpf_if {
 	struct bpf_if **bif_driverp;	/* pointer into softc */
 	u_int bif_dlt;			/* link layer type */
 	u_int bif_hdrlen;		/* length of header (with padding) */
-	struct ifnet *bif_ifp;		/* corresponding interface */
+	struct ifnet *bif_ifp;		/* correspoding interface */
 };
 
 #ifdef _KERNEL
-int	 bpf_setf(struct bpf_d *, struct bpf_program *);
+int	 bpf_setf __P((struct bpf_d *, struct bpf_program *));
 #endif
 
 #endif /* !_NET_BPFDESC_H_ */

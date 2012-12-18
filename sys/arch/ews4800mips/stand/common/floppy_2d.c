@@ -1,4 +1,4 @@
-/*	$NetBSD: floppy_2d.c,v 1.5 2009/02/04 15:22:13 tsutsui Exp $	*/
+/*	$NetBSD: floppy_2d.c,v 1.4.10.1 2009/02/06 02:14:58 snj Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.

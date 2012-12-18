@@ -1,4 +1,4 @@
-/* $NetBSD: dec_2000_300.c,v 1.19 2012/10/13 17:58:54 jdc Exp $ */
+/* $NetBSD: dec_2000_300.c,v 1.16 2008/04/28 20:23:10 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -34,17 +34,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -60,7 +60,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_2000_300.c,v 1.19 2012/10/13 17:58:54 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_2000_300.c,v 1.16 2008/04/28 20:23:10 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,7 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: dec_2000_300.c,v 1.19 2012/10/13 17:58:54 jdc Exp $"
 
 void dec_2000_300_init(void);
 static void dec_2000_300_cons_init(void);
-static void dec_2000_300_device_register(device_t, void *);
+static void dec_2000_300_device_register(struct device *, void *);
 
 #ifdef KGDB
 #include <machine/db_machdep.h>
@@ -168,7 +168,7 @@ dec_2000_300_cons_init(void)
 		/* display console... */
 		/* XXX */
 		(void) pckbc_cnattach(&jcp->jc_internal_iot, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT, 0);
+		    PCKBC_KBD_SLOT);
 
 		isa_display_console(&jcp->jc_eisa_iot, &jcp->jc_eisa_memt);
 #else
@@ -196,12 +196,12 @@ dec_2000_300_cons_init(void)
 }
 
 static void
-dec_2000_300_device_register(device_t dev, void *aux)
+dec_2000_300_device_register(struct device *dev, void *aux)
 {
 	static int found, initted, scsiboot, netboot;
-	static device_t eisadev, isadev, scsidev;
+	static struct device *eisadev, *isadev, *scsidev;
 	struct bootdev_data *b = bootdev_data;
-	device_t parent = device_parent(dev);
+	struct device *parent = device_parent(dev);
 
 	if (found)
 		return;
@@ -232,7 +232,7 @@ dec_2000_300_device_register(device_t dev, void *aux)
 
 			scsidev = dev;
 #if 0
-			printf("\nscsidev = %s\n", device_xname(scsidev));
+			printf("\nscsidev = %s\n", scsidev->dv_xname);
 #endif
 			return;
 		}
@@ -269,7 +269,7 @@ dec_2000_300_device_register(device_t dev, void *aux)
 		/* we've found it! */
 		booted_device = dev;
 #if 0
-		printf("\nbooted_device = %s\n", device_xname(booted_device));
+		printf("\nbooted_device = %s\n", booted_device->dv_xname);
 #endif
 		found = 1;
 		return;
@@ -289,7 +289,7 @@ dec_2000_300_device_register(device_t dev, void *aux)
 
 			booted_device = dev;
 #if 0
-			printf("\nbooted_device = %s\n", device_xname(booted_device));
+			printf("\nbooted_device = %s\n", booted_device->dv_xname);
 #endif
 			found = 1;
 			return;

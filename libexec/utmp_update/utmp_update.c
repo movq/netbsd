@@ -1,4 +1,4 @@
-/*	$NetBSD: utmp_update.c,v 1.11 2011/09/17 14:25:43 christos Exp $	 */
+/*	$NetBSD: utmp_update.c,v 1.8 2008/04/28 20:23:04 martin Exp $	 */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 #include <sys/cdefs.h>
 
-__RCSID("$NetBSD: utmp_update.c,v 1.11 2011/09/17 14:25:43 christos Exp $");
+__RCSID("$NetBSD: utmp_update.c,v 1.8 2008/04/28 20:23:04 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -46,28 +46,8 @@ __RCSID("$NetBSD: utmp_update.c,v 1.11 2011/09/17 14:25:43 christos Exp $");
 #include <string.h>
 #include <unistd.h>
 #include <paths.h>
-#include <stdarg.h>
-#include <errno.h>
-#include <syslog.h>
 
-static __dead __printflike(2, 3) void
-logerr(int e, const char *fmt, ...)
-{
-	va_list sap, eap;
-	char *s = NULL;
-	
-	if (e)
-		(void)asprintf(&s, "%s (%s)", fmt, strerror(e));
-	if (s)
-		fmt = s;
-
-	va_start(sap, fmt);
-	va_copy(eap, sap);
-	vsyslog(LOG_ERR, fmt, sap);
-	va_end(sap);
-	errx(1, fmt, eap);
-	va_end(eap);
-}
+int main(int, char *[]);
 
 int
 main(int argc, char *argv[])
@@ -77,51 +57,46 @@ main(int argc, char *argv[])
 	struct passwd *pwd;
 	struct stat st;
 	int fd;
-	int res;
 	uid_t euid, ruid;
 	char tty[MAXPATHLEN];
 
 	euid = geteuid();
 	ruid = getuid();
+	if (seteuid(ruid) == -1)
+		err(1, "seteuid");
 
 	if (argc != 2) {
 		(void)fprintf(stderr, "Usage: %s <vis-utmpx-entry>\n",
-		    getprogname());
-		return 1;
+			getprogname());
+		exit(1);
 	}
-
-	openlog(getprogname(), LOG_PID | LOG_NDELAY, LOG_AUTH);
-	if (seteuid(ruid) == -1)
-		logerr(errno, "Can't setuid %ld", (long)ruid);
 
 	len = strlen(argv[1]);
 
 	if (len > sizeof(*utx) * 4 + 1 || len < sizeof(*utx))
-		logerr(0, "Bad argument size %zu", len);
+		errx(1, "Bad argument");
 
 	if ((utx = malloc(len)) == NULL)
-		logerr(errno, "Can't allocate %zu", len);
+		err(1, NULL);
 
-	res = strunvis((char *)utx, argv[1]);
-	if (res != (int)sizeof(*utx))
-		logerr(0, "Decoding error %s %d != %zu", argv[1], res,
-		    sizeof(*utx));
+	if (strunvis((char *)utx, argv[1]) != sizeof(*utx))
+		errx(1, "Decoding error");
 
 	switch (utx->ut_type) {
 	case USER_PROCESS:
 	case DEAD_PROCESS:
 		break;
 	default:
-		logerr(0, "Invalid utmpx type %d", (int)utx->ut_type);
+		errx(1, "Invalid utmpx type %d", (int)utx->ut_type);
 	}
 
 	if (ruid != 0) {
 		if ((pwd = getpwuid(ruid)) == NULL)
-			logerr(0, "User %ld does not exist in password"
-			    " database", (long)ruid);
+			errx(1, "User %lu does not exist in password database",
+			    (long)ruid);
 
 		if (strcmp(pwd->pw_name, utx->ut_name) != 0)
-			logerr(0, "Current user `%s' does not match "
+			errx(1, "Current user `%s' does not match "
 			    "`%s' in utmpx entry", pwd->pw_name, utx->ut_name);
 	}
 
@@ -129,39 +104,34 @@ main(int argc, char *argv[])
 	fd = open(tty, O_RDONLY|O_NONBLOCK, 0);
 	if (fd != -1) {
 		if (fstat(fd, &st) == -1)
-			logerr(errno, "Cannot stat `%s'", tty);
+			err(1, "Cannot stat `%s'", tty);
 		if (ruid != 0 && st.st_uid != ruid)
-			logerr(0, "%s: Is not owned by you", tty);
+			errx(1, "%s: Is not owned by you", tty);
 		if (!isatty(fd))
-			logerr(0, "%s: Not a tty device", tty);
+			errx(1, "%s: Not a tty device", tty);
 		(void)close(fd);
 		if (access(tty, W_OK|R_OK) == -1)
-			logerr(errno, "Can't access `%s'", tty);
+			err(1, "%s", tty);
 	} else {
 		struct utmpx utold, *utoldp;
-		pid_t ppid;
-
 		/*
 		 * A daemon like ftpd that does not use a tty line? 
 		 * We only allow it to kill its own existing entries 
 		 */
 		if (utx->ut_type != DEAD_PROCESS)
-			logerr(errno, "Cannot open `%s'", tty);
+			err(1, "Cannot open `%s'", tty);
 
 		(void)memcpy(utold.ut_line, utx->ut_line, sizeof(utx->ut_line));
 		if ((utoldp = getutxline(&utold)) == NULL)
-			logerr(0, "Cannot find existing entry for `%s'",
+			err(1, "Cannot find existing entry for `%s'",
 			    utx->ut_line);
-		if (utoldp->ut_pid != (ppid = getppid()))
-			logerr(0, "Cannot modify entry for `%s' "
-			    "utmp pid %ld != parent %ld", tty,
-			    (long)utoldp->ut_pid, (long)ppid);
+		if (utoldp->ut_pid != getppid())
+			err(1, "Cannot modify entry for `%s'", tty);
 	}
 
-	if (seteuid(euid) == 1)
-		logerr(errno, "Can't setuid %ld", (long)euid);
+	(void)seteuid(euid);
 	if (pututxline(utx) == NULL)
-		logerr(errno, "Cannot update utmp entry");
+		err(1, "Cannot update utmp entry");
 
 	return 0;
 }

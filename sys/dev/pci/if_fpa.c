@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fpa.c,v 1.58 2012/10/27 17:18:32 chs Exp $	*/
+/*	$NetBSD: if_fpa.c,v 1.50 2008/06/12 22:44:47 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_fpa.c,v 1.58 2012/10/27 17:18:32 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_fpa.c,v 1.50 2008/06/12 22:44:47 cegger Exp $");
 
 #ifdef __NetBSD__
 #include "opt_inet.h"
@@ -59,8 +59,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_fpa.c,v 1.58 2012/10/27 17:18:32 chs Exp $");
 #include <net/if_dl.h>
 #include <net/route.h>
 
+#include "bpfilter.h"
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #if defined(__FreeBSD__)
 #include <netinet/if_fddi.h>
@@ -220,7 +223,7 @@ pdq_pci_attach(
 	free((void *) sc, M_DEVBUF);
 	return;
     }
-    memcpy(sc->sc_ac.ac_enaddr, (void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, 6);
+    bcopy((void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
     pdqs_pci[unit] = sc;
     pdq_ifattach(sc, pdq_pci_ifwatchdog);
     pci_map_int(config_id, pdq_pci_ifintr, (void*) sc, &net_imask);
@@ -286,7 +289,10 @@ pdq_pci_match(
 }
 
 int
-pdq_pci_probe(device_t parent, cfdata_t cf, void *aux)
+pdq_pci_probe(
+    struct device *parent,
+    struct cfdata *cf,
+    void *aux)
 {
     struct isa_attach_args *ia = (struct isa_attach_args *) aux;
     pdq_uint32_t irq, data;
@@ -336,14 +342,16 @@ pdq_pci_probe(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-pdq_pci_attach(device_t parent, device_t self, void *aux)
+pdq_pci_attach(
+    struct device *parent,
+    struct device *self,
+    void *aux)
 {
-    pdq_softc_t *sc = device_private(self);
+    pdq_softc_t *sc = (pdq_softc_t *) self;
     struct isa_attach_args *ia = (struct isa_attach_args *) aux;
     struct ifnet *ifp = &sc->sc_if;
     int i;
 
-    sc->sc_dev = self;
     sc->sc_if.if_unit = sc->sc_dev.dv_unit;
     sc->sc_if.if_name = "fpa";
     sc->sc_if.if_flags = 0;
@@ -357,7 +365,7 @@ pdq_pci_attach(device_t parent, device_t self, void *aux)
 	return;
     }
 
-    memcpy(sc->sc_ac.ac_enaddr, (void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, 6);
+    bcopy((void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
 
     pdq_ifattach(sc, pdq_pci_ifwatchdog);
 
@@ -383,7 +391,10 @@ struct cfdriver fpacd = {
 #elif defined(__NetBSD__)
 
 static int
-pdq_pci_match(device_t parent, cfdata_t match, void *aux)
+pdq_pci_match(
+    struct device *parent,
+    struct cfdata *match,
+    void *aux)
 {
     struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -396,9 +407,12 @@ pdq_pci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-pdq_pci_attach(device_t const parent, device_t const self, void *const aux)
+pdq_pci_attach(
+    struct device * const parent,
+    struct device * const self,
+    void *const aux)
 {
-    pdq_softc_t * const sc = device_private(self);
+    pdq_softc_t * const sc = (pdq_softc_t *)self;
     struct pci_attach_args * const pa = (struct pci_attach_args *) aux;
     pdq_uint32_t data;
     pci_intr_handle_t intrhandle;
@@ -416,7 +430,7 @@ pdq_pci_attach(device_t const parent, device_t const self, void *const aux)
 	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_CFLT, data);
     }
 
-    strlcpy(sc->sc_if.if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
+    strlcpy(sc->sc_if.if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
     sc->sc_if.if_flags = 0;
     sc->sc_if.if_softc = sc;
 
@@ -460,7 +474,7 @@ pdq_pci_attach(device_t const parent, device_t const self, void *const aux)
 				sc->sc_if.if_xname, 0,
 				(void *) sc, PDQ_DEFPA);
     if (sc->sc_pdq == NULL) {
-	aprint_error_dev(sc->sc_dev, "initialization failed\n");
+	aprint_error_dev(&sc->sc_dev, "initialization failed\n");
 	return;
     }
 
@@ -475,8 +489,8 @@ pdq_pci_attach(device_t const parent, device_t const self, void *const aux)
     if (sc->sc_ih == NULL) {
 	aprint_error_dev(self, "couldn't establish interrupt");
 	if (intrstr != NULL)
-	    aprint_error(" at %s", intrstr);
-	aprint_error("\n");
+	    aprint_normal(" at %s", intrstr);
+	aprint_normal("\n");
 	return;
     }
 
@@ -487,7 +501,7 @@ pdq_pci_attach(device_t const parent, device_t const self, void *const aux)
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 }
 
-CFATTACH_DECL_NEW(fpa, sizeof(pdq_softc_t),
+CFATTACH_DECL(fpa, sizeof(pdq_softc_t),
     pdq_pci_match, pdq_pci_attach, NULL, NULL);
 
 #endif /* __NetBSD__ */

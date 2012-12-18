@@ -1,4 +1,4 @@
-/* $NetBSD: if_an_pcmcia.c,v 1.41 2012/10/27 17:18:36 chs Exp $ */
+/* $NetBSD: if_an_pcmcia.c,v 1.36 2008/07/03 18:10:08 drochner Exp $ */
 
 /*-
  * Copyright (c) 2000, 2004 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_an_pcmcia.c,v 1.41 2012/10/27 17:18:36 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_an_pcmcia.c,v 1.36 2008/07/03 18:10:08 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,10 +62,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_an_pcmcia.c,v 1.41 2012/10/27 17:18:36 chs Exp $"
 #include <dev/pcmcia/pcmciavar.h>
 #include <dev/pcmcia/pcmciadevs.h>
 
-static int an_pcmcia_match(device_t, cfdata_t, void *);
+static int an_pcmcia_match(struct device *, struct cfdata *, void *);
 static int an_pcmcia_validate_config(struct pcmcia_config_entry *);
-static void an_pcmcia_attach(device_t, device_t, void *);
-static int an_pcmcia_detach(device_t, int);
+static void an_pcmcia_attach(struct device *, struct device *, void *);
+static int an_pcmcia_detach(struct device *, int);
 static int an_pcmcia_enable(struct an_softc *);
 static void an_pcmcia_disable(struct an_softc *);
 
@@ -97,7 +97,8 @@ static const size_t an_pcmcia_nproducts =
     sizeof(an_pcmcia_products) / sizeof(an_pcmcia_products[0]);
 
 static int
-an_pcmcia_match(device_t parent, cfdata_t match, void *aux)
+an_pcmcia_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -108,7 +109,8 @@ an_pcmcia_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static int
-an_pcmcia_validate_config(struct pcmcia_config_entry *cfe)
+an_pcmcia_validate_config(cfe)
+	struct pcmcia_config_entry *cfe;
 {
 	if (cfe->iftype != PCMCIA_IFTYPE_IO ||
 	    cfe->num_iospace < 1)
@@ -117,7 +119,8 @@ an_pcmcia_validate_config(struct pcmcia_config_entry *cfe)
 }
 
 static void
-an_pcmcia_attach(device_t parent, device_t self, void *aux)
+an_pcmcia_attach(struct device  *parent, struct device *self,
+    void *aux)
 {
 	struct an_pcmcia_softc *psc = device_private(self);
 	struct an_softc *sc = &psc->sc_an;
@@ -153,10 +156,10 @@ an_pcmcia_attach(device_t parent, device_t self, void *aux)
 		goto fail2;
 	}
 
-	if (pmf_device_register(self, NULL, NULL))
-		pmf_class_network_register(self, &sc->sc_if);
-	else
+	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
+	else
+		pmf_class_network_register(self, &sc->sc_if);
 
 	an_pcmcia_disable(sc);
 	sc->sc_enabled = 0;
@@ -172,7 +175,7 @@ fail:
 
 
 static int
-an_pcmcia_detach(device_t self, int flags)
+an_pcmcia_detach(struct device *self, int flags)
 {
 	struct an_pcmcia_softc *psc = device_private(self);
 	int error;
@@ -192,7 +195,8 @@ an_pcmcia_detach(device_t self, int flags)
 }
 
 static int
-an_pcmcia_enable(struct an_softc *sc)
+an_pcmcia_enable(sc)
+	struct an_softc *sc;
 {
 	struct an_pcmcia_softc *psc = (void *)sc;
 	int error;
@@ -212,7 +216,8 @@ an_pcmcia_enable(struct an_softc *sc)
 }
 
 static void
-an_pcmcia_disable(struct an_softc *sc)
+an_pcmcia_disable(sc)
+	struct an_softc *sc;
 {
 	struct an_pcmcia_softc *psc = (void *)sc;
 

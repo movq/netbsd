@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls_43.c,v 1.54 2010/11/19 06:44:36 dholland Exp $	*/
+/*	$NetBSD: vfs_syscalls_43.c,v 1.47 2008/06/24 11:18:15 ad Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,10 +37,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_43.c,v 1.54 2010/11/19 06:44:36 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_43.c,v 1.47 2008/06/24 11:18:15 ad Exp $");
 
 #if defined(_KERNEL_OPT)
-#include "opt_compat_netbsd.h"
+#include "fs_union.h"
 #endif
 
 #include <sys/param.h>
@@ -69,8 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_43.c,v 1.54 2010/11/19 06:44:36 dhollan
 
 #include <compat/sys/stat.h>
 #include <compat/sys/mount.h>
-
-#include <compat/common/compat_util.h>
 
 static void cvtstat(struct stat *, struct stat43 *);
 
@@ -139,18 +137,12 @@ compat_43_sys_lstat(struct lwp *l, const struct compat_43_sys_lstat_args *uap, r
 	struct stat sb, sb1;
 	struct stat43 osb;
 	int error;
-	struct pathbuf *pb;
 	struct nameidata nd;
 	int ndflags;
 
-	error = pathbuf_copyin(SCARG(uap, path), &pb);
-	if (error) {
-		return error;
-	}
-
 	ndflags = NOFOLLOW | LOCKLEAF | LOCKPARENT | TRYEMULROOT;
 again:
-	NDINIT(&nd, LOOKUP, ndflags, pb);
+	NDINIT(&nd, LOOKUP, ndflags, UIO_USERSPACE, SCARG(uap, path));
 	if ((error = namei(&nd))) {
 		if (error == EISDIR && (ndflags & LOCKPARENT) != 0) {
 			/*
@@ -160,7 +152,6 @@ again:
 			ndflags &= ~LOCKPARENT;
 			goto again;
 		}
-		pathbuf_destroy(pb);
 		return (error);
 	}
 	/*
@@ -169,7 +160,6 @@ again:
 	 */
 	vp = nd.ni_vp;
 	dvp = nd.ni_dvp;
-	pathbuf_destroy(pb);
 	if (vp->v_type != VLNK) {
 		if ((ndflags & LOCKPARENT) != 0) {
 			if (dvp == vp)
@@ -214,16 +204,22 @@ compat_43_sys_fstat(struct lwp *l, const struct compat_43_sys_fstat_args *uap, r
 		syscallarg(int) fd;
 		syscallarg(struct stat43 *) sb;
 	} */
+	int fd = SCARG(uap, fd);
+	struct file *fp;
 	struct stat ub;
 	struct stat43 oub;
 	int error;
 
-	error = do_sys_fstat(SCARG(uap, fd), &ub);
+	if ((fp = fd_getfile(fd)) == NULL)
+		return (EBADF);
+	error = (*fp->f_ops->fo_stat)(fp, &ub);
+	fd_putfile(fd);
 	if (error == 0) {
 		cvtstat(&ub, &oub);
 		error = copyout((void *)&oub, (void *)SCARG(uap, sb),
 		    sizeof (oub));
 	}
+
 
 	return (error);
 }
@@ -431,7 +427,7 @@ unionread:
 		}
 		free(dirbuf, M_TEMP);
 	}
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	if (error)
 		goto out;
 
@@ -440,7 +436,7 @@ unionread:
 	    (vp->v_mount->mnt_flag & MNT_UNION)) {
 		struct vnode *tvp = vp;
 		vp = vp->v_mount->mnt_vnodecovered;
-		vref(vp);
+		VREF(vp);
 		fp->f_data = (void *) vp;
 		fp->f_offset = 0;
 		vrele(tvp);
@@ -458,8 +454,6 @@ unionread:
  * sysctl helper routine for vfs.generic.conf lookups.
  */
 #if defined(COMPAT_09) || defined(COMPAT_43) || defined(COMPAT_44)
-static struct sysctllog *compat_clog;
-
 static int
 sysctl_vfs_generic_conf(SYSCTLFN_ARGS)
 {
@@ -497,30 +491,22 @@ sysctl_vfs_generic_conf(SYSCTLFN_ARGS)
 /*
  * Top level filesystem related information gathering.
  */
-void
-compat_sysctl_init(void)
+SYSCTL_SETUP(compat_sysctl_vfs_setup, "compat sysctl vfs subtree setup")
 {
 	extern int nmountcompatnames;
 
-	sysctl_createv(&compat_clog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
 		       CTLTYPE_INT, "maxtypenum",
 		       SYSCTL_DESCR("Highest valid filesystem type number"),
 		       NULL, nmountcompatnames, NULL, 0,
 		       CTL_VFS, VFS_GENERIC, VFS_MAXTYPENUM, CTL_EOL);
-	sysctl_createv(&compat_clog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "conf",
 		       SYSCTL_DESCR("Filesystem configuration information"),
 		       sysctl_vfs_generic_conf, 0, NULL,
 		       sizeof(struct vfsconf),
 		       CTL_VFS, VFS_GENERIC, VFS_CONF, CTL_EOL);
-}
-
-void
-compat_sysctl_fini(void)
-{
-
-	sysctl_teardown(&compat_clog);
 }
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_flow.c,v 1.20 2012/10/11 20:05:50 christos Exp $	*/
+/*	$NetBSD: ip6_flow.c,v 1.17 2008/04/28 20:24:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_flow.c,v 1.20 2012/10/11 20:05:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_flow.c,v 1.17 2008/04/28 20:24:10 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,10 +74,11 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_flow.c,v 1.20 2012/10/11 20:05:50 christos Exp $
  * using the cached details.
  *
  * Example:
- * ether/fddi_input -> ip6flow_fastforward -> if_output
+ * ether/fddi_input -> ip6flow_fastfoward -> if_output
  */
 
-static struct pool ip6flow_pool;
+POOL_INIT(ip6flow_pool, sizeof(struct ip6flow), 0, 0, 0, "ip6flowpl", NULL,
+    IPL_NET);
 
 LIST_HEAD(ip6flowhead, ip6flow);
 
@@ -163,14 +164,6 @@ ip6flow_lookup(const struct ip6_hdr *ip6)
 	return NULL;
 }
 
-void
-ip6flow_poolinit(void)
-{
-
-	pool_init(&ip6flow_pool, sizeof(struct ip6flow), 0, 0, 0, "ip6flowpl",
-			NULL, IPL_NET);
-}
-
 /*
  * Allocate memory and initialise lists. This function is called
  * from ip6_init and called there after to resize the hash table.
@@ -208,12 +201,11 @@ ip6flow_init(int table_size)
  * routine to deal with.
  */
 int
-ip6flow_fastforward(struct mbuf **mp)
+ip6flow_fastforward(struct mbuf *m)
 {
 	struct ip6flow *ip6f;
 	struct ip6_hdr *ip6;
 	struct rtentry *rt;
-	struct mbuf *m;
 	const struct sockaddr *dst;
 	int error;
 
@@ -223,7 +215,6 @@ ip6flow_fastforward(struct mbuf **mp)
 	if (!ip6_forwarding || ip6flow_inuse == 0)
 		return 0;
 
-	m = *mp;
 	/*
 	 * At least size of IPv6 Header?
 	 */
@@ -241,12 +232,10 @@ ip6flow_fastforward(struct mbuf **mp)
 				(max_linkhdr + 3) & ~3)) == NULL) {
 			return 0;
 		}
-		*mp = m;
 	} else if (__predict_false(m->m_len < sizeof(struct ip6_hdr))) {
 		if ((m = m_pullup(m, sizeof(struct ip6_hdr))) == NULL) {
 			return 0;
 		}
-		*mp = m;
 	}
 
 	ip6 = mtod(m, struct ip6_hdr *);
@@ -500,6 +489,7 @@ ip6flow_create(const struct route *ro, struct mbuf *m)
 	ip6f->ip6f_src = ip6->ip6_src;
 	ip6f->ip6f_flow = ip6->ip6_flow;
 	PRT_SLOW_ARM(ip6f->ip6f_timer, IP6FLOW_TIMER);
+	ip6f->ip6f_start = time_uptime;
 
 	/*
 	 * Insert into the approriate bucket of the flow table.

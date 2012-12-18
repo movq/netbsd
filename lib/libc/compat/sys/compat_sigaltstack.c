@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_sigaltstack.c,v 1.5 2012/03/20 17:06:00 matt Exp $	*/
+/*	$NetBSD: compat_sigaltstack.c,v 1.2 2008/04/28 20:22:59 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -31,20 +31,20 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: compat_sigaltstack.c,v 1.5 2012/03/20 17:06:00 matt Exp $");
+__RCSID("$NetBSD: compat_sigaltstack.c,v 1.2 2008/04/28 20:22:59 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define __LIBC12_SOURCE__
 
 #include <limits.h>
-#include <sys/time.h>
-#include <compat/sys/time.h>
 #include <signal.h>
 #include <compat/include/signal.h>
 #include <stddef.h>
 
 int
-sigaltstack(const struct sigaltstack13 *onss, struct sigaltstack13 *ooss)
+sigaltstack(onss, ooss)
+	const struct sigaltstack13 *onss;
+	struct sigaltstack13 *ooss;
 {
 	stack_t nss, oss;
 	int error;
@@ -60,7 +60,7 @@ sigaltstack(const struct sigaltstack13 *onss, struct sigaltstack13 *ooss)
 		if (oss.ss_size > INT_MAX)
 			ooss->ss_size = INT_MAX;
 		else
-			ooss->ss_size = (int)oss.ss_size;
+			ooss->ss_size = oss.ss_size;
 		ooss->ss_flags = oss.ss_flags;
 	}
 

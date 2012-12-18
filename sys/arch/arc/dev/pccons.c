@@ -1,4 +1,4 @@
-/*	$NetBSD: pccons.c,v 1.59 2011/07/01 19:25:41 dyoung Exp $	*/
+/*	$NetBSD: pccons.c,v 1.56 2008/09/13 17:13:57 tsutsui Exp $	*/
 /*	$OpenBSD: pccons.c,v 1.22 1999/01/30 22:39:37 imp Exp $	*/
 /*	NetBSD: pccons.c,v 1.89 1995/05/04 19:35:20 cgd Exp	*/
 
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.59 2011/07/01 19:25:41 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.56 2008/09/13 17:13:57 tsutsui Exp $");
 
 #include "opt_ddb.h"
 
@@ -97,7 +97,7 @@ __KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.59 2011/07/01 19:25:41 dyoung Exp $");
 #include <sys/proc.h>
 #include <sys/kauth.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/ic/pcdisplay.h>
 #include <machine/pccons.h>
@@ -349,7 +349,8 @@ kbc_get8042cmd(void)
  * Pass command byte to keyboard controller (8042).
  */
 int
-kbc_put8042cmd(uint8_t val)
+kbc_put8042cmd(val)
+	uint8_t val;
 {
 
 	if (!kbd_wait_output())
@@ -600,7 +601,7 @@ pcopen(dev_t dev, int flag, int mode, struct lwp *l)
 		return ENXIO;
 
 	if (!sc->sc_tty) {
-		tp = sc->sc_tty = tty_alloc();
+		tp = sc->sc_tty = ttymalloc();
 	}
 	else {
 		tp = sc->sc_tty;
@@ -638,7 +639,7 @@ pcclose(dev_t dev, int flag, int mode, struct lwp *l)
 	(*tp->t_linesw->l_close)(tp, flag);
 	ttyclose(tp);
 #ifdef notyet /* XXX */
-	tty_free(tp);
+	ttyfree(tp);
 #endif
 	return 0;
 }

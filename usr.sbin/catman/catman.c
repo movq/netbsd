@@ -1,4 +1,4 @@
-/*      $NetBSD: catman.c,v 1.34 2011/12/24 23:46:11 christos Exp $       */
+/*      $NetBSD: catman.c,v 1.28 2008/05/02 19:59:19 xtraeme Exp $       */
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -60,6 +60,7 @@ int dowhatis = 0;
 
 TAG *defp;	/* pointer to _default list */
 
+int		main(int, char * const *);
 static void	setdefentries(char *, char *, const char *);
 static void	uniquepath(void);
 static void	catman(void);
@@ -69,7 +70,7 @@ static void	setcatsuffix(char *, const char *, const char *);
 static void	makecat(const char *, const char *, const char *, const char *);
 static void	makewhatis(void);
 static void	dosystem(const char *);
-__dead static void	usage(void);
+static void	usage(void);
 
 
 int
@@ -163,7 +164,7 @@ setdefentries(char *m_path, char *m_add, const char *sections)
 			err(1, "malloc");
 		for (p = sections; *p;) {
 			i = snprintf(buf, sizeof(buf), "man%c", *p++);
-			for (; *p && !isdigit((unsigned char)*p) && i < (int)sizeof(buf) - 1; i++)
+			for (; *p && !isdigit((unsigned char)*p) && i < sizeof(buf) - 1; i++)
 				buf[i] = *p++;
 			buf[i] = '\0';
 			if (addentry(sectnewp, buf, 0) < 0)
@@ -524,7 +525,7 @@ splitentry(char *s, char *first, size_t firstlen, char *second,
 		;
 	if (*c == '\0')
 		return(0);
-	if ((size_t)(c - s + 1) > firstlen)
+	if (c - s + 1 > firstlen)
 		return(0);
 	strncpy(first, s, c-s);
 	first[c-s] = '\0';
@@ -557,22 +558,18 @@ setcatsuffix(char *catpage, const char *suffix, const char *crunchsuff)
 
 static void
 makecat(const char *manpage, const char *catpage, const char *buildcmd, 
-    const char *crunchcmd)
+	const char *crunchcmd)
 {
 	char crunchbuf[1024];
 	char sysbuf[2048];
-	size_t len;
 
-	len = snprintf(sysbuf, sizeof(sysbuf), buildcmd, manpage);
-	if (len > sizeof(sysbuf))
-		errx(1, "snprintf");
+	snprintf(sysbuf, sizeof(sysbuf), buildcmd, manpage);
 
 	if (*crunchcmd != '\0') {
 		snprintf(crunchbuf, sizeof(crunchbuf), crunchcmd, catpage);
-		snprintf(sysbuf + len, sizeof(sysbuf) - len, " | %s", 
-		    crunchbuf);
+		snprintf(sysbuf, sizeof(sysbuf), "%s | %s", sysbuf, crunchbuf);
 	} else {
-		snprintf(sysbuf + len, sizeof(sysbuf) - len, " > %s", catpage);
+		snprintf(sysbuf, sizeof(sysbuf), "%s > %s", sysbuf, catpage);
 	}
 
 	if (f_noprint == 0)

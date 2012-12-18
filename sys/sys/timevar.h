@@ -1,4 +1,4 @@
-/*	$NetBSD: timevar.h,v 1.32 2012/10/02 01:44:29 christos Exp $	*/
+/*	$NetBSD: timevar.h,v 1.23 2008/07/15 16:18:09 christos Exp $	*/
 
 /*
  *  Copyright (c) 2005, 2008 The NetBSD Foundation.
@@ -145,10 +145,7 @@ void	getnanotime(struct timespec *);
 void	getmicrotime(struct timeval *);
 
 /* Other functions */
-int	abstimeout2timo(struct timespec *, int *);
-void	adjtime1(const struct timeval *, struct timeval *, struct proc *);
-int	clock_getres1(clockid_t, struct timespec *);
-int	clock_gettime1(clockid_t, struct timespec *);
+int	adjtime1(const struct timeval *, struct timeval *, struct proc *);
 int	clock_settime1(struct proc *, clockid_t, const struct timespec *, bool);
 int	dogetitimer(struct proc *, int, struct itimerval *);
 int	dosetitimer(struct proc *, int, struct itimerval *);
@@ -156,7 +153,6 @@ int	dotimer_gettime(int, struct proc *, struct itimerspec *);
 int	dotimer_settime(int, struct itimerspec *, struct itimerspec *, int,
 	    struct proc *);
 int	tshzto(const struct timespec *);
-int	tshztoup(const struct timespec *);
 int	tvhzto(const struct timeval *);
 void	inittimecounter(void);
 int	itimerfix(struct timeval *);
@@ -165,8 +161,7 @@ int	ppsratecheck(struct timeval *, int *, int);
 int	ratecheck(struct timeval *, const struct timeval *);
 void	realtimerexpire(void *);
 int	settime(struct proc *p, struct timespec *);
-int	nanosleep1(struct lwp *, clockid_t, int, struct timespec *,
-	    struct timespec *);
+int	nanosleep1(struct lwp *l, struct timespec *, struct timespec *);
 int	settimeofday1(const struct timeval *, bool,
 	    const void *, struct lwp *, bool);
 int	timer_create1(timer_t *, clockid_t, struct sigevent *, copyin_t,
@@ -178,14 +173,13 @@ void	timers_free(struct proc *, int);
 void	timer_tick(struct lwp *, bool);
 int	tstohz(const struct timespec *);
 int	tvtohz(const struct timeval *);
-int	inittimeleft(struct timespec *, struct timespec *);
-int	gettimeleft(struct timespec *, struct timespec *);
+int	inittimeleft(struct timeval *, struct timeval *);
+int	gettimeleft(struct timeval *, struct timeval *);
 void	timerupcall(struct lwp *);
 void	time_init(void);
 void	time_init2(void);
-bool	time_wraps(struct timespec *, struct timespec *);
 
-extern volatile time_t time_second;	/* current second in the epoch */
-extern volatile time_t time_uptime;	/* system uptime in seconds */
+extern time_t time_second;	/* current second in the epoch */
+extern time_t time_uptime;	/* system uptime in seconds */
 
 #endif /* !_SYS_TIMEVAR_H_ */

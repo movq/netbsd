@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_iod.c,v 1.40 2012/04/29 20:27:31 dsl Exp $	*/
+/*	$NetBSD: smb_iod.c,v 1.29 2008/06/24 10:37:19 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_iod.c,v 1.40 2012/04/29 20:27:31 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_iod.c,v 1.29 2008/06/24 10:37:19 gmcgarry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,12 +62,11 @@ __KERNEL_RCSID(0, "$NetBSD: smb_iod.c,v 1.40 2012/04/29 20:27:31 dsl Exp $");
 
 #define	smb_iod_wakeup(iod)	wakeup(&(iod)->iod_flags)
 
-MALLOC_DEFINE(M_SMBIOD, "SMBIOD", "SMB network io daemon");
-MALLOC_DECLARE(M_SMBIOD);
+static MALLOC_DEFINE(M_SMBIOD, "SMBIOD", "SMB network io daemon");
 
 static int smb_iod_next;
 
-static bool smb_iod_sendall(struct smbiod *iod);
+static void smb_iod_sendall(struct smbiod *iod);
 static int  smb_iod_disconnect(struct smbiod *iod);
 static void smb_iod_thread(void *);
 
@@ -79,8 +78,7 @@ smb_iod_rqprocessed(struct smb_rq *rqp, int error)
 	rqp->sr_rpgen++;
 	rqp->sr_state = SMBRQ_NOTIFIED;
 	wakeup(&rqp->sr_state);
-	if (rqp->sr_timo > 0)
-		callout_stop(&rqp->sr_timo_ch);
+	callout_stop(&rqp->sr_timo_ch);
 	if (rqp->sr_recvcallback)
 		(*rqp->sr_recvcallback)(rqp->sr_recvarg);
 	SMBRQ_SUNLOCK(rqp);
@@ -270,9 +268,11 @@ smb_iod_sendrq(struct smbiod *iod, struct smb_rq *rqp)
 	m = m_copym(rqp->sr_rq.mb_top, 0, M_COPYALL, M_WAIT);
 	error = rqp->sr_lerror = (m) ? SMB_TRAN_SEND(vcp, m, l) : ENOBUFS;
 	if (error == 0) {
-		if (rqp->sr_timo > 0)
+		if (rqp->sr_timo > 0) {
+			callout_init(&rqp->sr_timo_ch, 0);
 			callout_reset(&rqp->sr_timo_ch, rqp->sr_timo,
 				smb_iod_rqtimedout, rqp);
+		}
 
 		if (rqp->sr_flags & SMBR_NOWAIT) {
 			/* caller doesn't want to wait, flag as processed */
@@ -346,7 +346,7 @@ smb_iod_recvall(struct smbiod *iod)
 		 */
 		m_dumpm(m);
 		hp = mtod(m, u_char*);
-		if (memcmp(hp, SMB_SIGNATURE, SMB_SIGLEN) != 0) {
+		if (bcmp(hp, SMB_SIGNATURE, SMB_SIGLEN) != 0) {
 			m_freem(m);
 			continue;
 		}
@@ -556,12 +556,11 @@ smb_iod_waitrq(struct smb_rq *rqp)
 }
 
 
-static bool
+static void
 smb_iod_sendall(struct smbiod *iod)
 {
 	struct smb_rq *rqp;
 	int herror;
-	bool sentany = false;
 
 	herror = 0;
 	/*
@@ -582,14 +581,11 @@ smb_iod_sendall(struct smbiod *iod)
 
 			if (__predict_false(herror != 0))
 				break;
-			sentany = true;
 		}
 	}
 	SMB_IOD_RQUNLOCK(iod);
 	if (herror == ENOTCONN)
 		smb_iod_dead(iod);
-
-	return sentany;
 }
 
 /*
@@ -652,19 +648,8 @@ smb_iod_main(struct smbiod *iod)
 		}
 	}
 #endif
-
-	/*
-	 * Do a send/receive cycle once and then as many times
-	 * afterwards as we can send out new data.  This is to make
-	 * sure we got all data sent which might have ended up in the
-	 * queue during the receive phase (which might block releasing
-	 * the kernel lock).
-	 */
 	smb_iod_sendall(iod);
 	smb_iod_recvall(iod);
-	while (smb_iod_sendall(iod)) {
-		smb_iod_recvall(iod);
-	}
 }
 
 void
@@ -685,11 +670,7 @@ smb_iod_thread(void *arg)
 		if (iod->iod_flags & SMBIOD_SHUTDOWN)
 			break;
 		SMBIODEBUG(("going to sleep\n"));
-		/*
-		 * technically wakeup every hz is unnecessary, but keep
-		 * this here until smb has been made mpsafe.
-		 */
-		tsleep(&iod->iod_flags, PSOCK, "smbidle", hz);
+		tsleep(&iod->iod_flags, PSOCK, "smbidle", 0);
 	}
 	splx(s);
 	kthread_exit(0);
@@ -714,8 +695,13 @@ smb_iod_create(struct smb_vc *vcp)
 	SIMPLEQ_INIT(&iod->iod_rqlist);
 	smb_sl_init(&iod->iod_evlock, "smbevl");
 	SIMPLEQ_INIT(&iod->iod_evlist);
+#ifdef __NetBSD__
 	error = kthread_create(PRI_NONE, 0, NULL, smb_iod_thread, iod,
 	   &iod->iod_l, "smbiod%d", iod->iod_id);
+#else
+	error = kthread_create(smb_iod_thread, iod, &iod->iod_p,
+	    RFNOWAIT, "smbiod%d", iod->iod_id);
+#endif
 	if (error) {
 		SMBIODEBUG(("can't start smbiod: %d", error));
 		free(iod, M_SMBIOD);
@@ -740,8 +726,10 @@ smb_iod_init(void)
 	return 0;
 }
 
+#ifndef __NetBSD__
 int
 smb_iod_done(void)
 {
 	return 0;
 }
+#endif

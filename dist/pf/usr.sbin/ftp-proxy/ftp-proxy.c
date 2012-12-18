@@ -1,4 +1,4 @@
-/*	$NetBSD: ftp-proxy.c,v 1.4 2011/02/02 02:20:26 rmind Exp $ */
+/*	$NetBSD: ftp-proxy.c,v 1.2 2008/06/18 09:06:26 yamt Exp $ */
 /*	$OpenBSD: ftp-proxy.c,v 1.15 2007/08/15 15:18:02 camield Exp $ */
 
 /*
@@ -44,6 +44,10 @@
 #include <vis.h>
 
 #include "filter.h"
+
+#if defined(__NetBSD__) && defined(WITH_IPF)
+#include "ipf.h"
+#endif /* __NetBSD__ && WITH_IPF */
 
 #define CONNECT_TIMEOUT	30
 #define MIN_PORT	1024
@@ -103,7 +107,7 @@ void	client_read(struct bufferevent *, void *);
 int	drop_privs(void);
 void	end_session(struct session *);
 int	exit_daemon(void);
-int	get_line(char *, size_t *);
+int	getline(char *, size_t *);
 void	handle_connection(const int, short, void *);
 void	handle_signal(int, short, void *);
 struct session * init_session(void);
@@ -130,8 +134,9 @@ int anonymous_only, daemonize, id_count, ipv6_mode, loglevel, max_sessions,
     rfc_mode, session_count, timeout, verbose;
 extern char *__progname;
 
-/* Default: PF operations. */
-static const ftp_proxy_ops_t *	fops = &pf_fprx_ops;
+#if defined(__NetBSD__) && defined(WITH_IPF)
+int ipf_enabled = 0;
+#endif /* __NetBSD__ && WITH_IPF */
 
 void
 client_error(struct bufferevent *bufev, short what, void *arg)
@@ -252,7 +257,7 @@ client_read(struct bufferevent *bufev, void *arg)
 		    buf_avail);
 		s->cbuf_valid += nread;
 
-		while ((n = get_line(s->cbuf, &s->cbuf_valid)) > 0) {
+		while ((n = getline(s->cbuf, &s->cbuf_valid)) > 0) {
 			logmsg(LOG_DEBUG, "#%d client: %s", s->id, linebuf);
 			if (!client_parse(s)) {
 				end_session(s);
@@ -316,11 +321,11 @@ end_session(struct session *s)
 
 	/* Remove rulesets by commiting empty ones. */
 	error = 0;
-	if (fops->prepare_commit(s->id) == -1)
+	if (prepare_commit(s->id) == -1)
 		error = errno;
-	else if (fops->do_commit() == -1) {
+	else if (do_commit() == -1) {
 		error = errno;
-		fops->do_rollback();
+		do_rollback();
 	}
 	if (error)
 		logmsg(LOG_ERR, "#%d pf rule removal failed: %s", s->id,
@@ -351,7 +356,7 @@ exit_daemon(void)
 }
 
 int
-get_line(char *buf, size_t *valid)
+getline(char *buf, size_t *valid)
 {
 	size_t i;
 
@@ -446,7 +451,7 @@ handle_connection(const int listen_fd, short event, void *ev)
 		    strerror(errno));
 		goto fail;
 	}
-	if (fops->server_lookup(client_sa, client_to_proxy_sa, server_sa)) {
+	if (server_lookup(client_sa, client_to_proxy_sa, server_sa) != 0) {
 	    	logmsg(LOG_CRIT, "#%d server lookup failed (no rdr?)", s->id);
 		goto fail;
 	}
@@ -638,12 +643,11 @@ main(int argc, char *argv[])
 	id_count	= 1;
 	session_count	= 0;
 
-#if defined(__NetBSD__)
-/* Note: both for IPFilter and NPF. */
-#define	NBSD_OPTS	"i:N:"
-#endif
-	while ((ch = getopt(argc, argv,
-	    "6Aa:b:D:d" NBSD_OPTS "m:P:p:q:R:rT:t:v")) != -1) {
+#if defined(__NetBSD__) && defined(WITH_IPF)
+	while ((ch = getopt(argc, argv, "6Aa:b:D:di:m:P:p:q:R:rT:t:v")) != -1) {
+#else
+	while ((ch = getopt(argc, argv, "6Aa:b:D:dm:P:p:q:R:rT:t:v")) != -1) {
+#endif /* __NetBSD__ && WITH_IPF */
 		switch (ch) {
 		case '6':
 			ipv6_mode = 1;
@@ -666,22 +670,16 @@ main(int argc, char *argv[])
 		case 'd':
 			daemonize = 0;
 			break;
-		case 'i':
 #if defined(__NetBSD__) && defined(WITH_IPF)
-			fops = &ipf_fprx_ops;
+		case 'i':
+			ipf_enabled = 1;
 			netif = optarg;
-#endif
 			break;
+#endif /* __NetBSD__ && WITH_IPF */
 		case 'm':
 			max_sessions = strtonum(optarg, 1, 500, &errstr);
 			if (errstr)
 				errx(1, "max sessions %s", errstr);
-			break;
-		case 'N':
-#if defined(__NetBSD__) && defined(WITH_NPF)
-			fops = &npf_fprx_ops;
-			npfopts = optarg;
-#endif
 			break;
 		case 'P':
 			fixed_server_port = optarg;
@@ -785,7 +783,7 @@ main(int argc, char *argv[])
 	freeaddrinfo(res);
 
 	/* Initialize pf. */
-	fops->init_filter(qname, tagname, verbose);
+	init_filter(qname, tagname, verbose);
 
 	if (daemonize) {
 		if (daemon(0, 0) == -1)
@@ -1008,7 +1006,7 @@ allow_data_connection(struct session *s)
 		logmsg(LOG_INFO, "#%d passive: client to server port %d"
 		    " via port %d", s->id, s->port, s->proxy_port);
 
-		if (fops->prepare_commit(s->id) == -1)
+		if (prepare_commit(s->id) == -1)
 			goto fail;
 		prepared = 1;
 
@@ -1017,23 +1015,22 @@ allow_data_connection(struct session *s)
 
 		/* rdr from $client to $orig_server port $proxy_port -> $server
 		    port $port */
-		if (fops->add_rdr(s->id, client_sa, orig_sa, s->proxy_port,
+		if (add_rdr(s->id, client_sa, orig_sa, s->proxy_port,
 		    server_sa, s->port) == -1)
 			goto fail;
 
 		/* nat from $client to $server port $port -> $proxy */
-		if (fops->add_nat(s->id, client_sa, server_sa, s->port,
-		    proxy_sa, PF_NAT_PROXY_PORT_LOW, PF_NAT_PROXY_PORT_HIGH)
-		    == -1)
+		if (add_nat(s->id, client_sa, server_sa, s->port, proxy_sa,
+		    PF_NAT_PROXY_PORT_LOW, PF_NAT_PROXY_PORT_HIGH) == -1)
 			goto fail;
 
 		/* pass in from $client to $server port $port */
-		if (fops->add_filter(s->id, PF_IN, client_sa, server_sa,
+		if (add_filter(s->id, PF_IN, client_sa, server_sa,
 		    s->port) == -1)
 			goto fail;
 
 		/* pass out from $proxy to $server port $port */
-		if (fops->add_filter(s->id, PF_OUT, proxy_sa, server_sa,
+		if (add_filter(s->id, PF_OUT, proxy_sa, server_sa,
 		    s->port) == -1)
 			goto fail;
 	}
@@ -1043,49 +1040,49 @@ allow_data_connection(struct session *s)
 		logmsg(LOG_INFO, "#%d active: server to client port %d"
 		    " via port %d", s->id, s->port, s->proxy_port);
 
-		if (fops->prepare_commit(s->id) == -1)
+		if (prepare_commit(s->id) == -1)
 			goto fail;
 		prepared = 1;
 
 		/* rdr from $server to $proxy port $proxy_port -> $client port
 		    $port */
-		if (fops->add_rdr(s->id, server_sa, proxy_sa,
-		    s->proxy_port, client_sa, s->port) == -1)
+		if (add_rdr(s->id, server_sa, proxy_sa, s->proxy_port,
+		    client_sa, s->port) == -1)
 			goto fail;
 
 		/* nat from $server to $client port $port -> $orig_server port
 		    $natport */
 		if (rfc_mode && s->cmd == CMD_PORT) {
 			/* Rewrite sourceport to RFC mandated 20. */
-			if (fops->add_nat(s->id, server_sa, client_sa,
-			    s->port, orig_sa, 20, 20) == -1)
+			if (add_nat(s->id, server_sa, client_sa, s->port,
+			    orig_sa, 20, 20) == -1)
 				goto fail;
 		} else {
 			/* Let pf pick a source port from the standard range. */
-			if (fops->add_nat(s->id, server_sa, client_sa,
-			    s->port, orig_sa, PF_NAT_PROXY_PORT_LOW,
+			if (add_nat(s->id, server_sa, client_sa, s->port,
+			    orig_sa, PF_NAT_PROXY_PORT_LOW,
 			    PF_NAT_PROXY_PORT_HIGH) == -1)
 			    	goto fail;
 		}
 
 		/* pass in from $server to $client port $port */
-		if (fops->add_filter(s->id, PF_IN, server_sa, client_sa,
-		    s->port) == -1)
+		if (add_filter(s->id, PF_IN, server_sa, client_sa, s->port) ==
+		    -1)
 			goto fail;
 
 		/* pass out from $orig_server to $client port $port */
-		if (fops->add_filter(s->id, PF_OUT, orig_sa, client_sa,
-		    s->port) == -1)
+		if (add_filter(s->id, PF_OUT, orig_sa, client_sa, s->port) ==
+		    -1)
 			goto fail;
 	}
 
 	/* Commit rules if they were prepared. */
-	if (prepared && (fops->do_commit() == -1)) {
+	if (prepared && (do_commit() == -1)) {
 		if (errno != EBUSY)
 			goto fail;
 		/* One more try if busy. */
 		usleep(5000);
-		if (fops->do_commit() == -1)
+		if (do_commit() == -1)
 			goto fail;
 	}
 
@@ -1097,7 +1094,7 @@ allow_data_connection(struct session *s)
  fail:
 	logmsg(LOG_CRIT, "#%d pf operation failed: %s", s->id, strerror(errno));
 	if (prepared)
-		fops->do_rollback();
+		do_rollback();
 	return (0);
 }
 	
@@ -1116,7 +1113,7 @@ server_read(struct bufferevent *bufev, void *arg)
 		    buf_avail);
 		s->sbuf_valid += nread;
 
-		while ((n = get_line(s->sbuf, &s->sbuf_valid)) > 0) {
+		while ((n = getline(s->sbuf, &s->sbuf_valid)) > 0) {
 			logmsg(LOG_DEBUG, "#%d server: %s", s->id, linebuf);
 			if (!server_parse(s)) {
 				end_session(s);
@@ -1165,14 +1162,9 @@ usage(void)
 {
 	fprintf(stderr, "usage: %s [-6Adrv] [-a address] [-b address]"
 	    " [-D level] [-m maxsessions]\n                 [-P port]"
-#if defined(__NetBSD__)
-#if defined(WITH_IPF)
+#if defined(__NetBSD__) && defined(WITH_IPF)
 	    " [-i netif]"
-#endif
-#if defined(WITH_NPF)
-	    " [-N netif:addr:port]"
-#endif
-#endif
+#endif /* __NetBSD__ && WITH_IPF */
 	    " [-p port] [-q queue] [-R address] [-T tag] [-t timeout]\n",
 	    __progname);
 

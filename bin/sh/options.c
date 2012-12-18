@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.43 2012/03/20 18:42:29 matt Exp $	*/
+/*	$NetBSD: options.c,v 1.40 2005/12/13 17:44:18 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)options.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: options.c,v 1.43 2012/03/20 18:42:29 matt Exp $");
+__RCSID("$NetBSD: options.c,v 1.40 2005/12/13 17:44:18 dsl Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,7 +49,6 @@ __RCSID("$NetBSD: options.c,v 1.43 2012/03/20 18:42:29 matt Exp $");
 #define DEFINE_OPTIONS
 #include "options.h"
 #undef DEFINE_OPTIONS
-#include "builtins.h"
 #include "nodes.h"	/* for other header files */
 #include "eval.h"
 #include "jobs.h"
@@ -87,7 +86,7 @@ STATIC int getopts(char *, char *, char **, char ***, char **);
 void
 procargs(int argc, char **argv)
 {
-	size_t i;
+	int i;
 
 	argptr = argv;
 	if (argc > 0)
@@ -198,9 +197,9 @@ options(int cmdline)
 }
 
 static void
-set_opt_val(size_t i, int val)
+set_opt_val(int i, int val)
 {
-	size_t j;
+	int j;
 	int flag;
 
 	if (val && (flag = optlist[i].opt_set)) {
@@ -219,7 +218,7 @@ set_opt_val(size_t i, int val)
 STATIC void
 minus_o(char *name, int val)
 {
-	size_t i;
+	int i;
 
 	if (name == NULL) {
 		if (val) {
@@ -250,7 +249,7 @@ minus_o(char *name, int val)
 STATIC void
 setoption(int flag, int val)
 {
-	size_t i;
+	int i;
 
 	for (i = 0; i < NOPTS; i++)
 		if (optlist[i].letter == flag) {
@@ -372,7 +371,8 @@ setcmd(int argc, char **argv)
 
 
 void
-getoptsreset(const char *value)
+getoptsreset(value)
+	const char *value;
 {
 	if (number(value) == 1) {
 		shellparam.optnext = NULL;

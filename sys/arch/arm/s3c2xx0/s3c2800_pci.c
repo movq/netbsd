@@ -1,4 +1,4 @@
-/*	$NetBSD: s3c2800_pci.c,v 1.19 2012/10/27 17:17:40 chs Exp $	*/
+/*	$NetBSD: s3c2800_pci.c,v 1.13 2008/01/06 01:37:56 matt Exp $	*/
 
 /*
  * Copyright (c) 2002 Fujitsu Component Limited
@@ -100,7 +100,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: s3c2800_pci.c,v 1.19 2012/10/27 17:17:40 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: s3c2800_pci.c,v 1.13 2008/01/06 01:37:56 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -111,7 +111,7 @@ __KERNEL_RCSID(0, "$NetBSD: s3c2800_pci.c,v 1.19 2012/10/27 17:17:40 chs Exp $")
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/s3c2xx0/s3c2800reg.h>
 #include <arm/s3c2xx0/s3c2800var.h>
@@ -137,15 +137,14 @@ __KERNEL_RCSID(0, "$NetBSD: s3c2800_pci.c,v 1.19 2012/10/27 17:17:40 chs Exp $")
 #define BUS0_DEV_MIN	1
 #define BUS0_DEV_MAX	21
 
-void	s3c2800_pci_attach_hook(device_t, device_t, struct pcibus_attach_args *);
+void	s3c2800_pci_attach_hook(struct device *, struct device *,
+			        struct pcibus_attach_args *);
 int	s3c2800_pci_bus_maxdevs(void *, int);
 pcitag_t s3c2800_pci_make_tag(void *, int, int, int);
 void	s3c2800_pci_decompose_tag(void *, pcitag_t, int *, int *, int *);
 pcireg_t s3c2800_pci_conf_read(void *, pcitag_t, int);
 void	s3c2800_pci_conf_write(void *, pcitag_t, int, pcireg_t);
-void	s3c2800_pci_conf_interrupt(void *, int, int, int, int, int *);
-int	s3c2800_pci_intr_map(const struct pci_attach_args *,
-	    pci_intr_handle_t *);
+int	s3c2800_pci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
 const char *s3c2800_pci_intr_string(void *, pci_intr_handle_t);
 const struct evcnt *s3c2800_pci_intr_evcnt(void *, pci_intr_handle_t);
 void *s3c2800_pci_intr_establish(void *, pci_intr_handle_t, int,
@@ -163,7 +162,7 @@ struct sspci_irq_handler {
 };
 
 struct sspci_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_reg_ioh;
@@ -179,8 +178,8 @@ struct sspci_softc {
 	void *sc_softinterrupt;
 };
 
-static int sspci_match(device_t, cfdata_t, void *aux);
-static void sspci_attach(device_t, device_t, void *);
+static int sspci_match(struct device *, struct cfdata *, void *aux);
+static void sspci_attach(struct device *, struct device *, void *);
 
 static int sspci_bs_map(void *, bus_addr_t, bus_size_t, int, 
 			     bus_space_handle_t *);
@@ -189,7 +188,7 @@ static int sspci_intr(void *);
 static void sspci_softintr(void *);
 
 /* attach structures */
-CFATTACH_DECL_NEW(sspci, sizeof(struct sspci_softc), sspci_match, sspci_attach,
+CFATTACH_DECL(sspci, sizeof(struct sspci_softc), sspci_match, sspci_attach,
     NULL, NULL);
 
 
@@ -206,11 +205,7 @@ struct arm32_pci_chipset sspci_chipset = {
 	s3c2800_pci_intr_string,
 	s3c2800_pci_intr_evcnt,
 	s3c2800_pci_intr_establish,
-	s3c2800_pci_intr_disestablish,
-#ifdef __HAVE_PCI_CONF_HOOK
-	NULL,
-#endif
-	s3c2800_pci_conf_interrupt,
+	s3c2800_pci_intr_disestablish
 };
 
 
@@ -221,15 +216,15 @@ struct arm32_pci_chipset sspci_chipset = {
 struct bus_space sspci_io_tag, sspci_mem_tag;
 
 static int
-sspci_match(device_t parent, cfdata_t match, void *aux)
+sspci_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	return 1;
 }
 
 static void
-sspci_attach(device_t parent, device_t self, void *aux)
+sspci_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct sspci_softc *sc = device_private(self);
+	struct sspci_softc *sc = (struct sspci_softc *) self;
 	struct s3c2xx0_attach_args *aa = aux;
 	bus_space_tag_t iot;
 	bus_dma_tag_t pci_dma_tag;
@@ -242,7 +237,6 @@ sspci_attach(device_t parent, device_t self, void *aux)
 #define FAIL(which)  do { \
 	error_on=(which); goto abort; }while(/*CONSTCOND*/0)
 
-	sc->sc_dev = self;
 	iot = sc->sc_iot = aa->sa_iot;
 	if (bus_space_map(iot, S3C2800_PCICTL_BASE,
 		S3C2800_PCICTL_SIZE, 0, &sc->sc_reg_ioh))
@@ -271,7 +265,7 @@ sspci_attach(device_t parent, device_t self, void *aux)
 
 #if defined(PCI_NETBSD_CONFIGURE)
 	if (sspci_init_controller(sc)) {
-		printf("%s: failed to initialize controller\n", device_xname(self));
+		printf("%s: failed to initialize controller\n", self->dv_xname);
 		return;
 	}
 #endif
@@ -293,15 +287,15 @@ sspci_attach(device_t parent, device_t self, void *aux)
 		    sc->sc_reg_ioh, PCI_CLASS_REG);
 
 		pci_devinfo(id_reg, class_reg, 1, buf, sizeof(buf));
-		printf("%s: %s\n", device_xname(self), buf);
+		printf("%s: %s\n", self->dv_xname, buf);
 	}
 
 #if defined(PCI_NETBSD_CONFIGURE)
 	ioext = extent_create("pciio", 0x100, S3C2800_PCI_IOSPACE_SIZE - 0x100,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 
 	memext = extent_create("pcimem", 0, S3C2800_PCI_MEMSPACE_SIZE,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 
 	sspci_chipset.pc_conf_v = (void *) sc;
 	sspci_chipset.pc_intr_v = (void *) sc;
@@ -330,7 +324,7 @@ sspci_attach(device_t parent, device_t self, void *aux)
 	pci_pba.pba_memt = &sspci_mem_tag;
 	pci_pba.pba_dmat = pci_dma_tag;
 	pci_pba.pba_dmat64 = NULL;
-	pci_pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
+	pci_pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
 	pci_pba.pba_bus = 0;
 	pci_pba.pba_bridgetag = NULL;
 
@@ -341,7 +335,7 @@ sspci_attach(device_t parent, device_t self, void *aux)
 #undef FAIL
 abort:
 	panic("%s: map failed (%s)",
-	    device_xname(self), error_on);
+	    self->dv_xname, error_on);
 }
 
 
@@ -388,10 +382,11 @@ sspci_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int flag,
 
 
 void
-s3c2800_pci_conf_interrupt(void *v, int bus, int dev, int ipin, int swiz, int *iline)
+pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int func,
+		   int swiz, int *iline)
 {
 #ifdef PCI_DEBUG
-	printf("pci_conf_interrupt(v(%p), bus(%d), dev(%d), ipin(%d), swiz(%d), *iline(%p)\n", v, bus, dev, ipin, swiz, iline);
+	printf("pci_conf_interrupt(pc(%lx), bus(%d), dev(%d), func(%d), swiz(%d), *iline(%p)\n", (unsigned long) pc, bus, dev, func, swiz, iline);
 #endif
 	if (bus == 0) {
 		*iline = dev;
@@ -401,7 +396,7 @@ s3c2800_pci_conf_interrupt(void *v, int bus, int dev, int ipin, int swiz, int *i
 }
 
 void
-s3c2800_pci_attach_hook(device_t parent, device_t self,
+s3c2800_pci_attach_hook(struct device * parent, struct device * self,
 			struct pcibus_attach_args * pba)
 {
 
@@ -550,7 +545,7 @@ s3c2800_pci_intr_disestablish(void *pcv, void *cookie)
 }
 
 int
-s3c2800_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+s3c2800_pci_intr_map(struct pci_attach_args * pa, pci_intr_handle_t * ihp)
 {
 #ifdef PCI_DEBUG
 	int pin = pa->pa_intrpin;
@@ -715,7 +710,7 @@ sspci_intr(void *arg)
 			if ((errors & (1 << i)) == 0)
 				continue;
 
-			printf("%s: %s\n", device_xname(sc->sc_dev),
+			printf("%s: %s\n", sc->sc_dev.dv_xname,
 			    pci_abnormal_error_name[i > 4 ? 5 : i]);
 
 			errors &= ~(1 << i);

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.28 2012/10/20 14:53:37 kiyohara Exp $	*/
+/*	$NetBSD: locore.S,v 1.16 2008/02/05 22:31:48 garbled Exp $	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
 /*
@@ -33,9 +33,9 @@
  */
 
 #include "opt_ddb.h"
+#include "fs_kernfs.h"
 #include "opt_ipkdb.h"
 #include "opt_lockdebug.h"
-#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_ppcparam.h"
 #include "assym.h"
@@ -44,13 +44,14 @@
 #include <sys/syscall.h>
 
 #include <machine/param.h>
+#include <machine/vmparam.h>
+#include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
+#define _NOREGNAMES
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
-#include <powerpc/oea/hid.h>
-#include <powerpc/oea/spr.h>
 
 /*
  * Some instructions gas doesn't understand (yet?)
@@ -64,6 +65,8 @@ GLOBAL(startsym)
 	.long	0			/* start symbol table */
 GLOBAL(endsym)
 	.long	0			/* end symbol table */
+GLOBAL(proc0paddr)
+	.long	0			/* proc0 p_addr */
 GLOBAL(oeacpufeat)
 	.long	0				/* cpu features */
 
@@ -121,42 +124,36 @@ __start:
 	cmpwi	0, 9, 0		/* 0 if read by CPU 0, 1 if read by CPU 1 */
 	bne	__start_cpu1
 	b	__start_cpu0
-	nop
 
 __start_cpu1:
-	/* Disable data and instruction caches for spinup. */
-	li	8,0
-	mtspr	SPR_HID0,8
+#ifdef CPU1_SLEEP
+	lis	8, 0x0020	/* SLEEP */
+	mfspr	7, SPR_HID0	/* get HID0 */
+	or	7, 7, 8
+	mtspr	SPR_HID0, 7	/* set HID0 */
+	lis	8, 0x0004	/* POW */
 	sync
-	isync
-
-#ifdef MULTIPROCESSOR
-	li	3, 0x1		/* CPU ID 1 */
-	ba	cpu_spinstart	/* cpu_spinstart(CPU ID) */
+	mtmsr	8
+	isync			/* zzz... */
 #else
-1:
-	b	1b
+	addi	9, 9, 1
+	lis	7, 0x100
+__start_cpu1_loop:
+	subi	7, 7, 1
+	cmpi	0, 7, 0
+	bne	__start_cpu1_loop
+	lis	8, 0x8000
+	ori	8, 8, 0x0c00
+	lis	9,_C_LABEL(cpu_info)+CI_CPL@ha
+	lwz	9,_C_LABEL(cpu_info)+CI_CPL@l(9)
+	stb	9, 0(8)
 #endif
-	nop
+	b	__start_cpu1
 
 __start_cpu0:
-	/* Enable data and instruction caches */
-	mfspr	8,SPR_HID0
-	andi.	8,8,(HID0_ICE|HID0_DCE)@l
-	andi.	0,8,HID0_DCE
-	ori	7,8,HID0_ICFI
-	bne	1f
-	ori	7,7,HID0_DCFI
-1:
-	sync
-	mtspr	SPR_HID0,7
-	sync
-	mtspr	SPR_HID0,8
-	sync
-	isync
 
 /* compute end of kernel memory */
-#if defined(DDB) || NKSYMS || defined(MODULAR)
+#if defined(DDB) || defined(KERNFS) || NKSYMS || defined(LKM)
 	lis	7,_C_LABEL(startsym)@ha
 	addi	7,7,_C_LABEL(startsym)@l
 	stw	3,0(7)
@@ -178,21 +175,18 @@ __start_cpu0:
 
 loop:	b	loop			/* XXX not reached */
 
+	.globl	_C_LABEL(enable_intr)
+_C_LABEL(enable_intr):
+	mfmsr	3
+	ori	3,3,PSL_EE@l
+	mtmsr	3
+	blr
 
-	.globl	_C_LABEL(cache_flush_invalidate_all)
-_C_LABEL(cache_flush_invalidate_all):
-	mtctr	3
-	li	4,0x0
-loop1:	lwz	5,0(4)
-	addi	4,4,32
-	bdnz	loop1
-
-	mtctr	3
-	li	4,0x0
-loop2:	dcbf	0,4
-	addi	4,4,32
-	bdnz	loop2
-
+	.globl	_C_LABEL(disable_intr)
+_C_LABEL(disable_intr):
+	mfmsr	3
+	andi.	3,3,~PSL_EE@l
+	mtmsr	3
 	blr
 
 	.globl	_C_LABEL(debug_led)

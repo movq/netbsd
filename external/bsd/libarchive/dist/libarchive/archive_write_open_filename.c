@@ -24,7 +24,7 @@
  */
 
 #include "archive_platform.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/archive_write_open_filename.c 191165 2009-04-17 00:39:35Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/archive_write_open_filename.c,v 1.20 2008/02/19 05:46:58 kientzle Exp $");
 
 #ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>
@@ -71,18 +71,24 @@ archive_write_open_filename(struct archive *a, const char *filename)
 {
 	struct write_file_data *mine;
 
-	if (filename == NULL || filename[0] == '\0')
-		return (archive_write_open_fd(a, 1));
-
-	mine = (struct write_file_data *)malloc(sizeof(*mine) + strlen(filename));
-	if (mine == NULL) {
-		archive_set_error(a, ENOMEM, "No memory");
-		return (ARCHIVE_FATAL);
+	if (filename == NULL || filename[0] == '\0') {
+		mine = (struct write_file_data *)malloc(sizeof(*mine));
+		if (mine == NULL) {
+			archive_set_error(a, ENOMEM, "No memory");
+			return (ARCHIVE_FATAL);
+		}
+		mine->filename[0] = '\0'; /* Record that we're using stdout. */
+	} else {
+		mine = (struct write_file_data *)malloc(sizeof(*mine) + strlen(filename));
+		if (mine == NULL) {
+			archive_set_error(a, ENOMEM, "No memory");
+			return (ARCHIVE_FATAL);
+		}
+		strcpy(mine->filename, filename);
 	}
-	strcpy(mine->filename, filename);
 	mine->fd = -1;
 	return (archive_write_open(a, mine,
-		file_open, file_write, file_close));
+		    file_open, file_write, file_close));
 }
 
 static int
@@ -98,11 +104,21 @@ file_open(struct archive *a, void *client_data)
 	/*
 	 * Open the file.
 	 */
-	mine->fd = open(mine->filename, flags, 0666);
-	if (mine->fd < 0) {
-		archive_set_error(a, errno, "Failed to open '%s'",
-		    mine->filename);
-		return (ARCHIVE_FATAL);
+	if (mine->filename[0] != '\0') {
+		mine->fd = open(mine->filename, flags, 0666);
+		if (mine->fd < 0) {
+			archive_set_error(a, errno, "Failed to open '%s'",
+			    mine->filename);
+			return (ARCHIVE_FATAL);
+		}
+	} else {
+		/*
+		 * NULL filename is stdout.
+		 */
+		mine->fd = 1;
+		/* By default, pad archive when writing to stdout. */
+		if (archive_write_get_bytes_in_last_block(a) < 0)
+			archive_write_set_bytes_in_last_block(a, 0);
 	}
 
 	if (fstat(mine->fd, &st) != 0) {
@@ -156,7 +172,8 @@ file_close(struct archive *a, void *client_data)
 	struct write_file_data	*mine = (struct write_file_data *)client_data;
 
 	(void)a; /* UNUSED */
-	close(mine->fd);
+	if (mine->filename[0] != '\0')
+		close(mine->fd);
 	free(mine);
 	return (ARCHIVE_OK);
 }

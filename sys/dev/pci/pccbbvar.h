@@ -1,5 +1,4 @@
-/*	$NetBSD: pccbbvar.h,v 1.41 2010/04/20 23:39:11 dyoung Exp $	*/
-
+/*	$NetBSD: pccbbvar.h,v 1.37 2008/06/26 20:57:10 drochner Exp $	*/
 /*
  * Copyright (c) 1999 HAYAKAWA Koichi.  All rights reserved.
  *
@@ -11,6 +10,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by HAYAKAWA Koichi.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,9 +35,6 @@
 
 #ifndef _DEV_PCI_PCCBBVAR_H_
 #define	_DEV_PCI_PCCBBVAR_H_
-
-#include <sys/mutex.h>
-#include <sys/condvar.h>
 
 #define	PCIC_FLAG_SOCKETP	0x0001
 #define	PCIC_FLAG_CARDP		0x0002
@@ -89,8 +90,10 @@ struct pccbb_softc {
 	bus_space_tag_t sc_memt;
 	bus_dma_tag_t sc_dmat;
 
+#if rbus
 	rbus_tag_t sc_rbus_iot;		/* rbus for i/o donated from parent */
 	rbus_tag_t sc_rbus_memt;	/* rbus for mem donated from parent */
+#endif
 
 	bus_space_tag_t sc_base_memt;
 	bus_space_handle_t sc_base_memh;
@@ -130,13 +133,10 @@ struct pccbb_softc {
 #define	PCCBB_PCMCIA_MEM_32	0x02	/* 32-bit memory address ready */
 
 	volatile int sc_pwrcycle;
-	kcondvar_t sc_pwr_cv;
-	kmutex_t sc_pwr_mtx;
 
 	/* interrupt handler list on the bridge */
 	LIST_HEAD(, pccbb_intrhand_list) sc_pil;
-	/* can i call intr handler for child device? */
-	bool sc_pil_intr_enable;
+	int sc_pil_intr_enable;	/* can i call intr handler for child device? */
 };
 
 /*

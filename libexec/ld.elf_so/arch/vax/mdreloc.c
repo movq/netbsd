@@ -1,16 +1,17 @@
-/*	$NetBSD: mdreloc.c,v 1.28 2011/03/25 18:07:07 joerg Exp $	*/
+/*	$NetBSD: mdreloc.c,v 1.23.4.1 2012/03/17 18:28:36 bouyer Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mdreloc.c,v 1.28 2011/03/25 18:07:07 joerg Exp $");
+__RCSID("$NetBSD: mdreloc.c,v 1.23.4.1 2012/03/17 18:28:36 bouyer Exp $");
 #endif /* not lint */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mdreloc.c,v 1.28 2011/03/25 18:07:07 joerg Exp $");
+__RCSID("$NetBSD: mdreloc.c,v 1.23.4.1 2012/03/17 18:28:36 bouyer Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
+#include <sys/stat.h>
 
 #include "debug.h"
 #include "rtld.h"
@@ -45,7 +46,7 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 			break;
 		}
 	}
-	relalim = (const Elf_Rela *)((const uint8_t *)rela + relasz);
+	relalim = (const Elf_Rela *)((caddr_t)rela + relasz);
 	for (; rela < relalim; rela++) {
 		where = (Elf_Addr *)(relocbase + rela->r_offset);
 		*where = (Elf_Addr)(relocbase + rela->r_addend);
@@ -53,7 +54,7 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 }
 
 int
-_rtld_relocate_nonplt_objects(Obj_Entry *obj)
+_rtld_relocate_nonplt_objects(const Obj_Entry *obj)
 {
 	const Elf_Rela *rela;
 
@@ -119,7 +120,7 @@ _rtld_relocate_nonplt_objects(Obj_Entry *obj)
 			    (void *)*where,
 			    obj->strtab + obj->symtab[symnum].st_name));
 			_rtld_error("%s: Unsupported relocation type %ld "
-			    "in non-PLT relocations",
+			    "in non-PLT relocations\n",
 			    obj->path, (u_long) ELF_R_TYPE(rela->r_info));
 			return -1;
 		}
@@ -181,17 +182,15 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela, Elf_Addr *
 caddr_t
 _rtld_bind(const Obj_Entry *obj, Elf_Word reloff)
 {
-	const Elf_Rela *rela = (const Elf_Rela *)((const uint8_t *)obj->pltrela + reloff);
+	const Elf_Rela *rela = (const Elf_Rela *)((caddr_t)obj->pltrela + reloff);
 	Elf_Addr result;
 	int err;
 
 	result = 0;	/* XXX gcc */
 
-	_rtld_shared_enter();
 	err = _rtld_relocate_plt_object(obj, rela, &result);
 	if (err)
 		_rtld_die();
-	_rtld_shared_exit();
 
 	return (caddr_t)result;
 }

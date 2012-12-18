@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.15 2012/07/27 05:36:11 matt Exp $	*/
+/*	$NetBSD: psl.h,v 1.13.82.1 2009/05/10 20:38:57 snj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -68,8 +68,6 @@
 #define	USERMODE(ps)	(((ps) & PSL_S) == 0)
 
 #if defined(_KERNEL) && !defined(_LOCORE)
-
-#define	IPL_SAFEPRI	PSL_LOWIPL	/* for kern_sleepq.c */
 
 /*
  * spl functions; platform-specific code must define spl0 and splx().

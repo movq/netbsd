@@ -1,6 +1,7 @@
-/*	$NetBSD: natm.h,v 1.11 2011/02/01 19:40:24 chuck Exp $	*/
+/*	$NetBSD: natm.h,v 1.9 2005/12/11 12:25:16 christos Exp $	*/
 
 /*
+ *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -12,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor and
+ *      Washington University.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -129,21 +136,21 @@ struct atm_rawioctl {
 /* external functions */
 
 /* natm_pcb.c */
-struct	natmpcb *npcb_alloc(int);
-void	npcb_free(struct natmpcb *, int);
-struct	natmpcb *npcb_add(struct natmpcb *, struct ifnet *, int, int);
+struct	natmpcb *npcb_alloc __P((int));
+void	npcb_free __P((struct natmpcb *, int));
+struct	natmpcb *npcb_add __P((struct natmpcb *, struct ifnet *, int, int));
 
 /* natm.c */
 #if defined(__NetBSD__) || defined(__OpenBSD__)
-int	natm_usrreq(struct socket *, int, struct mbuf *,
-                             struct mbuf *, struct mbuf *, struct lwp *);
+int	natm_usrreq __P((struct socket *, int, struct mbuf *,
+                             struct mbuf *, struct mbuf *, struct lwp *));
 #elif defined(__FreeBSD__)
-int	natm_usrreq(struct socket *, int, struct mbuf *,
-                             struct mbuf *, struct mbuf *);
+int	natm_usrreq __P((struct socket *, int, struct mbuf *,
+                             struct mbuf *, struct mbuf *));
 #endif
-int	natm0_sysctl(int *, u_int, void *, size_t *, void *, size_t);
-int	natm5_sysctl(int *, u_int, void *, size_t *, void *, size_t);
-void	natmintr(void);
+int	natm0_sysctl __P((int *, u_int, void *, size_t *, void *, size_t));
+int	natm5_sysctl __P((int *, u_int, void *, size_t *, void *, size_t));
+void	natmintr __P((void));
 
 #endif
 

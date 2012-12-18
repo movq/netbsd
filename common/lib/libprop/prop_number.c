@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_number.c,v 1.24 2012/07/27 09:10:59 pooka Exp $	*/
+/*	$NetBSD: prop_number.c,v 1.19.4.1 2008/11/30 02:40:01 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -57,6 +57,10 @@ struct _prop_number {
 						:31;
 	} pn_value;
 };
+
+#define	RBNODE_TO_PN(n)							\
+	((struct _prop_number *)					\
+	 ((uintptr_t)n - offsetof(struct _prop_number, pn_link)))
 
 _PROP_POOL_INIT(_prop_number_pool, sizeof(struct _prop_number), "propnmbr")
 
@@ -118,35 +122,33 @@ _prop_number_compare_values(const struct _prop_number_value *pnv1,
 }
 
 static int
-/*ARGSUSED*/
-_prop_number_rb_compare_nodes(void *ctx _PROP_ARG_UNUSED,
-			      const void *n1, const void *n2)
+_prop_number_rb_compare_nodes(const struct rb_node *n1,
+			      const struct rb_node *n2)
 {
-	const struct _prop_number *pn1 = n1;
-	const struct _prop_number *pn2 = n2;
+	const prop_number_t pn1 = RBNODE_TO_PN(n1);
+	const prop_number_t pn2 = RBNODE_TO_PN(n2);
 
-	return _prop_number_compare_values(&pn1->pn_value, &pn2->pn_value);
+	return (_prop_number_compare_values(&pn1->pn_value, &pn2->pn_value));
 }
 
 static int
-/*ARGSUSED*/
-_prop_number_rb_compare_key(void *ctx _PROP_ARG_UNUSED,
-			    const void *n, const void *v)
+_prop_number_rb_compare_key(const struct rb_node *n,
+			    const void *v)
 {
-	const struct _prop_number *pn = n;
+	const prop_number_t pn = RBNODE_TO_PN(n);
 	const struct _prop_number_value *pnv = v;
 
-	return _prop_number_compare_values(&pn->pn_value, pnv);
+	return (_prop_number_compare_values(&pn->pn_value, pnv));
 }
 
-static const rb_tree_ops_t _prop_number_rb_tree_ops = {
+static const struct rb_tree_ops _prop_number_rb_tree_ops = {
 	.rbto_compare_nodes = _prop_number_rb_compare_nodes,
-	.rbto_compare_key = _prop_number_rb_compare_key,
-	.rbto_node_offset = offsetof(struct _prop_number, pn_link),
-	.rbto_context = NULL
+	.rbto_compare_key   = _prop_number_rb_compare_key,
 };
 
 static struct rb_tree _prop_number_tree;
+static bool _prop_number_tree_initialized;
+
 _PROP_MUTEX_DECL_STATIC(_prop_number_tree_mutex)
 
 /* ARGSUSED */
@@ -155,34 +157,21 @@ _prop_number_free(prop_stack_t stack, prop_object_t *obj)
 {
 	prop_number_t pn = *obj;
 
-	_prop_rb_tree_remove_node(&_prop_number_tree, pn);
+	_prop_rb_tree_remove_node(&_prop_number_tree, &pn->pn_link);
 
 	_PROP_POOL_PUT(_prop_number_pool, pn);
 
 	return (_PROP_OBJECT_FREE_DONE);
 }
 
-_PROP_ONCE_DECL(_prop_number_init_once)
-
-static int
-_prop_number_init(void)
-{
-
-	_PROP_MUTEX_INIT(_prop_number_tree_mutex);
-	_prop_rb_tree_init(&_prop_number_tree, &_prop_number_rb_tree_ops);
-	return 0;
-}
-
 static void 
-_prop_number_lock(void)
+_prop_number_lock()
 {
-	/* XXX: init necessary? */
-	_PROP_ONCE_RUN(_prop_number_init_once, _prop_number_init);
 	_PROP_MUTEX_LOCK(_prop_number_tree_mutex);
 }
 
 static void
-_prop_number_unlock(void)
+_prop_number_unlock()
 {
 	_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
 }
@@ -270,20 +259,27 @@ _prop_number_equals(prop_object_t v1, prop_object_t v2,
 static prop_number_t
 _prop_number_alloc(const struct _prop_number_value *pnv)
 {
-	prop_number_t opn, pn, rpn;
-
-	_PROP_ONCE_RUN(_prop_number_init_once, _prop_number_init);
+	prop_number_t opn, pn;
+	struct rb_node *n;
+	bool rv;
 
 	/*
 	 * Check to see if this already exists in the tree.  If it does,
 	 * we just retain it and return it.
 	 */
 	_PROP_MUTEX_LOCK(_prop_number_tree_mutex);
-	opn = _prop_rb_tree_find(&_prop_number_tree, pnv);
-	if (opn != NULL) {
-		prop_object_retain(opn);
-		_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
-		return (opn);
+	if (! _prop_number_tree_initialized) {
+		_prop_rb_tree_init(&_prop_number_tree,
+				   &_prop_number_rb_tree_ops);
+		_prop_number_tree_initialized = true;
+	} else {
+		n = _prop_rb_tree_find(&_prop_number_tree, pnv);
+		if (n != NULL) {
+			opn = RBNODE_TO_PN(n);
+			prop_object_retain(opn);
+			_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
+			return (opn);
+		}
 	}
 	_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
 
@@ -304,15 +300,16 @@ _prop_number_alloc(const struct _prop_number_value *pnv)
 	 * we have to check again if it is in the tree.
 	 */
 	_PROP_MUTEX_LOCK(_prop_number_tree_mutex);
-	opn = _prop_rb_tree_find(&_prop_number_tree, pnv);
-	if (opn != NULL) {
+	n = _prop_rb_tree_find(&_prop_number_tree, pnv);
+	if (n != NULL) {
+		opn = RBNODE_TO_PN(n);
 		prop_object_retain(opn);
 		_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
 		_PROP_POOL_PUT(_prop_number_pool, pn);
 		return (opn);
 	}
-	rpn = _prop_rb_tree_insert_node(&_prop_number_tree, pn);
-	_PROP_ASSERT(rpn == pn);
+	rv = _prop_rb_tree_insert_node(&_prop_number_tree, &pn->pn_link);
+	_PROP_ASSERT(rv == true);
 	_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
 	return (pn);
 }

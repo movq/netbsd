@@ -1,4 +1,4 @@
-/*	$NetBSD: vs.c,v 1.35 2011/11/23 23:07:30 jmcneill Exp $	*/
+/*	$NetBSD: vs.c,v 1.33 2008/06/25 08:14:59 isaki Exp $	*/
 
 /*
  * Copyright (c) 2001 Tetsuya Isaki. All rights reserved.
@@ -11,6 +11,8 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vs.c,v 1.35 2011/11/23 23:07:30 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vs.c,v 1.33 2008/06/25 08:14:59 isaki Exp $");
 
 #include "audio.h"
 #include "vs.h"
@@ -39,7 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: vs.c,v 1.35 2011/11/23 23:07:30 jmcneill Exp $");
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/kmem.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -84,18 +85,17 @@ static int  vs_trigger_input(void *, void *, void *, int,
 	void (*)(void *), void *, const audio_params_t *);
 static int  vs_halt_output(void *);
 static int  vs_halt_input(void *);
-static int  vs_allocmem(struct vs_softc *, size_t, size_t, size_t,
+static int  vs_allocmem(struct vs_softc *, size_t, size_t, size_t, int,
 	struct vs_dma *);
 static void vs_freemem(struct vs_dma *);
 static int  vs_getdev(void *, struct audio_device *);
 static int  vs_set_port(void *, mixer_ctrl_t *);
 static int  vs_get_port(void *, mixer_ctrl_t *);
 static int  vs_query_devinfo(void *, mixer_devinfo_t *);
-static void *vs_allocm(void *, int, size_t);
-static void vs_freem(void *, void *, size_t);
+static void *vs_allocm(void *, int, size_t, struct malloc_type *, int);
+static void vs_freem(void *, void *, struct malloc_type *);
 static size_t vs_round_buffersize(void *, int, size_t);
 static int  vs_get_props(void *);
-static void vs_get_locks(void *, kmutex_t **, kmutex_t **);
 
 /* lower functions */
 static int vs_round_sr(u_long);
@@ -137,7 +137,6 @@ static const struct audio_hw_if vs_hw_if = {
 	vs_trigger_output,
 	vs_trigger_input,
 	NULL,
-	vs_get_locks,
 };
 
 static struct audio_device vs_device = {
@@ -232,8 +231,6 @@ vs_attach(device_t parent, device_t self, void *aux)
 	sc->sc_hw_if = &vs_hw_if;
 	sc->sc_addr = (void *) ia->ia_addr;
 	sc->sc_dmas = NULL;
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
 
 	/* XXX */
 	bus_space_map(iot, PPI_ADDR, PPI_MAPSIZE, BUS_SPACE_MAP_SHIFTED,
@@ -260,9 +257,6 @@ vs_dmaintr(void *hdl)
 
 	DPRINTF(2, ("vs_dmaintr\n"));
 	sc = hdl;
-
-	mutex_spin_enter(&sc->sc_intr_lock);
-
 	if (sc->sc_pintr) {
 		/* start next transfer */
 		sc->sc_current.dmap += sc->sc_current.blksize;
@@ -288,8 +282,6 @@ vs_dmaintr(void *hdl)
 	} else {
 		printf("vs_dmaintr: spurious interrupt\n");
 	}
-
-	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return 1;
 }
@@ -627,37 +619,38 @@ vs_halt_input(void *hdl)
 
 static int
 vs_allocmem(struct vs_softc *sc, size_t size, size_t align, size_t boundary,
-	struct vs_dma *vd)
+	int flags, struct vs_dma *vd)
 {
-	int error;
+	int error, wait;
 
 #ifdef DIAGNOSTIC
 	if (size > DMAC_MAXSEGSZ)
 		panic ("vs_allocmem: maximum size exceeded, %d", (int) size);
 #endif
 
+	wait = (flags & M_NOWAIT) ? BUS_DMA_NOWAIT : BUS_DMA_WAITOK;
 	vd->vd_size = size;
 
 	error = bus_dmamem_alloc(vd->vd_dmat, vd->vd_size, align, boundary,
 				 vd->vd_segs,
 				 sizeof (vd->vd_segs) / sizeof (vd->vd_segs[0]),
-				 &vd->vd_nsegs, BUS_DMA_WAITOK);
+				 &vd->vd_nsegs, wait);
 	if (error)
 		goto out;
 
 	error = bus_dmamem_map(vd->vd_dmat, vd->vd_segs, vd->vd_nsegs,
 			       vd->vd_size, &vd->vd_addr,
-			       BUS_DMA_WAITOK | BUS_DMA_COHERENT);
+			       wait | BUS_DMA_COHERENT);
 	if (error)
 		goto free;
 
 	error = bus_dmamap_create(vd->vd_dmat, vd->vd_size, 1, DMAC_MAXSEGSZ,
-				  0, BUS_DMA_WAITOK, &vd->vd_map);
+				  0, wait, &vd->vd_map);
 	if (error)
 		goto unmap;
 
 	error = bus_dmamap_load(vd->vd_dmat, vd->vd_map, vd->vd_addr,
-				vd->vd_size, NULL, BUS_DMA_WAITOK);
+				vd->vd_size, NULL, wait);
 	if (error)
 		goto destroy;
 
@@ -721,20 +714,21 @@ vs_query_devinfo(void *hdl, mixer_devinfo_t *mi)
 }
 
 static void *
-vs_allocm(void *hdl, int direction, size_t size)
+vs_allocm(void *hdl, int direction, size_t size, struct malloc_type *type,
+    int flags)
 {
 	struct vs_softc *sc;
 	struct vs_dma *vd;
 	int error;
 
-	if ((vd = kmem_alloc(sizeof(*vd), KM_SLEEP)) == NULL)
+	if ((vd = malloc(size, type, flags)) == NULL)
 		return NULL;
 	sc = hdl;
 	vd->vd_dmat = sc->sc_dmat;
 
-	error = vs_allocmem(sc, size, 32, 0, vd);
+	error = vs_allocmem(sc, size, 32, 0, flags, vd);
 	if (error) {
-		kmem_free(vd, sizeof(*vd));
+		free(vd, type);
 		return NULL;
 	}
 	vd->vd_next = sc->sc_dmas;
@@ -744,7 +738,7 @@ vs_allocm(void *hdl, int direction, size_t size)
 }
 
 static void
-vs_freem(void *hdl, void *addr, size_t size)
+vs_freem(void *hdl, void *addr, struct malloc_type *type)
 {
 	struct vs_softc *sc;
 	struct vs_dma *p, **pp;
@@ -754,7 +748,7 @@ vs_freem(void *hdl, void *addr, size_t size)
 		if (KVADDR(p) == addr) {
 			vs_freemem(p);
 			*pp = p->vd_next;
-			kmem_free(p, sizeof(*p));
+			free(p, type);
 			return;
 		}
 	}
@@ -800,16 +794,4 @@ vs_get_props(void *hdl)
 	DPRINTF(1, ("vs_get_props\n"));
 	return 0 /* | dependent | half duplex | no mmap */;
 }
-
-static void
-vs_get_locks(void *hdl, kmutex_t **intr, kmutex_t **thread)
-{
-	struct vs_softc *sc;
-
-	DPRINTF(1, ("vs_get_locks\n"));
-	sc = hdl;
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
-}
-
 #endif /* NAUDIO > 0 && NVS > 0*/

@@ -1,4 +1,4 @@
-/*	$NetBSD: pkill.c,v 1.28 2012/11/20 22:52:01 christos Exp $	*/
+/*	$NetBSD: pkill.c,v 1.23 2008/04/28 20:24:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pkill.c,v 1.28 2012/11/20 22:52:01 christos Exp $");
+__RCSID("$NetBSD: pkill.c,v 1.23 2008/04/28 20:24:14 martin Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -82,9 +82,7 @@ static char	*selected;
 static const char *delim = "\n";
 static int	nproc;
 static int	pgrep;
-static int	prenice;
 static int	signum = SIGTERM;
-static int	nicenum;
 static int	newest;
 static int	inverse;
 static int	longfmt;
@@ -102,9 +100,9 @@ static struct listhead ppidlist = SLIST_HEAD_INITIALIZER(list);
 static struct listhead tdevlist = SLIST_HEAD_INITIALIZER(list);
 static struct listhead sidlist = SLIST_HEAD_INITIALIZER(list);
 
+int	main(int, char **);
 static void	usage(void) __dead;
 static int	killact(const struct kinfo_proc2 *);
-static int	reniceact(const struct kinfo_proc2 *);
 static int	grepact(const struct kinfo_proc2 *);
 static void	makelist(struct listhead *, enum listtype, char *);
 
@@ -116,7 +114,7 @@ main(int argc, char **argv)
 	int (*action)(const struct kinfo_proc2 *);
 	const struct kinfo_proc2 *kp;
 	struct list *li;
-	const char *p;
+	const char *mstr, *p;
 	u_int32_t bestsec, bestusec;
 	regex_t reg;
 	regmatch_t regmatch;
@@ -126,9 +124,6 @@ main(int argc, char **argv)
 	if (strcmp(getprogname(), "pgrep") == 0) {
 		action = grepact;
 		pgrep = 1;
-	} else if (strcmp(getprogname(), "prenice") == 0) {
-		prenice = 1;
-
 	} else {
 		action = killact;
 		p = argv[1];
@@ -157,92 +152,67 @@ main(int argc, char **argv)
 
 	criteria = 0;
 
-	if (prenice) {
-		if (argc < 2)
-			usage();
-
-		if (strcmp(argv[1], "-l") == 0) {
+	while ((ch = getopt(argc, argv, "G:P:U:d:fg:ilns:t:u:vx")) != -1)
+		switch (ch) {
+		case 'G':
+			makelist(&rgidlist, LT_GROUP, optarg);
+			criteria = 1;
+			break;
+		case 'P':
+			makelist(&ppidlist, LT_GENERIC, optarg);
+			criteria = 1;
+			break;
+		case 'U':
+			makelist(&ruidlist, LT_USER, optarg);
+			criteria = 1;
+			break;
+		case 'd':
+			if (!pgrep)
+				usage();
+			delim = optarg;
+			break;
+		case 'f':
+			matchargs = 1;
+			break;
+		case 'g':
+			makelist(&pgrplist, LT_PGRP, optarg);
+			criteria = 1;
+			break;
+		case 'i':
+			cflags |= REG_ICASE;
+			break;
+		case 'l':
 			longfmt = 1;
-			argv++;
-			argc--;
+			break;
+		case 'n':
+			newest = 1;
+			criteria = 1;
+			break;
+		case 's':
+			makelist(&sidlist, LT_SID, optarg);
+			criteria = 1;
+			break;
+		case 't':
+			makelist(&tdevlist, LT_TTY, optarg);
+			criteria = 1;
+			break;
+		case 'u':
+			makelist(&euidlist, LT_USER, optarg);
+			criteria = 1;
+			break;
+		case 'v':
+			inverse = 1;
+			break;
+		case 'x':
+			fullmatch = 1;
+			break;
+		default:
+			usage();
+			/* NOTREACHED */
 		}
 
-		if (argc < 2)
-			usage();
-
-		action = reniceact;
-		p = argv[1];
-
-		i = (int)strtol(p, &q, 10);
-		if (*q == '\0') {
-			nicenum = i;
-			argv++;
-			argc--;
-		} else
-			usage();
-	} else {
-		while ((ch = getopt(argc, argv, "G:P:U:d:fg:ilns:t:u:vx")) != -1)
-			switch (ch) {
-			case 'G':
-				makelist(&rgidlist, LT_GROUP, optarg);
-				criteria = 1;
-				break;
-			case 'P':
-				makelist(&ppidlist, LT_GENERIC, optarg);
-				criteria = 1;
-				break;
-			case 'U':
-				makelist(&ruidlist, LT_USER, optarg);
-				criteria = 1;
-				break;
-			case 'd':
-				if (!pgrep)
-					usage();
-				delim = optarg;
-				break;
-			case 'f':
-				matchargs = 1;
-				break;
-			case 'g':
-				makelist(&pgrplist, LT_PGRP, optarg);
-				criteria = 1;
-				break;
-			case 'i':
-				cflags |= REG_ICASE;
-				break;
-			case 'l':
-				longfmt = 1;
-				break;
-			case 'n':
-				newest = 1;
-				criteria = 1;
-				break;
-			case 's':
-				makelist(&sidlist, LT_SID, optarg);
-				criteria = 1;
-				break;
-			case 't':
-				makelist(&tdevlist, LT_TTY, optarg);
-				criteria = 1;
-				break;
-			case 'u':
-				makelist(&euidlist, LT_USER, optarg);
-				criteria = 1;
-				break;
-			case 'v':
-				inverse = 1;
-				break;
-			case 'x':
-				fullmatch = 1;
-				break;
-			default:
-				usage();
-				/* NOTREACHED */
-			}
-		argc -= optind;
-		argv += optind;
-	}
-
+	argc -= optind;
+	argv += optind;
 	if (argc != 0)
 		criteria = 1;
 	if (!criteria)
@@ -285,26 +255,27 @@ main(int argc, char **argv)
 			if ((kp->p_flag & P_SYSTEM) != 0 || kp->p_pid == mypid)
 				continue;
 
-			if ((pargv = kvm_getargv2(kd, kp, 0)) == NULL)
-				continue;
 			if (matchargs) {
+				if ((pargv = kvm_getargv2(kd, kp, 0)) == NULL)
+					continue;
 
 				j = 0;
-				while (j < (int)sizeof(buf) && *pargv != NULL) {
+				while (j < sizeof(buf) && *pargv != NULL) {
 					j += snprintf(buf + j, sizeof(buf) - j,
 					    pargv[1] != NULL ? "%s " : "%s",
 					    pargv[0]);
 					pargv++;
 				}
-			} else
-				strlcpy(buf, pargv[0], sizeof(buf));
 
-			rv = regexec(&reg, buf, 1, &regmatch, 0);
+				mstr = buf;
+			} else
+				mstr = kp->p_comm;
+
+			rv = regexec(&reg, mstr, 1, &regmatch, 0);
 			if (rv == 0) {
 				if (fullmatch) {
 					if (regmatch.rm_so == 0 &&
-					    regmatch.rm_eo == 
-					    (regoff_t)strlen(buf))
+					    regmatch.rm_eo == strlen(mstr))
 						selected[i] = 1;
 				} else
 					selected[i] = 1;
@@ -348,7 +319,7 @@ main(int argc, char **argv)
 		}
 
 		SLIST_FOREACH(li, &ppidlist, li_chain)
-			if ((uid_t)kp->p_ppid == (uid_t)li->li_number)
+			if (kp->p_ppid == (uid_t)li->li_number)
 				break;
 		if (SLIST_FIRST(&ppidlist) != NULL && li == NULL) {
 			selected[i] = 0;
@@ -356,7 +327,7 @@ main(int argc, char **argv)
 		}
 
 		SLIST_FOREACH(li, &pgrplist, li_chain)
-			if (kp->p__pgid == (pid_t)li->li_number)
+			if (kp->p__pgid == (uid_t)li->li_number)
 				break;
 		if (SLIST_FIRST(&pgrplist) != NULL && li == NULL) {
 			selected[i] = 0;
@@ -376,7 +347,7 @@ main(int argc, char **argv)
 		}
 
 		SLIST_FOREACH(li, &sidlist, li_chain)
-			if (kp->p_sid == (pid_t)li->li_number)
+			if (kp->p_sid == (uid_t)li->li_number)
 				break;
 		if (SLIST_FIRST(&sidlist) != NULL && li == NULL) {
 			selected[i] = 0;
@@ -436,21 +407,15 @@ usage(void)
 {
 	const char *ustr;
 
-	if (prenice)
-		fprintf(stderr, "Usage: %s [-l] priority pattern ...\n",
-		    getprogname());
-	else {
-		if (pgrep)
-			ustr = "[-filnvx] [-d delim]";
-		else
-			ustr = "[-signal] [-filnvx]";
+	if (pgrep)
+		ustr = "[-filnvx] [-d delim]";
+	else
+		ustr = "[-signal] [-filnvx]";
 
-		(void)fprintf(stderr,
-		    "Usage: %s %s [-G gid] [-g pgrp] [-P ppid] [-s sid] "
-			   "[-t tty]\n"
-		    "             [-U uid] [-u euid] pattern ...\n",
-			      getprogname(), ustr);
-	}
+	(void)fprintf(stderr,
+		"Usage: %s %s [-G gid] [-g pgrp] [-P ppid] [-s sid] [-t tty]\n"
+		"             [-U uid] [-u euid] pattern ...\n", getprogname(),
+		ustr);
 
 	exit(STATUS_BADUSAGE);
 }
@@ -477,32 +442,6 @@ killact(const struct kinfo_proc2 *kp)
 		 */
 		return 0;
 	}
-
-	return 1;
-}
-
-static int
-reniceact(const struct kinfo_proc2 *kp)
-{
-	int oldprio;
-
-	if (longfmt)
-		grepact(kp);
-
-	errno = 0;
-	if ((oldprio = getpriority(PRIO_PROCESS, kp->p_pid)) == -1 &&
-	    errno != 0) {
-		warn("%d: getpriority", kp->p_pid);
-		return 0;
-	}
-
-	if (setpriority(PRIO_PROCESS, kp->p_pid, nicenum) == -1) {
-		warn("%d: setpriority", kp->p_pid);
-		return 0;
-	}
-
-	(void)printf("%d: old priority %d, new priority %d\n",
-	    kp->p_pid, oldprio, nicenum);
 
 	return 1;
 }
@@ -558,13 +497,13 @@ makelist(struct listhead *head, enum listtype type, char *src)
 			usage();
 
 		if ((li = malloc(sizeof(*li))) == NULL)
-			err(STATUS_ERROR, "Cannot allocate %zu bytes",
+			err(STATUS_ERROR, "Cannot allocate %zd bytes",
 			    sizeof(*li));
 		SLIST_INSERT_HEAD(head, li, li_chain);
 		empty = 0;
 
 		li->li_number = (uid_t)strtol(sp, &ep, 0);
-		if (*ep == '\0' && type != LT_TTY) {
+		if (*ep == '\0') {
 			switch (type) {
 			case LT_PGRP:
 				if (li->li_number == 0)
@@ -574,6 +513,9 @@ makelist(struct listhead *head, enum listtype type, char *src)
 				if (li->li_number == 0)
 					li->li_number = getsid(mypid);
 				break;
+			case LT_TTY:
+				usage();
+				/*NOTREACHED*/
 			default:
 				break;
 			}
@@ -594,34 +536,29 @@ makelist(struct listhead *head, enum listtype type, char *src)
 			li->li_number = gr->gr_gid;
 			break;
 		case LT_TTY:
-			p = sp;
-			if (*sp == '/')
-				prefix = "";
-			else if (strcmp(sp, "-") == 0) {
+			if (strcmp(sp, "-") == 0) {
 				li->li_number = -1;
 				break;
 			} else if (strcmp(sp, "co") == 0)
 				p = "console";
 			else if (strncmp(sp, "tty", 3) == 0)
-				/* all set */;
-			else if (strncmp(sp, "pts/", 4) == 0)
-				/* all set */;
-			else if (*ep != '\0' || (strlen(sp) == 2 && *sp == '0'))
+				p = sp;
+			else {
+				p = sp;
 				prefix = _PATH_TTY;
-			else
-				prefix = _PATH_DEV_PTS;
+			}
 
 			(void)snprintf(buf, sizeof(buf), "%s%s", prefix, p);
 
 			if (stat(buf, &st) == -1) {
 				if (errno == ENOENT)
 					errx(STATUS_BADUSAGE,
-					    "No such tty: `%s'", buf);
-				err(STATUS_ERROR, "Cannot access `%s'", buf);
+					    "No such tty: `%s'", sp);
+				err(STATUS_ERROR, "Cannot access `%s'", sp);
 			}
 
 			if ((st.st_mode & S_IFCHR) == 0)
-				errx(STATUS_BADUSAGE, "Not a tty: `%s'", buf);
+				errx(STATUS_BADUSAGE, "Not a tty: `%s'", sp);
 
 			li->li_number = st.st_rdev;
 			break;

@@ -1,4 +1,4 @@
-/*	$NetBSD: cache_sh3.c,v 1.16 2012/02/12 16:34:10 matt Exp $	*/
+/*	$NetBSD: cache_sh3.c,v 1.14 2008/04/28 20:23:35 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cache_sh3.c,v 1.16 2012/02/12 16:34:10 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cache_sh3.c,v 1.14 2008/04/28 20:23:35 martin Exp $");
 
 #include "opt_cache.h"
 
@@ -57,7 +57,7 @@ static inline void cache_sh3_op_line_16_nway(int, vaddr_t, uint32_t);
 static inline void cache_sh3_op_8lines_16_nway(int, vaddr_t, uint32_t);
 
 void
-sh3_cache_config(void)
+sh3_cache_config()
 {
 	size_t cache_size;
 	uint32_t r;
@@ -77,8 +77,6 @@ sh3_cache_config(void)
 		cache_size = 8 * 1024;
 		break;
 	case CPU_PRODUCT_7709A:
-		/* FALLTHROUGH */
-	case CPU_PRODUCT_7706:
 		cache_size = 16 * 1024;
 		break;
 	}
@@ -185,7 +183,7 @@ cache_sh3_op_8lines_16_nway(int n, vaddr_t va, uint32_t bits)
 }
 
 void
-sh3_cache_wbinv_all(void)
+sh3_cache_wbinv_all()
 {
 	vaddr_t va;
 

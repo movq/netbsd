@@ -1,4 +1,4 @@
-/*	$NetBSD: aout2elf.c,v 1.19 2012/01/08 02:24:32 christos Exp $
+/*	$NetBSD: aout2elf.c,v 1.13 2006/07/18 12:05:03 jnemeth Exp $
  *
  * Copyright 1997 Piermont Information Systems Inc.
  * All rights reserved.
@@ -13,20 +13,24 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE 
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
  * THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
@@ -35,7 +39,6 @@
 
 #include <sys/param.h>
 #include <sys/exec.h>
-#include <sys/exec_aout.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -96,7 +99,7 @@ is_aout_shared_lib(const char *name)
 	if (fd < 0) {
 		return 0;
 	}
-	if (read(fd, &ex, sizeof ex) - sizeof ex != 0) {
+	if (read(fd, &ex, sizeof ex) < sizeof ex) {
 		close(fd);
 		return 0;
 	}
@@ -112,7 +115,7 @@ static void
 handle_aout_x_libs(const char *srcdir, const char *tgtdir)
 {
 	char src[MAXPATHLEN];
-	unsigned int i;
+	int i;
 
 	for (i = 0; i < (sizeof x_libs / sizeof (const char *)); i++) {
 		snprintf(src, MAXPATHLEN, "%s/%s", srcdir, x_libs[i]);
@@ -182,7 +185,7 @@ handle_aout_libs(const char *dir, int op, const void *arg)
 			    full_name, destdir, dp->d_name);
 			break;
 		}
-
+		
 endloop:
 		free(full_name);
 	}
@@ -192,7 +195,7 @@ endloop:
 	return n;
 }
 
-__dead static void
+static void
 abort_libupdate(void)
 {
 	msg_display(MSG_aoutfail);

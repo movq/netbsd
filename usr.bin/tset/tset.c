@@ -1,4 +1,4 @@
-/*	$NetBSD: tset.c,v 1.20 2011/09/06 18:34:12 joerg Exp $	*/
+/*	$NetBSD: tset.c,v 1.16 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993
@@ -30,9 +30,17 @@
  */
 
 #include <sys/cdefs.h>
+#ifndef lint
 __COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993\
  The Regents of the University of California.  All rights reserved.");
-__RCSID("$NetBSD: tset.c,v 1.20 2011/09/06 18:34:12 joerg Exp $");
+#endif /* not lint */
+
+#ifndef lint
+#if 0
+static char sccsid[] = "@(#)tset.c	8.1 (Berkeley) 6/9/93";
+#endif
+__RCSID("$NetBSD: tset.c,v 1.16 2008/07/21 14:19:27 lukem Exp $");
+#endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/ioctl.h>
@@ -42,31 +50,33 @@ __RCSID("$NetBSD: tset.c,v 1.20 2011/09/06 18:34:12 joerg Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <term.h>
+#include <termcap.h>
 #include <termios.h>
 #include <unistd.h>
 #include "extern.h"
 
-static void	obsolete(char *[]);
-static void	report(const char *, int, u_int);
-__dead static void	usage(void);
+int	main __P((int, char *[]));
+void	obsolete __P((char *[]));
+void	report __P((char *, int, u_int));
+void	usage __P((void));
 
 struct termios mode, oldmode;
 
 int	isreset;		/* invoked as reset */
-int	nlines, ncolumns;	/* window size */
+int	lines, columns;		/* window size */
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 #ifdef TIOCGWINSZ
 	struct winsize win;
 #endif
-	int ch, noinit, noset, quiet, sflag, showterm;
+	int ch, extended, noinit, noset, quiet, Sflag, sflag, showterm;
 	int erasechar = 0, intrchar = 0, killchar = 0;
 	int usingupper;
-	char *p;
-	const char *k1, *k2;
+	char savech, *p, *q, *t, *tcapbuf;
 	const char *ttype;
 
 	if (tcgetattr(STDERR_FILENO, &mode) < 0)
@@ -86,7 +96,7 @@ main(int argc, char *argv[])
 	}
 
 	obsolete(argv);
-	noinit = noset = quiet = sflag = showterm = 0;
+	noinit = noset = quiet = Sflag = sflag = showterm = extended = 0;
 	while ((ch = getopt(argc, argv, "-a:d:e:EIi:k:m:np:QSrs")) != -1) {
 		switch (ch) {
 		case '-':		/* display term only */
@@ -103,8 +113,8 @@ main(int argc, char *argv[])
 			    optarg[1] == '?' ? '\177' : CTRL(optarg[1]) :
 			    optarg[0];
 			break;
-		case 'E':		/* -E does not make sense for terminfo
-					   should this be noisy? */
+		case 'E':
+			extended = 1;
 			break;
 		case 'I':		/* no initialization strings */
 			noinit = 1;
@@ -130,13 +140,13 @@ main(int argc, char *argv[])
 		case 'Q':		/* don't output control key settings */
 			quiet = 1;
 			break;
-		case 'S':		/* -S does not make sense for terminfo
-					   should this be noisy? */
+		case 'S':		/* output TERM/TERMCAP strings */
+			Sflag = 1;
 			break;
 		case 'r':		/* display term on stderr */
 			showterm = 1;
 			break;
-		case 's':		/* output TERM string */
+		case 's':		/* output TERM/TERMCAP strings */
 			sflag = 1;
 			break;
 		case '?':
@@ -150,22 +160,22 @@ main(int argc, char *argv[])
 	if (argc > 1)
 		usage();
 
-	ttype = get_terminfo_entry(*argv);
+	ttype = get_termcap_entry(*argv, &tcapbuf, extended);
 
 	if (!noset) {
-		ncolumns = columns;
-		nlines = lines;
+		columns = tgetnum("co");
+		lines = tgetnum("li");
 
 #ifdef TIOCGWINSZ
 		/* Set window size */
 		(void)ioctl(STDERR_FILENO, TIOCGWINSZ, &win);
 		if (win.ws_row > 0 && win.ws_col > 0) {
-			nlines = win.ws_row;
-			ncolumns = win.ws_col;
+			lines = win.ws_row;
+			columns = win.ws_col;
 		} else if (win.ws_row == 0 && win.ws_col == 0 &&
-		    nlines > 0 && columns > 0) {
-			win.ws_row = nlines;
-			win.ws_col = ncolumns;
+		    lines > 0 && columns > 0) {
+			win.ws_row = lines;
+			win.ws_col = columns;
 			(void)ioctl(STDERR_FILENO, TIOCSWINSZ, &win);
 		}
 #endif
@@ -178,6 +188,19 @@ main(int argc, char *argv[])
 		/* Set the modes if they've changed. */
 		if (memcmp(&mode, &oldmode, sizeof(mode)))
 			tcsetattr(STDERR_FILENO, TCSADRAIN, &mode);
+	}
+
+	/* Get the terminal name from the entry. */
+	p = tcapbuf;
+	if (p != NULL && *p != ':') {
+		t = p;
+		if ((p = strpbrk(p, "|:")) != NULL) {
+			savech = *p;
+			*p = '\0';
+			if ((ttype = strdup(t)) == NULL)
+				err(1, "strdup");
+			*p = savech;
+		}
 	}
 
 	if (noset)
@@ -196,6 +219,11 @@ main(int argc, char *argv[])
 		}
 	}
 
+	if (Sflag) {
+		(void)printf("%s ", ttype);
+		wrtermcap(tcapbuf);
+	}
+
 	if (sflag) {
 		/*
 		 * Figure out what shell we're using.  A hack, we look for an
@@ -203,13 +231,17 @@ main(int argc, char *argv[])
 		 */
 		if ((p = getenv("SHELL")) &&
 		    !strcmp(p + strlen(p) - 3, "csh")) {
-			k1 = "set noglob;\nsetenv TERM ";
-			k2 = ";\nunset noglob;\n";
+			p = "set noglob;\nsetenv TERM ";
+			q = ";\nsetenv TERMCAP '";
+			t = "';\nunset noglob;\n";
 		} else {
-			k1 = "TERM=";
-			k2 = ";\nexport TERM;\n";
+			p = "TERM=";
+			q = ";\nTERMCAP='";
+			t = "';\nexport TERMCAP TERM;\n";
 		}
-		(void)printf("%s%s%s", k1, ttype, k2);
+		(void)printf("%s%s%s", p, ttype, q);
+		wrtermcap(tcapbuf);
+		(void)printf("%s", t);
 	}
 
 	exit(0);
@@ -218,10 +250,14 @@ main(int argc, char *argv[])
 /*
  * Tell the user if a control key has been changed from the default value.
  */
-static void
-report(const char *name, int which, u_int def)
+void
+report(name, which, def)
+	char *name;
+	int which;
+	u_int def;
 {
 	u_int old, new;
+	char *bp, buf[1024];
 
 	new = mode.c_cc[which];
 	old = oldmode.c_cc[which];
@@ -231,9 +267,8 @@ report(const char *name, int which, u_int def)
 
 	(void)fprintf(stderr, "%s %s ", name, old == new ? "is" : "set to");
 
-	if (key_backspace != NULL &&
-	    new == (unsigned int)key_backspace[0] &&
-	    key_backspace[1] == '\0')
+	bp = buf;
+	if (tgetstr("kb", &bp) && new == buf[0] && buf[1] == '\0')
 		(void)fprintf(stderr, "backspace.\n");
 	else if (new == 0177)
 		(void)fprintf(stderr, "delete.\n");
@@ -251,12 +286,9 @@ report(const char *name, int which, u_int def)
  * This means that -e, -i and -k get default arguments supplied for them.
  */
 void
-obsolete(char *argv[])
+obsolete(argv)
+	char *argv[];
 {
-	static char earg[5] = { '-', 'e', '^', 'H', '\0' };
-	static char iarg[5] = { '-', 'i', '^', 'C', '\0' };
-	static char karg[5] = { '-', 'k', '^', 'U', '\0' };
-
 	for (; *argv; ++argv) {
 		if (argv[0][0] != '-' || (argv[1] && argv[1][0] != '-') ||
 		    (argv[0][1] != 'e' && argv[0][1] != 'i' &&
@@ -264,20 +296,20 @@ obsolete(char *argv[])
 			continue;
 		switch(argv[0][1]) {
 		case 'e':
-			argv[0] = earg;
+			argv[0] = "-e^H";
 			break;
 		case 'i':
-			argv[0] = iarg;
+			argv[0] = "-i^C";
 			break;
 		case 'k':
-			argv[0] = karg;
+			argv[0] = "-k^U";
 			break;
 		}
 	}
 }
 
-static void
-usage(void)
+void
+usage()
 {
 	(void)fprintf(stderr,
 "usage: %s [-EIQrSs] [-] [-e ch] [-i ch] [-k ch] [-m mapping] [terminal]\n",

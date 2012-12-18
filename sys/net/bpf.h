@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf.h,v 1.59 2012/03/15 00:57:56 christos Exp $	*/
+/*	$NetBSD: bpf.h,v 1.48 2005/12/10 23:21:38 elad Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993
@@ -45,8 +45,6 @@
 /* BSD style release date */
 #define BPF_RELEASE 199606
 
-__BEGIN_DECLS
-
 typedef	int bpf_int32;
 typedef	u_int bpf_u_int32;
 
@@ -55,10 +53,7 @@ typedef	u_int bpf_u_int32;
  * even multiple of BPF_ALIGNMENT.
  */
 #define BPF_ALIGNMENT sizeof(long)
-#define BPF_ALIGNMENT32 sizeof(int)
-
 #define BPF_WORDALIGN(x) (((x)+(BPF_ALIGNMENT-1))&~(BPF_ALIGNMENT-1))
-#define BPF_WORDALIGN32(x) (((x)+(BPF_ALIGNMENT32-1))&~(BPF_ALIGNMENT32-1))
 
 #define BPF_MAXINSNS 512
 #define BPF_DFLTBUFSIZE (1024*1024)	/* default static upper limit */
@@ -125,11 +120,8 @@ struct bpf_version {
 #define BIOCGDLT	 _IOR('B',106, u_int)
 #define BIOCGETIF	 _IOR('B',107, struct ifreq)
 #define BIOCSETIF	 _IOW('B',108, struct ifreq)
-#ifdef COMPAT_50
-#include <compat/sys/time.h>
-#define BIOCSORTIMEOUT	 _IOW('B',109, struct timeval50)
-#define BIOCGORTIMEOUT	 _IOR('B',110, struct timeval50)
-#endif
+#define BIOCSRTIMEOUT	 _IOW('B',109, struct timeval)
+#define BIOCGRTIMEOUT	 _IOR('B',110, struct timeval)
 #define BIOCGSTATS	 _IOR('B',111, struct bpf_stat)
 #define BIOCGSTATSOLD	 _IOR('B',111, struct bpf_stat_old)
 #define BIOCIMMEDIATE	 _IOW('B',112, u_int)
@@ -142,36 +134,12 @@ struct bpf_version {
 #define BIOCGDLTLIST	_IOWR('B',119, struct bpf_dltlist)
 #define BIOCGSEESENT	 _IOR('B',120, u_int)
 #define BIOCSSEESENT	 _IOW('B',121, u_int)
-#define BIOCSRTIMEOUT	 _IOW('B',122, struct timeval)
-#define BIOCGRTIMEOUT	 _IOR('B',123, struct timeval)
-#define BIOCGFEEDBACK	 _IOR('B',124, u_int)
-#define BIOCSFEEDBACK	 _IOW('B',125, u_int)
-#define BIOCFEEDBACK     BIOCSFEEDBACK		/* FreeBSD name */
 
 /*
- * Structure prepended to each packet. This is "wire" format, so we
- * cannot change it unfortunately to 64 bit times on 32 bit systems [yet].
+ * Structure prepended to each packet.
  */
-struct bpf_timeval {
-	long tv_sec;
-	long tv_usec;
-};
-
-struct bpf_timeval32 {
-	int32_t tv_sec;
-	int32_t tv_usec;
-};
-
 struct bpf_hdr {
-	struct bpf_timeval bh_tstamp;	/* time stamp */
-	uint32_t	bh_caplen;	/* length of captured portion */
-	uint32_t	bh_datalen;	/* original length of packet */
-	uint16_t	bh_hdrlen;	/* length of bpf header (this struct
-					   plus alignment padding) */
-};
-
-struct bpf_hdr32 {
-	struct bpf_timeval32 bh_tstamp;	/* time stamp */
+	struct timeval	bh_tstamp;	/* time stamp */
 	uint32_t	bh_caplen;	/* length of captured portion */
 	uint32_t	bh_datalen;	/* original length of packet */
 	uint16_t	bh_hdrlen;	/* length of bpf header (this struct
@@ -190,10 +158,8 @@ struct bpf_hdr32 {
     defined(__mips__) || defined(__ns32k__) || defined(__vax__) || \
     defined(__sh__) || (defined(__sparc__) && !defined(__sparc64__))
 #define SIZEOF_BPF_HDR 18
-#define SIZEOF_BPF_HDR32 18
 #else
 #define SIZEOF_BPF_HDR sizeof(struct bpf_hdr)
-#define SIZEOF_BPF_HDR32 sizeof(struct bpf_hdr32)
 #endif
 #endif
 
@@ -281,109 +247,22 @@ struct bpf_dltlist {
 };
 
 #ifdef _KERNEL
-#include <net/if.h>
-struct bpf_if;
-
-struct bpf_ops {
-	void (*bpf_attach)(struct ifnet *, u_int, u_int, struct bpf_if **);
-	void (*bpf_detach)(struct ifnet *);
-	void (*bpf_change_type)(struct ifnet *, u_int, u_int);
-
-	void (*bpf_tap)(struct bpf_if *, u_char *, u_int);
-	void (*bpf_mtap)(struct bpf_if *, struct mbuf *);
-	void (*bpf_mtap2)(struct bpf_if *, void *, u_int, struct mbuf *);
-	void (*bpf_mtap_af)(struct bpf_if *, uint32_t, struct mbuf *);
-	void (*bpf_mtap_sl_in)(struct bpf_if *, u_char *, struct mbuf **);
-	void (*bpf_mtap_sl_out)(struct bpf_if *, u_char *, struct mbuf *);
-};
-
-extern struct bpf_ops *bpf_ops;
-
-static inline void
-bpf_attach(struct ifnet *_ifp, u_int _dlt, u_int _hdrlen)
-{
-	bpf_ops->bpf_attach(_ifp, _dlt, _hdrlen, &_ifp->if_bpf);
-}
-
-static inline void
-bpf_attach2(struct ifnet *_ifp, u_int _dlt, u_int _hdrlen, struct bpf_if **_dp)
-{
-	bpf_ops->bpf_attach(_ifp, _dlt, _hdrlen, _dp);
-}
-
-static inline void
-bpf_tap(struct ifnet *_ifp, u_char *_pkt, u_int _len)
-{
-	if (_ifp->if_bpf)
-		bpf_ops->bpf_tap(_ifp->if_bpf, _pkt, _len);
-}
-
-static inline void
-bpf_mtap(struct ifnet *_ifp, struct mbuf *_m)
-{
-	if (_ifp->if_bpf)
-		bpf_ops->bpf_mtap(_ifp->if_bpf, _m);
-}
-
-static inline void
-bpf_mtap2(struct bpf_if *_bpf, void *_data, u_int _dlen, struct mbuf *_m)
-{
-	bpf_ops->bpf_mtap2(_bpf, _data, _dlen, _m);
-}
-
-static inline void
-bpf_mtap3(struct bpf_if *_bpf, struct mbuf *_m)
-{
-	if (_bpf)
-		bpf_ops->bpf_mtap(_bpf, _m);
-}
-
-static inline void
-bpf_mtap_af(struct ifnet *_ifp, uint32_t _af, struct mbuf *_m)
-{
-	if (_ifp->if_bpf)
-		bpf_ops->bpf_mtap_af(_ifp->if_bpf, _af, _m);
-}
-
-static inline void
-bpf_change_type(struct ifnet *_ifp, u_int _dlt, u_int _hdrlen)
-{
-	bpf_ops->bpf_change_type(_ifp, _dlt, _hdrlen);
-}
-
-static inline void
-bpf_detach(struct ifnet *_ifp)
-{
-	bpf_ops->bpf_detach(_ifp);
-}
-
-static inline void
-bpf_mtap_sl_in(struct ifnet *_ifp, u_char *_hdr, struct mbuf **_m)
-{
-	bpf_ops->bpf_mtap_sl_in(_ifp->if_bpf, _hdr, _m);
-}
-
-static inline void
-bpf_mtap_sl_out(struct ifnet *_ifp, u_char *_hdr, struct mbuf *_m)
-{
-	if (_ifp->if_bpf)
-		bpf_ops->bpf_mtap_sl_out(_ifp->if_bpf, _hdr, _m);
-}
-
-
-void     bpf_setops(void);
-
-void     bpf_ops_handover_enter(struct bpf_ops *);
-void     bpf_ops_handover_exit(void);
-
+int	 bpf_validate(struct bpf_insn *, int);
+void	 bpf_tap(void *, u_char *, u_int);
+void	 bpf_mtap(void *, struct mbuf *);
+void	 bpf_mtap2(void *, void *, u_int, struct mbuf *);
+void	 bpf_mtap_af(void *, uint32_t, struct mbuf *);
+void	 bpf_mtap_et(void *, uint16_t, struct mbuf *);
+void	 bpf_mtap_sl_in(void *, u_char *, struct mbuf **);
+void	 bpf_mtap_sl_out(void *, u_char *, struct mbuf *);
+void	 bpfattach(struct ifnet *, u_int, u_int);
+void	 bpfattach2(struct ifnet *, u_int, u_int, void *);
+void	 bpfdetach(struct ifnet *);
+void	 bpf_change_type(struct ifnet *, u_int, u_int);
 void	 bpfilterattach(int);
-
 #endif
 
-int	 bpf_validate(const struct bpf_insn *, int);
-u_int	 bpf_filter(const struct bpf_insn *, const u_char *, u_int, u_int);
-
-__END_DECLS
+u_int	 bpf_filter(struct bpf_insn *, u_char *, u_int, u_int);
 
 /*
  * Number of scratch memory words (for BPF_LD|BPF_MEM and BPF_ST).

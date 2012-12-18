@@ -1,4 +1,4 @@
-/*	$NetBSD: if_hme_sbus.c,v 1.33 2009/09/17 16:28:12 tsutsui Exp $	*/
+/*	$NetBSD: if_hme_sbus.c,v 1.24 2008/04/28 20:23:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_hme_sbus.c,v 1.33 2009/09/17 16:28:12 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_hme_sbus.c,v 1.24 2008/04/28 20:23:57 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,17 +60,20 @@ __KERNEL_RCSID(0, "$NetBSD: if_hme_sbus.c,v 1.33 2009/09/17 16:28:12 tsutsui Exp
 
 struct hmesbus_softc {
 	struct	hme_softc	hsc_hme;	/* HME device */
-	/* sbus specific stuff here */
+	struct	sbusdev		hsc_sbus;	/* SBus device */
 };
 
-int	hmematch_sbus(device_t, cfdata_t, void *);
-void	hmeattach_sbus(device_t, device_t, void *);
+int	hmematch_sbus(struct device *, struct cfdata *, void *);
+void	hmeattach_sbus(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(hme_sbus, sizeof(struct hmesbus_softc),
+CFATTACH_DECL(hme_sbus, sizeof(struct hmesbus_softc),
     hmematch_sbus, hmeattach_sbus, NULL, NULL);
 
 int
-hmematch_sbus(device_t parent, cfdata_t cf, void *aux)
+hmematch_sbus(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -80,28 +83,29 @@ hmematch_sbus(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-hmeattach_sbus(device_t parent, device_t self, void *aux)
+hmeattach_sbus(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct sbus_attach_args *sa = aux;
-	struct hmesbus_softc *hsc = device_private(self);
+	struct hmesbus_softc *hsc = (void *)self;
 	struct hme_softc *sc = &hsc->hsc_hme;
-	struct sbus_softc *sbsc = device_private(parent);
-	uint32_t burst, sbusburst;
+	struct sbusdev *sd = &hsc->hsc_sbus;
+	u_int32_t burst, sbusburst;
 	int node;
 
-	sc->sc_dev = self;
 	node = sa->sa_node;
 
 	/* Pass on the bus tags */
 	sc->sc_bustag = sa->sa_bustag;
 	sc->sc_dmatag = sa->sa_dmatag;
 
-	aprint_normal(": Sun Happy Meal Ethernet (%s)\n",
+	printf(": Sun Happy Meal Ethernet (%s)\n",
 	    sa->sa_name);
 
 	if (sa->sa_nreg < 5) {
-		aprint_error_dev(self, "only %d register sets\n",
-		    sa->sa_nreg);
+		printf("%s: only %d register sets\n",
+			device_xname(self), sa->sa_nreg);
 		return;
 	}
 
@@ -156,13 +160,16 @@ hmeattach_sbus(device_t parent, device_t self, void *aux)
 		return;
 	}
 
+	sd->sd_reset = (void *)hme_reset;
+	sbus_establish(sd, self);
+
 	prom_getether(node, sc->sc_enaddr);
 
 	/*
 	 * Get transfer burst size from PROM and pass it on
 	 * to the back-end driver.
 	 */
-	sbusburst = sbsc->sc_burst;
+	sbusburst = ((struct sbus_softc *)parent)->sc_burst;
 	if (sbusburst == 0)
 		sbusburst = SBUS_BURST_32 - 1; /* 1->16 */
 

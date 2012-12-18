@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs_sysvbfs.c,v 1.8 2011/08/29 14:35:03 joerg Exp $	*/
+/*	$NetBSD: newfs_sysvbfs.c,v 1.2 2008/04/28 20:23:09 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -31,7 +31,6 @@
 
 #include <sys/types.h>
 #include <sys/param.h>
-#include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,7 +44,7 @@
 
 #include <fs/sysvbfs/bfs.h>
 
-__dead static void usage(void);
+static void usage(void);
 static int bfs_newfs(int, uint32_t);
 
 int
@@ -55,111 +54,42 @@ main(int argc, char **argv)
 	struct disklabel d;
 	struct partition *p;
 	struct stat st;
-	uint32_t partsize;
-	int Fflag, Zflag;
 	int part;
-	int fd, ch;
+	int fd;
 
-	if (argc < 2)
+	if (argc != 2)
 		usage();
+	device = argv[1];
 
-	Fflag = Zflag = partsize = 0;
-	while ((ch = getopt(argc, argv, "Fs:Z")) != -1) {
-		switch (ch) {
-		case 'F':
-			Fflag = 1;
-			break;
-		case 's':
-			partsize = atoi(optarg);
-			break;
-		case 'Z':
-			Zflag = 1;
-			break;
-		default:
-			usage();
-			/*NOTREACHED*/
-		}
+	if ((fd = open(device, O_RDWR)) == -1) {
+		perror("open device");
+		exit(EXIT_FAILURE);
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc != 1)
-		usage();
-	device = argv[0];
-
-	if (!Fflag) {
-		if ((fd = open(device, O_RDWR)) == -1) {
-			perror("open device");
-			exit(EXIT_FAILURE);
-		}
-		if (fstat(fd, &st) != 0) {
-			perror("device stat");
-			goto err_exit;
-		}
-		if (!S_ISCHR(st.st_mode)) {
-			fprintf(stderr, "WARNING: not a raw device.\n");
-		}
-
-		part = DISKPART(st.st_rdev);
-
-		if (ioctl(fd, DIOCGDINFO, &d) == -1) {
-			perror("disklabel");
-			goto err_exit;
-		}
-		p = &d.d_partitions[part];
-		printf("partition = %d\n", part);
-		printf("size=%d offset=%d fstype=%d secsize=%d\n",
-		    p->p_size, p->p_offset, p->p_fstype, d.d_secsize);
-
-		if (p->p_fstype != FS_SYSVBFS) {
-			fprintf(stderr, "not a SysVBFS partition.\n");
-			goto err_exit;
-		}
-		partsize = p->p_size;
-	} else {
-		off_t filesize;
-		uint8_t zbuf[8192] = {0, };
-
-		if (partsize == 0) {
-			warnx("-F requires -s");
-			exit(EXIT_FAILURE);
-		}
-
-		filesize = partsize << BFS_BSHIFT;
-
-		fd = open(device, O_RDWR|O_CREAT|O_TRUNC, 0666);
-		if (fd == -1) {
-			perror("open file");
-			exit(EXIT_FAILURE);
-		}
-
-		if (Zflag) {
-			while (filesize > 0) {
-				size_t writenow = MIN(filesize, (off_t)sizeof(zbuf));
-
-				if ((size_t)write(fd, zbuf, writenow) != writenow) {
-					perror("zwrite");
-					exit(EXIT_FAILURE);
-				}
-				filesize -= writenow;
-			}
-		} else {
-			if (lseek(fd, filesize-1, SEEK_SET) == -1) {
-				perror("lseek");
-				exit(EXIT_FAILURE);
-			}
-			if (write(fd, zbuf, 1) != 1) {
-				perror("write");
-				exit(EXIT_FAILURE);
-			}
-			if (lseek(fd, 0, SEEK_SET) == -1) {
-				perror("lseek 2");
-				exit(EXIT_FAILURE);
-			}
-		}
+	if (fstat(fd, &st) != 0) {
+		perror("device stat");
+		goto err_exit;
+	}
+	if (!S_ISCHR(st.st_mode)) {
+		fprintf(stderr, "WARNING: not a raw device.\n");
 	}
 
-	if (bfs_newfs(fd, partsize) != 0)
+	part = DISKPART(st.st_rdev);
+
+	if (ioctl(fd, DIOCGDINFO, &d) == -1) {
+		perror("disklabel");
+		goto err_exit;
+	}
+	p = &d.d_partitions[part];
+	printf("partition = %d\n", part);
+	printf("size=%d offset=%d fstype=%d secsize=%d\n",
+	    p->p_size, p->p_offset, p->p_fstype, d.d_secsize);
+
+	if (p->p_fstype != FS_SYSVBFS) {
+		fprintf(stderr, "not a SysVBFS partition.\n");
+		goto err_exit;
+	}
+
+	if (bfs_newfs(fd, p->p_size) != 0)
 		goto err_exit;
 
 	close(fd);
@@ -170,7 +100,7 @@ main(int argc, char **argv)
 	exit(EXIT_FAILURE);
 }
 
-static int
+int
 bfs_newfs(int fd, uint32_t nsectors)
 {
 	uint8_t buf[DEV_BSIZE];
@@ -178,7 +108,7 @@ bfs_newfs(int fd, uint32_t nsectors)
 	struct bfs_inode *inode = (void *)buf;
 	struct bfs_dirent *dirent = (void *)buf;
 	time_t t = time(0);
-	int error;
+	int err;
 
 	/* Super block */
 	memset(buf, 0, DEV_BSIZE);
@@ -190,7 +120,7 @@ bfs_newfs(int fd, uint32_t nsectors)
 	bfs->compaction.from_backup = 0xffffffff;
 	bfs->compaction.to_backup = 0xffffffff;
 
-	if ((error = lseek(fd, 0, SEEK_SET)) == -1) {
+	if ((err = lseek(fd, 0, SEEK_SET)) == -1) {
 		perror("seek super block");
 		return -1;
 	}
@@ -232,11 +162,10 @@ bfs_newfs(int fd, uint32_t nsectors)
 	return 0;
 }
 
-static void
+void
 usage(void)
 {
 
-	(void)fprintf(stderr, "usage: %s [-FZ] [-s sectors] special-device\n",
-	    getprogname());
+	(void)fprintf(stderr, "usage: %s special-device\n", getprogname());
 	exit(EXIT_FAILURE);
 }

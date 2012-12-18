@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile,v 1.16 2011/01/02 05:30:12 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.15 2002/04/10 18:43:21 scw Exp $
 
 DEFS= -DSUN_BOOTPARAMS
 
 SRCS=   boot.c conf.c devopen.c
 SRCS+=	if_ie.c if_le.c
 PROG=	netboot
-LIBS=	${LIBSA} ${LIBKERN} ${LIBBUG}
+LIBS=	${LIBSA} ${LIBBUG}
 DPADD=	${LIBS}
 CLEANFILES+= netboot.bin
 

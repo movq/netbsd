@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sm_gpmc.c,v 1.5 2012/10/27 17:17:49 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sm_gpmc.c,v 1.3 2008/08/27 11:03:10 matt Exp $");
 
 #include "locators.h"
 
@@ -49,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_sm_gpmc.c,v 1.5 2012/10/27 17:17:49 chs Exp $");
 #include <net/if_media.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -60,8 +60,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_sm_gpmc.c,v 1.5 2012/10/27 17:17:49 chs Exp $");
 #include <arch/arm/omap/omap2_gpmcvar.h>
 #include <arch/arm/omap/omap_gpio.h>
 
-static int	sm_gpmc_match(device_t, cfdata_t, void *);
-static void	sm_gpmc_attach(device_t, device_t, void *);
+static int	sm_gpmc_match(struct device *, struct cfdata *, void *);
+static void	sm_gpmc_attach(struct device *, struct device *, void *);
 
 struct sm_gpmc_softc {
 	struct smc91cxx_softc sc_sm;
@@ -70,11 +70,11 @@ struct sm_gpmc_softc {
 	void *ih;
 };
 
-CFATTACH_DECL_NEW(sm_gpmc, sizeof(struct sm_gpmc_softc), sm_gpmc_match,
+CFATTACH_DECL(sm_gpmc, sizeof(struct sm_gpmc_softc), sm_gpmc_match,
     sm_gpmc_attach, NULL, NULL);
 
 static int
-sm_gpmc_match(device_t parent, cfdata_t match, void *aux)
+sm_gpmc_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct gpmc_attach_args *gpmc = aux;
 
@@ -106,9 +106,9 @@ sm_gpmc_intr(void *arg)
 }
 
 static void
-sm_gpmc_attach(device_t parent, device_t self, void *aux)
+sm_gpmc_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct sm_gpmc_softc *gpmcsc = device_private(self);
+	struct sm_gpmc_softc *gpmcsc = (struct sm_gpmc_softc *)self;
 	struct smc91cxx_softc *sc = &gpmcsc->sc_sm;
 	struct gpmc_attach_args *gpmc = aux;
 	bus_space_tag_t bst;
@@ -127,7 +127,6 @@ sm_gpmc_attach(device_t parent, device_t self, void *aux)
 	aprint_normal("\n");
 
 	/* fill in master sc */
-	sc->sc_dev = self;
 	sc->sc_bst = bst;
 	sc->sc_bsh = bsh;
 
@@ -142,9 +141,9 @@ sm_gpmc_attach(device_t parent, device_t self, void *aux)
 	}
 
 	evcnt_attach_dynamic(&gpmcsc->sc_spurious_ev, EVCNT_TYPE_INTR, NULL,
-	    device_xname(self), "spurious intr");
+	    self->dv_xname, "spurious intr");
 	evcnt_attach_dynamic(&gpmcsc->sc_incomplete_ev, EVCNT_TYPE_INTR, NULL,
-	    device_xname(self), "incomplete intr");
+	    self->dv_xname, "incomplete intr");
 
 	SMC_SELECT_BANK(sc, 1);
 	for (count = 0; count < ETHER_ADDR_LEN; count += 2) {

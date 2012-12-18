@@ -1,4 +1,4 @@
-/*	$NetBSD: ifmcstat.c,v 1.11 2012/10/26 16:52:52 seanb Exp $	*/
+/*	$NetBSD: ifmcstat.c,v 1.9 2004/11/16 05:59:32 itojun Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -66,12 +66,12 @@ kvm_t	*kvmd;
 
 struct	nlist nl[] = {
 #define	N_IFNET	0
-	{ "_ifnet", 0, 0, 0, 0 },
+	{ "_ifnet" },
 #if !(defined(__FreeBSD__) && __FreeBSD__ >= 3)
 #define N_IN6_MK 1
-	{ "_in6_mk", 0, 0, 0, 0 },
+	{ "_in6_mk" },
 #endif
-	{ "", 0, 0, 0, 0 },
+	{ "" },
 };
 
 const char *inet6_n2a __P((struct in6_addr *));
@@ -134,18 +134,13 @@ const char *inet6_n2a(p)
 
 int main()
 {
-	char	buf[_POSIX2_LINE_MAX], ifnam[IFNAMSIZ];
+	char	buf[_POSIX2_LINE_MAX], ifname[IFNAMSIZ];
 	struct	ifnet	*ifp, *nifp, ifnet;
 #ifndef __NetBSD__
 	struct	arpcom	arpcom;
 #else
 	struct ethercom ec;
-	union {
-		struct sockaddr_storage st;
-		struct sockaddr_dl sdl;
-	} su;
-	struct sockaddr_dl *sdlp;
-	sdlp = &su.sdl;
+	struct sockaddr_dl sdl;
 #endif
 
 	if ((kvmd = kvm_openfiles(NULL, NULL, NULL, O_RDONLY, buf)) == NULL) {
@@ -163,7 +158,7 @@ int main()
 	KREAD(nl[N_IFNET].n_value, &ifp, struct ifnet *);
 	while (ifp) {
 		KREAD(ifp, &ifnet, struct ifnet);
-		printf("%s:\n", if_indextoname(ifnet.if_index, ifnam));
+		printf("%s:\n", if_indextoname(ifnet.if_index, ifname));
 
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 		if6_addrlist(ifnet.if_addrlist.tqh_first);
@@ -177,13 +172,10 @@ int main()
 #endif
 
 #ifdef __NetBSD__
-		KREAD(ifnet.if_sadl, sdlp, struct sockaddr_dl);
-		if (sdlp->sdl_type == IFT_ETHER) {
-			/* If we didn't get all of it, try again */
-			if (sdlp->sdl_len > sizeof(struct sockaddr_dl))
-				kread((u_long)ifnet.if_sadl, (void *)sdlp, sdlp->sdl_len);
+		KREAD(ifnet.if_sadl, &sdl, struct sockaddr_dl);
+		if (sdl.sdl_type == IFT_ETHER) {
 			printf("\tenaddr %s",
-			       ether_ntoa((struct ether_addr *)LLADDR(sdlp)));
+			       ether_ntoa((struct ether_addr *)LLADDR(&sdl)));
 			KREAD(ifp, &ec, struct ethercom);
 			printf(" multicnt %d", ec.ec_multicnt);
 			acmc(ec.ec_multiaddrs.lh_first);

@@ -1,4 +1,4 @@
-/*	$NetBSD: stringops.h,v 1.1.1.2 2011/03/02 19:32:45 tron Exp $	*/
+/*	$NetBSD: stringops.h,v 1.1.1.1.2.3 2011/01/07 01:24:20 riz Exp $	*/
 
 #ifndef _STRINGOPS_H_INCLUDED_
 #define _STRINGOPS_H_INCLUDED_
@@ -43,7 +43,6 @@ extern int allprint(const char *);
 extern int allspace(const char *);
 extern int allascii(const char *);
 extern const char *split_nameval(char *, char **, char **);
-extern int valid_utf_8(const char *, ssize_t);
 
 /* LICENSE
 /* .ad

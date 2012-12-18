@@ -1,4 +1,4 @@
-/*	$NetBSD: ahcisatavar.h,v 1.14 2012/09/20 17:53:48 matt Exp $	*/
+/*	$NetBSD: ahcisatavar.h,v 1.4 2008/03/18 20:46:36 cube Exp $	*/
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -47,20 +52,11 @@ struct ahci_softc {
 	struct atac_softc sc_atac;
 	bus_space_tag_t sc_ahcit; /* ahci registers mapping */
 	bus_space_handle_t sc_ahcih;
-	bus_size_t sc_ahcis;
 	bus_dma_tag_t sc_dmat; /* DMA memory mappings: */
 	void *sc_cmd_hdr; /* command tables and received FIS */
 	bus_dmamap_t sc_cmd_hdrd;
-	bus_dma_segment_t sc_cmd_hdr_seg;
-	int sc_cmd_hdr_nseg;
 	int sc_atac_capflags;
-	int sc_ahci_quirks;
-#define AHCI_PCI_QUIRK_FORCE	__BIT(0)  /* force attach */
-#define AHCI_PCI_QUIRK_BAD64	__BIT(1)  /* broken 64-bit DMA */
-#define AHCI_QUIRK_BADPMP	__BIT(2)  /* broken PMP support, ignore */
-#define AHCI_QUIRK_BADPMPRESET	__BIT(3)  /* broken PMP support for reset */
 
-	uint32_t sc_ahci_cap;	/* copy of AHCI_CAP */
 	int sc_ncmds; /* number of command slots */
 	struct ata_channel *sc_chanarray[AHCI_MAX_PORTS];
 	struct ahci_channel {
@@ -75,12 +71,10 @@ struct ahci_softc {
 		bus_addr_t ahcic_bus_cmdh;
 		/* command tables (allocated per-channel) */
 		bus_dmamap_t ahcic_cmd_tbld;
-		bus_dma_segment_t ahcic_cmd_tbl_seg;
-		int ahcic_cmd_tbl_nseg;
 		struct ahci_cmd_tbl *ahcic_cmd_tbl[AHCI_MAX_CMDS];
 		bus_addr_t ahcic_bus_cmd_tbl[AHCI_MAX_CMDS];
 		bus_dmamap_t ahcic_datad[AHCI_MAX_CMDS];
-		uint32_t  ahcic_cmds_active; /* active commands */
+		u_int32_t  ahcic_cmds_active; /* active commands */
 	} sc_channels[AHCI_MAX_PORTS];
 };
 
@@ -104,8 +98,10 @@ struct ahci_softc {
     
 
 void ahci_attach(struct ahci_softc *);
-int  ahci_detach(struct ahci_softc *, int);
-void ahci_resume(struct ahci_softc *);
+void ahci_enable_intrs(struct ahci_softc *);
+int  ahci_reset(struct ahci_softc *);
+void ahci_setup_ports(struct ahci_softc *);
+void ahci_reprobe_drives(struct ahci_softc *);
 
 int  ahci_intr(void *);
 

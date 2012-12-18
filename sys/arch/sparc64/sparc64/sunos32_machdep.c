@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos32_machdep.c,v 1.32 2011/03/04 22:25:29 joerg Exp $	*/
+/*	$NetBSD: sunos32_machdep.c,v 1.28 2008/07/10 15:04:42 nakayama Exp $	*/
 /* from: NetBSD: sunos_machdep.c,v 1.14 2001/01/29 01:37:56 mrg Exp 	*/
 
 /*
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos32_machdep.c,v 1.32 2011/03/04 22:25:29 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos32_machdep.c,v 1.28 2008/07/10 15:04:42 nakayama Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ddb.h"
@@ -40,6 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: sunos32_machdep.c,v 1.32 2011/03/04 22:25:29 joerg E
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/namei.h>
+#include <sys/user.h>
 #include <sys/filedesc.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
@@ -101,8 +102,10 @@ static int ev_out32(struct firm_event *, int, struct uio *);
  */
 /* ARGSUSED */
 void
-sunos32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
-	/* stack:  XXX */
+sunos32_setregs(l, pack, stack)
+	struct lwp *l;
+	struct exec_package *pack;
+	u_long stack; /* XXX */
 {
 	struct trapframe64 *tf = l->l_md.md_tf;
 	struct fpstate64 *fs;
@@ -127,7 +130,7 @@ sunos32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 	 * Set the registers to 0 except for:
 	 *	%o6: stack pointer, built in exec())
 	 *	%tstate: (retain icc and xcc and cwp bits)
-	 *	%g1: p->p_psstrp (used by crt0)
+	 *	%g1: address of p->p_psstr (used by crt0)
 	 *	%tpc,%tnpc: entry point of program
 	 */
 	tstate = ((PSTATE_USER32)<<TSTATE_PSTATE_SHIFT) 
@@ -147,7 +150,7 @@ sunos32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 	}
 	memset(tf, 0, sizeof *tf);
 	tf->tf_tstate = tstate;
-	tf->tf_global[1] = (u_int)p->p_psstrp;
+	tf->tf_global[1] = (u_int)(u_long)p->p_psstr;
 	tf->tf_pc = pack->ep_entry & ~3;
 	tf->tf_npc = tf->tf_pc + 4;
 

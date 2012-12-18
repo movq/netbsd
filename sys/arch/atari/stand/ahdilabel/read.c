@@ -1,4 +1,4 @@
-/*	$NetBSD: read.c,v 1.4 2009/03/14 21:04:06 dsl Exp $	*/
+/*	$NetBSD: read.c,v 1.3 2008/04/28 20:23:15 martin Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -44,7 +44,10 @@
  * Read AHDI partitions from disk.
  */
 int
-ahdi_readlabel (struct ahdi_ptable *ptable, char *diskname, int flags)
+ahdi_readlabel (ptable, diskname, flags)
+	struct ahdi_ptable	*ptable;
+	char			*diskname;
+	int			 flags;
 {
 	int			 fd, rv;
 	struct disklabel	*dl;
@@ -99,7 +102,11 @@ ahdi_readlabel (struct ahdi_ptable *ptable, char *diskname, int flags)
  * Read AHDI partitions from root sector/auxillary root sector.
  */
 int
-read_rsec (int fd, struct ahdi_ptable *ptable, u_int rsec, u_int esec, int flags)
+read_rsec (fd, ptable, rsec, esec, flags)
+	int			 fd;
+	struct ahdi_ptable	*ptable;
+	u_int			 rsec, esec;
+	int			 flags;
 {
 	struct ahdi_part	*part, *end;
 	struct ahdi_root	*root;
@@ -220,7 +227,8 @@ disk_read (fd, start, count)
  * Assign NetBSD drive letters to partitions
  */
 void
-assign_letters (struct ahdi_ptable *ptable)
+assign_letters (ptable)
+	struct ahdi_ptable	*ptable;
 {
 	int	 	i, have_root, pno;
 	u_int32_t	pid;
@@ -251,7 +259,8 @@ assign_letters (struct ahdi_ptable *ptable)
  * Read disklabel for disk.
  */
 struct disklabel *
-read_dl (int fd)
+read_dl (fd)
+	int	 fd;
 {
 	struct disklabel	*dl;
 

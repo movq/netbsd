@@ -1,9 +1,9 @@
-#	$NetBSD: Makefile,v 1.31 2012/11/25 21:55:51 alnsn Exp $
+#	$NetBSD: Makefile,v 1.28 2007/02/09 21:55:06 ad Exp $
 
 INCSDIR= /usr/include/mips
 
-INCS=	ansi.h asm.h \
-	bswap.h \
+INCS=	ansi.h aout_machdep.h asm.h \
+	bswap.h bsd-aout.h \
 	cachectl.h cdefs.h cpu.h cpuregs.h \
 	ecoff_machdep.h elf_machdep.h endian.h endian_machdep.h \
 	float.h \
@@ -14,9 +14,9 @@ INCS=	ansi.h asm.h \
 	mips1_pte.h mips3_pte.h mips_opcode.h mips_param.h mutex.h \
 	pcb.h pmap.h pmc.h proc.h profile.h psl.h pte.h ptrace.h \
 	reg.h regdef.h regnum.h reloc.h rwlock.h \
-	setjmp.h signal.h sljitarch.h sysarch.h \
+	setjmp.h signal.h stdarg.h sysarch.h \
 	trap.h types.h \
-	vmparam.h \
+	varargs.h vmparam.h \
 	wchar_limits.h
 
 .include <bsd.kinc.mk>

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: maketars,v 1.74 2010/08/15 07:27:33 mrg Exp $
+# $NetBSD: maketars,v 1.64.6.3 2009/06/06 22:10:12 bouyer Exp $
 #
 # Make release tar files for some or all lists.  Usage:
 # maketars [-b] [-x] [-i installdir] [-a arch] [-m machine] [-s setsdir]
@@ -8,11 +8,10 @@
 #
 # The default sets are "base comp etc games man misc tests text"
 # The X sets are "xbase xcomp xetc xfont xserver"
-# The extsrc sets are "extbase extcomp extetc"
 #
 # If '-i installdir' is given, copy the given sets to installdir
 # (using pax -rw ...) instead of creating tar files.
-# In this case, remove "etc", "xetc", and "extetc" from the list of default sets.
+# In this case, remove "etc" and "xetc" from the list of default sets.
 #
 
 prog="${0##*/}"
@@ -20,7 +19,7 @@ rundir="$(dirname "$0")" # ${0%/*} isn't good enough when there's no "/"
 . "${rundir}/sets.subr"
 
 # set defaults
-lists=
+lists="${nlists}"
 tars="${RELEASEDIR}"
 dest="${DESTDIR}"
 metalog=
@@ -32,13 +31,10 @@ quiet=false
 usage()
 {
 	cat 1>&2 <<USAGE
-Usage: ${prog} [-L base,x,ext] [-b] [-x] [-y] [-i idir] [-a arch] [-m machine] [-s setsdir] [-S]
+Usage: ${prog} [-b] [-x] [-i idir] [-a arch] [-m machine] [-s setsdir] [-S]
 	    [-M metalog] [-N etcdir] [-d dest] [-t targetdir] [setname ...]
-	-L base,x,ext	Make specified lists
 	-b		Make both netbsd and x11 lists
 	-x		Only make x11 lists
-		[Default: make netbsd lists]
-	-y		Only make extsrc lists
 		[Default: make netbsd lists]
 	-i idir		Install sets to idir instead of creating tar files
 	-a arch		Set arch (e.g, m68k, mipseb, mipsel, powerpc) [${MACHINE_ARCH}]
@@ -61,29 +57,13 @@ msg()
 }
 
 # handle args
-while getopts L:bxyi:a:m:qs:SM:N:d:t: ch; do
+while getopts bxi:a:m:qs:SM:N:d:t: ch; do
 	case ${ch} in
-	L)
-		save_IFS="${IFS}"
-		IFS=,
-		for _list in ${OPTARG}; do
-			case $_list in
-			base)	lists="${lists} ${nlists}" ;;
-			x)	lists="${lists} ${xlists}" ;;
-			ext)	lists="${lists} ${extlists}" ;;
-			esac
-		done
-		IFS="${save_IFS}"
-		;;
-	# backward compat
 	b)
 		lists="${nlists} ${xlists}"
 		;;
 	x)
 		lists="${xlists}"
-		;;
-	y)
-		lists="${extlists}"
 		;;
 	i)
 		installdir="${OPTARG}"
@@ -122,8 +102,8 @@ while getopts L:bxyi:a:m:qs:SM:N:d:t: ch; do
 	esac
 done
 shift $((${OPTIND} - 1))
-if [ -n "${installdir}" ]; then	# if -i, remove etc + xetc + extetc from the default list
-	lists="$(echo ${lists} | ${SED} -e 's/ etc / /;s/ xetc / /;s/ extetc / /')"
+if [ -n "${installdir}" ]; then	# if -i, remove etc & xetc from the default list
+	lists="$(echo ${lists} | ${SED} -e 's/ etc / /;s/ xetc / /')"
 fi
 if [ -n "$*" ]; then
 	lists="$*"
@@ -160,32 +140,24 @@ trap cleanup 0 2 3 13		# EXIT INT QUIT PIPE
 
 for setname in ${lists}; do
 	${HOST_SH} "${setsdir}/makeflist" -a "${MACHINE_ARCH}" -m "${MACHINE}" \
-	    -s "${setsdir}" "${setname}" > "${SDIR}/flist.${setname}" \
-	    || exit 1
-	if [ ! -s "${SDIR}/flist.${setname}" ]; then
-		echo >&2 "makeflist output is empty for ${setname}"
-		exit 1
-	fi
+	    -s "${setsdir}" "${setname}" > "${SDIR}/flist.${setname}"
 	if [ -n "${metalog}" ]; then
 		${setfilesonly} && msg "Creating ${setlistdir}/set.${setname}"
 		${AWK} -f "${rundir}/getdirs.awk" "${SDIR}/flist.${setname}" \
-		    > "${SDIR}/flist.${setname}.full" \
-		    || exit 1
+		    | ${SORT} -u > "${SDIR}/flist.${setname}.full"
 		(
 			echo "/set uname=root gname=wheel"
 			${AWK} -f "${rundir}/join.awk" \
-				"${SDIR}/flist.${setname}.full" "${metalog}"
+				"${SDIR}/flist.${setname}.full" "${metalog}" \
+				    | ${SORT} -u
 			echo "./etc/mtree/set.${setname} type=file mode=0444"
-		) | ${MTREE} -CS -k all -R time -N "${etcdir}" \
-		    > "${setlistdir}/set.${setname}" \
-		    || exit 1
+		) > "${setlistdir}/set.${setname}"
 		# We deliberately do not add set.${setname} to ${metalog},
 		# because we depend on it as an input.
 	elif ! cmp -s "${SDIR}/flist.${setname}" \
 			"${setlistdir}/set.${setname}" >/dev/null 2>&1; then
 		rm -f "${setlistdir}/set.${setname}"
-		cp "${SDIR}/flist.${setname}" "${setlistdir}/set.${setname}" \
-		    || exit 1
+		cp "${SDIR}/flist.${setname}" "${setlistdir}/set.${setname}"
 	fi
 done
 if ${setfilesonly}; then		# exit after creating the set lists
@@ -196,10 +168,10 @@ fi
 # now build the tarfiles
 #
 
-GZIP=-9n		# for pax -z
+GZIP=-9			# for pax -z
 export GZIP
 es=0
-for setname in ${lists:-${nlists}}; do
+for setname in ${lists}; do
 	out="${setname}.tgz"
 	if [ -n "${installdir}" ]; then
 		msg "Copying set ${setname}"
@@ -217,7 +189,6 @@ for setname in ${lists:-${nlists}}; do
 		TMPFILES="${TMPFILES} ${tars}/${out}.tmp"
 		( cd "${dest}"; \
 		    ${PAX} -O -w -d -z -N"${etcdir}" ${metalog:+-M} \
-			--use-compress-program ${COMPRESS_PROGRAM} \
 			< "${setlistdir}/set.${setname}" ) \
 			> "${tars}/${out}.tmp" &&
 		mv "${tars}/${out}.tmp" "${tars}/${out}"

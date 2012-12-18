@@ -38,8 +38,6 @@ __FBSDID("$FreeBSD: src/usr.bin/tar/subst.c,v 1.4 2008/06/15 10:08:16 kientzle E
 #define	REG_BASIC 0
 #endif
 
-#include "err.h"
-
 struct subst_rule {
 	struct subst_rule *next;
 	regex_t re;
@@ -58,7 +56,7 @@ init_substitution(struct bsdtar *bsdtar)
 
 	bsdtar->substitution = subst = malloc(sizeof(*subst));
 	if (subst == NULL)
-		lafe_errc(1, errno, "Out of memory");
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
 	subst->first_rule = subst->last_rule = NULL;
 }
 
@@ -78,7 +76,7 @@ add_substitution(struct bsdtar *bsdtar, const char *rule_text)
 
 	rule = malloc(sizeof(*rule));
 	if (rule == NULL)
-		lafe_errc(1, errno, "Out of memory");
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
 	rule->next = NULL;
 
 	if (subst->last_rule == NULL)
@@ -88,32 +86,32 @@ add_substitution(struct bsdtar *bsdtar, const char *rule_text)
 	subst->last_rule = rule;
 
 	if (*rule_text == '\0')
-		lafe_errc(1, 0, "Empty replacement string");
+		bsdtar_errc(bsdtar, 1, 0, "Empty replacement string");
 	end_pattern = strchr(rule_text + 1, *rule_text);
 	if (end_pattern == NULL)
-		lafe_errc(1, 0, "Invalid replacement string");
+		bsdtar_errc(bsdtar, 1, 0, "Invalid replacement string");
 
 	pattern = malloc(end_pattern - rule_text);
 	if (pattern == NULL)
-		lafe_errc(1, errno, "Out of memory");
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
 	memcpy(pattern, rule_text + 1, end_pattern - rule_text - 1);
 	pattern[end_pattern - rule_text - 1] = '\0';
 
 	if ((r = regcomp(&rule->re, pattern, REG_BASIC)) != 0) {
 		char buf[80];
 		regerror(r, &rule->re, buf, sizeof(buf));
-		lafe_errc(1, 0, "Invalid regular expression: %s", buf);
+		bsdtar_errc(bsdtar, 1, 0, "Invalid regular expression: %s", buf);
 	}
 	free(pattern);
 
 	start_subst = end_pattern + 1;
 	end_pattern = strchr(start_subst, *rule_text);
 	if (end_pattern == NULL)
-		lafe_errc(1, 0, "Invalid replacement string");
+		bsdtar_errc(bsdtar, 1, 0, "Invalid replacement string");
 
 	rule->result = malloc(end_pattern - start_subst + 1);
 	if (rule->result == NULL)
-		lafe_errc(1, errno, "Out of memory");
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
 	memcpy(rule->result, start_subst, end_pattern - start_subst);
 	rule->result[end_pattern - start_subst] = '\0';
 
@@ -136,13 +134,13 @@ add_substitution(struct bsdtar *bsdtar, const char *rule_text)
 			rule->symlink = 1;
 			break;
 		default:
-			lafe_errc(1, 0, "Invalid replacement flag %c", *end_pattern);
+			bsdtar_errc(bsdtar, 1, 0, "Invalid replacement flag %c", *end_pattern);
 		}
 	}
 }
 
 static void
-realloc_strncat(char **str, const char *append, size_t len)
+realloc_strncat(struct bsdtar *bsdtar, char **str, const char *append, size_t len)
 {
 	char *new_str;
 	size_t old_len;
@@ -154,7 +152,7 @@ realloc_strncat(char **str, const char *append, size_t len)
 
 	new_str = malloc(old_len + len + 1);
 	if (new_str == NULL)
-		lafe_errc(1, errno, "Out of memory");
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
 	memcpy(new_str, *str, old_len);
 	memcpy(new_str + old_len, append, len);
 	new_str[old_len + len] = '\0';
@@ -163,7 +161,7 @@ realloc_strncat(char **str, const char *append, size_t len)
 }
 
 static void
-realloc_strcat(char **str, const char *append)
+realloc_strcat(struct bsdtar *bsdtar, char **str, const char *append)
 {
 	char *new_str;
 	size_t old_len;
@@ -175,7 +173,7 @@ realloc_strcat(char **str, const char *append)
 
 	new_str = malloc(old_len + strlen(append) + 1);
 	if (new_str == NULL)
-		lafe_errc(1, errno, "Out of memory");
+		bsdtar_errc(bsdtar, 1, errno, "Out of memory");
 	memcpy(new_str, *str, old_len);
 	strcpy(new_str + old_len, append);
 	free(*str);
@@ -204,16 +202,16 @@ apply_substitution(struct bsdtar *bsdtar, const char *name, char **result, int s
 		if (symlink_only && !rule->symlink)
 			continue;
 		if (regexec(&rule->re, name, 10, matches, 0))
-			continue;
+			break;
 
 		got_match = 1;
 		print_match |= rule->print;
-		realloc_strncat(result, name, matches[0].rm_so);
+		realloc_strncat(bsdtar, result, name, matches[0].rm_so);
 
 		for (i = 0, j = 0; rule->result[i] != '\0'; ++i) {
 			if (rule->result[i] == '~') {
-				realloc_strncat(result, rule->result + j, i - j);
-				realloc_strncat(result, name, matches[0].rm_eo);
+				realloc_strncat(bsdtar, result, rule->result + j, i - j);
+				realloc_strncat(bsdtar, result, name, matches[0].rm_eo);
 				j = i + 1;
 				continue;
 			}
@@ -225,7 +223,7 @@ apply_substitution(struct bsdtar *bsdtar, const char *name, char **result, int s
 			switch (c) {
 			case '~':
 			case '\\':
-				realloc_strncat(result, rule->result + j, i - j - 1);
+				realloc_strncat(bsdtar, result, rule->result + j, i - j - 1);
 				j = i;
 				break;
 			case '1':
@@ -237,13 +235,13 @@ apply_substitution(struct bsdtar *bsdtar, const char *name, char **result, int s
 			case '7':
 			case '8':
 			case '9':
-				realloc_strncat(result, rule->result + j, i - j - 1);
+				realloc_strncat(bsdtar, result, rule->result + j, i - j - 1);
 				if ((size_t)(c - '0') > (size_t)(rule->re.re_nsub)) {
 					free(*result);
 					*result = NULL;
 					return -1;
 				}
-				realloc_strncat(result, name + matches[c - '0'].rm_so, matches[c - '0'].rm_eo - matches[c - '0'].rm_so);
+				realloc_strncat(bsdtar, result, name + matches[c - '0'].rm_so, matches[c - '0'].rm_eo - matches[c - '0'].rm_so);
 				j = i + 1;
 				break;
 			default:
@@ -253,7 +251,7 @@ apply_substitution(struct bsdtar *bsdtar, const char *name, char **result, int s
 
 		}
 
-		realloc_strcat(result, rule->result + j);
+		realloc_strcat(bsdtar, result, rule->result + j);
 
 		name += matches[0].rm_eo;
 
@@ -262,7 +260,7 @@ apply_substitution(struct bsdtar *bsdtar, const char *name, char **result, int s
 	}
 
 	if (got_match)
-		realloc_strcat(result, name);
+		realloc_strcat(bsdtar, result, name);
 
 	if (print_match)
 		fprintf(stderr, "%s >> %s\n", path, *result);

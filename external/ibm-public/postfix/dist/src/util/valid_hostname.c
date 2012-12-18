@@ -1,4 +1,4 @@
-/*	$NetBSD: valid_hostname.c,v 1.1.1.2 2010/04/17 10:25:00 tron Exp $	*/
+/*	$NetBSD: valid_hostname.c,v 1.1.1.1.2.4 2011/01/07 01:24:20 riz Exp $	*/
 
 /*++
 /* NAME

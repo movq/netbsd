@@ -23,7 +23,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_compat_gtar.c 189308 2009-03-03 17:02:51Z kientzle $");
+__FBSDID("$FreeBSD: src/lib/libarchive/test/test_compat_gtar.c,v 1.2 2008/03/12 05:12:23 kientzle Exp $");
 
 /*
  * Verify our ability to read sample files created by GNU tar.
@@ -40,10 +40,9 @@ __FBSDID("$FreeBSD: head/lib/libarchive/test/test_compat_gtar.c 189308 2009-03-0
 static void
 test_compat_gtar_1(void)
 {
-	char name[] = "test_compat_gtar_1.tar";
+	char name[] = "test_compat_gtar_1.tgz";
 	struct archive_entry *ae;
 	struct archive *a;
-	int r;
 
 	assert((a = archive_read_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_compression_all(a));
@@ -52,11 +51,7 @@ test_compat_gtar_1(void)
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_open_filename(a, name, 10240));
 
 	/* Read first entry. */
-	assertEqualIntA(a, ARCHIVE_OK, r = archive_read_next_header(a, &ae));
-	if (r != ARCHIVE_OK) {
-		archive_read_finish(a);
-		return;
-	}
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
 	assertEqualString(
 		"12345678901234567890123456789012345678901234567890"
 		"12345678901234567890123456789012345678901234567890"
@@ -71,11 +66,7 @@ test_compat_gtar_1(void)
 	assertEqualInt(0100644, archive_entry_mode(ae));
 
 	/* Read second entry. */
-	assertEqualIntA(a, ARCHIVE_OK, r = archive_read_next_header(a, &ae));
-	if (r != ARCHIVE_OK) {
-		archive_read_finish(a);
-		return;
-	}
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
 	assertEqualString(
 		"abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij"
 		"abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij"
@@ -99,14 +90,14 @@ test_compat_gtar_1(void)
 	assertEqualIntA(a, ARCHIVE_EOF, archive_read_next_header(a, &ae));
 
 	/* Verify that the format detection worked. */
-	assertEqualInt(archive_compression(a), ARCHIVE_COMPRESSION_NONE);
+	assertEqualInt(archive_compression(a), ARCHIVE_COMPRESSION_GZIP);
 	assertEqualInt(archive_format(a), ARCHIVE_FORMAT_TAR_GNUTAR);
 
 	assertEqualInt(ARCHIVE_OK, archive_read_close(a));
-#if ARCHIVE_VERSION_NUMBER < 2000000
-	archive_read_finish(a);
-#else
+#if ARCHIVE_API_VERSION > 1
 	assertEqualInt(ARCHIVE_OK, archive_read_finish(a));
+#else
+	archive_read_finish(a);
 #endif
 }
 

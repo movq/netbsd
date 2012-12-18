@@ -1,4 +1,4 @@
-/*	$NetBSD: i80321_icu.c,v 1.24 2012/08/02 15:56:07 skrll Exp $	*/
+/*	$NetBSD: i80321_icu.c,v 1.18.10.1 2009/01/09 02:44:21 snj Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2006 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i80321_icu.c,v 1.24 2012/08/02 15:56:07 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i80321_icu.c,v 1.18.10.1 2009/01/09 02:44:21 snj Exp $");
 
 #ifndef EVBARM_SPL_NOINLINE
 #define	EVBARM_SPL_NOINLINE
@@ -52,7 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: i80321_icu.c,v 1.24 2012/08/02 15:56:07 skrll Exp $"
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -187,11 +187,7 @@ i80321_intr_calculate_masks(void)
 		i80321_imask[ipl] = irqs;
 	}
 
-	KASSERT(i80321_imask[IPL_NONE] == 0);
-	KASSERT(i80321_imask[IPL_SOFTCLOCK] == 0);
-	KASSERT(i80321_imask[IPL_SOFTBIO] == 0);
-	KASSERT(i80321_imask[IPL_SOFTNET] == 0);
-	KASSERT(i80321_imask[IPL_SOFTSERIAL] == 0);
+	i80321_imask[IPL_NONE] = 0;
 
 	/*
 	 * Enforce a hierarchy that gives "slow" device (or devices with
@@ -280,23 +276,15 @@ i80321_intr_init(void)
 	for (i = 0; i < NIRQ; i++) {
 		iq = &intrq[i];
 		TAILQ_INIT(&iq->iq_list);
+
+		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
+		    NULL, "iop321", i80321_irqnames[i]);
 	}
 
 	i80321_intr_calculate_masks();
 
 	/* Enable IRQs (don't yet use FIQs). */
 	enable_interrupts(I32_bit);
-}
-
-void
-i80321_intr_evcnt_attach(void)
-{
-	for (u_int i = 0; i < NIRQ; i++) {
-		struct intrq *iq = &intrq[i];
-		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
-		    NULL, "iop321", i80321_irqnames[i]);
-	}
-
 }
 
 void *
@@ -434,7 +422,7 @@ i80321_intr_dispatch(struct clockframe *frame)
 				 * triggered interrupt will just keep
 				 * coming back.
 				 */
-				frame->cf_tf.tf_spsr |= I32_bit;
+				frame->cf_if.if_spsr |= I32_bit;
 			}
 #endif
 			i80321_ipending |= ibit;
@@ -448,7 +436,7 @@ i80321_intr_dispatch(struct clockframe *frame)
 
 		iq = &intrq[irq];
 		iq->iq_ev.ev_count++;
-		ci->ci_data.cpu_nintr++;
+		uvmexp.intrs++;
 #ifdef I80321_HPI_ENABLED
 		/*
 		 * Re-enable interrupts iff an HPI is not pending
@@ -469,7 +457,7 @@ i80321_intr_dispatch(struct clockframe *frame)
 			 * Here's hoping the handler really did clear
 			 * down the source...
 			 */
-			frame->cf_tf.tf_spsr &= ~I32_bit;
+			frame->cf_if.if_spsr &= ~I32_bit;
 		}
 #endif
 		ci->ci_cpl = ppl;

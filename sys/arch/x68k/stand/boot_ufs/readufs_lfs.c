@@ -1,10 +1,10 @@
-/*	$NetBSD: readufs_lfs.c,v 1.12 2011/02/21 02:31:58 itohy Exp $	*/
+/*	$NetBSD: readufs_lfs.c,v 1.8 2005/12/11 12:19:44 christos Exp $	*/
 /*	from Id: readufs_lfs.c,v 1.7 2003/10/15 14:16:58 itohy Exp 	*/
 
 /*
  * FS specific support for 4.4BSD Log-structured Filesystem
  *
- * Written in 1999, 2002, 2003 by ITOH Yasufumi.
+ * Written in 1999, 2002, 2003 by ITOH Yasufumi (itohy@NetBSD.org).
  * Public domain.
  *
  * Intended to be used for boot programs (first stage).
@@ -20,7 +20,7 @@
  #error LFS currently requires USE_UFS1
 #endif
 
-static int get_lfs_inode(ino32_t ino, union ufs_dinode *dibuf);
+static int get_lfs_inode __P((ino32_t ino, union ufs_dinode *dibuf));
 
 static struct ufs1_dinode	ifile_dinode;
 
@@ -32,7 +32,7 @@ static struct ufs1_dinode	ifile_dinode;
  * If it is an LFS, save information from the superblock.
  */
 int
-try_lfs(void)
+try_lfs()
 {
 	struct ufs_info	*ufsinfo = &ufs_info;
 	struct dlfs	sblk, sblk2;
@@ -155,7 +155,9 @@ try_lfs(void)
  * Get inode from disk.
  */
 static int
-get_lfs_inode(ino32_t ino, union ufs_dinode *dibuf)
+get_lfs_inode(ino, dibuf)
+	ino32_t ino;
+	union ufs_dinode *dibuf;
 {
 	struct ufs_info *ufsinfo = &ufs_info;
 	daddr_t daddr;

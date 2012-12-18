@@ -1,4 +1,4 @@
-/*	$NetBSD: lancevar.h,v 1.15 2012/02/02 19:43:03 tls Exp $	*/
+/*	$NetBSD: lancevar.h,v 1.12 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "rnd.h"
+
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 struct lance_softc {
 	device_t sc_dev;		/* base device glue */
@@ -87,6 +91,8 @@ struct lance_softc {
 
 	int	sc_havecarrier;	/* carrier status */
 
+	void	*sc_sh;		/* shutdownhook cookie */
+
 	uint16_t sc_conf3;	/* CSR3 value */
 	uint16_t sc_saved_csr0;/* Value of csr0 at time of interrupt */
 
@@ -111,7 +117,9 @@ struct lance_softc {
 #endif
 	uint8_t sc_enaddr[ETHER_ADDR_LEN];
 	uint8_t sc_pad[2];
-	krndsource_t	rnd_source;
+#if NRND > 0
+	rndsource_element_t	rnd_source;
+#endif
 
 	void (*sc_meminit)(struct lance_softc *);
 	void (*sc_start)(struct ifnet *);

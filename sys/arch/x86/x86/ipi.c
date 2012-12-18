@@ -1,7 +1,7 @@
-/*	$NetBSD: ipi.c,v 1.18 2010/06/22 18:29:03 rmind Exp $	*/
+/*	$NetBSD: ipi.c,v 1.13 2008/05/11 21:48:02 ad Exp $	*/
 
 /*-
- * Copyright (c) 2000, 2008, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -32,9 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipi.c,v 1.18 2010/06/22 18:29:03 rmind Exp $");
-
-#include "opt_mtrr.h"
+__KERNEL_RCSID(0, "$NetBSD: ipi.c,v 1.13 2008/05/11 21:48:02 ad Exp $");
 
 #include <sys/param.h> 
 #include <sys/device.h>
@@ -42,67 +40,13 @@ __KERNEL_RCSID(0, "$NetBSD: ipi.c,v 1.18 2010/06/22 18:29:03 rmind Exp $");
 #include <sys/atomic.h>
 #include <sys/intr.h>
 #include <sys/cpu.h>
-#include <sys/xcall.h>
  
-#ifdef MULTIPROCESSOR
-
-#include <machine/cpufunc.h>
 #include <machine/cpuvar.h>
 #include <machine/i82093var.h>
 #include <machine/i82489reg.h>
 #include <machine/i82489var.h>
-#include <machine/mtrr.h>
-#include <machine/gdt.h>
 
-#include "acpica.h"
-
-#ifdef __x86_64__
-#include <machine/fpu.h>
-static void	x86_ipi_synch_fpu(struct cpu_info *);
-#else
-/* XXXfpu */
-#include "npx.h"
-#if NNPX > 0
-static void	x86_ipi_synch_fpu(struct cpu_info *);
-#define		fpusave_cpu(x)		npxsave_cpu(x)
-#else
-#define		x86_ipi_synch_fpu	NULL
-#endif
-#endif
-
-static void	x86_ipi_halt(struct cpu_info *);
-static void	x86_ipi_kpreempt(struct cpu_info *);
-static void	x86_ipi_xcall(struct cpu_info *);
-
-#ifdef MTRR
-static void	x86_ipi_reload_mtrr(struct cpu_info *);
-#else
-#define		x86_ipi_reload_mtrr	NULL
-#endif
-
-#if NACPICA > 0
-void	acpi_cpu_sleep(struct cpu_info *);
-#else
-#define	acpi_cpu_sleep	NULL
-#endif
-
-void (*ipifunc[X86_NIPI])(struct cpu_info *) =
-{
-	x86_ipi_halt,
-	NULL,
-	NULL,
-	x86_ipi_synch_fpu,
-	x86_ipi_reload_mtrr,
-	gdt_reload_cpu,
-	x86_ipi_xcall,
-	acpi_cpu_sleep,
-	x86_ipi_kpreempt
-};
-
-/*
- * x86 IPI interface.
- */
-
+#ifdef MULTIPROCESSOR
 int
 x86_send_ipi(struct cpu_info *ci, int ipimask)
 {
@@ -147,6 +91,21 @@ x86_broadcast_ipi(int ipimask)
 }
 
 void
+x86_multicast_ipi(int cpumask, int ipimask)
+{
+	struct cpu_info *ci;
+	CPU_INFO_ITERATOR cii;
+
+	if ((cpumask &= ~curcpu()->ci_cpumask) == 0)
+		return;
+
+	for (CPU_INFO_FOREACH(cii, ci)) {
+		if ((cpumask & ci->ci_cpumask) != 0)
+			x86_send_ipi(ci, ipimask);
+	}
+}
+
+void
 x86_ipi_handler(void)
 {
 	struct cpu_info *ci = curcpu();
@@ -163,83 +122,7 @@ x86_ipi_handler(void)
 		(*ipifunc[bit])(ci);
 	}
 }
-
-/*
- * Common x86 IPI handlers.
- */
-
-static void
-x86_ipi_halt(struct cpu_info *ci)
-{
-
-	x86_disable_intr();
-	atomic_and_32(&ci->ci_flags, ~CPUF_RUNNING);
-
-	for(;;) {
-		x86_hlt();
-	}
-}
-
-#if defined(__x86_64__) || NNPX > 0	/* XXXfpu */
-static void
-x86_ipi_synch_fpu(struct cpu_info *ci)
-{
-
-	fpusave_cpu(true);
-}
-#endif
-
-#ifdef MTRR
-static void
-x86_ipi_reload_mtrr(struct cpu_info *ci)
-{
-
-	if (mtrr_funcs != NULL) {
-		/*
-		 * mtrr_reload_cpu() is a macro in mtrr.h which picks
-		 * the appropriate function to use.
-		 */
-		mtrr_reload_cpu(ci);
-	}
-}
-#endif
-
-static void
-x86_ipi_kpreempt(struct cpu_info *ci)
-{
-
-	softint_trigger(1 << SIR_PREEMPT);
-}
-
-/*
- * MD support for xcall(9) interface.
- */
-
-static void
-x86_ipi_xcall(struct cpu_info *ci)
-{
-
-	xc_ipi_handler();
-}
-
-void
-xc_send_ipi(struct cpu_info *ci)
-{
-
-	KASSERT(kpreempt_disabled());
-	KASSERT(curcpu() != ci);
-
-	if (ci) {
-		/* Unicast: remote CPU. */
-		x86_send_ipi(ci, X86_IPI_XCALL);
-	} else {
-		/* Broadcast: all, but local CPU (caller will handle it). */
-		x86_broadcast_ipi(X86_IPI_XCALL);
-	}
-}
-
 #else
-
 int
 x86_send_ipi(struct cpu_info *ci, int ipimask)
 {
@@ -253,4 +136,9 @@ x86_broadcast_ipi(int ipimask)
 
 }
 
+void
+x86_multicast_ipi(int cpumask, int ipimask)
+{
+
+}
 #endif

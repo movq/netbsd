@@ -1,4 +1,4 @@
-/* 	$NetBSD: design_gsrd2.c,v 1.4 2011/06/18 06:44:27 matt Exp $ */
+/* 	$NetBSD: design_gsrd2.c,v 1.3 2007/10/17 19:54:20 garbled Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -32,7 +32,7 @@
 #include "opt_virtex.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: design_gsrd2.c,v 1.4 2011/06/18 06:44:27 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: design_gsrd2.c,v 1.3 2007/10/17 19:54:20 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,14 +40,13 @@ __KERNEL_RCSID(0, "$NetBSD: design_gsrd2.c,v 1.4 2011/06/18 06:44:27 matt Exp $"
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/extent.h>
-#include <sys/cpu.h>
-#include <sys/bus.h>
-#include <sys/intr.h>
 
+#include <machine/cpu.h>
+#include <machine/bus.h>
+#include <machine/intr.h>
 #include <machine/powerpc.h>
 #include <machine/tlb.h>
 
-#include <powerpc/ibm4xx/cpu.h>
 #include <powerpc/ibm4xx/dev/plbvar.h>
 
 #include <evbppc/virtex/dev/xcvbusvar.h>
@@ -477,7 +476,7 @@ virtex_machdep_init(vaddr_t endva, vsize_t maxsz, struct mem_region *phys,
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 	prop_number_t 		pn;
 	void 			*fb;

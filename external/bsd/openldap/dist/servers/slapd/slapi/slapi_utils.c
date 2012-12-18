@@ -1,9 +1,7 @@
-/*	$NetBSD: slapi_utils.c,v 1.1.1.3 2010/12/12 15:23:54 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/servers/slapd/slapi/slapi_utils.c,v 1.189.2.15 2010/04/13 20:23:51 kurt Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/slapi/slapi_utils.c,v 1.189.2.9 2008/02/11 23:26:50 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2002-2010 The OpenLDAP Foundation.
+ * Copyright 2002-2008 The OpenLDAP Foundation.
  * Portions Copyright 1997,2002-2003 IBM Corporation.
  * All rights reserved.
  *
@@ -28,7 +26,6 @@
 #include <ac/stdarg.h>
 #include <ac/ctype.h>
 #include <ac/unistd.h>
-#include <lutil.h>
 
 #include <slap.h>
 #include <slapi.h>
@@ -55,7 +52,7 @@ struct slapi_condvar {
 
 static int checkBVString(const struct berval *bv)
 {
-	ber_len_t i;
+	int i;
 
 	for ( i = 0; i < bv->bv_len; i++ ) {
 		if ( bv->bv_val[i] == '\0' )
@@ -477,30 +474,21 @@ int
 slapi_entry_has_children( const Slapi_Entry *e )
 {
 	Slapi_PBlock *pb;
-	Backend *be = select_backend( (struct berval *)&e->e_nname, 0 );
-	int rc, hasSubordinates = 0;
-
-	if ( be == NULL || be->be_has_subordinates == 0 ) {
-		return 0;
-	}
+	int hasSubordinates = 0;
 
 	pb = slapi_pblock_new();
-	if ( pb == NULL ) {
-		return 0;
-	}
 	slapi_int_connection_init_pb( pb, LDAP_REQ_SEARCH );
 
-	rc = slapi_pblock_set( pb, SLAPI_TARGET_DN, slapi_entry_get_dn(
-		(Entry *) e ));
-	if ( rc == LDAP_SUCCESS ) {
-		pb->pb_op->o_bd = be;
-		rc = be->be_has_subordinates( pb->pb_op, (Entry *) e,
-			&hasSubordinates );
+	slapi_pblock_set( pb, SLAPI_TARGET_DN, slapi_entry_get_dn( (Entry *)e ) );
+
+	pb->pb_op->o_bd = select_backend( (struct berval *)&e->e_nname, 0 );
+	if ( pb->pb_op->o_bd != NULL ) {
+		pb->pb_op->o_bd->be_has_subordinates( pb->pb_op, (Entry *)e, &hasSubordinates );
 	}
 
 	slapi_pblock_destroy( pb );
 
-	return ( rc == LDAP_SUCCESS && hasSubordinates == LDAP_COMPARE_TRUE );
+	return ( hasSubordinates == LDAP_COMPARE_TRUE );
 }
 
 /*
@@ -1832,16 +1820,9 @@ slapi_pw_find(
 	struct berval	**vals, 
 	struct berval	*v ) 
 {
-	int i;
-
-	if( ( vals == NULL ) || ( v == NULL ) )
-		return 1;
-
-	for ( i = 0; vals[i] != NULL; i++ ) {
-		if ( !lutil_passwd( vals[i], v, NULL, NULL ) )
-			return 0;
-	}
-
+	/*
+	 * FIXME: what's the point?
+	 */
 	return 1;
 }
 
@@ -3128,7 +3109,7 @@ int slapi_entry_schema_check( Slapi_PBlock *pb, Slapi_Entry *e )
 
 	pb->pb_op->o_bd = select_backend( &e->e_nname, 0 );
 	if ( pb->pb_op->o_bd != NULL ) {
-		rc = entry_schema_check( pb->pb_op, e, NULL, 0, 0, NULL,
+		rc = entry_schema_check( pb->pb_op, e, NULL, 0, 0,
 			&text, textbuf, textlen );
 	}
 	pb->pb_op->o_bd = be_orig;
@@ -3250,7 +3231,7 @@ LDAP *slapi_ldap_init( char *ldaphost, int ldapport, int secure, int shared )
 		rc = snprintf( url, size, "ldap%s://%s/", ( secure ? "s" : "" ), ldaphost );
 	}
 
-	if ( rc > 0 && (size_t) rc < size ) {
+	if ( rc > 0 && rc < size ) {
 		rc = ldap_initialize( &ld, url );
 	} else {
 		ld = NULL;

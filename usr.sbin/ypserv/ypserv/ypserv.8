@@ -1,4 +1,4 @@
-.\"	$NetBSD: ypserv.8,v 1.22 2011/04/25 22:53:09 wiz Exp $
+.\"	$NetBSD: ypserv.8,v 1.19 2008/05/16 16:41:42 chuck Exp $
 .\"
 .\" Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
 .\" All rights reserved.
@@ -11,6 +11,11 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
+.\" 3. All advertising materials mentioning features or use of this software
+.\"    must display the following acknowledgement:
+.\"	This product includes software developed by Mats O Jansson
+.\" 4. The name of the author may not be used to endorse or promote products
+.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
 .\" OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -70,26 +75,24 @@ The
 used for access control is the name which
 .Nm
 was invoked as (typically
-.Dq ypserv ) .
-If a host is not allowed to query this
+.Dq ypserv
+).  If a host is not allowed to query this
 .Tn NIS
 server,
 .Nm
 will return the
 .Tn NIS
 result code YP_NODOM.
-To avoid problems with DNS lookups causing
+To avoid problems with DNS lookups causing 
 .Nm
 to hang,
 .Nm
 disables DNS lookups for its client
 .Xr hosts_access 5
-lists.
-The result is that
+lists.  The result is that
 .Nm
-can only use address based patterns.
-This also means that wildcard patterns such as LOCAL or KNOWN will
-not work.
+can only use address based patterns.  This also means that wildcard patterns
+such as LOCAL or KNOWN will not work.
 .Pp
 The process pid of the
 .Nm
@@ -99,8 +102,7 @@ process can be found in the file
 The options are as follows:
 .Bl -tag -width indent
 .It Fl d
-Use internet Domain Name System.
-If a query to map
+Use internet Domain Name System. If a query to map
 .Pa hosts.byname
 or
 .Pa hosts.byaddr
@@ -115,14 +117,10 @@ Bind to the specified
 instead of dynamically allocating one.
 .El
 .Pp
-All messages are sent to the system log with the facility
-.Dv LOG_DAEMON .
-Error messages have the priority
-.Dv LOG_ERR .
-Refused requests are logged with the priority
-.Dv LOG_WARNING .
-All other messages are logged with the priority
-.Dv LOG_INFO .
+All messages are sent to the system log with the facility LOG_DAEMON.
+Error messages have the priority LOG_ERR.  Refused requests are logged
+with the priority LOG_WARNING.  All other messages are logged with the
+priority LOG_INFO.
 .Sh FILES
 .Bl -tag -width /var/run/ypserv.pid -compact
 .It Pa /var/run/ypserv.pid

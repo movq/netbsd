@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.72 2012/01/27 19:48:39 para Exp $	*/
+/*	$NetBSD: pmap.c,v 1.50 2007/10/17 19:56:39 garbled Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -67,28 +67,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.72 2012/01/27 19:48:39 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.50 2007/10/17 19:56:39 garbled Exp $");
 
 #include <sys/param.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
-#include <sys/kmem.h>
-#include <sys/pool.h>
+#include <sys/malloc.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/queue.h>
 #include <sys/systm.h>
+#include <sys/pool.h>
+#include <sys/device.h>
 
 #include <uvm/uvm.h>
 
+#include <machine/cpu.h>
+#include <machine/pcb.h>
 #include <machine/powerpc.h>
-#include <machine/tlb.h>
-
-#include <powerpc/pcb.h>
 
 #include <powerpc/spr.h>
-#include <powerpc/ibm4xx/spr.h>
-
-#include <powerpc/ibm4xx/cpu.h>
+#include <machine/tlb.h>
 
 /*
  * kernmap is an array of PTEs large enough to map in
@@ -129,14 +126,10 @@ struct evcnt tlbflush_ev = EVCNT_INITIALIZER(EVCNT_TYPE_TRAP,
 	NULL, "cpu", "tlbflush");
 struct evcnt tlbenter_ev = EVCNT_INITIALIZER(EVCNT_TYPE_TRAP,
 	NULL, "cpu", "tlbenter");
-EVCNT_ATTACH_STATIC(tlbmiss_ev);
-EVCNT_ATTACH_STATIC(tlbhit_ev);
-EVCNT_ATTACH_STATIC(tlbflush_ev);
-EVCNT_ATTACH_STATIC(tlbenter_ev);
 
 struct pmap kernel_pmap_;
-struct pmap *const kernel_pmap_ptr = &kernel_pmap_;
 
+int physmem;
 static int npgs;
 static u_int nextavail;
 #ifndef MSGBUFADDR
@@ -159,8 +152,8 @@ static char *pmap_attrib;
 
 struct pv_entry {
 	struct pv_entry *pv_next;	/* Linked list of mappings */
-	struct pmap *pv_pm;
 	vaddr_t pv_va;			/* virtual address of mapping */
+	struct pmap *pv_pm;
 };
 
 /* Each index corresponds to TLB_SIZE_* value. */
@@ -182,7 +175,7 @@ static int pmap_initialized;
 
 static int ctx_flush(int);
 
-struct pv_entry *pa_to_pv(paddr_t);
+inline struct pv_entry *pa_to_pv(paddr_t);
 static inline char *pa_to_attr(paddr_t);
 
 static inline volatile u_int *pte_find(struct pmap *, vaddr_t);
@@ -194,7 +187,7 @@ static void pmap_remove_pv(struct pmap *, vaddr_t, paddr_t);
 static int ppc4xx_tlb_size_mask(size_t, int *, int *);
 
 
-struct pv_entry *
+inline struct pv_entry *
 pa_to_pv(paddr_t pa)
 {
 	int bank, pg;
@@ -202,7 +195,7 @@ pa_to_pv(paddr_t pa)
 	bank = vm_physseg_find(atop(pa), &pg);
 	if (bank == -1)
 		return NULL;
-	return &VM_PHYSMEM_PTR(bank)->pmseg.pvent[pg];
+	return &vm_physmem[bank].pmseg.pvent[pg];
 }
 
 static inline char *
@@ -213,7 +206,7 @@ pa_to_attr(paddr_t pa)
 	bank = vm_physseg_find(atop(pa), &pg);
 	if (bank == -1)
 		return NULL;
-	return &VM_PHYSMEM_PTR(bank)->pmseg.attrs[pg];
+	return &vm_physmem[bank].pmseg.attrs[pg];
 }
 
 /*
@@ -419,6 +412,11 @@ pmap_bootstrap(u_int kernelstart, u_int kernelend)
 	pmap_kernel()->pm_ctx = KERNEL_PID;
 	nextavail = avail->start;
 
+	evcnt_attach_static(&tlbmiss_ev);
+	evcnt_attach_static(&tlbhit_ev);
+	evcnt_attach_static(&tlbflush_ev);
+	evcnt_attach_static(&tlbenter_ev);
+
 	pmap_bootstrap_done = 1;
 }
 
@@ -474,9 +472,9 @@ pmap_init(void)
 	pv = pv_table;
 	attr = pmap_attrib;
 	for (bank = 0; bank < vm_nphysseg; bank++) {
-		sz = VM_PHYSMEM_PTR(bank)->end - VM_PHYSMEM_PTR(bank)->start;
-		VM_PHYSMEM_PTR(bank)->pmseg.pvent = pv;
-		VM_PHYSMEM_PTR(bank)->pmseg.attrs = attr;
+		sz = vm_physmem[bank].end - vm_physmem[bank].start;
+		vm_physmem[bank].pmseg.pvent = pv;
+		vm_physmem[bank].pmseg.attrs = attr;
 		pv += sz;
 		attr += sz;
 	}
@@ -519,8 +517,8 @@ pmap_virtual_space(vaddr_t *start, vaddr_t *end)
  * This is not the most efficient technique but i don't
  * expect it to be called that often.
  */
-extern struct vm_page *vm_page_alloc1(void);
-extern void vm_page_free1(struct vm_page *);
+extern struct vm_page *vm_page_alloc1 __P((void));
+extern void vm_page_free1 __P((struct vm_page *));
 
 vaddr_t kbreak = VM_MIN_KERNEL_ADDRESS;
 
@@ -612,7 +610,7 @@ pmap_create(void)
 {
 	struct pmap *pm;
 
-	pm = kmem_alloc(sizeof(*pm), KM_SLEEP);
+	pm = malloc(sizeof *pm, M_VMPMAP, M_WAITOK);
 	memset(pm, 0, sizeof *pm);
 	pm->pm_refs = 1;
 	return pm;
@@ -650,7 +648,7 @@ pmap_destroy(struct pmap *pm)
 		}
 	if (pm->pm_ctx)
 		ctx_free(pm);
-	kmem_free(pm, sizeof(*pm));
+	free(pm, M_VMPMAP);
 }
 
 /*
@@ -672,6 +670,19 @@ pmap_copy(struct pmap *dst_pmap, struct pmap *src_pmap, vaddr_t dst_addr,
  */
 void
 pmap_update(struct pmap *pmap)
+{
+}
+
+/*
+ * Garbage collects the physical map system for
+ * pages which are no longer used.
+ * Success need not be guaranteed -- that is, there
+ * may well be pages which are not referenced, but
+ * others may be collected.
+ * Called by the pageout daemon when pages are scarce.
+ */
+void
+pmap_collect(struct pmap *pm)
 {
 }
 
@@ -702,7 +713,7 @@ pmap_copy_page(paddr_t src, paddr_t dst)
 {
 
 	memcpy((void *)dst, (void *)src, PAGE_SIZE);
-	dcache_wbinv_page(dst);
+	dcache_flush_page(dst);
 }
 
 /*
@@ -797,11 +808,11 @@ pmap_remove_pv(struct pmap *pm, vaddr_t va, paddr_t pa)
  * Insert physical page at pa into the given pmap at virtual address va.
  */
 int
-pmap_enter(struct pmap *pm, vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
+pmap_enter(struct pmap *pm, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
 {
 	int s;
 	u_int tte;
-	bool managed;
+	int managed;
 
 	/*
 	 * Have to remove any existing mapping first.
@@ -811,7 +822,9 @@ pmap_enter(struct pmap *pm, vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 	if (flags & PMAP_WIRED)
 		flags |= prot;
 
-	managed = uvm_pageismanaged(pa);
+	managed = 0;
+	if (vm_physseg_find(atop(pa), NULL) != -1)
+		managed = 1;
 
 	/*
 	 * Generate TTE.
@@ -820,11 +833,11 @@ pmap_enter(struct pmap *pm, vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 	/* XXXX -- need to support multiple page sizes. */
 	tte |= TTE_SZ_16K;
 #ifdef	DIAGNOSTIC
-	if ((flags & (PMAP_NOCACHE | PME_WRITETHROUG)) ==
-		(PMAP_NOCACHE | PME_WRITETHROUG))
+	if ((flags & (PME_NOCACHE | PME_WRITETHROUG)) ==
+		(PME_NOCACHE | PME_WRITETHROUG))
 		panic("pmap_enter: uncached & writethrough");
 #endif
-	if (flags & PMAP_NOCACHE)
+	if (flags & PME_NOCACHE)
 		/* Must be I/O mapping */
 		tte |= TTE_I | TTE_G;
 #ifdef PPC_4XX_NOCACHE
@@ -875,9 +888,7 @@ pmap_enter(struct pmap *pm, vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 
 	/* If this is a real fault, enter it in the tlb */
 	if (tte && ((flags & PMAP_WIRED) == 0)) {
-		int s2 = splhigh();
 		ppc4xx_tlb_enter(pm->pm_ctx, va, tte);
-		splx(s2);
 	}
 	splx(s);
 
@@ -918,7 +929,7 @@ pmap_unwire(struct pmap *pm, vaddr_t va)
 }
 
 void
-pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
+pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot)
 {
 	int s;
 	u_int tte;
@@ -943,11 +954,11 @@ pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 		/* XXXX -- need to support multiple page sizes. */
 		tte |= TTE_SZ_16K;
 #ifdef DIAGNOSTIC
-		if ((flags & (PMAP_NOCACHE | PME_WRITETHROUG)) ==
-			(PMAP_NOCACHE | PME_WRITETHROUG))
+		if ((prot & (PME_NOCACHE | PME_WRITETHROUG)) ==
+			(PME_NOCACHE | PME_WRITETHROUG))
 			panic("pmap_kenter_pa: uncached & writethrough");
 #endif
-		if (flags & PMAP_NOCACHE)
+		if (prot & PME_NOCACHE)
 			/* Must be I/O mapping */
 			tte |= TTE_I | TTE_G;
 #ifdef PPC_4XX_NOCACHE
@@ -1130,11 +1141,11 @@ void
 pmap_activate(struct lwp *l)
 {
 #if 0
-	struct pcb *pcb = lwp_getpcb(l);
+	struct pcb *pcb = &l->l_proc->p_addr->u_pcb;
 	pmap_t pmap = l->l_proc->p_vmspace->vm_map.pmap;
 
 	/*
-	 * XXX Normally performed in cpu_lwp_fork().
+	 * XXX Normally performed in cpu_fork().
 	 */
 	printf("pmap_activate(%p), pmap=%p\n",l,pmap);
 	pcb->pcb_pm = pmap;
@@ -1291,7 +1302,7 @@ ppc4xx_tlb_enter(int ctx, vaddr_t va, u_int pte)
 	tlbpid_t pid;
 	u_short msr;
 	paddr_t pa;
-	int sz;
+	int s, sz;
 
 	tlbenter_ev.ev_count++;
 
@@ -1301,6 +1312,7 @@ ppc4xx_tlb_enter(int ctx, vaddr_t va, u_int pte)
 	tl = (pte & ~TLB_RPN_MASK) | pa;
 	tl |= ppc4xx_tlbflags(va, pa);
 
+	s = splhigh();
 	idx = ppc4xx_tlb_find_victim();
 
 #ifdef DIAGNOSTIC
@@ -1331,6 +1343,7 @@ ppc4xx_tlb_enter(int ctx, vaddr_t va, u_int pte)
 		"sync; isync;"
 	: "=&r" (msr), "=&r" (pid)
 	: "r" (ctx), "r" (idx), "r" (tl), "r" (th));
+	splx(s);
 }
 
 void
@@ -1477,8 +1490,7 @@ pmap_tlbmiss(vaddr_t va, int ctx)
 	 * to not clobber 0 upto ${physmem} with device mappings in machdep
 	 * code.
 	 */
-	if (ctx != KERNEL_PID ||
-	    (va >= VM_MIN_KERNEL_ADDRESS && va < VM_MAX_KERNEL_ADDRESS)) {
+	if (ctx != KERNEL_PID || va >= VM_MIN_KERNEL_ADDRESS) {
 		pte = pte_find((struct pmap *)__UNVOLATILE(ctxbusy[ctx]), va);
 		if (pte == NULL) {
 			/* Map unmanaged addresses directly for kernel access */
@@ -1623,9 +1635,9 @@ ctx_free(struct pmap *pm)
 /*
  * Test ref/modify handling.
  */
-void pmap_testout(void);
+void pmap_testout __P((void));
 void
-pmap_testout(void)
+pmap_testout()
 {
 	vaddr_t va;
 	volatile int *loc;
@@ -1891,7 +1903,7 @@ pmap_testout(void)
 	       ref, mod);
 
 	pmap_remove(pmap_kernel(), va, va + PAGE_SIZE);
-	pmap_kenter_pa(va, pa, VM_PROT_ALL, 0);
+	pmap_kenter_pa(va, pa, VM_PROT_ALL);
 	uvm_km_free(kernel_map, (vaddr_t)va, PAGE_SIZE, UVM_KMF_WIRED);
 }
 #endif

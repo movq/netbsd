@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.17 2012/10/26 19:13:56 msaitoh Exp $
+#	$NetBSD: Makefile,v 1.13.26.1 2008/11/01 19:44:25 snj Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -9,15 +9,12 @@ RAMDISK=	${RAMDISKDIR}/ramdisk.fs
 .if ${MACHINE_ARCH} == "arm"
 # Little endian platforms.
 MDSETTARGETS=		ADI_BRH_INSTALL		${RAMDISK}	-	\
-			BCM5301X_INSTALL	${RAMDISK}	-	\
 			CP3100_INSTALL		${RAMDISK}	-	\
 			GEMINI_INSTALL		${RAMDISK}	-	\
 			GUMSTIX_INSTALL		${RAMDISK}	-	\
 			INTEGRATOR_INSTALL	${RAMDISK}	-	\
 			IQ80310_INSTALL		${RAMDISK}	-	\
 			IQ80321_INSTALL		${RAMDISK}	-	\
-			MINI2440_INSTALL	${RAMDISK}	-	\
-			OPENRD_INSTALL		${RAMDISK}	-	\
 			TS7200_INSTALL		${RAMDISK}	- 	\
 			TEAMASA_NPWR_INSTALL	${RAMDISK}	-
 .else

@@ -167,7 +167,7 @@ void
 screen_getsize()
 
 {
-    char *go;
+
 #ifdef TIOCGWINSZ
 
     struct winsize ws;
@@ -204,10 +204,7 @@ screen_getsize()
 #endif /* TIOCGSIZE */
 #endif /* TIOCGWINSZ */
 
-    if ((go = tgoto(tc_cursor_motion, 0, screen_length - 1)) != NULL)
-	(void) strcpy(lower_left, go);
-    else
-	lower_left[0] = '\0';
+    (void) strcpy(lower_left, tgoto(tc_cursor_motion, 0, screen_length - 1));
 }
 
 int
@@ -217,7 +214,7 @@ screen_readtermcap(int interactive)
     char *bufptr;
     char *PCptr;
     char *term_name;
-    char *go;
+    char *getenv();
     int status;
 
     /* set defaults in case we aren't smart */
@@ -318,10 +315,7 @@ screen_readtermcap(int interactive)
     PC = (PCptr = tgetstr("pc", &bufptr)) ? *PCptr : 0;
 
     /* set convenience strings */
-    if ((go = tgoto(tc_cursor_motion, 0, 0)) != NULL)
-	(void) strcpy(home, go);
-    else
-	home[0] = '\0';
+    (void) strcpy(home, tgoto(tc_cursor_motion, 0, 0));
     /* (lower_left is set in screen_getsize) */
 
     /* get the actual screen size with an ioctl, if needed */
@@ -509,13 +503,11 @@ void
 screen_move(int x, int y)
 
 {
-    char *go = tgoto(tc_cursor_motion, x, y);
-    if (go)
-	tputs(go, 1, putstdout);
+    tputs(tgoto(tc_cursor_motion, x, y), 1, putstdout);
 }
 
 void
-screen_standout(const char *msg)
+screen_standout(char *msg)
 
 {
     if (smart_terminal)
@@ -531,7 +523,7 @@ screen_standout(const char *msg)
 }
 
 void
-screen_clear(void)
+screen_clear()
 
 {
     if (smart_terminal)
@@ -541,7 +533,7 @@ screen_clear(void)
 }
 
 int
-screen_cte(void)
+screen_cte()
 
 {
     if (smart_terminal)
@@ -587,7 +579,7 @@ screen_cleareol(int len)
 }
 
 void
-screen_home(void)
+screen_home()
 
 {
     if (smart_terminal)

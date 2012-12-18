@@ -1,4 +1,4 @@
-/*	$NetBSD: bdinit.c,v 1.9 2012/10/13 20:57:35 dholland Exp $	*/
+/*	$NetBSD: bdinit.c,v 1.5 2003/08/07 09:37:15 agc Exp $	*/
 
 /*
  * Copyright (c) 1994
@@ -37,17 +37,16 @@
 #if 0
 static char sccsid[] = "from: @(#)bdinit.c	8.2 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: bdinit.c,v 1.9 2012/10/13 20:57:35 dholland Exp $");
+__RCSID("$NetBSD: bdinit.c,v 1.5 2003/08/07 09:37:15 agc Exp $");
 #endif
 #endif /* not lint */
 
 #include <string.h>
 #include "gomoku.h"
 
-static void init_overlap(void);
-
 void
-bdinit(struct spotstr *bp)
+bdinit(bp)
+	struct spotstr *bp;
 {
 	int i, j, r;
 	struct spotstr *sp;
@@ -59,7 +58,7 @@ bdinit(struct spotstr *bp)
 	sp = bp;
 	for (i = BSZ2; --i >= 0; sp++) {
 		sp->s_occ = BORDER;		/* top border */
-		sp->s_flags = BFLAGALL;
+		sp->s_flg = BFLAGALL;
 	}
 
 	/* fill entire board with EMPTY spots */
@@ -68,11 +67,11 @@ bdinit(struct spotstr *bp)
 	for (j = 0; ++j < BSZ1; sp++) {			/* for each row */
 		for (i = 0; ++i < BSZ1; sp++) {		/* for each column */
 			sp->s_occ = EMPTY;
-			sp->s_flags = 0;
+			sp->s_flg = 0;
 			sp->s_wval = 0;
 			if (j < 5) {
 				/* directions 1, 2, 3 are blocked */
-				sp->s_flags |= (BFLAG << 1) | (BFLAG << 2) |
+				sp->s_flg |= (BFLAG << 1) | (BFLAG << 2) |
 					(BFLAG << 3);
 				sp->s_fval[BLACK][1].s = MAXCOMBO;
 				sp->s_fval[BLACK][2].s = MAXCOMBO;
@@ -99,7 +98,7 @@ bdinit(struct spotstr *bp)
 			}
 			if (i > (BSZ - 4)) {
 				/* directions 0, 1 are blocked */
-				sp->s_flags |= BFLAG | (BFLAG << 1);
+				sp->s_flg |= BFLAG | (BFLAG << 1);
 				sp->s_fval[BLACK][0].s = MAXCOMBO;
 				sp->s_fval[BLACK][1].s = MAXCOMBO;
 				sp->s_fval[WHITE][0].s = MAXCOMBO;
@@ -108,7 +107,7 @@ bdinit(struct spotstr *bp)
 				sp->s_fval[BLACK][0].s = 0x500;
 				sp->s_fval[WHITE][0].s = 0x500;
 				/* if direction 1 is not blocked */
-				if (!(sp->s_flags & (BFLAG << 1))) {
+				if (!(sp->s_flg & (BFLAG << 1))) {
 					sp->s_fval[BLACK][1].s = 0x500;
 					sp->s_fval[WHITE][1].s = 0x500;
 				}
@@ -117,11 +116,11 @@ bdinit(struct spotstr *bp)
 				sp->s_fval[WHITE][0].s = 0x401;
 				if (i < 5) {
 					/* direction 3 is blocked */
-					sp->s_flags |= (BFLAG << 3);
+					sp->s_flg |= (BFLAG << 3);
 					sp->s_fval[BLACK][3].s = MAXCOMBO;
 					sp->s_fval[WHITE][3].s = MAXCOMBO;
 				} else if (i == 5 &&
-				    !(sp->s_flags & (BFLAG << 3))) {
+				    !(sp->s_flg & (BFLAG << 3))) {
 					sp->s_fval[BLACK][3].s = 0x500;
 					sp->s_fval[WHITE][3].s = 0x500;
 				}
@@ -130,7 +129,7 @@ bdinit(struct spotstr *bp)
 			 * Allocate a frame structure for non blocked frames.
 			 */
 			for (r = 4; --r >= 0; ) {
-				if (sp->s_flags & (BFLAG << r))
+				if (sp->s_flg & (BFLAG << r))
 					continue;
 				cbp->c_combo.s = sp->s_fval[BLACK][r].s;
 				cbp->c_vertex = sp - board;
@@ -141,13 +140,13 @@ bdinit(struct spotstr *bp)
 			}
 		}
 		sp->s_occ = BORDER;		/* left & right border */
-		sp->s_flags = BFLAGALL;
+		sp->s_flg = BFLAGALL;
 	}
 
 	/* mark the borders as such */
 	for (i = BSZ1; --i >= 0; sp++) {
 		sp->s_occ = BORDER;		/* bottom border */
-		sp->s_flags = BFLAGALL;
+		sp->s_flg = BFLAGALL;
 	}
 
 	sortframes[BLACK] = (struct combostr *)0;
@@ -172,12 +171,11 @@ bdinit(struct spotstr *bp)
  * As pieces are played, it can make frames not overlap if there are no
  * common open spaces shared between the two frames.
  */
-static void
-init_overlap(void)
+void
+init_overlap()
 {
 	struct spotstr *sp1, *sp2;
 	struct combostr *cbp;
-	unsigned frameix;
 	int i, f, r, n, d1, d2;
 	int mask, bmask, vertex, s;
 	u_char *str;
@@ -187,8 +185,7 @@ init_overlap(void)
 	memset(intersect, 0, sizeof(intersect));
 	str = &overlap[FAREA * FAREA];
 	ip = &intersect[FAREA * FAREA];
-	for (frameix = FAREA; frameix-- > 0; ) {	/* each frame */
-	    cbp = &frames[frameix];
+	for (cbp = frames + FAREA; --cbp >= frames; ) {		/* each frame */
 	    str -= FAREA;
 	    ip -= FAREA;
 	    sp1 = &board[vertex = cbp->c_vertex];
@@ -211,7 +208,7 @@ init_overlap(void)
 		    for (f = 0; f < 6; f++, sp2 -= d2) {
 			if (sp2->s_occ == BORDER)
 			    break;
-			if (sp2->s_flags & bmask)
+			if (sp2->s_flg & bmask)
 			    continue;
 			n = sp2->s_frame[r] - frames;
 			ip[n] = vertex;

@@ -1,4 +1,4 @@
-/*	$NetBSD: mlx_pci.c,v 1.24 2012/10/27 17:18:35 chs Exp $	*/
+/*	$NetBSD: mlx_pci.c,v 1.19 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mlx_pci.c,v 1.24 2012/10/27 17:18:35 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mlx_pci.c,v 1.19 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,8 +82,8 @@ __KERNEL_RCSID(0, "$NetBSD: mlx_pci.c,v 1.24 2012/10/27 17:18:35 chs Exp $");
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 
-static void	mlx_pci_attach(device_t, device_t, void *);
-static int	mlx_pci_match(device_t, cfdata_t, void *);
+static void	mlx_pci_attach(struct device *, struct device *, void *);
+static int	mlx_pci_match(struct device *, struct cfdata *, void *);
 static const struct mlx_pci_ident *mlx_pci_findmpi(struct pci_attach_args *);
 
 static int	mlx_v3_submit(struct mlx_softc *, struct mlx_ccb *);
@@ -141,7 +141,7 @@ static struct mlx_pci_ident {
 	},
 };
 
-CFATTACH_DECL_NEW(mlx_pci, sizeof(struct mlx_softc),
+CFATTACH_DECL(mlx_pci, sizeof(struct mlx_softc),
     mlx_pci_match, mlx_pci_attach, NULL, NULL);
 
 /*
@@ -178,7 +178,8 @@ mlx_pci_findmpi(struct pci_attach_args *pa)
  * Match a supported board.
  */
 static int
-mlx_pci_match(device_t parent, cfdata_t cfdata, void *aux)
+mlx_pci_match(struct device *parent, struct cfdata *cfdata,
+    void *aux)
 {
 
 	return (mlx_pci_findmpi(aux) != NULL);
@@ -188,7 +189,7 @@ mlx_pci_match(device_t parent, cfdata_t cfdata, void *aux)
  * Attach a supported board.
  */
 static void
-mlx_pci_attach(device_t parent, device_t self, void *aux)
+mlx_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa;
 	struct mlx_softc *mlx;
@@ -201,12 +202,11 @@ mlx_pci_attach(device_t parent, device_t self, void *aux)
 	int ior, memr, i;
 	const struct mlx_pci_ident *mpi;
 
-	mlx = device_private(self);
+	mlx = (struct mlx_softc *)self;
 	pa = aux;
 	pc = pa->pa_pc;
 	mpi = mlx_pci_findmpi(aux);
 
-	mlx->mlx_dv = self;
 	mlx->mlx_dmat = pa->pa_dmat;
 	mlx->mlx_ci.ci_iftype = mpi->mpi_iftype;
 
@@ -265,8 +265,8 @@ mlx_pci_attach(device_t parent, device_t self, void *aux)
 	if (mlx->mlx_ih == NULL) {
 		aprint_error_dev(self, "can't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			printf(" at %s", intrstr);
+		printf("\n");
 		return;
 	}
 

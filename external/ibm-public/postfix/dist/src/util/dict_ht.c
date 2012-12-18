@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_ht.c,v 1.1.1.3 2011/03/02 19:32:42 tron Exp $	*/
+/*	$NetBSD: dict_ht.c,v 1.1.1.1.2.4 2011/01/07 01:24:16 riz Exp $	*/
 
 /*++
 /* NAME
@@ -76,7 +76,6 @@ static void dict_ht_update(DICT *dict, const char *name, const char *value)
 {
     DICT_HT *dict_ht = (DICT_HT *) dict;
     HTABLE_INFO *ht;
-    char   *saved_value = mystrdup(value);
 
     /*
      * Optionally fold the key.
@@ -92,7 +91,7 @@ static void dict_ht_update(DICT *dict, const char *name, const char *value)
     } else {
 	ht = htable_enter(dict_ht->table, name, (char *) 0);
     }
-    ht->value = saved_value;
+    ht->value = mystrdup(value);
 }
 
 /* dict_ht_sequence - first/next iterator */

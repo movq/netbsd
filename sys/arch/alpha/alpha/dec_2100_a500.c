@@ -1,4 +1,4 @@
-/* $NetBSD: dec_2100_a500.c,v 1.23 2012/10/13 17:58:54 jdc Exp $ */
+/* $NetBSD: dec_2100_a500.c,v 1.18.10.1 2009/09/26 18:41:42 snj Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -34,17 +34,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -60,7 +60,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_2100_a500.c,v 1.23 2012/10/13 17:58:54 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_2100_a500.c,v 1.18.10.1 2009/09/26 18:41:42 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,7 +72,7 @@ __KERNEL_RCSID(0, "$NetBSD: dec_2100_a500.c,v 1.23 2012/10/13 17:58:54 jdc Exp $
 #include <machine/rpb.h>
 #include <machine/autoconf.h>
 #include <machine/cpuconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/alpha.h>
 
 #include <dev/ic/comreg.h>
@@ -104,7 +104,7 @@ static int comcnrate = CONSPEED;
 
 void _dec_2100_a500_init(void);
 static void dec_2100_a500_cons_init(void);
-static void dec_2100_a500_device_register(device_t, void *);
+static void dec_2100_a500_device_register(struct device *, void *);
 static void dec_2100_a500_machine_check(unsigned long, struct trapframe *,
 	unsigned long, unsigned long);
 
@@ -152,7 +152,7 @@ static void
 dec_2100_a500_cons_init(void)
 {
 	struct ctb *ctb;
-	uint64_t ctbslot;
+	u_int64_t ctbslot;
 	struct ttwoga_config *tcp;
 
 	ctb = (struct ctb *)(((char *)hwrpb) + hwrpb->rpb_ctb_off);
@@ -161,7 +161,7 @@ dec_2100_a500_cons_init(void)
 	tcp = ttwoga_init(0, 0);
 
 	switch (ctb->ctb_term_type) {
-	case CTB_PRINTERPORT:
+	case CTB_PRINTERPORT: 
 		/* serial console ... */
 		assert(CTB_TURBOSLOT_HOSE(ctbslot) == 0);
 		/* XXX */
@@ -186,7 +186,7 @@ dec_2100_a500_cons_init(void)
 		/* display console ... */
 		/* XXX */
 		(void) pckbc_cnattach(&tcp->tc_iot, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT, 0);
+		    PCKBC_KBD_SLOT);
 
 		switch (CTB_TURBOSLOT_TYPE(ctbslot)) {
 		case CTB_TURBOSLOT_TYPE_ISA:
@@ -235,12 +235,12 @@ dec_2100_a500_cons_init(void)
 }
 
 static void
-dec_2100_a500_device_register(device_t dev, void *aux)
+dec_2100_a500_device_register(struct device *dev, void *aux)
 {
 	static int found, initted, diskboot, netboot;
-	static device_t pcidev, ctrlrdev;
+	static struct device *pcidev, *ctrlrdev;
 	struct bootdev_data *b = bootdev_data;
-	device_t parent = device_parent(dev);
+	struct device *parent = device_parent(dev);
 
 	if (found)
 		return;
@@ -267,7 +267,7 @@ dec_2100_a500_device_register(device_t dev, void *aux)
 	
 			pcidev = dev;
 #if 0
-			printf("\npcidev = %s\n", device_xname(dev));
+			printf("\npcidev = %s\n", dev->dv_xname);
 #endif
 			return;
 		}
@@ -288,13 +288,13 @@ dec_2100_a500_device_register(device_t dev, void *aux)
 			if (netboot) {
 				booted_device = dev;
 #if 0
-				printf("\nbooted_device = %s\n", device_xname(dev));
+				printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 				found = 1;
 			} else {
 				ctrlrdev = dev;
 #if 0
-				printf("\nctrlrdev = %s\n", device_xname(dev));
+				printf("\nctrlrdev = %s\n", dev->dv_xname);
 #endif
 			}
 			return;
@@ -323,7 +323,7 @@ dec_2100_a500_device_register(device_t dev, void *aux)
 		/* we've found it! */
 		booted_device = dev;
 #if 0
-		printf("\nbooted_device = %s\n", device_xname(dev));
+		printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 		found = 1;
 	}
@@ -344,7 +344,7 @@ dec_2100_a500_device_register(device_t dev, void *aux)
 		/* we've found it! */
 		booted_device = dev;
 #if 0
-		printf("\nbooted_device = %s\n", device_xname(dev));
+		printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 		found = 1;
 	}

@@ -1,4 +1,4 @@
-/* $NetBSD: envstat.c,v 1.94 2012/12/14 05:29:28 pgoyette Exp $ */
+/* $NetBSD: envstat.c,v 1.70.4.1 2009/04/04 23:40:22 snj Exp $ */
 
 /*-
  * Copyright (c) 2007, 2008 Juan Romero Pardines.
@@ -27,29 +27,26 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: envstat.c,v 1.94 2012/12/14 05:29:28 pgoyette Exp $");
+__RCSID("$NetBSD: envstat.c,v 1.70.4.1 2009/04/04 23:40:22 snj Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <stdarg.h>
-#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <err.h>
 #include <errno.h>
-#include <paths.h>
 #include <syslog.h>
 #include <sys/envsys.h>
-#include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/queue.h>
 #include <prop/proplib.h>
 
 #include "envstat.h"
-#include "prog_ops.h"
+
+#define _PATH_DEV_SYSMON	"/dev/sysmon"
 
 #define ENVSYS_DFLAG	0x00000001	/* list registered devices */
 #define ENVSYS_FFLAG	0x00000002	/* show temp in farenheit */
@@ -58,7 +55,7 @@ __RCSID("$NetBSD: envstat.c,v 1.94 2012/12/14 05:29:28 pgoyette Exp $");
 #define ENVSYS_IFLAG 	0x00000010	/* skip invalid sensors */
 #define ENVSYS_SFLAG	0x00000020	/* remove all properties set */
 #define ENVSYS_TFLAG	0x00000040	/* make statistics */
-#define ENVSYS_KFLAG	0x00000100	/* show temp in kelvin */
+#define ENVSYS_WFLAG	0x00000080	/* print warn{min,max} values */
 
 /* Sensors */
 typedef struct envsys_sensor {
@@ -66,8 +63,11 @@ typedef struct envsys_sensor {
 	int32_t	cur_value;
 	int32_t	max_value;
 	int32_t	min_value;
+	int32_t	avg_value;
+	int32_t critcap_value;
 	int32_t	critmin_value;
 	int32_t	critmax_value;
+	int32_t warncap_value;
 	int32_t	warnmin_value;
 	int32_t	warnmax_value;
 	char	desc[ENVSYS_DESCLEN];
@@ -96,7 +96,7 @@ typedef struct envsys_dvprops {
 } *dvprops_t;
 
 /* A simple queue to manage all sensors */
-static SIMPLEQ_HEAD(, envsys_sensor) sensors_list =
+static SIMPLEQ_HEAD(, envsys_sensor) sensors_list = 
     SIMPLEQ_HEAD_INITIALIZER(sensors_list);
 
 /* A simple queue to manage statistics for all sensors */
@@ -109,36 +109,36 @@ static bool 		statistics;
 static u_int		header_passes;
 
 static int 		parse_dictionary(int);
-static int 		send_dictionary(FILE *);
+static int 		send_dictionary(FILE *, int);
 static int 		find_sensors(prop_array_t, const char *, dvprops_t);
 static void 		print_sensors(void);
-static int 		check_sensors(const char *);
+static int 		check_sensors(char *);
 static int 		usage(void);
 
-static int		sysmonfd; /* fd of /dev/sysmon */
 
 int main(int argc, char **argv)
 {
 	prop_dictionary_t dict;
-	int c, rval = 0;
+	int c, fd, rval = 0;
 	char *endptr, *configfile = NULL;
 	FILE *cf;
 
-	if (prog_init && prog_init() == -1)
-		err(1, "init failed");
-
 	setprogname(argv[0]);
 
-	while ((c = getopt(argc, argv, "c:Dd:fIi:klrSs:Tw:Wx")) != -1) {
+	while ((c = getopt(argc, argv, "c:Dd:fIi:lrSs:Tw:Wx")) != -1) {
 		switch (c) {
 		case 'c':	/* configuration file */
-			configfile = optarg;
+			configfile = strdup(optarg);
+			if (configfile == NULL)
+				err(EXIT_FAILURE, "strdup");
 			break;
 		case 'D':	/* list registered devices */
 			flags |= ENVSYS_DFLAG;
 			break;
 		case 'd':	/* show sensors of a specific device */
-			mydevname = optarg;
+			mydevname = strdup(optarg);
+			if (mydevname == NULL)
+				err(EXIT_FAILURE, "strdup");
 			break;
 		case 'f':	/* display temperature in Farenheit */
 			flags |= ENVSYS_FFLAG;
@@ -151,14 +151,11 @@ int main(int argc, char **argv)
 			if (*endptr != '\0')
 				errx(EXIT_FAILURE, "bad interval '%s'", optarg);
 			break;
-		case 'k':	/* display temperature in Kelvin */
-			flags |= ENVSYS_KFLAG;
-			break;
 		case 'l':	/* list sensors */
 			flags |= ENVSYS_LFLAG;
 			break;
 		case 'r':
-			/*
+			/* 
 			 * This flag is noop.. it's only here for
 			 * compatibility with the old implementation.
 			 */
@@ -167,10 +164,15 @@ int main(int argc, char **argv)
 			flags |= ENVSYS_SFLAG;
 			break;
 		case 's':	/* only show specified sensors */
-			sensors = optarg;
+			sensors = strdup(optarg);
+			if (sensors == NULL)
+				err(EXIT_FAILURE, "strdup");
 			break;
 		case 'T':	/* make statistics */
 			flags |= ENVSYS_TFLAG;
+			break;
+		case 'W':	/* print warn{max,min} vs crit{max,min} */
+			flags |= ENVSYS_WFLAG;
 			break;
 		case 'w':	/* width value for the lines */
 			width = (unsigned int)strtoul(optarg, &endptr, 10);
@@ -179,8 +181,6 @@ int main(int argc, char **argv)
 			break;
 		case 'x':	/* print the dictionary in raw format */
 			flags |= ENVSYS_XFLAG;
-			break;
-		case 'W':	/* No longer used, retained for compatibility */
 			break;
 		case '?':
 		default:
@@ -200,6 +200,9 @@ int main(int argc, char **argv)
 		if (!interval)
 			errx(EXIT_FAILURE,
 		    	    "-T cannot be used without an interval (-i)");
+		if (flags & ENVSYS_WFLAG)
+			errx(EXIT_FAILURE,
+			    "-T cannot be used with -W");
 		else
 			statistics = true;
 	}
@@ -208,12 +211,12 @@ int main(int argc, char **argv)
 		errx(EXIT_FAILURE, "-d flag cannot be used with -s");
 
 	/* Open the device in ro mode */
-	if ((sysmonfd = prog_open(_PATH_SYSMON, O_RDONLY)) == -1)
-		err(EXIT_FAILURE, "%s", _PATH_SYSMON);
+	if ((fd = open(_PATH_DEV_SYSMON, O_RDONLY)) == -1)
+		err(EXIT_FAILURE, "%s", _PATH_DEV_SYSMON);
 
 	/* Print dictionary in raw mode */
 	if (flags & ENVSYS_XFLAG) {
-		rval = prop_dictionary_recv_ioctl(sysmonfd,
+		rval = prop_dictionary_recv_ioctl(fd,
 						  ENVSYS_GETDICTIONARY,
 						  &dict);
 		if (rval)
@@ -224,16 +227,16 @@ int main(int argc, char **argv)
 	/* Remove all properties set in dictionary */
 	} else if (flags & ENVSYS_SFLAG) {
 		/* Close the ro descriptor */
-		(void)prog_close(sysmonfd);
+		(void)close(fd);
 
 		/* open the fd in rw mode */
-		if ((sysmonfd = prog_open(_PATH_SYSMON, O_RDWR)) == -1)
-			err(EXIT_FAILURE, "%s", _PATH_SYSMON);
+		if ((fd = open(_PATH_DEV_SYSMON, O_RDWR)) == -1)
+			err(EXIT_FAILURE, "%s", _PATH_DEV_SYSMON);
 
 		dict = prop_dictionary_create();
 		if (!dict)
 			err(EXIT_FAILURE, "prop_dictionary_create");
-
+		
 		rval = prop_dictionary_set_bool(dict,
 						"envsys-remove-props",
 					        true);
@@ -241,8 +244,7 @@ int main(int argc, char **argv)
 			err(EXIT_FAILURE, "prop_dict_set_bool");
 
 		/* send the dictionary to the kernel now */
-		rval = prop_dictionary_send_ioctl(dict, sysmonfd,
-		    ENVSYS_REMOVEPROPS);
+		rval = prop_dictionary_send_ioctl(dict, fd, ENVSYS_REMOVEPROPS);
 		if (rval)
 			warnx("%s", strerror(rval));
 
@@ -256,13 +258,13 @@ int main(int argc, char **argv)
 			errx(EXIT_FAILURE, "%s", strerror(errno));
 		}
 
-		rval = send_dictionary(cf);
+		rval = send_dictionary(cf, fd);
 		(void)fclose(cf);
 
 	/* Show sensors with interval */
 	} else if (interval) {
 		for (;;) {
-			rval = parse_dictionary(sysmonfd);
+			rval = parse_dictionary(fd);
 			if (rval)
 				break;
 
@@ -271,23 +273,26 @@ int main(int argc, char **argv)
 		}
 	/* Show sensors without interval */
 	} else {
-		rval = parse_dictionary(sysmonfd);
+		rval = parse_dictionary(fd);
 	}
 
-	(void)prog_close(sysmonfd);
+	if (sensors)
+		free(sensors);
+	if (mydevname)
+		free(mydevname);
+	(void)close(fd);
 
 	return rval ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 static int
-send_dictionary(FILE *cf)
+send_dictionary(FILE *cf, int fd)
 {
 	prop_dictionary_t kdict, udict;
 	int error = 0;
 
 	/* Retrieve dictionary from kernel */
-	error = prop_dictionary_recv_ioctl(sysmonfd,
-	    ENVSYS_GETDICTIONARY, &kdict);
+	error = prop_dictionary_recv_ioctl(fd, ENVSYS_GETDICTIONARY, &kdict);
       	if (error)
 		return error;
 
@@ -301,18 +306,17 @@ send_dictionary(FILE *cf)
 	/*
 	 * Close the read only descriptor and open a new one read write.
 	 */
-	(void)prog_close(sysmonfd);
-	if ((sysmonfd = prog_open(_PATH_SYSMON, O_RDWR)) == -1) {
+	(void)close(fd);
+	if ((fd = open(_PATH_DEV_SYSMON, O_RDWR)) == -1) {
 		error = errno;
-		warn("%s", _PATH_SYSMON);
+		warn("%s", _PATH_DEV_SYSMON);
 		return error;
 	}
 
-	/*
+	/* 
 	 * Send our sensor properties dictionary to the kernel then.
 	 */
-	error = prop_dictionary_send_ioctl(udict,
-	    sysmonfd, ENVSYS_SETDICTIONARY);
+	error = prop_dictionary_send_ioctl(udict, fd, ENVSYS_SETDICTIONARY);
 	if (error)
 		warnx("%s", strerror(error));
 
@@ -325,7 +329,7 @@ find_stats_sensor(const char *desc)
 {
 	sensor_stats_t stats;
 
-	/*
+	/* 
 	 * If we matched a sensor by its description return it, otherwise
 	 * allocate a new one.
 	 */
@@ -338,8 +342,6 @@ find_stats_sensor(const char *desc)
 		return NULL;
 
 	(void)strlcpy(stats->desc, desc, sizeof(stats->desc));
-	stats->min = INT32_MAX;
-	stats->max = INT32_MIN;
 	SIMPLEQ_INSERT_TAIL(&sensor_stats_list, stats, entries);
 
 	return stats;
@@ -419,7 +421,7 @@ parse_dictionary(int fd)
 					(void)printf("%d seconds)\n",
 					    (int)edp->refresh_timo);
 			}
-
+			
 			free(edp);
 			edp = NULL;
 		}
@@ -427,8 +429,19 @@ parse_dictionary(int fd)
 	}
 
 	/* print sensors now */
-	if (sensors)
-		rval = check_sensors(sensors);
+	if (sensors) {
+		char *str = strdup(sensors);
+		if (!str) {
+			rval = ENOMEM;
+			goto out;
+		}
+		rval = check_sensors(str);
+		if (rval) {
+			free(str);
+			goto out;
+		}
+		free(str);
+	}
 	if ((flags & ENVSYS_LFLAG) == 0 && (flags & ENVSYS_DFLAG) == 0)
 		print_sensors();
 	if (interval)
@@ -544,6 +557,11 @@ find_sensors(prop_array_t array, const char *dvname, dvprops_t edp)
 		if (obj1)
 			sensor->min_value = prop_number_integer_value(obj1);
 
+		/* get avg value */
+		obj1 = prop_dictionary_get(obj, "avg-value");
+		if (obj1)
+			sensor->avg_value = prop_number_integer_value(obj1);
+
 		/* get percentage flag */
 		obj1 = prop_dictionary_get(obj, "want-percentage");
 		if (obj1)
@@ -551,11 +569,6 @@ find_sensors(prop_array_t array, const char *dvname, dvprops_t edp)
 
 		/* get critical max value if available */
 		obj1 = prop_dictionary_get(obj, "critical-max");
-		if (obj1)
-			sensor->critmax_value = prop_number_integer_value(obj1);
-
-		/* get maximum capacity value if available */
-		obj1 = prop_dictionary_get(obj, "maximum-capacity");
 		if (obj1)
 			sensor->critmax_value = prop_number_integer_value(obj1);
 
@@ -567,15 +580,10 @@ find_sensors(prop_array_t array, const char *dvname, dvprops_t edp)
 		/* get critical capacity value if available */
 		obj1 = prop_dictionary_get(obj, "critical-capacity");
 		if (obj1)
-			sensor->critmin_value = prop_number_integer_value(obj1);
+			sensor->critcap_value = prop_number_integer_value(obj1);
 
 		/* get warning max value if available */
 		obj1 = prop_dictionary_get(obj, "warning-max");
-		if (obj1)
-			sensor->warnmax_value = prop_number_integer_value(obj1);
-
-		/* get high capacity value if available */
-		obj1 = prop_dictionary_get(obj, "high-capacity");
 		if (obj1)
 			sensor->warnmax_value = prop_number_integer_value(obj1);
 
@@ -587,7 +595,7 @@ find_sensors(prop_array_t array, const char *dvname, dvprops_t edp)
 		/* get warning capacity value if available */
 		obj1 = prop_dictionary_get(obj, "warning-capacity");
 		if (obj1)
-			sensor->warnmin_value = prop_number_integer_value(obj1);
+			sensor->warncap_value = prop_number_integer_value(obj1);
 
 		/* print sensor names if -l was given */
 		if (flags & ENVSYS_LFLAG) {
@@ -611,7 +619,7 @@ find_sensors(prop_array_t array, const char *dvname, dvprops_t edp)
 				continue;
 
 			/* ignore invalid data */
-			if (sensor->invalid)
+			if (sensor->invalid || !sensor->cur_value)
 				continue;
 
 			/* find or allocate a new statistics sensor */
@@ -622,7 +630,12 @@ find_sensors(prop_array_t array, const char *dvname, dvprops_t edp)
 				return ENOMEM;
 			}
 
-			/* update data */
+			/* collect data */
+			if (!stats->max)
+				stats->max = sensor->cur_value;
+			if (!stats->min)
+				stats->min = sensor->cur_value;
+
 			if (sensor->cur_value > stats->max)
 				stats->max = sensor->cur_value;
 
@@ -630,8 +643,10 @@ find_sensors(prop_array_t array, const char *dvname, dvprops_t edp)
 				stats->min = sensor->cur_value;
 
 			/* compute avg value */
-			stats->avg =
-			    (sensor->cur_value + stats->max + stats->min) / 3;
+			if (stats->max && stats->min)
+				stats->avg =
+				    (sensor->cur_value + stats->max +
+				    stats->min) / 3;
 		}
 	}
 
@@ -641,33 +656,30 @@ find_sensors(prop_array_t array, const char *dvname, dvprops_t edp)
 }
 
 static int
-check_sensors(const char *str)
+check_sensors(char *str)
 {
 	sensor_t sensor = NULL;
-	char *dvstring, *sstring, *p, *last, *s;
+	char *dvstring, *sstring, *p, *last;
 	bool sensor_found = false;
-
-	if ((s = strdup(str)) == NULL)
-		return errno;
 
 	/*
 	 * Parse device name and sensor description and find out
 	 * if the sensor is valid.
 	 */
-	for ((p = strtok_r(s, ",", &last)); p;
+	for ((p = strtok_r(str, ",", &last)); p;
 	     (p = strtok_r(NULL, ",", &last))) {
 		/* get device name */
 		dvstring = strtok(p, ":");
 		if (dvstring == NULL) {
 			warnx("missing device name");
-			goto out;
+			return EINVAL;
 		}
 
 		/* get sensor description */
 		sstring = strtok(NULL, ":");
 		if (sstring == NULL) {
 			warnx("missing sensor description");
-			goto out;
+			return EINVAL;
 		}
 
 		SIMPLEQ_FOREACH(sensor, &sensors_list, entries) {
@@ -683,21 +695,17 @@ check_sensors(const char *str)
 		if (sensor_found == false) {
 			warnx("unknown sensor `%s' for device `%s'",
 		       	    sstring, dvstring);
-			goto out;
+			return EINVAL;
 		}
 		sensor_found = false;
 	}
 
 	/* check if all sensors were ok, and error out if not */
 	SIMPLEQ_FOREACH(sensor, &sensors_list, entries)
-		if (sensor->visible) {
-			free(s);
+		if (sensor->visible)
 			return 0;
-		}
 
 	warnx("no sensors selected to display");
-out:
-	free(s);
 	return EINVAL;
 }
 
@@ -706,12 +714,12 @@ print_sensors(void)
 {
 	sensor_t sensor;
 	sensor_stats_t stats = NULL;
-	size_t maxlen = 0, ilen;
+	size_t maxlen = 0, ilen = 32 + 3;
 	double temp = 0;
 	const char *invalid = "N/A", *degrees, *tmpstr, *stype;
-	const char *a, *b, *c, *d, *e, *units;
+	const char *a, *b, *c, *d, *units;
 
-	tmpstr = stype = d = e = NULL;
+	tmpstr = stype = d = NULL;
 
 	/* find the longest description */
 	SIMPLEQ_FOREACH(sensor, &sensors_list, entries)
@@ -721,37 +729,35 @@ print_sensors(void)
 	if (width)
 		maxlen = width;
 
-	/*
+	/* 
 	 * Print a header at the bottom only once showing different
 	 * members if the statistics flag is set or not.
 	 *
 	 * As bonus if -s is set, only print this header every 10 iterations
 	 * to avoid redundancy... like vmstat(1).
 	 */
-
+	
 	a = "Current";
 	units = "Unit";
 	if (statistics) {
 		b = "Max";
 		c = "Min";
 		d = "Avg";
+	} else if (flags & ENVSYS_WFLAG) {
+		b = "WarnMax";
+		c = "WarnMin";
+		d = "WarnCap";
 	} else {
 		b = "CritMax";
-		c = "WarnMax";
-		d = "WarnMin";
-		e = "CritMin";
+		c = "CritMin";
+		d = "CritCap";
 	}
 
 	if (!sensors || (!header_passes && sensors) ||
 	    (header_passes == 10 && sensors)) {
-		if (statistics)
-			(void)printf("%s%*s  %9s %8s %8s %8s %6s\n",
-			    mydevname ? "" : "  ", (int)maxlen,
-			    "", a, b, c, d, units);
-		else
-			(void)printf("%s%*s  %9s %8s %8s %8s %8s %5s\n",
-			    mydevname ? "" : "  ", (int)maxlen,
-			    "", a, b, c, d, e, units);
+		(void)printf("%s%*s  %10s %8s %8s %8s %8s\n",
+		    mydevname ? "" : "  ", (int)maxlen,
+		    "", a, b, c, d, units);
 		if (sensors && header_passes == 10)
 			header_passes = 0;
 	}
@@ -791,7 +797,7 @@ print_sensors(void)
 
 		/* print invalid string */
 		if (sensor->invalid) {
-			(void)printf(": %9s\n", invalid);
+			(void)printf(": %10s\n", invalid);
 			continue;
 		}
 
@@ -801,163 +807,141 @@ print_sensors(void)
 		if ((strcmp(sensor->type, "Indicator") == 0) ||
 		    (strcmp(sensor->type, "Battery charge") == 0)) {
 
-			(void)printf(":%10s", sensor->cur_value ? "TRUE" : "FALSE");
+			(void)printf(": %10s", sensor->cur_value ? "ON" : "OFF");
 
-/* convert and print a temp value in degC, degF, or Kelvin */
-#define PRINTTEMP(a)						\
+/* converts the value to degC or degF */
+#define CONVERTTEMP(a, b, c)					\
 do {								\
-	if (a) {						\
-		temp = ((a) / 1000000.0);			\
-		if (flags & ENVSYS_FFLAG) {			\
-			temp = temp * (9.0 / 5.0) - 459.67;	\
-			degrees = "degF";			\
-		} else if (flags & ENVSYS_KFLAG) {		\
-			degrees = "K";				\
-		} else {					\
-			temp = temp - 273.15;			\
-			degrees = "degC";			\
-		}						\
-		(void)printf("%*.3f ", (int)ilen, temp);	\
-		ilen = 8;					\
+	if (b) 							\
+		(a) = ((b) / 1000000.0) - 273.15;		\
+	if (flags & ENVSYS_FFLAG) {				\
+		if (b)						\
+			(a) = (9.0 / 5.0) * (a) + 32.0;		\
+		(c) = "degF";					\
 	} else							\
-		ilen += 9;					\
+		(c) = "degC";					\
 } while (/* CONSTCOND */ 0)
+
 
 		/* temperatures */
 		} else if (strcmp(sensor->type, "Temperature") == 0) {
 
-			ilen = 10;
-			degrees = "";
-			(void)printf(":");
-			PRINTTEMP(sensor->cur_value);
+			CONVERTTEMP(temp, sensor->cur_value, degrees);
 			stype = degrees;
+			(void)printf(": %10.3f ", temp);
 
 			if (statistics) {
 				/* show statistics if flag set */
-				PRINTTEMP(stats->max);
-				PRINTTEMP(stats->min);
-				PRINTTEMP(stats->avg);
-				ilen += 2;
+				CONVERTTEMP(temp, stats->max, degrees);
+				(void)printf("%8.3f ", temp);
+				CONVERTTEMP(temp, stats->min, degrees);
+				(void)printf("%8.3f ", temp);
+				CONVERTTEMP(temp, stats->avg, degrees);
+				(void)printf("%8.3f ", temp);
+				ilen = 8;
+			} else if (flags & ENVSYS_WFLAG) {
+				if (sensor->warnmax_value) {
+					CONVERTTEMP(temp,
+					    sensor->warnmax_value, degrees);
+					(void)printf( "%8.3f ", temp);
+					ilen = 24 + 2;
+				}
+
+				if (sensor->warnmin_value) {
+					CONVERTTEMP(temp,
+					    sensor->warnmin_value, degrees);
+					if (sensor->warnmax_value)
+						ilen = 8;
+					else
+						ilen = 16 + 1;
+
+					(void)printf("%*.3f ", (int)ilen, temp);
+					ilen = 16 + 1;
+				}
 			} else {
-				PRINTTEMP(sensor->critmax_value);
-				PRINTTEMP(sensor->warnmax_value);
-				PRINTTEMP(sensor->warnmin_value);
-				PRINTTEMP(sensor->critmin_value);
+				if (sensor->critmax_value) {
+					CONVERTTEMP(temp,
+					    sensor->critmax_value, degrees);
+					(void)printf( "%8.3f ", temp);
+					ilen = 24 + 2;
+				}
+
+				if (sensor->critmin_value) {
+					CONVERTTEMP(temp,
+					    sensor->critmin_value, degrees);
+					if (sensor->critmax_value)
+						ilen = 8;
+					else
+						ilen = 16 + 1;
+
+					(void)printf("%*.3f ", (int)ilen, temp);
+					ilen = 16 + 1;
+				}
 			}
-			(void)printf("%*s", (int)ilen - 3, stype);
-#undef PRINTTEMP
+
+			(void)printf("%*s", (int)ilen, stype);
+#undef CONVERTTEMP
 
 		/* fans */
 		} else if (strcmp(sensor->type, "Fan") == 0) {
 			stype = "RPM";
 
-			(void)printf(":%10u ", sensor->cur_value);
-
-			ilen = 8;
+			(void)printf(": %10u ", sensor->cur_value);
 			if (statistics) {
 				/* show statistics if flag set */
 				(void)printf("%8u %8u %8u ",
 				    stats->max, stats->min, stats->avg);
-				ilen += 2;
-			} else {
-				if (sensor->critmax_value) {
-					(void)printf("%*u ", (int)ilen,
-					    sensor->critmax_value);
-					ilen = 8;
-				} else
-					ilen += 9;
-
+				ilen = 8;
+			} else if (flags & ENVSYS_WFLAG) {
 				if (sensor->warnmax_value) {
-					(void)printf("%*u ", (int)ilen,
+					(void)printf("%8u ",
 					    sensor->warnmax_value);
-					ilen = 8;
-				} else
-					ilen += 9;
+					ilen = 24 + 2;
+				}
 
 				if (sensor->warnmin_value) {
+					if (sensor->warnmax_value)
+						ilen = 8;
+					else
+						ilen = 16 + 1;
 					(void)printf("%*u ", (int)ilen,
 					    sensor->warnmin_value);
-					ilen = 8;
-				} else
-					ilen += 9;
+					ilen = 16 + 1;
+				}
+			} else {
+				if (sensor->critmax_value) {
+					(void)printf("%8u ",
+					    sensor->critmax_value);
+					ilen = 24 + 2;
+				}
 
 				if (sensor->critmin_value) {
-					(void)printf( "%*u ", (int)ilen,
+					if (sensor->critmax_value)
+						ilen = 8;
+					else
+						ilen = 16 + 1;
+					(void)printf("%*u ", (int)ilen,
 					    sensor->critmin_value);
-					ilen = 8;
-				} else
-					ilen += 9;
-
+					ilen = 16 + 1;
+				}
 			}
 
-			(void)printf("%*s", (int)ilen - 3, stype);
+			(void)printf("%*s", (int)ilen, stype);
 
 		/* integers */
 		} else if (strcmp(sensor->type, "Integer") == 0) {
 
-			stype = "none";
-
-			(void)printf(":%10d ", sensor->cur_value);
-
-			ilen = 8;
-
-/* Print percentage of max_value */
-#define PRINTPCT(a)							\
-do {									\
-	if (sensor->max_value) {					\
-		(void)printf("%*.3f%%", (int)ilen,			\
-			((a) * 100.0) / sensor->max_value);		\
-		ilen = 8;						\
-	} else								\
-		ilen += 9;						\
-} while ( /* CONSTCOND*/ 0 )
-
-/* Print an integer sensor value */
-#define PRINTINT(a)							\
-do {									\
-	(void)printf("%*u ", (int)ilen, (a));				\
-	ilen = 8;							\
-} while ( /* CONSTCOND*/ 0 )
-
-			if (!statistics) {
-				if (sensor->percentage) {
-					PRINTPCT(sensor->critmax_value);
-					PRINTPCT(sensor->warnmax_value);
-					PRINTPCT(sensor->warnmin_value);
-					PRINTPCT(sensor->critmin_value);
-				} else {
-					PRINTINT(sensor->critmax_value);
-					PRINTINT(sensor->warnmax_value);
-					PRINTINT(sensor->warnmin_value);
-					PRINTINT(sensor->critmin_value);
-				}
-			} else {
-				if (sensor->percentage) {
-					PRINTPCT(stats->max);
-					PRINTPCT(stats->min);
-					PRINTPCT(stats->avg);
-				} else {
-					PRINTINT(stats->max);
-					PRINTINT(stats->min);
-					PRINTINT(stats->avg);
-				}
-				ilen += 2;
-			}
-
-			(void)printf("%*s", (int)ilen - 3, stype);
-
-#undef PRINTINT
-#undef PRINTPCT
+			(void)printf(": %10d", sensor->cur_value);
 
 		/* drives  */
 		} else if (strcmp(sensor->type, "Drive") == 0) {
 
-			(void)printf(":%10s", sensor->drvstate);
+			(void)printf(": %10s", sensor->drvstate);
 
 		/* Battery capacity */
 		} else if (strcmp(sensor->type, "Battery capacity") == 0) {
 
-			(void)printf(":%10s", sensor->battcap);
+			(void)printf(": %10s", sensor->battcap);
 
 		/* everything else */
 		} else {
@@ -975,79 +959,87 @@ do {									\
 				stype = "Wh";
 			else if (strcmp(sensor->type, "Ampere hour") == 0)
 				stype = "Ah";
-			else
-				stype = "?";
 
-			(void)printf(":%10.3f ",
+			(void)printf(": %10.3f ",
 			    sensor->cur_value / 1000000.0);
 
-			ilen = 8;
-
-/* Print percentage of max_value */
-#define PRINTPCT(a)							\
-do {									\
-	if ((a) && sensor->max_value) {					\
-		(void)printf("%*.3f%%", (int)ilen,			\
-			((a) * 100.0) / sensor->max_value);		\
-		ilen = 8;						\
-	} else								\
-		ilen += 9;						\
-} while ( /* CONSTCOND*/ 0 )
-
-/* Print a generic sensor value */
-#define PRINTVAL(a)							\
-do {									\
-	if ((a)) {							\
-		(void)printf("%*.3f ", (int)ilen, (a) / 1000000.0);	\
-		ilen = 8;						\
-	} else								\
-		ilen += 9;						\
-} while ( /* CONSTCOND*/ 0 )
-
 			if (!statistics) {
-				if (sensor->percentage) {
-					PRINTPCT(sensor->critmax_value);
-					PRINTPCT(sensor->warnmax_value);
-					PRINTPCT(sensor->warnmin_value);
-					PRINTPCT(sensor->critmin_value);
-				} else {
+				if (flags & ENVSYS_WFLAG) {
+					if (sensor->warnmax_value) {
+						(void)printf("%8.3f ",
+						    sensor->warnmax_value / 1000000.0);
+						ilen = 24 + 2;
+					}
 
-					PRINTVAL(sensor->critmax_value);
-					PRINTVAL(sensor->warnmax_value);
-					PRINTVAL(sensor->warnmin_value);
-					PRINTVAL(sensor->critmin_value);
-				}
-			} else {
-				if (sensor->percentage) {
-					PRINTPCT(stats->max);
-					PRINTPCT(stats->min);
-					PRINTPCT(stats->avg);
+					if (sensor->warnmin_value) {
+						if (sensor->warnmax_value)
+							ilen = 8;
+						else
+							ilen = 16 + 1;
+						(void)printf("%*.3f ", (int)ilen,
+						    sensor->warnmin_value / 1000000.0);
+						ilen = 16 + 1;
+					}
+					if (sensor->warncap_value) {
+						ilen = 24 + 2 - 1;
+						(void)printf("%*.2f%% ", (int)ilen,
+						    (sensor->warncap_value * 100.0) /
+						    sensor->max_value);
+						ilen = 8;
+					}
 				} else {
-					PRINTVAL(stats->max);
-					PRINTVAL(stats->min);
-					PRINTVAL(stats->avg);
+					if (sensor->critmax_value) {
+						(void)printf("%8.3f ",
+						    sensor->critmax_value / 1000000.0);
+						ilen = 24 + 2;
+					}
+
+					if (sensor->critmin_value) {
+						if (sensor->critmax_value)
+							ilen = 8;
+						else
+							ilen = 16 + 1;
+						(void)printf("%*.3f ", (int)ilen,
+						    sensor->critmin_value / 1000000.0);
+						ilen = 16 + 1;
+
+					}
+
+					if (sensor->critcap_value) {
+						ilen = 24 + 2 - 1;
+						(void)printf("%*.2f%% ", (int)ilen,
+						    (sensor->critcap_value * 100.0) /
+						    sensor->max_value);
+						ilen = 8;
+					}
 				}
-				ilen += 2;
 			}
-#undef PRINTPCT
-#undef PRINTVAL
 
-			(void)printf("%*s", (int)ilen - 3, stype);
+			if (statistics && !sensor->percentage) {
+				/* show statistics if flag set */
+				(void)printf("%8.3f %8.3f %8.3f ",
+				    stats->max / 1000000.0,
+				    stats->min / 1000000.0,
+				    stats->avg / 1000000.0);
+				ilen = 8;
+			}
 
+			(void)printf("%*s", (int)ilen, stype);
 			if (sensor->percentage && sensor->max_value) {
-				(void)printf(" (%5.2f%%)",
+				(void)printf("  (%5.2f%%)",
 				    (sensor->cur_value * 100.0) /
 				    sensor->max_value);
 			}
 		}
 		(void)printf("\n");
+		ilen = 32 + 3;
 	}
 }
 
 static int
 usage(void)
 {
-	(void)fprintf(stderr, "Usage: %s [-DfIklrSTx] ", getprogname());
+	(void)fprintf(stderr, "Usage: %s [-DfIlrSTx] ", getprogname());
 	(void)fprintf(stderr, "[-c file] [-d device] [-i interval] ");
 	(void)fprintf(stderr, "[-s device:sensor,...] [-w width]\n");
 	exit(EXIT_FAILURE);

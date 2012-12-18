@@ -1,4 +1,4 @@
-/* $NetBSD: unichromefb.c,v 1.18 2011/01/22 15:14:28 cegger Exp $ */
+/* $NetBSD: unichromefb.c,v 1.14 2008/05/05 11:42:45 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2006, 2008 Jared D. McNeill <jmcneill@invisible.ca>
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: unichromefb.c,v 1.18 2011/01/22 15:14:28 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: unichromefb.c,v 1.14 2008/05/05 11:42:45 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,7 +70,6 @@ __KERNEL_RCSID(0, "$NetBSD: unichromefb.c,v 1.18 2011/01/22 15:14:28 cegger Exp 
 #include <dev/wsfont/wsfont.h>
 #include <dev/rasops/rasops.h>
 #include <dev/wscons/wsdisplay_vconsvar.h>
-#include <dev/pci/wsdisplay_pci.h>
 
 #include <dev/pci/unichromereg.h>
 #include <dev/pci/unichromemode.h>
@@ -122,8 +121,8 @@ struct unichromefb_softc {
 	int			sc_accel;
 };
 
-static int unichromefb_match(device_t, cfdata_t, void *);
-static void unichromefb_attach(device_t, device_t, void *);
+static int unichromefb_match(struct device *, struct cfdata *, void *);
+static void unichromefb_attach(struct device *, struct device *, void *);
 
 static int unichromefb_drm_print(void *, const char *);
 static int unichromefb_drm_unmap(struct unichromefb_softc *);
@@ -229,7 +228,7 @@ CFATTACH_DECL_NEW(unichromefb, sizeof(struct unichromefb_softc),
     unichromefb_match, unichromefb_attach, NULL, NULL);
 
 static int
-unichromefb_match(device_t parent, cfdata_t match, void *opaque)
+unichromefb_match(struct device *parent, struct cfdata *match, void *opaque)
 {
 	struct pci_attach_args *pa;
 
@@ -251,7 +250,7 @@ unichromefb_match(device_t parent, cfdata_t match, void *opaque)
 }
 
 static void
-unichromefb_attach(device_t parent, device_t self, void *opaque)
+unichromefb_attach(struct device *parent, struct device *self, void *opaque)
 {
 	struct unichromefb_softc *sc = device_private(self);
 	struct pci_attach_args *pa;
@@ -453,20 +452,21 @@ unichromefb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 	case WSDISPLAYIO_LINEBYTES:
 		*(u_int *)data = sc->sc_stride;
 		return 0;
-	case WSDISPLAYIO_SMODE: {
-		int new_mode = *(int *)data;
-		if (new_mode != sc->sc_wsmode) {
-			sc->sc_wsmode = new_mode;
-			switch (new_mode) {
-			case WSDISPLAYIO_MODE_EMUL:
-				unichromefb_drm_map(sc);
-				vcons_redraw_screen(vd->active);
-				break;
-			default:
-				unichromefb_drm_unmap(sc);
-				break;
+	case WSDISPLAYIO_SMODE:
+		{
+			int new_mode = *(int *)data;
+			if (new_mode != sc->sc_wsmode) {
+				sc->sc_wsmode = new_mode;
+				switch (new_mode) {
+				case WSDISPLAYIO_MODE_EMUL:
+					unichromefb_drm_map(sc);
+					vcons_redraw_screen(vd->active);
+					break;
+				default:
+					unichromefb_drm_unmap(sc);
+					break;
+				}
 			}
-		}
 		}
 		return 0;
 	case WSDISPLAYIO_SSPLASH:
@@ -479,11 +479,6 @@ unichromefb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 	case PCI_IOC_CFGWRITE:
 		return (pci_devioctl(sc->sc_pa.pa_pc, sc->sc_pa.pa_tag,
 		    cmd, data, flag, l));
-
-	case WSDISPLAYIO_GET_BUSID:
-		return wsdisplayio_busid_pci(sc->sc_dev,
-		    sc->sc_pa.pa_pc, sc->sc_pa.pa_tag, data);
-
 	}
 
 	return EPASSTHROUGH;

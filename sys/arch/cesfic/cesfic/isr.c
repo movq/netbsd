@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.c,v 1.16 2010/12/20 00:25:30 matt Exp $	*/
+/*	$NetBSD: isr.c,v 1.10 2008/06/22 16:34:15 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.16 2010/12/20 00:25:30 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.10 2008/06/22 16:34:15 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +53,7 @@ isr_list_t isr_list[NISR];
 extern	int intrcnt[];		/* from locore.s */
 
 void
-isrinit(void)
+isrinit()
 {
 	int i;
 
@@ -68,7 +68,11 @@ isrinit(void)
  * Called by driver attach functions.
  */
 void *
-isrlink(int (*func)(void *), void *arg, int ipl, int priority)
+isrlink(func, arg, ipl, priority)
+	int (*func) __P((void *));
+	void *arg;
+	int ipl;
+	int priority;
 {
 	struct isr *newisr, *curisr;
 	isr_list_t *list;
@@ -143,7 +147,8 @@ isrlink(int (*func)(void *), void *arg, int ipl, int priority)
  * Disestablish an interrupt handler.
  */
 void
-isrunlink(void *arg)
+isrunlink(arg)
+	void *arg;
 {
 	struct isr *isr = arg;
 
@@ -159,8 +164,8 @@ isrunlink(void *arg)
 static unsigned int idepth;
  
 void
-isrdispatch(int evec)
-	/* evec:		 format | vector offset */
+isrdispatch(evec)
+	int evec;		/* format | vector offset */
 {
 	struct isr *isr;
 	isr_list_t *list;
@@ -173,7 +178,7 @@ isrdispatch(int evec)
 	ipl = vec - ISRLOC;
 
 	intrcnt[ipl]++;
-	curcpu()->ci_data.cpu_nintr++;
+	uvmexp.intrs++;
 
 	if (ipl >= IPL_VM)
 		idepth++;

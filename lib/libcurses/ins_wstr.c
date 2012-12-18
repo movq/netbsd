@@ -1,4 +1,4 @@
-/*   $NetBSD: ins_wstr.c,v 1.6 2010/12/16 17:42:28 wiz Exp $ */
+/*   $NetBSD: ins_wstr.c,v 1.3 2007/05/29 11:10:56 blymn Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation Inc.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ins_wstr.c,v 1.6 2010/12/16 17:42:28 wiz Exp $");
+__RCSID("$NetBSD: ins_wstr.c,v 1.3 2007/05/29 11:10:56 blymn Exp $");
 #endif						  /* not lint */
 
 #include <string.h>
@@ -47,7 +47,7 @@ __RCSID("$NetBSD: ins_wstr.c,v 1.6 2010/12/16 17:42:28 wiz Exp $");
 
 /*
  * ins_wstr --
- *	insert a multi-character wide-character string into the current window
+ *	insert a multi-character wide character string into the current window
  */
 int
 ins_wstr(const wchar_t *wstr)
@@ -57,7 +57,7 @@ ins_wstr(const wchar_t *wstr)
 
 /*
  * ins_nwstr --
- *	insert a multi-character wide-character string into the current window
+ *	insert a multi-character wide character string into the current window
  *	with at most n characters
  */
 int
@@ -144,8 +144,6 @@ wins_nwstr(WINDOW *win, const wchar_t *wstr, int n)
 	if (!wstr)
 		return OK;
 	cw = wcwidth(*wstr);
-	if (cw < 0)
-		cw = 1;
 	if (!cw)
 		return ERR;
 
@@ -154,13 +152,9 @@ wins_nwstr(WINDOW *win, const wchar_t *wstr, int n)
 	len = 1;
 	n--;
 	while (*scp) {
-		int w;
 		if (!n)
 			break;
-		w = wcwidth(*scp);
-		if (w < 0)
-			w = 1;
-		n--, len++, width += w;
+		n--, len++, width += wcwidth(*scp);
 		scp++;
 	}
 #ifdef DEBUG
@@ -169,9 +163,9 @@ wins_nwstr(WINDOW *win, const wchar_t *wstr, int n)
 
 	if (cw > win->maxx - win->curx + 1)
 		return ERR;
-	start = &win->alines[win->cury]->line[win->curx];
+	start = &win->lines[win->cury]->line[win->curx];
 	sx = win->curx;
-	lnp = win->alines[win->cury];
+	lnp = win->lines[win->cury];
 	pcw = WCOL(*start);
 	if (pcw < 0) {
 		sx += pcw;
@@ -192,9 +186,9 @@ wins_nwstr(WINDOW *win, const wchar_t *wstr, int n)
 			__CTRACE(__CTRACE_INPUT,
 			    "wins_nwstr: (%d,%d)=(%x,%x,%p)\n",
 			    (int) win->cury, x,
-			    win->alines[win->cury]->line[x].ch,
-			    win->alines[win->cury]->line[x].attr,
-			    win->alines[win->cury]->line[x].nsp);
+			    win->lines[win->cury]->line[x].ch,
+			    win->lines[win->cury]->line[x].attr,
+			    win->lines[win->cury]->line[x].nsp);
 	}
 #endif /* DEBUG */
 
@@ -203,7 +197,7 @@ wins_nwstr(WINDOW *win, const wchar_t *wstr, int n)
 #ifdef DEBUG
 		__CTRACE(__CTRACE_INPUT, "wins_nwstr: shift all characters\n");
 #endif /* DEBUG */
-		temp1 = &win->alines[win->cury]->line[win->maxx - 1];
+		temp1 = &win->lines[win->cury]->line[win->maxx - 1];
 		temp2 = temp1 - width;
 		pcw = WCOL(*(temp2 + 1));
 		if (pcw < 0) {
@@ -237,9 +231,9 @@ wins_nwstr(WINDOW *win, const wchar_t *wstr, int n)
 				__CTRACE(__CTRACE_INPUT,
 				    "wins_nwstr: (%d,%d)=(%x,%x,%p)\n",
 				    (int) win->cury, x,
-				    win->alines[win->cury]->line[x].ch,
-				    win->alines[win->cury]->line[x].attr,
-				    win->alines[win->cury]->line[x].nsp);
+				    win->lines[win->cury]->line[x].ch,
+				    win->lines[win->cury]->line[x].attr,
+				    win->lines[win->cury]->line[x].nsp);
 		}
 #endif /* DEBUG */
 	}
@@ -273,8 +267,6 @@ wins_nwstr(WINDOW *win, const wchar_t *wstr, int n)
 				continue;
 		}
 		cw = wcwidth(*scp);
-		if (cw < 0)
-			cw = 1;
 		if (cw) {
 			/* 1st column */
 			temp1->ch = (wchar_t)*scp;
@@ -319,9 +311,9 @@ wins_nwstr(WINDOW *win, const wchar_t *wstr, int n)
 			__CTRACE(__CTRACE_INPUT,
 			    "wins_nwstr: (%d,%d)=(%x,%x,%p)\n",
 			    (int) win->cury, x,
-			    win->alines[win->cury]->line[x].ch,
-			    win->alines[win->cury]->line[x].attr,
-			    win->alines[win->cury]->line[x].nsp);
+			    win->lines[win->cury]->line[x].ch,
+			    win->lines[win->cury]->line[x].attr,
+			    win->lines[win->cury]->line[x].nsp);
 	}
 #endif /* DEBUG */
 	newx = win->maxx - 1 + win->ch_off;

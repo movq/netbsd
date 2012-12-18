@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.32 2012/01/15 17:36:55 joerg Exp $
+#	$NetBSD: Makefile.inc,v 1.29 2008/03/18 04:20:37 lukem Exp $
 #
 #	etc.sparc64/Makefile.inc -- sparc64-specific etc Makefile targets
 #
@@ -8,7 +8,7 @@ MK32BITLIBS?=no
 # If you change the list of distributed kernels, don't forget
 # to update the release documentation in distrib/notes/common/contents
 
-KERNEL_SETS=		GENERIC GENERIC.UP
+KERNEL_SETS=		GENERIC GENERIC.MP
 
 BUILD_KERNELS+=		INSTALL
 
@@ -26,7 +26,8 @@ SPARC32=COPTS=-m32 LD="ld -m elf32_sparc" AS="as -32" \
 	SHLIB_LDSTARTFILE=${DESTDIR}${LIBDIR}/crtbeginS.o \
 	SHLIB_LDENDFILE=${DESTDIR}${LIBDIR}/crtendS.o
 
-.if ${MACHINE_ARCH} == "sparc64" && ${MK32BITLIBS} != "no"
+.if ${MACHINE_ARCH} == "sparc64" && ${MACHINE} == "sparc64" && \
+	${MK32BITLIBS} != "no"
 
 	# build 32 bit programs
 .for _s64dir in lib/csu lib gnu/lib libexec/ld_elf.so
@@ -79,4 +80,4 @@ ISOBOOTFILE?=	${ISOBOOTFILEDIR}/boot.fs
 iso-image-md-post:
 	SUNLABEL=${TOOL_SUNLABEL:Q} \
 	    ${HOST_SH} ${NETBSDSRCDIR}/distrib/common/sunbootcd.sh \
-	    ${CDROM_IMAGE} - - - - ${ISOBOOTFILE}
+	    ${CDROM.image} - - - - ${ISOBOOTFILE}

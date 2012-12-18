@@ -1,4 +1,4 @@
-/*	$NetBSD: mediabay.c,v 1.22 2011/07/26 08:36:02 macallan Exp $	*/
+/*	$NetBSD: mediabay.c,v 1.15 2008/08/28 04:05:50 jmcneill Exp $	*/
 
 /*-
  * Copyright (C) 1999 Tsubai Masanari.  All rights reserved.
@@ -27,13 +27,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mediabay.c,v 1.22 2011/07/26 08:36:02 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mediabay.c,v 1.15 2008/08/28 04:05:50 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/kthread.h>
 #include <sys/systm.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/ofw/openfirm.h>
 
@@ -46,13 +48,13 @@ enum mediabay_controller {
 };
 
 struct mediabay_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	bus_space_tag_t sc_tag;
 	int sc_node;
 	u_int *sc_addr;
 	u_int *sc_fcr;
 	u_int sc_baseaddr;
-	device_t sc_content;
+	struct device *sc_content;
 	lwp_t *sc_kthread;
 	enum mediabay_controller sc_type;
 };
@@ -62,14 +64,14 @@ static const char *mediabay_keylargo[] = {
 	NULL
 };
 
-void mediabay_attach(device_t, device_t, void *);
-int mediabay_match(device_t, cfdata_t, void *);
-int mediabay_print(void *, const char *);
-void mediabay_attach_content(struct mediabay_softc *);
-int mediabay_intr(void *);
-void mediabay_kthread(void *);
+void mediabay_attach __P((struct device *, struct device *, void *));
+int mediabay_match __P((struct device *, struct cfdata *, void *));
+int mediabay_print __P((void *, const char *));
+void mediabay_attach_content __P((struct mediabay_softc *));
+int mediabay_intr __P((void *));
+void mediabay_kthread __P((void *));
 
-CFATTACH_DECL_NEW(mediabay, sizeof(struct mediabay_softc),
+CFATTACH_DECL(mediabay, sizeof(struct mediabay_softc),
     mediabay_match, mediabay_attach, NULL, NULL);
 
 #ifdef MEDIABAY_DEBUG
@@ -102,7 +104,10 @@ CFATTACH_DECL_NEW(mediabay, sizeof(struct mediabay_softc),
 #define MEDIABAY_ID_NONE	7
 
 int
-mediabay_match(device_t parent, cfdata_t cf, void *aux)
+mediabay_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct confargs *ca = aux;
 
@@ -116,16 +121,17 @@ mediabay_match(device_t parent, cfdata_t cf, void *aux)
  * Attach all the sub-devices we can find
  */
 void
-mediabay_attach(device_t parent, device_t self, void *aux)
+mediabay_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct mediabay_softc *sc = device_private(self);
+	struct mediabay_softc *sc = (struct mediabay_softc *)self;
 	struct confargs *ca = aux;
 	int irq, itype;
 
-	sc->sc_dev = self;
 	ca->ca_reg[0] += ca->ca_baseaddr;
 
-	sc->sc_addr = mapiodev(ca->ca_reg[0], PAGE_SIZE, false);
+	sc->sc_addr = mapiodev(ca->ca_reg[0], PAGE_SIZE);
 	sc->sc_node = ca->ca_node;
 	sc->sc_baseaddr = ca->ca_baseaddr;
 	sc->sc_tag = ca->ca_tag;
@@ -157,11 +163,12 @@ mediabay_attach(device_t parent, device_t self, void *aux)
 }
 
 void
-mediabay_attach_content(struct mediabay_softc *sc)
+mediabay_attach_content(sc)
+	struct mediabay_softc *sc;
 {
 	int child;
 	u_int fcr = 0;
-	device_t content;
+	struct device *content;
 	struct confargs ca;
 	u_int reg[20], intr[5];
 	char name[32];
@@ -187,11 +194,11 @@ mediabay_attach_content(struct mediabay_softc *sc)
 			fcr |= FCR_MEDIABAY_IDE_ENABLE | FCR_MEDIABAY_CD_POWER;
 			out32rb(sc->sc_fcr, fcr);
 			delay(50000);
-			printf("%s: powering up...\n", device_xname(sc->sc_dev));
+			printf("%s: powering up...\n", sc->sc_dev.dv_xname);
 			delay(2000000);
 		}
 	} else {
-		printf("%s: powering up keylargo-media-bay..", device_xname(sc->sc_dev));
+		printf("%s: powering up keylargo-media-bay..", sc->sc_dev.dv_xname);
 
 		out32rb(sc->sc_addr, in32rb(sc->sc_addr) & ~MBCR_MEDIABAY0_RESET);
 		out32rb(sc->sc_addr, in32rb(sc->sc_addr) & ~MBCR_MEDIABAY0_POWER);
@@ -242,7 +249,7 @@ mediabay_attach_content(struct mediabay_softc *sc)
 		ca.ca_reg = reg;
 		ca.ca_intr = intr;
 
-		content = config_found(sc->sc_dev, &ca, mediabay_print);
+		content = config_found(&sc->sc_dev, &ca, mediabay_print);
 		if (content) {
 			sc->sc_content = content;
 			return;
@@ -258,7 +265,9 @@ mediabay_attach_content(struct mediabay_softc *sc)
 }
 
 int
-mediabay_print(void *aux, const char *mediabay)
+mediabay_print(aux, mediabay)
+	void *aux;
+	const char *mediabay;
 {
 	struct confargs *ca = aux;
 
@@ -269,7 +278,8 @@ mediabay_print(void *aux, const char *mediabay)
 }
 
 int
-mediabay_intr(void *v)
+mediabay_intr(v)
+	void *v;
 {
 	struct mediabay_softc *sc = v;
 
@@ -279,7 +289,8 @@ mediabay_intr(void *v)
 }
 
 void
-mediabay_kthread(void *v)
+mediabay_kthread(v)
+	void *v;
 {
 	struct mediabay_softc *sc = v;
 	u_int x, fcr;
@@ -290,7 +301,7 @@ mediabay_kthread(void *v)
 		/* sleep 0.25 sec */
 		tsleep(mediabay_kthread, PRIBIO, "mbayev", hz/4);
 
-		DPRINTF("%s: ", device_xname(sc->sc_dev));
+		DPRINTF("%s: ", sc->sc_dev.dv_xname);
 		x = in32rb(sc->sc_addr);
 
 		switch (MEDIABAY_ID(sc, x)) {
@@ -299,7 +310,7 @@ mediabay_kthread(void *v)
 			if (sc->sc_content != NULL) {
 				config_detach(sc->sc_content, DETACH_FORCE);
 				DPRINTF("%s: detach done\n",
-					device_xname(sc->sc_dev));
+					sc->sc_dev.dv_xname);
 				sc->sc_content = NULL;
 
 				if (sc->sc_type != MB_CONTROLLER_KEYLARGO) {

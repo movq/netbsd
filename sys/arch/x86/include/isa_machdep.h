@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.h,v 1.11 2011/07/01 18:22:39 dyoung Exp $	*/
+/*	$NetBSD: isa_machdep.h,v 1.6.6.1 2009/09/29 23:53:14 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -72,8 +72,7 @@
 #ifndef _X86_ISA_MACHDEP_H_			/* XXX */
 #define _X86_ISA_MACHDEP_H_			/* XXX */
 
-#include <sys/bus.h>
-#include <sys/device.h>
+#include <machine/bus.h>
 #include <dev/isa/isadmavar.h>
 
 /*
@@ -100,7 +99,6 @@ struct isabus_attach_args;	/* XXX */
  */
 void	isa_attach_hook(device_t, device_t,
 	    struct isabus_attach_args *);
-void	isa_detach_hook(isa_chipset_tag_t, device_t);
 int	isa_intr_alloc(isa_chipset_tag_t, int, int, int *);
 const struct evcnt *isa_intr_evcnt(isa_chipset_tag_t ic, int irq);
 void	*isa_intr_establish(isa_chipset_tag_t ic, int irq, int type,
@@ -110,8 +108,6 @@ int	isa_mem_alloc(bus_space_tag_t, bus_size_t, bus_size_t,
 	    bus_addr_t, int, bus_addr_t *, bus_space_handle_t *);
 void	isa_mem_free(bus_space_tag_t, bus_space_handle_t, bus_size_t);
 
-#define	isa_dmadestroy(ic)						\
-	_isa_dmadestroy(&(ic)->ic_dmastate)
 #define	isa_dmainit(ic, bst, dmat, d)					\
 	_isa_dmainit(&(ic)->ic_dmastate, (bst), (dmat), (d))
 #define	isa_dmacascade(ic, c)						\

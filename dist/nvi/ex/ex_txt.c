@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_txt.c,v 1.6 2011/03/21 14:53:03 tnozaki Exp $ */
+/*	$NetBSD: ex_txt.c,v 1.1.1.2.6.3 2009/10/18 09:58:03 sborrill Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -246,7 +246,7 @@ notlast:			CIRCLEQ_REMOVE(tiqh, tp, q);
 			 */
 			if (LF_ISSET(TXT_CNTRLD)) {
 				for (cnt = 0; cnt < tp->len; ++cnt)
-					if (!ISBLANK((UCHAR_T)tp->lb[cnt]))
+					if (!isblank(tp->lb[cnt]))
 						break;
 				if (cnt == tp->len) {
 					tp->len = 1;
@@ -363,12 +363,8 @@ txt_prompt(SCR *sp, TEXT *tp, ARG_CHAR_T prompt, u_int32_t flags)
 		(void)ex_printf(sp, "%6lu  ", (u_long)tp->lno);
 
 	/* Print out autoindent string. */
-	if (LF_ISSET(TXT_AUTOINDENT)) {
-		const char *nstr;
-		size_t nlen;
-		INT2CHAR(sp, tp->lb, tp->ai + 1, nstr, nlen);
-		(void)ex_printf(sp, "%.*s", (int)tp->ai, nstr);
-	}
+	if (LF_ISSET(TXT_AUTOINDENT))
+		(void)ex_printf(sp, "%.*s", (int)tp->ai, tp->lb);
 	(void)ex_fflush(sp);
 }
 

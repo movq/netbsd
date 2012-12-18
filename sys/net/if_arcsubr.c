@@ -1,4 +1,4 @@
-/*	$NetBSD: if_arcsubr.c,v 1.64 2012/09/24 03:05:53 msaitoh Exp $	*/
+/*	$NetBSD: if_arcsubr.c,v 1.59.20.1 2009/11/21 19:43:41 snj Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Ignatios Souvatzis
@@ -35,10 +35,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_arcsubr.c,v 1.64 2012/09/24 03:05:53 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_arcsubr.c,v 1.59.20.1 2009/11/21 19:43:41 snj Exp $");
 
 #include "opt_inet.h"
 
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,7 +63,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_arcsubr.c,v 1.64 2012/09/24 03:05:53 msaitoh Exp 
 #include <net/if_arp.h>
 #include <net/if_ether.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -633,7 +636,7 @@ arc_ifattach(struct ifnet *ifp, uint8_t lla)
 		ifp->if_flags |= IFF_MULTICAST|IFF_ALLMULTI;
 	if (ifp->if_flags & IFF_LINK0 && arc_ipmtu > ARC_PHDS_MAXMTU)
 		log(LOG_ERR,
-		    "%s: arc_ipmtu is %d, but must not exceed %d\n",
+		    "%s: arc_ipmtu is %d, but must not exceed %d",
 		    ifp->if_xname, arc_ipmtu, ARC_PHDS_MAXMTU);
 
 	ifp->if_output = arc_output;
@@ -646,9 +649,11 @@ arc_ifattach(struct ifnet *ifp, uint8_t lla)
 		   ifp->if_xname, ifp->if_xname);
 	}
 	if_attach(ifp);
-	if_set_sadl(ifp, &lla, sizeof(lla), true);
+	if_set_sadl(ifp, &lla, sizeof(lla));
 
 	ifp->if_broadcastaddr = &arcbroadcastaddr;
 
-	bpf_attach(ifp, DLT_ARCNET, ARC_HDRLEN);
+#if NBPFILTER > 0
+	bpfattach(ifp, DLT_ARCNET, ARC_HDRLEN);
+#endif
 }

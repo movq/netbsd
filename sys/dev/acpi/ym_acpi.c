@@ -1,4 +1,4 @@
-/* $NetBSD: ym_acpi.c,v 1.14 2011/06/02 14:12:25 tsutsui Exp $ */
+/* $NetBSD: ym_acpi.c,v 1.5.14.1 2009/05/01 01:38:17 snj Exp $ */
 
 /*
  * Copyright (c) 2006 Jasper Wallace <jasper@pointless.net>
@@ -29,45 +29,44 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ym_acpi.c,v 1.14 2011/06/02 14:12:25 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ym_acpi.c,v 1.5.14.1 2009/05/01 01:38:17 snj Exp $");
+
+#include "mpu_ym.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/bus.h>
 
 #include <dev/acpi/acpivar.h>
 
 #include <dev/audio_if.h>
 
 #include <dev/ic/ad1848reg.h>
-#include <dev/ic/opl3sa3reg.h>
-
 #include <dev/isa/ad1848var.h>
+
+#include <dev/ic/opl3sa3reg.h>
 #include <dev/isa/wssreg.h>
 #include <dev/isa/ymvar.h>
 
 
-static int	ym_acpi_match(device_t, cfdata_t, void *);
-static void	ym_acpi_attach(device_t, device_t, void *);
+static int	ym_acpi_match(struct device *, struct cfdata *, void *);
+static void	ym_acpi_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ym_acpi, sizeof(struct ym_softc), ym_acpi_match,
+CFATTACH_DECL(ym_acpi, sizeof(struct ym_softc), ym_acpi_match,
     ym_acpi_attach, NULL, NULL);
 
 /*
  * ym_acpi_match: autoconf(9) match routine
  */
 static int
-ym_acpi_match(device_t parent, cfdata_t match, void *aux)
+ym_acpi_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
 	if (aa->aa_node->ad_type != ACPI_TYPE_DEVICE)
 		return 0;
-	if (!(aa->aa_node->ad_devinfo->Valid & ACPI_VALID_HID))
-		return 0;
-	if (!aa->aa_node->ad_devinfo->HardwareId.String)
-		return 0;
 	/* Yamaha OPL3-SA2 or OPL3-SA3 */
-	if (strcmp("YMH0021", aa->aa_node->ad_devinfo->HardwareId.String))
+	if (strcmp("YMH0021", aa->aa_node->ad_devinfo->HardwareId.Value))
 		return 0;
 
 	return 1;
@@ -77,9 +76,9 @@ ym_acpi_match(device_t parent, cfdata_t match, void *aux)
  * ym_acpi_attach: autoconf(9) attach routine
  */
 static void
-ym_acpi_attach(device_t parent, device_t self, void *aux)
+ym_acpi_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ym_softc *sc = device_private(self);
+	struct ym_softc *sc = (struct ym_softc *)self;
 	struct acpi_attach_args *aa = aux;
 	struct acpi_resources res;
 	struct acpi_io *sb_io, *codec_io, *opl_io, *control_io;
@@ -91,9 +90,8 @@ ym_acpi_attach(device_t parent, device_t self, void *aux)
 	struct ad1848_softc *ac = &sc->sc_ad1848.sc_ad1848;
 	ACPI_STATUS rv;
 
-	ac->sc_dev = self;
 	/* Parse our resources */
-	rv = acpi_resource_parse(self,
+	rv = acpi_resource_parse(&sc->sc_ad1848.sc_ad1848.sc_dev,
 	    aa->aa_node->ad_handle, "_CRS", &res,
 	    &acpi_resource_parse_ops_default);
 	if (ACPI_FAILURE(rv))

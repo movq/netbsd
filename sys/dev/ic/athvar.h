@@ -1,4 +1,4 @@
-/*	$NetBSD: athvar.h,v 1.35 2011/10/07 16:58:11 dyoung Exp $	*/
+/*	$NetBSD: athvar.h,v 1.25.4.2 2009/08/07 06:48:09 snj Exp $	*/
 
 /*-
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -44,12 +44,6 @@
 #ifndef _DEV_ATH_ATHVAR_H
 #define _DEV_ATH_ATHVAR_H
 
-#include <net/if.h>
-#include <net/if_media.h>
-#include <net/if_ether.h>
-
-#include <net80211/ieee80211_netbsd.h>
-#include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
 
 #include <external/isc/atheros_hal/dist/ah.h>
@@ -181,8 +175,6 @@ struct ath_tx99;
 
 struct ath_softc {
 	device_t 		sc_dev;
-	device_suspensor_t	sc_suspensor;
-	pmf_qual_t		sc_qual;
 	struct ethercom		sc_ec;		/* interface common */
 	struct ath_stats	sc_stats;	/* interface statistics */
 	struct ieee80211com	sc_ic;		/* IEEE 802.11 common */
@@ -201,6 +193,7 @@ struct ath_softc {
 	HAL_BUS_TAG		sc_st;		/* bus space tag */
 	HAL_BUS_HANDLE		sc_sh;		/* bus space handle */
 	bus_dma_tag_t		sc_dmat;	/* bus DMA tag */
+	ath_lock_t		sc_mtx;		/* master lock (recursive) */
 	struct ath_hal		*sc_ah;		/* Atheros HAL */
 	struct ath_ratectrl	*sc_rc;		/* tx rate control support */
 	struct ath_tx99		*sc_tx99;	/* tx99 adjunct state */
@@ -248,7 +241,7 @@ struct ath_softc {
 	u_int16_t		sc_ledoff;	/* off time for current blink */
 	struct callout		sc_ledtimer;	/* led off timer */
 
-	struct bpf_if *		sc_drvbpf;
+	void *			sc_drvbpf;
 	union {
 		struct ath_tx_radiotap_header th;
 		u_int8_t	pad[64];
@@ -314,7 +307,7 @@ struct ath_softc {
 
 int	ath_attach(u_int16_t, struct ath_softc *);
 int	ath_detach(struct ath_softc *);
-int	ath_activate(device_t, enum devact);
+int	ath_activate(struct device *, enum devact);
 bool	ath_resume(struct ath_softc *);
 void	ath_suspend(struct ath_softc *);
 int	ath_intr(void *);
@@ -570,8 +563,8 @@ extern int ath_txbuf;
 #define	ath_hal_gettxintrtxqs(_ah, _txqs) \
 	((*(_ah)->ah_getTxIntrQueue)((_ah), (_txqs)))
 
-#define ath_hal_gpioCfgOutput(_ah, _gpio, _type) \
-        ((*(_ah)->ah_gpioCfgOutput)((_ah), (_gpio), (_type)))
+#define ath_hal_gpioCfgOutput(_ah, _gpio) \
+        ((*(_ah)->ah_gpioCfgOutput)((_ah), (_gpio)))
 #define ath_hal_gpioset(_ah, _gpio, _b) \
         ((*(_ah)->ah_gpioSet)((_ah), (_gpio), (_b)))
 

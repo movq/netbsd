@@ -1,4 +1,4 @@
-.\"	$NetBSD: cpu_switchto.9,v 1.14 2011/06/03 08:06:54 wiz Exp $
+.\"	$NetBSD: cpu_switchto.9,v 1.10 2008/05/25 20:00:30 wiz Exp $
 .\"
 .\" Copyright (c)2007 YAMAMOTO Takashi,
 .\" All rights reserved.
@@ -25,15 +25,13 @@
 .\" SUCH DAMAGE.
 .\"
 .\" ------------------------------------------------------------
-.Dd June 2, 2011
+.Dd May 21, 2007
 .Dt CPU_SWITCHTO 9
 .Os
 .\" ------------------------------------------------------------
 .Sh NAME
 .Nm cpu_switchto
-.Nd machine-dependent
-.Tn LWP
-context switching interface
+.Nd machine-dependent LWP context switching interface
 .\" ------------------------------------------------------------
 .Sh SYNOPSIS
 .In sys/cpu.h
@@ -43,106 +41,74 @@ context switching interface
 "lwp_t *oldlwp" "lwp_t *newlwp" "bool returning"
 .\" ------------------------------------------------------------
 .Sh DESCRIPTION
-The
 .Fn cpu_switchto
-function saves the context of the
-.Tn LWP
-which is currently running on the processor,
-and restores the context of the
-.Tn LWP
-specified by
+saves the context of the LWP which is currently running on the processor,
+and restores the context of the LWP specified by
 .Fa newlwp .
 .Pp
-Remarks:
-.Bl -enum -offset indent
-.It
 .Fn cpu_switchto
-does not switch address spaces.
-.It
+doesn't switch address spaces.
+.Pp
 .Fn cpu_switchto
 sets
-.Xr curlwp 9
+.Dv curlwp
 to
 .Fa newlwp .
-If the architecture does non-interlocked adaptive mutex release,
-.Fn cpu_switchto
-does an equivalent of
-.Xr membar_producer 3 ,
-before and after the modification of
-.Xr curlwp 9 .
-.It
+.Pp
 .Fn cpu_switchto
 should be called at
 .Dv IPL_SCHED .
-When the function returns, the caller should lower
-the priority level as soon as possible.
-.It
+When
+.Fn cpu_switchto
+returns, the caller should lower the priority level as soon as possible.
+.Pp
 .Fn cpu_switchto
 might be called with spin mutexes held.
-.El
 .Pp
-The function takes the following arguments.
-.Bl -tag -width "returning " -offset indent
+It takes the following arguments.
+.Bl -tag -width oldlwp
 .It Fa oldlwp
-Specify the
-.Tn LWP
-from which the switch is going to be made, i.e., the calling
-.Tn LWP .
+Specify the lwp from which we are going to switch, i.e.,
+the calling LWP.
 If it was
 .Dv NULL ,
-the context of the
-.Tn LWP
-currently running on this processor is not saved.
+the context of the LWP currently running on this processor is not saved.
 .It Fa newlwp
-Specify the
-.Tn LWP
-to which to switch.
+Specify the lwp to which we are going to switch.
 It must not be
 .Dv NULL .
 .It Fa returning
 Only meaningful if the architecture implements fast software interrupts.
 If true, it indicates that
 .Fa oldlwp
-is a soft interrupt
-.Tn LWP
-that is blocking.
-It is a good indication that any kind of address space or user activity
+is a soft interrupt LWP that is blocking.
+It's a good indication that any kind of address space or user activity
 can be completely ignored.
 For example:
-.Xr ras_lookup 9 ,
-cache flushes, TLB wirings, adjusting lazy
-.Tn FPU
+.Fn ras_lookup ,
+cache flushes, TLB wirings, adjusting lazy FPU
 state.
 All that is required is to restore the register state and stack, and
-return to the interrupted
-.Tn LWP .
+return to the interrupted LWP.
 .El
 .\" ------------------------------------------------------------
 .Sh RETURN VALUES
-The
 .Fn cpu_switchto
-function does not return until another
-.Tn LWP
-calls
-.Fn cpu_switchto .
+does not return until another LWP calls
+.Fn cpu_switchto
+to switch to us.
 It returns the
-.Vt oldlwp
+.Dv oldlwp
 argument of the
 .Fn cpu_switchto
-which is called to switch back to our
-.Tn LWP .
-It is either a
-.Tn LWP
-which called
-.Fn cpu_switchto
+which is called to switch back to our LWP.
+It's either an LWP which called
+.Fa cpu_switchto
 to switch to us or
 .Dv NULL
-in case the
-.Tn LWP
-was exiting.
+in the case that the LWP was exiting.
 .\" ------------------------------------------------------------
 .Sh SEE ALSO
-.Xr membar_producer 3 ,
 .Xr swapcontext 3 ,
 .Xr intro 9 ,
 .Xr mutex 9 ,

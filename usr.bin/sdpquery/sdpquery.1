@@ -1,4 +1,4 @@
-.\"	$NetBSD: sdpquery.1,v 1.15 2010/02/18 14:00:40 wiz Exp $
+.\"	$NetBSD: sdpquery.1,v 1.8 2007/02/17 09:39:11 wiz Exp $
 .\"
 .\" Copyright (c) 2006 Itronix Inc.
 .\" All rights reserved.
@@ -27,7 +27,6 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.\" Copyright (c) 2009 The NetBSD Foundation, Inc.
 .\" Copyright (c) 2003 Maksim Yevmenkin <m_evmenkin@yahoo.com>
 .\" All rights reserved.
 .\"
@@ -52,23 +51,24 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
+.\" $Id: sdpquery.1,v 1.8 2007/02/17 09:39:11 wiz Exp $
 .\" $FreeBSD: src/usr.sbin/bluetooth/sdpcontrol/sdpcontrol.8,v 1.6 2005/07/09 19:04:43 markus Exp $
 .\"
-.Dd October 6, 2009
+.Dd February 17, 2007
 .Dt SDPQUERY 1
 .Os
 .Sh NAME
 .Nm sdpquery
-.Nd Service Discovery Protocol query utility
+.Nd SDP query utility
 .Sh SYNOPSIS
 .Nm
-.Op Fl NRX
+.Fl h
+.Nm
 .Op Fl d Ar device
 .Fl a Ar address
 .Ar command
 .Op Ar parameters ...
 .Nm
-.Op Fl NRX
 .Op Fl c Ar path
 .Fl l
 .Ar command
@@ -82,9 +82,8 @@ Remote SDP servers are identified by their address.
 Connection to the local SDP server is made via the control socket.
 The
 .Nm
-utility retrieves complete Service Records as directed and prints
-each record's attribute ID/value list to standard output and error
-messages to standard error.
+utility uses Service Search Attribute Requests and prints results to
+standard output and error messages to standard error.
 .Pp
 The options are as follows:
 .Bl -tag -width ".Fl a Ar address"
@@ -103,7 +102,7 @@ Specify path to the control socket.
 The default path is
 .Pa /var/run/sdp .
 .It Fl d Ar device
-Connect from the local device with the specified address.
+Connect from the local device with the specifed address.
 The device can be specified by BD_ADDR or device name.
 See
 .Xr btconfig 8
@@ -113,85 +112,61 @@ If no device is specified, the
 utility will use the best available.
 .It Fl l
 Query the local SDP server via the control socket.
-.It Fl N
-Additionally display numerical values.
-.It Fl R
-Display service attributes in raw (uninterpreted) format.
-.It Fl X
-Display service attribute values in hex.
+.It Fl h
+Display usage message and exit.
 .El
 .Pp
 The currently supported commands in
 .Nm
 are:
 .Pp
-.Bl -tag -width Browse -compact
+.Bl -tag -width ".Cm search Ar service" -compact
 .It Cm Browse Op Ar group
 Browse for services.
 The
 .Ar group
-parameter is the UUID of the group to browse.
-If omitted, the "Public Browse Group" is used.
+parameter is a 16-bit UUID of the group to browse.
+If omitted, the Public Browse Group. is used.
 .Pp
-.It Cm Record Ar handle Op Ar handle...
-Retrieve the Service Record with the given
-.Ar handle .
-Multiple handles can be given.
+.It Cm Search Ar service
+Search for the
+.Ar service .
+The
+.Ar service
+parameter is a 16-bit UUID of the service to search for.
+For the following services it is possible to use service name
+instead of service UUID:
 .Pp
-.It Cm Search Ar uuid Op Ar uuid...
-Search for records matching the list of
-UUIDs which can be given in numerical form, or the
-following aliases are known:
-.Pp
-.Bl -tag -offset indent -compact -width RFCOMMxxx
-.It A2DP
-Advanced Audio Distribution Profile
-.It BNEP
-Bluetooth Network Encapsulation Protocol
+.Bl -tag -compact
 .It CIP
-Common ISDN Access Service
+Common ISDN Access
 .It CTP
-Cordless Telephony Service
+Cordless Telephony
 .It DUN
-Dialup Networking Service
+DialUp Networking
 .It FAX
-Fax Service
+Fax
 .It FTRN
-File Transfer Service
+OBEX File Transfer
 .It GN
-Group ad-hoc Network Service
+Group ad-hoc Network
 .It HID
-Human Interface Device Service
+Human Interface Device
 .It HF
-Handsfree Service
+Handsfree
 .It HSET
-Headset Service
-.It L2CAP
-Logical Link Control and Adaptation Protocol
+Headset
 .It LAN
-LAN Access Using PPP Service
+LAN Access Using PPP
 .It NAP
-Network Access Point Service
-.It OBEX
-Object Exchange Protocol
+Network Access Point
 .It OPUSH
-Object Push Service
+OBEX Object Push
 .It PANU
-Personal Area Networking User Service
-.It PNP
-Plug'n'Play Information Service
-.It RFCOMM
-RFCOMM Protocol
-.It SDP
-Service Discovery Protocol
+Personal Area Networking User
 .It SP
-Serial Port Service
-.It SYNC
-IrMC Sync Client Service
+Serial Port
 .El
-.Pp
-Note that in order for a record to match, it must contain all the
-UUIDs in the ServiceSearchPattern and the maximum number is 12.
 .El
 .Sh EXIT STATUS
 .Ex -std
@@ -216,3 +191,18 @@ under the sponsorship of Itronix, Inc.
 .An Maksim Yevmenkin Aq m_evmenkin@yahoo.com
 .An Iain Hibbert
 for Itronix, Inc.
+.Sh CAVEATS
+The
+.Nm
+utility only requests the following attributes from the SDP server:
+.Pp
+.Bl -enum -offset indent -compact
+.It
+Service Record Handle
+.It
+Service Class ID List
+.It
+Protocol Descriptor List
+.It
+Bluetooth Profile Descriptor List
+.El

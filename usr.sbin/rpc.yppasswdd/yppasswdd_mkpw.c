@@ -1,4 +1,4 @@
-/*	$NetBSD: yppasswdd_mkpw.c,v 1.18 2011/08/30 17:06:22 plunky Exp $	*/
+/*	$NetBSD: yppasswdd_mkpw.c,v 1.16 2008/02/24 21:10:02 dholland Exp $	*/
 
 /*
  * Copyright (c) 1996 Jason R. Thorpe <thorpej@NetBSD.org>
@@ -15,6 +15,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -31,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: yppasswdd_mkpw.c,v 1.18 2011/08/30 17:06:22 plunky Exp $");
+__RCSID("$NetBSD: yppasswdd_mkpw.c,v 1.16 2008/02/24 21:10:02 dholland Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -74,7 +79,7 @@ make_passwd(yppasswd *argp, struct svc_req *rqstp, SVCXPRT *transp)
 
 #define REPLY(val)	do { \
 		int res = (val); \
-		if (!svc_sendreply(transp, (xdrproc_t)xdr_int, (caddr_t)&res)) \
+		if (!svc_sendreply(transp, xdr_int, (caddr_t)&res)) \
 			svcerr_systemerr(transp); \
 	} while (0)
 

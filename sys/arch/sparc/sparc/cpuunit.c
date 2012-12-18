@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuunit.c,v 1.15 2011/07/17 23:18:23 mrg Exp $	*/
+/*	$NetBSD: cpuunit.c,v 1.13 2008/04/28 20:23:36 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpuunit.c,v 1.15 2011/07/17 23:18:23 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpuunit.c,v 1.13 2008/04/28 20:23:36 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -42,11 +42,12 @@ __KERNEL_RCSID(0, "$NetBSD: cpuunit.c,v 1.15 2011/07/17 23:18:23 mrg Exp $");
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <sparc/sparc/cpuunitvar.h>
 
 struct cpuunit_softc {
+	struct device sc_dev;
 	int sc_node;				/* our OBP node */
 
 	bus_space_tag_t sc_st;			/* ours */
@@ -56,10 +57,10 @@ struct cpuunit_softc {
 	int sc_board;				/* board number */
 };
 
-static int cpuunit_match(device_t, cfdata_t, void *);
-static void cpuunit_attach(device_t, device_t, void *);
+static int cpuunit_match(struct device *, struct cfdata *, void *);
+static void cpuunit_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(cpuunit, sizeof(struct cpuunit_softc),
+CFATTACH_DECL(cpuunit, sizeof(struct cpuunit_softc),
     cpuunit_match, cpuunit_attach, NULL, NULL);
 
 static int cpuunit_print(void *, const char *);
@@ -69,7 +70,7 @@ static int cpuunit_setup_attach_args(struct cpuunit_softc *, bus_space_tag_t,
 static void cpuunit_destroy_attach_args(struct cpuunit_attach_args *);
 
 static int
-cpuunit_match(device_t parent, cfdata_t cf, void *aux)
+cpuunit_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -80,9 +81,9 @@ cpuunit_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-cpuunit_attach(device_t parent, device_t self, void *aux)
+cpuunit_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct cpuunit_softc *sc = device_private(self);
+	struct cpuunit_softc *sc = (void *) self;
 	struct mainbus_attach_args *ma = aux;
 	int node, error;
 	bus_space_tag_t sbt;
@@ -112,7 +113,7 @@ cpuunit_attach(device_t parent, device_t self, void *aux)
 	    sizeof(struct openprom_range), &sbt->nranges, &sbt->ranges);
 	if (error) {
 		printf("%s: error %d getting \"ranges\" property\n",
-		    device_xname(self), error);
+		    sc->sc_dev.dv_xname, error);
 		panic("cpuunit_attach");
 	}
 
@@ -124,7 +125,7 @@ cpuunit_attach(device_t parent, device_t self, void *aux)
 		if (cpuunit_setup_attach_args(sc, sbt, node, &cpua))
 			panic("cpuunit_attach: failed to set up attach args");
 
-		(void) config_found(self, &cpua, cpuunit_print);
+		(void) config_found(&sc->sc_dev, &cpua, cpuunit_print);
 
 		cpuunit_destroy_attach_args(&cpua);
 	}

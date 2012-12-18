@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide.c,v 1.219 2010/11/06 00:29:09 jakllsch Exp $	*/
+/*	$NetBSD: pciide.c,v 1.216 2008/03/18 20:46:37 cube Exp $	*/
 
 
 /*
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -70,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pciide.c,v 1.219 2010/11/06 00:29:09 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pciide.c,v 1.216 2008/03/18 20:46:37 cube Exp $");
 
 #include <sys/param.h>
 
@@ -78,13 +83,13 @@ __KERNEL_RCSID(0, "$NetBSD: pciide.c,v 1.219 2010/11/06 00:29:09 jakllsch Exp $"
 #include <dev/pci/pciidereg.h>
 #include <dev/pci/pciidevar.h>
 
-static int	pciide_match(device_t, cfdata_t, void *);
-static void	pciide_attach(device_t, device_t, void *);
+int	pciide_match(device_t, cfdata_t, void *);
+void	pciide_attach(device_t, device_t, void *);
 
 CFATTACH_DECL_NEW(pciide, sizeof(struct pciide_softc),
-    pciide_match, pciide_attach, pciide_detach, NULL);
+    pciide_match, pciide_attach, NULL, NULL);
 
-static int
+int
 pciide_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
@@ -102,7 +107,7 @@ pciide_match(device_t parent, cfdata_t match, void *aux)
 	return (0);
 }
 
-static void
+void
 pciide_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;

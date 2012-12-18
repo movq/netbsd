@@ -1,4 +1,4 @@
-/*	$NetBSD: score.c,v 1.16 2012/10/13 20:36:06 dholland Exp $	*/
+/*	$NetBSD: score.c,v 1.13 2007/12/15 19:44:39 perry Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)score.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: score.c,v 1.16 2012/10/13 20:36:06 dholland Exp $");
+__RCSID("$NetBSD: score.c,v 1.13 2007/12/15 19:44:39 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -46,16 +46,13 @@ __RCSID("$NetBSD: score.c,v 1.16 2012/10/13 20:36:06 dholland Exp $");
 #include "deck.h"
 #include "cribbage.h"
 
-static int fifteens(const CARD [], int);
-static int pairuns(const CARD [], int);
-
 /*
  * the following arrays give the sum of the scores of the (50 2)*48 = 58800
  * hands obtainable for the crib given the two cards whose ranks index the
  * array.  the two arrays are for the case where the suits are equal and
  * not equal respectively
  */
-static const long crbescr[169] = {
+const long crbescr[169] = {
     -10000, 271827, 278883, 332319, 347769, 261129, 250653, 253203, 248259,
     243435, 256275, 237435, 231051, -10000, -10000, 412815, 295707, 349497,
     267519, 262521, 259695, 254019, 250047, 262887, 244047, 237663, -10000,
@@ -77,7 +74,7 @@ static const long crbescr[169] = {
     -10000, -10000, -10000, -10000, -10000, -10000, -10000
 };
 
-static const long crbnescr[169] = {
+const long crbnescr[169] = {
     325272, 260772, 267828, 321264, 336714, 250074, 239598, 242148, 237204,
     232380, 246348, 226380, 219996, -10000, 342528, 401760, 284652, 338442,
     256464, 251466, 248640, 242964, 238992, 252960, 232992, 226608, -10000,
@@ -156,8 +153,7 @@ scorehand(const CARD hand[], CARD starter, int n, BOOLEAN crb,
 	hscore += i;
 	if (do_explain) {
 		if (i > 0) {
-			(void) snprintf(buf, sizeof(buf),
-			    "%d points in fifteens", i);
+			(void) sprintf(buf, "%d points in fifteens", i);
 			strcat(explan, buf);
 		} else
 			strcat(explan, "No fifteens");
@@ -166,8 +162,7 @@ scorehand(const CARD hand[], CARD starter, int n, BOOLEAN crb,
 	hscore += i;
 	if (do_explain) {
 		if (i > 0) {
-			(void) snprintf(buf, sizeof(buf),
-			    ", %d points in pairs, %d in runs",
+			(void) sprintf(buf, ", %d points in pairs, %d in runs",
 			    pairpoints, runpoints);
 			strcat(explan, buf);
 		} else
@@ -180,7 +175,7 @@ scorehand(const CARD hand[], CARD starter, int n, BOOLEAN crb,
  * fifteens:
  *	Return number of fifteens in hand of n cards
  */
-static int
+int
 fifteens(const CARD hand[], int n)
 {
 	int *sp, *np;
@@ -221,7 +216,7 @@ fifteens(const CARD hand[], int n)
  * this routine only works if n is strictly less than 6
  * sets the globals pairpoints and runpoints appropriately
  */
-static int
+int
 pairuns(const CARD h[], int n)
 {
 	int i;
@@ -289,12 +284,11 @@ pairuns(const CARD h[], int n)
  * the n cards in tbl during pegging
  */
 int
-pegscore(CARD crd, const CARD tbl[], unsigned n, int sum)
+pegscore(CARD crd, const CARD tbl[], int n, int sum)
 {
 	BOOLEAN got[RANKS];
 	int i, j, scr;
 	int k, lo, hi;
-	unsigned ju;
 
 	sum += VAL(crd.rank);
 	if (sum > 31)
@@ -305,11 +299,11 @@ pegscore(CARD crd, const CARD tbl[], unsigned n, int sum)
 		scr = 0;
 	if (!n)
 		return (scr);
-	ju = 1;
-	while (ju <= n && crd.rank == tbl[n - ju].rank)
-		++ju;
-	if (ju > 1)
-		return (scr + ichoose2[ju]);
+	j = 1;
+	while ((crd.rank == tbl[n - j].rank) && (n - j >= 0))
+		++j;
+	if (j > 1)
+		return (scr + ichoose2[j]);
 	if (n < 2)
 		return (scr);
 	lo = hi = crd.rank;

@@ -1,4 +1,4 @@
-/*	$NetBSD: cac_pci.c,v 1.33 2012/10/27 17:18:28 chs Exp $	*/
+/*	$NetBSD: cac_pci.c,v 1.28 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cac_pci.c,v 1.33 2012/10/27 17:18:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cac_pci.c,v 1.28 2008/04/28 20:23:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -130,14 +130,15 @@ cac_pci_findtype(struct pci_attach_args *pa)
 }
 
 static int
-cac_pci_match(device_t parent, cfdata_t match, void *aux)
+cac_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 
 	return (cac_pci_findtype(aux) != NULL);
 }
 
 static void
-cac_pci_attach(device_t parent, device_t self, void *aux)
+cac_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa;
 	const struct cac_pci_type *ct;
@@ -150,8 +151,7 @@ cac_pci_attach(device_t parent, device_t self, void *aux)
 
 	aprint_naive(": RAID controller\n");
 
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (struct cac_softc *)self;
 	pa = (struct pci_attach_args *)aux;
 	pc = pa->pa_pc;
 	ct = cac_pci_findtype(pa);
@@ -207,8 +207,8 @@ cac_pci_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error("can't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
 
@@ -219,7 +219,7 @@ cac_pci_attach(device_t parent, device_t self, void *aux)
 	cac_init(sc, intrstr, (ct->ct_flags & CT_STARTFW) != 0);
 }
 
-CFATTACH_DECL_NEW(cac_pci, sizeof(struct cac_softc),
+CFATTACH_DECL(cac_pci, sizeof(struct cac_softc),
     cac_pci_match, cac_pci_attach, NULL, NULL);
 
 static void
@@ -245,7 +245,7 @@ cac_pci_l0_completed(struct cac_softc *sc)
 
 	if ((off & 3) != 0)
 		printf("%s: failed command list returned: %lx\n",
-		    device_xname(sc->sc_dev), (long)off);
+		    device_xname(&sc->sc_dv), (long)off);
 
 	off = (off & ~3) - sc->sc_ccbs_paddr;
 	ccb = (struct cac_ccb *)((char *)sc->sc_ccbs + off);

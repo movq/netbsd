@@ -1,4 +1,4 @@
-/*	$NetBSD: membar_ops.S,v 1.5 2012/08/03 06:06:44 matt Exp $	*/
+/*	$NetBSD: membar_ops.S,v 1.3 2008/05/25 15:56:12 chs Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
@@ -31,41 +31,29 @@
 
 #include "atomic_op_asm.h"
 
-#if defined(_KERNEL)
-
 #ifdef _KERNEL_OPT
 #include "opt_cputype.h"
 #include "opt_lockdebug.h"
 #include "opt_multiprocessor.h"
 #endif
 
+#if defined(_KERNEL)
 
 #include <machine/cpu.h>
 
-#if (MIPS_HAS_LLSC != 0 && defined(MULTIPROCESSOR)) || !defined(__mips_o32)
+#if MIPS_HAS_LLSC != 0 && defined(MULTIPROCESSOR)
 #define	SYNC		sync
-#endif
-#elif !defined(__mips_o32)
-#define	SYNC		sync
+#else
+#define	SYNC		/* nothing */
 #endif
 
 	.text
-	.set noreorder
 
 LEAF(_membar_sync)
+	SYNC
 	j	ra
-#ifdef SYNC
-	 SYNC
-#else
-	 nop
-#endif
+	  nop
 END(_membar_sync)
-
-#ifdef _KERNEL
-STRONG_ALIAS(mb_read, _membar_sync)
-STRONG_ALIAS(mb_write, _membar_sync)
-STRONG_ALIAS(mb_memory, _membar_sync)
-#endif
 
 ATOMIC_OP_ALIAS(membar_sync,_membar_sync)
 ATOMIC_OP_ALIAS(membar_enter,_membar_sync)
@@ -76,3 +64,7 @@ ATOMIC_OP_ALIAS(membar_producer,_membar_sync)
 STRONG_ALIAS(_membar_producer,_membar_sync)
 ATOMIC_OP_ALIAS(membar_consumer,_membar_sync)
 STRONG_ALIAS(_membar_consumer,_membar_sync)
+
+#else /* _KERNEL */
+
+#endif /* _KERNEL */

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.20 2012/12/01 11:37:27 mbalmer Exp $	*/
+/*	$NetBSD: machdep.c,v 1.17 2008/01/14 03:50:01 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)machdep.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: machdep.c,v 1.20 2012/12/01 11:37:27 mbalmer Exp $");
+__RCSID("$NetBSD: machdep.c,v 1.17 2008/01/14 03:50:01 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -84,7 +84,7 @@ __RCSID("$NetBSD: machdep.c,v 1.20 2012/12/01 11:37:27 mbalmer Exp $");
  *      #endif
  *      }
  *
- * Appropriate variations of this are of course acceptable.
+ * Appropriate variations of this are of course acceptible.
  * The use of "#elseif" is discouraged because of non-portability.
  * If the correct #define doesn't exist, "UNIX_SYSV" in this case, make it up
  * and insert it in the list at the top of the file.  Alter the CFLAGS

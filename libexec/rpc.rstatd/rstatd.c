@@ -1,4 +1,4 @@
-/*	$NetBSD: rstatd.c,v 1.15 2011/08/29 20:41:06 joerg Exp $	*/
+/*	$NetBSD: rstatd.c,v 1.14 2006/05/09 20:18:07 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1993, John Brezak
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rstatd.c,v 1.15 2011/08/29 20:41:06 joerg Exp $");
+__RCSID("$NetBSD: rstatd.c,v 1.14 2006/05/09 20:18:07 mrg Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -50,12 +50,13 @@ __RCSID("$NetBSD: rstatd.c,v 1.15 2011/08/29 20:41:06 joerg Exp $");
 #include <rpcsvc/rstat.h>
 
 extern void rstat_service(struct svc_req *, SVCXPRT *);
-__dead static void cleanup(int);
+void cleanup(int);
+int main(int, char *[]);
 
 int from_inetd = 1;     /* started from inetd ? */
 int closedown = 20;	/* how long to wait before going dormant */
 
-static void
+void
 cleanup(int dummy)
 {
         (void) rpcb_unset(RSTATPROG, RSTATVERS_TIME, NULL);

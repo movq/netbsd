@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.33 2012/12/12 15:51:04 christos Exp $	*/
+/*	$NetBSD: misc.c,v 1.29 2006/10/16 00:11:57 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: misc.c,v 1.33 2012/12/12 15:51:04 christos Exp $");
+__RCSID("$NetBSD: misc.c,v 1.29 2006/10/16 00:11:57 christos Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -71,9 +71,7 @@ static KEY keylist[] = {
 	{"md5digest",	F_MD5,		NEEDVALUE},
 	{"mode",	F_MODE,		NEEDVALUE},
 	{"nlink",	F_NLINK,	NEEDVALUE},
-	{"nochange",	F_NOCHANGE,	0},
 	{"optional",	F_OPT,		0},
-	{"ripemd160digest", F_RMD160,	NEEDVALUE},
 	{"rmd160",	F_RMD160,	NEEDVALUE},
 	{"rmd160digest",F_RMD160,	NEEDVALUE},
 	{"sha1",	F_SHA1,		NEEDVALUE},
@@ -118,7 +116,7 @@ parsekey(const char *name, int *needvaluep)
 	KEY *k, tmp;
 
 	if (allbits == 0) {
-		size_t i;
+		int i;
 
 		for (i = 0; i < sizeof(keylist) / sizeof(KEY); i++)
 			allbits |= keylist[i].val;

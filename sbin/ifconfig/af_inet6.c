@@ -1,4 +1,4 @@
-/*	$NetBSD: af_inet6.c,v 1.27 2010/12/13 17:35:08 pooka Exp $	*/
+/*	$NetBSD: af_inet6.c,v 1.23 2008/07/15 20:56:13 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: af_inet6.c,v 1.27 2010/12/13 17:35:08 pooka Exp $");
+__RCSID("$NetBSD: af_inet6.c,v 1.23 2008/07/15 20:56:13 dyoung Exp $");
 #endif /* not lint */
 
 #include <sys/param.h> 
@@ -57,7 +57,6 @@ __RCSID("$NetBSD: af_inet6.c,v 1.27 2010/12/13 17:35:08 pooka Exp $");
 #include "parse.h"
 #include "extern.h"
 #include "af_inetany.h"
-#include "prog_ops.h"
 
 static void in6_constructor(void) __attribute__((constructor));
 static void in6_alias(const char *, prop_dictionary_t, prop_dictionary_t,
@@ -248,7 +247,7 @@ setia6eui64_impl(prop_dictionary_t env, struct in6_aliasreq *ifra)
 			}
 		}
 	}
-	if (lladdr == NULL)
+	if (!lladdr)
 		errx(EXIT_FAILURE, "could not determine link local address"); 
 
  	memcpy(&in6->s6_addr[8], &lladdr->s6_addr[8], 8);
@@ -279,7 +278,7 @@ in6_alias(const char *ifname, prop_dictionary_t env, prop_dictionary_t oenv,
 	char hbuf[NI_MAXHOST];
 	u_int32_t scopeid;
 	int s;
-	const int niflag = Nflag ? 0 : NI_NUMERICHOST;
+	const int niflag = NI_NUMERICHOST;
 	unsigned short flags;
 
 	/* Get the non-alias address for this interface. */
@@ -303,7 +302,7 @@ in6_alias(const char *ifname, prop_dictionary_t env, prop_dictionary_t oenv,
 
 	if (flags & IFF_POINTOPOINT) {
 		ifr6 = *creq;
-		if (prog_ioctl(s, SIOCGIFDSTADDR_IN6, &ifr6) == -1) {
+		if (ioctl(s, SIOCGIFDSTADDR_IN6, &ifr6) == -1) {
 			if (errno != EADDRNOTAVAIL)
 				warn("SIOCGIFDSTADDR_IN6");
 			memset(&ifr6.ifr_addr, 0, sizeof(ifr6.ifr_addr));
@@ -320,7 +319,7 @@ in6_alias(const char *ifname, prop_dictionary_t env, prop_dictionary_t oenv,
 	}
 
 	ifr6 = *creq;
-	if (prog_ioctl(s, SIOCGIFNETMASK_IN6, &ifr6) == -1) {
+	if (ioctl(s, SIOCGIFNETMASK_IN6, &ifr6) == -1) {
 		if (errno != EADDRNOTAVAIL)
 			warn("SIOCGIFNETMASK_IN6");
 	} else {
@@ -330,7 +329,7 @@ in6_alias(const char *ifname, prop_dictionary_t env, prop_dictionary_t oenv,
 	}
 
 	ifr6 = *creq;
-	if (prog_ioctl(s, SIOCGIFAFLAG_IN6, &ifr6) == -1) {
+	if (ioctl(s, SIOCGIFAFLAG_IN6, &ifr6) == -1) {
 		if (errno != EADDRNOTAVAIL)
 			warn("SIOCGIFAFLAG_IN6");
 	} else {
@@ -353,7 +352,7 @@ in6_alias(const char *ifname, prop_dictionary_t env, prop_dictionary_t oenv,
 		struct in6_addrlifetime *lifetime;
 		ifr6 = *creq;
 		lifetime = &ifr6.ifr_ifru.ifru_lifetime;
-		if (prog_ioctl(s, SIOCGIFALIFETIME_IN6, &ifr6) == -1) {
+		if (ioctl(s, SIOCGIFALIFETIME_IN6, &ifr6) == -1) {
 			if (errno != EADDRNOTAVAIL)
 				warn("SIOCGIFALIFETIME_IN6");
 		} else if (lifetime->ia6t_preferred || lifetime->ia6t_expire) {
@@ -375,6 +374,8 @@ in6_alias(const char *ifname, prop_dictionary_t env, prop_dictionary_t oenv,
 				printf("infty");
 		}
 	}
+
+	printf("\n");
 }
 
 static void
@@ -383,14 +384,12 @@ in6_status(prop_dictionary_t env, prop_dictionary_t oenv, bool force)
 	struct ifaddrs *ifap, *ifa;
 	struct in6_ifreq ifr;
 	const char *ifname;
-	bool printprefs = false;
 
 	if ((ifname = getifname(env)) == NULL)
 		err(EXIT_FAILURE, "%s: getifname", __func__);
 
 	if (getifaddrs(&ifap) != 0)
 		err(EXIT_FAILURE, "getifaddrs");
-	printprefs = ifa_any_preferences(ifname, ifap, AF_INET6);
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
 		if (strcmp(ifname, ifa->ifa_name) != 0)
 			continue;
@@ -403,9 +402,6 @@ in6_status(prop_dictionary_t env, prop_dictionary_t oenv, bool force)
 		estrlcpy(ifr.ifr_name, ifa->ifa_name, sizeof(ifr.ifr_name));
 		memcpy(&ifr.ifr_addr, ifa->ifa_addr, ifa->ifa_addr->sa_len);
 		in6_alias(ifname, env, oenv, &ifr);
-		if (printprefs)
-			ifa_print_preference(ifa->ifa_name, ifa->ifa_addr);
-		printf("\n");
 	}
 	freeifaddrs(ifap);
 }

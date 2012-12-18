@@ -1,4 +1,4 @@
-/*	$NetBSD: ipcs.c,v 1.42 2009/01/18 01:10:34 lukem Exp $	*/
+/*	$NetBSD: ipcs.c,v 1.41 2008/04/28 20:24:13 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -542,7 +542,7 @@ shm_sysctl(void)
 	void *buf;
 	int mib[4];
 	size_t len;
-	uint32_t i;
+	int i /*, valid */;
 	long valid;
 
 	mib[0] = CTL_KERN;
@@ -709,8 +709,7 @@ ipcs_kvm(void)
 	struct shmid_ds *shmsegs;
 	kvm_t *kd;
 	char errbuf[_POSIX2_LINE_MAX];
-	int32_t i;
-	uint32_t u;
+	int i;
 
 	if ((kd = kvm_openfiles(namelist, core, NULL, O_RDONLY,
 	    errbuf)) == NULL)
@@ -753,7 +752,7 @@ ipcs_kvm(void)
 			xmsqids = malloc(sizeof(struct msqid_ds) *
 			    msginfo.msgmni);
 
-			if ((size_t)kvm_read(kd, (u_long)msqids, xmsqids,
+			if (kvm_read(kd, (u_long)msqids, xmsqids,
 			    sizeof(struct msqid_ds) * msginfo.msgmni) !=
 			    sizeof(struct msqid_ds) * msginfo.msgmni)
 				errx(1, "kvm_read (msqids): %s",
@@ -803,20 +802,20 @@ ipcs_kvm(void)
 			xshmids = malloc(sizeof(struct shmid_ds) *
 			    shminfo.shmmni);
 
-			if ((size_t)kvm_read(kd, (u_long)shmsegs, xshmids,
+			if (kvm_read(kd, (u_long)shmsegs, xshmids,
 			    sizeof(struct shmid_ds) * shminfo.shmmni) !=
 			    sizeof(struct shmid_ds) * shminfo.shmmni)
 				errx(1, "kvm_read (shmsegs): %s",
 				    kvm_geterr(kd));
 
 			show_shminfo_hdr();
-			for (u = 0; u < shminfo.shmmni; u++) {
-				struct shmid_ds *shmptr = &xshmids[u];
+			for (i = 0; i < shminfo.shmmni; i++) {
+				struct shmid_ds *shmptr = &xshmids[i];
 				if (shmptr->shm_perm.mode & 0x0800)
 					show_shminfo(shmptr->shm_atime,
 					    shmptr->shm_dtime,
 					    shmptr->shm_ctime,
-					    IXSEQ_TO_IPCID(u, shmptr->shm_perm),
+					    IXSEQ_TO_IPCID(i, shmptr->shm_perm),
 					    (u_int64_t)shmptr->shm_perm._key,
 					    shmptr->shm_perm.mode,
 					    shmptr->shm_perm.uid,
@@ -851,7 +850,7 @@ ipcs_kvm(void)
 			xsema = malloc(sizeof(struct semid_ds) *
 			    seminfo.semmni);
 
-			if ((size_t)kvm_read(kd, (u_long)sema, xsema,
+			if (kvm_read(kd, (u_long)sema, xsema,
 			    sizeof(struct semid_ds) * seminfo.semmni) !=
 			    sizeof(struct semid_ds) * seminfo.semmni)
 				errx(1, "kvm_read (sema): %s",

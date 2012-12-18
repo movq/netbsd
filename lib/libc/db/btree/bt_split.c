@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_split.c,v 1.20 2011/06/20 09:11:17 mrg Exp $	*/
+/*	$NetBSD: bt_split.c,v 1.17.4.1 2009/04/23 02:33:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,7 +37,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bt_split.c,v 1.20 2011/06/20 09:11:17 mrg Exp $");
+__RCSID("$NetBSD: bt_split.c,v 1.17.4.1 2009/04/23 02:33:17 snj Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
@@ -215,7 +215,7 @@ __bt_split(BTREE *t, PAGE *sp, const DBT *key, const DBT *data, int flags,
 		}
 
 		/* Split the parent page if necessary or shift the indices. */
-		if ((uint32_t)h->upper - (uint32_t)h->lower < nbytes + sizeof(indx_t)) {
+		if (h->upper - h->lower < nbytes + sizeof(indx_t)) {
 			sp = h;
 			h = h->pgno == P_ROOT ?
 			    bt_root(t, h, &l, &r, &skip, nbytes) :
@@ -245,12 +245,10 @@ __bt_split(BTREE *t, PAGE *sp, const DBT *key, const DBT *data, int flags,
 			WR_BINTERNAL(dest, nksize ? nksize : bl->ksize,
 			    rchild->pgno, bl->flags & P_BIGKEY);
 			memmove(dest, bl->bytes, nksize ? nksize : bl->ksize);
-			if (bl->flags & P_BIGKEY) {
-				pgno_t pgno;
-				memcpy(&pgno, bl->bytes, sizeof(pgno));
-				if (bt_preserve(t, pgno) == RET_ERROR)
-					goto err1;
-			}
+			if (bl->flags & P_BIGKEY &&
+			    bt_preserve(t, *(pgno_t *)(void *)bl->bytes) ==
+			    RET_ERROR)
+				goto err1;
 			break;
 		case P_RINTERNAL:
 			/*
@@ -566,12 +564,9 @@ bt_broot(BTREE *t, PAGE *h, PAGE *l, PAGE *r)
 		 * If the key is on an overflow page, mark the overflow chain
 		 * so it isn't deleted when the leaf copy of the key is deleted.
 		 */
-		if (bl->flags & P_BIGKEY) {
-			pgno_t pgno;
-			memcpy(&pgno, bl->bytes, sizeof(pgno));
-			if (bt_preserve(t, pgno) == RET_ERROR)
-				return (RET_ERROR);
-		}
+		if (bl->flags & P_BIGKEY &&
+		    bt_preserve(t, *(pgno_t *)(void *)bl->bytes) == RET_ERROR)
+			return (RET_ERROR);
 		break;
 	case P_BINTERNAL:
 		bi = GETBINTERNAL(r, 0);

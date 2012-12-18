@@ -1,4 +1,4 @@
-/* $NetBSD: chmod.c,v 1.38 2012/10/22 18:00:46 christos Exp $ */
+/* $NetBSD: chmod.c,v 1.34 2008/07/20 00:52:39 lukem Exp $ */
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -40,7 +40,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)chmod.c	8.8 (Berkeley) 4/1/94";
 #else
-__RCSID("$NetBSD: chmod.c,v 1.38 2012/10/22 18:00:46 christos Exp $");
+__RCSID("$NetBSD: chmod.c,v 1.34 2008/07/20 00:52:39 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,39 +57,26 @@ __RCSID("$NetBSD: chmod.c,v 1.38 2012/10/22 18:00:46 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <getopt.h>
 
-__dead static void	usage(void);
-
-struct option chmod_longopts[] = {
-	{ "reference",		required_argument,	0,
-						1 },
-	{ NULL,			0,			0,
-						0 },
-};
+int	main(int, char *[]);
+void	usage(void);
 
 int
 main(int argc, char *argv[])
 {
 	FTS *ftsp;
 	FTSENT *p;
-	void *set;
-	mode_t mval;
+	mode_t *set;
 	int Hflag, Lflag, Rflag, ch, fflag, fts_options, hflag, rval;
-	char *mode, *reference;
+	char *mode;
 	int (*change_mode)(const char *, mode_t);
 
 	setprogname(argv[0]);
 	(void)setlocale(LC_ALL, "");
 
 	Hflag = Lflag = Rflag = fflag = hflag = 0;
-	reference = NULL;
-	while ((ch = getopt_long(argc, argv, "HLPRXfghorstuwx",
-	    chmod_longopts, NULL)) != -1)
+	while ((ch = getopt(argc, argv, "HLPRXfghorstuwx")) != -1)
 		switch (ch) {
-		case 1:
-			reference = optarg;
-			break;
 		case 'H':
 			Hflag = 1;
 			Lflag = 0;
@@ -104,7 +91,7 @@ main(int argc, char *argv[])
 		case 'R':
 			Rflag = 1;
 			break;
-		case 'f':
+		case 'f':		/* XXX: undocumented. */
 			fflag = 1;
 			break;
 		case 'h':
@@ -138,7 +125,7 @@ main(int argc, char *argv[])
 done:	argv += optind;
 	argc -= optind;
 
-	if (argc == 0 || (argc == 1 && reference == NULL))
+	if (argc < 2)
 		usage();
 
 	fts_options = FTS_PHYSICAL;
@@ -161,23 +148,13 @@ done:	argv += optind;
 	else
 		change_mode = chmod;
 
-	if (reference == NULL) {
-		mode = *argv++;
-		if ((set = setmode(mode)) == NULL) {
-			err(EXIT_FAILURE, "Cannot set file mode `%s'", mode);
-			/* NOTREACHED */
-		}
-		mval = 0;
-	} else {
-		struct stat st;
-
-		if (stat(reference, &st) == -1)
-			err(EXIT_FAILURE, "Cannot stat `%s'", reference);
-		mval = st.st_mode;
-		set = NULL;
+	mode = *argv;
+	if ((set = setmode(mode)) == NULL) {
+		err(EXIT_FAILURE, "Cannot set file mode `%s'", mode);
+		/* NOTREACHED */
 	}
 
-	if ((ftsp = fts_open(argv, fts_options, 0)) == NULL) {
+	if ((ftsp = fts_open(++argv, fts_options, 0)) == NULL) {
 		err(EXIT_FAILURE, "fts_open");
 		/* NOTREACHED */
 	}
@@ -213,8 +190,7 @@ done:	argv += optind;
 			break;
 		}
 		if ((*change_mode)(p->fts_accpath,
-		    set ? getmode(set, p->fts_statp->st_mode) : mval)
-		    && !fflag) {
+		    getmode(set, p->fts_statp->st_mode)) && !fflag) {
 			warn("%s", p->fts_path);
 			rval = 1;
 		}
@@ -227,13 +203,12 @@ done:	argv += optind;
 	/* NOTREACHED */
 }
 
-static void
+void
 usage(void)
 {
 	(void)fprintf(stderr,
-	    "Usage: %s [-R [-H | -L | -P]] [-fh] mode file ...\n"
-	    "\t%s [-R [-H | -L | -P]] [-fh] --reference=rfile file ...\n",
-	    getprogname(), getprogname());
+	    "usage: %s [-R [-H | -L | -P]] [-h] mode file ...\n",
+	    getprogname());
 	exit(1);
 	/* NOTREACHED */
 }

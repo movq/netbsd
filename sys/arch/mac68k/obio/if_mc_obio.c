@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mc_obio.c,v 1.18 2012/10/27 17:18:00 chs Exp $	*/
+/*	$NetBSD: if_mc_obio.c,v 1.17 2007/03/05 21:23:49 he Exp $	*/
 
 /*-
  * Copyright (c) 1997 David Huang <khym@azeotrope.org>
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mc_obio.c,v 1.18 2012/10/27 17:18:00 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mc_obio.c,v 1.17 2007/03/05 21:23:49 he Exp $");
 
 #include "opt_ddb.h"
 
@@ -61,8 +61,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_mc_obio.c,v 1.18 2012/10/27 17:18:00 chs Exp $");
 #define MACE_REG_BASE	0x50F1C000
 #define MACE_PROM_BASE	0x50F08000
 
-hide int	mc_obio_match(device_t, cfdata_t, void *);
-hide void	mc_obio_attach(device_t, device_t, void *);
+hide int	mc_obio_match(struct device *, struct cfdata *, void *);
+hide void	mc_obio_attach(struct device *, struct device *, void *);
 hide void	mc_obio_init(struct mc_softc *);
 hide void	mc_obio_put(struct mc_softc *, u_int);
 hide int	mc_dmaintr(void *);
@@ -71,11 +71,11 @@ hide void	mc_reset_rxdma_set(struct mc_softc *, int);
 hide void	mc_reset_txdma(struct mc_softc *);
 hide int	mc_obio_getaddr(struct mc_softc *, u_int8_t *);
 
-CFATTACH_DECL_NEW(mc_obio, sizeof(struct mc_softc),
+CFATTACH_DECL(mc_obio, sizeof(struct mc_softc),
     mc_obio_match, mc_obio_attach, NULL, NULL);
 
 hide int
-mc_obio_match(device_t parent, cfdata_t cf, void *aux)
+mc_obio_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct obio_attach_args *oa = aux;
 	bus_space_handle_t bsh;
@@ -106,14 +106,13 @@ mc_obio_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 hide void
-mc_obio_attach(device_t parent, device_t self, void *aux)
+mc_obio_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct obio_attach_args *oa = (struct obio_attach_args *)aux;
-	struct mc_softc *sc = device_private(self);
+	struct mc_softc *sc = (void *)self;
 	u_int8_t myaddr[ETHER_ADDR_LEN];
 	int rsegs;
 
-	sc->sc_dev = self;
 	sc->sc_regt = oa->oa_tag;
 	sc->sc_biucc = XMTSP_64;
 	sc->sc_fifocc = XMTFW_16 | RCVFW_64 | XMTFWU | RCVFWU |
@@ -281,7 +280,7 @@ mc_dmaintr(void *arg)
 		mc_reset_rxdma(sc);
 #ifdef MCDEBUG
 		printf("%s: resetting receive DMA channel (status 0x%04x)\n",
-		    device_xname(sc->sc_dev), status);
+		    sc->sc_dev.dv_xname, status);
 #endif
 	} else if (status & 0x100) {
 		/* We've received some packets from the MACE */
@@ -298,7 +297,7 @@ mc_dmaintr(void *arg)
 		if (head == sc->sc_tail) {
 #ifdef MCDEBUG
 			printf("%s: head == tail: suspending DMA?\n",
-			    device_xname(sc->sc_dev));
+			    sc->sc_dev.dv_xname);
 #endif
 			psc_reg2(PSC_ENETRD_CMD + sc->sc_rxset) = 0x9000;
 		}
@@ -344,7 +343,7 @@ mc_dmaintr(void *arg)
 		mc_reset_txdma(sc);
 #ifdef MCDEBUG
 		printf("%s: resetting transmit DMA channel (status 0x%04x)\n",
-			device_xname(sc->sc_dev), status);
+			sc->sc_dev.dv_xname, status);
 #endif
 	} else if (status & 0x100) {
 		/* Clear the interrupt and switch register sets */
@@ -412,7 +411,7 @@ mc_obio_getaddr(struct mc_softc *sc, u_int8_t *lladdr)
 
 	if (bus_space_map(sc->sc_regt, MACE_PROM_BASE, 8*16, 0, &bsh)) {
 		printf(": failed to map space to read MACE address.\n%s",
-		    device_xname(sc->sc_dev));
+		    sc->sc_dev.dv_xname);
 		return (-1);
 	}
 
@@ -424,7 +423,7 @@ mc_obio_getaddr(struct mc_softc *sc, u_int8_t *lladdr)
 	csum = mc_get_enaddr(sc->sc_regt, bsh, 1, lladdr);
 	if (csum != 0xff)
 		printf(": ethernet PROM checksum failed (0x%x != 0xff)\n%s",
-		    (int)csum, device_xname(sc->sc_dev));
+		    (int)csum, sc->sc_dev.dv_xname);
 
 	bus_space_unmap(sc->sc_regt, bsh, 8*16);
 

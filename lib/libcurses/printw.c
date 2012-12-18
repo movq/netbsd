@@ -1,4 +1,4 @@
-/*	$NetBSD: printw.c,v 1.22 2011/07/17 20:54:34 joerg Exp $	*/
+/*	$NetBSD: printw.c,v 1.20 2007/01/21 13:25:36 jdc Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)printw.c	8.3 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: printw.c,v 1.22 2011/07/17 20:54:34 joerg Exp $");
+__RCSID("$NetBSD: printw.c,v 1.20 2007/01/21 13:25:36 jdc Exp $");
 #endif
 #endif				/* not lint */
 
@@ -60,7 +60,7 @@ printw(const char *fmt,...)
 	int     ret;
 
 	va_start(ap, fmt);
-	ret = vw_printw(stdscr, fmt, ap);
+	ret = vwprintw(stdscr, fmt, ap);
 	va_end(ap);
 	return (ret);
 }
@@ -75,7 +75,7 @@ wprintw(WINDOW *win, const char *fmt,...)
 	int     ret;
 
 	va_start(ap, fmt);
-	ret = vw_printw(win, fmt, ap);
+	ret = vwprintw(win, fmt, ap);
 	va_end(ap);
 	return (ret);
 }
@@ -93,7 +93,7 @@ mvprintw(int y, int x, const char *fmt,...)
 	if (move(y, x) != OK)
 		return (ERR);
 	va_start(ap, fmt);
-	ret = vw_printw(stdscr, fmt, ap);
+	ret = vwprintw(stdscr, fmt, ap);
 	va_end(ap);
 	return (ret);
 }
@@ -108,7 +108,7 @@ mvwprintw(WINDOW * win, int y, int x, const char *fmt,...)
 		return (ERR);
 
 	va_start(ap, fmt);
-	ret = vw_printw(win, fmt, ap);
+	ret = vwprintw(win, fmt, ap);
 	va_end(ap);
 	return (ret);
 }
@@ -135,11 +135,11 @@ __winwrite(cookie, buf, n)
 	return (n);
 }
 /*
- * vw_printw --
+ * vwprintw --
  *	This routine actually executes the printf and adds it to the window.
  */
 int
-vw_printw(WINDOW *win, const char *fmt, va_list ap)
+vwprintw(WINDOW *win, const char *fmt, _BSD_VA_LIST_ ap)
 {
 	FILE   *f;
 
@@ -148,5 +148,3 @@ vw_printw(WINDOW *win, const char *fmt, va_list ap)
 	(void) vfprintf(f, fmt, ap);
 	return (fclose(f) ? ERR : OK);
 }
-
-__strong_alias(vwprintw, vw_printw)

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ieee1394subr.c,v 1.45 2010/04/05 07:22:23 joerg Exp $	*/
+/*	$NetBSD: if_ieee1394subr.c,v 1.40 2008/04/28 20:24:09 martin Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,19 +30,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ieee1394subr.c,v 1.45 2010/04/05 07:22:23 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ieee1394subr.c,v 1.40 2008/04/28 20:24:09 martin Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
-#include <sys/device.h>
-#include <sys/kernel.h>
-#include <sys/mbuf.h>
 #include <sys/socket.h>
 #include <sys/sockio.h>
-#include <sys/select.h>
+#include <sys/kernel.h>
+#include <sys/mbuf.h>
+#include <sys/device.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -53,7 +52,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_ieee1394subr.c,v 1.45 2010/04/05 07:22:23 joerg E
 #include <net/netisr.h>
 #include <net/route.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -66,6 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ieee1394subr.c,v 1.45 2010/04/05 07:22:23 joerg E
 #include <netinet6/nd6.h>
 #endif /* INET6 */
 
+#include <dev/ieee1394/fw_port.h>
 #include <dev/ieee1394/firewire.h>
 
 #include <dev/ieee1394/firewirereg.h>
@@ -153,9 +155,9 @@ ieee1394_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 	unicast = !(m0->m_flags & (M_BCAST | M_MCAST));
 	if (unicast) {
 		mtag =
-		    m_tag_find(m0, MTAG_FIREWIRE_HWADDR, NULL);
+		    m_tag_locate(m0, MTAG_FIREWIRE, MTAG_FIREWIRE_HWADDR, NULL);
 		if (!mtag) {
-			mtag = m_tag_get(MTAG_FIREWIRE_HWADDR,
+			mtag = m_tag_alloc(MTAG_FIREWIRE, MTAG_FIREWIRE_HWADDR,
 			    sizeof (struct ieee1394_hwaddr), M_NOWAIT);
 			if (!mtag) {
 				error = ENOMEM;
@@ -208,6 +210,7 @@ ieee1394_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 	if (mcopy)
 		looutput(ifp, mcopy, dst, rt);
 	myaddr = (const struct ieee1394_hwaddr *)CLLADDR(ifp->if_sadl);
+#if NBPFILTER > 0
 	if (ifp->if_bpf) {
 		struct ieee1394_bpfhdr h;
 		if (unicast)
@@ -220,6 +223,7 @@ ieee1394_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 		h.ibh_type = etype;
 		bpf_mtap2(ifp->if_bpf, &h, sizeof(h), m0);
 	}
+#endif
 	if ((ifp->if_flags & IFF_SIMPLEX) &&
 	    unicast &&
 	    memcmp(hwdst, myaddr, IEEE1394_ADDR_LEN) == 0)
@@ -381,12 +385,14 @@ ieee1394_input(struct ifnet *ifp, struct mbuf *m, uint16_t src)
 
 	/* strip off the ieee1394 header */
 	m_adj(m, sizeof(*iuh));
+#if NBPFILTER > 0
 	if (ifp->if_bpf) {
 		struct ieee1394_bpfhdr h;
 		struct m_tag *mtag;
 		const struct ieee1394_hwaddr *myaddr;
 
-		mtag = m_tag_find(m, MTAG_FIREWIRE_SENDER_EUID, 0);
+		mtag = m_tag_locate(m,
+		    MTAG_FIREWIRE, MTAG_FIREWIRE_SENDER_EUID, 0);
 		if (mtag)
 			memcpy(h.ibh_shost, mtag + 1, 8);
 		else
@@ -403,6 +409,7 @@ ieee1394_input(struct ifnet *ifp, struct mbuf *m, uint16_t src)
 		h.ibh_type = htons(etype);
 		bpf_mtap2(ifp->if_bpf, &h, sizeof(h), m);
 	}
+#endif
 
 	switch (etype) {
 #ifdef INET
@@ -678,7 +685,7 @@ ieee1394_ifattach(struct ifnet *ifp, const struct ieee1394_hwaddr *hwaddr)
 	if (ifp->if_baudrate == 0)
 		ifp->if_baudrate = IF_Mbps(100);
 
-	if_set_sadl(ifp, hwaddr, sizeof(struct ieee1394_hwaddr), true);
+	if_set_sadl(ifp, hwaddr, sizeof(struct ieee1394_hwaddr));
 
 	baddr = malloc(ifp->if_addrlen, M_DEVBUF, M_WAITOK);
 	memset(baddr->iha_uid, 0xff, IEEE1394_ADDR_LEN);
@@ -687,15 +694,19 @@ ieee1394_ifattach(struct ifnet *ifp, const struct ieee1394_hwaddr *hwaddr)
 	memset(baddr->iha_offset, 0, sizeof(baddr->iha_offset));
 	ifp->if_broadcastaddr = (uint8_t *)baddr;
 	LIST_INIT(&ic->ic_reassq);
-	bpf_attach(ifp, DLT_APPLE_IP_OVER_IEEE1394,
-	    sizeof(struct ieee1394_hwaddr));
+#if NBPFILTER > 0
+	bpfattach(ifp,
+	    DLT_APPLE_IP_OVER_IEEE1394, sizeof(struct ieee1394_hwaddr));
+#endif
 }
 
 void
 ieee1394_ifdetach(struct ifnet *ifp)
 {
 	ieee1394_drain(ifp);
-	bpf_detach(ifp);
+#if NBPFILTER > 0
+	bpfdetach(ifp);
+#endif
 	free(__UNCONST(ifp->if_broadcastaddr), M_DEVBUF);
 	ifp->if_broadcastaddr = NULL;
 #if 0	/* done in if_detach() */
@@ -709,23 +720,40 @@ ieee1394_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	struct ifreq *ifr = (struct ifreq *)data;
 	struct ifaddr *ifa = (struct ifaddr *)data;
 	int error = 0;
+#if __NetBSD_Version__ < 105080000
+	int fw_init(struct ifnet *);
+	void fw_stop(struct ifnet *, int);
+#endif
 
 	switch (cmd) {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
+#if __NetBSD_Version__ >= 105080000
 			if ((error = (*ifp->if_init)(ifp)) != 0)
+#else
+			if ((error = fw_init(ifp)) != 0)
+#endif
 				break;
 			arp_ifinit(ifp, ifa);
 			break;
 #endif /* INET */
 		default:
+#if __NetBSD_Version__ >= 105080000
 			error = (*ifp->if_init)(ifp);
+#else
+			error = fw_init(ifp);
+#endif
 			break;
 		}
 		break;
+
+	case SIOCGIFADDR:
+		memcpy(((struct sockaddr *)&ifr->ifr_data)->sa_data,
+		    CLLADDR(ifp->if_sadl), IEEE1394_ADDR_LEN);
+		    break;
 
 	case SIOCSIFMTU:
 		if (ifr->ifr_mtu > IEEE1394MTU)
@@ -734,8 +762,10 @@ ieee1394_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 			error = 0;
 		break;
 
+	case SIOCSIFCAP:
+		return ifioctl_common(ifp, cmd, data);
 	default:
-		error = ifioctl_common(ifp, cmd, data);
+		error = ENOTTY;
 		break;
 	}
 

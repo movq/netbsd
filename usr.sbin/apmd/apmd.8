@@ -1,6 +1,6 @@
-.\"	$NetBSD: apmd.8,v 1.22 2012/04/08 22:00:40 wiz Exp $
+.\"	$NetBSD: apmd.8,v 1.20 2008/09/25 22:44:51 reed Exp $
 .\"
-.\" Copyright (c) 1996, 2010 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1996 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd March 20, 2010
+.Dd May 16, 2004
 .Dt APMD 8
 .Os
 .Sh NAME
@@ -36,35 +36,30 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl adlqsv
-.Op Fl f Ar devname
-.Op Fl m Ar sockmode
-.Op Fl o Ar sockowner:sockgroup
-.Op Fl S Ar sockname
+.Bk -words
 .Op Fl t Ar rate
+.Ek
+.Bk -words
+.Op Fl S Ar sockname
+.Ek
+.Bk -words
+.Op Fl m Ar sockmode
+.Ek
+.Bk -words
+.Op Fl o Ar sockowner:sockgroup
+.Ek
+.Bk -words
+.Op Fl f Ar devname
+.Ek
 .Sh DESCRIPTION
-The
 .Nm
-daemon monitors the Advanced Power Management
-.Pq Tn APM
-pseudo-device, acting on
+monitors the advanced power management (APM) pseudo-device, acting on
 signaled events and upon user requests as sent by the
 .Xr apm 8
 utility.
 The
 .Nm
 daemon is only installed on supported platforms.
-.Pp
-.Em The
-.Nm
-.Em is largely deprecated.
-Modern systems supporting
-.Tn ACPI
-should rely on
-.Xr acpi 4 ,
-.Xr powerd 8 ,
-and the
-.Xr envsys 4
-framework instead.
 .Pp
 For suspend and standby request events delivered by the BIOS, or via
 .Xr apm 8 ,
@@ -89,13 +84,11 @@ device).
 Suspends are announced with two high tones.
 .Pp
 .Nm
-periodically polls the
-.Tn APM
-driver for the current power state.
+periodically polls the APM driver for the current power state.
 If the battery charge level changes substantially or the external power
 status changes, the new status is logged.
 The polling rate defaults to
-once per 10 minutes, but this may be altered by using the
+once per 10 minutes, but may be specified using the
 .Fl t
 command-line flag.
 .Pp
@@ -130,15 +123,15 @@ for the owner/group of
 .Pa /var/run/apmdev .
 .It Fl q
 Do not announce suspend and standby requests on the speaker.
+.It Fl s
+The current battery statistics are reported via
+.Xr syslog 3
+and exit without monitoring the APM status.
 .It Fl S Ar sockname
 Specify an alternate socket name (used by
 .Xr apm 8
 to communicate with
 .Nm ) .
-.It Fl s
-The current battery statistics are reported via
-.Xr syslog 3
-and exit without monitoring the APM status.
 .It Fl t Ar rate
 Change the polling rate from 600 seconds to
 .Ar rate
@@ -217,8 +210,11 @@ The default device used to control the APM kernel driver.
 .Xr speaker 4 ,
 .Xr apm 8 ,
 .Xr syslogd 8
+.Sh REFERENCES
+Advanced Power Management (APM) BIOS Interface Specification (revision
+1.1), Intel Corporation and Microsoft Corporation.
 .Sh HISTORY
 The
 .Nm
-daemon appeared in
+command appeared in
 .Nx 1.3 .

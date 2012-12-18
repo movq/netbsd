@@ -1,4 +1,4 @@
-.\" $NetBSD: uslsa.4,v 1.7 2012/03/13 19:25:42 njoly Exp $
+.\" $NetBSD: uslsa.4,v 1.4 2008/05/25 19:59:33 wiz Exp $
 .\"
 .\" Copyright (c) 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 17, 2012
+.Dd May 12, 2006
 .Dt USLSA 4
 .Os
 .Sh NAME
@@ -61,10 +61,7 @@ driver which makes it behave like a
 .Xr ucom 4 ,
 .Xr usb 4
 .Pp
-.Lk http://www.silabs.com "Silicon Laboratories" .
-.Rs
-.%T Silicon Laboratories AN571: CP210x Virtual COM Port Interface .
-.Re
+.Pa http://www.silabs.com .
 .Sh HISTORY
 The
 .Nm
@@ -79,6 +76,10 @@ driver was written by
 Code and style was borrowed from existing
 .Nx
 USB-serial drivers.
+Due to the unavailability of documentation, Craig Shelley's
+reverse-engineered Linux driver was used as documentation.
 .Sh CAVEATS
+Hardware flow control may not work correctly.
+.Pp
 Settings other than 8 data bits, no parity, and 1 stop bit
-seem to be refused by the CP2101.
+seem to be refused by the chip.

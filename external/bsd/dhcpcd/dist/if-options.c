@@ -1,6 +1,6 @@
 /* 
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2012 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2009 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,6 @@
  */
 
 #include <sys/types.h>
-#include <sys/utsname.h>
 
 #include <arpa/inet.h>
 
@@ -45,21 +44,12 @@
 #include "common.h"
 #include "if-options.h"
 #include "net.h"
-#include "platform.h"
-
-unsigned long long options = 0;
 
 /* These options only make sense in the config file, so don't use any
    valid short options for them */
-#define O_BASE			MAX('z', 'Z') + 1
-#define O_ARPING		O_BASE + 1
-#define O_FALLBACK		O_BASE + 2
-#define O_DESTINATION		O_BASE + 3
-#define O_IPV6RS		O_BASE + 4
-#define O_NOIPV6RS		O_BASE + 5 
-#define O_IPV6RA_FORK		O_BASE + 6 
-#define O_IPV6RA_OWN		O_BASE + 7
-#define O_IPV6RA_OWN_D		O_BASE + 8
+#define O_BASE		MAX('z', 'Z') + 1
+#define O_ARPING	O_BASE + 1
+#define O_FALLBACK	O_BASE + 2
 
 const struct option cf_options[] = {
 	{"background",      no_argument,       NULL, 'b'},
@@ -93,28 +83,20 @@ const struct option cf_options[] = {
 	{"lastlease",       no_argument,       NULL, 'E'},
 	{"fqdn",            optional_argument, NULL, 'F'},
 	{"nogateway",       no_argument,       NULL, 'G'},
-	{"xidhwaddr",       no_argument,       NULL, 'H'}, 
 	{"clientid",        optional_argument, NULL, 'I'},
-	{"broadcast",       no_argument,       NULL, 'J'},
 	{"nolink",          no_argument,       NULL, 'K'},
 	{"noipv4ll",        no_argument,       NULL, 'L'},
+	{"destination",     required_argument, NULL, 'N'},
 	{"nooption",        optional_argument, NULL, 'O'},
 	{"require",         required_argument, NULL, 'Q'},
 	{"static",          required_argument, NULL, 'S'},
 	{"test",            no_argument,       NULL, 'T'},
-	{"dumplease",       no_argument,       NULL, 'U'},
 	{"variables",       no_argument,       NULL, 'V'},
 	{"whitelist",       required_argument, NULL, 'W'},
 	{"blacklist",       required_argument, NULL, 'X'},
 	{"denyinterfaces",  required_argument, NULL, 'Z'},
 	{"arping",          required_argument, NULL, O_ARPING},
-	{"destination",     required_argument, NULL, O_DESTINATION},
 	{"fallback",        required_argument, NULL, O_FALLBACK},
-	{"ipv6rs",          no_argument,       NULL, O_IPV6RS},
-	{"noipv6rs",        no_argument,       NULL, O_NOIPV6RS},
-	{"ipv6ra_fork",     no_argument,       NULL, O_IPV6RA_FORK},
-	{"ipv6ra_own",      no_argument,       NULL, O_IPV6RA_OWN},
-	{"ipv6ra_own_default", no_argument,    NULL, O_IPV6RA_OWN_D},
 	{NULL,              0,                 NULL, '\0'}
 };
 
@@ -349,8 +331,7 @@ parse_option(struct if_options *ifo, int opt, const char *arg)
 	case 'g': /* FALLTHROUGH */
 	case 'n': /* FALLTHROUGH */
 	case 'x': /* FALLTHROUGH */
-	case 'T': /* FALLTHROUGH */
-	case 'U': /* We need to handle non interface options */
+	case 'T': /* We need to handle non interface options */
 		break;
 	case 'b':
 		ifo->options |= DHCPCD_BACKGROUND;
@@ -432,12 +413,14 @@ parse_option(struct if_options *ifo, int opt, const char *arg)
 		ifo->options |= DHCPCD_QUIET;
 		break;
 	case 'r':
+		ifo->options |= DHCPCD_REQUEST;
 		if (parse_addr(&ifo->req_addr, NULL, arg) != 0)
 			return -1;
-		ifo->options |= DHCPCD_REQUEST;
 		ifo->req_mask.s_addr = 0;
 		break;
 	case 's':
+		ifo->options |= DHCPCD_INFORM | DHCPCD_PERSISTENT;
+		ifo->options &= ~(DHCPCD_ARP | DHCPCD_STATIC);
 		if (arg && *arg != '\0') {
 			if (parse_addr(&ifo->req_addr, &ifo->req_mask,
 				arg) != 0)
@@ -446,8 +429,6 @@ parse_option(struct if_options *ifo, int opt, const char *arg)
 			ifo->req_addr.s_addr = 0;
 			ifo->req_mask.s_addr = 0;
 		}
-		ifo->options |= DHCPCD_INFORM | DHCPCD_PERSISTENT;
-		ifo->options &= ~(DHCPCD_ARP | DHCPCD_STATIC);
 		break;
 	case 't':
 		ifo->timeout = atoint(arg);
@@ -538,7 +519,9 @@ parse_option(struct if_options *ifo, int opt, const char *arg)
 		}
 		break;
 	case 'z':
-		ifav = splitv(&ifac, ifav, arg);
+		/* We only set this if we haven't got any interfaces */
+		if (!ifaces)
+			ifav = splitv(&ifac, ifav, arg);
 		break;
 	case 'A':
 		ifo->options &= ~DHCPCD_ARP;
@@ -585,9 +568,6 @@ parse_option(struct if_options *ifo, int opt, const char *arg)
 	case 'G':
 		ifo->options &= ~DHCPCD_GATEWAY;
 		break;
-	case 'H':
-		ifo->options |= DHCPCD_XID_HWADDR;
-		break;
 	case 'I':
 		/* Strings have a type of 0 */;
 		ifo->clientid[1] = 0;
@@ -603,14 +583,21 @@ parse_option(struct if_options *ifo, int opt, const char *arg)
 		ifo->options |= DHCPCD_CLIENTID;
 		ifo->clientid[0] = (uint8_t)s;
 		break;
-	case 'J':
-		ifo->options |= DHCPCD_BROADCAST;
-		break;
 	case 'K':
 		ifo->options &= ~DHCPCD_LINK;
 		break;
 	case 'L':
 		ifo->options &= ~DHCPCD_IPV4LL;
+		break;
+	case 'N':
+		if (make_option_mask(ifo->dstmask, arg, 2) != 0) {
+			if (errno == EINVAL)
+				syslog(LOG_ERR, "option `%s' does not take"
+				    " an IPv4 address", arg);
+			else
+				syslog(LOG_ERR, "unknown otpion `%s'", arg);
+			return -1;
+		}
 		break;
 	case 'O':
 		if (make_option_mask(ifo->requestmask, arg, -1) != 0 ||
@@ -637,16 +624,11 @@ parse_option(struct if_options *ifo, int opt, const char *arg)
 		}
 		p++;
 		if (strncmp(arg, "ip_address=", strlen("ip_address=")) == 0) {
-			if (parse_addr(&ifo->req_addr,
-			    ifo->req_mask.s_addr == 0 ? &ifo->req_mask : NULL,
-			    p) != 0)
+			if (parse_addr(&ifo->req_addr, &ifo->req_mask, p) != 0)
 				return -1;
 
 			ifo->options |= DHCPCD_STATIC;
 			ifo->options &= ~DHCPCD_INFORM;
-		} else if (strncmp(arg, "subnet_mask=", strlen("subnet_mask=")) == 0) {
-			if (parse_addr(&ifo->req_mask, NULL, p) != 0)
-				return -1;
 		} else if (strncmp(arg, "routes=", strlen("routes=")) == 0 ||
 		    strncmp(arg, "static_routes=", strlen("static_routes=")) == 0 ||
 		    strncmp(arg, "classless_static_routes=", strlen("classless_static_routes=")) == 0 ||
@@ -729,7 +711,9 @@ parse_option(struct if_options *ifo, int opt, const char *arg)
 		ifo->blacklist[ifo->blacklist_len++] = addr2.s_addr;
 		break;
 	case 'Z':
-		ifdv = splitv(&ifdc, ifdv, arg);
+		/* We only set this if we haven't got any interfaces */
+		if (!ifaces)
+			ifdv = splitv(&ifdc, ifdv, arg);
 		break;
 	case O_ARPING:
 		if (parse_addr(&addr, NULL, arg) != 0)
@@ -738,34 +722,9 @@ parse_option(struct if_options *ifo, int opt, const char *arg)
 		    sizeof(in_addr_t) * (ifo->arping_len + 1));
 		ifo->arping[ifo->arping_len++] = addr.s_addr;
 		break;
-	case O_DESTINATION:
-		if (make_option_mask(ifo->dstmask, arg, 2) != 0) {
-			if (errno == EINVAL)
-				syslog(LOG_ERR, "option `%s' does not take"
-				    " an IPv4 address", arg);
-			else
-				syslog(LOG_ERR, "unknown option `%s'", arg);
-			return -1;
-		}
-		break;
 	case O_FALLBACK:
 		free(ifo->fallback);
 		ifo->fallback = xstrdup(arg);
-		break;
-	case O_IPV6RS:
-		ifo->options |= DHCPCD_IPV6RS;
-		break;
-	case O_NOIPV6RS:
-		ifo->options &= ~DHCPCD_IPV6RS;
-		break;
-	case O_IPV6RA_FORK:
-		ifo->options &= ~DHCPCD_IPV6RA_REQRDNSS;
-		break;
-	case O_IPV6RA_OWN:
-		ifo->options |= DHCPCD_IPV6RA_OWN;
-		break;
-	case O_IPV6RA_OWN_D:
-		ifo->options |= DHCPCD_IPV6RA_OWN_DEFAULT;
 		break;
 	default:
 		return 0;
@@ -804,15 +763,13 @@ read_config(const char *file,
 {
 	struct if_options *ifo;
 	FILE *f;
-	char *line, *option, *p, *platform;
+	char *line, *option, *p;
 	int skip = 0, have_profile = 0;
-	struct utsname utn;
 
 	/* Seed our default options */
 	ifo = xzalloc(sizeof(*ifo));
-	ifo->options |= DHCPCD_GATEWAY | DHCPCD_DAEMONISE | DHCPCD_LINK;
-	ifo->options |= DHCPCD_ARP | DHCPCD_IPV4LL;
-	ifo->options |= DHCPCD_IPV6RS | DHCPCD_IPV6RA_REQRDNSS;
+	ifo->options |= DHCPCD_GATEWAY | DHCPCD_DAEMONISE;
+	ifo->options |= DHCPCD_ARP | DHCPCD_IPV4LL | DHCPCD_LINK;
 	ifo->timeout = DEFAULT_TIMEOUT;
 	ifo->reboot = DEFAULT_REBOOT;
 	ifo->metric = -1;
@@ -823,17 +780,9 @@ read_config(const char *file,
 	if (strcmp(ifo->hostname, "(none)") == 0 ||
 	    strcmp(ifo->hostname, "localhost") == 0)
 		ifo->hostname[0] = '\0';
-
-	platform = hardware_platform();
-	if (uname(&utn) == 0)
-		ifo->vendorclassid[0] = snprintf((char *)ifo->vendorclassid + 1,
-		    VENDORCLASSID_MAX_LEN,
-	            "%s-%s:%s-%s:%s%s%s", PACKAGE, VERSION,
-		    utn.sysname, utn.release, utn.machine,
-		    platform ? ":" : "", platform ? platform : "");
-	else
-		ifo->vendorclassid[0] = snprintf((char *)ifo->vendorclassid + 1,
-		    VENDORCLASSID_MAX_LEN, "%s-%s", PACKAGE, VERSION);
+	ifo->vendorclassid[0] = snprintf((char *)ifo->vendorclassid + 1,
+	    VENDORCLASSID_MAX_LEN,
+	    "%s %s", PACKAGE, VERSION);
 
 	/* Parse our options file */
 	f = fopen(file ? file : CONFIG, "r");
@@ -880,7 +829,8 @@ read_config(const char *file,
 		}
 		if (skip)
 			continue;
-		parse_config_line(ifo, option, line);
+		if (parse_config_line(ifo, option, line) != 1)
+			break;
 	}
 	fclose(f);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: inode.c,v 1.32 2012/11/25 19:42:14 jakllsch Exp $	*/
+/*	$NetBSD: inode.c,v 1.23.2.1 2011/01/16 12:38:27 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,6 +40,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -58,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)inode.c	8.5 (Berkeley) 2/8/95";
 #else
-__RCSID("$NetBSD: inode.c,v 1.32 2012/11/25 19:42:14 jakllsch Exp $");
+__RCSID("$NetBSD: inode.c,v 1.23.2.1 2011/01/16 12:38:27 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -97,8 +102,6 @@ static int iblock(struct inodesc *, long, u_int64_t);
 
 static int setlarge(void);
 
-static int sethuge(void);
-
 static int
 setlarge(void)
 {
@@ -112,24 +115,6 @@ setlarge(void)
 		else if (!reply("SET LARGE FILE INDICATOR"))
 			return 0;
 		sblock.e2fs.e2fs_features_rocompat |= EXT2F_ROCOMPAT_LARGEFILE;
-		sbdirty();
-	}
-	return 1;
-}
-
-static int
-sethuge(void)
-{
-	if (sblock.e2fs.e2fs_rev < E2FS_REV1) {
-		pfatal("HUGE FILES UNSUPPORTED ON REVISION 0 FILESYSTEMS");
-		return 0;
-	}
-	if (!(sblock.e2fs.e2fs_features_rocompat & EXT2F_ROCOMPAT_HUGE_FILE)) {
-		if (preen)
-			pwarn("SETTING HUGE FILE FEATURE\n");
-		else if (!reply("SET HUGE FILE FEATURE"))
-			return 0;
-		sblock.e2fs.e2fs_features_rocompat |= EXT2F_ROCOMPAT_HUGE_FILE;
 		sbdirty();
 	}
 	return 1;
@@ -255,8 +240,7 @@ iblock(struct inodesc *idesc, long ilevel, u_int64_t isize)
 	int32_t *ap;
 	int32_t *aplim;
 	struct bufarea *bp;
-	int i, n, (*func)(struct inodesc *);
-	size_t nif;
+	int i, n, (*func)(struct inodesc *), nif;
 	u_int64_t sizepb;
 	char buf[BUFSIZ];
 	char pathbuf[MAXPATHLEN + 1];
@@ -632,7 +616,9 @@ void
 pinode(ino_t ino)
 {
 	struct ext2fs_dinode *dp;
+	char *p;
 	struct passwd *pw;
+	time_t t;
 	uid_t uid;
 
 	printf(" I=%llu ", (unsigned long long)ino);
@@ -653,7 +639,9 @@ pinode(ino_t ino)
 	if (preen)
 		printf("%s: ", cdevname());
 	printf("SIZE=%llu ", (long long)inosize(dp));
-	printf("MTIME=%s ", print_mtime(fs2h32(dp->e2di_mtime)));
+	t = fs2h32(dp->e2di_mtime);
+	p = ctime(&t);
+	printf("MTIME=%12.12s %4.4s ", &p[4], &p[20]);
 }
 
 void
@@ -727,7 +715,7 @@ allocino(ino_t request, int type)
 	dp->e2di_mtime = dp->e2di_ctime = dp->e2di_atime;
 	dp->e2di_dtime = 0;
 	inossize(dp, sblock.e2fs_bsize);
-	inosnblock(dp, btodb(sblock.e2fs_bsize));
+	dp->e2di_nblock = h2fs32(btodb(sblock.e2fs_bsize));
 	n_files++;
 	inodirty();
 	typemap[ino] = E2IFTODT(type);
@@ -753,60 +741,4 @@ freeino(ino_t ino)
 	inodirty();
 	statemap[ino] = USTATE;
 	n_files--;
-}
-
-uint64_t
-inonblock(struct ext2fs_dinode *dp)
-{
-	uint64_t nblock;
-
-	/* XXX check for EXT2_HUGE_FILE without EXT2F_ROCOMPAT_HUGE_FILE? */
-
-	nblock = fs2h32(dp->e2di_nblock);
-
-	if ((sblock.e2fs.e2fs_features_rocompat & EXT2F_ROCOMPAT_HUGE_FILE)) {
-		nblock |= (uint64_t)fs2h16(dp->e2di_nblock_high) << 32;
-		if (fs2h32(dp->e2di_flags) & EXT2_HUGE_FILE) {
-			nblock = fsbtodb(&sblock, nblock);
-		}
-	}
-
-	return nblock;
-}
-
-void
-inosnblock(struct ext2fs_dinode *dp, uint64_t nblock)
-{
-	uint32_t flags;
-
-	flags = fs2h32(dp->e2di_flags);
-
-	if (nblock <= 0xffffffffULL) {
-		flags &= ~EXT2_HUGE_FILE;
-		dp->e2di_flags = h2fs32(flags);
-		dp->e2di_nblock = h2fs32(nblock);
-		return;
-	}
-
-	sethuge();
-
-	if (nblock <= 0xffffffffffffULL) {
-		flags &= ~EXT2_HUGE_FILE;
-		dp->e2di_flags = h2fs32(flags);
-		dp->e2di_nblock = h2fs32(nblock);
-		dp->e2di_nblock_high = h2fs16((nblock >> 32));
-		return;
-	}
-
-	if (dbtofsb(&sblock, nblock) <= 0xffffffffffffULL) {
-		flags |= EXT2_HUGE_FILE;
-		dp->e2di_flags = h2fs32(flags);
-		dp->e2di_nblock = h2fs32(dbtofsb(&sblock, nblock));
-		dp->e2di_nblock_high = h2fs16((dbtofsb(&sblock, nblock) >> 32));
-		return;
-	}
-
-	pfatal("trying to set nblocks higher than representable");
-
-	return;
 }

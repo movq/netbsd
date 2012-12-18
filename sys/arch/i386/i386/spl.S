@@ -1,4 +1,4 @@
-/*	$NetBSD: spl.S,v 1.38 2012/11/10 16:28:06 cherry Exp $	*/
+/*	$NetBSD: spl.S,v 1.32 2008/07/01 18:49:21 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1998, 2007, 2008 The NetBSD Foundation, Inc.
@@ -30,11 +30,10 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: spl.S,v 1.38 2012/11/10 16:28:06 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spl.S,v 1.32 2008/07/01 18:49:21 bouyer Exp $");
 
 #include "opt_vm86.h"
 #include "opt_ddb.h"
-#include "opt_spldebug.h"
 #include "opt_xen.h"
 
 #include <machine/trap.h>
@@ -56,16 +55,6 @@ ENTRY(splraise)
 	ja	1f
 	movl	%edx,CPUVAR(ILEVEL)
 1:
-#ifdef SPLDEBUG
-	pushl	%ebp
-	movl	%esp,%ebp
-	pushl	%eax
-	pushl	%edx
-	call	_C_LABEL(spldebug_raise)
-	addl	$4, %esp
-	popl	%eax
-	popl	%ebp
-#endif /* SPLDEBUG */
 	ret
 END(splraise)
 
@@ -73,19 +62,10 @@ END(splraise)
  * void spllower(int s);
  *
  * spllower() for i486 and Pentium.  Must be the same size as
- * cx8_spllower().  This must use pushf/cli/popf as it is used
+ * i686_spllower().  This must use pushf/cli/popf as it is used
  * early in boot where interrupts are disabled via eflags/IE.
  */
 ENTRY(spllower)
-#ifdef SPLDEBUG
-	movl	4(%esp), %ecx
-	pushl	%ebp
-	movl	%esp,%ebp
-	pushl	%ecx
-	call	_C_LABEL(spldebug_lower)
-	addl	$4, %esp
-	popl	%ebp
-#endif /* SPLDEBUG */
 	movl	4(%esp), %ecx
 	cmpl	CPUVAR(ILEVEL), %ecx
 	jae	1f
@@ -123,14 +103,14 @@ ENTRY(cx8_spllower)
 	movl	CPUVAR(ILEVEL),%edx
 	cmpl	%edx,%ecx			/* new level is lower? */
 	pushl	%ebx
-	jae	1f
+	jae,pn	1f
 0:
 	movl	CPUVAR(IPENDING),%eax
 	testl	%eax,CPUVAR(IUNMASK)(,%ecx,4)	/* deferred interrupts? */
 	movl	%eax,%ebx
-	jnz	2f
+	jnz,pn	2f
 	cmpxchg8b CPUVAR(ISTATE)		/* swap in new ilevel */
-	jnz	0b
+	jnz,pn	0b
 1:
 	popl	%ebx
 	ret
@@ -157,7 +137,7 @@ END(cx8_spllower)
  * It is important that the bit scan instruction is bsr, it will get
  * the highest 2 bits (currently the IPI and clock handlers) first,
  * to avoid deadlocks where one CPU sends an IPI, another one is at
- * splhigh() and defers it, lands in here via splx(), and handles
+ * splipi() and defers it, lands in here via splx(), and handles
  * a lower-prio one first, which needs to take the kernel lock -->
  * the sending CPU will never see the that CPU accept the IPI
  * (see pmap_tlb_shootnow).
@@ -322,6 +302,42 @@ doreti_checkast:
 #endif /* defined(DEBUG) */
 IDTVEC_END(doreti)
 
+#ifdef XEN
+/*
+ * void evtchn_do_event(int evtch, struct intrframe *regs)
+ */
+
+ENTRY(call_evtchn_do_event)
+	IDEPTH_INCR
+	/*
+	 * IDEPTH_INCR leaves old %esp in %eax.
+	 */
+	pushl	8(%eax)	/* regs */
+	pushl	4(%eax)	/* evtch */
+	call	_C_LABEL(evtchn_do_event)
+	addl	$8, %esp
+	IDEPTH_DECR
+	ret
+END(call_evtchn_do_event)
+#ifdef DOM0OPS
+/*
+ * void xenevt_event(int port)
+ */
+
+ENTRY(call_xenevt_event)
+	IDEPTH_INCR
+	/*
+	 * IDEPTH_INCR leaves old %esp in %eax.
+	 */
+	pushl	4(%eax)	/* evtch */
+	call	_C_LABEL(xenevt_event)
+	addl	$4, %esp
+	IDEPTH_DECR
+	ret
+END(call_xenevt_event)
+#endif /* DOM0OPS */
+#endif /* XEN */
+
 #ifndef XEN
 /*
  * Xsoftintr()
@@ -343,8 +359,8 @@ IDTVEC(softintr)
 	movl	CPUVAR(CURLWP),%esi
 	movl	IS_LWP(%eax),%edi	/* switch to handler LWP */
 	movl	%edi,CPUVAR(CURLWP)
-	movl	L_PCB(%edi),%edx
-	movl	L_PCB(%esi),%ecx
+	movl	L_ADDR(%edi),%edx
+	movl	L_ADDR(%esi),%ecx
 	movl	%esp,PCB_ESP(%ecx)
 	movl	%ebp,PCB_EBP(%ecx)
 	movl	PCB_ESP0(%edx),%esp	/* onto new stack */
@@ -354,7 +370,7 @@ IDTVEC(softintr)
 	call	_C_LABEL(softint_dispatch)/* run handlers */
 	addl	$8,%esp
 	cli
-	movl	L_PCB(%esi),%ecx
+	movl	L_ADDR(%esi),%ecx
 	movl	PCB_ESP(%ecx),%esp
 	xchgl	%esi,CPUVAR(CURLWP)	/* must be globally visible */
 	popl	%edi			/* unwind switchframe */

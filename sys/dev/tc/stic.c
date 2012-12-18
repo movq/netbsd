@@ -1,4 +1,4 @@
-/*	$NetBSD: stic.c,v 1.49 2012/01/11 21:12:36 macallan Exp $	*/
+/*	$NetBSD: stic.c,v 1.45 2008/07/09 13:19:33 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.49 2012/01/11 21:12:36 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.45 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,6 +50,8 @@ __KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.49 2012/01/11 21:12:36 macallan Exp $");
 #include <sys/kauth.h>
 #include <sys/lwp.h>
 #include <sys/event.h>
+
+#include <uvm/uvm_extern.h>
 
 #if defined(pmax)
 #include <mips/cpuregs.h>
@@ -91,19 +93,19 @@ __KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.49 2012/01/11 21:12:36 macallan Exp $");
  * adjacent each other in a word, i.e.,
  *	struct bt459triplet {
  * 		struct {
- *			uint8_t u0;
- *			uint8_t u1;
- *			uint8_t u2;
+ *			u_int8_t u0;
+ *			u_int8_t u1;
+ *			u_int8_t u2;
  *			unsigned :8;
  *		} bt_lo;
  *		struct {
  *
  * Although HX has single Bt459, 32bit R/W can be done w/o any trouble.
  *	struct bt459reg {
- *		   uint32_t	   bt_lo;
- *		   uint32_t	   bt_hi;
- *		   uint32_t	   bt_reg;
- *		   uint32_t	   bt_cmap;
+ *		   u_int32_t	   bt_lo;
+ *		   u_int32_t	   bt_hi;
+ *		   u_int32_t	   bt_reg;
+ *		   u_int32_t	   bt_cmap;
  *	};
  *
  */
@@ -114,7 +116,7 @@ __KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.49 2012/01/11 21:12:36 macallan Exp $");
 #define bt_reg	2
 #define bt_cmap 3
 
-#define REG(base, index)	*((volatile uint32_t *)(base) + (index))
+#define REG(base, index)	*((volatile u_int32_t *)(base) + (index))
 #define SELECT(vdac, regno) do {		\
 	REG(vdac, bt_lo) = DUPBYTE0(regno);	\
 	REG(vdac, bt_hi) = DUPBYTE1(regno);	\
@@ -159,7 +161,7 @@ const struct cdevsw stic_cdevsw = {
 };
 
 /* Colormap for wscons, matching WSCOL_*. Upper 8 are high-intensity. */
-static const uint8_t stic_cmap[16*3] = {
+static const u_int8_t stic_cmap[16*3] = {
 	0x00, 0x00, 0x00, /* black */
 	0x7f, 0x00, 0x00, /* red */
 	0x00, 0x7f, 0x00, /* green */
@@ -186,7 +188,7 @@ static const uint8_t stic_cmap[16*3] = {
  *   3 2 1 0 3 2 1 0		0 0 1 1 2 2 3 3
  *   7 6 5 4 7 6 5 4		4 4 5 5 6 6 7 7
  */
-static const uint8_t shuffle[256] = {
+static const u_int8_t shuffle[256] = {
 	0x00, 0x40, 0x10, 0x50, 0x04, 0x44, 0x14, 0x54,
 	0x01, 0x41, 0x11, 0x51, 0x05, 0x45, 0x15, 0x55,
 	0x80, 0xc0, 0x90, 0xd0, 0x84, 0xc4, 0x94, 0xd4,
@@ -265,7 +267,7 @@ static int	stic_unit;
 void
 stic_init(struct stic_info *si)
 {
-	volatile uint32_t *vdac;
+	volatile u_int32_t *vdac;
 	int i, cookie;
 
 	/* Reset the STIC & stamp(s). */
@@ -309,10 +311,10 @@ stic_init(struct stic_info *si)
 	wsfont_init();
 
 	cookie = wsfont_find(NULL, 12, 0, 2, WSDISPLAY_FONTORDER_R2L,
-	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
+	    WSDISPLAY_FONTORDER_L2R);
 	if (cookie <= 0)
 		cookie = wsfont_find(NULL, 0, 0, 2, WSDISPLAY_FONTORDER_R2L,
-		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
+		    WSDISPLAY_FONTORDER_L2R);
 	if (cookie <= 0)
 		panic("stic_init: font table is empty");
 
@@ -448,13 +450,13 @@ stic_cnattach(struct stic_info *si)
 static void
 stic_setup_vdac(struct stic_info *si)
 {
-	uint8_t *ip, *mp;
+	u_int8_t *ip, *mp;
 	int r, c, o, b, i, s;
 
 	s = spltty();
 
-	ip = (uint8_t *)si->si_cursor.cc_image;
-	mp = (uint8_t *)si->si_cursor.cc_mask;
+	ip = (u_int8_t *)si->si_cursor.cc_image;
+	mp = (u_int8_t *)si->si_cursor.cc_mask;
 	memset(ip, 0, sizeof(si->si_cursor.cc_image));
 	memset(mp, 0, sizeof(si->si_cursor.cc_mask));
 
@@ -498,7 +500,7 @@ stic_setup_vdac(struct stic_info *si)
 static void
 stic_clear_screen(struct stic_info *si)
 {
-	uint32_t *pb;
+	u_int32_t *pb;
 	int i;
 
 	/*
@@ -689,7 +691,7 @@ stic_do_switch(void *cookie)
 	struct stic_screen *ss;
 	struct stic_info *si;
 	u_int r, c, nr, nc;
-	uint16_t *p, *sp;
+	u_int16_t *p, *sp;
 
 	ss = cookie;
 	si = ss->ss_si;
@@ -738,7 +740,7 @@ stic_do_switch(void *cookie)
 
 	/*
 	 * XXX Since we don't yet receive vblank interrupts from the
-	 * PXG, we must flush immediately.
+	 * PXG, we must flush immediatley.
 	 */
 	if (si->si_disptype == WSDISPLAY_TYPE_PXG)
 		stic_flush(si);
@@ -777,9 +779,9 @@ stic_erasecols(void *cookie, int row, int col, int num, long attr)
 {
 	struct stic_info *si;
 	struct stic_screen *ss;
-	uint32_t *pb;
+	u_int32_t *pb;
 	u_int i, linewidth;
-	uint16_t *p;
+	u_int16_t *p;
 
 	ss = cookie;
 	si = ss->ss_si;
@@ -787,7 +789,7 @@ stic_erasecols(void *cookie, int row, int col, int num, long attr)
 	if (ss->ss_backing != NULL) {
 		p = ss->ss_backing + row * si->si_consw + col;
 		for (i = num; i != 0; i--)
-			*p++ = (uint16_t)attr;
+			*p++ = (u_int16_t)attr;
 	}
 	if ((ss->ss_flags & SS_ACTIVE) == 0)
 		return;
@@ -819,15 +821,15 @@ stic_eraserows(void *cookie, int row, int num, long attr)
 	struct stic_info *si;
 	struct stic_screen *ss;
 	u_int linewidth, i;
-	uint32_t *pb;
+	u_int32_t *pb;
 
 	ss = cookie;
 	si = ss->ss_si;
 
 	if (ss->ss_backing != NULL) {
-		pb = (uint32_t *)(ss->ss_backing + row * si->si_consw);
+		pb = (u_int32_t *)(ss->ss_backing + row * si->si_consw);
 		for (i = si->si_consw * num; i > 0; i -= 2)
-			*pb++ = (uint32_t)attr;
+			*pb++ = (u_int32_t)attr;
 	}
 	if ((ss->ss_flags & SS_ACTIVE) == 0)
 		return;
@@ -857,7 +859,7 @@ stic_copyrows(void *cookie, int src, int dst, int height)
 {
 	struct stic_info *si;
 	struct stic_screen *ss;
-	uint32_t *pb, *pbs;
+	u_int32_t *pb, *pbs;
 	u_int num, inc, adj;
 
 	ss = cookie;
@@ -918,7 +920,7 @@ stic_copycols(void *cookie, int row, int src, int dst, int num)
 	struct stic_info *si;
 	struct stic_screen *ss;
 	u_int height, updword;
-	uint32_t *pb, *pbs;
+	u_int32_t *pb, *pbs;
 
 	ss = cookie;
 	si = ss->ss_si;
@@ -1133,7 +1135,7 @@ stic_cursor(void *cookie, int on, int row, int col)
 
 		/*
 		 * XXX Since we don't yet receive vblank interrupts from the
-		 * PXG, we must flush immediately.
+		 * PXG, we must flush immediatley.
 		 */
 		if (si->si_disptype == WSDISPLAY_TYPE_PXG)
 			stic_flush(si);
@@ -1145,7 +1147,7 @@ stic_cursor(void *cookie, int on, int row, int col)
 void
 stic_flush(struct stic_info *si)
 {
-	volatile uint32_t *vdac;
+	volatile u_int32_t *vdac;
 	int v;
 
 	if ((si->si_flags & SI_ALL_CHANGED) == 0)
@@ -1165,7 +1167,7 @@ stic_flush(struct stic_info *si)
 	}
 
 	if ((v & SI_CURCMAP_CHANGED) != 0) {
-		uint8_t *cp;
+		u_int8_t *cp;
 
 		cp = si->si_cursor.cc_color;
 
@@ -1179,12 +1181,12 @@ stic_flush(struct stic_info *si)
 	}
 
 	if ((v & SI_CURSHAPE_CHANGED) != 0) {
-		uint8_t *ip, *mp, img, msk;
-		uint8_t u;
+		u_int8_t *ip, *mp, img, msk;
+		u_int8_t u;
 		int bcnt;
 
-		ip = (uint8_t *)si->si_cursor.cc_image;
-		mp = (uint8_t *)si->si_cursor.cc_mask;
+		ip = (u_int8_t *)si->si_cursor.cc_image;
+		mp = (u_int8_t *)si->si_cursor.cc_mask;
 
 		bcnt = 0;
 		SELECT(vdac, BT459_IREG_CRAM_BASE);
@@ -1273,7 +1275,7 @@ stic_set_cmap(struct stic_info *si, struct wsdisplay_cmap *p)
 
 	/*
 	 * XXX Since we don't yet receive vblank interrupts from the PXG, we
-	 * must flush immediately.
+	 * must flush immediatley.
 	 */
 	if (si->si_disptype == WSDISPLAY_TYPE_PXG)
 		stic_flush(si);
@@ -1350,7 +1352,7 @@ stic_set_cursor(struct stic_info *si, struct wsdisplay_cursor *p)
 
 	/*
 	 * XXX Since we don't yet receive vblank interrupts from the PXG, we
-	 * must flush immediately.
+	 * must flush immediatley.
 	 */
 	if (si->si_disptype == WSDISPLAY_TYPE_PXG)
 		stic_flush(si);
@@ -1392,7 +1394,7 @@ stic_set_curpos(struct stic_info *si, struct wsdisplay_curpos *curpos)
 static void
 stic_set_hwcurpos(struct stic_info *si)
 {
-	volatile uint32_t *vdac;
+	volatile u_int32_t *vdac;
 	int x, y, s;
 
 	vdac = si->si_vdac;

@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld_start.S,v 1.11 2012/08/13 02:53:25 matt Exp $	*/
+/*	$NetBSD: rtld_start.S,v 1.9 2008/04/28 20:23:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -31,8 +31,6 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: rtld_start.S,v 1.11 2012/08/13 02:53:25 matt Exp $")
-
 	.text
 	.align	0
 	.globl	_rtld_start
@@ -58,8 +56,9 @@ _rtld_start:
 	bl	_rtld			/* call the shared loader */
 	mov	r3, r0			/* save entry point */
 
-	ldr	r2, [sp], #4		/* pop r2 = cleanup */
-	ldr	r1, [sp], #4		/* pop r1 = obj_main */
+	ldr	r2, [sp, #0]		/* r2 = cleanup */
+	ldr	r1, [sp, #4]		/* r1 = obj_main */
+	add	sp, sp, #8		/* restore stack */
 	mov	r0, r4			/* restore ps_strings */
 #ifdef _ARM_ARCH_4T
 	bx	r3			/* jump to the entry point */
@@ -80,7 +79,7 @@ _rtld_start:
  *	lr = &GOT[2]
  */
 _rtld_bind_start:
-	stmdb	sp!,{r0-r4,sl,fp}	/* 8 byte aligned (lr already saved) */
+	stmdb	sp!,{r0-r4,sl,fp}
 
 	sub	r1, ip, lr		/* r1 = 4 * (n + 1) */
 	sub	r1, r1, #4		/* r1 = 4 * n */

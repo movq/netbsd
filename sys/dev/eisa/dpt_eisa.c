@@ -1,4 +1,4 @@
-/*	$NetBSD: dpt_eisa.c,v 1.21 2012/10/27 17:18:16 chs Exp $	*/
+/*	$NetBSD: dpt_eisa.c,v 1.18 2008/04/06 08:54:43 cegger Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Andrew Doran <ad@NetBSD.org>
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dpt_eisa.c,v 1.21 2012/10/27 17:18:16 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dpt_eisa.c,v 1.18 2008/04/06 08:54:43 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,11 +57,11 @@ __KERNEL_RCSID(0, "$NetBSD: dpt_eisa.c,v 1.21 2012/10/27 17:18:16 chs Exp $");
 #define DPT_EISA_IOCONF			0x90
 #define DPT_EISA_EATA_REG_OFFSET	0x88
 
-static void	dpt_eisa_attach(device_t, device_t, void *);
+static void	dpt_eisa_attach(struct device *, struct device *, void *);
 static int	dpt_eisa_irq(bus_space_tag_t, bus_space_handle_t, int *);
-static int	dpt_eisa_match(device_t, cfdata_t, void *);
+static int	dpt_eisa_match(struct device *, struct cfdata *, void *);
 
-CFATTACH_DECL_NEW(dpt_eisa, sizeof(struct dpt_softc),
+CFATTACH_DECL(dpt_eisa, sizeof(struct dpt_softc),
     dpt_eisa_match, dpt_eisa_attach, NULL, NULL);
 
 static const char * const dpt_eisa_boards[] = {
@@ -103,7 +103,8 @@ dpt_eisa_irq(bus_space_tag_t iot, bus_space_handle_t ioh, int *irq)
 }
 
 static int
-dpt_eisa_match(device_t parent, cfdata_t match, void *aux)
+dpt_eisa_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct eisa_attach_args *ea;
 	int i;
@@ -118,7 +119,7 @@ dpt_eisa_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-dpt_eisa_attach(device_t parent, device_t self, void *aux)
+dpt_eisa_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct eisa_attach_args *ea;
 	bus_space_handle_t ioh;
@@ -131,7 +132,6 @@ dpt_eisa_attach(device_t parent, device_t self, void *aux)
 
 	ea = aux;
 	sc = device_private(self);
-	sc->sc_dev = self;
 	iot = ea->ea_iot;
 	ec = ea->ea_ec;
 
@@ -171,7 +171,7 @@ dpt_eisa_attach(device_t parent, device_t self, void *aux)
 
 	/* Read the EATA configuration. */
 	if (dpt_readcfg(sc)) {
-		aprint_error_dev(sc->sc_dev, "readcfg failed - see dpt(4)\n");
+		aprint_error_dev(&sc->sc_dv, "readcfg failed - see dpt(4)\n");
 		return;
 	}
 

@@ -1,4 +1,4 @@
-.\" $NetBSD: pmf.9,v 1.20 2012/04/02 09:56:58 plunky Exp $
+.\" $NetBSD: pmf.9,v 1.7 2008/03/29 14:12:59 jmcneill Exp $
 .\"
 .\" Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
 .\" All rights reserved.
@@ -11,6 +11,12 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
+.\" 3. All advertising materials mentioning features or use of this software
+.\"    must display the following acknowledgement:
+.\"        This product includes software developed by Jared D. McNeill.
+.\" 4. Neither the name of The NetBSD Foundation nor the names of its
+.\"    contributors may be used to endorse or promote products derived
+.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -24,13 +30,12 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd April 2, 2012
+.Dd March 29, 2008
 .Dt PMF 9
 .Os
 .Sh NAME
 .Nm PMF ,
 .Nm pmf_device_register ,
-.Nm pmf_device_register1 ,
 .Nm pmf_device_deregister ,
 .Nm pmf_device_suspend ,
 .Nm pmf_device_resume ,
@@ -52,21 +57,20 @@
 .Sh SYNOPSIS
 .In sys/device.h
 .Ft bool
-.Fn pmf_device_register "device_t dev" "bool (*suspend)(device_t dev, const pmf_qual_t *qual)" "bool (*resume)(device_t dev, const pmf_qual_t *qual)"
-.Ft bool
-.Fn pmf_device_register1 "device_t dev" "bool (*suspend)(device_t dev, const pmf_qual_t *qual)" "bool (*resume)(device_t dev, const pmf_qual_t *qual)" "bool (*shutdown)(device_t dev, int how)"
+.Fn pmf_device_register "device_t dev" "bool (*suspend)(device_t dev)" "bool (*resume)(device_t dev)"
+.Fn pmf_device_register1 "device_t dev" "bool (*suspend)(device_t dev)" "bool (*resume)(device_t dev)" "bool (*shutdown)(device_t dev, int how)"
 .Ft void
 .Fn pmf_device_deregister "device_t dev"
 .Ft bool
-.Fn pmf_device_suspend "device_t dev" "const pmf_qual_t *qual"
+.Fn pmf_device_suspend "device_t dev"
 .Ft bool
-.Fn pmf_device_resume "device_t dev" "const pmf_qual_t *qual"
+.Fn pmf_device_resume "device_t dev"
 .Ft bool
-.Fn pmf_device_recursive_suspend "device_t dev" "const pmf_qual_t *qual"
+.Fn pmf_device_recursive_suspend "device_t dev"
 .Ft bool
-.Fn pmf_device_recursive_resume "device_t dev" "const pmf_qual_t *qual"
+.Fn pmf_device_recursive_resume "device_t dev"
 .Ft bool
-.Fn pmf_device_subtree_resume "device_t dev" "const pmf_qual_t *qual"
+.Fn pmf_device_resume_subtree "device_t dev"
 .Ft void
 .Fn pmf_class_network_register "device_t dev" "struct ifnet *ifp"
 .Ft bool
@@ -74,9 +78,9 @@
 .Ft bool
 .Fn pmf_class_display_register "device_t dev"
 .Ft bool
-.Fn pmf_system_suspend "const pmf_qual_t *qual"
+.Fn pmf_system_suspend "void"
 .Ft bool
-.Fn pmf_system_resume "const pmf_qual_t *qual"
+.Fn pmf_system_resume "void"
 .Ft void
 .Fn pmf_system_shutdown "int"
 .Ft bool
@@ -99,10 +103,6 @@ Drivers for devices implementing
 .Nm
 may make use of the following data type:
 .Bl -tag -width compact
-.It Fa pmf_qual_t
-An opaque aggregate of qualifications on a
-.Nm
-suspend or resume call.
 .It Fa pmf_generic_event_t
 A device driver can register as a listener for specific events, or inject
 events into the message queue.
@@ -123,8 +123,6 @@ The following message types are defined:
 .It
 .Dv PMFE_DISPLAY_BRIGHTNESS_DOWN
 .It
-.Dv PMFE_AUDIO_VOLUME_UP
-.It
 .Dv PMFE_AUDIO_VOLUME_DOWN
 .It
 .Dv PMFE_AUDIO_VOLUME_TOGGLE
@@ -137,74 +135,40 @@ The following message types are defined:
 .Sh FUNCTIONS
 .Bl -tag -width compact
 .It Fn pmf_device_register "dev" "suspend" "resume"
-Register a device with the power management framework.
-The
-.Fa suspend
-and
-.Fa resume
-functions are passed
-.Fa dev
-and a
-.Fa pmf_qual_t ,
-and will be called when the system state changes;
-they should return
-.Dv true
-on success and
-.Dv false
-on failure.
-If either
+Register a device with the power management framework. If either
 .Fa suspend
 or
 .Fa resume
 is
 .Dv NULL
 then it is assumed that device state does not need to be captured and
-resumed on a power transition.
-Bus and class-level power management will still be performed.
-Returns
+resumed on a power transition. Bus and class-level power management
+will still be performed. Returns
 .Dv false
 if there was an error.
 .It Fn pmf_device_register1 "dev" "suspend" "resume" "shutdown"
-Like
-.Fn pmf_device_register ,
-but additionally registers a shutdown handler.
-During system shutdown,
-.Fn pmf_system_shutdown
-calls
-.Fa shutdown
-on
-.Fa dev
-with the
-.Xr reboot 2
-.Dq howto
-in the second argument.
-.Fa shutdown
-should return
-.Dv true
-on success and
-.Dv false
-on failure.
+Like pmf_device_register, but additionally registers a shutdown handler.
 .It Fn pmf_device_deregister "dev"
 Deregister a device with the power management framework.
-.It Fn pmf_device_suspend "dev" "qual"
+.It Fn pmf_device_suspend "dev"
 Suspend a device by first calling the class suspend handler, followed by
 the driver suspend handler, and finally the bus suspend handler.
-.It Fn pmf_device_resume "dev" "qual"
+.It Fn pmf_device_resume "dev"
 Resume a device by first calling the bus resume handler, followed by the
 driver resume handler, and finally the class resume handler.
-.It Fn pmf_device_recursive_suspend "dev" "qual"
+.It Fn pmf_device_recursive_suspend "dev"
 As
 .Fn pmf_device_suspend ,
 but ensures that all child devices of
 .Fa dev
 are suspended.
-.It Fn pmf_device_recursive_resume "dev" "qual"
+.It Fn pmf_device_recursive_resume "dev"
 As
 .Fn pmf_device_resume ,
 but ensures that all parent devices of
 .Fa dev
 are resumed.
-.It Fn pmf_device_subtree_resume "dev" "qual"
+.It Fn pmf_device_resume_subtree "dev"
 As
 .Fn pmf_device_resume ,
 but ensures that all child devices of
@@ -219,25 +183,21 @@ device.
 .It Fn pmf_class_display_register "dev"
 Register a device with the power management framework as a display-class
 device.
-.It Fn pmf_system_suspend "qual"
-Suspend all attached devices.
-Devices are suspended by traversing the autoconfiguration tree
-beginning with the leaf nodes.
+.It Fn pmf_system_suspend "void"
+Suspend all attached devices. Devices are suspended by traversing the
+autoconfiguration tree beginning with the leaf nodes.
 This function will fail if any attached drivers do not support the power
 management framework.
-.It Fn pmf_system_resume "qual"
-Resume all attached devices.
-Devices are resumed by traversing the
+.It Fn pmf_system_resume "void"
+Resume all attached devices. Devices are resumed by traversing the
 autoconfiguration tree beginning with devices that do not have a parent.
 This function will fail if any attached drivers do not support the power
 management framework.
 .It Fn pmf_system_shutdown "int"
-Shutdown all attached devices.
-Devices are shut down by traversing the
+Shutdown all attached devices. Devices are shut down by traversing the
 autoconfiguration tree beginning with the leaf nodes.
 The integer argument is passed to the driver shutdown functions.
-It should contain the
-.Xr reboot 2
+It should contain the reboot(2)
 .Dq howto
 argument.
 This function ignores the presence of attached drivers that do not support the
@@ -247,8 +207,7 @@ Register the callback
 .Fa handler
 to be called whenever an
 .Fa ev
-event is triggered.
-If
+event is triggered. If
 .Fa global
 is
 .Dv true ,
@@ -259,8 +218,7 @@ accepts anonymous events from
 Deregister the callback previously registered with
 .Fn pmf_event_register .
 .It Fn pmf_event_inject "dev" "ev"
-Inject an inter-driver message into the message queue.
-If
+Inject an inter-driver message into the message queue. If
 .Fa dev
 is
 .Dv NULL ,
@@ -273,12 +231,18 @@ Insert a name-value pair into the platform information database.
 .It Fn pmf_get_platform "key"
 Retrieve the value for
 .Fa key
-from the platform information database.
-Returns
+from the platform information database. Returns
 .Dv NULL
 if the key is not present.
 .El
 .Sh CODE REFERENCES
+This section describes places within the
+.Nx
+source tree where actual code implementing or using the power management
+framework can be found.
+All pathnames are relative to
+.Pa /usr/src .
+.Pp
 The power management framework is implemented within the files
 .Pa sys/sys/pmf.h ,
 .Pa sys/sys/device.h ,

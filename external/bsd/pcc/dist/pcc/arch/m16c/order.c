@@ -1,5 +1,4 @@
-/*	Id: order.c,v 1.20 2008/09/27 07:35:23 ragge Exp 	*/	
-/*	$NetBSD: order.c,v 1.1.1.3 2010/06/03 18:57:17 plunky Exp $	*/
+/*	$Id: order.c,v 1.1.1.1 2008/08/24 05:32:56 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -96,7 +95,7 @@ offstar(NODE *p, int shape)
  * Shape matches for UMUL.  Cooperates with offstar().
  */
 int
-shumul(NODE *p, int shape)
+shumul(NODE *p)
 {
 //	NODE *l = p->n_left;
 
@@ -106,11 +105,10 @@ shumul(NODE *p, int shape)
 		fwalk(p, e2print, 0);
 	}
 #endif
-	/* XXX - fix */
 
 	/* Can only generate OREG of BREGs (or FB) */
 	if (p->n_op == REG && (isbreg(p->n_rval) || p->n_rval == FB))
-		return SROREG;
+		return SOREG;
 #if 0
 	if ((p->n_op == PLUS || p->n_op == MINUS) &&
 	    (l->n_op == REG && (isbreg(l->n_rval) || l->n_rval == FB)) &&
@@ -118,7 +116,7 @@ shumul(NODE *p, int shape)
 		return SOREG;
 	return 0;
 #else
-	return SROREG;
+	return SOREG;
 #endif
 }
 

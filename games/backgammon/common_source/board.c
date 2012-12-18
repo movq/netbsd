@@ -1,4 +1,4 @@
-/*	$NetBSD: board.c,v 1.9 2009/08/12 05:17:57 dholland Exp $	*/
+/*	$NetBSD: board.c,v 1.8 2005/07/01 01:12:39 jmc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)board.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: board.c,v 1.9 2009/08/12 05:17:57 dholland Exp $");
+__RCSID("$NetBSD: board.c,v 1.8 2005/07/01 01:12:39 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -42,8 +42,6 @@ __RCSID("$NetBSD: board.c,v 1.9 2009/08/12 05:17:57 dholland Exp $");
 
 static int i, j, k;
 static char ln[60];
-
-static void wrbsub(void);
 
 void
 wrboard(void)
@@ -162,7 +160,7 @@ lastline:
 	fixtty(&raw);
 }
 
-static void
+void
 wrbsub(void)
 {
 	int     m;

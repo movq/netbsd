@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.27 2012/02/12 13:56:56 wiz Exp $	*/
+/*	$NetBSD: defs.h,v 1.24 2005/06/27 01:00:06 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -207,7 +207,7 @@ struct rt_entry {
 #	    define RS_IF	0x001	/* for network interface */
 #	    define RS_NET_INT	0x002	/* authority route */
 #	    define RS_NET_SYN	0x004	/* fake net route for subnet */
-#	    define RS_NO_NET_SYN (RS_LOCAL | RS_IF)
+#	    define RS_NO_NET_SYN (RS_LOCAL | RS_LOCAL | RS_IF)
 #	    define RS_SUBNET	0x008	/* subnet route from any source */
 #	    define RS_LOCAL	0x010	/* loopback for pt-to-pt */
 #	    define RS_MHOME	0x020	/* from -m */
@@ -552,7 +552,7 @@ struct msg_limit {
 extern void	msglim(struct msg_limit *, naddr,
 		       const char *, ...) PATTRIB(3,4);
 #define	LOGERR(msg) msglog(msg ": %s", strerror(errno))
-__dead extern void	logbad(int, const char *, ...) PATTRIB(2,3);
+extern void	logbad(int, const char *, ...) PATTRIB(2,3);
 #define	BADERR(dump,msg) logbad(dump,msg ": %s", strerror(errno))
 #ifdef DEBUG
 #define	DBGERR(dump,msg) BADERR(dump,msg)
@@ -643,8 +643,7 @@ void rt_xaddrs(struct rt_addrinfo *, struct sockaddr *, struct sockaddr *,
 extern naddr	std_mask(naddr);
 extern naddr	ripv1_mask_net(naddr, struct interface *);
 extern naddr	ripv1_mask_host(naddr,struct interface *);
-#define		on_net_h(a,net,mask) ((((a) ^ (net)) & (mask)) == 0)
-#define		on_net(a,net,mask) on_net_h(ntohl(a),net,mask)
+#define		on_net(a,net,mask) (((ntohl(a) ^ (net)) & (mask)) == 0)
 extern int	check_dst(naddr);
 extern struct interface *check_dup(naddr, naddr, naddr, int);
 extern int	check_remote(struct interface *);

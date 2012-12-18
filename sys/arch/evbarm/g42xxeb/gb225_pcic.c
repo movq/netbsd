@@ -39,7 +39,7 @@
 #include <sys/malloc.h>
 #include <uvm/uvm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/pcmcia/pcmciareg.h>
@@ -85,8 +85,8 @@ struct opcic_softc {
 	bus_space_handle_t sc_memctl_ioh;
 };
 
-static int  	opcic_match(device_t, cfdata_t, void *);
-static void  	opcic_attach(device_t, device_t, void *);
+static int  	opcic_match(struct device *, struct cfdata *, void *);
+static void  	opcic_attach(struct device *, struct device *, void *);
 static int 	opcic_print(void *, const char *);
 
 static	int	opcic_read(struct sapcic_socket *, int);
@@ -100,7 +100,7 @@ static	void	opcic_intr_disestablish(struct sapcic_socket *, void *);
 static	int	opcic_card_detect(void *, int);
 #endif
 
-CFATTACH_DECL_NEW(opcic, sizeof(struct opcic_softc),
+CFATTACH_DECL(opcic, sizeof(struct opcic_softc),
     opcic_match, opcic_attach, NULL, NULL);
 
 static struct sapcic_tag opcic_tag = {
@@ -120,7 +120,7 @@ opcic_read_card_status(struct opcic_socket *so)
 {
 	struct opcic_softc *sc = (struct opcic_softc *)(so->ss.sc);
 	struct opio_softc *osc = 
-	    device_private(device_parent(sc->sc_pc.sc_dev));
+	    (struct opio_softc *) device_parent(&sc->sc_pc.sc_dev);
 
 	return bus_space_read_1(osc->sc_iot, osc->sc_ioh,
 	    GB225_CFDET + 2 * so->ss.socket);
@@ -128,19 +128,19 @@ opcic_read_card_status(struct opcic_socket *so)
 }
 
 static int
-opcic_match(device_t parent, cfdata_t cf, void *aux)
+opcic_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	return	1;
 }
 
 static void
-opcic_attach(device_t parent, device_t self, void *aux)
+opcic_attach(struct device *parent, struct device *self, void *aux)
 {
 	int i;
 	struct pcmciabus_attach_args paa;
-	struct opcic_softc *sc = device_private(self);
-	struct opio_softc *psc = device_private(parent);
-	struct obio_softc *bsd = device_private(device_parent(parent));
+	struct opcic_softc *sc = (struct opcic_softc *)self;
+	struct opio_softc *psc = (struct opio_softc *)parent;
+	struct obio_softc *bsd = (struct obio_softc *)device_parent(parent);
 	bus_space_handle_t memctl_ioh = bsd->sc_memctl_ioh;
 	bus_space_tag_t iot =  psc->sc_iot;
 
@@ -180,9 +180,11 @@ opcic_attach(device_t parent, device_t self, void *aux)
 		paa.paa_busname = "pcmcia";
 		paa.pct = (pcmcia_chipset_tag_t)&sa11x0_pcmcia_functions;
 		paa.pch = (pcmcia_chipset_handle_t)&sc->sc_socket[i].ss;
+		paa.iobase = 0;
+		paa.iosize = 0x4000000;
 
 		sc->sc_socket[i].ss.pcmcia =
-		    config_found_ia(sc->sc_pc.sc_dev,
+		    (struct device *)config_found_ia(&sc->sc_pc.sc_dev,
 		    "pcmciabus", &paa, opcic_print);
 
 #ifndef DONT_USE_CARD_DETECT_INTR
@@ -240,7 +242,7 @@ opcic_card_detect(void *arg, int val)
 	}
 	splx(s);
 
-	DPRINTF(("%s: card %d %s\n", device_xname(sc->sc_pc.sc_dev), sock_no,
+	DPRINTF(("%s: card %d %s\n", sc->sc_pc.sc_dev.dv_xname, sock_no,
 	    HAVE_CARD(val) ? "inserted" : "removed"));
 
 	sapcic_intr(arg);
@@ -282,9 +284,9 @@ opcic_write(struct sapcic_socket *__so, int which, int arg)
 	struct opcic_socket *so = (struct opcic_socket *)__so;
 	struct opcic_softc *sc = (struct opcic_softc *)so->ss.sc;
 	struct opio_softc *psc = 
-	     device_private(device_parent(sc->sc_pc.sc_dev));
+	    (struct opio_softc *) device_parent(&sc->sc_pc.sc_dev);
 	struct obio_softc *bsc = 
-	     device_private(device_parent(psc->sc_dev));
+	    (struct obio_softc *) device_parent(&psc->sc_dev);
 
 	switch (which) {
 	case SAPCIC_CONTROL_RESET:
@@ -315,7 +317,7 @@ opcic_set_power(struct sapcic_socket *__so, int arg)
 	struct opcic_socket *so = (struct opcic_socket *)__so;
 	struct opcic_softc *sc = (struct opcic_softc *)so->ss.sc;
 	struct opio_softc *psc = 
-	    device_private(device_parent(sc->sc_pc.sc_dev));
+	    (struct opio_softc *) device_parent(&sc->sc_pc.sc_dev);
  	int shift, save;
 	volatile uint8_t *p;
 
@@ -350,9 +352,9 @@ opcic_intr_establish(struct sapcic_socket *so, int level,
 {
 	struct opcic_softc *sc = (struct opcic_softc *)so->sc;
 	struct opio_softc *psc = 
-	    device_private(device_parent(sc->sc_pc.sc_dev));
+	    (struct opio_softc *) device_parent(&sc->sc_pc.sc_dev);
 	struct obio_softc *bsc = 
-	    device_private(device_parent(psc->sc_dev));
+	    (struct obio_softc *) device_parent(&psc->sc_dev);
 	int irq;
 
 	DPRINTF(("opcic_intr_establish %d\n", so->socket));
@@ -367,9 +369,9 @@ opcic_intr_disestablish(struct sapcic_socket *so, void *ih)
 {
 	struct opcic_softc *sc = (struct opcic_softc *)so->sc;
 	struct opio_softc *psc = 
-	    device_private(device_parent(sc->sc_pc.sc_dev));
+	    (struct opio_softc *) device_parent(&sc->sc_pc.sc_dev);
 	struct obio_softc *bsc = 
-	    device_private(device_parent(psc->sc_dev));
+	    (struct obio_softc *) device_parent(&psc->sc_dev);
 	int (* func)(void *) = ((struct obio_handler *)ih)->func;
 
 	int irq = so->socket ? PCMCIA_INT : CF_INT;

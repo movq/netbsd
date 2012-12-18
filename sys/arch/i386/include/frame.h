@@ -1,4 +1,4 @@
-/*	$NetBSD: frame.h,v 1.35 2012/02/19 21:06:11 rmind Exp $	*/
+/*	$NetBSD: frame.h,v 1.31 2008/10/15 06:51:18 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -67,6 +67,7 @@
 #define _I386_FRAME_H_
 
 #include <sys/signal.h>
+#include <sys/sa.h>
 
 /*
  * System stack frames.
@@ -76,14 +77,10 @@
  * Exception/Trap Stack Frame
  */
 struct trapframe {
-	uint16_t	tf_gs;
-	uint16_t	tf_gs_pad;
-	uint16_t	tf_fs;
-	uint16_t	tf_fs_pad;
-	uint16_t	tf_es;
-	uint16_t	tf_es_pad;
-	uint16_t	tf_ds;
-	uint16_t	tf_ds_pad;
+	int	tf_gs;
+	int	tf_fs;
+	int	tf_es;
+	int	tf_ds;
 	int	tf_edi;
 	int	tf_esi;
 	int	tf_ebp;
@@ -144,9 +141,12 @@ struct switchframe {
 	int	sf_eip;
 };
 
-#ifdef _KERNEL
+#if (defined(COMPAT_16) || defined(COMPAT_IBCS2)) && defined(_KERNEL)
 /*
- * Old-style signal frame
+ * XXX: Really COMPAT_IBCS2 should not be using our old signal frame.
+ */
+/*
+ * Signal frame
  */
 struct sigframe_sigcontext {
 	int	sf_ra;			/* return address for handler */
@@ -157,9 +157,6 @@ struct sigframe_sigcontext {
 };
 #endif
 
-/*
- * New-style signal frame
- */
 struct sigframe_siginfo {
 	int		sf_ra;		/* return address for handler */
 	int		sf_signum;	/* "signum" argument for handler */
@@ -169,10 +166,24 @@ struct sigframe_siginfo {
 	ucontext_t	sf_uc;		/* actual saved ucontext */
 };
 
+/*
+ * Scheduler activations upcall frame
+ */
+struct saframe {
+	int		sa_ra;
+	int		sa_type;
+	struct sa_t**	sa_sas;
+	int		sa_events;
+	int		sa_interrupted;
+	void*		sa_arg;
+};
+
 #ifdef _KERNEL
 void *getframe(struct lwp *, int, int *);
 void buildcontext(struct lwp *, int, void *, void *);
+#ifdef COMPAT_16
 void sendsig_sigcontext(const ksiginfo_t *, const sigset_t *);
+#endif
 #endif
 
 #endif  /* _I386_FRAME_H_ */

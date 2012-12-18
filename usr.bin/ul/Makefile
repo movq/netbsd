@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.6 2010/02/03 15:34:46 roy Exp $
+#	$NetBSD: Makefile,v 1.5 1997/10/20 02:09:46 lukem Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/6/93
 
 PROG=	ul
-DPADD=	${LIBTERMINFO}
-LDADD=	-lterminfo
+DPADD=	${LIBTERMCAP}
+LDADD=	-ltermcap
 
 .include <bsd.prog.mk>

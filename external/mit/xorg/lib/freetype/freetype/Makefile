@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2011/07/25 18:23:14 mrg Exp $
+#	$NetBSD: Makefile,v 1.5.6.1 2009/09/17 04:24:31 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -8,7 +8,7 @@ SUBDIR=	config internal
 
 INCSDIR=${X11INCDIR}/freetype2/freetype
 
-INCS=	freetype.h ftadvanc.h ftbbox.h ftbdf.h ftbitmap.h ftbzip2.h ftcache.h \
+INCS=	freetype.h ftadvanc.h ftbbox.h ftbdf.h ftbitmap.h ftcache.h \
 	ftchapters.h ftcid.h fterrdef.h fterrors.h ftgasp.h ftglyph.h \
 	ftgxval.h ftgzip.h ftimage.h ftincrem.h ftlcdfil.h ftlist.h \
 	ftlzw.h ftmac.h ftmm.h ftmodapi.h ftmoderr.h ftotval.h ftoutln.h \
@@ -27,10 +27,8 @@ CONFIG_SUBST=	${TOOL_SED} -e 's%@prefix@%${X11ROOTDIR}%' \
 		-e 's%@includedir@%${X11INCDIR}%' \
 		-e 's%@ft_version@%9.17.3%' \
 		-e 's%@FT2_EXTRA_LIBS@%%' \
-		-e 's%@build_libtool_libs@%yes%' \
 		-e 's%@hardcode_libdir_flag_spec@%-Wl,-rpath,${X11USRLIBDIR}%' \
-		-e 's%@LIBZ@%-lz%' \
-		-e 's%@LIBBZ2@%-lbz2%'
+		-e 's%@LIBZ@%-lz%'
 
 .PATH: ${X11SRCDIR.freetype}/builds/unix
 freetype-config: freetype-config.in

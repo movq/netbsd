@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt_pcctwo.c,v 1.12 2009/03/14 15:36:19 dsl Exp $	*/
+/*	$NetBSD: lpt_pcctwo.c,v 1.11 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lpt_pcctwo.c,v 1.12 2009/03/14 15:36:19 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lpt_pcctwo.c,v 1.11 2008/04/28 20:23:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -80,7 +80,10 @@ struct lpt_funcs lpt_pcctwo_funcs = {
 
 /* ARGSUSED */
 int
-lpt_pcctwo_match(device_t parent, cfdata_t cf, void *args)
+lpt_pcctwo_match(parent, cf, args)
+	device_t parent;
+	cfdata_t cf;
+	void *args;
 {
 	struct pcctwo_attach_args *pa;
 
@@ -106,7 +109,10 @@ lpt_pcctwo_match(device_t parent, cfdata_t cf, void *args)
 
 /* ARGSUSED */
 void
-lpt_pcctwo_attach(device_t parent, device_t self, void *args)
+lpt_pcctwo_attach(parent, self, args)
+	device_t parent;
+	device_t self;
+	void *args;
 {
 	struct pcctwo_attach_args *pa;
 	struct lpt_softc *sc;
@@ -156,7 +162,8 @@ lpt_pcctwo_attach(device_t parent, device_t self, void *args)
  * Handle printer interrupts
  */
 int
-lpt_pcctwo_intr(void *arg)
+lpt_pcctwo_intr(arg)
+	void *arg;
 {
 	struct lpt_softc *sc;
 	int i;
@@ -177,7 +184,9 @@ lpt_pcctwo_intr(void *arg)
 }
 
 void
-lpt_pcctwo_open(struct lpt_softc *sc, int int_ena)
+lpt_pcctwo_open(sc, int_ena)
+	struct lpt_softc *sc;
+	int int_ena;
 {
 	int sps;
 
@@ -196,7 +205,8 @@ lpt_pcctwo_open(struct lpt_softc *sc, int int_ena)
 }
 
 void
-lpt_pcctwo_close(struct lpt_softc *sc)
+lpt_pcctwo_close(sc)
+	struct lpt_softc *sc;
 {
 
 	pcc2_reg_write(sc, PCC2REG_PRT_ACK_ICSR,
@@ -205,7 +215,8 @@ lpt_pcctwo_close(struct lpt_softc *sc)
 }
 
 void
-lpt_pcctwo_iprime(struct lpt_softc *sc)
+lpt_pcctwo_iprime(sc)
+	struct lpt_softc *sc;
 {
 
 	pcc2_reg_write(sc, PCC2REG_PRT_CONTROL,
@@ -220,7 +231,9 @@ lpt_pcctwo_iprime(struct lpt_softc *sc)
 }
 
 void
-lpt_pcctwo_speed(struct lpt_softc *sc, int speed)
+lpt_pcctwo_speed(sc, speed)
+	struct lpt_softc *sc;
+	int speed;
 {
 	u_int8_t reg;
 
@@ -235,7 +248,9 @@ lpt_pcctwo_speed(struct lpt_softc *sc, int speed)
 }
 
 int
-lpt_pcctwo_notrdy(struct lpt_softc *sc, int err)
+lpt_pcctwo_notrdy(sc, err)
+	struct lpt_softc *sc;
+	int err;
 {
 	u_int8_t status;
 	u_int8_t new;
@@ -266,7 +281,9 @@ lpt_pcctwo_notrdy(struct lpt_softc *sc, int err)
 }
 
 void
-lpt_pcctwo_wr_data(struct lpt_softc *sc, u_char data)
+lpt_pcctwo_wr_data(sc, data)
+	struct lpt_softc *sc;
+	u_char data;
 {
 
 	pcc2_reg_write16(sc, PCC2REG_PRT_DATA, (u_int16_t) data);

@@ -1,4 +1,4 @@
-/* $NetBSD: mtd803var.h,v 1.9 2012/10/27 17:18:22 chs Exp $ */
+/* $NetBSD: mtd803var.h,v 1.6 2008/04/28 20:23:50 martin Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -31,7 +31,6 @@
 
 #include <sys/device.h>
 #include <sys/socket.h>
-#include <sys/rnd.h>
 #include <net/if.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
@@ -59,7 +58,7 @@ struct mtd_desc {
 
 /* Softc struct */
 struct mtd_softc {
-	device_t		dev;
+	struct device		dev;
 	struct mii_data		mii;
 	struct ethercom		ethercom;
 	bus_space_tag_t		bus_tag;
@@ -75,7 +74,9 @@ struct mtd_softc {
 	void *			buf;
 	bus_dmamap_t		buf_dma_map;
 
-	krndsource_t	rnd_src;
+#if NRND > 0
+	rndsource_element_t	rnd_src;
+#endif
 };
 
 

@@ -1,25 +1,38 @@
-.\"	$NetBSD: sha1.3,v 1.6 2010/04/05 21:27:01 joerg Exp $
+.\"	$NetBSD: sha1.3,v 1.2 2005/12/26 19:40:14 perry Exp $
 .\"	$OpenBSD: sha1.3,v 1.9 1998/03/07 22:18:12 millert Exp $
 .\"
-.\" Copyright (c) 1997, 2004 Todd C. Miller <Todd.Miller@courtesan.com>
+.\" Copyright (c) 1997 Todd C. Miller <Todd.Miller@courtesan.com>
+.\" All rights reserved.
 .\"
-.\" Permission to use, copy, modify, and distribute this software for any
-.\" purpose with or without fee is hereby granted, provided that the above
-.\" copyright notice and this permission notice appear in all copies.
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\" 3. All advertising materials mentioning features or use of this software
+.\"    must display the following acknowledgement:
+.\"	This product includes software developed by Todd C. Miller.
+.\" 4. The name of the author may not be used to endorse or promote products
+.\"    derived from this software without specific prior written permission.
 .\"
-.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\" THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+.\" INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+.\" AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+.\" THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+.\" EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+.\" PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+.\" OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+.\" WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+.\" OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+.\" ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\" See http://csrc.nist.gov/fips/fip180-1.txt for the detailed standard
 .\"
 .Dd July 10, 1997
 .Dt SHA1 3
-.Os
 .Sh NAME
 .Nm SHA1Init ,
 .Nm SHA1Update ,
@@ -35,17 +48,17 @@
 .Ft void
 .Fn SHA1Init "SHA1_CTX *context"
 .Ft void
-.Fn SHA1Update "SHA1_CTX *context" "const uint8_t *data" "u_int len"
+.Fn SHA1Update "SHA1_CTX *context" "const u_char *data" "u_int len"
 .Ft void
-.Fn SHA1Final "uint8_t digest[20]" "SHA1_CTX *context"
+.Fn SHA1Final "u_char digest[20]" "SHA1_CTX *context"
 .Ft void
-.Fn SHA1Transform "uint32_t state[5]" "uint8_t buffer[64]"
+.Fn SHA1Transform "uint32_t state[5]" "u_char buffer[64]"
 .Ft "char *"
 .Fn SHA1End "SHA1_CTX *context" "char *buf"
 .Ft "char *"
 .Fn SHA1File "char *filename" "char *buf"
 .Ft "char *"
-.Fn SHA1Data "uint8_t *data" "size_t len" "char *buf"
+.Fn SHA1Data "u_char *data" "size_t len" "char *buf"
 .Sh DESCRIPTION
 The SHA1 functions implement the NIST Secure Hash Algorithm (SHA-1),
 FIPS PUB 180-1.
@@ -145,27 +158,27 @@ The follow code fragment will calculate the digest for
 the string "abc" which is ``0xa9993e36476816aba3e25717850c26c9cd0d89d''.
 .Bd -literal -offset indent
 SHA1_CTX sha;
-uint8_t results[20];
+u_char results[20];
 char *buf;
 int n;
 
 buf = "abc";
 n = strlen(buf);
 SHA1Init(\*[Am]sha);
-SHA1Update(\*[Am]sha, (uint8_t *)buf, n);
+SHA1Update(\*[Am]sha, (u_char *)buf, n);
 SHA1Final(results, \*[Am]sha);
 
 /* Print the digest as one long hex value */
 printf("0x");
 for (n = 0; n \*[Lt] 20; n++)
 	printf("%02x", results[n]);
-putchar('\en');
+putchar('\\n');
 .Ed
 .Pp
 Alternately, the helper functions could be used in the following way:
 .Bd -literal -offset indent
 SHA1_CTX sha;
-uint8_t output[41];
+u_char output[41];
 char *buf = "abc";
 
 printf("0x%s", SHA1Data(buf, strlen(buf), output));

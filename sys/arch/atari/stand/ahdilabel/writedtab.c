@@ -1,4 +1,4 @@
-/*	$NetBSD: writedtab.c,v 1.5 2009/03/14 21:04:06 dsl Exp $	*/
+/*	$NetBSD: writedtab.c,v 1.4 2008/04/28 20:23:15 martin Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -39,7 +39,9 @@
  * Write AHDI partitions to disk
  */
 int
-ahdi_writedisktab (struct ahdi_ptable *ptable, char *disktype, char *disktab, char *dtype)
+ahdi_writedisktab (ptable, disktype, disktab, dtype)
+	struct ahdi_ptable	*ptable;
+	char			*disktype, *disktab, *dtype;
 {
 	FILE			*fd;
 	int			 pid, i, j, todo;

@@ -1,4 +1,4 @@
-/*	$NetBSD: flt_rounds.c,v 1.11 2011/07/10 21:18:47 matt Exp $	*/
+/*	$NetBSD: flt_rounds.c,v 1.10 2005/12/24 23:10:08 perry Exp $	*/
 
 /*
  * Copyright (c) 1996 Mark Brinicombe
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: flt_rounds.c,v 1.11 2011/07/10 21:18:47 matt Exp $");
+__RCSID("$NetBSD: flt_rounds.c,v 1.10 2005/12/24 23:10:08 perry Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <ieeefp.h>
@@ -54,12 +54,9 @@ __flt_rounds(void)
 #ifdef _SOFT_FLOAT
 	return map[fpgetround()];
 #else
-	union {
-		double u_d;
-		uint64_t u_fpscr;
-	} ud;
+	uint64_t fpscr;
 
-	__asm volatile("mffs %0" : "=f"(ud.u_d));
-	return map[((uint32_t)ud.u_fpscr & FPSCR_RN)];
+	__asm volatile("mffs %0" : "=f"(fpscr));
+	return map[((uint32_t)fpscr & FPSCR_RN)];
 #endif
 }

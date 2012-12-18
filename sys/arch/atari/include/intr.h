@@ -1,11 +1,8 @@
-/*	$NetBSD: intr.h,v 1.21 2009/07/08 12:23:10 tsutsui Exp $	*/
+/*	$NetBSD: intr.h,v 1.18.6.1 2009/01/06 23:52:42 snj Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
- *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Leo Weppelman.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -65,7 +62,7 @@
 #define splx(s)			((s) & PSL_IPL ? _spl(s) : spl0())
 
 #ifdef _KERNEL
-int spl0(void);
+int spl0 __P((void));
 
 extern const uint16_t ipl2psl_table[NIPL];
 extern int idepth;
@@ -88,48 +85,6 @@ splraiseipl(ipl_cookie_t icookie)
 
 	return _splraise(icookie._psl);
 }
-
-#include <sys/queue.h>
-#include <machine/cpu.h>	/* XXX: for clockframe */
-
-struct clockframe;
-
-#define	AUTO_VEC	0x0001	/* We're dealing with an auto-vector	*/
-#define	USER_VEC	0x0002	/* We're dealing with an user-vector	*/
-
-#define	FAST_VEC	0x0010	/* Fast, stash right into vector-table	*/
-#define	ARG_CLOCKFRAME	0x0020	/* Supply clockframe as an argument	*/
-
-/*
- * Interrupt handler chains.  intr_establish() inserts a handler into
- * the list.  The handler is called with its (single) argument or with a
- * 'standard' clockframe. This depends on 'ih_type'.
- */
-typedef int	(*hw_ifun_t)(void *, int);
-
-struct intrhand {
-	LIST_ENTRY(intrhand)	ih_link;
-	hw_ifun_t		ih_fun;
-	void			*ih_arg;
-	int			ih_type;
-	int			ih_pri;
-	int			ih_vector;
-	u_long			*ih_intrcnt;
-};
-
-void		intr_init(void);
-struct intrhand *intr_establish(int, int, int, hw_ifun_t, void *);
-int		intr_disestablish(struct intrhand *);
-void		intr_dispatch(struct clockframe);
-void		intr_glue(void);
-
-/*
- * Exported by intrcnt.h
- */
-extern u_long	autovects[];
-extern u_long	intrcnt_auto[];
-extern u_long	uservects[];
-extern u_long	intrcnt_user[];
 
 #endif /* _KERNEL */
 

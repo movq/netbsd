@@ -1,4 +1,4 @@
-/*	$NetBSD: framebuf.c,v 1.32 2012/06/25 22:32:47 abs Exp $	*/
+/*	$NetBSD: framebuf.c,v 1.29 2008/09/04 15:30:36 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007  Antti Kantee.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: framebuf.c,v 1.32 2012/06/25 22:32:47 abs Exp $");
+__RCSID("$NetBSD: framebuf.c,v 1.29 2008/09/04 15:30:36 pooka Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -100,7 +100,7 @@ getfiobyfd(struct puffs_usermount *pu, int fd)
 }
 
 struct puffs_framebuf *
-puffs_framebuf_make(void)
+puffs_framebuf_make()
 {
 	struct puffs_framebuf *pufbuf;
 
@@ -561,8 +561,9 @@ puffs_framev_enqueue_waitevent(struct puffs_cc *pcc, int fd, int *what)
 			EV_SET(&kev, fd, EVFILT_READ, EV_ENABLE,
 			    0, 0, (uintptr_t)fio);
 
-	if (kevent(pu->pu_kq, &kev, 1, NULL, 0, NULL) == -1)
-		return -1;
+	rv = kevent(pu->pu_kq, &kev, 1, NULL, 0, NULL);
+	if (rv != 0)
+		return errno;
 
 	if (*what & PUFFS_FBIO_READ)
 		fio->rwait++;
@@ -782,11 +783,11 @@ puffs__framev_addfd_ctrl(struct puffs_usermount *pu, int fd, int what,
 	struct puffs_fctrl_io *fio;
 	struct kevent *newevs;
 	struct kevent kev[2];
-	size_t nevs;
+	size_t nfds;
 	int rv, readenable;
 
-	nevs = pu->pu_nevs+2;
-	newevs = realloc(pu->pu_evs, nevs*sizeof(struct kevent));
+	nfds = pu->pu_nfds+1;
+	newevs = realloc(pu->pu_evs, (2*nfds) * sizeof(struct kevent));
 	if (newevs == NULL)
 		return -1;
 	pu->pu_evs = newevs;
@@ -823,7 +824,7 @@ puffs__framev_addfd_ctrl(struct puffs_usermount *pu, int fd, int what,
 		fio->stat |= FIO_ENABLE_W;
 
 	LIST_INSERT_HEAD(&pu->pu_ios, fio, fio_entries);
-	pu->pu_nevs = nevs;
+	pu->pu_nfds = nfds;
 
 	return 0;
 }
@@ -998,7 +999,7 @@ removefio(struct puffs_usermount *pu, struct puffs_fctrl_io *fio, int error)
 	}
 
 	/* don't bother with realloc */
-	pu->pu_nevs -= 2;
+	pu->pu_nfds--;
 
 	/* don't free us yet, might have some references in event arrays */
 	fio->stat |= FIO_DEAD;

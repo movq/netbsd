@@ -1,4 +1,4 @@
-/*	$NetBSD: c_jazz_eisa.c,v 1.14 2012/10/13 17:58:53 jdc Exp $	*/
+/*	$NetBSD: c_jazz_eisa.c,v 1.12 2005/12/11 12:16:37 christos Exp $	*/
 
 /*
  * Copyright (c) 1998
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: c_jazz_eisa.c,v 1.14 2012/10/13 17:58:53 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: c_jazz_eisa.c,v 1.12 2005/12/11 12:16:37 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: c_jazz_eisa.c,v 1.14 2012/10/13 17:58:53 jdc Exp $")
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/pio.h>
 #include <machine/platform.h>
 
@@ -149,7 +149,7 @@ c_jazz_eisa_cons_init(void)
 		if (rasdisplay_jazzio_cnattach(arc_displayc_id) == 0) {
 #if NPCKBC_JAZZIO > 0
 			pckbc_cnattach(&jazzio_bus, PICA_SYS_KBD,
-			    JAZZIO_KBCMDP, PCKBC_KBD_SLOT, 0);
+			    JAZZIO_KBCMDP, PCKBC_KBD_SLOT);
 #endif
 			return;
 		}
@@ -159,7 +159,7 @@ c_jazz_eisa_cons_init(void)
 		if (vga_jazzio_cnattach(arc_displayc_id) == 0) {
 #if NPCKBC_JAZZIO > 0
 			pckbc_cnattach(&jazzio_bus, PICA_SYS_KBD,
-			    JAZZIO_KBCMDP, PCKBC_KBD_SLOT, 0);
+			    JAZZIO_KBCMDP, PCKBC_KBD_SLOT);
 #endif
 			return;
 		}
@@ -173,7 +173,7 @@ c_jazz_eisa_cons_init(void)
 			if (vga_isa_cnattach(&arc_bus_io, &arc_bus_mem) == 0) {
 #if NPCKBC_JAZZIO > 0
 				pckbc_cnattach(&jazzio_bus, PICA_SYS_KBD,
-				    JAZZIO_KBCMDP, PCKBC_KBD_SLOT, 0);
+				    JAZZIO_KBCMDP, PCKBC_KBD_SLOT);
 #endif
 				return;
 			}

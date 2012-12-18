@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le.c,v 1.37 2010/12/14 23:38:30 matt Exp $	*/
+/*	$NetBSD: if_le.c,v 1.33 2008/04/28 20:23:39 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -65,15 +65,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.37 2010/12/14 23:38:30 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.33 2008/04/28 20:23:39 martin Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
 #include <sys/syslog.h>
 #include <sys/socket.h>
+#include <sys/device.h>
+#include <sys/reboot.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -86,6 +87,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.37 2010/12/14 23:38:30 matt Exp $");
 #include <netinet/if_inarp.h>
 #endif
 
+#include <machine/cpu.h>
 #include <machine/nexus.h>
 #include <machine/scb.h>
 #include <machine/mainbus.h>
@@ -219,7 +221,7 @@ le_mainbus_attach(device_t parent, device_t self, void *aux)
 		sc->sc_am7990.lsc.sc_enaddr[i] = (u_char)lance_addr[i];
 	vax_unmap_physmem((vaddr_t)lance_addr, 1);
 
-	memcpy(sc->sc_am7990.lsc.sc_ethercom.ec_if.if_xname, device_xname(self),
+	bcopy(device_xname(self), sc->sc_am7990.lsc.sc_ethercom.ec_if.if_xname,
 	    IFNAMSIZ);
 	am7990_config(&sc->sc_am7990);
 }

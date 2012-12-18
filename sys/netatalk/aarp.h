@@ -1,4 +1,4 @@
-/*	$NetBSD: aarp.h,v 1.3 2011/05/08 13:51:31 bouyer Exp $	*/
+/*	$NetBSD: aarp.h,v 1.2.86.1 2011/06/30 09:31:15 sborrill Exp $	*/
 
 /*
  * Copyright (c) 1990,1991 Regents of The University of Michigan.

@@ -1,4 +1,4 @@
-/*	$NetBSD: units.c,v 1.18 2012/03/20 20:34:59 matt Exp $	*/
+/*	$NetBSD: units.c,v 1.15 2006/05/01 00:00:12 christos Exp $	*/
 
 /*
  * units.c   Copyright (c) 1993 by Adrian Mariano (adrian@cam.cornell.edu)
@@ -39,54 +39,56 @@
 
 #define PRIMITIVECHAR '!'
 
-static const char *powerstring = "^";
+char *powerstring = "^";
 
-static struct {
-	const char *uname;
-	const char *uval;
+struct {
+	char *uname;
+	char *uval;
 }      unittable[MAXUNITS];
 
 struct unittype {
-	const char *numerator[MAXSUBUNITS];
-	const char *denominator[MAXSUBUNITS];
+	char *numerator[MAXSUBUNITS];
+	char *denominator[MAXSUBUNITS];
 	double factor;
 };
 
 struct {
-	const char *prefixname;
-	const char *prefixval;
+	char *prefixname;
+	char *prefixval;
 }      prefixtable[MAXPREFIXES];
 
 
-static const char *NULLUNIT = "";
+char *NULLUNIT = "";
 
-static int unitcount;
-static int prefixcount;
+int unitcount;
+int prefixcount;
 
 
-static int	addsubunit(const char *[], const char *);
-static int	addunit(struct unittype *, const char *, int);
-static void	cancelunit(struct unittype *);
-static int	compare(const void *, const void *);
-static int	compareproducts(const char **, const char **);
-static int	compareunits(struct unittype *, struct unittype *);
-static int	compareunitsreciprocal(struct unittype *, struct unittype *);
-static int	completereduce(struct unittype *);
-static void	initializeunit(struct unittype *);
-static void	readerror(int);
-static void	readunits(const char *);
-static int	reduceproduct(struct unittype *, int);
-static int	reduceunit(struct unittype *);
-static void	showanswer(struct unittype *, struct unittype *);
-static void	showunit(struct unittype *);
-static void	sortunit(struct unittype *);
-__dead static void	usage(void);
-static void	zeroerror(void);
-static char   *dupstr(const char *);
-static const char *lookupunit(const char *);
+int	addsubunit __P((char *[], char *));
+int	addunit __P((struct unittype *, char *, int));
+void	cancelunit __P((struct unittype *));
+int	compare __P((const void *, const void *));
+int	compareproducts __P((char **, char **));
+int	compareunits __P((struct unittype *, struct unittype *));
+int	compareunitsreciprocal __P((struct unittype *, struct unittype *));
+int	completereduce __P((struct unittype *));
+void	initializeunit __P((struct unittype *));
+int	main __P((int, char **));
+void	readerror __P((int));
+void	readunits __P((char *));
+int	reduceproduct __P((struct unittype *, int));
+int	reduceunit __P((struct unittype *));
+void	showanswer __P((struct unittype *, struct unittype *));
+void	showunit __P((struct unittype *));
+void	sortunit __P((struct unittype *));
+void	usage __P((void));
+void	zeroerror __P((void));
+char   *dupstr __P((char *));
+char   *lookupunit __P((char *));
 
-static char *
-dupstr(const char *str)
+
+char *
+dupstr(char *str)
 {
 	char *ret;
 
@@ -97,15 +99,15 @@ dupstr(const char *str)
 }
 
 
-static void
+void 
 readerror(int linenum)
 {
 	warnx("Error in units file '%s' line %d", UNITSFILE, linenum);
 }
 
 
-static void
-readunits(const char *userfile)
+void 
+readunits(char *userfile)
 {
 	FILE *unitfile;
 	char line[80], *lineptr;
@@ -219,17 +221,18 @@ readunits(const char *userfile)
 	fclose(unitfile);
 }
 
-static void
+void 
 initializeunit(struct unittype * theunit)
 {
 	theunit->factor = 1.0;
 	theunit->numerator[0] = theunit->denominator[0] = NULL;
 }
 
-static int
-addsubunit(const char *product[], const char *toadd)
+
+int 
+addsubunit(char *product[], char *toadd)
 {
-	const char **ptr;
+	char **ptr;
 
 	for (ptr = product; *ptr && *ptr != NULLUNIT; ptr++);
 	if (ptr >= product + MAXSUBUNITS) {
@@ -242,10 +245,11 @@ addsubunit(const char *product[], const char *toadd)
 	return 0;
 }
 
-static void
+
+void 
 showunit(struct unittype * theunit)
 {
-	const char **ptr;
+	char **ptr;
 	int printedslash;
 	int counter = 1;
 
@@ -287,8 +291,9 @@ showunit(struct unittype * theunit)
 	printf("\n");
 }
 
-static void
-zeroerror(void)
+
+void 
+zeroerror()
 {
 	warnx("Unit reduces to zero");
 }
@@ -300,8 +305,8 @@ zeroerror(void)
    Returns 0 for successful addition, nonzero on error.
 */
 
-static int
-addunit(struct unittype * theunit, const char *toadd, int flip)
+int 
+addunit(struct unittype * theunit, char *toadd, int flip)
 {
 	char *scratch, *savescr;
 	char *item;
@@ -384,17 +389,18 @@ addunit(struct unittype * theunit, const char *toadd, int flip)
 	return 0;
 }
 
-static int
+
+int 
 compare(const void *item1, const void *item2)
 {
-	return strcmp(*(const char * const *) item1,
-		      *(const char * const *) item2);
+	return strcmp(*(char **) item1, *(char **) item2);
 }
 
-static void
+
+void 
 sortunit(struct unittype * theunit)
 {
-	const char **ptr;
+	char **ptr;
 	int count;
 
 	for (count = 0, ptr = theunit->numerator; *ptr; ptr++, count++);
@@ -403,10 +409,11 @@ sortunit(struct unittype * theunit)
 	qsort(theunit->denominator, count, sizeof(char *), compare);
 }
 
-static void
+
+void 
 cancelunit(struct unittype * theunit)
 {
-	const char **den, **num;
+	char **den, **num;
 	int comp;
 
 	den = theunit->denominator;
@@ -439,8 +446,8 @@ cancelunit(struct unittype * theunit)
 static char buffer[100];	/* buffer for lookupunit answers with
 				   prefixes */
 
-static const char *
-lookupunit(const char *unit)
+char *
+lookupunit(char *unit)
 {
 	int i;
 	char *copy;
@@ -514,12 +521,12 @@ lookupunit(const char *unit)
 
 #define ERROR 4
 
-static int
+int 
 reduceproduct(struct unittype * theunit, int flip)
 {
 
-	const char *toadd;
-	const char **product;
+	char *toadd;
+	char **product;
 	int didsomething = 2;
 
 	if (flip)
@@ -541,7 +548,7 @@ reduceproduct(struct unittype * theunit, int flip)
 				break;
 			didsomething = 1;
 			if (*product != NULLUNIT) {
-				free(__UNCONST(*product));
+				free(*product);
 				*product = NULLUNIT;
 			}
 			if (addunit(theunit, toadd, flip))
@@ -557,7 +564,7 @@ reduceproduct(struct unittype * theunit, int flip)
    Returns 0 on success, or 1 on unknown unit error.
 */
 
-static int
+int 
 reduceunit(struct unittype * theunit)
 {
 	int ret;
@@ -571,8 +578,9 @@ reduceunit(struct unittype * theunit)
 	return 0;
 }
 
-static int
-compareproducts(const char **one, const char **two)
+
+int 
+compareproducts(char **one, char **two)
 {
 	while (*one || *two) {
 		if (!*one && *two != NULLUNIT)
@@ -594,7 +602,7 @@ compareproducts(const char **one, const char **two)
 
 /* Return zero if units are compatible, nonzero otherwise */
 
-static int
+int 
 compareunits(struct unittype * first, struct unittype * second)
 {
 	return
@@ -602,7 +610,7 @@ compareunits(struct unittype * first, struct unittype * second)
 	compareproducts(first->denominator, second->denominator);
 }
 
-static int
+int 
 compareunitsreciprocal(struct unittype * first, struct unittype * second)
 {
 	return
@@ -611,7 +619,7 @@ compareunitsreciprocal(struct unittype * first, struct unittype * second)
 }
 
 
-static int
+int 
 completereduce(struct unittype * unit)
 {
 	if (reduceunit(unit))
@@ -622,7 +630,7 @@ completereduce(struct unittype * unit)
 }
 
 
-static void
+void 
 showanswer(struct unittype * have, struct unittype * want)
 {
 	if (compareunits(have, want)) {
@@ -642,8 +650,8 @@ showanswer(struct unittype * have, struct unittype * want)
 }
 
 
-static void
-usage(void)
+void 
+usage()
 {
 	fprintf(stderr,
 	    "\nunits [-f unitsfile] [-q] [-v] [from-unit to-unit]\n");
@@ -653,6 +661,7 @@ usage(void)
 	exit(3);
 }
 
+
 int
 main(int argc, char **argv)
 {
@@ -660,7 +669,7 @@ main(int argc, char **argv)
 	struct unittype have, want;
 	char havestr[81], wantstr[81];
 	int optchar;
-	const char *userfile = 0;
+	char *userfile = 0;
 	int quiet = 0;
 
 	while ((optchar = getopt(argc, argv, "vqf:")) != -1) {

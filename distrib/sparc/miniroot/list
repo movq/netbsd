@@ -1,4 +1,4 @@
-#	$NetBSD: list,v 1.37 2011/11/18 21:32:46 njoly Exp $
+#	$NetBSD: list,v 1.30 2008/10/30 12:39:16 tsutsui Exp $
 
 # Sparc extra's
 PROG	bin/rcmd
@@ -18,26 +18,28 @@ PROG	usr/sbin/installboot
 
 # crunchgen source directory specials
 SPECIAL	vi	srcdir usr.bin/nvi/build
-SPECIAL	less	srcdir external/bsd/less/bin/less
+SPECIAL	less	srcdir usr.bin/less/less
 
 # Minimize use of MFS
 SYMLINK	/tmp	var/tmp
 
 # we need the contents of /usr/mdec
-COPY	${DESTDIR}/usr/mdec/binstall	usr/mdec/binstall	555
-COPY	${DESTDIR}/usr/mdec/boot	usr/mdec/boot
-LINK	usr/mdec/boot			usr/mdec/boot.388000
-COPY	${DESTDIR}/usr/mdec/boot.net	usr/mdec/boot.net
-COPY	${DESTDIR}/usr/mdec/bootblk	usr/mdec/bootblk
-COPY	${DESTDIR}/usr/mdec/bootjs.net	usr/mdec/bootjs.net
-COPY	${DESTDIR}/usr/mdec/bootxx	usr/mdec/bootxx
-COPY	${DESTDIR}/usr/mdec/ofwboot	usr/mdec/ofwboot
-LINK	usr/mdec/ofwboot		usr/mdec/ofwboot.net
+COPYDIR	${DESTDIR}/usr/mdec	usr/mdec
+# ensure binstall is executable
+MTREE	./usr/mdec/binstall	mode=0555
+
+# the zoneinfo
+COPYDIR	${DESTDIR}/usr/share/zoneinfo	usr/share/zoneinfo
+
+# and the termcap file
+COPY	${ARCHDIR}/termcap.src		usr/share/misc/termcap
 
 # copy the kernel
 COPY	${KERNOBJDIR}/GENERIC/netbsd	netbsd
 
 # various files that we need in /etc for the install
+COPY	${DESTDIR}/etc/disktab		etc/disktab.shadow
+SYMLINK	/tmp/disktab.shadow		etc/disktab
 SYMLINK	/tmp/fstab.shadow		etc/fstab
 SYMLINK	/tmp/resolv.conf.shadow		etc/resolv.conf
 SYMLINK	/tmp/hosts			etc/hosts

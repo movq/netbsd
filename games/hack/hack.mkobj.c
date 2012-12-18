@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.mkobj.c,v 1.9 2011/08/07 06:03:45 dholland Exp $	*/
+/*	$NetBSD: hack.mkobj.c,v 1.6 2003/04/02 18:36:38 jsm Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,16 +63,17 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.mkobj.c,v 1.9 2011/08/07 06:03:45 dholland Exp $");
+__RCSID("$NetBSD: hack.mkobj.c,v 1.6 2003/04/02 18:36:38 jsm Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
 #include "extern.h"
 
-static const char mkobjstr[] = "))[[!!!!????%%%%/=**))[[!!!!????%%%%/=**(%";
+char            mkobjstr[] = "))[[!!!!????%%%%/=**))[[!!!!????%%%%/=**(%";
 
 struct obj     *
-mkobj_at(int let, int x, int y)
+mkobj_at(let, x, y)
+	int let, x, y;
 {
 	struct obj     *otmp = mkobj(let);
 	otmp->ox = x;
@@ -83,7 +84,8 @@ mkobj_at(int let, int x, int y)
 }
 
 void
-mksobj_at(int otyp, int x, int y)
+mksobj_at(otyp, x, y)
+	int otyp, x, y;
 {
 	struct obj     *otmp = mksobj(otyp);
 	otmp->ox = x;
@@ -93,7 +95,8 @@ mksobj_at(int otyp, int x, int y)
 }
 
 struct obj     *
-mkobj(int let)
+mkobj(let)
+	int let;
 {
 	if (!let)
 		let = mkobjstr[rn2(sizeof(mkobjstr) - 1)];
@@ -110,7 +113,8 @@ mkobj(int let)
 struct obj      zeroobj;
 
 struct obj     *
-mksobj(int otyp)
+mksobj(otyp)
+	int otyp;
 {
 	struct obj     *otmp;
 	char            let = objects[otyp].oc_olet;
@@ -141,10 +145,9 @@ mksobj(int otyp)
 		if (otmp->otyp == TIN)
 			otmp->spe = rnd(...);
 #endif	/* NOT_YET_IMPLEMENTED */
-		/* FALLTHROUGH */
+		/* fall into next case */
 	case GEM_SYM:
 		otmp->quan = rn2(6) ? 1 : 2;
-		break;
 	case TOOL_SYM:
 	case CHAIN_SYM:
 	case BALL_SYM:
@@ -190,13 +193,15 @@ mksobj(int otyp)
 }
 
 int
-letter(int c)
+letter(c)
+	int c;
 {
 	return (('@' <= c && c <= 'Z') || ('a' <= c && c <= 'z'));
 }
 
 int
-weight(struct obj *obj)
+weight(obj)
+	struct obj     *obj;
 {
 	int             wt = objects[obj->otyp].oc_weight;
 	return (wt ? wt * obj->quan : (obj->quan + 1) / 2);

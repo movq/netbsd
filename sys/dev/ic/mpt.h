@@ -1,4 +1,4 @@
-/*	$NetBSD: mpt.h,v 1.7 2010/04/28 22:45:27 chs Exp $	*/
+/*	$NetBSD: mpt.h,v 1.6.42.1 2010/12/02 23:45:59 snj Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 by Greg Ansley

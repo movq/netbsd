@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.27 2010/03/10 23:13:10 abs Exp $
+#	$NetBSD: Makefile,v 1.21.10.1 2009/01/16 22:21:30 bouyer Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -19,7 +19,7 @@ LISTS=		${.CURDIR}/list
 TARGETDIR=	${DESTDIR}/rescue
 PARSELISTENV+=  TARGETDIR=${TARGETDIR:Q}
 
-.for f in ldconfig pdisk
+.for f in edlabel ldconfig pdisk
 PROG_${f}!=	cd ${NETBSDSRCDIR}/sbin/${f} && ${MAKE} -V PROG
 .if (${PROG_${f}} != "")
 LISTS+=		${.CURDIR}/list.${f}
@@ -36,9 +36,10 @@ CRUNCHENV+=	MKKERBEROS=no		# for ssh
 .endif
 
 LISTS+=		${.CURDIR}/list.ldd
+LDD_AOUTDIR!=	cd ${NETBSDSRCDIR}/usr.bin/ldd/aout && ${PRINTOBJDIR}
 LDD_ELF32DIR!=	cd ${NETBSDSRCDIR}/usr.bin/ldd/elf32 && ${PRINTOBJDIR}
 LDD_ELF64DIR!=	cd ${NETBSDSRCDIR}/usr.bin/ldd/elf64 && ${PRINTOBJDIR}
-PARSELISTENV+=	LDD_ELF32DIR=${LDD_ELF32DIR} LDD_ELF64DIR=${LDD_ELF64DIR}
+PARSELISTENV+=	LDD_AOUTDIR=${LDD_AOUTDIR} LDD_ELF32DIR=${LDD_ELF32DIR} LDD_ELF64DIR=${LDD_ELF64DIR}
 
 #	Specially built objects to override the behaviour of
 #	various library functions

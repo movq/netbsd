@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.h,v 1.11 2012/10/27 17:18:09 chs Exp $	*/
+/*	$NetBSD: pci_machdep.h,v 1.9 2006/08/30 23:35:10 rumble Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -60,7 +60,7 @@ struct sgimips_pci_chipset {
 				pcireg_t);
 	int		(*pc_conf_hook)(pci_chipset_tag_t, int, int, int,
 				pcireg_t);
-	int		(*pc_intr_map)(const struct pci_attach_args *,
+	int		(*pc_intr_map)(struct pci_attach_args *,
 				pci_intr_handle_t *);
 	const char *	(*pc_intr_string)(pci_chipset_tag_t pc,
 				pci_intr_handle_t);
@@ -81,7 +81,7 @@ extern struct sgimips_bus_dma_tag pci_bus_dma_tag;
 /*
  * Functions provided to machine-independent PCI code.
  */
-void		pci_attach_hook(device_t, device_t,
+void		pci_attach_hook(struct device *, struct device *,
 			struct pcibus_attach_args *);
 int		pci_bus_maxdevs(pci_chipset_tag_t, int);
 pcitag_t	pci_make_tag(pci_chipset_tag_t, int, int, int);
@@ -91,8 +91,7 @@ pcireg_t	pci_conf_read(pci_chipset_tag_t, pcitag_t, int);
 void		pci_conf_write(pci_chipset_tag_t, pcitag_t, int,
 			pcireg_t);
 int		pci_conf_hook(pci_chipset_tag_t, int, int, int, pcireg_t);
-int		pci_intr_map(const struct pci_attach_args *,
-			pci_intr_handle_t *);
+int		pci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
 const char	*pci_intr_string(pci_chipset_tag_t, pci_intr_handle_t);
 const struct evcnt *pci_intr_evcnt(pci_chipset_tag_t, pci_intr_handle_t);
 void		*pci_intr_establish(pci_chipset_tag_t, pci_intr_handle_t,

@@ -1,9 +1,7 @@
-/*	$NetBSD: memory.c,v 1.1.1.3 2010/12/12 15:21:28 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/libraries/liblber/memory.c,v 1.64.2.7 2010/04/13 20:22:54 kurt Exp */
+/* $OpenLDAP: pkg/ldap/libraries/liblber/memory.c,v 1.64.2.4 2008/02/11 23:26:41 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2010 The OpenLDAP Foundation.
+ * Copyright 1998-2008 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -653,16 +651,6 @@ ber_strdup( LDAP_CONST char *s )
 	return ber_strdup_x( s, NULL );
 }
 
-ber_len_t
-ber_strnlen( LDAP_CONST char *s, ber_len_t len )
-{
-	ber_len_t l;
-
-	for ( l = 0; l < len && s[l] != '\0'; l++ ) ;
-
-	return l;
-}
-
 char *
 ber_strndup_x( LDAP_CONST char *s, ber_len_t l, void *ctx )
 {
@@ -678,7 +666,11 @@ ber_strndup_x( LDAP_CONST char *s, ber_len_t l, void *ctx )
 		return NULL;
 	}
 
-	len = ber_strnlen( s, l );
+	len = strlen( s );
+
+	if ( len > l ) {
+		len = l;
+	}
 
 	if ( (p = ber_memalloc_x( len + 1, ctx )) == NULL ) {
 		ber_errno = LBER_ERROR_MEMORY;

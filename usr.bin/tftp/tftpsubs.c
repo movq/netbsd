@@ -1,4 +1,4 @@
-/*	$NetBSD: tftpsubs.c,v 1.12 2011/09/17 15:15:46 christos Exp $	*/
+/*	$NetBSD: tftpsubs.c,v 1.10 2006/04/09 18:45:19 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)tftpsubs.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: tftpsubs.c,v 1.12 2011/09/17 15:15:46 christos Exp $");
+__RCSID("$NetBSD: tftpsubs.c,v 1.10 2006/04/09 18:45:19 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,7 +60,7 @@ __RCSID("$NetBSD: tftpsubs.c,v 1.12 2011/09/17 15:15:46 christos Exp $");
 
 #include "tftpsubs.h"
 
-static struct bf {
+struct bf {
 	int counter;            /* size of data in buffer, or flag */
 	char buf[MAXPKTSIZE];   /* room for data packet */
 } bfs[2];
@@ -74,26 +74,26 @@ static int nextone;		/* index of next buffer to use */
 static int current;		/* index of buffer in use */
 
 				/* control flags for crlf conversions */
-static int newline = 0;		/* fillbuf: in middle of newline expansion */
-static int prevchar = -1;	/* putbuf: previous char (cr check) */
+int newline = 0;		/* fillbuf: in middle of newline expansion */
+int prevchar = -1;		/* putbuf: previous char (cr check) */
 
-static struct tftphdr *rw_init(int);
+static struct tftphdr *rw_init __P((int));
 
 struct tftphdr *
-w_init(void)		/* write-behind */
+w_init()		/* write-behind */
 {
 	return rw_init(0);
 }
 
 struct tftphdr *
-r_init(void)		/* read-ahead */
+r_init()		/* read-ahead */
 {
 	return rw_init(1);
 }
 
 static struct tftphdr *
-rw_init(int x)			/* init for either read-ahead or write-behind */
-				/* zero for write-behind, one for read-head */
+rw_init(x)			/* init for either read-ahead or write-behind */
+	int x;			/* zero for write-behind, one for read-head */
 {
 	newline = 0;		/* init crlf flag */
 	prevchar = -1;
@@ -108,11 +108,11 @@ rw_init(int x)			/* init for either read-ahead or write-behind */
    Free it and return next buffer filled with data.
  */
 int
-readit(
-    FILE *file,                     /* file opened for read */
-    struct tftphdr **dpp,
-    size_t amt,
-    int convert)                    /* if true, convert to ascii */
+readit(file, dpp, amt, convert)
+	FILE *file;                     /* file opened for read */
+	struct tftphdr **dpp;
+	size_t amt;
+	int convert;                    /* if true, convert to ascii */
 {
 	struct bf *b;
 
@@ -132,12 +132,12 @@ readit(
  * conversions are  lf -> cr,lf  and cr -> cr, nul
  */
 void
-read_ahead(
-    FILE *file,                 /* file opened for read */
-    size_t amt,			/* number of bytes to read */
-    int convert)                /* if true, convert to ascii */
+read_ahead(file, amt, convert)
+	FILE *file;                     /* file opened for read */
+	size_t amt;			/* number of bytes to read */
+	int convert;                    /* if true, convert to ascii */
 {
-	size_t i;
+	int i;
 	char *p;
 	int c;
 	struct bf *b;
@@ -182,7 +182,10 @@ read_ahead(
    available.
  */
 int
-writeit(FILE *file, struct tftphdr **dpp, int ct, int convert)
+writeit(file, dpp, ct, convert)
+	FILE *file;
+	struct tftphdr **dpp;
+	int ct, convert;
 {
 	bfs[current].counter = ct;      /* set size of data to write */
 	current = !current;             /* switch to other buffer */
@@ -201,7 +204,9 @@ writeit(FILE *file, struct tftphdr **dpp, int ct, int convert)
  * CR followed by anything else.  In this case we leave it alone.
  */
 int
-write_behind(FILE *file, int convert)
+write_behind(file, convert)
+	FILE *file;
+	int convert;
 {
 	char *buf;
 	int count;
@@ -260,9 +265,9 @@ skipit:
 
 int
 /*ARGSUSED*/
-synchnet(
-    int	f,		/* socket to flush */
-    size_t bsize)	/* size of buffer to sync */
+synchnet(f, bsize)
+	int	f;		/* socket to flush */
+	size_t	bsize;		/* size of buffer to sync */
 {
 	int i, j = 0;
 	char rbuf[PKTSIZE];
@@ -274,10 +279,10 @@ synchnet(
 		if (i) {
 			j++;
 			fromlen = sizeof from;
-			(void)recvfrom(f, rbuf, sizeof (rbuf), 0,
-			    (struct sockaddr *)(void *)&from, &fromlen);
+			(void) recvfrom(f, rbuf, sizeof (rbuf), 0,
+				(struct sockaddr *)(void *)&from, &fromlen);
 		} else {
-			return j;
+			return(j);
 		}
 	}
 }

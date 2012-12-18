@@ -1,4 +1,4 @@
-/*	$NetBSD: aica.c,v 1.22 2011/11/23 23:07:29 jmcneill Exp $	*/
+/*	$NetBSD: aica.c,v 1.18.4.1 2010/12/21 22:23:38 riz Exp $	*/
 
 /*
  * Copyright (c) 2003 SHIMIZU Ryo <ryo@misakimix.org>
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aica.c,v 1.22 2011/11/23 23:07:29 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aica.c,v 1.18.4.1 2010/12/21 22:23:38 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -37,12 +37,12 @@ __KERNEL_RCSID(0, "$NetBSD: aica.c,v 1.22 2011/11/23 23:07:29 jmcneill Exp $");
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/audioio.h>
-#include <sys/bus.h>
 
 #include <dev/audio_if.h>
 #include <dev/mulaw.h>
 #include <dev/auconv.h>
 
+#include <machine/bus.h>
 #include <machine/sysasicvar.h>
 
 #include <dreamcast/dev/g2/g2busvar.h>
@@ -56,9 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: aica.c,v 1.22 2011/11/23 23:07:29 jmcneill Exp $");
 #define	AICA_TIMEOUT	0x1800
 
 struct aica_softc {
-	device_t		sc_dev;		/* base device */
-	kmutex_t		sc_lock;
-	kmutex_t		sc_intr_lock;
+	struct device		sc_dev;		/* base device */
 	bus_space_tag_t		sc_memt;
 	bus_space_handle_t	sc_aica_regh;
 	bus_space_handle_t	sc_aica_memh;
@@ -115,11 +113,11 @@ static const struct audio_format aica_formats[AICA_NFORMATS] = {
 	 2, AUFMT_STEREO, 0, {1, 65536}},
 };
 
-int aica_match(device_t, cfdata_t, void *);
-void aica_attach(device_t, device_t, void *);
+int aica_match(struct device *, struct cfdata *, void *);
+void aica_attach(struct device *, struct device *, void *);
 int aica_print(void *, const char *);
 
-CFATTACH_DECL_NEW(aica, sizeof(struct aica_softc), aica_match, aica_attach,
+CFATTACH_DECL(aica, sizeof(struct aica_softc), aica_match, aica_attach,
     NULL, NULL);
 
 const struct audio_device aica_device = {
@@ -162,7 +160,6 @@ int aica_get_port(void *, mixer_ctrl_t *);
 int aica_query_devinfo(void *, mixer_devinfo_t *);
 void aica_encode(int, int, int, int, u_char *, u_short **);
 int aica_get_props(void *);
-void aica_get_locks(void *, kmutex_t **, kmutex_t **);
 
 const struct audio_hw_if aica_hw_if = {
 	aica_open,
@@ -194,11 +191,10 @@ const struct audio_hw_if aica_hw_if = {
 	aica_trigger_output,
 	aica_trigger_input,
 	NULL,				/* aica_dev_ioctl */
-	aica_get_locks,
 };
 
 int
-aica_match(device_t parent, cfdata_t cf, void *aux)
+aica_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	static int aica_matched = 0;
 
@@ -210,33 +206,29 @@ aica_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-aica_attach(device_t parent, device_t self, void *aux)
+aica_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct aica_softc *sc;
 	struct g2bus_attach_args *ga;
 	int i;
 
-	sc = device_private(self);
+	sc = (struct aica_softc *)self;
 	ga = aux;
-	sc->sc_dev = self;
 	sc->sc_memt = ga->ga_memt;
-
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
 
 	if (bus_space_map(sc->sc_memt, AICA_REG_ADDR, 0x3000, 0,
 	    &sc->sc_aica_regh) != 0) {
-		aprint_error(": can't map AICA register space\n");
+		printf(": can't map AICA register space\n");
 		return;
 	}
 
 	if (bus_space_map(sc->sc_memt, AICA_RAM_START, AICA_RAM_SIZE, 0,
 	    &sc->sc_aica_memh) != 0) {
-		aprint_error(": can't map AICA memory space\n");
+		printf(": can't map AICA memory space\n");
 		return;
 	}
 
-	aprint_normal(": ARM7 Sound Processing Unit\n");
+	printf(": ARM7 Sound Processing Unit\n");
 
 	aica_disable(sc);
 
@@ -253,12 +245,12 @@ aica_attach(device_t parent, device_t self, void *aux)
 
 	aica_enable(sc);
 
-	aprint_normal_dev(self, "interrupting at %s\n",
+	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname,
 	    sysasic_intr_string(SYSASIC_IRL9));
 	sysasic_intr_establish(SYSASIC_EVENT_AICA, IPL_BIO, SYSASIC_IRL9,
 	    aica_intr, sc);
 
-	audio_attach_mi(&aica_hw_if, sc, self);
+	audio_attach_mi(&aica_hw_if, sc, &sc->sc_dev);
 
 	/* init parameters */
 	sc->sc_output_master = 255;
@@ -604,9 +596,6 @@ aica_intr(void *arg)
 	struct aica_softc *sc;
 
 	sc = arg;
-
-	mutex_spin_enter(&sc->sc_intr_lock);
-
 	aica_fillbuffer(sc);
 
 	/* call audio interrupt handler (audio_pint()) */
@@ -616,9 +605,6 @@ aica_intr(void *arg)
 
 	/* clear SPU interrupt */
 	bus_space_write_4(sc->sc_memt, sc->sc_aica_regh, 0x28bc, 0x20);
-
-	mutex_spin_exit(&sc->sc_intr_lock);
-
 	return 1;
 }
 
@@ -775,14 +761,4 @@ aica_get_props(void *addr)
 {
 
 	return 0;
-}
-
-void
-aica_get_locks(void *addr, kmutex_t **intr, kmutex_t **thread)
-{
-	struct aica_softc *sc;
-
-	sc = addr;
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
 }

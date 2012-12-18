@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2011/01/22 19:19:22 joerg Exp $
+#	$NetBSD: Makefile,v 1.1 2007/12/17 19:09:44 garbled Exp $
 
 NOMAN= # defined
 
@@ -12,8 +12,6 @@ COMMONOBJ!=	cd ${COMMON} && ${PRINTOBJDIR}
 S= ${.CURDIR}/../../../..
 L= ${COMMONOBJ}/lib
 
-MKBOOTIMAGE= ${.CURDIR}/../../../powerpc/stand/mkbootimage
-
 BASE?=		boot
 PROG=		${BASE}
 NEWVERSWHAT=	"BOOT"
@@ -25,10 +23,10 @@ SRCS+= ns16550.c vers.c
 SRCS+= iplcb.c
 
 CFLAGS= -Os -mmultiple -ffreestanding
-CFLAGS+= -Werror -Wall -Wstrict-prototypes -Wmissing-prototypes
-AFLAGS= -x assembler-with-cpp
+AFLAGS= -x assembler-with-cpp -traditional-cpp
 
-CPPFLAGS= -nostdinc -I${.OBJDIR} -I${MKBOOTIMAGE} -I${S}
+CPPFLAGS= -nostdinc -I${.OBJDIR} -I${.CURDIR}/../mkbootimage -I${S}
+CPPFLAGS+= -Werror -Wall -Wstrict-prototypes -Wmissing-prototypes
 CPPFLAGS+= -D_STANDALONE -DRELOC=${RELOC} -DUSE_SCAN
 CPPFLAGS+= -D__daddr_t=int32_t
 #CPPFLAGS+= -DDBMONITOR
@@ -64,8 +62,7 @@ powerpc::
 .endif
 
 vers.c: ${.CURDIR}/../boot/version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
-	    ${.CURDIR}/../boot/version "rs6000" ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/../boot/version "rs6000" ${NEWVERSWHAT}
 
 ${PROG}: ${OBJS} ${LIBS}
 	${LD} -o ${PROG} -s -N -T ${.CURDIR}/../boot/ld.script \

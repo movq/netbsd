@@ -1,4 +1,4 @@
-/*	$NetBSD: pim.h,v 1.5 2009/11/11 12:57:52 skrll Exp $	*/
+/*	$NetBSD: pim.h,v 1.2 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -36,118 +36,110 @@
  *
  * "PA/RISC 1.1 I/O Firmware Architecture Reference Specification",
  * Version 1.0, August 22, 2001.
- *
- * "PA/RISC 2.0 I/O Firmware Architecture Reference Specification",
- * Version 1.0, August 22, 2001.
  */
 
 /* The PIM data for HPMC and TOC contains these register arrays. */
 struct hp700_pim_regs {
 
 	/* The general registers. */
-	uint32_t	pim_regs_r0;
-	uint32_t	pim_regs_r1;
-	uint32_t	pim_regs_r2;
-	uint32_t	pim_regs_r3;
-	uint32_t	pim_regs_r4;
-	uint32_t	pim_regs_r5;
-	uint32_t	pim_regs_r6;
-	uint32_t	pim_regs_r7;
-	uint32_t	pim_regs_r8;
-	uint32_t	pim_regs_r9;
-	uint32_t	pim_regs_r10;
-	uint32_t	pim_regs_r11;
-	uint32_t	pim_regs_r12;
-	uint32_t	pim_regs_r13;
-	uint32_t	pim_regs_r14;
-	uint32_t	pim_regs_r15;
-	uint32_t	pim_regs_r16;
-	uint32_t	pim_regs_r17;
-	uint32_t	pim_regs_r18;
-	uint32_t	pim_regs_r19;
-	uint32_t	pim_regs_r20;
-	uint32_t	pim_regs_r21;
-	uint32_t	pim_regs_r22;
-	uint32_t	pim_regs_r23;
-	uint32_t	pim_regs_r24;
-	uint32_t	pim_regs_r25;
-	uint32_t	pim_regs_r26;
-	uint32_t	pim_regs_r27;
-	uint32_t	pim_regs_r28;
-	uint32_t	pim_regs_r29;
-	uint32_t	pim_regs_r30;
-	uint32_t	pim_regs_r31;
+	u_int	pim_regs_r0;
+	u_int	pim_regs_r1;
+	u_int	pim_regs_r2;
+	u_int	pim_regs_r3;
+	u_int	pim_regs_r4;
+	u_int	pim_regs_r5;
+	u_int	pim_regs_r6;
+	u_int	pim_regs_r7;
+	u_int	pim_regs_r8;
+	u_int	pim_regs_r9;
+	u_int	pim_regs_r10;
+	u_int	pim_regs_r11;
+	u_int	pim_regs_r12;
+	u_int	pim_regs_r13;
+	u_int	pim_regs_r14;
+	u_int	pim_regs_r15;
+	u_int	pim_regs_r16;
+	u_int	pim_regs_r17;
+	u_int	pim_regs_r18;
+	u_int	pim_regs_r19;
+	u_int	pim_regs_r20;
+	u_int	pim_regs_r21;
+	u_int	pim_regs_r22;
+	u_int	pim_regs_r23;
+	u_int	pim_regs_r24;
+	u_int	pim_regs_r25;
+	u_int	pim_regs_r26;
+	u_int	pim_regs_r27;
+	u_int	pim_regs_r28;
+	u_int	pim_regs_r29;
+	u_int	pim_regs_r30;
+	u_int	pim_regs_r31;
 
 	/* The control registers. */
-	uint32_t	pim_regs_cr0;
-	uint32_t	pim_regs_cr1;
-	uint32_t	pim_regs_cr2;
-	uint32_t	pim_regs_cr3;
-	uint32_t	pim_regs_cr4;
-	uint32_t	pim_regs_cr5;
-	uint32_t	pim_regs_cr6;
-	uint32_t	pim_regs_cr7;
-	uint32_t	pim_regs_cr8;
-	uint32_t	pim_regs_cr9;
-	uint32_t	pim_regs_cr10;
-	uint32_t	pim_regs_cr11;
-	uint32_t	pim_regs_cr12;
-	uint32_t	pim_regs_cr13;
-	uint32_t	pim_regs_cr14;
-	uint32_t	pim_regs_cr15;
-	uint32_t	pim_regs_cr16;
-	uint32_t	pim_regs_cr17;
-	uint32_t	pim_regs_cr18;
-	uint32_t	pim_regs_cr19;
-	uint32_t	pim_regs_cr20;
-	uint32_t	pim_regs_cr21;
-	uint32_t	pim_regs_cr22;
-	uint32_t	pim_regs_cr23;
-	uint32_t	pim_regs_cr24;
-	uint32_t	pim_regs_cr25;
-	uint32_t	pim_regs_cr26;
-	uint32_t	pim_regs_cr27;
-	uint32_t	pim_regs_cr28;
-	uint32_t	pim_regs_cr29;
-	uint32_t	pim_regs_cr30;
-	uint32_t	pim_regs_cr31;
+	u_int	pim_regs_cr0;
+	u_int	pim_regs_cr1;
+	u_int	pim_regs_cr2;
+	u_int	pim_regs_cr3;
+	u_int	pim_regs_cr4;
+	u_int	pim_regs_cr5;
+	u_int	pim_regs_cr6;
+	u_int	pim_regs_cr7;
+	u_int	pim_regs_cr8;
+	u_int	pim_regs_cr9;
+	u_int	pim_regs_cr10;
+	u_int	pim_regs_cr11;
+	u_int	pim_regs_cr12;
+	u_int	pim_regs_cr13;
+	u_int	pim_regs_cr14;
+	u_int	pim_regs_cr15;
+	u_int	pim_regs_cr16;
+	u_int	pim_regs_cr17;
+	u_int	pim_regs_cr18;
+	u_int	pim_regs_cr19;
+	u_int	pim_regs_cr20;
+	u_int	pim_regs_cr21;
+	u_int	pim_regs_cr22;
+	u_int	pim_regs_cr23;
+	u_int	pim_regs_cr24;
+	u_int	pim_regs_cr25;
+	u_int	pim_regs_cr26;
+	u_int	pim_regs_cr27;
+	u_int	pim_regs_cr28;
+	u_int	pim_regs_cr29;
+	u_int	pim_regs_cr30;
+	u_int	pim_regs_cr31;
 
 	/* The space registers. */
-	uint32_t	pim_regs_sr0;
-	uint32_t	pim_regs_sr1;
-	uint32_t	pim_regs_sr2;
-	uint32_t	pim_regs_sr3;
-	uint32_t	pim_regs_sr4;
-	uint32_t	pim_regs_sr5;
-	uint32_t	pim_regs_sr6;
-	uint32_t	pim_regs_sr7;
+	u_int	pim_regs_sr0;
+	u_int	pim_regs_sr1;
+	u_int	pim_regs_sr2;
+	u_int	pim_regs_sr3;
+	u_int	pim_regs_sr4;
+	u_int	pim_regs_sr5;
+	u_int	pim_regs_sr6;
+	u_int	pim_regs_sr7;
 
 	/* The back entries of the instruction address queues. */
-	uint32_t	pim_regs_iisq_tail;
-	uint32_t	pim_regs_iioq_tail;
+	u_int	pim_regs_iisq_tail;
+	u_int	pim_regs_iioq_tail;
 };
 
 /* The PIM data for HPMC and LPMC contains this check information. */
 struct hp700_pim_checks {
 
 	/* The Check Type. */
-	uint32_t	pim_check_type;
+	u_int	pim_check_type;
 #define	PIM_CHECK_CACHE		(1 << 31)
 #define	PIM_CHECK_TLB		(1 << 30)
 #define	PIM_CHECK_BUS		(1 << 29)
 #define	PIM_CHECK_ASSISTS	(1 << 28)
-#define	PIM_CHECK_BITS						\
-	"\177\020"		/* New bitmask format */	\
-	"b\040cache\0"		/* bit 31 */			\
-	"b\037tlb\0"		/* bit 30 */			\
-	"b\036bus\0"		/* bit 29 */			\
-	"b\035assists\0"	/* bit 28 */
+#define	PIM_CHECK_BITS		"\020\040CACHE\037TLB\036BUS\035ASSISTS"
 
 	/*
 	 * The CPU State.  In addition to the common PIM_CPU_
 	 * bits defined below, some fields are HPMC-specific.
 	 */
-	uint32_t	pim_check_cpu_state;
+	u_int	pim_check_cpu_state;
 #define	PIM_CPU_IQV	(1 << 31)
 #define	PIM_CPU_IQF	(1 << 30)
 #define	PIM_CPU_IPV	(1 << 29)
@@ -155,30 +147,17 @@ struct hp700_pim_checks {
 #define	PIM_CPU_CRV	(1 << 27)
 #define	PIM_CPU_SRV	(1 << 26)
 #define	PIM_CPU_TRV	(1 << 25)
-#define	PIM_CPU_BITS						\
-	"\177\020"		/* New bitmask format */	\
-	"b\040iqv\0"		/* bit 31 */			\
-	"b\037iqf\0"		/* bit 30 */			\
-	"b\036ipv\0"		/* bit 29 */			\
-	"b\035grv\0"		/* bit 28 */			\
-	"b\034crv\0"		/* bit 27 */			\
-	"b\033srv\0"		/* bit 26 */			\
-	"b\032trv\0"		/* bit 25 */
+#define	PIM_CPU_BITS	"\020\040IQV\037IQF\036IPV\035GRV\034CRV\033SRV\032TRV"
 #define	PIM_CPU_HPMC_TL(cs)	(((cs) >> 4) & 0x3)
 #define	PIM_CPU_HPMC_HD		(1 << 3)
 #define	PIM_CPU_HPMC_SIS	(1 << 2)
 #define	PIM_CPU_HPMC_CS(cs)	((cs) & 0x3)
-#define	PIM_CPU_HPMC_BITS					\
-	PIM_CPU_BITS						\
-	"f\004\002tl\0"         /* bit 4 .. 5 */		\
-	"b\003hd\0"             /* bit 3 */			\
-	"b\002sis\0"            /* bit 2 */			\
-	"f\000\002cs\0"         /* bit 0 .. 1 */
+#define	PIM_CPU_HPMC_BITS	PIM_CPU_BITS "\004HD\003SIS"
 
-	uint32_t	pim_check_reserved_0;
+	u_int	pim_check_reserved_0;
 
 	/* The Cache Check word. */
-	uint32_t	pim_check_cache;
+	u_int	pim_check_cache;
 #define	PIM_CACHE_ICC	(1 << 31)
 #define	PIM_CACHE_DCC	(1 << 30)
 #define	PIM_CACHE_TC	(1 << 29)
@@ -187,34 +166,19 @@ struct hp700_pim_checks {
 #define	PIM_CACHE_LC	(1 << 26)
 #define	PIM_CACHE_RCC	(1 << 25)
 #define	PIM_CACHE_PADD(cc)	((cc) & 0x000fffff)
-#define	PIM_CACHE_BITS						\
-	"\177\020"		/* New bitmask format */	\
-	"b\040icc\0"		/* bit 31 */			\
-	"b\039dcc\0"		/* bit 30 */			\
-	"b\038tc\0"		/* bit 29 */			\
-	"b\037dc\0"		/* bit 28 */			\
-	"b\036crg\0"		/* bit 27 */			\
-	"b\035lc\0"		/* bit 26 */			\
-	"b\034rcc\0"		/* bit 25 */			\
-	"f\000\032paddr\0"	/* bit 0 .. 23 */
+#define	PIM_CACHE_BITS	"\020\040ICC\037DCC\036TC\035DC\034CRG\033LC\032RCC"
 
 	/* The TLB Check word. */
-	uint32_t	pim_check_tlb;
+	u_int	pim_check_tlb;
 #define	PIM_TLB_ITC	(1 << 31)
 #define	PIM_TLB_DTC	(1 << 30)
 #define	PIM_TLB_TRG	(1 << 29)
 #define	PIM_TLB_TUC	(1 << 28)
 #define	PIM_TLB_TNF	(1 << 27)
-#define	PIM_TLB_BITS						\
-	"\177\020"		/* New bitmask format */	\
-	"b\040itc\0"		/* bit 31 */			\
-	"b\039dtc\0"		/* bit 30 */			\
-	"b\038trg\0"		/* bit 29 */			\
-	"b\037tuc\0"		/* bit 28 */			\
-	"b\036tnf\0"		/* bit 27 */			\
+#define	PIM_TLB_BITS	"\020\040ITC\037DTC\036TRG\035TUC\034TNF"
 
 	/* The Bus Check word. */
-	uint32_t	pim_check_bus;
+	u_int	pim_check_bus;
 #define	PIM_BUS_RSV		(1 << 21)
 #define	PIM_BUS_RQV		(1 << 20)
 #define	PIM_BUS_VAR(bc)		(((bc) >> 16) & 0xf)
@@ -223,68 +187,59 @@ struct hp700_pim_checks {
 #define	PIM_BUS_PIV		(1 << 7)
 #define	PIM_BUS_BSV		(1 << 6)
 #define	PIM_BUS_STAT(bc)	((bc) & 0x3f)
-#define	PIM_BUS_BITS \
-	"\177\020"		/* New bitmask format */	\
-	"b\025rsv\0" 		/* bit 21 */			\
-	"b\024rqv\0"		/* bit 20 */			\
-	"f\020\004var\0"	/* bit 16 .. 19 */		\
-	"f\014\004type\0"	/* bit 12 .. 15 */		\
-	"f\010\004size\0"	/* bit 8 .. 11 */		\
-	"b\007piv\0"		/* bit 7 */			\
-	"b\006bsv\0"		/* bit 6 */			\
-	"f\000\006stat\0"	/* bit 0 .. 5 */
+#define	PIM_BUS_BITS		"\020\026RSV\025RQV\010PIV\007BSV"
 
 	/* The Assist Check word. */
-	uint32_t	pim_check_assist;
+	u_int	pim_check_assist;
 #define	PIM_ASSIST_COC		(1 << 31)
 #define	PIM_ASSIST_SC		(1 << 30)
 #define	PIM_ASSIST_BITS		"\020\040COC\037SC"
 
-	uint32_t	pim_check_reserved_1;
+	u_int	pim_check_reserved_1;
 
 	/* Additional information about the check. */
-	uint32_t	pim_check_assist_state;
-	uint32_t	pim_check_responder;
-	uint32_t	pim_check_requestor;
-	uint32_t	pim_check_path_info;
+	u_int	pim_check_assist_state;
+	u_int	pim_check_responder;
+	u_int	pim_check_requestor;
+	u_int	pim_check_path_info;
 };
 
 /* The PIM data for HPMC and LPMC contains this register array. */
 struct hp700_pim_fpregs {
 
 	/* The FPU state. */
-	uint64_t	pim_fpregs_fp0;
-	uint64_t	pim_fpregs_fp1;
-	uint64_t	pim_fpregs_fp2;
-	uint64_t	pim_fpregs_fp3;
-	uint64_t	pim_fpregs_fp4;
-	uint64_t	pim_fpregs_fp5;
-	uint64_t	pim_fpregs_fp6;
-	uint64_t	pim_fpregs_fp7;
-	uint64_t	pim_fpregs_fp8;
-	uint64_t	pim_fpregs_fp9;
-	uint64_t	pim_fpregs_fp10;
-	uint64_t	pim_fpregs_fp11;
-	uint64_t	pim_fpregs_fp12;
-	uint64_t	pim_fpregs_fp13;
-	uint64_t	pim_fpregs_fp14;
-	uint64_t	pim_fpregs_fp15;
-	uint64_t	pim_fpregs_fp16;
-	uint64_t	pim_fpregs_fp17;
-	uint64_t	pim_fpregs_fp18;
-	uint64_t	pim_fpregs_fp19;
-	uint64_t	pim_fpregs_fp20;
-	uint64_t	pim_fpregs_fp21;
-	uint64_t	pim_fpregs_fp22;
-	uint64_t	pim_fpregs_fp23;
-	uint64_t	pim_fpregs_fp24;
-	uint64_t	pim_fpregs_fp25;
-	uint64_t	pim_fpregs_fp26;
-	uint64_t	pim_fpregs_fp27;
-	uint64_t	pim_fpregs_fp28;
-	uint64_t	pim_fpregs_fp29;
-	uint64_t	pim_fpregs_fp30;
-	uint64_t	pim_fpregs_fp31;
+	u_int64_t	pim_fpregs_fp0;
+	u_int64_t	pim_fpregs_fp1;
+	u_int64_t	pim_fpregs_fp2;
+	u_int64_t	pim_fpregs_fp3;
+	u_int64_t	pim_fpregs_fp4;
+	u_int64_t	pim_fpregs_fp5;
+	u_int64_t	pim_fpregs_fp6;
+	u_int64_t	pim_fpregs_fp7;
+	u_int64_t	pim_fpregs_fp8;
+	u_int64_t	pim_fpregs_fp9;
+	u_int64_t	pim_fpregs_fp10;
+	u_int64_t	pim_fpregs_fp11;
+	u_int64_t	pim_fpregs_fp12;
+	u_int64_t	pim_fpregs_fp13;
+	u_int64_t	pim_fpregs_fp14;
+	u_int64_t	pim_fpregs_fp15;
+	u_int64_t	pim_fpregs_fp16;
+	u_int64_t	pim_fpregs_fp17;
+	u_int64_t	pim_fpregs_fp18;
+	u_int64_t	pim_fpregs_fp19;
+	u_int64_t	pim_fpregs_fp20;
+	u_int64_t	pim_fpregs_fp21;
+	u_int64_t	pim_fpregs_fp22;
+	u_int64_t	pim_fpregs_fp23;
+	u_int64_t	pim_fpregs_fp24;
+	u_int64_t	pim_fpregs_fp25;
+	u_int64_t	pim_fpregs_fp26;
+	u_int64_t	pim_fpregs_fp27;
+	u_int64_t	pim_fpregs_fp28;
+	u_int64_t	pim_fpregs_fp29;
+	u_int64_t	pim_fpregs_fp30;
+	u_int64_t	pim_fpregs_fp31;
 };
 
 /* The HPMC PIM data. */
@@ -296,7 +251,7 @@ struct hp700_pim_hpmc {
 
 /* The LPMC PIM data. */
 struct hp700_pim_lpmc {
-	uint32_t	pim_lpmc_hversion_dep[74];
+	u_int	pim_lpmc_hversion_dep[74];
 	struct	hp700_pim_checks pim_lpmc_checks;
 	struct	hp700_pim_fpregs pim_lpmc_fpregs;
 };
@@ -304,141 +259,6 @@ struct hp700_pim_lpmc {
 /* The TOC PIM data. */
 struct hp700_pim_toc {
 	struct	hp700_pim_regs pim_toc_regs;
-	uint32_t	pim_toc_hversion_dep;
-	uint32_t	pim_toc_cpu_state;
-};
-
-struct hp700_pim64_regs {
-
-	/* The general registers. */
-	uint64_t	pim_regs_r0;
-	uint64_t	pim_regs_r1;
-	uint64_t	pim_regs_r2;
-	uint64_t	pim_regs_r3;
-	uint64_t	pim_regs_r4;
-	uint64_t	pim_regs_r5;
-	uint64_t	pim_regs_r6;
-	uint64_t	pim_regs_r7;
-	uint64_t	pim_regs_r8;
-	uint64_t	pim_regs_r9;
-	uint64_t	pim_regs_r10;
-	uint64_t	pim_regs_r11;
-	uint64_t	pim_regs_r12;
-	uint64_t	pim_regs_r13;
-	uint64_t	pim_regs_r14;
-	uint64_t	pim_regs_r15;
-	uint64_t	pim_regs_r16;
-	uint64_t	pim_regs_r17;
-	uint64_t	pim_regs_r18;
-	uint64_t	pim_regs_r19;
-	uint64_t	pim_regs_r20;
-	uint64_t	pim_regs_r21;
-	uint64_t	pim_regs_r22;
-	uint64_t	pim_regs_r23;
-	uint64_t	pim_regs_r24;
-	uint64_t	pim_regs_r25;
-	uint64_t	pim_regs_r26;
-	uint64_t	pim_regs_r27;
-	uint64_t	pim_regs_r28;
-	uint64_t	pim_regs_r29;
-	uint64_t	pim_regs_r30;
-	uint64_t	pim_regs_r31;
-
-	/* The control registers. */
-	uint64_t	pim_regs_cr0;
-	uint64_t	pim_regs_cr1;
-	uint64_t	pim_regs_cr2;
-	uint64_t	pim_regs_cr3;
-	uint64_t	pim_regs_cr4;
-	uint64_t	pim_regs_cr5;
-	uint64_t	pim_regs_cr6;
-	uint64_t	pim_regs_cr7;
-	uint64_t	pim_regs_cr8;
-	uint64_t	pim_regs_cr9;
-	uint64_t	pim_regs_cr10;
-	uint64_t	pim_regs_cr11;
-	uint64_t	pim_regs_cr12;
-	uint64_t	pim_regs_cr13;
-	uint64_t	pim_regs_cr14;
-	uint64_t	pim_regs_cr15;
-	uint64_t	pim_regs_cr16;
-	uint64_t	pim_regs_cr17;
-	uint64_t	pim_regs_cr18;
-	uint64_t	pim_regs_cr19;
-	uint64_t	pim_regs_cr20;
-	uint64_t	pim_regs_cr21;
-	uint64_t	pim_regs_cr22;
-	uint64_t	pim_regs_cr23;
-	uint64_t	pim_regs_cr24;
-	uint64_t	pim_regs_cr25;
-	uint64_t	pim_regs_cr26;
-	uint64_t	pim_regs_cr27;
-	uint64_t	pim_regs_cr28;
-	uint64_t	pim_regs_cr29;
-	uint64_t	pim_regs_cr30;
-	uint64_t	pim_regs_cr31;
-
-	/* The space registers. */
-	uint64_t	pim_regs_sr0;
-	uint64_t	pim_regs_sr1;
-	uint64_t	pim_regs_sr2;
-	uint64_t	pim_regs_sr3;
-	uint64_t	pim_regs_sr4;
-	uint64_t	pim_regs_sr5;
-	uint64_t	pim_regs_sr6;
-	uint64_t	pim_regs_sr7;
-
-	/* The back entries of the instruction address queues. */
-	uint64_t	pim_regs_iisq_tail;
-	uint64_t	pim_regs_iioq_tail;
-};
-
-struct hp700_pim64_checks {
-	/* The Check Type. */	
-	uint32_t	pim_check_type;
-
-	/*
-	 * The CPU State.  In addition to the common PIM_CPU_
-	 * bits defined below, some fields are HPMC-specific.
-	 */
-	uint32_t	pim_check_cpu_state;
-
-	/* The Cache Check word. */
-	uint32_t	pim_check_cache;
-
-	/* The TLB Check word. */
-	uint32_t	pim_check_tlb;
-
-	/* The Bus Check word. */
-	uint32_t	pim_check_bus;
-
-	/* The Assist Check word. */
-	uint32_t	pim_check_assist;
-
-	/* Additional information about the check. */
-	uint32_t	pim_check_assist_state;
-	uint32_t	pim_check_path_info;
-	uint64_t	pim_check_responder;
-	uint64_t	pim_check_requestor;
-};
-
-/* The PARISC 2.0 HPMC PIM data. */
-struct hp700_pim64_hpmc {
-	struct hp700_pim64_regs pim_hpmc_regs;
-	struct hp700_pim64_checks pim_hpmc_checks;
-	struct hp700_pim_fpregs pim_hpmc_fpregs;
-};
-
-/* The PARISC 2.0 LPMC PIM data. */
-struct hp700_pim64_lpmc {
-	uint64_t pim_lmpc_hversion_dep[74];
-	struct hp700_pim64_checks pim_lpmc_checks;
-	struct hp700_pim_fpregs pim_lpmc_fpregs;
-};
-
-/* The PARISC 2.0 TOC PIM data. */
-struct hp700_pim64_toc {
-	struct	hp700_pim64_regs pim_toc_regs;
-	uint32_t	pim_toc_hversion_dep;
-	uint32_t	pim_toc_cpu_state;
+	u_int	pim_toc_hversion_dep;
+	u_int	pim_toc_cpu_state;
 };

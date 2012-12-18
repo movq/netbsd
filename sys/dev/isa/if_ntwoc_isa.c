@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ntwoc_isa.c,v 1.24 2012/10/27 17:18:24 chs Exp $	*/
+/*	$NetBSD: if_ntwoc_isa.c,v 1.17.14.1 2009/07/26 18:33:35 snj Exp $	*/
 /*
  * Copyright (c) 1999 Christian E. Hopps
  * Copyright (c) 1996 John Hay.
@@ -29,11 +29,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: if_ntwoc_isa.c,v 1.24 2012/10/27 17:18:24 chs Exp $
+ * $Id: if_ntwoc_isa.c,v 1.17.14.1 2009/07/26 18:33:35 snj Exp $
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ntwoc_isa.c,v 1.24 2012/10/27 17:18:24 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ntwoc_isa.c,v 1.17.14.1 2009/07/26 18:33:35 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,7 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ntwoc_isa.c,v 1.24 2012/10/27 17:18:24 chs Exp $"
 #endif
 
 #if __NetBSD_Version__ >= 104160000
-static	void ntwoc_isa_config_interrupts(device_t);
+static	void ntwoc_isa_config_interrupts(struct device *);
 #else
 #define	SCA_BASECLOCK	9830400
 #endif
@@ -75,7 +75,7 @@ static	void ntwoc_isa_config_interrupts(device_t);
 
 struct ntwoc_isa_softc {
 	/* Generic device stuff */
-	device_t sc_dev;		/* Common to all devices */
+	struct device sc_dev;		/* Common to all devices */
 
 	/* PCI chipset glue */
 	void		*sc_ih;	/* Interrupt handler */
@@ -84,8 +84,8 @@ struct ntwoc_isa_softc {
 	struct sca_softc sc_sca;	/* the SCA itself */
 };
 
-static  int ntwoc_isa_probe(device_t, cfdata_t, void *);
-static  void ntwoc_isa_attach(device_t, device_t, void *);
+static  int ntwoc_isa_probe(struct device *, struct cfdata *, void *);
+static  void ntwoc_isa_attach(struct device *, struct device *, void *);
 
 static	void ntwoc_isa_clock_callback(void *, int, int);
 static	void ntwoc_isa_dtr_callback(void *, int, int);
@@ -95,7 +95,7 @@ static	void ntwoc_isa_get_clock(struct sca_port *, u_int8_t, u_int8_t,
 static	void ntwoc_isa_setup_memory(struct sca_softc *sc);
 static	void ntwoc_isa_shutdown(void *sc);
 
-CFATTACH_DECL_NEW(ntwoc_isa, sizeof(struct ntwoc_isa_softc),
+CFATTACH_DECL(ntwoc_isa, sizeof(struct ntwoc_isa_softc),
     ntwoc_isa_probe, ntwoc_isa_attach, NULL, NULL);
 
 /*
@@ -186,7 +186,7 @@ ntwoc_isa_set_off(struct sca_softc *sca)
 }
 
 static int
-ntwoc_isa_probe(device_t parent, cfdata_t match, void *aux)
+ntwoc_isa_probe(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct isa_attach_args *ia;
 	bus_space_tag_t iot, memt;
@@ -381,7 +381,7 @@ out:
  * we win! attach the card
  */
 static void
-ntwoc_isa_attach(device_t parent, device_t self, void *aux)
+ntwoc_isa_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ntwoc_isa_softc *sc;
 	struct isa_attach_args *ia;
@@ -393,16 +393,15 @@ ntwoc_isa_attach(device_t parent, device_t self, void *aux)
 	int i, dbg, pgs, rv;
 
 	ia = (struct isa_attach_args *)aux;
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (struct ntwoc_isa_softc *)self;
 	sca = &sc->sc_sca;
 	dbg = 0;
 
 	printf(": N2 Serial Interface\n");
-	flags = device_cfdata(sc->sc_dev)->cf_flags;
+	flags = device_cfdata(&sc->sc_dev)->cf_flags;
 
 	sc->sc_ic = ia->ia_ic;
-	sca->sc_parent = sc->sc_dev;
+	sca->sc_parent = &sc->sc_dev;
 	sca->sc_numports = (flags & NTWOC_FLAGS_NPORT_MASK) + 1;
 	sca->sc_usedma = 0;
 	sca->sc_aux = sc;
@@ -420,7 +419,7 @@ ntwoc_isa_attach(device_t parent, device_t self, void *aux)
 	sca->sc_iot = ia->ia_iot;
 	if ((rv = bus_space_map(ia->ia_iot, ia->ia_io[0].ir_addr,
 	    NTWOC_SRC_IOPORT_SIZE, 0, &sca->sc_ioh))) {
-		aprint_error_dev(sc->sc_dev, "can't map io 0x%x sz %d, %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't map io 0x%x sz %d, %d\n",
 		    ia->ia_io[0].ir_addr,
 		    NTWOC_SRC_IOPORT_SIZE, rv);
 		return;
@@ -432,7 +431,7 @@ ntwoc_isa_attach(device_t parent, device_t self, void *aux)
 		/* map the isa io addresses */
 		if ((tmp = bus_space_map(ia->ia_iot, ioport, 16, 0,
 		    &sca->scu_sca_ioh[i]))) {
-			aprint_error_dev(sc->sc_dev, "mapping sca 0x%x sz %d failed: %d\n",
+			aprint_error_dev(&sc->sc_dev, "mapping sca 0x%x sz %d failed: %d\n",
 			    ioport, 16, tmp);
 			return;
 		}
@@ -464,7 +463,7 @@ ntwoc_isa_attach(device_t parent, device_t self, void *aux)
 	sca->scu_pagemask = sca->scu_pagesize - 1;
 	if ((rv = bus_space_map(ia->ia_memt, ia->ia_iomem[0].ir_addr,
 	     sca->scu_pagesize, 0, &sca->scu_memh))) {
-		aprint_error_dev(sc->sc_dev, "can't map mem 0x%x sz %ld, %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't map mem 0x%x sz %ld, %d\n",
 		    ia->ia_iomem[0].ir_addr,
 		    (u_long)sca->scu_pagesize, rv);
 		return;
@@ -543,13 +542,13 @@ ntwoc_isa_attach(device_t parent, device_t self, void *aux)
 
 #if 0
 	printf("%s: sca port 0x%x-0x%x dpram %ldk %d serial port%s\n",
-	    device_xname(sc->sc_dev), ia->ia_io[0].ir_addr | 0x8000,
+	    device_xname(&sc->sc_dev), ia->ia_io[0].ir_addr | 0x8000,
 	    (ia->ia_io[0].ir_addr | 0x8000) + NTWOC_SRC_ASIC_SIZE - 1,
 	    pgs * (sca->scu_pagesize / 1024), sca->sc_numports,
 	    (sca->sc_numports > 1 ? "s" : ""));
 #else
 	printf("%s: dpram %ldk %d serial port%s\n",
-	    device_xname(sc->sc_dev), (u_long)pgs * (sca->scu_pagesize / 1024),
+	    device_xname(&sc->sc_dev), (u_long)pgs * (sca->scu_pagesize / 1024),
 	    sca->sc_numports, (sca->sc_numports > 1 ? "s" : ""));
 #endif
 
@@ -565,14 +564,14 @@ ntwoc_isa_attach(device_t parent, device_t self, void *aux)
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_NET, ntwoc_isa_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "can't establish interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "can't establish interrupt\n");
 		return;
 	}
 
 	/* make sure we have 2 pages for each port */
 	if (pgs < 2 * sca->sc_numports) {
 		printf("%s: %d less than required pages of memory of %d\n",
-		    device_xname(sc->sc_dev), pgs, 2 * sca->sc_numports);
+		    device_xname(&sc->sc_dev), pgs, 2 * sca->sc_numports);
 		return;
 	}
 
@@ -706,9 +705,6 @@ ntwoc_isa_shutdown(void *aux)
 	mcr = bus_space_read_1(sc->sc_sca.sc_iot, sc->sc_sca.sc_ioh, NTWOC_MCR);
 	mcr |= (NTWOC_MCR_DTR0 | NTWOC_MCR_DTR1);
 	bus_space_write_1(sc->sc_sca.sc_iot, sc->sc_sca.sc_ioh, NTWOC_MCR, mcr);
-
-	/* turn off the card */
-	bus_space_write_1(sc->sc_sca.sc_iot, sc->sc_sca.sc_ioh, NTWOC_PCR, 0);
 }
 
 static void
@@ -786,17 +782,17 @@ ntwoc_isa_setup_memory(struct sca_softc *sc)
 	for (i = 0; i < sc->sc_numports; i++) {
 		scp = &sc->sc_ports[i];
 		scp->sp_txdesc_p = (bus_addr_t)(j * sc->scu_pagesize);
-		scp->sp_txdesc = (void *)(uintptr_t)scp->sp_txdesc_p;
+		scp->sp_txdesc = (void *)scp->sp_txdesc_p;
 		scp->sp_txbuf_p = scp->sp_txdesc_p;
 		scp->sp_txbuf_p += SCA_BSIZE;
-		scp->sp_txbuf = (void *)(uintptr_t)scp->sp_txbuf_p;
+		scp->sp_txbuf = (void *)scp->sp_txbuf_p;
 		j++;
 
 		scp->sp_rxdesc_p = (bus_addr_t)(j * sc->scu_pagesize);
-		scp->sp_rxdesc = (void *)(uintptr_t)scp->sp_txdesc_p;
+		scp->sp_rxdesc = (void *)scp->sp_txdesc_p;
 		scp->sp_rxbuf_p = scp->sp_rxdesc_p;
 		scp->sp_rxbuf_p += SCA_BSIZE;
-		scp->sp_rxbuf = (void *)(uintptr_t)scp->sp_rxbuf_p;
+		scp->sp_rxbuf = (void *)scp->sp_rxbuf_p;
 		j++;
 	}
 }
@@ -806,11 +802,12 @@ ntwoc_isa_setup_memory(struct sca_softc *sc)
  * get the base clock frequency
  */
 static void
-ntwoc_isa_config_interrupts(device_t self)
+ntwoc_isa_config_interrupts(self)
+	struct device *self;
 {
 	struct ntwoc_isa_softc *sc;
 
-	sc = device_private(self);
+	sc = (void *)self;
 	sca_get_base_clock(&sc->sc_sca);
 	sca_print_clock_info(&sc->sc_sca);
 }

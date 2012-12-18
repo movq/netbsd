@@ -1,10 +1,8 @@
-/*	$NetBSD: slapcommon.c,v 1.1.1.3 2010/12/12 15:22:48 adam Exp $	*/
-
 /* slapcommon.c - common routine for the slap tools */
-/* OpenLDAP: pkg/ldap/servers/slapd/slapcommon.c,v 1.73.2.20 2010/04/14 22:59:10 quanah Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/slapcommon.c,v 1.73.2.7 2008/02/11 23:26:44 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2010 The OpenLDAP Foundation.
+ * Copyright 1998-2008 The OpenLDAP Foundation.
  * Portions Copyright 1998-2003 Kurt D. Zeilenga.
  * Portions Copyright 2003 IBM Corporation.
  * All rights reserved.
@@ -82,7 +80,7 @@ usage( int tool, const char *progname )
 
 	case SLAPCAT:
 		options = " [-c]\n\t[-g] [-n databasenumber | -b suffix]"
-			" [-l ldiffile] [-a filter] [-s subtree] [-H url]\n";
+			" [-l ldiffile] [-a filter]\n";
 		break;
 
 	case SLAPDN:
@@ -94,12 +92,7 @@ usage( int tool, const char *progname )
 		break;
 
 	case SLAPTEST:
-		options = " [-n databasenumber] [-u]\n";
-		break;
-
-	case SLAPSCHEMA:
-		options = " [-c]\n\t[-g] [-n databasenumber | -b suffix]"
-			" [-l errorfile] [-a filter] [-s subtree] [-H url]\n";
+		options = " [-u]\n";
 		break;
 	}
 
@@ -225,17 +218,15 @@ slap_tool_init(
 	char *subtree = NULL;
 	char *ldiffile	= NULL;
 	char **debug_unknowns = NULL;
-	int rc, i;
+	int rc, i, dbnum;
 	int mode = SLAP_TOOL_MODE;
 	int truncatemode = 0;
 	int use_glue = 1;
-	int writer;
 
 #ifdef LDAP_DEBUG
 	/* tools default to "none", so that at least LDAP_DEBUG_ANY 
 	 * messages show up; use -d 0 to reset */
 	slap_debug = LDAP_DEBUG_NONE;
-	ldif_debug = slap_debug;
 #endif
 	ldap_syslog = 0;
 
@@ -246,10 +237,7 @@ slap_tool_init(
 		leakfile = stderr;
 	}
 	free( leakfilename );
-	leakfilename = NULL;
 #endif
-
-	scope = LDAP_SCOPE_DEFAULT;
 
 	switch( tool ) {
 	case SLAPADD:
@@ -257,7 +245,7 @@ slap_tool_init(
 		break;
 
 	case SLAPCAT:
-		options = "a:b:cd:f:F:gH:l:n:o:s:v";
+		options = "a:b:cd:f:F:gl:n:o:s:v";
 		mode |= SLAP_TOOL_READMAIN | SLAP_TOOL_READONLY;
 		break;
 
@@ -266,13 +254,8 @@ slap_tool_init(
 		mode |= SLAP_TOOL_READMAIN | SLAP_TOOL_READONLY;
 		break;
 
-	case SLAPSCHEMA:
-		options = "a:b:cd:f:F:gH:l:n:o:s:v";
-		mode |= SLAP_TOOL_READMAIN | SLAP_TOOL_READONLY;
-		break;
-
 	case SLAPTEST:
-		options = "d:f:F:n:o:Quv";
+		options = "d:f:F:o:Quv";
 		mode |= SLAP_TOOL_READMAIN | SLAP_TOOL_READONLY;
 		break;
 
@@ -348,52 +331,6 @@ slap_tool_init(
 			use_glue = 0;
 			break;
 
-		case 'H': {
-			LDAPURLDesc *ludp;
-			int rc;
-
-			rc = ldap_url_parse_ext( optarg, &ludp,
-				LDAP_PVT_URL_PARSE_NOEMPTY_HOST | LDAP_PVT_URL_PARSE_NOEMPTY_DN );
-			if ( rc != LDAP_URL_SUCCESS ) {
-				usage( tool, progname );
-			}
-
-			/* don't accept host, port, attrs, extensions */
-			if ( ldap_pvt_url_scheme2proto( ludp->lud_scheme ) != LDAP_PROTO_TCP ) {
-				usage( tool, progname );
-			}
-
-			if ( ludp->lud_host != NULL ) {
-				usage( tool, progname );
-			}
-
-			if ( ludp->lud_port != 0 ) {
-				usage( tool, progname );
-			}
-
-			if ( ludp->lud_attrs != NULL ) {
-				usage( tool, progname );
-			}
-
-			if ( ludp->lud_exts != NULL ) {
-				usage( tool, progname );
-			}
-
-			if ( ludp->lud_dn != NULL && ludp->lud_dn[0] != '\0' ) {
-				subtree = ludp->lud_dn;
-				ludp->lud_dn = NULL;
-			}
-
-			if ( ludp->lud_filter != NULL && ludp->lud_filter[0] != '\0' ) {
-				filterstr = ludp->lud_filter;
-				ludp->lud_filter = NULL;
-			}
-
-			scope = ludp->lud_scope;
-
-			ldap_free_urldesc( ludp );
-			} break;
-
 		case 'j':	/* jump to linenumber */
 			if ( lutil_atoi( &jumpline, optarg ) ) {
 				usage( tool, progname );
@@ -416,7 +353,7 @@ slap_tool_init(
 			break;
 
 		case 'n':	/* which config file db to index */
-			if ( lutil_atoi( &dbnum, optarg ) || dbnum < 0 ) {
+			if ( lutil_atoi( &dbnum, optarg ) ) {
 				usage( tool, progname );
 			}
 			break;
@@ -458,7 +395,7 @@ slap_tool_init(
 		case 's':	/* dump subtree */
 			if ( tool == SLAPADD )
 				mode |= SLAP_TOOL_NO_SCHEMA_CHECK;
-			else if ( tool == SLAPCAT || tool == SLAPSCHEMA )
+			else if ( tool == SLAPCAT )
 				subtree = ch_strdup( optarg );
 			break;
 
@@ -510,26 +447,13 @@ slap_tool_init(
 #endif
 #ifdef HAVE_EBCDIC
 		free( logName );
-		logName = NULL;
 #endif
 	}
 #endif /* LDAP_DEBUG && LDAP_SYSLOG */
 
 	switch ( tool ) {
-	case SLAPCAT:
-	case SLAPSCHEMA:
-		writer = 1;
-		break;
-
-	default:
-		writer = 0;
-		break;
-	}
-
-	switch ( tool ) {
 	case SLAPADD:
 	case SLAPCAT:
-	case SLAPSCHEMA:
 		if ( ( argc != optind ) || (dbnum >= 0 && base.bv_val != NULL ) ) {
 			usage( tool, progname );
 		}
@@ -576,10 +500,10 @@ slap_tool_init(
 	}
 
 	if ( ldiffile == NULL ) {
-		dummy.fp = writer ? stdout : stdin;
+		dummy.fp = tool == SLAPCAT ? stdout : stdin;
 		ldiffp = &dummy;
 
-	} else if ((ldiffp = ldif_open( ldiffile, writer ? "w" : "r" ))
+	} else if ((ldiffp = ldif_open( ldiffile, tool == SLAPCAT ? "w" : "r" ))
 		== NULL )
 	{
 		perror( ldiffile );
@@ -628,7 +552,6 @@ slap_tool_init(
 	case SLAPADD:
 	case SLAPCAT:
 	case SLAPINDEX:
-	case SLAPSCHEMA:
 		if ( !nbackends ) {
 			fprintf( stderr, "No databases found "
 					"in config file\n" );
@@ -641,7 +564,7 @@ slap_tool_init(
 	}
 
 	if ( use_glue ) {
-		rc = glue_sub_attach( 0 );
+		rc = glue_sub_attach();
 
 		if ( rc != 0 ) {
 			fprintf( stderr,
@@ -658,11 +581,8 @@ slap_tool_init(
 	}
 
 	switch ( tool ) {
-	case SLAPTEST:
-		if ( dbnum >= 0 )
-			goto get_db;
-		/* FALLTHRU */
 	case SLAPDN:
+	case SLAPTEST:
 	case SLAPAUTH:
 		be = NULL;
 		goto startup;
@@ -678,9 +598,6 @@ slap_tool_init(
 			fprintf( stderr, "Invalid filter '%s'\n", filterstr );
 			exit( EXIT_FAILURE );
 		}
-
-		ch_free( filterstr );
-		filterstr = NULL;
 	}
 
 	if( subtree ) {
@@ -696,7 +613,6 @@ slap_tool_init(
 			base = val;
 		} else {
 			free( subtree );
-			subtree = NULL;
 		}
 	}
 
@@ -712,7 +628,6 @@ slap_tool_init(
 
 		be = select_backend( &nbase, 0 );
 		ber_memfree( nbase.bv_val );
-		BER_BVZERO( &nbase );
 
 		switch ( tool ) {
 		case SLAPACL:
@@ -733,9 +648,6 @@ slap_tool_init(
 		if ( SLAP_GLUE_INSTANCE( be ) ) {
 			nosubordinates = 1;
 		}
-
-		ch_free( base.bv_val );
-		BER_BVZERO( &base );
 
 	} else if ( dbnum == -1 ) {
 		/* no suffix and no dbnum specified, just default to
@@ -777,43 +689,22 @@ slap_tool_init(
 				progname, dbnum, 0 );
 		}
 
-	} else if ( dbnum >= nbackends ) {
+	} else if ( dbnum < 0 || dbnum > (nbackends-1) ) {
 		fprintf( stderr,
 			"Database number selected via -n is out of range\n"
 			"Must be in the range 0 to %d"
-			" (the number of configured databases)\n",
-			nbackends - 1 );
+			" (number of configured databases)\n",
+			nbackends-1 );
 		exit( EXIT_FAILURE );
 
 	} else {
-get_db:
 		LDAP_STAILQ_FOREACH( be, &backendDB, be_next ) {
 			if ( dbnum == 0 ) break;
 			dbnum--;
 		}
 	}
 
-	if ( scope != LDAP_SCOPE_DEFAULT && BER_BVISNULL( &sub_ndn ) ) {
-		if ( be && be->be_nsuffix ) {
-			ber_dupbv( &sub_ndn, be->be_nsuffix );
-
-		} else {
-			fprintf( stderr,
-				"<scope> needs a DN or a valid database\n" );
-			exit( EXIT_FAILURE );
-		}
-	}
-
 startup:;
-	if ( be ) {
-		BackendDB *bdtmp;
-
-		dbnum = 0;
-		LDAP_STAILQ_FOREACH( bdtmp, &backendDB, be_next ) {
-			if ( bdtmp == be ) break;
-			dbnum++;
-		}
-	}
 
 #ifdef CSRIMALLOC
 	mal_leaktrace(1);
@@ -821,17 +712,10 @@ startup:;
 
 	if ( conffile != NULL ) {
 		ch_free( conffile );
-		conffile = NULL;
-	}
-
-	if ( confdir != NULL ) {
-		ch_free( confdir );
-		confdir = NULL;
 	}
 
 	if ( ldiffile != NULL ) {
 		ch_free( ldiffile );
-		ldiffile = NULL;
 	}
 
 	/* slapdn doesn't specify a backend to startup */
@@ -856,16 +740,13 @@ startup:;
 	}
 }
 
-int slap_tool_destroy( void )
+void slap_tool_destroy( void )
 {
-	int rc = 0;
 	if ( !dryrun ) {
 		if ( need_shutdown ) {
-			if ( slap_shutdown( be ))
-				rc = EXIT_FAILURE;
+			slap_shutdown( be );
 		}
-		if ( slap_destroy())
-			rc = EXIT_FAILURE;
+		slap_destroy();
 	}
 #ifdef SLAPD_MODULES
 	if ( slapMode == SLAP_SERVER_MODE ) {
@@ -886,13 +767,9 @@ int slap_tool_destroy( void )
 
 	if ( !BER_BVISNULL( &authcDN ) ) {
 		ch_free( authcDN.bv_val );
-		BER_BVZERO( &authcDN );
 	}
 
 	if ( ldiffp && ldiffp != &dummy ) {
 		ldif_close( ldiffp );
 	}
-	return rc;
 }
-
-

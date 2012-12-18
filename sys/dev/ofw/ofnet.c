@@ -1,4 +1,4 @@
-/*	$NetBSD: ofnet.c,v 1.53 2012/10/27 17:18:28 chs Exp $	*/
+/*	$NetBSD: ofnet.c,v 1.41 2008/04/08 20:11:58 cegger Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,10 +32,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofnet.c,v 1.53 2012/10/27 17:18:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofnet.c,v 1.41 2008/04/08 20:11:58 cegger Exp $");
 
 #include "ofnet.h"
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,8 +56,10 @@ __KERNEL_RCSID(0, "$NetBSD: ofnet.c,v 1.53 2012/10/27 17:18:28 chs Exp $");
 #include <netinet/if_inarp.h>
 #endif
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <dev/ofw/openfirm.h>
 
@@ -64,27 +67,27 @@ __KERNEL_RCSID(0, "$NetBSD: ofnet.c,v 1.53 2012/10/27 17:18:28 chs Exp $");
 #include <ipkdb/ipkdb.h>
 #include <machine/ipkdb.h>
 
-CFATTACH_DECL_NEW(ipkdb_ofn, 0,
+CFATTACH_DECL(ipkdb_ofn, 0,
     ipkdb_probe, ipkdb_attach, NULL, NULL);
 
 static struct ipkdb_if *kifp;
 static struct ofnet_softc *ipkdb_of;
 
-static int ipkdbprobe (cfdata_t, void *);
+static int ipkdbprobe (struct cfdata *, void *);
 #endif
 
 struct ofnet_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	int sc_phandle;
 	int sc_ihandle;
 	struct ethercom sc_ethercom;
 	struct callout sc_callout;
 };
 
-static int ofnet_match (device_t, cfdata_t, void *);
-static void ofnet_attach (device_t, device_t, void *);
+static int ofnet_match (struct device *, struct cfdata *, void *);
+static void ofnet_attach (struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ofnet, sizeof(struct ofnet_softc),
+CFATTACH_DECL(ofnet, sizeof(struct ofnet_softc),
     ofnet_match, ofnet_attach, NULL, NULL);
 
 static void ofnet_read (struct ofnet_softc *);
@@ -97,7 +100,7 @@ static int ofnet_ioctl (struct ifnet *, u_long, void *);
 static void ofnet_watchdog (struct ifnet *);
 
 static int
-ofnet_match(device_t parent, cfdata_t match, void *aux)
+ofnet_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct ofbus_attach_args *oba = aux;
 	char type[32];
@@ -121,7 +124,7 @@ ofnet_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-ofnet_attach(device_t parent, device_t self, void *aux)
+ofnet_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ofnet_softc *of = device_private(self);
 	struct ifnet *ifp = &of->sc_ethercom.ec_if;
@@ -130,12 +133,10 @@ ofnet_attach(device_t parent, device_t self, void *aux)
 	int l;
 	u_int8_t myaddr[ETHER_ADDR_LEN];
 
-	of->sc_dev = self;
-
 	of->sc_phandle = oba->oba_phandle;
 #if NIPKDB_OFN > 0
 	if (kifp &&
-	    kifp->unit - 1 == device_unit(of->sc_dev) &&
+	    kifp->unit - 1 == device_unit(&of->sc_dev) &&
 	    OF_instance_to_package(kifp->port) == oba->oba_phandle)  {
 		ipkdb_of = of;
 		of->sc_ihandle = kifp->port;
@@ -153,7 +154,7 @@ ofnet_attach(device_t parent, device_t self, void *aux)
 
 	callout_init(&of->sc_callout, 0);
 
-	strlcpy(ifp->if_xname, device_xname(of->sc_dev), IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(&of->sc_dev), IFNAMSIZ);
 	ifp->if_softc = of;
 	ifp->if_start = ofnet_start;
 	ifp->if_ioctl = ofnet_ioctl;
@@ -252,7 +253,7 @@ ofnet_read(struct ofnet_softc *of)
 			}
 
 			m->m_len = l = min(len, l);
-			memcpy(mtod(m, char *), bufp, l);
+			bcopy(bufp, mtod(m, char *), l);
 			bufp += l;
 			len -= l;
 			*mp = m;
@@ -261,7 +262,10 @@ ofnet_read(struct ofnet_softc *of)
 		if (head == 0)
 			continue;
 
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 		ifp->if_ipackets++;
 		(*ifp->if_input)(ifp, head);
 	}
@@ -269,7 +273,8 @@ ofnet_read(struct ofnet_softc *of)
 }
 
 static void
-ofnet_timer(void *arg)
+ofnet_timer(arg)
+	void *arg;
 {
 	struct ofnet_softc *of = arg;
 
@@ -323,7 +328,10 @@ ofnet_start(struct ifnet *ifp)
 			panic("ofnet_start: no header mbuf");
 		len = m0->m_pkthdr.len;
 
-		bpf_mtap(ifp, m0);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m0);
+#endif
 
 		if (len > ETHERMTU + sizeof(struct ether_header)) {
 			/* packet too large, toss it */
@@ -333,7 +341,7 @@ ofnet_start(struct ifnet *ifp)
 		}
 
 		for (bufp = buf; (m = m0) != NULL;) {
-			memcpy(bufp, mtod(m, char *), m->m_len);
+			bcopy(mtod(m, char *), bufp, m->m_len);
 			bufp += m->m_len;
 			MFREE(m, m0);
 		}
@@ -366,7 +374,7 @@ ofnet_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	int error = 0;
 
 	switch (cmd) {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 
 		switch (ifa->ifa_addr->sa_family) {
@@ -381,25 +389,20 @@ ofnet_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		ofnet_init(of);
 		break;
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		/* XXX re-use ether_ioctl() */
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_RUNNING:
+		if ((ifp->if_flags & IFF_UP) == 0 &&
+		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/* If interface is down, but running, stop it. */
 			ofnet_stop(of);
-			break;
-		case IFF_UP:
+		} else if ((ifp->if_flags & IFF_UP) != 0 &&
+			   (ifp->if_flags & IFF_RUNNING) == 0) {
 			/* If interface is up, but not running, start it. */
 			ofnet_init(of);
-			break;
-		default:
+		} else {
 			/* Other flags are ignored. */
-			break;
 		}
 		break;
 	default:
-		error = ether_ioctl(ifp, cmd, data);
+		error = EINVAL;
 		break;
 	}
 	return error;
@@ -410,7 +413,7 @@ ofnet_watchdog(struct ifnet *ifp)
 {
 	struct ofnet_softc *of = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", device_xname(of->sc_dev));
+	log(LOG_ERR, "%s: device timeout\n", device_xname(&of->sc_dev));
 	ifp->if_oerrors++;
 	ofnet_stop(of);
 	ofnet_init(of);
@@ -420,6 +423,8 @@ ofnet_watchdog(struct ifnet *ifp)
 static void
 ipkdbofstart(struct ipkdb_if *kip)
 {
+	int unit = kip->unit - 1;
+
 	if (ipkdb_of)
 		ipkdbattach(kip, &ipkdb_of->sc_ethercom);
 }
@@ -449,7 +454,7 @@ ipkdbofsend(struct ipkdb_if *kip, u_char *buf, int l)
 }
 
 static int
-ipkdbprobe(cfdata_t match, void *aux)
+ipkdbprobe(struct cfdata *match, void *aux)
 {
 	struct ipkdb_if *kip = aux;
 	static char name[256];

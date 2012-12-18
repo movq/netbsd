@@ -1,4 +1,4 @@
-/*	$NetBSD: isaclock.c,v 1.13 2009/03/14 21:04:15 dsl Exp $	*/
+/*	$NetBSD: isaclock.c,v 1.10 2007/10/17 19:56:57 garbled Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -121,7 +121,7 @@ WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isaclock.c,v 1.13 2009/03/14 21:04:15 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isaclock.c,v 1.10 2007/10/17 19:56:57 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -143,13 +143,14 @@ __KERNEL_RCSID(0, "$NetBSD: isaclock.c,v 1.13 2009/03/14 21:04:15 dsl Exp $");
 extern void disable_intr(void);	/* In locore.S */
 extern void enable_intr(void);	/* In locore.S */
 
-void	sysbeepstop(void *);
-void	sysbeep(int, int);
+void	sysbeepstop __P((void *));
+void	sysbeep __P((int, int));
 
 static int beeping;
 
 void
-sysbeepstop(void *arg)
+sysbeepstop(arg)
+	void *arg;
 {
 	/* disable counter 2 */
 	disable_intr();
@@ -159,7 +160,8 @@ sysbeepstop(void *arg)
 }
 
 void
-sysbeep(int pitch, int period)
+sysbeep(pitch, period)
+	int pitch, period;
 {
 	static callout_t sysbeep_ch;
 	static int last_pitch;

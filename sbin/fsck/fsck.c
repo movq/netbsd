@@ -1,4 +1,4 @@
-/*	$NetBSD: fsck.c,v 1.51 2012/04/07 04:52:20 christos Exp $	*/
+/*	$NetBSD: fsck.c,v 1.47 2008/02/23 21:41:47 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas. All rights reserved.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsck.c,v 1.51 2012/04/07 04:52:20 christos Exp $");
+__RCSID("$NetBSD: fsck.c,v 1.47 2008/02/23 21:41:47 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -67,7 +67,7 @@ __RCSID("$NetBSD: fsck.c,v 1.51 2012/04/07 04:52:20 christos Exp $");
 
 static enum { IN_LIST, NOT_IN_LIST } which = NOT_IN_LIST;
 
-TAILQ_HEAD(fstypelist, entry) opthead, selhead, omhead;
+TAILQ_HEAD(fstypelist, entry) opthead, selhead;
 
 struct entry {
 	char *type;
@@ -81,7 +81,6 @@ static int flags = 0;
 
 static int checkfs(const char *, const char *, const char *, void *, pid_t *);
 static int selected(const char *);
-static int omitted(const char *);
 static void addoption(char *);
 static const char *getoptions(const char *);
 static void addentry(struct fstypelist *, const char *, const char *);
@@ -89,7 +88,7 @@ static void maketypelist(char *);
 static void catopt(char **, const char *);
 static void mangle(char *, int *, const char ** volatile *, int *);
 static const char *getfslab(const char *);
-__dead static void usage(void);
+static void usage(void);
 static void *isok(struct fstab *);
 
 int
@@ -100,16 +99,14 @@ main(int argc, char *argv[])
 	const char *vfstype = NULL;
 	char globopt[3];
 	int ret = FSCK_EXIT_OK;
-	char buf[MAXPATHLEN];
 
 	globopt[0] = '-';
 	globopt[2] = '\0';
 
 	TAILQ_INIT(&selhead);
 	TAILQ_INIT(&opthead);
-	TAILQ_INIT(&omhead);
 
-	while ((i = getopt(argc, argv, "dfl:nPpqT:t:vx:y")) != -1) {
+	while ((i = getopt(argc, argv, "dfl:nPpqT:t:vy")) != -1) {
 		switch (i) {
 		case 'd':
 			flags |= CHECK_DEBUG;
@@ -153,10 +150,6 @@ main(int argc, char *argv[])
 
 		case 'v':
 			flags |= CHECK_VERBOSE;
-			continue;
-
-		case 'x':
-			addentry(&omhead, optarg, "");
 			continue;
 
 		case 'y':
@@ -213,9 +206,7 @@ main(int argc, char *argv[])
 			type = vfstype;
 		}
 		else {
-			spec = getfsspecname(buf, sizeof(buf), fs->fs_spec);
-			if (spec == NULL)
-				err(FSCK_EXIT_CHECK_FAILED, "%s", buf);
+			spec = fs->fs_spec;
 			type = fs->fs_vfstype;
 			if (BADTYPE(fs->fs_type))
 				errx(FSCK_EXIT_CHECK_FAILED,
@@ -243,9 +234,6 @@ isok(struct fstab *fs)
 		return NULL;
 
 	if (!selected(fs->fs_vfstype))
-		return NULL;
-
-	if (omitted(fs->fs_file))
 		return NULL;
 
 	return fs;
@@ -400,20 +388,6 @@ selected(const char *type)
 			return which == IN_LIST ? 1 : 0;
 
 	return which == IN_LIST ? 0 : 1;
-}
-
-
-static int
-omitted(const char *mountedon)
-{
-	struct entry *e;
-
-	/* If no type specified, it's always selected. */
-	TAILQ_FOREACH(e, &omhead, entries)
-		if (!strcmp(e->type, mountedon))
-			return 1;
-
-	return 0;
 }
 
 
@@ -584,7 +558,7 @@ static void
 usage(void)
 {
 	static const char common[] =
-	    "[-dfnPpqvy] [-x excludemount] [-l maxparallel] [-T fstype:fsoptions]\n\t\t[-t fstype]";
+	    "[-dfnPpqvy] [-l maxparallel] [-T fstype:fsoptions]\n\t\t[-t fstype]";
 
 	(void)fprintf(stderr, "usage: %s %s [special|node]...\n",
 	    getprogname(), common);

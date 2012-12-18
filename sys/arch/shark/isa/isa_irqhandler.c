@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_irqhandler.c,v 1.25 2010/12/20 00:25:43 matt Exp $	*/
+/*	$NetBSD: isa_irqhandler.c,v 1.21 2008/04/27 18:58:47 matt Exp $	*/
 
 /*
  * Copyright 1997
@@ -75,12 +75,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_irqhandler.c,v 1.25 2010/12/20 00:25:43 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_irqhandler.c,v 1.21 2008/04/27 18:58:47 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/syslog.h>
 #include <sys/malloc.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/intr.h>
 #include <machine/irqhandler.h>
@@ -108,7 +110,7 @@ void stray_irqhandler(u_int);
  */
 
 void
-irq_init(void)
+irq_init()
 {
 	int loop;
 
@@ -143,7 +145,11 @@ irq_init(void)
  */
 
 int
-irq_claim(int irq, irqhandler_t *handler, const char *group, const char *name)
+irq_claim(irq, handler, group, name)
+	int irq;
+	irqhandler_t *handler;
+	const char *group;
+	const char *name;
 {
 
 #ifdef DIAGNOSTIC
@@ -205,7 +211,9 @@ irq_claim(int irq, irqhandler_t *handler, const char *group, const char *name)
  */
 
 int
-irq_release(int irq, irqhandler_t *handler)
+irq_release(irq, handler)
+	int irq;
+	irqhandler_t *handler;
 {
 	irqhandler_t *irqhand;
 	irqhandler_t **prehand;
@@ -267,7 +275,7 @@ irq_release(int irq, irqhandler_t *handler)
  * happen very much anyway.
  */
 void
-irq_calculatemasks(void)
+irq_calculatemasks()
 {
 	int          irq, level;
 	irqhandler_t *ptr;
@@ -306,7 +314,13 @@ irq_calculatemasks(void)
 
 
 void *
-intr_claim(int irq, int level, int (*ih_func)(void *), void *ih_arg, const char *group, const char *name)
+intr_claim(irq, level, ih_func, ih_arg, group, name)
+	int irq;
+	int level;
+	int (*ih_func)(void *);
+	void *ih_arg;
+	const char *group;
+	const char *name;
 {
 	irqhandler_t *ih;
 
@@ -326,7 +340,8 @@ intr_claim(int irq, int level, int (*ih_func)(void *), void *ih_arg, const char 
 }
 
 int
-intr_release(void *arg)
+intr_release(arg)
+	void *arg;
 {
 	irqhandler_t *ih = (irqhandler_t *)arg;
 
@@ -345,7 +360,8 @@ intr_release(void *arg)
  */
 
 void
-disable_irq(int irq)
+disable_irq(irq)
+	int irq;
 {
 	u_int oldirqstate; 
 
@@ -365,7 +381,8 @@ disable_irq(int irq)
  */
 
 void
-enable_irq(int irq)
+enable_irq(irq)
+	int irq;
 {
 	u_int oldirqstate; 
 
@@ -384,7 +401,8 @@ enable_irq(int irq)
  */
 
 void
-stray_irqhandler(u_int mask)
+stray_irqhandler(mask)
+	u_int mask;
 {
 	static u_int stray_irqs = 0;
 

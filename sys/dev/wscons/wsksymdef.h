@@ -1,4 +1,4 @@
-/*	$NetBSD: wsksymdef.h,v 1.66 2012/04/22 14:32:08 khorben Exp $ */
+/*	$NetBSD: wsksymdef.h,v 1.61.8.2 2012/03/21 21:27:37 jdc Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -247,7 +247,7 @@
 #define	KS_ucircumflex 		0xfb
 #define	KS_udiaeresis 		0xfc
 #define	KS_yacute 		0xfd
-#define KS_thorn		0xfe
+#define	KS_thorn 		0xfe
 #define	KS_ydiaeresis 		0xff
 #define KS_Abreve		0x0102
 #define KS_abreve		0x0103
@@ -329,8 +329,8 @@
 #define KS_dead_ogonek		0x0328
 #define KS_dead_slash		0x0337
 #define	KS_dead_cedilla 	0x0327
-#define KS_dead_semi		0x0328
-#define KS_dead_colon		0x0329
+#define        KS_dead_semi		0x0328
+#define        KS_dead_colon		0x0329
 
 /*
  * Group Greek
@@ -544,7 +544,6 @@
 #define KS_Open                 0xf393
 #define KS_Paste                0xf394
 #define KS_Cut                  0xf395
-#define KS_Stop                 0xf396
 
 #define KS_Menu			0xf3c0
 #define KS_Pause		0xf3c1
@@ -602,7 +601,7 @@
 #define KS_GROUP_Command	0xf400U
 #define KS_GROUP_Internal	0xf500U
 #define KS_GROUP_Dead		0xf801U		/* not encoded in keysym */
-#define KS_GROUP_Plain		0xf802U		/* not encoded in keysym */
+#define KS_GROUP_Ascii		0xf802U		/* not encoded in keysym */
 #define KS_GROUP_Keycode	0xf803U		/* not encoded in keysym */
 
 #define KS_NUMKEYCODES	0x1000
@@ -611,7 +610,7 @@
 #define KS_GROUP(k)	((k) >= 0x0300 && (k) < 0x0370 ? KS_GROUP_Dead : \
 			    (((k) & 0xf000) == 0xe000 ? KS_GROUP_Keycode : \
 			      (((k) & 0xf800) == 0xf000 ? ((k) & 0xff00) : \
-				KS_GROUP_Plain)))
+				KS_GROUP_Ascii)))
 
 #define KS_VALUE(k)	(((k) & 0xf000) == 0xe000 ? ((k) & 0x0fff) : \
 			    (((k) & 0xf800) == 0xf000 ? ((k) & 0x00ff) : (k)))
@@ -643,9 +642,7 @@ action(KB_USER,	0,	0x0100,	"user",	,	"User-defined")	\
 action(KB_US,	0,	0x0200,	"us",	,	"US-English")	\
 action(KB_UK,	0,	0x0700,	"uk",	,	"UK-English")	\
 action(KB_BE,	0,	0x1300,	"be",	,	"Belgian")	\
-action(KB_CZ,	0,	0x1500, "cz",	,	"Czech")	\
 action(KB_DK,	0,	0x0400,	"dk",	,	"Danish")	\
-action(KB_NL,	0,	0x1600,	"nl",	,	"Dutch") 	\
 action(KB_FI,	0,	0x0900,	"fi",	,	"Finnish")	\
 action(KB_FR,	0,	0x0600,	"fr",	,	"French")	\
 action(KB_DE, KB_NODEAD,0x0300,	"de",".nodead",	"German")	\
@@ -661,12 +658,12 @@ action(KB_ES,	0,	0x0b00,	"es",	,	"Spanish")	\
 action(KB_SV,	0,	0x0900,	"sv",	,	"Swedish")	\
 action(KB_SF,	0,	0x1000,	"sf",	,	"Swiss French")	\
 action(KB_SG,	0,	0x0f00,	"sg",	,	"Swiss German")	\
-action(KB_UA,	0,	0x1200,	"ua",	,	"Ukrainian")	
+action(KB_UA,	0,	0x1200,	"ua",	,	"Ukrainian")
 #define KB_NONE 0x0000
 
 /* Define all the KB_xx numeric values using above table */
 #define KBF_ENUM(tag, tagf, value, cc, ccf, country) tag=value,
-enum { KB_ENC_FUN(KBF_ENUM) KB_NEXT=0x1700 };
+enum { KB_ENC_FUN(KBF_ENUM) KB_NEXT=0x1500 };
 
 /* Define list of KB_xxx and country codes for array initialisation */
 #define KBF_ENCTAB(tag, tagf, value, cc, ccf, country) { tag, cc },

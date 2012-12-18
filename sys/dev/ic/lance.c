@@ -1,4 +1,4 @@
-/*	$NetBSD: lance.c,v 1.46 2012/02/02 19:43:03 tls Exp $	*/
+/*	$NetBSD: lance.c,v 1.41 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -65,7 +65,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lance.c,v 1.46 2012/02/02 19:43:03 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lance.c,v 1.41 2008/04/28 20:23:50 martin Exp $");
+
+#include "bpfilter.h"
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,7 +79,9 @@ __KERNEL_RCSID(0, "$NetBSD: lance.c,v 1.46 2012/02/02 19:43:03 tls Exp $");
 #include <sys/malloc.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -84,8 +89,10 @@ __KERNEL_RCSID(0, "$NetBSD: lance.c,v 1.46 2012/02/02 19:43:03 tls Exp $");
 #include <net/if_media.h>
 
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <dev/ic/lancereg.h>
 #include <dev/ic/lancevar.h>
@@ -104,7 +111,7 @@ __KERNEL_RCSID(0, "$NetBSD: lance.c,v 1.46 2012/02/02 19:43:03 tls Exp $");
 
 integrate struct mbuf *lance_get(struct lance_softc *, int, int);
 
-hide bool lance_shutdown(device_t, int);
+hide void lance_shutdown(void *);
 
 int lance_mediachange(struct ifnet *);
 void lance_mediastatus(struct ifnet *, struct ifmediareq *);
@@ -243,19 +250,18 @@ lance_config(struct lance_softc *sc)
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
-	if (pmf_device_register1(sc->sc_dev, NULL, NULL, lance_shutdown))
-		pmf_class_network_register(sc->sc_dev, ifp);
-	else
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
-
+	sc->sc_sh = shutdownhook_establish(lance_shutdown, ifp);
+	if (sc->sc_sh == NULL)
+		panic("lance_config: can't establish shutdownhook");
 	sc->sc_rbufaddr = malloc(sc->sc_nrbuf * sizeof(int), M_DEVBUF,
 					M_WAITOK);
 	sc->sc_tbufaddr = malloc(sc->sc_ntbuf * sizeof(int), M_DEVBUF,
 					M_WAITOK);
 
+#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_NET, 0);
+#endif
 }
 
 void
@@ -472,11 +478,14 @@ lance_read(struct lance_softc *sc, int boff, int len)
 		return;
 	}
 
+#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.
 	 * If so, hand off the raw packet to BPF.
 	 */
-	bpf_mtap(ifp, m);
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, m);
+#endif
 
 	/* Pass the packet up. */
 	(*ifp->if_input)(ifp, m);
@@ -534,40 +543,42 @@ lance_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	s = splnet();
 
 	switch (cmd) {
-	case SIOCGIFMEDIA:
-	case SIOCSIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &sc->sc_media, cmd);
+	case SIOCSIFADDR:
+	case SIOCSIFFLAGS:
+		error = ether_ioctl(ifp, cmd, data);
 		break;
-	default:
-		if ((error = ether_ioctl(ifp, cmd, data)) != ENETRESET)
-			break;
-		error = 0;
-		if (cmd != SIOCADDMULTI && cmd != SIOCDELMULTI)
-			break;
-		if (ifp->if_flags & IFF_RUNNING) {
+	case SIOCADDMULTI:
+	case SIOCDELMULTI:
+		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 			/*
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			lance_reset(sc);
+			if (ifp->if_flags & IFF_RUNNING)
+				lance_reset(sc);
+			error = 0;
 		}
 		break;
 
+	case SIOCGIFMEDIA:
+	case SIOCSIFMEDIA:
+		error = ifmedia_ioctl(ifp, ifr, &sc->sc_media, cmd);
+		break;
+
+	default:
+		error = EINVAL;
+		break;
 	}
 
 	splx(s);
 	return (error);
 }
 
-hide bool
-lance_shutdown(device_t self, int howto)
+hide void
+lance_shutdown(void *arg)
 {
-	struct lance_softc *sc = device_private(self);
-	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
-	lance_stop(ifp, 0);
-
-	return true;
+	lance_stop((struct ifnet *)arg, 0);
 }
 
 /*

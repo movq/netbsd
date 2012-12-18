@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.11 2012/07/29 18:05:42 mlelstv Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.8 2008/04/28 20:23:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -27,23 +27,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.11 2012/07/29 18:05:42 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.8 2008/04/28 20:23:18 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/conf.h>
 
-extern void machine_init(void);
-
 void
-cpu_configure(void)
+cpu_configure()
 {
-
 	/* Start configuration */
 	splhigh();
-
-	machine_init();
 
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
@@ -53,9 +48,9 @@ cpu_configure(void)
 }
 
 void
-cpu_rootconf(void)
+cpu_rootconf()
 {
 
 	/* No boot information */
-	rootconf();
+	setroot(0, 0);
 }

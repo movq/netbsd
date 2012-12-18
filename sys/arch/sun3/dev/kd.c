@@ -1,4 +1,4 @@
-/*	$NetBSD: kd.c,v 1.57 2012/10/27 17:18:13 chs Exp $	*/
+/*	$NetBSD: kd.c,v 1.55 2008/04/28 20:23:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.57 2012/10/27 17:18:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.55 2008/04/28 20:23:37 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -67,6 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.57 2012/10/27 17:18:13 chs Exp $");
 #define PUT_WSIZE	64
 
 struct kd_softc {
+	struct	device kd_dev;		/* required first: base device */
 	struct  tty *kd_tty;
 
 	/* Console input hook */
@@ -107,7 +108,7 @@ kd_init(struct kd_softc *kd)
 {
 	struct tty *tp;
 
-	tp = tty_alloc();
+	tp = ttymalloc();
 	callout_setfunc(&tp->t_rstrt_ch, kd_later, tp);
 
 	tp->t_oproc = kdstart;

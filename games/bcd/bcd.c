@@ -1,4 +1,4 @@
-/*	$NetBSD: bcd.c,v 1.17 2009/08/12 05:21:28 dholland Exp $	*/
+/*	$NetBSD: bcd.c,v 1.15 2008/07/20 01:03:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)bcd.c	8.2 (Berkeley) 3/20/94";
 #else
-__RCSID("$NetBSD: bcd.c,v 1.17 2009/08/12 05:21:28 dholland Exp $");
+__RCSID("$NetBSD: bcd.c,v 1.15 2008/07/20 01:03:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -84,7 +84,7 @@ __RCSID("$NetBSD: bcd.c,v 1.17 2009/08/12 05:21:28 dholland Exp $");
 #include <ctype.h>
 #include <unistd.h>
 
-static const u_short holes[256] = {
+const u_short holes[256] = {
     0x0,	 0x0,	  0x0,	   0x0,	    0x0,     0x0,     0x0,     0x0,
     0x0,	 0x0,	  0x0,	   0x0,	    0x0,     0x0,     0x0,     0x0,
     0x0,	 0x0,	  0x0,	   0x0,	    0x0,     0x0,     0x0,     0x0,
@@ -124,7 +124,7 @@ static const u_short holes[256] = {
  */
 #define	bit(w,i)	((w)&(1<<(i)))
 
-static void printcard(char *);
+void	printcard(char *);
 
 int
 main(int argc, char **argv)
@@ -150,12 +150,12 @@ main(int argc, char **argv)
 
 #define	COLUMNS	48
 
-static void
+void
 printcard(char *str)
 {
 	static const char rowchars[] = "   123456789";
 	int i, row;
-	char *p;
+	unsigned char *p;
 
 	/* ruthlessly remove newlines and truncate at 48 characters. */
 	if ((p = strchr(str, '\n')))
@@ -166,8 +166,8 @@ printcard(char *str)
 
 	/* make string upper case. */
 	for (p = str; *p; ++p)
-		if (isascii((unsigned char)*p) && islower((unsigned char)*p))
-			*p = toupper((unsigned char) *p);
+		if (isascii(*p) && islower(*p))
+			*p = toupper(*p);
 
 	 /* top of card */
 	putchar(' ');
@@ -182,7 +182,7 @@ printcard(char *str)
 	p = str;
 	putchar('/');
 	for (i = 1; *p; i++, p++)
-		if (holes[(unsigned char)*p])
+		if (holes[(int)*p])
 			putchar(*p);
 		else
 			putchar(' ');
@@ -200,7 +200,7 @@ printcard(char *str)
 	for (row = 0; row <= 11; ++row) {
 		putchar('|');
 		for (i = 0, p = str; *p; i++, p++) {
-			if (bit(holes[(unsigned char)*p], 11 - row))
+			if (bit(holes[(int)*p], 11 - row))
 				putchar(']');
 			else
 				putchar(rowchars[row]);

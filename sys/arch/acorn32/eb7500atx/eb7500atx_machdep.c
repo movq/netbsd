@@ -1,4 +1,4 @@
-/*	$NetBSD: eb7500atx_machdep.c,v 1.25 2012/09/22 00:33:37 matt Exp $	*/
+/*	$NetBSD: eb7500atx_machdep.c,v 1.9 2008/01/19 13:11:10 chris Exp $	*/
 
 /*
  * Copyright (c) 2000-2002 Reinoud Zandijk.
@@ -39,7 +39,7 @@
  *
  * machdep.c
  *
- * Machine dependent functions for kernel setup
+ * Machine dependant functions for kernel setup
  *
  * This file still needs a lot of work
  *
@@ -48,14 +48,13 @@
  */
 
 #include "opt_ddb.h"
-#include "opt_modular.h"
 #include "opt_pmap_debug.h"
 #include "vidcvideo.h"
 #include "pckbc.h"
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.25 2012/09/22 00:33:37 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.9 2008/01/19 13:11:10 chris Exp $");
 
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -63,9 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.25 2012/09/22 00:33:37 matt 
 #include <sys/proc.h>
 #include <sys/msgbuf.h>
 #include <sys/exec.h>
-#include <sys/exec_aout.h>
 #include <sys/ksyms.h>
-#include <sys/bus.h>
 
 #include <dev/cons.h>
 
@@ -86,6 +83,7 @@ __KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.25 2012/09/22 00:33:37 matt 
 #include <arm/arm32/machdep.h>
 #include <arm/undefined.h>
 #include <machine/rtc.h>
+#include <machine/bus.h>
 
 #include <arm/iomd/vidc.h>
 #include <arm/iomd/iomdreg.h>
@@ -116,11 +114,20 @@ __KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.25 2012/09/22 00:33:37 matt 
 
 /*
  * Address to call from cpu_reset() to reset the machine.
- * This is machine architecture dependent as it varies depending
+ * This is machine architecture dependant as it varies depending
  * on where the ROM appears when you turn the MMU off.
  */
+u_int cpu_reset_address = 0x0; /* XXX 0x3800000 too for rev0 RiscPC 600 */
+
 
 #define VERBOSE_INIT_ARM
+
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#define UND_STACK_SIZE	1
+
 
 struct bootconfig bootconfig;	/* Boot config storage */
 videomemory_t videomemory;	/* Video memory descriptor */
@@ -129,7 +136,7 @@ char *boot_args = NULL;		/* holds the pre-processed boot arguments */
 extern char *booted_kernel;	/* used for ioctl to retrieve booted kernel */
 
 extern int       *vidc_base;
-extern uint32_t  iomd_base;
+extern u_int32_t  iomd_base;
 extern struct bus_space iomd_bs_tag;
 
 paddr_t physical_start;
@@ -140,6 +147,7 @@ paddr_t dma_range_begin;
 paddr_t dma_range_end;
 
 u_int free_pages;
+int physmem = 0;
 paddr_t memoryblock_end;
 
 #ifndef PMAP_STATIC_L1S
@@ -148,7 +156,18 @@ int max_processes = 64;		/* Default number */
 
 u_int videodram_size = 0;	/* Amount of DRAM to reserve for video */
 
+/* Physical and virtual addresses for some global pages */
+pv_addr_t systempage;
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
+
 paddr_t msgbufphys;
+
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -163,6 +182,7 @@ extern int pmap_debug_level;
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
 
+struct user *proc0paddr;
 
 #ifdef CPU_SA110
 #define CPU_SA110_CACHE_CLEAN_SIZE (0x4000 * 2)
@@ -233,7 +253,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("Halted while still in the ICE age.\n");
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
@@ -274,8 +293,6 @@ cpu_reboot(int howto, char *bootstr)
 
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -371,6 +388,7 @@ initarm(void *cookie)
 	u_int kerneldatasize;
 	u_int l1pagetable;
 	struct exec *kernexec = (struct exec *)KERNEL_TEXT_BASE;
+	pv_addr_t kernel_l1pt = { {0} };
 
 	/*
 	 * Heads up ... Setup the CPU / MMU / TLB functions
@@ -732,22 +750,22 @@ initarm(void *cookie)
 	 * REAL kernel page tables.
 	 */
 
+	/* Switch tables */
+#ifdef VERBOSE_INIT_ARM
+	printf("switching to new L1 page table\n");
+#endif
 #ifdef VERBOSE_INIT_ARM
 	printf("switching domains\n");
 #endif
 	/* be a client to all domains */
 	cpu_domains(0x55555555);
 
-	/* Switch tables */
-#ifdef VERBOSE_INIT_ARM
-	printf("switching to new L1 page table\n");
-#endif
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	setttb(kernel_l1pt.pv_pa);
 
 	/*
 	 * We must now clean the cache again....
 	 * Cleaning may be done by reading new data to displace any
-	 * dirty data in the cache. This will have happened in cpu_setttb()
+	 * dirty data in the cache. This will have happened in setttb()
 	 * but since we are boot strapping the addresses used for the read
 	 * may have just been remapped and thus the cache could be out
 	 * of sync. A re-clean after the switch will cure this.
@@ -762,7 +780,8 @@ initarm(void *cookie)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+	proc0paddr = (struct user *)kernelstack.pv_va;
+	lwp0.l_addr = proc0paddr;
 
 	/* 
 	 * if there is support for a serial console ...we should now
@@ -884,7 +903,8 @@ initarm(void *cookie)
 #ifdef VERBOSE_INIT_ARM
 	printf("pmap ");
 #endif
-	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
+	pmap_bootstrap((pd_entry_t *)kernel_l1pt.pv_va, KERNEL_VM_BASE,
+	    KERNEL_VM_BASE + KERNEL_VM_SIZE);
 	console_flush();
 
 	/* Setup the IRQ system */
@@ -933,8 +953,8 @@ initarm(void *cookie)
 	    bootconfig.vram[0].address,
 	    bootconfig.vram[0].pages * bootconfig.pagesize);
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-	ksyms_addsyms_elf(bootconfig.ksym_end - bootconfig.ksym_start,
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init(bootconfig.ksym_end - bootconfig.ksym_start,
 		(void *) bootconfig.ksym_start, (void *) bootconfig.ksym_end);
 #endif
 

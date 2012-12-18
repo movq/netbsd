@@ -1,4 +1,4 @@
-/*	$NetBSD: if_faith.c,v 1.47 2010/04/05 07:22:23 joerg Exp $	*/
+/*	$NetBSD: if_faith.c,v 1.44 2008/10/24 17:07:33 dyoung Exp $	*/
 /*	$KAME: if_faith.c,v 1.21 2001/02/20 07:59:26 itojun Exp $	*/
 
 /*
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_faith.c,v 1.47 2010/04/05 07:22:23 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_faith.c,v 1.44 2008/10/24 17:07:33 dyoung Exp $");
 
 #include "opt_inet.h"
 
@@ -79,6 +79,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_faith.c,v 1.47 2010/04/05 07:22:23 joerg Exp $");
 #include <netinet6/ip6_var.h>
 #endif
 
+#include "bpfilter.h"
 
 #include <net/net_osdep.h>
 
@@ -126,7 +127,9 @@ faith_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_dlt = DLT_NULL;
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
-	bpf_attach(ifp, DLT_NULL, sizeof(u_int));
+#if NBPFILTER > 0
+	bpfattach(ifp, DLT_NULL, sizeof(u_int));
+#endif
 	return (0);
 }
 
@@ -134,7 +137,9 @@ int
 faith_clone_destroy(struct ifnet *ifp)
 {
 
-	bpf_detach(ifp);
+#if NBPFILTER > 0
+	bpfdetach(ifp);
+#endif
 	if_detach(ifp);
 	free(ifp, M_DEVBUF);
 
@@ -152,13 +157,16 @@ faithoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	if ((m->m_flags & M_PKTHDR) == 0)
 		panic("faithoutput no HDR");
 	af = dst->sa_family;
+#if NBPFILTER > 0
 	/* BPF write needs to be handled specially */
 	if (af == AF_UNSPEC) {
 		af = *(mtod(m, int *));
 		m_adj(m, sizeof(int));
 	}
 
-	bpf_mtap_af(ifp, af, m);
+	if (ifp->if_bpf)
+		bpf_mtap_af(ifp->if_bpf, af, m);
+#endif
 
 	if (rt && rt->rt_flags & (RTF_REJECT|RTF_BLACKHOLE)) {
 		m_freem(m);
@@ -225,7 +233,7 @@ faithioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP | IFF_RUNNING;
 		ifa = (struct ifaddr *)data;
 		ifa->ifa_rtrequest = faithrtrequest;
@@ -256,10 +264,18 @@ faithioctl(struct ifnet *ifp, u_long cmd, void *data)
 		}
 		break;
 
-	default:
+#ifdef SIOCSIFMTU
+	case SIOCSIFMTU:
 		if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
 			error = 0;
 		break;
+#endif
+
+	case SIOCSIFFLAGS:
+		break;
+
+	default:
+		error = EINVAL;
 	}
 	return (error);
 }

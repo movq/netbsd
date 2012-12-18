@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_20.c,v 1.28 2010/04/23 15:19:20 rmind Exp $	*/
+/*	$NetBSD: netbsd32_compat_20.c,v 1.26 2008/06/24 11:18:15 ad Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -27,10 +27,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_20.c,v 1.28 2010/04/23 15:19:20 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_20.c,v 1.26 2008/06/24 11:18:15 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -154,15 +155,15 @@ compat_20_netbsd32_statfs(struct lwp *l, const struct compat_20_netbsd32_statfs_
 	struct statvfs *sp;
 	struct netbsd32_statfs s32;
 	int error;
-	struct vnode *vp;
+	struct nameidata nd;
 
-	error = namei_simple_user(SCARG_P32(uap, path),
-				NSM_FOLLOW_TRYEMULROOT, &vp);
-	if (error != 0)
+	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
+	    SCARG_P32(uap, path));
+	if ((error = namei(&nd)) != 0)
 		return (error);
-	mp = vp->v_mount;
+	mp = nd.ni_vp->v_mount;
 	sp = &mp->mnt_stat;
-	vrele(vp);
+	vrele(nd.ni_vp);
 	if ((error = VFS_STATVFS(mp, sp)) != 0)
 		return (error);
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;

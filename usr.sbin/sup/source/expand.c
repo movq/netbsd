@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.c,v 1.18 2009/10/17 22:26:13 christos Exp $	*/
+/*	$NetBSD: expand.c,v 1.16 2007/07/20 16:39:05 christos Exp $	*/
 
 /*
  * Copyright (c) 1991 Carnegie Mellon University
@@ -80,7 +80,7 @@ static jmp_buf sjbuf;
 static char pathbuf[MAXPATHLEN];
 static char *path, *pathp, *lastpathp;
 
-static const char globchars[] = "{[*?";/* meta characters */
+static char *globchars = "{[*?";/* meta characters */
 static char *entp;		/* current dir entry pointer */
 
 static char **BUFFER;		/* pointer to the buffer */
@@ -95,9 +95,9 @@ static void matchdir(char *);
 static int execbrc(char *, char *);
 static int match(char *, char *);
 static int amatch(char *, char *);
-static void addone(char *, const char *);
+static void addone(char *, char *);
 static int addpath(char);
-static int gethdir(char *, size_t);
+static int gethdir(char *, int);
 
 int 
 expand(char *spec, char **buffer, int bufsize)
@@ -361,7 +361,7 @@ amatch(char *s, char *p)
 }
 
 static void 
-addone(char *s1, const char *s2)
+addone(char *s1, char *s2)
 {
 	char *ep;
 
@@ -369,7 +369,7 @@ addone(char *s1, const char *s2)
 		bufcnt = BUFSIZE + 1;
 		longjmp(sjbuf, 1);
 	}
-	ep = malloc(strlen(s1) + strlen(s2) + 1);
+	ep = (char *) malloc(strlen(s1) + strlen(s2) + 1);
 	if (ep == 0) {
 		bufcnt = -1;
 		longjmp(sjbuf, 1);
@@ -392,7 +392,7 @@ addpath(char c)
 }
 
 static int 
-gethdir(char *home, size_t homelen)
+gethdir(char *home, int homelen)
 {
 	struct passwd *pp = getpwnam(home);
 

@@ -1,4 +1,4 @@
-/* $NetBSD: bus_dma.c,v 1.33 2012/07/11 17:13:30 rkujawa Exp $ */
+/* $NetBSD: bus_dma.c,v 1.29 2008/06/04 12:41:41 ad Exp $ */
 
 /*
  * This file was taken from from alpha/common/bus_dma.c
@@ -37,11 +37,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "opt_m68k_arch.h"
-
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.33 2012/07/11 17:13:30 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.29 2008/06/04 12:41:41 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.33 2012/07/11 17:13:30 rkujawa Exp $")
 #include <sys/proc.h>
 #include <sys/mbuf.h>
 
-#include <uvm/uvm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 
@@ -152,7 +150,7 @@ _bus_dmamap_load_buffer_direct_common(bus_dma_tag_t t, bus_dmamap_t map,
 		/*
 		 * Get the physical address for this segment.
 		 */
-		rv = pmap_extract(pmap, vaddr, (paddr_t *) &curaddr);
+		rv = pmap_extract(pmap, vaddr, &curaddr);
 		KASSERT(rv);
 
 		cacheable = _pmap_page_is_cacheable(pmap, vaddr);
@@ -424,6 +422,11 @@ _bus_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
  * Common function for DMA map synchronization.  May be called
  * by chipset-specific DMA map synchronization functions.
  */
+
+/* XXX these should be in <m68k/cpu.h> or <m68k/cacheops.h> */
+#define CACHELINE_SIZE	16
+#define CACHELINE_MASK	(CACHELINE_SIZE - 1)
+
 void
 _bus_dmamap_sync(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
     bus_size_t len, int ops)

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_pci.c,v 1.36 2011/07/26 20:51:24 dyoung Exp $	*/
+/*	$NetBSD: if_ne_pci.c,v 1.32 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_pci.c,v 1.36 2011/07/26 20:51:24 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_pci.c,v 1.32 2008/04/28 20:23:55 martin Exp $");
 
 #include "opt_ipkdb.h"
 
@@ -73,8 +73,8 @@ struct ne_pci_softc {
 	void *sc_ih;				/* interrupt handle */
 };
 
-static int	ne_pci_match(device_t, cfdata_t, void *);
-static void	ne_pci_attach(device_t, device_t, void *);
+static int	ne_pci_match(struct device *, struct cfdata *, void *);
+static void	ne_pci_attach(struct device *, struct device *, void *);
 
 CFATTACH_DECL_NEW(ne_pci, sizeof(struct ne_pci_softc),
     ne_pci_match, ne_pci_attach, NULL, NULL);
@@ -169,10 +169,11 @@ ne_pci_lookup(const struct pci_attach_args *pa)
  * PCI constants.
  * XXX These should be in a common file!
  */
-#define PCI_CBIO PCI_BAR(0)		/* Configuration Base IO Address */
+#define PCI_CBIO	0x10		/* Configuration Base IO Address */
 
 static int
-ne_pci_match(device_t parent, cfdata_t match, void *aux)
+ne_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -183,7 +184,7 @@ ne_pci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-ne_pci_attach(device_t parent, device_t self, void *aux)
+ne_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ne_pci_softc *psc = device_private(self);
 	struct ne2000_softc *nsc = &psc->sc_ne2000;
@@ -293,7 +294,7 @@ ne_pci_ipkdb_attach(struct ipkdb_if *kip, bus_space_tag_t iot,
 	pa.pa_pc = pc;
 	pa.pa_device = dev;
 	pa.pa_function = 0;
-	pa.pa_flags = PCI_FLAGS_IO_OKAY;
+	pa.pa_flags = PCI_FLAGS_IO_ENABLED;
 	pa.pa_tag = pci_make_tag(pc, bus, dev, /*func*/0);
 	pa.pa_id = pci_conf_read(pc, pa.pa_tag, PCI_ID_REG);
 	pa.pa_class = pci_conf_read(pc, pa.pa_tag, PCI_CLASS_REG);

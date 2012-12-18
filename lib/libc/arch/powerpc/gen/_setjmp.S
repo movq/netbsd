@@ -1,9 +1,10 @@
-/*	$NetBSD: _setjmp.S,v 1.3 2011/01/15 07:31:12 matt Exp $	*/
+/*	$NetBSD: _setjmp.S,v 1.2 2002/07/30 06:07:57 matt Exp $	*/
 
 #include <machine/asm.h>
 
 #if defined(LIBC_SCCS)
-__RCSID("$NetBSD: _setjmp.S,v 1.3 2011/01/15 07:31:12 matt Exp $")
+	.text
+	.asciz "$NetBSD: _setjmp.S,v 1.2 2002/07/30 06:07:57 matt Exp $"
 #endif
 
 /*
@@ -24,7 +25,6 @@ ENTRY(_setjmp)
 	stmw	%r9,8(%r3)		/* save r9..r31 */
 	li	%r3,0			/* indicate success */
 	blr				/* return */
-END(_setjmp)
 
 ENTRY(_longjmp)
 	lmw	%r9,8(%r3)		/* save r9..r31 */
@@ -36,4 +36,3 @@ ENTRY(_longjmp)
 	bnelr				/* return if not 0 */
 	li	%r3,1			/* what's the point? */
 	blr				/* return */
-END(_longjmp)

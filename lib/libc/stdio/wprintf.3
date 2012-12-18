@@ -1,4 +1,4 @@
-.\" $NetBSD: wprintf.3,v 1.8 2010/12/16 17:42:27 wiz Exp $
+.\" $NetBSD: wprintf.3,v 1.2 2005/06/03 20:32:20 wiz Exp $
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
@@ -38,7 +38,7 @@
 .\" FreeBSD: src/lib/libc/stdio/printf.3,v 1.47 2002/09/06 11:23:55 tjr Exp
 .\" $FreeBSD: src/lib/libc/stdio/wprintf.3,v 1.5 2003/07/05 07:55:34 tjr Exp $
 .\"
-.Dd April 30, 2010
+.Dd July 5, 2003
 .Dt WPRINTF 3
 .Os
 .Sh NAME
@@ -85,7 +85,7 @@ write output to the given output
 .Fn swprintf
 and
 .Fn vswprintf
-write to the wide-character string
+write to the wide character string
 .Fa ws .
 .Pp
 These functions write the output under the control of a
@@ -94,6 +94,11 @@ string that specifies how subsequent arguments
 (or arguments accessed via the variable-length argument facilities of
 .Xr stdarg 3 )
 are converted for output.
+.Pp
+These functions return the number of characters printed
+(not including the trailing
+.Ql \e0
+used to end output to strings).
 .Pp
 The
 .Fn swprintf
@@ -376,7 +381,7 @@ The
 .Vt double
 argument is rounded and converted in the style
 .Sm off
-.Oo \- Oc Ar d Li \&. Ar ddd Li e \*[Pm] Ar dd
+.Oo \- Oc Ar d Li \&. Ar ddd Li e \\*[Pm] Ar dd
 .Sm on
 where there is one digit before the
 decimal-point character
@@ -452,7 +457,7 @@ The
 .Vt double
 argument is converted to hexadecimal notation in the style
 .Sm off
-.Oo \- Oc Li 0x Ar h Li \&. Ar hhhp Oo \*[Pm] Oc Ar d ,
+.Oo \- Oc Li 0x Ar h Li \&. Ar hhhp Oo \\*[Pm] Oc Ar d ,
 .Sm on
 where the number of digits after the hexadecimal-point character
 is equal to the precision specification.
@@ -588,11 +593,6 @@ In no case does a non-existent or small field width cause truncation of
 a numeric field; if the result of a conversion is wider than the field
 width, the
 field is expanded to contain the conversion result.
-.Sh RETURN VALUES
-These functions return the number of characters printed
-(not including the trailing
-.Ql \e0
-used to end output to strings).
 .Sh SEE ALSO
 .Xr btowc 3 ,
 .Xr fputws 3 ,
@@ -602,7 +602,15 @@ used to end output to strings).
 .Xr wcsrtombs 3 ,
 .Xr wscanf 3
 .Sh STANDARDS
-The
+Subject to the caveats noted in the
+.Sh SECURITY CONSIDERATIONS
+Refer to
+.Xr printf 3 .
+.Sx BUGS
+section
+of
+.Xr printf 3 ,
+the
 .Fn wprintf ,
 .Fn fwprintf ,
 .Fn swprintf ,
@@ -613,6 +621,3 @@ and
 functions
 conform to
 .St -isoC-99 .
-.Sh SECURITY CONSIDERATIONS
-Subject to the caveats noted in the
-.Xr printf 3 .

@@ -1,6 +1,7 @@
-/*	$NetBSD: pmap.h,v 1.34 2012/06/30 22:50:36 jym Exp $	*/
+/*	$NetBSD: pmap.h,v 1.22 2008/10/26 00:08:15 mrg Exp $	*/
 
 /*
+ *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -12,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgment:
+ *      This product includes software developed by Charles D. Cranor and
+ *      Washington University.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -84,13 +91,18 @@
 #endif /* XEN */
 
 /*
- * The x86_64 pmap module closely resembles the i386 one and it 
- * uses the same recursive entry scheme. See the i386 pmap.h
+ * The x86_64 pmap module closely resembles the i386 one. It uses
+ * the same recursive entry scheme, and the same alternate area
+ * trick for accessing non-current pmaps. See the i386 pmap.h
  * for a description. The obvious difference is that 3 extra
  * levels of page table need to be dealt with. The level 1 page
  * table pages are at:
  *
  * l1: 0x00007f8000000000 - 0x00007fffffffffff     (39 bits, needs PML4 entry)
+ *
+ * The alternate space is at:
+ *
+ * l1: 0xffffff8000000000 - 0xffffffffffffffff     (39 bits, needs PML4 entry)
  *
  * The rest is kept as physical pages in 3 UVM objects, and is
  * temporarily mapped for virtual access when needed.
@@ -99,7 +111,7 @@
  *
  *  +---------------------------------+ 0xffffffffffffffff
  *  |                                 |
- *  |         Unused                  |
+ *  |    alt.L1 table (PTE pages)     |
  *  |                                 |
  *  +---------------------------------+ 0xffffff8000000000
  *  ~                                 ~
@@ -156,30 +168,40 @@
 #define L4_SLOT_KERN		320
 #endif
 #define L4_SLOT_KERNBASE	511
+#define L4_SLOT_APTE		510
 
 #define PDIR_SLOT_KERN	L4_SLOT_KERN
 #define PDIR_SLOT_PTE	L4_SLOT_PTE
+#define PDIR_SLOT_APTE	L4_SLOT_APTE
 
 /*
  * the following defines give the virtual addresses of various MMU
  * data structures:
- * PTE_BASE: the base VA of the linear PTE mappings
- * PTD_BASE: the base VA of the recursive mapping of the PTD
- * PDP_PDE: the VA of the PDE that points back to the PDP
+ * PTE_BASE and APTE_BASE: the base VA of the linear PTE mappings
+ * PTD_BASE and APTD_BASE: the base VA of the recursive mapping of the PTD
+ * PDP_PDE and APDP_PDE: the VA of the PDE that points back to the PDP/APDP
  *
  */
 
 #define PTE_BASE  ((pt_entry_t *) (L4_SLOT_PTE * NBPD_L4))
-#define KERN_BASE  ((pt_entry_t *) (L4_SLOT_KERN * NBPD_L4))
+#define APTE_BASE ((pt_entry_t *) (VA_SIGN_NEG((L4_SLOT_APTE * NBPD_L4))))
 
 #define L1_BASE		PTE_BASE
+#define AL1_BASE	APTE_BASE
+
 #define L2_BASE ((pd_entry_t *)((char *)L1_BASE + L4_SLOT_PTE * NBPD_L3))
 #define L3_BASE ((pd_entry_t *)((char *)L2_BASE + L4_SLOT_PTE * NBPD_L2))
 #define L4_BASE ((pd_entry_t *)((char *)L3_BASE + L4_SLOT_PTE * NBPD_L1))
 
+#define AL2_BASE ((pd_entry_t *)((char *)AL1_BASE + L4_SLOT_PTE * NBPD_L3))
+#define AL3_BASE ((pd_entry_t *)((char *)AL2_BASE + L4_SLOT_PTE * NBPD_L2))
+#define AL4_BASE ((pd_entry_t *)((char *)AL3_BASE + L4_SLOT_PTE * NBPD_L1))
+
 #define PDP_PDE		(L4_BASE + PDIR_SLOT_PTE)
+#define APDP_PDE	(L4_BASE + PDIR_SLOT_APTE)
 
 #define PDP_BASE	L4_BASE
+#define APDP_BASE	AL4_BASE
 
 #define NKL4_MAX_ENTRIES	(unsigned long)1
 #define NKL3_MAX_ENTRIES	(unsigned long)(NKL4_MAX_ENTRIES * 512)
@@ -188,7 +210,7 @@
 
 #define NKL4_KIMG_ENTRIES	1
 #define NKL3_KIMG_ENTRIES	1
-#define NKL2_KIMG_ENTRIES	16
+#define NKL2_KIMG_ENTRIES	10
 
 /*
  * Since kva space is below the kernel in its entirety, we start off
@@ -211,6 +233,7 @@
 				  NKL3_MAX_ENTRIES, NKL4_MAX_ENTRIES }
 #define NBPD_INITIALIZER	{ NBPD_L1, NBPD_L2, NBPD_L3, NBPD_L4 }
 #define PDES_INITIALIZER	{ L2_BASE, L3_BASE, L4_BASE }
+#define APDES_INITIALIZER	{ AL2_BASE, AL3_BASE, AL4_BASE }
 
 #define PTP_LEVELS	4
 
@@ -245,8 +268,6 @@
     atomic_and_ulong((volatile unsigned long *)p, ~(b))
 #define pmap_pte_flush()		/* nothing */
 #else
-extern kmutex_t pte_lock;
-
 static __inline pt_entry_t
 pmap_pa2pte(paddr_t pa)
 {
@@ -258,7 +279,6 @@ pmap_pte2pa(pt_entry_t pte)
 {
 	return xpmap_mtop_masked(pte & PG_FRAME);
 }
-
 static __inline void
 pmap_pte_set(pt_entry_t *pte, pt_entry_t npte)
 {
@@ -270,49 +290,45 @@ pmap_pte_set(pt_entry_t *pte, pt_entry_t npte)
 static __inline pt_entry_t
 pmap_pte_cas(volatile pt_entry_t *ptep, pt_entry_t o, pt_entry_t n)
 {
-	pt_entry_t opte;
+	int s = splvm();
+	pt_entry_t opte = *ptep;
 
-	mutex_enter(&pte_lock);
-	opte = *ptep;
 	if (opte == o) {
 		xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(ptep)), n);
 		xpq_flush_queue();
 	}
-
-	mutex_exit(&pte_lock);
+	splx(s);
 	return opte;
 }
 
 static __inline pt_entry_t
 pmap_pte_testset(volatile pt_entry_t *pte, pt_entry_t npte)
 {
-	pt_entry_t opte;
-
-	mutex_enter(&pte_lock);
-	opte = *pte;
+	int s = splvm();
+	pt_entry_t opte = *pte;
 	xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(pte)), npte);
 	xpq_flush_queue();
-	mutex_exit(&pte_lock);
+	splx(s);
 	return opte;
 }
 
 static __inline void
 pmap_pte_setbits(volatile pt_entry_t *pte, pt_entry_t bits)
 {
-	mutex_enter(&pte_lock);
+	int s = splvm();
 	xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(pte)), (*pte) | bits);
 	xpq_flush_queue();
-	mutex_exit(&pte_lock);
+	splx(s);
 }
 
 static __inline void
 pmap_pte_clearbits(volatile pt_entry_t *pte, pt_entry_t bits)
 {	
-	mutex_enter(&pte_lock);
+	int s = splvm();
 	xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(pte)),
 	    (*pte) & ~bits);
 	xpq_flush_queue();
-	mutex_exit(&pte_lock);
+	splx(s);
 }
 
 static __inline void
@@ -327,18 +343,7 @@ pmap_pte_flush(void)
 void pmap_prealloc_lowmem_ptps(void);
 void pmap_changeprot_local(vaddr_t, vm_prot_t);
 
-#include <x86/pmap_pv.h>
-
-#define	__HAVE_VM_PAGE_MD
-#define	VM_MDPAGE_INIT(pg) \
-	memset(&(pg)->mdpage, 0, sizeof((pg)->mdpage)); \
-	PMAP_PAGE_INIT(&(pg)->mdpage.mp_pp)
-
-struct vm_page_md {
-	struct pmap_page mp_pp;
-};
-
-#else	/*	!__x86_64__	*/
+#else	/*	__x86_64__	*/
 
 #include <i386/pmap.h>
 

@@ -1,5 +1,4 @@
-/*	Id: order.c,v 1.60 2011/04/25 18:20:17 ragge Exp 	*/	
-/*	$NetBSD: order.c,v 1.1.1.4 2011/09/01 12:46:36 plunky Exp $	*/
+/*	$Id: order.c,v 1.1.1.1 2008/08/24 05:32:55 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -104,16 +103,14 @@ myormake(NODE *q)
  * Shape matches for UMUL.  Cooperates with offstar().
  */
 int
-shumul(NODE *p, int shape)
+shumul(NODE *p)
 {
 
 	if (x2debug)
 		printf("shumul(%p)\n", p);
 
 	/* Turns currently anything into OREG on x86 */
-	if (shape & SOREG)
-		return SROREG;
-	return SRNOPE;
+	return SOREG;
 }
 
 /*
@@ -160,26 +157,11 @@ nspecial(struct optab *q)
 		}
 
 	case STASG:
-		{
-			static struct rspecial s[] = {
-				{ NEVER, EDI },
-				{ NRIGHT, ESI }, { NOLEFT, ESI },
-				{ NOLEFT, ECX }, { NORIGHT, ECX },
-				{ NEVER, ECX }, { 0 } };
-			return s;
-		}
-
 	case STARG:
 		{
 			static struct rspecial s[] = {
-#if defined(MACHOABI)
 				{ NEVER, EAX }, { NEVER, EDX },
 				{ NEVER, ECX }, { 0 } };
-
-#else
-				{ NEVER, EDI }, { NEVER, ECX },
-				{ NLEFT, ESI }, { 0 } };
-#endif
 			return s;
 		}
 
@@ -257,8 +239,8 @@ nspecial(struct optab *q)
 			return s;
 		} else if (q->lshape & SCREG) {
 			static struct rspecial s[] = {
-				{ NLEFT, EAXEDX }, { NRIGHT, ECXESI },
-				{ NEVER, ESI }, { NRES, EAXEDX }, { 0 } };
+				{ NEVER, EAX }, { NEVER, EDX },
+				{ NEVER, ECX }, { NRES, EAXEDX }, { 0 } };
 			return s;
 		}
 		break;
@@ -270,8 +252,8 @@ nspecial(struct optab *q)
 			return s;
 		} else if (q->visit & INCREG) {
 			static struct rspecial s[] = {
-				{ NLEFT, EAXEDX }, { NRIGHT, CL },
-				{ NRES, EAXEDX }, { 0 } };
+				{ NEVER, EAX }, { NEVER, EDX },
+				{ NEVER, ECX }, { NRES, EAXEDX }, { 0 } };
 			return s;
 		}
 		break;

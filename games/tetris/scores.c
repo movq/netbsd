@@ -1,4 +1,4 @@
-/*	$NetBSD: scores.c,v 1.20 2011/01/05 15:48:00 wiz Exp $	*/
+/*	$NetBSD: scores.c,v 1.14 2006/06/01 16:12:27 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -50,20 +50,13 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
-#include <term.h>
+#include <termcap.h>
 #include <unistd.h>
 
 #include "pathnames.h"
 #include "screen.h"
 #include "scores.h"
 #include "tetris.h"
-
-/*
- * Allow updating the high scores unless we're built as part of /rescue.
- */
-#ifndef RESCUEDIR
-#define ALLOW_SCORE_UPDATES
-#endif
 
 /*
  * Within this code, we can hang onto one extra "high score", leaving
@@ -83,317 +76,34 @@ static struct highscore scores[NUMSPOTS];
 
 static int checkscores(struct highscore *, int);
 static int cmpscores(const void *, const void *);
-static void getscores(int *);
+static void getscores(FILE **);
 static void printem(int, int, struct highscore *, int, const char *);
 static char *thisuser(void);
-
-/* contents chosen to be a highly illegal username */
-static const char hsh_magic_val[HSH_MAGIC_SIZE] = "//:\0\0://";
-
-#define HSH_ENDIAN_NATIVE	0x12345678
-#define HSH_ENDIAN_OPP		0x78563412
-
-/* current file format version */
-#define HSH_VERSION		1
-
-/* codes for scorefile_probe return */
-#define SCOREFILE_ERROR		(-1)
-#define SCOREFILE_CURRENT	0	/* 40-byte */
-#define SCOREFILE_CURRENT_OPP	1	/* 40-byte, opposite-endian */
-#define SCOREFILE_599		2	/* 36-byte */
-#define SCOREFILE_599_OPP	3	/* 36-byte, opposite-endian */
-#define SCOREFILE_50		4	/* 32-byte */
-#define SCOREFILE_50_OPP	5	/* 32-byte, opposite-endian */
-
-/*
- * Check (or guess) what kind of score file contents we have.
- */
-static int
-scorefile_probe(int sd)
-{
-	struct stat st;
-	int t1, t2, t3, tx;
-	ssize_t result;
-	uint32_t numbers[3], offset56, offset60, offset64;
-
-	if (fstat(sd, &st) < 0) {
-		warn("Score file %s: fstat", _PATH_SCOREFILE);
-		return -1;
-	}
-
-	t1 = st.st_size % sizeof(struct highscore_ondisk) == 0;
-	t2 = st.st_size % sizeof(struct highscore_ondisk_599) == 0;
-	t3 = st.st_size % sizeof(struct highscore_ondisk_50) == 0;
-	tx = t1 + t2 + t3;
-	if (tx == 1) {
-		/* Size matches exact number of one kind of records */
-		if (t1) {
-			return SCOREFILE_CURRENT;
-		} else if (t2) {
-			return SCOREFILE_599;
-		} else {
-			return SCOREFILE_50;
-		}
-	} else if (tx == 0) {
-		/* Size matches nothing, pick most likely as default */
-		goto wildguess;
-	}
-
-	/*
-	 * File size is multiple of more than one structure size.
-	 * (For example, 288 bytes could be 9*hso50 or 8*hso599.)
-	 * Read the file and see if we can figure out what's going
-	 * on. This is the layout of the first two records:
-	 *
-	 *   offset     hso / current   hso_599         hso_50
-	 *              (40-byte)       (36-byte)       (32-byte)
-	 *
-	 *   0          name #0         name #0         name #0
-         *   4            :               :               :
-         *   8            :               :               :
-         *   12           :               :               :
-         *   16           :               :               :
-	 *   20         score #0        score #0        score #0
-	 *   24         level #0        level #0        level #0
-	 *   28          (pad)          time #0         time #0
-	 *   32         time #0                         name #1
-	 *   36                         name #1           :
-         *   40         name #1           :               :
-         *   44           :               :               :
-         *   48           :               :               :
-	 *   52           :               :             score #1
-	 *   56           :             score #1        level #1
-	 *   60         score #1        level #1        time #1
-	 *   64         level #1        time #1         name #2
-	 *   68          (pad)            :               :
-	 *   72         time #1         name #2           :
-	 *   76           :               :               :
-	 *   80                  --- end ---
-	 *
-	 * There are a number of things we could check here, but the
-	 * most effective test is based on the following restrictions:
-	 *
-	 *    - The level must be between 1 and 9 (inclusive)
-	 *    - All times must be after 1985 and are before 2038,
-	 *      so the high word must be 0 and the low word may not be
-	 *      a small value.
-	 *    - Integer values of 0 or 1-9 cannot be the beginning of
-	 *      a login name string.
-	 *    - Values of 1-9 are probably not a score.
-	 *
-	 * So we read the three words at offsets 56, 60, and 64, and
-	 * poke at the values to try to figure things...
-	 */
-
-	if (lseek(sd, 56, SEEK_SET) < 0) {
-		warn("Score file %s: lseek", _PATH_SCOREFILE);
-		return -1;
-	}
-	result = read(sd, &numbers, sizeof(numbers));
-	if (result < 0) {
-		warn("Score file %s: read", _PATH_SCOREFILE);
-		return -1;
-	}
-	if ((size_t)result != sizeof(numbers)) {
-		/*
-		 * The smallest file whose size divides by more than
-		 * one of the sizes is substantially larger than 64,
-		 * so this should *never* happen.
-		 */
-		warnx("Score file %s: Unexpected EOF", _PATH_SCOREFILE);
-		return -1;
-	}
-
-	offset56 = numbers[0];
-	offset60 = numbers[1];
-	offset64 = numbers[2];
-
-	if (offset64 >= MINLEVEL && offset64 <= MAXLEVEL) {
-		/* 40-byte structure */
-		return SCOREFILE_CURRENT;
-	} else if (offset60 >= MINLEVEL && offset60 <= MAXLEVEL) {
-		/* 36-byte structure */
-		return SCOREFILE_599;
-	} else if (offset56 >= MINLEVEL && offset56 <= MAXLEVEL) {
-		/* 32-byte structure */
-		return SCOREFILE_50;
-	}
-
-	/* None was a valid level; try opposite endian */
-	offset64 = bswap32(offset64);
-	offset60 = bswap32(offset60);
-	offset56 = bswap32(offset56);
-
-	if (offset64 >= MINLEVEL && offset64 <= MAXLEVEL) {
-		/* 40-byte structure */
-		return SCOREFILE_CURRENT_OPP;
-	} else if (offset60 >= MINLEVEL && offset60 <= MAXLEVEL) {
-		/* 36-byte structure */
-		return SCOREFILE_599_OPP;
-	} else if (offset56 >= MINLEVEL && offset56 <= MAXLEVEL) {
-		/* 32-byte structure */
-		return SCOREFILE_50_OPP;
-	}
-
-	/* That didn't work either, dunno what's going on */
- wildguess:
-	warnx("Score file %s is likely corrupt", _PATH_SCOREFILE);
-	if (sizeof(void *) == 8 && sizeof(time_t) == 8) {
-		return SCOREFILE_CURRENT;
-	} else if (sizeof(time_t) == 8) {
-		return SCOREFILE_599;
-	} else {
-		return SCOREFILE_50;
-	}
-}
-
-/*
- * Copy a string safely, making sure it's null-terminated.
- */
-static void
-readname(char *to, size_t maxto, const char *from, size_t maxfrom)
-{
-	size_t amt;
-
-	amt = maxto < maxfrom ? maxto : maxfrom;
-	memcpy(to, from, amt);
-	to[maxto-1] = '\0';
-}
-
-/*
- * Copy integers, byte-swapping if desired.
- */
-static int32_t
-read32(int32_t val, int doflip)
-{
-	if (doflip) {
-		val = bswap32(val);
-	}
-	return val;
-}
-
-static int64_t
-read64(int64_t val, int doflip)
-{
-	if (doflip) {
-		val = bswap64(val);
-	}
-	return val;
-}
-
-/*
- * Read up to MAXHISCORES scorefile_ondisk entries.
- */
-static int
-readscores(int sd, int doflip)
-{
-	struct highscore_ondisk buf[MAXHISCORES];
-	ssize_t result;
-	int i;
-
-	result = read(sd, buf, sizeof(buf));
-	if (result < 0) {
-		warn("Score file %s: read", _PATH_SCOREFILE);
-		return -1;
-	}
-	nscores = result / sizeof(buf[0]);
-
-	for (i=0; i<nscores; i++) {
-		readname(scores[i].hs_name, sizeof(scores[i].hs_name),
-			 buf[i].hso_name, sizeof(buf[i].hso_name));
-		scores[i].hs_score = read32(buf[i].hso_score, doflip);
-		scores[i].hs_level = read32(buf[i].hso_level, doflip);
-		scores[i].hs_time = read64(buf[i].hso_time, doflip);
-	}
-	return 0;
-}
-
-/*
- * Read up to MAXHISCORES scorefile_ondisk_599 entries.
- */
-static int
-readscores599(int sd, int doflip)
-{
-	struct highscore_ondisk_599 buf[MAXHISCORES];
-	ssize_t result;
-	int i;
-
-	result = read(sd, buf, sizeof(buf));
-	if (result < 0) {
-		warn("Score file %s: read", _PATH_SCOREFILE);
-		return -1;
-	}
-	nscores = result / sizeof(buf[0]);
-
-	for (i=0; i<nscores; i++) {
-		readname(scores[i].hs_name, sizeof(scores[i].hs_name),
-			 buf[i].hso599_name, sizeof(buf[i].hso599_name));
-		scores[i].hs_score = read32(buf[i].hso599_score, doflip);
-		scores[i].hs_level = read32(buf[i].hso599_level, doflip);
-		/*
-		 * Don't bother pasting the time together into a
-		 * 64-bit value; just take whichever half is nonzero.
-		 */
-		scores[i].hs_time =
-			read32(buf[i].hso599_time[buf[i].hso599_time[0] == 0],
-			       doflip);
-	}
-	return 0;
-}
-
-/*
- * Read up to MAXHISCORES scorefile_ondisk_50 entries.
- */
-static int
-readscores50(int sd, int doflip)
-{
-	struct highscore_ondisk_50 buf[MAXHISCORES];
-	ssize_t result;
-	int i;
-
-	result = read(sd, buf, sizeof(buf));
-	if (result < 0) {
-		warn("Score file %s: read", _PATH_SCOREFILE);
-		return -1;
-	}
-	nscores = result / sizeof(buf[0]);
-
-	for (i=0; i<nscores; i++) {
-		readname(scores[i].hs_name, sizeof(scores[i].hs_name),
-			 buf[i].hso50_name, sizeof(buf[i].hso50_name));
-		scores[i].hs_score = read32(buf[i].hso50_score, doflip);
-		scores[i].hs_level = read32(buf[i].hso50_level, doflip);
-		scores[i].hs_time = read32(buf[i].hso50_time, doflip);
-	}
-	return 0;
-}
 
 /*
  * Read the score file.  Can be called from savescore (before showscores)
  * or showscores (if savescore will not be called).  If the given pointer
- * is not NULL, sets *fdp to an open file handle that corresponds to a
+ * is not NULL, sets *fpp to an open file pointer that corresponds to a
  * read/write score file that is locked with LOCK_EX.  Otherwise, the
  * file is locked with LOCK_SH for the read and closed before return.
+ *
+ * Note, we assume closing the stdio file releases the lock.
  */
 static void
-getscores(int *fdp)
+getscores(fpp)
+	FILE **fpp;
 {
-	struct highscore_header header;
 	int sd, mint, lck;
 	mode_t mask;
 	const char *mstr, *human;
-	int doflip;
-	int serrno;
-	ssize_t result;
+	FILE *sf;
 
-#ifdef ALLOW_SCORE_UPDATES
-	if (fdp != NULL) {
+	if (fpp != NULL) {
 		mint = O_RDWR | O_CREAT;
+		mstr = "r+";
 		human = "read/write";
 		lck = LOCK_EX;
-	} else
-#endif
-	{
+	} else {
 		mint = O_RDONLY;
 		mstr = "r";
 		human = "reading";
@@ -402,263 +112,49 @@ getscores(int *fdp)
 	setegid(egid);
 	mask = umask(S_IWOTH);
 	sd = open(_PATH_SCOREFILE, mint, 0666);
-	serrno = errno;
 	(void)umask(mask);
-	setegid(gid);
 	if (sd < 0) {
-		/*
-		 * If the file simply isn't there because nobody's
-		 * played yet, and we aren't going to be trying to
-		 * update it, don't warn. Even if we are going to be
-		 * trying to write it, don't fail -- we can still show
-		 * the player the score they got.
-		 */
-		if (fdp != NULL || errno != ENOENT) {
-			warn("Cannot open %s for %s", _PATH_SCOREFILE, human);
+		if (fpp == NULL) {
+			nscores = 0;
+			setegid(gid);
+			return;
 		}
-		goto fail;
+		err(1, "cannot open %s for %s", _PATH_SCOREFILE, human);
 	}
+	if ((sf = fdopen(sd, mstr)) == NULL) {
+		err(1, "cannot fdopen %s for %s", _PATH_SCOREFILE, human);
+	}
+	setegid(gid);
 
 	/*
 	 * Grab a lock.
-	 * XXX: failure here should probably be more fatal than this.
 	 */
 	if (flock(sd, lck))
 		warn("warning: score file %s cannot be locked",
 		    _PATH_SCOREFILE);
 
-	/*
-	 * The current format (since -current of 20090525) is
-	 *
-	 *    struct highscore_header
-	 *    up to MAXHIGHSCORES x struct highscore_ondisk
-	 *
-	 * Before this, there is no header, and the contents
-	 * might be any of three formats:
-	 *
-	 *    highscore_ondisk       (64-bit machines with 64-bit time_t)
-	 *    highscore_ondisk_599   (32-bit machines with 64-bit time_t)
-	 *    highscore_ondisk_50    (32-bit machines with 32-bit time_t)
-	 *
-	 * The first two appear in 5.99 between the time_t change and
-	 * 20090525, depending on whether the compiler inserts
-	 * structure padding before an unaligned 64-bit time_t. The
-	 * last appears in 5.0 and earlier.
-	 *
-	 * Any or all of these might also appear on other OSes where
-	 * this code has been ported.
-	 *
-	 * Since the old file has no header, we will have to guess
-	 * which of these formats it has.
-	 */
-
-	/*
-	 * First, look for a header.
-	 */
-	result = read(sd, &header, sizeof(header));
-	if (result < 0) {
-		warn("Score file %s: read", _PATH_SCOREFILE);
-		goto sdfail;
-	}
-	if (result != 0 && (size_t)result != sizeof(header)) {
-		warnx("Score file %s: read: unexpected EOF", _PATH_SCOREFILE);
-		/*
-		 * File is hopelessly corrupt, might as well truncate it
-		 * and start over with empty scores.
-		 */
-		if (lseek(sd, 0, SEEK_SET) < 0) {
-			/* ? */
-			warn("Score file %s: lseek", _PATH_SCOREFILE);
-			goto sdfail;
-		}
-		if (ftruncate(sd, 0) == 0) {
-			result = 0;
-		} else {
-			goto sdfail;
-		}
+	nscores = fread(scores, sizeof(scores[0]), MAXHISCORES, sf);
+	if (ferror(sf)) {
+		err(1, "error reading %s", _PATH_SCOREFILE);
 	}
 
-	if (result == 0) {
-		/* Empty file; that just means there are no scores. */
-		nscores = 0;
-	} else {
-		/*
-		 * Is what we read a header, or the first 16 bytes of
-		 * a score entry? hsh_magic_val is chosen to be
-		 * something that is extremely unlikely to appear in
-		 * hs_name[].
-		 */
-		if (!memcmp(header.hsh_magic, hsh_magic_val, HSH_MAGIC_SIZE)) {
-			/* Yes, we have a header. */
-
-			if (header.hsh_endiantag == HSH_ENDIAN_NATIVE) {
-				/* native endian */
-				doflip = 0;
-			} else if (header.hsh_endiantag == HSH_ENDIAN_OPP) {
-				doflip = 1;
-			} else {
-				warnx("Score file %s: Unknown endian tag %u",
-					_PATH_SCOREFILE, header.hsh_endiantag);
-				goto sdfail;
-			}
-
-			if (header.hsh_version != HSH_VERSION) {
-				warnx("Score file %s: Unknown version code %u",
-					_PATH_SCOREFILE, header.hsh_version);
-				goto sdfail;
-			}
-
-			if (readscores(sd, doflip) < 0) {
-				goto sdfail;
-			}
-		} else {
-			/*
-			 * Ok, it wasn't a header. Try to figure out what
-			 * size records we have.
-			 */
-			result = scorefile_probe(sd);
-			if (lseek(sd, 0, SEEK_SET) < 0) {
-				warn("Score file %s: lseek", _PATH_SCOREFILE);
-				goto sdfail;
-			}
-			switch (result) {
-			case SCOREFILE_CURRENT:
-				result = readscores(sd, 0 /* don't flip */);
-				break;
-			case SCOREFILE_CURRENT_OPP:
-				result = readscores(sd, 1 /* do flip */);
-				break;
-			case SCOREFILE_599:
-				result = readscores599(sd, 0 /* don't flip */);
-				break;
-			case SCOREFILE_599_OPP:
-				result = readscores599(sd, 1 /* do flip */);
-				break;
-			case SCOREFILE_50:
-				result = readscores50(sd, 0 /* don't flip */);
-				break;
-			case SCOREFILE_50_OPP:
-				result = readscores50(sd, 1 /* do flip */);
-				break;
-			default:
-				goto sdfail;
-			}
-			if (result < 0) {
-				goto sdfail;
-			}
-		}
-	}
-	
-
-	if (fdp)
-		*fdp = sd;
+	if (fpp)
+		*fpp = sf;
 	else
-		close(sd);
-
-	return;
-
-sdfail:
-	close(sd);
- fail:
-	if (fdp != NULL) {
-		*fdp = -1;
-	}
-	nscores = 0;
+		(void)fclose(sf);
 }
 
-#ifdef ALLOW_SCORE_UPDATES
-/*
- * Paranoid write wrapper; unlike fwrite() it preserves errno.
- */
-static int
-dowrite(int sd, const void *vbuf, size_t len)
-{
-	const char *buf = vbuf;
-	ssize_t result;
-	size_t done = 0;
-
-	while (done < len) {
-		result = write(sd, buf+done, len-done);
-		if (result < 0) {
-			if (errno == EINTR) {
-				continue;
-			}
-			return -1;
-		}
-		done += result;
-	}
-	return 0;
-}
-#endif /* ALLOW_SCORE_UPDATES */
-
-/*
- * Write the score file out.
- */
-static void
-putscores(int sd)
-{
-#ifdef ALLOW_SCORE_UPDATES
-	struct highscore_header header;
-	struct highscore_ondisk buf[MAXHISCORES];
-	int i;
-
-	if (sd == -1) {
-		return;
-	}
-
-	memcpy(header.hsh_magic, hsh_magic_val, HSH_MAGIC_SIZE);
-	header.hsh_endiantag = HSH_ENDIAN_NATIVE;
-	header.hsh_version = HSH_VERSION;
-
-	for (i=0; i<nscores; i++) {
-		strncpy(buf[i].hso_name, scores[i].hs_name,
-			sizeof(buf[i].hso_name));
-		buf[i].hso_score = scores[i].hs_score;
-		buf[i].hso_level = scores[i].hs_level;
-		buf[i].hso_pad = 0xbaadf00d;
-		buf[i].hso_time = scores[i].hs_time;
-	}
-
-	if (lseek(sd, 0, SEEK_SET) < 0) {
-		warn("Score file %s: lseek", _PATH_SCOREFILE);
-		goto fail;
-	}
-	if (dowrite(sd, &header, sizeof(header)) < 0 ||
-	    dowrite(sd, buf, sizeof(buf[0]) * nscores) < 0) {
-		warn("Score file %s: write", _PATH_SCOREFILE);
-		goto fail;
-	}
-	return;
- fail:
-	warnx("high scores may be damaged");
-#else
-	(void)sd;
-#endif /* ALLOW_SCORE_UPDATES */
-}
-
-/*
- * Close the score file.
- */
-static void
-closescores(int sd)
-{
-	flock(sd, LOCK_UN);
-	close(sd);
-}
-
-/*
- * Read and update the scores file with the current reults.
- */
 void
-savescore(int level)
+savescore(level)
+	int level;
 {
 	struct highscore *sp;
 	int i;
 	int change;
-	int sd;
+	FILE *sf;
 	const char *me;
 
-	getscores(&sd);
+	getscores(&sf);
 	gotscores = 1;
 	(void)time(&now);
 
@@ -701,9 +197,14 @@ savescore(int level)
 		 * Sort & clean the scores, then rewrite.
 		 */
 		nscores = checkscores(scores, nscores);
-		putscores(sd);
+		rewind(sf);
+		if (fwrite(scores, sizeof(*sp), nscores, sf) != (size_t)nscores ||
+		    fflush(sf) == EOF)
+			warnx("error writing %s: %s -- %s",
+			    _PATH_SCOREFILE, strerror(errno),
+			    "high scores may be damaged");
 	}
-	closescores(sd);
+	(void)fclose(sf);	/* releases lock */
 }
 
 /*
@@ -711,7 +212,7 @@ savescore(int level)
  * The result is always trimmed to fit in a score.
  */
 static char *
-thisuser(void)
+thisuser()
 {
 	const char *p;
 	struct passwd *pw;
@@ -743,7 +244,8 @@ thisuser(void)
  * listed first in the highscore file.
  */
 static int
-cmpscores(const void *x, const void *y)
+cmpscores(x, y)
+	const void *x, *y;
 {
 	const struct highscore *a, *b;
 	long l;
@@ -772,7 +274,9 @@ cmpscores(const void *x, const void *y)
  * Caveat:  the highest score on each level is always kept.
  */
 static int
-checkscores(struct highscore *hs, int num)
+checkscores(hs, num)
+	struct highscore *hs;
+	int num;
 {
 	struct highscore *sp;
 	int i, j, k, numnames;
@@ -845,7 +349,8 @@ checkscores(struct highscore *hs, int num)
  *   before it can be shown anyway.
  */
 void
-showscores(int level)
+showscores(level)
+	int level;
 {
 	struct highscore *sp;
 	int i, n, c;
@@ -853,7 +358,7 @@ showscores(int level)
 	int levelfound[NLEVELS];
 
 	if (!gotscores)
-		getscores(NULL);
+		getscores((FILE **)NULL);
 	(void)printf("\n\t\t\t    Tetris High Scores\n");
 
 	/*
@@ -861,7 +366,7 @@ showscores(int level)
 	 * the high scores; we do not need to check for printing in highlight
 	 * mode.  If SOstr is null, we can't do highlighting anyway.
 	 */
-	me = level && enter_standout_mode ? thisuser() : NULL;
+	me = level && SOstr ? thisuser() : NULL;
 
 	/*
 	 * Set times to 0 except for high score on each level.
@@ -899,7 +404,11 @@ showscores(int level)
 }
 
 static void
-printem(int level, int offset, struct highscore *hs, int n, const char *me)
+printem(level, offset, hs, n, me)
+	int level, offset;
+	struct highscore *hs;
+	int n;
+	const char *me;
 {
 	struct highscore *sp;
 	int nrows, row, col, item, i, highlight;
@@ -939,12 +448,12 @@ printem(int level, int offset, struct highscore *hs, int n, const char *me)
 			    sp->hs_level == level &&
 			    sp->hs_score == score &&
 			    strcmp(sp->hs_name, me) == 0) {
-				putpad(enter_standout_mode);
+				putpad(SOstr);
 				highlight = 1;
 			}
 			(void)printf("%s", buf);
 			if (highlight) {
-				putpad(exit_standout_mode);
+				putpad(SEstr);
 				highlight = 0;
 			}
 

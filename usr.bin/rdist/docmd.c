@@ -1,4 +1,4 @@
-/*	$NetBSD: docmd.c,v 1.28 2009/04/13 04:35:36 lukem Exp $	*/
+/*	$NetBSD: docmd.c,v 1.27 2006/12/18 15:14:42 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)docmd.c	8.1 (Berkeley) 6/9/93";
 #else
-__RCSID("$NetBSD: docmd.c,v 1.28 2009/04/13 04:35:36 lukem Exp $");
+__RCSID("$NetBSD: docmd.c,v 1.27 2006/12/18 15:14:42 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -315,29 +315,29 @@ void
 /*ARGSUSED*/
 lostconn(int signo __unused)
 {
-	char lcbuf[BUFSIZ];
+	char buf[BUFSIZ];
 	int nr = -1;
 
 	if (remerr != -1)
 		if (ioctl(remerr, FIONREAD, &nr) != -1) {
-			if (nr >= (int)sizeof(lcbuf))
-				nr = sizeof(lcbuf) - 1;
-			if ((nr = read(remerr, lcbuf, nr)) > 0) {
-				lcbuf[nr] = '\0';
-				if (lcbuf[nr - 1] == '\n')
-					lcbuf[--nr] = '\0';
+			if (nr >= sizeof(buf))
+				nr = sizeof(buf) - 1;
+			if ((nr = read(remerr, buf, nr)) > 0) {
+				buf[nr] = '\0';
+				if (buf[nr - 1] == '\n')
+					buf[--nr] = '\0';
 			}
 		}
 
 	if (nr <= 0)
-		(void) strlcpy(lcbuf, "lost connection", sizeof(lcbuf));
+		(void) strlcpy(buf, "lost connection", sizeof(buf));
 
 	if (iamremote)
 		cleanup(0);
 	if (lfp)
-		dolog(lfp, "rdist: %s\n", lcbuf);
+		dolog(lfp, "rdist: %s\n", buf);
 	else
-		error("%s\n", lcbuf);
+		error("%s\n", buf);
 	longjmp(env, 1);
 }
 

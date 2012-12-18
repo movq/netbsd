@@ -27,7 +27,7 @@ SOFTWARE.
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bootpgw.c,v 1.15 2011/08/29 20:38:55 joerg Exp $");
+__RCSID("$NetBSD: bootpgw.c,v 1.13 2007/05/27 16:31:42 tls Exp $");
 #endif
 
 /*
@@ -84,7 +84,7 @@ __RCSID("$NetBSD: bootpgw.c,v 1.15 2011/08/29 20:38:55 joerg Exp $");
  * Externals, forward declarations, and global variables
  */
 
-__dead static void usage(void);
+static void usage(void);
 static void handle_reply(void);
 static void handle_request(void);
 int main(int, char **);
@@ -449,7 +449,7 @@ main(int argc, char **argv)
 			report(LOG_INFO, "recvd pkt from IP addr %s",
 				   inet_ntoa(clnt_addr.sin_addr));
 		}
-		if (n < (int)sizeof(struct bootp)) {
+		if (n < sizeof(struct bootp)) {
 			if (debug) {
 				report(LOG_INFO, "received short packet");
 			}

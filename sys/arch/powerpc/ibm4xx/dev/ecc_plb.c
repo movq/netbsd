@@ -1,4 +1,4 @@
-/*	$NetBSD: ecc_plb.c,v 1.14 2011/06/18 06:41:42 matt Exp $	*/
+/*	$NetBSD: ecc_plb.c,v 1.11 2006/05/05 18:04:42 thorpej Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -36,43 +36,42 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ecc_plb.c,v 1.14 2011/06/18 06:41:42 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ecc_plb.c,v 1.11 2006/05/05 18:04:42 thorpej Exp $");
 
 #include "locators.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/cpu.h>
 
 #include <prop/proplib.h>
 
-#include <powerpc/ibm4xx/cpu.h>
-#include <powerpc/ibm4xx/dcr4xx.h>
+#include <machine/cpu.h>
+#include <powerpc/ibm4xx/dcr405gp.h>
 #include <powerpc/ibm4xx/dev/plbvar.h>
 
 
 struct ecc_plb_softc {
-	device_t sc_dev;
-	uint64_t sc_ecc_tb;
-	uint64_t sc_ecc_iv;	 /* Interval */
-	uint32_t sc_ecc_cnt;
+	struct device sc_dev;
+	u_quad_t sc_ecc_tb;
+	u_quad_t sc_ecc_iv;	 /* Interval */
+	u_int32_t sc_ecc_cnt;
 	u_int sc_memsize;
 	int sc_irq;
 };
 
-static int	ecc_plbmatch(device_t, cfdata_t, void *);
-static void	ecc_plbattach(device_t, device_t, void *);
-static void	ecc_plb_deferred(device_t);
+static int	ecc_plbmatch(struct device *, struct cfdata *, void *);
+static void	ecc_plbattach(struct device *, struct device *, void *);
+static void	ecc_plb_deferred(struct device *);
 static int	ecc_plb_intr(void *);
 
-CFATTACH_DECL_NEW(ecc_plb, sizeof(struct ecc_plb_softc),
+CFATTACH_DECL(ecc_plb, sizeof(struct ecc_plb_softc),
     ecc_plbmatch, ecc_plbattach, NULL, NULL);
 
 static int ecc_plb_found;
 
 static int
-ecc_plbmatch(device_t parent, cfdata_t cf, void *aux)
+ecc_plbmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct plb_attach_args *paa = aux;
 
@@ -88,9 +87,9 @@ ecc_plbmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-ecc_plbattach(device_t parent, device_t self, void *aux)
+ecc_plbattach(struct device *parent, struct device *self, void *aux)
 {
-	struct ecc_plb_softc *sc = device_private(self);
+	struct ecc_plb_softc *sc = (struct ecc_plb_softc *)self;
 	struct plb_attach_args *paa = aux;
 	unsigned int processor_freq;
 	unsigned int memsiz;
@@ -106,9 +105,8 @@ ecc_plbattach(device_t parent, device_t self, void *aux)
 	KASSERT(pn != NULL);
 	memsiz = (unsigned int) prop_number_integer_value(pn);
 
-	aprint_normal(": ECC controller\n");
+	printf(": ECC controller\n");
 
-	sc->sc_dev = self;
 	sc->sc_ecc_tb = 0;
 	sc->sc_ecc_cnt = 0;
 	sc->sc_ecc_iv = processor_freq; /* Set interval */
@@ -123,11 +121,11 @@ ecc_plbattach(device_t parent, device_t self, void *aux)
 }
 
 static void
-ecc_plb_deferred(device_t self)
+ecc_plb_deferred(struct device *self)
 {
-	struct ecc_plb_softc *sc = device_private(self);
+	struct ecc_plb_softc *sc = (struct ecc_plb_softc *)self;
 
-	intr_establish(sc->sc_irq, IST_LEVEL, IPL_SERIAL, ecc_plb_intr, sc);
+	intr_establish(sc->sc_irq, IST_LEVEL, IPL_SERIAL, ecc_plb_intr, NULL);
 }
 
 /*

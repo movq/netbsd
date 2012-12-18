@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0_udc.c,v 1.5 2011/07/01 20:32:51 dyoung Exp $	*/
+/*	$NetBSD: pxa2x0_udc.c,v 1.1 2006/12/17 16:03:33 peter Exp $	*/
 /*	$OpenBSD: pxa27x_udc.c,v 1.5 2005/03/30 14:24:39 dlg Exp $ */
 
 /*
@@ -23,7 +23,7 @@
 #include <sys/kernel.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/xscale/pxa2x0cpu.h>
 #include <arm/xscale/pxa2x0reg.h>
@@ -31,7 +31,7 @@
 #include <arm/xscale/pxa2x0_gpio.h>
 
 struct pxaudc_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	bus_size_t		sc_size;
@@ -39,67 +39,71 @@ struct pxaudc_softc {
 	void 			*sc_powerhook;
 };
 
-static int	pxaudc_match(device_t, cfdata_t, void *);
-static void	pxaudc_attach(device_t, device_t, void *);
-static int	pxaudc_detach(device_t, int);
+static int	pxaudc_match(struct device *, struct cfdata *, void *);
+static void	pxaudc_attach(struct device *, struct device *, void *);
+static int	pxaudc_detach(struct device *, int);
 
-CFATTACH_DECL_NEW(pxaudc, sizeof(struct pxaudc_softc),
+CFATTACH_DECL(pxaudc, sizeof(struct pxaudc_softc),
     pxaudc_match, pxaudc_attach, pxaudc_detach, NULL);
 
 static void	pxaudc_power(int, void *);
 static void	pxaudc_enable(struct pxaudc_softc *);
 
 static int
-pxaudc_match(device_t parent, cfdata_t cf, void *aux)
+pxaudc_match(struct device *parent, struct cfdata *cf, void *aux)
 {
-	struct pxaip_attach_args *pxa = aux;
 
-	if (CPU_IS_PXA270 && strcmp(pxa->pxa_name, cf->cf_name) == 0) {
-		pxa->pxa_size = PXA270_USBDC_SIZE;
+	if (CPU_IS_PXA270)
 		return 1;
-	}
 	return 0;
 }
 
 static void
-pxaudc_attach(device_t parent, device_t self, void *aux)
+pxaudc_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct pxaudc_softc *sc = device_private(self);
+	struct pxaudc_softc *sc = (struct pxaudc_softc *)self;
 	struct pxaip_attach_args *pxa = (struct pxaip_attach_args *)aux;
 
-	sc->sc_dev = self;
 	sc->sc_iot = pxa->pxa_iot;
 	sc->sc_size = 0;
 	sc->sc_powerhook = NULL;
 
-	aprint_normal(": USB Device Controller\n");
-	aprint_naive("\n");
-
-	if (bus_space_map(sc->sc_iot, pxa->pxa_addr, pxa->pxa_size, 0,
+	if (bus_space_map(sc->sc_iot, PXA2X0_USBDC_BASE, PXA2X0_USBDC_SIZE, 0,
 	    &sc->sc_ioh)) {
-		aprint_error_dev(self, "couldn't map memory space\n");
+		aprint_error(": couldn't map memory space\n");
 		return;
 	}
-	sc->sc_size = pxa->pxa_size;
+	sc->sc_size = PXA2X0_USBDC_SIZE;
+
+	printf(": PXA2x0 USB Device Controller\n");
 
 	bus_space_barrier(sc->sc_iot, sc->sc_ioh, 0, sc->sc_size,
 	    BUS_SPACE_BARRIER_READ|BUS_SPACE_BARRIER_WRITE);
+
+	pxa2x0_gpio_set_function(35, GPIO_ALT_FN_2_IN); /* USB_P2_1 */
+	pxa2x0_gpio_set_function(37, GPIO_ALT_FN_1_OUT); /* USB_P2_8 */
+	pxa2x0_gpio_set_function(41, GPIO_ALT_FN_2_IN); /* USB_P2_7 */
+	pxa2x0_gpio_set_function(89, GPIO_ALT_FN_2_OUT); /* USBHPEN<1> */
+	pxa2x0_gpio_set_function(120, GPIO_ALT_FN_2_OUT); /* USBHPEN<2> */
 
 	pxa2x0_clkman_config(CKEN_USBDC, 1);
 
 	pxaudc_enable(sc);
 
-	sc->sc_powerhook = powerhook_establish(device_xname(self),
+	pxa2x0_gpio_set_bit(37); /* USB_P2_8 */
+
+	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
 	    pxaudc_power, sc);
 	if (sc->sc_powerhook == NULL) {
-		aprint_error_dev(self, "unable to establish powerhook.\n");
+		aprint_error("%s: unable to establish powerhook.\n",
+		    sc->sc_dev.dv_xname);
 	}
 }
 
 static int
-pxaudc_detach(device_t self, int flags)
+pxaudc_detach(struct device *self, int flags)
 {
-	struct pxaudc_softc *sc = device_private(self);
+	struct pxaudc_softc *sc = (struct pxaudc_softc *)self;
 
 	if (sc->sc_powerhook)
 		powerhook_disestablish(sc->sc_powerhook);

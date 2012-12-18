@@ -1,4 +1,4 @@
-/*	$NetBSD: local_passwd.c,v 1.36 2012/03/25 05:55:07 dholland Exp $	*/
+/*	$NetBSD: local_passwd.c,v 1.31.10.1 2010/11/20 00:12:37 riz Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)local_passwd.c    8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: local_passwd.c,v 1.36 2012/03/25 05:55:07 dholland Exp $");
+__RCSID("$NetBSD: local_passwd.c,v 1.31.10.1 2010/11/20 00:12:37 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -86,7 +86,7 @@ getnewpasswd(struct passwd *pw, int min_pw_len)
 			(void)printf("Password unchanged.\n");
 			pw_error(NULL, 0, 0);
 		}
-		if (min_pw_len > 0 && (int)strlen(p) < min_pw_len) {
+		if (min_pw_len > 0 && strlen(p) < min_pw_len) {
 			(void) printf("Password is too short.\n");
 			continue;
 		}
@@ -217,7 +217,7 @@ pwlocal_process(const char *username, int argc, char **argv)
 	pw_copy(pfd, tfd, pw, &old_pw);
 
 	if (pw_mkdb(username, old_change == pw->pw_change) < 0)
-		pw_error(NULL, 0, 1);
+		pw_error((char *)NULL, 0, 1);
 
 	syslog(LOG_AUTH | LOG_INFO,
 	       "user %s (UID %lu) successfully changed "
@@ -230,16 +230,17 @@ pwlocal_process(const char *username, int argc, char **argv)
 static int force_local;
 
 int
-local_init(const char *progname)
+local_init(progname)
+	const char *progname;
 {
 	force_local = 0;
 	return (0);
 }
 
 int
-local_arg(char ch, const char *arg)
+local_arg(char arg, const char *optarg)
 {
-	switch (ch) {
+	switch (arg) {
 	case 'l':
 		force_local = 1;
 		break;
@@ -250,7 +251,7 @@ local_arg(char ch, const char *arg)
 }
 
 int
-local_arg_end(void)
+local_arg_end()
 {
 	if (force_local)
 		return(PW_USE_FORCE);
@@ -258,13 +259,14 @@ local_arg_end(void)
 }
 
 void
-local_end(void)
+local_end()
 {
 	/* NOOP */
 }
 
 int
-local_chpw(const char *uname)
+local_chpw(uname)
+	const char *uname;
 {
 	struct passwd *pw;
 	struct passwd old_pw;
@@ -326,7 +328,7 @@ local_chpw(const char *uname)
 	pw_copy(pfd, tfd, pw, &old_pw);
 
 	if (pw_mkdb(uname, old_change == pw->pw_change) < 0)
-		pw_error(NULL, 0, 1);
+		pw_error((char *)NULL, 0, 1);
 
 	syslog(LOG_AUTH | LOG_INFO,
 	       "user %s (UID %lu) successfully changed "

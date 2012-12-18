@@ -1,4 +1,4 @@
-/* $NetBSD: hpqlb_acpi.c,v 1.9 2011/02/16 09:05:12 jruoho Exp $ */
+/* $NetBSD: hpqlb_acpi.c,v 1.2 2008/05/02 01:53:33 simonb Exp $ */
 
 /*-
  * Copyright (c) 2008  Christoph Egger <cegger@netbsd.org>
@@ -27,25 +27,29 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpqlb_acpi.c,v 1.9 2011/02/16 09:05:12 jruoho Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpqlb_acpi.c,v 1.2 2008/05/02 01:53:33 simonb Exp $");
 
+#include <sys/types.h>
 #include <sys/param.h>
+#include <sys/malloc.h>
+#include <sys/buf.h>
+#include <sys/callout.h>
+#include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/module.h>
-#include <sys/systm.h>
+#include <sys/pmf.h>
 
-#include <machine/pio.h>
-
-#include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 
-#include <dev/isa/isareg.h>
-
+#include <machine/pio.h>
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wskbdvar.h>
+#include <dev/isa/isareg.h>
 
-#define _COMPONENT		ACPI_RESOURCE_COMPONENT
-ACPI_MODULE_NAME		("hpqlb_acpi")
+#ifdef HPQLB_DEBUG
+#define DPRINTF(x)		do { printf x; } while (/* CONSTCOND */0)
+#else
+#define DPRINTF(x)
+#endif
 
 struct hpqlb_softc {
 	device_t sc_dev;
@@ -84,16 +88,15 @@ struct hpqlb_softc {
 
 static int hpqlb_match(device_t, cfdata_t, void *);
 static void hpqlb_attach(device_t, device_t, void *);
-static int hpqlb_detach(device_t, int);
 
 static int hpqlb_finalize(device_t);
 static int hpqlb_hotkey_handler(struct wskbd_softc *, void *, u_int, int);
 
 static void hpqlb_init(device_t);
-static bool hpqlb_resume(device_t, const pmf_qual_t *);
+static bool hpqlb_resume(device_t PMF_FN_PROTO);
 
 CFATTACH_DECL_NEW(hpqlb, sizeof(struct hpqlb_softc),
-    hpqlb_match, hpqlb_attach, hpqlb_detach, NULL);
+    hpqlb_match, hpqlb_attach, NULL, NULL);
 
 static const char * const hpqlb_ids[] = {
 	"HPQ0006",
@@ -127,44 +130,29 @@ hpqlb_attach(device_t parent, device_t self, void *opaque)
 	hpqlb_init(self);
 
 	if (config_finalize_register(self, hpqlb_finalize) != 0)
-		aprint_error_dev(self, "unable to register hpqlb finalizer\n");
+		aprint_error_dev(self,
+			"WARNING: unable to register hpqlb finalizer\n");
 
 	sc->sc_smpsw_displaycycle_valid = true;
-
 	sc->sc_smpsw[HP_PSW_DISPLAY_CYCLE].smpsw_name =
 	    PSWITCH_HK_DISPLAY_CYCLE;
-
 	sc->sc_smpsw[HP_PSW_DISPLAY_CYCLE].smpsw_type =
 	    PSWITCH_TYPE_HOTKEY;
-
-	if (sysmon_pswitch_register(&sc->sc_smpsw[HP_PSW_DISPLAY_CYCLE]) != 0)
+	if (sysmon_pswitch_register(&sc->sc_smpsw[HP_PSW_DISPLAY_CYCLE])) {
+		aprint_error_dev(self, "couldn't register with sysmon\n");
 		sc->sc_smpsw_displaycycle_valid = false;
+	}
 
 	sc->sc_smpsw_sleep_valid = true;
 	sc->sc_smpsw[HP_PSW_SLEEP].smpsw_name = device_xname(self);
 	sc->sc_smpsw[HP_PSW_SLEEP].smpsw_type = PSWITCH_TYPE_SLEEP;
-
-	if (sysmon_pswitch_register(&sc->sc_smpsw[HP_PSW_SLEEP]) != 0)
+	if (sysmon_pswitch_register(&sc->sc_smpsw[HP_PSW_SLEEP])) {
+		aprint_error_dev(self, "couldn't register sleep with sysmon\n");
 		sc->sc_smpsw_sleep_valid = false;
+	}
 
-	(void)pmf_device_register(self, NULL, hpqlb_resume);
-}
-
-static int
-hpqlb_detach(device_t self, int flags)
-{
-	struct hpqlb_softc *sc = device_private(self);
-
-	pmf_device_deregister(self);
-	wskbd_hotkey_deregister(sc->sc_wskbddev);
-
-	if (sc->sc_smpsw_sleep_valid != false)
-		sysmon_pswitch_unregister(&sc->sc_smpsw[HP_PSW_SLEEP]);
-
-	if (sc->sc_smpsw_displaycycle_valid != false)
-		sysmon_pswitch_unregister(&sc->sc_smpsw[HP_PSW_DISPLAY_CYCLE]);
-
-	return 0;
+	if (!pmf_device_register(self, NULL, hpqlb_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int
@@ -204,8 +192,11 @@ hpqlb_hotkey_handler(struct wskbd_softc *wskbd_sc, void *cookie,
 	case HP_QLB_Sleep:
 		if (type != WSCONS_EVENT_KEY_DOWN)
 			break;
-		if (sc->sc_smpsw_sleep_valid == false)
+		if (sc->sc_smpsw_sleep_valid == false) {
+			DPRINTF(("%s: Sleep hotkey\n",
+			    device_xname(sc->sc_dev)));
 			break;
+		}
 		sysmon_pswitch_event(&sc->sc_smpsw[HP_PSW_SLEEP],
 			PSWITCH_EVENT_PRESSED);
 		break;
@@ -227,9 +218,8 @@ hpqlb_hotkey_handler(struct wskbd_softc *wskbd_sc, void *cookie,
 		pmf_event_inject(NULL, PMFE_CHASSIS_LID_OPEN);
 		break;
 	default:
-
-		ACPI_DEBUG_PRINT((ACPI_DB_INFO, "unknown hotkey "
-			"0x%02x\n", value));
+		DPRINTF(("%s: unknown hotkey 0x%02x\n",
+			device_xname(sc->sc_dev), value));
 		ret = 0; /* Assume, this is no hotkey */
 		break;
 	}
@@ -255,7 +245,6 @@ static int
 hpqlb_finalize(device_t self)
 {
 	device_t dv;
-	deviter_t di;
 	struct hpqlb_softc *sc = device_private(self);
 	static int done_once = 0;
 
@@ -266,8 +255,7 @@ hpqlb_finalize(device_t self)
 		return 0;
 	done_once = 1;
 
-	for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST); dv != NULL;
-	     dv = deviter_next(&di)) {
+	TAILQ_FOREACH(dv, &alldevs, dv_list) {
 		if (!device_is_a(dv, "wskbd"))
 			continue;
 
@@ -280,7 +268,6 @@ hpqlb_finalize(device_t self)
 				device_xname(dv));
 		break;
 	}
-	deviter_release(&di);
 
 	if (dv == NULL) {
 		aprint_error_dev(self, "WARNING: no matching wskbd found\n");
@@ -295,46 +282,10 @@ hpqlb_finalize(device_t self)
 }
 
 static bool
-hpqlb_resume(device_t self, const pmf_qual_t *qual)
+hpqlb_resume(device_t self PMF_FN_ARGS)
 {
 
 	hpqlb_init(self);
 
 	return true;
-}
-
-MODULE(MODULE_CLASS_DRIVER, hpqlb, NULL);
-
-#ifdef _MODULE
-#include "ioconf.c"
-#endif
-
-static int
-hpqlb_modcmd(modcmd_t cmd, void *aux)
-{
-	int rv = 0;
-
-	switch (cmd) {
-
-	case MODULE_CMD_INIT:
-
-#ifdef _MODULE
-		rv = config_init_component(cfdriver_ioconf_hpqlb,
-		    cfattach_ioconf_hpqlb, cfdata_ioconf_hpqlb);
-#endif
-		break;
-
-	case MODULE_CMD_FINI:
-
-#ifdef _MODULE
-		rv = config_fini_component(cfdriver_ioconf_hpqlb,
-		    cfattach_ioconf_hpqlb, cfdata_ioconf_hpqlb);
-#endif
-		break;
-
-	default:
-		rv = ENOTTY;
-	}
-
-	return rv;
 }

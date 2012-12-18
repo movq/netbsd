@@ -1,4 +1,4 @@
-/*	$NetBSD: perform.c,v 1.3 2012/02/21 18:27:05 wiz Exp $	*/
+/*	$NetBSD: perform.c,v 1.1.1.1.6.4 2010/02/04 06:45:58 snj Exp $	*/
 #if HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -6,14 +6,13 @@
 #if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
 #endif
-__RCSID("$NetBSD: perform.c,v 1.3 2012/02/21 18:27:05 wiz Exp $");
+__RCSID("$NetBSD: perform.c,v 1.1.1.1.6.4 2010/02/04 06:45:58 snj Exp $");
 
 /*-
  * Copyright (c) 2003 Grant Beattie <grant@NetBSD.org>
  * Copyright (c) 2005 Dieter Baron <dillo@NetBSD.org>
  * Copyright (c) 2007 Roland Illig <rillig@NetBSD.org>
  * Copyright (c) 2008, 2009 Joerg Sonnenberger <joerg@NetBSD.org>
- * Copyright (c) 2010 Thomas Klausner <wiz@NetBSD.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,7 +41,6 @@ __RCSID("$NetBSD: perform.c,v 1.3 2012/02/21 18:27:05 wiz Exp $");
  */
 
 #include <sys/utsname.h>
-#include <sys/stat.h>
 #if HAVE_ERR_H
 #include <err.h>
 #endif
@@ -130,61 +128,19 @@ static const struct pkg_meta_desc {
 static int pkg_do(const char *, int, int);
 
 static int
-end_of_version(const char *opsys, const char *version_end)
-{
-    if (*version_end == '\0')
-	return 1;
-
-    if (strcmp(opsys, "NetBSD") == 0) {
-	if (strncmp(version_end, "_ALPHA", 6) == 0
-	    || strncmp(version_end, "_BETA", 5) == 0
-	    || strncmp(version_end, "_RC", 3) == 0
-	    || strncmp(version_end, "_STABLE", 7) == 0
-	    || strncmp(version_end, "_PATCH", 6) == 0)
-	    return 1;
-    }
-
-    return 0;
-}
-
-static int
-compatible_platform(const char *opsys, const char *host, const char *package)
-{
-    int i = 0;
-
-    /* returns 1 if host and package operating system match */
-    if (strcmp(host, package) == 0)
-	return 1;
-
-    /* find offset of first difference */
-    for (i=0; (host[i] != '\0') && (host[i] == package[i]);)
-	i++;
-
-    if (end_of_version(opsys, host+i) && end_of_version(opsys, package+i))
-	return 1;
-
-    return 0;
-}
-
-static int
 mkdir_p(const char *path)
 {
 	char *p, *cur_end;
-	int done, saved_errno;
-	struct stat sb;
+	int done;
 
 	/*
 	 * Handle the easy case of direct success or
 	 * pre-existing directory first.
 	 */
-	if (mkdir(path, 0777) == 0)
+	if (mkdir(path, 0777) == 0 || errno == EEXIST)
 		return 0;
-	if (stat(path, &sb) == 0) {
-		if (S_ISDIR(sb.st_mode))
-			return 0;
-		errno = ENOTDIR;
+	if (errno != ENOENT)
 		return -1;
-	}
 
 	cur_end = p = xstrdup(path);
 
@@ -204,26 +160,21 @@ mkdir_p(const char *path)
 		done = (*cur_end == '\0');
 		*cur_end = '\0';
 
-		if (mkdir(p, 0777) == -1) {
-			saved_errno = errno;
-			if (stat(p, &sb) == 0) {
-				if (S_ISDIR(sb.st_mode))
-					goto pass;
-				errno = ENOTDIR;
-			} else {
-				errno = saved_errno;
-			}
+		/*
+		 * ENOENT can only happen if something else races us,
+		 * in which case we should better give up.
+		 */
+		if (mkdir(p, 0777) == -1 && errno != EEXIST) {
 			free(p);
 			return -1;
 		}
-pass:
 		if (done)
 			break;
 		*cur_end = '/';
 	}
 
 	free(p);
-	return 0;
+	return 0;	
 }
 
 /*
@@ -388,12 +339,14 @@ check_already_installed(struct pkg_task *pkg)
 	char *filename;
 	int fd;
 
+	if (Force)
+		return 1;
+
 	filename = pkgdb_pkg_file(pkg->pkgname, CONTENTS_FNAME);
 	fd = open(filename, O_RDONLY);
 	free(filename);
 	if (fd == -1)
 		return 1;
-	close(fd);
 
 	if (ReplaceSame) {
 		struct stat sb;
@@ -409,9 +362,6 @@ check_already_installed(struct pkg_task *pkg)
 		return 1;
 	}
 
-	if (Force)
-		return 1;
-
 	/* We can only arrive here for explicitly requested packages. */
 	if (!Automatic && is_automatic_installed(pkg->pkgname)) {
 		if (Fake ||
@@ -423,6 +373,7 @@ check_already_installed(struct pkg_task *pkg)
 		warnx("package `%s' already recorded as installed",
 		      pkg->pkgname);
 	}
+	close(fd);
 	return 0;
 
 }
@@ -507,7 +458,7 @@ check_other_installed(struct pkg_task *pkg)
 				continue; /* Both match, ok. */
 			warnx("Dependency of %s fulfilled by %s, but not by %s",
 			    iter, pkg->other_version, pkg->pkgname);
-			if (!ForceDepending)
+			if (!Force)
 				status = -1;
 			break;
 		}
@@ -778,9 +729,8 @@ extract_files(struct pkg_task *pkg)
 
 		r = archive_write_header(writer, pkg->entry);
 		if (r != ARCHIVE_OK) {
-			warnx("Failed to write %s for %s: %s",
+			warnx("Failed to write %s: %s",
 			    archive_entry_pathname(pkg->entry),
-			    pkg->pkgname,
 			    archive_error_string(writer));
 			goto out;
 		}
@@ -810,8 +760,7 @@ extract_files(struct pkg_task *pkg)
 			continue;
 		}
 		if (r != ARCHIVE_OK) {
-			warnx("Failed to read from archive for %s: %s",
-			    pkg->pkgname,
+			warnx("Failed to read from archive: %s",
 			    archive_error_string(pkg->archive));
 			goto out;
 		}
@@ -918,8 +867,7 @@ check_platform(struct pkg_task *pkg)
 		fatal = 0;
 
 	if (fatal ||
-	    compatible_platform(OPSYS_NAME, host_uname.release,
-				pkg->buildinfo[BI_OS_VERSION]) != 1) {
+	    strcmp(host_uname.release, pkg->buildinfo[BI_OS_VERSION]) != 0) {
 		warnx("Warning: package `%s' was built for a platform:",
 		    pkg->pkgname);
 		warnx("%s/%s %s (pkg) vs. %s/%s %s (this host)",
@@ -1319,9 +1267,9 @@ check_vulnerable(struct pkg_task *pkg)
 
 	if (strcasecmp(check_vulnerabilities, "never") == 0)
 		return 0;
-	else if (strcasecmp(check_vulnerabilities, "always") == 0)
+	else if (strcasecmp(check_vulnerabilities, "always"))
 		require_check = 1;
-	else if (strcasecmp(check_vulnerabilities, "interactive") == 0)
+	else if (strcasecmp(check_vulnerabilities, "interactive"))
 		require_check = 0;
 	else {
 		warnx("Unknown value of the configuration variable"
@@ -1330,13 +1278,13 @@ check_vulnerable(struct pkg_task *pkg)
 	}
 
 	if (pv == NULL) {
-		pv = read_pkg_vulnerabilities_file(pkg_vulnerabilities_file,
+		pv = read_pkg_vulnerabilities(pkg_vulnerabilities_file,
 		    require_check, 0);
 		if (pv == NULL)
 			return require_check;
 	}
 
-	if (!audit_package(pv, pkg->pkgname, NULL, 2))
+	if (!audit_package(pv, pkg->pkgname, NULL, 0, 2))
 		return 0;
 
 	if (require_check)
@@ -1386,7 +1334,6 @@ check_license(struct pkg_task *pkg)
 static int
 pkg_do(const char *pkgpath, int mark_automatic, int top_level)
 {
-	char *archive_name;
 	int status, invalid_sig;
 	struct pkg_task *pkg;
 
@@ -1394,15 +1341,14 @@ pkg_do(const char *pkgpath, int mark_automatic, int top_level)
 
 	status = -1;
 
-	pkg->archive = find_archive(pkgpath, top_level, &archive_name);
+	pkg->archive = find_archive(pkgpath, top_level);
 	if (pkg->archive == NULL) {
 		warnx("no pkg found for '%s', sorry.", pkgpath);
 		goto clean_find_archive;
 	}
 
-	invalid_sig = pkg_verify_signature(archive_name, &pkg->archive, &pkg->entry,
+	invalid_sig = pkg_verify_signature(&pkg->archive, &pkg->entry,
 	    &pkg->pkgname);
-	free(archive_name);
 
 	if (pkg->archive == NULL)
 		goto clean_memory;

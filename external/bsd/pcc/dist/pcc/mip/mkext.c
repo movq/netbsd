@@ -1,11 +1,8 @@
-/*	Id: mkext.c,v 1.50 2011/06/05 08:54:43 plunky Exp 	*/	
-/*	$NetBSD: mkext.c,v 1.1.1.4 2011/09/01 12:47:13 plunky Exp $	*/
 
 /*
  * Generate defines for the needed hardops.
  */
 #include "pass2.h"
-#include <stdlib.h>
 
 #ifdef HAVE_STRING_H
 #include <string.h>
@@ -25,7 +22,6 @@ int chkop[DSIZE];
 
 void mktables(void);
 
-char *ftitle;
 char *cname = "external.c";
 char *hname = "external.h";
 FILE *fc, *fh;
@@ -78,7 +74,7 @@ struct checks {
 
 int rstatus[] = { RSTATUS };
 int roverlay[MAXREGS][MAXREGS] = { ROVERLAP };
-int regclassmap[CLASSG][MAXREGS]; /* CLASSG is highest class */
+int regclassmap[NUMCLASS][MAXREGS];
 
 static void
 compl(struct optab *q, char *str)
@@ -110,8 +106,7 @@ compl(struct optab *q, char *str)
 static int
 getrcl(struct optab *q)
 {
-	int v = q->needs &
-	    (NACOUNT|NBCOUNT|NCCOUNT|NDCOUNT|NECOUNT|NFCOUNT|NGCOUNT);
+	int v = q->needs & (NACOUNT|NBCOUNT|NCCOUNT|NDCOUNT);
 	int r = q->rewrite & RESC1 ? 1 : q->rewrite & RESC2 ? 2 : 3;
 	int i = 0;
 
@@ -121,9 +116,6 @@ getrcl(struct optab *q)
 	INCK(NB)
 	INCK(NC)
 	INCK(ND)
-	INCK(NE)
-	INCK(NF)
-	INCK(NG)
 	return 0;
 }
 
@@ -132,15 +124,9 @@ main(int argc, char *argv[])
 {
 	struct optab *q;
 	struct checks *ch;
-	int i, j, areg, breg, creg, dreg, mx, ereg, freg, greg;
+	int i, j, areg, breg, creg, dreg, mx;
 	char *bitary;
 	int bitsz, rval, nelem;
-
-	if (argc == 2) {
-		i = atoi(argv[1]);
-		printf("Entry %d:\n%s\n", i, table[i].cstring);
-		return 0;
-	}
 
 	mkdope();
 
@@ -162,8 +148,6 @@ main(int argc, char *argv[])
 		perror("open hfile");
 		return(1);
 	}
-	fprintf(fh, "#ifndef _EXTERNAL_H_\n#define _EXTERNAL_H_\n");
-
 	for (ch = checks; ch->op != 0; ch++) {
 		if ((chkop[ch->op] & ch->type) == 0)
 			fprintf(fh, "#define NEED_%s\n", ch->name);
@@ -182,8 +166,6 @@ main(int argc, char *argv[])
 		bitsz = sizeof(int) == 4 ? 32 : 16;
 	}
 	fprintf(fh, "#define NUMBITS %d\n", bitsz);
-	fprintf(fh, "#define BIT2BYTE(bits) "
-	     "((((bits)+NUMBITS-1)/NUMBITS)*(NUMBITS/8))\n");
 	fprintf(fh, "#define BITSET(arr, bit) "
 	     "(arr[bit/NUMBITS] |= ((%s)1 << (bit & (NUMBITS-1))))\n",
 	     bitary);
@@ -201,23 +183,18 @@ main(int argc, char *argv[])
 	/* Sanity-check the table */
 	rval = 0;
 	for (q = table; q->op != FREE; q++) {
-		switch (q->op) {
-		case ASSIGN:
+		if (q->op == ASSIGN) {
 #define	F(x) (q->visit & x && q->rewrite & (RLEFT|RRIGHT) && \
 		    q->lshape & ~x && q->rshape & ~x)
-			if (F(INAREG) || F(INBREG) || F(INCREG) || F(INDREG) ||
-			    F(INEREG) || F(INFREG) || F(INGREG)) {
+			if (F(INAREG) || F(INBREG) || F(INCREG) || F(INDREG)) {
 				compl(q, "may match without result register");
 				rval++;
 			}
 #undef F
-			/* FALLTHROUGH */
-		case STASG:
 			if ((q->visit & INREGS) && !(q->rewrite & RDEST)) {
-				compl(q, "ASSIGN/STASG reclaim must be RDEST");
+				compl(q, "ASSIGN reclaim must be RDEST");
 				rval++;
 			}
-			break;
 		}
 		/* check that reclaim is not the wrong class */
 		if ((q->rewrite & (RESC1|RESC2|RESC3)) && 
@@ -247,19 +224,6 @@ main(int argc, char *argv[])
 	fprintf(fc, "-1 };\n");
 	fprintf(fh, "#define NPERMREG %d\n", j+1);
 	fprintf(fc, "bittype validregs[] = {\n");
-
-if (bitsz == 64) {
-	for (j = 0; j < MAXREGS; j += bitsz) {
-		long cbit = 0;
-		for (i = 0; i < bitsz; i++) {
-			if (i+j == MAXREGS)
-				break;
-			if (rstatus[i+j] & INREGS)
-				cbit |= ((long)1 << i);
-		}
-		fprintf(fc, "\t0x%lx,\n", cbit);
-	}
-} else {
 	for (j = 0; j < MAXREGS; j += bitsz) {
 		int cbit = 0;
 		for (i = 0; i < bitsz; i++) {
@@ -270,15 +234,13 @@ if (bitsz == 64) {
 		}
 		fprintf(fc, "\t0x%08x,\n", cbit);
 	}
-}
-
 	fprintf(fc, "};\n");
 	fprintf(fh, "extern bittype validregs[];\n");
 
 	/*
 	 * The register allocator uses bitmasks of registers for each class.
 	 */
-	areg = breg = creg = dreg = ereg = freg = greg = 0;
+	areg = breg = creg = dreg = 0;
 	for (i = 0; i < MAXREGS; i++) {
 		for (j = 0; j < NUMCLASS; j++)
 			regclassmap[j][i] = -1;
@@ -286,17 +248,11 @@ if (bitsz == 64) {
 		if (rstatus[i] & SBREG) regclassmap[1][i] = breg++;
 		if (rstatus[i] & SCREG) regclassmap[2][i] = creg++;
 		if (rstatus[i] & SDREG) regclassmap[3][i] = dreg++;
-		if (rstatus[i] & SEREG) regclassmap[4][i] = ereg++;
-		if (rstatus[i] & SFREG) regclassmap[5][i] = freg++;
-		if (rstatus[i] & SGREG) regclassmap[6][i] = greg++;
 	}
 	fprintf(fh, "#define AREGCNT %d\n", areg);
 	fprintf(fh, "#define BREGCNT %d\n", breg);
 	fprintf(fh, "#define CREGCNT %d\n", creg);
 	fprintf(fh, "#define DREGCNT %d\n", dreg);
-	fprintf(fh, "#define EREGCNT %d\n", ereg);
-	fprintf(fh, "#define FREGCNT %d\n", freg);
-	fprintf(fh, "#define GREGCNT %d\n", greg);
 	if (areg > bitsz)
 		printf("%d regs in class A (max %d)\n", areg, bitsz), rval++;
 	if (breg > bitsz)
@@ -305,24 +261,15 @@ if (bitsz == 64) {
 		printf("%d regs in class C (max %d)\n", creg, bitsz), rval++;
 	if (dreg > bitsz)
 		printf("%d regs in class D (max %d)\n", dreg, bitsz), rval++;
-	if (ereg > bitsz)
-		printf("%d regs in class E (max %d)\n", ereg, bitsz), rval++;
-	if (freg > bitsz)
-		printf("%d regs in class F (max %d)\n", freg, bitsz), rval++;
-	if (greg > bitsz)
-		printf("%d regs in class G (max %d)\n", greg, bitsz), rval++;
 
 	fprintf(fc, "static int amap[MAXREGS][NUMCLASS] = {\n");
 	for (i = 0; i < MAXREGS; i++) {
-		int ba, bb, bc, bd, r, be, bf, bg;
-		ba = bb = bc = bd = be = bf = bg = 0;
+		int ba, bb, bc, bd, r;
+		ba = bb = bc = bd = 0;
 		if (rstatus[i] & SAREG) ba = (1 << regclassmap[0][i]);
 		if (rstatus[i] & SBREG) bb = (1 << regclassmap[1][i]);
 		if (rstatus[i] & SCREG) bc = (1 << regclassmap[2][i]);
 		if (rstatus[i] & SDREG) bd = (1 << regclassmap[3][i]);
-		if (rstatus[i] & SEREG) be = (1 << regclassmap[4][i]);
-		if (rstatus[i] & SFREG) bf = (1 << regclassmap[5][i]);
-		if (rstatus[i] & SGREG) bg = (1 << regclassmap[6][i]);
 		for (j = 0; roverlay[i][j] >= 0; j++) {
 			r = roverlay[i][j];
 			if (rstatus[r] & SAREG)
@@ -333,20 +280,11 @@ if (bitsz == 64) {
 				bc |= (1 << regclassmap[2][r]);
 			if (rstatus[r] & SDREG)
 				bd |= (1 << regclassmap[3][r]);
-			if (rstatus[r] & SEREG)
-				be |= (1 << regclassmap[4][r]);
-			if (rstatus[r] & SFREG)
-				bf |= (1 << regclassmap[5][r]);
-			if (rstatus[r] & SGREG)
-				bg |= (1 << regclassmap[6][r]);
 		}
-		fprintf(fc, "\t/* %d */{ 0x%x", i, ba);
+		fprintf(fc, "\t{ 0x%x", ba);
 		if (NUMCLASS > 1) fprintf(fc, ",0x%x", bb);
 		if (NUMCLASS > 2) fprintf(fc, ",0x%x", bc);
 		if (NUMCLASS > 3) fprintf(fc, ",0x%x", bd);
-		if (NUMCLASS > 4) fprintf(fc, ",0x%x", be);
-		if (NUMCLASS > 5) fprintf(fc, ",0x%x", bf);
-		if (NUMCLASS > 6) fprintf(fc, ",0x%x", bg);
 		fprintf(fc, " },\n");
 	}
 	fprintf(fc, "};\n");
@@ -360,16 +298,9 @@ if (bitsz == 64) {
 	if (breg > mx) mx = breg;
 	if (creg > mx) mx = creg;
 	if (dreg > mx) mx = dreg;
-	if (ereg > mx) mx = ereg;
-	if (freg > mx) mx = freg;
-	if (greg > mx) mx = greg;
 	if (mx > (int)(sizeof(int)*8)-1) {
 		printf("too many regs in a class, use two classes instead\n");
-#ifdef HAVE_C99_FORMAT
 		printf("%d > %zu\n", mx, (sizeof(int)*8)-1);
-#else
-		printf("%d > %d\n", mx, (int)(sizeof(int)*8)-1);
-#endif
 		rval++;
 	}
 	fprintf(fc, "static int rmap[NUMCLASS][%d] = {\n", mx);
@@ -387,16 +318,13 @@ if (bitsz == 64) {
 	fprintf(fc, "	return rmap[class-1][color];\n}\n");
 
 	/* used by register allocator */
-	fprintf(fc, "int regK[] = { 0, %d, %d, %d, %d, %d, %d, %d };\n",
-	    areg, breg, creg, dreg, ereg, freg, greg);
+	fprintf(fc, "int regK[] = { 0, %d, %d, %d, %d };\n",
+	    areg, breg, creg, dreg);
 	fprintf(fc, "int\nclassmask(int class)\n{\n");
 	fprintf(fc, "\tif(class == CLASSA) return 0x%x;\n", (1 << areg)-1);
 	fprintf(fc, "\tif(class == CLASSB) return 0x%x;\n", (1 << breg)-1);
 	fprintf(fc, "\tif(class == CLASSC) return 0x%x;\n", (1 << creg)-1);
-	fprintf(fc, "\tif(class == CLASSD) return 0x%x;\n", (1 << dreg)-1);
-	fprintf(fc, "\tif(class == CLASSE) return 0x%x;\n", (1 << ereg)-1);
-	fprintf(fc, "\tif(class == CLASSF) return 0x%x;\n", (1 << freg)-1);
-	fprintf(fc, "\treturn 0x%x;\n}\n", (1 << greg)-1);
+	fprintf(fc, "\treturn 0x%x;\n}\n", (1 << dreg)-1);
 
 	fprintf(fh, "int interferes(int reg1, int reg2);\n");
 	nelem = (MAXREGS+bitsz-1)/bitsz;
@@ -417,9 +345,8 @@ if (bitsz == 64) {
 	fprintf(fc, "};\n");
 
 	fprintf(fc, "int\ninterferes(int reg1, int reg2)\n{\n");
-	fprintf(fc, "return (TESTBIT(ovlarr[reg1], reg2)) != 0;\n}\n");
+	fprintf(fc, "return TESTBIT(ovlarr[reg1], reg2);\n}\n");
 	fclose(fc);
-	fprintf(fh, "#endif /* _EXTERNAL_H_ */\n");
 	fclose(fh);
 	return rval;
 }
@@ -433,9 +360,7 @@ mktables()
 	int mxalen = 0, curalen;
 	int i;
 
-#if 0
-	P((fc, "#include \"pass2.h\"\n\n"));
-#endif
+//	P((fc, "#include \"pass2.h\"\n\n"));
 	for (i = 0; i <= MAXOP; i++) {
 		curalen = 0;
 		P((fc, "static int op%d[] = { ", i));

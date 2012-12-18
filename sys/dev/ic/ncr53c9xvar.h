@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr53c9xvar.h,v 1.55 2011/07/31 18:39:00 jakllsch Exp $	*/
+/*	$NetBSD: ncr53c9xvar.h,v 1.51 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
 #ifndef _DEV_IC_NCR53C9XVAR_H_
 #define _DEV_IC_NCR53C9XVAR_H_
 
-#include <sys/mutex.h>
+#include <sys/simplelock.h>
 
 /* Set this to 1 for normal debug, or 2 for per-target tracing. */
 /* #define NCR53C9X_DEBUG		1 */
@@ -119,7 +119,7 @@ struct ncr53c9x_ecb {
 	uint8_t	*daddr;		/* Saved data pointer */
 	int	 clen;		/* Size of command in cmd.cmd */
 	int	 dleft;		/* Residue */
-	u_char	 stat;		/* SCSI status byte */
+	u_char 	 stat;		/* SCSI status byte */
 	u_char	 tag[2];	/* TAG bytes */
 	u_char	 pad[1];
 
@@ -267,7 +267,7 @@ struct ncr53c9x_softc {
 	struct evcnt sc_intrcnt;		/* intr count */
 	struct scsipi_adapter sc_adapter;	/* out scsipi adapter */
 	struct scsipi_channel sc_channel;	/* our scsipi channel */
-	device_t sc_child;		/* attached scsibus, if any */
+	struct device *sc_child;		/* attached scsibus, if any */
 	struct callout sc_watchdog;		/* periodic timer */
 
 	const struct ncr53c9x_glue *sc_glue;	/* glue to MD code */
@@ -335,7 +335,7 @@ struct ncr53c9x_softc {
 	int sc_minsync;		/* Minimum sync period / 4 */
 	int sc_maxxfer;		/* Maximum transfer size */
 
-	kmutex_t sc_lock;	/* driver mutex */
+	struct simplelock sc_lock;/* driver mutex */
 };
 
 /* values for sc_state */
@@ -370,7 +370,7 @@ struct ncr53c9x_softc {
 #define SEND_PARITY_ERROR	0x0002
 #define SEND_INIT_DET_ERR	0x0004
 #define SEND_REJECT		0x0008
-#define SEND_IDENTIFY		0x0010
+#define SEND_IDENTIFY  		0x0010
 #define SEND_ABORT		0x0020
 #define SEND_WDTR		0x0040
 #define SEND_SDTR		0x0080
@@ -443,6 +443,5 @@ void	ncr53c9x_scsipi_request(struct scsipi_channel *chan,
 void	ncr53c9x_reset(struct ncr53c9x_softc *);
 int	ncr53c9x_intr(void *);
 void	ncr53c9x_init(struct ncr53c9x_softc *, int);
-void	ncr53c9x_abort(struct ncr53c9x_softc *, struct ncr53c9x_ecb *);
 
 #endif /* _DEV_IC_NCR53C9XVAR_H_ */

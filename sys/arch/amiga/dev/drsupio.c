@@ -1,4 +1,4 @@
-/*	$NetBSD: drsupio.c,v 1.21 2012/10/27 17:17:28 chs Exp $ */
+/*	$NetBSD: drsupio.c,v 1.18 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drsupio.c,v 1.21 2012/10/27 17:17:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drsupio.c,v 1.18 2008/04/28 20:23:12 martin Exp $");
 
 /*
  * DraCo multi-io chip bus space stuff
@@ -42,7 +42,10 @@ __KERNEL_RCSID(0, "$NetBSD: drsupio.c,v 1.21 2012/10/27 17:17:28 chs Exp $");
 #include <sys/device.h>
 #include <sys/systm.h>
 #include <sys/param.h>
-#include <sys/bus.h>
+
+#include <uvm/uvm_extern.h>
+
+#include <machine/bus.h>
 
 #include <amiga/include/cpu.h>
 
@@ -52,24 +55,25 @@ __KERNEL_RCSID(0, "$NetBSD: drsupio.c,v 1.21 2012/10/27 17:17:28 chs Exp $");
 #include <amiga/dev/supio.h>
 
 struct drsupio_softc {
+	struct device sc_dev;
 	struct bus_space_tag sc_bst;
 };
 
-int drsupiomatch(device_t, cfdata_t, void *);
-void drsupioattach(device_t, device_t, void *);
-int drsupprint(void *, const char *);
+int drsupiomatch(struct device *, struct cfdata *, void *);
+void drsupioattach(struct device *, struct device *, void *);
+int drsupprint(void *auxp, const char *);
 void drlptintack(void *);
 
-CFATTACH_DECL_NEW(drsupio, sizeof(struct drsupio_softc),
+CFATTACH_DECL(drsupio, sizeof(struct drsupio_softc),
     drsupiomatch, drsupioattach, NULL, NULL);
 
 int
-drsupiomatch(device_t parent, cfdata_t cf, void *aux)
+drsupiomatch(struct device *parent, struct cfdata *cfp, void *auxp)
 {
 	static int drsupio_matched = 0;
 
 	/* Exactly one of us lives on the DraCo */
-	if (!is_draco() || !matchname(aux, "drsupio") || drsupio_matched)
+	if (!is_draco() || !matchname(auxp, "drsupio") || drsupio_matched)
 		return 0;
 
 	drsupio_matched = 1;
@@ -90,14 +94,14 @@ struct drsupio_devs {
 };
 
 void
-drsupioattach(device_t parent, device_t self, void *aux)
+drsupioattach(struct device *parent, struct device *self, void *auxp)
 {
 	struct drsupio_softc *drsc;
 	struct drsupio_devs  *drsd;
 	struct drioct *ioct;
 	struct supio_attach_args supa;
 
-	drsc = device_private(self);
+	drsc = (struct drsupio_softc *)self;
 	drsd = drsupiodevs;
 
 	if (parent)
@@ -134,11 +138,10 @@ drlptintack(void *p)
 }
 
 int
-drsupprint(void *aux, const char *pnp)
+drsupprint(void *auxp, const char *pnp)
 {
 	struct supio_attach_args *supa;
-
-	supa = aux;
+	supa = auxp;
 
 	if (pnp == NULL)
 		return(QUIET);

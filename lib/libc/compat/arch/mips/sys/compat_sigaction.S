@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_sigaction.S,v 1.3 2009/12/14 01:07:42 matt Exp $	*/
+/*	$NetBSD: compat_sigaction.S,v 1.2 2008/04/28 20:22:58 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,10 +31,6 @@
  */
 
 #include "SYS.h"
-
-#if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: compat_sigaction.S,v 1.3 2009/12/14 01:07:42 matt Exp $")
-#endif /* LIBC_SCCS and not lint */
 
 WARN_REFERENCES(sigaction, \
     "warning: reference to compatibility sigaction(); include <signal.h> for correct reference")

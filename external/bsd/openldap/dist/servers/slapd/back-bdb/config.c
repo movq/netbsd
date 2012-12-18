@@ -1,10 +1,8 @@
-/*	$NetBSD: config.c,v 1.1.1.3 2010/12/12 15:22:54 adam Exp $	*/
-
 /* config.c - bdb backend configuration file routine */
-/* OpenLDAP: pkg/ldap/servers/slapd/back-bdb/config.c,v 1.91.2.19 2010/04/13 20:23:23 kurt Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/back-bdb/config.c,v 1.91.2.11 2008/04/14 21:28:42 quanah Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2000-2010 The OpenLDAP Foundation.
+ * Copyright 2000-2008 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,10 +49,7 @@ enum {
 	BDB_DIRTYR,
 	BDB_INDEX,
 	BDB_LOCKD,
-	BDB_SSTACK,
-	BDB_MODE,
-	BDB_PGSIZE,
-	BDB_CHECKSUM
+	BDB_SSTACK
 };
 
 static ConfigTable bdbcfg[] = {
@@ -63,12 +58,12 @@ static ConfigTable bdbcfg[] = {
 			"DESC 'Directory for database content' "
 			"EQUALITY caseIgnoreMatch "
 			"SYNTAX OMsDirectoryString SINGLE-VALUE )", NULL, NULL },
-	{ "cachefree", "size", 2, 2, 0, ARG_ULONG|ARG_OFFSET,
+	{ "cachefree", "size", 2, 2, 0, ARG_UINT|ARG_OFFSET,
 		(void *)offsetof(struct bdb_info, bi_cache.c_minfree),
 		"( OLcfgDbAt:1.11 NAME 'olcDbCacheFree' "
 			"DESC 'Number of extra entries to free when max is reached' "
 			"SYNTAX OMsInteger SINGLE-VALUE )", NULL, NULL },
-	{ "cachesize", "size", 2, 2, 0, ARG_ULONG|ARG_OFFSET,
+	{ "cachesize", "size", 2, 2, 0, ARG_UINT|ARG_OFFSET,
 		(void *)offsetof(struct bdb_info, bi_cache.c_maxsize),
 		"( OLcfgDbAt:1.1 NAME 'olcDbCacheSize' "
 			"DESC 'Entry cache size in entries' "
@@ -77,10 +72,6 @@ static ConfigTable bdbcfg[] = {
 		bdb_cf_gen, "( OLcfgDbAt:1.2 NAME 'olcDbCheckpoint' "
 			"DESC 'Database checkpoint interval in kbytes and minutes' "
 			"SYNTAX OMsDirectoryString SINGLE-VALUE )",NULL, NULL },
-	{ "checksum", NULL, 1, 2, 0, ARG_ON_OFF|ARG_MAGIC|BDB_CHECKSUM,
-		bdb_cf_gen, "( OLcfgDbAt:1.16 NAME 'olcDbChecksum' "
-			"DESC 'Enable database checksum validation' "
-			"SYNTAX OMsBoolean SINGLE-VALUE )", NULL, NULL },
 	{ "cryptfile", "file", 2, 2, 0, ARG_STRING|ARG_MAGIC|BDB_CRYPTFILE,
 		bdb_cf_gen, "( OLcfgDbAt:1.13 NAME 'olcDbCryptFile' "
 			"DESC 'Pathname of file containing the DB encryption key' "
@@ -97,11 +88,6 @@ static ConfigTable bdbcfg[] = {
 		bdb_cf_gen, "( OLcfgDbAt:1.4 NAME 'olcDbNoSync' "
 			"DESC 'Disable synchronous database writes' "
 			"SYNTAX OMsBoolean SINGLE-VALUE )", NULL, NULL },
-	{ "dbpagesize", "db> <size", 3, 3, 0, ARG_MAGIC|BDB_PGSIZE,
-		bdb_cf_gen, "( OLcfgDbAt:1.15 NAME 'olcDbPageSize' "
-			"DESC 'Page size of specified DB, in Kbytes' "
-			"EQUALITY caseExactMatch "
-			"SYNTAX OMsDirectoryString )", NULL, NULL },
 	{ "dirtyread", NULL, 1, 2, 0,
 #ifdef SLAP_BDB_ALLOW_DIRTY_READ
 		ARG_ON_OFF|ARG_MAGIC|BDB_DIRTYR, bdb_cf_gen,
@@ -111,12 +97,12 @@ static ConfigTable bdbcfg[] = {
 		"( OLcfgDbAt:1.5 NAME 'olcDbDirtyRead' "
 		"DESC 'Allow reads of uncommitted data' "
 		"SYNTAX OMsBoolean SINGLE-VALUE )", NULL, NULL },
-	{ "dncachesize", "size", 2, 2, 0, ARG_ULONG|ARG_OFFSET,
+	{ "dncachesize", "size", 2, 2, 0, ARG_UINT|ARG_OFFSET,
 		(void *)offsetof(struct bdb_info, bi_cache.c_eimax),
 		"( OLcfgDbAt:1.12 NAME 'olcDbDNcacheSize' "
 			"DESC 'DN cache size' "
 			"SYNTAX OMsInteger SINGLE-VALUE )", NULL, NULL },
-	{ "idlcachesize", "size", 2, 2, 0, ARG_ULONG|ARG_OFFSET,
+	{ "idlcachesize", "size", 2, 2, 0, ARG_UINT|ARG_OFFSET,
 		(void *)offsetof(struct bdb_info, bi_idl_cache_max_size),
 		"( OLcfgDbAt:1.6 NAME 'olcDbIDLcacheSize' "
 		"DESC 'IDL cache size in IDLs' "
@@ -135,10 +121,11 @@ static ConfigTable bdbcfg[] = {
 		bdb_cf_gen, "( OLcfgDbAt:1.8 NAME 'olcDbLockDetect' "
 		"DESC 'Deadlock detection algorithm' "
 		"SYNTAX OMsDirectoryString SINGLE-VALUE )", NULL, NULL },
-	{ "mode", "mode", 2, 2, 0, ARG_MAGIC|BDB_MODE,
-		bdb_cf_gen, "( OLcfgDbAt:0.3 NAME 'olcDbMode' "
+	{ "mode", "mode", 2, 2, 0, ARG_INT|ARG_OFFSET,
+		(void *)offsetof(struct bdb_info, bi_dbenv_mode),
+		"( OLcfgDbAt:0.3 NAME 'olcDbMode' "
 		"DESC 'Unix permissions of database files' "
-		"SYNTAX OMsDirectoryString SINGLE-VALUE )", NULL, NULL },
+		"SYNTAX OMsInteger SINGLE-VALUE )", NULL, NULL },
 	{ "searchstack", "depth", 2, 2, 0, ARG_INT|ARG_MAGIC|BDB_SSTACK,
 		bdb_cf_gen, "( OLcfgDbAt:1.9 NAME 'olcDbSearchStack' "
 		"DESC 'Depth of search stack in IDLs' "
@@ -170,7 +157,7 @@ static ConfigOCs bdbocs[] = {
 		"olcDbNoSync $ olcDbDirtyRead $ olcDbIDLcacheSize $ "
 		"olcDbIndex $ olcDbLinearIndex $ olcDbLockDetect $ "
 		"olcDbMode $ olcDbSearchStack $ olcDbShmKey $ "
-		"olcDbCacheFree $ olcDbDNcacheSize $ olcDbPageSize ) )",
+		"olcDbCacheFree $ olcDbDNcacheSize ) )",
 		 	Cft_Database, bdbcfg },
 	{ NULL, 0, NULL }
 };
@@ -215,6 +202,7 @@ bdb_online_index( void *ctx, void *arg )
 	DBT key, data;
 	DB_TXN *txn;
 	DB_LOCK lock;
+	BDB_LOCKER locker;
 	ID id, nid;
 	EntryInfo *ei;
 	int rc, getnext = 1;
@@ -243,6 +231,7 @@ bdb_online_index( void *ctx, void *arg )
 		rc = TXN_BEGIN( bdb->bi_dbenv, NULL, &txn, bdb->bi_db_opflags );
 		if ( rc ) 
 			break;
+		locker = TXN_ID( txn );
 		if ( getnext ) {
 			getnext = 0;
 			BDB_ID2DISK( id, &nid );
@@ -268,7 +257,7 @@ bdb_online_index( void *ctx, void *arg )
 		}
 
 		ei = NULL;
-		rc = bdb_cache_find_id( op, txn, id, &ei, 0, &lock );
+		rc = bdb_cache_find_id( op, txn, id, &ei, 0, locker, &lock );
 		if ( rc ) {
 			TXN_ABORT( txn );
 			if ( rc == DB_LOCK_DEADLOCK ) {
@@ -373,31 +362,15 @@ bdb_cf_gen( ConfigArgs *c )
 	if ( c->op == SLAP_CONFIG_EMIT ) {
 		rc = 0;
 		switch( c->type ) {
-		case BDB_MODE: {
-			char buf[64];
-			struct berval bv;
-			bv.bv_len = snprintf( buf, sizeof(buf), "0%o", bdb->bi_dbenv_mode );
-			if ( bv.bv_len > 0 && bv.bv_len < sizeof(buf) ) {
-				bv.bv_val = buf;
-				value_add_one( &c->rvalue_vals, &bv );
-			} else {
-				rc = 1;
-			}
-			} break;
-
 		case BDB_CHKPT:
 			if ( bdb->bi_txn_cp ) {
 				char buf[64];
 				struct berval bv;
-				bv.bv_len = snprintf( buf, sizeof(buf), "%d %d", bdb->bi_txn_cp_kbyte,
+				bv.bv_len = sprintf( buf, "%d %d", bdb->bi_txn_cp_kbyte,
 					bdb->bi_txn_cp_min );
-				if ( bv.bv_len > 0 && bv.bv_len < sizeof(buf) ) {
-					bv.bv_val = buf;
-					value_add_one( &c->rvalue_vals, &bv );
-				} else {
-					rc = 1;
-				}
-			} else {
+				bv.bv_val = buf;
+				value_add_one( &c->rvalue_vals, &bv );
+			} else{
 				rc = 1;
 			}
 			break;
@@ -474,11 +447,6 @@ bdb_cf_gen( ConfigArgs *c )
 				c->value_int = 1;
 			break;
 			
-		case BDB_CHECKSUM:
-			if ( bdb->bi_flags & BDB_CHKSUM )
-				c->value_int = 1;
-			break;
-
 		case BDB_INDEX:
 			bdb_attr_index_unparse( bdb, &c->rvalue_vals );
 			if ( !c->rvalue_vals ) rc = 1;
@@ -489,7 +457,7 @@ bdb_cf_gen( ConfigArgs *c )
 			if ( bdb->bi_lock_detect != DB_LOCK_DEFAULT ) {
 				int i;
 				for (i=0; !BER_BVISNULL(&bdb_lockd[i].word); i++) {
-					if ( bdb->bi_lock_detect == (u_int32_t)bdb_lockd[i].mask ) {
+					if ( bdb->bi_lock_detect == bdb_lockd[i].mask ) {
 						value_add_one( &c->rvalue_vals, &bdb_lockd[i].word );
 						rc = 0;
 						break;
@@ -501,36 +469,11 @@ bdb_cf_gen( ConfigArgs *c )
 		case BDB_SSTACK:
 			c->value_int = bdb->bi_search_stack_depth;
 			break;
-
-		case BDB_PGSIZE: {
-				struct bdb_db_pgsize *ps;
-				char buf[SLAP_TEXT_BUFLEN];
-				struct berval bv;
-				int rc = 1;
-
-				bv.bv_val = buf;
-				for ( ps = bdb->bi_pagesizes; ps; ps = ps->bdp_next ) {
-					bv.bv_len = sprintf( buf, "%s %d", ps->bdp_name.bv_val,
-						ps->bdp_size / 1024 );
-					value_add_one( &c->rvalue_vals, &bv );
-					rc = 0;
-
-				}
-				break;
-			}
 		}
 		return rc;
 	} else if ( c->op == LDAP_MOD_DELETE ) {
 		rc = 0;
 		switch( c->type ) {
-		case BDB_MODE:
-#if 0
-			/* FIXME: does it make any sense to change the mode,
-			 * if we don't exec a chmod()? */
-			bdb->bi_dbenv_mode = SLAPD_DEFAULT_DB_MODE;
-			break;
-#endif
-
 		/* single-valued no-ops */
 		case BDB_LOCKD:
 		case BDB_SSTACK:
@@ -589,9 +532,6 @@ bdb_cf_gen( ConfigArgs *c )
 		case BDB_NOSYNC:
 			bdb->bi_dbenv->set_flags( bdb->bi_dbenv, DB_TXN_NOSYNC, 0 );
 			break;
-		case BDB_CHECKSUM:
-			bdb->bi_flags &= ~BDB_CHKSUM;
-			break;
 		case BDB_INDEX:
 			if ( c->valx == -1 ) {
 				int i;
@@ -646,69 +586,11 @@ bdb_cf_gen( ConfigArgs *c )
 				}
 			}
 			break;
-		/* doesn't make sense on the fly; the DB file must be
-		 * recreated
-		 */
-		case BDB_PGSIZE: {
-				struct bdb_db_pgsize *ps, **prev;
-				int i;
-
-				for ( i = 0, prev = &bdb->bi_pagesizes, ps = *prev; ps;
-					prev = &ps->bdp_next, ps = ps->bdp_next, i++ ) {
-					if ( c->valx == -1 || i == c->valx ) {
-						*prev = ps->bdp_next;
-						ch_free( ps );
-						ps = *prev;
-						if ( i == c->valx ) break;
-					}
-				}
-			}
-			break;
 		}
 		return rc;
 	}
 
 	switch( c->type ) {
-	case BDB_MODE:
-		if ( ASCII_DIGIT( c->argv[1][0] ) ) {
-			long mode;
-			char *next;
-			errno = 0;
-			mode = strtol( c->argv[1], &next, 0 );
-			if ( errno != 0 || next == c->argv[1] || next[0] != '\0' ) {
-				fprintf( stderr, "%s: "
-					"unable to parse mode=\"%s\".\n",
-					c->log, c->argv[1] );
-				return 1;
-			}
-			bdb->bi_dbenv_mode = mode;
-
-		} else {
-			char *m = c->argv[1];
-			int who, what, mode = 0;
-
-			if ( strlen( m ) != STRLENOF("-rwxrwxrwx") ) {
-				return 1;
-			}
-
-			if ( m[0] != '-' ) {
-				return 1;
-			}
-
-			m++;
-			for ( who = 0; who < 3; who++ ) {
-				for ( what = 0; what < 3; what++, m++ ) {
-					if ( m[0] == '-' ) {
-						continue;
-					} else if ( m[0] != "rwx"[what] ) {
-						return 1;
-					}
-					mode += ((1 << (2 - what)) << 3*(2 - who));
-				}
-			}
-			bdb->bi_dbenv_mode = mode;
-		}
-		break;
 	case BDB_CHKPT: {
 		long	l;
 		bdb->bi_txn_cp = 1;
@@ -854,16 +736,9 @@ bdb_cf_gen( ConfigArgs *c )
 		}
 		break;
 
-	case BDB_CHECKSUM:
-		if ( c->value_int )
-			bdb->bi_flags |= BDB_CHKSUM;
-		else
-			bdb->bi_flags &= ~BDB_CHKSUM;
-		break;
-
 	case BDB_INDEX:
 		rc = bdb_attr_index_config( bdb, c->fname, c->lineno,
-			c->argc - 1, &c->argv[1], &c->reply);
+			c->argc - 1, &c->argv[1] );
 
 		if( rc != LDAP_SUCCESS ) return 1;
 		if (( bdb->bi_flags & BDB_IS_OPEN ) && !bdb->bi_index_task ) {
@@ -892,7 +767,7 @@ bdb_cf_gen( ConfigArgs *c )
 				c->log, c->argv[1] );
 			return 1;
 		}
-		bdb->bi_lock_detect = (u_int32_t)rc;
+		bdb->bi_lock_detect = rc;
 		break;
 
 	case BDB_SSTACK:
@@ -903,31 +778,6 @@ bdb_cf_gen( ConfigArgs *c )
 			c->value_int = MINIMUM_SEARCH_STACK_DEPTH;
 		}
 		bdb->bi_search_stack_depth = c->value_int;
-		break;
-
-	case BDB_PGSIZE: {
-		struct bdb_db_pgsize *ps, **prev;
-		int i, s;
-		
-		s = atoi(c->argv[2]);
-		if ( s < 1 || s > 64 ) {
-			snprintf( c->cr_msg, sizeof( c->cr_msg ),
-				"%s: size must be > 0 and <= 64: %d",
-				c->log, s );
-			Debug( LDAP_DEBUG_ANY, "%s\n", c->cr_msg, 0, 0 );
-			return -1;
-		}
-		i = strlen(c->argv[1]);
-		ps = ch_malloc( sizeof(struct bdb_db_pgsize) + i + 1 );
-		ps->bdp_next = NULL;
-		ps->bdp_name.bv_len = i;
-		ps->bdp_name.bv_val = (char *)(ps+1);
-		strcpy( ps->bdp_name.bv_val, c->argv[1] );
-		ps->bdp_size = s * 1024;
-		for ( prev = &bdb->bi_pagesizes; *prev; prev = &(*prev)->bdp_next )
-			;
-		*prev = ps;
-		}
 		break;
 	}
 	return 0;

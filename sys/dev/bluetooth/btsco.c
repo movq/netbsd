@@ -1,4 +1,4 @@
-/*	$NetBSD: btsco.c,v 1.28 2012/04/03 09:32:53 plunky Exp $	*/
+/*	$NetBSD: btsco.c,v 1.22 2008/08/06 15:01:23 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btsco.c,v 1.28 2012/04/03 09:32:53 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btsco.c,v 1.22 2008/08/06 15:01:23 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/audioio.h>
@@ -41,7 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: btsco.c,v 1.28 2012/04/03 09:32:53 plunky Exp $");
 #include <sys/fcntl.h>
 #include <sys/kernel.h>
 #include <sys/queue.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/proc.h>
 #include <sys/socketvar.h>
@@ -66,18 +66,14 @@ __KERNEL_RCSID(0, "$NetBSD: btsco.c,v 1.28 2012/04/03 09:32:53 plunky Exp $");
 
 #ifdef BTSCO_DEBUG
 int btsco_debug = BTSCO_DEBUG;
-#define DPRINTF(...)		do {		\
-	if (btsco_debug) {			\
-		printf("%s: ", __func__);	\
-		printf(__VA_ARGS__);		\
-	}					\
+#define DPRINTF(fmt, args...)		do {		\
+	if (btsco_debug)				\
+		printf("%s: "fmt, __func__ , ##args);	\
 } while (/* CONSTCOND */0)
 
-#define DPRINTFN(n, ...)	do {		\
-	if (btsco_debug > (n)) {		\
-		printf("%s: ", __func__);	\
-		printf(__VA_ARGS__);		\
-	}					\
+#define DPRINTFN(n, fmt, args...)	do {		\
+	if (btsco_debug > (n))				\
+		printf("%s: "fmt, __func__ , ##args);	\
 } while (/* CONSTCOND */0)
 #else
 #define DPRINTF(...)
@@ -97,7 +93,6 @@ struct btsco_softc {
 	device_t		 sc_audio;	/* MI audio device */
 	void			*sc_intr;	/* interrupt cookie */
 	kcondvar_t		 sc_connect;	/* connect wait */
-	kmutex_t		 sc_intr_lock;	/* for audio */
 
 	/* Bluetooth */
 	bdaddr_t		 sc_laddr;	/* local address */
@@ -139,7 +134,7 @@ struct btsco_softc {
 #define BTSCO_LISTEN		(1 << 1)
 
 /* autoconf(9) glue */
-static int  btsco_match(device_t, cfdata_t, void *);
+static int  btsco_match(device_t, struct cfdata *, void *);
 static void btsco_attach(device_t, device_t, void *);
 static int  btsco_detach(device_t, int);
 
@@ -162,11 +157,10 @@ static int btsco_setfd(void *, int);
 static int btsco_set_port(void *, mixer_ctrl_t *);
 static int btsco_get_port(void *, mixer_ctrl_t *);
 static int btsco_query_devinfo(void *, mixer_devinfo_t *);
-static void *btsco_allocm(void *, int, size_t);
-static void btsco_freem(void *, void *, size_t);
+static void *btsco_allocm(void *, int, size_t, struct malloc_type *, int);
+static void btsco_freem(void *, void *, struct malloc_type *);
 static int btsco_get_props(void *);
 static int btsco_dev_ioctl(void *, u_long, void *, int, struct lwp *);
-static void btsco_get_locks(void *, kmutex_t **, kmutex_t **);
 
 static const struct audio_hw_if btsco_if = {
 	btsco_open,		/* open */
@@ -196,7 +190,7 @@ static const struct audio_hw_if btsco_if = {
 	NULL,			/* trigger_output */
 	NULL,			/* trigger_input */
 	btsco_dev_ioctl,	/* dev_ioctl */
-	btsco_get_locks,	/* get_locks */
+	NULL,			/* powerstate */
 };
 
 static const struct audio_device btsco_device = {
@@ -265,7 +259,7 @@ static void btsco_intr(void *);
  */
 
 static int
-btsco_match(device_t self, cfdata_t cfdata, void *aux)
+btsco_match(device_t self, struct cfdata *cfdata, void *aux)
 {
 	prop_dictionary_t dict = aux;
 	prop_object_t obj;
@@ -295,7 +289,6 @@ btsco_attach(device_t parent, device_t self, void *aux)
 	sc->sc_state = BTSCO_CLOSED;
 	sc->sc_name = device_xname(self);
 	cv_init(&sc->sc_connect, "connect");
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_NONE);
 
 	/*
 	 * copy in our configuration info
@@ -343,8 +336,6 @@ btsco_attach(device_t parent, device_t self, void *aux)
 		aprint_error_dev(self, "audio_attach_mi failed\n");
 		return;
 	}
-
-	pmf_device_register(self, NULL, NULL);
 }
 
 static int
@@ -353,8 +344,6 @@ btsco_detach(device_t self, int flags)
 	struct btsco_softc *sc = device_private(self);
 
 	DPRINTF("sc=%p\n", sc);
-
-	pmf_device_deregister(self);
 
 	mutex_enter(bt_lock);
 	if (sc->sc_sco != NULL) {
@@ -395,7 +384,6 @@ btsco_detach(device_t self, int flags)
 	}
 
 	cv_destroy(&sc->sc_connect);
-	mutex_destroy(&sc->sc_intr_lock);
 
 	return 0;
 }
@@ -440,6 +428,7 @@ static void
 btsco_sco_disconnected(void *arg, int err)
 {
 	struct btsco_softc *sc = arg;
+	int s;
 
 	DPRINTF("%s sc_state %d\n", sc->sc_name, sc->sc_state);
 
@@ -462,7 +451,7 @@ btsco_sco_disconnected(void *arg, int err)
 		 * has completed so that when it tries to send more, we
 		 * can indicate an error.
 		 */
-		mutex_enter(&sc->sc_intr_lock);
+		s = splaudio();
 		if (sc->sc_tx_pending > 0) {
 			sc->sc_tx_pending = 0;
 			(*sc->sc_tx_intr)(sc->sc_tx_intrarg);
@@ -471,7 +460,7 @@ btsco_sco_disconnected(void *arg, int err)
 			sc->sc_rx_want = 0;
 			(*sc->sc_rx_intr)(sc->sc_rx_intrarg);
 		}
-		mutex_exit(&sc->sc_intr_lock);
+		splx(s);
 		break;
 
 	default:
@@ -502,16 +491,17 @@ static void
 btsco_sco_complete(void *arg, int count)
 {
 	struct btsco_softc *sc = arg;
+	int s;
 
 	DPRINTFN(10, "%s count %d\n", sc->sc_name, count);
 
-	mutex_enter(&sc->sc_intr_lock);
+	s = splaudio();
 	if (sc->sc_tx_pending > 0) {
 		sc->sc_tx_pending -= count;
 		if (sc->sc_tx_pending == 0)
 			(*sc->sc_tx_intr)(sc->sc_tx_intrarg);
 	}
-	mutex_exit(&sc->sc_intr_lock);
+	splx(s);
 }
 
 static void
@@ -526,11 +516,11 @@ static void
 btsco_sco_input(void *arg, struct mbuf *m)
 {
 	struct btsco_softc *sc = arg;
-	int len;
+	int len, s;
 
 	DPRINTFN(10, "%s len=%d\n", sc->sc_name, m->m_pkthdr.len);
 
-	mutex_enter(&sc->sc_intr_lock);
+	s = splaudio();
 	if (sc->sc_rx_want == 0) {
 		m_freem(m);
 	} else {
@@ -556,7 +546,7 @@ btsco_sco_input(void *arg, struct mbuf *m)
 		if (sc->sc_rx_want == 0)
 			(*sc->sc_rx_intr)(sc->sc_rx_intrarg);
 	}
-	mutex_exit(&sc->sc_intr_lock);
+	splx(s);
 }
 
 
@@ -580,7 +570,7 @@ btsco_open(void *hdl, int flags)
 	if (sc->sc_sco != NULL || sc->sc_sco_l != NULL)
 		return EIO;
 
-	KASSERT(mutex_owned(bt_lock));
+	mutex_enter(bt_lock);
 
 	memset(&sa, 0, sizeof(sa));
 	sa.bt_len = sizeof(sa);
@@ -657,6 +647,8 @@ btsco_open(void *hdl, int flags)
 	}
 
 done:
+	mutex_exit(bt_lock);
+
 	DPRINTF("done err=%d, sc_state=%d, sc_mtu=%d\n",
 			err, sc->sc_state, sc->sc_mtu);
 	return err;
@@ -669,8 +661,7 @@ btsco_close(void *hdl)
 
 	DPRINTF("%s\n", sc->sc_name);
 
-	KASSERT(mutex_owned(bt_lock));
-
+	mutex_enter(bt_lock);
 	if (sc->sc_sco != NULL) {
 		sco_disconnect(sc->sc_sco, 0);
 		sco_detach(&sc->sc_sco);
@@ -679,6 +670,7 @@ btsco_close(void *hdl)
 	if (sc->sc_sco_l != NULL) {
 		sco_detach(&sc->sc_sco_l);
 	}
+	mutex_exit(bt_lock);
 
 	if (sc->sc_rx_mbuf != NULL) {
 		m_freem(sc->sc_rx_mbuf);
@@ -777,9 +769,9 @@ btsco_round_blocksize(void *hdl, int bs, int mode,
 /*
  * Start Output
  *
- * We dont want to be calling the network stack with sc_intr_lock held
- * so make a note of what is to be sent, and schedule an interrupt to
- * bundle it up and queue it.
+ * We dont want to be calling the network stack at splaudio() so make
+ * a note of what is to be sent, and schedule an interrupt to bundle
+ * it up and queue it.
  */
 static int
 btsco_start_output(void *hdl, void *block, int blksize,
@@ -1016,16 +1008,17 @@ btsco_query_devinfo(void *hdl, mixer_devinfo_t *di)
  * Allocate Ring Buffers.
  */
 static void *
-btsco_allocm(void *hdl, int direction, size_t size)
+btsco_allocm(void *hdl, int direction, size_t size,
+		struct malloc_type *type, int flags)
 {
 	struct btsco_softc *sc = hdl;
 	void *addr;
 
 	DPRINTF("%s: size %d direction %d\n", sc->sc_name, size, direction);
 
-	addr = kmem_alloc(size, KM_SLEEP);
+	addr = malloc(size, type, flags);
 
-	if (addr != NULL && direction == AUMODE_PLAY) {
+	if (direction == AUMODE_PLAY) {
 		sc->sc_tx_buf = addr;
 		sc->sc_tx_refcnt = 0;
 	}
@@ -1043,7 +1036,7 @@ btsco_allocm(void *hdl, int direction, size_t size)
  * This would be a memory leak but at least there is a warning..
  */
 static void
-btsco_freem(void *hdl, void *addr, size_t size)
+btsco_freem(void *hdl, void *addr, struct malloc_type *type)
 {
 	struct btsco_softc *sc = hdl;
 	int count = hz / 2;
@@ -1054,7 +1047,7 @@ btsco_freem(void *hdl, void *addr, size_t size)
 		sc->sc_tx_buf = NULL;
 
 		while (sc->sc_tx_refcnt> 0 && count-- > 0)
-			kpause("drain", false, 1, NULL);
+			tsleep(sc, PWAIT, "drain", 1);
 
 		if (sc->sc_tx_refcnt > 0) {
 			aprint_error("%s: ring buffer unreleased!\n", sc->sc_name);
@@ -1062,7 +1055,7 @@ btsco_freem(void *hdl, void *addr, size_t size)
 		}
 	}
 
-	kmem_free(addr, size);
+	free(addr, type);
 }
 
 static int
@@ -1070,15 +1063,6 @@ btsco_get_props(void *hdl)
 {
 
 	return AUDIO_PROP_FULLDUPLEX;
-}
-
-static void
-btsco_get_locks(void *hdl, kmutex_t **intr, kmutex_t **thread)
-{
-	struct btsco_softc *sc = hdl;
-
-	*intr = &sc->sc_intr_lock;
-	*thread = bt_lock;
 }
 
 /*

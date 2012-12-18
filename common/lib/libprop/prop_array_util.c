@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_array_util.c,v 1.4 2012/07/27 09:10:59 pooka Exp $	*/
+/*	$NetBSD: prop_array_util.c,v 1.2 2008/09/11 13:15:13 haad Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -38,8 +38,8 @@
  * exactly what we're doing here.
  */
 
-#include "prop_object_impl.h" /* hide kernel vs. not-kernel vs. standalone */
 #include <prop/proplib.h>
+#include "prop_object_impl.h" /* hide kernel vs. not-kernel vs. standalone */
 
 bool
 prop_array_get_bool(prop_array_t array,
@@ -238,14 +238,3 @@ TEMPLATE(,)
 TEMPLATE(_nocopy,const)
 
 #undef TEMPLATE
-
-bool
-prop_array_add_and_rel(prop_array_t array, prop_object_t po)
-{
-	bool ret;
-	if (po == NULL)
-		return false;
-	ret = prop_array_add(array, po);
-	prop_object_release(po);
-	return ret;
-}

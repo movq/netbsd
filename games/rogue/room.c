@@ -1,4 +1,4 @@
-/*	$NetBSD: room.c,v 1.13 2009/08/12 08:44:45 dholland Exp $	*/
+/*	$NetBSD: room.c,v 1.12 2008/01/14 03:50:02 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)room.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: room.c,v 1.13 2009/08/12 08:44:45 dholland Exp $");
+__RCSID("$NetBSD: room.c,v 1.12 2008/01/14 03:50:02 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -95,12 +95,6 @@ static const struct option {
 		0, &save_file, NULL
 	}
 };
-
-static boolean get_oth_room(short, short *, short *);
-static void opt_erase(int);
-static void opt_go(int);
-static void opt_show(int);
-static void visit_rooms(int);
 
 void
 light_up_room(int rn)
@@ -352,7 +346,7 @@ is_all_connected(void)
 	return(1);
 }
 
-static void
+void
 visit_rooms(int rn)
 {
 	short i;
@@ -492,7 +486,7 @@ dr_course(object *monster, boolean entering, short row, short col)
 	}
 }
 
-static boolean
+boolean
 get_oth_room(short rn, short *row, short *col)
 {
 	short d = -1;
@@ -618,7 +612,7 @@ CH:
 	}
 }
 
-static void
+void
 opt_show(int i)
 {
 	const char *s;
@@ -634,7 +628,7 @@ opt_show(int i)
 	addstr(s);
 }
 
-static void
+void
 opt_erase(int i)
 {
 	const struct option *opt = &options[i];
@@ -643,7 +637,7 @@ opt_erase(int i)
 	clrtoeol();
 }
 
-static void
+void
 opt_go(int i)
 {
 	move(i, strlen(options[i].prompt));

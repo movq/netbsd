@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_vfsops.c,v 1.95 2011/10/07 09:35:05 hannken Exp $	*/
+/*	$NetBSD: smbfs_vfsops.c,v 1.85.4.1 2009/10/03 23:05:25 snj Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -35,7 +35,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_vfsops.c,v 1.95 2011/10/07 09:35:05 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_vfsops.c,v 1.85.4.1 2009/10/03 23:05:25 snj Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_quota.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -161,7 +165,6 @@ smbfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	struct smb_share *ssp = NULL;
 	struct smb_cred scred;
 	struct proc *p;
-	char *fromname;
 	int error;
 
 	if (*data_len < sizeof *args)
@@ -186,30 +189,23 @@ smbfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		return EINVAL;
 	}
 
+	error = set_statvfs_info(path, UIO_USERSPACE, NULL, UIO_USERSPACE,
+	    mp->mnt_op->vfs_name, mp, l);
+	if (error)
+		return error;
+
 	smb_makescred(&scred, l, l->l_cred);
 	error = smb_dev2share(args->dev_fd, SMBM_EXEC, &scred, &ssp);
 	if (error)
 		return error;
 	smb_share_unlock(ssp);	/* keep ref, but unlock */
 	vcp = SSTOVC(ssp);
-
-	fromname = kmem_zalloc(MNAMELEN, KM_SLEEP);
-	snprintf(fromname, MNAMELEN,
-	    "//%s@%s/%s", vcp->vc_username, vcp->vc_srvname, ssp->ss_name);
-	error = set_statvfs_info(path, UIO_USERSPACE, fromname, UIO_SYSSPACE,
-	    mp->mnt_op->vfs_name, mp, l);
-	kmem_free(fromname, MNAMELEN);
-	if (error) {
-		smb_share_lock(ssp);
-		smb_share_put(ssp, &scred);
-		return error;
-	}
-
 	mp->mnt_stat.f_iosize = vcp->vc_txmax;
 	mp->mnt_stat.f_namemax =
 	    (vcp->vc_hflags2 & SMB_FLAGS2_KNOWS_LONG_NAMES) ? 255 : 12;
 
-	smp = malloc(sizeof(*smp), M_SMBFSDATA, M_WAITOK|M_ZERO);
+	MALLOC(smp, struct smbmount *, sizeof(*smp), M_SMBFSDATA, M_WAITOK);
+	memset(smp, 0, sizeof(*smp));
 	mp->mnt_data = smp;
 
 	smp->sm_hash = hashinit(desiredvnodes, HASH_LIST, true,
@@ -224,6 +220,10 @@ smbfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 			    (S_IRWXU|S_IRWXG|S_IRWXO)) | S_IFREG;
 	smp->sm_args.dir_mode  = (smp->sm_args.dir_mode &
 			    (S_IRWXU|S_IRWXG|S_IRWXO)) | S_IFDIR;
+
+	memset(mp->mnt_stat.f_mntfromname, 0, MNAMELEN);
+	snprintf(mp->mnt_stat.f_mntfromname, MNAMELEN,
+	    "//%s@%s/%s", vcp->vc_username, vcp->vc_srvname, ssp->ss_name);
 
 	vfs_getnewfsid(mp);
 	return (0);
@@ -243,7 +243,8 @@ smbfs_unmount(struct mount *mp, int mntflags)
 	flags = 0;
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
-
+#ifdef QUOTA
+#endif
 	if (smbfs_rootvp->v_usecount > 1 && (mntflags & MNT_FORCE) == 0)
 		return EBUSY;
 
@@ -270,7 +271,7 @@ smbfs_unmount(struct mount *mp, int mntflags)
 
 	hashdone(smp->sm_hash, HASH_LIST, smp->sm_hashlen);
 	mutex_destroy(&smp->sm_hashlock);
-	free(smp, M_SMBFSDATA);
+	FREE(smp, M_SMBFSDATA);
 	return 0;
 }
 
@@ -300,7 +301,7 @@ smbfs_setroot(struct mount *mp)
 
 	/*
 	 * Someone might have already set sm_root while we slept
-	 * in smb_lookup or vnode allocation.
+	 * in smb_lookup or malloc/getnewvnode.
 	 */
 	if (smp->sm_root)
 		vput(vp);
@@ -309,7 +310,7 @@ smbfs_setroot(struct mount *mp)
 		smp->sm_root = VTOSMB(vp);
 
 		/* Keep reference, but unlock */
-		VOP_UNLOCK(vp);
+		VOP_UNLOCK(vp, 0);
 	}
 
 	return (0);
@@ -322,10 +323,9 @@ int
 smbfs_root(struct mount *mp, struct vnode **vpp)
 {
 	struct smbmount *smp = VFSTOSMBFS(mp);
-	int error;
 
 	if (__predict_false(!smp->sm_root)) {
-		error = smbfs_setroot(mp);
+		int error = smbfs_setroot(mp);
 		if (error)
 			return (error);
 		/* fallthrough */
@@ -333,11 +333,7 @@ smbfs_root(struct mount *mp, struct vnode **vpp)
 
 	KASSERT(smp->sm_root != NULL && SMBTOV(smp->sm_root) != NULL);
 	*vpp = SMBTOV(smp->sm_root);
-	vref(*vpp);
-	error = vn_lock(*vpp, LK_EXCLUSIVE | LK_RETRY);
-	if (error)
-		vrele(*vpp);
-	return error;
+	return vget(*vpp, LK_EXCLUSIVE | LK_RETRY);
 }
 
 /*
@@ -418,7 +414,8 @@ smbfs_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 	int error, allerror = 0;
 
 	/* Allocate a marker vnode. */
-	mvp = vnalloc(mp);
+	if ((mvp = vnalloc(mp)) == NULL)
+		return ENOMEM;
 	/*
 	 * Force stale buffer cache information to be flushed.
 	 */
@@ -432,20 +429,20 @@ loop:
 		 */
 		if (vp->v_mount != mp || vismarker(vp))
 			continue;
-		mutex_enter(vp->v_interlock);
+		mutex_enter(&vp->v_interlock);
 		np = VTOSMB(vp);
 		if (np == NULL) {
-			mutex_exit(vp->v_interlock);
+			mutex_exit(&vp->v_interlock);
 			continue;
 		}
 		if ((vp->v_type == VNON || (np->n_flag & NMODIFIED) == 0) &&
 		    LIST_EMPTY(&vp->v_dirtyblkhd) &&
 		     vp->v_uobj.uo_npages == 0) {
-			mutex_exit(vp->v_interlock);
+			mutex_exit(&vp->v_interlock);
 			continue;
 		}
 		mutex_exit(&mntvnode_lock);
-		error = vget(vp, LK_EXCLUSIVE | LK_NOWAIT);
+		error = vget(vp, LK_EXCLUSIVE | LK_NOWAIT | LK_INTERLOCK);
 		if (error) {
 			mutex_enter(&mntvnode_lock);
 			if (error == ENOENT) {

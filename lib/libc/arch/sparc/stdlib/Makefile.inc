@@ -1,4 +1,5 @@
-#	$NetBSD: Makefile.inc,v 1.5 2009/08/11 17:30:43 dsl Exp $
+#	$NetBSD: Makefile.inc,v 1.3 2006/03/22 22:03:58 drochner Exp $
 
-SRCS+=	llabs.S
-NO_SRCS+= imaxabs.S
+SRCS+=	abs.c div.c labs.c ldiv.c llabs.S
+
+SRCS+=	erand48_ieee754.c

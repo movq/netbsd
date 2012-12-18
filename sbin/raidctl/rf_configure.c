@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_configure.c,v 1.25 2010/01/27 18:34:02 christos Exp $	*/
+/*	$NetBSD: rf_configure.c,v 1.23 2006/03/19 01:57:11 dan Exp $	*/
 
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
@@ -49,7 +49,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: rf_configure.c,v 1.25 2010/01/27 18:34:02 christos Exp $");
+__RCSID("$NetBSD: rf_configure.c,v 1.23 2006/03/19 01:57:11 dan Exp $");
 #endif
 
 
@@ -57,7 +57,6 @@ __RCSID("$NetBSD: rf_configure.c,v 1.25 2010/01/27 18:34:02 christos Exp $");
 #include <stdlib.h>
 #include <errno.h>
 #include <strings.h>
-#include <err.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -400,7 +399,7 @@ rf_MakeLayoutSpecificDeclustered(FILE *configfp, RF_Config_t *cfgPtr, void *arg)
 	while (fscanf(fp, "%d", &val) == 1)
 		*p++ = (char) val;
 	fclose(fp);
-	if ((unsigned int)(p - cfgBuf) != cfgPtr->layoutSpecificSize) {
+	if (p - cfgBuf != cfgPtr->layoutSpecificSize) {
 		RF_ERRORMSG2("Size mismatch creating layout specific data: is %d sb %d bytes\n", (int) (p - cfgBuf), (int) (6 * sizeof(int) + b * k));
 		return (EINVAL);
 	}
@@ -501,14 +500,16 @@ rf_ReadSpareTable(RF_SparetWait_t *req, char *fname)
 	table = malloc(req->TablesPerSpareRegion * 
 		       sizeof(RF_SpareTableEntry_t *));
 	if (table == NULL) {
-		warnx("rf_ReadSpareTable: Unable to allocate table");
+		fprintf(stderr,
+			"rf_ReadSpareTable: Unable to allocate table\n");
 		return (NULL);
 	}
 	for (i = 0; i < req->TablesPerSpareRegion; i++) {
 		table[i] = malloc(req->BlocksPerTable * 
 				  sizeof(RF_SpareTableEntry_t));
 		if (table[i] == NULL) {
-			warnx("rf_ReadSpareTable: Unable to allocate table");
+			fprintf(stderr,
+				"rf_ReadSpareTable: Unable to allocate table\n");
 			return (NULL);  /* XXX should cleanup too! */
 		}
 		for (j = 0; j < req->BlocksPerTable; j++)
@@ -518,7 +519,8 @@ rf_ReadSpareTable(RF_SparetWait_t *req, char *fname)
 
 	/* 2.  open sparemap file, sanity check */
 	if ((fp = fopen(fname, "r")) == NULL) {
-		warn("rf_ReadSpareTable: Can't open sparemap file %s", fname);
+		fprintf(stderr,
+		    "rf_ReadSpareTable:  Can't open sparemap file %s\n", fname);
 		return (NULL);
 	}
 	if (rf_get_next_nonblank_line(buf, 1024, fp,
@@ -545,8 +547,7 @@ rf_ReadSpareTable(RF_SparetWait_t *req, char *fname)
 		numFound = fscanf(fp, " %d %d %d %d", &tableNum, &tupleNum,
 		    &spareDisk, &spareBlkOffset);
 		if (numFound != 4) {
-			warnx("Sparemap file prematurely exhausted after %d "
-			    "of %d lines", i, linecount);
+			fprintf(stderr, "Sparemap file prematurely exhausted after %d of %d lines\n", i, linecount);
 			fclose(fp);
 			return (NULL);
 		}

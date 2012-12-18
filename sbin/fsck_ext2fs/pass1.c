@@ -1,4 +1,4 @@
-/*	$NetBSD: pass1.c,v 1.22 2012/11/25 19:42:14 jakllsch Exp $	*/
+/*	$NetBSD: pass1.c,v 1.17 2008/03/16 23:17:55 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,6 +40,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -58,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)pass1.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: pass1.c,v 1.22 2012/11/25 19:42:14 jakllsch Exp $");
+__RCSID("$NetBSD: pass1.c,v 1.17 2008/03/16 23:17:55 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -89,7 +94,6 @@ pass1(void)
 {
 	ino_t inumber;
 	int c, i;
-	size_t j;
 	daddr_t dbase;
 	struct inodesc idesc;
 
@@ -140,9 +144,9 @@ pass1(void)
 	n_files = n_blks = 0;
 	resetinodebuf();
 	for (c = 0; c < sblock.e2fs_ncg; c++) {
-		for (j = 0;
-			j < sblock.e2fs.e2fs_ipg && inumber <= sblock.e2fs.e2fs_icount;
-			j++, inumber++) {
+		for (i = 0;
+			i < sblock.e2fs.e2fs_ipg && inumber <= sblock.e2fs.e2fs_icount;
+			i++, inumber++) {
 			if (inumber < EXT2_ROOTINO) /* XXX */
 				continue;
 			checkinode(inumber, &idesc);
@@ -201,9 +205,10 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 	}
 	lastino = inumber;
 	if (dp->e2di_dtime != 0) {
-		pwarn("INODE I=%llu HAS DTIME=%s",
-		    (unsigned long long)inumber,
-		    print_mtime(fs2h32(dp->e2di_dtime)));
+		time_t t = fs2h32(dp->e2di_dtime);
+		char *p = ctime(&t);
+		pwarn("INODE I=%llu HAS DTIME=%12.12s %4.4s",
+		    (unsigned long long)inumber, &p[4], &p[20]);
 		if (preen) {
 			printf(" (CORRECTED)\n");
 		}
@@ -277,7 +282,7 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 	}
 	lncntp[inumber] = fs2h16(dp->e2di_nlink);
 	if (dp->e2di_nlink == 0) {
-		zlnp = malloc(sizeof *zlnp);
+		zlnp = (struct zlncnt *)malloc(sizeof *zlnp);
 		if (zlnp == NULL) {
 			pfatal("LINK COUNT TABLE OVERFLOW");
 			if (reply("CONTINUE") == 0)
@@ -302,17 +307,16 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 	idesc->id_number = inumber;
 	(void)ckinode(dp, idesc);
 	idesc->id_entryno *= btodb(sblock.e2fs_bsize);
-	if (inonblock(dp) != (uint32_t)idesc->id_entryno) {
-		pwarn("INCORRECT BLOCK COUNT I=%llu (%llu should be %d)",
-		    (unsigned long long)inumber,
-		    (unsigned long long)inonblock(dp),
+	if (fs2h32(dp->e2di_nblock) != idesc->id_entryno) {
+		pwarn("INCORRECT BLOCK COUNT I=%llu (%d should be %d)",
+		    (unsigned long long)inumber, fs2h32(dp->e2di_nblock),
 		    idesc->id_entryno);
 		if (preen)
 			printf(" (CORRECTED)\n");
 		else if (reply("CORRECT") == 0)
 			return;
 		dp = ginode(inumber);
-		inosnblock(dp, idesc->id_entryno);
+		dp->e2di_nblock = h2fs32(idesc->id_entryno);
 		inodirty();
 	}
 	return;
@@ -365,7 +369,7 @@ pass1check(struct inodesc *idesc)
 					exit(FSCK_EXIT_CHECK_FAILED);
 				return (STOP);
 			}
-			new = malloc(sizeof(struct dups));
+			new = (struct dups *)malloc(sizeof(struct dups));
 			if (new == NULL) {
 				pfatal("DUP TABLE OVERFLOW.");
 				if (reply("CONTINUE") == 0)

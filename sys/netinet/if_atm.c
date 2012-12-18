@@ -1,6 +1,7 @@
-/*      $NetBSD: if_atm.c,v 1.33 2012/09/24 03:05:53 msaitoh Exp $       */
+/*      $NetBSD: if_atm.c,v 1.29 2008/10/24 17:07:33 dyoung Exp $       */
 
 /*
+ *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -12,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor and
+ *      Washington University.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atm.c,v 1.33 2012/09/24 03:05:53 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atm.c,v 1.29 2008/10/24 17:07:33 dyoung Exp $");
 
 #include "opt_inet.h"
 #include "opt_natm.h"
@@ -125,7 +132,7 @@ atm_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 		}
 		if (gate->sa_family != AF_LINK ||
 		    gate->sa_len < sockaddr_dl_measure(namelen, addrlen)) {
-			log(LOG_DEBUG, "atm_rtrequest: bad gateway value\n");
+			log(LOG_DEBUG, "atm_rtrequest: bad gateway value");
 			break;
 		}
 
@@ -155,7 +162,7 @@ atm_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 		/*
 		 * let the lower level know this circuit is active
 		 */
-		memcpy(&api.aph, CLLADDR(satocsdl(gate)), sizeof(api.aph));
+		bcopy(CLLADDR(satocsdl(gate)), &api.aph, sizeof(api.aph));
 		api.rxhand = NULL;
 		if (rt->rt_ifp->if_ioctl(rt->rt_ifp, SIOCATMENA, &api) != 0) {
 			printf("atm: couldn't add VC\n");
@@ -197,7 +204,7 @@ failed:
 		 * tell the lower layer to disable this circuit
 		 */
 
-		memcpy(&api.aph, CLLADDR(satocsdl(gate)), sizeof(api.aph));
+		bcopy(CLLADDR(satocsdl(gate)), &api.aph, sizeof(api.aph));
 		api.rxhand = NULL;
 		(void)rt->rt_ifp->if_ioctl(rt->rt_ifp, SIOCATMDIS, &api);
 
@@ -228,7 +235,7 @@ atmresolve(struct rtentry *rt, struct mbuf *m, const struct sockaddr *dst,
 	const struct sockaddr_dl *sdl;
 
 	if (m->m_flags & (M_BCAST|M_MCAST)) {
-		log(LOG_INFO, "atmresolve: BCAST/MCAST packet detected/dumped\n");
+		log(LOG_INFO, "atmresolve: BCAST/MCAST packet detected/dumped");
 		goto bad;
 	}
 
@@ -260,7 +267,7 @@ atmresolve(struct rtentry *rt, struct mbuf *m, const struct sockaddr *dst,
 
 
 	if (sdl->sdl_family == AF_LINK && sdl->sdl_alen == sizeof(*desten)) {
-		memcpy(desten, CLLADDR(sdl), sdl->sdl_alen);
+		bcopy(CLLADDR(sdl), desten, sdl->sdl_alen);
 		return (1);	/* ok, go for it! */
 	}
 

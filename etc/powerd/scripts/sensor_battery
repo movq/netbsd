@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: sensor_battery,v 1.7 2010/02/15 22:56:13 pgoyette Exp $
+#	$NetBSD: sensor_battery,v 1.5 2007/10/11 19:47:26 xtraeme Exp $
 #
 # Generic script for battery sensors.
 #
@@ -18,24 +18,9 @@ state-changed)
 	logger -p warning "${0}: (${3}) state changed to ${4} [${1}]" >&1
 	exit 0
 	;;
-warning-capacity)
+user-capacity)
 	logger -p warning \
-	    "${0}: (${3}) capacity below warning limit [${1}]" >&1
-	exit 0
-	;;
-critical-capacity)
-	logger -p warning \
-	    "${0}: (${3}) capacity below critical limit [${1}]" >&1
-	exit 0
-	;;
-high-capacity)
-	logger -p warning \
-	    "${0}: (${3}) capacity above high limit [${1}]" >&1
-	exit 0
-	;;
-maximum-capacity)
-	logger -p warning \
-	    "${0}: (${3}) capacity above maximum limit [${1}]" >&1
+	    "${0}: (${3}) user defined capacity dropped below limit [${1}]" >&1
 	exit 0
 	;;
 #

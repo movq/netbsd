@@ -1,4 +1,4 @@
-/*	$NetBSD: utoppy.c,v 1.21 2012/10/27 17:18:38 chs Exp $	*/
+/*	$NetBSD: utoppy.c,v 1.12 2008/05/24 16:40:58 cube Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: utoppy.c,v 1.21 2012/10/27 17:18:38 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: utoppy.c,v 1.12 2008/05/24 16:40:58 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,11 +43,9 @@ __KERNEL_RCSID(0, "$NetBSD: utoppy.c,v 1.21 2012/10/27 17:18:38 chs Exp $");
 #include <sys/uio.h>
 #include <sys/conf.h>
 #include <sys/vnode.h>
-#include <sys/bus.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
-#include <dev/usb/usbdivar.h>
 #include <dev/usb/usbdi_util.h>
 #include <dev/usb/usbdevs.h>
 #include <dev/usb/usb_quirks.h>
@@ -125,7 +123,7 @@ enum utoppy_state {
 };
 
 struct utoppy_softc {
-	device_t sc_dev;
+	USBBASEDEVICE sc_dev;
 	usbd_device_handle sc_udev;	/* device */
 	usbd_interface_handle sc_iface;	/* interface */
 	int sc_dying;
@@ -185,17 +183,11 @@ const struct cdevsw utoppy_cdevsw = {
 
 #define	UTOPPYUNIT(n)	(minor(n))
 
-int             utoppy_match(device_t, cfdata_t, void *);
-void            utoppy_attach(device_t, device_t, void *);
-int             utoppy_detach(device_t, int);
-int             utoppy_activate(device_t, enum devact);
-extern struct cfdriver utoppy_cd;
-CFATTACH_DECL_NEW(utoppy, sizeof(struct utoppy_softc), utoppy_match, utoppy_attach, utoppy_detach, utoppy_activate);
+USB_DECLARE_DRIVER(utoppy);
 
-int 
-utoppy_match(device_t parent, cfdata_t match, void *aux)
+USB_MATCH(utoppy)
 {
-	struct usb_attach_arg *uaa = aux;
+	USB_MATCH_START(utoppy, uaa);
 
 	if (uaa->vendor == USB_VENDOR_TOPFIELD &&
 	    uaa->product == USB_PRODUCT_TOPFIELD_TF5000PVR)
@@ -204,11 +196,9 @@ utoppy_match(device_t parent, cfdata_t match, void *aux)
 	return (UMATCH_NONE);
 }
 
-void 
-utoppy_attach(device_t parent, device_t self, void *aux)
+USB_ATTACH(utoppy)
 {
-	struct utoppy_softc *sc = device_private(self);
-	struct usb_attach_arg *uaa = aux;
+	USB_ATTACH_START(utoppy, sc, uaa);
 	usbd_device_handle dev = uaa->device;
 	usbd_interface_handle iface;
 	usb_endpoint_descriptor_t *ed;
@@ -218,10 +208,8 @@ utoppy_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_dev = self;
 
-	aprint_naive("\n");
-	aprint_normal("\n");
-
 	devinfop = usbd_devinfo_alloc(dev, 0);
+	USB_ATTACH_SETUP;
 	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
@@ -232,7 +220,7 @@ utoppy_attach(device_t parent, device_t self, void *aux)
 	if (usbd_set_config_index(dev, 0, 1)
 	    || usbd_device2interface_handle(dev, 0, &iface)) {
 		aprint_error_dev(self, "Configuration failed\n");
-		return;
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	epcount = 0;
@@ -240,7 +228,7 @@ utoppy_attach(device_t parent, device_t self, void *aux)
 	if (epcount != UTOPPY_NUMENDPOINTS) {
 		aprint_error_dev(self, "Expected %d endpoints, got %d\n",
 		    UTOPPY_NUMENDPOINTS, epcount);
-		return;
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	sc->sc_in = -1;
@@ -250,7 +238,7 @@ utoppy_attach(device_t parent, device_t self, void *aux)
 		ed = usbd_interface2endpoint_descriptor(iface, i);
 		if (ed == NULL) {
 			aprint_error_dev(self, "couldn't get ep %d\n", i);
-			return;
+			USB_ATTACH_ERROR_RETURN;
 		}
 
 		if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_IN &&
@@ -266,7 +254,7 @@ utoppy_attach(device_t parent, device_t self, void *aux)
 		aprint_error_dev(self,
 		    "could not find bulk in/out endpoints\n");
 		sc->sc_dying = 1;
-		return;
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	sc->sc_iface = iface;
@@ -297,9 +285,9 @@ utoppy_attach(device_t parent, device_t self, void *aux)
 	}
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-			   sc->sc_dev);
+			   USBDEV(sc->sc_dev));
 
-	return;
+	USB_ATTACH_SUCCESS_RETURN;
 
  fail2:	usbd_free_xfer(sc->sc_in_xfer);
 	sc->sc_in_xfer = NULL;
@@ -308,27 +296,28 @@ utoppy_attach(device_t parent, device_t self, void *aux)
 	sc->sc_out_xfer = NULL;
 
  fail0:	sc->sc_dying = 1;
-	return;
+	USB_ATTACH_ERROR_RETURN;
 }
 
 int
-utoppy_activate(device_t self, enum devact act)
+utoppy_activate(device_ptr_t self, enum devact act)
 {
 	struct utoppy_softc *sc = device_private(self);
 
 	switch (act) {
+	case DVACT_ACTIVATE:
+		return (EOPNOTSUPP);
+
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		break;
 	}
+	return (0);
 }
 
-int 
-utoppy_detach(device_t self, int flags)
+USB_DETACH(utoppy)
 {
-	struct utoppy_softc *sc = device_private(self);
+	USB_DETACH_START(utoppy, sc);
 	int maj, mn;
 	int s;
 
@@ -345,18 +334,18 @@ utoppy_detach(device_t self, int flags)
 
 	s = splusb();
 	if (--sc->sc_refcnt >= 0)
-		usb_detach_waitold(sc->sc_dev);
+		usb_detach_wait(USBDEV(sc->sc_dev));
 	splx(s);
 
 	/* locate the major number */
 	maj = cdevsw_lookup_major(&utoppy_cdevsw);
 
 	/* Nuke the vnodes for any open instances (calls close). */
-	mn = device_unit(self);
+	mn = self->dv_unit;
 	vdevgone(maj, mn, mn, VCHR);
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-			   sc->sc_dev);
+			   USBDEV(sc->sc_dev));
 
 	return (0);
 }
@@ -521,10 +510,7 @@ utoppy_bulk_transfer_cb(usbd_xfer_handle xfer,
     usbd_status status)
 {
 
-	if (xfer->pipe->device->bus->lock)
-		cv_broadcast(&xfer->cv);
-	else
-		wakeup(xfer);
+	wakeup(xfer);
 }
 
 static usbd_status
@@ -537,17 +523,14 @@ utoppy_bulk_transfer(usbd_xfer_handle xfer, usbd_pipe_handle pipe,
 
 	usbd_setup_xfer(xfer, pipe, 0, buf, *size, flags, timeout,
 	    utoppy_bulk_transfer_cb);
-	usbd_lock_pipe(pipe);	/* don't want callback until tsleep() */
+	s = splusb();
 	err = usbd_transfer(xfer);
 	if (err != USBD_IN_PROGRESS) {
-		usbd_unlock_pipe(pipe);
+		splx(s);
 		return (err);
 	}
-	if (pipe->device->bus->lock)
-		error = cv_wait_sig(&xfer->cv, pipe->device->bus->lock);
-	else
-		error = tsleep((void *)xfer, PZERO, lbl, 0);
-	usbd_unlock_pipe(pipe);
+	error = tsleep((void *)xfer, PZERO, lbl, 0);
+	splx(s);
 	if (error) {
 		usbd_abort_pipe(pipe);
 		return (USBD_INTERRUPTED);
@@ -568,7 +551,7 @@ utoppy_send_packet(struct utoppy_softc *sc, uint16_t cmd, uint32_t timeout)
 	h = sc->sc_out_data;
 
 	DPRINTF(UTOPPY_DBG_SEND_PACKET, ("%s: utoppy_send_packet: cmd 0x%04x, "
-	    "len %d\n", device_xname(sc->sc_dev), (u_int)cmd, h->h_len));
+	    "len %d\n", USBDEVNAME(sc->sc_dev), (u_int)cmd, h->h_len));
 
 	dlen = h->h_len;
 	len = dlen + UTOPPY_HEADER_SIZE;
@@ -580,7 +563,7 @@ utoppy_send_packet(struct utoppy_softc *sc, uint16_t cmd, uint32_t timeout)
 
 	if (len >= UTOPPY_BSIZE) {
 		DPRINTF(UTOPPY_DBG_SEND_PACKET, ("%s: utoppy_send_packet: "
-		    "packet too big (%d)\n", device_xname(sc->sc_dev), (int)len));
+		    "packet too big (%d)\n", USBDEVNAME(sc->sc_dev), (int)len));
 		return (EINVAL);
 	}
 
@@ -622,7 +605,7 @@ utoppy_send_packet(struct utoppy_softc *sc, uint16_t cmd, uint32_t timeout)
 	data = sc->sc_out_data;
 
 	DPRINTF(UTOPPY_DBG_SEND_PACKET, ("%s: utoppy_send_packet: total len "
-	    "%d...\n", device_xname(sc->sc_dev), (int)len));
+	    "%d...\n", USBDEVNAME(sc->sc_dev), (int)len));
 	DDUMP_PACKET(data, len);
 
 	do {
@@ -639,7 +622,7 @@ utoppy_send_packet(struct utoppy_softc *sc, uint16_t cmd, uint32_t timeout)
 		if (thislen != min(len, UTOPPY_FRAG_SIZE)) {
 			DPRINTF(UTOPPY_DBG_SEND_PACKET, ("%s: "
 			    "utoppy_send_packet: sent %ld, err %d\n",
-			    device_xname(sc->sc_dev), (u_long)thislen, err));
+			    USBDEVNAME(sc->sc_dev), (u_long)thislen, err));
 		}
 
 		if (err == 0) {
@@ -649,7 +632,7 @@ utoppy_send_packet(struct utoppy_softc *sc, uint16_t cmd, uint32_t timeout)
 	} while (err == 0 && len);
 
 	DPRINTF(UTOPPY_DBG_SEND_PACKET, ("%s: utoppy_send_packet: "
-	    "usbd_bulk_transfer() returned %d.\n", device_xname(sc->sc_dev),err));
+	    "usbd_bulk_transfer() returned %d.\n", USBDEVNAME(sc->sc_dev),err));
 
 	return (err ? utoppy_usbd_status2errno(err) : 0);
 }
@@ -668,7 +651,7 @@ utoppy_recv_packet(struct utoppy_softc *sc, uint16_t *respp, uint32_t timeout)
 	bytesleft = UTOPPY_BSIZE;
 
 	DPRINTF(UTOPPY_DBG_RECV_PACKET, ("%s: utoppy_recv_packet: ...\n",
-	    device_xname(sc->sc_dev)));
+	    USBDEVNAME(sc->sc_dev)));
 
 	do {
 		requested = thislen = min(bytesleft, UTOPPY_FRAG_SIZE);
@@ -679,7 +662,7 @@ utoppy_recv_packet(struct utoppy_softc *sc, uint16_t *respp, uint32_t timeout)
 
 		DPRINTF(UTOPPY_DBG_RECV_PACKET, ("%s: utoppy_recv_packet: "
 		    "usbd_bulk_transfer() returned %d, thislen %d, data %p\n",
-		    device_xname(sc->sc_dev), err, (u_int)thislen, data));
+		    USBDEVNAME(sc->sc_dev), err, (u_int)thislen, data));
 
 		if (err == 0) {
 			memcpy(data, sc->sc_in_buf, thislen);
@@ -696,12 +679,12 @@ utoppy_recv_packet(struct utoppy_softc *sc, uint16_t *respp, uint32_t timeout)
 	h = sc->sc_in_data;
 
 	DPRINTF(UTOPPY_DBG_RECV_PACKET, ("%s: utoppy_recv_packet: received %d "
-	    "bytes in total to %p\n", device_xname(sc->sc_dev), (u_int)len, h));
+	    "bytes in total to %p\n", USBDEVNAME(sc->sc_dev), (u_int)len, h));
 	DDUMP_PACKET(h, len);
 
 	if (len < UTOPPY_HEADER_SIZE || len < (uint32_t)le16toh(h->h_len)) {
 		DPRINTF(UTOPPY_DBG_RECV_PACKET, ("%s: utoppy_recv_packet: bad "
-		    " length (len %d, h_len %d)\n", device_xname(sc->sc_dev),
+		    " length (len %d, h_len %d)\n", USBDEVNAME(sc->sc_dev),
 		    (int)len, le16toh(h->h_len)));
 		return (EIO);
 	}
@@ -718,7 +701,7 @@ utoppy_recv_packet(struct utoppy_softc *sc, uint16_t *respp, uint32_t timeout)
 	 */
 	if (*respp == UTOPPY_RESP_FILE_DATA) {
 		DPRINTF(UTOPPY_DBG_RECV_PACKET, ("%s: utoppy_recv_packet: "
-		    "ACKing file data\n", device_xname(sc->sc_dev)));
+		    "ACKing file data\n", USBDEVNAME(sc->sc_dev)));
 
 		UTOPPY_OUT_INIT(sc);
 		err = utoppy_send_packet(sc, UTOPPY_CMD_ACK,
@@ -726,7 +709,7 @@ utoppy_recv_packet(struct utoppy_softc *sc, uint16_t *respp, uint32_t timeout)
 		if (err) {
 			DPRINTF(UTOPPY_DBG_RECV_PACKET, ("%s: "
 			    "utoppy_recv_packet: failed to ACK file data: %d\n",
-			    device_xname(sc->sc_dev), err));
+			    USBDEVNAME(sc->sc_dev), err));
 			return (err);
 		}
 	}
@@ -765,7 +748,7 @@ utoppy_recv_packet(struct utoppy_softc *sc, uint16_t *respp, uint32_t timeout)
 	sc->sc_in_offset = 0;
 
 	DPRINTF(UTOPPY_DBG_RECV_PACKET, ("%s: utoppy_recv_packet: len %d, "
-	    "crc 0x%04x, hdrcrc 0x%04x\n", device_xname(sc->sc_dev),
+	    "crc 0x%04x, hdrcrc 0x%04x\n", USBDEVNAME(sc->sc_dev),
 	    (int)len, crc, h->h_crc));
 	DDUMP_PACKET(h, len);
 
@@ -1165,7 +1148,7 @@ utoppy_readdir_next(struct utoppy_softc *sc)
 	int err;
 
 	DPRINTF(UTOPPY_DBG_READDIR, ("%s: utoppy_readdir_next: running...\n",
-	    device_xname(sc->sc_dev)));
+	    USBDEVNAME(sc->sc_dev)));
 
 	/*
 	 * Fetch the next READDIR response
@@ -1174,7 +1157,7 @@ utoppy_readdir_next(struct utoppy_softc *sc)
 	if (err) {
 		DPRINTF(UTOPPY_DBG_READDIR, ("%s: utoppy_readdir_next: "
 		    "utoppy_recv_packet() returned %d\n",
-		    device_xname(sc->sc_dev), err));
+		    USBDEVNAME(sc->sc_dev), err));
 		if (err == EBADMSG) {
 			UTOPPY_OUT_INIT(sc);
 			utoppy_send_packet(sc, UTOPPY_RESP_ERROR,
@@ -1186,12 +1169,12 @@ utoppy_readdir_next(struct utoppy_softc *sc)
 
 	DPRINTF(UTOPPY_DBG_READDIR, ("%s: utoppy_readdir_next: "
 	    "utoppy_recv_packet() returned %d, len %ld\n",
-	    device_xname(sc->sc_dev), err, (u_long)sc->sc_in_len));
+	    USBDEVNAME(sc->sc_dev), err, (u_long)sc->sc_in_len));
 
 	switch (resp) {
 	case UTOPPY_RESP_READDIR_DATA:
 		DPRINTF(UTOPPY_DBG_READDIR, ("%s: utoppy_readdir_next: "
-		    "UTOPPY_RESP_READDIR_DATA\n", device_xname(sc->sc_dev)));
+		    "UTOPPY_RESP_READDIR_DATA\n", USBDEVNAME(sc->sc_dev)));
 
 		UTOPPY_OUT_INIT(sc);
 		err = utoppy_send_packet(sc, UTOPPY_CMD_ACK,
@@ -1199,7 +1182,7 @@ utoppy_readdir_next(struct utoppy_softc *sc)
 		if (err) {
 			DPRINTF(UTOPPY_DBG_READDIR, ("%s: utoppy_readdir_next: "
 			    "utoppy_send_packet(ACK) returned %d\n",
-			    device_xname(sc->sc_dev), err));
+			    USBDEVNAME(sc->sc_dev), err));
 			utoppy_cancel(sc);
 			return (err);
 		}
@@ -1209,7 +1192,7 @@ utoppy_readdir_next(struct utoppy_softc *sc)
 
 	case UTOPPY_RESP_READDIR_END:
 		DPRINTF(UTOPPY_DBG_READDIR, ("%s: utoppy_readdir_next: "
-		    "UTOPPY_RESP_READDIR_END\n", device_xname(sc->sc_dev)));
+		    "UTOPPY_RESP_READDIR_END\n", USBDEVNAME(sc->sc_dev)));
 
 		UTOPPY_OUT_INIT(sc);
 		utoppy_send_packet(sc, UTOPPY_CMD_ACK, UTOPPY_SHORT_TIMEOUT);
@@ -1219,7 +1202,7 @@ utoppy_readdir_next(struct utoppy_softc *sc)
 
 	default:
 		DPRINTF(UTOPPY_DBG_READDIR, ("%s: utoppy_readdir_next: "
-		    "bad response: 0x%x\n", device_xname(sc->sc_dev), resp));
+		    "bad response: 0x%x\n", USBDEVNAME(sc->sc_dev), resp));
 		sc->sc_state = UTOPPY_STATE_IDLE;
 		sc->sc_in_len = 0;
 		return (EIO);
@@ -1234,14 +1217,14 @@ utoppy_readdir_decode(struct utoppy_softc *sc, struct utoppy_dirent *ud)
 	uint8_t ftype;
 
 	DPRINTF(UTOPPY_DBG_READDIR, ("%s: utoppy_readdir_decode: bytes left"
-	    " %d\n", device_xname(sc->sc_dev), (int)sc->sc_in_len));
+	    " %d\n", USBDEVNAME(sc->sc_dev), (int)sc->sc_in_len));
 
 	if (utoppy_timestamp_decode(sc, &ud->ud_mtime) ||
 	    utoppy_get_8(sc, &ftype) || utoppy_get_64(sc, &ud->ud_size) ||
 	    utoppy_get_string(sc, ud->ud_path, UTOPPY_MAX_FILENAME_LEN + 1) ||
 	    utoppy_get_32(sc, &ud->ud_attributes)) {
 		DPRINTF(UTOPPY_DBG_READDIR, ("%s: utoppy_readdir_decode: no "
-		    "more to decode\n", device_xname(sc->sc_dev)));
+		    "more to decode\n", USBDEVNAME(sc->sc_dev)));
 		return (0);
 	}
 
@@ -1258,7 +1241,7 @@ utoppy_readdir_decode(struct utoppy_softc *sc, struct utoppy_dirent *ud)
 	}
 
 	DPRINTF(UTOPPY_DBG_READDIR, ("%s: utoppy_readdir_decode: %s '%s', "
-	    "size %lld, time 0x%08lx, attr 0x%08x\n", device_xname(sc->sc_dev),
+	    "size %lld, time 0x%08lx, attr 0x%08x\n", USBDEVNAME(sc->sc_dev),
 	    (ftype == UTOPPY_FTYPE_DIR) ? "DIR" :
 	    ((ftype == UTOPPY_FTYPE_FILE) ? "FILE" : "UNKNOWN"), ud->ud_path,
 	    ud->ud_size, (u_long)ud->ud_mtime, ud->ud_attributes));
@@ -1277,7 +1260,7 @@ utoppy_readfile_next(struct utoppy_softc *sc)
 	if (err) {
 		DPRINTF(UTOPPY_DBG_READ, ("%s: utoppy_readfile_next: "
 		    "utoppy_recv_packet() returned %d\n",
-		    device_xname(sc->sc_dev), err));
+		    USBDEVNAME(sc->sc_dev), err));
 		utoppy_cancel(sc);
 		return (err);
 	}
@@ -1291,14 +1274,14 @@ utoppy_readfile_next(struct utoppy_softc *sc)
 		if (err) {
 			DPRINTF(UTOPPY_DBG_READ, ("%s: utoppy_readfile_next: "
 			    "utoppy_send_packet(UTOPPY_CMD_ACK) returned %d\n",
-			    device_xname(sc->sc_dev), err));
+			    USBDEVNAME(sc->sc_dev), err));
 			utoppy_cancel(sc);
 			return (err);
 		}
 
 		sc->sc_in_len = 0;
 		DPRINTF(UTOPPY_DBG_READ, ("%s: utoppy_readfile_next: "
-		    "FILE_HEADER done\n", device_xname(sc->sc_dev)));
+		    "FILE_HEADER done\n", USBDEVNAME(sc->sc_dev)));
 		break;
 
 	case UTOPPY_RESP_FILE_DATA:
@@ -1306,20 +1289,20 @@ utoppy_readfile_next(struct utoppy_softc *sc)
 		if (utoppy_get_64(sc, &off)) {
 			DPRINTF(UTOPPY_DBG_READ, ("%s: utoppy_readfile_next: "
 			    "UTOPPY_RESP_FILE_DATA did not provide offset\n",
-			    device_xname(sc->sc_dev)));
+			    USBDEVNAME(sc->sc_dev)));
 			utoppy_cancel(sc);
 			return (EBADMSG);
 		}
 
 		DPRINTF(UTOPPY_DBG_READ, ("%s: utoppy_readfile_next: "
 		    "UTOPPY_RESP_FILE_DATA: offset %lld, bytes left %ld\n",
-		    device_xname(sc->sc_dev), off, (u_long)sc->sc_in_len));
+		    USBDEVNAME(sc->sc_dev), off, (u_long)sc->sc_in_len));
 		break;
 
 	case UTOPPY_RESP_FILE_END:
 		DPRINTF(UTOPPY_DBG_READ, ("%s: utoppy_readfile_next: "
 		    "UTOPPY_RESP_FILE_END: sending ACK\n",
-		    device_xname(sc->sc_dev)));
+		    USBDEVNAME(sc->sc_dev)));
 		UTOPPY_OUT_INIT(sc);
 		utoppy_send_packet(sc, UTOPPY_CMD_ACK, UTOPPY_SHORT_TIMEOUT);
 		/*FALLTHROUGH*/
@@ -1328,13 +1311,13 @@ utoppy_readfile_next(struct utoppy_softc *sc)
 		sc->sc_state = UTOPPY_STATE_IDLE;
 		(void) utoppy_turbo_mode(sc, 0);
 		DPRINTF(UTOPPY_DBG_READ, ("%s: utoppy_readfile_next: all "
-		    "done\n", device_xname(sc->sc_dev)));
+		    "done\n", USBDEVNAME(sc->sc_dev)));
 		break;
 
 	case UTOPPY_RESP_ERROR:
 	default:
 		DPRINTF(UTOPPY_DBG_READ, ("%s: utoppy_readfile_next: bad "
-		    "response code 0x%0x\n", device_xname(sc->sc_dev), resp));
+		    "response code 0x%0x\n", USBDEVNAME(sc->sc_dev), resp));
 		utoppy_cancel(sc);
 		return (EIO);
 	}
@@ -1349,21 +1332,19 @@ utoppyopen(dev_t dev, int flag, int mode,
 	struct utoppy_softc *sc;
 	int error = 0;
 
-	sc = device_lookup_private(&utoppy_cd, UTOPPYUNIT(dev));
-	if (sc == NULL)
-		return ENXIO;
+	USB_GET_SC_OPEN(utoppy, UTOPPYUNIT(dev), sc);
 
 	if (sc == NULL || sc->sc_iface == NULL || sc->sc_dying)
 		return (ENXIO);
 
 	if (sc->sc_state != UTOPPY_STATE_CLOSED) {
 		DPRINTF(UTOPPY_DBG_OPEN, ("%s: utoppyopen: already open\n",
-		    device_xname(sc->sc_dev)));
+		    USBDEVNAME(sc->sc_dev)));
 		return (EBUSY);
 	}
 
 	DPRINTF(UTOPPY_DBG_OPEN, ("%s: utoppyopen: opening...\n",
-	    device_xname(sc->sc_dev)));
+	    USBDEVNAME(sc->sc_dev)));
 
 	sc->sc_refcnt++;
 	sc->sc_state = UTOPPY_STATE_OPENING;
@@ -1373,14 +1354,14 @@ utoppyopen(dev_t dev, int flag, int mode,
 
 	if (usbd_open_pipe(sc->sc_iface, sc->sc_out, 0, &sc->sc_out_pipe)) {
 		DPRINTF(UTOPPY_DBG_OPEN, ("%s: utoppyopen: usbd_open_pipe(OUT) "
-		    "failed\n", device_xname(sc->sc_dev)));
+		    "failed\n", USBDEVNAME(sc->sc_dev)));
 		error = EIO;
 		goto done;
 	}
 
 	if (usbd_open_pipe(sc->sc_iface, sc->sc_in, 0, &sc->sc_in_pipe)) {
 		DPRINTF(UTOPPY_DBG_OPEN, ("%s: utoppyopen: usbd_open_pipe(IN) "
-		    "failed\n", device_xname(sc->sc_dev)));
+		    "failed\n", USBDEVNAME(sc->sc_dev)));
 		error = EIO;
 		usbd_close_pipe(sc->sc_out_pipe);
 		sc->sc_out_pipe = NULL;
@@ -1406,7 +1387,7 @@ utoppyopen(dev_t dev, int flag, int mode,
 
 	if ((error = utoppy_check_ready(sc)) != 0) {
 		DPRINTF(UTOPPY_DBG_OPEN, ("%s: utoppyopen: utoppy_check_ready()"
-		    " returned %d\n", device_xname(sc->sc_dev), error));
+		    " returned %d\n", USBDEVNAME(sc->sc_dev), error));
  error:
 		usbd_abort_pipe(sc->sc_out_pipe);
 		usbd_close_pipe(sc->sc_out_pipe);
@@ -1420,11 +1401,11 @@ utoppyopen(dev_t dev, int flag, int mode,
 	sc->sc_state = error ? UTOPPY_STATE_CLOSED : UTOPPY_STATE_IDLE;
 
 	DPRINTF(UTOPPY_DBG_OPEN, ("%s: utoppyopen: done. error %d, new state "
-	    "'%s'\n", device_xname(sc->sc_dev), error,
+	    "'%s'\n", USBDEVNAME(sc->sc_dev), error,
 	    utoppy_state_string(sc->sc_state)));
 
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(USBDEV(sc->sc_dev));
 
 	return (error);
 }
@@ -1436,15 +1417,15 @@ utoppyclose(dev_t dev, int flag, int mode,
 	struct utoppy_softc *sc;
 	usbd_status err;
 
-	sc = device_lookup_private(&utoppy_cd, UTOPPYUNIT(dev));
+	USB_GET_SC(utoppy, UTOPPYUNIT(dev), sc);
 
 	DPRINTF(UTOPPY_DBG_CLOSE, ("%s: utoppyclose: closing...\n",
-	    device_xname(sc->sc_dev)));
+	    USBDEVNAME(sc->sc_dev)));
 
 	if (sc->sc_state < UTOPPY_STATE_IDLE) {
 		/* We are being forced to close before the open completed. */
 		DPRINTF(UTOPPY_DBG_CLOSE, ("%s: utoppyclose: not properly open:"
-		    " %s\n", device_xname(sc->sc_dev),
+		    " %s\n", USBDEVNAME(sc->sc_dev),
 		    utoppy_state_string(sc->sc_state)));
 		return (0);
 	}
@@ -1481,7 +1462,7 @@ utoppyclose(dev_t dev, int flag, int mode,
 	sc->sc_state = UTOPPY_STATE_CLOSED;
 
 	DPRINTF(UTOPPY_DBG_CLOSE, ("%s: utoppyclose: done.\n",
-	    device_xname(sc->sc_dev)));
+	    USBDEVNAME(sc->sc_dev)));
 
 	return (0);
 }
@@ -1494,7 +1475,7 @@ utoppyread(dev_t dev, struct uio *uio, int flags)
 	size_t len;
 	int err;
 
-	sc = device_lookup_private(&utoppy_cd, UTOPPYUNIT(dev));
+	USB_GET_SC(utoppy, UTOPPYUNIT(dev), sc);
 
 	if (sc->sc_dying)
 		return (EIO);
@@ -1502,7 +1483,7 @@ utoppyread(dev_t dev, struct uio *uio, int flags)
 	sc->sc_refcnt++;
 
 	DPRINTF(UTOPPY_DBG_READ, ("%s: utoppyread: reading: state '%s'\n",
-	    device_xname(sc->sc_dev), utoppy_state_string(sc->sc_state)));
+	    USBDEVNAME(sc->sc_dev), utoppy_state_string(sc->sc_state)));
 
 	switch (sc->sc_state) {
 	case UTOPPY_STATE_READDIR:
@@ -1523,14 +1504,14 @@ utoppyread(dev_t dev, struct uio *uio, int flags)
 		    sc->sc_state != UTOPPY_STATE_IDLE) {
 			DPRINTF(UTOPPY_DBG_READ, ("%s: utoppyread: READFILE: "
 			    "resid %ld, bytes_left %ld\n",
-			    device_xname(sc->sc_dev), (u_long)uio->uio_resid,
+			    USBDEVNAME(sc->sc_dev), (u_long)uio->uio_resid,
 			    (u_long)sc->sc_in_len));
 
 			if (sc->sc_in_len == 0 &&
 			    (err = utoppy_readfile_next(sc)) != 0) {
 				DPRINTF(UTOPPY_DBG_READ, ("%s: utoppyread: "
 				    "READFILE: utoppy_readfile_next returned "
-				    "%d\n", device_xname(sc->sc_dev), err));
+				    "%d\n", USBDEVNAME(sc->sc_dev), err));
 				break;
 			}
 
@@ -1559,10 +1540,10 @@ utoppyread(dev_t dev, struct uio *uio, int flags)
 	}
 
 	DPRINTF(UTOPPY_DBG_READ, ("%s: utoppyread: done. err %d, state '%s'\n",
-	    device_xname(sc->sc_dev), err, utoppy_state_string(sc->sc_state)));
+	    USBDEVNAME(sc->sc_dev), err, utoppy_state_string(sc->sc_state)));
 
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(USBDEV(sc->sc_dev));
 
 	return (err);
 }
@@ -1575,7 +1556,7 @@ utoppywrite(dev_t dev, struct uio *uio, int flags)
 	size_t len;
 	int err;
 
-	sc = device_lookup_private(&utoppy_cd, UTOPPYUNIT(dev));
+	USB_GET_SC(utoppy, UTOPPYUNIT(dev), sc);
 
 	if (sc->sc_dying)
 		return (EIO);
@@ -1595,7 +1576,7 @@ utoppywrite(dev_t dev, struct uio *uio, int flags)
 	err = 0;
 
 	DPRINTF(UTOPPY_DBG_WRITE, ("%s: utoppywrite: PRE-WRITEFILE: resid %ld, "
-	    "wr_size %lld, wr_offset %lld\n", device_xname(sc->sc_dev),
+	    "wr_size %lld, wr_offset %lld\n", USBDEVNAME(sc->sc_dev),
 	    (u_long)uio->uio_resid, sc->sc_wr_size, sc->sc_wr_offset));
 
 	while (sc->sc_state == UTOPPY_STATE_WRITEFILE &&
@@ -1605,7 +1586,7 @@ utoppywrite(dev_t dev, struct uio *uio, int flags)
 		    sizeof(uint64_t) + 3));
 
 		DPRINTF(UTOPPY_DBG_WRITE, ("%s: utoppywrite: uiomove(%ld)\n",
-		    device_xname(sc->sc_dev), (u_long)len));
+		    USBDEVNAME(sc->sc_dev), (u_long)len));
 
 		UTOPPY_OUT_INIT(sc);
 		utoppy_add_64(sc, sc->sc_wr_offset);
@@ -1613,7 +1594,7 @@ utoppywrite(dev_t dev, struct uio *uio, int flags)
 		err = uiomove(utoppy_current_ptr(sc->sc_out_data), len, uio);
 		if (err) {
 			DPRINTF(UTOPPY_DBG_WRITE, ("%s: utoppywrite: uiomove() "
-			    "returned %d\n", device_xname(sc->sc_dev), err));
+			    "returned %d\n", USBDEVNAME(sc->sc_dev), err));
 			break;
 		}
 
@@ -1624,13 +1605,13 @@ utoppywrite(dev_t dev, struct uio *uio, int flags)
 		if (err) {
 			DPRINTF(UTOPPY_DBG_WRITE, ("%s: utoppywrite: "
 			    "utoppy_command(UTOPPY_RESP_FILE_DATA) "
-			    "returned %d\n", device_xname(sc->sc_dev), err));
+			    "returned %d\n", USBDEVNAME(sc->sc_dev), err));
 			break;
 		}
 		if (resp != UTOPPY_RESP_SUCCESS) {
 			DPRINTF(UTOPPY_DBG_WRITE, ("%s: utoppywrite: "
 			    "utoppy_command(UTOPPY_RESP_FILE_DATA) returned "
-			    "bad response 0x%x\n", device_xname(sc->sc_dev),
+			    "bad response 0x%x\n", USBDEVNAME(sc->sc_dev),
 			    resp));
 			utoppy_cancel(sc);
 			err = EIO;
@@ -1642,30 +1623,30 @@ utoppywrite(dev_t dev, struct uio *uio, int flags)
 	}
 
 	DPRINTF(UTOPPY_DBG_WRITE, ("%s: utoppywrite: POST-WRITEFILE: resid %ld,"
-	    " wr_size %lld, wr_offset %lld, err %d\n", device_xname(sc->sc_dev),
+	    " wr_size %lld, wr_offset %lld, err %d\n", USBDEVNAME(sc->sc_dev),
 	    (u_long)uio->uio_resid, sc->sc_wr_size, sc->sc_wr_offset, err));
 
 	if (err == 0 && sc->sc_wr_size == 0) {
 		DPRINTF(UTOPPY_DBG_WRITE, ("%s: utoppywrite: sending "
-		    "FILE_END...\n", device_xname(sc->sc_dev)));
+		    "FILE_END...\n", USBDEVNAME(sc->sc_dev)));
 		UTOPPY_OUT_INIT(sc);
 		err = utoppy_command(sc, UTOPPY_RESP_FILE_END,
 		    UTOPPY_LONG_TIMEOUT, &resp);
 		if (err) {
 			DPRINTF(UTOPPY_DBG_WRITE, ("%s: utoppywrite: "
 			    "utoppy_command(UTOPPY_RESP_FILE_END) returned "
-			    "%d\n", device_xname(sc->sc_dev), err));
+			    "%d\n", USBDEVNAME(sc->sc_dev), err));
 
 			utoppy_cancel(sc);
 		}
 
 		sc->sc_state = UTOPPY_STATE_IDLE;
 		DPRINTF(UTOPPY_DBG_WRITE, ("%s: utoppywrite: state %s\n",
-		    device_xname(sc->sc_dev), utoppy_state_string(sc->sc_state)));
+		    USBDEVNAME(sc->sc_dev), utoppy_state_string(sc->sc_state)));
 	}
 
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(USBDEV(sc->sc_dev));
 
 	return (err);
 }
@@ -1682,17 +1663,17 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 	uint16_t resp;
 	int err;
 
-	sc = device_lookup_private(&utoppy_cd, UTOPPYUNIT(dev));
+	USB_GET_SC(utoppy, UTOPPYUNIT(dev), sc);
 
 	if (sc->sc_dying)
 		return (EIO);
 
 	DPRINTF(UTOPPY_DBG_IOCTL, ("%s: utoppyioctl: cmd 0x%08lx, state '%s'\n",
-	    device_xname(sc->sc_dev), cmd, utoppy_state_string(sc->sc_state)));
+	    USBDEVNAME(sc->sc_dev), cmd, utoppy_state_string(sc->sc_state)));
 
 	if (sc->sc_state != UTOPPY_STATE_IDLE && cmd != UTOPPYIOCANCEL) {
 		DPRINTF(UTOPPY_DBG_IOCTL, ("%s: utoppyioctl: still busy.\n",
-		    device_xname(sc->sc_dev)));
+		    USBDEVNAME(sc->sc_dev)));
 		return (EBUSY);
 	}
 
@@ -1703,19 +1684,19 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 		err = 0;
 		sc->sc_turbo_mode = *((int *)data) ? 1 : 0;
 		DPRINTF(UTOPPY_DBG_IOCTL, ("%s: utoppyioctl: UTOPPYIOTURBO: "
-		    "%s\n", device_xname(sc->sc_dev), sc->sc_turbo_mode ? "On" :
+		    "%s\n", USBDEVNAME(sc->sc_dev), sc->sc_turbo_mode ? "On" :
 		    "Off"));
 		break;
 
 	case UTOPPYIOCANCEL:
 		DPRINTF(UTOPPY_DBG_IOCTL, ("%s: utoppyioctl: UTOPPYIOCANCEL\n",
-		    device_xname(sc->sc_dev)));
+		    USBDEVNAME(sc->sc_dev)));
 		err = utoppy_cancel(sc);
 		break;
 
 	case UTOPPYIOREBOOT:
 		DPRINTF(UTOPPY_DBG_IOCTL, ("%s: utoppyioctl: UTOPPYIOREBOOT\n",
-		    device_xname(sc->sc_dev)));
+		    USBDEVNAME(sc->sc_dev)));
 		UTOPPY_OUT_INIT(sc);
 		err = utoppy_command(sc, UTOPPY_CMD_RESET, UTOPPY_LONG_TIMEOUT,
 		    &resp);
@@ -1728,13 +1709,13 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 
 	case UTOPPYIOSTATS:
 		DPRINTF(UTOPPY_DBG_IOCTL, ("%s: utoppyioctl: UTOPPYIOSTATS\n",
-		    device_xname(sc->sc_dev)));
+		    USBDEVNAME(sc->sc_dev)));
 		err = utoppy_stats(sc, (struct utoppy_stats *)data);
 		break;
 
 	case UTOPPYIORENAME:
 		DPRINTF(UTOPPY_DBG_IOCTL, ("%s: utoppyioctl: UTOPPYIORENAME\n",
-		    device_xname(sc->sc_dev)));
+		    USBDEVNAME(sc->sc_dev)));
 		ur = (struct utoppy_rename *)data;
 		UTOPPY_OUT_INIT(sc);
 
@@ -1754,7 +1735,7 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 
 	case UTOPPYIOMKDIR:
 		DPRINTF(UTOPPY_DBG_IOCTL, ("%s: utoppyioctl: UTOPPYIOMKDIR\n",
-		    device_xname(sc->sc_dev)));
+		    USBDEVNAME(sc->sc_dev)));
 		UTOPPY_OUT_INIT(sc);
 		err = utoppy_add_path(sc, *((const char **)data), 1);
 		if (err)
@@ -1771,7 +1752,7 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 
 	case UTOPPYIODELETE:
 		DPRINTF(UTOPPY_DBG_IOCTL, ("%s: utoppyioctl: UTOPPYIODELETE\n",
-		    device_xname(sc->sc_dev)));
+		    USBDEVNAME(sc->sc_dev)));
 		UTOPPY_OUT_INIT(sc);
 		err = utoppy_add_path(sc, *((const char **)data), 0);
 		if (err)
@@ -1788,13 +1769,13 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 
 	case UTOPPYIOREADDIR:
 		DPRINTF(UTOPPY_DBG_IOCTL, ("%s: utoppyioctl: UTOPPYIOREADDIR\n",
-		    device_xname(sc->sc_dev)));
+		    USBDEVNAME(sc->sc_dev)));
 		UTOPPY_OUT_INIT(sc);
 		err = utoppy_add_path(sc, *((const char **)data), 0);
 		if (err) {
 			DPRINTF(UTOPPY_DBG_READDIR, ("%s: utoppyioctl: "
 			    "utoppy_add_path() returned %d\n",
-			    device_xname(sc->sc_dev), err));
+			    USBDEVNAME(sc->sc_dev), err));
 			break;
 		}
 
@@ -1803,7 +1784,7 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 		if (err != 0) {
 			DPRINTF(UTOPPY_DBG_READDIR, ("%s: utoppyioctl: "
 			    "UTOPPY_CMD_READDIR returned %d\n",
-			    device_xname(sc->sc_dev), err));
+			    USBDEVNAME(sc->sc_dev), err));
 			break;
 		}
 
@@ -1811,7 +1792,7 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 		if (err) {
 			DPRINTF(UTOPPY_DBG_READDIR, ("%s: utoppyioctl: "
 			    "utoppy_readdir_next() returned %d\n",
-			    device_xname(sc->sc_dev), err));
+			    USBDEVNAME(sc->sc_dev), err));
 		}
 		break;
 
@@ -1819,7 +1800,7 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 		urf = (struct utoppy_readfile *)data;
 
 		DPRINTF(UTOPPY_DBG_IOCTL,("%s: utoppyioctl: UTOPPYIOREADFILE "
-		    "%s, offset %lld\n", device_xname(sc->sc_dev), urf->ur_path,
+		    "%s, offset %lld\n", USBDEVNAME(sc->sc_dev), urf->ur_path,
 		    urf->ur_offset));
 
 		if ((err = utoppy_turbo_mode(sc, sc->sc_turbo_mode)) != 0)
@@ -1846,7 +1827,7 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 		uw = (struct utoppy_writefile *)data;
 
 		DPRINTF(UTOPPY_DBG_IOCTL,("%s: utoppyioctl: UTOPPYIOWRITEFILE "
-		    "%s, size %lld, offset %lld\n", device_xname(sc->sc_dev),
+		    "%s, size %lld, offset %lld\n", USBDEVNAME(sc->sc_dev),
 		    uw->uw_path, uw->uw_size, uw->uw_offset));
 
 		if ((err = utoppy_turbo_mode(sc, sc->sc_turbo_mode)) != 0)
@@ -1858,7 +1839,7 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 
 		if ((err = utoppy_add_path(sc, uw->uw_path, 1)) != 0) {
 			DPRINTF(UTOPPY_DBG_WRITE,("%s: utoppyioctl: add_path() "
-			    "returned %d\n", device_xname(sc->sc_dev), err));
+			    "returned %d\n", USBDEVNAME(sc->sc_dev), err));
 			break;
 		}
 
@@ -1870,13 +1851,13 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 		if (err) {
 			DPRINTF(UTOPPY_DBG_WRITE,("%s: utoppyioctl: "
 			    "utoppy_command(UTOPPY_CMD_FILE) returned "
-			    "%d\n", device_xname(sc->sc_dev), err));
+			    "%d\n", USBDEVNAME(sc->sc_dev), err));
 			break;
 		}
 		if (resp != UTOPPY_RESP_SUCCESS) {
 			DPRINTF(UTOPPY_DBG_WRITE,("%s: utoppyioctl: "
 			    "utoppy_command(UTOPPY_CMD_FILE) returned "
-			    "bad response 0x%x\n", device_xname(sc->sc_dev),
+			    "bad response 0x%x\n", USBDEVNAME(sc->sc_dev),
 			    resp));
 			err = EIO;
 			break;
@@ -1894,14 +1875,14 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 		if (err) {
 			DPRINTF(UTOPPY_DBG_WRITE,("%s: utoppyioctl: "
 			    "utoppy_command(UTOPPY_RESP_FILE_HEADER) "
-			    "returned %d\n", device_xname(sc->sc_dev), err));
+			    "returned %d\n", USBDEVNAME(sc->sc_dev), err));
 			break;
 		}
 		if (resp != UTOPPY_RESP_SUCCESS) {
 			DPRINTF(UTOPPY_DBG_WRITE,("%s: utoppyioctl: "
 			    "utoppy_command(UTOPPY_RESP_FILE_HEADER) "
 			    "returned bad response 0x%x\n",
-			    device_xname(sc->sc_dev), resp));
+			    USBDEVNAME(sc->sc_dev), resp));
 			err = EIO;
 			break;
 		}
@@ -1912,25 +1893,25 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 
 		DPRINTF(UTOPPY_DBG_WRITE,("%s: utoppyioctl: Changing state to "
 		    "%s. wr_offset %lld, wr_size %lld\n",
-		    device_xname(sc->sc_dev), utoppy_state_string(sc->sc_state),
+		    USBDEVNAME(sc->sc_dev), utoppy_state_string(sc->sc_state),
 		    sc->sc_wr_offset, sc->sc_wr_size));
 		break;
 
 	default:
 		DPRINTF(UTOPPY_DBG_IOCTL,("%s: utoppyioctl: Invalid cmd\n",
-		    device_xname(sc->sc_dev)));
+		    USBDEVNAME(sc->sc_dev)));
 		err = ENODEV;
 		break;
 	}
 
 	DPRINTF(UTOPPY_DBG_IOCTL,("%s: utoppyioctl: done. err %d, state '%s'\n",
-	    device_xname(sc->sc_dev), err, utoppy_state_string(sc->sc_state)));
+	    USBDEVNAME(sc->sc_dev), err, utoppy_state_string(sc->sc_state)));
 
 	if (err)
 		utoppy_cancel(sc);
 
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(USBDEV(sc->sc_dev));
 
 	return (err);
 }

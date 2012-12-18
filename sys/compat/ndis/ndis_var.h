@@ -1,5 +1,3 @@
-/*	$NetBSD: ndis_var.h,v 1.6 2011/05/14 12:44:16 rmind Exp $	*/
-
 /*-
  * Copyright (c) 2003
  *	Bill Paul <wpaul@windriver.com>.  All rights reserved.
@@ -37,7 +35,7 @@
 #ifndef _NDIS_VAR_H_
 #define _NDIS_VAR_H_
 
-#include <sys/lock.h>
+#include <sys/simplelock.h>
 
 /* Forward declarations */
 struct ndis_miniport_block;
@@ -1602,7 +1600,7 @@ extern int ndis_unsched(void (*)(void *), void *, int);
 #ifdef __FreeBSD__
 extern int ndis_thsuspend(struct proc *, struct mtx *, int);
 #else /* __NetBSD__ */
-extern int ndis_thsuspend(struct proc *, kmutex_t *, int);
+extern int ndis_thsuspend(struct proc *, struct simplelock *, int);
 #endif
 extern void ndis_thresume(struct proc *);
 extern int ndis_strcasecmp(const char *, const char *);

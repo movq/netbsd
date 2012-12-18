@@ -1,5 +1,4 @@
-/*	Id: ccconfig.h,v 1.10 2011/06/04 19:27:26 plunky Exp 	*/	
-/*	$NetBSD: ccconfig.h,v 1.1.1.4 2011/09/01 12:47:17 plunky Exp $	*/
+/*	$Id: ccconfig.h,v 1.1.1.1 2008/08/24 05:33:10 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 2004 Anders Magnusson (ragge@ludd.luth.se).
@@ -40,13 +39,7 @@
 #define STARTFILES { "/usr/lib/crtbegin.o", NULL }
 #define	ENDFILES { "/usr/lib/crtend.o", NULL }
 
-#ifdef LANG_F77
-#define F77LIBLIST { "-L/usr/local/lib", "-lF77", "-lI77", "-lm", "-lc", NULL };
-#endif
-
-#if defined(mach_amd64)
-#define	CPPMDADD { "-D__amd64__", NULL, }
-#elif defined(mach_i386)
+#if defined(mach_i386)
 #define	CPPMDADD { "-D__i386__", NULL, }
 #elif defined(mach_vax)
 #define CPPMDADD { "-D__vax__", NULL, } 
@@ -57,3 +50,6 @@
 #else
 #error defines for arch missing
 #endif
+
+#define ELFABI
+#define	STABS

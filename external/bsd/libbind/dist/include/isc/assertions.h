@@ -1,4 +1,4 @@
-/*	$NetBSD: assertions.h,v 1.1.1.2 2012/09/09 16:07:49 christos Exp $	*/
+/*	$NetBSD: assertions.h,v 1.1.1.1.4.2 2011/01/06 21:42:14 riz Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2008  Internet Systems Consortium, Inc. ("ISC")
@@ -18,7 +18,7 @@
  */
 
 /*
- * Id: assertions.h,v 1.5 2008/11/14 02:36:51 marka Exp 
+ * Id: assertions.h,v 1.5 2008/11/14 02:36:51 marka Exp
  */
 
 #ifndef ASSERTIONS_H

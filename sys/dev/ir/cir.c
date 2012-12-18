@@ -1,4 +1,4 @@
-/*	$NetBSD: cir.c,v 1.29 2011/07/26 08:59:38 mrg Exp $	*/
+/*	$NetBSD: cir.c,v 1.23 2008/10/10 21:50:09 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cir.c,v 1.29 2011/07/26 08:59:38 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cir.c,v 1.23 2008/10/10 21:50:09 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,7 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: cir.c,v 1.29 2011/07/26 08:59:38 mrg Exp $");
 #include <sys/poll.h>
 #include <sys/select.h>
 #include <sys/vnode.h>
-#include <sys/module.h>
 
 #include <dev/ir/ir.h>
 #include <dev/ir/cirio.h>
@@ -60,19 +59,20 @@ const struct cdevsw cir_cdevsw = {
 	D_OTHER
 };
 
-int cir_match(device_t parent, cfdata_t match, void *aux);
-void cir_attach(device_t parent, device_t self, void *aux);
-int cir_detach(device_t self, int flags);
+int cir_match(struct device *parent, struct cfdata *match, void *aux);
+void cir_attach(struct device *parent, struct device *self, void *aux);
+int cir_activate(struct device *self, enum devact act);
+int cir_detach(struct device *self, int flags);
 
-CFATTACH_DECL_NEW(cir, sizeof(struct cir_softc),
-    cir_match, cir_attach, cir_detach, NULL);
+CFATTACH_DECL(cir, sizeof(struct cir_softc),
+    cir_match, cir_attach, cir_detach, cir_activate);
 
 extern struct cfdriver cir_cd;
 
 #define CIRUNIT(dev) (minor(dev))
 
 int
-cir_match(device_t parent, cfdata_t match, void *aux)
+cir_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct ir_attach_args *ia = aux;
 
@@ -80,12 +80,10 @@ cir_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-cir_attach(device_t parent, device_t self, void *aux)
+cir_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct cir_softc *sc = device_private(self);
 	struct ir_attach_args *ia = aux;
-
-	sc->sc_dev = self;
 
 	selinit(&sc->sc_rdsel);
 	sc->sc_methods = ia->ia_methods;
@@ -95,13 +93,29 @@ cir_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_methods->im_read == NULL ||
 	    sc->sc_methods->im_write == NULL ||
 	    sc->sc_methods->im_setparams == NULL)
-		panic("%s: missing methods", device_xname(sc->sc_dev));
+		panic("%s: missing methods", device_xname(&sc->sc_dev));
 #endif
 	printf("\n");
 }
 
 int
-cir_detach(device_t self, int flags)
+cir_activate(struct device *self, enum devact act)
+{
+	/*struct cir_softc *sc = device_private(self);*/
+
+	switch (act) {
+	case DVACT_ACTIVATE:
+		return (EOPNOTSUPP);
+		break;
+
+	case DVACT_DEACTIVATE:
+		break;
+	}
+	return (0);
+}
+
+int
+cir_detach(struct device *self, int flags)
 {
 	struct cir_softc *sc = device_private(self);
 	int maj, mn;
@@ -127,7 +141,7 @@ ciropen(dev_t dev, int flag, int mode, struct lwp *l)
 	sc = device_lookup_private(&cir_cd, CIRUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
-	if (!device_is_active(sc->sc_dev))
+	if (!device_is_active(&sc->sc_dev))
 		return (EIO);
 	if (sc->sc_open)
 		return (EBUSY);
@@ -169,7 +183,7 @@ cirread(dev_t dev, struct uio *uio, int flag)
 	sc = device_lookup_private(&cir_cd, CIRUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
-	if (!device_is_active(sc->sc_dev))
+	if (!device_is_active(&sc->sc_dev))
 		return (EIO);
 	return (sc->sc_methods->im_read(sc->sc_handle, uio, flag));
 }
@@ -182,7 +196,7 @@ cirwrite(dev_t dev, struct uio *uio, int flag)
 	sc = device_lookup_private(&cir_cd, CIRUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
-	if (!device_is_active(sc->sc_dev))
+	if (!device_is_active(&sc->sc_dev))
 		return (EIO);
 	return (sc->sc_methods->im_write(sc->sc_handle, uio, flag));
 }
@@ -196,7 +210,7 @@ cirioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 	sc = device_lookup_private(&cir_cd, CIRUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
-	if (!device_is_active(sc->sc_dev))
+	if (!device_is_active(&sc->sc_dev))
 		return (EIO);
 
 	switch (cmd) {
@@ -231,7 +245,7 @@ cirpoll(dev_t dev, int events, struct lwp *l)
 	sc = device_lookup_private(&cir_cd, CIRUNIT(dev));
 	if (sc == NULL)
 		return (POLLERR);
-	if (!device_is_active(sc->sc_dev))
+	if (!device_is_active(&sc->sc_dev))
 		return (POLLERR);
 
 	revents = 0;
@@ -259,43 +273,4 @@ cirpoll(dev_t dev, int events, struct lwp *l)
 
 	splx(s);
 	return (revents);
-}
-
-MODULE(MODULE_CLASS_DRIVER, cir, "ir");
-
-#ifdef _MODULE
-#include "ioconf.c"
-#endif
-
-static int
-cir_modcmd(modcmd_t cmd, void *opaque)
-{
-	int error = 0;
-#ifdef _MODULE
-	int bmaj = -1, cmaj = -1;
-#endif
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-#ifdef _MODULE
-		error = config_init_component(cfdriver_ioconf_cir,
-		    cfattach_ioconf_cir, cfdata_ioconf_cir);
-		if (error)
-			return error;
-		error = devsw_attach("cir", NULL, &bmaj, &cir_cdevsw, &cmaj);
-		if (error)
-			config_fini_component(cfdriver_ioconf_cir,
-			    cfattach_ioconf_cir, cfdata_ioconf_cir);
-#endif
-		return error;
-	case MODULE_CMD_FINI:
-#ifdef _MODULE
-		devsw_detach(NULL, &cir_cdevsw);
-		return config_fini_component(cfdriver_ioconf_cir,
-		    cfattach_ioconf_cir, cfdata_ioconf_cir);
-#endif
-		return error;
-	default:
-		return ENOTTY;
-	}
 }

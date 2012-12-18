@@ -1,4 +1,4 @@
-/*	$NetBSD: bootparam.c,v 1.19 2009/10/21 23:12:10 snj Exp $	*/
+/*	$NetBSD: bootparam.c,v 1.17 2008/03/25 21:23:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ * 4. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Gordon W. Ross
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -80,11 +85,11 @@ struct xdr_inaddr {
 	int32_t	addr[4];
 };
 
-int xdr_inaddr_encode(char **, struct in_addr);
-int xdr_inaddr_decode(char **, struct in_addr *);
+int xdr_inaddr_encode __P((char **, struct in_addr));
+int xdr_inaddr_decode __P((char **, struct in_addr *));
 
-int xdr_string_encode(char **, char *, int);
-int xdr_string_decode(char **, char *, int *);
+int xdr_string_encode __P((char **, char *, int));
+int xdr_string_decode __P((char **, char *, int *));
 
 
 /*

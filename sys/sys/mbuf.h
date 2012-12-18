@@ -1,4 +1,4 @@
-/*	$NetBSD: mbuf.h,v 1.149 2012/04/29 16:36:54 dsl Exp $	*/
+/*	$NetBSD: mbuf.h,v 1.144 2008/10/24 22:31:40 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999, 2001, 2007 The NetBSD Foundation, Inc.
@@ -241,6 +241,7 @@ struct _m_ext_storage {
 		(struct mbuf *, void *, size_t, void *);
 	void *ext_arg;			/* argument for ext_free */
 	size_t ext_size;		/* size of buffer, for ext_free */
+	struct malloc_type *ext_type;	/* malloc type */
 	union {
 		paddr_t extun_paddr;	/* physical address (M_EXT_CLUSTER) */
 					/* pages (M_EXT_PAGES) */
@@ -378,19 +379,6 @@ MBUF_DEFINE(mbuf, MHLEN, MLEN);
 #define MT_CONTROL	6	/* extra-data protocol message */
 #define MT_OOBDATA	7	/* expedited data  */
 
-#ifdef MBUFTYPES
-static const char *mbuftypes[] = {
-	"mbfree",
-	"mbdata",
-	"mbheader",
-	"mbsoname",
-	"mbsopts",
-	"mbftable",
-	"mbcontrol",
-	"mboobdata",
-};
-#endif
-
 /* flags to m_get/MGET */
 #define	M_DONTWAIT	M_NOWAIT
 #define	M_WAIT		M_WAITOK
@@ -518,6 +506,7 @@ do {									\
 		(m)->m_ext.ext_size = (size);				\
 		(m)->m_ext.ext_free = NULL;				\
 		(m)->m_ext.ext_arg = NULL;				\
+		(m)->m_ext.ext_type = mbtypes[(m)->m_type];		\
 		mowner_ref((m), M_EXT);					\
 	}								\
 } while (/* CONSTCOND */ 0)
@@ -531,6 +520,7 @@ do {									\
 	(m)->m_ext.ext_size = (size);					\
 	(m)->m_ext.ext_free = (free);					\
 	(m)->m_ext.ext_arg = (arg);					\
+	(m)->m_ext.ext_type = (type);					\
 	mowner_ref((m), M_EXT);						\
 } while (/* CONSTCOND */ 0)
 
@@ -561,8 +551,6 @@ do {									\
 	if ((m)->m_flags & M_EXT) {					\
 		m_ext_free(m);						\
 	} else {							\
-		KASSERT(m->m_type != MT_FREE);				\
-		m->m_type = MT_FREE;					\
 		pool_cache_put(mb_cache, (m));				\
 	}								\
 
@@ -679,7 +667,6 @@ do {									\
 /* change mbuf to new type */
 #define MCHTYPE(m, t)							\
 do {									\
-	KASSERT((t) != MT_FREE);					\
 	mbstat_type_add((m)->m_type, -1);				\
 	mbstat_type_add(t, 1);						\
 	(m)->m_type = t;						\
@@ -836,7 +823,6 @@ struct	mbuf *m_copyup(struct mbuf *, int, int);
 struct	mbuf *m_split(struct mbuf *,int, int);
 struct	mbuf *m_getptr(struct mbuf *, int, int *);
 void	m_adj(struct mbuf *, int);
-struct	mbuf *m_defrag(struct mbuf *, int);
 int	m_apply(struct mbuf *, int, int,
 		int (*)(void *, void *, unsigned int), void *);
 void	m_cat(struct mbuf *,struct mbuf *);
@@ -868,7 +854,7 @@ void	m_tag_unlink(struct mbuf *, struct m_tag *);
 void	m_tag_delete(struct mbuf *, struct m_tag *);
 void	m_tag_delete_chain(struct mbuf *, struct m_tag *);
 void	m_tag_delete_nonpersistent(struct mbuf *);
-struct	m_tag *m_tag_find(const struct mbuf *, int, struct m_tag *);
+struct	m_tag *m_tag_find(struct mbuf *, int, struct m_tag *);
 struct	m_tag *m_tag_copy(struct m_tag *);
 int	m_tag_copy_chain(struct mbuf *, struct mbuf *);
 void	m_tag_init(struct mbuf *);
@@ -922,8 +908,25 @@ m_length(const struct mbuf *m)
 	return pktlen;
 }
 
-void m_print(const struct mbuf *, const char *, void (*)(const char *, ...)
-    __printflike(1, 2));
+void m_print(const struct mbuf *, const char *, void (*)(const char *, ...));
 
 #endif /* _KERNEL */
 #endif /* !_SYS_MBUF_H_ */
+
+#ifdef _KERNEL
+#ifdef MBTYPES
+struct malloc_type *mbtypes[] = {		/* XXX */
+	M_FREE,		/* MT_FREE	0	should be on free list */
+	M_MBUF,		/* MT_DATA	1	dynamic (data) allocation */
+	M_MBUF,		/* MT_HEADER	2	packet header */
+	M_SONAME,	/* MT_SONAME	3	socket name */
+	M_SOOPTS,	/* MT_SOOPTS	4	socket options */
+	M_FTABLE,	/* MT_FTABLE	5	fragment reassembly header */
+	M_MBUF,		/* MT_CONTROL	6	extra-data protocol message */
+	M_MBUF,		/* MT_OOBDATA	7	expedited data  */
+};
+#undef MBTYPES
+#else
+extern struct malloc_type *mbtypes[];
+#endif /* MBTYPES */
+#endif /* _KERNEL */

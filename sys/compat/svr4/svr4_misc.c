@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_misc.c,v 1.155 2011/09/27 00:52:55 christos Exp $	 */
+/*	$NetBSD: svr4_misc.c,v 1.144.6.1 2010/03/17 02:59:52 snj Exp $	 */
 
 /*-
  * Copyright (c) 1994, 2008 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_misc.c,v 1.155 2011/09/27 00:52:55 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_misc.c,v 1.144.6.1 2010/03/17 02:59:52 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,17 +103,19 @@ static void svr4_setinfo(int, struct rusage *, int, svr4_siginfo_t *);
 struct svr4_hrtcntl_args;
 static int svr4_hrtcntl(struct lwp *, const struct svr4_hrtcntl_args *,
     register_t *);
+#define svr4_pfind(pid) p_find((pid), PFIND_UNLOCK | PFIND_ZOMBIE)
 
 static int svr4_mknod(struct lwp *, register_t *, const char *,
     svr4_mode_t, svr4_dev_t);
 
 int
-svr4_sys_wait(struct lwp *l, const struct svr4_sys_wait_args *uap,
-    register_t *retval)
+svr4_sys_wait(struct lwp *l, const struct svr4_sys_wait_args *uap, register_t *retval)
 {
-	int error, st, sig, pid = WAIT_ANY;
+	int error, was_zombie;
+	int st, sig;
+	int pid = WAIT_ANY;
 
-	error = do_sys_wait(&pid, &st, 0, NULL);
+	error = do_sys_wait(l, &pid, &st, 0, NULL, &was_zombie);
 
 	retval[0] = pid;
 	if (pid == 0)
@@ -314,7 +316,7 @@ again:
 eof:
 	*retval = SCARG(uap, nbytes) - resid;
 out:
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(tbuf, M_TEMP);
@@ -439,7 +441,7 @@ again:
 eof:
 	*retval = SCARG(uap, nbytes) - resid;
 out:
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(tbuf, M_TEMP);
@@ -527,7 +529,11 @@ svr4_mknod(struct lwp *l, register_t *retval, const char *path, svr4_mode_t mode
 		SCARG(&ap, mode) = mode;
 		return sys_mkfifo(l, &ap, retval);
 	} else {
-		return do_sys_mknod(l, path, mode, dev, retval, UIO_USERSPACE);
+		struct sys_mknod_args ap;
+		SCARG(&ap, path) = path;
+		SCARG(&ap, mode) = mode;
+		SCARG(&ap, dev) = dev;
+		return sys_mknod(l, &ap, retval);
 	}
 }
 
@@ -812,7 +818,6 @@ int
 svr4_sys_pgrpsys(struct lwp *l, const struct svr4_sys_pgrpsys_args *uap, register_t *retval)
 {
 	struct proc *p = l->l_proc;
-	pid_t pid;
 
 	switch (SCARG(uap, cmd)) {
 	case 1:			/* setpgrp() */
@@ -834,8 +839,8 @@ svr4_sys_pgrpsys(struct lwp *l, const struct svr4_sys_pgrpsys_args *uap, registe
 
 	case 2:			/* getsid(pid) */
 		mutex_enter(proc_lock);
-		pid = SCARG(uap, pid);
-		if (pid && (p = proc_find(pid)) == NULL) {
+		if (SCARG(uap, pid) != 0 &&
+		    (p = p_find(SCARG(uap, pid), PFIND_LOCKED | PFIND_ZOMBIE)) == NULL) {
 			mutex_exit(proc_lock);
 			return ESRCH;
 		}
@@ -852,8 +857,8 @@ svr4_sys_pgrpsys(struct lwp *l, const struct svr4_sys_pgrpsys_args *uap, registe
 
 	case 4:			/* getpgid(pid) */
 		mutex_enter(proc_lock);
-		pid = SCARG(uap, pid);
-		if (pid && (p = proc_find(pid)) == NULL) {
+		if (SCARG(uap, pid) != 0 &&
+		    (p = p_find(SCARG(uap, pid), PFIND_LOCKED | PFIND_ZOMBIE)) == NULL) {
 			mutex_exit(proc_lock);
 			return ESRCH;
 		}
@@ -1007,6 +1012,7 @@ svr4_sys_waitsys(struct lwp *l, const struct svr4_sys_waitsys_args *uap, registe
 {
 	int options, status;
 	int error;
+	int was_zombie;
 	struct rusage ru;
 	svr4_siginfo_t i;
 	int id = SCARG(uap, id);
@@ -1044,7 +1050,8 @@ svr4_sys_waitsys(struct lwp *l, const struct svr4_sys_waitsys_args *uap, registe
 	         SCARG(uap, grp), id,
 		 SCARG(uap, info), SCARG(uap, options)));
 
-	error = do_sys_wait(&id, &status, options, &ru);
+	error = do_sys_wait(l, &id, &status, options, &ru,
+	    &was_zombie);
 
 	retval[0] = id;
 	if (error != 0)
@@ -1076,7 +1083,7 @@ svr4_copyout_statvfs(const struct statvfs *bfs, struct svr4_statvfs *sufs)
 		sfs->f_flag |= SVR4_ST_RDONLY;
 	if (bfs->f_flag & MNT_NOSUID)
 		sfs->f_flag |= SVR4_ST_NOSUID;
-	sfs->f_namemax = bfs->f_namemax;
+	sfs->f_namemax = MAXNAMLEN;
 	memcpy(sfs->f_fstr, bfs->f_fstypename, sizeof(sfs->f_fstr)); /* XXX */
 	memset(sfs->f_filler, 0, sizeof(sfs->f_filler));
 
@@ -1108,7 +1115,7 @@ svr4_copyout_statvfs64(const struct statvfs *bfs, struct svr4_statvfs64 *sufs)
 		sfs->f_flag |= SVR4_ST_RDONLY;
 	if (bfs->f_flag & MNT_NOSUID)
 		sfs->f_flag |= SVR4_ST_NOSUID;
-	sfs->f_namemax = bfs->f_namemax;
+	sfs->f_namemax = MAXNAMLEN;
 	memcpy(sfs->f_fstr, bfs->f_fstypename, sizeof(sfs->f_fstr)); /* XXX */
 	memset(sfs->f_filler, 0, sizeof(sfs->f_filler));
 
@@ -1318,29 +1325,23 @@ svr4_sys_nice(struct lwp *l, const struct svr4_sys_nice_args *uap, register_t *r
 int
 svr4_sys_resolvepath(struct lwp *l, const struct svr4_sys_resolvepath_args *uap, register_t *retval)
 {
-	struct pathbuf *pb;
 	struct nameidata nd;
 	int error;
 	size_t len;
 
-	error = pathbuf_copyin(SCARG(uap, path), &pb);
-	if (error) {
-		return ENOMEM;
-	}
+	NDINIT(&nd, LOOKUP, NOFOLLOW | SAVENAME | TRYEMULROOT, UIO_USERSPACE,
+	    SCARG(uap, path));
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW | TRYEMULROOT, pb);
-	if ((error = namei(&nd)) != 0) {
-		pathbuf_destroy(pb);
+	if ((error = namei(&nd)) != 0)
 		return error;
-	}
 
-	if ((error = copyoutstr(nd.ni_pnbuf, SCARG(uap, buf),
+	if ((error = copyoutstr(nd.ni_cnd.cn_pnbuf, SCARG(uap, buf),
 	    SCARG(uap, bufsiz), &len)) != 0)
 		goto bad;
 
 	*retval = len;
 bad:
 	vrele(nd.ni_vp);
-	pathbuf_destroy(pb);
+	PNBUF_PUT(nd.ni_cnd.cn_pnbuf);
 	return error;
 }

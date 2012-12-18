@@ -1,4 +1,4 @@
-/*	$NetBSD: smtpd_proxy.h,v 1.1.1.2 2010/06/17 18:07:07 tron Exp $	*/
+/*	$NetBSD: smtpd_proxy.h,v 1.1.1.1.2.4 2011/01/07 01:24:14 riz Exp $	*/
 
 /*++
 /* NAME

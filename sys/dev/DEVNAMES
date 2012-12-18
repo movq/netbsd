@@ -1,4 +1,4 @@
-#	$NetBSD: DEVNAMES,v 1.280 2012/10/15 17:08:33 jakllsch Exp $
+#	$NetBSD: DEVNAMES,v 1.242.4.3 2010/01/27 21:17:55 sborrill Exp $
 #
 # This file contains all used device names and defined attributes in
 # alphabetical order. New devices added to the system somewhere should first
@@ -13,8 +13,6 @@ a2kbbc			amiga
 a2kbbc			amigappc
 a34kbbc			amiga
 a34kbbc			amigappc
-a9tmr			arm
-a9wdt			arm
 aac			MI
 abtn			macppc
 abus			vax
@@ -31,7 +29,6 @@ acpibat			MI
 acpibut			MI
 acpiec			MI
 acpilid			MI
-acpismbus		MI
 acpitz			MI
 ad			vax
 ad1848			MI		Attribute
@@ -63,7 +60,7 @@ ahd			MI
 ahsc			amiga
 ahsc			amigappc
 ai			MI
-aibs			MI
+aiboost			MI
 aic			MI
 akbd			mac68k
 akbd			macppc
@@ -94,10 +91,9 @@ arckbd			acorn26
 arcmsr			MI
 arcpp			acorn26
 arcvideo		acorn26
+arcwskbd		acorn26
+arcwsmouse		acorn26
 aria			MI
-armgic			arm
-arml2cc			arm
-armperiph		arm
 arp			MI		Attribute
 artsata			MI
 asc			acorn32
@@ -175,23 +171,11 @@ bioscall		i386		Attribute
 bivideo			hpcmips
 bktr			MI
 bm			macppc
-bcmcca			arm
-bcmccb			arm
-bcmeth			arm
-bcmi2c			arm
-bcmmdio			arm
-bcmnand			arm
-bcmpax			arm
-bcmrng			arm
-bcmsw			arm
-bcmusb			arm
 bmd			x68k
 bmtphy			MI
 boca			MI
 bonito			algor
 bpp			MI
-bppcsc			amiga
-bppcsc			amigappc
 brgphy			MI
 bt3c			MI
 btbc			MI
@@ -221,7 +205,6 @@ bztzsc			amigappc
 cac			MI
 cardbus			MI
 cardslot		MI
-cas			MI
 cbb			MI
 cbbus			MI		Attribute
 cbiiisc			amiga
@@ -273,8 +256,6 @@ clock			sun2
 clock			sun3
 clock			x68k
 clockctl		MI
-clockport		amiga
-clockportbus		amiga
 cmdide			MI
 cmi			vax
 cmpci			MI
@@ -318,7 +299,6 @@ cpu			sparc
 cpu			sparc64
 cpu			vax
 cpu			x68k
-cpunode			evbppc
 crime			sgimips
 crypto			MI		Attribute
 cs			MI
@@ -333,7 +313,6 @@ cy82c693		MI
 cypide			MI
 cz			MI
 #daic			MI
-dbcool			MI
 dbri			sparc
 dcm			hp300
 ddc			MI
@@ -343,10 +322,8 @@ depca			MI
 dge			MI
 dh			vax
 dhu			MI
-diic			powerpc
 dio			hp300
 dl			MI
-dm			MI
 dma			MI
 dma			sun3
 dmac			newsmips
@@ -368,12 +345,9 @@ drsupio			amigappc
 dsrtc			cats
 dsrtc			evbppc
 dtide			MI
-dtimer			arm
-duart			powerpc
 dvbox			hp300
 dwlpx			alpha
 dz			MI
-e500wdog		powerpc
 ea			MI
 eap			MI
 eb			MI
@@ -393,7 +367,6 @@ eeprom			sparc
 eeprom			sparc64
 eeprom			sun3
 ef			MI
-efa			amiga
 eg			MI
 ega			MI
 eh			acorn26
@@ -426,8 +399,7 @@ esm			MI
 eso			MI
 esp			MI
 ess			MI
-et			MI
-et4k			atari
+et			atari
 ether			MI		Attribute
 event			amiga		Attribute
 event			amigappc	Attribute
@@ -482,7 +454,6 @@ fdc			sun3
 fdc			x68k
 fddi			MI		Attribute
 fea			MI
-fec			arm
 ffb			sparc64
 fhpib			hp300
 finsio			MI
@@ -504,7 +475,6 @@ fwip			MI
 fwohci			MI
 fxp			MI
 g2bus			dreamcast
-g740a			MI
 gapspci			dreamcast
 gayle			amiga		Attribute
 gayle			amigappc	Attribute
@@ -515,8 +485,7 @@ gdrom			dreamcast
 gem			MI
 gentbi			MI
 geodeide		MI
-gfe			MI
-gic			arm
+gfe			evbppc
 gio			sgimips
 giobus			sgimips		Attribute
 glxtphy			MI
@@ -527,9 +496,6 @@ gphyter			MI
 gpib			MI
 gpio			evbppc
 gpio			MI
-gpioiic			MI
-gpioow			MI
-gpiosim			MI
 grackle			macppc
 grf			amiga
 grf			amigappc
@@ -561,15 +527,14 @@ grfrt			amiga
 grfrt			amigappc
 grful			amiga
 grful			amigappc
+gsfb			playstation2
 gsip			MI
 gt			cobalt
 gt			evbmips
-gt			MI
+gt			evbppc
 gten			prep
-gtidmac			MI
-gtmpsc			MI
-gtpci			MI
-gttwsi			MI
+gtidma			evbppc
+gtmpsc			evbppc
 gtsc			amiga
 gtsc			amigappc
 gus			MI
@@ -847,13 +812,11 @@ mcbus			alpha
 mcclock			algor
 mcclock			alpha
 mcclock			evbmips
-mcclock			evbppc
 mcclock			pmax
 mcclock			prep
 mcd			MI
 mcmem			alpha
 mcpcia			alpha
-mdio			evbppc
 mec			sgimips
 mediabay		macppc
 melody			amiga
@@ -895,10 +858,7 @@ mmem			dreamcast
 mms			bebox
 mms			dreamcast
 mms			i386
-motoi2c			MI		Attribute
 moxa			MI
-mppb			amiga
-mppb			amigappc
 mpt			MI
 mpu			MI
 mr			MI
@@ -926,9 +886,6 @@ mtd			MI
 mtty			MI
 mu			vax
 mulaw			MI		Attribute
-mvgbe			MI
-mvpex			MI
-mvsata			MI
 nca			MI
 ncr5380sbc		MI		Attribute
 ncr53c9x		MI		Attribute
@@ -1010,12 +967,6 @@ optiide			MI
 osiop			MI
 otgsc			amiga
 otgsc			amigappc
-p5bus			amiga
-p5bus			amigappc
-p5membar		amiga
-p5membar		amigappc
-p5pb			amiga
-p5pb			amigappc
 panel			cobalt
 pad			MI
 par			amiga
@@ -1037,7 +988,6 @@ pcdisplay		MI
 pcdisplayops		MI		Attribute
 pceb			alpha
 pceb			i386
-pcf8563rtc		MI
 pchb			bebox
 pchb			cobalt
 pchb			evbmips
@@ -1059,10 +1009,8 @@ pcic			algor
 pcic			alpha
 pcic			hpcmips
 pcic			i386
-pcie			evbppc
 pciide			MI
 pcivga			arc
-pcix			evbppc
 pckbc			MI
 pckbcport		bebox		Attribute
 pckbcport		i386		Attribute
@@ -1120,7 +1068,6 @@ ptsc			acorn32
 puc			MI
 pvr			dreamcast
 pwctl			hpcmips
-pwdog			MI
 px			pmax
 pxg			MI
 qd			MI
@@ -1134,7 +1081,6 @@ qsphy			MI
 qt			MI
 qv			vax
 ra			MI
-racd			MI
 radio			MI
 radio			MI		Attribute
 rambo			mipsco
@@ -1171,8 +1117,6 @@ rtfps			MI
 rtii			MI
 rtk			MI
 rtl80x9			MI		Attribute
-rum			MI
-run			MI
 rx			MI
 ry			vax
 rz			pmax
@@ -1185,7 +1129,6 @@ saip			hpcarm
 saost			hpcarm
 satalink		MI
 satlink			MI
-satmgr			sandpoint
 sb			MI
 sbc			mac68k
 sbdsp			MI		Attribute
@@ -1201,10 +1144,10 @@ sbscd			sbmips
 sbscn			sbmips
 sbtimer			sbmips
 sbus			MI
+sbus			playstation2
 sc			MI
 sc			newsmips
 sc			vax
-schide			MI
 sci			amiga		Attribute
 sci			amigappc	Attribute
 sci			evbsh3
@@ -1215,7 +1158,6 @@ scsi			MI		Attribute
 scsibus			MI
 scsirom			x68k
 sd			MI
-sdtemp			MI
 se			MI
 sea			MI
 sebuf			sun3
@@ -1259,15 +1201,16 @@ skbdif			hpcmips
 slhci			MI
 slide			MI
 sm			MI
+smap			playstation2
 smc93cx6		MI		Attribute
 smg			vax
-smsh			MI
 sn			arc
 sn			mac68k
 sn			newsmips
 sparcvme		sparc
 spc			MI
 spckbd			shark		Attribute
+spd			playstation2
 spi			MI
 spic			MI
 spif			sparc
@@ -1305,7 +1248,6 @@ tcom			MI
 tctrl			sparc
 tcx			sparc
 tcx			sparc64
-tdvfb			MI
 te			vax
 tea5757			MI
 tfb			MI
@@ -1329,7 +1271,6 @@ tpcalib			hpcarm		Attribute
 tpcalib			hpcmips		Attribute
 tpcalib			hpcsh		Attribute
 tpcic			sparc
-tpm			MI
 tqphy			MI
 tr			MI
 tr_isa			MI		Attribute
@@ -1338,7 +1279,6 @@ trm			MI
 ts			MI
 tsc			alpha
 tscs			MI
-tsec			powerpc
 tslcd			evbarm
 tslot			sparc
 tsp			alpha
@@ -1394,7 +1334,6 @@ uhid			MI
 uhidbus			MI		Attribute
 uhidev			MI
 uhmodem			MI
-uhso			MI
 uhub			MI
 uipaq			MI
 uirda			MI
@@ -1417,29 +1356,25 @@ up			vax
 upc			MI
 upl			MI
 uplcom			MI
-ural			MI
 urio			MI
 url			MI
 urlphy			MI
-urndis			MI
-urtw			MI
-urtwn			MI
 usb			MI
 usbus			MI		Attribute
 uscanner		MI
 usscanner		MI
 ustir			MI
 ut			vax
-uthum			MI
 utoppy			MI
 uu			vax
 uvisor			MI
 uvscom			MI
 uyap			MI
-uyurex			MI
 va			vax
 vcons			MI		Attribute
 veriexec		MI
+vesabios		i386
+vesafb			i386
 vesagtf			MI		Attribute
 vga			MI
 vge			MI
@@ -1474,10 +1409,8 @@ vs			x68k
 vsbus			vax
 vsms			alpha
 vt			i386
-vte			MI
 vtpbc			algor
 vz			vax
-wbsio			MI
 wd			MI
 wd33c93			MI		Attribute
 wdc			MI
@@ -1511,6 +1444,7 @@ xb			alpha
 xbd			xen
 xbox			MI
 xcfb			pmax
+xcom			x68k
 xd			MI
 xd			sun3
 xdc			MI
@@ -1521,7 +1455,6 @@ xencons			xen
 xenevt			xen
 xennet			xen
 xge			MI
-xhci			MI
 xi			MI
 xmi			MI
 xsii			pmax

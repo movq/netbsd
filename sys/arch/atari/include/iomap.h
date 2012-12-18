@@ -1,4 +1,4 @@
-/*	$NetBSD: iomap.h,v 1.15 2012/08/10 17:43:32 tsutsui Exp $	*/
+/*	$NetBSD: iomap.h,v 1.12 2003/04/02 07:35:55 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Leo Weppelman.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -36,7 +41,7 @@
  * I/O Address maps
  */
 #ifdef _KERNEL
-extern vaddr_t	stio_addr;	/* Where the st io-area is mapped	*/
+vaddr_t	stio_addr;		/* Where the st io-area is mapped	*/
 #define	AD_STIO	(stio_addr)	/* .. see atari_init.c			*/
 
 /*
@@ -48,10 +53,10 @@ extern vaddr_t	stio_addr;	/* Where the st io-area is mapped	*/
  * with the PLX. Also, the Milan uses the first page of 'pci_io_addr' for
  * access to some of it's ISA I/O devices (RTC, Interrupt controller, etc.)
  */
-extern vaddr_t	pci_conf_addr;	/* KVA base of PCI config space		*/
-extern vaddr_t	pci_io_addr;	/* KVA base of PCI io-space		*/
-extern vaddr_t	pci_mem_addr;	/* KVA base of PCI mem-space		*/
-extern vaddr_t	pci_mem_uncached; /* KVA base of an uncached PCI mem-page */
+vaddr_t	pci_conf_addr;		/* KVA base of PCI config space		*/
+vaddr_t	pci_io_addr;		/* KVA base of PCI io-space		*/
+vaddr_t	pci_mem_addr;		/* KVA base of PCI mem-space		*/
+vaddr_t	pci_mem_uncached;	/* KVA base of an uncached PCI mem-page	*/
 #endif /* _KERNEL */
 
 #define	PCI_CONFB_PHYS		(0xA0000000L)
@@ -76,9 +81,9 @@ extern vaddr_t	pci_mem_uncached; /* KVA base of an uncached PCI mem-page */
 /*
  * Pre-allocated PCI-memory regions (atari_init.c). We need those in the
  * boot-stages.
- * XXX: Can probably be reduced to only PCI_CONFIG_SIZE (Leo).
+ * XXX: Can probably be reduced to only PCI_CONF_SIZE (Leo).
  */
-#define PCI_CONFIG_SIZE	(4 * PAGE_SIZE)
+#define PCI_CONF_SIZE	(4 * PAGE_SIZE)
 #define PCI_IO_SIZE	(PAGE_SIZE)
 #define PCI_MEM_SIZE	(PAGE_SIZE)
 

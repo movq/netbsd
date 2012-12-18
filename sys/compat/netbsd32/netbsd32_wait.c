@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_wait.c,v 1.22 2012/11/03 23:22:22 njoly Exp $	*/
+/*	$NetBSD: netbsd32_wait.c,v 1.19 2008/05/29 14:51:26 mrg Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_wait.c,v 1.22 2012/11/03 23:22:22 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_wait.c,v 1.19 2008/05/29 14:51:26 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,8 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_wait.c,v 1.22 2012/11/03 23:22:22 njoly Exp
 #include <compat/netbsd32/netbsd32_conv.h>
 
 int
-netbsd32___wait450(struct lwp *l, const struct netbsd32___wait450_args *uap,
-    register_t *retval)
+netbsd32_wait4(struct lwp *l, const struct netbsd32_wait4_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) pid;
@@ -55,12 +54,14 @@ netbsd32___wait450(struct lwp *l, const struct netbsd32___wait450_args *uap,
 		syscallarg(int) options;
 		syscallarg(netbsd32_rusagep_t) rusage;
 	} */
-	int error, status, pid = SCARG(uap, pid);
-	struct netbsd32_rusage ru32;
-	struct rusage ru;
+	int		status, error;
+	int		was_zombie;
+	struct rusage	ru;
+	struct netbsd32_rusage	ru32;
+	int pid = SCARG(uap, pid);
 
-	error = do_sys_wait(&pid, &status, SCARG(uap, options),
-	    SCARG_P32(uap, rusage) != NULL ? &ru : NULL);
+	error = do_sys_wait(l, &pid, &status, SCARG(uap, options),
+	    SCARG_P32(uap, rusage) != NULL ? &ru : NULL, &was_zombie);
 
 	retval[0] = pid;
 	if (pid == 0)
@@ -79,22 +80,32 @@ netbsd32___wait450(struct lwp *l, const struct netbsd32___wait450_args *uap,
 
 
 int
-netbsd32___getrusage50(struct lwp *l,
-    const struct netbsd32___getrusage50_args *uap, register_t *retval)
+netbsd32_getrusage(struct lwp *l, const struct netbsd32_getrusage_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) who;
 		syscallarg(netbsd32_rusagep_t) rusage;
 	} */
-	int error;
 	struct proc *p = l->l_proc;
-	struct rusage ru;
-	struct netbsd32_rusage ru32;
+	struct rusage *rup;
+	struct netbsd32_rusage ru;
 
-	error = getrusage1(p, SCARG(uap, who), &ru);
-	if (error != 0)
-		return error;
+	switch (SCARG(uap, who)) {
 
-	netbsd32_from_rusage(&ru, &ru32);
-	return copyout(&ru32, SCARG_P32(uap, rusage), sizeof(ru32));
+	case RUSAGE_SELF:
+		rup = &p->p_stats->p_ru;
+		mutex_enter(p->p_lock);
+		calcru(p, &rup->ru_utime, &rup->ru_stime, NULL, NULL);
+		mutex_exit(p->p_lock);
+		break;
+
+	case RUSAGE_CHILDREN:
+		rup = &p->p_stats->p_cru;
+		break;
+
+	default:
+		return (EINVAL);
+	}
+	netbsd32_from_rusage(rup, &ru);
+	return copyout(&ru, SCARG_P32(uap, rusage), sizeof(ru));
 }

@@ -1,7 +1,7 @@
-/*	$NetBSD: sys_sched.c,v 1.42 2012/04/20 22:23:25 rmind Exp $	*/
+/*	$NetBSD: sys_sched.c,v 1.30.4.3 2009/03/08 03:15:36 snj Exp $	*/
 
 /*
- * Copyright (c) 2008, 2011 Mindaugas Rasiukevicius <rmind at NetBSD org>
+ * Copyright (c) 2008, Mindaugas Rasiukevicius <rmind at NetBSD org>
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_sched.c,v 1.42 2012/04/20 22:23:25 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_sched.c,v 1.30.4.3 2009/03/08 03:15:36 snj Exp $");
 
 #include <sys/param.h>
 
@@ -53,6 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD: sys_sched.c,v 1.42 2012/04/20 22:23:25 rmind Exp $")
 #include <sys/mutex.h>
 #include <sys/proc.h>
 #include <sys/pset.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/sched.h>
 #include <sys/syscallargs.h>
 #include <sys/sysctl.h>
@@ -60,8 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: sys_sched.c,v 1.42 2012/04/20 22:23:25 rmind Exp $")
 #include <sys/types.h>
 #include <sys/unistd.h>
 
-static struct sysctllog *sched_sysctl_log;
-static kauth_listener_t sched_listener;
+#include "opt_sa.h"
 
 /*
  * Convert user priority or the in-kernel priority or convert the current
@@ -92,11 +93,6 @@ convert_pri(lwp_t *l, int policy, pri_t pri)
 	/* Real-time -> time-sharing */
 	if (policy == SCHED_OTHER) {
 		KASSERT(l->l_class == SCHED_FIFO || l->l_class == SCHED_RR);
-		/*
-		 * this is a bit arbitrary because the priority is dynamic
-		 * for SCHED_OTHER threads and will likely be changed by
-		 * the scheduler soon anyway.
-		 */
 		return l->l_priority - PRI_USER_RT;
 	}
 
@@ -133,7 +129,7 @@ do_sched_setparam(pid_t pid, lwpid_t lid, int policy,
 	if (pid != 0) {
 		/* Find the process */
 		mutex_enter(proc_lock);
-		p = proc_find(pid);
+		p = p_find(pid, PFIND_LOCKED);
 		if (p == NULL) {
 			mutex_exit(proc_lock);
 			return ESRCH;
@@ -219,11 +215,6 @@ out:
 	return error;
 }
 
-/*
- * do_sched_getparam:
- *
- * if lid=0, returns the parameter of the first LWP in the process.
- */
 int
 do_sched_getparam(pid_t pid, lwpid_t lid, int *policy,
     struct sched_param *params)
@@ -232,7 +223,8 @@ do_sched_getparam(pid_t pid, lwpid_t lid, int *policy,
 	struct lwp *t;
 	int error, lpolicy;
 
-	t = lwp_find2(pid, lid); /* acquire p_lock */
+	/* Locks the LWP */
+	t = lwp_find2(pid, lid);
 	if (t == NULL)
 		return ESRCH;
 
@@ -247,17 +239,7 @@ do_sched_getparam(pid_t pid, lwpid_t lid, int *policy,
 	lwp_lock(t);
 	lparams.sched_priority = t->l_priority;
 	lpolicy = t->l_class;
-	lwp_unlock(t);
-	mutex_exit(t->l_proc->p_lock);
 
-	/*
-	 * convert to the user-visible priority value.
-	 * it's an inversion of convert_pri().
-	 *
-	 * the SCHED_OTHER case is a bit arbitrary given that
-	 *	- we don't allow setting the priority.
-	 *	- the priority is dynamic.
-	 */
 	switch (lpolicy) {
 	case SCHED_OTHER:
 		lparams.sched_priority -= PRI_USER;
@@ -274,6 +256,8 @@ do_sched_getparam(pid_t pid, lwpid_t lid, int *policy,
 	if (params != NULL)
 		*params = lparams;
 
+	lwp_unlock(t);
+	mutex_exit(t->l_proc->p_lock);
 	return error;
 }
 
@@ -311,16 +295,12 @@ out:
 static int
 genkcpuset(kcpuset_t **dset, const cpuset_t *sset, size_t size)
 {
-	kcpuset_t *kset;
 	int error;
 
-	kcpuset_create(&kset, true);
-	error = kcpuset_copyin(sset, kset, size);
-	if (error) {
-		kcpuset_unuse(kset, NULL);
-	} else {
-		*dset = kset;
-	}
+	*dset = kcpuset_create();
+	error = kcpuset_copyin(sset, *dset, size);
+	if (error != 0)
+		kcpuset_unuse(*dset, NULL);
 	return error;
 }
 
@@ -337,7 +317,7 @@ sys__sched_setaffinity(struct lwp *l,
 		syscallarg(size_t) size;
 		syscallarg(const cpuset_t *) cpuset;
 	} */
-	kcpuset_t *kcset, *kcpulst = NULL;
+	kcpuset_t *cpuset, *cpulst = NULL;
 	struct cpu_info *ici, *ci;
 	struct proc *p;
 	struct lwp *t;
@@ -347,7 +327,7 @@ sys__sched_setaffinity(struct lwp *l,
 	u_int lcnt;
 	int error;
 
-	error = genkcpuset(&kcset, SCARG(uap, cpuset), SCARG(uap, size));
+	error = genkcpuset(&cpuset, SCARG(uap, cpuset), SCARG(uap, size));
 	if (error)
 		return error;
 
@@ -366,9 +346,8 @@ sys__sched_setaffinity(struct lwp *l,
 	for (CPU_INFO_FOREACH(cii, ici)) {
 		struct schedstate_percpu *ispc;
 
-		if (!kcpuset_isset(kcset, cpu_index(ici))) {
+		if (kcpuset_isset(cpu_index(ici), cpuset) == 0)
 			continue;
-		}
 
 		ispc = &ici->ci_schedstate;
 		/* Check that CPU is not in the processor-set */
@@ -393,14 +372,14 @@ sys__sched_setaffinity(struct lwp *l,
 			goto out;
 		}
 		/* Empty set */
-		kcpuset_unuse(kcset, &kcpulst);
-		kcset = NULL; 
+		kcpuset_unuse(cpuset, &cpulst);
+		cpuset = NULL; 
 	}
 
 	if (SCARG(uap, pid) != 0) {
 		/* Find the process */
 		mutex_enter(proc_lock);
-		p = proc_find(SCARG(uap, pid));
+		p = p_find(SCARG(uap, pid), PFIND_LOCKED);
 		if (p == NULL) {
 			mutex_exit(proc_lock);
 			error = ESRCH;
@@ -430,55 +409,54 @@ sys__sched_setaffinity(struct lwp *l,
 		goto out;
 	}
 
-	/* Iterate through LWP(s). */
+#ifdef KERN_SA
+	/* Changing the affinity of a SA process is not supported */
+	if ((p->p_sflag & (PS_SA | PS_WEXIT)) != 0 || p->p_sa != NULL) {
+		mutex_exit(p->p_lock);
+		error = EINVAL;
+		goto out;
+	}
+#endif
+
+	/* Find the LWP(s) */
 	lcnt = 0;
 	lid = SCARG(uap, lid);
 	LIST_FOREACH(t, &p->p_lwps, l_sibling) {
-		if (lid && lid != t->l_lid) {
+		if (lid && lid != t->l_lid)
 			continue;
-		}
 		lwp_lock(t);
-		/* No affinity for zombie LWPs. */
+		/* It is not allowed to set the affinity for zombie LWPs */
 		if (t->l_stat == LSZOMB) {
 			lwp_unlock(t);
 			continue;
 		}
-		/* First, release existing affinity, if any. */
-		if (t->l_affinity) {
-			kcpuset_unuse(t->l_affinity, &kcpulst);
-		}
-		if (kcset) {
-			/*
-			 * Hold a reference on affinity mask, assign mask to
-			 * LWP and migrate it to another CPU (unlocks LWP).
-			 */
-			kcpuset_use(kcset);
-			t->l_affinity = kcset;
+		if (cpuset) {
+			/* Set the affinity flag and new CPU set */
+			t->l_flag |= LW_AFFINITY;
+			kcpuset_use(cpuset);
+			if (t->l_affinity != NULL)
+				kcpuset_unuse(t->l_affinity, &cpulst);
+			t->l_affinity = cpuset;
+			/* Migrate to another CPU, unlocks LWP */
 			lwp_migrate(t, ci);
 		} else {
-			/* Old affinity mask is released, just clear. */
+			/* Unset the affinity flag */
+			t->l_flag &= ~LW_AFFINITY;
+			if (t->l_affinity != NULL)
+				kcpuset_unuse(t->l_affinity, &cpulst);
 			t->l_affinity = NULL;
 			lwp_unlock(t);
 		}
 		lcnt++;
 	}
 	mutex_exit(p->p_lock);
-	if (lcnt == 0) {
+	if (lcnt == 0)
 		error = ESRCH;
-	}
 out:
 	mutex_exit(&cpu_lock);
-
-	/*
-	 * Drop the initial reference (LWPs, if any, have the ownership now),
-	 * and destroy whatever is in the G/C list, if filled.
-	 */
-	if (kcset) {
-		kcpuset_unuse(kcset, &kcpulst);
-	}
-	if (kcpulst) {
-		kcpuset_destroy(kcpulst);
-	}
+	if (cpuset != NULL)
+		kcpuset_unuse(cpuset, &cpulst);
+	kcpuset_destroy(cpulst);
 	return error;
 }
 
@@ -496,10 +474,10 @@ sys__sched_getaffinity(struct lwp *l,
 		syscallarg(cpuset_t *) cpuset;
 	} */
 	struct lwp *t;
-	kcpuset_t *kcset;
+	kcpuset_t *cpuset;
 	int error;
 
-	error = genkcpuset(&kcset, SCARG(uap, cpuset), SCARG(uap, size));
+	error = genkcpuset(&cpuset, SCARG(uap, cpuset), SCARG(uap, size));
 	if (error)
 		return error;
 
@@ -517,17 +495,17 @@ sys__sched_getaffinity(struct lwp *l,
 		goto out;
 	}
 	lwp_lock(t);
-	if (t->l_affinity) {
-		kcpuset_copy(kcset, t->l_affinity);
-	} else {
-		kcpuset_zero(kcset);
-	}
+	if (t->l_flag & LW_AFFINITY) {
+		KASSERT(t->l_affinity != NULL);
+		kcpuset_copy(cpuset, t->l_affinity);
+	} else
+		kcpuset_zero(cpuset);
 	lwp_unlock(t);
 	mutex_exit(t->l_proc->p_lock);
 
-	error = kcpuset_copyout(kcset, SCARG(uap, cpuset), SCARG(uap, size));
+	error = kcpuset_copyout(cpuset, SCARG(uap, cpuset), SCARG(uap, size));
 out:
-	kcpuset_unuse(kcset, NULL);
+	kcpuset_unuse(cpuset, NULL);
 	return error;
 }
 
@@ -539,14 +517,18 @@ sys_sched_yield(struct lwp *l, const void *v, register_t *retval)
 {
 
 	yield();
+#ifdef KERN_SA
+	if (l->l_flag & LW_SA) {
+		sa_preempt(l);
+	}
+#endif
 	return 0;
 }
 
 /*
  * Sysctl nodes and initialization.
  */
-static void
-sysctl_sched_setup(struct sysctllog **clog)
+SYSCTL_SETUP(sysctl_sched_setup, "sysctl sched setup")
 {
 	const struct sysctlnode *node = NULL;
 
@@ -585,63 +567,4 @@ sysctl_sched_setup(struct sysctllog **clog)
 		SYSCTL_DESCR("Maximal POSIX real-time priority"),
 		NULL, SCHED_PRI_MAX, NULL, 0,
 		CTL_CREATE, CTL_EOL);
-}
-
-static int
-sched_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
-    void *arg0, void *arg1, void *arg2, void *arg3)
-{
-	struct proc *p;
-	int result;
-
-	result = KAUTH_RESULT_DEFER;
-	p = arg0;
-
-	switch (action) {
-	case KAUTH_PROCESS_SCHEDULER_GETPARAM:
-		if (kauth_cred_uidmatch(cred, p->p_cred))
-			result = KAUTH_RESULT_ALLOW;
-		break;
-
-	case KAUTH_PROCESS_SCHEDULER_SETPARAM:
-		if (kauth_cred_uidmatch(cred, p->p_cred)) {
-			struct lwp *l;
-			int policy;
-			pri_t priority;
-
-			l = arg1;
-			policy = (int)(unsigned long)arg2;
-			priority = (pri_t)(unsigned long)arg3;
-
-			if ((policy == l->l_class ||
-			    (policy != SCHED_FIFO && policy != SCHED_RR)) &&
-			    priority <= l->l_priority)
-				result = KAUTH_RESULT_ALLOW;
-		}
-
-		break;
-
-	case KAUTH_PROCESS_SCHEDULER_GETAFFINITY:
-		result = KAUTH_RESULT_ALLOW;
-		break;
-
-	case KAUTH_PROCESS_SCHEDULER_SETAFFINITY:
-		/* Privileged; we let the secmodel handle this. */
-		break;
-
-	default:
-		break;
-	}
-
-	return result;
-}
-
-void
-sched_init(void)
-{
-
-	sysctl_sched_setup(&sched_sysctl_log);
-
-	sched_listener = kauth_listen_scope(KAUTH_SCOPE_PROCESS,
-	    sched_listener_cb, NULL);
 }

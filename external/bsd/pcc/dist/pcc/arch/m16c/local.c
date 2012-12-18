@@ -1,5 +1,4 @@
-/*	Id: local.c,v 1.21 2011/09/23 18:17:51 plunky Exp 	*/	
-/*	$NetBSD: local.c,v 1.1.1.5 2012/01/11 20:32:50 plunky Exp $	*/
+/*	$Id: local.c,v 1.1.1.1 2008/08/24 05:32:55 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -12,6 +11,8 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -83,6 +84,12 @@ clocal(NODE *p)
 			}
 		break;
 
+	case PMCONV:
+	case PVCONV:
+		if( p->n_right->n_op != ICON ) cerror( "bad conversion", 0);
+		nfree(p);
+		return(buildtree(o==PMCONV?MUL:DIV, p->n_left, p->n_right));
+	
 	case PCONV:
 		ml = p->n_left->n_type;
 		l = p->n_left;
@@ -158,6 +165,15 @@ andable(NODE *p)
 }
 
 /*
+ * at the end of the arguments of a ftn, set the automatic offset
+ */
+void
+cendarg()
+{
+	autooff = AUTOINIT;
+}
+
+/*
  * is an automatic variable of type t OK for a register variable
  */
 int
@@ -169,6 +185,29 @@ cisreg(TWORD t)
 	return 0; /* XXX - fix reg assignment in pftn.c */
 }
 
+/*
+ * return a node, for structure references, which is suitable for
+ * being added to a pointer of type t, in order to be off bits offset
+ * into a structure
+ * t, d, and s are the type, dimension offset, and sizeoffset
+ * For pdp10, return the type-specific index number which calculation
+ * is based on its size. For example, short a[3] would return 3.
+ * Be careful about only handling first-level pointers, the following
+ * indirections must be fullword.
+ */
+NODE *
+offcon(OFFSZ off, TWORD t, union dimfun *d, struct suedef *sue)
+{
+	register NODE *p;
+
+	if (xdebug)
+		printf("offcon: OFFSZ %lld type %x dim %p siz %d\n",
+		    off, t, d, sue->suesize);
+
+	p = bcon(0);
+	p->n_lval = off/SZCHAR; /* Default */
+	return(p);
+}
 
 /*
  * Allocate off bits on the stack.  p is a tree that when evaluated
@@ -211,7 +250,7 @@ spalloc(NODE *t, NODE *p, OFFSZ off)
  * print out a constant node
  * mat be associated with a label
  */
-int
+void
 ninval(NODE *p)
 {
 	struct symtab *q;
@@ -220,7 +259,7 @@ ninval(NODE *p)
 	p = p->n_left;
 	t = p->n_type;
 	if (t > BTMASK)
-		t = p->n_type = INT; /* pointer */
+		t = INT; /* pointer */
 
 	switch (t) {
 	case LONGLONG:
@@ -234,7 +273,8 @@ ninval(NODE *p)
 	case UNSIGNED:
 		printf("\t.long 0x%x", (int)p->n_lval);
 		if ((q = p->n_sp) != NULL) {
-			if ((q->sclass == STATIC && q->slevel > 0)) {
+			if ((q->sclass == STATIC && q->slevel > 0) ||
+			    q->sclass == ILABEL) {
 				printf("+" LABFMT, q->soffset);
 			} else
 				printf("+%s", exname(q->soname));
@@ -243,9 +283,36 @@ ninval(NODE *p)
 		break;
 	default:
 		fwalk(p, eprint, 0);
-		return 0;
+		cerror("ninval");
 	}
-	return 1;
+}
+
+/*
+ * print out an integer.
+ */
+void
+inval(CONSZ word)
+{
+	word &= 0xffffffff;
+	printf("	.long 0x%llx\n", word);
+}
+
+/* output code to initialize a floating point value */
+/* the proper alignment has been obtained */
+void
+finval(NODE *p)
+{
+	switch (p->n_type) {
+	case LDOUBLE:
+		printf("\t.tfloat\t0t%.20Le\n", p->n_dcon);
+		break;
+	case DOUBLE:
+		printf("\t.dfloat\t0d%.20e\n", (double)p->n_dcon);
+		break;
+	case FLOAT:
+		printf("\t.ffloat\t0f%.20e\n", (float)p->n_dcon);
+		break;
+	}
 }
 
 /* make a name look like an external name in the local machine */
@@ -373,7 +440,6 @@ setloc1(int locc)
 void
 myp2tree(NODE *p)
 {
-	struct symtab *sp;
 	union dimfun *df;
 	union arglist *al;
 	NODE *q;
@@ -412,34 +478,28 @@ myp2tree(NODE *p)
 
 	case FCON:
 		/* Write float constants to memory */
-		sp = inlalloc(sizeof(struct symtab));
-		sp->sclass = STATIC;
-		sp->ssue = 0;
-		sp->slevel = 1; /* fake numeric label */
-		sp->soffset = getlab();
-		sp->sflags = 0;
-		sp->stype = p->n_type;
-		sp->squal = (CON >> TSHIFT);
-
-		defloc(sp);
-		ninval(0, sp->ssue->suesize, p);
-
+		setloc1(RDATA);
+		defalign(p->n_type == FLOAT ? ALFLOAT : p->n_type == DOUBLE ?
+		    ALDOUBLE : ALLDOUBLE );
+		deflab1(i = getlab()); 
+		ninval(0, btdims[p->n_type].suesize, p);
 		p->n_op = NAME;
-		p->n_lval = 0;
-		p->n_sp = sp;
+		p->n_lval = 0;	
+		p->n_sp = tmpalloc(sizeof(struct symtab_hdr));
+		p->n_sp->sclass = ILABEL;
+		p->n_sp->soffset = i;
+		p->n_sp->sflags = 0;
 		break;
 	}
 
 }
-
 /*
  * Give target the opportunity of handling pragmas.
  */
 int
 mypragma(char **ary)
 {
-	return 0;
-}
+	return 0; }
 
 /*
  * Called when a identifier has been declared, to give target last word.

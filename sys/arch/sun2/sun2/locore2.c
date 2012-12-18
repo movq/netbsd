@@ -1,4 +1,4 @@
-/*	$NetBSD: locore2.c,v 1.26 2012/08/10 14:52:26 tsutsui Exp $	*/
+/*	$NetBSD: locore2.c,v 1.18 2008/04/28 20:23:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -30,21 +30,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.26 2012/08/10 14:52:26 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.18 2008/04/28 20:23:37 martin Exp $");
 
 #include "opt_ddb.h"
-#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
+#include <sys/user.h>
 #define ELFSIZE 32
 #include <sys/exec_elf.h>
 
 #include <uvm/uvm_extern.h>
-
-#include <dev/cons.h>
 
 #include <machine/cpu.h>
 #include <machine/db_machdep.h>
@@ -54,6 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.26 2012/08/10 14:52:26 tsutsui Exp $")
 #include <machine/promlib.h>
 #include <machine/pmap.h>
 #include <machine/pte.h>
+
+#include <machine/stdarg.h>
 
 #include <sun2/sun2/control.h>
 #include <sun2/sun2/machdep.h>
@@ -93,6 +93,9 @@ int cpu_has_vme = 0;
  */
 int delay_divisor = 82;		/* assume the fastest (3/260) */
 
+extern int physmem;
+
+struct user *proc0paddr;	/* proc[0] pcb address (u-area VA) */
 extern struct pcb *curpcb;
 
 /* First C code called by locore.s */
@@ -101,7 +104,7 @@ void _bootstrap(void);
 static void _verify_hardware(void);
 static void _vm_init(void);
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 static void _save_symtab(void);
 
 /*
@@ -169,7 +172,7 @@ _vm_init(void)
 	 * if DDB is not part of this kernel, ignore the symbols.
 	 */
 	esym = end + 4;
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	/* This will advance esym past the symbols. */
 	_save_symtab();
 #endif
@@ -186,16 +189,16 @@ _vm_init(void)
 	 * fault handler works in case we hit an early bug.
 	 * (The fault handler may reference lwp0 stuff.)
 	 */
-	uvm_lwp_setuarea(&lwp0, nextva);
-	memset((void *)nextva, 0, USPACE);
-
+	proc0paddr = (struct user *) nextva;
 	nextva += USPACE;
+	memset((void *)proc0paddr, 0, USPACE);
+	lwp0.l_addr = proc0paddr;
 
 	/*
 	 * Now that lwp0 exists, make it the "current" one.
 	 */
 	curlwp = &lwp0;
-	curpcb = lwp_getpcb(&lwp0);
+	curpcb = &proc0paddr->u_pcb;
 
 	/* This does most of the real work. */
 	pmap_bootstrap(nextva);
@@ -257,7 +260,6 @@ _verify_hardware(void)
 void 
 _bootstrap(void)
 {
-	extern struct consdev consdev_prom;	/* XXX */
 	vaddr_t va;
 
 	/* First, Clear BSS. */
@@ -265,12 +267,6 @@ _bootstrap(void)
 
 	/* Initialize the PROM. */
 	prom_init();
-
-	/*
-	 * Initialize console to point to the PROM (output only) table
-	 * for early printf calls.
-	 */
-	cn_tab = &consdev_prom;
 
 	/* Copy the IDPROM from control space. */
 	idprom_init();

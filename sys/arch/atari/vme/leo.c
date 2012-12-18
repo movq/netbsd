@@ -1,4 +1,4 @@
-/*	$NetBSD: leo.c,v 1.19 2011/07/01 20:34:06 dyoung Exp $	*/
+/*	$NetBSD: leo.c,v 1.13 2008/06/13 08:50:12 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1997 maximum entropy <entropy@zippy.bernstein.com>
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: leo.c,v 1.19 2011/07/01 20:34:06 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: leo.c,v 1.13 2008/06/13 08:50:12 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,14 +57,12 @@ __KERNEL_RCSID(0, "$NetBSD: leo.c,v 1.19 2011/07/01 20:34:06 dyoung Exp $");
 #include <sys/conf.h>
 #include <sys/ioctl.h>
 #include <machine/cpu.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/iomap.h>
 #include <machine/scu.h>
 #include <atari/vme/vmevar.h>
 #include <atari/vme/leovar.h>
 #include <atari/vme/leoioctl.h>
-
-#include "ioconf.h"
 
 static struct leo_addresses {
 	u_long reg_addr;
@@ -78,7 +76,7 @@ static struct leo_addresses {
 #define NLEOSTD (sizeof(leostd) / sizeof(leostd[0]))
 
 struct leo_softc {
-	device_t sc_dev;		/* XXX what goes here? */
+	struct device sc_dev;		/* XXX what goes here? */
 	bus_space_tag_t sc_iot;
 	bus_space_tag_t sc_memt;
 	bus_space_handle_t sc_ioh;
@@ -90,16 +88,18 @@ struct leo_softc {
 
 #define LEO_SC_FLAGS_INUSE 1
 
-static int leo_match(device_t, cfdata_t, void *);
-static void leo_attach(device_t, device_t, void *);
-static int leo_probe(bus_space_tag_t *, bus_space_tag_t *,
+static int leo_match __P((struct device *, struct cfdata *, void *));
+static void leo_attach __P((struct device *, struct device *, void *));
+static int leo_probe __P((bus_space_tag_t *, bus_space_tag_t *,
 			  bus_space_handle_t *, bus_space_handle_t *,
-			  u_int, u_int);
-static int leo_init(struct leo_softc *, int);
-static int leo_scroll(struct leo_softc *, int);
+			  u_int, u_int));
+static int leo_init __P((struct leo_softc *, int));
+static int leo_scroll __P((struct leo_softc *, int));
 
-CFATTACH_DECL_NEW(leo, sizeof(struct leo_softc),
+CFATTACH_DECL(leo, sizeof(struct leo_softc),
     leo_match, leo_attach, NULL, NULL);
+
+extern struct cfdriver leo_cd;
 
 dev_type_open(leoopen);
 dev_type_close(leoclose);
@@ -113,7 +113,10 @@ const struct cdevsw leo_cdevsw = {
 };
 
 static int
-leo_match(device_t parent, cfdata_t cf, void *aux)
+leo_match(parent, cfp, aux)
+	struct device *parent;
+	struct cfdata *cfp;
+	void *aux;
 {
 	struct vme_attach_args *va = aux;
 	int i;
@@ -175,7 +178,10 @@ leo_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static int
-leo_probe(bus_space_tag_t *iot, bus_space_tag_t *memt, bus_space_handle_t *ioh, bus_space_handle_t *memh, u_int iosize, u_int msize)
+leo_probe(iot, memt, ioh, memh, iosize, msize)
+	bus_space_tag_t *iot, *memt;
+	bus_space_handle_t *ioh, *memh;
+	u_int iosize, msize;
 {
 
 	/* Test that our highest register is within the io range. */
@@ -205,17 +211,17 @@ leo_probe(bus_space_tag_t *iot, bus_space_tag_t *memt, bus_space_handle_t *ioh, 
 }
 
 static void
-leo_attach(device_t parent, device_t self, void *aux)
+leo_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct leo_softc *sc = device_private(self);
+	struct leo_softc *sc = (struct leo_softc *)self;
 	struct vme_attach_args *va = aux;
 	bus_space_handle_t ioh;
 	bus_space_handle_t memh;
 #ifndef SET_REGION
 	int i;
 #endif
-
-	sc->sc_dev = self;
 
 	printf("\n");
 	if (bus_space_map(va->va_iot, va->va_iobase, va->va_iosize, 0, &ioh))
@@ -241,7 +247,7 @@ leo_attach(device_t parent, device_t self, void *aux)
 }
 
 int
-leoopen(dev_t dev, int flags, int devtype, struct lwp *l)
+leoopen(dev_t dev, int flags, int devtype, struct proc *p)
 {
 	struct leo_softc *sc;
 	int r;
@@ -262,7 +268,9 @@ leoopen(dev_t dev, int flags, int devtype, struct lwp *l)
 }
 
 static int
-leo_init(struct leo_softc *sc, int ysize)
+leo_init(sc, ysize)
+	struct leo_softc *sc;
+	int ysize;
 {
 
 	if ((ysize != 256) && (ysize != 384) && (ysize != 512))
@@ -317,7 +325,9 @@ leo_init(struct leo_softc *sc, int ysize)
 }
 
 static int
-leo_scroll(struct leo_softc *sc, int scroll)
+leo_scroll(sc, scroll)
+	struct leo_softc *sc;
+	int scroll;
 {
 
 	if ((scroll < 0) || (scroll > 255))
@@ -330,7 +340,7 @@ leo_scroll(struct leo_softc *sc, int scroll)
 }
 
 int
-leoclose(dev_t dev, int flags, int devtype, struct lwp *l)
+leoclose(dev_t dev, int flags, int devtype, struct proc *p)
 {
 	struct leo_softc *sc;
 
@@ -374,7 +384,7 @@ leomove(dev_t dev, struct uio *uio, int flags)
 }
 
 int
-leoioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
+leoioctl(dev_t dev, u_long cmd, void *data, int flags, struct proc *p)
 {
 	struct leo_softc *sc;
 

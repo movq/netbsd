@@ -1,4 +1,4 @@
-.\"	$NetBSD: printf.3,v 1.58 2010/12/26 12:39:54 jnemeth Exp $
+.\"	$NetBSD: printf.3,v 1.44 2007/06/09 18:51:19 christos Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -33,22 +33,19 @@
 .\"
 .\"     @(#)printf.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd December 26, 2010
+.Dd June 9, 2007
 .Dt PRINTF 3
 .Os
 .Sh NAME
 .Nm printf ,
 .Nm fprintf ,
-.Nm dprintf
 .Nm sprintf ,
 .Nm snprintf ,
 .Nm asprintf ,
 .Nm vprintf ,
 .Nm vfprintf ,
 .Nm vsprintf ,
-.Nm vdprintf ,
 .Nm vsnprintf ,
-.Nm vsnprintf_ss ,
 .Nm vasprintf
 .Nd formatted output conversion
 .Sh LIBRARY
@@ -59,8 +56,6 @@
 .Fn printf "const char * restrict format" ...
 .Ft int
 .Fn fprintf "FILE * restrict stream" "const char * restrict format" ...
-.Ft int
-.Fn dprintf "int fd" "const char * restrict format" ...
 .Ft int
 .Fn sprintf "char * restrict str" "const char * restrict format" ...
 .Ft int
@@ -75,11 +70,7 @@
 .Ft int
 .Fn vsprintf "char * restrict str" "const char * restrict format" "va_list ap"
 .Ft int
-.Fn vdprintf "int fd" "const char * restrict format" "va_list ap"
-.Ft int
 .Fn vsnprintf "char * restrict str" "size_t size" "const char * restrict format" "va_list ap"
-.Ft int
-.Fn vsnprintf_ss "char * restrict str" "size_t size" "const char * restrict format" "va_list ap"
 .Ft int
 .Fn vasprintf "char ** restrict ret" "const char * restrict format" "va_list ap"
 .Sh DESCRIPTION
@@ -101,17 +92,11 @@ and
 .Fn vfprintf
 write output to the given output
 .Fa stream ;
-.Fn dprintf
-and
-.Fn vdprintf
-write output to the give file descriptor
-.Fa fd ;
 .Fn sprintf ,
 .Fn snprintf ,
 .Fn vsprintf ,
-.Fn vsnprintf ,
 and
-.Fn vsnprintf_ss
+.Fn vsnprintf
 write to the character string
 .Fa str ;
 and
@@ -128,9 +113,13 @@ string that specifies how subsequent arguments
 .Xr stdarg 3 )
 are converted for output.
 .Pp
-.Fn vsnprintf_ss
-is a signal-safe standalone version that does not handle
-floating point formats.
+These functions return
+the number of characters printed
+(not including the trailing
+.Ql \e0
+used to end output to strings).
+If an output error was encountered, these functions shall return a
+negative value.
 .Pp
 .Fn asprintf
 and
@@ -156,10 +145,9 @@ argument to
 on error.
 It is more portable to check for a return value of \-1 instead.
 .Pp
-.Fn snprintf ,
-.Fn vsnprintf ,
+.Fn snprintf
 and
-.Fn vsnprintf_ss
+.Fn vsnprintf
 will write at most
 .Fa size Ns \-1
 of the characters printed into the output string
@@ -403,21 +391,13 @@ conversion, it indicates that the argument is a pointer to a signed type
 equivalent in size to a
 .Vt size_t .
 .Pp
-Note:
-if the standard integer types described in
-.Xr stdint 3
-are used, it is recommended that the predefined format string specifier
-macros are used when possible.
-These are further described in
-.Xr inttypes 3 .
-.Pp
 The following length modifier is valid for the
 .Cm a ,
 .Cm A ,
-.Cm e ,
-.Cm E ,
-.Cm f ,
-.Cm F ,
+.Cm e , 
+.Cm E , 
+.Cm f , 
+.Cm F , 
 .Cm g ,
 or
 .Cm G
@@ -505,7 +485,7 @@ The
 .Vt double
 argument is rounded and converted in the style
 .Sm off
-.Oo \- Oc Ar d Li \&. Ar ddd Li e \*[Pm] Ar dd
+.Oo \- Oc Ar d Li \&. Ar ddd Li e \\*[Pm] Ar dd
 .Sm on
 where there is one digit before the
 decimal-point character
@@ -587,7 +567,7 @@ The
 .Vt double
 argument is rounded and converted to hexadecimal notation in the style
 .Sm off
-.Oo \- Oc Li 0x Ar h Li \&. Ar hhhp Oo \*[Pm] Oc Ar d ,
+.Oo \- Oc Li 0x Ar h Li \&. Ar hhhp Oo \\*[Pm] Oc Ar d ,
 .Sm on
 where the number of digits after the hexadecimal-point character
 is equal to the precision specification.
@@ -730,21 +710,9 @@ In no case does a non-existent or small field width cause truncation of
 a numeric field; if the result of a conversion is wider than the field
 width, the
 field is expanded to contain the conversion result.
-.Sh RETURN VALUES
-These functions return
-the number of characters printed, or that would be printed if there
-was adequate space in case of
-.Fn snprintf ,
-.Fn vsnprintf ,
-and
-.Fn vsnprintf_ss
-(not including the trailing
-.Ql \e0
-used to end output to strings).
-If an output error was encountered, these functions shall return a
-negative value.
 .Sh EXAMPLES
-To print a date and time in the form
+.br
+To print a date and time in the form 
 .Dq Li "Sunday, July 3, 10:02" ,
 where
 .Fa weekday
@@ -782,151 +750,6 @@ char *newfmt(const char *fmt, ...)
 		return (p);
 }
 .Ed
-.Sh ERRORS
-In addition to the errors documented for the
-.Xr write 2
-system call, the
-.Fn printf
-family of functions may fail if:
-.Bl -tag -width Er
-.It Bq Er EILSEQ
-An invalid wide-character code was encountered.
-.It Bq Er ENOMEM
-Insufficient storage space is available.
-.El
-.Sh SEE ALSO
-.Xr printf 1 ,
-.Xr fmtcheck 3 ,
-.Xr scanf 3 ,
-.Xr setlocale 3 ,
-.Xr wprintf 3 ,
-.Xr printf 9
-.Sh STANDARDS
-Subject to the caveats noted in the
-.Sx BUGS
-section below, the
-.Fn fprintf ,
-.Fn printf ,
-.Fn sprintf ,
-.Fn vprintf ,
-.Fn vfprintf ,
-and
-.Fn vsprintf
-functions
-conform to
-.St -ansiC
-and
-.St -isoC-99 .
-With the same reservation, the
-.Fn snprintf
-and
-.Fn vsnprintf
-functions conform to
-.St -isoC-99 .
-.Sh HISTORY
-The functions
-.Fn snprintf
-and
-.Fn vsnprintf
-first appeared in
-.Bx 4.4 .
-The functions
-.Fn asprintf
-and
-.Fn vasprintf
-are modeled on the ones that first appeared in the GNU C library.
-The function
-.Fn vsnprintf_ss
-is non-standard and appeared in
-.Nx 4.0 .
-The functions
-.Fn dprintf
-and
-.Fn vdprintf
-are parts of
-.St -p1003.1-2008
-and appeared in
-.Nx 6.0 .
-.Sh CAVEATS
-Because
-.Fn sprintf
-and
-.Fn vsprintf
-assume an infinitely long string, callers must be careful not to
-overflow the actual space; this is often impossible to assure.
-For safety, programmers should use the
-.Fn snprintf
-and
-.Fn asprintf
-family of interfaces instead.
-Unfortunately, the
-.Fn snprintf
-interfaces are not available on older
-systems and the
-.Fn asprintf
-interfaces are not yet portable.
-.Pp
-It is important never to pass a string with user-supplied data as a
-format without using
-.Ql %s .
-An attacker can put format specifiers in the string to mangle your stack,
-leading to a possible security hole.
-This holds true even if you have built the string
-.Dq by hand
-using a function like
-.Fn snprintf ,
-as the resulting string may still contain user-supplied conversion specifiers
-for later interpolation by
-.Fn printf .
-.Pp
-Be sure to use the proper secure idiom:
-.Bd -literal -offset indent
-snprintf(buffer, sizeof(buffer), "%s", string);
-.Ed
-.Pp
-There is no way for printf to know the size of each argument passed.
-If you use positional arguments you must ensure that all parameters, up to the
-last positionally specified parameter, are used in the format string.
-This allows for the format string to be parsed for this information.
-Failure to do this will mean your code is non-portable and liable to fail.
-.Pp
-In this implementation, passing a
-.Dv NULL
-.Vt char *
-argument to the
-.Cm %s
-format specifier will output
-.Em "(null)"
-instead of crashing.
-Programs that depend on this behavior are non-portable and may crash
-on other systems or in the future.
-.Sh BUGS
-The conversion formats
-.Cm \&%D ,
-.Cm \&%O ,
-and
-.Cm \&%U
-are not standard and are provided only for backward compatibility.
-The effect of padding the
-.Cm %p
-format with zeros (either by the
-.Sq Cm 0
-flag or by specifying a precision), and the benign effect (i.e. none)
-of the
-.Sq Cm #
-flag on
-.Cm %n
-and
-.Cm %p
-conversions, as well as other nonsensical combinations such as
-.Cm %Ld ,
-are not standard; such combinations should be avoided.
-.Pp
-The
-.Nm
-family of functions do not correctly handle multibyte characters in the
-.Fa format
-argument.
 .Sh SECURITY CONSIDERATIONS
 The
 .Fn sprintf
@@ -998,3 +821,136 @@ for later interpolation by
 Always use the proper secure idiom:
 .Pp
 .Dl "snprintf(buffer, sizeof(buffer), \*q%s\*q, string);"
+.Sh ERRORS
+In addition to the errors documented for the
+.Xr write 2
+system call, the
+.Fn printf
+family of functions may fail if:
+.Bl -tag -width Er
+.It Bq Er EILSEQ
+An invalid wide character code was encountered.
+.It Bq Er ENOMEM
+Insufficient storage space is available.
+.El
+.Sh SEE ALSO
+.Xr printf 1 ,
+.Xr fmtcheck 3 ,
+.Xr printf 9 ,
+.Xr scanf 3 ,
+.Xr setlocale 3 ,
+.Xr wprintf 3
+.Sh STANDARDS
+Subject to the caveats noted in the
+.Sx BUGS
+section below, the
+.Fn fprintf ,
+.Fn printf ,
+.Fn sprintf ,
+.Fn vprintf ,
+.Fn vfprintf ,
+and
+.Fn vsprintf
+functions
+conform to
+.St -ansiC
+and
+.St -isoC-99 .
+With the same reservation, the
+.Fn snprintf
+and
+.Fn vsnprintf
+functions conform to
+.St -isoC-99 .
+.Sh HISTORY
+The functions
+.Fn snprintf
+and
+.Fn vsnprintf
+first appeared in
+.Bx 4.4 .
+The functions
+.Fn asprintf
+and
+.Fn vasprintf
+are modeled on the ones that first appeared in the GNU C library.
+.Sh CAVEATS
+Because
+.Fn sprintf
+and
+.Fn vsprintf
+assume an infinitely long string, callers must be careful not to
+overflow the actual space; this is often impossible to assure.
+For safety, programmers should use the
+.Fn snprintf
+and
+.Fn asprintf
+family of interfaces instead.
+Unfortunately, the
+.Fn snprintf
+interfaces are not available on older
+systems and the
+.Fn asprintf
+interfaces are not yet portable.
+.Pp
+It is important never to pass a string with user-supplied data as a
+format without using
+.Ql %s .
+An attacker can put format specifiers in the string to mangle your stack,
+leading to a possible security hole.
+This holds true even if you have built the string
+.Dq by hand
+using a function like
+.Fn snprintf ,
+as the resulting string may still contain user-supplied conversion specifiers
+for later interpolation by
+.Fn printf .
+.Pp
+Be sure to use the proper secure idiom:
+.Bd -literal -offset indent
+snprintf(buffer, sizeof(buffer), "%s", string);
+.Ed
+.Pp
+There is no way for printf to know the size of each argument passed.
+If you use positional arguments you must ensure that all parameters, up to the
+last positionally specified parameter, are used in the format string.
+This allows for the format string to be parsed for this information.
+Failure to do this will mean your code is non-portable and liable to fail.
+.Pp
+In this implementation, passing a
+.Dv NULL
+.Vt char *
+argument to the
+.Cm %s
+format specifier will output
+.Em "(null)"
+instead of crashing.
+Programs that depend on this behavior are non-portable and may crash
+on other systems or in the future.
+.Sh BUGS
+The conversion formats
+.Cm \&%D ,
+.Cm \&%O ,
+and
+.Cm %U
+are not standard and are provided only for backward compatibility.
+The effect of padding the
+.Cm %p
+format with zeros (either by the
+.Sq Cm 0
+flag or by specifying a precision), and the benign effect (i.e. none)
+of the
+.Sq Cm #
+flag on
+.Cm %n
+and
+.Cm %p
+conversions, as well as other nonsensical combinations such as
+.Cm %Ld ,
+are not standard; such combinations should be avoided.
+.Pp
+The
+.Nm
+family of functions do not correctly handle multibyte characters in the
+.Fa format
+argument.

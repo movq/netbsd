@@ -1,4 +1,4 @@
-/*	$NetBSD: systm.h,v 1.257 2012/08/03 18:08:01 matt Exp $	*/
+/*	$NetBSD: systm.h,v 1.228.4.2 2009/03/15 19:43:48 snj Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1988, 1991, 1993
@@ -43,18 +43,15 @@
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
 #endif
-#if !defined(_KERNEL) && !defined(_STANDALONE)
-#include <stdbool.h>
-#endif
 
 #include <machine/endian.h>
 
+#ifdef _KERNEL
 #include <sys/types.h>
-#include <sys/stdarg.h>
-
-#include <sys/device_if.h>
+#endif
 
 struct clockframe;
+struct device;
 struct lwp;
 struct proc;
 struct timeval;
@@ -92,7 +89,7 @@ extern const char *dumpspec;	/* how dump device was specified */
 
 extern dev_t rootdev;		/* root device */
 extern struct vnode *rootvp;	/* vnode equivalent to above */
-extern device_t root_device; /* device equivalent to above */
+extern struct device *root_device; /* device equivalent to above */
 extern const char *rootspec;	/* how root device was specified */
 
 extern int ncpu;		/* number of CPUs configured */
@@ -101,8 +98,8 @@ extern int ncpuonline;		/* number of CPUs online */
 extern bool mp_online;		/* secondary processors are started */
 #endif /* defined(_KERNEL) */
 
-extern const char hexdigits[];	/* "0123456789abcdef" in subr_prf.c */
-extern const char HEXDIGITS[];	/* "0123456789ABCDEF" in subr_prf.c */
+extern const char hexdigits[];	/* "0123456789abcdef" in subr_prf2.c */
+extern const char HEXDIGITS[];	/* "0123456789ABCDEF" in subr_prf2.c */
 
 /*
  * These represent the swap pseudo-device (`sw').  This device
@@ -131,24 +128,7 @@ extern int nsysent;
 #error	"what byte order is this machine?"
 #endif
 
-#define	SYCALL_INDIRECT	0x0000002 /* indirect (ie syscall() or __syscall()) */
-#define	SYCALL_NARGS64_MASK	0x000f000 /* count of 64bit args */
-#define SYCALL_RET_64	0x0010000 /* retval is a 64bit integer value */
-#define SYCALL_ARG0_64  0x0020000
-#define SYCALL_ARG1_64  0x0040000
-#define SYCALL_ARG2_64  0x0080000
-#define SYCALL_ARG3_64  0x0100000
-#define SYCALL_ARG4_64  0x0200000
-#define SYCALL_ARG5_64  0x0400000
-#define SYCALL_ARG6_64  0x0800000
-#define SYCALL_ARG7_64  0x1000000
-#define SYCALL_NOSYS    0x2000000 /* permanent nosys in sysent[] */
-#define	SYCALL_ARG_PTR	0x3000000 /* at least one argument is a pointer */
-#define SYCALL_RET_64_P(sy)	((sy)->sy_flags & SYCALL_RET_64)
-#define SYCALL_ARG_64_P(sy, n)	((sy)->sy_flags & (SYCALL_ARG0_64 << (n)))
-#define	SYCALL_ARG_64_MASK(sy)	(((sy)->sy_flags >> 17) & 0xff)
-#define	SYCALL_NARGS64(sy)	(((sy)->sy_flags >> 12) & 0x0f)
-#define	SYCALL_NARGS64_VAL(n)	((n) << 12)
+#define	SYCALL_INDIRECT	0x0002	/* indirect (ie syscall() or __syscall()) */
 
 extern int boothowto;		/* reboot flags, from console subsystem */
 #define	bootverbose	(boothowto & AB_VERBOSE)
@@ -159,7 +139,6 @@ extern void (*v_putc)(int); /* Virtual console putc routine */
 /*
  * General function declarations.
  */
-void	voidop(void);
 int	nullop(void *);
 int	enodev(void);
 int	enosys(void);
@@ -178,64 +157,76 @@ void	*hashinit(u_int, enum hashtype, bool, u_long *);
 void	hashdone(void *, enum hashtype, u_long);
 int	seltrue(dev_t, int, struct lwp *);
 int	sys_nosys(struct lwp *, const void *, register_t *);
-int	sys_nomodule(struct lwp *, const void *, register_t *);
 
-void	aprint_normal(const char *, ...) __printflike(1, 2);
-void	aprint_error(const char *, ...) __printflike(1, 2);
-void	aprint_naive(const char *, ...) __printflike(1, 2);
-void	aprint_verbose(const char *, ...) __printflike(1, 2);
-void	aprint_debug(const char *, ...) __printflike(1, 2);
+void	aprint_normal(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
+void	aprint_error(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
+void	aprint_naive(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
+void	aprint_verbose(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
+void	aprint_debug(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
 
-void device_printf(device_t, const char *fmt, ...) __printflike(2, 3);
+struct device;
 
-void	aprint_normal_dev(device_t, const char *, ...) __printflike(2, 3);
-void	aprint_error_dev(device_t, const char *, ...) __printflike(2, 3);
-void	aprint_naive_dev(device_t, const char *, ...) __printflike(2, 3);
-void	aprint_verbose_dev(device_t, const char *, ...) __printflike(2, 3);
-void	aprint_debug_dev(device_t, const char *, ...) __printflike(2, 3);
+void	aprint_normal_dev(struct device *, const char *, ...)
+    __attribute__((__format__(__printf__,2,3)));
+void	aprint_error_dev(struct device *, const char *, ...)
+    __attribute__((__format__(__printf__,2,3)));
+void	aprint_naive_dev(struct device *, const char *, ...)
+    __attribute__((__format__(__printf__,2,3)));
+void	aprint_verbose_dev(struct device *, const char *, ...)
+    __attribute__((__format__(__printf__,2,3)));
+void	aprint_debug_dev(struct device *, const char *, ...)
+    __attribute__((__format__(__printf__,2,3)));
 
 struct ifnet;
 
 void	aprint_normal_ifnet(struct ifnet *, const char *, ...)
-    __printflike(2, 3);
+    __attribute__((__format__(__printf__,2,3)));
 void	aprint_error_ifnet(struct ifnet *, const char *, ...)
-    __printflike(2, 3);
+    __attribute__((__format__(__printf__,2,3)));
 void	aprint_naive_ifnet(struct ifnet *, const char *, ...)
-    __printflike(2, 3);
+    __attribute__((__format__(__printf__,2,3)));
 void	aprint_verbose_ifnet(struct ifnet *, const char *, ...)
-    __printflike(2, 3);
+    __attribute__((__format__(__printf__,2,3)));
 void	aprint_debug_ifnet(struct ifnet *, const char *, ...)
-    __printflike(2, 3);
+    __attribute__((__format__(__printf__,2,3)));
 
 int	aprint_get_error_count(void);
 
-void	printf_tolog(const char *, ...) __printflike(1, 2);
+void	printf_tolog(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
 
-void	printf_nolog(const char *, ...) __printflike(1, 2);
+void	printf_nolog(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
 
-void	printf(const char *, ...) __printflike(1, 2);
-
-int	sprintf(char *, const char *, ...) __printflike(2, 3);
-
-int	snprintf(char *, size_t, const char *, ...) __printflike(3, 4);
-
-void	vprintf(const char *, va_list) __printflike(1, 0);
-
-int	vsprintf(char *, const char *, va_list) __printflike(2, 0);
-
-int	vsnprintf(char *, size_t, const char *, va_list) __printflike(3, 0);
-
+void	printf(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
+int	sprintf(char *, const char *, ...)
+    __attribute__((__format__(__printf__,2,3)));
+int	snprintf(char *, size_t, const char *, ...)
+    __attribute__((__format__(__printf__,3,4)));
+void	vprintf(const char *, _BSD_VA_LIST_);
+int	vsprintf(char *, const char *, _BSD_VA_LIST_);
+int	vsnprintf(char *, size_t, const char *, _BSD_VA_LIST_);
 int	humanize_number(char *, size_t, uint64_t, const char *, int);
 
 void	twiddle(void);
-void	banner(void);
 #endif /* _KERNEL */
 
-void	panic(const char *, ...) __dead __printflike(1, 2);
-void	vpanic(const char *, va_list) __dead __printflike(1, 0);
-void	uprintf(const char *, ...) __printflike(1, 2);
-void	uprintf_locked(const char *, ...) __printflike(1, 2);
-void	ttyprintf(struct tty *, const char *, ...) __printflike(2, 3);
+void	panic(const char *, ...)
+    __dead __attribute__((__format__(__printf__,1,2)));
+void	uprintf(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
+void	uprintf_locked(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
+void	ttyprintf(struct tty *, const char *, ...)
+    __attribute__((__format__(__printf__,2,3)));
+
+char	*bitmask_snprintf(u_quad_t, const char *, char *, size_t);
 
 int	format_bytes(char *, size_t, uint64_t);
 
@@ -294,7 +285,6 @@ void	statclock(struct clockframe *);
 #ifdef NTP
 void	ntp_init(void);
 #ifdef PPS_SYNC
-struct timespec;
 void	hardpps(struct timespec *, long);
 #endif /* PPS_SYNC */
 #else
@@ -313,14 +303,6 @@ void	startprofclock(struct proc *);
 void	stopprofclock(struct proc *);
 void	proftick(struct clockframe *);
 void	setstatclockrate(int);
-
-/*
- * Critical polling hooks.  Functions to be run while the kernel stays
- * elevated IPL for a "long" time.  (watchdogs).
- */
-void	*critpollhook_establish(void (*)(void *), void *);
-void	critpollhook_disestablish(void *);
-void	docritpollhooks(void);
 
 /*
  * Shutdown hooks.  Functions to be run with all interrupts disabled
@@ -355,14 +337,11 @@ void	dopowerhooks(int);
  * these to be executed just before (*mountroot)() if the passed device is
  * selected as the root device.
  */
-
-#define	ROOT_FSTYPE_ANY	"?"
-
-extern const char *rootfstype;
-void	*mountroothook_establish(void (*)(device_t), device_t);
+extern int (*mountroot)(void);
+void	*mountroothook_establish(void (*)(struct device *), struct device *);
 void	mountroothook_disestablish(void *);
 void	mountroothook_destroy(void);
-void	domountroothook(device_t);
+void	domountroothook(void);
 
 /*
  * Exec hooks. Subsystems may want to do cleanup when a process
@@ -400,7 +379,7 @@ int	uiomove(void *, size_t, struct uio *);
 int	uiomove_frombuf(void *, size_t, struct uio *);
 
 #ifdef _KERNEL
-int	setjmp(label_t *) __returns_twice;
+int	setjmp(label_t *);
 void	longjmp(label_t *) __dead;
 #endif
 
@@ -414,8 +393,6 @@ void	cpu_dumpconf(void);
 #ifdef GPROF
 void	kmstartup(void);
 #endif
-
-void	machdep_init(void);
 
 #ifdef _KERNEL
 #include <lib/libkern/libkern.h>
@@ -493,27 +470,17 @@ void scdebug_ret(register_t, int, const register_t[]);
 void	kernel_lock_init(void);
 void	_kernel_lock(int);
 void	_kernel_unlock(int, int *);
-bool	_kernel_locked_p(void);
 
-#ifdef _KERNEL
-void	kernconfig_lock_init(void);
-void	kernconfig_lock(void);
-void	kernconfig_unlock(void);
-bool	kernconfig_is_held(void);
-#endif
-
-#if defined(MULTIPROCESSOR) || defined(_MODULE)
+#if defined(MULTIPROCESSOR) || defined(_LKM)
 #define	KERNEL_LOCK(count, lwp)			\
 do {						\
 	if ((count) != 0)			\
 		_kernel_lock((count));	\
 } while (/* CONSTCOND */ 0)
 #define	KERNEL_UNLOCK(all, lwp, p)	_kernel_unlock((all), (p))
-#define	KERNEL_LOCKED_P()		_kernel_locked_p()
 #else
 #define	KERNEL_LOCK(count, lwp)		do {(void)(count); (void)(lwp);} while (/* CONSTCOND */ 0) /*NOP*/
 #define	KERNEL_UNLOCK(all, lwp, ptr)	do {(void)(all); (void)(lwp); (void)(ptr);} while (/* CONSTCOND */ 0) /*NOP*/
-#define	KERNEL_LOCKED_P()		(true)
 #endif
 
 #define	KERNEL_UNLOCK_LAST(l)		KERNEL_UNLOCK(-1, (l), NULL)

@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: prepare-import.sh,v 1.3 2009/02/02 20:47:20 joerg Exp $
+# $NetBSD: prepare-import.sh,v 1.1.6.1 2009/05/30 16:40:31 snj Exp $
 #
 # Copy new pkgsrc/pkg_install/files to dist.
 # Run this script and check for additional files and

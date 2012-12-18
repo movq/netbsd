@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_gio.c,v 1.11 2012/10/27 17:18:09 chs Exp $	*/
+/*	$NetBSD: pci_gio.c,v 1.5 2007/02/19 04:48:37 rumble Exp $	*/
 
 /*
  * Copyright (c) 2006 Stephen M. Rumble
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_gio.c,v 1.11 2012/10/27 17:18:09 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_gio.c,v 1.5 2007/02/19 04:48:37 rumble Exp $");
 
 /*
  * Glue for PCI devices that are connected to the GIO bus by various little
@@ -45,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_gio.c,v 1.11 2012/10/27 17:18:09 chs Exp $");
 #include <sys/malloc.h>
 #include <sys/extent.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/machtype.h>
 
 #include <sgimips/gio/giovar.h>
@@ -65,6 +65,7 @@ int giopci_debug = 0;
 #define DPRINTF(_x)	if (giopci_debug) printf _x
 
 struct giopci_softc {
+	struct device			sc_dev;
 	struct sgimips_pci_chipset	sc_pc;
 	int				sc_slot;
 	int				sc_gprid;
@@ -73,14 +74,13 @@ struct giopci_softc {
 	bus_space_handle_t		sc_ioh;
 };
 
-static int	giopci_match(device_t, cfdata_t, void *);
-static void	giopci_attach(device_t, device_t, void *);
+static int	giopci_match(struct device *, struct cfdata *, void *);
+static void	giopci_attach(struct device *, struct device *, void *);
 static int	giopci_bus_maxdevs(pci_chipset_tag_t, int);
 static pcireg_t	giopci_conf_read(pci_chipset_tag_t, pcitag_t, int);
 static void	giopci_conf_write(pci_chipset_tag_t, pcitag_t, int, pcireg_t);
 static int	giopci_conf_hook(pci_chipset_tag_t, int, int, int, pcireg_t);
-static int	giopci_intr_map(const struct pci_attach_args *,
-		    pci_intr_handle_t *);
+static int	giopci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
 static const char *
 		giopci_intr_string(pci_chipset_tag_t, pci_intr_handle_t);
 static void    *giopci_intr_establish(int, int, int (*)(void *), void *);
@@ -98,11 +98,11 @@ static void	giopci_intr_disestablish(void *);
 #define SETENG_TLAN_START	0x00100000
 #define SETENG_TLAN_END		0x001fffff
 
-CFATTACH_DECL_NEW(giopci, sizeof(struct giopci_softc),
+CFATTACH_DECL(giopci, sizeof(struct giopci_softc),
     giopci_match, giopci_attach, NULL, NULL);
 
 static int
-giopci_match(device_t parent, cfdata_t match, void *aux)
+giopci_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct gio_attach_args *ga = aux;
 	int gprid;
@@ -126,9 +126,9 @@ giopci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void 
-giopci_attach(device_t parent, device_t self, void *aux)
+giopci_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct giopci_softc *sc = device_private(self);
+	struct giopci_softc *sc = (void *)self;
 	pci_chipset_tag_t pc = &sc->sc_pc;
 	struct gio_attach_args *ga = aux;
 	uint32_t pci_off, pci_len, arb;
@@ -192,7 +192,7 @@ giopci_attach(device_t parent, device_t self, void *aux)
 
 	if (bus_space_subregion(ga->ga_iot, ga->ga_ioh, pci_off, pci_len,
 	    &sc->sc_ioh)) {
-		printf("%s: unable to map PCI registers\n", device_xname(self));
+		printf("%s: unable to map PCI registers\n",sc->sc_dev.dv_xname);
 		return;
 	}
 	sc->sc_pci_len = pci_len;
@@ -213,16 +213,15 @@ giopci_attach(device_t parent, device_t self, void *aux)
 
 #ifdef PCI_NETBSD_CONFIGURE
 	pc->pc_memext = extent_create("giopcimem", m_start, m_end,
-	    NULL, 0, EX_NOWAIT);
-	pci_configure_bus(pc, NULL, pc->pc_memext, NULL, 0,
-	    mips_cache_info.mci_dcache_align);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	pci_configure_bus(pc, NULL, pc->pc_memext, NULL, 0, mips_dcache_align);
 #endif
 
 	memset(&pba, 0, sizeof(pba));
 	pba.pba_memt	= SGIMIPS_BUS_SPACE_MEM;
 	pba.pba_dmat	= ga->ga_dmat;
 	pba.pba_pc	= pc;
-	pba.pba_flags	= PCI_FLAGS_MEM_OKAY;
+	pba.pba_flags	= PCI_FLAGS_MEM_ENABLED;
 	/* NB: do not set PCI_FLAGS_{MRL,MRM,MWI}_OKAY  -- true ?! */
 
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
@@ -290,7 +289,7 @@ giopci_conf_hook(pci_chipset_tag_t pc, int bus, int device, int function,
 }
 
 static int
-giopci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+giopci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	struct giopci_softc *sc = pa->pa_pc->cookie;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: abandon.c,v 1.9 2009/05/24 21:44:56 dholland Exp $	*/
+/*	$NetBSD: abandon.c,v 1.7 2007/12/15 19:44:44 perry Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)abandon.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: abandon.c,v 1.9 2009/05/24 21:44:56 dholland Exp $");
+__RCSID("$NetBSD: abandon.c,v 1.7 2007/12/15 19:44:44 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -68,7 +68,8 @@ __RCSID("$NetBSD: abandon.c,v 1.9 2009/05/24 21:44:56 dholland Exp $");
 
 /*ARGSUSED*/
 void
-abandon(int v __unused)
+abandon(v)
+	int v __unused;
 {
 	struct quad	*q;
 	int		i;
@@ -79,7 +80,8 @@ abandon(int v __unused)
 		printf("You may not abandon ye Faire Queene\n");
 		return;
 	}
-	if (Ship.cond != DOCKED) {
+	if (Ship.cond != DOCKED)
+	{
 		if (damaged(SHUTTLE)) {
 			out(SHUTTLE);
 			return;
@@ -87,11 +89,14 @@ abandon(int v __unused)
 		printf("Officers escape in shuttlecraft\n");
 		/* decide on fate of crew */
 		q = &Quad[Ship.quadx][Ship.quady];
-		if (q->qsystemname == 0 || damaged(XPORTER)) {
+		if (q->qsystemname == 0 || damaged(XPORTER))
+		{
 			printf("Entire crew of %d left to die in outer space\n",
 				Ship.crew);
 			Game.deaths += Ship.crew;
-		} else {
+		}
+		else
+		{
 			printf("Crew beams down to planet %s\n", systemname(q));
 		}
 	}
@@ -113,7 +118,8 @@ abandon(int v __unused)
 	Ship.warp3 = 125.0;
 	Ship.cond = GREEN;
 	/* clear out damages on old ship */
-	for (i = 0; i < MAXEVENTS; i++) {
+	for (i = 0; i < MAXEVENTS; i++)
+	{
 		e = &Event[i];
 		if (e->evcode != E_FIXDV)
 			continue;
@@ -123,8 +129,10 @@ abandon(int v __unused)
 	i = Param.damprob[SHUTTLE] + Param.damprob[CLOAK];
 	Param.damprob[SHUTTLE] = Param.damprob[CLOAK] = 0;
 	while (i > 0)
-		for (j = 0; j < NDEV; j++) {
-			if (Param.damprob[j] != 0) {
+		for (j = 0; j < NDEV; j++)
+		{
+			if (Param.damprob[j] != 0)
+			{
 				Param.damprob[j] += 1;
 				i--;
 				if (i <= 0)
@@ -136,17 +144,20 @@ abandon(int v __unused)
 	Ship.quadx = Now.base[i].x;
 	Ship.quady = Now.base[i].y;
 	/* setup that quadrant */
-	while (1) {
+	while (1)
+	{
 		initquad(1);
 		Sect[Ship.sectx][Ship.secty] = EMPTY;
-		for (i = 0; i < 5; i++) {
+		for (i = 0; i < 5; i++)
+		{
 			Ship.sectx = Etc.starbase.x + ranf(3) - 1;
 			if (Ship.sectx < 0 || Ship.sectx >= NSECTS)
 				continue;
 			Ship.secty = Etc.starbase.y + ranf(3) - 1;
 			if (Ship.secty < 0 || Ship.secty >= NSECTS)
 				continue;
-			if (Sect[Ship.sectx][Ship.secty] == EMPTY) {
+			if (Sect[Ship.sectx][Ship.secty] == EMPTY)
+			{
 				Sect[Ship.sectx][Ship.secty] = QUEENE;
 				dock(0);
 				compkldist(0);

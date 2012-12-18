@@ -1,4 +1,4 @@
-/*	$NetBSD: rlog.c,v 1.7 2012/03/08 21:32:28 christos Exp $	*/
+/*	$NetBSD: rlog.c,v 1.4 1996/10/15 07:00:50 veego Exp $	*/
 
 /* Print log messages and other information about RCS files.  */
 
@@ -31,16 +31,6 @@ Report problems and direct all questions to:
 
 /*
  * $Log: rlog.c,v $
- * Revision 1.7  2012/03/08 21:32:28  christos
- * Teach rcs about the new cvs "commitid" keyword, so that we don't bitch each
- * time we play with an RCS file maintained by CVS.
- *
- * Revision 1.6  2012/01/06 15:16:03  joerg
- * Don't use dangling elses.
- *
- * Revision 1.5  2011/05/15 14:33:12  christos
- * register c -> int c
- *
  * Revision 1.4  1996/10/15 07:00:50  veego
  * Merge rcs 5.7.
  *
@@ -227,7 +217,6 @@ static char const *insDelFormat;
 static int branchflag;	/*set on -b */
 static int exitstatus;
 static int lockflag;
-static int commitid;
 static struct Datepairs *datelist, *duelst;
 static struct Revpairs *revlist, *Revlst;
 static struct authors *authorlist;
@@ -238,7 +227,7 @@ static struct stateattri *statelist;
 mainProg(rlogId, "rlog", "Id: rlog.c,v 5.18 1995/06/16 06:19:24 eggert Exp")
 {
 	static char const cmdusage[] =
-		"\nrlog usage: rlog -{cbhLNRt} -ddates -l[lockers] -r[revs] -sstates -Vn -w[logins] -xsuff -zzone file ...";
+		"\nrlog usage: rlog -{bhLNRt} -ddates -l[lockers] -r[revs] -sstates -Vn -w[logins] -xsuff -zzone file ...";
 
 	register FILE *out;
 	char *a, **newargv;
@@ -265,9 +254,6 @@ mainProg(rlogId, "rlog", "Id: rlog.c,v 5.18 1995/06/16 06:19:24 eggert Exp")
 	argv = newargv;
 	while (a = *++argv,  0<--argc && *a++=='-') {
 		switch (*a++) {
-		case 'c':
-			commitid = true;
-			break;
 
 		case 'L':
 			onlylockflag = true;
@@ -601,17 +587,14 @@ putadelta(node,editscript,trunk)
 		date2str(node->date, datebuf),
 		node->author, node->state
 	);
-	if (commitid && node->commitid)
-	    aprintf(out, "  commitid: %s;", node->commitid);
 
-        if ( editscript ) {
+        if ( editscript )
            if(trunk)
 	      aprintf(out, insDelFormat,
                              editscript->deletelns, editscript->insertlns);
            else
 	      aprintf(out, insDelFormat,
                              editscript->insertlns, editscript->deletelns);
-        }
 
         newbranch = node->branches;
         if ( newbranch ) {
@@ -793,7 +776,7 @@ char   *argv;
 /*              and store in authorlist                   */
 
 {
-        int    c;
+        register    c;
         struct     authors  * newauthor;
 
         argv--;
@@ -987,13 +970,12 @@ extractdelta(pdelta)
 	    while (strcmp(pstate->status, pdelta->state) != 0)
 		if (!(pstate = pstate->nextstate))
 		    return false;
-	if (lockflag) { /* only locked revisions wanted */
+	if (lockflag) /* only locked revisions wanted */
 	    for (plock = Locks;  ;  plock = plock->nextlock)
 		if (!plock)
 		    return false;
 		else if (plock->delta == pdelta)
 		    break;
-	}
 	if ((prevision = Revlst)) /* only certain revs or branches wanted */
 	    for (;;) {
                 length = prevision->numfld;

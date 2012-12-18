@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.59 2012/10/27 17:18:00 chs Exp $	*/
+/*	$NetBSD: cpu.c,v 1.48 2007/11/17 18:02:42 macallan Exp $	*/
 
 /*-
  * Copyright (c) 2001 Tsubai Masanari.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.59 2012/10/27 17:18:00 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.48 2007/11/17 18:02:42 macallan Exp $");
 
 #include "opt_ppcparam.h"
 #include "opt_multiprocessor.h"
@@ -45,13 +45,15 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.59 2012/10/27 17:18:00 chs Exp $");
 #include <sys/device.h>
 #include <sys/types.h>
 #include <sys/lwp.h>
+#include <sys/user.h>
 
+#include <uvm/uvm_extern.h>
 #include <dev/ofw/openfirm.h>
 #include <powerpc/oea/hid.h>
 #include <powerpc/oea/bat.h>
 #include <powerpc/openpic.h>
+#include <powerpc/atomic.h>
 #include <powerpc/spr.h>
-#include <powerpc/oea/spr.h>
 #ifdef ALTIVEC
 #include <powerpc/altivec.h>
 #endif
@@ -75,13 +77,13 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.59 2012/10/27 17:18:00 chs Exp $");
 #endif /* NOPENPIC > 0 */
 #endif /* OPENPIC */
 
-int cpumatch(device_t, cfdata_t, void *);
-void cpuattach(device_t, device_t, void *);
+int cpumatch(struct device *, struct cfdata *, void *);
+void cpuattach(struct device *, struct device *, void *);
 
 void identifycpu(char *);
 static void ohare_init(void);
 
-CFATTACH_DECL_NEW(cpu, 0,
+CFATTACH_DECL(cpu, sizeof(struct device),
     cpumatch, cpuattach, NULL, NULL);
 
 extern struct cfdriver cpu_cd;
@@ -96,7 +98,10 @@ extern void openpic_set_priority(int, int);
 #endif
 
 int
-cpumatch(device_t parent, cfdata_t cf, void *aux)
+cpumatch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct confargs *ca = aux;
 	int *reg = ca->ca_reg;
@@ -128,10 +133,10 @@ cpumatch(device_t parent, cfdata_t cf, void *aux)
 	return 0;
 }
 
-void cpu_OFgetspeed(device_t, struct cpu_info *);
+void cpu_OFgetspeed(struct device *, struct cpu_info *);
 
 void
-cpu_OFgetspeed(device_t self, struct cpu_info *ci)
+cpu_OFgetspeed(struct device *self, struct cpu_info *ci)
 {
 	int	node;
 
@@ -154,7 +159,9 @@ cpu_OFgetspeed(device_t self, struct cpu_info *ci)
 }
 
 void
-cpuattach(device_t parent, device_t self, void *aux)
+cpuattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct cpu_info *ci;
 	struct confargs *ca = aux;
@@ -176,7 +183,7 @@ cpuattach(device_t parent, device_t self, void *aux)
 	}
 
 	if (OF_finddevice("/bandit/ohare") != -1) {
-		printf("%s", device_xname(self));
+		printf("%s", self->dv_xname);
 		ohare_init();
 	}
 }
@@ -184,12 +191,12 @@ cpuattach(device_t parent, device_t self, void *aux)
 #define CACHE_REG 0xf8000000
 
 void
-ohare_init(void)
+ohare_init()
 {
 	volatile uint32_t *cache_reg, x;
 
 	/* enable L2 cache */
-	cache_reg = mapiodev(CACHE_REG, PAGE_SIZE, false);
+	cache_reg = mapiodev(CACHE_REG, PAGE_SIZE);
 	if (((cache_reg[2] >> 24) & 0x0f) >= 3) {
 		x = cache_reg[4];
 		if ((x & 0x10) == 0)
@@ -218,7 +225,7 @@ md_setup_trampoline(volatile struct cpu_hatch_data *h, struct cpu_info *ci)
 		*(u_int *)EXC_RST =		/* ba cpu_spinup_trampoline */
 		    0x48000002 | (u_int)cpu_spinup_trampoline;
 		__syncicache((void *)EXC_RST, 0x100);
-		h->hatch_running = -1;
+		h->running = -1;
 
 		/* see if there's an OF property for the reset register */
 		sprintf(cpupath, "/cpus/@%x", ci->ci_cpuid);
@@ -242,7 +249,7 @@ md_setup_trampoline(volatile struct cpu_hatch_data *h, struct cpu_info *ci)
 #endif /* OPENPIC */
 		/* Start secondary CPU and stop timebase. */
 		out32(0xf2800000, (int)cpu_spinup_trampoline);
-		cpu_send_ipi(1, IPI_NOMESG);
+		ppc_send_ipi(1, PPC_IPI_NOMESG);
 #ifdef OPENPIC
 	}
 #endif
@@ -260,14 +267,14 @@ md_presync_timebase(volatile struct cpu_hatch_data *h)
 		tb = mftb();
 		tb += 100000;  /* 3ms @ 33MHz */
 
-		h->hatch_tbu = tb >> 32;
-		h->hatch_tbl = tb & 0xffffffff;
+		h->tbu = tb >> 32;
+		h->tbl = tb & 0xffffffff;
 
 		while (tb > mftb())
 			;
 
 		__asm volatile ("sync; isync");
-		h->hatch_running = 0;
+		h->running = 0;
 
 		delay(500000);
 	} else
@@ -291,12 +298,12 @@ md_start_timebase(volatile struct cpu_hatch_data *h)
 		 * running.
 		 */
 		for (i = 0; i < 100000; i++)
-			if (h->hatch_running)
+			if (h->running)
 				break;
 
 		/* Start timebase. */
 		out32(0xf2800000, 0x100);
-		cpu_send_ipi(1, IPI_NOMESG);
+		ppc_send_ipi(1, PPC_IPI_NOMESG);
 #ifdef OPENPIC
 	}
 #endif
@@ -308,9 +315,9 @@ md_sync_timebase(volatile struct cpu_hatch_data *h)
 #ifdef OPENPIC
 	if (openpic_base) {
 		/* Sync timebase. */
-		u_int tbu = h->hatch_tbu;
-		u_int tbl = h->hatch_tbl;
-		while (h->hatch_running == -1)
+		u_int tbu = h->tbu;
+		u_int tbl = h->tbl;
+		while (h->running == -1)
 			;
 		__asm volatile ("sync; isync");
 		__asm volatile ("mttbl %0" :: "r"(0));

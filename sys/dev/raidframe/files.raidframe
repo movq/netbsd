@@ -1,4 +1,4 @@
-#	$NetBSD: files.raidframe,v 1.8 2009/11/17 18:54:26 jld Exp $
+#	$NetBSD: files.raidframe,v 1.6.6.1 2009/12/10 22:59:16 snj Exp $
 
 defflag			RAID_AUTOCONFIG
 defflag			RAID_DIAGNOSTIC
@@ -64,4 +64,3 @@ file	dev/raidframe/rf_states.c		raid
 file	dev/raidframe/rf_stripelocks.c		raid
 file	dev/raidframe/rf_strutils.c		raid
 file	dev/raidframe/rf_utils.c		raid
-file	dev/raidframe/rf_compat50.c		raid & compat_50

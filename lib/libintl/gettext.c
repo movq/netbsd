@@ -1,4 +1,4 @@
-/*	$NetBSD: gettext.c,v 1.28 2012/07/30 23:04:42 yamt Exp $	*/
+/*	$NetBSD: gettext.c,v 1.25 2007/09/25 08:19:09 junyoung Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 Citrus Project,
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: gettext.c,v 1.28 2012/07/30 23:04:42 yamt Exp $");
+__RCSID("$NetBSD: gettext.c,v 1.25 2007/09/25 08:19:09 junyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/stat.h>
@@ -215,10 +215,6 @@ lookup_mofile(char *buf, size_t len, const char *dir, const char *lpath,
 	char *p, *q;
 	char lpath_tmp[BUFSIZ];
 
-	/*
-	 * LANGUAGE is a colon separated list of locale names.
-	 */
-
 	strlcpy(lpath_tmp, lpath, sizeof(lpath_tmp));
 	q = lpath_tmp;
 	/* CONSTCOND */
@@ -307,8 +303,8 @@ static int
 get_sysdep_string_table(struct mosysdepstr_h **table_h, uint32_t *ofstable,
 			uint32_t nstrings, uint32_t magic, char *base)
 {
-	unsigned int i;
-	int j, count;
+	int i, j;
+	int count;
 	size_t l;
 	struct mosysdepstr *table;
 
@@ -402,7 +398,7 @@ setup_sysdep_stuffs(struct mo *mo, struct mohandle *mohandle, char *base)
 	uint32_t magic;
 	struct moentry *stable;
 	size_t l;
-	unsigned int i;
+	int i;
 	char *v;
 	uint32_t *ofstable;
 
@@ -484,7 +480,7 @@ mapit(const char *path, struct domainbinding *db)
 	struct moentry_h *p;
 	struct mo *mo;
 	size_t l, headerlen;
-	unsigned int i;
+	int i;
 	char *v;
 	struct mohandle *mohandle = &db->mohandle;
 
@@ -628,8 +624,7 @@ mapit(const char *path, struct domainbinding *db)
 		if (v)
 			*v = '\0';
 	}
-	if (!mohandle->mo.mo_header ||
-	    _gettext_parse_plural(&mohandle->mo.mo_plural,
+	if (_gettext_parse_plural(&mohandle->mo.mo_plural,
 				  &mohandle->mo.mo_nplurals,
 				  mohandle->mo.mo_header, headerlen))
 		mohandle->mo.mo_plural = NULL;
@@ -776,7 +771,7 @@ lookup_bsearch(const char *msgid, struct domainbinding *db, size_t *rlen)
 		/* avoid possible infinite loop, when the data is not sorted */
 		if (omiddle == middle)
 			break;
-		if ((size_t)middle >= mohandle->mo.mo_nstring)
+		if (middle < 0 || middle >= mohandle->mo.mo_nstring)
 			break;
 
 		n = strcmp(msgid, mohandle->mo.mo_otable[middle].off);
@@ -812,21 +807,12 @@ get_lang_env(const char *category_name)
 {
 	const char *lang;
 
-	/*
-	 * 1. see LANGUAGE variable first.
-	 *
-	 * LANGUAGE is a GNU extension.
-	 * It's a colon separated list of locale names.
-	 */
+	/* 1. see LANGUAGE variable first. */
 	lang = getenv("LANGUAGE");
 	if (lang)
 		return lang;
 
-	/*
-	 * 2. if LANGUAGE isn't set, see LC_ALL, LC_xxx, LANG.
-	 *
-	 * It's essentially setlocale(LC_xxx, NULL).
-	 */
+	/* 2. if LANGUAGE isn't set, see LC_ALL, LC_xxx, LANG. */
 	lang = getenv("LC_ALL");
 	if (!lang)
 		lang = getenv(category_name);

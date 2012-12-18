@@ -1,4 +1,4 @@
-/* $NetBSD: if_cs_isapnp.c,v 1.18 2012/02/02 19:43:04 tls Exp $ */
+/* $NetBSD: if_cs_isapnp.c,v 1.11 2008/04/08 20:09:27 cegger Exp $ */
 
 /*-
  * Copyright (c)2001 YAMAMOTO Takashi,
@@ -27,14 +27,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cs_isapnp.c,v 1.18 2012/02/02 19:43:04 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cs_isapnp.c,v 1.11 2008/04/08 20:09:27 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/socket.h>
 
+#include "rnd.h"
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -52,21 +55,19 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_isapnp.c,v 1.18 2012/02/02 19:43:04 tls Exp $"
 #include <dev/isapnp/isapnpvar.h>
 #include <dev/isapnp/isapnpdevs.h>
 
-#define DEVNAME(sc) device_xname((sc)->sc_dev)
+#define DEVNAME(sc) device_xname(&((sc)->sc_dev))
 
-static int cs_isapnp_match(device_t, cfdata_t, void *);
-static void cs_isapnp_attach(device_t, device_t, void *);
+int cs_isapnp_match(struct device *, struct cfdata *, void *);
+void cs_isapnp_attach(struct device *, struct device *, void *);
 
-#ifdef notyet
-CFATTACH_DECL_NEW(cs_isapnp, sizeof(struct cs_softc_isa),
+CFATTACH_DECL(cs_isapnp, sizeof(struct cs_softc),
     cs_isapnp_match, cs_isapnp_attach, NULL, NULL);
-#else
-CFATTACH_DECL_NEW(cs_isapnp, sizeof(struct cs_softc),
-    cs_isapnp_match, cs_isapnp_attach, NULL, NULL);
-#endif
 
 int
-cs_isapnp_match(device_t parent, cfdata_t match, void *aux)
+cs_isapnp_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	int pri, variant;
 
@@ -77,20 +78,16 @@ cs_isapnp_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-cs_isapnp_attach(device_t parent, device_t self, void *aux)
+cs_isapnp_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-#ifdef notyet
-	struct cs_softc_isa *isc = device_private(sc);
-	struct cs_softc *sc = &sc->sc_cs;
-#else
 	struct cs_softc *sc = device_private(self);
-#endif
 	struct isapnp_attach_args *ipa = aux;
 #ifdef notyet
+	struct cs_softc_isa *isc = (void *)sc;
 	int i;
 #endif
-
-	sc->sc_dev = self;
 
 	printf("\n");
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.3 2011/06/20 06:35:40 matt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.2 2005/12/11 12:17:50 christos Exp $	*/
 
 /*
  * Copyright (C) 1995-1997 Wolfgang Solfrank.
@@ -30,14 +30,14 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef	_IBMNWS_CPU_H_
-#define	_IBMNWS_CPU_H_
+#ifndef	_MACHINE_CPU_H_
+#define	_MACHINE_CPU_H_
 
-#if defined(_KERNEL) && !defined(_MODULE)
+#if defined(_KERNEL)
 #define	CPU_MAXNUM	1
 extern char *bootpath;
 #endif
 
 #include <powerpc/cpu.h>
 
-#endif	/* _IBMNWS_CPU_H_ */
+#endif	/* _MACHINE_CPU_H_ */

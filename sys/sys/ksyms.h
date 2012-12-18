@@ -1,4 +1,4 @@
-/*	$NetBSD: ksyms.h,v 1.28 2012/11/18 00:06:56 chs Exp $	*/
+/*	$NetBSD: ksyms.h,v 1.17.4.1 2009/03/31 23:23:15 snj Exp $	*/
 
 /*
  * Copyright (c) 2001, 2003 Anders Magnusson (ragge@ludd.luth.se).
@@ -31,7 +31,6 @@
 #define _SYS_KSYMS_H_
 
 #ifdef _KSYMS_PRIVATE
-
 #define	ELFSIZE	ARCH_ELFSIZE
 #include <sys/exec_elf.h>
 #include <sys/queue.h>
@@ -40,18 +39,14 @@ struct ksyms_symtab {
 	TAILQ_ENTRY(ksyms_symtab) sd_queue; /* All active tables */
 	const char *sd_name;	/* Name of this table */
 	Elf_Sym *sd_symstart;	/* Address of symbol table */
-	uintptr_t sd_minsym;	/* symbol with minimum value */
-	uintptr_t sd_maxsym;	/* symbol with maximum value */
+	Elf_Sym *sd_minsym;	/* symbol with minimum value */
+	Elf_Sym *sd_maxsym;	/* symbol with maximum value */
 	char *sd_strstart;	/* Address of corresponding string table */
 	int sd_usroffset;	/* Real address for userspace */
 	int sd_symsize;		/* Size in bytes of symbol table */
 	int sd_strsize;		/* Size of string table */
-	int sd_nglob;		/* Number of global symbols */
 	bool sd_gone;		/* dead but around for open() */
-	void *sd_ctfstart;	/* Address of CTF contents */
-	int sd_ctfsize;		/* Size in bytes of CTF contents */
-	uint32_t *sd_nmap;	/* Name map for sorted symbols */
-	int sd_nmapsize;	/* Total span of map */
+	bool sd_malloc;		/* XXX REMOVE WHEN LKMS GO */
 };
 
 /*
@@ -61,12 +56,10 @@ struct ksyms_symtab {
 #define	SYMTAB		1
 #define	STRTAB		2
 #define	SHSTRTAB	3
-#define	SHBSS		4
-#define	SHCTF		5
-#define NSECHDR		6
+#define NSECHDR		4
 
-#define	NPRGHDR		1
-#define	SHSTRSIZ	42
+#define	NPRGHDR		2
+#define	SHSTRSIZ	32
 
 struct ksyms_hdr {
 	Elf_Ehdr	kh_ehdr;
@@ -94,7 +87,7 @@ struct ksyms_gsymbol {
 #define	KIOCGSIZE	_IOR('l', 3, int)
 
 
-#if defined(_KERNEL) || defined(_KMEMUSER)
+#ifdef _KERNEL
 /*
  * Definitions used in ksyms_getname() and ksyms_getval().
  */
@@ -104,23 +97,17 @@ struct ksyms_gsymbol {
 #define KSYMS_PROC	0100	/* Procedures only */
 #define KSYMS_ANY	0200	/* Also local symbols (DDB use only) */
 
-typedef int (*ksyms_callback_t)(const char *, int, void *,
-	uint32_t, int, void *);
-
 /*
  * Prototypes
  */
-
 int ksyms_getname(const char **, const char **, vaddr_t, int);
 int ksyms_getval(const char *, const char *, unsigned long *, int);
 int ksyms_getval_unlocked(const char *, const char *, unsigned long *, int);
-struct ksyms_symtab *ksyms_get_mod(const char *);
-int ksyms_mod_foreach(const char *mod, ksyms_callback_t, void *);
 int ksyms_addsymtab(const char *, void *, vsize_t, char *, vsize_t);
 int ksyms_delsymtab(const char *);
-void ksyms_init(void);
-void ksyms_addsyms_elf(int, void *, void *);
-void ksyms_addsyms_explicit(void *, void *, size_t, void *, size_t);
+void ksyms_init(int, void *, void *);
+void ksyms_init_explicit(void *, void *, size_t, void *, size_t);
+void ksyms_init_finalize(void);
 int ksyms_sift(char *, char *, int);
 void ksyms_modload(const char *, void *, vsize_t, char *, vsize_t);
 void ksyms_modunload(const char *);

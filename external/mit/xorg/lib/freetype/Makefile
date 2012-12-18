@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.10 2011/07/23 23:38:19 mrg Exp $
+#	$NetBSD: Makefile,v 1.3.2.2 2009/09/17 04:24:31 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -22,9 +22,6 @@ SRCS+=	autofit.c
 .PATH:	${FREETYPE}/src/bdf
 SRCS+=	bdf.c
 
-.PATH:	${FREETYPE}/src/cache
-SRCS+=	ftcache.c
-
 .PATH:	${FREETYPE}/src/cff
 SRCS+=	cff.c
 
@@ -33,9 +30,6 @@ SRCS+=	type1cid.c
 
 .PATH:	${FREETYPE}/src/gzip
 SRCS+=	ftgzip.c
-
-.PATH:	${FREETYPE}/src/bzip2
-SRCS+=	ftbzip2.c
 
 .PATH:	${FREETYPE}/src/lzw
 SRCS+=	ftlzw.c
@@ -89,13 +83,16 @@ CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/freetype2 \
 		-I${DESTDIR}${X11INCDIR}/freetype2/freetype/config \
 		-I${X11SRCDIR.${LIB}}/include
 
-.if !defined(MKSUBPIXEL) || ${MKSUBPIXEL} != "no"
+.if defined(MKSUBPIXEL) && ${MKSUBPIXEL} != "no"
 CPPFLAGS+=	-DFT_CONFIG_OPTION_SUBPIXEL_RENDERING
 .endif
 
+.if defined(MKTTINTERP) && ${MKTTINTERP} != "no"
+CPPFLAGS+=	-DTT_CONFIG_OPTION_BYTECODE_INTERPRETER
+.endif
+
 LIBDPLIBS= \
-	z ${.CURDIR}/../../../../../lib/libz \
-	bz2 ${.CURDIR}/../../../../../lib/libbz2
+	z ${.CURDIR}/../../../../../lib/libz
 
 PKGCONFIG=	freetype2
 PKGDIST.freetype2=	${.CURDIR}

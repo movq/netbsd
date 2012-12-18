@@ -1,4 +1,4 @@
-/*	$NetBSD: rxp.c,v 1.13 2009/08/27 00:31:12 dholland Exp $	*/
+/*	$NetBSD: rxp.c,v 1.12 2004/01/27 20:30:30 jsm Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)rxp.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: rxp.c,v 1.13 2009/08/27 00:31:12 dholland Exp $");
+__RCSID("$NetBSD: rxp.c,v 1.12 2004/01/27 20:30:30 jsm Exp $");
 #endif
 #endif /* not lint */
 
@@ -87,13 +87,16 @@ static char	*rxp__expand(int);
 static int	 rxp__match(const char *, int, Rxp_t *, Rxp_t *, const char *);
 
 int
-rxp_compile(const char *s)
+rxp_compile(s)
+	const char *	s;
 {
 	return (rxp__compile(s, TRUE));
 }
 
 static int
-rxp__compile(const char *s, int first)
+rxp__compile(s, first)
+	const char *s;
+	int first;
 {
 	static Rxp_t *rp;
 	static const char *sp;
@@ -189,17 +192,19 @@ rxp__compile(const char *s, int first)
  * match string against compiled regular expression
  */
 int
-rxp_match(const char *s)
+rxp_match(s)
+	const char *	s;
 {
 	return (rxp__match(s, TRUE, NULL, NULL, NULL));
 }
 
 static int
-rxp__match(const char *s,
-	   int first,
-	   Rxp_t *j_succ,		/* jump here on successful alt match */
-	   Rxp_t *j_fail,		/* jump here on failed match */
-	   const char *sp_fail)		/* reset sp to here on failed match */
+rxp__match(s, first, j_succ, j_fail, sp_fail)
+	const char *s;
+	int first;
+	Rxp_t *j_succ;		/* jump here on successful alt match */
+	Rxp_t *j_fail;		/* jump here on failed match */
+	const char *sp_fail;		/* reset sp to here on failed match */
 {
 	static Rxp_t *rp;
 	static const char *sp;
@@ -257,13 +262,14 @@ rxp__match(const char *s,
  * Reverse engineer the regular expression, by picking first of all alternates.
  */
 char *
-rxp_expand(void)
+rxp_expand()
 {
 	return (rxp__expand(TRUE));
 }
 
 static char *
-rxp__expand(int first)
+rxp__expand(first)
+	int first;
 {
 	static char buf[RXP_LINE_SZ/2];
 	static Rxp_t *rp;

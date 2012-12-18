@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_file64.c,v 1.53 2011/10/14 09:23:28 hannken Exp $	*/
+/*	$NetBSD: linux_file64.c,v 1.48.6.1 2010/03/17 02:59:52 snj Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2000, 2008 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_file64.c,v 1.53 2011/10/14 09:23:28 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_file64.c,v 1.48.6.1 2010/03/17 02:59:52 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -181,7 +181,7 @@ linux_sys_truncate64(struct lwp *l, const struct linux_sys_truncate64_args *uap,
 
 	/* Linux doesn't have the 'pad' pseudo-parameter */
 	SCARG(&ta, path) = SCARG(uap, path);
-	SCARG(&ta, PAD) = 0;
+	SCARG(&ta, pad) = 0;
 	SCARG(&ta, length) = SCARG(uap, length);
 
 	return sys_truncate(l, &ta, retval);
@@ -198,7 +198,7 @@ linux_sys_ftruncate64(struct lwp *l, const struct linux_sys_ftruncate64_args *ua
 
 	/* Linux doesn't have the 'pad' pseudo-parameter */
 	SCARG(&ta, fd) = SCARG(uap, fd);
-	SCARG(&ta, PAD) = 0;
+	SCARG(&ta, pad) = 0;
 	SCARG(&ta, length) = SCARG(uap, length);
 
 	return sys_ftruncate(l, &ta, retval);
@@ -254,14 +254,11 @@ linux_sys_getdents64(struct lwp *l, const struct linux_sys_getdents64_args *uap,
 
 	vp = (struct vnode *)fp->f_data;
 	if (vp->v_type != VDIR) {
-		error = ENOTDIR;
+		error = EINVAL;
 		goto out1;
 	}
 
-	vn_lock(vp, LK_SHARED | LK_RETRY);
-	error = VOP_GETATTR(vp, &va, l->l_cred);
-	VOP_UNLOCK(vp);
-	if (error)
+	if ((error = VOP_GETATTR(vp, &va, l->l_cred)))
 		goto out1;
 
 	nbytes = SCARG(uap, count);
@@ -350,7 +347,7 @@ again:
 eof:
 	*retval = nbytes - resid;
 out:
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(tbuf, M_TEMP);

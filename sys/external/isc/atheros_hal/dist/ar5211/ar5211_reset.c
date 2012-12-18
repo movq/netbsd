@@ -14,7 +14,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ar5211_reset.c,v 1.4 2011/03/07 11:25:42 cegger Exp $
+ * $Id: ar5211_reset.c,v 1.3.10.2 2009/08/07 06:43:38 snj Exp $
  */
 #include "opt_ah.h"
 
@@ -552,7 +552,7 @@ uint32_t softLedCfg, softLedState;
 
 	return AH_TRUE;
 bad:
-	if (status != AH_NULL)
+	if (*status)
 		*status = ecode;
 	return AH_FALSE;
 #undef FAIL

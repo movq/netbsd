@@ -1,4 +1,4 @@
-/*	$NetBSD: inet6.c,v 1.59 2011/05/24 18:07:11 spz Exp $	*/
+/*	$NetBSD: inet6.c,v 1.50.6.1 2009/03/26 17:14:41 snj Exp $	*/
 /*	BSDI inet.c,v 2.3 1995/10/24 02:19:29 prb Exp	*/
 
 /*
@@ -64,7 +64,7 @@
 #if 0
 static char sccsid[] = "@(#)inet.c	8.4 (Berkeley) 4/20/94";
 #else
-__RCSID("$NetBSD: inet6.c,v 1.59 2011/05/24 18:07:11 spz Exp $");
+__RCSID("$NetBSD: inet6.c,v 1.50.6.1 2009/03/26 17:14:41 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -114,7 +114,6 @@ extern const char * const tcpstates[];
 #include <netinet6/udp6_var.h>
 #include <netinet6/pim6_var.h>
 #include <netinet6/raw_ip6.h>
-#include <netinet/tcp_vtw.h>
 
 #include <arpa/inet.h>
 #if 0
@@ -130,8 +129,6 @@ extern const char * const tcpstates[];
 #include <string.h>
 #include <unistd.h>
 #include "netstat.h"
-#include "vtw.h"
-#include "prog_ops.h"
 
 #ifdef INET6
 
@@ -143,9 +140,8 @@ struct	tcpcb tcpcb;
 #endif
 struct	socket sockb;
 
-char	*inet6name(const struct in6_addr *);
-void	inet6print(const struct in6_addr *, int, const char *);
-void	print_vtw_v6(const vtw_t *);
+char	*inet6name(struct in6_addr *);
+void	inet6print(struct in6_addr *, int, char *);
 
 /*
  * Print a summary of connections related to an Internet
@@ -155,9 +151,6 @@ void	print_vtw_v6(const vtw_t *);
  */
 static int width;
 static int compact;
-
-/* VTW-related variables. */
-static struct timeval now;
 
 static void
 ip6protoprhdr(void)
@@ -173,21 +166,20 @@ ip6protoprhdr(void)
 		printf("%-8.8s ", "PCB");
 		width = 18;
 	}
-	printf(
-	    Vflag ? "%-5.5s %-6.6s %-6.6s  %*.*s %*.*s %-13.13s Expires\n"
-	          : "%-5.5s %-6.6s %-6.6s  %*.*s %*.*s %s\n",
+	printf( "%-5.5s %-6.6s %-6.6s  %*.*s %*.*s %s\n",
 	    "Proto", "Recv-Q", "Send-Q",
 	    -width, width, "Local Address",
-	    -width, width, "Foreign Address", "(state)");
+	    -width, width, "Foreign Address",
+	    "(state)");
 }
 
 static void
 ip6protopr0(intptr_t ppcb, u_long rcv_sb_cc, u_long snd_sb_cc,
-	const struct in6_addr *laddr, u_int16_t lport,
-	const struct in6_addr *faddr, u_int16_t fport,
-	short t_state, const char *name, const struct timeval *expires)
+	struct in6_addr *laddr, u_int16_t lport,
+	struct in6_addr *faddr, u_int16_t fport,
+	short t_state, char *name)
 {
-	static const char *shorttcpstates[] = {
+	static char *shorttcpstates[] = {
 		"CLOSED",       "LISTEN",       "SYNSEN",       "SYSRCV",
 		"ESTABL",       "CLWAIT",       "FWAIT1",       "CLOSNG",
 		"LASTAK",       "FWAIT2",       "TMWAIT",
@@ -217,70 +209,17 @@ ip6protopr0(intptr_t ppcb, u_long rcv_sb_cc, u_long snd_sb_cc,
 			    tcpstates[t_state]);
 #endif
 	}
-	if (Vflag && expires != NULL) {
-		if (expires->tv_sec == 0 && expires->tv_usec == -1)
-			printf(" reclaimed");
-		else {
-			struct timeval delta;
-
-			timersub(expires, &now, &delta);
-			printf(" %.3fms",
-			    delta.tv_sec * 1000.0 + delta.tv_usec / 1000.0);
-		}
-	}
 	putchar('\n');
+	
 }
 
-static void
-dbg_printf(const char *fmt, ...)
-{
-	return;
-}
-
-void 
-print_vtw_v6(const vtw_t *vtw)
-{
-	const vtw_v6_t *v6 = (const vtw_v6_t *)vtw;
-	struct timeval delta;
-	char buf[2][128];
-	static const struct timeval zero = {.tv_sec = 0, .tv_usec = 0};
-
-	inet_ntop(AF_INET6, &v6->laddr, buf[0], sizeof(buf[0]));
-	inet_ntop(AF_INET6, &v6->faddr, buf[1], sizeof(buf[1]));
-
-	timersub(&vtw->expire, &now, &delta);
-
-	if (vtw->expire.tv_sec == 0 && vtw->expire.tv_usec == -1) {
-		dbg_printf("%15.15s:%d %15.15s:%d reclaimed\n"
-		    ,buf[0], ntohs(v6->lport)
-		    ,buf[1], ntohs(v6->fport));
-		if (!(Vflag && vflag))
-			return;
-	} else if (vtw->expire.tv_sec == 0)
-		return;
-	else if (timercmp(&delta, &zero, <) && !(Vflag && vflag)) {
-		dbg_printf("%15.15s:%d %15.15s:%d expired\n"
-		    ,buf[0], ntohs(v6->lport)
-		    ,buf[1], ntohs(v6->fport));
-		return;
-	} else {
-		dbg_printf("%15.15s:%d %15.15s:%d expires in %.3fms\n"
-		    ,buf[0], ntohs(v6->lport)
-		    ,buf[1], ntohs(v6->fport)
-		    ,delta.tv_sec * 1000.0 + delta.tv_usec / 1000.0);
-	}
-	ip6protopr0(0, 0, 0,
-		 &v6->laddr, v6->lport,
-		 &v6->faddr, v6->fport,
-		 TCPS_TIME_WAIT, "tcp6", &vtw->expire);
-}
 
 void
-ip6protopr(u_long off, const char *name)
+ip6protopr(u_long off, char *name)
 {
 	struct inpcbtable table;
 	struct in6pcb *head, *prev, *next;
-	int istcp = strcmp(name, "tcp6") == 0;
+	int istcp;
 	static int first = 1;
 
 	compact = 0;
@@ -313,8 +252,8 @@ ip6protopr(u_long off, const char *name)
 			err(1, "sysctlnametomib: %s", mibname);
 		}
 
-		if (prog_sysctl(mib, __arraycount(mib),
-		    NULL, &size, NULL, 0) == -1)
+		if (sysctl(mib, sizeof(mib) / sizeof(*mib), NULL, &size,
+		    NULL, 0) == -1)
 			err(1, "sysctl (query)");
 		
 		if ((pcblist = malloc(size)) == NULL)
@@ -324,7 +263,7 @@ ip6protopr(u_long off, const char *name)
 		mib[6] = sizeof(*pcblist);
 		mib[7] = size / sizeof(*pcblist);
 
-		if (prog_sysctl(mib, __arraycount(mib), pcblist,
+		if (sysctl(mib, sizeof(mib) / sizeof(*mib), pcblist,
 		    &size, NULL, 0) == -1)
 			err(1, "sysctl (copy)");
 
@@ -346,15 +285,16 @@ ip6protopr(u_long off, const char *name)
 			    pcblist[i].ki_rcvq, pcblist[i].ki_sndq,
 			    &src.sin6_addr, src.sin6_port,
 			    &dst.sin6_addr, dst.sin6_port,
-			    pcblist[i].ki_tstate, name, NULL);
+			    pcblist[i].ki_tstate, name);
 		}
 
 		free(pcblist);
-		goto end;
+		return;
 	}
 
 	if (off == 0)
 		return;
+	istcp = strcmp(name, "tcp6") == 0;
 	kread(off, (char *)&table, sizeof (table));
 	head = prev =
 	    (struct in6pcb *)&((struct inpcbtable *)off)->inpt_queue.cqh_first;
@@ -393,16 +333,8 @@ ip6protopr(u_long off, const char *name)
 		    (intptr_t) prev, sockb.so_rcv.sb_cc, sockb.so_snd.sb_cc,
 		    &in6pcb.in6p_laddr, in6pcb.in6p_lport,
 		    &in6pcb.in6p_faddr, in6pcb.in6p_fport,
-		    tcpcb.t_state, name, NULL);
+		    tcpcb.t_state, name);
 		
-	}
-end:
-	if (istcp) {
-		struct timeval t;
-		timebase(&t);
-		gettimeofday(&now, NULL);
-		timersub(&now, &t, &now);
-		show_vtw_v6(print_vtw_v6);
 	}
 }
 
@@ -411,7 +343,7 @@ end:
  * Dump TCP6 statistics structure.
  */
 void
-tcp6_stats(u_long off, const char *name)
+tcp6_stats(u_long off, char *name)
 {
 	struct tcp6stat tcp6stat;
 
@@ -496,7 +428,7 @@ tcp6_stats(u_long off, const char *name)
  * Dump UDP6 statistics structure.
  */
 void
-udp6_stats(u_long off, const char *name)
+udp6_stats(u_long off, char *name)
 {
 	uint64_t udp6stat[UDP6_NSTATS];
 	u_quad_t delivered;
@@ -638,7 +570,7 @@ static	const char *ip6nh[] = {
  * Dump IP6 statistics structure.
  */
 void
-ip6_stats(u_long off, const char *name)
+ip6_stats(u_long off, char *name)
 {
 	uint64_t ip6stat[IP6_NSTATS];
 	int first, i;
@@ -808,7 +740,7 @@ ip6_stats(u_long off, const char *name)
  * Dump IPv6 per-interface statistics based on RFC 2465.
  */
 void
-ip6_ifstats(const char *ifname)
+ip6_ifstats(char *ifname)
 {
 	struct in6_ifreq ifr;
 	int s;
@@ -1124,10 +1056,10 @@ static	const char *icmp6names[] = {
  * Dump ICMPv6 statistics.
  */
 void
-icmp6_stats(u_long off, const char *name)
+icmp6_stats(u_long off, char *name)
 {
 	uint64_t icmp6stat[ICMP6_NSTATS];
-	int i, first;
+	register int i, first;
 
 	if (use_sysctl) {
 		size_t size = sizeof(icmp6stat);
@@ -1196,7 +1128,6 @@ icmp6_stats(u_long off, const char *name)
 	p(ICMP6_STAT_BADNA, "\t%llu bad neighbor advertisement message%s\n");
 	p(ICMP6_STAT_BADRS, "\t%llu bad router solicitation message%s\n");
 	p(ICMP6_STAT_BADRA, "\t%llu bad router advertisement message%s\n");
-	p(ICMP6_STAT_DROPPED_RAROUTE, "\t%llu router advertisement route%s dropped\n");
 	p(ICMP6_STAT_BADREDIRECT, "\t%llu bad redirect message%s\n");
 	p(ICMP6_STAT_PMTUCHG, "\t%llu path MTU change%s\n");
 #undef p
@@ -1207,7 +1138,7 @@ icmp6_stats(u_long off, const char *name)
  * Dump ICMPv6 per-interface statistics based on RFC 2466.
  */
 void
-icmp6_ifstats(const char *ifname)
+icmp6_ifstats(char *ifname)
 {
 	struct in6_ifreq ifr;
 	int s;
@@ -1273,7 +1204,7 @@ icmp6_ifstats(const char *ifname)
  * Dump PIM statistics structure.
  */
 void
-pim6_stats(u_long off, const char *name)
+pim6_stats(u_long off, char *name)
 {
 	uint64_t pim6stat[PIM6_NSTATS];
 
@@ -1305,7 +1236,7 @@ pim6_stats(u_long off, const char *name)
  * Dump raw ip6 statistics structure.
  */
 void
-rip6_stats(u_long off, const char *name)
+rip6_stats(u_long off, char *name)
 {
 	uint64_t rip6stat[RIP6_NSTATS];
 	u_quad_t delivered;
@@ -1348,7 +1279,7 @@ rip6_stats(u_long off, const char *name)
  * Take numeric_addr and numeric_port into consideration.
  */
 void
-inet6print(const struct in6_addr *in6, int port, const char *proto)
+inet6print(struct in6_addr *in6, int port, char *proto)
 {
 #define GETSERVBYPORT6(port, proto, ret)\
 do {\
@@ -1361,12 +1292,12 @@ do {\
 } while (0)
 	struct servent *sp = 0;
 	char line[80], *cp;
-	int lwidth;
+	int width;
 
-	lwidth = Aflag ? 12 : 16;
-	if (vflag && lwidth < (int)strlen(inet6name(in6)))
-		lwidth = strlen(inet6name(in6));
-	snprintf(line, sizeof(line), "%.*s.", lwidth, inet6name(in6));
+	width = Aflag ? 12 : 16;
+	if (vflag && width < strlen(inet6name(in6)))
+		width = strlen(inet6name(in6));
+	snprintf(line, sizeof(line), "%.*s.", width, inet6name(in6));
 	cp = strchr(line, '\0');
 	if (!numeric_port && port)
 		GETSERVBYPORT6(port, proto, sp);
@@ -1376,10 +1307,10 @@ do {\
 	else
 		snprintf(cp, sizeof(line) - (cp - line),
 		    "%d", ntohs((u_short)port));
-	lwidth = Aflag ? 18 : 22;
-	if (vflag && lwidth < (int)strlen(line))
-		lwidth = strlen(line);
-	printf(" %-*.*s", lwidth, lwidth, line);
+	width = Aflag ? 18 : 22;
+	if (vflag && width < strlen(line))
+		width = strlen(line);
+	printf(" %-*.*s", width, width, line);
 }
 
 /*
@@ -1389,9 +1320,9 @@ do {\
  */
 
 char *
-inet6name(const struct in6_addr *in6p)
+inet6name(struct in6_addr *in6p)
 {
-	char *cp;
+	register char *cp;
 	static char line[NI_MAXHOST];
 	struct hostent *hp;
 	static char domain[MAXHOSTNAMELEN + 1];
@@ -1410,7 +1341,7 @@ inet6name(const struct in6_addr *in6p)
 	}
 	cp = 0;
 	if (!numeric_addr && !IN6_IS_ADDR_UNSPECIFIED(in6p)) {
-		hp = gethostbyaddr((const char *)in6p, sizeof(*in6p), AF_INET6);
+		hp = gethostbyaddr((char *)in6p, sizeof(*in6p), AF_INET6);
 		if (hp) {
 			if ((cp = strchr(hp->h_name, '.')) &&
 			    !strcmp(cp + 1, domain))
@@ -1431,7 +1362,7 @@ inet6name(const struct in6_addr *in6p)
 		if (IN6_IS_ADDR_LINKLOCAL(in6p) ||
 		    IN6_IS_ADDR_MC_LINKLOCAL(in6p)) {
 			sin6.sin6_scope_id =
-			    ntohs(*(const u_int16_t *)&in6p->s6_addr[2]);
+			    ntohs(*(u_int16_t *)&in6p->s6_addr[2]);
 			sin6.sin6_addr.s6_addr[2] = 0;
 			sin6.sin6_addr.s6_addr[3] = 0;
 		}

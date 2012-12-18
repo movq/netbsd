@@ -1,4 +1,4 @@
-/*	$NetBSD: mkboot.c,v 1.8 2012/02/24 18:45:20 skrll Exp $	*/
+/*	$NetBSD: mkboot.c,v 1.6 2005/12/11 12:17:25 christos Exp $	*/
 
 /*	$OpenBSD: mkboot.c,v 1.9 2001/05/17 00:57:55 pvalchev Exp $	*/
 
@@ -101,7 +101,7 @@ struct exec {
 
 #define N_GETMAGIC(ex) \
     ((((ex).a_midmag)&0xffff0000) ? \
-    (ntohl((uint32_t)((ex).a_midmag))&0xffff) : ((ex).a_midmag))
+    (ntohl((u_int32_t)((ex).a_midmag))&0xffff) : ((ex).a_midmag))
 
 #include <stdio.h>
 #include <ctype.h>
@@ -161,7 +161,7 @@ main(int argc, char **argv)
 	if ((to = open(to_file, O_RDWR | O_TRUNC | O_CREAT, 0644)) < 0)
 		err(1, "%s: open", to_file);
 
-	memset(buf, 0, sizeof(buf));
+	bzero(buf, sizeof(buf));
 
 	/* record volume info */
 	lifv->vol_id = htobe16(HP700_LIF_VOL_ID);
@@ -320,7 +320,7 @@ putfile(char *from_file, int to)
 		err(1, "%s", to_file);
 	lseek(to, total - sizeof(load), SEEK_CUR);
 
-	memset(buf, 0, sizeof(buf));
+	bzero(buf, sizeof(buf));
 	/* pad to int */
 	n = sizeof(int) - total % sizeof(int);
 	if (total % sizeof(int)) {

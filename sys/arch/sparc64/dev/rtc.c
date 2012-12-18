@@ -1,4 +1,4 @@
-/*	$NetBSD: rtc.c,v 1.8 2011/07/01 18:48:37 dyoung Exp $	*/
+/*	$NetBSD: rtc.c,v 1.5 2008/03/29 05:42:46 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.8 2011/07/01 18:48:37 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.5 2008/03/29 05:42:46 tsutsui Exp $");
 
 /*
  * Clock driver for 'rtc' - mc146818 driver.
@@ -67,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.8 2011/07/01 18:48:37 dyoung Exp $");
 #include <sys/device.h>
 #include <sys/proc.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/autoconf.h>
 
 #include <dev/clock_subr.h>
@@ -144,7 +144,8 @@ rtc_ebus_attach(device_t parent, device_t self, void *aux)
 
 	if (bus_space_map(sc->sc_bst,
 			 EBUS_ADDR_FROM_REG(&ea->ea_reg[0]),
-			 sz, 0,
+			 sz,
+			 BUS_SPACE_MAP_LINEAR,
 			 &sc->sc_bsh) != 0) {
 		aprint_error(": can't map register\n");
 		return;
@@ -166,7 +167,6 @@ rtc_ebus_attach(device_t parent, device_t self, void *aux)
 	mc146818_attach(sc);
 
 	aprint_normal(": %s\n", model);
-	aprint_naive(": Clock\n");
 
 	/*
 	 * Turn interrupts off, just in case. (Although they shouldn't

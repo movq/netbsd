@@ -1,4 +1,4 @@
-/*	$NetBSD: timer_msiiep.c,v 1.27 2012/07/31 16:38:37 martin Exp $	*/
+/*	$NetBSD: timer_msiiep.c,v 1.23 2007/12/03 15:34:22 ad Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer_msiiep.c,v 1.27 2012/07/31 16:38:37 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer_msiiep.c,v 1.23 2007/12/03 15:34:22 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -74,10 +74,10 @@ __KERNEL_RCSID(0, "$NetBSD: timer_msiiep.c,v 1.27 2012/07/31 16:38:37 martin Exp
 #include <sparc/sparc/timervar.h>
 
 
-static int	timermatch_msiiep(device_t, cfdata_t, void *);
-static void	timerattach_msiiep(device_t, device_t, void *);
+static int	timermatch_msiiep(struct device *, struct cfdata *, void *);
+static void	timerattach_msiiep(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(timer_msiiep, 0,
+CFATTACH_DECL(timer_msiiep, sizeof(struct device),
     timermatch_msiiep, timerattach_msiiep, NULL, NULL);
 
 
@@ -86,7 +86,6 @@ static int	clockintr_msiiep(void *);
 static int	statintr_msiiep(void *);
 static u_int	timer_get_timecount(struct timecounter *);
 
-void*	sched_cookie;
 
 static struct intrhand level10 = { .ih_fun = clockintr_msiiep };
 static struct intrhand level14 = { .ih_fun = statintr_msiiep  };
@@ -121,7 +120,7 @@ static struct timecounter counter_timecounter = {
 
 
 static int
-timermatch_msiiep(device_t parent, cfdata_t cf, void *aux)
+timermatch_msiiep(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct msiiep_attach_args *msa = aux;
 
@@ -135,7 +134,7 @@ timermatch_msiiep(device_t parent, cfdata_t cf, void *aux)
  * node for them.
  */
 static void
-timerattach_msiiep(device_t parent, device_t self, void *aux)
+timerattach_msiiep(struct device *parent, struct device *self, void *aux)
 {
 
 	/* Put processor counter in "counter" mode */
@@ -176,8 +175,8 @@ timerattach_msiiep(device_t parent, device_t self, void *aux)
 	mspcic_write_1(pcic_cipar, 0xae);
 
 	/* link interrupt handlers */
-	intr_establish(10, 0, &level10, NULL, false);
-	intr_establish(14, 0, &level14, NULL, false);
+	intr_establish(10, 0, &level10, NULL);
+	intr_establish(14, 0, &level14, NULL);
 
 	/* Establish a soft interrupt at a lower level for schedclock */
 	sched_cookie = sparc_softintr_establish(IPL_SCHED, schedintr, NULL);
@@ -290,7 +289,7 @@ statintr_msiiep(void *cap)
 	 * The factor 8 is only valid for stathz==100.
 	 * See also clock.c
 	 */
-	if ((++cpuinfo.ci_schedstate.spc_schedticks & 7) == 0) {
+	if (curlwp && (++cpuinfo.ci_schedstate.spc_schedticks & 7) == 0) {
 		if (CLKF_LOPRI(frame, IPL_SCHED)) {
 			/* No need to schedule a soft interrupt */
 			spllowerschedclock();

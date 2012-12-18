@@ -1,4 +1,4 @@
-/* $NetBSD: vfs_getcwd.c,v 1.48 2012/11/05 17:24:11 dholland Exp $ */
+/* $NetBSD: vfs_getcwd.c,v 1.42 2008/04/28 20:24:05 martin Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_getcwd.c,v 1.48 2012/11/05 17:24:11 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_getcwd.c,v 1.42 2008/04/28 20:24:05 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_getcwd.c,v 1.48 2012/11/05 17:24:11 dholland Exp
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/uio.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/dirent.h>
 #include <sys/kauth.h>
 
@@ -128,8 +128,10 @@ getcwd_scandir(struct vnode **lvpp, struct vnode **uvpp, char **bpp,
 	cn.cn_nameiop = LOOKUP;
 	cn.cn_flags = ISLASTCN | ISDOTDOT | RDONLY;
 	cn.cn_cred = cred;
+	cn.cn_pnbuf = NULL;
 	cn.cn_nameptr = "..";
 	cn.cn_namelen = 2;
+	cn.cn_hash = 0;
 	cn.cn_consume = 0;
 
 	/*
@@ -156,7 +158,7 @@ getcwd_scandir(struct vnode **lvpp, struct vnode **uvpp, char **bpp,
 	dirbuflen = DIRBLKSIZ;
 	if (dirbuflen < va.va_blocksize)
 		dirbuflen = va.va_blocksize;
-	dirbuf = kmem_alloc(dirbuflen, KM_SLEEP);
+	dirbuf = (char *)malloc(dirbuflen, M_TEMP, M_WAITOK);
 
 #if 0
 unionread:
@@ -246,7 +248,7 @@ unionread:
 
 		uvp = uvp->v_mount->mnt_vnodecovered;
 		vput(tvp);
-		vref(uvp);
+		VREF(uvp);
 		*uvpp = uvp;
 		vn_lock(uvp, LK_EXCLUSIVE | LK_RETRY);
 		goto unionread;
@@ -256,7 +258,7 @@ unionread:
 
 out:
 	*lvpp = NULL;
-	kmem_free(dirbuf, dirbuflen);
+	free(dirbuf, M_TEMP);
 	return error;
 }
 
@@ -279,6 +281,7 @@ getcwd_getcache(struct vnode **lvpp, struct vnode **uvpp, char **bpp,
     char *bufp)
 {
 	struct vnode *lvp, *uvp = NULL;
+	char *obp = *bpp;
 	int error;
 
 	lvp = *lvpp;
@@ -303,8 +306,25 @@ getcwd_getcache(struct vnode **lvpp, struct vnode **uvpp, char **bpp,
 	 * before we take the parent lock.
 	 */
 
-	VOP_UNLOCK(lvp);
-	vn_lock(uvp, LK_EXCLUSIVE | LK_RETRY);
+	VOP_UNLOCK(lvp, 0);
+	error = vget(uvp, LK_EXCLUSIVE | LK_RETRY);
+
+	/*
+	 * Verify that vget succeeded while we were waiting for the
+	 * lock.
+	 */
+	if (error) {
+
+		/*
+		 * Oops, we missed.  If the vget failed, get our lock back
+		 * then rewind the `bp' and tell the caller to try things
+		 * the hard way.
+		 */
+		*uvpp = NULL;
+		vn_lock(lvp, LK_EXCLUSIVE | LK_RETRY);
+		*bpp = obp;
+		return -1;
+	}
 	vrele(lvp);
 	*lvpp = NULL;
 
@@ -333,8 +353,8 @@ getcwd_common(struct vnode *lvp, struct vnode *rvp, char **bpp, char *bufp,
 			rvp = rootvnode;
 	}
 
-	vref(rvp);
-	vref(lvp);
+	VREF(rvp);
+	VREF(lvp);
 
 	/*
 	 * Error handling invariant:
@@ -389,7 +409,7 @@ getcwd_common(struct vnode *lvp, struct vnode *rvp, char **bpp, char *bufp,
 				error = ENOENT;
 				goto out;
 			}
-			vref(lvp);
+			VREF(lvp);
 			error = vn_lock(lvp, LK_EXCLUSIVE | LK_RETRY);
 			if (error != 0) {
 				vrele(lvp);
@@ -504,7 +524,7 @@ sys___getcwd(struct lwp *l, const struct sys___getcwd_args *uap, register_t *ret
 	else if (len < 2)
 		return ERANGE;
 
-	path = kmem_alloc(len, KM_SLEEP);
+	path = (char *)malloc(len, M_TEMP, M_WAITOK);
 	if (!path)
 		return ENOMEM;
 
@@ -531,15 +551,14 @@ sys___getcwd(struct lwp *l, const struct sys___getcwd_args *uap, register_t *ret
 	error = copyout(bp, SCARG(uap, bufp), lenused);
 
 out:
-	kmem_free(path, len);
+	free(path, M_TEMP);
 	return error;
 }
 
 /*
  * Try to find a pathname for a vnode. Since there is no mapping
  * vnode -> parent directory, this needs the NAMECACHE_ENTER_REVERSE
- * option to work (to make cache_revlookup succeed). Caller holds a
- * reference to the vnode.
+ * option to work (to make cache_revlookup succeed).
  */
 int
 vnode_to_path(char *path, size_t len, struct vnode *vp, struct lwp *curl,
@@ -550,23 +569,23 @@ vnode_to_path(char *path, size_t len, struct vnode *vp, struct lwp *curl,
 	char *bp, *bend;
 	struct vnode *dvp;
 
-	KASSERT(vp->v_usecount > 0);
-
 	bp = bend = &path[len];
 	*(--bp) = '\0';
 
-	error = vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	error = vget(vp, LK_EXCLUSIVE | LK_RETRY);
 	if (error != 0)
 		return error;
 	error = cache_revlookup(vp, &dvp, &bp, path);
-	VOP_UNLOCK(vp);
+	vput(vp);
 	if (error != 0)
 		return (error == -1 ? ENOENT : error);
 
+	error = vget(dvp, 0);
+	if (error != 0)
+		return error;
 	*(--bp) = '/';
-	error = getcwd_common(dvp, NULL, &bp, path, len / 2,
-	    GETCWD_CHECK_ACCESS, curl);
-	vrele(dvp);
+	/* XXX GETCWD_CHECK_ACCESS == 0x0001 */
+	error = getcwd_common(dvp, NULL, &bp, path, len / 2, 1, curl);
 
 	/*
 	 * Strip off emulation path for emulated processes looking at

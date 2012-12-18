@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ni.c,v 1.9 2011/07/03 08:56:25 mrg Exp $ */
+/*	$NetBSD: if_ni.c,v 1.4 2007/03/04 06:00:56 christos Exp $ */
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -92,7 +92,7 @@
 #define DELAY(x)	{volatile int i = x * 3;while (--i);}
 #define WAITREG(csr,val) while (NI_RREG(csr) & val);
 
-static int ni_get(struct iodesc *, void *, size_t, saseconds_t);
+static int ni_get(struct iodesc *, void *, size_t, time_t);
 static int ni_put(struct iodesc *, void *, size_t);
 
 static int *syspte, allocbase, niaddr;
@@ -194,7 +194,6 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 	struct ni_msg *msg;
 	struct ni_ptdb *ptdb;
 	int i, va, res;
-	struct ni_param *nip;
 
 	if (beenhere++ && askname == 0)
 		return 0;
@@ -369,8 +368,7 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 	msg->nm_status = 0;
 	msg->nm_len = sizeof(struct ni_param) + 6;
 	msg->nm_opcode2 = NI_WPARAM;
-	nip = (struct ni_param *)&msg->nm_text[0];
-	nip->np_flags = NP_PAD;
+	((struct ni_param *)&msg->nm_text[0])->np_flags = NP_PAD;
 
 	puton(msg, &gvp->nc_forw0, PCR_CMDQNE|PCR_CMDQ0|PCR_OWN);
 
@@ -385,7 +383,8 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 		insput(data, &fqb->nf_mforw, PCR_FREEQNE|PCR_MFREEQ|PCR_OWN);
 	}
 #endif
-	bcopy(nip->np_dpa, enaddr, ETHER_ADDR_LEN);
+	bcopy(((struct ni_param *)&msg->nm_text[0])->np_dpa,
+	    enaddr, ETHER_ADDR_LEN);
 	insput(data, &fqb->nf_mforw, PCR_FREEQNE|PCR_MFREEQ|PCR_OWN);
 
 #ifdef NIDEBUG
@@ -414,7 +413,7 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 	msg->nm_len = 18;
 	msg->nm_opcode2 = NI_STPTDB;
 	ptdb = (struct ni_ptdb *)&msg->nm_text[0];
-	memset(ptdb, 0, sizeof(struct ni_ptdb));
+	bzero(ptdb, sizeof(struct ni_ptdb));
 	ptdb->np_index = 1;
 	ptdb->np_fque = 1;
 
@@ -427,7 +426,7 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 #endif
 	msg = REMQHI(&fqb->nf_mforw);
 	ptdb = (struct ni_ptdb *)&msg->nm_text[0];
-	memset(ptdb, 0, sizeof(struct ni_ptdb));
+	bzero(ptdb, sizeof(struct ni_ptdb));
 	msg->nm_opcode = BVP_MSG;
 	msg->nm_len = 18;
 	ptdb->np_index = 2;
@@ -450,19 +449,17 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 }
 
 int
-ni_get(struct iodesc *desc, void *pkt, size_t maxlen, saseconds_t timeout)
+ni_get(struct iodesc *desc, void *pkt, size_t maxlen, time_t timeout)
 {
 	struct ni_dg *data;
 	struct ni_bbd *bd;
-	satime_t nsec = getsecs();
+	int nsec = getsecs() + timeout;
 	int len, idx;
 
-loop:
-	while ((data = REMQHI(&gvp->nc_forwr)) == 0 &&
-	    ((getsecs() - nsec) < timeout))
+loop:	while ((data = REMQHI(&gvp->nc_forwr)) == 0 && (nsec > getsecs()))
 		;
 
-	if ((getsecs() - nsec) >= timeout)
+	if (nsec <= getsecs())
 		return 0;
 
 	switch (data->nd_opcode) {
@@ -472,7 +469,7 @@ loop:
 		len = data->bufs[0]._len;
 		if (len > maxlen)
 			len = maxlen;
-		memcpy(pkt, (void *)data->nd_cmdref, len);
+		bcopy((void *)data->nd_cmdref, pkt, len);
 		bd->nb_pte = (int)&syspte[data->nd_cmdref>>9];
 		data->bufs[0]._len = bd->nb_len = 2048;
 		data->bufs[0]._offset = 0;
@@ -513,7 +510,7 @@ ni_put(struct iodesc *desc, void *pkt, size_t len)
 	bdp = &bbd[(data->bufs[0]._index & 0x7fff)];
 	bdp->nb_status = NIBD_VALID;
 	bdp->nb_len = (len < 64 ? 64 : len);
-	memcpy((void *)data->nd_cmdref, pkt, len);
+	bcopy(pkt, (void *)data->nd_cmdref, len);
 	data->bufs[0]._offset = 0;
 	data->bufs[0]._len = bdp->nb_len;
 	data->nd_opcode = BVP_DGRAM;

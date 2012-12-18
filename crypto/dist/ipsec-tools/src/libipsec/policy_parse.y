@@ -1,4 +1,4 @@
-/*	$NetBSD: policy_parse.y,v 1.11 2009/02/16 18:36:21 tteras Exp $	*/
+/*	$NetBSD: policy_parse.y,v 1.10.18.1 2009/02/08 18:42:15 snj Exp $	*/
 
 /*	$KAME: policy_parse.y,v 1.21 2003/12/12 08:01:26 itojun Exp $	*/
 
@@ -164,11 +164,28 @@ policy_spec
 		rules
 	|	DIR PRIORITY PRIO_OFFSET ACTION
 		{
+			char *offset_buf;
+
 			p_dir = $1;
 			p_type = $4;
-			p_priority_offset = -atol($3.buf);
+
+			/* buffer big enough to hold a prepended negative sign */
+			offset_buf = malloc($3.len + 2);
+			if (offset_buf == NULL) 
+			{
+				__ipsec_errcode = EIPSEC_NO_BUFS;
+				return -1;
+			}
+
+			/* positive input value means higher priority, therefore lower
+			   actual value so that is closer to the beginning of the list */
+			sprintf (offset_buf, "-%s", $3.buf);
 
 			errno = 0;
+			p_priority_offset = atol(offset_buf);
+
+			free(offset_buf);
+
 			if (errno != 0 || p_priority_offset < INT32_MIN)
 			{
 				__ipsec_errcode = EIPSEC_INVAL_PRIORITY_OFFSET;

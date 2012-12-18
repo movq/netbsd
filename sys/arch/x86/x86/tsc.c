@@ -1,4 +1,4 @@
-/*	$NetBSD: tsc.c,v 1.30 2011/08/08 17:00:23 jmcneill Exp $	*/
+/*	$NetBSD: tsc.c,v 1.20.4.4 2009/02/02 19:41:50 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.30 2011/08/08 17:00:23 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.20.4.4 2009/02/02 19:41:50 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,9 +48,9 @@ __KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.30 2011/08/08 17:00:23 jmcneill Exp $");
 
 u_int	tsc_get_timecount(struct timecounter *);
 
-uint64_t	tsc_freq; /* exported for sysctl */
-static int64_t	tsc_drift_max = 250;	/* max cycles */
-static int64_t	tsc_drift_observed;
+uint64_t	tsc_freq;
+int64_t		tsc_drift_max = 250;	/* max cycles */
+int64_t		tsc_drift_observed;
 
 static volatile int64_t	tsc_sync_val;
 static volatile struct cpu_info	*tsc_sync_cpu;
@@ -69,7 +69,7 @@ tsc_tc_init(void)
 	uint32_t descs[4];
 	bool safe;
 
-	if (!cpu_hascounter()) {
+	if ((cpu_feature & CPUID_TSC) == 0) {
 		return;
 	}
 
@@ -128,7 +128,7 @@ tsc_tc_init(void)
 		case 0x0f:
 			/* Check for "invariant TSC", bit 8 of %edx. */
 			x86_cpuid(0x80000007, descs);
-			safe = (descs[3] & CPUID_APM_TSC) != 0;
+			safe = (descs[3] & (1 << 8)) != 0;
 			break;
 		}
 	}
@@ -166,10 +166,10 @@ tsc_sync_drift(int64_t drift)
  * Called during startup of APs, by the boot processor.  Interrupts
  * are disabled on entry.
  */
-static void
-tsc_read_bp(struct cpu_info *ci, uint64_t *bptscp, uint64_t *aptscp)
+void
+tsc_sync_bp(struct cpu_info *ci)
 {
-	uint64_t bptsc;
+	uint64_t tsc;
 
 	if (atomic_swap_ptr(&tsc_sync_cpu, ci) != NULL) {
 		panic("tsc_sync_bp: 1");
@@ -177,13 +177,13 @@ tsc_read_bp(struct cpu_info *ci, uint64_t *bptscp, uint64_t *aptscp)
 
 	/* Flag it and read our TSC. */
 	atomic_or_uint(&ci->ci_flags, CPUF_SYNCTSC);
-	bptsc = cpu_counter_serializing() >> 1;
+	tsc = rdmsr(MSR_TSC) >> 1;
 
 	/* Wait for remote to complete, and read ours again. */
 	while ((ci->ci_flags & CPUF_SYNCTSC) != 0) {
 		__insn_barrier();
 	}
-	bptsc += (cpu_counter_serializing() >> 1);
+	tsc += (rdmsr(MSR_TSC) >> 1);
 
 	/* Wait for the results to come in. */
 	while (tsc_sync_cpu == ci) {
@@ -193,28 +193,16 @@ tsc_read_bp(struct cpu_info *ci, uint64_t *bptscp, uint64_t *aptscp)
 		panic("tsc_sync_bp: 2");
 	}
 
-	*bptscp = bptsc;
-	*aptscp = tsc_sync_val;
-}
-
-void
-tsc_sync_bp(struct cpu_info *ci)
-{
-	uint64_t bptsc, aptsc;
-
-	tsc_read_bp(ci, &bptsc, &aptsc); /* discarded - cache effects */
-	tsc_read_bp(ci, &bptsc, &aptsc);
-
 	/* Compute final value to adjust for skew. */
-	ci->ci_data.cpu_cc_skew = bptsc - aptsc;
+	ci->ci_data.cpu_cc_skew = tsc - tsc_sync_val;
 }
 
 /*
  * Called during startup of AP, by the AP itself.  Interrupts are
  * disabled on entry.
  */
-static void
-tsc_post_ap(struct cpu_info *ci)
+void
+tsc_sync_ap(struct cpu_info *ci)
 {
 	uint64_t tsc;
 
@@ -222,11 +210,11 @@ tsc_post_ap(struct cpu_info *ci)
 	while ((ci->ci_flags & CPUF_SYNCTSC) == 0) {
 		__insn_barrier();
 	}
-	tsc = (cpu_counter_serializing() >> 1);
+	tsc = (rdmsr(MSR_TSC) >> 1);
 
 	/* Instruct primary to read its counter. */
 	atomic_and_uint(&ci->ci_flags, ~CPUF_SYNCTSC);
-	tsc += (cpu_counter_serializing() >> 1);
+	tsc += (rdmsr(MSR_TSC) >> 1);
 
 	/* Post result.  Ensure the whole value goes out atomically. */
 	(void)atomic_swap_64(&tsc_sync_val, tsc);
@@ -234,14 +222,6 @@ tsc_post_ap(struct cpu_info *ci)
 	if (atomic_swap_ptr(&tsc_sync_cpu, NULL) != ci) {
 		panic("tsc_sync_ap");
 	}
-}
-
-void
-tsc_sync_ap(struct cpu_info *ci)
-{
-
-	tsc_post_ap(ci);
-	tsc_post_ap(ci);
 }
 
 uint64_t
@@ -255,14 +235,5 @@ int
 cpu_hascounter(void)
 {
 
-	return cpu_feature[0] & CPUID_TSC;
-}
-
-uint64_t
-cpu_counter_serializing(void)
-{
-	if (cpu_feature[0] & CPUID_MSR)
-		return rdmsr(MSR_TSC);
-	else
-		return cpu_counter();
+	return cpu_feature & CPUID_TSC;
 }

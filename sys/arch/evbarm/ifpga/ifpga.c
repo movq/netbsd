@@ -1,4 +1,4 @@
-/*	$NetBSD: ifpga.c,v 1.25 2012/01/27 18:52:53 para Exp $ */
+/*	$NetBSD: ifpga.c,v 1.22 2008/04/27 18:58:46 matt Exp $ */
 
 /*
  * Copyright (c) 2001 ARM Ltd
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ifpga.c,v 1.25 2012/01/27 18:52:53 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ifpga.c,v 1.22 2008/04/27 18:58:46 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -66,12 +66,12 @@ __KERNEL_RCSID(0, "$NetBSD: ifpga.c,v 1.25 2012/01/27 18:52:53 para Exp $");
 #include "locators.h"
 
 /* Prototypes */
-static int  ifpga_match		(device_t, cfdata_t, void *);
-static void ifpga_attach	(device_t, device_t, void *);
+static int  ifpga_match		(struct device *, struct cfdata *, void *);
+static void ifpga_attach	(struct device *, struct device *, void *);
 static int  ifpga_print		(void *, const char *);
 
 /* Drive and attach structures */
-CFATTACH_DECL_NEW(ifpga, sizeof(struct ifpga_softc),
+CFATTACH_DECL(ifpga, sizeof(struct ifpga_softc),
     ifpga_match, ifpga_attach, NULL, NULL);
 
 int ifpga_found;
@@ -91,8 +91,6 @@ static struct bus_space ifpga_pci_mem_tag;
 static struct bus_space ifpga_bs_tag;
 
 struct ifpga_softc *ifpga_sc;
-device_t ifpga_dev;
-
 /*
  * Print the configuration information for children
  */
@@ -111,9 +109,10 @@ ifpga_print(void *aux, const char *pnp)
 }
 
 static int
-ifpga_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+ifpga_search(struct device *parent, struct cfdata *cf,
+	     const int *ldesc, void *aux)
 {
-	struct ifpga_softc *sc = device_private(parent);
+	struct ifpga_softc *sc = (struct ifpga_softc *)parent;
 	struct ifpga_attach_args ifa;
 	int tryagain;
 
@@ -134,7 +133,7 @@ ifpga_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 }
 
 static int
-ifpga_match(device_t parent, cfdata_t cf, void *aux)
+ifpga_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 #if 0
 	struct mainbus_attach_args *ma = aux;
@@ -152,9 +151,9 @@ ifpga_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-ifpga_attach(device_t parent, device_t self, void *aux)
+ifpga_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ifpga_softc *sc = device_private(self);
+	struct ifpga_softc *sc = (struct ifpga_softc *)self;
 	u_int id, sysclk;
 #if defined(PCI_NETBSD_CONFIGURE) && NPCI > 0
 	struct extent *ioext, *memext, *pmemext;
@@ -177,14 +176,13 @@ ifpga_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_iot = &ifpga_bs_tag;
 
-	ifpga_dev = self;
 	ifpga_sc = sc;
 
 	/* Now map in the IFPGA motherboard registers.  */
 	if (bus_space_map(sc->sc_iot, IFPGA_IO_SC_BASE, IFPGA_IO_SC_SIZE, 0,
 	    &sc->sc_sc_ioh))
 		panic("%s: Cannot map system controller registers", 
-		    device_xname(self));
+		    self->dv_xname);
 
 	id = bus_space_read_4(sc->sc_iot, sc->sc_sc_ioh, IFPGA_SC_ID);
 
@@ -223,7 +221,7 @@ ifpga_attach(device_t parent, device_t self, void *aux)
 		panic(" Unsupported bus");
 	}
 
-	printf("\n%s: FPGA ", device_xname(self));
+	printf("\n%s: FPGA ", self->dv_xname);
 
 	switch (id & IFPGA_SC_ID_FPGA_MASK)
 	{
@@ -248,22 +246,20 @@ ifpga_attach(device_t parent, device_t self, void *aux)
 	if (bus_space_map(sc->sc_iot, IFPGA_IO_IRQ_BASE, IFPGA_IO_IRQ_SIZE, 
 	    BUS_SPACE_MAP_LINEAR, &sc->sc_irq_ioh))
 		panic("%s: Cannot map irq controller registers",
-		    device_xname(self));
+		    self->dv_xname);
 
 	/* We can write to the IRQ/FIQ controller now.  */
 	ifpga_intr_postinit();
 
 	/* Map the core module */
 	if (bus_space_map(sc->sc_iot, IFPGA_IO_CM_BASE, IFPGA_IO_CM_SIZE, 0,
-	    &sc->sc_cm_ioh)) {
-		panic("%s: Cannot map core module registers",
-		    device_xname(self));
-	}
+	    &sc->sc_cm_ioh))
+		panic("%s: Cannot map core module registers", self->dv_xname);
 
 	/* Map the timers */
 	if (bus_space_map(sc->sc_iot, IFPGA_IO_TMR_BASE, IFPGA_IO_TMR_SIZE, 0,
 	    &sc->sc_tmr_ioh))
-		panic("%s: Cannot map timer registers", device_xname(self));
+		panic("%s: Cannot map timer registers", self->dv_xname);
 
 	printf("\n");
 
@@ -279,7 +275,7 @@ ifpga_attach(device_t parent, device_t self, void *aux)
 	    &pci_sc->sc_conf_ioh)
 	    || bus_space_map(pci_sc->sc_memt, IFPGA_V360_REG_BASE,
 	    IFPGA_V360_REG_SIZE, 0, &pci_sc->sc_reg_ioh))
-		panic("%s: Cannot map pci memory", device_xname(self));
+		panic("%s: Cannot map pci memory", self->dv_xname);
 
 	{
 		pcireg_t id_reg, class_reg;
@@ -291,18 +287,18 @@ ifpga_attach(device_t parent, device_t self, void *aux)
 		    pci_sc->sc_reg_ioh, V360_PCI_CC_REV);
 
 		pci_devinfo(id_reg, class_reg, 1, buf, sizeof(buf));
-		printf("%s: %s\n", device_xname(self), buf);
+		printf("%s: %s\n", self->dv_xname, buf);
 	}
 
 #if defined(PCI_NETBSD_CONFIGURE)
 	ioext = extent_create("pciio", 0x00000000,
-	    0x00000000 + IFPGA_PCI_IO_VSIZE, NULL, 0, EX_NOWAIT);
+	    0x00000000 + IFPGA_PCI_IO_VSIZE, M_DEVBUF, NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", IFPGA_PCI_APP0_BASE,
 	    IFPGA_PCI_APP0_BASE + IFPGA_PCI_APP0_SIZE,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 	pmemext = extent_create("pcipmem", IFPGA_PCI_APP1_BASE,
 	    IFPGA_PCI_APP1_BASE + IFPGA_PCI_APP1_SIZE,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 	ifpga_pci_chipset.pc_conf_v = (void *)pci_sc;
 	pci_configure_bus(&ifpga_pci_chipset, ioext, memext, pmemext, 0,
 	    arm_dcache_align);
@@ -325,7 +321,7 @@ ifpga_attach(device_t parent, device_t self, void *aux)
 	pci_pba.pba_memt = &ifpga_pci_mem_tag;
 	pci_pba.pba_dmat = &ifpga_pci_bus_dma_tag;
 	pci_pba.pba_dmat64 = NULL;
-	pci_pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
+	pci_pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
 	pci_pba.pba_bus = 0;
 	pci_pba.pba_bridgetag = NULL;
 	

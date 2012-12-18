@@ -1,4 +1,4 @@
-/*	$NetBSD: utime.h,v 1.9 2009/01/11 03:04:12 christos Exp $	*/
+/*	$NetBSD: utime.h,v 1.8 2005/02/03 04:39:32 perry Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -49,9 +49,7 @@ struct utimbuf {
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-#ifndef __LIBC12_SOURCE__
-int utime(const char *, const struct utimbuf *) __RENAME(__utime50);
-#endif
+int utime(const char *, const struct utimbuf *);
 __END_DECLS
 
 #endif /* !_UTIME_H_ */

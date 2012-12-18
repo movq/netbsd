@@ -1,12 +1,9 @@
 #!/bin/sh
 #
-# $NetBSD: cgd,v 1.8 2010/11/01 14:41:11 christos Exp $
+# $NetBSD: cgd,v 1.5 2005/03/02 19:09:22 tv Exp $
 #
 
-# PROVIDE: cgd
-# REQUIRE: rndctl
-# BEFORE:  DISKS
-# KEYWORD: interactive
+# PROVIDE: disks
 
 $_rc_subr_loaded . /etc/rc.subr
 
@@ -18,16 +15,8 @@ stop_cmd=":"
 cgd_start()
 {
 	if [ -f /etc/cgd/cgd.conf ]; then
-		print_rc_normal "Configuring CGD devices."
+		echo "Configuring CGD devices."
 		cgdconfig -C
-	fi
-}
-
-cgd_stop()
-{
-	if [ -f /etc/cgd/cgd.conf ]; then
-		print_rc_normal "Unconfiguring CGD devices."
-		cgdconfig -U
 	fi
 }
 

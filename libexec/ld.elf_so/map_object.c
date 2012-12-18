@@ -1,4 +1,4 @@
-/*	$NetBSD: map_object.c,v 1.45 2012/10/13 21:13:07 dholland Exp $	 */
+/*	$NetBSD: map_object.c,v 1.36.4.3 2012/03/17 18:28:32 bouyer Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: map_object.c,v 1.45 2012/10/13 21:13:07 dholland Exp $");
+__RCSID("$NetBSD: map_object.c,v 1.36.4.3 2012/03/17 18:28:32 bouyer Exp $");
 #endif /* not lint */
 
 #include <errno.h>
@@ -66,9 +66,6 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	Obj_Entry	*obj;
 	Elf_Ehdr	*ehdr;
 	Elf_Phdr	*phdr;
-#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
-	Elf_Phdr	*phtls;
-#endif
 	size_t		 phsize;
 	Elf_Phdr	*phlimit;
 	Elf_Phdr	*segs[2];
@@ -90,9 +87,6 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	Elf_Addr	 data_vlimit;
 	int		 data_flags;
 	caddr_t		 data_addr;
-#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
-	Elf_Addr	 tls_vaddr = 0; /* Noise GCC */
-#endif
 	Elf_Addr	 phdr_vaddr;
 	size_t		 phdr_memsz;
 	caddr_t		 gap_addr;
@@ -104,8 +98,8 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	size_t		 nclear;
 #endif
 
-	if (sb != NULL && sb->st_size < (off_t)sizeof (Elf_Ehdr)) {
-		_rtld_error("%s: not ELF file (too short)", path);
+	if (sb != NULL && sb->st_size < sizeof (Elf_Ehdr)) {
+		_rtld_error("%s: unrecognized file format1", path);
 		return NULL;
 	}
 
@@ -125,13 +119,9 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 		goto bad;
 	}
 	/* Make sure the file is valid */
-	if (memcmp(ELFMAG, ehdr->e_ident, SELFMAG) != 0) {
-		_rtld_error("%s: not ELF file (magic number bad)", path);
-		goto bad;
-	}
-	if (ehdr->e_ident[EI_CLASS] != ELFCLASS) {
-		_rtld_error("%s: invalid ELF class %x; expected %x", path,
-		    ehdr->e_ident[EI_CLASS], ELFCLASS);
+	if (memcmp(ELFMAG, ehdr->e_ident, SELFMAG) != 0 ||
+	    ehdr->e_ident[EI_CLASS] != ELFCLASS) {
+		_rtld_error("%s: unrecognized file format2 [%x != %x]", path, ehdr->e_ident[EI_CLASS], ELFCLASS);
 		goto bad;
 	}
 	/* Elf_e_ident includes class */
@@ -168,9 +158,6 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
          * in that order.
          */
 	phdr = (Elf_Phdr *) ((caddr_t)ehdr + ehdr->e_phoff);
-#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
-	phtls = NULL;
-#endif
 	phsize = ehdr->e_phnum * sizeof(phdr[0]);
 	obj->phdr = NULL;
 	phdr_vaddr = EA_UNDEF;
@@ -188,36 +175,20 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 			if (nsegs < 2)
 				segs[nsegs] = phdr;
 			++nsegs;
-
-#if ELFSIZE == 64
-#define	PRImemsz	PRIu64
-#else
-#define PRImemsz	PRIu32
-#endif
-			dbg(("%s: %s %p phsize %" PRImemsz, obj->path, "PT_LOAD",
-			    (void *)(uintptr_t)phdr->p_vaddr, phdr->p_memsz));
+			dbg(("%s: PT_LOAD %p", obj->path, phdr));
 			break;
 
 		case PT_PHDR:
 			phdr_vaddr = phdr->p_vaddr;
 			phdr_memsz = phdr->p_memsz;
-			dbg(("%s: %s %p phsize %" PRImemsz, obj->path, "PT_PHDR",
-			    (void *)(uintptr_t)phdr->p_vaddr, phdr->p_memsz));
+			dbg(("%s: PT_PHDR %p phsize %zu", obj->path,
+			    (void *)(uintptr_t)phdr_vaddr, phdr_memsz));
 			break;
 		
 		case PT_DYNAMIC:
 			obj->dynamic = (void *)(uintptr_t)phdr->p_vaddr;
-			dbg(("%s: %s %p phsize %" PRImemsz, obj->path, "PT_DYNAMIC",
-			    (void *)(uintptr_t)phdr->p_vaddr, phdr->p_memsz));
+ 			dbg(("%s: PT_DYNAMIC %p", obj->path, obj->dynamic));
 			break;
-
-#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
-		case PT_TLS:
-			phtls = phdr;
-			dbg(("%s: %s %p phsize %" PRImemsz, obj->path, "PT_TLS",
-			    (void *)(uintptr_t)phdr->p_vaddr, phdr->p_memsz));
-			break;
-#endif
 		}
 
 		++phdr;
@@ -265,17 +236,6 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	obj->textsize = text_vlimit - base_vaddr;
 	obj->vaddrbase = base_vaddr;
 	obj->isdynamic = ehdr->e_type == ET_DYN;
-
-#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
-	if (phtls != NULL) {
-		++_rtld_tls_dtv_generation;
-		obj->tlsindex = ++_rtld_tls_max_index;
-		obj->tlssize = phtls->p_memsz;
-		obj->tlsalign = phtls->p_align;
-		obj->tlsinitsize = phtls->p_filesz;
-		tls_vaddr = phtls->p_vaddr;
-	}
-#endif
 
 	obj->phdr_loaded = false;
 	for (i = 0; i < nsegs; i++) {
@@ -378,11 +338,6 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	/* Non-file portion of BSS mapped above. */
 #endif
 
-#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
-	if (phtls != NULL)
-		obj->tlsinit = mapbase + tls_vaddr;
-#endif
-
 	obj->mapbase = mapbase;
 	obj->mapsize = mapsize;
 	obj->relocbase = mapbase - base_vaddr;
@@ -412,10 +367,6 @@ _rtld_obj_free(Obj_Entry *obj)
 {
 	Objlist_Entry *elm;
 
-#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
-	if (obj->tls_done)
-		_rtld_tls_offset_free(obj);
-#endif
 	xfree(obj->path);
 	while (obj->needed != NULL) {
 		Needed_Entry *needed = obj->needed;

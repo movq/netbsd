@@ -1,4 +1,4 @@
-/*	$NetBSD: ppi.c,v 1.20 2012/10/27 17:18:16 chs Exp $	*/
+/*	$NetBSD: ppi.c,v 1.13 2008/06/12 21:45:39 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1996-2003 The NetBSD Foundation, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ppi.c,v 1.20 2012/10/27 17:18:16 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ppi.c,v 1.13 2008/06/12 21:45:39 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -81,7 +81,7 @@ __KERNEL_RCSID(0, "$NetBSD: ppi.c,v 1.20 2012/10/27 17:18:16 chs Exp $");
 #include <dev/gpib/ppiio.h>
 
 struct	ppi_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	gpib_chipset_tag_t sc_ic;
 	gpib_handle_t sc_hdl;
 
@@ -103,10 +103,10 @@ struct	ppi_softc {
 #define PPIF_TIMO	0x08
 #define PPIF_DELAY	0x10
 
-int	ppimatch(device_t, cfdata_t, void *);
-void	ppiattach(device_t, device_t, void *);
+int	ppimatch(struct device *, struct cfdata *, void *);
+void	ppiattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ppi, sizeof(struct ppi_softc),
+CFATTACH_DECL(ppi, sizeof(struct ppi_softc),
 	ppimatch, ppiattach, NULL, NULL);
 
 extern struct cfdriver ppi_cd;
@@ -143,14 +143,19 @@ int	ppidebug = 0x80;
 #endif
 
 int
-ppimatch(device_t parent, cfdata_t match, void *aux)
+ppimatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 
 	return (1);
 }
 
 void
-ppiattach(device_t parent, device_t self, void *aux)
+ppiattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct ppi_softc *sc = device_private(self);
 	struct gpib_attach_args *ga = aux;
@@ -165,7 +170,7 @@ ppiattach(device_t parent, device_t self, void *aux)
 
 	if (gpibregister(sc->sc_ic, sc->sc_address, ppicallback, sc,
 	    &sc->sc_hdl)) {
-		aprint_error_dev(sc->sc_dev, "can't register callback\n");
+		aprint_error_dev(&sc->sc_dev, "can't register callback\n");
 		return;
 	}
 
@@ -181,10 +186,10 @@ ppiopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	if (sc == NULL)
 		return (ENXIO);
 
-	if ((sc->sc_flags & PPIF_ALIVE) == 0)
+	if (sc->sc_flags & PPIF_ALIVE) == 0)
 		return (ENXIO);
 
-	DPRINTF(PDB_FOLLOW, ("ppiopen(%" PRIx64 ", %x): flags %x\n",
+	DPRINTF(PDB_FOLLOW, ("ppiopen(%x, %x): flags %x\n",
 	    dev, flags, sc->sc_flags));
 
 	if (sc->sc_flags & PPIF_OPEN)
@@ -204,7 +209,7 @@ ppiclose(dev_t dev, int flags, int fmt, struct lwp *l)
 
 	sc = device_lookup_private(&ppi_cd, UNIT(dev));
 
-	DPRINTF(PDB_FOLLOW, ("ppiclose(%" PRIx64 ", %x): flags %x\n",
+	DPRINTF(PDB_FOLLOW, ("ppiclose(%x, %x): flags %x\n",
 		       dev, flags, sc->sc_flags));
 
 	sc->sc_flags &= ~PPIF_OPEN;
@@ -212,7 +217,9 @@ ppiclose(dev_t dev, int flags, int fmt, struct lwp *l)
 }
 
 void
-ppicallback(void *v, int action)
+ppicallback(v, action)
+	void *v;
+	int action;
 {
 	struct ppi_softc *sc = v;
 
@@ -238,7 +245,7 @@ ppistart(void *v)
 {
 	struct ppi_softc *sc = v;
 
-	DPRINTF(PDB_FOLLOW, ("ppistart(%x)\n", device_unit(sc->sc_dev)));
+	DPRINTF(PDB_FOLLOW, ("ppistart(%x)\n", device_unit(&sc->sc_dev)));
 
 	sc->sc_flags &= ~PPIF_DELAY;
 	wakeup(sc);
@@ -249,7 +256,7 @@ ppitimo(void *arg)
 {
 	struct ppi_softc *sc = arg;
 
-	DPRINTF(PDB_FOLLOW, ("ppitimo(%x)\n", device_unit(sc->sc_dev)));
+	DPRINTF(PDB_FOLLOW, ("ppitimo(%x)\n", device_unit(&sc->sc_dev)));
 
 	sc->sc_flags &= ~(PPIF_UIO|PPIF_TIMO);
 	wakeup(sc);
@@ -259,7 +266,7 @@ int
 ppiread(dev_t dev, struct uio *uio, int flags)
 {
 
-	DPRINTF(PDB_FOLLOW, ("ppiread(%" PRIx64 ", %p)\n", dev, uio));
+	DPRINTF(PDB_FOLLOW, ("ppiread(%x, %p)\n", dev, uio));
 
 	return (ppirw(dev, uio));
 }
@@ -268,7 +275,7 @@ int
 ppiwrite(dev_t dev, struct uio *uio, int flags)
 {
 
-	DPRINTF(PDB_FOLLOW, ("ppiwrite(%" PRIx64 ", %p)\n", dev, uio));
+	DPRINTF(PDB_FOLLOW, ("ppiwrite(%x, %p)\n", dev, uio));
 
 	return (ppirw(dev, uio));
 }
@@ -289,7 +296,7 @@ ppirw(dev_t dev, struct uio *uio)
 	address = sc->sc_address;
 
 	DPRINTF(PDB_FOLLOW|PDB_IO,
-	    ("ppirw(%" PRIx64 ", %p, %c): burst %d, timo %d, resid %x\n",
+	    ("ppirw(%x, %p, %c): burst %d, timo %d, resid %x\n",
 	    dev, uio, uio->uio_rw == UIO_READ ? 'R' : 'W',
 	    sc->sc_burst, sc->sc_timo, uio->uio_resid));
 

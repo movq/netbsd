@@ -1,4 +1,4 @@
-/* $NetBSD: netisr.h,v 1.41 2010/06/27 06:48:40 kefren Exp $ */
+/* $NetBSD: netisr.h,v 1.38 2008/10/14 17:15:20 pooka Exp $ */
 
 /*
  * Copyright (c) 1980, 1986, 1989, 1993
@@ -48,14 +48,13 @@
 
 #if defined(_KERNEL)
 
-#if defined(_KERNEL_OPT)
+#if !defined(_LKM)
 #include "opt_inet.h"
 #include "opt_atalk.h"
 #include "opt_iso.h"
-#include "opt_mpls.h"
 #include "opt_natm.h"
 #include "arp.h"
-#endif /* defined(_KERNEL_OPT) */
+#endif /* !defined(_LKM) */
 
 #if !defined(_LOCORE)
 
@@ -86,9 +85,6 @@
 #include <netiso/iso.h>
 #include <netiso/clnp.h>
 #endif
-#ifdef MPLS
-#include <netmpls/mpls_var.h>
-#endif
 #ifdef NATM
 #include <netnatm/natm.h>
 #endif
@@ -116,7 +112,6 @@
 #define	NETISR_ISDN	26		/* same as AF_E164 */
 #define	NETISR_NATM	27		/* same as AF_NATM */
 #define	NETISR_ARP	28		/* same as AF_ARP */
-#define	NETISR_MPLS	33		/* same as AF_MPLS */
 #define	NETISR_MAX	AF_MAX
 
 #if !defined(_LOCORE) && defined(_KERNEL)

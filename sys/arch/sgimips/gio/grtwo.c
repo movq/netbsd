@@ -1,4 +1,4 @@
-/* $NetBSD: grtwo.c,v 1.13 2012/10/27 17:18:09 chs Exp $	 */
+/* $NetBSD: grtwo.c,v 1.10 2007/03/04 06:00:39 christos Exp $	 */
 
 /*
  * Copyright (c) 2004 Christopher SEKIYA
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grtwo.c,v 1.13 2012/10/27 17:18:09 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grtwo.c,v 1.10 2007/03/04 06:00:39 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,6 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD: grtwo.c,v 1.13 2012/10/27 17:18:09 chs Exp $");
 #include <sgimips/dev/int2var.h>
 
 struct grtwo_softc {
+	struct device   sc_dev;
+
 	struct grtwo_devconfig *sc_dc;
 };
 
@@ -82,10 +84,10 @@ struct grtwo_devconfig {
 	struct wsdisplay_font *dc_fontdata;
 };
 
-static int      grtwo_match(device_t, cfdata_t, void *);
-static void     grtwo_attach(device_t, device_t, void *);
+static int      grtwo_match(struct device *, struct cfdata *, void *);
+static void     grtwo_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(grtwo, sizeof(struct grtwo_softc),
+CFATTACH_DECL(grtwo, sizeof(struct grtwo_softc),
 	      grtwo_match, grtwo_attach, NULL, NULL);
 
 /* textops */
@@ -264,7 +266,7 @@ grtwo_fill_rectangle(struct grtwo_devconfig * dc, int x1, int y1, int x2,
 	   y axis. */
 
 	/* There appears to be a limit to the number of vertical lines that we
-	   can run through the graphics engine at one go.  This probably has
+	   can run through the the graphics engine at one go.  This probably has
 	   something to do with vertical refresh.  Single-row fills are okay,
 	   multiple-row screw up the board in exciting ways.  The copy_rectangle
 	   workaround doesn't work for fills. */
@@ -439,7 +441,7 @@ grtwo_setup_hw(struct grtwo_devconfig * dc)
 
 /* Attach routines */
 static int
-grtwo_match(device_t parent, cfdata_t cf, void *aux)
+grtwo_match(struct device * parent, struct cfdata * self, void *aux)
 {
 	struct gio_attach_args *ga = aux;
 
@@ -474,7 +476,7 @@ grtwo_attach_common(struct grtwo_devconfig * dc, struct gio_attach_args * ga)
 	wsfont_init();
 
 	dc->dc_font = wsfont_find(NULL, 8, 16, 0, WSDISPLAY_FONTORDER_L2R,
-				  WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
+				  WSDISPLAY_FONTORDER_L2R);
 
 	if (dc->dc_font < 0)
 		panic("grtwo_attach_common: no suitable fonts");
@@ -494,10 +496,10 @@ grtwo_attach_common(struct grtwo_devconfig * dc, struct gio_attach_args * ga)
 }
 
 static void
-grtwo_attach(device_t parent, device_t self, void *aux)
+grtwo_attach(struct device * parent, struct device * self, void *aux)
 {
 	struct gio_attach_args *ga = aux;
-	struct grtwo_softc *sc = device_private(self);
+	struct grtwo_softc *sc = (void *) self;
 	struct wsemuldisplaydev_attach_args wa;
 
 	if (grtwo_is_console && ga->ga_addr == grtwo_console_dc.dc_addr) {
@@ -528,7 +530,7 @@ grtwo_attach(device_t parent, device_t self, void *aux)
         if ((cpu_intr_establish(6, IPL_TTY, grtwo_intr6, sc)) == NULL)
                 printf(": unable to establish interrupt!\n");
 
-	config_found(self, &wa, wsemuldisplaydevprint);
+	config_found(&sc->sc_dev, &wa, wsemuldisplaydevprint);
 }
 
 int

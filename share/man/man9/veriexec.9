@@ -1,4 +1,4 @@
-.\" $NetBSD: veriexec.9,v 1.25 2011/03/18 16:18:45 jruoho Exp $
+.\" $NetBSD: veriexec.9,v 1.19 2008/05/28 00:33:39 snj Exp $
 .\"
 .\" Copyright 2006 Elad Efrat <elad@NetBSD.org>
 .\" Copyright 2006 Brett Lymn <blymn@NetBSD.org>
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd March 18, 2011
+.Dd February 10, 2008
 .Dt VERIEXEC 9
 .Os
 .Sh NAME
@@ -35,47 +35,9 @@
 .Nd in-kernel file integrity subsystem KPI
 .Sh SYNOPSIS
 .In sys/verified_exec.h
-.Ft void
-.Fn veriexec_init "void"
-.Ft bool
-.Fn veriexec_lookup "struct vnode *vp"
-.Ft int
-.Fn veriexec_verify "struct lwp *l" "struct vnode *vp" \
-"const u_char *name" "int flag" "bool *found"
-.Ft void
-.Fn veriexec_purge "struct vnode *vp"
-.Ft int
-.Fn veriexec_fpops_add "const char *fp_type" "size_t hash_len" \
-"size_t ctx_size" "veriexec_fpop_init_t init" "veriexec_fpop_update_t update" \
-"veriexec_fpop_final_t final"
-.Ft int
-.Fn veriexec_file_add "struct lwp *l" "prop_dictionary_t dict"
-.Ft int
-.Fn veriexec_file_delete "struct lwp *l" "struct vnode *vp"
-.Ft int
-.Fn veriexec_table_delete "struct lwp *l" "struct mount *mp"
-.Ft int
-.Fn veriexec_flush "struct lwp *l"
-.Ft int
-.Fn veriexec_openchk "struct lwp *l" "struct vnode *vp" \
-"const char *path" "int fmode"
-.Ft int
-.Fn veriexec_renamechk "struct lwp *l" "struct vnode *fromvp" \
-"const char *fromname" "struct vnode *tovp" "const char *toname"
-.Ft int
-.Fn veriexec_removechk "struct lwp *l" "struct vnode *vp" \
-"const char *name"
-.Ft int
-.Fn veriexec_unmountchk "struct mount *mp"
-.Ft int
-.Fn veriexec_convert "struct vnode *vp" "prop_dictionary_t rdict"
-.Ft int
-.Fn veriexec_dump "struct lwp *l" "prop_array_t rarray"
 .Sh DESCRIPTION
 .Nm
-is the
-.Tn KPI
-for
+is the KPI for
 .Em Veriexec ,
 the
 .Nx
@@ -85,25 +47,26 @@ calculation and comparison, file monitoring tables, and relevant hooks to
 enforce the
 .Em Veriexec
 policy.
-.Sh FUNCTIONS
 .Ss Core Routines
-.Bl -tag -width compact
-.It Fn veriexec_init "void"
+.Bl -tag
+.It Ft void Fn veriexec_init "void"
 Initialize the
 .Em Veriexec
 subsystem.
 Called only once during system startup.
-.It Fn veriexec_lookup "vp"
+.It Ft "bool" Fn veriexec_lookup "struct vnode *vp"
 Check if
 .Ar vp
 is monitored by
-.Em Veriexec .
+.Em Veriexec
+or not.
 Returns
 .Dv true
 if it is, or
 .Dv false
 otherwise.
-.It Fn veriexec_verify "l" "vp" "name" "flag" "found"
+.It Ft int Fn veriexec_verify "struct lwp *l" "struct vnode *vp" \
+"const u_char *name" "int flag" "bool *found"
 Verifies the digital fingerprint of
 .Ar vp .
 .Ar name
@@ -111,7 +74,7 @@ is the filename, and
 .Ar flag
 is the access flag.
 The access flag can be one of:
-.Bl -tag -width VERIEXEC_INDIRECT
+.Bl -tag
 .It Dv VERIEXEC_DIRECT
 The file was executed directly via
 .Xr execve 2 .
@@ -131,7 +94,7 @@ is a pointer to a boolean indicating whether an entry for the file was found
 in the
 .Em Veriexec
 tables.
-.It Fn veriexec_purge "vp"
+.It Ft void Fn veriexec_purge "struct vnode *vp"
 Purge the file entry for
 .Ar vp .
 This invalidates the fingerprint so it will be evaluated next time the file
@@ -139,9 +102,10 @@ is accessed.
 .\" veriexec_page_verify() intentionally not documented.
 .El
 .Ss Fingerprint Related Routines
-.Bl -tag -width compact
-.It Fn veriexec_fpops_add "fp_type" "hash_len" "ctx_size" \
-"init" "update" "final"
+.Bl -tag
+.It Ft Fn veriexec_fpops_add "const char *fp_type" "size_t hash_len" \
+"size_t ctx_size" "veriexec_fpop_init_t init" "veriexec_fpop_update_t update" \
+"veriexec_fpop_final_t final"
 Add support for fingerprinting algorithm
 .Ar fp_type
 with binary hash length
@@ -158,8 +122,9 @@ are the routines used to initialize, update, and finalize a calculation
 context.
 .El
 .Ss Table Management Routines
-.Bl -tag -width compact
-.It Fn veriexec_file_add "l" "dict"
+.Bl -tag
+.It Ft int Fn veriexec_file_add "struct lwp *l" \
+"prop_dictionary_t dict"
 Add a
 .Em Veriexec
 entry for the file described by
@@ -167,31 +132,32 @@ entry for the file described by
 .Pp
 .Ar dict
 is expected to have the following:
-.Bl -column entry-type string "entry type flags (see veriexec(4))"
-.It Sy Name	Type	Purpose
+.Bl -column entryxtype string
+.Sy Name	Type	Purpose
 .It file	string	filename
 .It entry-type	uint8	entry type flags ( see Xr veriexec 4 )
 .It fp-type	string	fingerprint hashing algorithm
 .It fp	data	the fingerprint
 .El
-.It Fn veriexec_file_delete "l" "vp"
+.It Ft int Fn veriexec_file_delete "struct lwp *l" "struct vnode *vp"
 Remove
 .Em Veriexec
 entry for
 .Ar vp .
-.It Fn veriexec_table_delete "l" "mp"
+.It Ft int Fn veriexec_table_delete "struct lwp *l" "struct mount *mp"
 Remove
 .Em Veriexec
 table for mount-point
 .Ar mp .
-.It Fn veriexec_flush "l"
+.It Ft int Fn veriexec_flush "struct lwp *l"
 Delete all
 .Em Veriexec
 tables.
 .El
 .Ss Hook Handlers
-.Bl -tag -width compact
-.It Fn veriexec_openchk "l" "vp" "path" "fmode"
+.Bl -tag
+.It Ft int Fn veriexec_openchk "struct lwp *l" "struct vnode *vp" \
+"const char *path" "int fmode"
 Called when a file is opened.
 .Pp
 .Ar l
@@ -206,7 +172,8 @@ the file is being created.
 is the pathname for the file (not necessarily a full path), and
 .Ar fmode
 are the mode bits with which the file was opened.
-.It Fn veriexec_renamechk "l" "fromvp" "fromname" "tovp" "toname"
+.It Ft int Fn veriexec_renamechk "struct lwp *l" "struct vnode *fromvp" \
+"const char *fromname" "struct vnode *tovp" "const char *toname"
 Called when a file is renamed.
 .Pp
 .Ar fromvp
@@ -223,7 +190,8 @@ is the LWP renaming the file.
 Depending on the strict level,
 .Nm
 will either track changes appropriately or prevent the rename.
-.It Fn veriexec_removechk "l" "vp" "name"
+.It Ft int Fn veriexec_removechk "struct lwp *l" "struct vnode *vp" \
+"const char *name"
 Called when a file is removed.
 .Pp
 .Ar vp
@@ -236,14 +204,14 @@ is the LWP removing the file,
 Depending on the strict level,
 .Nm
 will either clean-up after the file or prevent its removal.
-.It Fn veriexec_unmountchk "mp"
+.It Ft int Fn veriexec_unmountchk "struct mount *mp"
 Checks if the current strict level allows
 .Ar mp
 to be unmounted.
 .El
-.Ss Miscellaneous Routines
-.Bl -tag -width compact
-.It Fn veriexec_convert "vp" "rdict"
+.Ss Misc. Routines
+.Bl -tag
+.It Ft int Fn veriexec_convert "struct vnode *vp" "prop_dictionary_t rdict"
 Convert
 .Em Veriexec
 entry for
@@ -254,7 +222,7 @@ dictionary,
 .Ar rdict ,
 with the following elements:
 .Bl -column entryxtype string
-.It Sy Name	Type	Purpose
+.Sy Name	Type	Purpose
 .It entry-type	uint8	entry type flags ( see Xr veriexec 4 )
 .It status	uint8	entry status ( see below )
 .It fp-type	string	fingerprint hashing algorithm
@@ -275,7 +243,7 @@ If no entry was found,
 .Er ENOENT
 is returned.
 Otherwise, zero.
-.It Fn veriexec_dump "l" "rarray"
+.It Ft int Fn veriexec_dump "struct lwp *l" "prop_array_t rarray"
 Fill
 .Ar rarray
 with entries for all files monitored by
@@ -292,7 +260,7 @@ containing the filename.
 .El
 .Sh FILES
 .Bl -column srcxsysxkernxkernxverifiedexecxc foo
-.It Sy Path	Purpose
+.Sy Path	Purpose
 .It src/sys/dev/verified_exec.c	driver for userland communication
 .It src/sys/sys/verified_exec.h	shared (userland/kernel) header file
 .It src/sys/kern/kern_verifiedexec.c	subsystem code
@@ -303,7 +271,7 @@ containing the filename.
 .Xr proplib 3 ,
 .Xr sysctl 3 ,
 .Xr veriexec 4 ,
-.Xr security 7 ,
+.Xr security 8 ,
 .Xr sysctl 8 ,
 .Xr veriexecctl 8 ,
 .Xr veriexecgen 8 ,

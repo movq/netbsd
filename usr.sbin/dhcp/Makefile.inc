@@ -1,13 +1,10 @@
-# $NetBSD: Makefile.inc,v 1.27 2012/08/10 12:10:28 joerg Exp $
+# $NetBSD: Makefile.inc,v 1.22 2008/08/29 00:02:25 gmcgarry Exp $
 
-WARNS?=	1	# XXX -Wshadow -Wcast-qual -Wsign-compare
+WARNS?=	1
 
 .include <bsd.own.mk>
 
 USE_FORT?= yes	# network client/server
-CWARNFLAGS.clang+=	-Wno-tautological-compare \
-			-Wno-conversion -Wno-constant-logical-operand \
-			-Wno-format-security
 
 DIST=	${NETBSDSRCDIR}/dist/dhcp
 .PATH:	${DIST}/${DHCPSRCDIR}
@@ -17,7 +14,7 @@ OMOBJDIR!=cd $(.CURDIR)/../omapip && ${PRINTOBJDIR}
 MROBJDIR!=cd $(.CURDIR)/../minires && ${PRINTOBJDIR}
 DSTOBJDIR!=cd $(.CURDIR)/../dst && ${PRINTOBJDIR}
 
-.if defined(HAVE_GCC) || defined(HAVE_LLVM)
+.if defined(HAVE_GCC) && ${HAVE_GCC} == 4
 COPTS+=	-fno-strict-aliasing
 .endif
 

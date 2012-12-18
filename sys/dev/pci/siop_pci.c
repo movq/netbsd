@@ -1,4 +1,4 @@
-/*	$NetBSD: siop_pci.c,v 1.27 2010/11/13 13:52:08 uebayasi Exp $	*/
+/*	$NetBSD: siop_pci.c,v 1.21 2006/11/16 01:33:10 christos Exp $	*/
 
 /*
  * Copyright (c) 2000 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -27,12 +32,14 @@
 /* SYM53c8xx PCI-SCSI I/O Processors driver: PCI front-end */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siop_pci.c,v 1.27 2010/11/13 13:52:08 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siop_pci.c,v 1.21 2006/11/16 01:33:10 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -50,7 +57,8 @@ struct siop_pci_softc {
 };
 
 static int
-siop_pci_match(device_t parent, cfdata_t match, void *aux)
+siop_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	const struct siop_product_desc *pp;
@@ -63,12 +71,11 @@ siop_pci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-siop_pci_attach(device_t parent, device_t self, void *aux)
+siop_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct siop_pci_softc *sc = device_private(self);
+	struct siop_pci_softc *sc = (struct siop_pci_softc *)self;
 
-	sc->siop.sc_c.sc_dev = self;
 	if (siop_pci_attach_common(&sc->siop_pci, &sc->siop.sc_c,
 	    pa, siop_intr) == 0)
 		return;
@@ -76,5 +83,5 @@ siop_pci_attach(device_t parent, device_t self, void *aux)
 	siop_attach(&sc->siop);
 }
 
-CFATTACH_DECL_NEW(siop_pci, sizeof(struct siop_pci_softc),
+CFATTACH_DECL(siop_pci, sizeof(struct siop_pci_softc),
     siop_pci_match, siop_pci_attach, NULL, NULL);

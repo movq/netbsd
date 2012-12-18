@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: makesums,v 1.16 2009/09/19 07:09:54 snj Exp $
+# $NetBSD: makesums,v 1.15.28.1 2009/10/04 11:48:39 bouyer Exp $
 #
 # Make checksum files for files in ``tardir''.  Usage:
 # makesums [-a] [-t tardir] [setname [...]]

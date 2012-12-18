@@ -1,4 +1,4 @@
-.\" $NetBSD: pad.4,v 1.3 2009/10/21 16:06:59 snj Exp $
+.\" $NetBSD: pad.4,v 1.1 2007/11/11 17:45:19 jmcneill Exp $
 .\"
 .\" Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
 .\" All rights reserved.
@@ -11,6 +11,12 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
+.\" 3. All advertising materials mentioning features or use of this software
+.\"    must display the following acknowledgement:
+.\"        This product includes software developed by Jared D. McNeill.
+.\" 4. Neither the name of The NetBSD Foundation nor the names of its
+.\"    contributors may be used to endorse or promote products derived
+.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +45,12 @@ is a pseudo-device driver which provides support for feeding back PCM data
 from a consumer of the
 .Xr audio 4
 API to userland.
+.Sh EXAMPLES
+The following example streams an MP3 to an Apple AirTunes compatible device:
+.Bd -literal -offset indent
+$ rtunes - < /dev/pad0 &
+$ mpg123 -a /dev/sound1 mozart.mp3
+.Ed
 .Sh FILES
 The
 .Nm
@@ -52,12 +64,6 @@ and feeds the raw PCM output to
 .It
 .Pa /dev/padN
 .El
-.Sh EXAMPLES
-The following example streams an MP3 to an Apple AirTunes compatible device:
-.Bd -literal -offset indent
-$ rtunes - \*[Lt] /dev/pad0 \*[Am]
-$ mpg123 -a /dev/sound1 mozart.mp3
-.Ed
 .Sh SEE ALSO
 .Xr audio 4
 .Sh HISTORY

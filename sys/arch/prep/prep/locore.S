@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.18 2011/06/20 19:56:12 matt Exp $	*/
+/*	$NetBSD: locore.S,v 1.10 2008/02/05 22:31:50 garbled Exp $	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
 /*
@@ -33,9 +33,9 @@
  */
 
 #include "opt_ddb.h"
+#include "fs_kernfs.h"
 #include "opt_ipkdb.h"
 #include "opt_lockdebug.h"
-#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_ppcparam.h"
 #include "assym.h"
@@ -43,12 +43,14 @@
 #include <sys/syscall.h>
 
 #include <machine/param.h>
+#include <machine/vmparam.h>
+#include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
+#define _NOREGNAMES
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
-#include <powerpc/oea/spr.h>
 
 #include "ksyms.h"
 
@@ -75,6 +77,8 @@ GLOBAL(startsym)
 	.long	0			/* start symbol table */
 GLOBAL(endsym)
 	.long	0			/* end symbol table */
+GLOBAL(proc0paddr)
+	.long	0			/* proc0 p_addr */
 GLOBAL(oeacpufeat)
 	.long	0			/* cpu features */
 
@@ -98,7 +102,7 @@ __start:
 	isync
 
 /* compute end of kernel memory */
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM) || defined(KERNFS)
 	lis	7,_C_LABEL(startsym)@ha
 	addi	7,7,_C_LABEL(startsym)@l
 	stw	3,0(7)

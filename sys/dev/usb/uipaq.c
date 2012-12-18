@@ -1,4 +1,4 @@
-/*	$NetBSD: uipaq.c,v 1.18 2011/12/23 00:51:46 jakllsch Exp $	*/
+/*	$NetBSD: uipaq.c,v 1.13 2008/07/08 08:47:32 uebayasi Exp $	*/
 /*	$OpenBSD: uipaq.c,v 1.1 2005/06/17 23:50:33 deraadt Exp $	*/
 
 /*
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipaq.c,v 1.18 2011/12/23 00:51:46 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipaq.c,v 1.13 2008/07/08 08:47:32 uebayasi Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,7 +77,7 @@ int uipaqdebug = 0;
 #define UIPAQOBUFSIZE 1024
 
 struct uipaq_softc {
-	device_t		sc_dev;		/* base device */
+	USBBASEDEVICE		sc_dev;		/* base device */
 	usbd_device_handle	sc_udev;	/* device */
 	usbd_interface_handle	sc_iface;	/* interface */
 
@@ -136,10 +136,9 @@ extern struct cfdriver uipaq_cd;
 CFATTACH_DECL2_NEW(uipaq, sizeof(struct uipaq_softc), uipaq_match,
     uipaq_attach, uipaq_detach, uipaq_activate, NULL, uipaq_childdet);
 
-int 
-uipaq_match(device_t parent, cfdata_t match, void *aux)
+USB_MATCH(uipaq)
 {
-	struct usb_attach_arg *uaa = aux;
+	USB_MATCH_START(uipaq, uaa);
 
 	DPRINTFN(20,("uipaq: vendor=0x%x, product=0x%x\n",
 	    uaa->vendor, uaa->product));
@@ -148,11 +147,9 @@ uipaq_match(device_t parent, cfdata_t match, void *aux)
 	    UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
 }
 
-void 
-uipaq_attach(device_t parent, device_t self, void *aux)
+USB_ATTACH(uipaq)
 {
-	struct uipaq_softc *sc = device_private(self);
-	struct usb_attach_arg *uaa = aux;
+	USB_ATTACH_START(uipaq, sc, uaa);
 	usbd_device_handle dev = uaa->device;
 	usbd_interface_handle iface;
 	usb_interface_descriptor_t *id;
@@ -166,13 +163,6 @@ uipaq_attach(device_t parent, device_t self, void *aux)
 	DPRINTFN(10,("\nuipaq_attach: sc=%p\n", sc));
 
 	sc->sc_dev = self;
-
-	aprint_naive("\n");
-	aprint_normal("\n");
-
-	devinfop = usbd_devinfo_alloc(dev, 0);
-	aprint_normal_dev(self, "%s\n", devinfop);
-	usbd_devinfo_free(devinfop);
 
 	/* Move the device into the configured state. */
 	err = usbd_set_config_no(dev, UIPAQ_CONFIG_NO, 1);
@@ -188,6 +178,11 @@ uipaq_attach(device_t parent, device_t self, void *aux)
 		    devname, usbd_errstr(err));
 		goto bad;
 	}
+
+	devinfop = usbd_devinfo_alloc(dev, 0);
+	USB_ATTACH_SETUP;
+	aprint_normal_dev(self, "%s\n", devinfop);
+	usbd_devinfo_free(devinfop);
 
 	sc->sc_flags = uipaq_lookup(uaa->vendor, uaa->product)->uv_flags;
 
@@ -209,13 +204,13 @@ uipaq_attach(device_t parent, device_t self, void *aux)
 
 /*	err = uipaq_init(sc);
 	if (err) {
-		printf("%s: init failed, %s\n", device_xname(sc->sc_dev),
+		printf("%s: init failed, %s\n", USBDEVNAME(sc->sc_dev),
 		    usbd_errstr(err));
 		goto bad;
 	}*/
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-	    sc->sc_dev);
+	    USBDEV(sc->sc_dev));
 
 	uca.bulkin = uca.bulkout = -1;
 	for (i=0; i<id->bNumEndpoints; i++) {
@@ -236,18 +231,18 @@ uipaq_attach(device_t parent, device_t self, void *aux)
 	if (uca.bulkin == -1 || uca.bulkout == -1) {
 		aprint_error_dev(self, "no proper endpoints found (%d,%d) \n",
 		    uca.bulkin, uca.bulkout);
-		return;
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	sc->sc_subdev = config_found_sm_loc(self, "ucombus", NULL, &uca,
 					    ucomprint, ucomsubmatch);
 
-	return;
+	USB_ATTACH_SUCCESS_RETURN;
 
 bad:
 	DPRINTF(("uipaq_attach: ATTACH ERROR\n"));
 	sc->sc_dying = 1;
-	return;
+	USB_ATTACH_ERROR_RETURN;
 }
 
 
@@ -258,7 +253,7 @@ uipaq_dtr(struct uipaq_softc* sc, int onoff)
 	usbd_status err;
 	int retries = 3;
 
-	DPRINTF(("%s: uipaq_dtr: onoff=%x\n", device_xname(sc->sc_dev), onoff));
+	DPRINTF(("%s: uipaq_dtr: onoff=%x\n", USBDEVNAME(sc->sc_dev), onoff));
 
 	/* Avoid sending unnecessary requests */
 	if (onoff && (sc->sc_lcr & UCDC_LINE_DTR))
@@ -291,7 +286,7 @@ uipaq_rts(struct uipaq_softc* sc, int onoff)
 	usbd_status err;
 	int retries = 3;
 
-	DPRINTF(("%s: uipaq_rts: onoff=%x\n", device_xname(sc->sc_dev), onoff));
+	DPRINTF(("%s: uipaq_rts: onoff=%x\n", USBDEVNAME(sc->sc_dev), onoff));
 
 	/* Avoid sending unnecessary requests */
 	if (onoff && (sc->sc_lcr & UCDC_LINE_RTS)) return;
@@ -320,7 +315,7 @@ uipaq_break(struct uipaq_softc* sc, int onoff)
 	usbd_status err;
 	int retries = 3;
 
-	DPRINTF(("%s: uipaq_break: onoff=%x\n", device_xname(sc->sc_dev), onoff));
+	DPRINTF(("%s: uipaq_break: onoff=%x\n", USBDEVNAME(sc->sc_dev), onoff));
 
 	req.bmRequestType = UT_WRITE_CLASS_INTERFACE;
 	req.bRequest = UCDC_SEND_BREAK;
@@ -365,14 +360,20 @@ int
 uipaq_activate(device_t self, enum devact act)
 {
 	struct uipaq_softc *sc = device_private(self);
+	int rv = 0;
 
 	switch (act) {
+	case DVACT_ACTIVATE:
+		return (EOPNOTSUPP);
+		break;
+
 	case DVACT_DEACTIVATE:
+		if (sc->sc_subdev != NULL)
+			rv = config_deactivate(sc->sc_subdev);
 		sc->sc_dying = 1;
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		break;
 	}
+	return (rv);
 }
 
 void
@@ -396,7 +397,7 @@ uipaq_detach(device_t self, int flags)
 		rv |= config_detach(sc->sc_subdev, flags);
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-	    sc->sc_dev);
+	    USBDEV(sc->sc_dev));
 
 	return (rv);
 }

@@ -7,6 +7,8 @@
     *  manipulating the SB1250's Synchronous Serial
     *
     *  SB1250 specification level:  User's manual 1/02/02
+    *  
+    *  Author:  Mitch Lichtenberg
     *
     *********************************************************************
     *

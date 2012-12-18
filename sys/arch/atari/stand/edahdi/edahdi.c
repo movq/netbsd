@@ -1,4 +1,4 @@
-/*	$NetBSD: edahdi.c,v 1.11 2011/10/01 15:59:00 chs Exp $	*/
+/*	$NetBSD: edahdi.c,v 1.5 2005/12/11 12:17:00 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman, Waldi Ravens.
@@ -47,7 +47,7 @@
 
 #include <fcntl.h>
 #include <stdlib.h>
-#include <term.h>
+#include <curses.h>
 #include <termios.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -94,20 +94,28 @@ typedef struct {
 #define	T_NUMBER	5
 #define	T_EOF		6
 
-void	ahdi_cksum(void *);
-u_int	ahdi_getparts(int, ptable_t *, u_int, u_int);
-int	bsd_label(int, u_int);
-int	dkcksum(struct disklabel *);
-int	edit_parts(int, ptable_t *);
-void   *disk_read(int, u_int, u_int);
-void	disk_write(int, u_int, u_int, void  *);
-char   *get_id(void);
-int	lex(int *);
-int	show_parts(ptable_t *, int);
-void	update_disk(ptable_t *, int, int);
+/*
+ * Terminal capability strings (Ok, 1 to start with ;-) )
+ */
+char	*Clr_screen = "";
+
+void	ahdi_cksum __P((void *));
+u_int	ahdi_getparts __P((int, ptable_t *, u_int, u_int));
+int	bsd_label __P((int, u_int));
+int	dkcksum __P((struct disklabel *));
+int	edit_parts __P((int, ptable_t *));
+void   *disk_read __P((int, u_int, u_int));
+void	disk_write __P((int, u_int, u_int, void  *));
+char   *get_id __P((void));
+void	get_termcap __P((void));
+int	lex __P((int *));
+int	show_parts __P((ptable_t *, int));
+void	update_disk __P((ptable_t *, int, int));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+int	argc;
+char	*argv[];
 {
 	int		fd;
 	ptable_t	ptable;
@@ -137,7 +145,7 @@ main(int argc, char *argv[])
 		return (2);
 	}
 
-	setupterm(NULL, STDOUT_FILENO, NULL);
+	get_termcap();
 
 	ptable.nparts = 0;
 	ptable.parts  = NULL;
@@ -151,7 +159,9 @@ main(int argc, char *argv[])
 }
 
 int
-edit_parts(int fd, ptable_t *ptable)
+edit_parts(fd, ptable)
+	int		fd;
+	ptable_t	*ptable;
 {
 	int	scr_base = 0;
 	int	value;
@@ -159,8 +169,7 @@ edit_parts(int fd, ptable_t *ptable)
 
 	for (;;) {
 		error = NULL;
-		if (clear_screen)
-			tputs(clear_screen, 1, putchar);
+		tputs(Clr_screen, 1, putchar);
 		show_parts(ptable, scr_base);
 
 		printf("\n\n");
@@ -239,7 +248,9 @@ edit_parts(int fd, ptable_t *ptable)
 }
 
 int
-show_parts(ptable_t *ptable, int nr)
+show_parts(ptable, nr)
+	ptable_t	*ptable;
+	int		nr;
 {
 	int	i;
 	part_t	*p;
@@ -262,7 +273,8 @@ show_parts(ptable_t *ptable, int nr)
 }
 
 int
-lex(int *value)
+lex(value)
+	int	*value;
 {
 	char	c[1];
 	int	rv, nch;
@@ -314,7 +326,7 @@ out:
 }
 
 char *
-get_id(void)
+get_id()
 {
 	static char	buf[5];
 	       int	n;
@@ -331,7 +343,9 @@ get_id(void)
 }
 
 int
-bsd_label(int fd, u_int offset)
+bsd_label(fd, offset)
+	int		fd;
+	u_int		offset;
 {
 	u_char		*bblk;
 	u_int		nsec;
@@ -367,7 +381,8 @@ bsd_label(int fd, u_int offset)
 }
 
 int
-dkcksum(struct disklabel *dl)
+dkcksum(dl)
+	struct disklabel *dl;
 {
 	u_short	*start, *end, sum = 0;
 
@@ -379,7 +394,8 @@ dkcksum(struct disklabel *dl)
 }
 
 void
-ahdi_cksum(void *buf)
+ahdi_cksum(buf)
+void	*buf;
 {
 	unsigned short	*p = (unsigned short *)buf;
 	unsigned short	csum = 0;
@@ -413,9 +429,7 @@ ahdi_getparts(fd, ptable, rsec, esec)
 		end = &root->ar_parts[AHDI_MAXRPD];
 	else end = &root->ar_parts[AHDI_MAXARPD];
 	for (part = root->ar_parts; part < end; ++part) {
-		u_int	id;
-
-		memcpy(&id, &part->ap_flg, sizeof (id));
+		u_int	id = *((u_int32_t *)&part->ap_flg);
 		if (!(id & 0x01000000))
 			continue;
 		if ((id &= 0x00ffffff) == AHDI_PID_XGM) {
@@ -435,7 +449,7 @@ ahdi_getparts(fd, ptable, rsec, esec)
 				goto done;
 			}
 			p = &ptable->parts[--i];
-			memcpy(&p->id, &id, sizeof (id));
+			*((u_int32_t *)&p->id) = id << 8;
 			p->start = part->ap_st + rsec;
 			p->end   = p->start + part->ap_size - 1;
 			p->rsec  = rsec;
@@ -477,7 +491,9 @@ disk_read(fd, start, count)
 }
 
 void
-update_disk(ptable_t *ptable, int fd, int pno)
+update_disk(ptable, fd, pno)
+	ptable_t	*ptable;
+	int		fd, pno;
 {
 	struct ahdi_root	*root;
 	struct ahdi_part	*apart;
@@ -528,4 +544,23 @@ disk_write(fd, start, count, buf)
 		err(1, "Seek error");
 	if (write(fd, buf, size) != size)
 		err(1, "Write error");
+}
+
+void
+get_termcap()
+{
+	char	*term, tbuf[1024], buf[1024], *p;
+
+	if ((term = getenv("TERM")) == NULL)
+		warnx("No TERM environment variable!");
+	else {
+		if (tgetent(tbuf, term) != 1)
+			errx(1, "Tgetent failure.");
+		p = buf;
+		if (tgetstr("cl", &p)) {
+			if ((Clr_screen = malloc(strlen(buf) + 1)) == NULL)
+				errx(1, "Malloc failure.");
+			strcpy(Clr_screen, buf);
+		}
+	}
 }

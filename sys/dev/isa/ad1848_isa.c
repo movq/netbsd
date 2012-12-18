@@ -1,7 +1,7 @@
-/*	$NetBSD: ad1848_isa.c,v 1.38 2011/11/23 23:07:32 jmcneill Exp $	*/
+/*	$NetBSD: ad1848_isa.c,v 1.36 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
- * Copyright (c) 1999, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -95,7 +95,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ad1848_isa.c,v 1.38 2011/11/23 23:07:32 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ad1848_isa.c,v 1.36 2008/04/28 20:23:51 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,10 +105,11 @@ __KERNEL_RCSID(0, "$NetBSD: ad1848_isa.c,v 1.38 2011/11/23 23:07:32 jmcneill Exp
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/buf.h>
+
 #include <sys/cpu.h>
 #include <sys/bus.h>
+
 #include <sys/audioio.h>
-#include <sys/malloc.h>
 
 #include <dev/audio_if.h>
 #include <dev/auconv.h>
@@ -453,7 +454,7 @@ ad1848_isa_attach(struct ad1848_isa_softc *isc)
 		error = isa_dmamap_create(isc->sc_ic, isc->sc_playdrq,
 		    isc->sc_play_maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW);
 		if (error) {
-			aprint_error_dev(sc->sc_dev, "can't create map for drq %d\n",
+			aprint_error_dev(&sc->sc_dev, "can't create map for drq %d\n",
 			    isc->sc_playdrq);
 			return;
 		}
@@ -464,7 +465,7 @@ ad1848_isa_attach(struct ad1848_isa_softc *isc)
 		error = isa_dmamap_create(isc->sc_ic, isc->sc_recdrq,
 		    isc->sc_rec_maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW);
 		if (error) {
-			aprint_error_dev(sc->sc_dev, "can't create map for drq %d\n",
+			aprint_error_dev(&sc->sc_dev, "can't create map for drq %d\n",
 			    isc->sc_recdrq);
 			isa_dmamap_destroy(isc->sc_ic, isc->sc_playdrq);
 			return;
@@ -501,10 +502,8 @@ ad1848_isa_open(void *addr, int flags)
 
 #ifndef AUDIO_NO_POWER_CTL
 	/* Power-up chip */
-	if (isc->powerctl) {
-		KASSERT(mutex_owned(&sc->sc_intr_lock));
+	if (isc->powerctl)
 		isc->powerctl(isc->powerarg, flags);
-	}
 #endif
 
 	/* Init and mute wave output */
@@ -513,10 +512,8 @@ ad1848_isa_open(void *addr, int flags)
 	error = ad1848_open(sc, flags);
 	if (error) {
 #ifndef AUDIO_NO_POWER_CTL
-		if (isc->powerctl) {
-			KASSERT(mutex_owned(&sc->sc_intr_lock));
+		if (isc->powerctl)
 			isc->powerctl(isc->powerarg, 0);
-		}
 #endif
 		goto bad;
 	}
@@ -533,6 +530,9 @@ bad:
 	return error;
 }
 
+/*
+ * Close function is called at splaudio().
+ */
 void
 ad1848_isa_close(void *addr)
 {
@@ -546,10 +546,8 @@ ad1848_isa_close(void *addr)
 
 #ifndef AUDIO_NO_POWER_CTL
 	/* Power-down chip */
-	if (isc->powerctl) {
-		KASSERT(mutex_owned(&sc->sc_intr_lock));
+	if (isc->powerctl)
 		isc->powerctl(isc->powerarg, 0);
-	}
 #endif
 
 	if (isc->sc_playdrq != -1)
@@ -696,9 +694,6 @@ ad1848_isa_intr(void *arg)
 
 	isc = arg;
 	sc = &isc->sc_ad1848;
-
-	KASSERT(mutex_owned(&sc->sc_intr_lock));
-
 	retval = 0;
 	/* Get intr status */
 	status = ADREAD(sc, AD1848_STATUS);
@@ -739,7 +734,9 @@ void *
 ad1848_isa_malloc(
 	void *addr,
 	int direction,
-	size_t size)
+	size_t size,
+	struct malloc_type *pool,
+	int flags)
 {
 	struct ad1848_isa_softc *isc;
 	int drq;
@@ -749,14 +746,14 @@ ad1848_isa_malloc(
 		drq = isc->sc_playdrq;
 	else
 		drq = isc->sc_recdrq;
-	return isa_malloc(isc->sc_ic, drq, size, M_DEVBUF, M_WAITOK);
+	return isa_malloc(isc->sc_ic, drq, size, pool, flags);
 }
 
 void
-ad1848_isa_free(void *addr, void *ptr, size_t size)
+ad1848_isa_free(void *addr, void *ptr, struct malloc_type *pool)
 {
 
-	isa_free(ptr, M_DEVBUF);
+	isa_free(ptr, pool);
 }
 
 size_t

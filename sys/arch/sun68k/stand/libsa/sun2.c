@@ -1,4 +1,4 @@
-/*	$NetBSD: sun2.c,v 1.11 2009/12/11 18:42:05 tsutsui Exp $	*/
+/*	$NetBSD: sun2.c,v 1.9 2008/04/28 20:23:39 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  * We need to get the sun2 NBSG definition, even if we're 
  * building this with a different sun68k target.
  */
-#include <arch/sun2/include/pmap.h>
+#include <arch/sun2/include/param.h>
 
 #include <sys/param.h>
 #include <machine/idprom.h>
@@ -70,7 +70,6 @@
 
 u_int	get_pte(vaddr_t);
 void	set_pte(vaddr_t, u_int);
-void	dvma2_init(void);
 char *	dvma2_alloc(int);
 void	dvma2_free(char *, int);
 char *	dvma2_mapin(char *, int);
@@ -438,7 +437,7 @@ sun2_map_mem_run(void *entry)
 	}
 		
 	/* Tell our caller where in virtual space to enter. */
-	return ((char *)entry) - MEM_CHUNK0_LOAD_VIRT;
+	return ((void *)entry) - MEM_CHUNK0_LOAD_VIRT;
 }
 
 void 

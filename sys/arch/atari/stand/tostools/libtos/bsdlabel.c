@@ -1,4 +1,4 @@
-/*	$NetBSD: bsdlabel.c,v 1.4 2009/03/31 11:48:15 tsutsui Exp $	*/
+/*	$NetBSD: bsdlabel.c,v 1.1 2002/03/22 21:27:59 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens.
@@ -42,7 +42,10 @@
 static int	dkcksum    PROTO((struct disklabel *));
 
 int
-bsd_getlabel(disk_t *dd, struct disklabel *dlp, u_int offset)
+bsd_getlabel(dd, dlp, offset)
+	disk_t		 *dd;
+	struct disklabel *dlp;
+	u_int		 offset;
 {
 	u_char		*bblk;
 	u_int		nsec;
@@ -66,7 +69,7 @@ bsd_getlabel(disk_t *dd, struct disklabel *dlp, u_int offset)
 			   && dl->d_magic  == DISKMAGIC
 			   && dkcksum(dl)  == 0
 			   )	{
-				memcpy(dlp, dl, sizeof(*dlp));
+				bcopy(dl, dlp, sizeof(*dlp));
 				rv = 0;
 				break;
 			}
@@ -79,7 +82,8 @@ bsd_getlabel(disk_t *dd, struct disklabel *dlp, u_int offset)
 }
 
 static int
-dkcksum(struct disklabel *dl)
+dkcksum(dl)
+	struct disklabel *dl;
 {
 	u_short	*start, *end, sum = 0;
 

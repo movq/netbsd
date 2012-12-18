@@ -1,4 +1,4 @@
-/* $NetBSD: sfb.c,v 1.84 2012/01/11 21:12:36 macallan Exp $ */
+/* $NetBSD: sfb.c,v 1.77 2008/07/09 13:19:33 joerg Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sfb.c,v 1.84 2012/01/11 21:12:36 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sfb.c,v 1.77 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,6 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD: sfb.c,v 1.84 2012/01/11 21:12:36 macallan Exp $");
 #include <dev/ic/bt459reg.h>
 #include <dev/tc/sfbreg.h>
 
+#include <uvm/uvm_extern.h>
+
 #if defined(pmax)
 #define	machine_btop(x) mips_btop(MIPS_KSEG1_TO_PHYS(x))
 #endif
@@ -67,18 +69,18 @@ __KERNEL_RCSID(0, "$NetBSD: sfb.c,v 1.84 2012/01/11 21:12:36 macallan Exp $");
  * adjacent each other in a word, i.e.,
  *	struct bt459triplet {
  * 		struct {
- *			uint8_t u0;
- *			uint8_t u1;
- *			uint8_t u2;
+ *			u_int8_t u0;
+ *			u_int8_t u1;
+ *			u_int8_t u2;
  *			unsigned :8;
  *		} bt_lo;
  *
  * Although HX has single Bt459, 32bit R/W can be done w/o any trouble.
  *	struct bt459reg {
- *		   uint32_t	   bt_lo;
- *		   uint32_t	   bt_hi;
- *		   uint32_t	   bt_reg;
- *		   uint32_t	   bt_cmap;
+ *		   u_int32_t	   bt_lo;
+ *		   u_int32_t	   bt_hi;
+ *		   u_int32_t	   bt_reg;
+ *		   u_int32_t	   bt_cmap;
  *	};
  */
 
@@ -89,13 +91,13 @@ __KERNEL_RCSID(0, "$NetBSD: sfb.c,v 1.84 2012/01/11 21:12:36 macallan Exp $");
 #define	bt_cmap 0xc
 
 #define	REGWRITE32(p,i,v) do {					\
-	*(volatile uint32_t *)((p) + (i)) = (v); tc_wmb();	\
+	*(volatile u_int32_t *)((p) + (i)) = (v); tc_wmb();	\
     } while (/* CONSTCOND */ 0)
 #define	SFBWRITE32(p,i,v) do {					\
-	*(volatile uint32_t *)((p) + (i)) = (v);		\
+	*(volatile u_int32_t *)((p) + (i)) = (v);		\
     } while (/* CONSTCOND */ 0)
 #define	MEMWRITE32(p,v) do {					\
-	*(volatile uint32_t *)(p) = (v);			\
+	*(volatile u_int32_t *)(p) = (v);			\
     } while (/* CONSTCOND */ 0)
 
 #define	VDACSELECT(p,r) do {					\
@@ -105,9 +107,9 @@ __KERNEL_RCSID(0, "$NetBSD: sfb.c,v 1.84 2012/01/11 21:12:36 macallan Exp $");
 
 struct hwcmap256 {
 #define	CMAP_SIZE	256	/* 256 R/G/B entries */
-	uint8_t r[CMAP_SIZE];
-	uint8_t g[CMAP_SIZE];
-	uint8_t b[CMAP_SIZE];
+	u_int8_t r[CMAP_SIZE];
+	u_int8_t g[CMAP_SIZE];
+	u_int8_t b[CMAP_SIZE];
 };
 
 struct hwcursor64 {
@@ -116,9 +118,9 @@ struct hwcursor64 {
 	struct wsdisplay_curpos cc_size;
 	struct wsdisplay_curpos cc_magic;
 #define	CURSOR_MAX_SIZE	64
-	uint8_t cc_color[6];
-	uint64_t cc_image[CURSOR_MAX_SIZE];
-	uint64_t cc_mask[CURSOR_MAX_SIZE];
+	u_int8_t cc_color[6];
+	u_int64_t cc_image[CURSOR_MAX_SIZE];
+	u_int64_t cc_mask[CURSOR_MAX_SIZE];
 };
 
 struct sfb_softc {
@@ -208,7 +210,7 @@ static void set_curpos(struct sfb_softc *, struct wsdisplay_curpos *);
  *   3 2 1 0 3 2 1 0		0 0 1 1 2 2 3 3
  *   7 6 5 4 7 6 5 4		4 4 5 5 6 6 7 7
  */
-static const uint8_t shuffle[256] = {
+static const u_int8_t shuffle[256] = {
 	0x00, 0x40, 0x10, 0x50, 0x04, 0x44, 0x14, 0x54,
 	0x01, 0x41, 0x11, 0x51, 0x05, 0x45, 0x15, 0x55,
 	0x80, 0xc0, 0x90, 0xd0, 0x84, 0xc4, 0x94, 0xd4,
@@ -266,16 +268,16 @@ sfbattach(device_t parent, device_t self, void *aux)
 	console = (ta->ta_addr == sfb_consaddr);
 	if (console) {
 		sc->sc_ri = ri = &sfb_console_ri;
-		ri->ri_flg &= ~RI_NO_AUTO;
 		sc->nscreens = 1;
 	}
 	else {
-		ri = malloc(sizeof(struct rasops_info),
-			M_DEVBUF, M_NOWAIT|M_ZERO);
+		MALLOC(ri, struct rasops_info *, sizeof(struct rasops_info),
+			M_DEVBUF, M_NOWAIT);
 		if (ri == NULL) {
 			printf(": can't alloc memory\n");
 			return;
 		}
+		memset(ri, 0, sizeof(struct rasops_info));
 
 		ri->ri_hw = (void *)ta->ta_addr;
 		sfb_common_init(ri);
@@ -309,7 +311,7 @@ static void
 sfb_cmap_init(struct sfb_softc *sc)
 {
 	struct hwcmap256 *cm;
-	const uint8_t *p;
+	const u_int8_t *p;
 	int index;
 
 	cm = &sc->sc_cmap;
@@ -329,8 +331,8 @@ sfb_common_init(struct rasops_info *ri)
 
 	base = (void *)ri->ri_hw;
 	asic = base + SFB_ASIC_OFFSET;
-	hsetup = *(volatile uint32_t *)(asic + SFB_ASIC_VIDEO_HSETUP);
-	vsetup = *(volatile uint32_t *)(asic + SFB_ASIC_VIDEO_VSETUP);
+	hsetup = *(u_int32_t *)(asic + SFB_ASIC_VIDEO_HSETUP);
+	vsetup = *(u_int32_t *)(asic + SFB_ASIC_VIDEO_VSETUP);
 
 	vbase = 1;
 	SFBWRITE32(asic, SFB_ASIC_VIDEO_BASE, vbase);
@@ -344,8 +346,6 @@ sfb_common_init(struct rasops_info *ri)
 	sfbhwinit(base);
 
 	ri->ri_flg = RI_CENTER;
-	if (ri == &sfb_console_ri)
-		ri->ri_flg |= RI_NO_AUTO;
 	ri->ri_depth = 8;
 	ri->ri_width = (hsetup & 0x1ff) << 2;
 	ri->ri_height = (vsetup & 0x7ff);
@@ -358,10 +358,10 @@ sfb_common_init(struct rasops_info *ri)
 	wsfont_init();
 	/* prefer 12 pixel wide font */
 	cookie = wsfont_find(NULL, 12, 0, 0, WSDISPLAY_FONTORDER_R2L,
-	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
+	    WSDISPLAY_FONTORDER_L2R);
 	if (cookie <= 0)
 		cookie = wsfont_find(NULL, 0, 0, 0, WSDISPLAY_FONTORDER_R2L,
-		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
+		    WSDISPLAY_FONTORDER_L2R);
 	if (cookie <= 0) {
 		printf("sfb: font table is empty\n");
 		return;
@@ -583,7 +583,7 @@ sfbintr(void *arg)
 		REGWRITE32(vdac, bt_reg, y >> 8);
 	}
 	if (v & WSDISPLAY_CURSOR_DOCMAP) {
-		uint8_t *cp = sc->sc_cursor.cc_color;
+		u_int8_t *cp = sc->sc_cursor.cc_color;
 
 		VDACSELECT(vdac, BT459_IREG_CCOLOR_2);
 		REGWRITE32(vdac, bt_reg, cp[1]);
@@ -595,12 +595,12 @@ sfbintr(void *arg)
 		REGWRITE32(vdac, bt_reg, cp[4]);
 	}
 	if (v & WSDISPLAY_CURSOR_DOSHAPE) {
-		uint8_t *ip, *mp, img, msk;
-		uint8_t u;
+		u_int8_t *ip, *mp, img, msk;
+		u_int8_t u;
 		int bcnt;
 
-		ip = (uint8_t *)sc->sc_cursor.cc_image;
-		mp = (uint8_t *)sc->sc_cursor.cc_mask;
+		ip = (u_int8_t *)sc->sc_cursor.cc_image;
+		mp = (u_int8_t *)sc->sc_cursor.cc_mask;
 
 		bcnt = 0;
 		VDACSELECT(vdac, BT459_IREG_CRAM_BASE+0);
@@ -649,7 +649,7 @@ static void
 sfbhwinit(void *base)
 {
 	char *vdac = (char *)base + SFB_RAMDAC_OFFSET;
-	const uint8_t *p;
+	const u_int8_t *p;
 	int i;
 
 	VDACSELECT(vdac, BT459_IREG_COMMAND_0);
@@ -904,7 +904,7 @@ sfb_do_cursor(struct rasops_info *ri)
 {
 	char *sfb, *p;
 	int scanspan, height, width, align, x, y;
-	uint32_t lmask, rmask;
+	u_int32_t lmask, rmask;
 
 	x = ri->ri_ccol * ri->ri_font->fontwidth;
 	y = ri->ri_crow * ri->ri_font->fontheight;
@@ -944,8 +944,8 @@ sfb_putchar(void *id, int row, int col, u_int uc, long attr)
 	struct rasops_info *ri = id;
 	char *sfb, *p;
 	int scanspan, height, width, align, x, y;
-	uint32_t lmask, rmask, glyph;
-	uint8_t *g;
+	u_int32_t lmask, rmask, glyph;
+	u_int8_t *g;
 
 	x = col * ri->ri_font->fontwidth;
 	y = row * ri->ri_font->fontheight;
@@ -970,7 +970,7 @@ sfb_putchar(void *id, int row, int col, u_int uc, long attr)
 	/* XXX 2B stride fonts only XXX */
 	lmask = lmask & rmask;
 	while (height > 0) {
-		glyph = *(uint16_t *)g;			/* XXX */
+		glyph = *(u_int16_t *)g;		/* XXX */
 		SFBPIXELMASK(sfb, lmask);
 		SFBADDRESS(sfb, (long)p);
 		SFBSTART(sfb, glyph << align);
@@ -999,7 +999,7 @@ sfb_copycols(void *id, int row, int srccol, int dstcol, int ncols)
 	struct rasops_info *ri = id;
 	void *sp, *dp, *basex, *sfb;
 	int scanspan, height, width, aligns, alignd, shift, w, y;
-	uint32_t lmaskd, rmaskd;
+	u_int32_t lmaskd, rmaskd;
 
 	scanspan = ri->ri_stride;
 	y = row * ri->ri_font->fontheight;
@@ -1126,7 +1126,7 @@ sfb_erasecols(void *id, int row, int startcol, int ncols, long attr)
 	struct rasops_info *ri = id;
 	char *sfb, *p;
 	int scanspan, startx, height, width, align, w, y;
-	uint32_t lmask, rmask;
+	u_int32_t lmask, rmask;
 
 	scanspan = ri->ri_stride;
 	y = row * ri->ri_font->fontheight;
@@ -1185,7 +1185,7 @@ sfb_copyrows(void *id, int srcrow, int dstrow, int nrows)
 	struct rasops_info *ri = id;
 	char *sfb, *p;
 	int scanspan, offset, srcy, height, width, align, w;
-	uint32_t lmask, rmask;
+	u_int32_t lmask, rmask;
 
 	scanspan = ri->ri_stride;
 	height = ri->ri_font->fontheight * nrows;
@@ -1244,7 +1244,7 @@ sfb_eraserows(void *id, int startrow, int nrows, long attr)
 	struct rasops_info *ri = id;
 	char *sfb, *p;
 	int scanspan, starty, height, width, align, w;
-	uint32_t lmask, rmask;
+	u_int32_t lmask, rmask;
 
 	scanspan = ri->ri_stride;
 	starty = ri->ri_font->fontheight * startrow;

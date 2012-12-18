@@ -1,4 +1,4 @@
-/*	$NetBSD: ppt.c,v 1.19 2011/08/29 20:30:37 joerg Exp $	*/
+/*	$NetBSD: ppt.c,v 1.17 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)ppt.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: ppt.c,v 1.19 2011/08/29 20:30:37 joerg Exp $");
+__RCSID("$NetBSD: ppt.c,v 1.17 2008/07/20 01:03:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,10 +51,12 @@ __RCSID("$NetBSD: ppt.c,v 1.19 2011/08/29 20:30:37 joerg Exp $");
 
 #define	EDGE	"___________"
 
-static void putppt(int);
-static int getppt(const char *);
+       void	usage(void);
+	int	main(int, char *[]);
+static void	putppt(int);
+	int	getppt(const char *);
 
-__dead static void
+void
 usage(void)
 {
 	extern char *__progname;
@@ -63,7 +65,9 @@ usage(void)
 }
 
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	char *p, buf[132];
 	int c, start, neednl, dflag;
@@ -127,7 +131,8 @@ main(int argc, char **argv)
 }
 
 static void
-putppt(int c)
+putppt(c)
+	int c;
 {
 	int i;
 
@@ -144,7 +149,7 @@ putppt(int c)
 	(void) putchar('\n');
 }
 
-static int
+int
 getppt(const char *buf)
 {
 	const char *p = strchr(buf, '.');

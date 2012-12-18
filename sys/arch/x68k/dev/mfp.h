@@ -1,6 +1,7 @@
-/*	$NetBSD: mfp.h,v 1.9 2009/11/07 19:54:17 snj Exp $	*/
+/*	$NetBSD: mfp.h,v 1.5 2005/12/11 12:19:37 christos Exp $	*/
 
 /*
+ *
  * Copyright (c) 1998 NetBSD Foundation, Inc.
  * All rights reserved.
  *
@@ -12,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor and
+ *      Washington University.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,6 +36,8 @@
 #define MFP_INTR	0x40
 
 struct mfp_softc {
+	struct device	sc_dev;
+
 	bus_space_tag_t	sc_bst;
 	bus_space_handle_t	sc_bht;
 	int		sc_intr;
@@ -121,7 +130,7 @@ struct mfp_softc {
 
 /* XXX */
 #include <arch/x68k/dev/intiovar.h>
-#define mfp_base	((volatile uint8_t *)IIOV(MFP_ADDR))
+#define mfp_base	INTIO_ADDR(MFP_ADDR)
 #define mfp_set_aer(a) \
 	mfp_base[MFP_AER] = ((u_int8_t) (a))
 #define mfp_set_ddr(a) \
@@ -196,8 +205,6 @@ struct mfp_softc {
 
 #define mfp_bit_set_gpip(bits) mfp_bit_set(MFP_GPIP, (bits))
 #define mfp_bit_clear_gpip(bits) mfp_bit_clear(MFP_GPIP, (bits))
-#define mfp_bit_set_aer(bits) mfp_bit_set(MFP_AER, (bits))
-#define mfp_bit_clear_aer(bits) mfp_bit_clear(MFP_AER, (bits))
 #define mfp_bit_set_iera(bits) mfp_bit_set(MFP_IERA, (bits))
 #define mfp_bit_clear_iera(bits) mfp_bit_clear(MFP_IERA, (bits))
 #define mfp_bit_set_ierb(bits) mfp_bit_set(MFP_IERB, (bits))

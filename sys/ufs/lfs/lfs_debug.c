@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_debug.c,v 1.39 2011/07/17 20:54:54 joerg Exp $	*/
+/*	$NetBSD: lfs_debug.c,v 1.37 2008/04/28 20:24:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -60,9 +60,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_debug.c,v 1.39 2011/07/17 20:54:54 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_debug.c,v 1.37 2008/04/28 20:24:11 martin Exp $");
 
 #ifdef DEBUG
+
+#include <machine/stdarg.h>
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,11 +82,9 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_debug.c,v 1.39 2011/07/17 20:54:54 joerg Exp $")
 int lfs_lognum;
 struct lfs_log_entry lfs_log[LFS_LOGLENGTH];
 
-int
-lfs_bwrite_log(struct buf *bp, const char *file, int line)
+int lfs_bwrite_log(struct buf *bp, const char *file, int line)
 {
 	struct vop_bwrite_args a;
-
 	a.a_desc = VDESC(vop_bwrite);
 	a.a_bp = bp;
 
@@ -95,8 +95,7 @@ lfs_bwrite_log(struct buf *bp, const char *file, int line)
 	return (VCALL(bp->b_vp, VOFFSET(vop_bwrite), &a));
 }
 
-void
-lfs_dumplog(void)
+void lfs_dumplog(void)
 {
 	int i;
 	const char *cp;

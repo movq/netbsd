@@ -1,4 +1,4 @@
-/*	$NetBSD: cmp.c,v 1.5 2009/11/17 18:58:07 drochner Exp $	*/
+/*	$NetBSD: cmp.c,v 1.3 1997/10/16 23:24:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,14 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: cmp.c,v 1.5 2009/11/17 18:58:07 drochner Exp $");
+__RCSID("$NetBSD: cmp.c,v 1.3 1997/10/16 23:24:21 lukem Exp $");
 #endif
 
 #include "os.h"
 #include "cmp.h"
 
 int
-mopCmpEAddr(const u_char *addr1, const u_char *addr2)
+mopCmpEAddr(addr1, addr2)
+	u_char *addr1, *addr2;
 {
-        return(memcmp(addr1, addr2, 6));
+        return(memcmp((char *)addr1, (char *)addr2, 6));
 }

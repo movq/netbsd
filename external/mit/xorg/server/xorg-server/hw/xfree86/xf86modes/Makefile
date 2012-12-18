@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.5 2011/08/11 23:15:41 joerg Exp $
+# $NetBSD: Makefile,v 1.2.8.1 2009/09/17 04:24:41 snj Exp $
 
 .include "../../../Makefile.serverlib"
 .include "../../../Makefile.servermod"
@@ -6,17 +6,8 @@
 LIB=	xf86modes
 
 .PATH:	${X11SRCDIR.xorg-server}/hw/xfree86/modes
-SRCS=\
-	xf86Crtc.c \
-	xf86Cursors.c \
-	xf86cvt.c \
-	xf86gtf.c \
-	xf86DisplayIDModes.c \
-	xf86EdidModes.c \
-	xf86Modes.c \
-	xf86RandR12.c \
-	xf86Rotate.c \
-	xf86DiDGA.c
+SRCS=	xf86Crtc.c xf86Cursors.c xf86cvt.c xf86gtf.c xf86DiDGA.c \
+	xf86EdidModes.c xf86Modes.c xf86RandR12.c xf86Rotate.c
 
 CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/hw/xfree86/${LIB} \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86/ddc \
@@ -31,19 +22,14 @@ CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/hw/xfree86/${LIB} \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86/ramdac \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86/dixmods/extmod \
 		-I${X11SRCDIR.xorg-server}/Xext \
-		-I${X11SRCDIR.xorg-server}/xfixes \
 		-I${DESTDIR}${X11INCDIR}/X11 \
 		-I${DESTDIR}${X11INCDIR}/pixman-1 \
-		-I${DESTDIR}${X11INCDIR}/xorg \
-		-I${X11SRCDIR.xorg-server}/../include
+		-I${DESTDIR}${X11INCDIR}/xorg
 
-CPPFLAGS+=	${X11FLAGS.DIX} \
-		-DHAVE_XORG_CONFIG_H
+CPPFLAGS+=	${X11FLAGS.DIX}
 
 # XXX
 CPPFLAGS.xf86RandR12.c=	-Wno-error
-
-CWARNFLAGS.clang+=	-Wno-format
 
 .include <bsd.x11.mk>
 LIBDIR=	${XMODULEDIR}

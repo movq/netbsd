@@ -1,11 +1,11 @@
-# $NetBSD: md.arc,v 1.24 2011/07/17 20:54:31 joerg Exp $
+# $NetBSD: md.arc,v 1.21 2007/02/09 22:22:32 ad Exp $
 ./usr/include/arc				comp-c-include
 ./usr/include/arc/_G_config.h			comp-obsolete		obsolete
 ./usr/include/arc/ansi.h			comp-c-include
-./usr/include/arc/aout_machdep.h		comp-obsolete		obsolete
+./usr/include/arc/aout_machdep.h		comp-c-include
 ./usr/include/arc/asm.h				comp-c-include
 ./usr/include/arc/autoconf.h			comp-obsolete		obsolete
-./usr/include/arc/bsd-aout.h			comp-obsolete		obsolete
+./usr/include/arc/bsd-aout.h			comp-c-include
 ./usr/include/arc/bswap.h			comp-c-include
 ./usr/include/arc/cdefs.h			comp-c-include
 ./usr/include/arc/cpu.h				comp-c-include
@@ -49,10 +49,10 @@
 ./usr/include/arc/rwlock.h			comp-c-include
 ./usr/include/arc/setjmp.h			comp-c-include
 ./usr/include/arc/signal.h			comp-c-include
-./usr/include/arc/stdarg.h			comp-obsolete		obsolete
+./usr/include/arc/stdarg.h			comp-c-include
 ./usr/include/arc/trap.h			comp-c-include
 ./usr/include/arc/types.h			comp-c-include
-./usr/include/arc/varargs.h			comp-obsolete		obsolete
+./usr/include/arc/varargs.h			comp-c-include
 ./usr/include/arc/vmparam.h			comp-c-include
 ./usr/include/arc/wchar_limits.h		comp-c-include
 ./usr/include/ieeefp.h				comp-c-include

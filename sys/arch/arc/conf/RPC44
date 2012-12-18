@@ -1,7 +1,7 @@
-# $NetBSD: RPC44,v 1.41 2012/08/17 20:11:38 abs Exp $
+# $NetBSD: RPC44,v 1.31 2007/12/31 15:31:49 ad Exp $
 #
 # GENERIC machine description file
-#
+# 
 # This machine description file is used to generate the default NetBSD
 # kernel.  The generic kernel does not include all options, subsystems
 # and device drivers, but should be useful for most applications.
@@ -22,7 +22,7 @@ include		"arch/arc/conf/std.arc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.41 $"
+#ident		"GENERIC-$Revision: 1.31 $"
 
 maxusers	32		# estimated number of users
 
@@ -43,12 +43,15 @@ options 	SYSVSEM		# System V-like semaphores
 #options 	SEMUME=10	# max number of undo entries per process
 #options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
+#options 	SHMMAXPGS=1024	# 1024 pages is the default
+
+options 	LKM		# loadable kernel modules
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
-# Enable experimental buffer queue strategy for better responsiveness under
+# Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
 #options 	BUFQ_READPRIO
 #options 	BUFQ_PRIOCSCAN
@@ -97,7 +100,7 @@ file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay file system
-file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
+file-system 	PORTAL		# portal filesystem (still experimental)
 file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
@@ -105,9 +108,9 @@ file-system 	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-options 	QUOTA		# legacy UFS quotas
-options 	QUOTA2		# new, in-filesystem UFS quotas
+options 	QUOTA		# FFS quotas
 #options 	FFS_EI		# FFS Endian Independent support
+options 	SOFTDEP		# FFS soft updates support.
 options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
@@ -144,7 +147,6 @@ options 	SCSIVERBOSE	# human readable SCSI error messages
 
 # wscons terminal emulation
 options 	WSEMUL_VT100	# VT100 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 # Kernel root file system and dump configuration.
 options 	NFS_BOOT_DHCP,NFS_BOOT_BOOTPARAM
@@ -268,10 +270,9 @@ wsmouse*	at pms?
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-#pseudo-device	fss			# file system snapshot device
-pseudo-device	md			# memory disk device (ramdisk)
+#pseudo-device	fss		4	# file system snapshot device
+pseudo-device	md		1	# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
-pseudo-device	putter			# for puffs and pud
 
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
@@ -294,6 +295,7 @@ pseudo-device	tun			# network tunneling over tty
 pseudo-device	pty			# pseudo-terminals
 #pseudo-device	sequencer	1	# MIDI sequencer
 # rnd works; RND_COM does not on port arc yet.
+pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	clockctl		# user control of clock subsystem
 

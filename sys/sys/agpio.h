@@ -1,4 +1,4 @@
-/*	$NetBSD: agpio.h,v 1.10 2011/02/15 08:57:01 jmcneill Exp $	*/
+/*	$NetBSD: agpio.h,v 1.5.86.1 2011/05/19 19:34:13 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -125,7 +125,7 @@ typedef struct _agp_allocate {
 	int key;		/* tag of allocation            */
 	size_t pg_count;	/* number of pages              */
 	uint32_t type;		/* 0 == normal, other devspec   */
-	uint32_t physical;	/* device specific (some devices
+   	paddr_t physical;	/* device specific (some devices
 				 * need a phys address of the
 				 * actual page behind the gatt
 				 * table)                        */

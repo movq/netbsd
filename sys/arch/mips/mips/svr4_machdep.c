@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.c,v 1.15 2011/07/10 23:21:59 matt Exp $ */
+/*	$NetBSD: svr4_machdep.c,v 1.11 2008/04/28 20:23:28 martin Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -36,22 +36,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.15 2011/07/10 23:21:59 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.11 2008/04/28 20:23:28 martin Exp $");
 
 #include <sys/param.h>
-#include <sys/cpu.h>
-#include <sys/exec.h>
-#include <sys/exec_elf.h> 
-#include <sys/kernel.h>
-#include <sys/mount.h> 
+#include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/exec.h>
+#include <sys/user.h>
+#include <sys/kernel.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
+#include <sys/mount.h> 
 #include <sys/syscallargs.h>
-#include <sys/sysctl.h>
-#include <sys/systm.h>
+#include <sys/exec_elf.h> 
  
 #include <uvm/uvm_extern.h>
+#include <sys/sysctl.h>
 
 #include <compat/svr4/svr4_types.h>
 #include <compat/svr4/svr4_ucontext.h>
@@ -60,9 +60,9 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.15 2011/07/10 23:21:59 matt Exp $
 #include <compat/svr4/svr4_util.h>
 #include <compat/svr4/svr4_exec.h>
 
-#include <mips/psl.h>
-#include <mips/reg.h>
-
+#include <machine/cpu.h>
+#include <machine/psl.h>
+#include <machine/reg.h>
 #include <machine/vmparam.h>
 
 /* 
@@ -70,7 +70,10 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.15 2011/07/10 23:21:59 matt Exp $
  * XXX This should be filled later 
  */
 int
-svr4_setmcontext(struct lwp *l, svr4_mcontext_t *mc, unsigned long flags)
+svr4_setmcontext(l, mc, flags)
+	struct lwp *l;
+	svr4_mcontext_t *mc;
+	unsigned long flags;
 {
 	printf("Warning: svr4_setmcontext() called\n");
 	return 0;
@@ -84,16 +87,4 @@ svr4_getmcontext(l, mc, flags)
 {    
 	printf("Warning: svr4_getmcontext() called\n");
 	return NULL;
-}
-
-void
-svr4_md_init(void)
-{
-
-}
-
-void
-svr4_md_fini(void)
-{
-
 }

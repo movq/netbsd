@@ -1,4 +1,4 @@
-/*	$NetBSD: paths.h,v 1.41 2012/06/03 21:42:46 joerg Exp $	*/
+/*	$NetBSD: paths.h,v 1.34.4.1 2010/01/09 00:55:56 snj Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -61,18 +61,16 @@
 #define	_PATH_CLOCKCTL	"/dev/clockctl"
 #define	_PATH_CONSOLE	"/dev/console"
 #define	_PATH_CONSTTY	"/dev/constty"
-#define _PATH_CPUCTL	"/dev/cpuctl"
 #define	_PATH_CSMAPPER	"/usr/share/i18n/csmapper"
 #define	_PATH_DEFTAPE	"/dev/nrst0"
-#define	_PATH_DEVCDB	"/var/run/dev.cdb"
 #define	_PATH_DEVDB	"/var/run/dev.db"
 #define	_PATH_DEVNULL	"/dev/null"
 #define	_PATH_DRUM	"/dev/drum"
 #define	_PATH_ESDB	"/usr/share/i18n/esdb"
 #define	_PATH_FTPUSERS	"/etc/ftpusers"
-#define	_PATH_GETTYTAB	"/etc/gettytab"
 #define	_PATH_I18NMODULE "/usr/lib/i18n"
 #define	_PATH_ICONV	"/usr/share/i18n/iconv"
+#define	_PATH_GETTYTAB	"/etc/gettytab"
 #define	_PATH_KMEM	"/dev/kmem"
 #define	_PATH_KSYMS	"/dev/ksyms"
 #define	_PATH_KVMDB	"/var/db/kvm.db"
@@ -83,7 +81,6 @@
 #define	_PATH_MIXER	"/dev/mixer"
 #define	_PATH_MIXER0	"/dev/mixer0"
 #define	_PATH_NOLOGIN	"/etc/nologin"
-#define _PATH_POWER	"/dev/power"
 #define	_PATH_PRINTCAP	"/etc/printcap"
 #define	_PATH_PUD	"/dev/pud"
 #define	_PATH_PUFFS	"/dev/puffs"
@@ -94,11 +91,10 @@
 #define	_PATH_SOUND	"/dev/sound"
 #define	_PATH_SOUND0	"/dev/sound0"
 #define	_PATH_SYSMON	"/dev/sysmon"
+#define	_PATH_TERMCAP	"/usr/share/misc/termcap"
 #define	_PATH_TTY	"/dev/tty"
 #define	_PATH_UNIX	"/netbsd"
 #define	_PATH_URANDOM	"/dev/urandom"
-#define	_PATH_VIDEO	"/dev/video"
-#define	_PATH_VIDEO0	"/dev/video0"
 
 /*
  * Provide trailing slash, since mostly used for building pathnames.

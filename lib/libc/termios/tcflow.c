@@ -1,4 +1,4 @@
-/*	$NetBSD: tcflow.c,v 1.9 2012/06/25 22:32:46 abs Exp $	*/
+/*	$NetBSD: tcflow.c,v 1.8 2003/08/07 16:44:13 agc Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)termios.c	8.2 (Berkeley) 2/21/94";
 #else
-__RCSID("$NetBSD: tcflow.c,v 1.9 2012/06/25 22:32:46 abs Exp $");
+__RCSID("$NetBSD: tcflow.c,v 1.8 2003/08/07 16:44:13 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,7 +51,8 @@ __weak_alias(tcflow,_tcflow)
 #endif
 
 int
-tcflow(int fd, int action)
+tcflow(fd, action)
+	int fd, action;
 {
 	struct termios term;
 	u_char c;

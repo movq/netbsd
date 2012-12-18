@@ -1,4 +1,4 @@
-/*	$NetBSD: igmp.c,v 1.53 2012/01/09 14:31:21 liamjfoy Exp $	*/
+/*	$NetBSD: igmp.c,v 1.49 2008/05/04 07:22:14 thorpej Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: igmp.c,v 1.53 2012/01/09 14:31:21 liamjfoy Exp $");
+__KERNEL_RCSID(0, "$NetBSD: igmp.c,v 1.49 2008/05/04 07:22:14 thorpej Exp $");
 
 #include "opt_mrouting.h"
 
@@ -64,9 +64,12 @@ __KERNEL_RCSID(0, "$NetBSD: igmp.c,v 1.53 2012/01/09 14:31:21 liamjfoy Exp $");
 #include <netinet/igmp.h>
 #include <netinet/igmp_var.h>
 
+#include <machine/stdarg.h>
+
 #define IP_MULTICASTOPTS	0
 
-static struct pool igmp_rti_pool;
+POOL_INIT(igmp_rti_pool, sizeof(struct router_info), 0, 0, 0, "igmppl", NULL,
+    IPL_SOFTNET);
 
 static percpu_t *igmpstat_percpu;
 
@@ -79,8 +82,6 @@ void igmp_sendpkt(struct in_multi *, int);
 static int rti_fill(struct in_multi *);
 static struct router_info *rti_find(struct ifnet *);
 static void rti_delete(struct ifnet *);
-
-static void sysctl_net_inet_igmp_setup(struct sysctllog **);
 
 static int
 rti_fill(struct in_multi *inm)
@@ -149,9 +150,6 @@ void
 igmp_init(void)
 {
 
-	sysctl_net_inet_igmp_setup(NULL);
-	pool_init(&igmp_rti_pool, sizeof(struct router_info), 0, 0, 0,
-	    "igmppl", NULL, IPL_SOFTNET);
 	igmpstat_percpu = percpu_alloc(sizeof(uint64_t) * IGMP_NSTATS);
 }
 
@@ -191,7 +189,7 @@ igmp_input(struct mbuf *m, ...)
 	}
 	if (((m->m_flags & M_EXT) && (ip->ip_src.s_addr & IN_CLASSA_NET) == 0)
 	    || m->m_len < minlen) {
-		if ((m = m_pullup(m, minlen)) == NULL) {
+		if ((m = m_pullup(m, minlen)) == 0) {
 			IGMP_STATINC(IGMP_STAT_RCV_TOOSHORT);
 			return;
 		}
@@ -609,8 +607,7 @@ sysctl_net_inet_igmp_stats(SYSCTLFN_ARGS)
 	return (NETSTAT_SYSCTL(igmpstat_percpu, IGMP_NSTATS));
 }
 
-static void
-sysctl_net_inet_igmp_setup(struct sysctllog **clog)
+SYSCTL_SETUP(sysctl_net_inet_igmp_setup, "sysctl net.inet.igmp subtree setup")
 {
 
 	sysctl_createv(clog, 0, NULL, NULL,

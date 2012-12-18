@@ -1,9 +1,9 @@
-/*	$NetBSD: var.c,v 1.17 2011/10/16 17:12:11 joerg Exp $	*/
+/*	$NetBSD: var.c,v 1.14.26.1 2009/09/26 18:19:26 snj Exp $	*/
 
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: var.c,v 1.17 2011/10/16 17:12:11 joerg Exp $");
+__RCSID("$NetBSD: var.c,v 1.14.26.1 2009/09/26 18:19:26 snj Exp $");
 #endif
 
 
@@ -377,7 +377,7 @@ setstr(vq, s, error_ok)
 	if ((vq->flag & RDONLY) && !no_ro_check) {
 		warningf(TRUE, "%s: is read only", vq->name);
 		if (!error_ok)
-			errorf("%s", null);
+			errorf(null);
 		return 0;
 	}
 	if (!(vq->flag&INTEGER)) { /* string dest */
@@ -634,7 +634,7 @@ typeset(var, set, clr, field, base)
 		/* IMPORT is only used when the shell starts up and is
 		 * setting up its environment.  Allow only simple array
 		 * references at this time since parameter/command substitution
-		 * is performed on the [expression], which would be a major
+		 * is preformed on the [expression], which would be a major
 		 * security hole.
 		 */
 		if (set & IMPORT) {
@@ -738,7 +738,7 @@ typeset(var, set, clr, field, base)
 			}
 		}
 		if (!ok)
-		    errorf("%s", null);
+		    errorf(null);
 	}
 
 	if (val != NULL) {

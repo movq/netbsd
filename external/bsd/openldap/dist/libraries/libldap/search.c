@@ -1,9 +1,7 @@
-/*	$NetBSD: search.c,v 1.1.1.3 2010/12/12 15:21:36 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/libraries/libldap/search.c,v 1.76.2.11 2010/04/14 18:08:23 quanah Exp */
+/* $OpenLDAP: pkg/ldap/libraries/libldap/search.c,v 1.76.2.5 2008/02/11 23:26:41 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2010 The OpenLDAP Foundation.
+ * Copyright 1998-2008 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,25 +66,6 @@ ldap_search_ext(
 	int sizelimit,
 	int *msgidp )
 {
-	return ldap_pvt_search( ld, base, scope, filter, attrs,
-		attrsonly, sctrls, cctrls, timeout, sizelimit, -1, msgidp );
-}
-
-int
-ldap_pvt_search(
-	LDAP *ld,
-	LDAP_CONST char *base,
-	int scope,
-	LDAP_CONST char *filter,
-	char **attrs,
-	int attrsonly,
-	LDAPControl **sctrls,
-	LDAPControl **cctrls,
-	struct timeval *timeout,
-	int sizelimit,
-	int deref,
-	int *msgidp )
-{
 	int rc;
 	BerElement	*ber;
 	int timelimit;
@@ -119,7 +98,7 @@ ldap_pvt_search(
 	}
 
 	ber = ldap_build_search_req( ld, base, scope, filter, attrs,
-	    attrsonly, sctrls, cctrls, timelimit, sizelimit, deref, &id ); 
+	    attrsonly, sctrls, cctrls, timelimit, sizelimit, &id ); 
 
 	if ( ber == NULL ) {
 		return ld->ld_errno;
@@ -149,32 +128,11 @@ ldap_search_ext_s(
 	int sizelimit,
 	LDAPMessage **res )
 {
-	return ldap_pvt_search_s( ld, base, scope, filter, attrs,
-		attrsonly, sctrls, cctrls, timeout, sizelimit, -1, res );
-}
-
-int
-ldap_pvt_search_s(
-	LDAP *ld,
-	LDAP_CONST char *base,
-	int scope,
-	LDAP_CONST char *filter,
-	char **attrs,
-	int attrsonly,
-	LDAPControl **sctrls,
-	LDAPControl **cctrls,
-	struct timeval *timeout,
-	int sizelimit,
-	int deref,
-	LDAPMessage **res )
-{
 	int rc;
 	int	msgid;
 
-    *res = NULL;
-
-	rc = ldap_pvt_search( ld, base, scope, filter, attrs, attrsonly,
-		sctrls, cctrls, timeout, sizelimit, deref, &msgid );
+	rc = ldap_search_ext( ld, base, scope, filter, attrs, attrsonly,
+		sctrls, cctrls, timeout, sizelimit, &msgid );
 
 	if ( rc != LDAP_SUCCESS ) {
 		return( rc );
@@ -230,7 +188,7 @@ ldap_search(
 	assert( LDAP_VALID( ld ) );
 
 	ber = ldap_build_search_req( ld, base, scope, filter, attrs,
-	    attrsonly, NULL, NULL, -1, -1, -1, &id ); 
+	    attrsonly, NULL, NULL, -1, -1, &id ); 
 
 	if ( ber == NULL ) {
 		return( -1 );
@@ -254,7 +212,6 @@ ldap_build_search_req(
 	LDAPControl **cctrls,
 	ber_int_t timelimit,
 	ber_int_t sizelimit,
-	ber_int_t deref,
 	ber_int_t *idp)
 {
 	BerElement	*ber;
@@ -310,8 +267,7 @@ ldap_build_search_req(
 	    char *dn = ld->ld_options.ldo_cldapdn;
 	    if (!dn) dn = "";
 	    err = ber_printf( ber, "{ist{seeiib", *idp, dn,
-		LDAP_REQ_SEARCH, base, (ber_int_t) scope,
-		(deref < 0) ? ld->ld_deref : deref,
+		LDAP_REQ_SEARCH, base, (ber_int_t) scope, ld->ld_deref,
 		(sizelimit < 0) ? ld->ld_sizelimit : sizelimit,
 		(timelimit < 0) ? ld->ld_timelimit : timelimit,
 		attrsonly );
@@ -319,8 +275,7 @@ ldap_build_search_req(
 #endif
 	{
 	    err = ber_printf( ber, "{it{seeiib", *idp,
-		LDAP_REQ_SEARCH, base, (ber_int_t) scope,
-		(deref < 0) ? ld->ld_deref : deref,
+		LDAP_REQ_SEARCH, base, (ber_int_t) scope, ld->ld_deref,
 		(sizelimit < 0) ? ld->ld_sizelimit : sizelimit,
 		(timelimit < 0) ? ld->ld_timelimit : timelimit,
 		attrsonly );
@@ -346,25 +301,27 @@ ldap_build_search_req(
 
 #ifdef LDAP_DEBUG
 	if ( ldap_debug & LDAP_DEBUG_ARGS ) {
-		char	buf[ BUFSIZ ], *ptr = " *";
+		char	buf[ BUFSIZ ] = { ' ', '*', '\0' };
 
 		if ( attrs != NULL ) {
-			int	i, len, rest = sizeof( buf );
+			char	*ptr;
+			int	i;
 
-			for ( i = 0; attrs[ i ] != NULL && rest > 0; i++ ) {
-				ptr = &buf[ sizeof( buf ) - rest ];
-				len = snprintf( ptr, rest, " %s", attrs[ i ] );
-				rest -= (len >= 0 ? len : (int) sizeof( buf ));
+			for ( ptr = buf, i = 0;
+				attrs[ i ] != NULL && ptr < &buf[ sizeof( buf ) ];
+				i++ )
+			{
+				ptr += snprintf( ptr, sizeof( buf ) - ( ptr - buf ),
+					" %s", attrs[ i ] );
 			}
 
-			if ( rest <= 0 ) {
+			if ( ptr >= &buf[ sizeof( buf ) ] ) {
 				AC_MEMCPY( &buf[ sizeof( buf ) - STRLENOF( "...(truncated)" ) - 1 ],
 					"...(truncated)", STRLENOF( "...(truncated)" ) + 1 );
 			} 
-			ptr = buf;
 		}
 
-		Debug( LDAP_DEBUG_ARGS, "ldap_build_search_req ATTRS:%s\n", ptr, 0,0 );
+		Debug( LDAP_DEBUG_ARGS, "ldap_build_search_req ATTRS:%s\n", buf, 0, 0 );
 	}
 #endif /* LDAP_DEBUG */
 
@@ -397,8 +354,6 @@ ldap_search_st(
 {
 	int	msgid;
 
-    *res = NULL;
-
 	if ( (msgid = ldap_search( ld, base, scope, filter, attrs, attrsonly ))
 	    == -1 )
 		return( ld->ld_errno );
@@ -426,8 +381,6 @@ ldap_search_s(
 	LDAPMessage **res )
 {
 	int	msgid;
-
-    *res = NULL;
 
 	if ( (msgid = ldap_search( ld, base, scope, filter, attrs, attrsonly ))
 	    == -1 )

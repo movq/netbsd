@@ -1,4 +1,4 @@
-/*	$NetBSD: in_pcb.c,v 1.143 2012/06/25 15:28:39 christos Exp $	*/
+/*	$NetBSD: in_pcb.c,v 1.129.4.1 2009/05/10 20:45:45 snj Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -30,11 +30,9 @@
  */
 
 /*-
- * Copyright (c) 1998, 2011 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Coyote Point Systems, Inc.
  * This code is derived from software contributed to The NetBSD Foundation
  * by Public Access Networks Corporation ("Panix").  It was developed under
  * contract to Panix by Eric Haszlakiewicz and Thor Lancelot Simon.
@@ -93,7 +91,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.143 2012/06/25 15:28:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.129.4.1 2009/05/10 20:45:45 snj Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -113,7 +111,6 @@ __KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.143 2012/06/25 15:28:39 christos Exp $"
 #include <sys/proc.h>
 #include <sys/kauth.h>
 #include <sys/uidinfo.h>
-#include <sys/domain.h>
 
 #include <net/if.h>
 #include <net/route.h>
@@ -124,7 +121,6 @@ __KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.143 2012/06/25 15:28:39 christos Exp $"
 #include <netinet/in_pcb.h>
 #include <netinet/in_var.h>
 #include <netinet/ip_var.h>
-#include <netinet/portalgo.h>
 
 #ifdef INET6
 #include <netinet/ip6.h>
@@ -132,12 +128,13 @@ __KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.143 2012/06/25 15:28:39 christos Exp $"
 #include <netinet6/in6_pcb.h>
 #endif
 
-#ifdef FAST_IPSEC
+#ifdef IPSEC
+#include <netinet6/ipsec.h>
+#include <netkey/key.h>
+#elif FAST_IPSEC
 #include <netipsec/ipsec.h>
 #include <netipsec/key.h>
 #endif /* IPSEC */
-
-#include <netinet/tcp_vtw.h>
 
 struct	in_addr zeroin_addr;
 
@@ -191,7 +188,7 @@ in_pcballoc(struct socket *so, void *v)
 	struct inpcbtable *table = v;
 	struct inpcb *inp;
 	int s;
-#if defined(FAST_IPSEC)
+#if defined(IPSEC) || defined(FAST_IPSEC)
 	int error;
 #endif
 
@@ -200,14 +197,12 @@ in_pcballoc(struct socket *so, void *v)
 	splx(s);
 	if (inp == NULL)
 		return (ENOBUFS);
-	memset(inp, 0, sizeof(*inp));
+	bzero((void *)inp, sizeof(*inp));
 	inp->inp_af = AF_INET;
 	inp->inp_table = table;
 	inp->inp_socket = so;
 	inp->inp_errormtu = -1;
-	inp->inp_portalgo = PORTALGO_DEFAULT;
-	inp->inp_bindportonsend = false;
-#if defined(FAST_IPSEC)
+#if defined(IPSEC) || defined(FAST_IPSEC)
 	error = ipsec_init_pcbpolicy(so, &inp->inp_sp);
 	if (error != 0) {
 		s = splnet();
@@ -227,84 +222,37 @@ in_pcballoc(struct socket *so, void *v)
 	return (0);
 }
 
-static int
-in_pcbsetport(struct sockaddr_in *sin, struct inpcb *inp, kauth_cred_t cred)
+int
+in_pcbbind(void *v, struct mbuf *nam, struct lwp *l)
 {
-	struct inpcbtable *table = inp->inp_table;
+	struct in_ifaddr *ia = NULL;
+	struct inpcb *inp = v;
 	struct socket *so = inp->inp_socket;
-	u_int16_t *lastport;
+	struct inpcbtable *table = inp->inp_table;
+	struct sockaddr_in *sin = NULL; /* XXXGCC */
 	u_int16_t lport = 0;
-	enum kauth_network_req req;
-	int error;
-
-	if (inp->inp_flags & INP_LOWPORT) {
+	int wild = 0, reuseport = (so->so_options & SO_REUSEPORT);
 #ifndef IPNOPRIVPORTS
-		req = KAUTH_REQ_NETWORK_BIND_PRIVPORT;
-#else
-		req = KAUTH_REQ_NETWORK_BIND_PORT;
+	kauth_cred_t cred = l->l_cred;
 #endif
 
-		lastport = &table->inpt_lastlow;
-	} else {
-		req = KAUTH_REQ_NETWORK_BIND_PORT;
+	if (inp->inp_af != AF_INET)
+		return (EINVAL);
 
-		lastport = &table->inpt_lastport;
-	}
-
-	/* XXX-kauth: KAUTH_REQ_NETWORK_BIND_AUTOASSIGN_{,PRIV}PORT */
-	error = kauth_authorize_network(cred, KAUTH_NETWORK_BIND, req, so, sin,
-	    NULL);
-	if (error)
-		return (EACCES);
-
-       /*
-        * Use RFC6056 randomized port selection
-        */
-	error = portalgo_randport(&lport, &inp->inp_head, cred);
-	if (error)
-		return error;
-
-	inp->inp_flags |= INP_ANONPORT;
-	*lastport = lport;
-	lport = htons(lport);
-	inp->inp_lport = lport;
-	in_pcbstate(inp, INP_BOUND);
-
-	return (0);
-}
-
-static int
-in_pcbbind_addr(struct inpcb *inp, struct sockaddr_in *sin, kauth_cred_t cred)
-{
+	if (TAILQ_FIRST(&in_ifaddrhead) == 0)
+		return (EADDRNOTAVAIL);
+	if (inp->inp_lport || !in_nullhost(inp->inp_laddr))
+		return (EINVAL);
+	if ((so->so_options & (SO_REUSEADDR|SO_REUSEPORT)) == 0)
+		wild = 1;
+	if (nam == 0)
+		goto noname;
+	sin = mtod(nam, struct sockaddr_in *);
+	if (nam->m_len != sizeof (*sin))
+		return (EINVAL);
 	if (sin->sin_family != AF_INET)
 		return (EAFNOSUPPORT);
-
-	if (IN_MULTICAST(sin->sin_addr.s_addr)) {
-		/* Always succeed; port reuse handled in in_pcbbind_port(). */
-	} else if (!in_nullhost(sin->sin_addr)) {
-		struct in_ifaddr *ia = NULL;
-
-		INADDR_TO_IA(sin->sin_addr, ia);
-		/* check for broadcast addresses */
-		if (ia == NULL)
-			ia = ifatoia(ifa_ifwithaddr(sintosa(sin)));
-		if (ia == NULL)
-			return (EADDRNOTAVAIL);
-	}
-
-	inp->inp_laddr = sin->sin_addr;
-
-	return (0);
-}
-
-static int
-in_pcbbind_port(struct inpcb *inp, struct sockaddr_in *sin, kauth_cred_t cred)
-{
-	struct inpcbtable *table = inp->inp_table;
-	struct socket *so = inp->inp_socket;
-	int reuseport = (so->so_options & SO_REUSEPORT);
-	int wild = 0, error;
-
+	lport = sin->sin_port;
 	if (IN_MULTICAST(sin->sin_addr.s_addr)) {
 		/*
 		 * Treat SO_REUSEADDR as SO_REUSEPORT for multicast;
@@ -315,59 +263,46 @@ in_pcbbind_port(struct inpcb *inp, struct sockaddr_in *sin, kauth_cred_t cred)
 		 */
 		if (so->so_options & SO_REUSEADDR)
 			reuseport = SO_REUSEADDR|SO_REUSEPORT;
-	} 
-
-	if (sin->sin_port == 0) {
-		error = in_pcbsetport(sin, inp, cred);
-		if (error)
-			return (error);
-	} else {
+	} else if (!in_nullhost(sin->sin_addr)) {
+		sin->sin_port = 0;		/* yech... */
+		INADDR_TO_IA(sin->sin_addr, ia);
+		/* check for broadcast addresses */
+		if (ia == NULL)
+			ia = ifatoia(ifa_ifwithaddr(sintosa(sin)));
+		if (ia == NULL)
+			return (EADDRNOTAVAIL);
+	}
+	if (lport) {
 		struct inpcb *t;
-		vestigial_inpcb_t vestige;
 #ifdef INET6
 		struct in6pcb *t6;
 		struct in6_addr mapped;
 #endif
-		enum kauth_network_req req;
-
-		if ((so->so_options & (SO_REUSEADDR|SO_REUSEPORT)) == 0)
-			wild = 1;
-
 #ifndef IPNOPRIVPORTS
-		if (ntohs(sin->sin_port) < IPPORT_RESERVED)
-			req = KAUTH_REQ_NETWORK_BIND_PRIVPORT;
-		else
-#endif /* !IPNOPRIVPORTS */
-			req = KAUTH_REQ_NETWORK_BIND_PORT;
-
-		error = kauth_authorize_network(cred, KAUTH_NETWORK_BIND, req,
-		    so, sin, NULL);
-		if (error)
+		/* GROSS */
+		if (ntohs(lport) < IPPORT_RESERVED &&
+		    kauth_authorize_network(cred,
+		    KAUTH_NETWORK_BIND,
+		    KAUTH_REQ_NETWORK_BIND_PRIVPORT, so, sin,
+		    NULL))
 			return (EACCES);
-
+#endif
 #ifdef INET6
 		memset(&mapped, 0, sizeof(mapped));
 		mapped.s6_addr16[5] = 0xffff;
 		memcpy(&mapped.s6_addr32[3], &sin->sin_addr,
 		    sizeof(mapped.s6_addr32[3]));
-		t6 = in6_pcblookup_port(table, &mapped, sin->sin_port, wild, &vestige);
+		t6 = in6_pcblookup_port(table, &mapped, lport, wild);
 		if (t6 && (reuseport & t6->in6p_socket->so_options) == 0)
 			return (EADDRINUSE);
-		if (!t6 && vestige.valid) {
-		    if (!!reuseport != !!vestige.reuse_port) {
-			return EADDRINUSE;
-		    }
-		}
 #endif
-
-		/* XXX-kauth */
 		if (so->so_uidinfo->ui_uid && !IN_MULTICAST(sin->sin_addr.s_addr)) {
-			t = in_pcblookup_port(table, sin->sin_addr, sin->sin_port, 1, &vestige);
-			/*
-			 * XXX:	investigate ramifications of loosening this
-			 *	restriction so that as long as both ports have
-			 *	SO_REUSEPORT allow the bind
-			 */
+			t = in_pcblookup_port(table, sin->sin_addr, lport, 1);
+		/*
+		 * XXX:	investigate ramifications of loosening this
+		 *	restriction so that as long as both ports have
+		 *	SO_REUSEPORT allow the bind
+		 */
 			if (t &&
 			    (!in_nullhost(sin->sin_addr) ||
 			     !in_nullhost(t->inp_laddr) ||
@@ -375,73 +310,64 @@ in_pcbbind_port(struct inpcb *inp, struct sockaddr_in *sin, kauth_cred_t cred)
 			    && (so->so_uidinfo->ui_uid != t->inp_socket->so_uidinfo->ui_uid)) {
 				return (EADDRINUSE);
 			}
-			if (!t && vestige.valid) {
-				if ((!in_nullhost(sin->sin_addr)
-				     || !in_nullhost(vestige.laddr.v4)
-				     || !vestige.reuse_port)
-				    && so->so_uidinfo->ui_uid != vestige.uid) {
-					return EADDRINUSE;
-				}
-			}
 		}
-		t = in_pcblookup_port(table, sin->sin_addr, sin->sin_port, wild, &vestige);
+		t = in_pcblookup_port(table, sin->sin_addr, lport, wild);
 		if (t && (reuseport & t->inp_socket->so_options) == 0)
 			return (EADDRINUSE);
-		if (!t
-		    && vestige.valid
-		    && !(reuseport && vestige.reuse_port))
-			return EADDRINUSE;
-
-		inp->inp_lport = sin->sin_port;
-		in_pcbstate(inp, INP_BOUND);
 	}
+	inp->inp_laddr = sin->sin_addr;
 
+noname:
+	if (lport == 0) {
+		int	   cnt;
+		u_int16_t  mymin, mymax;
+		u_int16_t *lastport;
+
+		if (inp->inp_flags & INP_LOWPORT) {
+#ifndef IPNOPRIVPORTS
+			if (kauth_authorize_network(cred,
+			    KAUTH_NETWORK_BIND,
+			    KAUTH_REQ_NETWORK_BIND_PRIVPORT, so,
+			    sin, NULL))
+				return (EACCES);
+#endif
+			mymin = lowportmin;
+			mymax = lowportmax;
+			lastport = &table->inpt_lastlow;
+		} else {
+			mymin = anonportmin;
+			mymax = anonportmax;
+			lastport = &table->inpt_lastport;
+		}
+		if (mymin > mymax) {	/* sanity check */
+			u_int16_t swp;
+
+			swp = mymin;
+			mymin = mymax;
+			mymax = swp;
+		}
+
+		lport = *lastport - 1;
+		for (cnt = mymax - mymin + 1; cnt; cnt--, lport--) {
+			if (lport < mymin || lport > mymax)
+				lport = mymax;
+			if (!in_pcblookup_port(table, inp->inp_laddr,
+			    htons(lport), 1))
+				goto found;
+		}
+		if (!in_nullhost(inp->inp_laddr))
+			inp->inp_laddr.s_addr = INADDR_ANY;
+		return (EAGAIN);
+	found:
+		inp->inp_flags |= INP_ANONPORT;
+		*lastport = lport;
+		lport = htons(lport);
+	}
+	inp->inp_lport = lport;
 	LIST_REMOVE(&inp->inp_head, inph_lhash);
 	LIST_INSERT_HEAD(INPCBHASH_PORT(table, inp->inp_lport), &inp->inp_head,
 	    inph_lhash);
-
-	return (0);
-}
-
-int
-in_pcbbind(void *v, struct mbuf *nam, struct lwp *l)
-{
-	struct inpcb *inp = v;
-	struct sockaddr_in *sin = NULL; /* XXXGCC */
-	struct sockaddr_in lsin;
-	int error;
-
-	if (inp->inp_af != AF_INET)
-		return (EINVAL);
-
-	if (TAILQ_FIRST(&in_ifaddrhead) == 0)
-		return (EADDRNOTAVAIL);
-	if (inp->inp_lport || !in_nullhost(inp->inp_laddr))
-		return (EINVAL);
-
-	if (nam != NULL) {
-		sin = mtod(nam, struct sockaddr_in *);
-		if (nam->m_len != sizeof (*sin))
-			return (EINVAL);
-	} else {
-		lsin = *((const struct sockaddr_in *)
-		    inp->inp_socket->so_proto->pr_domain->dom_sa_any);
-		sin = &lsin;
-	}
-
-	/* Bind address. */
-	error = in_pcbbind_addr(inp, sin, l->l_cred);
-	if (error)
-		return (error);
-
-	/* Bind port. */
-	error = in_pcbbind_port(inp, sin, l->l_cred);
-	if (error) {
-		inp->inp_laddr.s_addr = INADDR_ANY;
-
-		return (error);
-	}
-
+	in_pcbstate(inp, INP_BOUND);
 	return (0);
 }
 
@@ -458,7 +384,6 @@ in_pcbconnect(void *v, struct mbuf *nam, struct lwp *l)
 	struct in_ifaddr *ia = NULL;
 	struct sockaddr_in *ifaddr = NULL;
 	struct sockaddr_in *sin = mtod(nam, struct sockaddr_in *);
-	vestigial_inpcb_t vestige;
 	int error;
 
 	if (inp->inp_af != AF_INET)
@@ -519,8 +444,7 @@ in_pcbconnect(void *v, struct mbuf *nam, struct lwp *l)
 	}
 	if (in_pcblookup_connect(inp->inp_table, sin->sin_addr, sin->sin_port,
 	    !in_nullhost(inp->inp_laddr) ? inp->inp_laddr : ifaddr->sin_addr,
-				 inp->inp_lport, &vestige) != 0
-	    || vestige.valid)
+	    inp->inp_lport) != 0)
 		return (EADDRINUSE);
 	if (in_nullhost(inp->inp_laddr)) {
 		if (inp->inp_lport == 0) {
@@ -538,20 +462,8 @@ in_pcbconnect(void *v, struct mbuf *nam, struct lwp *l)
 	}
 	inp->inp_faddr = sin->sin_addr;
 	inp->inp_fport = sin->sin_port;
-
-        /* Late bind, if needed */
-	if (inp->inp_bindportonsend) {
-               struct sockaddr_in lsin = *((const struct sockaddr_in *)
-		    inp->inp_socket->so_proto->pr_domain->dom_sa_any);
-		lsin.sin_addr = inp->inp_laddr;
-		lsin.sin_port = 0;
-
-               if ((error = in_pcbbind_port(inp, &lsin, l->l_cred)) != 0)
-                       return error;
-	}
-
 	in_pcbstate(inp, INP_CONNECTED);
-#if defined(FAST_IPSEC)
+#if defined(IPSEC) || defined(FAST_IPSEC)
 	if (inp->inp_socket->so_type == SOCK_STREAM)
 		ipsec_pcbconn(inp->inp_sp);
 #endif
@@ -569,7 +481,7 @@ in_pcbdisconnect(void *v)
 	inp->inp_faddr = zeroin_addr;
 	inp->inp_fport = 0;
 	in_pcbstate(inp, INP_BOUND);
-#if defined(FAST_IPSEC)
+#if defined(IPSEC) || defined(FAST_IPSEC)
 	ipsec_pcbdisconn(inp->inp_sp);
 #endif
 	if (inp->inp_socket->so_state & SS_NOFDREF)
@@ -586,7 +498,7 @@ in_pcbdetach(void *v)
 	if (inp->inp_af != AF_INET)
 		return;
 
-#if defined(FAST_IPSEC)
+#if defined(IPSEC) || defined(FAST_IPSEC)
 	ipsec4_delete_pcbpolicy(inp);
 #endif /*IPSEC*/
 	so->so_pcb = 0;
@@ -802,37 +714,22 @@ in_rtchange(struct inpcb *inp, int errno)
 
 struct inpcb *
 in_pcblookup_port(struct inpcbtable *table, struct in_addr laddr,
-		  u_int lport_arg, int lookup_wildcard, vestigial_inpcb_t *vp)
+    u_int lport_arg, int lookup_wildcard)
 {
 	struct inpcbhead *head;
 	struct inpcb_hdr *inph;
-	struct inpcb *match = NULL;
-	int matchwild = 3;
-	int wildcard;
+	struct inpcb *inp, *match = 0;
+	int matchwild = 3, wildcard;
 	u_int16_t lport = lport_arg;
-
-	if (vp)
-		vp->valid = 0;
 
 	head = INPCBHASH_PORT(table, lport);
 	LIST_FOREACH(inph, head, inph_lhash) {
-		struct inpcb * const inp = (struct inpcb *)inph;
-
+		inp = (struct inpcb *)inph;
 		if (inp->inp_af != AF_INET)
 			continue;
+
 		if (inp->inp_lport != lport)
 			continue;
-		/*
-		 * check if inp's faddr and laddr match with ours.
-		 * our faddr is considered null.
-		 * count the number of wildcard matches. (0 - 2)
-		 *
-		 *	null	null	match
-		 *	A	null	wildcard match
-		 *	null	B	wildcard match
-		 *	A	B	non match
-		 *	A	A	match
-		 */
 		wildcard = 0;
 		if (!in_nullhost(inp->inp_faddr))
 			wildcard++;
@@ -849,9 +746,6 @@ in_pcblookup_port(struct inpcbtable *table, struct in_addr laddr,
 		}
 		if (wildcard && !lookup_wildcard)
 			continue;
-		/*
-		 * prefer an address with less wildcards.
-		 */
 		if (wildcard < matchwild) {
 			match = inp;
 			matchwild = wildcard;
@@ -859,54 +753,6 @@ in_pcblookup_port(struct inpcbtable *table, struct in_addr laddr,
 				break;
 		}
 	}
-	if (match && matchwild == 0)
-		return match;
-
-	if (vp && table->vestige) {
-		void	*state = (*table->vestige->init_ports4)(laddr, lport_arg, lookup_wildcard);
-		vestigial_inpcb_t better;
-
-		while (table->vestige
-		       && (*table->vestige->next_port4)(state, vp)) {
-
-			if (vp->lport != lport)
-				continue;
-			wildcard = 0;
-			if (!in_nullhost(vp->faddr.v4))
-				wildcard++;
-			if (in_nullhost(vp->laddr.v4)) {
-				if (!in_nullhost(laddr))
-					wildcard++;
-			} else {
-				if (in_nullhost(laddr))
-					wildcard++;
-				else {
-					if (!in_hosteq(vp->laddr.v4, laddr))
-						continue;
-				}
-			}
-			if (wildcard && !lookup_wildcard)
-				continue;
-			if (wildcard < matchwild) {
-				better = *vp;
-				match  = (void*)&better;
-
-				matchwild = wildcard;
-				if (matchwild == 0)
-					break;
-			}
-		}
-
-		if (match) {
-			if (match != (void*)&better)
-				return match;
-			else {
-				*vp = better;
-				return 0;
-			}
-		}
-	}
-
 	return (match);
 }
 
@@ -917,16 +763,12 @@ int	in_pcbnotifymiss = 0;
 struct inpcb *
 in_pcblookup_connect(struct inpcbtable *table,
     struct in_addr faddr, u_int fport_arg,
-    struct in_addr laddr, u_int lport_arg,
-    vestigial_inpcb_t *vp)
+    struct in_addr laddr, u_int lport_arg)
 {
 	struct inpcbhead *head;
 	struct inpcb_hdr *inph;
 	struct inpcb *inp;
 	u_int16_t fport = fport_arg, lport = lport_arg;
-
-	if (vp)
-		vp->valid = 0;
 
 	head = INPCBHASH_CONNECT(table, faddr, fport, laddr, lport);
 	LIST_FOREACH(inph, head, inph_hash) {
@@ -940,12 +782,6 @@ in_pcblookup_connect(struct inpcbtable *table,
 		    in_hosteq(inp->inp_laddr, laddr))
 			goto out;
 	}
-	if (vp && table->vestige) {
-		if ((*table->vestige->lookup4)(faddr, fport_arg,
-					       laddr, lport_arg, vp))
-			return 0;
-	}
-
 #ifdef DIAGNOSTIC
 	if (in_pcbnotifymiss) {
 		printf("in_pcblookup_connect: faddr=%08x fport=%d laddr=%08x lport=%d\n",

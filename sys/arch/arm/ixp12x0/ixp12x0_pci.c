@@ -1,4 +1,4 @@
-/* $NetBSD: ixp12x0_pci.c,v 1.13 2012/10/27 17:17:39 chs Exp $ */
+/* $NetBSD: ixp12x0_pci.c,v 1.8 2008/04/28 20:23:14 martin Exp $ */
 /*
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp12x0_pci.c,v 1.13 2012/10/27 17:17:39 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp12x0_pci.c,v 1.8 2008/04/28 20:23:14 martin Exp $");
 
 /*
  * PCI configuration support for IXP12x0 Network Processor chip.
@@ -53,14 +53,13 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0_pci.c,v 1.13 2012/10/27 17:17:39 chs Exp $")
 #include "opt_pci.h"
 #include "pci.h"
 
-void ixp12x0_pci_attach_hook(device_t, device_t,
+void ixp12x0_pci_attach_hook(struct device *, struct device *,
 	struct pcibus_attach_args *);
 int ixp12x0_pci_bus_maxdevs(void *, int);
 pcitag_t ixp12x0_pci_make_tag(void *, int, int, int);
 void ixp12x0_pci_decompose_tag(void *, pcitag_t, int *, int *, int *);
 pcireg_t ixp12x0_pci_conf_read(void *, pcitag_t, int);
 void ixp12x0_pci_conf_write(void *, pcitag_t, int, pcireg_t);
-void ixp12x0_pci_conf_interrupt(void *, int, int, int, int, int *);
 
 static vaddr_t ixp12x0_pci_conf_setup(void *, struct ixp12x0_softc *, pcitag_t, int);
 
@@ -80,7 +79,9 @@ static vaddr_t ixp12x0_pci_conf_setup(void *, struct ixp12x0_softc *, pcitag_t, 
  */
 
 void
-ixp12x0_pci_init(pci_chipset_tag_t pc, void *cookie)
+ixp12x0_pci_init(pc, cookie)
+	pci_chipset_tag_t pc;
+	void *cookie;
 {
 #if NPCI > 0 && defined(PCI_NETBSD_CONFIGURE)
 	struct ixp12x0_softc *sc = cookie;
@@ -93,17 +94,16 @@ ixp12x0_pci_init(pci_chipset_tag_t pc, void *cookie)
 	pc->pc_decompose_tag = ixp12x0_pci_decompose_tag;
 	pc->pc_conf_read = ixp12x0_pci_conf_read;
 	pc->pc_conf_write = ixp12x0_pci_conf_write;
-	pc->pc_conf_interrupt = ixp12x0_pci_conf_interrupt;
 
 #if NPCI > 0 && defined(PCI_NETBSD_CONFIGURE)
 	ioext  = extent_create("pciio", 0, IXP12X0_PCI_IO_SIZE - 1,
-				NULL, 0, EX_NOWAIT);
+				M_DEVBUF, NULL, 0, EX_NOWAIT);
 	/* PCI MEM space is mapped same address as real memory */
 	memext = extent_create("pcimem", IXP12X0_PCI_MEM_HWBASE,
 				IXP12X0_PCI_MEM_HWBASE +
 				IXP12X0_PCI_MEM_SIZE - 1,
-				NULL, 0, EX_NOWAIT);
-	aprint_normal_dev(sc->sc_dev, "configuring PCI bus\n");
+				M_DEVBUF, NULL, 0, EX_NOWAIT);
+	printf("%s: configuring PCI bus\n", sc->sc_dev.dv_xname);
 	pci_configure_bus(pc, ioext, memext, NULL, 0 /* XXX bus = 0 */,
 			  arm_dcache_align);
 
@@ -113,25 +113,34 @@ ixp12x0_pci_init(pci_chipset_tag_t pc, void *cookie)
 }
 
 void
-ixp12x0_pci_conf_interrupt(void *v, int a, int b, int c, int d, int *p)
+pci_conf_interrupt(pc, a, b, c, d, p)
+	pci_chipset_tag_t pc;
+	int a, b, c, d, *p;
 {
 	/* Nothing */
 }
 
 void
-ixp12x0_pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
+ixp12x0_pci_attach_hook(parent, self, pba)
+	struct device *parent;
+	struct device *self;
+	struct pcibus_attach_args *pba;
 {
 	/* Nothing to do. */
 }
 
 int
-ixp12x0_pci_bus_maxdevs(void *v, int busno)
+ixp12x0_pci_bus_maxdevs(v, busno)
+	void *v;
+	int busno;
 {
 	return(MAX_PCI_DEVICES);
 }
 
 pcitag_t
-ixp12x0_pci_make_tag(void *v, int bus, int device, int function)
+ixp12x0_pci_make_tag(v, bus, device, function)
+	void *v;
+	int bus, device, function;
 {
 #ifdef PCI_DEBUG
 	printf("ixp12x0_pci_make_tag(v=%p, bus=%d, device=%d, function=%d)\n",
@@ -141,7 +150,10 @@ ixp12x0_pci_make_tag(void *v, int bus, int device, int function)
 }
 
 void
-ixp12x0_pci_decompose_tag(void *v, pcitag_t tag, int *busp, int *devicep, int *functionp)
+ixp12x0_pci_decompose_tag(v, tag, busp, devicep, functionp)
+	void *v;
+	pcitag_t tag;
+	int *busp, *devicep, *functionp;
 {
 #ifdef PCI_DEBUG
 	printf("ixp12x0_pci_decompose_tag(v=%p, tag=0x%08lx, bp=%x, dp=%x, fp=%x)\n",
@@ -157,7 +169,11 @@ ixp12x0_pci_decompose_tag(void *v, pcitag_t tag, int *busp, int *devicep, int *f
 }
 
 static vaddr_t
-ixp12x0_pci_conf_setup(void *v, struct ixp12x0_softc *sc, pcitag_t tag, int offset)
+ixp12x0_pci_conf_setup(v, sc, tag, offset)
+	void *v;
+	struct ixp12x0_softc *sc;
+	pcitag_t tag;
+	int offset;
 {
 	int bus, device, function;
 	vaddr_t addr;
@@ -178,7 +194,10 @@ ixp12x0_pci_conf_setup(void *v, struct ixp12x0_softc *sc, pcitag_t tag, int offs
 }
 
 pcireg_t
-ixp12x0_pci_conf_read(void *v, pcitag_t tag, int offset)
+ixp12x0_pci_conf_read(v, tag, offset)
+	void *v;
+	pcitag_t tag;
+	int offset;
 {
 	struct ixp12x0_softc *sc = v;
 	vaddr_t va = ixp12x0_pci_conf_setup(v, sc, tag, offset);
@@ -207,7 +226,11 @@ ixp12x0_pci_conf_read(void *v, pcitag_t tag, int offset)
 }
 
 void
-ixp12x0_pci_conf_write(void *v, pcitag_t tag, int offset, pcireg_t val)
+ixp12x0_pci_conf_write(v, tag, offset, val)
+	void *v;
+	pcitag_t tag;
+	int offset;
+	pcireg_t val;
 {
 	struct ixp12x0_softc *sc = v;
 	vaddr_t va = ixp12x0_pci_conf_setup(v, sc, tag, offset);

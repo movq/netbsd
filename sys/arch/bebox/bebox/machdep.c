@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.106 2012/10/13 17:58:54 jdc Exp $	*/
+/*	$NetBSD: machdep.c,v 1.94 2008/06/07 02:48:00 kiyohara Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,37 +32,50 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.106 2012/10/13 17:58:54 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.94 2008/06/07 02:48:00 kiyohara Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
 
-#define _POWERPC_BUS_DMA_PRIVATE
-
 #include <sys/param.h>
-#include <sys/bus.h>
+#include <sys/buf.h>
 #include <sys/conf.h>
 #include <sys/device.h>
+#include <sys/exec.h>
+#include <sys/extent.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
+#include <sys/mbuf.h>
 #include <sys/mount.h>
+#include <sys/msgbuf.h>
+#include <sys/proc.h>
 #include <sys/reboot.h>
+#include <sys/syscallargs.h>
+#include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/vnode.h>
+#include <sys/user.h>
+#include <sys/ksyms.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bebox.h>
-#include <machine/autoconf.h>
-#include <machine/bootinfo.h>
-#include <machine/powerpc.h>
+#include <net/netisr.h>
 
+#include <machine/bootinfo.h>
+#include <machine/autoconf.h>
+#define _POWERPC_BUS_DMA_PRIVATE
+#include <machine/bus.h>
+#include <machine/intr.h>
+#include <machine/pmap.h>
+#include <machine/powerpc.h>
+#include <machine/trap.h>
+
+#include <powerpc/oea/bat.h>
 #include <powerpc/pic/picvar.h> 
-#include <powerpc/pio.h>
-#include <powerpc/prep_bus.h>
-#include <powerpc/psl.h>
 
 #include <dev/cons.h>
+
+#include "ksyms.h"
 
 #include "vga.h"
 #if (NVGA > 0)
@@ -91,10 +104,13 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.106 2012/10/13 17:58:54 jdc Exp $");
  * Global variables used here and there
  */
 char bootinfo[BOOTINFO_MAXSIZE];
-#define	MEMREGIONS	2
-struct mem_region physmemr[MEMREGIONS], availmemr[MEMREGIONS];
+paddr_t bebox_mb_reg;		/* BeBox MotherBoard register */
+#define	OFMEMREGIONS	32
+struct mem_region physmemr[OFMEMREGIONS], availmemr[OFMEMREGIONS];
 char bootpath[256];
+paddr_t avail_end;			/* XXX temporary */
 struct pic_ops *isa_pic;
+int isa_pcmciamask = 0x8b28;		/* XXXX */
 extern int primary_pic;
 void initppc(u_long, u_long, u_int, void *);
 static void disable_device(const char *);
@@ -125,6 +141,7 @@ initppc(u_long startkernel, u_long endkernel, u_int args, void *btinfo)
 		availmemr[0].start = (endkernel + PGOFSET) & ~PGOFSET;
 		availmemr[0].size = meminfo->memsize - availmemr[0].start;
 	}
+	avail_end = physmemr[0].start + physmemr[0].size;    /* XXX temporary */
 
 	/*
 	 * Get CPU clock
@@ -141,6 +158,11 @@ initppc(u_long startkernel, u_long endkernel, u_int args, void *btinfo)
 		ns_per_tick = 1000000000 / ticks_per_sec;
 	}
 
+
+	/*
+	 * boothowto
+	 */
+	/*	boothowto = args; */
 	prep_initppc(startkernel, endkernel, args);
 }
 
@@ -148,8 +170,14 @@ initppc(u_long startkernel, u_long endkernel, u_int args, void *btinfo)
  * Machine dependent startup code.
  */
 void
-cpu_startup(void)
+cpu_startup()
 {
+	/*
+	 * BeBox Mother Board's Register Mapping
+	 */
+	bebox_mb_reg = (vaddr_t) mapiodev(BEBOX_INTR_REG, PAGE_SIZE);
+	if (!bebox_mb_reg)
+		panic("cpu_startup: no room for interrupt register");
 
 	/*
 	 * Do common VM initialization
@@ -172,6 +200,17 @@ cpu_startup(void)
 	 * Now that we have VM, malloc's are OK in bus_space.
 	 */
 	bus_space_mallocok();
+
+	/*
+	 * Now allow hardware interrupts.
+	 */
+	{
+		int msr;
+
+		splraise(-1);
+		__asm volatile ("mfmsr %0; ori %0,%0,%1; mtmsr %0"
+		    : "=r"(msr) : "K"(PSL_EE));
+	}
 }
 
 /*
@@ -179,7 +218,8 @@ cpu_startup(void)
  * Look up information in bootinfo of boot loader.
  */
 void *
-lookup_bootinfo(int type)
+lookup_bootinfo(type)
+	int type;
 {
 	struct btinfo_common *bt;
 	struct btinfo_common *help = (struct btinfo_common *)bootinfo;
@@ -215,7 +255,7 @@ disable_device(const char *name)
  * Initialize system console.
  */
 void
-consinit(void)
+consinit()
 {
 	struct btinfo_console *consinfo;
 	static int initted;
@@ -239,7 +279,7 @@ consinit(void)
 		 */
 #if (NPCKBC > 0)
 		pckbc_cnattach(&genppc_isa_io_space_tag, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT, 0);
+		    PCKBC_KBD_SLOT);
 #endif
 		disable_device("vga");
 		return;
@@ -252,7 +292,7 @@ consinit(void)
 		vga_cnattach(&prep_io_space_tag, &prep_mem_space_tag, -1, 1);
 #if (NPCKBC > 0)
 		pckbc_cnattach(&genppc_isa_io_space_tag, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT, 0);
+		    PCKBC_KBD_SLOT);
 #endif
 		return;
 	}
@@ -291,14 +331,12 @@ cpu_reboot(int howto, char *what)
 	splhigh();
 	if (howto & RB_HALT) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("halted\n\n");
 
 	}
 	if (!cold && (howto & RB_DUMP))
 		oea_dumpsys();
 	doshutdownhooks();
-	pmf_system_shutdown(boothowto);
 	printf("rebooting\n\n");
 	if (what && *what) {
 		if (strlen(what) > sizeof str - 5)
@@ -317,12 +355,5 @@ cpu_reboot(int howto, char *what)
 	*ap++ = 0;
 	if (ap[-2] == '-')
 		*ap1 = 0;
-
-	/* Left and Right LED on.  Max 15 for both LED. */
-#define LEFT_LED(x)	(((x) & 0xf) << 4)
-#define RIGHT_LED(x)	(((x) & 0xf))
-
-	outb(PREP_BUS_SPACE_IO + 0x0c00, LEFT_LED(15) | RIGHT_LED(15));
-
 	while (1);
 }

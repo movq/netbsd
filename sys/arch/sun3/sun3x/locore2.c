@@ -1,4 +1,4 @@
-/*	$NetBSD: locore2.c,v 1.39 2012/08/10 14:33:35 tsutsui Exp $	*/
+/*	$NetBSD: locore2.c,v 1.34 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.39 2012/08/10 14:33:35 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.34 2008/04/28 20:23:38 martin Exp $");
 
 #include "opt_ddb.h"
 
@@ -38,12 +38,11 @@ __KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.39 2012/08/10 14:33:35 tsutsui Exp $")
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
+#include <sys/user.h>
 #define ELFSIZE 32
 #include <sys/exec_elf.h>
 
 #include <uvm/uvm_extern.h>
-
-#include <dev/cons.h>
 
 #include <machine/cpu.h>
 #include <machine/db_machdep.h>
@@ -78,6 +77,7 @@ int mmutype = MMU_68030;
  * Now our own stuff.
  */
 
+struct user *proc0paddr;	/* proc[0] pcb address (u-area VA) */
 extern struct pcb *curpcb;
 
 /* First C code called by locore.s */
@@ -169,16 +169,16 @@ _vm_init(void)
 	 * fault handler works in case we hit an early bug.
 	 * (The fault handler may reference lwp0 stuff.)
 	 */
-	uvm_lwp_setuarea(&lwp0, nextva);
-	memset((void *)nextva, 0, USPACE);
-
+	proc0paddr = (struct user *) nextva;
 	nextva += USPACE;
+	memset((void *)proc0paddr, 0, USPACE);
+	lwp0.l_addr = proc0paddr;
 
 	/*
 	 * Now that lwp0 exists, make it the "current" one.
 	 */
 	curlwp = &lwp0;
-	curpcb = lwp_getpcb(&lwp0);
+	curpcb = &proc0paddr->u_pcb;
 
 	/* This does most of the real work. */
 	pmap_bootstrap(nextva);
@@ -194,19 +194,12 @@ _vm_init(void)
 void 
 _bootstrap(void)
 {
-	extern struct consdev consdev_prom;	/* XXX */
 
 	/* First, Clear BSS. */
 	memset(edata, 0, end - edata);
 
 	/* Set v_handler, get boothowto. */
 	sunmon_init();
-
-	/*
-	 * Initialize console to point to the PROM (output only) table
-	 * for early printf calls.
-	 */
-	cn_tab = &consdev_prom;
 
 	/* Handle kernel mapping, pmap_bootstrap(), etc. */
 	_vm_init();

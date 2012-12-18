@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tlp_ap.c,v 1.13 2011/07/15 07:49:20 he Exp $	*/
+/*	$NetBSD: if_tlp_ap.c,v 1.10 2008/04/28 20:23:30 martin Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tlp_ap.c,v 1.13 2011/07/15 07:49:20 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tlp_ap.c,v 1.10 2008/04/28 20:23:30 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -78,10 +78,10 @@ struct tulip_ap_softc {
 	bus_space_handle_t sc_cfsh;
 };
 
-static int	tlp_ap_match(device_t, cfdata_t, void *);
-static void	tlp_ap_attach(device_t, device_t, void *);
+static int	tlp_ap_match(struct device *, struct cfdata *, void *);
+static void	tlp_ap_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(tlp_ap, sizeof(struct tulip_ap_softc),
+CFATTACH_DECL(tlp_ap, sizeof(struct tulip_ap_softc),
     tlp_ap_match, tlp_ap_attach, NULL, NULL);
 
 static void tlp_ap_preinit(struct tulip_softc *);
@@ -94,7 +94,7 @@ const struct tulip_mediasw tlp_ap_mediasw = {
 };
 
 static int
-tlp_ap_match(device_t parent, cfdata_t cf, void *aux)
+tlp_ap_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct apbus_attach_args *apa = aux;
 
@@ -108,18 +108,16 @@ tlp_ap_match(device_t parent, cfdata_t cf, void *aux)
  * Install interface into kernel networking data structures
  */
 static void
-tlp_ap_attach(device_t parent, device_t self, void *aux)
+tlp_ap_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct tulip_ap_softc *psc = device_private(self);
+	struct tulip_ap_softc *psc = (void *) self;
 	struct tulip_softc *sc = &psc->sc_tulip;
 	struct apbus_attach_args *apa = aux;
 	uint8_t enaddr[ETHER_ADDR_LEN];
 	u_int intrmask;
 	int i;
 
-	sc->sc_dev = self;
-
-	aprint_normal(" slot%d addr 0x%lx", apa->apa_slotno, apa->apa_hwbase);
+	printf(" slot%d addr 0x%lx", apa->apa_slotno, apa->apa_hwbase);
 
 	/* PCI configuration register */
 	psc->sc_cfst = 0;
@@ -135,12 +133,12 @@ tlp_ap_attach(device_t parent, device_t self, void *aux)
 			sc->sc_chip = TULIP_CHIP_21140;
 		break;
 	default:
-		aprint_error(": unable to handle your board\n");
+		printf(": unable to handle your board\n");
 		return;
 	}
 
-	aprint_normal(": %s Ethernet, pass %d.%d\n",
-	    tlp_chip_name(sc->sc_chip),
+	printf(": %s Ethernet, pass %d.%d\n",
+	    tlp_chip_names[sc->sc_chip],
 	    (sc->sc_rev >> 4) & 0xf, sc->sc_rev & 0xf);
 
 	/* CSR */
@@ -148,17 +146,17 @@ tlp_ap_attach(device_t parent, device_t self, void *aux)
 	sc->sc_sh = apa->apa_hwbase + TLP_AP_CSR;
 	sc->sc_dmat = apbus_dmatag_init(apa);
 	if (sc->sc_dmat == NULL) {
-		aprint_error_dev(self, "cannot allocate memory\n");
+		printf("%s: cannot allocate memory\n", sc->sc_dev.dv_xname);
 		return;
 	}
 
 	/*
 	 * Initialize bus specific parameters.
 	 */
-	if (mips_cache_info.mci_sdcache_line_size > 0)
-		sc->sc_cacheline = mips_cache_info.mci_sdcache_line_size / 4;
-	else if (mips_cache_info.mci_pdcache_line_size > 0)
-		sc->sc_cacheline = mips_cache_info.mci_pdcache_line_size / 4;
+	if (mips_sdcache_line_size > 0)
+		sc->sc_cacheline = mips_sdcache_line_size / 4;
+	else if (mips_pdcache_line_size > 0)
+		sc->sc_cacheline = mips_pdcache_line_size / 4;
 	else
 		sc->sc_cacheline = 4;
 	sc->sc_maxburst = sc->sc_cacheline;		/* XXX */
@@ -204,7 +202,7 @@ tlp_ap_attach(device_t parent, device_t self, void *aux)
 	TULIP_WRITE(sc, CSR_GPP, 0xcf);			/* mask abort/DMA err */
 
 	if (tlp_read_srom(sc) == 0) {
-		aprint_error_dev(self, "srom read failed\n");
+		printf("%s: srom read failed\n", sc->sc_dev.dv_xname);
 		free(sc->sc_dmat, M_DEVBUF);
 		return;
 	}

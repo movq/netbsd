@@ -1,4 +1,4 @@
-/*	$NetBSD: rt2560var.h,v 1.9 2012/02/18 13:38:36 drochner Exp $	*/
+/*	$NetBSD: rt2560var.h,v 1.6 2007/12/09 20:27:58 jmcneill Exp $	*/
 /*	$OpenBSD: rt2560var.h,v 1.2 2006/01/14 12:43:27 damien Exp $  */
 
 /*-
@@ -97,7 +97,7 @@ struct rt2560_node {
 };
 
 struct rt2560_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 
 	struct ieee80211com	sc_ic;
 	int			(*sc_newstate)(struct ieee80211com *,
@@ -149,7 +149,8 @@ struct rt2560_softc {
 
 	int			dwelltime;
 
-	struct bpf_if *		sc_drvbpf;
+#if NBPFILTER > 0
+	void *			sc_drvbpf;
 
 	union {
 		struct rt2560_rx_radiotap_header th;
@@ -164,6 +165,7 @@ struct rt2560_softc {
 	}			sc_txtapu;
 #define sc_txtap		sc_txtapu.th
 	int			sc_txtap_len;
+#endif
 };
 
 #define	sc_if		sc_ec.ec_if

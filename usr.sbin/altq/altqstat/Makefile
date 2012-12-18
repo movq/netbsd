@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2010/02/06 23:45:26 he Exp $
+#	$NetBSD: Makefile,v 1.3 2006/10/12 19:59:13 peter Exp $
 
 PROG=	altqstat
 SRCS=	altqstat.c quip_client.c qdisc_conf.c qdisc_cbq.c qdisc_hfsc.c \
@@ -7,7 +7,7 @@ SRCS=	altqstat.c quip_client.c qdisc_conf.c qdisc_cbq.c qdisc_hfsc.c \
 
 CPPFLAGS+= -DALTQ -I${.CURDIR}/../libaltq
 
-DPADD+=	${LIBCURSES} ${LIBTERMINFO} ${LIBMATH}
-LDADD+=	-lcurses -lterminfo -lm
+DPADD+=	${LIBCURSES} ${LIBMATH}
+LDADD+=	-lcurses -lm
 
 .include <bsd.prog.mk>

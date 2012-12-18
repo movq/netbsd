@@ -92,11 +92,12 @@ char* get_string(int eos);
 int my_getch(void);
 void my_ungetch(int c);
 
+
 //
 // Routines
 //
 int
-my_getch(void)
+my_getch()
 {
     if (unget_count > 0) {
 	return (unget_buf[--unget_count]);
@@ -149,7 +150,7 @@ get_okay(const char *prompt, int default_value)
     int		c;
 
     flush_to_newline(0);
-    printf("%s", prompt);
+    printf(prompt);
 
     for (;;) {
 	c = my_getch();
@@ -167,7 +168,7 @@ get_okay(const char *prompt, int default_value)
 	    return 0;
 	} else {
 	    flush_to_newline(0);
-	    printf("%s", prompt);
+	    printf(prompt);
 	}
     }
     return -1;
@@ -180,7 +181,7 @@ get_command(const char *prompt, int promptBeforeGet, int *command)
     int		c;
 
     if (promptBeforeGet) {
-	printf("%s", prompt);
+	printf(prompt);
     }	
     for (;;) {
 	c = my_getch();
@@ -190,7 +191,7 @@ get_command(const char *prompt, int promptBeforeGet, int *command)
 	} else if (c == ' ' || c == '\t') {
 	    // skip blanks and tabs
 	} else if (c == '\n') {
-	    printf("%s", prompt);
+	    printf(prompt);
 	} else {
 	    *command = c;
 	    return 1;
@@ -215,7 +216,7 @@ get_number_argument(const char *prompt, long *number, long default_value)
 	    // skip blanks and tabs
 	} else if (c == '\n') {
 	    if (default_value == kDefault) {
-		printf("%s", prompt);
+		printf(prompt);
 	    } else {
 		my_ungetch(c);
 		*number = default_value;
@@ -294,7 +295,7 @@ get_string_argument(const char *prompt, char **string, int reprompt)
 	    // skip blanks and tabs
 	} else if (c == '\n') {
 	    if (reprompt) {
-		printf("%s", prompt);
+		printf(prompt);
 	    } else {
 		my_ungetch(c);
 		*string = NULL;
@@ -369,12 +370,12 @@ get_string(int eos)
 }
 
 
-uint32_t
+unsigned long
 get_multiplier(long divisor)
 {
     int c;
-    uint32_t result;
-    uint32_t extra;
+    unsigned long result;
+    unsigned long extra;
 
     c = my_getch();
 
@@ -403,7 +404,7 @@ get_multiplier(long divisor)
 	    } else {
 		result *= extra;
 	    }
-	} else if ((long long)result >= divisor) {
+	} else if (result >= divisor) {
 	    result /= divisor;
 	} else {
 	    result = 1;
@@ -433,7 +434,7 @@ get_partition_modifier(void)
 
 
 int
-number_of_digits(uint32_t value)
+number_of_digits(unsigned long value)
 {
     int j;
 

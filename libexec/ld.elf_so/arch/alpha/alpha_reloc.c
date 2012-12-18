@@ -1,4 +1,4 @@
-/*	$NetBSD: alpha_reloc.c,v 1.40 2011/03/31 15:30:31 skrll Exp $	*/
+/*	$NetBSD: alpha_reloc.c,v 1.31.4.2 2012/03/30 19:23:34 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -62,11 +62,11 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: alpha_reloc.c,v 1.40 2011/03/31 15:30:31 skrll Exp $");
+__RCSID("$NetBSD: alpha_reloc.c,v 1.31.4.2 2012/03/30 19:23:34 bouyer Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/tls.h>
+#include <sys/stat.h>
 #include <string.h>
 
 #include "rtld.h"
@@ -81,7 +81,7 @@ __RCSID("$NetBSD: alpha_reloc.c,v 1.40 2011/03/31 15:30:31 skrll Exp $");
 void _rtld_bind_start(void);
 void _rtld_bind_start_old(void);
 void _rtld_relocate_nonplt_self(Elf_Dyn *, Elf_Addr);
-caddr_t _rtld_bind(const Obj_Entry *, Elf_Addr);
+caddr_t _rtld_bind(const Obj_Entry *, Elf_Word);
 static inline int _rtld_relocate_plt_object(const Obj_Entry *,
     const Elf_Rela *, Elf_Addr *);
 
@@ -187,7 +187,7 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 			break;
 		}
 	}
-	relalim = (const Elf_Rela *)((const uint8_t *)rela + relasz);
+	relalim = (const Elf_Rela *)((caddr_t)rela + relasz);
 	for (; rela < relalim; rela++) {
 		where = (Elf_Addr *)(relocbase + rela->r_offset);
 		/* XXX For some reason I see a few GLOB_DAT relocs here. */
@@ -196,7 +196,7 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 }
 
 int
-_rtld_relocate_nonplt_objects(Obj_Entry *obj)
+_rtld_relocate_nonplt_objects(const Obj_Entry *obj)
 {
 	const Elf_Rela *rela;
 	Elf_Addr target = -1;
@@ -262,64 +262,6 @@ _rtld_relocate_nonplt_objects(Obj_Entry *obj)
 			rdbg(("COPY (avoid in main)"));
 			break;
 
-		case R_TYPE(TPREL64):
-			def = _rtld_find_symdef(symnum, obj, &defobj, false);
-			if (def == NULL)
-				return -1;
-
-			if (!defobj->tls_done &&
-			    _rtld_tls_offset_allocate(obj))
-				return -1;
-
-			tmp = (Elf64_Addr)(def->st_value +
-			    sizeof(struct tls_tcb) + defobj->tlsoffset +
-			    rela->r_addend);
-
-			if (__predict_true(RELOC_ALIGNED_P(where)))
-				*where = tmp;
-			else
-				store_ptr(where, tmp);
-
-			rdbg(("TPREL64 %s in %s --> %p",
-			    obj->strtab + obj->symtab[symnum].st_name,
-			    obj->path, (void *)*where));
-
-			break;
-
-		case R_TYPE(DTPMOD64):
-			def = _rtld_find_symdef(symnum, obj, &defobj, false);
-			if (def == NULL)
-				return -1;
-
-			tmp = (Elf64_Addr)defobj->tlsindex;
-			if (__predict_true(RELOC_ALIGNED_P(where)))
-				*where = tmp;
-			else
-				store_ptr(where, tmp);
-
-			rdbg(("DTPMOD64 %s in %s --> %p",
-			    obj->strtab + obj->symtab[symnum].st_name,
-			    obj->path, (void *)*where));
-
-			break;
-
-		case R_TYPE(DTPREL64):
-			def = _rtld_find_symdef(symnum, obj, &defobj, false);
-			if (def == NULL)
-				return -1;
-
-			tmp = (Elf64_Addr)(def->st_value + rela->r_addend);
-			if (__predict_true(RELOC_ALIGNED_P(where)))
-				*where = tmp;
-			else
-				store_ptr(where, tmp);
-
-			rdbg(("DTPREL64 %s in %s --> %p",
-			    obj->strtab + obj->symtab[symnum].st_name,
-			    obj->path, (void *)*where));
-
-			break;
-
 		default:
 			rdbg(("sym = %lu, type = %lu, offset = %p, "
 			    "addend = %p, contents = %p, symbol = %s",
@@ -328,7 +270,7 @@ _rtld_relocate_nonplt_objects(Obj_Entry *obj)
 			    (void *)load_ptr(where),
 			    obj->strtab + obj->symtab[symnum].st_name));
 			_rtld_error("%s: Unsupported relocation type %ld "
-			    "in non-PLT relocations",
+			    "in non-PLT relocations\n",
 			    obj->path, (u_long) ELF_R_TYPE(rela->r_info));
 			return -1;
 		}
@@ -358,8 +300,7 @@ _rtld_relocate_plt_lazy(const Obj_Entry *obj)
 }
 
 static inline int
-_rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela,
-    Elf_Addr *tp)
+_rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela, Elf_Addr *tp)
 {
 	Elf_Addr *where = (Elf_Addr *)(obj->relocbase + rela->r_offset);
 	Elf_Addr new_value;
@@ -535,18 +476,15 @@ out:
 }
 
 caddr_t
-_rtld_bind(const Obj_Entry *obj, Elf_Addr reloff)
+_rtld_bind(const Obj_Entry *obj, Elf_Word reloff)
 {
-	const Elf_Rela *rela = 
-	    (const Elf_Rela *)((const uint8_t *)obj->pltrela + reloff);
+	const Elf_Rela *rela = (const Elf_Rela *)((caddr_t)obj->pltrela + reloff);
 	Elf_Addr result = 0; /* XXX gcc */
 	int err;
 
-	_rtld_shared_enter();
 	err = _rtld_relocate_plt_object(obj, rela, &result);
 	if (err)
 		_rtld_die();
-	_rtld_shared_exit();
 
 	return (caddr_t)result;
 }

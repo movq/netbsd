@@ -1,4 +1,4 @@
-/*	$NetBSD: msiiep.c,v 1.43 2011/07/17 23:34:17 mrg Exp $ */
+/*	$NetBSD: msiiep.c,v 1.36 2008/06/04 12:41:41 ad Exp $ */
 
 /*
  * Copyright (c) 2001 Valeriy E. Ushakov
@@ -27,7 +27,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msiiep.c,v 1.43 2011/07/17 23:34:17 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msiiep.c,v 1.36 2008/06/04 12:41:41 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -38,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: msiiep.c,v 1.43 2011/07/17 23:34:17 mrg Exp $");
 #include <uvm/uvm.h>
 
 #define _SPARC_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/autoconf.h>
 #include <machine/promlib.h>
 
@@ -65,10 +65,11 @@ __KERNEL_RCSID(0, "$NetBSD: msiiep.c,v 1.43 2011/07/17 23:34:17 mrg Exp $");
 /*
  * "Stub" ms-IIep parent that knows how to attach various functions.
  */
-static int	msiiep_match(device_t, cfdata_t, void *);
-static void	msiiep_attach(device_t, device_t, void *);
+static int	msiiep_match(struct device *, struct cfdata *, void *);
+static void	msiiep_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(msiiep, 0, msiiep_match, msiiep_attach, NULL, NULL);
+CFATTACH_DECL(msiiep, sizeof(struct device),
+    msiiep_match, msiiep_attach, NULL, NULL);
 
 
 /* sleep in idle spin */
@@ -79,11 +80,11 @@ volatile uint32_t *msiiep_mid = NULL;
 /*
  * The real thing.
  */
-static int	mspcic_match(device_t, cfdata_t, void *);
-static void	mspcic_attach(device_t, device_t, void *);
+static int	mspcic_match(struct device *, struct cfdata *, void *);
+static void	mspcic_attach(struct device *, struct device *, void *);
 static int	mspcic_print(void *, const char *);
 
-CFATTACH_DECL_NEW(mspcic, sizeof(struct mspcic_softc),
+CFATTACH_DECL(mspcic, sizeof(struct mspcic_softc),
     mspcic_match, mspcic_attach, NULL, NULL);
 
 
@@ -191,7 +192,7 @@ static struct sparc_bus_dma_tag mspcic_dma_tag = {
 
 
 static int
-msiiep_match(device_t parent, cfdata_t cf, void *aux)
+msiiep_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	pcireg_t id;
@@ -215,7 +216,7 @@ msiiep_match(device_t parent, cfdata_t cf, void *aux)
 
 
 static void
-msiiep_attach(device_t parent, device_t self, void *aux)
+msiiep_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	struct msiiep_attach_args msa;
@@ -267,7 +268,7 @@ msiiep_cpu_sleep(struct cpu_info *ci)
  */
 
 static int
-mspcic_match(device_t parent, cfdata_t cf, void *aux)
+mspcic_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct msiiep_attach_args *msa = aux;
 
@@ -276,9 +277,9 @@ mspcic_match(device_t parent, cfdata_t cf, void *aux)
 
 
 static void
-mspcic_attach(device_t parent, device_t self, void *aux)
+mspcic_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct mspcic_softc *sc = device_private(self);
+	struct mspcic_softc *sc = (struct mspcic_softc *)self;
 	struct msiiep_attach_args *msa = aux;
 	struct mainbus_attach_args *ma = msa->msa_ma;
 	int node = ma->ma_node;
@@ -351,7 +352,7 @@ mspcic_attach(device_t parent, device_t self, void *aux)
 	pba.pba_dmat = sc->sc_dmat;
 	pba.pba_dmat64 = NULL;
 	pba.pba_pc = &mspcic_pc_tag;
-	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
+	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
 
 	config_found_ia(self, "pcibus", &pba, mspcic_print);
 }
@@ -562,7 +563,7 @@ mspcic_intr_establish(bus_space_tag_t t, int line, int ipl,
 
 	ih->ih_fun = handler;
 	ih->ih_arg = arg;
-	intr_establish(pil, ipl, ih, fastvec, false);
+	intr_establish(pil, ipl, ih, fastvec);
 
 	return(ih);
 }
@@ -656,12 +657,10 @@ mspcic_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map,
 }
 
 static void
-mspcic_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
+mspcic_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t dmam)
 {
 
-	/* Mark the mappings as invalid. */
-	map->dm_mapsize = 0;
-	map->dm_nsegs = 0;
+	panic("mspcic_dmamap_unload: not implemented");
 }
 
 
@@ -700,8 +699,7 @@ mspcic_dmamem_map(bus_dma_tag_t tag, bus_dma_segment_t *segs, int nsegs,
 			panic("mspcic_dmamem_map: size botch");
 
 		pa = VM_PAGE_TO_PHYS(m);
-		pmap_kenter_pa(va,
-		    pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE, 0);
+		pmap_kenter_pa(va, pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE);
 		va += pagesz;
 		size -= pagesz;
 	}

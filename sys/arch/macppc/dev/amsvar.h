@@ -1,4 +1,4 @@
-/*	$NetBSD: amsvar.h,v 1.10 2012/10/27 17:18:00 chs Exp $	*/
+/*	$NetBSD: amsvar.h,v 1.8 2007/03/05 10:47:06 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1998	Colin Wood
@@ -37,7 +37,7 @@
  * State info, per mouse instance.
  */
 struct ams_softc {
-	device_t	sc_dev;
+	struct	device	sc_dev;
 
 	/* ADB info */
 	int		origaddr;	/* ADB device type (ADBADDR_MS) */
@@ -51,7 +51,7 @@ struct ams_softc {
 	char		sc_devid[5];	/* device indentifier */
 
 	int		sc_mb;		/* current button state */
-	device_t	sc_wsmousedev;
+	struct device	*sc_wsmousedev;
 	/* helpers for trackpads */
 	int		sc_down;
 	int		sc_tapping;	/* 1 - tapping causes button event */
@@ -71,7 +71,7 @@ struct ams_softc {
 #define MSCLASS_TRACKBALL	2
 #define MSCLASS_TRACKPAD	3
 
-void ms_adbcomplete(uint8_t *buffer, uint8_t *data_area, int adb_command);
-void ms_handoff(adb_event_t *event, struct ams_softc *);
+void ms_adbcomplete __P((uint8_t *buffer, uint8_t *data_area, int adb_command));
+void ms_handoff __P((adb_event_t *event, struct ams_softc *));
 
 #endif /* _MACPPC_AMSVAR_H_ */

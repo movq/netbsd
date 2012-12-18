@@ -1,4 +1,4 @@
-.\"	$NetBSD: mv.1,v 1.26 2012/03/22 07:58:17 wiz Exp $
+.\"	$NetBSD: mv.1,v 1.24 2003/08/07 09:05:18 agc Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -110,7 +110,7 @@ prompts the user for confirmation as specified for the
 option.
 .Pp
 Should the
-.Xr rename 2
+.Xr rename  2
 call fail because
 .Ar source
 and
@@ -122,8 +122,8 @@ destination, and then remove the source.
 The effect is roughly equivalent to:
 .Bd -literal -offset indent
 rm -f destination_path \*[Am]\*[Am] \e
-cp -PRp source_file destination_path \*[Am]\*[Am] \e
-rm -rf source_file
+\tcp -PRp source_file destination_path \*[Am]\*[Am] \e
+\trm -rf source_file
 .Ed
 .Sh EXIT STATUS
 The

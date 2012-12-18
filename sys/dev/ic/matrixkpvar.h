@@ -40,8 +40,8 @@ struct matrixkp_softc {
 #define	MXKP_NODEBOUNCE	0x1
 	u_int32_t sc_flags;
 	u_int32_t sc_enabled;
-	device_t sc_dev;
-	device_t sc_wskbddev;
+	struct device *sc_dev;
+	struct device *sc_wskbddev;
 	struct callout sc_callout;
 };
 
@@ -53,6 +53,6 @@ int  mxkp_enable(void *, int);
 void mxkp_set_leds(void *, int);
 int  mxkp_ioctl(void *, u_long, void *, int, struct lwp *);
 
-extern const struct wskbd_accessops mxkp_accessops;
+const struct wskbd_accessops mxkp_accessops;
 
 #endif

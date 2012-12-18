@@ -1,4 +1,4 @@
-/*	$NetBSD: pud_dev.c,v 1.6 2009/12/22 17:32:03 pooka Exp $	*/
+/*	$NetBSD: pud_dev.c,v 1.4.34.2 2010/01/09 01:02:22 snj Exp $	*/
 
 /*
  * Copyright (c) 2007  Antti Kantee.  All Rights Reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pud_dev.c,v 1.6 2009/12/22 17:32:03 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pud_dev.c,v 1.4.34.2 2010/01/09 01:02:22 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>

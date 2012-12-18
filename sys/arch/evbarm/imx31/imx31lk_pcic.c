@@ -1,5 +1,5 @@
-/*	$Id: imx31lk_pcic.c,v 1.6 2012/11/12 18:00:39 skrll Exp $	*/
-/*	$NetBSD: imx31lk_pcic.c,v 1.6 2012/11/12 18:00:39 skrll Exp $	*/
+/*	$Id: imx31lk_pcic.c,v 1.3 2008/06/30 00:49:31 perry Exp $	*/
+/*	$NetBSD: imx31lk_pcic.c,v 1.3 2008/06/30 00:49:31 perry Exp $	*/
 /*	$OpenBSD: pxapcic.c,v 1.1 2005/07/01 23:51:55 uwe Exp $	*/
 
 /*
@@ -19,14 +19,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$Id: imx31lk_pcic.c,v 1.6 2012/11/12 18:00:39 skrll Exp $");
+__KERNEL_RCSID(0, "$Id: imx31lk_pcic.c,v 1.3 2008/06/30 00:49:31 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <uvm/uvm.h>
 
@@ -38,10 +38,10 @@ __KERNEL_RCSID(0, "$Id: imx31lk_pcic.c,v 1.6 2012/11/12 18:00:39 skrll Exp $");
 #include <arch/arm/imx/imx_pcic.h>
 
 
-static int	imx31lk_pcic_match(device_t, cfdata_t, void *);
-static void	imx31lk_pcic_attach(device_t, device_t, void *);
+static int	imx31lk_pcic_match(struct device *, struct cfdata *, void *);
+static void	imx31lk_pcic_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(imx31lk_pcic, sizeof(struct imx_pcic_softc),
+CFATTACH_DECL(imx31lk_pcic, sizeof(struct imx_pcic_softc),
 	imx31lk_pcic_match, imx31lk_pcic_attach, NULL, NULL);
 
 static void	imx31lk_pcic_socket_setup(struct imx_pcic_socket *);
@@ -63,19 +63,17 @@ struct imx_pcic_tag imx31lk_pcic_functions = {
 };
 
 static int
-imx31lk_pcic_match(device_t parent, cfdata_t cf, void *aux)
+imx31lk_pcic_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	return 1;	/* XXX */
 }
 
 static void
-imx31lk_pcic_attach(device_t parent, device_t self, void *aux)
+imx31lk_pcic_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct imx_pcic_softc *sc = device_private(self);
+	struct imx_pcic_softc *sc = (struct imx_pcic_softc *)self;
 	struct aips_attach_args * const aipsa = aux;
-
-	sc->sc_dev = self;
 
 printf("\n");
 printf("imx_iot %p\n", aipsa->aipsa_memt);
@@ -111,7 +109,7 @@ imx31lk_pcic_socket_setup(struct imx_pcic_socket *so)
 	iot = sc->sc_iot;
 
 	if (so->socket != 0)
-		panic("%s: CF slot %d not supported", device_xname(sc->sc_dev), so->socket);
+		panic("%s: CF slot %d not supported", sc->sc_dev.dv_xname, so->socket);
 
 	pa = sc->sc_pa;
 
@@ -119,7 +117,7 @@ imx31lk_pcic_socket_setup(struct imx_pcic_socket *so)
 	    0, &imx31lkh);
 	if (error) {
 		panic("%s: failed to map memory %x for imx31lk",
-		    device_xname(sc->sc_dev), (uint32_t)pa);
+		    sc->sc_dev.dv_xname, (uint32_t)pa);
 	}
 	imx31lkh += pa - trunc_page(pa);
 	
@@ -212,7 +210,7 @@ imx31lk_pcic_set_power(struct imx_pcic_socket *so, int pwr)
 #ifdef NOTYET
 	bus_space_tag_t iot = so->sc->sc_iot;
 	bus_space_handle_t ioh = (bus_space_handle_t)so->pcictag_cookie;
-	uint16_t reg;
+	u_int16_t reg;
 	int s;
 
 	s = splhigh();

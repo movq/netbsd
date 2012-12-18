@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.9 2011/08/11 23:15:38 joerg Exp $
+#	$NetBSD: Makefile,v 1.3 2008/10/12 20:20:49 hubertf Exp $
 
 .include <bsd.own.mk>
 
-LIB=	Xaw7
+LIB=	Xaw8
 LIBOLD=	Xaw
 
 .if ${MKSTATICLIB} != "no"
@@ -15,6 +15,7 @@ SYMLINKS+=	lib${LIB}_p.a ${X11USRLIBDIR}/lib${LIBOLD}_p.a
 
 .if ${MKPIC} != "no"
 SYMLINKS+=	lib${LIB}.so ${X11USRLIBDIR}/lib${LIBOLD}.so
+SYMLINKS+=	lib${LIB}.so.8 ${X11USRLIBDIR}/lib${LIBOLD}.so.8
 .endif
 
 .PATH:	${X11SRCDIR.Xaw}/src
@@ -22,7 +23,7 @@ SRCS=	Actions.c AllWidgets.c AsciiSink.c AsciiSrc.c \
 	AsciiText.c Box.c Command.c Converters.c Dialog.c \
 	DisplayList.c Form.c Grip.c Label.c List.c MenuButton.c \
 	MultiSrc.c MultiSink.c OS.c Paned.c Panner.c Pixmap.c \
-	Porthole.c Repeater.c Scrollbar.c Simple.c \
+	Porthole.c PrintShell.c Repeater.c Scrollbar.c Simple.c \
 	SimpleMenu.c Sme.c SmeBSB.c SmeLine.c StripChart.c \
 	Text.c TextSink.c TextSrc.c TextAction.c TextPop.c \
 	TextTr.c Tip.c Toggle.c Tree.c Vendor.c Viewport.c \
@@ -49,31 +50,23 @@ INCS=	AllWidgets.h AsciiSink.h AsciiSinkP.h AsciiSrc.h \
 
 INCSDIR=${X11INCDIR}/X11/Xaw
 
-
-CPPFLAGS+=	-DHAVE_WCHAR_H -DHAVE_WCTYPE_H -DNO_WIDEC_H -DHAVE_ISWALNUM
-CPPFLAGS+=	-DHAVE_GETPAGESIZE
-CPPFLAGS+=	-DPROJECT_ROOT=\"${X11ROOTDIR}\" -DXAW7
+CPPFLAGS+=	-DHAS_WCHAR_H -DHAS_WCTYPE_H -DNO_WIDEC_H -DHAVE_ISWALNUM
+CPPFLAGS+=	-DPROJECT_ROOT=\"${X11ROOTDIR}\"
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11/Xaw
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11/extensions
 
 LIBDPLIBS=\
 	Xmu	${.CURDIR}/../libXmu \
 	Xt	${.CURDIR}/../libXt \
+	Xp	${.CURDIR}/../libXp \
 	SM	${.CURDIR}/../libSM \
 	ICE	${.CURDIR}/../libICE \
 	Xpm	${.CURDIR}/../libXpm \
 	Xext	${.CURDIR}/../libXext \
 	X11	${.CURDIR}/../libX11/dynamic
 
-PKGCONFIG=	xaw7
+PKGCONFIG=	xaw8
 PKGDIST=	${LIBOLD}
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>
-
-# XXX
-.if defined(HAVE_GCC)
-COPTS.XawIm.c+=	-Wno-error
-.endif
-
-CWARNFLAGS.clang+=	-Wno-format

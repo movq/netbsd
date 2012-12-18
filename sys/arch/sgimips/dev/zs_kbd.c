@@ -1,4 +1,4 @@
-/*	$NetBSD: zs_kbd.c,v 1.10 2012/10/29 12:51:38 chs Exp $	*/
+/*	$NetBSD: zs_kbd.c,v 1.8 2008/03/29 19:15:35 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2004 Steve Rumble
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs_kbd.c,v 1.10 2012/10/29 12:51:38 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs_kbd.c,v 1.8 2008/03/29 19:15:35 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -110,7 +110,7 @@ struct zskbd_devconfig {
 	uint8_t		dip;
 
 	/* wscons glue */
-	device_t	wskbddev;
+	struct device  *wskbddev;
 	int		enabled;
 };
 

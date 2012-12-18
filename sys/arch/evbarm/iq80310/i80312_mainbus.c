@@ -1,4 +1,4 @@
-/*	$NetBSD: i80312_mainbus.c,v 1.16 2012/10/14 18:37:55 msaitoh Exp $	*/
+/*	$NetBSD: i80312_mainbus.c,v 1.13 2005/12/11 12:17:09 christos Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -42,14 +42,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i80312_mainbus.c,v 1.16 2012/10/14 18:37:55 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i80312_mainbus.c,v 1.13 2005/12/11 12:17:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <evbarm/iq80310/iq80310reg.h>
 #include <evbarm/iq80310/iq80310var.h>
@@ -60,17 +60,17 @@ __KERNEL_RCSID(0, "$NetBSD: i80312_mainbus.c,v 1.16 2012/10/14 18:37:55 msaitoh 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcidevs.h>
 
-int	i80312_mainbus_match(device_t, cfdata_t, void *);
-void	i80312_mainbus_attach(device_t, device_t, void *);
+int	i80312_mainbus_match(struct device *, struct cfdata *, void *);
+void	i80312_mainbus_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(iopxs_mainbus, sizeof(struct i80312_softc),
+CFATTACH_DECL(iopxs_mainbus, sizeof(struct i80312_softc),
     i80312_mainbus_match, i80312_mainbus_attach, NULL, NULL);
 
 /* There can be only one. */
 int	i80312_mainbus_found;
 
 int
-i80312_mainbus_match(device_t parent, cfdata_t cf, void *aux)
+i80312_mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 #if 0
 	struct mainbus_attach_args *ma = aux;
@@ -91,15 +91,13 @@ i80312_mainbus_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-i80312_mainbus_attach(device_t parent, device_t self, void *aux)
+i80312_mainbus_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct i80312_softc *sc = device_private(self);
+	struct i80312_softc *sc = (void *) self;
 	paddr_t memstart;
 	psize_t memsize;
 
 	i80312_mainbus_found = 1;
-	sc->sc_dev = self;
-	iq80310_intr_evcnt_attach();
 
 	/*
 	 * Fill in the space tag for the i80312's own devices,
@@ -117,7 +115,7 @@ i80312_mainbus_attach(device_t parent, device_t self, void *aux)
 	if (bus_space_subregion(sc->sc_st, sc->sc_sh, I80312_MEM_BASE,
 	    I80312_MEM_SIZE, &sc->sc_mem_sh))
 		panic("%s: unable to subregion MEM registers",
-		    device_xname(self));
+		    sc->sc_dev.dv_xname);
 
 	/*
 	 * We have mapped the PCI I/O windows in the early bootstrap phase.

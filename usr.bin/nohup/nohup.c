@@ -1,4 +1,4 @@
-/*	$NetBSD: nohup.c,v 1.15 2011/09/06 18:24:15 joerg Exp $	*/
+/*	$NetBSD: nohup.c,v 1.13 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989 The Regents of the University of California.
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989\
 #if 0
 static char sccsid[] = "@(#)nohup.c	5.4 (Berkeley) 6/1/90";
 #endif
-__RCSID("$NetBSD: nohup.c,v 1.15 2011/09/06 18:24:15 joerg Exp $");
+__RCSID("$NetBSD: nohup.c,v 1.13 2008/07/21 14:19:24 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -53,8 +53,9 @@ __RCSID("$NetBSD: nohup.c,v 1.15 2011/09/06 18:24:15 joerg Exp $");
 #include <string.h>
 #include <errno.h>
 
-static void dofile(void);
-__dead static void usage(void);
+static void dofile __P((void));
+static void usage __P((void));
+int main __P((int, char **));
 
 /* nohup shall exit with one of the following values:
    126 - The utility was found but could not be invoked.
@@ -65,7 +66,9 @@ __dead static void usage(void);
 #define EXIT_MISC	127
 
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	int exit_status;
 
@@ -97,11 +100,10 @@ main(int argc, char **argv)
 }
 
 static void
-dofile(void)
+dofile()
 {
 	int fd;
-	char path[MAXPATHLEN];
-	const char *p;
+	char *p, path[MAXPATHLEN];
 
 	/* If the standard output is a terminal, all output written to 
 	   its standard output shall be appended to the end of the file
@@ -135,7 +137,7 @@ dupit:	(void)lseek(fd, 0L, SEEK_END);
 }
 
 static void
-usage(void)
+usage()
 {
 	(void)fprintf(stderr, "usage: nohup utility [argument ...]\n");
 	exit(EXIT_MISC);

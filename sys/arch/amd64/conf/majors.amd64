@@ -1,4 +1,4 @@
-#	$NetBSD: majors.amd64,v 1.24 2011/06/30 20:09:18 wiz Exp $
+#	$NetBSD: majors.amd64,v 1.20 2008/07/15 06:50:02 cegger Exp $
 #
 # Device majors for amd64
 #
@@ -30,6 +30,7 @@ device-major	bpf		char 23			bpfilter
 device-major	md		char 24  block 17	md
 
 device-major	spkr		char 27			spkr
+device-major	lkm		char 28			lkm
 
 device-major	cy		char 38			cy
 device-major	mcd		char 39  block 7	mcd
@@ -100,6 +101,6 @@ device-major	xenevt		char 141		xenevt
 device-major	xbd		char 142 block 142	xbd
 device-major	xencons		char 143		xencons
 
-# Majors up to 143 are reserved for machine-dependent drivers.
+# Majors up to 143 are reserved for machine-dependant drivers.
 # New machine-independent driver majors are assigned in 
 # sys/conf/majors.

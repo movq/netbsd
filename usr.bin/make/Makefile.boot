@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.boot,v 1.20 2011/03/26 21:42:12 dholland Exp $
+#	$NetBSD: Makefile.boot,v 1.17 2004/05/07 00:04:38 ross Exp $
 #
 # a very simple makefile...
 #
@@ -22,7 +22,7 @@ CFLAGS= -DTARGET_MACHINE=\"${MACHINE}\" \
 LIBS=
 
 OBJ=arch.o buf.o compat.o cond.o dir.o for.o hash.o job.o main.o make.o \
-    make_malloc.o parse.o str.o strlist.o suff.o targ.o trace.o var.o util.o
+    parse.o str.o suff.o targ.o trace.o var.o util.o
 
 LIBOBJ= lst.lib/lstAppend.o lst.lib/lstAtEnd.o lst.lib/lstAtFront.o \
 	lst.lib/lstClose.o lst.lib/lstConcat.o lst.lib/lstDatum.o \
@@ -32,7 +32,7 @@ LIBOBJ= lst.lib/lstAppend.o lst.lib/lstAtEnd.o lst.lib/lstAtFront.o \
 	lst.lib/lstInit.o lst.lib/lstInsert.o lst.lib/lstIsAtEnd.o \
 	lst.lib/lstIsEmpty.o lst.lib/lstLast.o lst.lib/lstMember.o \
 	lst.lib/lstNext.o lst.lib/lstOpen.o lst.lib/lstRemove.o \
-	lst.lib/lstReplace.o lst.lib/lstSucc.o lst.lib/lstPrev.o
+	lst.lib/lstReplace.o lst.lib/lstSucc.o
 
 bmake: ${OBJ} ${LIBOBJ}
 #	@echo 'make of make and make.0 started.'

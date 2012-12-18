@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425var.h,v 1.16 2012/11/12 18:00:38 skrll Exp $ */
+/*	$NetBSD: ixp425var.h,v 1.11 2006/12/10 10:01:49 scw Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -13,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,7 +40,7 @@
 #include <sys/device.h>
 #include <sys/queue.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/pci/pcivar.h>
 
@@ -62,11 +68,11 @@
 #define PCI_CONF_UNLOCK(s)	restore_interrupts((s))
 
 struct ixp425_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;		/* IRQ handle */
 
-	uint32_t sc_intrmask;
+	u_int32_t sc_intrmask;
 
 	/* Handles for the various subregions. */
 	bus_space_handle_t sc_pci_ioh;		/* PCI mem handler */
@@ -84,10 +90,10 @@ struct ixp425_softc {
 	struct arm32_dma_range ia_pci_dma_range;
 
 	/* GPIO configuration */
-	uint32_t sc_gpio_out;
-	uint32_t sc_gpio_oe;
-	uint32_t sc_gpio_intr1;
-	uint32_t sc_gpio_intr2;
+	u_int32_t sc_gpio_out;
+	u_int32_t sc_gpio_oe;
+	u_int32_t sc_gpio_intr1;
+	u_int32_t sc_gpio_intr2;
 };
 
 /*
@@ -108,9 +114,9 @@ struct intrhand {
 struct intrq {
 	TAILQ_HEAD(, intrhand) iq_list;	/* handler list */
 	struct evcnt iq_ev;		/* event counter */
-	uint32_t iq_mask;		/* IRQs to mask while handling */
-	uint32_t iq_pci_mask;		/* PCI IRQs to mask while handling */
-	uint32_t iq_levels;		/* IPL_*'s this IRQ has */
+	u_int32_t iq_mask;		/* IRQs to mask while handling */
+	u_int32_t iq_pci_mask;		/* PCI IRQs to mask while handling */
+	u_int32_t iq_levels;		/* IPL_*'s this IRQ has */
 	char iq_name[IRQNAMESIZE];	/* interrupt name */
 	int iq_ist;			/* share type */
 };
@@ -142,11 +148,10 @@ void	ixp425_mem_bs_init(bus_space_tag_t, void *);
 void	ixp425_pci_conf_reg_write(struct ixp425_softc *, uint32_t, uint32_t);
 uint32_t ixp425_pci_conf_reg_read(struct ixp425_softc *, uint32_t); 
 
-void	ixp425_attach(device_t);
+void	ixp425_attach(struct ixp425_softc *);
 void	ixp425_icu_init(void);
 void	ixp425_clk_bootstrap(bus_space_tag_t);
 void	ixp425_intr_init(void);
-void	ixp425_intr_evcnt_attach(void);
 void	*ixp425_intr_establish(int, int, int (*)(void *), void *);
 void    ixp425_intr_disestablish(void *);
 

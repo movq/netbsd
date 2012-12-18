@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.103 2011/07/01 18:51:51 dyoung Exp $ */
+/*	$NetBSD: clock.c,v 1.102 2007/10/17 19:57:14 garbled Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -88,7 +88,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.103 2011/07/01 18:51:51 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.102 2007/10/17 19:57:14 garbled Exp $");
 
 #include "opt_sparc_arch.h"
 
@@ -100,7 +100,7 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.103 2011/07/01 18:51:51 dyoung Exp $");
 #include <sys/systm.h>
 #include <sys/timetc.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/autoconf.h>
 #include <machine/eeprom.h>
 #include <machine/cpu.h>

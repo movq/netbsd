@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.makemon.c,v 1.9 2009/08/12 07:28:40 dholland Exp $	*/
+/*	$NetBSD: hack.makemon.c,v 1.7 2008/01/28 06:55:41 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,13 +63,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.makemon.c,v 1.9 2009/08/12 07:28:40 dholland Exp $");
+__RCSID("$NetBSD: hack.makemon.c,v 1.7 2008/01/28 06:55:41 dholland Exp $");
 #endif				/* not lint */
 
 #include	"hack.h"
 #include	"extern.h"
 
-static const struct monst zeromonst;
+struct monst zeromonst;
 
 /*
  * called with [x,y] = coordinates;
@@ -181,7 +181,8 @@ gotmon:
 }
 
 coord
-enexto(xchar xx, xchar yy)
+enexto(xx, yy)
+	xchar           xx, yy;
 {
 	xchar           x, y;
 	coord           foo[15], *tfoo;
@@ -236,7 +237,8 @@ goodpos(int x, int y)
 }
 
 void
-rloc(struct monst *mtmp)
+rloc(mtmp)
+	struct monst   *mtmp;
 {
 	int		tx, ty;
 	char            ch = mtmp->data->mlet;
@@ -263,7 +265,9 @@ rloc(struct monst *mtmp)
 }
 
 struct monst   *
-mkmon_at(int let, int x, int y)
+mkmon_at(let, x, y)
+	char            let;
+	int             x, y;
 {
 	int             ct;
 	const struct permonst *ptr;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_intio.c,v 1.17 2011/10/16 03:10:18 isaki Exp $	*/
+/*	$NetBSD: if_ne_intio.c,v 1.11.14.1 2010/11/20 00:33:47 riz Exp $	*/
 
 /*
  * Copyright (c) 2001 Tetsuya Isaki. All rights reserved.
@@ -11,6 +11,8 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,10 +32,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.17 2011/10/16 03:10:18 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.11.14.1 2010/11/20 00:33:47 riz Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,6 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.17 2011/10/16 03:10:18 isaki Exp $
 
 static int  ne_intio_match(device_t, cfdata_t, void *);
 static void ne_intio_attach(device_t, device_t, void *);
+static int  ne_intio_intr(void *);
 
 #define ne_intio_softc ne2000_softc
 
@@ -113,7 +117,7 @@ ne_intio_match(device_t parent, cfdata_t cf, void *aux)
 		return 0;
 
 	/* Check whether the board is inserted or not */
-	if (badaddr((void *)IIOV(ia->ia_addr)))
+	if (badaddr(INTIO_ADDR(ia->ia_addr)))
 		return 0;
 
 	/* Map I/O space */
@@ -131,7 +135,7 @@ ne_intio_match(device_t parent, cfdata_t cf, void *aux)
 
  out:
 	bus_space_unmap(iot, ioh, NE2000_NPORTS);
-	return (rv != 0) ? 1 : 0;
+	return rv;
 }
 
 static void
@@ -206,7 +210,19 @@ ne_intio_attach(device_t parent, device_t self, void *aux)
 	ne2000_attach(sc, NULL);
 
 	/* Establish the interrupt handler */
-	if (intio_intr_establish(ia->ia_intr, "ne", dp8390_intr, dsc))
+	if (intio_intr_establish(ia->ia_intr, "ne", ne_intio_intr, dsc))
 		aprint_error_dev(self,
 		    "couldn't establish interrupt handler\n");
+}
+
+static int
+ne_intio_intr(void *arg)
+{
+	int error;
+	int s;
+
+	s = splnet();
+	error = dp8390_intr(arg);
+	splx(s);
+	return error;
 }

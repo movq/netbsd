@@ -1,4 +1,4 @@
-/*	$NetBSD: tty.c,v 1.256 2012/10/19 16:55:22 apb Exp $	*/
+/*	$NetBSD: tty.c,v 1.227.4.2 2009/10/11 18:03:21 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -63,9 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.256 2012/10/19 16:55:22 apb Exp $");
-
-#include "opt_compat_netbsd.h"
+__KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.227.4.2 2009/10/11 18:03:21 sborrill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,12 +74,12 @@ __KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.256 2012/10/19 16:55:22 apb Exp $");
 #undef	TTYDEFCHARS
 #include <sys/file.h>
 #include <sys/conf.h>
-#include <sys/cpu.h>
 #include <sys/dkstat.h>
 #include <sys/uio.h>
 #include <sys/kernel.h>
 #include <sys/vnode.h>
 #include <sys/syslog.h>
+#include <sys/malloc.h>
 #include <sys/kmem.h>
 #include <sys/signalvar.h>
 #include <sys/resourcevar.h>
@@ -91,13 +89,8 @@ __KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.256 2012/10/19 16:55:22 apb Exp $");
 #include <sys/sysctl.h>
 #include <sys/kauth.h>
 #include <sys/intr.h>
-#include <sys/ioctl_compat.h>
-#include <sys/module.h>
-#include <sys/bitops.h>
 
-#ifdef COMPAT_60
-#include <compat/sys/ttycom.h>
-#endif /* COMPAT_60 */
+#include <machine/stdarg.h>
 
 static int	ttnread(struct tty *);
 static void	ttyblock(struct tty *);
@@ -105,7 +98,7 @@ static void	ttyecho(int, struct tty *);
 static void	ttyrubo(struct tty *, int);
 static void	ttyprintf_nolock(struct tty *, const char *fmt, ...)
     __attribute__((__format__(__printf__,2,3)));
-static int	proc_compare_wrapper(struct proc *, struct proc *);
+static int	proc_compare(struct proc *, struct proc *);
 static void	ttysigintr(void *);
 
 /* Symbolic sleep message strings. */
@@ -204,103 +197,21 @@ static void *tty_sigsih;
 struct ttylist_head ttylist = TAILQ_HEAD_INITIALIZER(ttylist);
 int tty_count;
 kmutex_t tty_lock;
-krwlock_t ttcompat_lock;
-int (*ttcompatvec)(struct tty *, u_long, void *, int, struct lwp *);
 
 uint64_t tk_cancc;
 uint64_t tk_nin;
 uint64_t tk_nout;
 uint64_t tk_rawcc;
 
-static kauth_listener_t tty_listener;
-
-#define	TTY_MINQSIZE	0x00400
-#define	TTY_MAXQSIZE	0x10000
-int tty_qsize = TTY_MINQSIZE;
-
-static int
-tty_get_qsize(int *qsize, int newsize)
+SYSCTL_SETUP(sysctl_kern_tkstat_setup, "sysctl kern.tkstat subtree setup")
 {
-	newsize = 1 << ilog2(newsize);	/* Make it a power of two */ 
 
-	if (newsize < TTY_MINQSIZE || newsize > TTY_MAXQSIZE)
-		return EINVAL;
-
-	*qsize = newsize;
-	return 0;
-}
-
-static int
-tty_set_qsize(struct tty *tp, int newsize)
-{
-	struct clist rawq, canq, outq;
-	struct clist orawq, ocanq, ooutq;
-
-	clalloc(&rawq, newsize, 1);
-	clalloc(&canq, newsize, 1);
-	clalloc(&outq, newsize, 0);
-
-	mutex_spin_enter(&tty_lock);
-
-	if (tp->t_outq.c_cc != 0) {
-		mutex_spin_exit(&tty_lock);
-		clfree(&rawq);
-		clfree(&canq);
-		clfree(&outq);
-		return EBUSY;
-	}
-
-	orawq = tp->t_rawq;
-	ocanq = tp->t_canq;
-	ooutq = tp->t_outq;
-
-	tp->t_qsize = newsize;
-	tp->t_rawq = rawq;
-	tp->t_canq = canq;
-	tp->t_outq = outq;
-
-	ttsetwater(tp);
-
-	mutex_spin_exit(&tty_lock);
-
-	clfree(&orawq);
-	clfree(&ocanq);
-	clfree(&ooutq);
-
-	return 0;
-}
-
-static int
-sysctl_kern_tty_qsize(SYSCTLFN_ARGS)
-{
-	int newsize;
-	int error;
-	struct sysctlnode node;
-	node = *rnode;
-	node.sysctl_data = &newsize;
-
-	newsize = tty_qsize;
-	error = sysctl_lookup(SYSCTLFN_CALL(&node));
-	if (error || newp == NULL)
-		return error;
-
-
-	return tty_get_qsize(&tty_qsize, newsize);
-}
-
-static void
-sysctl_kern_tty_setup(void)
-{
-	const struct sysctlnode *rnode, *cnode;
-	struct sysctllog *kern_tkstat_sysctllog, *kern_tty_sysctllog;
-
-	kern_tkstat_sysctllog = NULL;
-	sysctl_createv(&kern_tkstat_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "kern", NULL,
 		       NULL, 0, NULL, 0,
 		       CTL_KERN, CTL_EOL);
-	sysctl_createv(&kern_tkstat_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "tkstat",
 		       SYSCTL_DESCR("Number of characters sent and and "
@@ -308,43 +219,30 @@ sysctl_kern_tty_setup(void)
 		       NULL, 0, NULL, 0,
 		       CTL_KERN, KERN_TKSTAT, CTL_EOL);
 
-	sysctl_createv(&kern_tkstat_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_QUAD, "nin",
 		       SYSCTL_DESCR("Total number of tty input characters"),
 		       NULL, 0, &tk_nin, 0,
 		       CTL_KERN, KERN_TKSTAT, KERN_TKSTAT_NIN, CTL_EOL);
-	sysctl_createv(&kern_tkstat_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_QUAD, "nout",
 		       SYSCTL_DESCR("Total number of tty output characters"),
 		       NULL, 0, &tk_nout, 0,
 		       CTL_KERN, KERN_TKSTAT, KERN_TKSTAT_NOUT, CTL_EOL);
-	sysctl_createv(&kern_tkstat_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_QUAD, "cancc",
 		       SYSCTL_DESCR("Number of canonical tty input characters"),
 		       NULL, 0, &tk_cancc, 0,
 		       CTL_KERN, KERN_TKSTAT, KERN_TKSTAT_CANCC, CTL_EOL);
-	sysctl_createv(&kern_tkstat_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_QUAD, "rawcc",
 		       SYSCTL_DESCR("Number of raw tty input characters"),
 		       NULL, 0, &tk_rawcc, 0,
 		       CTL_KERN, KERN_TKSTAT, KERN_TKSTAT_RAWCC, CTL_EOL);
-
-	kern_tty_sysctllog = NULL;
-	sysctl_createv(&kern_tty_sysctllog, 0, NULL, &rnode,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "tty", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_KERN, CTL_CREATE, CTL_EOL);
-	sysctl_createv(&kern_tty_sysctllog, 0, &rnode, &cnode,
-		       CTLFLAG_PERMANENT | CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "qsize",
-		       SYSCTL_DESCR("TTY input and output queue size"),
-		       sysctl_kern_tty_qsize, 0, &tty_qsize, 0,
-		       CTL_CREATE, CTL_EOL);
 }
 
 int
@@ -411,11 +309,11 @@ ttylopen(dev_t device, struct tty *tp)
 	if (!ISSET(tp->t_state, TS_ISOPEN)) {
 		SET(tp->t_state, TS_ISOPEN);
 		memset(&tp->t_winsize, 0, sizeof(tp->t_winsize));
+#ifdef COMPAT_OLDTTY
 		tp->t_flags = 0;
+#endif
 	}
 	mutex_spin_exit(&tty_lock);
-	if (tp->t_qsize != tty_qsize)
-		tty_set_qsize(tp, tty_qsize);
 	return (0);
 }
 
@@ -445,11 +343,11 @@ ttyclose(struct tty *tp)
 
 	mutex_spin_exit(&tty_lock);
 
-	if (sess != NULL) {
-		mutex_enter(proc_lock);
-		/* Releases proc_lock. */
-		proc_sessrele(sess);
-	}
+	mutex_enter(proc_lock);
+	if (sess != NULL)
+		SESSRELE(sess);
+	mutex_exit(proc_lock);
+
 	return (0);
 }
 
@@ -930,7 +828,6 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	struct proc *p = l ? l->l_proc : NULL;
 	struct linesw	*lp;
 	int		s, error;
-	struct pathbuf *pb;
 	struct nameidata nd;
 	char		infobuf[200];
 
@@ -953,7 +850,7 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	case  TIOCSTAT:
 	case  TIOCSTI:
 	case  TIOCSWINSZ:
-	case  TIOCSQSIZE:
+#ifdef COMPAT_OLDTTY
 	case  TIOCLBIC:
 	case  TIOCLBIS:
 	case  TIOCLSET:
@@ -962,6 +859,7 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	case  TIOCSETN:
 	case  TIOCSETP:
 	case  TIOCSLTC:
+#endif
 		mutex_spin_enter(&tty_lock);
 		while (isbackground(curproc, tp) &&
 		    p->p_pgrp->pg_jobc && (p->p_lflag & PL_PPWAIT) == 0 &&
@@ -973,7 +871,7 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 			mutex_exit(proc_lock);
 			
 			mutex_spin_enter(&tty_lock);
-			error = ttypause(tp, hz);
+			error = ttysleep(tp, &lbolt, true, 0);
 			if (error) {
 				mutex_spin_exit(&tty_lock);
 				return (error);
@@ -1033,18 +931,12 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 			    (TS_CARR_ON | TS_ISOPEN))
 				return EBUSY;
 
-			pb = pathbuf_create("/dev/console");
-			if (pb == NULL) {
-				return ENOMEM;
-			}
-			NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, pb);
-			if ((error = namei(&nd)) != 0) {
-				pathbuf_destroy(pb);
+			NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_SYSSPACE,
+			    "/dev/console");
+			if ((error = namei(&nd)) != 0)
 				return error;
-			}
 			error = VOP_ACCESS(nd.ni_vp, VREAD, l->l_cred);
 			vput(nd.ni_vp);
-			pathbuf_destroy(pb);
 			if (error)
 				return error;
 
@@ -1071,9 +963,6 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 		break;
 	case TIOCGWINSZ:		/* get window size */
 		*(struct winsize *)data = tp->t_winsize;
-		break;
-	case TIOCGQSIZE:
-		*(int *)data = tp->t_qsize;
 		break;
 	case FIOGETOWN:
 		mutex_enter(proc_lock);
@@ -1276,9 +1165,9 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 		 * it must equal `p_session', in which case the session
 		 * already has the correct reference count.
 		 */
-		if (tp->t_session == NULL) {
-			proc_sesshold(p->p_session);
-		}
+		if (tp->t_session == NULL)
+			SESSHOLD(p->p_session);
+
 		tp->t_session = p->p_session;
 		tp->t_pgrp = p->p_pgrp;
 		p->p_session->s_ttyp = tp;
@@ -1287,7 +1176,7 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 		mutex_exit(proc_lock);
 		break;
 	case FIOSETOWN: {		/* set pgrp of tty */
-		pid_t pgid = *(pid_t *)data;
+		pid_t pgid = *(int *)data;
 		struct pgrp *pgrp;
 
 		mutex_enter(proc_lock); 
@@ -1297,18 +1186,14 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 		}
 
 		if (pgid < 0) {
-			pgrp = pgrp_find(-pgid);
-			if (pgrp == NULL) {
-				mutex_exit(proc_lock);
+			pgrp = pg_find(-pgid, PFIND_LOCKED | PFIND_UNLOCK_FAIL);
+			if (pgrp == NULL)
 				return (EINVAL);
-			}
 		} else {
 			struct proc *p1;
-			p1 = proc_find(pgid);
-			if (!p1) {
-				mutex_exit(proc_lock);
+			p1 = p_find(pgid, PFIND_LOCKED | PFIND_UNLOCK_FAIL);
+			if (!p1)
 				return (ESRCH);
-			}
 			pgrp = p1->p_pgrp;
 		}
 
@@ -1324,18 +1209,16 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	}
 	case TIOCSPGRP: {		/* set pgrp of tty */
 		struct pgrp *pgrp;
-		pid_t pgid = *(pid_t *)data;
-
-		if (pgid == NO_PGID)
-			return EINVAL;
 
 		mutex_enter(proc_lock); 
 		if (!isctty(p, tp)) {
 			mutex_exit(proc_lock);
 			return (ENOTTY);
 		}
-		pgrp = pgrp_find(pgid);
-		if (pgrp == NULL || pgrp->pg_session != p->p_session) {
+		pgrp = pg_find(*(int *)data, PFIND_LOCKED | PFIND_UNLOCK_FAIL);
+		if (pgrp == NULL)
+			return (EINVAL);
+		if (pgrp->pg_session != p->p_session) {
 			mutex_exit(proc_lock);
 			return (EPERM);
 		}
@@ -1363,32 +1246,12 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 		}
 		mutex_spin_exit(&tty_lock);
 		break;
-	case TIOCSQSIZE:
-		if ((error = tty_get_qsize(&s, *(int *)data)) == 0 &&
-		    s != tp->t_qsize)
-			error = tty_set_qsize(tp, s);
-		return error;
 	default:
-#ifdef COMPAT_60
-		error = compat_60_ttioctl(tp, cmd, data, flag, l);
-		if (error != EPASSTHROUGH)
-			return error;
-#endif /* COMPAT_60 */
-		/* We may have to load the compat module for this. */
-		for (;;) {
-			rw_enter(&ttcompat_lock, RW_READER);
-			if (ttcompatvec != NULL) {
-				break;
-			}
-			rw_exit(&ttcompat_lock);
-			(void)module_autoload("compat", MODULE_CLASS_ANY);
-			if (ttcompatvec == NULL) {
-				return EPASSTHROUGH;
-			}
-		}
-		error = (*ttcompatvec)(tp, cmd, data, flag, l);
-		rw_exit(&ttcompat_lock);
-		return error;
+#ifdef COMPAT_OLDTTY
+		return (ttcompat(tp, cmd, data, flag, l));
+#else
+		return (EPASSTHROUGH);
+#endif
 	}
 	return (0);
 }
@@ -1830,7 +1693,7 @@ ttread(struct tty *tp, struct uio *uio, int flag)
 		mutex_exit(proc_lock);
 
 		mutex_spin_enter(&tty_lock);
-		error = ttypause(tp, hz);
+		error = ttysleep(tp, &lbolt, true, 0);
 		mutex_spin_exit(&tty_lock);
 		if (error)
 			return (error);
@@ -1923,11 +1786,9 @@ ttread(struct tty *tp, struct uio *uio, int flag)
 			mutex_spin_exit(&tty_lock);
 			return (0);	/* EOF */
 		}
-		if (!has_stime || slp <= 0) {
-			if (flag & IO_NDELAY) {
-				mutex_spin_exit(&tty_lock);
-				return (EWOULDBLOCK);
-			}
+		if (flag & IO_NDELAY) {
+			mutex_spin_exit(&tty_lock);
+			return (EWOULDBLOCK);
 		}
 		error = ttysleep(tp, &tp->t_rawcv, true, slp);
 		mutex_spin_exit(&tty_lock);
@@ -1939,6 +1800,7 @@ ttread(struct tty *tp, struct uio *uio, int flag)
 		goto loop;
 	}
  read:
+	mutex_spin_exit(&tty_lock);
 
 	/*
 	 * Input present, check for input mapping and processing.
@@ -1950,14 +1812,16 @@ ttread(struct tty *tp, struct uio *uio, int flag)
 		 */
 		if (CCEQ(cc[VDSUSP], c) &&
 		    ISSET(lflag, IEXTEN|ISIG) == (IEXTEN|ISIG)) {
+			mutex_spin_enter(&tty_lock);
 			ttysig(tp, TTYSIG_PG1, SIGTSTP);
 			if (first) {
-				error = ttypause(tp, hz);
+				error = ttysleep(tp, &lbolt, true, 0);
+				mutex_spin_exit(&tty_lock);
 				if (error)
 					break;
-				mutex_spin_exit(&tty_lock);
 				goto loop;
-			}
+			} else
+				mutex_spin_exit(&tty_lock);
 			break;
 		}
 		/*
@@ -1968,9 +1832,7 @@ ttread(struct tty *tp, struct uio *uio, int flag)
 		/*
 		 * Give user character.
 		 */
-		mutex_spin_exit(&tty_lock);
  		error = ureadc(c, uio);
-		mutex_spin_enter(&tty_lock);
 		if (error)
 			break;
  		if (uio->uio_resid == 0)
@@ -1983,11 +1845,11 @@ ttread(struct tty *tp, struct uio *uio, int flag)
 			break;
 		first = 0;
 	}
-
 	/*
 	 * Look to unblock output now that (presumably)
 	 * the input queue has gone down.
 	 */
+	mutex_spin_enter(&tty_lock);
 	if (ISSET(tp->t_state, TS_TBLOCK) && tp->t_rawq.c_cc < TTYHOG / 5) {
 		if (ISSET(tp->t_iflag, IXOFF) &&
 		    cc[VSTART] != _POSIX_VDISABLE &&
@@ -2100,7 +1962,7 @@ ttwrite(struct tty *tp, struct uio *uio, int flag)
 		mutex_exit(proc_lock);
 
 		mutex_spin_enter(&tty_lock);
-		error = ttypause(tp, hz);
+		error = ttysleep(tp, &lbolt, true, 0);
 		mutex_spin_exit(&tty_lock);
 		if (error)
 			goto out;
@@ -2460,7 +2322,7 @@ ttsetwater(struct tty *tp)
 	tp->t_lowat = x = CLAMP(cps / 2, TTMAXLOWAT, TTMINLOWAT);
 	x += cps;
 	x = CLAMP(x, TTMAXHIWAT, TTMINHIWAT);
-	tp->t_hiwat = roundup(x, TTROUND);
+	tp->t_hiwat = roundup(x, CBSIZE);
 #undef	CLAMP
 }
 
@@ -2508,7 +2370,7 @@ ttygetinfo(struct tty *tp, int fromsig, char *buf, size_t bufsz)
 			} else
 				mutex_enter(p->p_lock);
 			oldpick = pick;
-			if (proc_compare_wrapper(pick, p))
+			if (proc_compare(pick, p))
 				pick = p;
 			mutex_exit(p->p_lock);
 			if (p->p_lock != oldpick->p_lock)
@@ -2537,36 +2399,15 @@ ttygetinfo(struct tty *tp, int fromsig, char *buf, size_t bufsz)
 
 	mutex_enter(pick->p_lock);
 	LIST_FOREACH(l, &pick->p_lwps, l_sibling) {
-		const char *lp;
 		lwp_lock(l);
-#ifdef LWP_PC
-#define FMT_RUN "%#"PRIxVADDR
-#define VAL_RUNNING (vaddr_t)LWP_PC(l)
-#define VAL_RUNABLE (vaddr_t)LWP_PC(l)
-#else
-#define FMT_RUN "%s"
-#define VAL_RUNNING "running"
-#define VAL_RUNABLE "runnable"
-#endif
-		switch (l->l_stat) {
-		case LSONPROC:
-			snprintf(lmsg, sizeof(lmsg), FMT_RUN"/%d", VAL_RUNNING,
-			    cpu_index(l->l_cpu));
-			lp = lmsg;
-			break;
-		case LSRUN:
-			snprintf(lmsg, sizeof(lmsg), FMT_RUN, VAL_RUNABLE);
-			lp = lmsg;
-			break;
-		default:
-			lp = l->l_wchan ? l->l_wmesg : "iowait";
-			break;
-		} 
-		strlcat(buf, lp, bufsz);
-		strlcat(buf, LIST_NEXT(l, l_sibling) != NULL ? " " : "] ",
-		    bufsz);
-		pctcpu += l->l_pctcpu;
+		snprintf(lmsg, sizeof(lmsg), "%s%s",
+		    l->l_stat == LSONPROC ? "running" :
+		    l->l_stat == LSRUN ? "runnable" :
+		    l->l_wchan ? l->l_wmesg : "iowait",
+		    (LIST_NEXT(l, l_sibling) != NULL) ? " " : "] ");
 		lwp_unlock(l);
+		strlcat(buf, lmsg, bufsz);
+		pctcpu += l->l_pctcpu;
 	}
 	pctcpu += pick->p_pctcpu;
 	calcru(pick, &utime, &stime, NULL, NULL);
@@ -2614,11 +2455,26 @@ ttyputinfo(struct tty *tp, char *buf)
 }
 
 /*
- * Returns 1 if p2 has a better chance being the active foreground process
- * in a terminal instead of p1.
+ * Returns 1 if p2 is "better" than p1
+ *
+ * The algorithm for picking the "interesting" process is thus:
+ *
+ *	1) Only foreground processes are eligible - implied.
+ *	2) Runnable processes are favored over anything else.  The runner
+ *	   with the highest CPU utilization is picked (l_pctcpu).  Ties are
+ *	   broken by picking the highest pid.
+ *	3) The sleeper with the shortest sleep time is next.  With ties,
+ *	   we pick out just "short-term" sleepers (P_SINTR == 0).
+ *	4) Further ties are broken by picking the highest pid.
  */
+#define	ISRUN(p)	((p)->p_nrlwps > 0)
+#define	TESTAB(a, b)	((a)<<1 | (b))
+#define	ONLYA	2
+#define	ONLYB	1
+#define	BOTH	3
+
 static int
-proc_compare_wrapper(struct proc *p1, struct proc *p2)
+proc_compare(struct proc *p1, struct proc *p2)
 {
 	lwp_t *l1, *l2;
 
@@ -2626,12 +2482,51 @@ proc_compare_wrapper(struct proc *p1, struct proc *p2)
 	KASSERT(mutex_owned(p2->p_lock));
 
 	if ((l1 = LIST_FIRST(&p1->p_lwps)) == NULL)
-		return 1;
-
+		return (1);
 	if ((l2 = LIST_FIRST(&p2->p_lwps)) == NULL)
-		return 0;
-
-	return proc_compare(p1, l1, p2, l2);
+		return (0);
+	/*
+	 * see if at least one of them is runnable
+	 */
+	switch (TESTAB(ISRUN(p1), ISRUN(p2))) {
+	case ONLYA:
+		return (0);
+	case ONLYB:
+		return (1);
+	case BOTH:
+		/*
+		 * tie - favor one with highest recent CPU utilization
+		 */
+		if (l2->l_pctcpu > l1->l_pctcpu)
+			return (1);
+		return (p2->p_pid > p1->p_pid);	/* tie - return highest pid */
+	}
+	/*
+ 	 * weed out zombies
+	 */
+	switch (TESTAB(P_ZOMBIE(p1), P_ZOMBIE(p2))) {
+	case ONLYA:
+		return (1);
+	case ONLYB:
+		return (0);
+	case BOTH:
+		return (p2->p_pid > p1->p_pid);	/* tie - return highest pid */
+	}
+	/*
+	 * pick the one with the smallest sleep time
+	 */
+	if (l2->l_slptime > l2->l_slptime)
+		return (0);
+	if (l2->l_slptime > l2->l_slptime)
+		return (1);
+	/*
+	 * favor one sleeping in a non-interruptible sleep
+	 */
+	if (l2->l_flag & LW_SINTR && (l2->l_flag & LW_SINTR) == 0)
+		return (1);
+	if (l2->l_flag & LW_SINTR && (l2->l_flag & LW_SINTR) == 0)
+		return (0);
+	return (p2->p_pid > p1->p_pid);		/* tie - return highest pid */
 }
 
 /*
@@ -2661,9 +2556,8 @@ out:
 
 /*
  * Sleep on chan, returning ERESTART if tty changed while we napped and
- * returning any errors (e.g. EINTR/EWOULDBLOCK) reported by
- * cv_timedwait(_sig).
- * If the tty is revoked, restarting a pending call will redo validation done
+ * returning any errors (e.g. EINTR/ETIMEDOUT) reported by tsleep.  If
+ * the tty is revoked, restarting a pending call will redo validation done
  * at the start of the call.
  *
  * Must be called with the tty lock held.
@@ -2677,9 +2571,7 @@ ttysleep(struct tty *tp, kcondvar_t *cv, bool catch, int timo)
 	KASSERT(mutex_owned(&tty_lock));
 
 	gen = tp->t_gen;
-	if (cv == NULL)
-		error = kpause("ttypause", catch, timo, &tty_lock);
-	else if (catch)
+	if (catch)
 		error = cv_timedwait_sig(cv, &tty_lock, timo);
 	else
 		error = cv_timedwait(cv, &tty_lock, timo);
@@ -2688,27 +2580,16 @@ ttysleep(struct tty *tp, kcondvar_t *cv, bool catch, int timo)
 	return (tp->t_gen == gen ? 0 : ERESTART);
 }
 
-int
-ttypause(struct tty *tp, int timo)
-{
-	int error;
-
-	error = ttysleep(tp, NULL, true, timo);
-	if (error == EWOULDBLOCK)
-		error = 0;
-	return error;
-}
-
 /*
  * Attach a tty to the tty list.
  *
  * This should be called ONLY once per real tty (including pty's).
  * eg, on the sparc, the keyboard and mouse have struct tty's that are
  * distinctly NOT usable as tty's, and thus should not be attached to
- * the ttylist.  This is why this call is not done from tty_alloc().
+ * the ttylist.  This is why this call is not done from ttymalloc().
  *
  * Device drivers should attach tty's at a similar time that they are
- * allocated, or, for the case of statically allocated struct tty's
+ * ttymalloc()'ed, or, for the case of statically allocated struct tty's
  * either in the attach or (first) open routine.
  */
 void
@@ -2742,35 +2623,32 @@ tty_detach(struct tty *tp)
  * Allocate a tty structure and its associated buffers.
  */
 struct tty *
-tty_alloc(void)
+ttymalloc(void)
 {
-	struct tty *tp;
-	int i;
+	struct tty	*tp;
+	int i;	
 
 	tp = kmem_zalloc(sizeof(*tp), KM_SLEEP);
 	callout_init(&tp->t_rstrt_ch, 0);
 	callout_setfunc(&tp->t_rstrt_ch, ttrstrt, tp);
-	tp->t_qsize = tty_qsize;
-	clalloc(&tp->t_rawq, tp->t_qsize, 1);
+	/* XXX: default to 1024 chars for now */
+	clalloc(&tp->t_rawq, 1024, 1);
 	cv_init(&tp->t_rawcv, "ttyraw");
 	cv_init(&tp->t_rawcvf, "ttyrawf");
-	clalloc(&tp->t_canq, tp->t_qsize, 1);
+	clalloc(&tp->t_canq, 1024, 1);
 	cv_init(&tp->t_cancv, "ttycan");
 	cv_init(&tp->t_cancvf, "ttycanf");
 	/* output queue doesn't need quoting */
-	clalloc(&tp->t_outq, tp->t_qsize, 0);
+	clalloc(&tp->t_outq, 1024, 0);
 	cv_init(&tp->t_outcv, "ttyout");
 	cv_init(&tp->t_outcvf, "ttyoutf");
 	/* Set default line discipline. */
 	tp->t_linesw = ttyldisc_default();
-	tp->t_dev = NODEV;
 	selinit(&tp->t_rsel);
 	selinit(&tp->t_wsel);
-	for (i = 0; i < TTYSIG_COUNT; i++)  {
+	for (i = 0; i < TTYSIG_COUNT; i++) 
 		sigemptyset(&tp->t_sigs[i]);
-	}
-
-	return tp;
+	return (tp);
 }
 
 /*
@@ -2780,7 +2658,7 @@ tty_alloc(void)
  * tty_attach()ed.
  */
 void
-tty_free(struct tty *tp)
+ttyfree(struct tty *tp)
 {
 	int i;
 
@@ -2828,36 +2706,6 @@ ttyprintf_nolock(struct tty *tp, const char *fmt, ...)
 	va_end(ap);
 }
 
-static int
-tty_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
-    void *arg0, void *arg1, void *arg2, void *arg3)
-{
-	struct tty *tty;
-	int result;
-
-	result = KAUTH_RESULT_DEFER;
-
-	if (action != KAUTH_DEVICE_TTY_OPEN)
-		return result;
-
-	tty = arg0;
-
-	/* If it's not opened, we allow. */
-	if ((tty->t_state & TS_ISOPEN) == 0)
-		result = KAUTH_RESULT_ALLOW;
-	else {
-		/*
-		 * If it's opened, we can only allow if it's not exclusively
-		 * opened; otherwise, that's a privileged operation and we
-		 * let the secmodel handle it.
-		 */
-		if ((tty->t_state & TS_XCLUDE) == 0)
-			result = KAUTH_RESULT_ALLOW;
-	}
-
-	return result;
-}
-
 /*
  * Initialize the tty subsystem.
  */
@@ -2866,14 +2714,8 @@ tty_init(void)
 {
 
 	mutex_init(&tty_lock, MUTEX_DEFAULT, IPL_VM);
-	rw_init(&ttcompat_lock);
 	tty_sigsih = softint_establish(SOFTINT_CLOCK, ttysigintr, NULL);
 	KASSERT(tty_sigsih != NULL);
-
-	tty_listener = kauth_listen_scope(KAUTH_SCOPE_DEVICE,
-	    tty_listener_cb, NULL);
-
-	sysctl_kern_tty_setup();
 }
 
 /*

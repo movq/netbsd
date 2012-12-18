@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_net.c,v 1.11 2011/07/17 20:54:42 joerg Exp $	*/
+/*	$NetBSD: dev_net.c,v 1.7 2008/05/11 11:42:02 chris Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -42,6 +42,7 @@
  * BOOTP for IP address - bootp()
  */
 
+#include <machine/stdarg.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <net/if.h>
@@ -58,7 +59,7 @@
 static int netdev_sock = -1;
 static int netdev_opens;
 
-static int net_getparams(int sock);
+static int net_getparams __P((int sock));
 
 /*
  * Called by devopen after it sets f->f_dev to our devsw entry.
@@ -104,7 +105,8 @@ net_open(struct open_file *f, ...)
 }
 
 int
-net_close(struct open_file *f)
+net_close(f)
+	struct open_file *f;
 {
 
 #ifdef	NETIF_DEBUG
@@ -126,19 +128,29 @@ net_close(struct open_file *f)
 		if (debug)
 			printf("net_close: calling netif_close()\n");
 		pxe_netif_close(netdev_sock);
+		//pxe_netif_shutdown(); /* XXX shouldn't be done here */
 		netdev_sock = -1;
 	}
 	return (0);
 }
 
 int
-net_ioctl(struct open_file *f, u_long cmd, void *data)
+net_ioctl(f, cmd, data)
+	struct open_file *f;
+	u_long cmd;
+	void *data;
 {
 	return EIO;
 }
 
 int
-net_strategy(void *devdata, int rw, daddr_t blk, size_t size, void *buf, size_t *rsize)
+net_strategy(devdata, rw, blk, size, buf, rsize)
+	void *devdata;
+	int rw;
+	daddr_t blk;
+	size_t size;
+	void *buf;
+	size_t *rsize;
 {
 	return EIO;
 }
@@ -149,11 +161,12 @@ net_strategy(void *devdata, int rw, daddr_t blk, size_t size, void *buf, size_t 
  * server IP address, and our root path on the server.
  */
 #ifdef	SUPPORT_BOOTP
-int bootp(int sock);
+int bootp __P((int sock));
 #endif
 
 static int
-net_getparams(int sock)
+net_getparams(sock)
+	int sock;
 {
 
 #ifdef	SUPPORT_BOOTP

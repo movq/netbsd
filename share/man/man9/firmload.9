@@ -1,4 +1,4 @@
-.\"	$NetBSD: firmload.9,v 1.6 2010/01/24 14:14:55 jruoho Exp $
+.\"	$NetBSD: firmload.9,v 1.4 2008/04/30 13:10:58 martin Exp $
 .\"
 .\" Copyright (c) 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -61,14 +61,15 @@ provides a simple and convenient API for device drivers to load firmware
 images from files residing in the file system that are necessary for the
 devices that they control.
 Firmware images reside in sub-directories, one for each driver, of a series
-of colon-separated path prefixes specified by the sysctl variable
+of colon-separated path prefixes specified the sysctl variable
 .Dv hw.firmware.path .
-.Sh FUNCTIONS
+.Pp
 The following functions are provided by the
 .Nm
 API:
 .Bl -tag -width indent
-.It Fn "firmware_open" "drvname" "imgname" "fhp"
+.It int Fn "firmware_open" "const char *drvname" "const char *imgname" \
+"firmware_handle_t *fhp"
 .Pp
 Open then firmware image
 .Fa imgname
@@ -82,16 +83,17 @@ Upon success,
 returns 0 and stores a firmware image handle in the location pointed to by
 .Fa fhp .
 Otherwise, an error code is returned to indicate the reason for failure.
-.It Fn "firmware_close" "fh"
+.It int Fn "firmware_close" "firmware_handle_t fh"
 .Pp
 Close the firmware image file associated with the firmware handle
 .Fa fh .
 Returns 0 upon success or an error code to indicate the reason for failure.
-.It Fn "firmware_get_size" "fh"
+.It off_t Fn "firmware_get_size" "firmware_handle_t fh"
 .Pp
 Returns the size of the image file associated with the firmware handle
 .Fa fh .
-.It Fn "firmware_read" "fh" "offset" "buf" "size"
+.It int Fn "firmware_read" "firmware_handle_t fh" "off_t offset" "void *buf" \
+"size_t size"
 .Pp
 Reads from the image file associated with the firmware handle
 .Fa fh
@@ -102,14 +104,14 @@ for length
 The firmware image data is placed into the buffer specified by
 .Fa buf .
 Returns 0 upon success or an error code to indicate the reason for failure.
-.It Fn "firmware_malloc" "size"
+.It void * Ns Fn "firmware_malloc" "size_t size"
 .Pp
 Allocates a region of wired kernel memory of size
 .Fa size .
 Note:
 .Fn firmware_malloc
 may block.
-.It Fn "firmware_free" "buf" "size"
+.It void Fn "firmware_free" "void *buf" "size_t size"
 .Pp
 Frees a region of memory previously allocated by
 .Fn firmware_malloc .

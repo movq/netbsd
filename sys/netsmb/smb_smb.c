@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_smb.c,v 1.33 2012/11/24 19:48:25 nakayama Exp $	*/
+/*	$NetBSD: smb_smb.c,v 1.29.6.2 2012/11/26 19:50:11 riz Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_smb.c,v 1.33 2012/11/24 19:48:25 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_smb.c,v 1.29.6.2 2012/11/26 19:50:11 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -119,7 +119,7 @@ smb_smb_negotiate(struct smb_vc *vcp, struct smb_cred *scred)
 	vcp->vc_hflags2 = 0;
 	vcp->obj.co_flags &= ~(SMBV_ENCRYPT);
 	sp = &vcp->vc_sopt;
-	memset(sp, 0, sizeof(struct smb_sopt));
+	bzero(sp, sizeof(struct smb_sopt));
 	error = smb_rq_alloc(VCTOCP(vcp), SMB_COM_NEGOTIATE, scred, &rqp);
 	if (error)
 		return error;

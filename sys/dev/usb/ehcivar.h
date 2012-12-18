@@ -1,4 +1,4 @@
-/*	$NetBSD: ehcivar.h,v 1.40 2012/06/10 06:15:53 mrg Exp $ */
+/*	$NetBSD: ehcivar.h,v 1.33 2008/10/14 18:12:38 jmcneill Exp $ */
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -109,11 +109,6 @@ struct ehci_soft_islot {
 
 typedef struct ehci_softc {
 	device_t sc_dev;
-	kmutex_t sc_lock;
-	kmutex_t sc_intr_lock;
-	kcondvar_t sc_doorbell;
-	void *sc_doorbell_si;
-	void *sc_pcd_si;
 	struct usbd_bus sc_bus;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
@@ -121,7 +116,6 @@ typedef struct ehci_softc {
 	u_int sc_offs;			/* offset to operational regs */
 	int sc_flags;			/* misc flags */
 #define EHCIF_DROPPED_INTR_WORKAROUND	0x01
-#define EHCIF_ETTF			0x02 /* Emb. Transaction Translater func. */
 
 	char sc_vendor[32];		/* vendor string for root hub */
 	int sc_id_vendor;		/* vendor ID for root hub */
@@ -145,6 +139,7 @@ typedef struct ehci_softc {
 	struct ehci_soft_itd **sc_softitds;
 
 	TAILQ_HEAD(, ehci_xfer) sc_intrhead;
+	kmutex_t sc_intrhead_lock;
 
 	ehci_soft_qh_t *sc_freeqhs;
 	ehci_soft_qtd_t *sc_freeqtds;
@@ -156,22 +151,26 @@ typedef struct ehci_softc {
 	u_int8_t sc_conf;		/* device configuration */
 	usbd_xfer_handle sc_intrxfer;
 	char sc_isreset[EHCI_MAX_PORTS];
+#ifdef USB_USE_SOFTINTR
 	char sc_softwake;
-	kcondvar_t sc_softwake_cv;
+#endif /* USB_USE_SOFTINTR */
 
 	u_int32_t sc_eintrs;
 	ehci_soft_qh_t *sc_async_head;
 
 	SIMPLEQ_HEAD(, usbd_xfer) sc_free_xfers; /* free xfers */
 
-	struct callout sc_tmo_intrlist;
+	kmutex_t sc_doorbell_lock;
 
-	device_t sc_child; /* /dev/usb# device */
+	usb_callout_t sc_tmo_intrlist;
+
+#if defined(__NetBSD__) || defined(__OpenBSD__)
+	device_ptr_t sc_child;		/* /dev/usb# device */
+#endif
 	char sc_dying;
+#if defined(__NetBSD__)
 	struct usb_dma_reserve sc_dma_reserve;
-
-	void (*sc_vendor_init)(struct ehci_softc *);
-	int (*sc_vendor_port_status)(struct ehci_softc *, uint32_t, int);
+#endif
 } ehci_softc_t;
 
 #define EREAD1(sc, a) bus_space_read_1((sc)->iot, (sc)->ioh, (a))
@@ -192,6 +191,6 @@ int		ehci_intr(void *);
 int		ehci_detach(ehci_softc_t *, int);
 int		ehci_activate(device_t, enum devact);
 void		ehci_childdet(device_t, device_t);
-bool		ehci_suspend(device_t, const pmf_qual_t *);
-bool		ehci_resume(device_t, const pmf_qual_t *);
+bool		ehci_suspend(device_t PMF_FN_PROTO);
+bool		ehci_resume(device_t PMF_FN_PROTO);
 bool		ehci_shutdown(device_t, int);

@@ -1,4 +1,4 @@
-/*	$NetBSD: lex.l,v 1.18 2010/06/13 04:14:57 tnozaki Exp $	*/
+/*	$NetBSD: lex.l,v 1.13.40.3 2009/01/15 04:21:26 snj Exp $	*/
 
 %{
 /*-
@@ -42,17 +42,16 @@
 #if 0
 static char sccsid[] = "@(#)lex.l	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lex.l,v 1.18 2010/06/13 04:14:57 tnozaki Exp $");
+__RCSID("$NetBSD: lex.l,v 1.13.40.3 2009/01/15 04:21:26 snj Exp $");
 #endif
 #endif /* not lint */
 
+#include "runetype_local.h"
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "citrus_namespace.h"
 #include "citrus_bcs.h"
-
-#include "runetype_file.h"
 
 #include "ldef.h"
 #include "yacc.h"

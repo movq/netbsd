@@ -1,4 +1,4 @@
-/*	$NetBSD: oosiop.c,v 1.13 2010/11/13 13:52:02 uebayasi Exp $	*/
+/*	$NetBSD: oosiop.c,v 1.12 2008/03/29 09:11:35 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2001 Shuichiro URATA.  All rights reserved.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: oosiop.c,v 1.13 2010/11/13 13:52:02 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: oosiop.c,v 1.12 2008/03/29 09:11:35 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,6 +45,8 @@ __KERNEL_RCSID(0, "$NetBSD: oosiop.c,v 1.13 2010/11/13 13:52:02 uebayasi Exp $")
 #include <sys/buf.h>
 #include <sys/malloc.h>
 #include <sys/queue.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>

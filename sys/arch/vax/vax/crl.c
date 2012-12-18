@@ -1,4 +1,4 @@
-/*	$NetBSD: crl.c,v 1.30 2011/10/26 20:24:41 martin Exp $	*/
+/*	$NetBSD: crl.c,v 1.25 2008/03/11 05:34:03 matt Exp $	*/
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -31,25 +31,22 @@
  */
 
 /*
- * Bugfix by Johnny Billquist 2010
- */
-
-/*
  * TO DO (tef  7/18/85):
  *	1) change printf's to log() instead???
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: crl.c,v 1.30 2011/10/26 20:24:41 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: crl.c,v 1.25 2008/03/11 05:34:03 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/buf.h>
 
+#include <machine/cpu.h>
+#include <machine/mtpr.h>
 #include <machine/sid.h>
 #include <machine/scb.h>
 
@@ -153,8 +150,7 @@ crlrw(dev_t dev, struct uio *uio, int flag)
 		}
 		s = splconsmedia(); 
 		crlstart();
-                while ((bp->b_oflags & BO_DONE) == 0)
-                  (void) tsleep(bp, PRIBIO, "crlxfer", 0);
+		biowait(bp);
 		splx(s);
 		if (bp->b_error != 0) {
 			error = bp->b_error;
@@ -215,10 +211,10 @@ crlintr(void *arg)
 
 				crlstat.crl_ds = mfpr(PR_STXDB);
 
-				snprintb(sbuf, sizeof(sbuf), CRLCS_BITS,
-				    crlstat.crl_cs);
-				snprintb(sbuf2, sizeof(sbuf2), CRLDS_BITS,
-				    crlstat.crl_ds);
+				bitmask_snprintf(crlstat.crl_cs, CRLCS_BITS,
+						 sbuf, sizeof(sbuf));
+				bitmask_snprintf(crlstat.crl_ds, CRLDS_BITS,
+						 sbuf2, sizeof(sbuf2));
 				printf("crlcs=0x%s, crlds=0x%s\n", sbuf, sbuf2);
 				break;
 			}
@@ -228,7 +224,7 @@ crlintr(void *arg)
 			bp->b_oflags |= BO_DONE;
 		}
 		crltab.crl_active = 0;
-		wakeup(bp);
+		wakeup((void *)bp);
 		break;
 
 	case CRL_S_XCONT:

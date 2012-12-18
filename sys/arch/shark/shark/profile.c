@@ -1,4 +1,4 @@
-/*	$NetBSD: profile.c,v 1.14 2009/11/27 03:23:13 rmind Exp $	*/
+/*	$NetBSD: profile.c,v 1.12 2007/03/04 06:00:43 christos Exp $	*/
 
 /*
  * Copyright 1997
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: profile.c,v 1.14 2009/11/27 03:23:13 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: profile.c,v 1.12 2007/03/04 06:00:43 christos Exp $");
 
 #include "profiler.h"
 
@@ -47,6 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: profile.c,v 1.14 2009/11/27 03:23:13 rmind Exp $");
 #include <sys/buf.h>
 #include <sys/time.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/ioctl.h>
 #include <sys/conf.h>
 #include <sys/errno.h>
@@ -121,7 +122,8 @@ const struct cdevsw prof_cdevsw = {
 };
 
 void 
-profilerattach(int n)
+profilerattach(n)
+    int n;
 {
     /* reset the profiler state */
     prof_sc.state = 0;
@@ -136,7 +138,11 @@ profilerattach(int n)
  *       EROFS if attempt to open in write mode.
  */
 int
-profopen(dev_t dev, int flag, int mode, struct proc *p)
+profopen(dev, flag, mode, p)
+    dev_t dev;
+    int flag;
+    int mode;
+    struct proc *p;
 {
 
     /* check that the minor number is correct. */
@@ -168,7 +174,11 @@ profopen(dev_t dev, int flag, int mode, struct proc *p)
  * 
  */
 int
-profclose(dev_t dev, int flag, int mode, struct proc *p)
+profclose(dev, flag, mode, p)
+    dev_t dev;
+    int flag;
+    int mode;
+    struct proc *p;
 {
     /* clear the state, and stop profiling if 
      * it is happening.
@@ -179,7 +189,10 @@ profclose(dev_t dev, int flag, int mode, struct proc *p)
 }
 
 int
-profread(dev_t dev, struct uio *uio, int flags)
+profread(dev, uio, flags)
+	dev_t dev;
+	struct uio *uio;
+	int flags;
 {
     int error;
     int real, backup;
@@ -272,7 +285,12 @@ profread(dev_t dev, struct uio *uio, int flags)
 static int profcount = 0;
 static int ints = 0;
 int
-profioctl(dev_t dev, u_long cmd, void *data, int flag, struct proc *p)
+profioctl(dev, cmd, data, flag, p)
+	dev_t dev;
+	u_long cmd;
+	void *data;
+	int flag;
+	struct proc *p;
 {
     int error = 0;
     struct profStartInfo *info = (struct profStartInfo *) data;

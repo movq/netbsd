@@ -1,4 +1,4 @@
-#	$NetBSD: files.hp700,v 1.25 2011/02/15 10:32:56 tsutsui Exp $
+#	$NetBSD: files.hp700,v 1.20 2008/03/30 12:32:13 skrll Exp $
 #
 #	$OpenBSD: files.hp700,v 1.31 2001/06/26 02:41:25 mickey Exp $
 #
@@ -11,6 +11,7 @@ maxusers 2 8 64
 
 # Status LEDs
 defflag 			USELEDS
+defflag				POWER_SWITCH
 
 include "dev/pckbport/files.pckbport"
 
@@ -53,11 +54,6 @@ include "dev/isa/files.isa"
 #
 include "dev/eisa/files.eisa"
 
-#
-# HIL Human Interface Loop devices
-#
-include "dev/hil/files.hil"
-
 
 #
 # Gonzo System Connect Bus
@@ -78,14 +74,6 @@ device	pdc
 attach	pdc at gedoens
 file	arch/hp700/dev/pdc.c		pdc
 
-device	power
-attach	power at gedoens
-file	arch/hp700/dev/power.c		power needs-flag
-
-device	lcd
-attach	lcd at gedoens
-file	arch/hp700/dev/lcd.c		lcd needs-flag
-
 device	mem
 attach	mem at gedoens
 file	arch/hp700/dev/mem.c		mem
@@ -102,21 +90,6 @@ file	arch/hp700/dev/fpu.c		fpu
 device	phantomas: gedoens
 attach	phantomas at gedoens
 file	arch/hp700/dev/phantomas.c	phantomas
-
-# GeckoBOA BC GSC+ port
-device	gecko: gedoens
-attach	gecko at gedoens
-file	arch/hp700/dev/gecko.c		gecko
-
-# U2/Uturn, Runway to GSC Bus bridge & IOA
-device	uturn: gedoens
-attach	uturn at gedoens
-file	arch/hp700/dev/uturn.c		uturn
-
-# Astro memory & I/O controller
-device	astro: gedoens
-attach	astro at gedoens
-file	arch/hp700/dev/astro.c			astro
 
 # 1FT1-0002, 1FU2-0002
 # as goes w/ 7100LC, 7300LC, 7200, 8000, 8200, 8500
@@ -147,29 +120,11 @@ file	arch/hp700/dev/dino.c		dino
 attach	com at dino with com_dino
 file	arch/hp700/dev/com_dino.c	com_dino
 
-# Elroy, Ropes to PCI Bridge. Supports 4X PCI and dual address cycle.
-# Mercury; QuickSilver is an AGP also
-device	elroy: pcibus
-attach	elroy at gedoens
-file	arch/hp700/dev/elroy.c		elroy
-file	arch/hp700/dev/apic.c		elroy
-
 attach	sti at gedoens with sti_gedoens
-file	arch/hp700/dev/sti_sgc.c		sti_gedoens
-file	arch/hp700/dev/sti_pci_machdep.c	sti_pci
+file	arch/hp700/dev/sti_sgc.c	sti_gedoens
 
 attach	siop at gedoens with siop_gedoens
 file	arch/hp700/dev/siop_sgc.c	siop_gedoens
-
-device	ssio {[irq = -1]}
-attach	ssio at pci
-file	arch/hp700/dev/ssio.c			ssio
-
-attach	com at ssio with com_ssio
-file	arch/hp700/dev/com_ssio.c		com_ssio
-
-attach	lpt at ssio with lpt_ssio
-file	arch/hp700/dev/lpt_ssio.c		lpt_ssio
 
 ###
 
@@ -218,8 +173,9 @@ file	arch/hp700/gsc/osiop_gsc.c	osiop_gsc
 attach	oosiop at gsc with oosiop_gsc
 file	arch/hp700/gsc/oosiop_gsc.c	oosiop_gsc
 
-attach	hil at gsc with hil_gsc
-file	arch/hp700/gsc/hil_gsc.c	hil_gsc
+device	hil: tty
+attach	hil at gsc
+file	arch/hp700/gsc/hil.c		hil
 
 device	gsckbc: pckbport
 attach	gsckbc at gsc
@@ -272,6 +228,7 @@ file	arch/hp700/hp700/disksubr.c		disk
 file	arch/hp700/hp700/intr.c
 file	arch/hp700/hp700/machdep.c
 file	arch/hp700/hp700/sys_machdep.c
+file	arch/hp700/hp700/power.c		power_switch
 file	arch/hp700/dev/clock.c
 
 file	dev/cons.c

@@ -1,5 +1,4 @@
-/*	Id: code.c,v 1.23 2011/06/04 07:41:11 ragge Exp 	*/	
-/*	$NetBSD: code.c,v 1.1.1.3 2011/09/01 12:46:37 plunky Exp $	*/
+/*	$Id: code.c,v 1.1.1.1 2008/08/24 05:32:55 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -77,16 +76,16 @@ efcode()
 	/* address of return struct is in eax */
 	/* create a call to memcpy() */
 	/* will get the result in eax */
-	p = block(REG, NIL, NIL, CHAR+PTR, 0, 0);
+	p = block(REG, NIL, NIL, CHAR+PTR, 0, MKSUE(CHAR+PTR));
 	p->n_rval = R0;
-	q = block(OREG, NIL, NIL, CHAR+PTR, 0, 0);
+	q = block(OREG, NIL, NIL, CHAR+PTR, 0, MKSUE(CHAR+PTR));
 	q->n_rval = FB;
 	q->n_lval = 8; /* return buffer offset */
-	p = block(CM, q, p, INT, 0, 0);
+	p = block(CM, q, p, INT, 0, MKSUE(INT));
 	sz = (tsize(STRTY, cftnsp->sdf, cftnsp->ssue)+SZCHAR-1)/SZCHAR;
-	p = block(CM, p, bcon(sz), INT, 0, 0);
+	p = block(CM, p, bcon(sz), INT, 0, MKSUE(INT));
 	p->n_right->n_name = "";
-	p = block(CALL, bcon(0), p, CHAR+PTR, 0, 0);
+	p = block(CALL, bcon(0), p, CHAR+PTR, 0, MKSUE(CHAR+PTR));
 	p->n_left->n_name = "memcpy";
 	send_passt(IP_NODE, p);
 }
@@ -231,6 +230,14 @@ addsym(struct symtab *q)
 	sympole = w;
 }
 
+/*
+ * by now, the automatics and register variables are allocated
+ */
+void
+bccode()
+{
+}
+
 struct caps {
 	char *cap, *stat;
 } caps[] = {
@@ -306,6 +313,16 @@ bycode(int t, int i)
 			putchar(t);
 		}
 	}
+}
+
+/*
+ * return the alignment of field of type t
+ */
+int
+fldal(unsigned int t)
+{
+	uerror("illegal field type");
+	return(ALINT);
 }
 
 /* fix up type of field p */

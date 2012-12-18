@@ -1,4 +1,4 @@
-/*	$NetBSD: cmds.c,v 1.13 2011/08/14 17:57:44 christos Exp $	*/
+/*	$NetBSD: cmds.c,v 1.11 2008/04/28 20:24:17 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -59,7 +59,7 @@
 
 #ifndef lint
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cmds.c,v 1.13 2011/08/14 17:57:44 christos Exp $");
+__RCSID("$NetBSD: cmds.c,v 1.11 2008/04/28 20:24:17 martin Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -86,10 +86,10 @@ static void	cmd_detach0(struct mlx_disk *);
 static struct	mlx_rebuild_status rs;
 static int	rstatus;
 
-static struct {
+struct {
 	int	hwid;
 	const char	*name;
-} const mlx_ctlr_names[] = {
+} static const mlx_ctlr_names[] = {
 	{ 0x00, "960E/960M" },
 	{ 0x01,	"960P/PD" },
 	{ 0x02,	"960PL" },
@@ -184,8 +184,7 @@ cmd_cstatus(char **argv)
 	struct mlx_phys_drv pd;
 	static char buf[80];
 	const char *model;
-	int channel, target;
-	size_t i;
+	int i, channel, target;
 
 	model = NULL;	/* XXXGCC -Wuninitialized */
 
@@ -210,14 +209,12 @@ cmd_cstatus(char **argv)
 	printf("\n");
 
 	if (verbosity > 0 && ci.ci_iftype > 1) {
-		uint32_t hid, sid;
-
 		mlx_enquiry(&enq);
-		memcpy(&hid, enq.me_hardware_id, sizeof(hid));
-		memcpy(&sid, enq.me_firmware_id, sizeof(sid));
 
-		printf("  Hardware ID\t\t\t0x%08x\n", le32toh(hid));
-		printf("  Firmware ID\t\t\t0x%08x\n", le32toh(sid));
+		printf("  Hardware ID\t\t\t0x%08x\n",
+		    le32toh(*(u_int32_t *)enq.me_hardware_id));
+		printf("  Firmware ID\t\t\t0x%08x\n",
+		    le32toh(*(u_int32_t *)enq.me_firmware_id));
 		printf("  Configured/Actual channels\t%d/%d\n",
 		    enq.me_configured_channels, enq.me_actual_channels);
 		printf("  Max Targets\t\t\t%d\n", enq.me_max_targets);

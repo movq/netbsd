@@ -1,4 +1,4 @@
-/*	$NetBSD: tip.c,v 1.51 2011/09/06 18:33:01 joerg Exp $	*/
+/*	$NetBSD: tip.c,v 1.49 2008/07/21 14:19:26 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)tip.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: tip.c,v 1.51 2011/09/06 18:33:01 joerg Exp $");
+__RCSID("$NetBSD: tip.c,v 1.49 2008/07/21 14:19:26 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -54,12 +54,12 @@ __RCSID("$NetBSD: tip.c,v 1.51 2011/09/06 18:33:01 joerg Exp $");
 #include "tip.h"
 #include "pathnames.h"
 
-__dead static void	tipusage(void);
+static void	tipusage(void);
 
 int	escape(void);
 int	main(int, char **);
-__dead static void	intprompt(int);
-__dead static void	tipin(void);
+void	intprompt(int);
+void	tipin(void);
 
 char	PNbuf[256];			/* This limits the size of a number */
 
@@ -320,7 +320,7 @@ prompt(const char *s, char *volatile p, size_t l)
 /*
  * Interrupt service routine during prompting
  */
-static void
+void
 /*ARGSUSED*/
 intprompt(int dummy __unused)
 {
@@ -334,7 +334,7 @@ intprompt(int dummy __unused)
 /*
  * ****TIPIN   TIPIN****
  */
-static void
+void
 tipin(void)
 {
 	char gch, bol = 1;
@@ -510,7 +510,7 @@ static char partab[0200];
 void
 xpwrite(int fd, char *buf, size_t n)
 {
-	size_t i;
+	int i;
 	char *bp;
 
 	bp = buf;

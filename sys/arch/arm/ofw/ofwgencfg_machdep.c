@@ -1,4 +1,4 @@
-/*	$NetBSD: ofwgencfg_machdep.c,v 1.19 2012/10/27 17:17:40 chs Exp $	*/
+/*	$NetBSD: ofwgencfg_machdep.c,v 1.13 2008/08/29 19:08:29 matt Exp $	*/
 
 /*
  * Copyright 1997
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofwgencfg_machdep.c,v 1.19 2012/10/27 17:17:40 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofwgencfg_machdep.c,v 1.13 2008/08/29 19:08:29 matt Exp $");
 
 #include "opt_ddb.h"
 
@@ -50,7 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: ofwgencfg_machdep.c,v 1.19 2012/10/27 17:17:40 chs E
 #include <sys/kernel.h>
 #include <sys/exec.h>
 #include <sys/ksyms.h>
-#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -81,18 +80,19 @@ extern pv_addr_t abtstack;
 extern pv_addr_t kernelstack;
 extern u_int data_abort_handler_address;
 extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 
 /*
  *  Imported routines
  */
-extern void data_abort_handler(trapframe_t *frame);
-extern void prefetch_abort_handler(trapframe_t *frame);
-extern void undefinedinstruction_bounce(trapframe_t *frame);
-int	ofbus_match(device_t, cfdata_t, void *);
-void	ofbus_attach(device_t, device_t, void *);
+extern void data_abort_handler		__P((trapframe_t *frame));
+extern void prefetch_abort_handler	__P((trapframe_t *frame));
+extern void undefinedinstruction_bounce	__P((trapframe_t *frame));
+int	ofbus_match __P((struct device *, struct cfdata *, void *));
+void	ofbus_attach __P((struct device *, struct device *, void *));
 
 /* Local routines */
-static void process_kernel_args(void);
+static void process_kernel_args	__P((void));
 
 /*
  *  Exported variables
@@ -106,7 +106,7 @@ int max_processes = 64;			/* Default number */
 
 int ofw_handleticks = 0;	/* set to TRUE by cpu_initclocks */
 
-CFATTACH_DECL_NEW(ofbus_root, 0,
+CFATTACH_DECL(ofbus_root, sizeof(struct device),
     ofbus_match, ofbus_attach, NULL, NULL);
 
 /**************************************************************/
@@ -121,7 +121,9 @@ CFATTACH_DECL_NEW(ofbus_root, 0,
  */
 
 void
-cpu_reboot(int howto, char *bootstr)
+cpu_reboot(howto, bootstr)
+	int howto;
+	char *bootstr;
 {
 	/* Just call OFW common routine. */
 	ofw_boot(howto, bootstr);
@@ -199,6 +201,10 @@ initarm(void *cookie)
 
 	/* Set-up the IRQ system. */
 	irq_init();
+
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init(0, NULL, NULL);	/* XXX */
+#endif
 
 #ifdef DDB
 	db_machine_init();

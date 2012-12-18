@@ -1,4 +1,4 @@
-/* $NetBSD: sci.c,v 1.57 2012/12/12 13:32:37 tsutsui Exp $ */
+/* $NetBSD: sci.c,v 1.51 2008/06/13 13:08:57 cegger Exp $ */
 
 /*-
  * Copyright (C) 1999 T.Horiuchi and SAITOH Masanobu.  All rights reserved.
@@ -93,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sci.c,v 1.57 2012/12/12 13:32:37 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sci.c,v 1.51 2008/06/13 13:08:57 cegger Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_sci.h"
@@ -130,7 +130,7 @@ void scicnpoolc(dev_t, int);
 int sciintr(void *);
 
 struct sci_softc {
-	device_t sc_dev;		/* boilerplate */
+	struct device sc_dev;		/* boilerplate */
 	struct tty *sc_tty;
 	void *sc_si;
 	callout_t sc_diag_ch;
@@ -181,8 +181,8 @@ struct sci_softc {
 };
 
 /* controller driver configuration */
-static int sci_match(device_t, cfdata_t, void *);
-static void sci_attach(device_t, device_t, void *);
+static int sci_match(struct device *, struct cfdata *, void *);
+static void sci_attach(struct device *, struct device *, void *);
 
 void	sci_break(struct sci_softc *, int);
 void	sci_iflush(struct sci_softc *);
@@ -231,7 +231,7 @@ int scicn_speed = 9600;
 
 u_int sci_rbuf_size = SCI_RING_SIZE;
 
-CFATTACH_DECL_NEW(sci, sizeof(struct sci_softc),
+CFATTACH_DECL(sci, sizeof(struct sci_softc),
     sci_match, sci_attach, NULL, NULL);
 
 extern struct cfdriver sci_cd;
@@ -358,24 +358,23 @@ sci_getc(void)
 }
 
 static int
-sci_match(device_t parent, cfdata_t cf, void *aux)
+sci_match(struct device *parent, struct cfdata *cfp, void *aux)
 {
 
-	if (strcmp(cf->cf_name, "sci") || sci_attached)
+	if (strcmp(cfp->cf_name, "sci") || sci_attached)
 		return 0;
 
 	return 1;
 }
 
 static void
-sci_attach(device_t parent, device_t self, void *aux)
+sci_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct sci_softc *sc = device_private(self);
+	struct sci_softc *sc = (struct sci_softc *)self;
 	struct tty *tp;
 
 	sci_attached = 1;
 
-	sc->sc_dev = self;
 	sc->sc_hwflags = 0;	/* XXX */
 	sc->sc_swflags = 0;	/* XXX */
 	sc->sc_fifolen = 0;	/* XXX */
@@ -383,7 +382,7 @@ sci_attach(device_t parent, device_t self, void *aux)
 	if (sciisconsole) {
 		SET(sc->sc_hwflags, SCI_HW_CONSOLE);
 		SET(sc->sc_swflags, TIOCFLAG_SOFTCAR);
-		printf("\n%s: console\n", device_xname(self));
+		printf("\n%s: console\n", sc->sc_dev.dv_xname);
 	} else {
 		InitializeSci(9600);
 		printf("\n");
@@ -403,7 +402,7 @@ sci_attach(device_t parent, device_t self, void *aux)
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, scisoft, sc);
 	SET(sc->sc_hwflags, SCI_HW_DEV_OK);
 
-	tp = tty_alloc();
+	tp = ttymalloc();
 	tp->t_oproc = scistart;
 	tp->t_param = sciparam;
 	tp->t_hwiflow = NULL;
@@ -412,7 +411,7 @@ sci_attach(device_t parent, device_t self, void *aux)
 	sc->sc_rbuf = malloc(sci_rbuf_size << 1, M_DEVBUF, M_NOWAIT);
 	if (sc->sc_rbuf == NULL) {
 		printf("%s: unable to allocate ring buffer\n",
-		    device_xname(self));
+		    sc->sc_dev.dv_xname);
 		return;
 	}
 	sc->sc_ebuf = sc->sc_rbuf + (sci_rbuf_size << 1);
@@ -482,7 +481,7 @@ sciparam(struct tty *tp, struct termios *t)
 	int ospeed = t->c_ospeed;
 	int s;
 
-	if (!device_is_active(sc->sc_dev))
+	if (!device_is_active(&sc->sc_dev))
 		return (EIO);
 
 	/* Check requested parameters. */
@@ -619,7 +618,7 @@ sciopen(dev_t dev, int flag, int mode, struct lwp *l)
 	    sc->sc_rbuf == NULL)
 		return (ENXIO);
 
-	if (!device_is_active(sc->sc_dev))
+	if (!device_is_active(&sc->sc_dev))
 		return (ENXIO);
 
 #ifdef KGDB
@@ -729,7 +728,7 @@ sciclose(dev_t dev, int flag, int mode, struct lwp *l)
 	(*tp->t_linesw->l_close)(tp, flag);
 	ttyclose(tp);
 
-	if (!device_is_active(sc->sc_dev))
+	if (!device_is_active(&sc->sc_dev))
 		return (0);
 
 	return (0);
@@ -779,7 +778,7 @@ sciioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	int error;
 	int s;
 
-	if (!device_is_active(sc->sc_dev))
+	if (!device_is_active(&sc->sc_dev))
 		return (EIO);
 
 	error = (*tp->t_linesw->l_ioctl)(tp, cmd, data, flag, l);
@@ -892,7 +891,7 @@ scidiag(void *arg)
 	splx(s);
 
 	log(LOG_WARNING, "%s: %d silo overflow%s, %d ibuf flood%s\n",
-	    device_xname(sc->sc_dev),
+	    sc->sc_dev.dv_xname,
 	    overflows, overflows == 1 ? "" : "s",
 	    floods, floods == 1 ? "" : "s");
 }
@@ -982,7 +981,9 @@ sci_rxsoft(struct sci_softc *sc, struct tty *tp)
 }
 
 integrate void
-sci_txsoft(struct sci_softc *sc, struct tty *tp)
+sci_txsoft(sc, tp)
+	struct sci_softc *sc;
+	struct tty *tp;
 {
 
 	CLR(tp->t_state, TS_BUSY);
@@ -1037,7 +1038,7 @@ scisoft(void *arg)
 	struct sci_softc *sc = arg;
 	struct tty *tp;
 
-	if (!device_is_active(sc->sc_dev))
+	if (!device_is_active(&sc->sc_dev))
 		return;
 
 	tp = sc->sc_tty;
@@ -1068,7 +1069,7 @@ sciintr(void *arg)
 	u_int cc;
 	u_short ssr;
 
-	if (!device_is_active(sc->sc_dev))
+	if (!device_is_active(&sc->sc_dev))
 		return (0);
 
 	end = sc->sc_ebuf;
@@ -1264,7 +1265,7 @@ sciintr(void *arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#ifdef RND_SCI
+#if NRND > 0 && defined(RND_SCI)
 	rnd_add_uint32(&sc->rnd_source, iir | lsr);
 #endif
 
@@ -1272,7 +1273,8 @@ sciintr(void *arg)
 }
 
 void
-scicnprobe(struct consdev *cp)
+scicnprobe(cp)
+	struct consdev *cp;
 {
 	int maj;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: lcl_ho.c,v 1.1.1.2 2012/09/09 16:07:59 christos Exp $	*/
+/*	$NetBSD: lcl_ho.c,v 1.1.1.1.4.2 2011/01/06 21:42:18 riz Exp $	*/
 
 /*
  * Copyright (c) 1985, 1988, 1993
@@ -54,7 +54,7 @@
 /* BIND Id: gethnamaddr.c,v 8.15 1996/05/22 04:56:30 vixie Exp $ */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-static const char rcsid[] = "Id: lcl_ho.c,v 1.5 2006/03/09 23:57:56 marka Exp ";
+static const char rcsid[] = "Id: lcl_ho.c,v 1.5 2006/03/09 23:57:56 marka Exp";
 #endif /* LIBC_SCCS and not lint */
 
 /* Imports. */

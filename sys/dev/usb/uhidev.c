@@ -1,12 +1,12 @@
-/*	$NetBSD: uhidev.c,v 1.56 2012/06/10 06:15:54 mrg Exp $	*/
+/*	$NetBSD: uhidev.c,v 1.42.8.2 2010/01/09 01:37:04 snj Exp $	*/
 
 /*
- * Copyright (c) 2001, 2012 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
  * by Lennart Augustsson (lennart@augustsson.net) at
- * Carlstedt Research & Technology and Matthew R. Green (mrg@eterna.com.au).
+ * Carlstedt Research & Technology.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhidev.c,v 1.56 2012/06/10 06:15:54 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhidev.c,v 1.42.8.2 2010/01/09 01:37:04 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,14 +59,12 @@ __KERNEL_RCSID(0, "$NetBSD: uhidev.c,v 1.56 2012/06/10 06:15:54 mrg Exp $");
 
 /* Report descriptor for broken Wacom Graphire */
 #include <dev/usb/ugraphire_rdesc.h>
-/* Report descriptor for game controllers in "XInput" mode */
-#include <dev/usb/xinput_rdesc.h>
 
 #include "locators.h"
 
 #ifdef UHIDEV_DEBUG
-#define DPRINTF(x)	if (uhidevdebug) printf x
-#define DPRINTFN(n,x)	if (uhidevdebug>(n)) printf x
+#define DPRINTF(x)	if (uhidevdebug) logprintf x
+#define DPRINTFN(n,x)	if (uhidevdebug>(n)) logprintf x
 int	uhidevdebug = 0;
 #else
 #define DPRINTF(x)
@@ -87,14 +85,10 @@ extern struct cfdriver uhidev_cd;
 CFATTACH_DECL2_NEW(uhidev, sizeof(struct uhidev_softc), uhidev_match,
     uhidev_attach, uhidev_detach, uhidev_activate, NULL, uhidev_childdet);
 
-int 
-uhidev_match(device_t parent, cfdata_t match, void *aux)
+USB_MATCH(uhidev)
 {
-	struct usbif_attach_arg *uaa = aux;
+	USB_IFMATCH_START(uhidev, uaa);
 
-	/* Game controllers in "XInput" mode */
-	if (USBIF_IS_XINPUT(uaa))
-		return UMATCH_IFACECLASS_IFACESUBCLASS_IFACEPROTO;
 	if (uaa->class != UICLASS_HID)
 		return (UMATCH_NONE);
 	if (usbd_get_quirks(uaa->device)->uq_flags & UQ_HID_IGNORE)
@@ -102,11 +96,9 @@ uhidev_match(device_t parent, cfdata_t match, void *aux)
 	return (UMATCH_IFACECLASS_GENERIC);
 }
 
-void 
-uhidev_attach(device_t parent, device_t self, void *aux)
+USB_ATTACH(uhidev)
 {
-	struct uhidev_softc *sc = device_private(self);
-	struct usbif_attach_arg *uaa = aux;
+	USB_IFATTACH_START(uhidev, sc, uaa);
 	usbd_interface_handle iface = uaa->iface;
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
@@ -125,15 +117,10 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dev = self;
 	sc->sc_udev = uaa->device;
 	sc->sc_iface = iface;
-
-	aprint_naive("\n");
-	aprint_normal("\n");
-
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_USB);
-
 	id = usbd_get_interface_descriptor(iface);
 
 	devinfop = usbd_devinfo_alloc(uaa->device, 0);
+	USB_ATTACH_SETUP;
 	aprint_normal_dev(self, "%s, iclass %d/%d\n",
 	       devinfop, id->bInterfaceClass, id->bInterfaceSubClass);
 	usbd_devinfo_free(devinfop);
@@ -158,7 +145,7 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 			aprint_error_dev(self,
 			    "could not read endpoint descriptor\n");
 			sc->sc_dying = 1;
-			return;
+			USB_ATTACH_ERROR_RETURN;
 		}
 
 		DPRINTFN(10,("uhidev_attach: bLength=%d bDescriptorType=%d "
@@ -189,7 +176,7 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_iep_addr == -1) {
 		aprint_error_dev(self, "no input interrupt endpoint\n");
 		sc->sc_dying = 1;
-		return;
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	/* XXX need to extend this */
@@ -200,7 +187,10 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 		/* The report descriptor for the Wacom Graphire is broken. */
 		switch (uaa->product) {
 		case USB_PRODUCT_WACOM_GRAPHIRE:
-		case USB_PRODUCT_WACOM_GRAPHIRE2:
+			size = sizeof uhid_graphire_report_descr;
+			descptr = uhid_graphire_report_descr;
+			break;
+
 		case USB_PRODUCT_WACOM_GRAPHIRE3_4X5:
 		case USB_PRODUCT_WACOM_GRAPHIRE3_6X8:
 		case USB_PRODUCT_WACOM_GRAPHIRE4_4X5: /* The 6x8 too? */
@@ -220,10 +210,6 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 			break;
 		}
 	}
-	if (USBIF_IS_XINPUT(uaa)) {
-		size = sizeof uhid_xinput_report_descr;
-		descptr = uhid_xinput_report_descr;
-	}
 
 	if (descptr) {
 		desc = malloc(size, M_USBDEV, M_NOWAIT);
@@ -241,7 +227,7 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 	if (err) {
 		aprint_error_dev(self, "no report descriptor\n");
 		sc->sc_dying = 1;
-		return;
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	if (uaa->vendor == USB_VENDOR_HOSIDEN && 
@@ -257,47 +243,13 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 		    &reportbuf, sizeof reportbuf);
 	}
 
-	if (uaa->vendor == USB_VENDOR_LOGITECH &&
-	    uaa->product == USB_PRODUCT_LOGITECH_CBT44 && size == 0xb1) {
-		uint8_t *data = desc;
-		/*
-		 * This device has a odd USAGE_MINIMUM value that would
-		 * cause the multimedia keys to have their usage number
-		 * shifted up one usage.  Adjust so the usages are sane.
-		 */
-
-		if (data[0x56] == 0x19 && data[0x57] == 0x01 &&
-		    data[0x58] == 0x2a && data[0x59] == 0x8c)
-			data[0x57] = 0x00;
-	}
-
-	/*
-	 * Enable the Six Axis and DualShock 3 controllers.
-	 * See http://ps3.jim.sh/sixaxis/usb/
-	 */
-	if (uaa->vendor == USB_VENDOR_SONY &&
-	    uaa->product == USB_PRODUCT_SONY_PS3CONTROLLER) {
-		usb_device_request_t req;
-		char data[17];
-		int actlen;
-
-		req.bmRequestType = UT_READ_CLASS_INTERFACE;
-		req.bRequest = 1;
-		USETW(req.wValue, 0x3f2);
-		USETW(req.wIndex, 0);
-		USETW(req.wLength, sizeof data);
-
-		usbd_do_request_flags(sc->sc_udev, &req, data,
-			USBD_SHORT_XFER_OK, &actlen, USBD_DEFAULT_TIMEOUT);
-	}
-
 	sc->sc_repdesc = desc;
 	sc->sc_repdesc_size = size;
 
 	uha.uaa = uaa;
 	nrepid = uhidev_maxrepid(desc, size);
 	if (nrepid < 0)
-		return;
+		USB_ATTACH_SUCCESS_RETURN;
 	if (nrepid > 0)
 		aprint_normal_dev(self, "%d report ids\n", nrepid);
 	nrepid++;
@@ -310,7 +262,7 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 		free(repsizes, M_TEMP);
 nomem:
 		aprint_error_dev(self, "no memory\n");
-		return;
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	/* Just request max packet size for the interrupt pipe */
@@ -318,7 +270,7 @@ nomem:
 	sc->sc_nrepid = nrepid;
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-			   sc->sc_dev);
+			   USBDEV(sc->sc_dev));
 
 	for (repid = 0; repid < nrepid; repid++) {
 		repsz = hid_report_size(desc, size, hid_input, repid);
@@ -353,18 +305,20 @@ nomem:
 					free(repsizes, M_TEMP);
 					aprint_error_dev(self,
 					    "sc_intr == NULL\n");
-					return;
+					USB_ATTACH_ERROR_RETURN;
 				}
 #endif
+#if NRND > 0
 				rnd_attach_source(&csc->rnd_source,
-						  device_xname(dev),
+						  USBDEVNAME(dev),
 						  RND_TYPE_TTY, 0);
+#endif
 			}
 		}
 	}
 	free(repsizes, M_TEMP);
 
-	return;
+	USB_ATTACH_SUCCESS_RETURN;
 }
 
 int
@@ -399,14 +353,25 @@ int
 uhidev_activate(device_t self, enum devact act)
 {
 	struct uhidev_softc *sc = device_private(self);
+	int i, rv;
 
 	switch (act) {
+	case DVACT_ACTIVATE:
+		return (EOPNOTSUPP);
+
 	case DVACT_DEACTIVATE:
+		rv = 0;
+		for (i = 0; i < sc->sc_nrepid; i++)
+			if (sc->sc_subdevs[i] != NULL)
+				rv |= config_deactivate(
+					sc->sc_subdevs[i]);
 		sc->sc_dying = 1;
-		return 0;
+		break;
 	default:
-		return EOPNOTSUPP;
+		rv = 0;
+		break;
 	}
+	return (rv);
 }
 
 void
@@ -423,12 +388,13 @@ uhidev_childdet(device_t self, device_t child)
 	sc->sc_subdevs[i] = NULL;
 }
 
-int 
-uhidev_detach(device_t self, int flags)
+USB_DETACH(uhidev)
 {
-	struct uhidev_softc *sc = device_private(self);
+	USB_DETACH_START(uhidev, sc);
 	int i, rv;
+#if NRND > 0
 	struct uhidev *csc;
+#endif
 
 	DPRINTF(("uhidev_detach: sc=%p flags=%d\n", sc, flags));
 
@@ -442,17 +408,18 @@ uhidev_detach(device_t self, int flags)
 	rv = 0;
 	for (i = 0; i < sc->sc_nrepid; i++) {
 		if (sc->sc_subdevs[i] != NULL) {
+#if NRND > 0
 			csc = device_private(sc->sc_subdevs[i]);
 			rnd_detach_source(&csc->rnd_source);
+#endif
 			rv |= config_detach(sc->sc_subdevs[i], flags);
 		}
 	}
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-			   sc->sc_dev);
+			   USBDEV(sc->sc_dev));
 
 	pmf_device_deregister(self);
-	mutex_destroy(&sc->sc_lock);
 
 	return (rv);
 }
@@ -485,7 +452,7 @@ uhidev_intr(usbd_xfer_handle xfer, usbd_private_handle addr, usbd_status status)
 		return;
 
 	if (status != USBD_NORMAL_COMPLETION) {
-		DPRINTF(("%s: interrupt status=%d\n", device_xname(sc->sc_dev),
+		DPRINTF(("%s: interrupt status=%d\n", USBDEVNAME(sc->sc_dev),
 			 status));
 		usbd_clear_endpoint_stall_async(sc->sc_ipipe);
 		return;
@@ -511,15 +478,17 @@ uhidev_intr(usbd_xfer_handle xfer, usbd_private_handle addr, usbd_status status)
 #ifdef UHIDEV_DEBUG
 	if (scd->sc_in_rep_size != cc) {
 		DPRINTF(("%s: expected %d bytes, got %d\n",
-		       device_xname(sc->sc_dev), scd->sc_in_rep_size, cc));
+		       USBDEVNAME(sc->sc_dev), scd->sc_in_rep_size, cc));
 	}
 #endif
 	if (cc == 0) {
 		DPRINTF(("%s: 0-length input ignored\n",
-			device_xname(sc->sc_dev)));
+			USBDEVNAME(sc->sc_dev)));
 		return;
 	}
+#if NRND > 0
 	rnd_add_uint32(&scd->rnd_source, (uintptr_t)(sc->sc_ibuf));
+#endif
 	scd->sc_intr(scd, p, cc);
 }
 
@@ -537,15 +506,14 @@ uhidev_open(struct uhidev *scd)
 	usbd_status err;
 	int error;
 
-	DPRINTF(("uhidev_open: open pipe, state=%d\n", scd->sc_state));
+	DPRINTF(("uhidev_open: open pipe, state=%d refcnt=%d\n",
+		 scd->sc_state, sc->sc_refcnt));
 
-	mutex_enter(&sc->sc_lock);
-	if (scd->sc_state & UHIDEV_OPEN) {
-		mutex_exit(&sc->sc_lock);
+	if (scd->sc_state & UHIDEV_OPEN)
 		return (EBUSY);
-	}
 	scd->sc_state |= UHIDEV_OPEN;
-	mutex_exit(&sc->sc_lock);
+	if (sc->sc_refcnt++)
+		return (0);
 
 	if (sc->sc_isize == 0)
 		return (0);
@@ -602,12 +570,11 @@ out2:
 out1:
 	DPRINTF(("uhidev_open: failed in someway"));
 	free(sc->sc_ibuf, M_USBDEV);
-	mutex_enter(&sc->sc_lock);
 	scd->sc_state &= ~UHIDEV_OPEN;
+	sc->sc_refcnt = 0;
 	sc->sc_ipipe = NULL;
 	sc->sc_opipe = NULL;
 	sc->sc_oxfer = NULL;
-	mutex_exit(&sc->sc_lock);
 	return error;
 }
 
@@ -616,14 +583,11 @@ uhidev_close(struct uhidev *scd)
 {
 	struct uhidev_softc *sc = scd->sc_parent;
 
-	mutex_enter(&sc->sc_lock);
-	if (!(scd->sc_state & UHIDEV_OPEN)) {
-		mutex_exit(&sc->sc_lock);
+	if (!(scd->sc_state & UHIDEV_OPEN))
 		return;
-	}
 	scd->sc_state &= ~UHIDEV_OPEN;
-	mutex_exit(&sc->sc_lock);
-
+	if (--sc->sc_refcnt)
+		return;
 	DPRINTF(("uhidev_close: close pipe\n"));
 
 	if (sc->sc_oxfer != NULL)

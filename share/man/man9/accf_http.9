@@ -1,4 +1,3 @@
-.\" $NetBSD: accf_http.9,v 1.7 2010/04/11 05:40:16 jruoho Exp $
 .\"
 .\" Copyright (c) 2000 Alfred Perlstein
 .\"
@@ -27,8 +26,8 @@
 .\" $FreeBSD: src/share/man/man9/accf_http.9,v 1.11 2005/01/18 20:52:51 ru Exp $
 .\" "
 .Dd September 4, 2008
-.Dt ACCF_HTTP 9
 .Os
+.Dt ACCF_HTTP 9
 .Sh NAME
 .Nm accf_http
 .Nd "buffer incoming connections until a certain complete HTTP requests arrive"
@@ -40,24 +39,16 @@ This is a filter to be placed on a socket that will be using
 .Fn accept
 to receive incoming HTTP connections.
 .Pp
-Once installed on a listening socket, this filter is activated when a
-connection becomes ready to receive data (at which point
-.Xr accept 2
-would usually return the connected descriptor to the application).
-The filter prevents the descriptor from being returned immediately
-to the application via
-.Xr accept 2 .
-The descriptor is made available to the application via
-.Xr accept 2
-only when one of the following conditions is met:
-.Bl -enum
-.It
-A complete, syntactically valid HTTP/1.0 or HTTP/1.1 HEAD or GET request has
+It prevents the application from receiving the connected descriptor via
+.Fn accept
+until either a full HTTP/1.0 or HTTP/1.1 HEAD or GET request has
 been buffered by the kernel.
-.It
-The data buffered by the kernel cannot be part of a complete, syntactically
-valid HTTP 1.0 or HTTP/1.1 HEAD or GET request.
-.El
+.Pp
+If something other than a HTTP/1.0 or
+HTTP/1.1 HEAD or GET request is received the kernel will
+allow the application to receive the connection descriptor
+via
+.Fn accept .
 .Pp
 The utility of
 .Nm
@@ -81,21 +72,20 @@ on the socket
 .Bd -literal -offset 0i
 	struct accept_filter_arg afa;
 
-	bzero(\*[Am]afa, sizeof(afa));
+	bzero(&afa, sizeof(afa));
 	strcpy(afa.af_name, "httpready");
-	setsockopt(sok, SOL_SOCKET, SO_ACCEPTFILTER, \*[Am]afa, sizeof(afa));
+	setsockopt(sok, SOL_SOCKET, SO_ACCEPTFILTER, &afa, sizeof(afa));
 .Ed
 .Sh SEE ALSO
 .Xr setsockopt 2 ,
 .Xr accept_filter 9
 .Sh HISTORY
 The accept filter mechanism and the
-.Nm
-filter were introduced in
+accf_http filter were introduced in
 .Fx 4.0 .
 They were ported to
-.Nx
-by Coyote Point Systems and appeared in
+.Nx by
+Coyote Point Systems and appeared in
 .Nx 5.0 .
 .Sh AUTHORS
 This manual page and the filter were written by

@@ -1,4 +1,4 @@
-/*	$NetBSD: timer_sun4m.c,v 1.28 2011/09/01 08:43:24 martin Exp $	*/
+/*	$NetBSD: timer_sun4m.c,v 1.16.56.3 2011/03/08 17:29:46 riz Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -58,16 +58,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer_sun4m.c,v 1.28 2011/09/01 08:43:24 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer_sun4m.c,v 1.16.56.3 2011/03/08 17:29:46 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/systm.h>
-#include <sys/cpu.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <sparc/sparc/vaddrs.h>
 #include <sparc/sparc/cpuvar.h>
@@ -100,12 +99,11 @@ void
 schedintr_4m(void *v)
 {
 
-	kpreempt_disable();
 #ifdef MULTIPROCESSOR
 	/*
 	 * We call hardclock() here so that we make sure it is called on
 	 * all CPUs.  This function ends up being called on sun4m systems
-	 * every tick.
+	 * every tick, so we have avoid 
 	 */
 	if (!CPU_IS_PRIMARY(curcpu()))
 		hardclock(v);
@@ -117,7 +115,6 @@ schedintr_4m(void *v)
 	if ((++cpuinfo.ci_schedstate.spc_schedticks & 7) == 0 && schedhz != 0)
 #endif
 		schedclock(curlwp);
-	kpreempt_enable();
 }
 
 
@@ -142,12 +139,10 @@ clockintr_4m(void *cap)
 	 */
 	if (cold)
 		return 0;
-	kpreempt_disable();
 	/* read the limit register to clear the interrupt */
 	*((volatile int *)&timerreg4m->t_limit);
 	tickle_tc();
 	hardclock((struct clockframe *)cap);
-	kpreempt_enable();
 	return (1);
 }
 
@@ -159,8 +154,6 @@ statintr_4m(void *cap)
 {
 	struct clockframe *frame = cap;
 	u_long newint;
-
-	kpreempt_disable();
 
 	/* read the limit register to clear the interrupt */
 	*((volatile int *)&counterreg4m->t_limit);
@@ -200,13 +193,12 @@ statintr_4m(void *cap)
 #if !defined(MULTIPROCESSOR)
 	}
 #endif
-	kpreempt_enable();
 
 	return (1);
 }
 
 void
-timerattach_obio_4m(device_t parent, device_t self, void *aux)
+timerattach_obio_4m(struct device *parent, struct device *self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct sbus_attach_args *sa = &uoba->uoba_sbus;

@@ -1,4 +1,4 @@
-#	$NetBSD: files.arm,v 1.114 2012/12/10 04:58:54 matt Exp $
+#	$NetBSD: files.arm,v 1.93 2008/10/14 16:01:22 matt Exp $
 
 # temporary define to allow easy moving to ../arch/arm/arm32
 defflag				ARM32
@@ -8,19 +8,13 @@ defflag	opt_cputypes.h		CPU_ARM2 CPU_ARM250 CPU_ARM3
 defflag	opt_cputypes.h		CPU_ARM6 CPU_ARM7 CPU_ARM7TDMI CPU_ARM8
 				CPU_ARM9 CPU_ARM9E CPU_ARM10 CPU_ARM11
 				CPU_SA110 CPU_SA1100 CPU_SA1110 CPU_IXP12X0
-				CPU_FA526 CPU_CORTEX
+				CPU_FA526
 				CPU_XSCALE_80200 CPU_XSCALE_80321
 				CPU_XSCALE_PXA250 CPU_XSCALE_PXA270
-				CPU_XSCALE_IXP425 
-				CPU_SHEEVA
+				CPU_XSCALE_IXP425
 defflag	opt_cputypes.h		CPU_ARM1136: CPU_ARM11
 defflag	opt_cputypes.h		CPU_ARM1176: CPU_ARM11
-defflag	opt_cputypes.h		CPU_ARM11MPCORE: CPU_ARM11
-defflag	opt_cputypes.h		CPU_CORTEXA5: CPU_CORTEX
-defflag	opt_cputypes.h		CPU_CORTEXA7: CPU_CORTEX
-defflag	opt_cputypes.h		CPU_CORTEXA8: CPU_CORTEX
-defflag	opt_cputypes.h		CPU_CORTEXA9: CPU_CORTEX
-defflag	opt_cputypes.h		CPU_CORTEXA15: CPU_CORTEX
+defflag	opt_cputypes.h		CPU_CORTEXA8: CPU_ARM11
 defflag opt_cputypes.h		FPU_VFP
 
 defparam opt_cpuoptions.h	XSCALE_CCLKCFG
@@ -30,13 +24,9 @@ defflag  opt_cpuoptions.h	XSCALE_NO_COALESCE_WRITES
 defflag  opt_cpuoptions.h	XSCALE_CACHE_READ_WRITE_ALLOCATE
 defflag  opt_cpuoptions.h	ARM32_DISABLE_ALIGNMENT_FAULTS
 defflag  opt_cpuoptions.h	ARM9_CACHE_WRITE_THROUGH
-defflag  opt_cpuoptions.h	TPIDRPRW_IS_CURLWP
-defflag  opt_cpuoptions.h	TPIDRPRW_IS_CURCPU
-defflag  opt_cpuoptions.h	ARM11_PMC CORTEX_PMC
-defflag  opt_cpuoptions.h	ARM11_CACHE_WRITE_THROUGH
-defflag	 opt_cpuoptions.h	ARM11MPCORE_COMPAT_MMU
-# use extended small page in compatible MMU mode for ARMv6
-defflag  opt_cpuoptions.h	ARMV6_EXTENDED_SMALL_PAGE
+defflag  opt_cpuoptions.h	PROCESS_ID_IS_CURLWP
+defflag  opt_cpuoptions.h	PROCESS_ID_IS_CURCPU
+defflag  opt_cpuoptions.h	ARM11_PMC
 
 # Interrupt implementation header definition.
 defparam opt_arm_intr_impl.h	ARM_INTR_IMPL
@@ -44,22 +34,24 @@ defparam opt_arm_intr_impl.h	ARM_INTR_IMPL
 # ARM-specific debug options
 defflag	opt_arm_debug.h		ARM_LOCK_CAS_DEBUG
 
-# Board-specific bus_space(9)/bus_dma(9) definitions
-defflag  opt_arm_bus_space.h	__BUS_SPACE_HAS_STREAM_METHODS _ARM32_NEED_BUS_DMA_BOUNCE
+# Board-specific bus_space(9) definitions
+defflag  opt_arm_bus_space.h	__BUS_SPACE_HAS_STREAM_METHODS
 
 # Floating point emulator
-obsolete defflag				ARMFPE
+defflag				ARMFPE
+file	arch/arm/fpe-arm/armfpe_glue.S		armfpe
+file	arch/arm/fpe-arm/armfpe_init.c		armfpe
+file	arch/arm/fpe-arm/armfpe.S		armfpe
 
 # VFP support
-file	arch/arm/vfp/vfp_init.c			arm32
-file	arch/arm/vfp/pmap_vfp.S			arm32 & fpu_vfp
+file	arch/arm/vfp/vfp_init.c			fpu_vfp
 
 # PMAP_DEBUG (heavily abused option)
 defflag				PMAP_DEBUG
 
 # New PMAP options
 defflag	opt_arm32_pmap.h	ARM32_NEW_VM_LAYOUT PMAPCOUNTERS
-				PMAP_STEAL_MEMORY PMAP_NEED_ALLOC_POOLPAGE
+				PMAP_STEAL_MEMORY
 
 # MI console support
 file	dev/cons.c
@@ -76,7 +68,7 @@ file	arch/arm/arm/fiq.c
 file	arch/arm/arm/fiq_subr.S
 
 # mainbus files
-device	mainbus { [base = -1], [size = 0], [dack = -1], [irq = -1], [intrbase = -1], [core = -1] }
+device	mainbus { [base = -1], [size = 0], [dack = -1], [irq = -1] }
 attach	mainbus at root
 file	arch/arm/mainbus/mainbus.c		mainbus & arm32
 file	arch/arm/mainbus/mainbus_io.c		mainbus & arm32
@@ -102,20 +94,17 @@ file	arch/arm/arm/bootconfig.c
 file	arch/arm/arm/compat_13_machdep.c	compat_13
 file	arch/arm/arm/compat_16_machdep.c	compat_16
 file	arch/arm/arm/copystr.S
-file	arch/arm/arm/core_machdep.c
 file	arch/arm/arm/cpu_in_cksum.S		(inet | inet6) & cpu_in_cksum
 file	arch/arm/arm/cpufunc.c
 file	arch/arm/arm/cpufunc_asm.S
-file	arch/arm/arm/cpufunc_asm_arm3.S		cpu_arm2 | cpu_arm250 | cpu_arm3
+file	arch/arm/arm/cpufunc_asm_arm3.S		cpu_arm3
 file	arch/arm/arm/cpufunc_asm_arm67.S	cpu_arm6 | cpu_arm7
 file	arch/arm/arm/cpufunc_asm_arm7tdmi.S	cpu_arm7tdmi
 file	arch/arm/arm/cpufunc_asm_arm8.S		cpu_arm8
 file	arch/arm/arm/cpufunc_asm_arm9.S		cpu_arm9
-file	arch/arm/arm/cpufunc_asm_arm10.S	cpu_arm9e | cpu_arm10 |
-							cpu_sheeva
-file	arch/arm/arm/cpufunc_asm_arm11.S	cpu_arm11 | cpu_cortex
+file	arch/arm/arm/cpufunc_asm_arm10.S	cpu_arm9e | cpu_arm10
+file	arch/arm/arm/cpufunc_asm_arm11.S	cpu_arm11
 file	arch/arm/arm/cpufunc_asm_arm1136.S	cpu_arm1136
-file	arch/arm/arm/cpufunc_asm_arm11x6.S	cpu_arm1136 | cpu_arm1176
 file	arch/arm/arm/cpufunc_asm_armv4.S	cpu_arm9 | cpu_arm9e |
 							cpu_arm10 |
 							cpu_fa526 |
@@ -127,14 +116,11 @@ file	arch/arm/arm/cpufunc_asm_armv4.S	cpu_arm9 | cpu_arm9e |
 							cpu_xscale_80321 |
 							cpu_xscale_ixp425 |
 							cpu_xscale_pxa250 |
-							cpu_xscale_pxa270 |
-							cpu_cortex |
-							cpu_sheeva
-file	arch/arm/arm/cpufunc_asm_armv5.S	cpu_arm10 | cpu_arm11mpcore
-file	arch/arm/arm/cpufunc_asm_armv5_ec.S	cpu_arm9e | cpu_arm10 |
-							cpu_sheeva
-file	arch/arm/arm/cpufunc_asm_armv6.S	cpu_arm11 | cpu_cortex
-file	arch/arm/arm/cpufunc_asm_armv7.S	cpu_cortex
+							cpu_xscale_pxa270
+file	arch/arm/arm/cpufunc_asm_armv5.S	cpu_arm10
+file	arch/arm/arm/cpufunc_asm_armv5_ec.S	cpu_arm9e | cpu_arm10
+file	arch/arm/arm/cpufunc_asm_armv6.S	cpu_arm11
+makeoptions	cpu_arm11	"AOPTS.cpufunc_asm_armv6.S"+="-Wa,-march=armv6"
 file	arch/arm/arm/cpufunc_asm_sa1.S		cpu_sa110 | cpu_sa1100 |
 							cpu_sa1110 |
 							cpu_ixp12x0
@@ -144,12 +130,8 @@ file	arch/arm/arm/cpufunc_asm_xscale.S	cpu_xscale_80200 |
 						    cpu_xscale_80321 |
 						    cpu_xscale_ixp425 |
 						    cpu_xscale_pxa250 |
-						    cpu_xscale_pxa270 |
-						    cpu_cortex
+						    cpu_xscale_pxa270
 file	arch/arm/arm/cpufunc_asm_ixp12x0.S	cpu_ixp12x0
-file	arch/arm/arm/cpufunc_asm_sheeva.S	cpu_sheeva
-file	arch/arm/arm/cpu_exec.c
-file	arch/arm/arm/fusu.S
 file	arch/arm/arm/idle_machdep.c
 file	arch/arm/arm/lock_cas.S
 file	arch/arm/arm/process_machdep.c
@@ -161,6 +143,7 @@ file	arch/arm/arm/undefined.c
 # vectors.S gets included manually by Makefile.acorn26, since it needs
 # to be at the start of the text segment on those machines.
 file	arch/arm/arm/vectors.S			arm32
+file	arch/arm/arm/vm_machdep_arm.c
 
 # files common to arm32 implementations
 file	arch/arm/arm32/arm32_machdep.c		arm32
@@ -169,7 +152,9 @@ file	arch/arm/arm32/cpu.c			arm32 & cpu
 file	arch/arm/arm32/cpuswitch.S		arm32
 file	arch/arm/arm32/exception.S		arm32
 file	arch/arm/arm32/fault.c			arm32
+file	arch/arm/arm32/fusu.S			arm32
 file	arch/arm/arm32/kobj_machdep.c		arm32 & modular
+file	arch/arm/arm32/mem.c			arm32
 file	arch/arm/arm32/pmap.c			arm32
 file	arch/arm/arm32/setcpsr.S		arm32
 file	arch/arm/arm32/setstack.S		arm32
@@ -181,14 +166,9 @@ file	arch/arm/arm32/atomic.S			arm32
 # files less common to arm32 implementations...
 file	kern/kern_cctr.c			arm11
 file	arch/arm/arm32/arm11_pmc.c		arm11_pmc
-file	arch/arm/arm32/cortex_pmc.c		cortex_pmc
 
 # arm32 library functions
 file	arch/arm/arm32/bcopy_page.S		arm32
-
-#
-include "compat/netbsd32/files.netbsd32"
-file	arch/arm/arm32/netbsd32_machdep.c	arm32 & compat_netbsd32
 
 # Linux binary compatibility (COMPAT_LINUX)
 include "compat/ossaudio/files.ossaudio"

@@ -1,5 +1,4 @@
-/*	$NetBSD: umassvar.h,v 1.34 2012/08/24 12:20:02 drochner Exp $	*/
-
+/*	$NetBSD: umassvar.h,v 1.27 2008/09/06 21:49:00 rmind Exp $	*/
 /*-
  * Copyright (c) 1999 MAEKAWA Masahide <bishop@rr.iij4u.or.jp>,
  *		      Nick Hibma <n_hibma@freebsd.org>
@@ -31,7 +30,7 @@
 
 #ifdef UMASS_DEBUG
 #define DIF(m, x)	if (umassdebug & (m)) do { x ; } while (0)
-#define DPRINTF(m, x)	if (umassdebug & (m)) printf x
+#define DPRINTF(m, x)	if (umassdebug & (m)) logprintf x
 #define UDMASS_UPPER	0x00008000	/* upper layer */
 #define UDMASS_GEN	0x00010000	/* general */
 #define UDMASS_SCSI	0x00020000	/* scsi */
@@ -134,7 +133,7 @@ typedef void (*umass_callback)(struct umass_softc *, void *, int, int);
 #define STATUS_WIRE_FAILED	3	/* couldn't even get command across */
 
 typedef void (*umass_wire_xfer)(struct umass_softc *, int, void *, int, void *,
-				int, int, u_int, int, umass_callback, void *);
+				int, int, u_int, umass_callback, void *);
 typedef void (*umass_wire_reset)(struct umass_softc *, int);
 typedef void (*umass_wire_state)(usbd_xfer_handle, usbd_private_handle,
 				 usbd_status);
@@ -146,12 +145,12 @@ struct umass_wire_methods {
 };
 
 struct umassbus_softc {
-	device_t		sc_child;	/* child device, for detach */
+	device_ptr_t		sc_child;	/* child device, for detach */
 };
 
 /* the per device structure */
 struct umass_softc {
-	device_t		sc_dev;		/* base device */
+	USBBASEDEVICE		sc_dev;		/* base device */
 	usbd_device_handle	sc_udev;	/* device */
 	usbd_interface_handle	sc_iface;	/* interface */
 	int			sc_ifaceno;	/* interface number */
@@ -161,9 +160,6 @@ struct umass_softc {
 	usb_device_request_t	sc_req;
 
 	const struct umass_wire_methods *sc_methods;
-
-	kmutex_t		sc_lock;
-	kcondvar_t		sc_detach_cv;
 
 	u_int8_t		sc_wire;	/* wire protocol */
 #define	UMASS_WPROTO_UNSPEC	0
@@ -265,6 +261,7 @@ struct umass_softc {
 	struct timeval tv;
 #endif
 
+	int			sc_xfer_flags;
 	char			sc_dying;
 	int			sc_refcnt;
 	int			sc_sense;

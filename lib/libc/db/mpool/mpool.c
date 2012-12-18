@@ -1,4 +1,4 @@
-/*	$NetBSD: mpool.c,v 1.19 2009/04/22 18:44:06 christos Exp $	*/
+/*	$NetBSD: mpool.c,v 1.18.4.1 2009/04/23 02:33:18 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -34,7 +34,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: mpool.c,v 1.19 2009/04/22 18:44:06 christos Exp $");
+__RCSID("$NetBSD: mpool.c,v 1.18.4.1 2009/04/23 02:33:18 snj Exp $");
 
 #include "namespace.h"
 #include <sys/queue.h>

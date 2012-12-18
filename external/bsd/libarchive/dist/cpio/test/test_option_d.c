@@ -28,37 +28,41 @@ __FBSDID("$FreeBSD$");
 
 DEFINE_TEST(test_option_d)
 {
-	int r;
+	struct stat st;
+	int r, fd;
 
 	/*
 	 * Create a file in a directory.
 	 */
-	assertMakeDir("dir", 0755);
-	assertMakeFile("dir/file", 0644, NULL);
+	assertEqualInt(0, mkdir("dir", 0755));
+	fd = open("dir/file", O_CREAT | O_WRONLY, 0644);
+	assert(fd >= 0);
+	close(fd);
 
 	/* Create an archive. */
 	r = systemf("echo dir/file | %s -o > archive.cpio 2>archive.err", testprog);
 	assertEqualInt(r, 0);
-	assertTextFileContents("1 block\n", "archive.err");
-	assertFileSize("archive.cpio", 512);
+	assertFileContents("1 block\n", 8, "archive.err");
+	assertEqualInt(0, stat("archive.cpio", &st));
+	assertEqualInt(512, st.st_size);
 
 	/* Dearchive without -d, this should fail. */
-	assertMakeDir("without-d", 0755);
-	assertChdir("without-d");
+	assertEqualInt(0, mkdir("without-d", 0755));
+	assertEqualInt(0, chdir("without-d"));
 	r = systemf("%s -i < ../archive.cpio >out 2>err", testprog);
 	assertEqualInt(r, 0);
 	assertEmptyFile("out");
 	/* And the file should not be restored. */
-	assertFileNotExists("dir/file");
+	assert(0 != stat("dir/file", &st));
 
 	/* Dearchive with -d, this should succeed. */
-	assertChdir("..");
-	assertMakeDir("with-d", 0755);
-	assertChdir("with-d");
+	assertEqualInt(0, chdir(".."));
+	assertEqualInt(0, mkdir("with-d", 0755));
+	assertEqualInt(0, chdir("with-d"));
 	r = systemf("%s -id < ../archive.cpio >out 2>err", testprog);
 	assertEqualInt(r, 0);
 	assertEmptyFile("out");
-	assertTextFileContents("1 block\n", "err");
+	assertFileContents("1 block\n", 8, "err");
 	/* And the file should be restored. */
-	assertFileExists("dir/file");
+	assertEqualInt(0, stat("dir/file", &st));
 }

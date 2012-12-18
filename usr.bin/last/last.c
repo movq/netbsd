@@ -1,4 +1,4 @@
-/*	$NetBSD: last.c,v 1.36 2012/03/15 03:04:05 dholland Exp $	*/
+/*	$NetBSD: last.c,v 1.32 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)last.c	8.2 (Berkeley) 4/2/94";
 #endif
-__RCSID("$NetBSD: last.c,v 1.36 2012/03/15 03:04:05 dholland Exp $");
+__RCSID("$NetBSD: last.c,v 1.32 2008/07/21 14:19:23 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -92,11 +92,11 @@ __RCSID("$NetBSD: last.c,v 1.36 2012/03/15 03:04:05 dholland Exp $");
 #define MAXUTMP		1024
 
 typedef struct arg {
-	const char	*name;		/* argument */
+	char	*name;			/* argument */
 #define	HOST_TYPE	-2
 #define	TTY_TYPE	-3
 #define	USER_TYPE	-4
-	int		type;		/* type of arg */
+	int	type;			/* type of arg */
 	struct arg	*next;		/* linked list pointer */
 } ARG;
 static ARG	*arglist;		/* head of linked list */
@@ -113,10 +113,12 @@ static long	maxrec;			/* records to display */
 static int	fulltime = 0;		/* Display seconds? */
 static int	xflag;			/* Assume file is wtmpx format */
 
-static void	 addarg(int, const char *);
+int	 main(int, char *[]);
+
+static void	 addarg(int, char *);
 static TTY	*addtty(const char *);
 static void	 hostconv(char *);
-static const char *ttyconv(char *);
+static char	*ttyconv(char *);
 #ifdef SUPPORT_UTMPX
 static void	 wtmpx(const char *, int, int, int, int);
 #endif
@@ -124,7 +126,7 @@ static void	 wtmpx(const char *, int, int, int, int);
 static void	 wtmp(const char *, int, int, int, int);
 #endif
 static char	*fmttime(time_t, int);
-__dead static void	 usage(void);
+static void	 usage(void);
 
 static
 void usage(void)
@@ -146,7 +148,7 @@ main(int argc, char *argv[])
 {
 	int ch;
 	char *p;
-	const char *file = NULL;
+	char	*file = NULL;
 	int namesize = UT_NAMESIZE;
 	int linesize = UT_LINESIZE;
 	int hostsize = UT_HOSTSIZE;
@@ -269,7 +271,7 @@ main(int argc, char *argv[])
  *	add an entry to a linked list of arguments
  */
 static void
-addarg(int type, const char *arg)
+addarg(int type, char *arg)
 {
 	ARG *cur;
 
@@ -286,7 +288,7 @@ addarg(int type, const char *arg)
  *	add an entry to a linked list of ttys
  */
 static TTY *
-addtty(const char *tty)
+addtty(const char *ttyname)
 {
 	TTY *cur;
 
@@ -294,7 +296,7 @@ addtty(const char *tty)
 		err(EXIT_FAILURE, "malloc failure");
 	cur->next = ttylist;
 	cur->logout = currentout;
-	memmove(cur->tty, tty, sizeof(cur->tty));
+	memmove(cur->tty, ttyname, sizeof(cur->tty));
 	return (ttylist = cur);
 }
 
@@ -328,7 +330,7 @@ hostconv(char *arg)
  * ttyconv --
  *	convert tty to correct name.
  */
-static const char *
+static char *
 ttyconv(char *arg)
 {
 	char *mval;
@@ -360,10 +362,6 @@ fmttime(time_t t, int flags)
 	static char tbuf[TBUFLEN];
 
 	tm = (flags & GMT) ? gmtime(&t) : localtime(&t);
-	if (tm == NULL) {
-		strcpy(tbuf, "????");
-		return tbuf;
-	}
 	strftime(tbuf, sizeof(tbuf),
 	    (flags & TIMEONLY)
 	     ? (flags & FULLTIME ? LTFMTS : TFMTS)
@@ -378,14 +376,14 @@ fmttime(time_t t, int flags)
 #define LINESIZE UT_LINESIZE
 #define HOSTSIZE UT_HOSTSIZE
 #define ut_timefld ut_time
-#define HAS_UT_SS 0
+#define FIRSTVALID 0
 #include "want.c"
 #undef TYPE /*(a)*/
 #undef NAMESIZE
 #undef LINESIZE
 #undef HOSTSIZE
 #undef ut_timefld
-#undef HAS_UT_SS
+#undef FIRSTVALID
 #endif
 
 #ifdef SUPPORT_UTMPX
@@ -400,6 +398,6 @@ fmttime(time_t t, int flags)
 #define LINESIZE UTX_LINESIZE
 #define HOSTSIZE UTX_HOSTSIZE
 #define ut_timefld ut_xtime
-#define HAS_UT_SS 1
+#define FIRSTVALID 1
 #include "want.c"
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.15 2012/10/27 17:17:58 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.10 2008/04/28 20:23:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.15 2012/10/27 17:17:58 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.10 2008/04/28 20:23:26 martin Exp $");
 
 #include "opt_md.h"
 
@@ -51,9 +51,8 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.15 2012/10/27 17:17:58 chs Exp $");
 
 #include <iyonix/iyonix/iyonixvar.h>
 
-#include <acorn32/include/bootconfig.h>
-
-extern struct bootconfig bootconfig;
+struct device *booted_device;
+int booted_partition;
 
 /*
  * Set up the root device from the boot args
@@ -62,8 +61,8 @@ void
 cpu_rootconf(void)
 {
 	aprint_normal("boot device: %s\n",
-	    booted_device != NULL ? device_xname(booted_device) : "<unknown>");
-	rootconf();
+	    booted_device != NULL ? booted_device->dv_xname : "<unknown>");
+	setroot(booted_device, booted_partition);
 }
 
 
@@ -97,15 +96,15 @@ cpu_configure(void)
 		if (prop_dictionary_set(device_properties(dev),		\
 						x, y) == false) {	\
 			printf("WARNING: unable to set " x " "		\
-			   "property for %s\n", device_xname(dev));	\
+			   "property for %s\n", dev->dv_xname);		\
 		}							\
 		prop_object_release(y);					\
 	} while (/*CONSTCOND*/0)
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
-	device_t pdev;
+	struct device *pdev;
 
 	if ((pdev = device_parent(dev)) != NULL &&
 	    device_is_a(pdev, "pci")) {
@@ -131,53 +130,10 @@ device_register(device_t dev, void *aux)
 							   ETHER_ADDR_LEN);
 			KASSERT(mac != NULL);
 
-			SETPROP("mac-address", mac);
+			SETPROP("mac-addr", mac);
 			SETPROP("i82543-cfg1", cfg1);
 			SETPROP("i82543-cfg2", cfg2);
 			SETPROP("i82543-swdpin", swdpin);
 		}
-	}
-
-	if (device_is_a(dev, "genfb") &&
-	    device_is_a(device_parent(dev), "pci") ) {
-		prop_dictionary_t dict = device_properties(dev);
-		struct pci_attach_args *pa = aux;
-		pcireg_t bar0, bar1;
-		uint32_t fbaddr;
-		bus_space_handle_t vgah;
-
-		bar0 = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_MAPREG_START);
-		bar1 = pci_conf_read(pa->pa_pc, pa->pa_tag,
-			PCI_MAPREG_START + 0x04);
-
-		/*
-		 * We need to prod the VGA card to disable interrupts, since
-		 * RISC OS has been using them and we don't know how to
-		 * handle them. This assumes that we have a NVidia
-		 * GeForce 2 MX card as supplied with the Iyonix and
-		 * as (probably) required by RISC OS in order to boot.
-		 * If you write your own RISC OS driver for a different card,
-		 * you're on your own.
-		 */
-
-/* We're guessing at the numbers here, guys */
-#define VGASIZE 0x1000
-#define IRQENABLE_ADDR 0x140
-
-		bus_space_map(pa->pa_memt, PCI_MAPREG_MEM_ADDR(bar0), 
-			VGASIZE, 0, &vgah);
-		bus_space_write_4(pa->pa_memt, vgah, 0x140, 0);
-		bus_space_unmap(pa->pa_memt, vgah, 0x1000);
-
-		fbaddr = PCI_MAPREG_MEM_ADDR(bar1);
-
-		prop_dictionary_set_bool(dict, "is_console", 1);
-		prop_dictionary_set_uint32(dict, "width",
-			bootconfig.width + 1);
-		prop_dictionary_set_uint32(dict, "height",
-			bootconfig.height + 1);
-		prop_dictionary_set_uint32(dict, "depth",
-			1 << bootconfig.log2_bpp);
-		prop_dictionary_set_uint32(dict, "address", fbaddr);
 	}
 }

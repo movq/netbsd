@@ -1,4 +1,4 @@
-/* $NetBSD: prom.c,v 1.14 2009/03/18 10:22:22 cegger Exp $ */
+/* $NetBSD: prom.c,v 1.11 2002/07/30 20:36:42 nathanw Exp $ */
 
 /*  
  * Mach Operating System
@@ -43,7 +43,7 @@ static int test_getchar(int *);
 static void putonechar(int c);
 
 void
-init_prom_calls(void)
+init_prom_calls()
 {
 	extern struct prom_vec prom_dispatch_v;
 	struct rpb *r;
@@ -63,7 +63,8 @@ init_prom_calls(void)
 
 #if !defined(NO_GETCHAR) || !defined(NO_PUTCHAR_HALT)
 static int
-test_getchar(int *xc)
+test_getchar(xc)
+	int *xc;
 {
 	prom_return_t ret;
 
@@ -75,7 +76,7 @@ test_getchar(int *xc)
 
 #if !defined(NO_GETCHAR)
 int
-getchar(void)
+getchar()
 {
 	int c;
 
@@ -90,7 +91,8 @@ getchar(void)
 #endif
 
 static void
-putonechar(int c)
+putonechar(c)
+	int c;
 {
 	prom_return_t ret;
 	char cbuf = c;
@@ -101,7 +103,8 @@ putonechar(int c)
 }
 
 void
-putchar(int c)
+putchar(c)
+	int c;
 {
 #if !defined(NO_PUTCHAR_HALT)
 	int typed_c;
@@ -120,7 +123,9 @@ putchar(int c)
 }
 
 int
-prom_getenv(int id, char *buf, int len)
+prom_getenv(id, buf, len)
+	int id, len;
+	char *buf;
 {
 	/* 
 	 * On at least some systems, the GETENV call requires a

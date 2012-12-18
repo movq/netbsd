@@ -1,4 +1,4 @@
-/*	$NetBSD: igphyvar.h,v 1.1 2010/03/07 07:53:37 msaitoh Exp $	*/
+/*	$NetBSD: igphyvar.h,v 1.1.8.2 2010/11/19 23:40:29 riz Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.

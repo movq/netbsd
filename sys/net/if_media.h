@@ -1,4 +1,4 @@
-/*	$NetBSD: if_media.h,v 1.56 2012/10/25 10:59:43 msaitoh Exp $	*/
+/*	$NetBSD: if_media.h,v 1.51 2008/09/09 20:12:18 mhitch Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -136,7 +136,7 @@ struct ifmedia_entry *ifmedia_match(struct ifmedia *, u_int, u_int);
 void	ifmedia_delete_instance(struct ifmedia *, u_int);
 
 /* Compute baudrate for a given media. */
-uint64_t	ifmedia_baudrate(int);
+u_quad_t	ifmedia_baudrate(int);
 
 /* Remove all media */
 void		ifmedia_removeall(struct ifmedia *);
@@ -179,11 +179,6 @@ void		ifmedia_removeall(struct ifmedia *);
 #define	IFM_10G_SR	19		/* 10GBase-SR 850nm Multi-mode */
 #define	IFM_10G_CX4	20		/* 10GBase CX4 copper */
 #define	IFM_2500_SX	21		/* 2500baseSX - multi-mode fiber */
-#define	IFM_1000_BX10	22		/* 1000base-BX10 */
-#define	IFM_10G_TWINAX	23		/* 10GBase Twinax copper */
-#define	IFM_10G_TWINAX_LONG	24	/* 10GBase Twinax Long copper */
-#define	IFM_10G_LRM	25		/* 10GBase-LRM 850nm Multi-mode */
-#define	IFM_10G_T	26		/* 10GBase-T - RJ45 */
 
 #define	IFM_ETH_MASTER	0x00000100	/* master mode (1000baseT) */
 #define	IFM_ETH_RXPAUSE	0x00000200	/* receive PAUSE frames */
@@ -244,7 +239,6 @@ void		ifmedia_removeall(struct ifmedia *);
 #define	IFM_IEEE80211_TURBO	0x00000800	/* Operate in Turbo mode */
 #define	IFM_IEEE80211_IBSS	0x00001000	/* Operate in IBSS mode */
 #define	IFM_IEEE80211_WDS 	0x00002000	/* Operate as an WDS master */
-#define	IFM_IEEE80211_MBSS	0x00004000	/* Operate in MBSS mode */
 
 /* operating mode for multi-mode devices */
 #define	IFM_IEEE80211_11A	0x00010000	/* 5 GHz, OFDM mode */
@@ -416,7 +410,6 @@ struct ifmedia_description {
 	{ IFM_ETHER | IFM_1000_CX,	"1000baseCX" },			\
 	{ IFM_ETHER | IFM_1000_CX,	"1000CX" },			\
 	{ IFM_ETHER | IFM_1000_CX,	"1000BASE-CX" },		\
-	{ IFM_ETHER | IFM_1000_BX10,	"1000BASE-BX10" },		\
 	{ IFM_ETHER | IFM_1000_T,	"1000baseT" },			\
 	{ IFM_ETHER | IFM_1000_T,	"1000T" },			\
 	{ IFM_ETHER | IFM_1000_T,	"1000BASE-T" },			\
@@ -428,10 +421,6 @@ struct ifmedia_description {
 	{ IFM_ETHER | IFM_10G_SR,	"10GbaseSR" },			\
 	{ IFM_ETHER | IFM_10G_SR,	"10GSR" },			\
 	{ IFM_ETHER | IFM_10G_SR,	"10GBASE-SR" },			\
-	{ IFM_ETHER | IFM_10G_LRM,	"10Gbase-LRM" },		\
-	{ IFM_ETHER | IFM_10G_TWINAX,	"10Gbase-Twinax" },		\
-	{ IFM_ETHER | IFM_10G_TWINAX_LONG,	"10Gbase-Twinax-Long" },\
-	{ IFM_ETHER | IFM_10G_T,	"10Gbase-T" },			\
 	{ IFM_ETHER | IFM_10G_CX4,	"10GbaseCX4" },			\
 	{ IFM_ETHER | IFM_10G_CX4,	"10GCX4" },			\
 	{ IFM_ETHER | IFM_10G_CX4,	"10GBASE-CX4" },		\
@@ -461,7 +450,6 @@ struct ifmedia_description {
 	{ IFM_ETHER | IFM_10_T | IFM_FDX,	"10BASE-T-FDX" },	\
 	{ IFM_ETHER | IFM_100_TX | IFM_FDX,	"100baseTX-FDX" },	\
 	{ IFM_ETHER | IFM_100_TX | IFM_FDX,	"100BASE-TX-FDX" },	\
-	{ IFM_ETHER | IFM_1000_T | IFM_FDX,	"1000baseT-FDX" },	\
 									\
 	/*								\
 	 * IEEE 802.11							\
@@ -537,7 +525,6 @@ struct ifmedia_description {
 	{ IFM_IEEE80211 | IFM_IEEE80211_TURBO,	"turbo" },		\
 	{ IFM_IEEE80211 | IFM_IEEE80211_IBSS,	"ibss" },		\
 	{ IFM_IEEE80211 | IFM_IEEE80211_WDS, 	"wds" },		\
-	{ IFM_IEEE80211 | IFM_IEEE80211_MBSS,	"mesh" },		\
 									\
 	{ 0, NULL },							\
 }
@@ -547,7 +534,7 @@ struct ifmedia_description {
  */
 struct ifmedia_baudrate {
 	int	ifmb_word;		/* media word */
-	uint64_t	ifmb_baudrate;		/* corresponding baudrate */
+	u_quad_t	ifmb_baudrate;		/* corresponding baudrate */
 };
 
 #define	IFM_BAUDRATE_DESCRIPTIONS {					\

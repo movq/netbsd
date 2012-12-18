@@ -1,4 +1,4 @@
-/*	$NetBSD: footbridge.c,v 1.26 2012/10/10 21:53:09 skrll Exp $	*/
+/*	$NetBSD: footbridge.c,v 1.18 2007/12/14 11:08:03 chris Exp $	*/
 
 /*
  * Copyright (c) 1997,1998 Mark Brinicombe.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: footbridge.c,v 1.26 2012/10/10 21:53:09 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: footbridge.c,v 1.18 2007/12/14 11:08:03 chris Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: footbridge.c,v 1.26 2012/10/10 21:53:09 skrll Exp $"
 
 #include <dev/pci/pcivar.h>
 #define _ARM32_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/bootconfig.h>
 
@@ -68,13 +68,15 @@ __KERNEL_RCSID(0, "$NetBSD: footbridge.c,v 1.26 2012/10/10 21:53:09 skrll Exp $"
 
 /* Declare prototypes */
 
-static int footbridge_match(device_t parent, cfdata_t cf, void *aux);
-static void footbridge_attach(device_t parent, device_t self, void *aux);
-static int footbridge_print(void *aux, const char *pnp);
-static int footbridge_intr(void *arg);
+static int footbridge_match	__P((struct device *parent, struct cfdata *cf,
+	                             void *aux));
+static void footbridge_attach	__P((struct device *parent, struct device *self,
+        	                     void *aux));
+static int footbridge_print	__P((void *aux, const char *pnp));
+static int footbridge_intr	__P((void *arg));
 
 /* Driver and attach structures */
-CFATTACH_DECL_NEW(footbridge, sizeof(struct footbridge_softc),
+CFATTACH_DECL(footbridge, sizeof(struct footbridge_softc),
     footbridge_match, footbridge_attach, NULL, NULL);
 
 /* Various bus space tags */
@@ -107,13 +109,15 @@ footbridge_pci_bs_tag_init(void)
 }
 
 /*
- * int footbridge_print(void *aux, const char *name)
+ * int footbridgeprint(void *aux, const char *name)
  *
  * print configuration info for children
  */
 
 static int
-footbridge_print(void *aux, const char *pnp)
+footbridge_print(aux, pnp)
+	void *aux;
+	const char *pnp;
 {
 	union footbridge_attach_args *fba = aux;
 
@@ -123,13 +127,16 @@ footbridge_print(void *aux, const char *pnp)
 }
 
 /*
- * int footbridge_match(device_t parent, cfdata_t cf, void *aux)
+ * int footbridge_match(struct device *parent, struct cfdata *cf, void *aux)
  *
  * Just return ok for this if it is device 0
  */ 
  
 static int
-footbridge_match(device_t parent, cfdata_t cf, void *aux)
+footbridge_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	if (footbridge_found)
 		return(0);
@@ -138,14 +145,17 @@ footbridge_match(device_t parent, cfdata_t cf, void *aux)
 
 
 /*
- * void footbridge_attach(device_t parent, device_t dev, void *aux)
+ * void footbridge_attach(struct device *parent, struct device *dev, void *aux)
  *
  */
   
 static void
-footbridge_attach(device_t parent, device_t self, void *aux)
+footbridge_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
-	struct footbridge_softc *sc = device_private(self);
+	struct footbridge_softc *sc = (struct footbridge_softc *)self;
 	union footbridge_attach_args fba;
 	int vendor, device, rev;
 
@@ -154,26 +164,27 @@ footbridge_attach(device_t parent, device_t self, void *aux)
 
 	clock_sc = sc;
 
-	sc->sc_dev = self;
 	sc->sc_iot = &footbridge_bs_tag;
 
 	/* Map the Footbridge */
 	if (bus_space_map(sc->sc_iot, DC21285_ARMCSR_VBASE,
 	     DC21285_ARMCSR_VSIZE, 0, &sc->sc_ioh))
-		panic("%s: Cannot map registers", device_xname(self));
+		panic("%s: Cannot map registers", self->dv_xname);
 
 	/* Read the ID to make sure it is what we think it is */
 	vendor = bus_space_read_2(sc->sc_iot, sc->sc_ioh, VENDOR_ID);
 	device = bus_space_read_2(sc->sc_iot, sc->sc_ioh, DEVICE_ID);
 	rev = bus_space_read_1(sc->sc_iot, sc->sc_ioh, REVISION);
 	if (vendor != DC21285_VENDOR_ID && device != DC21285_DEVICE_ID)
-		panic("%s: Unrecognised ID", device_xname(self));
+		panic("%s: Unrecognised ID", self->dv_xname);
 
-	aprint_normal(": DC21285 rev %d\n", rev);
+	printf(": DC21285 rev %d\n", rev);
 
 	/* Disable all interrupts from the footbridge */
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, IRQ_ENABLE_CLEAR, 0xffffffff);
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, FIQ_ENABLE_CLEAR, 0xffffffff);
+
+/*	bus_space_write_4(sc->sc_iot, sc->sc_ioh, 0x18, 0x40000000);*/
 
 	/* Install a generic handler to catch a load of system interrupts */
 	sc->sc_serr_ih = footbridge_intr_claim(IRQ_SERR, IPL_HIGH,
@@ -198,8 +209,7 @@ footbridge_attach(device_t parent, device_t self, void *aux)
 	/* calibrate the delay loop */
 	calibrate_delay();
 
-	/*
-	 * It seems that the default of the memory being visible from 0 upwards
+	/* it seems that the default of the memory being visible from 0 upwards
 	 * on the PCI bus causes issues when DMAing from traditional PC VGA
 	 * address.  This breaks dumping core on cats, as DMAing pages in the
 	 * range 0xb800-0xc000 cause the system to hang.  This suggests that
@@ -241,7 +251,7 @@ footbridge_attach(device_t parent, device_t self, void *aux)
 	fba.fba_pba.pba_memt = &footbridge_pci_mem_bs_tag;
 	fba.fba_pba.pba_dmat = &footbridge_pci_bus_dma_tag;
 	fba.fba_pba.pba_dmat64 = NULL;
-	fba.fba_pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
+	fba.fba_pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
 	fba.fba_pba.pba_bus = 0;
 	fba.fba_pba.pba_bridgetag = NULL;
 	config_found_ia(self, "pcibus", &fba.fba_pba, pcibusprint);
@@ -265,7 +275,8 @@ footbridge_attach(device_t parent, device_t self, void *aux)
 /* Generic footbridge interrupt handler */
 
 int
-footbridge_intr(void *arg)
+footbridge_intr(arg)
+	void *arg;
 {
 	struct footbridge_softc *sc = arg;
 	u_int ctrl, intr;

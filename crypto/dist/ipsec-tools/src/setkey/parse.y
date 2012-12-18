@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.y,v 1.15 2012/01/09 15:25:13 drochner Exp $	*/
+/*	$NetBSD: parse.y,v 1.10.18.2 2009/02/08 18:42:19 snj Exp $	*/
 
 /*	$KAME: parse.y,v 1.81 2003/07/01 04:01:48 itojun Exp $	*/
 
@@ -57,6 +57,10 @@
 #include "vchar.h"
 #include "extern.h"
 
+#ifndef IPPROTO_MH
+#define IPPROTO_MH		135
+#endif
+
 #define DEFAULT_NATT_PORT	4500
 
 #ifndef UDP_ENCAP_ESPINUDP
@@ -85,13 +89,13 @@ struct security_ctx {
 
 struct security_ctx sec_ctx;
 
-static u_int p_natt_type, p_esp_frag;
+static u_int p_natt_type;
 static struct addrinfo * p_natt_oa = NULL;
 
 static int p_aiflags = 0, p_aifamily = PF_UNSPEC;
 
 static struct addrinfo *parse_addr __P((char *, char *));
-static int fix_portstr __P((int, vchar_t *, vchar_t *, vchar_t *));
+static int fix_portstr __P((vchar_t *, vchar_t *, vchar_t *));
 static int setvarbuf __P((char *, int *, struct sadb_ext *, int, 
     const void *, int));
 void parse_init __P((void));
@@ -125,10 +129,9 @@ static int setkeymsg_add __P((unsigned int, unsigned int,
 %token ALG_COMP
 %token F_LIFETIME_HARD F_LIFETIME_SOFT
 %token F_LIFEBYTE_HARD F_LIFEBYTE_SOFT
-%token F_ESPFRAG
 %token DECSTRING QUOTEDSTRING HEXSTRING STRING ANY
 	/* SPD management */
-%token SPDADD SPDUPDATE SPDDELETE SPDDUMP SPDFLUSH
+%token SPDADD SPDDELETE SPDDUMP SPDFLUSH
 %token F_POLICY PL_REQUESTS
 %token F_AIFLAGS
 %token TAGGED
@@ -167,7 +170,6 @@ command
 	|	dump_command
 	|	exit_command
 	|	spdadd_command
-	|	spdupdate_command
 	|	spddelete_command
 	|	spddump_command
 	|	spdflush_command
@@ -209,27 +211,11 @@ delete_command
 deleteall_command
 	:	DELETEALL ipaddropts ipaddr ipaddr protocol_spec EOT
 		{
-#ifndef __linux__
-			if (setkeymsg_addr(SADB_DELETE, $5, $3, $4, 1) < 0)
-				return -1;
-#else /* __linux__ */
-			/* linux strictly adheres to RFC2367, and returns
-			 * an error if we send an SADB_DELETE request without
-			 * an SPI. Therefore, we must first retrieve a list
-			 * of SPIs for all matching SADB entries, and then
-			 * delete each one separately. */
-			u_int32_t *spi;
-			int i, n;
+			int status;
 
-			spi = sendkeymsg_spigrep($5, $3, $4, &n);
-			for (i = 0; i < n; i++) {
-				p_spi = spi[i];
-				if (setkeymsg_addr(SADB_DELETE,
-							$5, $3, $4, 0) < 0)
-					return -1;
-			}
-			free(spi);
-#endif /* __linux__ */
+			status = setkeymsg_addr(SADB_DELETE, $5, $3, $4, 1);
+			if (status < 0)
+				return -1;
 		}
 	;
 
@@ -546,14 +532,6 @@ extension
 	|	F_MODE MODE { p_mode = $2; }
 	|	F_MODE ANY { p_mode = IPSEC_MODE_ANY; }
 	|	F_REQID DECSTRING { p_reqid = $2; }
-	|	F_ESPFRAG DECSTRING
-		{
-			if (p_natt_type == 0) {
-				yyerror("esp fragment size only valid for NAT-T");
-				return -1;
-			}
-			p_esp_frag = $2;
-		}
 	|	F_REPLAY DECSTRING
 		{
 			if ((p_ext & SADB_X_EXT_OLD) != 0) {
@@ -578,7 +556,6 @@ extension
 	/* definition about command for SPD management */
 	/* spdadd */
 spdadd_command
-	/* XXX merge with spdupdate ??? */
 	:	SPDADD ipaddropts STRING prefix portstr STRING prefix portstr upper_spec upper_misc_spec context_spec policy_spec EOT
 		{
 			int status;
@@ -588,9 +565,16 @@ spdadd_command
 			last_msg_type = SADB_X_SPDADD;
 #endif
 
-			/* fixed port fields if ulp is icmp */
-			if (fix_portstr($9, &$10, &$5, &$8))
-				return -1;
+			/* fixed port fields if ulp is icmpv6 */
+			if ($10.buf != NULL) {
+				if ( ($9 != IPPROTO_ICMPV6) &&
+					 ($9 != IPPROTO_MH))
+					return -1;
+				free($5.buf);
+				free($8.buf);
+				if (fix_portstr(&$10, &$5, &$8))
+					return -1;
+			}
 
 			src = parse_addr($3.buf, $5.buf);
 			dst = parse_addr($6.buf, $8.buf);
@@ -623,61 +607,22 @@ spdadd_command
 		}
 	;
 
-spdupdate_command
-	/* XXX merge with spdadd ??? */
-	:	SPDUPDATE ipaddropts STRING prefix portstr STRING prefix portstr upper_spec upper_misc_spec context_spec policy_spec EOT
-		{
-			int status;
-			struct addrinfo *src, *dst;
-
-#ifdef HAVE_PFKEY_POLICY_PRIORITY
-			last_msg_type = SADB_X_SPDUPDATE;
-#endif
-
-			/* fixed port fields if ulp is icmp */
-			if (fix_portstr($9, &$10, &$5, &$8))
-				return -1;
-
-			src = parse_addr($3.buf, $5.buf);
-			dst = parse_addr($6.buf, $8.buf);
-			if (!src || !dst) {
-				/* yyerror is already called */
-				return -1;
-			}
-			if (src->ai_next || dst->ai_next) {
-				yyerror("multiple address specified");
-				freeaddrinfo(src);
-				freeaddrinfo(dst);
-				return -1;
-			}
-
-			status = setkeymsg_spdaddr(SADB_X_SPDUPDATE, $9, &$12,
-			    src, $4, dst, $7);
-			freeaddrinfo(src);
-			freeaddrinfo(dst);
-			if (status < 0)
-				return -1;
-		}
-	|	SPDUPDATE TAGGED QUOTEDSTRING policy_spec EOT
-		{
-			int status;
-
-			status = setkeymsg_spdaddr_tag(SADB_X_SPDUPDATE,
-			    $3.buf, &$4);
-			if (status < 0)
-				return -1;
-		}
-	;
-
 spddelete_command
 	:	SPDDELETE ipaddropts STRING prefix portstr STRING prefix portstr upper_spec upper_misc_spec context_spec policy_spec EOT
 		{
 			int status;
 			struct addrinfo *src, *dst;
 
-			/* fixed port fields if ulp is icmp */
-			if (fix_portstr($9, &$10, &$5, &$8))
-				return -1;
+			/* fixed port fields if ulp is icmpv6 */
+			if ($10.buf != NULL) {
+				if (($9 != IPPROTO_ICMPV6) &&
+					($9 != IPPROTO_MH))
+					return -1;
+				free($5.buf);
+				free($8.buf);
+				if (fix_portstr(&$10, &$5, &$8))
+					return -1;
+			}
 
 			src = parse_addr($3.buf, $5.buf);
 			dst = parse_addr($6.buf, $8.buf);
@@ -1527,22 +1472,6 @@ setkeymsg_add(type, satype, srcs, dsts)
 				
 				memcpy(buf + l, &natt_port, len);
 				l += len;
-#ifdef SADB_X_EXT_NAT_T_FRAG
-				if (p_esp_frag) {
-					struct sadb_x_nat_t_frag esp_frag;
-
-					/* NATT_FRAG */
-					len = sizeof(struct sadb_x_nat_t_frag);
-					memset(&esp_frag, 0, len);
-					esp_frag.sadb_x_nat_t_frag_len = PFKEY_UNIT64(len);
-					esp_frag.sadb_x_nat_t_frag_exttype =
-						SADB_X_EXT_NAT_T_FRAG;
-					esp_frag.sadb_x_nat_t_frag_fraglen = p_esp_frag;
-
-					memcpy(buf + l, &esp_frag, len);
-					l += len;
-				}
-#endif
 			}
 #endif
 			msg->sadb_msg_len = PFKEY_UNIT64(l);
@@ -1581,55 +1510,36 @@ parse_addr(host, port)
 }
 
 static int
-fix_portstr(ulproto, spec, sport, dport)
-	int ulproto;
+fix_portstr(spec, sport, dport)
 	vchar_t *spec, *sport, *dport;
 {
-	char sp[16], dp[16];
-	int a, b, c, d;
-	unsigned long u;
+	const char *p, *p2 = "0";
+	char *q;
+	u_int l;
 
-	if (spec->buf == NULL)
-		return 0;
-
-	switch (ulproto) {
-	case IPPROTO_ICMP:
-	case IPPROTO_ICMPV6:
-	case IPPROTO_MH:
-		if (sscanf(spec->buf, "%d,%d", &a, &b) == 2) {
-			sprintf(sp, "%d", a);
-			sprintf(dp, "%d", b);
-		} else if (sscanf(spec->buf, "%d", &a) == 1) {
-			sprintf(sp, "%d", a);
-		} else {
+	l = 0;
+	for (q = spec->buf; *q != ',' && *q != '\0' && l < spec->len; q++, l++)
+		;
+	if (*q != '\0') {
+		if (*q == ',') {
+			*q = '\0';
+			p2 = ++q;
+		}
+		for (p = p2; *p != '\0' && l < spec->len; p++, l++)
+			;
+		if (*p != '\0' || *p2 == '\0') {
 			yyerror("invalid an upper layer protocol spec");
 			return -1;
 		}
-		break;
-	case IPPROTO_GRE:
-		if (sscanf(spec->buf, "%d.%d.%d.%d", &a, &b, &c, &d) == 4) {
-			sprintf(sp, "%d", (a << 8) + b);
-			sprintf(dp, "%d", (c << 8) + d);
-		} else if (sscanf(spec->buf, "%lu", &u) == 1) {
-			sprintf(sp, "%d", (int) (u >> 16));
-			sprintf(dp, "%d", (int) (u & 0xffff));
-		} else {
-			yyerror("invalid an upper layer protocol spec");
-			return -1;
-		}
-		break;
 	}
 
-	free(sport->buf);
-	sport->buf = strdup(sp);
+	sport->buf = strdup(spec->buf);
 	if (!sport->buf) {
 		yyerror("insufficient memory");
 		return -1;
 	}
 	sport->len = strlen(sport->buf);
-
-	free(dport->buf);
-	dport->buf = strdup(dp);
+	dport->buf = strdup(p2);
 	if (!dport->buf) {
 		yyerror("insufficient memory");
 		return -1;
@@ -1682,7 +1592,6 @@ parse_init()
 		freeaddrinfo (p_natt_oa);
 	p_natt_oa = NULL;
 	p_natt_type = 0;
-	p_esp_frag = 0;
 
 	return;
 }

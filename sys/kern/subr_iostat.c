@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_iostat.c,v 1.19 2009/11/30 11:28:35 pooka Exp $	*/
+/*	$NetBSD: subr_iostat.c,v 1.15.8.1 2009/04/04 17:49:21 snj Exp $	*/
 /*	NetBSD: subr_disk.c,v 1.69 2005/05/29 22:24:15 christos Exp	*/
 
 /*-
@@ -68,11 +68,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_iostat.c,v 1.19 2009/11/30 11:28:35 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_iostat.c,v 1.15.8.1 2009/04/04 17:49:21 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/iostat.h>
 #include <sys/sysctl.h>
 #include <sys/rwlock.h>
@@ -96,8 +96,6 @@ struct iostatlist_head iostatlist = TAILQ_HEAD_INITIALIZER(iostatlist);
 int iostat_count;		/* number of drives in global drivelist */
 krwlock_t iostatlist_lock;
 
-static void sysctl_io_stats_setup(struct sysctllog **);
-
 /*
  * Initialise the iostat subsystem.
  */
@@ -106,7 +104,6 @@ iostat_init(void)
 {
 
 	rw_init(&iostatlist_lock);
-	sysctl_io_stats_setup(NULL);
 }
 
 /*
@@ -139,7 +136,7 @@ iostat_alloc(int32_t type, void *parent, const char *name)
 {
 	struct io_stats *stats;
 
-	stats = kmem_zalloc(sizeof(*stats), KM_SLEEP);
+	stats = malloc(sizeof(struct io_stats), M_DEVBUF, M_WAITOK|M_ZERO);
 	if (stats == NULL)
 		panic("iostat_alloc: cannot allocate memory for stats buffer");
 
@@ -179,7 +176,7 @@ iostat_free(struct io_stats *stats)
 	TAILQ_REMOVE(&iostatlist, stats, io_link);
 	iostat_count--;
 	rw_exit(&iostatlist_lock);
-	kmem_free(stats, sizeof(*stats));
+	free(stats, M_DEVBUF);
 }
 
 /*
@@ -379,15 +376,8 @@ sysctl_hw_iostats(SYSCTLFN_ARGS)
 	return (error);
 }
 
-static void
-sysctl_io_stats_setup(struct sysctllog **clog)
+SYSCTL_SETUP(sysctl_io_stats_setup, "sysctl i/o stats setup")
 {
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "hw", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_HW, CTL_EOL);
 
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,

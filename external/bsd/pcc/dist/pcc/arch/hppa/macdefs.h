@@ -1,5 +1,4 @@
-/*	Id: macdefs.h,v 1.18 2011/06/05 10:19:24 ragge Exp 	*/	
-/*	$NetBSD: macdefs.h,v 1.1.1.4 2011/09/01 12:46:33 plunky Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * Copyright (c) 2007 Michael Shalayeff
@@ -88,6 +87,8 @@
 
 #undef	CHAR_UNSIGNED
 #define	BOOL_TYPE	CHAR
+#define	WCHAR_TYPE	INT
+#define	ENUMSIZE(high,low)	INT
 
 typedef long long CONSZ;
 typedef unsigned long long U_CONSZ;
@@ -101,7 +102,7 @@ typedef long long OFFSZ;
 #undef	BACKTEMP	/* stack grows upwards */
 
 #define	FIELDOPS	/* have bit field ops */
-#define TARGET_ENDIAN TARGET_BE
+#define	LTORBYTES	/* big endian */
 
 #define	BYTEOFF(x)	((x)&03)
 #define	wdal(k)		(BYTEOFF(k)==0)
@@ -464,10 +465,7 @@ int COLORMAP(int c, int *r);
 #define	MYOPTIM
 
 #define	SFUNCALL	(MAXSPECIAL+1)	/* struct assign after function call */
-#define	SPCNHI		(MAXSPECIAL+2)	/* high 21bits constant */
-#define	SPCON		(MAXSPECIAL+3)	/* smaller constant */
-#define	SPICON		(MAXSPECIAL+4)	/* even smaller constant */
-#define	SPCNHW		(MAXSPECIAL+5)	/* LL const w/ 0 in low word */
-#define	SPCNLW		(MAXSPECIAL+6)	/* LL const w/ 0 in high word */
-#define	SPIMM		(MAXSPECIAL+7)	/* immidiate const for depi/comib */
-#define	SPNAME		(MAXSPECIAL+8)	/* ext symbol reference load/store */
+#define	SPCON		(MAXSPECIAL+2)	/* smaller constant */
+#define	SPICON		(MAXSPECIAL+3)	/* even smaller constant */
+#define	SPIMM		(MAXSPECIAL+4)	/* immidiate const for depi/comib */
+#define	SPNAME		(MAXSPECIAL+5)	/* ext symbol reference load/store */

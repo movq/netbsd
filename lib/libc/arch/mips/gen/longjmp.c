@@ -1,4 +1,4 @@
-/*	$NetBSD: longjmp.c,v 1.5 2012/03/29 19:27:05 christos Exp $	*/
+/*	$NetBSD: longjmp.c,v 1.2 2008/04/28 20:22:56 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -49,7 +49,7 @@ __longjmp14(jmp_buf env, int val)
 	ucontext_t uc;
 
 	/* Ensure non-zero SP and sigcontext magic number is present */
-	if (sc->sc_regs[_R_SP] == 0 || sc->sc_regs[_R_ZERO] != (mips_reg_t)0xACEDBADEU)
+	if (sc->sc_regs[_R_SP] == 0 || sc->sc_regs[_R_ZERO] != 0xACEDBADE)
 		goto err;
 
 	/* Ensure non-zero return value */
@@ -70,7 +70,7 @@ __longjmp14(jmp_buf env, int val)
 	uc.uc_link = 0;
 
 	/* Save return value in context */
-	uc.uc_mcontext.__gregs[_REG_V0] = val;
+	uc.uc_mcontext.__gregs[_R_V0] = val;
 
 	/* Copy saved registers */
 	uc.uc_mcontext.__gregs[_REG_S0] = sc->sc_regs[_R_S0];
@@ -82,9 +82,6 @@ __longjmp14(jmp_buf env, int val)
 	uc.uc_mcontext.__gregs[_REG_S6] = sc->sc_regs[_R_S6];
 	uc.uc_mcontext.__gregs[_REG_S7] = sc->sc_regs[_R_S7];
 	uc.uc_mcontext.__gregs[_REG_S8] = sc->sc_regs[_R_S8];
-#if defined(__mips_n32) || defined(__mips_n64)
-	uc.uc_mcontext.__gregs[_REG_GP] = sc->sc_regs[_R_GP];
-#endif
 	uc.uc_mcontext.__gregs[_REG_SP] = sc->sc_regs[_R_SP];
 	uc.uc_mcontext.__gregs[_REG_RA] = sc->sc_regs[_R_RA];
 	uc.uc_mcontext.__gregs[_REG_EPC] = sc->sc_pc;

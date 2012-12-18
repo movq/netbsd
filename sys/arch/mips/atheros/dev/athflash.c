@@ -1,4 +1,4 @@
-/* $NetBSD: athflash.c,v 1.6 2012/10/27 17:18:02 chs Exp $ */
+/* $NetBSD: athflash.c,v 1.3 2008/06/11 23:55:20 cegger Exp $ */
 
 /*
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
@@ -82,7 +82,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: athflash.c,v 1.6 2012/10/27 17:18:02 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: athflash.c,v 1.3 2008/06/11 23:55:20 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -92,7 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: athflash.c,v 1.6 2012/10/27 17:18:02 chs Exp $");
 #include <sys/proc.h>
 #include <sys/systm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <mips/atheros/include/arbusvar.h>
 
@@ -104,6 +104,7 @@ int	flash_debug = 0;
 #endif
 
 struct flash_softc {
+	struct device		sc_dev;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	size_t			sc_size;
@@ -114,8 +115,8 @@ struct flash_softc {
 
 #define	FLASH_ST_BUSY	0x1
 
-static int flash_probe(device_t, cfdata_t, void *);
-static void flash_attach(device_t, device_t, void *);
+static int flash_probe(struct device *, struct cfdata *, void *);
+static void flash_attach(struct device *, struct device *, void *);
 
 static int is_block_same(struct flash_softc *, bus_size_t, const void *);
 static int toggle_bit_wait(struct flash_softc *, bus_size_t, int, int, int);
@@ -125,7 +126,7 @@ static int flash_sector_write(struct flash_softc *, bus_size_t);
 
 extern struct cfdriver athflash_cd;
 
-CFATTACH_DECL_NEW(athflash, sizeof(struct flash_softc),
+CFATTACH_DECL(athflash, sizeof(struct flash_softc),
 	      flash_probe, flash_attach, NULL, NULL);
 
 dev_type_open(flashopen);
@@ -151,7 +152,7 @@ static struct {
 };
 
 static int
-flash_probe(device_t parent, cfdata_t cf, void *aux)
+flash_probe(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct arbus_attach_args	*aa = aux;
 	bus_space_handle_t		ioh;
@@ -191,10 +192,9 @@ flash_probe(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-flash_attach(device_t parent, device_t self, void *aux)
+flash_attach(struct device *parent, struct device *self, void *aux)
 {
-	char nbuf[32];
-	struct flash_softc		*sc = device_private(self);
+	struct flash_softc		*sc = (void *) self;
 	struct arbus_attach_args	*aa = aux;
 	int				i;
 	bus_space_tag_t			iot = aa->aa_bst;
@@ -230,17 +230,18 @@ flash_attach(device_t parent, device_t self, void *aux)
 	}
 
 	KASSERT(flash_ids[i].name != NULL);
-	printf(": %s", flash_ids[i].name);
-	if (humanize_number(nbuf, sizeof(nbuf), flash_ids[i].flash_size, "B",
-	    1024) > 0)
-		printf(" (%s)", nbuf);
+	printf(": %s ", flash_ids[i].name);
+	if (i >= 0x100000)
+		printf("(%d MB)", flash_ids[i].flash_size >> 20);
+	else
+		printf("(%d KB)", flash_ids[i].flash_size >> 10);
 
 	/*
 	 * determine size of the largest block
 	 */
 	sc->sc_size = flash_ids[i].flash_size;
 	sc->sc_sector_size = flash_ids[i].sector_size;
-
+	
 	if ((sc->sc_buf = malloc(sc->sc_sector_size, M_DEVBUF, M_NOWAIT))
 	    == NULL) {
 		printf(": can't alloc buffer space\n");

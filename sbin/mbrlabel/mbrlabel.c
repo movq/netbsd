@@ -1,4 +1,4 @@
-/*	$NetBSD: mbrlabel.c,v 1.28 2012/07/14 20:14:17 wiz Exp $	*/
+/*	$NetBSD: mbrlabel.c,v 1.26 2005/12/28 06:03:15 christos Exp $	*/
 
 /*
  * Copyright (C) 1998 Wolfgang Solfrank.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mbrlabel.c,v 1.28 2012/07/14 20:14:17 wiz Exp $");
+__RCSID("$NetBSD: mbrlabel.c,v 1.26 2005/12/28 06:03:15 christos Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -55,16 +55,17 @@ __RCSID("$NetBSD: mbrlabel.c,v 1.28 2012/07/14 20:14:17 wiz Exp $");
 #include "dkcksum.h"
 #include "extern.h"
 
-__dead static void	usage(void);
-static void	getlabel(int);
-static void	setlabel(int, int);
-static int	getparts(int, u_int32_t, u_int32_t, int);
-static u_int16_t	getshort(void *);
-static u_int32_t	getlong(void *);
+int	main(int, char **);
+void	usage(void);
+void	getlabel(int);
+void	setlabel(int, int);
+int	getparts(int, u_int32_t, u_int32_t, int);
+u_int16_t	getshort(void *);
+u_int32_t	getlong(void *);
 
 struct disklabel label;
 
-static void
+void
 getlabel(int sd)
 {
 
@@ -80,7 +81,7 @@ getlabel(int sd)
 		label.d_npartitions = getrawpartition() + 1;
 }
 
-static void
+void
 setlabel(int sd, int doraw)
 {
 	int one = 1;
@@ -97,7 +98,7 @@ setlabel(int sd, int doraw)
 
 }
 
-static u_int16_t
+u_int16_t
 getshort(void *p)
 {
 	unsigned char *cp = p;
@@ -105,7 +106,7 @@ getshort(void *p)
 	return (cp[0] | (cp[1] << 8));
 }
 
-static u_int32_t
+u_int32_t
 getlong(void *p)
 {
 	unsigned char *cp = p;
@@ -113,7 +114,7 @@ getlong(void *p)
 	return (cp[0] | (cp[1] << 8) | (cp[2] << 16) | (cp[3] << 24));
 }
 
-static int
+int
 getparts(int sd, u_int32_t off, u_int32_t extoff, int verbose)
 {
 	unsigned char		buf[DEV_BSIZE];
@@ -236,10 +237,10 @@ getparts(int sd, u_int32_t off, u_int32_t extoff, int verbose)
 	return (changed);
 }
 
-static void
+void
 usage(void)
 {
-	fprintf(stderr, "usage: %s [-fqrw] [-s sector] device\n",
+	fprintf(stderr, "usage: %s [-fqrw] [-s sector] rawdisk\n",
 	    getprogname());
 	exit(1);
 }

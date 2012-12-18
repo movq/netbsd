@@ -34,7 +34,7 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_crypto_tkip.c,v 1.10 2005/08/08 18:46:35 sam Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_tkip.c,v 1.11 2011/04/03 10:04:32 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_tkip.c,v 1.9 2008/08/26 12:25:39 drochner Exp $");
 #endif
 
 /*
@@ -116,7 +116,8 @@ tkip_attach(struct ieee80211com *ic, struct ieee80211_key *k)
 {
 	struct tkip_ctx *ctx;
 
-	ctx = malloc(sizeof(struct tkip_ctx), M_DEVBUF, M_NOWAIT | M_ZERO);
+	MALLOC(ctx, struct tkip_ctx *, sizeof(struct tkip_ctx),
+		M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (ctx == NULL) {
 		ic->ic_stats.is_crypto_nomem++;
 		return NULL;
@@ -131,7 +132,7 @@ tkip_detach(struct ieee80211_key *k)
 {
 	struct tkip_ctx *ctx = k->wk_private;
 
-	free(ctx, M_DEVBUF);
+	FREE(ctx, M_DEVBUF);
 }
 
 static int
@@ -802,8 +803,6 @@ michael_mic(struct tkip_ctx *ctx, const u8 *key,
 	u32 l, r;
 	const uint8_t *data;
 	u_int space;
-	uint8_t spill[4];
-	int nspill = 0;
 
 	michael_mic_hdr(mtod(m, struct ieee80211_frame *), hdr);
 
@@ -826,20 +825,6 @@ michael_mic(struct tkip_ctx *ctx, const u8 *key,
 	for (;;) {
 		if (space > data_len)
 			space = data_len;
-		if (nspill) {
-			int n = min(4 - nspill, space);
-			memcpy(spill + nspill, data, n);
-			nspill += n;
-			data += n;
-			space -= n;
-			data_len -= n;
-			if (nspill == 4) {
-				l ^= get_le32(spill);
-				michael_block(l, r);
-				nspill = 0;
-			} else
-				goto next;
-		}
 		/* collect 32-bit blocks from current buffer */
 		while (space >= sizeof(uint32_t)) {
 			l ^= get_le32(data);
@@ -848,27 +833,84 @@ michael_mic(struct tkip_ctx *ctx, const u8 *key,
 			space -= sizeof(uint32_t);
 			data_len -= sizeof(uint32_t);
 		}
-		if (space) {
-			memcpy(spill, data, space);
-			nspill = space;
-			data_len -= space;
-		}
-next:
-		if (!data_len)
+		/*
+		 * NB: when space is zero we make one more trip around
+		 * the loop to advance to the next mbuf where there is
+		 * data.  This handles the case where there are 4*n
+		 * bytes in an mbuf followed by <4 bytes in a later mbuf.
+		 * By making an extra trip we'll drop out of the loop
+		 * with m pointing at the mbuf with 3 bytes and space
+		 * set as required by the remainder handling below.
+		 */
+		if (!data_len || (data_len < sizeof(uint32_t) && space != 0))
 			break;
 		m = m->m_next;
-		KASSERT(m);
-		/*
-		 * Setup for next buffer.
-		 */
-		data = mtod(m, const uint8_t *);
-		space = m->m_len;
+		if (m == NULL) {
+			IASSERT(0, ("out of data, data_len %zu\n", data_len));
+			break;
+		}
+		if (space != 0) {
+			const uint8_t *data_next;
+			/*
+			 * Block straddles buffers, split references.
+			 */
+			data_next = mtod(m, const uint8_t *);
+			IASSERT(m->m_len >= sizeof(uint32_t) - space,
+				("not enough data in following buffer, "
+				"m_len %u need %zu\n", m->m_len,
+				sizeof(uint32_t) - space));
+			switch (space) {
+			case 1:
+				l ^= get_le32_split(data[0], data_next[0],
+					data_next[1], data_next[2]);
+				data = data_next + 3;
+				space = m->m_len - 3;
+				break;
+			case 2:
+				l ^= get_le32_split(data[0], data[1],
+					data_next[0], data_next[1]);
+				data = data_next + 2;
+				space = m->m_len - 2;
+				break;
+			case 3:
+				l ^= get_le32_split(data[0], data[1],
+					data[2], data_next[0]);
+				data = data_next + 1;
+				space = m->m_len - 1;
+				break;
+			}
+			michael_block(l, r);
+			data_len -= sizeof(uint32_t);
+		} else {
+			/*
+			 * Setup for next buffer.
+			 */
+			data = mtod(m, const uint8_t *);
+			space = m->m_len;
+		}
 	}
+	/*
+	 * Catch degenerate cases like mbuf[4*n+1 bytes] followed by
+	 * mbuf[2 bytes].  I don't believe these should happen; if they
+	 * do then we'll need more involved logic.
+	 */
+	KASSERT(data_len <= space);
+
 	/* Last block and padding (0x5a, 4..7 x 0) */
-	spill[nspill++] = 0x5a;
-	for (; nspill < 4; nspill++)
-		spill[nspill] = 0;
-	l ^= get_le32(spill);
+	switch (data_len) {
+	case 0:
+		l ^= get_le32_split(0x5a, 0, 0, 0);
+		break;
+	case 1:
+		l ^= get_le32_split(data[0], 0x5a, 0, 0);
+		break;
+	case 2:
+		l ^= get_le32_split(data[0], data[1], 0x5a, 0);
+		break;
+	case 3:
+		l ^= get_le32_split(data[0], data[1], data[2], 0x5a);
+		break;
+	}
 	michael_block(l, r);
 	/* l ^= 0; */
 	michael_block(l, r);

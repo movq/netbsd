@@ -1,4 +1,4 @@
-/*	$NetBSD: bsddisklabel.c,v 1.57 2012/11/20 20:17:43 jakllsch Exp $	*/
+/*	$NetBSD: bsddisklabel.c,v 1.45.4.1 2009/05/18 19:35:14 bouyer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,7 +15,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -52,14 +56,12 @@
 #include "msg_defs.h"
 #include "menu_defs.h"
 
-static int check_partitions(void);
-
 /* For the current state of this file blame abs@NetBSD.org */
 /* Even though he wasn't the last to hack it, but he did admit doing so :-) */
 
-#define	PART_ANY		-1
-#define	PART_EXTRA		-2
-#define	PART_TMP_RAMDISK	-3
+#define	PART_ANY	-1
+#define	PART_EXTRA	-2
+#define	PART_TMP_MFS	-3
 
 /* Defaults for things that might be defined in md.h */
 #ifndef PART_ROOT
@@ -70,6 +72,10 @@ static int check_partitions(void);
 #endif
 #ifndef PART_USR
 #define PART_USR	PART_ANY
+#endif
+
+#ifndef DEFSWAPRAM
+#define DEFSWAPRAM	32
 #endif
 
 #ifndef DEFVARSIZE
@@ -126,15 +132,6 @@ save_ptn(int ptn, daddr_t start, daddr_t size, int fstype, const char *mountpt)
 		}
 		strlcpy(p->pi_mount, mountpt, sizeof p->pi_mount);
 		p->pi_flags |= PIF_MOUNT;
-		/* Default to UFS2. */
-		if (p->pi_fstype == FS_BSDFFS) {
-#ifdef DEFAULT_UFS2
-#ifndef HAVE_UFS2_BOOT
-			if (strcmp(mountpt, "/") != 0)
-#endif
-				p->pi_flags |= PIF_FFSv2;
-#endif
-		}
 	}
 
 	return ptn;
@@ -151,12 +148,12 @@ set_ptn_titles(menudesc *m, int opt, void *arg)
 
 	p = &pi->ptn_sizes[opt];
 	if (p->mount[0] == 0) {
-		wprintw(m->mw, "%s", msg_string(MSG_add_another_ptn));
+		wprintw(m->mw, msg_string(MSG_add_another_ptn));
 		return;
 	}
 	size = p->size;
 	if (p == pi->pool_part)
-		snprintf(inc_free, sizeof inc_free, "(%" PRIi64 ")",
+		snprintf(inc_free, sizeof inc_free, "(%" PRIi64 ")", 
 		    (size + pi->free_space) / sm);
 	else
 		inc_free[0] = 0;
@@ -285,7 +282,7 @@ set_ptn_size(menudesc *m, void *arg)
 	}
 
 	size = NUMSEC(size, mult, dlcylsize);
-	if (p->ptn_id == PART_TMP_RAMDISK) {
+	if (p->ptn_id == PART_TMP_MFS) {
 		p->size = size;
 		return 0;
 	}
@@ -352,13 +349,9 @@ get_ptn_sizes(daddr_t part_start, daddr_t sectors, int no_swap)
 #define PI_SWAP 1
 		{ PART_SWAP,	{ 's', 'w', 'a', 'p', '\0' },
 	 	  DEFSWAPSIZE,	DEFSWAPSIZE, 0, 0 },
-		{ PART_TMP_RAMDISK,
-#ifdef HAVE_TMPFS
-		  { '/', 't', 'm', 'p', ' ', '(', 't', 'm', 'p', 'f', 's', ')', '\0' },
-#else
-		  { '/', 't', 'm', 'p', ' ', '(', 'm', 'f', 's', ')', '\0' },
-#endif
-		  64, 0, 0, 0 },
+		{ PART_TMP_MFS,	
+		  { 't', 'm', 'p', ' ', '(', 'm', 'f', 's', ')', '\0' },
+		    64, 0, 0, 0 },
 #define PI_USR 3
 		{ PART_USR,	{ '/', 'u', 's', 'r', '\0' },	DEFUSRSIZE,
 		  0, 0, 0 },
@@ -378,18 +371,8 @@ get_ptn_sizes(daddr_t part_start, daddr_t sectors, int no_swap)
 	msg_table_add(MSG_ptnheaders);
 
 	if (pi.menu_no < 0) {
-		/* If there is a swap partition elsewhere, don't add one here.*/
-		if (no_swap) {
+		/* If there is a swap partition elsewhere, don't add one here.*/		if (no_swap)
 			pi.ptn_sizes[PI_SWAP].size = 0;
-		} else {
-#if DEFSWAPSIZE == -1
-			/* Dynamic swap size. */
-			pi.ptn_sizes[PI_SWAP].dflt_size = get_ramsize();
-			pi.ptn_sizes[PI_SWAP].size =
-			    pi.ptn_sizes[PI_SWAP].dflt_size;
-#endif
-		}
-
 		/* If installing X increase default size of /usr */
 		if (set_X11_selected())
 			pi.ptn_sizes[PI_USR].dflt_size += XNEEDMB;
@@ -494,7 +477,7 @@ get_ptn_sizes(daddr_t part_start, daddr_t sectors, int no_swap)
 					break;
 				continue;
 			}
-			if (p->ptn_id == PART_TMP_RAMDISK)
+			if (p->ptn_id == PART_TMP_MFS)
 				continue;
 			p->size += pi.free_space % dlcylsize;
 			break;
@@ -509,8 +492,8 @@ get_ptn_sizes(daddr_t part_start, daddr_t sectors, int no_swap)
 				size = p->limit;
 		}
 		i = p->ptn_id;
-		if (i == PART_TMP_RAMDISK) {
-			tmp_ramdisk_size = size;
+		if (i == PART_TMP_MFS) {
+			tmp_mfs_size = size;
 			size = 0;
 			continue;
 		}
@@ -683,7 +666,7 @@ make_bsd_partitions(void)
 				}
 			}
 		} else {
-			if (p->pi_offset < ptstart + ptsize &&
+			if (p->pi_offset < ptstart + ptsize &&			
 			    p->pi_offset + p->pi_size > ptstart)
 				/* Not outside area we are allocating */
 				continue;
@@ -705,7 +688,7 @@ make_bsd_partitions(void)
 		msg_display(MSG_abort);
 		return 0;
 	}
-	if (check_partitions() == 0)
+	if (md_check_partitions() == 0)
 		goto edit_check;
 
 	/* Disk name */
@@ -716,42 +699,4 @@ make_bsd_partitions(void)
 
 	/* Everything looks OK. */
 	return (1);
-}
-
-/*
- * check that there is at least a / somewhere.
- */
-static int
-check_partitions(void)
-{
-#ifdef HAVE_BOOTXX_xFS
-	int rv;
-	char *bootxx;
-#endif
-#ifndef HAVE_UFS2_BOOT
-	int fstype;
-#endif
-
-#ifdef HAVE_BOOTXX_xFS
-	/* check if we have boot code for the root partition type */
-	bootxx = bootxx_name();
-	if (bootxx != NULL) {
-		rv = access(bootxx, R_OK);
-		free(bootxx);
-	}
-	if (bootxx == NULL || rv != 0) {
-		process_menu(MENU_ok, deconst(MSG_No_Bootcode));
-		return 0;
-	}
-#endif
-#ifndef HAVE_UFS2_BOOT
-	fstype = bsdlabel[rootpart].pi_fstype;
-	if (fstype == FS_BSDFFS &&
-	    (bsdlabel[rootpart].pi_flags & PIF_FFSv2) != 0) {
-		process_menu(MENU_ok, deconst(MSG_cannot_ufs2_root));
-		return 0;
-	}
-#endif
-
-	return md_check_partitions();
 }

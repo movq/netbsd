@@ -1,4 +1,4 @@
-/*	$NetBSD: psychovar.h,v 1.18 2011/06/02 00:24:23 christos Exp $	*/
+/*	$NetBSD: psychovar.h,v 1.15 2008/05/29 14:51:26 mrg Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Matthew R. Green
@@ -69,6 +69,12 @@ struct psycho_pbm {
 	bus_space_tag_t			pp_iot;
 	bus_dma_tag_t			pp_dmat;
 	int				pp_bus;
+	int				pp_busmax;
+	struct pp_busnode {
+		int	node;
+		int	(*valid)(void *);
+		void	*arg;
+	}				(*pp_busnode)[256];
 	int				pp_flags;
 
 	/* and pointers into the psycho regs for our bits */
@@ -83,7 +89,7 @@ struct psycho_pbm {
  * per pair of psycho's.
  */
 struct psycho_softc {
-	device_t			sc_dev;
+	struct	device			sc_dev;
 
 	/*
 	 * one sabre has two simba's.  psycho's are separately attached,

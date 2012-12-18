@@ -1,4 +1,4 @@
-/*	$NetBSD: stoc.c,v 1.12 2009/08/12 06:19:17 dholland Exp $	*/
+/*	$NetBSD: stoc.c,v 1.9 2005/04/19 20:17:12 rillig Exp $	*/
 
 /*
  * Copyright (c) 1994
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)stoc.c	8.1 (Berkeley) 7/24/94";
 #else
-__RCSID("$NetBSD: stoc.c,v 1.12 2009/08/12 06:19:17 dholland Exp $");
+__RCSID("$NetBSD: stoc.c,v 1.9 2005/04/19 20:17:12 rillig Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,14 +59,12 @@ static	const struct	mvstr	mv[] = {
 	{ -1,		0 }
 };
 
-static int lton(int);
-
-
 /*
  * Turn the spot number form of a move into the character form.
  */
 const char *
-stoc(int s)
+stoc(s)
+	int s;
 {
 	static char buf[32];
 	int i;
@@ -74,7 +72,7 @@ stoc(int s)
 	for (i = 0; mv[i].m_code >= 0; i++)
 		if (s == mv[i].m_code)
 			return(mv[i].m_text);
-	snprintf(buf, sizeof(buf), "%c%d", letters[s % BSZ1], s / BSZ1);
+	sprintf(buf, "%c%d", letters[s % BSZ1], s / BSZ1);
 	return(buf);
 }
 
@@ -82,7 +80,8 @@ stoc(int s)
  * Turn the character form of a move into the spot number form.
  */
 int
-ctos(const char *mp)
+ctos(mp)
+	const char *mp;
 {
 	int i;
 
@@ -100,8 +99,9 @@ ctos(const char *mp)
 /*
  * Turn a letter into a number.
  */
-static int
-lton(int c)
+int
+lton(c)
+	int c;
 {
 	int i;
 

@@ -1,4 +1,4 @@
-/* $NetBSD: nvram.h,v 1.8 2012/10/27 17:18:08 chs Exp $ */
+/* $NetBSD: nvram.h,v 1.6 2008/04/28 20:23:33 martin Exp $ */
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -173,7 +173,7 @@ typedef struct _HEADER {
 	uint32_t ConfigLastWriteDT[2]; /* last change to config area */
 	uint32_t ConfigCount;	/* count of entries in configuration */
 
-	/* OS Dependent temp area */
+	/* OS Dependant temp area */
 	void *OSAreaAddress;
 	uint32_t OSAreaLength;
 	uint32_t OSAreaLastWriteDT[2]; /* last change to OSArea */
@@ -220,6 +220,8 @@ struct prep_mk48txx_softc {
 };
 
 struct nvram_pnpbus_softc {
+	struct device sc_dev;		/* base device */ 
+
 	bus_space_tag_t sc_iot;		/* io space tag */
 	bus_space_tag_t sc_as;		/* addr line */
 	bus_space_handle_t sc_ash;

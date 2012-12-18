@@ -1,4 +1,4 @@
-/*	$NetBSD: sii_ds.c,v 1.9 2011/07/09 17:32:30 matt Exp $	*/
+/*	$NetBSD: sii_ds.c,v 1.3 2007/03/04 06:00:33 christos Exp $	*/
 
 /*
  * Copyright 1996 The Board of Trustees of The Leland Stanford
@@ -16,24 +16,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sii_ds.c,v 1.9 2011/07/09 17:32:30 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sii_ds.c,v 1.3 2007/03/04 06:00:33 christos Exp $");
 
 #include "sii.h"
 
 #include <sys/param.h>
-#include <sys/buf.h>
-#include <sys/bus.h>
-#include <sys/device.h>
 #include <sys/systm.h>
+#include <sys/device.h>
+#include <sys/buf.h>
 
-#include <mips/locore.h>
-#include <pmax/locore.h>
+#include <machine/locore.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 #include <dev/scsipi/scsi_message.h>
 
+#include <machine/bus.h>
 #include <pmax/ibus/siireg.h>
 #include <pmax/ibus/siivar.h>
 
@@ -43,23 +42,25 @@ __KERNEL_RCSID(0, "$NetBSD: sii_ds.c,v 1.9 2011/07/09 17:32:30 matt Exp $");
 #include <pmax/pmax/pmaxtype.h>
 
 
-static void	kn230_copytobuf(u_short *src, 	/* NB: must be short aligned */
-		    volatile u_short *dst, int length);
-static void	kn230_copyfrombuf(volatile u_short *src, char *dst,
-		    int length);
+static void	kn230_copytobuf __P((u_short *src, 	/* NB: must be short aligned */
+		    volatile u_short *dst, int length));
+static void	kn230_copyfrombuf __P((volatile u_short *src, char *dst,
+		    int length));
 
-static void	kn01_copytobuf(u_short *src, 	/* NB: must be short aligned */
-		    volatile u_short *dst, int length);
-static void	kn01_copyfrombuf(volatile u_short *src, char *dst,
-		    int length);
+static void	kn01_copytobuf __P((u_short *src, 	/* NB: must be short aligned */
+		    volatile u_short *dst, int length));
+static void	kn01_copyfrombuf __P((volatile u_short *src, char *dst,
+		    int length));
 
 /*
  * Autoconfig definition of driver front-end
  */
-static int	sii_ds_match(device_t, struct cfdata *, void *);
-static void	sii_ds_attach(device_t, device_t, void *);
+static int	sii_ds_match __P((struct device* parent, struct cfdata *match,
+		    void *aux));
+static void	sii_ds_attach __P((struct device *parent, struct device *self,
+		    void *aux));
 
-CFATTACH_DECL_NEW(sii_ds, sizeof(struct siisoftc),
+CFATTACH_DECL(sii_ds, sizeof(struct siisoftc),
     sii_ds_match, sii_ds_attach, NULL, NULL);
 
 /* define a safe address in the SCSI buffer for doing status & message DMA */
@@ -70,7 +71,10 @@ CFATTACH_DECL_NEW(sii_ds, sizeof(struct siisoftc),
  * Match driver on Decstation (2100, 3100, 5100) based on name and probe.
  */
 static int
-sii_ds_match(device_t parent, cfdata_t cf, void *aux)
+sii_ds_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct ibus_attach_args *ia = aux;
 	void *siiaddr;
@@ -84,12 +88,14 @@ sii_ds_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-sii_ds_attach(device_t parent, device_t self, void *aux)
+sii_ds_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct ibus_attach_args *ia = aux;
-	struct siisoftc *sc = device_private(self);
+	struct siisoftc *sc = (struct siisoftc *) self;
 
-	sc->sc_dev = self;
 	sc->sc_regs = (SIIRegs *)MIPS_PHYS_TO_KSEG1(ia->ia_addr);
 
 	/* set up scsi buffer.  XXX Why statically allocated? */
@@ -128,7 +134,10 @@ sii_ds_attach(device_t parent, device_t self, void *aux)
  * currently safe on sii driver, but API and casts should be changed.
  */
 static void
-kn230_copytobuf(u_short *src, volatile u_short *dst, int len)
+kn230_copytobuf(src, dst, len)
+	u_short *src;
+	volatile u_short *dst;
+	int len;
 {
 	u_int *wsrc = (u_int *)src;
 	volatile u_int *wdst = (volatile u_int *)dst;
@@ -162,8 +171,10 @@ kn230_copytobuf(u_short *src, volatile u_short *dst, int len)
  * currently safe on sii driver, but API and casts should be changed.
  */
 static void
-kn230_copyfrombuf(volatile u_short *src, char *dst, int len)
-	/* dst:		 XXX assume 32-bit aligned? */
+kn230_copyfrombuf(src, dst, len)
+	volatile u_short *src;
+	char *dst;		/* XXX assume 32-bit aligned? */
+	int len;
 {
 	volatile u_int *wsrc = (volatile u_int *)src;
 	u_int *wdst = (u_int *)dst;
@@ -201,7 +212,10 @@ kn230_copyfrombuf(volatile u_short *src, char *dst, int len)
 
 
 static void
-kn01_copytobuf(u_short *src, volatile u_short *dst, int len)
+kn01_copytobuf(src, dst, len)
+	u_short *src;
+	volatile u_short *dst;
+	int len;
 {
 #if defined(DIAGNOSTIC) || defined(DEBUG)
 	if ((u_int)(src) & 0x3) {
@@ -216,8 +230,10 @@ kn01_copytobuf(u_short *src, volatile u_short *dst, int len)
 }
 
 static void
-kn01_copyfrombuf(volatile u_short *src, char *dst, int len)
-	/* dst:		 XXX assume 32-bit aligned? */
+kn01_copyfrombuf(src, dst, len)
+	volatile u_short *src;
+	char *dst;		/* XXX assume 32-bit aligned? */
+	int len;
 {
 #if defined(DIAGNOSTIC) || defined(DEBUG)
 	if ((u_int)(src) & 0x3) {

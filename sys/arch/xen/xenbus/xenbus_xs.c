@@ -1,4 +1,4 @@
-/* $NetBSD: xenbus_xs.c,v 1.23 2012/11/28 16:26:59 royger Exp $ */
+/* $NetBSD: xenbus_xs.c,v 1.17 2008/10/29 13:53:15 cegger Exp $ */
 /******************************************************************************
  * xenbus_xs.c
  *
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xenbus_xs.c,v 1.23 2012/11/28 16:26:59 royger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xenbus_xs.c,v 1.17 2008/10/29 13:53:15 cegger Exp $");
 
 #if 0
 #define DPRINTK(fmt, args...) \
@@ -48,6 +48,9 @@ __KERNEL_RCSID(0, "$NetBSD: xenbus_xs.c,v 1.23 2012/11/28 16:26:59 royger Exp $"
 #include <sys/proc.h>
 #include <sys/mutex.h>
 #include <sys/kthread.h>
+#include <sys/simplelock.h>
+
+#include <machine/stdarg.h>
 
 #include <xen/xen.h>	/* for xendomain_is_dom0() */
 #include <xen/xenbus.h>
@@ -78,8 +81,7 @@ struct xs_stored_msg {
 struct xs_handle {
 	/* A list of replies. Currently only one will ever be outstanding. */
 	SIMPLEQ_HEAD(, xs_stored_msg) reply_list;
-	kmutex_t reply_lock;
-	kcondvar_t reply_cv;
+	struct simplelock reply_lock;
 	kmutex_t xs_lock; /* serialize access to xenstore */
 	int suspend_spl;
 
@@ -88,13 +90,14 @@ struct xs_handle {
 static struct xs_handle xs_state;
 
 /* List of registered watches, and a lock to protect it. */
-static SLIST_HEAD(, xenbus_watch) watches;
-static kmutex_t watches_lock;
+static SLIST_HEAD(, xenbus_watch) watches =
+    SLIST_HEAD_INITIALIZER(watches);
+static struct simplelock watches_lock = SIMPLELOCK_INITIALIZER;
 
 /* List of pending watch callback events, and a lock to protect it. */
-static SIMPLEQ_HEAD(, xs_stored_msg) watch_events;
-static kmutex_t watch_events_lock;
-static kcondvar_t watch_cv;
+static SIMPLEQ_HEAD(, xs_stored_msg) watch_events =
+    SIMPLEQ_HEAD_INITIALIZER(watch_events);
+static struct simplelock watch_events_lock = SIMPLELOCK_INITIALIZER;
 
 static int
 get_error(const char *errorstring)
@@ -117,14 +120,21 @@ read_reply(enum xsd_sockmsg_type *type, unsigned int *len)
 {
 	struct xs_stored_msg *msg;
 	char *body;
+	int s;
 
-	mutex_enter(&xs_state.reply_lock);
+	simple_lock(&xs_state.reply_lock);
+	s = spltty();
+
 	while (SIMPLEQ_EMPTY(&xs_state.reply_list)) {
-		cv_wait(&xs_state.reply_cv, &xs_state.reply_lock);
+		ltsleep(&xs_state.reply_list, PRIBIO, "rplq", 0,
+		    &xs_state.reply_lock);
 	}
+
 	msg = SIMPLEQ_FIRST(&xs_state.reply_list);
 	SIMPLEQ_REMOVE_HEAD(&xs_state.reply_list, msg_next);
-	mutex_exit(&xs_state.reply_lock);
+
+	splx(s);
+	simple_unlock(&xs_state.reply_lock);
 
 	*type = msg->hdr.type;
 	if (len)
@@ -639,64 +649,67 @@ register_xenbus_watch(struct xenbus_watch *watch)
 	/* Pointer in ascii is the token. */
 	char token[sizeof(watch) * 2 + 1];
 	int err;
+	int s;
 
-	snprintf(token, sizeof(token), "%lX", (long)watch);
+	sprintf(token, "%lX", (long)watch);
 
-	mutex_enter(&watches_lock);
+	s = spltty();
+
+	simple_lock(&watches_lock);
 	KASSERT(find_watch(token) == 0);
 	SLIST_INSERT_HEAD(&watches, watch, watch_next);
-	mutex_exit(&watches_lock);
+	simple_unlock(&watches_lock);
 
 	err = xs_watch(watch->node, token);
 
 	/* Ignore errors due to multiple registration. */
 	if ((err != 0) && (err != EEXIST)) {
-		mutex_enter(&watches_lock);
+		simple_lock(&watches_lock);
 		SLIST_REMOVE(&watches, watch, xenbus_watch, watch_next);
-		mutex_exit(&watches_lock);
+		simple_unlock(&watches_lock);
 	}
+
+	splx(s);
+
 	return err;
 }
 
 void
 unregister_xenbus_watch(struct xenbus_watch *watch)
 {
-	SIMPLEQ_HEAD(, xs_stored_msg) gclist;
 	struct xs_stored_msg *msg, *next_msg;
 	char token[sizeof(watch) * 2 + 1];
-	int err;
+	int err, s;
 
-	snprintf(token, sizeof(token), "%lX", (long)watch);
+	sprintf(token, "%lX", (long)watch);
 
-	mutex_enter(&watches_lock);
+	s = spltty();
+
+	simple_lock(&watches_lock);
 	KASSERT(find_watch(token));
 	SLIST_REMOVE(&watches, watch, xenbus_watch, watch_next);
-	mutex_exit(&watches_lock);
+	simple_unlock(&watches_lock);
 
 	err = xs_unwatch(watch->node, token);
-	if (err) {
+	if (err)
 		printf(
 		       "XENBUS Failed to release watch %s: %i\n",
 		       watch->node, err);
-	}
+
+	splx(s);
 
 	/* Cancel pending watch events. */
-	SIMPLEQ_INIT(&gclist);
-	mutex_enter(&watch_events_lock);
+	simple_lock(&watch_events_lock);
 	for (msg = SIMPLEQ_FIRST(&watch_events); msg != NULL; msg = next_msg) {
 		next_msg = SIMPLEQ_NEXT(msg, msg_next);
 		if (msg->u.watch.handle != watch)
 			continue;
 		SIMPLEQ_REMOVE(&watch_events, msg, xs_stored_msg, msg_next);
-		SIMPLEQ_INSERT_TAIL(&gclist, msg, msg_next);
-	}
-	mutex_exit(&watch_events_lock);
-
-	while ((msg = SIMPLEQ_FIRST(&gclist)) != NULL) {
-		SIMPLEQ_REMOVE(&gclist, msg, xs_stored_msg, msg_next);
 		free(msg->u.watch.vec, M_DEVBUF);
 		free(msg, M_DEVBUF);
 	}
+	simple_unlock(&watch_events_lock);
+
 }
 
 void
@@ -712,7 +725,7 @@ xs_resume(void)
 	char token[sizeof(watch) * 2 + 1];
 	/* No need for watches_lock: the suspend_mutex is sufficient. */
 	SLIST_FOREACH(watch, &watches, watch_next) {
-		snprintf(token, sizeof(token), "%lX", (long)watch);
+		sprintf(token, "%lX", (long)watch);
 		xs_watch(watch->node, token);
 	}
 
@@ -722,38 +735,38 @@ xs_resume(void)
 static void
 xenwatch_thread(void *unused)
 {
-	SIMPLEQ_HEAD(, xs_stored_msg) events_to_proces;
 	struct xs_stored_msg *msg;
+	int s;
 
-	SIMPLEQ_INIT(&events_to_proces);
 	for (;;) {
-		mutex_enter(&watch_events_lock);
-		while (SIMPLEQ_EMPTY(&watch_events))
-			cv_wait(&watch_cv, &watch_events_lock);
-		SIMPLEQ_CONCAT(&events_to_proces, &watch_events);
-		mutex_exit(&watch_events_lock);
+		tsleep(&watch_events, PRIBIO, "evtsq", 0);
+		s = spltty(); /* to block IPL_CTRL */
+		while (!SIMPLEQ_EMPTY(&watch_events)) {
+			msg = SIMPLEQ_FIRST(&watch_events);
 
-		DPRINTK("xenwatch_thread: processing events");
-
-		while ((msg = SIMPLEQ_FIRST(&events_to_proces)) != NULL) {
+			simple_lock(&watch_events_lock);
+			SIMPLEQ_REMOVE_HEAD(&watch_events, msg_next);
+			simple_unlock(&watch_events_lock);
 			DPRINTK("xenwatch_thread: got event");
-			SIMPLEQ_REMOVE_HEAD(&events_to_proces, msg_next);
+
 			msg->u.watch.handle->xbw_callback(
 				msg->u.watch.handle,
-				(void *)msg->u.watch.vec,
+				(const char **)msg->u.watch.vec,
 				msg->u.watch.vec_size);
 			free(msg->u.watch.vec, M_DEVBUF);
 			free(msg, M_DEVBUF);
 		}
+
+		splx(s);
 	}
 }
 
 static int
 process_msg(void)
 {
-	struct xs_stored_msg *msg, *s_msg;
+	struct xs_stored_msg *msg;
 	char *body;
-	int err;
+	int err, s;
 
 	msg = malloc(sizeof(*msg), M_DEVBUF, M_NOWAIT);
 	if (msg == NULL)
@@ -782,8 +795,6 @@ process_msg(void)
 	body[msg->hdr.len] = '\0';
 
 	if (msg->hdr.type == XS_WATCH_EVENT) {
-		bool found, repeated;
-
 		DPRINTK("process_msg: XS_WATCH_EVENT");
 		msg->u.watch.vec = split(body, msg->hdr.len,
 					 &msg->u.watch.vec_size);
@@ -792,39 +803,31 @@ process_msg(void)
 			return ENOMEM;
 		}
 
-		mutex_enter(&watches_lock);
+		simple_lock(&watches_lock);
+		s = spltty();
 		msg->u.watch.handle = find_watch(
-		    msg->u.watch.vec[XS_WATCH_TOKEN]);
-		found = (msg->u.watch.handle != NULL);
-		repeated = false;
-		if (found) {
-			mutex_enter(&watch_events_lock);
-			/* Don't add duplicate events to the queue of pending watches */
-			SIMPLEQ_FOREACH(s_msg, &watch_events, msg_next) {
-				if (s_msg->u.watch.handle == msg->u.watch.handle) {
-					repeated = true;
-					break;
-				}
-			}
-			if (!repeated) {
-				SIMPLEQ_INSERT_TAIL(&watch_events, msg, msg_next);
-				cv_broadcast(&watch_cv);
-			}
-			mutex_exit(&watch_events_lock);
-		}
-		mutex_exit(&watches_lock);
-		if (!found || repeated) {
+			msg->u.watch.vec[XS_WATCH_TOKEN]);
+		if (msg->u.watch.handle != NULL) {
+			simple_lock(&watch_events_lock);
+			SIMPLEQ_INSERT_TAIL(&watch_events, msg, msg_next);
+			wakeup(&watch_events);
+			simple_unlock(&watch_events_lock);
+		} else {
 			free(msg->u.watch.vec, M_DEVBUF);
 			free(msg, M_DEVBUF);
 		}
+		splx(s);
+		simple_unlock(&watches_lock);
 	} else {
 		DPRINTK("process_msg: type %d body %s", msg->hdr.type, body);
-
+		    
 		msg->u.reply.body = body;
-		mutex_enter(&xs_state.reply_lock);
+		simple_lock(&xs_state.reply_lock);
+		s = spltty();
 		SIMPLEQ_INSERT_TAIL(&xs_state.reply_list, msg, msg_next);
-		cv_broadcast(&xs_state.reply_cv);
-		mutex_exit(&xs_state.reply_lock);
+		splx(s);
+		simple_unlock(&xs_state.reply_lock);
+		wakeup(&xs_state.reply_list);
 	}
 
 	return 0;
@@ -847,17 +850,9 @@ xs_init(device_t dev)
 {
 	int err;
 
-	SLIST_INIT(&watches);
-	mutex_init(&watches_lock, MUTEX_DEFAULT, IPL_TTY);
-
-	SIMPLEQ_INIT(&watch_events);
-	mutex_init(&watch_events_lock, MUTEX_DEFAULT, IPL_TTY);
-	cv_init(&watch_cv, "evtsq");
-
 	SIMPLEQ_INIT(&xs_state.reply_list);
+	simple_lock_init(&xs_state.reply_lock);
 	mutex_init(&xs_state.xs_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&xs_state.reply_lock, MUTEX_DEFAULT, IPL_TTY);
-	cv_init(&xs_state.reply_cv, "rplq");
 
 	err = kthread_create(PRI_NONE, 0, NULL, xenwatch_thread,
 	    NULL, NULL, "xenwatch");

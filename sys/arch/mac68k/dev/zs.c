@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.58 2009/10/27 03:45:32 snj Exp $	*/
+/*	$NetBSD: zs.c,v 1.56 2008/03/29 19:15:34 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1996-1998 Bill Studenmund
@@ -13,6 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ * 4. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Gordon Ross
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -49,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.58 2009/10/27 03:45:32 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.56 2008/03/29 19:15:34 tsutsui Exp $");
 
 #include "opt_ddb.h"
 #include "opt_mac68k.h"
@@ -188,7 +193,7 @@ zs_get_chan_addr(int channel)
 int zsinited = 0; /* 0 = not, 1 = inited, not attached, 2= attached */
 
 void
-zs_init(void)
+zs_init()
 {
 	zsinited = 1;
 	if (zs_conschan != 0){ /* we might have moved io under the console */

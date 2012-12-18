@@ -1,4 +1,4 @@
-/*	$NetBSD: path.c,v 1.5 2011/09/21 19:32:59 christos Exp $	*/
+/*	$NetBSD: path.c,v 1.4 2002/07/10 20:19:41 wiz Exp $	*/
 
 /*
  * Copyright (c) 1991 Carnegie Mellon University
@@ -62,11 +62,11 @@
 #include "supextern.h"
 
 void
-path(const char *original, char *direc, char *file)
+path(char *original, char *direc, char *file)
 {
 	char *y;
 	/* x is direc */
-	const char *p;
+	char *p;
 
 	/* copy and note the end */
 	p = original;

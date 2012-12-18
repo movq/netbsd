@@ -1,5 +1,4 @@
-/*	Id: misc.c,v 1.17 2009/02/11 15:58:55 ragge Exp 	*/	
-/*	$NetBSD: misc.c,v 1.1.1.3 2010/06/03 18:57:50 plunky Exp $	*/
+/*	$Id: misc.c,v 1.1.1.1 2008/08/24 05:33:07 gmcgarry Exp $	*/
 /*
  * Copyright(C) Caldera International Inc. 2001-2002. All rights reserved.
  *
@@ -351,7 +350,7 @@ return(lp);
 int
 newlabel()
 {
-return( lastlabno++ );
+return( ++lastlabno );
 }
 
 

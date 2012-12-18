@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_pci.c,v 1.11 2012/11/12 18:00:38 skrll Exp $ */
+/*	$NetBSD: ixp425_pci.c,v 1.5 2006/04/10 03:36:03 simonb Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -13,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp425_pci.c,v 1.11 2012/11/12 18:00:38 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_pci.c,v 1.5 2006/04/10 03:36:03 simonb Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_pci.c,v 1.11 2012/11/12 18:00:38 skrll Exp $"
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/xscale/ixp425reg.h>
 #include <arm/xscale/ixp425var.h>
@@ -52,13 +58,12 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_pci.c,v 1.11 2012/11/12 18:00:38 skrll Exp $"
 #include "opt_pci.h"
 #include "pci.h"
 
-void	ixp425_pci_attach_hook(device_t, device_t,
+void	ixp425_pci_attach_hook(struct device *, struct device *,
 	    struct pcibus_attach_args *);
 int	ixp425_pci_bus_maxdevs(void *, int);
 void	ixp425_pci_decompose_tag(void *, pcitag_t, int *, int *, int *);
 void	ixp425_pci_conf_setup(void *, struct ixp425_softc *, pcitag_t, int);
 void	ixp425_pci_conf_write(void *, pcitag_t, int, pcireg_t);
-void	ixp425_pci_conf_interrupt(void *, int, int, int, int, int *);
 pcitag_t ixp425_pci_make_tag(void *, int, int, int);
 pcireg_t ixp425_pci_conf_read(void *, pcitag_t, int);
 
@@ -81,7 +86,6 @@ ixp425_pci_init(struct ixp425_softc *sc)
 	pc->pc_decompose_tag = ixp425_pci_decompose_tag;
 	pc->pc_conf_read = ixp425_pci_conf_read;
 	pc->pc_conf_write = ixp425_pci_conf_write;
-	pc->pc_conf_interrupt = ixp425_pci_conf_interrupt;
 
 	/*
 	 * Initialize the bus space tags.
@@ -91,13 +95,13 @@ ixp425_pci_init(struct ixp425_softc *sc)
 
 #if NPCI > 0 && defined(PCI_NETBSD_CONFIGURE)
 	ioext  = extent_create("pciio", 0, IXP425_PCI_IO_SIZE - 1,
-				NULL, 0, EX_NOWAIT);
+				M_DEVBUF, NULL, 0, EX_NOWAIT);
 	/* PCI MEM space is mapped same address as real memory */
 	memext = extent_create("pcimem", IXP425_PCI_MEM_HWBASE,
 				IXP425_PCI_MEM_HWBASE +
 				IXP425_PCI_MEM_SIZE - 1,
-				NULL, 0, EX_NOWAIT);
-	aprint_normal_dev(sc->sc_dev, "configuring PCI bus\n");
+				M_DEVBUF, NULL, 0, EX_NOWAIT);
+	printf("%s: configuring PCI bus\n", sc->sc_dev.dv_xname);
 	pci_configure_bus(pc, ioext, memext, NULL, 0 /* XXX bus = 0 */,
 			  arm_dcache_align);
 
@@ -107,12 +111,12 @@ ixp425_pci_init(struct ixp425_softc *sc)
 }
 
 void
-ixp425_pci_conf_interrupt(void *v, int a, int b, int c, int d, int *p)
+pci_conf_interrupt(pci_chipset_tag_t pc, int a, int b, int c, int d, int *p)
 {
 }
 
 void
-ixp425_pci_attach_hook(device_t parent, device_t self,
+ixp425_pci_attach_hook(struct device *parent, struct device *self,
 	struct pcibus_attach_args *pba)
 {
 	/* Nothing to do. */
@@ -179,7 +183,7 @@ pcireg_t
 ixp425_pci_conf_read(void *v, pcitag_t tag, int offset)
 {
 	struct ixp425_softc *sc = v;
-	uint32_t data;
+	u_int32_t data;
 	pcireg_t rv;
 	int s;
 #define PCI_NP_HAVE_BUG
@@ -223,7 +227,7 @@ void
 ixp425_pci_conf_write(void *v, pcitag_t tag, int offset, pcireg_t val)
 {
 	struct ixp425_softc *sc = v;
-	uint32_t data;
+	u_int32_t data;
 	int s;
 
 	PCI_CONF_LOCK(s);

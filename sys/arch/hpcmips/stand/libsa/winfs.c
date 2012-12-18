@@ -1,4 +1,4 @@
-/*	$NetBSD: winfs.c,v 1.5 2009/03/14 21:04:09 dsl Exp $	*/
+/*	$NetBSD: winfs.c,v 1.3 2006/01/25 18:28:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 Shin Takemura.
@@ -50,7 +50,9 @@ struct winfs {
 
 
 int 
-win_open(char *path, struct open_file *f)
+win_open(path, f)
+	char           *path;
+	struct open_file *f;
 {
 	TCHAR *wpath = (TCHAR*)path;
 	struct winfs *fsdata;
@@ -76,7 +78,8 @@ win_open(char *path, struct open_file *f)
 
 
 int 
-win_close(struct open_file *f)
+win_close(f)
+	struct open_file *f;
 {
 	struct winfs *fsdata = (struct winfs *) f->f_fsdata;
 
@@ -90,8 +93,11 @@ win_close(struct open_file *f)
 
 
 int 
-win_read(struct open_file *f, void *addr, size_t size, size_t *resid)
-	/* resid:	 out */
+win_read(f, addr, size, resid)
+	struct open_file *f;
+	void           *addr;
+	size_t         size;
+	size_t         *resid;	/* out */
 {
 	struct winfs *fsdata = (struct winfs *) f->f_fsdata;
 	DWORD read_len;
@@ -116,15 +122,20 @@ win_read(struct open_file *f, void *addr, size_t size, size_t *resid)
 }
 
 int 
-win_write(struct open_file *f, void *start, size_t size, size_t *resid)
-	/* resid:	 out */
+win_write(f, start, size, resid)
+	struct open_file *f;
+	void           *start;
+	size_t          size;
+	size_t         *resid;	/* out */
 {
 	return (EROFS);	/* XXX */
 }
 
 
 int 
-win_stat(struct open_file *f, struct stat *sb)
+win_stat(f, sb)
+	struct open_file *f;
+	struct stat    *sb;
 {
 	sb->st_mode = 0444;
 	sb->st_nlink = 1;
@@ -135,7 +146,10 @@ win_stat(struct open_file *f, struct stat *sb)
 }
 
 off_t 
-win_seek(struct open_file *f, off_t offset, int whence)
+win_seek(f, offset, whence)
+	struct open_file *f;
+	off_t           offset;
+	int             whence;
 {
 	struct winfs *fsdata = (struct winfs *) f->f_fsdata;
 	DWORD dwPointer;

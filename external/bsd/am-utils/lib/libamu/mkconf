@@ -1,4 +1,4 @@
-#	$NetBSD: mkconf,v 1.2 2009/06/12 15:44:58 christos Exp $
+#	$NetBSD: mkconf,v 1.1.6.1 2009/06/17 20:18:33 bouyer Exp $
 #
 # mkconf
 # Generate local configuration parameters for amd

@@ -1,4 +1,4 @@
-/* $NetBSD: if_ti.c,v 1.91 2012/10/27 17:18:34 chs Exp $ */
+/* $NetBSD: if_ti.c,v 1.81 2008/04/10 19:13:37 cegger Exp $ */
 
 /*
  * Copyright (c) 1997, 1998, 1999
@@ -81,8 +81,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ti.c,v 1.91 2012/10/27 17:18:34 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ti.c,v 1.81 2008/04/10 19:13:37 cegger Exp $");
 
+#include "bpfilter.h"
 #include "opt_inet.h"
 
 #include <sys/param.h>
@@ -96,13 +97,17 @@ __KERNEL_RCSID(0, "$NetBSD: if_ti.c,v 1.91 2012/10/27 17:18:34 chs Exp $");
 #include <sys/device.h>
 #include <sys/reboot.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_ether.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -144,9 +149,9 @@ static const struct ti_type ti_devs[] = {
 };
 
 static const struct ti_type *ti_type_match(struct pci_attach_args *);
-static int ti_probe(device_t, cfdata_t, void *);
-static void ti_attach(device_t, device_t, void *);
-static bool ti_shutdown(device_t, int);
+static int ti_probe(struct device *, struct cfdata *, void *);
+static void ti_attach(struct device *, struct device *, void *);
+static void ti_shutdown(void *);
 static void ti_txeof_tigon1(struct ti_softc *);
 static void ti_txeof_tigon2(struct ti_softc *);
 static void ti_rxeof(struct ti_softc *);
@@ -199,7 +204,7 @@ static int ti_gibinit(struct ti_softc *);
 
 static int ti_ether_ioctl(struct ifnet *, u_long, void *);
 
-CFATTACH_DECL_NEW(ti, sizeof(struct ti_softc),
+CFATTACH_DECL(ti, sizeof(struct ti_softc),
     ti_probe, ti_attach, NULL, NULL);
 
 /*
@@ -263,7 +268,7 @@ ti_eeprom_getbyte(struct ti_softc *sc, int addr, u_int8_t *dest)
 	 */
 	if (ti_eeprom_putbyte(sc, EEPROM_CTL_WRITE)) {
 		printf("%s: failed to send write command, status: %x\n",
-		    device_xname(sc->sc_dev), CSR_READ_4(sc, TI_MISC_LOCAL_CTL));
+		    device_xname(&sc->sc_dev), CSR_READ_4(sc, TI_MISC_LOCAL_CTL));
 		return (1);
 	}
 
@@ -272,7 +277,7 @@ ti_eeprom_getbyte(struct ti_softc *sc, int addr, u_int8_t *dest)
 	 */
 	if (ti_eeprom_putbyte(sc, (addr >> 8) & 0xFF)) {
 		printf("%s: failed to send address, status: %x\n",
-		    device_xname(sc->sc_dev), CSR_READ_4(sc, TI_MISC_LOCAL_CTL));
+		    device_xname(&sc->sc_dev), CSR_READ_4(sc, TI_MISC_LOCAL_CTL));
 		return (1);
 	}
 	/*
@@ -280,7 +285,7 @@ ti_eeprom_getbyte(struct ti_softc *sc, int addr, u_int8_t *dest)
 	 */
 	if (ti_eeprom_putbyte(sc, addr & 0xFF)) {
 		printf("%s: failed to send address, status: %x\n",
-		    device_xname(sc->sc_dev), CSR_READ_4(sc, TI_MISC_LOCAL_CTL));
+		    device_xname(&sc->sc_dev), CSR_READ_4(sc, TI_MISC_LOCAL_CTL));
 		return (1);
 	}
 
@@ -291,7 +296,7 @@ ti_eeprom_getbyte(struct ti_softc *sc, int addr, u_int8_t *dest)
 	 */
 	if (ti_eeprom_putbyte(sc, EEPROM_CTL_READ)) {
 		printf("%s: failed to send read command, status: %x\n",
-		    device_xname(sc->sc_dev), CSR_READ_4(sc, TI_MISC_LOCAL_CTL));
+		    device_xname(&sc->sc_dev), CSR_READ_4(sc, TI_MISC_LOCAL_CTL));
 		return (1);
 	}
 
@@ -397,7 +402,7 @@ ti_loadfw(struct ti_softc *sc)
 		    tigonFwReleaseMinor != TI_FIRMWARE_MINOR ||
 		    tigonFwReleaseFix != TI_FIRMWARE_FIX) {
 			printf("%s: firmware revision mismatch; want "
-			    "%d.%d.%d, got %d.%d.%d\n", device_xname(sc->sc_dev),
+			    "%d.%d.%d, got %d.%d.%d\n", device_xname(&sc->sc_dev),
 			    TI_FIRMWARE_MAJOR, TI_FIRMWARE_MINOR,
 			    TI_FIRMWARE_FIX, tigonFwReleaseMajor,
 			    tigonFwReleaseMinor, tigonFwReleaseFix);
@@ -415,7 +420,7 @@ ti_loadfw(struct ti_softc *sc)
 		    tigon2FwReleaseMinor != TI_FIRMWARE_MINOR ||
 		    tigon2FwReleaseFix != TI_FIRMWARE_FIX) {
 			printf("%s: firmware revision mismatch; want "
-			    "%d.%d.%d, got %d.%d.%d\n", device_xname(sc->sc_dev),
+			    "%d.%d.%d, got %d.%d.%d\n", device_xname(&sc->sc_dev),
 			    TI_FIRMWARE_MAJOR, TI_FIRMWARE_MINOR,
 			    TI_FIRMWARE_FIX, tigon2FwReleaseMajor,
 			    tigon2FwReleaseMinor, tigon2FwReleaseFix);
@@ -431,7 +436,7 @@ ti_loadfw(struct ti_softc *sc)
 		break;
 	default:
 		printf("%s: can't load firmware: unknown hardware rev\n",
-		    device_xname(sc->sc_dev));
+		    device_xname(&sc->sc_dev));
 		break;
 	}
 
@@ -494,24 +499,24 @@ ti_handle_events(struct ti_softc *sc)
 			sc->ti_linkstat = TI_EVENT_CODE(e);
 			if (sc->ti_linkstat == TI_EV_CODE_LINK_UP)
 				printf("%s: 10/100 link up\n",
-				       device_xname(sc->sc_dev));
+				       device_xname(&sc->sc_dev));
 			else if (sc->ti_linkstat == TI_EV_CODE_GIG_LINK_UP)
 				printf("%s: gigabit link up\n",
-				       device_xname(sc->sc_dev));
+				       device_xname(&sc->sc_dev));
 			else if (sc->ti_linkstat == TI_EV_CODE_LINK_DOWN)
 				printf("%s: link down\n",
-				       device_xname(sc->sc_dev));
+				       device_xname(&sc->sc_dev));
 			break;
 		case TI_EV_ERROR:
 			if (TI_EVENT_CODE(e) == TI_EV_CODE_ERR_INVAL_CMD)
 				printf("%s: invalid command\n",
-				       device_xname(sc->sc_dev));
+				       device_xname(&sc->sc_dev));
 			else if (TI_EVENT_CODE(e) == TI_EV_CODE_ERR_UNIMP_CMD)
 				printf("%s: unknown command\n",
-				       device_xname(sc->sc_dev));
+				       device_xname(&sc->sc_dev));
 			else if (TI_EVENT_CODE(e) == TI_EV_CODE_ERR_BADCFG)
 				printf("%s: bad config data\n",
-				       device_xname(sc->sc_dev));
+				       device_xname(&sc->sc_dev));
 			break;
 		case TI_EV_FIRMWARE_UP:
 			ti_init2(sc);
@@ -525,7 +530,7 @@ ti_handle_events(struct ti_softc *sc)
 			break;
 		default:
 			printf("%s: unknown event: %d\n",
-			    device_xname(sc->sc_dev), TI_EVENT_EVENT(e));
+			    device_xname(&sc->sc_dev), TI_EVENT_EVENT(e));
 			break;
 		}
 		/* Advance the consumer index. */
@@ -572,7 +577,7 @@ ti_alloc_jumbo_mem(struct ti_softc *sc)
 	if ((error = bus_dmamem_alloc(sc->sc_dmat,
 	    TI_JMEM, PAGE_SIZE, 0, &dmaseg, 1, &dmanseg,
 	    BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't allocate jumbo buffer, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't allocate jumbo buffer, error = %d\n",
 		       error);
 		return (error);
 	}
@@ -580,7 +585,7 @@ ti_alloc_jumbo_mem(struct ti_softc *sc)
 	if ((error = bus_dmamem_map(sc->sc_dmat, &dmaseg, dmanseg,
 	    TI_JMEM, (void **)&sc->ti_cdata.ti_jumbo_buf,
 	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't map jumbo buffer, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't map jumbo buffer, error = %d\n",
 		       error);
 		return (error);
 	}
@@ -589,7 +594,7 @@ ti_alloc_jumbo_mem(struct ti_softc *sc)
 	    TI_JMEM, 1,
 	    TI_JMEM, 0, BUS_DMA_NOWAIT,
 	    &sc->jumbo_dmamap)) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't create jumbo buffer DMA map, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't create jumbo buffer DMA map, error = %d\n",
 		       error);
 		return (error);
 	}
@@ -597,7 +602,7 @@ ti_alloc_jumbo_mem(struct ti_softc *sc)
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->jumbo_dmamap,
 	    sc->ti_cdata.ti_jumbo_buf, TI_JMEM, NULL,
 	    BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't load jumbo buffer DMA map, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't load jumbo buffer DMA map, error = %d\n",
 		       error);
 		return (error);
 	}
@@ -620,7 +625,7 @@ ti_alloc_jumbo_mem(struct ti_softc *sc)
 			free(sc->ti_cdata.ti_jumbo_buf, M_DEVBUF);
 			sc->ti_cdata.ti_jumbo_buf = NULL;
 			printf("%s: no memory for jumbo "
-			    "buffer queue!\n", device_xname(sc->sc_dev));
+			    "buffer queue!\n", device_xname(&sc->sc_dev));
 			return (ENOBUFS);
 		}
 		entry->slot = i;
@@ -642,7 +647,7 @@ ti_jalloc(struct ti_softc *sc)
 	entry = SIMPLEQ_FIRST(&sc->ti_jfree_listhead);
 
 	if (entry == NULL) {
-		printf("%s: no free jumbo buffers\n", device_xname(sc->sc_dev));
+		printf("%s: no free jumbo buffers\n", device_xname(&sc->sc_dev));
 		return (NULL);
 	}
 
@@ -706,7 +711,7 @@ ti_newbuf_std(struct ti_softc *sc, int i, struct mbuf *m, bus_dmamap_t dmamap)
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES, 1,
 					       MCLBYTES, 0, BUS_DMA_NOWAIT,
 					       &dmamap)) != 0) {
-			aprint_error_dev(sc->sc_dev, "can't create recv map, error = %d\n",
+			aprint_error_dev(&sc->sc_dev, "can't create recv map, error = %d\n",
 			       error);
 			return (ENOMEM);
 		}
@@ -716,14 +721,14 @@ ti_newbuf_std(struct ti_softc *sc, int i, struct mbuf *m, bus_dmamap_t dmamap)
 	if (m == NULL) {
 		MGETHDR(m_new, M_DONTWAIT, MT_DATA);
 		if (m_new == NULL) {
-			aprint_error_dev(sc->sc_dev, "mbuf allocation failed "
+			aprint_error_dev(&sc->sc_dev, "mbuf allocation failed "
 			    "-- packet dropped!\n");
 			return (ENOBUFS);
 		}
 
 		MCLGET(m_new, M_DONTWAIT);
 		if (!(m_new->m_flags & M_EXT)) {
-			aprint_error_dev(sc->sc_dev, "cluster allocation failed "
+			aprint_error_dev(&sc->sc_dev, "cluster allocation failed "
 			    "-- packet dropped!\n");
 			m_freem(m_new);
 			return (ENOBUFS);
@@ -734,7 +739,7 @@ ti_newbuf_std(struct ti_softc *sc, int i, struct mbuf *m, bus_dmamap_t dmamap)
 		if ((error = bus_dmamap_load(sc->sc_dmat, dmamap,
 				mtod(m_new, void *), m_new->m_len, NULL,
 				BUS_DMA_READ|BUS_DMA_NOWAIT)) != 0) {
-			aprint_error_dev(sc->sc_dev, "can't load recv map, error = %d\n",
+			aprint_error_dev(&sc->sc_dev, "can't load recv map, error = %d\n",
 			       error);
 			return (ENOMEM);
 		}
@@ -780,7 +785,7 @@ ti_newbuf_mini(struct ti_softc *sc, int i, struct mbuf *m, bus_dmamap_t dmamap)
 		if ((error = bus_dmamap_create(sc->sc_dmat, MHLEN, 1,
 					       MHLEN, 0, BUS_DMA_NOWAIT,
 					       &dmamap)) != 0) {
-			aprint_error_dev(sc->sc_dev, "can't create recv map, error = %d\n",
+			aprint_error_dev(&sc->sc_dev, "can't create recv map, error = %d\n",
 			       error);
 			return (ENOMEM);
 		}
@@ -790,7 +795,7 @@ ti_newbuf_mini(struct ti_softc *sc, int i, struct mbuf *m, bus_dmamap_t dmamap)
 	if (m == NULL) {
 		MGETHDR(m_new, M_DONTWAIT, MT_DATA);
 		if (m_new == NULL) {
-			aprint_error_dev(sc->sc_dev, "mbuf allocation failed "
+			aprint_error_dev(&sc->sc_dev, "mbuf allocation failed "
 			    "-- packet dropped!\n");
 			return (ENOBUFS);
 		}
@@ -800,7 +805,7 @@ ti_newbuf_mini(struct ti_softc *sc, int i, struct mbuf *m, bus_dmamap_t dmamap)
 		if ((error = bus_dmamap_load(sc->sc_dmat, dmamap,
 				mtod(m_new, void *), m_new->m_len, NULL,
 				BUS_DMA_READ|BUS_DMA_NOWAIT)) != 0) {
-			aprint_error_dev(sc->sc_dev, "can't load recv map, error = %d\n",
+			aprint_error_dev(&sc->sc_dev, "can't load recv map, error = %d\n",
 			       error);
 			return (ENOMEM);
 		}
@@ -845,7 +850,7 @@ ti_newbuf_jumbo(struct ti_softc *sc, int i, struct mbuf *m)
 		/* Allocate the mbuf. */
 		MGETHDR(m_new, M_DONTWAIT, MT_DATA);
 		if (m_new == NULL) {
-			aprint_error_dev(sc->sc_dev, "mbuf allocation failed "
+			aprint_error_dev(&sc->sc_dev, "mbuf allocation failed "
 			    "-- packet dropped!\n");
 			return (ENOBUFS);
 		}
@@ -854,7 +859,7 @@ ti_newbuf_jumbo(struct ti_softc *sc, int i, struct mbuf *m)
 		tbuf = ti_jalloc(sc);
 		if (tbuf == NULL) {
 			m_freem(m_new);
-			aprint_error_dev(sc->sc_dev, "jumbo allocation failed "
+			aprint_error_dev(&sc->sc_dev, "jumbo allocation failed "
 			    "-- packet dropped!\n");
 			return (ENOBUFS);
 		}
@@ -1053,13 +1058,13 @@ ti_init_tx_ring(struct ti_softc *sc)
 		if ((error = bus_dmamap_create(sc->sc_dmat, ETHER_MAX_LEN_JUMBO,
 					       40, ETHER_MAX_LEN_JUMBO, 0,
 					       BUS_DMA_NOWAIT, &dmamap)) != 0) {
-			aprint_error_dev(sc->sc_dev, "can't create tx map, error = %d\n",
+			aprint_error_dev(&sc->sc_dev, "can't create tx map, error = %d\n",
 			       error);
 			return (ENOMEM);
 		}
 		dma = malloc(sizeof(*dma), M_DEVBUF, M_NOWAIT);
 		if (!dma) {
-			aprint_error_dev(sc->sc_dev, "can't alloc txdmamap_pool_entry\n");
+			aprint_error_dev(&sc->sc_dev, "can't alloc txdmamap_pool_entry\n");
 			bus_dmamap_destroy(sc->sc_dmat, dmamap);
 			return (ENOMEM);
 		}
@@ -1096,7 +1101,7 @@ ti_add_mcast(struct ti_softc *sc, struct ether_addr *addr)
 		TI_DO_CMD_EXT(TI_CMD_EXT_ADD_MCAST, 0, 0, (void *)&ext, 2);
 		break;
 	default:
-		printf("%s: unknown hwrev\n", device_xname(sc->sc_dev));
+		printf("%s: unknown hwrev\n", device_xname(&sc->sc_dev));
 		break;
 	}
 
@@ -1124,7 +1129,7 @@ ti_del_mcast(struct ti_softc *sc, struct ether_addr *addr)
 		TI_DO_CMD_EXT(TI_CMD_EXT_DEL_MCAST, 0, 0, (void *)&ext, 2);
 		break;
 	default:
-		printf("%s: unknown hwrev\n", device_xname(sc->sc_dev));
+		printf("%s: unknown hwrev\n", device_xname(&sc->sc_dev));
 		break;
 	}
 
@@ -1266,7 +1271,7 @@ ti_chipinit(struct ti_softc *sc)
 	/* Check the ROM failed bit to see if self-tests passed. */
 	if (CSR_READ_4(sc, TI_CPU_STATE) & TI_CPUSTATE_ROMFAIL) {
 		printf("%s: board self-diagnostics failed!\n",
-		       device_xname(sc->sc_dev));
+		       device_xname(&sc->sc_dev));
 		return (ENODEV);
 	}
 
@@ -1284,7 +1289,7 @@ ti_chipinit(struct ti_softc *sc)
 		break;
 	default:
 		printf("%s: unsupported chip revision 0x%x\n",
-		    device_xname(sc->sc_dev), rev);
+		    device_xname(&sc->sc_dev), rev);
 		return (ENODEV);
 	}
 
@@ -1329,7 +1334,7 @@ ti_chipinit(struct ti_softc *sc)
 			if (bootverbose)
 				printf("%s: cache line size %d not "
 				    "supported; disabling PCI MWI\n",
-				    device_xname(sc->sc_dev), cacheline);
+				    device_xname(&sc->sc_dev), cacheline);
 			CSR_WRITE_4(sc, PCI_COMMAND_STATUS_REG,
 				    CSR_READ_4(sc, PCI_COMMAND_STATUS_REG)
 				    & ~PCI_COMMAND_INVALIDATE_ENABLE);
@@ -1384,7 +1389,7 @@ ti_chipinit(struct ti_softc *sc)
 
 	if (ti_64bitslot_war(sc)) {
 		printf("%s: bios thinks we're in a 64 bit slot, "
-		    "but we aren't", device_xname(sc->sc_dev));
+		    "but we aren't", device_xname(&sc->sc_dev));
 		return (EINVAL);
 	}
 
@@ -1598,7 +1603,7 @@ ti_type_match(struct pci_attach_args *pa)
  * against our list and return its name if we find a match.
  */
 static int
-ti_probe(device_t parent, cfdata_t match, void *aux)
+ti_probe(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	const struct ti_type		*t;
@@ -1609,7 +1614,7 @@ ti_probe(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-ti_attach(device_t parent, device_t self, void *aux)
+ti_attach(struct device *parent, struct device *self, void *aux)
 {
 	u_int32_t		command;
 	struct ifnet		*ifp;
@@ -1631,8 +1636,7 @@ ti_attach(device_t parent, device_t self, void *aux)
 
 	printf(": %s (rev. 0x%02x)\n", t->ti_name, PCI_REVISION(pa->pa_class));
 
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (struct ti_softc *)self;
 
 	/*
 	 * Map control/status registers.
@@ -1661,19 +1665,25 @@ ti_attach(device_t parent, device_t self, void *aux)
 
 	/* Allocate interrupt */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error_dev(sc->sc_dev, "couldn't map interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, ti_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			printf(" at %s", intrstr);
+		printf("\n");
 		return;
 	}
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+	printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev), intrstr);
+	/*
+	 * Add shutdown hook so that DMA is disabled prior to reboot. Not
+	 * doing do could allow DMA to corrupt kernel memory during the
+	 * reboot before the driver initializes.
+	 */
+	(void) shutdownhook_establish(ti_shutdown, sc);
 
 	if (ti_chipinit(sc)) {
 		aprint_error_dev(self, "chip initialization failed\n");
@@ -1736,7 +1746,7 @@ ti_attach(device_t parent, device_t self, void *aux)
 	if ((error = bus_dmamem_alloc(sc->sc_dmat,
 	    sizeof(struct ti_ring_data), PAGE_SIZE, 0, &dmaseg, 1, &dmanseg,
 	    BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't allocate ring buffer, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't allocate ring buffer, error = %d\n",
 		       error);
 		goto fail2;
 	}
@@ -1744,7 +1754,7 @@ ti_attach(device_t parent, device_t self, void *aux)
 	if ((error = bus_dmamem_map(sc->sc_dmat, &dmaseg, dmanseg,
 	    sizeof(struct ti_ring_data), (void **)&sc->ti_rdata,
 	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't map ring buffer, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't map ring buffer, error = %d\n",
 		       error);
 		goto fail2;
 	}
@@ -1753,7 +1763,7 @@ ti_attach(device_t parent, device_t self, void *aux)
 	    sizeof(struct ti_ring_data), 1,
 	    sizeof(struct ti_ring_data), 0, BUS_DMA_NOWAIT,
 	    &sc->info_dmamap)) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't create ring buffer DMA map, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't create ring buffer DMA map, error = %d\n",
 		       error);
 		goto fail2;
 	}
@@ -1761,7 +1771,7 @@ ti_attach(device_t parent, device_t self, void *aux)
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->info_dmamap,
 	    sc->ti_rdata, sizeof(struct ti_ring_data), NULL,
 	    BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't load ring buffer DMA map, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't load ring buffer DMA map, error = %d\n",
 		       error);
 		goto fail2;
 	}
@@ -1804,7 +1814,7 @@ ti_attach(device_t parent, device_t self, void *aux)
 	/* Set up ifnet structure */
 	ifp = &sc->ethercom.ec_if;
 	ifp->if_softc = sc;
-	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl = ti_ioctl;
 	ifp->if_start = ti_start;
@@ -1868,16 +1878,6 @@ ti_attach(device_t parent, device_t self, void *aux)
 	 */
 	if_attach(ifp);
 	ether_ifattach(ifp, eaddr);
-
-	/*
-	 * Add shutdown hook so that DMA is disabled prior to reboot. Not
-	 * doing do could allow DMA to corrupt kernel memory during the
-	 * reboot before the driver initializes.
-	 */
-	if (pmf_device_register1(self, NULL, NULL, ti_shutdown))
-		pmf_class_network_register(self, ifp);
-	else
-		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	return;
 fail2:
@@ -1971,13 +1971,16 @@ ti_rxeof(struct ti_softc *sc)
 		ifp->if_ipackets++;
 		m->m_pkthdr.rcvif = ifp;
 
+#if NBPFILTER > 0
 		/*
 	 	 * Handle BPF listeners. Let the BPF user see the packet, but
 	 	 * don't pass it up to the ether_input() layer unless it's
 	 	 * a broadcast packet, multicast packet, matches our ethernet
 	 	 * address or the interface is in promiscuous mode.
 	 	 */
-		bpf_mtap(ifp, m);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 
 		eh = mtod(m, struct ether_header *);
 		switch (ntohs(eh->ether_type)) {
@@ -2445,7 +2448,10 @@ ti_start(struct ifnet *ifp)
 		 * If there's a BPF listener, bounce a copy of this frame
 		 * to him.
 		 */
-		bpf_mtap(ifp, m_head);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m_head);
+#endif
 	}
 
 	/* Transmit */
@@ -2470,7 +2476,7 @@ ti_init(void *xsc)
 
 	/* Init the gen info block, ring control blocks and firmware. */
 	if (ti_gibinit(sc)) {
-		aprint_error_dev(sc->sc_dev, "initialization failure\n");
+		aprint_error_dev(&sc->sc_dev, "initialization failure\n");
 		splx(s);
 		return;
 	}
@@ -2490,7 +2496,7 @@ ti_init2(struct ti_softc *sc)
 	ifp = &sc->ethercom.ec_if;
 
 	/* Specify MTU and interface index. */
-	CSR_WRITE_4(sc, TI_GCR_IFINDEX, device_unit(sc->sc_dev)); /* ??? */
+	CSR_WRITE_4(sc, TI_GCR_IFINDEX, device_unit(&sc->sc_dev)); /* ??? */
 
 	tmp = ifp->if_mtu + ETHER_HDR_LEN + ETHER_CRC_LEN;
 	if (sc->ethercom.ec_capenable & ETHERCAP_VLAN_MTU)
@@ -2700,7 +2706,7 @@ ti_ether_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	}
 
 	switch (cmd) {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
@@ -2731,7 +2737,8 @@ ti_ioctl(struct ifnet *ifp, u_long command, void *data)
 	s = splnet();
 
 	switch (command) {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
+	case SIOCGIFADDR:
 		error = ti_ether_ioctl(ifp, command, data);
 		break;
 	case SIOCSIFMTU:
@@ -2743,8 +2750,6 @@ ti_ioctl(struct ifnet *ifp, u_long command, void *data)
 		}
 		break;
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, command, data)) != 0)
-			break;
 		if (ifp->if_flags & IFF_UP) {
 			/*
 			 * If only the state of the PROMISC flag changed,
@@ -2805,7 +2810,7 @@ ti_watchdog(struct ifnet *ifp)
 
 	sc = ifp->if_softc;
 
-	aprint_error_dev(sc->sc_dev, "watchdog timeout -- resetting\n");
+	aprint_error_dev(&sc->sc_dev, "watchdog timeout -- resetting\n");
 	ti_stop(sc);
 	ti_init(sc);
 
@@ -2860,13 +2865,10 @@ ti_stop(struct ti_softc *sc)
  * Stop all chip I/O so that the kernel's probe routines don't
  * get confused by errant DMAs when rebooting.
  */
-static bool
-ti_shutdown(device_t self, int howto)
+static void
+ti_shutdown(void *v)
 {
-	struct ti_softc *sc;
+	struct ti_softc		*sc = v;
 
-	sc = device_private(self);
 	ti_chipinit(sc);
-
-	return true;
 }

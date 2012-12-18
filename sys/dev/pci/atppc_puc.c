@@ -1,4 +1,4 @@
-/* $NetBSD: atppc_puc.c,v 1.13 2012/10/27 17:18:28 chs Exp $ */
+/* $NetBSD: atppc_puc.c,v 1.10 2008/04/28 20:23:54 martin Exp $ */
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #include "opt_atppc.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atppc_puc.c,v 1.13 2012/10/27 17:18:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atppc_puc.c,v 1.10 2008/04/28 20:23:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,6 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: atppc_puc.c,v 1.13 2012/10/27 17:18:28 chs Exp $");
 #include <sys/termios.h>
 
 #include <sys/bus.h>
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pucvar.h>
@@ -115,11 +116,11 @@ atppc_puc_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_ieh == NULL) {
 		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			printf(" at %s", intrstr);
+		printf("\n");
 		return;
 	}
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+	printf("%s: interrupting at %s\n", device_xname(sc->sc_dev), intrstr);
 	sc->sc_has |= ATPPC_HAS_INTR;
 
 	/* setup DMA hooks */
@@ -159,10 +160,11 @@ atppc_puc_dma_setup(struct atppc_puc_softc *psc)
 
 /* Start DMA operation over PCI bus */
 static int
-atppc_puc_dma_start(struct atppc_softc *sc, void *buf, u_int nbytes,
+atppc_puc_dma_start(struct atppc_softc *dev, void *buf, u_int nbytes,
 	u_int8_t mode)
 {
-	struct atppc_puc_softc *psc = (struct atppc_puc_softc *)sc;
+	struct atppc_puc_softc *psc = (struct atppc_puc_softc *) dev;
+	struct atppc_softc *sc = &psc->sc_atppc;
 
 	bus_dmamap_sync(sc->sc_dmat, psc->sc_dmamap, 0, nbytes,
 	    (mode == ATPPC_DMA_MODE_WRITE) ? BUS_DMASYNC_PREWRITE
@@ -173,10 +175,11 @@ atppc_puc_dma_start(struct atppc_softc *sc, void *buf, u_int nbytes,
 
 /* Stop DMA operation over PCI bus */
 static int
-atppc_puc_dma_finish(struct atppc_softc *sc)
+atppc_puc_dma_finish(struct atppc_softc *dev)
 {
 
-	struct atppc_puc_softc *psc = (struct atppc_puc_softc *)sc;
+	struct atppc_puc_softc *psc = (struct atppc_puc_softc *) dev;
+	struct atppc_softc *sc = &psc->sc_atppc;
 
 	/*
 	 * We don't know direction of DMA, so sync both. We can safely

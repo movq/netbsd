@@ -1,4 +1,4 @@
-/* $NetBSD: com_jensenio.c,v 1.13 2011/07/01 19:22:35 dyoung Exp $ */
+/* $NetBSD: com_jensenio.c,v 1.10 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: com_jensenio.c,v 1.13 2011/07/01 19:22:35 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_jensenio.c,v 1.10 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,6 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: com_jensenio.c,v 1.13 2011/07/01 19:22:35 dyoung Exp
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -48,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: com_jensenio.c,v 1.13 2011/07/01 19:22:35 dyoung Exp
 #include <sys/device.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -108,7 +109,7 @@ com_jensenio_attach(device_t parent, device_t self, void *aux)
 
 	com_attach_subr(sc);
 
-	scb_set(ja->ja_irq[0], com_jensenio_intr, jsc, IPL_VM);
+	scb_set(ja->ja_irq[0], com_jensenio_intr, sc, IPL_VM);
 	aprint_normal_dev(self, "interrupting at vector 0x%x\n",
 	    ja->ja_irq[0]);
 

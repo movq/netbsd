@@ -1,4 +1,4 @@
-/*	$NetBSD: if.c,v 1.30 2012/06/24 16:24:34 kardel Exp $	*/
+/*	$NetBSD: if.c,v 1.26.16.1 2010/11/21 21:30:20 riz Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -37,7 +37,7 @@
 #include "pathnames.h"
 
 #ifdef __NetBSD__
-__RCSID("$NetBSD: if.c,v 1.30 2012/06/24 16:24:34 kardel Exp $");
+__RCSID("$NetBSD: if.c,v 1.26.16.1 2010/11/21 21:30:20 riz Exp $");
 #elif defined(__FreeBSD__)
 __RCSID("$FreeBSD$");
 #else
@@ -286,7 +286,7 @@ iflookup(naddr addr)
 naddr					/* host byte order */
 std_mask(naddr addr)			/* network byte order */
 {
-	addr = ntohl(addr);		/* was a host, not a network */
+	NTOHL(addr);			/* was a host, not a network */
 
 	if (addr == 0)			/* default route has mask 0 */
 		return 0;
@@ -374,7 +374,7 @@ ripv1_mask_host(naddr addr,		/* in network byte order */
 int					/* 0=bad */
 check_dst(naddr addr)
 {
-	addr = ntohl(addr);
+	NTOHL(addr);
 
 	if (IN_CLASSA(addr)) {
 		if (addr == 0)
@@ -641,9 +641,6 @@ rt_xaddrs(struct rt_addrinfo *info,
 #ifdef _HAVE_SA_LEN
 	static struct sockaddr sa_zero;
 #endif
-#if defined(__NetBSD__) && defined(RT_ROUNDUP)
-#define ROUNDUP(a) RT_ROUNDUP(a)
-#else
 #ifdef sgi
 #define ROUNDUP(a) ((a) > 0 ? (1 + (((a) - 1) | (sizeof(__uint64_t) - 1))) \
 		    : sizeof(__uint64_t))
@@ -651,7 +648,6 @@ rt_xaddrs(struct rt_addrinfo *info,
 #define ROUNDUP(a) ((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) \
 		    : sizeof(long))
 #endif
-#endif /* defined(__NetBSD__) && defined(RT_ROUNDUP) */
 
 
 	memset(info, 0, sizeof(*info));
@@ -986,10 +982,9 @@ ifinit(void)
 				} else if (now.tv_sec>(ifp->int_data.ts
 						       + CHECK_BAD_INTERVAL)) {
 					trace_act("interface %s has been off"
-						  " %lld seconds; forget it",
+						  " %ld seconds; forget it",
 						  ifp->int_name,
-						  (long long)now.tv_sec -
-						  ifp->int_data.ts);
+						  now.tv_sec-ifp->int_data.ts);
 					ifdel(ifp);
 					ifp = 0;
 				}

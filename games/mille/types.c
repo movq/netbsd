@@ -1,4 +1,4 @@
-/*	$NetBSD: types.c,v 1.10 2009/05/25 23:34:50 dholland Exp $	*/
+/*	$NetBSD: types.c,v 1.8 2003/08/07 09:37:26 agc Exp $	*/
 
 /*
  * Copyright (c) 1982, 1993
@@ -34,18 +34,19 @@
 #if 0
 static char sccsid[] = "@(#)types.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: types.c,v 1.10 2009/05/25 23:34:50 dholland Exp $");
+__RCSID("$NetBSD: types.c,v 1.8 2003/08/07 09:37:26 agc Exp $");
 #endif
 #endif /* not lint */
 
-#include "mille.h"
+# include	"mille.h"
 
 /*
  * @(#)types.c	1.1 (Berkeley) 4/1/82
  */
 
 int
-is_repair(CARD card)
+is_repair(card)
+	CARD	card; 
 {
 
 	return card == C_GAS || card == C_SPARE ||
@@ -53,7 +54,8 @@ is_repair(CARD card)
 }
 
 int
-safety(CARD card)
+safety(card)
+	CARD	card;
 {
 	switch (card) {
 	  case C_EMPTY:

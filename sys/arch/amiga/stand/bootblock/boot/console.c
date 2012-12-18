@@ -1,4 +1,4 @@
-/* $NetBSD: console.c,v 1.13 2009/10/17 11:18:18 mlelstv Exp $ */
+/* $NetBSD: console.c,v 1.8 2008/04/28 20:23:13 martin Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -115,10 +115,6 @@ consinit(void *consptr) {
 	if (OpenDevice("timer.device", 0, (struct AmigaIO*)mc->tmior, 0))
 		goto err;
 
-#ifdef SERCONSOLE
-	RawIOInit();
-#endif
-
 	ConsoleBase = mc;
 	return 0;
 
@@ -147,7 +143,7 @@ err:
 
 #ifdef _PRIMARY_BOOT
 int
-consclose(void)
+consclose()
 {
 	struct Console *mc = ConsoleBase;
 
@@ -179,49 +175,35 @@ consclose(void)
 #endif
 
 void
-putchar(int c)
+putchar(c)
+	char c;
 {
 	struct Console *mc = ConsoleBase;
-	char buf = c;
 
 	mc->cnior->length = 1;
-	mc->cnior->buf = &buf;
+	mc->cnior->buf = &c;
 	mc->cnior->cmd = Cmd_Wr;
-
-#ifdef SERCONSOLE
-	RawPutChar((int32_t)c);
-#endif
-
 	(void)DoIO(mc->cnior);
 }
 
 void
-puts(char *s)
+puts(s)
+	char *s;
 {
 	struct Console *mc = ConsoleBase;
 
 	mc->cnior->length = -1;
 	mc->cnior->buf = s;
 	mc->cnior->cmd = Cmd_Wr;
-
-#ifdef SERCONSOLE
-	while (*s)
-		RawPutChar(*s++);
-#endif
-
 	(void)DoIO(mc->cnior);
 }
 
 int
-getchar(void)
+getchar()
 {
 	struct AmigaIO *ior;
-	char c = '\n';
+	char c = -1;
 	struct Console *mc = ConsoleBase;
-	unsigned long ticks;
-#ifdef SERCONSOLE
-	int32_t r;
-#endif
 
 	mc->cnior->length = 1;
 	mc->cnior->buf = &c;
@@ -229,37 +211,22 @@ getchar(void)
 
 	SendIO(mc->cnior);
 
-	ticks = 10 * timelimit;
-	do {
-		if (timelimit == 0)
-			ticks = 2;
-
+	if (timelimit) {
 		mc->tmior->cmd = Cmd_Addtimereq;
-		mc->tmior->secs = 0;
-		mc->tmior->usec = 100000;
+		mc->tmior->secs = timelimit;
+		mc->tmior->usec = 2; /* Paranoid */
 		SendIO((struct AmigaIO *)mc->tmior);
 
 		ior = WaitPort(mc->cnmp);
-		if (ior == mc->cnior) {
+		if (ior == mc->cnior)
 			AbortIO((struct AmigaIO *)mc->tmior);
-			ticks = 1;
-		} else /* if (ior == mc->tmior) */ {
-#ifdef SERCONSOLE
-			r = RawMayGetChar();
-			if (r != -1) {
-				c = r;
-				ticks = 1;
-			}
-#endif
-			if (ticks == 1)
-				AbortIO((struct AmigaIO *)mc->cnior);
+		else /* if (ior == mc->tmior) */ {
+			AbortIO(mc->cnior);
+			c = '\n';
 		}
 		WaitIO((struct AmigaIO *)mc->tmior);
-
-		--ticks;
-	} while (ticks != 0);
-	timelimit = 0;
-
+		timelimit = 0;
+	}
 	(void)WaitIO(mc->cnior);
 	return c;
 }

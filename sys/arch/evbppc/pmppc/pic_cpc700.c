@@ -1,4 +1,4 @@
-/* $NetBSD: pic_cpc700.c,v 1.6 2011/07/01 19:03:09 dyoung Exp $ */
+/* $NetBSD: pic_cpc700.c,v 1.4 2008/04/28 20:23:17 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,15 +30,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_cpc700.c,v 1.6 2011/07/01 19:03:09 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_cpc700.c,v 1.4 2008/04/28 20:23:17 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <machine/pio.h>
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arch/powerpc/pic/picvar.h>
 

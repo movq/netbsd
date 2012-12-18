@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.rip.c,v 1.12 2009/08/12 07:28:41 dholland Exp $	*/
+/*	$NetBSD: hack.rip.c,v 1.8.10.2 2009/06/29 23:33:53 snj Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.rip.c,v 1.12 2009/08/12 07:28:41 dholland Exp $");
+__RCSID("$NetBSD: hack.rip.c,v 1.8.10.2 2009/06/29 23:33:53 snj Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
@@ -83,10 +83,8 @@ static const char    *ripbot = "\
                  *|     *  *  *      | *\n\
         _________)/\\\\_//(\\/(/\\)/\\//\\/|_)_______";
 
-static void center(int, char *);
-
 void
-outrip(void)
+outrip()
 {
 	char            buf[BUFSZ];
 
@@ -126,8 +124,10 @@ outrip(void)
 	getret();
 }
 
-static void
-center(int line __unused, char *text)
+void
+center(line, text)
+	int             line __unused;
+	char           *text;
 {
 	int             n = strlen(text) / 2;
 	printf(ripmid, 8 + n, text, 8 - n, "");

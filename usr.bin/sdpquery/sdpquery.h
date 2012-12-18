@@ -1,4 +1,4 @@
-/*	$NetBSD: sdpquery.h,v 1.3 2009/05/12 18:37:50 plunky Exp $	*/
+/*	$NetBSD: sdpquery.h,v 1.2 2006/07/26 10:54:49 tron Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -31,14 +31,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef __BTQUERY_H__
+#define __BTQUERY_H__
+
 extern const char *control_socket;
-extern bdaddr_t local_addr;
-extern bdaddr_t remote_addr;
 
-extern bool Nflag, Rflag, Xflag;
+int do_sdp_browse(bdaddr_t *, bdaddr_t *, int, char const **);
+int do_sdp_search(bdaddr_t *, bdaddr_t *, int, char const **);
 
-int do_sdp_browse(int, const char **);
-int do_sdp_record(int, const char **);
-int do_sdp_search(int, const char **);
-
-void print_record(sdp_data_t *);
+#endif /* __BTQUERY_H__ */

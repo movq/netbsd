@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_accf.c,v 1.12 2010/08/21 13:19:39 pgoyette Exp $	*/
+/*	$NetBSD: uipc_accf.c,v 1.6 2008/10/15 08:25:28 ad Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_accf.c,v 1.12 2010/08/21 13:19:39 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_accf.c,v 1.6 2008/10/15 08:25:28 ad Exp $");
 
 #define ACCEPT_FILTER_MOD
 
@@ -69,6 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_accf.c,v 1.12 2010/08/21 13:19:39 pgoyette Exp 
 #include <sys/lock.h>
 #include <sys/kmem.h>
 #include <sys/mbuf.h>
+#include <sys/lkm.h>
 #include <sys/rwlock.h>
 #include <sys/protosw.h>
 #include <sys/sysctl.h>
@@ -77,7 +78,6 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_accf.c,v 1.12 2010/08/21 13:19:39 pgoyette Exp 
 #include <sys/queue.h>
 #include <sys/once.h>
 #include <sys/atomic.h>
-#include <sys/module.h>
 
 static krwlock_t accept_filter_lock;
 
@@ -87,22 +87,20 @@ static LIST_HEAD(, accept_filter) accept_filtlsthd =
 /*
  * Names of Accept filter sysctl objects
  */
-static struct sysctllog *ctllog;
-static void
-sysctl_net_inet_accf_setup(void)
+SYSCTL_SETUP(sysctl_net_inet_accf_setup, "sysctl net.inet.accf subtree setup")
 {
 
-	sysctl_createv(&ctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "net", NULL,
 		       NULL, 0, NULL, 0,
 		       CTL_NET, CTL_EOL);
-	sysctl_createv(&ctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "inet", NULL,
 		       NULL, 0, NULL, 0,
 		       CTL_NET, PF_INET, CTL_EOL);
-	sysctl_createv(&ctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "accf",
 		       SYSCTL_DESCR("Accept filters"),
@@ -114,8 +112,6 @@ int
 accept_filt_add(struct accept_filter *filt)
 {
 	struct accept_filter *p;
-
-	accept_filter_init();
 
 	rw_enter(&accept_filter_lock, RW_WRITER);
 	LIST_FOREACH(p, &accept_filtlsthd, accf_next) {
@@ -149,27 +145,15 @@ struct accept_filter *
 accept_filt_get(char *name)
 {
 	struct accept_filter *p;
-	char buf[32];
-	u_int gen;
 
-	do {
-		rw_enter(&accept_filter_lock, RW_READER);
-		LIST_FOREACH(p, &accept_filtlsthd, accf_next) {
-			if (strcmp(p->accf_name, name) == 0) {
-				atomic_inc_uint(&p->accf_refcnt);
-				break;
-			}
-		}
-		rw_exit(&accept_filter_lock);
-		if (p != NULL) {
+	rw_enter(&accept_filter_lock, RW_READER);
+	LIST_FOREACH(p, &accept_filtlsthd, accf_next) {
+		if (strcmp(p->accf_name, name) == 0) {
+			atomic_inc_uint(&p->accf_refcnt);
 			break;
 		}
-		/* Try to autoload a module to satisfy the request. */
-		strcpy(buf, "accf_");
-		strlcat(buf, name, sizeof(buf));
-		gen = module_gen;
-		(void)module_autoload(buf, MODULE_CLASS_ANY);
-	} while (gen != module_gen);
+	}
+	rw_exit(&accept_filter_lock);
 
 	return p;
 }
@@ -184,7 +168,6 @@ accept_filter_init0(void)
 {
 
 	rw_init(&accept_filter_lock);
-	sysctl_net_inet_accf_setup();
 
 	return 0;
 }
@@ -200,6 +183,34 @@ accept_filter_init(void)
 	static ONCE_DECL(accept_filter_init_once);
 
 	RUN_ONCE(&accept_filter_init_once, accept_filter_init0);
+}
+
+int
+accept_filt_generic_mod_event(struct lkm_table *lkmtp, int event, void *data)
+{
+	struct accept_filter *accfp = (struct accept_filter *) data;
+	int error;
+
+	switch (event) {
+	case LKM_E_LOAD:
+		accept_filter_init();
+		error = accept_filt_add(accfp);
+		break;
+
+	case LKM_E_UNLOAD:
+		error = accept_filt_del(accfp);
+		break;
+
+	case LKM_E_STAT:
+		error = 0;
+		break;
+
+	default:
+		error = EOPNOTSUPP;
+		break;
+	}
+
+	return error;
 }
 
 int
@@ -285,8 +296,6 @@ accept_filt_setopt(struct socket *so, const struct sockopt *sopt)
 	struct accept_filter *afp;
 	struct so_accf *newaf;
 	int error;
-
-	accept_filter_init();
 
 	if (sopt == NULL || sopt->sopt_size == 0) {
 		solock(so);

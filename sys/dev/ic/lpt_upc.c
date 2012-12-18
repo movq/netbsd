@@ -1,4 +1,4 @@
-/* $NetBSD: lpt_upc.c,v 1.10 2009/01/25 14:34:14 bjh21 Exp $ */
+/* $NetBSD: lpt_upc.c,v 1.9.14.1 2009/02/02 00:57:44 snj Exp $ */
 /*-
  * Copyright (c) 2000 Ben Harris
  * All rights reserved.
@@ -28,7 +28,7 @@
 /* This file is part of NetBSD/arm26 -- a port of NetBSD to ARM2/3 machines. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lpt_upc.c,v 1.10 2009/01/25 14:34:14 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lpt_upc.c,v 1.9.14.1 2009/02/02 00:57:44 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

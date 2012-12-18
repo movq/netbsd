@@ -1,4 +1,4 @@
-/*	$NetBSD: memreg.c,v 1.45 2012/07/29 00:04:05 matt Exp $ */
+/*	$NetBSD: memreg.c,v 1.41 2008/05/21 14:10:28 ad Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: memreg.c,v 1.45 2012/07/29 00:04:05 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: memreg.c,v 1.41 2008/05/21 14:10:28 ad Exp $");
 
 #include "opt_sparc_arch.h"
 
@@ -68,17 +68,15 @@ __KERNEL_RCSID(0, "$NetBSD: memreg.c,v 1.45 2012/07/29 00:04:05 matt Exp $");
 #include <machine/reg.h>	/* for trapframe */
 #include <machine/trap.h>	/* for trap types */
 
-volatile u_int *par_err_reg;
+static int	memregmatch_mainbus(struct device *, struct cfdata *, void *);
+static int	memregmatch_obio(struct device *, struct cfdata *, void *);
+static void	memregattach_mainbus(struct device *, struct device *, void *);
+static void	memregattach_obio(struct device *, struct device *, void *);
 
-static int	memregmatch_mainbus(device_t, cfdata_t, void *);
-static int	memregmatch_obio(device_t, cfdata_t, void *);
-static void	memregattach_mainbus(device_t, device_t, void *);
-static void	memregattach_obio(device_t, device_t, void *);
-
-CFATTACH_DECL_NEW(memreg_mainbus, 0,
+CFATTACH_DECL(memreg_mainbus, sizeof(struct device),
     memregmatch_mainbus, memregattach_mainbus, NULL, NULL);
 
-CFATTACH_DECL_NEW(memreg_obio, 0,
+CFATTACH_DECL(memreg_obio, sizeof(struct device),
     memregmatch_obio, memregattach_obio, NULL, NULL);
 
 #if defined(SUN4M)
@@ -89,7 +87,7 @@ static void hardmemerr4m(unsigned, u_int, u_int, u_int, u_int);
  * The OPENPROM calls this "memory-error".
  */
 static int
-memregmatch_mainbus(device_t parent, cfdata_t cf, void *aux)
+memregmatch_mainbus(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -97,7 +95,7 @@ memregmatch_mainbus(device_t parent, cfdata_t cf, void *aux)
 }
 
 static int
-memregmatch_obio(device_t parent, cfdata_t cf, void *aux)
+memregmatch_obio(struct device *parent, struct cfdata *cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 
@@ -114,7 +112,7 @@ memregmatch_obio(device_t parent, cfdata_t cf, void *aux)
 
 /* ARGSUSED */
 static void
-memregattach_mainbus(device_t parent, device_t self, void *aux)
+memregattach_mainbus(struct device *parent, struct device *self, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	bus_space_handle_t bh;
@@ -138,7 +136,7 @@ memregattach_mainbus(device_t parent, device_t self, void *aux)
 
 /* ARGSUSED */
 static void
-memregattach_obio(device_t parent, device_t self, void *aux)
+memregattach_obio(struct device *parent, struct device *self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	bus_space_handle_t bh;
@@ -182,11 +180,12 @@ memerr4_4c(unsigned int issync,
 	char bits[64];
 	u_int pte;
 
-	snprintb(bits, sizeof(bits), SER_BITS, ser);
 	printf("%ssync mem arr: ser=%s sva=0x%x ",
-	    issync ? "" : "a", bits, sva);
-	snprintb(bits, sizeof(bits), AER_BITS, aer & 0xff);
-	printf("aer=%s ava=0x%x\n", bits, ava);
+		issync ? "" : "a",
+		bitmask_snprintf(ser, SER_BITS, bits, sizeof(bits)),
+		sva);
+	printf("aer=%s ava=0x%x\n", bitmask_snprintf(aer & 0xff,
+		AER_BITS, bits, sizeof(bits)), ava);
 
 	pte = getpte4(sva);
 	if ((pte & PG_V) != 0 && (pte & PG_TYPE) == PG_OBMEM) {
@@ -202,10 +201,10 @@ memerr4_4c(unsigned int issync,
 			prom_pa_location(pa, 0));
 	}
 
-	if (par_err_reg) {
-		snprintb(bits, sizeof(bits), PER_BITS, *par_err_reg);
-		printf("parity error register = %s\n", bits);
-	}
+	if (par_err_reg)
+		printf("parity error register = %s\n",
+			bitmask_snprintf(*par_err_reg, PER_BITS,
+					 bits, sizeof(bits)));
 	panic("memory error");		/* XXX */
 }
 
@@ -217,15 +216,15 @@ memerr4_4c(unsigned int issync,
 static void
 hardmemerr4m(unsigned type, u_int sfsr, u_int sfva, u_int afsr, u_int afva)
 {
-	char bits[64];
+	char *s, bits[64];
 
 	printf("memory fault: type %d", type);
-	snprintb(bits, sizeof(bits), SFSR_BITS, sfsr);
-	printf("sfsr=%s sfva=0x%x\n", bits, sfva);
+	s = bitmask_snprintf(sfsr, SFSR_BITS, bits, sizeof(bits));
+	printf("sfsr=%s sfva=0x%x\n", s, sfva);
 
 	if (afsr != 0) {
-		snprintb(bits, sizeof(bits), AFSR_BITS, afsr);
-		printf("; afsr=%s afva=0x%x%x\n", bits,
+		s = bitmask_snprintf(afsr, AFSR_BITS, bits, sizeof(bits));
+		printf("; afsr=%s afva=0x%x%x\n", s,
 			(afsr & AFSR_AFA) >> AFSR_AFA_RSHIFT, afva);
 	}
 

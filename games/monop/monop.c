@@ -1,4 +1,4 @@
-/*	$NetBSD: monop.c,v 1.27 2012/06/19 05:35:32 dholland Exp $	*/
+/*	$NetBSD: monop.c,v 1.24 2008/07/20 01:03:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)monop.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: monop.c,v 1.27 2012/06/19 05:35:32 dholland Exp $");
+__RCSID("$NetBSD: monop.c,v 1.24 2008/07/20 01:03:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -63,8 +63,8 @@ bool	fixing,			/* set if fixing up debt		*/
 	told_em,		/* set if told user he's out of debt	*/
 	spec;			/* set if moving by card to RR or UTIL	*/
 
-const char *name_list[MAX_PL+2];	/* list of players' names	*/
-static const char *const comlist[] = {	/* list of normal commands 	*/
+const char	*name_list[MAX_PL+2],	/* list of players' names	*/
+	*const comlist[]	= {	/* list of normal commands 	*/
 	"quit",		/*  0 */	"print",	/*  1 */
 	"where",	/*  2 */	"own holdings",	/*  3 */
 	"holdings",	/*  4 */	"mortgage",	/*  5 */
@@ -75,15 +75,15 @@ static const char *const comlist[] = {	/* list of normal commands 	*/
 	"restore",	/* 14 */	"roll",		/* 15 */
 	"",		/* 16 */
 	0
-};
-const char *const yncoms[] = {	/* list of commands for yes/no answers	*/
+	},
+	*const yncoms[]	= {	/* list of commands for yes/no answers	*/
 	"yes",		/*  0 */	"no",		/*  1 */
 	"quit",		/*  2 */	"print",	/*  3 */
 	"where",	/*  4 */	"own holdings",	/*  5 */
 	"holdings",	/*  6 */
 	0
-};
-const char *const lucky_mes[]	= {	/* "got lucky" messages		*/
+	},
+	*const lucky_mes[]	= {	/* "got lucky" messages		*/
 	"You lucky stiff",		"You got lucky",
 	"What a lucky person!",		"You must have a 4-leaf clover",
 	"My, my!  Aren't we lucky!",	"Luck smiles upon you",
@@ -91,7 +91,7 @@ const char *const lucky_mes[]	= {	/* "got lucky" messages		*/
 	"Your karma must certainly be together",
 	"How beautifully Cosmic",	"Wow, you must be really with it"
 	/* "I want your autograph",	-- Save for later */
-};
+	};
 
 int	player,			/* current player number		*/
 	num_play,		/* current number of players		*/
@@ -125,15 +125,15 @@ DECK	deck[2];		/* Chance and Community Chest		*/
 PLAY	*play,			/* player structure array ("calloc"ed)	*/
 	*cur_p;			/* pointer to current player's struct	*/
 
-static RR_S rr[N_RR];		/* railroad descriptions		*/
+RR_S	rr[N_RR];		/* railroad descriptions		*/
 
-static UTIL_S util[2];		/* utility descriptions			*/
+UTIL_S	util[2];		/* utility descriptions			*/
 
 #define MONINIT(num_in, h_cost, not_m, mon_n, sq1,sq2,sq3) \
      {0,    -1, num_in, 0,      h_cost, not_m, mon_n, {sq1,sq2,sq3}, {0,0,0}}
 /* name  owner          num_own                                      sq */
 
-static MON mon[N_MON] = {	/* monopoly descriptions		*/
+MON	mon[N_MON]	= {	/* monopoly descriptions		*/
 /*   num_in h_cost  not_m	mon_n	    sqnums */
 MONINIT(2,  1,	"Purple",	"PURPLE",   1,3, 0),
 MONINIT(3,  1,	"Lt. Blue",	"LT. BLUE", 6,8,9),
@@ -223,7 +223,9 @@ SQUARE	board[N_SQRS+1]	= {	/* board itself (+1 for Jail)		*/
  *	This program implements a monopoly game
  */
 int
-main(int ac, char *av[])
+main(ac, av)
+	int ac;
+	char *av[];
 {
 	/* Revoke setgid privileges */
 	setgid(getgid());
@@ -252,7 +254,8 @@ main(int ac, char *av[])
 
 /*ARGSUSED*/
 static void
-do_quit(int n __unused)
+do_quit(n)
+	int n __unused;
 {
 	quit();
 }
@@ -261,7 +264,7 @@ do_quit(int n __unused)
  *	This routine gets the names of the players
  */
 static void
-getplayers(void)
+getplayers()
 {
 	int i, j;
 	char buf[257];
@@ -283,7 +286,8 @@ blew_it:
 			printf("Player %d's name: ", i + 1);
 			fgets(buf, sizeof(buf), stdin);
 			if (feof(stdin)) {
-				quit();
+				printf("End of file on stdin\n");
+				exit(0);
 			}
 			buf[strcspn(buf, "\n")] = '\0';
 		} while (strlen(buf) == 0);
@@ -315,7 +319,7 @@ blew_it:
  *	This routine figures out who goes first
  */
 static void
-init_players(void)
+init_players()
 {
 	int i, rl, cur_max;
 	bool over = 0;
@@ -347,7 +351,7 @@ again:
  *	This routine initializes the monopoly structures.
  */
 static void
-init_monops(void)
+init_monops()
 {
 	MON *mp;
 	int i;

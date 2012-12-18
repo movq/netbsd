@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_prot.c,v 1.116 2012/06/09 02:55:32 christos Exp $	*/
+/*	$NetBSD: kern_prot.c,v 1.108 2008/10/11 13:40:57 pooka Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1990, 1991, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_prot.c,v 1.116 2012/06/09 02:55:32 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_prot.c,v 1.108 2008/10/11 13:40:57 pooka Exp $");
 
 #include "opt_compat_43.h"
 
@@ -128,7 +128,7 @@ sys_getsid(struct lwp *l, const struct sys_getsid_args *uap, register_t *retval)
 	mutex_enter(proc_lock);
 	if (pid == 0)
 		*retval = l->l_proc->p_session->s_sid;
-	else if ((p = proc_find(pid)) != NULL)
+	else if ((p = p_find(pid, PFIND_LOCKED)) != NULL)
 		*retval = p->p_session->s_sid;
 	else
 		error = ESRCH;
@@ -150,7 +150,7 @@ sys_getpgid(struct lwp *l, const struct sys_getpgid_args *uap, register_t *retva
 	mutex_enter(proc_lock);
 	if (pid == 0)
 		*retval = l->l_proc->p_pgid;
-	else if ((p = proc_find(pid)) != NULL)
+	else if ((p = p_find(pid, PFIND_LOCKED)) != NULL)
 		*retval = p->p_pgid;
 	else
 		error = ESRCH;
@@ -231,20 +231,21 @@ sys_getgroups(struct lwp *l, const struct sys_getgroups_args *uap, register_t *r
 	*retval = kauth_cred_ngroups(l->l_cred);
 	if (SCARG(uap, gidsetsize) == 0)
 		return 0;
-	if (SCARG(uap, gidsetsize) < (int)*retval)
+	if (SCARG(uap, gidsetsize) < *retval)
 		return EINVAL;
 
 	return kauth_cred_getgroups(l->l_cred, SCARG(uap, gidset), *retval,
 	    UIO_USERSPACE);
 }
 
+/* ARGSUSED */
 int
 sys_setsid(struct lwp *l, const void *v, register_t *retval)
 {
 	struct proc *p = l->l_proc;
 	int error;
 
-	error = proc_enterpgrp(p, p->p_pid, p->p_pid, true);
+	error = enterpgrp(p, p->p_pid, p->p_pid, 1);
 	*retval = p->p_pid;
 	return (error);
 }
@@ -264,11 +265,11 @@ sys_setsid(struct lwp *l, const void *v, register_t *retval)
  * 	there must exist some pid in same session having pgid (EPERM)
  * pid must not be session leader (EPERM)
  *
- * Permission checks now in proc_enterpgrp()
+ * Permission checks now in enterpgrp()
  */
+/* ARGSUSED */
 int
-sys_setpgid(struct lwp *l, const struct sys_setpgid_args *uap,
-    register_t *retval)
+sys_setpgid(struct lwp *l, const struct sys_setpgid_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) pid;
@@ -284,7 +285,7 @@ sys_setpgid(struct lwp *l, const struct sys_setpgid_args *uap,
 	if ((pgid = SCARG(uap, pgid)) == 0)
 		pgid = targp;
 
-	return proc_enterpgrp(p, targp, pgid, false);
+	return enterpgrp(p, targp, pgid, 0);
 }
 
 /*
@@ -346,12 +347,6 @@ do_setresuid(struct lwp *l, uid_t r, uid_t e, uid_t sv, u_int flags)
 		/* Update count of processes for this user */
 		(void)chgproccnt(kauth_cred_getuid(ncred), -1);
 		(void)chgproccnt(r, 1);
-
-		/* The first lwp of a process is not counted */
-		int nlwps = p->p_nlwps - 1;
-		(void)chglwpcnt(kauth_cred_getuid(ncred), -nlwps);
-		(void)chglwpcnt(r, nlwps);
-
 		kauth_cred_setuid(ncred, r);
 	}
 	if (sv != -1)
@@ -615,7 +610,7 @@ sys___setlogin(struct lwp *l, const struct sys___setlogin_args *uap, register_t 
 	if ((error = kauth_authorize_process(l->l_cred, KAUTH_PROCESS_SETID,
 	    p, NULL, NULL, NULL)) != 0)
 		return (error);
-	error = copyinstr(SCARG(uap, namebuf), newname, sizeof newname, NULL);
+	error = copyinstr(SCARG(uap, namebuf), &newname, sizeof newname, NULL);
 	if (error != 0)
 		return (error == ENAMETOOLONG ? EINVAL : error);
 
@@ -631,3 +626,4 @@ sys___setlogin(struct lwp *l, const struct sys___setlogin_args *uap, register_t 
 	mutex_exit(proc_lock);
 	return (0);
 }
+

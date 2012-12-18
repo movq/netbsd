@@ -1,4 +1,4 @@
-/*	$NetBSD: ifwatchd.c,v 1.26 2011/08/30 18:57:38 joerg Exp $	*/
+/*	$NetBSD: ifwatchd.c,v 1.23 2008/05/24 17:45:14 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
 enum event { ARRIVAL, DEPARTURE, UP, DOWN, CARRIER, NO_CARRIER };
 
 /* local functions */
-__dead static void usage(void);
+static void usage(void);
 static void dispatch(void*, size_t);
 static void check_addrs(char *cp, int addrs, enum event ev);
 static void invoke_script(struct sockaddr *sa, struct sockaddr *dst, enum event ev, int ifindex, const char *ifname_hint);
@@ -83,6 +83,11 @@ static int check_is_connected(const char * ifname, int def_retvalue);
 #define	if_is_connected(X)	1
 #define	if_is_not_connected(X)	1
 #endif
+
+/* stolen from /sbin/route */
+#define ROUNDUP(a) \
+	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
+#define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
 
 /* global variables */
 static int verbose = 0, quiet = 0;
@@ -110,7 +115,7 @@ struct interface_data {
 	int last_carrier_status;
 	char * ifname;
 };
-static SLIST_HEAD(,interface_data) ifs = SLIST_HEAD_INITIALIZER(ifs);
+SLIST_HEAD(,interface_data) ifs = SLIST_HEAD_INITIALIZER(ifs);
 
 int
 main(int argc, char **argv)
@@ -312,7 +317,7 @@ check_addrs(char *cp, int addrs, enum event ev)
 			ifa = sa;
 		else if (i == RTA_BRD)
 			brd = sa;
-		RT_ADVANCE(cp, sa);
+		ADVANCE(cp, sa);
 	}
 	if (ifa != NULL) {
 		ifname = if_indextoname(ifndx, ifname_buf);
@@ -333,7 +338,7 @@ invoke_script(struct sockaddr *sa, struct sockaddr *dest, enum event ev,
     int ifindex, const char *ifname_hint)
 {
 	char addr[NI_MAXHOST], daddr[NI_MAXHOST], ifname_buf[IFNAMSIZ];
-	const char * volatile ifname;
+	const char *ifname;
 	const char *script;
 	int status;
 
@@ -519,12 +524,12 @@ free_interfaces(void)
 }
 
 static int
-find_interface(int idx)
+find_interface(int index)
 {
 	struct interface_data * p;
 
 	SLIST_FOREACH(p, &ifs, next)
-		if (p->index == idx)
+		if (p->index == index)
 			return 1;
 	return 0;
 }
@@ -597,7 +602,7 @@ out:
 static int
 check_is_connected(const char *ifname, int def_retval)
 {
-	int s, error;
+	int s, err;
 	struct spppstatus oldstatus;
 	struct spppstatusncp status;
 
@@ -609,10 +614,10 @@ check_is_connected(const char *ifname, int def_retval)
 	s = socket(AF_INET, SOCK_DGRAM, 0);
 	if (s < 0)
 		return 1;	/* no idea how to handle this... */
-	error = ioctl(s, SPPPGETSTATUSNCP, &status);
-	if (error != 0) {
-		error = ioctl(s, SPPPGETSTATUS, &oldstatus);
-		if (error != 0) {
+	err = ioctl(s, SPPPGETSTATUSNCP, &status);
+	if (err != 0) {
+		err = ioctl(s, SPPPGETSTATUS, &oldstatus);
+		if (err != 0) {
 			/* not if_spppsubr.c based - return default */
 			close(s);
 			return def_retval;

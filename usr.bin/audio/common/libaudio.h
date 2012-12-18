@@ -1,4 +1,4 @@
-/*	$NetBSD: libaudio.h,v 1.17 2011/08/28 01:17:47 joerg Exp $	*/
+/*	$NetBSD: libaudio.h,v 1.15.4.1 2009/06/23 06:53:36 snj Exp $	*/
 
 /*
  * Copyright (c) 1999, 2009 Matthew R. Green
@@ -158,8 +158,6 @@ typedef struct {
 
 /* returns size of header, or -ve for failure */
 ssize_t audio_wav_parse_hdr (void *, size_t, u_int *, u_int *, u_int *, u_int *, size_t *);
-
-extern int verbose;
 
 /*
  * audio routine error codes

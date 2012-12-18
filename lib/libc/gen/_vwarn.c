@@ -1,4 +1,4 @@
-/*	$NetBSD: _vwarn.c,v 1.11 2011/07/17 20:54:34 joerg Exp $	*/
+/*	$NetBSD: _vwarn.c,v 1.10 2005/09/13 01:44:09 christos Exp $	*/
 
 /*
  * J.T. Conklin, December 12, 1994
@@ -7,19 +7,17 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: _vwarn.c,v 1.11 2011/07/17 20:54:34 joerg Exp $");
+__RCSID("$NetBSD: _vwarn.c,v 1.10 2005/09/13 01:44:09 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
-
-#include <stdarg.h>
 
 #if defined(__indr_reference)
 __indr_reference(_vwarn, vwarn)
 #else
 
-void _vwarn(const char *, va_list);
+void _vwarn(const char *, _BSD_VA_LIST_);
 
 void
-vwarn(const char *fmt, va_list ap)
+vwarn(const char *fmt, _BSD_VA_LIST_ ap)
 {
 	_vwarn(fmt, ap);
 }

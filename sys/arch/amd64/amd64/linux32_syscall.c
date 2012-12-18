@@ -1,14 +1,17 @@
-/*	$NetBSD: linux32_syscall.c,v 1.30 2010/12/20 00:25:24 matt Exp $ */
+/*	$NetBSD: linux32_syscall.c,v 1.27 2008/10/21 12:16:59 ad Exp $ */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_syscall.c,v 1.30 2010/12/20 00:25:24 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_syscall.c,v 1.27 2008/10/21 12:16:59 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
 #include <sys/syscallvar.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 #include <machine/psl.h>
@@ -28,7 +31,8 @@ linux32_syscall_intern(struct proc *p)
 }
 
 void
-linux32_syscall(struct trapframe *frame)
+linux32_syscall(frame)
+	struct trapframe *frame;
 {
 	const struct sysent *callp;
 	struct proc *p;

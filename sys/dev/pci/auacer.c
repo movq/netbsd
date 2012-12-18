@@ -1,7 +1,7 @@
-/*	$NetBSD: auacer.c,v 1.31 2012/10/27 17:18:28 chs Exp $	*/
+/*	$NetBSD: auacer.c,v 1.21 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
- * Copyright (c) 2004, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -44,15 +44,17 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auacer.c,v 1.31 2012/10/27 17:18:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auacer.c,v 1.21 2008/04/28 20:23:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/fcntl.h>
 #include <sys/proc.h>
+
+#include <uvm/uvm_extern.h>	/* for PAGE_SIZE */
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
@@ -96,10 +98,8 @@ struct auacer_chan {
 };
 
 struct auacer_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	void *sc_ih;
-	kmutex_t sc_lock;
-	kmutex_t sc_intr_lock;
 
 	audio_device_t sc_audev;
 
@@ -165,8 +165,8 @@ static int	auacer_getdev(void *, struct audio_device *);
 static int	auacer_set_port(void *, mixer_ctrl_t *);
 static int	auacer_get_port(void *, mixer_ctrl_t *);
 static int	auacer_query_devinfo(void *, mixer_devinfo_t *);
-static void	*auacer_allocm(void *, int, size_t);
-static void	auacer_freem(void *, void *, size_t);
+static void	*auacer_allocm(void *, int, size_t, struct malloc_type *, int);
+static void	auacer_freem(void *, void *, struct malloc_type *);
 static size_t	auacer_round_buffersize(void *, int, size_t);
 static paddr_t	auacer_mappage(void *, void *, off_t, int);
 static int	auacer_get_props(void *);
@@ -182,9 +182,8 @@ static int	auacer_alloc_cdata(struct auacer_softc *);
 static int	auacer_allocmem(struct auacer_softc *, size_t, size_t,
 				struct auacer_dma *);
 static int	auacer_freemem(struct auacer_softc *, struct auacer_dma *);
-static void	auacer_get_locks(void *, kmutex_t **, kmutex_t **);
 
-static bool	auacer_resume(device_t, const pmf_qual_t *);
+static bool	auacer_resume(device_t PMF_FN_PROTO);
 static int	auacer_set_rate(struct auacer_softc *, int, u_int);
 
 static void auacer_reset(struct auacer_softc *sc);
@@ -217,7 +216,7 @@ static struct audio_hw_if auacer_hw_if = {
 	auacer_trigger_output,
 	auacer_trigger_input,
 	NULL,			/* dev_ioctl */
-	auacer_get_locks,
+	NULL,			/* powerstate */
 };
 
 #define AUACER_FORMATS_4CH	1
@@ -237,7 +236,8 @@ static int	auacer_write_codec(void *, uint8_t, uint16_t);
 static int	auacer_reset_codec(void *);
 
 static int
-auacer_match(device_t parent, cfdata_t match, void *aux)
+auacer_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -249,7 +249,7 @@ auacer_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-auacer_attach(device_t parent, device_t self, void *aux)
+auacer_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct auacer_softc *sc;
 	struct pci_attach_args *pa;
@@ -259,8 +259,7 @@ auacer_attach(device_t parent, device_t self, void *aux)
 	const char *intrstr;
 	int i;
 
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (struct auacer_softc *)self;
 	pa = aux;
 	aprint_normal(": Acer Labs M5455 Audio controller\n");
 
@@ -276,9 +275,6 @@ auacer_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_dmamap_flags = BUS_DMA_COHERENT;	/* XXX remove */
 
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
-
 	/* enable bus mastering */
 	v = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
 	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG,
@@ -286,29 +282,25 @@ auacer_attach(device_t parent, device_t self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error_dev(sc->sc_dev, "can't map interrupt\n");
-		mutex_destroy(&sc->sc_lock);
-		mutex_destroy(&sc->sc_intr_lock);
+		aprint_error_dev(&sc->sc_dev, "can't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pa->pa_pc, ih);
 	sc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_AUDIO,
 	    auacer_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "can't establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "can't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
-		mutex_destroy(&sc->sc_lock);
-		mutex_destroy(&sc->sc_intr_lock);
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	strlcpy(sc->sc_audev.name, "M5455 AC97", MAX_AUDIO_DEV_LEN);
 	snprintf(sc->sc_audev.version, MAX_AUDIO_DEV_LEN,
 		 "0x%02x", PCI_REVISION(pa->pa_class));
-	strlcpy(sc->sc_audev.config, device_xname(sc->sc_dev), MAX_AUDIO_DEV_LEN);
+	strlcpy(sc->sc_audev.config, device_xname(&sc->sc_dev), MAX_AUDIO_DEV_LEN);
 
 	/* Set up DMA lists. */
 	auacer_alloc_cdata(sc);
@@ -325,15 +317,11 @@ auacer_attach(device_t parent, device_t self, void *aux)
 	sc->host_if.write = auacer_write_codec;
 	sc->host_if.reset = auacer_reset_codec;
 
-	if (ac97_attach(&sc->host_if, self, &sc->sc_lock) != 0) {
-		mutex_destroy(&sc->sc_lock);
-		mutex_destroy(&sc->sc_intr_lock);
+	if (ac97_attach(&sc->host_if, self) != 0)
 		return;
-	}
 
 	/* setup audio_format */
 	memcpy(sc->sc_formats, auacer_formats, sizeof(auacer_formats));
-	mutex_enter(&sc->sc_lock);
 	if (!AC97_IS_4CH(sc->codec_if))
 		AUFMT_INVALIDATE(&sc->sc_formats[AUACER_FORMATS_4CH]);
 	if (!AC97_IS_6CH(sc->codec_if))
@@ -344,28 +332,21 @@ auacer_attach(device_t parent, device_t self, void *aux)
 			sc->sc_formats[i].frequency[0] = 48000;
 		}
 	}
-	mutex_exit(&sc->sc_lock);
 
 	if (0 != auconv_create_encodings(sc->sc_formats, AUACER_NFORMATS,
 					 &sc->sc_encodings)) {
-		mutex_destroy(&sc->sc_lock);
-		mutex_destroy(&sc->sc_intr_lock);
 		return;
 	}
 
-	mutex_enter(&sc->sc_lock);
-	mutex_spin_enter(&sc->sc_intr_lock);
-	auacer_reset(sc);
-	mutex_spin_exit(&sc->sc_intr_lock);
-	mutex_exit(&sc->sc_lock);
+	audio_attach_mi(&auacer_hw_if, sc, &sc->sc_dev);
 
-	audio_attach_mi(&auacer_hw_if, sc, sc->sc_dev);
+	auacer_reset(sc);
 
 	if (!pmf_device_register(self, NULL, auacer_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
-CFATTACH_DECL_NEW(auacer, sizeof(struct auacer_softc),
+CFATTACH_DECL(auacer, sizeof(struct auacer_softc),
     auacer_match, auacer_attach, NULL, NULL);
 
 static int
@@ -693,7 +674,8 @@ auacer_query_devinfo(void *v, mixer_devinfo_t *dp)
 }
 
 static void *
-auacer_allocm(void *v, int direction, size_t size)
+auacer_allocm(void *v, int direction, size_t size,
+    struct malloc_type *pool, int flags)
 {
 	struct auacer_softc *sc;
 	struct auacer_dma *p;
@@ -702,13 +684,13 @@ auacer_allocm(void *v, int direction, size_t size)
 	if (size > (ALI_DMALIST_MAX * ALI_DMASEG_MAX))
 		return NULL;
 
-	p = kmem_zalloc(sizeof(*p), KM_SLEEP);
+	p = malloc(sizeof(*p), pool, flags | M_ZERO);
 	if (p == NULL)
 		return NULL;
 	sc = v;
 	error = auacer_allocmem(sc, size, 0, p);
 	if (error) {
-		kmem_free(p, sizeof(*p));
+		free(p, pool);
 		return NULL;
 	}
 
@@ -719,7 +701,7 @@ auacer_allocm(void *v, int direction, size_t size)
 }
 
 static void
-auacer_freem(void *v, void *ptr, size_t size)
+auacer_freem(void *v, void *ptr, struct malloc_type *pool)
 {
 	struct auacer_softc *sc;
 	struct auacer_dma *p, **pp;
@@ -729,7 +711,7 @@ auacer_freem(void *v, void *ptr, size_t size)
 		if (KERNADDR(p) == ptr) {
 			auacer_freemem(sc, p);
 			*pp = p->next;
-			kmem_free(p, sizeof(*p));
+			free(p, pool);
 			return;
 		}
 	}
@@ -781,16 +763,6 @@ auacer_get_props(void *v)
 }
 
 static void
-auacer_get_locks(void *v, kmutex_t **intr, kmutex_t **proc)
-{
-	struct auacer_softc *sc;
-
-	sc = v;
-	*intr = &sc->sc_intr_lock;
-	*proc = &sc->sc_lock;
-}
-
-static void
 auacer_add_entry(struct auacer_chan *chan)
 {
 	struct auacer_dmalist *q;
@@ -826,7 +798,7 @@ auacer_upd_chan(struct auacer_softc *sc, struct auacer_chan *chan)
 
 	if (sts & ALI_SR_DMA_INT_FIFO) {
 		printf("%s: fifo underrun # %u\n",
-		       device_xname(sc->sc_dev), ++chan->fifoe);
+		       device_xname(&sc->sc_dev), ++chan->fifoe);
 	}
 
 	civ = READ1(sc, chan->port + ALI_OFF_CIV);
@@ -858,18 +830,14 @@ auacer_intr(void *v)
 	int ret, intrs;
 
 	sc = v;
-
-	DPRINTF(ALI_DEBUG_INTR, ("auacer_intr: intrs=0x%x\n",
-	    READ4(sc, ALI_INTERRUPTSR)));
-
-	mutex_spin_enter(&sc->sc_intr_lock);
 	intrs = READ4(sc, ALI_INTERRUPTSR);
+	DPRINTF(ALI_DEBUG_INTR, ("auacer_intr: intrs=0x%x\n", intrs));
+
 	ret = 0;
 	if (intrs & ALI_INT_PCMOUT) {
 		auacer_upd_chan(sc, &sc->sc_pcmo);
 		ret++;
 	}
-	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return ret != 0;
 }
@@ -952,22 +920,22 @@ auacer_allocmem(struct auacer_softc *sc, size_t size, size_t align,
 	p->size = size;
 	error = bus_dmamem_alloc(sc->dmat, p->size, align, 0,
 				 p->segs, sizeof(p->segs)/sizeof(p->segs[0]),
-				 &p->nsegs, BUS_DMA_WAITOK);
+				 &p->nsegs, BUS_DMA_NOWAIT);
 	if (error)
 		return error;
 
 	error = bus_dmamem_map(sc->dmat, p->segs, p->nsegs, p->size,
-			       &p->addr, BUS_DMA_WAITOK|sc->sc_dmamap_flags);
+			       &p->addr, BUS_DMA_NOWAIT|sc->sc_dmamap_flags);
 	if (error)
 		goto free;
 
 	error = bus_dmamap_create(sc->dmat, p->size, 1, p->size,
-				  0, BUS_DMA_WAITOK, &p->map);
+				  0, BUS_DMA_NOWAIT, &p->map);
 	if (error)
 		goto unmap;
 
 	error = bus_dmamap_load(sc->dmat, p->map, p->addr, p->size, NULL,
-				BUS_DMA_WAITOK);
+				BUS_DMA_NOWAIT);
 	if (error)
 		goto destroy;
 	return (0);
@@ -1005,7 +973,7 @@ auacer_alloc_cdata(struct auacer_softc *sc)
 	if ((error = bus_dmamem_alloc(sc->dmat,
 				      sizeof(struct auacer_cdata),
 				      PAGE_SIZE, 0, &seg, 1, &rseg, 0)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to allocate control data, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to allocate control data, error = %d\n",
 		    error);
 		goto fail_0;
 	}
@@ -1014,7 +982,7 @@ auacer_alloc_cdata(struct auacer_softc *sc)
 				    sizeof(struct auacer_cdata),
 				    (void **) &sc->sc_cdata,
 				    sc->sc_dmamap_flags)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to map control data, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to map control data, error = %d\n",
 		    error);
 		goto fail_1;
 	}
@@ -1022,7 +990,7 @@ auacer_alloc_cdata(struct auacer_softc *sc)
 	if ((error = bus_dmamap_create(sc->dmat, sizeof(struct auacer_cdata), 1,
 				       sizeof(struct auacer_cdata), 0, 0,
 				       &sc->sc_cddmamap)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to create control data DMA map, "
+		aprint_error_dev(&sc->sc_dev, "unable to create control data DMA map, "
 		    "error = %d\n", error);
 		goto fail_2;
 	}
@@ -1030,7 +998,7 @@ auacer_alloc_cdata(struct auacer_softc *sc)
 	if ((error = bus_dmamap_load(sc->dmat, sc->sc_cddmamap,
 				     sc->sc_cdata, sizeof(struct auacer_cdata),
 				     NULL, 0)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to load control data DMA map, "
+		aprint_error_dev(&sc->sc_dev, "unable to load control data DMA map, "
 		    "error = %d\n", error);
 		goto fail_3;
 	}
@@ -1049,17 +1017,13 @@ auacer_alloc_cdata(struct auacer_softc *sc)
 }
 
 static bool
-auacer_resume(device_t dv, const pmf_qual_t *qual)
+auacer_resume(device_t dv PMF_FN_ARGS)
 {
 	struct auacer_softc *sc = device_private(dv);
 
-	mutex_enter(&sc->sc_lock);
-	mutex_spin_enter(&sc->sc_intr_lock);
 	auacer_reset_codec(sc);
-	mutex_spin_exit(&sc->sc_intr_lock);
 	delay(1000);
 	sc->codec_if->vtbl->restore_ports(sc->codec_if);
-	mutex_exit(&sc->sc_lock);
 
 	return true;
 }

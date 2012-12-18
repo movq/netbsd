@@ -1,4 +1,4 @@
-/*	$NetBSD: pty.c,v 1.31 2009/02/20 16:44:06 christos Exp $	*/
+/*	$NetBSD: pty.c,v 1.29 2005/09/14 02:12:34 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pty.c	8.3 (Berkeley) 5/16/94";
 #else
-__RCSID("$NetBSD: pty.c,v 1.31 2009/02/20 16:44:06 christos Exp $");
+__RCSID("$NetBSD: pty.c,v 1.29 2005/09/14 02:12:34 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -63,7 +63,7 @@ int
 openpty(int *amaster, int *aslave, char *name, struct termios *term,
 	struct winsize *winp)
 {
-	char line[] = "/dev/XtyXX";
+	static char line[] = "/dev/XtyXX";
 	const char *cp1, *cp2, *cp, *linep;
 	int master, slave;
 	gid_t ttygid;
@@ -106,7 +106,7 @@ openpty(int *amaster, int *aslave, char *name, struct termios *term,
 			if ((master = open(line, O_RDWR, 0)) == -1) {
 				if (errno != ENOENT)
 					continue;	/* busy */
-				if ((size_t)(cp2 - cp + 1) < sizeof(TTY_OLD_SUFFIX))
+				if (cp2 - cp + 1 < sizeof(TTY_OLD_SUFFIX))
 					return -1; /* out of ptys */
 				else	
 					break;	/* out of ptys in this group */

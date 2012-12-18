@@ -1,4 +1,4 @@
-/*	$NetBSD: iostat.c,v 1.60 2011/08/30 19:06:06 joerg Exp $	*/
+/*	$NetBSD: iostat.c,v 1.52 2008/07/21 13:36:58 lukem Exp $	*/
 
 /*
  * Copyright (c) 1996 John M. Vinopal
@@ -71,7 +71,7 @@ __COPYRIGHT("@(#) Copyright (c) 1986, 1991, 1993\
 #if 0
 static char sccsid[] = "@(#)iostat.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: iostat.c,v 1.60 2011/08/30 19:06:06 joerg Exp $");
+__RCSID("$NetBSD: iostat.c,v 1.52 2008/07/21 13:36:58 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -87,21 +87,17 @@ __RCSID("$NetBSD: iostat.c,v 1.60 2011/08/30 19:06:06 joerg Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <math.h>
 
 #include "drvstats.h"
 
 /* Namelist and memory files. */
 char	*nlistf, *memf;
 
-int		hz;
-static int	reps, interval;
+int		hz, reps, interval;
 static int	todo = 0;
 static int	defdrives;
 static int	winlines = 20;
 static int	wincols = 80;
-
-#define	MAX(a,b)	(((a)>(b))?(a):(b))
 
 #define	ISSET(x, a)	((x) & (a))
 #define	SHOW_CPU	(1<<0)
@@ -119,9 +115,11 @@ static void drive_statsx(double);
 static void sig_header(int);
 static volatile int do_header;
 static void header(void);
-__dead static void usage(void);
+static void usage(void);
 static void display(void);
 static int selectdrives(int, char *[]);
+
+int main(int, char *[]);
 
 int
 main(int argc, char *argv[])
@@ -247,9 +245,9 @@ sig_header(int signo)
 }
 
 static void
-header(void)
+header()
 {
-	size_t i;
+	int i;
 
 					/* Main Headers. */
 	if (ISSET(todo, SHOW_STATS_X)) {
@@ -313,7 +311,7 @@ header(void)
 static void
 drive_stats(double etime)
 {
-	size_t dn;
+	int dn;
 	double atime, mbps;
 
 	for (dn = 0; dn < ndrive; ++dn) {
@@ -325,8 +323,7 @@ drive_stats(double etime)
 			    1024.0) / (cur.rxfer[dn] + cur.wxfer[dn]);
 		else
 			mbps = 0.0;
-		(void)printf(" %5.*f",
-		    MAX(0, 3 - (int)floor(log10(fmax(1.0, mbps)))), mbps);
+		(void)printf(" %5.2f", mbps);
 
 					/* average transfers per second. */
 		(void)printf(" %4.0f",
@@ -342,16 +339,14 @@ drive_stats(double etime)
 			    (double)(1024 * 1024);
 		else
 			mbps = 0;
-		mbps /= etime;
-		(void)printf(" %5.*f ",
-		    MAX(0, 3 - (int)floor(log10(fmax(1.0, mbps)))), mbps);
+		(void)printf(" %5.2f ", mbps / etime);
 	}
 }
 
 static void
 drive_stats2(double etime)
 {
-	size_t dn;
+	int dn;
 	double atime;
 
 	for (dn = 0; dn < ndrive; ++dn) {
@@ -376,7 +371,7 @@ drive_stats2(double etime)
 static void
 drive_statsx(double etime)
 {
-	size_t dn;
+	int dn;
 	double atime, kbps;
 
 	for (dn = 0; dn < ndrive; ++dn) {
@@ -434,16 +429,16 @@ static void
 cpustats(void)
 {
 	int state;
-	double ttime;
+	double time;
 
-	ttime = 0;
+	time = 0;
 	for (state = 0; state < CPUSTATES; ++state)
-		ttime += cur.cp_time[state];
-	if (!ttime)
-		ttime = 1.0;
+		time += cur.cp_time[state];
+	if (!time)
+		time = 1.0;
 			/* States are generally never 100% and can use %3.0f. */
 	for (state = 0; state < CPUSTATES; ++state)
-		printf(" %2.0f", 100. * cur.cp_time[state] / ttime);
+		printf(" %2.0f", 100. * cur.cp_time[state] / time);
 }
 
 static void
@@ -519,7 +514,7 @@ selectdrives(int argc, char *argv[])
 			break;
 #endif
 		tried++;
-		for (i = 0; i < (int)ndrive; i++) {
+		for (i = 0; i < ndrive; i++) {
 			if (strcmp(cur.name[i], *argv))
 				continue;
 			cur.select[i] = 1;
@@ -534,8 +529,8 @@ selectdrives(int argc, char *argv[])
 		 * if none specified.
 		 */
 		maxdrives = (ISSET(todo, SHOW_STATS_X) ||
-			     (int)ndrive < defdrives)
-			? (int)(ndrive) : defdrives;
+			     ndrive < defdrives)
+			? (ndrive) : defdrives;
 		for (i = 0; i < maxdrives; i++) {
 			cur.select[i] = 1;
 

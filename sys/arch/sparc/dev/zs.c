@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.121 2012/10/27 17:18:11 chs Exp $	*/
+/*	$NetBSD: zs.c,v 1.111.6.4 2011/03/08 17:29:45 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.121 2012/10/27 17:18:11 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.111.6.4 2011/03/08 17:29:45 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -185,7 +185,7 @@ void zs_disable(struct zs_chanstate *);
 
 
 /* XXX from dev/ic/z8530tty.c */
-extern struct tty *zstty_get_tty_from_dev(device_t);
+extern struct tty *zstty_get_tty_from_dev(struct device *);
 
 /*
  * Is the zs chip present?
@@ -415,7 +415,7 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 	 */
 	for (channel = 0; channel < 2; channel++) {
 		struct zschan *zc;
-		device_t child;
+		struct device *child;
 		int hwflags;
 
 		zsc_args.channel = channel;
@@ -448,9 +448,6 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 		 * mouse line disciplines for SUN4 machines below.
 		 * Also, don't set the console flags, otherwise we
 		 * tell zstty_attach() to attach as console.
-		 * XXX
-		 * is this still necessary? sparc64 passes the console flags to
-		 * zstty etc. 
 		 */
 		if (zsc->zsc_promunit == 1) {
 			if ((hwflags & ZS_HWFLAG_CONSOLE_INPUT) != 0 &&
@@ -461,10 +458,6 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 			}
 		} else {
 			zsc_args.hwflags = hwflags;
-			if (zsc_args.hwflags & ZS_HWFLAG_CONSOLE) {
-				zsc_args.hwflags |= ZS_HWFLAG_USE_CONSDEV;
-				zsc_args.consdev = &zs_consdev;
-			}
 		}
 #endif
 		if ((zsc_args.hwflags & ZS_HWFLAG_CONSOLE_INPUT) != 0) {
@@ -478,8 +471,8 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 		cs->cs_reg_csr  = &zc->zc_csr;
 		cs->cs_reg_data = &zc->zc_data;
 
-		memcpy(cs->cs_creg, zs_init_reg, 16);
-		memcpy(cs->cs_preg, zs_init_reg, 16);
+		bcopy(zs_init_reg, cs->cs_creg, 16);
+		bcopy(zs_init_reg, cs->cs_preg, 16);
 
 		/* XXX: Consult PROM properties for this?! */
 		cs->cs_defspeed = zs_get_speed(cs);
@@ -532,16 +525,8 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 			struct tty *tp = zstty_get_tty_from_dev(child);
 			kma.kmta_tp = tp;
 			kma.kmta_dev = tp->t_dev;
+			kma.kmta_consdev = zsc_args.consdev;
 
-			/*
-			 * we need to pass a consdev since that's how kbd knows
-			 * it's the console keyboard
-			 */
-			if (hwflags & ZS_HWFLAG_CONSOLE_INPUT) {
-				kma.kmta_consdev = &zs_consdev;
-			} else
-				kma.kmta_consdev = zsc_args.consdev;
-			
 			/* Attach 'em if we got 'em. */
 #if (NKBD > 0)
 			if (channel == 0) {
@@ -607,6 +592,8 @@ zs_print(void *aux, const char *name)
 
 	return (UNCONF);
 }
+
+static volatile int zssoftpending;
 
 /*
  * Our ZS chips all share a common interrupt level,

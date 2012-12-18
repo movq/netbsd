@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_signal.c,v 1.65 2011/02/03 21:45:31 joerg Exp $	 */
+/*	$NetBSD: svr4_signal.c,v 1.64.10.1 2011/02/16 21:22:44 bouyer Exp $	 */
 
 /*-
  * Copyright (c) 1994, 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_signal.c,v 1.65 2011/02/03 21:45:31 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_signal.c,v 1.64.10.1 2011/02/16 21:22:44 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

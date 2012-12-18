@@ -35,7 +35,7 @@
  *	trace.c - print traces of D (B) channel activity for isdn4bsd
  *	-------------------------------------------------------------
  *
- *	$Id: trace.c,v 1.13 2011/08/31 16:24:59 plunky Exp $ 
+ *	$Id: trace.c,v 1.9 2007/09/08 15:34:23 pooka Exp $ 
  *
  * $FreeBSD$
  *
@@ -77,7 +77,7 @@ static struct stat fst;
 
 static void dumpbuf( int n, unsigned char *buf, struct i4b_trace_hdr *hdr, int raw );
 static int switch_driver( int value, int rx, int tx );
-__dead static void usage( void );
+static void usage( void );
 static void exit_hdl( void );
 static void reopenfiles( int );
 void add_datetime(char *filename, char *rfilename);
@@ -86,7 +86,7 @@ char * fmt_hdr(struct i4b_trace_hdr *hdr, int frm_len);
 /*---------------------------------------------------------------------------*
  *	usage instructions
  *---------------------------------------------------------------------------*/
-static void
+void
 usage(void)
 {
 	fprintf(stderr,"\n");
@@ -121,6 +121,9 @@ usage(void)
 int
 main(int argc, char *argv[])
 {
+	extern int optind;
+	extern int opterr;
+	extern char *optarg;
 	char devicename[80];
 	char headerbuf[256];
 		
@@ -128,8 +131,8 @@ main(int argc, char *argv[])
 	int c;
 	char *b;
 
-	const char *outfile = TRACE_FILE_NAME;
-	const char *binfile = BIN_FILE_NAME;
+	char *outfile = TRACE_FILE_NAME;
+	char *binfile = BIN_FILE_NAME;
 	int outfileset = 0;
 	int raw = 1;
 	int noct = -1;
@@ -254,7 +257,7 @@ main(int argc, char *argv[])
 			exit(1);
 		}
 		
-		if ((setvbuf(BP, NULL, _IONBF, 0)) != 0)
+		if ((setvbuf(BP, (char *)NULL, _IONBF, 0)) != 0)
 		{
 			char buffer[80];
 
@@ -333,7 +336,7 @@ main(int argc, char *argv[])
 			exit(1);
 		}
 		
-		if ((setvbuf(Fout, NULL, _IONBF, 0)) != 0)
+		if ((setvbuf(Fout, (char *)NULL, _IONBF, 0)) != 0)
 		{
 			char buffer[80];
 
@@ -345,7 +348,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if ((setvbuf(stdout, NULL, _IOLBF, 0)) != 0)
+	if ((setvbuf(stdout, (char *)NULL, _IOLBF, 0)) != 0)
 	{
 		char buffer[80];
 
@@ -402,7 +405,7 @@ main(int argc, char *argv[])
 
 			if (Bopt)
 			{
-				if ((int)(fwrite(buf, 1, n, BP)) != n)
+				if ((fwrite(buf, 1, n, BP)) != n)
 				{
 					snprintf(buffer, sizeof(buffer),
 					    "Error writing file [%s]",
@@ -545,7 +548,7 @@ fmt_hdr(struct i4b_trace_hdr *hdr, int frm_len)
  *	decode protocol and output to file(s)
  *---------------------------------------------------------------------------*/
 static void
-dumpbuf(int n, unsigned char *dbuf, struct i4b_trace_hdr *hdr, int raw)
+dumpbuf(int n, unsigned char *buf, struct i4b_trace_hdr *hdr, int raw)
 {
 	static char l1buf[128];
 	static unsigned char l2buf[32000];
@@ -569,7 +572,7 @@ dumpbuf(int n, unsigned char *dbuf, struct i4b_trace_hdr *hdr, int raw)
 			
 		pbuf = &l1buf[0];
 
-		switch (dbuf[0])
+		switch (buf[0])
 		{
 		case INFO0:
 			sprintf((pbuf+strlen(pbuf)),"I430: INFO0 (No Signal)\n");
@@ -600,29 +603,29 @@ dumpbuf(int n, unsigned char *dbuf, struct i4b_trace_hdr *hdr, int raw)
 			break;
 
 		default:
-			sprintf((pbuf+strlen(pbuf)),"I430: ERROR, invalid INFO value 0x%x!\n", dbuf[0]);
+			sprintf((pbuf+strlen(pbuf)),"I430: ERROR, invalid INFO value 0x%x!\n", buf[0]);
 			break;
 		}
 		break;
 		
 	case TRC_CH_D:		/* D-channel data */
 
-		cnt = decode_lapd(l2buf, n, dbuf, hdr->dir, raw, print_q921);
+		cnt = decode_lapd(l2buf, n, buf, hdr->dir, raw, print_q921);
 	
 		n -= cnt;
-		dbuf += cnt;
+		buf += cnt;
 	
 		if (n)
 		{
-			switch (*dbuf)
+			switch (*buf)
 			{
 			case 0x40:
 			case 0x41:
-				decode_1tr6(l3buf, n, cnt, dbuf, raw);
+				decode_1tr6(l3buf, n, cnt, buf, raw);
 				break;
 				
 			case 0x08:
-				decode_q931(l3buf, n, cnt, dbuf, raw);
+				decode_q931(l3buf, n, cnt, buf, raw);
 				break;
 
 			default:
@@ -633,7 +636,7 @@ dumpbuf(int n, unsigned char *dbuf, struct i4b_trace_hdr *hdr, int raw)
 				}
 				else
 				{	
-					decode_unknownl3(l3buf, n, cnt, dbuf, raw);
+					decode_unknownl3(l3buf, n, cnt, buf, raw);
 				}
 				break;
 			}
@@ -650,15 +653,15 @@ dumpbuf(int n, unsigned char *dbuf, struct i4b_trace_hdr *hdr, int raw)
 
 			for (j = 0; j < 16; j++)
 				if (i + j < n)
-					sprintf((pbuf+strlen(pbuf)),"%02x ", dbuf[i + j]);
+					sprintf((pbuf+strlen(pbuf)),"%02x ", buf[i + j]);
 				else
 					sprintf((pbuf+strlen(pbuf)),"   ");
 
 			sprintf((pbuf+strlen(pbuf)),"      ");
 
 			for (j = 0; j < 16 && i + j < n; j++)
-				if (isprint(dbuf[i + j]))
-					sprintf((pbuf+strlen(pbuf)),"%c", dbuf[i + j]);
+				if (isprint(buf[i + j]))
+					sprintf((pbuf+strlen(pbuf)),"%c", buf[i + j]);
 				else
 					sprintf((pbuf+strlen(pbuf)),".");
 
@@ -789,7 +792,7 @@ reopenfiles(int dummy)
 			exit(1);
 		}
 
-		if ((setvbuf(Fout, NULL, _IONBF, 0)) != 0)
+		if ((setvbuf(Fout, (char *)NULL, _IONBF, 0)) != 0)
 		{
 			char buffer[80];
 
@@ -818,7 +821,7 @@ reopenfiles(int dummy)
 			exit(1);
 		}
 
-		if ((setvbuf(BP, NULL, _IONBF, 0)) != 0)
+		if ((setvbuf(BP, (char *)NULL, _IONBF, 0)) != 0)
 		{
 			char buffer[80];
 

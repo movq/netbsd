@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.10 2011/06/20 07:18:07 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.2 2008/04/28 20:23:34 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,22 +30,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.10 2011/06/20 07:18:07 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.2 2008/04/28 20:23:34 martin Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
-#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
-#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/exec.h>
 #include <sys/extent.h>
-#include <sys/intr.h>
 #include <sys/kernel.h>
-#include <sys/ksyms.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/mount.h>
@@ -53,23 +49,30 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.10 2011/06/20 07:18:07 matt Exp $");
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/syscallargs.h>
-#include <sys/sysctl.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
+#include <sys/user.h>
+#include <sys/ksyms.h>
 
 #include <uvm/uvm_extern.h>
 
+#include <sys/sysctl.h>
+
+#include <net/netisr.h>
+
 #include <machine/autoconf.h>
 #include <machine/bootinfo.h>
+#include <machine/bus.h>
+#include <machine/intr.h>
+#include <machine/pmap.h>
 #include <machine/powerpc.h>
-#include <machine/iplcb.h>
+#include <machine/trap.h>
 
-#include <powerpc/pmap.h>
-#include <powerpc/trap.h>
+#include <machine/iplcb.h>
 
 #include <powerpc/oea/bat.h>
 #include <powerpc/pio.h>
-#include <powerpc/pic/picvar.h>
+#include <arch/powerpc/pic/picvar.h>
 
 #include <dev/cons.h>
 
@@ -82,7 +85,7 @@ void comsoft(void);
 #endif
 
 #ifdef DDB
-#include <powerpc/db_machdep.h>
+#include <machine/db_machdep.h>
 #include <ddb/db_extern.h>
 #endif
 
@@ -91,6 +94,7 @@ void comsoft(void);
 void initppc(u_long, u_long, u_int, void *);
 void dumpsys(void);
 void strayintr(int);
+int lcsplx(int);
 void rs6000_bus_space_init(void);
 void setled(uint32_t);
 void say_hi(void);
@@ -114,7 +118,7 @@ struct mem_region physmemr[OFMEMREGIONS], availmemr[OFMEMREGIONS];
 paddr_t avail_end;			/* XXX temporary */
 extern register_t iosrtable[16];
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 extern void *endsym, *startsym;
 #endif
 
@@ -143,9 +147,7 @@ say_hi(void)
 {
 	printf("HELLO?!\n");
 	setled(0x55500000);
-#ifdef DDB
 	Debugger();
-#endif
 #if 0
         li      %r28,0x00000041 /* PUT A to R28*/         
         li      %r29,0x30       /* put serial addr to r29*/
@@ -378,8 +380,8 @@ initppc(u_long startkernel, u_long endkernel, u_int args, void *btinfo)
 	consinit();
 	setled(0x41000000);
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-	ksyms_addsyms_elf((int)((u_long)endsym - (u_long)startsym), startsym, endsym);
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init((int)((u_long)endsym - (u_long)startsym), startsym, endsym);
 #endif
 
 #ifdef DDB
@@ -502,8 +504,6 @@ cpu_reboot(int howto, char *what)
 
 halt_sys:
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	if (howto & RB_HALT) {
                 printf("\n");

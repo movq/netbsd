@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_ecoff.h,v 1.20 2009/12/10 14:13:54 matt Exp $	*/
+/*	$NetBSD: exec_ecoff.h,v 1.18 2005/12/11 12:25:20 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Adam Glass
@@ -105,14 +105,14 @@ struct ecoff_exechdr {
 #ifdef _KERNEL
 int	exec_ecoff_makecmds(struct lwp *, struct exec_package *);
 int	cpu_exec_ecoff_probe(struct lwp *, struct exec_package *);
-void	cpu_exec_ecoff_setregs(struct lwp *, struct exec_package *, vaddr_t);
+void	cpu_exec_ecoff_setregs(struct lwp *, struct exec_package *, u_long);
 
-int	exec_ecoff_prep_omagic(struct lwp *, struct exec_package *,
-	    struct ecoff_exechdr *, struct vnode *);
-int	exec_ecoff_prep_nmagic(struct lwp *, struct exec_package *,
-	    struct ecoff_exechdr *, struct vnode *);
-int	exec_ecoff_prep_zmagic(struct lwp *, struct exec_package *,
-	    struct ecoff_exechdr *, struct vnode *);
+int	exec_ecoff_prep_omagic __P((struct lwp *, struct exec_package *,
+	    struct ecoff_exechdr *, struct vnode *));
+int	exec_ecoff_prep_nmagic __P((struct lwp *, struct exec_package *,
+	    struct ecoff_exechdr *, struct vnode *));
+int	exec_ecoff_prep_zmagic __P((struct lwp *, struct exec_package *,
+	    struct ecoff_exechdr *, struct vnode *));
 
 #endif /* _KERNEL */
 #endif /* !_SYS_EXEC_ECOFF_H_ */

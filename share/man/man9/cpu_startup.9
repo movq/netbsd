@@ -1,4 +1,4 @@
-.\"     $NetBSD: cpu_startup.9,v 1.7 2010/04/13 12:04:25 jruoho Exp $
+.\"     $NetBSD: cpu_startup.9,v 1.6 2008/04/30 13:10:58 martin Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,36 +27,31 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd April 13, 2010
+.Dd February 27, 2006
 .Dt CPU_STARTUP 9
 .Os
 .Sh NAME
 .Nm cpu_startup
-.Nd machine-dependent
-.Tn CPU
-startup
+.Nd machine-dependent CPU startup
 .Sh SYNOPSIS
 .In sys/systm.h
 .Ft void
 .Fn cpu_startup "void"
 .Sh DESCRIPTION
-The machine-dependent
 .Fn cpu_startup
 is invoked early during system bootstrap, after the console
 has been set up and immediately after
 .Xr uvm 9
 has been initialized.
-.Pp
-The following tasks are performed by
-.Fn cpu_startup :
-.Bl -bullet -offset indent
+.Fn cpu_startup
+performs the following tasks:
+.Bl -bullet
 .It
-print the initial copyright message;
+prints the initial copyright message
 .It
-allocate memory and buffers for kernel tables; and
+allocate memory and buffers for kernel tables
 .It
-initialize the
-.Tn CPU .
+initialize the CPU
 .El
 .Sh SEE ALSO
 .Xr autoconf 9 ,

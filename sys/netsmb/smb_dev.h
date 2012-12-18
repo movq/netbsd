@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_dev.h,v 1.7 2010/07/12 02:58:01 christos Exp $	*/
+/*	$NetBSD: smb_dev.h,v 1.6.74.1 2010/07/16 18:47:10 riz Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov

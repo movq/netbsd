@@ -1,4 +1,4 @@
-/*	$NetBSD: pic.c,v 1.16 2012/10/27 17:18:09 chs Exp $	 */
+/*	$NetBSD: pic.c,v 1.13 2008/08/23 17:25:54 tsutsui Exp $	 */
 
 /*
  * Copyright (c) 2002 Steve Rumble
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic.c,v 1.16 2012/10/27 17:18:09 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic.c,v 1.13 2008/08/23 17:25:54 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -37,7 +37,7 @@ __KERNEL_RCSID(0, "$NetBSD: pic.c,v 1.16 2012/10/27 17:18:09 chs Exp $");
 #include <machine/cpu.h>
 #include <machine/locore.h>
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/machtype.h>
 #include <machine/sysconf.h>
 
@@ -48,20 +48,23 @@ __KERNEL_RCSID(0, "$NetBSD: pic.c,v 1.16 2012/10/27 17:18:09 chs Exp $");
 #include "locators.h"
 
 struct pic_softc {
+	struct device   	sc_dev;
+
 	bus_space_tag_t		iot;
 	bus_space_handle_t	ioh;
+
 };
 
-static int      pic_match(device_t, cfdata_t, void *);
-static void     pic_attach(device_t, device_t, void *);
+static int      pic_match(struct device *, struct cfdata *, void *);
+static void     pic_attach(struct device *, struct device *, void *);
 static int      pic_print(void *, const char *);
 static void	pic_bus_reset(void);
-static void	pic_bus_error(vaddr_t, uint32_t, uint32_t);
+static void	pic_bus_error(uint32_t, uint32_t, uint32_t, uint32_t);
 static void	pic_watchdog_enable(void);
 static void	pic_watchdog_disable(void);
 static void	pic_watchdog_tickle(void);
 
-CFATTACH_DECL_NEW(pic, 0,
+CFATTACH_DECL(pic, sizeof(struct pic_softc),
     pic_match, pic_attach, NULL, NULL);
 
 struct pic_attach_args {
@@ -76,7 +79,7 @@ int pic_gio32_arb_config(int, uint32_t);
 static struct pic_softc psc;
 
 static int
-pic_match(device_t parent, cfdata_t match, void *aux)
+pic_match(struct device * parent, struct cfdata * match, void *aux)
 {
 	/*
 	 * PIC exists on IP12 systems. It appears to be the immediate
@@ -89,7 +92,7 @@ pic_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-pic_attach(device_t parent, device_t self, void *aux)
+pic_attach(struct device * parent, struct device * self, void *aux)
 {
 	uint32_t reg;
 	struct pic_attach_args iaa;
@@ -209,7 +212,7 @@ pic_bus_reset(void)
 }
 
 static void
-pic_bus_error(vaddr_t pc, uint32_t status, uint32_t ipending)
+pic_bus_error(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
 {
 
 	printf("pic0: bus error\n");

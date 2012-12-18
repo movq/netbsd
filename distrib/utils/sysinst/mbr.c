@@ -1,4 +1,4 @@
-/*	$NetBSD: mbr.c,v 1.91 2012/05/26 05:09:59 tsutsui Exp $ */
+/*	$NetBSD: mbr.c,v 1.79.14.3 2010/05/20 05:36:35 snj Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,20 +14,24 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE 
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
  * THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
@@ -110,13 +114,9 @@ struct part_id {
 };
 
 static int get_mapping(struct mbr_partition *, int, int *, int *, int *,
-			    daddr_t *);
+			    unsigned long *);
 static void convert_mbr_chs(int, int, int, uint8_t *, uint8_t *,
 				 uint8_t *, uint32_t);
-static void get_ptn_alignment(struct mbr_partition *);
-
-static unsigned int ptn_alignment;
-static unsigned int ptn_0_offset;
 
 /*
  * Notes on the extended partition editor.
@@ -188,23 +188,6 @@ dump_mbr(mbr_info_t *mbr, const char *msg)
 #endif
 
 /*
- * To be used only on ports which cannot provide any bios geometry
- */
-int
-set_bios_geom_with_mbr_guess(void)
-{
-	int cyl, head;
-	daddr_t sec;
-
-	read_mbr(diskdev, &mbr);
-	msg_display(MSG_nobiosgeom, dlcyl, dlhead, dlsec);
-	if (guess_biosgeom_from_mbr(&mbr, &cyl, &head, &sec) >= 0)
-		msg_display_add(MSG_biosguess, cyl, head, sec);
-	set_bios_geom(cyl, head, sec);
-	return edit_mbr(&mbr);
-}
-
-/*
  * get C/H/S geometry from user via menu interface and
  * store in globals.
  */
@@ -252,16 +235,16 @@ disp_cur_geom(void)
  * in the netbsd disklabel to the part we changed.
  */
 static void
-remove_old_partitions(uint start, int64_t size)
+remove_old_partitions(uint start, int size)
 {
 	partinfo *p;
 	uint end;
 
-	if (size > 0) {
-		end = start + size;
-	} else {
+	/* Allow for size being -ve, get it right for very large partitions */
+	end = start + size;
+	if (end < start) {
 		end = start;
-		start = end - size;
+		start = end + size;
 	}
 
 	if (end == 0)
@@ -275,9 +258,9 @@ remove_old_partitions(uint start, int64_t size)
 }
 
 static int
-find_mbr_space(struct mbr_sector *mbrs, uint *start, uint *size, uint from, int ignore)
+find_mbr_space(struct mbr_sector *mbrs, uint *start, uint *size, int from, int ignore)
 {
-	uint sz;
+	int sz;
 	int i;
 	uint s, e;
 
@@ -393,7 +376,7 @@ set_mbr_type(menudesc *m, void *arg)
 #ifdef BOOTSEL
 		if (ombri->bootsec == mbri->sector + mbrp->mbrp_start)
 			ombri->bootsec = 0;
-
+				
 		memset(mbri->mbrb.mbrbs_nametab[opt], 0,
 		    sizeof mbri->mbrb.mbrbs_nametab[opt]);
 #endif
@@ -466,9 +449,8 @@ set_mbr_type(menudesc *m, void *arg)
 			return 0;
 		mbri->extended = ext;
 		ext->sector = mbrp->mbrp_start;
-		ext->mbr.mbr_parts[0].mbrp_start = ptn_0_offset;
-		ext->mbr.mbr_parts[0].mbrp_size =
-		    mbrp->mbrp_size - ptn_0_offset;
+		ext->mbr.mbr_parts[0].mbrp_start = bsec;
+		ext->mbr.mbr_parts[0].mbrp_size = mbrp->mbrp_size - bsec;
 	}
 	mbrp->mbrp_type = type;
 
@@ -480,18 +462,18 @@ set_type_label(menudesc *m, int opt, void *arg)
 {
 
 	if (opt == 0) {
-		wprintw(m->mw, "%s", msg_string(MSG_Dont_change));
+		wprintw(m->mw, msg_string(MSG_Dont_change));
 		return;
 	}
 	if (opt == 1) {
-		wprintw(m->mw, "%s", msg_string(MSG_Delete_partition));
+		wprintw(m->mw, msg_string(MSG_Delete_partition));
 		return;
 	}
 	if (part_ids[opt - 1].id == -1) {
-		wprintw(m->mw, "%s", msg_string(MSG_Other_kind));
+		wprintw(m->mw, msg_string(MSG_Other_kind));
 		return;
 	}
-	wprintw(m->mw, "%s", part_ids[opt - 1].name);
+	wprintw(m->mw, part_ids[opt - 1].name);
 }
 
 static int
@@ -499,7 +481,7 @@ edit_mbr_type(menudesc *m, void *arg)
 {
 	static menu_ent type_opts[1 + nelem(part_ids)];
 	static int type_menu = -1;
-	unsigned int i;
+	int i;
 
 	if (type_menu == -1) {
 		for (i = 0; i < nelem(type_opts); i++) {
@@ -528,7 +510,7 @@ edit_mbr_start(menudesc *m, void *arg)
 	int opt = mbri->opt;
 	uint start, sz;
 	uint new_r, new, limit, dflt_r;
-	int64_t delta;
+	int delta;
 	const char *errmsg;
 	char *cp;
 	struct {
@@ -536,10 +518,10 @@ edit_mbr_start(menudesc *m, void *arg)
 		uint	start_r;
 		uint	limit;
 	} freespace[MBR_PART_COUNT];
-	unsigned int spaces;
-	unsigned int i;
+	int spaces;
+	int i;
 	char prompt[MBR_PART_COUNT * 60];
-	unsigned int len;
+	int len;
 	char numbuf[12];
 
 	if (opt >= MBR_PART_COUNT)
@@ -747,14 +729,14 @@ edit_mbr_size(menudesc *m, void *arg)
 			/* If unchanged, don't re-round size */
 			new = dflt;
 		else {
-			/* Round end to the partition alignment */
+			/* Round end to cylinder boundary */
 			if (sizemult != 1) {
 				new *= sizemult;
-				new += rounddown(start, ptn_alignment);
-				new = roundup(new, ptn_alignment);
+				new += rounddown(start, current_cylsize);
+				new = roundup(new, current_cylsize);
 				new -= start;
 				while (new <= 0)
-					new += ptn_alignment;
+					new += current_cylsize;
 			}
 		}
 		if (new > max)
@@ -816,7 +798,7 @@ edit_mbr_size(menudesc *m, void *arg)
 		break;
 	}
 
-	if (opt >= MBR_PART_COUNT && max - new <= (uint32_t)bsec)
+	if (opt >= MBR_PART_COUNT && max - new <= bsec)
 		/* Round up if not enough space for a header for free area */
 		new = max;
 
@@ -824,7 +806,7 @@ edit_mbr_size(menudesc *m, void *arg)
 		/* Kill information about old partition from label */
 		mbri->last_mounted[opt < MBR_PART_COUNT ? opt : 0] = NULL;
 		remove_old_partitions(mbri->sector + mbrp->mbrp_start +
-			    mbrp->mbrp_size, (int64_t)new - mbrp->mbrp_size);
+					mbrp->mbrp_size, new - mbrp->mbrp_size);
 	}
 
 	mbrp->mbrp_size = new;
@@ -877,7 +859,7 @@ edit_mbr_active(menudesc *m, void *arg)
 		*fl = 0;
 		return 0;
 	}
-
+		
 	/* Ensure there is at most one active partition */
 	for (i = 0; i < MBR_PART_COUNT; i++)
 		mbri->mbr.mbr_parts[i].mbrp_flag = 0;
@@ -1242,12 +1224,12 @@ mbr_use_wholedisk(mbr_info_t *mbri)
 	memset(&mbri->mbrb, 0, sizeof mbri->mbrb);
 #endif
 	part[0].mbrp_type = MBR_PTYPE_NETBSD;
-	part[0].mbrp_size = dlsize - ptn_0_offset;
-	part[0].mbrp_start = ptn_0_offset;
+	part[0].mbrp_size = dlsize - bsec;
+	part[0].mbrp_start = bsec;
 	part[0].mbrp_flag = MBR_PFLAG_ACTIVE;
 
-	ptstart = ptn_0_offset;
-	ptsize = dlsize - ptn_0_offset;
+	ptstart = bsec;
+	ptsize = dlsize - bsec;
 	return 1;
 }
 
@@ -1271,7 +1253,6 @@ edit_mbr(mbr_info_t *mbri)
 	/* Ask full/part */
 
 	part = &mbrs->mbr_parts[0];
-	get_ptn_alignment(part);	/* update ptn_alignment */
 	msg_display(MSG_fullpart, diskdev);
 	process_menu(MENU_fullpart, &usefull);
 
@@ -1293,7 +1274,7 @@ edit_mbr(mbr_info_t *mbri)
 			msg_display(MSG_ovrwrite);
 			process_menu(MENU_noyes, NULL);
 			if (!yesno) {
-				if (logfp)
+				if (logging)
 					(void)fprintf(logfp, "User answered no to destroy other data, aborting.\n");
 				return 0;
 			}
@@ -1301,16 +1282,16 @@ edit_mbr(mbr_info_t *mbri)
 		return(md_mbr_use_wholedisk(mbri));
 	}
 
+	/* Default to MB, and use bios geometry for cylinder size */
+	set_sizemultname_meg();
+	current_cylsize = bhead * bsec;
+
 	mbr_menu = new_menu(NULL, NULL, 16, 0, -1, 15, 70,
 			MC_NOBOX | MC_ALWAYS_SCROLL | MC_NOCLEAR,
 			set_mbr_header, set_mbr_label, NULL,
 			NULL, MSG_Partition_table_ok);
 	if (mbr_menu == -1)
 		return 0;
-
-	/* Default to MB, and use bios geometry for cylinder size */
-	set_sizemultname_meg();
-	current_cylsize = bhead * bsec;
 
 	for (;;) {
 		ptstart = 0;
@@ -1342,7 +1323,7 @@ edit_mbr(mbr_info_t *mbri)
 		}
 
 		/* Install in only netbsd partition if none tagged */
-		if (ptstart == 0 && bsdstart != ~0u) {
+		if (ptstart == 0 && bsdstart != ~0) {
 			ptstart = bsdstart;
 			ptsize = bsdsize;
 		}
@@ -1405,7 +1386,7 @@ validate_and_set_names(mbr_info_t *mbri, const struct mbr_bootsel *src,
 	const unsigned char *p;
 
 	/*
-	 * The 16 bit magic used to detect whether mbr_bootsel is valid
+	 * The 16 bit magic used to detect wether mbr_bootsel is valid
 	 * or not is pretty week - collisions have been seen in the wild;
 	 * but maybe it is just foreign tools corruption reminiscents
 	 * of NetBSD MBRs. Anyway, before accepting a boot menu definition,
@@ -1456,10 +1437,6 @@ read_mbr(const char *disk, mbr_info_t *mbri)
 	 */
 	if (bsec == 0)
 		bsec = dlsec;
-	ptn_0_offset = bsec;
-	/* use 1MB default offset on large disks as fdisk(8) */
-	if (dlsize > 2048 * 1024 * 128)
-		ptn_0_offset = 2048;
 
 	memset(mbri, 0, sizeof *mbri);
 
@@ -1470,16 +1447,14 @@ read_mbr(const char *disk, mbr_info_t *mbri)
 
 	for (;;) {
 		if (pread(fd, mbrs, sizeof *mbrs,
-		    (ext_base + next_ext) * (off_t)MBR_SECSIZE) - sizeof *mbrs != 0)
+		    (ext_base + next_ext) * (off_t)MBR_SECSIZE) < sizeof *mbrs)
 			break;
 
 		if (!valid_mbr(mbrs))
 			break;
 
 		mbrp = &mbrs->mbr_parts[0];
-		if (ext_base == 0) {
-			get_ptn_alignment(mbrp);	/* get ptn_0_offset */
-		} else {
+		if (ext_base != 0) {
 			/* sanity check extended chain */
 			if (MBR_IS_EXTENDED(mbrp[0].mbrp_type))
 				break;
@@ -1498,7 +1473,7 @@ read_mbr(const char *disk, mbr_info_t *mbri)
 #if BOOTSEL
 		if (mbrs->mbr_bootsel_magic == htole16(MBR_MAGIC)) {
 			/* old bootsel, grab bootsel info */
-			bootkey = validate_and_set_names(mbri,
+			bootkey = validate_and_set_names(mbri, 
 				(struct mbr_bootsel *)
 				((uint8_t *)mbrs + MBR_BS_OLD_OFFSET),
 				ext_base);
@@ -1559,9 +1534,9 @@ read_mbr(const char *disk, mbr_info_t *mbri)
 				ext->sector = base;
 				ext->mbr.mbr_magic = htole16(MBR_MAGIC);
 				ext->mbr.mbr_parts[1] = mbrp[1];
-				ext->mbr.mbr_parts[0].mbrp_start = ptn_0_offset;
+				ext->mbr.mbr_parts[0].mbrp_start = bsec;
 				ext->mbr.mbr_parts[0].mbrp_size =
-				    ext_base + limit - base - ptn_0_offset;
+				    ext_base + limit - base - bsec;
 				mbrp[1].mbrp_type = MBR_PTYPE_EXT;
 				mbrp[1].mbrp_start = base - ext_base;
 				mbrp[1].mbrp_size = limit - mbrp[1].mbrp_start;
@@ -1752,7 +1727,7 @@ guess_biosgeom_from_mbr(mbr_info_t *mbri, int *cyl, int *head, daddr_t *sec)
 	int xcylinders, xheads, i, j;
 	daddr_t xsectors;
 	int c1, h1, s1, c2, h2, s2;
-	daddr_t a1, a2;
+	unsigned long a1, a2;
 	uint64_t num, denom;
 
 	/*
@@ -1837,7 +1812,7 @@ guess_biosgeom_from_mbr(mbr_info_t *mbri, int *cyl, int *head, daddr_t *sec)
 
 static int
 get_mapping(struct mbr_partition *parts, int i,
-	    int *cylinder, int *head, int *sector, daddr_t *absolute)
+	    int *cylinder, int *head, int *sector, unsigned long *absolute)
 {
 	struct mbr_partition *apart = &parts[i / 2];
 
@@ -1856,42 +1831,9 @@ get_mapping(struct mbr_partition *parts, int i,
 			+ le32toh(apart->mbrp_size) - 1;
 	}
 	/* Sanity check the data against max values */
-	if ((((*cylinder * MAXHEAD) + *head) * (uint32_t)MAXSECTOR + *sector) < *absolute)
+	if ((((*cylinder * MAXHEAD) + *head) * MAXSECTOR + *sector) < *absolute)
 		/* cannot be a CHS mapping */
 		return -1;
 
 	return 0;
-}
-
-/*
- * Determine partition boundary alignment as fdisk(8) does.
- */
-static void
-get_ptn_alignment(struct mbr_partition *mbrp0)
-{
-	uint32_t ptn_0_base, ptn_0_limit;
-
-	/* Default to using 'traditional' cylinder alignment */
-	ptn_alignment = bhead * bsec;
-	ptn_0_offset = bsec;
-
-	if (mbrp0->mbrp_type != 0) {
-		/* Try to copy offset of first partition */
-		ptn_0_base = le32toh(mbrp0->mbrp_start);
-		ptn_0_limit = ptn_0_base + le32toh(mbrp0->mbrp_size);
-		if (!(ptn_0_limit & 2047)) {
-			/* Partition ends on a 1MB boundary, align to 1MB */
-			ptn_alignment = 2048;
-			if (ptn_0_base <= 2048
-			    && !(ptn_0_base & (ptn_0_base - 1))) {
-				/* ptn_base is a power of 2, use it */
-				ptn_0_offset = ptn_0_base;
-			}
-		}
-	} else {
-		/* Use 1MB offset for large (>128GB) disks */
-		if (dlsize > 2048 * 1024 * 128)
-			ptn_alignment = 2048;
-			ptn_0_offset = 2048;
-	}
 }

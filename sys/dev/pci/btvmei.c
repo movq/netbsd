@@ -1,4 +1,4 @@
-/* $NetBSD: btvmei.c,v 1.29 2012/10/27 17:18:28 chs Exp $ */
+/* $NetBSD: btvmei.c,v 1.18 2008/04/10 19:13:36 cegger Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btvmei.c,v 1.29 2012/10/27 17:18:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btvmei.c,v 1.18 2008/04/10 19:13:36 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,12 +51,12 @@ __KERNEL_RCSID(0, "$NetBSD: btvmei.c,v 1.29 2012/10/27 17:18:28 chs Exp $");
 #include <dev/pci/btvmeireg.h>
 #include <dev/pci/btvmeivar.h>
 
-static int b3_617_match(device_t, cfdata_t, void *);
-static void b3_617_attach(device_t, device_t, void *);
+static int b3_617_match(struct device *, struct cfdata *, void *);
+static void b3_617_attach(struct device *, struct device *, void *);
 #ifdef notyet
-static int b3_617_detach(device_t);
+static int b3_617_detach(struct device *);
 #endif
-void b3_617_slaveconfig(device_t, struct vme_attach_args *);
+void b3_617_slaveconfig(struct device *, struct vme_attach_args *);
 
 static void b3_617_vmeintr(struct b3_617_softc *, unsigned char);
 
@@ -69,11 +69,14 @@ struct b3_617_vmeresc {
 	int firstpage, maplen;
 };
 
-CFATTACH_DECL_NEW(btvmei, sizeof(struct b3_617_softc),
+CFATTACH_DECL(btvmei, sizeof(struct b3_617_softc),
     b3_617_match, b3_617_attach, NULL, NULL);
 
 static int
-b3_617_match(device_t parent, cfdata_t match, void *aux)
+b3_617_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct pci_attach_args *pa = aux;
 
@@ -84,21 +87,27 @@ b3_617_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-b3_617_attach(device_t parent, device_t self, void *aux)
+b3_617_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct b3_617_softc *sc = device_private(self);
+	struct b3_617_softc *sc = (struct b3_617_softc*)self;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
+
+	int rev;
 
 	pci_intr_handle_t ih;
 	const char *intrstr;
 	struct vmebus_attach_args vaa;
 
-	sc->sc_dev = self;
+	aprint_naive(": VME bus adapter\n");
+
 	sc->sc_pc = pc;
 	sc->sc_dmat = pa->pa_dmat;
 
-	pci_aprint_devinfo_fancy(pa, "VME bus adapter", "BIT3 PCI-VME 617", 1);
+	rev = PCI_REVISION(pci_conf_read(pc, pa->pa_tag, PCI_CLASS_REG));
+	aprint_normal(": BIT3 PCI-VME 617 rev %d\n", rev);
 
 	/*
 	 * Map CSR and mapping table spaces.
@@ -132,7 +141,7 @@ b3_617_attach(device_t parent, device_t self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error_dev(sc->sc_dev, "couldn't map interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
@@ -142,13 +151,13 @@ b3_617_attach(device_t parent, device_t self, void *aux)
 	 */
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_BIO, b3_617_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	if (b3_617_init(sc))
 		return;
@@ -180,9 +189,10 @@ b3_617_attach(device_t parent, device_t self, void *aux)
 
 #ifdef notyet
 static int
-b3_617_detach(device_t dev)
+b3_617_detach(dev)
+	struct device *dev;
 {
-	struct b3_617_softc *sc = device_private(dev);
+	struct b3_617_softc *sc = (struct b3_617_softc *)dev;
 
 	b3_617_halt(sc);
 
@@ -197,9 +207,11 @@ b3_617_detach(device_t dev)
 #endif
 
 void
-b3_617_slaveconfig(device_t dev, struct vme_attach_args *va)
+b3_617_slaveconfig(dev, va)
+	struct device *dev;
+	struct vme_attach_args *va;
 {
-	struct b3_617_softc *sc = device_private(dev);
+	struct b3_617_softc *sc = (struct b3_617_softc *)dev;
 	vme_chipset_tag_t vmect;
 	int i, res;
 	const char *name = 0; /* XXX gcc! */
@@ -255,14 +267,15 @@ freeit:
 }
 
 int
-b3_617_reset(struct b3_617_softc *sc)
+b3_617_reset(sc)
+	struct b3_617_softc *sc;
 {
 	unsigned char status;
 
 	/* reset sequence, ch 5.2 */
 	status = read_csr_byte(sc, LOC_STATUS);
 	if (status & LSR_NO_CONNECT) {
-		printf("%s: not connected\n", device_xname(sc->sc_dev));
+		printf("%s: not connected\n", device_xname(&sc->sc_dev));
 		return (-1);
 	}
 	status = read_csr_byte(sc, REM_STATUS); /* discard */
@@ -271,8 +284,8 @@ b3_617_reset(struct b3_617_softc *sc)
 	if (status & LSR_CERROR_MASK) {
 		char sbuf[sizeof(BIT3_LSR_BITS) + 64];
 
-		snprintb(sbuf, sizeof(sbuf), BIT3_LSR_BITS, status);
-		printf("%s: interface error, lsr=%s\n", device_xname(sc->sc_dev),
+		bitmask_snprintf(status, BIT3_LSR_BITS, sbuf, sizeof(sbuf));
+		printf("%s: interface error, lsr=%s\n", device_xname(&sc->sc_dev),
 		       sbuf);
 		return (-1);
 	}
@@ -280,7 +293,8 @@ b3_617_reset(struct b3_617_softc *sc)
 }
 
 int
-b3_617_init(struct b3_617_softc *sc)
+b3_617_init(sc)
+	struct b3_617_softc *sc;
 {
 	unsigned int i;
 
@@ -299,16 +313,16 @@ b3_617_init(struct b3_617_softc *sc)
 	 * set up scatter page allocation control
 	 */
 	sc->vmeext = extent_create("pcivme", MR_PCI_VME,
-				   MR_PCI_VME + MR_PCI_VME_SIZE - 1,
+				   MR_PCI_VME + MR_PCI_VME_SIZE - 1, M_DEVBUF,
 				   sc->vmemap, sizeof(sc->vmemap),
 				   EX_NOCOALESCE);
 #if 0
 	sc->pciext = extent_create("vmepci", MR_VME_PCI,
-				   MR_VME_PCI + MR_VME_PCI_SIZE - 1,
+				   MR_VME_PCI + MR_VME_PCI_SIZE - 1, M_DEVBUF,
 				   sc->pcimap, sizeof(sc->pcimap),
 				   EX_NOCOALESCE);
 	sc->dmaext = extent_create("dmapci", MR_DMA_PCI,
-				   MR_DMA_PCI + MR_DMA_PCI_SIZE - 1,
+				   MR_DMA_PCI + MR_DMA_PCI_SIZE - 1, M_DEVBUF,
 				   sc->dmamap, sizeof(sc->dmamap),
 				   EX_NOCOALESCE);
 #endif
@@ -330,7 +344,8 @@ b3_617_init(struct b3_617_softc *sc)
 
 #ifdef notyet /* for detach */
 void
-b3_617_halt(struct b3_617_softc *sc)
+b3_617_halt(sc)
+	struct b3_617_softc *sc;
 {
 	/*
 	 * because detach code checks for existence of children,
@@ -344,7 +359,9 @@ b3_617_halt(struct b3_617_softc *sc)
 #endif
 
 static void
-b3_617_vmeintr(struct b3_617_softc *sc, unsigned char lstat)
+b3_617_vmeintr(sc, lstat)
+	struct b3_617_softc *sc;
+	unsigned char lstat;
 {
 	int level;
 
@@ -390,7 +407,16 @@ b3_617_vmeintr(struct b3_617_softc *sc, unsigned char lstat)
 #define sc ((struct b3_617_softc*)vsc)
 
 int
-b3_617_map_vme(void *vsc, vme_addr_t vmeaddr, vme_size_t len, vme_am_t am, vme_datasize_t datasizes, vme_swap_t swap, bus_space_tag_t *tag, bus_space_handle_t *handle, vme_mapresc_t *resc)
+b3_617_map_vme(vsc, vmeaddr, len, am, datasizes, swap, tag, handle, resc)
+	void *vsc;
+	vme_addr_t vmeaddr;
+	vme_size_t len;
+	vme_am_t am;
+	vme_datasize_t datasizes;
+	vme_swap_t swap;
+	bus_space_tag_t *tag;
+	bus_space_handle_t *handle;
+	vme_mapresc_t *resc;
 {
 	vme_addr_t vmebase, vmeend, va;
 	unsigned long maplen, first, i;
@@ -455,7 +481,9 @@ b3_617_map_vme(void *vsc, vme_addr_t vmeaddr, vme_size_t len, vme_am_t am, vme_d
 }
 
 void
-b3_617_unmap_vme(void *vsc, vme_mapresc_t resc)
+b3_617_unmap_vme(vsc, resc)
+	void *vsc;
+	vme_mapresc_t resc;
 {
 	unsigned long i;
 	struct b3_617_vmeresc *r = resc;
@@ -472,7 +500,14 @@ b3_617_unmap_vme(void *vsc, vme_mapresc_t resc)
 }
 
 int
-b3_617_vme_probe(void *vsc, vme_addr_t addr, vme_size_t len, vme_am_t am, vme_datasize_t datasize, int (*callback)(void *, bus_space_tag_t, bus_space_handle_t), void *cbarg)
+b3_617_vme_probe(vsc, addr, len, am, datasize, callback, cbarg)
+	void *vsc;
+	vme_addr_t addr;
+	vme_size_t len;
+	vme_am_t am;
+	vme_datasize_t datasize;
+	int (*callback)(void *, bus_space_tag_t, bus_space_handle_t);
+	void *cbarg;
 {
 	bus_space_tag_t tag;
 	bus_space_handle_t handle;
@@ -528,11 +563,14 @@ b3_617_vme_probe(void *vsc, vme_addr_t addr, vme_size_t len, vme_am_t am, vme_da
 }
 
 int
-b3_617_map_vmeint(void *vsc, int level, int vector, vme_intr_handle_t *handlep)
+b3_617_map_vmeint(vsc, level, vector, handlep)
+	void *vsc;
+	int level, vector;
+	vme_intr_handle_t *handlep;
 {
 	if (!sc->sc_ih) {
 		printf("%s: b3_617_map_vmeint: no IRQ\n",
-		       device_xname(sc->sc_dev));
+		       device_xname(&sc->sc_dev));
 		return (ENXIO);
 	}
 	/*
@@ -544,7 +582,12 @@ b3_617_map_vmeint(void *vsc, int level, int vector, vme_intr_handle_t *handlep)
 }
 
 void *
-b3_617_establish_vmeint(void *vsc, vme_intr_handle_t handle, int prior, int (*func)(void *), void *arg)
+b3_617_establish_vmeint(vsc, handle, prior, func, arg)
+	void *vsc;
+	vme_intr_handle_t handle;
+	int prior;
+	int (*func)(void *);
+	void *arg;
 {
 	struct b3_617_vmeintrhand *ih;
 	long lv;
@@ -572,7 +615,9 @@ b3_617_establish_vmeint(void *vsc, vme_intr_handle_t handle, int prior, int (*fu
 }
 
 void
-b3_617_disestablish_vmeint(void *vsc, void *cookie)
+b3_617_disestablish_vmeint(vsc, cookie)
+	void *vsc;
+	void *cookie;
 {
 	struct b3_617_vmeintrhand *ih = cookie;
 	int s;
@@ -590,7 +635,8 @@ b3_617_disestablish_vmeint(void *vsc, void *cookie)
 }
 
 int
-b3_617_intr(void *vsc)
+b3_617_intr(vsc)
+	void *vsc;
 {
 	int handled = 0;
 
@@ -656,7 +702,9 @@ b3_617_dmamap_create(vsc, len, am, datasize, swap,
 }
 
 void
-b3_617_dmamap_destroy(void *vsc, bus_dmamap_t map)
+b3_617_dmamap_destroy(vsc, map)
+	void *vsc;
+	bus_dmamap_t map;
 {
 }
 
@@ -677,7 +725,10 @@ b3_617_dmamem_alloc(vsc, len, am, datasizes, swap,
 }
 
 void
-b3_617_dmamem_free(void *vsc, bus_dma_segment_t *segs, int nsegs)
+b3_617_dmamem_free(vsc, segs, nsegs)
+	void *vsc;
+	bus_dma_segment_t *segs;
+	int nsegs;
 {
 }
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: calendar.1,v 1.25 2010/06/08 03:08:47 riz Exp $
+.\"	$NetBSD: calendar.1,v 1.22 2008/03/07 19:22:22 christos Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)calendar.1	8.1 (Berkeley) 6/29/93
 .\"
-.Dd August 27, 2009
+.Dd December 6, 2004
 .Dt CALENDAR 1
 .Os
 .Sh NAME
@@ -58,7 +58,7 @@ This requires super-user privileges.
 Display lines for the given date.
 By default, the current date is used.
 The year, which may be given in either two or four digit format, is used
-only for purposes of determining whether the given date falls on a Friday
+only for purposes of determining wether the given date falls on a Friday
 in that year (see below).
 If the year is not specified, the current year is assumed.
 .It Fl f Ar file
@@ -74,11 +74,10 @@ By default, the following filenames are checked for:
 .El
 and the first which is found is used.
 The filename may be absolute.
-If not absolute, it is taken relative to the
+If not absolute, it is taken relative to the current directory or the
 directory specified by the
 .Ev CALENDAR_DIR
-environment variable, if set; otherwise, it is taken relative to the
-user's home directory.
+environment variable.
 Or, if the
 .Fl a
 flag is given, a non-absolute filename is taken relative to each user's
@@ -199,6 +198,10 @@ U.S. holidays.
 This calendar should be updated yearly by the local system administrator
 so that roving holidays are set correctly for the current year.
 .El
+.Sh SEE ALSO
+.Xr at 1 ,
+.Xr cpp 1 ,
+.Xr cron 8
 .Sh COMPATIBILITY
 The
 .Nm
@@ -220,10 +223,6 @@ environment variable to
 or use the
 .Fl f
 flag.
-.Sh SEE ALSO
-.Xr at 1 ,
-.Xr cpp 1 ,
-.Xr cron 8
 .Sh HISTORY
 A
 .Nm

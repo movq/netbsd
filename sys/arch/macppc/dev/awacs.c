@@ -1,4 +1,4 @@
-/*	$NetBSD: awacs.c,v 1.43 2012/11/02 20:09:02 phx Exp $	*/
+/*	$NetBSD: awacs.c,v 1.35.4.1 2012/11/06 20:10:49 riz Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,22 +27,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awacs.c,v 1.43 2012/11/02 20:09:02 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awacs.c,v 1.35.4.1 2012/11/06 20:10:49 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/audioio.h>
 #include <sys/device.h>
+#include <sys/malloc.h>
 #include <sys/systm.h>
 #include <sys/kthread.h>
 #include <sys/kernel.h>
-#include <sys/mutex.h>
-#include <sys/condvar.h>
 
 #include <dev/auconv.h>
 #include <dev/audio_if.h>
 #include <dev/mulaw.h>
 
 #include <uvm/uvm_extern.h>
+
 #include <machine/autoconf.h>
 #include <machine/pio.h>
 
@@ -65,10 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: awacs.c,v 1.43 2012/11/02 20:09:02 phx Exp $");
 struct awacs_softc {
 	device_t sc_dev;
 	int sc_flags;
-	bus_space_tag_t sc_tag;
-	bus_space_handle_t	sc_regh;
-	bus_space_handle_t	sc_idmah;
-	bus_space_handle_t	sc_odmah;
+
 	void (*sc_ointr)(void *);	/* DMA completion intr handler */
 	void *sc_oarg;			/* arg for sc_ointr() */
 	int sc_opages;			/* # of output pages */
@@ -86,13 +83,14 @@ struct awacs_softc {
 	int vol_l, vol_r;
 	int sc_bass, sc_treble;
 	lwp_t *sc_thread;
-	kcondvar_t sc_event;
+	int sc_event;
 	int sc_output_wanted;
 	int sc_need_parallel_output;
 #if NSGSMIX > 0
 	device_t sc_sgsmix;
 #endif
 
+	char *sc_reg;
 	u_int sc_codecctl0;
 	u_int sc_codecctl1;
 	u_int sc_codecctl2;
@@ -109,9 +107,6 @@ struct awacs_softc {
 
 #define AWACS_NFORMATS	2
 	struct audio_format sc_formats[AWACS_NFORMATS];
-
-	kmutex_t sc_lock;
-	kmutex_t sc_intr_lock;
 };
 
 static int awacs_match(device_t, struct cfdata *, void *);
@@ -138,7 +133,6 @@ static int awacs_query_devinfo(void *, mixer_devinfo_t *);
 static size_t awacs_round_buffersize(void *, int, size_t);
 static paddr_t awacs_mappage(void *, void *, off_t, int);
 static int awacs_get_props(void *);
-static void awacs_get_locks(void *, kmutex_t **, kmutex_t **);
 
 static inline u_int awacs_read_reg(struct awacs_softc *, int);
 static inline void awacs_write_reg(struct awacs_softc *, int, int);
@@ -190,7 +184,6 @@ const struct audio_hw_if awacs_hw_if = {
 	awacs_trigger_output,
 	awacs_trigger_input,
 	NULL,
-	awacs_get_locks,
 };
 
 struct audio_device awacs_device = {
@@ -323,7 +316,7 @@ static void
 awacs_attach(device_t parent, device_t self, void *aux)
 {
 	struct awacs_softc *sc;
-	struct confargs *ca = aux;
+	struct confargs *ca;
 	int cirq, oirq, iirq, cirq_type, oirq_type, iirq_type;
 	int len = -1, perch;
 	int root_node;
@@ -331,21 +324,15 @@ awacs_attach(device_t parent, device_t self, void *aux)
 
 	sc = device_private(self);
 	sc->sc_dev = self;
-	sc->sc_tag = ca->ca_tag;
+	ca = aux;
 
-	if (bus_space_map(sc->sc_tag, ca->ca_baseaddr + ca->ca_reg[0],
-	    ca->ca_reg[1], 0, &sc->sc_regh) != 0)
-		printf("couldn't map codec registers\n");
-	if (bus_space_map(sc->sc_tag, ca->ca_baseaddr + ca->ca_reg[2],
-	    ca->ca_reg[3], BUS_SPACE_MAP_LINEAR, &sc->sc_odmah) != 0)
-		printf("couldn't map DMA out registers\n");
-	if (bus_space_map(sc->sc_tag, ca->ca_baseaddr + ca->ca_reg[4],
-	    ca->ca_reg[5], BUS_SPACE_MAP_LINEAR, &sc->sc_idmah) != 0)
-		printf("couldn't map DMA in registers\n");
+	sc->sc_reg = mapiodev(ca->ca_baseaddr + ca->ca_reg[0], ca->ca_reg[1]);
 
-	sc->sc_odma = bus_space_vaddr(sc->sc_tag, sc->sc_odmah);
-	sc->sc_idma = bus_space_vaddr(sc->sc_tag, sc->sc_idmah);
+	/* out */
+	sc->sc_odma = mapiodev(ca->ca_baseaddr + ca->ca_reg[2], ca->ca_reg[3]);
 	sc->sc_odmacmd = dbdma_alloc(20 * sizeof(struct dbdma_command));
+	/* in */
+	sc->sc_idma = mapiodev(ca->ca_baseaddr + ca->ca_reg[4], ca->ca_reg[5]);
 	sc->sc_idmacmd = dbdma_alloc(20 * sizeof(struct dbdma_command));
 
 	if (strcmp(ca->ca_name, "i2s") == 0) {
@@ -384,11 +371,6 @@ awacs_attach(device_t parent, device_t self, void *aux)
 	intr_establish(cirq, cirq_type, IPL_BIO, awacs_status_intr, sc);
 	intr_establish(oirq, oirq_type, IPL_AUDIO, awacs_intr, sc);
 	intr_establish(iirq, iirq_type, IPL_AUDIO, awacs_intr, sc);
-
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
-
-	cv_init(&sc->sc_event, "awacs_wait");
 
 	/* check if the chip is a screamer */
 	sc->sc_screamer = (of_compatible(ca->ca_node, screamer) != -1);
@@ -485,7 +467,7 @@ awacs_attach(device_t parent, device_t self, void *aux)
 		sc->sc_need_parallel_output = 1;
 		sc->sc_codecctl1 |= AWACS_PARALLEL_OUTPUT;
 	}
-	
+
 	if (awacs_check_headphones(sc)) {
 
                 /* default output to headphones */
@@ -549,7 +531,6 @@ awacs_attach(device_t parent, device_t self, void *aux)
 	    &sc->sc_thread, "%s", "awacs") != 0) {
 		printf("awacs: unable to create event kthread");
 	}
-	pmf_device_register(sc->sc_dev, NULL, NULL);
 }
 
 static int
@@ -558,38 +539,29 @@ awacs_setup_sgsmix(device_t cookie)
 	struct awacs_softc *sc = device_private(cookie);
 #if NSGSMIX > 0
 	device_t dv;
-	deviter_t di;
 #endif
 
 	if (!sc->sc_have_perch)
 		return 0;
 #if NSGSMIX > 0
 	/* look for sgsmix */
-	for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
-	     dv != NULL;
-	     dv = deviter_next(&di)) {
+	for (dv = alldevs.tqh_first; dv; dv=dv->dv_list.tqe_next) {
 		if (device_is_a(dv, "sgsmix")) {
 			sc->sc_sgsmix = dv;
 			break;
 		}
 	}
-	deviter_release(&di);
 	if (sc->sc_sgsmix == NULL)
 		return 0;
 
 	printf("%s: using %s\n", device_xname(sc->sc_dev),
 	    device_xname(sc->sc_sgsmix));
 
-	sc->sc_codecctl1 &= ~AWACS_MUTE_HEADPHONE;
-	awacs_write_codec(sc, sc->sc_codecctl1);
-
-	mutex_enter(&sc->sc_intr_lock);
 	awacs_select_output(sc, sc->sc_output_mask);
 	awacs_set_volume(sc, sc->vol_l, sc->vol_r);
 	awacs_set_bass(sc, 128);
 	awacs_set_treble(sc, 128);
-	cv_signal(&sc->sc_event);	
-	mutex_exit(&sc->sc_intr_lock);
+	wakeup(&sc->sc_event);	
 #endif
 	return 0;
 }
@@ -598,15 +570,19 @@ awacs_setup_sgsmix(device_t cookie)
 static inline u_int
 awacs_read_reg(struct awacs_softc *sc, int reg)
 {
+	char *addr;
 
-	return bus_space_read_4(sc->sc_tag, sc->sc_regh, reg);
+	addr = sc->sc_reg;
+	return in32rb(addr + reg);
 }
 
 static inline void
 awacs_write_reg(struct awacs_softc *sc, int reg, int val)
 {
+	char *addr;
 
-	bus_space_write_4(sc->sc_tag, sc->sc_regh, reg, val);
+	addr = sc->sc_reg;
+	out32rb(addr + reg, val);
 }
 
 static void
@@ -633,7 +609,6 @@ awacs_intr(void *v)
 	int status;
 
 	sc = v;
-	mutex_spin_enter(&sc->sc_intr_lock);
 	cmd = sc->sc_odmacmd;
 	count = sc->sc_opages;
 	/* Fill used buffer(s). */
@@ -648,7 +623,6 @@ awacs_intr(void *v)
 		}
 		cmd++;
 	}
-	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return 1;
 }
@@ -855,15 +829,11 @@ awacs_set_port(void *h, mixer_ctrl_t *mc)
 		/* No change necessary? */
 		if (mc->un.mask == sc->sc_output_mask)
 			return 0;
-		mutex_enter(&sc->sc_intr_lock);
 		awacs_select_output(sc, mc->un.mask);
-		mutex_exit(&sc->sc_intr_lock);
 		return 0;
 
 	case AWACS_VOL_MASTER:
-		mutex_enter(&sc->sc_intr_lock);
 		awacs_set_volume(sc, l, r);
-		mutex_exit(&sc->sc_intr_lock);
 		return 0;
 
 	case AWACS_INPUT_SELECT:
@@ -904,15 +874,11 @@ awacs_set_port(void *h, mixer_ctrl_t *mc)
 
 #if NSGSMIX > 0
 	case AWACS_BASS:
-		mutex_enter(&sc->sc_intr_lock);
 		awacs_set_bass(sc, l);
-		mutex_exit(&sc->sc_intr_lock);
 		return 0;
 
 	case AWACS_TREBLE:
-		mutex_enter(&sc->sc_intr_lock);
 		awacs_set_treble(sc, l);
-		mutex_exit(&sc->sc_intr_lock);
 		return 0;
 #endif
 	}
@@ -984,7 +950,7 @@ awacs_query_devinfo(void *h, mixer_devinfo_t *dip)
 	switch (dip->index) {
 
 	case AWACS_OUTPUT_SELECT:
-		dip->mixer_class = AWACS_OUTPUT_CLASS;
+		dip->mixer_class = AWACS_MONITOR_CLASS;
 		strcpy(dip->label.name, AudioNoutput);
 		dip->type = AUDIO_MIXER_SET;
 		dip->prev = dip->next = AUDIO_MIXER_LAST;
@@ -996,12 +962,11 @@ awacs_query_devinfo(void *h, mixer_devinfo_t *dip)
 		return 0;
 
 	case AWACS_VOL_MASTER:
-		dip->mixer_class = AWACS_OUTPUT_CLASS;
+		dip->mixer_class = AWACS_MONITOR_CLASS;
 		strcpy(dip->label.name, AudioNmaster);
 		dip->type = AUDIO_MIXER_VALUE;
 		dip->prev = dip->next = AUDIO_MIXER_LAST;
 		dip->un.v.num_channels = 2;
-		dip->un.v.delta = 16;
 		strcpy(dip->un.v.units.name, AudioNvolume);
 		return 0;
 
@@ -1018,7 +983,7 @@ awacs_query_devinfo(void *h, mixer_devinfo_t *dip)
 	case AWACS_BASS:
 		if (sc->sc_sgsmix == NULL)
 			return ENXIO;
-		dip->mixer_class = AWACS_OUTPUT_CLASS;
+		dip->mixer_class = AWACS_MONITOR_CLASS;
 		strcpy(dip->label.name, AudioNbass);
 		dip->type = AUDIO_MIXER_VALUE;
 		dip->prev = dip->next = AUDIO_MIXER_LAST;
@@ -1029,7 +994,7 @@ awacs_query_devinfo(void *h, mixer_devinfo_t *dip)
 	case AWACS_TREBLE:
 		if (sc->sc_sgsmix == NULL)
 			return ENXIO;
-		dip->mixer_class = AWACS_OUTPUT_CLASS;
+		dip->mixer_class = AWACS_MONITOR_CLASS;
 		strcpy(dip->label.name, AudioNtreble);
 		dip->type = AUDIO_MIXER_VALUE;
 		dip->prev = dip->next = AUDIO_MIXER_LAST;
@@ -1166,15 +1131,6 @@ awacs_trigger_input(void *h, void *start, void *end, int bsize,
 
 	DPRINTF("awacs_trigger_input called\n");
 	return 1;
-}
-  
-static void
-awacs_get_locks(void *opaque, kmutex_t **intr, kmutex_t **thread)
-{
-	struct awacs_softc *sc = opaque;
-
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
 }
 
 static void
@@ -1403,16 +1359,14 @@ awacs_status_intr(void *cookie)
 	struct awacs_softc *sc = cookie;
 	int mask;
 	
-	mutex_spin_enter(&sc->sc_intr_lock);
 	mask = awacs_check_headphones(sc) ? OUTPUT_HEADPHONES : OUTPUT_SPEAKER;
 	if (mask != sc->sc_output_mask) {
 
 		sc->sc_output_wanted = mask;
-		cv_signal(&sc->sc_event);
+		wakeup(&sc->sc_event);
 	}
 	/* clear the interrupt */
 	awacs_write_reg(sc, AWACS_SOUND_CTRL, sc->sc_soundctl | AWACS_PORTCHG);
-	mutex_spin_exit(&sc->sc_intr_lock);
 	return 1;
 }
 
@@ -1421,9 +1375,8 @@ awacs_thread(void *cookie)
 {
 	struct awacs_softc *sc = cookie;
 	
-	mutex_enter(&sc->sc_intr_lock);
 	while (1) {
-		cv_timedwait(&sc->sc_event, &sc->sc_intr_lock, hz);
+		tsleep(&sc->sc_event, PWAIT, "awacs_wait", hz);
 		if (sc->sc_output_wanted == sc->sc_output_mask)
 			continue;
 

@@ -1,11 +1,10 @@
-#	$NetBSD: Makefile,v 1.5 2010/05/22 02:27:08 mrg Exp $
+#	$NetBSD: Makefile,v 1.3.8.1 2008/11/07 23:23:36 snj Exp $
 
 .include <bsd.own.mk>
 
 LIB=	Xxf86vm
 .PATH:	${X11SRCDIR.${LIB}}/src
 .PATH:	${X11SRCDIR.${LIB}}/man
-.PATH:	${X11SRCDIR.${LIB}}/include/X11/extensions
 
 SRCS=	XF86VMode.c
 MAN=	XF86VM.3
@@ -33,10 +32,6 @@ MLINKS=	XF86VM.3 XF86VidModeQueryExtension.3 \
 
 LIBDPLIBS=	Xext	${.CURDIR}/../libXext \
 		X11	${.CURDIR}/../libX11/dynamic
-
-INCS=	xf86vmode.h
-
-INCSDIR=${X11INCDIR}/X11/extensions
 
 PKGDIST=	${LIB}
 

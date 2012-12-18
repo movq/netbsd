@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_bcast.c,v 1.24 2012/03/20 17:14:50 matt Exp $	*/
+/*	$NetBSD: clnt_bcast.c,v 1.19 2008/04/25 17:44:44 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)clnt_bcast.c 1.15 89/04/21 Copyr 1988 Sun Micro";
 #else
-__RCSID("$NetBSD: clnt_bcast.c,v 1.24 2012/03/20 17:14:50 matt Exp $");
+__RCSID("$NetBSD: clnt_bcast.c,v 1.19 2008/04/25 17:44:44 christos Exp $");
 #endif
 #endif
 
@@ -122,9 +122,9 @@ struct broadif {
 
 typedef TAILQ_HEAD(, broadif) broadlist_t;
 
-int __rpc_getbroadifs(int, int, int, broadlist_t *);
-void __rpc_freebroadifs(broadlist_t *);
-int __rpc_broadenable(int, int, struct broadif *);
+int __rpc_getbroadifs __P((int, int, int, broadlist_t *));
+void __rpc_freebroadifs __P((broadlist_t *));
+int __rpc_broadenable __P((int, int, struct broadif *));
 
 int __rpc_lowvers = 0;
 
@@ -234,8 +234,7 @@ __rpc_broadenable(int af, int s, struct broadif *bip)
 			return -1;
 	} else
 #endif
-		if (setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o,
-		    (socklen_t)sizeof(o)) == -1)
+		if (setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o) < 0)
 			return -1;
 
 	return 0;
@@ -243,18 +242,19 @@ __rpc_broadenable(int af, int s, struct broadif *bip)
 
 
 enum clnt_stat
-rpc_broadcast_exp(
-	rpcprog_t	prog,		/* program number */
-	rpcvers_t	vers,		/* version number */
-	rpcproc_t	proc,		/* procedure number */
-	xdrproc_t	xargs,		/* xdr routine for args */
-	const char *	argsp,		/* pointer to args */
-	xdrproc_t	xresults,	/* xdr routine for results */
-	caddr_t		resultsp,	/* pointer to results */
-	resultproc_t	eachresult,	/* call with each result obtained */
-	int 		inittime,	/* how long to wait initially */
-	int 		waittime,	/* maximum time to wait */
-	const char *	nettype)	/* transport type */
+rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
+	eachresult, inittime, waittime, nettype)
+	rpcprog_t	prog;		/* program number */
+	rpcvers_t	vers;		/* version number */
+	rpcproc_t	proc;		/* procedure number */
+	xdrproc_t	xargs;		/* xdr routine for args */
+	const char *	argsp;		/* pointer to args */
+	xdrproc_t	xresults;	/* xdr routine for results */
+	caddr_t		resultsp;	/* pointer to results */
+	resultproc_t	eachresult;	/* call with each result obtained */
+	int 		inittime;	/* how long to wait initially */
+	int 		waittime;	/* maximum time to wait */
+	const char		*nettype;	/* transport type */
 {
 	enum clnt_stat	stat = RPC_SUCCESS; /* Return status */
 	XDR 		xdr_stream; /* XDR stream */
@@ -262,10 +262,10 @@ rpc_broadcast_exp(
 	struct rpc_msg	msg;	/* RPC message */
 	char 		*outbuf = NULL;	/* Broadcast msg buffer */
 	char		*inbuf = NULL; /* Reply buf */
-	ssize_t		inlen;
+	int		inlen;
 	u_int 		maxbufsize = 0;
 	AUTH 		*sys_auth = authunix_create_default();
-	size_t		i;
+	int		i;
 	void		*handle;
 	char		uaddress[1024];	/* A self imposed limit */
 	char		*uaddrp = uaddress;
@@ -282,7 +282,7 @@ rpc_broadcast_exp(
 		broadlist_t nal;
 	} fdlist[MAXBCAST];
 	struct pollfd pfd[MAXBCAST];
-	nfds_t fdlistno = 0;
+	size_t fdlistno = 0;
 	struct r_rpcb_rmtcallargs barg;	/* Remote arguments */
 	struct r_rpcb_rmtcallres bres; /* Remote results */
 	size_t outlen;
@@ -467,15 +467,15 @@ rpc_broadcast_exp(
 				 */
 
 				if (!__rpc_lowvers)
-					if ((size_t)sendto(fdlist[i].fd, outbuf,
+					if (sendto(fdlist[i].fd, outbuf,
 					    outlen, 0, (struct sockaddr*)addr,
-					    (socklen_t)fdlist[i].asize) !=
+					    (size_t)fdlist[i].asize) !=
 					    outlen) {
 						warn("clnt_bcast: cannot send"
 						      " broadcast packet");
 						stat = RPC_CANTSEND;
 						continue;
-					}
+					};
 #ifdef RPC_DEBUG
 				if (!__rpc_lowvers)
 					fprintf(stderr, "Broadcast packet sent "
@@ -487,15 +487,13 @@ rpc_broadcast_exp(
 				 * Send the version 2 packet also
 				 * for UDP/IP
 				 */
-				if (pmap_flag &&
-				    fdlist[i].proto == IPPROTO_UDP) {
-					if ((size_t)sendto(fdlist[i].fd,
-					    outbuf_pmap, outlen_pmap, 0, addr,
-					    (socklen_t)fdlist[i].asize) !=
+				if (pmap_flag && fdlist[i].proto == IPPROTO_UDP) {
+					if (sendto(fdlist[i].fd, outbuf_pmap,
+					    outlen_pmap, 0, addr,
+					    (size_t)fdlist[i].asize) !=
 						outlen_pmap) {
 						warnx("clnt_bcast: "
-						    "Cannot send "
-						    "broadcast packet");
+				"Cannot send broadcast packet");
 						stat = RPC_CANTSEND;
 						continue;
 					}
@@ -565,7 +563,7 @@ rpc_broadcast_exp(
 				stat = RPC_CANTRECV;
 				continue;
 			}
-			if (inlen < (ssize_t)sizeof(u_int32_t))
+			if (inlen < sizeof (u_int32_t))
 				continue; /* Drop that and go ahead */
 			/*
 			 * see if reply transaction id matches sent id.
@@ -665,16 +663,17 @@ done_broad:
 
 
 enum clnt_stat
-rpc_broadcast(
-	rpcprog_t	prog,		/* program number */
-	rpcvers_t	vers,		/* version number */
-	rpcproc_t	proc,		/* procedure number */
-	xdrproc_t	xargs,		/* xdr routine for args */
-	const char *	argsp,		/* pointer to args */
-	xdrproc_t	xresults,	/* xdr routine for results */
-	caddr_t		resultsp,	/* pointer to results */
-	resultproc_t	eachresult,	/* call with each result obtained */
-	const char *	nettype)	/* transport type */
+rpc_broadcast(prog, vers, proc, xargs, argsp, xresults, resultsp,
+			eachresult, nettype)
+	rpcprog_t	prog;		/* program number */
+	rpcvers_t	vers;		/* version number */
+	rpcproc_t	proc;		/* procedure number */
+	xdrproc_t	xargs;		/* xdr routine for args */
+	const char *	argsp;		/* pointer to args */
+	xdrproc_t	xresults;	/* xdr routine for results */
+	caddr_t		resultsp;	/* pointer to results */
+	resultproc_t	eachresult;	/* call with each result obtained */
+	const char		*nettype;	/* transport type */
 {
 	enum clnt_stat	dummy;
 

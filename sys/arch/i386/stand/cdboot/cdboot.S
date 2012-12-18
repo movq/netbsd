@@ -1,4 +1,4 @@
-/*	$NetBSD: cdboot.S,v 1.12 2011/01/04 16:53:05 jakllsch Exp $	*/
+/*	$NetBSD: cdboot.S,v 1.8 2008/05/03 13:07:31 ad Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -33,6 +33,9 @@
  * This is a primary boot loader that loads a secondary boot loader
  * directly from CD without performing floppy/hard disk emulation as
  * described by the El Torito specification.
+ *
+ * TODO:
+ *  - Support for loading secondary boot loader > 64kB
  */
 
 #include <machine/asm.h>
@@ -41,8 +44,8 @@
 #define BOOT_ADDR	0x7c00
 #define BLOCK_SIZE	2048		/* Default for ISO 9660 */
 #define VD_LBA		16		/* LBA of Volume Descriptor (VD) */
-#define PVD_ADDR	end		/* Where Primary VD is loaded */
-#define ROOTDIR_ADDR	end+BLOCK_SIZE	/* Where Root Directory is loaded */
+#define PVD_ADDR	0x1000		/* Where Primary VD is loaded */
+#define ROOTDIR_ADDR	0x1800		/* Where Root Directory is loaded */
 #define LOADER_ADDR	SECONDARY_LOAD_ADDRESS
 
 #ifdef BOOT_FROM_FAT
@@ -221,8 +224,6 @@ boot_hard_disk:
 boot_cdrom:
 	movw	$str_banner, %si
 	call	message
-
-/* Read volume descriptor sectors until Primary decriptor found */
 	movl	$VD_LBA, %eax
 next_block:
 	movb	$1, %dh			/* Number of sectors to read */
@@ -237,7 +238,6 @@ next_block:
 	call	message
 	jmp	panic
 
-/* Read all of root directory */
 pvd_found:
 	movw	$PVD_ADDR+PVD_ROOT_DR, %bx
 	movl	DR_EXTENT(%bx), %eax	/* LBA of the root directory */
@@ -246,8 +246,6 @@ pvd_found:
 	movb	%dl, %dh		/*  ... and load it to %dh */
 	movl	$ROOTDIR_ADDR, %ebx
 	call	read_sectors
-
-/* Scan directory entries searching for /boot */
 next_entry:
 	cmpb	$0, DR_LEN(%bx)
 	jz	last_entry
@@ -272,7 +270,6 @@ last_entry:
 	call	message
 	jmp	panic
 
-/* Found /boot, read contents to 0x1000:0 */
 load_loader:
 	movl	DR_EXTENT(%bx), %eax
 	movl	DR_DATA_LEN(%bx), %edx
@@ -281,8 +278,6 @@ load_loader:
 	movb	%dl, %dh
 	movl	$LOADER_ADDR, %ebx
 	call	read_sectors
-
-/* Finally call into code of /boot */
 	movl	$boot_params, %esi	/* Provide boot_params */
 	xorl	%edx, %edx
 	movb	boot_drive, %dl
@@ -299,40 +294,38 @@ panic:
  * %eax = LBA of starting sector
  * %ebx = buffer to store sectors
  * %dh = number of sectors to read
- *
- * Long transfers are split onto multiple 64k reads
  */
-#define MAX_SECTORS (0x10000/BLOCK_SIZE)
 read_sectors:
-	pushal
-	movl	%eax, edd_lba
-	shrl	$4, %ebx		/* Convert buffer addr to seg:0 */
+	pusha
+	movl	%eax, edd_lba		/* Convert LBA to segment */
+	shrl	$4, %ebx
 	movw	%bx, edd_segment
-1:	movb	%dh, edd_nsecs
-	cmpb	$MAX_SECTORS, %dh
-	jle	2f			/* j if less than 64k */
-	movb	$MAX_SECTORS, edd_nsecs	/* Read 32 sectors - 64k bytes */
-2:	movb	boot_drive, %dl
+	movb	%dh, edd_nsecs
+	movb	boot_drive, %dl
 	movw	$edd_packet, %si
 read_again:
 	movb	$0x42, %ah
-	push	%dx			/* bios shouldn't kill %dh, but ... */
 	int	$0x13
-	pop	%dx			/* ... better safe than sorry! */
 	jc	read_fail
-	addw	$0x1000, edd_segment	/* Advance segment addr by 64k bytes */
-	addl	$MAX_SECTORS, edd_lba	/* And sector number to match */
-	sub	edd_nsecs, %dh		/* Number of sectors remaining */
-	jnz	1b			
-	popal
+	popa
 	ret
-
 read_fail:
 	cmpb	$ERROR_TIMEOUT, %ah
 	jz	read_again
 	movw	$str_read_error, %si
 	call	message
 	jmp	panic
+
+/*
+ * For debugging purpose
+ */
+put_char:
+	pusha
+	movb	$0x0e, %ah
+	movw	$0x0001, %bx
+	int	$0x10
+	popa
+	ret
 
 #include <message.S>
 

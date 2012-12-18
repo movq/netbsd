@@ -1,4 +1,4 @@
-/*	$NetBSD: aml_name.c,v 1.4 2009/10/08 13:16:13 cegger Exp $	*/
+/*	$NetBSD: aml_name.c,v 1.3.10.1 2009/10/10 18:16:25 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 1999 Takanori Watanabe
@@ -31,7 +31,7 @@
  *	$FreeBSD: src/usr.sbin/acpi/amldb/aml/aml_name.c,v 1.3 2000/11/09 06:24:45 iwasaki Exp $
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: aml_name.c,v 1.4 2009/10/08 13:16:13 cegger Exp $");
+__RCSID("$NetBSD: aml_name.c,v 1.3.10.1 2009/10/10 18:16:25 sborrill Exp $");
 
 #include <sys/param.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofrom.c,v 1.23 2011/07/26 08:56:26 mrg Exp $	*/
+/*	$NetBSD: ofrom.c,v 1.16 2008/06/11 21:16:28 cegger Exp $	*/
 
 /*
  * Copyright 1998
@@ -38,29 +38,30 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofrom.c,v 1.23 2011/07/26 08:56:26 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofrom.c,v 1.16 2008/06/11 21:16:28 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
 #include <sys/fcntl.h>
-#include <sys/bus.h>
 
 #include <uvm/uvm_extern.h>
 
+#include <machine/bus.h>
 #include <dev/ofw/openfirm.h>
 
 struct ofrom_softc {
+	struct device	sc_dev;
 	int		enabled;
 	paddr_t		base;
 	paddr_t		size;
 };
 
-int ofromprobe(device_t, cfdata_t, void *);
-void ofromattach(device_t, device_t, void *);
+int ofromprobe __P((struct device *, struct cfdata *, void *));
+void ofromattach __P((struct device *, struct device *, void *));
 
-CFATTACH_DECL_NEW(ofrom, sizeof(struct ofrom_softc),
+CFATTACH_DECL(ofrom, sizeof(struct ofrom_softc),
     ofromprobe, ofromattach, NULL, NULL);
 
 extern struct cfdriver ofrom_cd;
@@ -75,7 +76,10 @@ const struct cdevsw ofrom_cdevsw = {
 };
 
 int
-ofromprobe(device_t parent, cfdata_t cf, void *aux)
+ofromprobe(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct ofbus_attach_args *oba = aux;
 	static const char *const compatible_strings[] = { "rom", NULL };
@@ -86,9 +90,11 @@ ofromprobe(device_t parent, cfdata_t cf, void *aux)
 
 
 void
-ofromattach(device_t parent, device_t self, void *aux)
+ofromattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct ofrom_softc *sc = device_private(self);
+	struct ofrom_softc *sc = (struct ofrom_softc *)self;
 	struct ofbus_attach_args *oba = aux;
 	char regbuf[8];
 
@@ -130,14 +136,23 @@ ofromrw(dev_t dev, struct uio *uio, int flags)
 	struct iovec *iov;
 	paddr_t v;
 	psize_t o;
-	extern kmutex_t memlock;
+	extern int physlock;
 	extern char *memhook;
 
 	sc = device_lookup_private(&ofrom_cd, minor(dev));
 	if (!sc || !sc->enabled)
 		return (ENXIO);			/* XXX PANIC */
 
-	mutex_enter(&memlock);
+	/* lock against other uses of shared vmmap */
+	while (physlock > 0) {
+		physlock++;
+		error = tsleep((void *)&physlock, PZERO | PCATCH, "ofromrw",
+		    0);
+		if (error)
+			return (error);
+	}
+	physlock = 1;
+
 	while (uio->uio_resid > 0 && error == 0) {
 		iov = uio->uio_iov;
 		if (iov->iov_len == 0) {
@@ -156,7 +171,6 @@ ofromrw(dev_t dev, struct uio *uio, int flags)
 		if (uio->uio_offset >= sc->size)
 			break;
 
-		/* XXX: Use unamanged mapping. */
 		v = sc->base + uio->uio_offset;
 		pmap_enter(pmap_kernel(), (vaddr_t)memhook,
 		    trunc_page(v), uio->uio_rw == UIO_READ ?
@@ -169,7 +183,10 @@ ofromrw(dev_t dev, struct uio *uio, int flags)
 		    (vaddr_t)memhook + PAGE_SIZE);
 		pmap_update(pmap_kernel());
 	}
-	mutex_exit(&memlock);
+
+	if (physlock > 1)
+		wakeup((void *)&physlock);
+	physlock = 0;
 
 	return (error);
 }

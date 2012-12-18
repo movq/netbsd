@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.131 2012/08/02 14:03:22 matt Exp $     */
+/*	$NetBSD: trap.c,v 1.116.4.3 2009/03/02 20:04:57 snj Exp $     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -33,22 +33,32 @@
  /* All bugs are subject to removal without further notice */
 		
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.131 2012/08/02 14:03:22 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.116.4.3 2009/03/02 20:04:57 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
 
+#include <sys/types.h>
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/cpu.h>
-#include <sys/exec.h>
-#include <sys/kauth.h>
 #include <sys/proc.h>
+#include <sys/user.h>
+#include <sys/syscall.h>
+#include <sys/systm.h>
 #include <sys/signalvar.h>
+#include <sys/exec.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
+#include <sys/pool.h>
+#include <sys/kauth.h>
 
 #include <uvm/uvm_extern.h>
 
+#include <machine/mtpr.h>
+#include <machine/pte.h>
+#include <machine/pcb.h>
 #include <machine/trap.h>
+#include <machine/pmap.h>
+#include <machine/cpu.h>
 #include <machine/userret.h>
 
 #ifdef DDB
@@ -88,30 +98,40 @@ const char * const traptypes[]={
 };
 int no_traps = 18;
 
-#define USERMODE_P(tf)   ((((tf)->tf_psl) & (PSL_U)) == PSL_U)
+#define USERMODE_P(framep)   ((((framep)->psl) & (PSL_U)) == PSL_U)
+#define FAULTCHK						\
+	if (l->l_addr->u_pcb.iftrap) {				\
+		frame->pc = (unsigned)l->l_addr->u_pcb.iftrap;	\
+		frame->psl &= ~PSL_FPD;				\
+		frame->r0 = EFAULT;/* for copyin/out */		\
+		frame->r1 = -1; /* for fetch/store */		\
+		return;						\
+	}
+
 
 void
-trap(struct trapframe *tf)
+trap(struct trapframe *frame)
 {
-	u_int	sig = 0, type = tf->tf_trap, code = 0;
+	u_int	sig = 0, type = frame->trap, code = 0;
 	u_int	rv, addr;
 	bool trapsig = true;
-	const bool usermode = USERMODE_P(tf);
-	struct lwp * const l = curlwp;
-	struct proc * const p = l->l_proc;
-	struct pcb * const pcb = lwp_getpcb(l);
+	const bool usermode = USERMODE_P(frame);;
+	struct	lwp *l;
+	struct	proc *p;
 	u_quad_t oticks = 0;
 	struct vmspace *vm;
 	struct vm_map *map;
 	vm_prot_t ftype;
-	void *onfault = pcb->pcb_onfault;
 
+	l = curlwp;
+	KASSERT(l != NULL);
+	p = l->l_proc;
 	KASSERT(p != NULL);
-	curcpu()->ci_data.cpu_ntrap++;
+	uvmexp.traps++;
 	if (usermode) {
 		type |= T_USER;
 		oticks = p->p_sticks;
-		l->l_md.md_utf = tf; 
+		l->l_addr->u_pcb.framep = frame; 
 		LWP_CACHE_CREDS(l, p);
 	}
 
@@ -119,26 +139,26 @@ trap(struct trapframe *tf)
 
 
 #ifdef TRAPDEBUG
-if(tf->tf_trap==7) goto fram;
+if(frame->trap==7) goto fram;
 if(faultdebug)printf("Trap: type %lx, code %lx, pc %lx, psl %lx\n",
-		tf->tf_trap, tf->tf_code, tf->tf_pc, tf->tf_psl);
+		frame->trap, frame->code, frame->pc, frame->psl);
 fram:
 #endif
 	switch (type) {
 
 	default:
 #ifdef DDB
-		kdb_trap(tf);
+		kdb_trap(frame);
 #endif
 		panic("trap: type %x, code %x, pc %x, psl %x",
-		    (u_int)tf->tf_trap, (u_int)tf->tf_code,
-		    (u_int)tf->tf_pc, (u_int)tf->tf_psl);
+		    (u_int)frame->trap, (u_int)frame->code,
+		    (u_int)frame->pc, (u_int)frame->psl);
 
 	case T_KSPNOTVAL:
 		panic("%d.%d (%s): KSP invalid %#x@%#x pcb %p fp %#x psl %#x)",
 		    p->p_pid, l->l_lid, l->l_name ? l->l_name : "??",
-		    mfpr(PR_KSP), (u_int)tf->tf_pc, pcb,
-		    (u_int)tf->tf_fp, (u_int)tf->tf_psl);
+		    mfpr(PR_KSP), (u_int)frame->pc, l->l_addr,
+		    (u_int)frame->fp, (u_int)frame->psl);
 
 	case T_TRANSFLT|T_USER:
 	case T_TRANSFLT:
@@ -158,42 +178,23 @@ fram:
 
 	case T_PTELEN|T_USER:	/* Page table length exceeded */
 	case T_ACCFLT|T_USER:
-		if (tf->tf_code < 0) { /* Check for kernel space */
+		if (frame->code < 0) { /* Check for kernel space */
 			sig = SIGSEGV;
 			code = SEGV_ACCERR;
 			break;
 		}
 
 	case T_PTELEN:
-#ifndef MULTIPROCESSOR
-		/*
-		 * If we referred to an address beyond the end of the system
-		 * page table, it may be due to a failed CAS
-		 * restartable-atomic-sequence.  If it is, restart it at the
-		 * beginning and restart.
-		 */
-		{
-			extern const uint8_t cas32_ras_start[], cas32_ras_end[];
-			if (tf->tf_code == CASMAGIC
-			    && tf->tf_pc >= (uintptr_t) cas32_ras_start
-			    && tf->tf_pc < (uintptr_t) cas32_ras_end) {
-				tf->tf_pc = (uintptr_t) cas32_ras_start;
-				trapsig = false;
-				break;
-			}
-		}
-		/* FALLTHROUGH */
-#endif
 	case T_ACCFLT:
 #ifdef TRAPDEBUG
 if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
-			tf->tf_trap, tf->tf_code, tf->tf_pc, tf->tf_psl);
+			frame->trap, frame->code, frame->pc, frame->psl);
 #endif
 #ifdef DIAGNOSTIC
 		if (p == 0)
 			panic("trap: access fault: addr %lx code %lx",
-			    tf->tf_pc, tf->tf_code);
-		if (tf->tf_psl & PSL_IS)
+			    frame->pc, frame->code);
+		if (frame->psl & PSL_IS)
 			panic("trap: pflt on IS");
 #endif
 
@@ -204,8 +205,8 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 		 * because we must check for PTE pages anyway we don't
 		 * bother doing it here.
 		 */
-		addr = trunc_page(tf->tf_code);
-		if (!usermode && (tf->tf_code < 0)) {
+		addr = trunc_page(frame->code);
+		if (!usermode && (frame->code < 0)) {
 			vm = NULL;
 			map = kernel_map;
 
@@ -214,35 +215,22 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 			map = &vm->vm_map;
 		}
 
-		if (tf->tf_trap & T_WRITE)
+		if (frame->trap & T_WRITE)
 			ftype = VM_PROT_WRITE;
 		else
 			ftype = VM_PROT_READ;
 
-		pcb->pcb_onfault = NULL;
+		if ((usermode) && (l->l_flag & LW_SA)) {
+			l->l_savp->savp_faultaddr = (vaddr_t)frame->code;
+			l->l_pflag |= LP_SA_PAGEFAULT;
+		}
+
 		rv = uvm_fault(map, addr, ftype);
-		pcb->pcb_onfault = onfault;
 		if (rv != 0) {
 			if (!usermode) {
-				if (onfault) {
-					pcb->pcb_onfault = NULL;
-					tf->tf_pc = (unsigned)onfault;
-					tf->tf_psl &= ~PSL_FPD;
-					tf->tf_r0 = rv;
-					return;
-				}
-				printf("r0=%08lx r1=%08lx r2=%08lx r3=%08lx ",
-				    tf->tf_r0, tf->tf_r1, tf->tf_r2, tf->tf_r3);
-				printf("r4=%08lx r5=%08lx r6=%08lx r7=%08lx\n",
-				    tf->tf_r4, tf->tf_r5, tf->tf_r6, tf->tf_r7);
-				printf(
-				    "r8=%08lx r9=%08lx r10=%08lx r11=%08lx\n",
-				    tf->tf_r8, tf->tf_r9, tf->tf_r10,
-				    tf->tf_r11);
-				printf("ap=%08lx fp=%08lx sp=%08lx pc=%08lx\n",
-				    tf->tf_ap, tf->tf_fp, tf->tf_sp, tf->tf_pc);
-				panic("SEGV in kernel mode: pc %#lx addr %#lx",
-				    tf->tf_pc, tf->tf_code);
+				FAULTCHK;
+				panic("Segv in kernel mode: pc %x addr %x",
+				    (u_int)frame->pc, (u_int)frame->code);
 			}
 			code = SEGV_ACCERR;
 			if (rv == ENOMEM) {
@@ -263,6 +251,9 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 			    && (void *)addr >= vm->vm_maxsaddr)
 				uvm_grow(p, addr);
 		}
+		if (usermode) {
+			l->l_pflag &= ~LP_SA_PAGEFAULT;
+		}
 		break;
 
 	case T_BPTFLT|T_USER:
@@ -272,7 +263,7 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 	case T_TRCTRAP|T_USER:
 		sig = SIGTRAP;
 		code = TRAP_TRACE;
-		tf->tf_psl &= ~PSL_T;
+		frame->psl &= ~PSL_T;
 		break;
 
 	case T_PRIVINFLT|T_USER:
@@ -294,7 +285,7 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 
 	case T_ARITHFLT|T_USER:
 		sig = SIGFPE;
-		switch (tf->tf_code) {
+		switch (frame->code) {
 		case ATRP_INTOVF: code = FPE_INTOVF; break;
 		case ATRP_INTDIV: code = FPE_INTDIV; break;
 		case ATRP_FLTOVF: code = FPE_FLTOVF; break;
@@ -321,23 +312,20 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 	case T_KDBTRAP:
 	case T_KDBTRAP|T_USER:
 	case T_TRCTRAP:
-		kdb_trap(tf);
+		kdb_trap(frame);
 		return;
 #endif
 	}
 	if (trapsig) {
 		ksiginfo_t ksi;
-		if ((sig == SIGSEGV || sig == SIGILL)
-		    && cpu_printfataltraps
-		    && (p->p_slflag & PSL_TRACED) == 0
-		    && !sigismember(&p->p_sigctx.ps_sigcatch, sig))
+		if ((sig == SIGSEGV || sig == SIGILL) && cpu_printfataltraps)
 			printf("pid %d.%d (%s): sig %d: type %lx, code %lx, pc %lx, psl %lx\n",
-			       p->p_pid, l->l_lid, p->p_comm, sig, tf->tf_trap,
-			       tf->tf_code, tf->tf_pc, tf->tf_psl);
+			       p->p_pid, l->l_lid, p->p_comm, sig, frame->trap,
+			       frame->code, frame->pc, frame->psl);
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_signo = sig;
-		ksi.ksi_trap = tf->tf_trap;
-		ksi.ksi_addr = (void *)tf->tf_code;
+		ksi.ksi_trap = frame->trap;
+		ksi.ksi_addr = (void *)frame->code;
 		ksi.ksi_code = code;
 
 		/*
@@ -351,8 +339,8 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 		 *
 		 * XXX this is gross -- miod
 		 */
-		if (type == (T_ARITHFLT | T_USER) && (tf->tf_code & 8))
-			tf->tf_pc = skip_opcode(tf->tf_pc);
+		if (type == (T_ARITHFLT | T_USER) && (frame->code & 8))
+			frame->pc = skip_opcode(frame->pc);
 
 		trapsignal(l, &ksi);
 	}
@@ -360,20 +348,21 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 	if (!usermode)
 		return;
 
-	userret(l, tf, oticks);
+	userret(l, frame, oticks);
 }
 
 void
-setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
+setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 {
-	struct trapframe * const tf = l->l_md.md_utf;
+	struct trapframe *exptr;
 
-	tf->tf_pc = pack->ep_entry + 2;
-	tf->tf_sp = stack;
-	tf->tf_r6 = stack;				/* for ELF */
-	tf->tf_r7 = 0;				/* for ELF */
-	tf->tf_r8 = 0;				/* for ELF */
-	tf->tf_r9 = l->l_proc->p_psstrp;		/* for ELF */
+	exptr = l->l_addr->u_pcb.framep;
+	exptr->pc = pack->ep_entry + 2;
+	exptr->sp = stack;
+	exptr->r6 = stack;				/* for ELF */
+	exptr->r7 = 0;					/* for ELF */
+	exptr->r8 = 0;					/* for ELF */
+	exptr->r9 = (u_long) l->l_proc->p_psstr;	/* for ELF */
 }
 
 
@@ -383,14 +372,27 @@ setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 void
 startlwp(void *arg)
 {
-	ucontext_t * const uc = arg;
-	lwp_t * const l = curlwp;
-	int error;
+	int err;
+	ucontext_t *uc = arg;
+	struct lwp *l = curlwp;
 
-	error = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
-	KASSERT(error == 0);
+	err = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
+#if DIAGNOSTIC
+	if (err) {
+		printf("Error %d from cpu_setmcontext.", err);
+	}
+#endif
+	pool_put(&lwp_uc_pool, uc);
 
-	kmem_free(uc, sizeof(ucontext_t));
 	/* XXX - profiling spoiled here */
-	userret(l, l->l_md.md_utf, l->l_proc->p_sticks);
+	userret(l, l->l_addr->u_pcb.framep, l->l_proc->p_sticks);
 }
+
+void
+upcallret(struct lwp *l)
+{
+
+	/* XXX - profiling */
+	userret(l, l->l_addr->u_pcb.framep, l->l_proc->p_sticks);
+}
+

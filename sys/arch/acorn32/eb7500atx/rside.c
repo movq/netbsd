@@ -1,4 +1,4 @@
-/*	$NetBSD: rside.c,v 1.14 2012/07/31 15:50:31 bouyer Exp $	*/
+/*	$NetBSD: rside.c,v 1.9 2008/03/18 20:46:35 cube Exp $	*/
 
 /*
  * Copyright (c) 2004 Christopher Gilbert
@@ -56,17 +56,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rside.c,v 1.14 2012/07/31 15:50:31 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rside.c,v 1.9 2008/03/18 20:46:35 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <sys/bus.h>
 
 #include <machine/intr.h>
 #include <machine/io.h>
+#include <machine/bus.h>
 #include <acorn32/eb7500atx/rsidereg.h>
 #include <machine/irqhandler.h>
 
@@ -180,7 +180,7 @@ rside_attach(device_t parent, device_t self, void *aux)
 	 * cookie.
 	 */
 
-	sc->sc_wdcdev.sc_atac.atac_dev = self;
+	sc->sc_wdcdev.dev = self;
 	sc->sc_wdcdev.regs = sc->sc_wdc_regs;
 	sc->sc_tag = *rs->sa_iot;
 	sc->sc_tag.bs_cookie = (void *) DRIVE_REGISTER_SPACING_SHIFT;
@@ -188,9 +188,10 @@ rside_attach(device_t parent, device_t self, void *aux)
 	/* Fill in wdc and channel infos */
 	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16;
 	sc->sc_wdcdev.sc_atac.atac_pio_cap = 0;
+	sc->sc_wdcdev.sc_atac.atac_dma_cap = 0;
+	sc->sc_wdcdev.sc_atac.atac_udma_cap = 0;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 2;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 	for (channel = 0 ; channel < 2; channel++) {
 		scp = &sc->rside_channels[channel];
 		sc->sc_chanarray[channel] = &scp->rc_channel;
@@ -200,6 +201,7 @@ rside_attach(device_t parent, device_t self, void *aux)
 		cp->ch_channel = channel;
 		cp->ch_atac = &sc->sc_wdcdev.sc_atac;
 		cp->ch_queue = &scp->rc_chqueue;
+		cp->ch_ndrive = 2;
 		wdr->cmd_iot = wdr->ctl_iot = &sc->sc_tag;
 		if (bus_space_map(wdr->cmd_iot,
 		    rside_info[channel].drive_registers,

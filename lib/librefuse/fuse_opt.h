@@ -1,4 +1,4 @@
-/*	$NetBSD: fuse_opt.h,v 1.5 2009/04/19 22:25:29 christos Exp $	*/
+/*	$NetBSD: fuse_opt.h,v 1.4.18.1 2011/08/08 19:55:27 riz Exp $	*/
 
 /*
  * Copyright (c) 2007 Alistair Crooks.  All rights reserved.

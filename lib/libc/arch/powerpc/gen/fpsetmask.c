@@ -1,4 +1,4 @@
-/*	$NetBSD: fpsetmask.c,v 1.10 2011/07/10 21:18:47 matt Exp $	*/
+/*	$NetBSD: fpsetmask.c,v 1.9 2008/04/28 20:22:56 martin Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fpsetmask.c,v 1.10 2011/07/10 21:18:47 matt Exp $");
+__RCSID("$NetBSD: fpsetmask.c,v 1.9 2008/04/28 20:22:56 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -50,16 +50,13 @@ __weak_alias(fpsetmask,_fpsetmask)
 fp_except
 fpsetmask(fp_except mask)
 {
-	union {
-		double u_d;
-		uint64_t u_fpscr;
-	} ud;
+	uint64_t fpscr;
 	fp_except old;
 
-	__asm volatile("mffs %0" : "=f"(ud.u_d));
-	old = ((uint32_t)ud.u_fpscr & MASKBITS) >> MASKSHFT;
-	ud.u_fpscr &= ~MASKBITS;
-	ud.u_fpscr |= ((uint32_t)mask << MASKSHFT) & MASKBITS;
-	__asm volatile("mtfsf 0xff,%0" :: "f"(ud.u_d));
+	__asm volatile("mffs %0" : "=f"(fpscr));
+	old = ((uint32_t)fpscr & MASKBITS) >> MASKSHFT;
+	fpscr &= ~MASKBITS;
+	fpscr |= ((uint32_t)mask << MASKSHFT) & MASKBITS;
+	__asm volatile("mtfsf 0xff,%0" :: "f"(fpscr));
 	return (old);
 }

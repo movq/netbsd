@@ -1,4 +1,4 @@
-/*	$NetBSD: magmareg.h,v 1.17 2012/10/27 17:18:37 chs Exp $	*/
+/*	$NetBSD: magmareg.h,v 1.13 2008/07/02 10:16:20 plunky Exp $	*/
 
 /*-
  *  Copyright (c) 1998 Iain Hibbert
@@ -97,7 +97,8 @@ struct cd1190 {
 
 /* software state for each card */
 struct magma_softc {
-	device_t	ms_dev;		/* required. must be first in softc */
+	struct device	ms_dev;		/* required. must be first in softc */
+	struct sbusdev	ms_sd;		/* sbus device */
 	struct evcnt	ms_intrcnt;	/* statistics */
 
 	/* cd1400 chip info */
@@ -150,7 +151,7 @@ struct mtty_port {
 #define MTTYF_RING_OVERFLOW	(1<<5)
 
 struct mtty_softc {
-	device_t ms_dev;		/* device info */
+	struct device ms_dev;		/* device info */
 	int ms_nports;			/* tty ports */
 	struct mtty_port ms_port[MAGMA_MAX_TTY];
 };
@@ -182,6 +183,7 @@ struct mbpp_port {
 #define MBPPF_WAKEUP	(1<<4)
 
 struct mbpp_softc {
+	struct device ms_dev;		/* device info */
 	int ms_nports;			/* parallel ports */
 	struct mbpp_port ms_port[MAGMA_MAX_BPP];
 };
@@ -201,19 +203,19 @@ __inline u_char cd1400_read_reg(struct cd1400 *, int);
 __inline void cd1400_write_reg(struct cd1400 *, int, u_char);
 void cd1400_enable_transmitter(struct cd1400 *, int);
 
-int magma_match(device_t, cfdata_t, void *);
-void magma_attach(device_t, device_t, void *);
+int magma_match(struct device *, struct cfdata *, void *);
+void magma_attach(struct device *, struct device *, void *);
 int magma_hard(void *);
 void magma_soft(void *);
 
-int mtty_match(device_t, cfdata_t, void *);
-void mtty_attach(device_t, device_t, void *);
+int mtty_match(struct device *, struct cfdata *, void *);
+void mtty_attach(struct device *, struct device *, void *);
 int mtty_modem_control(struct mtty_port *, int, int);
 int mtty_param(struct tty *, struct termios *);
 void mtty_start(struct tty *);
 
-int mbpp_match(device_t, cfdata_t, void *);
-void mbpp_attach(device_t, device_t, void *);
+int mbpp_match(struct device *, struct cfdata *, void *);
+void mbpp_attach(struct device *, struct device *, void *);
 void mbpp_timeout(void *);
 void mbpp_start(void *);
 int mbpp_send(struct mbpp_port *, void *, int);

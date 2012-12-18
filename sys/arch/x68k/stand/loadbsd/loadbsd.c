@@ -1,7 +1,7 @@
 /*
  *	Load and boot NetBSD kernel on Human68k
  *
- *	written by ITOH Yasufumi
+ *	written by Yasha (ITOH Yasufumi)
  *	public domain
  *
  *	loadbsd [-hvV] [-abDs] [-r root_device] netbsd
@@ -19,13 +19,13 @@
  *		-q	quiet boot
  *		-v	verbose boot (also turn on verbosity of loadbsd)
  *
- *	$NetBSD: loadbsd.c,v 1.14 2011/02/21 02:31:59 itohy Exp $
+ *	$NetBSD: loadbsd.c,v 1.9 2005/12/24 22:45:40 perry Exp $
  */
 
 #include <sys/cdefs.h>
 
-__RCSID("$NetBSD: loadbsd.c,v 1.14 2011/02/21 02:31:59 itohy Exp $");
-#define VERSION	"$Revision: 1.14 $ $Date: 2011/02/21 02:31:59 $"
+__RCSID("$NetBSD: loadbsd.c,v 1.9 2005/12/24 22:45:40 perry Exp $");
+#define VERSION	"$Revision: 1.9 $ $Date: 2005/12/24 22:45:40 $"
 
 #include <sys/types.h>		/* ntohl */
 #include <sys/reboot.h>
@@ -47,16 +47,16 @@ __RCSID("$NetBSD: loadbsd.c,v 1.14 2011/02/21 02:31:59 itohy Exp $");
 #define GETDECIMAL(var, str)	\
 	do {	var *= 10; var += *str++ - '0'; } while (ISDIGIT(*str))
 
-static const char *lookupif(const char *name,
-				 unsigned *pif, unsigned *punit);
-static void get_current_scsi_interface(unsigned *pif, unsigned *punit);
-static int bootdev(const char *devstr);
-static struct tramparg *read_kernel(const char *fn);
-static int chkmpu(void);
-static __dead void usage(int status, const char *msg)
+static const char *lookupif __P((const char *name,
+				 unsigned *pif, unsigned *punit));
+static void get_current_scsi_interface __P((unsigned *pif, unsigned *punit));
+static int bootdev __P((const char *devstr));
+static struct tramparg *read_kernel __P((const char *fn));
+static int chkmpu __P((void));
+static __dead void usage __P((int status, const char *msg))
 					__attribute__((noreturn));
 
-int main(int argc, char *argv[]);
+int main __P((int argc, char *argv[]));
 
 int opt_v;
 int opt_N;
@@ -74,7 +74,9 @@ const struct hatbl {
  * return the next position
  */
 static const char *
-lookupif(const char *name, unsigned *pif, unsigned *punit)
+lookupif(name, pif, punit)
+	const char *name;
+	unsigned *pif, *punit;
 {
 	unsigned u, unit;
 	const char *p;
@@ -111,7 +113,8 @@ found:
  * if the SCSI interface is not specified, use the current one
  */
 static void
-get_current_scsi_interface(unsigned *pif, unsigned *punit)
+get_current_scsi_interface(pif, punit)
+	unsigned *pif, *punit;
 {
 	unsigned binf;
 	char *bootrom;
@@ -163,7 +166,8 @@ const struct devtbl {
 };
 
 static int
-bootdev(const char *devstr)
+bootdev(devstr)
+	const char *devstr;
 {
 	unsigned u;
 	unsigned major, unit, lun, partition;
@@ -295,7 +299,8 @@ found:	major = devtable[u].major;
  *	|----------------------|
  */
 static struct tramparg *
-read_kernel(const char *fn)
+read_kernel(fn)
+	const char *fn;
 {
 	int fd;
 	union dos_fcb *fcb;
@@ -390,7 +395,7 @@ read_kernel(const char *fn)
  * MC68020 and later	-> return nonzero
  */
 static int
-chkmpu(void)
+chkmpu()
 {
 	register int ret __asm("%d0");
 
@@ -408,7 +413,9 @@ chkmpu(void)
 }
 
 static __dead void
-usage(int status, const char *msg)
+usage(status, msg)
+	int status;
+	const char *msg;
 {
 	extern const char *const __progname;
 
@@ -442,7 +449,9 @@ kernel options:\n\
 }
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	char *rootdevname = 0;
 	int rootdev;
@@ -558,7 +567,7 @@ main(int argc, char *argv[])
 	if (opt_N)
 		xerrx(0, "But don't actually do it.");
 
-	DOS_SUPER_JSR((void (*)(void)) tramp, &regs, &regs);
+	DOS_SUPER_JSR((void (*) __P((void))) tramp, &regs, &regs);
 
 	/* NOTREACHED */
 

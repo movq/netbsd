@@ -1,6 +1,7 @@
-/*	$NetBSD: xd.c,v 1.68 2011/02/01 20:19:32 chuck Exp $	*/
+/*	$NetBSD: xd.c,v 1.65 2008/06/28 12:13:38 tsutsui Exp $	*/
 
 /*
+ *
  * Copyright (c) 1995 Charles D. Cranor
  * All rights reserved.
  *
@@ -12,6 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,7 +35,7 @@
  *
  * x d . c   x y l o g i c s   7 5 3 / 7 0 5 3   v m e / s m d   d r i v e r
  *
- * author: Chuck Cranor <chuck@netbsd>
+ * author: Chuck Cranor <chuck@ccrc.wustl.edu>
  * id: &Id: xd.c,v 1.9 1995/09/25 20:12:44 chuck Exp &
  * started: 27-Feb-95
  * references: [1] Xylogics Model 753 User's Manual
@@ -46,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xd.c,v 1.68 2011/02/01 20:19:32 chuck Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xd.c,v 1.65 2008/06/28 12:13:38 tsutsui Exp $");
 
 #undef XDC_DEBUG		/* full debug */
 #define XDC_DIAG		/* extra sanity checks */
@@ -1095,7 +1101,7 @@ xdstrategy(struct buf *bp)
 
 	/* first, give jobs in front of us a chance */
 	parent = xd->parent;
-	while (parent->nfree > 0 && bufq_peek(parent->sc_wq) != NULL)
+	while (parent->nfree > 0 && BUFQ_PEEK(parent->sc_wq) != NULL)
 		if (xdc_startbuf(parent, NULL, NULL) != XD_ERR_AOK)
 			break;
 
@@ -1104,7 +1110,7 @@ xdstrategy(struct buf *bp)
 	 * buffs will get picked up later by xdcintr().
 	 */
 	if (parent->nfree == 0) {
-		bufq_put(parent->sc_wq, bp);
+		BUFQ_PUT(parent->sc_wq, bp);
 		splx(s);
 		return;
 	}
@@ -1148,7 +1154,7 @@ xdcintr(void *v)
 	xdc_start(xdcsc, XDC_MAXIOPB);
 
 	/* fill up any remaining iorq's with queue'd buffers */
-	while (xdcsc->nfree > 0 && bufq_peek(xdcsc->sc_wq) != NULL)
+	while (xdcsc->nfree > 0 && BUFQ_PEEK(xdcsc->sc_wq) != NULL)
 		if (xdc_startbuf(xdcsc, NULL, NULL) != XD_ERR_AOK)
 			break;
 
@@ -1373,7 +1379,7 @@ xdc_startbuf(struct xdc_softc *xdcsc, struct xd_softc *xdsc, struct buf *bp)
 	/* get buf */
 
 	if (bp == NULL) {
-		bp = bufq_get(xdcsc->sc_wq);
+		bp = BUFQ_GET(xdcsc->sc_wq);
 		if (bp == NULL)
 			panic("%s bp", __func__);
 		xdsc = xdcsc->sc_drives[DISKUNIT(bp->b_dev)];
@@ -1416,7 +1422,7 @@ xdc_startbuf(struct xdc_softc *xdcsc, struct xd_softc *xdsc, struct buf *bp)
 		printf("%s: warning: out of DVMA space\n",
 		    device_xname(xdcsc->sc_dev));
 		XDC_FREE(xdcsc, rqno);
-		bufq_put(xdcsc->sc_wq, bp);
+		BUFQ_PUT(xdcsc->sc_wq, bp);
 		return XD_ERR_FAIL;	/* XXX: need some sort of
 		                         * call-back scheme here? */
 	}
@@ -1609,7 +1615,7 @@ xdc_piodriver(struct xdc_softc *xdcsc, int iorqno, int freeone)
 	 * queued
 	 */
 
-	while (xdcsc->nfree > 0 && bufq_peek(xdcsc->sc_wq) != NULL)
+	while (xdcsc->nfree > 0 && BUFQ_PEEK(xdcsc->sc_wq) != NULL)
 		if (xdc_startbuf(xdcsc, NULL, NULL) != XD_ERR_AOK)
 			break;
 
@@ -1937,7 +1943,7 @@ xdc_perror(struct xd_iorq *iorq, struct xd_iopb *iopb, int still_trying)
 	    device_xname(iorq->xd->sc_dev) :
 	    device_xname(iorq->xdc->sc_dev));
 	if (iorq->buf)
-		printf("%c: ", 'a' + (char)DISKPART(iorq->buf->b_dev));
+		printf("%c: ", 'a' + DISKPART(iorq->buf->b_dev));
 	if (iopb->comm == XDCMD_RD || iopb->comm == XDCMD_WR)
 		printf("%s %d/%d/%d: ",
 		    (iopb->comm == XDCMD_RD) ? "read" : "write",

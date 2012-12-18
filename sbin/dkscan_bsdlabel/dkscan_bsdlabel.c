@@ -1,4 +1,4 @@
-/* $NetBSD: dkscan_bsdlabel.c,v 1.3 2011/08/27 16:43:07 joerg Exp $ */
+/* $NetBSD: dkscan_bsdlabel.c,v 1.2 2008/04/28 20:23:08 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -42,8 +42,6 @@
 #include "dkscan_util.h"
 
 #include "dkwedge_bsdlabel.c"
-
-__dead static void usage(void);
 
 int
 main(int argc, char **argv)

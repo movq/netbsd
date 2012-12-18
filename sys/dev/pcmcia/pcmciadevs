@@ -1,4 +1,4 @@
-$NetBSD: pcmciadevs,v 1.230 2012/08/23 10:37:56 kiyohara Exp $
+$NetBSD: pcmciadevs,v 1.227 2008/09/06 22:07:11 rmind Exp $
 /* $FreeBSD: src/sys/dev/pccard/pccarddevs,v 1.20 2001/11/19 05:02:55 imp Exp $*/
 
 /*-
@@ -28,11 +28,6 @@ $NetBSD: pcmciadevs,v 1.230 2012/08/23 10:37:56 kiyohara Exp $
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- */
-
-/*
- * Use "make -f Makefile.pcmicadevs" to regenerate pcmicadevs.h and
- * pcmicadevs_data.h
  */
 
 /*
@@ -98,7 +93,6 @@ vendor IODATA2			0x028a	I-O DATA
 vendor ASUSTEK			0x02aa	Asustek Computer
 vendor SIEMENS			0x02ac	Siemens
 vendor MICROSOFT		0x02d2	Microsoft Corporation
-vendor AMBICOM			0x02df	AmbiCom Inc
 vendor BREEZECOM		0x0a02	BreezeCOM
 vendor NEWMEDIA2		0x10cd	NewMedia
 vendor ACTIONTEC		0x1668	ACTIONTEC
@@ -155,9 +149,6 @@ product ALLIEDTELESIS LA_PCM	0x0002 Allied Telesis LA-PCM
 
 /* Alvarion Ltd. */
 product ALVARION BREEZENET	0x0001 Alvarion Ltd. BreezeNET PC-DS.11b
-
-/* AmbiCom Inc */
-product AMBICOM WL54CF		0x8103 AmbiCom WL54-CF
 
 /* Anycom */
 product ANYCOM LSE041		0x0004 AnyCom BlueCard LSE041 R1B
@@ -447,6 +438,7 @@ product XIRCOM CEM56		0x110b Xircom CreditCard Ethernet + Modem 56
  * Cards we know only by their cis, sorted by name.
  */
 vendor ACCTON			-1	ACCTON
+vendor AMBICOM			-1	AmbiCom Inc
 vendor AMD			-1	AMD
 vendor BILLIONTON		-1	Billionton Systems Inc.
 vendor CNET			-1	CNet
@@ -480,7 +472,6 @@ product AMD AM79C930		{ "AMD", "Am79C930", NULL, NULL } AMD Am79C930
 product BILLIONTON CFLT10N	{ "CF", "10Base-Ethernet", "1.0", NULL } Billionton Systems Inc. CFLT10N Ethernet
 product BILLIONTON LNT10TN	{ "PCMCIA", "LNT-10TN", NULL, NULL } Billionton Systems Inc. LNT-10TN NE2000 Compatible Card
 product CNET NE2000		{ "CNet", "CN40BC&spEthernet", NULL, NULL } CNet CN40BC NE2000 Compatible
-product COREGA ETHER_CF_TD	{ "corega&spK.K.", "corega&spEther&spCF-TD&spLAN&spCard", NULL, NULL } Corega Ether CF-TD LAN Card
 product COREGA ETHER_PCC_T	{ "corega&spK.K.", "corega&spEther&spPCC-T", NULL, NULL } Corega Ether PCC-T
 product COREGA ETHER_PCC_TD	{ "corega&spK.K.", "corega&spEther&spPCC-TD", NULL, NULL } Corega Ether PCC-TD
 product COREGA ETHER_PCC_TL	{ "corega&spK.K.", "corega&spEther&spPCC-TL", NULL, NULL } Corega Ether PCC-TL

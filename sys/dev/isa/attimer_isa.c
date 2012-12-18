@@ -1,4 +1,4 @@
-/*	$NetBSD: attimer_isa.c,v 1.13 2009/08/23 16:02:53 jmcneill Exp $	*/
+/*	$NetBSD: attimer_isa.c,v 1.11 2008/04/29 06:53:03 martin Exp $	*/
 
 /*
  *  Copyright (c) 2005 The NetBSD Foundation.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: attimer_isa.c,v 1.13 2009/08/23 16:02:53 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: attimer_isa.c,v 1.11 2008/04/29 06:53:03 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,7 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: attimer_isa.c,v 1.13 2009/08/23 16:02:53 jmcneill Ex
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
 
-static int	attimer_isa_match(device_t, cfdata_t, void *);
+static int	attimer_isa_match(device_t, struct cfdata *, void *);
 static void	attimer_isa_attach(device_t, device_t, void *);
 
 CFATTACH_DECL_NEW(attimer_isa, sizeof(struct attimer_softc),
@@ -131,8 +131,8 @@ attimer_isa_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dev = self;
 	sc->sc_iot = ia->ia_iot;
 
-	aprint_naive("\n");
-	aprint_normal("\n");
+	aprint_naive(": AT Timer\n");
+	aprint_normal(": AT Timer\n");
 
 	sc->sc_size = 4;
 	if (bus_space_map(sc->sc_iot, IO_TIMER1, sc->sc_size, 0,

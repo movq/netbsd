@@ -1,4 +1,4 @@
-/* $NetBSD: tsc.c,v 1.19 2011/05/17 17:34:47 dyoung Exp $ */
+/* $NetBSD: tsc.c,v 1.13 2005/12/11 12:16:17 christos Exp $ */
 
 /*-
  * Copyright (c) 1999 by Ross Harvey.  All rights reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.19 2011/05/17 17:34:47 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.13 2005/12/11 12:16:17 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,26 +59,28 @@ __KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.19 2011/05/17 17:34:47 dyoung Exp $");
 
 #define tsc() { Generate ctags(1) key. }
 
-static int tscmatch(device_t, cfdata_t, void *);
-static void tscattach(device_t, device_t, void *);
+int	tscmatch __P((struct device *, struct cfdata *, void *));
+void	tscattach __P((struct device *, struct device *, void *));
 
-CFATTACH_DECL_NEW(tsc, 0, tscmatch, tscattach, NULL, NULL);
+CFATTACH_DECL(tsc, sizeof(struct tsc_softc),
+    tscmatch, tscattach, NULL, NULL);
 
 extern struct cfdriver tsc_cd;
 
 struct tsp_config tsp_configuration[2];
 
-static int tscprint(void *, const char *pnp);
+static int tscprint __P((void *, const char *pnp));
 
-static int tspmatch(device_t, cfdata_t, void *);
-static void tspattach(device_t, device_t, void *);
+int	tspmatch __P((struct device *, struct cfdata *, void *));
+void	tspattach __P((struct device *, struct device *, void *));
 
-CFATTACH_DECL_NEW(tsp, 0, tspmatch, tspattach, NULL, NULL);
+CFATTACH_DECL(tsp, sizeof(struct tsp_softc),
+    tspmatch, tspattach, NULL, NULL);
 
 extern struct cfdriver tsp_cd;
 
-static int tsp_bus_get_window(int, int,
-	struct alpha_bus_space_translation *);
+static int tsp_bus_get_window __P((int, int,
+	struct alpha_bus_space_translation *));
 
 /* There can be only one */
 static int tscfound;
@@ -86,8 +88,11 @@ static int tscfound;
 /* Which hose is the display console connected to? */
 int tsp_console_hose;
 
-static int
-tscmatch(device_t parent, cfdata_t match, void *aux)
+int
+tscmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -96,12 +101,13 @@ tscmatch(device_t parent, cfdata_t match, void *aux)
 	    && !tscfound;
 }
 
-static void
-tscattach(device_t parent, device_t self, void * aux)
+void tscattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	int i;
 	int nbus;
-	uint64_t csc, aar;
+	u_int64_t csc, aar;
 	struct tsp_attach_args tsp;
 	struct mainbus_attach_args *ma = aux;
 
@@ -134,7 +140,9 @@ tscattach(device_t parent, device_t self, void * aux)
 }
 
 static int
-tscprint(void *aux, const char *p)
+tscprint(aux, p)
+	void *aux;
+	const char *p;
 {
 	register struct tsp_attach_args *tsp = aux;
 
@@ -145,8 +153,11 @@ tscprint(void *aux, const char *p)
 
 #define tsp() { Generate ctags(1) key. }
 
-static int
-tspmatch(device_t parent, cfdata_t match, void *aux)
+int
+tspmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct tsp_attach_args *t = aux;
 
@@ -154,8 +165,10 @@ tspmatch(device_t parent, cfdata_t match, void *aux)
 	    && strcmp(t->tsp_name, tsp_cd.cd_name) == 0;
 }
 
-static void
-tspattach(device_t parent, device_t self, void *aux)
+void
+tspattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct pcibus_attach_args pba;
 	struct tsp_attach_args *t = aux;
@@ -183,14 +196,15 @@ tspattach(device_t parent, device_t self, void *aux)
 	pba.pba_pc = &pcp->pc_pc;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
+	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }
 
 struct tsp_config *
-tsp_init(int mallocsafe, int n)
-	/* n:	 Pchip number */
+tsp_init(mallocsafe, n)
+	int mallocsafe;
+	int n;	/* Pchip number */
 {
 	struct tsp_config *pcp;
 
@@ -215,8 +229,9 @@ tsp_init(int mallocsafe, int n)
 }
 
 static int
-tsp_bus_get_window(int type, int window,
-    struct alpha_bus_space_translation *abst)
+tsp_bus_get_window(type, window, abst)
+	int type, window;
+	struct alpha_bus_space_translation *abst;
 {
 	struct tsp_config *tsp = &tsp_configuration[tsp_console_hose];
 	bus_space_tag_t st;
@@ -243,33 +258,4 @@ tsp_bus_get_window(int type, int window,
 	abst->abst_sys_end = TS_PHYSADDR(abst->abst_sys_end);
 
 	return (0);
-}
-
-void
-tsc_print_dir(unsigned int indent, unsigned long dir)
-{
-	char buf[60];
-
-	snprintb(buf, 60,
-		 "\177\20"
-		 "b\77Internal Cchip asynchronous error\0"
-		 "b\76Pchip 0 error\0"
-		 "b\75Pchip 1 error\0"
-		 "b\74Pchip 2 error\0"
-		 "b\73Pchip 3 error\0",
-		 dir);
-	IPRINTF(indent, "DIR = %s\n", buf);
-}
-
-void
-tsc_print_misc(unsigned int indent, unsigned long misc)
-{
-	unsigned long tmp = MISC_NXM_SRC(misc);
-
-	if (!MISC_NXM(misc))
-		return;
-
-	IPRINTF(indent, "NXM address detected\n");
-	IPRINTF(indent, "NXM source         = %s %lu\n",
-		tmp <= 3 ? "CPU" : "Pchip", tmp <= 3 ? tmp : tmp - 4);
 }

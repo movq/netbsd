@@ -1,4 +1,4 @@
-/*	$NetBSD: pic_distopenpic.c,v 1.9 2012/02/01 09:54:03 matt Exp $ */
+/*	$NetBSD: pic_distopenpic.c,v 1.4 2008/05/10 15:31:05 martin Exp $ */
 
 /*-
  * Copyright (c) 2008 Tim Rightnour
@@ -30,21 +30,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_distopenpic.c,v 1.9 2012/02/01 09:54:03 matt Exp $");
-
-#include "opt_openpic.h"
-#include "opt_interrupt.h"
+__KERNEL_RCSID(0, "$NetBSD: pic_distopenpic.c,v 1.4 2008/05/10 15:31:05 martin Exp $");
 
 #include <sys/param.h>
+#include <sys/malloc.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/pio.h>
 #include <powerpc/openpic.h>
 
-#include <powerpc/pic/picvar.h>
+#include <arch/powerpc/pic/picvar.h>
+
+#include "opt_interrupt.h"
 
 /* distributed stuff */
 static int opic_isu_from_irq(struct openpic_ops *, int, int *);
@@ -64,7 +63,7 @@ setup_distributed_openpic(void *addr, int nrofisus, void **isu, int *maps)
 	u_int x;
 
 	openpic_base = (void *)addr;
-	opicops = kmem_alloc(sizeof(*opicops), KM_SLEEP);
+	opicops = malloc(sizeof(struct openpic_ops), M_DEVBUF, M_NOWAIT);
 	KASSERT(opicops != NULL);
 	pic = &opicops->pic;
 
@@ -73,10 +72,11 @@ setup_distributed_openpic(void *addr, int nrofisus, void **isu, int *maps)
 		panic("Can't handle a distributed openpic with internal ISU");
 	
 	opicops->nrofisus = nrofisus;
-	opicops->isu = kmem_alloc(sizeof(volatile u_char *) * nrofisus,
-	    KM_SLEEP);
+	opicops->isu = malloc(sizeof(volatile unsigned char *) * nrofisus,
+	    M_DEVBUF, M_NOWAIT);
 	KASSERT(opicops->isu != NULL);
-	opicops->irq_per = kmem_alloc(sizeof(uint8_t) * nrofisus, KM_SLEEP);
+	opicops->irq_per = malloc(sizeof(uint8_t) * nrofisus,
+	    M_DEVBUF, M_NOWAIT);
 	KASSERT(opicops->irq_per != NULL);
 	
 	for (irq=0, i=0; i < nrofisus ; i++) {
@@ -173,7 +173,7 @@ static void
 distopic_establish_irq(struct pic_ops *pic, int irq, int type, int pri)
 {
 	struct openpic_ops *opic = (struct openpic_ops *)pic;
-	int isu, realirq = -1, realpri = max(1, min(15, pri));
+	int isu, realirq, realpri = max(1, min(15, pri));
 	uint32_t x;
 
 	isu = opic_isu_from_irq(opic, irq, &realirq);
@@ -181,18 +181,9 @@ distopic_establish_irq(struct pic_ops *pic, int irq, int type, int pri)
 
 	x = irq;
 	x |= OPENPIC_IMASK;
-
-	if ((realirq == 0 && isu == 0) ||
-	    type == IST_EDGE_RISING || type == IST_LEVEL_HIGH)
-		x |= OPENPIC_POLARITY_POSITIVE;
-	else
-		x |= OPENPIC_POLARITY_NEGATIVE;
-
-	if (type == IST_EDGE_FALLING || type == IST_EDGE_RISING)
-		x |= OPENPIC_SENSE_EDGE;
-	else
-		x |= OPENPIC_SENSE_LEVEL;
-
+	x |= (realirq == 0 && isu == 0) ?
+	    OPENPIC_POLARITY_POSITIVE :	OPENPIC_POLARITY_NEGATIVE;
+	x |= (type == IST_EDGE) ? OPENPIC_SENSE_EDGE : OPENPIC_SENSE_LEVEL;
 	x |= realpri << OPENPIC_PRIORITY_SHIFT;
 	distopic_write(opic, isu, OPENPIC_DSRC_VECTOR_OFFSET(realirq), x);
 
@@ -204,7 +195,7 @@ static void
 distopic_enable_irq(struct pic_ops *pic, int irq, int type)
 {
 	struct openpic_ops *opic = (struct openpic_ops *)pic;
-	int isu, realirq = -1;
+	int isu, realirq;
 	u_int x;
 
 	isu = opic_isu_from_irq(opic, irq, &realirq);
@@ -218,7 +209,7 @@ static void
 distopic_disable_irq(struct pic_ops *pic, int irq)
 {
 	struct openpic_ops *opic = (struct openpic_ops *)pic;
-	int isu, realirq = -1;
+	int isu, realirq;
 	u_int x;
 
 	isu = opic_isu_from_irq(opic, irq, &realirq);

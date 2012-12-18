@@ -1,4 +1,4 @@
-/*	$NetBSD: rtc.c,v 1.18 2011/07/18 00:31:13 mrg Exp $ */
+/*	$NetBSD: rtc.c,v 1.14 2006/09/04 23:45:30 gdamore Exp $ */
 
 /*
  * Copyright (c) 2001 Valeriy E. Ushakov
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.18 2011/07/18 00:31:13 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.14 2006/09/04 23:45:30 gdamore Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -45,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.18 2011/07/18 00:31:13 mrg Exp $");
 #include <sys/gmon.h>
 #endif
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/autoconf.h>
 
 #include <dev/clock_subr.h>
@@ -55,22 +55,24 @@ __KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.18 2011/07/18 00:31:13 mrg Exp $");
 #include <dev/ebus/ebusvar.h>
 
 struct rtc_ebus_softc {
+	struct device		sc_dev;
+
 	bus_space_tag_t		sc_bt;	/* parent bus tag */
 	bus_space_handle_t	sc_bh;	/* handle for registers */
 };
 
-static int	rtcmatch_ebus(device_t, cfdata_t, void *);
-static void	rtcattach_ebus(device_t, device_t, void *);
+static int	rtcmatch_ebus(struct device *, struct cfdata *, void *);
+static void	rtcattach_ebus(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(rtc_ebus, sizeof(struct rtc_ebus_softc),
+CFATTACH_DECL(rtc_ebus, sizeof(struct rtc_ebus_softc),
     rtcmatch_ebus, rtcattach_ebus, NULL, NULL);
 
 /* XXX: global TOD clock handle (sparc/clock.c) */
 extern todr_chip_handle_t todr_handle;
 
 /* todr(9) methods */
-static int rtc_gettime(todr_chip_handle_t, struct timeval *);
-static int rtc_settime(todr_chip_handle_t, struct timeval *);
+static int rtc_gettime(todr_chip_handle_t, volatile struct timeval *);
+static int rtc_settime(todr_chip_handle_t, volatile struct timeval *);
 
 int rtc_auto_century_adjust = 1; /* XXX: do we ever want not to? */
 
@@ -101,7 +103,7 @@ mc146818_write(void *cookie, u_int reg, u_int datum)
 
 
 static int
-rtcmatch_ebus(device_t parent, cfdata_t cf, void *aux)
+rtcmatch_ebus(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct ebus_attach_args *ea = aux;
 
@@ -109,10 +111,11 @@ rtcmatch_ebus(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-rtcattach_ebus(device_t parent, device_t self, void *aux)
+rtcattach_ebus(struct device *parent, struct device *self, void *aux)
 {
-	struct rtc_ebus_softc *sc = device_private(self);
+	struct rtc_ebus_softc *sc = (void *)self;
 	struct ebus_attach_args *ea = aux;
+
 	todr_chip_handle_t handle;
 
 	sc->sc_bt = ea->ea_bustag;
@@ -152,7 +155,7 @@ rtcattach_ebus(device_t parent, device_t self, void *aux)
  * Return 0 on success; an error number otherwise.
  */
 static int
-rtc_gettime(todr_chip_handle_t handle, struct timeval *tv)
+rtc_gettime(todr_chip_handle_t handle, volatile struct timeval *tv)
 {
 	struct rtc_ebus_softc *sc = handle->cookie;
 	struct clock_ymdhms dt;
@@ -199,7 +202,7 @@ rtc_gettime(todr_chip_handle_t handle, struct timeval *tv)
  * Return 0 on success; an error number otherwise.
  */
 static int
-rtc_settime(todr_chip_handle_t handle, struct timeval *tv)
+rtc_settime(todr_chip_handle_t handle, volatile struct timeval *tv)
 {
 	struct rtc_ebus_softc *sc = handle->cookie;
 	struct clock_ymdhms dt;

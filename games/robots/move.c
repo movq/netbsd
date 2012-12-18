@@ -1,4 +1,4 @@
-/*	$NetBSD: move.c,v 1.16 2009/08/12 08:30:55 dholland Exp $	*/
+/*	$NetBSD: move.c,v 1.12 2004/08/27 09:07:08 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,39 +34,30 @@
 #if 0
 static char sccsid[] = "@(#)move.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: move.c,v 1.16 2009/08/12 08:30:55 dholland Exp $");
+__RCSID("$NetBSD: move.c,v 1.12 2004/08/27 09:07:08 christos Exp $");
 #endif
 #endif /* not lint */
 
-#include <sys/types.h>
-#include <sys/ttydefaults.h>  /* for CTRL */
-#include <ctype.h>
-#include <curses.h>
-#include <unistd.h>
 #include "robots.h"
 
-#define ESC	'\033'
-
-static bool do_move(int, int);
-static bool eaten(const COORD *);
-static bool must_telep(void);
+# define	ESC	'\033'
 
 /*
  * get_move:
  *	Get and execute a move from the player
  */
 void
-get_move(void)
+get_move()
 {
-	int c;
+	int		c;
 #ifdef FANCY
-	int lastmove;
+	int		lastmove;
 #endif /*FANCY*/
 
 	if (Waiting)
 		return;
 
-#ifdef FANCY
+#ifdef	FANCY
 	if (Pattern_roll) {
 		if (Next_move >= Move_list)
 			lastmove = *Next_move;
@@ -82,7 +73,7 @@ get_move(void)
 			c = Run_ch;
 		else if (Count != 0)
 			c = Cnt_move;
-#ifdef FANCY
+#ifdef	FANCY
 		else if (Num_robots > 1 && Stand_still)
 			c = '>';
 		else if (Num_robots > 1 && Pattern_roll) {
@@ -160,7 +151,7 @@ over:
 		  case 'Y': case 'U': case 'H': case 'J':
 		  case 'K': case 'L': case 'B': case 'N':
 		  case '>':
-			Running = true;
+			Running = TRUE;
 			if (c == '>')
 				Run_ch = ' ';
 			else
@@ -175,13 +166,13 @@ over:
 			break;
 		  case 'w':
 		  case 'W':
-			Waiting = true;
+			Waiting = TRUE;
 			leaveok(stdscr, TRUE);
 			goto ret;
 		  case 't':
 		  case 'T':
 teleport:
-			Running = false;
+			Running = FALSE;
 			mvaddch(My_pos.y, My_pos.x, ' ');
 			My_pos = *rnd_pos();
 			telmsg(1);
@@ -216,15 +207,15 @@ ret:
  *	Must I teleport; i.e., is there anywhere I can move without
  * being eaten?
  */
-static bool
-must_telep(void)
+bool
+must_telep()
 {
-	int x, y;
-	static COORD newpos;
+	int		x, y;
+	static COORD	newpos;
 
-#ifdef FANCY
+#ifdef	FANCY
 	if (Stand_still && Num_robots > 1 && eaten(&My_pos))
-		return true;
+		return TRUE;
 #endif
 
 	for (y = -1; y <= 1; y++) {
@@ -238,20 +229,21 @@ must_telep(void)
 			if (Field[newpos.y][newpos.x] > 0)
 				continue;
 			if (!eaten(&newpos))
-				return false;
+				return FALSE;
 		}
 	}
-	return true;
+	return TRUE;
 }
 
 /*
  * do_move:
  *	Execute a move
  */
-static bool
-do_move(int dy, int dx)
+bool
+do_move(dy, dx)
+	int	dy, dx;
 {
-	static COORD newpos;
+	static COORD	newpos;
 
 	newpos.y = My_pos.y + dy;
 	newpos.x = My_pos.x + dx;
@@ -259,7 +251,7 @@ do_move(int dy, int dx)
 	    newpos.x <= 0 || newpos.x >= X_FIELDSIZE ||
 	    Field[newpos.y][newpos.x] > 0 || eaten(&newpos)) {
 		if (Running) {
-			Running = false;
+			Running = FALSE;
 			leaveok(stdscr, FALSE);
 			move(My_pos.y, My_pos.x);
 			refresh();
@@ -268,26 +260,27 @@ do_move(int dy, int dx)
 			putchar(CTRL('G'));
 			reset_count();
 		}
-		return false;
+		return FALSE;
 	}
 	else if (dy == 0 && dx == 0)
-		return true;
+		return TRUE;
 	mvaddch(My_pos.y, My_pos.x, ' ');
 	My_pos = newpos;
 	mvaddch(My_pos.y, My_pos.x, PLAYER);
 	if (!jumping())
 		refresh();
-	return true;
+	return TRUE;
 }
 
 /*
  * eaten:
  *	Player would get eaten at this place
  */
-static bool
-eaten(const COORD *pos)
+bool
+eaten(pos)
+	const COORD	*pos;
 {
-	int x, y;
+	int	x, y;
 
 	for (y = pos->y - 1; y <= pos->y + 1; y++) {
 		if (y <= 0 || y >= Y_FIELDSIZE)
@@ -296,10 +289,10 @@ eaten(const COORD *pos)
 			if (x <= 0 || x >= X_FIELDSIZE)
 				continue;
 			if (Field[y][x] == 1)
-				return true;
+				return TRUE;
 		}
 	}
-	return false;
+	return FALSE;
 }
 
 /*
@@ -307,10 +300,10 @@ eaten(const COORD *pos)
  *	Reset the count variables
  */
 void
-reset_count(void)
+reset_count()
 {
 	Count = 0;
-	Running = false;
+	Running = FALSE;
 	leaveok(stdscr, FALSE);
 	refresh();
 }
@@ -320,7 +313,7 @@ reset_count(void)
  *	See if we are jumping, i.e., we should not refresh.
  */
 bool
-jumping(void)
+jumping()
 {
 	return (Jump && (Count || Running || Waiting));
 }

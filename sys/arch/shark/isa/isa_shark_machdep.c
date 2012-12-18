@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_shark_machdep.c,v 1.15 2012/10/27 17:18:10 chs Exp $	*/
+/*	$NetBSD: isa_shark_machdep.c,v 1.8 2007/03/08 20:48:39 matt Exp $	*/
 
 /*
  * Copyright 1997
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_shark_machdep.c,v 1.15 2012/10/27 17:18:10 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_shark_machdep.c,v 1.8 2007/03/08 20:48:39 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -163,7 +163,13 @@ static const char * const isa_intr_names[16] = {
 };
 
 void *
-isa_intr_establish(isa_chipset_tag_t ic, int irq, int type, int level, int (*ih_fun)(void *), void *ih_arg)
+isa_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
+	isa_chipset_tag_t ic;
+	int irq;
+	int type;
+	int level;
+	int (*ih_fun) __P((void *));
+	void *ih_arg;
 {
 	irqhandler_t *ih;
 
@@ -196,7 +202,9 @@ isa_intr_establish(isa_chipset_tag_t ic, int irq, int type, int level, int (*ih_
  * Deregister an interrupt handler.
  */
 void
-isa_intr_disestablish(isa_chipset_tag_t ic, void *arg)
+isa_intr_disestablish(ic, arg)
+	isa_chipset_tag_t ic;
+	void *arg;
 {
 	panic("isa_intr_disestablish");
 }
@@ -216,7 +224,9 @@ isa_init(vaddr_t isa_io_addr, vaddr_t isa_mem_addr)
 }
 
 void
-isa_attach_hook(device_t parent, device_t self, struct isabus_attach_args *iba)
+isa_attach_hook(parent, self, iba)
+        struct device *parent, *self;
+        struct isabus_attach_args *iba;
 {
 
 	/*
@@ -225,9 +235,4 @@ isa_attach_hook(device_t parent, device_t self, struct isabus_attach_args *iba)
 	 * now.
 	 */
 	iba->iba_ic = &isa_chipset_tag;
-}
-
-void
-isa_detach_hook(isa_chipset_tag_t ic, device_t self)
-{
 }

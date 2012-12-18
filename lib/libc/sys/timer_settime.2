@@ -1,4 +1,4 @@
-.\"	$NetBSD: timer_settime.2,v 1.9 2012/11/06 23:25:44 wiz Exp $
+.\"	$NetBSD: timer_settime.2,v 1.5 2008/04/30 13:10:51 martin Exp $
 .\"
 .\" Copyright (c) 2003 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd May 17, 2010
+.Dd September 13, 2003
 .Dt TIMER_SETTIME 2
 .Os
 .Sh NAME
@@ -48,12 +48,10 @@
 .Sh DESCRIPTION
 The
 .Fn timer_settime
-sets the next expiration time of the timer with ID
+sets the next expiration time of the timer with id
 .Ar timerid
 to the
 .Fa it_value
-(see
-.Xr itimerspec 3 )
 specified in the
 .Ar tim
 argument.
@@ -62,8 +60,7 @@ If the argument
 .Ar otim
 is not
 .Dv NULL
-the old timer settings are returned.
-.Pp
+the old timer settingas are returned.
 If the
 .Ar flags
 argument is set to
@@ -121,7 +118,7 @@ argument of
 .Fn timer_settime
 or in the
 .Ar tim
-argument of
+argment of
 .Fn timer_gettime
 are subject to the above rounding effect and might not exactly match the
 requested values by the user.
@@ -169,4 +166,3 @@ structure specified a value less than zero or greater than or equal to 10e9.
 .Sh STANDARDS
 .St -p1003.1b-93 ,
 .St -p1003.1i-95
-.\"  LocalWords:  gettime settime

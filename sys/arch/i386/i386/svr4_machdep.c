@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.c,v 1.96 2010/02/14 11:09:54 drochner Exp $	 */
+/*	$NetBSD: svr4_machdep.c,v 1.92.4.1 2010/02/16 21:24:15 bouyer Exp $	 */
 
 /*-
  * Copyright (c) 1994, 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.96 2010/02/14 11:09:54 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.92.4.1 2010/02/16 21:24:15 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
@@ -42,6 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.96 2010/02/14 11:09:54 drochner E
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
+#include <sys/user.h>
 #include <sys/filedesc.h>
 #include <sys/ioctl.h>
 #include <sys/kernel.h>
@@ -70,7 +71,6 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.96 2010/02/14 11:09:54 drochner E
 #include <machine/svr4_machdep.h>
 
 static void svr4_getsiginfo(union svr4_siginfo *, int, u_long, void *);
-extern void (*svr4_fasttrap_vec)(void);
 void svr4_fasttrap(struct trapframe);
 
 #ifdef DEBUG_SVR4
@@ -109,9 +109,9 @@ svr4_printmcontext(const char *fun, svr4_mcontext_t *mc)
 #endif
 
 void
-svr4_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
+svr4_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 {
-	struct pcb *pcb = lwp_getpcb(l);
+	struct pcb *pcb = &l->l_addr->u_pcb;
 	struct trapframe *tf = l->l_md.md_regs;
 
 	setregs(l, epp, stack);
@@ -485,8 +485,6 @@ svr4_sys_sysarch(struct lwp *l, const struct svr4_sys_sysarch_args *uap, registe
 
 /*
  * Fast syscall gate trap...
- *
- * NOTE: svr4_fasttrap_lock is held.
  */
 void
 svr4_fasttrap(struct trapframe frame)
@@ -501,7 +499,11 @@ svr4_fasttrap(struct trapframe frame)
 	l->l_md.md_regs = &frame;
 
 	if (p->p_emul != &emul_svr4) {
-		/* can't exit, because we need svr4_fasttrap_lock held. */
+		ksiginfo_t ksi;
+		memset(&ksi, 0, sizeof(ksi));
+		ksi.ksi_signo = SIGILL;
+		ksi.ksi_code = ILL_ILLTRP;
+		trapsignal(l, &ksi);
 		return;
 	}
 
@@ -559,21 +561,4 @@ svr4_fasttrap(struct trapframe frame)
 		    frame.tf_eax);
 		break;
 	}
-}
-
-void
-svr4_md_init(void)
-{
-
-	svr4_fasttrap_vec = (void (*)(void))svr4_fasttrap;
-}
-
-void
-svr4_md_fini(void)
-{
-	extern krwlock_t svr4_fasttrap_lock;
-
-	rw_enter(&svr4_fasttrap_lock, RW_WRITER);
-	svr4_fasttrap_vec = (void (*)(void))nullop;
-	rw_exit(&svr4_fasttrap_lock);
 }

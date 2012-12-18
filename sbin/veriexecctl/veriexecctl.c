@@ -1,4 +1,4 @@
-/*	$NetBSD: veriexecctl.c,v 1.35 2011/08/29 14:35:04 joerg Exp $	*/
+/*	$NetBSD: veriexecctl.c,v 1.33 2008/08/31 23:37:45 dholland Exp $	*/
 
 /*-
  * Copyright 2005 Elad Efrat <elad@NetBSD.org>
@@ -64,7 +64,7 @@ extern int yyparse(void);
 int gfd, verbose = 0, error = EXIT_SUCCESS;
 size_t line = 0;
 
-__dead static void
+static void
 usage(void)
 {
 	const char *progname = getprogname();
@@ -124,7 +124,7 @@ print_query(prop_dictionary_t qp, char *file)
 {
 	struct statvfs sv;
 	const char *v;
-	size_t i;
+	int i;
 	uint8_t u8;
 	char buf[64];
 

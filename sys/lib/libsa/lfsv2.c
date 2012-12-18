@@ -1,4 +1,4 @@
-/* $NetBSD: lfsv2.c,v 1.5 2012/05/21 21:34:16 dsl Exp $ */
+/* $NetBSD: lfsv2.c,v 1.2 2003/04/11 11:27:06 dsl Exp $ */
 
 #define	LIBSA_LFS
 #define	REQUIRED_LFS_VERSION	2
@@ -9,9 +9,6 @@
 #define	ufs_write		lfsv2_write
 #define	ufs_seek		lfsv2_seek
 #define	ufs_stat		lfsv2_stat
-#if defined(LIBSA_ENABLE_LS_OP)
-#define	ufs_ls			lfsv2_ls
-#endif
 
 #define	fs_bsize		lfs_bsize
 #define	IFILE_Vx		IFILE
@@ -21,7 +18,5 @@
 #else
 #define	INOPBx(fs) INOPB(fs)
 #endif
-
-#define	FSMOD			"lfs"
 
 #include "lib/libsa/ufs.c"

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofdev.h,v 1.3 2009/09/11 12:00:12 phx Exp $	*/
+/*	$NetBSD: ofdev.h,v 1.2 2003/06/26 20:47:51 aymeric Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -50,7 +50,5 @@ struct of_dev {
 
 extern char opened_name[];
 extern int floppyboot;
-
-int strategy(void *, int, daddr_t, size_t, void *, size_t *);
 
 #endif

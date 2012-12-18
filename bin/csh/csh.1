@@ -1,4 +1,4 @@
-.\"	$NetBSD: csh.1,v 1.50 2012/03/22 07:58:16 wiz Exp $
+.\"	$NetBSD: csh.1,v 1.43.32.1 2009/04/01 00:25:20 snj Exp $
 .\"
 .\" Copyright (c) 1980, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)csh.1	8.2 (Berkeley) 1/21/94
 .\"
-.Dd March 29, 2009
+.Dd April 17, 2004
 .Dt CSH 1
 .Os
 .Sh NAME
@@ -46,7 +46,7 @@ The
 .Nm
 is a command language interpreter
 incorporating a history mechanism (see
-.Sx History substitutions ) ,
+.Sx History Substitutions ) ,
 job control facilities (see
 .Sx Jobs ) ,
 interactive file name
@@ -171,7 +171,7 @@ It is typical for users on crt's to put the command ``stty crt''
 in their
 .Pa \&.login
 file, and to also invoke
-.Xr tset 1
+.Xr tset  1
 there.
 .Pp
 In the normal case, the shell will begin reading commands from the
@@ -277,7 +277,7 @@ when it is typed.
 There is another special key
 .Ic ^Y
 that does not generate a STOP signal until a program attempts to
-.Xr read 2
+.Xr read  2
 it.
 This request can usefully be typed ahead when you have prepared some commands
 for a job that you wish to stop after it has read them.
@@ -299,7 +299,7 @@ Similarly saying `%1 \*[Am]' resumes job number 1 in the background.
 Jobs can also be named by prefixes of the string typed in to start them,
 if these prefixes are unambiguous, thus `%ex' would normally restart
 a suspended
-.Xr ex 1
+.Xr ex  1
 job, if there were only one suspended job whose name began with
 the string `ex'.
 It is also possible to say `%?string'
@@ -495,7 +495,7 @@ For example, consider the following output from the
 .Ar history
 command:
 .Bd -literal -offset indent
-09  write michael
+\09  write michael
 10  ex write.c
 11  cat oldwrite.c
 12  diff *write.c
@@ -1190,14 +1190,14 @@ statements below.
 .Pp
 .It Ic eval Ar arg ...
 (As in
-.Xr sh 1 . )
+.Xr sh  1  . )
 The arguments are read as input to the shell and the resulting
 command(s) executed in the context of the current shell.
 This is usually used to execute commands
 generated as the result of command or variable substitution, since
 parsing occurs before these substitutions.
 See
-.Xr tset 1
+.Xr tset  1
 for an example of using
 .Ic eval .
 .Pp
@@ -1359,7 +1359,7 @@ option lists process id's in addition to the normal information.
 Sends either the TERM (terminate) signal or the
 specified signal to the specified jobs or processes.
 Signals are either given by number or by names (as given in
-.In signal.h ,
+.Aq Pa signal.h ,
 stripped of the prefix ``SIG'').
 The signal names are listed by ``kill \-l'';
 if an
@@ -1411,7 +1411,7 @@ The maximum number of CPU-seconds to be used by each process.
 The largest single file (in bytes) that can be created.
 .It Ar datasize
 The maximum growth of the data+stack region via
-.Xr sbrk 2
+.Xr sbrk  2
 beyond the end of the program text.
 .It Ar stacksize
 The maximum
@@ -1468,7 +1468,7 @@ man pages for an additional description of system resource limits.
 Terminate a login shell, replacing it with an instance of
 .Pa /usr/bin/login .
 This is one way to log off, included for compatibility with
-.Xr sh 1 .
+.Xr sh  1  .
 .Pp
 .It Ic logout
 Terminate a login shell.
@@ -1702,7 +1702,7 @@ Causes the shell to stop in its tracks, much as if it had been sent a stop
 signal with
 .Ic ^Z .
 This is most often used to stop shells started by
-.Xr su 1 .
+.Xr su  1 .
 .Pp
 .It Ic switch Ar ( string )
 .It Ic case Ar str1 :
@@ -1793,7 +1793,7 @@ environment.
 See also the
 .Ic setenv
 command above and
-.Xr printenv 1 .
+.Xr printenv  1  .
 .Pp
 .It Ic wait
 Wait for all background jobs.
@@ -1977,7 +1977,7 @@ when there is mail in the file
 .Ar name .
 .It Ic noclobber
 As described in the section on
-.Sx Input/output ,
+.Sx input/output ,
 restrictions are placed on output redirection to ensure that
 files are not accidentally destroyed, and that `\*[Gt]\*[Gt]' redirections
 refer to existing files.
@@ -2046,7 +2046,7 @@ The file in which the shell resides.
 This variable is used in forking shells to interpret files that have execute
 bits set, but which are not executable by the system.
 (See the description of
-.Sx Non-builtin command execution
+.Sx Non-builtin Command Execution
 below.)
 Initialized to the (system-dependent) home of the shell.
 .It Ic status
@@ -2110,7 +2110,7 @@ after history substitution.
 .Ss Non-builtin command execution
 When a command to be executed is found to not be a builtin command
 the shell attempts to execute the command via
-.Xr execve 2 .
+.Xr execve  2  .
 Each word in the variable
 .Ar path
 names a directory from which the shell will attempt to execute the command.
@@ -2236,16 +2236,15 @@ substitutions on a single line to 20.
 .Xr a.out 5 ,
 .Xr environ 7 ,
 .Xr sysctl 8
-.Rs
-.%T "An introduction to the C shell"
-.Re
+.br
+.Em "An introduction to the C shell"
 .Sh HISTORY
 .Nm
 appeared in
 .Bx 3 .
 It was a first implementation of a command language interpreter
 incorporating a history mechanism (see
-.Sx History substitutions ) ,
+.Sx History Substitutions ) ,
 job control facilities (see
 .Sx Jobs ) ,
 interactive file name

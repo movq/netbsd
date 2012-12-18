@@ -1,4 +1,4 @@
-/*	$NetBSD: sort.c,v 1.61 2011/09/16 15:39:29 joerg Exp $	*/
+/*	$NetBSD: sort.c,v 1.46.4.2 2010/06/29 18:01:11 riz Exp $	*/
 
 /*-
  * Copyright (c) 2000-2003 The NetBSD Foundation, Inc.
@@ -76,7 +76,10 @@ __COPYRIGHT("@(#) Copyright (c) 1993\
  The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
-__RCSID("$NetBSD: sort.c,v 1.61 2011/09/16 15:39:29 joerg Exp $");
+#ifndef lint
+__RCSID("$NetBSD: sort.c,v 1.46.4.2 2010/06/29 18:01:11 riz Exp $");
+__SCCSID("@(#)sort.c	8.1 (Berkeley) 6/6/93");
+#endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/time.h>
@@ -111,7 +114,9 @@ const char *tmpdir;	/* where temporary files should be put */
 
 static void cleanup(void);
 static void onsignal(int);
-__dead static void usage(const char *);
+static void usage(const char *);
+
+int main(int argc, char **argv);
 
 int
 main(int argc, char *argv[])
@@ -145,15 +150,13 @@ main(int argc, char *argv[])
 	fldtab = emalloc(fldtab_sz * sizeof(*fldtab));
 	memset(fldtab, 0, fldtab_sz * sizeof(*fldtab));
 
-#define SORT_OPTS "bcdD:fHik:lmno:rR:sSt:T:ux"
-
 	/* Convert "+field" args to -f format */
-	fixit(&argc, argv, SORT_OPTS);
+	fixit(&argc, argv);
 
 	if (!(tmpdir = getenv("TMPDIR")))
 		tmpdir = _PATH_TMP;
 
-	while ((ch = getopt(argc, argv, SORT_OPTS)) != -1) {
+	while ((ch = getopt(argc, argv, "bcdD:fik:mHno:rR:sSt:T:ux")) != -1) {
 		switch (ch) {
 		case 'b':
 			fldtab[0].flags |= BI | BT;
@@ -165,7 +168,7 @@ main(int argc, char *argv[])
 			for (i = 0; optarg[i]; i++)
 			    debug_flags |= 1 << (optarg[i] & 31);
 			break;
-		case 'd': case 'f': case 'i': case 'n': case 'l':
+		case 'd': case 'f': case 'i': case 'n':
 			fldtab[0].flags |= optval(ch, 0);
 			break;
 		case 'H':
@@ -284,7 +287,7 @@ main(int argc, char *argv[])
 
 	if (fldtab[1].icol.num == 0) {
 		/* No sort key specified */
-		if (fldtab[0].flags & (I|D|F|N|L)) {
+		if (fldtab[0].flags & (I|D|F|N)) {
 			/* Modified - generate a key that covers the line */
 			fldtab[0].flags &= ~(BI|BT);
 			setfield("1", &fldtab[++fld_cnt], fldtab->flags);
@@ -396,7 +399,7 @@ usage(const char *msg)
 	if (msg != NULL)
 		(void)fprintf(stderr, "%s: %s\n", getprogname(), msg);
 	(void)fprintf(stderr,
-	    "usage: %s [-bcdfHilmnrSsu] [-k field1[,field2]] [-o output]"
+	    "usage: %s [-bcdfHimnrSsu] [-k field1[,field2]] [-o output]"
 	    " [-R char] [-T dir]", getprogname());
 	(void)fprintf(stderr,
 	    "             [-t char] [file ...]\n");

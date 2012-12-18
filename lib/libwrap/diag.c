@@ -1,4 +1,4 @@
-/*	$NetBSD: diag.c,v 1.10 2012/03/22 22:58:15 joerg Exp $	*/
+/*	$NetBSD: diag.c,v 1.8 2004/09/07 13:20:40 jrf Exp $	*/
 
  /*
   * Routines to report various classes of problems. Each report is decorated
@@ -16,16 +16,14 @@
 #if 0
 static char sccsid[] = "@(#) diag.c 1.1 94/12/28 17:42:20";
 #else
-__RCSID("$NetBSD: diag.c,v 1.10 2012/03/22 22:58:15 joerg Exp $");
+__RCSID("$NetBSD: diag.c,v 1.8 2004/09/07 13:20:40 jrf Exp $");
 #endif
 #endif
 
 /* System libraries */
 
 #include <syslog.h>
-#include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <setjmp.h>
 #include <string.h>
 #include <errno.h>
@@ -33,61 +31,75 @@ __RCSID("$NetBSD: diag.c,v 1.10 2012/03/22 22:58:15 joerg Exp $");
 /* Local stuff */
 
 #include "tcpd.h"
+#include "mystdarg.h"
 
 struct tcpd_context tcpd_context;
 jmp_buf tcpd_buf;
 
-static void tcpd_diag(int, const char *, const char *, va_list)
-    __printflike(3,0);
+static void tcpd_diag __P((int, char *, char *, va_list))
+	__attribute__((__format__(__printf__, 3, 0)));
 
 /* tcpd_diag - centralize error reporter */
 
-static void
-tcpd_diag(int severity, const char *tag, const char *fmt, va_list ap)
+static void tcpd_diag(severity, tag, format, ap)
+int     severity;
+char   *tag;
+char   *format;
+va_list ap;
 {
-    char *buf;
-    int     oerrno;
+    char    fmt[BUFSIZ];
+    char    buf[BUFSIZ];
+    int     i, o, oerrno;
 
     /* save errno in case we need it */
     oerrno = errno;
 
-    if (vasprintf(&buf, fmt, ap) == -1)
-	buf = __UNCONST(fmt);
-
-    errno = oerrno;
-
     /* contruct the tag for the log entry */
     if (tcpd_context.file)
-	syslog(severity, "%s: %s, line %d: %s",
-	    tag, tcpd_context.file, tcpd_context.line, buf);
+	(void)snprintf(buf, sizeof buf, "%s: %s, line %d: ",
+		tag, tcpd_context.file, tcpd_context.line);
     else
-	syslog(severity, "%s: %s", tag, buf);
+	(void)snprintf(buf, sizeof buf, "%s: ", tag);
 
-    if (buf != fmt)
-        free(buf);
+    /* change % to %% in tag before appending the format */
+    for (i = 0, o = 0; buf[i] != '\0'; ) {
+	if (buf[i] == '%') {
+	    fmt[o] = '%';
+	    if (o < sizeof(fmt) - 1)
+		o++;
+	}
+	fmt[o] = buf[i++];
+	if (o < sizeof(fmt) - 1)
+	    o++;
+    }
+
+    /* append format and force null termination */
+    fmt[o] = '\0';
+    (void)strlcat(fmt, format, sizeof(fmt) - o);
+
+    errno = oerrno;
+    vsyslog(severity, fmt, ap);
 }
 
 /* tcpd_warn - report problem of some sort and proceed */
 
-void
-tcpd_warn(const char *format, ...)
+void    VARARGS(tcpd_warn, char *, format)
 {
     va_list ap;
 
-    va_start(ap, format);
+    VASTART(ap, char *, format);
     tcpd_diag(LOG_ERR, "warning", format, ap);
-    va_end(ap);
+    VAEND(ap);
 }
 
 /* tcpd_jump - report serious problem and jump */
 
-void
-tcpd_jump(const char *format, ...)
+void    VARARGS(tcpd_jump, char *, format)
 {
     va_list ap;
 
-    va_start(ap, format);
+    VASTART(ap, char *, format);
     tcpd_diag(LOG_ERR, "error", format, ap);
-    va_end(ap);
+    VAEND(ap);
     longjmp(tcpd_buf, AC_ERROR);
 }

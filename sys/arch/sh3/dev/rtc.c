@@ -1,4 +1,4 @@
-/*	$NetBSD: rtc.c,v 1.8 2010/05/22 15:51:32 tsutsui Exp $ */
+/*	$NetBSD: rtc.c,v 1.5 2008/04/28 20:23:34 martin Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.8 2010/05/22 15:51:32 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.5 2008/04/28 20:23:34 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -55,7 +55,6 @@ struct rtc_softc {
 
 	int sc_valid;
 	struct todr_chip_handle sc_todr;
-	u_int sc_year0;
 };
 
 static int	rtc_match(device_t, cfdata_t, void *);
@@ -69,10 +68,7 @@ CFATTACH_DECL_NEW(rtc, sizeof(struct rtc_softc),
 static int rtc_gettime_ymdhms(todr_chip_handle_t, struct clock_ymdhms *);
 static int rtc_settime_ymdhms(todr_chip_handle_t, struct clock_ymdhms *);
 
-#ifndef SH3_RTC_BASEYEAR
-#define SH3_RTC_BASEYEAR	1900
-#endif
-u_int sh3_rtc_baseyear = SH3_RTC_BASEYEAR;
+
 
 static int
 rtc_match(device_t parent, cfdata_t cfp, void *aux)
@@ -87,7 +83,6 @@ rtc_attach(device_t parent, device_t self, void *aux)
 {
 	struct rtc_softc *sc;
 	uint8_t r;
-	prop_number_t prop_rtc_baseyear;
 #ifdef RTC_DEBUG
 	char bits[128];
 #endif
@@ -101,8 +96,8 @@ rtc_attach(device_t parent, device_t self, void *aux)
 	r = _reg_read_1(SH_(RCR2));
 
 #ifdef RTC_DEBUG
-	snprintb(bits, sizeof(bits), SH_RCR2_BITS, r);
-	aprint_debug_dev(sc->sc_dev, "RCR2=%s\n", bits);
+	aprint_debug_dev(sc->sc_dev, "RCR2=%s\n",
+		bitmask_snprintf(r, SH_RCR2_BITS, bits, sizeof(bits)));
 #endif
 
 	/* Was the clock running? */
@@ -124,19 +119,6 @@ rtc_attach(device_t parent, device_t self, void *aux)
 	sc->sc_todr.todr_gettime_ymdhms = rtc_gettime_ymdhms;
 	sc->sc_todr.todr_settime_ymdhms = rtc_settime_ymdhms;
 
-	prop_rtc_baseyear = prop_dictionary_get(device_properties(self),
-	    "sh3_rtc_baseyear");
-	if (prop_rtc_baseyear != NULL) {
-		sh3_rtc_baseyear =
-		    (u_int)prop_number_integer_value(prop_rtc_baseyear);
-#ifdef RTC_DEBUG
-		aprint_debug_dev(self,
-		    "using baseyear %u passed via device property\n",
-		    sh3_rtc_baseyear);
-#endif
-	}
-	sc->sc_year0 = sh3_rtc_baseyear;
-
 	todr_attach(&sc->sc_todr);
 
 #ifdef RTC_DEBUG
@@ -145,9 +127,6 @@ rtc_attach(device_t parent, device_t self, void *aux)
 		rtc_gettime_ymdhms(&sc->sc_todr, &dt);
 	}
 #endif
-
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 
@@ -202,7 +181,7 @@ rtc_gettime_ymdhms(todr_chip_handle_t h, struct clock_ymdhms *dt)
 		return EIO;
 	}
 
-	dt->dt_year += sc->sc_year0;
+	dt->dt_year += 1900;
 	if (dt->dt_year < POSIX_BASE_YEAR)
 		dt->dt_year += 100;
 
@@ -227,11 +206,7 @@ rtc_settime_ymdhms(todr_chip_handle_t h, struct clock_ymdhms *dt)
 	unsigned int year;
 	uint8_t r;
 
-	year = dt->dt_year - sc->sc_year0;
-	if (year > 99)
-		year -= 100;
-
-	year = TOBCD(year);
+	year = TOBCD(dt->dt_year % 100);
 
 	r = _reg_read_1(SH_(RCR2));
 

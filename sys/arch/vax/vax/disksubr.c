@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.53 2012/06/22 20:42:23 abs Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.48 2008/03/11 05:34:03 matt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,26 +32,28 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.53 2012/06/22 20:42:23 abs Exp $");
-
-#include "opt_compat_ultrix.h"
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.48 2008/03/11 05:34:03 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
-#include <sys/cpu.h>
 #include <sys/dkbad.h>
 #include <sys/disklabel.h>
 #include <sys/disk.h>
 #include <sys/syslog.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/macros.h>
+#include <machine/pte.h>
+#include <machine/pcb.h>
+#include <machine/cpu.h>
 
 #include <dev/mscp/mscp.h> /* For disk encoding scheme */
 
+#include "opt_compat_ultrix.h"
 #ifdef COMPAT_ULTRIX
 #include <dev/dec/dec_boot.h>
 #include <ufs/ufs/dinode.h>	/* XXX for fs.h */
@@ -157,8 +159,7 @@ compat_label(dev_t dev, void (*strat)(struct buf *bp), struct disklabel *lp,
 		int part;
 
 		if (dlp->magic != DEC_LABEL_MAGIC) {
-			if (dlp->magic != 0)
-				printf("label: %x\n",dlp->magic);
+			printf("label: %x\n",dlp->magic);
 			msg = ((msg != NULL) ? msg: "no disk label");
 			goto done;
 		}
@@ -259,7 +260,7 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *),
 	if ((error = biowait(bp)))
 		goto done;
 	dlp = (struct disklabel *)((char *)bp->b_data + LABELOFFSET);
-	memcpy(dlp, lp, sizeof(struct disklabel));
+	bcopy(lp, dlp, sizeof(struct disklabel));
 	bp->b_oflags &= ~(BO_DONE);
 	bp->b_flags &= ~(B_READ);
 	bp->b_flags |= B_WRITE;

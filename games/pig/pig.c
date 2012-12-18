@@ -1,4 +1,4 @@
-/*	$NetBSD: pig.c,v 1.15 2012/06/19 05:46:09 dholland Exp $	*/
+/*	$NetBSD: pig.c,v 1.13 2008/07/20 01:03:21 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993\
 #if 0
 static char sccsid[] = "@(#)pig.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: pig.c,v 1.15 2012/06/19 05:46:09 dholland Exp $");
+__RCSID("$NetBSD: pig.c,v 1.13 2008/07/20 01:03:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,11 +53,13 @@ __RCSID("$NetBSD: pig.c,v 1.15 2012/06/19 05:46:09 dholland Exp $");
 #include <unistd.h>
 
 int main(int, char *[]);
-static void pigout(char *, int);
-static void usage(void) __dead;
+void pigout(char *, int);
+void usage(void) __dead;
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	int len;
 	int ch;
@@ -88,8 +90,10 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-static void
-pigout(char *buf, int len)
+void
+pigout(buf, len)
+	char *buf;
+	int len;
 {
 	int ch, start, i;
 	int olen, allupper, firstupper;
@@ -127,8 +131,8 @@ pigout(char *buf, int len)
 	(void)printf("%.*s%s", olen, buf + start, allupper ? "AY" : "ay");
 }
 
-static void
-usage(void)
+void
+usage()
 {
 	(void)fprintf(stderr, "usage: pig\n");
 	exit(1);

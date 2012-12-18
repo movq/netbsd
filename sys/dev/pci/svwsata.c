@@ -1,4 +1,4 @@
-/*	$NetBSD: svwsata.c,v 1.16 2012/07/31 15:50:36 bouyer Exp $	*/
+/*	$NetBSD: svwsata.c,v 1.10 2008/03/18 20:46:37 cube Exp $	*/
 
 /*
  * Copyright (c) 2005 Mark Kettenis
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svwsata.c,v 1.16 2012/07/31 15:50:36 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svwsata.c,v 1.10 2008/03/18 20:46:37 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -34,10 +34,8 @@ __KERNEL_RCSID(0, "$NetBSD: svwsata.c,v 1.16 2012/07/31 15:50:36 bouyer Exp $");
 static int  svwsata_match(device_t, cfdata_t, void *);
 static void svwsata_attach(device_t, device_t, void *);
 
-static void svwsata_chip_map(struct pciide_softc *,
-    const struct pci_attach_args *);
-static void svwsata_mapreg_dma(struct pciide_softc *,
-    const struct pci_attach_args *);
+static void svwsata_chip_map(struct pciide_softc *, struct pci_attach_args *);
+static void svwsata_mapreg_dma(struct pciide_softc *, struct pci_attach_args *);
 static void svwsata_mapchan(struct pciide_channel *);
 
 CFATTACH_DECL_NEW(svwsata, sizeof(struct pciide_softc),
@@ -102,7 +100,7 @@ svwsata_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-svwsata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
+svwsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	pci_intr_handle_t intrhandle;
@@ -124,7 +122,7 @@ svwsata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 			   PCI_MAPREG_TYPE_MEM |
 			   PCI_MAPREG_MEM_TYPE_32BIT, 0,
 			   &sc->sc_ba5_st, &sc->sc_ba5_sh,
-			   NULL, &sc->sc_ba5_ss) != 0) {
+			   NULL, NULL) != 0) {
 		aprint_error(": unable to map BA5 register space\n");
 		return;
 	}
@@ -151,7 +149,6 @@ svwsata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 
 	/* We can use SControl and SStatus to probe for drives. */
 	sc->sc_wdcdev.sc_atac.atac_probe = wdc_sataprobe;
-	sc->sc_wdcdev.wdc_maxdrives = 1;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -172,8 +169,8 @@ svwsata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
 		    "couldn't establish native-PCI interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
 
@@ -192,7 +189,7 @@ svwsata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 }
 
 static void
-svwsata_mapreg_dma(struct pciide_softc *sc, const struct pci_attach_args *pa)
+svwsata_mapreg_dma(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *pc;
 	int chan, reg;

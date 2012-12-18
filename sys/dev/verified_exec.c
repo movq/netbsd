@@ -1,4 +1,4 @@
-/*	$NetBSD: verified_exec.c,v 1.67 2012/03/13 18:40:30 elad Exp $	*/
+/*	$NetBSD: verified_exec.c,v 1.63.22.1 2008/12/18 00:56:27 snj Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 Elad Efrat <elad@NetBSD.org>
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: verified_exec.c,v 1.67 2012/03/13 18:40:30 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: verified_exec.c,v 1.63.22.1 2008/12/18 00:56:27 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -54,7 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: verified_exec.c,v 1.67 2012/03/13 18:40:30 elad Exp 
 
 #include <prop/proplib.h>
 
-void veriexecattach(device_t, device_t, void *);
+void veriexecattach(struct device *, struct device *, void *);
 static dev_type_open(veriexecopen);
 static dev_type_close(veriexecclose);
 static dev_type_ioctl(veriexecioctl);
@@ -106,8 +106,7 @@ veriexecattach(DEVPORT_DEVICE *parent, DEVPORT_DEVICE *self, void *aux)
 static int
 veriexecopen(dev_t dev, int flags, int fmt, struct lwp *l)
 {
-	if (kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_VERIEXEC,
-	    KAUTH_REQ_SYSTEM_VERIEXEC_ACCESS, NULL, NULL, NULL))
+	if (kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER, NULL))
 		return (EPERM);
 
 	if (veriexec_dev_usage > 0)
@@ -128,24 +127,25 @@ veriexecclose(dev_t dev, int flags, int fmt, struct lwp *l)
 static int
 veriexec_delete(prop_dictionary_t dict, struct lwp *l)
 {
-	struct vnode *vp;
+	struct nameidata nid;
 	const char *file;
 	int error;
 
 	if (!prop_dictionary_get_cstring_nocopy(dict, "file", &file))
 		return (EINVAL);
 
-	error = namei_simple_kernel(file, NSM_FOLLOW_NOEMULROOT, &vp);
+	NDINIT(&nid, LOOKUP, FOLLOW, UIO_SYSSPACE, file);
+	error = namei(&nid);
 	if (error)
 		return (error);
 
 	/* XXX this should be done differently... */
-	if (vp->v_type == VREG)
-		error = veriexec_file_delete(l, vp);
-	else if (vp->v_type == VDIR)
-		error = veriexec_table_delete(l, vp->v_mount);
+	if (nid.ni_vp->v_type == VREG)
+		error = veriexec_file_delete(l, nid.ni_vp);
+	else if (nid.ni_vp->v_type == VDIR)
+		error = veriexec_table_delete(l, nid.ni_vp->v_mount);
 
-	vrele(vp);
+	vrele(nid.ni_vp);
 
 	return (error);
 }
@@ -153,20 +153,21 @@ veriexec_delete(prop_dictionary_t dict, struct lwp *l)
 static int
 veriexec_query(prop_dictionary_t dict, prop_dictionary_t rdict, struct lwp *l)
 {
-	struct vnode *vp;
+	struct nameidata nid;
 	const char *file;
 	int error;
 
 	if (!prop_dictionary_get_cstring_nocopy(dict, "file", &file))
 		return (EINVAL);
 
-	error = namei_simple_kernel(file, NSM_FOLLOW_NOEMULROOT, &vp);
+	NDINIT(&nid, LOOKUP, FOLLOW, UIO_SYSSPACE, file);
+	error = namei(&nid);
 	if (error)
 		return (error);
 
-	error = veriexec_convert(vp, rdict);
+	error = veriexec_convert(nid.ni_vp, rdict);
 
-	vrele(vp);
+	vrele(nid.ni_vp);
 
 	return (error);
 }
@@ -174,10 +175,12 @@ veriexec_query(prop_dictionary_t dict, prop_dictionary_t rdict, struct lwp *l)
 int
 veriexecioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
+	extern int veriexec_strict;
 	struct plistref *plistref;
 	prop_dictionary_t dict;
 	int error = 0;
 
+	/* XXX This should be replaced with a kauth(9) request. */
 	switch (cmd) {
 	case VERIEXEC_TABLESIZE:
 	case VERIEXEC_LOAD:
@@ -186,11 +189,12 @@ veriexecioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 		if (!(flags & FWRITE))
 			return (EPERM);
 
-		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_VERIEXEC,
-		    KAUTH_REQ_SYSTEM_VERIEXEC_MODIFY, KAUTH_ARG(cmd), NULL,
-		    NULL);
-		if (error)
-			return error;
+		if (veriexec_strict > VERIEXEC_LEARNING) {
+			log(LOG_WARNING, "Veriexec: Strict mode, modifying "
+			    "tables not permitted.\n");
+
+			return (EPERM);
+		}
 
 		break;
 

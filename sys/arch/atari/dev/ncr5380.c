@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr5380.c,v 1.70 2012/10/27 17:17:43 chs Exp $	*/
+/*	$NetBSD: ncr5380.c,v 1.56.2.1 2009/01/16 21:56:48 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Leo Weppelman.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,19 +31,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ncr5380.c,v 1.70 2012/10/27 17:17:43 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ncr5380.c,v 1.56.2.1 2009/01/16 21:56:48 bouyer Exp $");
 
 /*
  * Bit mask of targets you want debugging to be shown
  */
-uint8_t dbg_target_mask = 0x7f;
+u_char	dbg_target_mask = 0x7f;
 
 /*
  * Set bit for target when parity checking must be disabled.
  * My (LWP) Maxtor 7245S  seems to generate parity errors on about 50%
  * of all transfers while the data is correct!?
  */
-uint8_t ncr5380_no_parchk = 0xff;
+u_char	ncr5380_no_parchk = 0xff;
 
 #ifdef	AUTO_SENSE
 
@@ -50,19 +55,19 @@ uint8_t ncr5380_no_parchk = 0xff;
  * option to override.
  */
 #ifdef	TRY_SCSI_LINKED_COMMANDS
-uint8_t ncr_test_link = ((~TRY_SCSI_LINKED_COMMANDS) & 0x7f);
+u_char	ncr_test_link = ((~TRY_SCSI_LINKED_COMMANDS) & 0x7f);
 #else
-uint8_t ncr_test_link = 0x7f;
+u_char	ncr_test_link = 0x7f;
 #endif
-uint8_t ncr_will_link = 0x00;
+u_char	ncr_will_link = 0x00;
 
 #endif	/* AUTO_SENSE */
 
 /*
  * This is the default sense-command we send.
  */
-static uint8_t sense_cmd[] = {
-	SCSI_REQUEST_SENSE, 0, 0, 0, sizeof(struct scsi_sense_data), 0
+static	u_char	sense_cmd[] = {
+		SCSI_REQUEST_SENSE, 0, 0, 0, sizeof(struct scsi_sense_data), 0
 };
 
 /*
@@ -73,12 +78,12 @@ static volatile int	main_running = 0;
 /*
  * Mask of targets selected
  */
-static uint8_t	busy;
+static u_char	busy;
 
-static void	ncr5380_minphys(struct buf *bp);
-static void	ncr5380_scsi_request(struct scsipi_channel *,
-		    scsipi_adapter_req_t, void *);
-static void	ncr5380_show_scsi_cmd(struct scsipi_xfer *xs);
+static void	ncr5380_minphys __P((struct buf *bp));
+static void	ncr5380_scsi_request __P((struct scsipi_channel *,
+					scsipi_adapter_req_t, void *));
+static void	ncr5380_show_scsi_cmd __P((struct scsipi_xfer *xs));
 
 static SC_REQ	req_queue[NREQ];
 static SC_REQ	*free_head = NULL;	/* Free request structures	*/
@@ -96,47 +101,40 @@ static SC_REQ	*free_head = NULL;	/* Free request structures	*/
  * some cases (especially when using my tapedrive, a Tandberg 3600) the
  * device is busy internally and the first SCSI-phase will be delayed.
  */
-static inline int
-wait_req_true(void)
+extern inline int wait_req_true(void)
 {
-	int timeout = 250000;
+	int	timeout = 250000;
 
-	while ((GET_5380_REG(NCR5380_IDSTAT) & SC_S_REQ) == 0 && --timeout)
+	while (!(GET_5380_REG(NCR5380_IDSTAT) & SC_S_REQ) && --timeout)
 		delay(1);
-	return GET_5380_REG(NCR5380_IDSTAT) & SC_S_REQ;
+	return (GET_5380_REG(NCR5380_IDSTAT) & SC_S_REQ);
 }
 
 /*
  * Wait for request-line to become inactive. When it doesn't return 0.
  * Otherwise return != 0.
  */
-static inline int
-wait_req_false(void)
+extern inline int wait_req_false(void)
 {
-	int timeout = 250000;
+	int	timeout = 250000;
 
 	while ((GET_5380_REG(NCR5380_IDSTAT) & SC_S_REQ) && --timeout)
 		delay(1);
-	return (GET_5380_REG(NCR5380_IDSTAT) & SC_S_REQ) == 0;
+	return (!(GET_5380_REG(NCR5380_IDSTAT) & SC_S_REQ));
 }
 
-static inline void
-ack_message(void)
+extern inline void ack_message()
 {
-
 	SET_5380_REG(NCR5380_ICOM, 0);
 }
 
-static inline void
-nack_message(SC_REQ *reqp, u_char msg)
+extern inline void nack_message(SC_REQ *reqp, u_char msg)
 {
-
 	SET_5380_REG(NCR5380_ICOM, SC_A_ATN);
 	reqp->msgout = msg;
 }
 
-static inline void
-finish_req(SC_REQ *reqp)
+extern inline void finish_req(SC_REQ *reqp)
 {
 	int			sps;
 	struct scsipi_xfer	*xs = reqp->xs;
@@ -164,15 +162,15 @@ finish_req(SC_REQ *reqp)
 	free_head  = reqp;
 	splx(sps);
 
-	if ((reqp->dr_flag & DRIVER_LINKCHK) == 0)
+	if (!(reqp->dr_flag & DRIVER_LINKCHK))
 		scsipi_done(xs);
 }
 
 /*
  * Auto config stuff....
  */
-void	ncr_attach(device_t, device_t, void *);
-int	ncr_match(device_t, cfdata_t, void *);
+void	ncr_attach __P((struct device *, struct device *, void *));
+int	ncr_match __P((struct device *, struct cfdata *, void *));
 
 /*
  * Tricks to make driver-name configurable
@@ -182,28 +180,31 @@ int	ncr_match(device_t, cfdata_t, void *);
 #define CFSTRING(n)	__STRING(n)
 #define	CFDRNAME(n)	n
 
-CFATTACH_DECL_NEW(CFDRNAME(DRNAME), sizeof(struct ncr_softc),
+CFATTACH_DECL(CFDRNAME(DRNAME), sizeof(struct ncr_softc),
     ncr_match, ncr_attach, NULL, NULL);
 
 extern struct cfdriver CFNAME(DRNAME);
 
 int
-ncr_match(device_t parent, cfdata_t cf, void *aux)
+ncr_match(pdp, cfp, auxp)
+struct device	*pdp;
+struct cfdata	*cfp;
+void		*auxp;
 {
-
-	return machine_match(parent, cf, aux, &CFNAME(DRNAME));
+	return (machine_match(pdp, cfp, auxp, &CFNAME(DRNAME)));
 }
 
 void
-ncr_attach(device_t parent, device_t self, void *aux)
+ncr_attach(pdp, dp, auxp)
+struct device	*pdp, *dp;
+void		*auxp;
 {
 	struct ncr_softc	*sc;
 	int			i;
 
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (struct ncr_softc *)dp;
 
-	sc->sc_adapter.adapt_dev = self;
+	sc->sc_adapter.adapt_dev = &sc->sc_dev;
 	sc->sc_adapter.adapt_openings = 7;
 	sc->sc_adapter.adapt_max_periph = 1;
 	sc->sc_adapter.adapt_ioctl = NULL;
@@ -251,7 +252,7 @@ ncr_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(self, &sc->sc_channel, scsiprint);
+	config_found(dp, &sc->sc_channel, scsiprint);
 }
 
 /*
@@ -262,17 +263,17 @@ ncr_attach(device_t parent, device_t self, void *aux)
  * Carry out a request from the high level driver.
  */
 static void
-ncr5380_scsi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
-    void *arg)
+ncr5380_scsi_request(chan, req, arg)
+	struct scsipi_channel *chan;
+	scsipi_adapter_req_t req;
+	void *arg;
 {
 	struct scsipi_xfer *xs;
 	struct scsipi_periph *periph;
-	struct ncr_softc *sc;
+	struct ncr_softc *sc = (void *)chan->chan_adapter->adapt_dev;
 	int	sps;
 	SC_REQ	*reqp, *link, *tmp;
 	int	flags;
-
-	sc = device_private(chan->chan_adapter->adapt_dev);
 
 	switch (req) {
 	case ADAPTER_REQ_RUN_XFER:
@@ -345,11 +346,11 @@ ncr5380_scsi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 		    (reqp->xcmd.opcode == SCSI_REQUEST_SENSE)) {
 			reqp->next = issue_q;
 			issue_q    = reqp;
-		} else {
+		}
+		else {
 			tmp  = issue_q;
 			do {
-				if (!link && (tmp->targ_id == reqp->targ_id) &&
-				    !tmp->link)
+			    if (!link && (tmp->targ_id == reqp->targ_id) && !tmp->link)
 					link = tmp;
 			} while (tmp->next && (tmp = tmp->next));
 			tmp->next = reqp;
@@ -370,18 +371,17 @@ ncr5380_scsi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 		 * ignore the results of the dummy command, since we only
 		 * care about whether it was accepted or not.
 		 */
-		if (!link && (ncr_test_link & (1 << reqp->targ_id)) == 0 &&
-		    (tmp = free_head) && (reqp->dr_flag & DRIVER_NOINT) == 0) {
+		if (!link && !(ncr_test_link & (1<<reqp->targ_id)) &&
+		    (tmp = free_head) && !(reqp->dr_flag & DRIVER_NOINT)) {
 			free_head = tmp->next;
-			tmp->dr_flag = (reqp->dr_flag & ~DRIVER_DMAOK) |
-			    DRIVER_LINKCHK;
+			tmp->dr_flag = (reqp->dr_flag & ~DRIVER_DMAOK) | DRIVER_LINKCHK;
 			tmp->phase = NR_PHASE;
 			tmp->msgout = MSG_NOOP;
 			tmp->status = SCSGOOD;
 			tmp->xs = reqp->xs;
 			tmp->targ_id = reqp->targ_id;
 			tmp->targ_lun = reqp->targ_lun;
-			memcpy(&tmp->xcmd, sense_cmd, sizeof(sense_cmd));
+			bcopy(sense_cmd, &tmp->xcmd, sizeof(sense_cmd));
 			tmp->xcmd_len = sizeof(sense_cmd);
 			tmp->xdata_ptr = (u_char *)&tmp->xs->sense.scsi_sense;
 			tmp->xdata_len = sizeof(tmp->xs->sense.scsi_sense);
@@ -421,28 +421,29 @@ ncr5380_scsi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 static void
 ncr5380_minphys(struct buf *bp)
 {
-
-	if (bp->b_bcount > MIN_PHYS)
-		bp->b_bcount = MIN_PHYS;
-	minphys(bp);
+    if (bp->b_bcount > MIN_PHYS)
+	bp->b_bcount = MIN_PHYS;
+    minphys(bp);
 }
 #undef MIN_PHYS
 
 static void
 ncr5380_show_scsi_cmd(struct scsipi_xfer *xs)
 {
-	uint8_t	*b = (uint8_t *)xs->cmd;
+	u_char	*b = (u_char *) xs->cmd;
 	int	i  = 0;
 
 	scsipi_printaddr(xs->xs_periph);
-	if ((xs->xs_control & XS_CTL_RESET) == 0) {
+	if (!(xs->xs_control & XS_CTL_RESET)) {
 		while (i < xs->cmdlen) {
 			if (i)
 				printf(",");
 			printf("%x",b[i++]);
 		}
 		printf("-\n");
-	} else {
+	}
+	else {
+		
 		printf("-RESET-\n");
 	}
 }
@@ -451,7 +452,8 @@ ncr5380_show_scsi_cmd(struct scsipi_xfer *xs)
  * The body of the driver.
  */
 static void
-scsi_main(struct ncr_softc *sc)
+scsi_main(sc)
+struct ncr_softc *sc;
 {
 	SC_REQ	*req, *prev;
 	int	itype;
@@ -465,120 +467,112 @@ scsi_main(struct ncr_softc *sc)
 
 	PID("scsi_main1");
 	for (;;) {
-		sps = splbio();
-		if (!connected) {
-			/*
-			 * Check if it is fair keep any exclusive access to
-			 * DMA claimed. If not, stop queueing new jobs so
-			 * the discon_q will be eventually drained and DMA
-			 * can be given up.
-			 */
-			if (!fair_to_keep_dma())
-				goto main_exit;
+	    sps = splbio();
+	    if (!connected) {
+		/*
+		 * Check if it is fair keep any exclusive access to DMA
+		 * claimed. If not, stop queueing new jobs so the discon_q
+		 * will be eventually drained and DMA can be given up.
+		 */
+		if (!fair_to_keep_dma())
+			goto main_exit;
 
-			/*
-			 * Search through the issue-queue for a command
-			 * destined for a target that isn't busy.
-			 */
-			prev = NULL;
-			for (req=issue_q; req != NULL;
-			    prev = req, req = req->next) {
-				if ((busy & (1 << req->targ_id)) == 0) {
-					/*
-					 * Found one, remove it from
-					 * the issue queue.
-					 */
-					if (prev == NULL) 
-						issue_q = req->next;
-					else
-						prev->next = req->next;
-					req->next = NULL;
-					break;
-				}
+		/*
+		 * Search through the issue-queue for a command
+		 * destined for a target that isn't busy.
+		 */
+		prev = NULL;
+		for (req=issue_q; req != NULL; prev = req, req = req->next) {
+			if (!(busy & (1 << req->targ_id))) {
+				/*
+				 * Found one, remove it from the issue queue
+				 */
+				if (prev == NULL) 
+					issue_q = req->next;
+				else prev->next = req->next;
+				req->next = NULL;
+				break;
 			}
+		}
 
-			/*
-			 * When a request has just ended, we get here
-			 * before an other device detects that
-			 * the bus is free and that it can reconnect.
-			 * The problem is that when this happens,
-			 * we always baffle the device because our
-			 * (initiator) id is higher.  This can cause
-			 * a sort of starvation on slow devices.
-			 * So we check for a pending reselection here.
-			 * Note that 'connected' will be non-null
-			 * if the reselection succeeds.
-			 */
-			if ((GET_5380_REG(NCR5380_IDSTAT) & (SC_S_SEL|SC_S_IO))
-			    == (SC_S_SEL|SC_S_IO)){
-				if (req != NULL) {
-					req->next = issue_q; 
-					issue_q = req;
-				}
-				splx(sps);
-
-				reselect(sc);
-				scsi_clr_ipend();
-				goto connected;
-			}
-
-			/*
-			 * The host is not connected and there is no request
-			 * pending, exit.
-			 */
-			if (req == NULL) {
-				PID("scsi_main2");
-				goto main_exit;
-			}
-
-			/*
-			 * Re-enable interrupts before handling the request.
-			 */
-			splx(sps);
-
-#ifdef DBG_REQ
-			if (dbg_target_mask & (1 << req->targ_id))
-				show_request(req, "TARGET");
-#endif
-			/*
-			 * We found a request. Try to connect to the target.
-			 * If the initiator fails arbitration,
-			 * the command is put back in the issue queue.
-			 */
-			if (scsi_select(req, 0)) {
-				sps = splbio();
+		/*
+		 * When a request has just ended, we get here before an other
+		 * device detects that the bus is free and that it can
+		 * reconnect. The problem is that when this happens, we always
+		 * baffle the device because our (initiator) id is higher. This
+		 * can cause a sort of starvation on slow devices. So we check
+		 * for a pending reselection here.
+		 * Note that 'connected' will be non-null if the reselection
+		 * succeeds.
+		 */
+		if ((GET_5380_REG(NCR5380_IDSTAT) & (SC_S_SEL|SC_S_IO))
+						== (SC_S_SEL|SC_S_IO)){
+			if (req != NULL) {
 				req->next = issue_q; 
 				issue_q = req;
-				splx(sps);
-#ifdef DBG_REQ
-				if (dbg_target_mask & (1 << req->targ_id))
-					ncr_tprint(req, "Select failed\n");
-#endif
-			}
-		} else
-			splx(sps);
-connected:
-		if (connected) {
-			/*
-			 * If the host is currently connected but
-			 * a 'real-DMA' transfer is in progress,
-			 * the 'end-of-DMA' interrupt restarts main.
-			 * So quit.
-			 */
-			sps = splbio();
-			if (connected &&
-			    (connected->dr_flag & DRIVER_IN_DMA)) {
-				PID("scsi_main3");
-				goto main_exit;
 			}
 			splx(sps);
 
-			/*
-			 * Let the target guide us through the bus-phases
-			 */
-			while (information_transfer(sc) == -1)
-				continue;
+			reselect(sc);
+			scsi_clr_ipend();
+			goto connected;
 		}
+
+		/*
+		 * The host is not connected and there is no request
+		 * pending, exit.
+		 */
+		if (req == NULL) {
+			PID("scsi_main2");
+			goto main_exit;
+		}
+
+		/*
+		 * Re-enable interrupts before handling the request.
+		 */
+		splx(sps);
+
+#ifdef DBG_REQ
+		if (dbg_target_mask & (1 << req->targ_id))
+			show_request(req, "TARGET");
+#endif
+		/*
+		 * We found a request. Try to connect to the target. If the
+		 * initiator fails arbitration, the command is put back in the
+		 * issue queue.
+		 */
+		if (scsi_select(req, 0)) {
+			sps = splbio();
+			req->next = issue_q; 
+			issue_q = req;
+			splx(sps);
+#ifdef DBG_REQ
+			if (dbg_target_mask & (1 << req->targ_id))
+				ncr_tprint(req, "Select failed\n");
+#endif
+		}
+	    }
+	    else splx(sps);
+connected:
+	    if (connected) {
+		/*
+		 * If the host is currently connected but a 'real-DMA' transfer
+		 * is in progress, the 'end-of-DMA' interrupt restarts main.
+		 * So quit.
+		 */
+		sps = splbio();
+		if (connected && (connected->dr_flag & DRIVER_IN_DMA)) {
+			PID("scsi_main3");
+			goto main_exit;
+		}
+		splx(sps);
+
+		/*
+		 * Let the target guide us through the bus-phases
+		 */
+		while (information_transfer(sc) == -1)
+			;
+	    }
 	}
 	/* NEVER TO REACH HERE */
 	show_phase(NULL, 0);	/* XXX: Get rid of not used warning */
@@ -610,15 +604,15 @@ main_exit:
 
 			if (itype == INTR_RESEL)
 				reselect(sc);
-			else {
 #ifdef REAL_DMA
-				dma_ready();
+			else dma_ready();
 #else
+			else {
 				if (pdma_ready())
 					goto connected;
 				panic("Got DMA interrupt without DMA");
-#endif
 			}
+#endif
 			goto connected;
 		}
 	}
@@ -634,12 +628,13 @@ main_exit:
  * This interrupt can only be triggered when running in non-polled DMA
  * mode. When DMA is not active, it will be silently ignored, it is usually
  * to late because the EOP interrupt of the controller happens just a tiny
- * bit earlier. It might become useful when scatter/gather is implemented,
+ * bit earlier. It might become usefull when scatter/gather is implemented,
  * because in that case only part of the DATAIN/DATAOUT transfer is taken
  * out of a single buffer.
  */
 static void
-ncr_dma_intr(struct ncr_softc *sc)
+ncr_dma_intr(sc)
+struct ncr_softc *sc;
 {
 	SC_REQ	*reqp;
 	int	dma_done;
@@ -647,7 +642,7 @@ ncr_dma_intr(struct ncr_softc *sc)
 	PID("ncr_dma_intr");
 	if ((reqp = connected) && (reqp->dr_flag & DRIVER_IN_DMA)) {
 		scsi_idisable();
-		if ((dma_done = dma_ready()) == 0) {
+		if (!(dma_done = dma_ready())) {
 			transfer_dma(reqp, reqp->phase, 0);
 			return;
 		}
@@ -662,9 +657,10 @@ ncr_dma_intr(struct ncr_softc *sc)
  * the machine-dependent hardware interrupt.
  */
 static void
-ncr_ctrl_intr(struct ncr_softc *sc)
+ncr_ctrl_intr(sc)
+struct ncr_softc *sc;
 {
-	int itype;
+	int	itype;
 
 	if (main_running)
 		return; /* scsi_main() should handle this one */
@@ -676,16 +672,15 @@ ncr_ctrl_intr(struct ncr_softc *sc)
 				reselect(sc);
 			else {
 #ifdef REAL_DMA
-				int dma_done;
-				if ((dma_done = dma_ready()) == 0) {
-					transfer_dma(connected,
-					    connected->phase, 0);
-					return;
-				}
+			    int	dma_done;
+			    if (!(dma_done = dma_ready())) {
+				transfer_dma(connected, connected->phase, 0);
+				return;
+			    }
 #else
-				if (pdma_ready())
-					return;
-				panic("Got DMA interrupt without DMA");
+			    if (pdma_ready())
+				return;
+			    panic("Got DMA interrupt without DMA");
 #endif
 			}
 			scsi_clr_ipend();
@@ -707,18 +702,19 @@ ncr_ctrl_intr(struct ncr_softc *sc)
  * to a non-zero value. This is the case when 'select' is called by abort.
  */
 static int
-scsi_select(SC_REQ *reqp, int code)
+scsi_select(reqp, code)
+SC_REQ	*reqp;
+int	code;
 {
-	uint8_t			tmp[1];
-	uint8_t			phase;
+	u_char			tmp[1];
+	u_char			phase;
 	u_long			cnt;
 	int			sps;
-	uint8_t			atn_flag;
-	uint8_t			targ_bit;
+	u_int8_t		atn_flag;
+	u_int8_t		targ_bit;
 	struct ncr_softc	*sc;
 
-	sc = device_private(
-	    reqp->xs->xs_periph->periph_channel->chan_adapter->adapt_dev);
+	sc = (void*)reqp->xs->xs_periph->periph_channel->chan_adapter->adapt_dev;
 	DBG_SELPRINT ("Starting arbitration\n", 0);
 	PID("scsi_select1");
 
@@ -734,7 +730,7 @@ scsi_select(SC_REQ *reqp, int code)
 	if (connected) {
 		splx(sps);
 		PID("scsi_select2");
-		return -1;
+		return (-1);
 	}
 
 	/*
@@ -753,15 +749,15 @@ scsi_select(SC_REQ *reqp, int code)
 	splx(sps);
 
 	cnt = 10;
-	while ((GET_5380_REG(NCR5380_ICOM) & SC_AIP) == 0 && --cnt)
+	while (!(GET_5380_REG(NCR5380_ICOM) & SC_AIP) && --cnt)
 		delay(1);
 
-	if ((GET_5380_REG(NCR5380_ICOM) & SC_AIP) == 0) {
+	if (!(GET_5380_REG(NCR5380_ICOM) & SC_AIP)) {
 		SET_5380_REG(NCR5380_MODE, IMODE_BASE);
 		SET_5380_REG(NCR5380_ICOM, 0);
 		DBG_SELPRINT ("Arbitration lost, bus not free\n",0);
 		PID("scsi_select3");
-		return -1;
+		return (-1);
 	}
 
 	/* The arbitration delay is 2.2 usecs */
@@ -774,7 +770,7 @@ scsi_select(SC_REQ *reqp, int code)
 		SET_5380_REG(NCR5380_MODE, IMODE_BASE);
 		SET_5380_REG(NCR5380_ICOM, 0);
 		PID("scsi_select4");
-		return -1;
+		return (-1);
 	}
 
 	/*
@@ -787,14 +783,14 @@ scsi_select(SC_REQ *reqp, int code)
 		SET_5380_REG(NCR5380_ICOM, 0);
 		DBG_SELPRINT ("Arbitration lost, higher id present\n",0);
 		PID("scsi_select5");
-		return -1;
+		return (-1);
 	}
 	if (GET_5380_REG(NCR5380_ICOM) & SC_LA) {
 		SET_5380_REG(NCR5380_MODE, IMODE_BASE);
 		SET_5380_REG(NCR5380_ICOM, 0);
 		DBG_SELPRINT ("Arbitration lost,deassert SC_ARBIT\n",0);
 		PID("scsi_select6");
-		return -1;
+		return (-1);
 	}
 	SET_5380_REG(NCR5380_ICOM, SC_A_SEL | SC_A_BSY);
 	if (GET_5380_REG(NCR5380_ICOM) & SC_LA) {
@@ -802,7 +798,7 @@ scsi_select(SC_REQ *reqp, int code)
 		SET_5380_REG(NCR5380_ICOM, 0);
 		DBG_SELPRINT ("Arbitration lost, deassert SC_A_SEL\n", 0);
 		PID("scsi_select7");
-		return -1;
+		return (-1);
 	}
 	/* Bus settle delay + Bus clear delay = 1.2 usecs */
 	delay(2);
@@ -845,10 +841,10 @@ scsi_select(SC_REQ *reqp, int code)
 	 * 250 ms.
 	 */
 	cnt = 25000;
-	while ((GET_5380_REG(NCR5380_IDSTAT) & SC_S_BSY) == 0 && --cnt)
+	while (!(GET_5380_REG(NCR5380_IDSTAT) & SC_S_BSY) && --cnt)
 		delay(10);
 
-	if ((GET_5380_REG(NCR5380_IDSTAT) & SC_S_BSY) == 0) {
+	if (!(GET_5380_REG(NCR5380_IDSTAT) & SC_S_BSY)) {
 		/*
 		 * There is no reaction from the target, start the selection
 		 * timeout procedure. We release the databus but keep SEL
@@ -859,7 +855,7 @@ scsi_select(SC_REQ *reqp, int code)
 		 */
 		SET_5380_REG(NCR5380_ICOM, SC_A_SEL | atn_flag);
 		delay(201);
-		if ((GET_5380_REG(NCR5380_IDSTAT) & SC_S_BSY) == 0) {
+		if (!(GET_5380_REG(NCR5380_IDSTAT) & SC_S_BSY)) {
 			SET_5380_REG(NCR5380_ICOM, 0);
 			reqp->xs->error      = code ? code : XS_SELTIMEOUT;
 			DBG_SELPRINT ("Target %d not responding to sel\n",
@@ -868,7 +864,7 @@ scsi_select(SC_REQ *reqp, int code)
 				ncr_test_link &= ~(1<<reqp->targ_id);
 			finish_req(reqp);
 			PID("scsi_select8");
-			return 0;
+			return (0);
 		}
 	}
 	SET_5380_REG(NCR5380_ICOM, atn_flag);
@@ -893,7 +889,7 @@ scsi_select(SC_REQ *reqp, int code)
 	 * Allow disconnect only when interrupts are allowed.
 	 */
 	tmp[0] = MSG_IDENTIFY(reqp->targ_lun,
-	    (reqp->dr_flag & DRIVER_NOINT) ? 0 : 1);
+			(reqp->dr_flag & DRIVER_NOINT) ? 0 : 1);
 	cnt    = 1;
 	phase  = PH_MSGOUT;
 
@@ -909,35 +905,34 @@ scsi_select(SC_REQ *reqp, int code)
 	 */
 	if (transfer_pio(&phase, tmp, &cnt, 0) || cnt) {
 
-		if ((phase == PH_CMD) && (sc->sc_selected & targ_bit) == 0) {
-			DBG_SELPRINT("Target %d: not responding to ATN.\n",
-			    reqp->targ_id);
+		if ((phase == PH_CMD) && !(sc->sc_selected & targ_bit)) {
+			DBG_SELPRINT ("Target %d: not responding to ATN.\n",
+							reqp->targ_id);
 			sc->sc_noselatn |= targ_bit;
 			reqp->phase = PH_CMD;
 			goto identify_failed;
 		}
 
-		DBG_SELPRINT("Target %d: failed to send identify\n",
-		    reqp->targ_id);
+		DBG_SELPRINT ("Target %d: failed to send identify\n",
+							reqp->targ_id);
 		/*
 		 * Try to disconnect from the target.  We cannot leave
 		 * it just hanging here.
 		 */
 		if (!reach_msg_out(sc, sizeof(struct scsipi_generic))) {
 			u_long	len   = 1;
-			uint8_t	phse  = PH_MSGOUT;
-			uint8_t	msg   = MSG_ABORT;
+			u_char	phse  = PH_MSGOUT;
+			u_char	msg   = MSG_ABORT;
 
 			transfer_pio(&phse, &msg, &len, 0);
-		} else
-			scsi_reset_verbose(sc,
-			    "Connected to unidentified target");
+		}
+		else scsi_reset_verbose(sc, "Connected to unidentified target");
 
 		SET_5380_REG(NCR5380_ICOM, 0);
 		reqp->xs->error = code ? code : XS_DRIVER_STUFFUP;
 		finish_req(reqp);
 		PID("scsi_select9");
-		return 0;
+		return (0);
 	}
 	reqp->phase = PH_MSGOUT;
 
@@ -954,7 +949,7 @@ identify_failed:
 	connected  = reqp;
 	busy      |= targ_bit;
 	PID("scsi_select10");
-	return 0;
+	return (0);
 }
 
 /*
@@ -963,10 +958,11 @@ identify_failed:
  *	-1: keep on calling information_transfer() from scsi_main()
  */
 static int
-information_transfer(struct ncr_softc *sc)
+information_transfer(sc)
+struct ncr_softc *sc;
 {
 	SC_REQ	*reqp = connected;
-	uint8_t	tmp, phase;
+	u_char	tmp, phase;
 	u_long	len;
 
 	PID("info_transf1");
@@ -993,11 +989,11 @@ information_transfer(struct ncr_softc *sc)
 		connected       = NULL;
 		reqp->xs->error = XS_TIMEOUT;
 		finish_req(reqp);
-		if ((tmp & SC_S_REQ) == 0)
+		if (!(tmp & SC_S_REQ))
 			scsi_reset_verbose(sc,
 					   "Timeout waiting for phase-change");
 		PID("info_transf2");
-		return 0;
+		return (0);
 	}
 
 	phase = (tmp >> 2) & 7;
@@ -1007,40 +1003,40 @@ information_transfer(struct ncr_softc *sc)
 		if (dbg_target_mask & (1 << reqp->targ_id))
 			DBG_INFPRINT(show_phase, reqp, phase);
 #endif
-	} else {
+	}
+	else {
 		/*
 		 * Same data-phase. If same error give up
 		 */
-		if ((reqp->msgout == MSG_ABORT) &&
-		    ((phase == PH_DATAOUT) || (phase == PH_DATAIN))) {
+		if ((reqp->msgout == MSG_ABORT)
+		     && ((phase == PH_DATAOUT) || (phase == PH_DATAIN))) {
 			busy     &= ~(1 << reqp->targ_id);
 			connected = NULL;
 			reqp->xs->error = XS_TIMEOUT;
 			finish_req(reqp);
 			scsi_reset_verbose(sc, "Failure to abort command");
-			return 0;
+			return (0);
 		}
 	}
 
 	switch (phase) {
-	case PH_DATAOUT:
+	    case PH_DATAOUT:
 #ifdef DBG_NOWRITE
 		ncr_tprint(reqp, "NOWRITE set -- write attempt aborted.");
 		reqp->msgout = MSG_ABORT;
 		SET_5380_REG(NCR5380_ICOM, SC_A_ATN);
-		return -1;
+		return (-1);
 #endif /* DBG_NOWRITE */
 		/*
 		 * If this is the first write using DMA, fill
 		 * the bounce buffer.
 		 */
 		if (reqp->xdata_ptr == reqp->xs->data) { /* XXX */
-			if (reqp->dr_flag & DRIVER_BOUNCING)
-				memcpy(reqp->bounceb, reqp->xdata_ptr,
-				    reqp->xdata_len);
+		    if (reqp->dr_flag & DRIVER_BOUNCING)
+			bcopy(reqp->xdata_ptr, reqp->bounceb, reqp->xdata_len);
 		}
 
-	case PH_DATAIN:
+	   case PH_DATAIN:
 		if (reqp->xdata_len <= 0) {
 			/*
 			 * Target keeps requesting data. Try to get into
@@ -1050,38 +1046,39 @@ information_transfer(struct ncr_softc *sc)
 			reqp->msgout = MSG_ABORT;
 			SET_5380_REG(NCR5380_ICOM, SC_A_ATN);
 			reach_msg_out(sc, 100);
-			return -1;
+			return (-1);
 		}
 #ifdef REAL_DMA
 		if (reqp->dr_flag & DRIVER_DMAOK) {
 			int poll = REAL_DMA_POLL|(reqp->dr_flag & DRIVER_NOINT);
 			transfer_dma(reqp, phase, poll);
 			if (!poll)
-				return 0;
-		} else
+				return (0);
+		}
+		else
 #endif
 		{
 			PID("info_transf3");
 			len = reqp->xdata_len;
 #ifdef USE_PDMA
 			if (transfer_pdma(&phase, reqp->xdata_ptr, &len) == 0)
-				return 0;
+				return (0);
 #else
 			transfer_pio(&phase, reqp->xdata_ptr, &len, 0);
 #endif
 			reqp->xdata_ptr += reqp->xdata_len - len;
 			reqp->xdata_len  = len;
 		}
-		return -1;
-	case PH_MSGIN:
+		return (-1);
+	   case PH_MSGIN:
 		/*
 		 * We only expect single byte messages here.
 		 */
 		len = 1;
 		transfer_pio(&phase, &tmp, &len, 1);
 		reqp->message = tmp;
-		return handle_message(reqp, tmp);
-	case PH_MSGOUT:
+		return (handle_message(reqp, tmp));
+	   case PH_MSGOUT:
 		len = 1;
 		transfer_pio(&phase, &reqp->msgout, &len, 0);
 		if (reqp->msgout == MSG_ABORT) {
@@ -1091,26 +1088,26 @@ information_transfer(struct ncr_softc *sc)
 				reqp->xs->error = XS_DRIVER_STUFFUP;
 			finish_req(reqp);
 			PID("info_transf4");
-			return 0;
+			return (0);
 		}
 		reqp->msgout = MSG_NOOP;
-		return -1;
-	case PH_CMD :
+		return (-1);
+	   case PH_CMD :
 		len = reqp->xcmd_len;
-		transfer_pio(&phase, (uint8_t *)&reqp->xcmd, &len, 0);
+		transfer_pio(&phase, (u_char *)&reqp->xcmd, &len, 0);
 		PID("info_transf5");
-		return -1;
-	case PH_STATUS:
+		return (-1);
+	   case PH_STATUS:
 		len = 1;
 		transfer_pio(&phase, &tmp, &len, 0);
 		reqp->status = tmp;
 		PID("info_transf6");
-		return -1;
+		return (-1);
 	   default :
 		ncr_tprint(reqp, "Unknown phase\n");
 	}
 	PID("info_transf7");
-	return -1;
+	return (-1);
 }
 
 /*
@@ -1120,7 +1117,9 @@ information_transfer(struct ncr_softc *sc)
  *	-1 : Get on to the next phase.
  */
 static int
-handle_message(SC_REQ *reqp, u_int msg)
+handle_message(reqp, msg)
+SC_REQ	*reqp;
+u_int	msg;
 {
 	int	sps;
 	SC_REQ	*prev, *req;
@@ -1134,116 +1133,117 @@ handle_message(SC_REQ *reqp, u_int msg)
 		 * we merely have to start the next command pointed
 		 * to by 'next_link'.
 		 */
-	case MSG_LINK_CMD_COMPLETE:
-	case MSG_LINK_CMD_COMPLETEF:
-		if (reqp->link == NULL) {
-			ncr_tprint(reqp, "No link for linked command");
-			nack_message(reqp, MSG_ABORT);
-			PID("hmessage2");
-			return -1;
-		}
-		ack_message();
-		if ((reqp->dr_flag & DRIVER_AUTOSEN) == 0) {
-			reqp->xs->resid = reqp->xdata_len;
-			reqp->xs->error = 0;
-		}
-
-#ifdef AUTO_SENSE
-		if (check_autosense(reqp, 1) == -1)
-			return -1;
-#endif /* AUTO_SENSE */
-
-#ifdef DBG_REQ
-		if (dbg_target_mask & (1 << reqp->targ_id))
-			show_request(reqp->link, "LINK");
-#endif
-		connected = reqp->link;
-
-		/*
-		 * Unlink the 'linked' request from the issue_q
-		 */
-		sps  = splbio();
-		prev = NULL;
-		for (req = issue_q; req != NULL; prev = req, req = req->next) {
-			if (req == connected)
-				break;
-		}
-		if (req == NULL)
-			panic("Inconsistent issue_q");
-		if (prev == NULL)
-			issue_q = req->next;
-		else
-			prev->next = req->next;
-		req->next = NULL;
-		splx(sps);
-
-		finish_req(reqp);
-		PID("hmessage3");
-		return -1;
-	case MSG_ABORT:
-	case MSG_CMDCOMPLETE:
-		ack_message();
-		connected = NULL;	
-		busy     &= ~(1 << reqp->targ_id);
-		if ((reqp->dr_flag & DRIVER_AUTOSEN) == 0) {
-			reqp->xs->resid = reqp->xdata_len;
-			reqp->xs->error = 0;
-		}
-
-#ifdef AUTO_SENSE
-		if (check_autosense(reqp, 0) == -1) {
-			PID("hmessage4");
-			return 0;
-		}
-#endif /* AUTO_SENSE */
-
-		finish_req(reqp);
-		PID("hmessage5");
-		return 0;
-	case MSG_MESSAGE_REJECT:
-		ack_message();
-		PID("hmessage6");
-		return -1;
-	case MSG_DISCONNECT:
-		ack_message();
-#ifdef DBG_REQ
-		if (dbg_target_mask & (1 << reqp->targ_id))
-			show_request(reqp, "DISCON");
-#endif
-		sps = splbio();
-		connected  = NULL;
-		reqp->next = discon_q;
-		discon_q   = reqp;
-		splx(sps);
-		PID("hmessage7");
-		return 0;
-	case MSG_SAVEDATAPOINTER:
-	case MSG_RESTOREPOINTERS:
-		/*
-		 * We save pointers implicitely at disconnect.
-		 * So we can ignore these messages.
-		 */
-		ack_message();
-		PID("hmessage8");
-		return -1;
-	case MSG_EXTENDED:
-		nack_message(reqp, MSG_MESSAGE_REJECT);
-		PID("hmessage9");
-		return -1;
-	default: 
-		if ((msg & 0x80) && (msg & 0x18) == 0) {	/* IDENTIFY */
-			PID("hmessage10");
+		case MSG_LINK_CMD_COMPLETE:
+		case MSG_LINK_CMD_COMPLETEF:
+			if (reqp->link == NULL) {
+				ncr_tprint(reqp, "No link for linked command");
+				nack_message(reqp, MSG_ABORT);
+				PID("hmessage2");
+				return (-1);
+			}
 			ack_message();
-			return 0;
-		} else {
-			ncr_tprint(reqp, "Unknown message %x.  Rejecting.\n",
-			    msg);
+			if (!(reqp->dr_flag & DRIVER_AUTOSEN)) {
+				reqp->xs->resid = reqp->xdata_len;
+				reqp->xs->error = 0;
+			}
+
+#ifdef AUTO_SENSE
+			if (check_autosense(reqp, 1) == -1)
+				return (-1);
+#endif /* AUTO_SENSE */
+
+#ifdef DBG_REQ
+			if (dbg_target_mask & (1 << reqp->targ_id))
+				show_request(reqp->link, "LINK");
+#endif
+			connected = reqp->link;
+
+			/*
+			 * Unlink the 'linked' request from the issue_q
+			 */
+			sps  = splbio();
+			prev = NULL;
+			req  = issue_q;
+			for (; req != NULL; prev = req, req = req->next) {
+				if (req == connected)
+					break;
+			}
+			if (req == NULL)
+				panic("Inconsistent issue_q");
+			if (prev == NULL)
+				issue_q = req->next;
+			else prev->next = req->next;
+			req->next = NULL;
+			splx(sps);
+
+			finish_req(reqp);
+			PID("hmessage3");
+			return (-1);
+		case MSG_ABORT:
+		case MSG_CMDCOMPLETE:
+			ack_message();
+			connected = NULL;	
+			busy     &= ~(1 << reqp->targ_id);
+			if (!(reqp->dr_flag & DRIVER_AUTOSEN)) {
+				reqp->xs->resid = reqp->xdata_len;
+				reqp->xs->error = 0;
+			}
+
+#ifdef AUTO_SENSE
+			if (check_autosense(reqp, 0) == -1) {
+				PID("hmessage4");
+				return (0);
+			}
+#endif /* AUTO_SENSE */
+
+			finish_req(reqp);
+			PID("hmessage5");
+			return (0);
+		case MSG_MESSAGE_REJECT:
+			ack_message();
+			PID("hmessage6");
+			return (-1);
+		case MSG_DISCONNECT:
+			ack_message();
+#ifdef DBG_REQ
+			if (dbg_target_mask & (1 << reqp->targ_id))
+				show_request(reqp, "DISCON");
+#endif
+			sps = splbio();
+			connected  = NULL;
+			reqp->next = discon_q;
+			discon_q   = reqp;
+			splx(sps);
+			PID("hmessage7");
+			return (0);
+		case MSG_SAVEDATAPOINTER:
+		case MSG_RESTOREPOINTERS:
+			/*
+			 * We save pointers implicitely at disconnect.
+			 * So we can ignore these messages.
+			 */
+			ack_message();
+			PID("hmessage8");
+			return (-1);
+		case MSG_EXTENDED:
 			nack_message(reqp, MSG_MESSAGE_REJECT);
-		}
-		return -1;
+			PID("hmessage9");
+			return (-1);
+		default: 
+			if ((msg & 0x80) && !(msg & 0x18)) {	/* IDENTIFY */
+				PID("hmessage10");
+				ack_message();
+				return (0);
+			} else {
+				ncr_tprint(reqp,
+					   "Unknown message %x.  Rejecting.\n",
+					   msg);
+				nack_message(reqp, MSG_MESSAGE_REJECT);
+			}
+			return (-1);
 	}
 	PID("hmessage11");
-	return -1;
+	return (-1);
 }
 
 /*
@@ -1252,12 +1252,13 @@ handle_message(SC_REQ *reqp, u_int msg)
  * disconnected queue.
  */
 static void
-reselect(struct ncr_softc *sc)
+reselect(sc)
+struct ncr_softc *sc;
 {
-	uint8_t	phase;
+	u_char	phase;
 	u_long	len;
-	uint8_t	msg;
-	uint8_t	target_mask;
+	u_char	msg;
+	u_char	target_mask;
 	int	abort = 0;
 	SC_REQ	*tmp, *prev;
 
@@ -1291,12 +1292,11 @@ reselect(struct ncr_softc *sc)
 	 * of possible line glitches - cheaper than delay(1) and we need
 	 * only a few nanoseconds.
 	 */
-	if ((GET_5380_REG(NCR5380_IDSTAT) & SC_S_BSY) == 0) {
-		if ((GET_5380_REG(NCR5380_IDSTAT) & SC_S_BSY) == 0) {
-			ncr_aprint(sc,
-			    "Stepped into the reselection timeout\n");
-			return;
-		}
+	if (!(GET_5380_REG(NCR5380_IDSTAT) & SC_S_BSY)) {
+	    if (!(GET_5380_REG(NCR5380_IDSTAT) & SC_S_BSY)) {
+		ncr_aprint(sc, "Stepped into the reselection timeout\n");
+		return;
+	    }
 	}
 
 	/*
@@ -1309,27 +1309,25 @@ reselect(struct ncr_softc *sc)
 		ncr_aprint(sc, "Expecting IDENTIFY, got 0x%x\n", msg);
 		abort = 1;
 		tmp = NULL;
-	} else {
-		/*
-		 * Find the command reconnecting
-		 */
-		for (tmp = discon_q, prev = NULL; tmp != NULL;
-		    prev = tmp, tmp = tmp->next) {
-			if (target_mask == (1 << tmp->targ_id)) {
-				if (prev)
-					prev->next = tmp->next;
-				else
-					discon_q = tmp->next;
-				tmp->next = NULL;
-				break;
-			}
+	}
+	else {
+	    /*
+	     * Find the command reconnecting
+	     */
+	    for (tmp = discon_q, prev = NULL; tmp; prev = tmp, tmp = tmp->next){
+		if (target_mask == (1 << tmp->targ_id)) {
+			if (prev)
+				prev->next = tmp->next;
+			else discon_q = tmp->next;
+			tmp->next = NULL;
+			break;
 		}
-		if (tmp == NULL) {
-			ncr_aprint(sc,
-			    "No disconnected job for targetmask %x\n",
-			    target_mask);
-			abort = 1;
-		}
+	    }
+	    if (tmp == NULL) {
+		ncr_aprint(sc, "No disconnected job for targetmask %x\n",
+								target_mask);
+		abort = 1;
+	    }
 	}
 	if (abort) {
 		msg   = MSG_ABORT;
@@ -1339,7 +1337,8 @@ reselect(struct ncr_softc *sc)
 		SET_5380_REG(NCR5380_ICOM, SC_A_ATN);
 		if (transfer_pio(&phase, &msg, &len, 0) || len)
 			scsi_reset_verbose(sc, "Failure to abort reselection");
-	} else {
+	}
+	else {
 		connected = tmp;
 #ifdef DBG_REQ
 		if (dbg_target_mask & (1 << tmp->targ_id))
@@ -1356,74 +1355,73 @@ reselect(struct ncr_softc *sc)
  * phase.
  */
 static int
-transfer_pio(u_char *phase, u_char *data, u_long *len, int dont_drop_ack)
+transfer_pio(phase, data, len, dont_drop_ack)
+u_char	*phase;
+u_char	*data;
+u_long	*len;
+int	dont_drop_ack;
 {
 	u_int	cnt = *len;
-	uint8_t	ph  = *phase;
-	uint8_t	tmp, new_icom;
+	u_char	ph  = *phase;
+	u_char	tmp, new_icom;
 
-	DBG_PIOPRINT("SCSI: transfer_pio start: phase: %d, len: %d\n", ph,cnt);
+	DBG_PIOPRINT ("SCSI: transfer_pio start: phase: %d, len: %d\n", ph,cnt);
 	PID("tpio1");
 	SET_5380_REG(NCR5380_TCOM, ph);
 	do {
-		if (!wait_req_true()) {
-	    		DBG_PIOPRINT ("SCSI: transfer_pio: missing REQ\n",
-			    0, 0);
-			break;
-		}
-		if (((GET_5380_REG(NCR5380_IDSTAT) >> 2) & 7) != ph) {
-	    		DBG_PIOPRINT("SCSI: transfer_pio: phase mismatch\n",
-			    0, 0);
-			break;
-		}
-		if (PH_IN(ph)) {
-			*data++ = GET_5380_REG(NCR5380_DATA);
-			SET_5380_REG(NCR5380_ICOM, SC_A_ACK);
-			if ((cnt == 1) && dont_drop_ack)
-				new_icom = SC_A_ACK;
-			else
-				new_icom = 0;
-		} else {
-			SET_5380_REG(NCR5380_DATA, *data++);
+	    if (!wait_req_true()) {
+	    	DBG_PIOPRINT ("SCSI: transfer_pio: missing REQ\n", 0, 0);
+		break;
+	    }
+	    if (((GET_5380_REG(NCR5380_IDSTAT) >> 2) & 7) != ph) {
+	    	DBG_PIOPRINT ("SCSI: transfer_pio: phase mismatch\n", 0, 0);
+		break;
+	    }
+	    if (PH_IN(ph)) {
+		*data++ = GET_5380_REG(NCR5380_DATA);
+		SET_5380_REG(NCR5380_ICOM, SC_A_ACK);
+		if ((cnt == 1) && dont_drop_ack)
+			new_icom = SC_A_ACK;
+		else new_icom = 0;
+	    }
+	    else {
+		SET_5380_REG(NCR5380_DATA, *data++);
 
-			/*
-			 * The SCSI-standard suggests that in the
-			 * 'MESSAGE OUT' phase, the initiator should
-			 * drop ATN on the last byte of the * message phase
-			 * after REQ has been asserted for the handshake
-			 * but before the initiator raises ACK.
-			 */
-			if (!((ph == PH_MSGOUT) && (cnt > 1) )) {
-				SET_5380_REG(NCR5380_ICOM, SC_ADTB);
-				SET_5380_REG(NCR5380_ICOM, SC_ADTB | SC_A_ACK);
-				new_icom = 0;
-			} else {
-				SET_5380_REG(NCR5380_ICOM, SC_ADTB | SC_A_ATN);
-				SET_5380_REG(NCR5380_ICOM,
-				    SC_ADTB | SC_A_ATN | SC_A_ACK);
-				new_icom = SC_A_ATN;
-			}
+		/*
+		 * The SCSI-standard suggests that in the 'MESSAGE OUT' phase,
+		 * the initiator should drop ATN on the last byte of the
+		 * message phase after REQ has been asserted for the handshake
+		 * but before the initiator raises ACK.
+		 */
+		if (!( (ph == PH_MSGOUT) && (cnt > 1) )) {
+			SET_5380_REG(NCR5380_ICOM, SC_ADTB);
+			SET_5380_REG(NCR5380_ICOM, SC_ADTB | SC_A_ACK);
+			new_icom = 0;
 		}
-		if (!wait_req_false()) {
-			DBG_PIOPRINT("SCSI: transfer_pio - REQ not dropping\n",
-			    0, 0);
-			break;
+		else {
+			SET_5380_REG(NCR5380_ICOM, SC_ADTB | SC_A_ATN);
+			SET_5380_REG(NCR5380_ICOM, SC_ADTB|SC_A_ATN|SC_A_ACK);
+			new_icom = SC_A_ATN;
 		}
-		SET_5380_REG(NCR5380_ICOM, new_icom);
+	    }
+	    if (!wait_req_false()) {
+		DBG_PIOPRINT ("SCSI: transfer_pio - REQ not dropping\n", 0, 0);
+		break;
+	    }
+	    SET_5380_REG(NCR5380_ICOM, new_icom);
 
 	} while (--cnt);
 
 	if ((tmp = GET_5380_REG(NCR5380_IDSTAT)) & SC_S_REQ)
 		*phase = (tmp >> 2) & 7;
-	else
-		*phase = NR_PHASE;
+	else *phase = NR_PHASE;
 	*len = cnt;
-	DBG_PIOPRINT("SCSI: transfer_pio done: phase: %d, len: %d\n",
-	    *phase, cnt);
+	DBG_PIOPRINT ("SCSI: transfer_pio done: phase: %d, len: %d\n",
+								*phase, cnt);
 	PID("tpio2");
-	if (cnt == 0 || (*phase == ph))
-		return 0;
-	return -1;
+	if (!cnt || (*phase == ph))
+		return (0);
+	return (-1);
 }
 
 #ifdef REAL_DMA
@@ -1433,10 +1431,13 @@ transfer_pio(u_char *phase, u_char *data, u_long *len, int dont_drop_ack)
  * If 'poll' is true, the function busy-waits until DMA has completed.
  */
 static void
-transfer_dma(SC_REQ *reqp, u_int phase, int poll)
+transfer_dma(reqp, phase, poll)
+SC_REQ	*reqp;
+u_int	phase;
+int	poll;
 {
 	int	dma_done;
-	uint8_t	mbase = 0;
+	u_char	mbase = 0;
 	int	sps;
 
 again:
@@ -1466,8 +1467,8 @@ again:
 		scsi_ienable();
 		reqp->dr_flag |= DRIVER_IN_DMA;
 		mbase = SC_E_EOPI | SC_MON_BSY;
-	} else
-		scsi_idisable();
+	}
+	else scsi_idisable();
 	mbase |=  IMODE_BASE | SC_M_DMA;
 	scsi_dma_setup(reqp, phase, mbase);
 
@@ -1479,7 +1480,7 @@ again:
 		 * 'end-of-DMA' condition occurs.
 		 */
 		poll_edma(reqp);
-		if ((dma_done = dma_ready()) == 0)
+		if (!(dma_done = dma_ready()))
 			goto again;
 	}
 	PID("tdma2");
@@ -1489,7 +1490,7 @@ again:
  * Check results of a DMA data-transfer.
  */
 static int
-dma_ready(void)
+dma_ready()
 {
 	SC_REQ	*reqp = connected;
 	int	dmstat, is_edma;
@@ -1502,17 +1503,16 @@ dma_ready(void)
 	 * Check if the call is sensible and not caused by any spurious
 	 * interrupt.
 	 */
-	if (!is_edma &&
-	    (dmstat & (SC_END_DMA|SC_BSY_ERR)) == 0 &&
-	    (dmstat & SC_PHS_MTCH) != 0) {
+	if (!is_edma && !(dmstat & (SC_END_DMA|SC_BSY_ERR))
+		     && (dmstat & SC_PHS_MTCH) ) {
 		ncr_tprint(reqp, "dma_ready: spurious call "
-		    "(dm:%x,last_hit: %s)\n",
+				 "(dm:%x,last_hit: %s)\n",
 #ifdef DBG_PID
-		    dmstat, last_hit[DBG_PID-1]);
+					dmstat, last_hit[DBG_PID-1]);
 #else
-		    dmstat, "unknown");
+					dmstat, "unknown");
 #endif
-		return 0;
+		return (0);
 	}
 
 	/*
@@ -1532,7 +1532,7 @@ dma_ready(void)
 		 * before copying.
 		 */
 		PCIA();
-		memcpy(reqp->xdata_ptr, reqp->bouncerp, bytes_done);
+		bcopy(reqp->bouncerp, reqp->xdata_ptr, bytes_done);
 		reqp->bouncerp += bytes_done;
 	}
 
@@ -1540,11 +1540,10 @@ dma_ready(void)
 	reqp->xdata_len -= bytes_done;				/* XXX */
 	if ((reqp->dm_cur->dm_count -= bytes_done) == 0)
 		reqp->dm_cur++;
-	else
-		reqp->dm_cur->dm_addr += bytes_done;
+	else reqp->dm_cur->dm_addr += bytes_done;
 
 	if (PH_IN(reqp->phase) && (dmstat & SC_PAR_ERR)) {
-		if ((ncr5380_no_parchk & (1 << reqp->targ_id)) == 0) {
+		if (!(ncr5380_no_parchk & (1 << reqp->targ_id))) {
 			ncr_tprint(reqp, "parity error in data-phase\n");
 			reqp->xs->error = XS_TIMEOUT;
 		}
@@ -1559,8 +1558,8 @@ dma_ready(void)
 	SET_5380_REG(NCR5380_MODE, IMODE_BASE);
 
 
-	if ((dmstat & SC_BSY_ERR) != 0 || (dmstat & SC_PHS_MTCH) == 0 ||
-	    (reqp->dm_cur > reqp->dm_last) || reqp->xs->error != 0) {
+	if ((dmstat & SC_BSY_ERR) || !(dmstat & SC_PHS_MTCH)
+		 || (reqp->dm_cur > reqp->dm_last) || (reqp->xs->error)) {
 
 		/*
 		 * Tell interrupt functions DMA mode has ended.
@@ -1574,30 +1573,31 @@ dma_ready(void)
 		SET_5380_REG(NCR5380_ICOM, 0);
 
 		if (dmstat & SC_BSY_ERR) {
-			if (reqp->xs->error == 0)
+			if (!reqp->xs->error)
 				reqp->xs->error = XS_TIMEOUT;
 			finish_req(reqp);
 			PID("dma_ready1");
-			return 1;
+			return (1);
 		}
 
 		if (reqp->xs->error != 0) {
-			ncr_tprint(reqp, "dma-ready: code = %d\n",
-			    reqp->xs->error); /* LWP */
+ncr_tprint(reqp, "dma-ready: code = %d\n", reqp->xs->error); /* LWP */
 			reqp->msgout = MSG_ABORT;
 			SET_5380_REG(NCR5380_ICOM, SC_A_ATN);
 		}
 		PID("dma_ready2");
-		return 1;
+		return (1);
 	}
-	return 0;
+	return (0);
 }
 #endif /* REAL_DMA */
 
 static int
-check_autosense(SC_REQ *reqp, int linked)
+check_autosense(reqp, linked)
+SC_REQ	*reqp;
+int	linked;
 {
-	int sps;
+	int	sps;
 
 	/*
 	 * If this is the driver's Link Check for this target, ignore
@@ -1608,9 +1608,8 @@ check_autosense(SC_REQ *reqp, int linked)
 	if (reqp->dr_flag & DRIVER_LINKCHK) {
 		if (linked)
 			ncr_will_link |= 1<<reqp->targ_id;
-		else
-			ncr_tprint(reqp, "Does not support linked commands\n");
-		return 0;
+		else ncr_tprint(reqp, "Does not support linked commands\n");
+		return (0);
 	}
 	/*
 	 * If we not executing an auto-sense and the status code
@@ -1618,10 +1617,10 @@ check_autosense(SC_REQ *reqp, int linked)
 	 * sense command.
 	 */
 	PID("cautos1");
-	if ((reqp->dr_flag & DRIVER_AUTOSEN) == 0) {
+	if (!(reqp->dr_flag & DRIVER_AUTOSEN)) {
 		switch (reqp->status & SCSMASK) {
-		case SCSCHKC:
-			memcpy(&reqp->xcmd, sense_cmd, sizeof(sense_cmd));
+		    case SCSCHKC:
+			bcopy(sense_cmd, &reqp->xcmd, sizeof(sense_cmd));
 			reqp->xcmd_len = sizeof(sense_cmd);
 			reqp->xdata_ptr = (u_char *)&reqp->xs->sense.scsi_sense;
 			reqp->xdata_len = sizeof(reqp->xs->sense.scsi_sense);
@@ -1632,49 +1631,50 @@ check_autosense(SC_REQ *reqp, int linked)
 				reqp->next = issue_q;
 				issue_q    = reqp;
 				splx(sps);
-			} else
-				reqp->xcmd.bytes[sizeof(sense_cmd)-2] |= 1;
+			}
+			else reqp->xcmd.bytes[sizeof(sense_cmd)-2] |= 1;
 
 #ifdef DBG_REQ
-			memset(reqp->xdata_ptr, 0, reqp->xdata_len);
+			bzero(reqp->xdata_ptr, reqp->xdata_len);
 			if (dbg_target_mask & (1 << reqp->targ_id))
 				show_request(reqp, "AUTO-SENSE");
 #endif
 			PID("cautos2");
-			return -1;
-		case SCSBUSY:
+			return (-1);
+		    case SCSBUSY:
 			reqp->xs->error = XS_BUSY;
-			return 0;
+			return (0);
 		}
-	} else {
+	}
+	else {
 		/*
 		 * An auto-sense has finished
 		 */
 		if ((reqp->status & SCSMASK) != SCSGOOD)
 			reqp->xs->error = XS_DRIVER_STUFFUP; /* SC_E_AUTOSEN; */
-		else
-			reqp->xs->error = XS_SENSE;
+		else reqp->xs->error = XS_SENSE;
 		reqp->status = SCSCHKC;
 	}
 	PID("cautos3");
-	return 0;
+	return (0);
 }
 
 static int
-reach_msg_out(struct ncr_softc *sc, u_long len)
+reach_msg_out(sc, len)
+struct ncr_softc *sc;
+u_long		 len;
 {
-	uint8_t	phase;
-	uint8_t	data;
+	u_char	phase;
+	u_char	data;
 	u_long	n = len;
 
 	ncr_aprint(sc, "Trying to reach Message-out phase\n");
 	if ((phase = GET_5380_REG(NCR5380_IDSTAT)) & SC_S_REQ)
 		phase = (phase >> 2) & 7;
-	else
-		return -1;
+	else return (-1);
 	ncr_aprint(sc, "Trying to reach Message-out phase, now: %d\n", phase);
 	if (phase == PH_MSGOUT)
-		return 0;
+		return (0);
 
 	SET_5380_REG(NCR5380_TCOM, phase);
 
@@ -1686,7 +1686,8 @@ reach_msg_out(struct ncr_softc *sc, u_long len)
 		if (PH_IN(phase)) {
 			data = GET_5380_REG(NCR5380_DATA);
 			SET_5380_REG(NCR5380_ICOM, SC_A_ACK | SC_A_ATN);
-		} else {
+		}
+		else {
 			SET_5380_REG(NCR5380_DATA, 0);
 			SET_5380_REG(NCR5380_ICOM, SC_ADTB|SC_A_ATN);
 			SET_5380_REG(NCR5380_ICOM, SC_ADTB|SC_A_ACK|SC_A_ATN);
@@ -1701,17 +1702,17 @@ reach_msg_out(struct ncr_softc *sc, u_long len)
 		if (phase == PH_MSGOUT) {
 			ncr_aprint(sc, "Message-out phase reached after "
 					"%ld bytes.\n", len - n);
-			return 0;
+			return (0);
 		}
-		ncr_aprint(sc, "Phase now: %d after %ld bytes.\n",
-		    phase, len - n);
+		ncr_aprint(sc, "Phase now: %d after %ld bytes.\n", phase,
+								   len - n);
 		
 	}
-	return -1;
+	return (-1);
 }
 
 void
-scsi_reset(void)
+scsi_reset()
 {
 	SC_REQ	*tmp, *next;
 	int	sps;
@@ -1763,9 +1764,10 @@ scsi_reset(void)
 }
 
 static void
-scsi_reset_verbose(struct ncr_softc *sc, const char *why)
+scsi_reset_verbose(sc, why)
+struct ncr_softc *sc;
+const char	 *why;
 {
-
 	ncr_aprint(sc, "Resetting SCSI-bus (%s)\n", why);
 
 	scsi_reset();
@@ -1778,24 +1780,25 @@ scsi_reset_verbose(struct ncr_softc *sc, const char *why)
  * and INTR_SPURIOUS is returned.
  */
 static int
-check_intr(struct ncr_softc *sc)
+check_intr(sc)
+struct ncr_softc *sc;
 {
 	SC_REQ	*reqp;
 
-	if ((GET_5380_REG(NCR5380_IDSTAT) & (SC_S_SEL|SC_S_IO)) ==
-	    (SC_S_SEL|SC_S_IO))
-		return INTR_RESEL;
+	if ((GET_5380_REG(NCR5380_IDSTAT) & (SC_S_SEL|SC_S_IO))
+							==(SC_S_SEL|SC_S_IO))
+		return (INTR_RESEL);
 	else {
 		if ((reqp = connected) && (reqp->dr_flag & DRIVER_IN_DMA)){
 			reqp->dr_flag &= ~DRIVER_IN_DMA;
-			return INTR_DMA;
+			return (INTR_DMA);
 		}
 	}
 	printf("-->");
 	scsi_show();
 	scsi_clr_ipend();
 	ncr_aprint(sc, "Spurious interrupt.\n");
-	return INTR_SPURIOUS;
+	return (INTR_SPURIOUS);
 }
 
 #ifdef REAL_DMA
@@ -1804,11 +1807,12 @@ check_intr(struct ncr_softc *sc)
  * the DMA-chain.
  */
 static int
-scsi_dmaok(SC_REQ *reqp)
+scsi_dmaok(reqp)
+SC_REQ	*reqp;
 {
 	u_long			phy_buf;
 	u_long			phy_len;
-	uint8_t			*req_addr;
+	char			*req_addr;
 	u_long			req_len;
 	struct dma_chain	*dm;
 
@@ -1816,13 +1820,13 @@ scsi_dmaok(SC_REQ *reqp)
 	 * To be safe, do not use DMA for Falcon
 	 */
 	if (machineid & ATARI_FALCON)
-		return 0;
+		return (0);
 
 	/*
 	 * Initialize locals and requests' DMA-chain.
 	 */
 	req_len        = reqp->xdata_len;
-	req_addr       = (uint8_t *)reqp->xdata_ptr;
+	req_addr       = (void *)reqp->xdata_ptr;
 	dm             = reqp->dm_cur = reqp->dm_last = reqp->dm_chain;
 	dm->dm_count   = dm->dm_addr = 0;
 	reqp->dr_flag &= ~DRIVER_BOUNCING;
@@ -1831,7 +1835,7 @@ scsi_dmaok(SC_REQ *reqp)
 	 * Do not accept zero length DMA.
 	 */
 	if (req_len == 0)
-		return 0;
+		return (0);
 
 	/*
 	 * If DMA is emulated in software, we don't have to breakup the
@@ -1841,14 +1845,14 @@ scsi_dmaok(SC_REQ *reqp)
 	if (emulated_dma()) {
 		dm->dm_addr    = (u_long)req_addr;
 		dm->dm_count   = req_len;
-		return 1;
+		return (1);
 	}
 
 	/*
 	 * LWP: I think that this restriction is not strictly nessecary.
 	 */
 	if ((req_len & 0x1) || ((u_int)req_addr & 0x3))
-		return 0;
+		return (0);
 
 	/*
 	 * Build the DMA-chain.
@@ -1867,19 +1871,18 @@ scsi_dmaok(SC_REQ *reqp)
 			u_long	tmp = kvtop(req_addr);
 
 			if ((phy_buf + phy_len) != tmp) {
-				if (wrong_dma_range(reqp, dm)) {
-					if (reqp->dr_flag & DRIVER_BOUNCING)
-						goto bounceit;
-					return 0;
-				}
+			    if (wrong_dma_range(reqp, dm)) {
+				if (reqp->dr_flag & DRIVER_BOUNCING)
+					goto bounceit;
+				return (0);
+			    }
 
-				if (++dm >= &reqp->dm_chain[MAXDMAIO]) {
-					ncr_tprint(reqp,
-					    "dmaok: DMA chain too long!\n");
-					return 0;
-				}
-				dm->dm_count = 0;
-				dm->dm_addr  = tmp;
+			    if (++dm >= &reqp->dm_chain[MAXDMAIO]) {
+				ncr_tprint(reqp,"dmaok: DMA chain too long!\n");
+				return (0);
+			    }
+			    dm->dm_count = 0;
+			    dm->dm_addr  = tmp;
 			}
 			phy_buf = tmp;
 		}
@@ -1887,10 +1890,10 @@ scsi_dmaok(SC_REQ *reqp)
         if (wrong_dma_range(reqp, dm)) {
 		if (reqp->dr_flag & DRIVER_BOUNCING)
 			goto bounceit;
-		return 0;
+		return (0);
 	}
 	reqp->dm_last = dm;
-	return 1;
+	return (1);
 
 bounceit:
 	if ((reqp->bounceb = alloc_bounceb(reqp->xdata_len)) == NULL) {
@@ -1898,7 +1901,7 @@ bounceit:
 		 * If we can't get a bounce buffer, forget DMA
 		 */
 		reqp->dr_flag &= ~DRIVER_BOUNCING;
-		return 0;
+		return(0);
 	}
 	/*
 	 * Initialize a single DMA-range containing the bounced request
@@ -1908,14 +1911,15 @@ bounceit:
 	dm->dm_count   = reqp->xdata_len;
 	reqp->bouncerp = reqp->bounceb;
 
-	return 1;
+	return (1);
 }
 #endif /* REAL_DMA */
 
 static void
-run_main(struct ncr_softc *sc)
+run_main(sc)
+struct ncr_softc *sc;
 {
-	int sps = splbio();
+	int	sps = splbio();
 
 	if (!main_running) {
 		/*
@@ -1931,8 +1935,8 @@ run_main(struct ncr_softc *sc)
 		main_running = 1;
 		splx(sps);
 		scsi_main(sc);
-	} else
-		splx(sps);
+	}
+	else splx(sps);
 }
 
 /*
@@ -1962,7 +1966,7 @@ ncr_aprint(struct ncr_softc *sc, const char *fmt, ...)
 	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
-	printf("%s: %s", device_xname(sc->sc_dev), buf);
+	printf("%s: %s", sc->sc_dev.dv_xname, buf);
 }
 /****************************************************************************
  *		Start Debugging Functions				    *
@@ -1973,21 +1977,23 @@ static const char *phase_names[] = {
 };
 
 static void
-show_phase(SC_REQ *reqp, int phase)
+show_phase(reqp, phase)
+SC_REQ	*reqp;
+int	phase;
 {
-
 	printf("INFTRANS: %d Phase = %s\n", reqp->targ_id, phase_names[phase]);
 }
 
 static void
-show_data_sense(struct scsipi_xfer *xs)
+show_data_sense(xs)
+struct scsipi_xfer	*xs;
 {
-	uint8_t	*p1, *p2;
+	u_char	*p1, *p2;
 	int	i;
 
-	p1 = (uint8_t *)xs->cmd;
-	p2 = (uint8_t *)&xs->sense.scsi_sense;
-	if (*p2 == 0)
+	p1 = (u_char *) xs->cmd;
+	p2 = (u_char *)&xs->sense.scsi_sense;
+	if(*p2 == 0)
 		return;	/* No(n)sense */
 	printf("cmd[%d]: ", xs->cmdlen);
 	for (i = 0; i < xs->cmdlen; i++)
@@ -1999,15 +2005,15 @@ show_data_sense(struct scsipi_xfer *xs)
 }
 
 static void
-show_request(SC_REQ *reqp, const char *qtxt)
+show_request(reqp, qtxt)
+SC_REQ	*reqp;
+const char *qtxt;
 {
-
-	printf("REQ-%s: %d %p[%ld] "
-	    "cmd[0]=%x S=%x M=%x R=%x resid=%d dr_flag=%x %s\n",
-	    qtxt, reqp->targ_id, reqp->xdata_ptr, reqp->xdata_len,
-	    reqp->xcmd.opcode, reqp->status, reqp->message,
-	    reqp->xs->error, reqp->xs->resid, reqp->dr_flag,
-	    reqp->link ? "L":"");
+	printf("REQ-%s: %d %p[%ld] cmd[0]=%x S=%x M=%x R=%x resid=%d dr_flag=%x %s\n",
+			qtxt, reqp->targ_id, reqp->xdata_ptr, reqp->xdata_len,
+			reqp->xcmd.opcode, reqp->status, reqp->message,
+			reqp->xs->error, reqp->xs->resid, reqp->dr_flag,
+			reqp->link ? "L":"");
 	if (reqp->status == SCSCHKC)
 		show_data_sense(reqp->xs);
 }
@@ -2018,7 +2024,8 @@ static const char *sig_names[] = {
 };
 
 static void
-show_signals(uint8_t dmstat, uint8_t idstat)
+show_signals(dmstat, idstat)
+u_char	dmstat, idstat;
 {
 	u_short	tmp, mask;
 	int	j, need_pipe;
@@ -2038,15 +2045,15 @@ show_signals(uint8_t dmstat, uint8_t idstat)
 }
 
 void
-scsi_show(void)
+scsi_show()
 {
 	SC_REQ	*tmp;
 	int	sps = splhigh();
-	uint8_t	idstat, dmstat;
+	u_char	idstat, dmstat;
 	int	i;
 
 	printf("scsi_show: scsi_main is%s running\n",
-	    main_running ? "" : " not");
+		main_running ? "" : " not");
 	for (tmp = issue_q; tmp; tmp = tmp->next)
 		show_request(tmp, "ISSUED");
 	for (tmp = discon_q; tmp; tmp = tmp->next)

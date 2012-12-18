@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.17 2012/05/07 08:51:47 wiz Exp $
+#	$NetBSD: Makefile,v 1.14 2008/08/29 00:02:22 gmcgarry Exp $
 
 USE_FORT?= yes	# data driven bugs?
 
@@ -7,7 +7,7 @@ NOMAN=		# defined
 .include <bsd.own.mk>
 
 LIB=		bz2
-DIST=		${NETBSDSRCDIR}/external/bsd/bzip2/dist
+DIST=		${NETBSDSRCDIR}/dist/bzip2
 .PATH:		${DIST}
 
 SRCS=		blocksort.c huffman.c crctable.c randtable.c compress.c \
@@ -22,7 +22,7 @@ COPTS+=		-O0
 
 # XXX blocksort.c gets mis-compiled with 4.1
 .if (${MACHINE_ARCH} == "sh3el" || ${MACHINE_ARCH} == "sh3eb") && \
-    defined(HAVE_GCC)
+    (defined(HAVE_GCC) && ${HAVE_GCC} == 4)
 COPTS.blocksort.c+=	-fno-loop-optimize
 .endif
 

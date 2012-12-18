@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_siginfo.h,v 1.7 2011/11/18 04:07:43 christos Exp $ */
+/*	$NetBSD: linux_siginfo.h,v 1.3 2008/10/21 20:24:15 njoly Exp $ */
 
 /*-
  * Copyright (c) 2005 Emmanuel Dreyfus, all rights reserved.
@@ -34,7 +34,7 @@
 #ifndef _AMD64_LINUX_SIGINFO_H
 #define _AMD64_LINUX_SIGINFO_H
 
-#define LINUX___ARCH_SI_PREAMBLE_SIZE (4 * sizeof(int))
+#define LINUX___ARCH_SI_PREAMBLE_SIZE (3 * sizeof(int))
 #define LINUX_SI_MAX_SIZE 128
 #define LINUX_SI_PAD_SIZE \
     ((LINUX_SI_MAX_SIZE - LINUX___ARCH_SI_PREAMBLE_SIZE) / sizeof(int))
@@ -45,27 +45,17 @@ typedef union linux_sigval {
 } linux_sigval_t;
 
 
-typedef struct linux_siginfo {
+struct linux_siginfo {
 	int lsi_signo;
 	int lsi_errno;
 	int lsi_code;
 	union {
 		int _pad[LINUX_SI_PAD_SIZE];
-
-		/* kill() */
 		struct {
 			linux_pid_t _pid;
 			linux_uid_t _uid;
 		} _kill;
 
-		/* POSIX.1b signals */
-		struct {
-			linux_pid_t	_pid;
-			linux_uid_t	_uid;
-			linux_sigval_t	_sigval;
-		} _rt;
-
-		/* POSIX.1b timers */
 		struct {
 			linux_timer_t _tid;
 			int _overrun;
@@ -74,27 +64,36 @@ typedef struct linux_siginfo {
 			int _sys_private;
 		} _timer;
 
-		/* SIGCHLD */
 		struct {
 			linux_pid_t _pid;
 			linux_uid_t _uid;
 			int _status;
 			linux_clock_t _utime;
-			linux_clock_t _stime;
+			clock_t _stime;
 		} _sigchld;
 
-		/* SIGPOLL */
-		struct {
-			long _band;
-			int _fd;
-		} _sigpoll;
-
-		/* SIGILL, SIGFPE, SIGSEGV, SIGBUS */
 		struct {
 			void *_addr;
 		} _sigfault;
 
-	} _sidata;
+		struct {
+			long _band;
+			int _fd;
+		} _sigpoll;
+	} _sifields;
 } linux_siginfo_t;
+
+/*
+ * si_code values for non-signals
+ */
+#define LINUX_SI_USER		0
+#define LINUX_SI_KERNEL		0x80
+#define LINUX_SI_QUEUE		-1
+#define LINUX_SI_TIMER		-2
+#define LINUX_SI_MESGQ		-3
+#define LINUX_SI_ASYNCIO	-4
+#define LINUX_SI_SIGIO		-5
+#define LINUX_SI_TKILL		-6
+#define LINUX_SI_DETHREAD	-7
 
 #endif /* !_AMD64_LINUX_SIGINFO_H */

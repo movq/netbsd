@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_inet.c,v 1.41 2011/08/31 18:31:04 plunky Exp $	*/
+/*	$NetBSD: tp_inet.c,v 1.36 2007/12/20 19:53:35 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -73,7 +73,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_inet.c,v 1.41 2011/08/31 18:31:04 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_inet.c,v 1.36 2007/12/20 19:53:35 dyoung Exp $");
 
 #include "opt_inet.h"
 #include "opt_iso.h"
@@ -103,6 +103,8 @@ __KERNEL_RCSID(0, "$NetBSD: tp_inet.c,v 1.41 2011/08/31 18:31:04 plunky Exp $");
 #ifndef ISO
 #include <netiso/iso_chksum.c>
 #endif
+
+#include <machine/stdarg.h>
 
 /*
  * NAME:		in_getsufx()
@@ -159,7 +161,7 @@ in_putsufx(void *v, void *sufxloc, int sufxlen, int which)
 {
 	struct inpcb   *inp = v;
 	if (which == TP_FOREIGN) {
-		memcpy((void *) & inp->inp_fport, sufxloc, sizeof(inp->inp_fport));
+		bcopy(sufxloc, (void *) & inp->inp_fport, sizeof(inp->inp_fport));
 	}
 }
 
@@ -281,7 +283,7 @@ in_getnetaddr(void *v, struct mbuf *name, int which)
 {
 	struct inpcb   *inp = v;
 	struct sockaddr_in *sin = mtod(name, struct sockaddr_in *);
-	memset((void *) sin, 0, sizeof(*sin));
+	bzero((void *) sin, sizeof(*sin));
 	switch (which) {
 	case TP_LOCAL:
 		sin->sin_addr = inp->inp_laddr;
@@ -426,7 +428,7 @@ tpip_output_dg(struct mbuf *m0, ...)
 	m->m_len = sizeof(struct ip);
 
 	ip = mtod(m, struct ip *);
-	memset((void *) ip, 0, sizeof *ip);
+	bzero((void *) ip, sizeof *ip);
 
 	ip->ip_p = IPPROTO_TP;
 	if (sizeof(struct ip) + datalen > IP_MAXPACKET) {
@@ -452,7 +454,7 @@ tpip_output_dg(struct mbuf *m0, ...)
 #endif
 
 	error = ip_output(m, (struct mbuf *) 0, ro, IP_ALLOWBROADCAST,
-	    NULL, NULL);
+	    (struct ip_moptions *)NULL, (struct socket *)NULL);
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_EMIT]) {

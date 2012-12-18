@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_extattr.c,v 1.41 2012/12/08 13:42:36 manu Exp $	*/
+/*	$NetBSD: ufs_extattr.c,v 1.21.14.4 2011/09/17 18:51:34 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1999-2002 Robert N. M. Watson
@@ -48,11 +48,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_extattr.c,v 1.41 2012/12/08 13:42:36 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_extattr.c,v 1.21.14.4 2011/09/17 18:51:34 bouyer Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_ffs.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,7 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_extattr.c,v 1.41 2012/12/08 13:42:36 manu Exp $"
 #include <sys/kauth.h>
 #include <sys/kernel.h>
 #include <sys/namei.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/fcntl.h>
 #include <sys/lwp.h>
 #include <sys/vnode.h>
@@ -77,8 +75,9 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_extattr.c,v 1.41 2012/12/08 13:42:36 manu Exp $"
 #include <ufs/ufs/ufs_bswap.h>
 #include <ufs/ufs/ufs_extern.h>
 
+static MALLOC_JUSTDEFINE(M_UFS_EXTATTR, "ufs_extattr","ufs extended attribute");
+
 int ufs_extattr_sync = 1;
-int ufs_extattr_autocreate = 1024;
 
 static int	ufs_extattr_valid_attrname(int attrnamespace,
 		    const char *attrname);
@@ -106,58 +105,6 @@ static struct ufs_extattr_list_entry *ufs_extattr_find_attr(struct ufsmount *,
 static int	ufs_extattr_get_header(struct vnode *, 
 		    struct ufs_extattr_list_entry *, 
 		    struct ufs_extattr_header *, off_t *);
-
-/*
- * Convert a FreeBSD extended attribute and namespace to a consistent string
- * representation.
- *
- * The returned value, if not NULL, is guaranteed to be an allocated object
- * of its size as returned by strlen() + 1 and must be freed by the caller.
- */
-static char *
-from_freebsd_extattr(int attrnamespace, const char *attrname)
-{
-	const char *namespace;
-	char *attr;
-	size_t len;
-
-	if (attrnamespace == EXTATTR_NAMESPACE_SYSTEM)
-		namespace = "system";
-	else if (attrnamespace == EXTATTR_NAMESPACE_USER)
-		namespace = "user";
-	else
-		return NULL;
-
-	/* <namespace>.<attrname>\0 */
-	len = strlen(namespace) + 1 + strlen(attrname) + 1;
-
-	attr = kmem_alloc(len, KM_SLEEP);
-
-	snprintf(attr, len, "%s.%s", namespace, attrname);
-
-	return attr;
-}
-
-/*
- * Internal wrapper around a conversion-check-free sequence.
- */
-static int
-internal_extattr_check_cred(vnode_t *vp, int attrnamespace, const char *name,
-    kauth_cred_t cred, int access_mode)
-{
-	char *attr;
-	int error;
-
-	attr = from_freebsd_extattr(attrnamespace, name);
-	if (attr == NULL)
-		return EINVAL;
-
-	error = extattr_check_cred(vp, attr, cred, access_mode);
-
-	kmem_free(attr, strlen(attr) + 1);
-
-	return error;
-}
 
 /*
  * Per-FS attribute lock protecting attribute operations.
@@ -207,6 +154,7 @@ ufs_extattr_valid_attrname(int attrnamespace, const char *attrname)
 	return (1);
 }
 
+#ifdef UFS_EXTATTR_AUTOCREATE
 /*
  * Autocreate an attribute storage
  */
@@ -218,13 +166,10 @@ ufs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
 	struct ufsmount *ump = VFSTOUFS(mp);
 	struct vnode *backing_vp;
 	struct nameidata nd;
-	struct pathbuf *pb;
-	char *path;
+	char path[PATH_MAX + 1];
 	struct ufs_extattr_fileheader uef;
 	struct ufs_extattr_list_entry *uele;
 	int error;
-
-	path = PNBUF_GET();
 
 	/* 
 	 * We only support system and user namespace autocreation
@@ -245,35 +190,37 @@ ufs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
 			       attrname);
 		break;
 	default:
-		PNBUF_PUT(path);
 		return NULL;
 		break;
 	}
 
 	/*
-	 * XXX unlock/lock should only be done when setting extattr
-	 * on backing store or one of its parent directory 
-	 * including root, but we always do it for now.
+	 * When setting attribute on the root vnode, we get it 
+	 * already locked, and vn_open/namei/VFS_ROOT will try to
+	 * look it, causing a panic. Unlock it first. This cause
+	 * no problem as we do not need the vnode to be locked. 
+	 * it is left untouched for UFS1 extended attributes.
 	 */ 
-	KASSERT(VOP_ISLOCKED(vp) == LK_EXCLUSIVE);
-	VOP_UNLOCK(vp);
+	if (vp->v_vflag && VV_ROOT) {
+		KASSERT(VOP_ISLOCKED(vp) == LK_EXCLUSIVE);
+		VOP_UNLOCK(vp, 0);
+	}
+	KASSERT(VOP_ISLOCKED(vp) == 0);
 
-	pb = pathbuf_create(path);
-	NDINIT(&nd, CREATE, LOCKPARENT, pb);
+	NDINIT(&nd, CREATE, LOCKPARENT, UIO_SYSSPACE, path);
 	
 	error = vn_open(&nd, O_CREAT|O_RDWR, 0600);
 
 	/*
-	 * Reacquire the lock on the vnode
+	 * Reacquire the lock on the vnode if it was root.
 	 */
 	KASSERT(VOP_ISLOCKED(vp) == 0);
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	if (vp->v_vflag && VV_ROOT)
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	KASSERT(VOP_ISLOCKED(vp) == LK_EXCLUSIVE);
 
-	if (error != 0) {
-		pathbuf_destroy(pb);
-		PNBUF_PUT(path);
+	if (error != 0)
 		return NULL;
-	}
 
 	KASSERT(nd.ni_vp != NULL);
 	KASSERT(VOP_ISLOCKED(nd.ni_vp) == LK_EXCLUSIVE);
@@ -283,18 +230,16 @@ ufs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
  	 * backing_vp is the backing store. 
 	 */	
 	backing_vp = nd.ni_vp;
-	pathbuf_destroy(pb);
-	PNBUF_PUT(path);
 
 	uef.uef_magic = UFS_EXTATTR_MAGIC;
 	uef.uef_version = UFS_EXTATTR_VERSION;
-	uef.uef_size = ufs_extattr_autocreate;
+	uef.uef_size = UFS_EXTATTR_AUTOCREATE;
 
 	error = vn_rdwr(UIO_WRITE, backing_vp, &uef, sizeof(uef), 0,
 		        UIO_SYSSPACE, IO_NODELOCKED|IO_APPEND, 
 			l->l_cred, NULL, l);
 
-	VOP_UNLOCK(backing_vp);
+	VOP_UNLOCK(backing_vp, 0);
 
 	if (error != 0) {
 		printf("%s: write uef header failed for %s, error = %d\n", 
@@ -302,6 +247,12 @@ ufs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
 		vn_close(backing_vp, FREAD|FWRITE, l->l_cred);
 		return NULL;
 	}
+
+	/*
+	 * ufs_extattr_enable_with_open increases the vnode reference
+	 * count. Not sure why, but do the same here.
+	 */
+	vref(vp);
 
 	/*
 	 * Now enable attribute. 
@@ -329,6 +280,7 @@ ufs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
 
 	return uele;
 }
+#endif /* UFS_EXTATTR_AUTOCREATE */
 
 /*
  * Locate an attribute given a name and mountpoint.
@@ -425,6 +377,7 @@ ufs_extattr_start(struct mount *mp, struct lwp *l)
 	return (error);
 }
 
+#ifdef UFS_EXTATTR_AUTOSTART
 /*
  * Helper routine: given a locked parent directory and filename, return
  * the locked vnode of the inode associated with the name.  Will not
@@ -440,24 +393,23 @@ ufs_extattr_lookup(struct vnode *start_dvp, int lockparent, const char *dirname,
 	struct vop_lookup_args vargs;
 	struct componentname cnp;
 	struct vnode *target_vp;
-	char *pnbuf;
 	int error;
 
 	KASSERT(VOP_ISLOCKED(start_dvp) == LK_EXCLUSIVE);
-
-	pnbuf = PNBUF_GET();
 
 	memset(&cnp, 0, sizeof(cnp));
 	cnp.cn_nameiop = LOOKUP;
 	cnp.cn_flags = ISLASTCN | lockparent;
 	cnp.cn_cred = l->l_cred;
-	cnp.cn_nameptr = pnbuf;
-	error = copystr(dirname, pnbuf, MAXPATHLEN, &cnp.cn_namelen);
+	cnp.cn_pnbuf = PNBUF_GET();
+	cnp.cn_nameptr = cnp.cn_pnbuf;
+	error = copystr(dirname, cnp.cn_pnbuf, MAXPATHLEN,
+	    (size_t *) &cnp.cn_namelen);
 	if (error) {
 		if (lockparent == 0) {
-			VOP_UNLOCK(start_dvp);
+			VOP_UNLOCK(start_dvp, 0);
 		}
-		PNBUF_PUT(pnbuf);
+		PNBUF_PUT(cnp.cn_pnbuf);
 		printf("ufs_extattr_lookup: copystr failed\n");
 		return (error);
 	}
@@ -467,11 +419,10 @@ ufs_extattr_lookup(struct vnode *start_dvp, int lockparent, const char *dirname,
 	vargs.a_vpp = &target_vp;
 	vargs.a_cnp = &cnp;
 	error = ufs_lookup(&vargs);
-	PNBUF_PUT(pnbuf);
+	PNBUF_PUT(cnp.cn_pnbuf);
 	if (error) {
-		if (lockparent == 0) {
-			VOP_UNLOCK(start_dvp);
-		}
+		if (lockparent == 0)
+			VOP_UNLOCK(start_dvp, 0);
 		return (error);
 	}
 #if 0
@@ -480,12 +431,14 @@ ufs_extattr_lookup(struct vnode *start_dvp, int lockparent, const char *dirname,
 #endif
 
 	if ((target_vp != start_dvp) && (lockparent == 0))
-		 VOP_UNLOCK(start_dvp);
+		VOP_UNLOCK(start_dvp, 0);
+
 
 	KASSERT(VOP_ISLOCKED(target_vp) == LK_EXCLUSIVE);
 	*vp = target_vp;
 	return (0);
 }
+#endif /* !UFS_EXTATTR_AUTOSTART */
 
 /*
  * Enable an EA using the passed filesystem, backing vnode, attribute name,
@@ -504,17 +457,17 @@ ufs_extattr_enable_with_open(struct ufsmount *ump, struct vnode *vp,
 	if (error) {
 		printf("ufs_extattr_enable_with_open.VOP_OPEN(): failed "
 		    "with %d\n", error);
-		VOP_UNLOCK(vp);
+		VOP_UNLOCK(vp, 0);
 		return (error);
 	}
 
-	mutex_enter(vp->v_interlock);
+	mutex_enter(&vp->v_interlock);
 	vp->v_writecount++;
-	mutex_exit(vp->v_interlock);
+	mutex_exit(&vp->v_interlock);
 
 	vref(vp);
 
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 
 	error = ufs_extattr_enable(ump, attrnamespace, attrname, vp, l);
 	if (error != 0)
@@ -522,6 +475,7 @@ ufs_extattr_enable_with_open(struct ufsmount *ump, struct vnode *vp,
 	return (error);
 }
 
+#ifdef UFS_EXTATTR_AUTOSTART
 /*
  * Given a locked directory vnode, iterate over the names in the directory
  * and use ufs_extattr_lookup() to retrieve locked vnodes of potential
@@ -545,7 +499,7 @@ ufs_extattr_iterate_directory(struct ufsmount *ump, struct vnode *dvp,
 	if (dvp->v_type != VDIR)
 		return (ENOTDIR);
 
-	dirbuf = kmem_alloc(DIRBLKSIZ, KM_SLEEP);
+	MALLOC(dirbuf, char *, DIRBLKSIZ, M_TEMP, M_WAITOK);
 
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
@@ -617,7 +571,7 @@ ufs_extattr_iterate_directory(struct ufsmount *ump, struct vnode *dvp,
 				break;
 		}
 	}
-	kmem_free(dirbuf, DIRBLKSIZ);
+	FREE(dirbuf, M_TEMP);
 	
 	return (0);
 }
@@ -722,6 +676,7 @@ ufs_extattr_autostart(struct mount *mp, struct lwp *l)
 
 	return (error);
 }
+#endif /* !UFS_EXTATTR_AUTOSTART */
 
 /*
  * Stop extended attribute support on an FS.
@@ -775,7 +730,8 @@ ufs_extattr_enable(struct ufsmount *ump, int attrnamespace,
 	if (backing_vnode->v_type != VREG)
 		return (EINVAL);
 
-	attribute = kmem_zalloc(sizeof(*attribute), KM_SLEEP);
+	attribute = malloc(sizeof(*attribute), M_UFS_EXTATTR,
+	    M_WAITOK | M_ZERO);
 
 	if (!(ump->um_extattr.uepm_flags & UFS_EXTATTR_UEPM_STARTED)) {
 		error = EOPNOTSUPP;
@@ -790,7 +746,7 @@ ufs_extattr_enable(struct ufsmount *ump, int attrnamespace,
 	strncpy(attribute->uele_attrname, attrname,
 	    UFS_EXTATTR_MAXEXTATTRNAME);
 	attribute->uele_attrnamespace = attrnamespace;
-	memset(&attribute->uele_fileheader, 0,
+	bzero(&attribute->uele_fileheader,
 	    sizeof(struct ufs_extattr_fileheader));
 	
 	attribute->uele_backing_vnode = backing_vnode;
@@ -849,14 +805,14 @@ ufs_extattr_enable(struct ufsmount *ump, int attrnamespace,
 	LIST_INSERT_HEAD(&ump->um_extattr.uepm_list, attribute,
 	    uele_entries);
 
-	VOP_UNLOCK(backing_vnode);
+	VOP_UNLOCK(backing_vnode, 0);
 	return (0);
 
  unlock_free_exit:
-	VOP_UNLOCK(backing_vnode);
+	VOP_UNLOCK(backing_vnode, 0);
 
  free_exit:
-	kmem_free(attribute, sizeof(*attribute));
+	free(attribute, M_UFS_EXTATTR);
 	return (error);
 }
 
@@ -875,14 +831,14 @@ ufs_extattr_disable(struct ufsmount *ump, int attrnamespace,
 
 	uele = ufs_extattr_find_attr(ump, attrnamespace, attrname);
 	if (!uele)
-		return (ENODATA);
+		return (ENOATTR);
 
 	LIST_REMOVE(uele, uele_entries);
 
 	error = vn_close(uele->uele_backing_vnode, FREAD|FWRITE,
 	    l->l_cred);
 
-	kmem_free(uele, sizeof(*uele));
+	free(uele, M_UFS_EXTATTR);
 
 	return (error);
 }
@@ -903,29 +859,32 @@ ufs_extattrctl(struct mount *mp, int cmd, struct vnode *filename_vp,
 	/*
 	 * Only privileged processes can configure extended attributes.
 	 */
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_FS_EXTATTR,
-	    0, mp, NULL, NULL);
-	if (error) {
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0) {
 		if (filename_vp != NULL)
-			VOP_UNLOCK(filename_vp);
+			VOP_UNLOCK(filename_vp, 0);
 		return (error);
 	}
 
 	switch(cmd) {
 	case UFS_EXTATTR_CMD_START:
 		if (filename_vp != NULL) {
-			VOP_UNLOCK(filename_vp);
+			VOP_UNLOCK(filename_vp, 0);
 			return (EINVAL);
 		}
 		if (attrname != NULL)
 			return (EINVAL);
 
+#ifdef UFS_EXTATTR_AUTOSTART
 		error = ufs_extattr_autostart(mp, l);
+#else
+		error = ufs_extattr_start(mp, l);
+#endif
 		return (error);
 		
 	case UFS_EXTATTR_CMD_STOP:
 		if (filename_vp != NULL) {
-			VOP_UNLOCK(filename_vp);
+			VOP_UNLOCK(filename_vp, 0);
 			return (EINVAL);
 		}
 		if (attrname != NULL)
@@ -938,7 +897,7 @@ ufs_extattrctl(struct mount *mp, int cmd, struct vnode *filename_vp,
 		if (filename_vp == NULL)
 			return (EINVAL);
 		if (attrname == NULL) {
-			VOP_UNLOCK(filename_vp);
+			VOP_UNLOCK(filename_vp, 0);
 			return (EINVAL);
 		}
 
@@ -954,7 +913,7 @@ ufs_extattrctl(struct mount *mp, int cmd, struct vnode *filename_vp,
 
 	case UFS_EXTATTR_CMD_DISABLE:
 		if (filename_vp != NULL) {
-			VOP_UNLOCK(filename_vp);
+			VOP_UNLOCK(filename_vp, 0);
 			return (EINVAL);
 		}
 		if (attrname == NULL)
@@ -1023,7 +982,7 @@ ufs_extattr_get_header(struct vnode *vp, struct ufs_extattr_list_entry *uele,
 
 	/* Defined? */
 	if ((ueh->ueh_flags & UFS_EXTATTR_ATTR_FLAG_INUSE) == 0)
-		return ENODATA;
+		return ENOATTR;
 
 	/* Valid for the current inode generation? */
 	if (ueh->ueh_i_gen != ip->i_gen) {
@@ -1036,7 +995,7 @@ ufs_extattr_get_header(struct vnode *vp, struct ufs_extattr_list_entry *uele,
 		printf("%s (%s): inode gen inconsistency (%u, %jd)\n",
 		       __func__,  mp->mnt_stat.f_mntonname, ueh->ueh_i_gen,
 		       (intmax_t)ip->i_gen);
-		return ENODATA;
+		return ENOATTR;
 	}
 
 	/* Local size consistency check. */
@@ -1102,14 +1061,13 @@ ufs_extattr_get(struct vnode *vp, int attrnamespace, const char *name,
 	if (strlen(name) == 0)
 		return (EINVAL);
 
-	error = internal_extattr_check_cred(vp, attrnamespace, name, cred,
-	    VREAD);
+	error = extattr_check_cred(vp, attrnamespace, cred, l, IREAD);
 	if (error)
 		return (error);
 
 	attribute = ufs_extattr_find_attr(ump, attrnamespace, name);
 	if (!attribute)
-		return (ENODATA);
+		return (ENOATTR);
 
 	/*
 	 * Allow only offsets of zero to encourage the read/replace
@@ -1162,7 +1120,7 @@ ufs_extattr_get(struct vnode *vp, int attrnamespace, const char *name,
 		uio->uio_offset = 0;
 
 	if (attribute->uele_backing_vnode != vp)
-		VOP_UNLOCK(attribute->uele_backing_vnode);
+		VOP_UNLOCK(attribute->uele_backing_vnode, 0);
 
 	return (error);
 }
@@ -1204,7 +1162,7 @@ vop_listextattr {
  */
 static int
 ufs_extattr_list(struct vnode *vp, int attrnamespace,
-    struct uio *uio, size_t *size, int flag, 
+    struct uio *uio, size_t *size, int flag,
     kauth_cred_t cred, struct lwp *l)
 {
 	struct ufs_extattr_list_entry *uele;
@@ -1217,12 +1175,7 @@ ufs_extattr_list(struct vnode *vp, int attrnamespace,
 	if (!(ump->um_extattr.uepm_flags & UFS_EXTATTR_UEPM_STARTED))
 		return (EOPNOTSUPP);
 
-	/*
-	 * XXX: We can move this inside the loop and iterate on individual
-	 *	attributes.
-	 */
-	error = internal_extattr_check_cred(vp, attrnamespace, "", cred,
-	    VREAD);
+	error = extattr_check_cred(vp, attrnamespace, cred, l, IREAD);
 	if (error)
 		return (error);
 
@@ -1233,7 +1186,7 @@ ufs_extattr_list(struct vnode *vp, int attrnamespace,
 			continue;
 
 		error = ufs_extattr_get_header(vp, uele, &ueh, NULL);
-		if (error == ENODATA)
+		if (error == ENOATTR)
 			continue;	
 		if (error != 0)
 			return error;
@@ -1260,7 +1213,7 @@ ufs_extattr_list(struct vnode *vp, int attrnamespace,
 			 * strings (a la listxattr), or non NUL-terminated,
 			 * one byte length prefixed strings (for
 			 * extattr_list_file). EXTATTR_LIST_LENPREFIX switches
-		 	 * that second behavior.
+			 * that second behavior.
 			 */
 			if (flag & EXTATTR_LIST_LENPREFIX) {
 				uint8_t len = (uint8_t)attrnamelen;
@@ -1268,10 +1221,10 @@ ufs_extattr_list(struct vnode *vp, int attrnamespace,
 				/* Copy leading name length */
 				error = uiomove(&len, sizeof(len), uio);
 				if (error != 0)
-					break;	
+					break;
 			} else {
 				/* Include trailing NULL */
-				attrnamelen++; 
+				attrnamelen++;
 			}
 
 			error = uiomove(uele->uele_attrname, 
@@ -1281,7 +1234,7 @@ ufs_extattr_list(struct vnode *vp, int attrnamespace,
 		}
 
 		if (uele->uele_backing_vnode != vp)
-			VOP_UNLOCK(uele->uele_backing_vnode);
+			VOP_UNLOCK(uele->uele_backing_vnode, 0);
 
 		if (error != 0)
 			return error;
@@ -1387,17 +1340,20 @@ ufs_extattr_set(struct vnode *vp, int attrnamespace, const char *name,
 	if (!ufs_extattr_valid_attrname(attrnamespace, name))
 		return (EINVAL);
 
-	error = internal_extattr_check_cred(vp, attrnamespace, name, cred,
-	    VWRITE);
+	error = extattr_check_cred(vp, attrnamespace, cred, l, IWRITE);
 	if (error)
 		return (error);
 
 	attribute = ufs_extattr_find_attr(ump, attrnamespace, name);
 	if (!attribute) {
+#ifdef UFS_EXTATTR_AUTOCREATE
 		attribute =  ufs_extattr_autocreate_attr(vp, attrnamespace, 
 							 name, l);
 		if  (!attribute)
-			return (ENODATA);
+			return (ENOATTR);
+#else /* UFS_EXTATTR_AUTOCREATE */
+		return (ENOATTR);
+#endif /* UFS_EXTATTR_AUTOCREATE */
 	}
 
 	/*
@@ -1471,7 +1427,7 @@ ufs_extattr_set(struct vnode *vp, int attrnamespace, const char *name,
 	uio->uio_offset = 0;
 
 	if (attribute->uele_backing_vnode != vp)
-		VOP_UNLOCK(attribute->uele_backing_vnode);
+		VOP_UNLOCK(attribute->uele_backing_vnode, 0);
 
 	return (error);
 }
@@ -1500,14 +1456,13 @@ ufs_extattr_rm(struct vnode *vp, int attrnamespace, const char *name,
 	if (!ufs_extattr_valid_attrname(attrnamespace, name))
 		return (EINVAL);
 
-	error = internal_extattr_check_cred(vp, attrnamespace, name, cred,
-	    VWRITE);
+	error = extattr_check_cred(vp, attrnamespace, cred, l, IWRITE);
 	if (error)
 		return (error);
 
 	attribute = ufs_extattr_find_attr(ump, attrnamespace, name);
 	if (!attribute)
-		return (ENODATA);
+		return (ENOATTR);
 
 	/*
 	 * Don't need to get a lock on the backing file if the getattr is
@@ -1545,7 +1500,7 @@ ufs_extattr_rm(struct vnode *vp, int attrnamespace, const char *name,
 		error = ENXIO;
 
  vopunlock_exit:
-	VOP_UNLOCK(attribute->uele_backing_vnode);
+	VOP_UNLOCK(attribute->uele_backing_vnode, 0);
 
 	return (error);
 }
@@ -1584,13 +1539,15 @@ ufs_extattr_vnode_inactive(struct vnode *vp, struct lwp *l)
 }
 
 void
-ufs_extattr_init(void)
+ufs_extattr_init()
 {
 
+	malloc_type_attach(M_UFS_EXTATTR);
 }
 
 void
-ufs_extattr_done(void)
+ufs_extattr_done()
 {
 
+	malloc_type_detach(M_UFS_EXTATTR);
 }

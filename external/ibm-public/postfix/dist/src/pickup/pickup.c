@@ -1,4 +1,4 @@
-/*	$NetBSD: pickup.c,v 1.1.1.4 2011/03/02 19:32:24 tron Exp $	*/
+/*	$NetBSD: pickup.c,v 1.1.1.1.2.4 2011/01/07 01:24:08 riz Exp $	*/
 
 /*++
 /* NAME
@@ -198,9 +198,8 @@ static int cleanup_service_error_reason(PICKUP_INFO *info, int status,
      * -r" when a message is already delivered (or bounced). The Postfix
      * sendmail command rejects submissions without recipients.
      */
-    if (reason == 0 || *reason == 0)
-	msg_warn("%s: error writing %s: %s",
-		  info->path, info->id, cleanup_strerror(status));
+    if (reason == 0)
+	msg_warn("%s: %s", info->path, cleanup_strerror(status));
     return ((status & (CLEANUP_STAT_BAD | CLEANUP_STAT_RCPT)) ?
 	    REMOVE_MESSAGE_FILE : KEEP_MESSAGE_FILE);
 }

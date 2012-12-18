@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_driver.c,v 1.131 2012/12/10 08:36:03 msaitoh Exp $	*/
+/*	$NetBSD: rf_driver.c,v 1.118.10.2 2009/12/10 22:59:16 snj Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -66,11 +66,9 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.131 2012/12/10 08:36:03 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.118.10.2 2009/12/10 22:59:16 snj Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_raid_diagnostic.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -118,6 +116,7 @@ __KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.131 2012/12/10 08:36:03 msaitoh Exp 
 #endif
 
 /* rad == RF_RaidAccessDesc_t */
+RF_DECLARE_MUTEX(rf_rad_lock)
 #define RF_MAX_FREE_RAD 128
 #define RF_MIN_FREE_RAD  32
 
@@ -133,38 +132,35 @@ static void rf_UnconfigureArray(void);
 static void rf_ShutdownRDFreeList(void *);
 static int rf_ConfigureRDFreeList(RF_ShutdownList_t **);
 
-rf_declare_mutex2(rf_printf_mutex);	/* debug only:  avoids interleaved
+RF_DECLARE_MUTEX(rf_printf_mutex)	/* debug only:  avoids interleaved
 					 * printfs by different stripes */
 
-#define SIGNAL_QUIESCENT_COND(_raid_) \
-	rf_broadcast_cond2((_raid_)->access_suspend_cv)
+#define SIGNAL_QUIESCENT_COND(_raid_)  wakeup(&((_raid_)->accesses_suspended))
 #define WAIT_FOR_QUIESCENCE(_raid_) \
-	rf_wait_cond2((_raid_)->access_suspend_cv, \
-		      (_raid_)->access_suspend_mutex)
+	ltsleep(&((_raid_)->accesses_suspended), PRIBIO, \
+		"raidframe quiesce", 0, &((_raid_)->access_suspend_mutex))
 
 static int configureCount = 0;	/* number of active configurations */
 static int isconfigged = 0;	/* is basic raidframe (non per-array)
 				 * stuff configured */
-static rf_declare_mutex2(configureMutex); /* used to lock the configuration
-					   * stuff */
+RF_DECLARE_LKMGR_STATIC_MUTEX(configureMutex)	/* used to lock the configuration
+					 * stuff */
 static RF_ShutdownList_t *globalShutdown;	/* non array-specific
 						 * stuff */
 
 static int rf_ConfigureRDFreeList(RF_ShutdownList_t ** listp);
 static int rf_AllocEmergBuffers(RF_Raid_t *);
 static void rf_FreeEmergBuffers(RF_Raid_t *);
-static void rf_destroy_mutex_cond(RF_Raid_t *);
-static void rf_alloc_mutex_cond(RF_Raid_t *);
 
 /* called at system boot time */
 int
-rf_BootRaidframe(void)
+rf_BootRaidframe()
 {
 
 	if (raidframe_booted)
 		return (EBUSY);
 	raidframe_booted = 1;
-	rf_init_mutex2(configureMutex, IPL_NONE);
+	mutex_init(&configureMutex, MUTEX_DEFAULT, IPL_NONE);
  	configureCount = 0;
 	isconfigged = 0;
 	globalShutdown = NULL;
@@ -175,13 +171,12 @@ rf_BootRaidframe(void)
  * Called whenever an array is shutdown
  */
 static void
-rf_UnconfigureArray(void)
+rf_UnconfigureArray()
 {
 
-	rf_lock_mutex2(configureMutex);
+	RF_LOCK_LKMGR_MUTEX(configureMutex);
 	if (--configureCount == 0) {	/* if no active configurations, shut
 					 * everything down */
-		rf_destroy_mutex2(rf_printf_mutex);
 		isconfigged = 0;
 		rf_ShutdownList(&globalShutdown);
 
@@ -194,7 +189,7 @@ rf_UnconfigureArray(void)
 			rf_print_unfreed();
 #endif
 	}
-	rf_unlock_mutex2(configureMutex);
+	RF_UNLOCK_LKMGR_MUTEX(configureMutex);
 }
 
 /*
@@ -216,16 +211,16 @@ rf_Shutdown(RF_Raid_t *raidPtr)
          * cuts down on the amount of serialization we've got going
          * on.
          */
-	rf_lock_mutex2(raidPtr->rad_lock);
+	RF_LOCK_MUTEX(rf_rad_lock);
 	if (raidPtr->waitShutdown) {
-		rf_unlock_mutex2(raidPtr->rad_lock);
+		RF_UNLOCK_MUTEX(rf_rad_lock);
 		return (EBUSY);
 	}
 	raidPtr->waitShutdown = 1;
 	while (raidPtr->nAccOutstanding) {
-		rf_wait_cond2(raidPtr->outstandingCond, raidPtr->rad_lock);
+		RF_WAIT_COND(raidPtr->outstandingCond, rf_rad_lock);
 	}
-	rf_unlock_mutex2(raidPtr->rad_lock);
+	RF_UNLOCK_MUTEX(rf_rad_lock);
 
 	/* Wait for any parity re-writes to stop... */
 	while (raidPtr->parity_rewrite_in_progress) {
@@ -236,13 +231,12 @@ rf_Shutdown(RF_Raid_t *raidPtr)
 	}
 
 	/* Wait for any reconstruction to stop... */
-	rf_lock_mutex2(raidPtr->mutex);
 	while (raidPtr->reconInProgress) {
 		printf("raid%d: Waiting for reconstruction to stop...\n",
 		       raidPtr->raidid);
-		rf_wait_cond2(raidPtr->waitForReconCond, raidPtr->mutex);
+		tsleep(&raidPtr->waitForReconCond, PRIBIO,
+		       "rfreshutdown",0);
 	}
-	rf_unlock_mutex2(raidPtr->mutex);
 
 	raidPtr->valid = 0;
 
@@ -257,8 +251,6 @@ rf_Shutdown(RF_Raid_t *raidPtr)
 
 	rf_ShutdownList(&raidPtr->shutdownList);
 
-	rf_destroy_mutex_cond(raidPtr);
-
 	rf_UnconfigureArray();
 
 	return (0);
@@ -271,8 +263,7 @@ rf_Shutdown(RF_Raid_t *raidPtr)
 		RF_ERRORMSG2("RAIDFRAME: failed %s with %d\n", RF_STRING(f), rc); \
 		rf_ShutdownList(&globalShutdown); \
 		configureCount--; \
-		rf_unlock_mutex2(configureMutex); \
-		rf_destroy_mutex2(rf_printf_mutex); \
+		RF_UNLOCK_LKMGR_MUTEX(configureMutex); \
 		return(rc); \
 	} \
 }
@@ -282,7 +273,6 @@ rf_Shutdown(RF_Raid_t *raidPtr)
 	rf_FreeEmergBuffers(raidPtr); \
 	rf_ShutdownList(&raidPtr->shutdownList); \
 	rf_UnconfigureArray(); \
-	rf_destroy_mutex_cond(raidPtr); \
 }
 
 #define DO_RAID_INIT_CONFIGURE(f) { \
@@ -294,16 +284,20 @@ rf_Shutdown(RF_Raid_t *raidPtr)
 	} \
 }
 
+#define DO_RAID_MUTEX(_m_) { \
+	rf_mutex_init((_m_)); \
+}
+
 int
 rf_Configure(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr, RF_AutoConfig_t *ac)
 {
 	RF_RowCol_t col;
 	int rc;
 
-	rf_lock_mutex2(configureMutex);
+	RF_LOCK_LKMGR_MUTEX(configureMutex);
 	configureCount++;
 	if (isconfigged == 0) {
-		rf_init_mutex2(rf_printf_mutex, IPL_VM);
+		rf_mutex_init(&rf_printf_mutex);
 
 		/* initialize globals */
 
@@ -333,10 +327,9 @@ rf_Configure(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr, RF_AutoConfig_t *ac)
 		DO_INIT_CONFIGURE(rf_ConfigurePSStatus);
 		isconfigged = 1;
 	}
-	rf_unlock_mutex2(configureMutex);
+	RF_UNLOCK_LKMGR_MUTEX(configureMutex);
 
-	rf_alloc_mutex_cond(raidPtr);
-
+	DO_RAID_MUTEX(&raidPtr->mutex);
 	/* set up the cleanup list.  Do this after ConfigureDebug so that
 	 * value of memDebug will be set */
 
@@ -355,11 +348,20 @@ rf_Configure(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr, RF_AutoConfig_t *ac)
 	raidPtr->status = rf_rs_optimal;
 	raidPtr->reconControl = NULL;
 
+	TAILQ_INIT(&(raidPtr->iodone));
+	simple_lock_init(&(raidPtr->iodone_lock));
+
 	DO_RAID_INIT_CONFIGURE(rf_ConfigureEngine);
 	DO_RAID_INIT_CONFIGURE(rf_ConfigureStripeLocks);
 
+	raidPtr->outstandingCond = 0;
+
 	raidPtr->nAccOutstanding = 0;
 	raidPtr->waitShutdown = 0;
+
+	DO_RAID_MUTEX(&raidPtr->access_suspend_mutex);
+
+	raidPtr->waitForReconCond = 0;
 
 	if (ac!=NULL) {
 		/* We have an AutoConfig structure..  Don't do the
@@ -392,7 +394,6 @@ rf_Configure(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr, RF_AutoConfig_t *ac)
 	raidPtr->parity_rewrite_in_progress = 0;
 	raidPtr->adding_hot_spare = 0;
 	raidPtr->recon_in_progress = 0;
-
 	raidPtr->maxOutstanding = cfgPtr->maxOutstandingDiskReqs;
 
 	/* autoconfigure and root_partition will actually get filled in
@@ -544,6 +545,7 @@ rf_ConfigureRDFreeList(RF_ShutdownList_t **listp)
 	rf_pool_init(&rf_pools.rad, sizeof(RF_RaidAccessDesc_t),
 		     "rf_rad_pl", RF_MIN_FREE_RAD, RF_MAX_FREE_RAD);
 	rf_ShutdownCreate(listp, rf_ShutdownRDFreeList, NULL);
+	simple_lock_init(&rf_rad_lock);
 	return (0);
 }
 
@@ -557,20 +559,20 @@ rf_AllocRaidAccDesc(RF_Raid_t *raidPtr, RF_IoType_t type,
 
 	desc = pool_get(&rf_pools.rad, PR_WAITOK);
 
-	rf_lock_mutex2(raidPtr->rad_lock);
+	RF_LOCK_MUTEX(rf_rad_lock);
 	if (raidPtr->waitShutdown) {
 		/*
 	         * Actually, we're shutting the array down. Free the desc
 	         * and return NULL.
 	         */
 
-		rf_unlock_mutex2(raidPtr->rad_lock);
+		RF_UNLOCK_MUTEX(rf_rad_lock);
 		pool_put(&rf_pools.rad, desc);
 		return (NULL);
 	}
 	raidPtr->nAccOutstanding++;
 
-	rf_unlock_mutex2(raidPtr->rad_lock);
+	RF_UNLOCK_MUTEX(rf_rad_lock);
 
 	desc->raidPtr = (void *) raidPtr;
 	desc->type = type;
@@ -627,12 +629,12 @@ rf_FreeRaidAccDesc(RF_RaidAccessDesc_t *desc)
 	}
 
 	pool_put(&rf_pools.rad, desc);
-	rf_lock_mutex2(raidPtr->rad_lock);
+	RF_LOCK_MUTEX(rf_rad_lock);
 	raidPtr->nAccOutstanding--;
 	if (raidPtr->waitShutdown) {
-		rf_signal_cond2(raidPtr->outstandingCond);
+		RF_SIGNAL_COND(raidPtr->outstandingCond);
 	}
-	rf_unlock_mutex2(raidPtr->rad_lock);
+	RF_UNLOCK_MUTEX(rf_rad_lock);
 }
 /*********************************************************************
  * Main routine for performing an access.
@@ -699,7 +701,7 @@ rf_SetReconfiguredMode(RF_Raid_t *raidPtr, int col)
 		printf("Can't set reconfigured mode in dedicated-spare array\n");
 		RF_PANIC();
 	}
-	rf_lock_mutex2(raidPtr->mutex);
+	RF_LOCK_MUTEX(raidPtr->mutex);
 	raidPtr->numFailures++;
 	raidPtr->Disks[col].status = rf_ds_dist_spared;
 	raidPtr->status = rf_rs_reconfigured;
@@ -708,7 +710,7 @@ rf_SetReconfiguredMode(RF_Raid_t *raidPtr, int col)
 	 * architecture. */
 	if (raidPtr->Layout.map->flags & RF_BD_DECLUSTERED)
 		rf_InstallSpareTable(raidPtr, col);
-	rf_unlock_mutex2(raidPtr->mutex);
+	RF_UNLOCK_MUTEX(raidPtr->mutex);
 	return (0);
 }
 #endif
@@ -723,7 +725,7 @@ rf_FailDisk(RF_Raid_t *raidPtr, int fcol, int initRecon)
 
 	rf_SuspendNewRequestsAndWait(raidPtr);
 
-	rf_lock_mutex2(raidPtr->mutex);
+	RF_LOCK_MUTEX(raidPtr->mutex);
 	if (raidPtr->Disks[fcol].status != rf_ds_failed) {
 		/* must be failing something that is valid, or else it's
 		   already marked as failed (in which case we don't
@@ -732,7 +734,7 @@ rf_FailDisk(RF_Raid_t *raidPtr, int fcol, int initRecon)
 		raidPtr->Disks[fcol].status = rf_ds_failed;
 		raidPtr->status = rf_rs_degraded;
 	}
-	rf_unlock_mutex2(raidPtr->mutex);
+	RF_UNLOCK_MUTEX(raidPtr->mutex);
 
 	rf_update_component_labels(raidPtr, RF_NORMAL_COMPONENT_UPDATE);
 
@@ -742,14 +744,14 @@ rf_FailDisk(RF_Raid_t *raidPtr, int fcol, int initRecon)
 	rf_close_component(raidPtr, raidPtr->raid_cinfo[fcol].ci_vp,
 			   raidPtr->Disks[fcol].auto_configured);
 
-	rf_lock_mutex2(raidPtr->mutex);
+	RF_LOCK_MUTEX(raidPtr->mutex);
 	raidPtr->raid_cinfo[fcol].ci_vp = NULL;
 
 	/* Need to mark the component as not being auto_configured
 	   (in case it was previously). */
 
 	raidPtr->Disks[fcol].auto_configured = 0;
-	rf_unlock_mutex2(raidPtr->mutex);
+	RF_UNLOCK_MUTEX(raidPtr->mutex);
 	/* now we can allow IO to continue -- we'll be suspending it
 	   again in rf_ReconstructFailedDisk() if we have to.. */
 
@@ -785,7 +787,7 @@ rf_SuspendNewRequestsAndWait(RF_Raid_t *raidPtr)
 	if (rf_quiesceDebug)
 		printf("raid%d: Suspending new reqs\n", raidPtr->raidid);
 #endif
-	rf_lock_mutex2(raidPtr->access_suspend_mutex);
+	RF_LOCK_MUTEX(raidPtr->access_suspend_mutex);
 	raidPtr->accesses_suspended++;
 	raidPtr->waiting_for_quiescence = (raidPtr->accs_in_flight == 0) ? 0 : 1;
 
@@ -804,7 +806,7 @@ rf_SuspendNewRequestsAndWait(RF_Raid_t *raidPtr)
 	printf("raid%d: Quiescence reached..\n", raidPtr->raidid);
 #endif
 
-	rf_unlock_mutex2(raidPtr->access_suspend_mutex);
+	RF_UNLOCK_MUTEX(raidPtr->access_suspend_mutex);
 	return (raidPtr->waiting_for_quiescence);
 }
 /* wake up everyone waiting for quiescence to be released */
@@ -818,14 +820,14 @@ rf_ResumeNewRequests(RF_Raid_t *raidPtr)
 		printf("raid%d: Resuming new requests\n", raidPtr->raidid);
 #endif
 
-	rf_lock_mutex2(raidPtr->access_suspend_mutex);
+	RF_LOCK_MUTEX(raidPtr->access_suspend_mutex);
 	raidPtr->accesses_suspended--;
 	if (raidPtr->accesses_suspended == 0)
 		cb = raidPtr->quiesce_wait_list;
 	else
 		cb = NULL;
 	raidPtr->quiesce_wait_list = NULL;
-	rf_unlock_mutex2(raidPtr->access_suspend_mutex);
+	RF_UNLOCK_MUTEX(raidPtr->access_suspend_mutex);
 
 	while (cb) {
 		t = cb;
@@ -866,7 +868,7 @@ rf_ConfigureDebug(RF_Config_t *cfgPtr)
 	int     i;
 
 	rf_ResetDebugOptions();
-	for (i = 0; i < RF_MAXDBGV && cfgPtr->debugVars[i][0]; i++) {
+	for (i = 0; cfgPtr->debugVars[i][0] && i < RF_MAXDBGV; i++) {
 		name_p = rf_find_non_white(&cfgPtr->debugVars[i][0]);
 		white_p = rf_find_white(name_p);	/* skip to start of 2nd
 							 * word */
@@ -909,37 +911,4 @@ rf_print_unable_to_add_shutdown(const char *file, int line, int rc)
 {
 	RF_ERRORMSG3("Unable to add to shutdown list file %s line %d rc=%d\n",
 		     file, line, rc);
-}
-
-static void
-rf_alloc_mutex_cond(RF_Raid_t *raidPtr)
-{
-
-	rf_init_mutex2(raidPtr->mutex, IPL_VM);
-
-	rf_init_cond2(raidPtr->outstandingCond, "rfocond");
-	rf_init_mutex2(raidPtr->rad_lock, IPL_VM);
-
-	rf_init_mutex2(raidPtr->access_suspend_mutex, IPL_VM);
-	rf_init_cond2(raidPtr->access_suspend_cv, "rfquiesce");
-
-	rf_init_cond2(raidPtr->waitForReconCond, "rfrcnw");
-
-	rf_init_cond2(raidPtr->adding_hot_spare_cv, "raidhs");
-}
-
-static void
-rf_destroy_mutex_cond(RF_Raid_t *raidPtr)
-{
-
-	rf_destroy_cond2(raidPtr->waitForReconCond);
-	rf_destroy_cond2(raidPtr->adding_hot_spare_cv);
-
-	rf_destroy_mutex2(raidPtr->access_suspend_mutex);
-	rf_destroy_cond2(raidPtr->access_suspend_cv);
-
-	rf_destroy_cond2(raidPtr->outstandingCond);
-	rf_destroy_mutex2(raidPtr->rad_lock);
-
-	rf_destroy_mutex2(raidPtr->mutex);
 }

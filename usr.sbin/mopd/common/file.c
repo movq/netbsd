@@ -1,4 +1,4 @@
-/*	$NetBSD: file.c,v 1.15 2011/08/31 13:09:10 nakayama Exp $	*/
+/*	$NetBSD: file.c,v 1.10 2002/11/05 06:08:29 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1995-96 Mats O Jansson.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: file.c,v 1.15 2011/08/31 13:09:10 nakayama Exp $");
+__RCSID("$NetBSD: file.c,v 1.10 2002/11/05 06:08:29 thorpej Exp $");
 #endif
 
 #include "os.h"
@@ -58,13 +63,12 @@ __RCSID("$NetBSD: file.c,v 1.15 2011/08/31 13:09:10 nakayama Exp $");
 # endif
 #endif /* NOELF */
 
-#ifndef NOAOUT
-static int	getCLBYTES(int);
-static int	getMID(int, int);
-#endif
+int	getCLBYTES __P((int));
+int	getMID __P((int, int));
 
 const char *
-FileTypeName(mopd_imagetype type)
+FileTypeName(type)
+	mopd_imagetype type;
 {
 
 	switch (type) {
@@ -82,73 +86,80 @@ FileTypeName(mopd_imagetype type)
 }
 
 void
-mopFilePutLX(u_char *buf, int idx, u_int32_t value, int cnt)
+mopFilePutLX(buf, index, value, cnt)
+	u_char	       *buf;
+	int		index, cnt;
+	u_int32_t	value;
 {
 	int i;
 	for (i = 0; i < cnt; i++) {
-		buf[idx+i] = value % 256;
+		buf[index+i] = value % 256;
 		value = value / 256;
 	}
 }
 
 void
-mopFilePutBX(u_char *buf, int idx, u_int32_t value, int cnt)
+mopFilePutBX(buf, index, value, cnt)
+	u_char	       *buf;
+	int		index, cnt;
+	u_int32_t	value;
 {
 	int i;
 	for (i = 0; i < cnt; i++) {
-		buf[idx+cnt-1-i] = value % 256;
+		buf[index+cnt-1-i] = value % 256;
 		value = value / 256;
 	}
 }
 
 u_int32_t
-mopFileGetLX(u_char *buf, int idx, int cnt)
+mopFileGetLX(buf, index, cnt)
+	u_char	*buf;
+	int	index, cnt;
 {
 	u_int32_t ret = 0;
 	int i;
 
 	for (i = 0; i < cnt; i++) {
-		int j = idx + cnt - 1 - i;
-		if (j < 0)
-			abort();
-		ret = ret * 256 + buf[j];
+		ret = ret*256 + buf[index+cnt-1-i];
 	}
 
 	return(ret);
 }
 
 u_int32_t
-mopFileGetBX(u_char *buf, int idx, int cnt)
+mopFileGetBX(buf, index, cnt)
+	u_char	*buf;
+	int	index, cnt;
 {
 	u_int32_t ret = 0;
 	int i;
 
 	for (i = 0; i < cnt; i++) {
-		int j = idx + i;
-		if (j < 0)
-			abort();
-		ret = ret * 256 + buf[j];
+		ret = ret*256 + buf[index+i];
 	}
 
 	return(ret);
 }
 
 void
-mopFileSwapX(u_char *buf, int idx, int cnt)
+mopFileSwapX(buf, index, cnt)
+	u_char	*buf;
+	int	index, cnt;
 {
 	int i;
 	u_char c;
 
 	for (i = 0; i < (cnt / 2); i++) {
-		c = buf[idx+i];
-		buf[idx+i] = buf[idx+cnt-1-i];
-		buf[idx+cnt-1-i] = c;
+		c = buf[index+i];
+		buf[index+i] = buf[index+cnt-1-i];
+		buf[index+cnt-1-i] = c;
 	}
 
 }
 
 int
-CheckMopFile(int fd)
+CheckMopFile(fd)
+	int	fd;
 {
 	u_char	header[512];
 	short	image_type;
@@ -178,7 +189,8 @@ CheckMopFile(int fd)
 }
 
 int
-GetMopFileInfo(struct dllist *dl)
+GetMopFileInfo(dl)
+	struct		dllist *dl;
 {
 	u_char		header[512];
 	short		image_type;
@@ -289,8 +301,9 @@ GetMopFileInfo(struct dllist *dl)
 }
 
 #ifndef NOAOUT
-static int
-getMID(int old_mid, int new_mid)
+int
+getMID(old_mid,new_mid)
+	int	old_mid, new_mid;
 {
 	int	mid;
 
@@ -350,8 +363,9 @@ getMID(int old_mid, int new_mid)
 	return(mid);
 }
 
-static int
-getCLBYTES(int mid)
+int
+getCLBYTES(mid)
+	int	mid;
 {
 	int	clbytes;
 
@@ -406,7 +420,8 @@ getCLBYTES(int mid)
 #endif
 
 int
-CheckElfFile(int fd)
+CheckElfFile(fd)
+	int	fd;
 {
 #ifdef NOELF
 	return(-1);
@@ -433,7 +448,8 @@ CheckElfFile(int fd)
 }
 
 int
-GetElfFileInfo(struct dllist *dl)
+GetElfFileInfo(dl)
+	struct dllist	*dl;
 {
 #ifdef NOELF
 	return(-1);
@@ -616,7 +632,8 @@ GetElfFileInfo(struct dllist *dl)
 }
 
 int
-CheckAOutFile(int fd)
+CheckAOutFile(fd)
+	int	fd;
 {
 #ifdef NOAOUT
 	return(-1);
@@ -649,7 +666,8 @@ CheckAOutFile(int fd)
 }
 
 int
-GetAOutFileInfo(struct dllist *dl)
+GetAOutFileInfo(dl)
+	struct dllist	*dl;
 {
 #ifdef NOAOUT
 	return(-1);
@@ -671,14 +689,14 @@ GetAOutFileInfo(struct dllist *dl)
 
 	mid = getMID(mid, N_GETMID (ex));
 
-	if (mid == (uint32_t)-1) {
+	if (mid == -1) {
 		mid = getMID(mid, N_GETMID (ex_swap));
-		if (mid != (uint32_t)-1) {
+		if (mid != -1) {
 			mopFileSwapX((u_char *)&ex, 0, 4);
 		}
 	}
 
-	if (mid == (uint32_t)-1) {
+	if (mid == -1) {
 		return(-1);
 	}
 
@@ -850,32 +868,33 @@ GetAOutFileInfo(struct dllist *dl)
 }
 
 int
-GetFileInfo(struct dllist *dl)
+GetFileInfo(dl)
+	struct dllist	*dl;
 {
-	int	error;
+	int	err;
 
-	error = CheckElfFile(dl->ldfd);
-	if (error == 0) {
-		error = GetElfFileInfo(dl);
-		if (error != 0) {
+	err = CheckElfFile(dl->ldfd);
+	if (err == 0) {
+		err = GetElfFileInfo(dl);
+		if (err != 0) {
 			return(-1);
 		}
 		return (0);
 	}
 
-	error = CheckAOutFile(dl->ldfd);
-	if (error == 0) {
-		error = GetAOutFileInfo(dl);
-		if (error != 0) {
+	err = CheckAOutFile(dl->ldfd);
+	if (err == 0) {
+		err = GetAOutFileInfo(dl);
+		if (err != 0) {
 			return(-1);
 		}
 		return (0);
 	}
 
-	error = CheckMopFile(dl->ldfd);
-	if (error == 0) {
-		error = GetMopFileInfo(dl);
-		if (error != 0) {
+	err = CheckMopFile(dl->ldfd);
+	if (err == 0) {
+		err = GetMopFileInfo(dl);
+		if (err != 0) {
 			return(-1);
 		}
 		return (0);
@@ -886,7 +905,9 @@ GetFileInfo(struct dllist *dl)
 }
 
 ssize_t
-mopFileRead(struct dllist *dlslot, u_char *buf)
+mopFileRead(dlslot, buf)
+	struct dllist *dlslot;
+	u_char	*buf;
 {
 	ssize_t len, outlen;
 	int	bsz, sec;

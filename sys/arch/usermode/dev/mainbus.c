@@ -1,4 +1,4 @@
-/* $NetBSD: mainbus.c,v 1.9 2012/01/07 18:10:18 jmcneill Exp $ */
+/* $NetBSD: mainbus.c,v 1.1 2007/12/29 14:38:31 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *        This product includes software developed by Jared D. McNeill.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -27,10 +33,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.9 2012/01/07 18:10:18 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.1 2007/12/29 14:38:31 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
@@ -50,13 +57,6 @@ typedef struct mainbus_softc {
 CFATTACH_DECL_NEW(mainbus, sizeof(mainbus_softc_t),
     mainbus_match, mainbus_attach, NULL, NULL);
 
-extern char *usermode_disk_image_path[];
-extern int usermode_disk_image_path_count;
-extern char *usermode_tap_device;
-extern char *usermode_tap_eaddr;
-extern char *usermode_audio_device;
-extern int usermode_vnc_width, usermode_vnc_height, usermode_vnc_port;
-
 static int
 mainbus_match(device_t parent, cfdata_t match, void *opaque)
 {
@@ -69,7 +69,6 @@ mainbus_attach(device_t parent, device_t self, void *opaque)
 {
 	mainbus_softc_t *sc = device_private(self);
 	struct thunkbus_attach_args taa;
-	int i;
 
 	aprint_naive("\n");
 	aprint_normal("\n");
@@ -78,39 +77,10 @@ mainbus_attach(device_t parent, device_t self, void *opaque)
 
 	taa.taa_type = THUNKBUS_TYPE_CPU;
 	config_found_ia(self, "thunkbus", &taa, mainbus_print);
-
-	taa.taa_type = THUNKBUS_TYPE_TTYCONS;
-	config_found_ia(self, "thunkbus", &taa, mainbus_print);
-
-	if (usermode_vnc_port > 0 && usermode_vnc_port < 65536) {
-		taa.taa_type = THUNKBUS_TYPE_VNCFB;
-		taa.u.vnc.width = usermode_vnc_width;
-		taa.u.vnc.height = usermode_vnc_height;
-		taa.u.vnc.port = usermode_vnc_port;
-		config_found_ia(self, "thunkbus", &taa, mainbus_print);
-	}
-
 	taa.taa_type = THUNKBUS_TYPE_CLOCK;
 	config_found_ia(self, "thunkbus", &taa, mainbus_print);
-
-	if (usermode_tap_device) {
-		taa.taa_type = THUNKBUS_TYPE_VETH;
-		taa.u.veth.device = usermode_tap_device;
-		taa.u.veth.eaddr = usermode_tap_eaddr;
-		config_found_ia(self, "thunkbus", &taa, mainbus_print);
-	}
-
-	if (usermode_audio_device) {
-		taa.taa_type = THUNKBUS_TYPE_VAUDIO;
-		taa.u.vaudio.device = usermode_audio_device;
-		config_found_ia(self, "thunkbus", &taa, mainbus_print);
-	}
-
-	for (i = 0; i < usermode_disk_image_path_count; i++) {
-		taa.taa_type = THUNKBUS_TYPE_DISKIMAGE;
-		taa.u.diskimage.path = usermode_disk_image_path[i];
-		config_found_ia(self, "thunkbus", &taa, mainbus_print);
-	}
+	taa.taa_type = THUNKBUS_TYPE_TTYCONS;
+	config_found_ia(self, "thunkbus", &taa, mainbus_print);
 }
 
 static int

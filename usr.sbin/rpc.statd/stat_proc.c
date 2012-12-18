@@ -1,4 +1,4 @@
-/*	$NetBSD: stat_proc.c,v 1.8 2009/04/18 13:04:50 lukem Exp $	*/
+/*	$NetBSD: stat_proc.c,v 1.7 2005/11/03 19:36:42 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1995
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: stat_proc.c,v 1.8 2009/04/18 13:04:50 lukem Exp $");
+__RCSID("$NetBSD: stat_proc.c,v 1.7 2005/11/03 19:36:42 bouyer Exp $");
 #endif
 
 #include <errno.h>
@@ -62,7 +62,7 @@ sm_stat_1_svc(arg, req)
 	sm_name *arg;
 	struct svc_req *req;
 {
-	static sm_stat_res smres;
+	static sm_stat_res res;
 	struct addrinfo *ai;
 
 	NO_ALARM;
@@ -70,17 +70,17 @@ sm_stat_1_svc(arg, req)
 		syslog(LOG_DEBUG, "stat called for host %s", arg->mon_name);
 
 	if (getaddrinfo(arg->mon_name, NULL, NULL, &ai) == 0) {
-		smres.res_stat = stat_succ;
+		res.res_stat = stat_succ;
 		freeaddrinfo(ai);
 	} else {
 		syslog(LOG_ERR, "invalid hostname to sm_stat: %s",
 		    arg->mon_name);
-		smres.res_stat = stat_fail;
+		res.res_stat = stat_fail;
 	}
 
-	smres.state = status_info.ourState;
+	res.state = status_info.ourState;
 	ALARM;
-	return (&smres);
+	return (&res);
 }
 
 /* sm_mon_1 ---------------------------------------------------------------- */
@@ -96,7 +96,7 @@ sm_mon_1_svc(arg, req)
 	mon *arg;
 	struct svc_req *req;
 {
-	static sm_stat_res smres;
+	static sm_stat_res res;
 	struct addrinfo *ai;
 	HostInfo *hp, h;
 	MonList *lp;
@@ -109,8 +109,8 @@ sm_mon_1_svc(arg, req)
 		    arg->mon_id.my_id.my_name, arg->mon_id.my_id.my_prog,
 		    arg->mon_id.my_id.my_vers, arg->mon_id.my_id.my_proc);
 	}
-	smres.res_stat = stat_fail;	/* Assume fail until set otherwise */
-	smres.state = status_info.ourState;
+	res.res_stat = stat_fail;	/* Assume fail until set otherwise */
+	res.state = status_info.ourState;
 
 	/*
 	 * Find existing host entry, or create one if not found.  If
@@ -119,7 +119,7 @@ sm_mon_1_svc(arg, req)
 	if (getaddrinfo(arg->mon_id.mon_name, NULL, NULL, &ai) != 0) {
 		syslog(LOG_ERR, "Invalid hostname to sm_mon: %s",
 		    arg->mon_id.mon_name);
-		return &smres;
+		return &res;
 	}
 
 	freeaddrinfo(ai);
@@ -143,10 +143,10 @@ sm_mon_1_svc(arg, req)
 		hp->monList = lp;
 		change_host(arg->mon_id.mon_name, hp);
 		sync_file();
-		smres.res_stat = stat_succ;	/* Report success */
+		res.res_stat = stat_succ;	/* Report success */
 	}
 	ALARM;
-	return (&smres);
+	return (&res);
 }
 
 /* do_unmon ---------------------------------------------------------------- */
@@ -203,7 +203,7 @@ sm_unmon_1_svc(arg, req)
 	mon_id *arg;
 	struct svc_req *req;
 {
-	static sm_stat smres;
+	static sm_stat res;
 	HostInfo *hp, h;
 
 	NO_ALARM;
@@ -227,10 +227,10 @@ sm_unmon_1_svc(arg, req)
 		syslog(LOG_ERR, "unmon request from %s for unknown host %s",
 		    arg->my_id.my_name, arg->mon_name);
 
-	smres.state = status_info.ourState;
+	res.state = status_info.ourState;
 	ALARM;
 
-	return (&smres);
+	return (&res);
 }
 
 /* sm_unmon_all_1 ---------------------------------------------------------- */
@@ -245,7 +245,7 @@ sm_unmon_all_1_svc(arg, req)
 	my_id *arg;
 	struct svc_req *req;
 {
-	static sm_stat smres;
+	static sm_stat res;
 
 	NO_ALARM;
 	if (debug) {
@@ -257,10 +257,10 @@ sm_unmon_all_1_svc(arg, req)
 	unmon_hosts();
 	sync_file();
 
-	smres.state = status_info.ourState;
+	res.state = status_info.ourState;
 	ALARM;
 
-	return (&smres);
+	return (&res);
 }
 
 /* sm_simu_crash_1 --------------------------------------------------------- */

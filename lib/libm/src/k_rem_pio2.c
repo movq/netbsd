@@ -12,7 +12,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: k_rem_pio2.c,v 1.12 2010/04/23 19:17:07 drochner Exp $");
+__RCSID("$NetBSD: k_rem_pio2.c,v 1.11 2003/01/04 23:43:03 wiz Exp $");
 #endif
 
 /*
@@ -131,7 +131,6 @@ __RCSID("$NetBSD: k_rem_pio2.c,v 1.12 2010/04/23 19:17:07 drochner Exp $");
  * to produce the hexadecimal values shown.
  */
 
-#include "namespace.h"
 #include "math.h"
 #include "math_private.h"
 

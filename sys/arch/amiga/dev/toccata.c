@@ -1,4 +1,4 @@
-/* $NetBSD: toccata.c,v 1.15 2011/11/23 23:07:28 jmcneill Exp $ */
+/* $NetBSD: toccata.c,v 1.12 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2001, 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: toccata.c,v 1.15 2011/11/23 23:07:28 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: toccata.c,v 1.12 2008/04/28 20:23:12 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -38,7 +38,8 @@ __KERNEL_RCSID(0, "$NetBSD: toccata.c,v 1.15 2011/11/23 23:07:28 jmcneill Exp $"
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/fcntl.h>		/* FREAD */
-#include <sys/bus.h>
+
+#include <machine/bus.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -174,8 +175,6 @@ int toccata_set_port(void *, mixer_ctrl_t *);
 int toccata_get_port(void *, mixer_ctrl_t *);
 int toccata_query_devinfo(void *, mixer_devinfo_t *);
 
-void toccata_get_locks(void *, kmutex_t **, kmutex_t **);
-
 const struct audio_hw_if audiocs_hw_if = {
 	toccata_open,
 	toccata_close,
@@ -207,8 +206,6 @@ const struct audio_hw_if audiocs_hw_if = {
 	toccata_get_props,
 	0,	/* trigger_output */
 	0,
-	0,
-	toccata_get_locks,
 };
 
 struct toccata_softc {
@@ -223,19 +220,16 @@ struct toccata_softc {
 
 	void			(*sc_playmore)(void *);
 	void			 *sc_playarg;
-
-	kmutex_t		sc_lock;
-	kmutex_t		sc_intr_lock;
 };
 
-int toccata_match(device_t, cfdata_t, void *);
-void toccata_attach(device_t, device_t, void *);
+int toccata_match(struct device *, struct cfdata *, void *);
+void toccata_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(toccata, sizeof(struct toccata_softc),
+CFATTACH_DECL(toccata, sizeof(struct toccata_softc),
     toccata_match, toccata_attach, NULL, NULL);
 
 int
-toccata_match(device_t parent, cfdata_t cfp, void *aux)
+toccata_match(struct device *parent, struct cfdata *cfp, void *aux)
 {
 	struct zbus_args *zap;
 
@@ -251,16 +245,15 @@ toccata_match(device_t parent, cfdata_t cfp, void *aux)
 }
 
 void
-toccata_attach(device_t parent, device_t self, void *aux)
+toccata_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct toccata_softc *sc;
 	struct ad1848_softc *asc;
 	struct zbus_args *zap;
 	volatile uint8_t *boardp;
 
-	sc = device_private(self);
+	sc = (struct toccata_softc *)self;
 	asc = &sc->sc_ad;
-	asc->sc_dev = self;
 	zap = aux;
 
 	boardp = (volatile uint8_t *)zap->va;
@@ -282,15 +275,12 @@ toccata_attach(device_t parent, device_t self, void *aux)
 	sc->sc_captbuf = 0;
 	sc->sc_playmore = 0;
 
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
-
 	sc->sc_isr.isr_ipl = 6;
 	sc->sc_isr.isr_arg = sc;
 	sc->sc_isr.isr_intr = toccata_intr;
 	add_isr(&sc->sc_isr);
 
-	audio_attach_mi(&audiocs_hw_if, sc, self);
+	audio_attach_mi(&audiocs_hw_if, sc, &asc->sc_dev);
 
 }
 
@@ -304,20 +294,14 @@ toccata_intr(void *tag) {
 	int i;
 
 	sc = tag;
-
-	mutex_spin_enter(&sc->sc_intr_lock);
-
 	status = *(sc->sc_boardp);
 
-	if (status & TOCC_FIFO_INT) {	/* active low */
-		mutex_spin_exit(&sc->sc_intr_lock);
+	if (status & TOCC_FIFO_INT)	/* active low */
 		return 0;
-	}
 
 	if (status & TOCC_FIFO_PBHE) {
 		if (sc->sc_playmore) {
 			(*sc->sc_playmore)(sc->sc_playarg);
-			mutex_spin_exit(&sc->sc_intr_lock);
 			return 1;
 		}
 	} else if (status & TOCC_FIFO_CPHF) {
@@ -334,7 +318,6 @@ toccata_intr(void *tag) {
 
 			/* XXX if (sc->sc_captmore) { */
 			(*sc->sc_captmore)(sc->sc_captarg);
-			mutex_spin_exit(&sc->sc_intr_lock);
 			return 1;
 		}
 	}
@@ -346,11 +329,10 @@ toccata_intr(void *tag) {
 	 * FIFO interrupt.
 	 */
 #ifdef DEBUG
-	printf("%s: got unexpected interrupt %x\n",
-	    device_xname(sc->sc_ad.sc_dev), status);
+	printf("%s: got unexpected interrupt %x\n", sc->sc_ad.sc_dev.dv_xname,
+	    status);
 #endif
 	*sc->sc_boardp = TOCC_ACT;
-	mutex_spin_exit(&sc->sc_intr_lock);
 	return 1;
 }
 
@@ -458,15 +440,6 @@ int
 toccata_get_props(void *addr)
 {
 	return 0;
-}
-
-void
-toccata_get_locks(void *opaque, kmutex_t **intr, kmutex_t **thread)
-{
-	struct toccata_softc *sc = opaque;
-
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
 }
 
 int

@@ -1,4 +1,4 @@
-/*	$NetBSD: verify.c,v 1.43 2012/10/05 01:31:05 christos Exp $	*/
+/*	$NetBSD: verify.c,v 1.39 2006/10/07 15:35:51 elad Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)verify.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: verify.c,v 1.43 2012/10/05 01:31:05 christos Exp $");
+__RCSID("$NetBSD: verify.c,v 1.39 2006/10/07 15:35:51 elad Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,11 +64,11 @@ static void	miss(NODE *, char *);
 static int	vwalk(void);
 
 int
-verify(FILE *fi)
+verify(void)
 {
 	int rval;
 
-	root = spec(fi);
+	root = spec(stdin);
 	rval = vwalk();
 	miss(root, path);
 	return (rval);
@@ -124,8 +124,7 @@ vwalk(void)
 			    !fnmatch(ep->name, p->fts_name, FNM_PATHNAME)) ||
 			    !strcmp(ep->name, p->fts_name)) {
 				ep->flags |= F_VISIT;
-				if ((ep->flags & F_NOCHANGE) == 0 &&
-				    compare(ep, p))
+				if (compare(ep, p))
 					rval = MISMATCHEXIT;
 				if (!(ep->flags & F_IGN) &&
 				    ep->type == F_DIR &&
@@ -142,7 +141,7 @@ vwalk(void)
 		if (ep)
 			continue;
  extra:
-		if (!eflag && !(dflag && p->fts_info == FTS_SL)) {
+		if (!eflag) {
 			printf("extra: %s", RP(p));
 			if (rflag) {
 				if ((S_ISDIR(p->fts_statp->st_mode)
@@ -176,17 +175,8 @@ miss(NODE *p, char *tail)
 		if (p->type != F_DIR && (dflag || p->flags & F_VISIT))
 			continue;
 		strcpy(tail, p->name);
-		if (!(p->flags & F_VISIT)) {
-			/* Don't print missing message if file exists as a 
-			   symbolic link and the -q flag is set. */
-			struct stat statbuf;
-
-			if (qflag && stat(path, &statbuf) == 0 &&
-			    S_ISDIR(statbuf.st_mode))
-				p->flags |= F_VISIT;
-			else
-				(void)printf("%s missing", path);
-		}
+		if (!(p->flags & F_VISIT))
+			printf("missing: %s", path);
 		switch (p->type) {
 		case F_BLOCK:
 		case F_CHAR:

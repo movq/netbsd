@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_softint.c,v 1.38 2011/09/27 01:02:38 jym Exp $	*/
+/*	$NetBSD: kern_softint.c,v 1.23.4.3 2010/01/16 17:41:14 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
@@ -176,9 +176,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_softint.c,v 1.38 2011/09/27 01:02:38 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_softint.c,v 1.23.4.3 2010/01/16 17:41:14 bouyer Exp $");
 
 #include <sys/param.h>
+#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/intr.h>
 #include <sys/mutex.h>
@@ -262,7 +263,6 @@ softint_init_isr(softcpu_t *sc, const char *desc, pri_t pri, u_int level)
 	si->si_lwp->l_private = si;
 	softint_init_md(si->si_lwp, level, &si->si_machdep);
 }
-
 /*
  * softint_init:
  *
@@ -284,7 +284,6 @@ softint_init(struct cpu_info *ci)
 		    sizeof(softhand_t);
 	}
 
-	/* Use uvm_km(9) for persistent, page-aligned allocation. */
 	sc = (softcpu_t *)uvm_km_alloc(kernel_map, softint_bytes, 0,
 	    UVM_KMF_WIRED | UVM_KMF_ZERO);
 	if (sc == NULL)
@@ -346,10 +345,9 @@ softint_establish(u_int flags, void (*func)(void *), void *arg)
 
 	/* Find a free slot. */
 	sc = curcpu()->ci_data.cpu_softcpu;
-	for (index = 1; index < softint_max; index++) {
+	for (index = 1; index < softint_max; index++)
 		if (sc->sc_hand[index].sh_func == NULL)
 			break;
-	}
 	if (index == softint_max) {
 		mutex_exit(&softint_lock);
 		printf("WARNING: softint_establish: table full, "
@@ -409,7 +407,7 @@ softint_disestablish(void *arg)
 	 * all CPUs.  Once softint_disestablish() is called, the caller
 	 * commits to not trigger the interrupt and set SOFTINT_ACTIVE on
 	 * it again.  So, we are only looking for handler records with
-	 * SOFTINT_ACTIVE already set.
+	 * SOFTINT_ACTIVE alreay set.
 	 */
 	where = xc_broadcast(0, (xcfunc_t)nullop, NULL, NULL);
 	xc_wait(where);
@@ -465,9 +463,8 @@ softint_schedule(void *arg)
 	sh = (softhand_t *)((uint8_t *)curcpu()->ci_data.cpu_softcpu + offset);
 
 	/* If it's already pending there's nothing to do. */
-	if ((sh->sh_flags & SOFTINT_PENDING) != 0) {
+	if ((sh->sh_flags & SOFTINT_PENDING) != 0)
 		return;
-	}
 
 	/*
 	 * Enqueue the handler into the LWP's pending list.
@@ -540,11 +537,6 @@ softint_execute(softint_t *si, lwp_t *l, int s)
 			havelock = true;
 		}
 		(*sh->sh_func)(sh->sh_arg);
-
-		/* Diagnostic: check that spin-locks have not leaked. */
-		KASSERTMSG(curcpu()->ci_mtx_count == 0,
-		    "%s: ci_mtx_count (%d) != 0, sh_func %p\n",
-		    __func__, curcpu()->ci_mtx_count, sh->sh_func);
 	
 		(void)splhigh();
 		KASSERT((sh->sh_flags & SOFTINT_ACTIVE) != 0);
@@ -559,7 +551,7 @@ softint_execute(softint_t *si, lwp_t *l, int s)
 	 * Unlocked, but only for statistics.
 	 * Should be per-CPU to prevent cache ping-pong.
 	 */
-	curcpu()->ci_data.cpu_nsoft++;
+	uvmexp.softs++;
 
 	KASSERT(si->si_cpu == curcpu());
 	KASSERT(si->si_lwp->l_wchan == NULL);
@@ -729,21 +721,17 @@ softint_overlay(void)
 	int s;
 
 	l = curlwp;
-	KASSERT((l->l_pflag & LP_INTR) == 0);
-
-	/*
-	 * Arrange to elevate priority if the LWP blocks.  Also, bind LWP
-	 * to the CPU.  Note: disable kernel preemption before doing that.
-	 */
-	s = splhigh();
 	ci = l->l_cpu;
 	si = ((softcpu_t *)ci->ci_data.cpu_softcpu)->sc_int;
 
+	KASSERT((l->l_pflag & LP_INTR) == 0);
+
+	/* Arrange to elevate priority if the LWP blocks. */
+	s = splhigh();
 	obase = l->l_kpribase;
 	l->l_kpribase = PRI_KERNEL_RT;
 	oflag = l->l_pflag;
 	l->l_pflag = oflag | LP_INTR | LP_BOUND;
-
 	while ((softints = ci->ci_data.cpu_softints) != 0) {
 		if ((softints & (1 << SOFTINT_SERIAL)) != 0) {
 			ci->ci_data.cpu_softints &= ~(1 << SOFTINT_SERIAL);
@@ -800,7 +788,6 @@ softint_dispatch(lwp_t *pinned, int s)
 	u_int timing;
 	lwp_t *l;
 
-	KASSERT((pinned->l_pflag & LP_RUNNING) != 0);
 	l = curlwp;
 	si = l->l_private;
 

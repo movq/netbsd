@@ -1,4 +1,4 @@
-# $NetBSD: ad.x86_64,v 1.6 2009/06/12 01:55:59 mrg Exp $
+# $NetBSD: ad.x86_64,v 1.5.2.1 2009/09/17 04:24:27 snj Exp $
 ./usr/X11R6/bin/inb					-unknown-	x11
 ./usr/X11R6/bin/inl					-unknown-	x11
 ./usr/X11R6/bin/inw					-unknown-	x11

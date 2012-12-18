@@ -1,5 +1,5 @@
-/*	$Id: at91busvar.h,v 1.6 2012/11/12 18:00:36 skrll Exp $	*/
-/*	$NetBSD: at91busvar.h,v 1.6 2012/11/12 18:00:36 skrll Exp $ */
+/*	$Id: at91busvar.h,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
+/*	$NetBSD: at91busvar.h,v 1.2 2008/07/03 01:15:38 matt Exp $ */
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -13,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,18 +40,18 @@
 #include <sys/device.h>
 #include <sys/queue.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <arm/at91/at91piovar.h>
 
 
 /* clocks: */
 struct at91bus_clocks {
-	uint32_t		slow;		/* slow clock in Hz	*/
-	uint32_t		main;		/* main clock in Hz	*/
-	uint32_t		cpu;		/* processor clock in Hz */
-	uint32_t		master;		/* master clock in Hz	*/
-	uint32_t		plla;		/* PLLA clock */
-	uint32_t		pllb;		/* PLLB clock */
+	u_int32_t		slow;		/* slow clock in Hz	*/
+	u_int32_t		main;		/* main clock in Hz	*/
+	u_int32_t		cpu;		/* processor clock in Hz */
+	u_int32_t		master;		/* master clock in Hz	*/
+	u_int32_t		plla;		/* PLLA clock */
+	u_int32_t		pllb;		/* PLLB clock */
 };
 
 extern struct at91bus_clocks at91bus_clocks;
@@ -75,7 +81,7 @@ struct at91bus_softc {
 	bus_dma_tag_t		sc_dmat;
 };
 
-struct trapframe;
+struct irqframe;
 
 struct at91bus_machdep {
 	/* initialization: */
@@ -95,7 +101,7 @@ struct at91bus_machdep {
 	void *(*intr_establish)(int pid, int ipl, int type, int (*ih_func)(void *), void *arg);
 	void (*intr_disestablish)(void *cookie);
 	void (*intr_poll)(void *cookie, int flags);
-	void (*intr_dispatch)(struct trapframe *);
+	void (*intr_dispatch)(struct irqframe *);
 
 	/* configuration */
 	const char *(*peripheral_name)(int pid);
@@ -108,7 +114,7 @@ typedef const struct at91bus_machdep * at91bus_tag_t;
 extern const struct at91bus_machdep at91rm9200bus;
 #endif
 
-extern uint32_t at91_chip_id;
+extern u_int32_t at91_chip_id;
 #define	AT91_CHIP_ID()	at91_chip_id
 extern at91bus_tag_t at91bus_tag;
 extern struct bus_space at91_bs_tag;

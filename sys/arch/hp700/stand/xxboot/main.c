@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.10 2012/02/24 18:45:20 skrll Exp $	*/
+/*	$NetBSD: main.c,v 1.6 2008/04/09 19:18:25 skrll Exp $	*/
 
 /*
  * Copyright (c) 2003 ITOH Yasufumi.
@@ -99,7 +99,10 @@ extern char diskbuf[2048];
 #define MASK_BLK_PER_READ	(BLK_PER_READ - 1)
 
 void
-RAW_READ(void *buf, daddr_t blkpos, size_t bytelen)
+RAW_READ(buf, blkpos, bytelen)
+	void *buf;
+	daddr_t blkpos;
+	size_t bytelen;
 {
 	char *b = buf;
 	size_t off, readlen;
@@ -153,7 +156,9 @@ RAW_READ(void *buf, daddr_t blkpos, size_t bytelen)
  * buf must have enough space
  */
 static char *
-hexstr(char *buf, unsigned val)
+hexstr(buf, val)
+	char *buf;
+	unsigned val;
 {
 	unsigned v;
 	char rev[16];
@@ -175,10 +180,10 @@ hexstr(char *buf, unsigned val)
 }
 
 void
-ipl_main(unsigned interactive, unsigned sptop, unsigned psw)
-	/* interactive:		 parameters from PDC */
-	/* sptop:			 value of sp on function entry */
-	/* psw:			 PSW on startup */
+ipl_main(interactive, sptop, psw)
+	unsigned interactive;		/* parameters from PDC */
+	unsigned sptop;			/* value of sp on function entry */
+	unsigned psw;			/* PSW on startup */
 {
 	char buf[32];
 	int part = 0;		/* default partition "a" */
@@ -294,7 +299,10 @@ ipl_main(unsigned interactive, unsigned sptop, unsigned psw)
 }
 
 void
-load_file(const char *path, unsigned loadadr, unsigned interactive, int part)
+load_file(path, loadadr, interactive, part)
+	const char *path;
+	unsigned loadadr, interactive;
+	int part;
 {
 
 	/* look-up the file */
@@ -305,8 +313,11 @@ load_file(const char *path, unsigned loadadr, unsigned interactive, int part)
 }
 
 void
-load_file_ino(ino32_t ino, const char *fn, unsigned loadadr, unsigned interactive, int part)
-	/* fn:		 for message only */
+load_file_ino(ino, fn, loadadr, interactive, part)
+	ino32_t ino;
+	const char *fn;		/* for message only */
+	unsigned loadadr, interactive;
+	int part;
 {
 	union ufs_dinode dinode;
 	size_t sz;
@@ -344,7 +355,9 @@ load_file_ino(ino32_t ino, const char *fn, unsigned loadadr, unsigned interactiv
  * fill in loading information from an ELF executable
  */
 static inline void
-xi_elf32(struct loadinfo *inf, Elf32_Ehdr *hdr)
+xi_elf32(inf, hdr)
+	struct loadinfo *inf;
+	Elf32_Ehdr *hdr;
 {
 	char *top = (void *) hdr;
 	Elf32_Phdr *ph;
@@ -361,7 +374,9 @@ xi_elf32(struct loadinfo *inf, Elf32_Ehdr *hdr)
 }
 
 static inline void
-xi_elf64(struct loadinfo *inf, Elf64_Ehdr *hdr)
+xi_elf64(inf, hdr)
+	struct loadinfo *inf;
+	Elf64_Ehdr *hdr;
 {
 	char *top = (void *) hdr;
 	Elf64_Phdr *ph;
@@ -382,27 +397,29 @@ xi_elf64(struct loadinfo *inf, Elf64_Ehdr *hdr)
 }
 
 int
-xi_load(struct loadinfo *inf, void *buf)
+xi_load(inf, buf)
+	struct loadinfo *inf;
+	void *buf;
 {
 	Elf32_Ehdr *e32hdr = buf;
 	Elf64_Ehdr *e64hdr = buf;
-	uint16_t class_data;
+	u_int16_t class_data;
 
 	/*
 	 * check ELF header
 	 * (optimized assuming big endian byte order)
 	 */
 	/* ELF magic */
-	if (*(uint32_t *)&e32hdr->e_ident[EI_MAG0] !=
+	if (*(u_int32_t *)&e32hdr->e_ident[EI_MAG0] !=
 		(ELFMAG0 << 24 | ELFMAG1 << 16 | ELFMAG2 << 8 | ELFMAG3) ||
 	    e32hdr->e_ident[EI_VERSION] != EV_CURRENT)
 		return 1;	/* Not an ELF */
 
 	/* file and machine type */
-	if (*(uint32_t *)&e32hdr->e_type != (ET_EXEC << 16 | EM_PARISC))
+	if (*(u_int32_t *)&e32hdr->e_type != (ET_EXEC << 16 | EM_PARISC))
 		return 1;	/* Not an executable / Wrong architecture */
 
-	if ((class_data = *(uint16_t *)&e32hdr->e_ident[EI_CLASS]) ==
+	if ((class_data = *(u_int16_t *)&e32hdr->e_ident[EI_CLASS]) ==
 	    (ELFCLASS32 << 8 | ELFDATA2MSB)) {
 
 		/* support one section executable (ld -N) only */
@@ -428,7 +445,7 @@ xi_load(struct loadinfo *inf, void *buf)
 	memmove(buf, inf->sec_image, inf->sec_size);
 
 #if 0	/* XXX bss clear is done by the secondary boot itself */
-	memset((char *) buf + inf->sec_size, 0, inf->sec_pad);
+	bzero((char *) buf + inf->sec_size, inf->sec_pad);
 #endif
 
 	return 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.30 2012/10/13 17:58:54 jdc Exp $	*/
+/*	$NetBSD: machdep.c,v 1.23 2007/10/17 19:55:51 garbled Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.30 2012/10/13 17:58:54 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.23 2007/10/17 19:55:51 garbled Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_mvmetype.h"
@@ -40,12 +40,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.30 2012/10/13 17:58:54 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
-#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/exec.h>
 #include <sys/extent.h>
-#include <sys/intr.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
@@ -56,15 +54,22 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.30 2012/10/13 17:58:54 jdc Exp $");
 #include <sys/syscallargs.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
+#include <sys/user.h>
+
+#include <uvm/uvm_extern.h>
+
 #include <sys/sysctl.h>
+
+#include <net/netisr.h>
 
 #include <machine/autoconf.h>
 #include <machine/bootinfo.h>
+#include <machine/bus.h>
+#include <machine/intr.h>
+#include <machine/pmap.h>
 #include <machine/platform.h>
 #include <machine/powerpc.h>
-
-#include <powerpc/pmap.h>
-#include <powerpc/trap.h>
+#include <machine/trap.h>
 
 #include <powerpc/oea/bat.h>
 
@@ -157,14 +162,14 @@ initppc(u_long startkernel, u_long endkernel, void *btinfo)
  * Machine dependent startup code.
  */
 void
-cpu_startup(void)
+cpu_startup()
 {
 	char modelbuf[256];
 
 	/*
 	 * Mapping PReP-compatible interrput vector register.
 	 */
-	prep_intr_reg = (vaddr_t) mapiodev(MVMEPPC_INTR_REG, PAGE_SIZE, false);
+	prep_intr_reg = (vaddr_t) mapiodev(MVMEPPC_INTR_REG, PAGE_SIZE);
 	if (!prep_intr_reg)
 		panic("startup: no room for interrupt register");
 
@@ -193,7 +198,7 @@ cpu_startup(void)
  * Initialize system console.
  */
 void
-consinit(void)
+consinit()
 {
 	static int initted = 0;
 
@@ -208,7 +213,7 @@ consinit(void)
 		pfb_cnattach(consinfo->addr);
 #if (NPCKBC > 0)
 		pckbc_cnattach(&mvmeppc_isa_io_space_tag, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT, 0);
+		    PCKBC_KBD_SLOT);
 #endif
 		return;
 	}
@@ -228,7 +233,7 @@ consinit(void)
 dokbd:
 #if (NPCKBC > 0)
 		pckbc_cnattach(&mvmeppc_isa_io_space_tag, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT, 0);
+		    PCKBC_KBD_SLOT);
 #endif
 		return;
 	}
@@ -282,8 +287,6 @@ cpu_reboot(int howto, char *what)
 
 halt_sys:
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	if (howto & RB_HALT) {
                 printf("\n");

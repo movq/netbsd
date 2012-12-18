@@ -1,4 +1,4 @@
-/* $NetBSD: wsfontload.c,v 1.17 2011/08/31 13:32:42 joerg Exp $ */
+/* $NetBSD: wsfontload.c,v 1.13 2008/05/26 12:15:42 drochner Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -45,7 +45,7 @@
 #define DEFBITORDER	WSDISPLAY_FONTORDER_L2R
 #define DEFBYTEORDER	WSDISPLAY_FONTORDER_L2R
 
-__dead static void usage(void);
+static void usage(void);
 static int getencoding(char *);
 static const char *rgetencoding(int);
 static const char *rgetfontorder(int);
@@ -68,7 +68,6 @@ static struct {
 	{"pcvt", WSDISPLAY_FONTENC_PCVT},
 	{"iso7", WSDISPLAY_FONTENC_ISO7},
 	{"iso2", WSDISPLAY_FONTENC_ISO2},
-	{"koi8r", WSDISPLAY_FONTENC_KOI8_R},
 };
 
 static void
@@ -76,8 +75,8 @@ usage(void)
 {
 
 	(void)fprintf(stderr,
-		"usage: %s [-Bbv] [-e encoding] [-f wsdev] [-h height]"
-		" [-N name] [-w width] [fontfile]\n",
+		"usage: %s [-f wsdev] [-w width] [-h height] [-e encoding]"
+		" [-N name] [-b] [-B] [fontfile]\n",
 		      getprogname());
 	exit(1);
 }
@@ -88,7 +87,7 @@ usage(void)
 static const char *
 rgetfontorder(int fontorder)
 {
-	size_t i;
+	int i;
 
 	for (i = 0; i < sizeof(fontorders) / sizeof(fontorders[0]); i++)
 		if (fontorders[i].val == fontorder)
@@ -103,7 +102,7 @@ rgetfontorder(int fontorder)
 static const char *
 rgetencoding(int enc)
 {
-	size_t i;
+	int i;
 
 	for (i = 0; i < sizeof(encodings) / sizeof(encodings[0]); i++)
 		if (encodings[i].val == enc)
@@ -118,16 +117,15 @@ rgetencoding(int enc)
 static int
 getencoding(char *name)
 {
-	size_t i;
-	int j;
+	int i;
 
 	for (i = 0; i < sizeof(encodings) / sizeof(encodings[0]); i++)
 		if (!strcmp(name, encodings[i].name))
 			return (encodings[i].val);
 
-	if (sscanf(name, "%d", &j) != 1)
+	if (sscanf(name, "%d", &i) != 1)
 		errx(1, "invalid encoding");
-	return (j);
+	return (i);
 }
 
 int
@@ -215,7 +213,7 @@ main(int argc, char **argv)
 	res = read(ffd, buf, len);
 	if (res < 0)
 		err(4, "read font");
-	if ((size_t)res != len)
+	if (res != len)
 		errx(4, "short read");
 
 	f.data = buf;

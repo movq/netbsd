@@ -1,7 +1,7 @@
-/* $NetBSD: siisatareg.h,v 1.7 2011/11/02 16:03:01 jakllsch Exp $ */
+/* $NetBSD: siisatareg.h,v 1.2.4.2 2009/09/28 00:24:52 snj Exp $ */
 
-/*
- * Copyright (c) 2007, 2008, 2009, 2010, 2011 Jonathan A. Kollasch.
+/*-
+ * Copyright (c) 2007, 2008, 2009 Jonathan A. Kollasch.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,9 +25,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-
-#ifndef _IC_SIISATAREG_H_
-#define _IC_SIISATAREG_H_
 
 /* Silicon Image SATA 2 controller register defines */
 
@@ -54,13 +51,13 @@ struct siisata_sge {
 #define SGE_FLAG_LNK __BIT(30)
 #define SGE_FLAG_DRD __BIT(29)
 #define SGE_FLAG_XCF __BIT(28)
-} __packed __aligned(8);
+} __packed;
 
 /* Scatter/Gather Table */
 /* must be aligned to 64-bit boundary */
 struct siisata_sgt {
 	struct siisata_sge sgt_sge[4];
-} __packed __aligned(8);
+} __packed;
 
 /* Port Request Block */
 struct siisata_prb {
@@ -86,7 +83,7 @@ struct siisata_prb {
 /* First SGE in PRB is always reserved for ATAPI in this implementation. */
 	uint8_t prb_atapi[16]; /* zero for non-ATAPI */
 	struct siisata_sge prb_sge[1]; /* extended to NSGE */
-} __packed __aligned(8);
+} __packed;
 
 
 #define SIISATA_NSGE ((MAXPHYS/PAGE_SIZE) + 1)
@@ -98,11 +95,6 @@ struct siisata_prb {
 #define SIISATA_PCI_BAR0 0x10
 #define SIISATA_PCI_BAR1 0x18
 #define SIISATA_PCI_BAR2 0x20
-
-/* Cardbus stuff */
-#define SIISATA_CARDBUS_BAR0 SIISATA_PCI_BAR0
-#define SIISATA_CARDBUS_BAR1 SIISATA_PCI_BAR1
-#define SIISATA_CARDBUS_BAR2 SIISATA_PCI_BAR2
 
 /* BAR 0 */
 
@@ -253,5 +245,3 @@ struct siisata_prb {
 #define PR_PSS_ATTENTION	__BIT(31)
 #define PR_PSS_SLOT_MASK	__BITS(30, 0)
 #define PR_PXSS(n)		__SHIFTIN(__BIT(n), PR_PSS_SLOT_MASK)
-
-#endif /* !_IC_SIISATAREG_H_ */

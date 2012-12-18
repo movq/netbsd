@@ -1,4 +1,4 @@
-/* $NetBSD: videoio.h,v 1.8 2011/08/13 02:49:06 jakllsch Exp $ */
+/* $NetBSD: videoio.h,v 1.4 2008/09/25 19:34:49 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2005, 2008 Jared D. McNeill <jmcneill@invisible.ca>
@@ -32,9 +32,6 @@
 
 #include <sys/types.h>
 #include <sys/time.h>
-#ifdef _KERNEL
-#include <compat/sys/time.h>
-#endif
 
 #ifndef _KERNEL
 #define __u64	uint64_t
@@ -156,27 +153,6 @@ struct v4l2_buffer {
 	uint32_t	reserved;
 };
 
-#ifdef _KERNEL
-struct v4l2_buffer50 {
-	uint32_t	index;
-	enum v4l2_buf_type type;
-	uint32_t	bytesused;
-	uint32_t	flags;
-	enum v4l2_field	field;
-	struct timeval50 timestamp;
-	struct v4l2_timecode timecode;
-	uint32_t	sequence;
-	enum v4l2_memory memory;
-	union {
-		uint32_t	offset;
-		unsigned long	userptr;
-	} m;
-	uint32_t	length;
-	uint32_t	input;
-	uint32_t	reserved;
-};
-
-#endif
 struct v4l2_rect {
 	int32_t		left;
 	int32_t		top;
@@ -683,10 +659,12 @@ struct v4l2_requestbuffers {
 #define V4L2_CAP_ASYNCIO		0x02000000
 #define V4L2_CAP_STREAMING		0x04000000
 #define V4L2_CAP_BITMASK	\
-	"\20\1VIDEO_CAPTURE\2VIDEO_OUTPUT\3VIDEO_OVERLAY"	\
-	"\5VBI_CAPTURE\6VBI_OUTPUT\10RDS_CAPTURE"		\
-	"\21TUNER\22AUDIO\31READWRITE"				\
-	"\32ASYNCIO\33STREAMING"
+	"\20\1VIDEO_CAPTURE\2VIDEO_OUTPUT\3VIDEO_OVERLAY"
+#if 0
+	"\5VBI_CAPTURE\6VBI_OUTPUT\9RDS_CAPTURE"		\
+	"\17TUNER\18AUDIO\25READWRITE"				\
+	"\26ASYNCIO\27STREAMING"
+#endif
 
 /* Device ioctls -- try to keep them the same as Linux for compat_linux */
 #define VIDIOC_QUERYCAP		_IOR('V', 0, struct v4l2_capability)
@@ -740,11 +718,5 @@ struct v4l2_requestbuffers {
 #define VIDIOC_ENUMAUDOUT	_IOWR('V', 66, struct v4l2_audioout)
 #define VIDIOC_G_PRIORITY	_IOR('V', 67, enum v4l2_priority)
 #define VIDIOC_S_PRIORITY	_IOW('V', 68, enum v4l2_priority)
-
-#ifdef _KERNEL
-#define VIDIOC_QUERYBUF50	_IOWR('V', 9, struct v4l2_buffer50)
-#define VIDIOC_QBUF50		_IOWR('V', 15, struct v4l2_buffer50)
-#define VIDIOC_DQBUF50		_IOWR('V', 17, struct v4l2_buffer50)
-#endif
 
 #endif /* !_HAVE_SYS_VIDEOIO_H */

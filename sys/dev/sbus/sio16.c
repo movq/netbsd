@@ -1,4 +1,4 @@
-/*	$NetBSD: sio16.c,v 1.24 2011/07/18 00:58:52 mrg Exp $	*/
+/*	$NetBSD: sio16.c,v 1.17 2008/05/29 14:51:27 mrg Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sio16.c,v 1.24 2011/07/18 00:58:52 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sio16.c,v 1.17 2008/05/29 14:51:27 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -64,15 +64,16 @@ __KERNEL_RCSID(0, "$NetBSD: sio16.c,v 1.24 2011/07/18 00:58:52 mrg Exp $");
  * device cfattach and cfdriver definitions, plus the routine we pass
  * to the cd18xx code or interrupt acknowledgement.
  */
-static int	sio16_match(device_t, cfdata_t, void *);
-static void	sio16_attach(device_t, device_t, void *);
+static int	sio16_match(struct device *, struct cfdata *, void *);
+static void	sio16_attach(struct device *, struct device *, void *);
 static u_char	sio16_ackfunc(void *, int who);
 
 /*
  * define the sio16 per-device softc.
  */
 struct sio16_softc {
-	device_t sc_dev;
+	struct device	sc_dev;			/* must be first */
+	struct sbusdev	sc_sd;			/* for sbus drivers */
 
 	/* sbus information */
 	bus_space_tag_t	sc_tag;			/* bus tag for below */
@@ -88,7 +89,7 @@ struct sio16_softc {
 
 };
 
-CFATTACH_DECL_NEW(siosixteen, sizeof(struct sio16_softc),
+CFATTACH_DECL(siosixteen, sizeof(struct sio16_softc),
     sio16_match, sio16_attach, NULL, NULL);
 
 struct sio16_attach_args {
@@ -107,7 +108,10 @@ struct sio16_attach_args {
  */
 #define	SIO16_ROM_NAME	"sio16"
 int
-sio16_match(device_t parent, cfdata_t cf, void *aux)
+sio16_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void   *aux;
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -122,15 +126,15 @@ sio16_match(device_t parent, cfdata_t cf, void *aux)
  * device attach routine:  go attach all sub devices.
  */
 void
-sio16_attach(device_t parent, device_t self, void *aux)
+sio16_attach(parent, self, aux)
+	struct device *parent, *self;
+	void   *aux;
 {
 	struct sbus_attach_args *sa = aux;
-	struct sio16_softc *sc = device_private(self);
+	struct sio16_softc *sc = (struct sio16_softc *)self;
 	bus_space_handle_t h;
 	char *mode, *model;
 	int i;
-
-	sc->sc_dev = self;
 
 	if (sa->sa_nreg != 4)
 		panic("sio16_attach: got %d registers intead of 4",
@@ -207,6 +211,9 @@ sio16_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 
+	/* set up our sbus connections */
+	sbus_establish(&sc->sc_sd, &sc->sc_dev);
+
 	/* establish interrupt channel */
 	(void)bus_intr_establish(sa->sa_bustag, sa->sa_pri, IPL_TTY,
 	    cd18xx_hardintr, sc);
@@ -239,7 +246,9 @@ sio16_attach(device_t parent, device_t self, void *aux)
  * in clcd_attach() below, or the various service match routines.
  */
 u_char
-sio16_ackfunc(void *v, int who)
+sio16_ackfunc(v, who)
+	void *v;
+	int who;
 {
 	struct sio16_softc *sc = v;
 	bus_size_t addr;
@@ -257,7 +266,7 @@ sio16_ackfunc(void *v, int who)
 		break;
 	default:
 		panic("%s: sio16_ackfunc: unknown ackfunc %d",
-		    device_xname(sc->sc_dev), who);
+		    device_xname(&sc->sc_dev), who);
 	}
 	return (bus_space_read_1(sc->sc_tag, sc->sc_ack, addr));
 }
@@ -266,14 +275,17 @@ sio16_ackfunc(void *v, int who)
  * we attach two `clcd' instances per 1600se, that each call the
  * backend cd18xx driver for help.
  */
-static int	clcd_match(device_t, cfdata_t, void *);
-static void	clcd_attach(device_t, device_t, void *);
+static int	clcd_match(struct device *, struct cfdata *, void *);
+static void	clcd_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(clcd, sizeof(struct cd18xx_softc),
+CFATTACH_DECL(clcd, sizeof(struct cd18xx_softc),
     clcd_match, clcd_attach, NULL, NULL);
 
 static int
-clcd_match(device_t parent, cfdata_t cf, void *aux)
+clcd_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 
 	/* XXX */
@@ -281,9 +293,11 @@ clcd_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-clcd_attach(device_t parent, device_t self, void *aux)
+clcd_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct cd18xx_softc *sc = device_private(self);
+	struct cd18xx_softc *sc = (struct cd18xx_softc *)self;
 	struct sio16_attach_args *args = aux;
 
 	sc->sc_tag = args->cd_tag;

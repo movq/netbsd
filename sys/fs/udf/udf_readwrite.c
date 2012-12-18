@@ -1,4 +1,4 @@
-/* $NetBSD: udf_readwrite.c,v 1.11 2011/06/12 03:35:55 rmind Exp $ */
+/* $NetBSD: udf_readwrite.c,v 1.8.4.2 2009/07/09 19:44:34 snj Exp $ */
 
 /*
  * Copyright (c) 2007, 2008 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: udf_readwrite.c,v 1.11 2011/06/12 03:35:55 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_readwrite.c,v 1.8.4.2 2009/07/09 19:44:34 snj Exp $");
 #endif /* not lint */
 
 
@@ -442,9 +442,9 @@ udf_write_phys_buf(struct udf_mount *ump, int what, struct buf *buf)
 	/* don't forget to increase pending count for the bwrite itself */
 /* panic("NO WRITING\n"); */
 	if (buf->b_vp) {
-		mutex_enter(buf->b_vp->v_interlock);
+		mutex_enter(&buf->b_vp->v_interlock);
 		buf->b_vp->v_numoutput++;
-		mutex_exit(buf->b_vp->v_interlock);
+		mutex_exit(&buf->b_vp->v_interlock);
 	}
 
 	error = 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: opl_yds.c,v 1.17 2012/04/09 10:18:17 plunky Exp $	*/
+/*	$NetBSD: opl_yds.c,v 1.15 2008/04/28 20:23:55 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opl_yds.c,v 1.17 2012/04/09 10:18:17 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opl_yds.c,v 1.15 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,11 +75,10 @@ opl_yds_attach(device_t parent, device_t self, void *aux)
 	struct yds_softc *ssc = device_private(parent);
 	struct opl_softc *sc = device_private(self);
 
-	sc->dev = self;
+	sc->mididev.dev = self;
 	sc->ioh = ssc->sc_opl_ioh;
 	sc->iot = ssc->sc_opl_iot;
 	sc->offs = 0;
-	sc->lock = &ssc->sc_intr_lock;
 	strcpy(sc->syn.name, "DS-1 integrated ");
 
 	opl_attach(sc);

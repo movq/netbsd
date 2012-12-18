@@ -1,4 +1,4 @@
-/*	$NetBSD: lint.h,v 1.13 2009/04/15 01:20:57 christos Exp $	*/
+/*	$NetBSD: lint.h,v 1.12 2008/09/26 22:52:24 matt Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -85,8 +85,8 @@ typedef enum {
  * size of types, name and classification
  */
 typedef	struct {
-	size_t	tt_sz;			/* size in bits */
-	size_t	tt_psz;			/* size, different from tt_sz
+	int	tt_sz;			/* size in bits */
+	int	tt_psz;			/* size, different from tt_sz
 					   if pflag is set */
 	tspec_t	tt_styp;		/* signed counterpart */
 	tspec_t	tt_utyp;		/* unsigned counterpart */

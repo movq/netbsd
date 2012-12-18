@@ -1,4 +1,4 @@
-/*	$NetBSD: aac_pci.c,v 1.35 2012/10/27 17:18:28 chs Exp $	*/
+/*	$NetBSD: aac_pci.c,v 1.25.8.2 2010/11/20 20:56:46 riz Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aac_pci.c,v 1.35 2012/10/27 17:18:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aac_pci.c,v 1.25.8.2 2010/11/20 20:56:46 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -353,30 +353,6 @@ static struct aac_ident {
 		0,
 		"IBM ServeRAID 8k"
 	},
-	{	PCI_VENDOR_ADP2,
-		PCI_PRODUCT_ADP2_ASR2200S,
-		PCI_VENDOR_ADP2,
-		PCI_PRODUCT_ADP2_2405,
-		AAC_HWIF_I960RX,
-		0,
-		"Adaptec RAID 2405"
-	},
-	{	PCI_VENDOR_ADP2,
-		PCI_PRODUCT_ADP2_ASR2200S,
-		PCI_VENDOR_ADP2,
-		PCI_PRODUCT_ADP2_3405,
-		AAC_HWIF_I960RX,
-		0,
-		"Adaptec RAID 3405"
-	},
-	{	PCI_VENDOR_ADP2,
-		PCI_PRODUCT_ADP2_ASR2200S,
-		PCI_VENDOR_ADP2,
-		PCI_PRODUCT_ADP2_3805,
-		AAC_HWIF_I960RX,
-		0,
-		"Adaptec RAID 3805"
-	},
 	{
 		PCI_VENDOR_DEC,
 		PCI_PRODUCT_DEC_21554,
@@ -422,11 +398,10 @@ static struct aac_ident {
 		0,
 		"HP NetRAID-4M"
 	},
-	{
-		PCI_VENDOR_ADP2,
-		PCI_PRODUCT_ADP2_ASR2200S,
-		PCI_VENDOR_SUN,
-		PCI_PRODUCT_ADP2_ASR2120S,
+	{	0x9005,
+		0x0285,
+		0x108e,
+		0x286,
 		AAC_HWIF_I960RX,
 		0,
 		"SG-XPCIESAS-R-IN"
@@ -474,7 +449,8 @@ aac_pci_intr_set(struct aac_softc *sc, int (*hand)(void*), void *arg)
 }
 
 static int
-aac_pci_match(device_t parent, cfdata_t match, void *aux)
+aac_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -487,7 +463,7 @@ aac_pci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-aac_pci_attach(device_t parent, device_t self, void *aux)
+aac_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa;
 	pci_chipset_tag_t pc;
@@ -502,10 +478,9 @@ aac_pci_attach(device_t parent, device_t self, void *aux)
 
 	pa = aux;
 	pc = pa->pa_pc;
-	pcisc = device_private(self);
+	pcisc = (struct aac_pci_softc *)self;
 	pcisc->sc_pc = pc;
 	sc = &pcisc->sc_aac;
-	sc->sc_dv = self;
 	state = 0;
 
 	aprint_naive(": RAID controller\n");
@@ -550,8 +525,8 @@ aac_pci_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error("couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		goto bail_out;
 	}
 	state++;
@@ -561,7 +536,7 @@ aac_pci_attach(device_t parent, device_t self, void *aux)
 	m = aac_find_ident(pa);
 	aprint_normal("%s\n", m->prodstr);
 	if (intrstr != NULL)
-		aprint_normal_dev(self, "interrupting at %s\n",
+		aprint_normal_dev(&sc->sc_dv, "interrupting at %s\n",
 		    intrstr);
 
 	sc->sc_hwif = m->hwif;
@@ -598,7 +573,7 @@ aac_pci_attach(device_t parent, device_t self, void *aux)
 		bus_space_unmap(sc->sc_memt, sc->sc_memh, memsize);
 }
 
-CFATTACH_DECL_NEW(aac_pci, sizeof(struct aac_pci_softc),
+CFATTACH_DECL(aac_pci, sizeof(struct aac_pci_softc),
     aac_pci_match, aac_pci_attach, NULL, NULL);
 
 /*

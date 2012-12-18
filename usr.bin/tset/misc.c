@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.9 2010/02/10 10:33:45 roy Exp $	*/
+/*	$NetBSD: misc.c,v 1.8 2006/05/01 23:18:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -30,7 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: misc.c,v 1.9 2010/02/10 10:33:45 roy Exp $");
+#ifndef lint
+#if 0
+static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 6/9/93";
+#endif
+__RCSID("$NetBSD: misc.c,v 1.8 2006/05/01 23:18:37 christos Exp $");
+#endif /* not lint */
 
 #include <err.h>
 #include <errno.h>
@@ -42,7 +47,8 @@ __RCSID("$NetBSD: misc.c,v 1.9 2010/02/10 10:33:45 roy Exp $");
 #include "extern.h"
 
 void
-tset_cat(const char *file)
+tset_cat(file)
+	char *file;
 {
 	register int fd, nr, nw;
 	char buf[1024];
@@ -59,8 +65,8 @@ tset_cat(const char *file)
 }
 
 int
-outc(int c)
+outc(c)
+	int c;
 {
-
 	return (putc(c, stderr));
 }

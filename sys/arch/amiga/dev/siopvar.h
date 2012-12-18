@@ -1,4 +1,4 @@
-/*	$NetBSD: siopvar.h,v 1.27 2012/10/27 17:17:31 chs Exp $	*/
+/*	$NetBSD: siopvar.h,v 1.25 2005/12/11 12:16:28 christos Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -116,9 +116,8 @@ struct siop_tinfo {
 };
 
 struct	siop_softc {
-	device_t sc_dev;
+	struct	device sc_dev;
 	struct	isr sc_isr;
-	void	*sc_siop_si;
 
 	u_char	sc_istat;
 	u_char	sc_dstat;

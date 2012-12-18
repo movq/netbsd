@@ -175,11 +175,11 @@ namespace std
   template class messages_byname<C>;
   
   // ctype
-  template class __ctype_abstract_base<C>;
+  inline template class __ctype_abstract_base<C>;
   template class ctype_byname<C>;
   
   // codecvt
-  template class __codecvt_abstract_base<C, char, mbstate_t>;
+  inline template class __codecvt_abstract_base<C, char, mbstate_t>;
   template class codecvt_byname<C, char, mbstate_t>;
 
   // collate

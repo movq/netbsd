@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.h,v 1.4 2010/07/24 09:35:36 jruoho Exp $	*/
+/*	$NetBSD: cpufunc.h,v 1.2 2008/03/20 09:09:20 kochi Exp $	*/
 
 /*-
  * Copyright (c) 1998 Doug Rabson
@@ -46,7 +46,6 @@ struct thread;
 static __inline void
 breakpoint(void)
 {
-
 	__asm __volatile("break.m %0" :: "i"(IA64_FIXED_BREAK));
 }
 
@@ -60,6 +59,7 @@ extern uint64_t ia64_port_base;
 #define	__PIO_ADDR(x)		(__volatile void*)(ia64_port_base |	\
 	(((x) & 0xFFFC) << 10) | ((x) & 0xFFF))
 
+#if 0
 /*
  * I/O port reads with ia32 semantics.
  */
@@ -73,7 +73,7 @@ inb(unsigned int port)
 	v = *p;
 	ia64_mf_a();
 	ia64_mf();
-	return v;
+	return (v);
 }
 
 static __inline uint16_t
@@ -81,13 +81,12 @@ inw(unsigned int port)
 {
 	__volatile uint16_t *p;
 	uint16_t v;
-
 	p = __PIO_ADDR(port);
 	ia64_mf();
 	v = *p;
 	ia64_mf_a();
 	ia64_mf();
-	return v;
+	return (v);
 }
 
 static __inline uint32_t
@@ -95,20 +94,18 @@ inl(unsigned int port)
 {
 	volatile uint32_t *p;
 	uint32_t v;
-
 	p = __PIO_ADDR(port);
 	ia64_mf();
 	v = *p;
 	ia64_mf_a();
 	ia64_mf();
-	return v;
+	return (v);
 }
 
 static __inline void
 insb(unsigned int port, void *addr, size_t count)
 {
 	uint8_t *buf = addr;
-
 	while (count--)
 		*buf++ = inb(port);
 }
@@ -117,7 +114,6 @@ static __inline void
 insw(unsigned int port, void *addr, size_t count)
 {
 	uint16_t *buf = addr;
-
 	while (count--)
 		*buf++ = inw(port);
 }
@@ -126,7 +122,6 @@ static __inline void
 insl(unsigned int port, void *addr, size_t count)
 {
 	uint32_t *buf = addr;
-
 	while (count--)
 		*buf++ = inl(port);
 }
@@ -135,7 +130,6 @@ static __inline void
 outb(unsigned int port, uint8_t data)
 {
 	volatile uint8_t *p;
-
 	p = __PIO_ADDR(port);
 	ia64_mf();
 	*p = data;
@@ -147,7 +141,6 @@ static __inline void
 outw(unsigned int port, uint16_t data)
 {
 	volatile uint16_t *p;
-
 	p = __PIO_ADDR(port);
 	ia64_mf();
 	*p = data;
@@ -159,7 +152,6 @@ static __inline void
 outl(unsigned int port, uint32_t data)
 {
 	volatile uint32_t *p;
-
 	p = __PIO_ADDR(port);
 	ia64_mf();
 	*p = data;
@@ -171,7 +163,6 @@ static __inline void
 outsb(unsigned int port, const void *addr, size_t count)
 {
 	const uint8_t *buf = addr;
-
 	while (count--)
 		outb(port, *buf++);
 }
@@ -180,7 +171,6 @@ static __inline void
 outsw(unsigned int port, const void *addr, size_t count)
 {
 	const uint16_t *buf = addr;
-
 	while (count--)
 		outw(port, *buf++);
 }
@@ -189,22 +179,20 @@ static __inline void
 outsl(unsigned int port, const void *addr, size_t count)
 {
 	const uint32_t *buf = addr;
-
 	while (count--)
 		outl(port, *buf++);
 }
+#endif
 
 static __inline void
 disable_intr(void)
 {
-
 	__asm __volatile ("rsm psr.i");
 }
 
 static __inline void
 enable_intr(void)
 {
-
 	__asm __volatile ("ssm psr.i;; srlz.d");
 }
 
@@ -212,16 +200,14 @@ static __inline register_t
 intr_disable(void)
 {
 	register_t psr;
-
 	__asm __volatile ("mov %0=psr;;" : "=r"(psr));
 	disable_intr();
-	return (psr & IA64_PSR_I) ? 1 : 0;
+	return ((psr & IA64_PSR_I) ? 1 : 0);
 }
 
 static __inline void
 intr_restore(register_t ie)
 {
-
 	if (ie)
 		enable_intr();
 }

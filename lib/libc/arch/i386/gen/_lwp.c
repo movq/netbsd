@@ -1,4 +1,4 @@
-/*	$NetBSD: _lwp.c,v 1.8 2012/08/31 20:57:24 drochner Exp $	*/
+/*	$NetBSD: _lwp.c,v 1.6 2008/04/28 20:22:56 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: _lwp.c,v 1.8 2012/08/31 20:57:24 drochner Exp $");
+__RCSID("$NetBSD: _lwp.c,v 1.6 2008/04/28 20:22:56 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -56,9 +56,9 @@ _lwp_makecontext(ucontext_t *u, void (*start)(void *),
 	/* LINTED uintptr_t is safe */
 	u->uc_mcontext.__gregs[_REG_EIP] = (uintptr_t)start;
 	
-	/* Align to a 16-byte boundary for SSE */
+	/* Align to a word */
 	/* LINTED uintptr_t is safe */
-	sp = (void **) (((uintptr_t)(stack_base + stack_size - 4) & ~0xf) + 4);
+	sp = (void **) ((uintptr_t)(stack_base + stack_size) & ~0x3);
 	
 	*--sp = arg;
 	*--sp = (void *) _lwp_exit;
@@ -66,6 +66,5 @@ _lwp_makecontext(ucontext_t *u, void (*start)(void *),
 	/* LINTED uintptr_t is safe */
 	u->uc_mcontext.__gregs[_REG_UESP] = (uintptr_t) sp;
 
-	u->uc_mcontext._mc_tlsbase = (uintptr_t)private;
-	u->uc_flags |= _UC_TLSBASE;
+	/* LINTED private is currently unused */
 }

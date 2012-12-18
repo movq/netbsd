@@ -24,8 +24,7 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Id: compat.c,v 1.11 2011/09/27 08:22:55 plunky Exp 	
- * $NetBSD: compat.c,v 1.1.1.5 2012/01/11 20:33:31 plunky Exp $
+ * $Id: compat.c,v 1.1.1.1 2008/08/24 05:33:08 gmcgarry Exp $
  */
 
 /*-
@@ -43,6 +42,13 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *        This product includes software developed by the NetBSD
+ *        Foundation, Inc. and its contributors.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,7 +62,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *	NetBSD: basename.c,v 1.9 2009/11/24 13:34:20 tnozaki Exp 
+ *	$NetBSD: compat.c,v 1.1.1.1 2008/08/24 05:33:08 gmcgarry Exp $
  */
 
 /*
@@ -87,13 +93,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	NetBSD: gettemp.c,v 1.13 2003/12/05 00:57:36 uebayasi Exp 
+ *	$NetBSD: compat.c,v 1.1.1.1 2008/08/24 05:33:08 gmcgarry Exp $
  */
 
 #include <string.h>
+#include <fcntl.h>
 
 #include "config.h"
-#include "compat.h"
+#include "manifest.h"
 
 #ifndef HAVE_STRLCAT
 /*
@@ -170,7 +177,7 @@ strlcpy(char *dst, const char *src, size_t siz)
 char *optarg;
 int optind = 1;
 int
-getopt(int argc, char * const argv[], const char *args)
+getopt(int argc, char **argv, char *args)
 {
         int n;
 	int nlen = strlen(args);
@@ -209,7 +216,7 @@ getopt(int argc, char * const argv[], const char *args)
 }
 #endif
 
-#ifdef os_win32
+#ifdef WIN32
 #define ISPATHSEPARATOR(x) ((x == '/') || (x == '\\'))
 #else
 #define ISPATHSEPARATOR(x) (x == '/')
@@ -223,6 +230,7 @@ getopt(int argc, char * const argv[], const char *args)
 char *
 basename(char *path)
 {
+	static char singledot[] = ".";
 	static char result[PATH_MAX];
 	char *p, *lastp;
 	size_t len;
@@ -231,12 +239,8 @@ basename(char *path)
 	 * If `path' is a null pointer or points to an empty string,
 	 * return a pointer to the string ".".
 	 */
-	if ((path == NULL) || (*path == '\0')) {
-		result[0] = '.';
-		result[1] = '\0';
-
-		return (result);
-	}
+	if ((path == NULL) || (*path == '\0'))
+		return (singledot);
 
 	/* Strip trailing slashes, if any. */
 	lastp = path + strlen(path) - 1;
@@ -260,14 +264,11 @@ basename(char *path)
 }
 #endif
 
-#if !defined(HAVE_MKSTEMP) && !defined(os_win32)
-#include <fcntl.h>	/* open() */
-#include <unistd.h>	/* getpid() */
-
+#if !defined(HAVE_MKSTEMP) && !defined(WIN32)
 int
 mkstemp(char *path)
 {
-	char *trv;
+	char *start, *trv;
 	unsigned int pid;
 
 	/* To guarantee multiple calls generate unique names even if
@@ -336,7 +337,6 @@ ffs(int x)
  */
 
 #if !defined(HAVE_SNPRINTF) || !defined(HAVE_VSNPRINTF)
-#include <ctype.h>	/* isdigit() */
 
 static void 
 dopr(char *buffer, size_t maxlen, const char *format, va_list args);
@@ -747,7 +747,7 @@ fmtint(char *buffer, size_t *currlen, size_t maxlen,
 }
 
 static long double 
-ldpow10(int exp)
+pow10(int exp)
 {
 	long double result = 1;
 
@@ -760,7 +760,7 @@ ldpow10(int exp)
 }
 
 static long 
-lroundl(long double value)
+round(long double value)
 {
 	long intpart = value;
 
@@ -810,11 +810,11 @@ fmtfp(char *buffer, size_t *currlen, size_t maxlen, long double fvalue,
 	/* We "cheat" by converting the fractional part to integer by
 	 * multiplying by a factor of 10
 	 */
-	fracpart = lroundl((ldpow10 (max)) * (ufvalue - intpart));
+	fracpart = round((pow10 (max)) * (ufvalue - intpart));
 
-	if (fracpart >= ldpow10 (max)) {
+	if (fracpart >= pow10 (max)) {
 		intpart++;
-		fracpart -= ldpow10 (max);
+		fracpart -= pow10 (max);
 	}
 
 	/* Convert integer part */

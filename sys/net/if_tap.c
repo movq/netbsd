@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tap.c,v 1.68 2012/10/27 17:18:39 chs Exp $	*/
+/*	$NetBSD: if_tap.c,v 1.47.4.8 2010/12/09 04:11:39 riz Exp $	*/
 
 /*
  *  Copyright (c) 2003, 2004, 2008, 2009 The NetBSD Foundation.
@@ -33,10 +33,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.68 2012/10/27 17:18:39 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.47.4.8 2010/12/09 04:11:39 riz Exp $");
 
 #if defined(_KERNEL_OPT)
-
+#include "bpfilter.h"
 #include "opt_modular.h"
 #include "opt_compat_netbsd.h"
 #endif
@@ -61,14 +61,15 @@ __KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.68 2012/10/27 17:18:39 chs Exp $");
 #include <sys/mutex.h>
 #include <sys/simplelock.h>
 #include <sys/intr.h>
-#include <sys/stat.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
 #include <net/if_tap.h>
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <compat/sys/sockio.h>
 
@@ -77,7 +78,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.68 2012/10/27 17:18:39 chs Exp $");
  * sysctl node management
  *
  * It's not really possible to use a SYSCTL_SETUP block with
- * current module implementation, so it is easier to just define
+ * current LKM implementation, so it is easier to just define
  * our own function.
  *
  * The handler function is a "helper" in Andrew Brown's sysctl
@@ -93,10 +94,11 @@ SYSCTL_SETUP_PROTO(sysctl_tap_setup);
 #endif
 
 /*
- * Since we're an Ethernet device, we need the 2 following
- * components: a struct ethercom and a struct ifmedia
- * since we don't attach a PHY to ourselves.
- * We could emulate one, but there's no real point.
+ * Since we're an Ethernet device, we need the 3 following
+ * components: a leading struct device, a struct ethercom,
+ * and also a struct ifmedia since we don't attach a PHY to
+ * ourselves. We could emulate one, but there's no real
+ * point.
  */
 
 struct tap_softc {
@@ -113,9 +115,6 @@ struct tap_softc {
 	kmutex_t	sc_rdlock;
 	struct simplelock	sc_kqlock;
 	void		*sc_sih;
-	struct timespec sc_atime;
-	struct timespec sc_mtime;
-	struct timespec sc_btime;
 };
 
 /* autoconf(9) glue */
@@ -146,7 +145,6 @@ static int	tap_fops_write(file_t *, off_t *, struct uio *,
     kauth_cred_t, int);
 static int	tap_fops_ioctl(file_t *, u_long, void *);
 static int	tap_fops_poll(file_t *, int);
-static int	tap_fops_stat(file_t *, struct stat *);
 static int	tap_fops_kqfilter(file_t *, struct knote *);
 
 static const struct fileops tap_fileops = {
@@ -155,10 +153,10 @@ static const struct fileops tap_fileops = {
 	.fo_ioctl = tap_fops_ioctl,
 	.fo_fcntl = fnullop_fcntl,
 	.fo_poll = tap_fops_poll,
-	.fo_stat = tap_fops_stat,
+	.fo_stat = fbadop_stat,
 	.fo_close = tap_fops_close,
 	.fo_kqfilter = tap_fops_kqfilter,
-	.fo_restart = fnullop_restart,
+	.fo_drain = fnullop_drain,
 };
 
 /* Helper for cloning open() */
@@ -270,8 +268,6 @@ tap_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_dev = self;
 	sc->sc_sih = softint_establish(SOFTINT_CLOCK, tap_softintr, sc);
-	getnanotime(&sc->sc_btime);
-	sc->sc_atime = sc->sc_mtime = sc->sc_btime;
 
 	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
@@ -346,7 +342,7 @@ tap_attach(device_t parent, device_t self, void *aux)
 	if ((error = sysctl_createv(NULL, 0, NULL,
 	    &node, CTLFLAG_READWRITE,
 	    CTLTYPE_STRING, device_xname(self), NULL,
-	    tap_sysctl_handler, 0, (void *)sc, 18,
+	    tap_sysctl_handler, 0, sc, 18,
 	    CTL_NET, AF_LINK, tap_node, device_unit(sc->sc_dev),
 	    CTL_EOL)) != 0)
 		aprint_error_dev(self, "sysctl_createv returned %d, ignoring\n",
@@ -480,7 +476,10 @@ tap_start(struct ifnet *ifp)
 				return;
 
 			ifp->if_opackets++;
-			bpf_mtap(ifp, m0);
+#if NBPFILTER > 0
+			if (ifp->if_bpf)
+				bpf_mtap(ifp->if_bpf, m0);
+#endif
 
 			m_freem(m0);
 		}
@@ -571,7 +570,7 @@ tap_lifaddr(struct ifnet *ifp, u_long cmd, struct ifaliasreq *ifra)
 	if (sa->sa_family != AF_LINK)
 		return (EINVAL);
 
-	if_set_sadl(ifp, sa->sa_data, ETHER_ADDR_LEN, false);
+	if_set_sadl(ifp, sa->sa_data, ETHER_ADDR_LEN);
 
 	return (0);
 }
@@ -652,7 +651,7 @@ tap_clone_creator(int unit)
 		cf->cf_fstate = FSTATE_STAR;
 	} else {
 		cf->cf_unit = unit;
-		cf->cf_fstate = FSTATE_NOTFOUND;
+		cf->cf_fstate = FSTATE_FOUND;
 	}
 
 	return device_private(config_attach_pseudo(cf));
@@ -849,7 +848,10 @@ tap_dev_close(struct tap_softc *sc)
 				break;
 
 			ifp->if_opackets++;
-			bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+			if (ifp->if_bpf)
+				bpf_mtap(ifp->if_bpf, m);
+#endif
 			m_freem(m);
 		}
 	}
@@ -889,8 +891,6 @@ tap_dev_read(int unit, struct uio *uio, int flags)
 
 	if (sc == NULL)
 		return (ENXIO);
-
-	getnanotime(&sc->sc_atime);
 
 	ifp = &sc->sc_ec.ec_if;
 	if ((ifp->if_flags & IFF_UP) == 0)
@@ -943,7 +943,10 @@ tap_dev_read(int unit, struct uio *uio, int flags)
 	}
 
 	ifp->if_opackets++;
-	bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, m);
+#endif
 
 	/*
 	 * One read is one packet.
@@ -961,33 +964,6 @@ tap_dev_read(int unit, struct uio *uio, int flags)
 out:
 	mutex_exit(&sc->sc_rdlock);
 	return (error);
-}
-
-static int
-tap_fops_stat(file_t *fp, struct stat *st)
-{
-	int error = 0;
-	struct tap_softc *sc;
-	int unit = (uintptr_t)fp->f_data;
-
-	(void)memset(st, 0, sizeof(*st));
-
-	KERNEL_LOCK(1, NULL);
-	sc = device_lookup_private(&tap_cd, unit);
-	if (sc == NULL) {
-		error = ENXIO;
-		goto out;
-	}
-
-	st->st_dev = makedev(cdevsw_lookup_major(&tap_cdevsw), unit);
-	st->st_atimespec = sc->sc_atime;
-	st->st_mtimespec = sc->sc_mtime;
-	st->st_ctimespec = st->st_birthtimespec = sc->sc_btime;
-	st->st_uid = kauth_cred_geteuid(fp->f_cred);
-	st->st_gid = kauth_cred_getegid(fp->f_cred);
-out:
-	KERNEL_UNLOCK_ONE(NULL);
-	return error;
 }
 
 static int
@@ -1021,7 +997,6 @@ tap_dev_write(int unit, struct uio *uio, int flags)
 	if (sc == NULL)
 		return (ENXIO);
 
-	getnanotime(&sc->sc_mtime);
 	ifp = &sc->sc_ec.ec_if;
 
 	/* One write, one packet, that's the rule */
@@ -1054,7 +1029,10 @@ tap_dev_write(int unit, struct uio *uio, int flags)
 	ifp->if_ipackets++;
 	m->m_pkthdr.rcvif = ifp;
 
-	bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, m);
+#endif
 	s =splnet();
 	(*ifp->if_input)(ifp, m);
 	splx(s);
@@ -1273,7 +1251,7 @@ tap_kqread(struct knote *kn, long hint)
  * (called a link set) which is used at init_sysctl() time to cycle
  * through all those functions to create the kernel's sysctl tree.
  *
- * It is not possible to use link sets in a module, so the
+ * It is not (currently) possible to use link sets in a LKM, so the
  * easiest is to simply call our own setup routine at load time.
  *
  * In the SYSCTL_SETUP blocks you find in the kernel, nodes have the
@@ -1385,9 +1363,9 @@ tap_sysctl_handler(SYSCTLFN_ARGS)
 		return (EINVAL);
 
 	/* Commit change */
-	if (ether_aton_r(enaddr, sizeof(enaddr), addr) != 0)
+	if (ether_nonstatic_aton(enaddr, addr) != 0)
 		return (EINVAL);
-	if_set_sadl(ifp, enaddr, ETHER_ADDR_LEN, false);
+	if_set_sadl(ifp, enaddr, ETHER_ADDR_LEN);
 	return (error);
 }
 #endif

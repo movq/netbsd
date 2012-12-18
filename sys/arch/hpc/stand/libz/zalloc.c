@@ -1,4 +1,4 @@
-/* $NetBSD: zalloc.c,v 1.2 2009/03/14 15:36:06 dsl Exp $ */
+/* $NetBSD: zalloc.c,v 1.1 2006/01/17 03:12:29 uwe Exp $ */
 
 /*
  * Copyright (c) 2006 Valeriy E. Ushakov
@@ -32,7 +32,10 @@
 #include <memory.h>
 
 voidpf
-zcalloc(voidpf opaque, unsigned items, unsigned size)
+zcalloc(opaque, items, size)
+	voidpf opaque;
+	unsigned items;
+	unsigned size;
 {
 	size_t total = items * size;
 
@@ -43,7 +46,9 @@ zcalloc(voidpf opaque, unsigned items, unsigned size)
 }
 
 void
-zcfree(voidpf opaque, voidpf ptr)
+zcfree(opaque, ptr)
+	voidpf opaque;
+	voidpf ptr;
 {
 	free(ptr);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: dpt_pci.c,v 1.26 2012/10/27 17:18:31 chs Exp $	*/
+/*	$NetBSD: dpt_pci.c,v 1.21 2008/04/10 19:13:36 cegger Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Andrew Doran <ad@NetBSD.org>
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dpt_pci.c,v 1.26 2012/10/27 17:18:31 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dpt_pci.c,v 1.21 2008/04/10 19:13:36 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,14 +56,15 @@ __KERNEL_RCSID(0, "$NetBSD: dpt_pci.c,v 1.26 2012/10/27 17:18:31 chs Exp $");
 #define	PCI_CBMA	0x14	/* Configuration base memory address */
 #define	PCI_CBIO	0x10	/* Configuration base I/O address */
 
-static int	dpt_pci_match(device_t, cfdata_t, void *);
-static void	dpt_pci_attach(device_t, device_t, void *);
+static int	dpt_pci_match(struct device *, struct cfdata *, void *);
+static void	dpt_pci_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(dpt_pci, sizeof(struct dpt_softc),
+CFATTACH_DECL(dpt_pci, sizeof(struct dpt_softc),
     dpt_pci_match, dpt_pci_attach, NULL, NULL);
 
 static int
-dpt_pci_match(device_t parent, cfdata_t match, void *aux)
+dpt_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -77,7 +78,7 @@ dpt_pci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-dpt_pci_attach(device_t parent, device_t self, void *aux)
+dpt_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa;
 	struct dpt_softc *sc;
@@ -89,8 +90,7 @@ dpt_pci_attach(device_t parent, device_t self, void *aux)
 
 	aprint_naive(": Storage controller\n");
 
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (struct dpt_softc *)self;
 	pa = (struct pci_attach_args *)aux;
 	pc = pa->pa_pc;
 	aprint_normal(": ");
@@ -124,14 +124,14 @@ dpt_pci_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error("can't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
 
 	/* Read the EATA configuration. */
 	if (dpt_readcfg(sc)) {
-		aprint_error_dev(sc->sc_dev, "readcfg failed - see dpt(4)\n");
+		aprint_error_dev(&sc->sc_dv, "readcfg failed - see dpt(4)\n");
 		return;
 	}
 

@@ -1,4 +1,4 @@
-/* $NetBSD: exec_elf32.c,v 1.12 2010/08/28 21:30:03 joerg Exp $ */
+/* $NetBSD: exec_elf32.c,v 1.9.40.2 2009/10/04 00:22:12 snj Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: exec_elf32.c,v 1.12 2010/08/28 21:30:03 joerg Exp $");
+__RCSID("$NetBSD: exec_elf32.c,v 1.9.40.2 2009/10/04 00:22:12 snj Exp $");
 #endif /* not lint */
 
 #ifndef ELFSIZE
@@ -95,7 +95,7 @@ ELFNAMEEND(findoff)(mappedfile, mappedsize, vmaddr, fileoffp)
 #if (ELFSIZE == 32)
 	Elf32_Half nphdr, i;
 #elif (ELFSIZE == 64)
-	Elf64_Word nphdr, i;
+	Elf64_Half nphdr, i;
 #endif
 	int rv;
 

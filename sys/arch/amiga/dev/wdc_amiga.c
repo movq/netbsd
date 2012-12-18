@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_amiga.c,v 1.36 2012/07/31 15:50:31 bouyer Exp $ */
+/*	$NetBSD: wdc_amiga.c,v 1.31 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 2000, 2003 The NetBSD Foundation, Inc.
@@ -30,16 +30,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_amiga.c,v 1.36 2012/07/31 15:50:31 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_amiga.c,v 1.31 2008/04/28 20:23:12 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-#include <sys/bus.h>
 
 #include <machine/cpu.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <sys/bswap.h>
 
@@ -75,8 +75,7 @@ CFATTACH_DECL_NEW(wdc_amiga, sizeof(struct wdc_amiga_softc),
 int
 wdc_amiga_probe(device_t parent, cfdata_t cfp, void *aux)
 {
-	if ((!is_a4000() && !is_a1200() && !is_a600()) ||
-	    !matchname(aux, "wdc"))
+	if ((!is_a4000() && !is_a1200()) || !matchname(aux, "wdc"))
 		return(0);
 	return 1;
 }
@@ -134,10 +133,10 @@ wdc_amiga_attach(device_t parent, device_t self, void *aux)
 	sc->sc_chanlist[0] = &sc->sc_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanlist;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 	sc->sc_channel.ch_channel = 0;
 	sc->sc_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
 	sc->sc_channel.ch_queue = &sc->sc_chqueue;
+	sc->sc_channel.ch_ndrive = 2;
 
 	wdc_init_shadow_regs(&sc->sc_channel);
 

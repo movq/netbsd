@@ -1,4 +1,4 @@
-/*	$NetBSD: bnep.c,v 1.11 2011/08/27 22:30:44 joerg Exp $	*/
+/*	$NetBSD: bnep.c,v 1.1.6.1 2009/02/06 01:12:46 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 Iain Hibbert
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bnep.c,v 1.11 2011/08/27 22:30:44 joerg Exp $");
+__RCSID("$NetBSD: bnep.c,v 1.1.6.1 2009/02/06 01:12:46 snj Exp $");
 
 #include <bluetooth.h>
 #include <sdp.h>
@@ -49,7 +49,7 @@ static size_t bnep_recv_filter_multi_addr_rsp(channel_t *, uint8_t *, size_t);
 static bool bnep_pfilter(channel_t *, packet_t *);
 static bool bnep_mfilter(channel_t *, packet_t *);
 
-static const uint8_t NAP_UUID[] = {
+static uint8_t NAP_UUID[] = {
 	0x00, 0x00, 0x11, 0x16,
 	0x00, 0x00,
 	0x10, 0x00,
@@ -57,7 +57,7 @@ static const uint8_t NAP_UUID[] = {
 	0x00, 0x80, 0x5f, 0x9b, 0x34, 0xfb
 };
 
-static const uint8_t GN_UUID[] = {
+static uint8_t GN_UUID[] = {
 	0x00, 0x00, 0x11, 0x17,
 	0x00, 0x00,
 	0x10, 0x00,
@@ -65,7 +65,7 @@ static const uint8_t GN_UUID[] = {
 	0x00, 0x80, 0x5f, 0x9b, 0x34, 0xfb,
 };
 
-static const uint8_t PANU_UUID[] = {
+static uint8_t PANU_UUID[] = {
 	0x00, 0x00, 0x11, 0x15,
 	0x00, 0x00,
 	0x10, 0x00,
@@ -168,11 +168,6 @@ bnep_recv(packet_t *pkt)
 	    || pkt->chan->state != CHANNEL_OPEN)
 		return false;	/* no forwarding */
 
-	if (pkt->len > ETHER_MAX_LEN)
-		log_debug("received long packet "
-			  "(type=0x%2.2x, proto=0x%4.4x, len=%zu)",
-		    	  type, be16dec(pkt->type), pkt->len);
-
 	return true;
 }
 
@@ -180,8 +175,8 @@ static bool
 bnep_recv_extension(packet_t *pkt)
 {
 	exthdr_t *eh;
-	size_t len, size;
-	uint8_t type;
+	size_t len;
+	uint8_t type, size;
 
 	do {
 		if (pkt->len < 2)
@@ -293,8 +288,8 @@ bnep_recv_control_command_not_understood(channel_t *chan, uint8_t *ptr, size_t s
 	type = *ptr++;
 	log_err("received Control Command Not Understood (0x%2.2x)", type);
 
-	/* we didn't send any reserved commands, just shut them down */
-	chan->down(chan);
+	/* we didn't send any reserved commands, just cut them off */
+	channel_close(chan);
 
 	return 1;
 }
@@ -302,8 +297,7 @@ bnep_recv_control_command_not_understood(channel_t *chan, uint8_t *ptr, size_t s
 static size_t
 bnep_recv_setup_connection_req(channel_t *chan, uint8_t *ptr, size_t size)
 {
-	size_t len;
-	uint8_t off;
+	uint8_t len, off;
 	int src, dst, rsp;
 
 	if (size < 1)
@@ -370,10 +364,6 @@ done:
 	    ether_ntoa((struct ether_addr *)chan->raddr), rsp);
 
 	bnep_send_control(chan, BNEP_SETUP_CONNECTION_RESPONSE, rsp);
-	if (rsp == BNEP_SETUP_SUCCESS) {
-		bnep_send_control(chan, BNEP_FILTER_NET_TYPE_SET);
-		bnep_send_control(chan, BNEP_FILTER_MULTI_ADDR_SET);
-	}
 	return (len * 2 + 1);
 }
 
@@ -398,10 +388,8 @@ bnep_recv_setup_connection_rsp(channel_t *chan, uint8_t *ptr, size_t size)
 	if (rsp == BNEP_SETUP_SUCCESS) {
 		chan->state = CHANNEL_OPEN;
 		channel_timeout(chan, 0);
-		bnep_send_control(chan, BNEP_FILTER_NET_TYPE_SET);
-		bnep_send_control(chan, BNEP_FILTER_MULTI_ADDR_SET);
 	} else {
-		chan->down(chan);
+		channel_close(chan);
 	}
 
 	return 2;
@@ -411,8 +399,7 @@ static size_t
 bnep_recv_filter_net_type_set(channel_t *chan, uint8_t *ptr, size_t size)
 {
 	pfilter_t *pf;
-	int i, nf, rsp;
-	size_t len;
+	int i, len, nf, rsp;
 
 	if (size < 2)
 		return 0;
@@ -429,10 +416,6 @@ bnep_recv_filter_net_type_set(channel_t *chan, uint8_t *ptr, size_t size)
 	}
 
 	nf = len / 4;
-	if (nf > BNEP_MAX_NET_TYPE_FILTERS) {
-		rsp = BNEP_FILTER_TOO_MANY_FILTERS;
-		goto done;
-	}
 	pf = malloc(nf * sizeof(pfilter_t));
 	if (pf == NULL) {
 		rsp = BNEP_FILTER_TOO_MANY_FILTERS;
@@ -486,10 +469,11 @@ bnep_recv_filter_net_type_rsp(channel_t *chan, uint8_t *ptr, size_t size)
 	}
 
 	rsp = be16dec(ptr);
-	if (rsp != BNEP_FILTER_SUCCESS)
-		log_err("filter_net_type: addr %s response 0x%2.2x",
-		    ether_ntoa((struct ether_addr *)chan->raddr), rsp);
 
+	log_debug("addr %s response 0x%2.2x",
+	    ether_ntoa((struct ether_addr *)chan->raddr), rsp);
+
+	/* we did not send any filter_net_type_set message */
 	return 2;
 }
 
@@ -497,8 +481,7 @@ static size_t
 bnep_recv_filter_multi_addr_set(channel_t *chan, uint8_t *ptr, size_t size)
 {
 	mfilter_t *mf;
-	int i, nf, rsp;
-	size_t len;
+	int i, len, nf, rsp;
 
 	if (size < 2)
 		return 0;
@@ -515,10 +498,6 @@ bnep_recv_filter_multi_addr_set(channel_t *chan, uint8_t *ptr, size_t size)
 	}
 
 	nf = len / (ETHER_ADDR_LEN * 2);
-	if (nf > BNEP_MAX_MULTI_ADDR_FILTERS) {
-		rsp = BNEP_FILTER_TOO_MANY_FILTERS;
-		goto done;
-	}
 	mf = malloc(nf * sizeof(mfilter_t));
 	if (mf == NULL) {
 		rsp = BNEP_FILTER_TOO_MANY_FILTERS;
@@ -579,10 +558,10 @@ bnep_recv_filter_multi_addr_rsp(channel_t *chan, uint8_t *ptr, size_t size)
 	}
 
 	rsp = be16dec(ptr);
-	if (rsp != BNEP_FILTER_SUCCESS)
-		log_err("filter_multi_addr: addr %s response 0x%2.2x",
-		    ether_ntoa((struct ether_addr *)chan->raddr), rsp);
+	log_debug("addr %s response 0x%2.2x",
+	    ether_ntoa((struct ether_addr *)chan->raddr), rsp);
 
+	/* we did not send any filter_multi_addr_set message */
 	return 2;
 }
 
@@ -593,7 +572,7 @@ bnep_send_control(channel_t *chan, uint8_t type, ...)
 	uint8_t *p;
 	va_list ap;
 
-	assert(chan->state != CHANNEL_CLOSED);
+	_DIAGASSERT(chan->state != CHANNEL_CLOSED);
 
 	pkt = packet_alloc(chan);
 	if (pkt == NULL)
@@ -625,12 +604,8 @@ bnep_send_control(channel_t *chan, uint8_t type, ...)
 		p += 2;
 		break;
 
-	case BNEP_FILTER_NET_TYPE_SET:
-	case BNEP_FILTER_MULTI_ADDR_SET:
-		be16enc(p, 0);	/* just clear filters for now */
-		p += 2;
-		break;
-
+	case BNEP_FILTER_NET_TYPE_SET:		/* TODO */
+	case BNEP_FILTER_MULTI_ADDR_SET:	/* TODO */
 	default:
 		log_err("Can't send control type 0x%2.2x", type);
 		break;

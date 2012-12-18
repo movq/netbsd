@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.c,v 1.28 2010/12/20 00:25:40 matt Exp $ */
+/*	$NetBSD: isr.c,v 1.26 2008/06/26 02:52:03 isaki Exp $ */
 
 /*
  * This file was taken from mvme68k/mvme68k/isr.c
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.28 2010/12/20 00:25:40 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.26 2008/06/26 02:52:03 isaki Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -278,7 +278,7 @@ isrdispatch_autovec(struct clockframe *frame)
 
 	intrcnt[ipl]++; /* XXXSCW: Will go away soon */
 	next68k_irq_evcnt[ipl].ev_count++;
-	curcpu()->ci_data.cpu_nintr++;
+	uvmexp.intrs++;
 #ifdef INTRLOG
 	log[logptr].ipl = ipl;
 	log[logptr].intrstat = *intrstat;
@@ -329,12 +329,12 @@ isrdispatch_autovec(struct clockframe *frame)
 
 		printf("isrdispatch_autovec: stray level %d interrupt\n", ipl);
 
-		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS,
-		    (*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)));
+		bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)),
+				 NEXT_INTR_BITS, sbuf, sizeof(sbuf));
 		printf("  *intrstat = 0x%s\n", sbuf);
 
-		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS,
-		    (*(volatile u_long *)IIOV(NEXT_P_INTRMASK)));
+		bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRMASK)),
+				 NEXT_INTR_BITS, sbuf, sizeof(sbuf));
 		printf("  *intrmask = 0x%s\n", sbuf);
 	}
 #endif
@@ -370,7 +370,7 @@ isrdispatch_vectored(int ipl, struct clockframe *frame)
 
 	intrcnt[ipl]++; /* XXXSCW: Will go away soon */
 	next68k_irq_evcnt[ipl].ev_count++;
-	curcpu()->ci_data.cpu_nintr++;
+	uvmexp.intrs++;
 
 	if (isr->isr_func == NULL) {
 		printf("isrdispatch_vectored: no handler for vec 0x%x\n",

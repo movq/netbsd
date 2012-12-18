@@ -1,4 +1,4 @@
-/*	$NetBSD: kobj_machdep.c,v 1.7 2012/01/06 09:09:25 skrll Exp $	*/
+/*	$NetBSD: kobj_machdep.c,v 1.4 2008/04/28 20:23:23 martin Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.7 2012/01/06 09:09:25 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.4 2008/04/28 20:23:23 martin Exp $");
 
 #define	ELFSIZE		ARCH_ELFSIZE
 
@@ -62,10 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.7 2012/01/06 09:09:25 skrll Exp $
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <machine/cpufunc.h>
-#include <machine/pmap.h>
 
 static inline unsigned int
 RND(unsigned int x)
@@ -105,9 +102,6 @@ kobj_reloc(kobj_t ko, uintptr_t relocbase, const void *data,
 	Elf_Addr addr, value;
 	Elf_Word rtype, symidx;
 	const Elf_Rela *rela;
-	extern int __data_start;
-
-	unsigned int GP = (int) &__data_start;
 
 	if (!isrela) {
 		printf("kobj_reloc: only support RELA relocations\n");
@@ -154,7 +148,7 @@ kobj_reloc(kobj_t ko, uintptr_t relocbase, const void *data,
 		value = LR(addr, value);
 		*where |=
 		    (((value >> 31) & 0x001) <<  0) |
-		    (((value >> 20) & 0x7ff) <<  1) |
+		    (((value >> 20) & 0x3ff) <<  1) |
 		    (((value >> 18) & 0x003) << 14) |
 		    (((value >> 13) & 0x01f) << 16) |
 		    (((value >> 11) & 0x003) << 12);
@@ -173,28 +167,11 @@ kobj_reloc(kobj_t ko, uintptr_t relocbase, const void *data,
 		    (((value & 0x003ff) << 1) << 2);		/* w2 */
 		break;
 
-	case R_TYPE(DPREL14R):
-		/* RR(symbol - GP, addend) */
-		addr = kobj_sym_lookup(ko, symidx);
-		value = RR(addr - GP, value);
-		*where |=
-		     (((value >>  0) & 0x1fff) << 1) |
-		     (((value >> 13) & 0x1) << 0);
-		break;
-
-
+#if 0
+	case R_TYPE(DPREL17F):
 	case R_TYPE(DPREL21L):
-		/* LR(symbol - GP, addend) */
-		addr = kobj_sym_lookup(ko, symidx);
-		value = LR(addr - GP, value);
-		*where |=
-		    (((value >> 31) & 0x001) <<  0) |
-		    (((value >> 20) & 0x7ff) <<  1) |
-		    (((value >> 18) & 0x003) << 14) |
-		    (((value >> 13) & 0x01f) << 16) |
-		    (((value >> 11) & 0x003) << 12);
 		break;
-
+#endif
 	case R_TYPE(SEGREL32):
 		/* symbol - SB + addend */
 		/* XXX SB */
@@ -215,10 +192,8 @@ int
 kobj_machdep(kobj_t ko, void *base, size_t size, bool load)
 {
 
-	if (load) {
+	if (load)
 		fdcache(HPPA_SID_KERNEL, (vaddr_t)base, size);
-		ficache(HPPA_SID_KERNEL, (vaddr_t)base, size);
-	}
 
 	return 0;
 }

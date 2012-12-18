@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec_doi.h,v 1.14 2012/11/29 15:31:25 vanhu Exp $	*/
+/*	$NetBSD: ipsec_doi.h,v 1.11.4.1 2009/02/08 18:42:16 snj Exp $	*/
 
 /* Id: ipsec_doi.h,v 1.15 2006/08/11 16:06:30 vanhu Exp */
 
@@ -33,8 +33,6 @@
 
 #ifndef _IPSEC_DOI_H
 #define _IPSEC_DOI_H
-
-#include "isakmp.h"
 
 /* refered to RFC2407 */
 
@@ -75,7 +73,6 @@
 #define   IPSECDOI_ESP_RC4				10
 #define   IPSECDOI_ESP_NULL				11
 #define   IPSECDOI_ESP_AES				12
-#define   IPSECDOI_ESP_AESGCM16				20
 #define   IPSECDOI_ESP_CAMELLIA				22
 #if 1
   /* draft-ietf-ipsec-ciph-aes-cbc-00.txt */
@@ -200,12 +197,6 @@ struct ipsecdoi_pl_id {
 #define IPSECDOI_TYPE_PH1	0
 #define IPSECDOI_TYPE_PH2	1
 
-/*
- * Prefix that will make ipsecdoi_sockaddr2id() generate address type
- * identities without knowning the exact length of address.
- */
-#define IPSECDOI_PREFIX_HOST	0xff
-
 struct isakmpsa;
 struct ipsecdoi_pl_sa;
 struct saprop;
@@ -218,14 +209,14 @@ extern int ipsecdoi_selectph2proposal __P((struct ph2handle *));
 extern int ipsecdoi_checkph2proposal __P((struct ph2handle *));
 
 extern struct prop_pair **get_proppair __P((vchar_t *, int));
-extern vchar_t *get_sabyproppair __P((u_int32_t, u_int32_t, struct prop_pair *));
+extern vchar_t *get_sabyproppair __P((struct prop_pair *, struct ph1handle *));
 extern int ipsecdoi_updatespi __P((struct ph2handle *iph2));
 extern vchar_t *get_sabysaprop __P((struct saprop *, vchar_t *));
 extern int ipsecdoi_chkcmpids( const vchar_t *, const vchar_t *, int );
 extern int ipsecdoi_checkid1 __P((struct ph1handle *));
 extern int ipsecdoi_setid1 __P((struct ph1handle *));
-extern int set_identifier __P((vchar_t **, int, const vchar_t * const));
-extern int set_identifier_qual __P((vchar_t **, int, const vchar_t * const, int));
+extern int set_identifier __P((vchar_t **, int, vchar_t *));
+extern int set_identifier_qual __P((vchar_t **, int, vchar_t *, int));
 extern int ipsecdoi_setid2 __P((struct ph2handle *));
 extern vchar_t *ipsecdoi_sockaddr2id __P((struct sockaddr *, u_int, u_int));
 extern int ipsecdoi_id2sockaddr __P((vchar_t *, struct sockaddr *,
@@ -234,8 +225,7 @@ extern char *ipsecdoi_id2str __P((const vchar_t *));
 extern vchar_t *ipsecdoi_sockrange2id __P((	struct sockaddr *,
 	struct sockaddr *, u_int));
 
-extern vchar_t *ipsecdoi_setph1proposal __P((struct remoteconf *,
-					     struct isakmpsa *));
+extern vchar_t *ipsecdoi_setph1proposal __P((struct isakmpsa *));
 extern int ipsecdoi_setph2proposal __P((struct ph2handle *));
 extern int ipsecdoi_transportmode __P((struct saprop *));
 extern int ipsecdoi_get_defaultlifetime __P((void));
@@ -248,9 +238,6 @@ extern int ipsecdoi_t2satrns __P((struct isakmp_pl_t *,
 extern int ipsecdoi_authalg2trnsid __P((int));
 extern int idtype2doi __P((int));
 extern int doi2idtype __P((int));
-
-extern int ipsecdoi_parse_responder_lifetime __P((struct isakmp_pl_n *notify,
-	u_int32_t *lifetime_sec, u_int32_t *liftime_kb));
 
 
 #endif /* _IPSEC_DOI_H */

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2011/05/26 12:56:25 joerg Exp $
+#	$NetBSD: Makefile,v 1.1 2008/09/19 21:38:40 christos Exp $
 
 .include "${.CURDIR}/../Makefile.inc"
 
@@ -17,8 +17,6 @@ LPREFIX.fsi_lex.l =	fsi_yy
 CPPFLAGS.fsi_lex.c += -Dyylval=fsi_yylval -Dyyerror=fsi_yyerror
 CPPFLAGS.fsi_util.c += -Dyyerror=fsi_yyerror -Dyyparse=fsi_yyparse
 CPPFLAGS.fsinfo.c += -Dyyparse=fsi_yyparse
-
-CWARNFLAGS.clang+=	-Wno-unneeded-internal-declaration
 
 FSINFOOBJDIR!=cd ${.CURDIR} && ${PRINTOBJDIR}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.29 2012/01/05 21:32:36 christos Exp $	*/
+/*	$NetBSD: md.c,v 1.23 2008/10/07 09:58:16 abs Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,7 +15,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -52,20 +56,6 @@
 #include "msg_defs.h"
 #include "menu_defs.h"
 
-static void install_bootblocks(void);
-static void install_ofwboot(void);
-
-void
-md_init(void)
-{
-}
-
-void
-md_init_set_status(int flags)
-{
-	(void)flags;
-}
-
 int
 md_get_info(void)
 {
@@ -77,14 +67,14 @@ md_get_info(void)
 
 	fd = open(dev_name, O_RDONLY, 0);
 	if (fd < 0) {
-		if (logfp)
+		if (logging)
 			(void)fprintf(logfp, "Can't open %s\n", dev_name);
 		endwin();
 		fprintf(stderr, "Can't open %s\n", dev_name);
 		exit(1);
 	}
 	if (ioctl(fd, DIOCGDINFO, &disklabel) == -1) {
-		if (logfp)
+		if (logging)
 			(void)fprintf(logfp, "Can't read disklabel on %s.\n",
 				dev_name);
 		endwin();
@@ -114,24 +104,6 @@ md_get_info(void)
 }
 
 /*
- * md back-end code for menu-driven BSD disklabel editor.
- */
-int
-md_make_bsd_partitions(void)
-{
-	return make_bsd_partitions();
-}
-
-/*
- * any additional partition validation
- */
-int
-md_check_partitions(void)
-{
-	return 1;
-}
-
-/*
  * hook called before writing new disklabel.
  */
 int
@@ -146,74 +118,97 @@ md_pre_disklabel(void)
 int
 md_post_disklabel(void)
 {
-	install_bootblocks();
 	return 0;
-}
-
-/*
- * hook called after upgrade() or install() has finished setting
- * up the target disk but immediately before the user is given the
- * ``disks are now set up'' message.
- */
-int
-md_post_newfs(void)
-{
-	install_ofwboot();
-	return 0;
-}
-
-int
-md_post_extract(void)
-{
-	return 0;
-}
-
-void
-md_cleanup_install(void)
-{
-#ifndef DEBUG
-	enable_rc_conf();
-#endif
-}
-
-int
-md_pre_update(void)
-{
-	return 1;
-}
-
-/* Upgrade support */
-int
-md_update(void)
-{
-	md_post_newfs();
-	return 1;
 }
 
 /* install/update bootblocks */
 static void
 install_bootblocks(void)
 {
-	/* Install boot blocks before mounting the target disk */
+
+	/* Install boot blocks now that we have a full system ... */
 	msg_display(MSG_dobootblks, diskdev);
 	run_program(RUN_DISPLAY, "/sbin/disklabel -W %s", diskdev);
-	run_program(RUN_DISPLAY, "/usr/sbin/installboot /dev/r%sc"
-	    " /usr/mdec/bootblk", diskdev);
+	run_program(RUN_DISPLAY, "/usr/mdec/binstall ffs %s", targetroot_mnt);
 }
 
-/* install/update secondary bootstrap */
-static void
-install_ofwboot(void)
+/*
+ * hook called after running newfs.
+ */
+int
+md_post_newfs(void)
 {
-	/* copy secondary bootstrap now that the target is mounted */
-	msg_display(MSG_doofwboot, targetroot_mnt);
-	run_program(RUN_DISPLAY, "/bin/cp -p /usr/mdec/ofwboot %s",
-	    targetroot_mnt);
+	install_bootblocks();
+	return 0;
+}
+
+/*
+ * some ports use this to copy the MD filesystem, we do not.
+ */
+int
+md_copy_filesystem(void)
+{
+	return 0;
+}
+
+/*
+ * md back-end code for menu-driven BSD disklabel editor.
+ */
+int
+md_make_bsd_partitions(void)
+{
+	return make_bsd_partitions();
+}
+
+/*
+ * any additional partition validation
+ */
+int
+md_check_partitions(void)
+{
+	return check_partitions();
+}
+
+/* Upgrade support */
+int
+md_update(void)
+{
+	/* endwin(); */
+	md_copy_filesystem();
+	md_post_newfs();
+	wrefresh(curscr);
+	wmove(stdscr, 0, 0);
+	wclear(stdscr);
+	wrefresh(stdscr);
+	return 1;
+}
+
+void
+md_cleanup_install(void)
+{
+
+	enable_rc_conf();
 }
 
 int
-md_pre_mount()
+md_pre_update()
 {
-	install_bootblocks();
+	return 1;
+}
+
+void
+md_init()
+{
+}
+
+void
+md_init_set_status(int minimal)
+{
+	(void)minimal;
+}
+
+int
+md_post_extract(void)
+{
 	return 0;
 }

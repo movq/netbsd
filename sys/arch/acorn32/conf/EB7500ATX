@@ -1,4 +1,4 @@
-#	$NetBSD: EB7500ATX,v 1.49 2012/12/06 06:25:24 msaitoh Exp $
+#	$NetBSD: EB7500ATX,v 1.33 2008/07/31 07:40:59 simonb Exp $
 #
 #	EB7500ATX --- NetBSD/acorn32 complete configuration
 #
@@ -22,7 +22,7 @@ include		"arch/acorn32/conf/std.acorn32"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"EB7500ATX-$Revision: 1.49 $"
+#ident		"EB7500ATX-$Revision: 1.33 $"
 
 # estimated number of users
 maxusers	32
@@ -34,6 +34,9 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 
 # CPU options
 options 	CPU_ARM7	# Support the ARM7 core
+
+# FPA options
+#options 	ARMFPE		# ARM Ltd FPE
 
 options		EB7500ATX	# Define in case needed
 
@@ -52,17 +55,17 @@ file-system	FILECORE	# Acorn filecore file system
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay filesystem
-file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
+file-system	PORTAL		# portal filesystem (still experimental)
 file-system	PROCFS		# /proc
 file-system	UMAPFS		# NULLFS + uid and gid remapping
 file-system	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-options 	QUOTA		# legacy UFS quotas
-options 	QUOTA2		# new, in-filesystem UFS quotas
-#options 	FFS_EI		# FFS Endian Independent support
-options 	WAPBL		# File system journaling support
+options 	QUOTA		# UFS quotas
+#options 	FFS_EI		# FFS Endian Independant support
+options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 options 	NFSSERVER
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
@@ -125,6 +128,8 @@ options 	SYSVSEM		# System V-like semaphores
 #options 	SEMUME=10	# max number of undo entries per process
 #options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
+options 	SHMMAXPGS=1024	# 1024 pages is the default
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 # Device options
 
@@ -135,12 +140,13 @@ options 	MEMORY_DISK_HOOKS	# boottime setup of ramdisk
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 options 	IRQSTATS	# manage IRQ statistics
+options 	LKM		# loadable kernel modules
 options 	KMEMSTATS	# kernel memory statistics
 #options 	SCSIVERBOSE	# Verbose SCSI errors
 options 	USERCONF	# userconf(4) support
 #options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
 #options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
-options		SYMTAB_SPACE=275000
+options		SYMTAB_SPACE=250000
 
 # Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
@@ -193,7 +199,6 @@ vidc0		at mainbus?
 options 	WSEMUL_VT100
 
 #options 	WSDISPLAY_COMPAT_RAWKBD
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 #options 	FONT_BOLD8x16
 #options 	FONT_GALLANT12x22	# Very nice font
@@ -242,7 +247,7 @@ cs*	at rsbus?
 # Not functioning (yet) 
 #ds1687rtc*	at rsbus?
 
-pseudo-device	loop			# network loopback
+pseudo-device	loop	1		# network loopback
 pseudo-device	bpfilter		# packet filter
 pseudo-device	sl			# CSLIP
 pseudo-device	ppp			# PPP
@@ -250,7 +255,7 @@ pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
 pseudo-device	tun			# network tunneling over tty
 pseudo-device	tap			# virtual Ethernet
 #pseudo-device	gre			# generic L3 over IP tunnel
-#pseudo-device	ipfilter		# ip filter
+#pseudo-device	ipfilter 1		# ip filter
 pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
 #pseudo-device	faith			# IPv[46] tcp relay translation i/f
 pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
@@ -272,13 +277,13 @@ options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # options	RF_INCLUDE_INTERDECLUSTER=1
 # options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 # options	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-#pseudo-device	fss			# file system snapshot device
-pseudo-device	md			# Ramdisk driver
+#pseudo-device	fss	4		# file system snapshot device
+pseudo-device	md	1		# Ramdisk driver
+pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
-pseudo-device	putter			# for puffs and pud
 
 # If the standard modes don't work for your monitor, you can specify
 # a RISC-OS-format monitor definition file and a list of modes here.

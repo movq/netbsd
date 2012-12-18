@@ -1,4 +1,4 @@
-/*	$NetBSD: ess_isa.c,v 1.24 2010/05/22 16:35:00 tsutsui Exp $	*/
+/*	$NetBSD: ess_isa.c,v 1.21 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ess_isa.c,v 1.24 2010/05/22 16:35:00 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ess_isa.c,v 1.21 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,14 +52,15 @@ __KERNEL_RCSID(0, "$NetBSD: ess_isa.c,v 1.24 2010/05/22 16:35:00 tsutsui Exp $")
 #define DPRINTF(x)	{}
 #endif
 
-int ess_isa_probe(device_t, cfdata_t, void *);
-void ess_isa_attach(device_t, device_t, void *);
+int ess_isa_probe(struct device *, struct cfdata *, void *);
+void ess_isa_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ess_isa, sizeof(struct ess_softc),
+CFATTACH_DECL(ess_isa, sizeof(struct ess_softc),
     ess_isa_probe, ess_isa_attach, NULL, NULL);
 
 int
-ess_isa_probe(device_t parent, cfdata_t match, void *aux)
+ess_isa_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int ret;
 	struct isa_attach_args *ia;
@@ -120,20 +121,16 @@ ess_isa_probe(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-ess_isa_attach(device_t parent, device_t self, void *aux)
+ess_isa_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ess_softc *sc;
 	struct isa_attach_args *ia;
 	int enablejoy;
 
-	sc = device_private(self);
-
-	sc->sc_dev = self;
+	sc = (void *)self;
 	ia = aux;
 	enablejoy = 0;
-
-	aprint_naive("\n");
-	aprint_normal("\n");
+	printf("\n");
 
 	sc->sc_ic = ia->ia_ic;
 	sc->sc_iot = ia->ia_iot;
@@ -152,7 +149,7 @@ ess_isa_attach(device_t parent, device_t self, void *aux)
 	sc->sc_audio2.drq = ia->ia_ndrq > 1 ? ia->ia_drq[1].ir_drq : -1;
 
 #if NJOY_ESS > 0
-	if (device_cfdata(self)->cf_flags & 1) {
+	if (device_cfdata(&sc->sc_dev)->cf_flags & 1) {
 		sc->sc_joy_iot = ia->ia_iot;
 		if (!bus_space_map(sc->sc_joy_iot, 0x201, 1, 0,
 				   &sc->sc_joy_ioh))
@@ -160,7 +157,7 @@ ess_isa_attach(device_t parent, device_t self, void *aux)
 	}
 #endif
 
-	aprint_normal_dev(self, "");
+	printf("%s", device_xname(&sc->sc_dev));
 
 	essattach(sc, enablejoy);
 }

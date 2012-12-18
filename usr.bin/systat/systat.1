@@ -1,4 +1,4 @@
-.\"	$NetBSD: systat.1,v 1.42 2012/03/22 07:58:20 wiz Exp $
+.\"	$NetBSD: systat.1,v 1.37 2007/02/18 17:29:26 dsl Exp $
 .\"
 .\" Copyright (c) 1985, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)systat.1	8.2 (Berkeley) 12/30/93
 .\"
-.Dd January 5, 2012
+.Dd February 18, 2007
 .Dt SYSTAT 1
 .Os
 .Sh NAME
@@ -70,11 +70,11 @@ disk usage statistics (a la
 disk
 .Tn I/O
 statistics (a la
-.Xr iostat 8 ) ,
+.Xr iostat  8  ) ,
 virtual memory statistics (a la
-.Xr vmstat 1 ) ,
+.Xr vmstat  1  ) ,
 network ``mbuf'' utilization, and network connections (a la
-.Xr netstat 1 ) .
+.Xr netstat  1  ) .
 .Pp
 Input is interpreted at two different levels.
 A ``global'' command interpreter processes all keyboard input.
@@ -120,6 +120,7 @@ argument expects to be one of:
 .Ic inet.tcp ,
 .Ic inet.tcpsyn ,
 .Ic inet6.ip6 ,
+.Ic ipsec ,
 .Ic iostat ,
 .Ic mbufs ,
 .Ic netstat ,
@@ -181,7 +182,10 @@ Print the load average over the past 1, 5, and 15 minutes
 on the command line.
 .It Ic stop
 Stop refreshing the screen.
-.It Oo Ic start Oc Oo Ar number Oc
+.It Xo
+.Op Ic start
+.Op Ar number
+.Xc
 Start (continue) refreshing the screen.
 If a second, numeric, argument is provided it is interpreted as a
 refresh interval in seconds.
@@ -238,6 +242,8 @@ Display statistics about the
 ``syncache''.
 .It Ic inet6.ip6
 Display IPv6 statistics.
+.It Ic ipsec
+Display IPsec statistics for both IPv4 and v6.
 .It Ic iostat
 Display, in the lower window, statistics about processor use
 and disk throughput.
@@ -332,7 +338,8 @@ Reset the port, host, and protocol matching mechanisms to the default
 (any protocol, port, or host).
 .El
 .It Ic pigs
-Display, in the lower window, those processes which are getting the
+Display, in the lower window, those processes resident in main
+memory and getting the
 largest portion of the processor (the default display).
 When less than 100% of the
 processor is scheduled to user processes, the remaining time
@@ -406,7 +413,8 @@ and fifteen minute intervals.
 Below this is a list of the
 average number of processes (over the last refresh interval)
 that are runnable (`r'), in page wait (`p'),
-in disk wait other than paging (`d'), sleeping (`s').
+in disk wait other than paging (`d'),
+sleeping (`s'), and swapped out but desiring to run (`w').
 Below the queue length listing is a numerical listing and
 a bar graph showing the amount of
 system (shown as `='), user (shown as `\*[Gt]'),
@@ -517,6 +525,7 @@ with the ones specified.
 The following commands are specific to the
 .Ic inet.* ,
 .Ic inet6.* ,
+.Ic ipsec ,
 .Ic syscall
 and
 .Ic vmstat
@@ -539,6 +548,8 @@ Reset running statistics to zero.
 For the namelist.
 .It Pa /dev/kmem
 For information in main memory.
+.It Pa /dev/drum
+For information about swapped out processes.
 .It Pa /etc/hosts
 For host names.
 .It Pa /etc/networks

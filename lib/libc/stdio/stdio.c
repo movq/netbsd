@@ -1,4 +1,4 @@
-/*	$NetBSD: stdio.c,v 1.21 2012/03/27 15:05:42 christos Exp $	*/
+/*	$NetBSD: stdio.c,v 1.14 2008/03/13 15:40:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)stdio.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: stdio.c,v 1.21 2012/03/27 15:05:42 christos Exp $");
+__RCSID("$NetBSD: stdio.c,v 1.14 2008/03/13 15:40:00 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -56,68 +56,71 @@ __RCSID("$NetBSD: stdio.c,v 1.21 2012/03/27 15:05:42 christos Exp $");
  * Small standard I/O/seek/close functions.
  * These maintain the `known seek offset' for seek optimisation.
  */
-ssize_t
-__sread(void *cookie, void *buf, size_t n)
+int
+__sread(cookie, buf, n)
+	void *cookie;
+	char *buf;
+	int n;
 {
 	FILE *fp = cookie;
-	ssize_t ret;
+	int ret;
 	
-	_DIAGASSERT(cookie != NULL);
-	_DIAGASSERT(cookie == fp->_cookie);
+	_DIAGASSERT(fp != NULL);
 	_DIAGASSERT(buf != NULL);
 
-	ret = read(__sfileno(fp), buf, n);
+	ret = read(__sfileno(fp), buf, (size_t)n);
 	/* if the read succeeded, update the current offset */
 	if (ret >= 0)
 		fp->_offset += ret;
 	else
 		fp->_flags &= ~__SOFF;	/* paranoia */
-
-	return ret;
+	return (ret);
 }
 
-ssize_t
-__swrite(void *cookie, const void *buf, size_t n)
+int
+__swrite(cookie, buf, n)
+	void *cookie;
+	char const *buf;
+	int n;
 {
 	FILE *fp = cookie;
 
 	_DIAGASSERT(cookie != NULL);
-	_DIAGASSERT(cookie == fp->_cookie);
 	_DIAGASSERT(buf != NULL);
 
 	if (fp->_flags & __SAPP)
-		if (lseek(__sfileno(fp), (off_t)0, SEEK_END) == (off_t)-1)
-			return -1;
+		(void) lseek(__sfileno(fp), (off_t)0, SEEK_END);
 	fp->_flags &= ~__SOFF;	/* in case FAPPEND mode is set */
-	return write(__sfileno(fp), buf, n);
+	return write(__sfileno(fp), buf, (size_t)n);
 }
 
-off_t
-__sseek(void *cookie, off_t offset, int whence)
+fpos_t
+__sseek(cookie, offset, whence)
+	void *cookie;
+	fpos_t offset;
+	int whence;
 {
 	FILE *fp = cookie;
 	off_t ret;
 
-	_DIAGASSERT(cookie != NULL);
-	_DIAGASSERT(cookie == fp->_cookie);
+	_DIAGASSERT(fp != NULL);
 	
-	ret = lseek(__sfileno(fp), offset, whence);
-	if (ret == (off_t)-1L)
+	ret = lseek(__sfileno(fp), (off_t)offset, whence);
+	if (ret == -1L)
 		fp->_flags &= ~__SOFF;
 	else {
 		fp->_flags |= __SOFF;
 		fp->_offset = ret;
 	}
-	return ret;
+	return (ret);
 }
 
 int
-__sclose(void *cookie)
+__sclose(cookie)
+	void *cookie;
 {
-	FILE *fp = cookie;
 
 	_DIAGASSERT(cookie != NULL);
-	_DIAGASSERT(cookie == fp->_cookie);
 
-	return close(__sfileno(fp));
+	return close(__sfileno((FILE *)cookie));
 }

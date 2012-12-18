@@ -1,4 +1,4 @@
-/*	$NetBSD: dp83932.c,v 1.35 2010/11/13 13:52:00 uebayasi Exp $	*/
+/*	$NetBSD: dp83932.c,v 1.27 2008/08/23 15:46:47 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -35,8 +35,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dp83932.c,v 1.35 2010/11/13 13:52:00 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dp83932.c,v 1.27 2008/08/23 15:46:47 tsutsui Exp $");
 
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,11 +49,15 @@ __KERNEL_RCSID(0, "$NetBSD: dp83932.c,v 1.35 2010/11/13 13:52:00 uebayasi Exp $"
 #include <sys/errno.h>
 #include <sys/device.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_ether.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -60,21 +65,21 @@ __KERNEL_RCSID(0, "$NetBSD: dp83932.c,v 1.35 2010/11/13 13:52:00 uebayasi Exp $"
 #include <dev/ic/dp83932reg.h>
 #include <dev/ic/dp83932var.h>
 
-static void	sonic_start(struct ifnet *);
-static void	sonic_watchdog(struct ifnet *);
-static int	sonic_ioctl(struct ifnet *, u_long, void *);
-static int	sonic_init(struct ifnet *);
-static void	sonic_stop(struct ifnet *, int);
+void	sonic_start(struct ifnet *);
+void	sonic_watchdog(struct ifnet *);
+int	sonic_ioctl(struct ifnet *, u_long, void *);
+int	sonic_init(struct ifnet *);
+void	sonic_stop(struct ifnet *, int);
 
-static bool	sonic_shutdown(device_t, int);
+void	sonic_shutdown(void *);
 
-static void	sonic_reset(struct sonic_softc *);
-static void	sonic_rxdrain(struct sonic_softc *);
-static int	sonic_add_rxbuf(struct sonic_softc *, int);
-static void	sonic_set_filter(struct sonic_softc *);
+void	sonic_reset(struct sonic_softc *);
+void	sonic_rxdrain(struct sonic_softc *);
+int	sonic_add_rxbuf(struct sonic_softc *, int);
+void	sonic_set_filter(struct sonic_softc *);
 
-static uint16_t sonic_txintr(struct sonic_softc *);
-static void	sonic_rxintr(struct sonic_softc *);
+uint16_t sonic_txintr(struct sonic_softc *);
+void	sonic_rxintr(struct sonic_softc *);
 
 int	sonic_copy_small = 0;
 
@@ -217,12 +222,10 @@ sonic_attach(struct sonic_softc *sc, const uint8_t *enaddr)
 	/*
 	 * Make sure the interface is shutdown during reboot.
 	 */
-	if (pmf_device_register1(sc->sc_dev, NULL, NULL, sonic_shutdown))
-		pmf_class_network_register(sc->sc_dev, ifp);
-	else
+	sc->sc_sdhook = shutdownhook_establish(sonic_shutdown, sc);
+	if (sc->sc_sdhook == NULL)
 		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
-
+		    "WARNING: unable to establish shutdown hook\n");
 	return;
 
 	/*
@@ -259,14 +262,12 @@ sonic_attach(struct sonic_softc *sc, const uint8_t *enaddr)
  *
  *	Make sure the interface is stopped at reboot.
  */
-bool
-sonic_shutdown(device_t self, int howto)
+void
+sonic_shutdown(void *arg)
 {
-	struct sonic_softc *sc = device_private(self);
+	struct sonic_softc *sc = arg;
 
 	sonic_stop(&sc->sc_ethercom.ec_if, 1);
-
-	return true;
 }
 
 /*
@@ -464,10 +465,13 @@ sonic_start(struct ifnet *ifp)
 		sc->sc_txpending++;
 		sc->sc_txlast = nexttx;
 
+#if NBPFILTER > 0
 		/*
 		 * Pass the packet to any BPF listeners.
 		 */
-		bpf_mtap(ifp, m0);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m0);
+#endif
 	}
 
 	if (sc->sc_txpending == (SONIC_NTXDESC - 1)) {
@@ -837,10 +841,13 @@ sonic_rxintr(struct sonic_softc *sc)
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 
+#if NBPFILTER > 0
 		/*
 		 * Pass this up to any BPF listeners.
 		 */
-		bpf_mtap(ifp, m);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif /* NBPFILTER > 0 */
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);

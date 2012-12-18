@@ -1,4 +1,4 @@
-/* $NetBSD: wsemul_sun.c,v 1.28 2010/03/12 08:40:50 jdc Exp $ */
+/* $NetBSD: wsemul_sun.c,v 1.26.64.1 2010/03/17 03:22:53 snj Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -33,7 +33,7 @@
 /* XXX DESCRIPTION/SOURCE OF INFORMATION */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsemul_sun.c,v 1.28 2010/03/12 08:40:50 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsemul_sun.c,v 1.26.64.1 2010/03/17 03:22:53 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -544,13 +544,6 @@ int
 wsemul_sun_translate(void *cookie, keysym_t in, const char **out)
 {
 	static char c;
-
-	if (KS_GROUP(in) == KS_GROUP_Plain) {
-		/* allow ISO-1 */
-		c = KS_VALUE(in);
-		*out = &c;
-		return (1);
-	}
 
 	if (KS_GROUP(in) == KS_GROUP_Keypad && (in & 0x80) == 0) {
 		c = in & 0xff; /* turn into ASCII */

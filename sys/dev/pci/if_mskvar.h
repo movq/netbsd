@@ -1,5 +1,5 @@
 /*	$OpenBSD: if_mskvar.h,v 1.3 2006/12/28 16:34:42 kettenis Exp $	*/
-/*	$NetBSD: if_mskvar.h,v 1.11 2012/10/14 19:10:41 msaitoh Exp $	*/
+/*	$NetBSD: if_mskvar.h,v 1.7 2008/06/20 16:45:13 cube Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -81,7 +81,11 @@
 #ifndef _DEV_PCI_IF_MSKVAR_H_
 #define _DEV_PCI_IF_MSKVAR_H_
 
+#include "rnd.h"
+
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 struct sk_jpool_entry {
 	int                             slot;
@@ -184,7 +188,7 @@ struct sk_if_softc;
 
 /* Softc for the Yukon-II controller. */
 struct sk_softc {
-	device_t		sk_dev;
+	struct device		sk_dev;		/* generic device */
 	bus_space_handle_t	sk_bhandle;	/* bus space handle */
 	bus_space_tag_t		sk_btag;	/* bus space tag */
 	void			*sk_intrhand;	/* irq handler handle */
@@ -205,12 +209,14 @@ struct sk_softc {
 	bus_dmamap_t		sk_status_map;
 	int			sk_status_idx;
 	int			sk_status_own_idx;
-	krndsource_t     rnd_source;
+#if NRND > 0
+	rndsource_element_t     rnd_source;
+#endif
 };
 
 /* Softc for each logical interface */
 struct sk_if_softc {
-	device_t		sk_dev;
+	struct device		sk_dev;		/* generic device */
 	struct ethercom		sk_ethercom;	/* interface info */
 	struct mii_data		sk_mii;
 	u_int8_t		sk_enaddr[ETHER_ADDR_LEN]; /* station addr */

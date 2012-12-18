@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.10 2012/04/13 07:05:32 jruoho Exp $
+# $NetBSD: Makefile,v 1.3 2008/05/01 15:38:17 jmmv Exp $
 
 .include <bsd.own.mk>
 
@@ -9,17 +9,16 @@ TESTSDIR=	${TESTSBASE}/modules
 # creates the 'modules' subdirectory unconditionally, which if left empty
 # will confuse atf-run.  Therefore we must install, at the very least, the
 # Atffile into it.
-TESTS_C=	t_modctl
-TESTS_C+=	t_builtin
-LDADD=		-lprop
-LDADD+=		-lrumpfs_kernfs -lrumpvfs -lrump -lrumpuser -lpthread
+.if ${MKMODULAR} != no
 
-TESTS_SH=	t_abi_uvm
-TESTS_SH+=	t_modload
+TESTS_C=	t_modctl
+LDADD=		-lprop
+
+TESTS_SH=	t_modload
 
 SUBDIR=		k_helper
-SUBDIR+=	k_helper2
-SUBDIR+=	k_helper3
-SUBDIR+=	k_uvm
 
+.endif
+
+.include <bsd.subdir.mk>
 .include <bsd.test.mk>

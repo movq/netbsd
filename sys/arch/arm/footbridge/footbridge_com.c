@@ -1,4 +1,4 @@
-/*	$NetBSD: footbridge_com.c,v 1.35 2012/10/10 21:53:09 skrll Exp $	*/
+/*	$NetBSD: footbridge_com.c,v 1.28 2008/06/13 08:49:15 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1997 Mark Brinicombe
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: footbridge_com.c,v 1.35 2012/10/10 21:53:09 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: footbridge_com.c,v 1.28 2008/06/13 08:49:15 cegger Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ddbparam.h"
@@ -53,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: footbridge_com.c,v 1.35 2012/10/10 21:53:09 skrll Ex
 #include <sys/malloc.h>
 #include <sys/termios.h>
 #include <sys/kauth.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <arm/footbridge/dc21285mem.h>
 #include <arm/footbridge/dc21285reg.h>
@@ -78,7 +78,7 @@ extern u_int dc21285_fclk;
 #endif	/* DDB */
 
 struct fcom_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	void			*sc_ih;
@@ -100,21 +100,21 @@ struct fcom_softc {
 
 #define RX_BUFFER_SIZE	0x100
 
-static int  fcom_probe(device_t, cfdata_t, void *);
-static void fcom_attach(device_t, device_t, void *);
-static void fcom_softintr(void *);
+static int  fcom_probe   __P((struct device *, struct cfdata *, void *));
+static void fcom_attach  __P((struct device *, struct device *, void *));
+static void fcom_softintr __P((void *));
 
-static int fcom_rxintr(void *);
-/*static int fcom_txintr(void *);*/
+static int fcom_rxintr __P((void *));
+/*static int fcom_txintr __P((void *));*/
 
 /*struct consdev;*/
-/*void	fcomcnprobe(struct consdev *);
-void	fcomcninit(struct consdev *);*/
-int	fcomcngetc(dev_t);
-void	fcomcnputc(dev_t, int);
-void	fcomcnpollc(dev_t, int);
+/*void	fcomcnprobe	__P((struct consdev *));
+void	fcomcninit	__P((struct consdev *));*/
+int	fcomcngetc	__P((dev_t));
+void	fcomcnputc	__P((dev_t, int));
+void	fcomcnpollc	__P((dev_t, int));
 
-CFATTACH_DECL_NEW(fcom, sizeof(struct fcom_softc),
+CFATTACH_DECL(fcom, sizeof(struct fcom_softc),
     fcom_probe, fcom_attach, NULL, NULL);
 
 extern struct cfdriver fcom_cd;
@@ -132,8 +132,8 @@ const struct cdevsw fcom_cdevsw = {
 	nostop, fcomtty, fcompoll, nommap, ttykqfilter, D_TTY
 };
 
-void fcominit(bus_space_tag_t, bus_space_handle_t, int, int);
-void fcominitcons(bus_space_tag_t, bus_space_handle_t);
+void fcominit	 	__P((bus_space_tag_t, bus_space_handle_t, int, int));
+void fcominitcons 	__P((bus_space_tag_t, bus_space_handle_t));
 
 bus_space_tag_t fcomconstag;
 bus_space_handle_t fcomconsioh;
@@ -154,14 +154,17 @@ extern int comcnspeed;
 extern struct bus_space fcomcons_bs_tag;
 
 /*
- * int fcom_probe(device_t parent, cfdata_t cf, void *aux)
+ * int fcom_probe(struct device *parent, struct cfdata *cf, void *aux)
  *
  * Make sure we are trying to attach a com device and then
  * probe for one.
  */
 
 static int
-fcom_probe(device_t parent, cfdata_t cf, void *aux)
+fcom_probe(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	union footbridge_attach_args *fba = aux;
 
@@ -171,19 +174,20 @@ fcom_probe(device_t parent, cfdata_t cf, void *aux)
 }
 
 /*
- * void fcom_attach(device_t parent, device_t self, void *aux)
+ * void fcom_attach(struct device *parent, struct device *self, void *aux)
  *
  * attach the com device
  */
 
 static void
-fcom_attach(device_t parent, device_t self, void *aux)
+fcom_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	union footbridge_attach_args *fba = aux;
-	struct fcom_softc *sc = device_private(self);
+	struct fcom_softc *sc = (struct fcom_softc *)self;
 
 	/* Set up the softc */
-	sc->sc_dev = self;
 	sc->sc_iot = fba->fba_fca.fca_iot;
 	sc->sc_ioh = fba->fba_fca.fca_ioh;
 	callout_init(&sc->sc_softintr_ch, 0);
@@ -202,20 +206,20 @@ fcom_attach(device_t parent, device_t self, void *aux)
 		/* locate the major number */
 		major = cdevsw_lookup_major(&fcom_cdevsw);
 
-		cn_tab->cn_dev = makedev(major, device_unit(sc->sc_dev));
-		aprint_normal(": console");
+		cn_tab->cn_dev = makedev(major, device_unit(&sc->sc_dev));
+		printf(": console");
 	}
-	aprint_normal("\n");
+	printf("\n");
 
 	sc->sc_ih = footbridge_intr_claim(sc->sc_rx_irq, IPL_SERIAL,
 		"serial rx", fcom_rxintr, sc);
 	if (sc->sc_ih == NULL)
 		panic("%s: Cannot install rx interrupt handler",
-		    device_xname(sc->sc_dev));
+		    sc->sc_dev.dv_xname);
 }
 
-static void fcomstart(struct tty *);
-static int fcomparam(struct tty *, struct termios *);
+static void fcomstart __P((struct tty *));
+static int fcomparam __P((struct tty *, struct termios *));
 
 int
 fcomopen(dev_t dev, int flag, int mode, struct lwp *l)
@@ -227,7 +231,7 @@ fcomopen(dev_t dev, int flag, int mode, struct lwp *l)
 	if (!sc)
 		return ENXIO;
 	if (!(tp = sc->sc_tty))
-		sc->sc_tty = tp = tty_alloc();
+		sc->sc_tty = tp = ttymalloc();
 	if (!sc->sc_rxbuffer[0]) {
 		sc->sc_rxbuffer[0] = malloc(RX_BUFFER_SIZE, M_DEVBUF, M_WAITOK);
 		sc->sc_rxbuffer[1] = malloc(RX_BUFFER_SIZE, M_DEVBUF, M_WAITOK);
@@ -236,7 +240,7 @@ fcomopen(dev_t dev, int flag, int mode, struct lwp *l)
 		sc->sc_rxbuf = sc->sc_rxbuffer[sc->sc_rxcur];
 		if (!sc->sc_rxbuf)
 			panic("%s: Cannot allocate rx buffer memory",
-			    device_xname(sc->sc_dev));
+			    sc->sc_dev.dv_xname);
 	}
 	tp->t_oproc = fcomstart;
 	tp->t_param = fcomparam;
@@ -515,7 +519,8 @@ fcomparam(struct tty *tp, struct termios *t)
 static int softint_scheduled = 0;
 
 static void
-fcom_softintr(void *arg)
+fcom_softintr(arg)
+	void *arg;
 {
 	struct fcom_softc *sc = arg;
 	struct tty *tp = sc->sc_tty;
@@ -539,7 +544,8 @@ fcom_softintr(void *arg)
 
 #if 0
 static int
-fcom_txintr(void *arg)
+fcom_txintr(arg)
+	void *arg;
 {
 /*	struct fcom_softc *sc = arg;*/
 
@@ -549,7 +555,8 @@ fcom_txintr(void *arg)
 #endif
 
 static int
-fcom_rxintr(void *arg)
+fcom_rxintr(arg)
+	void *arg;
 {
 	struct fcom_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -586,7 +593,8 @@ fcom_rxintr(void *arg)
 
 #if 0
 void
-fcom_iflush(struct fcom_softc *sc)
+fcom_iflush(sc)
+	struct fcom_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -603,7 +611,8 @@ fcom_iflush(struct fcom_softc *sc)
 
 #if 0
 void
-fcomcnprobe(struct consdev *cp)
+fcomcnprobe(cp)
+	struct consdev *cp;
 {
 	int major;
 
@@ -618,7 +627,8 @@ fcomcnprobe(struct consdev *cp)
 }
 
 void
-fcomcninit(struct consdev *cp)
+fcomcninit(cp)
+	struct consdev *cp;
 {
 	fcomconstag = &fcomcons_bs_tag;
 
@@ -630,7 +640,10 @@ fcomcninit(struct consdev *cp)
 #endif
 
 int
-fcomcnattach(u_int iobase, int rate, tcflag_t cflag)
+fcomcnattach(iobase, rate, cflag)
+	u_int iobase;
+	int rate;
+	tcflag_t cflag;
 {
 	static struct consdev fcomcons = {
 		NULL, NULL, fcomcngetc, fcomcnputc, fcomcnpollc, NULL,
@@ -665,7 +678,11 @@ fcomcndetach(void)
  * Initialize UART to known state.
  */
 void
-fcominit(bus_space_tag_t iot, bus_space_handle_t ioh, int rate, int mode)
+fcominit(iot, ioh, rate, mode)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	int rate;
+	int mode;
 {
 	int baudrate;
 	int h_ubrlcr;
@@ -724,7 +741,9 @@ fcominit(bus_space_tag_t iot, bus_space_handle_t ioh, int rate, int mode)
  * Set UART for console use. Do normal init, then enable interrupts.
  */
 void
-fcominitcons(bus_space_tag_t iot, bus_space_handle_t ioh)
+fcominitcons(iot, ioh)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
 {
 	int s = splserial();
 
@@ -737,7 +756,8 @@ fcominitcons(bus_space_tag_t iot, bus_space_handle_t ioh)
 #endif
 
 int
-fcomcngetc(dev_t dev)
+fcomcngetc(dev)
+	dev_t dev;
 {
 	int s = splserial();
 	bus_space_tag_t iot = fcomconstag;
@@ -764,7 +784,9 @@ fcomcngetc(dev_t dev)
  * Console kernel output character routine.
  */
 void
-fcomcnputc(dev_t dev, int c)
+fcomcnputc(dev, c)
+	dev_t dev;
+	int c;
 {
 	int s = splserial();
 	bus_space_tag_t iot = fcomconstag;
@@ -786,6 +808,8 @@ fcomcnputc(dev_t dev, int c)
 }
 
 void
-fcomcnpollc(dev_t dev, int on)
+fcomcnpollc(dev, on)
+	dev_t dev;
+	int on;
 {
 }

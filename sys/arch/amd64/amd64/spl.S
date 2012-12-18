@@ -1,4 +1,4 @@
-/*	$NetBSD: spl.S,v 1.26 2012/11/10 16:28:06 cherry Exp $	*/
+/*	$NetBSD: spl.S,v 1.20.6.1 2009/04/03 17:42:36 snj Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -99,8 +99,8 @@ IDTVEC(softintr)
 	movl	$IPL_HIGH,CPUVAR(ILEVEL)
 	movq	CPUVAR(CURLWP),%r15
 	movq	IS_LWP(%rax),%rdi	/* switch to handler LWP */
-	movq	L_PCB(%rdi),%rdx
-	movq	L_PCB(%r15),%rcx
+	movq	L_ADDR(%rdi),%rdx
+	movq	L_ADDR(%r15),%rcx
 	movq	%rdi,CPUVAR(CURLWP)
 	movq	%rsp,PCB_RSP(%rcx)
 	movq	%rbp,PCB_RBP(%rcx)
@@ -110,7 +110,7 @@ IDTVEC(softintr)
 	movl	IS_MAXLEVEL(%rax),%esi	/* ipl to run at */
 	call	_C_LABEL(softint_dispatch)/* run handlers */
 	cli
-	movq	L_PCB(%r15),%rcx
+	movq	L_ADDR(%r15),%rcx
 	movq	PCB_RSP(%rcx),%rsp
 	xchgq	%r15,CPUVAR(CURLWP)	/* must be globally visible */
 	popq	%r15			/* unwind switchframe */
@@ -186,7 +186,7 @@ ENTRY(splraise)
 /*
  * void spllower(int s);
  *
- * Must be the same size as cx8_spllower().  This must use
+ * Must be the same size as i686_spllower().  This must use
  * pushf/cli/popf as it is used early in boot where interrupts
  * are disabled via eflags/IE.
  */
@@ -229,7 +229,7 @@ ENTRY(cx8_spllower)
 	movl	CPUVAR(ILEVEL),%edx
 	movq	%rbx,%r8
 	cmpl	%edx,%edi			/* new level is lower? */
-	jae	1f
+	jae,pn	1f
 0:
 	movl	CPUVAR(IPENDING),%eax
 	movl	%edi,%ecx
@@ -239,9 +239,9 @@ ENTRY(cx8_spllower)
 	 * On the P4 this jump is cheaper than patching in junk
 	 * using cmov.  Is cmpxchg expensive if it fails?
 	 */
-	jnz	2f
+	jnz,pn	2f
 	cmpxchg8b CPUVAR(ISTATE)		/* swap in new ilevel */
-	jnz	0b
+	jnz,pn	0b
 1:
 	movq	%r8,%rbx
 	ret
@@ -265,7 +265,7 @@ LABEL(cx8_spllower_end)
  * It is important that the bit scan instruction is bsr, it will get
  * the highest 2 bits (currently the IPI and clock handlers) first,
  * to avoid deadlocks where one CPU sends an IPI, another one is at
- * splhigh() and defers it, lands in here via splx(), and handles
+ * splipi() and defers it, lands in here via splx(), and handles
  * a lower-prio one first, which needs to take the kernel lock -->
  * the sending CPU will never see the that CPU accept the IPI
  * (see pmap_tlb_shootnow).
@@ -344,3 +344,18 @@ doreti_checkast:
 	call	_C_LABEL(do_pmap_load)
 	CLI(si)
 	jmp	doreti_checkast		/* recheck ASTs */
+
+#ifdef XEN
+NENTRY(call_evtchn_do_event)
+	incl	CPUVAR(IDEPTH)
+	call    _C_LABEL(evtchn_do_event)
+	decl	CPUVAR(IDEPTH)
+	ret
+#ifdef DOM0OPS
+NENTRY(call_xenevt_event)
+	incl	CPUVAR(IDEPTH)
+	call    _C_LABEL(xenevt_event)
+	decl	CPUVAR(IDEPTH)
+	ret
+#endif /* DOM0OPS */
+#endif /* XEN */

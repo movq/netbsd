@@ -1,4 +1,4 @@
-/*	$NetBSD: txcom.c,v 1.46 2012/10/27 17:17:54 chs Exp $ */
+/*	$NetBSD: txcom.c,v 1.40.6.1 2010/11/26 17:16:03 riz Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000, 2004 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: txcom.c,v 1.46 2012/10/27 17:17:54 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: txcom.c,v 1.40.6.1 2010/11/26 17:16:03 riz Exp $");
 
 #include "opt_tx39uart_debug.h"
 
@@ -95,11 +95,12 @@ struct txcom_chip {
 };
 
 struct txcom_softc {
+	struct	device		sc_dev;
 	struct tty		*sc_tty;
 	struct txcom_chip	*sc_chip;
 
-	void		*sc_txsoft_cookie;
-	void		*sc_rxsoft_cookie;
+	struct callout		sc_txsoft_ch;
+	struct callout		sc_rxsoft_ch;
 
  	u_int8_t	*sc_tba;	/* transmit buffer address */
  	int		sc_tbc;		/* transmit byte count */
@@ -111,9 +112,9 @@ struct txcom_softc {
 
 extern struct cfdriver txcom_cd;
 
-int	txcom_match(device_t, cfdata_t, void *);
-void	txcom_attach(device_t, device_t, void *);
-int	txcom_print(void *, const char *);
+int	txcom_match(struct device *, struct cfdata *, void *);
+void	txcom_attach(struct device *, struct device *, void *);
+int	txcom_print(void*, const char *);
 
 int	txcom_txintr(void *);
 int	txcom_rxintr(void *);
@@ -164,7 +165,7 @@ struct consdev txcomcons = {
 /* Serial console */
 struct txcom_chip txcom_chip;
 
-CFATTACH_DECL_NEW(txcom, sizeof(struct txcom_softc),
+CFATTACH_DECL(txcom, sizeof(struct txcom_softc),
     txcom_match, txcom_attach, NULL, NULL);
 
 dev_type_open(txcomopen);
@@ -182,17 +183,20 @@ const struct cdevsw txcom_cdevsw = {
 };
 
 int
-txcom_match(device_t parent, cfdata_t cf, void *aux)
+txcom_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	/* if the autoconfiguration got this far, there's a slot here */
 	return 1;
 }
 
 void
-txcom_attach(device_t parent, device_t self, void *aux)
+txcom_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct tx39uart_attach_args *ua = aux;
-	struct txcom_softc *sc = device_private(self);
+	struct txcom_softc *sc = (void*)self;
 	tx_chipset_tag_t tc;
 	struct tty *tp;
 	struct txcom_chip *chip;
@@ -229,7 +233,7 @@ txcom_attach(device_t parent, device_t self, void *aux)
 	}
 	memset(sc->sc_rbuf, 0, TXCOM_RING_SIZE);
 
-	tp = tty_alloc();
+	tp = ttymalloc();
 	tp->t_oproc = txcomstart;
 	tp->t_param = txcomparam;
 	tp->t_hwiflow = NULL;
@@ -241,12 +245,16 @@ txcom_attach(device_t parent, device_t self, void *aux)
 		/* locate the major number */
 		maj = cdevsw_lookup_major(&txcom_cdevsw);
 
-		cn_tab->cn_dev = makedev(maj, device_unit(self));
+		cn_tab->cn_dev = makedev(maj, device_unit(&sc->sc_dev));
 
 		printf(": console");
 	}
 
 	printf("\n");
+
+	/* initialize callouts */
+	callout_init(&sc->sc_txsoft_ch, 0);
+	callout_init(&sc->sc_rxsoft_ch, 0);
 
 	/* 
 	 * Enable interrupt
@@ -267,11 +275,6 @@ txcom_attach(device_t parent, device_t self, void *aux)
 	    txcom_parityerr_intr, sc);
 	tx_intr_establish(tc, TXCOMINTR(BREAK, slot), IST_EDGE, IPL_TTY,
 	    txcom_break_intr, sc);
-
-	sc->sc_txsoft_cookie =
-	    softint_establish(SOFTINT_SERIAL, txcom_txsoft, sc);
-	sc->sc_rxsoft_cookie =
-	    softint_establish(SOFTINT_SERIAL, txcom_rxsoft, sc);
 
 	/*
 	 * UARTA has external signal line. (its wiring is platform dependent)
@@ -414,9 +417,9 @@ __txcom_txbufready(struct txcom_chip *chip, int retry)
 }
 
 void
-txcom_pulse_mode(device_t dev)
+txcom_pulse_mode(struct device *dev)
 {
-	struct txcom_softc *sc = device_private(dev);
+	struct txcom_softc *sc = (void*)dev;
 	struct txcom_chip *chip = sc->sc_chip;
 	tx_chipset_tag_t tc = chip->sc_tc;
 	int ofs;
@@ -700,7 +703,7 @@ txcom_rxintr(void *arg)
 	sc->sc_rbuf[sc->sc_rbput] = c;
 	sc->sc_rbput = (sc->sc_rbput + 1) % TXCOM_RING_MASK;
 	
-	softint_schedule(sc->sc_rxsoft_cookie);
+	callout_reset(&sc->sc_rxsoft_ch, 1, txcom_rxsoft, sc);
 
 	return 0;
 }
@@ -749,7 +752,7 @@ txcom_txintr(void *arg)
 		sc->sc_tbc--;
 		sc->sc_tba++;
 	} else {
-		softint_schedule(sc->sc_txsoft_cookie);
+		callout_reset(&sc->sc_txsoft_ch, 1, txcom_txsoft, sc);
 	}
 
 	return 0;

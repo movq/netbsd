@@ -1,4 +1,4 @@
-/*	$NetBSD: events.c,v 1.1.1.4 2012/06/09 11:27:25 tron Exp $	*/
+/*	$NetBSD: events.c,v 1.1.1.1.2.4 2011/01/07 01:24:17 riz Exp $	*/
 
 /*++
 /* NAME
@@ -63,8 +63,7 @@
 /*	event_request_timer() causes the specified callback function to
 /*	be called with the specified context argument after \fIdelay\fR
 /*	seconds, or as soon as possible thereafter. The delay should
-/*	not be negative (the manifest EVENT_NULL_DELAY provides for
-/*	convenient zero-delay notification).
+/*	not be negative.
 /*	The event argument is equal to EVENT_TIME.
 /*	Only one timer request can be active per (callback, context) pair.
 /*	Calling event_request_timer() with an existing (callback, context)
@@ -182,7 +181,6 @@ typedef fd_set EVENT_MASK;
 #define EVENT_MASK_SET(fd, mask)	FD_SET((fd), (mask))
 #define EVENT_MASK_ISSET(fd, mask)	FD_ISSET((fd), (mask))
 #define EVENT_MASK_CLR(fd, mask)	FD_CLR((fd), (mask))
-#define EVENT_MASK_CMP(m1, m2) memcmp((m1), (m2), EVENT_MASK_BYTE_COUNT(m1))
 #else
 
  /*
@@ -229,8 +227,6 @@ typedef struct {
 	(EVENT_MASK_FD_BYTE((fd), (mask)) & EVENT_MASK_FD_BIT(fd))
 #define EVENT_MASK_CLR(fd, mask) \
 	(EVENT_MASK_FD_BYTE((fd), (mask)) &= ~EVENT_MASK_FD_BIT(fd))
-#define EVENT_MASK_CMP(m1, m2) \
-	memcmp((m1)->data, (m2)->data, EVENT_MASK_BYTE_COUNT(m1))
 #endif
 
  /*
@@ -239,7 +235,7 @@ typedef struct {
 typedef struct EVENT_FDTABLE EVENT_FDTABLE;
 
 struct EVENT_FDTABLE {
-    EVENT_NOTIFY_RDWR_FN callback;
+    EVENT_NOTIFY_RDWR callback;
     char   *context;
 };
 static EVENT_MASK event_rmask;		/* enabled read events */
@@ -513,7 +509,7 @@ typedef struct EVENT_TIMER EVENT_TIMER;
 
 struct EVENT_TIMER {
     time_t  when;			/* when event is wanted */
-    EVENT_NOTIFY_TIME_FN callback;		/* callback function */
+    EVENT_NOTIFY_TIME callback;		/* callback function */
     char   *context;			/* callback context */
     long    loop_instance;		/* event_loop() call instance */
     RING    ring;			/* linkage */
@@ -669,7 +665,8 @@ void    event_drain(int time_limit)
     max_time = event_present + time_limit;
     while (event_present < max_time
 	   && (event_timer_head.pred != &event_timer_head
-	       || EVENT_MASK_CMP(&zero_mask, &event_xmask) != 0)) {
+	       || memcmp(&zero_mask, &event_xmask,
+			 EVENT_MASK_BYTE_COUNT(&zero_mask)) != 0)) {
 	event_loop(1);
 #if (EVENTS_STYLE != EVENTS_STYLE_SELECT)
 	if (EVENT_MASK_BYTE_COUNT(&zero_mask)
@@ -724,7 +721,7 @@ void    event_fork(void)
 
 /* event_enable_read - enable read events */
 
-void    event_enable_read(int fd, EVENT_NOTIFY_RDWR_FN callback, char *context)
+void    event_enable_read(int fd, EVENT_NOTIFY_RDWR callback, char *context)
 {
     const char *myname = "event_enable_read";
     EVENT_FDTABLE *fdp;
@@ -779,7 +776,7 @@ void    event_enable_read(int fd, EVENT_NOTIFY_RDWR_FN callback, char *context)
 
 /* event_enable_write - enable write events */
 
-void    event_enable_write(int fd, EVENT_NOTIFY_RDWR_FN callback, char *context)
+void    event_enable_write(int fd, EVENT_NOTIFY_RDWR callback, char *context)
 {
     const char *myname = "event_enable_write";
     EVENT_FDTABLE *fdp;
@@ -889,7 +886,7 @@ void    event_disable_readwrite(int fd)
 
 /* event_request_timer - (re)set timer */
 
-time_t  event_request_timer(EVENT_NOTIFY_TIME_FN callback, char *context, int delay)
+time_t  event_request_timer(EVENT_NOTIFY_TIME callback, char *context, int delay)
 {
     const char *myname = "event_request_timer";
     RING   *ring;
@@ -960,7 +957,7 @@ time_t  event_request_timer(EVENT_NOTIFY_TIME_FN callback, char *context, int de
 
 /* event_cancel_timer - cancel timer */
 
-int     event_cancel_timer(EVENT_NOTIFY_TIME_FN callback, char *context)
+int     event_cancel_timer(EVENT_NOTIFY_TIME callback, char *context)
 {
     const char *myname = "event_cancel_timer";
     RING   *ring;

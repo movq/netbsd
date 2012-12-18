@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_inode.c,v 1.110 2012/07/09 11:20:22 matt Exp $	*/
+/*	$NetBSD: ffs_inode.c,v 1.99.4.2 2012/01/25 18:18:46 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.110 2012/07/09 11:20:22 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.99.4.2 2012/01/25 18:18:46 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -75,7 +75,7 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.110 2012/07/09 11:20:22 matt Exp $")
 #include <sys/fstrans.h>
 #include <sys/kauth.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/resourcevar.h>
@@ -103,8 +103,8 @@ static int ffs_indirtrunc(struct inode *, daddr_t, daddr_t, daddr_t, int,
  * updated but that the times have already been set. The access
  * and modified times are taken from the second and third parameters;
  * the inode change time is always taken from the current time. If
- * UPDATE_WAIT flag is set, or UPDATE_DIROP is set then wait for the
- * disk write of the inode to complete.
+ * UPDATE_WAIT flag is set, or UPDATE_DIROP is set and we are not doing
+ * softupdates, then wait for the disk write of the inode to complete.
  */
 
 int
@@ -133,7 +133,7 @@ ffs_update(struct vnode *vp, const struct timespec *acc,
 	if ((flags & IN_MODIFIED) != 0 &&
 	    (vp->v_mount->mnt_flag & MNT_ASYNC) == 0) {
 		waitfor = updflags & UPDATE_WAIT;
-		if ((updflags & UPDATE_DIROP) != 0)
+		if ((updflags & UPDATE_DIROP) && !DOINGSOFTDEP(vp))
 			waitfor |= UPDATE_WAIT;
 	} else
 		waitfor = 0;
@@ -155,10 +155,12 @@ ffs_update(struct vnode *vp, const struct timespec *acc,
 		return (error);
 	}
 	ip->i_flag &= ~(IN_MODIFIED | IN_ACCESSED);
+	if (DOINGSOFTDEP(vp)) {
+		softdep_update_inodeblock(ip, bp, waitfor);
+	} else if (ip->i_ffs_effnlink != ip->i_nlink)
+		panic("ffs_update: bad link cnt");
 	/* Keep unlinked inode list up to date */
-	KDASSERTMSG(DIP(ip, nlink) == ip->i_nlink,
-	    "DIP(ip, nlink) [%d] == ip->i_nlink [%d]",
-	    DIP(ip, nlink), ip->i_nlink);
+	KDASSERT(DIP(ip, nlink) == ip->i_nlink);
 	if (ip->i_mode) {
 		if (ip->i_nlink > 0) {
 			UFS_WAPBL_UNREGISTER_INODE(ip->i_ump->um_mountp,
@@ -277,7 +279,7 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 				return error;
 			}
 			if (ioflag & IO_SYNC) {
-				mutex_enter(ovp->v_interlock);
+				mutex_enter(&ovp->v_interlock);
 				VOP_PUTPAGES(ovp,
 				    trunc_page(osize & fs->fs_bmask),
 				    round_page(eob), PGO_CLEANIT | PGO_SYNCIO |
@@ -326,10 +328,9 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 		size = blksize(fs, oip, lbn);
 		eoz = MIN(MAX(lblktosize(fs, lbn) + size, round_page(pgoffset)),
 		    osize);
-		ubc_zerorange(&ovp->v_uobj, length, eoz - length,
-		    UBC_UNMAP_FLAG(ovp));
+		uvm_vnp_zerorange(ovp, length, eoz - length);
 		if (round_page(eoz) > round_page(length)) {
-			mutex_enter(ovp->v_interlock);
+			mutex_enter(&ovp->v_interlock);
 			error = VOP_PUTPAGES(ovp, round_page(length),
 			    round_page(eoz),
 			    PGO_CLEANIT | PGO_DEACTIVATE | PGO_JOURNALLOCKED |
@@ -340,6 +341,39 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 	}
 
 	genfs_node_wrlock(ovp);
+
+	if (DOINGSOFTDEP(ovp)) {
+		if (length > 0) {
+			/*
+			 * If a file is only partially truncated, then
+			 * we have to clean up the data structures
+			 * describing the allocation past the truncation
+			 * point. Finding and deallocating those structures
+			 * is a lot of work. Since partial truncation occurs
+			 * rarely, we solve the problem by syncing the file
+			 * so that it will have no data structures left.
+			 */
+			if ((error = VOP_FSYNC(ovp, cred, FSYNC_WAIT,
+			    0, 0)) != 0) {
+				genfs_node_unlock(ovp);
+				return (error);
+			}
+			mutex_enter(&ump->um_lock);
+			if (oip->i_flag & IN_SPACECOUNTED)
+				fs->fs_pendingblocks -= DIP(oip, blocks);
+			mutex_exit(&ump->um_lock);
+		} else {
+			uvm_vnp_setsize(ovp, length);
+#ifdef QUOTA
+ 			(void) chkdq(oip, -DIP(oip, blocks), NOCRED, 0);
+#endif
+			softdep_setup_freeblocks(oip, length, 0);
+			(void) vinvalbuf(ovp, 0, cred, curlwp, 0, 0);
+			genfs_node_unlock(ovp);
+			oip->i_flag |= IN_CHANGE | IN_UPDATE;
+			return (ffs_update(ovp, NULL, NULL, 0));
+		}
+	}
 	oip->i_size = length;
 	DIP_ASSIGN(oip, size, length);
 	uvm_vnp_setsize(ovp, length);
@@ -525,7 +559,7 @@ done:
 	genfs_node_unlock(ovp);
 	oip->i_flag |= IN_CHANGE;
 	UFS_WAPBL_UPDATE(ovp, NULL, NULL, 0);
-#if defined(QUOTA) || defined(QUOTA2)
+#ifdef QUOTA
 	(void) chkdq(oip, -blocksreleased, NOCRED, 0);
 #endif
 	KASSERT(ovp->v_type != VREG || ovp->v_size == oip->i_size);
@@ -623,7 +657,7 @@ ffs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn, daddr_t lastbn,
 	else
 		bap2 = (int64_t *)bp->b_data;
 	if (lastbn >= 0) {
-		copy = kmem_alloc(fs->fs_bsize, KM_SLEEP);
+		copy = malloc(fs->fs_bsize, M_TEMP, M_WAITOK);
 		memcpy((void *)copy, bp->b_data, (u_int)fs->fs_bsize);
 		for (i = last + 1; i < NINDIR(fs); i++)
 			BAP_ASSIGN(ip, i, 0);
@@ -678,7 +712,7 @@ ffs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn, daddr_t lastbn,
 	}
 
 	if (copy != NULL) {
-		kmem_free(copy, fs->fs_bsize);
+		FREE(copy, M_TEMP);
 	} else {
 		brelse(bp, BC_INVAL);
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: adc.c,v 1.13 2010/08/08 16:23:40 chs Exp $ */
+/*	$NetBSD: adc.c,v 1.9 2008/03/27 03:16:29 uwe Exp $ */
 
 /*
  * Copyright (c) 2003 Valeriy E. Ushakov
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adc.c,v 1.13 2010/08/08 16:23:40 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adc.c,v 1.9 2008/03/27 03:16:29 uwe Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -58,8 +58,7 @@ adc_match(device_t parent, cfdata_t cf, void *aux)
 
 	/* REMINDER: also in 7727 and 7729 */
 	if ((cpu_product != CPU_PRODUCT_7709)
-	    && (cpu_product != CPU_PRODUCT_7709A)
-	    && (cpu_product != CPU_PRODUCT_7706))
+	    && (cpu_product != CPU_PRODUCT_7709A))
 		return (0);
 
 	if (strcmp(cf->cf_name, "adc") != 0)
@@ -80,15 +79,6 @@ adc_attach(device_t parent, device_t self, void *aux)
 	aprint_normal("\n");
 
 	config_search_ia(adc_search, self, "adc", NULL);
-
-	/*
-	 * XXX: TODO: provide hooks to manage power.  For now register
-	 * null hooks which is no worse than before.
-	 *
-	 * NB: ADC registers are reset by standby!
-	 */
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 
@@ -141,12 +131,14 @@ adc_sample_channel(int chan)
 	csr = ADC_(CSR);
 	if ((csr & SH7709_ADCSR_ADST) != 0) {
 		/* another conversion is in progress?! */
-	        snprintb(bits, sizeof(bits), SH7709_ADCSR_BITS, csr);
-		printf("adc_sample_channel(%d): CSR=%s", chan, bits);
+		printf("adc_sample_channel(%d): CSR=%s", chan,
+		       bitmask_snprintf(csr, SH7709_ADCSR_BITS,
+					bits, sizeof(bits)));
 		cr = ADC_(CR);
 		cr &= ~0x07;	/* three lower bits always read as 1s */
-	        snprintb(bits, sizeof(bits), SH7709_ADCR_BITS, cr);
-		printf(", CR=%s\n", bits);
+		printf(", CR=%s\n",
+		       bitmask_snprintf(cr, SH7709_ADCR_BITS,
+					bits, sizeof(bits)));
 		return (-1);
 	}
 #endif

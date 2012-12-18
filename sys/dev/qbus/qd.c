@@ -1,4 +1,4 @@
-/*	$NetBSD: qd.c,v 1.53 2012/10/27 17:18:37 chs Exp $	*/
+/*	$NetBSD: qd.c,v 1.44 2008/06/12 23:06:14 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1988 Regents of the University of California.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: qd.c,v 1.53 2012/10/27 17:18:37 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: qd.c,v 1.44 2008/06/12 23:06:14 cegger Exp $");
 
 #include "opt_ddb.h"
 
@@ -72,6 +72,8 @@ __KERNEL_RCSID(0, "$NetBSD: qd.c,v 1.53 2012/10/27 17:18:37 chs Exp $");
 #include <sys/device.h>
 #include <sys/poll.h>
 #include <sys/buf.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/cons.h>
 
@@ -114,6 +116,7 @@ struct qdflags {
  * Softc struct to keep track of all states in this driver.
  */
 struct	qd_softc {
+	struct	device sc_dev;
 	bus_space_tag_t	sc_iot;
 	bus_space_handle_t sc_ioh;
 	bus_dma_tag_t	sc_dmat;
@@ -164,6 +167,7 @@ int Qbus_unmap[NQD];		/* Qbus mapper release code */
 struct qdmap qdmap[NQD];	/* QDSS register map structure */
 struct qdflags qdflags[NQD];	/* QDSS register map structure */
 void *qdbase[NQD];		/* base address of each QDSS unit */
+struct buf qdbuf[NQD];		/* buf structs used by strategy */
 short qdopened[NQD];		/* graphics device is open exclusive use */
 
 /*
@@ -398,7 +402,7 @@ int qd0cninited = 0, qd0iscons = 0;
  * any memory for it in bootstrap.
  */
 void
-qdearly(void)
+qdearly()
 {
 	extern vaddr_t virtual_avail;
 	int tmp;
@@ -431,7 +435,8 @@ qdearly(void)
 }
 
 void
-qdcnprobe(struct consdev *cndev)
+qdcnprobe(cndev)
+	struct  consdev *cndev;
 {
 	int i;
 
@@ -454,7 +459,8 @@ qdcnprobe(struct consdev *cndev)
  * Init QDSS as console (before probe routine)
  */
 void
-qdcninit(struct consdev *cndev)
+qdcninit(cndev)
+	struct  consdev *cndev;
 {
 	void *phys_adr;		/* physical QDSS base adrs */
 	u_int mapix;			/* index into QVmap[] array */
@@ -523,7 +529,7 @@ qdcninit(struct consdev *cndev)
 } /* qdcninit */
 
 /* see <sys/device.h> */
-CFATTACH_DECL_NEW(qd, sizeof(struct qd_softc),
+CFATTACH_DECL(qd, sizeof(struct qd_softc),
     qd_match, qd_attach, NULL, NULL);
 
 #define	QD_RCSR(reg) \
@@ -543,12 +549,15 @@ CFATTACH_DECL_NEW(qd, sizeof(struct qd_softc),
  *
  */
 static int
-qd_match(device_t parent, cfdata_t match, void *aux)
+qd_match(parent, match, aux)
+	device_t parent;
+	cfdata_t match;
+	void *aux;
 {
 	struct qd_softc ssc;
 	struct qd_softc *sc = &ssc;
 	struct uba_attach_args *ua = aux;
-	struct uba_softc *uh = device_private(parent);
+	struct uba_softc *uh = (void *)parent;
 	int unit;
 	volatile struct dga *dga;	/* pointer to gate array structure */
 	int vector;
@@ -719,8 +728,9 @@ qd_match(device_t parent, cfdata_t match, void *aux)
 } /* qdprobe */
 
 
-void
-qd_attach(device_t parent, device_t self, void *aux)
+void qd_attach(parent, self, aux)
+	   device_t parent, *self;
+	   void *aux;
 {
 	struct uba_attach_args *ua = aux;
 	int unit;	/* QDSS module # for this call */
@@ -824,7 +834,7 @@ qdopen(dev_t dev, int flag, int mode, struct proc *p)
 
 		/* If not done already, allocate tty structure */
 		if (qd_tty[minor_dev] == NULL)
-			qd_tty[minor_dev] = tty_alloc();
+			qd_tty[minor_dev] = ttymalloc();
 
 		if (qd_tty[minor_dev] == NULL)
 			return ENXIO;
@@ -1061,7 +1071,12 @@ qdclose(dev_t dev, int flag, int mode, struct proc *p)
 } /* qdclose */
 
 int
-qdioctl(dev_t dev, u_long cmd, void *datap, int flags, struct proc *p)
+qdioctl(dev, cmd, datap, flags, p)
+	dev_t dev;
+	u_long cmd;
+	void *datap;
+	int flags;
+	struct proc *p;
 {
 	volatile int *ptep;	/* page table entry pointer */
 	int mapix;		/* QVmap[] page table index */
@@ -1102,7 +1117,7 @@ qdioctl(dev_t dev, u_long cmd, void *datap, int flags, struct proc *p)
 		s = spl5();
 		GETEND(eq_header[unit]);
 		splx(s);
-		memcpy(datap, (void *)event, sizeof(struct _vs_event));
+		bcopy((void *)event, datap, sizeof(struct _vs_event));
 		break;
 
 	case QD_RESET:
@@ -1221,7 +1236,7 @@ qdioctl(dev_t dev, u_long cmd, void *datap, int flags, struct proc *p)
 		/*
 		 * stuff qdmap structure in return buffer
 		 */
-		memcpy(datap, (void *)qd, sizeof(struct qdmap));
+		bcopy((void *)qd, datap, sizeof(struct qdmap));
 
 		break;
 
@@ -1486,7 +1501,10 @@ qdioctl(dev_t dev, u_long cmd, void *datap, int flags, struct proc *p)
 
 
 int
-qdpoll(dev_t dev, int events, struct proc *p)
+qdpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
 {
 	int s;
 	int unit;
@@ -1616,7 +1634,10 @@ void qd_strategy(struct buf *bp);
 
 /*ARGSUSED*/
 int
-qdwrite(dev_t dev, struct uio *uio, int flag)
+qdwrite(dev, uio, flag)
+	dev_t dev;
+	struct uio *uio;
+	int flag;
 {
 	struct tty *tp;
 	int minor_dev;
@@ -1635,14 +1656,18 @@ qdwrite(dev_t dev, struct uio *uio, int flag)
 		/*
 		* this is a DMA xfer from user space
 		*/
-		return (physio(qd_strategy, NULL, dev, B_WRITE, minphys, uio));
+		return (physio(qd_strategy, &qdbuf[unit],
+		dev, B_WRITE, minphys, uio));
 	}
 	return (ENXIO);
 }
 
 /*ARGSUSED*/
 int
-qdread(dev_t dev, struct uio *uio, int flag)
+qdread(dev, uio, flag)
+	dev_t dev;
+	struct uio *uio;
+	int flag;
 {
 	struct tty *tp;
 	int minor_dev;
@@ -1661,7 +1686,8 @@ qdread(dev_t dev, struct uio *uio, int flag)
 		/*
 		* this is a bitmap-to-processor xfer
 		*/
-		return (physio(qd_strategy, NULL, dev, B_READ, minphys, uio));
+		return (physio(qd_strategy, &qdbuf[unit],
+		dev, B_READ, minphys, uio));
 	}
 	return (ENXIO);
 }
@@ -1673,7 +1699,8 @@ qdread(dev_t dev, struct uio *uio, int flag)
 ***************************************************************/
 
 void
-qd_strategy(struct buf *bp)
+qd_strategy(bp)
+	struct buf *bp;
 {
 	volatile struct dga *dga;
 	volatile struct adder *adder;
@@ -1785,7 +1812,9 @@ out:
 
 /*ARGSUSED*/
 void
-qdstop(struct tty *tp, int flag)
+qdstop(tp, flag)
+	struct tty *tp;
+	int flag;
 {
 	int s;
 
@@ -1803,7 +1832,9 @@ qdstop(struct tty *tp, int flag)
  *  Output a character to the QDSS screen
  */
 void
-blitc(int unit, u_char chr)
+blitc(unit, chr)
+	int unit;
+	u_char chr;
 {
 	volatile struct adder *adder;
 	volatile struct dga *dga;
@@ -2010,7 +2041,8 @@ blitc(int unit, u_char chr)
  */
 
 static void
-qddint(void *arg)
+qddint(arg)
+	void *arg;
 {
 	device_t dv = arg;
 	struct DMAreq_header *header;
@@ -2187,7 +2219,8 @@ qddint(void *arg)
  * ADDER interrupt service routine
  */
 static void
-qdaint(void *arg)
+qdaint(arg)
+	void *arg;
 {
 	device_t dv = arg;
 	volatile struct adder *adder;
@@ -2866,7 +2899,8 @@ GET_TBUTTON:
  *
  */
 void
-clear_qd_screen(int unit)
+clear_qd_screen(unit)
+	int unit;
 {
 	volatile struct adder *adder;
 	adder = (struct adder *) qdmap[unit].adder;
@@ -2898,7 +2932,9 @@ clear_qd_screen(int unit)
  *  kernel console output to the glass tty
  */
 void
-qdcnputc(dev_t dev, int chr)
+qdcnputc(dev, chr)
+	dev_t dev;
+	int chr;
 {
 
 	/*
@@ -2917,7 +2953,9 @@ qdcnputc(dev_t dev, int chr)
  *  load the mouse cursor's template RAM bitmap
  */
 void
-ldcursor(int unit, short *bitmap)
+ldcursor(unit, bitmap)
+	int unit;
+	short *bitmap;
 {
 	volatile struct dga *dga;
 	volatile short *temp;
@@ -2950,7 +2988,8 @@ ldcursor(int unit, short *bitmap)
  *  Put the console font in the QDSS off-screen memory
  */
 void
-ldfont(int unit)
+ldfont(unit)
+	int unit;
 {
 	volatile struct adder *adder;
 
@@ -3080,7 +3119,9 @@ ldfont(int unit)
  * kernel debugger.
  */
 void
-qdcnpollc(dev_t dev, int onoff)
+qdcnpollc(dev, onoff)
+	dev_t dev;
+	int onoff;
 {
 	qdpolling = onoff;
 }
@@ -3090,7 +3131,8 @@ qdcnpollc(dev_t dev, int onoff)
  *  Get a character from the LK201 (polled)
  */
 int
-qdcngetc(dev_t dev)
+qdcngetc(dev)
+	dev_t dev;
 {
 	short key;
 	char chr;
@@ -3187,7 +3229,8 @@ LOOP:
  *  led_control()... twiddle LK-201 LED's
  */
 void
-led_control(int unit, int cmd, int led_mask)
+led_control(unit, cmd, led_mask)
+	int unit, cmd, led_mask;
 {
 	int i;
 	volatile struct duart *duart;
@@ -3214,7 +3257,8 @@ led_control(int unit, int cmd, int led_mask)
  *  scroll_up()... move the screen up one character height
  */
 void
-scroll_up(volatile struct adder *adder)
+scroll_up(adder)
+	volatile struct adder *adder;
 {
 	/*
 	* setup VIPER operand control registers
@@ -3276,7 +3320,8 @@ scroll_up(volatile struct adder *adder)
  *  init shared memory pointers and structures
  */
 void
-init_shared(int unit)
+init_shared(unit)
+	int unit;
 {
 	volatile struct dga *dga;
 
@@ -3338,7 +3383,8 @@ init_shared(int unit)
  * init the ADDER, VIPER, bitmaps, & color map
  */
 void
-setup_dragon(int unit)
+setup_dragon(unit)
+	int unit;
 {
 
 	volatile struct adder *adder;
@@ -3592,7 +3638,8 @@ setup_dragon(int unit)
  * Init the DUART and set defaults in input
  */
 void
-setup_input(int unit)
+setup_input(unit)
+	int unit;
 {
 	volatile struct duart *duart;	/* DUART register structure pointer */
 	int i, bits;
@@ -3758,7 +3805,9 @@ OUT:
  *		GOOD otherwise
  */
 int
-wait_status(volatile struct adder *adder, int mask)
+wait_status(adder, mask)
+	volatile struct adder *adder;
+	int mask;
 {
 	int i;
 
@@ -3779,7 +3828,10 @@ wait_status(volatile struct adder *adder, int mask)
  * write out onto the ID bus
  */
 void
-write_ID(volatile struct adder *adder, short adrs, short data)
+write_ID(adder, adrs, data)
+	volatile struct adder *adder;
+	short adrs;
+	short data;
 {
 	int i;
 

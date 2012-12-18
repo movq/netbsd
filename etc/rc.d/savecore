@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: savecore,v 1.8 2009/09/14 17:34:56 apb Exp $
+# $NetBSD: savecore,v 1.7 2004/08/13 18:08:03 mycroft Exp $
 #
 
 # PROVIDE: savecore
@@ -21,9 +21,7 @@ savecore_start()
 	#
 	if [ -d "${savecore_dir}/." ]; then
 		echo "Checking for core dump..."
-		if savecore -n; then
-			savecore $rc_flags "${savecore_dir}"
-		fi
+		savecore $rc_flags "${savecore_dir}"
 	else
 		warn "No crash dump directory; savecore not run."
 	fi

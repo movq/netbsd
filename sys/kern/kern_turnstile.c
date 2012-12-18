@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_turnstile.c,v 1.32 2012/06/15 13:51:40 yamt Exp $	*/
+/*	$NetBSD: kern_turnstile.c,v 1.23.4.1 2009/09/28 01:38:24 snj Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2006, 2007, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002, 2006, 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_turnstile.c,v 1.32 2012/06/15 13:51:40 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_turnstile.c,v 1.23.4.1 2009/09/28 01:38:24 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/lockdebug.h>
@@ -69,16 +69,18 @@ __KERNEL_RCSID(0, "$NetBSD: kern_turnstile.c,v 1.32 2012/06/15 13:51:40 yamt Exp
 #include <sys/sleepq.h>
 #include <sys/systm.h>
 
+#include <uvm/uvm_extern.h>
+
 #define	TS_HASH_SIZE	64
 #define	TS_HASH_MASK	(TS_HASH_SIZE - 1)
 #define	TS_HASH(obj)	(((uintptr_t)(obj) >> 3) & TS_HASH_MASK)
 
-static tschain_t	turnstile_tab[TS_HASH_SIZE]	__cacheline_aligned;
-pool_cache_t		turnstile_cache			__read_mostly;
+tschain_t	turnstile_tab[TS_HASH_SIZE];
+pool_cache_t	turnstile_cache;
 
-static int		turnstile_ctor(void *, void *, int);
+int	turnstile_ctor(void *, void *, int);
 
-extern turnstile_t	turnstile0;
+extern turnstile_t turnstile0;
 
 /*
  * turnstile_init:
@@ -94,7 +96,7 @@ turnstile_init(void)
 	for (i = 0; i < TS_HASH_SIZE; i++) {
 		tc = &turnstile_tab[i];
 		LIST_INIT(&tc->tc_chain);
-		tc->tc_mutex = mutex_obj_alloc(MUTEX_DEFAULT, IPL_SCHED);
+		mutex_init(&tc->tc_mutex, MUTEX_DEFAULT, IPL_SCHED);
 	}
 
 	turnstile_cache = pool_cache_init(sizeof(turnstile_t), 0, 0, 0,
@@ -109,7 +111,7 @@ turnstile_init(void)
  *
  *	Constructor for turnstiles.
  */
-static int
+int
 turnstile_ctor(void *arg, void *obj, int flags)
 {
 	turnstile_t *ts = obj;
@@ -151,7 +153,7 @@ turnstile_remove(turnstile_t *ts, lwp_t *l, int q)
 	}
 
 	ts->ts_waiters[q]--;
-	sleepq_remove(&ts->ts_sleepq[q], l);
+	(void)sleepq_remove(&ts->ts_sleepq[q], l);
 }
 
 /*
@@ -167,7 +169,7 @@ turnstile_lookup(wchan_t obj)
 	tschain_t *tc;
 
 	tc = &turnstile_tab[TS_HASH(obj)];
-	mutex_spin_enter(tc->tc_mutex);
+	mutex_spin_enter(&tc->tc_mutex);
 
 	LIST_FOREACH(ts, &tc->tc_chain, ts_chain)
 		if (ts->ts_obj == obj)
@@ -191,171 +193,7 @@ turnstile_exit(wchan_t obj)
 	tschain_t *tc;
 
 	tc = &turnstile_tab[TS_HASH(obj)];
-	mutex_spin_exit(tc->tc_mutex);
-}
-
-/*
- * turnstile_lendpri:
- *
- *	Lend our priority to lwps on the blocking chain.
- *
- *	If the current owner of the lock (l->l_wchan, set by sleepq_enqueue)
- *	has a priority lower than ours (lwp_eprio(l)), lend our priority to
- *	him to avoid priority inversions.
- */
-
-static void
-turnstile_lendpri(lwp_t *cur)
-{
-	lwp_t * l = cur;
-	pri_t prio;
-
-	/*
-	 * NOTE: if you get a panic in this code block, it is likely that
-	 * a lock has been destroyed or corrupted while still in use.  Try
-	 * compiling a kernel with LOCKDEBUG to pinpoint the problem.
-	 */
-
-	LOCKDEBUG_BARRIER(l->l_mutex, 1);
-	KASSERT(l == curlwp);
-	prio = lwp_eprio(l);
-	for (;;) {
-		lwp_t *owner;
-		turnstile_t *ts;
-		bool dolock;
-
-		if (l->l_wchan == NULL)
-			break;
-
-		/*
-		 * Ask syncobj the owner of the lock.
-		 */
-		owner = (*l->l_syncobj->sobj_owner)(l->l_wchan);
-		if (owner == NULL)
-			break;
-
-		/*
-		 * The owner may have changed as we have dropped the tc lock.
-		 */
-		if (cur == owner) {
-			/*
-			 * We own the lock: stop here, sleepq_block()
-			 * should wake up immediatly.
-			 */
-			break;
-		}
-		/*
-		 * Acquire owner->l_mutex if we don't have it yet.
-		 * Because we already have another LWP lock (l->l_mutex) held,
-		 * we need to play a try lock dance to avoid deadlock.
-		 */
-		dolock = l->l_mutex != owner->l_mutex;
-		if (l == owner || (dolock && !lwp_trylock(owner))) {
-			/*
-			 * The owner was changed behind us or trylock failed.
-			 * Restart from curlwp.
-			 *
-			 * Note that there may be a livelock here:
-			 * the owner may try grabing cur's lock (which is the
-			 * tc lock) while we're trying to grab the owner's lock.
-			 */
-			lwp_unlock(l);
-			l = cur;
-			lwp_lock(l);
-			prio = lwp_eprio(l);
-			continue;
-		}
-		/*
-		 * If the owner's priority is already higher than ours,
-		 * there's nothing to do anymore.
-		 */
-		if (prio <= lwp_eprio(owner)) {
-			if (dolock)
-				lwp_unlock(owner);
-			break;
-		}
-		/*
-		 * Lend our priority to the 'owner' LWP.
-		 *
-		 * Update lenders info for turnstile_unlendpri.
-		 */
-		ts = l->l_ts;
-		KASSERT(ts->ts_inheritor == owner || ts->ts_inheritor == NULL);
-		if (ts->ts_inheritor == NULL) {
-			ts->ts_inheritor = owner;
-			ts->ts_eprio = prio;
-			SLIST_INSERT_HEAD(&owner->l_pi_lenders, ts, ts_pichain);
-			lwp_lendpri(owner, prio);
-		} else if (prio > ts->ts_eprio) {
-			ts->ts_eprio = prio;
-			lwp_lendpri(owner, prio);
-		}
-		if (dolock)
-			lwp_unlock(l);
-		LOCKDEBUG_BARRIER(owner->l_mutex, 1);
-		l = owner;
-	}
-	LOCKDEBUG_BARRIER(l->l_mutex, 1);
-	if (cur->l_mutex != l->l_mutex) {
-		lwp_unlock(l);
-		lwp_lock(cur);
-	}
-	LOCKDEBUG_BARRIER(cur->l_mutex, 1);
-}
-
-/*
- * turnstile_unlendpri: undo turnstile_lendpri
- */
-
-static void
-turnstile_unlendpri(turnstile_t *ts)
-{
-	lwp_t * const l = curlwp;
-	turnstile_t *iter;
-	turnstile_t *next;
-	turnstile_t *prev = NULL;
-	pri_t prio;
-	bool dolock;
-
-	KASSERT(ts->ts_inheritor != NULL);
-	ts->ts_inheritor = NULL;
-	dolock = l->l_mutex == l->l_cpu->ci_schedstate.spc_lwplock;
-	if (dolock) {
-		lwp_lock(l);
-	}
-
-	/*
-	 * the following loop does two things.
-	 *
-	 * - remove ts from the list.
-	 *
-	 * - from the rest of the list, find the highest priority.
-	 */
-
-	prio = -1;
-	KASSERT(!SLIST_EMPTY(&l->l_pi_lenders));
-	for (iter = SLIST_FIRST(&l->l_pi_lenders);
-	    iter != NULL; iter = next) {
-		KASSERT(lwp_eprio(l) >= ts->ts_eprio);
-		next = SLIST_NEXT(iter, ts_pichain);
-		if (iter == ts) {
-			if (prev == NULL) {
-				SLIST_REMOVE_HEAD(&l->l_pi_lenders,
-				    ts_pichain);
-			} else {
-				SLIST_REMOVE_AFTER(prev, ts_pichain);
-			}
-		} else if (prio < iter->ts_eprio) {
-			prio = iter->ts_eprio;
-		}
-		prev = iter;
-	}
-
-	lwp_lendpri(l, prio);
-
-	if (dolock) {
-		lwp_unlock(l);
-	}
+	mutex_spin_exit(&tc->tc_mutex);
 }
 
 /*
@@ -367,16 +205,19 @@ turnstile_unlendpri(turnstile_t *ts)
 void
 turnstile_block(turnstile_t *ts, int q, wchan_t obj, syncobj_t *sobj)
 {
-	lwp_t * const l = curlwp; /* cached curlwp */
+	lwp_t *l;
+	lwp_t *cur; /* cached curlwp */
+	lwp_t *owner;
 	turnstile_t *ots;
 	tschain_t *tc;
 	sleepq_t *sq;
-	pri_t obase;
+	pri_t prio, obase;
 
 	tc = &turnstile_tab[TS_HASH(obj)];
+	l = cur = curlwp;
 
 	KASSERT(q == TS_READER_Q || q == TS_WRITER_Q);
-	KASSERT(mutex_owned(tc->tc_mutex));
+	KASSERT(mutex_owned(&tc->tc_mutex));
 	KASSERT(l != NULL && l->l_ts != NULL);
 
 	if (ts == NULL) {
@@ -411,8 +252,9 @@ turnstile_block(turnstile_t *ts, int q, wchan_t obj, syncobj_t *sobj)
 
 	sq = &ts->ts_sleepq[q];
 	ts->ts_waiters[q]++;
-	sleepq_enter(sq, l, tc->tc_mutex);
-	LOCKDEBUG_BARRIER(tc->tc_mutex, 1);
+	sleepq_enter(sq, l, &tc->tc_mutex);
+	/* now tc->tc_mutex is also cur->l_mutex and l->l_mutex */
+	LOCKDEBUG_BARRIER(&tc->tc_mutex, 1);
 	l->l_kpriority = true;
 	obase = l->l_kpribase;
 	if (obase < PRI_KTHREAD)
@@ -425,11 +267,92 @@ turnstile_block(turnstile_t *ts, int q, wchan_t obj, syncobj_t *sobj)
 	 * to be interrupted while in a state of flux.
 	 */
 	KPREEMPT_DISABLE(l);
-	KASSERT(tc->tc_mutex == l->l_mutex);
-	turnstile_lendpri(l);
+
+	/*
+	 * Lend our priority to lwps on the blocking chain.
+	 *
+	 * NOTE: if you get a panic in this code block, it is likely that
+	 * a lock has been destroyed or corrupted while still in use.  Try
+	 * compiling a kernel with LOCKDEBUG to pinpoint the problem.
+	 */
+	prio = lwp_eprio(l);
+
+	for (;;) {
+		bool dolock;
+
+		if (l->l_wchan == NULL)
+			break;
+
+		owner = (*l->l_syncobj->sobj_owner)(l->l_wchan);
+		if (owner == NULL)
+			break;
+
+		/* The owner may have changed as we have dropped the tc lock */
+		if (cur == owner) {
+			/*
+			 * we own the lock: stop here, sleepq_block()
+			 * should wake up immediatly
+			 */
+			break;
+		}
+
+		if (l == owner) {
+			/* owner has changed, restart from curlwp */
+			lwp_unlock(l);
+			l = cur;
+			lwp_lock(l);
+			prio = lwp_eprio(l);
+			continue;
+		}
+			
+		if (l->l_mutex != owner->l_mutex)
+			dolock = true;
+		else
+			dolock = false;
+		if (dolock && !lwp_trylock(owner)) {
+			/*
+			 * restart from curlwp.
+			 * Note that there may be a livelock here:
+			 * the owner may try grabing cur's lock (which is
+			 * the tc lock) while we're trying to grab
+			 * the owner's lock.
+			 */
+			lwp_unlock(l);
+			l = cur;
+			lwp_lock(l);
+			prio = lwp_eprio(l);
+			continue;
+		}
+		if (prio <= lwp_eprio(owner)) {
+			if (dolock)
+				lwp_unlock(owner);
+			break;
+		}
+		ts = l->l_ts;
+		KASSERT(ts->ts_inheritor == owner || ts->ts_inheritor == NULL);
+		if (ts->ts_inheritor == NULL) {
+			ts->ts_inheritor = owner;
+			ts->ts_eprio = prio;
+			SLIST_INSERT_HEAD(&owner->l_pi_lenders, ts, ts_pichain);
+			lwp_lendpri(owner, prio);
+		} else if (prio > ts->ts_eprio) {
+			ts->ts_eprio = prio;
+			lwp_lendpri(owner, prio);
+		}
+		if (dolock)
+			lwp_unlock(l);
+		l = owner;
+	}
+	LOCKDEBUG_BARRIER(l->l_mutex, 1);
+	if (cur->l_mutex != l->l_mutex) {
+		lwp_unlock(l);
+		lwp_lock(cur);
+	}
+	LOCKDEBUG_BARRIER(cur->l_mutex, 1);
+
 	sleepq_block(0, false);
-	l->l_kpribase = obase;
-	KPREEMPT_ENABLE(l);
+	cur->l_kpribase = obase;
+	KPREEMPT_ENABLE(cur);
 }
 
 /*
@@ -450,7 +373,7 @@ turnstile_wakeup(turnstile_t *ts, int q, int count, lwp_t *nl)
 
 	KASSERT(q == TS_READER_Q || q == TS_WRITER_Q);
 	KASSERT(count > 0 && count <= TS_WAITERS(ts, q));
-	KASSERT(mutex_owned(tc->tc_mutex));
+	KASSERT(mutex_owned(&tc->tc_mutex));
 	KASSERT(ts->ts_inheritor == curlwp || ts->ts_inheritor == NULL);
 
 	/*
@@ -458,7 +381,52 @@ turnstile_wakeup(turnstile_t *ts, int q, int count, lwp_t *nl)
 	 */
 
 	if (ts->ts_inheritor != NULL) {
-		turnstile_unlendpri(ts);
+		turnstile_t *iter;
+		turnstile_t *next;
+		turnstile_t *prev = NULL;
+		pri_t prio;
+		bool dolock;
+
+		ts->ts_inheritor = NULL;
+		l = curlwp;
+
+		dolock = l->l_mutex == l->l_cpu->ci_schedstate.spc_lwplock;
+		if (dolock) {
+			lwp_lock(l);
+		}
+
+		/*
+		 * the following loop does two things.
+		 *
+		 * - remove ts from the list.
+		 *
+		 * - from the rest of the list, find the highest priority.
+		 */
+
+		prio = -1;
+		KASSERT(!SLIST_EMPTY(&l->l_pi_lenders));
+		for (iter = SLIST_FIRST(&l->l_pi_lenders);
+		    iter != NULL; iter = next) {
+			KASSERT(lwp_eprio(l) >= ts->ts_eprio);
+			next = SLIST_NEXT(iter, ts_pichain);
+			if (iter == ts) {
+				if (prev == NULL) {
+					SLIST_REMOVE_HEAD(&l->l_pi_lenders,
+					    ts_pichain);
+				} else {
+					SLIST_REMOVE_AFTER(prev, ts_pichain);
+				}
+			} else if (prio < iter->ts_eprio) {
+				prio = iter->ts_eprio;
+			}
+			prev = iter;
+		}
+
+		lwp_lendpri(l, prio);
+
+		if (dolock) {
+			lwp_unlock(l);
+		}
 	}
 
 	if (nl != NULL) {
@@ -478,7 +446,7 @@ turnstile_wakeup(turnstile_t *ts, int q, int count, lwp_t *nl)
 			turnstile_remove(ts, l, q);
 		}
 	}
-	mutex_spin_exit(tc->tc_mutex);
+	mutex_spin_exit(&tc->tc_mutex);
 }
 
 /*
@@ -489,7 +457,7 @@ turnstile_wakeup(turnstile_t *ts, int q, int count, lwp_t *nl)
  *	has received a signal.  It's not a valid action for turnstiles,
  *	since LWPs blocking on a turnstile are not interruptable.
  */
-void
+u_int
 turnstile_unsleep(lwp_t *l, bool cleanup)
 {
 

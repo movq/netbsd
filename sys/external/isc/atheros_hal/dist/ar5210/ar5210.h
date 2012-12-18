@@ -14,7 +14,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ar5210.h,v 1.3 2011/03/07 11:25:42 cegger Exp $
+ * $Id: ar5210.h,v 1.2.2.2 2009/08/07 06:43:31 snj Exp $
  */
 #ifndef _ATH_AR5210_H_
 #define _ATH_AR5210_H_
@@ -206,8 +206,7 @@ extern	HAL_BOOL ar5210SetRegulatoryDomain(struct ath_hal *,
 extern	u_int ar5210GetWirelessModes(struct ath_hal *ah);
 extern	void ar5210EnableRfKill(struct ath_hal *);
 extern	HAL_BOOL ar5210GpioCfgInput(struct ath_hal *, uint32_t gpio);
-extern	HAL_BOOL ar5210GpioCfgOutput(struct ath_hal *, uint32_t gpio,
-		HAL_GPIO_MUX_TYPE);
+extern	HAL_BOOL ar5210GpioCfgOutput(struct ath_hal *, uint32_t gpio);
 extern	uint32_t ar5210GpioGet(struct ath_hal *, uint32_t gpio);
 extern	HAL_BOOL ar5210GpioSet(struct ath_hal *, uint32_t gpio, uint32_t);
 extern	void ar5210Gpio0SetIntr(struct ath_hal *, u_int, uint32_t ilevel);
@@ -255,7 +254,7 @@ extern	HAL_BOOL ar5210SetKeyCacheEntry(struct ath_hal *, uint16_t entry,
 extern	HAL_BOOL ar5210SetKeyCacheEntryMac(struct ath_hal *,
 			uint16_t, const uint8_t *);
 
-extern	HAL_BOOL ar5210SetPowerMode(struct ath_hal *, HAL_POWER_MODE mode,
+extern	HAL_BOOL ar5210SetPowerMode(struct ath_hal *, uint32_t powerRequest,
 		int setChip);
 extern	HAL_POWER_MODE ar5210GetPowerMode(struct ath_hal *);
 

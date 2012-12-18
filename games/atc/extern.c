@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.c,v 1.11 2009/08/12 04:48:03 dholland Exp $	*/
+/*	$NetBSD: extern.c,v 1.10 2008/01/31 05:19:44 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -46,7 +46,7 @@
 #if 0
 static char sccsid[] = "@(#)extern.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: extern.c,v 1.11 2009/08/12 04:48:03 dholland Exp $");
+__RCSID("$NetBSD: extern.c,v 1.10 2008/01/31 05:19:44 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -63,8 +63,7 @@ const char	*filename;
 FILE		*filein, *fileout;
 #endif
 
-static C_SCREEN screen;
-C_SCREEN *sp = &screen;
+C_SCREEN		screen, *sp = &screen;
 
 LIST		air, ground;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: miscbltin.c,v 1.42 2012/06/11 18:28:10 njoly Exp $	*/
+/*	$NetBSD: miscbltin.c,v 1.36.26.1 2009/04/01 00:25:21 snj Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)miscbltin.c	8.4 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: miscbltin.c,v 1.42 2012/06/11 18:28:10 njoly Exp $");
+__RCSID("$NetBSD: miscbltin.c,v 1.36.26.1 2009/04/01 00:25:21 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -61,7 +61,7 @@ __RCSID("$NetBSD: miscbltin.c,v 1.42 2012/06/11 18:28:10 njoly Exp $");
 #include "output.h"
 #include "memalloc.h"
 #include "error.h"
-#include "builtins.h"
+#include "miscbltin.h"
 #include "mystring.h"
 
 #undef rflag
@@ -302,7 +302,6 @@ umaskcmd(int argc, char **argv)
 
 struct limits {
 	const char *name;
-	const char *unit;
 	int	cmd;
 	int	factor;	/* multiply by to get rlim_{cur,max} values */
 	char	option;
@@ -310,45 +309,42 @@ struct limits {
 
 static const struct limits limits[] = {
 #ifdef RLIMIT_CPU
-	{ "time",	"seconds",	RLIMIT_CPU,	   1, 't' },
+	{ "time(seconds)",		RLIMIT_CPU,	   1, 't' },
 #endif
 #ifdef RLIMIT_FSIZE
-	{ "file",	"blocks",	RLIMIT_FSIZE,	 512, 'f' },
+	{ "file(blocks)",		RLIMIT_FSIZE,	 512, 'f' },
 #endif
 #ifdef RLIMIT_DATA
-	{ "data",	"kbytes",	RLIMIT_DATA,	1024, 'd' },
+	{ "data(kbytes)",		RLIMIT_DATA,	1024, 'd' },
 #endif
 #ifdef RLIMIT_STACK
-	{ "stack",	"kbytes",	RLIMIT_STACK,	1024, 's' },
+	{ "stack(kbytes)",		RLIMIT_STACK,	1024, 's' },
 #endif
 #ifdef  RLIMIT_CORE
-	{ "coredump",	"blocks",	RLIMIT_CORE,	 512, 'c' },
+	{ "coredump(blocks)",		RLIMIT_CORE,	 512, 'c' },
 #endif
 #ifdef RLIMIT_RSS
-	{ "memory",	"kbytes",	RLIMIT_RSS,	1024, 'm' },
+	{ "memory(kbytes)",		RLIMIT_RSS,	1024, 'm' },
 #endif
 #ifdef RLIMIT_MEMLOCK
-	{ "locked memory","kbytes",	RLIMIT_MEMLOCK, 1024, 'l' },
-#endif
-#ifdef RLIMIT_NTHR
-	{ "thread",	"threads",	RLIMIT_NTHR,       1, 'r' },
+	{ "locked memory(kbytes)",	RLIMIT_MEMLOCK, 1024, 'l' },
 #endif
 #ifdef RLIMIT_NPROC
-	{ "process",	"processes",	RLIMIT_NPROC,      1, 'p' },
+	{ "process(processes)",		RLIMIT_NPROC,      1, 'p' },
 #endif
 #ifdef RLIMIT_NOFILE
-	{ "nofiles",	"descriptors",	RLIMIT_NOFILE,     1, 'n' },
+	{ "nofiles(descriptors)",	RLIMIT_NOFILE,     1, 'n' },
 #endif
 #ifdef RLIMIT_VMEM
-	{ "vmemory",	"kbytes",	RLIMIT_VMEM,	1024, 'v' },
+	{ "vmemory(kbytes)",		RLIMIT_VMEM,	1024, 'v' },
 #endif
 #ifdef RLIMIT_SWAP
-	{ "swap",	"kbytes",	RLIMIT_SWAP,	1024, 'w' },
+	{ "swap(kbytes)",		RLIMIT_SWAP,	1024, 'w' },
 #endif
 #ifdef RLIMIT_SBSIZE
-	{ "sbsize",	"bytes",	RLIMIT_SBSIZE,	   1, 'b' },
+	{ "sbsize(bytes)",		RLIMIT_SBSIZE,	   1, 'b' },
 #endif
-	{ NULL,		NULL,		0,		   0,  '\0' }
+	{ (char *) 0,			0,		   0,  '\0' }
 };
 
 int
@@ -364,7 +360,7 @@ ulimitcmd(int argc, char **argv)
 	struct rlimit	limit;
 
 	what = 'f';
-	while ((optc = nextopt("HSabtfdscmlrpnv")) != '\0')
+	while ((optc = nextopt("HSabtfdsmcnplv")) != '\0')
 		switch (optc) {
 		case 'H':
 			how = HARD;
@@ -396,7 +392,11 @@ ulimitcmd(int argc, char **argv)
 			val = (rlim_t) 0;
 
 			while ((c = *p++) >= '0' && c <= '9')
+			{
 				val = (val * 10) + (long)(c - '0');
+				if (val < (rlim_t) 0)
+					break;
+			}
 			if (c)
 				error("bad number");
 			val *= l->factor;
@@ -410,8 +410,7 @@ ulimitcmd(int argc, char **argv)
 			else if (how & HARD)
 				val = limit.rlim_max;
 
-			out1fmt("%-13s (-%c %-11s) ", l->name, l->option,
-			    l->unit);
+			out1fmt("%-20s ", l->name);
 			if (val == RLIM_INFINITY)
 				out1fmt("unlimited\n");
 			else

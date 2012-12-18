@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.rumors.c,v 1.9 2011/08/06 20:18:26 dholland Exp $	*/
+/*	$NetBSD: hack.rumors.c,v 1.5 2003/04/02 18:36:39 jsm Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,24 +63,19 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.rumors.c,v 1.9 2011/08/06 20:18:26 dholland Exp $");
+__RCSID("$NetBSD: hack.rumors.c,v 1.5 2003/04/02 18:36:39 jsm Exp $");
 #endif				/* not lint */
 
 #include "hack.h"	/* for RUMORFILE and BSD (strchr) */
 #include "extern.h"
 #define	CHARSZ	8		/* number of bits in a char */
+int             n_rumors = 0;
+int             n_used_rumors = -1;
+char           *usedbits;
 
-static int n_rumors = 0;
-static int n_used_rumors = -1;
-static char *usedbits;
-
-static void init_rumors(FILE *);
-static int skipline(FILE *);
-static void outline(FILE *);
-static int used(int);
-
-static void
-init_rumors(FILE *rumf)
+void
+init_rumors(rumf)
+	FILE           *rumf;
 {
 	int             i;
 	n_used_rumors = 0;
@@ -88,13 +83,14 @@ init_rumors(FILE *rumf)
 		n_rumors++;
 	rewind(rumf);
 	i = n_rumors / CHARSZ;
-	usedbits = alloc(i + 1);
+	usedbits = (char *) alloc((unsigned) (i + 1));
 	for (; i >= 0; i--)
 		usedbits[i] = 0;
 }
 
-static int
-skipline(FILE *rumf)
+int
+skipline(rumf)
+	FILE           *rumf;
 {
 	char            line[COLNO];
 	while (1) {
@@ -105,8 +101,9 @@ skipline(FILE *rumf)
 	}
 }
 
-static void
-outline(FILE *rumf)
+void
+outline(rumf)
+	FILE           *rumf;
 {
 	char            line[COLNO];
 	char           *ep;
@@ -115,11 +112,11 @@ outline(FILE *rumf)
 	if ((ep = strchr(line, '\n')) != 0)
 		*ep = 0;
 	pline("This cookie has a scrap of paper inside! It reads: ");
-	pline("%s", line);
+	pline(line);
 }
 
 void
-outrumor(void)
+outrumor()
 {
 	int             rn, i;
 	FILE           *rumf;
@@ -145,8 +142,9 @@ none:
 	(void) fclose(rumf);
 }
 
-static int
-used(int i)
+int
+used(i)
+	int             i;
 {
 	return (usedbits[i / CHARSZ] & (1 << (i % CHARSZ)));
 }

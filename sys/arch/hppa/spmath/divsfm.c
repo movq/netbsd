@@ -1,4 +1,4 @@
-/*	$NetBSD: divsfm.c,v 1.5 2012/02/04 17:03:09 skrll Exp $	*/
+/*	$NetBSD: divsfm.c,v 1.4 2007/02/22 05:46:29 thorpej Exp $	*/
 
 /*	$OpenBSD: divsfm.c,v 1.4 2001/03/29 03:58:17 mickey Exp $	*/
 
@@ -42,12 +42,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: divsfm.c,v 1.5 2012/02/04 17:03:09 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: divsfm.c,v 1.4 2007/02/22 05:46:29 thorpej Exp $");
 
 #include "md.h"
 
 void
-divsfm(int opnd1, int opnd2, struct mdsfu_register *result)
+divsfm(opnd1,opnd2,result)
+
+int opnd1, opnd2;
+struct mdsfu_register *result;
 {
 	register int sign, op1_sign;
 

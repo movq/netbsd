@@ -1,9 +1,7 @@
-/*	$NetBSD: sets.c,v 1.1.1.4 2010/12/12 15:22:45 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/servers/slapd/sets.c,v 1.28.2.14 2010/04/13 20:23:19 kurt Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/sets.c,v 1.28.2.10 2008/07/08 20:36:58 quanah Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2000-2010 The OpenLDAP Foundation.
+ * Copyright 2000-2008 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -122,7 +120,7 @@ set_dup( SetCookie *cp, BerVarray set, unsigned flags )
 /* Join two sets according to operator op and flags op_flags.
  * op can be:
  *	'|' (or):	the union between the two sets is returned,
- *		 	eliminating duplicates
+ *		 	eliminating diplicates
  *	'&' (and):	the intersection between the two sets
  *			is returned
  *	'+' (add):	the inner product of the two sets is returned,
@@ -728,7 +726,6 @@ slap_set_filter( SLAP_SET_GATHER gatherer,
 			if ( len == 4
 				&& memcmp( "this", filter, len ) == 0 )
 			{
-				assert( !BER_BVISNULL( target ) );
 				if ( ( SF_TOP() == (void *)'/' ) || IS_SET( SF_TOP() ) ) {
 					SF_ERROR( syntax );
 				}
@@ -749,15 +746,15 @@ slap_set_filter( SLAP_SET_GATHER gatherer,
 				if ( ( SF_TOP() == (void *)'/' ) || IS_SET( SF_TOP() ) ) {
 					SF_ERROR( syntax );
 				}
-				if ( BER_BVISNULL( user ) ) {
-					SF_ERROR( memory );
-				}
 				set = cp->set_op->o_tmpcalloc( 2, sizeof( struct berval ),
 						cp->set_op->o_tmpmemctx );
 				if ( set == NULL ) {
 					SF_ERROR( memory );
 				}
 				ber_dupbv_x( set, user, cp->set_op->o_tmpmemctx );
+				if ( BER_BVISNULL( set ) ) {
+					SF_ERROR( memory );
+				}
 				BER_BVZERO( &set[ 1 ] );
 				
 			} else if ( SF_TOP() != (void *)'/' ) {

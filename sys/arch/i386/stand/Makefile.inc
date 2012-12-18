@@ -1,11 +1,5 @@
-#	$NetBSD: Makefile.inc,v 1.10 2012/04/04 10:54:44 joerg Exp $
+#	$NetBSD: Makefile.inc,v 1.6 2008/08/29 00:02:23 gmcgarry Exp $
 
 .include <bsd.own.mk>
 
 BINDIR=	/usr/mdec
-
-OPT_SIZE.gcc=	-Os -ffreestanding -fomit-frame-pointer
-OPT_SIZE.clang=	-Oz -ffreestanding -fomit-frame-pointer -DNDEBUG \
-		-fno-stack-protector -mno-sse \
-		-mstack-alignment=4 \
-		-mllvm -inline-threshold=3 -mllvm -enable-load-pre=false

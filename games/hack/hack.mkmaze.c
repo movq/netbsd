@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.mkmaze.c,v 1.8 2009/08/12 07:28:41 dholland Exp $	*/
+/*	$NetBSD: hack.mkmaze.c,v 1.6 2003/04/02 18:36:38 jsm Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,22 +63,17 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.mkmaze.c,v 1.8 2009/08/12 07:28:41 dholland Exp $");
+__RCSID("$NetBSD: hack.mkmaze.c,v 1.6 2003/04/02 18:36:38 jsm Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
 #include "extern.h"
 #include "def.mkroom.h"		/* not really used */
-
-static const struct permonst hell_hound =
+const struct permonst hell_hound =
 {"hell hound", 'd', 12, 14, 2, 3, 6, 0};
 
-static void walkfrom(int, int);
-static void move(int *, int *, int);
-static int okay(int, int, int);
-
 void
-makemaz(void)
+makemaz()
 {
 	int             x, y;
 	int		zx, zy;
@@ -156,8 +151,9 @@ makemaz(void)
 	xdnstair = ydnstair = 0;
 }
 
-static void
-walkfrom(int x, int y)
+void
+walkfrom(x, y)
+	int             x, y;
 {
 	int             q, a, dir;
 	int             dirs[4];
@@ -177,8 +173,10 @@ walkfrom(int x, int y)
 	}
 }
 
-static void
-move(int *x, int *y, int dir)
+void
+move(x, y, dir)
+	int            *x, *y;
+	int             dir;
 {
 	switch (dir) {
 	case 0:
@@ -196,8 +194,10 @@ move(int *x, int *y, int dir)
 	}
 }
 
-static int
-okay(int x, int y, int dir)
+int
+okay(x, y, dir)
+	int             x, y;
+	int             dir;
 {
 	move(&x, &y, dir);
 	move(&x, &y, dir);
@@ -208,7 +208,7 @@ okay(int x, int y, int dir)
 }
 
 coord
-mazexy(void)
+mazexy()
 {
 	coord           mm;
 	mm.x = 3 + 2 * rn2(COLNO / 2 - 2);

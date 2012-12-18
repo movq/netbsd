@@ -1,4 +1,4 @@
-/* $NetBSD: if_vge.c,v 1.53 2012/07/22 14:33:04 matt Exp $ */
+/* $NetBSD: if_vge.c,v 1.41.14.4 2008/12/07 19:10:53 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2004
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vge.c,v 1.53 2012/07/22 14:33:04 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vge.c,v 1.41.14.4 2008/12/07 19:10:53 bouyer Exp $");
 
 /*
  * VIA Networking Technologies VT612x PCI gigabit ethernet NIC driver.
@@ -84,6 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_vge.c,v 1.53 2012/07/22 14:33:04 matt Exp $");
  * and sample NICs for testing.
  */
 
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/endian.h>
@@ -113,6 +114,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_vge.c,v 1.53 2012/07/22 14:33:04 matt Exp $");
 #include <dev/pci/pcidevs.h>
 
 #include <dev/pci/if_vgereg.h>
+
+#define VGE_JUMBO_MTU		9000
 
 #define VGE_IFQ_MAXLEN		64
 
@@ -189,7 +192,7 @@ struct vge_rxsoft {
 
 
 struct vge_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 
 	bus_space_tag_t		sc_bst;		/* bus space tag */
 	bus_space_handle_t	sc_bsh;		/* bus space handle */
@@ -292,10 +295,8 @@ struct vge_softc {
 static inline void vge_set_txaddr(struct vge_txfrag *, bus_addr_t);
 static inline void vge_set_rxaddr(struct vge_rxdesc *, bus_addr_t);
 
-static int vge_ifflags_cb(struct ethercom *);
-
-static int vge_match(device_t, cfdata_t, void *);
-static void vge_attach(device_t, device_t, void *);
+static int vge_match(struct device *, struct cfdata *, void *);
+static void vge_attach(struct device *, struct device *, void *);
 
 static int vge_encap(struct vge_softc *, struct mbuf *, int);
 
@@ -314,25 +315,25 @@ static int vge_init(struct ifnet *);
 static void vge_stop(struct ifnet *, int);
 static void vge_watchdog(struct ifnet *);
 #if VGE_POWER_MANAGEMENT
-static int vge_suspend(device_t);
-static int vge_resume(device_t);
+static int vge_suspend(struct device *);
+static int vge_resume(struct device *);
 #endif
-static bool vge_shutdown(device_t, int);
+static void vge_shutdown(void *);
 
 static uint16_t vge_read_eeprom(struct vge_softc *, int);
 
 static void vge_miipoll_start(struct vge_softc *);
 static void vge_miipoll_stop(struct vge_softc *);
-static int vge_miibus_readreg(device_t, int, int);
-static void vge_miibus_writereg(device_t, int, int, int);
-static void vge_miibus_statchg(struct ifnet *);
+static int vge_miibus_readreg(struct device *, int, int);
+static void vge_miibus_writereg(struct device *, int, int, int);
+static void vge_miibus_statchg(struct device *);
 
 static void vge_cam_clear(struct vge_softc *);
 static int vge_cam_set(struct vge_softc *, uint8_t *);
 static void vge_setmulti(struct vge_softc *);
 static void vge_reset(struct vge_softc *);
 
-CFATTACH_DECL_NEW(vge, sizeof(struct vge_softc),
+CFATTACH_DECL(vge, sizeof(struct vge_softc),
     vge_match, vge_attach, NULL, NULL);
 
 static inline void
@@ -445,7 +446,7 @@ vge_read_eeprom(struct vge_softc *sc, int addr)
 	}
 
 	if (i == VGE_TIMEOUT) {
-		printf("%s: EEPROM read timed out\n", device_xname(sc->sc_dev));
+		aprint_error_dev(&sc->sc_dev, "EEPROM read timed out\n");
 		return 0;
 	}
 
@@ -473,8 +474,7 @@ vge_miipoll_stop(struct vge_softc *sc)
 	}
 
 	if (i == VGE_TIMEOUT) {
-		printf("%s: failed to idle MII autopoll\n",
-		    device_xname(sc->sc_dev));
+		aprint_error_dev(&sc->sc_dev, "failed to idle MII autopoll\n");
 	}
 }
 
@@ -495,8 +495,7 @@ vge_miipoll_start(struct vge_softc *sc)
 	}
 
 	if (i == VGE_TIMEOUT) {
-		printf("%s: failed to idle MII autopoll\n",
-		    device_xname(sc->sc_dev));
+		aprint_error_dev(&sc->sc_dev, "failed to idle MII autopoll\n");
 		return;
 	}
 
@@ -513,19 +512,18 @@ vge_miipoll_start(struct vge_softc *sc)
 	}
 
 	if (i == VGE_TIMEOUT) {
-		printf("%s: failed to start MII autopoll\n",
-		    device_xname(sc->sc_dev));
+		aprint_error_dev(&sc->sc_dev, "failed to start MII autopoll\n");
 	}
 }
 
 static int
-vge_miibus_readreg(device_t dev, int phy, int reg)
+vge_miibus_readreg(struct device *dev, int phy, int reg)
 {
 	struct vge_softc *sc;
 	int i, s;
 	uint16_t rval;
 
-	sc = device_private(dev);
+	sc = (void *)dev;
 	rval = 0;
 	if (phy != (CSR_READ_1(sc, VGE_MIICFG) & 0x1F))
 		return 0;
@@ -547,7 +545,7 @@ vge_miibus_readreg(device_t dev, int phy, int reg)
 	}
 
 	if (i == VGE_TIMEOUT)
-		printf("%s: MII read timed out\n", device_xname(sc->sc_dev));
+		aprint_error_dev(&sc->sc_dev, "MII read timed out\n");
 	else
 		rval = CSR_READ_2(sc, VGE_MIIDATA);
 
@@ -558,12 +556,12 @@ vge_miibus_readreg(device_t dev, int phy, int reg)
 }
 
 static void
-vge_miibus_writereg(device_t dev, int phy, int reg, int data)
+vge_miibus_writereg(struct device *dev, int phy, int reg, int data)
 {
 	struct vge_softc *sc;
 	int i, s;
 
-	sc = device_private(dev);
+	sc = (void *)dev;
 	if (phy != (CSR_READ_1(sc, VGE_MIICFG) & 0x1F))
 		return;
 
@@ -587,7 +585,7 @@ vge_miibus_writereg(device_t dev, int phy, int reg, int data)
 	}
 
 	if (i == VGE_TIMEOUT) {
-		printf("%s: MII write timed out\n", device_xname(sc->sc_dev));
+		aprint_error_dev(&sc->sc_dev, "MII write timed out\n");
 	}
 
 	vge_miipoll_start(sc);
@@ -656,8 +654,7 @@ vge_cam_set(struct vge_softc *sc, uint8_t *addr)
 	}
 
 	if (i == VGE_TIMEOUT) {
-		printf("%s: setting CAM filter failed\n",
-		    device_xname(sc->sc_dev));
+		aprint_error_dev(&sc->sc_dev, "setting CAM filter failed\n");
 		error = EIO;
 		goto fail;
 	}
@@ -772,7 +769,7 @@ vge_reset(struct vge_softc *sc)
 	}
 
 	if (i == VGE_TIMEOUT) {
-		printf("%s: soft reset timed out", device_xname(sc->sc_dev));
+		aprint_error_dev(&sc->sc_dev, "soft reset timed out");
 		CSR_WRITE_1(sc, VGE_CRS3, VGE_CR3_STOP_FORCE);
 		DELAY(2000);
 	}
@@ -788,8 +785,7 @@ vge_reset(struct vge_softc *sc)
 	}
 
 	if (i == VGE_TIMEOUT) {
-		printf("%s: EEPROM reload timed out\n",
-		    device_xname(sc->sc_dev));
+		aprint_error_dev(&sc->sc_dev, "EEPROM reload timed out\n");
 		return;
 	}
 
@@ -807,7 +803,7 @@ vge_reset(struct vge_softc *sc)
  * IDs against our list and return a device name if we find a match.
  */
 static int
-vge_match(device_t parent, cfdata_t match, void *aux)
+vge_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -833,8 +829,7 @@ vge_allocmem(struct vge_softc *sc)
 	error = bus_dmamem_alloc(sc->sc_dmat, sizeof(struct vge_control_data),
 	     VGE_RING_ALIGN, 0, &seg, 1, &nseg, BUS_DMA_NOWAIT);
 	if (error) {
-		aprint_error_dev(sc->sc_dev,
-		    "could not allocate control data dma memory\n");
+		aprint_error_dev(&sc->sc_dev, "could not allocate control data dma memory\n");
 		goto fail_1;
 	}
 
@@ -844,8 +839,7 @@ vge_allocmem(struct vge_softc *sc)
 	    sizeof(struct vge_control_data), (void **)&sc->sc_control_data,
 	    BUS_DMA_NOWAIT);
 	if (error) {
-		aprint_error_dev(sc->sc_dev,
-		    "could not map control data dma memory\n");
+		aprint_error_dev(&sc->sc_dev, "could not map control data dma memory\n");
 		goto fail_2;
 	}
 	memset(sc->sc_control_data, 0, sizeof(struct vge_control_data));
@@ -858,8 +852,7 @@ vge_allocmem(struct vge_softc *sc)
 	    sizeof(struct vge_control_data), 0, BUS_DMA_NOWAIT,
 	    &sc->sc_cddmamap);
 	if (error) {
-		aprint_error_dev(sc->sc_dev,
-		    "could not create control data dmamap\n");
+		aprint_error_dev(&sc->sc_dev, "could not create control data dmamap\n");
 		goto fail_3;
 	}
 
@@ -868,8 +861,7 @@ vge_allocmem(struct vge_softc *sc)
 	    sc->sc_control_data, sizeof(struct vge_control_data), NULL,
 	    BUS_DMA_NOWAIT);
 	if (error) {
-		aprint_error_dev(sc->sc_dev,
-		    "could not load control data dma memory\n");
+		aprint_error_dev(&sc->sc_dev, "could not load control data dma memory\n");
 		goto fail_4;
 	}
 
@@ -880,8 +872,7 @@ vge_allocmem(struct vge_softc *sc)
 		    VGE_TX_FRAGS, VGE_TX_MAXLEN, 0, BUS_DMA_NOWAIT,
 		    &sc->sc_txsoft[i].txs_dmamap);
 		if (error) {
-			aprint_error_dev(sc->sc_dev,
-			    "can't create DMA map for TX descs\n");
+			aprint_error_dev(&sc->sc_dev, "can't create DMA map for TX descs\n");
 			goto fail_5;
 		}
 	}
@@ -893,8 +884,7 @@ vge_allocmem(struct vge_softc *sc)
 		    1, MCLBYTES, 0, BUS_DMA_NOWAIT,
 		    &sc->sc_rxsoft[i].rxs_dmamap);
 		if (error) {
-			aprint_error_dev(sc->sc_dev,
-			    "can't create DMA map for RX descs\n");
+			aprint_error_dev(&sc->sc_dev, "can't create DMA map for RX descs\n");
 			goto fail_6;
 		}
 		sc->sc_rxsoft[i].rxs_mbuf = NULL;
@@ -931,10 +921,10 @@ vge_allocmem(struct vge_softc *sc)
  * setup and ethernet/BPF attach.
  */
 static void
-vge_attach(device_t parent, device_t self, void *aux)
+vge_attach(struct device *parent, struct device *self, void *aux)
 {
 	uint8_t	*eaddr;
-	struct vge_softc *sc = device_private(self);
+	struct vge_softc *sc = (void *)self;
 	struct ifnet *ifp;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
@@ -942,9 +932,8 @@ vge_attach(device_t parent, device_t self, void *aux)
 	pci_intr_handle_t ih;
 	uint16_t val;
 
-	sc->sc_dev = self;
-
-	pci_aprint_devinfo_fancy(pa, NULL, "VIA VT612X Gigabit Ethernet", 1);
+	aprint_normal(": VIA VT612X Gigabit Ethernet (rev. %#x)\n",
+	    PCI_REVISION(pa->pa_class));
 
 	/* Make sure bus-mastering is enabled */
         pci_conf_write(pc, pa->pa_tag, PCI_COMMAND_STATUS_REG,
@@ -956,7 +945,7 @@ vge_attach(device_t parent, device_t self, void *aux)
 	 */
 	if (pci_mapreg_map(pa, VGE_PCI_LOMEM, PCI_MAPREG_TYPE_MEM, 0,
 	    &sc->sc_bst, &sc->sc_bsh, NULL, NULL) != 0) {
-		aprint_error_dev(self, "couldn't map memory\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't map memory\n");
 		return;
 	}
 
@@ -964,19 +953,19 @@ vge_attach(device_t parent, device_t self, void *aux)
          * Map and establish our interrupt.
          */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error_dev(self, "unable to map interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "unable to map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_intrhand = pci_intr_establish(pc, ih, IPL_NET, vge_intr, sc);
 	if (sc->sc_intrhand == NULL) {
-		aprint_error_dev(self, "unable to establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "unable to establish interrupt");
 		if (intrstr != NULL)
 			aprint_error(" at %s", intrstr);
 		aprint_error("\n");
 		return;
 	}
-	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	/* Reset the adapter. */
 	vge_reset(sc);
@@ -995,7 +984,7 @@ vge_attach(device_t parent, device_t self, void *aux)
 	eaddr[4] = val & 0xff;
 	eaddr[5] = val >> 8;
 
-	aprint_normal_dev(self, "Ethernet address: %s\n",
+	aprint_normal_dev(&sc->sc_dev, "Ethernet address: %s\n",
 	    ether_sprintf(eaddr));
 
 	/*
@@ -1009,7 +998,7 @@ vge_attach(device_t parent, device_t self, void *aux)
 
 	ifp = &sc->sc_ethercom.ec_if;
 	ifp->if_softc = sc;
-	strlcpy(ifp->if_xname, device_xname(self), IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_mtu = ETHERMTU;
 	ifp->if_baudrate = IF_Gbps(1);
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
@@ -1054,7 +1043,7 @@ vge_attach(device_t parent, device_t self, void *aux)
 	sc->sc_ethercom.ec_mii = &sc->sc_mii;
 	ifmedia_init(&sc->sc_mii.mii_media, 0, ether_mediachange,
 	    ether_mediastatus);
-	mii_attach(self, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
+	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 	    MII_OFFSET_ANY, MIIF_DOPAUSE);
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL) {
 		ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER|IFM_NONE, 0, NULL);
@@ -1067,7 +1056,6 @@ vge_attach(device_t parent, device_t self, void *aux)
 	 */
 	if_attach(ifp);
 	ether_ifattach(ifp, eaddr);
-	ether_set_ifflags_cb(&sc->sc_ethercom, vge_ifflags_cb);
 
 	callout_init(&sc->sc_timeout, 0);
 	callout_setfunc(&sc->sc_timeout, vge_tick, sc);
@@ -1075,10 +1063,9 @@ vge_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * Make sure the interface is shutdown during reboot.
 	 */
-	if (pmf_device_register1(self, NULL, NULL, vge_shutdown))
-		pmf_class_network_register(self, ifp);
-	else
-		aprint_error_dev(self, "couldn't establish power handler\n");
+	if (shutdownhook_establish(vge_shutdown, sc) == NULL) {
+		aprint_error_dev(&sc->sc_dev, "WARNING: unable to establish shutdown hook\n");
+	}
 }
 
 static int
@@ -1139,7 +1126,7 @@ vge_newbuf(struct vge_softc *sc, int idx, struct mbuf *m)
 	VGE_RXDESCSYNC(sc, idx, BUS_DMASYNC_PREREAD);
 	if (rd_sts & VGE_RDSTS_OWN) {
 		panic("%s: tried to map busy RX descriptor",
-		    device_xname(sc->sc_dev));
+		    device_xname(&sc->sc_dev));
 	}
 #endif
 
@@ -1367,10 +1354,13 @@ vge_rxeof(struct vge_softc *sc)
 			    bswap16(rxctl & VGE_RDCTL_VLANID), continue);
 		}
 
+#if NBPFILTER > 0
 		/*
 		 * Handle BPF listeners.
 		 */
-		bpf_mtap(ifp, m);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 
 		(*ifp->if_input)(ifp, m);
 
@@ -1437,14 +1427,14 @@ vge_txeof(struct vge_softc *sc)
 }
 
 static void
-vge_tick(void *arg)
+vge_tick(void *xsc)
 {
 	struct vge_softc *sc;
 	struct ifnet *ifp;
 	struct mii_data *mii;
 	int s;
 
-	sc = arg;
+	sc = xsc;
 	ifp = &sc->sc_ethercom.ec_if;
 	mii = &sc->sc_mii;
 
@@ -1494,7 +1484,7 @@ vge_intr(void *arg)
 	for (;;) {
 
 		status = CSR_READ_4(sc, VGE_ISR);
-		/* If the card has gone away the read returns 0xffffffff. */
+		/* If the card has gone away the read returns 0xffff. */
 		if (status == 0xFFFFFFFF)
 			break;
 
@@ -1703,9 +1693,8 @@ vge_start(struct ifnet *ifp)
 
 		if ((error = vge_encap(sc, m_head, idx))) {
 			if (error == EFBIG) {
-				printf("%s: Tx packet consumes too many "
-				    "DMA segments, dropping...\n",
-				    device_xname(sc->sc_dev));
+				aprint_error_dev(&sc->sc_dev, "Tx packet consumes too many "
+				    "DMA segments, dropping...\n");
 				IFQ_DEQUEUE(&ifp->if_snd, m_head);
 				m_freem(m_head);
 				continue;
@@ -1742,7 +1731,10 @@ vge_start(struct ifnet *ifp)
 		 * If there's a BPF listener, bounce a copy of this frame
 		 * to him.
 		 */
-		bpf_mtap(ifp, m_head);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m_head);
+#endif
 	}
 
 	if (sc->sc_tx_free < ofree) {
@@ -1790,8 +1782,8 @@ vge_init(struct ifnet *ifp)
 	sc->sc_rx_consumed = 0;
 	for (i = 0; i < VGE_NRXDESC; i++) {
 		if (vge_newbuf(sc, i, NULL) == ENOBUFS) {
-			printf("%s: unable to allocate or map rx buffer\n",
-			    device_xname(sc->sc_dev));
+			aprint_error_dev(&sc->sc_dev, "unable to allocate or map "
+			    "rx buffer\n");
 			return 1; /* XXX */
 		}
 	}
@@ -1960,12 +1952,15 @@ out:
 }
 
 static void
-vge_miibus_statchg(struct ifnet *ifp)
+vge_miibus_statchg(struct device *self)
 {
-	struct vge_softc *sc = ifp->if_softc;
-	struct mii_data *mii = &sc->sc_mii;
-	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
+	struct vge_softc *sc;
+	struct mii_data *mii;
+	struct ifmedia_entry *ife;
 
+	sc = (void *)self;
+	mii = &sc->sc_mii;
+	ife = mii->mii_media.ifm_cur;
 	/*
 	 * If the user manually selects a media mode, we need to turn
 	 * on the forced MAC mode bit in the DIAGCTL register. If the
@@ -1996,31 +1991,10 @@ vge_miibus_statchg(struct ifnet *ifp)
 		}
 		break;
 	default:
-		printf("%s: unknown media type: %x\n",
-		    device_xname(sc->sc_dev),
+		aprint_error_dev(&sc->sc_dev, "unknown media type: %x\n",
 		    IFM_SUBTYPE(ife->ifm_media));
 		break;
 	}
-}
-
-static int
-vge_ifflags_cb(struct ethercom *ec)
-{
-	struct ifnet *ifp = &ec->ec_if;
-	struct vge_softc *sc = ifp->if_softc;
-	int change = ifp->if_flags ^ sc->sc_if_flags;
-
-	if ((change & ~(IFF_CANTCHANGE|IFF_DEBUG)) != 0)
-		return ENETRESET;
-	else if ((change & IFF_PROMISC) == 0)
-		return 0;
-
-	if ((ifp->if_flags & IFF_PROMISC) == 0)
-		CSR_CLRBIT_1(sc, VGE_RXCTL, VGE_RXCTL_RX_PROMISC);
-	else
-		CSR_SETBIT_1(sc, VGE_RXCTL, VGE_RXCTL_RX_PROMISC);
-	vge_setmulti(sc);
-	return 0;
 }
 
 static int
@@ -2036,8 +2010,41 @@ vge_ioctl(struct ifnet *ifp, u_long command, void *data)
 
 	s = splnet();
 
-	if ((error = ether_ioctl(ifp, command, data)) == ENETRESET) {
+	switch (command) {
+	case SIOCSIFMTU:
+		if (ifr->ifr_mtu > VGE_JUMBO_MTU)
+			error = EINVAL;
+		else if ((error = ifioctl_common(ifp, command, data)) == ENETRESET)
+			error = 0;
+		break;
+	case SIOCSIFFLAGS:
+		if (ifp->if_flags & IFF_UP) {
+			if (ifp->if_flags & IFF_RUNNING &&
+			    ifp->if_flags & IFF_PROMISC &&
+			    (sc->sc_if_flags & IFF_PROMISC) == 0) {
+				CSR_SETBIT_1(sc, VGE_RXCTL,
+				    VGE_RXCTL_RX_PROMISC);
+				vge_setmulti(sc);
+			} else if (ifp->if_flags & IFF_RUNNING &&
+			    (ifp->if_flags & IFF_PROMISC) == 0 &&
+			    sc->sc_if_flags & IFF_PROMISC) {
+				CSR_CLRBIT_1(sc, VGE_RXCTL,
+				    VGE_RXCTL_RX_PROMISC);
+				vge_setmulti(sc);
+                        } else
+				vge_init(ifp);
+		} else {
+			if (ifp->if_flags & IFF_RUNNING)
+				vge_stop(ifp, 1);
+		}
+		sc->sc_if_flags = ifp->if_flags;
+		break;
+	default:
+		if ((error = ether_ioctl(ifp, command, data)) != ENETRESET)
+			break;
+
 		error = 0;
+
 		if (command != SIOCADDMULTI && command != SIOCDELMULTI)
 			;
 		else if (ifp->if_flags & IFF_RUNNING) {
@@ -2047,8 +2054,8 @@ vge_ioctl(struct ifnet *ifp, u_long command, void *data)
 			 */
 			vge_setmulti(sc);
 		}
+		break;
 	}
-	sc->sc_if_flags = ifp->if_flags;
 
 	splx(s);
 	return error;
@@ -2062,7 +2069,7 @@ vge_watchdog(struct ifnet *ifp)
 
 	sc = ifp->if_softc;
 	s = splnet();
-	printf("%s: watchdog timeout\n", device_xname(sc->sc_dev));
+	aprint_error_dev(&sc->sc_dev, "watchdog timeout\n");
 	ifp->if_oerrors++;
 
 	vge_txeof(sc);
@@ -2137,14 +2144,14 @@ vge_stop(struct ifnet *ifp, int disable)
  * resume.
  */
 static int
-vge_suspend(device_t dev)
+vge_suspend(struct device *dev)
 {
 	struct vge_softc *sc;
 	int i;
 
 	sc = device_get_softc(dev);
 
-	vge_stop(sc);
+	vge_stop(&sc->sc_ethercom.ec_if, 1);
 
         for (i = 0; i < 5; i++)
 		sc->sc_saved_maps[i] =
@@ -2165,13 +2172,13 @@ vge_suspend(device_t dev)
  * appropriate.
  */
 static int
-vge_resume(device_t dev)
+vge_resume(struct device *dev)
 {
 	struct vge_softc *sc;
 	struct ifnet *ifp;
 	int i;
 
-	sc = device_private(dev);
+	sc = (void *)dev;
 	ifp = &sc->sc_ethercom.ec_if;
 
         /* better way to do this? */
@@ -2201,13 +2208,11 @@ vge_resume(device_t dev)
  * Stop all chip I/O so that the kernel's probe routines don't
  * get confused by errant DMAs when rebooting.
  */
-static bool
-vge_shutdown(device_t self, int howto)
+static void
+vge_shutdown(void *arg)
 {
 	struct vge_softc *sc;
 
-	sc = device_private(self);
+	sc = arg;
 	vge_stop(&sc->sc_ethercom.ec_if, 1);
-
-	return true;
 }

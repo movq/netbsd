@@ -1,4 +1,4 @@
-/*	$NetBSD: apmd.c,v 1.32 2011/11/25 12:51:27 joerg Exp $	*/
+/*	$NetBSD: apmd.c,v 1.31 2008/04/28 20:24:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 2000 The NetBSD Foundation, Inc.
@@ -59,31 +59,31 @@
 #define POWER_STATUS_ACON	0x1
 #define POWER_STATUS_LOWBATTNOW	0x2
 
-static const char apmdev[] = _PATH_APM_CTLDEV;
-static const char sockfile[] = _PATH_APM_SOCKET;
+const char apmdev[] = _PATH_APM_CTLDEV;
+const char sockfile[] = _PATH_APM_SOCKET;
 
 static int debug = 0;
 static int verbose = 0;
 
-__dead static void usage (void);
-static int power_status (int fd, int force, struct apm_power_info *pinfo);
-static int bind_socket (const char *sn, mode_t mode, uid_t uid, gid_t gid);
-static enum apm_state handle_client(int sock_fd, int ctl_fd);
-static void suspend(int ctl_fd);
-static void stand_by(int ctl_fd);
-static void resume(int ctl_fd);
-__dead static void sigexit(int signo);
-static void make_noise(int howmany);
-static void do_etc_file(const char *file);
-static void do_ac_state(int state);
+void usage (void);
+int power_status (int fd, int force, struct apm_power_info *pinfo);
+int bind_socket (const char *sn, mode_t mode, uid_t uid, gid_t gid);
+enum apm_state handle_client(int sock_fd, int ctl_fd);
+void suspend(int ctl_fd);
+void stand_by(int ctl_fd);
+void resume(int ctl_fd);
+void sigexit(int signo);
+void make_noise(int howmany);
+void do_etc_file(const char *file);
+void do_ac_state(int state);
 
-static void
+void
 sigexit(int signo)
 {
     exit(1);
 }
 
-static void
+void
 usage(void)
 {
     fprintf(stderr,"usage: %s [-adlqsv] [-t seconds] [-S sockname]\n\t[-m sockmode] [-o sockowner:sockgroup] [-f devname]\n", getprogname());
@@ -91,7 +91,7 @@ usage(void)
 }
 
 
-static int
+int
 power_status(int fd, int force, struct apm_power_info *pinfo)
 {
     struct apm_power_info bstate;
@@ -149,7 +149,7 @@ sockunlink(void)
 	(void) remove(socketname);
 }
 
-static int
+int
 bind_socket(const char *sockname, mode_t mode, uid_t uid, gid_t gid)
 {
     int sock;
@@ -175,7 +175,7 @@ bind_socket(const char *sockname, mode_t mode, uid_t uid, gid_t gid)
     return sock;
 }
 
-static enum apm_state
+enum apm_state
 handle_client(int sock_fd, int ctl_fd)
 {
     /* accept a handle from the client, process it, then clean up */
@@ -222,8 +222,9 @@ handle_client(int sock_fd, int ctl_fd)
 
 static int speaker_ok = TRUE;
 
-static void
-make_noise(int howmany)
+void
+make_noise(howmany)
+int howmany;
 {
     int spkrfd;
     int trycnt;
@@ -263,7 +264,7 @@ make_noise(int howmany)
 }
 
 
-static void
+void
 suspend(int ctl_fd)
 {
     do_etc_file(_PATH_APM_ETC_SUSPEND);
@@ -275,7 +276,7 @@ suspend(int ctl_fd)
     ioctl(ctl_fd, APM_IOC_SUSPEND, 0);
 }
 
-static void
+void
 stand_by(int ctl_fd)
 {
     do_etc_file(_PATH_APM_ETC_STANDBY);
@@ -289,7 +290,7 @@ stand_by(int ctl_fd)
 
 #define TIMO (10*60)			/* 10 minutes */
 
-static void
+void
 resume(int ctl_fd)
 {
     do_etc_file(_PATH_APM_ETC_RESUME);
@@ -522,7 +523,7 @@ main(int argc, char *argv[])
     exit(1);
 }
 
-static void
+void
 do_etc_file(const char *file)
 {
     pid_t pid;
@@ -566,7 +567,7 @@ do_etc_file(const char *file)
     }
 }
 
-static void
+void
 do_ac_state(int state)
 {
 	switch (state) {

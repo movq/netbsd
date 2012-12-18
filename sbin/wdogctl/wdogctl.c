@@ -1,4 +1,4 @@
-/*	$NetBSD: wdogctl.c,v 1.20 2011/08/27 19:00:35 joerg Exp $	*/
+/*	$NetBSD: wdogctl.c,v 1.17 2006/08/13 23:24:53 wiz Exp $	*/
 
 /*-
  * Copyright (c) 2000 Zembu Labs, Inc.
@@ -35,7 +35,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: wdogctl.c,v 1.20 2011/08/27 19:00:35 joerg Exp $");
+__RCSID("$NetBSD: wdogctl.c,v 1.17 2006/08/13 23:24:53 wiz Exp $");
 #endif
 
 
@@ -56,16 +56,17 @@ __RCSID("$NetBSD: wdogctl.c,v 1.20 2011/08/27 19:00:35 joerg Exp $");
 
 #define	_PATH_WATCHDOG		"/dev/watchdog"
 
-static void	enable_kernel(const char *, u_int);
-static void	enable_user(const char *, u_int, int);
-static void	enable_ext(const char *, u_int);
-static void	tickle_ext(void);
-static void	disable(void);
-static void	prep_wmode(struct wdog_mode *, int,  const char *, u_int);
-static void	list_timers(void);
-__dead static void	usage(void);
+int	main(int, char *[]);
+void	enable_kernel(const char *, u_int);
+void	enable_user(const char *, u_int, int);
+void	enable_ext(const char *, u_int);
+void	tickle_ext(void);
+void	disable(void);
+void	prep_wmode(struct wdog_mode *, int,  const char *, u_int);
+void	list_timers(void);
+void	usage(void);
 
-static int	Aflag;
+int	Aflag;
 
 /* Caution -- ordered list; entries >= CMD_EXT_TICKLE set timers */
 enum	cmd {
@@ -83,7 +84,7 @@ main(int argc, char *argv[])
 {
 	enum cmd command = CMD_NONE;
 	int period_flag = 0;
-	int ch, tmp;
+	int ch;
 	u_int period = WDOG_PERIOD_DEFAULT;
 
 	while ((ch = getopt(argc, argv, "Adekp:utx")) != -1) {
@@ -118,10 +119,9 @@ main(int argc, char *argv[])
 
 		case 'p':
 			period_flag = 1;
-			tmp = atoi(optarg);
-			if (tmp < 0)
+			period = atoi(optarg);
+			if (period == -1)
 				usage();
-			period = (unsigned int)tmp;
 			break;
 
 		case 'x':
@@ -172,7 +172,7 @@ main(int argc, char *argv[])
 	exit(EXIT_SUCCESS);
 }
 
-static void
+void
 prep_wmode(struct wdog_mode *wp, int mode,  const char *name, u_int period)
 {
 	if (strlen(name) >= WDOG_NAMESIZE)
@@ -185,7 +185,7 @@ prep_wmode(struct wdog_mode *wp, int mode,  const char *name, u_int period)
 		wp->wm_mode |= WDOG_FEATURE_ALARM;
 }
 
-static void
+void
 enable_kernel(const char *name, u_int period)
 {
 	struct wdog_mode wm;
@@ -199,11 +199,9 @@ enable_kernel(const char *name, u_int period)
 
 	if (ioctl(fd, WDOGIOC_SMODE, &wm) == -1)
 		err(EXIT_FAILURE, "WDOGIOC_SMODE");
-
-	(void)close(fd);
 }
 
-static void
+void
 enable_ext(const char *name, u_int period)
 {
 	struct wdog_mode wm;  
@@ -220,12 +218,10 @@ enable_ext(const char *name, u_int period)
 	if (ioctl(fd, WDOGIOC_TICKLE) == -1)
 		syslog(LOG_EMERG, "unable to tickle watchdog timer %s: %m",
 		    wm.wm_name);
-
-	(void)close(fd);
 	return;
 }
 
-static void
+void
 enable_user(const char *name, u_int period, int cancel_on_close)
 {
 	struct wdog_mode wm;  
@@ -309,8 +305,8 @@ enable_user(const char *name, u_int period, int cancel_on_close)
 	/* NOTREACHED */
 }
 
-static void
-tickle_ext(void)
+void
+tickle_ext()
 {
 	int fd;
 
@@ -319,11 +315,9 @@ tickle_ext(void)
 		err(EXIT_FAILURE, "open %s", _PATH_WATCHDOG);
 	if (ioctl(fd, WDOGIOC_TICKLE) == -1)
 		fprintf(stderr, "Cannot tickle timer\n");
-
-	(void)close(fd);
 }
 
-static void
+void
 disable(void)
 {
 	struct wdog_mode wm;
@@ -336,7 +330,6 @@ disable(void)
 
 	if (ioctl(fd, WDOGIOC_WHICH, &wm) == -1) {
 		printf("No watchdog timer running.\n");
-		(void)close(fd);
 		return;
 	}
 	mode = wm.wm_mode & WDOG_MODE_MASK;
@@ -361,7 +354,7 @@ disable(void)
 	}
 }
 
-static void
+void
 list_timers(void)
 {
 	struct wdog_conf wc;
@@ -438,7 +431,7 @@ list_timers(void)
 	(void)close(fd);
 }
 
-static void
+void
 usage(void)
 {
 

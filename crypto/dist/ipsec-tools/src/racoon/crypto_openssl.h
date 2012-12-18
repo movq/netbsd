@@ -1,4 +1,4 @@
-/*	$NetBSD: crypto_openssl.h,v 1.8 2012/11/29 15:31:25 vanhu Exp $	*/
+/*	$NetBSD: crypto_openssl.h,v 1.5 2006/10/06 12:02:27 manu Exp $	*/
 
 /* Id: crypto_openssl.h,v 1.11 2004/11/13 11:28:01 manubsd Exp */
 
@@ -34,6 +34,8 @@
 #ifndef _CRYPTO_OPENSSL_H
 #define _CRYPTO_OPENSSL_H
 
+#include "crypto_openssl.h"
+
 #include <openssl/x509v3.h>
 #include <openssl/rsa.h>
 
@@ -53,7 +55,6 @@ extern int eay_cmp_asn1dn __P((vchar_t *, vchar_t *));
 extern int eay_check_x509cert __P((vchar_t *, char *, char *, int));
 extern vchar_t *eay_get_x509asn1subjectname __P((vchar_t *));
 extern int eay_get_x509subjectaltname __P((vchar_t *, char **, int *, int));
-extern vchar_t * eay_get_x509asn1issuername __P((vchar_t *));
 extern char *eay_get_x509text __P((vchar_t *));
 extern vchar_t *eay_get_x509cert __P((char *));
 extern vchar_t *eay_get_x509sign __P((vchar_t *, vchar_t *));
@@ -123,9 +124,6 @@ extern vchar_t *eay_aes_encrypt __P((vchar_t *, vchar_t *, vchar_t *));
 extern vchar_t *eay_aes_decrypt __P((vchar_t *, vchar_t *, vchar_t *));
 extern int eay_aes_weakkey __P((vchar_t *));
 extern int eay_aes_keylen __P((int));
-
-/* AES GCM 16*/
-extern int eay_aesgcm_keylen __P((int));
 
 #if defined(HAVE_OPENSSL_CAMELLIA_H)
 /* Camellia */

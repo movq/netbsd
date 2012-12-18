@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_sdmmc.c,v 1.11 2012/12/14 23:53:56 jakllsch Exp $	*/
+/*	$NetBSD: ld_sdmmc.c,v 1.3.2.3 2009/12/02 17:39:16 sborrill Exp $	*/
 
 /*
  * Copyright (c) 2008 KIYOHARA Takashi
@@ -28,11 +28,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_sdmmc.c,v 1.11 2012/12/14 23:53:56 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_sdmmc.c,v 1.3.2.3 2009/12/02 17:39:16 sborrill Exp $");
 
-#ifdef _KERNEL_OPT
-#include "opt_sdmmc.h"
-#endif
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,7 +44,11 @@ __KERNEL_RCSID(0, "$NetBSD: ld_sdmmc.c,v 1.11 2012/12/14 23:53:56 jakllsch Exp $
 #include <sys/dkio.h>
 #include <sys/disk.h>
 #include <sys/kthread.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/ldvar.h>
 
@@ -113,9 +115,7 @@ ld_sdmmc_attach(device_t parent, device_t self, void *aux)
 
 	ld->sc_dv = self;
 
-	aprint_normal(": <0x%02x:0x%04x:%s:0x%02x:0x%08x:0x%03x>\n",
-	    sa->sf->cid.mid, sa->sf->cid.oid, sa->sf->cid.pnm,
-	    sa->sf->cid.rev, sa->sf->cid.psn, sa->sf->cid.mdt);
+	aprint_normal("\n");
 	aprint_naive("\n");
 
 	callout_init(&sc->sc_task.task_callout, CALLOUT_MPSAFE);
@@ -132,10 +132,9 @@ ld_sdmmc_attach(device_t parent, device_t self, void *aux)
 	ld->sc_start = ld_sdmmc_start;
 
 	/*
-	 * It is avoided that the error occurs when the card attaches it,
+	 * It is avoided that the error occurs when the card attaches it, 
 	 * when wedge is supported.
 	 */
-	config_pending_incr();
 	if (kthread_create(PRI_NONE, KTHREAD_MPSAFE, NULL,
 	    ld_sdmmc_doattach, sc, &lwp, "%sattach", device_xname(self))) {
 		aprint_error_dev(self, "couldn't create thread\n");
@@ -147,17 +146,8 @@ ld_sdmmc_doattach(void *arg)
 {
 	struct ld_sdmmc_softc *sc = (struct ld_sdmmc_softc *)arg;
 	struct ld_softc *ld = &sc->sc_ld;
-	struct sdmmc_softc *ssc = device_private(device_parent(ld->sc_dv));
 
 	ldattach(ld);
-	aprint_normal_dev(ld->sc_dv, "%d-bit width, bus clock",
-	    sc->sc_sf->width);
-	if ((ssc->sc_busclk / 1000) != 0)
-		aprint_normal(" %u.%03u MHz\n",
-		    ssc->sc_busclk / 1000, ssc->sc_busclk % 1000);
-	else
-		aprint_normal(" %u KHz\n", ssc->sc_busclk % 1000);
-	config_pending_decr();
 	kthread_exit(0);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: sleepq.c,v 1.13 2011/01/28 17:57:03 pooka Exp $	*/
+/*	$NetBSD: sleepq.c,v 1.1 2008/10/10 13:14:41 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -25,19 +25,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sleepq.c,v 1.13 2011/01/28 17:57:03 pooka Exp $");
-
 #include <sys/param.h>
 #include <sys/condvar.h>
 #include <sys/mutex.h>
-#include <sys/once.h>
 #include <sys/queue.h>
 #include <sys/sleepq.h>
 #include <sys/syncobj.h>
-#include <sys/atomic.h>
-
-#include "rump_private.h"
 
 /*
  * Flimsy and minimalistic sleepq implementation.  This is implemented
@@ -47,24 +40,16 @@ __KERNEL_RCSID(0, "$NetBSD: sleepq.c,v 1.13 2011/01/28 17:57:03 pooka Exp $");
 
 syncobj_t sleep_syncobj;
 static kcondvar_t sq_cv;
-
-static int
-sqinit1(void)
-{
-
-	cv_init(&sq_cv, "sleepq");
-
-	return 0;
-}
+static kmutex_t sq_mtx;
 
 void
 sleepq_init(sleepq_t *sq)
 {
-	ONCE_DECL(sqctl);
-
-	RUN_ONCE(&sqctl, sqinit1);
 
 	TAILQ_INIT(sq);
+
+	cv_init(&sq_cv, "sleepq"); /* XXX */
+	mutex_init(&sq_mtx, MUTEX_DEFAULT, IPL_NONE); /* multi-XXX */
 }
 
 void
@@ -72,55 +57,39 @@ sleepq_enqueue(sleepq_t *sq, wchan_t wc, const char *wmsg, syncobj_t *sob)
 {
 	struct lwp *l = curlwp;
 
+	if (__predict_false(sob != &sleep_syncobj || strcmp(wmsg, "callout"))) {
+		panic("sleepq: unsupported enqueue");
+	}
+
 	l->l_wchan = wc;
-	l->l_wmesg = wmsg;
-	l->l_sleepq = sq;
 	TAILQ_INSERT_TAIL(sq, l, l_sleepchain);
 }
 
 int
-sleepq_block(int timo, bool catch)
+sleepq_block(int timo, bool hatch)
 {
 	struct lwp *l = curlwp;
-	int error = 0;
-	kmutex_t *mp = l->l_mutex;
-	int biglocks = l->l_biglocks;
 
-	while (l->l_wchan) {
-		l->l_mutex = mp; /* keep sleepq lock until woken up */
-		error = cv_timedwait(&sq_cv, mp, timo);
-		if (error == EWOULDBLOCK || error == EINTR) {
-			if (l->l_wchan) {
-				TAILQ_REMOVE(l->l_sleepq, l, l_sleepchain);
-				l->l_wchan = NULL;
-				l->l_wmesg = NULL;
-			}
-		}
-	}
-	mutex_spin_exit(mp);
+	KASSERT(timo == 0 && !hatch);
 
-	if (biglocks)
-		KERNEL_LOCK(biglocks, curlwp);
+	mutex_enter(&sq_mtx);
+	while (l->l_wchan)
+		cv_wait(&sq_cv, &sq_mtx);
+	mutex_exit(&sq_mtx);
 
-	return error;
+	return 0;
 }
 
 lwp_t *
 sleepq_wake(sleepq_t *sq, wchan_t wchan, u_int expected, kmutex_t *mp)
 {
-	struct lwp *l, *l_next;
+	struct lwp *l;
 	bool found = false;
 
-	if (__predict_false(expected != -1))
-		panic("sleepq_wake: \"expected\" not supported");
-
-	for (l = TAILQ_FIRST(sq); l; l = l_next) {
-		l_next = TAILQ_NEXT(l, l_sleepchain);
+	TAILQ_FOREACH(l, sq, l_sleepchain) {
 		if (l->l_wchan == wchan) {
 			found = true;
 			l->l_wchan = NULL;
-			l->l_wmesg = NULL;
-			TAILQ_REMOVE(sq, l, l_sleepchain);
 		}
 	}
 	if (found)
@@ -130,52 +99,15 @@ sleepq_wake(sleepq_t *sq, wchan_t wchan, u_int expected, kmutex_t *mp)
 	return NULL;
 }
 
-void
-sleepq_unsleep(struct lwp *l, bool cleanup)
-{
-
-	l->l_wchan = NULL;
-	l->l_wmesg = NULL;
-	TAILQ_REMOVE(l->l_sleepq, l, l_sleepchain);
-	cv_broadcast(&sq_cv);
-
-	if (cleanup) {
-		mutex_spin_exit(l->l_mutex);
-	}
-}
-
 /*
- * Thread scheduler handles priorities.  Therefore no action here.
- * (maybe do something if we're deperate?)
+ * XXX: used only by callout, therefore here
+ *
+ * We don't fudge around with the lwp mutex at all, therefore
+ * this is enough.
  */
-void
-sleepq_changepri(struct lwp *l, pri_t pri)
+kmutex_t *
+lwp_lock_retry(struct lwp *l, kmutex_t *old)
 {
 
-}
-
-void
-sleepq_lendpri(struct lwp *l, pri_t pri)
-{
-
-}
-
-struct lwp *
-syncobj_noowner(wchan_t wc)
-{
-
-	return NULL;
-}
-
-void
-lwp_unlock_to(struct lwp *l, kmutex_t *new)
-{
-	kmutex_t *old;
-
-	KASSERT(mutex_owned(l->l_mutex));
-
-	old = l->l_mutex;
-	membar_exit();
-	l->l_mutex = new;
-	mutex_spin_exit(old);
+	return old;
 }

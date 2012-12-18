@@ -1,4 +1,4 @@
-/*	$NetBSD: nd6_nbr.c,v 1.96 2012/03/22 20:34:41 drochner Exp $	*/
+/*	$NetBSD: nd6_nbr.c,v 1.90 2008/07/31 18:24:07 matt Exp $	*/
 /*	$KAME: nd6_nbr.c,v 1.61 2001/02/10 16:06:14 jinmei Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nd6_nbr.c,v 1.96 2012/03/22 20:34:41 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nd6_nbr.c,v 1.90 2008/07/31 18:24:07 matt Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -66,6 +66,10 @@ __KERNEL_RCSID(0, "$NetBSD: nd6_nbr.c,v 1.96 2012/03/22 20:34:41 drochner Exp $"
 #include <netinet6/nd6.h>
 #include <netinet/icmp6.h>
 #include <netinet6/icmp6_private.h>
+
+#ifdef IPSEC
+#include <netinet6/ipsec.h>
+#endif
 
 #include "carp.h"
 #if NCARP > 0
@@ -476,7 +480,7 @@ nd6_ns_output(struct ifnet *ifp, const struct in6_addr *daddr6,
 		 * above), but we do so here explicitly to make the intention
 		 * clearer.
 		 */
-		memset(&src_in, 0, sizeof(src_in));
+		bzero(&src_in, sizeof(src_in));
 		src = &src_in;
 	}
 	ip6->ip6_src = *src;
@@ -508,10 +512,10 @@ nd6_ns_output(struct ifnet *ifp, const struct in6_addr *daddr6,
 		m->m_pkthdr.len += optlen;
 		m->m_len += optlen;
 		icmp6len += optlen;
-		memset((void *)nd_opt, 0, optlen);
+		bzero((void *)nd_opt, optlen);
 		nd_opt->nd_opt_type = ND_OPT_SOURCE_LINKADDR;
 		nd_opt->nd_opt_len = optlen >> 3;
-		memcpy((void *)(nd_opt + 1), mac, ifp->if_addrlen);
+		bcopy(mac, (void *)(nd_opt + 1), ifp->if_addrlen);
 	}
 
 	ip6->ip6_plen = htons((u_int16_t)icmp6len);
@@ -705,7 +709,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 			llchange = 0;
 		else {
 			if (sdl->sdl_alen) {
-				if (memcmp(lladdr, CLLADDR(sdl), ifp->if_addrlen))
+				if (bcmp(lladdr, CLLADDR(sdl), ifp->if_addrlen))
 					llchange = 1;
 				else
 					llchange = 0;
@@ -967,10 +971,10 @@ nd6_na_output(
 		m->m_pkthdr.len += optlen;
 		m->m_len += optlen;
 		icmp6len += optlen;
-		memset((void *)nd_opt, 0, optlen);
+		bzero((void *)nd_opt, optlen);
 		nd_opt->nd_opt_type = ND_OPT_TARGET_LINKADDR;
 		nd_opt->nd_opt_len = optlen >> 3;
-		memcpy((void *)(nd_opt + 1), mac, ifp->if_addrlen);
+		bcopy(mac, (void *)(nd_opt + 1), ifp->if_addrlen);
 	} else
 		flags &= ~ND_NA_FLAG_OVERRIDE;
 
@@ -1110,7 +1114,7 @@ nd6_dad_start(struct ifaddr *ifa, int xtick)
 			ifa->ifa_ifp ? if_name(ifa->ifa_ifp) : "???");
 		return;
 	}
-	memset(dp, 0, sizeof(*dp));
+	bzero(dp, sizeof(*dp));
 	callout_init(&dp->dad_timer_ch, CALLOUT_MPSAFE);
 	TAILQ_INSERT_TAIL(&dadq, (struct dadq *)dp, dad_list);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_namespace.h,v 1.8 2009/01/11 02:46:24 christos Exp $	*/
+/*	$NetBSD: citrus_namespace.h,v 1.6.26.1 2009/01/15 03:24:06 snj Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,

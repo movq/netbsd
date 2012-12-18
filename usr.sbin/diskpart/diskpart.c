@@ -37,7 +37,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\
 #if 0
 static char sccsid[] = "from: @(#)diskpart.c	8.3 (Berkeley) 11/30/94";
 #else
-__RCSID("$NetBSD: diskpart.c,v 1.19 2011/08/30 10:12:06 joerg Exp $");
+__RCSID("$NetBSD: diskpart.c,v 1.17 2008/07/21 13:36:58 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,7 +64,7 @@ __RCSID("$NetBSD: diskpart.c,v 1.19 2011/08/30 10:12:06 joerg Exp $");
  * Default partition sizes, where they exist.
  */
 #define	NDEFAULTS	4
-static int	defpart[NDEFAULTS][NPARTITIONS] = {
+int	defpart[NDEFAULTS][NPARTITIONS] = {
    { 15884, 66880, 0, 15884, 307200, 0, 0, 291346 },	/* ~ 356+ Mbytes */
    { 15884, 33440, 0, 15884, 55936, 0, 0, 291346 },	/* ~ 206-355 Mbytes */
    { 15884, 33440, 0, 15884, 55936, 0, 0, 0 },		/* ~ 61-205 Mbytes */
@@ -77,7 +77,7 @@ static int	defpart[NDEFAULTS][NPARTITIONS] = {
  * covers the physical space on a disk.
  */
 #define	NLAYOUTS	3
-static char	layouts[NLAYOUTS][NPARTITIONS] = {
+char	layouts[NLAYOUTS][NPARTITIONS] = {
    { 'a', 'b', 'h', 'g' },
    { 'a', 'b', 'h', 'd', 'e', 'f' },
    { 'c' },
@@ -89,7 +89,7 @@ static char	layouts[NLAYOUTS][NPARTITIONS] = {
  * with zero block and frag sizes are special cases
  * (e.g. swap areas or for access to the entire device).
  */
-static struct	partition defparam[NPARTITIONS] = {
+struct	partition defparam[NPARTITIONS] = {
 	{ 0, 0, { 1024 }, FS_UNUSED, 8, { 0 }, },		/* a */
 	{ 0, 0, { 1024 }, FS_SWAP,   8, { 0 }, },		/* b */
 	{ 0, 0, { 1024 }, FS_UNUSED, 8, { 0 }, },		/* c */
@@ -108,21 +108,24 @@ static struct	partition defparam[NPARTITIONS] = {
  * table; another 126 sectors past this is needed as a
  * pool of replacement sectors.
  */
-static int	badsecttable = 126;	/* # sectors */
+int	badsecttable = 126;	/* # sectors */
 
-static int	pflag;			/* print device driver partition tables */
-static int	dflag;			/* print disktab entry */
+int	pflag;			/* print device driver partition tables */
+int	dflag;			/* print disktab entry */
 
-static int	gettype(const char *, const char *const *);
-static struct disklabel *promptfordisk(const char *);
-__dead static void	usage(void);
+int	gettype __P((const char *, const char *const *));
+int	main __P((int, char **));
+struct disklabel *promptfordisk __P((const char *));
+void	usage __P((void));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
+
 	struct disklabel *dp;
-	int spc, def, part, layout, j, ch;
-	uint32_t curcyl;
+	int curcyl, spc, def, part, layout, j, ch;
 	int threshhold, numcyls[NPARTITIONS], startcyl[NPARTITIONS];
 	off_t totsize = 0;
 	const char *tyname;
@@ -360,9 +363,9 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-static struct disklabel disk;
+struct disklabel disk;
 
-static struct	field {
+struct	field {
 	const char	*f_name;
 	const char	*f_defaults;
 	u_int32_t	*f_location;
@@ -374,8 +377,9 @@ static struct	field {
 	{ NULL, NULL, 0 },
 };
 
-static struct disklabel *
-promptfordisk(const char *name)
+struct disklabel *
+promptfordisk(name)
+	const char *name;
 {
 	struct disklabel *dp = &disk;
 	struct field *fp;
@@ -492,8 +496,10 @@ again:
 	return (dp);
 }
 
-static int
-gettype(const char *t, const char *const *names)
+int
+gettype(t, names)
+	const char *t;
+	const char *const *names;
 {
 	const char *const *nm;
 
@@ -505,7 +511,7 @@ gettype(const char *t, const char *const *names)
 	return (-1);
 }
 
-static void
+void
 usage(void)
 {
 	(void)fprintf(stderr, "usage: diskpart [-dp] [-s size] disk-type\n");

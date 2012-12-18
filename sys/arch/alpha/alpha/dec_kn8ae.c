@@ -1,4 +1,4 @@
-/* $NetBSD: dec_kn8ae.c,v 1.41 2012/02/06 02:14:11 matt Exp $ */
+/* $NetBSD: dec_kn8ae.c,v 1.37 2007/03/04 05:59:10 christos Exp $ */
 
 /*
  * Copyright (c) 1997 by Matthew Jacob
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_kn8ae.c,v 1.41 2012/02/06 02:14:11 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_kn8ae.c,v 1.37 2007/03/04 05:59:10 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,12 +66,12 @@ __KERNEL_RCSID(0, "$NetBSD: dec_kn8ae.c,v 1.41 2012/02/06 02:14:11 matt Exp $");
 #define	KV(_addr)	((void *)ALPHA_PHYS_TO_K0SEG((_addr)))
 
 
-void dec_kn8ae_init(void);
-void dec_kn8ae_cons_init(void);
-static void dec_kn8ae_device_register(device_t, void *);
+void dec_kn8ae_init __P((void));
+void dec_kn8ae_cons_init __P((void));
+static void dec_kn8ae_device_register __P((struct device *, void *));
 
 static void dec_kn8ae_mcheck_handler
-(unsigned long, struct trapframe *, unsigned long, unsigned long);
+    __P((unsigned long, struct trapframe *, unsigned long, unsigned long));
 
 const struct alpha_variation_table dec_kn8ae_variations[] = {
 	{ 0, "AlphaServer 8400" },
@@ -79,9 +79,9 @@ const struct alpha_variation_table dec_kn8ae_variations[] = {
 };
 
 void
-dec_kn8ae_init(void)
+dec_kn8ae_init()
 {
-	uint64_t variation;
+	u_int64_t variation;
 
 	platform.family = "AlphaServer 8400";
 
@@ -99,7 +99,7 @@ dec_kn8ae_init(void)
 }
 
 void
-dec_kn8ae_cons_init(void)
+dec_kn8ae_cons_init()
 {
 
 	/*
@@ -115,12 +115,14 @@ dec_kn8ae_cons_init(void)
 
 /* #define	BDEBUG	1 */
 static void
-dec_kn8ae_device_register(device_t dev, void *aux)
+dec_kn8ae_device_register(dev, aux)
+	struct device *dev;
+	void *aux;
 {
 	static int found, initted, diskboot, netboot;
-	static device_t primarydev, pcidev, ctrlrdev;
+	static struct device *primarydev, *pcidev, *ctrlrdev;
 	struct bootdev_data *b = bootdev_data;
-	device_t parent = device_parent(dev);
+	struct device *parent = device_parent(dev);
 
 	if (found)
 		return;
@@ -154,7 +156,7 @@ dec_kn8ae_device_register(device_t dev, void *aux)
 				return;
 			primarydev = dev;
 #ifdef BDEBUG
-			printf("\nprimarydev = %s\n", device_xname(dev));
+			printf("\nprimarydev = %s\n", dev->dv_xname);
 #endif
 			return;
 		}
@@ -182,7 +184,7 @@ dec_kn8ae_device_register(device_t dev, void *aux)
 	
 			pcidev = dev;
 #if	BDEBUG
-			printf("\npcidev = %s\n", device_xname(dev));
+			printf("\npcidev = %s\n", dev->dv_xname);
 #endif
 			return;
 		}
@@ -203,13 +205,13 @@ dec_kn8ae_device_register(device_t dev, void *aux)
 			if (netboot) {
 				booted_device = dev;
 #ifdef BDEBUG
-				printf("\nbooted_device = %s\n", device_xname(dev));
+				printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 				found = 1;
 			} else {
 				ctrlrdev = dev;
 #if	BDEBUG
-				printf("\nctrlrdev = %s\n", device_xname(dev));
+				printf("\nctrlrdev = %s\n", dev->dv_xname);
 #endif
 			}
 			return;
@@ -238,7 +240,7 @@ dec_kn8ae_device_register(device_t dev, void *aux)
 		/* we've found it! */
 		booted_device = dev;
 #if	BDEBUG
-		printf("\nbooted_device = %s\n", device_xname(dev));
+		printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 		found = 1;
 	}
@@ -247,25 +249,26 @@ dec_kn8ae_device_register(device_t dev, void *aux)
 /*
  * KN8AE Machine Check Handlers.
  */
-void kn8ae_harderr(unsigned long, unsigned long,
-    unsigned long, struct trapframe *);
+void kn8ae_harderr __P((unsigned long, unsigned long,
+    unsigned long, struct trapframe *));
 
-static void kn8ae_softerr(unsigned long, unsigned long,
-    unsigned long, struct trapframe *);
+static void kn8ae_softerr __P((unsigned long, unsigned long,
+    unsigned long, struct trapframe *));
 
-void kn8ae_mcheck(unsigned long, unsigned long,
-    unsigned long, struct trapframe *);
+void kn8ae_mcheck __P((unsigned long, unsigned long,
+    unsigned long, struct trapframe *));
 
 /*
  * Support routine for clearing errors
  */
-static void clear_tlsb_ebits(int);
+static void clear_tlsb_ebits __P((int));
 
 static void
-clear_tlsb_ebits(int cpuonly)
+clear_tlsb_ebits(cpuonly)
+	int cpuonly;
 {
 	int node;
-	uint32_t tldev;
+	u_int32_t tldev;
 
 	for (node = 0; node <= TLSB_NODE_MAX; ++node) {
 		if ((tlsb_found & (1 << node)) == 0)
@@ -340,7 +343,11 @@ clear_tlsb_ebits(int cpuonly)
 static const char *fmt1 = "        %-25s = 0x%l016x\n";
 
 void
-kn8ae_harderr(unsigned long mces, unsigned long type, unsigned long logout, struct trapframe *framep)
+kn8ae_harderr(mces, type, logout, framep)
+	unsigned long mces;
+	unsigned long type;
+	unsigned long logout;
+	struct trapframe *framep;
 {
 	int whami, cpuwerr, dof_cnt;
 	mc_hdr_ev5 *hdr;
@@ -361,7 +368,7 @@ kn8ae_harderr(unsigned long mces, unsigned long type, unsigned long logout, stru
 	printf(fmt1, "Fill Syndrome", mptr->fill_syndrome);
 	printf(fmt1, "Interrupt Status Reg.", mptr->isr);
 	printf("\n");
-	dof_cnt = (ptr->rsvdheader & 0xffffffff00000000) >> 32;
+	dof_cnt = (ptr->rsvdheader & 0xffffffff00000000) >> 32; 
 	cpuwerr = ptr->rsvdheader & 0xffff;
 	
 	printf(fmt1, "CPU W/Error.", cpuwerr);
@@ -396,22 +403,22 @@ kn8ae_harderr(unsigned long mces, unsigned long type, unsigned long logout, stru
 	 *    tlfadr reg of the TIOP or TMEM (depending on type of error,
 	 *    see upcoming code branches) and write data back to location.
 	 *
-	 * 4. When the CPU attempts to read the location, another 620 interrupt
-	 *    should occur for the CPU at which instant PAL will scrub the
-	 *    location. Then the o.s. scrub routine finishes. If the PAL scrubs
+         * 4. When the CPU attempts to read the location, another 620 interrupt
+         *    should occur for the CPU at which instant PAL will scrub the
+         *    location. Then the o.s. scrub routine finishes. If the PAL scrubs
 	 *    the location then the scrubbed flag should be 0 (this is what we
 	 *    expect).
 	 *
-	 *    If it's a 1 then the alpha_scrub_long routine did the scrub.
+         *    If it's a 1 then the alpha_scrub_long routine did the scrub.
 	 *
-	 * 5. We renable correctable error logging and continue
+         * 5. We renable correctable error logging and continue
 	 */
 	printf("WARNING THIS IS NOT DONE YET YOU MAY GET DATA CORRUPTION");
 	clear_tlsb_ebits(0);
 	/*
 	 * Clear error by rewriting register.
 	 */
-	alpha_pal_wrmces(mces);
+        alpha_pal_wrmces(mces);
 }
 
 /*
@@ -419,7 +426,11 @@ kn8ae_harderr(unsigned long mces, unsigned long type, unsigned long logout, stru
  */
 
 static void
-kn8ae_softerr(unsigned long mces, unsigned long type, unsigned long logout, struct trapframe *framep)
+kn8ae_softerr(mces, type, logout, framep)
+	unsigned long mces;
+	unsigned long type;
+	unsigned long logout;
+	struct trapframe *framep;
 {
 	int whami, cpuwerr, dof_cnt;
 	mc_hdr_ev5 *hdr;
@@ -439,7 +450,7 @@ kn8ae_softerr(unsigned long mces, unsigned long type, unsigned long logout, stru
 	printf(fmt1, "Fill Syndrome", mptr->fill_syndrome);
 	printf(fmt1, "Interrupt Status Reg.", mptr->isr);
 	printf("\n");
-	dof_cnt = (ptr->rsvdheader & 0xffffffff00000000) >> 32;
+	dof_cnt = (ptr->rsvdheader & 0xffffffff00000000) >> 32; 
 	cpuwerr = ptr->rsvdheader & 0xffff;
 	
 	printf(fmt1, "CPU W/Error.", cpuwerr);
@@ -459,7 +470,7 @@ kn8ae_softerr(unsigned long mces, unsigned long type, unsigned long logout, stru
 	/*
 	 * Clear error by rewriting register.
 	 */
-	alpha_pal_wrmces(mces);
+        alpha_pal_wrmces(mces);
 }
 
 /*
@@ -467,7 +478,11 @@ kn8ae_softerr(unsigned long mces, unsigned long type, unsigned long logout, stru
  */
 
 void
-kn8ae_mcheck(unsigned long mces, unsigned long type, unsigned long logout, struct trapframe *framep)
+kn8ae_mcheck(mces, type, logout, framep)
+	unsigned long mces;
+	unsigned long type;
+	unsigned long logout;
+	struct trapframe *framep;
 {
 	struct mchkinfo *mcp;
 	int get_dwlpx_regs;
@@ -568,7 +583,11 @@ kn8ae_mcheck(unsigned long mces, unsigned long type, unsigned long logout, struc
 }
 
 static void
-dec_kn8ae_mcheck_handler(unsigned long mces, struct trapframe *framep, unsigned long vector, unsigned long param)
+dec_kn8ae_mcheck_handler(mces, framep, vector, param)
+	unsigned long mces;
+	struct trapframe *framep;
+	unsigned long vector;
+	unsigned long param;
 {
 	switch (vector) {
 	case ALPHA_SYS_ERROR:

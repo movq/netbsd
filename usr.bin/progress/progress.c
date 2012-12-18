@@ -1,4 +1,4 @@
-/*	$NetBSD: progress.c,v 1.20 2012/06/27 22:07:36 riastradh Exp $ */
+/*	$NetBSD: progress.c,v 1.17.4.1 2010/11/21 18:40:44 riz Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -31,23 +31,32 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: progress.c,v 1.20 2012/06/27 22:07:36 riastradh Exp $");
+__RCSID("$NetBSD: progress.c,v 1.17.4.1 2010/11/21 18:40:44 riz Exp $");
 #endif				/* not lint */
 
 #include <sys/types.h>
+#include <sys/param.h>
+#include <sys/socket.h>
 #include <sys/ioctl.h>
-#include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/wait.h>
+#include <netinet/in.h>
+#include <arpa/ftp.h>
 
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <glob.h>
+#include <signal.h>
 #include <inttypes.h>
 #include <limits.h>
-#include <signal.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <termios.h>
+#include <time.h>
+#include <tzfile.h>
 #include <unistd.h>
 
 #define GLOBAL			/* force GLOBAL decls in progressbar.h to be
@@ -55,7 +64,8 @@ __RCSID("$NetBSD: progress.c,v 1.20 2012/06/27 22:07:36 riastradh Exp $");
 #include "progressbar.h"
 
 static void broken_pipe(int unused);
-__dead static void usage(void);
+static void usage(void);
+int main(int, char *[]);
 
 static void
 broken_pipe(int unused)

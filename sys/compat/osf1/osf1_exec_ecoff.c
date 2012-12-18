@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_exec_ecoff.c,v 1.24 2012/02/03 20:11:54 matt Exp $ */
+/* $NetBSD: osf1_exec_ecoff.c,v 1.20.24.1 2008/11/20 03:25:42 snj Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -31,12 +31,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_exec_ecoff.c,v 1.24 2012/02/03 20:11:54 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_exec_ecoff.c,v 1.20.24.1 2008/11/20 03:25:42 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/namei.h>
 #include <sys/vnode.h>
 #include <sys/exec.h>
@@ -56,7 +56,6 @@ struct osf1_exec_emul_arg {
 };
 
 static int osf1_exec_ecoff_dynamic(struct lwp *l, struct exec_package *epp);
-static void osf1_free_emul_arg(void *);
 
 int
 osf1_exec_ecoff_probe(struct lwp *l, struct exec_package *epp)
@@ -70,13 +69,20 @@ osf1_exec_ecoff_probe(struct lwp *l, struct exec_package *epp)
 		return ENOEXEC;
 
 	/* set up the exec package emul arg as appropriate */
-	emul_arg = kmem_alloc(sizeof(*emul_arg), KM_SLEEP);
+	emul_arg = malloc(sizeof *emul_arg, M_TEMP, M_WAITOK);
 	epp->ep_emul_arg = emul_arg;
-	epp->ep_emul_arg_free = osf1_free_emul_arg;
 
 	emul_arg->flags = 0;
-	/* this cannot overflow because both are size PATH_MAX */
-	strcpy(emul_arg->exec_name, epp->ep_kname);
+	if (epp->ep_ndp->ni_segflg == UIO_SYSSPACE)
+		error = copystr(epp->ep_ndp->ni_dirp, emul_arg->exec_name,
+		    MAXPATHLEN + 1, NULL);
+	else
+		error = copyinstr(epp->ep_ndp->ni_dirp, emul_arg->exec_name,
+		    MAXPATHLEN + 1, NULL);
+#ifdef DIAGNOSTIC
+	if (error != 0)
+		panic("osf1_exec_ecoff_probe: copyinstr failed");
+#endif
 
 	/* do any special object file handling */
 	switch (execp->f.f_flags & ECOFF_FLAG_OBJECT_TYPE_MASK) {
@@ -99,7 +105,8 @@ osf1_exec_ecoff_probe(struct lwp *l, struct exec_package *epp)
 	}
 
 	if (error) {
-		exec_free_emul_arg(epp);
+		free(epp->ep_emul_arg, M_TEMP);
+		epp->ep_emul_arg = NULL;
 		kill_vmcmds(&epp->ep_vmcmds);		/* if any */
 	}
 
@@ -167,7 +174,8 @@ osf1_copyargs(struct lwp *l, struct exec_package *pack, struct ps_strings *argin
 	*stackp += len;
 
 out:
-	exec_free_emul_arg(pack);
+	free(pack->ep_emul_arg, M_TEMP);
+	pack->ep_emul_arg = NULL;
 	return error;
 }
 
@@ -233,7 +241,7 @@ osf1_exec_ecoff_dynamic(struct lwp *l, struct exec_package *epp)
         if (ldr_vp->v_mount->mnt_flag & MNT_NOSUID)
                 epp->ep_vap->va_mode &= ~(S_ISUID | S_ISGID);
 
-	VOP_UNLOCK(ldr_vp);
+	VOP_UNLOCK(ldr_vp, 0);
 
 	/*
 	 * read the header, and make sure we got all of it.
@@ -289,17 +297,8 @@ osf1_exec_ecoff_dynamic(struct lwp *l, struct exec_package *epp)
 	return (0);
 
 badunlock:
-	VOP_UNLOCK(ldr_vp);
+	VOP_UNLOCK(ldr_vp, 0);
 bad:
 	vrele(ldr_vp);
 	return (error);
-}
-
-void
-osf1_free_emul_arg(void *arg)
-{
-	struct osf1_exec_emul_arg *emul_arg = arg;
-	KASSERT(emul_arg != NULL);
-
-	kmem_free(emul_arg, sizeof(*emul_arg));
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_process.c,v 1.162 2011/09/06 11:22:42 jmcneill Exp $	*/
+/*	$NetBSD: sys_process.c,v 1.143.4.2 2012/02/04 16:57:59 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -118,8 +118,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_process.c,v 1.162 2011/09/06 11:22:42 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_process.c,v 1.143.4.2 2012/02/04 16:57:59 bouyer Exp $");
 
+#include "opt_coredump.h"
 #include "opt_ptrace.h"
 #include "opt_ktrace.h"
 
@@ -129,8 +130,9 @@ __KERNEL_RCSID(0, "$NetBSD: sys_process.c,v 1.162 2011/09/06 11:22:42 jmcneill E
 #include <sys/errno.h>
 #include <sys/ptrace.h>
 #include <sys/uio.h>
+#include <sys/user.h>
 #include <sys/ras.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/kauth.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
@@ -140,84 +142,6 @@ __KERNEL_RCSID(0, "$NetBSD: sys_process.c,v 1.162 2011/09/06 11:22:42 jmcneill E
 #include <machine/reg.h>
 
 #ifdef PTRACE
-static kauth_listener_t ptrace_listener;
-
-static int
-ptrace_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
-    void *arg0, void *arg1, void *arg2, void *arg3)
-{
-	struct proc *p;
-	int result;
-
-	result = KAUTH_RESULT_DEFER;
-	p = arg0;
-
-	if (action != KAUTH_PROCESS_PTRACE)
-		return result;
-
-	switch ((u_long)arg1) {
-	case PT_TRACE_ME:
-	case PT_ATTACH:
-	case PT_WRITE_I:
-	case PT_WRITE_D:
-	case PT_READ_I:
-	case PT_READ_D:
-	case PT_IO:
-#ifdef PT_GETREGS
-	case PT_GETREGS:
-#endif
-#ifdef PT_SETREGS
-	case PT_SETREGS:
-#endif
-#ifdef PT_GETFPREGS
-	case PT_GETFPREGS:
-#endif
-#ifdef PT_SETFPREGS
-	case PT_SETFPREGS:
-#endif
-	case PT_SET_EVENT_MASK:
-	case PT_GET_EVENT_MASK:
-	case PT_GET_PROCESS_STATE:
-#ifdef __HAVE_PTRACE_MACHDEP
-	PTRACE_MACHDEP_REQUEST_CASES
-#endif
-		if (kauth_cred_getuid(cred) != kauth_cred_getuid(p->p_cred) ||
-		    ISSET(p->p_flag, PK_SUGID)) {
-			break;
-		}
-
-		result = KAUTH_RESULT_ALLOW;
-
-	break;
-
-#ifdef PT_STEP
-	case PT_STEP:
-#endif
-	case PT_CONTINUE:
-	case PT_KILL:
-	case PT_DETACH:
-	case PT_LWPINFO:
-	case PT_SYSCALL:
-	case PT_SYSCALLEMU:
-	case PT_DUMPCORE:
-		result = KAUTH_RESULT_ALLOW;
-		break;
-
-	default:
-		break;
-	}
-
-	return result;
-}
-
-void
-ptrace_init(void)
-{
-
-	ptrace_listener = kauth_listen_scope(KAUTH_SCOPE_PROCESS,
-	    ptrace_listener_cb, NULL);
-}
-
 /*
  * Process debugging system call.
  */
@@ -232,23 +156,18 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 	} */
 	struct proc *p = l->l_proc;
 	struct lwp *lt;
-#ifdef PT_STEP
-	struct lwp *lt2;
-#endif
 	struct proc *t;				/* target process */
 	struct uio uio;
 	struct iovec iov;
 	struct ptrace_io_desc piod;
-	struct ptrace_event pe;
-	struct ptrace_state ps;
 	struct ptrace_lwpinfo pl;
 	struct vmspace *vm;
 	int error, write, tmp, req, pheld;
-	int signo = 0;
-	int resume_all;
+	int signo;
 	ksiginfo_t ksi;
+#ifdef COREDUMP
 	char *path;
-	int len = 0;
+#endif
 
 	error = 0;
 	req = SCARG(uap, req);
@@ -265,8 +184,7 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 		mutex_enter(t->p_lock);
 	} else {
 		/* Find the process we're supposed to be operating on. */
-		t = proc_find(SCARG(uap, pid));
-		if (t == NULL) {
+		if ((t = p_find(SCARG(uap, pid), PFIND_LOCKED)) == NULL) {
 			mutex_exit(proc_lock);
 			return (ESRCH);
 		}
@@ -377,13 +295,12 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 	case  PT_LWPINFO:
 	case  PT_SYSCALL:
 	case  PT_SYSCALLEMU:
+#ifdef COREDUMP
 	case  PT_DUMPCORE:
+#endif
 #ifdef PT_STEP
 	case  PT_STEP:
 #endif
-	case  PT_SET_EVENT_MASK:
-	case  PT_GET_EVENT_MASK:
-	case  PT_GET_PROCESS_STATE:
 		/*
 		 * You can't do what you want to the process if:
 		 *	(1) It's not being traced at all,
@@ -407,8 +324,7 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 		 *	(3) it's not being traced by _you_, or
 		 */
 		if (t->p_pptr != p) {
-			uprintf("parent %d != %d\n", t->p_pptr->p_pid,
-			    p->p_pid);
+			uprintf("parent %d != %d\n", t->p_pptr->p_pid, p->p_pid);
 			error = EBUSY;
 			break;
 		}
@@ -479,7 +395,6 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 	write = 0;
 	*retval = 0;
 	tmp = 0;
-	resume_all = 1;
 
 	switch (req) {
 	case  PT_TRACE_ME:
@@ -562,27 +477,28 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 		uvmspace_free(vm);
 		break;
 
+#ifdef COREDUMP
 	case  PT_DUMPCORE:
 		if ((path = SCARG(uap, addr)) != NULL) {
 			char *dst;
-			len = SCARG(uap, data);
-
+			int len = SCARG(uap, data);
 			if (len < 0 || len >= MAXPATHLEN) {
 				error = EINVAL;
 				break;
 			}
-			dst = kmem_alloc(len + 1, KM_SLEEP);
+			dst = malloc(len + 1, M_TEMP, M_WAITOK);
 			if ((error = copyin(path, dst, len)) != 0) {
-				kmem_free(dst, len + 1);
+				free(dst, M_TEMP);
 				break;
 			}
 			path = dst;
 			path[len] = '\0';
 		}
-		error = (*coredump_vec)(lt, path);
+		error = coredump(lt, path);
 		if (path)
-			kmem_free(path, len + 1);
+			free(path, M_TEMP);
 		break;
+#endif
 
 #ifdef PT_STEP
 	case  PT_STEP:
@@ -614,44 +530,6 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 		t->p_trace_enabled = trace_is_enabled(t);
 
 		/*
-		 * Pick up the LWPID, if supplied.  There are two cases:
-		 * data < 0 : step or continue single thread, lwp = -data
-		 * data > 0 in PT_STEP : step this thread, continue others
-		 * For operations other than PT_STEP, data > 0 means
-		 * data is the signo to deliver to the process.
-		 */
-		tmp = SCARG(uap, data);
-		if (tmp >= 0) {
-#ifdef PT_STEP
-			if (req == PT_STEP)
-				signo = 0;
-			else
-#endif
-			{
-				signo = tmp;
-				tmp = 0;	/* don't search for LWP */
-			}
-		}
-		else
-			tmp = -tmp;
-		
-		if (tmp > 0) {
-			if (req == PT_DETACH) {
-				error = EINVAL;
-				break;
-			}
-			lwp_delref2 (lt);
-			lt = lwp_find(t, tmp);
-			if (lt == NULL) {
-				error = ESRCH;
-				break;
-			}
-			lwp_addref(lt);
-			resume_all = 0;
-			signo = 0;
-		}
-			
-		/*
 		 * From the 4.4BSD PRM:
 		 * "The data argument is taken as a signal number and the
 		 * child's execution continues at location addr as if it
@@ -664,35 +542,33 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 		 */
 
 		/* Check that the data is a valid signal number or zero. */
-		if (signo < 0 || signo >= NSIG) {
+		if (SCARG(uap, data) < 0 || SCARG(uap, data) >= NSIG) {
 			error = EINVAL;
 			break;
 		}
 
+		uvm_lwp_hold(lt);
+
 		/* If the address parameter is not (int *)1, set the pc. */
-		if ((int *)SCARG(uap, addr) != (int *)1) {
-			error = process_set_pc(lt, SCARG(uap, addr));
-			if (error != 0)
+		if ((int *)SCARG(uap, addr) != (int *)1)
+			if ((error = process_set_pc(lt, SCARG(uap, addr))) != 0) {
+				uvm_lwp_rele(lt);
 				break;
-		}
+			}
+
 #ifdef PT_STEP
 		/*
 		 * Arrange for a single-step, if that's requested and possible.
-		 * More precisely, set the single step status as requested for
-		 * the requested thread, and clear it for other threads.
 		 */
-		LIST_FOREACH(lt2, &t->p_lwps, l_sibling) {
-			if (lt != lt2) 
-			{
-				lwp_lock(lt2);
-				process_sstep(lt2, 0);
-				lwp_unlock(lt2);
-			}
-		}
 		error = process_sstep(lt, req == PT_STEP);
-		if (error)
+		if (error) {
+			uvm_lwp_rele(lt);
 			break;
+		}
 #endif
+
+		uvm_lwp_rele(lt);
+
 		if (req == PT_DETACH) {
 			CLR(t->p_slflag, PSL_TRACED|PSL_FSTRACE|PSL_SYSCALL);
 
@@ -705,8 +581,9 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 			/* not being traced any more */
 			t->p_opptr = NULL;
 		}
+
+		signo = SCARG(uap, data);
 	sendsig:
-		t->p_fpid = 0;
 		/* Finally, deliver the requested signal (or none). */
 		if (t->p_stat == SSTOP) {
 			/*
@@ -715,10 +592,7 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 			 * an LWP runs to see it.
 			 */
 			t->p_xstat = signo;
-			if (resume_all)
-				proc_unstop(t);
-			else
-				lwp_unstop(lt);
+			proc_unstop(t);
 		} else if (signo != 0) {
 			KSI_INIT_EMPTY(&ksi);
 			ksi.ksi_signo = signo;
@@ -768,37 +642,6 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 		SET(t->p_slflag, PSL_TRACED);
 		signo = SIGSTOP;
 		goto sendsig;
-
-	case  PT_GET_EVENT_MASK:
-		if (SCARG(uap, data) != sizeof(pe))
-			return EINVAL;
-		memset(&pe, 0, sizeof(pe));
-		pe.pe_set_event = ISSET(t->p_slflag, PSL_TRACEFORK) ? 
-			PTRACE_FORK : 0;
-		error = copyout(&pe, SCARG(uap, addr), sizeof(pe));
-		break;
-
-	case  PT_SET_EVENT_MASK:
-		if (SCARG(uap, data) != sizeof(pe))
-			return EINVAL;
-		if ((error = copyin(SCARG(uap, addr), &pe, sizeof(pe))) != 0)
-			return error;
-		if (pe.pe_set_event & PTRACE_FORK)
-			SET(t->p_slflag, PSL_TRACEFORK);
-		else
-			CLR(t->p_slflag, PSL_TRACEFORK);
-		break;
-
-	case  PT_GET_PROCESS_STATE:
-		if (SCARG(uap, data) != sizeof(ps))
-			return EINVAL;
-		memset(&ps, 0, sizeof(ps));
-		if (t->p_fpid) {
-			ps.pe_report_event = PTRACE_FORK;
-			ps.pe_other_pid = t->p_fpid;
-		}
-		error = copyout(&ps, SCARG(uap, addr), sizeof(ps));
-		break;
 
 	case PT_LWPINFO:
 		if (SCARG(uap, data) != sizeof(pl)) {
@@ -964,6 +807,8 @@ process_doregs(struct lwp *curl /*tracer*/,
 	if ((size_t)kl > uio->uio_resid)
 		kl = uio->uio_resid;
 
+	uvm_lwp_hold(l);
+
 	error = process_read_regs(l, &r);
 	if (error == 0)
 		error = uiomove(kv, kl, uio);
@@ -973,6 +818,8 @@ process_doregs(struct lwp *curl /*tracer*/,
 		else
 			error = process_write_regs(l, &r);
 	}
+
+	uvm_lwp_rele(l);
 
 	uio->uio_offset = 0;
 	return (error);
@@ -1001,7 +848,7 @@ process_dofpregs(struct lwp *curl /*tracer*/,
 	int error;
 	struct fpreg r;
 	char *kv;
-	size_t kl;
+	int kl;
 
 	if (uio->uio_offset < 0 || uio->uio_offset > (off_t)sizeof(r))
 		return EINVAL;
@@ -1014,23 +861,20 @@ process_dofpregs(struct lwp *curl /*tracer*/,
 	if ((size_t)kl > uio->uio_resid)
 		kl = uio->uio_resid;
 
-#ifdef __HAVE_PROCESS_XFPREGS
-	error = process_read_xfpregs(l, &r, &kl);
-#else
+	uvm_lwp_hold(l);
+
 	error = process_read_fpregs(l, &r);
-#endif
 	if (error == 0)
 		error = uiomove(kv, kl, uio);
 	if (error == 0 && uio->uio_rw == UIO_WRITE) {
 		if (l->l_stat != LSSTOP)
 			error = EBUSY;
 		else
-#ifdef __HAVE_PROCESS_XFPREGS
-			error = process_write_xfpregs(l, &r, kl);
-#else
 			error = process_write_fpregs(l, &r);
-#endif
 	}
+
+	uvm_lwp_rele(l);
+
 	uio->uio_offset = 0;
 	return (error);
 #else

@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.75 2012/10/27 17:18:12 chs Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.59 2008/05/30 19:26:35 ad Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Matthew R. Green
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.75 2012/10/27 17:18:12 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.59 2008/05/30 19:26:35 ad Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -42,7 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.75 2012/10/27 17:18:12 chs Exp $")
 #include <sys/malloc.h>
 
 #define _SPARC_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/autoconf.h>
 #include <machine/openfirm.h>
 #include <dev/pci/pcivar.h>
@@ -51,6 +51,9 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.75 2012/10/27 17:18:12 chs Exp $")
 #include <dev/ofw/ofw_pci.h>
 
 #include <sparc64/dev/iommureg.h>
+#include <sparc64/dev/iommuvar.h>
+#include <sparc64/dev/psychoreg.h>
+#include <sparc64/dev/psychovar.h>
 #include <sparc64/sparc64/cache.h>
 
 #include "locators.h"
@@ -60,7 +63,6 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.75 2012/10/27 17:18:12 chs Exp $")
 #define SPDB_INTR	0x04
 #define SPDB_INTMAP	0x08
 #define SPDB_PROBE	0x20
-#define SPDB_TAG	0x40
 int sparc_pci_debug = 0x0;
 #define DPRINTF(l, s)	do { if (sparc_pci_debug & l) printf s; } while (0)
 #else
@@ -72,24 +74,19 @@ struct sparc_pci_chipset _sparc_pci_chipset = {
 	.cookie = NULL,
 };
 
+static int pci_find_ino(struct pci_attach_args *, pci_intr_handle_t *);
+
 static pcitag_t
 ofpci_make_tag(pci_chipset_tag_t pc, int node, int b, int d, int f)
 {
 	pcitag_t tag;
-	pcireg_t reg;
 
 	tag = PCITAG_CREATE(node, b, d, f);
 
-	DPRINTF(SPDB_TAG,
-		("%s: creating tag for node %x bus %d dev %d fn %d\n",
-		 __func__, node, b, d, f));
-
 	/* Enable all the different spaces for this device */
-	reg = pci_conf_read(pc, tag, PCI_COMMAND_STATUS_REG);
-	reg |= PCI_COMMAND_MEM_ENABLE|PCI_COMMAND_MASTER_ENABLE|
-	       PCI_COMMAND_IO_ENABLE;
-	pci_conf_write(pc, tag, PCI_COMMAND_STATUS_REG, reg);
-
+	pci_conf_write(pc, tag, PCI_COMMAND_STATUS_REG,
+		PCI_COMMAND_MEM_ENABLE|PCI_COMMAND_MASTER_ENABLE|
+		PCI_COMMAND_IO_ENABLE);
 	return (tag);
 }
 
@@ -98,8 +95,8 @@ ofpci_make_tag(pci_chipset_tag_t pc, int node, int b, int d, int f)
  */
 
 void
-pci_attach_hook(device_t parent, device_t self,
-    struct pcibus_attach_args *pba)
+pci_attach_hook(struct device *parent, struct device *self,
+	struct pcibus_attach_args *pba)
 {
 }
 
@@ -113,6 +110,7 @@ pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
 pcitag_t
 pci_make_tag(pci_chipset_tag_t pc, int b, int d, int f)
 {
+	struct psycho_pbm *pp = pc->cookie;
 	struct ofw_pci_register reg;
 	pcitag_t tag;
 	int (*valid)(void *);
@@ -127,11 +125,10 @@ pci_make_tag(pci_chipset_tag_t pc, int b, int d, int f)
 	 * It returns a tag if node is present and bus is valid.
 	 */
 	if (0 <= b && b < 256) {
-		KASSERT(pc->spc_busnode != NULL);
-		node = (*pc->spc_busnode)[b].node;
-		valid = (*pc->spc_busnode)[b].valid;
+		node = (*pp->pp_busnode)[b].node;
+		valid = (*pp->pp_busnode)[b].valid;
 		if (node != 0 && d == 0 &&
-		    (valid == NULL || (*valid)((*pc->spc_busnode)[b].arg)))
+		    (valid == NULL || (*valid)((*pp->pp_busnode)[b].arg)))
 			return ofpci_make_tag(pc, node, b, d, f);
 	}
 
@@ -153,20 +150,26 @@ pci_make_tag(pci_chipset_tag_t pc, int b, int d, int f)
 	 * then we're obviously on the wrong bus.  So go up one
 	 * level.
 	 */
-	DPRINTF(SPDB_PROBE, ("curnode %x %s\n", node,
-		prom_getpropstringA(node, "name", name, sizeof(name))));
+#ifdef DEBUG
+	if (sparc_pci_debug & SPDB_PROBE) {
+		printf("curnode %x %s\n", node,
+			prom_getpropstringA(node, "name", name, sizeof(name)));
+	}
+#endif
 #if 0
 	while ((OF_getprop(OF_parent(node), "bus-range", (void *)&busrange,
 		sizeof(busrange)) == sizeof(busrange)) &&
 		(b < busrange[0] || b > busrange[1])) {
 		/* Out of range, go up one */
 		node = OF_parent(node);
-		DPRINTF(SPDB_PROBE, printf("going up to node %x %s\n",
-		    node,
-		    prom_getpropstringA(node, "name", name, sizeof(name))));
+#ifdef DEBUG
+		if (sparc_pci_debug & SPDB_PROBE) {
+			printf("going up to node %x %s\n", node,
+			prom_getpropstringA(node, "name", name, sizeof(name)));
+		}
+#endif
 	}
 #endif	
-	node = prom_firstchild(node);
 	/*
 	 * Now traverse all peers until we find the node or we find
 	 * the right bridge. 
@@ -176,8 +179,13 @@ pci_make_tag(pci_chipset_tag_t pc, int b, int d, int f)
 	 */
 	for (node = ((node)); node; node = prom_nextsibling(node)) {
 
-		DPRINTF(SPDB_PROBE, ("checking node %x %s\n", node,
-			prom_getpropstringA(node, "name", name, sizeof(name))));
+#ifdef DEBUG
+		if (sparc_pci_debug & SPDB_PROBE) {
+			printf("checking node %x %s\n", node,
+			prom_getpropstringA(node, "name", name, sizeof(name)));
+			
+		}
+#endif
 
 #if 1
 		/*
@@ -195,9 +203,13 @@ pci_make_tag(pci_chipset_tag_t pc, int b, int d, int f)
 				break;
 			/* Go down 1 level */
 			node = prom_firstchild(node);
-			DPRINTF(SPDB_PROBE, ("going down to node %x %s\n", node,
-			    prom_getpropstringA(node, "name", name,
-				sizeof(name))));
+#ifdef DEBUG
+			if (sparc_pci_debug & SPDB_PROBE) {
+				printf("going down to node %x %s\n", node,
+					prom_getpropstringA(node, "name",
+							name, sizeof(name)));
+			}
+#endif
 		}
 #endif /*1*/
 		/* 
@@ -243,7 +255,7 @@ pci_decompose_tag(pci_chipset_tag_t pc, pcitag_t tag, int *bp, int *dp, int *fp)
 
 int
 sparc64_pci_enumerate_bus(struct pci_softc *sc, const int *locators,
-    int (*match)(const struct pci_attach_args *), struct pci_attach_args *pap)
+    int (*match)(struct pci_attach_args *), struct pci_attach_args *pap)
 {
 	struct ofw_pci_register reg;
 	pci_chipset_tag_t pc = sc->sc_pc;
@@ -252,9 +264,7 @@ sparc64_pci_enumerate_bus(struct pci_softc *sc, const int *locators,
 	int node, b, d, f, ret;
 	int bus_frequency, lt, cl, cacheline;
 	char name[30];
-#if 0
 	extern int pci_config_dump;
-#endif
 
 	if (sc->sc_bridgetag)
 		node = PCITAG_NODE(*sc->sc_bridgetag);
@@ -273,11 +283,6 @@ sparc64_pci_enumerate_bus(struct pci_softc *sc, const int *locators,
 	    (cacheline/ecache_min_line_size)*ecache_min_line_size == cacheline &&
 	    (cacheline/4)*4 == cacheline);
 
-#if 0
-	/*
-	 * XXX this faults on Fire PCIe controllers.
-	 * XXX move into the psycho and schizo driver front ends.
-	 */
 	/* Turn on parity for the bus. */
 	tag = ofpci_make_tag(pc, node, sc->sc_bus, 0, 0);
 	csr = pci_conf_read(pc, tag, PCI_COMMAND_STATUS_REG);
@@ -293,9 +298,7 @@ sparc64_pci_enumerate_bus(struct pci_softc *sc, const int *locators,
 	bhlc |= 0x40 << PCI_LATTIMER_SHIFT;
 	pci_conf_write(pc, tag, PCI_BHLC_REG, bhlc);
 
-	if (pci_config_dump)
-		pci_conf_print(pc, tag, NULL);
-#endif
+	if (pci_config_dump) pci_conf_print(pc, tag, NULL);
 
 	for (node = prom_firstchild(node); node != 0 && node != -1;
 	     node = prom_nextsibling(node)) {
@@ -366,13 +369,156 @@ sparc64_pci_enumerate_bus(struct pci_softc *sc, const int *locators,
 	return (0);
 }
 
+/* assume we are mapped little-endian/side-effect */
+pcireg_t
+pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
+{
+	struct psycho_pbm *pp = pc->cookie;
+	struct psycho_softc *sc = pp->pp_sc;
+	pcireg_t val = (pcireg_t)~0;
+
+	DPRINTF(SPDB_CONF, ("pci_conf_read: tag %lx reg %x ", 
+		(long)tag, reg));
+	if (PCITAG_NODE(tag) != -1) {
+		DPRINTF(SPDB_CONF, ("asi=%x addr=%qx (offset=%x) ...",
+			sc->sc_configaddr._asi,
+			(long long)(sc->sc_configaddr._ptr + 
+				PCITAG_OFFSET(tag) + reg),
+			(int)PCITAG_OFFSET(tag) + reg));
+
+		val = bus_space_read_4(sc->sc_configtag, sc->sc_configaddr,
+			PCITAG_OFFSET(tag) + reg);
+	}
+#ifdef DEBUG
+	else DPRINTF(SPDB_CONF, ("pci_conf_read: bogus pcitag %x\n",
+		(int)PCITAG_OFFSET(tag)));
+#endif
+	DPRINTF(SPDB_CONF, (" returning %08x\n", (u_int)val));
+
+	return (val);
+}
+
+void
+pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
+{
+	struct psycho_pbm *pp = pc->cookie;
+	struct psycho_softc *sc = pp->pp_sc;
+
+	DPRINTF(SPDB_CONF, ("pci_conf_write: tag %lx; reg %x; data %x; ", 
+		(long)PCITAG_OFFSET(tag), reg, (int)data));
+	DPRINTF(SPDB_CONF, ("asi = %x; readaddr = %qx (offset = %x)\n",
+		sc->sc_configaddr._asi,
+		(long long)(sc->sc_configaddr._ptr + PCITAG_OFFSET(tag) + reg), 
+		(int)PCITAG_OFFSET(tag) + reg));
+
+	/* If we don't know it, just punt it.  */
+	if (PCITAG_NODE(tag) == -1) {
+		DPRINTF(SPDB_CONF, ("pci_conf_write: bad addr"));
+		return;
+	}
+		
+	bus_space_write_4(sc->sc_configtag, sc->sc_configaddr, 
+		PCITAG_OFFSET(tag) + reg, data);
+}
+
+/*
+ * XXX: This code assumes we're on a psycho host bridge.
+ */
+static int
+pci_find_ino(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+{
+	struct psycho_pbm *pp = pa->pa_pc->cookie;
+	struct psycho_softc *sc = pp->pp_sc;
+	u_int bus;
+	u_int dev;
+	u_int pin;
+
+	DPRINTF(SPDB_INTMAP, ("pci_find_ino: pa_tag: node %x, %d:%d:%d\n",
+			      PCITAG_NODE(pa->pa_tag), (int)PCITAG_BUS(pa->pa_tag),
+			      (int)PCITAG_DEV(pa->pa_tag),
+			      (int)PCITAG_FUN(pa->pa_tag)));
+	DPRINTF(SPDB_INTMAP,
+		("pci_find_ino: intrswiz %d, intrpin %d, intrline %d, rawintrpin %d\n",
+		 pa->pa_intrswiz, pa->pa_intrpin, pa->pa_intrline, pa->pa_rawintrpin));
+	DPRINTF(SPDB_INTMAP, ("pci_find_ino: pa_intrtag: node %x, %d:%d:%d\n",
+			      PCITAG_NODE(pa->pa_intrtag),
+			      (int)PCITAG_BUS(pa->pa_intrtag),
+			      (int)PCITAG_DEV(pa->pa_intrtag),
+			      (int)PCITAG_FUN(pa->pa_intrtag)));
+
+	bus = (pp->pp_id == PSYCHO_PBM_B);
+	/*
+	 * If we are on a ppb, use the devno on the underlying bus when forming
+	 * the ivec.
+	 */
+	if (pa->pa_intrswiz != 0 && PCITAG_NODE(pa->pa_intrtag) != 0) 
+		dev = PCITAG_DEV(pa->pa_intrtag);
+	else
+		dev = pa->pa_device;
+	dev--;
+
+	if (sc->sc_mode == PSYCHO_MODE_PSYCHO &&
+	    pp->pp_id == PSYCHO_PBM_B)
+		dev--;
+
+	pin = pa->pa_intrpin - 1;
+	DPRINTF(SPDB_INTMAP, ("pci_find_ino: mode %d, pbm %d, dev %d, pin %d\n",
+	    sc->sc_mode, pp->pp_id, dev, pin));
+
+	*ihp = sc->sc_ign | ((bus << 4) & INTMAP_PCIBUS) |
+	    ((dev << 2) & INTMAP_PCISLOT) | (pin & INTMAP_PCIINT);
+
+	return (0);
+}
+
+/*
+ * interrupt mapping foo.
+ * XXX: how does this deal with multiple interrupts for a device?
+ */
+int
+pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+{
+	pcitag_t tag = pa->pa_tag;
+	int interrupts, *intp;
+	int len, node = PCITAG_NODE(tag);
+	char devtype[30];
+
+	intp = &interrupts;
+	len = 1;
+	if (prom_getprop(node, "interrupts", sizeof(interrupts),
+			&len, &intp) != 0 || len != 1) {
+		DPRINTF(SPDB_INTMAP,
+			("pci_intr_map: could not read interrupts\n"));
+		return (ENODEV);
+	}
+
+	if (OF_mapintr(node, &interrupts, sizeof(interrupts), 
+		sizeof(interrupts)) < 0) {
+		printf("OF_mapintr failed\n");
+		pci_find_ino(pa, &interrupts);
+	}
+
+	/* Try to find an IPL for this type of device. */
+	prom_getpropstringA(node, "device_type", devtype, sizeof(devtype));
+	for (len = 0; intrmap[len].in_class != NULL; len++)
+		if (strcmp(intrmap[len].in_class, devtype) == 0) {
+			interrupts |= INTLEVENCODE(intrmap[len].in_lev);
+			break;
+		}
+
+	/* XXXX -- we use the ino.  What if there is a valid IGN? */
+	*ihp = interrupts;
+	return (0);
+}
+
 const char *
 pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 {
 	static char str[16];
 
+	DPRINTF(SPDB_INTR, ("pci_intr_string: ih %u", ih));
 	sprintf(str, "ivec %x", ih);
-	DPRINTF(SPDB_INTR, ("pci_intr_string: returning %s\n", str));
+	DPRINTF(SPDB_INTR, ("; returning %s\n", str));
 
 	return (str);
 }
@@ -398,58 +544,18 @@ pci_intr_setattr(pci_chipset_tag_t pc, pci_intr_handle_t *ih,
 	}
 }
 
-/*
- * interrupt mapping foo.
- * XXX: how does this deal with multiple interrupts for a device?
- */
-int
-pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+void *
+pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih, int level,
+	int (*func)(void *), void *arg)
 {
-	pcitag_t tag = pa->pa_tag;
-	int interrupts[4], *intp, int_used;
-	int len, node = PCITAG_NODE(tag);
-	char devtype[30];
+	void *cookie;
+	struct psycho_pbm *pp = (struct psycho_pbm *)pc->cookie;
 
-	intp = &interrupts[0];
-	len = prom_getproplen(node, "interrupts");
-	if (len > sizeof(interrupts)) {
-		DPRINTF(SPDB_INTMAP,
-			("pci_intr_map: too many available interrupts\n"));
-		return (ENODEV);
-	}
-	if (prom_getprop(node, "interrupts", len,
-			&len, &intp) != 0 || len != 1) {
-		DPRINTF(SPDB_INTMAP,
-			("pci_intr_map: could not read interrupts\n"));
-		return (ENODEV);
-	}
+	DPRINTF(SPDB_INTR, ("pci_intr_establish: ih %lu; level %d", (u_long)ih, level));
+	cookie = bus_intr_establish(pp->pp_memt, ih, level, func, arg);
 
-	/* XXX We pick the first interrupt, but should do better */
-	int_used = interrupts[0];
-	if (OF_mapintr(node, &int_used, sizeof(int_used), 
-		sizeof(int_used)) < 0) {
-		printf("OF_mapintr failed\n");
-		if (pa->pa_pc->spc_find_ino)
-			pa->pa_pc->spc_find_ino(pa, &int_used);
-	}
-	DPRINTF(SPDB_INTMAP, ("OF_mapintr() gave %x\n", int_used));
-
-	/* Try to find an IPL for this type of device. */
-	prom_getpropstringA(node, "device_type", devtype, sizeof(devtype));
-	for (len = 0; intrmap[len].in_class != NULL; len++)
-		if (strcmp(intrmap[len].in_class, devtype) == 0) {
-			int_used |= INTLEVENCODE(intrmap[len].in_lev);
-			DPRINTF(SPDB_INTMAP, ("reset to %x\n", int_used));
-			break;
-		}
-
-	*ihp = int_used;
-
-	/* Call the sub-driver is necessary */
-	if (pa->pa_pc->spc_intr_map)
-		(*pa->pa_pc->spc_intr_map)(pa, ihp);
-
-	return (0);
+	DPRINTF(SPDB_INTR, ("; returning handle %p\n", cookie));
+	return (cookie);
 }
 
 void
@@ -460,32 +566,4 @@ pci_intr_disestablish(pci_chipset_tag_t pc, void *cookie)
 
 	/* XXX */
 	/* panic("can't disestablish PCI interrupts yet"); */
-}
-
-int
-sparc_pci_childspace(int type)
-{
-	int ss;
-
-	switch (type) {
-	case PCI_CONFIG_BUS_SPACE:
-		ss = 0x00;
-		break;
-	case PCI_IO_BUS_SPACE:
-		ss = 0x01;
-		break;
-	case PCI_MEMORY_BUS_SPACE:
-		ss = 0x02;
-		break;
-#if 0
-	/* we don't do 64 bit memory space */
-	case PCI_MEMORY64_BUS_SPACE:
-		ss = 0x03;
-		break;
-#endif
-	default:
-		panic("get_childspace: unknown bus type: %d", type);
-	}
-
-	return (ss);
 }

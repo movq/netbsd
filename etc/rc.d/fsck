@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: fsck,v 1.11 2010/02/17 23:32:07 christos Exp $
+# $NetBSD: fsck,v 1.9 2008/03/02 21:31:30 tron Exp $
 #
 
 # PROVIDE: fsck
@@ -22,8 +22,31 @@ fsck_start()
 	trap : 3		# enter single-user mode on failure.
 
 	echo "Starting file system checks:"
-	fsck -x / $fsck_flags
-	handle_fsck_error "$?"
+	fsck $fsck_flags
+	local fsck_error="$?"
+	case $fsck_error in
+	0)	# OK
+		return
+		;;
+	2)	# Needs re-run, still fs errors
+		echo "file systems still have errors; re-run fsck manually!"
+		;;
+	4)	# Root modified
+		echo "Root filesystem was modified, rebooting ..."
+		reboot
+		echo "Reboot failed; help!"
+		;;
+	8)	# Check failed
+		echo "Automatic file system check failed; help!"
+		;;
+	12)	# Got signal
+		echo "Boot interrupted."
+		;;
+	*)
+		echo "Unknown error $fsck_error; help!"
+		;;
+	esac
+	stop_boot
 }
 
 load_rc_config $name

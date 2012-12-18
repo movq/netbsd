@@ -1,4 +1,4 @@
-/*	$NetBSD: fwohcivar.h,v 1.34 2012/08/04 03:55:43 riastradh Exp $	*/
+/*	$NetBSD: fwohcivar.h,v 1.29 2007/11/06 15:24:11 kiyohara Exp $	*/
 
 /*-
  * Copyright (c) 2003 Hidetoshi SHimokawa
@@ -36,22 +36,31 @@
  * $FreeBSD: src/sys/dev/firewire/fwohcivar.h,v 1.16 2007/06/06 14:31:36 simokawa Exp $
  *
  */
-#ifndef _FWOHCIVAR_H_
-#define _FWOHCIVAR_H_
 
-struct fwohci_softc {
+#if defined(__NetBSD__)
+MALLOC_DECLARE(M_FW);
+#endif
+
+typedef struct fwohci_softc {
 	struct firewire_comm fc;
 	bus_space_tag_t bst;
 	bus_space_handle_t bsh;
+#if defined(__FreeBSD__)
+	void *ih;
+#if defined(__DragonFly__) || __FreeBSD_version < 500000
+	void *ih_cam;
+	void *ih_bio;
+#endif
+	struct resource *bsr;
+	struct resource *irq_res;
+#elif defined(__NetBSD__)
 	bus_size_t bssize;
-	struct fwohci_dbch {
-		int off;
+#endif
+	struct fwohci_dbch{
 		u_int ndb;
 		u_int ndesc;
 		STAILQ_HEAD(, fwohcidb_tr) db_trq;
-		struct fwohcidb_tr *top;
-		struct fwohcidb_tr *bottom;
-		struct fwohcidb_tr *pdb_tr;
+		struct fwohcidb_tr *top, *bottom, *pdb_tr;
 		struct fw_xferq xferq;
 		int flags;
 #define	FWOHCI_DBCH_INIT	(1<<0)
@@ -61,27 +70,30 @@ struct fwohci_softc {
 #define FWOHCI_DBCH_MAX_PAGES	32
 		/* Context programs buffer */
 		struct fwdma_alloc_multi *am;
+		fw_bus_dma_tag_t dmat;
 	} arrq, arrs, atrq, atrs, it[OHCI_DMA_ITCH], ir[OHCI_DMA_IRCH];
 	u_int maxrec;
 	uint32_t *sid_buf;
 	struct fwdma_alloc sid_dma;
 	struct fwdma_alloc crom_dma;
 	struct fwdma_alloc dummy_dma;
-	uint32_t intmask;
+	uint32_t intmask, irstat, itstat;
 	uint32_t intstat;
-	uint32_t irstat;
-	uint32_t itstat;
+	fw_task_t fwohci_task_busreset;
+	fw_task_t fwohci_task_sid;
+	fw_task_t fwohci_task_dma;
 	int cycle_lost;
-};
+} fwohci_softc_t;
 
-#define OWRITE(sc, r, x) bus_space_write_4((sc)->bst, (sc)->bsh, (r), (x))
-#define OREAD(sc, r)	bus_space_read_4((sc)->bst, (sc)->bsh, (r))
-
-void fwohci_init(struct fwohci_softc *);
-int fwohci_attach(struct fwohci_softc *);
+void fwohci_intr (void *arg);
+int fwohci_filt (void *arg);
+int fwohci_init (struct fwohci_softc *, device_t);
+void fwohci_poll (struct firewire_comm *, int, int);
+void fwohci_reset (struct fwohci_softc *, device_t);
+#if defined(__FreeBSD__)
+int fwohci_detach(struct fwohci_softc *, device_t);
+#elif defined(__NetBSD__)
 int fwohci_detach(struct fwohci_softc *, int);
-int fwohci_intr(void *arg);
-int fwohci_resume(struct fwohci_softc *);
-int fwohci_stop(struct fwohci_softc *);
-
-#endif	/* _FWOHCIVAR_H_ */
+#endif
+int fwohci_resume (struct fwohci_softc *, device_t);
+int fwohci_stop (struct fwohci_softc *, device_t dev);

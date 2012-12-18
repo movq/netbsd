@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.20 2011/02/12 05:15:39 tsutsui Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.17 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.20 2011/02/12 05:15:39 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.17 2008/04/28 20:23:19 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,9 +65,8 @@ bus_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags,
 		return 0;
 	}
 
-	if (t->bustype != HP300_BUS_SPACE_DIO &&
-	    t->bustype != HP300_BUS_SPACE_SGC)
-		panic("%s: bad space tag", __func__);
+	if (t->bustype != HP300_BUS_SPACE_DIO)
+		panic("bus_space_map: bad space tag");
 
 	/*
 	 * Allocate virtual address space from the extio extent map.
@@ -113,7 +112,7 @@ bus_space_free(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 	/*
 	 * Not meaningful on any currently-supported hp300 bus.
 	 */
-	panic("%s: shouldn't be here", __func__);
+	panic("bus_space_free: shouldn't be here");
 }
 
 void
@@ -130,9 +129,8 @@ bus_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 		return;
 	}
 
-	if (t->bustype != HP300_BUS_SPACE_DIO &&
-	    t->bustype != HP300_BUS_SPACE_SGC)
-		panic("%s: bad space tag", __func__);
+	if (t->bustype != HP300_BUS_SPACE_DIO)
+		panic("bus_space_map: bad space tag");
 
 	kva = m68k_trunc_page(bsh);
 	offset = m68k_page_offset(bsh);
@@ -141,7 +139,7 @@ bus_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 #ifdef DIAGNOSTIC
 	if (bsh < (vaddr_t)extiobase ||
 	    bsh >= ((vaddr_t)extiobase + ptoa(EIOMAPSIZE)))
-		panic("%s: bad bus space handle", __func__);
+		panic("bus_space_unmap: bad bus space handle");
 #endif
 
 	/*
@@ -154,8 +152,8 @@ bus_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 	 */
 	if (extent_free(extio_ex, kva, size,
 	    EX_NOWAIT | (extio_ex_malloc_safe ? EX_MALLOCOK : 0)))
-		printf("%s: kva 0x%lx size 0x%lx: "
-		    "can't free region\n", __func__, (u_long)bsh, size);
+		printf("bus_space_unmap: kva 0x%lx size 0x%lx: "
+		    "can't free region\n", (u_long) bsh, size);
 }
 
 /* ARGSUSED */
@@ -196,7 +194,7 @@ hp300_bus_space_probe(bus_space_tag_t t, bus_space_handle_t bsh,
 		break;
 
 	default:
-		panic("%s: unupported data size %d", __func__, sz);
+		panic("bus_space_probe: unupported data size %d", sz);
 		/* NOTREACHED */
 	}
 

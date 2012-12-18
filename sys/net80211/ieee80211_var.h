@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_var.h,v 1.28 2010/01/17 19:45:07 pooka Exp $	*/
+/*	$NetBSD: ieee80211_var.h,v 1.26.52.1 2009/08/07 06:43:50 snj Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -143,7 +143,7 @@ struct ieee80211com {
 	u_int8_t		ic_dtim_period;	/* DTIM period */
 	u_int8_t		ic_dtim_count;	/* DTIM count for last bcn */
 	struct ifmedia		ic_media;	/* interface media config */
-	struct bpf_if *		ic_rawbpf;	/* packet filter structure */
+	void *			ic_rawbpf;	/* packet filter structure */
 	struct ieee80211_node	*ic_bss;	/* information for this node */
 	struct ieee80211_channel *ic_ibss_chan;
 	struct ieee80211_channel *ic_curchan;	/* current channel */
@@ -276,16 +276,13 @@ extern struct ieee80211com_head ieee80211com_head;
 #define	IEEE80211_C_SHPREAMBLE	0x00008000	/* CAPABILITY: short preamble */
 #define	IEEE80211_C_MONITOR	0x00010000	/* CAPABILITY: monitor mode */
 #define	IEEE80211_C_TKIPMIC	0x00020000	/* CAPABILITY: TKIP MIC avail */
-#define IEEE80211_C_WME_TKIPMIC 0x00040000      /* CAPABILITY: TKIP MIC for QoS
-						   frame */
-/* 0x780000 available */
 #define	IEEE80211_C_WPA1	0x00800000	/* CAPABILITY: WPA1 avail */
 #define	IEEE80211_C_WPA2	0x01000000	/* CAPABILITY: WPA2 avail */
 #define	IEEE80211_C_WPA		0x01800000	/* CAPABILITY: WPA1+WPA2 avail*/
 #define	IEEE80211_C_BURST	0x02000000	/* CAPABILITY: frame bursting */
 #define	IEEE80211_C_WME		0x04000000	/* CAPABILITY: WME avail */
 #define	IEEE80211_C_WDS		0x08000000	/* CAPABILITY: 4-addr support */
-/* 0x10000000 reserved */
+#define	IEEE80211_C_WME_TKIPMIC	0x10000000 	/* CAPABILITY: TKIP MIC for QoS frame */
 #define	IEEE80211_C_BGSCAN	0x20000000	/* CAPABILITY: bg scanning */
 #define	IEEE80211_C_TXFRAG	0x40000000	/* CAPABILITY: tx fragments */
 /* XXX protection/barker? */

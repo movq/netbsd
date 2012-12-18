@@ -1,4 +1,4 @@
-/*	$NetBSD: iso_snpac.c,v 1.54 2011/10/19 01:53:35 dyoung Exp $	*/
+/*	$NetBSD: iso_snpac.c,v 1.51 2008/10/24 21:50:08 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iso_snpac.c,v 1.54 2011/10/19 01:53:35 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iso_snpac.c,v 1.51 2008/10/24 21:50:08 dyoung Exp $");
 
 #include "opt_iso.h"
 #ifdef ISO
@@ -275,18 +275,18 @@ iso_setmcasts(struct ifnet *ifp, int req)
 {
 	static const char * const addrlist[] =
 	{all_es_snpa, all_is_snpa, all_l1is_snpa, all_l2is_snpa, 0};
-	struct sockaddr sa;
+	struct ifreq ifr;
 	const char *const *cpp;
 
-	(void)memset(&sa, 0, sizeof(sa));
+	(void)memset(&ifr, 0, sizeof(ifr));
 	for (cpp = addrlist; *cpp; cpp++) {
-		(void)memcpy(sa.sa_data, *cpp, 6);
-		if (req == RTM_ADD && 
-		    if_mcast_op(ifp, SIOCADDMULTI, &sa) != 0)
+		(void)memcpy(ifr.ifr_addr.sa_data, *cpp, 6);
+		if (req == RTM_ADD && (ifp->if_ioctl == NULL ||
+		    (*ifp->if_ioctl)(ifp, SIOCADDMULTI, &ifr) != 0))
 			printf("iso_setmcasts: %s unable to add mcast\n",
 			    ifp->if_xname);
-		else if (req == RTM_DELETE && 
-		    if_mcast_op(ifp, SIOCDELMULTI, &sa) != 0)
+		else if (req == RTM_DELETE && (ifp->if_ioctl == NULL ||
+		    (*ifp->if_ioctl)(ifp, SIOCDELMULTI, &ifr) != 0))
 			printf("iso_setmcasts: %s unable to delete mcast\n",
 			    ifp->if_xname);
 	}
@@ -549,18 +549,9 @@ snpac_ioctl(
 #endif
 
 	if (cmd == SIOCSSTYPE) {
-		int error;
-
-		if (l == NULL)
-			error = EACCES;
-		else
-			error = kauth_authorize_network(l->l_cred,
-			    KAUTH_NETWORK_SOCKET,
-			    KAUTH_REQ_NETWORK_SOCKET_SETPRIV, so,
-			    KAUTH_ARG(cmd), NULL);
-
-		if (error)
-			return (error);
+		if (l == NULL || kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, NULL))
+			return (EPERM);
 		if ((rq->sr_type & (SNPA_ES | SNPA_IS)) == (SNPA_ES | SNPA_IS))
 			return (EINVAL);
 		if (rq->sr_type & SNPA_ES) {

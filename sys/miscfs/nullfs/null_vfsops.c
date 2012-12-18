@@ -1,4 +1,4 @@
-/*	$NetBSD: null_vfsops.c,v 1.84 2012/04/30 22:51:27 rmind Exp $	*/
+/*	$NetBSD: null_vfsops.c,v 1.77 2008/06/24 11:25:05 ad Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -32,7 +32,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
 /*
  * Copyright (c) 1992, 1993, 1995
  *	The Regents of the University of California.  All rights reserved.
@@ -70,17 +69,18 @@
  */
 
 /*
- * Null file-system: VFS operations.
- *
- * See null_vnops.c for a description.
+ * Null Layer
+ * (See null_vnops.c for a description of what this does.)
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: null_vfsops.c,v 1.84 2012/04/30 22:51:27 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: null_vfsops.c,v 1.77 2008/06/24 11:25:05 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/sysctl.h>
+#include <sys/time.h>
+#include <sys/proc.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
@@ -90,24 +90,35 @@ __KERNEL_RCSID(0, "$NetBSD: null_vfsops.c,v 1.84 2012/04/30 22:51:27 rmind Exp $
 #include <miscfs/nullfs/null.h>
 #include <miscfs/genfs/layer_extern.h>
 
-MODULE(MODULE_CLASS_VFS, null, "layerfs");
+MODULE(MODULE_CLASS_VFS, nullfs, NULL);
 
 VFS_PROTOS(nullfs);
 
 static struct sysctllog *nullfs_sysctl_log;
 
+/*
+ * Mount null layer
+ */
 int
-nullfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
+nullfs_mount(mp, path, data, data_len)
+	struct mount *mp;
+	const char *path;
+	void *data;
+	size_t *data_len;
 {
-	struct vnode *lowerrootvp, *vp;
+	struct lwp *l = curlwp;
+	struct nameidata nd;
 	struct null_args *args = data;
+	struct vnode *lowerrootvp, *vp;
 	struct null_mount *nmp;
 	struct layer_mount *lmp;
-	struct pathbuf *pb;
-	struct nameidata nd;
-	int error;
+	int error = 0;
 
-	if (*data_len < sizeof(*args))
+#ifdef NULLFS_DIAGNOSTIC
+	printf("nullfs_mount(mp = %p)\n", mp);
+#endif
+
+	if (*data_len < sizeof *args)
 		return EINVAL;
 
 	if (mp->mnt_flag & MNT_GETARGS) {
@@ -115,29 +126,35 @@ nullfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		if (lmp == NULL)
 			return EIO;
 		args->la.target = NULL;
-		*data_len = sizeof(*args);
+		*data_len = sizeof *args;
 		return 0;
 	}
 
-	/* Update is not supported. */
+	/*
+	 * Update is not supported
+	 */
 	if (mp->mnt_flag & MNT_UPDATE)
 		return EOPNOTSUPP;
 
-	/* Find the lower vnode and lock it. */
-	error = pathbuf_copyin(args->la.target, &pb);
-	if (error) {
-		return error;
-	}
-	NDINIT(&nd, LOOKUP, FOLLOW|LOCKLEAF, pb);
-	if ((error = namei(&nd)) != 0) {
-		pathbuf_destroy(pb);
-		return error;
-	}
-	lowerrootvp = nd.ni_vp;
-	pathbuf_destroy(pb);
+	/*
+	 * Find lower node
+	 */
+	NDINIT(&nd, LOOKUP, FOLLOW|LOCKLEAF, UIO_USERSPACE, args->la.target);
+	if ((error = namei(&nd)) != 0)
+		return (error);
 
-	/* Create the mount point. */
-	nmp = kmem_zalloc(sizeof(struct null_mount), KM_SLEEP);
+	/*
+	 * Sanity check on lower vnode
+	 */
+	lowerrootvp = nd.ni_vp;
+
+	/*
+	 * First cut at fixing up upper mount point
+	 */
+	nmp = (struct null_mount *) malloc(sizeof(struct null_mount),
+	    M_UFSMNT, M_WAITOK);		/* XXX */
+	memset(nmp, 0, sizeof(struct null_mount));
+
 	mp->mnt_data = nmp;
 	nmp->nullm_vfs = lowerrootvp->v_mount;
 	if (nmp->nullm_vfs->mnt_flag & MNT_LOCAL)
@@ -158,54 +175,83 @@ nullfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	nmp->nullm_node_hashtbl = hashinit(desiredvnodes, HASH_LIST, true,
 	    &nmp->nullm_node_hash);
 
-	/* Setup a null node for root vnode. */
+	/*
+	 * Fix up null node for root vnode
+	 */
 	error = layer_node_create(mp, lowerrootvp, &vp);
+	/*
+	 * Make sure the fixup worked
+	 */
 	if (error) {
 		vput(lowerrootvp);
 		hashdone(nmp->nullm_node_hashtbl, HASH_LIST,
 		    nmp->nullm_node_hash);
-		kmem_free(nmp, sizeof(struct null_mount));
-		return error;
+		free(nmp, M_UFSMNT);	/* XXX */
+		return (error);
 	}
 	/*
-	 * Keep a held reference to the root vnode.  It will be released on
-	 * umount.  Note: nullfs is MP-safe.
+	 * Keep a held reference to the root vnode.
+	 * It is vrele'd in nullfs_unmount.
 	 */
 	vp->v_vflag |= VV_ROOT;
 	nmp->nullm_rootvp = vp;
+
+	/* We don't need kernel_lock. */
 	mp->mnt_iflag |= IMNT_MPSAFE;
-	VOP_UNLOCK(vp);
+
+	/*
+	 * Unlock the node
+	 */
+	VOP_UNLOCK(vp, 0);
 
 	error = set_statvfs_info(path, UIO_USERSPACE, args->la.target,
-	    UIO_USERSPACE, mp->mnt_op->vfs_name, mp, curlwp);
+	    UIO_USERSPACE, mp->mnt_op->vfs_name, mp, l);
+#ifdef NULLFS_DIAGNOSTIC
+	printf("nullfs_mount: lower %s, alias at %s\n",
+	    mp->mnt_stat.f_mntfromname, mp->mnt_stat.f_mntonname);
+#endif
 	return error;
 }
 
+/*
+ * Free reference to null layer
+ */
 int
 nullfs_unmount(struct mount *mp, int mntflags)
 {
 	struct null_mount *nmp = MOUNTTONULLMOUNT(mp);
 	struct vnode *null_rootvp = nmp->nullm_rootvp;
-	int error, flags = 0;
+	int error;
+	int flags = 0;
+
+#ifdef NULLFS_DIAGNOSTIC
+	printf("nullfs_unmount(mp = %p)\n", mp);
+#endif
 
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
 
 	if (null_rootvp->v_usecount > 1 && (mntflags & MNT_FORCE) == 0)
-		return EBUSY;
-
+		return (EBUSY);
 	if ((error = vflush(mp, null_rootvp, flags)) != 0)
-		return error;
+		return (error);
 
-	/* Eliminate all activity and release the vnode. */
+#ifdef NULLFS_DIAGNOSTIC
+	vprint("alias root of lower", null_rootvp);
+#endif
+	/*
+	 * Blow it away for future re-use
+	 */
 	vgone(null_rootvp);
 
-	/* Finally, destroy the mount point structures. */
+	/*
+	 * Finally, throw away the null_mount structure
+	 */
 	hashdone(nmp->nullm_node_hashtbl, HASH_LIST, nmp->nullm_node_hash);
 	mutex_destroy(&nmp->nullm_hashlock);
-	kmem_free(mp->mnt_data, sizeof(struct null_mount));
+	free(mp->mnt_data, M_UFSMNT);	/* XXX */
 	mp->mnt_data = NULL;
-	return 0;
+	return (0);
 }
 
 extern const struct vnodeopv_desc null_vnodeop_opv_desc;
@@ -244,7 +290,7 @@ struct vfsops nullfs_vfsops = {
 };
 
 static int
-null_modcmd(modcmd_t cmd, void *arg)
+nullfs_modcmd(modcmd_t cmd, void *arg)
 {
 	int error;
 
@@ -280,5 +326,6 @@ null_modcmd(modcmd_t cmd, void *arg)
 		error = ENOTTY;
 		break;
 	}
+	
 	return error;
 }

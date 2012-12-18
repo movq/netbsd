@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.17 2011/06/30 00:52:59 matt Exp $	*/
+/*	$NetBSD: pmap.h,v 1.13 2007/02/21 22:59:49 thorpej Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -69,14 +69,6 @@
 #ifndef	_IBM4XX_PMAP_H_
 #define	_IBM4XX_PMAP_H_
 
-#ifdef _LOCORE          
-#error use assym.h instead
-#endif
-
-#if defined(_MODULE)
-#error this file should not be included by loadable kernel modules
-#endif
-
 #include <powerpc/ibm4xx/tlb.h>
 
 #define KERNEL_PID	1	/* TLB PID to use for kernel translation */
@@ -136,8 +128,11 @@
  * Extra flags to pass to pmap_enter() -- make sure they don't conflict
  * w/PMAP_CANFAIL or PMAP_WIRED
  */
-#define	PME_NOCACHE	0x1000000
-#define	PME_WRITETHROUG	0x2000000
+#define	PME_NOCACHE	0x100
+#define	PME_WRITETHROUG	0x200
+#define	PMAP_NC		PME_NOCACHE	/* XXX: OEA pmap compat. for bus_dma */
+
+#ifndef _LOCORE
 
 /*
  * Pmap stuff
@@ -149,8 +144,12 @@ struct pmap {
 	volatile u_int *pm_ptbl[STSZ];	/* Array of 64 pointers to page tables. */
 };
 
+typedef	struct pmap *pmap_t;
+
 #ifdef	_KERNEL
 #define	PMAP_GROWKERNEL
+extern struct pmap kernel_pmap_;
+#define	pmap_kernel()	(&kernel_pmap_)
 
 #define	PMAP_ATTR_REF		0x1
 #define	PMAP_ATTR_CHG		0x2
@@ -208,4 +207,5 @@ vtophys(vaddr_t va)
 	return va;
 }
 #endif	/* _KERNEL */
+#endif	/* _LOCORE */
 #endif	/* _IBM4XX_PMAP_H_ */

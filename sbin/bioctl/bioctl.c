@@ -1,4 +1,4 @@
-/* $NetBSD: bioctl.c,v 1.15 2011/08/29 14:34:58 joerg Exp $ */
+/* $NetBSD: bioctl.c,v 1.11 2008/03/03 16:10:48 xtraeme Exp $ */
 /* $OpenBSD: bioctl.c,v 1.52 2007/03/20 15:26:06 jmc Exp $ */
 
 /*
@@ -31,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: bioctl.c,v 1.15 2011/08/29 14:34:58 joerg Exp $");
+__RCSID("$NetBSD: bioctl.c,v 1.11 2008/03/03 16:10:48 xtraeme Exp $");
 #endif
 
 #include <sys/types.h>
@@ -76,7 +76,7 @@ struct locator {
 	int lun;
 };
 
-__dead static void 	usage(void);
+static void 	usage(void);
 static void	bio_alarm(int, int, char **);
 static void	bio_show_common(int, int, char **);
 static int	bio_show_volumes(struct biotmp *);
@@ -320,9 +320,9 @@ bio_show_volumes(struct biotmp *bt)
 	}
 
 	if (rtypestr)
-		strlcpy(rtype, rtypestr, sizeof(rtype));
+		snprintf(rtype, sizeof(rtype), rtypestr);
 	if (stripestr)
-		strlcpy(stripe, stripestr, sizeof(stripe));
+		snprintf(stripe, sizeof(stripe), stripestr);
 	else
 		snprintf(stripe, sizeof(stripe), "%uK", bv.bv_stripe_size);
 
@@ -601,7 +601,7 @@ bio_setstate_passthru(int fd, int argc, char **argv)
 	char			*endptr;
 	bool			rem = false;
 
-	if (argc < 2 || argc > 3)
+	if (argc > 3)
 		usage();
 
 	memset(&bs, 0, sizeof(bs));
@@ -640,7 +640,7 @@ bio_setstate_consistency(int fd, int argc, char **argv)
 	struct bioc_setstate	bs;
 	char			*endptr;
 
-	if (argc != 2)
+	if (argc > 2)
 		usage();
 
 	memset(&bs, 0, sizeof(bs));
@@ -733,8 +733,7 @@ bio_volops_create(int fd, int argc, char **argv)
 		errx(EXIT_FAILURE, "Invalid Volume ID value");
 
 	if (argc == 7)
-		if (dehumanize_number(argv[3], &volsize) == -1
-		    || volsize < 0)
+		if (dehumanize_number(argv[3], &volsize) == -1)
 			errx(EXIT_FAILURE, "Invalid SIZE value");
 
 	bc.bc_stripe = (unsigned int)strtoul(stripe, &endptr, 10);
@@ -799,7 +798,7 @@ bio_volops_create(int fd, int argc, char **argv)
 	switch (bc.bc_level) {
 	case 0:	/* RAID 0 requires at least one disk */
 		if (argc == 7) {
-			if ((uint64_t)volsize > (disksize * user_disks))
+			if (volsize > (disksize * user_disks))
 				errx(EXIT_FAILURE, "volume size specified "
 				   "is larger than available on free disks");
 			bc.bc_size = (uint64_t)volsize;
@@ -817,7 +816,7 @@ bio_volops_create(int fd, int argc, char **argv)
 			bc.bc_level = BIOC_SVOL_RAID10;
 
 		if (argc == 7) {
-			if ((uint64_t)volsize > ((disksize * user_disks) / 2))
+			if (volsize > ((disksize * user_disks) / 2))
 				errx(EXIT_FAILURE, "volume size specified "
 				   "is larger than available on free disks");
 			bc.bc_size = (uint64_t)volsize;
@@ -832,7 +831,7 @@ bio_volops_create(int fd, int argc, char **argv)
 			    "this RAID level");
 
 		if (argc == 7) {
-			if ((uint64_t)volsize > (disksize * (user_disks - 1)))
+			if (volsize > (disksize * (user_disks - 1)))
 				errx(EXIT_FAILURE, "volume size specified "
 				    "is larger than available on free disks");
 			bc.bc_size = (uint64_t)volsize;
@@ -846,7 +845,7 @@ bio_volops_create(int fd, int argc, char **argv)
 			    "this RAID level");
 
 		if (argc == 7) {
-			if ((uint64_t)volsize >
+			if (volsize >
 			    ((disksize * user_disks) - (disksize * 2)))
 				err(EXIT_FAILURE, "volume size specified "
 				    "is larger than available on free disks");

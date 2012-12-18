@@ -1,4 +1,4 @@
-/* $NetBSD: kvm_mips.c,v 1.21 2011/01/23 06:28:52 matt Exp $ */
+/* $NetBSD: kvm_mips.c,v 1.18 2008/01/15 13:57:42 ad Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: kvm_mips.c,v 1.21 2011/01/23 06:28:52 matt Exp $");
+__RCSID("$NetBSD: kvm_mips.c,v 1.18 2008/01/15 13:57:42 ad Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -46,10 +46,7 @@ __RCSID("$NetBSD: kvm_mips.c,v 1.21 2011/01/23 06:28:52 matt Exp $");
 #include <sys/proc.h>
 #include <sys/stat.h>
 #include <sys/kcore.h>
-#include <sys/types.h>
-
 #include <machine/kcore.h>
-
 #include <stdlib.h>
 #include <unistd.h>
 #include <nlist.h>
@@ -66,7 +63,8 @@ __RCSID("$NetBSD: kvm_mips.c,v 1.21 2011/01/23 06:28:52 matt Exp $");
 #include <mips/vmparam.h>
 
 void
-_kvm_freevtop(kvm_t *kd)
+_kvm_freevtop(kd)
+	kvm_t *kd;
 {
 
 	/* Not actually used for anything right now, but safe. */
@@ -75,7 +73,8 @@ _kvm_freevtop(kvm_t *kd)
 }
 
 int
-_kvm_initvtop(kvm_t *kd)
+_kvm_initvtop(kd)
+	kvm_t *kd;
 {
 
 	return (0);
@@ -85,12 +84,15 @@ _kvm_initvtop(kvm_t *kd)
  * Translate a kernel virtual address to a physical address.
  */
 int
-_kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
+_kvm_kvatop(kd, va, pa)
+	kvm_t *kd;
+	u_long va;
+	u_long *pa;
 {
 	cpu_kcore_hdr_t *cpu_kh;
 	int page_off;
 	u_int pte;
-	paddr_t pte_pa;
+	u_long pte_pa;
 
 	if (ISALIVE(kd)) {
 		_kvm_err(kd, 0, "vatop called in live kernel!");
@@ -100,23 +102,6 @@ _kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 	cpu_kh = kd->cpu_data;
 	page_off = va & PGOFSET;
 
-#ifdef _LP64
-	if (MIPS_XKPHYS_P(va)) {
-		/*
-		 * Direct-mapped cached address: just convert it.
-		 */
-		*pa = MIPS_XKPHYS_TO_PHYS(va);
-		return (NBPG - page_off);
-	}
-
-	if (va < MIPS_XKPHYS_START) {
-		/*
-		 * XUSEG (user virtual address space) - invalid.
-		 */
-		_kvm_err(kd, 0, "invalid kernel virtual address");
-		goto lose;
-	}
-#else
 	if (va < MIPS_KSEG0_START) {
 		/*
 		 * KUSEG (user virtual address space) - invalid.
@@ -124,9 +109,8 @@ _kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 		_kvm_err(kd, 0, "invalid kernel virtual address");
 		goto lose;
 	}
-#endif
 
-	if (MIPS_KSEG0_P(va)) {
+	if (va >= MIPS_KSEG0_START && va < MIPS_KSEG1_START) {
 		/*
 		 * Direct-mapped cached address: just convert it.
 		 */
@@ -134,23 +118,13 @@ _kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 		return (NBPG - page_off);
 	}
 
-	if (MIPS_KSEG1_P(va)) {
+	if (va >= MIPS_KSEG1_START && va < MIPS_KSEG2_START) {
 		/*
 		 * Direct-mapped uncached address: just convert it.
 		 */
 		*pa = MIPS_KSEG1_TO_PHYS(va);
 		return (NBPG - page_off);
 	}
-
-#ifdef _LP64
-	if (va >= MIPS_KSEG2_START) {
-		/*
-		 * KUSEG (user virtual address space) - invalid.
-		 */
-		_kvm_err(kd, 0, "invalid kernel virtual address");
-		goto lose;
-	}
-#endif
 
 	/*
 	 * We now know that we're a KSEG2 (kernel virtually mapped)
@@ -162,17 +136,10 @@ _kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 	 * Step 1: Make sure the kernel page table has a translation
 	 * for the address.
 	 */
-#ifdef _LP64
-	if (va >= (MIPS_XKSEG_START + (cpu_kh->sysmapsize * NBPG))) {
-		_kvm_err(kd, 0, "invalid XKSEG address");
-		goto lose;
-	}
-#else
 	if (va >= (MIPS_KSEG2_START + (cpu_kh->sysmapsize * NBPG))) {
 		_kvm_err(kd, 0, "invalid KSEG2 address");
 		goto lose;
 	}
-#endif
 
 	/*
 	 * Step 2: Locate and read the PTE.
@@ -205,7 +172,9 @@ _kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
  * Translate a physical address to a file-offset in the crash dump.
  */
 off_t
-_kvm_pa2off(kvm_t *kd, paddr_t pa)
+_kvm_pa2off(kd, pa)
+	kvm_t *kd;
+	u_long pa;
 {
 	cpu_kcore_hdr_t *cpu_kh;
 	phys_ram_seg_t *ramsegs;
@@ -234,7 +203,8 @@ _kvm_pa2off(kvm_t *kd, paddr_t pa)
  * have to deal with these NOT being constants!  (i.e. m68k)
  */
 int
-_kvm_mdopen(kvm_t *kd)
+_kvm_mdopen(kd)
+	kvm_t	*kd;
 {
 
 	kd->usrstack = USRSTACK;

@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_syscalls.c,v 1.142 2012/03/13 18:41:13 elad Exp $	*/
+/*	$NetBSD: lfs_syscalls.c,v 1.133 2008/05/16 09:22:01 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2007, 2007, 2008
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.142 2012/03/13 18:41:13 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.133 2008/05/16 09:22:01 hannken Exp $");
 
 #ifndef LFS
 # define LFS		/* for prototypes in syscallargs.h */
@@ -117,9 +117,8 @@ sys_lfs_markv(struct lwp *l, const struct sys_lfs_markv_args *uap, register_t *r
 	struct lfs *fs;
 	struct mount *mntp;
 
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_LFS,
-	    KAUTH_REQ_SYSTEM_LFS_MARKV, NULL, NULL, NULL);
-	if (error)
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return (error);
 
 	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
@@ -163,9 +162,8 @@ sys_lfs_markv(struct lwp *l, const struct sys_lfs_markv_args *uap, register_t *r
 	struct lfs *fs;
 	struct mount *mntp;
 
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_LFS,
-	    KAUTH_REQ_SYSTEM_LFS_MARKV, NULL, NULL, NULL);
-	if (error)
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return (error);
 
 	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
@@ -249,7 +247,7 @@ lfs_markv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov,
 	if (fs->lfs_ronly)
 		return EROFS;
 
-	maxino = (fragstoblks(fs, VTOI(fs->lfs_ivnode)->i_ffs1_blocks) -
+	maxino = (fragstoblks(fs, fsbtofrags(fs, VTOI(fs->lfs_ivnode)->i_ffs1_blocks)) -
 		      fs->lfs_cleansz - fs->lfs_segtabsz) * fs->lfs_ifpb;
 
 	cnt = blkcnt;
@@ -566,9 +564,8 @@ sys_lfs_bmapv(struct lwp *l, const struct sys_lfs_bmapv_args *uap, register_t *r
 	struct lfs *fs;
 	struct mount *mntp;
 
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_LFS,
-	    KAUTH_REQ_SYSTEM_LFS_BMAPV, NULL, NULL, NULL);
-	if (error)
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return (error);
 
 	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
@@ -611,9 +608,8 @@ sys_lfs_bmapv(struct lwp *l, const struct sys_lfs_bmapv_args *uap, register_t *r
 	struct lfs *fs;
 	struct mount *mntp;
 
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_LFS,
-	    KAUTH_REQ_SYSTEM_LFS_BMAPV, NULL, NULL, NULL);
-	if (error)
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return (error);
 
 	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
@@ -712,8 +708,6 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 			 */
 			if (v_daddr != LFS_UNUSED_DADDR) {
 				lfs_vunref(vp);
-				if (VTOI(vp)->i_lfs_iflags & LFSI_BMAP)
-					vrecycle(vp, NULL, NULL);
 				numrefed--;
 			}
 
@@ -740,7 +734,7 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 			vp = ufs_ihashlookup(ump->um_dev, blkp->bi_inode);
 			if (vp != NULL && !(vp->v_iflag & VI_XLOCK)) {
 				ip = VTOI(vp);
-				mutex_enter(vp->v_interlock);
+				mutex_enter(&vp->v_interlock);
 				mutex_exit(&ufs_ihash_lock);
 				if (lfs_vref(vp)) {
 					v_daddr = LFS_UNUSED_DADDR;
@@ -766,8 +760,7 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 					continue;
 				} else {
 					KASSERT(VOP_ISLOCKED(vp));
-					VTOI(vp)->i_lfs_iflags |= LFSI_BMAP;
-					VOP_UNLOCK(vp);
+					VOP_UNLOCK(vp, 0);
 					numrefed++;
 				}
 			}
@@ -821,9 +814,6 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 	 */
 	if (v_daddr != LFS_UNUSED_DADDR) {
 		lfs_vunref(vp);
-		/* Recycle as above. */
-		if (ip->i_lfs_iflags & LFSI_BMAP)
-			vrecycle(vp, NULL, NULL);
 		numrefed--;
 	}
 
@@ -858,9 +848,8 @@ sys_lfs_segclean(struct lwp *l, const struct sys_lfs_segclean_args *uap, registe
 	int error;
 	unsigned long segnum;
 
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_LFS,
-	    KAUTH_REQ_SYSTEM_LFS_SEGCLEAN, NULL, NULL, NULL);
-	if (error)
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return (error);
 
 	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
@@ -991,8 +980,7 @@ lfs_segwait(fsid_t *fsidp, struct timeval *tv)
  * -1/errno is return on error.
  */
 int
-sys___lfs_segwait50(struct lwp *l, const struct sys___lfs_segwait50_args *uap,
-    register_t *retval)
+sys_lfs_segwait(struct lwp *l, const struct sys_lfs_segwait_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(fsid_t *) fsidp;
@@ -1003,9 +991,8 @@ sys___lfs_segwait50(struct lwp *l, const struct sys___lfs_segwait50_args *uap,
 	int error;
 
 	/* XXX need we be su to segwait? */
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_LFS,
-	    KAUTH_REQ_SYSTEM_LFS_SEGWAIT, NULL, NULL, NULL);
-	if (error)
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return (error);
 	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
 		return (error);
@@ -1030,6 +1017,7 @@ sys___lfs_segwait50(struct lwp *l, const struct sys___lfs_segwait50_args *uap,
  * we lfs_vref, and it is the caller's responsibility to lfs_vunref
  * when finished.
  */
+extern kmutex_t ufs_hashlock;
 
 int
 lfs_fasthashget(dev_t dev, ino_t ino, struct vnode **vpp)
@@ -1038,13 +1026,13 @@ lfs_fasthashget(dev_t dev, ino_t ino, struct vnode **vpp)
 
 	mutex_enter(&ufs_ihash_lock);
 	if ((vp = ufs_ihashlookup(dev, ino)) != NULL) {
-		mutex_enter(vp->v_interlock);
+		mutex_enter(&vp->v_interlock);
 		mutex_exit(&ufs_ihash_lock);
 		if (vp->v_iflag & VI_XLOCK) {
 			DLOG((DLOG_CLEAN, "lfs_fastvget: ino %d VI_XLOCK\n",
 			      ino));
 			lfs_stats.clean_vnlocked++;
-			mutex_exit(vp->v_interlock);
+			mutex_exit(&vp->v_interlock);
 			return EAGAIN;
 		}
 		if (lfs_vref(vp)) {
@@ -1109,8 +1097,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 		*vpp = NULL;
 		return EDEADLK;
 	}
-	error = getnewvnode(VT_LFS, mp, lfs_vnodeop_p, NULL, &vp);
-	if (error) {
+	if ((error = getnewvnode(VT_LFS, mp, lfs_vnodeop_p, &vp)) != 0) {
 		*vpp = NULL;
 		return (error);
 	}
@@ -1136,11 +1123,6 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 	ufs_ihashins(ip);
 	mutex_exit(&ufs_hashlock);
 
-#ifdef notyet
-	/* Not found in the cache => this vnode was loaded only for cleaning. */
-	ip->i_lfs_iflags |= LFSI_BMAP;
-#endif
-
 	/*
 	 * XXX
 	 * This may not need to be here, logically it should go down with
@@ -1158,7 +1140,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 			ufs_ihashrem(ip);
 
 			/* Unlock and discard unneeded inode. */
-			VOP_UNLOCK(vp);
+			vlockmgr(&vp->v_lock, LK_RELEASE);
 			lfs_vunref(vp);
 			*vpp = NULL;
 			return (error);
@@ -1181,7 +1163,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 			ufs_ihashrem(ip);
 
 			/* Unlock and discard unneeded inode. */
-			VOP_UNLOCK(vp);
+			vlockmgr(&vp->v_lock, LK_RELEASE);
 			lfs_vunref(vp);
 			brelse(bp, 0);
 			*vpp = NULL;
@@ -1206,7 +1188,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 	*vpp = vp;
 
 	KASSERT(VOP_ISLOCKED(vp));
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 
 	return (0);
 }

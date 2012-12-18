@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.7 2012/10/27 17:17:48 chs Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.5 2008/04/28 20:23:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -32,12 +32,11 @@
 #ifndef _EVBARM_AUTOCONF_H_
 #define	_EVBARM_AUTOCONF_H_
 
-#ifndef _ARM_MAINBUS_MAINBUS_H_
 struct mainbus_attach_args {
 	const char *ma_name;
 };
-#endif
 
-extern void (*evbarm_device_register)(device_t, void *);
+struct device;
+extern void (*evbarm_device_register)(struct device *, void *);
 
 #endif	/* _EVBARM_AUTOCONF_H_ */

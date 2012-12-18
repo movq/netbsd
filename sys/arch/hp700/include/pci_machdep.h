@@ -40,8 +40,8 @@ struct pci_attach_args;
 
 struct hppa_pci_chipset_tag {
 	void		*_cookie;
-	void		(*pc_attach_hook)(device_t,
-			    device_t, struct pcibus_attach_args *);
+	void		(*pc_attach_hook)(struct device *,
+			    struct device *, struct pcibus_attach_args *);
 	int		(*pc_bus_maxdevs)(void *, int);
 	pcitag_t	(*pc_make_tag)(void *, int, int, int);
 	void		(*pc_decompose_tag)(void *, pcitag_t, int *,
@@ -49,14 +49,14 @@ struct hppa_pci_chipset_tag {
 	pcireg_t	(*pc_conf_read)(void *, pcitag_t, int);
 	void		(*pc_conf_write)(void *, pcitag_t, int, pcireg_t);
 
-	int		(*pc_intr_map)(const struct pci_attach_args *,
+	int		(*pc_intr_map)(struct pci_attach_args *,
 			    pci_intr_handle_t *);
 	const char	*(*pc_intr_string)(void *, pci_intr_handle_t);
 	void		*(*pc_intr_establish)(void *, pci_intr_handle_t,
 			    int, int (*)(void *), void *);
 	void		(*pc_intr_disestablish)(void *, void *);
 
-	void		*(*pc_alloc_parent)(device_t,
+	void		*(*pc_alloc_parent)(struct device *,
 			    struct pci_attach_args *, int);
 };
 

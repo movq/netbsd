@@ -1,4 +1,4 @@
-/*	$NetBSD: input_transp.h,v 1.1.1.1 2009/06/23 10:08:46 tron Exp $	*/
+/*	$NetBSD: input_transp.h,v 1.1.1.1.2.3 2011/01/07 01:24:03 riz Exp $	*/
 
 #ifndef _INPUT_TRANSP_INCLUDED_
 #define _INPUT_TRANSP_INCLUDED_

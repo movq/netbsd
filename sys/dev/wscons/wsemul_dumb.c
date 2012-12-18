@@ -1,4 +1,4 @@
-/* $NetBSD: wsemul_dumb.c,v 1.15 2010/01/28 22:36:19 drochner Exp $ */
+/* $NetBSD: wsemul_dumb.c,v 1.14 2006/11/16 01:33:31 christos Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsemul_dumb.c,v 1.15 2010/01/28 22:36:19 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsemul_dumb.c,v 1.14 2006/11/16 01:33:31 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: wsemul_dumb.c,v 1.15 2010/01/28 22:36:19 drochner Ex
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/wscons/wsemulvar.h>
 #include <dev/wscons/ascii.h>
-#include <dev/wscons/wsksymdef.h>
 
 void	*wsemul_dumb_cnattach(const struct wsscreen_descr *, void *,
 				   int, int, long);
@@ -204,14 +203,6 @@ int
 wsemul_dumb_translate(void *cookie, keysym_t in,
     const char **out)
 {
-	static char c;
-
-	if (KS_GROUP(in) == KS_GROUP_Plain) {
-		/* allow ISO-1 */
-		c = KS_VALUE(in);
-		*out = &c;
-		return (1);
-	}
 	return (0);
 }
 

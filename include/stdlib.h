@@ -1,4 +1,4 @@
-/*	$NetBSD: stdlib.h,v 1.100 2012/06/21 21:13:29 christos Exp $	*/
+/*	$NetBSD: stdlib.h,v 1.85.4.1 2011/05/20 19:18:37 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -160,9 +160,7 @@ unsigned short *
 	 seed48(unsigned short[3]);
 void	 srand48(long);
 
-#ifndef __LIBC12_SOURCE__
-int	 putenv(char *) __RENAME(__putenv50);
-#endif
+int	 putenv(const char *);
 #endif
 
 
@@ -192,7 +190,7 @@ char	*mktemp(char *)
 
 int	 setkey(const char *);
 
-char	*realpath(const char * __restrict, char * __restrict);
+char	*realpath(const char *, char *);
 
 int	 ttyslot(void);
 
@@ -244,7 +242,7 @@ int	 posix_memalign(void **, size_t, size_t);
 #if defined(alloca) && (alloca == __builtin_alloca) && \
 	defined(__GNUC__) && (__GNUC__ < 2)
 void	*alloca(int);     /* built-in for gcc */
-#elif defined(__PCC__) && !defined(__GNUC__)
+#elif defined(__PCC__)
 #define alloca(size) __builtin_alloca(size)
 #else
 void	*alloca(size_t);
@@ -252,8 +250,6 @@ void	*alloca(size_t);
 
 uint32_t arc4random(void);
 void	 arc4random_stir(void);
-void	 arc4random_buf(void *, size_t);
-uint32_t arc4random_uniform(uint32_t);
 void	 arc4random_addrandom(u_char *, int);
 char	*getbsize(int *, long *);
 char	*cgetcap(char *, const char *, int);
@@ -269,10 +265,7 @@ int	 cgetustr(char *, const char *, char **);
 void	 csetexpandtc(int);
 
 int	 daemon(int, int);
-int	 devname_r(dev_t, mode_t, char *, size_t);
-#ifndef __LIBC12_SOURCE__
-__aconst char *devname(dev_t, mode_t) __RENAME(__devname50);
-#endif
+__aconst char *devname(dev_t, mode_t);
 
 #define	HN_DECIMAL		0x01
 #define	HN_NOSPACE		0x02
@@ -285,7 +278,7 @@ __aconst char *devname(dev_t, mode_t) __RENAME(__devname50);
 int	 humanize_number(char *, size_t, int64_t, const char *, int, int);
 int	 dehumanize_number(const char *, int64_t *);
 
-devmajor_t getdevmajor(const char *, mode_t);
+dev_t	 getdevmajor(const char *, mode_t);
 int	 getloadavg(double [], int);
 
 int	 getenv_r(const char *, char *, size_t);
@@ -300,12 +293,9 @@ int	 radixsort(const unsigned char **, int, const unsigned char *,
 int	 sradixsort(const unsigned char **, int, const unsigned char *,
 	    unsigned);
 
-void	 mi_vector_hash(const void * __restrict, size_t, uint32_t,
-	    uint32_t[3]);
-
 void	 setproctitle(const char *, ...)
-	    __printflike(1, 2);
-const char *getprogname(void) __constfunc;
+	    __attribute__((__format__(__printf__, 1, 2)));
+const char *getprogname(void) __attribute__((const));
 void	setprogname(const char *);
 
 quad_t	 qabs(quad_t);

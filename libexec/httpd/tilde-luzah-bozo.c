@@ -1,9 +1,9 @@
-/*	$NetBSD: tilde-luzah-bozo.c,v 1.9 2011/11/18 09:51:31 mrg Exp $	*/
+/*	$NetBSD: tilde-luzah-bozo.c,v 1.3.8.1 2009/02/08 20:30:20 snj Exp $	*/
 
-/*	$eterna: tilde-luzah-bozo.c,v 1.16 2011/11/18 09:21:15 mrg Exp $	*/
+/*	$eterna: tilde-luzah-bozo.c,v 1.5 2008/03/03 03:36:12 mrg Exp $	*/
 
 /*
- * Copyright (c) 1997-2011 Matthew R. Green
+ * Copyright (c) 1997-2008 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -15,6 +15,8 @@
  *    notice, this list of conditions and the following disclaimer and
  *    dedication in the documentation and/or other materials provided
  *    with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -38,26 +40,31 @@
 
 #include <errno.h>
 #include <pwd.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "bozohttpd.h"
 
+#ifndef PUBLIC_HTML
+#define PUBLIC_HTML		"public_html"
+#endif
+
+	int	uflag;		/* allow /~user/ translation */
+	const char *public_html	= PUBLIC_HTML;
+
 /*
- * bozo_user_transform does this:
+ * user_transform does this:
  *	- chdir's /~user/public_html
  *	- returns the rest of the file, index.html appended if required
- *	- returned malloced file to serve in request->hr_file,
- *        ala transform_request().
  *
  * transform_request() is supposed to check that we have user support
  * enabled.
  */
-int
-bozo_user_transform(bozo_httpreq_t *request, int *isindex)
+char *
+user_transform(request, isindex)
+	http_req *request;
+	int *isindex;
 {
-	bozohttpd_t *httpd = request->hr_httpd;
 	char	c, *s, *file = NULL;
 	struct	passwd *pw;
 
@@ -69,63 +76,44 @@ bozo_user_transform(bozo_httpreq_t *request, int *isindex)
 		*isindex = (c == '/' || c == '\0');
 	}
 
-	debug((httpd, DEBUG_OBESE, "looking for user %s",
-		request->hr_file + 2));
+	debug((DEBUG_OBESE, "looking for user %s", request->hr_file + 2));
 	pw = getpwnam(request->hr_file + 2);
 	/* fix this up immediately */
 	if (s)
 		s[-1] = '/';
-	if (pw == NULL) {
-		(void)bozo_http_error(httpd, 404, request, "no such user");
-		return 0;
-	}
+	if (pw == NULL)
+		http_error(404, request, "no such user");
 
-	debug((httpd, DEBUG_OBESE, "user %s dir %s/%s uid %d gid %d",
-	      pw->pw_name, pw->pw_dir, httpd->public_html,
-	      pw->pw_uid, pw->pw_gid));
+	debug((DEBUG_OBESE, "user %s home dir %s uid %d gid %d", pw->pw_name,
+	    pw->pw_dir, pw->pw_uid, pw->pw_gid));
 
 	if (chdir(pw->pw_dir) < 0) {
-		bozo_warn(httpd, "chdir1 error: %s: %s", pw->pw_dir,
-			strerror(errno));
-		(void)bozo_http_error(httpd, 404, request,
-			"can't chdir to homedir");
-		return 0;
+		warning("chdir1 error: %s: %s", pw->pw_dir, strerror(errno));
+		http_error(403, request, "can't chdir to homedir");
 	}
-	if (chdir(httpd->public_html) < 0) {
-		bozo_warn(httpd, "chdir2 error: %s: %s", httpd->public_html,
-			strerror(errno));
-		(void)bozo_http_error(httpd, 404, request,
-			"can't chdir to public_html");
-		return 0;
+	if (chdir(public_html) < 0) {
+		warning("chdir2 error: %s: %s", public_html, strerror(errno));
+		http_error(403, request, "can't chdir to public_html");
 	}
 	if (s == NULL || *s == '\0') {
-		file = bozostrdup(httpd, httpd->index_html);
+		file = bozostrdup(index_html);
 	} else {
-		file = bozomalloc(httpd, strlen(s) +
-		    (*isindex ? strlen(httpd->index_html) + 1 : 1));
+		file = bozomalloc(strlen(s) +
+		    (*isindex ? strlen(index_html) + 1 : 1));
 		strcpy(file, s);
 		if (*isindex)
-			strcat(file, httpd->index_html);
+			strcat(file, index_html);
 	}
 
 	/* see transform_request() */
 	if (*file == '/' || strcmp(file, "..") == 0 ||
-	    strstr(file, "/..") || strstr(file, "../")) {
-		(void)bozo_http_error(httpd, 403, request, "illegal request");
-		free(file);
-		return 0;
-	}
+	    strstr(file, "/..") || strstr(file, "../"))
+		http_error(403, request, "illegal request");
 
-	if (bozo_auth_check(request, file)) {
-		free(file);
-		return 0;
-	}
+	auth_check(request, file);
 
-	free(request->hr_file);
-	request->hr_file = file;
-
-	debug((httpd, DEBUG_FAT, "transform_user returning %s under %s", file,
+	debug((DEBUG_FAT, "transform_user returning %s under %s", file,
 	    pw->pw_dir));
-	return 1;
+	return (file);
 }
 #endif /* NO_USER_SUPPORT */

@@ -1,4 +1,4 @@
-/*	$NetBSD: smdk2410_lcd.c,v 1.8 2012/10/27 17:17:49 chs Exp $ */
+/*	$NetBSD: smdk2410_lcd.c,v 1.4 2008/06/11 23:24:43 cegger Exp $ */
 
 /*
  * Copyright (c) 2004  Genetec Corporation.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smdk2410_lcd.c,v 1.8 2012/10/27 17:17:49 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smdk2410_lcd.c,v 1.4 2008/06/11 23:24:43 cegger Exp $");
 
 /*
  * LCD driver for Samsung SMDK2410.
@@ -54,17 +54,16 @@ __KERNEL_RCSID(0, "$NetBSD: smdk2410_lcd.c,v 1.8 2012/10/27 17:17:49 chs Exp $")
 #include <dev/wscons/wsdisplayvar.h> 
 #include <dev/wscons/wscons_callbacks.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <arm/s3c2xx0/s3c24x0var.h>
 #include <arm/s3c2xx0/s3c24x0reg.h>
 #include <arm/s3c2xx0/s3c2410reg.h>
 #include <arm/s3c2xx0/s3c24x0_lcd.h>
 
-#include "locators.h"
 #include "wsdisplay.h"
 
-int	lcd_match(device_t, cfdata_t, void *);
-void	lcd_attach(device_t, device_t, void *);
+int	lcd_match(struct device *, struct cfdata *, void *);
+void	lcd_attach(struct device *, struct device *, void *);
 
 #ifdef LCD_DEBUG
 void draw_test_pattern(struct s3c24x0_lcd_softc *,
@@ -166,11 +165,11 @@ const struct cdevsw lcd_cdevsw = {
 
 #endif /* NWSDISPLAY */
 
-CFATTACH_DECL_NEW(lcd_ssio, sizeof (struct s3c24x0_lcd_softc),  lcd_match,
+CFATTACH_DECL(lcd_ssio, sizeof (struct s3c24x0_lcd_softc),  lcd_match,
     lcd_attach, NULL, NULL);
 
 int
-lcd_match(device_t parent, cfdata_t cf, void *aux)
+lcd_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct s3c2xx0_attach_args *sa = aux;
 
@@ -212,9 +211,9 @@ static const struct s3c24x0_lcd_panel_info samsung_LTS350Q1 =
 };
 
 void
-lcd_attach(device_t parent, device_t self, void *aux)
+lcd_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct s3c24x0_lcd_softc *sc = device_private(self);
+	struct s3c24x0_lcd_softc *sc = (struct s3c24x0_lcd_softc *)self;
 	bus_space_tag_t iot =  s3c2xx0_softc->sc_iot;
 	bus_space_handle_t gpio_ioh = s3c2xx0_softc->sc_gpio_ioh;
 #if NWSDISPLAY > 0
@@ -224,7 +223,6 @@ lcd_attach(device_t parent, device_t self, void *aux)
 #endif
 
 
-	sc->sc_dev = self;
 	aprint_normal( "\n" );
 
 	/* setup GPIO ports for LCD */

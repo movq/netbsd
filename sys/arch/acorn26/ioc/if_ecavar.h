@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ecavar.h,v 1.4 2012/05/11 15:39:18 skrll Exp $	*/
+/*	$NetBSD: if_ecavar.h,v 1.1 2002/03/24 15:47:16 bjh21 Exp $	*/
 
 /*-
  * Copyright (c) 2001 Ben Harris
@@ -33,31 +33,31 @@
 #ifndef _LOCORE
 #include <sys/device.h>
 #include <sys/socket.h>
-#include <sys/bus.h>
 
 #include <net/if.h>
 #include <net/if_eco.h>
 
 #include <arm/fiq.h>
 
+#include <machine/bus.h>
 #include <machine/fiq.h>
 
 struct eca_fiqstate {
 	void		*efs_fiqhandler;
 	struct mbuf	*efs_rx_curmbuf;
 	struct fiqregs	efs_rx_fiqregs;
-	uint32_t	efs_rx_flags;
-	uint8_t		efs_rx_myaddr;
+	u_int32_t	efs_rx_flags;
+	u_int8_t	efs_rx_myaddr;
 	struct mbuf	*efs_tx_curmbuf;
 };
 
 struct eca_softc {
-	device_t	sc_dev;
+	struct device	sc_dev;
 	struct ecocom 	sc_ec;
-	uint8_t		sc_cr1;
-	uint8_t		sc_cr2;
-	uint8_t		sc_cr3;
-	uint8_t		sc_cr4;
+	u_int8_t	sc_cr1;
+	u_int8_t	sc_cr2;
+	u_int8_t	sc_cr3;
+	u_int8_t	sc_cr4;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 	void		*sc_rx_soft;
@@ -65,7 +65,7 @@ struct eca_softc {
 	struct eca_fiqstate sc_fiqstate;
 	struct mbuf	*sc_rcvmbuf;
 	struct mbuf	*sc_txmbuf;
-	uint8_t		sc_sr2;
+	u_int8_t	sc_sr2;
 	void		*sc_tx_soft;
 	int		sc_transmitting;
 };

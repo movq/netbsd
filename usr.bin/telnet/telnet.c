@@ -1,4 +1,4 @@
-/*	$NetBSD: telnet.c,v 1.36 2012/01/10 13:49:32 christos Exp $	*/
+/*	$NetBSD: telnet.c,v 1.31 2006/02/02 19:33:12 he Exp $	*/
 
 /*
  * Copyright (c) 1988, 1990, 1993
@@ -34,14 +34,14 @@
 #if 0
 static char sccsid[] = "@(#)telnet.c	8.4 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: telnet.c,v 1.36 2012/01/10 13:49:32 christos Exp $");
+__RCSID("$NetBSD: telnet.c,v 1.31 2006/02/02 19:33:12 he Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
 
 #include <signal.h>
-#include <term.h>
+#include <termcap.h>
 #include <unistd.h>
 /* By the way, we need to include curses.h before telnet.h since,
  * among other things, telnet.h #defines 'DO', which is a variable
@@ -66,6 +66,7 @@ __RCSID("$NetBSD: telnet.c,v 1.36 2012/01/10 13:49:32 christos Exp $");
 #include <libtelnet/encrypt.h>
 #endif
 
+
 #define	strip(x) ((my_want_state_is_wont(TELOPT_BINARY)) ? ((x)&0x7f) : (x))
 
 static unsigned char	subbuffer[SUBBUFSIZE],
@@ -527,7 +528,7 @@ dooption(int option)
 #endif
 
 	    case TELOPT_XDISPLOC:	/* X Display location */
-		if (env_getvalue((const unsigned char *)"DISPLAY"))
+		if (env_getvalue((unsigned char *)"DISPLAY"))
 		    new_state_ok = 1;
 		break;
 
@@ -618,7 +619,7 @@ dontoption(int option)
  * duplicate, or verbose names (names with spaces).
  */
 
-static char name_unknown[] = "UNKNOWN";
+static char *name_unknown = "UNKNOWN";
 static char *unknown[] = { 0, 0 };
 
 char **
@@ -749,26 +750,27 @@ char *termbuf;
 
 /*ARGSUSED*/
 int
-setupterm(char *tname, int fd, int *errp)
+setup_term(char *tname, int fd, int *errp)
 {
 	char zz[1024], *zz_ptr;
 	char *ext_tc, *newptr;
-	size_t len;
 	
-	if ((termbuf = malloc(1024)) == NULL)
+	if ((termbuf = (char *) malloc(1024)) == NULL)
 		goto error;
 	
 	if (tgetent(termbuf, tname) == 1) {
-		/* check for ZZ capability, indicating termcap truncated */
+		  /* check for ZZ capability, which indicates termcap truncated */
 		zz_ptr = zz;
 		if (tgetstr("ZZ", &zz_ptr) != NULL) {
-			/* it was, fish back the full termcap */
+			  /* it was, fish back the full termcap */
 			sscanf(zz, "%p", &ext_tc);
-			len = strlen(ext_tc) + 1;
-			if ((newptr = realloc(termbuf, len)) == NULL)
+			if ((newptr = (char *) realloc(termbuf,
+						       strlen(ext_tc) + 1))
+			    == NULL) {
 				goto error;
+			}
 
-			memcpy(newptr, ext_tc, len);
+			strlcpy(newptr, ext_tc, strlen(ext_tc) + 1);
 			termbuf = newptr;
 		}
 
@@ -800,8 +802,8 @@ gettermname(void)
 		resettermname = 0;
 		if (tnamep && tnamep != unknown)
 			free(tnamep);
-		if ((tname = (char *)env_getvalue((const unsigned char *)"TERM")) &&
-				(setupterm(tname, 1, &err) == 0)) {
+		if ((tname = (char *)env_getvalue((unsigned char *)"TERM")) &&
+				(setup_term(tname, 1, &err) == 0)) {
 			tnamep = mklist(termbuf, tname);
 		} else {
 			if (tname && ((int)strlen(tname) <= 40)) {
@@ -872,14 +874,14 @@ suboption(void)
 	if (SB_EOF())
 	    return;
 	if (SB_GET() == TELQUAL_SEND) {
-	    long osp, isp;
+	    long ospeed, ispeed;
 	    unsigned char temp[50];
 	    int len;
 
-	    TerminalSpeeds(&isp, &osp);
+	    TerminalSpeeds(&ispeed, &ospeed);
 
 	    sprintf((char *)temp, "%c%c%c%c%ld,%ld%c%c", IAC, SB, TELOPT_TSPEED,
-		    TELQUAL_IS, osp, isp, IAC, SE);
+		    TELQUAL_IS, (long)ospeed, (long)ispeed, IAC, SE);
 	    len = strlen((char *)temp+4) + 4;	/* temp[3] is 0 ... */
 
 	    if (len < NETROOM()) {
@@ -975,7 +977,7 @@ suboption(void)
 	    unsigned char temp[50], *dp;
 	    int len;
 
-	    if ((dp = env_getvalue((const unsigned char *)"DISPLAY")) == NULL) {
+	    if ((dp = env_getvalue((unsigned char *)"DISPLAY")) == NULL) {
 		/*
 		 * Something happened, we no longer have a DISPLAY
 		 * variable.  So, turn off the option.
@@ -1106,7 +1108,7 @@ lm_will(unsigned char *cmd, int len)
     default:
 	str_lm[3] = DONT;
 	str_lm[4] = cmd[0];
-	if ((size_t)NETROOM() > sizeof(str_lm)) {
+	if (NETROOM() > sizeof(str_lm)) {
 	    ring_supply_data(&netoring, str_lm, sizeof(str_lm));
 	    printsub('>', &str_lm[2], sizeof(str_lm)-2);
 	}
@@ -1142,7 +1144,7 @@ lm_do(unsigned char *cmd, int len)
     default:
 	str_lm[3] = WONT;
 	str_lm[4] = cmd[0];
-	if ((size_t)NETROOM() > sizeof(str_lm)) {
+	if (NETROOM() > sizeof(str_lm)) {
 	    ring_supply_data(&netoring, str_lm, sizeof(str_lm));
 	    printsub('>', &str_lm[2], sizeof(str_lm)-2);
 	}
@@ -1183,7 +1185,7 @@ lm_mode(unsigned char *cmd, int len, int init)
 	str_lm_mode[4] = linemode;
 	if (!init)
 	    str_lm_mode[4] |= MODE_ACK;
-	if ((size_t)NETROOM() > sizeof(str_lm_mode)) {
+	if (NETROOM() > sizeof(str_lm_mode)) {
 	    ring_supply_data(&netoring, str_lm_mode, sizeof(str_lm_mode));
 	    printsub('>', &str_lm_mode[2], sizeof(str_lm_mode)-2);
 	}
@@ -1297,7 +1299,7 @@ unsigned char slc_import_def[] = {
 void
 slc_import(int def)
 {
-    if ((size_t)NETROOM() > sizeof(slc_import_val)) {
+    if (NETROOM() > sizeof(slc_import_val)) {
 	if (def) {
 	    ring_supply_data(&netoring, slc_import_def, sizeof(slc_import_def));
 	    printsub('>', &slc_import_def[2], sizeof(slc_import_def)-2);
@@ -1438,7 +1440,7 @@ slc_start_reply(void)
 void
 slc_add_reply(unsigned int func, unsigned int flags, cc_t value)
 {
-	if ((size_t)(slc_replyp - slc_reply) + 6 > sizeof(slc_reply))
+	if ((slc_replyp - slc_reply) + 6 > sizeof(slc_reply))
 		return;
 	if ((*slc_replyp++ = func) == IAC)
 		*slc_replyp++ = IAC;
@@ -1454,7 +1456,7 @@ slc_end_reply(void)
     int len;
 
     len = slc_replyp - slc_reply;
-    if (len <= 4 || ((size_t)len + 2 > sizeof(slc_reply)))
+    if (len <= 4 || (len + 2 > sizeof(slc_reply)))
 	return;
     *slc_replyp++ = IAC;
     *slc_replyp++ = SE;
@@ -1633,7 +1635,7 @@ env_opt_add(unsigned char *ep)
 	vp = env_getvalue(ep);
 	elen = 2 * (vp ? strlen((char *)vp) : 0) +
 		2 * strlen((char *)ep) + 6;
-	if ((unsigned int)(opt_replyend - opt_replyp) < elen)
+	if ((opt_replyend - opt_replyp) < elen)
 	{
 		unsigned char *p;
 		len = opt_replyend - opt_reply + elen;
@@ -1688,7 +1690,7 @@ env_opt_add(unsigned char *ep)
 }
 
 int
-opt_welldefined(const char *ep)
+opt_welldefined(char *ep)
 {
 	if ((strcmp(ep, "USER") == 0) ||
 	    (strcmp(ep, "DISPLAY") == 0) ||
@@ -2280,7 +2282,7 @@ telnet(const char *user)
 	send_will(TELOPT_LINEMODE, 1);
 	send_will(TELOPT_NEW_ENVIRON, 1);
 	send_do(TELOPT_STATUS, 1);
-	if (env_getvalue((const unsigned char *)"DISPLAY"))
+	if (env_getvalue((unsigned char *)"DISPLAY"))
 	    send_will(TELOPT_XDISPLOC, 1);
 	if (eight)
 	    tel_enter_binary(eight);

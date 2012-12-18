@@ -1,4 +1,4 @@
-/*	$NetBSD: move.c,v 1.18 2011/08/31 16:24:56 plunky Exp $	*/
+/*	$NetBSD: move.c,v 1.15 2004/11/05 21:30:32 dsl Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)move.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: move.c,v 1.18 2011/08/31 16:24:56 plunky Exp $");
+__RCSID("$NetBSD: move.c,v 1.15 2004/11/05 21:30:32 dsl Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,13 +56,8 @@ __RCSID("$NetBSD: move.c,v 1.18 2011/08/31 16:24:56 plunky Exp $");
 #undef	CTRL
 #define	CTRL(c)		(c - 'A' + 1)
 
-static void check_go(void);
-static int playcard(PLAY *);
-static void getmove(void);
-static int haspicked(const PLAY *);
-
 void
-domove(void)
+domove()
 {
 	PLAY	*pp;
 	int	i, j;
@@ -172,8 +167,8 @@ acc:
  *	Check and see if either side can go.  If they cannot,
  * the game is over
  */
-static void
-check_go(void)
+void
+check_go()
 {
 	CARD	card;
 	PLAY	*pp, *op;
@@ -203,8 +198,9 @@ check_go(void)
 	Finished = TRUE;
 }
 
-static int
-playcard(PLAY *pp)
+int
+playcard(pp)
+	PLAY	*pp;
 {
 	int	v;
 	CARD	card;
@@ -352,8 +348,8 @@ protected:
 	return TRUE;
 }
 
-static void
-getmove(void)
+void
+getmove()
 {
 	char	c;
 #ifdef EXTRAP
@@ -469,7 +465,7 @@ over:
 				leaveok(Board, TRUE);
 				if ((outf = fopen(buf, "w")) == NULL)
 					warn("%s", buf);
-				setbuf(outf, NULL);
+				setbuf(outf, (char *)NULL);
 			}
 			Debug = !Debug;
 			break;
@@ -486,8 +482,9 @@ ret:
 /*
  * return whether or not the player has picked
  */
-static int
-haspicked(const PLAY *pp)
+int
+haspicked(pp)
+	const PLAY	*pp;
 {
 	int	card;
 
@@ -506,7 +503,8 @@ haspicked(const PLAY *pp)
 }
 
 void
-account(CARD card)
+account(card)
+	CARD	card; 
 {
 	CARD	oppos;
 
@@ -531,7 +529,8 @@ account(CARD card)
 }
 
 void
-prompt(int promptno)
+prompt(promptno)
+	int	promptno;
 {
 	static const char	*const names[] = {
 				">>:Move:",
@@ -562,7 +561,8 @@ prompt(int promptno)
 }
 
 void
-sort(CARD *hand)
+sort(hand)
+	CARD	*hand;
 {
 	CARD	*cp, *tp;
 	CARD	temp;

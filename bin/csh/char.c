@@ -1,4 +1,4 @@
-/* $NetBSD: char.c,v 1.10 2012/01/19 02:42:53 christos Exp $ */
+/* $NetBSD: char.c,v 1.9 2003/08/07 09:05:03 agc Exp $ */
 
 /*-
  * Copyright (c) 1980, 1991, 1993
@@ -34,210 +34,209 @@
 #if 0
 static char sccsid[] = "@(#)char.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: char.c,v 1.10 2012/01/19 02:42:53 christos Exp $");
+__RCSID("$NetBSD: char.c,v 1.9 2003/08/07 09:05:03 agc Exp $");
 #endif
 #endif /* not lint */
 
 #include "char.h"
 
-/* on default same as original map */
 unsigned short _cmap[256] = {
-/*	  0 nul		  1 soh		  2 stx		  3 etx	*/
+/*	nul		soh		stx		etx	*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	  4 eot		  5 enq		  6 ack		  7 bel	*/
+/*	eot		enq		ack		bel	*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	  8 bs		  9 ht		 10 nl		 11 vt	*/
+/*	bs		ht		nl		vt	*/
 	_CTR,		_CTR|_SP|_META,	_CTR|_NL|_META,	_CTR,
 
-/*	 12 np		 13 cr		 14 so		 15 si	*/
+/*	np		cr		so		si	*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	 16 dle		 17 dc1		 18 dc2		 19 dc3	*/
+/*	dle		dc1		dc2		dc3	*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	 20 dc4		 21 nak		 22 syn		 23 etb	*/
+/*	dc4		nak		syn		etb	*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	 24 can		 25 em		 26 sub		 27 esc	*/
+/*	can		em		sub		esc	*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	 28 fs		 29 gs		 30 rs		 31 us	*/
+/*	fs		gs		rs		us	*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	 32 sp		 33 !		 34 "		 35 #	*/
-	_SP|_META,	_PUN,		_QF|_PUN,	_META|_PUN,
+/*	sp		!		"		#	*/
+	_SP|_META,	0,		_QF,		_META,
 
-/*	 36 $		 37 %		 38 &		 39 '	*/
-	_DOL|_PUN,	_PUN,		_META|_CMD|_PUN,_QF|_PUN,
+/*	$		%		&		'	*/
+	_DOL,		0,		_META|_CMD,	_QF,
 
-/*	 40 (		 41 )		 42 *		 43 +	*/
-	_META|_CMD|_PUN,_META|_PUN,	_GLOB|_PUN,	_PUN,
+/*	(		)		*		+	*/
+	_META|_CMD,	_META,		_GLOB,		0,
 
-/*	 44 ,		 45 -		 46 .		 47 /	*/
-	_PUN,		_PUN,		_PUN,		_PUN,
+/*	,		-		.		/	*/
+	0,		0,		0,		0,
 
-/*	 48 0		 49 1		 50 2		 51 3	*/
+/*	0		1		2		3	*/
 	_DIG|_XD,	_DIG|_XD,	_DIG|_XD,	_DIG|_XD,
 
-/*	 52 4		 53 5		 54 6		 55 7	*/
+/*	4		5		6		7	*/
 	_DIG|_XD,	_DIG|_XD,	_DIG|_XD,	_DIG|_XD,
 
-/*	 56 8		 57 9		 58 :		 59 ;	*/
-	_DIG|_XD,	_DIG|_XD,	_PUN,		_META|_CMD|_PUN,
+/*	8		9		:		;	*/
+	_DIG|_XD,	_DIG|_XD,	0,		_META|_CMD,
 
-/*	 60 <		 61 =		 62 >		 63 ?	*/
-	_META|_PUN,	_PUN,		_META|_PUN,	_GLOB|_PUN,
+/*	<		=		>		?	*/
+	_META,		0,		_META,		_GLOB,
 
-/*	 64 @		 65 A		 66 B		 67 C	*/
-	_PUN,		_LET|_UP|_XD,	_LET|_UP|_XD,	_LET|_UP|_XD,
+/*	@		A		B		C	*/
+	0,		_LET|_UP|_XD,	_LET|_UP|_XD,	_LET|_UP|_XD,
 
-/*	 68 D		 69 E		 70 F		 71 G	*/
+/*	D		E		F		G	*/
 	_LET|_UP|_XD,	_LET|_UP|_XD,	_LET|_UP|_XD,	_LET|_UP,
 
-/*	 72 H		 73 I		 74 J		 75 K	*/
+/*	H		I		J		K	*/
 	_LET|_UP,	_LET|_UP,	_LET|_UP,	_LET|_UP,
 
-/*	 76 L		 77 M		 78 N		 79 O	*/
+/*	L		M		N		O	*/
 	_LET|_UP,	_LET|_UP,	_LET|_UP,	_LET|_UP,
 
-/*	 80 P		 81 Q		 82 R		 83 S	*/
+/*	P		Q		R		S	*/
 	_LET|_UP,	_LET|_UP,	_LET|_UP,	_LET|_UP,
 
-/*	 84 T		 85 U		 86 V		 87 W	*/
+/*	T		U		V		W	*/
 	_LET|_UP,	_LET|_UP,	_LET|_UP,	_LET|_UP,
 
-/*	 88 X		 89 Y		 90 Z		 91 [	*/
-	_LET|_UP,	_LET|_UP,	_LET|_UP,	_GLOB|_PUN,
+/*	X		Y		Z		[	*/
+	_LET|_UP,	_LET|_UP,	_LET|_UP,	_GLOB,
 
-/*	 92 \		 93 ]		 94 ^		 95 _	*/
-	_ESC|_PUN,	_PUN,		_PUN,		_PUN,
+/*	\		]		^		_	*/
+	_ESC,		0,		0,		0,
 
-/*	 96 `		 97 a		 98 b		 99 c	*/
-  _QB|_GLOB|_META|_PUN,	_LET|_LOW|_XD,	_LET|_LOW|_XD,	_LET|_LOW|_XD,
+/*	`		a		b		c	*/
+  _QB|_GLOB|_META,	_LET|_LOW|_XD,	_LET|_LOW|_XD,	_LET|_LOW|_XD,
 
-/*	100 d		101 e		102 f		103 g	*/
+/*	d		e		f		g	*/
 	_LET|_LOW|_XD,	_LET|_LOW|_XD,	_LET|_LOW|_XD,	_LET|_LOW,
 
-/*	104 h		105 i		106 j		107 k	*/
+/*	h		i		j		k	*/
 	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,
 
-/*	108 l		109 m		110 n		111 o	*/
+/*	l		m		n		o	*/
 	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,
 
-/*	112 p		113 q		114 r		115 s	*/
+/*	p		q		r		s	*/
 	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,
 
-/*	116 t		117 u		118 v		119 w	*/
+/*	t		u		v		w	*/
 	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,
 
-/*	120 x		121 y		122 z		123 {	*/
-	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_GLOB|_PUN,
+/*	x		y		z		{	*/
+	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_GLOB,
 
-/*	124 |		125 }		126 ~		127 del	*/
-	_META|_CMD|_PUN,_PUN,		_PUN,		_CTR,
+/*	|		}		~		del	*/
+	_META|_CMD,	0,		0,		_CTR,
 
-#ifdef SHORT_STRINGS
+#if defined(SHORT_STRINGS) && !defined(KANJI)
 /****************************************************************/
 /* 128 - 255 The below is supposedly ISO 8859/1			*/
 /****************************************************************/
-/*	128 (undef)	129 (undef)	130 (undef)	131 (undef)	*/
+/*	(undef)		(undef)		(undef)		(undef)		*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	132 (undef)	133 (undef)	134 (undef)	135 (undef)	*/
+/*	(undef)		(undef)		(undef)		(undef)		*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	136 (undef)	137 (undef)	138 (undef)	139 (undef)	*/
+/*	(undef)		(undef)		(undef)		(undef)		*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	140 (undef)	141 (undef)	142 (undef)	143 (undef)	*/
+/*	(undef)		(undef)		(undef)		(undef)		*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	144 (undef)	145 (undef)	146 (undef)	147 (undef)	*/
+/*	(undef)		(undef)		(undef)		(undef)		*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	148 (undef)	149 (undef)	150 (undef)	151 (undef)	*/
+/*	(undef)		(undef)		(undef)		(undef)		*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	152 (undef)	153 (undef)	154 (undef)	155 (undef)	*/
+/*	(undef)		(undef)		(undef)		(undef)		*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	156 (undef)	157 (undef)	158 (undef)	159 (undef)	*/
+/*	(undef)		(undef)		(undef)		(undef)		*/
 	_CTR,		_CTR,		_CTR,		_CTR,
 
-/*	160 nobreakspace 161 exclamdown	162 cent	163 sterling	*/
-	_PUN, /* XXX */	_PUN,		_PUN,		_PUN,
+/*	nobreakspace	exclamdown	cent		sterling	*/
+	_SP,		0,		0,		0,
 
-/*	164 currency	165 yen		166 brokenbar	167 section	*/
-	_PUN,		_PUN,		_PUN,		_PUN,
+/*	currency	yen		brokenbar	section		*/
+	0,		0,		0,		0,
 
-/*	168 diaeresis	169 copyright	170 ordfeminine	171 guillemotleft*/
-	_PUN,		_PUN,		_PUN,		_PUN,
+/*	diaeresis	copyright	ordfeminine	guillemotleft	*/
+	0,		0,		0,		0,
 
-/*	172 notsign	173 hyphen	174 registered	175 macron	*/
-	_PUN,		_PUN,		_PUN,		_PUN,
+/*	notsign		hyphen		registered	macron		*/
+	0,		0,		0,		0,
 
-/*	176 degree	177 plusminus	178 twosuperior	179 threesuperior*/
-	_PUN,		_PUN,		_PUN,		_PUN,
+/*	degree		plusminus	twosuperior	threesuperior	*/
+	0,		0,		0,		0,
 
-/*	180 acute	181 mu 		182 paragraph	183 periodcentered*/
-	_PUN,		_PUN, /*XXX*/	_PUN,		_PUN,
+/*	acute		mu		paragraph	periodcentered	*/
+	0,		0,		0,		0,
 
-/*	184 cedilla	185 onesuperior	186 masculine	187 guillemotright*/
-	_PUN,		_PUN,		_PUN,		_PUN,
+/*	cedilla		onesuperior	masculine	guillemotright	*/
+	0,		0,		0,		0,
 
-/*	188 onequarter	189 onehalf	190 threequarters 191 questiondown*/
-	_PUN,		_PUN,		_PUN,		_PUN,
+/*	onequarter	onehalf		threequarters	questiondown	*/
+	0,		0,		0,		0,
 
-/*	192 Agrave	193 Aacute	194 Acircumflex	195 Atilde	*/
+/*	Agrave		Aacute		Acircumflex	Atilde		*/
 	_LET|_UP,	_LET|_UP,	_LET|_UP,	_LET|_UP,
 
-/*	196 Adiaeresis	197 Aring	198 AE		199 Ccedilla	*/
+/*	Adiaeresis	Aring		AE		Ccedilla	*/
 	_LET|_UP,	_LET|_UP,	_LET|_UP,	_LET|_UP,
 
-/*	200 Egrave	201 Eacute	202 Ecircumflex	203 Ediaeresis	*/
+/*	Egrave		Eacute		Ecircumflex	Ediaeresis	*/
 	_LET|_UP,	_LET|_UP,	_LET|_UP,	_LET|_UP,
 
-/*	204 Igrave	205 Iacute	206 Icircumflex	207 Idiaeresis	*/
+/*	Igrave		Iacute		Icircumflex	Idiaeresis	*/
 	_LET|_UP,	_LET|_UP,	_LET|_UP,	_LET|_UP,
 
-/*	208 ETH		209 Ntilde	210 Ograve	211 Oacute	*/
+/*	ETH		Ntilde		Ograve		Oacute		*/
 	_LET|_UP,	_LET|_UP,	_LET|_UP,	_LET|_UP,
 
-/*	212 Ocircumflex	213 Otilde	214 Odiaeresis	215 multiply	*/
-	_LET|_UP,	_LET|_UP,	_LET|_UP,	_PUN,
+/*	Ocircumflex	Otilde		Odiaeresis	multiply	*/
+	_LET|_UP,	_LET|_UP,	_LET|_UP,	0,
 
-/*	216 Ooblique	217 Ugrave	218 Uacute	219 Ucircumflex	*/
+/*	Ooblique	Ugrave		Uacute		Ucircumflex	*/
 	_LET|_UP,	_LET|_UP,	_LET|_UP,	_LET|_UP,
 
-/*	220 Udiaeresis	221 Yacute	222 THORN	223 ssharp	*/
+/*	Udiaeresis	Yacute		THORN		ssharp		*/
 	_LET|_UP,	_LET|_UP,	_LET|_UP,	_LET|_LOW,
 
-/*	224 agrave	225 aacute	226 acircumflex	227 atilde	*/
+/*	agrave		aacute		acircumflex	atilde		*/
 	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,
 
-/*	228 adiaeresis	229 aring	230 ae		231 ccedilla	*/
+/*	adiaeresis	aring		ae		ccedilla	*/
 	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,
 
-/*	232 egrave	233 eacute	234 ecircumflex	235 ediaeresis	*/
+/*	egrave		eacute		ecircumflex	ediaeresis	*/
 	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,
 
-/*	236 igrave	237 iacute	238 icircumflex	239 idiaeresis	*/
+/*	igrave		iacute		icircumflex	idiaeresis	*/
 	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,
 
-/*	240 eth		241 ntilde	242 ograve	243 oacute	*/
+/*	eth		ntilde		ograve		oacute		*/
 	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,
 
-/*	244 ocircumflex	245 otilde	246 odiaeresis	247 division	*/
-	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_PUN,
+/*	ocircumflex	otilde		odiaeresis	division	*/
+	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	0,
 
-/*	248 oslash	249 ugrave	250 uacute	251 ucircumflex	*/
+/*	oslash		ugrave		uacute		ucircumflex	*/
 	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,
 
-/*	252 udiaeresis	253 yacute	254 thorn	255 ydiaeresis	*/
+/*	udiaeresis	yacute		thorn		ydiaeresis	*/
 	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,	_LET|_LOW,
-#endif /* SHORT_STRINGS */
+#endif /* SHORT_STRINGS && !KANJI */
 };
 
 #ifndef NLS

@@ -1,4 +1,4 @@
-/*	$NetBSD: iq80310_7seg.c,v 1.10 2011/07/01 20:41:16 dyoung Exp $	*/
+/*	$NetBSD: iq80310_7seg.c,v 1.9 2005/12/11 12:17:09 christos Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -40,12 +40,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iq80310_7seg.c,v 1.10 2011/07/01 20:41:16 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iq80310_7seg.c,v 1.9 2005/12/11 12:17:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <evbarm/iq80310/iq80310reg.h>
 #include <evbarm/iq80310/iq80310var.h>

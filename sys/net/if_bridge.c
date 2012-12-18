@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bridge.c,v 1.76 2012/03/22 12:59:33 wiz Exp $	*/
+/*	$NetBSD: if_bridge.c,v 1.62.6.4 2009/04/04 18:03:06 snj Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -80,13 +80,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.76 2012/03/22 12:59:33 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.62.6.4 2009/04/04 18:03:06 snj Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_bridge_ipf.h"
 #include "opt_inet.h"
 #include "opt_pfil_hooks.h"
-#endif /* _KERNEL_OPT */
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -100,9 +99,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.76 2012/03/22 12:59:33 wiz Exp $");
 #include <sys/pool.h>
 #include <sys/kauth.h>
 #include <sys/cpu.h>
-#include <sys/cprng.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
@@ -445,42 +445,20 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		struct ifbrparam ifbrparam;
 	} args;
 	struct ifdrv *ifd = (struct ifdrv *) data;
-	const struct bridge_control *bc = NULL; /* XXXGCC */
+	const struct bridge_control *bc;
 	int s, error = 0;
-
-	/* Authorize command before calling splnet(). */
-	switch (cmd) {
-	case SIOCGDRVSPEC:
-	case SIOCSDRVSPEC:
-		if (ifd->ifd_cmd >= bridge_control_table_size) {
-			error = EINVAL;
-			return error;
-		}
-
-		bc = &bridge_control_table[ifd->ifd_cmd];
-
-		/* We only care about BC_F_SUSER at this point. */
-		if ((bc->bc_flags & BC_F_SUSER) == 0)
-			break;
-
-		error = kauth_authorize_network(l->l_cred,
-		    KAUTH_NETWORK_INTERFACE_BRIDGE,
-		    cmd == SIOCGDRVSPEC ?
-		     KAUTH_REQ_NETWORK_INTERFACE_BRIDGE_GETPRIV :
-		     KAUTH_REQ_NETWORK_INTERFACE_BRIDGE_SETPRIV,
-		     ifd, NULL, NULL);
-		if (error)
-			return (error);
-
-		break;
-	}
 
 	s = splnet();
 
 	switch (cmd) {
 	case SIOCGDRVSPEC:
 	case SIOCSDRVSPEC:
-		KASSERT(bc != NULL);
+		if (ifd->ifd_cmd >= bridge_control_table_size) {
+			error = EINVAL;
+			break;
+		}
+		bc = &bridge_control_table[ifd->ifd_cmd];
+
 		if (cmd == SIOCGDRVSPEC &&
 		    (bc->bc_flags & BC_F_COPYOUT) == 0) {
 			error = EINVAL;
@@ -492,7 +470,12 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 			break;
 		}
 
-		/* BC_F_SUSER is checked above, before splnet(). */
+		if (bc->bc_flags & BC_F_SUSER) {
+			error = kauth_authorize_generic(l->l_cred,
+			    KAUTH_GENERIC_ISSUSER, NULL);
+			if (error)
+				break;
+		}
 
 		if (ifd->ifd_len != bc->bc_argsize ||
 		    ifd->ifd_len > sizeof(args)) {
@@ -517,30 +500,23 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_RUNNING:
+		if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) == IFF_RUNNING) {
 			/*
 			 * If interface is marked down and it is running,
 			 * then stop and disable it.
 			 */
 			(*ifp->if_stop)(ifp, 1);
-			break;
-		case IFF_UP:
+		} else if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) == IFF_UP) {
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
 			 */
 			error = (*ifp->if_init)(ifp);
-			break;
-		default:
-			break;
 		}
 		break;
 
 	default:
-		error = ifioctl_common(ifp, cmd, data);
+		error = ENOTTY;
 		break;
 	}
 
@@ -1085,7 +1061,7 @@ bridge_ifdetach(struct ifnet *ifp)
 	struct ifbreq breq;
 
 	memset(&breq, 0, sizeof(breq));
-	strlcpy(breq.ifbr_ifsname, ifp->if_xname, sizeof(breq.ifbr_ifsname));
+	snprintf(breq.ifbr_ifsname, sizeof(breq.ifbr_ifsname), ifp->if_xname);
 
 	(void) bridge_ioctl_del(sc, &breq);
 }
@@ -1498,15 +1474,15 @@ bridge_input(struct ifnet *ifp, struct mbuf *m)
 	eh = mtod(m, struct ether_header *);
 
 	if (m->m_flags & (M_BCAST|M_MCAST)) {
-		if (bif->bif_flags & IFBIF_STP) {
-			/* Tap off 802.1D packets; they do not get forwarded. */
-			if (memcmp(eh->ether_dhost, bstp_etheraddr,
-			    ETHER_ADDR_LEN) == 0) {
-				m = bstp_input(sc, bif, m);
-				if (m == NULL)
-					return (NULL);
-			}
+		/* Tap off 802.1D packets; they do not get forwarded. */
+		if (memcmp(eh->ether_dhost, bstp_etheraddr,
+		    ETHER_ADDR_LEN) == 0) {
+			m = bstp_input(ifp, m);
+			if (m == NULL)
+				return (NULL);
+		}
 
+		if (bif->bif_flags & IFBIF_STP) {
 			switch (bif->bif_state) {
 			case BSTP_IFSTATE_BLOCKING:
 			case BSTP_IFSTATE_LISTENING:
@@ -1853,7 +1829,7 @@ bridge_rtable_init(struct bridge_softc *sc)
 	for (i = 0; i < BRIDGE_RTHASH_SIZE; i++)
 		LIST_INIT(&sc->sc_rthash[i]);
 
-	sc->sc_rthash_key = cprng_fast32();
+	sc->sc_rthash_key = arc4random();
 
 	LIST_INIT(&sc->sc_rtlist);
 

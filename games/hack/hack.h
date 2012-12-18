@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.h,v 1.16 2011/08/06 20:18:26 dholland Exp $	*/
+/*	$NetBSD: hack.h,v 1.10.38.1 2009/06/29 23:33:53 snj Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -67,7 +67,11 @@
 #include "config.h"
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
+
+#ifndef BSD
+#define	index	strchr
+#define	rindex	strrchr
+#endif /* BSD */
 
 #define	Null(type)	((struct type *) 0)
 
@@ -91,7 +95,7 @@ typedef struct {
 #include	"def.rm.h"
 #include	"def.permonst.h"
 
-#define	newstring(x)	((char *) alloc(x))
+#define	newstring(x)	(char *) alloc((unsigned)(x))
 #include "hack.onames.h"
 
 #define ON 1
@@ -192,16 +196,16 @@ extern char *hname;
 extern const char *const hu_stat[]; /* in eat.c */
 extern const char *nomovemsg;
 extern const char *occtxt;
-extern const char *save_cm;
+extern char *save_cm;
 extern const char *killer;
 extern const char *const traps[];
 extern char SAVEF[];
 extern char fut_geno[60]; /* idem */
 extern char genocided[60]; /* defined in Decl.c */
 extern char lock[PL_NSIZ + 4];
-extern const char mlarge[];
+extern char mlarge[];
 extern char morc;
-extern const char nul[];
+extern char nul[];
 extern char plname[PL_NSIZ], pl_character[PL_CSIZ];
 extern const char quitchars[];
 extern char sdir[]; /* defined in hack.c */

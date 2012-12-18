@@ -1,4 +1,4 @@
-/*	$NetBSD: fgets.c,v 1.28 2012/03/15 18:22:30 christos Exp $	*/
+/*	$NetBSD: fgets.c,v 1.21 2007/06/03 17:39:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,13 +37,12 @@
 #if 0
 static char sccsid[] = "@(#)fgets.c	8.2 (Berkeley) 12/22/93";
 #else
-__RCSID("$NetBSD: fgets.c,v 1.28 2012/03/15 18:22:30 christos Exp $");
+__RCSID("$NetBSD: fgets.c,v 1.21 2007/06/03 17:39:26 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
 #include <stdio.h>
-#include <errno.h>
 #include <string.h>
 #include "reentrant.h"
 #include "local.h"
@@ -57,20 +56,25 @@ __RCSID("$NetBSD: fgets.c,v 1.28 2012/03/15 18:22:30 christos Exp $");
  * Return first argument, or NULL if no characters were read.
  */
 char *
-fgets(char *buf, int n, FILE *fp)
+fgets(buf, n, fp)
+	char *buf;
+	int n;
+	FILE *fp;
 {
-	int len;
+	size_t len;
 	char *s;
 	unsigned char *p, *t;
 
 	_DIAGASSERT(buf != NULL);
 	_DIAGASSERT(fp != NULL);
+	if (n <= 0)					/* sanity check */
+		return (NULL);
 
 	FLOCKFILE(fp);
 	_SET_ORIENTATION(fp, -1);
 	s = buf;
 	n--;			/* leave space for NUL */
-	do {
+	while (n != 0) {
 		/*
 		 * If the buffer is empty, refill it.
 		 */
@@ -93,39 +97,25 @@ fgets(char *buf, int n, FILE *fp)
 		 * newline, and stop.  Otherwise, copy entire chunk
 		 * and loop.
 		 */
-		if (len > n) {
-			if (n < 0) {
-				/*
-				 * Caller's length <= 0
-				 * We can't write into the buffer, so cannot
-				 * return a string, so must return NULL.
-				 * Set errno and __SERR so it is consistent.
-				 * TOG gives no indication of what to do here!
-				 */
-				errno = EINVAL;
-				fp->_flags |= __SERR;
-				FUNLOCKFILE(fp);
-				return NULL;
-			}
+		if (len > n)
 			len = n;
-		}
-		t = memchr(p, '\n', (size_t)len);
+		t = memchr((void *)p, '\n', len);
 		if (t != NULL) {
-			len = (int)(++t - p);
+			len = ++t - p;
 			fp->_r -= len;
 			fp->_p = t;
-			(void)memcpy(s, p, (size_t)len);
+			(void)memcpy((void *)s, (void *)p, len);
 			s[len] = 0;
 			FUNLOCKFILE(fp);
-			return buf;
+			return (buf);
 		}
 		fp->_r -= len;
 		fp->_p += len;
-		(void)memcpy(s, p, (size_t)len);
+		(void)memcpy((void *)s, (void *)p, len);
 		s += len;
 		n -= len;
-	} while (n != 0);
+	}
 	*s = 0;
 	FUNLOCKFILE(fp);
-	return buf;
+	return (buf);
 }

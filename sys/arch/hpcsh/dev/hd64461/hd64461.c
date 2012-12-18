@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64461.c,v 1.24 2011/07/19 15:30:52 dyoung Exp $	*/
+/*	$NetBSD: hd64461.c,v 1.19 2008/04/28 20:23:22 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -30,36 +30,32 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64461.c,v 1.24 2011/07/19 15:30:52 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64461.c,v 1.19 2008/04/28 20:23:22 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/reboot.h>
-#include <sys/bus.h>
 
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/debug.h>
 
-#include <hpcsh/dev/hd64461/hd64461reg.h>
-#include <hpcsh/dev/hd64461/hd64461intcreg.h>
 #include <hpcsh/dev/hd64461/hd64461var.h>
 
 /* HD64461 modules. INTC, TIMER, POWER modules are included in hd64461if */
-STATIC const struct hd64461_module {
+STATIC struct hd64461_module {
 	const char *name;
 } hd64461_modules[] = {
 	[HD64461_MODULE_VIDEO]		= { "hd64461video" },
 	[HD64461_MODULE_PCMCIA]		= { "hd64461pcmcia" },
-	[HD64461_MODULE_UART]		= { "hd64461uart" },
-#if 0 /* there are no drivers, so don't bother */
 	[HD64461_MODULE_GPIO]		= { "hd64461gpio" },
 	[HD64461_MODULE_AFE]		= { "hd64461afe" },
+	[HD64461_MODULE_UART]		= { "hd64461uart" },
 	[HD64461_MODULE_FIR]		= { "hd64461fir" },
-#endif
 };
-
-int use_afeck = 0;
+#define HD64461_NMODULE							\
+	(sizeof hd64461_modules / sizeof(struct hd64461_module))
 
 STATIC int hd64461_match(device_t, cfdata_t, void *);
 STATIC void hd64461_attach(device_t, device_t, void *);
@@ -84,7 +80,7 @@ hd64461_match(device_t parent, cfdata_t cf, void *aux)
 		return (0);	/* HD64461 only supports SH7709 interface */
 	}
 
-	if (strcmp("hd64461if", cf->cf_name) != 0)
+	if (strcmp("hd64461if", cf->cf_name))
 		return (0);
 
 	return (1);
@@ -94,8 +90,7 @@ STATIC void
 hd64461_attach(device_t parent, device_t self, void *aux)
 {
 	struct hd64461_attach_args ha;
-	const struct hd64461_module *module;
-	uint16_t stbcr;
+	struct hd64461_module *module;
 	int i;
 
 	aprint_naive("\n");
@@ -105,33 +100,14 @@ hd64461_attach(device_t parent, device_t self, void *aux)
 		hd64461_info();
 #endif
 
-	stbcr = hd64461_reg_read_2(HD64461_SYSSTBCR_REG16);
-
-	/* we don't use TIMER */
-	stbcr |= HD64461_SYSSTBCR_STM0ST | HD64461_SYSSTBCR_STM1ST;
-
-	/* no drivers for FIR and AFE */
-	stbcr |= HD64461_SYSSTBCR_SIRST | HD64461_SYSSTBCR_SAFEST;
-
-	if (!use_afeck)
-		stbcr |=
-		    HD64461_SYSSTBCR_SAFECKE_IST | HD64461_SYSSTBCR_SAFECKE_OST;
-
-	hd64461_reg_write_2(HD64461_SYSSTBCR_REG16, stbcr);
-
-
 	/* Attach all sub modules */
-	for (i = 0; i < __arraycount(hd64461_modules); ++i) {
-		module = &hd64461_modules[i];
-		if (module->name == NULL)
+	for (i = 0, module = hd64461_modules; i < HD64461_NMODULE;
+	    i++, module++) {
+		if (module->name == 0)
 			continue;
 		ha.ha_module_id = i;
 		config_found(self, &ha, hd64461_print);
 	}
-
-	/* XXX: TODO */
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 STATIC int
@@ -148,6 +124,9 @@ hd64461_print(void *aux, const char *pnp)
 
 
 #ifdef DEBUG
+
+#include <hpcsh/dev/hd64461/hd64461reg.h>
+#include <hpcsh/dev/hd64461/hd64461intcreg.h>
 
 STATIC void
 hd64461_info(void)

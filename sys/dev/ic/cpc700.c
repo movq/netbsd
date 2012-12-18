@@ -1,4 +1,4 @@
-/*	$NetBSD: cpc700.c,v 1.19 2012/01/27 18:53:07 para Exp $	*/
+/*	$NetBSD: cpc700.c,v 1.14 2008/04/28 20:23:49 martin Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpc700.c,v 1.19 2012/01/27 18:53:07 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpc700.c,v 1.14 2008/04/28 20:23:49 martin Exp $");
 
 #include "pci.h"
 #include "opt_pci.h"
@@ -79,7 +79,7 @@ union attach_args {
 
 
 void
-cpc_attach(device_t self, pci_chipset_tag_t pc, bus_space_tag_t mem,
+cpc_attach(struct device *self, pci_chipset_tag_t pc, bus_space_tag_t mem,
 	   bus_space_tag_t pciio, bus_dma_tag_t tag, int attachpci,
 	   uint freq);
 
@@ -104,7 +104,7 @@ cpc_print(void *aux, const char *pnp)
 }
 
 static int
-cpc_submatch(device_t parent, cfdata_t cf,
+cpc_submatch(struct device *parent, struct cfdata *cf,
 	     const int *ldesc, void *aux)
 {
 	struct cpcbus_attach_args *caa = aux;
@@ -119,7 +119,7 @@ cpc_submatch(device_t parent, cfdata_t cf,
  * Attach the cpc.
  */
 void
-cpc_attach(device_t self, pci_chipset_tag_t pc, bus_space_tag_t mem,
+cpc_attach(struct device *self, pci_chipset_tag_t pc, bus_space_tag_t mem,
 	   bus_space_tag_t pciio, bus_dma_tag_t dma, int attachpci,
 	   uint freq)
 {
@@ -173,8 +173,8 @@ cpc_attach(device_t self, pci_chipset_tag_t pc, bus_space_tag_t mem,
 	aa.pba.pba_iot = pciio;
 	aa.pba.pba_memt = mem;
 	aa.pba.pba_dmat = dma;
-	aa.pba.pba_pc = pc;
-	aa.pba.pba_flags = PCI_FLAGS_MEM_OKAY | PCI_FLAGS_IO_OKAY;
+	aa.pba.pba_pc = 0;
+	aa.pba.pba_flags = PCI_FLAGS_MEM_ENABLED | PCI_FLAGS_IO_ENABLED;
 	aa.pba.pba_bus = 0;
 
 	/* Save PCI error condition reg. */
@@ -191,9 +191,9 @@ cpc_attach(device_t self, pci_chipset_tag_t pc, bus_space_tag_t mem,
 
 #if NPCI > 0 && defined(PCI_NETBSD_CONFIGURE)
 	ioext  = extent_create("pciio",  CPC_PCI_IO_START, CPC_PCI_IO_END,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", CPC_PCI_MEM_BASE, CPC_PCI_MEM_END,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 
 	pci_configure_bus(0, ioext, memext, NULL, 0, 32);
 

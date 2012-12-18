@@ -1,4 +1,4 @@
-/*	$NetBSD: sdp.c,v 1.9 2011/03/20 19:46:13 plunky Exp $	*/
+/*	$NetBSD: sdp.c,v 1.5.6.1 2010/11/21 03:05:06 riz Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -29,7 +29,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 /*
- * Copyright (c) 2009 The NetBSD Foundation, Inc.
  * Copyright (c) 2004 Maksim Yevmenkin <m_evmenkin@yahoo.com>
  * All rights reserved.
  *
@@ -56,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: sdp.c,v 1.9 2011/03/20 19:46:13 plunky Exp $");
+__RCSID("$NetBSD: sdp.c,v 1.5.6.1 2010/11/21 03:05:06 riz Exp $");
 
 #include <sys/types.h>
 
@@ -73,128 +72,149 @@ __RCSID("$NetBSD: sdp.c,v 1.9 2011/03/20 19:46:13 plunky Exp $");
 #include <errno.h>
 #include <sdp.h>
 #include <stdlib.h>
-#include <strings.h>
 #include <usbhid.h>
 
 #include "btdevctl.h"
 
-static bool parse_hid_descriptor(sdp_data_t *);
-static int32_t parse_boolean(sdp_data_t *);
-static int32_t parse_pdl_param(sdp_data_t *, uint16_t);
-static int32_t parse_pdl(sdp_data_t *, uint16_t);
-static int32_t parse_apdl(sdp_data_t *, uint16_t);
+static int32_t parse_l2cap_psm(sdp_attr_t *);
+static int32_t parse_rfcomm_channel(sdp_attr_t *);
+static int32_t parse_hid_descriptor(sdp_attr_t *);
+static int32_t parse_boolean(sdp_attr_t *);
+static int32_t parse_uint16(sdp_attr_t *);
 
-static int config_pnp(prop_dictionary_t, sdp_data_t *);
-static int config_hid(prop_dictionary_t, sdp_data_t *);
-static int config_hset(prop_dictionary_t, sdp_data_t *);
-static int config_hf(prop_dictionary_t, sdp_data_t *);
+static int config_pnp(prop_dictionary_t);
+static int config_hid(prop_dictionary_t);
+static int config_hset(prop_dictionary_t);
+static int config_hf(prop_dictionary_t);
 
 uint16_t pnp_services[] = {
 	SDP_SERVICE_CLASS_PNP_INFORMATION,
 };
 
+uint32_t pnp_attrs[] = {
+	SDP_ATTR_RANGE(	0x0201,		/* Vendor ID */
+			0x0202),	/* Product ID */
+	SDP_ATTR_RANGE(	0x0205,		/* Vendor ID Source */
+			0x0205),
+};
+
 uint16_t hid_services[] = {
-	SDP_SERVICE_CLASS_HUMAN_INTERFACE_DEVICE,
+	SDP_SERVICE_CLASS_HUMAN_INTERFACE_DEVICE
+};
+
+uint32_t hid_attrs[] = {
+	SDP_ATTR_RANGE(	SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST,
+			SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST),
+	SDP_ATTR_RANGE( SDP_ATTR_ADDITIONAL_PROTOCOL_DESCRIPTOR_LISTS,
+			SDP_ATTR_ADDITIONAL_PROTOCOL_DESCRIPTOR_LISTS),
+	SDP_ATTR_RANGE(	0x0205,		/* HIDReconnectInitiate */
+			0x0206),	/* HIDDescriptorList */
+	SDP_ATTR_RANGE(	0x0209,		/* HIDBatteryPower */
+			0x0209),
+	SDP_ATTR_RANGE(	0x020d,		/* HIDNormallyConnectable */
+			0x020d)
 };
 
 uint16_t hset_services[] = {
-	SDP_SERVICE_CLASS_HEADSET,
+	SDP_SERVICE_CLASS_HEADSET
+};
+
+uint32_t hset_attrs[] = {
+	SDP_ATTR_RANGE(	SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST,
+			SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST),
 };
 
 uint16_t hf_services[] = {
-	SDP_SERVICE_CLASS_HANDSFREE_AUDIO_GATEWAY,
+	SDP_SERVICE_CLASS_HANDSFREE_AUDIO_GATEWAY
+};
+
+uint32_t hf_attrs[] = {
+	SDP_ATTR_RANGE(	SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST,
+			SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST),
 };
 
 static struct {
 	const char		*name;
-	int			(*handler)(prop_dictionary_t, sdp_data_t *);
+	int			(*handler)(prop_dictionary_t);
 	const char		*description;
 	uint16_t		*services;
-	size_t			nservices;
+	int			nservices;
+	uint32_t		*attrs;
+	int			nattrs;
 } cfgtype[] = {
     {
 	"HID",		config_hid,	"Human Interface Device",
 	hid_services,	__arraycount(hid_services),
+	hid_attrs,	__arraycount(hid_attrs),
     },
     {
 	"HSET",		config_hset,	"Headset",
 	hset_services,	__arraycount(hset_services),
+	hset_attrs,	__arraycount(hset_attrs),
     },
     {
 	"HF",		config_hf,	"Handsfree",
 	hf_services,	__arraycount(hf_services),
+	hf_attrs,	__arraycount(hf_attrs),
     },
 };
 
-#define MAX_SSP		(2 + 1 * 3)	/* largest nservices is 1 */
+static sdp_attr_t	values[8];
+static uint8_t		buffer[__arraycount(values)][512];
 
-static bool
-cfg_ssa(sdp_session_t ss, uint16_t *services, size_t nservices, sdp_data_t *rsp)
+static int32_t
+cfg_search(void *ss, uint32_t plen, uint16_t *pp, uint32_t alen, uint32_t *ap)
 {
-	uint8_t buf[MAX_SSP];
-	sdp_data_t ssp;
-	size_t i;
+	int i;
 
-	ssp.next = buf;
-	ssp.end = buf + sizeof(buf);
-
-	for (i = 0; i < nservices; i++)
-		sdp_put_uuid16(&ssp, services[i]);
-
-	ssp.end = ssp.next;
-	ssp.next = buf;
-
-	return sdp_service_search_attribute(ss, &ssp, NULL, rsp);
-}
-
-static bool
-cfg_search(sdp_session_t ss, int i, prop_dictionary_t dict)
-{
-	sdp_data_t rsp, rec;
-
-	/* check PnP Information first */
-	if (!cfg_ssa(ss, pnp_services, __arraycount(pnp_services), &rsp))
-		return false;
-
-	while (sdp_get_seq(&rsp, &rec)) {
-		if (config_pnp(dict, &rec) == 0)
-			break;
+	for (i = 0; i < __arraycount(values); i++) {
+		values[i].flags = SDP_ATTR_INVALID;
+		values[i].attr = 0;
+		values[i].vlen = sizeof(buffer[i]);
+		values[i].value = buffer[i];
 	}
 
-	/* then requested service */
-	if (!cfg_ssa(ss, cfgtype[i].services, cfgtype[i].nservices, &rsp))
-		return false;
-
-	while (sdp_get_seq(&rsp, &rec)) {
-		errno = (*cfgtype[i].handler)(dict, &rec);
-		if (errno == 0)
-			return true;
-	}
-
-	return false;
+	return sdp_search(ss, plen, pp, alen, ap, i, values);
 }
 
 prop_dictionary_t
 cfg_query(bdaddr_t *laddr, bdaddr_t *raddr, const char *service)
 {
 	prop_dictionary_t dict;
-	sdp_session_t ss;
-	size_t i;
+	void *ss;
+	int rv, i;
 
 	dict = prop_dictionary_create();
 	if (dict == NULL)
-		err(EXIT_FAILURE, "prop_dictionary_create()");
+		return NULL;
 
 	for (i = 0; i < __arraycount(cfgtype); i++) {
 		if (strcasecmp(service, cfgtype[i].name) == 0) {
 			ss = sdp_open(laddr, raddr);
-			if (ss == NULL)
-				err(EXIT_FAILURE, "SDP connection failed");
 
-			if (!cfg_search(ss, i, dict))
-				errx(EXIT_FAILURE, "service %s not found", service);
+			if (ss == NULL || (errno = sdp_error(ss)) != 0)
+				return NULL;
 
+			cfg_search(ss,
+				__arraycount(pnp_services), pnp_services,
+				__arraycount(pnp_attrs), pnp_attrs);
+
+			config_pnp(dict);
+
+			rv = cfg_search(ss,
+				cfgtype[i].nservices, cfgtype[i].services,
+				cfgtype[i].nattrs, cfgtype[i].attrs);
+
+			if (rv != 0) {
+				errno = sdp_error(ss);
+				return NULL;
+			}
 			sdp_close(ss);
+
+			rv = (*cfgtype[i].handler)(dict);
+			if (rv != 0)
+				return NULL;
+
 			return dict;
 		}
 	}
@@ -210,38 +230,30 @@ cfg_query(bdaddr_t *laddr, bdaddr_t *raddr, const char *service)
  * Configure PnP Information results
  */
 static int
-config_pnp(prop_dictionary_t dict, sdp_data_t *rec)
+config_pnp(prop_dictionary_t dict)
 {
-	sdp_data_t value;
-	uintmax_t v;
-	uint16_t attr;
-	int vendor, product, source;
+	int32_t vendor, product, source;
+	int i;
 
 	vendor = -1;
 	product = -1;
 	source = -1;
 
-	while (sdp_get_attr(rec, &attr, &value)) {
-		switch (attr) {
-		case 0x0201:	/* Vendor ID */
-			if (sdp_get_uint(&value, &v)
-			    && v <= UINT16_MAX)
-				vendor = (int)v;
+	for (i = 0; i < __arraycount(values); i++) {
+		if (values[i].flags != SDP_ATTR_OK)
+			continue;
 
+		switch (values[i].attr) {
+		case 0x0201: /* Vendor ID */
+			vendor = parse_uint16(&values[i]);
 			break;
 
-		case 0x0202:	/* Product ID */
-			if (sdp_get_uint(&value, &v)
-			    && v <= UINT16_MAX)
-				product = (int)v;
-
+		case 0x0202: /* Product ID */
+			product = parse_uint16(&values[i]);
 			break;
 
-		case 0x0205:	/* Vendor ID Source */
-			if (sdp_get_uint(&value, &v)
-			    && v <= UINT16_MAX)
-				source = (int)v;
-
+		case 0x0205: /* Vendor ID Source */
+			source = parse_uint16(&values[i]);
 			break;
 
 		default:
@@ -268,44 +280,54 @@ config_pnp(prop_dictionary_t dict, sdp_data_t *rec)
  * Configure HID results
  */
 static int
-config_hid(prop_dictionary_t dict, sdp_data_t *rec)
+config_hid(prop_dictionary_t dict)
 {
 	prop_object_t obj;
 	int32_t control_psm, interrupt_psm,
-		reconnect_initiate, hid_length;
+		reconnect_initiate, battery_power,
+		normally_connectable, hid_length;
 	uint8_t *hid_descriptor;
-	sdp_data_t value;
 	const char *mode;
-	uint16_t attr;
+	int i;
 
 	control_psm = -1;
 	interrupt_psm = -1;
 	reconnect_initiate = -1;
+	normally_connectable = 0;
+	battery_power = 0;
 	hid_descriptor = NULL;
 	hid_length = -1;
 
-	while (sdp_get_attr(rec, &attr, &value)) {
-		switch (attr) {
+	for (i = 0; i < __arraycount(values); i++) {
+		if (values[i].flags != SDP_ATTR_OK)
+			continue;
+
+		switch (values[i].attr) {
 		case SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST:
-			control_psm = parse_pdl(&value, SDP_UUID_PROTOCOL_L2CAP);
+			control_psm = parse_l2cap_psm(&values[i]);
 			break;
 
 		case SDP_ATTR_ADDITIONAL_PROTOCOL_DESCRIPTOR_LISTS:
-			interrupt_psm = parse_apdl(&value, SDP_UUID_PROTOCOL_L2CAP);
+			interrupt_psm = parse_l2cap_psm(&values[i]);
 			break;
 
 		case 0x0205: /* HIDReconnectInitiate */
-			reconnect_initiate = parse_boolean(&value);
+			reconnect_initiate = parse_boolean(&values[i]);
 			break;
 
 		case 0x0206: /* HIDDescriptorList */
-			if (parse_hid_descriptor(&value)) {
-				hid_descriptor = value.next;
-				hid_length = value.end - value.next;
+			if (parse_hid_descriptor(&values[i]) == 0) {
+				hid_descriptor = values[i].value;
+				hid_length = values[i].vlen;
 			}
 			break;
 
-		default:
+		case 0x0209: /* HIDBatteryPower */
+			battery_power = parse_boolean(&values[i]);
+			break;
+
+		case 0x020d: /* HIDNormallyConnectable */
+			normally_connectable = parse_boolean(&values[i]);
 			break;
 		}
 	}
@@ -363,22 +385,21 @@ config_hid(prop_dictionary_t dict, sdp_data_t *rec)
  * Configure HSET results
  */
 static int
-config_hset(prop_dictionary_t dict, sdp_data_t *rec)
+config_hset(prop_dictionary_t dict)
 {
 	prop_object_t obj;
-	sdp_data_t value;
-	int32_t channel;
-	uint16_t attr;
+	uint32_t channel;
+	int i;
 
 	channel = -1;
 
-	while (sdp_get_attr(rec, &attr, &value)) {
-		switch (attr) {
-		case SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST:
-			channel = parse_pdl(&value, SDP_UUID_PROTOCOL_RFCOMM);
-			break;
+	for (i = 0; i < __arraycount(values); i++) {
+		if (values[i].flags != SDP_ATTR_OK)
+			continue;
 
-		default:
+		switch (values[i].attr) {
+		case SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST:
+			channel = parse_rfcomm_channel(&values[i]);
 			break;
 		}
 	}
@@ -405,22 +426,21 @@ config_hset(prop_dictionary_t dict, sdp_data_t *rec)
  * Configure HF results
  */
 static int
-config_hf(prop_dictionary_t dict, sdp_data_t *rec)
+config_hf(prop_dictionary_t dict)
 {
 	prop_object_t obj;
-	sdp_data_t value;
-	int32_t channel;
-	uint16_t attr;
+	uint32_t channel;
+	int i;
 
 	channel = -1;
 
-	while (sdp_get_attr(rec, &attr, &value)) {
-		switch (attr) {
-		case SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST:
-			channel = parse_pdl(&value, SDP_UUID_PROTOCOL_RFCOMM);
-			break;
+	for (i = 0; i < __arraycount(values); i++) {
+		if (values[i].flags != SDP_ATTR_OK)
+			continue;
 
-		default:
+		switch (values[i].attr) {
+		case SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST:
+			channel = parse_rfcomm_channel(&values[i]);
 			break;
 		}
 	}
@@ -450,138 +470,403 @@ config_hf(prop_dictionary_t dict, sdp_data_t *rec)
 }
 
 /*
- * Parse HIDDescriptorList . This is a sequence of HIDDescriptors, of which
- * each is a data element sequence containing, minimally, a ClassDescriptorType
- * and ClassDescriptorData containing a byte array of data. Any extra elements
- * should be ignored.
+ * Parse [additional] protocol descriptor list for L2CAP PSM
  *
- * If a ClassDescriptorType "Report" is found, set SDP data value to the
- * ClassDescriptorData content and return true. Note that we don't need to
- * extract the actual length as the SDP data is guaranteed valid.
+ * seq8 len8				2
+ *	seq8 len8			2
+ *		uuid16 value16		3	L2CAP
+ *		uint16 value16		3	PSM
+ *	seq8 len8			2
+ *		uuid16 value16		3	HID Protocol
+ *				      ===
+ *				       15
  */
 
-static bool
-parse_hid_descriptor(sdp_data_t *value)
+static int32_t
+parse_l2cap_psm(sdp_attr_t *a)
 {
-	sdp_data_t list, desc;
-	uintmax_t type;
-	char *str;
-	size_t len;
+	uint8_t	*ptr = a->value;
+	uint8_t	*end = a->value + a->vlen;
+	int32_t	 type, len, uuid, psm;
 
-	if (!sdp_get_seq(value, &list))
-		return false;
+	if (end - ptr < 15)
+		return (-1);
 
-	while (sdp_get_seq(&list, &desc)) {
-		if (sdp_get_uint(&desc, &type)
-		    && type == UDESC_REPORT
-		    && sdp_get_str(&desc, &str, &len)) {
-			value->next = (uint8_t *)str;
-			value->end = (uint8_t *)(str + len);
-			return true;
+	if (a->attr == SDP_ATTR_ADDITIONAL_PROTOCOL_DESCRIPTOR_LISTS) {
+		SDP_GET8(type, ptr);
+		switch (type) {
+		case SDP_DATA_SEQ8:
+			SDP_GET8(len, ptr);
+			break;
+
+		case SDP_DATA_SEQ16:
+			SDP_GET16(len, ptr);
+			break;
+
+		case SDP_DATA_SEQ32:
+			SDP_GET32(len, ptr);
+			break;
+
+		default:
+			return (-1);
 		}
+		if (ptr + len > end)
+			return (-1);
 	}
 
-	return false;
-}
-
-static int32_t
-parse_boolean(sdp_data_t *value)
-{
-	bool bv;
-
-	if (!sdp_get_bool(value, &bv))
-		return -1;
-
-	return bv;
-}
-
-/*
- * The ProtocolDescriptorList attribute describes one or
- * more protocol stacks that may be used to gain access to
- * the service dscribed by the service record.
- *
- * If the ProtocolDescriptorList describes a single stack,
- * the attribute value takes the form of a data element
- * sequence in which each element of the sequence is a
- * protocol descriptor.
- *
- *	seq
- *	  <list>
- *
- * If it is possible for more than one kind of protocol
- * stack to be used to gain access to the service, the
- * ProtocolDescriptorList takes the form of a data element
- * alternative where each member is a data element sequence
- * consisting of a list of sequences describing each protocol
- *
- *	alt
- *	  seq
- *	    <list>
- *	  seq
- *	    <list>
- *
- * Each ProtocolDescriptorList is a list containing a sequence for
- * each protocol, where each sequence contains the protocol UUUID
- * and any protocol specific parameters.
- *
- *	seq
- *	  uuid		L2CAP
- *	  uint16	psm
- *	seq
- *	  uuid		RFCOMM
- *	  uint8		channel
- *
- * We want to extract the ProtocolSpecificParameter#1 for the
- * given protocol, which will be an unsigned int.
- */
-static int32_t
-parse_pdl_param(sdp_data_t *pdl, uint16_t proto)
-{
-	sdp_data_t seq;
-	uintmax_t param;
-
-	while (sdp_get_seq(pdl, &seq)) {
-		if (!sdp_match_uuid16(&seq, proto))
-			continue;
-
-		if (sdp_get_uint(&seq, &param))
-			return param;
-
+	SDP_GET8(type, ptr);
+	switch (type) {
+	case SDP_DATA_SEQ8:
+		SDP_GET8(len, ptr);
 		break;
+
+	case SDP_DATA_SEQ16:
+		SDP_GET16(len, ptr);
+		break;
+
+	case SDP_DATA_SEQ32:
+		SDP_GET32(len, ptr);
+		break;
+
+	default:
+		return (-1);
+	}
+	if (ptr + len > end)
+		return (-1);
+
+	/* Protocol */
+	SDP_GET8(type, ptr);
+	switch (type) {
+	case SDP_DATA_SEQ8:
+		SDP_GET8(len, ptr);
+		break;
+
+	case SDP_DATA_SEQ16:
+		SDP_GET16(len, ptr);
+		break;
+
+	case SDP_DATA_SEQ32:
+		SDP_GET32(len, ptr);
+		break;
+
+	default:
+		return (-1);
+	}
+	if (ptr + len > end)
+		return (-1);
+
+	/* UUID */
+	if (ptr + 3 > end)
+		return (-1);
+	SDP_GET8(type, ptr);
+	switch (type) {
+	case SDP_DATA_UUID16:
+		SDP_GET16(uuid, ptr);
+		if (uuid != SDP_UUID_PROTOCOL_L2CAP)
+			return (-1);
+		break;
+
+	case SDP_DATA_UUID32:  /* XXX FIXME can we have 32-bit UUID */
+	case SDP_DATA_UUID128: /* XXX FIXME can we have 128-bit UUID */
+	default:
+		return (-1);
 	}
 
-	return -1;
-}
+	/* PSM */
+	if (ptr + 3 > end)
+		return (-1);
+	SDP_GET8(type, ptr);
+	if (type != SDP_DATA_UINT16)
+		return (-1);
+	SDP_GET16(psm, ptr);
 
-static int32_t
-parse_pdl(sdp_data_t *value, uint16_t proto)
-{
-	sdp_data_t seq;
-	int32_t param = -1;
-
-	sdp_get_alt(value, value);	/* strip any alt header */
-
-	while (param == -1 && sdp_get_seq(value, &seq))
-		param = parse_pdl_param(&seq, proto);
-
-	return param;
+	return (psm);
 }
 
 /*
- * Parse AdditionalProtocolDescriptorList
+ * Parse HID descriptor string
+ *
+ * seq8 len8			2
+ *	seq8 len8		2
+ *		uint8 value8	2
+ *		str value	3
+ *			      ===
+ *			        9
+ */
+
+static int32_t
+parse_hid_descriptor(sdp_attr_t *a)
+{
+	uint8_t	*ptr = a->value;
+	uint8_t	*end = a->value + a->vlen;
+	int32_t	 type, len, descriptor_type;
+
+	if (end - ptr < 9)
+		return (-1);
+
+	SDP_GET8(type, ptr);
+	switch (type) {
+	case SDP_DATA_SEQ8:
+		SDP_GET8(len, ptr);
+		break;
+
+	case SDP_DATA_SEQ16:
+		SDP_GET16(len, ptr);
+		break;
+
+	case SDP_DATA_SEQ32:
+		SDP_GET32(len, ptr);
+		break;
+
+	default:
+		return (-1);
+	}
+	if (ptr + len > end)
+		return (-1);
+
+	while (ptr < end) {
+		/* Descriptor */
+		SDP_GET8(type, ptr);
+		switch (type) {
+		case SDP_DATA_SEQ8:
+			if (ptr + 1 > end)
+				return (-1);
+			SDP_GET8(len, ptr);
+			break;
+
+		case SDP_DATA_SEQ16:
+			if (ptr + 2 > end)
+				return (-1);
+			SDP_GET16(len, ptr);
+			break;
+
+		case SDP_DATA_SEQ32:
+			if (ptr + 4 > end)
+				return (-1);
+			SDP_GET32(len, ptr);
+			break;
+
+		default:
+			return (-1);
+		}
+
+		/* Descripor type */
+		if (ptr + 1 > end)
+			return (-1);
+		SDP_GET8(type, ptr);
+		if (type != SDP_DATA_UINT8 || ptr + 1 > end)
+			return (-1);
+		SDP_GET8(descriptor_type, ptr);
+
+		/* Descriptor value */
+		if (ptr + 1 > end)
+			return (-1);
+		SDP_GET8(type, ptr);
+		switch (type) {
+		case SDP_DATA_STR8:
+			if (ptr + 1 > end)
+				return (-1);
+			SDP_GET8(len, ptr);
+			break;
+
+		case SDP_DATA_STR16:
+			if (ptr + 2 > end)
+				return (-1);
+			SDP_GET16(len, ptr);
+			break;
+
+		case SDP_DATA_STR32:
+			if (ptr + 4 > end)
+				return (-1);
+			SDP_GET32(len, ptr);
+			break;
+
+		default:
+			return (-1);
+		}
+		if (ptr + len > end)
+			return (-1);
+
+		if (descriptor_type == UDESC_REPORT && len > 0) {
+			a->value = ptr;
+			a->vlen = len;
+
+			return (0);
+		}
+
+		ptr += len;
+	}
+
+	return (-1);
+}
+
+/*
+ * Parse boolean value
+ *
+ * bool8 int8
+ */
+
+static int32_t
+parse_boolean(sdp_attr_t *a)
+{
+	if (a->vlen != 2 || a->value[0] != SDP_DATA_BOOL)
+		return (-1);
+
+	return (a->value[1]);
+}
+
+/*
+ * Parse unsigned int value
+ *
+ * uint16 value16
  */
 static int32_t
-parse_apdl(sdp_data_t *value, uint16_t proto)
+parse_uint16(sdp_attr_t *a)
 {
-	sdp_data_t seq;
-	int32_t param = -1;
+	uint8_t	*ptr = a->value;
+	int32_t type, val;
 
-	sdp_get_seq(value, value);	/* strip seq header */
+	if (a->vlen < 3)
+		return (-1);
 
-	while (param == -1 && sdp_get_seq(value, &seq))
-		param = parse_pdl_param(&seq, proto);
+	SDP_GET8(type, ptr);
+	if (type != SDP_DATA_UINT16)
+		return (-1);
 
-	return param;
+	SDP_GET16(val, ptr);
+	return (val);
+}
+
+/*
+ * Parse protocol descriptor list for the RFCOMM channel
+ *
+ * seq8 len8				2
+ *	seq8 len8			2
+ *		uuid16 value16		3	L2CAP
+ *	seq8 len8			2
+ *		uuid16 value16		3	RFCOMM
+ *		uint8 value8		2	channel
+ *				      ===
+ *				       14
+ */
+
+static int32_t
+parse_rfcomm_channel(sdp_attr_t *a)
+{
+	uint8_t	*ptr = a->value;
+	uint8_t	*end = a->value + a->vlen;
+	int32_t	 type, len, uuid, channel;
+
+	if (end - ptr < 14)
+		return (-1);
+
+	SDP_GET8(type, ptr);
+	switch (type) {
+	case SDP_DATA_SEQ8:
+		SDP_GET8(len, ptr);
+		break;
+
+	case SDP_DATA_SEQ16:
+		SDP_GET16(len, ptr);
+		break;
+
+	case SDP_DATA_SEQ32:
+		SDP_GET32(len, ptr);
+		break;
+
+	default:
+		return (-1);
+	}
+	if (ptr + len > end)
+		return (-1);
+
+	/* Protocol */
+	SDP_GET8(type, ptr);
+	switch (type) {
+	case SDP_DATA_SEQ8:
+		SDP_GET8(len, ptr);
+		break;
+
+	case SDP_DATA_SEQ16:
+		SDP_GET16(len, ptr);
+		break;
+
+	case SDP_DATA_SEQ32:
+		SDP_GET32(len, ptr);
+		break;
+
+	default:
+		return (-1);
+	}
+	if (ptr + len > end)
+		return (-1);
+
+	/* UUID */
+	if (ptr + 3 > end)
+		return (-1);
+	SDP_GET8(type, ptr);
+	switch (type) {
+	case SDP_DATA_UUID16:
+		SDP_GET16(uuid, ptr);
+		if (uuid != SDP_UUID_PROTOCOL_L2CAP)
+			return (-1);
+		break;
+
+	case SDP_DATA_UUID32:  /* XXX FIXME can we have 32-bit UUID */
+	case SDP_DATA_UUID128: /* XXX FIXME can we have 128-bit UUID */
+	default:
+		return (-1);
+	}
+
+	/* Protocol */
+	SDP_GET8(type, ptr);
+	switch (type) {
+	case SDP_DATA_SEQ8:
+		SDP_GET8(len, ptr);
+		break;
+
+	case SDP_DATA_SEQ16:
+		SDP_GET16(len, ptr);
+		break;
+
+	case SDP_DATA_SEQ32:
+		SDP_GET32(len, ptr);
+		break;
+
+	default:
+		return (-1);
+	}
+	if (ptr + len > end)
+		return (-1);
+
+	/* UUID */
+	if (ptr + 3 > end)
+		return (-1);
+	SDP_GET8(type, ptr);
+	switch (type) {
+	case SDP_DATA_UUID16:
+		SDP_GET16(uuid, ptr);
+		if (uuid != SDP_UUID_PROTOCOL_RFCOMM)
+			return (-1);
+		break;
+
+	case SDP_DATA_UUID32:  /* XXX FIXME can we have 32-bit UUID */
+	case SDP_DATA_UUID128: /* XXX FIXME can we have 128-bit UUID */
+	default:
+		return (-1);
+	}
+
+	/* channel */
+	if (ptr + 2 > end)
+		return (-1);
+
+	SDP_GET8(type, ptr);
+	if (type != SDP_DATA_UINT8)
+		return (-1);
+
+	SDP_GET8(channel, ptr);
+
+	return (channel);
 }
 
 /*

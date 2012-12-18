@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2011/07/01 01:25:52 mrg Exp $
+#	$NetBSD: Makefile,v 1.3 2008/10/12 20:20:49 hubertf Exp $
 
 NOCHECKVER=	yes	# we want to install an older version ...
 MKLINKLIB=	no
@@ -7,6 +7,10 @@ MKLINKLIB=	no
 
 LIB=	Xaw6
 LIBOLD=	Xaw
+
+.if ${MKPIC} != "no"
+SYMLINKS+=	lib${LIB}.so.6 ${X11USRLIBDIR}/lib${LIBOLD}.so.6
+.endif
 
 .PATH:	${X11SRCDIR.Xaw}/src
 
@@ -19,9 +23,8 @@ SRCS=	Actions.c AllWidgets.c AsciiSink.c AsciiSrc.c AsciiText.c \
 	TextSrc.c TextTr.c Toggle.c Tree.c Vendor.c Viewport.c \
 	XawI18n.c XawIm.c XawInit.c
 
-CPPFLAGS+=	-DHAVE_WCHAR_H -DHAVE_WCTYPE_H -DNO_WIDEC_H -DOLDXAW \
-		-DHAVE_GETPAGESIZE \
-		-DHAVE_ISWALNUM -DPROJECT_ROOT=\"${X11ROOTDIR}\"
+CPPFLAGS+=	-DHAS_WCHAR_H -DHAS_WCTYPE_H -DNO_WIDEC_H -DOLDXAW \
+		-DHAVE_ISWALNUM
 
 LIBDPLIBS=\
 	Xmu	${.CURDIR}/../libXmu \
@@ -36,8 +39,3 @@ PKGDIST=	${LIBOLD}
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>
-
-# XXX
-.if defined(HAVE_GCC)
-COPTS.XawIm.c+= -Wno-error
-.endif

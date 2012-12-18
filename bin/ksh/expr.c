@@ -1,4 +1,4 @@
-/*	$NetBSD: expr.c,v 1.9 2011/10/16 17:12:11 joerg Exp $	*/
+/*	$NetBSD: expr.c,v 1.8 2005/06/26 19:09:00 christos Exp $	*/
 
 /*
  * Korn expression evaluation
@@ -9,7 +9,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: expr.c,v 1.9 2011/10/16 17:12:11 joerg Exp $");
+__RCSID("$NetBSD: expr.c,v 1.8 2005/06/26 19:09:00 christos Exp $");
 #endif
 
 
@@ -193,7 +193,7 @@ v_evaluate(vp, expr, error_ok)
 		if (i == LAEXPR) {
 			if (error_ok == KSH_RETURN_ERROR)
 				return 0;
-			errorf("%s", null);
+			errorf(null);
 		}
 		unwind(i);
 		/*NOTREACHED*/

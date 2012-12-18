@@ -1,4 +1,4 @@
-/*	$NetBSD: dir.c,v 1.53 2011/03/06 17:08:16 bouyer Exp $	*/
+/*	$NetBSD: dir.c,v 1.51 2008/07/08 08:14:37 simonb Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)dir.c	8.8 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: dir.c,v 1.53 2011/03/06 17:08:16 bouyer Exp $");
+__RCSID("$NetBSD: dir.c,v 1.51 2008/07/08 08:14:37 simonb Exp $");
 #endif
 #endif /* not lint */
 
@@ -198,7 +198,7 @@ dirscan(struct inodesc *idesc)
 	idesc->id_loc = 0;
 	for (dp = fsck_readdir(idesc); dp != NULL; dp = fsck_readdir(idesc)) {
 		dsize = iswap16(dp->d_reclen);
-		if (dsize > (int)sizeof dbuf)
+		if (dsize > sizeof dbuf)
 			dsize = sizeof dbuf;
 		memmove(dbuf, dp, (size_t)dsize);
 #		if (BYTE_ORDER == LITTLE_ENDIAN)
@@ -539,8 +539,6 @@ linkup(ino_t orphan, ino_t parentdir, char *name)
 		idesc.id_type = DATA;
 		idesc.id_func = findino;
 		idesc.id_number = ROOTINO;
-		idesc.id_uid = iswap32(DIP(dp, uid));
-		idesc.id_gid = iswap32(DIP(dp, gid));
 		if ((ckinode(dp, &idesc) & FOUND) != 0) {
 			lfdir = idesc.id_parent;
 		} else {
@@ -640,9 +638,7 @@ int
 changeino(ino_t dir, const char *name, ino_t newnum)
 {
 	struct inodesc idesc;
-	union dinode *dp;
 
-	dp = ginode(dir);
 	memset(&idesc, 0, sizeof(struct inodesc));
 	idesc.id_type = DATA;
 	idesc.id_func = chgino;
@@ -650,9 +646,7 @@ changeino(ino_t dir, const char *name, ino_t newnum)
 	idesc.id_fix = DONTKNOW;
 	idesc.id_name = name;
 	idesc.id_parent = newnum;	/* new value for name */
-	idesc.id_uid = iswap32(DIP(dp, uid));
-	idesc.id_gid = iswap32(DIP(dp, gid));
-	return (ckinode(dp, &idesc));
+	return (ckinode(ginode(dir), &idesc));
 }
 
 /*
@@ -668,7 +662,6 @@ makeentry(ino_t parent, ino_t ino, const char *name)
 	if (parent < ROOTINO || parent >= maxino ||
 	    ino < ROOTINO || ino >= maxino)
 		return (0);
-	dp = ginode(parent);
 	memset(&idesc, 0, sizeof(struct inodesc));
 	idesc.id_type = DATA;
 	idesc.id_func = mkentry;
@@ -676,8 +669,7 @@ makeentry(ino_t parent, ino_t ino, const char *name)
 	idesc.id_parent = ino;	/* this is the inode to enter */
 	idesc.id_fix = DONTKNOW;
 	idesc.id_name = name;
-	idesc.id_uid = iswap32(DIP(dp, uid));
-	idesc.id_gid = iswap32(DIP(dp, gid));
+	dp = ginode(parent);
 	if (iswap64(DIP(dp, size)) % dirblksiz) {
 		DIP_SET(dp, size,
 		    iswap64(roundup(iswap64(DIP(dp, size)), dirblksiz)));
@@ -689,8 +681,6 @@ makeentry(ino_t parent, ino_t ino, const char *name)
 	dp = ginode(parent);
 	if (expanddir(dp, pathbuf) == 0)
 		return (0);
-	update_uquot(idesc.id_number, idesc.id_uid, idesc.id_gid,
-	    btodb(sblock->fs_bsize), 0);
 	return (ckinode(dp, &idesc) & ALTERED);
 }
 
@@ -737,7 +727,7 @@ expanddir(union dinode *dp, char *name)
 		    btodb(sblock->fs_bsize));
 		dirblk = iswap32(dp1->di_db[lastbn + 1]);
 	}
-	bp = getdirblk(dirblk, sblksize(sblock, (daddr_t)DIP(dp, size), lastbn + 1));
+	bp = getdirblk(dirblk, sblksize(sblock, DIP(dp, size), lastbn + 1));
 	if (bp->b_errs)
 		goto bad;
 	memmove(firstblk, bp->b_un.b_buf, dirblksiz);
@@ -751,7 +741,7 @@ expanddir(union dinode *dp, char *name)
 	     cp += dirblksiz)
 		memmove(cp, &emptydir, sizeof emptydir);
 	dirty(bp);
-	bp = getdirblk(dirblk, sblksize(sblock, (daddr_t)DIP(dp, size), lastbn + 1));
+	bp = getdirblk(dirblk, sblksize(sblock, DIP(dp, size), lastbn + 1));
 	if (bp->b_errs)
 		goto bad;
 	memmove(bp->b_un.b_buf, &emptydir, sizeof emptydir);
@@ -799,7 +789,6 @@ allocdir(ino_t parent, ino_t request, int mode)
 	ino = allocino(request, IFDIR|mode);
 	if (ino < ROOTINO)
 		return 0;
-	update_uquot(ino, 0, 0, btodb(sblock->fs_fsize), 1);
 	dirhead.dot_reclen = iswap16(12);
 	dirhead.dotdot_reclen = iswap16(dirblksiz - 12);
 	odirhead.dot_reclen = iswap16(12);

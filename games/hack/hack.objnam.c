@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.objnam.c,v 1.11 2011/08/07 06:03:45 dholland Exp $	*/
+/*	$NetBSD: hack.objnam.c,v 1.7.10.1 2009/06/29 23:31:28 snj Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.objnam.c,v 1.11 2011/08/07 06:03:45 dholland Exp $");
+__RCSID("$NetBSD: hack.objnam.c,v 1.7.10.1 2009/06/29 23:31:28 snj Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -74,11 +74,9 @@ __RCSID("$NetBSD: hack.objnam.c,v 1.11 2011/08/07 06:03:45 dholland Exp $");
 #define	Strcpy	(void) strcpy
 #define	PREFIX	15
 
-static char *strprepend(char *, char *);
-static char *sitoa(int);
-
-static char *
-strprepend(char *s, char *pref)
+char           *
+strprepend(s, pref)
+	char           *s, *pref;
 {
 	int             i = strlen(pref);
 	if (i > PREFIX) {
@@ -90,8 +88,9 @@ strprepend(char *s, char *pref)
 	return (s);
 }
 
-static char *
-sitoa(int a)
+char           *
+sitoa(a)
+	int             a;
 {
 	static char     buf[13];
 	Snprintf(buf, sizeof(buf), (a < 0) ? "%d" : "+%d", a);
@@ -99,7 +98,8 @@ sitoa(int a)
 }
 
 char           *
-typename(int otyp)
+typename(otyp)
+	int             otyp;
 {
 	static char     buf[BUFSZ];
 	size_t bufpos;
@@ -166,7 +166,8 @@ typename(int otyp)
 }
 
 char           *
-xname(struct obj *obj)
+xname(obj)
+	struct obj     *obj;
 {
 	static char     bufr[BUFSZ];
 	/* caution: doname() and aobjnam() below "know" these sizes */
@@ -200,7 +201,7 @@ xname(struct obj *obj)
 			break;
 		}
 		/* fungis ? */
-		/* FALLTHROUGH */
+		/* fall into next case */
 	case WEAPON_SYM:
 		if (obj->otyp == WORM_TOOTH && pl) {
 			pl = 0;
@@ -212,7 +213,7 @@ xname(struct obj *obj)
 			Strcpy(buf, "crysknives");
 			break;
 		}
-		/* FALLTHROUGH */
+		/* fall into next case */
 	case ARMOR_SYM:
 	case CHAIN_SYM:
 	case ROCK_SYM:
@@ -337,7 +338,8 @@ nopl:
 }
 
 char           *
-doname(struct obj *obj)
+doname(obj)
+	struct obj     *obj;
 {
 	char            prefix[PREFIX];
 	char           *bp = xname(obj);
@@ -358,7 +360,7 @@ doname(struct obj *obj)
 	case ARMOR_SYM:
 		if (obj->owornmask & W_ARMOR)
 			strlcat(bp, " (being worn)", bpmax);
-		/* FALLTHROUGH */
+		/* fall into next case */
 	case WEAPON_SYM:
 		if (obj->known) {
 			strlcat(prefix, sitoa(obj->spe), sizeof(prefix));
@@ -403,7 +405,9 @@ setan(const char *str, char *buf, size_t bufmax)
 }
 
 char           *
-aobjnam(struct obj *otmp, const char *verb)
+aobjnam(otmp, verb)
+	struct obj     *otmp;
+	const char           *verb;
 {
 	char           *bp = xname(otmp);
 	char            prefix[PREFIX];
@@ -432,7 +436,8 @@ aobjnam(struct obj *otmp, const char *verb)
 }
 
 char           *
-Doname(struct obj *obj)
+Doname(obj)
+	struct obj     *obj;
 {
 	char           *s = doname(obj);
 
@@ -441,11 +446,12 @@ Doname(struct obj *obj)
 	return (s);
 }
 
-static const char *const wrp[] = {"wand", "ring", "potion", "scroll", "gem"};
-static const char wrpsym[] = {WAND_SYM, RING_SYM, POTION_SYM, SCROLL_SYM, GEM_SYM};
+const char *const wrp[] = {"wand", "ring", "potion", "scroll", "gem"};
+const char wrpsym[] = {WAND_SYM, RING_SYM, POTION_SYM, SCROLL_SYM, GEM_SYM};
 
 struct obj     *
-readobjnam(char *bp)
+readobjnam(bp)
+	char           *bp;
 {
 	char           *p;
 	unsigned        ii;

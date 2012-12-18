@@ -1,4 +1,4 @@
-/*	$NetBSD: pcib.c,v 1.16 2012/10/27 17:17:43 chs Exp $	*/
+/*	$NetBSD: pcib.c,v 1.9 2008/04/28 20:23:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -32,13 +32,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.16 2012/10/27 17:17:43 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.9 2008/04/28 20:23:15 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/isa/isavar.h>
 
@@ -49,16 +49,19 @@ __KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.16 2012/10/27 17:17:43 chs Exp $");
 
 #include "isadma.h"
 
-int	pcibmatch(device_t, cfdata_t, void *);
-void	pcibattach(device_t, device_t, void *);
+int	pcibmatch __P((struct device *, struct cfdata *, void *));
+void	pcibattach __P((struct device *, struct device *, void *));
 
-CFATTACH_DECL_NEW(pcib, 0,
+CFATTACH_DECL(pcib, sizeof(struct device),
     pcibmatch, pcibattach, NULL, NULL);
 
-void	pcib_callback(device_t);
+void	pcib_callback __P((struct device *));
 
 int
-pcibmatch(device_t parent, cfdata_t match, void *aux)
+pcibmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct pci_attach_args *pa = aux;
 
@@ -68,7 +71,7 @@ pcibmatch(device_t parent, cfdata_t match, void *aux)
 	switch (PCI_VENDOR(pa->pa_id)) {
 	case PCI_VENDOR_ALI:
 		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_ALI_M1533:
+		case PCI_PRODUCT_ALI_M1543:
 			return (1);
 		}
 		break;
@@ -78,7 +81,9 @@ pcibmatch(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-pcibattach(device_t parent, device_t self, void *aux)
+pcibattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct pci_attach_args *pa = aux;
 	char devinfo[256];
@@ -90,7 +95,7 @@ pcibattach(device_t parent, device_t self, void *aux)
 	 * callback.
 	 */
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	printf("%s: %s (rev. 0x%02x)\n", device_xname(self), devinfo,
+	printf("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
 	    PCI_REVISION(pa->pa_class));
 
 	/* Set the ISA bus callback */
@@ -98,7 +103,8 @@ pcibattach(device_t parent, device_t self, void *aux)
 }
 
 void
-pcib_callback(device_t self)
+pcib_callback(self)
+	struct device *self;
 {
 	struct isabus_attach_args iba;
 

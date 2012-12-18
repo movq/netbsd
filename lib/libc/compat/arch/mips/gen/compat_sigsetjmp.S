@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_sigsetjmp.S,v 1.2 2009/12/14 03:04:33 matt Exp $	*/
+/*	$NetBSD: compat_sigsetjmp.S,v 1.1 2005/09/17 11:49:39 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1995,
@@ -33,18 +33,18 @@
  */
 
 #include <sys/syscall.h>
+#include <mips/regnum.h>
 #include <mips/asm.h>
-#include <mips/regdef.h>
-
-#include "assym.h"
+#include <machine/setjmp.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
 	ASMSTR("from: @(#)setjmp.s	8.1 (Berkeley) 6/4/93")
-#else
-	ASMSTR("$NetBSD: compat_sigsetjmp.S,v 1.2 2009/12/14 03:04:33 matt Exp $")
-#endif
+	ASMSTR("$NetBSD: compat_sigsetjmp.S,v 1.1 2005/09/17 11:49:39 tsutsui Exp $")
 #endif /* LIBC_SCCS and not lint */
+
+#ifdef __ABICALLS__
+	.abicalls
+#endif
 
 /*
  * C library -- sigsetjmp, siglongjmp
@@ -59,25 +59,30 @@
  */
 
 LEAF(sigsetjmp)
-	SETUP_GP
-	SETUP_GP64(t0, sigsetjmp)
-	INT_S	a1, _OFFSETOF_SC_MASK13(a0)	# save "savemask"
+#ifdef __ABICALLS__
+	.set	noreorder
+	.cpload	t9
+	.set	reorder
+#endif
+	sw	a1, (_JBLEN*4)(a0)		# save "savemask"
 	bne	a1, 0x0, 1f			# do saving of signal mask?
-	PTR_LA	t9, _C_LABEL(_setjmp)
-	jr	t9
+	la	t9, _setjmp
+	jr t9
 
-1:	PTR_LA	t9, _C_LABEL(setjmp)
-	jr	t9
+1:	la	t9, setjmp
+	jr t9
 END(sigsetjmp)
 
 LEAF(siglongjmp)
-	SETUP_GP
-	SETUP_GP64(t0, siglongjmp)
-	INT_L	t1, _OFFSETOF_SC_MASK13(a0)	# get "savemask"
-	bne	t1, 0x0, 1f			# restore signal mask?
-	PTR_LA	t9, _C_LABEL(_longjmp)
+#ifdef __ABICALLS__
+	.set	noreorder
+	.cpload	t9
+	.set	reorder
+#endif
+	lw	t0, (_JBLEN * 4)(a0)		# get "savemask"
+	bne	t0, 0x0, 1f			# restore signal mask?
+	la	t9, _longjmp
 	jr	t9
-
-1:	PTR_LA	t9, _C_LABEL(longjmp)
+1:	la	t9, longjmp
 	jr	t9
 END(siglongjmp)

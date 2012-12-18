@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.11 2010/02/04 12:54:55 roy Exp $
+#	$NetBSD: Makefile,v 1.8 2006/09/24 07:59:59 xtraeme Exp $
 
 .include <bsd.own.mk>
 
@@ -11,7 +11,7 @@ SRCS=	button.c charproc.c charsets.c cursor.c data.c doublechr.c \
 CPPFLAGS+=	-I${X11SRCDIR.xc}/programs/xterm \
 		-I${DESTDIR}${X11INCDIR}/freetype2 \
 		-DSCROLLBAR_RIGHT -DOPT_WIDE_CHARS -DOPT_LUIT_PROG \
-		-DXRENDERFONT -DXFREE86_FT2 -DOPT_PASTE64 \
+		-DXRENDERFONT -DXFREE86_FT2 \
 		-DPROJECTROOT=${X11ROOTDIR}
 
 CPPFLAGS.main.c=-DUTMP -DUSE_TTY_GROUP ${X11FLAGS.VERSION}
@@ -22,9 +22,9 @@ BUILDSYMLINKS=	XTerm-col.ad XTerm-color.ad
 
 LDADD+=	-lXft -lfontconfig -lfreetype -lexpat -lXrender
 DPADD+=	${LIBXFT} ${LIBFONTCONFIG} ${LIBFREETYPE} ${LIBEXPAT} ${LIBXRENDER}
-LDADD+=	-lXaw -lXmu -lXt -lSM -lICE -lXpm -lXext -lX11 -lterminfo -lutil
+LDADD+=	-lXaw -lXmu -lXt -lSM -lICE -lXpm -lXext -lX11 -ltermcap -lutil
 DPADD+=	${LIBXAW} ${LIBXMU} ${LIBXT} ${LIBSM} ${LIBICE} \
-	${LIBXPM} ${LIBXEXT} ${LIBX11} ${LIBTERMINFO} ${LIBUTIL}
+	${LIBXPM} ${LIBXEXT} ${LIBX11} ${LIBTERMCAP} ${LIBUTIL}
 
 SUBDIR=	resize uxterm
 

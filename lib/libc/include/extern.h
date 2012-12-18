@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.21 2012/10/11 17:09:56 christos Exp $	*/
+/*	$NetBSD: extern.h,v 1.15 2007/12/04 17:45:07 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Christos Zoulas.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -24,15 +29,12 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdarg.h>
-#include <ucontext.h>
-
 __BEGIN_DECLS
 extern char *__minbrk;
 int __getcwd(char *, size_t);
 int __getlogin(char *, size_t);
 int __setlogin(const char *);
-void _resumecontext(void) __dead;
+void _resumecontext(void);
 const char *__strerror(int , char *, size_t);
 const char *__strsignal(int , char *, size_t);
 char *__dtoa(double, int, int, int *, int *, char **);
@@ -49,26 +51,17 @@ char *__hldtoa(long double, const char *, int, int *, int *,  char **);
 char *__ldtoa(long double *, int, int, int *, int *, char **);
 #endif
 
-#ifndef __LIBC12_SOURCE__
 struct syslog_data;
 void	syslog_ss(int, struct syslog_data *, const char *, ...)
-    __RENAME(__syslog_ss60) __printflike(3, 4);
-void    vsyslog_ss(int, struct syslog_data *, const char *, va_list) 
-    __RENAME(__vsyslog_ss60) __printflike(3, 0); 
-void	syslogp_ss(int, struct syslog_data *, const char *, const char *, 
-    const char *, ...) __RENAME(__syslogp_ss60) __printflike(5, 0);
-void	vsyslogp_ss(int, struct syslog_data *, const char *, const char *, 
-    const char *, va_list) __RENAME(__vsyslogp_ss60) __printflike(5, 0);
-#endif
+    __attribute__((__format__(__printf__,3,4)));
+void	vsyslog_ss(int, struct syslog_data *, const char *, _BSD_VA_LIST_);
 
 int	snprintf_ss(char * __restrict, size_t, const char * __restrict, ...)
-    __printflike(3, 4);
+    __attribute__((__format__(__printf__, 3, 4)));
 int	vsnprintf_ss(char * __restrict, size_t, const char * __restrict,
-    va_list) __printflike(3, 0);
+    _BSD_VA_LIST_) __attribute__((__format__(__printf__, 3, 0)));
 
 void	_malloc_prefork(void);
 void	_malloc_postfork(void);
-
-int	_sys_setcontext(const ucontext_t *);
 
 __END_DECLS

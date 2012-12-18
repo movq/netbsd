@@ -1,4 +1,4 @@
-/*	$NetBSD: siop_sgc.c,v 1.10 2012/05/23 16:11:37 skrll Exp $	*/
+/*	$NetBSD: siop_sgc.c,v 1.1 2008/03/30 12:32:13 skrll Exp $	*/
 
 /*	$OpenBSD: siop_sgc.c,v 1.1 2007/08/05 19:09:52 kettenis Exp $	*/
 
@@ -19,7 +19,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siop_sgc.c,v 1.10 2012/05/23 16:11:37 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siop_sgc.c,v 1.1 2008/03/30 12:32:13 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -28,7 +28,7 @@ __KERNEL_RCSID(0, "$NetBSD: siop_sgc.c,v 1.10 2012/05/23 16:11:37 skrll Exp $");
 #include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/iomod.h>
 
 #include <dev/scsipi/scsi_all.h>
@@ -40,20 +40,21 @@ __KERNEL_RCSID(0, "$NetBSD: siop_sgc.c,v 1.10 2012/05/23 16:11:37 skrll Exp $");
 #include <dev/ic/siopvar.h>
 
 #include <hp700/dev/cpudevs.h>
+#include <hp700/hp700/intr.h>
 
 #define IO_II_INTEN		0x20000000
 #define IO_II_PACKEN		0x10000000
 #define IO_II_PREFETCHEN	0x08000000
 
-int siop_sgc_match(device_t, cfdata_t, void *);
-void siop_sgc_attach(device_t, device_t, void *);
+int siop_sgc_match(struct device *, struct cfdata *, void *);
+void siop_sgc_attach(struct device *, struct device *, void *);
 int siop_sgc_intr(void *);
 void siop_sgc_reset(struct siop_common_softc *);
 
-uint8_t siop_sgc_r1(void *, bus_space_handle_t, bus_size_t);
-uint16_t siop_sgc_r2(void *, bus_space_handle_t, bus_size_t);
-void siop_sgc_w1(void *, bus_space_handle_t, bus_size_t, uint8_t);
-void siop_sgc_w2(void *, bus_space_handle_t, bus_size_t, uint16_t);
+u_int8_t siop_sgc_r1(void *, bus_space_handle_t, bus_size_t);
+u_int16_t siop_sgc_r2(void *, bus_space_handle_t, bus_size_t);
+void siop_sgc_w1(void *, bus_space_handle_t, bus_size_t, u_int8_t);
+void siop_sgc_w2(void *, bus_space_handle_t, bus_size_t, u_int16_t);
 
 struct siop_sgc_softc {
 	struct siop_softc sc_siop;
@@ -62,11 +63,11 @@ struct siop_sgc_softc {
 	struct hppa_bus_space_tag sc_bustag;
 };
 
-CFATTACH_DECL_NEW(siop_gedoens, sizeof(struct siop_sgc_softc),
+CFATTACH_DECL(siop_gedoens, sizeof(struct siop_sgc_softc),
     siop_sgc_match, siop_sgc_attach, NULL, NULL);
 
 int
-siop_sgc_match(device_t parent, cfdata_t match, void *aux)
+siop_sgc_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -74,29 +75,25 @@ siop_sgc_match(device_t parent, cfdata_t match, void *aux)
 	    ca->ca_type.iodc_sv_model != HPPA_ADMA_FWSCSI)
 		return 0;
 
+	/* Make sure we have an IRQ. */
+	if (ca->ca_irq == HP700CF_IRQ_UNDEF)
+		ca->ca_irq = hp700_intr_allocate_bit(&int_reg_cpu);
+
 	return 1;
 }
 
 void
-siop_sgc_attach(device_t parent, device_t self, void *aux)
+siop_sgc_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct siop_sgc_softc *sgc = device_private(self);
-	struct siop_softc *sc = &sgc->sc_siop;
+	struct siop_sgc_softc *sgc = (struct siop_sgc_softc *)self;
+        struct siop_softc *sc = &sgc->sc_siop;
 	struct confargs *ca = aux;
-	struct cpu_info *ci = &cpus[0];
 	volatile struct iomod *regs;
 
-	sc->sc_c.sc_dev = self;
 	sgc->sc_iot = ca->ca_iot;
 	if (bus_space_map(sgc->sc_iot, ca->ca_hpa,
 	    IOMOD_HPASIZE, 0, &sgc->sc_ioh)) {
-		aprint_error(": can't map io space\n");
-		return;
-	}
-
-	ca->ca_irq = hp700_intr_allocate_bit(&ci->ci_ir, ca->ca_irq);
-	if (ca->ca_irq == HP700CF_IRQ_UNDEF) {
-		aprint_error(": can't allocate interrupt\n");
+		printf(": cannot map io space\n");
 		return;
 	}
 
@@ -128,16 +125,16 @@ siop_sgc_attach(device_t parent, device_t self, void *aux)
 
 	siop_sgc_reset(&sc->sc_c);
 
-	regs->io_eim = ci->ci_hpa | (31 - ca->ca_irq);
+	regs->io_eim = cpu_gethpa(0) | (31 - ca->ca_irq);
 	regs->io_ii_rw |= IO_II_INTEN;
 
-	aprint_normal(": NCR53C720 rev %d\n", bus_space_read_1(sc->sc_c.sc_rt,
-	    sc->sc_c.sc_rh, SIOP_CTEST3) >> 4);
+        printf(": NCR53C720 rev %d\n", bus_space_read_1(sc->sc_c.sc_rt,
+            sc->sc_c.sc_rh, SIOP_CTEST3) >> 4);
 
-	siop_attach(&sgc->sc_siop);
+        siop_attach(&sgc->sc_siop);
 
-	(void)hp700_intr_establish(IPL_BIO, siop_intr, sc, &ci->ci_ir,
-	    ca->ca_irq);
+        (void)hp700_intr_establish(&sc->sc_c.sc_dev, IPL_BIO,
+            siop_intr, sc, &int_reg_cpu, ca->ca_irq);
 }
 
 void
@@ -151,33 +148,33 @@ siop_sgc_reset(struct siop_common_softc *sc)
 	    (0xc << STIME0_SEL_SHIFT));
 }
 
-uint8_t
+u_int8_t
 siop_sgc_r1(void *v, bus_space_handle_t h, bus_size_t o)
 {
-	return *(volatile uint8_t *)(h + (o ^ 3));
+	return *(volatile u_int8_t *)(h + (o ^ 3));
 }
 
-uint16_t
+u_int16_t
 siop_sgc_r2(void *v, bus_space_handle_t h, bus_size_t o)
 {
 	if (o == SIOP_SIST0) {
-		uint16_t reg;
+		u_int16_t reg;
 
 		reg = siop_sgc_r1(v, h, SIOP_SIST0);
 		reg |= siop_sgc_r1(v, h, SIOP_SIST1) << 8;
 		return reg;
 	}
-	return *(volatile uint16_t *)(h + (o ^ 2));
+	return *(volatile u_int16_t *)(h + (o ^ 2));
 }
 
 void
-siop_sgc_w1(void *v, bus_space_handle_t h, bus_size_t o, uint8_t vv)
+siop_sgc_w1(void *v, bus_space_handle_t h, bus_size_t o, u_int8_t vv)
 {
-	*(volatile uint8_t *)(h + (o ^ 3)) = vv;
+	*(volatile u_int8_t *)(h + (o ^ 3)) = vv;
 }
 
 void
-siop_sgc_w2(void *v, bus_space_handle_t h, bus_size_t o, uint16_t vv)
+siop_sgc_w2(void *v, bus_space_handle_t h, bus_size_t o, u_int16_t vv)
 {
-	*(volatile uint16_t *)(h + (o ^ 2)) = vv;
+	*(volatile u_int16_t *)(h + (o ^ 2)) = vv;
 }

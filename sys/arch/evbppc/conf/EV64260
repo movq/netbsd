@@ -1,4 +1,4 @@
-#	$NetBSD: EV64260,v 1.53 2012/10/17 14:48:11 apb Exp $
+#	$NetBSD: EV64260,v 1.36 2008/07/31 07:41:00 simonb Exp $
 #
 #	MVP -- Motorola's Multiprocessing Verification Platform
 #
@@ -13,25 +13,22 @@ maxusers	32
 #options 	UVMHIST
 #options 	UVMHIST_PRINT
 
-#options 	MULTIPROCESSOR		# Discovery II/III support
-
 # PowerPC options
 options		ALTIVEC
 #options 	CLOCKBASE=100000000	# EVB64260
 options 	CLOCKBASE=133000000	# EVB64260A
 
 # Marvell options
+options 	GT_MPP_INTERRUPTS=0x2c600000
+options 	GT_MPP_WATCHDOG=0x03000000
 options 	MPSC_CONSOLE=0
 options 	GT_MPSC_DEFAULT_BAUD_RATE=9600
+#options 	GT_BASE=0x14000000	# PMON low
+options 	GT_BASE=0xF8000000	# PPCBoot
 options 	GT_MPSC_FREQUENCY="(cpu_timebase*4)"
 options 	GT_MPSC_CLOCK_SOURCE="BRG_BCR_CLKS_TCLK"
-options 	GT_MPP_WATCHDOG=0x03000000
-options 	GT_DEVBUS
-#options 	GT_ECC
-options 	GT_COMM
-options 	GT_WATCHDOG
-
-# EV64260 options
+options 	PCI0_GPPINTS=0xffffff1b,PCI1_GPPINTS=0xffffff1d
+options 	PCI0_SKIPMASK="(~0x180)",PCI1_SKIPMASK="(~0x180)"
 options 	OBIO0_STRIDE=0,OBIO1_STRIDE=2,OBIO2_STRIDE=2,OBIO3_STRIDE=2
 
 # Options for necessary to use MD
@@ -47,6 +44,9 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V message queues
 options 	SYSVSEM		# System V semaphores
 options 	SYSVSHM		# System V shared memory
+#options 	SHMMAXPGS=1024	# 1024 pages is the default
+
+#options 	LKM		# loadable kernel modules
 
 #options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -57,7 +57,7 @@ options 	DIAGNOSTIC	# cheap kernel consistency checks
 #options 	DEBUG		# expensive debugging checks/support
 options 	DDB		# in-kernel debugger
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
-options 	SYMTAB_SPACE=330000	# size for embedded symbol table
+options 	SYMTAB_SPACE=300000	# size for embedded symbol table
 
 #makeoptions	DEFCOPTS="-g"	# compile full symbol table
 makeoptions	DEBUG="-g"
@@ -73,9 +73,7 @@ makeoptions	DEBUG="-g"
 options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0,
-options 	COMPAT_40	# NetBSD 4.0,
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -93,16 +91,17 @@ file-system 	MSDOSFS		# MS-DOS file system
 #file-system 	KERNFS		# /kern
 #file-system 	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
+#file-system 	PORTAL		# portal filesystem (still experimental)
 #file-system 	PROCFS		# /proc
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
 #file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# legacy UFS quotas
-#options 	QUOTA2		# new, in-filesystem UFS quotas
-#options 	FFS_EI		# FFS Endian Independent support
-options 	WAPBL		# File system journaling support
+#options 	QUOTA		# UFS quotas
+#options 	FFS_EI		# FFS Endian Independant support
+options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
@@ -132,6 +131,7 @@ options 	INET		# IP + ICMP + TCP + UDP
 #options 	IPFILTER_LOG	# ipmon(8) log support
 #options 	IPFILTER_LOOKUP	# ippool(8) support
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
+#options 	NMBCLUSTERS=1024
 
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!
@@ -145,7 +145,6 @@ options 	PCI_NETBSD_CONFIGURE	# Do not rely on BIOS/whatever to configure PCI de
 # wscons options
 #options 	WSEMUL_SUN		# sun terminal emulation
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	WSDISPLAY_DEFAULTSCREENS=1
 
 # Kernel root file system and dump configuration.
@@ -159,42 +158,40 @@ mainbus0	at root
 
 cpu*		at mainbus0
 
-# Discovery system controller
-#gt0	at mainbus0 addr 0x14000000	# PMON low
-gt0	at mainbus0 addr 0xf8000000	# PPCBoot
+gt0		at mainbus0		# Discovery system controller
 
 # PCI busses
-gtpci*	at gt? unit ?			# 64-bit, 66MHz
-pci*	at gtpci?
+gtpci0		at gt0 unit 0		# 64-bit, 66MHz
+gtpci1		at gt0 unit 1		# 64-bit, 66MHz
+
+pci*		at gtpci?
 
 # 16550s off CS2
-obio0	at gt0 unit 0			# Chip Select 0
-obio1	at gt0 unit 1			# Chip Select 1
-obio2	at gt0 unit 2			# Chip Select 2
-com0	at obio2 offset 0x0020 size 8 irq 85
-com1	at obio2 offset 0x0000 size 8 irq 86
-obio3	at gt0 unit 3			# Chip Select 3
-obio4	at gt0 unit 4			# Boot Chip Select
+obio0		at gt0 unit 0		# Chip Select 0
+obio1		at gt0 unit 1		# Chip Select 1
+obio2		at gt0 unit 2		# Chip Select 2
+com0		at obio2 offset 0x0020 size 8 irq 85
+com1		at obio2 offset 0x0000 size 8 irq 86
+obio3		at gt0 unit 3		# Chip Select 3
+obio4		at gt0 unit 4		# Boot Chip Select
 
 # UARTs
-gtmpsc*	at gt? offset ?			# Multi-Protocol Serial Controller
-					#   with Serial Direct Memory Access
+gtmpsc0 	at gt0 unit 0		# Serial #0
+gtmpsc1 	at gt0 unit 1		# Serial #1
 
 # Ethernet and PHY
-gfec*	at gt? offset ?			# Ethernet (RMMI)
-gfe*	at gfec? port ? irq ?		# Ethernet port #0/#1/#2
+gfe0		at gt0 unit 0 flags 1	# Ethernet #0 (RMMI)
+gfe1		at gt0 unit 1 flags 1	# Ethernet #1 (RMMI)
+gfe2		at gt0 unit 2 flags 1	# Ethernet #2 (RMMI)
 
 # I2C
-gttwsi*	at gt? offset ? irq ?		# Two-Wire Serial Interface
-iic*	at gttwsi?
-
-# DMA
-gtidmac* at gt? offset ? irq ?		# IDMA Controller
+gtiic0		at gt0 unit 0		# I2C controller
+iic*		at gtiic?
 
 # PCI devices
-pchb*	at pci? dev ? function ?	# PCI Host Bridge
-ppb*	at pci? dev ? function ?	# PCI-PCI Bridges
-pci*	at ppb? bus ?
+ppb*		at pci? dev ? function ?	# PCI-PCI bridges
+pci*		at ppb? bus ?
+#pcib*		at pci? dev ? function ?	# VIA 82C686B
 
 #ehci*	at pci?	dev ? function ?	# Enhanced Host Controller
 #ohci*	at pci?	dev ? function ?	# Open Host Controller
@@ -263,8 +260,8 @@ wd*		at atabus? drive ? flags 0x0000
 #pseudo-device	ccd		4	# concatenated/striped disk devices
 #pseudo-device	raid		4	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
-#pseudo-device	fss			# file system snapshot device
-pseudo-device	md			# memory disk device
+#pseudo-device	fss		4	# file system snapshot device
+pseudo-device	md		1	# memory disk device
 pseudo-device	loop			# network loopback
 pseudo-device	bpfilter		# packet filter
 #pseudo-device	ipfilter		# IP filter (firewall) and NAT
@@ -277,8 +274,7 @@ pseudo-device	bpfilter		# packet filter
 #pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 #pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	pty			# pseudo-terminals
+pseudo-device	rnd			# /dev/random and in-kernel generator
 #pseudo-device	wsmux			# ick
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
-pseudo-device	swdmover		# softare dmover(9) back-end
-pseudo-device	dmoverio		# /dev/dmover dmover(9) interface

@@ -1,4 +1,4 @@
-/*	$NetBSD: iq80310_intr.c,v 1.32 2012/10/03 16:51:44 chs Exp $	*/
+/*	$NetBSD: iq80310_intr.c,v 1.26 2008/04/27 18:58:46 matt Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iq80310_intr.c,v 1.32 2012/10/03 16:51:44 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iq80310_intr.c,v 1.26 2008/04/27 18:58:46 matt Exp $");
 
 #ifndef EVBARM_SPL_NOINLINE
 #define	EVBARM_SPL_NOINLINE
@@ -50,7 +50,9 @@ __KERNEL_RCSID(0, "$NetBSD: iq80310_intr.c,v 1.32 2012/10/03 16:51:44 chs Exp $"
 #include <sys/systm.h>
 #include <sys/malloc.h>
 
-#include <sys/bus.h>
+#include <uvm/uvm_extern.h>
+
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -74,7 +76,7 @@ volatile int iq80310_ipending;
 /* Software copy of the IRQs we have enabled. */
 uint32_t intr_enabled;
 
-#ifdef __HAVE_FAST_SOFTINTS
+#ifdef __HAVE_FAST_SOFTINTRS
 /*
  * Map a software interrupt queue index (at the top of the word, and
  * highest priority softintr is encountered first in an ffs()).
@@ -92,7 +94,7 @@ static const int si_to_ipl[SI_NQUEUES] = {
 };
 #endif
 
-void	iq80310_intr_dispatch(struct trapframe *frame);
+void	iq80310_intr_dispatch(struct irqframe *frame);
 
 static inline uint32_t
 iq80310_intstat_read(void)
@@ -247,7 +249,7 @@ iq80310_intr_calculate_masks(void)
 	}
 }
 
-#ifdef __HAVE_FAST_SOFTINTS
+#ifdef __HAVE_FAST_SOFTINTRS
 void
 iq80310_do_soft(void)
 {
@@ -281,7 +283,7 @@ iq80310_do_soft(void)
 
 	restore_interrupts(oldirqstate);
 }
-#endif	/* __HAVE_SOFT_FASTINTS */
+#endif	/* __HAVE_SOFT_FASTINTRS */
 
 int
 _splraise(int ipl)
@@ -304,7 +306,7 @@ _spllower(int ipl)
 	return (iq80310_spllower(ipl));
 }
 
-#ifdef __HAVE_FAST_SOFTINTS
+#ifdef __HAVE_FAST_SOFTINTRS
 void
 _setsoftintr(int si)
 {
@@ -338,6 +340,8 @@ iq80310_intr_init(void)
 		TAILQ_INIT(&iq->iq_list);
 
 		sprintf(iq->iq_name, "irq %d", i);
+		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
+		    NULL, "iq80310", iq->iq_name);
 	}
 
 	iq80310_intr_calculate_masks();
@@ -348,19 +352,6 @@ iq80310_intr_init(void)
 
 	/* Enable IRQs (don't yet use FIQs). */
 	enable_interrupts(I32_bit);
-}
-
-void
-iq80310_intr_evcnt_attach(void)
-{
-	struct intrq *iq;
-	int i;
-
-	for (i = 0; i < NIRQ; i++) {
-		iq = &intrq[i];
-		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
-		    NULL, "iq80310", iq->iq_name);
-	}
 }
 
 void *
@@ -415,7 +406,7 @@ iq80310_intr_disestablish(void *cookie)
 }
 
 void
-iq80310_intr_dispatch(struct trapframe *frame)
+iq80310_intr_dispatch(struct irqframe *frame)
 {
 	struct intrq *iq;
 	struct intrhand *ih;
@@ -452,7 +443,7 @@ iq80310_intr_dispatch(struct trapframe *frame)
 
 		iq = &intrq[irq];
 		iq->iq_ev.ev_count++;
-		ci->ci_data.cpu_nintr++;
+		uvmexp.intrs++;
 		ci->ci_cpl |= iq->iq_mask;
 		oldirqstate = enable_interrupts(I32_bit);
 		for (ih = TAILQ_FIRST(&iq->iq_list); ih != NULL;

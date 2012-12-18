@@ -1,4 +1,4 @@
-/*	$NetBSD: uhmodem.c,v 1.13 2011/12/23 00:51:46 jakllsch Exp $	*/
+/*	$NetBSD: uhmodem.c,v 1.7 2008/05/24 16:40:58 cube Exp $	*/
 
 /*
  * Copyright (c) 2008 Yojiro UO <yuo@nui.org>.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhmodem.c,v 1.13 2011/12/23 00:51:46 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhmodem.c,v 1.7 2008/05/24 16:40:58 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -112,7 +112,7 @@ __KERNEL_RCSID(0, "$NetBSD: uhmodem.c,v 1.13 2011/12/23 00:51:46 jakllsch Exp $"
 Static int	uhmodemdebug = 0;
 #define DPRINTFN(n, x)  do { \
 				if (uhmodemdebug > (n)) \
-					printf x; \
+					logprintf x; \
 			} while (0)
 #else
 #define DPRINTFN(n, x)
@@ -174,10 +174,9 @@ extern struct cfdriver uhmodem_cd;
 CFATTACH_DECL2_NEW(uhmodem, sizeof(struct uhmodem_softc), uhmodem_match,
     uhmodem_attach, uhmodem_detach, uhmodem_activate, NULL, uhmodem_childdet);
 
-int 
-uhmodem_match(device_t parent, cfdata_t match, void *aux)
+USB_MATCH(uhmodem)
 {
-	struct usbif_attach_arg *uaa = aux;
+	USB_IFMATCH_START(uhmodem, uaa);
 
 	if (uhmodem_lookup(uaa->vendor, uaa->product) != NULL)
 		/* XXX interface# 0,1 provide modem function, but this driver
@@ -187,11 +186,9 @@ uhmodem_match(device_t parent, cfdata_t match, void *aux)
 	return (UMATCH_NONE);
 }
 
-void 
-uhmodem_attach(device_t parent, device_t self, void *aux)
+USB_ATTACH(uhmodem)
 {
-	struct uhmodem_softc *sc = device_private(self);
-	struct usbif_attach_arg *uaa = aux;
+	USB_IFATTACH_START(uhmodem, sc, uaa);
 	usbd_device_handle dev = uaa->device;
 	usb_config_descriptor_t *cdesc;
 	usb_interface_descriptor_t *id;
@@ -203,10 +200,8 @@ uhmodem_attach(device_t parent, device_t self, void *aux)
 	int j;
 	char comname[16];
 
-	aprint_naive("\n");
-	aprint_normal("\n");
-
 	devinfop = usbd_devinfo_alloc(dev, 0);
+	USB_ATTACH_SETUP;
 	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
@@ -372,12 +367,12 @@ uhmodem_attach(device_t parent, device_t self, void *aux)
 	} /* end of Interface loop */
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_ubsa.sc_udev,
-			   sc->sc_ubsa.sc_dev);
+			   USBDEV(sc->sc_ubsa.sc_dev));
 
-	return;
+	USB_ATTACH_SUCCESS_RETURN;
 
 error:
-	return;
+	USB_ATTACH_ERROR_RETURN;
 }
 
 void
@@ -394,10 +389,9 @@ uhmodem_childdet(device_t self, device_t child)
 	sc->sc_ubsa.sc_subdevs[i] = NULL;
 }
 
-int 
-uhmodem_detach(device_t self, int flags)
+USB_DETACH(uhmodem)
 {
-	struct uhmodem_softc *sc = device_private(self);
+	USB_DETACH_START(uhmodem, sc);
 	int i;
 	int rv = 0;
 
@@ -417,7 +411,7 @@ uhmodem_detach(device_t self, int flags)
 	}
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_ubsa.sc_udev,
-			   sc->sc_ubsa.sc_dev);
+			   USBDEV(sc->sc_ubsa.sc_dev));
 
 	return (rv);
 }
@@ -426,14 +420,22 @@ int
 uhmodem_activate(device_t self, enum devact act)
 {
 	struct uhmodem_softc *sc = device_private(self);
+	int rv = 0;
+	int i;
 
 	switch (act) {
+	case DVACT_ACTIVATE:
+		return (EOPNOTSUPP);
+
 	case DVACT_DEACTIVATE:
+		for (i = 0; i < sc->sc_ubsa.sc_numif; i++) {
+			if (sc->sc_ubsa.sc_subdevs[i] != NULL)
+				rv |= config_deactivate(sc->sc_ubsa.sc_subdevs[i]);
+		}
 		sc->sc_ubsa.sc_dying = 1;
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		break;
 	}
+	return (rv);
 }
 
 Static int

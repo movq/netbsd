@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.9 2011/01/22 19:19:20 joerg Exp $	*/
+/*	$NetBSD: boot.c,v 1.5 2008/04/28 20:23:28 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -92,8 +92,8 @@ char *kernelnames[] = {
 };
 
 
-static char *devsplit(char *, char *);
-int main(int, char **);
+static char *devsplit __P((char *, char *));
+int main __P((int, char **));
 
 /*
  * This gets arguments from the first stage boot lader, calls PROM routines
@@ -101,7 +101,9 @@ int main(int, char **);
  * that new program.
  */
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	char *name, **namep, *dev, *kernel;
 	char bootname[PATH_MAX], bootpath[PATH_MAX];
@@ -109,8 +111,8 @@ main(int argc, char **argv)
 	u_long marks[MARK_MAX];
 	struct btinfo_symtab bi_syms;
 	struct btinfo_bootpath bi_bpath;
-	extern void prom_init(void);
-	void (*entry)(int, char **, char **, u_int, char *);
+	extern void prom_init __P((void));
+	void (*entry) __P((int, char **, char **, u_int, char *));
 
 	prom_init();
 
@@ -118,6 +120,7 @@ main(int argc, char **argv)
 	printf("\n");
 	printf("NetBSD/mipsco " NETBSD_VERS " " BOOT_TYPE_NAME 
 	       " Bootstrap, Revision %s\n", bootprog_rev);
+	printf("(%s, %s)\n\n", bootprog_maker, bootprog_date);
 
 	/* initialise bootinfo structure early */
 	bi_init(BOOTINFO_ADDR);
@@ -183,7 +186,8 @@ fail:
  * strip out device name and kernel name
  */
 static char *
-devsplit(char *fname, char *devname)
+devsplit(fname, devname)
+	char *fname, *devname;
 {
 	char *src, *dst;
 

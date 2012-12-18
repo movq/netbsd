@@ -26,15 +26,13 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGES.
  *
- * $Id: ah_osdep.c,v 1.6 2012/04/11 13:48:11 nakayama Exp $
+ * $Id: ah_osdep.c,v 1.2.4.3 2009/08/14 21:47:33 snj Exp $
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ah_osdep.c,v 1.6 2012/04/11 13:48:11 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ah_osdep.c,v 1.2.4.3 2009/08/14 21:47:33 snj Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_athhal.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +41,8 @@ __KERNEL_RCSID(0, "$NetBSD: ah_osdep.c,v 1.6 2012/04/11 13:48:11 nakayama Exp $"
 #include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/kauth.h>
-#include <sys/module.h>
+
+#include <machine/stdarg.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -53,10 +52,18 @@ __KERNEL_RCSID(0, "$NetBSD: ah_osdep.c,v 1.6 2012/04/11 13:48:11 nakayama Exp $"
 
 #include <external/isc/atheros_hal/dist/ah.h>
 
-extern	void ath_hal_printf(struct ath_hal *, const char*, ...)
-		__printflike(2,3);
-extern	void ath_hal_vprintf(struct ath_hal *, const char*, va_list)
-		__printflike(2, 0);
+#ifdef __mips__
+#include <sys/cpu.h>
+
+#define ENTER	lwp_t *savlwp = curlwp; curlwp = cpu_info_store.ci_curlwp;
+#define	EXIT	curlwp = savlwp;
+#else
+#define	ENTER	/* nothing */
+#define	EXIT	/* nothing */
+#endif
+
+extern	void ath_hal_printf(struct ath_hal *, const char*, ...);
+extern	void ath_hal_vprintf(struct ath_hal *, const char*, va_list);
 extern	const char* ath_hal_ether_sprintf(const u_int8_t *mac);
 extern	void *ath_hal_malloc(size_t);
 extern	void ath_hal_free(void *);
@@ -65,8 +72,8 @@ extern	void ath_hal_assert_failed(const char* filename,
 		int lineno, const char* msg);
 #endif
 #ifdef ATHHAL_DEBUG
-extern	void HALDEBUG(struct ath_hal *ah, u_int mask, const char* fmt, ...)
-	__printflike(3,4);
+extern	void HALDEBUG(struct ath_hal *ah, const char* fmt, ...);
+extern	void HALDEBUGn(struct ath_hal *ah, u_int level, const char* fmt, ...);
 #endif /* ATHHAL_DEBUG */
 
 #ifdef ATHHAL_DEBUG
@@ -139,45 +146,74 @@ MALLOC_DEFINE(M_ATH_HAL, "ath_hal", "ath hal data");
 void*
 ath_hal_malloc(size_t size)
 {
-	return malloc(size, M_ATH_HAL, M_NOWAIT | M_ZERO);
+	void *ret;
+	ENTER
+	ret = malloc(size, M_ATH_HAL, M_NOWAIT | M_ZERO);
+	EXIT
+	return ret;
 }
 
 void
 ath_hal_free(void* p)
 {
+	ENTER
 	free(p, M_ATH_HAL);
+	EXIT
 }
 
 void
 ath_hal_vprintf(struct ath_hal *ah, const char* fmt, va_list ap)
 {
+	ENTER
 	vprintf(fmt, ap);
+	EXIT
 }
 
 void
 ath_hal_printf(struct ath_hal *ah, const char* fmt, ...)
 {
 	va_list ap;
+	ENTER
 	va_start(ap, fmt);
 	ath_hal_vprintf(ah, fmt, ap);
 	va_end(ap);
+	EXIT
 }
 
 const char*
 ath_hal_ether_sprintf(const u_int8_t *mac)
 {
-	return ether_sprintf(mac);
+	const char *ret;
+	ENTER
+	ret = ether_sprintf(mac);
+	EXIT
+	return ret;
 }
 
 #ifdef ATHHAL_DEBUG
 void
-HALDEBUG(struct ath_hal *ah, u_int mask, const char* fmt, ...)
+HALDEBUG(struct ath_hal *ah, const char* fmt, ...)
 {
-	if (ath_hal_debug & mask) {
+	if (ath_hal_debug) {
 		va_list ap;
+		ENTER
 		va_start(ap, fmt);
 		ath_hal_vprintf(ah, fmt, ap);
 		va_end(ap);
+		EXIT
+	}
+}
+
+void
+HALDEBUGn(struct ath_hal *ah, u_int level, const char* fmt, ...)
+{
+	if (ath_hal_debug >= level) {
+		va_list ap;
+		ENTER
+		va_start(ap, fmt);
+		ath_hal_vprintf(ah, fmt, ap);
+		va_end(ap);
+		EXIT
 	}
 }
 #endif /* ATHHAL_DEBUG */
@@ -280,6 +316,7 @@ void
 ath_hal_reg_write(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
 {
 	bus_space_tag_t t = BUSTAG(ah);
+	ENTER
 
 	if (ath_hal_alq) {
 		struct ale *ale = ath_hal_alq_get(ah);
@@ -297,6 +334,8 @@ ath_hal_reg_write(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
 	else
 #endif
 		bus_space_write_stream_4(t, h, reg, val);
+
+	EXIT
 }
 
 u_int32_t
@@ -305,6 +344,7 @@ ath_hal_reg_read(struct ath_hal *ah, u_int32_t reg)
 	u_int32_t val;
 	bus_space_handle_t h = BUSHANDLE(ah);
 	bus_space_tag_t t = BUSTAG(ah);
+	ENTER
 
 #if _BYTE_ORDER == _BIG_ENDIAN
 	if (reg >= 0x4000 && reg < 0x5000)
@@ -324,6 +364,7 @@ ath_hal_reg_read(struct ath_hal *ah, u_int32_t reg)
 		}
 	}
 
+	EXIT
 	return val;
 }
 
@@ -332,7 +373,7 @@ OS_MARK(struct ath_hal *ah, u_int id, u_int32_t v)
 {
 	if (ath_hal_alq) {
 		struct ale *ale = ath_hal_alq_get(ah);
-
+		ENTER
 		if (ale) {
 			struct athregrec *r = (struct athregrec *) ale->ae_data;
 			r->op = OP_MARK;
@@ -340,6 +381,7 @@ OS_MARK(struct ath_hal *ah, u_int id, u_int32_t v)
 			r->val = v;
 			alq_post(ath_hal_alq, ale);
 		}
+		EXIT
 	}
 }
 #elif defined(ATHHAL_DEBUG) || defined(AH_REGOPS_FUNC)
@@ -359,6 +401,7 @@ ath_hal_reg_write(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
 {
 	bus_space_handle_t h = BUSHANDLE(ah);
 	bus_space_tag_t t = BUSTAG(ah);
+	ENTER
 
 #if _BYTE_ORDER == _BIG_ENDIAN
 	if (reg >= 0x4000 && reg < 0x5000)
@@ -366,6 +409,7 @@ ath_hal_reg_write(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
 	else
 #endif
 		bus_space_write_stream_4(t, h, reg, val);
+	EXIT
 }
 
 u_int32_t
@@ -374,6 +418,7 @@ ath_hal_reg_read(struct ath_hal *ah, u_int32_t reg)
 	bus_space_handle_t h = BUSHANDLE(ah);
 	bus_space_tag_t t = BUSTAG(ah);
 	uint32_t ret;
+	ENTER
 
 #if _BYTE_ORDER == _BIG_ENDIAN
 	if (reg >= 0x4000 && reg < 0x5000)
@@ -381,6 +426,7 @@ ath_hal_reg_read(struct ath_hal *ah, u_int32_t reg)
 	else
 #endif
 		ret = bus_space_read_stream_4(t, h, reg);
+	EXIT
 
 	return ret;
 }
@@ -390,6 +436,7 @@ ath_hal_reg_read(struct ath_hal *ah, u_int32_t reg)
 void
 ath_hal_assert_failed(const char* filename, int lineno, const char *msg)
 {
+	ENTER
 	printf("Atheros HAL assertion failure: %s: line %u: %s\n",
 		filename, lineno, msg);
 	panic("ath_hal_assert");
@@ -402,7 +449,9 @@ ath_hal_assert_failed(const char* filename, int lineno, const char *msg)
 void
 ath_hal_delay(int n)
 {
+	ENTER
 	DELAY(n);
+	EXIT
 }
 
 u_int32_t
@@ -410,34 +459,28 @@ ath_hal_getuptime(struct ath_hal *ah)
 {
 	struct bintime bt;
 	uint32_t ret;
+	ENTER
 	getbinuptime(&bt);
 	ret = (bt.sec * 1000) +
 		(((uint64_t)1000 * (uint32_t)(bt.frac >> 32)) >> 32);
+	EXIT
 	return ret;
 }
 
 void
 ath_hal_memzero(void *dst, size_t n)
 {
+	ENTER
 	(void)memset(dst, 0, n);
+	EXIT
 }
 
 void *
 ath_hal_memcpy(void *dst, const void *src, size_t n)
 {
-	return memcpy(dst, src, n);
-}
-
-MODULE(MODULE_CLASS_MISC, ath_hal, NULL);
-
-static int
-ath_hal_modcmd(modcmd_t cmd, void *opaque)
-{
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-	case MODULE_CMD_FINI:
-		return 0;
-	default:
-		return ENOTTY;
-	}
+	void *ret;
+	ENTER
+	ret = memcpy(dst, src, n);
+	EXIT
+	return ret;
 }

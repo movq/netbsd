@@ -1,14 +1,13 @@
-#	$NetBSD: bsd.hostprog.mk,v 1.67 2012/02/29 20:07:57 tron Exp $
+#	$NetBSD: bsd.hostprog.mk,v 1.53.2.1 2009/06/06 22:10:12 bouyer Exp $
 #	@(#)bsd.prog.mk	8.2 (Berkeley) 4/2/94
 
 .include <bsd.init.mk>
 .include <bsd.sys.mk>
 
 ##### Basic targets
+clean:		cleanprog
 
 ##### Default values
-LIBATF_C?=	/usr/lib/libatf-c.a
-LIBATF_CXX?=	/usr/lib/libatf-c++.a
 LIBBLUETOOTH?=	/usr/lib/libbluetooth.a
 LIBBZ2?=	/usr/lib/libbz2.a
 LIBC?=		/usr/lib/libc.a
@@ -21,7 +20,6 @@ LIBDBM?=	/usr/lib/libdbm.a
 LIBDES?=	/usr/lib/libdes.a
 LIBEDIT?=	/usr/lib/libedit.a
 LIBEVENT?=	/usr/lib/libevent.a
-LIBEXPAT?=	/usr/lib/libexpat.a
 LIBFETCH?=	/usr/lib/libfetch.a
 LIBFORM?=	/usr/lib/libform.a
 LIBGCC?=	/usr/lib/libgcc.a
@@ -30,7 +28,6 @@ LIBINTL?=	/usr/lib/libintl.a
 LIBIPSEC?=	/usr/lib/libipsec.a
 LIBKVM?=	/usr/lib/libkvm.a
 LIBL?=		/usr/lib/libl.a
-LIBLZMA?=	/usr/lib/liblzma.a
 LIBM?=		/usr/lib/libm.a
 LIBMAGIC?=	/usr/lib/libmagic.a
 LIBMENU?=	/usr/lib/libmenu.a
@@ -44,20 +41,16 @@ LIBPCI?=	/usr/lib/libpci.a
 LIBPLOT?=	/usr/lib/libplot.a
 LIBPOSIX?=	/usr/lib/libposix.a
 LIBPUFFS?=	/usr/lib/libpuffs.a
-LIBQUOTA?=	/usr/lib/libquota.a
 LIBRESOLV?=	/usr/lib/libresolv.a
 LIBRPCSVC?=	/usr/lib/librpcsvc.a
 LIBRUMP?=	/usr/lib/librump.a
-LIBRUMPCLIENT?=	/usr/lib/librumpclient.a
-LIBRUMPNET?=	/usr/lib/librumpnet.a
 LIBRUMPUSER?=	/usr/lib/librumpuser.a
-LIBRUMPVFS?=	/usr/lib/librumpvfs.a
+LIBSDP?=	/usr/lib/libsdp.a
 LIBSKEY?=	/usr/lib/libskey.a
-LIBSQLITE3?=	/usr/lib/libsqlite3.a
 LIBSSP?=	/usr/lib/libssp.a
 LIBSTDCXX?=	/usr/lib/libstdc++.a
 LIBSUPCXX?=	/usr/lib/libsupc++.a
-LIBTERMINFO?=	/usr/lib/libterminfo.a
+LIBTERMCAP?=	/usr/lib/libtermcap.a
 LIBUTIL?=	/usr/lib/libutil.a
 LIBWRAP?=	/usr/lib/libwrap.a
 LIBUKFS?=	/usr/lib/libukfs.a
@@ -123,11 +116,13 @@ MAN=	${HOSTPROG}.1
 
 realall: ${HOSTPROG}
 
-CLEANFILES+= a.out [Ee]rrs mklog core *.core ${HOSTPROG} ${OBJS} ${LOBJS}
+cleanprog: .PHONY
+	rm -f a.out [Ee]rrs mklog core *.core \
+	    ${HOSTPROG} ${OBJS} ${LOBJS} ${CLEANFILES}
 
 beforedepend:
 CFLAGS:=	${HOST_CFLAGS}
-CPPFLAGS:=	${HOST_CPPFLAGS:N-Wp,-iremap,*}
+CPPFLAGS:=	${HOST_CPPFLAGS}
 
 lint: ${LOBJS}
 .if defined(LOBJS) && !empty(LOBJS)
@@ -142,7 +137,6 @@ LINKSMODE?= ${BINMODE}
 .include <bsd.inc.mk>
 .include <bsd.links.mk>
 .include <bsd.dep.mk>
-.include <bsd.clean.mk>
 
 ${TARGETS}:	# ensure existence
 

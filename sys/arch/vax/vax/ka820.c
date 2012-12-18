@@ -1,4 +1,4 @@
-/*	$NetBSD: ka820.c,v 1.54 2011/06/05 16:59:21 matt Exp $	*/
+/*	$NetBSD: ka820.c,v 1.49 2008/03/11 05:34:03 matt Exp $	*/
 /*
  * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.
@@ -39,22 +39,28 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka820.c,v 1.54 2011/06/05 16:59:21 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka820.c,v 1.49 2008/03/11 05:34:03 matt Exp $");
 
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/bus.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
+#include <sys/time.h>
 #include <sys/kernel.h>
+#include <sys/device.h>
+#include <sys/systm.h>
+#include <sys/conf.h>
 #include <sys/proc.h>
+#include <sys/user.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/ka820.h>
+#include <machine/cpu.h>
+#include <machine/mtpr.h>
 #include <machine/nexus.h>
 #include <machine/clock.h>
 #include <machine/scb.h>
+#include <machine/bus.h>
 #include <machine/mainbus.h>
 
 #include <dev/cons.h>
@@ -77,8 +83,8 @@ static void ka820_attach(device_t, device_t, void*);
 static void ka820_memerr(void);
 static void ka820_conf(void);
 static int ka820_mchk(void *);
-static int ka820_gettime(struct timeval *);
-static void ka820_settime(struct timeval *);
+static int ka820_gettime(volatile struct timeval *);
+static void ka820_settime(volatile struct timeval *);
 static void rxcdintr(void *);
 static void vaxbierr(void *);
 
@@ -279,7 +285,7 @@ static int ms820_match(device_t, cfdata_t, void *);
 static void ms820_attach(device_t, device_t, void*);
 
 struct mem_bi_softc {
-	device_t sc_dev;
+	struct device *sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 };
@@ -345,8 +351,8 @@ static const char b2[] = "\20\40RDS\37HIERR\36CRD\35ADRS";
 			continue;
 		csr1 = MEMRD(MSREG_CSR1);
 		csr2 = MEMRD(MSREG_CSR2);
-		snprintb(sbuf, sizeof(sbuf), b1, csr1);
-		snprintb(sbuf2, sizeof(sbuf2), b2, csr2);
+		bitmask_snprintf(csr1, b1, sbuf, sizeof(sbuf));
+		bitmask_snprintf(csr2, b2, sbuf2, sizeof(sbuf2));
 		aprint_error_dev(sc->sc_dev, "csr1=%s csr2=%s\n", sbuf, sbuf2);
 		if ((csr1 & MS1_ERRSUM) == 0)
 			continue;
@@ -475,7 +481,7 @@ rxchar(void)
 #endif
 
 int
-ka820_gettime(struct timeval *tvp)
+ka820_gettime(volatile struct timeval *tvp)
 {
 	struct clock_ymdhms c;
 	int s;
@@ -507,7 +513,7 @@ ka820_gettime(struct timeval *tvp)
 }
 
 void
-ka820_settime(struct timeval *tvp)
+ka820_settime(volatile struct timeval *tvp)
 {
 	struct clock_ymdhms c;
 
@@ -529,7 +535,6 @@ ka820_settime(struct timeval *tvp)
 static void
 ka820_startslave(struct cpu_info *ci)
 {
-	const struct pcb *pcb = lwp_getpcb(ci->ci_data.cpu_onproc);
 	const int id = ci->ci_slotid;
 	int i;
 
@@ -543,7 +548,8 @@ ka820_startslave(struct cpu_info *ci)
 	ka820_txrx(id, "D/I 4 %x\r", ci->ci_istack);	/* Interrupt stack */
 	ka820_txrx(id, "D/I C %x\r", mfpr(PR_SBR));	/* SBR */
 	ka820_txrx(id, "D/I D %x\r", mfpr(PR_SLR));	/* SLR */
-	ka820_txrx(id, "D/I 10 %x\r", pcb->pcb_paddr);	/* PCB for idle proc */
+	ka820_txrx(id, "D/I 10 %x\r",			/* PCB for idle proc */
+	    ci->ci_data.cpu_onproc->l_addr->u_pcb.pcb_paddr);
 	ka820_txrx(id, "D/I 11 %x\r", mfpr(PR_SCBB));	/* SCB */
 	ka820_txrx(id, "D/I 38 %x\r", mfpr(PR_MAPEN));	/* Enable MM */
 	ka820_txrx(id, "S %x\r", (int)&vax_mp_tramp);	/* Start! */

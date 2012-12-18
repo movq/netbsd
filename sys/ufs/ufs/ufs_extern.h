@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_extern.h,v 1.72 2012/05/09 00:21:18 riastradh Exp $	*/
+/*	$NetBSD: ufs_extern.h,v 1.60.8.1 2012/05/19 17:28:29 riz Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -49,9 +49,7 @@ struct mbuf;
 struct mount;
 struct nameidata;
 struct lwp;
-struct ufid;
 struct ufs_args;
-struct ufs_lookup_results;
 struct ufsmount;
 struct uio;
 struct vattr;
@@ -126,41 +124,15 @@ void	ufs_dirbad(struct inode *, doff_t, const char *);
 int	ufs_dirbadentry(struct vnode *, struct direct *, int);
 void	ufs_makedirentry(struct inode *, struct componentname *,
 			 struct direct *);
-int	ufs_direnter(struct vnode *, const struct ufs_lookup_results *,
-		     struct vnode *, struct direct *,
+int	ufs_direnter(struct vnode *, const struct ufs_lookup_results *, struct vnode *, struct direct *,
 		     struct componentname *, struct buf *);
-int	ufs_dirremove(struct vnode *, const struct ufs_lookup_results *,
-		      struct inode *, int, int);
-int	ufs_dirrewrite(struct inode *, off_t,
-		       struct inode *, ino_t, int, int, int);
+int	ufs_dirremove(struct vnode *, const struct ufs_lookup_results *, struct inode *, int, int);
+int	ufs_dirrewrite(struct inode *, off_t, struct inode *, ino_t, int, int, int);
 int	ufs_dirempty(struct inode *, ino_t, kauth_cred_t);
 int	ufs_checkpath(struct inode *, struct inode *, kauth_cred_t);
 int	ufs_parentcheck(struct vnode *, struct vnode *, kauth_cred_t,
 			int *, struct vnode **);
 int	ufs_blkatoff(struct vnode *, off_t, char **, struct buf **, bool);
-
-/* ufs_rename.c -- for lfs */
-bool	ufs_gro_directory_empty_p(struct mount *, kauth_cred_t,
-	    struct vnode *, struct vnode *);
-int	ufs_gro_rename_check_possible(struct mount *,
-	    struct vnode *, struct vnode *, struct vnode *, struct vnode *);
-int	ufs_gro_rename_check_permitted(struct mount *, kauth_cred_t,
-	    struct vnode *, struct vnode *, struct vnode *, struct vnode *);
-int	ufs_gro_remove_check_possible(struct mount *,
-	    struct vnode *, struct vnode *);
-int	ufs_gro_remove_check_permitted(struct mount *, kauth_cred_t,
-	    struct vnode *, struct vnode *);
-int	ufs_gro_rename(struct mount *, kauth_cred_t,
-	    struct vnode *, struct componentname *, void *, struct vnode *,
-	    struct vnode *, struct componentname *, void *, struct vnode *);
-int	ufs_gro_remove(struct mount *, kauth_cred_t,
-	    struct vnode *, struct componentname *, void *, struct vnode *);
-int	ufs_gro_lookup(struct mount *, struct vnode *,
-	    struct componentname *, void *, struct vnode **);
-int	ufs_gro_genealogy(struct mount *, kauth_cred_t,
-	    struct vnode *, struct vnode *, struct vnode **);
-int	ufs_gro_lock_directory(struct mount *, struct vnode *);
-
 
 /* ufs_quota.c */
 /*
@@ -169,18 +141,15 @@ int	ufs_gro_lock_directory(struct mount *, struct vnode *);
 #define	FORCE	0x01	/* force usage changes independent of limits */
 void	ufsquota_init(struct inode *);
 void	ufsquota_free(struct inode *);
+int	getinoquota(struct inode *);
 int	chkdq(struct inode *, int64_t, kauth_cred_t, int);
 int	chkiq(struct inode *, int32_t, kauth_cred_t, int);
-int	quota_handle_cmd(struct mount *, struct lwp *,
-			 struct quotactl_args *);
-
+int	quotaon(struct lwp *, struct mount *, int, void *);
+int	quotaoff(struct lwp *, struct mount *, int);
+int	getquota(struct mount *, u_long, int, void *);
+int	setquota(struct mount *, u_long, int, void *);
+int	setuse(struct mount *, u_long, int, void *);
 int	qsync(struct mount *);
-
-/* ufs_quota1.c */
-int	quota1_umount(struct mount *, int);
-
-/* ufs_quota2.c */
-int	quota2_umount(struct mount *, int);
 
 /* ufs_vfsops.c */
 void	ufs_init(void);
@@ -188,14 +157,14 @@ void	ufs_reinit(void);
 void	ufs_done(void);
 int	ufs_start(struct mount *, int);
 int	ufs_root(struct mount *, struct vnode **);
-int	ufs_quotactl(struct mount *, struct quotactl_args *);
+int	ufs_quotactl(struct mount *, int, uid_t, void *);
 int	ufs_fhtovp(struct mount *, struct ufid *, struct vnode **);
 
 /* ufs_vnops.c */
 void	ufs_vinit(struct mount *, int (**)(void *),
 		  int (**)(void *), struct vnode **);
-int	ufs_makeinode(int, struct vnode *, const struct ufs_lookup_results *,
-		      struct vnode **, struct componentname *);
+int	ufs_makeinode(int, struct vnode *, const struct ufs_lookup_results *, struct vnode **,
+		      struct componentname *);
 int	ufs_gop_alloc(struct vnode *, off_t, off_t, int, kauth_cred_t);
 void	ufs_gop_markupdate(struct vnode *, int);
 
@@ -205,9 +174,22 @@ void	ufs_gop_markupdate(struct vnode *, int);
 
 void	ffs_snapgone(struct inode *);
 
+/*
+ * Soft dependency function prototypes.
+ */
+int   softdep_setup_directory_add(struct buf *, struct inode *, off_t,
+				  ino_t, struct buf *, int);
+void  softdep_change_directoryentry_offset(struct inode *, void *,
+					   void *, void *, int);
+void  softdep_setup_remove(struct buf *, struct inode *, struct inode *, int);
+void  softdep_setup_directory_change(struct buf *, struct inode *,
+				     struct inode *, ino_t, int);
+void  softdep_change_linkcnt(struct inode *);
+void  softdep_releasefile(struct inode *);
+void  softdep_pace_dirrem(void);
+
 __END_DECLS
 
 extern kmutex_t ufs_ihash_lock;
-extern kmutex_t ufs_hashlock;
 
 #endif /* !_UFS_UFS_EXTERN_H_ */

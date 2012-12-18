@@ -1,4 +1,4 @@
-/*	$NetBSD: console.c,v 1.43 2012/10/13 17:58:54 jdc Exp $	*/
+/*	$NetBSD: console.c,v 1.36 2007/04/12 13:10:59 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -28,16 +28,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.43 2012/10/13 17:58:54 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.36 2007/04/12 13:10:59 jmcneill Exp $");
 
 #include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/termios.h>
-#include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/machtype.h>
 
 #include <dev/cons.h>
@@ -54,7 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: console.c,v 1.43 2012/10/13 17:58:54 jdc Exp $");
 #include <sgimips/mace/macereg.h>
 
 #include "com.h"
-#include "scn.h"
 #include "zsc.h"
 #include "gio.h"
 #include "pckbc.h"
@@ -66,7 +64,6 @@ __KERNEL_RCSID(0, "$NetBSD: console.c,v 1.43 2012/10/13 17:58:54 jdc Exp $");
 #endif
 int comcnmode = CONMODE;
 
-extern struct consdev scn_cn;
 extern struct consdev zs_cn;
 
 extern void	zs_kgdb_init(void);
@@ -76,18 +73,17 @@ extern int	crmfb_probe(void);
 #endif
 
 void		kgdb_port_init(void);
-static int	scn_serial_init(const char *);
 static int	zs_serial_init(const char *);
 static int	gio_video_init(const char *);
 static int	mace_serial_init(const char *);
 
 void
-consinit(void)
+consinit()
 {
 	const char *consdev;
 	
 	/* Ask ARCS what it is using for console output. */
-	consdev = arcbios_GetEnvironmentVariable("ConsoleOut");
+	consdev = ARCBIOS->GetEnvironmentVariable("ConsoleOut");
 
 	if (consdev == NULL) {
 		printf("WARNING: ConsoleOut environment variable not set\n");
@@ -95,11 +91,6 @@ consinit(void)
 	}
 
 	switch (mach_type) {
-	case MACH_SGI_IP6 | MACH_SGI_IP10:
-		if (scn_serial_init(consdev))
-			return;
-		break;
-
 	case MACH_SGI_IP12:
 	case MACH_SGI_IP20:
 	case MACH_SGI_IP22:
@@ -117,7 +108,7 @@ consinit(void)
 			/* XXX Hardcoded iotag, MACE address XXX */
 			pckbc_cnattach(SGIMIPS_BUS_SPACE_NORMAL,
 			    MACE_BASE + 0x320000, 8,
-			    PCKBC_KBD_SLOT, 0);
+			    PCKBC_KBD_SLOT);
 #endif
 #endif
 			return;
@@ -133,22 +124,6 @@ consinit(void)
 	}
 
 	printf("Using ARCS for console I/O.\n");
-}
-
-static int
-scn_serial_init(const char *consdev)
-{
-#if (NSCN > 0)
-	if ((strlen(consdev) == 9) && (!strncmp(consdev, "serial", 6)) &&
-	    (consdev[7] == '0' || consdev[7] == '1')) {
-		cn_tab = &scn_cn;
-		(*cn_tab->cn_init)(cn_tab);
-			
-		return (1);
-	}
-#endif
-	
-	return (0);
 }
 
 static int
@@ -194,7 +169,7 @@ gio_video_init(const char *consdev)
 			pckbc_cnattach(SGIMIPS_BUS_SPACE_HPC,
 			    HPC_BASE_ADDRESS_0 +
 			    HPC3_PBUS_CH6_DEVREGS + IOC_KB_REGS, KBCMDP,
-			    PCKBC_KBD_SLOT, 0);
+			    PCKBC_KBD_SLOT);
 #endif
 			break;
 		}
@@ -217,7 +192,7 @@ mace_serial_init(const char *consdev)
 	if ((strlen(consdev) == 9) && (!strncmp(consdev, "serial", 6)) &&
 	    (consdev[7] == '0' || consdev[7] == '1')) {
 		/* Get comm speed from ARCS */
-		dbaud = arcbios_GetEnvironmentVariable("dbaud");
+		dbaud = ARCBIOS->GetEnvironmentVariable("dbaud");
 		speed = strtoul(dbaud, NULL, 10);
 		base = (consdev[7] == '0') ? MACE_ISA_SER1_BASE :
 		    MACE_ISA_SER2_BASE;
@@ -225,7 +200,7 @@ mace_serial_init(const char *consdev)
 		delay(10000);
 
 		/* XXX: hardcoded MACE iotag */
-		if (comcnattach(SGIMIPS_BUS_SPACE_MACE, MIPS_PHYS_TO_KSEG1(MACE_BASE + base),
+		if (comcnattach(3, MIPS_PHYS_TO_KSEG1(MACE_BASE + base),
 		    speed, COM_FREQ, COM_TYPE_NORMAL, comcnmode) == 0)
 			return (1);
 	}
@@ -236,12 +211,12 @@ mace_serial_init(const char *consdev)
 
 #if defined(KGDB)
 void
-kgdb_port_init(void)
+kgdb_port_init()
 {
 # if (NCOM > 0)
 #  define KGDB_DEVMODE ((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB)) | CS8)
 	if (mach_type == MACH_SGI_IP32)
-		com_kgdb_attach(SGIMIPS_BUS_SPACE_MACE, 0xbf398000, 9600, COM_FREQ, COM_TYPE_NORMAL,
+		com_kgdb_attach(3, 0xbf398000, 9600, COM_FREQ, COM_TYPE_NORMAL,
 		    KGDB_DEVMODE);
 # endif	/* (NCOM > 0) */
 

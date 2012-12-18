@@ -1,4 +1,4 @@
-/*	$NetBSD: mkfifo.c,v 1.13 2011/09/04 20:30:34 joerg Exp $	*/
+/*	$NetBSD: mkfifo.c,v 1.12 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1990, 1993\
 #if 0
 static char sccsid[] = "@(#)mkfifo.c	8.2 (Berkeley) 1/5/94";
 #endif
-__RCSID("$NetBSD: mkfifo.c,v 1.13 2011/09/04 20:30:34 joerg Exp $");
+__RCSID("$NetBSD: mkfifo.c,v 1.12 2008/07/21 14:19:24 lukem Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -52,10 +52,13 @@ __RCSID("$NetBSD: mkfifo.c,v 1.13 2011/09/04 20:30:34 joerg Exp $");
 #include <unistd.h>
 #include <err.h>
 
-__dead static void usage(void);
+int	main __P((int, char **));
+static void usage __P((void));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	int ch, exitval;
 	void *set;
@@ -99,8 +102,8 @@ main(int argc, char *argv[])
 	exit(exitval);
 }
 
-static void
-usage(void)
+void
+usage()
 {
 	(void)fprintf(stderr, "usage: mkfifo [-m mode] fifoname ...\n");
 	exit(1);

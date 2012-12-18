@@ -1,4 +1,4 @@
-/* $NetBSD: rm.c,v 1.52 2012/06/13 07:35:37 dholland Exp $ */
+/* $NetBSD: rm.c,v 1.48.4.1 2012/06/15 09:08:03 sborrill Exp $ */
 
 /*-
  * Copyright (c) 1990, 1993, 1994, 2003
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)rm.c	8.8 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: rm.c,v 1.52 2012/06/13 07:35:37 dholland Exp $");
+__RCSID("$NetBSD: rm.c,v 1.48.4.1 2012/06/15 09:08:03 sborrill Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,22 +54,20 @@ __RCSID("$NetBSD: rm.c,v 1.52 2012/06/13 07:35:37 dholland Exp $");
 #include <grp.h>
 #include <locale.h>
 #include <pwd.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-static int dflag, eval, fflag, iflag, Pflag, stdin_ok, vflag, Wflag;
-static sig_atomic_t pinfo;
+int dflag, eval, fflag, iflag, Pflag, stdin_ok, vflag, Wflag;
 
-static int	check(char *, char *, struct stat *);
-static void	checkdot(char **);
-static void	progress(int);
-static void	rm_file(char **);
-static int	rm_overwrite(char *, struct stat *);
-static void	rm_tree(char **);
-__dead static void	usage(void);
+int	check(char *, char *, struct stat *);
+void	checkdot(char **);
+void	rm_file(char **);
+int	rm_overwrite(char *, struct stat *);
+void	rm_tree(char **);
+void	usage(void);
+int	main(int, char *[]);
 
 /*
  * For the sake of the `-f' flag, check whether an error number indicates the
@@ -134,8 +132,6 @@ main(int argc, char *argv[])
 		usage();
 	}
 
-	(void)signal(SIGINFO, progress);
-
 	checkdot(argv);
 
 	if (*argv) {
@@ -151,7 +147,7 @@ main(int argc, char *argv[])
 	/* NOTREACHED */
 }
 
-static void
+void
 rm_tree(char **argv)
 {
 	FTS *fts;
@@ -257,17 +253,15 @@ rm_tree(char **argv)
 		if (rval != 0) {
 			warn("%s", p->fts_path);
 			eval = 1;
-		} else if (vflag || pinfo) {
-			pinfo = 0;
+		} else if (vflag)
 			(void)printf("%s\n", p->fts_path);
-		}
 	}
 	if (errno)
 		err(1, "fts_read");
 	fts_close(fts);
 }
 
-static void
+void
 rm_file(char **argv)
 {
 	struct stat sb;
@@ -377,7 +371,7 @@ rm_file(char **argv)
  * rm_overwrite will return 0 on success.
  */
 
-static int
+int
 rm_overwrite(char *file, struct stat *sbp)
 {
 	struct stat sb, sb2;
@@ -412,7 +406,7 @@ rm_overwrite(char *file, struct stat *sbp)
 
 #define	WRITE_PASS(mode, byte) do {					\
 	off_t len;							\
-	size_t wlen, i;							\
+	int wlen, i;							\
 	char buf[8 * 1024];						\
 									\
 	if (fsync(fd) || lseek(fd, (off_t)0, SEEK_SET))			\
@@ -426,8 +420,8 @@ rm_overwrite(char *file, struct stat *sbp)
 			    i+= sizeof(u_int32_t))			\
 				*(int *)(buf + i) = arc4random();	\
 		}							\
-		wlen = len < (off_t)sizeof(buf) ? (size_t)len : sizeof(buf); \
-		if ((size_t)write(fd, buf, wlen) != wlen)		\
+		wlen = len < sizeof(buf) ? len : sizeof(buf);		\
+		if (write(fd, buf, wlen) != wlen)			\
 			goto err;					\
 	}								\
 	sync();		/* another poke at hidden caches */		\
@@ -435,7 +429,7 @@ rm_overwrite(char *file, struct stat *sbp)
 
 #define READ_PASS(byte) do {						\
 	off_t len;							\
-	size_t rlen;							\
+	int rlen;							\
 	char pattern[8 * 1024];						\
 	char buf[8 * 1024];						\
 									\
@@ -444,8 +438,8 @@ rm_overwrite(char *file, struct stat *sbp)
 									\
 	memset(pattern, byte, sizeof(pattern));				\
 	for(len = sbp->st_size; len > 0; len -= rlen) {			\
-		rlen = len < (off_t)sizeof(buf) ? (size_t)len : sizeof(buf); \
-		if((size_t)read(fd, buf, rlen) != rlen)			\
+		rlen = len < sizeof(buf) ? len : sizeof(buf);		\
+		if(read(fd, buf, rlen) != rlen)				\
 			goto err;					\
 		if(memcmp(buf, pattern, rlen))				\
 			goto err;					\
@@ -508,7 +502,7 @@ err:	eval = 1;
 	return 1;
 }
 
-static int
+int
 check(char *path, char *name, struct stat *sp)
 {
 	int ch, first;
@@ -556,7 +550,7 @@ check(char *path, char *name, struct stat *sp)
  * trailing slashes have been removed, we'll remove them here.
  */
 #define ISDOT(a) ((a)[0] == '.' && (!(a)[1] || ((a)[1] == '.' && !(a)[2])))
-static void
+void
 checkdot(char **argv)
 {
 	char *p, **save, **t;
@@ -587,7 +581,7 @@ checkdot(char **argv)
 	}
 }
 
-static void
+void
 usage(void)
 {
 
@@ -595,11 +589,4 @@ usage(void)
 	    getprogname());
 	exit(1);
 	/* NOTREACHED */
-}
-
-static void
-progress(int sig __unused)
-{
-	
-	pinfo++;
 }

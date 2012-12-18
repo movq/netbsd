@@ -1,4 +1,4 @@
-/*	$NetBSD: comp.c,v 1.13 2009/05/25 23:44:04 dholland Exp $	*/
+/*	$NetBSD: comp.c,v 1.10 2006/03/19 00:29:27 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1993
@@ -34,26 +34,26 @@
 #if 0
 static char sccsid[] = "@(#)comp.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: comp.c,v 1.13 2009/05/25 23:44:04 dholland Exp $");
+__RCSID("$NetBSD: comp.c,v 1.10 2006/03/19 00:29:27 christos Exp $");
 #endif
 #endif /* not lint */
 
-#include "mille.h"
+# include	"mille.h"
 
 /*
  * @(#)comp.c	1.1 (Berkeley) 4/1/82
  */
 
-#define V_VALUABLE	40
+# define	V_VALUABLE	40
 
 void
-calcmove(void)
+calcmove()
 {
 	CARD		card;
 	int		*value;
 	PLAY		*pp, *op;
 	bool		foundend, cango, canstop, foundlow;
-	unsigned int	i, count200, badcount, nummin, nummax, diff;
+	unsgn int	i, count200, badcount, nummin, nummax, diff;
 	int		curmin, curmax;
 	CARD		safe, oppos;
 	int		valbuf[HAND_SZ], count[NUM_CARDS];
@@ -401,7 +401,8 @@ play_it:
  * Return true if the given player could conceivably win with his next card.
  */
 int
-onecard(const PLAY *pp)
+onecard(pp)
+	const PLAY	*pp;
 {
 	CARD	bat, spd, card;
 
@@ -433,7 +434,9 @@ onecard(const PLAY *pp)
 }
 
 int
-canplay(const PLAY *pp, const PLAY *op, CARD card)
+canplay(pp, op, card)
+	const PLAY	*pp, *op;
+	CARD	card;
 {
 	switch (card) {
 	  case C_200:

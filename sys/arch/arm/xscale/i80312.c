@@ -1,4 +1,4 @@
-/*	$NetBSD: i80312.c,v 1.23 2012/10/14 14:20:57 msaitoh Exp $	*/
+/*	$NetBSD: i80312.c,v 1.19 2006/02/25 02:28:56 wiz Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -40,14 +40,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i80312.c,v 1.23 2012/10/14 14:20:57 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i80312.c,v 1.19 2006/02/25 02:28:56 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #define	_ARM32_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/xscale/i80312reg.h>
 #include <arm/xscale/i80312var.h>
@@ -109,17 +109,17 @@ i80312_attach(struct i80312_softc *sc)
 	if (bus_space_subregion(sc->sc_st, sc->sc_sh, I80312_PPB_BASE,
 	    I80312_PPB_SIZE, &sc->sc_ppb_sh))
 		panic("%s: unable to subregion PPB registers",
-		    device_xname(sc->sc_dev));
+		    sc->sc_dev.dv_xname);
 
 	if (bus_space_subregion(sc->sc_st, sc->sc_sh, I80312_ATU_BASE,
 	    I80312_ATU_SIZE, &sc->sc_atu_sh))
 		panic("%s: unable to subregion ATU registers",
-		    device_xname(sc->sc_dev));
+		    sc->sc_dev.dv_xname);
 
 	if (bus_space_subregion(sc->sc_st, sc->sc_sh, I80312_INTC_BASE,
 	    I80312_INTC_SIZE, &sc->sc_intc_sh))
 		panic("%s: unable to subregion INTC registers",
-		    device_xname(sc->sc_dev));
+		    sc->sc_dev.dv_xname);
 
 	/* We expect the Memory Controller to be already sliced off. */
 
@@ -159,10 +159,10 @@ i80312_attach(struct i80312_softc *sc)
 		    sc->sc_sder);
 	} else if (sc->sc_privmem_size || sc->sc_privio_size) {
 		printf("%s: WARNING: privmem_size 0x%08x privio_size 0x%08x\n",
-		    device_xname(sc->sc_dev), sc->sc_privmem_size,
+		    sc->sc_dev.dv_xname, sc->sc_privmem_size,
 		    sc->sc_privio_size);
 		printf("%s: private bus spaces not enabled\n",
-		    device_xname(sc->sc_dev));
+		    sc->sc_dev.dv_xname);
 	}
 
 	/*
@@ -296,7 +296,7 @@ i80312_attach(struct i80312_softc *sc)
 		ia.ia_offset = id->id_offset;
 		ia.ia_size = id->id_size;
 
-		(void) config_found_ia(sc->sc_dev, "iopxs", &ia, i80312_iopxs_print);
+		(void) config_found_ia(&sc->sc_dev, "iopxs", &ia, i80312_iopxs_print);
 	}
 
 	/*
@@ -317,9 +317,9 @@ i80312_attach(struct i80312_softc *sc)
 	pba.pba_intrswiz = 3;
 	pba.pba_intrtag = 0;
 	/* XXX MRL/MRM/MWI seem to have problems, at the moment. */
-	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY /* |
+	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED /* |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY */;
-	(void) config_found_ia(sc->sc_dev, "pcibus", &pba, pcibusprint);
+	(void) config_found_ia(&sc->sc_dev, "pcibus", &pba, pcibusprint);
 }
 
 /*
@@ -368,9 +368,6 @@ i80312_pci_dma_init(struct i80312_softc *sc)
 	dmat->_dmamem_map = _bus_dmamem_map;
 	dmat->_dmamem_unmap = _bus_dmamem_unmap;
 	dmat->_dmamem_mmap = _bus_dmamem_mmap;
-
-	dmat->_dmatag_subregion = _bus_dmatag_subregion;
-	dmat->_dmatag_destroy = _bus_dmatag_destroy;
 }
 
 /*

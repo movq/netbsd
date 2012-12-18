@@ -1,4 +1,4 @@
-/*      $NetBSD: ipaq_pcic.c,v 1.21 2011/07/26 22:52:48 dyoung Exp $        */
+/*      $NetBSD: ipaq_pcic.c,v 1.18 2008/04/28 20:23:21 martin Exp $        */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipaq_pcic.c,v 1.21 2011/07/26 22:52:48 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipaq_pcic.c,v 1.18 2008/04/28 20:23:21 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,8 +41,8 @@ __KERNEL_RCSID(0, "$NetBSD: ipaq_pcic.c,v 1.21 2011/07/26 22:52:48 dyoung Exp $"
 #include <sys/kernel.h>
 #include <sys/kthread.h>
 #include <sys/malloc.h>
-#include <sys/bus.h>
 
+#include <machine/bus.h>
 #include <dev/pcmcia/pcmciachip.h>
 #include <dev/pcmcia/pcmciavar.h>
 
@@ -56,8 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: ipaq_pcic.c,v 1.21 2011/07/26 22:52:48 dyoung Exp $"
 
 #include "ipaqpcic.h"
 
-static	int	ipaqpcic_match(device_t, cfdata_t, void *);
-static	void	ipaqpcic_attach(device_t, device_t, void *);
+static	int	ipaqpcic_match(struct device *, struct cfdata *, void *);
+static	void	ipaqpcic_attach(struct device *, struct device *, void *);
 static	int	ipaqpcic_print(void *, const char *);
 
 static	int	ipaqpcic_read(struct sapcic_socket *, int);
@@ -86,29 +86,28 @@ static struct sapcic_tag ipaqpcic_functions = {
 	ipaqpcic_intr_disestablish
 };
 
-CFATTACH_DECL_NEW(ipaqpcic, sizeof(struct ipaqpcic_softc),
+CFATTACH_DECL(ipaqpcic, sizeof(struct ipaqpcic_softc),
     ipaqpcic_match, ipaqpcic_attach, NULL, NULL);
 
 static int
-ipaqpcic_match(device_t parent, cfdata_t cf, void *aux)
+ipaqpcic_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	return (1);
 }
 
 static void
-ipaqpcic_attach(device_t parent, device_t self, void *aux)
+ipaqpcic_attach(struct device *parent, struct device *self, void *aux)
 {
 	int i;
 	struct pcmciabus_attach_args paa;
-	struct ipaqpcic_softc *sc = device_private(self);
-	struct ipaq_softc *psc = device_private(parent);
+	struct ipaqpcic_softc *sc = (struct ipaqpcic_softc *)self;
+	struct ipaq_softc *psc = (struct ipaq_softc *)parent;
 
-	aprint_normal("\n");
+	printf("\n");
 
-	sc->sc_pc.sc_dev = self;
 	sc->sc_pc.sc_iot = psc->sc_iot;
 	sc->sc_ioh = psc->sc_ioh;
-	sc->sc_parent = psc;
+	sc->sc_parent = (struct ipaq_softc *)parent;
 
 	ipaqpcic_init(sc);
 
@@ -125,9 +124,11 @@ ipaqpcic_attach(device_t parent, device_t self, void *aux)
 		paa.paa_busname = "pcmcia";
 		paa.pct = (pcmcia_chipset_tag_t)&sa11x0_pcmcia_functions;
 		paa.pch = (pcmcia_chipset_handle_t)&sc->sc_socket[i];
+		paa.iobase = 0;
+		paa.iosize = 0x4000000;
 
 		sc->sc_socket[i].pcmcia =
-		    config_found_ia(sc->sc_pc.sc_dev, "pcmciabus",
+		    config_found_ia(&sc->sc_pc.sc_dev, "pcmciabus",
 		    &paa, ipaqpcic_print);
 
 		sa11x0_intr_establish((sa11x0_chipset_tag_t)psc,

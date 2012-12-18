@@ -1,4 +1,4 @@
-/*	$NetBSD: hpcapm_machdep.c,v 1.5 2011/03/16 13:23:41 tsutsui Exp $	*/
+/*	$NetBSD: hpcapm_machdep.c,v 1.2 2005/12/11 12:17:33 christos Exp $	*/
 
 /*
  * Copyright (c) 2000 Takemura Shin
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpcapm_machdep.c,v 1.5 2011/03/16 13:23:41 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpcapm_machdep.c,v 1.2 2005/12/11 12:17:33 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -56,7 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: hpcapm_machdep.c,v 1.5 2011/03/16 13:23:41 tsutsui E
 #endif
 
 void
-machine_standby(void)
+machine_standby()
 {
 #if NVRIP_COMMON > 0
 	if (platid_match(&platid, &platid_mask_CPU_MIPS_VR_41XX)) {
@@ -64,7 +64,7 @@ machine_standby(void)
 		 * disable all interrupts except PIU interrupt
 		 */
 		vrip_intr_suspend();
-		vrip_splpiu();
+		_spllower(~MIPS_INT_MASK_0);
 
 		/*
 		 * STANDBY instruction puts the CPU into power saveing
@@ -88,38 +88,38 @@ machine_standby(void)
 }
 
 void
-machine_sleep(void)
+machine_sleep()
 {
 #if NVRIP_COMMON > 0
-	if (platid_match(&platid, &platid_mask_CPU_MIPS_VR_41XX)) {
-		/*
-		 * disable all interrupts except PIU interrupt
-		 */
-		vrip_intr_suspend();
-		vrip_splpiu();
+	 if (platid_match(&platid, &platid_mask_CPU_MIPS_VR_41XX)) {
+		 /*
+		  * disable all interrupts except PIU interrupt
+		  */
+		 vrip_intr_suspend();
+		 _spllower(~MIPS_INT_MASK_0);
 
-		/*
-		 * SUSPEND instruction puts the CPU into power saveing
-		 * state until some interrupt occuer.
-		 * It sleeps until you push the power button.
-		 */
-		__asm(".set noreorder");
-		__asm(".word	" ___STRING(VR_OPCODE_SUSPEND));
-		__asm("nop");
-		__asm("nop");
-		__asm("nop");
-		__asm("nop");
-		__asm("nop");
-		__asm(".set reorder");
+		 /*
+		  * SUSPEND instruction puts the CPU into power saveing
+		  * state until some interrupt occuer.
+		  * It sleeps until you push the power button.
+		  */
+		 __asm(".set noreorder");
+		 __asm(".word	" ___STRING(VR_OPCODE_SUSPEND));
+		 __asm("nop");
+		 __asm("nop");
+		 __asm("nop");
+		 __asm("nop");
+		 __asm("nop");
+		 __asm(".set reorder");
 
-		splhigh();
-		vrip_intr_resume();
-		delay(1000); /* 1msec */
-	}
+		 splhigh();
+		 vrip_intr_resume();
+		 delay(1000); /* 1msec */
+	 }
 #endif /* NVRIP_COMMON > 0 */
 #ifdef TX39XX
-	if (platid_match(&platid, &platid_mask_CPU_MIPS_TX)) {
-		tx39power_suspend_cpu();
-	}
+	 if (platid_match(&platid, &platid_mask_CPU_MIPS_TX)) {
+		 tx39power_suspend_cpu();
+	 }
 #endif
 }

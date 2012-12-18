@@ -1,11 +1,11 @@
-# $NetBSD: Makefile,v 1.5 2009/05/12 21:50:38 plunky Exp $
+# $NetBSD: Makefile,v 1.2 2008/08/18 08:25:32 plunky Exp $
 #
 
 PROG=	btpand
 MAN=	btpand.8
-SRCS=	btpand.c bnep.c channel.c client.c packet.c server.c tap.c
+SRCS=	btpand.c bnep.c channel.c client.c packet.c server.c sdp.c tap.c
 
-DPADD+=	${LIBBLUETOOTH} ${LIBEVENT} ${LIBUTIL}
-LDADD+=	-lbluetooth -levent -lutil
+DPADD+=	${LIBBLUETOOTH} ${LIBSDP} ${LIBEVENT} ${LIBUTIL}
+LDADD+=	-lbluetooth -lsdp -levent -lutil
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: mime_detach.c,v 1.8 2012/04/29 23:50:22 christos Exp $	*/
+/*	$NetBSD: mime_detach.c,v 1.3 2008/04/28 20:24:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #ifndef __lint__
-__RCSID("$NetBSD: mime_detach.c,v 1.8 2012/04/29 23:50:22 christos Exp $");
+__RCSID("$NetBSD: mime_detach.c,v 1.3 2008/04/28 20:24:14 martin Exp $");
 #endif /* not __lint__ */
 
 #include <assert.h>
@@ -54,7 +54,6 @@ __RCSID("$NetBSD: mime_detach.c,v 1.8 2012/04/29 23:50:22 christos Exp $");
 #include "mime_codecs.h"
 #include "mime_detach.h"
 #endif
-#include "sig.h"
 
 
 static struct {
@@ -96,12 +95,8 @@ detach_get_fname(char *prompt, char *pathname)
 {
 	if (!detach_ctl.batch) {
 		char *fname;
-
 		fname = my_gets(&elm.filec, prompt, pathname);
-		if (fname == NULL)	/* ignore this attachment */
-			return NULL;
-		(void)strip_WSP(fname);
-		fname = skip_WSP(fname);
+		fname = skip_WSP(fname); /* XXX - do this? */
 		if (*fname == '\0')	/* ignore this attachment */
 			return NULL;
 		pathname = savestr(fname);	/* save this or it gets trashed */
@@ -125,29 +120,24 @@ detach_open_core(char *fname, const char *partstr)
 
 	flags = (detach_ctl.overwrite ? 0 : O_EXCL) | O_CREAT | O_TRUNC | O_WRONLY;
 
-	if ((fd = open(fname, flags | O_CLOEXEC, 0600)) != -1 &&
-	    Fdopen(fd, "we") != NULL)
+	if ((fd = open(fname, flags, 0600)) != -1 &&
+	    Fdopen(fd, "w") != NULL)
 		return DETACH_OPEN_OK;
 
 	if (detach_ctl.ask && fd == -1 && errno == EEXIST) {
 		char *p;
  start:
-		(void)sasprintf(&p, "%-7s overwrite %s: Always/Never/once/next/rename (ANonr)[n]? ",
+		(void)sasprintf(&p, "%-7s overwrite: Always/Never/once/next/rename (ANonr)[n]? ",
 		    partstr, fname);
 		p = my_gets(&elm.string, p, NULL);
-		if (p == NULL)
-			goto start;
-
-		(void)strip_WSP(p);
 		p = skip_WSP(p);
-
 		switch (*p) {
 		case 'A':	detach_ctl.overwrite = 1;
 				detach_ctl.batch = 1;
 				detach_ctl.ask = 0;
 				/* FALLTHROUGH */
 		case 'o':
-			if (Fopen(fname, "we") != NULL)
+			if (Fopen(fname, "w") != NULL)
 				return DETACH_OPEN_OK;
 			break;
 
@@ -166,7 +156,7 @@ detach_open_core(char *fname, const char *partstr)
 			return DETACH_RENAME;
 		}
 	}
-	warn("%s", fname);
+	warn(fname);
 	if (fd != -1)
 		(void)close(fd);
 
@@ -178,36 +168,26 @@ detach_open_target(struct mime_info *mip)
 {
 	char *pathname;
 	char *prompt;
-	const char *partstr;
-	const char *subtype;
-
-	/*
-	 * XXX: If partstr == NULL, we probably shouldn't be detaching
-	 * anything, but let's be liberal and try to do something with
-	 * the block anyway.
-	 */
-	partstr = mip->mi_partstr && mip->mi_partstr[0] ? mip->mi_partstr : "0";
-	subtype = mip->mi_subtype ? mip->mi_subtype : "unknown";
 
 	/*
 	 * Get the suggested target pathname.
 	 */
 	if (mip->mi_filename != NULL)
-		(void)sasprintf(&pathname, "%s/%s", mip->mi_detachdir,
-		    mip->mi_filename);
+		(void)sasprintf(&pathname, "%s/%s", mip->mi_detachdir, mip->mi_filename);
 	else {
 		if (mip->mi_detachall == 0)
 			return NULL;
 
 		(void)sasprintf(&pathname, "%s/msg-%s.part-%s.%s",
 		    mip->mi_detachdir, mip->mi_msgstr,
-		    partstr, subtype);
+		    mip->mi_partstr[0] ? mip->mi_partstr : "0",
+		    mip->mi_subtype ? mip->mi_subtype : "unknown");
 	}
 
 	/*
 	 * Make up the prompt
 	 */
-	(void)sasprintf(&prompt, "%-7s filename: ", partstr);
+	(void)sasprintf(&prompt, "%-7s filename: ", mip->mi_partstr);
 
 	/*
 	 * The main loop.
@@ -228,7 +208,7 @@ detach_open_target(struct mime_info *mip)
 				return NULL;
 			continue;
 		}
-		switch (detach_open_core(fname, partstr)) {
+		switch (detach_open_core(fname, mip->mi_partstr)) {
 		case DETACH_OPEN_OK:
 			return fname;
 		case DETACH_NEXT:

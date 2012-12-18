@@ -1,4 +1,4 @@
-/*	$NetBSD: l2cap_upper.c,v 1.11 2010/01/04 19:20:05 plunky Exp $	*/
+/*	$NetBSD: l2cap_upper.c,v 1.9 2008/08/06 15:01:24 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: l2cap_upper.c,v 1.11 2010/01/04 19:20:05 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: l2cap_upper.c,v 1.9 2008/08/06 15:01:24 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -109,9 +109,6 @@ l2cap_attach(struct l2cap_channel **handle,
 int
 l2cap_bind(struct l2cap_channel *chan, struct sockaddr_bt *addr)
 {
-
-	if (chan->lc_lcid != L2CAP_NULL_CID)
-		return EINVAL;
 
 	memcpy(&chan->lc_laddr, addr, sizeof(struct sockaddr_bt));
 	return 0;
@@ -299,10 +296,8 @@ l2cap_detach(struct l2cap_channel **handle)
  *
  *		proto->newconn(upper, laddr, raddr)
  *
- *	for incoming connections matching the psm and local address of
- *	the channel. NULL address is permitted and matches any device.
- *	If L2CAP_PSM_ANY is bound the next higher unused value from the
- *	dynamic range (above 0x1001) will be selected.
+ *	for incoming connections matching the psm and local address of the
+ *	channel (NULL psm/address are permitted and match any protocol/device).
  *
  *	The upper layer should create and return a new channel.
  *
@@ -312,31 +307,13 @@ int
 l2cap_listen(struct l2cap_channel *chan)
 {
 	struct l2cap_channel *used, *prev = NULL;
-	uint32_t psm;
 
 	if (chan->lc_lcid != L2CAP_NULL_CID)
 		return EINVAL;
 
-	/*
-	 * This is simplistic but its not really worth spending a
-	 * lot of time looking for an unused PSM..
-	 */
-	if (chan->lc_laddr.bt_psm == L2CAP_PSM_ANY) {
-		psm = 0x1001;
-		used = LIST_FIRST(&l2cap_listen_list);
-
-		if (used != NULL && used->lc_laddr.bt_psm >= psm) {
-			psm = used->lc_laddr.bt_psm + 0x0002;
-			if ((psm & 0x0100) != 0)
-				psm += 0x0100;
-
-			if (psm > UINT16_MAX)
-				return EADDRNOTAVAIL;
-		}
-
-		chan->lc_laddr.bt_psm = psm;
-	} else if (L2CAP_PSM_INVALID(chan->lc_laddr.bt_psm))
-		return EINVAL;
+	if (chan->lc_laddr.bt_psm != L2CAP_PSM_ANY
+	    && L2CAP_PSM_INVALID(chan->lc_laddr.bt_psm))
+		return EADDRNOTAVAIL;
 
 	/*
 	 * This CID is irrelevant, as the channel is not stored on the active

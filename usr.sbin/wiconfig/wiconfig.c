@@ -1,4 +1,4 @@
-/*	$NetBSD: wiconfig.c,v 1.44 2012/04/12 11:46:14 joerg Exp $	*/
+/*	$NetBSD: wiconfig.c,v 1.41 2008/07/21 13:37:00 lukem Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ctr.columbia.edu>.  All rights reserved.
@@ -68,7 +68,7 @@
 #if !defined(lint)
 __COPYRIGHT("@(#) Copyright (c) 1997, 1998, 1999\
  Bill Paul.  All rights reserved.");
-__RCSID("$NetBSD: wiconfig.c,v 1.44 2012/04/12 11:46:14 joerg Exp $");
+__RCSID("$NetBSD: wiconfig.c,v 1.41 2008/07/21 13:37:00 lukem Exp $");
 #endif
 
 struct wi_table {
@@ -82,9 +82,9 @@ struct wi_table {
 #define	WI_KEYSTRUCT		0x05
 #define	WI_BITS			0x06
 #define	WI_VENDOR		0x07
-	const char *wi_label;		/* label used to print info */
+	char *wi_label;			/* label used to print info */
 	int wi_opt;			/* option character to set this */
-	const char *wi_desc;
+	char *wi_desc;
 	char *wi_optval;
 };
 
@@ -96,32 +96,35 @@ struct wi_table {
 #define WI_APRATE_11		0x6E	/* 11 Mbps */
 
 #ifdef WI_RID_SCAN_APS
-static void wi_apscan(char *);
-static int  get_if_flags(int, const char *);
-static int  set_if_flags(int, const char *, int);
+static void wi_apscan		__P((char *));
+static int  get_if_flags	__P((int, const char *));
+static int  set_if_flags	__P((int, const char *, int));
 #endif
-static int  wi_getval(char *, struct wi_req *);
-static void wi_setval(char *, struct wi_req *);
-static void wi_printstr(struct wi_req *);
-static void wi_setstr(char *, int, char *);
-static void wi_setbytes(char *, int, char *, int);
-static void wi_setword(char *, int, int);
-static void wi_sethex(char *, int, char *);
-static void wi_printwords(struct wi_req *);
-static void wi_printbool(struct wi_req *);
-static void wi_printhex(struct wi_req *);
-static void wi_printbits(struct wi_req *);
-static void wi_checkwifi(char *);
-static void wi_dumpinfo(char *);
-static void wi_printkeys(struct wi_req *);
-static void wi_printvendor(struct wi_req *);
-static void wi_dumpstats(char *);
-__dead static void usage(void);
-static struct wi_table *wi_optlookup(struct wi_table *, int);
+static int  wi_getval		__P((char *, struct wi_req *));
+static void wi_setval		__P((char *, struct wi_req *));
+static void wi_printstr		__P((struct wi_req *));
+static void wi_setstr		__P((char *, int, char *));
+static void wi_setbytes		__P((char *, int, char *, int));
+static void wi_setword		__P((char *, int, int));
+static void wi_sethex		__P((char *, int, char *));
+static void wi_printwords	__P((struct wi_req *));
+static void wi_printbool	__P((struct wi_req *));
+static void wi_printhex		__P((struct wi_req *));
+static void wi_printbits	__P((struct wi_req *));
+static void wi_checkwifi	__P((char *));
+static void wi_dumpinfo		__P((char *));
+static void wi_printkeys	__P((struct wi_req *));
+static void wi_printvendor	__P((struct wi_req *));
+static void wi_dumpstats	__P((char *));
+static void usage		__P((void));
+static struct wi_table *
+	wi_optlookup __P((struct wi_table *, int));
+int main __P((int argc, char **argv));
 
 #ifdef WI_RID_SCAN_APS
-static int
-get_if_flags(int s, const char *name)
+static int get_if_flags(s, name)
+	int		s;
+	const char	*name;
 {
 	struct ifreq	ifreq;
 	int		flags;
@@ -134,8 +137,10 @@ get_if_flags(int s, const char *name)
 	return flags;
 }
 
-static int
-set_if_flags(int s, const char *name, int flags)
+static int set_if_flags(s, name, flags)
+	int		s;
+	const char	*name;
+	int		flags;
 {
 	struct ifreq ifreq;
 
@@ -147,8 +152,8 @@ set_if_flags(int s, const char *name, int flags)
 	return 0;
 }
 
-static void
-wi_apscan(char *iface)
+static void wi_apscan(iface)
+	char			*iface;
 {
 	struct wi_req		wreq;
 	struct ifreq		ifr;
@@ -223,7 +228,7 @@ wi_apscan(char *iface)
 	for ( i = 0; i < naps; i++, w++) {
 		printf("ap[%d]:\n", i);
 		if (w->scanreason) {
-			static const char *scanm[] = {
+			static char *scanm[] = {
 				"Host initiated",
 				"Firmware initiated",
 				"Inquiry request from host"
@@ -261,7 +266,7 @@ wi_apscan(char *iface)
 			rate = 2;
 			break;
 		case WI_APRATE_5:
-			rate = 5;
+			rate = 5.5;
 			break;
 		case WI_APRATE_11:
 			rate = 11;
@@ -279,8 +284,9 @@ wi_apscan(char *iface)
 }
 #endif
 
-static int
-wi_getval(char *iface, struct wi_req *wreq)
+static int wi_getval(iface, wreq)
+	char			*iface;
+	struct wi_req		*wreq;
 {
 	struct ifreq		ifr;
 	int			s, error;
@@ -306,8 +312,9 @@ wi_getval(char *iface, struct wi_req *wreq)
 	return error;
 }
 
-static void
-wi_setval(char *iface, struct wi_req *wreq)
+static void wi_setval(iface, wreq)
+	char			*iface;
+	struct wi_req		*wreq;
 {
 	struct ifreq		ifr;
 	int			s;
@@ -330,8 +337,8 @@ wi_setval(char *iface, struct wi_req *wreq)
 	return;
 }
 
-static void
-wi_printstr(struct wi_req *wreq)
+void wi_printstr(wreq)
+	struct wi_req		*wreq;
 {
 	char			*ptr;
 	int			i;
@@ -358,8 +365,10 @@ wi_printstr(struct wi_req *wreq)
 	return;
 }
 
-static void
-wi_setstr(char *iface, int code, char *str)
+void wi_setstr(iface, code, str)
+	char			*iface;
+	int			code;
+	char			*str;
 {
 	struct wi_req		wreq;
 
@@ -378,8 +387,11 @@ wi_setstr(char *iface, int code, char *str)
 	return;
 }
 
-static void
-wi_setbytes(char *iface, int code, char *bytes, int len)
+void wi_setbytes(iface, code, bytes, len)
+	char			*iface;
+	int			code;
+	char			*bytes;
+	int			len;
 {
 	struct wi_req		wreq;
 
@@ -394,8 +406,10 @@ wi_setbytes(char *iface, int code, char *bytes, int len)
 	return;
 }
 
-static void
-wi_setword(char *iface, int code, int word)
+void wi_setword(iface, code, word)
+	char			*iface;
+	int			code;
+	int			word;
 {
 	struct wi_req		wreq;
 
@@ -410,8 +424,10 @@ wi_setword(char *iface, int code, int word)
 	return;
 }
 
-static void
-wi_sethex(char *iface, int code, char *str)
+void wi_sethex(iface, code, str)
+	char			*iface;
+	int			code;
+	char			*str;
 {
 	struct ether_addr	*addr;
 
@@ -424,8 +440,8 @@ wi_sethex(char *iface, int code, char *str)
 	return;
 }
 
-static void
-wi_printkeys(struct wi_req *wreq)
+static void wi_printkeys(wreq)
+        struct wi_req           *wreq;
 {
         int                     i, j, bn;
         struct wi_key           *k;
@@ -458,8 +474,8 @@ wi_printkeys(struct wi_req *wreq)
         return;
 };
 
-static void
-wi_printvendor(struct wi_req *wreq)
+void wi_printvendor(wreq)
+	struct wi_req		*wreq;
 {
 	/* id
 	 * vendor
@@ -495,8 +511,8 @@ wi_printvendor(struct wi_req *wreq)
 	return;
 }	
 
-static void
-wi_printwords(struct wi_req *wreq)
+void wi_printwords(wreq)
+	struct wi_req		*wreq;
 {
 	int			i;
 
@@ -508,8 +524,8 @@ wi_printwords(struct wi_req *wreq)
 	return;
 }
 
-static void
-wi_printbool(struct wi_req *wreq)
+void wi_printbool(wreq)
+	struct wi_req		*wreq;
 {
 	if (le16toh(wreq->wi_val[0]))
 		printf("[ On ]");
@@ -519,8 +535,8 @@ wi_printbool(struct wi_req *wreq)
 	return;
 }
 
-static void
-wi_printhex(struct wi_req *wreq)
+void wi_printhex(wreq)
+	struct wi_req		*wreq;
 {
 	int			i;
 	unsigned char		*c;
@@ -538,8 +554,8 @@ wi_printhex(struct wi_req *wreq)
 	return;
 }
 
-static void
-wi_printbits(struct wi_req *wreq)
+void wi_printbits(wreq)
+	struct wi_req		*wreq;
 {
 	int			i;
 	int bits = le16toh(wreq->wi_val[0]);
@@ -556,51 +572,51 @@ wi_printbits(struct wi_req *wreq)
 }
 
 static struct wi_table wi_table[] = {
-	{ WI_RID_SERIALNO, WI_STRING, "NIC serial number:\t\t\t", 0, 0, 0 },
+	{ WI_RID_SERIALNO, WI_STRING, "NIC serial number:\t\t\t" },
 	{ WI_RID_NODENAME, WI_STRING, "Station name:\t\t\t\t",
-	    's', "station name", 0, },
-	{ WI_RID_OWN_SSID, WI_STRING, "SSID for IBSS creation:\t\t\t", 0, 0, 0 },
-	{ WI_RID_CURRENT_SSID, WI_STRING, "Current netname (SSID):\t\t\t", 0, 0, 0 },
-	{ WI_RID_DESIRED_SSID, WI_STRING, "Desired netname (SSID):\t\t\t", 0, 0, 0 },
-	{ WI_RID_CURRENT_BSSID, WI_HEXBYTES, "Current BSSID:\t\t\t\t", 0, 0, 0 },
-	{ WI_RID_CHANNEL_LIST, WI_BITS, "Channel list:\t\t\t\t", 0, 0, 0 },
-	{ WI_RID_OWN_CHNL, WI_WORDS, "IBSS channel:\t\t\t\t", 0, 0, 0 },
-	{ WI_RID_CURRENT_CHAN, WI_WORDS, "Current channel:\t\t\t", 0, 0, 0 },
-	{ WI_RID_COMMS_QUALITY, WI_WORDS, "Comms quality/signal/noise:\t\t", 0, 0, 0 },
-	{ WI_RID_PROMISC, WI_BOOL, "Promiscuous mode:\t\t\t", 0, 0, 0 },
-	{ WI_RID_PORTTYPE, WI_WORDS, "Port type:\t\t\t\t", 0, 0, 0 },
+	    's', "station name" },
+	{ WI_RID_OWN_SSID, WI_STRING, "SSID for IBSS creation:\t\t\t" },
+	{ WI_RID_CURRENT_SSID, WI_STRING, "Current netname (SSID):\t\t\t" },
+	{ WI_RID_DESIRED_SSID, WI_STRING, "Desired netname (SSID):\t\t\t" },
+	{ WI_RID_CURRENT_BSSID, WI_HEXBYTES, "Current BSSID:\t\t\t\t" },
+	{ WI_RID_CHANNEL_LIST, WI_BITS, "Channel list:\t\t\t\t" },
+	{ WI_RID_OWN_CHNL, WI_WORDS, "IBSS channel:\t\t\t\t" },
+	{ WI_RID_CURRENT_CHAN, WI_WORDS, "Current channel:\t\t\t" },
+	{ WI_RID_COMMS_QUALITY, WI_WORDS, "Comms quality/signal/noise:\t\t" },
+	{ WI_RID_PROMISC, WI_BOOL, "Promiscuous mode:\t\t\t" },
+	{ WI_RID_PORTTYPE, WI_WORDS, "Port type:\t\t\t\t" },
 	{ WI_RID_MAC_NODE, WI_HEXBYTES, "MAC address:\t\t\t\t",
-	    'm', "MAC address", 0, },
-	{ WI_RID_TX_RATE, WI_WORDS, "TX rate (selection):\t\t\t", 0, 0, 0 },
-	{ WI_RID_CUR_TX_RATE, WI_WORDS, "TX rate (actual speed):\t\t\t", 0, 0, 0 },
-	{ WI_RID_CUR_BEACON_INT, WI_WORDS, "Beacon Interval (current) [msec]:\t", 0, 0, 0 },
+	    'm', "MAC address" },
+	{ WI_RID_TX_RATE, WI_WORDS, "TX rate (selection):\t\t\t" },
+	{ WI_RID_CUR_TX_RATE, WI_WORDS, "TX rate (actual speed):\t\t\t"},
+	{ WI_RID_CUR_BEACON_INT, WI_WORDS, "Beacon Interval (current) [msec]:\t"},
 	{ WI_RID_MAX_DATALEN, WI_WORDS, "Maximum data length:\t\t\t",
-	    'd', "maximum data length", 0 },
+	    'd', "maximum data length" },
 	{ WI_RID_RTS_THRESH, WI_WORDS, "RTS/CTS handshake threshold:\t\t",
-	    'r', "RTS threshold", 0 },
+	    'r', "RTS threshold" },
 	{ WI_RID_FRAG_THRESH, WI_WORDS, "fragmentation threshold:\t\t",
-	    'g', "fragmentation threshold", 0, },
-	{ WI_RID_DBM_ADJUST, WI_WORDS, "RSSI -> dBm adjustment:\t\t\t", 0, 0, 0 },
-	{ WI_RID_CREATE_IBSS, WI_BOOL, "Create IBSS:\t\t\t\t", 0, 0, 0 },
+	    'g', "fragmentation threshold" },
+	{ WI_RID_DBM_ADJUST, WI_WORDS, "RSSI -> dBm adjustment:\t\t\t" },
+	{ WI_RID_CREATE_IBSS, WI_BOOL, "Create IBSS:\t\t\t\t" },
 	{ WI_RID_MICROWAVE_OVEN, WI_WORDS, "Microwave oven robustness:\t\t",
-	    'M', "microwave oven robustness enabled", 0 },
+	    'M', "microwave oven robustness enabled" },
 	{ WI_RID_ROAMING_MODE, WI_WORDS, "Roaming mode(1:firm,3:disable):\t\t",
-	    'R', "roaming mode", 0 },
+	    'R', "roaming mode" },
 	{ WI_RID_SYSTEM_SCALE, WI_WORDS, "Access point density:\t\t\t",
-	    'a', "system scale", 0 },
-	{ WI_RID_PM_ENABLED, WI_WORDS, "Power Mgmt (1=on, 0=off):\t\t", 0, 0, 0 },
-	{ WI_RID_MAX_SLEEP, WI_WORDS, "Max sleep time (msec):\t\t\t", 0, 0, 0 },
- 	{ WI_RID_STA_IDENTITY, WI_VENDOR, "Vendor info:\t\t\t\t", 0, 0, 0 },
-	{ 0, WI_NONE, 0, 0, 0, 0 }
+	    'a', "system scale" },
+	{ WI_RID_PM_ENABLED, WI_WORDS, "Power Mgmt (1=on, 0=off):\t\t" },
+	{ WI_RID_MAX_SLEEP, WI_WORDS, "Max sleep time (msec):\t\t\t" },
+ 	{ WI_RID_STA_IDENTITY, WI_VENDOR, "Vendor info:\t\t\t\t" },
+	{ 0, WI_NONE }
 };
 
 static struct wi_table wi_crypt_table[] = {
-	{ WI_RID_ENCRYPTION, WI_BOOL, "WEP encryption:\t\t\t\t", 0, 0, 0 },
+	{ WI_RID_ENCRYPTION, WI_BOOL, "WEP encryption:\t\t\t\t" },
 	{ WI_RID_CNFAUTHMODE, WI_WORDS, "Authentication type \n(1=OpenSys, 2=Shared Key):\t\t",
-	    'A', "authentication type", 0 },
-        { WI_RID_TX_CRYPT_KEY, WI_WORDS, "TX encryption key:\t\t\t", 0, 0, 0 },
-        { WI_RID_DEFLT_CRYPT_KEYS, WI_KEYSTRUCT, "Encryption keys:\t\t\t", 0, 0, 0 },
-	{ 0, WI_NONE, 0, 0, 0, 0 }
+	    'A', "authentication type" },
+        { WI_RID_TX_CRYPT_KEY, WI_WORDS, "TX encryption key:\t\t\t" },
+        { WI_RID_DEFLT_CRYPT_KEYS, WI_KEYSTRUCT, "Encryption keys:\t\t\t" },
+	{ 0, WI_NONE }
 };
 
 static struct wi_table *wi_tables[] = {
@@ -610,7 +626,9 @@ static struct wi_table *wi_tables[] = {
 };
 
 static struct wi_table *
-wi_optlookup(struct wi_table *table, int opt)
+wi_optlookup(table, opt)
+	struct wi_table *table;
+	int opt;
 {
 	struct wi_table *wt;
 
@@ -620,8 +638,8 @@ wi_optlookup(struct wi_table *table, int opt)
 	return (NULL);
 }
 
-static void
-wi_checkwifi(char *iface)
+static void wi_checkwifi(iface)
+	char			*iface;
 {
 	struct ifreq		ifr;
 	struct ieee80211_nwid	nwid;
@@ -644,8 +662,8 @@ wi_checkwifi(char *iface)
 	close(s);
 }
 
-static void
-wi_dumpinfo(char *iface)
+static void wi_dumpinfo(iface)
+	char			*iface;
 {
 	struct wi_req		wreq;
 	int			i, has_wep;
@@ -736,8 +754,8 @@ wi_dumpinfo(char *iface)
 	return;
 }
 
-static void
-wi_dumpstats(char *iface)
+static void wi_dumpstats(iface)
+	char			*iface;
 {
 	struct wi_req		wreq;
 	struct wi_counters	*c;
@@ -796,7 +814,7 @@ wi_dumpstats(char *iface)
 }
 
 static void
-usage(void)
+usage()
 {
 
 	fprintf(stderr,
@@ -808,8 +826,9 @@ usage(void)
 	exit(1);
 }
 
-int
-main(int argc, char *argv[])
+int main(argc, argv)
+	int			argc;
+	char			*argv[];
 {
 	struct wi_table *wt, **table;
 	char *iface;

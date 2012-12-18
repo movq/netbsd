@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.69 2012/06/22 20:54:39 abs Exp $	*/
+/*	$NetBSD: md.h,v 1.63 2008/04/30 15:29:11 ad Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,20 +14,24 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE 
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
  * THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
@@ -46,27 +50,11 @@
 #include "mbr.h"
 
 /* constants and defines */
-#define	DEFUSRSIZE	0
-#define	DEFSWAPSIZE	(-1)
-#define	DEFROOTSIZE	32
+
+#define DEFROOTSIZE	32
 
 /* Megs required for a full X installation. */
 #define XNEEDMB 50
-
-/* use UFS2 by default for ffs */
-#define	DEFAULT_UFS2
-
-/* have support for booting from UFS2 */
-#define	HAVE_UFS2_BOOT
-
-/* allow using tmpfs for /tmp instead of mfs */
-#define HAVE_TMPFS
-
-/* have file system specific primary boot loader */
-#define	HAVE_BOOTXX_xFS
-#define	BOOTXXDIR	"/usr/mdec"
-#define	BOOTXX_FFSV1	"bootxx_ffsv1"
-#define	BOOTXX_FFSV2	"bootxx_ffsv2"
 
 /*
  *  Default filesets to fetch and install during installation
@@ -95,7 +83,7 @@
  * If not defined, we assume the port does not support disklabels and
  * hand-edited disklabel will NOT be written by MI code.
  *
- * On i386, do what the 1.2 install scripts did.
+ * On i386, do what the 1.2 install scripts did. 
  */
 #define DISKLABEL_CMD "disklabel -w -r"
 
@@ -104,13 +92,9 @@
 #define _PATH_BOOTEXT	DEFAULT_BOOTDIR "/" DEFAULT_BOOTEXTCODE
 
 extern struct mbr_bootsel *mbs;
-
-/* i386 can still have old mcd ISA devices */
-#ifdef CD_NAMES
-#undef CD_NAMES
-#endif
-#define CD_NAMES "cd0a","mcd0a"
+ 
 
 /*
  *  prototypes for MD code.
  */
+

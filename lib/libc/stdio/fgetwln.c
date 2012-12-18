@@ -1,4 +1,4 @@
-/*	$NetBSD: fgetwln.c,v 1.5 2012/03/15 18:22:30 christos Exp $	*/
+/*	$NetBSD: fgetwln.c,v 1.1 2005/05/14 23:51:02 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002-2004 Tim J. Robbins.
@@ -31,16 +31,12 @@
 #if 0
 __FBSDID("$FreeBSD: src/lib/libc/stdio/fgetwln.c,v 1.2 2004/08/06 17:00:09 tjr Exp $");
 #else
-__RCSID("$NetBSD: fgetwln.c,v 1.5 2012/03/15 18:22:30 christos Exp $");
+__RCSID("$NetBSD: fgetwln.c,v 1.1 2005/05/14 23:51:02 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
-#include <assert.h>
-#include <errno.h>
-#include <limits.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <wchar.h>
 #include "reentrant.h"
 #include "local.h"
@@ -48,32 +44,6 @@ __RCSID("$NetBSD: fgetwln.c,v 1.5 2012/03/15 18:22:30 christos Exp $");
 #ifdef __weak_alias
 __weak_alias(fgetwln,_fgetwln)
 #endif
-
-/*
- * Expand the line buffer.  Return -1 on error.
-#ifdef notdef
- * The `new size' does not account for a terminating '\0',
- * so we add 1 here.
-#endif
- */
-static int
-__slbexpand(FILE *fp, size_t newsize)
-{
-	void *p;
-
-#ifdef notdef
-	++newsize;
-#endif
-	_DIAGASSERT(fp != NULL);
-
-	if (_EXT(fp)->_fgetstr_len >= newsize)
-		return 0;
-	if ((p = realloc(_EXT(fp)->_fgetstr_buf, newsize)) == NULL)
-		return -1;
-	_EXT(fp)->_fgetstr_buf = p;
-	_EXT(fp)->_fgetstr_len = newsize;
-	return 0;
-}
 
 wchar_t *
 fgetwln(FILE * __restrict fp, size_t *lenp)
@@ -87,10 +57,10 @@ fgetwln(FILE * __restrict fp, size_t *lenp)
 	len = 0;
 	while ((wc = __fgetwc_unlock(fp)) != WEOF) {
 #define	GROW	512
-		if (len * sizeof(wchar_t) >= _EXT(fp)->_fgetstr_len &&
+		if (len * sizeof(wchar_t) >= fp->_lb._size &&
 		    __slbexpand(fp, (len + GROW) * sizeof(wchar_t)))
 			goto error;
-		*((wchar_t *)(void *)_EXT(fp)->_fgetstr_buf + len++) = wc;
+		*((wchar_t *)(void *)fp->_lb._base + len++) = wc;
 		if (wc == L'\n')
 			break;
 	}
@@ -99,10 +69,10 @@ fgetwln(FILE * __restrict fp, size_t *lenp)
 
 	FUNLOCKFILE(fp);
 	*lenp = len;
-	return (wchar_t *)(void *)_EXT(fp)->_fgetstr_buf;
+	return ((wchar_t *)(void *)fp->_lb._base);
 
 error:
 	FUNLOCKFILE(fp);
 	*lenp = 0;
-	return NULL;
+	return (NULL);
 }

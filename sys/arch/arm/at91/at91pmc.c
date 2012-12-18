@@ -1,5 +1,5 @@
-/*	$Id: at91pmc.c,v 1.6 2012/11/12 18:00:36 skrll Exp $	*/
-/*	$NetBSD: at91pmc.c,v 1.6 2012/11/12 18:00:36 skrll Exp $	*/
+/*	$Id: at91pmc.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
+/*	$NetBSD: at91pmc.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -13,6 +13,13 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the NetBSD
+ *	Foundation, Inc. and its contributors.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD");
 #include <sys/time.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -52,8 +59,8 @@ __KERNEL_RCSID(0, "$NetBSD");
 void
 at91pmc_get_clocks(struct at91bus_clocks *clocks)
 {
-	uint64_t		mclk, pllaclk, pllbclk, pclk, mstclk;
-	uint32_t		reg;
+	u_int64_t		mclk, pllaclk, pllbclk, pclk, mstclk;
+	u_int32_t		reg;
 
 	if (!((reg = PMCREG(PMC_MOR)) & PMC_MOR_MOSCEN))
 		panic("%s: main oscillator not enabled (MOR=0x%#X)", __FUNCTION__, reg);
@@ -69,8 +76,6 @@ at91pmc_get_clocks(struct at91bus_clocks *clocks)
 	} else if (((mclk / 1000) % 1000) <= 10) {
 	  mclk -= (mclk % 1000000U);
 	}
-
-	PMCREG(PMC_PLLICPR) = PMC_PLLICPR_ICPPLLA | PMC_PLLICPR_ICPPLLB;
 
 	reg = PMCREG(PMC_PLLAR); pllaclk = 0;
 	if (reg & PMC_PLL_DIV) {

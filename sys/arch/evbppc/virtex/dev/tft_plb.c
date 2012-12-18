@@ -1,4 +1,4 @@
-/* 	$NetBSD: tft_plb.c,v 1.5 2011/07/01 19:03:50 dyoung Exp $ */
+/* 	$NetBSD: tft_plb.c,v 1.2 2007/03/04 05:59:46 christos Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tft_plb.c,v 1.5 2011/07/01 19:03:50 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tft_plb.c,v 1.2 2007/03/04 05:59:46 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: tft_plb.c,v 1.5 2011/07/01 19:03:50 dyoung Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/wscons/wsconsio.h>
@@ -65,10 +65,10 @@ struct plb_tft_softc {
 	void 			*sc_sdhook; 	/* stop DMA */
 };
 
-static void 	plb_tft_attach(device_t, device_t, void *);
+static void 	plb_tft_attach(struct device *, struct device *, void *);
 static paddr_t 	plb_tft_mmap(void *, void *, off_t, int);
 
-CFATTACH_DECL_NEW(plb_tft, sizeof(struct plb_tft_softc),
+CFATTACH_DECL(plb_tft, sizeof(struct plb_tft_softc),
     xcvbus_child_match, plb_tft_attach, NULL, NULL);
 
 
@@ -82,7 +82,7 @@ static struct wsdisplay_accessops plb_tft_accessops = {
  * Generic device.
  */
 static void
-plb_tft_attach(device_t parent, device_t self, void *aux)
+plb_tft_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct xcvbus_attach_args *vaa = aux;
 	struct plb_tft_softc 	*psc = device_private(self);
@@ -91,13 +91,13 @@ plb_tft_attach(device_t parent, device_t self, void *aux)
 
 	psc->psc_dmat 	= vaa->vaa_dmat;
 	sc->sc_iot 	= vaa->vaa_iot;
-	sc->sc_dev	= self;
 
-	aprint_normal(": PLB_TFT\n");
+	printf(": PLB_TFT\n");
 
 	if ((error = bus_space_map(sc->sc_iot, vaa->vaa_addr, TFT_SIZE,
 	    0, &sc->sc_ioh)) != 0) {
-	    	aprint_error_dev(self, "could not map device registers\n");
+	    	printf("%s: could not map device registers\n",
+		    device_xname(self));
 	    	goto fail_0;
 	}
 
@@ -107,22 +107,26 @@ plb_tft_attach(device_t parent, device_t self, void *aux)
 	/* Allocate and map framebuffer control data. */
 	if ((error = bus_dmamem_alloc(psc->psc_dmat, sc->sc_size, ADDR_ALIGN,
 	    0, &psc->psc_seg, 1, &nseg, 0)) != 0) {
-	    	aprint_error_dev(self, "could not allocate framebuffer\n");
+	    	printf("%s: could not allocate framebuffer\n",
+	    	    device_xname(self));
 		goto fail_1;
 	}
 	if ((error = bus_dmamem_map(psc->psc_dmat, &psc->psc_seg, nseg,
 	    sc->sc_size, &sc->sc_image, BUS_DMA_COHERENT)) != 0) {
-	    	aprint_error_dev(self, "could not map framebuffer\n");
+	    	printf("%s: could not map framebuffer\n",
+	    	    device_xname(self));
 		goto fail_2;
 	}
 	if ((error = bus_dmamap_create(psc->psc_dmat, sc->sc_size, 1,
 	    sc->sc_size, 0, 0, &psc->psc_dmap)) != 0) {
-	    	aprint_error_dev(self, "could not create framebuffer DMA map\n");
+	    	printf("%s: could not create framebuffer DMA map\n",
+	    	    device_xname(self));
 		goto fail_3;
 	}
 	if ((error = bus_dmamap_load(psc->psc_dmat, psc->psc_dmap,
 	    sc->sc_image, sc->sc_size, NULL, 0)) != 0) {
-	    	aprint_error_dev(self, "could not load framebuffer DMA map\n");
+	    	printf("%s: could not load framebuffer DMA map\n",
+	    	    device_xname(self));
 		goto fail_4;
 	}
 	/* XXX hack, we linear map whole RAM and we have single segment */
@@ -130,11 +134,11 @@ plb_tft_attach(device_t parent, device_t self, void *aux)
 	/* XXX hack, use predefined base addr */
 	sc->sc_image = (void *)(uintptr_t)0x3c00000;
 
-	/* XXX forget the hack above, use "virtex-tft-framebuffer-base" prop */
+	/* XXX fuck the hack above, use "virtex-tft-framebuffer-base" prop */
 
 	tft_attach(self, &plb_tft_accessops);
 
-	aprint_normal_dev(self, "video memory pa 0x%08x\n",
+	printf("%s: video memory pa 0x%08x\n", device_xname(self),
 	    (uint32_t)psc->psc_dmap->dm_segs[0].ds_addr);
 
 #if 0
@@ -147,7 +151,7 @@ plb_tft_attach(device_t parent, device_t self, void *aux)
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, TFT_CTRL, CTRL_ENABLE);
 
 #if 0
-	/* XXX how do we change framebuffer base? */
+	/* XXX how the fuck do we change framebuffer base? */
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, TFT_CTRL, CTRL_RESET);
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, TFT_CTRL, CTRL_ENABLE);
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, TFT_ADDR,
@@ -165,7 +169,7 @@ plb_tft_attach(device_t parent, device_t self, void *aux)
  fail_1:
 	bus_space_unmap(sc->sc_iot, sc->sc_ioh, TFT_SIZE);
  fail_0:
-	aprint_error_dev(self, "error %d\n", error);
+	printf("%s: error %d\n", device_xname(self), error);
 }
 
 static paddr_t

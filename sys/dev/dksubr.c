@@ -1,4 +1,4 @@
-/* $NetBSD: dksubr.c,v 1.45 2012/05/29 10:20:33 elric Exp $ */
+/* $NetBSD: dksubr.c,v 1.37 2008/04/28 20:23:46 martin Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 1999, 2002, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dksubr.c,v 1.45 2012/05/29 10:20:33 elric Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dksubr.c,v 1.37 2008/04/28 20:23:46 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,10 +70,11 @@ int	dkdebug = 0;
 static void	dk_makedisklabel(struct dk_intf *, struct dk_softc *);
 
 void
-dk_sc_init(struct dk_softc *dksc, const char *xname)
+dk_sc_init(struct dk_softc *dksc, void *osc, const char *xname)
 {
 
 	memset(dksc, 0x0, sizeof(*dksc));
+	dksc->sc_osc = osc;
 	strncpy(dksc->sc_xname, xname, DK_XNAME_SIZE);
 	dksc->sc_dkdev.dk_name = dksc->sc_xname;
 }
@@ -89,7 +90,7 @@ dk_open(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 	int	ret = 0;
 	struct disk *dk = &dksc->sc_dkdev;
 
-	DPRINTF_FOLLOW(("dk_open(%s, %p, 0x%"PRIx64", 0x%x)\n",
+	DPRINTF_FOLLOW(("dk_open(%s, %p, 0x%x, 0x%x)\n",
 	    di->di_dkname, dksc, dev, flags));
 
 	mutex_enter(&dk->dk_openlock);
@@ -152,7 +153,7 @@ dk_close(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 	int	pmask = 1 << part;
 	struct disk *dk = &dksc->sc_dkdev;
 
-	DPRINTF_FOLLOW(("dk_close(%s, %p, 0x%"PRIx64", 0x%x)\n",
+	DPRINTF_FOLLOW(("dk_close(%s, %p, 0x%x, 0x%x)\n",
 	    di->di_dkname, dksc, dev, flags));
 
 	mutex_enter(&dk->dk_openlock);
@@ -220,7 +221,7 @@ dk_strategy(struct dk_intf *di, struct dk_softc *dksc, struct buf *bp)
 	 * provided by the individual driver.
 	 */
 	s = splbio();
-	bufq_put(dksc->sc_bufq, bp);
+	BUFQ_PUT(dksc->sc_bufq, bp);
 	dk_start(di, dksc);
 	splx(s);
 	return;
@@ -234,9 +235,9 @@ dk_start(struct dk_intf *di, struct dk_softc *dksc)
 	DPRINTF_FOLLOW(("dk_start(%s, %p)\n", di->di_dkname, dksc));
 
 	/* Process the work queue */
-	while ((bp = bufq_get(dksc->sc_bufq)) != NULL) {
+	while ((bp = BUFQ_GET(dksc->sc_bufq)) != NULL) {
 		if (di->di_diskstart(dksc, bp) != 0) {
-			bufq_put(dksc->sc_bufq, bp);
+			BUFQ_PUT(dksc->sc_bufq, bp);
 			break;
 		}
 	}
@@ -293,7 +294,7 @@ dk_ioctl(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 #endif
 	int	error = 0;
 
-	DPRINTF_FOLLOW(("dk_ioctl(%s, %p, 0x%"PRIx64", 0x%lx)\n",
+	DPRINTF_FOLLOW(("dk_ioctl(%s, %p, 0x%x, 0x%lx)\n",
 	    di->di_dkname, dksc, dev, cmd));
 
 	/* ensure that the pseudo disk is open for writes for these commands */
@@ -305,28 +306,18 @@ dk_ioctl(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 	case ODIOCWDINFO:
 #endif
 	case DIOCWLABEL:
-	case DIOCAWEDGE:
-	case DIOCDWEDGE:
 		if ((flag & FWRITE) == 0)
 			return EBADF;
 	}
 
 	/* ensure that the pseudo-disk is initialized for these */
 	switch (cmd) {
-#ifdef DIOCGSECTORSIZE
-	case DIOCGSECTORSIZE:
-	case DIOCGMEDIASIZE:
-#endif
 	case DIOCGDINFO:
 	case DIOCSDINFO:
 	case DIOCWDINFO:
 	case DIOCGPART:
 	case DIOCWLABEL:
 	case DIOCGDEFLABEL:
-	case DIOCAWEDGE:
-	case DIOCDWEDGE:
-	case DIOCLWEDGES:
-	case DIOCCACHESYNC:
 #ifdef __HAVE_OLD_DISKLABEL
 	case ODIOCGDINFO:
 	case ODIOCSDINFO:
@@ -338,17 +329,6 @@ dk_ioctl(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 	}
 
 	switch (cmd) {
-#ifdef DIOCGSECTORSIZE
-	case DIOCGSECTORSIZE:
-		*(u_int *)data = dksc->sc_geom.pdg_secsize;
-		return 0;
-	case DIOCGMEDIASIZE:
-		*(off_t *)data =
-		    (off_t)dksc->sc_geom.pdg_secsize *
-		    dksc->sc_geom.pdg_nsectors;
-		return 0;
-#endif
-
 	case DIOCGDINFO:
 		*(struct disklabel *)data = *(dksc->sc_dkdev.dk_label);
 		break;
@@ -626,46 +606,6 @@ dk_makedisklabel(struct dk_intf *di, struct dk_softc *dksc)
 	lp->d_checksum = dkcksum(lp);
 }
 
-void
-dk_set_properties(struct dk_intf *di, struct dk_softc *dksc)
-{
-	prop_dictionary_t disk_info, odisk_info, geom;
-
-	disk_info = prop_dictionary_create();
-
-	geom = prop_dictionary_create();
-
-	prop_dictionary_set_uint64(geom, "sectors-per-unit", dksc->sc_size);
-
-	prop_dictionary_set_uint32(geom, "sector-size",
-	    dksc->sc_geom.pdg_secsize);
-
-	prop_dictionary_set_uint16(geom, "sectors-per-track",
-	    dksc->sc_geom.pdg_nsectors);
-
-	prop_dictionary_set_uint16(geom, "tracks-per-cylinder",
-	    dksc->sc_geom.pdg_ntracks);
-
-	prop_dictionary_set_uint64(geom, "cylinders-per-unit",
-	    dksc->sc_geom.pdg_ncylinders);
-
-	prop_dictionary_set(disk_info, "geometry", geom);
-	prop_object_release(geom);
-
-	prop_dictionary_set(device_properties(dksc->sc_dev),
-	    "disk-info", disk_info);
-
-	/*
-	 * Don't release disk_info here; we keep a reference to it.
-	 * disk_detach() will release it when we go away.
-	 */
-
-	odisk_info = dksc->sc_dkdev.dk_info;
-	dksc->sc_dkdev.dk_info = disk_info;
-	if (odisk_info)
-		prop_object_release(odisk_info);
-}
-
 /* This function is taken from ccd.c:1.76  --rcd */
 
 /*
@@ -679,7 +619,8 @@ dk_set_properties(struct dk_intf *di, struct dk_softc *dksc)
  * set *vpp to the file's vnode.
  */
 int
-dk_lookup(struct pathbuf *pb, struct lwp *l, struct vnode **vpp)
+dk_lookup(const char *path, struct lwp *l, struct vnode **vpp,
+    enum uio_seg segflg)
 {
 	struct nameidata nd;
 	struct vnode *vp;
@@ -689,7 +630,7 @@ dk_lookup(struct pathbuf *pb, struct lwp *l, struct vnode **vpp)
 	if (l == NULL)
 		return ESRCH;	/* Is ESRCH the best choice? */
 
-	NDINIT(&nd, LOOKUP, FOLLOW, pb);
+	NDINIT(&nd, LOOKUP, FOLLOW, segflg, path);
 	if ((error = vn_open(&nd, FREAD | FWRITE, 0)) != 0) {
 		DPRINTF((DKDB_FOLLOW|DKDB_INIT),
 		    ("dk_lookup: vn_open error = %d\n", error));
@@ -711,11 +652,11 @@ dk_lookup(struct pathbuf *pb, struct lwp *l, struct vnode **vpp)
 
 	IFDEBUG(DKDB_VNODE, vprint("dk_lookup: vnode info", vp));
 
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	*vpp = vp;
 	return 0;
 out:
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	(void) vn_close(vp, FREAD | FWRITE, l->l_cred);
 	return error;
 }

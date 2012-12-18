@@ -1,4 +1,4 @@
-/*	$NetBSD: sched.h,v 1.75 2011/11/21 04:36:05 christos Exp $	*/
+/*	$NetBSD: sched.h,v 1.65 2008/10/07 09:48:27 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2007, 2008 The NetBSD Foundation, Inc.
@@ -96,8 +96,21 @@ __BEGIN_DECLS
  * Interface of CPU-sets.
  */
 typedef struct _cpuset cpuset_t;
+typedef struct _kcpuset kcpuset_t;	/* XXX: lwp.h included from userland */
 
-#ifndef _KERNEL
+#ifdef _KERNEL
+
+kcpuset_t *kcpuset_create(void);
+void	kcpuset_destroy(kcpuset_t *);
+void	kcpuset_copy(kcpuset_t *, const kcpuset_t *);
+void	kcpuset_use(kcpuset_t *);
+void	kcpuset_unuse(kcpuset_t *, kcpuset_t **);
+int	kcpuset_copyin(const cpuset_t *, kcpuset_t *, size_t);
+int	kcpuset_copyout(const kcpuset_t *, cpuset_t *, size_t);
+void	kcpuset_zero(kcpuset_t *);
+int	kcpuset_isset(cpuid_t, const kcpuset_t *);
+
+#else
 
 #define	cpuset_create()		_cpuset_create()
 #define	cpuset_destroy(c)	_cpuset_destroy(c)
@@ -138,7 +151,7 @@ __END_DECLS
 #define	CP_IDLE		4
 #define	CPUSTATES	5
 
-#if defined(_KERNEL) || defined(_KMEMUSER)
+#if defined(_KERNEL)
 
 #include <sys/mutex.h>
 #include <sys/time.h>
@@ -176,11 +189,10 @@ struct schedstate_percpu {
 #define	SPCF_SHOULDYIELD	0x0002	/* process should yield the CPU */
 #define	SPCF_OFFLINE		0x0004	/* CPU marked offline */
 #define	SPCF_RUNNING		0x0008	/* CPU is running */
-#define	SPCF_NOINTR		0x0010	/* shielded from interrupts */
 
 #define	SPCF_SWITCHCLEAR	(SPCF_SEENRR|SPCF_SHOULDYIELD)
 
-#endif /* defined(_KERNEL) || defined(_KMEMUSER) */
+#endif /* defined(_KERNEL) */
 
 /*
  * Flags passed to the Linux-compatible __clone(2) system call.
@@ -211,7 +223,6 @@ struct cpu_info;
 
 /* Scheduler initialization */
 void		runq_init(void);
-void		synch_init(void);
 void		sched_init(void);
 void		sched_rqinit(void);
 void		sched_cpuattach(struct cpu_info *);
@@ -220,7 +231,7 @@ void		sched_cpuattach(struct cpu_info *);
 void		sched_tick(struct cpu_info *);
 void		schedclock(struct lwp *);
 void		sched_schedclock(struct lwp *);
-void		sched_pstats(void);
+void		sched_pstats(void *);
 void		sched_lwp_stats(struct lwp *);
 void		sched_pstats_hook(struct lwp *, int);
 
@@ -248,17 +259,14 @@ void		setrunnable(struct lwp *);
 void		sched_setrunnable(struct lwp *);
 
 struct cpu_info *sched_takecpu(struct lwp *);
-void		sched_print_runqueue(void (*pr)(const char *, ...)
-    __printflike(1, 2));
+void		sched_print_runqueue(void (*pr)(const char *, ...));
 
 /* Dispatching */
 bool		kpreempt(uintptr_t);
 void		preempt(void);
-void		yield(void);
 int		mi_switch(struct lwp *);
 void		updatertime(lwp_t *, const struct bintime *);
 void		sched_idle(void);
-void		suspendsched(void);
 
 int		do_sched_setparam(pid_t, lwpid_t, int, const struct sched_param *);
 int		do_sched_getparam(pid_t, lwpid_t, int *, struct sched_param *);

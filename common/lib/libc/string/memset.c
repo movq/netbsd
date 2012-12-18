@@ -1,4 +1,4 @@
-/*	$NetBSD: memset.c,v 1.9 2011/11/08 16:52:11 joerg Exp $	*/
+/*	$NetBSD: memset.c,v 1.6 2008/03/29 14:03:22 he Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)memset.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: memset.c,v 1.9 2011/11/08 16:52:11 joerg Exp $");
+__RCSID("$NetBSD: memset.c,v 1.6 2008/03/29 14:03:22 he Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -49,9 +49,6 @@ __RCSID("$NetBSD: memset.c,v 1.9 2011/11/08 16:52:11 joerg Exp $");
 #include <string.h>
 #else
 #include <lib/libkern/libkern.h>
-#if defined(BZERO) && defined(_STANDALONE)
-#include <lib/libsa/stand.h>
-#endif
 #include <machine/limits.h>
 #endif 
 
@@ -60,8 +57,8 @@ __RCSID("$NetBSD: memset.c,v 1.9 2011/11/08 16:52:11 joerg Exp $");
 
 #ifdef _FORTIFY_SOURCE
 #undef bzero
-#endif
 #undef memset
+#endif
 
 #ifndef __OPTIMIZE_SIZE__
 #ifdef BZERO

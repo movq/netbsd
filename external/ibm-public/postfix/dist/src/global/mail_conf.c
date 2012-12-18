@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_conf.c,v 1.1.1.2 2011/03/02 19:32:15 tron Exp $	*/
+/*	$NetBSD: mail_conf.c,v 1.1.1.1.2.3 2011/01/07 01:24:03 riz Exp $	*/
 
 /*++
 /* NAME
@@ -22,9 +22,6 @@
 /*	const char *name;
 /*
 /*	const char *mail_conf_eval(string)
-/*	const char *string;
-/*
-/*	const char *mail_conf_eval_once(string)
 /*	const char *string;
 /*
 /*	const char *mail_conf_lookup_eval(name)
@@ -55,11 +52,6 @@
 /*	mail_conf_eval() recursively expands any $parameters in the
 /*	string argument. The result is volatile and should be copied
 /*	if it is to be used for any appreciable amount of time.
-/*
-/*	mail_conf_eval_once() non-recursively expands any $parameters
-/*	in the string argument. The result is volatile and should
-/*	be copied if it is to be used for any appreciable amount
-/*	of time.
 /*
 /*	mail_conf_lookup_eval() looks up the named parameter, and expands any
 /*	$parameters in the result. The result is volatile and should be
@@ -209,15 +201,6 @@ const char *mail_conf_eval(const char *string)
 #define RECURSIVE	1
 
     return (dict_eval(CONFIG_DICT, string, RECURSIVE));
-}
-
-/* mail_conf_eval_once - expand one level of macros in string */
-
-const char *mail_conf_eval_once(const char *string)
-{
-#define NONRECURSIVE	0
-
-    return (dict_eval(CONFIG_DICT, string, NONRECURSIVE));
 }
 
 /* mail_conf_lookup - lookup named variable */

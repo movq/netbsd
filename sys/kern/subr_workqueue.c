@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_workqueue.c,v 1.33 2012/10/07 22:16:21 matt Exp $	*/
+/*	$NetBSD: subr_workqueue.c,v 1.26.4.1 2009/04/04 16:58:25 snj Exp $	*/
 
 /*-
  * Copyright (c)2002, 2005, 2006, 2007 YAMAMOTO Takashi,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_workqueue.c,v 1.33 2012/10/07 22:16:21 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_workqueue.c,v 1.26.4.1 2009/04/04 16:58:25 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/cpu.h>
@@ -40,6 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: subr_workqueue.c,v 1.33 2012/10/07 22:16:21 matt Exp
 #include <sys/condvar.h>
 #include <sys/queue.h>
 
+#include <uvm/uvm_extern.h>
+
 typedef struct work_impl {
 	SIMPLEQ_ENTRY(work_impl) wk_entry;
 } work_impl_t;
@@ -50,7 +52,7 @@ struct workqueue_queue {
 	kmutex_t q_mutex;
 	kcondvar_t q_cv;
 	struct workqhead q_queue;
-	lwp_t *q_worker;
+	struct lwp *q_worker;
 };
 
 struct workqueue {
@@ -58,7 +60,7 @@ struct workqueue {
 	void *wq_arg;
 	int wq_flags;
 
-	char wq_name[MAXCOMLEN];
+	const char *wq_name;
 	pri_t wq_prio;
 	void *wq_ptr;
 };
@@ -142,9 +144,8 @@ workqueue_init(struct workqueue *wq, const char *name,
     pri_t prio, int ipl)
 {
 
-	strncpy(wq->wq_name, name, sizeof(wq->wq_name));
-
 	wq->wq_prio = prio;
+	wq->wq_name = name;
 	wq->wq_func = callback_func;
 	wq->wq_arg = callback_arg;
 }
@@ -161,8 +162,6 @@ workqueue_initqueue(struct workqueue *wq, struct workqueue_queue *q,
 	cv_init(&q->q_cv, wq->wq_name);
 	SIMPLEQ_INIT(&q->q_queue);
 	ktf = ((wq->wq_flags & WQ_MPSAFE) != 0 ? KTHREAD_MPSAFE : 0);
-	if (wq->wq_prio < PRI_KERNEL)
-		ktf |= KTHREAD_TS;
 	if (ci) {
 		error = kthread_create(wq->wq_prio, ktf, ci, workqueue_worker,
 		    wq, &q->q_worker, "%s/%u", wq->wq_name, ci->ci_index);
@@ -206,12 +205,15 @@ static void
 workqueue_finiqueue(struct workqueue *wq, struct workqueue_queue *q)
 {
 	struct workqueue_exitargs wqe;
+	lwp_t *l;
 
 	KASSERT(wq->wq_func == workqueue_exit);
 
 	wqe.wqe_q = q;
 	KASSERT(SIMPLEQ_EMPTY(&q->q_queue));
 	KASSERT(q->q_worker != NULL);
+	l = curlwp;
+	uvm_lwp_hold(l);	
 	mutex_enter(&q->q_mutex);
 	SIMPLEQ_INSERT_TAIL(&q->q_queue, &wqe.wqe_wk, wk_entry);
 	cv_signal(&q->q_cv);
@@ -219,6 +221,7 @@ workqueue_finiqueue(struct workqueue *wq, struct workqueue_queue *q)
 		cv_wait(&q->q_cv, &q->q_mutex);
 	}
 	mutex_exit(&q->q_mutex);
+	uvm_lwp_rele(l);	
 	mutex_destroy(&q->q_mutex);
 	cv_destroy(&q->q_cv);
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: if_ndis.c,v 1.34 2012/10/27 17:18:23 chs Exp $	*/
-
 /*-
  * Copyright (c) 2003
  *	Bill Paul <wpaul@windriver.com>.  All rights reserved.
@@ -37,9 +35,12 @@
 __FBSDID("$FreeBSD: src/sys/dev/if_ndis/if_ndis.c,v 1.69.2.6 2005/03/31 04:24:36 wpaul Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: if_ndis.c,v 1.34 2012/10/27 17:18:23 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ndis.c,v 1.18.14.1 2009/08/14 21:06:04 snj Exp $");
 #endif
 
+#ifdef __FreeBSD__
+#include "opt_bdg.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,18 +51,30 @@ __KERNEL_RCSID(0, "$NetBSD: if_ndis.c,v 1.34 2012/10/27 17:18:23 chs Exp $");
 #include <sys/socket.h>
 #include <sys/queue.h>
 
+#ifdef __NetBSD__
 #include <sys/device.h>
 #include <sys/kauth.h>
+#endif
 
+#ifdef __FreeBSD__
 #include <sys/module.h>
+#else /* __NetBSD__ */
+#include <sys/lkm.h>
+#endif
 
 #include <sys/proc.h>
+#if __FreeBSD_version < 502113
 #include <sys/sysctl.h>
+#endif
 
 #include <net/if.h>
 #include <net/if_arp.h>
 
+#ifdef __FreeBSD__
+#include <net/ethernet.h>
+#else
 #include <net/if_ether.h>
+#endif
 
 #include <net/if_dl.h>
 #include <net/if_media.h>
@@ -69,18 +82,33 @@ __KERNEL_RCSID(0, "$NetBSD: if_ndis.c,v 1.34 2012/10/27 17:18:23 chs Exp $");
 
 #include <net/bpf.h>
 
+#ifdef __FreeBSD__
+#include <machine/bus_memio.h>
+#include <machine/bus_pio.h>
+#include <machine/resource.h>
+#endif
 
 #include <sys/bus.h>
 
+#ifdef __FreeBSD__
+#include <sys/bus.h>
+#include <sys/rman.h>
+#endif
 
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_ioctl.h>
 
+#ifdef __FreeBSD__
+#include <dev/wi/if_wavelan_ieee.h>
+#else /* __NetBSD__ */
 #include <dev/ic/wi_ieee.h>
+#endif
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
+#ifdef __NetBSD__
 #include <dev/pci/pcidevs.h>
+#endif
 
 #include <compat/ndis/pe_var.h>
 #include <compat/ndis/resource_var.h>
@@ -88,7 +116,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_ndis.c,v 1.34 2012/10/27 17:18:23 chs Exp $");
 #include <compat/ndis/hal_var.h>
 #include <compat/ndis/ndis_var.h>
 #include <compat/ndis/cfg_var.h>
+#ifdef __NetBSD__
 #include <compat/ndis/nbcompat.h>
+#endif
 #include <dev/if_ndis/if_ndisvar.h>
 
 #define NDIS_IMAGE
@@ -96,12 +126,25 @@ __KERNEL_RCSID(0, "$NetBSD: if_ndis.c,v 1.34 2012/10/27 17:18:23 chs Exp $");
 
 #include "ndis_driver_data.h"
 
-void ndis_attach(void *);
-int ndis_detach(device_t, int);
-int ndis_suspend(device_t);
-int ndis_resume(device_t);
-void ndis_shutdown(device_t);
+#ifdef __FreeBSD__
+int ndis_attach			(device_t);
+#else /* __NetBSD__ */
+void ndis_attach		(void *);
+#endif
+#ifdef __FreeBSD__
+int ndis_detach			(device_t);
+#else /* __NetBSD__ */
+int ndis_detach			(device_t, int);
+#endif
+int ndis_suspend		(device_t);
+int ndis_resume			(device_t);
+void ndis_shutdown		(device_t);
 
+#ifdef __FreeBSD__
+int ndisdrv_modevent		(module_t, int, void *);
+#else /* __NetBSD__ */
+int ndisdrv_modevent	(struct lkm_table *lkmtp, int cmd);
+#endif
 
 /* I moved these to if_ndisvar.h */
 /*
@@ -121,7 +164,11 @@ static funcptr ndis_rxeof_wrap;
 static funcptr ndis_linksts_wrap;
 static funcptr ndis_linksts_done_wrap;
 
+#ifdef __FreeBSD__
+static  void ndis_intr		(void *);
+#else /* __NetBSD__ */
 int ndis_intr(void *);
+#endif
 static void ndis_tick		(void *);
 static void ndis_ticktask	(void *);
 static void ndis_start		(struct ifnet *);
@@ -129,7 +176,11 @@ static void ndis_starttask	(void *);
 static int ndis_ioctl		(struct ifnet *, u_long, void *);
 static int ndis_wi_ioctl_get	(struct ifnet *, u_long, void *);
 static int ndis_wi_ioctl_set	(struct ifnet *, u_long, void *);
+#ifdef __FreeBSD__
+static void ndis_init		(void *);
+#else /* __NetBSD__ */
 static int ndis_init		(struct ifnet *);
+#endif
 static void ndis_stop		(struct ndis_softc *);
 static void ndis_watchdog	(struct ifnet *);
 static int ndis_ifmedia_upd	(struct ifnet *);
@@ -144,15 +195,13 @@ static void ndis_media_status	(struct ifnet *, struct ifmediareq *);
 static void ndis_setmulti	(struct ndis_softc *);
 static void ndis_map_sclist	(void *, bus_dma_segment_t *,
 	int, bus_size_t, int);
-
-int ndis_in_isr;
-
-#ifdef _MODULE
-
+#ifdef __NetBSD__
 static int ndisdrv_loaded = 0;
-int ndisdrv_modevent(module_t,  int);
+#endif /* __NetBSD__ */
+#ifdef __FreeBSD__
+static int ndisdrv_loaded = 0;
+#endif
 
-MODULE(MODULE_CLASS_DRIVER, ndisdrv_modevent, NULL);
 /*
  * This routine should call windrv_load() once for each driver
  * image. This will do the relocation and dynalinking for the
@@ -160,7 +209,16 @@ MODULE(MODULE_CLASS_DRIVER, ndisdrv_modevent, NULL);
  * saved in our driver database.
  */ 
 int
-ndisdrv_modevent(module_t mod, int cmd)
+#ifdef __FreeBSD__
+ndisdrv_modevent(mod, cmd, arg)
+	module_t		mod;
+	int			cmd;
+	void			*arg;
+#else
+ndisdrv_modevent(mod, cmd)
+	module_t		mod;
+	int			cmd;
+#endif
 {
 	int			error = 0;
 
@@ -168,7 +226,7 @@ ndisdrv_modevent(module_t mod, int cmd)
 	printf("in ndisdrv_modevent\n");
 #endif
 	switch (cmd) {
-	case MODULE_CMD_INIT:
+	case MOD_LOAD:
 		ndisdrv_loaded++;
                 if (ndisdrv_loaded > 1)
 			break;
@@ -179,7 +237,7 @@ ndisdrv_modevent(module_t mod, int cmd)
 		windrv_wrap((funcptr)ndis_linksts_done,
 		    &ndis_linksts_done_wrap);
 		break;
-	case MODULE_CMD_FINI:
+	case MOD_UNLOAD:
 		ndisdrv_loaded--;
 		if (ndisdrv_loaded > 0)
 			break;
@@ -189,17 +247,25 @@ ndisdrv_modevent(module_t mod, int cmd)
 		windrv_unwrap(ndis_linksts_wrap);
 		windrv_unwrap(ndis_linksts_done_wrap);
 		break;
-	case MODULE_CMD_STAT:
-		error = ENOTTY;
+/* TODO: Do we need a LKM_E_STAT for NetBSD? */
+#ifdef __FreeBSD__		
+	case MOD_SHUTDOWN:
+		windrv_unwrap(ndis_rxeof_wrap);
+		windrv_unwrap(ndis_txeof_wrap);
+		windrv_unwrap(ndis_linksts_wrap);
+		windrv_unwrap(ndis_linksts_done_wrap);
 		break;
+#endif /* __FreeBSD__ */		
 	default:
 		error = EINVAL;
 		break;
 	}
 
-	return error;
+	return (error);
 }
 
+#ifdef __NetBSD__
+#ifdef NDIS_LKM
 int if_ndis_lkmentry(struct lkm_table *lkmtp, int cmd, int ver);
 
 CFDRIVER_DECL(ndis, DV_DULL, NULL);
@@ -236,16 +302,22 @@ if_ndis_lkmentry(struct lkm_table *lkmtp, int cmd, int ver)
 	DISPATCH(lkmtp, cmd, ver, lkm_nofunc, lkm_nofunc, lkm_nofunc);
 }
 
-#endif /* _MODULE */
+#endif /* NIDS_LKM */
+#endif /* __NetBSD__ */
 
 /*
  * Program the 64-bit multicast hash filter.
  */
 static void
-ndis_setmulti(struct ndis_softc *sc)
+ndis_setmulti(sc)
+	struct ndis_softc	*sc;
 {
 	struct ifnet		*ifp;
+#ifdef __FreeBSD__	
+	struct ifmultiaddr	*ifma;
+#else /* __NetBSD__ */
 	struct ether_multi	*ifma;
+#endif	
 	int			len, mclistsz, error;
 	uint8_t			*mclist;
 
@@ -266,8 +338,13 @@ ndis_setmulti(struct ndis_softc *sc)
 		return;
 	}
 
+#ifdef __FreeBSD__	
+	if (TAILQ_EMPTY(&ifp->if_multiaddrs))
+		return;
+#else /* __NetBSD__ */
 	if (LIST_EMPTY(&sc->arpcom.ec_multiaddrs))
 		return;
+#endif		
 
 	len = sizeof(mclistsz);
 	ndis_get_info(sc, OID_802_3_MAXIMUM_LIST_SIZE, &mclistsz, &len);
@@ -282,7 +359,17 @@ ndis_setmulti(struct ndis_softc *sc)
 	sc->ndis_filter |= NDIS_PACKET_TYPE_MULTICAST;
 
 	len = 0;
+#ifdef __FreeBSD__	
+	TAILQ_FOREACH(ifma, &ifp->if_multiaddrs, ifma_link) {
+#else /* __NetBSD__ */
 	LIST_FOREACH(ifma, &sc->arpcom.ec_multiaddrs, enm_list) {
+#endif
+#ifdef __FreeBSD__
+		if (ifma->ifma_addr->sa_family != AF_LINK)
+			continue;
+		bcopy(CLLADDR(satosdl(ifma->ifma_addr)),
+		    mclist + (ETHER_ADDR_LEN * len), ETHER_ADDR_LEN);
+#else /* __NetBSD__ */
 /*
  *****************************************************************************
  * TODO: The NetBSD ether_multi structure (sys/net/if_ether.h) defines a range 
@@ -292,8 +379,9 @@ ndis_setmulti(struct ndis_softc *sc)
  * But for right now I'm assuming there is only a single address.
  *****************************************************************************
  */
-		memcpy(mclist + (ETHER_ADDR_LEN * len), ifma->enm_addrlo,
+		bcopy(ifma->enm_addrlo, mclist + (ETHER_ADDR_LEN * len),
 			ETHER_ADDR_LEN);
+#endif		    
 		len++;
 		if (len > mclistsz) {
 			sc->ndis_filter |= NDIS_PACKET_TYPE_ALL_MULTICAST;
@@ -326,7 +414,8 @@ out:
 }
 
 static int
-ndis_set_offload(struct ndis_softc *sc)
+ndis_set_offload(sc)
+	struct ndis_softc	*sc;
 {
 	ndis_task_offload	*nto;
 	ndis_task_offload_hdr	*ntoh;
@@ -387,7 +476,8 @@ ndis_set_offload(struct ndis_softc *sc)
 }
 
 static int
-ndis_probe_offload(struct ndis_softc *sc)
+ndis_probe_offload(sc)
+	struct ndis_softc	*sc;
 {
 	ndis_task_offload	*nto;
 	ndis_task_offload_hdr	*ntoh;
@@ -478,9 +568,15 @@ ndis_probe_offload(struct ndis_softc *sc)
  * Attach the interface. Allocate softc structures, do ifmedia
  * setup and ethernet/BPF attach.
  */
+#ifdef __FreeBSD__ 
+int
+ndis_attach(dev)
+	device_t		dev;
+#else /* __NetBSD__ */
 void
 ndis_attach(dev)
 	void			*dev;
+#endif	
 {
 	u_char			eaddr[ETHER_ADDR_LEN];
 	struct ndis_softc	*sc;
@@ -498,28 +594,62 @@ ndis_attach(dev)
 		
 	sc = device_get_softc(dev);
 	
+#ifdef __NetBSD__
 	/* start out at dispatch level */
 	win_irql = DISPATCH_LEVEL;
+#endif	
 
-	mutex_init(&sc->ndis_mtx, MUTEX_DEFAULT, IPL_NET);
-
+#ifdef __FreeBSD__
+	mtx_init(&sc->ndis_mtx, "ndis softc lock",
+	    MTX_NETWORK_LOCK, MTX_DEF);
+#else /* __NetBSD__ */
+	simple_lock_init(&sc->ndis_mtx);
+#endif
+	
 	/*
 	 * Hook interrupt early, since calling the driver's
 	 * init routine may trigger an interrupt. Note that
 	 * we don't need to do any explicit interrupt setup
 	 * for USB.
 	 */
+#ifdef __FreeBSD__
+	if (sc->ndis_iftype == PCMCIABus || sc->ndis_iftype == PCIBus) {
+		error = bus_setup_intr(dev, sc->ndis_irq,
+		    INTR_TYPE_NET | INTR_MPSAFE,
+		    ndis_intr, sc, &sc->ndis_intrhand);
+
+		if (error) {
+			aprint_error_dev(dev, "couldn't set up irq\n");
+			goto fail;
+		}
+	}
+#else /* __NetBSD__ */
 	/* 
 	 * For NetBSD, the interrupt is set up in the bus-dependent
 	 * code.  For PCI it's done in ndis_attach_pci()
 	 */
+#endif
 
 /* 
  * TODO: remove this #ifdef once if_ndis_pcmcia.c compiles
  */
+#ifdef __FreeBSD__
+	if (sc->ndis_iftype == PCMCIABus) {
+		error = ndis_alloc_amem(sc);
+		if (error) {
+			aprint_error_dev(dev, "failed to allocate attribute memory\n");
+			goto fail;
+		}
+	}
+#endif
 
 	sc->ndis_regvals = ndis_regvals;
 
+#ifdef __FreeBSD__
+#if __FreeBSD_version < 502113
+	sysctl_ctx_init(&sc->ndis_ctx);
+#endif
+#endif
 
 	/* Create sysctl registry nodes */
 	ndis_create_sysctls(sc);
@@ -531,7 +661,12 @@ ndis_attach(dev)
 		pdrv = windrv_lookup(0, "PCCARD Bus");
 	else
 		pdrv = windrv_lookup(0, "USB Bus");
-	pdo = windrv_find_pdo(pdrv, device_parent(sc->ndis_dev));
+#ifdef __FreeBSD__	
+	pdo = windrv_find_pdo(pdrv, dev);
+#else /* __NetBSD__ */
+	/* here dev is actuially just a pointer to the softc */
+	pdo = windrv_find_pdo(pdrv, sc->ndis_dev->dv_parent);
+#endif
 
 
 	/*
@@ -542,12 +677,14 @@ ndis_attach(dev)
 	 
 	img = drv_data;
 	drv = windrv_lookup((vm_offset_t)img, NULL);
+#ifdef __NetBSD__
 	/* 
 	 * Stash a pointer to the softc in the Windows device_object, since 
 	 * we can't get it from the NetBSD device structure.
 	 */
 	pdo->pdo_sc = sc;
 	pdo->fdo_sc = sc;
+#endif	
 	
 	if (NdisAddDevice(drv, pdo) != STATUS_SUCCESS) {
 		aprint_error_dev(sc->ndis_dev, "failed to create FDO!\n");
@@ -560,10 +697,18 @@ ndis_attach(dev)
 		      sc->ndis_chars->nmc_version_major,
 		      sc->ndis_chars->nmc_version_minor);
 
+#ifdef __FreeBSD__
+	/* Do resource conversion. */
+	if (sc->ndis_iftype == PCMCIABus || sc->ndis_iftype == PCIBus)
+		ndis_convert_res(sc);
+	else
+		sc->ndis_block->nmb_rlist = NULL;
+#else /* __NetBSD__ */
 	/* 
 	 * For NetBSD so far we do the resource conversion directly in
 	 * ndis_attach_pci()
 	 */
+#endif
 
 	/* Install our RX and TX interrupt handlers. */
 	sc->ndis_block->nmb_senddone_func = ndis_txeof_wrap;
@@ -573,9 +718,11 @@ ndis_attach(dev)
 	sc->ndis_block->nmb_rlist = sc->ndis_rl;	
 	/* sc->ndis_block->nmb_rlist = &sc->ndis_rl; */
 	
+#ifdef __NetBSD__	
 	/* TODO: Free this memory! */
 	sc->arpcom.ec_if.if_sadl = 
 		malloc(sizeof(struct sockaddr_dl), M_DEVBUF, M_NOWAIT|M_ZERO);
+#endif		
 
 	/* Call driver's init routine. */
 	if (ndis_init_nic(sc)) {
@@ -590,6 +737,9 @@ ndis_attach(dev)
 	len = sizeof(eaddr);
 	ndis_get_info(sc, OID_802_3_CURRENT_ADDRESS, &eaddr, &len);
 
+#ifdef __FreeBSD__
+	bcopy(eaddr, (char *)&sc->arpcom.ec_if.ac_enaddr, ETHER_ADDR_LEN);
+#endif
 	/*
 	 * Figure out if we're allowed to use multipacket sends
 	 * with this driver, and if so, how many.
@@ -647,9 +797,15 @@ ndis_attach(dev)
 	ifp = &sc->arpcom.ac_if;
 	ifp->if_softc = sc;
 	
+#ifdef __NetBSD__	
 	sc->ic.ic_ifp = ifp;
+#endif
 	
+#ifdef __FreeBSD__
+	if_initname(ifp, device_get_name(dev), device_get_unit(dev));
+#else /* __NetBSD__ */
 	strlcpy(ifp->if_xname, device_xname(sc->ndis_dev), IFNAMSIZ);
+#endif
 	ifp->if_mtu = ETHERMTU;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl = ndis_ioctl;
@@ -657,19 +813,32 @@ ndis_attach(dev)
 	ifp->if_watchdog = ndis_watchdog;
 	ifp->if_init = ndis_init;
 	ifp->if_baudrate = 10000000;
+#if __FreeBSD_version < 502114
+	ifp->if_snd.ifq_maxlen = 50;
+#else
 	IFQ_SET_MAXLEN(&ifp->if_snd, 50);
+	ifp->if_snd.ifq_drv_maxlen = 25;
 	IFQ_SET_READY(&ifp->if_snd);
+#endif
 	ifp->if_capenable = ifp->if_capabilities;
+#ifdef __FreeBSD__	
+	ifp->if_hwassist = sc->ndis_hwassist;
+#else /* __NetBSD__ */
 	/* 
 	 * TODO: I don't think NetBSD has this field describing "HW offload 
 	 * capabilities" as found in FreeBSD's 
 	 * if_data structure, but maybe there is something else that 
 	 * needs to be done here for NetBSD
 	 */
+#endif
 
 	/* Do media setup */
 	if (sc->ndis_80211) {
+#ifdef __FreeBSD__	
+		struct ieee80211com	*ic = (void *)ifp;
+#else /* __NetBSD__ */
 		struct ieee80211com *ic = &sc->ic;
+#endif		
 		ndis_80211_rates_ex	rates;
 		struct ndis_80211_nettype_list *ntl;
 		uint32_t		arg;
@@ -712,7 +881,7 @@ ndis_attach(dev)
 		free(ntl, M_DEVBUF);
 nonettypes:
 		len = sizeof(rates);
-		memset((char *)&rates, 0, len);
+		bzero((char *)&rates, len);
 		r = ndis_get_info(sc, OID_802_11_SUPPORTED_RATES,
 		    (void *)rates, &len);
 		if (r)
@@ -838,11 +1007,17 @@ nonettypes:
 		r = ndis_get_info(sc, OID_802_11_POWER_MODE, &arg, &j);
 		if (r == 0)
 			ic->ic_caps |= IEEE80211_C_PMGT;
-		memcpy(&ic->ic_myaddr, eaddr, sizeof(eaddr));
+		bcopy(eaddr, &ic->ic_myaddr, sizeof(eaddr));
+#ifdef __FreeBSD__		
+		ieee80211_ifattach(ifp);
+		ieee80211_media_init(ifp, ieee80211_media_change,
+		    ndis_media_status);		
+#else /* __NetBSD__ */
 		if_attach(ifp);
 		ieee80211_ifattach(&sc->ic);
 		ieee80211_media_init(&sc->ic, ieee80211_media_change,
 		    ndis_media_status);		
+#endif
 
 		ic->ic_ibss_chan = IEEE80211_CHAN_ANYC;
 		ic->ic_bss->ni_chan = ic->ic_ibss_chan;
@@ -856,7 +1031,9 @@ nonettypes:
 		    IFM_ETHER|IFM_100_TX|IFM_FDX, 0, NULL);
 		ifmedia_add(&sc->ifmedia, IFM_ETHER|IFM_AUTO, 0, NULL);
 		ifmedia_set(&sc->ifmedia, IFM_ETHER|IFM_AUTO);
+#ifdef __NetBSD__
 		if_attach(ifp);
+#endif		
 		ether_ifattach(ifp, eaddr);
 	}
 
@@ -865,12 +1042,20 @@ nonettypes:
 	sc->ndis_block->nmb_statusdone_func = ndis_linksts_done_wrap;
 fail:
 	if (error)
+#ifdef __FreeBSD__	
+		ndis_detach(dev);
+#else /* __NetBSD__ */
 		ndis_detach(dev, 0);
+#endif		
 	else
 		/* We're done talking to the NIC for now; halt it. */
 		ndis_halt_nic(sc);
 
+#ifdef __FreeBSD__
+	return(error);
+#else /* __NetBSD__ */
 	return;
+#endif 	
 }
 
 /*
@@ -881,20 +1066,33 @@ fail:
  * allocated.
  */
 int
+#ifdef __FreeBSD__
+ndis_detach(dev)
+	device_t		dev;
+#else /* __NetBSD__ */
 ndis_detach (dev, flags)
 	device_t 		dev;
 	int			flags;
+#endif
 {
 	struct ndis_softc	*sc;
 	struct ifnet		*ifp;
 	driver_object		*drv;
+#ifdef __NetBSD__
 	int			s;
+#endif	
 
 #ifdef NDIS_DBG
 	printf("in ndis_detach\n");
 #endif
 
 	sc = device_get_softc(dev);
+#ifdef __FreeBSD__
+	KASSERT(mtx_initialized(&sc->ndis_mtx),
+	    ("ndis mutex not initialized"));
+#else /* __NetBSD__*/
+	KASSERT(mtx_initialized(&sc->ndis_mtx));
+#endif	   
 
 	NDIS_LOCK(sc);
 
@@ -905,29 +1103,55 @@ ndis_detach (dev, flags)
 		NDIS_UNLOCK(sc);	
 		ndis_stop(sc);
 		if (sc->ndis_80211)
+#ifdef __FreeBSD__		
+			ieee80211_ifdetach(ifp);
+#else /* __NetBSD__ */
 			ieee80211_ifdetach(&sc->ic);
+#endif						
 		else
 			ether_ifdetach(ifp);
 	} else {
 		NDIS_UNLOCK(sc);	
 	}
 
+#ifdef __FreeBSD__
+	bus_generic_detach(dev);
+#endif
 
+#ifdef __FreeBSD__
+	if (sc->ndis_intrhand)
+		bus_teardown_intr(dev, sc->ndis_irq, sc->ndis_intrhand);
+	if (sc->ndis_irq)
+		bus_release_resource(dev, SYS_RES_IRQ, 0, sc->ndis_irq);
+#else
 /* 
  * TODO: unmap interrupts when unloading in NetBSD
  */
+#endif /* __NetBSD__ */
 	if (sc->ndis_res_io)
 		bus_release_resource(dev, SYS_RES_IOPORT,
 		    sc->ndis_io_rid, sc->ndis_res_io);
 	if (sc->ndis_res_mem)
 		bus_release_resource(dev, SYS_RES_MEMORY,
 		    sc->ndis_mem_rid, sc->ndis_res_mem);
+#ifdef __FreeBSD__		    
+	if (sc->ndis_res_altmem)
+		bus_release_resource(dev, SYS_RES_MEMORY,
+		    sc->ndis_altmem_rid, sc->ndis_res_altmem);
+
+	if (sc->ndis_iftype == PCMCIABus)
+		ndis_free_amem(sc);
+#endif
 	if (sc->ndis_sc)
 		ndis_destroy_dma(sc);
 
 	if (sc->ndis_txarray)
 		free(sc->ndis_txarray, M_DEVBUF);
 
+#ifdef __FreeBSD__
+	if (!sc->ndis_80211)
+		ifmedia_removeall(&sc->ifmedia);
+#endif		
 
 	ndis_unload_driver((void *)ifp);
 
@@ -945,18 +1169,67 @@ ndis_detach (dev, flags)
 	if (drv == NULL)
 		panic("couldn't find driver object");
 	windrv_destroy_pdo(drv, dev);
-
+#ifdef __FreeBSD__
+	if (sc->ndis_iftype == PCIBus)
+		bus_dma_tag_destroy(sc->ndis_parent_tag);
+#else /* __NetBSD__ */
 /* 
  * TODO: Unmap dma for NetBSD
  */
-	mutex_destroy(&sc->ndis_mtx);
+#endif
+
+#ifdef __FreeBSD__
+#if __FreeBSD_version < 502113
+	sysctl_ctx_free(&sc->ndis_ctx);
+#endif
+#endif
+
+	mtx_destroy(&sc->ndis_mtx);
 
 	return(0);
 }
 
-/* TODO: write a NetBSD version of ndis_suspend() */
+#ifdef __FreeBSD__
+int
+ndis_suspend(dev)
+	device_t		dev;
+{
+	struct ndis_softc	*sc;
+	struct ifnet		*ifp;
 
+	sc = device_get_softc(dev);
+	ifp = &sc->arpcom.ac_if;
+
+#ifdef notdef
+	if (NDIS_INITIALIZED(sc))
+        	ndis_stop(sc);
+#endif
+
+	return(0);
+}
+#else /* __NetBSD__ */
+/* TODO: write a NetBSD version of ndis_suspend() */
+#endif
+
+#ifdef __FreeBSD__
+int
+ndis_resume(dev)
+	device_t		dev;
+{
+	struct ndis_softc	*sc;
+	struct ifnet		*ifp;
+
+	sc = device_get_softc(dev);
+	ifp = &sc->arpcom.ac_if;
+
+	if (NDIS_INITIALIZED(sc))
+        	ndis_init(sc);
+
+	return(0);
+}
+#else /* __NetBSD__ */
 /* TODO: write a NetBSD version of ndis_resume() */
+#endif
 
 /*
  * A frame has been uploaded: pass the resulting mbuf chain up to
@@ -978,7 +1251,10 @@ ndis_detach (dev, flags)
  * packet.
  */
 __stdcall /*static*/ void
-ndis_rxeof(ndis_handle adapter, ndis_packet **packets, uint32_t pktcnt)
+ndis_rxeof(adapter, packets, pktcnt)
+	ndis_handle		adapter;
+	ndis_packet		**packets;
+	uint32_t		pktcnt;
 {
 	struct ndis_softc	*sc;
 	ndis_miniport_block	*block;
@@ -990,7 +1266,11 @@ ndis_rxeof(ndis_handle adapter, ndis_packet **packets, uint32_t pktcnt)
 	int			i;
 
 	block = (ndis_miniport_block *)adapter;
+#ifdef __FreeBSD__	
+	sc = device_get_softc(block->nmb_physdeviceobj->do_devext);
+#else /* __NetBSD__ */
 	sc = (struct ndis_softc *)block->nmb_physdeviceobj->pdo_sc;
+#endif		
 	ifp = &sc->arpcom.ac_if;
 
 	for (i = 0; i < pktcnt; i++) {
@@ -1000,10 +1280,18 @@ ndis_rxeof(ndis_handle adapter, ndis_packet **packets, uint32_t pktcnt)
 		if (ndis_ptom(&m0, p)) {
 			aprint_error_dev(sc->ndis_dev, "ptom failed\n");
 			if (p->np_oob.npo_status == NDIS_STATUS_SUCCESS)
+#ifdef __FreeBSD__			
+				ndis_return_packet(sc, p);
+#else /* __NetBSD__ */
 				ndis_return_packet(NULL, (void *)sc, 0, p);
+#endif
 		} else {
 			if (p->np_oob.npo_status == NDIS_STATUS_RESOURCES) {
+#ifdef __FreeBSD__
+				m = m_dup(m0, M_DONTWAIT);
+#else /* __NetBSD__ */
 				m = m_dup(m0, 0, m0->m_pkthdr.len, FALSE);
+#endif
 				/*
 				 * NOTE: we want to destroy the mbuf here, but
 				 * we don't actually want to return it to the
@@ -1024,6 +1312,25 @@ ndis_rxeof(ndis_handle adapter, ndis_packet **packets, uint32_t pktcnt)
 			ifp->if_ipackets++;
 
 			/* Deal with checksum offload. */
+#ifdef __FreeBSD__			
+			if (ifp->if_capenable & IFCAP_RXCSUM &&
+			    p->np_ext.npe_info[ndis_tcpipcsum_info] != NULL) {
+				s = (uintptr_t)
+			 	    p->np_ext.npe_info[ndis_tcpipcsum_info];
+				csum = (ndis_tcpip_csum *)&s;
+				if (csum->u.ntc_rxflags &
+				    NDIS_RXCSUM_IP_PASSED)
+					m0->m_pkthdr.csum_flags |=
+					    CSUM_IP_CHECKED|CSUM_IP_VALID;
+				if (csum->u.ntc_rxflags &
+				    (NDIS_RXCSUM_TCP_PASSED |
+				    NDIS_RXCSUM_UDP_PASSED)) {
+					m0->m_pkthdr.csum_flags |=
+					    CSUM_DATA_VALID|CSUM_PSEUDO_HDR;
+					m0->m_pkthdr.csum_data = 0xFFFF;
+				}
+			}
+#else /* __NetBSD__ */
 /* 
  * TODO: deal with checksum offload in NetBSD 
  * (see IFCAP_XXX in sys/net/if.h, these differ from the FreeBSD ones)
@@ -1045,8 +1352,13 @@ ndis_rxeof(ndis_handle adapter, ndis_packet **packets, uint32_t pktcnt)
 					m0->m_pkthdr.csum_data = 0xFFFF;
 				}
 			}			
+#endif
 
-			bpf_mtap(ifp, m0);
+#ifdef __NetBSD__
+			if(ifp->if_bpf) {
+				bpf_mtap(ifp->if_bpf, m0);
+			}
+#endif
 
 			(*ifp->if_input)(ifp, m0);
 		}
@@ -1071,10 +1383,16 @@ ndis_txeof(adapter, packet, status)
 	struct ifnet		*ifp;
 	int			idx;
 	struct mbuf		*m;
+#ifdef __NetBSD__
 	int			s;
+#endif	
 
 	block = (ndis_miniport_block *)adapter;
+#ifdef __FreeBSD__	
+	sc = device_get_softc(block->nmb_physdeviceobj->do_devext);
+#else /* __NetBSD__ */
 	sc = (struct ndis_softc *)block->nmb_physdeviceobj->pdo_sc;
+#endif		
 	ifp = &sc->arpcom.ac_if;
 
 	m = packet->np_m0;
@@ -1104,13 +1422,21 @@ ndis_txeof(adapter, packet, status)
 }
 
 __stdcall /*static*/ void
-ndis_linksts(ndis_handle adapter, ndis_status status, void *sbuf, uint32_t slen)
+ndis_linksts(adapter, status, sbuf, slen)
+	ndis_handle		adapter;
+	ndis_status		status;
+	void			*sbuf;
+	uint32_t		slen;
 {
 	ndis_miniport_block	*block;
 	struct ndis_softc	*sc;
 
 	block = adapter;
+#ifdef __FreeBSD__	
+	sc = device_get_softc(block->nmb_physdeviceobj->do_devext);
+#else /* __NetBSD__ */
 	sc = (struct ndis_softc *)block->nmb_physdeviceobj->pdo_sc;
+#endif		
 	
 
 	block->nmb_getstat = status;
@@ -1119,14 +1445,19 @@ ndis_linksts(ndis_handle adapter, ndis_status status, void *sbuf, uint32_t slen)
 }
 
 __stdcall /*static*/ void
-ndis_linksts_done(ndis_handle adapter)
+ndis_linksts_done(adapter)
+	ndis_handle		adapter;
 {
 	ndis_miniport_block	*block;
 	struct ndis_softc	*sc;
 	struct ifnet		*ifp;
 
 	block = adapter;
+#ifdef __FreeBSD__	
+	sc = device_get_softc(block->nmb_physdeviceobj->do_devext);
+#else /* __NetBSD__ */
 	sc = (struct ndis_softc *)block->nmb_physdeviceobj->pdo_sc;
+#endif		
 	ifp = &sc->arpcom.ac_if;
 
 	if (!NDIS_INITIALIZED(sc))
@@ -1148,8 +1479,13 @@ ndis_linksts_done(ndis_handle adapter)
 	return;
 }
 
+#ifdef __FreeBSD__
+ static  void
+ndis_intr(arg)
+#else /* __NetBSD__ */
 int
 ndis_intr(arg)
+#endif
 	void			*arg;
 {
 	struct ndis_softc	*sc;
@@ -1162,6 +1498,7 @@ ndis_intr(arg)
 	sc = arg;
 	ifp = &sc->arpcom.ac_if;
 
+#ifdef __NetBSD__
 	/* 
 	 * I was getting an interrupt before NdisAddDevice was called, 
 	 * which sets up the ndis_block, so...
@@ -1169,11 +1506,16 @@ ndis_intr(arg)
 	if(sc->ndis_block == NULL) {
 		return 0;
 	}
+#endif	
 	
 	intr = sc->ndis_block->nmb_interrupt;
 
 	if (sc->ndis_block->nmb_miniportadapterctx == NULL) {
+#ifdef __FreeBSD__		
+		return;
+#else /* __NetBSD__ */
 		return 0;
+#endif
 	}			
 
 	KeAcquireSpinLock(&intr->ni_dpccountlock, &irql);
@@ -1191,13 +1533,18 @@ ndis_intr(arg)
 		ndis_in_isr = FALSE;
 	}
 
+#ifdef __FreeBSD__	
+	return;
+#else /* __NetBSD__ */
 	return 0;
+#endif		
 }
 
 /* 
  * just here so I can wake up the SWI thread
  * in ndis_ticktask
  */
+#ifdef __NetBSD__
 struct ndisproc {
 	struct ndisqhead	*np_q;
 	struct proc		*np_p;
@@ -1206,34 +1553,51 @@ struct ndisproc {
 	int			np_needs_wakeup;
 };
 extern struct ndisproc ndis_iproc;
+#endif
 
 static void
-ndis_tick(void *xsc)
+ndis_tick(xsc)
+	void			*xsc;
 {
 	struct ndis_softc	*sc;
 
+#ifdef __FreeBSD__
+	mtx_unlock(&Giant);
+#else /* __NetBSD__ */
 	/* TODO: do we need the lock for NetBSD? */
+#endif
 
 	sc = xsc;
 
 	ndis_sched(ndis_ticktask, sc, NDIS_TASKQUEUE);
 	
+#ifdef __FreeBSD__	
+	sc->ndis_stat_ch = timeout(ndis_tick, sc, hz *
+	    sc->ndis_block->nmb_checkforhangsecs);
+#else /* __NetBSD__ */
 	callout_reset(&sc->ndis_stat_ch, hz * 
 		sc->ndis_block->nmb_checkforhangsecs, ndis_tick, sc);
+#endif
 
+#ifdef __FreeBSD__
+	mtx_lock(&Giant);
+#endif
 
 	return;
 }
 
 static void
-ndis_ticktask(void *xsc)
+ndis_ticktask(xsc)
+	void			*xsc;
 {
 	struct ndis_softc	*sc;
 	__stdcall ndis_checkforhang_handler hangfunc;
 	uint8_t			rval;
 	ndis_media_state	linkstate;
 	int			error, len;
+#ifdef __NetBSD__
 	int			s;
+#endif	
 
 	sc = xsc;
 
@@ -1311,12 +1675,17 @@ ndis_map_sclist(arg, segs, nseg, mapsize, error)
 }
 
 static void
-ndis_starttask(void *arg)
+ndis_starttask(arg)
+	void			*arg;
 {
 	struct ifnet		*ifp;
 
 	ifp = arg;
-	if (!IFQ_IS_EMPTY(&ifp->if_snd))
+#if __FreeBSD_version < 502114
+	if (ifp->if_snd.ifq_head != NULL)
+#else
+	if (!IFQ_DRV_IS_EMPTY(&ifp->if_snd))
+#endif
 		ndis_start(ifp);
 	return;
 }
@@ -1334,14 +1703,17 @@ ndis_starttask(void *arg)
  * will do the mapping themselves on a buffer by buffer basis.
  */
 static void
-ndis_start(struct ifnet *ifp)
+ndis_start(ifp)
+	struct ifnet		*ifp;
 {
 	struct ndis_softc	*sc;
 	struct mbuf		*m = NULL;
 	ndis_packet		**p0 = NULL, *p = NULL;
     ndis_tcpip_csum		*csum;
 	int			pcnt = 0, status;
+#ifdef __NetBSD__
 	int			s;
+#endif
 
 	sc = ifp->if_softc;
 		
@@ -1355,7 +1727,11 @@ ndis_start(struct ifnet *ifp)
 	p0 = &sc->ndis_txarray[sc->ndis_txidx];
 
 	while(sc->ndis_txpending) {
-		IFQ_DEQUEUE(&ifp->if_snd, m);
+#if __FreeBSD_version < 502114
+		IF_DEQUEUE(&ifp->if_snd, m);
+#else
+		IFQ_DRV_DEQUEUE(&ifp->if_snd, m);
+#endif
 		if (m == NULL)
 			break;
 
@@ -1390,6 +1766,14 @@ ndis_start(struct ifnet *ifp)
 		 * Do scatter/gather processing, if driver requested it.
 		 */
 		if (sc->ndis_sc) {
+#ifdef __FreeBSD__
+			bus_dmamap_load_mbuf(sc->ndis_ttag,
+			    sc->ndis_tmaps[sc->ndis_txidx], m,
+			    ndis_map_sclist, &p->np_sclist, BUS_DMA_NOWAIT);
+			bus_dmamap_sync(sc->ndis_ttag,
+			    sc->ndis_tmaps[sc->ndis_txidx],
+			    BUS_DMASYNC_PREREAD);			    
+#else /* __NetBSD__ */
 /* 
  * TODO: NetBSD's bus_dmamap_load_mbuf dosen't provide a callback function 
  * argumet as FreeBSD's does figure out what to do about this. 
@@ -1412,6 +1796,7 @@ ndis_start(struct ifnet *ifp)
 			    sc->ndis_tmaps[sc->ndis_txidx]->dm_segs->ds_addr,
 			    sc->ndis_tmaps[sc->ndis_txidx]->dm_segs->ds_len,
 			    BUS_DMASYNC_PREREAD);			    
+#endif
 			p->np_ext.npe_info[ndis_sclist_info] = &p->np_sclist;
 		}
 
@@ -1439,7 +1824,11 @@ ndis_start(struct ifnet *ifp)
 		 * If there's a BPF listener, bounce a copy of this frame
 		 * to him.
 		 */
+#ifdef __FreeBSD__
+		BPF_MTAP(ifp, m);
+#else /* __NetBSD__ */
 		bpf_mtap(ifp, m);
+#endif
 		/*
 		 * The array that p0 points to must appear contiguous,
 		 * so we must not wrap past the end of sc->ndis_txarray[].
@@ -1475,13 +1864,24 @@ ndis_start(struct ifnet *ifp)
 	return;
 }
 
+#ifdef __FreeBSD__
+static void
+ndis_init(xsc)
+	void			*xsc;
+#else /* __NetBSD__ */
 static int
 ndis_init(xsc)
 	struct ifnet 		*xsc;
+#endif
 {
+#ifdef __FreeBSD__
+	struct ndis_softc	*sc = (struct ndis_softc *)xsc;
+	struct ifnet		*ifp = &sc->arpcom.ac_if;
+#else /* __NetBSD__ */
 	struct ndis_softc	*sc  = xsc->if_softc;
 	struct ifnet		*ifp = xsc;
 	int 			s;
+#endif
 	int			i, error;
 	
 	/*
@@ -1491,14 +1891,22 @@ ndis_init(xsc)
 	 * call ifp->if_init() quite as often.
 	 */
 	if (sc->ndis_link && sc->ndis_skip)
+#ifdef __FreeBSD__      
+		return;
+#else /* __NetBSD__ */
 		return 0;
+#endif
 
 	/*
 	 * Cancel pending I/O and free all RX/TX buffers.
 	 */
 	 ndis_stop(sc);
 	 if (ndis_init_nic(sc)) {
+#ifdef __FreeBSD__      
+		return;
+#else /* __NetBSD__ */
 		return 0;
+#endif
 	}
 
 	/* Init our MAC address */
@@ -1557,25 +1965,39 @@ ndis_init(xsc)
 	if (sc->ndis_block->nmb_checkforhangsecs == 0)
 		sc->ndis_block->nmb_checkforhangsecs = 3;
 
+#ifdef __FreeBSD__
+	sc->ndis_stat_ch = timeout(ndis_tick, sc,
+	    hz * sc->ndis_block->nmb_checkforhangsecs);
+#else /* __NetBSD__ */
 	callout_reset(&sc->ndis_stat_ch, 
 		      hz * sc->ndis_block->nmb_checkforhangsecs,
 		      ndis_tick, sc);
+#endif	    
 
+#ifdef __FreeBSD__      
+		return;
+#else /* __NetBSD__ */
 		return 0;
+#endif
 }
 
 /*
  * Set media options.
  */
 static int
-ndis_ifmedia_upd(struct ifnet *ifp)
+ndis_ifmedia_upd(ifp)
+	struct ifnet		*ifp;
 {
 	struct ndis_softc		*sc;
 
 	sc = ifp->if_softc;
 
 	if (NDIS_INITIALIZED(sc))
+#ifdef __FreeBSD__	
+		ndis_init(sc);
+#else /* __NetBSD__ */
 		ndis_init(&sc->arpcom.ac_if);
+#endif		
 
 	return(0);
 }
@@ -1584,7 +2006,9 @@ ndis_ifmedia_upd(struct ifnet *ifp)
  * Report current media status.
  */
 static void
-ndis_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
+ndis_ifmedia_sts(ifp, ifmr)
+	struct ifnet		*ifp;
+	struct ifmediareq	*ifmr;
 {
 	struct ndis_softc	*sc;
 	uint32_t		media_info;
@@ -1631,7 +2055,8 @@ ndis_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 /* TODO: Perhaps raise the IPL while in these wireless functions ? */
 
 static void
-ndis_setstate_80211(struct ndis_softc *sc)
+ndis_setstate_80211(sc)
+	struct ndis_softc	*sc;
 {
 	struct ieee80211com	*ic;
 	ndis_80211_ssid		ssid;
@@ -1641,13 +2066,19 @@ ndis_setstate_80211(struct ndis_softc *sc)
 	uint32_t		arg;
 	struct ifnet		*ifp;
 	
+#ifdef __NetBSD__
 #define wk_len 		wk_keylen
 #define ic_wep_txkey	ic_def_txkey
+#endif
 
 ic = &sc->ic;
 
 /* TODO: are these equivelant? */	
+#ifdef __FreeBSD__	
+	ifp = &sc->ic.ic_ac.ac_if;
+#else /* __NetBSD__ */
 	ifp = sc->ic.ic_ifp;
+#endif
 
 	if (!NDIS_INITIALIZED(sc))
 		return;
@@ -1667,10 +2098,18 @@ ic = &sc->ic;
 
 	/* Set WEP */
 /* TODO: Clean up these #ifdef's */	
+#ifdef __FreeBSD__
+#ifdef IEEE80211_F_WEPON
+	if (ic->ic_flags & IEEE80211_F_WEPON) {	
+#else
+	if (ic->ic_wep_mode >= IEEE80211_WEP_ON) {
+#endif
+#else /* __NetBSD__ */
 	if (ic->ic_flags & IEEE80211_F_PRIVACY) {	
+#endif /* __NetBSD__ */
 		for (i = 0; i < IEEE80211_WEP_NKID; i++) {		
 			if (ic->ic_nw_keys[i].wk_len) {
-				memset((char *)&wep, 0, sizeof(wep));
+				bzero((char *)&wep, sizeof(wep));
 				wep.nw_keylen = ic->ic_nw_keys[i].wk_len;
 #ifdef notdef
 				/* 5 and 13 are the only valid key lengths */
@@ -1700,6 +2139,14 @@ ic = &sc->ic;
 		if (rval)
 			aprint_error_dev(sc->ndis_dev, "enable WEP failed: %d\n", 
 				     rval);
+#ifdef __FreeBSD__			    
+#ifndef IEEE80211_F_WEPON
+		if (ic->ic_wep_mode != IEEE80211_WEP_8021X &&
+		    ic->ic_wep_mode != IEEE80211_WEP_ON)
+			arg = NDIS_80211_PRIVFILT_ACCEPTALL;
+		else
+#endif
+#endif /* __FreeBSD__ */
 			arg = NDIS_80211_PRIVFILT_8021XWEP;
 		len = sizeof(arg);
 		rval = ndis_set_info(sc, OID_802_11_PRIVACY_FILTER, &arg, &len);
@@ -1759,7 +2206,7 @@ ic = &sc->ic;
 #endif
 
 	len = sizeof(config);
-	memset((char *)&config, 0, len);
+	bzero((char *)&config, len);
 	config.nc_length = len;
 	config.nc_fhconfig.ncf_length = sizeof(ndis_80211_config_fh);
 	rval = ndis_get_info(sc, OID_802_11_CONFIGURATION, &config, &len); 
@@ -1804,12 +2251,12 @@ ic = &sc->ic;
 	/* Set SSID -- always do this last. */
 
 	len = sizeof(ssid);
-	memset((char *)&ssid, 0, len);
+	bzero((char *)&ssid, len);
 	ssid.ns_ssidlen = ic->ic_des_esslen;
 	if (ssid.ns_ssidlen == 0) {
 		ssid.ns_ssidlen = 1;
 	} else
-		memcpy(ssid.ns_ssid, ic->ic_des_essid, ssid.ns_ssidlen);
+		bcopy(ic->ic_des_essid, ssid.ns_ssid, ssid.ns_ssidlen);
 	rval = ndis_set_info(sc, OID_802_11_SSID, &ssid, &len);
 
 	if (rval)
@@ -1863,6 +2310,9 @@ ndis_media_status(struct ifnet *ifp, struct ifmediareq *imr)
         case IEEE80211_MODE_11G:
                 imr->ifm_active |= IFM_MAKEMODE(IFM_IEEE80211_11G);
                 break;
+#ifdef __FreeBSD__		
+        case IEEE80211_MODE_TURBO:
+#endif /* __NetBSD__ */
 /* 
  * TODO: is this correct? (IEEE80211_MODE_TURBO_A and IEEE80211_MODE_TURBO_G 
  * are defined in _ieee80211.h)
@@ -1876,7 +2326,9 @@ ndis_media_status(struct ifnet *ifp, struct ifmediareq *imr)
 }
 
 static int
-ndis_get_assoc(struct ndis_softc *sc, ndis_wlan_bssid_ex **assoc)
+ndis_get_assoc(sc, assoc)
+	struct ndis_softc	*sc;
+	ndis_wlan_bssid_ex	**assoc;
 {
 	ndis_80211_bssid_list_ex	*bl;
 	ndis_wlan_bssid_ex	*bs;
@@ -1909,13 +2361,13 @@ ndis_get_assoc(struct ndis_softc *sc, ndis_wlan_bssid_ex **assoc)
 
 	bs = (ndis_wlan_bssid_ex *)&bl->nblx_bssid[0];
 	for (i = 0; i < bl->nblx_items; i++) {
-		if (memcmp(bs->nwbx_macaddr, bssid, sizeof(bssid)) == 0) {
+		if (bcmp(bs->nwbx_macaddr, bssid, sizeof(bssid)) == 0) {
 			*assoc = malloc(bs->nwbx_len, M_TEMP, M_NOWAIT);
 			if (*assoc == NULL) {
 				free(bl, M_TEMP);
 				return(ENOMEM);
 			}
-			memcpy((char *)*assoc, (char *)bs, bs->nwbx_len);
+			bcopy((char *)bs, (char *)*assoc, bs->nwbx_len);
 			free(bl, M_TEMP);
 			return(0);
 		}	
@@ -1927,7 +2379,8 @@ ndis_get_assoc(struct ndis_softc *sc, ndis_wlan_bssid_ex **assoc)
 }
 
 static void
-ndis_getstate_80211(struct ndis_softc *sc)
+ndis_getstate_80211(sc)
+	struct ndis_softc	*sc;
 {
 	struct ieee80211com	*ic;
 	ndis_80211_ssid		ssid;
@@ -1939,7 +2392,11 @@ ndis_getstate_80211(struct ndis_softc *sc)
 
 	ic = &sc->ic;
 /* TODO: are these equivelant? */	
+#ifdef __FreeBSD__	
+	ifp = &sc->ic.ic_ac.ac_if;
+#else /* __NetBSD__ */
 	ifp = sc->ic.ic_ifp;
+#endif
 
 	if (!NDIS_INITIALIZED(sc))
 		return;
@@ -1975,12 +2432,12 @@ ndis_getstate_80211(struct ndis_softc *sc)
 		return;
 
 	len = sizeof(ssid);
-	memset((char *)&ssid, 0, len);
+	bzero((char *)&ssid, len);
 	rval = ndis_get_info(sc, OID_802_11_SSID, &ssid, &len);
 
 	if (rval)
 		aprint_error_dev(sc->ndis_dev, "get ssid failed: %d\n", rval);
-	memcpy(ic->ic_bss->ni_essid, ssid.ns_ssid, ssid.ns_ssidlen);
+	bcopy(ssid.ns_ssid, ic->ic_bss->ni_essid, ssid.ns_ssidlen);
 	ic->ic_bss->ni_esslen = ssid.ns_ssidlen;
 
 	len = sizeof(arg);
@@ -2028,7 +2485,7 @@ ndis_getstate_80211(struct ndis_softc *sc)
 	}
 
 	len = sizeof(config);
-	memset((char *)&config, 0, len);
+	bzero((char *)&config, len);
 	config.nc_length = len;
 	config.nc_fhconfig.ncf_length = sizeof(ndis_80211_config_fh);
 	rval = ndis_get_info(sc, OID_802_11_CONFIGURATION, &config, &len);   
@@ -2065,20 +2522,25 @@ ndis_getstate_80211(struct ndis_softc *sc)
 }
 
 static int
-ndis_ioctl(struct ifnet *ifp, u_long command, void *data)
+ndis_ioctl(ifp, command, data)
+	struct ifnet		*ifp;
+	u_long			command;
+	void *			data;
 {
 	struct ndis_softc	*sc = ifp->if_softc;
 	struct ifreq		*ifr = (struct ifreq *) data;
 	int			i, error = 0;
+#ifdef __NetBSD__
 	int			s;
+#endif	
 
 	/*NDIS_LOCK(sc);*/
+#ifdef __NetBSD__
 	s = splnet();
+#endif	
 
 	switch(command) {
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, command, data)) != 0)
-			break;
 		if (ifp->if_flags & IFF_UP) {
 			if (ifp->if_flags & IFF_RUNNING &&
 			    ifp->if_flags & IFF_PROMISC &&
@@ -2099,7 +2561,11 @@ ndis_ioctl(struct ifnet *ifp, u_long command, void *data)
 				    OID_GEN_CURRENT_PACKET_FILTER,
 				    &sc->ndis_filter, &i);
 			} else
+#ifdef __FreeBSD__			
+				ndis_init(sc);
+#else /* __NetBSD__ */
 				ndis_init(ifp);
+#endif
 		} else {
 			if (ifp->if_flags & IFF_RUNNING)
 				ndis_stop(sc);
@@ -2109,12 +2575,14 @@ ndis_ioctl(struct ifnet *ifp, u_long command, void *data)
 		break;
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
+#ifdef __NetBSD__
 /* 
  * TODO: I'm really not sure this is the correct thing to do here, but multicast
  * address lists weren't getting set in ether_ioctl because they SIOCADDMULTI 
  * is routed to ndis_setmulti here.
  */
 		error = ether_ioctl(ifp, command, data);
+#endif
 		ndis_setmulti(sc);
 		error = 0;
 		break;	
@@ -2150,7 +2618,11 @@ ndis_ioctl(struct ifnet *ifp, u_long command, void *data)
 	default:
 		sc->ndis_skip = 1;
 		if (sc->ndis_80211) {
+#ifdef __FreeBSD__		
+			error = ieee80211_ioctl(ifp, command, data);
+#else /* __NetBSD__ */
 			error = ieee80211_ioctl(&sc->ic, command, data);
+#endif
 
 			if (error == ENETRESET) {
 				ndis_setstate_80211(sc);
@@ -2164,13 +2636,18 @@ ndis_ioctl(struct ifnet *ifp, u_long command, void *data)
 	}
 
 	/*NDIS_UNLOCK(sc);*/
+#ifdef __NetBSD__
 			splx(s);
+#endif		
 
 	return(error);
 }
 
 static int
-ndis_wi_ioctl_get(struct ifnet *ifp, u_long command, void * data)
+ndis_wi_ioctl_get(ifp, command, data)
+	struct ifnet		*ifp;
+	u_long			command;
+	void *			data;
 {
 	struct wi_req		wreq;
 	struct ifreq		*ifr;
@@ -2210,11 +2687,11 @@ ndis_wi_ioctl_get(struct ifnet *ifp, u_long command, void * data)
 		api = (struct wi_apinfo *)&((int *)&wreq.wi_val)[1];
 		wb = bl->nblx_bssid;
 		while (maxaps--) {
-			memset(api, 0, sizeof(*api));
-			memcpy(&api->bssid, &wb->nwbx_macaddr,
+			bzero(api, sizeof(*api));
+			bcopy(&wb->nwbx_macaddr, &api->bssid,
 			    sizeof(api->bssid));
 			api->namelen = wb->nwbx_ssid.ns_ssidlen;
-			memcpy(&api->name, &wb->nwbx_ssid.ns_ssid, api->namelen);
+			bcopy(&wb->nwbx_ssid.ns_ssid, &api->name, api->namelen);
 			if (wb->nwbx_privacy)
 				api->capinfo |= IEEE80211_CAPINFO_PRIVACY;
 			/* XXX Where can we get noise information? */
@@ -2248,17 +2725,22 @@ ndis_wi_ioctl_get(struct ifnet *ifp, u_long command, void * data)
 }
 
 static int
-ndis_wi_ioctl_set(struct ifnet *ifp, u_long command, void * data)
+ndis_wi_ioctl_set(ifp, command, data)
+	struct ifnet		*ifp;
+	u_long			command;
+	void *			data;
 {
 	struct wi_req		wreq;
 	struct ifreq		*ifr;
 	struct ndis_softc	*sc;
 	uint32_t		foo;
 	int			error, len;
-
-	error = kauth_authorize_network(kauth_cred_get(),
-	    KAUTH_NETWORK_INTERFACE, KAUTH_REQ_NETWORK_INTERFACE_SETPRIV,
-	    ifp, KAUTH_ARG(command), NULL);
+#ifdef __FreeBSD__
+	error = suser(curthread);
+#else /* __NetBSD__ */
+	error = kauth_authorize_generic(curlwp->l_cred,
+	    KAUTH_GENERIC_ISSUSER, NULL);
+#endif	
 	if (error)
 		return (error);
 
@@ -2284,10 +2766,13 @@ ndis_wi_ioctl_set(struct ifnet *ifp, u_long command, void * data)
 }
 
 static void
-ndis_watchdog(struct ifnet *ifp)
+ndis_watchdog(ifp)
+	struct ifnet		*ifp;
 {
 	struct ndis_softc		*sc;
+#ifdef __NetBSD__
 	int				s;
+#endif	
 
 	sc = ifp->if_softc;
 	
@@ -2309,13 +2794,20 @@ ndis_watchdog(struct ifnet *ifp)
  * RX and TX lists.
  */
 static void
-ndis_stop(struct ndis_softc *sc)
+ndis_stop(sc)
+	struct ndis_softc		*sc;
 {
 	struct ifnet		*ifp;
+#ifdef __NetBSD__
 	int 			s;
+#endif	
 
 	ifp = &sc->arpcom.ac_if;
+#ifdef __FreeBSD__	
+	untimeout(ndis_tick, sc, sc->ndis_stat_ch);
+#else /* __NetBSD__ */
 	callout_stop(&sc->ndis_stat_ch);
+#endif
 
 	ndis_halt_nic(sc);
 
@@ -2335,3 +2827,16 @@ ndis_stop(struct ndis_softc *sc)
  * get confused by errant DMAs when rebooting.
  */
 /* TODO: remove this #ifdef once ndis_shutdown_nic() is working on NetBSD */
+#ifdef __FreeBSD__
+void
+ndis_shutdown(dev)
+	device_t		dev;
+{
+	struct ndis_softc		*sc;
+
+	sc = device_get_softc(dev);
+	ndis_shutdown_nic(sc);
+
+	return;
+}
+#endif /* __FreeBSD__ */

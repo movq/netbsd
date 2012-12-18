@@ -1,4 +1,4 @@
-/*	$NetBSD: pmax.c,v 1.14 2009/04/05 11:55:39 lukem Exp $	*/
+/*	$NetBSD: pmax.c,v 1.13 2008/04/28 20:24:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -98,7 +98,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(__lint)
-__RCSID("$NetBSD: pmax.c,v 1.14 2009/04/05 11:55:39 lukem Exp $");
+__RCSID("$NetBSD: pmax.c,v 1.13 2008/04/28 20:24:16 martin Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
@@ -269,7 +269,7 @@ pmax_setboot(ib_params *params)
 	if (rv == -1) {
 		warn("Writing `%s'", params->filesystem);
 		goto done;
-	} else if ((size_t)rv != bootstrapsize) {
+	} else if (rv != bootstrapsize) {
 		warnx("Writing `%s': short write", params->filesystem);
 		goto done;
 	}
@@ -357,8 +357,7 @@ load_bootstrap(ib_params *params, char **data,
 
 	/* Now load the bootstrap into memory */
 	for (i = 0; i < nsegs; i++) {
-		if ((Elf32_Word)pread(params->s1fd,
-		    *data + seglist[i].addr - lowaddr,
+		if (pread(params->s1fd, *data + seglist[i].addr - lowaddr,
 		    seglist[i].f_size, (off_t)seglist[i].f_offset)
 		    != seglist[i].f_size) {
 			warn("Reading `%s'", params->stage1);

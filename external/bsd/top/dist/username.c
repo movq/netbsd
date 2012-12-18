@@ -52,7 +52,6 @@
 #include "top.h"
 #include "utils.h"
 #include "hash.h"
-#include "username.h"
 
 #define EXPIRETIME (60 * 5)
 
@@ -75,14 +74,14 @@ hash_table *userhash;
 
 
 void
-init_username(void)
+init_username()
 
 {
     userhash = hash_create(211);
 }
 
 char *
-username(int xuid)
+username(int uid)
 
 {
     struct hash_data *data;
@@ -93,27 +92,27 @@ username(int xuid)
     now = time(NULL);
 
     /* get whatever is in the cache */
-    data = hash_lookup_uint(userhash, (unsigned int)xuid);
+    data = hash_lookup_uint(userhash, (unsigned int)uid);
 
     /* if we had a cache miss, then create space for a new entry */
     if (data == NULL)
     {
 	/* make space */
-	data = emalloc(sizeof(struct hash_data));
+	data = (struct hash_data *)malloc(sizeof(struct hash_data));
 
 	/* fill in some data, including an already expired time */
-	data->uid = xuid;
+	data->uid = uid;
 	data->expire = (time_t)0;
 
 	/* add it to the hash: the rest gets filled in later */
-	hash_add_uint(userhash, xuid, data);
+	hash_add_uint(userhash, uid, data);
     }
 
-    /* Now data points to the correct hash entry for "xuid".  If this is
+    /* Now data points to the correct hash entry for "uid".  If this is
        a new entry, then expire is 0 and the next test will be true. */
     if (data->expire <= now)
     {
-	if ((pw = getpwuid(xuid)) != NULL)
+	if ((pw = getpwuid(uid)) != NULL)
 	{
 	    strncpy(data->name, pw->pw_name, MAXLOGNAME-1);
 	    data->expire = now + EXPIRETIME;
@@ -123,7 +122,7 @@ username(int xuid)
 	else
 	{
 	    /* username doesnt exist ... so invent one */
-	    snprintf(data->name, sizeof(data->name), "%d", xuid);
+	    snprintf(data->name, sizeof(data->name), "%d", uid);
 	    data->expire = now + EXPIRETIME;
 	    dprintf("username: updating %d with %s, expires %d\n",
 		    data->uid, data->name, data->expire);
@@ -135,12 +134,12 @@ username(int xuid)
 }
 
 int
-userid(char *xusername)
+userid(char *username)
 
 {
     struct passwd *pwd;
 
-    if ((pwd = getpwnam(xusername)) == NULL)
+    if ((pwd = getpwnam(username)) == NULL)
     {
 	return(-1);
     }

@@ -1,4 +1,4 @@
-/*	$NetBSD: btpin.c,v 1.6 2011/08/29 13:50:13 joerg Exp $	*/
+/*	$NetBSD: btpin.c,v 1.4.4.1 2009/09/26 18:47:47 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2006 Itronix, Inc.  All rights reserved.");
-__RCSID("$NetBSD: btpin.c,v 1.6 2011/08/29 13:50:13 joerg Exp $");
+__RCSID("$NetBSD: btpin.c,v 1.4.4.1 2009/09/26 18:47:47 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/un.h>
@@ -45,7 +45,8 @@ __RCSID("$NetBSD: btpin.c,v 1.6 2011/08/29 13:50:13 joerg Exp $");
 #include <time.h>
 #include <unistd.h>
 
-__dead static void usage(void);
+int  main(int, char *[]);
+void usage(void);
 
 int
 main(int ac, char *av[])
@@ -182,7 +183,7 @@ main(int ac, char *av[])
 	exit(EXIT_SUCCESS);
 }
 
-static void
+void
 usage(void)
 {
 

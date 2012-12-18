@@ -1,4 +1,4 @@
-/*	$NetBSD: kbdvar.h,v 1.21 2012/04/26 00:50:10 macallan Exp $	*/
+/*	$NetBSD: kbdvar.h,v 1.19 2008/03/29 19:15:36 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -43,7 +43,6 @@
 #include "wskbd.h"	/* for NWSKBD */
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wskbdvar.h>
-#include <dev/sysmon/sysmonvar.h>
 
 #if NWSKBD > 0
 #include "opt_wsdisplay_compat.h"
@@ -51,9 +50,6 @@
 
 struct kbd_softc {
 	device_t k_dev;		/* required first: base device */
-
-	struct sysmon_pswitch k_sm_pbutton;
-	int k_ev;
 
 	/* middle layer methods */
 	const struct kbd_ops *k_ops;
@@ -63,7 +59,7 @@ struct kbd_softc {
 	struct evvar k_events;	/* event queue state */
 
 #if NWSKBD > 0
-	device_t  k_wskbd;/* handle for wskbd, if it is attached */
+	struct device * k_wskbd;/* handle for wskbd, if it is attached */
 	int k_wsenabled;	/* set if we are using wskbd */
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	int k_wsraw;		/* send raw events to wscons */

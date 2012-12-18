@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.h,v 1.12 2011/06/30 20:09:20 wiz Exp $	*/
+/*	$NetBSD: signal.h,v 1.10 2005/12/11 12:16:47 christos Exp $	*/
 
 /*
  * Copyright (c) 1994-1996 Mark Brinicombe.
@@ -38,7 +38,7 @@
  *
  * signal.h
  *
- * Architecture dependent signal types and structures
+ * Architecture dependant signal types and structures
  *
  * Created      : 30/09/94
  */
@@ -53,6 +53,14 @@ typedef int sig_atomic_t;
 #endif
 
 #if defined(_NETBSD_SOURCE)
+
+#ifdef _KERNEL
+#ifdef COMPAT_16
+#define SIGTRAMP_VALID(vers)	((unsigned)(vers) <= 2)
+#else
+#define SIGTRAMP_VALID(vers)	((vers) == 2)
+#endif
+#endif
 
 #ifndef _LOCORE
 /*

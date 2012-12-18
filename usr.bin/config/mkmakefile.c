@@ -1,4 +1,4 @@
-/*	$NetBSD: mkmakefile.c,v 1.15 2012/06/08 08:56:45 martin Exp $	*/
+/*	$NetBSD: mkmakefile.c,v 1.7 2008/07/16 11:45:56 kent Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -74,8 +74,6 @@ static void emitrules(FILE *);
 static void emitload(FILE *);
 static void emitincludes(FILE *);
 static void emitappmkoptions(FILE *);
-static void emitsubs(FILE *, const char *, const char *, int);
-static int  selectopt(const char *, void *);
 
 int
 mkmakefile(void)
@@ -115,7 +113,7 @@ mkmakefile(void)
 	lineno = 0;
 	while (fgets(line, sizeof(line), ifp) != NULL) {
 		lineno++;
-		if ((version < 20090214 && line[0] != '%') || line[0] == '#') {
+		if (line[0] != '%') {
 			fputs(line, ofp);
 			continue;
 		}
@@ -133,20 +131,9 @@ mkmakefile(void)
 			fn = emitincludes;
 		else if (strcmp(line, "%MAKEOPTIONSAPPEND\n") == 0)
 			fn = emitappmkoptions;
-		else if (strncmp(line, "%VERSION ", sizeof("%VERSION ")-1) == 0) {
-			int newvers;
-			if (sscanf(line, "%%VERSION %d\n", &newvers) != 1) {
-				cfgxerror(ifname, lineno, "syntax error for "
-				    "%%VERSION");
-			} else
-				setversion(newvers);
-			continue;
-		} else {
-			if (version < 20090214)
-				cfgxerror(ifname, lineno,
-				    "unknown %% construct ignored: %s", line);
-			else
-				emitsubs(ofp, line, ifname, lineno);
+		else {
+			cfgxerror(ifname, lineno,
+			    "unknown %% construct ignored: %s", line);
 			continue;
 		}
 		(*fn)(ofp);
@@ -185,51 +172,6 @@ mkmakefile(void)
  bad2:
 	free(ifname);
 	return (1);
-}
-
-static void
-emitsubs(FILE *fp, const char *line, const char *file, int lineno)
-{
-	char *nextpct;
-	const char *optname;
-	struct nvlist *option;
-
-	while (*line != '\0') {
-		if (*line != '%') {
-			fputc(*line++, fp);
-			continue;
-		}
-
-		line++;
-		nextpct = strchr(line, '%');
-		if (nextpct == NULL) {
-			cfgxerror(file, lineno, "unbalanced %% or "
-			    "unknown construct");
-			return;
-		}
-		*nextpct = '\0';
-
-		if (*line == '\0')
-			fputc('%', fp);
-		else {
-			optname = intern(line);
-			if (!DEFINED_OPTION(optname)) {
-				cfgxerror(file, lineno, "unknown option %s",
-				    optname);
-				return;
-			}
-
-			if ((option = ht_lookup(opttab, optname)) == NULL)
-				option = ht_lookup(fsopttab, optname);
-			if (option != NULL)
-				fputs(option->nv_str ? option->nv_str : "1",
-				    fp);
-			/* Otherwise it's not a selected option and we don't
-			 * output anything. */
-		}
-
-		line = nextpct+1;
-	}
 }
 
 /*
@@ -280,7 +222,7 @@ static void
 emitdefs(FILE *fp)
 {
 	struct nvlist *nv;
-	const char *sp;
+	char *sp;
 
 	fprintf(fp, "KERNEL_BUILD=%s\n", conffile);
 	fputs("IDENT=", fp);
@@ -512,13 +454,6 @@ emitload(FILE *fp)
 	fputs(".MAIN: all\nall:", fp);
 	TAILQ_FOREACH(cf, &allcf, cf_next) {
 		fprintf(fp, " %s", cf->cf_name);
-		/*
-		 * If we generate multiple configs inside the same build directory
-		 * with a parallel build, strange things may happen, so sequentialize
-		 * them.
-		 */
-		if (cf != TAILQ_LAST(&allcf,conftq))
-			fprintf(fp, " .WAIT");
 	}
 	fputs("\n\n", fp);
 	TAILQ_FOREACH(cf, &allcf, cf_next) {
@@ -551,6 +486,21 @@ emitincludes(FILE *fp)
 	}
 }
 
+static int
+print_condmkopts(const char *name, void *value, void *arg)
+{
+	struct nvlist *nv;
+	FILE *fp = arg;
+
+	if (ht_lookup(selecttab, name) == 0)
+		return (0);
+
+	for (nv = value; nv != NULL; nv = nv->nv_next)
+		fprintf(fp, "%s+=%s\n", nv->nv_name, nv->nv_str);
+
+	return (0);
+}
+
 /*
  * Emit appending makeoptions.
  */
@@ -558,24 +508,9 @@ static void
 emitappmkoptions(FILE *fp)
 {
 	struct nvlist *nv;
-	struct condexpr *cond;
 
 	for (nv = appmkoptions; nv != NULL; nv = nv->nv_next)
 		fprintf(fp, "%s+=%s\n", nv->nv_name, nv->nv_str);
 
-	for (nv = condmkoptions; nv != NULL; nv = nv->nv_next) {
-		cond = nv->nv_ptr;
-		if (expr_eval(cond, selectopt, NULL))
-			fprintf(fp, "%s+=%s\n", nv->nv_name, nv->nv_str);
-		condexpr_destroy(cond);
-		nv->nv_ptr = NULL;
-	}
-}
-
-static int
-/*ARGSUSED*/
-selectopt(const char *name, void *context)
-{
-
-	return (ht_lookup(selecttab, strtolower(name)) != NULL);
+	ht_enumerate(condmkopttab, print_condmkopts, fp);
 }

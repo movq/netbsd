@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tscs_isa.c,v 1.15 2012/02/02 19:43:04 tls Exp $	*/
+/*	$NetBSD: if_tscs_isa.c,v 1.7 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -30,14 +30,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tscs_isa.c,v 1.15 2012/02/02 19:43:04 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tscs_isa.c,v 1.7 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/socket.h>
 #include <sys/device.h>
 
+#include "rnd.h"
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -54,14 +57,17 @@ __KERNEL_RCSID(0, "$NetBSD: if_tscs_isa.c,v 1.15 2012/02/02 19:43:04 tls Exp $")
 #include <dev/ic/cs89x0var.h>
 #include <dev/isa/cs89x0isavar.h>
 
-static int	tscs_isa_probe(device_t, cfdata_t, void *);
-static void	tscs_isa_attach(device_t, device_t, void *);
+int	tscs_isa_probe(struct device *, struct cfdata *, void *);
+void	tscs_isa_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(tscs_isa, sizeof(struct cs_softc_isa),
+CFATTACH_DECL(tscs_isa, sizeof(struct cs_softc),
     tscs_isa_probe, tscs_isa_attach, NULL, NULL);
 
 int
-tscs_isa_probe(device_t parent, cfdata_t cf, void *aux)
+tscs_isa_probe(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -165,13 +171,14 @@ tscs_isa_probe(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-tscs_isa_attach(device_t parent, device_t self, void *aux)
+tscs_isa_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct cs_softc_isa *isc = device_private(self);
-	struct cs_softc *sc = &isc->sc_cs;
+	struct cs_softc *sc = (struct cs_softc *) self;
+	struct cs_softc_isa *isc = (void *) self;
 	struct isa_attach_args *ia = aux;
 
-	sc->sc_dev = self;
 	isc->sc_ic = ia->ia_ic;
 	sc->sc_iot = ia->ia_iot;
 	sc->sc_memt = ia->ia_memt;
@@ -186,14 +193,14 @@ tscs_isa_attach(device_t parent, device_t self, void *aux)
 	 */
 	if (bus_space_map(sc->sc_iot, ia->ia_io[0].ir_addr, CS8900_IOSIZE,
 	    0, &sc->sc_ioh)) {
-		aprint_error_dev(self, "unable to map i/o space\n");
+		aprint_error_dev(&sc->sc_dev, "unable to map i/o space\n");
 		return;
 	}
 
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, sc->sc_irq, IST_EDGE,
 	    IPL_NET, cs_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(self, "unable to establish interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "unable to establish interrupt\n");
 		return;
 	}
 

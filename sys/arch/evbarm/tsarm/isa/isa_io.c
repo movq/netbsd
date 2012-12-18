@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_io.c,v 1.10 2012/02/12 16:34:08 matt Exp $	*/
+/*	$NetBSD: isa_io.c,v 1.5 2007/03/04 05:59:45 christos Exp $	*/
 
 /*
  * Copyright 1997
@@ -38,13 +38,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_io.c,v 1.10 2012/02/12 16:34:08 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_io.c,v 1.5 2007/03/04 05:59:45 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/extent.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/pio.h>
 #include <machine/isa_machdep.h>
 
@@ -237,15 +237,17 @@ isa_bs_mallocok(void)
 /* bus space functions */
 
 void
-isa_io_init(vm_offset_t isa_io_addr, vm_offset_t isa_mem_addr)
+isa_io_init(isa_io_addr, isa_mem_addr)
+	vm_offset_t isa_io_addr;
+	vm_offset_t isa_mem_addr;
 {
 	isa_io_bs_tag.bs_cookie = (void *)isa_io_addr;
 	isa_mem_bs_tag.bs_cookie = (void *)isa_mem_addr;
 
-	isaio_ex = extent_create("isaio", 0x0, 0xffff, 
+	isaio_ex = extent_create("isaio", 0x0, 0xffff, M_DEVBUF, 
 		(void *)isaio_ex_storage, sizeof(isaio_ex_storage),
 		EX_NOWAIT|EX_NOCOALESCE);
-	isamem_ex = extent_create("isamem", 0x0, 0xfffff, 
+	isamem_ex = extent_create("isamem", 0x0, 0xfffff, M_DEVBUF, 
 		(void *)isamem_ex_storage, sizeof(isamem_ex_storage),
 		EX_NOWAIT|EX_NOCOALESCE);
 	if (isaio_ex == NULL || isamem_ex == NULL)
@@ -270,7 +272,12 @@ isa_mem_data_vaddr(void)
 }
 
 int
-isa_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int cacheable, bus_space_handle_t *bshp)
+isa_bs_map(t, bpa, size, cacheable, bshp)
+	void *t;
+	bus_addr_t bpa;
+	bus_size_t size;
+	int cacheable;
+	bus_space_handle_t *bshp;
 {
 	struct extent *ex;
 	int err;
@@ -290,29 +297,34 @@ isa_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int cacheable, bus_space_ha
 }
 
 void
-isa_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
+isa_bs_unmap(t, bsh, size)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
 {
 	isa_bs_free(t, bsh, size);
 }
 
 int
-isa_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
+isa_bs_subregion(t, bsh, offset, size, nbshp)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t offset, size;
+	bus_space_handle_t *nbshp;
 {
 	*nbshp = bsh + offset;
 	return(0);
 }
 
 int
-isa_bs_alloc(
-	void *t,
-	bus_addr_t rstart,
-	bus_addr_t rend,
-	bus_size_t size,
-	bus_size_t alignment,
-	bus_size_t boundary,
-	int cacheable,
-	bus_addr_t *bpap,
-	bus_space_handle_t *bshp)
+isa_bs_alloc(t, rstart, rend, size, alignment, boundary, cacheable,
+    bpap, bshp)
+	void *t;
+	bus_addr_t rstart, rend;
+	bus_size_t size, alignment, boundary;
+	int cacheable;
+	bus_addr_t *bpap;
+	bus_space_handle_t *bshp;
 {
 	struct extent *ex;
 	u_long bpa;
@@ -335,7 +347,10 @@ isa_bs_alloc(
 }
 
 void    
-isa_bs_free(void *t, bus_space_handle_t bsh, bus_size_t size)
+isa_bs_free(t, bsh, size)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
 {
 	struct extent *ex;
 
@@ -349,14 +364,20 @@ isa_bs_free(void *t, bus_space_handle_t bsh, bus_size_t size)
 }
 
 void *
-isa_bs_vaddr(void *t, bus_space_handle_t bsh)
+isa_bs_vaddr(t, bsh)
+	void *t;
+	bus_space_handle_t bsh;
 {
 
 	return ((void *)bsh);
 }
 
 void
-isa_bs_barrier(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t len, int flags)
+isa_bs_barrier(t, bsh, offset, len, flags)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t offset, len;
+	int flags;
 {
 	/* just return */
 }	

@@ -1,4 +1,4 @@
-/* $NetBSD: pci_machdep.h,v 1.18 2011/04/04 20:37:55 dyoung Exp $ */
+/* $NetBSD: pci_machdep.h,v 1.10.8.1 2009/10/03 23:54:05 snj Exp $ */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -57,26 +62,102 @@
 #ifndef _XEN_PCI_MACHDEP_H_
 #define _XEN_PCI_MACHDEP_H_
 
-/*
- * Types provided to machine-independent PCI code
- */
-typedef struct xen_intr_handle pci_intr_handle_t;
-
-#include <x86/pci_machdep_common.h>
-
 #include "opt_xen.h"
+
+struct pci_attach_args;
+
+extern struct x86_bus_dma_tag pci_bus_dma_tag;
+#ifdef _LP64
+extern struct x86_bus_dma_tag pci_bus_dma64_tag;
+#endif
+
+/* Some values appropriate for x86, from x86/include/pci_machdep.h */
+#define __HAVE_PCIIDE_MACHDEP_COMPAT_INTR_ESTABLISH
+#define PCI_PREFER_IOSPACE
+
+#ifdef XEN3
+union x86_pci_tag_u {
+	uint32_t mode1;
+	struct {
+		uint16_t port;
+		uint8_t enable;
+		uint8_t forward;
+	} mode2;
+};
+
+typedef union x86_pci_tag_u pcitag_t;
 
 #ifndef DOM0OPS
 int		xpci_enumerate_bus(struct pci_softc *, const int *,
-		   int (*)(const struct pci_attach_args *),
-		   struct pci_attach_args *);
+		   int (*)(struct pci_attach_args *), struct pci_attach_args *);
 #define PCI_MACHDEP_ENUMERATE_BUS xpci_enumerate_bus
 #endif
 
-/* functions provided to MI PCI */
+#else /* XEN3 */
 
+extern uint32_t pci_bus_attached[];
+
+#define PCI_MACHDEP_ENUMERATE_BUS xen_pci_enumerate_bus
+
+/* types provided to MI PCI */
+struct xen_pci_tag {
+	uint8_t bus;
+	uint8_t device;
+	uint8_t function;
+	uint8_t _pad; /* pad to 32bits */
+};
+
+typedef struct xen_pci_tag pcitag_t;
+#endif /* !XEN3 */
+
+typedef void *pci_chipset_tag_t;
+
+typedef struct xen_intr_handle pci_intr_handle_t;
+
+/* functions provided to MI PCI */
+struct pci_attach_args;
+
+void		pci_attach_hook(device_t, device_t,
+		    struct pcibus_attach_args *);
+int		pci_bus_maxdevs(pci_chipset_tag_t, int);
+pcitag_t	pci_make_tag(pci_chipset_tag_t, int, int, int);
+void		pci_decompose_tag(pci_chipset_tag_t, pcitag_t,
+		    int *, int *, int *);
+pcireg_t	pci_conf_read(pci_chipset_tag_t, pcitag_t, int);
+void		pci_conf_write(pci_chipset_tag_t, pcitag_t, int,
+		    pcireg_t);
+int		pci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
+const char	*pci_intr_string(pci_chipset_tag_t, pci_intr_handle_t);
+const struct evcnt *pci_intr_evcnt(pci_chipset_tag_t, pci_intr_handle_t);
+void		*pci_intr_establish(pci_chipset_tag_t, pci_intr_handle_t,
+		    int, int (*)(void *), void *);
+void		pci_intr_disestablish(pci_chipset_tag_t, void *);
 int		xen_pci_enumerate_bus(struct pci_softc *, const int *,
-		   int (*)(const struct pci_attach_args *),
-		   struct pci_attach_args *);
+		   int (*)(struct pci_attach_args *), struct pci_attach_args *);
+
+/* Extract Bus Number for a host bridge or -1 if unknown. */
+int             pchb_get_bus_number(pci_chipset_tag_t, pcitag_t);
+
+/*
+ * Section 6.2.4, `Miscellaneous Functions' of the PCI Specification,
+ * says that 255 means `unknown' or `no connection' to the interrupt
+ * controller on a PC.
+ */
+#define	X86_PCI_INTERRUPT_LINE_NO_CONNECTION	0xff
+
+extern int pci_mode;
+int pci_mode_detect(void);
+int pci_bus_flags(void);
+
+void pci_device_foreach(pci_chipset_tag_t, int,
+			void (*)(pci_chipset_tag_t, pcitag_t, void*),
+			void *);
+
+void pci_device_foreach_min(pci_chipset_tag_t, int, int,
+			    void (*)(pci_chipset_tag_t, pcitag_t, void*),
+			    void *);
+
+void pci_bridge_foreach(pci_chipset_tag_t, int, int,
+	void (*) (pci_chipset_tag_t, pcitag_t, void *), void *);
 
 #endif /* _XEN_PCI_MACHDEP_H_ */

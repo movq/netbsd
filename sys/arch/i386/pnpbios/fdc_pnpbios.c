@@ -1,4 +1,4 @@
-/*	$NetBSD: fdc_pnpbios.c,v 1.17 2012/02/02 19:42:59 tls Exp $	*/
+/*	$NetBSD: fdc_pnpbios.c,v 1.14.10.1 2009/12/01 19:37:03 snj Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -34,9 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdc_pnpbios.c,v 1.17 2012/02/02 19:42:59 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdc_pnpbios.c,v 1.14.10.1 2009/12/01 19:37:03 snj Exp $");
 
-
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,9 +44,11 @@ __KERNEL_RCSID(0, "$NetBSD: fdc_pnpbios.c,v 1.17 2012/02/02 19:42:59 tls Exp $")
 #include <sys/device.h>
 #include <sys/buf.h>
 #include <sys/queue.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/isa/isavar.h>

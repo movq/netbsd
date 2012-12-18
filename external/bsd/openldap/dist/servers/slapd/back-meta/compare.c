@@ -1,9 +1,7 @@
-/*	$NetBSD: compare.c,v 1.1.1.3 2010/12/12 15:23:09 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/servers/slapd/back-meta/compare.c,v 1.50.2.10 2010/04/13 20:23:30 kurt Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/back-meta/compare.c,v 1.50.2.7 2008/02/12 00:25:47 quanah Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1999-2010 The OpenLDAP Foundation.
+ * Copyright 1999-2008 The OpenLDAP Foundation.
  * Portions Copyright 2001-2003 Pierangelo Masarati.
  * Portions Copyright 1999-2003 Howard Chu.
  * All rights reserved.
@@ -46,7 +44,7 @@ meta_back_compare( Operation *op, SlapReply *rs )
 	struct berval	mapped_attr = op->orc_ava->aa_desc->ad_cname;
 	struct berval	mapped_value = op->orc_ava->aa_value;
 	int		msgid;
-	ldap_back_send_t	retrying = LDAP_BACK_RETRYING;
+	int		do_retry = 1;
 	LDAPControl	**ctrls = NULL;
 
 	mc = meta_back_getconn( op, rs, &candidate, LDAP_BACK_SENDERR );
@@ -126,9 +124,9 @@ retry:;
 			ctrls, NULL, &msgid );
 
 	rs->sr_err = meta_back_op_result( mc, op, rs, candidate, msgid,
-		mt->mt_timeout[ SLAP_OP_COMPARE ], ( LDAP_BACK_SENDRESULT | retrying ) );
-	if ( rs->sr_err == LDAP_UNAVAILABLE && retrying ) {
-		retrying &= ~LDAP_BACK_RETRYING;
+		mt->mt_timeout[ SLAP_OP_COMPARE ], LDAP_BACK_SENDRESULT );
+	if ( rs->sr_err == LDAP_UNAVAILABLE && do_retry ) {
+		do_retry = 0;
 		if ( meta_back_retry( op, rs, &mc, candidate, LDAP_BACK_SENDERR ) ) {
 			/* if the identity changed, there might be need to re-authz */
 			(void)mi->mi_ldap_extra->controls_free( op, rs, &ctrls );

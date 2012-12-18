@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_utils.c,v 1.10 2009/03/14 15:36:21 dsl Exp $	*/
+/*	$NetBSD: filecore_utils.c,v 1.9 2008/04/30 14:07:14 ad Exp $	*/
 
 /*-
  * Copyright (c) 1994 The Regents of the University of California.
@@ -102,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_utils.c,v 1.10 2009/03/14 15:36:21 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_utils.c,v 1.9 2008/04/30 14:07:14 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -151,7 +151,8 @@ __KERNEL_RCSID(0, "$NetBSD: filecore_utils.c,v 1.10 2009/03/14 15:36:21 dsl Exp 
  * so we treat such blocks as invalid.
  */
 int
-filecore_bbchecksum(void *bb)
+filecore_bbchecksum(bb)
+	void *bb;
 {
 	u_char *bootblock = bb;
 	u_char byte0, accum_diff;
@@ -191,7 +192,8 @@ filecore_bbchecksum(void *bb)
 }
 
 mode_t
-filecore_mode(struct filecore_node *ip)
+filecore_mode(ip)
+	struct filecore_node *ip;
 {
 	mode_t m = 0;
 	int rf = 0;
@@ -222,7 +224,8 @@ filecore_mode(struct filecore_node *ip)
 }
 
 struct timespec
-filecore_time(struct filecore_node *ip)
+filecore_time(ip)
+	struct filecore_node *ip;
 {
 	struct timespec ts;
 	u_int64_t cs;
@@ -235,7 +238,8 @@ filecore_time(struct filecore_node *ip)
 }
 
 ino_t
-filecore_getparent(struct filecore_node *ip)
+filecore_getparent(ip)
+	struct filecore_node *ip;
 {
 	struct buf *pbp;
 	u_int32_t addr;
@@ -304,7 +308,10 @@ filecore_getparent(struct filecore_node *ip)
 }
 
 int
-filecore_fn2unix(char *fcfn, char *ufn, u_int16_t *len)
+filecore_fn2unix(fcfn, ufn, len)
+	char *fcfn;
+	char *ufn;
+	u_int16_t *len;
 {
 	int i = 0;
 
@@ -331,7 +338,10 @@ filecore_fn2unix(char *fcfn, char *ufn, u_int16_t *len)
 }
 
 int
-filecore_fncmp(const char *fcfn, const char *ufn, u_short len)
+filecore_fncmp(fcfn, ufn, len)
+	const char *fcfn;
+	const char *ufn;
+	u_short len;
 {
 	char f, u;
 	int i = 0;

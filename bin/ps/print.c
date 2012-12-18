@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.120 2012/03/20 18:42:28 matt Exp $	*/
+/*	$NetBSD: print.c,v 1.106.2.1 2009/04/01 00:25:20 snj Exp $	*/
 
 /*
  * Copyright (c) 2000, 2007 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.6 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: print.c,v 1.120 2012/03/20 18:42:28 matt Exp $");
+__RCSID("$NetBSD: print.c,v 1.106.2.1 2009/04/01 00:25:20 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -101,6 +101,8 @@ static void  intprintorsetwidth(VAR *, int, int);
 static void  strprintorsetwidth(VAR *, const char *, int);
 
 static time_t now;
+static int ncpu;
+static u_int64_t *cp_id;
 
 #define	min(a,b)	((a) <= (b) ? (a) : (b))
 
@@ -381,8 +383,10 @@ groups(void *arg, VARENT *ve, int mode)
 	} else
 		left = -1;
 
-	if (ki->p_ngroups == 0)
+	if (ki->p_ngroups == 0) {
 		fmt_putc('-', &left);
+		return;
+	}
 
 	for (i = 0; i < ki->p_ngroups; i++) {
 		(void)snprintf(buf, sizeof(buf), "%d", ki->p_groups[i]);
@@ -419,8 +423,10 @@ groupnames(void *arg, VARENT *ve, int mode)
 	} else
 		left = -1;
 
-	if (ki->p_ngroups == 0)
+	if (ki->p_ngroups == 0) {
 		fmt_putc('-', &left);
+		return;
+	}
 
 	for (i = 0; i < ki->p_ngroups; i++) {
 		if (i)
@@ -481,16 +487,6 @@ state(void *arg, VARENT *ve, int mode)
 	flag = k->p_flag;
 	cp = buf;
 
-	/*
-	 * NOTE: There are historical letters, which are no longer used:
-	 *
-	 * - W: indicated that process is swapped out.
-	 * - L: indicated non-zero l_holdcnt (i.e. that process was
-	 *   prevented from swapping-out.
-	 *
-	 * These letters should not be used for new states to avoid
-	 * conflicts with old applications which might depend on them.
-	 */
 	switch (k->p_stat) {
 
 	case LSSTOP:
@@ -499,7 +495,7 @@ state(void *arg, VARENT *ve, int mode)
 
 	case LSSLEEP:
 		if (flag & L_SINTR)	/* interruptable (long) */
-			*cp = (int)k->p_slptime >= maxslp ? 'I' : 'S';
+			*cp = k->p_slptime >= maxslp ? 'I' : 'S';
 		else
 			*cp = 'D';
 		break;
@@ -526,6 +522,9 @@ state(void *arg, VARENT *ve, int mode)
 		*cp = '?';
 	}
 	cp++;
+	if (flag & L_INMEM) {
+	} else
+		*cp++ = 'W';
 	if (k->p_nice < NZERO)
 		*cp++ = '<';
 	else if (k->p_nice > NZERO)
@@ -538,6 +537,9 @@ state(void *arg, VARENT *ve, int mode)
 		*cp++ = 'V';
 	if (flag & P_SYSTEM)
 		*cp++ = 'K';
+	/* system process might have this too, don't need to double up */
+	else if (k->p_holdcnt)
+		*cp++ = 'L';
 	if (k->p_eflag & EPROC_SLEADER)
 		*cp++ = 's';
 	if (flag & P_SA)
@@ -554,12 +556,13 @@ void
 lstate(void *arg, VARENT *ve, int mode)
 {
 	struct kinfo_lwp *k;
-	int flag;
+	int flag, is_zombie;
 	char *cp;
 	VAR *v;
 	char buf[16];
 
 	k = arg;
+	is_zombie = 0;
 	v = ve->var;
 	flag = k->l_flag;
 	cp = buf;
@@ -572,23 +575,21 @@ lstate(void *arg, VARENT *ve, int mode)
 
 	case LSSLEEP:
 		if (flag & L_SINTR)	/* interruptible (long) */
-			*cp = (int)k->l_slptime >= maxslp ? 'I' : 'S';
+			*cp = k->l_slptime >= maxslp ? 'I' : 'S';
 		else
 			*cp = 'D';
 		break;
 
 	case LSRUN:
 	case LSIDL:
-		*cp = 'R';
-		break;
-
 	case LSONPROC:
-		*cp = 'O';
+		*cp = 'R';
 		break;
 
 	case LSZOMB:
 	case LSDEAD:
 		*cp = 'Z';
+		is_zombie = 1;
 		break;
 
 	case LSSUSPENDED:
@@ -599,10 +600,11 @@ lstate(void *arg, VARENT *ve, int mode)
 		*cp = '?';
 	}
 	cp++;
-	if (flag & L_SYSTEM)
-		*cp++ = 'K';
-	if (flag & L_SA)
-		*cp++ = 'a';
+	if (flag & L_INMEM) {
+	} else
+		*cp++ = 'W';
+	if (k->l_holdcnt)
+		*cp++ = 'L';
 	if (flag & L_DETACHED)
 		*cp++ = '-';
 	*cp = '\0';
@@ -716,7 +718,7 @@ tdev(void *arg, VARENT *ve, int mode)
 				v->width = 2;
 	} else {
 		(void)snprintf(buff, sizeof(buff),
-		    "%lld/%lld", (long long)major(dev), (long long)minor(dev));
+		    "%d/%d", major(dev), minor(dev));
 		strprintorsetwidth(v, buff, mode);
 	}
 }
@@ -965,7 +967,7 @@ wchan(void *arg, VARENT *ve, int mode)
 	}
 }
 
-#define	pgtok(a)        (((a)*(size_t)getpagesize())/1024)
+#define	pgtok(a)        (((a)*getpagesize())/1024)
 
 void
 vsize(void *arg, VARENT *ve, int mode)
@@ -1002,6 +1004,39 @@ p_rssize(void *arg, VARENT *ve, int mode)	/* doesn't account for text */
 }
 
 void
+setncpu(void)
+{
+	int mib[2];
+	size_t size;
+
+	mib[0] = CTL_HW;
+	mib[1] = HW_NCPU;
+	size = sizeof(ncpu);
+	if (sysctl(mib, 2, &ncpu, &size, NULL, 0) == -1) {
+		ncpu = 0;
+		return;
+	}
+	cp_id = malloc(sizeof(cp_id[0]) * ncpu);
+	if (cp_id == NULL)
+		err(1, NULL);
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_CP_ID;
+	size = sizeof(cp_id[0]) * ncpu;
+	if (sysctl(mib, 2, cp_id, &size, NULL, 0) == -1)
+		ncpu = 0;
+}
+
+static int
+get_cpunum(u_int64_t id)
+{
+	int i = 0;
+	for (i = 0; i < ncpu; i++)
+		if (id == cp_id[i])
+			return i;
+	return -1;
+}
+
+void
 cpuid(void *arg, VARENT *ve, int mode)
 {
 	struct kinfo_lwp *l;
@@ -1009,7 +1044,7 @@ cpuid(void *arg, VARENT *ve, int mode)
 
 	l = arg;
 	v = ve->var;
-	intprintorsetwidth(v, l->l_cpuid, mode);
+	intprintorsetwidth(v, get_cpunum(l->l_cpuid), mode);
 }
 
 void
@@ -1067,7 +1102,8 @@ cputime(void *arg, VARENT *ve, int mode)
 }
 
 double
-getpcpu(const struct kinfo_proc2 *k)
+getpcpu(k)
+	const struct kinfo_proc2 *k;
 {
 	static int failure;
 
@@ -1078,7 +1114,9 @@ getpcpu(const struct kinfo_proc2 *k)
 
 #define	fxtofl(fixpt)	((double)(fixpt) / fscale)
 
-	if (k->p_swtime == 0 || k->p_realstat == SZOMB)
+	/* XXX - I don't like this */
+	if (k->p_swtime == 0 || (k->p_flag & L_INMEM) == 0 ||
+	    k->p_realstat == SZOMB)
 		return (0.0);
 	if (rawcpu)
 		return (100.0 * fxtofl(k->p_pctcpu));
@@ -1091,16 +1129,15 @@ pcpu(void *arg, VARENT *ve, int mode)
 {
 	struct kinfo_proc2 *k;
 	VAR *v;
-	double dbl;
 
 	k = arg;
 	v = ve->var;
-	dbl = getpcpu(k);
-	doubleprintorsetwidth(v, dbl, (dbl >= 99.95) ? 0 : 1, mode);
+	doubleprintorsetwidth(v, getpcpu(k), 1, mode);
 }
 
 double
-getpmem(const struct kinfo_proc2 *k)
+getpmem(k)
+	const struct kinfo_proc2 *k;
 {
 	static int failure;
 	double fracmem;
@@ -1111,6 +1148,8 @@ getpmem(const struct kinfo_proc2 *k)
 	if (failure)
 		return (0.0);
 
+	if ((k->p_flag & L_INMEM) == 0)
+		return (0.0);
 	/* XXX want pmap ptpages, segtab, etc. (per architecture) */
 	szptudot = uspace/getpagesize();
 	/* XXX don't have info about shared */
@@ -1167,7 +1206,10 @@ tsize(void *arg, VARENT *ve, int mode)
  * structures.
  */
 static void
-printval(void *bp, VAR *v, int mode)
+printval(bp, v, mode)
+	void *bp;
+	VAR *v;
+	int mode;
 {
 	static char ofmt[32] = "%";
 	int width, vok, fmtlen;

@@ -1,4 +1,4 @@
-/*	$NetBSD: cleanup_milter.c,v 1.1.1.6 2012/06/09 11:27:09 tron Exp $	*/
+/*	$NetBSD: cleanup_milter.c,v 1.1.1.1.2.5 2011/08/09 18:58:16 riz Exp $	*/
 
 /*++
 /* NAME
@@ -842,7 +842,8 @@ static off_t cleanup_find_header_start(CLEANUP_STATE *state, ssize_t index,
 	     /* Reset the saved PTR record and update last_type. */ ;
 	else if ((header_label == 0
 		  || (strncasecmp(header_label, STR(buf), len) == 0
-		      && (strlen(header_label) == len)))
+		      && (IS_SPACE_TAB(STR(buf)[len])
+			  || STR(buf)[len] == ':')))
 		 && --index == 0) {
 	    /* If we have a saved PTR record, it points to start of header. */
 	    break;
@@ -1450,7 +1451,7 @@ static const char *cleanup_add_rcpt(void *context, const char *ext_rcpt)
 	}
     }
     tok822_free_tree(tree);
-    cleanup_addr_bcc_dsn(state, STR(int_rcpt_buf), NO_DSN_ORCPT, DEF_DSN_NOTIFY);
+    cleanup_addr_bcc(state, STR(int_rcpt_buf));
     vstring_free(int_rcpt_buf);
     if (addr_count == 0) {
 	msg_warn("%s: ignoring attempt from Milter to add null recipient",

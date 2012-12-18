@@ -1,4 +1,4 @@
-/*	$NetBSD: strtol.c,v 1.3 2009/07/20 04:59:03 kiyohara Exp $	*/
+/*	$NetBSD: strtol.c,v 1.1 2006/04/07 14:21:29 cherry Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -40,7 +40,6 @@ static char sccsid[] = "@(#)strtol.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
 #include <lib/libsa/stand.h>
-#include <lib/libsa/loadfile.h>
 #include <lib/libkern/libkern.h>
 
 #include <machine/limits.h>
@@ -54,7 +53,10 @@ static char sccsid[] = "@(#)strtol.c	8.1 (Berkeley) 6/4/93";
  * alphabets and digits are each contiguous.
  */
 long
-strtol(const char *nptr, char **endptr, int base)
+strtol(nptr, endptr, base)
+	const char *nptr;
+	char **endptr;
+	int base;
 {
 	const char *s;
 	unsigned long acc;

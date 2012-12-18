@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.133 2012/10/20 11:58:45 kiyohara Exp $
+# $NetBSD: GENERIC,v 1.112 2008/08/10 15:31:20 tls Exp $
 #
 # GENERIC machine description file
 #
@@ -20,13 +20,15 @@
 
 include 	"arch/bebox/conf/std.bebox"
 
-options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
+#options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.133 $"
+#ident 		"GENERIC-$Revision: 1.112 $"
 
 maxusers	32
 
 # Standard system options
+
+options 	INSECURE	# disable kernel security levels - X needs this
 
 options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 options 	NTP		# NTP phase/frequency locked loop
@@ -36,7 +38,9 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
+options 	LKM		# loadable kernel modules
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
@@ -66,8 +70,6 @@ options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# 4.3BSD
 #options 	COMPAT_386BSD_MBRPART	# recognize old partition ID
 #options 	COMPAT_LINUX	# Linux binary compatibility
@@ -80,27 +82,29 @@ file-system	FFS		# UFS
 #file-system	LFS		# log-structured file system
 file-system	MFS		# memory file system
 file-system	NFS		# Network File System client
+#file-system 	NTFS		# Windows/NT file system (experimental)
 file-system	CD9660		# ISO 9660 + Rock Ridge file system
 file-system	MSDOSFS		# MS-DOS file system
 #file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
 #file-system	OVERLAY		# overlay file system
-file-system	PROCFS		# /proc
+#file-system	PORTAL		# portal filesystem (still experimental)
+#file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 file-system	UNION		# union file system
 #file-system	CODA		# Coda File System; also needs vcoda (below)
 #file-system	SMBFS		# CIFS; also needs nsmb (below)
-file-system	PTYFS		# /dev/pts/N support
-file-system	TMPFS		# Efficient memory file-system
+#file-system	PTYFS		# /dev/pts/N support
+#file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 #file-system	HFS		# experimental - Apple HFS+ (read-only)
 
 # File system options
-options 	QUOTA		# legacy UFS quotas
-options 	QUOTA2		# new, in-filesystem UFS quotas
-#options 	FFS_EI		# FFS Endian Independent support
-options 	WAPBL		# File system journaling support
+options 	QUOTA		# UFS quotas
+#options 	FFS_EI		# FFS Endian Independant support
+options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 #options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -127,7 +131,6 @@ options 	INET6		# IPV6
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	IPFILTER_LOG	# ipmon(8) log support
 #options 	IPFILTER_LOOKUP	# ippool(8) support
-options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -149,6 +152,7 @@ options 	IPFILTER_COMPAT # Compat for IP-Filter
 options 	PCIVERBOSE	# verbose PCI device autoconfig messages
 options 	MIIVERBOSE	# verbose PHY autoconfig messages
 #options 	PCI_CONFIG_DUMP	# verbosely dump PCI config space
+options 	PCI_NETBSD_CONFIGURE
 options 	SCSIVERBOSE	# human readable SCSI error messages
 
 #options 	NFS_BOOT_BOOTPARAM,NFS_BOOT_BOOTP
@@ -158,9 +162,6 @@ options 	SCSIVERBOSE	# human readable SCSI error messages
 #options 	WSEMUL_SUN		# sun terminal emulation
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
 options 	WS_DEFAULT_FG=WSCOL_LIGHT_WHITE
-# compatibility to other console drivers
-options 	WSDISPLAY_COMPAT_USL	# wsconscfg VT handling
-options 	WSDISPLAY_COMPAT_RAWKBD	# can get raw scancodes
 
 config		netbsd	root on ? type ?
 
@@ -184,9 +185,8 @@ pckbc0		at isa?			# pc keyboard controller
 pckbd*		at pckbc?		# PC keyboard
 pms*		at pckbc?		# PS/2 mouse for wsmouse
 #options	PMS_DISABLE_POWERHOOK	# Disable PS/2 reset on resume
-#options 	PMS_SYNAPTICS_TOUCHPAD	# Enable support for Synaptics Touchpads
+options		PMS_SYNAPTICS_TOUCHPAD	# Enable support for Synaptics Touchpads
 genfb*		at pci? dev ? function ?
-options 	WSFB_FAKE_VGA_FB
 vga*		at pci? dev ? function ?
 wsdisplay*	at vga? console ?
 wskbd*		at pckbd? console ?
@@ -205,16 +205,16 @@ lpt0	at isa? port 0x378 irq 7	# standard PC parallel ports
 
 mcclock0 at isa? port 0x70		# time-of-day clock
 attimer0 at isa?
-#pcppi0	at isa?
-#spkr0	at pcppi?
+pcppi0	at isa?
+spkr0	at pcppi?
 
-wss0	at isa? port 0x82c irq 30 drq 6 drq2 7	# Windows Sound System
+#wss0	at isa? port ? irq 30 drq 6 drq2 7	# Windows Sound System
 
 # Audio support
-audio*	at audiobus?
+#audio*  at audiobus?
 
 # MIDI support
-#midi*	at pcppi?			# MIDI interface to the PC speaker
+midi*	at pcppi?			# MIDI interface to the PC speaker
 
 # Joystick driver. Probe is a little strange; add only if you have one.
 joy0	at isa? port 0x201
@@ -230,6 +230,7 @@ cd*	at scsibus? target ? lun ?	# SCSI CD-ROM drives
 #uk*	at scsibus? target ? lun ?	# SCSI unknown
 
 fdc0	at isa? port 0x3f0 irq 6 drq 2	# standard PC floppy controllers
+#fdc1	at isa? port 0x370 irq ? drq ?
 fd0	at fdc? drive 1
 #fd*	at fdc? drive ?
 
@@ -258,11 +259,6 @@ tlp*	at pci? dev ? function ?	# DECchip 21x4x and clones
 # MII/PHY support
 ukphy*  at mii? phy ?                   # generic unknown PHYs
 
-# TV cards
-
-# Brooktree 848/849/878/879 based TV cards
-bktr*	at pci? dev ? function ?	# Brooktree video/audio capture/tuner
-
 
 # Pseudo-Devices
 
@@ -271,11 +267,11 @@ pseudo-device	crypto			# /dev/crypto device
 pseudo-device	swcrypto		# software crypto implementation
 
 # disk/mass storage pseudo-devices
-#pseudo-device	bio			# RAID control device driver
+pseudo-device	bio			# RAID control device driver
 pseudo-device	ccd		4	# concatenated/striped disk devices
 pseudo-device	cgd		4	# cryptographic disk devices
-#pseudo-device	raid		8	# RAIDframe disk driver
-#options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
+pseudo-device	raid		8	# RAIDframe disk driver
+options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 #options 	RF_INCLUDE_EVENODD=1
 #options 	RF_INCLUDE_RAID5_RS=1
@@ -284,9 +280,9 @@ pseudo-device	cgd		4	# cryptographic disk devices
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss			# file system snapshot device
+pseudo-device	fss		4	# file system snapshot device
 
-pseudo-device	md			# memory disk device
+pseudo-device	md		1	# memory disk device
 pseudo-device	vnd			# disk-like interface to files
 options 	VND_COMPRESSION		# compressed vnd(4)
 
@@ -323,6 +319,7 @@ pseudo-device   accf_http		# "httpready" accept filter
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	sequencer	1	# MIDI sequencer
+pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms

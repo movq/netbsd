@@ -1,4 +1,4 @@
-/*	$NetBSD: primes.c,v 1.19 2011/08/30 02:58:04 jakllsch Exp $	*/
+/*	$NetBSD: primes.c,v 1.16 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)primes.c	8.5 (Berkeley) 5/10/95";
 #else
-__RCSID("$NetBSD: primes.c,v 1.19 2011/08/30 02:58:04 jakllsch Exp $");
+__RCSID("$NetBSD: primes.c,v 1.16 2008/07/20 01:03:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -84,7 +84,7 @@ __RCSID("$NetBSD: primes.c,v 1.19 2011/08/30 02:58:04 jakllsch Exp $");
  *
  * We make TABSIZE large to reduce the overhead of inner loop setup.
  */
-static char table[TABSIZE];	 /* Eratosthenes sieve of odd numbers */
+char table[TABSIZE];	 /* Eratosthenes sieve of odd numbers */
 
 /*
  * prime[i] is the (i-1)th prime.
@@ -103,11 +103,12 @@ extern const ubig *pr_limit;		/* largest prime in the prime array */
 extern const char pattern[];
 extern const int pattern_size;	/* length of pattern array */
 
-static int dflag;
+int	dflag;
 
-static void primes(ubig, ubig);
-static ubig read_num_buf(void);
-static void usage(void) __dead;
+int	main(int, char *[]);
+void	primes(ubig, ubig);
+ubig	read_num_buf(void);
+void	usage(void) __dead;
 
 int
 main(int argc, char *argv[])
@@ -199,7 +200,7 @@ read_num_buf(void)
 				err(1, "stdin");
 			exit(0);
 		}
-		for (p = buf; isblank((unsigned char)*p); ++p);
+		for (p = buf; isblank(*p); ++p);
 		if (*p == '\n' || *p == '\0')
 			continue;
 		if (*p == '-')
@@ -305,10 +306,11 @@ primes(ubig start, ubig stop)
 		/* note highest useful factor and sieve spot */
 		if (stop-start > TABSIZE+TABSIZE) {
 			tab_lim = &table[TABSIZE]; /* sieve it all */
-			fact_lim = sqrt((double)(start)+TABSIZE+TABSIZE+1.0);
+			fact_lim = (int)sqrt(
+					(double)(start)+TABSIZE+TABSIZE+1.0);
 		} else {
 			tab_lim = &table[(stop-start)/2]; /* partial sieve */
-			fact_lim = sqrt((double)(stop)+1.0);
+			fact_lim = (int)sqrt((double)(stop)+1.0);
 		}
 		/* sieve for factors >= 17 */
 		factor = 17;	/* 17 is first prime to use */

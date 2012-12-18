@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.15 2012/06/11 15:18:05 chs Exp $	*/
+/*	$NetBSD: asm.h,v 1.13 2008/10/26 00:08:15 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -101,7 +101,6 @@
 
 #define	ENTRY(y)	_ENTRY(_C_LABEL(y)); _PROF_PROLOGUE
 #define	NENTRY(y)	_ENTRY(_C_LABEL(y))
-#define	ALTENTRY(x)	NENTRY(x)
 #define	ASENTRY(y)	_ENTRY(_ASM_LABEL(y)); _PROF_PROLOGUE
 #define	LABEL(y)	_LABEL(_C_LABEL(y))
 
@@ -120,16 +119,15 @@
 	.globl alias;							\
 	alias = sym
 
+/* XXXfvdl do not use stabs here */
 #ifdef __STDC__
 #define	WARN_REFERENCES(sym,msg)					\
-	.pushsection .gnu.warning. ## sym;				\
-	.ascii msg;							\
-	.popsection
+	.stabs msg ## ,30,0,0,0 ;					\
+	.stabs __STRING(_C_LABEL(sym)) ## ,1,0,0,0
 #else
 #define	WARN_REFERENCES(sym,msg)					\
-	.pushsection .gnu.warning./**/sym;				\
-	.ascii msg;							\
-	.popsection
+	.stabs msg,30,0,0,0 ;						\
+	.stabs __STRING(sym),1,0,0,0
 #endif /* __STDC__ */
 
 #else	/*	__x86_64__	*/

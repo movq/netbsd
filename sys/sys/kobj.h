@@ -1,4 +1,4 @@
-/*	$NetBSD: kobj.h,v 1.16 2011/08/13 21:04:07 christos Exp $	*/
+/*	$NetBSD: kobj.h,v 1.9 2008/05/20 19:20:38 ad Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -29,26 +29,19 @@
 #ifndef _SYS_KOBJ_H_
 #define	_SYS_KOBJ_H_
 
-#define ELFSIZE ARCH_ELFSIZE
-#include <sys/exec.h>
-#include <sys/exec_elf.h>
-
 typedef struct kobj *kobj_t;
 
 /* External interface. */
-int		kobj_load_vfs(kobj_t *, const char *, const bool);
-int		kobj_load_mem(kobj_t *, const char *, void *, ssize_t);
+int		kobj_load_file(kobj_t *, const char *, const char *, bool);
+int		kobj_load_mem(kobj_t *, void *, ssize_t);
 int		kobj_affix(kobj_t, const char *);
 void		kobj_unload(kobj_t);
-int		kobj_stat(kobj_t, vaddr_t *, size_t *);
+void		kobj_stat(kobj_t, vaddr_t *, size_t *);
 int		kobj_find_section(kobj_t, const char *, void **, size_t *);
 
 /* MI-MD interface. */
 uintptr_t	kobj_sym_lookup(kobj_t, uintptr_t);
 int		kobj_reloc(kobj_t, uintptr_t, const void *, bool, bool);
 int		kobj_machdep(kobj_t, void *, size_t, bool);
-
-/* implementation interface. */
-int		kobj_renamespace(Elf_Sym *, size_t, char **, size_t *);
 
 #endif /* !_SYS_KOBJ_H_ */

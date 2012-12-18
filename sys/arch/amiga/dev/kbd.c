@@ -1,4 +1,4 @@
-/*	$NetBSD: kbd.c,v 1.55 2012/10/27 17:17:29 chs Exp $ */
+/*	$NetBSD: kbd.c,v 1.50.20.1 2010/07/16 18:26:12 riz Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kbd.c,v 1.55 2012/10/27 17:17:29 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kbd.c,v 1.50.20.1 2010/07/16 18:26:12 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -143,14 +143,14 @@ struct kbd_softc {
 
 	int k_console;		/* true if used as console keyboard */
 #if NWSKBD>0
-	device_t k_wskbddev; /* pointer to wskbd for sending strokes */
+	struct device *k_wskbddev; /* pointer to wskbd for sending strokes */
 	int k_pollingmode;         /* polling mode on? whatever it isss... */
 #endif
 };
 struct kbd_softc kbd_softc;
 
-int kbdmatch(device_t, cfdata_t, void *);
-void kbdattach(device_t, device_t, void *);
+int kbdmatch(struct device *, struct cfdata *, void *);
+void kbdattach(struct device *, struct device *, void *);
 void kbdintr(int);
 void kbdstuffchar(u_char);
 
@@ -160,7 +160,7 @@ int drkbdputc(u_int8_t);
 int drkbdputc2(u_int8_t, u_int8_t);
 int drkbdwaitfor(int);
 
-CFATTACH_DECL_NEW(kbd, 0,
+CFATTACH_DECL(kbd, sizeof(struct device),
     kbdmatch, kbdattach, NULL, NULL);
 
 dev_type_open(kbdopen);
@@ -177,17 +177,17 @@ const struct cdevsw kbd_cdevsw = {
 
 /*ARGSUSED*/
 int
-kbdmatch(device_t parent, cfdata_t cf, void *aux)
+kbdmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 
-	if (matchname((char *)aux, "kbd"))
+	if (matchname((char *)auxp, "kbd"))
 		return(1);
 	return(0);
 }
 
 /*ARGSUSED*/
 void
-kbdattach(device_t parent, device_t self, void *aux)
+kbdattach(struct device *pdp, struct device *dp, void *auxp)
 {
 #ifdef DRACO
 	kbdenable();
@@ -200,7 +200,7 @@ kbdattach(device_t parent, device_t self, void *aux)
 #endif
 
 #if NWSKBD>0
-	if (self != NULL) {
+	if (dp != NULL) {
 		/*
 		 * Try to attach the wskbd.
 		 */
@@ -209,7 +209,7 @@ kbdattach(device_t parent, device_t self, void *aux)
 		waa.keymap = &kbd_mapdata;
 		waa.accessops = &kbd_accessops;
 		waa.accesscookie = NULL;
-		kbd_softc.k_wskbddev = config_found(self, &waa, wskbddevprint);
+		kbd_softc.k_wskbddev = config_found(dp, &waa, wskbddevprint);
 
 		kbd_softc.k_pollingmode = 0;
 	}
@@ -527,7 +527,9 @@ kbdpoll(dev_t dev, int events, struct lwp *l)
 }
 
 int
-kbdkqfilter(dev_t dev, struct knote *kn)
+kbdkqfilter(dev, kn)
+	dev_t dev;
+	struct knote *kn;
 {
 
 	return (ev_kqfilter(&kbd_softc.k_events, kn));
@@ -722,7 +724,7 @@ kbdstuffchar(u_char c)
 	}
 	fe->id = KEY_CODE(c);
 	fe->value = KEY_UP(c) ? VKEY_UP : VKEY_DOWN;
-	firm_gettime(fe);
+	getmicrotime(&fe->time);
 	k->k_events.ev_put = put;
 	EV_WAKEUP(&k->k_events);
 }
