@@ -1,5 +1,4 @@
-/*	Id: pass1.h,v 1.237 2012/03/22 18:51:40 plunky Exp 	*/	
-/*	$NetBSD: pass1.h,v 1.3 2012/03/26 14:30:46 plunky Exp $	*/
+/*	$Id: pass1.h,v 1.1.1.1 2008/08/24 05:33:02 gmcgarry Exp $	*/
 /*
  * Copyright(C) Caldera International Inc. 2001-2002. All rights reserved.
  *
@@ -38,17 +37,14 @@
 
 #include <sys/types.h>
 #include <stdarg.h>
-#include <string.h>
 #ifdef HAVE_STDINT_H
 #include <stdint.h>
 #endif
 
-#ifndef MKEXT
-#include "external.h"
-#else
-typedef unsigned int bittype; /* XXX - for basicblock */
-#endif
 #include "manifest.h"
+
+#include "protos.h"
+#include "ccconfig.h"
 
 /*
  * Storage classes
@@ -67,15 +63,16 @@ typedef unsigned int bittype; /* XXX - for basicblock */
 #define MOU		11
 #define UNAME		12
 #define TYPEDEF		13
-/* #define FORTRAN		14 */
+#define FORTRAN		14
 #define ENAME		15
 #define MOE		16
-/* #define UFORTRAN 	17 */
+#define UFORTRAN 	17
 #define USTATIC		18
+#define ILABEL		19
 
 	/* field size is ORed in */
-#define FIELD		0200
-#define FLDSIZ		0177
+#define FIELD		0100
+#define FLDSIZ		077
 extern	char *scnames(int);
 
 /*
@@ -89,7 +86,7 @@ extern	char *scnames(int);
 #define	NSTYPES		05
 #define	SMASK		07
 
-#define	STLS		00010	/* Thread Local Support variable */
+/* #define SSET		00010 */
 /* #define SREF		00020 */
 #define SNOCREAT	00040	/* don't create a symbol in lookup() */
 #define STEMP		00100	/* Allocate symtab from temp or perm mem */
@@ -109,21 +106,25 @@ extern	char *scnames(int);
 struct rstack;
 struct symtab;
 union arglist;
-#ifdef GCC_COMPAT
-struct gcc_attr_pack;
-#endif
 
 /*
  * Dimension/prototype information.
  * 	ddim > 0 holds the dimension of an array.
  *	ddim < 0 is a dynamic array and refers to a tempnode.
- *	...unless:
- *		ddim == NOOFFSET, an array without dimenston, "[]"
- *		ddim == -1, dynamic array while building before defid.
  */
 union dimfun {
 	int	ddim;		/* Dimension of an array */
 	union arglist *dfun;	/* Prototype index */
+};
+
+/*
+ * Struct/union/enum definition.
+ * The first element (size) is used for other types as well.
+ */
+struct suedef {
+	int	suesize;	/* Size of the struct */
+	struct	symtab *sylnk;	/* the list of elements */
+	int	suealign;	/* Alignment of this struct */
 };
 
 /*
@@ -132,29 +133,42 @@ union dimfun {
 union arglist {
 	TWORD type;
 	union dimfun *df;
-	struct attr *sap;
+	struct suedef *sue;
 };
 #define TNULL		INCREF(FARG) /* pointer to FARG -- impossible type */
 #define TELLIPSIS 	INCREF(INCREF(FARG))
 
 /*
  * Symbol table definition.
+ *
+ * The symtab_hdr struct is used to save label info in NAME and ICON nodes.
  */
+struct symtab_hdr {
+	struct	symtab *h_next;	/* link to other symbols in the same scope */
+	int	h_offset;	/* offset or value */
+	char	h_sclass;	/* storage class */
+	char	h_slevel;	/* scope level */
+	short	h_sflags;		/* flags, see below */
+};
+
 struct	symtab {
-	struct	symtab *snext;	/* link to other symbols in the same scope */
-	int	soffset;	/* offset or value */
-	char	sclass;		/* storage class */
-	char	slevel;		/* scope level */
-	short	sflags;		/* flags, see below */
+	struct	symtab_hdr hdr;
 	char	*sname;		/* Symbol name */
 	char	*soname;	/* Written-out name */
 	TWORD	stype;		/* type word */
 	TWORD	squal;		/* qualifier word */
 	union	dimfun *sdf;	/* ptr to the dimension/prototype array */
-	struct	attr *sap;	/* the base type attribute list */
+	struct	suedef *ssue;	/* ptr to the definition table */
 };
 
-#define	ISSOU(ty)   ((ty) == STRTY || (ty) == UNIONTY)
+#define	snext	hdr.h_next
+#define	soffset	hdr.h_offset
+#define	sclass	hdr.h_sclass
+#define	slevel	hdr.h_slevel
+#define	sflags	hdr.h_sflags
+
+#define	MKSUE(type)  &btdims[type]
+extern struct suedef btdims[];
 
 /*
  * External definitions
@@ -181,18 +195,14 @@ extern	OFFSZ inoff;
 
 extern	int reached;
 extern	int isinlining;
-extern	int xinline, xgnu89, xgnu99;
-extern	int bdebug, ddebug, edebug, idebug, ndebug;
-extern	int odebug, pdebug, sdebug, tdebug, xdebug;
+
+extern	int sdebug, idebug, pdebug;
 
 /* various labels */
 extern	int brklab;
 extern	int contlab;
 extern	int flostat;
 extern	int retlab;
-extern	int doing_init, statinit;
-extern	short sztable[];
-extern	char *astypnames[];
 
 /* pragma globals */
 extern int pragma_allpacked, pragma_packed, pragma_aligned;
@@ -206,31 +216,6 @@ extern char *pragma_renamed;
 #define FDEF		010
 #define FLOOP		020
 
-/*
- * Location counters
- */
-#define NOSEG		-1
-#define PROG		0		/* (ro) program segment */
-#define DATA		1		/* (rw) data segment */
-#define RDATA		2		/* (ro) data segment */
-#define LDATA		3		/* (rw) local data */
-#define UDATA		4		/* (rw) uninitialized data */
-#define STRNG		5		/* (ro) string segment */
-#define PICDATA		6		/* (rw) relocatable data segment */
-#define PICRDATA	7		/* (ro) relocatable data segment */
-#define PICLDATA	8		/* (rw) local relocatable data */
-#define TLSDATA		9		/* (rw) TLS data segment */
-#define TLSUDATA	10		/* (rw) TLS uninitialized segment */
-#define CTORS		11		/* constructor */
-#define DTORS		12		/* destructor */
-#define	NMSEG		13		/* other (named) segment */
-
-extern int lastloc, nextloc;
-void locctr(int type, struct symtab *sp);
-void setseg(int type, char *name);
-void defalign(int al);
-void symdirec(struct symtab *sp);
-
 /*	mark an offset which is undefined */
 
 #define NOOFFSET	(-10201)
@@ -238,15 +223,13 @@ void symdirec(struct symtab *sp);
 /* declarations of various functions */
 extern	NODE
 	*buildtree(int, NODE *, NODE *r),
-	*mkty(unsigned, union dimfun *, struct attr *),
+	*mkty(unsigned, union dimfun *, struct suedef *),
 	*rstruct(char *, int),
 	*dclstruct(struct rstack *),
 	*strend(int gtype, char *),
 	*tymerge(NODE *, NODE *),
 	*stref(NODE *),
-#ifdef WORD_ADDRESSED
-	*offcon(OFFSZ, TWORD, union dimfun *, struct attr *),
-#endif
+	*offcon(OFFSZ, TWORD, union dimfun *, struct suedef *),
 	*bcon(int),
 	*xbcon(CONSZ, struct symtab *, TWORD),
 	*bpsize(NODE *),
@@ -254,29 +237,26 @@ extern	NODE
 	*pconvert(NODE *),
 	*oconvert(NODE *),
 	*ptmatch(NODE *),
-	*makety(NODE *, TWORD, TWORD, union dimfun *, struct attr *),
-	*block(int, NODE *, NODE *, TWORD, union dimfun *, struct attr *),
+	*tymatch(NODE *),
+	*makety(NODE *, TWORD, TWORD, union dimfun *, struct suedef *),
+	*block(int, NODE *, NODE *, TWORD, union dimfun *, struct suedef *),
 	*doszof(NODE *),
 	*talloc(void),
 	*optim(NODE *),
 	*clocal(NODE *),
 	*ccopy(NODE *),
-	*tempnode(int, TWORD, union dimfun *, struct attr *),
-	*eve(NODE *),
-	*doacall(struct symtab *, NODE *, NODE *);
+	*tempnode(int, TWORD, union dimfun *, struct suedef *),
+	*doacall(NODE *, NODE *);
 NODE	*intprom(NODE *);
-OFFSZ	tsize(TWORD, union dimfun *, struct attr *),
+OFFSZ	tsize(TWORD, union dimfun *, struct suedef *),
 	psize(NODE *);
 NODE *	typenode(NODE *new);
 void	spalloc(NODE *, NODE *, OFFSZ);
 char	*exname(char *);
-NODE	*floatcon(char *);
-NODE	*fhexcon(char *);
-NODE	*bdty(int op, ...);
 extern struct rstack *rpole;
 
 int oalloc(struct symtab *, int *);
-void deflabel(char *, NODE *);
+void deflabel(char *);
 void gotolabel(char *);
 unsigned int esccon(char **);
 void inline_start(struct symtab *);
@@ -284,10 +264,8 @@ void inline_end(void);
 void inline_addarg(struct interpass *);
 void inline_ref(struct symtab *);
 void inline_prtout(void);
-void inline_args(struct symtab **, int);
-NODE *inlinetree(struct symtab *, NODE *, NODE *);
 void ftnarg(NODE *);
-struct rstack *bstruct(char *, int, NODE *);
+struct rstack *bstruct(char *, int);
 void moedef(char *);
 void beginit(struct symtab *);
 void simpleinit(struct symtab *, NODE *);
@@ -298,17 +276,16 @@ char *addname(char *);
 void symclear(int);
 struct symtab *hide(struct symtab *);
 void soumemb(NODE *, char *, int);
-int talign(unsigned int, struct attr *);
+int talign(unsigned int, struct suedef *);
 void bfcode(struct symtab **, int);
 int chkftn(union arglist *, union arglist *);
 void branch(int);
 void cbranch(NODE *, NODE *);
 void extdec(struct symtab *);
 void defzero(struct symtab *);
-int falloc(struct symtab *, int, NODE *);
+int falloc(struct symtab *, int, int, NODE *);
 TWORD ctype(TWORD);  
-void inval(CONSZ, int, NODE *);
-int ninval(CONSZ, int, NODE *);
+void ninval(CONSZ, int, NODE *);
 void infld(CONSZ, int, CONSZ);
 void zbits(CONSZ, int);
 void instring(struct symtab *);
@@ -322,14 +299,13 @@ char *tmpsprintf(char *, ...);
 char *tmpvsprintf(char *, va_list);
 void asginit(NODE *);
 void desinit(NODE *);
-void endinit(int);
-void endictx(void);
+void endinit(void);
 void sspinit(void);
 void sspstart(void);
 void sspend(void);
 void ilbrace(void);
 void irbrace(void);
-CONSZ scalinit(NODE *);
+void scalinit(NODE *);
 void p1print(char *, ...);
 char *copst(int);
 int cdope(int);
@@ -341,10 +317,7 @@ struct symtab *enumhd(char *);
 NODE *enumdcl(struct symtab *);
 NODE *enumref(char *);
 CONSZ icons(NODE *);
-CONSZ valcast(CONSZ v, TWORD t);
-int mypragma(char *);
-char *pragtok(char *);
-int eat(int);
+int mypragma(char **);
 void fixdef(struct symtab *);
 int cqual(TWORD, TWORD);
 void defloc(struct symtab *);
@@ -353,205 +326,24 @@ int nncon(NODE *);
 void cunput(char);
 NODE *nametree(struct symtab *sp);
 void *inlalloc(int size);
-void *blkalloc(int size);
 void pass1_lastchance(struct interpass *);
 void fldty(struct symtab *p);
-int getlab(void);
-struct suedef *sueget(struct suedef *p);
-void complinit(void);
-NODE *structref(NODE *p, int f, char *name);
-NODE *cxop(int op, NODE *l, NODE *r);
-NODE *imop(int op, NODE *l, NODE *r);
-NODE *cxelem(int op, NODE *p);
-NODE *cxconj(NODE *p);
-NODE *cxret(NODE *p, NODE *q);
-NODE *cast(NODE *p, TWORD t, TWORD q);
-NODE *ccast(NODE *p, TWORD t, TWORD u, union dimfun *df, struct attr *sue);
-int andable(NODE *);
-int conval(NODE *, int, NODE *);
-int ispow2(CONSZ);
-void defid(NODE *q, int class);
-void efcode(void);
-void ecomp(NODE *p);
-int upoff(int size, int alignment, int *poff);
-void nidcl(NODE *p, int class);
-void eprint(NODE *, int, int *, int *);
-int uclass(int class);
-int notlval(NODE *);
-void ecode(NODE *p);
-void ftnend(void);
-void dclargs(void);
-int suemeq(struct attr *s1, struct attr *s2);
-struct symtab *strmemb(struct attr *ap);
-int yylex(void);
-void yyerror(char *);
-int pragmas_gcc(char *t);
-NODE *cstknode(TWORD t, union dimfun *df, struct attr *ap);
-int concast(NODE *p, TWORD t);
-NODE *builtin_check(NODE *f, NODE *a);
-NODE *rmpconv(NODE *);
-NODE *nlabel(int label);
-
-
-#ifdef SOFTFLOAT
-typedef struct softfloat SF;
-SF soft_neg(SF);
-SF soft_cast(CONSZ v, TWORD);
-SF soft_plus(SF, SF);
-SF soft_minus(SF, SF);
-SF soft_mul(SF, SF);
-SF soft_div(SF, SF);
-int soft_cmp_eq(SF, SF);
-int soft_cmp_ne(SF, SF);
-int soft_cmp_ge(SF, SF);
-int soft_cmp_gt(SF, SF);
-int soft_cmp_le(SF, SF);
-int soft_cmp_lt(SF, SF);
-int soft_isz(SF);
-CONSZ soft_val(SF);
-#define FLOAT_NEG(sf)		soft_neg(sf)
-#define	FLOAT_CAST(v,t)		soft_cast(v, t)
-#define	FLOAT_PLUS(x1,x2)	soft_plus(x1, x2)
-#define	FLOAT_MINUS(x1,x2)	soft_minus(x1, x2)
-#define	FLOAT_MUL(x1,x2)	soft_mul(x1, x2)
-#define	FLOAT_DIV(x1,x2)	soft_div(x1, x2)
-#define	FLOAT_ISZERO(sf)	soft_isz(sf)
-#define	FLOAT_VAL(sf)		soft_val(sf)
-#define FLOAT_EQ(x1,x2)		soft_cmp_eq(x1, x2)
-#define FLOAT_NE(x1,x2)		soft_cmp_ne(x1, x2)
-#define FLOAT_GE(x1,x2)		soft_cmp_ge(x1, x2)
-#define FLOAT_GT(x1,x2)		soft_cmp_gt(x1, x2)
-#define FLOAT_LE(x1,x2)		soft_cmp_le(x1, x2)
-#define FLOAT_LT(x1,x2)		soft_cmp_lt(x1, x2)
-#else
-#define	FLOAT_NEG(p)		-(p)
-#define	FLOAT_CAST(p,v)		(ISUNSIGNED(v) ? \
-		(long double)(U_CONSZ)(p) : (long double)(CONSZ)(p))
-#define	FLOAT_PLUS(x1,x2)	(x1) + (x2)
-#define	FLOAT_MINUS(x1,x2)	(x1) - (x2)
-#define	FLOAT_MUL(x1,x2)	(x1) * (x2)
-#define	FLOAT_DIV(x1,x2)	(x1) / (x2)
-#define	FLOAT_ISZERO(p)		(p) == 0.0
-#define FLOAT_VAL(p)		(CONSZ)(p)
-#define FLOAT_EQ(x1,x2)		(x1) == (x2)
-#define FLOAT_NE(x1,x2)		(x1) != (x2)
-#define FLOAT_GE(x1,x2)		(x1) >= (x2)
-#define FLOAT_GT(x1,x2)		(x1) > (x2)
-#define FLOAT_LE(x1,x2)		(x1) <= (x2)
-#define FLOAT_LT(x1,x2)		(x1) < (x2)
-#endif
-
-enum {	ATTR_NONE,
-
-	/* PCC used attributes */
-	ATTR_COMPLEX,	/* Internal definition of complex */
-	xxxATTR_BASETYP,	/* Internal; see below */
-	ATTR_QUALTYP,	/* Internal; const/volatile, see below */
-	ATTR_STRUCT,	/* Internal; element list */
-#define	ATTR_MAX ATTR_STRUCT
 
 #ifdef GCC_COMPAT
-	/* type attributes */
-	GCC_ATYP_ALIGNED,
-	GCC_ATYP_PACKED,
-	GCC_ATYP_SECTION,
-	GCC_ATYP_TRANSP_UNION,
-	GCC_ATYP_UNUSED,
-	GCC_ATYP_DEPRECATED,
-	GCC_ATYP_MAYALIAS,
-
-	/* variable attributes */
-	GCC_ATYP_MODE,
-
-	/* function attributes */
-	GCC_ATYP_NORETURN,
-	GCC_ATYP_FORMAT,
-	GCC_ATYP_NONNULL,
-	GCC_ATYP_SENTINEL,
-	GCC_ATYP_WEAK,
-	GCC_ATYP_FORMATARG,
-	GCC_ATYP_GNU_INLINE,
-	GCC_ATYP_MALLOC,
-	GCC_ATYP_NOTHROW,
-	GCC_ATYP_CONST,
-	GCC_ATYP_PURE,
-	GCC_ATYP_CONSTRUCTOR,
-	GCC_ATYP_DESTRUCTOR,
-	GCC_ATYP_VISIBILITY,
-	GCC_ATYP_STDCALL,
-	GCC_ATYP_CDECL,
-	GCC_ATYP_WARN_UNUSED_RESULT,
-	GCC_ATYP_USED,
-	GCC_ATYP_NO_INSTR_FUN,
-	GCC_ATYP_NOINLINE,
-	GCC_ATYP_ALIAS,
-	GCC_ATYP_WEAKREF,
-	GCC_ATYP_ALLOCSZ,
-	GCC_ATYP_ALW_INL,
-	GCC_ATYP_TLSMODEL,
-	GCC_ATYP_ALIASWEAK,
-	GCC_ATYP_RETURNS_TWICE,
-
-	/* other stuff */
-	GCC_ATYP_BOUNDED,	/* OpenBSD extra boundary checks */
-
-	GCC_ATYP_MAX
-#endif
-};
-
-
-/*
-#ifdef notdef
- * ATTR_BASETYP has the following layout:
- * aa[0].iarg has size
- * aa[1].iarg has alignment
-#endif
- * ATTR_QUALTYP has the following layout:
- * aa[0].iarg has CON/VOL + FUN/ARY/PTR
- * Not defined yet...
- * aa[3].iarg is dimension for arrays (XXX future)
- * aa[3].varg is function defs for functions.
- */
-#ifdef notdef
-#define	atypsz	aa[0].iarg
-#define	aalign	aa[1].iarg
-#endif
-
-/*
- * ATTR_STRUCT member list.
- */
-#define amlist  aa[0].varg
-#define amsize  aa[1].iarg
-#define	strattr(x)	(attr_find(x, ATTR_STRUCT))
-
-#define	iarg(x)	aa[x].iarg
-#define	sarg(x)	aa[x].sarg
-#define	varg(x)	aa[x].varg
-
 void gcc_init(void);
 int gcc_keyword(char *, NODE **);
-struct attr *gcc_attr_parse(NODE *);
-void gcc_tcattrfix(NODE *);
-struct gcc_attrib *gcc_get_attr(struct suedef *, int);
-void dump_attr(struct attr *gap);
-
-struct attr *attr_add(struct attr *orig, struct attr *new);
-struct attr *attr_new(int, int);
-struct attr *attr_find(struct attr *, int);
-struct attr *attr_copy(struct attr *src, struct attr *dst, int nelem);
-struct attr *attr_dup(struct attr *ap, int n);
+#endif
 
 #ifdef STABS
 void stabs_init(void);
 void stabs_file(char *);
-void stabs_efile(char *);
 void stabs_line(int);
 void stabs_rbrac(int);
 void stabs_lbrac(int);
 void stabs_func(struct symtab *);
 void stabs_newsym(struct symtab *);
 void stabs_chgsym(struct symtab *);
-void stabs_struct(struct symtab *, struct attr *);
+void stabs_struct(struct symtab *, struct suedef *);
 #endif
 
 #ifndef CHARCAST
@@ -559,20 +351,6 @@ void stabs_struct(struct symtab *, struct attr *);
 /* this is a macro to defend against cross-compilers, etc. */
 #define CHARCAST(x) (char)(x)
 #endif
-
-/* sometimes int is smaller than pointers */
-#if SZPOINT(CHAR) <= SZINT
-#define INTPTR  INT
-#elif SZPOINT(CHAR) <= SZLONG
-#define INTPTR  LONG
-#elif SZPOINT(CHAR) <= SZLONGLONG
-#define INTPTR  LONGLONG
-#else
-#error int size unknown
-#endif
-
-/* Generate a bitmask from a given type size */
-#define SZMASK(y) ((((1LL << ((y)-1))-1) << 1) | 1)
 
 /*
  * C compiler first pass extra defines.
@@ -591,7 +369,7 @@ void stabs_struct(struct symtab *, struct attr *);
 #define	OROR		(MAXOP+12)
 #define	NOT		(MAXOP+13)
 #define	CAST		(MAXOP+14)
-#define	STRING		(MAXOP+15)
+/* #define	STRING		(MAXOP+15) */
 
 /* The following must be in the same order as their NOASG counterparts */
 #define	PLUSEQ		(MAXOP+16)
@@ -609,32 +387,14 @@ void stabs_struct(struct symtab *, struct attr *);
 
 #define INCR		(MAXOP+26)
 #define DECR		(MAXOP+27)
-#define SZOF		(MAXOP+28)
-#define CLOP		(MAXOP+29)
-#define ATTRIB		(MAXOP+30)
-#define XREAL		(MAXOP+31)
-#define XIMAG		(MAXOP+32)
-#define TYMERGE		(MAXOP+33)
-#define LABEL		(MAXOP+34)
-
-
 /*
  * The following types are only used in pass1.
  */
 #define SIGNED		(MAXTYPES+1)
-#define FARG		(MAXTYPES+2)
-#define	FIMAG		(MAXTYPES+3)
-#define	IMAG		(MAXTYPES+4)
-#define	LIMAG		(MAXTYPES+5)
-#define	FCOMPLEX	(MAXTYPES+6)
-#define	COMPLEX		(MAXTYPES+7)
-#define	LCOMPLEX	(MAXTYPES+8)
-#define	ENUMTY		(MAXTYPES+9)
-
-#define	ISFTY(x)	((x) >= FLOAT && (x) <= LDOUBLE)
-#define	ISCTY(x)	((x) >= FCOMPLEX && (x) <= LCOMPLEX)
-#define	ISITY(x)	((x) >= FIMAG && (x) <= LIMAG)
-#define ANYCX(p) (p->n_type == STRTY && attr_find(p->n_ap, ATTR_COMPLEX))
+#define BOOL		(MAXTYPES+2)
+#define	FCOMPLEX	(MAXTYPES+3)
+#define	COMPLEX		(MAXTYPES+4)
+#define	LCOMPLEX	(MAXTYPES+5)
 
 #define coptype(o)	(cdope(o)&TYFLG)
 #define clogop(o)	(cdope(o)&LOGFLG)

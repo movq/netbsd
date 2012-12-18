@@ -1,4 +1,4 @@
-/*	$NetBSD: maplevar.h,v 1.14 2012/10/27 17:17:45 chs Exp $	*/
+/*	$NetBSD: maplevar.h,v 1.12 2008/04/28 20:23:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
 struct maple_func {
 	int		f_funcno;
 	struct maple_unit *f_unit;
-	device_t f_dev;
+	struct device	*f_dev;
 
 	/* callback */
 	void		(*f_callback)(void *, struct maple_response *,
@@ -166,7 +166,7 @@ struct maple_unit {
 };
 
 struct maple_softc {
-	device_t	sc_dev;
+	struct device	sc_dev;
 
 	callout_t	maple_callout_ch;
 	lwp_t		*event_thread;

@@ -1,6 +1,7 @@
-/*	$NetBSD: xy.c,v 1.72 2011/02/01 20:19:32 chuck Exp $	*/
+/*	$NetBSD: xy.c,v 1.69 2008/06/28 12:13:38 tsutsui Exp $	*/
 
 /*
+ *
  * Copyright (c) 1995 Charles D. Cranor
  * All rights reserved.
  *
@@ -12,6 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,7 +35,7 @@
  *
  * x y . c   x y l o g i c s   4 5 0 / 4 5 1   s m d   d r i v e r
  *
- * author: Chuck Cranor <chuck@netbsd>
+ * author: Chuck Cranor <chuck@ccrc.wustl.edu>
  * id: &Id: xy.c,v 1.1 1995/09/25 20:35:14 chuck Exp &
  * started: 14-Sep-95
  * references: [1] Xylogics Model 753 User's Manual
@@ -46,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xy.c,v 1.72 2011/02/01 20:19:32 chuck Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xy.c,v 1.69 2008/06/28 12:13:38 tsutsui Exp $");
 
 #undef XYC_DEBUG		/* full debug */
 #undef XYC_DIAG			/* extra sanity checks */
@@ -1056,7 +1062,7 @@ xystrategy(struct buf *bp)
 
 	s = splbio();		/* protect the queues */
 
-	bufq_put(xy->xyq, bp);	 /* XXX disksort_cylinder */
+	BUFQ_PUT(xy->xyq, bp);	 /* XXX disksort_cylinder */
 
 	/* start 'em up */
 
@@ -1625,7 +1631,7 @@ xyc_reset(struct xyc_softc *xycsc, int quiet, struct xy_iorq *blastmode,
 				/* Sun3: map/unmap regardless of B_PHYS */
 				dvma_mapout(iorq->dbufbase,
 				    iorq->buf->b_bcount);
-				(void)bufq_get(iorq->xy->xyq);
+				(void)BUFQ_GET(iorq->xy->xyq);
 				disk_unbusy(&iorq->xy->sc_dk,
 				    (iorq->buf->b_bcount - iorq->buf->b_resid),
 				    (iorq->buf->b_flags & B_READ));
@@ -1669,11 +1675,11 @@ xyc_start(struct xyc_softc *xycsc, struct xy_iorq *iorq)
 		for (lcv = 0; lcv < XYC_MAXDEV ; lcv++) {
 			if ((xy = xycsc->sc_drives[lcv]) == NULL)
 				continue;
-			if (bufq_peek(xy->xyq) == NULL)
+			if (BUFQ_PEEK(xy->xyq) == NULL)
 				continue;
 			if (xy->xyrq->mode != XY_SUB_FREE)
 				continue;
-			xyc_startbuf(xycsc, xy, bufq_peek(xy->xyq));
+			xyc_startbuf(xycsc, xy, BUFQ_PEEK(xy->xyq));
 		}
 	}
 	xyc_submit_iorq(xycsc, iorq, XY_SUB_NOQ);
@@ -1799,7 +1805,7 @@ xyc_remove_iorq(struct xyc_softc *xycsc)
 			}
 			/* Sun3: map/unmap regardless of B_PHYS */
 			dvma_mapout(iorq->dbufbase, iorq->buf->b_bcount);
-			(void)bufq_get(iorq->xy->xyq);
+			(void)BUFQ_GET(iorq->xy->xyq);
 			disk_unbusy(&iorq->xy->sc_dk,
 			    (bp->b_bcount - bp->b_resid),
 			    (bp->b_flags & B_READ));
@@ -1836,7 +1842,7 @@ xyc_perror(struct xy_iorq *iorq, struct xy_iopb *iopb, int still_trying)
 	printf("%s", (iorq->xy) ? device_xname(iorq->xy->sc_dev)
 	    : device_xname(iorq->xyc->sc_dev));
 	if (iorq->buf)
-		printf("%c: ", 'a' + (char)DISKPART(iorq->buf->b_dev));
+		printf("%c: ", 'a' + DISKPART(iorq->buf->b_dev));
 	if (iopb->com == XYCMD_RD || iopb->com == XYCMD_WR)
 		printf("%s %d/%d/%d: ",
 		    (iopb->com == XYCMD_RD) ? "read" : "write",

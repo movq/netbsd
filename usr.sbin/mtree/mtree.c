@@ -1,4 +1,4 @@
-/*	$NetBSD: mtree.c,v 1.43 2012/12/12 15:51:41 christos Exp $	*/
+/*	$NetBSD: mtree.c,v 1.34 2008/07/21 13:36:59 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1990, 1993
@@ -43,7 +43,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1990, 1993\
 #if 0
 static char sccsid[] = "@(#)mtree.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: mtree.c,v 1.43 2012/12/12 15:51:41 christos Exp $");
+__RCSID("$NetBSD: mtree.c,v 1.34 2008/07/21 13:36:59 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,28 +59,25 @@ __RCSID("$NetBSD: mtree.c,v 1.43 2012/12/12 15:51:41 christos Exp $");
 #include "extern.h"
 
 int	ftsoptions = FTS_PHYSICAL;
-int	cflag, Cflag, dflag, Dflag, eflag, iflag, jflag, lflag, mflag,
-    	nflag, qflag, rflag, sflag, tflag, uflag, Uflag;
+int	cflag, Cflag, dflag, Dflag, eflag, iflag, lflag, mflag,
+    	rflag, sflag, tflag, uflag, Uflag;
 char	fullpath[MAXPATHLEN];
 
-__dead static	void	usage(void);
+	int	main(int, char **);
+static	void	usage(void);
 
 int
 main(int argc, char **argv)
 {
 	int	ch, status;
 	char	*dir, *p;
-	FILE	*spec1, *spec2;
 
 	setprogname(argv[0]);
 
 	dir = NULL;
 	init_excludes();
-	spec1 = stdin;
-	spec2 = NULL;
 
-	while ((ch = getopt(argc, argv,
-	    "cCdDeE:f:I:ijk:K:lLmMnN:p:PqrR:s:StuUWxX:"))
+	while ((ch = getopt(argc, argv, "cCdDeE:f:I:ik:K:lLmMN:p:PrR:s:tuUWxX:"))
 	    != -1) {
 		switch((char)ch) {
 		case 'c':
@@ -102,27 +99,14 @@ main(int argc, char **argv)
 			eflag = 1;
 			break;
 		case 'f':
-			if (spec1 == stdin) {
-				spec1 = fopen(optarg, "r");
-				if (spec1 == NULL)
-					mtree_err("%s: %s", optarg,
-					    strerror(errno));
-			} else if (spec2 == NULL) {
-				spec2 = fopen(optarg, "r");
-				if (spec2 == NULL)
-					mtree_err("%s: %s", optarg,
-					    strerror(errno));
-			} else
-				usage();
+			if (!(freopen(optarg, "r", stdin)))
+				mtree_err("%s: %s", optarg, strerror(errno));
 			break;
 		case 'i':
 			iflag = 1;
 			break;
 		case 'I':
 			parsetags(&includetags, optarg);
-			break;
-		case 'j':
-			jflag = 1;
 			break;
 		case 'k':
 			keys = F_TYPE;
@@ -148,9 +132,6 @@ main(int argc, char **argv)
 		case 'M':
 			mtree_Mflag = 1;
 			break;
-		case 'n':
-			nflag = 1;
-			break;
 		case 'N':
 			if (! setup_getid(optarg))
 				mtree_err(
@@ -163,9 +144,6 @@ main(int argc, char **argv)
 		case 'P':
 			ftsoptions &= ~FTS_LOGICAL;
 			ftsoptions |= FTS_PHYSICAL;
-			break;
-		case 'q':
-			qflag = 1;
 			break;
 		case 'r':
 			rflag = 1;
@@ -180,9 +158,6 @@ main(int argc, char **argv)
 			crc_total = ~strtol(optarg, &p, 0);
 			if (*p)
 				mtree_err("illegal seed value -- %s", optarg);
-			break;
-		case 'S':
-			mtree_Sflag = 1;
 			break;
 		case 't':
 			tflag = 1;
@@ -213,13 +188,6 @@ main(int argc, char **argv)
 	if (argc)
 		usage();
 
-	if (spec2 && (cflag || Cflag || Dflag))
-		mtree_err("Double -f, -c, -C and -D flags are mutually "
-		    "exclusive");
-
-	if (dir && spec2)
-		mtree_err("Double -f and -p flags are mutually exclusive");
-
 	if (dir && chdir(dir))
 		mtree_err("%s: %s", dir, strerror(errno));
 
@@ -240,13 +208,10 @@ main(int argc, char **argv)
 		exit(0);
 	}
 	if (Cflag || Dflag) {
-		dump_nodes("", spec(spec1), Dflag);
+		dump_nodes("", spec(stdin), Dflag);
 		exit(0);
 	}
-	if (spec2 != NULL)
-		status = mtree_specspec(spec1, spec2);
-	else
-		status = verify(spec1);
+	status = verify();
 	if (Uflag && (status == MISMATCHEXIT))
 		status = 0;
 	exit(status);
@@ -257,10 +222,9 @@ usage(void)
 {
 
 	fprintf(stderr,
-	    "usage: %s [-CcDdejLlMnPqrStUuWx] [-i|-m] [-E tags]\n"
-	    "\t\t[-f spec] [-f spec]\n"
-	    "\t\t[-I tags] [-K keywords] [-k keywords] [-N dbdir] [-p path]\n"
-	    "\t\t[-R keywords] [-s seed] [-X exclude-file]\n",
+	    "usage: %s [-cCdDelLMPruUWx] [-i|-m] [-f spec] [-k key]\n"
+	    "\t\t[-K addkey] [-R removekey] [-I inctags] [-E exctags]\n"
+	    "\t\t[-N userdbdir] [-X exclude-file] [-p path] [-s seed]\n",
 	    getprogname());
 	exit(1);
 }

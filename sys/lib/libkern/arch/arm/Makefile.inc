@@ -1,10 +1,10 @@
-#	$NetBSD: Makefile.inc,v 1.12 2012/10/30 16:36:03 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.7 2008/10/14 03:16:20 matt Exp $
 
-SRCS+=	byte_swap_2.S byte_swap_4.S
-SRCS+=	ffs.S
-SRCS+=	divsi3.S udivsi3.S divide.S clzsi2.S modsi3.S umodsi3.S
-SRCS+=	memcmp.S memcpy.S memset.S memmove.S strcmp.S strncmp.S
+SRCS+=	__assert.c __main.c bswap64.c byte_swap_2.S byte_swap_4.S \
+	ffs.S imax.c imin.c lmax.c lmin.c max.c min.c random.c scanc.c \
+	skpc.c strcat.c strcasecmp.c \
+	strcpy.c strlen.c strncasecmp.c \
+	strncpy.c strtoul.c ulmax.c ulmin.c
 
-.if ${MACHINE_ARCH} == "earm" || ${MACHINE_ARCH} == "earmeb"
-SRCS+=	__aeabi_ldivmod.S __aeabi_uldivmod.S __aeabi_lcmp.c __aeabi_ulcmp.c
-.endif
+SRCS+=	divsi3.S clzsi2.S
+SRCS+=	memchr.c memcmp.S memcpy.S memset.S memmove.S strcmp.S strncmp.S

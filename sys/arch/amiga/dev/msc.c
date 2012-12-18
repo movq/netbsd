@@ -1,4 +1,4 @@
-/*	$NetBSD: msc.c,v 1.45 2012/10/27 17:17:30 chs Exp $ */
+/*	$NetBSD: msc.c,v 1.41 2008/05/25 19:22:21 ad Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -93,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msc.c,v 1.45 2012/10/27 17:17:30 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msc.c,v 1.41 2008/05/25 19:22:21 ad Exp $");
 
 #include "msc.h"
 
@@ -104,6 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: msc.c,v 1.45 2012/10/27 17:17:30 chs Exp $");
 #include <sys/tty.h>
 #include <sys/proc.h>
 #include <sys/file.h>
+#include <sys/malloc.h>
 #include <sys/uio.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
@@ -207,13 +208,13 @@ const struct   speedtab *mscspeedtab;
 int mscmctl(dev_t dev, int bits, int howto);
 void mscmint(register void *data);
 
-int mscmatch(device_t, cfdata_t, void *);
-void mscattach(device_t, device_t, void *);
+int mscmatch(struct device *, struct cfdata *, void *);
+void mscattach(struct device *, struct device *, void *);
 
 #define	SWFLAGS(dev)	(msc->openflags | (MSCDIALIN(dev) ? 0 : TIOCFLAG_SOFTCAR))
 #define	DEBUG_CD	0
 
-CFATTACH_DECL_NEW(msc, 0,
+CFATTACH_DECL(msc, sizeof(struct device),
     mscmatch, mscattach, NULL, NULL);
 
 dev_type_open(mscopen);
@@ -231,11 +232,11 @@ const struct cdevsw msc_cdevsw = {
 };
 
 int
-mscmatch(device_t parent, cfdata_t cf, void *aux)
+mscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 	if (zap->manid == 514 && (zap->prodid == 70 || zap->prodid == 69))
 		return(1);
 
@@ -243,7 +244,7 @@ mscmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-mscattach(device_t parent, device_t self, void *aux)
+mscattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	volatile struct mscmemory *mscmem;
 	struct mscdevice *msc;
@@ -251,8 +252,8 @@ mscattach(device_t parent, device_t self, void *aux)
 	int unit;
 	int Count;
 
-	zap = aux;
-	unit = device_unit(self);
+	zap = (struct zbus_args *)auxp;
+	unit = device_unit(dp);
 
 	/*
 	 * Make config msgs look nicer.
@@ -347,7 +348,7 @@ mscopen(dev_t dev, int flag, int mode, struct lwp *l)
 
 	if (!msc_tty[ttyn]) {
 
-		tp = tty_alloc();
+		tp = ttymalloc();
 		tty_attach(tp);
 		msc_tty[ttyn] = tp;
 		msc_tty[ttyn+1] = (struct tty *)NULL;
@@ -1201,7 +1202,7 @@ mscinitcard(struct zbus_args *zap)
 	(void)mlm->ResetBoard;
 
 	/* wait until speed detector has finished */
-	for (bcount = 0; bcount < 2000; bcount++) {
+	for (bcount = 0; bcount < 200; bcount++) {
 		delay(10000);
 		if (mlm->Common.Crystal)
 			break;

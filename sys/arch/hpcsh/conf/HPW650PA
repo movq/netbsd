@@ -1,4 +1,4 @@
-#	$NetBSD: HPW650PA,v 1.31 2012/08/17 20:11:39 abs Exp $
+#	$NetBSD: HPW650PA,v 1.26 2008/02/02 06:09:12 uwe Exp $
 #
 #	HITACHI PERSONA HPW650PA
 #
@@ -8,8 +8,6 @@ include 	"arch/hpcsh/conf/std.hpcsh"
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
 maxusers	32			# estimated number of users
-
-options 	HZ=64			# default clock rate                  
 
 # in-kernel bootloader, see kloader(4)
 options 	KLOADER
@@ -42,7 +40,6 @@ options 	EXEC_COFF	# 32-bit COFF executables
 
 # File systems
 file-system 	FFS		# UFS
-file-system 	MFS		# memory file system (requires FFS)
 file-system 	MSDOSFS		# MS-DOS file system
 file-system	NFS		# Sun NFS-compatible filesystem client
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -57,7 +54,6 @@ config		netbsd	root on ? type ?
 
 options 	WSEMUL_VT100
 options 	WSDISPLAY_DEFAULTSCREENS=1
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	FONT_VT220L8x10
 options 	WS_KERNEL_FG=WSCOL_BROWN
 options 	WS_KERNEL_BG=WSCOL_BLUE
@@ -98,5 +94,6 @@ pseudo-device	pty			# pseudo-terminals
 
 pseudo-device	bpfilter		# Berkeley packet filter
 pseudo-device	loop			# network loopback
+pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
-#pseudo-device	fss			# file system snapshot device
+#pseudo-device	fss		4	# file system snapshot device

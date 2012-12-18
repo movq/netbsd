@@ -1,12 +1,10 @@
-#	$NetBSD: Makefile,v 1.8 2010/11/21 02:33:41 mrg Exp $
+#	$NetBSD: Makefile,v 1.2.4.2 2009/09/17 04:24:28 snj Exp $
 
 .include <bsd.own.mk>
 
 PROG=	xfs
 
 XFSDIR= ${X11SRCDIR.${PROG}}
-
-.PATH:	${XFSDIR}/man
 
 .PATH:	${XFSDIR}/difs
 SRCS=	atom.c cache.c charinfo.c difsutils.c dispatch.c events.c \
@@ -21,8 +19,7 @@ CPPFLAGS+=		-I${XFSDIR}/include \
 			-I${DESTDIR}${X11INCDIR}/X11/FS \
 			-I${X11SRCDIR.libXfont}/include \
 			-I${X11SRCDIR.libXfont}/bitmap \
-			-I${XFSDIR}/../include \
-			-DHAVE_DAEMON
+			-I${XFSDIR}/../include
 
 CONN_DEFINES=		${X11FLAGS.CONNECTION} -DFONT_t -DTRANS_SERVER \
 			-DTRANS_REOPEN -DHAS_FCHOWN -DHAS_STICKY_DIR_BIT
@@ -48,11 +45,10 @@ X11EXTRAMANDEFS+=	-e 's%__configfilepath__%${XFSCONFIGDIR}/config%g; \
 			s%__configfiledesc__%the default file,%g'
 
 
-.PATH:	${XFSDIR}/config
 BUILDSYMLINKS=	config.cpp fsconfig.cpp
 CPPSCRIPTS=	fsconfig
 CPPSCRIPTFLAGS=	-DDEFAULTFONTPATH=${X11FONTDIR}/misc/,${X11FONTDIR}/Type1/,${X11FONTDIR}/75dpi/,${X11FONTDIR}/100dpi/ \
-		-DFSERRORS=/var/log/xfs.log -D__appmansuffix__=1
+		-DFSERRORS=/var/log/xfs.log
 
 CONFIGFILES=	fsconfig
 FILESNAME=	config

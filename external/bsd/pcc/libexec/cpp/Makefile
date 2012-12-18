@@ -1,39 +1,32 @@
-#	$NetBSD: Makefile,v 1.9 2011/06/07 13:30:35 plunky Exp $
+#	$NetBSD: Makefile,v 1.2 2008/08/27 13:15:53 gmcgarry Exp $
 
-.include <bsd.init.mk>
+.include <bsd.own.mk>
 
-.PATH:	${PCC_DIST}/cc/cpp \
-	${PCC_DIST}/mip
+# USE_FORT?= yes
 
-#
-# We build cpp(1) as pcpp(1) to avoid confusion with GCC
-#
+DIST=	${NETBSDSRCDIR}/external/bsd/pcc/dist/pcc
+SUBDIST=${DIST}/cc/cpp
+.PATH:	${SUBDIST}
 
-PROG=	pcpp
+PROG=	cpp
+SRCS=   cpy.y scanner.c cpp.c
 
-SRCS=	cpy.y
-SRCS+=	cpp.c token.c
+MAN=    cpp.1
 
-MAN=	pcpp.1
+BINDIR= /usr/libexec
 
-pcpp.1:	cpp.1
-	${TOOL_SED} -e "s,Nm cpp,Nm pcpp,"	\
-		    -e "s,Dt CPP,Dt PCPP,"	\
-		    ${.ALLSRC} > ${.TARGET}
-
+YFLAGS+=	-d
+CPPFLAGS+=	-I${DIST}/cc/cpp -I${.CURDIR} -I${DIST} -I${DIST}/mip
+CPPFLAGS+=	-I${.CURDIR}/../..
 CPPFLAGS+=	-I${.OBJDIR}
-CPPFLAGS+=	-I${PCC_DIST}/mip
-CPPFLAGS+=	-I${PCC_DIST}/cc/cpp
+CPPFLAGS+=	-DCPP_DEBUG
 
-# generate cpy.h
-YHEADER=
+CLEANFILES+=	lex.yy.c y.tab.h cpp.cat1 scanner.c
+CLEANFILES+=    cpp.cat1
 
-# some files include y.tab.h instead
-DPSRCS=		y.tab.h
-
-y.tab.h:	cpy.h
-	${HOST_LN} -f ${.ALLSRC} ${.TARGET}
-
-CLEANFILES+=	pcpp.1 y.tab.h
+# scanner.l expects to include y.tab.h
+cpy.c: cpy.y
+	${YACC} ${YFLAGS} -o ${.TARGET} ${.ALLSRC}
+	mv cpy.h y.tab.h
 
 .include <bsd.prog.mk>

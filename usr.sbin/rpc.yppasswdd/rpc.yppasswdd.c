@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc.yppasswdd.c,v 1.17 2011/08/31 16:24:59 plunky Exp $	*/
+/*	$NetBSD: rpc.yppasswdd.c,v 1.11 2002/11/08 00:16:39 fvdl Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -28,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rpc.yppasswdd.c,v 1.17 2011/08/31 16:24:59 plunky Exp $");
+__RCSID("$NetBSD: rpc.yppasswdd.c,v 1.11 2002/11/08 00:16:39 fvdl Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -55,7 +60,7 @@ char	make_arg[_POSIX2_LINE_MAX] = "make";
 
 int	main(int, char *[]);
 void	yppasswddprog_1(struct svc_req *, SVCXPRT *);
-__dead static void	usage(void);
+void	usage(void);
 
 int
 main(int argc, char *argv[])
@@ -92,8 +97,8 @@ main(int argc, char *argv[])
 				int arglen;
 
 				arglen = strlen(argv[i]);
-				if ((len + arglen) > (int)(sizeof(make_arg) - 2))
-					errx(EXIT_FAILURE, "%s", strerror(E2BIG));
+				if ((len + arglen) > (sizeof(make_arg) - 2))
+					errx(EXIT_FAILURE, strerror(E2BIG));
 				make_arg[len++] = ' ';
 				(void)strcpy(&make_arg[len], argv[i]);
 				len += arglen;
@@ -142,7 +147,7 @@ yppasswddprog_1(struct svc_req *rqstp, SVCXPRT *transp)
 
 	switch (rqstp->rq_proc) {
 	case NULLPROC:
-		(void)svc_sendreply(transp, (xdrproc_t)xdr_void, NULL);
+		(void)svc_sendreply(transp, xdr_void, (char *) NULL);
 		return;
 
 	case YPPASSWDPROC_UPDATE:

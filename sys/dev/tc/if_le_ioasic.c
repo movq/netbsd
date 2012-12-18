@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_ioasic.c,v 1.33 2009/04/18 14:58:04 tsutsui Exp $	*/
+/*	$NetBSD: if_le_ioasic.c,v 1.30 2008/04/04 12:25:07 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le_ioasic.c,v 1.33 2009/04/18 14:58:04 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le_ioasic.c,v 1.30 2008/04/04 12:25:07 tsutsui Exp $");
 
 #include "opt_inet.h"
 
@@ -264,7 +264,7 @@ le_ioasic_copytobuf_gap16(struct lance_softc *sc, void *fromv, int boff,
 	if (boff) {
 		int xfer;
 		xfer = min(len, 16 - boff);
-		memcpy(bptr + boff, from, xfer);
+		bcopy(from, bptr + boff, xfer);
 		from += xfer;
 		bptr += 32;
 		len -= xfer;
@@ -317,7 +317,7 @@ le_ioasic_copytobuf_gap16(struct lance_softc *sc, void *fromv, int boff,
 		default:
 		/* Does odd-aligned case ever happen? */
 		do {
-			memcpy(bptr, from, 16);
+			bcopy(from, bptr, 16);
 			from += 16;
 			bptr += 32;
 			len -= 16;
@@ -325,7 +325,7 @@ le_ioasic_copytobuf_gap16(struct lance_softc *sc, void *fromv, int boff,
 		break;
 	}
 	if (len)
-		memcpy(bptr, from, len);
+		bcopy(from, bptr, len);
 }
 
 void
@@ -343,7 +343,7 @@ le_ioasic_copyfrombuf_gap16(struct lance_softc *sc, void *tov, int boff,
 	if (boff) {
 		int xfer;
 		xfer = min(len, 16 - boff);
-		memcpy(to, bptr + boff, xfer);
+		bcopy(bptr + boff, to, xfer);
 		to += xfer;
 		bptr += 32;
 		len -= xfer;
@@ -391,7 +391,7 @@ le_ioasic_copyfrombuf_gap16(struct lance_softc *sc, void *tov, int boff,
 	/* XXX Does odd-byte-aligned case ever happen? */
 	default:
 		do {
-			memcpy(to, bptr, 16);
+			bcopy(bptr, to, 16);
 			to += 16;
 			bptr += 32;
 			len -= 16;
@@ -399,7 +399,7 @@ le_ioasic_copyfrombuf_gap16(struct lance_softc *sc, void *tov, int boff,
 		break;
 	}
 	if (len)
-		memcpy(to, bptr, len);
+		bcopy(bptr, to, len);
 }
 
 void
@@ -413,7 +413,7 @@ le_ioasic_zerobuf_gap16(struct lance_softc *sc, int boff, int len)
 	boff &= 0xf;
 	xfer = min(len, 16 - boff);
 	while (len > 0) {
-		memset(bptr + boff, 0, xfer);
+		bzero(bptr + boff, xfer);
 		bptr += 32;
 		boff = 0;
 		len -= xfer;

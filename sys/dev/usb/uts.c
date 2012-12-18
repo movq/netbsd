@@ -1,5 +1,3 @@
-/*	$NetBSD: uts.c,v 1.1 2012/01/17 03:49:20 christos Exp $	*/
-
 /*
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -34,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uts.c,v 1.1 2012/01/17 03:49:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uts.c,v 1.1.12.2 2012/09/28 10:58:17 sborrill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

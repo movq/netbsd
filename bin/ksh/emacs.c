@@ -1,4 +1,4 @@
-/*	$NetBSD: emacs.c,v 1.32 2009/04/25 05:11:37 lukem Exp $	*/
+/*	$NetBSD: emacs.c,v 1.31 2006/05/13 21:58:51 christos Exp $	*/
 
 /*
  *  Emacs-like command line editing and history
@@ -10,7 +10,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: emacs.c,v 1.32 2009/04/25 05:11:37 lukem Exp $");
+__RCSID("$NetBSD: emacs.c,v 1.31 2006/05/13 21:58:51 christos Exp $");
 #endif
 
 
@@ -1519,8 +1519,7 @@ x_bind(a1, a2, macro, list)
 void
 x_init_emacs()
 {
-	size_t i;
-	register int j;
+	register int i, j;
 	char *locale;
 
 	ainit(AEDIT);

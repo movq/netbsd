@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.4 2009/12/13 08:25:20 mrg Exp $
+#	$NetBSD: Makefile.inc,v 1.3.2.1 2011/01/06 05:20:24 riz Exp $
 
 MLIBDIR?=	none
 

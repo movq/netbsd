@@ -1,4 +1,4 @@
-/*	$NetBSD: ofcons.c,v 1.27 2012/10/27 17:18:00 chs Exp $	*/
+/*	$NetBSD: ofcons.c,v 1.23 2008/06/13 11:54:31 cegger Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofcons.c,v 1.27 2012/10/27 17:18:00 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofcons.c,v 1.23 2008/06/13 11:54:31 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -55,6 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: ofcons.c,v 1.27 2012/10/27 17:18:00 chs Exp $");
 #include "adb.h"
 
 struct ofcons_softc {
+	struct device of_dev;
 	struct tty *of_tty;
 };
 
@@ -62,10 +63,10 @@ struct ofcons_softc {
 
 static int stdin, stdout;
 
-static int ofcmatch(device_t, cfdata_t, void *);
-static void ofcattach(device_t, device_t, void *);
+static int ofcmatch __P((struct device *, struct cfdata *, void *));
+static void ofcattach __P((struct device *, struct device *, void *));
 
-CFATTACH_DECL_NEW(macofcons, sizeof(struct ofcons_softc),
+CFATTACH_DECL(macofcons, sizeof(struct ofcons_softc),
     ofcmatch, ofcattach, NULL, NULL);
 
 extern struct cfdriver macofcons_cd;
@@ -94,7 +95,7 @@ static int ofcparam(struct tty *, struct termios *);
 static int ofcons_probe(void);
 
 static int
-ofcmatch(device_t parent, cfdata_t match, void *aux)
+ofcmatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	static int attached = 0;
@@ -113,7 +114,7 @@ ofcmatch(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-ofcattach(device_t parent, device_t self, void *aux)
+ofcattach(struct device *parent, struct device *self, void *aux)
 {
 	printf("\n");
 }
@@ -128,7 +129,7 @@ ofcopen(dev_t dev, int flag, int mode, struct lwp *l)
 	if (!sc)
 		return ENXIO;
 	if (!(tp = sc->of_tty))
-		sc->of_tty = tp = tty_alloc();
+		sc->of_tty = tp = ttymalloc();
 	tp->t_oproc = ofcstart;
 	tp->t_param = ofcparam;
 	tp->t_dev = dev;

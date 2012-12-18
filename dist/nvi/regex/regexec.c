@@ -1,4 +1,4 @@
-/*	$NetBSD: regexec.c,v 1.4 2009/10/31 20:11:53 dsl Exp $ */
+/*	$NetBSD: regexec.c,v 1.1.1.2.6.2 2009/11/01 16:10:12 bouyer Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994 Henry Spencer.
@@ -173,7 +173,7 @@ regexec(const regex_t *preg, const RCHAR_T *string, size_t nmatch, regmatch_t *p
 		return(REG_BADPAT);
 	eflags = GOODFLAGS(eflags);
 
-	if (g->nstates <= (int)(CHAR_BIT*sizeof(states1)) && !(eflags&REG_LARGE))
+	if (g->nstates <= CHAR_BIT*sizeof(states1) && !(eflags&REG_LARGE))
 		return(smatcher(g, (RCHAR_T *)__UNCONST(string), nmatch, pmatch, eflags));
 	else
 		return(lmatcher(g, (RCHAR_T *)__UNCONST(string), nmatch, pmatch, eflags));

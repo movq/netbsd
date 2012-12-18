@@ -1,4 +1,4 @@
-/*	$NetBSD: ktrace.c,v 1.45 2011/09/16 15:39:26 joerg Exp $	*/
+/*	$NetBSD: ktrace.c,v 1.42 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)ktrace.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: ktrace.c,v 1.45 2011/09/16 15:39:26 joerg Exp $");
+__RCSID("$NetBSD: ktrace.c,v 1.42 2008/07/21 14:19:23 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -66,10 +66,11 @@ __RCSID("$NetBSD: ktrace.c,v 1.45 2011/09/16 15:39:26 joerg Exp $");
 #include "setemul.h"
 #endif
 
+int	main(int, char *[]);
 static int rpid(char *);
-__dead static void usage(void);
+static void usage(void);
 static int do_ktrace(const char *, int, int, int, int, int);
-__dead static void no_ktrace(int);
+static void no_ktrace(int);
 static void fset(int fd, int flag);
 static void fclear(int fd, int flag);
 
@@ -93,7 +94,7 @@ main(int argc, char *argv[])
 	append = ops = pidset = trset = synclog = 0;
 	trpoints = 0;
 	block = 1;
-	vers = 2;
+	vers = 1;
 	pid = 0;	/* Appease GCC */
 
 #ifdef KTRUSS
@@ -295,7 +296,7 @@ static void
 usage(void)
 {
 
-#define	TRPOINTS "[AaceilmnSsuvw+-]"
+#define	TRPOINTS "[AaceilmnsUuvw+-]"
 #ifdef KTRUSS
 	(void)fprintf(stderr, "usage:\t%s "
 	    "[-aCcdilnRT] [-e emulation] [-f infile] [-g pgrp] "

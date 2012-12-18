@@ -1,4 +1,4 @@
-/*	$NetBSD: boot1.c,v 1.20 2011/01/06 01:08:48 jakllsch Exp $	*/
+/*	$NetBSD: boot1.c,v 1.17 2008/04/30 16:18:26 ad Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: boot1.c,v 1.20 2011/01/06 01:08:48 jakllsch Exp $");
+__RCSID("$NetBSD: boot1.c,v 1.17 2008/04/30 16:18:26 ad Exp $");
 
 #include <lib/libsa/stand.h>
 #include <lib/libkern/libkern.h>
@@ -44,11 +44,11 @@ __RCSID("$NetBSD: boot1.c,v 1.20 2011/01/06 01:08:48 jakllsch Exp $");
 #define XSTR(x) #x
 #define STR(x) XSTR(x)
 
-static daddr_t bios_sector;
+static uint32_t bios_sector;
 
 static struct biosdisk_ll d;
 
-const char *boot1(uint32_t, uint64_t *);
+const char *boot1(uint32_t, uint32_t *);
 extern void putstr(const char *);
 
 extern struct disklabel ptn_disklabel;
@@ -60,15 +60,17 @@ ob(void)
 }
 
 const char *
-boot1(uint32_t biosdev, uint64_t *sector)
+boot1(uint32_t biosdev, uint32_t *sector)
 {
-	struct stat sb;
+        struct stat sb;
 	int fd;
 
 	bios_sector = *sector;
 	d.dev = biosdev;
 
-	putstr("\r\nNetBSD/x86 " STR(FS) " Primary Bootstrap\r\n");
+#ifdef SHOW_BANNER
+        putstr("\r\nNetBSD/x86 " STR(FS) " Primary Bootstrap\r\n");
+#endif
 
 	if (set_geometry(&d, NULL))
 		return "set_geometry\r\n";
@@ -107,8 +109,9 @@ boot1(uint32_t biosdev, uint64_t *sector)
 
 done:
 	/* if we fail here, so will fstat, so keep going */
-	if (fd == -1 || fstat(fd, &sb) == -1)
+	if (fstat(fd, &sb) == -1) {
 		return "Can't open /boot\r\n";
+	}
 
 	biosdev = (uint32_t)sb.st_size;
 #if 0

@@ -1,4 +1,4 @@
-/* $NetBSD: hp300.c,v 1.13 2011/02/10 23:25:11 tsutsui Exp $ */
+/* $NetBSD: hp300.c,v 1.10 2008/04/28 20:24:16 martin Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(__lint)
-__RCSID("$NetBSD: hp300.c,v 1.13 2011/02/10 23:25:11 tsutsui Exp $");
+__RCSID("$NetBSD: hp300.c,v 1.10 2008/04/28 20:24:16 martin Exp $");
 #endif /* !__lint */
 
 /* We need the target disklabel.h, not the hosts one..... */
@@ -78,7 +78,8 @@ hp300_setboot(ib_params *params)
 	int		i;
 	unsigned int	secsize = HP300_SECTSIZE;
 	uint64_t	boot_size, boot_offset;
-	struct disklabel *label;
+	char		label_buf[DEV_BSIZE];
+	struct disklabel *label = (void *)label_buf;
 
 	assert(params != NULL);
 	assert(params->fsfd != -1);
@@ -88,12 +89,6 @@ hp300_setboot(ib_params *params)
 
 	retval = 0;
 	bootstrap = MAP_FAILED;
-
-	label = malloc(params->sectorsize);
-	if (label == NULL) {
-		warn("Failed to allocate memory for disklabel");
-		goto done;
-	}
 
 	if (params->flags & IB_APPEND) {
 		if (!S_ISREG(params->fsstat.st_mode)) {
@@ -108,9 +103,8 @@ hp300_setboot(ib_params *params)
 		 * The bootstrap can be well over 8k, and must go into a BOOT
 		 * partition. Read NetBSD label to locate BOOT partition.
 		 */
-		if (pread(params->fsfd, label, params->sectorsize,
-		    LABELSECTOR * params->sectorsize)
-		    != (ssize_t)params->sectorsize) {
+		if (pread(params->fsfd, label, DEV_BSIZE, 2 * DEV_BSIZE)
+								!= DEV_BSIZE) {
 			warn("reading disklabel");
 			goto done;
 		}
@@ -143,7 +137,7 @@ hp300_setboot(ib_params *params)
 		 * Maybe we ought to be able to take a binary file and add
 		 * it to the LIF filesystem.
 		 */
-		if (boot_size < (uint64_t)params->s1stat.st_size) {
+		if (boot_size < params->s1stat.st_size) {
 			warn("BOOT partition too small (%llu < %llu)",
 				(unsigned long long)boot_size,
 				(unsigned long long)params->s1stat.st_size);
@@ -161,12 +155,11 @@ hp300_setboot(ib_params *params)
 	/* Relocate files, sanity check LIF directory on the way */
 	lifdir = (void *)(bootstrap + HP300_SECTSIZE * 2);
 	for (i = 0; i < 8; lifdir++, i++) {
-		int32_t addr = be32toh(lifdir->dir_addr);
-		int32_t limit = (params->s1stat.st_size - 1) / HP300_SECTSIZE + 1;
-		int32_t end = addr + be32toh(lifdir->dir_length);
-		if (end > limit) {
+		int addr = be32toh(lifdir->dir_addr);
+		int limit = (params->s1stat.st_size - 1) / HP300_SECTSIZE + 1;
+		if (addr + be32toh(lifdir->dir_length) > limit) {
 			warnx("LIF entry %d larger (%d %d) than LIF file",
-				i, end, limit);
+				i,  addr + be32toh(lifdir->dir_length), limit);
 			goto done;
 		}
 		if (addr != 0 && boot_offset != 0)
@@ -206,8 +199,6 @@ hp300_setboot(ib_params *params)
 	retval = 1;
 
  done:
-	if (label != NULL)
-		free(label);
 	if (bootstrap != MAP_FAILED)
 		munmap(bootstrap, params->s1stat.st_size);
 	return retval;

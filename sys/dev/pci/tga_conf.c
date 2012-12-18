@@ -1,4 +1,4 @@
-/* $NetBSD: tga_conf.c,v 1.7 2009/03/14 15:36:19 dsl Exp $ */
+/* $NetBSD: tga_conf.c,v 1.6 2001/12/12 07:50:05 elric Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tga_conf.c,v 1.7 2009/03/14 15:36:19 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tga_conf.c,v 1.6 2001/12/12 07:50:05 elric Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -135,7 +135,8 @@ static const struct tga_conf tga_configs[TGA_TYPE_UNKNOWN] = {
 #undef MB
 
 int
-tga_identify(struct tga_devconfig *dc)
+tga_identify(dc)
+	struct tga_devconfig *dc;
 {
 	int type;
 	int gder;
@@ -200,7 +201,8 @@ tga_identify(struct tga_devconfig *dc)
 }
 
 const struct tga_conf *
-tga_getconf(int type)
+tga_getconf(type)
+	int type;
 {
 
 	if (type >= 0 && type < TGA_TYPE_UNKNOWN)

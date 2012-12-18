@@ -1,4 +1,4 @@
-/*	$NetBSD: xstr.c,v 1.25 2011/09/16 15:39:31 joerg Exp $	*/
+/*	$NetBSD: xstr.c,v 1.22 2008/07/21 14:19:28 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,11 +39,11 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)xstr.c	8.1 (Berkeley) 6/9/93";
 #else
-__RCSID("$NetBSD: xstr.c,v 1.25 2011/09/16 15:39:31 joerg Exp $");
+__RCSID("$NetBSD: xstr.c,v 1.22 2008/07/21 14:19:28 lukem Exp $");
 #endif
 #endif /* not lint */
 
-#include <sys/param.h>
+#include <sys/types.h>
 #include <signal.h>
 #include <errno.h>
 #include <unistd.h>
@@ -62,7 +62,7 @@ __RCSID("$NetBSD: xstr.c,v 1.25 2011/09/16 15:39:31 joerg Exp $");
  */
 
 static off_t	hashit(const char *, int);
-__dead static void	onintr(int);
+static void	onintr(int);
 static off_t	yankstr(char **);
 static int	octdigit(char);
 static void	inithash(void);
@@ -75,13 +75,12 @@ static void	xsdotc(void);
 static char	lastchr(const char *);
 static int	istail(const char *, const char *);
 static void	process(const char *);
-__dead static void	usage(void);
+static void	usage(void);
 
 static off_t	tellpt;
 static off_t	mesgpt;
-static char	stringtmpfile[MAXPATHLEN];
-static const char *strings =	"strings";
-static const char *array =	0;
+static char	*strings =	"strings";
+static char	*array =	0;
 static int	cflg;
 static int	vflg;
 static int	readstd;
@@ -95,6 +94,8 @@ static struct	hash {
 	struct	hash *hnext;
 	short	hnew;
 } bucket[BUCKETS];
+
+int	main(int, char *[]);
 
 int
 main(int argc, char *argv[])
@@ -131,10 +132,8 @@ main(int argc, char *argv[])
 	else {
 		int	fd;
 
-		snprintf(stringtmpfile, sizeof(stringtmpfile),
-		    "%s%s.XXXXXX", _PATH_TMP, "xstr");
-		strings = stringtmpfile;
-		fd = mkstemp(stringtmpfile);
+		strings = strdup(_PATH_TMP);
+		fd = mkstemp(strings);
 		if (fd == -1)
 			err(1, "mkstemp failed");
 		close(fd);
@@ -262,7 +261,7 @@ yankstr(char **cpp)
 	char *cp = *cpp;
 	int c, ch;
 	char *dbuf, *dp, *edp;
-	const char *tp;
+	char *tp;
 	off_t hash;
 	size_t bsiz = BUFSIZ;
 
@@ -359,7 +358,8 @@ out:
 }
 
 static int
-octdigit(char c)
+octdigit(c)
+	char c;
 {
 
 	return (isdigit((unsigned char)c) && c != '8' && c != '9');

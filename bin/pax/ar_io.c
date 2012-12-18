@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)ar_io.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: ar_io.c,v 1.54 2012/03/20 18:42:28 matt Exp $");
+__RCSID("$NetBSD: ar_io.c,v 1.48.18.1 2009/10/03 21:27:59 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -145,11 +145,6 @@ ar_open(const char *name)
 		artyp = ISRMT;
 		if ((arfd = rmtopen(name, O_RDWR, DMOD)) == -1) {
 			syswarn(0, errno, "Failed open on %s", name);
-			return -1;
-		}
-		if (!isrmt(arfd)) {
-			rmtclose(arfd);
-			tty_warn(0, "Not a remote file: %s", name);
 			return -1;
 		}
 		blksz = rdblksz = 8192;
@@ -1431,7 +1426,7 @@ ar_next(void)
 	if (sigprocmask(SIG_BLOCK, &s_mask, &o_mask) < 0)
 		syswarn(0, errno, "Unable to set signal mask");
 	ar_close();
-	if (sigprocmask(SIG_SETMASK, &o_mask, NULL) < 0)
+	if (sigprocmask(SIG_SETMASK, &o_mask, (sigset_t *)NULL) < 0)
 		syswarn(0, errno, "Unable to restore signal mask");
 
 	if (done || !wr_trail || force_one_volume)
@@ -1613,7 +1608,12 @@ ar_start_gzip(int fd, const char *gzp, int wr)
 }
 
 static const char *
-timefmt(char *buf, size_t size, off_t sz, time_t tm, const char *unitstr)
+timefmt(buf, size, sz, tm, unitstr)
+	char *buf;
+	size_t size;
+	off_t sz;
+	time_t tm;
+	const char *unitstr;
 {
 	(void)snprintf(buf, size, "%lu secs (" OFFT_F " %s/sec)",
 	    (unsigned long)tm, (OFFT_T)(sz / tm), unitstr);
@@ -1621,7 +1621,10 @@ timefmt(char *buf, size_t size, off_t sz, time_t tm, const char *unitstr)
 }
 
 static const char *
-sizefmt(char *buf, size_t size, off_t sz)
+sizefmt(buf, size, sz)
+	char *buf;
+	size_t size;
+	off_t sz;
 {
 	(void)snprintf(buf, size, OFFT_F " bytes", (OFFT_T)sz);
 	return buf;

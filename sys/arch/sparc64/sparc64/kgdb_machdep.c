@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_machdep.c,v 1.15 2011/05/23 18:38:51 rmind Exp $ */
+/*	$NetBSD: kgdb_machdep.c,v 1.11 2008/04/28 20:23:37 martin Exp $ */
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -121,7 +121,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.15 2011/05/23 18:38:51 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.11 2008/04/28 20:23:37 martin Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_multiprocessor.h"
@@ -213,7 +213,7 @@ kgdb_resume_others(void)
 }
 
 static void
-kgdb_suspend(void)
+kgdb_suspend()
 {
 
 	sparc64_ipi_pause_thiscpu(NULL);
@@ -225,10 +225,11 @@ kgdb_suspend(void)
  * noting on the console why nothing else is going on.
  */
 void
-kgdb_connect(int verbose)
+kgdb_connect(verbose)
+	int verbose;
 {
 
-	if (kgdb_dev == NODEV)
+	if (kgdb_dev < 0)
 		return;
 #if NFB > 0
 	fb_unblank();
@@ -256,10 +257,10 @@ kgdb_connect(int verbose)
  * Decide what to do on panic.
  */
 void
-kgdb_panic(void)
+kgdb_panic()
 {
 
-	if (kgdb_dev != NODEV && kgdb_debug_panic)
+	if (kgdb_dev >= 0 && kgdb_debug_panic)
 		kgdb_connect(kgdb_active == 0);
 }
 
@@ -269,7 +270,8 @@ kgdb_panic(void)
  * XXX should this be done at the other end?
  */
 int
-kgdb_signal(int type)
+kgdb_signal(type)
+	int type;
 {
 	int sigval;
 
@@ -339,7 +341,9 @@ kgdb_signal(int type)
  * understood by gdb.
  */
 void
-kgdb_getregs(db_regs_t *regs, kgdb_reg_t *gdb_regs)
+kgdb_getregs(regs, gdb_regs)
+	db_regs_t *regs;
+	kgdb_reg_t *gdb_regs;
 {
 	struct trapframe64 *tf = &regs->db_tf;
 
@@ -362,7 +366,9 @@ kgdb_getregs(db_regs_t *regs, kgdb_reg_t *gdb_regs)
  * Reverse the above.
  */
 void
-kgdb_setregs(db_regs_t *regs, kgdb_reg_t *gdb_regs)
+kgdb_setregs(regs, gdb_regs)
+	db_regs_t *regs;
+	kgdb_reg_t *gdb_regs;
 {
 	struct trapframe64 *tf = &regs->db_tf;
 
@@ -376,7 +382,9 @@ kgdb_setregs(db_regs_t *regs, kgdb_reg_t *gdb_regs)
  * Determine if memory at [va..(va+len)] is valid.
  */
 int
-kgdb_acc(vaddr_t va, size_t len)
+kgdb_acc(va, len)
+	vaddr_t va;
+	size_t len;
 {
 	int64_t data;
 	vaddr_t eva;
@@ -385,15 +393,15 @@ kgdb_acc(vaddr_t va, size_t len)
 	eva = round_page(va + len);
 	va = trunc_page(va);
 
-	mutex_enter(&pm->pm_lock);
+	simple_lock(&pm->pm_lock);
 	for (; va < eva; va += PAGE_SIZE) {
 		data = pseg_get(pm, va);
 		if ((data & TLB_V) == 0) {
-			mutex_exit(&pm->pm_lock);
+			simple_unlock(&pm->pm_lock);
 			return 0;
 		}
 	}
-	mutex_exit(&pm->pm_lock);
+	simple_unlock(&pm->pm_lock);
 
 	return (1);
 }

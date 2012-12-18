@@ -1,4 +1,4 @@
-/* $NetBSD: isp_netbsd.c,v 1.86 2012/08/21 15:53:07 bouyer Exp $ */
+/* $NetBSD: isp_netbsd.c,v 1.78 2008/07/15 16:18:08 christos Exp $ */
 /*
  * Platform (NetBSD) dependent common attachment code for Qlogic adapters.
  */
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isp_netbsd.c,v 1.86 2012/08/21 15:53:07 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isp_netbsd.c,v 1.78 2008/07/15 16:18:08 christos Exp $");
 
 #include <dev/ic/isp_netbsd.h>
 #include <dev/ic/isp_ioctl.h>
@@ -59,7 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: isp_netbsd.c,v 1.86 2012/08/21 15:53:07 bouyer Exp $
  */
 #define	_XT(xs)	((((xs)->timeout/1000) * hz) + (3 * hz))
 
-static void isp_config_interrupts(device_t);
+static void isp_config_interrupts(struct device *);
 static void ispminphys_1020(struct buf *);
 static void ispminphys(struct buf *);
 static void ispcmd(struct ispsoftc *, XS_T *);
@@ -92,12 +92,10 @@ static int isp_fabric_hysteresis = 5;
 void
 isp_attach(struct ispsoftc *isp)
 {
-	device_t self = isp->isp_osinfo.dev;
 	int i;
-
 	isp->isp_state = ISP_RUNSTATE;
 
-	isp->isp_osinfo.adapter.adapt_dev = self;
+	isp->isp_osinfo.adapter.adapt_dev = &isp->isp_osinfo.dev;
 	isp->isp_osinfo.adapter.adapt_openings = isp->isp_maxcmds;
 	isp->isp_osinfo.loop_down_limit = 300;
 
@@ -120,8 +118,7 @@ isp_attach(struct ispsoftc *isp)
 	callout_setfunc(&isp->isp_osinfo.ldt, isp_ldt, isp);
 	if (IS_FC(isp)) {
 		if (kthread_create(PRI_NONE, 0, NULL, isp_fc_worker, isp,
-		    &isp->isp_osinfo.thread, "%s:fc_thrd",
-		    device_xname(self))) {
+		    &isp->isp_osinfo.thread, "%s:fc_thrd", device_xname(&isp->isp_osinfo.dev))) {
 			isp_prt(isp, ISP_LOGERR,
 			    "unable to create FC worker thread");
 			return;
@@ -157,14 +154,14 @@ isp_attach(struct ispsoftc *isp)
 	/*
          * Defer enabling mailbox interrupts until later.
          */
-        config_interrupts(self, isp_config_interrupts);
+        config_interrupts((struct device *) isp, isp_config_interrupts);
 }
 
 static void
-isp_config_interrupts(device_t self)
+isp_config_interrupts(struct device *self)
 {
 	int i;
-        struct ispsoftc *isp = device_private(self);
+        struct ispsoftc *isp = (struct ispsoftc *) self;
 
         isp->isp_osinfo.mbox_sleep_ok = 1;
 
@@ -179,7 +176,7 @@ isp_config_interrupts(device_t self)
 	 * And attach children (if any).
 	 */
 	for (i = 0; i < isp->isp_osinfo.adapter.adapt_nchannels; i++) {
-		config_found(self, &isp->isp_osinfo.chan[i], scsiprint);
+		config_found((void *)isp, &isp->isp_osinfo.chan[i], scsiprint);
 	}
 }
 
@@ -208,7 +205,7 @@ static int
 ispioctl(struct scsipi_channel *chan, u_long cmd, void *addr, int flag,
 	struct proc *p)
 {
-	struct ispsoftc *isp = device_private(chan->chan_adapter->adapt_dev);
+	struct ispsoftc *isp = (void *)chan->chan_adapter->adapt_dev;
 	int nr, bus, retval = ENOTTY;
 
 	switch (cmd) {
@@ -258,7 +255,7 @@ ispioctl(struct scsipi_channel *chan, u_long cmd, void *addr, int flag,
 
 	case ISP_RESETHBA:
 		ISP_LOCK(isp);
-		isp_reinit(isp, 0);
+		isp_reinit(isp);
 		ISP_UNLOCK(isp);
 		retval = 0;
 		break;
@@ -325,7 +322,7 @@ ispioctl(struct scsipi_channel *chan, u_long cmd, void *addr, int flag,
 	{
 		isp_stats_t *sp = (isp_stats_t *) addr;
 
-		ISP_MEMZERO(sp, sizeof (*sp));
+		MEMZERO(sp, sizeof (*sp));
 		sp->isp_stat_version = ISP_STATS_VERSION;
 		sp->isp_type = isp->isp_type;
 		sp->isp_revision = isp->isp_revision;
@@ -624,18 +621,6 @@ ispcmd(struct ispsoftc *isp, XS_T *xs)
 
 	switch (isp_start(xs)) {
 	case CMD_QUEUED:
-		if (IS_FC(isp) && isp->isp_osinfo.wwns[XS_TGT(xs)] == 0) {
-			fcparam *fcp = FCPARAM(isp, XS_CHANNEL(xs));
-			int dbidx = fcp->isp_dev_map[XS_TGT(xs)] - 1;
-			device_t dev = xs->xs_periph->periph_dev;
-			
-			if (dbidx >= 0 && dev &&
-			    prop_dictionary_set_uint64(device_properties(dev),
-			    "port-wwn", fcp->portdb[dbidx].port_wwn) == TRUE) {
-				isp->isp_osinfo.wwns[XS_TGT(xs)] =
-				    fcp->portdb[dbidx].port_wwn;
-			}
-                }
 		if (xs->xs_control & XS_CTL_POLL) {
 			isp_polled_cmd_wait(isp, xs);
 			isp->isp_osinfo.mbox_sleep_ok = ombi;
@@ -696,7 +681,7 @@ ispcmd(struct ispsoftc *isp, XS_T *xs)
 static void
 isprequest(struct scsipi_channel *chan, scsipi_adapter_req_t req, void *arg)
 {
-	struct ispsoftc *isp = device_private(chan->chan_adapter->adapt_dev);
+	struct ispsoftc *isp = (void *)chan->chan_adapter->adapt_dev;
 
 	switch (req) {
 	case ADAPTER_REQ_RUN_XFER:
@@ -756,7 +741,7 @@ isp_polled_cmd_wait(struct ispsoftc *isp, XS_T *xs)
 				break;
 			}
 		}
-		ISP_DELAY(1000);
+		USEC_DELAY(1000);
 		mswait -= 1;
 	}
 
@@ -766,7 +751,7 @@ isp_polled_cmd_wait(struct ispsoftc *isp, XS_T *xs)
 	 */
 	if (XS_CMD_DONE_P(xs) == 0) {
 		if (isp_control(isp, ISPCTL_ABORT_CMD, xs)) {
-			isp_reinit(isp, 0);
+			isp_reinit(isp);
 		}
 		if (XS_NOERR(xs)) {
 			isp_prt(isp, ISP_LOGERR, "polled command timed out");
@@ -877,25 +862,25 @@ isp_dog(void *arg)
 			XS_CMD_S_CLEAR(xs);
 			isp_done(xs);
 		} else {
+			uint32_t nxti, optr;
 			void *qe;
 			isp_marker_t local, *mp = &local;
 			isp_prt(isp, ISP_LOGDEBUG2,
 			    "possible command timeout on handle %x", handle);
 			XS_CMD_C_WDOG(xs);
 			callout_reset(&xs->xs_callout, hz, isp_dog, xs);
-			qe = isp_getrqentry(isp);
-			if (qe == NULL) {
+			if (isp_getrqentry(isp, &nxti, &optr, &qe)) {
 				ISP_UNLOCK(isp);
 				return;
 			}
 			XS_CMD_S_GRACE(xs);
-			ISP_MEMZERO((void *) mp, sizeof (*mp));
+			MEMZERO((void *) mp, sizeof (*mp));
 			mp->mrk_header.rqs_entry_count = 1;
 			mp->mrk_header.rqs_entry_type = RQSTYPE_MARKER;
 			mp->mrk_modifier = SYNC_ALL;
 			mp->mrk_target = XS_CHANNEL(xs) << 7;
 			isp_put_marker(isp, mp, qe);
-			ISP_SYNC_REQUEST(isp);
+			ISP_ADD_REQUEST(isp, nxti);
 		}
 	} else {
 		isp_prt(isp, ISP_LOGDEBUG0, "watchdog with no command");
@@ -928,7 +913,7 @@ isp_gdt(void *arg)
 		if (lp->state != FC_PORTDB_STATE_ZOMBIE) {
 			continue;
 		}
-		if (lp->dev_map_idx == 0) {
+		if (lp->ini_map_idx == 0) {
 			continue;
 		}
 		if (lp->new_reserved == 0) {
@@ -939,9 +924,9 @@ isp_gdt(void *arg)
 			more_to_do++;
 			continue;
 		}
-		tgt = lp->dev_map_idx - 1;
-		FCPARAM(isp, 0)->isp_dev_map[tgt] = 0;
-		lp->dev_map_idx = 0;
+		tgt = lp->ini_map_idx - 1;
+		FCPARAM(isp, 0)->isp_ini_map[tgt] = 0;
+		lp->ini_map_idx = 0;
 		lp->state = FC_PORTDB_STATE_NIL;
 		isp_prt(isp, ISP_LOGCONFIG, prom3, lp->portid, tgt,
 		    "Gone Device Timeout");
@@ -985,7 +970,7 @@ isp_ldt(void *arg)
 		if (lp->state != FC_PORTDB_STATE_PROBATIONAL) {
 			continue;
 		}
-		if (lp->dev_map_idx == 0) {
+		if (lp->ini_map_idx == 0) {
 			continue;
 		}
 
@@ -1005,9 +990,9 @@ isp_ldt(void *arg)
 		 * will happen when loop comes back up.
 		 */
 
-		tgt = lp->dev_map_idx - 1;
-		FCPARAM(isp, 0)->isp_dev_map[tgt] = 0;
-		lp->dev_map_idx = 0;
+		tgt = lp->ini_map_idx - 1;
+		FCPARAM(isp, 0)->isp_ini_map[tgt] = 0;
+		lp->ini_map_idx = 0;
 		isp_prt(isp, ISP_LOGCONFIG, prom3, lp->portid, tgt,
 		    "Loop Down Timeout");
 		isp_make_gone(isp, tgt);
@@ -1281,20 +1266,20 @@ isp_async(struct ispsoftc *isp, ispasync_t cmd, ...)
 				if (i >= FL_ID && i <= SNS_ID) {
 					continue;
 				}
-				if (FCPARAM(isp, bus)->isp_dev_map[i] == 0) {
+				if (FCPARAM(isp, bus)->isp_ini_map[i] == 0) {
 					break;
 				}
 			}
 			if (i < MAX_FC_TARG) {
-				FCPARAM(isp, bus)->isp_dev_map[i] = dbidx + 1;
-				lp->dev_map_idx = i + 1;
+				FCPARAM(isp, bus)->isp_ini_map[i] = dbidx + 1;
+				lp->ini_map_idx = i + 1;
 			} else {
 				isp_prt(isp, ISP_LOGWARN, "out of target ids");
 				isp_dump_portdb(isp, bus);
 			}
 		}
-		if (lp->dev_map_idx) {
-			tgt = lp->dev_map_idx - 1;
+		if (lp->ini_map_idx) {
+			tgt = lp->ini_map_idx - 1;
 			isp_prt(isp, ISP_LOGCONFIG, prom2,
 			    lp->portid, lp->handle,
 		            roles[lp->roles], "arrived at", tgt,
@@ -1320,10 +1305,10 @@ isp_async(struct ispsoftc *isp, ispasync_t cmd, ...)
 		va_end(ap);
 		if (isp_change_is_bad) {
 			lp->state = FC_PORTDB_STATE_NIL;
-			if (lp->dev_map_idx) {
-				tgt = lp->dev_map_idx - 1;
-				FCPARAM(isp, bus)->isp_dev_map[tgt] = 0;
-				lp->dev_map_idx = 0;
+			if (lp->ini_map_idx) {
+				tgt = lp->ini_map_idx - 1;
+				FCPARAM(isp, bus)->isp_ini_map[tgt] = 0;
+				lp->ini_map_idx = 0;
 				isp_prt(isp, ISP_LOGCONFIG, prom3,
 				    lp->portid, tgt, "change is bad");
 				isp_make_gone(isp, tgt);
@@ -1340,11 +1325,11 @@ isp_async(struct ispsoftc *isp, ispasync_t cmd, ...)
 		} else {
 			lp->portid = lp->new_portid;
 			lp->roles = lp->new_roles;
-			if (lp->dev_map_idx) {
-				int t = lp->dev_map_idx - 1;
-				FCPARAM(isp, bus)->isp_dev_map[t] =
+			if (lp->ini_map_idx) {
+				int t = lp->ini_map_idx - 1;
+				FCPARAM(isp, bus)->isp_ini_map[t] =
 				    (lp - FCPARAM(isp, bus)->portdb) + 1;
-				tgt = lp->dev_map_idx - 1;
+				tgt = lp->ini_map_idx - 1;
 				isp_prt(isp, ISP_LOGCONFIG, prom2,
 				    lp->portid, lp->handle,
 				    roles[lp->roles], "changed at", tgt,
@@ -1368,8 +1353,8 @@ isp_async(struct ispsoftc *isp, ispasync_t cmd, ...)
 		bus = va_arg(ap, int);
 		lp = va_arg(ap, fcportdb_t *);
 		va_end(ap);
-		if (lp->dev_map_idx) {
-			tgt = lp->dev_map_idx - 1;
+		if (lp->ini_map_idx) {
+			tgt = lp->ini_map_idx - 1;
 			isp_prt(isp, ISP_LOGCONFIG, prom2,
 			    lp->portid, lp->handle,
 		    	    roles[lp->roles], "stayed at", tgt,
@@ -1400,7 +1385,7 @@ isp_async(struct ispsoftc *isp, ispasync_t cmd, ...)
 		 * If it isn't marked that isp_gdt is going to get rid of it,
 		 * announce that it's gone.
 		 */
-		if (lp->dev_map_idx && lp->reserved == 0) {
+		if (lp->ini_map_idx && lp->reserved == 0) {
 			lp->reserved = 1;
 			lp->new_reserved = isp->isp_osinfo.gone_device_time;
 			lp->state = FC_PORTDB_STATE_ZOMBIE;
@@ -1410,7 +1395,7 @@ isp_async(struct ispsoftc *isp, ispasync_t cmd, ...)
 				    "starting Gone Device Timer");
 				callout_schedule(&isp->isp_osinfo.gdt, hz);
 			}
-			tgt = lp->dev_map_idx - 1;
+			tgt = lp->ini_map_idx - 1;
 			isp_prt(isp, ISP_LOGCONFIG, prom2,
 			    lp->portid, lp->handle,
 		            roles[lp->roles], "gone zombie at", tgt,
@@ -1501,7 +1486,7 @@ isp_async(struct ispsoftc *isp, ispasync_t cmd, ...)
 		}
 		mbox1 = isp->isp_osinfo.mbox_sleep_ok;
 		isp->isp_osinfo.mbox_sleep_ok = 0;
-		isp_reinit(isp, 0);
+		isp_reinit(isp);
 		isp->isp_osinfo.mbox_sleep_ok = mbox1;
 		isp_async(isp, ISPASYNC_FW_RESTARTED, NULL);
 		break;
@@ -1518,21 +1503,7 @@ isp_prt(struct ispsoftc *isp, int level, const char *fmt, ...)
 	if (level != ISP_LOGALL && (level & isp->isp_dblev) == 0) {
 		return;
 	}
-	printf("%s: ", device_xname(isp->isp_osinfo.dev));
-	va_start(ap, fmt);
-	vprintf(fmt, ap);
-	va_end(ap);
-	printf("\n");
-}
-
-void
-isp_xs_prt(struct ispsoftc *isp, XS_T *xs, int level, const char *fmt, ...)
-{
-	va_list ap;
-	if (level != ISP_LOGALL && (level & isp->isp_dblev) == 0) {
-		return;
-	}
-	scsipi_printaddr(xs->xs_periph);
+	printf("%s: ", device_xname(&isp->isp_osinfo.dev));
 	va_start(ap, fmt);
 	vprintf(fmt, ap);
 	va_end(ap);
@@ -1598,19 +1569,22 @@ isp_mbox_wait_complete(struct ispsoftc *isp, mbreg_t *mbp)
 	microtime(&start);
 	if (isp->isp_osinfo.mbox_sleep_ok) {
 		int to;
-		struct timeval tv, utv;
+		struct timeval tv;
 
 		tv.tv_sec = 0;
 		tv.tv_usec = 0;
 		for (olim = 0; olim < maxc; olim++) {
-			utv.tv_sec = usecs / 1000000;
-			utv.tv_usec = usecs % 1000000;
-			timeradd(&tv, &utv, &tv);
+			tv.tv_sec += (usecs / 1000000);
+			tv.tv_usec += (usecs % 1000000);
+			if (tv.tv_usec >= 100000) {
+				tv.tv_sec++;
+				tv.tv_usec -= 1000000;
+			}
 		}
-		to = tvtohz(&tv);
+		timeradd(&tv, &start, &tv);
+		to = tvhzto(&tv);
 		if (to == 0)
 			to = 1;
-		timeradd(&tv, &start, &tv);
 
 		isp->isp_osinfo.mbox_sleep_ok = 0;
 		isp->isp_osinfo.mbox_sleeping = 1;
@@ -1631,7 +1605,7 @@ isp_mbox_wait_complete(struct ispsoftc *isp, mbreg_t *mbp)
 						break;
 					}
 				}
-				ISP_DELAY(100);
+				USEC_DELAY(100);
 			}
 			if (isp->isp_osinfo.mboxcmd_done) {
 				break;

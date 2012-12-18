@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2009/01/05 15:39:34 pooka Exp $
+#	$NetBSD: Makefile,v 1.1 2008/09/04 12:21:25 pooka Exp $
 #
 
 MOUNTNAME=	sysvbfs

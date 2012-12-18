@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.18 2012/02/16 02:26:35 christos Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.15 2008/08/29 19:08:29 matt Exp $	*/
 
 /*
  * Copyright (c) 1996 Scott K Stevens
@@ -34,7 +34,7 @@
 /*
  * Machine-dependent defines for new kernel debugger.
  */
-#include <sys/types.h>
+
 #include <uvm/uvm_extern.h>
 #include <arm/armreg.h>
 #include <machine/frame.h>
@@ -43,7 +43,6 @@
 /* end of mangling */
 
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
-#define	DDB_EXPR_FMT	"l"		/* expression is long */
 typedef	long		db_expr_t;	/* expression - signed */
 
 typedef trapframe_t db_regs_t;
@@ -109,9 +108,9 @@ extern db_regs_t	ddb_regs;	/* register state */
 
 #define SOFTWARE_SSTEP
 
-u_int branch_taken(u_int insn, u_int pc, db_regs_t *db_regs);
-int kdb_trap(int, db_regs_t *);
-void db_machine_init(void);
+u_int branch_taken __P((u_int insn, u_int pc, db_regs_t *db_regs));
+int kdb_trap __P((int, db_regs_t *));
+void db_machine_init __P((void));
 int db_validate_address(vm_offset_t addr);
 
 #define DB_ELF_SYMBOLS

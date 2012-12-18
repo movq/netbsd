@@ -1,4 +1,4 @@
-/*	$NetBSD: ehlo_mask.c,v 1.1.1.2 2011/03/02 19:32:14 tron Exp $	*/
+/*	$NetBSD: ehlo_mask.c,v 1.1.1.1.2.3 2011/01/07 01:24:02 riz Exp $	*/
 
 /*++
 /* NAME
@@ -92,7 +92,7 @@ int     ehlo_mask(const char *mask_str)
      * can switch between Postfix versions without trouble.
      */
     return (name_mask_opt("ehlo string mask", ehlo_mask_table,
-			  mask_str, NAME_MASK_ANY_CASE | NAME_MASK_IGNORE));
+			  mask_str, NAME_MASK_ANY_CASE));
 }
 
 /* str_ehlo_mask - mask to string */

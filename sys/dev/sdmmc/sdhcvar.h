@@ -1,4 +1,4 @@
-/*	$NetBSD: sdhcvar.h,v 1.11 2012/12/13 06:43:37 riastradh Exp $	*/
+/*	$NetBSD: sdhcvar.h,v 1.1.8.2 2009/10/07 15:41:13 sborrill Exp $	*/
 /*	$OpenBSD: sdhcvar.h,v 1.3 2007/09/06 08:01:01 jsg Exp $	*/
 
 /*
@@ -37,35 +37,15 @@ struct sdhc_softc {
 	uint32_t		sc_flags;
 #define	SDHC_FLAG_USE_DMA	0x0001
 #define	SDHC_FLAG_FORCE_DMA	0x0002
-#define	SDHC_FLAG_NO_PWR0	0x0004	/* Freescale ESDHC */
-#define	SDHC_FLAG_HAVE_DVS	0x0008	/* Freescale ESDHC */
-#define	SDHC_FLAG_32BIT_ACCESS	0x0010	/* Freescale ESDHC */
-#define	SDHC_FLAG_ENHANCED	0x0020	/* Freescale ESDHC */
-#define	SDHC_FLAG_8BIT_MODE	0x0040	/* MMC 8bit mode is supported */
-#define	SDHC_FLAG_HAVE_CGM	0x0080	/* Netlogic XLP */
-#define	SDHC_FLAG_NO_LED_ON	0x0100	/* LED_ON unsupported in HOST_CTL */
-#define	SDHC_FLAG_HOSTCAPS	0x0200	/* No device provided capabilities */
-#define	SDHC_FLAG_RSP136_CRC	0x0400	/* Resp 136 with CRC and end-bit */
-#define	SDHC_FLAG_SINGLE_ONLY	0x0800	/* Single transfer only */
-#define	SDHC_FLAG_WAIT_RESET	0x1000	/* Wait for soft resets to start */
-
-	uint32_t		sc_clkbase;
-	int			sc_clkmsk;	/* Mask for SDCLK */
-	uint32_t		sc_caps;/* attachment provided capabilities */
-
-	int (*sc_vendor_rod)(struct sdhc_softc *, int);
-	int (*sc_vendor_write_protect)(struct sdhc_softc *);
-	int (*sc_vendor_card_detect)(struct sdhc_softc *);
-	int (*sc_vendor_bus_clock)(struct sdhc_softc *, int);
+#define	SDHC_FLAG_NO_PWR0	0x0004
 };
 
 /* Host controller functions called by the attachment driver. */
 int	sdhc_host_found(struct sdhc_softc *, bus_space_tag_t,
 	    bus_space_handle_t, bus_size_t);
 int	sdhc_intr(void *);
-int	sdhc_detach(device_t, int);
-bool	sdhc_suspend(device_t, const pmf_qual_t *);
-bool	sdhc_resume(device_t, const pmf_qual_t *);
-bool	sdhc_shutdown(device_t, int);
+bool	sdhc_suspend(device_t dev PMF_FN_ARGS);
+bool	sdhc_resume(device_t dev PMF_FN_ARGS);
+bool	sdhc_shutdown(device_t dev, int flags);
 
 #endif	/* _SDHCVAR_H_ */

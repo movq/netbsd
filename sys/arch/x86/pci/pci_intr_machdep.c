@@ -1,7 +1,7 @@
-/*	$NetBSD: pci_intr_machdep.c,v 1.25 2012/06/15 14:07:44 yamt Exp $	*/
+/*	$NetBSD: pci_intr_machdep.c,v 1.12 2008/07/03 14:02:25 drochner Exp $	*/
 
 /*-
- * Copyright (c) 1997, 1998, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.25 2012/06/15 14:07:44 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.12 2008/07/03 14:02:25 drochner Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -82,18 +82,18 @@ __KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.25 2012/06/15 14:07:44 yamt E
 #include <sys/errno.h>
 #include <sys/device.h>
 #include <sys/intr.h>
-#include <sys/malloc.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 
 #include "ioapic.h"
 #include "eisa.h"
-#include "acpica.h"
+#include "acpi.h"
 #include "opt_mpbios.h"
 #include "opt_acpi.h"
 
-#if NIOAPIC > 0 || NACPICA > 0
-#include <machine/i82093reg.h>
+#if NIOAPIC > 0 || NACPI > 0
 #include <machine/i82093var.h>
 #include <machine/mpconfig.h>
 #include <machine/mpbiosvar.h>
@@ -104,28 +104,22 @@ __KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.25 2012/06/15 14:07:44 yamt E
 #include <machine/mpbiosvar.h>
 #endif
 
-#if NACPICA > 0
+#if NACPI > 0
 #include <machine/mpacpi.h>
 #endif
 
 #define	MPSAFE_MASK	0x80000000
 
 int
-pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int pin = pa->pa_intrpin;
 	int line = pa->pa_intrline;
-	pci_chipset_tag_t ipc, pc = pa->pa_pc;
-#if NIOAPIC > 0 || NACPICA > 0
+#if NIOAPIC > 0 || NACPI > 0
 	int rawpin = pa->pa_rawintrpin;
+	pci_chipset_tag_t pc = pa->pa_pc;
 	int bus, dev, func;
 #endif
-
-	for (ipc = pc; ipc != NULL; ipc = ipc->pc_super) {
-		if ((ipc->pc_present & PCI_OVERRIDE_INTR_MAP) == 0)
-			continue;
-		return (*ipc->pc_ov->ov_intr_map)(ipc->pc_ctx, pa, ihp);
-	}
 
 	if (pin == 0) {
 		/* No IRQ used. */
@@ -135,22 +129,15 @@ pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 	*ihp = 0;
 
 	if (pin > PCI_INTERRUPT_PIN_MAX) {
-		aprint_normal("pci_intr_map: bad interrupt pin %d\n", pin);
+		printf("pci_intr_map: bad interrupt pin %d\n", pin);
 		goto bad;
 	}
 
-#if NIOAPIC > 0 || NACPICA > 0
-	KASSERT(rawpin >= PCI_INTERRUPT_PIN_A);
-	KASSERT(rawpin <= PCI_INTERRUPT_PIN_D);
+#if NIOAPIC > 0 || NACPI > 0
 	pci_decompose_tag(pc, pa->pa_tag, &bus, &dev, &func);
 	if (mp_busses != NULL) {
-		/*
-		 * Note: PCI_INTERRUPT_PIN_A == 1 where intr_find_mpmapping
-		 * wants pci bus_pin encoding which uses INT_A == 0.
-		 */
-		if (intr_find_mpmapping(bus,
-		    (dev << 2) | (rawpin - PCI_INTERRUPT_PIN_A), ihp) == 0) {
-			if (APIC_IRQ_LEGACY_IRQ(*ihp) == 0)
+		if (intr_find_mpmapping(bus, (dev<<2)|(rawpin-1), ihp) == 0) {
+			if ((*ihp & 0xff) == 0)
 				*ihp |= line;
 			return 0;
 		}
@@ -176,20 +163,20 @@ pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 	 * the BIOS has not configured the device.
 	 */
 	if (line == 0 || line == X86_PCI_INTERRUPT_LINE_NO_CONNECTION) {
-		aprint_normal("pci_intr_map: no mapping for pin %c (line=%02x)\n",
+		printf("pci_intr_map: no mapping for pin %c (line=%02x)\n",
 		       '@' + pin, line);
 		goto bad;
 	} else {
 		if (line >= NUM_LEGACY_IRQS) {
-			aprint_normal("pci_intr_map: bad interrupt line %d\n", line);
+			printf("pci_intr_map: bad interrupt line %d\n", line);
 			goto bad;
 		}
 		if (line == 2) {
-			aprint_normal("pci_intr_map: changed line 2 to line 9\n");
+			printf("pci_intr_map: changed line 2 to line 9\n");
 			line = 9;
 		}
 	}
-#if NIOAPIC > 0 || NACPICA > 0
+#if NIOAPIC > 0 || NACPI > 0
 	if (mp_busses != NULL) {
 		if (intr_find_mpmapping(mp_isa_bus, line, ihp) == 0) {
 			if ((*ihp & 0xff) == 0)
@@ -203,9 +190,9 @@ pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 			return 0;
 		}
 #endif
-		aprint_normal("pci_intr_map: bus %d dev %d func %d pin %d; line %d\n",
+		printf("pci_intr_map: bus %d dev %d func %d pin %d; line %d\n",
 		    bus, dev, func, pin, line);
-		aprint_normal("pci_intr_map: no MP mapping found\n");
+		printf("pci_intr_map: no MP mapping found\n");
 	}
 #endif
 
@@ -220,14 +207,6 @@ bad:
 const char *
 pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 {
-	pci_chipset_tag_t ipc;
-
-	for (ipc = pc; ipc != NULL; ipc = ipc->pc_super) {
-		if ((ipc->pc_present & PCI_OVERRIDE_INTR_STRING) == 0)
-			continue;
-		return (*ipc->pc_ov->ov_intr_string)(ipc->pc_ctx, pc, ih);
-	}
-
 	return intr_string(ih & ~MPSAFE_MASK);
 }
 
@@ -235,13 +214,6 @@ pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 const struct evcnt *
 pci_intr_evcnt(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 {
-	pci_chipset_tag_t ipc;
-
-	for (ipc = pc; ipc != NULL; ipc = ipc->pc_super) {
-		if ((ipc->pc_present & PCI_OVERRIDE_INTR_EVCNT) == 0)
-			continue;
-		return (*ipc->pc_ov->ov_intr_evcnt)(ipc->pc_ctx, pc, ih);
-	}
 
 	/* XXX for now, no evcnt parent reported */
 	return NULL;
@@ -276,14 +248,6 @@ pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih,
 	struct ioapic_softc *ioapic;
 #endif
 	bool mpsafe;
-	pci_chipset_tag_t ipc;
-
-	for (ipc = pc; ipc != NULL; ipc = ipc->pc_super) {
-		if ((ipc->pc_present & PCI_OVERRIDE_INTR_ESTABLISH) == 0)
-			continue;
-		return (*ipc->pc_ov->ov_intr_establish)(ipc->pc_ctx,
-		    pc, ih, level, func, arg);
-	}
 
 	pic = &i8259_pic;
 	pin = irq = (ih & ~MPSAFE_MASK);
@@ -293,7 +257,7 @@ pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih,
 	if (ih & APIC_INT_VIA_APIC) {
 		ioapic = ioapic_find(APIC_IRQ_APIC(ih));
 		if (ioapic == NULL) {
-			aprint_normal("pci_intr_establish: bad ioapic %d\n",
+			printf("pci_intr_establish: bad ioapic %d\n",
 			    APIC_IRQ_APIC(ih));
 			return NULL;
 		}
@@ -312,118 +276,6 @@ pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih,
 void
 pci_intr_disestablish(pci_chipset_tag_t pc, void *cookie)
 {
-	pci_chipset_tag_t ipc;
-
-	for (ipc = pc; ipc != NULL; ipc = ipc->pc_super) {
-		if ((ipc->pc_present & PCI_OVERRIDE_INTR_DISESTABLISH) == 0)
-			continue;
-		(*ipc->pc_ov->ov_intr_disestablish)(ipc->pc_ctx, pc, cookie);
-		return;
-	}
 
 	intr_disestablish(cookie);
 }
-
-#if NIOAPIC > 0
-/*
- * experimental support for MSI, does support a single vector,
- * no MSI-X, 8-bit APIC IDs
- * (while it doesn't need the ioapic technically, it borrows
- * from its kernel support)
- */
-
-/* dummies, needed by common intr_establish code */
-static void
-msipic_hwmask(struct pic *pic, int pin)
-{
-}
-static void
-msipic_addroute(struct pic *pic, struct cpu_info *ci,
-		int pin, int vec, int type)
-{
-}
-
-static struct pic msi_pic = {
-	.pic_name = "msi",
-	.pic_type = PIC_SOFT,
-	.pic_vecbase = 0,
-	.pic_apicid = 0,
-	.pic_lock = __SIMPLELOCK_UNLOCKED,
-	.pic_hwmask = msipic_hwmask,
-	.pic_hwunmask = msipic_hwmask,
-	.pic_addroute = msipic_addroute,
-	.pic_delroute = msipic_addroute,
-	.pic_edge_stubs = ioapic_edge_stubs,
-};
-
-struct msi_hdl {
-	struct intrhand *ih;
-	pci_chipset_tag_t pc;
-	pcitag_t tag;
-	int co;
-};
-
-void *
-pci_msi_establish(struct pci_attach_args *pa, int level,
-		  int (*func)(void *), void *arg)
-{
-	int co;
-	struct intrhand *ih;
-	struct msi_hdl *msih;
-	struct cpu_info *ci;
-	struct intrsource *is;
-	pcireg_t reg;
-
-	if (!pci_get_capability(pa->pa_pc, pa->pa_tag, PCI_CAP_MSI, &co, 0))
-		return NULL;
-
-	ih = intr_establish(-1, &msi_pic, -1, IST_EDGE, level, func, arg, 0);
-	if (ih == NULL)
-		return NULL;
-
-	msih = malloc(sizeof(*msih), M_DEVBUF, M_WAITOK);
-	msih->ih = ih;
-	msih->pc = pa->pa_pc;
-	msih->tag = pa->pa_tag;
-	msih->co = co;
-
-	ci = ih->ih_cpu;
-	is = ci->ci_isources[ih->ih_slot];
-	reg = pci_conf_read(pa->pa_pc, pa->pa_tag, co + PCI_MSI_CTL);
-	pci_conf_write(pa->pa_pc, pa->pa_tag, co + PCI_MSI_MADDR64_LO,
-		       IOAPIC_MSIADDR_BASE |
-		       __SHIFTIN(ci->ci_cpuid, IOAPIC_MSIADDR_DSTID_MASK));
-	if (reg & PCI_MSI_CTL_64BIT_ADDR) {
-		pci_conf_write(pa->pa_pc, pa->pa_tag, co + PCI_MSI_MADDR64_HI,
-		    0);
-		/* XXX according to the manual, ASSERT is unnecessary if
-		 * EDGE
-		 */
-		pci_conf_write(pa->pa_pc, pa->pa_tag, co + PCI_MSI_MDATA64,
-		    __SHIFTIN(is->is_idtvec, IOAPIC_MSIDATA_VECTOR_MASK) |
-		    IOAPIC_MSIDATA_TRGMODE_EDGE | IOAPIC_MSIDATA_LEVEL_ASSERT |
-		    IOAPIC_MSIDATA_DM_FIXED);
-	} else {
-		/* XXX according to the manual, ASSERT is unnecessary if
-		 * EDGE
-		 */
-		pci_conf_write(pa->pa_pc, pa->pa_tag, co + PCI_MSI_MDATA,
-		    __SHIFTIN(is->is_idtvec, IOAPIC_MSIDATA_VECTOR_MASK) |
-		    IOAPIC_MSIDATA_TRGMODE_EDGE | IOAPIC_MSIDATA_LEVEL_ASSERT |
-		    IOAPIC_MSIDATA_DM_FIXED);
-	}
-	pci_conf_write(pa->pa_pc, pa->pa_tag, co + PCI_MSI_CTL,
-	    PCI_MSI_CTL_MSI_ENABLE);
-	return msih;
-}
-
-void
-pci_msi_disestablish(void *ih)
-{
-	struct msi_hdl *msih = ih;
-
-	pci_conf_write(msih->pc, msih->tag, msih->co + PCI_MSI_CTL, 0);
-	intr_disestablish(msih->ih);
-	free(msih, M_DEVBUF);
-}
-#endif

@@ -1,4 +1,4 @@
-/* $NetBSD: ifpci.c,v 1.31 2012/10/27 17:18:34 chs Exp $	*/
+/* $NetBSD: ifpci.c,v 1.25 2008/04/10 19:13:37 cegger Exp $	*/
 /*
  *   Copyright (c) 1999 Gary Jennejohn. All rights reserved.
  *
@@ -36,14 +36,14 @@
  *	Fritz!Card PCI driver
  *	------------------------------------------------
  *
- *	$Id: ifpci.c,v 1.31 2012/10/27 17:18:34 chs Exp $
+ *	$Id: ifpci.c,v 1.25 2008/04/10 19:13:37 cegger Exp $
  *
  *      last edit-date: [Fri Jan  5 11:38:58 2001]
  *
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ifpci.c,v 1.31 2012/10/27 17:18:34 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ifpci.c,v 1.25 2008/04/10 19:13:37 cegger Exp $");
 
 
 #include <sys/param.h>
@@ -134,12 +134,12 @@ static void avma1pp_bchannel_stat(isdn_layer1token, int h_chan, bchan_statistics
 static void avma1pp_map_int(struct ifpci_softc *sc, struct pci_attach_args *pa);
 static void avma1pp_bchannel_setup(isdn_layer1token, int h_chan, int bprot, int activate);
 static void avma1pp_init_linktab(struct isic_softc *);
-static int ifpci_match(device_t parent, cfdata_t match, void *aux);
-static void ifpci_attach(device_t parent, device_t self, void *aux);
-static int ifpci_detach(device_t self, int flags);
-static int ifpci_activate(device_t self, enum devact act);
+static int ifpci_match(struct device *parent, struct cfdata *match, void *aux);
+static void ifpci_attach(struct device *parent, struct device *self, void *aux);
+static int ifpci_detach(struct device *self, int flags);
+static int ifpci_activate(struct device *self, enum devact act);
 
-CFATTACH_DECL_NEW(ifpci, sizeof(struct ifpci_softc),
+CFATTACH_DECL(ifpci, sizeof(struct ifpci_softc),
     ifpci_match, ifpci_attach, ifpci_detach, ifpci_activate);
 
 /*---------------------------------------------------------------------------*
@@ -262,7 +262,8 @@ CFATTACH_DECL_NEW(ifpci, sizeof(struct ifpci_softc),
 #define HSCX_AVMA1PP_ACTIVE	0x1000
 
 static int
-ifpci_match(device_t parent, cfdata_t match, void *aux)
+ifpci_match(struct device *parent,
+	struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -273,15 +274,13 @@ ifpci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-ifpci_attach(device_t parent, device_t self, void *aux)
+ifpci_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ifpci_softc *psc = device_private(self);
+	struct ifpci_softc *psc = (void*)self;
 	struct pci_attach_args *pa = aux;
 	struct isic_softc *sc = &psc->sc_isic;
 	struct isdn_l3_driver *drv;
 	u_int v;
-
-	sc->sc_dev = self;
 
 	/* announce */
 	printf(": Fritz!PCI card\n");
@@ -299,7 +298,7 @@ ifpci_attach(device_t parent, device_t self, void *aux)
 	    &sc->sc_maps[0].t, &sc->sc_maps[0].h, &psc->sc_base, &psc->sc_size) != 0
 	   && pci_mapreg_map(pa, FRITZPCI_PORT0_IO_MAPOFF, PCI_MAPREG_TYPE_IO, 0,
 	    &sc->sc_maps[0].t, &sc->sc_maps[0].h, &psc->sc_base, &psc->sc_size) != 0) {
-		aprint_error_dev(self, "can't map card\n");
+		aprint_error_dev(&sc->sc_dev, "can't map card\n");
 		return;
 	}
 
@@ -354,7 +353,7 @@ ifpci_attach(device_t parent, device_t self, void *aux)
 	/* setup i4b infrastructure (have to roll our own here) */
 
 	/* sc->sc_isac_version = ((ISAC_READ(I_RBCH)) >> 5) & 0x03; */
-	 printf("%s: ISAC %s (IOM-%c)\n", device_xname(self),
+	 printf("%s: ISAC %s (IOM-%c)\n", device_xname(&sc->sc_dev),
   		"2085 Version A1/A2 or 2086/2186 Version 1.1",
 		 sc->sc_bustyp == BUS_TYPE_IOM1 ? '1' : '2');
 
@@ -388,7 +387,7 @@ ifpci_attach(device_t parent, device_t self, void *aux)
 	sc->sc_freeflag2 = 0;
 
 	/* init higher protocol layers */
-	drv = isdn_attach_isdnif(device_xname(self),
+	drv = isdn_attach_isdnif(device_xname(&sc->sc_dev),
 	    "AVM Fritz!PCI", &sc->sc_l2, &ifpci_l3_driver, NBCH_BRI);
 	sc->sc_l3token = drv;
 	sc->sc_l2.driver = &isic_std_driver;
@@ -399,9 +398,9 @@ ifpci_attach(device_t parent, device_t self, void *aux)
 }
 
 static int
-ifpci_detach(device_t self, int flags)
+ifpci_detach(struct device *self, int flags)
 {
-	struct ifpci_softc *psc = device_private(self);
+	struct ifpci_softc *psc = (struct ifpci_softc *)self;
 
 	bus_space_unmap(psc->sc_isic.sc_maps[0].t, psc->sc_isic.sc_maps[0].h, psc->sc_size);
 	bus_space_free(psc->sc_isic.sc_maps[0].t, psc->sc_isic.sc_maps[0].h, psc->sc_size);
@@ -411,20 +410,26 @@ ifpci_detach(device_t self, int flags)
 }
 
 int
-ifpci_activate(device_t self, enum devact act)
+ifpci_activate(struct device *self, enum devact act)
 {
-	struct ifpci_softc *psc = device_private(self);
+	struct ifpci_softc *psc = (struct ifpci_softc *)self;
+	int error = 0, s;
 
+	s = splnet();
 	switch (act) {
+	case DVACT_ACTIVATE:
+		error = EOPNOTSUPP;
+		break;
+
 	case DVACT_DEACTIVATE:
 		psc->sc_isic.sc_intr_valid = ISIC_INTR_DYING;
 		isdn_layer2_status_ind(&psc->sc_isic.sc_l2, psc->sc_isic.sc_l3token, STI_ATTACH, 0);
 		isdn_detach_isdnif(psc->sc_isic.sc_l3token);
 		psc->sc_isic.sc_l3token = NULL;
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		break;
 	}
+	splx(s);
+	return (error);
 }
 
 /*---------------------------------------------------------------------------*
@@ -836,7 +841,7 @@ avma1pp_hscx_intr(int h_chan, u_int stat, struct isic_softc *sc)
 		 * a look at isic_bchannel_start() in i4b_bchan.c !
 		 */
 
-		NDBGL1(L1_H_IRQ, "%s: chan %d - XPR, Tx Fifo Empty!", device_xname(sc->sc_dev), h_chan);
+		NDBGL1(L1_H_IRQ, "%s: chan %d - XPR, Tx Fifo Empty!", device_xname(&sc->sc_dev), h_chan);
 
 		if(chan->out_mbuf_cur == NULL) 	/* last frame is transmitted */
 		{
@@ -958,7 +963,7 @@ avma1pp_map_int(struct ifpci_softc *psc, struct pci_attach_args *pa)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error_dev(sc->sc_dev, "couldn't map interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		avma1pp_disable(sc);
 		return;
 	}
@@ -966,14 +971,14 @@ avma1pp_map_int(struct ifpci_softc *psc, struct pci_attach_args *pa)
 	intrstr = pci_intr_string(pc, ih);
 	psc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, avma1pp_intr, sc);
 	if (psc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			printf(" at %s", intrstr);
+		printf("\n");
 		avma1pp_disable(sc);
 		return;
 	}
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+	printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev), intrstr);
 }
 
 static void
@@ -983,7 +988,7 @@ avma1pp_hscx_init(struct isic_softc *sc, int h_chan, int activate)
 	u_int param = 0;
 
 	NDBGL1(L1_BCHAN, "%s: channel=%d, %s",
-		device_xname(sc->sc_dev), h_chan, activate ? "activate" : "deactivate");
+		device_xname(&sc->sc_dev), h_chan, activate ? "activate" : "deactivate");
 
 	if (activate == 0)
 	{
@@ -1045,7 +1050,7 @@ avma1pp_bchannel_setup(isdn_layer1token t, int h_chan, int bprot, int activate)
 	}
 
 	NDBGL1(L1_BCHAN, "%s: channel=%d, %s",
-		device_xname(sc->sc_dev), h_chan, activate ? "activate" : "deactivate");
+		device_xname(&sc->sc_dev), h_chan, activate ? "activate" : "deactivate");
 
 	/* general part */
 

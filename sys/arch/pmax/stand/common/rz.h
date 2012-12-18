@@ -1,4 +1,4 @@
-/*	$NetBSD: rz.h,v 1.4 2009/03/17 00:45:46 he Exp $	*/
+/*	$NetBSD: rz.h,v 1.2 1999/11/27 03:09:51 simonb Exp $	*/
 
 /*
  * Copyright (c) 1997 Jonathan Stone (hereinafter referred to as the author)
@@ -32,11 +32,7 @@
  * SUCH DAMAGE.
  */
 
-int rzstrategy(void*, int, daddr_t, size_t, void*, size_t*);
-int rzopen(struct open_file*, ...);
-#if !defined(LIBSA_NO_DEV_CLOSE)
-int rzclose(struct open_file*);
-#endif
-#if !defined(LIBSA_NO_DEV_IOCTL)
-int rzioctl(struct open_file*, u_long, void*);
-#endif
+int rzstrategy __P((void*, int, daddr_t, size_t, void*, size_t*));
+int rzopen __P((struct open_file*, ...));
+int rzclose __P((struct open_file*));
+int rzioctl __P((struct open_file*, u_long, void*));

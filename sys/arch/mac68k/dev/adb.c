@@ -1,4 +1,4 @@
-/*	$NetBSD: adb.c,v 1.55 2012/10/27 17:17:59 chs Exp $	*/
+/*	$NetBSD: adb.c,v 1.52 2008/04/03 05:03:23 scottr Exp $	*/
 
 /*
  * Copyright (C) 1994	Bradley A. Grantham
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Bradley A. Grantham.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.55 2012/10/27 17:17:59 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.52 2008/04/03 05:03:23 scottr Exp $");
 
 #include "opt_adb.h"
 
@@ -52,10 +57,10 @@ __KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.55 2012/10/27 17:17:59 chs Exp $");
 /*
  * Function declarations.
  */
-static int	adbmatch(device_t, cfdata_t, void *);
-static void	adbattach(device_t, device_t, void *);
+static int	adbmatch(struct device *, struct cfdata *, void *);
+static void	adbattach(struct device *, struct device *, void *);
 static int	adbprint(void *, const char *);
-void		adb_config_interrupts(device_t);
+void		adb_config_interrupts(struct device *);
 
 extern void	adb_jadbproc(void);
 
@@ -74,24 +79,24 @@ extern char	*adbHardwareDescr[];
 /*
  * Driver definition.
  */
-CFATTACH_DECL_NEW(adb, 0,
+CFATTACH_DECL(adb, sizeof(struct device),
     adbmatch, adbattach, NULL, NULL);
 
 static int
-adbmatch(device_t parent, cfdata_t cf, void *aux)
+adbmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
-	static bool adb_matched;
+	static int adb_matched = 0;
 
 	/* Allow only one instance. */
 	if (adb_matched)
 		return (0);
 
-	adb_matched = true;
+	adb_matched = 1;
 	return (1);
 }
 
 static void
-adbattach(device_t parent, device_t self, void *aux)
+adbattach(struct device *parent, struct device *self, void *aux)
 {
 
 	adb_softintr_cookie = softint_establish(SOFTINT_SERIAL,
@@ -105,14 +110,14 @@ adbattach(device_t parent, device_t self, void *aux)
 }
 
 void
-adb_config_interrupts(device_t self)
+adb_config_interrupts(struct device *self)
 {
 	ADBDataBlock adbdata;
 	struct adb_attach_args aa_args;
 	int totaladbs;
 	int adbindex, adbaddr;
 
-	printf("%s", device_xname(self));
+	printf("%s", self->dv_xname);
 	adb_polling = 1;
 
 #ifdef MRG_ADB

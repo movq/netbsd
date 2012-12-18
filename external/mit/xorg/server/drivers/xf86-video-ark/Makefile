@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2009/06/10 01:59:09 mrg Exp $
+#	$NetBSD: Makefile,v 1.3.8.1 2009/09/17 04:24:35 snj Exp $
 
 DRIVER=		xf86-video-ark
 DRIVER_NAME=	ark_drv

@@ -1,4 +1,4 @@
-/*	$NetBSD: execlp.c,v 1.12 2011/06/30 19:46:07 joerg Exp $	*/
+/*	$NetBSD: execlp.c,v 1.11 2008/01/09 11:26:03 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)exec.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: execlp.c,v 1.12 2011/06/30 19:46:07 joerg Exp $");
+__RCSID("$NetBSD: execlp.c,v 1.11 2008/01/09 11:26:03 simonb Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -50,6 +50,9 @@ __weak_alias(execlp,_execlp)
 int
 execlp(const char *name, const char *arg, ...)
 {
+#if defined(__i386__) || defined(__m68k__)
+	return execvp(name, __UNCONST(&arg));
+#else
 	va_list ap;
 	char **argv;
 	int i;
@@ -68,4 +71,5 @@ execlp(const char *name, const char *arg, ...)
 	va_end(ap);
 	
 	return execvp(name, argv);
+#endif
 }

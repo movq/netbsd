@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_conf_long.c,v 1.1.1.2 2011/03/02 19:32:15 tron Exp $	*/
+/*	$NetBSD: mail_conf_long.c,v 1.1.1.1.2.3 2011/01/07 01:24:03 riz Exp $	*/
 
 /*++
 /* NAME
@@ -81,8 +81,7 @@
 
 #include <sys_defs.h>
 #include <stdlib.h>
-#include <stdio.h>			/* BUFSIZ */
-#include <errno.h>
+#include <stdio.h>			/* sscanf() */
 
 /* Utility library. */
 
@@ -100,12 +99,10 @@
 static int convert_mail_conf_long(const char *name, long *longval)
 {
     const char *strval;
-    char   *end;
+    char    junk;
 
     if ((strval = mail_conf_lookup_eval(name)) != 0) {
-	errno = 0;
-	*longval = strtol(strval, &end, 10);
-	if (*strval == 0 || *end != 0 || errno == ERANGE)
+	if (sscanf(strval, "%ld%c", longval, &junk) != 1)
 	    msg_fatal("bad numerical configuration: %s = %s", name, strval);
 	return (1);
     }

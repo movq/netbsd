@@ -1,4 +1,4 @@
-/*	$NetBSD: aed.c,v 1.30 2012/10/27 17:17:59 chs Exp $	*/
+/*	$NetBSD: aed.c,v 1.28 2008/06/11 23:54:45 cegger Exp $	*/
 
 /*
  * Copyright (C) 1994	Bradley A. Grantham
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Bradley A. Grantham.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aed.c,v 1.30 2012/10/27 17:17:59 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aed.c,v 1.28 2008/06/11 23:54:45 cegger Exp $");
 
 #include "opt_adb.h"
 
@@ -52,8 +57,8 @@ __KERNEL_RCSID(0, "$NetBSD: aed.c,v 1.30 2012/10/27 17:17:59 chs Exp $");
 /*
  * Function declarations.
  */
-static int	aedmatch(device_t, cfdata_t, void *);
-static void	aedattach(device_t, device_t, void *);
+static int	aedmatch(struct device *, struct cfdata *, void *);
+static void	aedattach(struct device *, struct device *, void *);
 static void	aed_emulate_mouse(adb_event_t *);
 static void	aed_kbdrpt(void *);
 static void	aed_dokeyupdown(adb_event_t *);
@@ -67,7 +72,7 @@ static struct aed_softc *aed_sc;
 static int aed_options = 0 | AED_MSEMUL;
 
 /* Driver definition */
-CFATTACH_DECL_NEW(aed, sizeof(struct aed_softc),
+CFATTACH_DECL(aed, sizeof(struct aed_softc),
     aedmatch, aedattach, NULL, NULL);
 
 extern struct cfdriver aed_cd;
@@ -85,7 +90,7 @@ const struct cdevsw aed_cdevsw = {
 };
 
 static int
-aedmatch(device_t parent, cfdata_t cf, void *aux)
+aedmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)aux;
 	static int aed_matched;
@@ -99,10 +104,10 @@ aedmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-aedattach(device_t parent, device_t self, void *aux)
+aedattach(struct device *parent, struct device *self, void *aux)
 {
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)aux;
-	struct aed_softc *sc = device_private(self);
+	struct aed_softc *sc = (struct aed_softc *)self;
 
 	callout_init(&sc->sc_repeat_ch, 0);
 	selinit(&sc->sc_selinfo);
@@ -119,7 +124,7 @@ aedattach(device_t parent, device_t self, void *aux)
 	sc->sc_repeating = -1;          /* not repeating */
 
 	/* Pull in the options flags. */ 
-	sc->sc_options = (device_cfdata(self)->cf_flags | aed_options);
+	sc->sc_options = (device_cfdata(&sc->sc_dev)->cf_flags | aed_options);
 
 	sc->sc_ioproc = NULL;
 	

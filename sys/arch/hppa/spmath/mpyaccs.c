@@ -1,4 +1,4 @@
-/*	$NetBSD: mpyaccs.c,v 1.5 2012/02/04 17:03:10 skrll Exp $	*/
+/*	$NetBSD: mpyaccs.c,v 1.4 2007/02/22 05:46:30 thorpej Exp $	*/
 
 /*	$OpenBSD: mpyaccs.c,v 1.4 2001/03/29 03:58:18 mickey Exp $	*/
 
@@ -42,12 +42,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpyaccs.c,v 1.5 2012/02/04 17:03:10 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpyaccs.c,v 1.4 2007/02/22 05:46:30 thorpej Exp $");
 
 #include "md.h"
 
 void
-mpyaccs(int opnd1, int opnd2, struct mdsfu_register *result)
+mpyaccs(opnd1,opnd2,result)
+
+int opnd1, opnd2;
+struct mdsfu_register *result;
 {
 	struct mdsfu_register temp;
 	int carry, sign;

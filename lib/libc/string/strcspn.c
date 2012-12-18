@@ -1,4 +1,4 @@
-/*	$NetBSD: strcspn.c,v 1.18 2012/03/21 00:35:50 christos Exp $	*/
+/*	$NetBSD: strcspn.c,v 1.16 2008/07/30 16:13:59 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2008 Joerg Sonnenberger
@@ -26,20 +26,16 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: strcspn.c,v 1.18 2012/03/21 00:35:50 christos Exp $");
+__RCSID("$NetBSD: strcspn.c,v 1.16 2008/07/30 16:13:59 joerg Exp $");
 
 #include <assert.h>
 #include <inttypes.h>
-#include <limits.h>
 #include <string.h>
-
-/* 64bit version is in strspn.c */
-#if ULONG_MAX != 0xffffffffffffffffull
 
 size_t
 strcspn(const char *s, const char *charset)
 {
-	static const uint8_t idx[8] = { 1, 2, 4, 8, 16, 32, 64, 128 };
+	static const size_t idx[8] = { 1, 2, 4, 8, 16, 32, 64, 128 };
 	const char *t;
 	uint8_t set[32];
 #define UC(a) ((unsigned int)(unsigned char)(a))
@@ -66,5 +62,3 @@ strcspn(const char *s, const char *charset)
 			break;
 	return t - s;
 }
-
-#endif

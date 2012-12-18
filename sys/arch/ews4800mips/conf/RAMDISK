@@ -1,4 +1,4 @@
-# 	$NetBSD: RAMDISK,v 1.16 2012/03/10 21:51:52 joerg Exp $
+# 	$NetBSD: RAMDISK,v 1.10 2008/07/16 15:22:50 tsutsui Exp $
 #
 # kernel config file with memory disk for installation
 #
@@ -12,7 +12,6 @@ options 	MEMORY_DISK_HOOKS
 options 	MEMORY_DISK_IS_ROOT	# force root on memory disk
 options 	MEMORY_DISK_SERVER=0	# no userspace memory disk support
 options 	MEMORY_DISK_ROOT_SIZE=6144	# size of memory disk, in blocks
-options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
 
 options 	PIPE_SOCKETPAIR
 options 	NFS_V2_ONLY
@@ -26,15 +25,13 @@ no options 	KTRACE
 no options 	SYSVMSG
 no options 	SYSVSEM
 no options 	SYSVSHM
+no options 	P1003_1B_SEMAPHORE
 no options 	SYSCTL_INCLUDE_DESCR
 
 no options	COMPAT_13
 no options	COMPAT_14
 no options	COMPAT_15
 no options	COMPAT_16
-no options	COMPAT_20
-no options	COMPAT_30
-no options	COMPAT_43
 
 no file-system	EXT2FS
 no file-system	LFS
@@ -42,15 +39,12 @@ no file-system	FDESC
 no file-system	KERNFS
 no file-system	NULLFS
 no file-system	OVERLAY
-no file-system	PUFFS
-no file-system	PROCFS
+no file-system	PORTAL
 no file-system	UMAPFS
 no file-system	UNION
 no file-system	PTYFS
-no file-system	TMPFS
 
 no options 	QUOTA
-no options 	QUOTA2
 no options 	NFSSERVER
 no options 	NETATALK
 no options 	PPP_FILTER
@@ -64,11 +58,9 @@ no ses*	at scsibus?
 no ss*	at scsibus?
 no uk*	at scsibus?
 
-no pseudo-device	ccd
 no pseudo-device	raid
 no pseudo-device	vnd
 no pseudo-device	fss
-no pseudo-device	putter
 no pseudo-device	ipfilter
 no pseudo-device	ppp
 no pseudo-device	pppoe
@@ -81,8 +73,6 @@ no pseudo-device	stf
 no pseudo-device	vlan
 no pseudo-device	bridge
 no pseudo-device	agr
-no pseudo-device	accf_data
-no pseudo-device	accf_http
 no pseudo-device	clockctl
 no pseudo-device	ksyms
 no pseudo-device	wsmux

@@ -37,7 +37,7 @@
  *	isic - I4B Siemens ISDN Chipset Driver for Teles S0/16.3
  *	========================================================
  *
- *	$Id: isic_isa_tel_s0163.c,v 1.13 2012/10/27 17:18:25 chs Exp $
+ *	$Id: isic_isa_tel_s0163.c,v 1.10 2007/10/19 12:00:19 ad Exp $
  *
  *      last edit-date: [Fri Jan  5 11:37:22 2001]
  *
@@ -49,7 +49,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_isa_tel_s0163.c,v 1.13 2012/10/27 17:18:25 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_isa_tel_s0163.c,v 1.10 2007/10/19 12:00:19 ad Exp $");
 
 #include "opt_isicisa.h"
 #ifdef ISICISA_TEL_S0_16_3
@@ -416,7 +416,7 @@ set_softc(struct isic_softc *sc, struct isa_attach_args *ia, int unit)
 }
 
 int
-isic_probe_s0163(device_t dev, cfdata_t cf,
+isic_probe_s0163(struct device *dev, struct cfdata *cf,
 		struct isa_attach_args *ia)
 {
 	u_char byte;
@@ -537,10 +537,10 @@ isic_attach_s0163(struct isa_device *dev)
 #elif defined(__bsdi__)
 
 extern int
-isic_attach_s0163(device_t parent, device_t self, struct isa_attach_args *ia)
+isic_attach_s0163(struct device *parent, struct device *self, struct isa_attach_args *ia)
 {
 	u_char irq;
-	struct isic_softc *sc = device_private(self);
+	struct isic_softc *sc = (struct isic_softc *)self;
 	int unit = sc->sc_dev.dv_unit;
 
 	/* Commit the probed attachement values */

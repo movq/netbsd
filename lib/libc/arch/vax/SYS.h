@@ -1,4 +1,4 @@
-/*	$NetBSD: SYS.h,v 1.12 2012/02/27 12:26:21 joerg Exp $ */
+/*	$NetBSD: SYS.h,v 1.10 2003/08/07 16:42:30 agc Exp $ */
 /*
  * Copyright (c) 1983, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,9 +33,6 @@
 #include <machine/asm.h>
 #include <sys/syscall.h>
 
-#define	CERROR	_C_LABEL(__cerror)
-#define	CURBRK	_C_LABEL(__curbrk)
-
 #ifdef __STDC__
 #define SYSTRAP(x)	chmk $ SYS_ ## x
 #else
@@ -47,7 +44,6 @@
 	SYSTRAP(y)
 
 #define _SYSCALL(x,y)							\
-	.p2align 2;							\
 	err: nop; nop; jmp CERROR+2;					\
 	_SYSCALL_NOERROR(x,y);						\
 	jcs err+2
@@ -60,13 +56,11 @@
 
 #define PSEUDO_NOERROR(x,y)						\
 	_SYSCALL_NOERROR(x,y);						\
-	ret;								\
-	END(x)
+	ret
 
 #define PSEUDO(x,y)							\
 	_SYSCALL(x,y);							\
-	ret;								\
-	END(x)
+	ret
 
 #define RSYSCALL_NOERROR(x)						\
 	PSEUDO_NOERROR(x,x)
@@ -85,5 +79,12 @@
 
 #define	ASMSTR		.asciz
 
-	.protected	CERROR
+#ifdef __ELF__
+#define	CERROR	_C_LABEL(__cerror)
+#define	CURBRK	_C_LABEL(__curbrk)
+#else
+#define	CERROR	_ASM_LABEL(cerror)
+#define	CURBRK	_ASM_LABEL(curbrk)
+#endif
+
 	.globl	CERROR

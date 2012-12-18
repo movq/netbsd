@@ -1,4 +1,4 @@
-/*	$NetBSD: nvram.c,v 1.19 2011/06/05 06:33:43 tsutsui Exp $	*/
+/*	$NetBSD: nvram.c,v 1.13 2008/06/13 08:50:12 cegger Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Leo Weppelman.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nvram.c,v 1.19 2011/06/05 06:33:43 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nvram.c,v 1.13 2008/06/13 08:50:12 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -47,40 +52,43 @@ __KERNEL_RCSID(0, "$NetBSD: nvram.c,v 1.19 2011/06/05 06:33:43 tsutsui Exp $");
 #include <atari/dev/clockreg.h>
 #include <atari/dev/nvramvar.h>
 
-#include "ioconf.h"
-
 #include "nvr.h"
 
 #define	MC_NVRAM_CSUM	(MC_NVRAM_START + MC_NVRAM_SIZE - 2)
 
 #if NNVR > 0
-static void	nvram_set_csum(u_char csum);
-static int	nvram_csum_valid(u_char csum);
-static u_char	nvram_csum(void);
+static void	nvram_set_csum __P((u_char csum));
+static int	nvram_csum_valid __P((u_char csum));
+static u_char	nvram_csum __P((void));
 
 /*
  * Auto config stuff....
  */
-static void	nvr_attach(device_t, device_t, void *);
-static int	nvr_match(device_t, cfdata_t, void *);
+static void	nvr_attach __P((struct device *, struct device *, void *));
+static int	nvr_match __P((struct device *, struct cfdata *, void *));
 
-CFATTACH_DECL_NEW(nvr, sizeof(struct nvr_softc),
+CFATTACH_DECL(nvr, sizeof(struct nvr_softc),
     nvr_match, nvr_attach, NULL, NULL);
+
+extern struct cfdriver nvr_cd;
 
 /*ARGSUSED*/
 static	int
-nvr_match(device_t parent, cfdata_t cf, void *aux)
+nvr_match(pdp, cfp, auxp)
+struct	device	*pdp;
+struct	cfdata	*cfp;
+void		*auxp;
 {
-	if (!strcmp((char *)aux, "nvr"))
+	if (!strcmp((char *)auxp, "nvr"))
 		return (1);
 	return (0);
 }
 
 /*ARGSUSED*/
 static void
-nvr_attach(device_t parent, device_t self, void *aux)
+nvr_attach(device_t pdp, device_t dp, void *auxp)
 {
-	struct nvr_softc	*sc;
+	struct nvr_softc	*nvr_soft;
 	int			nreg;
 	
 	/*
@@ -92,9 +100,8 @@ nvr_attach(device_t parent, device_t self, void *aux)
 			mc146818_write(RTC, nreg, 0);
 		nvram_set_csum(nvram_csum());
 	}
-	sc = device_private(self);
-	sc->sc_dev = self;
-	sc->sc_flags = NVR_CONFIGURED;
+	nvr_soft = device_lookup_private(&nvr_cd, 0);
+	nvr_soft->nvr_flags = NVR_CONFIGURED;
 	printf("\n");
 }
 /*
@@ -109,10 +116,10 @@ int
 nvr_get_byte(int byteno)
 {
 #if NNVR > 0
-	struct nvr_softc	*sc;
+	struct nvr_softc	*nvr_soft;
 
-	sc = device_lookup_private(&nvr_cd, 0);
-	if (!(sc->sc_flags & NVR_CONFIGURED))
+	nvr_soft = device_lookup_private(&nvr_cd, 0);
+	if (!(nvr_soft->nvr_flags & NVR_CONFIGURED))
 		return(NVR_INVALID);
 	return (mc146818_read(RTC, byteno + MC_NVRAM_START) & 0xff);
 #else
@@ -130,10 +137,10 @@ nvram_uio(struct uio *uio)
 	int			nleft;
 	u_char			buf[MC_NVRAM_CSUM - MC_NVRAM_START + 1];
 	u_char			*p;
-	struct nvr_softc	*sc;
+	struct nvr_softc	*nvr_soft;
 
-	sc = device_lookup_private(&nvr_cd,0);
-	if (!(sc->sc_flags & NVR_CONFIGURED))
+	nvr_soft = device_lookup_private(&nvr_cd,0);
+	if (!(nvr_soft->nvr_flags & NVR_CONFIGURED))
 		return ENXIO;
 
 #ifdef NV_DEBUG
@@ -170,7 +177,7 @@ nvram_uio(struct uio *uio)
 }
 
 static u_char
-nvram_csum(void)
+nvram_csum()
 {
 	u_char	csum;
 	int	nreg;
@@ -181,7 +188,8 @@ nvram_csum(void)
 }
 
 static int
-nvram_csum_valid(u_char csum)
+nvram_csum_valid(csum)
+u_char	csum;
 {
 	if (((~csum & 0xff) != mc146818_read(RTC, MC_NVRAM_CSUM))
 		|| (csum != mc146818_read(RTC, MC_NVRAM_CSUM + 1)))
@@ -190,7 +198,8 @@ nvram_csum_valid(u_char csum)
 }
 
 static void
-nvram_set_csum(u_char csum)
+nvram_set_csum(csum)
+u_char	csum;
 {
 	mc146818_write(RTC, MC_NVRAM_CSUM,    ~csum);
 	mc146818_write(RTC, MC_NVRAM_CSUM + 1, csum);

@@ -1,4 +1,4 @@
-/*	$NetBSD: kobj_machdep.c,v 1.3 2010/10/14 16:33:50 tsutsui Exp $	*/
+/*	$NetBSD: kobj_machdep.c,v 1.2 2008/04/28 20:23:27 martin Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.3 2010/10/14 16:33:50 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.2 2008/04/28 20:23:27 martin Exp $");
 
 #define	ELFSIZE		ARCH_ELFSIZE
 
@@ -64,7 +64,8 @@ kobj_reloc(kobj_t ko, uintptr_t relocbase, const void *data,
 		addr = kobj_sym_lookup(ko, symnum);
 		if (addr == 0)
 			return -1;
-		tmp = (Elf_Addr)(addr + rela->r_addend) - (Elf_Addr)where;
+		tmp = (Elf_Addr)(relocbase + addr +
+		    rela->r_addend) - (Elf_Addr)where;
 		if (*where != tmp)
 			*where = tmp;
 		break;
@@ -74,12 +75,14 @@ kobj_reloc(kobj_t ko, uintptr_t relocbase, const void *data,
 		addr = kobj_sym_lookup(ko, symnum);
 		if (addr == 0)
 			return -1;
-		tmp = (Elf_Addr)(addr + *where + rela->r_addend);
-		*where = tmp;
+		tmp = (Elf_Addr)(relocbase + addr +
+		    rela->r_addend);
+		if (*where != tmp)
+			*where = tmp;
 		break;
 
 	case R_TYPE(RELATIVE):
-		*where += (Elf_Addr)(relocbase + rela->r_addend);
+		*where += (Elf_Addr)relocbase;
 		break;
 
 	default:

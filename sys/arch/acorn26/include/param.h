@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.4 2010/02/08 19:02:25 joerg Exp $	*/
+/*	$NetBSD: param.h,v 1.2 2008/07/02 17:28:57 ad Exp $	*/
 
 /*
  * Copyright (c) 1994,1995 Mark Brinicombe.
@@ -58,6 +58,18 @@
 #define MSGBUFSIZE	NBPG		/* default message buffer size */
 #endif
 
+#ifndef NMBCLUSTERS
+#if defined(_KERNEL_OPT)
+#include "opt_gateway.h"
+#endif
+
+#ifdef GATEWAY
+#define	NMBCLUSTERS	512		/* map size, max cluster allocation */
+#else
+#define	NMBCLUSTERS	256		/* map size, max cluster allocation */
+#endif
+#endif
+
 /*
  * Defaults for lower- and upper-bounds for the kmem_map page count.
  * Can be overridden by kernel config options.
@@ -78,7 +90,7 @@
 
 #ifdef _KERNEL
 #ifndef _LOCORE
-void delay(unsigned);
+void	delay __P((unsigned));
 #define DELAY(x)	delay(x)
 #endif
 #define	MAXEXEC		1

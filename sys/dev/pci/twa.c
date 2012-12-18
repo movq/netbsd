@@ -1,4 +1,4 @@
-/*	$NetBSD: twa.c,v 1.43 2012/11/02 14:59:11 chs Exp $ */
+/*	$NetBSD: twa.c,v 1.28.4.1 2009/08/07 06:10:20 snj Exp $ */
 /*	$wasabi: twa.c,v 1.27 2006/07/28 18:17:21 wrstuden Exp $	*/
 
 /*-
@@ -67,9 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: twa.c,v 1.43 2012/11/02 14:59:11 chs Exp $");
-
-//#define TWA_DEBUG
+__KERNEL_RCSID(0, "$NetBSD: twa.c,v 1.28.4.1 2009/08/07 06:10:20 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -86,6 +84,11 @@ __KERNEL_RCSID(0, "$NetBSD: twa.c,v 1.43 2012/11/02 14:59:11 chs Exp $");
 #include <sys/disk.h>
 #include <sys/sysctl.h>
 #include <sys/syslog.h>
+#if 1
+#include <sys/ktrace.h>
+#endif
+
+#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 
@@ -113,13 +116,13 @@ static int	twa_find_aen(struct twa_softc *sc, uint16_t);
 static uint16_t	twa_enqueue_aen(struct twa_softc *sc,
 			struct twa_command_header *);
 
-static void	twa_attach(device_t, device_t, void *);
+static void	twa_attach(struct device *, struct device *, void *);
 static void	twa_shutdown(void *);
 static int	twa_init_connection(struct twa_softc *, uint16_t, uint32_t,
 				    uint16_t, uint16_t, uint16_t, uint16_t, uint16_t *,
 					uint16_t *, uint16_t *, uint16_t *, uint32_t *);
 static int	twa_intr(void *);
-static int 	twa_match(device_t, cfdata_t, void *);
+static int 	twa_match(struct device *, struct cfdata *, void *);
 static int	twa_reset(struct twa_softc *);
 
 static int	twa_print(void *, const char *);
@@ -139,7 +142,7 @@ extern struct	cfdriver twa_cd;
 extern uint32_t twa_fw_img_size;
 extern uint8_t	twa_fw_img[];
 
-CFATTACH_DECL_NEW(twa, sizeof(struct twa_softc),
+CFATTACH_DECL(twa, sizeof(struct twa_softc),
     twa_match, twa_attach, NULL, NULL);
 
 /* FreeBSD driver revision for sysctl expected by the 3ware cli */
@@ -249,7 +252,7 @@ static const struct twa_message	twa_aen_table[] = {
 	{0x00FD, "Handler lockup"},
 	{0x00FE, "Retrying PCI transfer"},
 	{0x00FF, "AEN queue is full"},
-	{0xFFFFFFFF, NULL}
+	{0xFFFFFFFF, (char *)NULL}
 };
 
 /* AEN severity table. */
@@ -259,7 +262,7 @@ static const char	*twa_aen_severity_table[] = {
 	"WARNING",
 	"INFO",
 	"DEBUG",
-	NULL
+	(char *)NULL
 };
 
 /* Error messages. */
@@ -376,7 +379,7 @@ static const struct twa_message	twa_error_table[] = {
 	{0x025B, "Invalid LBA offset specified in CreateUnit descriptor"},
 	{0x025C, "Invalid stripelet size specified in CreateUnit descriptor"},
 	{0x0260, "SMART attribute exceeded threshold"},
-	{0xFFFFFFFF, NULL}
+	{0xFFFFFFFF, (char *)NULL}
 };
 
 struct twa_pci_identity {
@@ -385,7 +388,7 @@ struct twa_pci_identity {
 	const char	*name;
 };
 
-static const struct twa_pci_identity twa_pci_products[] = {
+static const struct twa_pci_identity pci_twa_products[] = {
 	{ PCI_VENDOR_3WARE,
 	  PCI_PRODUCT_3WARE_9000,
 	  "3ware 9000 series",
@@ -433,31 +436,23 @@ twa_request_wait_handler(struct twa_request *tr)
 	wakeup(tr);
 }
 
-static const struct twa_pci_identity *
-twa_lookup(pcireg_t id)
-{
-	const struct twa_pci_identity *entry;
-	int i;
-
-	for (i = 0; i < __arraycount(twa_pci_products); i++) {
-		entry = &twa_pci_products[i];
-		if (entry->vendor_id == PCI_VENDOR(id) &&
-		    entry->product_id == PCI_PRODUCT(id)) {
-			return entry;
-		}
-	}
-	return NULL;
-}
-
 static int
-twa_match(device_t parent, cfdata_t cfdata, void *aux)
+twa_match(struct device *parent, struct cfdata *cfdata,
+    void *aux)
 {
+	int i;
 	struct pci_attach_args *pa = aux;
-	const struct twa_pci_identity *entry;
+	const struct twa_pci_identity *entry = 0;
 
-	entry = twa_lookup(pa->pa_id);
-	if (entry != NULL) {
-		return 1;
+	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_3WARE) {
+		for (i = 0; (pci_twa_products[i].product_id); i++) {
+			entry = &pci_twa_products[i];
+			if (entry->product_id == PCI_PRODUCT(pa->pa_id)) {
+				aprint_normal("%s: (rev. 0x%02x)\n",
+				    entry->name, PCI_REVISION(pa->pa_class));
+				return (1);
+			}
+		}
 	}
 	return (0);
 }
@@ -532,8 +527,8 @@ twa_unmap_request(struct twa_request *tr)
 	/* Free alignment buffer if it was used. */
 	if (tr->tr_flags & TWA_CMD_DATA_COPY_NEEDED) {
 		s = splvm();
-		uvm_km_kmem_free(kmem_va_arena, (vaddr_t)tr->tr_data,
-		    tr->tr_length);
+		uvm_km_free(kmem_map, (vaddr_t)tr->tr_data,
+		    tr->tr_length, UVM_KMF_WIRED);
 		splx(s);
 		tr->tr_data = tr->tr_real_data;
 		tr->tr_length = tr->tr_real_length;
@@ -720,6 +715,7 @@ twa_inquiry(struct twa_request *tr, int lunid)
 		SID_QUAL_LU_NOTPRESENT;
 
 	error = twa_immediate_request(tr, TWA_REQUEST_TIMEOUT_PERIOD);
+
 	if (error != 0)
 		return (error);
 
@@ -734,7 +730,7 @@ static int
 twa_print_inquiry_data(struct twa_softc *sc, struct scsipi_inquiry_data *scsipi)
 {
 
-    printf("%s: %s\n", device_xname(sc->twa_dv), scsipi->vendor);
+    printf("%s: %s\n", device_xname(&sc->twa_dv), scsipi->vendor);
 
     return (1);
 }
@@ -845,7 +841,7 @@ twa_alloc_req_pkts(struct twa_softc *sc, int num_reqs)
 	if ((rv = bus_dmamem_alloc(sc->twa_dma_tag,
 		size, PAGE_SIZE, 0, &seg,
 		1, &rseg, BUS_DMA_NOWAIT)) != 0){
-			aprint_error_dev(sc->twa_dv, "unable to allocate "
+			aprint_error_dev(&sc->twa_dv, "unable to allocate "
 				"command packets, rv = %d\n", rv);
 			return (ENOMEM);
 	}
@@ -853,14 +849,14 @@ twa_alloc_req_pkts(struct twa_softc *sc, int num_reqs)
 	if ((rv = bus_dmamem_map(sc->twa_dma_tag,
 		&seg, rseg, size, (void **)&sc->twa_cmds,
 		BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
-			aprint_error_dev(sc->twa_dv, "unable to map commands, rv = %d\n", rv);
+			aprint_error_dev(&sc->twa_dv, "unable to map commands, rv = %d\n", rv);
 			return (1);
 	}
 
 	if ((rv = bus_dmamap_create(sc->twa_dma_tag,
 		size, num_reqs, size,
 		0, BUS_DMA_NOWAIT, &sc->twa_cmd_map)) != 0) {
-			aprint_error_dev(sc->twa_dv, "unable to create command DMA map, "
+			aprint_error_dev(&sc->twa_dv, "unable to create command DMA map, "
 				"rv = %d\n", rv);
 			return (ENOMEM);
 	}
@@ -868,13 +864,13 @@ twa_alloc_req_pkts(struct twa_softc *sc, int num_reqs)
 	if ((rv = bus_dmamap_load(sc->twa_dma_tag, sc->twa_cmd_map,
 		sc->twa_cmds, size, NULL,
 		BUS_DMA_NOWAIT)) != 0) {
-			aprint_error_dev(sc->twa_dv, "unable to load command DMA map, "
+			aprint_error_dev(&sc->twa_dv, "unable to load command DMA map, "
 				"rv = %d\n", rv);
 			return (1);
 	}
 
 	if ((uintptr_t)sc->twa_cmds % TWA_ALIGNMENT) {
-		aprint_error_dev(sc->twa_dv, "DMA map memory not aligned on %d boundary\n", TWA_ALIGNMENT);
+		aprint_error_dev(&sc->twa_dv, "DMA map memory not aligned on %d boundary\n", TWA_ALIGNMENT);
 
 		return (1);
 	}
@@ -907,7 +903,7 @@ twa_alloc_req_pkts(struct twa_softc *sc, int num_reqs)
 		if ((rv = bus_dmamap_create(sc->twa_dma_tag,
 			max_xfer, max_segs, 1, 0, BUS_DMA_NOWAIT,
 			&tr->tr_dma_map)) != 0) {
-				aprint_error_dev(sc->twa_dv, "unable to create command "
+				aprint_error_dev(&sc->twa_dv, "unable to create command "
 					"DMA map, rv = %d\n", rv);
 				return (ENOMEM);
 		}
@@ -953,7 +949,7 @@ twa_recompute_openings(struct twa_softc *sc)
 
 #ifdef TWA_DEBUG
 		printf("%s: unit %d openings %d\n",
-				device_xname(sc->twa_dv), unit, openings);
+				device_xname(&sc->twa_dv), unit, openings);
 #endif
 		if (td->td_dev != NULL)
 			(*td->td_callbacks->tcb_openings)(td->td_dev, td->td_openings);
@@ -990,7 +986,7 @@ twa_request_bus_scan(struct twa_softc *sc)
 
 		if (twa_inquiry(tr, unit) == 0) {
 			if (td->td_dev == NULL) {
-	    			twa_print_inquiry_data(sc,
+            			twa_print_inquiry_data(sc,
 				   ((struct scsipi_inquiry_data *)tr->tr_data));
 
 				sc->sc_units[unit].td_size =
@@ -1003,7 +999,7 @@ twa_request_bus_scan(struct twa_softc *sc)
 				locs[TWACF_UNIT] = unit;
 
 				sc->sc_units[unit].td_dev =
-				    config_found_sm_loc(sc->twa_dv, "twa",
+				    config_found_sm_loc(&sc->twa_dv, "twa",
 				    locs, &twaa, twa_print, config_stdsubmatch);
 			}
 		} else {
@@ -1060,18 +1056,16 @@ twa_start(struct twa_request *tr)
 	s = splbio();
 
 	/*
-	 * The 9650 and 9690 have a bug in the detection of the full queue
-	 * condition.
-	 *
+	 * The 9650 has a bug in the detection of the full queue condition.
 	 * If a write operation has filled the queue and is directly followed
 	 * by a status read, it sometimes doesn't return the correct result.
 	 * To work around this, the upper 32bit are written first.
 	 * This effectively serialises the hardware, but does not change
 	 * the state of the queue.
 	 */
-	if (sc->sc_quirks & TWA_QUIRK_QUEUEFULL_BUG) {
+	if (sc->sc_product_id == PCI_PRODUCT_3WARE_9650) {
 		/* Write lower 32 bits of address */
-		TWA_WRITE_COMMAND_QUEUE_LOW(sc, tr->tr_cmd_phys +
+		TWA_WRITE_9650_COMMAND_QUEUE_LOW(sc, tr->tr_cmd_phys +
 			sizeof(struct twa_command_header));
 	}
 
@@ -1095,12 +1089,12 @@ twa_start(struct twa_request *tr)
 			sizeof(struct twa_command_packet),
 			BUS_DMASYNC_PREWRITE | BUS_DMASYNC_PREREAD);
 
-		if (sc->sc_quirks & TWA_QUIRK_QUEUEFULL_BUG) {
+		if (sc->sc_product_id == PCI_PRODUCT_3WARE_9650) {
 			/*
-			 * Cmd queue is not full.  Post the command
+			 * Cmd queue is not full.  Post the command to 9650
 			 * by writing upper 32 bits of address.
 			 */
-			TWA_WRITE_COMMAND_QUEUE_HIGH(sc, tr->tr_cmd_phys +
+			TWA_WRITE_9650_COMMAND_QUEUE_HIGH(sc, tr->tr_cmd_phys +
 				sizeof(struct twa_command_header));
 		} else {
 			/* Cmd queue is not full.  Post the command. */
@@ -1150,24 +1144,24 @@ twa_drain_response_queue(struct twa_softc *sc)
 static int
 twa_drain_response_queue_large(struct twa_softc *sc, uint32_t timeout)
 {
-	uint32_t	start_time = 0, end_time;
-	uint32_t	response = 0;
+        uint32_t        start_time = 0, end_time;
+        uint32_t        response = 0;
 
-	if (sc->sc_product_id == PCI_PRODUCT_3WARE_9550 ||
-	    sc->sc_product_id == PCI_PRODUCT_3WARE_9650 ) {
-	       start_time = 0;
-	       end_time = (timeout * TWA_MICROSECOND);
+        if (sc->sc_product_id == PCI_PRODUCT_3WARE_9550 ||
+            sc->sc_product_id == PCI_PRODUCT_3WARE_9650 ) {
+               start_time = 0;
+               end_time = (timeout * TWA_MICROSECOND);
 
-	       while ((response &
-		   TWA_9550SX_DRAIN_COMPLETE) != TWA_9550SX_DRAIN_COMPLETE) {
+               while ((response &
+                   TWA_9550SX_DRAIN_COMPLETE) != TWA_9550SX_DRAIN_COMPLETE) {
 			response = twa_inl(sc, TWA_RESPONSE_QUEUE_LARGE_OFFSET);
 			if (start_time >= end_time)
-			       return (1);
-			DELAY(1);
-			start_time++;
-	       }
-	       /* P-chip delay */
-	       DELAY(500000);
+                               return (1);
+                        DELAY(1);
+                        start_time++;
+               }
+               /* P-chip delay */
+               DELAY(500000);
        }
        return (0);
 }
@@ -1327,7 +1321,7 @@ twa_check_response_q(struct twa_request *tr, int clear)
 		req = tr;
 
 	if ((tr->tr_cmd_pkt_type & TWA_CMD_PKT_TYPE_EXTERNAL) != 0) {
-		/* XXX this is bogus ! req can't be anything else but tr ! */
+		XXX this is bogus ! req can't be anything else but tr !
 		if (req->tr_request_id == tr->tr_request_id) 
 			panic("req id: %d on controller queue twice",
 		    	    tr->tr_request_id);
@@ -1471,7 +1465,7 @@ twa_setup(struct twa_softc *sc)
 		/* Soft reset the controller, and try one more time. */
 
 		printf("%s: controller initialization failed. "
-		    "Retrying initialization\n", device_xname(sc->twa_dv));
+		    "Retrying initialization\n", device_xname(&sc->twa_dv));
 
 		if ((error = twa_soft_reset(sc)) == 0)
 			error = twa_init_ctlr(sc);
@@ -1492,7 +1486,7 @@ twa_setup(struct twa_softc *sc)
 void *twa_sdh;
 
 static void
-twa_attach(device_t parent, device_t self, void *aux)
+twa_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa;
 	struct twa_softc *sc;
@@ -1500,31 +1494,27 @@ twa_attach(device_t parent, device_t self, void *aux)
 	pcireg_t csr;
 	pci_intr_handle_t ih;
 	const char *intrstr;
+	struct ctlname ctlnames[] = CTL_NAMES;
 	const struct sysctlnode *node; 
-	const struct twa_pci_identity *entry;
 	int i;
 	bool use_64bit;
 
-	sc = device_private(self);
-
-	sc->twa_dv = self;
+	sc = (struct twa_softc *)self;
 
 	pa = aux;
 	pc = pa->pa_pc;
 	sc->pc = pa->pa_pc;
 	sc->tag = pa->pa_tag;
 
-	entry = twa_lookup(pa->pa_id);
-	pci_aprint_devinfo_fancy(pa, "RAID controller", entry->name, 1);
-
-	sc->sc_quirks = 0;
+	aprint_naive(": RAID controller\n");
+	aprint_normal(": 3ware Apache\n");
 		
 	if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_3WARE_9000) {
 		sc->sc_nunits = TWA_MAX_UNITS;
 		use_64bit = false;
 		if (pci_mapreg_map(pa, PCI_MAPREG_START, PCI_MAPREG_TYPE_IO, 0,
 	    	    &sc->twa_bus_iot, &sc->twa_bus_ioh, NULL, NULL)) {
-			aprint_error_dev(sc->twa_dv, "can't map i/o space\n");
+			aprint_error_dev(&sc->twa_dv, "can't map i/o space\n");
 			return;
 		}
 	} else if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_3WARE_9550) {
@@ -1533,7 +1523,7 @@ twa_attach(device_t parent, device_t self, void *aux)
 		if (pci_mapreg_map(pa, PCI_MAPREG_START + 0x08, 
 	    	    PCI_MAPREG_MEM_TYPE_64BIT, 0, &sc->twa_bus_iot, 
 		    &sc->twa_bus_ioh, NULL, NULL)) {
-			aprint_error_dev(sc->twa_dv, "can't map mem space\n");
+			aprint_error_dev(&sc->twa_dv, "can't map mem space\n");
 			return;
 		}
 	} else if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_3WARE_9650) {
@@ -1542,30 +1532,28 @@ twa_attach(device_t parent, device_t self, void *aux)
 		if (pci_mapreg_map(pa, PCI_MAPREG_START + 0x08, 
 	    	    PCI_MAPREG_MEM_TYPE_64BIT, 0, &sc->twa_bus_iot, 
 		    &sc->twa_bus_ioh, NULL, NULL)) {
-			aprint_error_dev(sc->twa_dv, "can't map mem space\n");
+			aprint_error_dev(&sc->twa_dv, "can't map mem space\n");
 			return;
 		}
-		sc->sc_quirks |= TWA_QUIRK_QUEUEFULL_BUG;
 	} else if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_3WARE_9690) {
 		sc->sc_nunits = TWA_9690_MAX_UNITS;
 		use_64bit = true;
 		if (pci_mapreg_map(pa, PCI_MAPREG_START + 0x08, 
 	    	    PCI_MAPREG_MEM_TYPE_64BIT, 0, &sc->twa_bus_iot, 
 		    &sc->twa_bus_ioh, NULL, NULL)) {
-			aprint_error_dev(sc->twa_dv, "can't map mem space\n");
+			aprint_error_dev(&sc->twa_dv, "can't map mem space\n");
 			return;
 		}
-		sc->sc_quirks |= TWA_QUIRK_QUEUEFULL_BUG;
 	} else {
 		sc->sc_nunits = 0;
 		use_64bit = false;
-		aprint_error_dev(sc->twa_dv, "product id 0x%02x not recognized\n", 
+		aprint_error_dev(&sc->twa_dv, "product id 0x%02x not recognized\n", 
 		    PCI_PRODUCT(pa->pa_id));
 		return;
 	}
 
 	if (pci_dma64_available(pa) && use_64bit) {
-		aprint_verbose_dev(self, "64-bit DMA addressing active\n");
+		aprint_verbose_dev(self, "64bit DMA addressing active");
 		sc->twa_dma_tag = pa->pa_dmat64;
 	} else {
 		sc->twa_dma_tag = pa->pa_dmat;
@@ -1580,21 +1568,21 @@ twa_attach(device_t parent, device_t self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error_dev(sc->twa_dv, "can't map interrupt\n");
+		aprint_error_dev(&sc->twa_dv, "can't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 
 	sc->twa_ih = pci_intr_establish(pc, ih, IPL_BIO, twa_intr, sc);
 	if (sc->twa_ih == NULL) {
-		aprint_error_dev(sc->twa_dv, "can't establish interrupt%s%s\n",
+		aprint_error_dev(&sc->twa_dv, "can't establish interrupt%s%s\n",
 			(intrstr) ? " at " : "",
 			(intrstr) ? intrstr : "");
 		return;
 	}
 
 	if (intrstr != NULL)
-		aprint_normal_dev(sc->twa_dv, "interrupting at %s\n",
+		aprint_normal_dev(&sc->twa_dv, "interrupting at %s\n",
 			intrstr);
 
 	twa_setup(sc);
@@ -1607,29 +1595,29 @@ twa_attach(device_t parent, device_t self, void *aux)
 				CTLFLAG_PERMANENT, CTLTYPE_NODE, "hw",
 				NULL, NULL, 0, NULL, 0,
 				CTL_HW, CTL_EOL) != 0) {
-		aprint_error_dev(sc->twa_dv, "could not create %s sysctl node\n",
-			"hw");
+		aprint_error_dev(&sc->twa_dv, "could not create %s sysctl node\n",
+			ctlnames[CTL_HW].ctl_name);
 		return;
 	}
 	if (sysctl_createv(NULL, 0, NULL, &node,
-				0, CTLTYPE_NODE, device_xname(sc->twa_dv),
-				SYSCTL_DESCR("twa driver information"),
-				NULL, 0, NULL, 0,
+        			0, CTLTYPE_NODE, device_xname(&sc->twa_dv),
+        			SYSCTL_DESCR("twa driver information"),
+        			NULL, 0, NULL, 0,
 				CTL_HW, CTL_CREATE, CTL_EOL) != 0) {
-		aprint_error_dev(sc->twa_dv, "could not create %s.%s sysctl node\n",
-			"hw",
-			device_xname(sc->twa_dv));
+                aprint_error_dev(&sc->twa_dv, "could not create %s.%s sysctl node\n",
+			ctlnames[CTL_HW].ctl_name,
+			device_xname(&sc->twa_dv));
 		return;
 	}
 	if ((i = sysctl_createv(NULL, 0, NULL, NULL,
-				0, CTLTYPE_STRING, "driver_version",
-				SYSCTL_DESCR("twa driver version"),
-				NULL, 0, __UNCONST(&twaver), 0,
+        			0, CTLTYPE_STRING, "driver_version",
+        			SYSCTL_DESCR("twa driver version"),
+        			NULL, 0, &twaver, 0,
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
-		aprint_error_dev(sc->twa_dv, "could not create %s.%s.driver_version sysctl\n",
-			"hw",
-			device_xname(sc->twa_dv));
+                aprint_error_dev(&sc->twa_dv, "could not create %s.%s.driver_version sysctl\n",
+			ctlnames[CTL_HW].ctl_name,
+			device_xname(&sc->twa_dv));
 		return;
 	}
 
@@ -1795,7 +1783,7 @@ int
 twa_map_request(struct twa_request *tr)
 {
 	struct twa_softc	*sc = tr->tr_sc;
-	int			 s, rv, rc;
+	int			 s, rv;
 
 	/* If the command involves data, map that too. */
 	if (tr->tr_data != NULL) {
@@ -1805,12 +1793,11 @@ twa_map_request(struct twa_request *tr)
 			tr->tr_real_data = tr->tr_data;
 			tr->tr_real_length = tr->tr_length;
 			s = splvm();
-			rc = uvm_km_kmem_alloc(kmem_va_arena,
-			    tr->tr_length, (VM_NOSLEEP | VM_INSTANTFIT),
-			    (vmem_addr_t *)&tr->tr_data);
+			tr->tr_data = (void *)uvm_km_alloc(kmem_map,
+			    tr->tr_length, 512, UVM_KMF_NOWAIT|UVM_KMF_WIRED);
 			splx(s);
 
-			if (rc != 0) {
+			if (tr->tr_data == NULL) {
 				tr->tr_data = tr->tr_real_data;
 				tr->tr_length = tr->tr_real_length;
 				return(ENOMEM);
@@ -1830,9 +1817,8 @@ twa_map_request(struct twa_request *tr)
 		if (rv != 0) {
 			if ((tr->tr_flags & TWA_CMD_DATA_COPY_NEEDED) != 0) {
 				s = splvm();
-				uvm_km_kmem_free(kmem_va_arena,
-				    (vaddr_t)tr->tr_data,
-				    tr->tr_length);
+				uvm_km_free(kmem_map, (vaddr_t)tr->tr_data,
+				    tr->tr_length, UVM_KMF_WIRED);
 				splx(s);
 			}
 			return (rv);
@@ -1844,8 +1830,8 @@ twa_map_request(struct twa_request *tr)
 
 			if (tr->tr_flags & TWA_CMD_DATA_COPY_NEEDED) {
 				s = splvm();
-				uvm_km_kmem_free(kmem_va_arena, (vaddr_t)tr->tr_data,
-				    tr->tr_length);
+				uvm_km_free(kmem_map, (vaddr_t)tr->tr_data,
+				    tr->tr_length, UVM_KMF_WIRED);
 				splx(s);
 				tr->tr_data = tr->tr_real_data;
 				tr->tr_length = tr->tr_real_length;
@@ -1897,7 +1883,7 @@ twa_intr(void *arg)
 #ifdef DIAGNOSTIC
 		if (rv != 0)
 			printf("%s: unable to retrieve AEN (%d)\n",
-				device_xname(sc->twa_dv), rv);
+				device_xname(&sc->twa_dv), rv);
 #endif
 		caught = 1;
 	}
@@ -2188,7 +2174,7 @@ fw_passthru_done:
 		}
 		if ((error = copyout(sc->twa_aen_queue [event_index],
 		    user_buf->pdata, sizeof(struct tw_cl_event_packet))) != 0)
-			aprint_error_dev(sc->twa_dv, "get_previous: Could not copyout to "
+			aprint_error_dev(&sc->twa_dv, "get_previous: Could not copyout to "
 			    "event_buf. error = %x\n",
 			    error);
 		(sc->twa_aen_queue[event_index])->retrieved = TWA_AEN_RETRIEVED;
@@ -2623,34 +2609,34 @@ twa_soft_reset(struct twa_softc *sc)
 			TWA_CONTROL_DISABLE_INTERRUPTS);
 
 	if (twa_drain_response_queue_large(sc, 30) != 0) {
-		aprint_error_dev(sc->twa_dv,
+		aprint_error_dev(&sc->twa_dv,
 		    "response queue not empty after reset.\n");
 		return(1);
 	}
 	if (twa_wait_status(sc, TWA_STATUS_MICROCONTROLLER_READY |
 				TWA_STATUS_ATTENTION_INTERRUPT, 30)) {
-		aprint_error_dev(sc->twa_dv, "no attention interrupt after reset.\n");
+		aprint_error_dev(&sc->twa_dv, "no attention interrupt after reset.\n");
 		return(1);
 	}
 	twa_outl(sc, TWA_CONTROL_REGISTER_OFFSET,
 		TWA_CONTROL_CLEAR_ATTENTION_INTERRUPT);
 
 	if (twa_drain_response_queue(sc)) {
-		aprint_error_dev(sc->twa_dv, "cannot drain response queue.\n");
+		aprint_error_dev(&sc->twa_dv, "cannot drain response queue.\n");
 		return(1);
 	}
 	if (twa_drain_aen_queue(sc)) {
-		aprint_error_dev(sc->twa_dv, "cannot drain AEN queue.\n");
+		aprint_error_dev(&sc->twa_dv, "cannot drain AEN queue.\n");
 		return(1);
 	}
 	if (twa_find_aen(sc, TWA_AEN_SOFT_RESET)) {
-		aprint_error_dev(sc->twa_dv, "reset not reported by controller.\n");
+		aprint_error_dev(&sc->twa_dv, "reset not reported by controller.\n");
 		return(1);
 	}
 	status_reg = twa_inl(sc, TWA_STATUS_REGISTER_OFFSET);
 	if (TWA_STATUS_ERRORS(status_reg) ||
 	    twa_check_ctlr_state(sc, status_reg)) {
-		aprint_error_dev(sc->twa_dv, "controller errors detected.\n");
+		aprint_error_dev(&sc->twa_dv, "controller errors detected.\n");
 		return(1);
 	}
 	return(0);
@@ -2780,7 +2766,7 @@ twa_enqueue_aen(struct twa_softc *sc, struct twa_command_header *cmd_hdr)
 				&sync_time, twa_aen_callback);
 #ifdef DIAGNOSTIC
 		if (rv != 0)
-			aprint_error_dev(sc->twa_dv, "unable to sync time with ctlr\n");
+			aprint_error_dev(&sc->twa_dv, "unable to sync time with ctlr\n");
 #endif
 		break;
 
@@ -2805,7 +2791,7 @@ twa_enqueue_aen(struct twa_softc *sc, struct twa_command_header *cmd_hdr)
 
 		if (event->severity < TWA_AEN_SEVERITY_DEBUG) {
 			printf("%s: AEN 0x%04X: %s: %s: %s\n",
-				device_xname(sc->twa_dv),
+				device_xname(&sc->twa_dv),
 				aen_code,
 				twa_aen_severity_table[event->severity],
 				twa_find_msg_string(twa_aen_table, aen_code),
@@ -2975,16 +2961,16 @@ twa_describe_controller(struct twa_softc *sc)
 
 	if (rv) {
 		/* some error occurred */
-		aprint_error_dev(sc->twa_dv, "failed to fetch version information\n");
+		aprint_error_dev(&sc->twa_dv, "failed to fetch version information\n");
 		goto bail;
 	}
 
 	ports = *(uint8_t *)(p[0]->data);
 
-	aprint_normal_dev(sc->twa_dv, "%d ports, Firmware %.16s, BIOS %.16s\n",
+	aprint_normal_dev(&sc->twa_dv, "%d ports, Firmware %.16s, BIOS %.16s\n",
 		ports, p[1]->data, p[2]->data);
 
-	aprint_verbose_dev(sc->twa_dv, "Monitor %.16s, PCB %.8s, Achip %.8s, Pchip %.8s\n",
+	aprint_verbose_dev(&sc->twa_dv, "Monitor %.16s, PCB %.8s, Achip %.8s, Pchip %.8s\n",
 		p[3]->data, p[4]->data,
 		p[5]->data, p[6]->data);
 
@@ -2998,7 +2984,7 @@ twa_describe_controller(struct twa_softc *sc)
 			TWA_PARAM_DRIVEMODEL_LENGTH, NULL, &p[8]);
 
 		if (rv != 0) {
-			aprint_error_dev(sc->twa_dv, "unable to get drive model for port"
+			aprint_error_dev(&sc->twa_dv, "unable to get drive model for port"
 				" %d\n", i);
 			continue;
 		}
@@ -3008,7 +2994,7 @@ twa_describe_controller(struct twa_softc *sc)
 			TWA_PARAM_DRIVESIZE_LENGTH, NULL, &p[9]);
 
 		if (rv != 0) {
-			aprint_error_dev(sc->twa_dv, "unable to get drive size"
+			aprint_error_dev(&sc->twa_dv, "unable to get drive size"
 				" for port %d\n", i);
 			free(p[8], M_DEVBUF);
 			continue;
@@ -3016,7 +3002,7 @@ twa_describe_controller(struct twa_softc *sc)
 
 		dsize = *(uint32_t *)(p[9]->data);
 
-		aprint_verbose_dev(sc->twa_dv, "port %d: %.40s %d MB\n",
+		aprint_verbose_dev(&sc->twa_dv, "port %d: %.40s %d MB\n",
 		    i, p[8]->data, dsize / 2048);
 
 		if (p[8])
@@ -3084,7 +3070,7 @@ twa_check_ctlr_state(struct twa_softc *sc, uint32_t status_reg)
 			last_warning[1] = t1.tv_usec;
 		}
 		if (status_reg & TWA_STATUS_PCI_PARITY_ERROR_INTERRUPT) {
-			aprint_error_dev(sc->twa_dv, "clearing PCI parity error "
+			aprint_error_dev(&sc->twa_dv, "clearing PCI parity error "
 				"re-seat/move/replace card.\n");
 			twa_outl(sc, TWA_CONTROL_REGISTER_OFFSET,
 				TWA_CONTROL_CLEAR_PARITY_ERROR);
@@ -3093,7 +3079,7 @@ twa_check_ctlr_state(struct twa_softc *sc, uint32_t status_reg)
 				TWA_PCI_CONFIG_CLEAR_PARITY_ERROR);
 		}
 		if (status_reg & TWA_STATUS_PCI_ABORT_INTERRUPT) {
-			aprint_error_dev(sc->twa_dv, "clearing PCI abort\n");
+			aprint_error_dev(&sc->twa_dv, "clearing PCI abort\n");
 			twa_outl(sc, TWA_CONTROL_REGISTER_OFFSET,
 				TWA_CONTROL_CLEAR_PCI_ABORT);
 			pci_conf_write(sc->pc, sc->tag,
@@ -3109,7 +3095,7 @@ twa_check_ctlr_state(struct twa_softc *sc, uint32_t status_reg)
  			 */
  			if ((sc->sc_product_id != PCI_PRODUCT_3WARE_9650) ||
  			    ((sc->twa_sc_flags & TWA_STATE_IN_RESET) == 0)) { 
- 				aprint_error_dev(sc->twa_dv,
+ 				aprint_error_dev(&sc->twa_dv,
  				    "clearing controller queue error\n");
  			}
  		
@@ -3117,7 +3103,7 @@ twa_check_ctlr_state(struct twa_softc *sc, uint32_t status_reg)
  				TWA_CONTROL_CLEAR_QUEUE_ERROR);
 		}
 		if (status_reg & TWA_STATUS_MICROCONTROLLER_ERROR) {
-			aprint_error_dev(sc->twa_dv, "micro-controller error\n");
+			aprint_error_dev(&sc->twa_dv, "micro-controller error\n");
 			result = 1;
 		}
 	}

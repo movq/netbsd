@@ -1,4 +1,4 @@
-/* $NetBSD: ieee80211_netbsd.c,v 1.22 2012/11/14 18:34:05 matt Exp $ */
+/* $NetBSD: ieee80211_netbsd.c,v 1.16 2008/01/31 22:07:22 christos Exp $ */
 /*-
  * Copyright (c) 2003-2005 Sam Leffler, Errno Consulting
  * All rights reserved.
@@ -30,7 +30,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_freebsd.c,v 1.8 2005/08/08 18:46:35 sam Exp $");
 #else
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.22 2012/11/14 18:34:05 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.16 2008/01/31 22:07:22 christos Exp $");
 #endif
 
 /*
@@ -44,9 +44,9 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.22 2012/11/14 18:34:05 matt E
 #include <sys/sysctl.h>
 #include <sys/once.h>
 
-#include <sys/socket.h>
+#include <machine/stdarg.h>
 
-#include <sys/cprng.h>
+#include <sys/socket.h>
 
 #include <net/if.h>
 #include <net/if_media.h>
@@ -80,10 +80,6 @@ static int
 ieee80211_init0(void)
 {
 	ieee80211_setup_func * const *ieee80211_setup, f;
-
-	if (max_linkhdr < ALIGN(sizeof(struct ieee80211_qosframe_addr4))) {
-		max_linkhdr = ALIGN(sizeof(struct ieee80211_qosframe_addr4));
-	}
 
         __link_set_foreach(ieee80211_setup, ieee80211_funcs) {
 		f = (void*)*ieee80211_setup;
@@ -193,7 +189,7 @@ ieee80211_sysctl_attach(struct ieee80211com *ic)
 	if ((rc = sysctl_createv(&ic->ic_sysctllog, 0, &rnode, &cnode,
 	    CTLFLAG_PERMANENT|CTLFLAG_READONLY, CTLTYPE_STRING,
 	    "parent", SYSCTL_DESCR("parent device"),
-	    ieee80211_sysctl_parent, 0, (void *)ic, IFNAMSIZ, CTL_CREATE,
+	    ieee80211_sysctl_parent, 0, ic, IFNAMSIZ, CTL_CREATE,
 	    CTL_EOL)) != 0)
 		goto err;
 
@@ -462,7 +458,7 @@ cleanup:
 /*
  * Setup sysctl(3) MIB, net.ieee80211.*
  *
- * TBD condition CTLFLAG_PERMANENT on being a module or not
+ * TBD condition CTLFLAG_PERMANENT on being an LKM or not
  */
 SYSCTL_SETUP(sysctl_ieee80211, "sysctl ieee80211 subtree setup")
 {
@@ -494,11 +490,15 @@ err:
 int
 ieee80211_node_dectestref(struct ieee80211_node *ni)
 {
-	if (atomic_dec_uint_nv(&ni->ni_refcnt) == 0) {
-		atomic_inc_uint(&ni->ni_refcnt);
-		return 1;
+	int rc, s;
+	s = splnet();
+	if (--ni->ni_refcnt == 0) {
+		rc = 1;
+		ni->ni_refcnt = 1;
 	} else
-		return 0;
+		rc = 0;
+	splx(s);
+	return rc;
 }
 
 void
@@ -646,7 +646,14 @@ ieee80211_getmgtframe(u_int8_t **frm, u_int pktlen)
 void
 get_random_bytes(void *p, size_t n)
 {
-	cprng_fast(p, n);
+	u_int8_t *dp = p;
+
+	while (n > 0) {
+		u_int32_t v = arc4random();
+		size_t nb = n > sizeof(u_int32_t) ? sizeof(u_int32_t) : n;
+		(void)memcpy(dp, &v, nb);
+		dp += sizeof(u_int32_t), n -= nb;
+	}
 }
 
 void

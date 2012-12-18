@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.39 2012/01/05 21:32:36 christos Exp $	*/
+/*	$NetBSD: md.c,v 1.33 2008/10/07 09:58:16 abs Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,7 +15,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -52,17 +56,6 @@
 #include "msg_defs.h"
 #include "menu_defs.h"
 
-void
-md_init(void)
-{
-}
-
-void
-md_init_set_status(int flags)
-{
-	(void)flags;
-}
-
 int
 md_get_info(void)
 {
@@ -74,14 +67,14 @@ md_get_info(void)
 
 	fd = open(dev_name, O_RDONLY, 0);
 	if (fd < 0) {
-		if (logfp)
+		if (logging)
 			(void)fprintf(logfp, "Can't open %s\n", dev_name);
 		endwin();
 		fprintf(stderr, "Can't open %s\n", dev_name);
 		exit(1);
 	}
 	if (ioctl(fd, DIOCGDINFO, &disklabel) == -1) {
-		if (logfp)
+		if (logging)
 			(void)fprintf(logfp, "Can't read disklabel on %s.\n",
 				dev_name);
 		endwin();
@@ -111,24 +104,6 @@ md_get_info(void)
 }
 
 /*
- * md back-end code for menu-driven BSD disklabel editor.
- */
-int
-md_make_bsd_partitions(void)
-{
-	return(make_bsd_partitions());
-}
-
-/*
- * any additional partition validation
- */
-int
-md_check_partitions(void)
-{
-	return 1;
-}
-
-/*
  * hook called before writing new disklabel.
  */
 int
@@ -147,37 +122,47 @@ md_post_disklabel(void)
 }
 
 /*
- * hook called after upgrade() or install() has finished setting
+ * MD hook called after upgrade() or install() has finished setting
  * up the target disk but immediately before the user is given the
- * ``disks are now set up'' message.
+ * ``disks are now set up'' message, so that if power fails, they can
+ * continue installation by booting the target disk and doing an
+ * `upgrade'.
  *
  * On the vax, we use this opportunity to install the boot blocks.
  */
 int
 md_post_newfs(void)
 {
+
 	printf(msg_string(MSG_dobootblks), diskdev);
 	run_program(0, "/usr/sbin/installboot /dev/r%s%c /usr/mdec/%.2sboot",
 	    diskdev, 'a' + getrawpartition(), diskdev);
 	return 0;
 }
 
+/*
+ * some ports use this to copy the MD filesystem, we do not.
+ */
 int
-md_post_extract(void)
+md_copy_filesystem(void)
 {
 	return 0;
 }
 
-void
-md_cleanup_install(void)
+/*
+ * md back-end code for menu-driven BSD disklabel editor.
+ */
+int
+md_make_bsd_partitions(void)
 {
-#ifndef DEBUG
-	enable_rc_conf();
-#endif
+	return(make_bsd_partitions());
 }
 
+/*
+ * any additional partition validation
+ */
 int
-md_pre_update(void)
+md_check_partitions(void)
 {
 	return 1;
 }
@@ -186,12 +171,43 @@ md_pre_update(void)
 int
 md_update(void)
 {
+	move_aout_libs();
+	endwin();
+	md_copy_filesystem();
 	md_post_newfs();
+	wrefresh(curscr);
+	wmove(stdscr, 0, 0);
+	wclear(stdscr);
+	wrefresh(stdscr);
 	return 1;
 }
 
+void
+md_cleanup_install(void)
+{
+
+	enable_rc_conf();
+}
+
 int
-md_pre_mount()
+md_pre_update()
+{
+	return 1;
+}
+
+void
+md_init()
+{
+}
+
+void
+md_init_set_status(int minimal)
+{
+	(void)minimal;
+}
+
+int
+md_post_extract(void)
 {
 	return 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: efinet.c,v 1.6 2009/10/26 19:16:56 cegger Exp $	*/
+/*	$NetBSD: efinet.c,v 1.2 2006/04/22 07:58:53 cherry Exp $	*/
 
 /*-
  * Copyright (c) 2001 Doug Rabson
@@ -144,7 +144,7 @@ efinet_get(struct iodesc *desc, void *pkt, size_t len, time_t timeout)
 			 */
 			if (bufsz > len)
 				bufsz = len;
-			memcpy(pkt, buf, bufsz);
+			bcopy(buf, pkt, bufsz);
 			return bufsz;
 		}
 		if (status != EFI_NOT_READY)
@@ -198,14 +198,14 @@ efinet_init(struct iodesc *desc, void *machdep_hint)
 	dump_mode(net->Mode);
 #endif
 
-	memcpy(desc->myea, net->Mode->CurrentAddress.Addr, 6);
+	bcopy(net->Mode->CurrentAddress.Addr, desc->myea, 6);
 	desc->xid = 1;
 
 	return;
 }
 
 void
-efinet_init_driver(void)
+efinet_init_driver()
 {
 	EFI_STATUS	status;
 	UINTN		sz;
@@ -234,7 +234,7 @@ efinet_init_driver(void)
 	efi_net.netif_nifs = nifs;
 	efi_net.netif_ifs = difs;
 
-	memset(stats, 0, sizeof(stats));
+	bzero(stats, sizeof(stats));
 	for (i = 0; i < nifs; i++) {
 		struct netif_dif *dif = &efi_net.netif_ifs[i];
 		dif->dif_unit = i;

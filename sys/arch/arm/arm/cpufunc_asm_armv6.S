@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc_asm_armv6.S,v 1.5 2012/09/22 00:33:37 matt Exp $	*/
+/*	$NetBSD: cpufunc_asm_armv6.S,v 1.2 2008/04/27 18:58:43 matt Exp $	*/
 
 /*
  * Copyright (c) 2002, 2005 ARM Limited
@@ -38,8 +38,6 @@
 #include <machine/cpu.h>
 #include <machine/asm.h>
 
-	.arch	armv6
-
 /*
  * Functions to set the MMU Translation Table Base register
  *
@@ -47,16 +45,15 @@
  * addresses that are about to change.
  */
 ENTRY(armv6_setttb)
-	cmp	r1, #0
 #ifdef PMAP_CACHE_VIVT
-	mcrne	p15, 0, r0, c7, c5, 0	/* Flush I cache */
-	mcrne	p15, 0, r0, c7, c14, 0	/* clean and invalidate D cache */
+	mcr	p15, 0, r0, c7, c5, 0	/* Flush I cache */
+	mcr	p15, 0, r0, c7, c14, 0	/* clean and invalidate D cache */
 #endif
-	mcrne	p15, 0, r0, c7, c10, 4	/* drain the write buffer */
+	mcr	p15, 0, r0, c7, c10, 4	/* drain the write buffer */
 
 	mcr	p15, 0, r0, c2, c0, 0	/* load new TTB */
 
-	mcrne	p15, 0, r0, c8, c7, 0	/* invalidate I+D TLBs */
+	mcr	p15, 0, r0, c8, c7, 0	/* invalidate I+D TLBs */
 	RET
 
 /*
@@ -84,7 +81,7 @@ ENTRY_NP(armv6_icache_sync_all)
 	mcr	p15, 0, r0, c7, c10, 4	/* drain the write buffer */
 	RET
 
-/* LINTSTUB: void armv6_dcache_wb_range(vaddr_t, vsize_t); */
+/* LINTSTUB: void armv6_icache_sync_range(vaddr_t, vsize_t); */
 ENTRY(armv6_dcache_wb_range)
 	add	r1, r1, r0
 	sub	r1, r1, #1

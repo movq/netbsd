@@ -1,4 +1,4 @@
-.\"	$NetBSD: hardware,v 1.53 2012/11/19 23:04:15 rkujawa Exp $
+.\"	$NetBSD: hardware,v 1.45.34.1 2009/04/25 23:16:33 snj Exp $
 .
 .Nx \*V
 runs on any Amiga that has a 68020 or better CPU with
@@ -13,13 +13,13 @@ For 68020 and 68030 systems, a FPU is recommended but not required for the
 system utilities.
 68LC040, 68040V and 68LC060 systems don't work correctly at the moment.
 .Pp
-The minimal configuration requires around 24 MB of RAM (not including CHIPMEM!)
-and about 250 MB of disk space.
+The minimal configuration requires 6 MB of RAM (not including CHIPMEM!)
+and about 100 MB of disk space.
 To install the entire system requires much more disk space,
 and to run X or compile the system, more RAM is recommended.
-(24 MB of RAM will actually allow you to compile,
+(6 MB of RAM will actually allow you to compile,
 however it won't be speedy.
-X really isn't usable on a 24 MB system.)
+X really isn't usable on a 6 MB system.)
 .Pp
 You will probably want to compile your own kernel.
 .Li GENERIC
@@ -35,14 +35,7 @@ place your swap partition onto a old small (and normally slow) disk!
 .
 .Ss2 Supported devices
 .(bullet -offset indent
-IDE controllers
-.(bullet -compact
 A4000/A1200 IDE controller, including ATAPI devices
-.It
-ELBOX FastATA 1200 Mk-III/Mk-IV
-.It
-Individual Computers X-Surf IDE
-.bullet)
 .It
 SCSI host adapters
 .(bullet -compact
@@ -55,27 +48,12 @@ and GVP series II.
 The Emplant SCSI adapter has been reported by a party to
 hang after doing part of the installation without problems
 .It
-53c710 based boards: A4091, BlizzardPPC 603e+, Magnum, Warp Engine, Zeus
-and DraCo builtin
+53c710 based boards: A4091, Magnum, Warp Engine, Zeus and DraCo builtin
 .It
 FAS216 based SCSI boards: FastLane Z3, Blizzard I and II, Blizzard IV,
 Blizzard 2060, CyberSCSI Mk I and II
 .It
 53c770 based SCSI boards: Cyberstorm Mk III SCSI, Cyberstorm PPC SCSI
-.bullet)
-.It
-PCI bridges
-.(bullet -compact
-ELBOX Mediator PCI 1200 series (original model, LT2, LT4, SX, TX)
-.It
-Prometheus PCI bridge
-.It
-Phase5 PCI bridge: CyberVision PPC, BlizzardVision PPC
-.bullet)
-.It
-Clockports
-.(bullet -compact
-Amiga 1200 on-board clockport
 .bullet)
 .It
 Video controllers
@@ -148,8 +126,6 @@ HyperCom 3Z, HyperCom 4, HyperCom 3+ and 4+
 MultiFaceCard II and III
 .It
 A2232 (normal and clockdoubled)
-.It
-SilverSurfer clockport-based serial port
 .It
 IOBlix Zorro-Bus
 .bullet)

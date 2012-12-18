@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.7 2011/05/24 13:08:16 joerg Exp $	*/
+/*	$NetBSD: print.c,v 1.3 1997/10/16 23:24:58 lukem Exp $	*/
 
 /*
  * Copyright (c) 1993-96 Mats O Jansson.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print.c,v 1.7 2011/05/24 13:08:16 joerg Exp $");
+__RCSID("$NetBSD: print.c,v 1.3 1997/10/16 23:24:58 lukem Exp $");
 #endif
 
 #include <sys/types.h>
@@ -43,7 +48,9 @@ __RCSID("$NetBSD: print.c,v 1.7 2011/05/24 13:08:16 joerg Exp $");
 #define SHORT_PRINT
 
 void
-mopPrintHWA(FILE *fd, const u_char *ap)
+mopPrintHWA(fd, ap)
+	FILE	*fd;
+        u_char *ap;
 {
 	(void)fprintf(fd, "%x:%x:%x:%x:%x:%x",
 		      ap[0],ap[1],ap[2],ap[3],ap[4],ap[5]);
@@ -56,7 +63,9 @@ mopPrintHWA(FILE *fd, const u_char *ap)
 }
 
 void
-mopPrintBPTY(FILE *fd, u_char bpty)
+mopPrintBPTY(fd, bpty)
+	FILE	*fd;
+	u_char 	bpty;
 {
 	switch(bpty) {
 	case MOP_K_BPTY_SYS:
@@ -72,7 +81,9 @@ mopPrintBPTY(FILE *fd, u_char bpty)
 };
 
 void
-mopPrintPGTY(FILE *fd, u_char pgty)
+mopPrintPGTY(fd, pgty)
+	FILE	*fd;
+	u_char 	pgty;
 {
 	switch(pgty) {
 	case MOP_K_PGTY_SECLDR:
@@ -94,17 +105,19 @@ mopPrintPGTY(FILE *fd, u_char pgty)
 }
 
 void
-mopPrintOneline(FILE *fd, const u_char *pkt, int trans)
+mopPrintOneline(fd, pkt, trans)
+	FILE	*fd;
+	u_char	*pkt;
+	int	 trans;
 {
-	int	 idx = 0;
-	const u_char	*dst, *src;
-	u_char   code;
+	int	 index = 0;
+	u_char	*dst, *src, code;
 	u_short	 proto;
 	int	 len;
 
 	trans = mopGetTrans(pkt, trans);
-	mopGetHeader(pkt, &idx, &dst, &src, &proto, &len, trans);
-	code = mopGetChar(pkt, &idx);
+	mopGetHeader(pkt, &index, &dst, &src, &proto, &len, trans);
+	code = mopGetChar(pkt, &index);
 
 	switch (proto) {
 	case MOP_K_PROTO_DL:
@@ -242,14 +255,17 @@ mopPrintOneline(FILE *fd, const u_char *pkt, int trans)
 }
 
 void
-mopPrintHeader(FILE *fd, const u_char *pkt, int trans)
+mopPrintHeader(fd, pkt, trans)
+	FILE	*fd;
+	u_char	*pkt;
+	int	 trans;
 {
-	const u_char	*dst, *src;
+	u_char	*dst, *src;
 	u_short	 proto;
-	int	 len, idx = 0;
+	int	 len, index = 0;
 
 	trans = mopGetTrans(pkt, trans);
-	mopGetHeader(pkt, &idx, &dst, &src, &proto, &len, trans);
+	mopGetHeader(pkt, &index, &dst, &src, &proto, &len, trans);
 	
 	(void)fprintf(fd,"\nDst          : ");
 	mopPrintHWA(fd, dst);
@@ -303,17 +319,20 @@ mopPrintHeader(FILE *fd, const u_char *pkt, int trans)
 }
 
 void
-mopPrintMopHeader(FILE *fd, const u_char *pkt, int trans)
+mopPrintMopHeader(fd, pkt, trans)
+	FILE	*fd;
+	u_char	*pkt;
+	int	 trans;
 {
-	const u_char	*dst, *src;
+	u_char	*dst, *src;
 	u_short	 proto;
-	int	 len, idx = 0;
+	int	 len, index = 0;
 	u_char   code;
 
 	trans = mopGetTrans(pkt, trans);
-	mopGetHeader(pkt, &idx, &dst, &src, &proto, &len, trans);
+	mopGetHeader(pkt, &index, &dst, &src, &proto, &len, trans);
 	
-	code = mopGetChar(pkt, &idx);
+	code = mopGetChar(pkt, &index);
 
 	(void)fprintf(fd, "Code         :   %02x ",code);
 
@@ -412,9 +431,11 @@ mopPrintMopHeader(FILE *fd, const u_char *pkt, int trans)
 }
 
 void
-mopPrintDevice(FILE *fd, u_char device)
+mopPrintDevice(fd, device)
+	FILE	*fd;
+        u_char device;
 {
-	const char	*sname, *name;
+	char	*sname, *name;
 
 	sname = nmaGetShort((int) device);
 	name  = nmaGetDevice((int) device);
@@ -423,7 +444,9 @@ mopPrintDevice(FILE *fd, u_char device)
 }
 
 void
-mopPrintTime(FILE *fd, const u_char *ap)
+mopPrintTime(fd, ap)
+	FILE	*fd;
+        u_char *ap;
 {
 	(void)fprintf(fd,
 		      "%04d-%02d-%02d %02d:%02d:%02d.%02d %d:%02d",
@@ -432,13 +455,15 @@ mopPrintTime(FILE *fd, const u_char *ap)
 }
 
 void
-mopPrintInfo(FILE *fd, const u_char *pkt, int *idx,
-	     u_short moplen, u_char mopcode, int trans)
+mopPrintInfo(fd, pkt, index, moplen, mopcode, trans)
+	FILE	*fd;
+	u_char  *pkt, mopcode;
+	int     *index, trans;
+	u_short moplen;
 {
         u_short itype,tmps;
 	u_char  ilen ,tmpc,device;
-	u_char  uc1,uc2,uc3;
-	const u_char *ucp;
+	u_char  uc1,uc2,uc3,*ucp;
 	int     i;
 	
 	device = 0;
@@ -452,24 +477,24 @@ mopPrintInfo(FILE *fd, const u_char *pkt, int *idx,
 		break;
 	}
 
-	itype = mopGetShort(pkt,idx); 
+	itype = mopGetShort(pkt,index); 
 
-	while (*idx < (int)(moplen + 2)) {
-		ilen  = mopGetChar(pkt,idx);
+	while (*index < (int)(moplen + 2)) {
+		ilen  = mopGetChar(pkt,index);
 		switch (itype) {
 		case 0:
-			tmpc  = mopGetChar(pkt,idx);
-			*idx = *idx + tmpc;
+			tmpc  = mopGetChar(pkt,index);
+			*index = *index + tmpc;
 			break;
 		case MOP_K_INFO_VER:
-			uc1 = mopGetChar(pkt,idx);
-			uc2 = mopGetChar(pkt,idx);
-			uc3 = mopGetChar(pkt,idx);
+			uc1 = mopGetChar(pkt,index);
+			uc2 = mopGetChar(pkt,index);
+			uc3 = mopGetChar(pkt,index);
 			(void)fprintf(fd,"Maint Version: %d.%d.%d\n",
 				      uc1,uc2,uc3);
 			break;
 		case MOP_K_INFO_MFCT:
-			tmps = mopGetShort(pkt,idx);
+			tmps = mopGetShort(pkt,index);
 			(void)fprintf(fd,"Maint Funcion: %04x ( ",tmps);
 			if (tmps &   1) (void)fprintf(fd, "Loop ");
 			if (tmps &   2) (void)fprintf(fd, "Dump ");
@@ -482,70 +507,70 @@ mopPrintInfo(FILE *fd, const u_char *pkt, int *idx,
 			(void)fprintf(fd, ")\n");
 			break;
 		case MOP_K_INFO_CNU:
-			ucp = pkt + *idx; *idx = *idx + 6;
+			ucp = pkt + *index; *index = *index + 6;
 			(void)fprintf(fd,"Console User : ");
 			mopPrintHWA(fd, ucp);
 			(void)fprintf(fd, "\n");
 			break;
 		case MOP_K_INFO_RTM:
-			tmps = mopGetShort(pkt,idx);
+			tmps = mopGetShort(pkt,index);
 			(void)fprintf(fd,"Reserv Timer : %04x (%d)\n",
 				      tmps,tmps); 
 			break;
 		case MOP_K_INFO_CSZ:
-			tmps = mopGetShort(pkt,idx);
+			tmps = mopGetShort(pkt,index);
 			(void)fprintf(fd,"Cons Cmd Size: %04x (%d)\n",
 				      tmps,tmps);
 			break;
 		case MOP_K_INFO_RSZ:
-			tmps = mopGetShort(pkt,idx);
+			tmps = mopGetShort(pkt,index);
 			(void)fprintf(fd,"Cons Res Size: %04x (%d)\n",
 				      tmps,tmps);
 			break;
 		case MOP_K_INFO_HWA:
-			ucp = pkt + *idx; *idx = *idx + 6;
+			ucp = pkt + *index; *index = *index + 6;
 			(void)fprintf(fd,"Hardware Addr: ");
 			mopPrintHWA(fd, ucp);
 			(void)fprintf(fd, "\n");
 			break;
 		case MOP_K_INFO_TIME:
-			ucp = pkt + *idx; *idx = *idx + 10;
+			ucp = pkt + *index; *index = *index + 10;
 			(void)fprintf(fd,"System Time: ");
 			mopPrintTime(fd, ucp);
 			(void)fprintf(fd,"\n");
 			break;
 		case MOP_K_INFO_SOFD:
-			device = mopGetChar(pkt,idx);
+			device = mopGetChar(pkt,index);
 			(void)fprintf(fd,"Comm Device  :   %02x ",device);
 			mopPrintDevice(fd, device);
 			(void)fprintf(fd, "\n");
 			break;
 		case MOP_K_INFO_SFID:
-			tmpc = mopGetChar(pkt,idx);
+			tmpc = mopGetChar(pkt,index);
 			(void)fprintf(fd,"Software ID  :   %02x ",tmpc);
-			if (tmpc == 0) {
+			if ((tmpc == 0)) {
 				(void)fprintf(fd,"No software id");
 			}
-			if (tmpc == 254) {
+			if ((tmpc == 254)) {
 				(void)fprintf(fd,"Maintenance system");
 				tmpc = 0;
 			}
-			if (tmpc == 255) {
+			if ((tmpc == 255)) {
 				(void)fprintf(fd,"Standard operating system");
 				tmpc = 0;
 			}
-			if (tmpc > 0) {
+			if ((tmpc > 0)) {
 				(void)fprintf(fd,"'");
 				for (i = 0; i < ((int) tmpc); i++) {
 					(void)fprintf(fd,"%c",
-						     mopGetChar(pkt,idx));
+						     mopGetChar(pkt,index));
 				}
 				(void)fprintf(fd,"'");
 			}
 			(void)fprintf(fd,"\n");
 			break;
 		case MOP_K_INFO_PRTY:
-			tmpc = mopGetChar(pkt,idx);
+			tmpc = mopGetChar(pkt,index);
 			(void)fprintf(fd,"System Proc  :   %02x ",tmpc);
 			switch (tmpc) { 
 			case MOP_K_PRTY_11:
@@ -573,7 +598,7 @@ mopPrintInfo(FILE *fd, const u_char *pkt, int *idx,
 			};
 			break;
 		case MOP_K_INFO_DLTY:
-			tmpc = mopGetChar(pkt,idx);
+			tmpc = mopGetChar(pkt,index);
 			(void)fprintf(fd,"Data Link Typ:   %02x ",tmpc);
 			switch (tmpc) { 
 			case MOP_K_DLTY_NI:
@@ -591,7 +616,7 @@ mopPrintInfo(FILE *fd, const u_char *pkt, int *idx,
 			};
 			break;
 		case MOP_K_INFO_DLBSZ:
-			tmps = mopGetShort(pkt,idx);
+			tmps = mopGetShort(pkt,index);
 			(void)fprintf(fd,"DL Buff Size : %04x (%d)\n",
 				      tmps,tmps);
 			break;
@@ -604,8 +629,8 @@ mopPrintInfo(FILE *fd, const u_char *pkt, int *idx,
 			{
 		        	switch (itype) {
 				case 102:
-					ucp = pkt + *idx;
-					*idx = *idx + ilen;
+					ucp = pkt + *index;
+					*index = *index + ilen;
 					(void)fprintf(fd,
 						     "ROM Sftwr Ver:   %02x '",
 						      ilen);
@@ -615,8 +640,8 @@ mopPrintInfo(FILE *fd, const u_char *pkt, int *idx,
 					(void)fprintf(fd, "'\n");
 					break;
 				case 103:
-					ucp = pkt + *idx;
-					*idx = *idx + ilen;
+					ucp = pkt + *index;
+					*index = *index + ilen;
 					(void)fprintf(fd,
 						     "Software Ver :   %02x '",
 						      ilen);
@@ -626,7 +651,7 @@ mopPrintInfo(FILE *fd, const u_char *pkt, int *idx,
 					(void)fprintf(fd, "'\n");
 					break;
 				case 104:
-					tmps = mopGetShort(pkt,idx);
+					tmps = mopGetShort(pkt,index);
 					(void)fprintf(fd,
 						"DECnet Addr  : %d.%d (%d)\n",
 						      tmps / 1024,
@@ -634,8 +659,8 @@ mopPrintInfo(FILE *fd, const u_char *pkt, int *idx,
 						      tmps);
 					break;
 				case 105:
-					ucp = pkt + *idx;
-					*idx = *idx + ilen;
+					ucp = pkt + *index;
+					*index = *index + ilen;
 					(void)fprintf(fd,
 						     "Node Name    :   %02x '",
 						      ilen);
@@ -645,8 +670,8 @@ mopPrintInfo(FILE *fd, const u_char *pkt, int *idx,
 					(void)fprintf(fd, "'\n");
 					break;
 				case 106:
-					ucp = pkt + *idx;
-					*idx = *idx + ilen;
+					ucp = pkt + *index;
+					*index = *index + ilen;
 					(void)fprintf(fd,
 						     "Node Ident   :   %02x '",
 						      ilen);
@@ -657,7 +682,7 @@ mopPrintInfo(FILE *fd, const u_char *pkt, int *idx,
 					break;
 				};
 			} else {
-				ucp = pkt + *idx; *idx = *idx + ilen;
+				ucp = pkt + *index; *index = *index + ilen;
 				(void)fprintf(fd, "Info Type    : %04x (%d)\n",
 					      itype,
 					      itype);
@@ -676,7 +701,7 @@ mopPrintInfo(FILE *fd, const u_char *pkt, int *idx,
 				(void)fprintf(fd, "\n");
 			};
 		}
-		itype = mopGetShort(pkt,idx); 
+		itype = mopGetShort(pkt,index); 
         }
 }
 

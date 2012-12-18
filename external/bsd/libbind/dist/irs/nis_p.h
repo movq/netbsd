@@ -1,4 +1,4 @@
-/*	$NetBSD: nis_p.h,v 1.1.1.2 2012/09/09 16:07:56 christos Exp $	*/
+/*	$NetBSD: nis_p.h,v 1.1.1.1.4.2 2011/01/06 21:42:18 riz Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -18,7 +18,7 @@
  */
 
 /*
- * Id: nis_p.h,v 1.3 2005/04/27 04:56:33 sra Exp 
+ * Id: nis_p.h,v 1.3 2005/04/27 04:56:33 sra Exp
  */
 
 /*! \file

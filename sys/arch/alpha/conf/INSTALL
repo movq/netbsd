@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.103 2012/08/17 20:11:37 abs Exp $
+# $NetBSD: INSTALL,v 1.96 2008/07/31 07:40:59 simonb Exp $
 #
 # Alpha INSTALL kernel.
 
@@ -14,7 +14,6 @@ maxusers 8
 options 	MEMORY_DISK_HOOKS
 options 	MEMORY_DISK_IS_ROOT	# Force root on ram-disk
 options 	MEMORY_DISK_ROOT_SIZE=9300	# 4 Megabytes
-options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
 
 # CPU Support
 options 	DEC_2000_300	# "Jensen":	2000/300 (DECpc AXP 150)
@@ -46,11 +45,12 @@ file-system	FFS		# Fast file system
 file-system	CD9660		# ISO-9660 CD-ROM FS (w/RockRidge extensions)
 file-system	MSDOSFS		# MS-DOS-compatible file system
 file-system	NFS		# Sun NFS-compatible file system client
+file-system	KERNFS		# Kernel variable file system (/kern)
 
 # File system options
 #options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
-options 	WAPBL		# File system journaling support
+options 	WAPBL		# File system journaling support - Experimental
 
 # Networking options
 options 	INET		# IP + ICMP + TCP + UDP
@@ -92,7 +92,6 @@ options 	NFS_BOOT_DHCP		# superset of BOOTP
 
 # WS console uses SUN or VT100 terminal emulation
 options 	WSEMUL_VT100
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 config		netbsd	root on ? type ?
 
@@ -342,9 +341,10 @@ wskbd*		at	pckbd?
 wsmouse*	at	pms?
 
 pseudo-device	loop		1
-pseudo-device	md		
+pseudo-device	md		1
 pseudo-device	ppp		
 pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
 pseudo-device	sl		
 
-#pseudo-device	fss			# file system snapshot device
+pseudo-device	rnd			# /dev/random and in-kernel generator
+#pseudo-device	fss		4	# file system snapshot device

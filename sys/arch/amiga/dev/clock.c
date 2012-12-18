@@ -1,7 +1,6 @@
-/*	$NetBSD: clock.c,v 1.54 2012/10/27 17:17:28 chs Exp $ */
+/*	$NetBSD: clock.c,v 1.47.20.4 2010/07/16 18:26:12 riz Exp $ */
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -37,9 +36,48 @@
  *
  *	@(#)clock.c	7.6 (Berkeley) 5/7/91
  */
+/*
+ * Copyright (c) 1988 University of Utah.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: clock.c 1.18 91/01/21$
+ *
+ *	@(#)clock.c	7.6 (Berkeley) 5/7/91
+ */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.54 2012/10/27 17:17:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.47.20.4 2010/07/16 18:26:12 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -79,10 +117,10 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.54 2012/10/27 17:17:28 chs Exp $");
  * periods where N is the value loaded into the counter.
  */
 
-int clockmatch(device_t, cfdata_t, void *);
-void clockattach(device_t, device_t, void *);
+int clockmatch(struct device *, struct cfdata *, void *);
+void clockattach(struct device *, struct device *, void *);
 void cpu_initclocks(void);
-static void calibrate_delay(device_t);
+static void calibrate_delay(struct device *);
 
 /* the clocks run at NTSC: 715.909kHz or PAL: 709.379kHz.
    We're using a 100 Hz clock. */
@@ -103,13 +141,13 @@ static struct timecounter clk_timecounter = {
 	NULL,		/* next */
 };
 
-CFATTACH_DECL_NEW(clock, 0,
+CFATTACH_DECL(clock, sizeof(struct device),
     clockmatch, clockattach, NULL, NULL);
 
 int
-clockmatch(device_t parent, cfdata_t cf, void *aux)
+clockmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
-	if (matchname("clock", aux))
+	if (matchname("clock", auxp))
 		return(1);
 	return(0);
 }
@@ -118,7 +156,7 @@ clockmatch(device_t parent, cfdata_t cf, void *aux)
  * Start the real-time clock.
  */
 void
-clockattach(device_t parent, device_t self, void *aux)
+clockattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	const char *clockchip;
 	unsigned short interval;
@@ -149,7 +187,7 @@ clockattach(device_t parent, device_t self, void *aux)
 
 	amiga_clk_interval = chipfreq / hz;
 
-	if (self != NULL) {	/* real autoconfig? */
+	if (dp != NULL) {	/* real autoconfig? */
 		printf(": %s system hz %d hardware hz %d\n", clockchip, hz,
 		    chipfreq);
 
@@ -168,7 +206,7 @@ clockattach(device_t parent, device_t self, void *aux)
 		draco_ioct->io_timerlo = amiga_clk_interval & 0xff;
 		draco_ioct->io_timerhi = amiga_clk_interval >> 8;
 
-		calibrate_delay(self);
+		calibrate_delay(dp);
 
 		return;
 	}
@@ -196,7 +234,7 @@ clockattach(device_t parent, device_t self, void *aux)
 	 */
 	clockcia->cra = (clockcia->cra & 0xc0) | 1;
 
-	calibrate_delay(self);
+	calibrate_delay(dp);
 }
 
 void
@@ -326,13 +364,13 @@ clk_getcounter(struct timecounter *tc)
  * off by 2.4%
  */
 static void
-calibrate_delay(device_t self)
+calibrate_delay(struct device *dp)
 {
 	unsigned long t1, t2;
 	extern u_int32_t delaydivisor;
 		/* XXX this should be defined elsewhere */
 
-	if (self)
+	if (dp)
 		printf("Calibrating delay loop... ");
 
 	do {
@@ -343,7 +381,7 @@ calibrate_delay(device_t self)
 	t2 = ((t2 - t1) * 1000000) / (amiga_clk_interval * hz);
 	delaydivisor = (delaydivisor * t2 + 1023) >> 10;
 #ifdef DEBUG
-	if (self)
+	if (dp)
 		printf("\ndiff %ld us, new divisor %u/1024 us\n", t2,
 		    delaydivisor);
 	do {
@@ -353,7 +391,7 @@ calibrate_delay(device_t self)
 	} while (t2 <= t1);
 	t2 = ((t2 - t1) * 1000000) / (amiga_clk_interval * hz);
 	delaydivisor = (delaydivisor * t2 + 1023) >> 10;
-	if (self)
+	if (dp)
 		printf("diff %ld us, new divisor %u/1024 us\n", t2,
 		    delaydivisor);
 #endif
@@ -365,10 +403,10 @@ calibrate_delay(device_t self)
 	t2 = ((t2 - t1) * 1000000) / (amiga_clk_interval * hz);
 	delaydivisor = (delaydivisor * t2 + 1023) >> 10;
 #ifdef DEBUG
-	if (self)
+	if (dp)
 		printf("diff %ld us, new divisor ", t2);
 #endif
-	if (self)
+	if (dp)
 		printf("%u/1024 us\n", delaydivisor);
 }
 

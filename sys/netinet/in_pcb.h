@@ -1,4 +1,4 @@
-/*	$NetBSD: in_pcb.h,v 1.50 2012/06/25 15:28:39 christos Exp $	*/
+/*	$NetBSD: in_pcb.h,v 1.45 2007/12/16 18:39:57 elad Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -80,7 +80,6 @@ struct inpcb {
 #define inp_af		inp_head.inph_af
 #define inp_ppcb	inp_head.inph_ppcb
 #define inp_state	inp_head.inph_state
-#define inp_portalgo	inp_head.inph_portalgo
 #define inp_socket	inp_head.inph_socket
 #define inp_table	inp_head.inph_table
 #define inp_sp		inp_head.inph_sp
@@ -92,8 +91,6 @@ struct inpcb {
 	struct	  mbuf *inp_options;	/* IP options */
 	struct	  ip_moptions *inp_moptions; /* IP multicast options */
 	int	  inp_errormtu;		/* MTU of last xmit status = EMSGSIZE */
-	uint8_t	  inp_ip_minttl;
-	bool      inp_bindportonsend;
 };
 
 #define	inp_faddr	inp_ip.ip_dst
@@ -111,6 +108,8 @@ struct inpcb {
 /* XXX should move to an UDP control block */
 #define INP_ESPINUDP		0x100	/* ESP over UDP for NAT-T */
 #define INP_ESPINUDP_NON_IKE	0x200	/* ESP over UDP for NAT-T */
+#define	INP_CONTROLOPTS		(INP_RECVOPTS|INP_RECVRETOPTS|INP_RECVDSTADDR|\
+				INP_RECVIF)
 #define INP_ESPINUDP_ALL	(INP_ESPINUDP|INP_ESPINUDP_NON_IKE)
 #define INP_NOHEADER		0x400	/* Kernel removes IP header
 					 * before feeding a packet
@@ -119,9 +118,6 @@ struct inpcb {
 					 * not supply an IP header.
 					 * Cancels INP_HDRINCL.
 					 */
-#define	INP_RECVTTL		0x800	/* receive incoming IP TTL */
-#define	INP_CONTROLOPTS		(INP_RECVOPTS|INP_RECVRETOPTS|INP_RECVDSTADDR|\
-				INP_RECVIF|INP_RECVTTL)
 
 #define	sotoinpcb(so)		((struct inpcb *)(so)->so_pcb)
 
@@ -135,14 +131,13 @@ void	in_pcbdisconnect(void *);
 void	in_pcbinit(struct inpcbtable *, int, int);
 struct inpcb *
 	in_pcblookup_port(struct inpcbtable *,
-			  struct in_addr, u_int, int, struct vestigial_inpcb *);
+	    struct in_addr, u_int, int);
 struct inpcb *
 	in_pcblookup_bind(struct inpcbtable *,
 	    struct in_addr, u_int);
 struct inpcb *
 	in_pcblookup_connect(struct inpcbtable *,
-			     struct in_addr, u_int, struct in_addr, u_int,
-			     struct vestigial_inpcb *);
+	    struct in_addr, u_int, struct in_addr, u_int);
 int	in_pcbnotify(struct inpcbtable *, struct in_addr, u_int,
 	    struct in_addr, u_int, int, void (*)(struct inpcb *, int));
 void	in_pcbnotifyall(struct inpcbtable *, struct in_addr, int,

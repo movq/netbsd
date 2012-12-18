@@ -1,4 +1,4 @@
-/*	$NetBSD: mime_decode.c,v 1.17 2010/06/21 19:49:31 christos Exp $	*/
+/*	$NetBSD: mime_decode.c,v 1.13 2008/04/28 20:24:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -34,13 +34,14 @@
 
 #include <sys/cdefs.h>
 #ifndef __lint__
-__RCSID("$NetBSD: mime_decode.c,v 1.17 2010/06/21 19:49:31 christos Exp $");
+__RCSID("$NetBSD: mime_decode.c,v 1.13 2008/04/28 20:24:14 martin Exp $");
 #endif /* not __lint__ */
 
 #include <assert.h>
 #include <err.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <setjmp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -266,15 +267,8 @@ get_content(struct mime_info *mip)
 		filename = savestr(filename);	/* save it! */
 	}
 	mip->mi_filename = filename;
-
-	/*
-	 * XXX: If we have a "Content-Type" in the header, then assume
-	 * we also have a "MIME-Version: 1.0".  This fixes some broken
-	 * MIME headers that I have seen occasionally.
-	 */
-	if (mip->mi_version == NULL && mip->mi_type != NULL)
-		mip->mi_version = MIME_VERSION;
 }
+
 
 static struct message *
 salloc_message(int flag, long block, short offset)
@@ -847,8 +841,7 @@ enum dispmode_e {
 	DM_BINARY,		/* indicate binary data */
 	DM_PGPSIGN,		/* OpenPGP signed part */
 	DM_PGPENCR,		/* OpenPGP encrypted part */
-	DM_PGPKEYS,		/* OpenPGP keys part */
-	DM_SENTINEL		/* end marker; shouldn't be used */
+	DM_PGPKEYS		/* OpenPGP keys part */
 };
 #define APPLICATION_OCTET_STREAM	DM_BINARY
 
@@ -1025,15 +1018,15 @@ mime_decode_body(struct mime_info *mip)
 			{ DM_PGPKEYS,	"OpenPGP keys"		},
 			{ DM_UNKNOWN,	"unknown data"		},
 			{ DM_IGNORE,	NULL			},
-			{ DM_SENTINEL,	NULL			},
+			{ -1,		NULL			},
 		};
 		const struct msg_tbl_s *mp;
 
-		for (mp = msg_tbl; mp->dm != DM_SENTINEL; mp++)
+		for (mp = msg_tbl; mp->dm != -1; mp++)
 			if (mp->dm == dispmode)
 				break;
 
-		assert(mp->dm != DM_SENTINEL);	/* msg_tbl is short if this happens! */
+		assert(mp->dm != -1);	/* msg_tbl is short if this happens! */
 
 		if (mp->msg)
 			(void)fprintf(pipe_end(mip), "  [%s]\n\n", mp->msg);
@@ -1132,7 +1125,7 @@ decode_header(FILE *fi, FILE *fo, void *cookie __unused)
 		hdrstr = linebuf;
 		if (colon)
 			hdrstr = mime_decode_hfield(decbuf, sizeof(decbuf), hdrstr, hdrstr);
-		(void)fputs(hdrstr, fo);
+		(void)fprintf(fo, hdrstr);
 	}
 }
 

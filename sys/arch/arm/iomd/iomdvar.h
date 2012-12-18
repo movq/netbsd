@@ -1,4 +1,4 @@
-/*	$NetBSD: iomdvar.h,v 1.4 2012/05/10 09:56:27 skrll Exp $	*/
+/*	$NetBSD: iomdvar.h,v 1.2 2002/04/19 01:04:39 wiz Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -39,7 +39,7 @@
  * Created      : 02/02/97
  */
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 /*
  * Attach args for iomd_clock device
@@ -119,6 +119,6 @@ union iomd_attach_args {
 /*
  * IOMD_BASE register variable
  */
-extern uint32_t iomd_base;
+extern u_int32_t iomd_base;
 
 /* End of iomdvar.h */

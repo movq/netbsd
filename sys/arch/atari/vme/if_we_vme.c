@@ -1,4 +1,4 @@
-/*	$NetBSD: if_we_vme.c,v 1.3 2011/10/01 15:59:01 chs Exp $	*/
+/*	$NetBSD: if_we_vme.c,v 1.2.6.2 2010/11/20 00:26:51 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2010 The NetBSD Foundation, Inc.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_we_vme.c,v 1.3 2011/10/01 15:59:01 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_we_vme.c,v 1.2.6.2 2010/11/20 00:26:51 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,6 +72,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_we_vme.c,v 1.3 2011/10/01 15:59:01 chs Exp $");
 #include <machine/cpu.h>
 #include <machine/iomap.h>
 #include <machine/scu.h>
+
+#include <atari/atari/intr.h>
 
 #include <atari/vme/vmevar.h>
 
@@ -132,7 +134,7 @@ we_vme_probe(device_t parent, cfdata_t cf, void *aux)
 	struct atari_bus_space t;
 	bus_space_tag_t asict, memt;
 	bus_space_handle_t asich, asich1, memh;
-	bus_size_t memsize = 0;
+	bus_size_t memsize;
 	bool asich_valid, asich1_valid, memh_valid;
 	int i, rv;
 	uint8_t sum, reg, type, hwr;

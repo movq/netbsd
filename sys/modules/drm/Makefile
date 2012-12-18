@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.4 2011/02/18 14:26:40 jmcneill Exp $
+# $NetBSD: Makefile,v 1.2.14.1 2009/06/23 07:07:28 snj Exp $
 
 .include "../Makefile.inc"
 
@@ -14,15 +14,12 @@ SRCS+=	drm_dma.c
 SRCS+=	drm_drawable.c
 SRCS+=	drm_drv.c
 SRCS+=	drm_fops.c
-SRCS+=	drm_hashtab.c
 SRCS+=	drm_ioctl.c
 SRCS+=	drm_irq.c
 SRCS+=	drm_lock.c
 SRCS+=	drm_memory.c
-SRCS+=	drm_mm.c
 SRCS+=	drm_pci.c
 SRCS+=	drm_scatter.c
-SRCS+=	drm_sman.c
 SRCS+=	drm_sysctl.c
 SRCS+=	drm_vm.c
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_fcntl.c,v 1.35 2011/10/14 09:23:29 hannken Exp $	 */
+/*	$NetBSD: svr4_32_fcntl.c,v 1.34 2008/04/28 20:23:46 martin Exp $	 */
 
 /*-
  * Copyright (c) 1994, 1997, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_fcntl.c,v 1.35 2011/10/14 09:23:29 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_fcntl.c,v 1.34 2008/04/28 20:23:46 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -261,10 +261,7 @@ fd_truncate(struct lwp *l, int fd, struct flock *flp, register_t *retval)
 		fd_putfile(fd);
 		return ESPIPE;
 	}
-	vn_lock(vp, LK_SHARED | LK_RETRY);
-	error = VOP_GETATTR(vp, &vattr, l->l_cred);
-	VOP_UNLOCK(vp);
-	if (error) {
+	if ((error = VOP_GETATTR(vp, &vattr, l->l_cred)) != 0) {
 		fd_putfile(fd);
 		return error;
 	}

@@ -1,10 +1,12 @@
-#	$NetBSD: Makefile,v 1.3 2010/05/24 20:31:17 pgoyette Exp $
+#	$NetBSD: Makefile,v 1.2 2002/08/19 09:41:33 lukem Exp $
 
 .include <bsd.own.mk>
 
 LIB=	pci
 
-SRCS=	pci_bus.c pci_device.c pci_subr.c pci_verbose.c
+SRCS=	pci_bus.c pci_device.c pci_subr.c
+
+CPPFLAGS+=-DPCIVERBOSE
 
 .PATH.c: ${NETBSDSRCDIR}/sys/dev/pci
 

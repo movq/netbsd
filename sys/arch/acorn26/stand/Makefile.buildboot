@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.buildboot,v 1.13 2012/08/16 16:23:32 matt Exp $
+#	$NetBSD: Makefile.buildboot,v 1.10 2005/12/11 12:16:05 christos Exp $
 
 S?=	${.CURDIR}/../../../..
 
@@ -18,14 +18,11 @@ LIBCRTEND=
 
 RISCOSTYPE ?= ff8
 
-.include <bsd.own.mk>
-
 SRCS+=		vers.c
 CLEANFILES+=	vers.c
 .PHONY: vers.c
 vers.c: ${.CURDIR}/version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
-	    ${.CURDIR}/version ${MACHINE} ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version ${MACHINE} ${NEWVERSWHAT}
 
 CPPFLAGS+=	-D_STANDALONE -DHIMEM=0x28000
 CPPFLAGS+=	-I. -I${.CURDIR}/../../.. -I${.CURDIR}/../../../..
@@ -59,6 +56,7 @@ SAMISCMAKEFLAGS+= SA_INCLUDE_NET=no SA_USE_LOADFILE=yes SA_USE_CREAD=yes
 CPPFLAGS+=	-DLIBSA_NO_RAW_ACCESS \
 		-DLIBSA_SINGLE_FILESYSTEM=riscos \
 		-DLIBSA_NO_FS_WRITE \
+		-DLIBSA_USE_MEMCPY -DLIBSA_USE_MEMSET \
 		-DHEAP_VARIABLE
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=		${SALIB}
@@ -73,7 +71,6 @@ RELOC=8000
 LINKFLAGS=-N
 
 ${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBRISCOS}
-	${_MKTARGET_LINK}
 	${LD} -o ${.TARGET} ${LINKFLAGS} -Ttext ${RELOC} ${OBJS} \
 	    ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBRISCOS} ${LIBSA}
 	${SIZE} ${.TARGET}

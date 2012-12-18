@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0_intr.c,v 1.20 2012/07/29 00:07:10 matt Exp $	*/
+/*	$NetBSD: pxa2x0_intr.c,v 1.14 2008/04/27 18:58:45 matt Exp $	*/
 
 /*
  * Copyright (c) 2002  Genetec Corporation.  All rights reserved.
@@ -39,13 +39,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pxa2x0_intr.c,v 1.20 2012/07/29 00:07:10 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pxa2x0_intr.c,v 1.14 2008/04/27 18:58:45 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/lock.h>
 
@@ -58,10 +58,10 @@ __KERNEL_RCSID(0, "$NetBSD: pxa2x0_intr.c,v 1.20 2012/07/29 00:07:10 matt Exp $"
 /*
  * INTC autoconf glue
  */
-static int	pxaintc_match(device_t, cfdata_t, void *);
-static void	pxaintc_attach(device_t, device_t, void *);
+static int	pxaintc_match(struct device *, struct cfdata *, void *);
+static void	pxaintc_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(pxaintc, 0,
+CFATTACH_DECL(pxaintc, sizeof(struct device),
     pxaintc_match, pxaintc_attach, NULL, NULL);
 
 static int pxaintc_attached;
@@ -90,7 +90,6 @@ static struct intrhandler {
 	/* struct evbnt ev; */
 } handler[ICU_LEN];
 
-vaddr_t pxaic_base;
 volatile int softint_pending;
 volatile int intr_mask;
 /* interrupt masks for each level */
@@ -99,7 +98,7 @@ static int extirq_level[ICU_LEN];
 
 
 static int
-pxaintc_match(device_t parent, cfdata_t cf, void *aux)
+pxaintc_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct pxaip_attach_args *pxa = aux;
 
@@ -110,7 +109,7 @@ pxaintc_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-pxaintc_attach(device_t parent, device_t self, void *args)
+pxaintc_attach(struct device *parent, struct device *self, void *args)
 {
 	int i;
 
@@ -208,11 +207,9 @@ static int
 stray_interrupt(void *cookie)
 {
 	int irqno = (int)cookie;
-	int irqmin = CPU_IS_PXA250 ? PXA250_IRQ_MIN : PXA270_IRQ_MIN;
-
 	printf("stray interrupt %d\n", irqno);
 
-	if (irqmin <= irqno && irqno < ICU_LEN){
+	if (PXA270_IRQ_MIN <= irqno && irqno < ICU_LEN){
 		int save = disable_interrupts(I32_bit);
 		write_icu(SAIPIC_MR,
 		    read_icu(SAIPIC_MR) & ~(1U<<irqno));
@@ -239,13 +236,17 @@ pxa2x0_update_intr_masks(int irqno, int level)
 		pxa2x0_imask[i] |= mask; /* Enable interrupt at lower level */
 
 	for( ; i < NIPL-1; ++i)
-		pxa2x0_imask[i] &= ~mask; /* Disable interrupt at upper level */
+		pxa2x0_imask[i] &= ~mask; /* Disable itnerrupt at upper level */
 
 	/*
 	 * Enforce a hierarchy that gives "slow" device (or devices with
 	 * limited input buffer space/"real-time" requirements) a better
 	 * chance at not dropping data.
 	 */
+	pxa2x0_imask[IPL_SOFTBIO] &= pxa2x0_imask[IPL_SOFTCLOCK];
+	pxa2x0_imask[IPL_SOFTNET] &= pxa2x0_imask[IPL_SOFTBIO];
+	pxa2x0_imask[IPL_SOFTSERIAL] &= pxa2x0_imask[IPL_SOFTNET];
+	pxa2x0_imask[IPL_VM] &= pxa2x0_imask[IPL_SOFTSERIAL];
 	pxa2x0_imask[IPL_SCHED] &= pxa2x0_imask[IPL_VM];
 	pxa2x0_imask[IPL_HIGH] &= pxa2x0_imask[IPL_SCHED];
 
@@ -259,11 +260,25 @@ static void
 init_interrupt_masks(void)
 {
 
-	/*
-	 * disable all interrups until handlers are installed.
-	 */
 	memset(pxa2x0_imask, 0, sizeof(pxa2x0_imask));
 
+	/*
+	 * IPL_NONE has soft interrupts enabled only, at least until
+	 * hardware handlers are installed.
+	 */
+	pxa2x0_imask[IPL_NONE] = ~0;
+	/*
+	 * Initialize the soft interrupt masks to block themselves.
+	 */
+	pxa2x0_imask[IPL_SOFTCLOCK] = ~0;
+	pxa2x0_imask[IPL_SOFTBIO] = ~0;
+	pxa2x0_imask[IPL_SOFTNET] = ~0;
+	pxa2x0_imask[IPL_SOFTSERIAL] = ~0;
+
+	pxa2x0_imask[IPL_SOFTCLOCK] &= pxa2x0_imask[IPL_NONE];
+	pxa2x0_imask[IPL_SOFTBIO] &= pxa2x0_imask[IPL_SOFTCLOCK];
+	pxa2x0_imask[IPL_SOFTNET] &= pxa2x0_imask[IPL_SOFTBIO];
+	pxa2x0_imask[IPL_SOFTSERIAL] &= pxa2x0_imask[IPL_SOFTNET];
 }
 
 #undef splx

@@ -1,11 +1,5 @@
-#	$NetBSD: Makefile,v 1.2 2010/04/23 19:41:03 joerg Exp $
+#	$NetBSD: Makefile,v 1.1 2008/09/19 22:01:25 joerg Exp $
 
-.include <bsd.own.mk>
-
-SUBDIR=
-
-.if ${MKBSDTAR} == "yes"
-SUBDIR+=	cpio tar
-.endif
+SUBDIR=		# cpio tar
 
 .include <bsd.subdir.mk>

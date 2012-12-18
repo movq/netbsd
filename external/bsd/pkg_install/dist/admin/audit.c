@@ -1,4 +1,4 @@
-/*	$NetBSD: audit.c,v 1.1.1.9 2011/02/18 22:32:28 aymeric Exp $	*/
+/*	$NetBSD: audit.c,v 1.1.1.2.6.3 2010/02/03 00:38:21 snj Exp $	*/
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -7,7 +7,7 @@
 #if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
 #endif
-__RCSID("$NetBSD: audit.c,v 1.1.1.9 2011/02/18 22:32:28 aymeric Exp $");
+__RCSID("$NetBSD: audit.c,v 1.1.1.2.6.3 2010/02/03 00:38:21 snj Exp $");
 
 /*-
  * Copyright (c) 2008 Joerg Sonnenberger <joerg@NetBSD.org>.
@@ -73,6 +73,7 @@ __RCSID("$NetBSD: audit.c,v 1.1.1.9 2011/02/18 22:32:28 aymeric Exp $");
 #include "admin.h"
 #include "lib.h"
 
+static int check_eol = 0;
 static int check_signature = 0;
 static const char *limit_vul_types = NULL;
 static int update_pkg_vuln = 0;
@@ -99,7 +100,7 @@ parse_options(int argc, char **argv, const char *options)
 	while ((ch = getopt(argc, argv, options)) != -1) {
 		switch (ch) {
 		case 'e':
-			check_eol = "yes";
+			check_eol = 1;
 			break;
 		case 's':
 			check_signature = 1;
@@ -122,7 +123,8 @@ parse_options(int argc, char **argv, const char *options)
 static int
 check_exact_pkg(const char *pkg)
 {
-	return audit_package(pv, pkg, limit_vul_types, quiet ? 0 : 1);
+	return audit_package(pv, pkg, limit_vul_types, check_eol,
+	    quiet ? 0 : 1);
 }
 
 static int
@@ -207,7 +209,7 @@ check_and_read_pkg_vulnerabilities(void)
 			    (long)(now / 86400), now / 86400 == 1 ? "" : "s");
 	}
 
-	pv = read_pkg_vulnerabilities_file(pkg_vulnerabilities_file, 0, check_signature);
+	pv = read_pkg_vulnerabilities(pkg_vulnerabilities_file, 0, check_signature);
 }
 
 void
@@ -280,7 +282,7 @@ check_pkg_vulnerabilities(int argc, char **argv)
 	if (argc != optind + 1)
 		usage();
 
-	pv = read_pkg_vulnerabilities_file(argv[optind], 0, check_signature);
+	pv = read_pkg_vulnerabilities(argv[optind], 0, check_signature);
 	free_pkg_vulnerabilities(pv);
 }
 
@@ -288,8 +290,8 @@ void
 fetch_pkg_vulnerabilities(int argc, char **argv)
 {
 	struct pkg_vulnerabilities *pv_check;
-	char *buf;
-	size_t buf_len, buf_fetched;
+	char *buf, *decompressed_input;
+	size_t buf_len, buf_fetched, decompressed_len;
 	ssize_t cur_fetched;
 	struct url *url;
 	struct url_stat st;
@@ -361,7 +363,15 @@ fetch_pkg_vulnerabilities(int argc, char **argv)
 	
 	buf[buf_len] = '\0';
 
-	pv_check = read_pkg_vulnerabilities_memory(buf, buf_len, check_signature);
+	if (decompress_buffer(buf, buf_len, &decompressed_input,
+	    &decompressed_len)) {
+		pv_check = parse_pkg_vulnerabilities(decompressed_input,
+		    decompressed_len, check_signature);
+		free(decompressed_input);
+	} else {
+		pv_check = parse_pkg_vulnerabilities(buf, buf_len,
+		    check_signature);
+	}
 	free_pkg_vulnerabilities(pv_check);
 
 	fd = open(pkg_vulnerabilities_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -384,15 +394,8 @@ check_pkg_history_pattern(const char *pkg, const char *pattern)
 {
 	const char *delim, *end_base;
 
-	if (strpbrk(pattern, "*[") != NULL) {
-		end_base = NULL;
-		for (delim = pattern;
-				*delim != '\0' && *delim != '['; delim++) {
-			if (*delim == '-')
-				end_base = delim;
-		}
-
-		if (end_base == NULL)
+	if ((delim = strchr(pattern, '*')) != NULL) {
+		if ((end_base = strrchr(pattern, '-')) == NULL)
 			errx(EXIT_FAILURE, "Missing - in wildcard pattern %s",
 			    pattern);
 		if ((delim = strchr(pattern, '>')) != NULL ||

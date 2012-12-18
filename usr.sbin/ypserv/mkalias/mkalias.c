@@ -1,4 +1,4 @@
-/*	$NetBSD: mkalias.c,v 1.18 2011/08/30 21:10:28 joerg Exp $ */
+/*	$NetBSD: mkalias.c,v 1.15 2008/02/29 03:00:47 lukem Exp $ */
 
 /*
  * Copyright (c) 1997 Mats O Jansson <moj@stacken.kth.se>
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -28,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mkalias.c,v 1.18 2011/08/30 21:10:28 joerg Exp $");
+__RCSID("$NetBSD: mkalias.c,v 1.15 2008/02/29 03:00:47 lukem Exp $");
 #endif
 
 #include <sys/types.h>
@@ -52,12 +57,13 @@ __RCSID("$NetBSD: mkalias.c,v 1.18 2011/08/30 21:10:28 joerg Exp $");
 #include "ypdb.h"
 #include "ypdef.h"
 
-static void	capitalize(char *, int);
-static int	check_host(char *, char *, int, int, int);
-static void	split_address(char *, int, char *, char *);
-__dead static void	usage(void);
+void	capitalize(char *, int);
+int	check_host(char *, char *, int, int, int);
+int	main(int, char *[]);
+void	split_address(char *, int, char *, char *);
+void	usage(void);
 
-static void
+void
 split_address(char *address, int len, char *user, char *host)
 {
 	char *c, *s, *r;
@@ -94,7 +100,7 @@ split_address(char *address, int len, char *user, char *host)
 	}
 }
 
-static int
+int
 check_host(char *address, char *host, int dflag, int uflag, int Eflag)
 {
 	u_char answer[PACKETSZ];
@@ -118,7 +124,7 @@ check_host(char *address, char *host, int dflag, int uflag, int Eflag)
 	return(status == -1);
 }
 
-static void
+void
 capitalize(char *name, int len)
 {
 	char last = ' ';
@@ -294,7 +300,7 @@ main(int argc, char *argv[])
 
 	if (new_db != NULL) {
 	  	snprintf(datestr, sizeof(datestr), "%010d", (int)time(NULL));
-		key.dptr = __UNCONST(YP_LAST_KEY);
+		key.dptr = YP_LAST_KEY;
 		key.dsize = strlen(YP_LAST_KEY);
 		val.dptr = datestr;
 		val.dsize = strlen(datestr);
@@ -307,7 +313,7 @@ main(int argc, char *argv[])
 
 	if (new_db != NULL) {
 	  	localhostname(myname, sizeof(myname) - 1);
-		key.dptr = __UNCONST(YP_MASTER_KEY);
+		key.dptr = YP_MASTER_KEY;
 		key.dsize = strlen(YP_MASTER_KEY);
 		val.dptr = myname;
 		val.dsize = strlen(myname);
@@ -330,7 +336,7 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-static void
+void
 usage(void)
 {
 	fprintf(stderr,

@@ -1,4 +1,4 @@
-/*	$NetBSD: efi_console.c,v 1.4 2009/07/20 04:59:03 kiyohara Exp $	*/
+/*	$NetBSD: efi_console.c,v 1.2 2006/04/22 07:58:53 cherry Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -32,7 +32,6 @@
 #include <efi.h>
 #include <efilib.h>
 #include <lib/libsa/stand.h>
-#include <lib/libsa/loadfile.h>
 
 #include "bootstrap.h"
 
@@ -69,7 +68,7 @@ efi_cons_putchar(int c)
 }
 
 int
-efi_cons_getchar(void)
+efi_cons_getchar()
 {
 	EFI_INPUT_KEY key;
 	EFI_STATUS status;
@@ -85,7 +84,7 @@ efi_cons_getchar(void)
 }
 
 int
-efi_cons_poll(void)
+efi_cons_poll()
 {
 	/* This can clear the signaled state. */
 	return (BS->CheckEvent(conin->WaitForKey) == EFI_SUCCESS);

@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_data.c,v 1.14 2009/01/25 06:59:35 cyber Exp $	*/
+/*	$NetBSD: prop_data.c,v 1.13.4.1 2009/01/26 00:47:51 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.

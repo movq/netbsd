@@ -1,4 +1,4 @@
-/*	$NetBSD: mdreloc.c,v 1.47 2011/03/31 12:47:01 nakayama Exp $	*/
+/*	$NetBSD: mdreloc.c,v 1.41.4.1 2012/03/17 18:28:38 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mdreloc.c,v 1.47 2011/03/31 12:47:01 nakayama Exp $");
+__RCSID("$NetBSD: mdreloc.c,v 1.41.4.1 2012/03/17 18:28:38 bouyer Exp $");
 #endif /* not lint */
 
 #include <errno.h>
@@ -39,6 +39,7 @@ __RCSID("$NetBSD: mdreloc.c,v 1.47 2011/03/31 12:47:01 nakayama Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #include "rtldenv.h"
 #include "debug.h"
@@ -66,7 +67,7 @@ __RCSID("$NetBSD: mdreloc.c,v 1.47 2011/03/31 12:47:01 nakayama Exp $");
 #define _RF_U		0x04000000		/* Unaligned */
 #define _RF_SZ(s)	(((s) & 0xff) << 8)	/* memory target size */
 #define _RF_RS(s)	( (s) & 0xff)		/* right shift */
-static const int reloc_target_flags[R_TYPE(TLS_TPOFF64)+1] = {
+static const int reloc_target_flags[] = {
 	0,							/* NONE */
 	_RF_S|_RF_A|		_RF_SZ(8)  | _RF_RS(0),		/* RELOC_8 */
 	_RF_S|_RF_A|		_RF_SZ(16) | _RF_RS(0),		/* RELOC_16 */
@@ -91,8 +92,6 @@ static const int reloc_target_flags[R_TYPE(TLS_TPOFF64)+1] = {
 				_RF_SZ(32) | _RF_RS(0),		/* JMP_SLOT */
 	      _RF_A|	_RF_B|	_RF_SZ(32) | _RF_RS(0),		/* RELATIVE */
 	_RF_S|_RF_A|	_RF_U|	_RF_SZ(32) | _RF_RS(0),		/* UA_32 */
-
-	/* TLS and 64 bit relocs not listed here... */
 };
 
 #ifdef RTLD_DEBUG_RELOC
@@ -101,22 +100,7 @@ static const char *reloc_names[] = {
 	"DISP_16", "DISP_32", "WDISP_30", "WDISP_22", "HI22",
 	"22", "13", "LO10", "GOT10", "GOT13",
 	"GOT22", "PC10", "PC22", "WPLT30", "COPY",
-	"GLOB_DAT", "JMP_SLOT", "RELATIVE", "UA_32",
-
-	/* not used with 32bit userland, besides a few of the TLS ones */
-	"PLT32",
-	"HIPLT22", "LOPLT10", "LOPLT10", "PCPLT22", "PCPLT32",
-	"10", "11", "64", "OLO10", "HH22",
-	"HM10", "LM22", "PC_HH22", "PC_HM10", "PC_LM22", 
-	"WDISP16", "WDISP19", "GLOB_JMP", "7", "5", "6",
-	"DISP64", "PLT64", "HIX22", "LOX10", "H44", "M44", 
-	"L44", "REGISTER", "UA64", "UA16",
-	"TLS_GD_HI22", "TLS_GD_LO10", "TLS_GD_ADD", "TLS_GD_CALL",
-	"TLS_LDM_HI22", "TLS_LDM_LO10", "TLS_LDM_ADD", "TLS_LDM_CALL",
-	"TLS_LDO_HIX22", "TLS_LDO_LOX10", "TLS_LDO_ADD", "TLS_IE_HI22", 
-	"TLS_IE_LO10", "TLS_IE_LD", "TLS_IE_LDX", "TLS_IE_ADD", "TLS_LE_HIX22", 
-	"TLS_LE_LOX10", "TLS_DTPMOD32", "TLS_DTPMOD64", "TLS_DTPOFF32", 
-	"TLS_DTPOFF64", "TLS_TPOFF32", "TLS_TPOFF64",
+	"GLOB_DAT", "JMP_SLOT", "RELATIVE", "UA_32"
 };
 #endif
 
@@ -127,7 +111,6 @@ static const char *reloc_names[] = {
 #define RELOC_USE_ADDEND(t)		((reloc_target_flags[t] & _RF_A) != 0)
 #define RELOC_TARGET_SIZE(t)		((reloc_target_flags[t] >> 8) & 0xff)
 #define RELOC_VALUE_RIGHTSHIFT(t)	(reloc_target_flags[t] & 0xff)
-#define RELOC_TLS(t)			(t >= R_TYPE(TLS_GD_HI22))
 
 static const int reloc_target_bitmask[] = {
 #define _BM(x)	(~(-(1ULL << (x))))
@@ -190,7 +173,7 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 			break;
 		}
 	}
-	relalim = (const Elf_Rela *)((const uint8_t *)rela + relasz);
+	relalim = (const Elf_Rela *)((caddr_t)rela + relasz);
 	for (; rela < relalim; rela++) {
 		where = (Elf_Addr *)(relocbase + rela->r_offset);
 		*where += (Elf_Addr)(relocbase + rela->r_addend);
@@ -198,7 +181,7 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 }
 
 int
-_rtld_relocate_nonplt_objects(Obj_Entry *obj)
+_rtld_relocate_nonplt_objects(const Obj_Entry *obj)
 {
 	const Elf_Rela *rela;
 
@@ -226,79 +209,12 @@ _rtld_relocate_nonplt_objects(Obj_Entry *obj)
 
 		/*
 		 * We use the fact that relocation types are an `enum'
-		 * Note: R_SPARC_TLS_TPOFF64 is currently numerically largest.
-		 */
-		if (type > R_TYPE(TLS_TPOFF64))
-			return (-1);
-
-		value = rela->r_addend;
-
-		/*
-		 * Handle TLS relocations here, they are different.
-		 */
-		if (RELOC_TLS(type)) {
-			switch (type) {
-				case R_TYPE(TLS_DTPMOD32):
-					def = _rtld_find_symdef(symnum, obj,
-					    &defobj, false);
-					if (def == NULL)
-						return -1;
-
-					*where = (Elf_Addr)defobj->tlsindex;
-
-					rdbg(("TLS_DTPMOD32 %s in %s --> %p",
-					    obj->strtab +
-					    obj->symtab[symnum].st_name,
-					    obj->path, (void *)*where));
-
-					break;
-
-				case R_TYPE(TLS_DTPOFF32):
-					def = _rtld_find_symdef(symnum, obj,
-					    &defobj, false);
-					if (def == NULL)
-						return -1;
-
-					*where = (Elf_Addr)(def->st_value
-					    + rela->r_addend);
-
-					rdbg(("TLS_DTPOFF32 %s in %s --> %p",
-					    obj->strtab +
-					        obj->symtab[symnum].st_name,
-					    obj->path, (void *)*where));
-
-					break;
-
-				case R_TYPE(TLS_TPOFF32):
-					def = _rtld_find_symdef(symnum, obj,
-					    &defobj, false);
-					if (def == NULL)
-						return -1;
-
-					if (!defobj->tls_done &&
-						_rtld_tls_offset_allocate(obj))
-						     return -1;
-
-					*where = (Elf_Addr)(def->st_value -
-			                            defobj->tlsoffset +
-						    rela->r_addend);
-
-		                        rdbg(("TLS_TPOFF32 %s in %s --> %p",
-		                            obj->strtab +
-					    obj->symtab[symnum].st_name,
-		                            obj->path, (void *)*where));
-
-	                		break;
-			}
-			continue;
-		}
-
-		/*
-		 * If it is no TLS relocation (handled above), we can not
-		 * deal with it if it is beyound R_SPARC_6.
+		 * Note: R_SPARC_6 is currently numerically largest.
 		 */
 		if (type > R_TYPE(6))
 			return (-1);
+
+		value = rela->r_addend;
 
 		/*
 		 * Handle relative relocs here, as an optimization.
@@ -404,17 +320,15 @@ _rtld_relocate_plt_lazy(const Obj_Entry *obj)
 caddr_t
 _rtld_bind(const Obj_Entry *obj, Elf_Word reloff)
 {
-	const Elf_Rela *rela = (const Elf_Rela *)((const uint8_t *)obj->pltrela + reloff);
+	const Elf_Rela *rela = (const Elf_Rela *)((caddr_t)obj->pltrela + reloff);
 	Elf_Addr value;
 	int err;
 
 	value = 0;	/* XXX gcc */
 
-	_rtld_shared_enter();
 	err = _rtld_relocate_plt_object(obj, rela, &value);
 	if (err)
 		_rtld_die();
-	_rtld_shared_exit();
 
 	return (caddr_t)value;
 }

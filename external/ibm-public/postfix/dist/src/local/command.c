@@ -1,4 +1,4 @@
-/*	$NetBSD: command.c,v 1.1.1.2 2010/06/17 18:06:53 tron Exp $	*/
+/*	$NetBSD: command.c,v 1.1.1.1.2.4 2011/01/07 01:24:06 riz Exp $	*/
 
 /*++
 /* NAME

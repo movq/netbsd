@@ -1,4 +1,4 @@
-/*	$NetBSD: ixpide.c,v 1.24 2012/07/31 15:50:36 bouyer Exp $	*/
+/*	$NetBSD: ixpide.c,v 1.13.4.1 2008/11/12 23:12:57 snj Exp $	*/
 
 /*
  *  Copyright (c) 2004 The NetBSD Foundation.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixpide.c,v 1.24 2012/07/31 15:50:36 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixpide.c,v 1.13.4.1 2008/11/12 23:12:57 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,16 +38,16 @@ __KERNEL_RCSID(0, "$NetBSD: ixpide.c,v 1.24 2012/07/31 15:50:36 bouyer Exp $");
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_ixp_reg.h>
 
-static bool	ixpide_resume(device_t, const pmf_qual_t *);
-static bool	ixpide_suspend(device_t, const pmf_qual_t *);
+static bool	ixpide_resume(device_t PMF_FN_PROTO);
+static bool	ixpide_suspend(device_t PMF_FN_PROTO);
 static int	ixpide_match(device_t, cfdata_t, void *);
 static void	ixpide_attach(device_t, device_t, void *);
 
-static void	ixp_chip_map(struct pciide_softc *, const struct pci_attach_args *);
+static void	ixp_chip_map(struct pciide_softc *, struct pci_attach_args *);
 static void	ixp_setup_channel(struct ata_channel *);
 
 CFATTACH_DECL_NEW(ixpide, sizeof(struct pciide_softc),
-    ixpide_match, ixpide_attach, pciide_detach, NULL);
+    ixpide_match, ixpide_attach, NULL, NULL);
 
 static const char ixpdesc[] = "ATI Technologies IXP IDE Controller";
 
@@ -94,11 +94,12 @@ ixpide_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-ixp_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
+ixp_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int channel;
 	pcireg_t interface;
+	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
@@ -120,7 +121,6 @@ ixp_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 	sc->sc_wdcdev.sc_atac.atac_set_modes = ixp_setup_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	interface = PCI_INTERFACE(pa->pa_class);
 
@@ -131,7 +131,8 @@ ixp_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 		cp = &sc->pciide_channels[channel];
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
-		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
+		    pciide_pci_intr);
 	}
 }
 
@@ -145,7 +146,7 @@ static const uint8_t ixp_mdma_timings[] = {
 };
 
 static bool
-ixpide_resume(device_t dv, const pmf_qual_t *qual)
+ixpide_resume(device_t dv PMF_FN_ARGS)
 {
 	struct pciide_softc *sc = device_private(dv);
 
@@ -158,7 +159,7 @@ ixpide_resume(device_t dv, const pmf_qual_t *qual)
 }
 
 static bool
-ixpide_suspend(device_t dv, const pmf_qual_t *qual)
+ixpide_suspend(device_t dv PMF_FN_ARGS)
 {
 	struct pciide_softc *sc = device_private(dv);
 
@@ -188,15 +189,15 @@ ixp_setup_channel(struct ata_channel *chp)
 
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
-		if (drvp->drive_type == ATA_DRIVET_NONE)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
-		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
+		if (drvp->drive_flags & DRIVE_UDMA) {
 			s = splbio();
-			drvp->drive_flags &= ~ATA_DRIVE_DMA;
+			drvp->drive_flags &= ~DRIVE_DMA;
 			splx(s);
 			IXP_UDMA_ENABLE(udma, chp->ch_channel, drive);
 			IXP_SET_MODE(udma, chp->ch_channel, drive, drvp->UDMA_mode);
-		} else if (drvp->drive_flags & ATA_DRIVE_DMA) {
+		} else if (drvp->drive_flags & DRIVE_DMA) {
 			IXP_UDMA_DISABLE(udma, chp->ch_channel, drive);
 			IXP_SET_TIMING(mdma_timing, chp->ch_channel, drive,
 			    ixp_mdma_timings[drvp->DMA_mode]);

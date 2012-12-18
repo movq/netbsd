@@ -1,4 +1,4 @@
-/*	$NetBSD: dtms.c,v 1.11 2011/07/09 17:32:31 matt Exp $	*/
+/*	$NetBSD: dtms.c,v 1.9 2008/04/28 20:23:32 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -30,38 +30,39 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dtms.c,v 1.11 2011/07/09 17:32:31 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dtms.c,v 1.9 2008/04/28 20:23:32 martin Exp $");
 
 #include "locators.h"
 
 #include <sys/param.h>
-#include <sys/bus.h>
+#include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
 #include <sys/syslog.h>
-#include <sys/systm.h>
 
-#include <pmax/tc/dtreg.h>
-#include <pmax/tc/dtvar.h>
+#include <machine/bus.h>
+
+#include <arch/pmax/tc/dtreg.h>
+#include <arch/pmax/tc/dtvar.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsmousevar.h>
 
 struct dtms_softc {
-	device_t	sc_dev;
-	device_t	sc_wsmousedev;
+	struct device	sc_dv;
+	struct device	*sc_wsmousedev;
 	int		sc_enabled;
 };
 
-int	dtms_match(device_t, cfdata_t, void *);
-void	dtms_attach(device_t, device_t, void *);
+int	dtms_match(struct device *, struct cfdata *, void *);
+void	dtms_attach(struct device *, struct device *, void *);
 int	dtms_input(void *, int);
 int	dtms_enable(void *);
 int	dtms_ioctl(void *, u_long, void *, int, struct lwp *);
 void	dtms_disable(void *);
 void	dtms_handler(void *, struct dt_msg *);
 
-CFATTACH_DECL_NEW(dtms, sizeof(struct dtms_softc),
+CFATTACH_DECL(dtms, sizeof(struct dtms_softc),
     dtms_match, dtms_attach, NULL, NULL);
 
 const struct wsmouse_accessops dtms_accessops = {
@@ -71,7 +72,7 @@ const struct wsmouse_accessops dtms_accessops = {
 };
 
 int
-dtms_match(device_t parent, cfdata_t cf, void *aux)
+dtms_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct dt_attach_args *dta;
 
@@ -80,20 +81,19 @@ dtms_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-dtms_attach(device_t parent, device_t self, void *aux)
+dtms_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct wsmousedev_attach_args a;
 	struct dtms_softc *sc;
 	struct dt_softc *dt;
 
-	dt = device_private(parent);
-	sc = device_private(self);
-	sc->sc_dev = self;
+	dt = (struct dt_softc *)parent;
+	sc = (struct dtms_softc *)self;
 
 	printf("\n");
 
-	if (dt_establish_handler(dt, &dt_ms_dv, sc, dtms_handler)) {
-		printf("%s: unable to establish handler\n", device_xname(self));
+	if (dt_establish_handler(dt, &dt_ms_dv, self, dtms_handler)) {
+		printf("%s: unable to establish handler\n", self->dv_xname);
 		return;
 	}
 

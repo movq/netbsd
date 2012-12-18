@@ -1,4 +1,4 @@
-/* $NetBSD: cms.c,v 1.21 2012/04/09 10:18:16 plunky Exp $ */
+/* $NetBSD: cms.c,v 1.18 2008/04/28 20:23:52 martin Exp $ */
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cms.c,v 1.21 2012/04/09 10:18:16 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cms.c,v 1.18 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,7 +58,7 @@ int	cmsdebug = 0;
 #endif
 
 struct cms_softc {
-	kmutex_t sc_lock;
+	struct midi_softc sc_mididev;
 
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
@@ -163,8 +163,9 @@ cms_attach(device_t parent, device_t self, void *aux)
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	midisyn *ms;
+	struct audio_attach_args arg;
 
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_AUDIO);
+	sc->sc_mididev.dev = self;
 
 	aprint_normal("\n");
 
@@ -183,17 +184,20 @@ cms_attach(device_t parent, device_t self, void *aux)
 	/* now let's reset the chips */
 	cms_reset(sc);
 
-	/* init the synthesiser */
 	ms = &sc->sc_midisyn;
 	ms->mets = &midi_cms_hw;
 	strcpy(ms->name, "Creative Music System");
 	ms->nvoice = CMS_NVOICES;
 	ms->data = sc;
-	ms->lock = &sc->sc_lock;
-	midisyn_init(ms);
 
-	/* and attach the midi device with the synthesiser */
-	midi_attach_mi(&midisyn_hw_if, ms, self);
+	/* use the synthesiser */
+	midisyn_attach(&sc->sc_mididev, ms);
+
+	/* now attach the midi device to the synthesiser */
+	arg.type = AUDIODEV_TYPE_MIDI;
+	arg.hwif = sc->sc_mididev.hw_if;
+	arg.hdl = sc->sc_mididev.hw_hdl;
+	config_found(self, &arg, 0);
 }
 
 

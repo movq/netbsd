@@ -1,4 +1,4 @@
-/*	$NetBSD: histedit.c,v 1.45 2012/03/20 18:42:29 matt Exp $	*/
+/*	$NetBSD: histedit.c,v 1.41 2008/02/13 12:57:16 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)histedit.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: histedit.c,v 1.45 2012/03/20 18:42:29 matt Exp $");
+__RCSID("$NetBSD: histedit.c,v 1.41 2008/02/13 12:57:16 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,7 +53,6 @@ __RCSID("$NetBSD: histedit.c,v 1.45 2012/03/20 18:42:29 matt Exp $");
 #include "parser.h"
 #include "var.h"
 #include "options.h"
-#include "builtins.h"
 #include "main.h"
 #include "output.h"
 #include "mystring.h"
@@ -150,13 +149,13 @@ bad:
 			INTON;
 		}
 		if (el) {
-			el_source(el, NULL);
 			if (Vflag)
 				el_set(el, EL_EDITOR, "vi");
 			else if (Eflag)
 				el_set(el, EL_EDITOR, "emacs");
 			el_set(el, EL_BIND, "^I", 
 			    tabcomplete ? "rl-complete" : "ed-insert", NULL);
+			el_source(el, NULL);
 		}
 	} else {
 		INTOFF;
@@ -199,7 +198,9 @@ setterm(const char *term)
 }
 
 int
-inputrc(int argc, char **argv)
+inputrc(argc, argv)
+	int argc;
+	char **argv;
 {
 	if (argc != 2) {
 		out2str("usage: inputrc file\n");
@@ -288,7 +289,6 @@ histcmd(int argc, char **argv)
 		 * Catch interrupts to reset active counter and
 		 * cleanup temp files.
 		 */
-		savehandler = handler;
 		if (setjmp(jmploc.loc)) {
 			active = 0;
 			if (*editfile)
@@ -296,6 +296,7 @@ histcmd(int argc, char **argv)
 			handler = savehandler;
 			longjmp(handler->loc, 1);
 		}
+		savehandler = handler;
 		handler = &jmploc;
 		if (++active > MAXHISTLOOPS) {
 			active = 0;

@@ -1,4 +1,4 @@
-/* $NetBSD: ahdilabel.c,v 1.8 2009/03/14 21:04:06 dsl Exp $ */
+/* $NetBSD: ahdilabel.c,v 1.7 2008/04/28 20:23:15 martin Exp $ */
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -55,7 +55,9 @@ u_int32_t	 read_sector (struct ahdi_ptable*, char *, int, int);
 void		 change_part (struct ahdi_ptable*, int, int);
 
 int
-main (int argc, char *argv[])
+main (argc, argv)
+	int	 argc;
+	char	*argv[];
 {
 	struct ahdi_ptable	ptable;
 	int			flags, rv, key, units;
@@ -207,7 +209,9 @@ main (int argc, char *argv[])
 }
 
 void
-show_parts (struct ahdi_ptable *ptable, int start, int finish, int units)
+show_parts (ptable, start, finish, units)
+	struct ahdi_ptable	*ptable;
+	int			 start, finish, units;
 {
 	int	i;
 
@@ -281,7 +285,9 @@ show_parts (struct ahdi_ptable *ptable, int start, int finish, int units)
 }
 
 int
-get_input (char *buf, int len)
+get_input (buf, len)
+	char	*buf;
+	int	 len;
 {
 	int count, key;
 
@@ -296,7 +302,10 @@ get_input (char *buf, int len)
 }
 
 char *
-sec_to_cts (struct ahdi_ptable *ptable, u_int32_t sector, char *cts)
+sec_to_cts (ptable, sector, cts)
+	struct ahdi_ptable	*ptable;
+	u_int32_t	 sector;
+	char		*cts;
 {
 	u_int32_t	cylinder, track;
 
@@ -309,7 +318,10 @@ sec_to_cts (struct ahdi_ptable *ptable, u_int32_t sector, char *cts)
 }
 
 u_int32_t
-read_sector (struct ahdi_ptable *ptable, char *buf, int part, int se)
+read_sector (ptable, buf, part, se)
+	struct ahdi_ptable	*ptable;
+	char			*buf;
+	int			 part, se;
 {
 	u_int32_t	sector, track, cylinder;
 	int		i;
@@ -363,7 +375,9 @@ read_sector (struct ahdi_ptable *ptable, char *buf, int part, int se)
 }
 
 void
-change_part (struct ahdi_ptable *ptable, int part, int units)
+change_part (ptable, part, units)
+	struct ahdi_ptable	*ptable;
+	int			 part, units;
 {
 #define BUFLEN	20
 #define CTSLEN	64

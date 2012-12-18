@@ -1,4 +1,4 @@
-/*	$NetBSD: ctags.h,v 1.9 2009/07/13 19:05:40 roy Exp $	*/
+/*	$NetBSD: ctags.h,v 1.8.34.1 2009/08/14 20:32:22 snj Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994

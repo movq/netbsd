@@ -1,12 +1,11 @@
-# $NetBSD: md.evbmips,v 1.17 2012/11/24 14:00:35 alnsn Exp $
+# $NetBSD: md.evbmips,v 1.12 2007/02/09 22:22:32 ad Exp $
 ./usr/include/evbmips				comp-c-include
 ./usr/include/evbmips/_G_config.h		comp-obsolete		obsolete
 ./usr/include/evbmips/ansi.h			comp-c-include
-./usr/include/evbmips/aout_machdep.h		comp-obsolete		obsolete
+./usr/include/evbmips/aout_machdep.h		comp-c-include
 ./usr/include/evbmips/asm.h			comp-c-include
-./usr/include/evbmips/bsd-aout.h		comp-obsolete		obsolete
 ./usr/include/evbmips/bswap.h			comp-c-include
-./usr/include/evbmips/bus.h			comp-obsolete		obsolete
+./usr/include/evbmips/bus.h			comp-c-include
 ./usr/include/evbmips/cdefs.h			comp-c-include
 ./usr/include/evbmips/cpu.h			comp-c-include
 ./usr/include/evbmips/db_machdep.h		comp-obsolete		obsolete
@@ -52,11 +51,10 @@
 ./usr/include/evbmips/rwlock.h			comp-c-include
 ./usr/include/evbmips/setjmp.h			comp-c-include
 ./usr/include/evbmips/signal.h			comp-c-include
-./usr/include/evbmips/sljitarch.h		comp-c-include
-./usr/include/evbmips/stdarg.h			comp-obsolete		obsolete
+./usr/include/evbmips/stdarg.h			comp-c-include
 ./usr/include/evbmips/trap.h			comp-c-include
 ./usr/include/evbmips/types.h			comp-c-include
-./usr/include/evbmips/varargs.h			comp-obsolete		obsolete
+./usr/include/evbmips/varargs.h			comp-c-include
 ./usr/include/evbmips/vmparam.h			comp-c-include
 ./usr/include/evbmips/wchar_limits.h		comp-c-include
 ./usr/include/ieeefp.h				comp-c-include

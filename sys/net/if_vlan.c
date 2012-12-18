@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vlan.c,v 1.69 2011/10/19 22:07:09 dyoung Exp $	*/
+/*	$NetBSD: if_vlan.c,v 1.60.4.1 2009/05/03 18:01:01 snj Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -78,9 +78,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vlan.c,v 1.69 2011/10/19 22:07:09 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vlan.c,v 1.60.4.1 2009/05/03 18:01:01 snj Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -92,7 +93,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_vlan.c,v 1.69 2011/10/19 22:07:09 dyoung Exp $");
 #include <sys/proc.h>
 #include <sys/kauth.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
@@ -286,7 +289,11 @@ vlan_config(struct ifvlan *ifv, struct ifnet *p)
 			 */
 			ec->ec_capenable |= ETHERCAP_VLAN_MTU;
 			if (p->if_flags & IFF_UP) {
-				error = if_flags_set(p, p->if_flags);
+				struct ifreq ifr;
+
+				ifr.ifr_flags = p->if_flags;
+				error = (*p->if_ioctl)(p, SIOCSIFFLAGS,
+				    (void *) &ifr);
 				if (error) {
 					if (ec->ec_nvlans-- == 1)
 						ec->ec_capenable &=
@@ -312,16 +319,15 @@ vlan_config(struct ifvlan *ifv, struct ifnet *p)
 		 * assisted checksumming flags and tcp segmentation
 		 * offload.
 		 */
-		if (ec->ec_capabilities & ETHERCAP_VLAN_HWTAGGING) {
-		        ec->ec_capenable |= ETHERCAP_VLAN_HWTAGGING;
+		if (ec->ec_capabilities & ETHERCAP_VLAN_HWTAGGING)
 			ifp->if_capabilities = p->if_capabilities &
-			    (IFCAP_TSOv4 | IFCAP_TSOv6 |
+			    (IFCAP_TSOv4 |
 			     IFCAP_CSUM_IPv4_Tx|IFCAP_CSUM_IPv4_Rx|
 			     IFCAP_CSUM_TCPv4_Tx|IFCAP_CSUM_TCPv4_Rx|
 			     IFCAP_CSUM_UDPv4_Tx|IFCAP_CSUM_UDPv4_Rx|
 			     IFCAP_CSUM_TCPv6_Tx|IFCAP_CSUM_TCPv6_Rx|
 			     IFCAP_CSUM_UDPv6_Tx|IFCAP_CSUM_UDPv6_Rx);
-                }
+
 		/*
 		 * We inherit the parent's Ethernet address.
 		 */
@@ -378,8 +384,11 @@ vlan_unconfig(struct ifnet *ifp)
 			 */
 			ec->ec_capenable &= ~ETHERCAP_VLAN_MTU;
 			if (ifv->ifv_p->if_flags & IFF_UP) {
-				(void)if_flags_set(ifv->ifv_p,
-				    ifv->ifv_p->if_flags);
+				struct ifreq ifr;
+
+				ifr.ifr_flags = ifv->ifv_p->if_flags;
+				(void) (*ifv->ifv_p->if_ioctl)(ifv->ifv_p,
+				    SIOCSIFFLAGS, (void *) &ifr);
 			}
 		}
 
@@ -457,11 +466,35 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	struct ifnet *pr;
 	struct ifcapreq *ifcr;
 	struct vlanreq vlr;
+	struct sockaddr *sa;
 	int s, error = 0;
 
 	s = splnet();
 
 	switch (cmd) {
+	case SIOCSIFADDR:
+		if (ifv->ifv_p != NULL) {
+			ifp->if_flags |= IFF_UP;
+
+			switch (ifa->ifa_addr->sa_family) {
+#ifdef INET
+			case AF_INET:
+				arp_ifinit(ifp, ifa);
+				break;
+#endif
+			default:
+				break;
+			}
+		} else {
+			error = EINVAL;
+		}
+		break;
+
+	case SIOCGIFADDR:
+		sa = (struct sockaddr *)&ifr->ifr_data;
+		memcpy(sa->sa_data, CLLADDR(ifp->if_sadl), ifp->if_addrlen);
+		break;
+
 	case SIOCSIFMTU:
 		if (ifv->ifv_p == NULL)
 			error = EINVAL;
@@ -513,8 +546,6 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
 		/*
 		 * For promiscuous mode, we enable promiscuous mode on
 		 * the parent if we need promiscuous on the VLAN interface.
@@ -544,21 +575,8 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
 			error = 0;
 		break;
-	case SIOCINITIFADDR:
-		if (ifv->ifv_p == NULL) {
-			error = EINVAL;
-			break;
-		}
-
-		ifp->if_flags |= IFF_UP;
-#ifdef INET
-		if (ifa->ifa_addr->sa_family == AF_INET)
-			arp_ifinit(ifp, ifa);
-#endif
-		break;
-
 	default:
-		error = ether_ioctl(ifp, cmd, data);
+		error = EINVAL;
 	}
 
 	splx(s);
@@ -586,7 +604,8 @@ vlan_ether_addmulti(struct ifvlan *ifv, struct ifreq *ifr)
 	 * about it.  Also, remember this multicast address so that
 	 * we can delete them on unconfigure.
 	 */
-	mc = malloc(sizeof(struct vlan_mc_entry), M_DEVBUF, M_NOWAIT);
+	MALLOC(mc, struct vlan_mc_entry *, sizeof(struct vlan_mc_entry),
+	    M_DEVBUF, M_NOWAIT);
 	if (mc == NULL) {
 		error = ENOMEM;
 		goto alloc_failed;
@@ -601,14 +620,15 @@ vlan_ether_addmulti(struct ifvlan *ifv, struct ifreq *ifr)
 	memcpy(&mc->mc_addr, sa, sa->sa_len);
 	LIST_INSERT_HEAD(&ifv->ifv_mc_listhead, mc, mc_entries);
 
-	error = if_mcast_op(ifv->ifv_p, SIOCADDMULTI, sa);
+	error = (*ifv->ifv_p->if_ioctl)(ifv->ifv_p, SIOCADDMULTI,
+	    (void *)ifr);
 	if (error != 0)
 		goto ioctl_failed;
 	return (error);
 
  ioctl_failed:
 	LIST_REMOVE(mc, mc_entries);
-	free(mc, M_DEVBUF);
+	FREE(mc, M_DEVBUF);
  alloc_failed:
 	(void)ether_delmulti(sa, &ifv->ifv_ec);
 	return (error);
@@ -636,14 +656,15 @@ vlan_ether_delmulti(struct ifvlan *ifv, struct ifreq *ifr)
 		return (error);
 
 	/* We no longer use this multicast address.  Tell parent so. */
-	error = if_mcast_op(ifv->ifv_p, SIOCDELMULTI, sa);
+	error = (*ifv->ifv_p->if_ioctl)(ifv->ifv_p, SIOCDELMULTI,
+	    (void *)ifr);
 	if (error == 0) {
 		/* And forget about this address. */
 		for (mc = LIST_FIRST(&ifv->ifv_mc_listhead); mc != NULL;
 		    mc = LIST_NEXT(mc, mc_entries)) {
 			if (mc->mc_enm == enm) {
 				LIST_REMOVE(mc, mc_entries);
-				free(mc, M_DEVBUF);
+				FREE(mc, M_DEVBUF);
 				break;
 			}
 		}
@@ -662,12 +683,22 @@ vlan_ether_purgemulti(struct ifvlan *ifv)
 {
 	struct ifnet *ifp = ifv->ifv_p;		/* Parent. */
 	struct vlan_mc_entry *mc;
+	union {
+		struct ifreq ifreq;
+		struct {
+			char ifr_name[IFNAMSIZ];
+			struct sockaddr_storage ifr_ss;
+		} ifreq_storage;
+	} ifreq;
+	struct ifreq *ifr = &ifreq.ifreq;
 
+	memcpy(ifr->ifr_name, ifp->if_xname, IFNAMSIZ);
 	while ((mc = LIST_FIRST(&ifv->ifv_mc_listhead)) != NULL) {
-		(void)if_mcast_op(ifp, SIOCDELMULTI,
+		ifreq_setaddr(SIOCDELMULTI, ifr,
 		    (const struct sockaddr *)&mc->mc_addr);
+		(void)(*ifp->if_ioctl)(ifp, SIOCDELMULTI, (void *)ifr);
 		LIST_REMOVE(mc, mc_entries);
-		free(mc, M_DEVBUF);
+		FREE(mc, M_DEVBUF);
 	}
 }
 
@@ -708,7 +739,10 @@ vlan_start(struct ifnet *ifp)
 		}
 #endif /* ALTQ */
 
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 		/*
 		 * If the parent can insert the tag itself, just mark
 		 * the tag in the mbuf header.
@@ -889,7 +923,10 @@ vlan_input(struct ifnet *ifp, struct mbuf *m)
 	m->m_pkthdr.rcvif = &ifv->ifv_if;
 	ifv->ifv_if.if_ipackets++;
 
-	bpf_mtap(&ifv->ifv_if, m);
+#if NBPFILTER > 0
+	if (ifv->ifv_if.if_bpf)
+		bpf_mtap(ifv->ifv_if.if_bpf, m);
+#endif
 
 	/* Pass it back through the parent's input routine. */
 	(*ifp->if_input)(&ifv->ifv_if, m);

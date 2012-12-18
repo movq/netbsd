@@ -1,4 +1,4 @@
-/*	$NetBSD: hcsc.c,v 1.21 2012/10/27 17:18:37 chs Exp $	*/
+/*	$NetBSD: hcsc.c,v 1.19 2008/04/28 20:23:56 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 Ben Harris
@@ -41,6 +41,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Matthias Pfaller.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -62,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hcsc.c,v 1.21 2012/10/27 17:18:37 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hcsc.c,v 1.19 2008/04/28 20:23:56 martin Exp $");
 
 #include <sys/param.h>
 
@@ -147,7 +152,7 @@ hcsc_attach(device_t parent, device_t self, void *aux)
 #ifndef NCR5380_USE_BUS_SPACE
 	uint8_t *iobase;
 #endif
-	char hi_option[sizeof(device_xname(self)) + 8];
+	char hi_option[sizeof(self->dv_xname) + 8];
 
 	ncr_sc->sc_dev = self;
 	ncr_sc->sc_min_dma_len = 0;

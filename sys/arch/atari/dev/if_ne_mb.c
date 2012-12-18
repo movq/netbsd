@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_mb.c,v 1.2 2010/04/06 15:32:36 tsutsui Exp $	*/
+/*	$NetBSD: if_ne_mb.c,v 1.2.8.2 2010/11/20 00:33:46 riz Exp $	*/
 
 /*
  * Copyright (c) 2010 Izumi Tsutsui.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_mb.c,v 1.2 2010/04/06 15:32:36 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_mb.c,v 1.2.8.2 2010/11/20 00:33:46 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

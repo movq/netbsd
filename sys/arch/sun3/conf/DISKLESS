@@ -1,4 +1,4 @@
-# $NetBSD: DISKLESS,v 1.64 2012/10/17 14:48:17 apb Exp $
+# $NetBSD: DISKLESS,v 1.58 2008/04/05 22:08:41 tsutsui Exp $
 
 # DISKLESS - Root and swap on NFS
 # Desktop machines only (3/50, 3/60, 3/110)
@@ -23,6 +23,8 @@ maxusers	2
 #options 	SYSVMSG		# System V message queues
 #options 	SYSVSEM		# System V semaphores
 #options 	SYSVSHM		# System V shared memory
+#options 	SHMMAXPGS=1024	# 1024 pages is the default
+#options 	LKM		# loadable kernel modules
 #options 	INSECURE	# disable kernel security level
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -54,9 +56,7 @@ options 	COMPAT_15	# NetBSD 1.5
 options 	COMPAT_16	# NetBSD 1.6
 options 	COMPAT_20	# NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0
-options 	COMPAT_40	# NetBSD 4.0
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
 #options 	COMPAT_LINUX	# can run Linux/m68k executables
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
@@ -74,9 +74,8 @@ file-system	NFS		# Sun NFS client support
 #file-system	PTYFS		# /dev/pts/N support
 
 #options 	NFSSERVER	# nfs server support
-#options 	QUOTA		# legacy UFS quotas
-#options 	QUOTA2		# new, in-filesystem UFS quotas
-#options 	FFS_EI		# FFS Endian Independent support
+#options 	QUOTA		# FFS quotas
+#options 	FFS_EI		# FFS Endian Independant support
 
 # Networking options
 options 	INET		# IP protocol stack support

@@ -1,4 +1,4 @@
-/* $NetBSD: pi1ppcvar.h,v 1.6 2011/07/01 18:53:47 dyoung Exp $ */
+/* $NetBSD: pi1ppcvar.h,v 1.3 2008/04/16 06:25:23 cegger Exp $ */
 
 /*-
  * Copyright (c) 2001 Alcove - Nicolas Souchu
@@ -33,18 +33,24 @@
 #ifndef __PI1PPCVAR_H
 #define __PI1PPCVAR_H
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/types.h>
 #include <sys/device.h>
 #include <sys/callout.h>
 
 #include <dev/ppbus/ppbus_conf.h>
 
+
 /* Maximum time to wait for device response */
 #define MAXBUSYWAIT	(5 * (hz))
 
 /* Poll interval when wating for device to become ready */
 #define PI1PPC_POLL	((hz)/10)
+
+/* Interrupt priority level for pi1ppc device */
+#define IPL_PI1PPC	IPL_TTY
+#define splpi1ppc	spltty
+
 
 /* Diagnostic and verbose printing macros */
 
@@ -62,18 +68,30 @@ extern int pi1ppc_verbose;
 #define PI1PPC_VPRINTF(arg)
 #endif
 
+
 /* Flag used in DMA transfer */
 #define PI1PPC_DMA_MODE_READ 0x0
 #define PI1PPC_DMA_MODE_WRITE 0x1
+
 
 /* Flags passed via config */
 #define PI1PPC_FLAG_DISABLE_INTR	0x01
 #define PI1PPC_FLAG_DISABLE_DMA	0x02
 
+
 /* Locking for pi1ppc device */
-#define PI1PPC_SC_LOCK(sc)	(&((sc)->sc_lock))
-#define PI1PPC_LOCK(sc)		mutex_enter(&sc->sc_lock)
-#define PI1PPC_UNLOCK(sc)	mutex_exit(&sc->sc_lock)
+#if defined(MULTIPROCESSOR) || defined (LOCKDEBUG)
+#include <sys/lock.h>
+#define PI1PPC_SC_LOCK(sc) (&((sc)->sc_lock))
+#define PI1PPC_LOCK_INIT(sc) simple_lock_init(PI1PPC_SC_LOCK((sc)))
+#define PI1PPC_LOCK(sc) simple_lock(PI1PPC_SC_LOCK((sc)))
+#define PI1PPC_UNLOCK(sc) simple_unlock(PI1PPC_SC_LOCK((sc)))
+#else /* !(MULTIPROCESSOR) && !(LOCKDEBUG) */
+#define PI1PPC_LOCK_INIT(sc)
+#define PI1PPC_LOCK(sc)
+#define PI1PPC_UNLOCK(sc)
+#define PI1PPC_SC_LOCK(sc) NULL
+#endif /* MULTIPROCESSOR || LOCKDEBUG */
 
 /* Single softintr callback entry */
 struct pi1ppc_handler_node {
@@ -85,11 +103,12 @@ struct pi1ppc_handler_node {
 /* Generic structure to hold parallel port chipset info. */
 struct pi1ppc_softc {
 	/* Generic device attributes */
-	device_t sc_dev;
+        device_t sc_dev;
 
-	kmutex_t sc_lock;
-	kcondvar_t sc_in_cv;
-	kcondvar_t sc_out_cv;
+#if defined(MULTIPROCESSOR) || defined(LOCKDEBUG)
+	/* Simple lock */
+	struct simplelock sc_lock;
+#endif
 
 	/* Machine independent bus infrastructure */
 	bus_space_tag_t sc_iot;
@@ -110,17 +129,17 @@ struct pi1ppc_softc {
 	 /* Input buffer: working pointers, and size in bytes. */
 	char * sc_inb;
 	char * sc_inbstart;
-	uint32_t sc_inb_nbytes;
+	u_int32_t sc_inb_nbytes;
 	int sc_inerr;
 
 	/* Output buffer pointer, working pointer, and size in bytes. */
 	char * sc_outb;
 	char * sc_outbstart;
-	uint32_t sc_outb_nbytes;
+	u_int32_t sc_outb_nbytes;
 	int sc_outerr;
 
 	/* DMA functions: setup by bus specific attach code */
-	int (*sc_dma_start)(struct pi1ppc_softc *, void *, u_int, uint8_t);
+	int (*sc_dma_start)(struct pi1ppc_softc *, void *, u_int, u_int8_t);
 	int (*sc_dma_finish)(struct pi1ppc_softc *);
 	int (*sc_dma_abort)(struct pi1ppc_softc *);
 	int (*sc_dma_malloc)(device_t, void **, bus_addr_t *,
@@ -135,7 +154,7 @@ struct pi1ppc_softc {
 	/* Device attachment state */
 #define PI1PPC_ATTACHED 1
 #define PI1PPC_NOATTACH 0
-	uint8_t sc_dev_ok;
+	u_int8_t sc_dev_ok;
 
 	/*
 	 * Hardware capabilities flags: standard mode and nibble mode are
@@ -146,60 +165,62 @@ struct pi1ppc_softc {
 #define PI1PPC_HAS_DMA	0x02	/* DMA available */
 #define PI1PPC_HAS_FIFO	0x04	/* FIFO available */
 #define PI1PPC_HAS_PS2	0x08	/* PS2 mode capable */
-	uint8_t sc_has;		/* Chipset detected capabilities */
+	u_int8_t sc_has;	/* Chipset detected capabilities */
 
 	/* Flags specifying mode of chipset operation . */
 #define PI1PPC_MODE_STD	0x01	/* Use centronics-compatible mode */
 #define PI1PPC_MODE_PS2	0x02	/* Use PS2 mode */
 #define PI1PPC_MODE_NIBBLE 0x10	/* Use nibble mode */
-	uint8_t sc_mode;	/* Current operational mode */
+	u_int8_t sc_mode;	/* Current operational mode */
 
 	/* Flags which further define chipset operation */
 #define PI1PPC_USE_INTR	0x01	/* Use interrupts */
 #define PI1PPC_USE_DMA	0x02	/* Use DMA */
-	uint8_t sc_use;		/* Capabilities to use */
+	u_int8_t sc_use;	/* Capabilities to use */
 
 	/* Parallel Port Chipset model. */
 #define GENERIC         6
-	uint8_t sc_model;	/* chipset model */
+	u_int8_t sc_model;	/* chipset model */
 
 	/* EPP mode - UNUSED */
-	uint8_t sc_epp;
+	u_int8_t sc_epp;
 
 	/* Parallel Port Chipset Type.  Only Indy-style needed? */
 #define PI1PPC_TYPE_INDY 0
-	uint8_t sc_type;
+	u_int8_t sc_type;
 
 	/* Stored register values after an interrupt occurs */
-	uint8_t sc_ecr_intr;
-	uint8_t sc_ctr_intr;
-	uint8_t sc_str_intr;
+	u_int8_t sc_ecr_intr;
+	u_int8_t sc_ctr_intr;
+	u_int8_t sc_str_intr;
 
 #define PI1PPC_IRQ_NONE	0x0
 #define PI1PPC_IRQ_nACK	0x1
 #define PI1PPC_IRQ_DMA	0x2
 #define PI1PPC_IRQ_FIFO	0x4
 #define PI1PPC_IRQ_nFAULT	0x8
-	uint8_t sc_irqstat;	/* Record irq settings */
+	u_int8_t sc_irqstat;	/* Record irq settings */
 
 #define PI1PPC_DMA_INIT		0x01
 #define PI1PPC_DMA_STARTED	0x02
 #define PI1PPC_DMA_COMPLETE	0x03
 #define PI1PPC_DMA_INTERRUPTED	0x04
 #define PI1PPC_DMA_ERROR		0x05
-	uint8_t sc_dmastat;	/* Record dma state */
+	u_int8_t sc_dmastat;	/* Record dma state */
 
 #define PI1PPC_PWORD_MASK	0x30
 #define PI1PPC_PWORD_16	0x00
 #define PI1PPC_PWORD_8	0x10
 #define PI1PPC_PWORD_32	0x20
-	uint8_t sc_pword;	/* PWord size: used for FIFO DMA transfers */
-	uint8_t sc_fifo;	/* FIFO size */
+	u_int8_t sc_pword;	/* PWord size: used for FIFO DMA transfers */
+	u_int8_t sc_fifo;	/* FIFO size */
 
 	/* Indicates number of PWords in FIFO queues that generate interrupt */
-	uint8_t sc_wthr;	/* writeIntrThresold */
-	uint8_t sc_rthr;	/* readIntrThresold */
+	u_int8_t sc_wthr;	/* writeIntrThresold */
+	u_int8_t sc_rthr;	/* readIntrThresold */
 };
+
+
 
 #ifdef _KERNEL
 

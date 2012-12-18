@@ -1,4 +1,4 @@
-/* $NetBSD: udf_strat_sequential.c,v 1.11 2011/01/03 13:12:40 drochner Exp $ */
+/* $NetBSD: udf_strat_sequential.c,v 1.5.4.4 2009/07/09 19:44:34 snj Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: udf_strat_sequential.c,v 1.11 2011/01/03 13:12:40 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_strat_sequential.c,v 1.5.4.4 2009/07/09 19:44:34 snj Exp $");
 #endif /* not lint */
 
 
@@ -670,9 +670,6 @@ udf_discstrat_finish_seq(struct udf_strat_args *args)
 
 	/* destroy our pool */
 	pool_destroy(&priv->desc_pool);
-
-	mutex_destroy(&priv->discstrat_mutex);
-	cv_destroy(&priv->discstrat_cv);
 
 	/* free our private space */
 	free(ump->strategy_private, M_UDFTEMP);

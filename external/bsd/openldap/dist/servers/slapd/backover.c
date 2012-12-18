@@ -1,10 +1,8 @@
-/*	$NetBSD: backover.c,v 1.1.1.4 2010/12/12 15:22:19 adam Exp $	*/
-
 /* backover.c - backend overlay routines */
-/* OpenLDAP: pkg/ldap/servers/slapd/backover.c,v 1.71.2.21 2010/04/13 20:23:11 kurt Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/backover.c,v 1.71.2.10 2008/07/08 19:25:38 quanah Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2003-2010 The OpenLDAP Foundation.
+ * Copyright 2003-2008 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -105,8 +103,6 @@ over_db_config(
 	ca.be = be;
 	snprintf( ca.log, sizeof( ca.log ), "%s: line %d",
 			ca.fname, ca.lineno );
-	ca.op = SLAP_CONFIG_ADD;
-	ca.valx = -1;
 
 	for (; on; on=on->on_next) {
 		rc = SLAP_CONF_UNKNOWN;
@@ -197,7 +193,7 @@ over_db_destroy(
 	slap_overinfo *oi = be->bd_info->bi_private;
 	slap_overinst *on = oi->oi_list, *next;
 	BackendInfo *bi_orig = be->bd_info;
-	int rc = 0;
+	int rc;
 
 	be->bd_info = oi->oi_orig;
 	if ( be->bd_info->bi_db_destroy ) {
@@ -601,27 +597,6 @@ over_acl_attribute(
 	return rc;
 }
 
-int
-overlay_callback_after_backover( Operation *op, slap_callback *sc, int append )
-{
-	slap_callback **scp;
-
-	for ( scp = &op->o_callback; *scp != NULL; scp = &(*scp)->sc_next ) {
-		if ( (*scp)->sc_response == over_back_response ) {
-			sc->sc_next = (*scp)->sc_next;
-			(*scp)->sc_next = sc;
-			return 0;
-		}
-	}
-
-	if ( append ) {
-		*scp = sc;
-		return 0;
-	}
-
-	return 1;
-}
-
 /*
  * default return code in case of missing backend function
  * and overlay stack returning SLAP_CB_CONTINUE
@@ -701,7 +676,7 @@ over_op_func(
 	slap_overinfo *oi;
 	slap_overinst *on;
 	BackendDB *be = op->o_bd, db;
-	slap_callback cb = {NULL, over_back_response, NULL, NULL}, **sc;
+	slap_callback cb = {NULL, over_back_response, NULL, NULL};
 	int rc = SLAP_CB_CONTINUE;
 
 	/* FIXME: used to happen for instance during abandon
@@ -721,14 +696,9 @@ over_op_func(
 	op->o_callback = &cb;
 
 	rc = overlay_op_walk( op, rs, which, oi, on );
-	for ( sc = &op->o_callback; *sc; sc = &(*sc)->sc_next ) {
-		if ( *sc == &cb ) {
-			*sc = cb.sc_next;
-			break;
-		}
-	}
 
 	op->o_bd = be;
+	op->o_callback = cb.sc_next;
 	return rc;
 }
 
@@ -1072,7 +1042,7 @@ overlay_register_control( BackendDB *be, const char *oid )
 		
 		/* add to all backends... */
 		LDAP_STAILQ_FOREACH( bd, &backendDB, be_next ) {
-			if ( bd == be->bd_self ) {
+			if ( be == bd ) {
 				gotit = 1;
 			}
 
@@ -1083,8 +1053,8 @@ overlay_register_control( BackendDB *be, const char *oid )
 	}
 	
 	if ( !gotit ) {
-		be->bd_self->be_ctrls[ cid ] = 1;
-		be->bd_self->be_ctrls[ SLAP_MAX_CIDS ] = 1;
+		be->be_ctrls[ cid ] = 1;
+		be->be_ctrls[ SLAP_MAX_CIDS ] = 1;
 	}
 
 	return 0;
@@ -1116,15 +1086,14 @@ void
 overlay_remove( BackendDB *be, slap_overinst *on )
 {
 	slap_overinfo *oi = on->on_info;
-	slap_overinst **oidx;
-	BackendInfo *bi_orig;
+	slap_overinst **oidx, *on2;
 
 	/* remove overlay from oi_list an call db_close and db_destroy
 	 * handlers */
 	for ( oidx = &oi->oi_list; *oidx; oidx = &(*oidx)->on_next ) {
 		if ( *oidx == on ) {
 			*oidx = on->on_next;
-			bi_orig = be->bd_info;
+			BackendInfo *bi_orig = be->bd_info;
 			be->bd_info = (BackendInfo *)on;
 			if ( on->on_bi.bi_db_close ) {
 				on->on_bi.bi_db_close( be, NULL );

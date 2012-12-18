@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc.xxx,v 1.8 2010/02/11 09:06:50 roy Exp $
+#	$NetBSD: Makefile.inc.xxx,v 1.4 2003/11/13 14:07:38 sekiya Exp $
 
 DBG=		-Os -Wa,-xgot # XXX -xgot workaround for objcopy-crunchide
 
@@ -8,8 +8,9 @@ IMAGEENDIAN?=	be
 MAKEDEVTARGETS=	all
 LISTS+=		${DISTRIBDIR}/common/list.sysinst
 MTREECONF+=	${.CURDIR}/mtree.usr.install
-IMAGEDEPENDS+=	${ARCHDIR}/dot.profile \
+IMAGEDEPENDS+=	${ARCHDIR}/dot.profile ${ARCHDIR}/termcap.iris-ansi \
 		${DESTDIR}/.profile \
+		${DESTDIR}/etc/disktab \
 		${KERNOBJDIR}/GENERIC32_IP2x/netbsd.ecoff \
 		${KERNOBJDIR}/GENERIC32_IP2x/netbsd \
 		${KERNOBJDIR}/GENERIC32_IP3x/netbsd

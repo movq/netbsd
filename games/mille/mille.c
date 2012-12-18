@@ -1,4 +1,4 @@
-/*	$NetBSD: mille.c,v 1.20 2011/08/31 16:24:56 plunky Exp $	*/
+/*	$NetBSD: mille.c,v 1.16 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Copyright (c) 1982, 1993
@@ -39,20 +39,21 @@ __COPYRIGHT("@(#) Copyright (c) 1982, 1993\
 #if 0
 static char sccsid[] = "@(#)mille.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: mille.c,v 1.20 2011/08/31 16:24:56 plunky Exp $");
+__RCSID("$NetBSD: mille.c,v 1.16 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
-#include <time.h>
-#include "mille.h"
-#include <signal.h>
+# include	"mille.h"
+# include	<signal.h>
 
 /*
  * @(#)mille.c	1.3 (Berkeley) 5/10/83
  */
 
 int
-main(int ac, char *av[])
+main(ac, av)
+	int	ac;
+	char	*av[];
 {
 	bool	restore;
 
@@ -61,7 +62,7 @@ main(int ac, char *av[])
 
 	if (strcmp(av[0], "a.out") == 0) {
 		outf = fopen("q", "w");
-		setbuf(outf, NULL);
+		setbuf(outf, (char *)NULL);
 		Debug = TRUE;
 	}
 	restore = FALSE;
@@ -91,11 +92,11 @@ main(int ac, char *av[])
 	leaveok(Score, TRUE);
 	leaveok(Miles, TRUE);
 	clearok(curscr, TRUE);
-#ifndef PROF
-	srandom((long) time(NULL));
-#else
+# ifndef PROF
+	srandom(getpid());
+# else
 	srandom(0);
-#endif
+# endif
 	cbreak();
 	noecho();
 	signal(SIGINT, rub);
@@ -138,7 +139,8 @@ main(int ac, char *av[])
  * quit.
  */
 void
-rub(int dummy __unused)
+rub(dummy)
+	int dummy __unused;
 {
 	(void)signal(SIGINT, SIG_IGN);
 	if (getyn(REALLYPROMPT))
@@ -150,7 +152,8 @@ rub(int dummy __unused)
  *	Time to go beddy-by
  */
 void
-die(int code)
+die(code)
+	int code;
 {
 
 	(void)signal(SIGINT, SIG_IGN);

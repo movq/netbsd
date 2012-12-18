@@ -1,4 +1,4 @@
-/*	$NetBSD: worm.c,v 1.30 2011/05/23 23:03:38 joerg Exp $	*/
+/*	$NetBSD: worm.c,v 1.28 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)worm.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: worm.c,v 1.30 2011/05/23 23:03:38 joerg Exp $");
+__RCSID("$NetBSD: worm.c,v 1.28 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
@@ -63,39 +63,39 @@ __RCSID("$NetBSD: worm.c,v 1.30 2011/05/23 23:03:38 joerg Exp $");
 #define RUNLEN 8
 #define CNTRL(p) (p-'A'+1)
 
+WINDOW *tv;
+WINDOW *stw;
 struct body {
 	int x;
 	int y;
 	struct body *prev;
 	struct body *next;
-};
+} *head, *tail, goody;
+int growing = 0;
+int running = 0;
+int slow = 0;
+int score = 0;
+int start_len = LENGTH;
+int visible_len;
+int lastch;
+char outbuf[BUFSIZ];
 
-static WINDOW *tv;
-static WINDOW *stw;
-static struct body *head, *tail, goody;
-static int growing = 0;
-static int running = 0;
-static int slow = 0;
-static int score = 0;
-static int start_len = LENGTH;
-static int visible_len;
-static int lastch;
-static char outbuf[BUFSIZ];
-
+void	crash(void) __dead;
+void	display(const struct body *, char);
 int	main(int, char **);
-static void crash(void) __dead;
-static void display(const struct body *, char);
-static void leave(int) __dead;
-static void life(void);
-static void newpos(struct body *);
-static void process(int);
-static void prize(void);
-static int rnd(int);
-static void setup(void);
-static void wake(int);
+void	leave(int) __dead;
+void	life(void);
+void	newpos(struct body *);
+void	process(int);
+void	prize(void);
+int	rnd(int);
+void	setup(void);
+void	wake(int);
 
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 
 	/* Revoke setgid privileges */
@@ -155,8 +155,8 @@ main(int argc, char **argv)
 	}
 }
 
-static void
-life(void)
+void
+life()
 {
 	struct body *bp, *np;
 	int i, j = 1;
@@ -190,15 +190,18 @@ life(void)
 	visible_len = start_len + 1;
 }
 
-static void
-display(const struct body *pos, char chr)
+void
+display(pos, chr)
+	const struct body *pos;
+	char chr;
 {
 	wmove(tv, pos->y, pos->x);
 	waddch(tv, chr);
 }
 
-static void
-leave(int dummy)
+void
+leave(dummy)
+	int dummy;
 {
 	endwin();
 
@@ -209,22 +212,25 @@ leave(int dummy)
 	exit(0);
 }
 
-static void
-wake(int dummy)
+void
+wake(dummy)
+	int dummy __unused;
 {
 	signal(SIGALRM, wake);
 	fflush(stdout);
 	process(lastch);
 }
 
-static int
-rnd(int range)
+int
+rnd(range)
+	int range;
 {
 	return abs((rand()>>5)+(rand()>>5)) % range;
 }
 
-static void
-newpos(struct body *bp)
+void
+newpos(bp)
+	struct body * bp;
 {
 	if (visible_len == (LINES-3) * (COLS-3) - 1) {
 		endwin();
@@ -240,8 +246,8 @@ newpos(struct body *bp)
 	} while(winch(tv) != ' ');
 }
 
-static void
-prize(void)
+void
+prize()
 {
 	int value;
 
@@ -251,8 +257,9 @@ prize(void)
 	wrefresh(tv);
 }
 
-static void
-process(int ch)
+void
+process(ch)
+	int ch;
 {
 	int x,y;
 	struct body *nh;
@@ -345,14 +352,14 @@ process(int ch)
 		alarm(1);
 }
 
-static void
-crash(void)
+void
+crash()
 {
 	leave(0);
 }
 
-static void
-setup(void)
+void
+setup()
 {
 	clear();
 	refresh();

@@ -1,4 +1,4 @@
-/*	$NetBSD: extra.c,v 1.7 2009/08/12 05:17:57 dholland Exp $	*/
+/*	$NetBSD: extra.c,v 1.6 2005/07/01 01:12:39 jmc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)extra.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: extra.c,v 1.7 2009/08/12 05:17:57 dholland Exp $");
+__RCSID("$NetBSD: extra.c,v 1.6 2005/07/01 01:12:39 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -44,8 +44,6 @@ __RCSID("$NetBSD: extra.c,v 1.7 2009/08/12 05:17:57 dholland Exp $");
 #ifdef DEBUG
 FILE   *trace;
 #endif
-
-static int eval(void);
 
 /*
  * dble()
@@ -233,7 +231,7 @@ trapped(int n, int inc)
 	return (ct / 5);
 }
 
-static int
+int
 eval(void)
 {
 	int     i, j;

@@ -1,4 +1,4 @@
-/*	$NetBSD: interrupt.c,v 1.11 2011/02/20 07:56:16 matt Exp $	*/
+/*	$NetBSD: interrupt.c,v 1.6 2008/04/28 20:23:28 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -29,40 +29,56 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define __INTR_PRIVATE
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.11 2011/02/20 07:56:16 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.6 2008/04/28 20:23:28 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
 #include <sys/intr.h>
-#include <sys/lwp.h>
 #include <sys/cpu.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/sysconf.h>
 
 void
-cpu_intr(int ppl, vaddr_t pc, uint32_t status)
+cpu_intr(status, cause, pc, ipending)
+	u_int32_t status;
+	u_int32_t cause;
+	u_int32_t pc;
+	u_int32_t ipending;
 {
-	uint32_t ipending;
-	int ipl;
+	struct cpu_info *ci;
 
-	curcpu()->ci_data.cpu_nintr++;
+	ci = curcpu();
+	uvmexp.intrs++;
 
-	while (ppl < (ipl = splintr(&ipending))) {
-		/* device interrupts */
-		(*platform.iointr)(status, pc, ipending);
+	/* device interrupts */
+	ci->ci_idepth++;
+	(*platform.iointr)(status, cause, pc, ipending);
+	ci->ci_idepth--;
+
+#ifdef __HAVE_FAST_SOFTINTS
+	/* software simulated interrupt */
+	if ((ipending & MIPS_SOFT_INT_MASK_1)
+		    || (ssir && (status & MIPS_SOFT_INT_MASK_1))) {
+	    _clrsoftintr(MIPS_SOFT_INT_MASK_1);
+	    softintr_dispatch();
 	}
-
+#endif
 }
 
-const struct ipl_sr_map mipsco_ipl_sr_map = {
-    .sr_bits = {
+static const int ipl_sr_bits[] = {
 	[IPL_NONE] = 0,
 	[IPL_SOFTCLOCK] = MIPS_INT_MASK_SPL_SOFT0,
 	[IPL_SOFTNET] = MIPS_INT_MASK_SPL_SOFT1,
 	[IPL_VM] = MIPS_INT_MASK_SPL2,
 	[IPL_SCHED] = MIPS_INT_MASK_SPL2,
-	[IPL_HIGH] = MIPS_INT_MASK,
-    },
 };
+
+ipl_cookie_t
+makeiplcookie(ipl_t ipl)
+{
+
+	return (ipl_cookie_t){._sr = ipl_sr_bits[ipl]};
+}

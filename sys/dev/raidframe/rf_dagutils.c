@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_dagutils.c,v 1.53 2011/05/11 18:13:12 mrg Exp $	*/
+/*	$NetBSD: rf_dagutils.c,v 1.51 2007/03/04 06:02:36 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_dagutils.c,v 1.53 2011/05/11 18:13:12 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_dagutils.c,v 1.51 2007/03/04 06:02:36 christos Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -254,7 +254,7 @@ rf_ConfigureDAGs(RF_ShutdownList_t **listp)
 }
 
 RF_DagHeader_t *
-rf_AllocDAGHeader(void)
+rf_AllocDAGHeader()
 {
 	RF_DagHeader_t *dh;
 
@@ -270,7 +270,7 @@ rf_FreeDAGHeader(RF_DagHeader_t * dh)
 }
 
 RF_DagNode_t *
-rf_AllocDAGNode(void)
+rf_AllocDAGNode()
 {
 	RF_DagNode_t *node;
 
@@ -292,7 +292,7 @@ rf_FreeDAGNode(RF_DagNode_t *node)
 }
 
 RF_DagList_t *
-rf_AllocDAGList(void)
+rf_AllocDAGList()
 {
 	RF_DagList_t *dagList;
 
@@ -309,7 +309,7 @@ rf_FreeDAGList(RF_DagList_t *dagList)
 }
 
 void *
-rf_AllocDAGPCache(void)
+rf_AllocDAGPCache()
 {
 	void *p;
 	p = pool_get(&rf_pools.dagpcache, PR_WAITOK);
@@ -325,7 +325,7 @@ rf_FreeDAGPCache(void *p)
 }
 
 RF_FuncList_t *
-rf_AllocFuncList(void)
+rf_AllocFuncList()
 {
 	RF_FuncList_t *funcList;
 
@@ -359,7 +359,7 @@ rf_AllocStripeBuffer(RF_Raid_t *raidPtr, RF_DagHeader_t *dag_h,
 					raidPtr->logBytesPerSector),
 		     M_RAIDFRAME, M_NOWAIT);
 	if (!p) {
-		rf_lock_mutex2(raidPtr->mutex);
+		RF_LOCK_MUTEX(raidPtr->mutex);
 		if (raidPtr->stripebuf_count > 0) {
 			vple = raidPtr->stripebuf;
 			raidPtr->stripebuf = vple->next;
@@ -371,7 +371,7 @@ rf_AllocStripeBuffer(RF_Raid_t *raidPtr, RF_DagHeader_t *dag_h,
 			printf("raid%d: Help!  Out of emergency full-stripe buffers!\n", raidPtr->raidid);
 #endif
 		}
-		rf_unlock_mutex2(raidPtr->mutex);
+		RF_UNLOCK_MUTEX(raidPtr->mutex);
 		if (!p) {
 			/* We didn't get a buffer... not much we can do other than wait,
 			   and hope that someone frees up memory for us.. */
@@ -393,7 +393,7 @@ rf_AllocStripeBuffer(RF_Raid_t *raidPtr, RF_DagHeader_t *dag_h,
 void
 rf_FreeStripeBuffer(RF_Raid_t *raidPtr, RF_VoidPointerListElem_t *vple)
 {
-	rf_lock_mutex2(raidPtr->mutex);
+	RF_LOCK_MUTEX(raidPtr->mutex);
 	if (raidPtr->stripebuf_count < raidPtr->numEmergencyStripeBuffers) {
 		/* just tack it in */
 		vple->next = raidPtr->stripebuf;
@@ -403,7 +403,7 @@ rf_FreeStripeBuffer(RF_Raid_t *raidPtr, RF_VoidPointerListElem_t *vple)
 		free(vple->p, M_RAIDFRAME);
 		rf_FreeVPListElem(vple);
 	}
-	rf_unlock_mutex2(raidPtr->mutex);
+	RF_UNLOCK_MUTEX(raidPtr->mutex);
 }
 
 /* allocates a buffer big enough to hold the data described by the
@@ -438,7 +438,7 @@ rf_AllocIOBuffer(RF_Raid_t *raidPtr, int size)
 				 raidPtr->logBytesPerSector,
 				 M_RAIDFRAME, M_NOWAIT);
 	if (!p) {
-		rf_lock_mutex2(raidPtr->mutex);
+		RF_LOCK_MUTEX(raidPtr->mutex);
 		if (raidPtr->iobuf_count > 0) {
 			vple = raidPtr->iobuf;
 			raidPtr->iobuf = vple->next;
@@ -450,7 +450,7 @@ rf_AllocIOBuffer(RF_Raid_t *raidPtr, int size)
 			printf("raid%d: Help!  Out of emergency buffers!\n", raidPtr->raidid);
 #endif
 		}
-		rf_unlock_mutex2(raidPtr->mutex);
+		RF_UNLOCK_MUTEX(raidPtr->mutex);
 		if (!p) {
 			/* We didn't get a buffer... not much we can do other than wait,
 			   and hope that someone frees up memory for us.. */
@@ -466,7 +466,7 @@ rf_AllocIOBuffer(RF_Raid_t *raidPtr, int size)
 void
 rf_FreeIOBuffer(RF_Raid_t *raidPtr, RF_VoidPointerListElem_t *vple)
 {
-	rf_lock_mutex2(raidPtr->mutex);
+	RF_LOCK_MUTEX(raidPtr->mutex);
 	if (raidPtr->iobuf_count < raidPtr->numEmergencyBuffers) {
 		/* just tack it in */
 		vple->next = raidPtr->iobuf;
@@ -476,7 +476,7 @@ rf_FreeIOBuffer(RF_Raid_t *raidPtr, RF_VoidPointerListElem_t *vple)
 		free(vple->p, M_RAIDFRAME);
 		rf_FreeVPListElem(vple);
 	}
-	rf_unlock_mutex2(raidPtr->mutex);
+	RF_UNLOCK_MUTEX(raidPtr->mutex);
 }
 
 

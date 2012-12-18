@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.5 2011/06/30 20:09:16 wiz Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.4 2007/12/20 23:02:38 dsl Exp $	*/
 
 /*
  * Copyright (c) 1995-1997 Mark Brinicombe.
@@ -35,14 +35,14 @@
  *
  * sys_machdep.c
  *
- * Machine dependent syscalls
+ * Machine dependant syscalls
  *
  * Created      : 10/01/96
  */
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.5 2011/06/30 20:09:16 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.4 2007/12/20 23:02:38 dsl Exp $");
 
 #include <sys/systm.h>
 #include <sys/mount.h>

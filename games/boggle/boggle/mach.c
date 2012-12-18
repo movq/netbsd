@@ -1,4 +1,4 @@
-/*	$NetBSD: mach.c,v 1.21 2011/08/31 16:24:55 plunky Exp $	*/
+/*	$NetBSD: mach.c,v 1.18 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)mach.c	8.1 (Berkeley) 6/11/93";
 #else
-__RCSID("$NetBSD: mach.c,v 1.21 2011/08/31 16:24:55 plunky Exp $");
+__RCSID("$NetBSD: mach.c,v 1.18 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,8 +64,7 @@ __RCSID("$NetBSD: mach.c,v 1.21 2011/08/31 16:24:55 plunky Exp $");
 static int ccol, crow, maxw;
 static int colstarts[MAXCOLS], ncolstarts;
 static int lastline;
-static int ncols;
-int nlines;
+int ncols, nlines;
 
 extern const char *pword[], *mword[];
 extern int ngames, nmwords, npwords, tnmwords, tnpwords;
@@ -82,10 +81,6 @@ static void	tty_cleanup(void);
 static int	tty_setup(void);
 static void	tty_showboard(const char *);
 static void	winch_catcher(int);
-static void	getword(char *);
-static void	starttime(void);
-static void	stoptime(void);
-
 
 /*
  * Do system dependent initialization
@@ -167,7 +162,7 @@ prwidth(const char *const base[], int indx)
  * - doesn't accept words longer than MAXWORDLEN or containing caps
  */
 char *
-get_line(char *q)
+getline(char *q)
 {
 	int ch, done;
 	char *p;
@@ -257,7 +252,7 @@ get_line(char *q)
 	}
 	*p = '\0';
 	if (ch == EOF)
-		return (NULL);
+		return((char *) NULL);
 	return(q);
 }
 
@@ -286,7 +281,7 @@ static int gone;
 /*
  * Stop the game timer
  */
-static void
+void
 stoptime(void)
 {
 	time_t t;
@@ -298,7 +293,7 @@ stoptime(void)
 /*
  * Restart the game timer
  */
-static void
+void
 starttime(void)
 {
 	time_t t;
@@ -479,10 +474,16 @@ showstr(const char *str, int delaysecs)
 	refresh();
 }
 
+void
+putstr(const char *s)
+{
+	addstr(s);
+}
+
 /*
  * Get a valid word and put it in the buffer
  */
-static void
+void
 getword(char *q)
 {
 	int ch, col, done, i, row;

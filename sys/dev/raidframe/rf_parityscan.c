@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_parityscan.c,v 1.34 2011/05/01 01:09:05 mrg Exp $	*/
+/*	$NetBSD: rf_parityscan.c,v 1.32.64.1 2009/12/10 22:59:17 snj Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
  ****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_parityscan.c,v 1.34 2011/05/01 01:09:05 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_parityscan.c,v 1.32.64.1 2009/12/10 22:59:17 snj Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -262,17 +262,17 @@ rf_VerifyParityBasic(RF_Raid_t *raidPtr, RF_RaidAddr_t raidAddr,
 		rf_PrintDAGList(rd_dag_h);
 	}
 #endif
-	RF_LOCK_MCPAIR(mcpair);
+	RF_LOCK_MUTEX(mcpair->mutex);
 	mcpair->flag = 0;
-	RF_UNLOCK_MCPAIR(mcpair);
+	RF_UNLOCK_MUTEX(mcpair->mutex);
 
 	rf_DispatchDAG(rd_dag_h, (void (*) (void *)) rf_MCPairWakeupFunc,
 	    (void *) mcpair);
 
-	RF_LOCK_MCPAIR(mcpair);
+	RF_LOCK_MUTEX(mcpair->mutex);
 	while (!mcpair->flag)
-		RF_WAIT_MCPAIR(mcpair);
-	RF_UNLOCK_MCPAIR(mcpair);
+		RF_WAIT_COND(mcpair->cond, mcpair->mutex);
+	RF_UNLOCK_MUTEX(mcpair->mutex);
 	if (rd_dag_h->status != rf_enable) {
 		RF_ERRORMSG("Unable to verify parity:  can't read the stripe\n");
 		retcode = RF_PARITY_COULD_NOT_VERIFY;
@@ -308,17 +308,17 @@ rf_VerifyParityBasic(RF_Raid_t *raidPtr, RF_RaidAddr_t raidAddr,
 			rf_PrintDAGList(wr_dag_h);
 		}
 #endif
-		RF_LOCK_MCPAIR(mcpair);
+		RF_LOCK_MUTEX(mcpair->mutex);
 		mcpair->flag = 0;
-		RF_UNLOCK_MCPAIR(mcpair);
+		RF_UNLOCK_MUTEX(mcpair->mutex);
 
 		rf_DispatchDAG(wr_dag_h, (void (*) (void *)) rf_MCPairWakeupFunc,
 		    (void *) mcpair);
 
-		RF_LOCK_MCPAIR(mcpair);
+		RF_LOCK_MUTEX(mcpair->mutex);
 		while (!mcpair->flag)
-			RF_WAIT_MCPAIR(mcpair);
-		RF_UNLOCK_MCPAIR(mcpair);
+			RF_WAIT_COND(mcpair->cond, mcpair->mutex);
+		RF_UNLOCK_MUTEX(mcpair->mutex);
 		if (wr_dag_h->status != rf_enable) {
 			RF_ERRORMSG("Unable to correct parity in VerifyParity:  can't write the stripe\n");
 			retcode = RF_PARITY_COULD_NOT_CORRECT;

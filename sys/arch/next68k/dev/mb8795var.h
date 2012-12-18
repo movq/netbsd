@@ -1,4 +1,4 @@
-/*	$NetBSD: mb8795var.h,v 1.14 2012/10/27 17:18:05 chs Exp $	*/
+/*	$NetBSD: mb8795var.h,v 1.10 2007/03/04 06:00:27 christos Exp $	*/
 /*
  * Copyright (c) 1998 Darrin B. Jewell
  * All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Darrin B. Jewell
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -24,7 +29,10 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "rnd.h"                /* is random device-driver configured? */
+#if NRND > 0
 #include <sys/rnd.h>
+#endif  /* NRND */
 
 #define MB8795_NRXBUFS (32)
 
@@ -49,7 +57,7 @@ struct mb8795_glue {
 };
 
 struct mb8795_softc {
-	device_t		sc_dev;		/* base device glue */
+	struct device		sc_dev;		/* base device glue */
 	struct ethercom		sc_ethercom;	/* Ethernet common part */
 
 	struct	mb8795_glue 	*sc_glue;	/* glue to MD code */
@@ -68,7 +76,9 @@ struct mb8795_softc {
 
 	struct ifmedia sc_media;
 
-	krndsource_t     rnd_source;
+#if NRND > 0
+	rndsource_element_t     rnd_source;
+#endif /* NRND */
 
 };
 

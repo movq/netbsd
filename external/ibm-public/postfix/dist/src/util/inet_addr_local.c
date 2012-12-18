@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_addr_local.c,v 1.3 2010/06/17 18:18:16 tron Exp $	*/
+/*	$NetBSD: inet_addr_local.c,v 1.1.1.1.2.4 2011/01/07 01:24:18 riz Exp $	*/
 
 /*++
 /* NAME

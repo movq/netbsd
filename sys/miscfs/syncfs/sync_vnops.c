@@ -1,4 +1,4 @@
-/*	$NetBSD: sync_vnops.c,v 1.29 2011/06/12 03:35:58 rmind Exp $	*/
+/*	$NetBSD: sync_vnops.c,v 1.25.10.1 2009/02/24 04:13:35 snj Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sync_vnops.c,v 1.29 2011/06/12 03:35:58 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sync_vnops.c,v 1.25.10.1 2009/02/24 04:13:35 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -107,17 +107,17 @@ sync_delay(struct mount *mp)
  * Create a new filesystem syncer vnode for the specified mount point.
  */
 int
-vfs_allocate_syncvnode(struct mount *mp)
+vfs_allocate_syncvnode(mp)
+	struct mount *mp;
 {
 	struct vnode *vp;
 	static int start, incr, next;
 	int error, vdelay;
 
 	/* Allocate a new vnode */
-	error = getnewvnode(VT_VFS, mp, sync_vnodeop_p, NULL, &vp);
-	if (error) {
-		return error;
-	}
+	if ((error = getnewvnode(VT_VFS, mp, sync_vnodeop_p, &vp)) != 0)
+		return (error);
+
 	vp->v_writecount = 1;
 	vp->v_type = VNON;
 
@@ -138,10 +138,10 @@ vfs_allocate_syncvnode(struct mount *mp)
 		}
 		next = start;
 	}
-	mutex_enter(vp->v_interlock);
+	mutex_enter(&vp->v_interlock);
 	vdelay = sync_delay(mp);
 	vn_syncer_add_to_worklist(vp, vdelay > 0 ? next % vdelay : 0);
-	mutex_exit(vp->v_interlock);
+	mutex_exit(&vp->v_interlock);
 	mp->mnt_syncer = vp;
 	return (0);
 }
@@ -150,16 +150,17 @@ vfs_allocate_syncvnode(struct mount *mp)
  * Destroy the filesystem syncer vnode for the specified mount point.
  */
 void
-vfs_deallocate_syncvnode(struct mount *mp)
+vfs_deallocate_syncvnode(mp)
+	struct mount *mp;
 {
 	struct vnode *vp;
 
 	vp = mp->mnt_syncer;
 	mp->mnt_syncer = NULL;
-	mutex_enter(vp->v_interlock);
+	mutex_enter(&vp->v_interlock);
 	vn_syncer_remove_from_worklist(vp);
 	vp->v_writecount = 0;
-	mutex_exit(vp->v_interlock);
+	mutex_exit(&vp->v_interlock);
 	vgone(vp);
 }
 
@@ -167,7 +168,8 @@ vfs_deallocate_syncvnode(struct mount *mp)
  * Do a lazy sync of the filesystem.
  */
 int
-sync_fsync(void *v)
+sync_fsync(v)
+	void *v;
 {
 	struct vop_fsync_args /* {
 		struct vnode *a_vp;
@@ -188,9 +190,9 @@ sync_fsync(void *v)
 	/*
 	 * Move ourselves to the back of the sync list.
 	 */
-	mutex_enter(syncvp->v_interlock);
+	mutex_enter(&syncvp->v_interlock);
 	vn_syncer_add_to_worklist(syncvp, sync_delay(mp));
-	mutex_exit(syncvp->v_interlock);
+	mutex_exit(&syncvp->v_interlock);
 
 	/*
 	 * Walk the list of vnodes pushing all that are dirty and
@@ -207,7 +209,8 @@ sync_fsync(void *v)
  * The syncer vnode is no longer needed and is being decommissioned.
  */
 int
-sync_inactive(void *v)
+sync_inactive(v)
+	void *v;
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
@@ -215,7 +218,7 @@ sync_inactive(void *v)
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	return (0);
 }
 
@@ -230,7 +233,8 @@ sync_reclaim(void *v)
  * Print out a syncer vnode.
  */
 int
-sync_print(void *v)
+sync_print(v)
+	void *v;
 {
 
 	printf("syncer vnode\n");

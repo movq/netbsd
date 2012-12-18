@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.87 2012/10/27 17:17:28 chs Exp $ */
+/*	$NetBSD: fd.c,v 1.79 2008/06/11 12:59:10 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.87 2012/10/27 17:17:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.79 2008/06/11 12:59:10 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,6 +50,8 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.87 2012/10/27 17:17:28 chs Exp $");
 #include <sys/dkbad.h>
 #include <sys/proc.h>
 #include <sys/conf.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 #include <amiga/amiga/device.h>
@@ -144,7 +146,7 @@ struct fdtype {
  * floppy disk device data
  */
 struct fd_softc {
-	device_t sc_dev;	/* generic device info; must come first */
+	struct device sc_dv;	/* generic device info; must come first */
 	struct disk dkdev;	/* generic disk info */
 	struct bufq_state *bufq;/* queue pending I/O operations */
 	struct buf curbuf;	/* state of current I/O operation */
@@ -189,11 +191,11 @@ struct fdcargs {
 	int unit;
 };
 
-int	fdcmatch(device_t, cfdata_t, void *);
-void	fdcattach(device_t, device_t, void *);
+int	fdcmatch(struct device *, struct cfdata *, void *);
+void	fdcattach(struct device *, struct device *, void *);
 int	fdcprint(void *, const char *);
-int	fdmatch(device_t, cfdata_t, void *);
-void	fdattach(device_t, device_t, void *);
+int	fdmatch(struct device *, struct cfdata *, void *);
+void	fdattach(struct device *, struct device *, void *);
 
 void	fdintr(int);
 void	fdidxintr(void);
@@ -239,9 +241,9 @@ struct fdtype fdtype[] = {
 	{ 0x55555555, 40, 11, 9, 7358, 6815, 414, { 80, 161 }, "5.25dd" },
 	{ 0xAAAAAAAA, 80, 22, 18, 14716, 13630, 828, { 80, 161 }, "3.5hd" }
 };
-int nfdtype = __arraycount(fdtype);
+int nfdtype = sizeof(fdtype) / sizeof(*fdtype);
 
-CFATTACH_DECL_NEW(fd, sizeof(struct fd_softc),
+CFATTACH_DECL(fd, sizeof(struct fd_softc),
     fdmatch, fdattach, NULL, NULL);
 
 extern struct cfdriver fd_cd;
@@ -264,7 +266,7 @@ const struct cdevsw fd_cdevsw = {
 
 struct dkdriver fddkdriver = { fdstrategy };
 
-CFATTACH_DECL_NEW(fdc, 0,
+CFATTACH_DECL(fdc, sizeof(struct device),
     fdcmatch, fdcattach, NULL, NULL);
 
 /*
@@ -325,12 +327,12 @@ CFATTACH_DECL_NEW(fdc, 0,
 
 
 int
-fdcmatch(device_t parent, cfdata_t cf, void *aux)
+fdcmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	static int fdc_matched = 0;
 
 	/* Allow only once instance. */
-	if (matchname("fdc", aux) == 0 || fdc_matched)
+	if (matchname("fdc", auxp) == 0 || fdc_matched)
 		return(0);
 	if ((fdc_dmap = alloc_chipmem(DMABUFSZ)) == NULL) {
 		printf("fdc: unable to allocate DMA buffer\n");
@@ -342,7 +344,7 @@ fdcmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-fdcattach(device_t parent, device_t self, void *aux)
+fdcattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	struct fdcargs args;
 
@@ -352,20 +354,20 @@ fdcattach(device_t parent, device_t self, void *aux)
 	args.type = fdcgetfdtype(args.unit);
 
 	fdc_side = -1;
-	config_found(self, &args, fdcprint);
+	config_found(dp, &args, fdcprint);
 	for (args.unit++; args.unit < FDMAXUNITS; args.unit++) {
 		if ((args.type = fdcgetfdtype(args.unit)) == NULL)
 			continue;
-		config_found(self, &args, fdcprint);
+		config_found(dp, &args, fdcprint);
 	}
 }
 
 int
-fdcprint(void *aux, const char *pnp)
+fdcprint(void *auxp, const char *pnp)
 {
 	struct fdcargs *fcp;
 
-	fcp = aux;
+	fcp = auxp;
 	if (pnp)
 		aprint_normal("fd%d at %s unit %d:", fcp->unit, pnp,
 			fcp->type->driveid);
@@ -374,28 +376,27 @@ fdcprint(void *aux, const char *pnp)
 
 /*ARGSUSED*/
 int
-fdmatch(device_t parent, cfdata_t cf, void *aux)
+fdmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct fdcargs *fdap;
 
-	fdap = aux;
-	if (cf->cf_loc[FDCCF_UNIT] == fdap->unit ||
-	    cf->cf_loc[FDCCF_UNIT] == FDCCF_UNIT_DEFAULT)
+	fdap = auxp;
+	if (cfp->cf_loc[FDCCF_UNIT] == fdap->unit ||
+	    cfp->cf_loc[FDCCF_UNIT] == FDCCF_UNIT_DEFAULT)
 		return(1);
 
 	return(0);
 }
 
 void
-fdattach(device_t parent, device_t self, void *aux)
+fdattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	struct fdcargs *ap;
 	struct fd_softc *sc;
 	int i;
 
-	ap = aux;
-	sc = device_private(self);
-	sc->sc_dev = self;
+	ap = auxp;
+	sc = device_private(dp);
 
 	bufq_alloc(&sc->bufq, "disksort", BUFQ_SORT_CYLINDER);
 	callout_init(&sc->calibrate_ch, 0);
@@ -416,7 +417,7 @@ fdattach(device_t parent, device_t self, void *aux)
 	/*
 	 * Initialize and attach the disk structure.
 	 */
-	disk_init(&sc->dkdev, device_xname(sc->sc_dev), &fddkdriver);
+	disk_init(&sc->dkdev, sc->sc_dv.dv_xname, &fddkdriver);
 	disk_attach(&sc->dkdev);
 
 	/*
@@ -679,7 +680,7 @@ fdstrategy(struct buf *bp)
 	 * queue the buf and kick the low level code
 	 */
 	s = splbio();
-	bufq_put(sc->bufq, bp);
+	BUFQ_PUT(sc->bufq, bp);
 	fdstart(sc);
 	splx(s);
 	return;
@@ -727,7 +728,7 @@ fdgetdefaultlabel(struct fd_softc *sc, struct disklabel *lp, int part)
 /* (variable part) XXX ick */
 {
 
-	memset(lp, 0, sizeof(struct disklabel));
+	bzero(lp, sizeof(struct disklabel));
 	lp->d_secsize = FDSECSIZE;
 	lp->d_ntracks = FDNHEADS;
 	lp->d_ncylinders = sc->type->ncylinders;
@@ -771,8 +772,8 @@ fdgetdisklabel(struct fd_softc *sc, dev_t dev)
 	part = FDPART(dev);
 	lp = sc->dkdev.dk_label;
 	clp =  sc->dkdev.dk_cpulabel;
-	memset(lp, 0, sizeof(struct disklabel));
-	memset(clp, 0, sizeof(struct cpu_disklabel));
+	bzero(lp, sizeof(struct disklabel));
+	bzero(clp, sizeof(struct cpu_disklabel));
 
 	lp->d_secsize = FDSECSIZE;
 	lp->d_ntracks = FDNHEADS;
@@ -804,7 +805,7 @@ fdgetdisklabel(struct fd_softc *sc, dev_t dev)
 		error = EINVAL;
 		goto nolabel;
 	}
-	memcpy(lp, dlp, sizeof(struct disklabel));
+	bcopy(dlp, lp, sizeof(struct disklabel));
 	if (lp->d_trkseek > FDSTEPDELAY)
 		sc->stepdelay = lp->d_trkseek;
 	brelse(bp, 0);
@@ -872,7 +873,7 @@ fdsetdisklabel(struct fd_softc *sc, struct disklabel *lp)
 	    (pp->p_frag * pp->p_fsize % PAGE_SIZE))
 		return(EINVAL);
 done:
-	memcpy(clp, lp, sizeof(struct disklabel));
+	bcopy(lp, clp, sizeof(struct disklabel));
 	return(0);
 }
 
@@ -908,7 +909,7 @@ fdputdisklabel(struct fd_softc *sc, dev_t dev)
 	 * copy disklabel to buf and write it out synchronous
 	 */
 	dlp = (struct disklabel *)((char*)bp->b_data + LABELOFFSET);
-	memcpy(dlp, lp, sizeof(struct disklabel));
+	bcopy(lp, dlp, sizeof(struct disklabel));
 	bp->b_blkno = 0;
 	bp->b_cylinder = 0;
 	bp->b_flags &= ~(B_READ);
@@ -1179,7 +1180,7 @@ fdstart(struct fd_softc *sc)
 	 * get next buf if there.
 	 */
 	dp = &sc->curbuf;
-	if ((bp = bufq_peek(sc->bufq)) == NULL) {
+	if ((bp = BUFQ_PEEK(sc->bufq)) == NULL) {
 #ifdef FDDEBUG
 		printf("  nothing to do\n");
 #endif
@@ -1210,16 +1211,16 @@ printf("fdstart: disk changed\n");
 #endif
 		sc->flags &= ~FDF_HAVELABEL;
 		for (;;) {
-			bp = bufq_get(sc->bufq);
+			bp = BUFQ_GET(sc->bufq);
 			bp->b_error = EIO;
-			if (bufq_peek(sc->bufq) == NULL)
+			if (BUFQ_PEEK(sc->bufq) == NULL)
 				break;
 			biodone(bp);
 		}
 		/*
 		 * do fddone() on last buf to allow other units to start.
 		 */
-		bufq_put(sc->bufq, bp);
+		BUFQ_PUT(sc->bufq, bp);
 		fddone(sc);
 		return;
 	}
@@ -1294,7 +1295,7 @@ fdcont(struct fd_softc *sc)
 	int trk, write;
 
 	dp = &sc->curbuf;
-	bp = bufq_peek(sc->bufq);
+	bp = BUFQ_PEEK(sc->bufq);
 	dp->b_data = (char*)dp->b_data + (dp->b_bcount - bp->b_resid);
 	dp->b_blkno += (dp->b_bcount - bp->b_resid) / FDSECSIZE;
 	dp->b_bcount = bp->b_resid;
@@ -1468,8 +1469,8 @@ fddmadone(struct fd_softc *sc, int timeo)
 		 */
 		sc->flags &= ~FDF_DIRTY;
 		if (timeo)
-			aprint_error_dev(sc->sc_dev,
-			    "write of track cache timed out.\n");
+			printf("%s: write of track cache timed out.\n",
+			    sc->sc_dv.dv_xname);
 		if (sc->flags & FDF_JUSTFLUSH) {
 			sc->flags &= ~FDF_JUSTFLUSH;
 			/*
@@ -1497,8 +1498,8 @@ fddmadone(struct fd_softc *sc, int timeo)
 	else {
 #ifdef FDDEBUG
 		if (timeo)
-			aprint_debug_dev(sc->sc_dev,
-			    "fddmadone: cache load timed out.\n");
+			printf("%s: fddmadone: cache load timed out.\n",
+			    sc->sc_dv.dv_xname);
 #endif
 		if (sc->retried >= sc->retries) {
 			sc->retried = 0;
@@ -1534,7 +1535,7 @@ fddone(struct fd_softc *sc)
 		goto nobuf;
 
 	dp = &sc->curbuf;
-	if ((bp = bufq_peek(sc->bufq)) == NULL)
+	if ((bp = BUFQ_PEEK(sc->bufq)) == NULL)
 		panic ("fddone");
 	/*
 	 * check for an error that may have occurred
@@ -1554,9 +1555,9 @@ fddone(struct fd_softc *sc)
 		sz *= FDSECSIZE;
 		sz = min(dp->b_bcount, sz);
 		if (bp->b_flags & B_READ)
-			memcpy(dp->b_data, data, sz);
+			bcopy(data, dp->b_data, sz);
 		else {
-			memcpy(data, dp->b_data, sz);
+			bcopy(dp->b_data, data, sz);
 			sc->flags |= FDF_DIRTY;
 		}
 		bp->b_resid = dp->b_bcount - sz;
@@ -1573,14 +1574,14 @@ fddone(struct fd_softc *sc)
 	/*
 	 * remove from queue.
 	 */
-	(void)bufq_get(sc->bufq);
+	(void)BUFQ_GET(sc->bufq);
 
 	disk_unbusy(&sc->dkdev, (bp->b_bcount - bp->b_resid),
 	    (bp->b_flags & B_READ));
 
 	biodone(bp);
 nobuf:
-	fdfindwork(device_unit(sc->sc_dev));
+	fdfindwork(device_unit(&sc->sc_dv));
 }
 
 void
@@ -1619,7 +1620,7 @@ fdfindwork(int unit)
 		 * and it has no buf's queued do it now
 		 */
 		if (sc->flags & FDF_MOTOROFF) {
-			if (bufq_peek(sc->bufq) == NULL)
+			if (BUFQ_PEEK(sc->bufq) == NULL)
 				fdmotoroff(sc);
 			else {
 				/*
@@ -1639,7 +1640,7 @@ fdfindwork(int unit)
 		 * if we have no start unit and the current unit has
 		 * io waiting choose this unit to start.
 		 */
-		if (ssc == NULL && bufq_peek(sc->bufq) != NULL)
+		if (ssc == NULL && BUFQ_PEEK(sc->bufq) != NULL)
 			ssc = sc;
 	}
 	if (ssc)
@@ -1790,8 +1791,8 @@ amrawtocache(struct fd_softc *sc)
 again:
 	if (doagain == 0 || (rp = srp = fdfindsync(srp, erp)) == NULL) {
 #ifdef DIAGNOSTIC
-		aprint_error_dev(sc->sc_dev, "corrupted track (%d) data.\n",
-		    sc->cachetrk);
+		printf("%s: corrupted track (%d) data.\n",
+		    sc->sc_dv.dv_xname, sc->cachetrk);
 #endif
 		return(-1);
 	}
@@ -1813,9 +1814,8 @@ again:
 		}
 		if (((info >> 16) & 0xff) != sc->cachetrk) {
 #ifdef DEBUG
-			aprint_debug_dev(sc->sc_dev,
-			    "incorrect track found: 0x%lx %d\n",
-			    info, sc->cachetrk);
+			printf("%s: incorrect track found: 0x%lx %d\n",
+			    sc->sc_dv.dv_xname, info, sc->cachetrk);
 #endif
 			goto again;
 		}
@@ -1954,9 +1954,8 @@ msrawtocache(struct fd_softc *sc)
 			 */
 			if ((rp = (u_short *)fdfindsync((u_long *)rp, (u_long *)erp)) == NULL) {
 #ifdef DIAGNOSTIC
-				aprint_normal_dev(sc->sc_dev,
-				    "corrupted track (%d) data.\n",
-				    sc->cachetrk);
+				printf("%s: corrupted track (%d) data.\n",
+				sc->sc_dv.dv_xname, sc->cachetrk);
 #endif
 				return(-1);
 			}

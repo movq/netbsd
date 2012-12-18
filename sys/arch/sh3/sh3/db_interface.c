@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.61 2011/01/28 21:06:07 uwe Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.57 2008/06/08 22:13:09 uwe Exp $	*/
 
 /*-
  * Copyright (C) 2002 UCHIYAMA Yasushi.  All rights reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.61 2011/01/28 21:06:07 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.57 2008/06/08 22:13:09 uwe Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -36,6 +36,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.61 2011/01/28 21:06:07 uwe Exp $"
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/user.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -177,7 +178,7 @@ kdb_trap(int type, int code, db_regs_t *regs)
 }
 
 void
-cpu_Debugger(void)
+cpu_Debugger()
 {
 
 	__asm volatile("trapa %0" :: "i"(_SH_TRA_BREAK));
@@ -227,21 +228,35 @@ void
 db_set_single_step(db_regs_t *regs)
 {
 
-	/*
-	 * Channel A is set up for single stepping in sh_cpu_init().
-	 * Before RTE we write tf_ubc to BBRA and tf_spc to BARA.
-	 */
+	_reg_write_2(SH_(BBRA), 0);		/* disable break */
+
 #ifdef SH3
 	if (CPU_IS_SH3) {
+		/* A: compare all address bits */
+		_reg_write_4(SH_(BAMRA), 0x00000000);
+
+		/* A: break after execution, ignore ASID */
+		_reg_write_4(SH_(BRCR), (UBC_CTL_A_AFTER_INSN
+					 | SH3_UBC_CTL_A_MASK_ASID));
+
+		/* will be written to BBRA before RTE */
 		regs->tf_ubc = UBC_CYCLE_INSN | UBC_CYCLE_READ
 			| SH3_UBC_CYCLE_CPU;
 	}
-#endif
+#endif	/* SH3 */
+
 #ifdef SH4
 	if (CPU_IS_SH4) {
+		/* A: compare all address bits, ignore ASID */
+		_reg_write_1(SH_(BAMRA), SH4_UBC_MASK_NONE | SH4_UBC_MASK_ASID);
+
+		/* A: break after execution */
+		_reg_write_2(SH_(BRCR), UBC_CTL_A_AFTER_INSN);
+
+		/* will be written to BBRA before RTE */
 		regs->tf_ubc = UBC_CYCLE_INSN | UBC_CYCLE_READ;
 	}
-#endif
+#endif	/* SH4 */
 }
 
 void
@@ -656,13 +671,14 @@ db_stackcheck_cmd(db_expr_t addr, bool have_addr, db_expr_t count,
 		  const char *modif)
 {
 	struct lwp *l;
+	struct user *u;
 	struct pcb *pcb;
 	uint32_t *t32;
 	uint8_t *t8;
 	int i, j;
 
 #define	MAX_STACK	(USPACE - PAGE_SIZE)
-#define	MAX_FRAME	(PAGE_SIZE - sizeof(struct pcb))
+#define	MAX_FRAME	(PAGE_SIZE - sizeof(struct user))
 
 	db_printf("stack max: %d byte, frame max %d byte,"
 	    " sizeof(struct trapframe) %d byte\n", MAX_STACK, MAX_FRAME,
@@ -672,7 +688,8 @@ db_stackcheck_cmd(db_expr_t addr, bool have_addr, db_expr_t count,
 		  "  nest\n");
 
 	LIST_FOREACH(l, &alllwp, l_list) {
-		pcb = lwp_getpcb(l);
+		u = l->l_addr;
+		pcb = &u->u_pcb;
 		/* stack */
 		t32 = (uint32_t *)(pcb->pcb_sf.sf_r7_bank - MAX_STACK);
 		for (i = 0; *t32++ == 0xa5a5a5a5; i++)

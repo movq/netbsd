@@ -1,4 +1,4 @@
-/*	$NetBSD: efs_vfsops.c,v 1.23 2012/03/13 18:40:36 elad Exp $	*/
+/*	$NetBSD: efs_vfsops.c,v 1.16.4.1 2009/01/06 23:34:46 snj Exp $	*/
 
 /*
  * Copyright (c) 2006 Stephen M. Rumble <rumble@ephemeral.org>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: efs_vfsops.c,v 1.23 2012/03/13 18:40:36 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: efs_vfsops.c,v 1.16.4.1 2009/01/06 23:34:46 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -34,7 +34,6 @@ __KERNEL_RCSID(0, "$NetBSD: efs_vfsops.c,v 1.23 2012/03/13 18:40:36 elad Exp $")
 #include <sys/module.h>
 
 #include <miscfs/genfs/genfs_node.h>
-#include <miscfs/genfs/genfs.h>
 
 #include <miscfs/specfs/specdev.h>
 
@@ -176,8 +175,7 @@ efs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
 	struct efs_args *args = data;
-	struct pathbuf *pb;
-	struct nameidata devnd;
+	struct nameidata devndp;
 	struct efs_mount *emp; 
 	struct vnode *devvp;
 	int err, mode;
@@ -198,19 +196,11 @@ efs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		return (EOPNOTSUPP);	/* XXX read-only */
 
 	/* look up our device's vnode. it is returned locked */
-	err = pathbuf_copyin(args->fspec, &pb);
-	if (err) {
-		return err;
-	}
-	NDINIT(&devnd, LOOKUP, FOLLOW | LOCKLEAF, pb);
-	if ((err = namei(&devnd))) {
-		pathbuf_destroy(pb);
+	NDINIT(&devndp, LOOKUP, FOLLOW | LOCKLEAF, UIO_USERSPACE, args->fspec);
+	if ((err = namei(&devndp)))
 		return (err);
-	}
 
-	devvp = devnd.ni_vp;
-	pathbuf_destroy(pb);
-
+	devvp = devndp.ni_vp;
 	if (devvp->v_type != VBLK) {
 		vput(devvp);
 		return (ENOTBLK);
@@ -223,11 +213,12 @@ efs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	 * If mount by non-root, then verify that user has necessary
 	 * permissions on the device.
 	 */
-	err = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-	    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp, KAUTH_ARG(VREAD));
-	if (err) {
-		vput(devvp);
-		return (err);
+	if (kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER, NULL)) {
+		err = VOP_ACCESS(devvp, mode, l->l_cred);
+		if (err) {
+			vput(devvp);
+			return (err);
+		}
 	}
 
 	if ((err = VOP_OPEN(devvp, mode, l->l_cred))) {
@@ -242,7 +233,7 @@ efs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		return (err);
 	}
 
-	VOP_UNLOCK(devvp);
+	VOP_UNLOCK(devvp, 0);
 
 	return (0);
 }
@@ -362,7 +353,7 @@ efs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 		if (*vpp != NULL)
 			return (0);
 
-		err = getnewvnode(VT_EFS, mp, efs_vnodeop_p, NULL, &vp);
+		err = getnewvnode(VT_EFS, mp, efs_vnodeop_p, &vp);
 		if (err)
 			return (err);
 		

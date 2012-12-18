@@ -1,4 +1,4 @@
-/*	$NetBSD: consinit.c,v 1.9 2012/10/13 17:58:53 jdc Exp $	*/
+/*	$NetBSD: consinit.c,v 1.7 2008/04/28 20:23:17 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,13 +30,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.9 2012/10/13 17:58:53 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.7 2008/04/28 20:23:17 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 
 #include <machine/explora.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include "com.h"
 #if NCOM > 0
@@ -88,7 +88,6 @@ consinit(void)
 	fb_cnattach(tag, BASE_FB2, (void *)BASE_FB);
 	tag = elb_get_bus_space_tag(BASE_PCKBC);
 	pckbc_cnattach(tag, _BUS_SPACE_UNSTRIDE(tag, BASE_PCKBC),
-	    _BUS_SPACE_UNSTRIDE(tag, BASE_PCKBC2-BASE_PCKBC), PCKBC_KBD_SLOT,
-	    0);
+	    _BUS_SPACE_UNSTRIDE(tag, BASE_PCKBC2-BASE_PCKBC), PCKBC_KBD_SLOT);
 #endif
 }

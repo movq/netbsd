@@ -1,5 +1,5 @@
 # Country Code : City Code : City : Country
-#	$NetBSD: inter.phone,v 1.27 2012/03/06 17:11:15 mbalmer Exp $
+#	$NetBSD: inter.phone,v 1.25 2007/05/31 05:57:01 wiz Exp $
 #	@(#)inter.phone	8.1 (Berkeley) 6/9/93
 20:2:Cairo:Egypt, Arab Rep. of
 20:3:Alexandria:Egypt, Arab Rep. of
@@ -91,12 +91,10 @@
 40:0:Bucharest:Romania
 41:22:Geneva:Switzerland
 41:31:Berne:Switzerland
-41:32:Jura:Switzerland
 41:43:Zurich:Switzerland
 41:44:Zurich (before March 2005):Switzerland
 41:52:Winterthur:Switzerland
 41:61:Basel:Switzerland
-41:62:Argovia:Switzerland
 423:::Liechtenstein
 43:1:Vienna:Austria
 43:316:Graz:Austria
@@ -328,7 +326,6 @@
 221:::Senegal Republic
 224:4:Conakry:Guinea, People's Rev. Rep.
 225:::Ivory Coast Rep. of
-226:::Upper Volta (Burkina Faso)
 227:::Niger Republic
 228:::Togo, Rep. of
 229:::Benin, People's Rep. of

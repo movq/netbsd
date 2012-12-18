@@ -1,4 +1,4 @@
-/*	$NetBSD: res_comp.c,v 1.12 2012/03/13 21:13:43 christos Exp $	*/
+/*	$NetBSD: res_comp.c,v 1.9.4.1 2011/01/06 21:42:48 riz Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993
@@ -75,7 +75,7 @@
 static const char sccsid[] = "@(#)res_comp.c	8.1 (Berkeley) 6/4/93";
 static const char rcsid[] = "Id: res_comp.c,v 1.5 2005/07/28 06:51:50 marka Exp";
 #else
-__RCSID("$NetBSD: res_comp.c,v 1.12 2012/03/13 21:13:43 christos Exp $");
+__RCSID("$NetBSD: res_comp.c,v 1.9.4.1 2011/01/06 21:42:48 riz Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -86,7 +86,6 @@ __RCSID("$NetBSD: res_comp.c,v 1.12 2012/03/13 21:13:43 christos Exp $");
 #include <sys/param.h>
 #include <netinet/in.h>
 #include <arpa/nameser.h>
-#include <assert.h>
 #include <ctype.h>
 #include <resolv.h>
 #include <stdio.h>
@@ -136,8 +135,8 @@ dn_comp(const char *src, u_char *dst, int dstsiz,
 	u_char **dnptrs, u_char **lastdnptr)
 {
 	return (ns_name_compress(src, dst, (size_t)dstsiz,
-				 (void *)dnptrs,
-				 (void *)lastdnptr));
+				 (const u_char **)dnptrs,
+				 (const u_char **)lastdnptr));
 }
 
 /*%
@@ -149,8 +148,7 @@ dn_skipname(const u_char *ptr, const u_char *eom) {
 
 	if (ns_name_skip(&ptr, eom) == -1)
 		return (-1);
-	_DIAGASSERT(__type_fit(int, ptr - saveptr));
-	return (int)(ptr - saveptr);
+	return (ptr - saveptr);
 }
 
 /*%

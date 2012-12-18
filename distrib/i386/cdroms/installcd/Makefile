@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2008/12/02 10:48:21 ad Exp $
+#	$NetBSD: Makefile,v 1.5 2008/05/02 23:13:06 ad Exp $
 #
 
 # Install CD, to be made after 'build.sh release'

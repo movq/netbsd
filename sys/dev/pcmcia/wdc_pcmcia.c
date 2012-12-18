@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_pcmcia.c,v 1.123 2012/07/31 15:50:37 bouyer Exp $ */
+/*	$NetBSD: wdc_pcmcia.c,v 1.112.8.2 2009/03/26 17:03:39 snj Exp $ */
 
 /*-
  * Copyright (c) 1998, 2003, 2004 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_pcmcia.c,v 1.123 2012/07/31 15:50:37 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_pcmcia.c,v 1.112.8.2 2009/03/26 17:03:39 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -89,7 +89,7 @@ static void wdc_pcmcia_attach(device_t, device_t, void *);
 static int wdc_pcmcia_detach(device_t, int);
 
 CFATTACH_DECL_NEW(wdc_pcmcia, sizeof(struct wdc_pcmcia_softc),
-    wdc_pcmcia_match, wdc_pcmcia_attach, wdc_pcmcia_detach, NULL);
+    wdc_pcmcia_match, wdc_pcmcia_attach, wdc_pcmcia_detach, wdcactivate);
 
 static const struct wdc_pcmcia_product {
 	struct pcmcia_product wdc_product;
@@ -299,7 +299,7 @@ wdc_pcmcia_attach(device_t parent, device_t self, void *aux)
 	sc->ata_channel.ch_queue = &sc->wdc_chqueue;
 	wdcp = pcmcia_product_lookup(pa, wdc_pcmcia_products,
 	    wdc_pcmcia_nproducts, sizeof(wdc_pcmcia_products[0]), NULL);
-	sc->sc_wdcdev.wdc_maxdrives = wdcp ? wdcp->wdc_ndrive : 2;
+	sc->ata_channel.ch_ndrive = wdcp ? wdcp->wdc_ndrive : 2;
 	wdc_init_shadow_regs(&sc->ata_channel);
 
 	error = wdc_pcmcia_enable(self, 1);
@@ -320,10 +320,6 @@ wdc_pcmcia_attach(device_t parent, device_t self, void *aux)
 	tsleep(wdc_pcmcia_attach, PWAIT, "wdcattach", hz / 2);
 
 	wdcattach(&sc->ata_channel);
-
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "unable to establish power handler\n");
-
 	config_pending_decr();
 	ata_delref(&sc->ata_channel);
 	sc->sc_state = WDC_PCMCIA_ATTACHED;
@@ -342,8 +338,6 @@ wdc_pcmcia_detach(device_t self, int flags)
 	if (sc->sc_state != WDC_PCMCIA_ATTACHED)
 		return (0);
 
-	pmf_device_deregister(self);
-
 	if ((error = wdcdetach(self, flags)) != 0)
 		return (error);
 
@@ -353,7 +347,7 @@ wdc_pcmcia_detach(device_t self, int flags)
 }
 
 static int
-wdc_pcmcia_enable(device_t self, int onoff)
+wdc_pcmcia_enable(struct device *self, int onoff)
 {
 	struct wdc_pcmcia_softc *sc = device_private(self);
 	int error;
@@ -404,7 +398,7 @@ wdc_pcmcia_datain_memory(struct ata_channel *chp, int flags, void *buf,
 		size_t n;
 
 		n = min(len, 1024);
-		if ((flags & ATA_DRIVE_CAP32) && (n & 3) == 0)
+		if ((flags & DRIVE_CAP32) && (n & 3) == 0)
 			bus_space_read_region_stream_4(wdr->data32iot,
 			    wdr->data32ioh, 0, buf, n >> 2);
 		else
@@ -425,7 +419,7 @@ wdc_pcmcia_dataout_memory(struct ata_channel *chp, int flags, void *buf,
 		size_t n;
 
 		n = min(len, 1024);
-		if ((flags & ATA_DRIVE_CAP32) && (n & 3) == 0)
+		if ((flags & DRIVE_CAP32) && (n & 3) == 0)
 			bus_space_write_region_stream_4(wdr->data32iot,
 			    wdr->data32ioh, 0, buf, n >> 2);
 		else

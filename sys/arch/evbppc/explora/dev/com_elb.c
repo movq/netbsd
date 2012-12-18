@@ -1,4 +1,4 @@
-/*	$NetBSD: com_elb.c,v 1.9 2011/07/01 19:02:32 dyoung Exp $	*/
+/*	$NetBSD: com_elb.c,v 1.8 2008/08/08 09:50:19 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_elb.c,v 1.9 2011/07/01 19:02:32 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_elb.c,v 1.8 2008/08/08 09:50:19 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -38,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: com_elb.c,v 1.9 2011/07/01 19:02:32 dyoung Exp $");
 #include <sys/systm.h>
 #include <sys/tty.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>

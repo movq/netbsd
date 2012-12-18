@@ -1,4 +1,4 @@
-/*	$NetBSD: mke2fs.c,v 1.16 2012/03/24 08:22:24 joerg Exp $	*/
+/*	$NetBSD: mke2fs.c,v 1.9.2.1 2011/01/16 12:38:27 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2007 Izumi Tsutsui.  All rights reserved.
@@ -64,6 +64,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *	notice, this list of conditions and the following disclaimer in the
  *	documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *	must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -92,7 +97,8 @@
  *	- Design and Implementation of the Second Extended Filesystem
  *		http://e2fsprogs.sourceforge.net/ext2intro.html
  *	- Linux Documentation "The Second Extended Filesystem"
- *		http://www.kernel.org/doc/Documentation/filesystems/ext2.txt
+ *		src/linux/Documentation/filesystems/ext2.txt
+ *		    in the Linux kernel distribution
  */
 
 #include <sys/cdefs.h>
@@ -100,7 +106,7 @@
 #if 0
 static char sccsid[] = "@(#)mkfs.c	8.11 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: mke2fs.c,v 1.16 2012/03/24 08:22:24 joerg Exp $");
+__RCSID("$NetBSD: mke2fs.c,v 1.9.2.1 2011/01/16 12:38:27 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -124,7 +130,7 @@ __RCSID("$NetBSD: mke2fs.c,v 1.16 2012/03/24 08:22:24 joerg Exp $");
 #include "extern.h"
 
 static void initcg(uint);
-static void zap_old_sblock(int);
+static void zap_old_sblock(daddr_t);
 static uint cgoverhead(uint);
 static int fsinit(const struct timeval *);
 static int makedir(struct ext2fs_direct *, int);
@@ -552,7 +558,7 @@ mke2fs(const char *fsys, int fi, int fo)
 
 	if (!Nflag) {
 		static const uint pbsize[] = { 1024, 2048, 4096, 0 };
-		uint pblock;
+		uint pblock, epblock;
 		/*
 		 * Validate the given file system size.
 		 * Verify that its last block can actually be accessed.
@@ -566,23 +572,19 @@ mke2fs(const char *fsys, int fi, int fo)
 		/*
 		 * Ensure there is nothing that looks like a filesystem
 		 * superblock anywhere other than where ours will be.
+		 * If fsck_ext2fs finds the wrong one all hell breaks loose!
 		 *
-		 * Ext2fs superblock is always placed at the same SBOFF,
-		 * so we just zap possible first backups.
+		 * XXX: needs to check how fsck_ext2fs programs even
+		 *      on other OSes determine alternate superblocks
 		 */
 		for (i = 0; pbsize[i] != 0; i++) {
- 			pblock = (pbsize[i] > BBSIZE) ? 0 : 1;	/* 1st dblk */
-			pblock += pbsize[i] * NBBY;		/* next bg */
-			/* zap first backup */
-			zap_old_sblock(pblock * pbsize[i]);
+			epblock = (uint64_t)bcount * bsize / pbsize[i];
+			for (pblock = ((pbsize[i] == SBSIZE) ? 1 : 0);
+			    pblock < epblock;
+			    pblock += pbsize[i] * NBBY /* bpg */)
+				zap_old_sblock((daddr_t)pblock *
+				    pbsize[i] / sectorsize);
 		}
-		/*
-		 * Also zap possbile FFS magic leftover to prevent
-		 * kernel vfs_mountroot() and bootloadres from mis-recognizing
-		 * this file system as FFS.
-		 */
-		zap_old_sblock(8192);	/* SBLOCK_UFS1 */
-		zap_old_sblock(65536);	/* SBLOCK_UFS2 */
 	}
 
 	if (verbosity >= 3)
@@ -626,7 +628,7 @@ mke2fs(const char *fsys, int fi, int fo)
 			continue;
 		}
 		/* Print superblock numbers */
-		len = printf("%s%*" PRIu64 ",", (col ? " " : ""), fld_width,
+		len = printf(" %*" PRIu64 "," + !col, fld_width,
 		    (uint64_t)cgbase(&sblock, cylno));
 		col += len;
 		if (col + len < max_cols)
@@ -773,9 +775,9 @@ initcg(uint cylno)
  * Zap possible lingering old superblock data
  */
 static void
-zap_old_sblock(int sblkoff)
+zap_old_sblock(daddr_t sec)
 {
-	static int cg0_data;
+	static daddr_t cg0_data;
 	uint32_t oldfs[SBSIZE / sizeof(uint32_t)];
 	static const struct fsm {
 		uint32_t offset;
@@ -797,25 +799,24 @@ zap_old_sblock(int sblkoff)
 		return;
 
 	/* don't override data before superblock */
-	if (sblkoff < SBOFF)
+	if (sec < SBOFF / sectorsize)
 		return;
 
 	if (cg0_data == 0) {
 		cg0_data =
 		    ((daddr_t)sblock.e2fs.e2fs_first_dblock + cgoverhead(0)) *
-		    sblock.e2fs_bsize;
+		    sblock.e2fs_bsize / sectorsize;
 	}
 
 	/* Ignore anything that is beyond our filesystem */
-	if (sblkoff / sectorsize >= fssize)
+	if (sec >= fssize)
 		return;
 	/* Zero anything inside our filesystem... */
-	if (sblkoff >= sblock.e2fs.e2fs_first_dblock * bsize) {
+	if (sec >= sblock.e2fs.e2fs_first_dblock * bsize / sectorsize) {
 		/* ...unless we will write that area anyway */
-		if (sblkoff >= cg0_data)
+		if (sec >= cg0_data)
 			/* assume iobuf is zero'ed here */
-			wtfs(sblkoff / sectorsize,
-			    roundup(SBSIZE, sectorsize), iobuf);
+			wtfs(sec, roundup(SBSIZE, sectorsize), iobuf);
 		return;
 	}
 
@@ -825,7 +826,7 @@ zap_old_sblock(int sblkoff)
 	 * XXX: ext2fs won't preserve data after SBOFF,
 	 *      but first_dblock could have a different value.
 	 */
-	rdfs(sblkoff / sectorsize, sizeof(oldfs), &oldfs);
+	rdfs(sec, sizeof(oldfs), &oldfs);
 	for (fsm = fs_magics;; fsm++) {
 		uint32_t v;
 		if (fsm->mask == 0)
@@ -838,7 +839,7 @@ zap_old_sblock(int sblkoff)
 
 	/* Just zap the magic number */
 	oldfs[fsm->offset] = 0;
-	wtfs(sblkoff / sectorsize, sizeof(oldfs), &oldfs);
+	wtfs(sec, sizeof(oldfs), &oldfs);
 }
 
 /*

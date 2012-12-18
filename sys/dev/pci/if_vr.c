@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vr.c,v 1.111 2012/07/22 14:33:04 matt Exp $	*/
+/*	$NetBSD: if_vr.c,v 1.95.4.2 2009/10/03 21:53:36 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -97,9 +97,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vr.c,v 1.111 2012/07/22 14:33:04 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vr.c,v 1.95.4.2 2009/10/03 21:53:36 snj Exp $");
 
-
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -111,7 +111,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_vr.c,v 1.111 2012/07/22 14:33:04 matt Exp $");
 #include <sys/socket.h>
 #include <sys/device.h>
 
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
+
+#include <uvm/uvm_extern.h>		/* for PAGE_SIZE */
 
 #include <net/if.h>
 #include <net/if_arp.h>
@@ -119,7 +123,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_vr.c,v 1.111 2012/07/22 14:33:04 matt Exp $");
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
+#include "bpfilter.h"
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -143,12 +150,19 @@ __KERNEL_RCSID(0, "$NetBSD: if_vr.c,v 1.111 2012/07/22 14:33:04 matt Exp $");
 static const struct vr_type {
 	pci_vendor_id_t		vr_vid;
 	pci_product_id_t	vr_did;
+	const char		*vr_name;
 } vr_devs[] = {
-	{ PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT3043 },
-	{ PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT6102 },
-	{ PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT6105 },
-	{ PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT6105M },
-	{ PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT86C100A }
+	{ PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT3043,
+		"VIA VT3043 (Rhine) 10/100" },
+	{ PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT6102,
+		"VIA VT6102 (Rhine II) 10/100" },
+	{ PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT6105,
+		"VIA VT6105 (Rhine III) 10/100" },
+	{ PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT6105M,
+		"VIA VT6105M (Rhine III) 10/100" },
+	{ PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT86C100A,
+		"VIA VT86C100A (Rhine-II) 10/100" },
+	{ 0, 0, NULL }
 };
 
 /*
@@ -231,7 +245,9 @@ struct vr_softc {
 	uint32_t	vr_save_membase;
 	uint32_t	vr_save_irq;
 
-	krndsource_t rnd_source;	/* random source */
+#if NRND > 0
+	rndsource_element_t rnd_source;	/* random source */
+#endif
 };
 
 #define	VR_CDTXADDR(sc, x)	((sc)->vr_cddma + VR_CDTXOFF((x)))
@@ -303,13 +319,13 @@ static void	vr_tick(void *);
 
 static int	vr_mii_readreg(device_t, int, int);
 static void	vr_mii_writereg(device_t, int, int, int);
-static void	vr_mii_statchg(struct ifnet *);
+static void	vr_mii_statchg(device_t);
 
 static void	vr_setmulti(struct vr_softc *);
 static void	vr_reset(struct vr_softc *);
 static int	vr_restore_state(pci_chipset_tag_t, pcitag_t, device_t,
     pcireg_t);
-static bool	vr_resume(device_t, const pmf_qual_t *);
+static bool	vr_resume(device_t PMF_FN_PROTO);
 
 int	vr_copy_small = 0;
 
@@ -396,9 +412,9 @@ vr_mii_writereg(device_t self, int phy, int reg, int val)
 }
 
 static void
-vr_mii_statchg(struct ifnet *ifp)
+vr_mii_statchg(device_t self)
 {
-	struct vr_softc *sc = ifp->if_softc;
+	struct vr_softc *sc = device_private(self);
 
 	/*
 	 * In order to fiddle with the 'full-duplex' bit in the netconfig
@@ -752,13 +768,16 @@ vr_rxeof(struct vr_softc *sc)
 		ifp->if_ipackets++;
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = total_len;
+#if NBPFILTER > 0
 		/*
 		 * Handle BPF listeners. Let the BPF user see the packet, but
 		 * don't pass it up to the ether_input() layer unless it's
 		 * a broadcast packet, multicast packet, matches our ethernet
 		 * address or the interface is in promiscuous mode.
 		 */
-		bpf_mtap(ifp, m);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);
 	}
@@ -904,7 +923,10 @@ vr_intr(void *arg)
 
 		handled = 1;
 
-		rnd_add_uint32(&sc->rnd_source, status);
+#if NRND > 0
+		if (RND_ENABLED(&sc->rnd_source))
+			rnd_add_uint32(&sc->rnd_source, status);
+#endif
 
 		if (status & VR_ISR_RX_OK)
 			vr_rxeof(sc);
@@ -1069,11 +1091,14 @@ vr_start(struct ifnet *ifp)
 		 */
 		ds->ds_mbuf = m0;
 
+#if NBPFILTER > 0
 		/*
 		 * If there's a BPF listener, bounce a copy of this frame
 		 * to him.
 		 */
-		bpf_mtap(ifp, m0);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m0);
+#endif
 
 		/*
 		 * Fill in the transmit descriptor.
@@ -1372,7 +1397,7 @@ vr_stop(struct ifnet *ifp, int disable)
 		vr_rxdrain(sc);
 }
 
-static int	vr_probe(device_t, cfdata_t, void *);
+static int	vr_probe(device_t, struct cfdata *, void *);
 static void	vr_attach(device_t, device_t, void *);
 static bool	vr_shutdown(device_t, int);
 
@@ -1383,10 +1408,8 @@ static const struct vr_type *
 vr_lookup(struct pci_attach_args *pa)
 {
 	const struct vr_type *vrt;
-	int i;
 
-	for (i = 0; i < __arraycount(vr_devs); i++) {
-		vrt = &vr_devs[i];
+	for (vrt = vr_devs; vrt->vr_name != NULL; vrt++) {
 		if (PCI_VENDOR(pa->pa_id) == vrt->vr_vid &&
 		    PCI_PRODUCT(pa->pa_id) == vrt->vr_did)
 			return (vrt);
@@ -1395,7 +1418,7 @@ vr_lookup(struct pci_attach_args *pa)
 }
 
 static int
-vr_probe(device_t parent, cfdata_t match, void *aux)
+vr_probe(device_t parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 
@@ -1429,6 +1452,7 @@ vr_attach(device_t parent, device_t self, void *aux)
 	struct vr_softc *sc = device_private(self);
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 	bus_dma_segment_t seg;
+	const struct vr_type *vrt;
 	uint32_t reg;
 	struct ifnet *ifp;
 	uint8_t eaddr[ETHER_ADDR_LEN], mac;
@@ -1443,7 +1467,13 @@ vr_attach(device_t parent, device_t self, void *aux)
 	sc->vr_id = pa->pa_id;
 	callout_init(&sc->vr_tick_ch, 0);
 
-	pci_aprint_devinfo(pa, NULL);
+	vrt = vr_lookup(pa);
+	if (vrt == NULL) {
+		printf("\n");
+		panic("vr_attach: impossible");
+	}
+
+	printf(": %s Ethernet\n", vrt->vr_name);
 
 	/*
 	 * Handle power management nonsense.
@@ -1519,10 +1549,11 @@ vr_attach(device_t parent, device_t self, void *aux)
 		if (sc->vr_ih == NULL) {
 			aprint_error_dev(self, "couldn't establish interrupt");
 			if (intrstr != NULL)
-				aprint_error(" at %s", intrstr);
-			aprint_error("\n");
+				printf(" at %s", intrstr);
+			printf("\n");
 		}
-		aprint_normal_dev(self, "interrupting at %s\n", intrstr);
+		printf("%s: interrupting at %s\n",
+			device_xname(self), intrstr);
 	}
 
 	/*
@@ -1574,7 +1605,7 @@ vr_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * A Rhine chip was detected. Inform the world.
 	 */
-	aprint_normal("%s: Ethernet address: %s\n",
+	printf("%s: Ethernet address: %s\n",
 		device_xname(self), ether_sprintf(eaddr));
 
 	memcpy(sc->vr_enaddr, eaddr, ETHER_ADDR_LEN);
@@ -1675,16 +1706,15 @@ vr_attach(device_t parent, device_t self, void *aux)
 	} else
 		ifmedia_set(&sc->vr_mii.mii_media, IFM_ETHER|IFM_AUTO);
 
-	sc->vr_ec.ec_capabilities |= ETHERCAP_VLAN_MTU;
-
 	/*
 	 * Call MI attach routines.
 	 */
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->vr_enaddr);
-
+#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
+#endif
 
 	if (pmf_device_register1(self, NULL, vr_resume, vr_shutdown))
 		pmf_class_network_register(self, ifp);
@@ -1737,7 +1767,7 @@ vr_restore_state(pci_chipset_tag_t pc, pcitag_t tag, device_t self,
 }
 
 static bool
-vr_resume(device_t self, const pmf_qual_t *qual)
+vr_resume(device_t self PMF_FN_ARGS)
 {
 	struct vr_softc *sc = device_private(self);
 

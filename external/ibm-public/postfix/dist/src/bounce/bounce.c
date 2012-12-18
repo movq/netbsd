@@ -1,4 +1,4 @@
-/*	$NetBSD: bounce.c,v 1.1.1.2 2010/06/17 18:06:40 tron Exp $	*/
+/*	$NetBSD: bounce.c,v 1.1.1.1.2.4 2011/01/07 01:23:59 riz Exp $	*/
 
 /*++
 /* NAME

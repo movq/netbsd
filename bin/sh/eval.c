@@ -1,4 +1,4 @@
-/*	$NetBSD: eval.c,v 1.104 2012/06/14 18:56:54 joerg Exp $	*/
+/*	$NetBSD: eval.c,v 1.93 2008/05/26 14:55:17 tron Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)eval.c	8.9 (Berkeley) 6/8/95";
 #else
-__RCSID("$NetBSD: eval.c,v 1.104 2012/06/14 18:56:54 joerg Exp $");
+__RCSID("$NetBSD: eval.c,v 1.93 2008/05/26 14:55:17 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -45,7 +45,6 @@ __RCSID("$NetBSD: eval.c,v 1.104 2012/06/14 18:56:54 joerg Exp $");
 #include <stdlib.h>
 #include <signal.h>
 #include <stdio.h>
-#include <errno.h>
 #include <unistd.h>
 #include <sys/fcntl.h>
 #include <sys/times.h>
@@ -92,7 +91,6 @@ int evalskip;			/* set if we are skipping commands */
 STATIC int skipcount;		/* number of levels to skip */
 MKINIT int loopnest;		/* current loop nesting level */
 int funcnest;			/* depth of function calls */
-STATIC int builtin_flags;	/* evalcommand flags for builtins */
 
 
 const char *commandname;
@@ -182,7 +180,7 @@ evalcmd(int argc, char **argv)
                         STPUTC('\0', concat);
                         p = grabstackstr(concat);
                 }
-                evalstring(p, builtin_flags & EV_TESTED);
+                evalstring(p, EV_TESTED);
         }
         return exitstatus;
 }
@@ -299,7 +297,7 @@ evaltree(union node *n, int flags)
 		do_etest = !(flags & EV_TESTED);
 		break;
 	case NCMD:
-		evalcommand(n, flags, NULL);
+		evalcommand(n, flags, (struct backcmd *)NULL);
 		do_etest = !(flags & EV_TESTED);
 		break;
 	default:
@@ -521,14 +519,14 @@ evalpipe(union node *n)
 			INTON;
 			if (prevfd > 0) {
 				close(0);
-				copyfd(prevfd, 0, 1);
+				copyfd(prevfd, 0);
 				close(prevfd);
 			}
 			if (pip[1] >= 0) {
 				close(pip[0]);
 				if (pip[1] != 1) {
 					close(1);
-					copyfd(pip[1], 1, 1);
+					copyfd(pip[1], 1);
 					close(pip[1]);
 				}
 			}
@@ -592,7 +590,7 @@ evalbackcmd(union node *n, struct backcmd *result)
 			close(pip[0]);
 			if (pip[1] != 1) {
 				close(1);
-				copyfd(pip[1], 1, 1);
+				copyfd(pip[1], 1);
 				close(pip[1]);
 			}
 			eflag = 0;
@@ -667,7 +665,6 @@ parse_command_args(int argc, char **argv, int *use_syspath)
 }
 
 int vforked = 0;
-extern char *trap[];
 
 /*
  * Execute a simple command.
@@ -762,13 +759,13 @@ evalcommand(union node *cmd, int flgs, struct backcmd *backcmd)
 		for (sp = varlist.list ; sp ; sp = sp->next) {
 			if (sep != 0)
 				outc(sep, &errout);
-			out2shstr(sp->text);
+			out2str(sp->text);
 			sep = ' ';
 		}
 		for (sp = arglist.list ; sp ; sp = sp->next) {
 			if (sep != 0)
 				outc(sep, &errout);
-			out2shstr(sp->text);
+			out2str(sp->text);
 			sep = ' ';
 		}
 		outc('\n', &errout);
@@ -823,7 +820,7 @@ evalcommand(union node *cmd, int flgs, struct backcmd *backcmd)
 	}
 
 	/* Fork off a child process if necessary. */
-	if (cmd->ncmd.backgnd || (trap[0] && (flags & EV_EXIT) != 0)
+	if (cmd->ncmd.backgnd
 	 || (cmdentry.cmdtype == CMDNORMAL && (flags & EV_EXIT) == 0)
 	 || ((flags & EV_BACKCMD) != 0
 	    && ((cmdentry.cmdtype != CMDBUILTIN && cmdentry.cmdtype != CMDSPLBLTIN)
@@ -906,7 +903,7 @@ normal_fork:
 			close(pip[0]);
 			if (pip[1] != 1) {
 				close(1);
-				copyfd(pip[1], 1, 1);
+				copyfd(pip[1], 1);
 				close(pip[1]);
 			}
 		}
@@ -984,7 +981,6 @@ normal_fork:
 		savehandler = handler;
 		savecmdname = commandname;
 		handler = &jmploc;
-		temp_path = 0;
 		if (!setjmp(jmploc.loc)) {
 			/* We need to ensure the command hash table isn't
 			 * corruped by temporary PATH assignments.
@@ -994,9 +990,10 @@ normal_fork:
 			    cmdentry.u.bltin == typecmd)) {
 				savelocalvars = localvars;
 				localvars = 0;
-				temp_path = 1;
 				mklocal(path - 5 /* PATH= */, 0);
-			}
+				temp_path = 1;
+			} else
+				temp_path = 0;
 			redirect(cmd->ncmd.redirect, mode);
 
 			/* exec is a special builtin, but needs this list... */
@@ -1011,7 +1008,6 @@ normal_fork:
 			/* and getopt */
 			optreset = 1;
 			optind = 1;
-			builtin_flags = flags;
 			exitstatus = cmdentry.u.bltin(argc, argv);
 		} else {
 			e = exception;

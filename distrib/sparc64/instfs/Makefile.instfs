@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.instfs,v 1.12 2010/02/11 09:06:50 roy Exp $
+#	$NetBSD: Makefile.instfs,v 1.6 2007/05/10 23:22:32 dogcow Exp $
 
 INSTFSDIR=	${.CURDIR}/../instfs
 
@@ -14,7 +14,8 @@ IMAGEENDIAN=	be
 MAKEDEVTARGETS=	ramdisk bpf
 PARSELISTENV=	INSTFSDIR=${INSTFSDIR:Q}
 IMAGEDEPENDS=	${CRUNCHBIN} \
-		${INSTFSDIR}/dot.profile \
+		${INSTFSDIR}/disktab.preinstall ${INSTFSDIR}/dot.profile \
+		${INSTFSDIR}/termcap.mini \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
-		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \
-		${DISTRIBDIR}/common/services
+		${NETBSDSRCDIR}/etc/netconfig ${NETBSDSRCDIR}/etc/protocols \
+		${NETBSDSRCDIR}/distrib/common/services

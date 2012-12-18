@@ -1,9 +1,9 @@
-/*	$NetBSD: main.c,v 1.25 2012/06/19 05:30:43 dholland Exp $	*/
+/*	$NetBSD: main.c,v 1.23 2008/02/03 21:24:58 dholland Exp $	*/
 
 /* main.c		 */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: main.c,v 1.25 2012/06/19 05:30:43 dholland Exp $");
+__RCSID("$NetBSD: main.c,v 1.23 2008/02/03 21:24:58 dholland Exp $");
 #endif				/* not lint */
 
 #include <sys/types.h>
@@ -15,26 +15,6 @@ __RCSID("$NetBSD: main.c,v 1.25 2012/06/19 05:30:43 dholland Exp $");
 #include "header.h"
 #include "extern.h"
 
-static void showstr(void);
-static void t_setup(int);
-static void t_endup(int);
-static void showwear(void);
-static void showwield(void);
-static void showread(void);
-static void showeat(void);
-static void showquaff(void);
-static void show1(int, const char *[]);
-static void randmonst(void);
-static void parse(void);
-static void run(int);
-static void wield(void);
-static void ydhi(int);
-static void ycwi(int);
-static void wear(void);
-static void dropobj(void);
-static void readscr(void);
-static void eatcookie(void);
-static void quaff(void);
 static int whatitem(const char *);
 
 static char     copyright[] = "\nLarn is copyrighted 1986 by Noah Morgan.\n";
@@ -75,7 +55,9 @@ static char    *termtypes[] = {"vt100", "vt101", "vt102", "vt103", "vt125",
 	************
  */
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int             argc;
+	char          **argv;
 {
 	int    i;
 	int             hard;
@@ -327,8 +309,8 @@ main(int argc, char **argv)
 
 	show character's inventory
  */
-static void
-showstr(void)
+void
+showstr()
 {
 	int    i, number;
 	for (number = 3, i = 0; i < 26; i++)
@@ -340,7 +322,7 @@ showstr(void)
 }
 
 void
-qshowstr(void)
+qshowstr()
 {
 	int    i, j, k, sigsav;
 	srcount = 0;
@@ -366,8 +348,9 @@ qshowstr(void)
 /*
  *	subroutine to clear screen depending on # lines to display
  */
-static void
-t_setup(int count)
+void
+t_setup(count)
+	int    count;
 {
 	if (count < 20) {	/* how do we clear the screen? */
 		cl_up(79, count);
@@ -381,8 +364,9 @@ t_setup(int count)
 /*
  *	subroutine to restore normal display screen depending on t_setup()
  */
-static void
-t_endup(int count)
+void
+t_endup(count)
+	int    count;
 {
 	if (count < 18)		/* how did we clear the screen? */
 		draws(0, MAXX, 0, (count > MAXY) ? MAXY : count);
@@ -395,8 +379,8 @@ t_endup(int count)
 /*
 	function to show the things player is wearing only
  */
-static void
-showwear(void)
+void
+showwear()
 {
 	int    i, j, sigsav, count;
 	sigsav = nosignal;
@@ -444,8 +428,8 @@ showwear(void)
 /*
 	function to show the things player can wield only
  */
-static void
-showwield(void)
+void
+showwield()
 {
 	int    i, j, sigsav, count;
 	sigsav = nosignal;
@@ -502,8 +486,8 @@ showwield(void)
 /*
  *	function to show the things player can read only
  */
-static void
-showread(void)
+void
+showread()
 {
 	int    i, j, sigsav, count;
 	sigsav = nosignal;
@@ -534,8 +518,8 @@ showread(void)
 /*
  *	function to show the things player can eat only
  */
-static void
-showeat(void)
+void
+showeat()
 {
 	int    i, j, sigsav, count;
 	sigsav = nosignal;
@@ -564,8 +548,8 @@ showeat(void)
 /*
 	function to show the things player can quaff only
  */
-static void
-showquaff(void)
+void
+showquaff()
 {
 	int    i, j, sigsav, count;
 	sigsav = nosignal;
@@ -591,8 +575,10 @@ showquaff(void)
 	t_endup(count);
 }
 
-static void
-show1(int idx, const char *str2[])
+void
+show1(idx, str2)
+	int    idx;
+	const char  *str2[];
 {
 	lprintf("\n%c)   %s", idx + 'a', objectname[iven[idx]]);
 	if (str2 != 0 && str2[ivenarg[idx]][0] != 0)
@@ -646,8 +632,8 @@ show3(int indx)
 /*
 	subroutine to randomly create monsters if needed
  */
-static void
-randmonst(void)
+void
+randmonst()
 {
 	if (c[TIMESTOP])
 		return;		/* don't make monsters if time is stopped	 */
@@ -664,8 +650,8 @@ randmonst(void)
 
 	get and execute a command
  */
-static void
-parse(void)
+void
+parse()
 {
 	int    i, j, k, flag;
 	while (1) {
@@ -974,7 +960,7 @@ parse(void)
 }
 
 void
-parse2(void)
+parse2()
 {
 	if (c[HASTEMONST])
 		movemonst();
@@ -983,8 +969,9 @@ parse2(void)
 	regen();
 }
 
-static void
-run(int dir)
+void
+run(dir)
+	int             dir;
 {
 	int    i;
 	i = 1;
@@ -1007,8 +994,8 @@ run(int dir)
 /*
 	function to wield a weapon
  */
-static void
-wield(void)
+void
+wield()
 {
 	int    i;
 	while (1) {
@@ -1045,14 +1032,16 @@ wield(void)
 /*
 	common routine to say you don't have an item
  */
-static void
-ydhi(int x)
+void
+ydhi(x)
+	int             x;
 {
 	cursors();
 	lprintf("\nYou don't have item %c!", x);
 }
-static void
-ycwi(int x)
+void
+ycwi(x)
+	int             x;
 {
 	cursors();
 	lprintf("\nYou can't wield item %c!", x);
@@ -1061,8 +1050,8 @@ ycwi(int x)
 /*
 	function to wear armor
  */
-static void
-wear(void)
+void
+wear()
 {
 	int    i;
 	while (1) {
@@ -1113,8 +1102,8 @@ wear(void)
 /*
 	function to drop an object
  */
-static void
-dropobj(void)
+void
+dropobj()
 {
 	int    i;
 	unsigned char  *p;
@@ -1177,8 +1166,8 @@ dropobj(void)
 /*
  *	readscr()		Subroutine to read a scroll one is carrying
  */
-static void
-readscr(void)
+void
+readscr()
 {
 	int    i;
 	while (1) {
@@ -1212,7 +1201,7 @@ readscr(void)
 /*
  *	subroutine to eat a cookie one is carrying
  */
-static void
+void
 eatcookie(void)
 {
 	const char *p;
@@ -1250,8 +1239,8 @@ eatcookie(void)
 /*
  *	subroutine to quaff a potion one is carrying
  */
-static void
-quaff(void)
+void
+quaff()
 {
 	int    i;
 	while (1) {
@@ -1299,7 +1288,8 @@ whatitem(const char *str)
 	and allow * to mean return amt, else return the number entered
  */
 unsigned long 
-readnum(long mx)
+readnum(mx)
+	long            mx;
 {
 	int    i;
 	unsigned long amt = 0;

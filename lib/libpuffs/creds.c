@@ -1,4 +1,4 @@
-/*	$NetBSD: creds.c,v 1.16 2012/03/15 12:49:36 njoly Exp $	*/
+/*	$NetBSD: creds.c,v 1.14.12.1 2009/11/28 16:01:03 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2006  Antti Kantee.  All Rights Reserved.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: creds.c,v 1.16 2012/03/15 12:49:36 njoly Exp $");
+__RCSID("$NetBSD: creds.c,v 1.14.12.1 2009/11/28 16:01:03 bouyer Exp $");
 #endif /* !lint */
 
 /*
@@ -250,11 +250,10 @@ puffs_access_times(uid_t uid, gid_t gid, mode_t mode, int va_utimes_null,
 	const struct puffs_cred *pcr)
 {
 
-	if (puffs_cred_isuid(pcr, uid) || puffs_cred_isjuggernaut(pcr))
-		return 0;
-
-	if (va_utimes_null == 0)
+	if (!puffs_cred_isuid(pcr, uid) && !puffs_cred_isjuggernaut(pcr)
+	    && (va_utimes_null == 0
+	      || puffs_access(VNON, mode, uid, gid, PUFFS_VWRITE, pcr) != 0))
 		return EPERM;
 
-	return puffs_access(VNON, mode, uid, gid, PUFFS_VWRITE, pcr);
+	return 0;
 }

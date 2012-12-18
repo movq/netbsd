@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_sub.c,v 1.6 2009/03/14 21:04:17 dsl Exp $ */
+/*	$NetBSD: exec_sub.c,v 1.3 2005/12/24 20:07:41 perry Exp $ */
 
 #include <sys/cdefs.h>
 
@@ -7,21 +7,23 @@
 #include <sys/param.h>
 
 #ifdef BOOT
-void B_PRINT(const unsigned char *p);
+void B_PRINT __P((const unsigned char *p));
 #endif
 
-static inline void bzero4(void *ptr, size_t siz);
-static void xk_aout(struct execkern_arg *xarg, struct exec *hdr);
-static void xk_elf(struct execkern_arg *xarg, Elf32_Ehdr *hdr);
+static inline void bzero4 __P((void *ptr, size_t siz));
+static void xk_aout __P((struct execkern_arg *xarg, struct exec *hdr));
+static void xk_elf __P((struct execkern_arg *xarg, Elf32_Ehdr *hdr));
 
 #ifdef LOADBSD
-static void DPRINT_SEC(const char *ident,
-			    const struct execkern_section *sec);
+static void DPRINT_SEC __P((const char *ident,
+			    const struct execkern_section *sec));
 extern int opt_v;
 extern const char *kernel_fn;
 
 static void
-DPRINT_SEC(const char *ident, const struct execkern_section *sec)
+DPRINT_SEC(ident, sec)
+	const char *ident;
+	const struct execkern_section *sec;
 {
 
 	if (opt_v)
@@ -59,7 +61,9 @@ DPRINT_SEC(const char *ident, const struct execkern_section *sec)
 		SECTION(sec, (ident), (image), (size), 0)
 
 static inline void
-bzero4(void *ptr, size_t siz)
+bzero4(ptr, siz)
+	void *ptr;
+	size_t siz;
 {
 	u_long *p;
 	u_short s;
@@ -75,7 +79,9 @@ bzero4(void *ptr, size_t siz)
  * fill in loading information from an a.out executable
  */
 static void
-xk_aout(struct execkern_arg *xarg, struct exec *hdr)
+xk_aout(xarg, hdr)
+	struct execkern_arg *xarg;
+	struct exec *hdr;
 {
 	unsigned u;
 	char *s;
@@ -114,7 +120,9 @@ xk_aout(struct execkern_arg *xarg, struct exec *hdr)
  * fill in loading information from an ELF executable
  */
 static void
-xk_elf(struct execkern_arg *xarg, Elf32_Ehdr *hdr)
+xk_elf(xarg, hdr)
+	struct execkern_arg *xarg;
+	Elf32_Ehdr *hdr;
 {
 	char *top = (void *) hdr;
 	struct execkern_section *sec;
@@ -245,8 +253,10 @@ xk_elf(struct execkern_arg *xarg, Elf32_Ehdr *hdr)
 
 
 int
-xk_load(struct execkern_arg *xarg, void *buf, u_long loadaddr)
-	/* loadaddr:	 for a.out */
+xk_load(xarg, buf, loadaddr)
+	struct execkern_arg *xarg;
+	void *buf;
+	u_long loadaddr;	/* for a.out */
 {
 	struct exec *ahdr;
 	Elf32_Ehdr *ehdr;

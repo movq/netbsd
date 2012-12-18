@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.25 2012/07/28 23:08:56 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.14 2008/07/02 17:28:55 ad Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2004, 2005 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.25 2012/07/28 23:08:56 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.14 2008/07/02 17:28:55 ad Exp $");
 
 #include "opt_ddb.h"
 
@@ -35,12 +35,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.25 2012/07/28 23:08:56 matt Exp $");
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/buf.h>
 #include <sys/reboot.h>
 #include <sys/mount.h>
 #include <sys/kcore.h>
 #include <sys/boot_flag.h>
-#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -69,8 +69,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.25 2012/07/28 23:08:56 matt Exp $");
 
 vsize_t kseg2iobufsize;		/* to reserve PTEs for KSEG2 I/O space */
 
+/* our exported CPU info */
+struct cpu_info cpu_info_store;
+
 /* maps for VM objects */
+struct vm_map *mb_map;
 struct vm_map *phys_map;
+
+/* for buffer cache, vnode cache estimation */
+int physmem;		/* max supported memory, changes to actual */
 
 /* referenced by mips_machdep.c:cpu_dump() */
 int mem_cluster_cnt;
@@ -85,6 +92,7 @@ void
 mach_init(int argc, char *argv[], struct bootinfo *bi)
 {
 	extern char kernel_text[], edata[], end[];
+	extern struct user *proc0paddr;
 	void *v;
 	int i;
 
@@ -95,6 +103,14 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 		 * the firmware directly and have to clear BSS here.
 		 */
 		memset(edata, 0, end - edata);
+		/*
+		 * XXX
+		 * lwp0 and cpu_info_store are allocated in BSS
+		 * and initialized before mach_init() is called,
+		 * so restore them again.
+		 */
+		lwp0.l_cpu = &cpu_info_store;
+		cpu_info_store.ci_curlwp = &lwp0;
 	}
 
 	/* Setup early-console with BIOS ROM routines */
@@ -104,8 +120,8 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	sbd_init();
 
 	__asm volatile("move %0, $29" : "=r"(v));
-	printf("kernel_text=%p edata=%p end=%p sp=%p\n",
-	    kernel_text, edata, end, v);
+	printf("kernel_text=%p edata=%p end=%p sp=%p\n", kernel_text, edata,
+	    end, v);
 
 	option(argc, argv, bi);
 
@@ -122,7 +138,7 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	 */
 	cn_tab = NULL;
 
-	mips_vector_init(NULL, false);
+	mips_vector_init();
 
 	memcpy((void *)0x80000200, ews4800mips_nmi_vec, 32); /* NMI */
 	mips_dcache_wbinv_all();
@@ -132,7 +148,7 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	curcpu()->ci_cycles_per_hz = (curcpu()->ci_cpu_freq + hz / 2) / hz;
 	curcpu()->ci_divisor_delay =
 	    ((curcpu()->ci_cpu_freq + 500000) / 1000000);
-	if (mips_options.mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT) {
+	if (mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT) {
 		curcpu()->ci_cycles_per_hz /= 2;
 		curcpu()->ci_divisor_delay /= 2;
 	}
@@ -155,7 +171,11 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 
 	pmap_bootstrap();
 
-	mips_init_lwp0_uarea();
+	v = (void *)uvm_pageboot_alloc(USPACE);	/* proc0 USPACE */
+	lwp0.l_addr = proc0paddr = (struct user *) v;
+	lwp0.l_md.md_regs = (struct frame *)((char *)v + USPACE) - 1;
+	proc0paddr->u_pcb.pcb_context[11] =
+	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
 }
 
 void
@@ -176,7 +196,7 @@ option(int argc, char *argv[], struct bootinfo *bi)
 #ifdef DDB
 	/* Load symbol table */
 	if (bi->bi_nsym)
-		ksyms_addsyms_elf(bi->bi_esym - bi->bi_ssym,
+		ksyms_init(bi->bi_esym - bi->bi_ssym,
 		    (void *)bi->bi_ssym, (void *)bi->bi_esym);
 #endif
 	/* Parse option */
@@ -243,7 +263,8 @@ cpu_reboot(int howto, char *bootstr)
 	static int waittime = -1;
 
 	/* Take a snapshot before clobbering any registers. */
-	savectx(curpcb);
+	if (curlwp)
+		savectx((struct user *)curpcb);
 
 	if (cold) {
 		howto |= RB_HALT;
@@ -273,8 +294,6 @@ cpu_reboot(int howto, char *bootstr)
 
  haltsys:
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN) {
 		if (platform.poweroff) {

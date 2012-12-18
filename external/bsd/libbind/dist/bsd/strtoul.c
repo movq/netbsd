@@ -1,8 +1,8 @@
-/*	$NetBSD: strtoul.c,v 1.1.1.2 2012/09/09 16:07:42 christos Exp $	*/
+/*	$NetBSD: strtoul.c,v 1.1.1.1.4.2 2011/01/06 21:42:12 riz Exp $	*/
 
 #if defined(LIBC_SCCS) && !defined(lint)
 static const char sccsid[] = "@(#)strtoul.c	8.1 (Berkeley) 6/4/93";
-static const char rcsid[] = "Id: strtoul.c,v 1.4 2008/02/18 03:49:08 marka Exp ";
+static const char rcsid[] = "Id: strtoul.c,v 1.4 2008/02/18 03:49:08 marka Exp";
 #endif /* LIBC_SCCS and not lint */
 
 /*

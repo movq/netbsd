@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.18 2011/10/02 18:30:50 christos Exp $
+#	$NetBSD: Makefile,v 1.10 2006/01/02 22:10:32 is Exp $
 
 ### what we need:
 
@@ -18,7 +18,7 @@ DIR_LIBC=	${DIR_TOP}/../common/lib/libc
 # prefer our assembler versions over assembler, and assembler over C:
 
 .SUFFIXES:
-.SUFFIXES: .out .o .po .pico .so .s .S .c .cc .C .f .y .l .ln .m4 .sh
+.SUFFIXES: .out .o .po .so .s .S .c .cc .C .f .y .l .ln .m4 .sh
 
 FILES= bootxx_ffs bootxx_fd
 BINDIR=/usr/mdec
@@ -33,7 +33,7 @@ SOBJS += libstubs.o memcmp.o memmove.o memset.o strncmp.o
 
 OBJS=	$(SOBJS) $(COBJS)
 
-DEFS = -D_STANDALONE -DSA_EXEC_ANYOWNER -D_PRIMARY_BOOT
+DEFS = -D_STANDALONE -DINSECURE -D_PRIMARY_BOOT
 
 .NOPATH: ${OBJS} x.out f.out libboot.a xxstart.o
 
@@ -49,7 +49,7 @@ CLEANFILES += bootxx_ffs bootxx_fd x.out f.out xxstart.o fdstart.o libboot.a ver
 
 INCPATH = -nostdinc -I${DIR_TOP} -I${DIR_TOP}/lib/libsa -I${.CURDIR}
 INCPATH += -I${.CURDIR}/../boot -I${.CURDIR}/../../..
-INCPATH += -I${.CURDIR}/../elf2bb -I${.OBJDIR}
+INCPATH += -I${.CURDIR}/../aout2bb -I$(.CURDIR) -I${DESTDIR}/usr/include
 
 AFLAGS += -m68030 -l
 CAFLAGS += -Wa,-l -Wa,-m68030 ${INCPATH} -D_PRIMARY_BOOT
@@ -73,10 +73,10 @@ DEFS+=	-D__daddr_t=int32_t
 .S.o: ; ${CC} ${CAFLAGS} ${COPTS} -x assembler-with-cpp -o $@ -c $<
 
 bootxx_ffs: x.out
-	${RELOC2BB} x.out $@ || (${NM} -u x.out && false)
+	${RELOC2BB} x.out $@ || ${NM} -u x.out
 
 bootxx_fd: f.out
-	${RELOC2BB} -F f.out $@ || (${NM} -u f.out && false)
+	${RELOC2BB} -F f.out $@ || ${NM} -u f.out
 
 x.out: xxstart.o libboot.a
 	${LD} ${LDFLAGS} -r -dc -e _start -o $@ $>
@@ -99,13 +99,9 @@ fdstart.o: ${.CURDIR}/../boot//bbstart.s
 libboot.a: ${OBJS}
 	${AR} r $@ $> && ${RANLIB} $@
 
+.PHONY:	vers.c
 vers.c:	${.CURDIR}/../boot/version
-	${HOST_SH} ${DIR_TOP}/conf/newvers_stand.sh -N \
-	    ${.CURDIR}/../boot/version "amiga"
-
-.if !make(obj) && !make(clean) && !make(cleandir)
-.NOPATH: machine m68k
-.BEGIN: machine m68k
+	${HOST_SH} ${DIR_TOP}/conf/newvers_stand.sh -NDM ${.CURDIR}/../boot/version "amiga"
 
 machine:
 	-rm -f $@
@@ -114,7 +110,6 @@ machine:
 m68k:
 	-rm -f $@
 	ln -s ${DIR_TOP}/arch/m68k/include $@
-.endif
 
 # make sure these are built:
 

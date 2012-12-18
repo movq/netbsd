@@ -1,4 +1,4 @@
-/*	$NetBSD: at91_bus_dma.c,v 1.5 2012/09/18 05:47:27 matt Exp $ */
+/*	$NetBSD: at91_bus_dma.c,v 1.2 2008/07/03 01:15:38 matt Exp $ */
 
 /*
  * Copyright (c) 2004 Jesse Off
@@ -12,6 +12,9 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of The Fujitsu Component Limited nor the name of
+ *    Genetec corporation may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY FUJITSU COMPONENT LIMITED AND GENETEC
  * CORPORATION ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
@@ -33,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91_bus_dma.c,v 1.5 2012/09/18 05:47:27 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91_bus_dma.c,v 1.2 2008/07/03 01:15:38 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -42,12 +45,29 @@ __KERNEL_RCSID(0, "$NetBSD: at91_bus_dma.c,v 1.5 2012/09/18 05:47:27 matt Exp $"
 #include <sys/extent.h>
 
 #define _ARM32_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/at91/at91var.h>
 
 struct arm32_bus_dma_tag at91_bd_tag = {
-	_BUS_DMAMAP_FUNCS,
-	_BUS_DMAMEM_FUNCS,
-	_BUS_DMAMAP_FUNCS,
+	NULL,			/* _ranges: set by platform specific routine */
+	0,			/* _nranges */
+
+	NULL,			/* _cookie */
+
+	_bus_dmamap_create,
+	_bus_dmamap_destroy,
+	_bus_dmamap_load,
+	_bus_dmamap_load_mbuf,
+	_bus_dmamap_load_uio,
+	_bus_dmamap_load_raw,
+	_bus_dmamap_unload,
+	_bus_dmamap_sync,
+	NULL,			/* sync_post */
+
+	_bus_dmamem_alloc,
+	_bus_dmamem_free,
+	_bus_dmamem_map,
+	_bus_dmamem_unmap,
+	_bus_dmamem_mmap,
 };

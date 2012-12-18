@@ -1,4 +1,4 @@
-#	$NetBSD: majors.sparc,v 1.33 2011/06/30 20:09:36 wiz Exp $
+#	$NetBSD: majors.sparc,v 1.29 2007/12/31 15:32:06 ad Exp $
 #
 # Device majors for sparc
 #
@@ -97,6 +97,7 @@ device-major	bpp		char 107		bpp
 device-major	tcx		char 109		tcx
 device-major	vnd		char 110 block 8	vnd
 device-major	tun		char 111		tun
+device-major	lkm		char 112		lkm
 
 device-major	rnd		char 119		rnd
 device-major	scsibus		char 120		scsibus
@@ -118,6 +119,6 @@ device-major	ksyms		char 136		ksyms
 
 device-major	joy		char 137		joy
 
-# Majors up to 143 are reserved for machine-dependent drivers.
+# Majors up to 143 are reserved for machine-dependant drivers.
 # New machine-independent driver majors are assigned in 
 # sys/conf/majors.

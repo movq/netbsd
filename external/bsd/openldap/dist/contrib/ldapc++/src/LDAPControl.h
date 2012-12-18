@@ -1,6 +1,4 @@
-/*	$NetBSD: LDAPControl.h,v 1.1.1.2 2010/03/08 02:14:20 lukem Exp $	*/
-
-// OpenLDAP: pkg/ldap/contrib/ldapc++/src/LDAPControl.h,v 1.5.10.2 2008/09/03 18:03:43 quanah Exp
+// $OpenLDAP: pkg/ldap/contrib/ldapc++/src/LDAPControl.h,v 1.5.10.1 2008/04/14 23:09:26 quanah Exp $
 /*
  * Copyright 2000, OpenLDAP Foundation, All Rights Reserved.
  * COPYING RESTRICTIONS APPLY, see COPYRIGHT file
@@ -19,6 +17,11 @@
 class LDAPCtrl{
     public :
         /**
+         * Copy-constructor
+         */
+        LDAPCtrl(const LDAPCtrl& c);
+
+        /**
          * Constructor.
          * @param oid:  The Object Identifier of the Control
          * @param critical: "true" if the Control should be handled
@@ -26,7 +29,7 @@ class LDAPCtrl{
          * @param data: If there is data for the control, put it here.
          * @param length: The length of the data field
          */
-        LDAPCtrl(const char *oid, bool critical=false, const char *data=0, 
+        LDAPCtrl(const char *oid, bool critical, const char *data=0, 
                 int length=0);
 
         /**
@@ -36,8 +39,8 @@ class LDAPCtrl{
          *                  critical by the server.
          * @param data: If there is data for the control, put it here.
          */
-        LDAPCtrl(const std::string& oid, bool critical,
-                 const std::string& data);
+        LDAPCtrl(const std::string& oid, bool critical=false,
+                const std::string& data=std::string());
 
         /**
          * Creates a copy of the Control that "ctrl is pointing to
@@ -55,13 +58,7 @@ class LDAPCtrl{
         std::string getOID() const;
 
         /**
-         * @return true if there is no "Control Value" (there is a
-         * difference between no and an empty control value)
-         */
-        bool hasData() const;
-
-        /**
-         * @return The Data of the control as a std::string-Object
+         * @return The Data of the control as a std::string-Objekt
          */
         std::string getData() const;
 
@@ -83,7 +80,6 @@ class LDAPCtrl{
         std::string m_oid;
         std::string m_data;
         bool m_isCritical;
-        bool m_noData;
 };
 
 #endif //LDAP_CONTROL_H

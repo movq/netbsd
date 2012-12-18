@@ -1,4 +1,4 @@
-/*	$NetBSD: output.c,v 1.33 2010/08/30 06:27:14 christos Exp $	*/
+/*	$NetBSD: output.c,v 1.30 2008/10/12 01:40:37 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)output.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: output.c,v 1.33 2010/08/30 06:27:14 christos Exp $");
+__RCSID("$NetBSD: output.c,v 1.30 2008/10/12 01:40:37 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -139,43 +139,6 @@ outstr(const char *p, struct output *file)
 }
 
 
-void
-out2shstr(const char *p)
-{
-	outshstr(p, out2);
-}
-
-
-void
-outshstr(const char *p, struct output *file)
-{
-	static const char norm_chars [] \
-		= "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/-=";
-	int need_q = p[0] == 0 || p[strspn(p, norm_chars)] != 0;
-	char c;
-
-	if (need_q)
-		outc('\'', file);
-
-	while (c = *p++, c != 0){
-		if (c != '\''){
-			outc(c, file);
-		}else{
-			outc('\'', file);
-			outc('\\', file);
-			outc(c, file);
-			outc('\'', file);
-		}
-	}
-
-	if (need_q)
-		outc('\'', file);
-
-	if (file == out2)
-		flushout(file);
-}
-
-
 char out_junk[16];
 
 
@@ -264,9 +227,8 @@ out1fmt(const char *fmt, ...)
 	va_end(ap);
 }
 
-#ifdef DEBUG
 void
-debugprintf(const char *fmt, ...)
+dprintf(const char *fmt, ...)
 {
 	va_list ap;
 
@@ -275,7 +237,6 @@ debugprintf(const char *fmt, ...)
 	va_end(ap);
 	flushout(out2);
 }
-#endif
 
 void
 fmtstr(char *outbuf, size_t length, const char *fmt, ...)

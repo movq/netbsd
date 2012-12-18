@@ -1,12 +1,8 @@
-#	$NetBSD: Makefile,v 1.12 2011/05/20 22:29:55 joerg Exp $
+#	$NetBSD: Makefile,v 1.8 2008/10/25 22:27:37 apb Exp $
 
-S=		${.CURDIR}/../../../..
-
-AFLAGS.cdboot.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
+S=	${.CURDIR}/../../../..
 
 NOMAN=		# defined
-.include <bsd.own.mk>
-
 STRIPFLAG=	# nothing
 
 LIBCRT0=	# nothing
@@ -14,41 +10,59 @@ LIBCRTBEGIN=	# nothing
 LIBCRTEND=	# nothing
 LIBC=		# nothing
 
-PRIMARY_LOAD_ADDRESS=	0x1000
-SECONDARY_LOAD_ADDRESS=	0x10000
+PRIMARY_LOAD_ADDRESS=0x600
+SECONDARY_LOAD_ADDRESS=0x10000
 
-PROG=		bootxx_cd9660
-SRCS?=		cdboot.S
+PIE_CFLAGS=
+PIE_LDFLAGS=
+PIE_AFLAGS=
 
-BINDIR=		/usr/mdec
-BINMODE=	444
+.include <bsd.own.mk>
 
-.PATH:		${.CURDIR}/..
+PROG=	cdboot
+SRCS?=	cdboot.S
 
-LDFLAGS+=	-nostdlib -Wl,-e,start
-CPPFLAGS+=	-I. -I${.CURDIR}/../lib -I${S}
-CPPFLAGS+=	-DPRIMARY_LOAD_ADDRESS=${PRIMARY_LOAD_ADDRESS}
-CPPFLAGS+=	-DSECONDARY_LOAD_ADDRESS=${SECONDARY_LOAD_ADDRESS}
-CPPFLAGS+=	-DDISABLE_KEYPRESS
+BINDIR=	/usr/mdec
+BINMODE=444
 
-.if ${MACHINE_ARCH} == "x86_64"
-LDFLAGS+=	-Wl,-m,elf_i386
-AFLAGS+=	-m32
+.PATH:	${.CURDIR}/..
+
+LDFLAGS+= -nostdlib -Wl,-e,start
+CPPFLAGS+= -I. -I${.CURDIR}/../lib -I${S}
+CPPFLAGS+= -DPRIMARY_LOAD_ADDRESS=${PRIMARY_LOAD_ADDRESS}
+CPPFLAGS+= -DSECONDARY_LOAD_ADDRESS=${SECONDARY_LOAD_ADDRESS}
+#CPPFLAGS+= -DDISABLE_KEYPRESS
+
+.if ${MACHINE} == "amd64"
+LDFLAGS+=  -Wl,-m,elf_i386
+AFLAGS+=   -m32
 .endif
 
-BUILDSYMLINKS+=	$S/arch/i386/include	machine \
-		$S/arch/x86/include	x86
+.if !make(obj) && !make(clean) && !make(cleandir)
+.BEGIN: machine x86
+.NOPATH: machine x86
+.endif
 
-DPSRCS+=	machine x86
+realdepend realall: machine x86
+CLEANFILES+= machine x86
 
-CLEANFILES+=	${PROG}.tmp
+machine::
+	-rm -f $@
+	ln -s $S/arch/i386/include $@
+
+x86::
+	-rm -f $@
+	ln -s $S/arch/x86/include $@
+
+${OBJS}: machine x86
+
+CLEANFILES+= ${PROG}.tmp
 
 ${PROG}: ${OBJS}
 	${_MKTARGET_LINK}
-	${CC} -o ${PROG}.tmp ${LDFLAGS} -Wl,-Ttext,${PRIMARY_LOAD_ADDRESS} \
-	    ${OBJS}
+	${CC} -o ${PROG}.tmp ${LDFLAGS} -Wl,-Ttext,${PRIMARY_LOAD_ADDRESS} ${OBJS}
 	@ set -- $$( ${NM} -t d ${PROG}.tmp | grep '\<free_space\>' \
-		| ${TOOL_SED} 's/^0*//'  ); \
+		    | ${TOOL_SED} 's/^0*//'  ); \
 		echo "#### There are $$1 free bytes in ${PROG}"
 	${OBJCOPY} -O binary ${PROG}.tmp ${PROG}
 	rm -f ${PROG}.tmp

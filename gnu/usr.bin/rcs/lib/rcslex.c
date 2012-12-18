@@ -1,4 +1,4 @@
-/*	$NetBSD: rcslex.c,v 1.7 2011/05/15 14:33:12 christos Exp $	*/
+/*	$NetBSD: rcslex.c,v 1.6 1998/02/20 09:27:19 mycroft Exp $	*/
 
 /* lexical analysis of RCS files */
 
@@ -42,9 +42,6 @@ Report problems and direct all questions to:
 
 /*
  * $Log: rcslex.c,v $
- * Revision 1.7  2011/05/15 14:33:12  christos
- * register c -> int c
- *
  * Revision 1.6  1998/02/20 09:27:19  mycroft
  * Fill in missing (default) mmap(2) flags.
  *
@@ -317,7 +314,7 @@ nextlex()
  * For ID's and NUM's, NextString is set to the character string.
  * Assumption: nextc contains the next character.
  */
-{       int c;
+{       register c;
 	declarecache;
 	register FILE *frew;
         register char * sp;
@@ -682,7 +679,7 @@ readstring()
 /* skip over characters until terminating single SDELIM        */
 /* If foutptr is set, copy every character read to foutptr.    */
 /* Does not advance nextlex at the end.                        */
-{       int c;
+{       register c;
 	declarecache;
 	register FILE *frew;
 	register RILE *fin;
@@ -715,7 +712,7 @@ printstring()
  * Does not advance nextlex at the end.
  */
 {
-        int c;
+        register c;
 	declarecache;
 	register FILE *fout;
 	register RILE *fin;
@@ -753,7 +750,7 @@ savestring(target)
  * Yield a copy of *TARGET, except with exact length.
  */
 {
-        int c;
+        register c;
 	declarecache;
 	register FILE *frew;
 	register char *tp;

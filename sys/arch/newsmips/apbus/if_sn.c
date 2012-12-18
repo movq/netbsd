@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sn.c,v 1.34 2012/10/13 06:24:15 tsutsui Exp $	*/
+/*	$NetBSD: if_sn.c,v 1.30 2008/04/09 15:40:30 tsutsui Exp $	*/
 
 /*
  * National Semiconductor  DP8393X SONIC Driver
@@ -16,7 +16,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sn.c,v 1.34 2012/10/13 06:24:15 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sn.c,v 1.30 2008/04/09 15:40:30 tsutsui Exp $");
 
 #include "opt_inet.h"
 
@@ -45,8 +45,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_sn.c,v 1.34 2012/10/13 06:24:15 tsutsui Exp $");
 
 #include <uvm/uvm_extern.h>
 
+#include "bpfilter.h"
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <machine/cpu.h>
 #include <newsmips/apbus/apbusvar.h>
@@ -204,7 +207,7 @@ snsetup(struct sn_softc	*sc, uint8_t *lladdr)
 
 #ifdef SNDEBUG
 	aprint_debug_dev(sc->sc_dev, "buffers: rra=%p cda=%p rda=%p tda=%p\n",
-	    device_xname(sc->sc_dev), sc->p_rra[0], sc->p_cda,
+	    sc->sc_dev.dv_xname, sc->p_rra[0], sc->p_cda,
 	    sc->p_rda, sc->mtda[0].mtd_txp);
 #endif
 
@@ -231,24 +234,23 @@ snioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifa = (struct ifaddr *)data;
 		ifp->if_flags |= IFF_UP;
-		(void)sninit(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
+			(void)sninit(sc);
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
 		default:
+			(void)sninit(sc);
 			break;
 		}
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((err = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
 		if ((ifp->if_flags & IFF_UP) == 0 &&
 		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
@@ -292,8 +294,7 @@ snioctl(struct ifnet *ifp, u_long cmd, void *data)
 		}
 		break;
 	default:
-		err = ether_ioctl(ifp, cmd, data);
-		break;
+		err = EINVAL;
 	}
 	splx(s);
 	return err;
@@ -330,11 +331,14 @@ outloop:
 	if ((m->m_flags & M_PKTHDR) == 0)
 		panic("%s: snstart: no header mbuf", device_xname(sc->sc_dev));
 
+#if NBPFILTER > 0
 	/*
 	 * If bpf is listening on this interface, let it
 	 * see the packet before we commit it to the wire.
 	 */
-	bpf_mtap(ifp, m);
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, m);
+#endif
 
 	/*
 	 * If there is nothing in the o/p queue, and there is room in
@@ -1057,8 +1061,11 @@ sonic_read(struct sn_softc *sc, void *pkt, int len)
 	m = sonic_get(sc, pkt, len);
 	if (m == NULL)
 		return 0;
+#if NBPFILTER > 0
 	/* Pass the packet to any BPF listeners. */
-	bpf_mtap(ifp, m);
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, m);
+#endif
 	(*ifp->if_input)(ifp, m);
 	return 1;
 }

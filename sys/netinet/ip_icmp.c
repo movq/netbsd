@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_icmp.c,v 1.129 2012/03/22 20:34:38 drochner Exp $	*/
+/*	$NetBSD: ip_icmp.c,v 1.120 2008/06/18 09:06:28 yamt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -94,7 +94,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_icmp.c,v 1.129 2012/03/22 20:34:38 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_icmp.c,v 1.120 2008/06/18 09:06:28 yamt Exp $");
 
 #include "opt_ipsec.h"
 
@@ -123,10 +123,17 @@ __KERNEL_RCSID(0, "$NetBSD: ip_icmp.c,v 1.129 2012/03/22 20:34:38 drochner Exp $
 #include <netinet/icmp_var.h>
 #include <netinet/icmp_private.h>
 
+#ifdef IPSEC
+#include <netinet6/ipsec.h>
+#include <netkey/key.h>
+#endif
+
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
 #include <netipsec/key.h>
 #endif	/* FAST_IPSEC*/
+
+#include <machine/stdarg.h>
 
 /*
  * ICMP routines: error generation, receive packet processing, and
@@ -135,7 +142,6 @@ __KERNEL_RCSID(0, "$NetBSD: ip_icmp.c,v 1.129 2012/03/22 20:34:38 drochner Exp $
  */
 
 int	icmpmaskrepl = 0;
-int	icmpbmcastecho = 0;
 #ifdef ICMPPRINTFS
 int	icmpprintfs = 0;
 #endif
@@ -170,14 +176,12 @@ static struct rttimer_queue *icmp_redirect_timeout_q = NULL;
 static void icmp_mtudisc_timeout(struct rtentry *, struct rttimer *);
 static void icmp_redirect_timeout(struct rtentry *, struct rttimer *);
 
-static void sysctl_netinet_icmp_setup(struct sysctllog **);
+static int icmp_ratelimit(const struct in_addr *, const int, const int);
+
 
 void
 icmp_init(void)
 {
-
-	sysctl_netinet_icmp_setup(NULL);
-
 	/*
 	 * This is only useful if the user initializes redirtimeout to
 	 * something other than zero.
@@ -302,10 +306,6 @@ icmp_error(struct mbuf *n, int type, int code, n_long dest,
 	m->m_len = icmplen + ICMP_MINLEN;
 	if ((m->m_flags & M_EXT) == 0)
 		MH_ALIGN(m, m->m_len);
-	else {
-		m->m_data += sizeof(struct ip);
-		m->m_len -= sizeof(struct ip);
-	}
 	icp = mtod(m, struct icmp *);
 	if ((u_int)type > ICMP_MAXTYPE)
 		panic("icmp_error");
@@ -334,8 +334,7 @@ icmp_error(struct mbuf *n, int type, int code, n_long dest,
 	 * Now, copy old ip header (without options)
 	 * in front of icmp message.
 	 */
-	if ((m->m_flags & M_EXT) == 0 &&
-	    m->m_data - sizeof(struct ip) < m->m_pktdat)
+	if (m->m_data - sizeof(struct ip) < m->m_pktdat)
 		panic("icmp len");
 	m->m_data -= sizeof(struct ip);
 	m->m_len += sizeof(struct ip);
@@ -420,7 +419,7 @@ icmp_input(struct mbuf *m, ...)
 		goto freeit;
 	}
 	i = hlen + min(icmplen, ICMP_ADVLENMIN);
-	if ((m->m_len < i || M_READONLY(m)) && (m = m_pullup(m, i)) == NULL) {
+	if ((m->m_len < i || M_READONLY(m)) && (m = m_pullup(m, i)) == 0) {
 		ICMP_STATINC(ICMP_STAT_TOOSHORT);
 		return;
 	}
@@ -539,22 +538,12 @@ icmp_input(struct mbuf *m, ...)
 		break;
 
 	case ICMP_ECHO:
-		if (!icmpbmcastecho &&
-		    (m->m_flags & (M_MCAST | M_BCAST)) != 0)  {
-			ICMP_STATINC(ICMP_STAT_BMCASTECHO);
-			break;
-		}
 		icp->icmp_type = ICMP_ECHOREPLY;
 		goto reflect;
 
 	case ICMP_TSTAMP:
 		if (icmplen < ICMP_TSLEN) {
 			ICMP_STATINC(ICMP_STAT_BADLEN);
-			break;
-		}
-		if (!icmpbmcastecho &&
-		    (m->m_flags & (M_MCAST | M_BCAST)) != 0)  {
-			ICMP_STATINC(ICMP_STAT_BMCASTTSTAMP);
 			break;
 		}
 		icp->icmp_type = ICMP_TSTAMPREPLY;
@@ -643,7 +632,7 @@ reflect:
 			rtfree(rt);
 
 		pfctlinput(PRC_REDIRECT_HOST, sintosa(&icmpsrc));
-#if defined(FAST_IPSEC)
+#if defined(IPSEC) || defined(FAST_IPSEC)
 		key_sa_routechange((struct sockaddr *)&icmpsrc);
 #endif
 		break;
@@ -994,8 +983,7 @@ sysctl_net_inet_icmp_stats(SYSCTLFN_ARGS)
 	return (NETSTAT_SYSCTL(icmpstat_percpu, ICMP_NSTATS));
 }
 
-static void
-sysctl_netinet_icmp_setup(struct sysctllog **clog)
+SYSCTL_SETUP(sysctl_net_inet_icmp_setup, "sysctl net.inet.icmp subtree setup")
 {
 
 	sysctl_createv(clog, 0, NULL, NULL,
@@ -1062,14 +1050,6 @@ sysctl_netinet_icmp_setup(struct sysctllog **clog)
 		       sysctl_net_inet_icmp_stats, 0, NULL, 0,
 		       CTL_NET, PF_INET, IPPROTO_ICMP, ICMPCTL_STATS,
 		       CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "bmcastecho",
-		       SYSCTL_DESCR("Respond to ICMP_ECHO or ICMP_TIMESTAMP "
-				    "message to the broadcast or multicast"),
-		       NULL, 0, &icmpbmcastecho, 0,
-		       CTL_NET, PF_INET, IPPROTO_ICMP, ICMPCTL_BMCASTECHO,
-		       CTL_EOL);
 }
 
 void
@@ -1106,7 +1086,8 @@ icmp_mtudisc(struct icmp *icp, struct in_addr faddr)
 		struct rtentry *nrt;
 
 		error = rtrequest((int) RTM_ADD, dst,
-		    (struct sockaddr *) rt->rt_gateway, NULL,
+		    (struct sockaddr *) rt->rt_gateway,
+		    (struct sockaddr *) 0,
 		    RTF_GATEWAY | RTF_HOST | RTF_DYNAMIC, &nrt);
 		if (error) {
 			rtfree(rt);
@@ -1246,7 +1227,7 @@ icmp_redirect_timeout(struct rtentry *rt, struct rttimer *r)
  *
  * XXX per-destination/type check necessary?
  */
-int
+static int
 icmp_ratelimit(const struct in_addr *dst, const int type,
     const int code)
 {

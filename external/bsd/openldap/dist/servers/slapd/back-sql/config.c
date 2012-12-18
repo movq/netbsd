@@ -1,9 +1,7 @@
-/*	$NetBSD: config.c,v 1.1.1.3 2010/12/12 15:23:24 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/servers/slapd/back-sql/config.c,v 1.32.2.8 2010/04/13 20:23:42 kurt Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/back-sql/config.c,v 1.32.2.5 2008/02/11 23:26:48 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1999-2010 The OpenLDAP Foundation.
+ * Copyright 1999-2008 The OpenLDAP Foundation.
  * Portions Copyright 1999 Dmitry Kovalev.
  * Portions Copyright 2002 Pierangelo Masarati.
  * Portions Copyright 2004 Mark Adamson.
@@ -661,7 +659,7 @@ read_baseObject(
 {
 	backsql_info 	*bi = (backsql_info *)be->be_private;
 	LDIFFP		*fp;
-	int		rc = 0, lineno = 0, lmax = 0, ldifrc;
+	int		rc = 0, lineno = 0, lmax = 0;
 	char		*buf = NULL;
 
 	assert( fname != NULL );
@@ -687,7 +685,7 @@ read_baseObject(
 	bi->sql_baseObject->e_nname = be->be_nsuffix[0];
 	bi->sql_baseObject->e_attrs = NULL;
 
-	while (( ldifrc = ldif_read_record( fp, &lineno, &buf, &lmax )) > 0 ) {
+	while ( ldif_read_record( fp, &lineno, &buf, &lmax ) ) {
 		Entry		*e = str2entry( buf );
 		Attribute	*a;
 
@@ -706,7 +704,7 @@ read_baseObject(
 				"dn=\"%s\" (line=%d)\n",
 				e->e_name.bv_val, lineno );
 			entry_free( e );
-			rc = LDAP_OTHER;
+			rc = EXIT_FAILURE;
 			break;
 		}
 
@@ -730,9 +728,6 @@ read_baseObject(
 			break;
 		}
 	}
-
-	if ( ldifrc < 0 )
-		rc = LDAP_OTHER;
 
 	if ( rc ) {
 		entry_free( bi->sql_baseObject );

@@ -1,4 +1,4 @@
-/*	$NetBSD: mopd.c,v 1.14 2011/08/30 19:49:11 joerg Exp $	*/
+/*	$NetBSD: mopd.c,v 1.10 2002/11/05 14:18:05 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1993-96 Mats O Jansson.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mopd.c,v 1.14 2011/08/30 19:49:11 joerg Exp $");
+__RCSID("$NetBSD: mopd.c,v 1.10 2002/11/05 14:18:05 thorpej Exp $");
 #endif
 
 /*
@@ -56,8 +61,9 @@ __RCSID("$NetBSD: mopd.c,v 1.14 2011/08/30 19:49:11 joerg Exp $");
  */
 struct if_info *iflist;
 
-__dead static void	Usage(void);
-void	mopProcess(struct if_info *, u_char *);
+void	Usage __P((void));
+int	main __P((int, char **));
+void	mopProcess __P((struct if_info *, u_char *));
 
 int     AllFlag = 0;		/* listen on "all" interfaces */
 int     DebugFlag = 0;		/* print debugging messages   */
@@ -66,10 +72,12 @@ int	VersionFlag = 0;	/* print version              */
 int	Not3Flag = 0;		/* Not MOP V3 messages.       */
 int	Not4Flag = 0;		/* Not MOP V4 messages.       */
 int	promisc = 1;		/* Need promisc mode    */
-const char *MopdDir = MOP_FILE_PATH;  /* Path to mop directory  */
+char	*MopdDir = MOP_FILE_PATH;  /* Path to mop directory  */
 
 int
-main(int argc, char  **argv)
+main(argc, argv)
+	int     argc;
+	char  **argv;
 {
 	int	c, pid;
 
@@ -152,8 +160,8 @@ main(int argc, char  **argv)
 	return (0);
 }
 
-static void
-Usage(void)
+void
+Usage()
 {
 	(void) fprintf(stderr, "usage: %s -a [ -d -f -v ] [ -3 | -4 ]\n",
 	    getprogname());
@@ -167,11 +175,13 @@ Usage(void)
  * Process incomming packages.
  */
 void
-mopProcess(struct if_info *ii, u_char *pkt)
+mopProcess(ii, pkt)
+	struct if_info *ii;
+	u_char *pkt;
 {
-	const u_char	*dst, *src;
+	u_char	*dst, *src;
 	u_short  ptype;
-	int	 idx, trans, len;
+	int	 index, trans, len;
 
 	/* We don't known with transport, Guess! */
 
@@ -182,8 +192,8 @@ mopProcess(struct if_info *ii, u_char *pkt)
 	if ((trans == TRANS_ETHER) && Not3Flag) return;
 	if ((trans == TRANS_8023) && Not4Flag)	return;
 
-	idx = 0;
-	mopGetHeader(pkt, &idx, &dst, &src, &ptype, &len, trans);
+	index = 0;
+	mopGetHeader(pkt, &index, &dst, &src, &ptype, &len, trans);
 
 	/*
 	 * Ignore our own transmissions
@@ -194,10 +204,10 @@ mopProcess(struct if_info *ii, u_char *pkt)
 
 	switch(ptype) {
 	case MOP_K_PROTO_DL:
-		mopProcessDL(stdout, ii, pkt, &idx, dst, src, trans, len);
+		mopProcessDL(stdout, ii, pkt, &index, dst, src, trans, len);
 		break;
 	case MOP_K_PROTO_RC:
-		mopProcessRC(stdout, ii, pkt, &idx, dst, src, trans, len);
+		mopProcessRC(stdout, ii, pkt, &index, dst, src, trans, len);
 		break;
 	default:
 		break;

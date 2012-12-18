@@ -1,4 +1,4 @@
-/*	$NetBSD: master_ent.c,v 1.1.1.3 2011/07/31 10:02:42 tron Exp $	*/
+/*	$NetBSD: master_ent.c,v 1.1.1.1.2.5 2011/08/09 18:58:17 riz Exp $	*/
 
 /*++
 /* NAME

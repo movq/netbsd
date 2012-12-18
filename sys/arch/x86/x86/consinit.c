@@ -1,4 +1,4 @@
-/*	$NetBSD: consinit.c,v 1.24 2012/10/13 17:58:55 jdc Exp $	*/
+/*	$NetBSD: consinit.c,v 1.15 2007/11/14 17:55:00 ad Exp $	*/
 
 /*
  * Copyright (c) 1998
@@ -27,18 +27,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.24 2012/10/13 17:58:55 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.15 2007/11/14 17:55:00 ad Exp $");
 
 #include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/bootinfo.h>
-#include <arch/x86/include/genfb_machdep.h>
 
-#include "genfb.h"
 #include "vga.h"
 #include "ega.h"
 #include "pcdisplay.h"
@@ -66,8 +64,18 @@ __KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.24 2012/10/13 17:58:55 jdc Exp $");
 #endif
 #include "pckbd.h" /* for pckbc_machdep_cnattach */
 
-#if (NGENFB > 0)
-#include <dev/wsfb/genfbvar.h>
+#ifdef __i386__
+#include "vesafb.h"
+#if (NVESAFB > 0)
+#include <arch/i386/bios/vesafbvar.h>
+#endif
+#endif
+
+#ifdef __i386__
+#include "xboxfb.h"
+#if (NXBOXFB > 0)
+#include <machine/xbox.h>
+#endif
 #endif
 
 #include "com.h"
@@ -139,10 +147,9 @@ int comkgdbmode = KGDB_DEVMODE;
  * it shouldn't be called from init386 either.
  */
 void
-consinit(void)
+consinit()
 {
 	const struct btinfo_console *consinfo;
-	const struct btinfo_framebuffer *fbinfo;
 	static int initted;
 
 	if (initted)
@@ -155,40 +162,44 @@ consinit(void)
 #endif
 		consinfo = &default_consinfo;
 
-	fbinfo = lookup_bootinfo(BTINFO_FRAMEBUFFER);
-
+#if (NVGA > 0) || (NEGA > 0) || (NPCDISPLAY > 0) || (NVESAFB > 0) || (NXBOXFB > 0)
 	if (!strcmp(consinfo->devname, "pc")) {
 		int error;
-#if (NGENFB > 0)
-		if (fbinfo && fbinfo->physaddr > 0) {
-			if (x86_genfb_cnattach() == -1) {
-				initted = 0;	/* defer */
-				return;
-			}
-			genfb_cnattach();
+#if (NVESAFB > 0)
+		if (!vesafb_cnattach())
 			goto dokbd;
+#endif
+#if (NXBOXFB > 0)
+		switch (xboxfb_cnattach()) {
+		case 0:
+			goto dokbd;
+		case 1:
+			break;
+		case -1:
+			/* defer initialization until later */
+			initted = 0;
+			return;
 		}
-		genfb_disable();
 #endif
 #if (NVGA > 0)
-		if (!vga_cnattach(x86_bus_space_io, x86_bus_space_mem,
+		if (!vga_cnattach(X86_BUS_SPACE_IO, X86_BUS_SPACE_MEM,
 				  -1, 1))
 			goto dokbd;
 #endif
 #if (NEGA > 0)
-		if (!ega_cnattach(x86_bus_space_io, x86_bus_space_mem))
+		if (!ega_cnattach(X86_BUS_SPACE_IO, X86_BUS_SPACE_MEM))
 			goto dokbd;
 #endif
 #if (NPCDISPLAY > 0)
-		if (!pcdisplay_cnattach(x86_bus_space_io, x86_bus_space_mem))
+		if (!pcdisplay_cnattach(X86_BUS_SPACE_IO, X86_BUS_SPACE_MEM))
 			goto dokbd;
 #endif
 		if (0) goto dokbd; /* XXX stupid gcc */
 dokbd:
 		error = ENODEV;
 #if (NPCKBC > 0)
-		error = pckbc_cnattach(x86_bus_space_io, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT, 0);
+		error = pckbc_cnattach(X86_BUS_SPACE_IO, IO_KBD, KBCMDP,
+		    PCKBC_KBD_SLOT);
 #endif
 #if (NUKBD > 0)
 		if (error)
@@ -199,8 +210,10 @@ dokbd:
 			       error);
 		return;
 	}
+#endif /* PC | VT | VGA | PCDISPLAY | VESAFB | XBOXFB */
 #if (NCOM > 0)
 	if (!strcmp(consinfo->devname, "com")) {
+		bus_space_tag_t tag = X86_BUS_SPACE_IO;
 		int addr = consinfo->addr;
 		int speed = consinfo->speed;
 
@@ -209,7 +222,7 @@ dokbd:
 		if (speed == 0)
 			speed = CONSPEED;
 
-		if (comcnattach(x86_bus_space_io, addr, speed,
+		if (comcnattach(tag, addr, speed,
 				COM_FREQ, COM_TYPE_NORMAL, comcnmode))
 			panic("can't init serial console @%x", consinfo->addr);
 
@@ -221,12 +234,14 @@ dokbd:
 
 #ifdef KGDB
 void
-kgdb_port_init(void)
+kgdb_port_init()
 {
 #if (NCOM > 0)
 	if(!strcmp(kgdb_devname, "com")) {
-		com_kgdb_attach(x86_bus_space_io, comkgdbaddr, comkgdbrate,
-		    COM_FREQ, COM_TYPE_NORMAL, comkgdbmode);
+		bus_space_tag_t tag = X86_BUS_SPACE_IO;
+
+		com_kgdb_attach(tag, comkgdbaddr, comkgdbrate, COM_FREQ, 
+		    COM_TYPE_NORMAL, comkgdbmode);
 	}
 #endif
 }

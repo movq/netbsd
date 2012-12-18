@@ -1,4 +1,4 @@
-/*	$NetBSD: spif.c,v 1.28 2011/07/18 00:58:52 mrg Exp $	*/
+/*	$NetBSD: spif.c,v 1.18.6.1 2011/01/07 03:52:34 riz Exp $	*/
 /*	$OpenBSD: spif.c,v 1.12 2003/10/03 16:44:51 miod Exp $	*/
 
 /*
@@ -41,7 +41,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spif.c,v 1.28 2011/07/18 00:58:52 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spif.c,v 1.18.6.1 2011/01/07 03:52:34 riz Exp $");
 
 #include "spif.h"
 #if NSPIF > 0
@@ -71,18 +71,21 @@ __KERNEL_RCSID(0, "$NetBSD: spif.c,v 1.28 2011/07/18 00:58:52 mrg Exp $");
 #include <dev/sbus/spifvar.h>
 #include <dev/sbus/spifreg.h>
 
-#include "ioconf.h"
 
 /* Autoconfig stuff */
 
-CFATTACH_DECL_NEW(spif, sizeof(struct spif_softc),
+CFATTACH_DECL(spif, sizeof(struct spif_softc),
     spif_match, spif_attach, NULL, NULL);
 
-CFATTACH_DECL_NEW(stty, sizeof(struct stty_softc),
+CFATTACH_DECL(stty, sizeof(struct stty_softc),
     stty_match, stty_attach, NULL, NULL);
 
-CFATTACH_DECL_NEW(sbpp, sizeof(struct sbpp_softc),
+CFATTACH_DECL(sbpp, sizeof(struct sbpp_softc),
     sbpp_match, sbpp_attach, NULL, NULL);
+
+extern struct cfdriver spif_cd;
+extern struct cfdriver stty_cd;
+extern struct cfdriver sbpp_cd;
 
 dev_type_open(stty_open);
 dev_type_close(stty_close);
@@ -140,7 +143,10 @@ const struct cdevsw sbpp_cdevsw = {
 
 
 int
-spif_match(device_t parent, cfdata_t vcf, void *aux)
+spif_match(parent, vcf, aux)
+	struct device *parent;
+	struct cfdata *vcf;
+	void *aux;
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -151,12 +157,12 @@ spif_match(device_t parent, cfdata_t vcf, void *aux)
 }
 
 void
-spif_attach(device_t parent, device_t self, void *aux)
+spif_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct spif_softc *sc = device_private(self);
 	struct sbus_attach_args *sa = aux;
-
-	sc->sc_dev = self;
 
 	if (sa->sa_nintr != 2) {
 		printf(": expected %d interrupts, got %d\n", 2, sa->sa_nintr);
@@ -268,7 +274,10 @@ fail_unmapregs:
 }
 
 int
-stty_match(device_t parent, cfdata_t vcf, void *aux)
+stty_match(parent, vcf, aux)
+	struct device *parent;
+	struct cfdata *vcf;
+	void *aux;
 {
 	struct spif_softc *sc = device_private(parent);
 
@@ -276,13 +285,14 @@ stty_match(device_t parent, cfdata_t vcf, void *aux)
 }
 
 void
-stty_attach(device_t parent, device_t dev, void *aux)
+stty_attach(parent, dev, aux)
+	struct device *parent, *dev;
+	void *aux;
 {
 	struct spif_softc *sc = device_private(parent);
 	struct stty_softc *ssc = device_private(dev);
 	int port;
 
-	sc->sc_dev = dev;
 	sc->sc_ttys = ssc;
 
 	for (port = 0; port < sc->sc_nser; port++) {
@@ -291,7 +301,7 @@ stty_attach(device_t parent, device_t dev, void *aux)
 
 		DTR_WRITE(sc, port, 0);
 
-		tp = tty_alloc();
+		tp = ttymalloc();
 
 		tp->t_oproc = stty_start;
 		tp->t_param = stty_param;
@@ -482,7 +492,9 @@ stty_ioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 }
 
 int
-stty_modem_control(struct stty_port *sp, int bits, int how)
+stty_modem_control(sp, bits, how)
+	struct stty_port *sp;
+	int bits, how;
 {
 	struct spif_softc *csc = sp->sp_sc;
 	struct tty *tp = sp->sp_tty;
@@ -542,7 +554,7 @@ stty_param(struct tty *tp, struct termios *t)
 						      SPIF_CARD(tp->t_dev));
 	struct stty_port *sp = &st->sc_port[SPIF_PORT(tp->t_dev)];
 	struct spif_softc *sc = sp->sp_sc;
-	uint8_t rbprl = 0, rbprh = 0, tbprl = 0, tbprh = 0;
+	u_int8_t rbprl, rbprh, tbprl, tbprh;
 	int s, opt;
 
 	if (t->c_ospeed &&
@@ -714,10 +726,12 @@ stty_start(struct tty *tp)
 }
 
 int
-spif_stcintr_rxexception(struct spif_softc *sc, int *needsoftp)
+spif_stcintr_rxexception(sc, needsoftp)
+	struct spif_softc *sc;
+	int *needsoftp;
 {
 	struct stty_port *sp;
-	uint8_t channel, *ptr;
+	u_int8_t channel, *ptr;
 
 	channel = CD180_GSCR_CHANNEL(STC_READ(sc, STC_GSCR1));
 	sp = &sc->sc_ttys->sc_port[channel];
@@ -739,10 +753,12 @@ spif_stcintr_rxexception(struct spif_softc *sc, int *needsoftp)
 }
 
 int
-spif_stcintr_rx(struct spif_softc *sc, int *needsoftp)
+spif_stcintr_rx(sc, needsoftp)
+	struct spif_softc *sc;
+	int *needsoftp;
 {
 	struct stty_port *sp;
-	uint8_t channel, *ptr, cnt, rcsr;
+	u_int8_t channel, *ptr, cnt, rcsr;
 	int i;
 
 	channel = CD180_GSCR_CHANNEL(STC_READ(sc, STC_GSCR1));
@@ -772,10 +788,12 @@ spif_stcintr_rx(struct spif_softc *sc, int *needsoftp)
 }
 
 int
-spif_stcintr_tx(struct spif_softc *sc, int *needsoftp)
+spif_stcintr_tx(sc, needsoftp)
+	struct spif_softc *sc;
+	int *needsoftp;
 {
 	struct stty_port *sp;
-	uint8_t channel, ch;
+	u_int8_t channel, ch;
 	int cnt = 0;
 
 	channel = CD180_GSCR_CHANNEL(STC_READ(sc, STC_GSCR1));
@@ -823,10 +841,12 @@ spif_stcintr_tx(struct spif_softc *sc, int *needsoftp)
 }
 
 int
-spif_stcintr_mx(struct spif_softc *sc, int *needsoftp)
+spif_stcintr_mx(sc, needsoftp)
+	struct spif_softc *sc;
+	int *needsoftp;
 {
 	struct stty_port *sp;
-	uint8_t channel, mcr;
+	u_int8_t channel, mcr;
 
 	channel = CD180_GSCR_CHANNEL(STC_READ(sc, STC_GSCR1));
 	sp = &sc->sc_ttys->sc_port[channel];
@@ -841,11 +861,12 @@ spif_stcintr_mx(struct spif_softc *sc, int *needsoftp)
 }
 
 int
-spif_stcintr(void *vsc)
+spif_stcintr(vsc)
+	void *vsc;
 {
 	struct spif_softc *sc = (struct spif_softc *)vsc;
 	int needsoft = 0, r = 0, i;
-	uint8_t ar;
+	u_int8_t ar;
 
 	for (i = 0; i < 8; i++) {
 		ar = ISTC_READ(sc, STC_RRAR) & CD180_GSVR_IMASK;
@@ -873,12 +894,13 @@ spif_stcintr(void *vsc)
 }
 
 void
-spif_softintr(void *vsc)
+spif_softintr(vsc)
+	void *vsc;
 {
 	struct spif_softc *sc = (struct spif_softc *)vsc;
 	struct stty_softc *stc = sc->sc_ttys;
 	int r = 0, i, data, s, flags;
-	uint8_t stat, msvr;
+	u_int8_t stat, msvr;
 	struct stty_port *sp;
 	struct tty *tp;
 
@@ -927,7 +949,7 @@ spif_softintr(void *vsc)
 
 			if (ISSET(flags, STTYF_RING_OVERFLOW)) {
 				log(LOG_WARNING, "%s-%x: ring overflow\n",
-					device_xname(stc->sc_dev), i);
+					device_xname(&stc->sc_dev), i);
 				r = 1;
 			}
 
@@ -943,21 +965,26 @@ spif_softintr(void *vsc)
 }
 
 void
-stty_write_ccr(struct spif_softc *sc, uint8_t val)
+stty_write_ccr(sc, val)
+	struct spif_softc *sc;
+	u_int8_t val;
 {
 	int tries = 100000;
 
 	while (STC_READ(sc, STC_CCR) && tries--)
 		/*EMPTY*/;
 	if (tries == 0)
-		aprint_error_dev(sc->sc_dev, "ccr timeout\n");
+		aprint_error_dev(&sc->sc_dev, "ccr timeout\n");
 	STC_WRITE(sc, STC_CCR, val);
 }
 
 int
-stty_compute_baud(speed_t speed, int clock, uint8_t *bprlp, uint8_t *bprhp)
+stty_compute_baud(speed, clock, bprlp, bprhp)
+	speed_t speed;
+	int clock;
+	u_int8_t *bprlp, *bprhp;
 {
-	uint32_t rate;
+	u_int32_t rate;
 
 	rate = (2 * clock) / (16 * speed);
 	if (rate & 1)
@@ -974,7 +1001,10 @@ stty_compute_baud(speed_t speed, int clock, uint8_t *bprlp, uint8_t *bprhp)
 }
 
 int
-sbpp_match(device_t parent, cfdata_t vcf, void *aux)
+sbpp_match(parent, vcf, aux)
+	struct device *parent;
+	struct cfdata *vcf;
+	void *aux;
 {
 	struct spif_softc *sc = device_private(parent);
 
@@ -982,7 +1012,9 @@ sbpp_match(device_t parent, cfdata_t vcf, void *aux)
 }
 
 void
-sbpp_attach(device_t parent, device_t dev, void *aux)
+sbpp_attach(parent, dev, aux)
+	struct device *parent, *dev;
+	void *aux;
 {
 	struct spif_softc *sc = device_private(parent);
 	struct sbpp_softc *psc = device_private(dev);
@@ -998,49 +1030,74 @@ sbpp_attach(device_t parent, device_t dev, void *aux)
 }
 
 int
-sbpp_open(dev_t dev, int flags, int mode, struct lwp *l)
+sbpp_open(dev, flags, mode, l)
+	dev_t dev;
+	int flags;
+	int mode;
+	struct lwp *l;
 {
 	return (ENXIO);
 }
 
 int
-sbpp_close(dev_t dev, int flags, int mode, struct lwp *l)
+sbpp_close(dev, flags, mode, l)
+	dev_t dev;
+	int flags;
+	int mode;
+	struct lwp *l;
 {
 	return (ENXIO);
 }
 
 int
-spif_ppcintr(void *v)
+spif_ppcintr(v)
+	void *v;
 {
 	return (0);
 }
 
 int
-sbpp_read(dev_t dev, struct uio *uio, int flags)
+sbpp_read(dev, uio, flags)
+	dev_t dev;
+	struct uio *uio;
+	int flags;
 {
 	return (sbpp_rw(dev, uio));
 }
 
 int
-sbpp_write(dev_t dev, struct uio *uio, int flags)
+sbpp_write(dev, uio, flags)
+	dev_t dev;
+	struct uio *uio;
+	int flags;
 {
 	return (sbpp_rw(dev, uio));
 }
 
 int
-sbpp_rw(dev_t dev, struct uio *uio)
+sbpp_rw(dev, uio)
+	dev_t dev;
+	struct uio *uio;
 {
 	return (ENXIO);
 }
 
 int
-sbpp_poll(dev_t dev, int events, struct lwp *l)
+sbpp_poll(dev, events, l)
+	dev_t dev;
+	int events;
+	struct lwp *l;
 {
 	return (seltrue(dev, events, l));
 }
 
 int
-sbpp_ioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
+sbpp_ioctl(dev, cmd, data, flags, l)
+	dev_t dev;
+	u_long cmd;
+	void *data;
+	int flags;
+	struct lwp *l;
 {
 	int error;
 

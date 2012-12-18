@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_efs.c,v 1.5 2011/08/29 14:35:00 joerg Exp $	*/
+/*	$NetBSD: mount_efs.c,v 1.4 2008/08/05 20:57:45 pooka Exp $	*/
 
 /*
  * Copyright (c) 2006 Stephen M. Rumble <rumble@ephemeral.org>
@@ -41,10 +41,10 @@ static const struct mntopt mopts[] = {
 	MOPT_NULL
 };
 
-__dead static void	usage(void);
+static void	usage(void);
 
 static void
-usage(void)
+usage()
 {
 	
 	fprintf(stderr, "usage: %s [-o options] special node\n", getprogname());

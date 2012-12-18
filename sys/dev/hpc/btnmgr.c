@@ -1,4 +1,4 @@
-/*	$NetBSD: btnmgr.c,v 1.26 2012/10/27 17:18:17 chs Exp $	*/
+/*	$NetBSD: btnmgr.c,v 1.22 2007/10/19 11:59:42 ad Exp $	*/
 
 /*-
  * Copyright (c) 1999
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btnmgr.c,v 1.26 2012/10/27 17:18:17 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btnmgr.c,v 1.22 2007/10/19 11:59:42 ad Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_btnmgr.h"
@@ -74,23 +74,24 @@ int	btnmgr_debug = BTNMGRDEBUG_CONF;
 #endif
 
 struct btnmgr_softc {
+	struct device sc_dev;
 	config_hook_tag	sc_hook_tag;
 	int sc_enabled;
-	device_t sc_wskbddev;
+	struct device *sc_wskbddev;
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	int sc_rawkbd;
 #endif
 };
 
-int btnmgrmatch(device_t, cfdata_t, void *);
-void btnmgrattach(device_t, device_t, void *);
+int btnmgrmatch(struct device *, struct cfdata *, void *);
+void btnmgrattach(struct device *, struct device *, void *);
 const char *btnmgr_name(long);
 static int btnmgr_hook(void *, int, long, void *);
 
 /*
  * global/static data
  */
-CFATTACH_DECL_NEW(btnmgr, sizeof(struct btnmgr_softc),
+CFATTACH_DECL(btnmgr, sizeof(struct btnmgr_softc),
     btnmgrmatch, btnmgrattach, NULL, NULL);
 
 #ifdef notyet
@@ -172,7 +173,7 @@ struct wskbd_mapdata btnmgr_keymapdata = {
  *  function bodies
  */
 int
-btnmgrmatch(device_t parent, cfdata_t match, void *aux)
+btnmgrmatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -183,8 +184,8 @@ btnmgrmatch(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-btnmgrattach(device_t parent,
-	     device_t self, void *aux)
+btnmgrattach(struct device *parent,
+	     struct device *self, void *aux)
 {
 	int id;
 	struct btnmgr_softc *sc = device_private(self);
@@ -210,9 +211,6 @@ btnmgrattach(device_t parent,
 	wa.accesscookie = sc;
 
 	sc->sc_wskbddev = config_found(self, &wa, wskbddevprint);
-
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 static int

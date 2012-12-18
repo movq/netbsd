@@ -1,4 +1,4 @@
-/*	$NetBSD: fancy.c,v 1.14 2009/08/12 05:17:57 dholland Exp $	*/
+/*	$NetBSD: fancy.c,v 1.13 2005/07/01 01:12:39 jmc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,24 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)fancy.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: fancy.c,v 1.14 2009/08/12 05:17:57 dholland Exp $");
+__RCSID("$NetBSD: fancy.c,v 1.13 2005/07/01 01:12:39 jmc Exp $");
 #endif
 #endif /* not lint */
 
 #include "back.h"
 
-static void bsect(int, int, int, int);
-static void fixpos(int, int, int, int, int);
-static void fixcol(int, int, int, int, int);
-static void newline(void);
-
-/*
- * These need to be declared so they come out as commons, because
- * termcap might or might not define some of them. Our termcap defines
- * PC, BC, and UP only. This is gross.
- *
- * XXX: rewrite this crap using curses.
- */
 char    PC;			/* padding character */
 char   *BC;			/* backspace sequence */
 char   *CD;			/* clear to end of screen sequence */
@@ -64,33 +52,33 @@ char   *ML;			/* row cursor movement map */
 char   *ND;			/* forward cursor sequence */
 char   *UP;			/* up cursor sequence */
 
-static int lHO;			/* length of HO */
-static int lBC;			/* length of BC */
-static int lND;			/* length of ND */
-static int lUP;			/* length of UP */
-static int CO;			/* number of columns */
-static int LI;			/* number of lines */
-static int *linect;		/* array of lengths of lines on screen (the
+int     lHO;			/* length of HO */
+int     lBC;			/* length of BC */
+int     lND;			/* length of ND */
+int     lUP;			/* length of UP */
+int     CO;			/* number of columns */
+int     LI;			/* number of lines */
+int    *linect;			/* array of lengths of lines on screen (the
 				 * actual screen is not stored) */
 
  /* two letter codes */
-static char tcap[] = "bccdceclcmhomcmlndup";
+char    tcap[] = "bccdceclcmhomcmlndup";
  /* corresponding strings */
-static char **tstr[] = {&BC, &CD, &CE, &CL, &CM, &HO, &MC, &ML, &ND, &UP};
+char  **tstr[] = {&BC, &CD, &CE, &CL, &CM, &HO, &MC, &ML, &ND, &UP};
 
 int     buffnum;		/* pointer to output buffer */
 
-static char tbuf[1024];		/* buffer for decoded termcap entries */
+char    tbuf[1024];		/* buffer for decoded termcap entries */
 
-static int oldb[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-		     0, 0, 0, 0, 0, 0};
+int     oldb[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+		  0, 0, 0, 0, 0, 0};
 
-static int oldr;
-static int oldw;
+int     oldr;
+int     oldw;
  /* "real" cursor positions, so it knows when to reposition. These are -1 if
   * curr and curc are accurate */
-static int realr;
-static int realc;
+int     realr;
+int     realc;
 
 void
 fboard(void)
@@ -199,7 +187,7 @@ fboard(void)
  * to see if the position is a player's home, since those are printed
  * differently.
  */
-static void
+void
 bsect(int b, int rpos, int cpos, int cnext)
 {
 	int     j;		/* index */
@@ -306,7 +294,7 @@ refresh(void)
 	buflush();
 }
 
-static void
+void
 fixpos(int cur, int new, int r, int c, int inc)
 {
 	int     o, n, nv;
@@ -392,7 +380,7 @@ fixpos(int cur, int new, int r, int c, int inc)
 	fixcol(r + inc * new, c + 1, abs(cur + new), ' ', inc);
 }
 
-static void
+void
 fixcol(int r, int c, int l, int ch, int inc)
 {
 	int     i;
@@ -695,7 +683,7 @@ cline(void)
 	}
 }
 
-static void
+void
 newline(void)
 {
 	cline();

@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_vnops.c,v 1.85 2012/11/30 23:24:21 nakayama Exp $	*/
+/*	$NetBSD: smbfs_vnops.c,v 1.65.6.1 2012/02/17 16:01:28 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_vnops.c,v 1.85 2012/11/30 23:24:21 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_vnops.c,v 1.65.6.1 2012/02/17 16:01:28 sborrill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,7 +78,6 @@ __KERNEL_RCSID(0, "$NetBSD: smbfs_vnops.c,v 1.85 2012/11/30 23:24:21 nakayama Ex
 #include <sys/vnode.h>
 #include <sys/lockf.h>
 #include <sys/kauth.h>
-#include <sys/mallocvar.h>
 
 #include <machine/limits.h>
 
@@ -161,16 +160,33 @@ static struct vnodeopv_entry_desc smbfs_vnodeop_entries[] = {
 const struct vnodeopv_desc smbfs_vnodeop_opv_desc =
 	{ &smbfs_vnodeop_p, smbfs_vnodeop_entries };
 
-static int
-smbfs_check_possible(struct vnode *vp, struct smbnode *np, mode_t mode)
+int
+smbfs_access(v)
+     void *v;
 {
+	struct vop_access_args /* {
+		struct vnode *a_vp;
+		int  a_mode;
+		kauth_cred_t a_cred;
+	} */ *ap = v;
+	struct vnode *vp = ap->a_vp;
+#ifdef SMB_VNODE_DEBUG
+	struct smbnode *np = VTOSMB(vp);
+#endif
+	u_int acc_mode = ap->a_mode;
+	struct smbmount *smp = VTOSMBFS(vp);
+
+        SMBVDEBUG("file '%.*s', node mode=%o, acc mode=%x\n",
+	    (int) np->n_nmlen, np->n_name,
+	    (vp->v_type == VDIR) ? smp->sm_args.dir_mode : smp->sm_args.file_mode,
+	    acc_mode);
 
         /*
          * Disallow write attempts on read-only file systems;
          * unless the file is a socket, fifo, or a block or
          * character device resident on the file system.
          */
-	if (mode & VWRITE) {
+	if (acc_mode & VWRITE) {
 		switch (vp->v_type) {
 		case VREG:
 		case VDIR:
@@ -182,55 +198,16 @@ smbfs_check_possible(struct vnode *vp, struct smbnode *np, mode_t mode)
 		}
 	}
 
-	return 0;
-}
-
-static int
-smbfs_check_permitted(struct vnode *vp, struct smbnode *np, mode_t mode,
-    kauth_cred_t cred)
-{
-	struct smbmount *smp = VTOSMBFS(vp);
-	mode_t file_mode = (vp->v_type == VDIR) ? smp->sm_args.dir_mode :
-	    smp->sm_args.file_mode;
-
-	return kauth_authorize_vnode(cred, kauth_access_action(mode,
-	    vp->v_type, file_mode), vp, NULL, genfs_can_access(vp->v_type,
-	    file_mode, smp->sm_args.uid, smp->sm_args.gid, mode, cred));
-}
-
-int
-smbfs_access(void *v)
-{
-	struct vop_access_args /* {
-		struct vnode *a_vp;
-		int  a_mode;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
-	struct smbnode *np = VTOSMB(vp);
-	u_int acc_mode = ap->a_mode;
-	int error;
-#ifdef SMB_VNODE_DEBUG
-	struct smbmount *smp = VTOSMBFS(vp);
-#endif
-
-        SMBVDEBUG("file '%.*s', node mode=%o, acc mode=%x\n",
-	    (int) np->n_nmlen, np->n_name,
+	return (vaccess(vp->v_type,
 	    (vp->v_type == VDIR) ? smp->sm_args.dir_mode : smp->sm_args.file_mode,
-	    acc_mode);
-
-	error = smbfs_check_possible(vp, np, acc_mode);
-	if (error)
-		return error;
-
-	error = smbfs_check_permitted(vp, np, acc_mode, ap->a_cred);
-
-	return error;
+	    smp->sm_args.uid, smp->sm_args.gid,
+	    acc_mode, ap->a_cred));
 }
 
 /* ARGSUSED */
 int
-smbfs_open(void *v)
+smbfs_open(v)
+     void *v;
 {
 	struct vop_open_args /* {
 		struct vnode *a_vp;
@@ -252,10 +229,9 @@ smbfs_open(void *v)
 		return EACCES;
 	}
 	if (vp->v_type == VDIR) {
-		if ((sv_caps & SMB_CAP_NT_SMBS) == 0) {
-			np->n_flag |= NOPEN;
+		np->n_flag |= NOPEN;
+		if ((sv_caps & SMB_CAP_NT_SMBS) == 0)
 			return 0;
-		}
 		goto do_open;	/* skip 'modified' check */
 	}
 
@@ -316,7 +292,8 @@ do_open:
  * Close called.
  */
 int
-smbfs_close(void *v)
+smbfs_close(v)
+     void *v;
 {
 	struct vop_close_args /* {
 		struct vnodeop_desc *a_desc;
@@ -340,22 +317,13 @@ smbfs_close(void *v)
 	 * Ideally, the lookup routines should handle such case, and
 	 * the context would be removed only in smbfs_inactive().
 	 */
-	if (vp->v_type == VDIR && (np->n_flag & NOPEN) != 0) {
-		struct smb_share *ssp = np->n_mount->sm_share;
+	if (vp->v_type == VDIR && (np->n_flag & NOPEN) != 0 &&
+	    np->n_dirseq != NULL) {
 		struct smb_cred scred;
 
 		smb_makescred(&scred, l, ap->a_cred);
-
-		if (np->n_dirseq != NULL) {
-			smbfs_findclose(np->n_dirseq, &scred);
-			np->n_dirseq = NULL;
-		}
-
-		if (SMB_CAPS(SSTOVC(ssp)) & SMB_CAP_NT_SMBS)
-			smbfs_smb_close(ssp, np->n_fid, &np->n_mtime, &scred);
-
-		np->n_flag &= ~NOPEN;
-		smbfs_attr_cacheremove(vp);
+		smbfs_findclose(np->n_dirseq, &scred);
+		np->n_dirseq = NULL;
 	}
 
 	return (0);
@@ -365,7 +333,8 @@ smbfs_close(void *v)
  * smbfs_getattr call from vfs.
  */
 int
-smbfs_getattr(void *v)
+smbfs_getattr(v)
+     void *v;
 {
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
@@ -402,7 +371,8 @@ smbfs_getattr(void *v)
 }
 
 int
-smbfs_setattr(void *v)
+smbfs_setattr(v)
+     void *v;
 {
 	struct vop_setattr_args /* {
 		struct vnode *a_vp;
@@ -469,12 +439,13 @@ smbfs_setattr(void *v)
 	if (vap->va_atime.tv_sec != VNOVAL)
 		atime = &vap->va_atime;
 	if (mtime != atime) {
-		error = kauth_authorize_vnode(ap->a_cred,
-		    KAUTH_VNODE_WRITE_TIMES, ap->a_vp, NULL,
-		    genfs_can_chtimes(ap->a_vp, vap->va_vaflags,
-		    VTOSMBFS(vp)->sm_args.uid, ap->a_cred));
-		if (error)
-			return (error);
+                if (kauth_cred_geteuid(ap->a_cred) !=
+		    VTOSMBFS(vp)->sm_args.uid &&
+                    (error = kauth_authorize_generic(ap->a_cred,
+		    KAUTH_GENERIC_ISSUSER, NULL)) &&
+                    ((vap->va_vaflags & VA_UTIMES_NULL) == 0 ||
+                    (error = VOP_ACCESS(ap->a_vp, VWRITE, ap->a_cred))))
+                        return (error);
 
 #if 0
 		if (mtime == NULL)
@@ -497,7 +468,8 @@ smbfs_setattr(void *v)
 				VOP_CLOSE(vp, FWRITE, ap->a_cred);
 				}
 			} else if (SMB_CAPS(vcp) & SMB_CAP_NT_SMBS) {
-				error = smbfs_smb_setpattrNT(np, 0, mtime, atime, &scred);
+				error = smbfs_smb_setptime2(np, mtime, atime, 0, &scred);
+/*				error = smbfs_smb_setpattrNT(np, 0, mtime, atime, &scred);*/
 			} else if (SMB_DIALECT(vcp) >= SMB_DIALECT_LANMAN2_0) {
 				error = smbfs_smb_setptime2(np, mtime, atime, 0, &scred);
 			} else {
@@ -531,7 +503,8 @@ smbfs_setattr(void *v)
  * smbfs_read call.
  */
 int
-smbfs_read(void *v)
+smbfs_read(v)
+     void *v;
 {
 	struct vop_read_args /* {
 		struct vnode *a_vp;
@@ -548,7 +521,8 @@ smbfs_read(void *v)
 }
 
 int
-smbfs_write(void *v)
+smbfs_write(v)
+     void *v;
 {
 	struct vop_write_args /* {
 		struct vnode *a_vp;
@@ -559,8 +533,7 @@ smbfs_write(void *v)
 	struct vnode *vp = ap->a_vp;
 	struct uio *uio = ap->a_uio;
 
-	SMBVDEBUG("%d,ofs=%lld,sz=%zu\n",vp->v_type,
-	    (long long int)uio->uio_offset, uio->uio_resid);
+	SMBVDEBUG("%d,ofs=%lld,sz=%u\n",vp->v_type, (long long int)uio->uio_offset, uio->uio_resid);
 	if (vp->v_type != VREG)
 		return (EPERM);
 	return smbfs_writevnode(vp, uio, ap->a_cred, ap->a_ioflag);
@@ -568,10 +541,13 @@ smbfs_write(void *v)
 /*
  * smbfs_create call
  * Create a regular file. On entry the directory to contain the file being
- * created is locked.  We must release before we return.
+ * created is locked.  We must release before we return. We must also free
+ * the pathname buffer pointed at by cnp->cn_pnbuf, always on error, or
+ * only if the SAVESTART bit in cn_flags is clear on success.
  */
 int
-smbfs_create(void *v)
+smbfs_create(v)
+     void *v;
 {
 	struct vop_create_args /* {
 		struct vnode *a_dvp;
@@ -605,17 +581,23 @@ smbfs_create(void *v)
 	if (error)
 		goto out;
 
-	cache_enter(dvp, *ap->a_vpp, cnp->cn_nameptr, cnp->cn_namelen,
-		    cnp->cn_flags);
+	/* No error */
+	if (cnp->cn_flags & MAKEENTRY)
+		cache_enter(dvp, *ap->a_vpp, cnp);
 
   out:
+	if (error || ((cnp->cn_flags & SAVESTART) == 0))
+		PNBUF_PUT(cnp->cn_pnbuf);
 	VN_KNOTE(dvp, NOTE_WRITE);
 	vput(dvp);
 	return (error);
+
+
 }
 
 int
-smbfs_remove(void *v)
+smbfs_remove(v)
+     void *v;
 {
 	struct vop_remove_args /* {
 		struct vnodeop_desc *a_desc;
@@ -638,8 +620,6 @@ smbfs_remove(void *v)
 		smb_makescred(&scred, curlwp, cnp->cn_cred);
 		error = smbfs_smb_delete(np, &scred);
 	}
-	if (error == 0)
-		np->n_flag |= NGONE;
 
 	VN_KNOTE(ap->a_vp, NOTE_DELETE);
 	VN_KNOTE(ap->a_dvp, NOTE_WRITE);
@@ -655,7 +635,8 @@ smbfs_remove(void *v)
  * smbfs_file rename call
  */
 int
-smbfs_rename(void *v)
+smbfs_rename(v)
+     void *v;
 {
 	struct vop_rename_args  /* {
 		struct vnode *a_fdvp;
@@ -717,14 +698,12 @@ smbfs_rename(void *v)
 			error = smbfs_smb_delete(VTOSMB(tvp), &scred);
 			if (error)
 				goto out;
-			VTOSMB(tvp)->n_flag |= NGONE;
 			VN_KNOTE(tdvp, NOTE_WRITE);
 			VN_KNOTE(tvp, NOTE_DELETE);
 			cache_purge(tvp);
 		}
 		error = smbfs_smb_rename(VTOSMB(fvp), VTOSMB(tdvp),
 		    tcnp->cn_nameptr, tcnp->cn_namelen, &scred);
-		VTOSMB(fvp)->n_flag |= NGONE;
 		VN_KNOTE(fdvp, NOTE_WRITE);
 		VN_KNOTE(fvp, NOTE_RENAME);
 	}
@@ -757,7 +736,8 @@ out:
  * somtime it will come true...
  */
 int
-smbfs_link(void *v)
+smbfs_link(v)
+     void *v;
 {
 	return genfs_eopnotsupp(v);
 }
@@ -767,13 +747,15 @@ smbfs_link(void *v)
  * Sometime it will be functional...
  */
 int
-smbfs_symlink(void *v)
+smbfs_symlink(v)
+     void *v;
 {
 	return genfs_eopnotsupp(v);
 }
 
 int
-smbfs_mkdir(void *v)
+smbfs_mkdir(v)
+     void *v;
 {
 	struct vop_mkdir_args /* {
 		struct vnode *a_dvp;
@@ -810,6 +792,8 @@ smbfs_mkdir(void *v)
 	*ap->a_vpp = vp;
 
  out:
+	if (error || ((cnp->cn_flags & SAVESTART) == 0))
+		PNBUF_PUT(cnp->cn_pnbuf);
 	VN_KNOTE(dvp, NOTE_WRITE | NOTE_LINK);
 	vput(dvp);
 
@@ -820,7 +804,8 @@ smbfs_mkdir(void *v)
  * smbfs_remove directory call
  */
 int
-smbfs_rmdir(void *v)
+smbfs_rmdir(v)
+     void *v;
 {
 	struct vop_rmdir_args /* {
 		struct vnode *a_dvp;
@@ -844,8 +829,6 @@ smbfs_rmdir(void *v)
 
 	smb_makescred(&scred, curlwp, cnp->cn_cred);
 	error = smbfs_smb_rmdir(np, &scred);
-	if (error == 0)
-		np->n_flag |= NGONE;
 	dnp->n_flag |= NMODIFIED;
 	smbfs_attr_cacheremove(dvp);
 	VN_KNOTE(dvp, NOTE_WRITE | NOTE_LINK);
@@ -862,7 +845,8 @@ smbfs_rmdir(void *v)
  * smbfs_readdir call
  */
 int
-smbfs_readdir(void *v)
+smbfs_readdir(v)
+     void *v;
 {
 	struct vop_readdir_args /* {
 		struct vnode *a_vp;
@@ -894,7 +878,8 @@ smbfs_fsync(void *v)
 }
 
 int
-smbfs_print(void *v)
+smbfs_print(v)
+     void *v;
 {
 	struct vop_print_args /* {
 	struct vnode *a_vp;
@@ -910,7 +895,8 @@ smbfs_print(void *v)
 }
 
 int
-smbfs_pathconf(void *v)
+smbfs_pathconf(v)
+     void *v;
 {
 	struct vop_pathconf_args  /* {
 		struct vnode *vp;
@@ -945,7 +931,8 @@ smbfs_pathconf(void *v)
 }
 
 int
-smbfs_strategy(void *v)
+smbfs_strategy(v)
+	void *v;
 {
 	struct vop_strategy_args /* {
 		struct vnode *a_vp;
@@ -1020,7 +1007,8 @@ smbfs_getextattr(struct vop_getextattr_args *ap)
  * a callback mechanism because it will help to improve a level of consistency.
  */
 int
-smbfs_advlock(void *v)
+smbfs_advlock(v)
+     void *v;
 {
 	struct vop_advlock_args /* {
 		struct vnode *a_vp;
@@ -1172,7 +1160,8 @@ smbfs_pathcheck(struct smbmount *smp, const char *name, int nmlen)
  * Things go even weird without fixed inode numbers...
  */
 int
-smbfs_lookup(void *v)
+smbfs_lookup(v)
+     void *v;
 {
 	struct vop_lookup_args /* {
 		struct vnode *a_dvp;
@@ -1218,26 +1207,29 @@ smbfs_lookup(void *v)
 	 * the time the cache entry has been created. If it has,
 	 * the cache entry has to be ignored.
 	 */
-	if (cache_lookup(dvp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags,
-			 NULL, vpp)) {
+	if ((error = cache_lookup(dvp, vpp, cnp)) >= 0) {
 		struct vattr vattr;
 		struct vnode *newvp;
-		bool killit = false;
+		int err2;
 
-		error = VOP_ACCESS(dvp, VEXEC, cnp->cn_cred);
-		if (error != 0) {
-			if (*vpp != NULLVP) {
+		if (error && error != ENOENT) {
+			*vpp = NULLVP;
+			return error;
+		}
+
+		err2 = VOP_ACCESS(dvp, VEXEC, cnp->cn_cred);
+		if (err2 != 0) {
+			if (error == 0) {
 				if (*vpp != dvp)
 					vput(*vpp);
 				else
 					vrele(*vpp);
 			}
 			*vpp = NULLVP;
-			return error;
+			return err2;
 		}
 
-		if (*vpp == NULLVP) {
+		if (error == ENOENT) {
 			if (!VOP_GETATTR(dvp, &vattr, cnp->cn_cred)
 			    && vattr.va_mtime.tv_sec == VTOSMB(dvp)->n_nctime)
 				return ENOENT;
@@ -1247,35 +1239,20 @@ smbfs_lookup(void *v)
 		}
 
 		newvp = *vpp;
-		error = VOP_GETATTR(newvp, &vattr, cnp->cn_cred);
-		/*
-		 * If the file type on the server is inconsistent
-		 * with what it was when we created the vnode,
-		 * kill the bogus vnode now and fall through to
-		 * the code below to create a new one with the
-		 * right type.
-		 */
-		if (error == 0 &&
-		    ((newvp->v_type == VDIR &&
-		    (VTOSMB(newvp)->n_dosattr & SMB_FA_DIR) == 0) ||
-		    (newvp->v_type == VREG &&
-		    (VTOSMB(newvp)->n_dosattr & SMB_FA_DIR) != 0)))
-			killit = true;
-		else if (error == 0
+		if (!VOP_GETATTR(newvp, &vattr, cnp->cn_cred)
 			&& vattr.va_ctime.tv_sec == VTOSMB(newvp)->n_ctime)
 		{
 			/* nfsstats.lookupcache_hits++; */
+			if (cnp->cn_nameiop != LOOKUP && islastcn)
+				cnp->cn_flags |= SAVENAME;
+
 			return (0);
 		}
 
 		cache_purge(newvp);
-		if (newvp != dvp) {
-			if (killit) {
-				VOP_UNLOCK(newvp);
-				vgone(newvp);
-			} else
-				vput(newvp);
-		} else
+		if (newvp != dvp)
+			vput(newvp);
+		else
 			vrele(newvp);
 		*vpp = NULLVP;
 	}
@@ -1321,15 +1298,15 @@ smbfs_lookup(void *v)
 			if (error)
 				return (error);
 
+			cnp->cn_flags |= SAVENAME;
 			return (EJUSTRETURN);
 		}
 
 		/*
 		 * Insert name into cache (as non-existent) if appropriate.
 		 */
-		if (nameiop != CREATE)
-			cache_enter(dvp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-				    cnp->cn_flags);
+		if ((cnp->cn_flags & MAKEENTRY) && nameiop != CREATE)
+			cache_enter(dvp, *vpp, cnp);
 
 		return (ENOENT);
 	}
@@ -1345,12 +1322,13 @@ smbfs_lookup(void *v)
 		if (isdot)
 			return (EISDIR);
 		if (flags & ISDOTDOT)
-			VOP_UNLOCK(dvp);
+			VOP_UNLOCK(dvp, 0);
 		error = smbfs_nget(mp, dvp, name, nmlen, &fattr, vpp);
 		if (flags & ISDOTDOT)
 			vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 		if (error)
 			return (error);
+		cnp->cn_flags |= SAVENAME;
 		return (0);
 	}
 
@@ -1359,14 +1337,14 @@ smbfs_lookup(void *v)
 		/*
 		 * "." lookup
 		 */
-		vref(dvp);
+		VREF(dvp);
 		*vpp = dvp;
 	} else if (flags & ISDOTDOT) {
 
 		/*
 		 * ".." lookup
 		 */
-		VOP_UNLOCK(dvp);
+		VOP_UNLOCK(dvp, 0);
 		error = smbfs_nget(mp, dvp, name, nmlen, NULL, vpp);
 		vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 		if (error) {
@@ -1381,17 +1359,20 @@ smbfs_lookup(void *v)
 			return error;
 	}
 
-	KASSERT(error == 0);
-	if (cnp->cn_nameiop != DELETE || !islastcn) {
-		VTOSMB(*vpp)->n_ctime = VTOSMB(*vpp)->n_mtime.tv_sec;
-		cache_enter(dvp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-			    cnp->cn_flags);
+	if (cnp->cn_nameiop != LOOKUP && (flags & ISLASTCN))
+		cnp->cn_flags |= SAVENAME;
+
+	if ((cnp->cn_flags & MAKEENTRY)) {
+		KASSERT(error == 0);
+		if (cnp->cn_nameiop != DELETE || !islastcn) {
+			VTOSMB(*vpp)->n_ctime = VTOSMB(*vpp)->n_mtime.tv_sec;
+			cache_enter(dvp, *vpp, cnp);
 #ifdef notdef
-	} else if (error == ENOENT && cnp->cn_nameiop != CREATE) {
-		VTOSMB(*vpp)->n_nctime = VTOSMB(*vpp)->n_mtime.tv_sec;
-		cache_enter(dvp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-			    cnp->cn_flags);
+		} else if (error == ENOENT && cnp->cn_nameiop != CREATE) {
+			VTOSMB(*vpp)->n_nctime = VTOSMB(*vpp)->n_mtime.tv_sec;
+			cache_enter(dvp, *vpp, cnp);
 #endif
+		}
 	}
 
 	return (0);

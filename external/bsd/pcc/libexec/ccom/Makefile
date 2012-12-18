@@ -1,43 +1,47 @@
-#	$NetBSD: Makefile,v 1.11 2011/09/01 13:00:14 plunky Exp $
+#	$NetBSD: Makefile,v 1.2 2008/08/27 13:15:53 gmcgarry Exp $
 
-WARNS?=	2
+.include <bsd.own.mk>
 
-.include <bsd.init.mk>
+# USE_FORT?= yes
 
-.PATH:	${PCC_DIST}/cc/ccom \
-	${PCC_DIST}/arch/${TARGMACH} \
-	${PCC_DIST}/mip
+DIST=	${NETBSDSRCDIR}/external/bsd/pcc/dist/pcc
+SUBDIST=${DIST}/cc/ccom
 
 PROG=	ccom
-
 SRCS=   cgram.y
-SRCS+=	scan.l
-SRCS+=	optim.c pftn.c trees.c inline.c symtabs.c
-SRCS+=	gcc_compat.c init.c local.c code.c stabs.c builtins.c
-SRCS+=	match.c reader.c optim2.c regs.c local2.c order.c table.c
-SRCS+=	common.c main.c external.c
+SRCS+=  optim.c pftn.c scan.c trees.c inline.c symtabs.c
+SRCS+=	gcc_compat.c init.c local.c code.c stabs.c match.c reader.c optim2.c
+SRCS+=	regs.c local2.c order.c table.c common.c main.c external.c
 
 MAN=    ccom.1
 
-# generate cgram.h
-YHEADER=
+BINDIR= /usr/libexec
 
+CPPFLAGS+=	-I${SUBDIST} -I${.CURDIR} -I${DIST}/mip
+CPPFLAGS+=	-I${.CURDIR}/../..
 CPPFLAGS+=	-I${.OBJDIR}
-CPPFLAGS+=	-I${PCC_DIST}/mip
-CPPFLAGS+=	-I${PCC_DIST}/os/${TARGOS}
-CPPFLAGS+=	-I${PCC_DIST}/arch/${TARGMACH}
-CPPFLAGS+=	-I${PCC_DIST}/cc/ccom
+CPPFLAGS+=	-DPCC_DEBUG -DGCC_COMPAT
+YFLAGS+=	-d
 
-COPTS.pftn.c+=	-Wno-uninitialized
+DPSRCS=	external.h
 
-DPSRCS=	external.c
+CLEANFILES+=	external.h external.c ccom.cat1 cgram.h mkext scan.c
+CLEANFILES+=    ccom.cat1
 
-MKEXTDIR!=	cd ../mkext && ${PRINTOBJDIR}
 
-external.c:	${MKEXTDIR}/mkext
-	${_MKTARGET_CREATE}
-	${MKEXTDIR}/mkext
+.include "../../Makefile.inc"
 
-CLEANFILES+=	external.c external.h
+trees.c: pass2.h
+
+pass2.h: external.h
+
+optim2.o reader.o: external.h
 
 .include <bsd.prog.mk>
+
+.PATH:	${SUBDIST} ${MIPDIR} ${MDIR}
+
+external.h external.c: ${MIPDIR}/mkext.c $(MDIR)/table.c
+	$(HOST_CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -DMKEXT -o ${.OBJDIR}/mkext ${MIPDIR}/mkext.c \
+	$(MDIR)/table.c ${MIPDIR}/common.c
+	${.OBJDIR}/mkext

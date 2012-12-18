@@ -1,4 +1,4 @@
-/*	$NetBSD: in_var.h,v 1.65 2010/11/05 01:35:57 rmind Exp $	*/
+/*	$NetBSD: in_var.h,v 1.62 2008/04/28 20:24:09 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -302,47 +302,44 @@ void	in_purgeaddr(struct ifaddr *);
 void	in_purgeif(struct ifnet *);
 void	ip_input(struct mbuf *);
 int	ipflow_fastforward(struct mbuf *);
+void	ip_initid(void);
 
+extern uint16_t	ip_id;
+static __inline uint16_t ip_newid(const struct in_ifaddr *);
 
-struct ipid_state;
-typedef struct ipid_state ipid_state_t;
-
-ipid_state_t *	ip_id_init(void);
-void		ip_id_fini(ipid_state_t *);
-uint16_t	ip_randomid(ipid_state_t *, uint16_t);
-
-extern ipid_state_t *	ip_ids;
-extern uint16_t		ip_id;
-extern int		ip_do_randomid;
+uint16_t ip_randomid(uint16_t);
+extern int ip_do_randomid;
 
 /*
- * ip_newid_range: "allocate" num contiguous IP IDs.
+ * ip_newid_range: "allocate" num contiguous ip_ids.
  *
- * => Return the first ID.
+ * => return the first id.
  */
+
 static __inline uint16_t
-ip_newid_range(const struct in_ifaddr *ia, u_int num)
+ip_newid_range(const struct in_ifaddr *ia, unsigned int num)
 {
 	uint16_t id;
 
 	if (ip_do_randomid) {
 		/* XXX ignore num */
-		return ip_randomid(ip_ids, ia ? ia->ia_idsalt : 0);
+		return ip_randomid(ia ? ia->ia_idsalt : 0);
 	}
 
-	/* Never allow an IP ID of 0 (detect wrap). */
-	if ((uint16_t)(ip_id + num) < ip_id) {
+	/*
+	 * never allow an ip_id of 0. (detect wrap)
+	 */
+	if ((uint16_t)(ip_id + num) < ip_id)
 		ip_id = 1;
-	}
 	id = htons(ip_id);
 	ip_id += num;
+
 	return id;
 }
 
 static __inline uint16_t
 ip_newid(const struct in_ifaddr *ia)
 {
-
 	return ip_newid_range(ia, 1);
 }
 
@@ -350,7 +347,7 @@ ip_newid(const struct in_ifaddr *ia)
 int	sysctl_inpcblist(SYSCTLFN_PROTO);
 #endif
 
-#endif	/* !_KERNEL */
+#endif
 
 /* INET6 stuff */
 #include <netinet6/in6_var.h>

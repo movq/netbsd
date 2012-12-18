@@ -1,4 +1,4 @@
-/*	$NetBSD: cs428x.h,v 1.16 2012/10/27 17:18:31 chs Exp $	*/
+/*	$NetBSD: cs428x.h,v 1.14 2007/12/09 20:28:07 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2000 Tatoku Ogaito.  All rights reserved.
@@ -72,9 +72,7 @@ enum cs428x_flags {
  * Software state
  */
 struct cs428x_softc {
-	device_t	      sc_dev;
-	kmutex_t              sc_lock;
-	kmutex_t              sc_intr_lock;
+	struct device	      sc_dev;
 
 	pci_chipset_tag_t sc_pc;
 	pcitag_t sc_pt;
@@ -181,14 +179,14 @@ int  cs428x_write_codec(void *, u_int8_t, u_int16_t);
 int  cs428x_mixer_set_port(void *, mixer_ctrl_t *);
 int  cs428x_mixer_get_port(void *, mixer_ctrl_t *);
 int  cs428x_query_devinfo(void *, mixer_devinfo_t *);
-void *cs428x_malloc(void *, int, size_t);
+void *cs428x_malloc(void *, int, size_t, struct malloc_type *, int);
 size_t cs428x_round_buffersize(void *, int, size_t);
-void cs428x_free(void *, void *, size_t);
+void cs428x_free(void *, void *, struct malloc_type *);
 paddr_t cs428x_mappage(void *, void *, off_t, int);
-void cs428x_get_locks(void *, kmutex_t **, kmutex_t **);
 
 /* internal functions */
-int cs428x_allocmem(struct cs428x_softc *, size_t, struct cs428x_dma *);
+int cs428x_allocmem(struct cs428x_softc *, size_t, struct malloc_type *,
+	int, struct cs428x_dma *);
 int cs428x_src_wait(struct cs428x_softc *);
 
 

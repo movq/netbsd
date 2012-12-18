@@ -1,4 +1,4 @@
-/*	$NetBSD: isapnp.c,v 1.59 2009/08/23 15:56:56 jmcneill Exp $	*/
+/*	$NetBSD: isapnp.c,v 1.58 2008/04/28 20:23:53 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 2008 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isapnp.c,v 1.59 2009/08/23 15:56:56 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isapnp.c,v 1.58 2008/04/28 20:23:53 martin Exp $");
 
 #include "isadma.h"
 
@@ -907,8 +907,7 @@ isapnp_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dmat = ia->ia_dmat;
 	sc->sc_ncards = 0;
 
-	aprint_naive("\n");
-	aprint_normal("\n");
+	aprint_normal(": ISA Plug 'n Play device support\n");
 
 	if (isapnp_map(sc)) {
 		aprint_error_dev(self, "unable to map PnP register\n");

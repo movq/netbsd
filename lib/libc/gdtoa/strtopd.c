@@ -1,4 +1,4 @@
-/* $NetBSD: strtopd.c,v 1.3 2011/03/20 23:15:35 christos Exp $ */
+/* $NetBSD: strtopd.c,v 1.2 2008/03/21 23:13:48 christos Exp $ */
 
 /****************************************************************
 
@@ -42,17 +42,12 @@ strtopd(CONST char *s, char **sp, double *d)
 {
 	static FPI fpi0 = { 53, 1-1023-53+1, 2046-1023-53+1, 1, SI };
 	ULong bits[2];
-	Long expt;
+	Long exp;
 	int k;
-#ifdef Honor_FLT_ROUNDS
-#include "gdtoa_fltrnds.h"
-#else
-#define fpi &fpi0
-#endif
 
-	k = strtodg(s, sp, fpi, &expt, bits);
+	k = strtodg(s, sp, &fpi0, &exp, bits);
 	if (k == STRTOG_NoMemory)
 		return k;
-	ULtod((ULong*)d, bits, expt, k);
+	ULtod((ULong*)d, bits, exp, k);
 	return k;
 	}

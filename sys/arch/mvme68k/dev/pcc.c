@@ -1,6 +1,6 @@
-/*	$NetBSD: pcc.c,v 1.33 2012/10/29 12:51:38 chs Exp $	*/
+/*	$NetBSD: pcc.c,v 1.30 2008/04/28 20:23:29 martin Exp $	*/
 
-/*
+/*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
@@ -41,6 +41,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -59,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcc.c,v 1.33 2012/10/29 12:51:38 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcc.c,v 1.30 2008/04/28 20:23:29 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -80,11 +85,11 @@ __KERNEL_RCSID(0, "$NetBSD: pcc.c,v 1.33 2012/10/29 12:51:38 chs Exp $");
  * Autoconfiguration stuff for the PCC chip on mvme147
  */
 
-void pccattach(device_t, device_t, void *);
-int pccmatch(device_t, cfdata_t, void *);
+void pccattach(struct device *, struct device *, void *);
+int pccmatch(struct device *, struct cfdata *, void *);
 int pccprint(void *, const char *);
 
-CFATTACH_DECL_NEW(pcc, sizeof(struct pcc_softc),
+CFATTACH_DECL(pcc, sizeof(struct pcc_softc),
     pccmatch, pccattach, NULL, NULL);
 
 static int pccintr(void *);
@@ -139,11 +144,11 @@ bus_addr_t pcc_slave_base_addr;
 
 /* ARGSUSED */
 int
-pccmatch(device_t parent, cfdata_t cf, void *aux)
+pccmatch(struct device *parent, struct cfdata *cf, void *args)
 {
 	struct mainbus_attach_args *ma;
 
-	ma = aux;
+	ma = args;
 
 	/* Only attach one PCC. */
 	if (sys_pcc)
@@ -154,7 +159,7 @@ pccmatch(device_t parent, cfdata_t cf, void *aux)
 
 /* ARGSUSED */
 void
-pccattach(device_t parent, device_t self, void *aux)
+pccattach(struct device *parent, struct device *self, void *args)
 {
 	struct mainbus_attach_args *ma;
 	struct pcc_attach_args npa;
@@ -162,8 +167,8 @@ pccattach(device_t parent, device_t self, void *aux)
 	uint8_t reg;
 	int i;
 
-	ma = aux;
-	sc = sys_pcc = device_private(self);
+	ma = args;
+	sc = sys_pcc = (struct pcc_softc *)self;
 
 	/* Get a handle to the PCC's registers. */
 	sc->sc_bust = ma->ma_bust;

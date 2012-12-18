@@ -1,6 +1,6 @@
 #!@BSHELL@ -
 #
-#	$NetBSD: host-mkdep.in,v 1.23 2012/12/09 23:53:39 christos Exp $
+#	$NetBSD: host-mkdep.in,v 1.17 2007/07/09 15:27:10 jmmv Exp $
 #
 # Copyright (c) 1991, 1993
 #	The Regents of the University of California.  All rights reserved.
@@ -43,7 +43,6 @@ AWK_OPTIONAL=
 QUIET=false
 CPPFLAGS=
 NEWEXT=.o
-PREFIX=
 OUTFILE=.depend
 SRCS=
 
@@ -62,10 +61,10 @@ set_objlist()
 		IFS="$oifs"
 		objlist=
 		for suf in "$@"; do
-			objlist="$objlist${objlist:+ }$PREFIX$file$suf"
+			objlist="$objlist${objlist:+ }$file$suf"
 		done
 	else
-		objlist="$PREFIX$file"
+		objlist="$file"
 	fi
 }
 
@@ -85,7 +84,7 @@ while [ $# -gt 0 ]; do
 		-p)	NEWEXT=;;
 		-q)	QUIET=true;;
 
-		-[fPs])	# Options with arguments
+		-[fs])	# Options with arguments
 			[ -z "$optarg" ] && {
 				[ $# = 1 ] && usage
 				shift
@@ -93,7 +92,6 @@ while [ $# -gt 0 ]; do
 			}
 			case "-$option" in
 			-f)	OUTFILE="$optarg";;
-			-P)	PREFIX="$optarg";;
 			-s)	NEWEXT="$optarg";;
 			esac
 			optarg=
@@ -119,65 +117,42 @@ done
 if $MERGE; then
 	SRCS="$*"
 else
-	#
-	# Process argument list.
-	# This is tricky, because arguments may contain spaces and other
-	# escapes characters.  The argument list is used like a tail queue.
-	# $cppargs has one x for each unprocessed argument, so when an
-	# argument is processed, it is shifted and the corresponding number
-	# of x's is removed.  The advantage to counting is that suffix removal
-	# works without fork.
-	#
-	cppargs=
-	for arg; do
-		cppargs="x$cppargs"
-	done
-	while [ -n "$cppargs" ]; do
+	while [ $# -gt 0 ]; do
 		case "$1" in
 		-L)			# takes an arg, but ignored
 				shift 2
-				cppargs=${cppargs%xx}
 				;;
 
 		-c|-[lLMOW]*)		# takes no extra args
 				shift
-				cppargs=${cppargs%x}
 				;;
 
 		-[IDU]*)
-				set -- "$@" "$1"
+				CPPFLAGS="$CPPFLAGS $1"
 				shift
-				cppargs=${cppargs%x}
 				;;
 
-		-[IDU]|-include|-isystem|-isysroot)
-				set -- "$@" "$1" "$2"
+		-[IDU]|-include|-isystem)
+				CPPFLAGS="$CPPFLAGS $1 $2"
 				shift 2
-				cppargs=${cppargs%xx}
 				;;
 				
 		-isystem-cxx|-cxx-isystem)
-				set -- "$@" "-isystem" "$2"
+				CPPFLAGS="$CPPFLAGS -isystem $2"
 				shift 2
-				cppargs=${cppargs%xx}
 				;;
 
 		-no-cpp-precomp)	# This is a Darwin-specific option.
-				set -- "$@" "$1"
+				CPPFLAGS="$CPPFLAGS $1"
 				shift
-				cppargs=${cppargs%x}
 				;;
 
 		-nostdinc*)	# This is a gcc/g++ ism; ignore if not gcc/g++
 				case "@CFLAGS@" in
 				*-O2*)	# Autoconf puts -O2 when gcc only
-					set -- "$@" "$1"
+					CPPFLAGS="$CPPFLAGS $1"
 					;;
 				esac	
-				shift
-				cppargs=${cppargs%x}
-				;;
-		--sysroot*)
 				shift
 				;;
 
@@ -189,7 +164,6 @@ else
 		*)	
 				SRCS="$SRCS $1"	# source file
 				shift
-				cppargs=${cppargs%x}
 				;;
 		esac
 	done
@@ -208,7 +182,7 @@ if $MERGE; then
 			if ! $QUIET; then echo "$0: Ignoring $f" >&2; fi
 			continue
 		fi
-		while IFS=':'; read target dependents; do
+		while IFS=':'; read target dependants; do
 			IFS=
 			t1="${target#* }"
 			file="${target%.o}"
@@ -216,9 +190,9 @@ if $MERGE; then
 				set_objlist $file
 				target="$objlist"
 			fi
-			echo "$target:$dependents"
+			echo "$target:$dependants"
 			if "$OPTIONAL"; then
-				echo ".OPTIONAL:$dependents"
+				echo ".OPTIONAL:$dependants"
 			fi
 		done <$f
 	done >$TMP
@@ -228,7 +202,7 @@ else
 		file=${file%.*}
 		set_objlist $file
 
-		@CPP@ "$@" $f | @AWK@ '
+		@CPP@ $CPPFLAGS $f | @AWK@ '
 			/^#/ {
 				# Be as tolerant as possible.
 				sub(/^#(line)? [ 0-9]*\"?/, "")

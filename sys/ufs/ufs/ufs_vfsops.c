@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_vfsops.c,v 1.51 2012/04/04 19:52:48 tron Exp $	*/
+/*	$NetBSD: ufs_vfsops.c,v 1.39 2008/05/06 18:43:45 ad Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993, 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.51 2012/04/04 19:52:48 tron Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.39 2008/05/06 18:43:45 ad Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -50,12 +50,11 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.51 2012/04/04 19:52:48 tron Exp $")
 #include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/kauth.h>
 
 #include <miscfs/specfs/specdev.h>
 
-#include <sys/quotactl.h>
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
@@ -100,77 +99,43 @@ ufs_root(struct mount *mp, struct vnode **vpp)
  * Do operations associated with quotas
  */
 int
-ufs_quotactl(struct mount *mp, struct quotactl_args *args)
+ufs_quotactl(struct mount *mp, int cmds, uid_t uid, void *arg)
 {
+	struct lwp *l = curlwp;
 
-#if !defined(QUOTA) && !defined(QUOTA2)
+#ifndef QUOTA
 	(void) mp;
-	(void) args;
+	(void) cmds;
+	(void) uid;
+	(void) arg;
+	(void) l;
 	return (EOPNOTSUPP);
 #else
-	struct lwp *l = curlwp;
-	int error;
+	int cmd, type, error;
 
-	/* Mark the mount busy, as we're passing it to kauth(9). */
-	error = vfs_busy(mp, NULL);
-	if (error) {
-		return (error);
-	}
-	mutex_enter(&mp->mnt_updating);
+	if (uid == -1)
+		uid = kauth_cred_getuid(l->l_cred);
+	cmd = cmds >> SUBCMDSHIFT;
 
-	error = quota_handle_cmd(mp, l, args);
-
-	mutex_exit(&mp->mnt_updating);
-	vfs_unbusy(mp, false, NULL);
-	return (error);
-#endif
-}
-	
-#if 0
 	switch (cmd) {
 	case Q_SYNC:
 		break;
-
 	case Q_GETQUOTA:
-		/* The user can always query about his own quota. */
 		if (uid == kauth_cred_getuid(l->l_cred))
 			break;
-
-		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_FS_QUOTA,
-		    KAUTH_REQ_SYSTEM_FS_QUOTA_GET, mp, KAUTH_ARG(uid), NULL);
-
-		break;
-
-	case Q_QUOTAON:
-	case Q_QUOTAOFF:
-		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_FS_QUOTA,
-		    KAUTH_REQ_SYSTEM_FS_QUOTA_ONOFF, mp, NULL, NULL);
-
-		break;
-
-	case Q_SETQUOTA:
-	case Q_SETUSE:
-		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_FS_QUOTA,
-		    KAUTH_REQ_SYSTEM_FS_QUOTA_MANAGE, mp, KAUTH_ARG(uid), NULL);
-
-		break;
-
+		/* fall through */
 	default:
-		error = EINVAL;
-		break;
+		if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+		    NULL)) != 0)
+			return (error);
 	}
 
 	type = cmds & SUBCMDMASK;
-	if (!error) {
-		/* Only check if there was no error above. */
-		if ((u_int)type >= MAXQUOTAS)
-			error = EINVAL;
-	}
-
-	if (error) {
-		vfs_unbusy(mp, false, NULL);
+	if ((u_int)type >= MAXQUOTAS)
+		return (EINVAL);
+	error = vfs_busy(mp, NULL);
+	if (error != 0)
 		return (error);
-	}
 
 	mutex_enter(&mp->mnt_updating);
 	switch (cmd) {
@@ -206,6 +171,7 @@ ufs_quotactl(struct mount *mp, struct quotactl_args *args)
 	vfs_unbusy(mp, false, NULL);
 	return (error);
 #endif
+}
 
 /*
  * This is the generic part of fhtovp called after the underlying
@@ -223,7 +189,6 @@ ufs_fhtovp(struct mount *mp, struct ufid *ufhp, struct vnode **vpp)
 		return (error);
 	}
 	ip = VTOI(nvp);
-	KASSERT(ip != NULL);
 	if (ip->i_mode == 0 || ip->i_gen != ufhp->ufid_gen) {
 		vput(nvp);
 		*vpp = NULLVP;
@@ -246,7 +211,7 @@ ufs_init(void)
 	    "ufsdir", NULL, IPL_NONE, NULL, NULL, NULL);
 
 	ufs_ihashinit();
-#if defined(QUOTA) || defined(QUOTA2)
+#ifdef QUOTA
 	dqinit();
 #endif
 #ifdef UFS_DIRHASH
@@ -261,7 +226,7 @@ void
 ufs_reinit(void)
 {
 	ufs_ihashreinit();
-#if defined(QUOTA) || defined(QUOTA2)
+#ifdef QUOTA
 	dqreinit();
 #endif
 }
@@ -276,7 +241,7 @@ ufs_done(void)
 		return;
 
 	ufs_ihashdone();
-#if defined(QUOTA) || defined(QUOTA2)
+#ifdef QUOTA
 	dqdone();
 #endif
 	pool_cache_destroy(ufs_direct_cache);

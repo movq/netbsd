@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.16 2010/12/13 17:35:08 pooka Exp $	*/
+/*	$NetBSD: util.c,v 1.8.2.1 2009/05/03 13:17:52 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2008 David Young.  All rights reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: util.c,v 1.16 2010/12/13 17:35:08 pooka Exp $");
+__RCSID("$NetBSD: util.c,v 1.8.2.1 2009/05/03 13:17:52 bouyer Exp $");
 #endif /* not lint */
 
 #include <ctype.h>
@@ -52,9 +52,7 @@ __RCSID("$NetBSD: util.c,v 1.16 2010/12/13 17:35:08 pooka Exp $");
 #include <netinet/in.h>		/* XXX */
 
 #include "env.h"
-#include "extern.h"
 #include "util.h"
-#include "prog_ops.h"
 
 int
 getsock(int naf)
@@ -65,12 +63,12 @@ getsock(int naf)
 		return s;
 
 	if (oaf != -1)
-		prog_close(s);
+		close(s);
 
 	if (naf == AF_UNSPEC)
 		naf = AF_INET;
 
-	s = prog_socket(naf, SOCK_DGRAM, 0);
+	s = socket(naf, SOCK_DGRAM, 0);
 	if (s == -1)
 		oaf = -1;
 	else
@@ -79,8 +77,7 @@ getsock(int naf)
 }
 
 const char *
-get_string(const char *val, const char *sep, u_int8_t *buf, int *lenp,
-    bool hexok)
+get_string(const char *val, const char *sep, u_int8_t *buf, int *lenp)
 {
 	int len;
 	bool hexstr;
@@ -88,7 +85,7 @@ get_string(const char *val, const char *sep, u_int8_t *buf, int *lenp,
 
 	len = *lenp;
 	p = buf;
-	hexstr = hexok && val[0] == '0' && tolower((u_char)val[1]) == 'x';
+	hexstr = (val[0] == '0' && tolower((u_char)val[1]) == 'x');
 	if (hexstr)
 		val += 2;
 	for (;;) {
@@ -105,7 +102,7 @@ get_string(const char *val, const char *sep, u_int8_t *buf, int *lenp,
 				return NULL;
 			}
 		}
-		if (p >= buf + len) {
+		if (p > buf + len) {
 			if (hexstr)
 				warnx("hexadecimal digits too long");
 			else
@@ -188,7 +185,7 @@ prefixlen_to_mask(int af, int plen)
 	}
 	u.sa.sa_family = af;
 
-	if (plen < 0 || (size_t)plen > addrlen * NBBY) {
+	if (plen < 0 || plen > addrlen * NBBY) {
 		errno = EINVAL;
 		return NULL;
 	}
@@ -224,7 +221,7 @@ direct_ioctl(prop_dictionary_t env, unsigned long cmd, void *data)
 
 	estrlcpy(data, ifname, IFNAMSIZ);
 
-	return prog_ioctl(s, cmd, data);
+	return ioctl(s, cmd, data);
 }
 
 int
@@ -275,15 +272,14 @@ print_link_addresses(prop_dictionary_t env, bool print_active_only)
 		iflr.flags = IFLR_PREFIX;
 		iflr.prefixlen = sdl->sdl_alen * NBBY;
 
-		if (prog_ioctl(s, SIOCGLIFADDR, &iflr) == -1)
+		if (ioctl(s, SIOCGLIFADDR, &iflr) == -1)
 			err(EXIT_FAILURE, "%s: ioctl", __func__);
 
 		if (((iflr.flags & IFLR_ACTIVE) != 0) != print_active_only)
 			continue;
 
 		if (getnameinfo(ifa->ifa_addr, ifa->ifa_addr->sa_len,
-			hbuf, sizeof(hbuf), NULL, 0,
-			Nflag ? 0 : NI_NUMERICHOST) == 0 &&
+			hbuf, sizeof(hbuf), NULL, 0, NI_NUMERICHOST) == 0 &&
 		    hbuf[0] != '\0') {
 			printf("\t%s %s\n",
 			    print_active_only ? "address:" : "link", hbuf);
@@ -291,60 +287,6 @@ print_link_addresses(prop_dictionary_t env, bool print_active_only)
 	}
 	freeifaddrs(ifap);
 }
-
-int16_t
-ifa_get_preference(const char *ifname, const struct sockaddr *sa)
-{
-	struct if_addrprefreq ifap;
-	int s;
-
-	if ((s = getsock(sa->sa_family)) == -1) {
-		if (errno == EPROTONOSUPPORT)
-			return 0;
-		err(EXIT_FAILURE, "socket");
-	}
-	memset(&ifap, 0, sizeof(ifap));
-	estrlcpy(ifap.ifap_name, ifname, sizeof(ifap.ifap_name));
-	memcpy(&ifap.ifap_addr, sa, MIN(sizeof(ifap.ifap_addr), sa->sa_len));
-	if (prog_ioctl(s, SIOCGIFADDRPREF, &ifap) == -1) {
-		if (errno == EADDRNOTAVAIL || errno == EAFNOSUPPORT)
-			return 0;
-		warn("SIOCGIFADDRPREF");
-	}
-	return ifap.ifap_preference;
-}
-
-void
-ifa_print_preference(const char *ifname, const struct sockaddr *sa)
-{
-	int16_t preference;
-
-	if (lflag)
-		return;
-
-	preference = ifa_get_preference(ifname, sa);
-	printf(" preference %" PRId16, preference);
-}
-
-bool
-ifa_any_preferences(const char *ifname, struct ifaddrs *ifap, int family)
-{
-	struct ifaddrs *ifa;
-
-	/* Print address preference numbers if any address has a non-zero
-	 * preference assigned.
-	 */
-	for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
-		if (strcmp(ifname, ifa->ifa_name) != 0)
-			continue;
-		if (ifa->ifa_addr->sa_family != family)
-			continue;
-		if (ifa_get_preference(ifa->ifa_name, ifa->ifa_addr) != 0)
-			return true;
-	}
-	return false;
-}
-
 
 #ifdef INET6
 /* KAME idiosyncrasy */

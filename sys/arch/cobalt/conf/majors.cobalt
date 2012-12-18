@@ -1,4 +1,4 @@
-#	$NetBSD: majors.cobalt,v 1.30 2011/06/30 20:09:22 wiz Exp $
+#	$NetBSD: majors.cobalt,v 1.24 2008/10/12 04:36:36 tsutsui Exp $
 #
 # Device majors for cobalt
 #
@@ -20,6 +20,7 @@ device-major	ptc		char 13			pty
 device-major	log		char 14
 device-major	filedesc	char 15
 device-major	rnd		char 16			rnd
+device-major	lkm		char 17			lkm
 device-major	bpf		char 18			bpfilter
 device-major	tun		char 19			tun
 device-major	ipl		char 20			ipfilter
@@ -52,16 +53,11 @@ device-major	audio		char 47			audio
 device-major	midi		char 48			midi
 device-major	sequencer	char 49			sequencer
 device-major	vcoda		char 50			vcoda
-device-major	wsdisplay	char 51			wsdisplay
-device-major	wskbd		char 52			wskbd
-device-major	wsmouse		char 53			wsmouse
-device-major	wsmux		char 54			wsmux
-device-major	wsfont		char 55			wsfont
 
 device-major	altq		char 77			altq
 
 device-major	nsmb		char 98			nsmb
 
-# Majors up to 143 are reserved for machine-dependent drivers.
-# New machine-independent driver majors are assigned in
+# Majors up to 143 are reserved for machine-dependant drivers.
+# New machine-independent driver majors are assigned in 
 # sys/conf/majors.

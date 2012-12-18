@@ -1,4 +1,4 @@
-/*	$NetBSD: zs_kgdb.c,v 1.10 2009/03/18 10:22:32 cegger Exp $	*/
+/*	$NetBSD: zs_kgdb.c,v 1.7 2008/04/28 20:23:28 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs_kgdb.c,v 1.10 2009/03/18 10:22:32 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs_kgdb.c,v 1.7 2008/04/28 20:23:28 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,15 +67,15 @@ __KERNEL_RCSID(0, "$NetBSD: zs_kgdb.c,v 1.10 2009/03/18 10:22:32 cegger Exp $");
  *   (gdb) target remote /dev/ttyb
  */
 
-void zs_kgdb_init(void);
-void zskgdb(struct zs_chanstate *cs);
+void zs_kgdb_init __P((void));
+void zskgdb __P((struct zs_chanstate *cs));
 
-static void	zs_setparam(struct zs_chanstate *, int, int);
+static void	zs_setparam __P((struct zs_chanstate *, int, int));
 static struct	zsops zsops_kgdb;
 
 extern struct	zschan *zs_get_chan_addr (int zs_unit, int channel);
-extern int	zs_getc(void *arg);
-extern void	zs_putc(void *arg, int c);
+extern int	zs_getc __P((void *arg));
+extern void	zs_putc __P((void *arg, int c));
 
 static u_char zs_kgdb_regs[16] = {
 	0,	/* 0: CMD (reset, etc.) */
@@ -97,7 +97,10 @@ static u_char zs_kgdb_regs[16] = {
 };
 
 static void
-zs_setparam(struct zs_chanstate *cs, int iena, int rate)
+zs_setparam(cs, iena, rate)
+	struct zs_chanstate *cs;
+	int iena;
+	int rate;
 {
 	int s, tconst;
 
@@ -125,7 +128,7 @@ zs_setparam(struct zs_chanstate *cs, int iena, int rate)
  * Called after cninit(), so printf() etc. works.
  */
 void
-zs_kgdb_init(void)
+zs_kgdb_init()
 {
 	struct zschan *zc;
 	int channel, unit;
@@ -153,7 +156,9 @@ zs_kgdb_init(void)
  * Set the speed to kgdb_rate, CS8, etc.
  */
 int
-zs_check_kgdb(struct zs_chanstate *cs, int dev)
+zs_check_kgdb(cs, dev)
+	struct zs_chanstate *cs;
+	int dev;
 {
 
 	if (dev != kgdb_dev)
@@ -176,7 +181,8 @@ zs_check_kgdb(struct zs_chanstate *cs, int dev)
  * should time out after a few seconds to avoid hanging on spurious input.
  */
 void
-zskgdb(struct zs_chanstate *cs)
+zskgdb(cs)
+	struct zs_chanstate *cs;
 {
 	int unit = minor(kgdb_dev);
 
@@ -190,10 +196,10 @@ zskgdb(struct zs_chanstate *cs)
  * Interface to the lower layer (zscc)
  ****************************************************************/
 
-static void zs_kgdb_rxint(struct zs_chanstate *);
-static void zs_kgdb_stint(struct zs_chanstate *, int);
-static void zs_kgdb_txint(struct zs_chanstate *);
-static void zs_kgdb_softint(struct zs_chanstate *);
+static void zs_kgdb_rxint __P((struct zs_chanstate *));
+static void zs_kgdb_stint __P((struct zs_chanstate *, int));
+static void zs_kgdb_txint __P((struct zs_chanstate *));
+static void zs_kgdb_softint __P((struct zs_chanstate *));
 
 static struct zsops zsops_kgdb = {
 	zs_kgdb_rxint,		/* receive char available */
@@ -205,7 +211,8 @@ static struct zsops zsops_kgdb = {
 int kgdb_input_lost;
 
 static void
-zs_kgdb_rxint(struct zs_chanstate *cs)
+zs_kgdb_rxint(cs)
+	struct zs_chanstate *cs;
 {
 	register u_char c, rr1;
 
@@ -229,7 +236,8 @@ zs_kgdb_rxint(struct zs_chanstate *cs)
 }
 
 static void
-zs_kgdb_txint(register struct zs_chanstate *cs)
+zs_kgdb_txint(cs)
+	register struct zs_chanstate *cs;
 {
 	register int rr0;
 
@@ -238,7 +246,9 @@ zs_kgdb_txint(register struct zs_chanstate *cs)
 }
 
 static void
-zs_kgdb_stint(register struct zs_chanstate *cs, int force)
+zs_kgdb_stint(cs, force)
+	register struct zs_chanstate *cs;
+	int force;
 {
 	register int rr0;
 
@@ -255,7 +265,8 @@ zs_kgdb_stint(register struct zs_chanstate *cs, int force)
 }
 
 static void
-zs_kgdb_softint(struct zs_chanstate *cs)
+zs_kgdb_softint(cs)
+	struct zs_chanstate *cs;
 {
 	printf("zs_kgdb_softint?\n");
 }

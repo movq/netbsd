@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.24 2011/11/04 11:27:01 martin Exp $ */
+/*	$NetBSD: md.c,v 1.20 2008/10/07 09:58:14 abs Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,21 +15,26 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE 
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
  * THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 /* md.c -- cats machine specific routines */
@@ -43,25 +48,14 @@
 #include <sys/disklabel.h>
 #include <sys/ioctl.h>
 #include <sys/param.h>
-
 #include "defs.h"
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
-
-void
-md_init(void)
-{
-}
-
-void
-md_init_set_status(int flags)
-{
-	(void)flags;
-}
+void backtowin(void);
 
 int
-md_get_info(void)
+md_get_info (void)
 {
 	struct disklabel disklabel;
 	int fd;
@@ -93,7 +87,7 @@ md_get_info(void)
 	}
 
 	close(fd);
-
+ 
 	dlcyl = disklabel.d_ncylinders;
 	dlhead = disklabel.d_ntracks;
 	dlsec = disklabel.d_nsectors;
@@ -102,7 +96,7 @@ md_get_info(void)
 
 	/*
 	 * Compute whole disk size. Take max of (dlcyl*dlhead*dlsec)
-	 * and secperunit,  just in case the disk is already labelled.
+	 * and secperunit,  just in case the disk is already labelled.  
 	 * (If our new label's RAW_PART size ends up smaller than the
 	 * in-core RAW_PART size  value, updating the label will fail.)
 	 */
@@ -126,57 +120,62 @@ md_get_info(void)
 	return 1;
 }
 
-/*
- * md back-end code for menu-driven BSD disklabel editor.
- */
-int
-md_make_bsd_partitions(void)
-{
-	return make_bsd_partitions();
-}
-
-/*
- * any additional partition validation
- */
-int
-md_check_partitions(void)
-{
-	return 1;
-}
-
-/*
- * hook called before writing new disklabel.
- */
 int
 md_pre_disklabel(void)
 {
 	return 0;
 }
 
-/*
- * hook called after writing disklabel to new target disk.
- */
 int
 md_post_disklabel(void)
 {
 	return 0;
 }
 
-/*
- * hook called after upgrade() or install() has finished setting
- * up the target disk but immediately before the user is given the
- * ``disks are now set up'' message.
- */
 int
 md_post_newfs(void)
+{
+#if 0
+	/* XXX boot blocks ... */
+	printf(msg_string(MSG_dobootblks), diskdev);
+	run_program(RUN_DISPLAY, "/sbin/disklabel -B %s /dev/r%sc",
+	    "-b /usr/mdec/rzboot -s /usr/mdec/bootrz", diskdev);
+#endif
+	return 0;
+}
+
+int
+md_copy_filesystem(void)
 {
 	return 0;
 }
 
 int
-md_post_extract(void)
+md_make_bsd_partitions(void)
 {
-	return 0;
+	return make_bsd_partitions();
+}
+
+int
+md_check_partitions(void)
+{
+	return 1;
+}
+
+
+/* Upgrade support */
+int
+md_update(void)
+{
+	move_aout_libs();
+	endwin();
+	md_copy_filesystem();
+	md_post_newfs();
+	wrefresh(curscr);
+	wmove(stdscr, 0, 0);
+	wclear(stdscr);
+	wrefresh(stdscr);
+	return 1;
 }
 
 void
@@ -193,16 +192,19 @@ md_pre_update(void)
 	return 1;
 }
 
-/* Upgrade support */
-int
-md_update(void)
+void
+md_init(void)
 {
-	md_post_newfs();
-	return 1;
+}
+
+void
+md_init_set_status(int minimal)
+{
+	(void)minimal;
 }
 
 int
-md_pre_mount()
+md_post_extract(void)
 {
 	return 0;
 }

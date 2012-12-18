@@ -1,21 +1,21 @@
-/* $NetBSD: dec_alphabook1.c,v 1.27 2012/10/13 17:58:54 jdc Exp $ */
+/* $NetBSD: dec_alphabook1.c,v 1.21 2007/03/04 15:18:10 yamt Exp $ */
 
 /*
  * Copyright (c) 1995, 1996, 1997 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_alphabook1.c,v 1.27 2012/10/13 17:58:54 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_alphabook1.c,v 1.21 2007/03/04 15:18:10 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: dec_alphabook1.c,v 1.27 2012/10/13 17:58:54 jdc Exp 
 #include <machine/rpb.h>
 #include <machine/autoconf.h>
 #include <machine/cpuconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -72,9 +72,9 @@ __KERNEL_RCSID(0, "$NetBSD: dec_alphabook1.c,v 1.27 2012/10/13 17:58:54 jdc Exp 
 #endif
 static int comcnrate = CONSPEED;
 
-void dec_alphabook1_init(void);
-static void dec_alphabook1_cons_init(void);
-static void dec_alphabook1_device_register(device_t, void *);
+void dec_alphabook1_init __P((void));
+static void dec_alphabook1_cons_init __P((void));
+static void dec_alphabook1_device_register __P((struct device *, void *));
 
 #ifdef KGDB
 #include <machine/db_machdep.h>
@@ -91,9 +91,9 @@ const struct alpha_variation_table dec_alphabook1_variations[] = {
 };
 
 void
-dec_alphabook1_init(void)
+dec_alphabook1_init()
 {
-	uint64_t variation;
+	u_int64_t variation;
 
 	platform.family = "AlphaBook";
 
@@ -110,7 +110,7 @@ dec_alphabook1_init(void)
 }
 
 static void
-dec_alphabook1_cons_init(void)
+dec_alphabook1_cons_init()
 {
 	struct ctb *ctb;
 	struct lca_config *lcp;
@@ -122,7 +122,7 @@ dec_alphabook1_cons_init(void)
 	ctb = (struct ctb *)(((char *)hwrpb) + hwrpb->rpb_ctb_off);
 
 	switch (ctb->ctb_term_type) {
-	case CTB_PRINTERPORT:
+	case CTB_PRINTERPORT: 
 		/* serial console ... */
 		/* XXX */
 		{
@@ -146,7 +146,7 @@ dec_alphabook1_cons_init(void)
 		/* display console ... */
 		/* XXX */
 		(void) pckbc_cnattach(&lcp->lc_iot, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT, 0);
+		    PCKBC_KBD_SLOT);
 
 		if (CTB_TURBOSLOT_TYPE(ctb->ctb_turboslot) ==
 		    CTB_TURBOSLOT_TYPE_ISA)
@@ -174,12 +174,14 @@ dec_alphabook1_cons_init(void)
 }
 
 static void
-dec_alphabook1_device_register(device_t dev, void *aux)
+dec_alphabook1_device_register(dev, aux)
+	struct device *dev;
+	void *aux;
 {
 	static int found, initted, diskboot, netboot;
-	static device_t pcidev, ctrlrdev;
+	static struct device *pcidev, *ctrlrdev;
 	struct bootdev_data *b = bootdev_data;
-	device_t parent = device_parent(dev);
+	struct device *parent = device_parent(dev);
 
 	if (found)
 		return;
@@ -205,7 +207,7 @@ dec_alphabook1_device_register(device_t dev, void *aux)
 	
 			pcidev = dev;
 #if 0
-			printf("\npcidev = %s\n", device_xname(dev));
+			printf("\npcidev = %s\n", dev->dv_xname);
 #endif
 			return;
 		}
@@ -226,13 +228,13 @@ dec_alphabook1_device_register(device_t dev, void *aux)
 			if (netboot) {
 				booted_device = dev;
 #if 0
-				printf("\nbooted_device = %s\n", device_xname(dev));
+				printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 				found = 1;
 			} else {
 				ctrlrdev = dev;
 #if 0
-				printf("\nctrlrdev = %s\n", device_xname(dev));
+				printf("\nctrlrdev = %s\n", dev->dv_xname);
 #endif
 			}
 			return;
@@ -261,7 +263,7 @@ dec_alphabook1_device_register(device_t dev, void *aux)
 		/* we've found it! */
 		booted_device = dev;
 #if 0
-		printf("\nbooted_device = %s\n", device_xname(dev));
+		printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 		found = 1;
 	}

@@ -1,6 +1,6 @@
-#	$NetBSD: INSTALL,v 1.8 2010/11/23 11:14:05 hannken Exp $
+#	$NetBSD: INSTALL,v 1.5 2002/07/05 13:40:16 abs Exp $
 #
-# GENERIC install kernel for SandPoint NAS
+# GENERIC for Motorola Sandpoint
 #
 
 include "arch/sandpoint/conf/GENERIC"
@@ -8,6 +8,5 @@ include "arch/sandpoint/conf/GENERIC"
 options 	MEMORY_DISK_HOOKS
 options 	MEMORY_DISK_IS_ROOT	# Force root on RAM disk
 options 	MEMORY_DISK_ROOT_SIZE=4096	# 2 MB
-options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
 
-pseudo-device	md		
+pseudo-device	md		1

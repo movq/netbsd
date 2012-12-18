@@ -1,4 +1,4 @@
-/*      $NetBSD: coalesce.c,v 1.19 2012/01/02 21:35:17 perseant Exp $  */
+/*      $NetBSD: coalesce.c,v 1.16 2008/05/16 09:21:59 hannken Exp $  */
 
 /*-
  * Copyright (c) 2002, 2005 The NetBSD Foundation, Inc.
@@ -56,7 +56,6 @@
 #include "bufcache.h"
 #include "vnode.h"
 #include "cleaner.h"
-#include "kernelops.h"
 
 extern int debug, do_mmap;
 
@@ -88,7 +87,7 @@ enum coalesce_returncodes {
 	COALESCE_MAXERROR
 };
 
-const char *coalesce_return[] = {
+char *coalesce_return[] = {
 	"Successfully coalesced",
 	"File not in use or inode not found",
 	"Not large enough to coalesce",
@@ -124,8 +123,6 @@ get_dinode(struct clfs *fs, ino_t ino)
 	     dip < (struct ufs1_dinode *)(bp->b_data + fs->lfs_ibsize); dip++)
 		if (dip->di_inumber == ino) {
 			r = (struct ufs1_dinode *)malloc(sizeof(*r));
-			if (r == NULL)
-				break;
 			memcpy(r, dip, sizeof(*r));
 			brelse(bp, 0);
 			return r;
@@ -170,13 +167,11 @@ clean_inode(struct clfs *fs, ino_t ino)
 	}
 
 	/* Sanity checks */
-#if 0	/* di_size is uint64_t -- this is a noop */
 	if (dip->di_size < 0) {
 		dlog("ino %d, negative size (%" PRId64 ")", ino, dip->di_size);
 		free(dip);
 		return COALESCE_BADSIZE;
 	}
-#endif
 	if (nb > dip->di_blocks) {
 		dlog("ino %d, computed blocks %d > held blocks %d", ino, nb,
 		     dip->di_blocks);
@@ -200,7 +195,7 @@ clean_inode(struct clfs *fs, ino_t ino)
 	}
 	lim.blkiov = bip;
 	lim.blkcnt = nb;
-	if (kops.ko_fcntl(fs->clfs_ifilefd, LFCNBMAPV, &lim) < 0) { 
+	if (fcntl(fs->clfs_ifilefd, LFCNBMAPV, &lim) < 0) { 
 		syslog(LOG_WARNING, "%s: coalesce: LFCNBMAPV: %m",
 		       fs->lfs_fsmnt);
 		retval = COALESCE_BADBMAPV;
@@ -280,7 +275,7 @@ clean_inode(struct clfs *fs, ino_t ino)
 			goto out;
 		}
 
-		if (kops.ko_pread(fs->clfs_devfd, bip[i].bi_bp, bip[i].bi_size,
+		if (pread(fs->clfs_devfd, bip[i].bi_bp, bip[i].bi_size,
 			  fsbtob(fs, bip[i].bi_daddr)) < 0) {
 			retval = COALESCE_EIO;
 			goto out;
@@ -303,13 +298,12 @@ clean_inode(struct clfs *fs, ino_t ino)
 			brelse(bp, B_INVAL);
 
 			if (cip.clean < 4) /* XXX magic number 4 */
-				kops.ko_fcntl(fs->clfs_ifilefd,
-				    LFCNSEGWAIT, NULL);
+				fcntl(fs->clfs_ifilefd, LFCNSEGWAIT, NULL);
 		} while(cip.clean < 4);
 
 		lim.blkiov = tbip;
 		lim.blkcnt = (tbip + bps < bip + nb ? bps : nb % bps);
-		if (kops.ko_fcntl(fs->clfs_ifilefd, LFCNMARKV, &lim) < 0) {
+		if (fcntl(fs->clfs_ifilefd, LFCNMARKV, &lim) < 0) {
 			retval = COALESCE_BADMARKV;
 			goto out;
 		}

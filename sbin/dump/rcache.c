@@ -1,4 +1,4 @@
-/*	$NetBSD: rcache.c,v 1.23 2010/01/27 12:20:25 spz Exp $	*/
+/*	$NetBSD: rcache.c,v 1.22 2008/04/28 20:23:08 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rcache.c,v 1.23 2010/01/27 12:20:25 spz Exp $");
+__RCSID("$NetBSD: rcache.c,v 1.22 2008/04/28 20:23:08 martin Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -106,7 +106,7 @@ initcache(int cachesize, int readblksize)
 	nblksread <<= ufsib->ufs_bshift - dev_bshift;
 
 	if (cachesize == -1) {	/* Compute from memory available */
-		uint64_t usermem, cachetmp;
+		uint64_t usermem;
 		int mib[2] = { CTL_HW, HW_USERMEM64 };
 
 		len = sizeof(usermem);
@@ -115,9 +115,7 @@ initcache(int cachesize, int readblksize)
 			    strerror(errno));
 			return;
 		}
-		cachetmp = (usermem / MAXMEMPART) / CSIZE;
-		/* for those with TB of RAM */
-		cachebufs = (cachetmp > INT_MAX) ? INT_MAX : cachetmp;
+		cachebufs = (usermem / MAXMEMPART) / CSIZE;
 	} else {		/* User specified */
 		cachebufs = cachesize;
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.94 2012/05/01 09:40:15 martin Exp $ */
+/*	$NetBSD: cpu.h,v 1.84.14.2 2011/03/08 17:29:45 riz Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -76,6 +76,8 @@
 #define	curlwp			(cpuinfo.ci_curlwp)
 #define	CPU_IS_PRIMARY(ci)	((ci)->master)
 
+#define	cpu_swapin(p)		/* nothing */
+#define	cpu_swapout(p)		/* nothing */
 #define	cpu_number()		(cpuinfo.ci_cpuid)
 void	cpu_proc_fork(struct proc *, struct proc *);
 
@@ -138,11 +140,12 @@ void	sparc_softintr_init(void);
  * process as soon as possible.
  */
 #define cpu_signotify(l) do {						\
-	(l)->l_cpu->ci_want_ast = 1;					\
+	struct cpu_info *_ci = (l)->l_cpu;				\
+	_ci->ci_want_ast = 1;						\
 									\
 	/* Just interrupt the target CPU, so it can notice its AST */	\
-	if ((l)->l_cpu->ci_cpuid != cpu_number())			\
-		XCALL0(sparc_noop, 1U << (l)->l_cpu->ci_cpuid);		\
+	if (_ci->ci_cpuid != cpu_number())				\
+		XCALL0(sparc_noop, 1U << _ci->ci_cpuid);		\
 } while (/*CONSTCOND*/0)
 
 /* CPU architecture version */
@@ -151,28 +154,20 @@ extern int cpu_arch;
 /* Number of CPUs in the system */
 extern int sparc_ncpus;
 
-/* Provide %pc of a lwp */
-#define LWP_PC(l)       ((l)->l_md.md_tf->tf_pc)
-
 /*
  * Interrupt handler chains.  Interrupt handlers should return 0 for
  * ``not me'' or 1 (``I took care of it'').  intr_establish() inserts a
  * handler into the list.  The handler is called with its (single)
  * argument, or with a pointer to a clockframe if ih_arg is NULL.
- *
- * realfun/realarg are used to chain callers, usually with the
- * biglock wrapper.
  */
 extern struct intrhand {
 	int	(*ih_fun)(void *);
 	void	*ih_arg;
 	struct	intrhand *ih_next;
 	int	ih_classipl;
-	int	(*ih_realfun)(void *);
-	void	*ih_realarg;
 } *intrhand[15];
 
-void	intr_establish(int, int, struct intrhand *, void (*)(void), bool);
+void	intr_establish(int, int, struct intrhand *, void (*)(void));
 void	intr_disestablish(int, struct intrhand *);
 
 void	intr_lock_kernel(void);
@@ -203,6 +198,7 @@ int	probeget(void *, int);
 void	write_all_windows(void);
 void	write_user_windows(void);
 void 	lwp_trampoline(void);
+void 	lwp_setfunc_trampoline(void);
 struct pcb;
 void	snapshot(struct pcb *);
 struct frame *getfp(void);
@@ -212,7 +208,7 @@ void	qcopy(const void *, void *, size_t);
 void	qzero(void *, size_t);
 
 /* trap.c */
-void	cpu_vmspace_exec(struct lwp *, vaddr_t, vaddr_t);
+void	kill_user_windows(struct lwp *);
 int	rwindow_save(struct lwp *);
 
 /* cons.c */
@@ -236,7 +232,7 @@ void kgdb_panic(void);
 
 /* emul.c */
 struct trapframe;
-int fixalign(struct lwp *, struct trapframe *, void **);
+int fixalign(struct lwp *, struct trapframe *);
 int emulinstr(int, struct trapframe *);
 
 /* cpu.c */

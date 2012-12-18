@@ -1,4 +1,4 @@
-/*	$NetBSD: ex.h,v 1.4 2011/11/23 19:25:28 tnozaki Exp $ */
+/*	$NetBSD: ex.h,v 1.2.2.1 2009/01/20 02:41:12 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -110,7 +110,7 @@ struct _excmd {
 	F_SET(cmdp, L__f);						\
 }
 
-	ARG_CHAR_T	  buffer;		/* Command: named buffer. */
+	CHAR_T	  buffer;		/* Command: named buffer. */
 	db_recno_t	  lineno;		/* Command: line number. */
 	long	  count;		/* Command: signed count. */
 	long	  flagoff;		/* Command: signed flag offset. */

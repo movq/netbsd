@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.c,v 1.26 2011/09/01 15:10:31 christos Exp $	*/
+/*	$NetBSD: isa_machdep.c,v 1.12.6.2 2010/02/22 04:36:52 snj Exp $	*/
 /*	NetBSD isa_machdep.c,v 1.11 2004/06/20 18:04:08 thorpej Exp 	*/
 
 /*-
@@ -66,17 +66,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.26 2011/09/01 15:10:31 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.12.6.2 2010/02/22 04:36:52 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
+#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/mbuf.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/bus_private.h>
 
 #include <machine/pio.h>
@@ -87,7 +88,9 @@ __KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.26 2011/09/01 15:10:31 christos Ex
 
 #include <uvm/uvm_extern.h>
 
+#ifdef XEN3
 #include "ioapic.h"
+#endif
 
 #if NIOAPIC > 0
 #include <machine/i82093var.h>
@@ -97,15 +100,30 @@ __KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.26 2011/09/01 15:10:31 christos Ex
 static int _isa_dma_may_bounce(bus_dma_tag_t, bus_dmamap_t, int, int *);
 
 struct x86_bus_dma_tag isa_bus_dma_tag = {
-	._tag_needs_free	= 0,
-	._bounce_thresh		= ISA_DMA_BOUNCE_THRESHOLD,
-	._bounce_alloc_lo	= 0,
-	._bounce_alloc_hi	= ISA_DMA_BOUNCE_THRESHOLD,
-	._may_bounce		= _isa_dma_may_bounce,
+	0,				/* _tag_needs_free */
+	ISA_DMA_BOUNCE_THRESHOLD,	/* _bounce_thresh */
+	0,				/* _bounce_alloc_lo */
+	ISA_DMA_BOUNCE_THRESHOLD,	/* _bounce_alloc_hi */
+	_isa_dma_may_bounce,
+	_bus_dmamap_create,
+	_bus_dmamap_destroy,
+	_bus_dmamap_load,
+	_bus_dmamap_load_mbuf,
+	_bus_dmamap_load_uio,
+	_bus_dmamap_load_raw,
+	_bus_dmamap_unload,
+	_bus_dmamap_sync,
+	_bus_dmamem_alloc,
+	_bus_dmamem_free,
+	_bus_dmamem_map,
+	_bus_dmamem_unmap,
+	_bus_dmamem_mmap,
+	_bus_dmatag_subregion,
+	_bus_dmatag_destroy,
 };
 
 #define	IDTVEC(name)	__CONCAT(X,name)
-typedef void (vector)(void);
+typedef void (vector) __P((void));
 extern vector *IDTVEC(intr)[];
 
 #define	LEGAL_IRQ(x)	((x) >= 0 && (x) < NUM_LEGACY_IRQS && (x) != 2)
@@ -126,8 +144,13 @@ isa_intr_evcnt(isa_chipset_tag_t ic, int irq)
 }
 
 void *
-isa_intr_establish(isa_chipset_tag_t ic, int irq, int type, int level,
-	int (*ih_fun)(void *), void *ih_arg)
+isa_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
+	isa_chipset_tag_t ic;
+	int irq;
+	int type;
+	int level;
+	int (*ih_fun) __P((void *));
+	void *ih_arg;
 {
 	int evtch;
 	char evname[16];
@@ -176,14 +199,17 @@ isa_intr_establish(isa_chipset_tag_t ic, int irq, int type, int level,
  * Deregister an interrupt handler.
  */
 void
-isa_intr_disestablish(isa_chipset_tag_t ic, void *arg)
+isa_intr_disestablish(ic, arg)
+	isa_chipset_tag_t ic;
+	void *arg;
 {
 	//XXX intr_disestablish(ih);
 }
 
-/* XXX share with x86 */
 void
-isa_attach_hook(device_t parent, device_t self, struct isabus_attach_args *iba)
+isa_attach_hook(parent, self, iba)
+	struct device *parent, *self;
+	struct isabus_attach_args *iba;
 {
 	extern struct x86_isa_chipset x86_isa_chipset;
 	extern int isa_has_been_seen;
@@ -204,17 +230,14 @@ isa_attach_hook(device_t parent, device_t self, struct isabus_attach_args *iba)
 	iba->iba_ic = &x86_isa_chipset;
 }
 
-/* XXX share with x86 */
-void
-isa_detach_hook(isa_chipset_tag_t ic, device_t self)
-{
-	extern int isa_has_been_seen;
-
-	isa_has_been_seen = 0;
-}
-
 int
-isa_mem_alloc(bus_space_tag_t t, bus_size_t size, bus_size_t align, bus_addr_t boundary, int flags, bus_addr_t *addrp, bus_space_handle_t *bshp)
+isa_mem_alloc(t, size, align, boundary, flags, addrp, bshp)
+	bus_space_tag_t t;
+	bus_size_t size, align;
+	bus_addr_t boundary;
+	int flags;
+	bus_addr_t *addrp;
+	bus_space_handle_t *bshp;
 {
 
 	/*
@@ -225,7 +248,10 @@ isa_mem_alloc(bus_space_tag_t t, bus_size_t size, bus_size_t align, bus_addr_t b
 }
 
 void
-isa_mem_free(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
+isa_mem_free(t, bsh, size)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
 {
 
 	bus_space_free(t, bsh, size);

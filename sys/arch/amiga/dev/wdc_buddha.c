@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_buddha.c,v 1.8 2012/07/31 15:50:31 bouyer Exp $	*/
+/*	$NetBSD: wdc_buddha.c,v 1.4 2008/04/28 20:23:12 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -34,9 +34,9 @@
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-#include <sys/bus.h>
 
 #include <machine/cpu.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/bswap.h>
 
@@ -114,7 +114,6 @@ wdc_buddha_attach(device_t parent, device_t self, void *aux)
 	sc->sc_wdcdev.sc_atac.atac_pio_cap = 0;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = nchannels;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -135,6 +134,7 @@ wdc_buddha_attach(device_t parent, device_t self, void *aux)
 			    "can't allocate memory for command queue\n");
 			return;
 		}
+		cp->ch_ndrive = 2;
 
 		/*
 		 * XXX According to the Buddha docs, we should use a method

@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_machdep.c,v 1.16 2011/07/01 18:49:24 dyoung Exp $	*/
+/*	$NetBSD: rbus_machdep.c,v 1.12 2008/06/26 15:08:48 nakayama Exp $	*/
 
 /*
  * Copyright (c) 2003 Takeshi Nakayama.
@@ -26,14 +26,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.16 2011/07/01 18:49:24 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.12 2008/06/26 15:08:48 nakayama Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/extent.h>
 #include <sys/systm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/openfirm.h>
 #include <machine/promlib.h>
 #include <dev/pci/pcivar.h>
@@ -66,7 +66,11 @@ md_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags,
 }
 
 void
-md_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size, bus_addr_t *adrp)
+md_space_unmap(t, bsh, size, adrp)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
+	bus_addr_t *adrp;
 {
 	DPRINTF("md_space_unmap: 0x%" PRIxPTR ", 0x%" PRIx64 ", 0x%" PRIx64
 		"\n", (u_long)t->cookie, bsh._ptr, size);
@@ -121,6 +125,7 @@ void
 pccbb_attach_hook(device_t parent, device_t self, struct pci_attach_args *pa)
 {
 	pci_chipset_tag_t pc = pa->pa_pc;
+	struct psycho_pbm *pp = pc->cookie;
 	pcireg_t reg;
 	int node = PCITAG_NODE(pa->pa_tag);
 	int error;
@@ -142,17 +147,17 @@ pccbb_attach_hook(device_t parent, device_t self, struct pci_attach_args *pa)
 			printf("pccbb_attach_hook: broken bus %d\n", bus);
 		else {
 #ifdef DIAGNOSTIC
-			if ((*pc->spc_busnode)[bus].node != 0)
+			if ((*pp->pp_busnode)[bus].node != 0)
 				printf("pccbb_attach_hook: override bus %d"
 				       " node %08x -> %08x\n",
-				       bus, (*pc->spc_busnode)[bus].node, node);
+				       bus, (*pp->pp_busnode)[bus].node, node);
 #endif
-			(*pc->spc_busnode)[bus].arg = device_private(self);
-			(*pc->spc_busnode)[bus].valid = pccbb_cardbus_isvalid;
-			(*pc->spc_busnode)[bus].node = node;
+			(*pp->pp_busnode)[bus].arg = device_private(self);
+			(*pp->pp_busnode)[bus].valid = pccbb_cardbus_isvalid;
+			(*pp->pp_busnode)[bus].node = node;
 		}
 	} else {
-		bus = ++pc->spc_busmax;
+		bus = ++pp->pp_busmax;
 		DPRINTF("pccbb_attach_hook: bus %d\n", bus);
 		if (bus >= 256)
 			printf("pccbb_attach_hook: 256 >= busses exist\n");
@@ -162,14 +167,14 @@ pccbb_attach_hook(device_t parent, device_t self, struct pci_attach_args *pa)
 			reg |= pa->pa_bus | (bus << 8) | (bus << 16);
 			pci_conf_write(pc, pa->pa_tag, PPB_REG_BUSINFO, reg);
 #ifdef DIAGNOSTIC
-			if ((*pc->spc_busnode)[bus].node != 0)
+			if ((*pp->pp_busnode)[bus].node != 0)
 				printf("pccbb_attach_hook: override bus %d"
 				       " node %08x -> %08x\n",
-				       bus, (*pc->spc_busnode)[bus].node, node);
+				       bus, (*pp->pp_busnode)[bus].node, node);
 #endif
-			(*pc->spc_busnode)[bus].arg = device_private(self);
-			(*pc->spc_busnode)[bus].valid = pccbb_cardbus_isvalid;
-			(*pc->spc_busnode)[bus].node = node;
+			(*pp->pp_busnode)[bus].arg = device_private(self);
+			(*pp->pp_busnode)[bus].valid = pccbb_cardbus_isvalid;
+			(*pp->pp_busnode)[bus].node = node;
 		}
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: virtex_start.S,v 1.8 2011/06/20 19:56:11 matt Exp $ */
+/*	$NetBSD: virtex_start.S,v 1.1 2006/12/02 22:18:47 freza Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -33,10 +33,11 @@
  * This file is based on startup code of Walnut and Explora boards.
  */
 
+#define _NOREGNAMES
+
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
 #include "opt_lockdebug.h"
-#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_ppcarch.h"
 #include "opt_ppcparam.h"
@@ -52,8 +53,8 @@
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
-#include <powerpc/ibm4xx/spr.h>
-#include <powerpc/ibm4xx/dcr4xx.h>
+#include <powerpc/ibm4xx/dcr405gp.h>
+#include <powerpc/ibm4xx/pmap.h>
 
 
 /* N megabytes. */
@@ -61,6 +62,11 @@
 
 /* Set bit (beginning with MSB) for each 128MB of RAM. */
 #define PHYSMEM_REGIONS_MASK 		~((1 << (32 - MB(PHYSMEM)/MB(128))) - 1)
+
+
+/* Initialized by INIT_CPUINFO(), used by machdep.c */
+GLOBAL(proc0paddr)
+	.long	0			/* proc0 p_addr */
 
 /* For kvm_mkdb, supposed to mark the start of kernel text. */
 	.text
@@ -157,7 +163,7 @@ __start:
 	cmpw    %r7,%r4
 	bne+    2b
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	/* We don't have a symbol table, so set startsym = endsym = end */
 	lis	%r7,_C_LABEL(startsym)@ha
 	ori 	%r7,%r7,_C_LABEL(startsym)@l

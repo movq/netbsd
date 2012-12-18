@@ -1,4 +1,4 @@
-/*	$NetBSD: ds1743.c,v 1.9 2011/07/01 19:03:50 dyoung Exp $	*/
+/*	$NetBSD: ds1743.c,v 1.7 2006/09/18 22:05:47 gdamore Exp $	*/
 
 /*
  * Copyright (c) 2001-2002 Wasabi Sysetms, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ds1743.c,v 1.9 2011/07/01 19:03:50 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ds1743.c,v 1.7 2006/09/18 22:05:47 gdamore Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,20 +46,20 @@ __KERNEL_RCSID(0, "$NetBSD: ds1743.c,v 1.9 2011/07/01 19:03:50 dyoung Exp $");
 #include <dev/clock_subr.h>
 
 #include <machine/rtc.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <evbppc/walnut/dev/ds1743reg.h>
 #include <evbppc/walnut/dev/pbusvar.h>
 
 struct dsrtc_softc {
-	device_t	sc_dev;
+	struct device	sc_dev;
 	bus_space_tag_t	sc_iot;
 	bus_space_handle_t sc_ioh;
 	struct todr_chip_handle sc_todr;
 };
 
-static void dsrtcattach(device_t, device_t, void *);
-static int dsrtcmatch(device_t, cfdata_t, void *);
+static void dsrtcattach(struct device *, struct device *, void *);
+static int dsrtcmatch(struct device *, struct cfdata *, void *);
 #if 0	/* Nothing uses these yet */
 static int ds1743_ram_read(struct dsrtc_softc *, int);
 static void ds1743_ram_write(struct dsrtc_softc *, int, int);
@@ -73,7 +73,7 @@ static u_char ds1743_lock(struct dsrtc_softc *, u_char);
 static void ds1743_unlock(struct dsrtc_softc *, u_char);
 
 /* device and attach structures */
-CFATTACH_DECL_NEW(ds1743rtc, sizeof(struct dsrtc_softc),
+CFATTACH_DECL(ds1743rtc, sizeof(struct dsrtc_softc),
     dsrtcmatch, dsrtcattach, NULL, NULL);
 
 /*
@@ -86,7 +86,7 @@ int ds1743found = 0;
 #define DS_SCRATCH_ADDR 0x1FF7
 
 static int
-dsrtcmatch(device_t parent, cfdata_t cf, void *aux)
+dsrtcmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct pbus_attach_args *paa = aux;
 	int retval = !ds1743found;
@@ -131,14 +131,13 @@ dsrtcmatch(device_t parent, cfdata_t cf, void *aux)
  */
 
 static void
-dsrtcattach(device_t parent, device_t self, void *aux)
+dsrtcattach(struct device *parent, struct device *self, void *aux)
 {
-	struct dsrtc_softc *sc = device_private(self);
+	struct dsrtc_softc *sc = (struct dsrtc_softc *)self;
 	struct pbus_attach_args *paa = aux;
 
 	ds1743found = 1;
 	
-	sc->sc_dev = self;
 	sc->sc_iot = paa->pb_bt;
 	if (bus_space_map(sc->sc_iot, paa->pb_addr, DS_SIZE, 0, &sc->sc_ioh)) {
 		printf(": can't map i/o space\n");
@@ -150,20 +149,19 @@ dsrtcattach(device_t parent, device_t self, void *aux)
 		printf(": lithium cell is dead, RTC unreliable");
 	printf("\n");
 
-	sc->sc_todr.todr_gettime_ymdhms = dsrtc_read;
-	sc->sc_todr.todr_settime_ymdhms = dsrtc_write;
-	sc->sc_todr.cookie = sc;
-
 #ifdef DEBUG
 	{
-		struct clock_ymdhms dt;
-		dsrtc_read(&sc->sc_todr, &dt);
-		printf("RTC: %d/%d/%04d %d:%02d:%02d\n",
-			dt.dt_mon, dt.dt_day, dt.dt_year,
-			dt.dt_hour, dt.dt_min, dt.dt_sec);
+		rtc_t rtc;
+		dsrtc_read(sc, &rtc);
+		printf("RTC: %d/%d/%02d%02d %d:%02d:%02d\n",
+			rtc.rtc_mon, rtc.rtc_day, rtc.rtc_cen, rtc.rtc_year,
+			rtc.rtc_hour, rtc.rtc_min, rtc.rtc_sec);
 	}
 #endif
 
+	sc->sc_todr.todr_gettime_ymdhms = dsrtc_read;
+	sc->sc_todr.todr_settime_ymdhms = dsrtc_write;
+	sc->sc_todr.cookie = sc;
 	todr_attach(&sc->sc_todr);
 }
 

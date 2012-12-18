@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.37 2011/06/09 19:57:51 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.32.2.1 2009/09/05 11:45:06 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,6 +40,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -63,7 +68,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\
 #if 0
 static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 1/23/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.37 2011/06/09 19:57:51 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.32.2.1 2009/09/05 11:45:06 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -87,7 +92,7 @@ __RCSID("$NetBSD: main.c,v 1.37 2011/06/09 19:57:51 christos Exp $");
 #include "fsutil.h"
 #include "exitvalues.h"
 
-volatile sig_atomic_t	returntosingle = 0;
+int	returntosingle = 0;
 
 
 static int	argtoi(int, const char *, const char *, int);
@@ -100,7 +105,6 @@ main(int argc, char *argv[])
 	int ch;
 	int ret = FSCK_EXIT_OK;
 
-	ckfinish = ckfini;
 	sync();
 	skipclean = 1;
 	while ((ch = getopt(argc, argv, "b:dfm:npPqUy")) != -1) {

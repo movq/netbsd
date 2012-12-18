@@ -1,4 +1,4 @@
-/*	$NetBSD: dl.c,v 1.47 2012/10/27 17:18:37 chs Exp $	*/
+/*	$NetBSD: dl.c,v 1.43 2008/06/11 17:32:30 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -104,7 +104,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dl.c,v 1.47 2012/10/27 17:18:37 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dl.c,v 1.43 2008/06/11 17:32:30 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -129,7 +129,7 @@ __KERNEL_RCSID(0, "$NetBSD: dl.c,v 1.47 2012/10/27 17:18:37 chs Exp $");
 #include "ioconf.h"
 
 struct dl_softc {
-	device_t	sc_dev;
+	struct device	sc_dev;
 	struct evcnt	sc_rintrcnt;
 	struct evcnt	sc_tintrcnt;
 	bus_space_tag_t	sc_iot;
@@ -137,15 +137,15 @@ struct dl_softc {
 	struct tty	*sc_tty;
 };
 
-static	int	dl_match (device_t, cfdata_t, void *);
-static	void	dl_attach (device_t, device_t, void *);
+static	int	dl_match (struct device *, struct cfdata *, void *);
+static	void	dl_attach (struct device *, struct device *, void *);
 static	void	dlrint (void *);
 static	void	dlxint (void *);
 static	void	dlstart (struct tty *);
 static	int	dlparam (struct tty *, struct termios *);
 static	void	dlbrk (struct dl_softc *, int);
 
-CFATTACH_DECL_NEW(dl, sizeof(struct dl_softc),
+CFATTACH_DECL(dl, sizeof(struct dl_softc),
     dl_match, dl_attach, NULL, NULL);
 
 dev_type_open(dlopen);
@@ -173,7 +173,7 @@ const struct cdevsw dl_cdevsw = {
 /* then complete the housecleaning for full operation */
 
 static int
-dl_match (device_t parent, cfdata_t cf, void *aux)
+dl_match (struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct uba_attach_args *ua = aux;
 
@@ -229,12 +229,11 @@ dl_match (device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-dl_attach (device_t parent, device_t self, void *aux)
+dl_attach (struct device *parent, struct device *self, void *aux)
 {
 	struct dl_softc *sc = device_private(self);
 	struct uba_attach_args *ua = aux;
 
-	sc->sc_dev = self;
 	sc->sc_iot = ua->ua_iot;
 	sc->sc_ioh = ua->ua_ioh;
 
@@ -245,7 +244,7 @@ dl_attach (device_t parent, device_t self, void *aux)
 
 	/* Initialize our softc structure. Should be done in open? */
 
-	sc->sc_tty = tty_alloc();
+	sc->sc_tty = ttymalloc();
 	tty_attach(sc->sc_tty);
 
 	/* Now register the TX & RX interrupt handlers */
@@ -254,9 +253,9 @@ dl_attach (device_t parent, device_t self, void *aux)
 	uba_intr_establish(ua->ua_icookie, ua->ua_cvec - 4,
 		dlrint, sc, &sc->sc_rintrcnt);
 	evcnt_attach_dynamic(&sc->sc_rintrcnt, EVCNT_TYPE_INTR, ua->ua_evcnt,
-		device_xname(sc->sc_dev), "rintr");
+		device_xname(&sc->sc_dev), "rintr");
 	evcnt_attach_dynamic(&sc->sc_tintrcnt, EVCNT_TYPE_INTR, ua->ua_evcnt,
-		device_xname(sc->sc_dev), "tintr");
+		device_xname(&sc->sc_dev), "tintr");
 
 	printf("\n");
 }
@@ -287,7 +286,7 @@ dlrint(void *arg)
 			 * else where we can afford the time.
 			 */
 			log(LOG_WARNING, "%s: rx overrun\n",
-			    device_xname(sc->sc_dev));
+			    device_xname(&sc->sc_dev));
 		}
 		if (c & DL_RBUF_FRAMING_ERR)
 			cc |= TTY_FE;
@@ -298,7 +297,7 @@ dlrint(void *arg)
 #if defined(DIAGNOSTIC)
 	} else {
 		log(LOG_WARNING, "%s: stray rx interrupt\n",
-		    device_xname(sc->sc_dev));
+		    device_xname(&sc->sc_dev));
 #endif
 	}
 }

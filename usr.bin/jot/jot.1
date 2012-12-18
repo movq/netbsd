@@ -1,4 +1,4 @@
-.\"	$NetBSD: jot.1,v 1.12 2012/04/08 22:00:39 wiz Exp $
+.\"	$NetBSD: jot.1,v 1.9 2008/02/24 00:05:31 dsl Exp $
 .\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)jot.1	8.1 (Berkeley) 6/6/93
 .\"
-.Dd January 5, 2010
+.Dd February 24, 2008
 .Dt JOT 1
 .Os
 .Sh NAME
@@ -38,10 +38,18 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl cnr
+.Bk -words
 .Op Fl b Ar word
+.Ek
+.Bk -words
 .Op Fl p Ar precision
+.Ek
+.Bk -words
 .Op Fl s Ar string
+.Ek
+.Bk -words
 .Op Fl w Ar word
+.Ek
 .Oo Ar reps
 .Oo Ar begin
 .Oo Ar end
@@ -62,8 +70,7 @@ Just print
 .Ar word
 repetitively.
 .It Fl c
-This is an abbreviation for
-.Fl w Ar %c .
+This is an abbreviation for \fB\-w %c\fP.
 .It Fl n
 Do not print the final newline normally appended to the output.
 .It Fl p Ar precision
@@ -144,10 +151,6 @@ derives in part from
 a function in APL.
 .Sh EXAMPLES
 The command:
-.Dl "jot - 42 87 1"
-prints the integers from 42 to 87, inclusive.
-.Pp
-The command:
 .Dl "jot 21 \-1 1.00"
 prints 21 evenly spaced numbers increasing from \-1 to 1.
 .Pp
@@ -197,7 +200,6 @@ prints all lines 80 characters or longer.
 .Xr ed 1 ,
 .Xr expand 1 ,
 .Xr rs 1 ,
-.Xr seq 1 ,
 .Xr yes 1 ,
 .Xr printf 3 ,
 .Xr random 3

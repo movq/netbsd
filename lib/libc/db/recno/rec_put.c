@@ -1,4 +1,4 @@
-/*	$NetBSD: rec_put.c,v 1.19 2011/06/26 22:18:16 christos Exp $	*/
+/*	$NetBSD: rec_put.c,v 1.17 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -34,7 +34,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: rec_put.c,v 1.19 2011/06/26 22:18:16 christos Exp $");
+__RCSID("$NetBSD: rec_put.c,v 1.17 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
@@ -167,14 +167,8 @@ einval:		errno = EINVAL;
 	if ((status = __rec_iput(t, nrec - 1, &fdata, flags)) != RET_SUCCESS)
 		return (status);
 
-	switch (flags) {
-	case R_IAFTER:
-		nrec++;
-		break;
-	case R_SETCURSOR:
+	if (flags == R_SETCURSOR)
 		t->bt_cursor.rcursor = nrec;
-		break;
-	}
 	
 	F_SET(t, R_MODIFIED);
 	return (__rec_ret(t, NULL, nrec, key, NULL));
@@ -214,7 +208,7 @@ __rec_iput(BTREE *t, recno_t nrec, const DBT *data, u_int flags)
 			return (RET_ERROR);
 		tdata.data = db;
 		tdata.size = NOVFLSIZE;
-		memcpy(db, &pg, sizeof(pg));
+		*(pgno_t *)(void *)db = pg;
 		_DBFIT(data->size, uint32_t);
 		*(uint32_t *)(void *)(db + sizeof(pgno_t)) =
 		    (uint32_t)data->size;

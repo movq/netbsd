@@ -1,4 +1,4 @@
-/* $NetBSD: vm_machdep.c,v 1.29 2012/08/16 17:35:01 matt Exp $ */
+/* $NetBSD: vm_machdep.c,v 1.20 2008/10/25 22:12:33 he Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 Ben Harris
@@ -35,7 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+/* Following is for vmapbuf/vunmapbuf */
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
@@ -64,13 +64,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.29 2012/08/16 17:35:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.20 2008/10/25 22:12:33 he Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/mount.h> /* XXX syscallargs.h uses fhandle_t and fsid_t */
 #include <sys/proc.h>
 #include <sys/syscallargs.h>
+#include <sys/user.h>
 #include <sys/sched.h>
 #include <sys/mutex.h>
 
@@ -80,13 +81,12 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.29 2012/08/16 17:35:01 matt Exp $")
 #include <machine/frame.h>
 #include <machine/intr.h>
 #include <machine/machdep.h>
-#include <machine/pcb.h>
 
 /*
- * Finish a fork operation, with thread l2 nearly set up.
+ * Finish a fork operation, with process p2 nearly set up.
  * Copy and update the pcb and trap frame, making the child ready to run.
  *
- * l1 is the thread being forked; if l1 == &lwp0, we are creating
+ * p1 is the process being forked; if p1 == &proc0, we are creating
  * a kernel thread, and the return path and argument are specified with
  * `func' and `arg'.
  *
@@ -96,50 +96,63 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.29 2012/08/16 17:35:01 matt Exp $")
  */
 
 /*
- * Note: the pcb structure has to be at the start of the uarea -- we start
- * the kernel stack from the end.
+ * Note:
+ * 
+ * p->p_addr points to a page containing the user structure
+ * (see <sys/user.h>) and the kernel stack.  The user structure has to be
+ * at the start of the area -- we start the kernel stack from the end.
  */
 
 void
 cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
     void (*func)(void *), void *arg)
 {
-	struct pcb *pcb1, *pcb2;
+	struct pcb *pcb;
 	struct trapframe *tf;
 	struct switchframe *sf;
+	char *stacktop;
 
 #if 0
 	printf("cpu_lwp_fork: %p -> %p\n", p1, p2);
 #endif
-	pcb1 = lwp_getpcb(l1);
-	pcb2 = lwp_getpcb(l2);
-
+	pcb = &l2->l_addr->u_pcb;
 	/* Copy the pcb */
-	*pcb2 = *pcb1;
+	*pcb = l1->l_addr->u_pcb;
 
 	/* pmap_activate(l2); XXX Other ports do.  Why?  */
 
 	/* Set up the kernel stack */
-	tf = (struct trapframe *)(uvm_lwp_getuarea(l2) + USPACE) - 1;
+	stacktop = (char *)l2->l_addr + USPACE;
+	tf = (struct trapframe *)stacktop - 1;
 	sf = (struct switchframe *)tf - 1;
 	/* Duplicate old process's trapframe (if it had one) */
-	if (lwp_trapframe(l1) == NULL)
-		memset(tf, 0, sizeof(*tf));
+	if (l1->l_addr->u_pcb.pcb_tf == NULL)
+		bzero(tf, sizeof(*tf));
 	else
-		*tf = *lwp_trapframe(l1);
+		*tf = *l1->l_addr->u_pcb.pcb_tf;
 	/* If specified, give the child a different stack. */
 	if (stack != NULL)
 		tf->tf_usr_sp = (u_int)stack + stacksize;
-	lwp_settrapframe(l2, tf);
+	l2->l_addr->u_pcb.pcb_tf = tf;
 	/* Fabricate a new switchframe */
-	memset(sf, 0, sizeof(*sf));
+	bzero(sf, sizeof(*sf));
+
+	cpu_setfunc(l2, func, arg);
+}
+
+void
+cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
+{
+	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct trapframe *tf = pcb->pcb_tf;
+	struct switchframe *sf = (struct switchframe *)tf - 1;
 
 	sf->sf_r13 = (register_t)tf; /* Initial stack pointer */
 	sf->sf_pc  = (register_t)lwp_trampoline | R15_MODE_SVC;
 
-	lwp_settrapframe(l2, tf);
-	pcb2->pcb_sf = sf;
-	pcb2->pcb_onfault = NULL;
+	pcb->pcb_tf = tf;
+	pcb->pcb_sf = sf;
+	pcb->pcb_onfault = NULL;
 	sf->sf_r4 = (register_t)func;
 	sf->sf_r5 = (register_t)arg;
 }
@@ -158,13 +171,27 @@ cpu_lwp_free2(struct lwp *l)
 	/* Nothing to do here? */
 }
 
+void
+cpu_swapin(struct lwp *l)
+{
+
+	/* Can anyone think of anything I should do here? */
+}
+
+void
+cpu_swapout(struct lwp *l)
+{
+
+	/* ... or here, for that matter. */
+}
+
 /*
  * Map a user I/O request into kernel virtual address space.
  * Note: the pages are already locked by uvm_vslock(), so we
  * do not need to pass an access_type to pmap_enter().
  */
 /* This code was originally stolen from the alpha port. */
-int
+void
 vmapbuf(struct buf *bp, vsize_t len)
 {
 	vaddr_t faddr, taddr, off;
@@ -194,8 +221,6 @@ vmapbuf(struct buf *bp, vsize_t len)
 		taddr += PAGE_SIZE;
 	}
 	pmap_update(vm_map_pmap(phys_map));
-
-	return 0;
 }
 
 /*

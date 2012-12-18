@@ -1,4 +1,4 @@
-/*	$NetBSD: apcreg.h,v 1.1 2010/01/15 20:57:12 bouyer Exp $	*/
+/*	$NetBSD: apcreg.h,v 1.1.2.2 2010/01/27 21:17:55 sborrill Exp $	*/
 
 /*
  * Copyright (c) 2010 Manuel Bouyer.

@@ -302,7 +302,7 @@ typedef struct nt_dispatch_header nt_dispatch_header;
 
 /* TODO: What is the best way to do this? */
 
-extern int win_irql;
+int win_irql;
 #define AT_DISPATCH_LEVEL(useless) \
 	(win_irql == DISPATCH_LEVEL)
 
@@ -850,7 +850,7 @@ struct io_stack_location {
 
 	/*
 	 * There's a big-ass union here in the actual Windows
-	 * definition of the structure, but it contains stuff
+	 * definition of the stucture, but it contains stuff
 	 * that doesn't really apply to BSD, and defining it
 	 * all properly would require duplicating over a dozen
 	 * other structures that we'll never use. Since the
@@ -1004,7 +1004,7 @@ typedef struct irp irp;
 		io_stack_location *src, *dst;				\
 		src = IoGetCurrentIrpStackLocation(irp);		\
 		dst = IoGetNextIrpStackLocation(irp);			\
-		memcpy( (char *)dst, (char *)src,				\
+		bcopy((char *)src, (char *)dst,				\
 		    offsetof(io_stack_location, isl_completionfunc));	\
 	} while(0)
 

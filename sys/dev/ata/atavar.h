@@ -1,4 +1,4 @@
-/*	$NetBSD: atavar.h,v 1.90 2012/07/31 15:50:34 bouyer Exp $	*/
+/*	$NetBSD: atavar.h,v 1.77.4.1 2008/11/20 02:45:36 snj Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,6 +40,11 @@
 /* XXX For scsipi_adapter and scsipi_channel. */
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/atapiconf.h>
+
+/*
+ * Max number of drives per channel.
+ */
+#define	ATA_MAXDRIVES		2
 
 /*
  * Description of a command to be handled by an ATA controller.  These
@@ -103,6 +113,12 @@ struct atabus_initq {
 	struct atabus_softc *atabus_sc;
 };
 
+#ifdef _KERNEL
+TAILQ_HEAD(atabus_initq_head, atabus_initq);
+extern struct atabus_initq_head atabus_initq_head;
+extern struct simplelock atabus_interlock;
+#endif /* _KERNEL */
+
 /* High-level functions and structures used by both ATA and ATAPI devices */
 struct ataparams;
 
@@ -111,21 +127,19 @@ struct ata_drive_datas {
 	u_int8_t drive;		/* drive number */
 	int8_t ata_vers;	/* ATA version supported */
 	u_int16_t drive_flags;	/* bitmask for drives present/absent and cap */
-#define	ATA_DRIVE_CAP32		0x0001
-#define	ATA_DRIVE_DMA		0x0002
-#define	ATA_DRIVE_UDMA		0x0004
-#define	ATA_DRIVE_MODE		0x0008	/* the drive reported its mode */
-#define	ATA_DRIVE_RESET		0x0010	/* reset the drive state at next xfer */
-#define	ATA_DRIVE_WAITDRAIN	0x0020	/* device is waiting for the queue to drain */
-#define	ATA_DRIVE_NOSTREAM	0x0040	/* no stream methods on this drive */
-#define ATA_DRIVE_ATAPIDSCW	0x0080	/* needs to wait for DSC in phase_complete */
 
-	uint8_t drive_type;
-#define	ATA_DRIVET_NONE		0
-#define	ATA_DRIVET_ATA		1
-#define	ATA_DRIVET_ATAPI	2
-#define	ATA_DRIVET_OLD		3
-#define	ATA_DRIVET_PM		4
+#define	DRIVE_ATA	0x0001
+#define	DRIVE_ATAPI	0x0002
+#define	DRIVE_OLD	0x0004
+#define	DRIVE		(DRIVE_ATA|DRIVE_ATAPI|DRIVE_OLD)
+#define	DRIVE_CAP32	0x0008
+#define	DRIVE_DMA	0x0010
+#define	DRIVE_UDMA	0x0020
+#define	DRIVE_MODE	0x0040	/* the drive reported its mode */
+#define	DRIVE_RESET	0x0080	/* reset the drive state at next xfer */
+#define	DRIVE_WAITDRAIN	0x0100	/* device is waiting for the queue to drain */
+#define	DRIVE_ATAPIST	0x0200	/* device is an ATAPI tape drive */
+#define	DRIVE_NOSTREAM	0x0400	/* no stream methods on this drive */
 
 	/*
 	 * Current setting of drive's PIO, DMA and UDMA modes.
@@ -226,33 +240,27 @@ struct ata_bio {
  *
  * This structure defines the interface between the ATA/ATAPI device driver
  * and the controller for short commands. It contains the command's parameter,
- * the length of data to read/write (if any), and a function to call upon
+ * the len of data's to read/write (if any), and a function to call upon
  * completion.
  * If no sleep is allowed, the driver can poll for command completion.
- * Once the command completed, if the error registered is valid, the flag
+ * Once the command completed, if the error registed is valid, the flag
  * AT_ERROR is set and the error register value is copied to r_error .
  * A separate interface is needed for read/write or ATAPI packet commands
  * (which need multiple interrupts per commands).
  */
 struct ata_command {
-	/* ATA parameters */
-	uint64_t r_lba;		/* before & after */
-	uint16_t r_count;	/* before & after */
-	union {
-		uint16_t r_features; /* before */
-		uint8_t r_error; /* after */
-	};
-	union {
-		uint8_t r_command; /* before */
-		uint8_t r_status; /* after */
-	};
-	uint8_t r_device;	/* before & after */
-
-	uint8_t r_st_bmask;	/* status register mask to wait for before
+	u_int8_t r_command;	/* Parameters to upload to registers */
+	u_int8_t r_head;
+	u_int16_t r_cyl;
+	u_int8_t r_sector;
+	u_int8_t r_count;
+	u_int8_t r_features;
+	u_int8_t r_st_bmask;	/* status register mask to wait for before
 				   command */
-	uint8_t r_st_pmask;	/* status register mask to wait for after
+	u_int8_t r_st_pmask;	/* status register mask to wait for after
 				   command */
-	volatile uint16_t flags;
+	u_int8_t r_error;	/* error register after command done */
+	volatile u_int16_t flags;
 
 #define AT_READ     0x0001 /* There is data to read */
 #define AT_WRITE    0x0002 /* There is data to write (excl. with AT_READ) */
@@ -266,8 +274,6 @@ struct ata_command {
 #define AT_RESET    0x0400 /* command terminated by channel reset */
 #define AT_GONE     0x0800 /* command terminated because device is gone */
 #define AT_READREG  0x1000 /* Read registers on completion */
-#define AT_LBA      0x2000 /* LBA28 */
-#define AT_LBA48    0x4000 /* LBA48 */
 
 	int timeout;		/* timeout (in ms) */
 	void *data;		/* Data buffer address */
@@ -283,7 +289,7 @@ struct ata_command {
 struct ata_bustype {
 	int	bustype_type;	/* symbolic name of type */
 	int	(*ata_bio)(struct ata_drive_datas *, struct ata_bio *);
-	void	(*ata_reset_drive)(struct ata_drive_datas *, int, uint32_t *);
+	void	(*ata_reset_drive)(struct ata_drive_datas *, int);
 	void	(*ata_reset_channel)(struct ata_channel *, int);
 /* extra flags for ata_reset_*(), in addition to AT_* */
 #define AT_RST_EMERG 0x10000 /* emergency - e.g. for a dump */
@@ -336,7 +342,6 @@ struct ata_channel {
 #define	ATACH_DISABLED 0x80	/* channel is disabled */
 #define ATACH_TH_RUN   0x100	/* the kernel thread is working */
 #define ATACH_TH_RESET 0x200	/* someone ask the thread to reset */
-#define ATACH_TH_RESCAN 0x400	/* rescan requested */
 	u_int8_t ch_status;	/* copy of status register */
 	u_int8_t ch_error;	/* copy of error register */
 
@@ -344,14 +349,17 @@ struct ata_channel {
 	int ch_reset_flags;
 
 	/* per-drive info */
-	int ch_ndrives; /* number of entries in ch_drive[] */
-	struct ata_drive_datas *ch_drive; /* array of ata_drive_datas */
+	int ch_ndrive;
+	struct ata_drive_datas ch_drive[ATA_MAXDRIVES];
 
-	device_t atabus;	/* self */
+	struct device *atabus;	/* self */
 
 	/* ATAPI children */
-	device_t atapibus;
+	struct device *atapibus;
 	struct scsipi_channel ch_atapi_channel;
+
+	/* ATA children */
+	struct device *ata_drives[ATA_MAXDRIVES];
 
 	/*
 	 * Channel queues.  May be the same for all channels, if hw
@@ -361,9 +369,6 @@ struct ata_channel {
 
 	/* The channel kernel thread */
 	struct lwp *ch_thread;
-
-	/* Number of sata PMP ports, if any */
-	int ch_satapmp_nports;
 };
 
 /*
@@ -430,9 +435,6 @@ struct atac_softc {
 void	ata_channel_attach(struct ata_channel *);
 int	atabusprint(void *aux, const char *);
 int	ataprint(void *aux, const char *);
-
-int	atabus_alloc_drives(struct ata_channel *, int);
-void	atabus_free_drives(struct ata_channel *);
 
 struct ataparams;
 int	ata_get_params(struct ata_drive_datas *, u_int8_t, struct ataparams *);

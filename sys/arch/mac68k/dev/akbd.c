@@ -1,4 +1,4 @@
-/*	$NetBSD: akbd.c,v 1.23 2012/10/27 17:17:59 chs Exp $	*/
+/*	$NetBSD: akbd.c,v 1.21 2007/03/10 16:35:14 hauke Exp $	*/
 
 /*
  * Copyright (C) 1998	Colin Wood
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: akbd.c,v 1.23 2012/10/27 17:17:59 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: akbd.c,v 1.21 2007/03/10 16:35:14 hauke Exp $");
 
 #include "opt_adb.h"
 
@@ -69,8 +69,8 @@ __KERNEL_RCSID(0, "$NetBSD: akbd.c,v 1.23 2012/10/27 17:17:59 chs Exp $");
 /*
  * Function declarations.
  */
-static int	akbdmatch(device_t, cfdata_t, void *);
-static void	akbdattach(device_t, device_t, void *);
+static int	akbdmatch(struct device *, struct cfdata *, void *);
+static void	akbdattach(struct device *, struct device *, void *);
 static void	kbd_processevent(adb_event_t *, struct akbd_softc *);
 #ifdef notyet
 static u_char	getleds(int);
@@ -83,7 +83,7 @@ static void	blinkleds(struct akbd_softc *);
  */
 
 /* Driver definition. */
-CFATTACH_DECL_NEW(akbd, sizeof(struct akbd_softc),
+CFATTACH_DECL(akbd, sizeof(struct akbd_softc),
     akbdmatch, akbdattach, NULL, NULL);
 
 extern struct cfdriver akbd_cd;
@@ -116,7 +116,7 @@ struct wskbd_mapdata akbd_keymapdata = {
 static int akbd_is_console(void);
 
 static int
-akbdmatch(device_t parent, cfdata_t cf, void *aux)
+akbdmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)aux;
 
@@ -127,10 +127,10 @@ akbdmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-akbdattach(device_t parent, device_t self, void *aux)
+akbdattach(struct device *parent, struct device *self, void *aux)
 {
 	ADBSetInfoBlock adbinfo;
-	struct akbd_softc *sc = device_private(self);
+	struct akbd_softc *sc = (struct akbd_softc *)self;
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)aux;
 	int error, kbd_done;
 	short cmd;
@@ -464,7 +464,7 @@ akbd_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 	switch (cmd) {
 
 	case WSKBDIO_GTYPE:
-		*(int *)data = WSKBD_TYPE_ADB;
+		*(int *)data = 0;		/* XXX */
 		return 0;
 	case WSKBDIO_SETLEDS:
 		return 0;

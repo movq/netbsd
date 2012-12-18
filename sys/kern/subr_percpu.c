@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_percpu.c,v 1.16 2012/01/27 19:48:40 para Exp $	*/
+/*	$NetBSD: subr_percpu.c,v 1.8.10.1 2009/02/02 03:34:29 snj Exp $	*/
 
 /*-
  * Copyright (c)2007,2008 YAMAMOTO Takashi,
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_percpu.c,v 1.16 2012/01/27 19:48:40 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_percpu.c,v 1.8.10.1 2009/02/02 03:34:29 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/cpu.h>
@@ -42,6 +42,8 @@ __KERNEL_RCSID(0, "$NetBSD: subr_percpu.c,v 1.16 2012/01/27 19:48:40 para Exp $"
 #include <sys/rwlock.h>
 #include <sys/vmem.h>
 #include <sys/xcall.h>
+
+#include <uvm/uvm_extern.h>
 
 #define	PERCPU_QUANTUM_SIZE	(ALIGNBYTES + 1)
 #define	PERCPU_QCACHE_MAX	0
@@ -56,10 +58,10 @@ __KERNEL_RCSID(0, "$NetBSD: subr_percpu.c,v 1.16 2012/01/27 19:48:40 para Exp $"
 #define	percpu_decrypt(pc)	(pc)
 #endif /* defined(DIAGNOSTIC) */
 
-static krwlock_t	percpu_swap_lock	__cacheline_aligned;
-static kmutex_t		percpu_allocation_lock	__cacheline_aligned;
-static vmem_t *		percpu_offset_arena	__cacheline_aligned;
-static unsigned int	percpu_nextoff		__cacheline_aligned;
+static krwlock_t percpu_swap_lock;
+static kmutex_t percpu_allocation_lock;
+static vmem_t *percpu_offset_arena;
+static unsigned int percpu_nextoff = PERCPU_QUANTUM_SIZE;
 
 static percpu_cpu_t *
 cpu_percpu(struct cpu_info *ci)
@@ -88,11 +90,10 @@ percpu_cpu_swap(void *p1, void *p2)
 	percpu_cpu_t * const newpcc = p2;
 	percpu_cpu_t * const pcc = cpu_percpu(ci);
 
-	KASSERT(ci == curcpu() || !mp_online);
-
 	/*
 	 * swap *pcc and *newpcc unless anyone has beaten us.
 	 */
+
 	rw_enter(&percpu_swap_lock, RW_WRITER);
 	if (newpcc->pcc_size > pcc->pcc_size) {
 		percpu_cpu_t tmp;
@@ -146,8 +147,10 @@ percpu_cpu_enlarge(size_t size)
 		} else {
 			uint64_t where;
 
+			uvm_lwp_hold(curlwp); /* don't swap out pcc */
 			where = xc_unicast(0, percpu_cpu_swap, ci, &pcc, ci);
 			xc_wait(where);
+			uvm_lwp_rele(curlwp);
 		}
 		KASSERT(pcc.pcc_size < size);
 		if (pcc.pcc_data != NULL) {
@@ -160,9 +163,9 @@ percpu_cpu_enlarge(size_t size)
  * percpu_backend_alloc: vmem import callback for percpu_offset_arena
  */
 
-static int
+static vmem_addr_t
 percpu_backend_alloc(vmem_t *dummy, vmem_size_t size, vmem_size_t *resultsize,
-    vm_flag_t vmflags, vmem_addr_t *addrp)
+    vm_flag_t vmflags)
 {
 	unsigned int offset;
 	unsigned int nextoff;
@@ -171,7 +174,7 @@ percpu_backend_alloc(vmem_t *dummy, vmem_size_t size, vmem_size_t *resultsize,
 	KASSERT(dummy == NULL);
 
 	if ((vmflags & VM_NOSLEEP) != 0)
-		return ENOMEM;
+		return VMEM_ADDR_NULL;
 
 	size = roundup(size, PERCPU_IMPORT_SIZE);
 	mutex_enter(&percpu_allocation_lock);
@@ -182,8 +185,7 @@ percpu_backend_alloc(vmem_t *dummy, vmem_size_t size, vmem_size_t *resultsize,
 	percpu_cpu_enlarge(nextoff);
 
 	*resultsize = size;
-	*addrp = (vmem_addr_t)offset;
-	return 0;
+	return (vmem_addr_t)offset;
 }
 
 static void
@@ -216,9 +218,8 @@ percpu_init(void)
 	ASSERT_SLEEPABLE();
 	rw_init(&percpu_swap_lock);
 	mutex_init(&percpu_allocation_lock, MUTEX_DEFAULT, IPL_NONE);
-	percpu_nextoff = PERCPU_QUANTUM_SIZE;
 
-	percpu_offset_arena = vmem_xcreate("percpu", 0, 0, PERCPU_QUANTUM_SIZE,
+	percpu_offset_arena = vmem_create("percpu", 0, 0, PERCPU_QUANTUM_SIZE,
 	    percpu_backend_alloc, NULL, NULL, PERCPU_QCACHE_MAX, VM_SLEEP,
 	    IPL_NONE);
 }
@@ -253,13 +254,11 @@ percpu_init_cpu(struct cpu_info *ci)
 percpu_t *
 percpu_alloc(size_t size)
 {
-	vmem_addr_t offset;
+	unsigned int offset;
 	percpu_t *pc;
 
 	ASSERT_SLEEPABLE();
-	if (vmem_alloc(percpu_offset_arena, size, VM_SLEEP | VM_BESTFIT,
-	    &offset) != 0)
-		return NULL;
+	offset = vmem_alloc(percpu_offset_arena, size, VM_SLEEP | VM_BESTFIT);
 	pc = (percpu_t *)percpu_encrypt((uintptr_t)offset);
 	percpu_zero(pc, size);
 	return pc;

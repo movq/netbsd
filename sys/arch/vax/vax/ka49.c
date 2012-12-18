@@ -30,15 +30,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka49.c,v 1.19 2012/06/28 13:59:55 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka49.c,v 1.17 2008/03/11 05:34:03 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/cpu.h>
 #include <sys/device.h>
+#include <sys/systm.h>
 #include <sys/kernel.h>
 
 #include <machine/clock.h>
+#include <machine/cpu.h>
 #include <machine/scb.h>
 #include <machine/mainbus.h>
 
@@ -157,6 +157,7 @@ ka49_cache_enable(void)
 	mtpr(mfpr(PR_BCEDSTS), PR_BCEDSTS);	/* Clear error bits */
 	mtpr(mfpr(PR_NESTS), PR_NESTS);		/* Clear error bits */
 
+
 	start = 0x01400000;
 	slut  = 0x01440000;
 
@@ -223,6 +224,7 @@ ka49_steal_pages(void)
 
 	/* Turn on caches (to speed up execution a bit) */
 	ka49_cache_enable();
+
 }
 
 void

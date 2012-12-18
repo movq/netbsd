@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_output.c,v 1.26 2011/07/17 20:54:54 joerg Exp $	*/
+/*	$NetBSD: clnp_output.c,v 1.22 2008/01/14 04:17:35 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clnp_output.c,v 1.26 2011/07/17 20:54:54 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clnp_output.c,v 1.22 2008/01/14 04:17:35 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -80,6 +80,8 @@ __KERNEL_RCSID(0, "$NetBSD: clnp_output.c,v 1.26 2011/07/17 20:54:54 joerg Exp $
 #include <netiso/clnp.h>
 #include <netiso/clnp_stat.h>
 #include <netiso/argo_debug.h>
+
+#include <machine/stdarg.h>
 
 static struct clnp_fixed dt_template = {
 	ISO8473_CLNP,		/* network identifier */
@@ -350,7 +352,7 @@ clnp_output(struct mbuf *m0, ...)
 			printf("clnp_output: NEW clcp %p\n", clcp);
 		}
 #endif
-		memset((void *) clcp, 0, sizeof(struct clnp_cache));
+		bzero((void *) clcp, sizeof(struct clnp_cache));
 
 		if (isop->isop_optindex)
 			oidx = mtod(isop->isop_optindex, struct clnp_optidx *);
@@ -506,7 +508,7 @@ clnp_output(struct mbuf *m0, ...)
 		 * the option was not specified previously
 		 */
 		if ((m->m_len + sizeof(qos_option)) < MLEN) {
-			memcpy(hoff, (void *) qos_option, sizeof(qos_option));
+			bcopy((void *) qos_option, hoff, sizeof(qos_option));
 			clnp->cnf_hdr_len += sizeof(qos_option);
 			hdrlen += sizeof(qos_option);
 			m->m_len += sizeof(qos_option);

@@ -1,4 +1,4 @@
-/*	$NetBSD: consinit.c,v 1.8 2011/07/01 20:26:36 dyoung Exp $ */
+/*	$NetBSD: consinit.c,v 1.7 2006/08/16 07:59:44 he Exp $ */
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.8 2011/07/01 20:26:36 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.7 2006/08/16 07:59:44 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,7 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.8 2011/07/01 20:26:36 dyoung Exp $");
 #include <sys/conf.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/cons.h>
 

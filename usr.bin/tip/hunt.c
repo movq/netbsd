@@ -1,4 +1,4 @@
-/*	$NetBSD: hunt.c,v 1.18 2011/09/06 18:33:01 joerg Exp $	*/
+/*	$NetBSD: hunt.c,v 1.16 2006/12/14 17:09:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)hunt.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: hunt.c,v 1.18 2011/09/06 18:33:01 joerg Exp $");
+__RCSID("$NetBSD: hunt.c,v 1.16 2006/12/14 17:09:43 christos Exp $");
 #endif /* not lint */
 
 #include "tip.h"
@@ -42,9 +42,9 @@ __RCSID("$NetBSD: hunt.c,v 1.18 2011/09/06 18:33:01 joerg Exp $");
 static	jmp_buf deadline;
 static	int deadfl;
 
-__dead static void	dead(int);
+void	dead(int);
 
-static void
+void
 /*ARGSUSED*/
 dead(int dummy __unused)
 {
@@ -76,7 +76,7 @@ hunt(char *name)
 		}
 		(void)alarm(0);
 		if (FD < 0) {
-			warn("%s", cp);
+			warn(cp);
 			deadfl = 1;
 		} else if (!deadfl) {
 			struct termios cntrl;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ppb.c,v 1.50 2012/10/20 05:57:34 matt Exp $	*/
+/*	$NetBSD: ppb.c,v 1.39 2008/05/03 05:44:06 cegger Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ppb.c,v 1.50 2012/10/20 05:57:34 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ppb.c,v 1.39 2008/05/03 05:44:06 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,10 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: ppb.c,v 1.50 2012/10/20 05:57:34 matt Exp $");
 #include <dev/pci/ppbreg.h>
 #include <dev/pci/pcidevs.h>
 
-#define	PCI_PCIE_SLCSR_NOTIFY_MASK					\
-	(PCI_PCIE_SLCSR_ABE | PCI_PCIE_SLCSR_PFE | PCI_PCIE_SLCSR_MSE |	\
-	 PCI_PCIE_SLCSR_PDE | PCI_PCIE_SLCSR_CCE | PCI_PCIE_SLCSR_HPE)
-
 struct ppb_softc {
 	device_t sc_dev;		/* generic device glue */
 	pci_chipset_tag_t sc_pc;	/* our PCI chipset... */
@@ -55,12 +51,8 @@ struct ppb_softc {
 	pcireg_t sc_pciconfext[48];
 };
 
-static const char pcie_linkspeed_strings[4][5] = {
-	"1.25", "2.5", "5.0", "8.0",
-};
-
-static bool		ppb_resume(device_t, const pmf_qual_t *);
-static bool		ppb_suspend(device_t, const pmf_qual_t *);
+static bool		ppb_resume(device_t PMF_FN_PROTO);
+static bool		ppb_suspend(device_t PMF_FN_PROTO);
 
 static int
 ppbmatch(device_t parent, cfdata_t match, void *aux)
@@ -76,29 +68,11 @@ ppbmatch(device_t parent, cfdata_t match, void *aux)
 	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_BRIDGE_PCI)
 		return 1;
 
-#ifdef __powerpc__
-	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_PROCESSOR &&
-	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_PROCESSOR_POWERPC) {
-		pcireg_t bhlc = pci_conf_read(pa->pa_pc, pa->pa_tag,
-		    PCI_BHLC_REG);
-		if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_FREESCALE
-		    && PCI_HDRTYPE(bhlc) == PCI_HDRTYPE_RC)
-		return 1;
-	}
-#endif
-
-#ifdef _MIPS_PADDR_T_64BIT
-	/* The LDT HB acts just like a PPB.  */
-	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_SIBYTE
-	    && PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_SIBYTE_BCM1250_LDTHB)
-		return 1;
-#endif
-
 	return 0;
 }
 
 static void
-ppb_fix_pcie(device_t self)
+ppb_fix_pcix(device_t self)
 {
 	struct ppb_softc *sc = device_private(self);
 	pcireg_t reg;
@@ -108,91 +82,15 @@ ppb_fix_pcie(device_t self)
 				&off, &reg))
 		return; /* Not a PCIe device */
 
-	aprint_normal_dev(self, "PCI Express ");
-	switch (reg & PCI_PCIE_XCAP_VER_MASK) {
-	case PCI_PCIE_XCAP_VER_1_0:
-		aprint_normal("1.0");
-		break;
-	case PCI_PCIE_XCAP_VER_2_0:
-		aprint_normal("2.0");
-		break;
-	default:
-		aprint_normal_dev(self,
-		    "version unsupported (0x%" PRIxMAX ")\n",
-		    __SHIFTOUT(reg, PCI_PCIE_XCAP_VER_MASK));
+	if ((reg & 0x000f0000) != 0x00010000) {
+		aprint_normal_dev(self, "unsupported PCI Express version\n");
 		return;
 	}
-	aprint_normal(" <");
-	switch (reg & PCI_PCIE_XCAP_TYPE_MASK) {
-	case PCI_PCIE_XCAP_TYPE_PCIE_DEV:
-		aprint_normal("PCI-E Endpoint device");
-		break;
-	case PCI_PCIE_XCAP_TYPE_PCI_DEV:
-		aprint_normal("Legacy PCI-E Endpoint device");
-		break;
-	case PCI_PCIE_XCAP_TYPE_ROOT:
-		aprint_normal("Root Port of PCI-E Root Complex");
-		break;
-	case PCI_PCIE_XCAP_TYPE_UP:
-		aprint_normal("Upstream Port of PCI-E Switch");
-		break;
-	case PCI_PCIE_XCAP_TYPE_DOWN:
-		aprint_normal("Downstream Port of PCI-E Switch");
-		break;
-	case PCI_PCIE_XCAP_TYPE_PCIE2PCI:
-		aprint_normal("PCI-E to PCI/PCI-X Bridge");
-		break;
-	case PCI_PCIE_XCAP_TYPE_PCI2PCIE:
-		aprint_normal("PCI/PCI-X to PCI-E Bridge");
-		break;
-	default:
-		aprint_normal("Device/Port Type 0x%" PRIxMAX,
-		    __SHIFTOUT(reg, PCI_PCIE_XCAP_TYPE_MASK));
-		break;
-	}
-
-	switch (reg & PCI_PCIE_XCAP_TYPE_MASK) {
-	case PCI_PCIE_XCAP_TYPE_ROOT:
-	case PCI_PCIE_XCAP_TYPE_DOWN:
-	case PCI_PCIE_XCAP_TYPE_PCI2PCIE:
-		reg = pci_conf_read(sc->sc_pc, sc->sc_tag, off + 0x0c);
-		u_int mlw = (reg >> 4) & 0x1f;
-		u_int mls = (reg >> 0) & 0x0f;
-		if (mls < __arraycount(pcie_linkspeed_strings)) {
-			aprint_normal("> x%d @ %sGb/s\n",
-			    mlw, pcie_linkspeed_strings[mls]);
-		} else {
-			aprint_normal("> x%d @ %d.%dGb/s\n",
-			    mlw, (mls * 25) / 10, (mls * 25) % 10);
-		}
-
-		reg = pci_conf_read(sc->sc_pc, sc->sc_tag, off + 0x10);
-		if (reg & __BIT(29)) {	/* DLLA */
-			u_int lw = (reg >> 20) & 0x1f;
-			u_int ls = (reg >> 16) & 0x0f;
-			if (lw != mlw || ls != mls) {
-				if (ls < __arraycount(pcie_linkspeed_strings)) {
-					aprint_normal("> x%d @ %sGb/s\n",
-					    lw, pcie_linkspeed_strings[ls]);
-				} else {
-					aprint_normal_dev(self,
-					    "link is x%d @ %d.%dGb/s\n",
-					    lw, (ls * 25) / 10, (ls * 25) % 10);
-				}
-			}
-		}
-		break;
-	default:
-		aprint_normal(">\n");
-		break;
-	}
-
-	reg = pci_conf_read(sc->sc_pc, sc->sc_tag, off + PCI_PCIE_SLCSR);
-	if (reg & PCI_PCIE_SLCSR_NOTIFY_MASK) {
-		aprint_debug_dev(self, "disabling notification events\n");
-		reg &= ~PCI_PCIE_SLCSR_NOTIFY_MASK;
-		pci_conf_write(sc->sc_pc, sc->sc_tag,
-		    off + PCI_PCIE_SLCSR, reg);
+	reg = pci_conf_read(sc->sc_pc, sc->sc_tag, off + 0x18);
+	if (reg & 0x003f) {
+		aprint_normal_dev(self, "disabling notification events\n");
+		reg &= ~0x003f;
+		pci_conf_write(sc->sc_pc, sc->sc_tag, off + 0x18, reg);
 	}
 }
 
@@ -204,8 +102,12 @@ ppbattach(device_t parent, device_t self, void *aux)
 	pci_chipset_tag_t pc = pa->pa_pc;
 	struct pcibus_attach_args pba;
 	pcireg_t busdata;
+	char devinfo[256];
 
-	pci_aprint_devinfo(pa, NULL);
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
+	    PCI_REVISION(pa->pa_class));
+	aprint_naive("\n");
 
 	sc->sc_pc = pc;
 	sc->sc_tag = pa->pa_tag;
@@ -218,7 +120,7 @@ ppbattach(device_t parent, device_t self, void *aux)
 		return;
 	}
 
-	ppb_fix_pcie(self);
+	ppb_fix_pcix(self);
 
 #if 0
 	/*
@@ -248,7 +150,6 @@ ppbattach(device_t parent, device_t self, void *aux)
 	pba.pba_pc = pc;
 	pba.pba_flags = pa->pa_flags & ~PCI_FLAGS_MRM_OKAY;
 	pba.pba_bus = PPB_BUSINFO_SECONDARY(busdata);
-	pba.pba_sub = PPB_BUSINFO_SUBORDINATE(busdata);
 	pba.pba_bridgetag = &sc->sc_tag;
 	pba.pba_intrswiz = pa->pa_intrswiz;
 	pba.pba_intrtag = pa->pa_intrtag;
@@ -268,7 +169,7 @@ ppbdetach(device_t self, int flags)
 }
 
 static bool
-ppb_resume(device_t dv, const pmf_qual_t *qual)
+ppb_resume(device_t dv PMF_FN_ARGS)
 {
 	struct ppb_softc *sc = device_private(dv);
 	int off;
@@ -281,13 +182,13 @@ ppb_resume(device_t dv, const pmf_qual_t *qual)
 			    sc->sc_pciconfext[(off - 0x40)/4]);
 	}
 
-	ppb_fix_pcie(dv);
+	ppb_fix_pcix(dv);
 
 	return true;
 }
 
 static bool
-ppb_suspend(device_t dv, const pmf_qual_t *qual)
+ppb_suspend(device_t dv PMF_FN_ARGS)
 {
 	struct ppb_softc *sc = device_private(dv);
 	int off;
@@ -305,6 +206,5 @@ ppbchilddet(device_t self, device_t child)
 	/* we keep no references to child devices, so do nothing */
 }
 
-CFATTACH_DECL3_NEW(ppb, sizeof(struct ppb_softc),
-    ppbmatch, ppbattach, ppbdetach, NULL, NULL, ppbchilddet,
-    DVF_DETACH_SHUTDOWN);
+CFATTACH_DECL2_NEW(ppb, sizeof(struct ppb_softc),
+    ppbmatch, ppbattach, ppbdetach, NULL, NULL, ppbchilddet);

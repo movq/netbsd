@@ -27,15 +27,15 @@
  * SUCH DAMAGE.
  */
 
-#include "SYS.h"
-
 #if defined(SYSLIBC_SCCS) && !defined(lint)
 	/* .asciz "@(#)cerror.s	8.1 (Berkeley) 6/4/93" */
-RCSID("$NetBSD: cerror.S,v 1.9 2011/01/25 02:38:15 matt Exp $")
+	.asciz "$NetBSD: cerror.S,v 1.8 2003/08/07 16:42:33 agc Exp $"
 #endif /* SYSLIBC_SCCS and not lint */
 
+#include "SYS.h"
+
 	.globl	_C_LABEL(errno)
-NENTRY(__cerror, 0)
+CERROR: .word 0
 #ifdef _REENTRANT
 	pushl	%r0
 	calls	$0,_C_LABEL(__errno)
@@ -46,4 +46,3 @@ NENTRY(__cerror, 0)
 	mnegl	$1,%r0
 	movl	%r0,%r1
 	ret
-END(__cerror)

@@ -1,5 +1,4 @@
-/*	Id: code.c,v 1.67 2011/06/23 13:43:04 ragge Exp 	*/	
-/*	$NetBSD: code.c,v 1.1.1.4 2011/09/01 12:46:34 plunky Exp $	*/
+/*	$Id: code.c,v 1.1.1.1 2008/08/24 05:32:54 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -30,52 +29,7 @@
 
 # include "pass1.h"
 
-/*
- * Print out assembler segment name.
- */
-void
-setseg(int seg, char *name)
-{
-	switch (seg) {
-	case PROG: name = ".text"; break;
-	case DATA:
-	case LDATA: name = ".data"; break;
-	case UDATA: break;
-#ifdef MACHOABI
-	case PICLDATA:
-	case PICDATA: name = ".section .data.rel.rw,\"aw\""; break;
-	case PICRDATA: name = ".section .data.rel.ro,\"aw\""; break;
-	case STRNG: name = ".cstring"; break;
-	case RDATA: name = ".const_data"; break;
-#else
-	case PICLDATA: name = ".section .data.rel.local,\"aw\",@progbits";break;
-	case PICDATA: name = ".section .data.rel.rw,\"aw\",@progbits"; break;
-	case PICRDATA: name = ".section .data.rel.ro,\"aw\",@progbits"; break;
-	case STRNG:
-#ifdef AOUTABI
-	case RDATA: name = ".data"; break;
-#else
-	case RDATA: name = ".section .rodata"; break;
-#endif
-#endif
-	case TLSDATA: name = ".section .tdata,\"awT\",@progbits"; break;
-	case TLSUDATA: name = ".section .tbss,\"awT\",@nobits"; break;
-	case CTORS: name = ".section\t.ctors,\"aw\",@progbits"; break;
-	case DTORS: name = ".section\t.dtors,\"aw\",@progbits"; break;
-	case NMSEG: 
-		printf("\t.section %s,\"aw\",@progbits\n", name);
-		return;
-	}
-	printf("\t%s\n", name);
-}
-
-#ifdef MACHOABI
-void
-defalign(int al)
-{
-	printf("\t.align %d\n", ispow2(al/ALCHAR));
-}
-#endif
+int lastloc = -1;
 
 /*
  * Define everything needed to print out some data (or text).
@@ -84,29 +38,47 @@ defalign(int al)
 void
 defloc(struct symtab *sp)
 {
-	char *name;
-
-	if ((name = sp->soname) == NULL)
-		name = exname(sp->sname);
-	if (sp->sclass == EXTDEF) {
-		printf("	.globl %s\n", name);
-#if defined(ELFABI)
-		printf("\t.type %s,@%s\n", name,
-		    ISFTN(sp->stype)? "function" : "object");
+	extern char *nextsect;
+#if defined(ELFABI) || defined(PECOFFABI)
+	static char *loctbl[] = { "text", "data", "section .rodata" };
+#elif defined(MACHOABI)
+	static char *loctbl[] = { "text", "data", "const_data" };
 #endif
+	TWORD t;
+	int s;
+
+	if (sp == NULL) {
+		lastloc = -1;
+		return;
 	}
+	t = sp->stype;
+	s = ISFTN(t) ? PROG : ISCON(cqual(t, sp->squal)) ? RDATA : DATA;
+#ifdef TLS
+	if (sp->sflags & STLS) {
+		if (s != DATA)
+			cerror("non-data symbol in tls section");
+		nextsect = ".tdata";
+	}
+#endif
+	if (nextsect) {
+		printf("	.section %s\n", nextsect);
+		nextsect = NULL;
+		s = -1;
+	} else if (s != lastloc)
+		printf("	.%s\n", loctbl[s]);
+	lastloc = s;
+	while (ISARY(t))
+		t = DECREF(t);
+	if (t > UCHAR)
+		printf("	.align %d\n", t > USHORT ? 4 : 2);
+	if (sp->sclass == EXTDEF)
+		printf("	.globl %s\n", exname(sp->soname));
 #if defined(ELFABI)
-	if (!ISFTN(sp->stype)) {
-		if (sp->slevel == 0)
-			printf("\t.size %s,%d\n", name,
-			    (int)tsize(sp->stype, sp->sdf, sp->sap)/SZCHAR);
-		else
-			printf("\t.size " LABFMT ",%d\n", sp->soffset,
-			    (int)tsize(sp->stype, sp->sdf, sp->sap)/SZCHAR);
-	}
+	if (ISFTN(t))
+		printf("\t.type %s,@function\n", exname(sp->soname));
 #endif
 	if (sp->slevel == 0)
-		printf("%s:\n", name);
+		printf("%s:\n", exname(sp->soname));
 	else
 		printf(LABFMT ":\n", sp->soffset);
 }
@@ -124,44 +96,15 @@ efcode()
 	gotnr = 0;	/* new number for next fun */
 	if (cftnsp->stype != STRTY+FTN && cftnsp->stype != UNIONTY+FTN)
 		return;
-#if defined(os_openbsd)
-	/* struct return for small structs */
-	int sz = tsize(BTYPE(cftnsp->stype), cftnsp->sdf, cftnsp->sap);
-	if (sz == SZCHAR || sz == SZSHORT || sz == SZINT || sz == SZLONGLONG) {
-		/* Pointer to struct in eax */
-		if (sz == SZLONGLONG) {
-			q = block(OREG, NIL, NIL, INT, 0, 0);
-			q->n_lval = 4;
-			p = block(REG, NIL, NIL, INT, 0, 0);
-			p->n_rval = EDX;
-			ecomp(buildtree(ASSIGN, p, q));
-		}
-		if (sz < SZSHORT) sz = CHAR;
-		else if (sz > SZSHORT) sz = INT;
-		else sz = SHORT;
-		q = block(OREG, NIL, NIL, sz, 0, 0);
-		p = block(REG, NIL, NIL, sz, 0, 0);
-		ecomp(buildtree(ASSIGN, p, q));
-		return;
-	}
-#endif
 	/* Create struct assignment */
-	q = block(OREG, NIL, NIL, PTR+STRTY, 0, cftnsp->sap);
+	q = block(OREG, NIL, NIL, PTR+STRTY, 0, cftnsp->ssue);
 	q->n_rval = EBP;
 	q->n_lval = 8; /* return buffer offset */
 	q = buildtree(UMUL, q, NIL);
-	p = block(REG, NIL, NIL, PTR+STRTY, 0, cftnsp->sap);
+	p = block(REG, NIL, NIL, PTR+STRTY, 0, cftnsp->ssue);
 	p = buildtree(UMUL, p, NIL);
 	p = buildtree(ASSIGN, q, p);
 	ecomp(p);
-
-	/* put hidden arg in eax on return */
-	q = block(OREG, NIL, NIL, INT, 0, 0);
-	regno(q) = FPREG;
-	q->n_lval = 8;
-	p = block(REG, NIL, NIL, INT, 0, 0);
-	regno(p) = EAX;
-	ecomp(buildtree(ASSIGN, p, q));
 }
 
 /*
@@ -171,7 +114,9 @@ efcode()
 void
 bfcode(struct symtab **sp, int cnt)
 {
+#ifdef os_win32
 	extern int argstacksize;
+#endif
 	struct symtab *sp2;
 	extern int gotnr;
 	NODE *n, *p;
@@ -179,83 +124,36 @@ bfcode(struct symtab **sp, int cnt)
 
 	if (cftnsp->stype == STRTY+FTN || cftnsp->stype == UNIONTY+FTN) {
 		/* Function returns struct, adjust arg offset */
-#if defined(os_openbsd)
-		/* OpenBSD uses non-standard return for small structs */
-		int sz = tsize(BTYPE(cftnsp->stype), cftnsp->sdf, cftnsp->sap);
-		if (sz != SZCHAR && sz != SZSHORT &&
-		    sz != SZINT && sz != SZLONGLONG)
-#endif
-			for (i = 0; i < cnt; i++) 
-				sp[i]->soffset += SZPOINT(INT);
+		for (i = 0; i < cnt; i++) 
+			sp[i]->soffset += SZPOINT(INT);
 	}
 
-#ifdef GCC_COMPAT
-	if (attr_find(cftnsp->sap, GCC_ATYP_STDCALL) != NULL)
-		cftnsp->sflags |= SSTDCALL;
-#endif
-
+#ifdef os_win32
 	/*
-	 * Count the arguments
+	 * Count the arguments and mangle name in symbol table as a callee.
 	 */
 	argstacksize = 0;
 	if (cftnsp->sflags & SSTDCALL) {
-#ifdef os_win32
-
-		char buf[256];
-		char *name;
-#endif
-
+		char buf[64];
 		for (i = 0; i < cnt; i++) {
 			TWORD t = sp[i]->stype;
 			if (t == STRTY || t == UNIONTY)
-				argstacksize +=
-				    tsize(t, sp[i]->sdf, sp[i]->sap);
+				argstacksize += sp[i]->ssue->suesize;
 			else
 				argstacksize += szty(t) * SZINT / SZCHAR;
 		}
-#ifdef os_win32
-		/*
-		 * mangle name in symbol table as a callee.
-		 */
-		if ((name = cftnsp->soname) == NULL)
-			name = exname(cftnsp->sname);
-		snprintf(buf, 256, "%s@%d", name, argstacksize);
-		cftnsp->soname = addname(buf);
-#endif
+		snprintf(buf, 64, "%s@%d", cftnsp->soname, argstacksize);
+		cftnsp->soname = newstring(buf, strlen(buf));
 	}
+#endif
 
 	if (kflag) {
-#define	STL	200
-		char *str = inlalloc(STL);
-#if !defined(MACHOABI)
-		int l = getlab();
-#else
-		char *name;
-#endif
-
-		/* Generate extended assembler for PIC prolog */
-		p = tempnode(0, INT, 0, 0);
+		/* Put ebx in temporary */
+		n = block(REG, NIL, NIL, INT, 0, MKSUE(INT));
+		n->n_rval = EBX;
+		p = tempnode(0, INT, 0, MKSUE(INT));
 		gotnr = regno(p);
-		p = block(XARG, p, NIL, INT, 0, 0);
-		p->n_name = "=g";
-		p = block(XASM, p, bcon(0), INT, 0, 0);
-
-#if defined(MACHOABI)
-		if ((name = cftnsp->soname) == NULL)
-			name = cftnsp->sname;
-		if (snprintf(str, STL, "call L%s$pb\nL%s$pb:\n\tpopl %%0\n",
-		    name, name) >= STL)
-			cerror("bfcode");
-#else
-		if (snprintf(str, STL,
-		    "call " LABFMT "\n" LABFMT ":\n	popl %%0\n"
-		    "	addl $_GLOBAL_OFFSET_TABLE_+[.-" LABFMT "], %%0\n",
-		    l, l, l) >= STL)
-			cerror("bfcode");
-#endif
-		p->n_name = str;
-		p->n_right->n_type = STRTY;
-		ecomp(p);
+		ecomp(buildtree(ASSIGN, p, n));
 	}
 	if (xtemps == 0)
 		return;
@@ -265,10 +163,8 @@ bfcode(struct symtab **sp, int cnt)
 		if (sp[i]->stype == STRTY || sp[i]->stype == UNIONTY ||
 		    cisreg(sp[i]->stype) == 0)
 			continue;
-		if (cqual(sp[i]->stype, sp[i]->squal) & VOL)
-			continue;
 		sp2 = sp[i];
-		n = tempnode(0, sp[i]->stype, sp[i]->sdf, sp[i]->sap);
+		n = tempnode(0, sp[i]->stype, sp[i]->sdf, sp[i]->ssue);
 		n = buildtree(ASSIGN, n, nametree(sp2));
 		sp[i]->soffset = regno(n->n_left);
 		sp[i]->sflags |= STNODE;
@@ -276,6 +172,15 @@ bfcode(struct symtab **sp, int cnt)
 	}
 }
 
+
+/*
+ * by now, the automatics and register variables are allocated
+ */
+void
+bccode()
+{
+	SETOFF(autooff, SZINT);
+}
 
 #if defined(MACHOABI)
 struct stub stublist;
@@ -297,7 +202,7 @@ ejobcode(int flag )
 		DLIST_FOREACH(p, &stublist, link) {
 			printf("\t.section __IMPORT,__jump_table,symbol_stubs,self_modifying_code+pure_instructions,5\n");
 			printf("L%s$stub:\n", p->name);
-			printf("\t.indirect_symbol %s\n", p->name);
+			printf("\t.indirect_symbol %s\n", exname(p->name));
 			printf("\thlt ; hlt ; hlt ; hlt ; hlt\n");
 			printf("\t.subsections_via_symbols\n");
 		}
@@ -305,23 +210,22 @@ ejobcode(int flag )
 		printf("\t.section __IMPORT,__pointers,non_lazy_symbol_pointers\n");
 		DLIST_FOREACH(p, &nlplist, link) {
 			printf("L%s$non_lazy_ptr:\n", p->name);
-			printf("\t.indirect_symbol %s\n", p->name);
+			printf("\t.indirect_symbol %s\n", exname(p->name));
 			printf("\t.long 0\n");
 	        }
 
 	}
 #endif
 
-	printf("\t.ident \"PCC: %s\"\n", VERSSTR);
+#define _MKSTR(x) #x
+#define MKSTR(x) _MKSTR(x)
+#define OS MKSTR(TARGOS)
+        printf("\t.ident \"PCC: %s (%s)\"\n", PACKAGE_STRING, OS);
 }
 
 void
 bjobcode()
 {
-#ifdef os_sunos
-	astypnames[SHORT] = astypnames[USHORT] = "\t.2byte";
-#endif
-	astypnames[INT] = astypnames[UNSIGNED] = "\t.long";
 #if defined(MACHOABI)
 	DLIST_INIT(&stublist, link);
 	DLIST_INIT(&nlplist, link);
@@ -344,7 +248,7 @@ funcode(NODE *p)
 		if (r->n_right->n_op != STARG)
 			r->n_right = block(FUNARG, r->n_right, NIL,
 			    r->n_right->n_type, r->n_right->n_df,
-			    r->n_right->n_ap);
+			    r->n_right->n_sue);
 	}
 	if (r->n_op != STARG) {
 		l = talloc();
@@ -357,18 +261,28 @@ funcode(NODE *p)
 		return p;
 #if defined(ELFABI)
 	/* Create an ASSIGN node for ebx */
-	l = block(REG, NIL, NIL, INT, 0, 0);
+	l = block(REG, NIL, NIL, INT, 0, MKSUE(INT));
 	l->n_rval = EBX;
-	l = buildtree(ASSIGN, l, tempnode(gotnr, INT, 0, 0));
+	l = buildtree(ASSIGN, l, tempnode(gotnr, INT, 0, MKSUE(INT)));
 	if (p->n_right->n_op != CM) {
-		p->n_right = block(CM, l, p->n_right, INT, 0, 0);
+		p->n_right = block(CM, l, p->n_right, INT, 0, MKSUE(INT));
 	} else {
 		for (r = p->n_right; r->n_left->n_op == CM; r = r->n_left)
 			;
-		r->n_left = block(CM, l, r->n_left, INT, 0, 0);
+		r->n_left = block(CM, l, r->n_left, INT, 0, MKSUE(INT));
 	}
 #endif
 	return p;
+}
+
+/*
+ * return the alignment of field of type t
+ */
+int
+fldal(unsigned int t)
+{
+	uerror("illegal field type");
+	return(ALINT);
 }
 
 /* fix up type of field p */

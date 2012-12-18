@@ -35,7 +35,7 @@
 __FBSDID("$FreeBSD: src/sys/compat/ndis/kern_windrv.c,v 1.3.2.2 2005/03/31 04:24:35 wpaul Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: kern_windrv.c,v 1.8 2009/03/18 17:06:48 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_windrv.c,v 1.5 2006/11/16 01:32:44 christos Exp $");
 #endif
 
 #include <sys/param.h>
@@ -140,7 +140,9 @@ windrv_libfini(void)
  */
 
 driver_object *
-windrv_lookup(vm_offset_t img, const char *name)
+windrv_lookup(img, name)
+	vm_offset_t		img;
+	const char		*name;
 {
 	struct drvdb_ent	*d;
 	unicode_string		us;
@@ -167,7 +169,7 @@ windrv_lookup(vm_offset_t img, const char *name)
 		printf("d->windrv_object->dro_driverstart = %x\n", d->windrv_object->dro_driverstart);
 #endif		
 		if (d->windrv_object->dro_driverstart == (void *)img ||	
-		    (memcmp((char *)d->windrv_object->dro_drivername.us_buf,
+		    (bcmp((char *)d->windrv_object->dro_drivername.us_buf,
 			 (char *)us.us_buf, us.us_len) == 0 && us.us_len > 0)) {		
 			mtx_unlock(&drvdb_mtx);		
 			printf("found driver object!\n");
@@ -362,7 +364,9 @@ windrv_load(module_t mod, vm_offset_t img, int len)
  */
 
 int
-windrv_create_pdo(driver_object *drv, device_t bsddev)
+windrv_create_pdo(drv, bsddev)
+	driver_object		*drv;
+	device_t		bsddev;
 {
 	device_object		*dev;
 
@@ -384,7 +388,9 @@ windrv_create_pdo(driver_object *drv, device_t bsddev)
 }
 
 void
-windrv_destroy_pdo(driver_object *drv, device_t bsddev)
+windrv_destroy_pdo(drv, bsddev)
+	driver_object		*drv;
+	device_t		bsddev;
 {
 	device_object		*pdo;
 
@@ -407,7 +413,9 @@ windrv_destroy_pdo(driver_object *drv, device_t bsddev)
  */
 
 device_object *
-windrv_find_pdo(driver_object *drv, device_t bsddev)
+windrv_find_pdo(drv, bsddev)
+	driver_object		*drv;
+	device_t		bsddev;
 {
 	device_object		*pdo;
 #ifdef NDIS_DBG
@@ -433,7 +441,9 @@ windrv_find_pdo(driver_object *drv, device_t bsddev)
  */
 
 int
-windrv_bus_attach(driver_object *drv, const char *name)
+windrv_bus_attach(drv, name)
+	driver_object		*drv;
+	const char			*name;
 {
 	struct drvdb_ent	*new;
 
@@ -474,7 +484,9 @@ extern void	x86_64_wrap_end(void);
 #endif /* __amd64__ */
 
 int
-windrv_wrap(funcptr func, funcptr *wrap)
+windrv_wrap(func, wrap)
+	funcptr			func;
+	funcptr			*wrap;
 {
 #ifdef __amd64__
 	funcptr			p;
@@ -493,7 +505,7 @@ windrv_wrap(funcptr func, funcptr *wrap)
 
 	/* Copy over the code. */
 
-	memcpy( p, (char *)wrapstart, (wrapend - wrapstart));
+	bcopy((char *)wrapstart, p, (wrapend - wrapstart));
 
 	/* Insert the function address into the new wrapper instance. */
 

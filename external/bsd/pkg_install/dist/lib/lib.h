@@ -1,4 +1,4 @@
-/* $NetBSD: lib.h,v 1.6 2010/06/26 00:17:13 joerg Exp $ */
+/* $NetBSD: lib.h,v 1.1.1.1.6.4 2010/02/04 06:45:58 snj Exp $ */
 
 /* from FreeBSD Id: lib.h,v 1.25 1997/10/08 07:48:03 charnier Exp */
 
@@ -322,8 +322,8 @@ int	has_pkgdir(const char *);
 struct archive;
 struct archive_entry;
 
-struct archive *open_archive(const char *, char **);
-struct archive *find_archive(const char *, int, char **);
+struct archive *open_archive(const char *);
+struct archive *find_archive(const char *, int);
 void	process_pkg_path(void);
 struct url *find_best_package(const char *, const char *, int);
 
@@ -374,13 +374,16 @@ lpkg_t *alloc_lpkg(const char *);
 lpkg_t *find_on_queue(lpkg_head_t *, const char *);
 void    free_lpkg(lpkg_t *);
 
+/* Extract input if compressed to NUL terminated buffer (not counted) */
+int decompress_buffer(const char *, size_t, char **, size_t *);
+
+/* Parse NUL terminated inputed, argument is strlen of the input */
+struct pkg_vulnerabilities *parse_pkg_vulnerabilities(const char *, size_t, int);
 /* Read pkg_vulnerabilities from file */
-struct pkg_vulnerabilities *read_pkg_vulnerabilities_file(const char *, int, int);
-/* Read pkg_vulnerabilities from memory */
-struct pkg_vulnerabilities *read_pkg_vulnerabilities_memory(void *, size_t, int);
+struct pkg_vulnerabilities *read_pkg_vulnerabilities(const char *, int, int);
 void free_pkg_vulnerabilities(struct pkg_vulnerabilities *);
 int audit_package(struct pkg_vulnerabilities *, const char *, const char *,
-    int);
+    int, int);
 
 /* Parse configuration file */
 void pkg_install_config(void);
@@ -388,8 +391,8 @@ void pkg_install_config(void);
 void pkg_install_show_variable(const char *);
 
 /* Package signature creation and validation */
-int pkg_verify_signature(const char *, struct archive **, struct archive_entry **, char **);
-int pkg_full_signature_check(const char *, struct archive **);
+int pkg_verify_signature(struct archive **, struct archive_entry **, char **);
+int pkg_full_signature_check(struct archive **);
 #ifdef HAVE_SSL
 void pkg_sign_x509(const char *, const char *, const char *, const char *);
 #endif
@@ -430,7 +433,6 @@ extern Boolean Force;
 extern const char *cert_chain_file;
 extern const char *certs_packages;
 extern const char *certs_pkg_vulnerabilities;
-extern const char *check_eol;
 extern const char *check_vulnerabilities;
 extern const char *config_file;
 extern const char *config_pkg_dbdir;

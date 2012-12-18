@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_oldmmap.c,v 1.72 2009/08/18 02:04:14 christos Exp $	*/
+/*	$NetBSD: linux_oldmmap.c,v 1.70 2008/06/18 12:24:17 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_oldmmap.c,v 1.72 2009/08/18 02:04:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_oldmmap.c,v 1.70 2008/06/18 12:24:17 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,8 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux_oldmmap.c,v 1.72 2009/08/18 02:04:14 christos 
 #include <compat/linux/common/linux_mmap.h>
 #include <compat/linux/common/linux_oldmmap.h>
 #include <compat/linux/common/linux_signal.h>
-#include <compat/linux/common/linux_ipc.h>
-#include <compat/linux/common/linux_sem.h>
 
 #include <compat/linux/linux_syscallargs.h>
 
@@ -86,10 +84,8 @@ linux_sys_old_mmap(struct lwp *l, const struct linux_sys_old_mmap_args *uap, reg
 	if ((error = copyin(SCARG(uap, lmp), &lmap, sizeof lmap)))
 		return error;
 
-	if (lmap.lm_offset & PAGE_MASK) {
-		DPRINTF(("old_mmap: 0x%x\n", lmap.lm_offset));
+	if (lmap.lm_offset & PAGE_MASK)
 		return EINVAL;
-	}
 
 	SCARG(&nlmap,addr) = lmap.lm_addr;
 	SCARG(&nlmap,len) = lmap.lm_len;
@@ -97,10 +93,9 @@ linux_sys_old_mmap(struct lwp *l, const struct linux_sys_old_mmap_args *uap, reg
 	SCARG(&nlmap,flags) = lmap.lm_flags;
 	SCARG(&nlmap,fd) = lmap.lm_fd;
 	SCARG(&nlmap,offset) = lmap.lm_offset;
-	error = linux_sys_mmap(l, &nlmap, retval);
-	DPRINTF(("old_mmap(%#x, %u, %u, %u, %d, %u) = %d\n",
+	DPRINTF(("old_mmap(%#x, %u, %u, %u, %d, %u)\n",
 	    lmap.lm_addr, lmap.lm_len, lmap.lm_prot, lmap.lm_flags,
-	    lmap.lm_fd, lmap.lm_offset, error));
-	return error;
+	    lmap.lm_fd, lmap.lm_offset));
+	return linux_sys_mmap(l, &nlmap, retval);
 }
 

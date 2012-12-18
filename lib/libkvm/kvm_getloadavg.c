@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_getloadavg.c,v 1.11 2012/03/21 10:10:36 matt Exp $	*/
+/*	$NetBSD: kvm_getloadavg.c,v 1.8 2003/08/07 16:44:37 agc Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_getloadavg.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_getloadavg.c,v 1.11 2012/03/21 10:10:36 matt Exp $");
+__RCSID("$NetBSD: kvm_getloadavg.c,v 1.8 2003/08/07 16:44:37 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -56,11 +56,11 @@ __RCSID("$NetBSD: kvm_getloadavg.c,v 1.11 2012/03/21 10:10:36 matt Exp $");
 #include "kvm_private.h"
 
 static struct nlist nl[] = {
-	{ .n_name = "_averunnable" },
+	{ "_averunnable" },
 #define	X_AVERUNNABLE	0
-	{ .n_name = "_fscale" },
+	{ "_fscale" },
 #define	X_FSCALE	1
-	{ .n_name = "" },
+	{ "" },
 };
 
 /*
@@ -70,7 +70,10 @@ static struct nlist nl[] = {
  * Return number of samples retrieved, or -1 on error.
  */
 int
-kvm_getloadavg(kvm_t *kd, double loadavg[], int nelem)
+kvm_getloadavg(kd, loadavg, nelem)
+	kvm_t *kd;
+	double loadavg[];
+	int nelem;
 {
 	struct loadavg loadinfo;
 	struct nlist *p;
@@ -86,6 +89,8 @@ kvm_getloadavg(kvm_t *kd, double loadavg[], int nelem)
 		return (-1);
 	}
 
+#define KREAD(kd, addr, obj) \
+	(kvm_read(kd, addr, (void *)(obj), sizeof(*obj)) != sizeof(*obj))
 	if (KREAD(kd, nl[X_AVERUNNABLE].n_value, &loadinfo)) {
 		_kvm_err(kd, kd->program, "can't read averunnable");
 		return (-1);

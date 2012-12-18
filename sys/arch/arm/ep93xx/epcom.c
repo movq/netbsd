@@ -1,4 +1,4 @@
-/*	$NetBSD: epcom.c,v 1.24 2012/11/12 18:00:36 skrll Exp $ */
+/*	$NetBSD: epcom.c,v 1.18 2008/06/11 22:37:21 cegger Exp $ */
 /*
  * Copyright (c) 1998, 1999, 2001, 2002, 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -73,14 +73,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: epcom.c,v 1.24 2012/11/12 18:00:36 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: epcom.c,v 1.18 2008/06/11 22:37:21 cegger Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "epcom.h"
 
 #include "rnd.h"
-#ifdef RND_COM
+#if NRND > 0 && defined(RND_COM)
 #include <sys/rnd.h>
 #endif
 
@@ -111,7 +111,7 @@ __KERNEL_RCSID(0, "$NetBSD: epcom.c,v 1.24 2012/11/12 18:00:36 skrll Exp $");
 #include <sys/kauth.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/ep93xx/epcomreg.h>
 #include <arm/ep93xx/epcomvar.h>
@@ -182,7 +182,7 @@ struct consdev epcomcons = {
 #define COMDIALOUT(x)	(minor(x) & COMDIALOUT_MASK)
 
 #define COM_ISALIVE(sc)	((sc)->enabled != 0 && \
-			device_is_active((sc)->sc_dev))
+			device_is_active(&(sc)->sc_dev))
 
 void
 epcom_attach_subr(struct epcom_softc *sc)
@@ -201,7 +201,7 @@ epcom_attach_subr(struct epcom_softc *sc)
 		SET(sc->sc_swflags, TIOCFLAG_SOFTCAR);
 	}
 
-	tp = tty_alloc();
+	tp = ttymalloc();
 	tp->t_oproc = epcomstart;
 	tp->t_param = epcomparam;
 	tp->t_hwiflow = epcomhwiflow;
@@ -212,7 +212,7 @@ epcom_attach_subr(struct epcom_softc *sc)
 	sc->sc_rbavail = EPCOM_RING_SIZE;
 	if (sc->sc_rbuf == NULL) {
 		printf("%s: unable to allocate ring buffer\n",
-		    device_xname(sc->sc_dev));
+		    sc->sc_dev.dv_xname);
 		return;
 	}
 	sc->sc_ebuf = sc->sc_rbuf + (EPCOM_RING_SIZE << 1);
@@ -230,15 +230,15 @@ epcom_attach_subr(struct epcom_softc *sc)
 		/* locate the major number */
 		maj = cdevsw_lookup_major(&epcom_cdevsw);
 
-		cn_tab->cn_dev = makedev(maj, device_unit(sc->sc_dev));
+		cn_tab->cn_dev = makedev(maj, device_unit(&sc->sc_dev));
 
-		aprint_normal("%s: console\n", device_xname(sc->sc_dev));
+		aprint_normal("%s: console\n", sc->sc_dev.dv_xname);
 	}
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, epcomsoft, sc);
 
-#ifdef RND_COM
-	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
+#if NRND > 0 && defined(RND_COM)
+	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
 			  RND_TYPE_TTY, 0);
 #endif
 
@@ -441,7 +441,7 @@ epcomopen(dev_t dev, int flag, int mode, struct lwp *l)
 		sc->sc_rbuf == NULL)
 		return (ENXIO);
 
-	if (!device_is_active(sc->sc_dev))
+	if (!device_is_active(&sc->sc_dev))
 		return (ENXIO);
 
 #ifdef KGDB
@@ -474,7 +474,7 @@ epcomopen(dev_t dev, int flag, int mode, struct lwp *l)
 				splx(s2);
 				splx(s);
 				printf("%s: device enable failed\n",
-				       device_xname(sc->sc_dev));
+				       sc->sc_dev.dv_xname);
 				return (EIO);
 			}
 			sc->enabled = 1;
@@ -763,7 +763,7 @@ epcom_iflush(struct epcom_softc *sc)
 			bus_space_read_4(iot, ioh, EPCOM_Data);
 #ifdef DIAGNOSTIC
 	if (!timo)
-		printf("%s: com_iflush timeout %02x\n", device_xname(sc->sc_dev),
+		printf("%s: com_iflush timeout %02x\n", sc->sc_dev.dv_xname,
 		       reg);
 #endif
 }
@@ -898,7 +898,7 @@ epcom_txsoft(struct epcom_softc *sc, struct tty *tp)
 inline static void
 epcom_rxsoft(struct epcom_softc *sc, struct tty *tp)
 {
-	int (*rint)(int, struct tty *) = tp->t_linesw->l_rint;
+	int (*rint) __P((int, struct tty *)) = tp->t_linesw->l_rint;
 	u_char *get, *end;
 	u_int cc, scc;
 	u_char sts;
@@ -1018,7 +1018,7 @@ epcomintr(void* arg)
 	u_int cc;
 	u_int flagr;
 	u_int intr;
-	uint32_t c, csts;
+	u_int32_t c, csts;
 
 	intr = bus_space_read_4(iot, ioh, EPCOM_IntIDIntClr);
 
@@ -1132,7 +1132,7 @@ epcomintr(void* arg)
 	softint_schedule(sc->sc_si);
 
 #if 0 /* XXX: broken */
-#ifdef RND_COM
+#if NRND > 0 && defined(RND_COM)
 	rnd_add_uint32(&sc->rnd_source, intr ^ flagr);
 #endif
 #endif

@@ -32,13 +32,13 @@
 #define  _OMAP_WDTVAR_H
 
 #include <sys/device.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <dev/sysmon/sysmonvar.h>
  
 #define	OMAPWDT32K_DEFAULT_PERIOD	4		/* in seconds */
 
 struct omapwdt32k_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 	struct sysmon_wdog sc_smw;

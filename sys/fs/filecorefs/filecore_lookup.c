@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_lookup.c,v 1.16 2012/11/05 17:27:37 dholland Exp $	*/
+/*	$NetBSD: filecore_lookup.c,v 1.10 2007/11/26 19:01:44 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993, 1994 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_lookup.c,v 1.16 2012/11/05 17:27:37 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_lookup.c,v 1.10 2007/11/26 19:01:44 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/namei.h>
@@ -118,7 +118,8 @@ struct	nchstats filecore_nchstats;
  * NOTE: (LOOKUP | LOCKPARENT) currently returns the parent inode unlocked.
  */
 int
-filecore_lookup(void *v)
+filecore_lookup(v)
+	void *v;
 {
 	struct vop_lookup_args /* {
 		struct vnode *a_dvp;
@@ -169,10 +170,8 @@ filecore_lookup(void *v)
 	 * check the name cache to see if the directory/name pair
 	 * we are looking for is known already.
 	 */
-	if (cache_lookup(vdp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags, NULL, vpp)) {
-		return *vpp == NULLVP ? ENOENT : 0;
-	}
+	if ((error = cache_lookup(vdp, vpp, cnp)) >= 0)
+		return (error);
 
 	name = cnp->cn_nameptr;
 	namelen = cnp->cn_namelen;
@@ -248,9 +247,11 @@ notfound:
 	/*
 	 * Insert name into cache (as non-existent) if appropriate.
 	 */
-	cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-		    cnp->cn_flags);
-	return (nameiop == CREATE || nameiop == RENAME) ? EROFS : ENOENT;
+	if (cnp->cn_flags & MAKEENTRY)
+		cache_enter(vdp, *vpp, cnp);
+	if (nameiop == CREATE || nameiop == RENAME)
+		return (EROFS);
+	return (ENOENT);
 
 found:
 	if (numdirpasses == 2)
@@ -292,7 +293,7 @@ found:
 	if (flags & ISDOTDOT) {
 		ino_t pin = filecore_getparent(dp);
 
-		VOP_UNLOCK(pdp);	/* race to get the inode */
+		VOP_UNLOCK(pdp, 0);	/* race to get the inode */
 		error = VFS_VGET(vdp->v_mount, pin, &tdp);
 		vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY);
 		if (error) {
@@ -300,7 +301,7 @@ found:
 		}
 		*vpp = tdp;
 	} else if (name[0] == '.' && namelen == 1) {
-		vref(vdp);	/* we want ourself, ie "." */
+		VREF(vdp);	/* we want ourself, ie "." */
 		*vpp = vdp;
 	} else {
 #ifdef FILECORE_DEBUG_BR
@@ -317,7 +318,7 @@ found:
 	/*
 	 * Insert name into cache if appropriate.
 	 */
-	cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-		    cnp->cn_flags);
-	return 0;
+	if (cnp->cn_flags & MAKEENTRY)
+		cache_enter(vdp, *vpp, cnp);
+	return (0);
 }

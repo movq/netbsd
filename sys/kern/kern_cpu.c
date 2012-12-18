@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_cpu.c,v 1.59 2012/10/17 20:19:55 drochner Exp $	*/
+/*	$NetBSD: kern_cpu.c,v 1.36.4.2 2008/11/13 00:04:07 snj Exp $	*/
 
 /*-
- * Copyright (c) 2007, 2008, 2009, 2010, 2012 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -56,10 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_cpu.c,v 1.59 2012/10/17 20:19:55 drochner Exp $");
-
-#include "opt_cpu_ucode.h"
-#include "opt_compat_netbsd.h"
+__KERNEL_RCSID(0, "$NetBSD: kern_cpu.c,v 1.36.4.2 2008/11/13 00:04:07 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,17 +79,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_cpu.c,v 1.59 2012/10/17 20:19:55 drochner Exp $
 
 #include <uvm/uvm_extern.h>
 
-/*
- * If the port has stated that cpu_data is the first thing in cpu_info,
- * verify that the claim is true. This will prevent them from getting out
- * of sync.
- */
-#ifdef __HAVE_CPU_DATA_FIRST
-CTASSERT(offsetof(struct cpu_info, ci_data) == 0);
-#else
-CTASSERT(offsetof(struct cpu_info, ci_data) != 0);
-#endif
-
 void	cpuctlattach(int);
 
 static void	cpu_xc_online(struct cpu_info *);
@@ -106,65 +92,24 @@ const struct cdevsw cpuctl_cdevsw = {
 	D_OTHER | D_MPSAFE
 };
 
-kmutex_t	cpu_lock		__cacheline_aligned;
-int		ncpu			__read_mostly;
-int		ncpuonline		__read_mostly;
-bool		mp_online		__read_mostly;
+kmutex_t cpu_lock;
+int	ncpu;
+int	ncpuonline;
+bool	mp_online;
+struct	cpuqueue cpu_queue = CIRCLEQ_HEAD_INITIALIZER(cpu_queue);
 
-/* Note: set on mi_cpu_attach() and idle_loop(). */
-kcpuset_t *	kcpuset_attached	__read_mostly	= NULL;
-kcpuset_t *	kcpuset_running		__read_mostly	= NULL;
-
-struct cpuqueue	cpu_queue		__cacheline_aligned
-    = CIRCLEQ_HEAD_INITIALIZER(cpu_queue);
-
-static struct cpu_info **cpu_infos	__read_mostly;
-
-/*
- * mi_cpu_init: early initialisation of MI CPU related structures.
- *
- * Note: may not block and memory allocator is not yet available.
- */
-void
-mi_cpu_init(void)
-{
-
-	mutex_init(&cpu_lock, MUTEX_DEFAULT, IPL_NONE);
-
-	kcpuset_create(&kcpuset_attached, true);
-	kcpuset_create(&kcpuset_running, true);
-	kcpuset_set(kcpuset_running, 0);
-}
+static struct cpu_info *cpu_infos[MAXCPUS];
 
 int
 mi_cpu_attach(struct cpu_info *ci)
 {
 	int error;
 
-	KASSERT(maxcpus > 0);
-
 	ci->ci_index = ncpu;
-	kcpuset_set(kcpuset_attached, cpu_index(ci));
-
-	/*
-	 * Create a convenience cpuset of just ourselves.
-	 */
-	kcpuset_create(&ci->ci_data.cpu_kcpuset, true);
-	kcpuset_set(ci->ci_data.cpu_kcpuset, cpu_index(ci));
-
+	cpu_infos[cpu_index(ci)] = ci;
 	CIRCLEQ_INSERT_TAIL(&cpu_queue, ci, ci_data.cpu_qchain);
 	TAILQ_INIT(&ci->ci_data.cpu_ld_locks);
 	__cpu_simple_lock_init(&ci->ci_data.cpu_ld_lock);
-
-	/* This is useful for eg, per-cpu evcnt */
-	snprintf(ci->ci_data.cpu_name, sizeof(ci->ci_data.cpu_name), "cpu%d",
-	    cpu_index(ci));
-
-	if (__predict_false(cpu_infos == NULL)) {
-		cpu_infos =
-		    kmem_zalloc(sizeof(cpu_infos[0]) * maxcpus, KM_SLEEP);
-	}
-	cpu_infos[cpu_index(ci)] = ci;
 
 	sched_cpuattach(ci);
 
@@ -197,7 +142,6 @@ void
 cpuctlattach(int dummy)
 {
 
-	KASSERT(cpu_infos != NULL);
 }
 
 int
@@ -220,12 +164,15 @@ cpuctl_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 		    NULL);
 		if (error != 0)
 			break;
-		if (cs->cs_id >= maxcpus ||
+		if (cs->cs_id >= __arraycount(cpu_infos) ||
 		    (ci = cpu_lookup(cs->cs_id)) == NULL) {
 			error = ESRCH;
 			break;
 		}
-		cpu_setintr(ci, cs->cs_intr);
+		if (!cs->cs_intr) {
+			error = EOPNOTSUPP;
+			break;
+		}
 		error = cpu_setstate(ci, cs->cs_online);
 		break;
 
@@ -234,7 +181,7 @@ cpuctl_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 		id = cs->cs_id;
 		memset(cs, 0, sizeof(*cs));
 		cs->cs_id = id;
-		if (cs->cs_id >= maxcpus ||
+		if (cs->cs_id >= __arraycount(cpu_infos) ||
 		    (ci = cpu_lookup(id)) == NULL) {
 			error = ESRCH;
 			break;
@@ -243,15 +190,8 @@ cpuctl_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 			cs->cs_online = false;
 		else
 			cs->cs_online = true;
-		if ((ci->ci_schedstate.spc_flags & SPCF_NOINTR) != 0)
-			cs->cs_intr = false;
-		else
-			cs->cs_intr = true;
-		cs->cs_lastmod = (int32_t)ci->ci_schedstate.spc_lastmod;
-		cs->cs_lastmodhi = (int32_t)
-		    (ci->ci_schedstate.spc_lastmod >> 32);
-		cs->cs_intrcnt = cpu_intr_count(ci) + 1;
-		cs->cs_hwid = ci->ci_cpuid;
+		cs->cs_intr = true;
+		cs->cs_lastmod = ci->ci_schedstate.spc_lastmod;
 		break;
 
 	case IOC_CPU_MAPID:
@@ -270,38 +210,6 @@ cpuctl_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 		*(int *)data = ncpu;
 		break;
 
-#ifdef CPU_UCODE
-	case IOC_CPU_UCODE_GET_VERSION:
-		error = cpu_ucode_get_version((struct cpu_ucode_version *)data);
-		break;
-
-#ifdef COMPAT_60
-	case OIOC_CPU_UCODE_GET_VERSION:
-		error = compat6_cpu_ucode_get_version((struct compat6_cpu_ucode *)data);
-		break;
-#endif
-
-	case IOC_CPU_UCODE_APPLY:
-		error = kauth_authorize_machdep(l->l_cred,
-		    KAUTH_MACHDEP_CPU_UCODE_APPLY,
-		    NULL, NULL, NULL, NULL);
-		if (error != 0)
-			break;
-		error = cpu_ucode_apply((const struct cpu_ucode *)data);
-		break;
-
-#ifdef COMPAT_60
-	case OIOC_CPU_UCODE_APPLY:
-		error = kauth_authorize_machdep(l->l_cred,
-		    KAUTH_MACHDEP_CPU_UCODE_APPLY,
-		    NULL, NULL, NULL, NULL);
-		if (error != 0)
-			break;
-		error = compat6_cpu_ucode_apply((const struct compat6_cpu_ucode *)data);
-		break;
-#endif
-#endif
-
 	default:
 		error = ENOTTY;
 		break;
@@ -314,16 +222,9 @@ cpuctl_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 struct cpu_info *
 cpu_lookup(u_int idx)
 {
-	struct cpu_info *ci;
+	struct cpu_info *ci = cpu_infos[idx];
 
-	KASSERT(idx < maxcpus);
-
-	if (__predict_false(cpu_infos == NULL)) {
-		KASSERT(idx == 0);
-		return curcpu();
-	}
-
-	ci = cpu_infos[idx];
+	KASSERT(idx < __arraycount(cpu_infos));
 	KASSERT(ci == NULL || cpu_index(ci) == idx);
 
 	return ci;
@@ -339,15 +240,15 @@ cpu_xc_offline(struct cpu_info *ci)
 	int s;
 
 	/*
-	 * Thread that made the cross call (separate context) holds
-	 * cpu_lock on our behalf.
+	 * Thread which sent unicast (separate context) is holding
+	 * the cpu_lock for us.
 	 */
 	spc = &ci->ci_schedstate;
 	s = splsched();
 	spc->spc_flags |= SPCF_OFFLINE;
 	splx(s);
 
-	/* Take the first available CPU for the migration. */
+	/* Take the first available CPU for the migration */
 	for (CPU_INFO_FOREACH(cii, target_ci)) {
 		mspc = &target_ci->ci_schedstate;
 		if ((mspc->spc_flags & SPCF_OFFLINE) == 0)
@@ -368,16 +269,17 @@ cpu_xc_offline(struct cpu_info *ci)
 			lwp_unlock(l);
 			continue;
 		}
-		/* Regular case - no affinity. */
-		if (l->l_affinity == NULL) {
+		/* Normal case - no affinity */
+		if ((l->l_flag & LW_AFFINITY) == 0) {
 			lwp_migrate(l, target_ci);
 			continue;
 		}
-		/* Affinity is set, find an online CPU in the set. */
+		/* Affinity is set, find an online CPU in the set */
+		KASSERT(l->l_affinity != NULL);
 		for (CPU_INFO_FOREACH(cii, mci)) {
 			mspc = &mci->ci_schedstate;
 			if ((mspc->spc_flags & SPCF_OFFLINE) == 0 &&
-			    kcpuset_isset(l->l_affinity, cpu_index(mci)))
+			    kcpuset_isset(cpu_index(mci), l->l_affinity))
 				break;
 		}
 		if (mci == NULL) {
@@ -464,146 +366,3 @@ cpu_setstate(struct cpu_info *ci, bool online)
 	spc->spc_lastmod = time_second;
 	return 0;
 }
-
-#ifdef __HAVE_INTR_CONTROL
-static void
-cpu_xc_intr(struct cpu_info *ci)
-{
-	struct schedstate_percpu *spc;
-	int s;
-
-	spc = &ci->ci_schedstate;
-	s = splsched();
-	spc->spc_flags &= ~SPCF_NOINTR;
-	splx(s);
-}
-
-static void
-cpu_xc_nointr(struct cpu_info *ci)
-{
-	struct schedstate_percpu *spc;
-	int s;
-
-	spc = &ci->ci_schedstate;
-	s = splsched();
-	spc->spc_flags |= SPCF_NOINTR;
-	splx(s);
-}
-
-int
-cpu_setintr(struct cpu_info *ci, bool intr)
-{
-	struct schedstate_percpu *spc;
-	CPU_INFO_ITERATOR cii;
-	struct cpu_info *ci2;
-	uint64_t where;
-	xcfunc_t func;
-	int nintr;
-
-	spc = &ci->ci_schedstate;
-
-	KASSERT(mutex_owned(&cpu_lock));
-
-	if (intr) {
-		if ((spc->spc_flags & SPCF_NOINTR) == 0)
-			return 0;
-		func = (xcfunc_t)cpu_xc_intr;
-	} else {
-		if ((spc->spc_flags & SPCF_NOINTR) != 0)
-			return 0;
-		/*
-		 * Ensure that at least one CPU within the system
-		 * is handing device interrupts.
-		 */
-		nintr = 0;
-		for (CPU_INFO_FOREACH(cii, ci2)) {
-			if ((ci2->ci_schedstate.spc_flags & SPCF_NOINTR) != 0)
-				continue;
-			if (ci2 == ci)
-				continue;
-			nintr++;
-		}
-		if (nintr == 0)
-			return EBUSY;
-		func = (xcfunc_t)cpu_xc_nointr;
-	}
-
-	where = xc_unicast(0, func, ci, NULL, ci);
-	xc_wait(where);
-	if (intr) {
-		KASSERT((spc->spc_flags & SPCF_NOINTR) == 0);
-	} else if ((spc->spc_flags & SPCF_NOINTR) == 0) {
-		/* If was not set offline, then it is busy */
-		return EBUSY;
-	}
-
-	/* Direct interrupts away from the CPU and record the change. */
-	cpu_intr_redistribute();
-	spc->spc_lastmod = time_second;
-	return 0;
-}
-#else	/* __HAVE_INTR_CONTROL */
-int
-cpu_setintr(struct cpu_info *ci, bool intr)
-{
-
-	return EOPNOTSUPP;
-}
-
-u_int
-cpu_intr_count(struct cpu_info *ci)
-{
-
-	return 0;	/* 0 == "don't know" */
-}
-#endif	/* __HAVE_INTR_CONTROL */
-
-bool
-cpu_softintr_p(void)
-{
-
-	return (curlwp->l_pflag & LP_INTR) != 0;
-}
-
-#ifdef CPU_UCODE
-int
-cpu_ucode_load(struct cpu_ucode_softc *sc, const char *fwname)
-{
-	firmware_handle_t fwh;
-	int error;
-
-	if (sc->sc_blob != NULL) {
-		firmware_free(sc->sc_blob, 0);
-		sc->sc_blob = NULL;
-		sc->sc_blobsize = 0;
-	}
-
-	error = cpu_ucode_md_open(&fwh, sc->loader_version, fwname);
-	if (error != 0) {
-		aprint_error("ucode: firmware_open failed: %i\n", error);
-		goto err0;
-	}
-
-	sc->sc_blobsize = firmware_get_size(fwh);
-	sc->sc_blob = firmware_malloc(sc->sc_blobsize);
-	if (sc->sc_blob == NULL) {
-		error = ENOMEM;
-		firmware_close(fwh);
-		goto err0;
-	}
-
-	error = firmware_read(fwh, 0, sc->sc_blob, sc->sc_blobsize);
-	firmware_close(fwh);
-	if (error != 0)
-		goto err1;
-
-	return 0;
-
-err1:
-	firmware_free(sc->sc_blob, 0);
-	sc->sc_blob = NULL;
-	sc->sc_blobsize = 0;
-err0:
-	return error;
-}
-#endif

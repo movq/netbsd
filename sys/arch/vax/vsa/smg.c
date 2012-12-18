@@ -1,4 +1,4 @@
-/*	$NetBSD: smg.c,v 1.55 2012/01/11 21:26:13 macallan Exp $ */
+/*	$NetBSD: smg.c,v 1.48 2008/03/15 00:21:30 matt Exp $ */
 /*
  * Copyright (c) 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -31,20 +31,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smg.c,v 1.55 2012/01/11 21:26:13 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smg.c,v 1.48 2008/03/15 00:21:30 matt Exp $");
 
 #include <sys/param.h>
+#include <sys/device.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
-#include <sys/conf.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
-#include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/time.h>
+#include <sys/malloc.h>
+#include <sys/conf.h>
+#include <sys/kernel.h>
 
 #include <machine/vsbus.h>
 #include <machine/sid.h>
+#include <machine/cpu.h>
 #include <machine/ka420.h>
 
 #include <dev/cons.h>
@@ -247,8 +247,8 @@ smg_attach(device_t parent, device_t self, void *aux)
 	callout_reset(&smg_cursor_ch, hz / 2, smg_crsr_blink, NULL);
 	curcmd = CUR_CMD_HSHI;
 	WRITECUR(CUR_CMD, curcmd);
-	if ((fcookie = wsfont_find(NULL, 8, 15, 0, WSDISPLAY_FONTORDER_R2L,
-	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP)) < 0) {
+	if ((fcookie = wsfont_find(NULL, 8, 15, 0,
+		WSDISPLAY_FONTORDER_R2L, WSDISPLAY_FONTORDER_L2R)) < 0) {
 		aprint_error_dev(self, "could not find 8x15 font\n");
 		return;
 	}
@@ -330,12 +330,12 @@ smg_copycols(void *id, int row, int srccol, int dstcol, int ncols)
 	struct smg_screen * const ss = id;
 	int i;
 
-	memcpy(&ss->ss_image[row][dstcol], &ss->ss_image[row][srccol], ncols);
-	memcpy(&ss->ss_attr[row][dstcol], &ss->ss_attr[row][srccol], ncols);
+	bcopy(&ss->ss_image[row][srccol], &ss->ss_image[row][dstcol], ncols);
+	bcopy(&ss->ss_attr[row][srccol], &ss->ss_attr[row][dstcol], ncols);
 	if (ss != curscr)
 		return;
 	for (i = 0; i < SM_CHEIGHT; i++)
-		memcpy(&SM_ADDR(row, dstcol, i), &SM_ADDR(row, srccol, i), ncols);
+		bcopy(&SM_ADDR(row,srccol, i), &SM_ADDR(row, dstcol, i),ncols);
 }
 
 /*
@@ -347,12 +347,12 @@ smg_erasecols(void *id, int row, int startcol, int ncols, long fillattr)
 	struct smg_screen * const ss = id;
 	int i;
 
-	memset(&ss->ss_image[row][startcol], 0, ncols);
-	memset(&ss->ss_attr[row][startcol], 0, ncols);
+	bzero(&ss->ss_image[row][startcol], ncols);
+	bzero(&ss->ss_attr[row][startcol], ncols);
 	if (ss != curscr)
 		return;
 	for (i = 0; i < SM_CHEIGHT; i++)
-		memset(&SM_ADDR(row, startcol, i), 0, ncols);
+		bzero(&SM_ADDR(row, startcol, i), ncols);
 }
 
 static void
@@ -361,9 +361,9 @@ smg_copyrows(void *id, int srcrow, int dstrow, int nrows)
 	struct smg_screen * const ss = id;
 	int frows;
 
-	memcpy(&ss->ss_image[dstrow][0], &ss->ss_image[srcrow][0],
+	bcopy(&ss->ss_image[srcrow][0], &ss->ss_image[dstrow][0],
 	    nrows * SM_COLS);
-	memcpy(&ss->ss_attr[dstrow][0], &ss->ss_attr[srcrow][0],
+	bcopy(&ss->ss_attr[srcrow][0], &ss->ss_attr[dstrow][0],
 	    nrows * SM_COLS);
 	if (ss != curscr)
 		return;
@@ -395,17 +395,17 @@ smg_eraserows(void *id, int startrow, int nrows, long fillattr)
 	struct smg_screen * const ss = id;
 	int frows;
 
-	memset(&ss->ss_image[startrow][0], 0, nrows * SM_COLS);
-	memset(&ss->ss_attr[startrow][0], 0, nrows * SM_COLS);
+	bzero(&ss->ss_image[startrow][0], nrows * SM_COLS);
+	bzero(&ss->ss_attr[startrow][0], nrows * SM_COLS);
 	if (ss != curscr)
 		return;
 	if (nrows > 25) {
 		frows = nrows >> 1;
-		memset(&sm_addr[(startrow * SM_NEXTROW)], 0, frows * SM_NEXTROW);
-		memset(&sm_addr[((startrow + frows) * SM_NEXTROW)], 0,
+		bzero(&sm_addr[(startrow * SM_NEXTROW)], frows * SM_NEXTROW);
+		bzero(&sm_addr[((startrow + frows) * SM_NEXTROW)],
 		    (nrows - frows) * SM_NEXTROW);
 	} else
-		memset(&sm_addr[(startrow * SM_NEXTROW)], 0, nrows * SM_NEXTROW);
+		bzero(&sm_addr[(startrow * SM_NEXTROW)], nrows * SM_NEXTROW);
 }
 
 static int
@@ -536,7 +536,8 @@ int
 smg_alloc_screen(void *v, const struct wsscreen_descr *type, void **cookiep,
     int *curxp, int *curyp, long *defattrp)
 {
-	*cookiep = malloc(sizeof(struct smg_screen), M_DEVBUF, M_WAITOK|M_ZERO);
+	*cookiep = malloc(sizeof(struct smg_screen), M_DEVBUF, M_WAITOK);
+	bzero(*cookiep, sizeof(struct smg_screen));
 	*curxp = *curyp = *defattrp = 0;
 	return 0;
 }
@@ -595,8 +596,8 @@ smgcninit(struct consdev *cndev)
 	curscr = &smg_conscreen;
 	wsdisplay_cnattach(&smg_stdscreen, &smg_conscreen, 0, 0, 0);
 	cn_tab->cn_pri = CN_INTERNAL;
-	if ((fcookie = wsfont_find(NULL, 8, 15, 0, WSDISPLAY_FONTORDER_R2L,
-	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP)) < 0)
+	if ((fcookie = wsfont_find(NULL, 8, 15, 0,
+		WSDISPLAY_FONTORDER_R2L, WSDISPLAY_FONTORDER_L2R)) < 0)
 	{
 		printf("smg: could not find 8x15 font\n");
 		return;

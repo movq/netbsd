@@ -1,4 +1,4 @@
-/*	$NetBSD: consinit.c,v 1.6 2012/10/13 17:58:53 jdc Exp $	*/
+/*	$NetBSD: consinit.c,v 1.4 2008/05/15 23:38:49 rjs Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -34,7 +34,7 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/cons.h>
@@ -70,7 +70,7 @@ consinit(void)
 	if (!strcmp(CONSOLE, "genfb")) {
 #if (NPCKBC > 0)
 		pckbc_cnattach(&genppc_isa_io_space_tag, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT, 0);
+		    PCKBC_KBD_SLOT);
 #endif
 		return;
 	}

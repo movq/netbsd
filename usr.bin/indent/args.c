@@ -1,4 +1,4 @@
-/*	$NetBSD: args.c,v 1.10 2009/04/12 11:09:49 lukem Exp $	*/
+/*	$NetBSD: args.c,v 1.9 2003/08/07 11:14:07 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -68,7 +68,7 @@
 #if 0
 static char sccsid[] = "@(#)args.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: args.c,v 1.10 2009/04/12 11:09:49 lukem Exp $");
+__RCSID("$NetBSD: args.c,v 1.9 2003/08/07 11:14:07 agc Exp $");
 #endif
 #endif				/* not lint */
 
@@ -99,7 +99,7 @@ __RCSID("$NetBSD: args.c,v 1.10 2009/04/12 11:09:49 lukem Exp $");
 #define	STDIN		3	/* use stdin */
 #define	KEY		4	/* type (keyword) */
 
-const char *option_source = "?";
+char   *option_source = "?";
 
 /*
  * N.B.: because of the way the table here is scanned, options whose names are
@@ -108,7 +108,7 @@ const char *option_source = "?";
  * default value is the one actually assigned.
  */
 struct pro {
-	const char *p_name;	/* name, eg -bl, -cli */
+	char   *p_name;		/* name, eg -bl, -cli */
 	int     p_type;		/* type (int, bool, special) */
 	int     p_default;	/* the default value (if int) */
 	int     p_special;	/* depends on type */
@@ -351,10 +351,10 @@ scan_profile(FILE *f)
 	}
 }
 
-const char *param_start;
+char   *param_start;
 
 int
-eqin(const char *s1, const char *s2)
+eqin(char *s1, char *s2)
 {
 	while (*s1) {
 		if (*s1++ != *s2++)

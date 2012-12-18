@@ -1,4 +1,4 @@
-/* $NetBSD: pnpbiosvar.h,v 1.12 2011/06/30 20:09:31 wiz Exp $ */
+/* $NetBSD: pnpbiosvar.h,v 1.10 2005/12/26 19:24:00 perry Exp $ */
 /*
  * Copyright (c) 1999
  * 	Matthias Drochner.  All rights reserved.
@@ -24,8 +24,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
-#include <sys/device.h>		/* for device_t */
 
 struct pnpbios_attach_args {
 	isa_chipset_tag_t paa_ic;
@@ -70,7 +68,7 @@ struct pnpresources {
 	SIMPLEQ_HEAD(, pnp_io) io;
 	SIMPLEQ_HEAD(, pnp_irq) irq;
 	SIMPLEQ_HEAD(, pnp_dma) dma;
-	struct pnpresources *dependent_link;
+	struct pnpresources *dependant_link;
 	struct pnp_compatid *compatids;
 	char *longname;
 };
@@ -98,4 +96,4 @@ int pnpbios_getiobase(pnpbios_tag_t, struct pnpresources *, int,
 int pnpbios_getiosize(pnpbios_tag_t, struct pnpresources *, int, int *);
 int pnpbios_getirqnum(pnpbios_tag_t, struct pnpresources *, int, int *, int *);
 int pnpbios_getdmachan(pnpbios_tag_t, struct pnpresources *, int, int *);
-void pnpbios_print_devres(device_t, struct pnpbiosdev_attach_args *);
+void pnpbios_print_devres(struct device *, struct pnpbiosdev_attach_args *);

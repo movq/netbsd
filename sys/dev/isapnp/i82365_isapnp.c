@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365_isapnp.c,v 1.32 2012/10/27 17:18:26 chs Exp $	*/
+/*	$NetBSD: i82365_isapnp.c,v 1.26 2008/06/26 12:33:17 drochner Exp $	*/
 
 /*
  * Copyright (c) 1998 Bill Sommerfeld.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82365_isapnp.c,v 1.32 2012/10/27 17:18:26 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82365_isapnp.c,v 1.26 2008/06/26 12:33:17 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,10 +65,10 @@ int	pcicisapnp_debug = 0 /* XXX */ ;
 #define	DPRINTF(arg)
 #endif
 
-int pcic_isapnp_match(device_t, cfdata_t, void *);
-void pcic_isapnp_attach(device_t, device_t, void *);
+int pcic_isapnp_match(struct device *, struct cfdata *, void *);
+void	pcic_isapnp_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(pcic_isapnp, sizeof(struct pcic_isa_softc),
+CFATTACH_DECL(pcic_isapnp, sizeof(struct pcic_isa_softc),
     pcic_isapnp_match, pcic_isapnp_attach, NULL, NULL);
 
 static const struct pcmcia_chip_functions pcic_isa_functions = {
@@ -92,21 +92,23 @@ static const struct pcmcia_chip_functions pcic_isa_functions = {
 };
 
 int
-pcic_isapnp_match(device_t parent, cfdata_t match, void *aux)
+pcic_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
 	pri = isapnp_devmatch(aux, &isapnp_pcic_devinfo, &variant);
 	if (pri && variant > 0)
 		pri = 0;
-	return pri;
+	return (pri);
 }
 
 void
-pcic_isapnp_attach(device_t parent, device_t self, void *aux)
+pcic_isapnp_attach(struct device *parent, struct device *self,
+    void *aux)
 {
+	struct pcic_softc *sc = device_private(self);
 	struct pcic_isa_softc *isc = device_private(self);
-	struct pcic_softc *sc = &isc->sc_pcic;
 	struct isapnp_attach_args *ipa = aux;
 	isa_chipset_tag_t ic = ipa->ipa_ic;
 	bus_space_tag_t iot = ipa->ipa_iot;
@@ -117,22 +119,19 @@ pcic_isapnp_attach(device_t parent, device_t self, void *aux)
 	int msize;
 	int tmp1;
 
-	sc->dev = self;
-
 	printf("\n");
 
 	if (isapnp_config(iot, memt, ipa)) {
-		aprint_error_dev(self, "error in region allocation\n");
+		aprint_error_dev(&sc->dev, "error in region allocation\n");
 		return;
 	}
 
-	printf("%s: %s %s", device_xname(self), ipa->ipa_devident,
+	printf("%s: %s %s", device_xname(&sc->dev), ipa->ipa_devident,
 	    ipa->ipa_devclass);
 
 	/* sanity check that we get at least one hunk of IO space.. */
 	if (ipa->ipa_nio < 1) {
-		aprint_error_dev(self,
-		    "failed to get one chunk of i/o space\n");
+		aprint_error_dev(&sc->dev, "failed to get one chunk of i/o space\n");
 		return;
 	}
 
@@ -151,16 +150,17 @@ pcic_isapnp_attach(device_t parent, device_t self, void *aux)
 	}
 
 	msize =  0x4000;
-	if (isa_mem_alloc(memt, msize, msize, 0, 0, &maddr, &memh)) {
+	if (isa_mem_alloc (memt, msize, msize, 0, 0,
+			   &maddr, &memh)) {
 		printf(": can't alloc mem space\n");
 		return;
 	}
-	printf(": using iomem %#" PRIxPADDR " iosiz %#x", maddr, msize);
+	printf(": using iomem 0x%lx iosiz 0x%x", maddr, msize);
 	sc->membase = maddr;
 	sc->subregionmask = (1 << (msize / PCIC_MEM_PAGESIZE)) - 1;
 
 	isc->sc_ic = ic;
-	sc->pct = &pcic_isa_functions;
+	sc->pct = (pcmcia_chipset_tag_t) & pcic_isa_functions;
 
 	sc->iot = iot;
 	sc->ioh = ioh;

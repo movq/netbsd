@@ -1,4 +1,4 @@
-/*	$NetBSD: ess_isapnp.c,v 1.22 2010/05/22 16:35:00 tsutsui Exp $	*/
+/*	$NetBSD: ess_isapnp.c,v 1.19 2008/04/08 20:09:27 cegger Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ess_isapnp.c,v 1.22 2010/05/22 16:35:00 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ess_isapnp.c,v 1.19 2008/04/08 20:09:27 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,10 +61,10 @@ __KERNEL_RCSID(0, "$NetBSD: ess_isapnp.c,v 1.22 2010/05/22 16:35:00 tsutsui Exp 
 #include <dev/isa/essreg.h>
 #include <dev/isa/essvar.h>
 
-int	ess_isapnp_match(device_t, cfdata_t, void *);
-void	ess_isapnp_attach(device_t, device_t, void *);
+int	ess_isapnp_match(struct device *, struct cfdata *, void *);
+void	ess_isapnp_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ess_isapnp, sizeof(struct ess_softc),
+CFATTACH_DECL(ess_isapnp, sizeof(struct ess_softc),
     ess_isapnp_match, ess_isapnp_attach, NULL, NULL);
 
 /*
@@ -75,7 +75,8 @@ CFATTACH_DECL_NEW(ess_isapnp, sizeof(struct ess_softc),
  * Probe for the ess hardware.
  */
 int
-ess_isapnp_match(device_t parent, cfdata_t match, void *aux)
+ess_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -91,20 +92,18 @@ ess_isapnp_match(device_t parent, cfdata_t match, void *aux)
  * pseudo-device driver.
  */
 void
-ess_isapnp_attach(device_t parent, device_t self, void *aux)
+ess_isapnp_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct ess_softc *sc;
 	struct isapnp_attach_args *ipa;
 
 	sc = device_private(self);
-	sc->sc_dev = self;
 	ipa = aux;
-
-	aprint_naive("\n");
-	aprint_normal("\n");
+	printf("\n");
 
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		aprint_error_dev(self, "error in region allocation\n");
+		aprint_error_dev(&sc->sc_dev, "error in region allocation\n");
 		return;
 	}
 
@@ -121,11 +120,11 @@ ess_isapnp_attach(device_t parent, device_t self, void *aux)
 	sc->sc_audio2.drq = ipa->ipa_drq[1].num;
 
 	if (!essmatch(sc)) {
-		aprint_error_dev(self, "essmatch failed\n");
+		aprint_error_dev(&sc->sc_dev, "essmatch failed\n");
 		return;
 	}
 
-	aprint_normal_dev(self, "");
+	printf("%s", device_xname(&sc->sc_dev));
 
 	essattach(sc, 0);
 }

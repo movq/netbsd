@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs.c,v 1.13 2012/05/21 21:34:16 dsl Exp $	*/
+/*	$NetBSD: ext2fs.c,v 1.4.36.1 2011/01/16 12:38:27 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -145,31 +150,6 @@ struct file {
 	size_t		f_buf_size;	/* size of data block */
 	daddr_t		f_buf_blkno;	/* block number of data block */
 };
-
-#if defined(LIBSA_ENABLE_LS_OP)
-
-#define NELEM(x) (sizeof (x) / sizeof(*x))
-
-typedef struct entry_t entry_t;
-struct entry_t {
-	entry_t	*e_next;
-	ino32_t	e_ino;
-	uint8_t	e_type;
-	char	e_name[1];
-};
-
-static const char    *const typestr[] = {
-	"unknown",
-	"REG",
-	"DIR",
-	"CHR",
-	"BLK",
-	"FIFO",
-	"SOCK",
-	"LNK"
-};
-
-#endif /* LIBSA_ENABLE_LS_OP */
 
 static int read_inode(ino32_t, struct open_file *);
 static int block_map(struct open_file *, indp_t, indp_t *);
@@ -510,7 +490,7 @@ read_gdblock(struct open_file *f, struct m_ext2fs *fs)
 /*
  * Open a file.
  */
-__compactcall int
+int
 ext2fs_open(const char *path, struct open_file *f)
 {
 #ifndef LIBSA_FS_SINGLECOMPONENT
@@ -535,7 +515,6 @@ ext2fs_open(const char *path, struct open_file *f)
 
 	/* allocate space and read super block */
 	fs = alloc(sizeof(*fs));
-	memset(fs, 0, sizeof(*fs));
 	fp->f_fs = fs;
 	twiddle();
 
@@ -713,12 +692,10 @@ ext2fs_open(const char *path, struct open_file *f)
 out:
 	if (rc)
 		ext2fs_close(f);
-	else
-		fsmod = "ext2fs";
 	return rc;
 }
 
-__compactcall int
+int
 ext2fs_close(struct open_file *f)
 {
 	struct file *fp = (struct file *)f->f_fsdata;
@@ -741,7 +718,7 @@ ext2fs_close(struct open_file *f)
  * Copy a portion of a file into kernel memory.
  * Cross block boundaries when necessary.
  */
-__compactcall int
+int
 ext2fs_read(struct open_file *f, void *start, size_t size, size_t *resid)
 {
 	struct file *fp = (struct file *)f->f_fsdata;
@@ -779,7 +756,7 @@ ext2fs_read(struct open_file *f, void *start, size_t size, size_t *resid)
  * Not implemented.
  */
 #ifndef LIBSA_NO_FS_WRITE
-__compactcall int
+int
 ext2fs_write(struct open_file *f, void *start, size_t size, size_t *resid)
 {
 
@@ -788,7 +765,7 @@ ext2fs_write(struct open_file *f, void *start, size_t size, size_t *resid)
 #endif /* !LIBSA_NO_FS_WRITE */
 
 #ifndef LIBSA_NO_FS_SEEK
-__compactcall off_t
+off_t
 ext2fs_seek(struct open_file *f, off_t offset, int where)
 {
 	struct file *fp = (struct file *)f->f_fsdata;
@@ -811,7 +788,7 @@ ext2fs_seek(struct open_file *f, off_t offset, int where)
 }
 #endif /* !LIBSA_NO_FS_SEEK */
 
-__compactcall int
+int
 ext2fs_stat(struct open_file *f, struct stat *sb)
 {
 	struct file *fp = (struct file *)f->f_fsdata;
@@ -825,97 +802,6 @@ ext2fs_stat(struct open_file *f, struct stat *sb)
 	sb->st_size = fp->f_di.e2di_size;
 	return 0;
 }
-
-#if defined(LIBSA_ENABLE_LS_OP)
-__compactcall void
-ext2fs_ls(struct open_file *f, const char *pattern)
-{
-	struct file *fp = (struct file *)f->f_fsdata;
-	size_t block_size = fp->f_fs->e2fs_bsize;
-	char *buf;
-	size_t buf_size;
-	entry_t	*names = 0, *n, **np;
-
-	fp->f_seekp = 0;
-	while (fp->f_seekp < (off_t)fp->f_di.e2di_size) {
-		struct ext2fs_direct  *dp, *edp;
-		int rc = buf_read_file(f, &buf, &buf_size);
-		if (rc)
-			goto out;
-		if (buf_size != block_size || buf_size == 0)
-			goto out;
-
-		dp = (struct ext2fs_direct *)buf;
-		edp = (struct ext2fs_direct *)(buf + buf_size);
-
-		for (; dp < edp;
-		     dp = (void *)((char *)dp + fs2h16(dp->e2d_reclen))) {
-			const char *t;
-
-			if (fs2h16(dp->e2d_reclen) <= 0)
-				goto out;
-
-			if (fs2h32(dp->e2d_ino) == 0)
-				continue;
-
-			if (dp->e2d_type >= NELEM(typestr) ||
-			    !(t = typestr[dp->e2d_type])) {
-				/*
-				 * This does not handle "old"
-				 * filesystems properly. On little
-				 * endian machines, we get a bogus
-				 * type name if the namlen matches a
-				 * valid type identifier. We could
-				 * check if we read namlen "0" and
-				 * handle this case specially, if
-				 * there were a pressing need...
-				 */
-				printf("bad dir entry\n");
-				goto out;
-			}
-			if (pattern && !fnmatch(dp->e2d_name, pattern))
-				continue;
-			n = alloc(sizeof *n + strlen(dp->e2d_name));
-			if (!n) {
-				printf("%d: %s (%s)\n",
-					fs2h32(dp->e2d_ino), dp->e2d_name, t);
-				continue;
-			}
-			n->e_ino = fs2h32(dp->e2d_ino);
-			n->e_type = dp->e2d_type;
-			strcpy(n->e_name, dp->e2d_name);
-			for (np = &names; *np; np = &(*np)->e_next) {
-				if (strcmp(n->e_name, (*np)->e_name) < 0)
-					break;
-			}
-			n->e_next = *np;
-			*np = n;
-		}
-		fp->f_seekp += buf_size;
-	}
-
-	if (names) {
-		entry_t *p_names = names;
-		do {
-			n = p_names;
-			printf("%d: %s (%s)\n",
-				n->e_ino, n->e_name, typestr[n->e_type]);
-			p_names = n->e_next;
-		} while (p_names);
-	} else {
-		printf("not found\n");
-	}
-out:
-	if (names) {
-		do {
-			n = names;
-			names = n->e_next;
-			dealloc(n, 0);
-		} while (names);
-	}
-	return;
-}
-#endif
 
 /*
  * byte swap functions for big endian machines

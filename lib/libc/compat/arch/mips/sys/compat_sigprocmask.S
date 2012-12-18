@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_sigprocmask.S,v 1.2 2009/12/14 03:04:33 matt Exp $	*/
+/*	$NetBSD: compat_sigprocmask.S,v 1.1 2005/09/17 11:49:39 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -35,32 +35,34 @@
 #include "SYS.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-	RCSID("from: @(#)sigprocmask.s	8.1 (Berkeley) 6/4/93")
-#else
-	RCSID("$NetBSD: compat_sigprocmask.S,v 1.2 2009/12/14 03:04:33 matt Exp $")
-#endif
+	ASMSTR("from: @(#)sigprocmask.s	8.1 (Berkeley) 6/4/93")
+	ASMSTR("$NetBSD: compat_sigprocmask.S,v 1.1 2005/09/17 11:49:39 tsutsui Exp $")
 #endif /* LIBC_SCCS and not lint */
 
 WARN_REFERENCES(sigprocmask, \
     "warning: reference to compatibility sigprocmask(); include <signal.h> for correct reference")
 
 LEAF(sigprocmask)	# sigprocmask(how, new, old) sigset_t *new, *old;
-	PIC_PROLOGUE(sigprocmask)
+#ifdef __ABICALLS__
+	.set    noreorder
+	.cpload t9
+	.set    reorder
+#endif
 	bne	a1, zero, gotptr	# if new sigset pointer not null
 	li	a0, 1			# how = SIG_BLOCK
 	b	doit			# mask = zero
 gotptr:
-	INT_L	a1, 0(a1)		# indirect to new mask arg
+	lw	a1, 0(a1)		# indirect to new mask arg
 doit:
-	SYSTRAP(compat_13_sigprocmask13)
-
+	li	v0, SYS_compat_13_sigprocmask13
+	syscall
 	bne	a3, zero, err
 	beq	a2, zero, out		# test if old mask requested
-	INT_S	v0, 0(a2)		# store old mask
+	sw	v0, 0(a2)		# store old mask
 out:
 	move	v0, zero
-	PIC_RETURN()
+	j	ra
 err:
-	PIC_TAILCALL(__cerror)
+	la	t9, _C_LABEL(__cerror)
+	jr	t9
 END(sigprocmask)

@@ -1,4 +1,4 @@
-/*	$NetBSD: magma.c,v 1.56 2012/10/27 17:18:37 chs Exp $	*/
+/*	$NetBSD: magma.c,v 1.48 2008/07/02 10:16:20 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1998 Iain Hibbert
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: magma.c,v 1.56 2012/10/27 17:18:37 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: magma.c,v 1.48 2008/07/02 10:16:20 plunky Exp $");
 
 #if 0
 #define MAGMA_DEBUG
@@ -66,8 +66,6 @@ __KERNEL_RCSID(0, "$NetBSD: magma.c,v 1.56 2012/10/27 17:18:37 chs Exp $");
 
 #include <dev/sbus/mbppio.h>
 #include <dev/sbus/magmareg.h>
-
-#include "ioconf.h"
 
 /* supported cards
  *
@@ -169,14 +167,17 @@ static struct magma_board_info supported_cards[] = {
  *  Autoconfig Stuff
  */
 
-CFATTACH_DECL_NEW(magma, sizeof(struct magma_softc),
+CFATTACH_DECL(magma, sizeof(struct magma_softc),
     magma_match, magma_attach, NULL, NULL);
 
-CFATTACH_DECL_NEW(mtty, sizeof(struct mtty_softc),
+CFATTACH_DECL(mtty, sizeof(struct mtty_softc),
     mtty_match, mtty_attach, NULL, NULL);
 
-CFATTACH_DECL_NEW(mbpp, sizeof(struct mbpp_softc),
+CFATTACH_DECL(mbpp, sizeof(struct mbpp_softc),
     mbpp_match, mbpp_attach, NULL, NULL);
+
+extern struct cfdriver mtty_cd;
+extern struct cfdriver mbpp_cd;
 
 dev_type_open(mttyopen);
 dev_type_close(mttyclose);
@@ -218,7 +219,10 @@ const struct cdevsw mbpp_cdevsw = {
  * returns 0 for success, 1 for failure
  */
 int
-cd1400_compute_baud(speed_t speed, int clock, int *cor, int *bpr)
+cd1400_compute_baud(speed, clock, cor, bpr)
+	speed_t speed;
+	int clock;
+	int *cor, *bpr;
 {
 	int c, co, br;
 
@@ -241,7 +245,9 @@ cd1400_compute_baud(speed_t speed, int clock, int *cor, int *bpr)
  * Write a CD1400 channel command, should have a timeout?
  */
 inline void
-cd1400_write_ccr(struct cd1400 *cd, u_char cmd)
+cd1400_write_ccr(cd, cmd)
+	struct cd1400 *cd;
+	u_char cmd;
 {
 	while( cd1400_read_reg(cd, CD1400_CCR) )
 		;
@@ -253,7 +259,9 @@ cd1400_write_ccr(struct cd1400 *cd, u_char cmd)
  * read a value from a cd1400 register
  */
 inline u_char
-cd1400_read_reg(struct cd1400 *cd, int reg)
+cd1400_read_reg(cd, reg)
+	struct cd1400 *cd;
+	int reg;
 {
 	return(cd->cd_reg[reg]);
 }
@@ -262,7 +270,10 @@ cd1400_read_reg(struct cd1400 *cd, int reg)
  * write a value to a cd1400 register
  */
 inline void
-cd1400_write_reg(struct cd1400 *cd, int reg, u_char value)
+cd1400_write_reg(cd, reg, value)
+	struct cd1400 *cd;
+	int reg;
+	u_char value;
 {
 	cd->cd_reg[reg] = value;
 }
@@ -271,7 +282,9 @@ cd1400_write_reg(struct cd1400 *cd, int reg, u_char value)
  * enable transmit service requests for cd1400 channel
  */
 void
-cd1400_enable_transmitter(struct cd1400 *cd, int channel)
+cd1400_enable_transmitter(cd, channel)
+	struct cd1400 *cd;
+	int channel;
 {
 	int s, srer;
 
@@ -301,7 +314,10 @@ cd1400_enable_transmitter(struct cd1400 *cd, int channel)
  */
 
 int
-magma_match(device_t parent, cfdata_t cf, void *aux)
+magma_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct sbus_attach_args *sa = aux;
 	struct magma_board_info *card;
@@ -329,7 +345,10 @@ magma_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-magma_attach(device_t parent, device_t self, void *aux)
+magma_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct sbus_attach_args *sa = aux;
 	struct magma_softc *sc = device_private(self);
@@ -339,7 +358,6 @@ magma_attach(device_t parent, device_t self, void *aux)
 	int cd_clock;
 	int node, chip;
 
-	sc->ms_dev = self;
 	node = sa->sa_node;
 
 	/*
@@ -414,7 +432,7 @@ magma_attach(device_t parent, device_t self, void *aux)
 		cd->cd_chiprev = cd1400_read_reg(cd, CD1400_GFRCR);
 
 		dprintf(("%s attach CD1400 %d addr %p rev %x clock %dMHz\n",
-			device_xname(sc->ms_dev), chip,
+			device_xname(&sc->ms_dev), chip,
 			cd->cd_reg, cd->cd_chiprev, cd->cd_clock));
 
 		/* clear GFRCR */
@@ -454,6 +472,8 @@ magma_attach(device_t parent, device_t self, void *aux)
 			device_xname(self), chip, cd->cd_reg);
 	}
 
+	sbus_establish(&sc->ms_sd, &sc->ms_dev);
+
 	/* configure the children */
 	(void)config_found(self, mtty_match, NULL);
 	(void)config_found(self, mbpp_match, NULL);
@@ -469,11 +489,11 @@ magma_attach(device_t parent, device_t self, void *aux)
 	sc->ms_sicookie = softint_establish(SOFTINT_SERIAL, magma_soft, sc);
 	if (sc->ms_sicookie == NULL) {
 		aprint_normal("\n");
-		aprint_error_dev(sc->ms_dev, "cannot establish soft int handler\n");
+		aprint_error_dev(&sc->ms_dev, "cannot establish soft int handler\n");
 		return;
 	}
 	evcnt_attach_dynamic(&sc->ms_intrcnt, EVCNT_TYPE_INTR, NULL,
-	    device_xname(sc->ms_dev), "intr");
+	    device_xname(&sc->ms_dev), "intr");
 }
 
 /*
@@ -484,7 +504,8 @@ magma_attach(device_t parent, device_t self, void *aux)
  *  runs at IPL_SERIAL
  */
 int
-magma_hard(void *arg)
+magma_hard(arg)
+	void *arg;
 {
 	struct magma_softc *sc = arg;
 	struct cd1400 *cd;
@@ -704,7 +725,8 @@ magma_hard(void *arg)
  * runs at IPL_SOFTSERIAL
  */
 void
-magma_soft(void *arg)
+magma_soft(arg)
+	void *arg;
 {
 	struct magma_softc *sc = arg;
 	struct mtty_softc *mtty = sc->ms_mtty;
@@ -744,7 +766,7 @@ magma_soft(void *arg)
 
 			if( stat & CD1400_RDSR_OE )
 				log(LOG_WARNING, "%s%x: fifo overflow\n",
-				    device_xname(mtty->ms_dev), port);
+				    device_xname(&mtty->ms_dev), port);
 
 			(*tp->t_linesw->l_rint)(data, tp);
 		}
@@ -755,14 +777,14 @@ magma_soft(void *arg)
 		splx(s);	/* ok */
 
 		if( ISSET(flags, MTTYF_CARRIER_CHANGED) ) {
-			dprintf(("%s%x: cd %s\n", device_xname(mtty->ms_dev),
+			dprintf(("%s%x: cd %s\n", device_xname(&mtty->ms_dev),
 				port, mp->mp_carrier ? "on" : "off"));
 			(*tp->t_linesw->l_modem)(tp, mp->mp_carrier);
 		}
 
 		if( ISSET(flags, MTTYF_RING_OVERFLOW) ) {
 			log(LOG_WARNING, "%s%x: ring buffer overflow\n",
-			    device_xname(mtty->ms_dev), port);
+			    device_xname(&mtty->ms_dev), port);
 		}
 
 		if( ISSET(flags, MTTYF_DONE) ) {
@@ -817,7 +839,10 @@ chkbpp:
  */
 
 int
-mtty_match(device_t parent, cfdata_t cf, void *args)
+mtty_match(parent, cf, args)
+	struct device *parent;
+	struct cfdata *cf;
+	void *args;
 {
 	struct magma_softc *sc = device_private(parent);
 
@@ -825,13 +850,15 @@ mtty_match(device_t parent, cfdata_t cf, void *args)
 }
 
 void
-mtty_attach(device_t parent, device_t self, void *args)
+mtty_attach(parent, dev, args)
+	struct device *parent;
+	struct device *dev;
+	void *args;
 {
 	struct magma_softc *sc = device_private(parent);
-	struct mtty_softc *ms = device_private(self);
+	struct mtty_softc *ms = device_private(dev);
 	int port, chip, chan;
 
-	sc->ms_dev = self;
 	sc->ms_mtty = ms;
 	dprintf((" addr %p", ms));
 
@@ -844,10 +871,8 @@ mtty_attach(device_t parent, device_t self, void *args)
 			chan = 1; /* skip channel 0 if parmode */
 		mp->mp_channel = chan;
 
-		tp = tty_alloc();
-		if (tp == NULL) {
-			break;
-		}
+		tp = ttymalloc();
+		if (tp == NULL) break;
 		tty_attach(tp);
 		tp->t_oproc = mtty_start;
 		tp->t_param = mtty_param;
@@ -872,7 +897,11 @@ mtty_attach(device_t parent, device_t self, void *args)
  * open routine. returns zero if successful, else error code
  */
 int
-mttyopen(dev_t dev, int flags, int mode, struct lwp *l)
+mttyopen(dev, flags, mode, l)
+	dev_t dev;
+	int flags;
+	int mode;
+	struct lwp *l;
 {
 	int card = MAGMA_CARD(dev);
 	int port = MAGMA_PORT(dev);
@@ -965,7 +994,11 @@ bad:
  * close routine. returns zero if successful, else error code
  */
 int
-mttyclose(dev_t dev, int flag, int mode, struct lwp *l)
+mttyclose(dev, flag, mode, l)
+	dev_t dev;
+	int flag;
+	int mode;
+	struct lwp *l;
 {
 	struct mtty_softc *ms = device_lookup_private(&mtty_cd,
 						      MAGMA_CARD(dev));
@@ -1004,7 +1037,10 @@ mttyclose(dev_t dev, int flag, int mode, struct lwp *l)
  * Read routine
  */
 int
-mttyread(dev_t dev, struct uio *uio, int flags)
+mttyread(dev, uio, flags)
+	dev_t dev;
+	struct uio *uio;
+	int flags;
 {
 	struct mtty_softc *ms = device_lookup_private(&mtty_cd,
 						      MAGMA_CARD(dev));
@@ -1018,7 +1054,10 @@ mttyread(dev_t dev, struct uio *uio, int flags)
  * Write routine
  */
 int
-mttywrite(dev_t dev, struct uio *uio, int flags)
+mttywrite(dev, uio, flags)
+	dev_t dev;
+	struct uio *uio;
+	int flags;
 {
 	struct mtty_softc *ms = device_lookup_private(&mtty_cd,
 						      MAGMA_CARD(dev));
@@ -1032,7 +1071,10 @@ mttywrite(dev_t dev, struct uio *uio, int flags)
  * Poll routine
  */
 int
-mttypoll(dev_t dev, int events, struct lwp *l)
+mttypoll(dev, events, l)
+	dev_t dev;
+	int events;
+	struct lwp *l;
 {
 	struct mtty_softc *ms = device_lookup_private(&mtty_cd,
 						      MAGMA_CARD(dev));
@@ -1046,7 +1088,8 @@ mttypoll(dev_t dev, int events, struct lwp *l)
  * return tty pointer
  */
 struct tty *
-mttytty(dev_t dev)
+mttytty(dev)
+	dev_t dev;
 {
 	struct mtty_softc *ms = device_lookup_private(&mtty_cd,
 						      MAGMA_CARD(dev));
@@ -1059,7 +1102,12 @@ mttytty(dev_t dev)
  * ioctl routine
  */
 int
-mttyioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
+mttyioctl(dev, cmd, data, flags, l)
+	dev_t dev;
+	u_long cmd;
+	void *data;
+	int flags;
+	struct lwp *l;
 {
 	struct mtty_softc *ms = device_lookup_private(&mtty_cd,
 						      MAGMA_CARD(dev));
@@ -1135,7 +1183,9 @@ mttyioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
  * Stop output, e.g., for ^S or output flush.
  */
 void
-mttystop(struct tty *tp, int flags)
+mttystop(tp, flags)
+	struct tty *tp;
+	int flags;
 {
 	struct mtty_softc *ms = device_lookup_private(&mtty_cd,
 						      MAGMA_CARD(tp->t_dev));
@@ -1162,7 +1212,8 @@ mttystop(struct tty *tp, int flags)
  * Start output, after a stop.
  */
 void
-mtty_start(struct tty *tp)
+mtty_start(tp)
+	struct tty *tp;
 {
 	struct mtty_softc *ms = device_lookup_private(&mtty_cd,
 						      MAGMA_CARD(tp->t_dev));
@@ -1197,7 +1248,10 @@ mtty_start(struct tty *tp)
  * only let them fiddle with RTS if CRTSCTS is not enabled
  */
 int
-mtty_modem_control(struct mtty_port *mp, int bits, int howto)
+mtty_modem_control(mp, bits, howto)
+	struct mtty_port *mp;
+	int bits;
+	int howto;
 {
 	struct cd1400 *cd = mp->mp_cd1400;
 	struct tty *tp = mp->mp_tty;
@@ -1260,7 +1314,9 @@ mtty_modem_control(struct mtty_port *mp, int bits, int howto)
  * Set tty parameters, returns error or 0 on success
  */
 int
-mtty_param(struct tty *tp, struct termios *t)
+mtty_param(tp, t)
+	struct tty *tp;
+	struct termios *t;
 {
 	struct mtty_softc *ms = device_lookup_private(&mtty_cd,
 						      MAGMA_CARD(tp->t_dev));
@@ -1389,7 +1445,10 @@ mtty_param(struct tty *tp, struct termios *t)
  */
 
 int
-mbpp_match(device_t parent, cfdata_t cf, void *args)
+mbpp_match(parent, cf, args)
+	struct device *parent;
+	struct cfdata *cf;
+	void *args;
 {
 	struct magma_softc *sc = device_private(parent);
 
@@ -1397,7 +1456,10 @@ mbpp_match(device_t parent, cfdata_t cf, void *args)
 }
 
 void
-mbpp_attach(device_t parent, device_t dev, void *args)
+mbpp_attach(parent, dev, args)
+	struct device *parent;
+	struct device *dev;
+	void *args;
 {
 	struct magma_softc *sc = device_private(parent);
 	struct mbpp_softc *ms = device_private(dev);
@@ -1427,7 +1489,11 @@ mbpp_attach(device_t parent, device_t dev, void *args)
  * open routine. returns zero if successful, else error code
  */
 int
-mbppopen(dev_t dev, int flags, int mode, struct lwp *l)
+mbppopen(dev, flags, mode, l)
+	dev_t dev;
+	int flags;
+	int mode;
+	struct lwp *l;
 {
 	int card = MAGMA_CARD(dev);
 	int port = MAGMA_PORT(dev);
@@ -1476,7 +1542,11 @@ mbppopen(dev_t dev, int flags, int mode, struct lwp *l)
  * close routine. returns zero if successful, else error code
  */
 int
-mbppclose(dev_t dev, int flag, int mode, struct lwp *l)
+mbppclose(dev, flag, mode, l)
+	dev_t dev;
+	int flag;
+	int mode;
+	struct lwp *l;
 {
 	struct mbpp_softc *ms = device_lookup_private(&mbpp_cd,
 						      MAGMA_CARD(dev));
@@ -1490,7 +1560,12 @@ mbppclose(dev_t dev, int flag, int mode, struct lwp *l)
  * ioctl routine
  */
 int
-mbppioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
+mbppioctl(dev, cmd, data, flags, l)
+	dev_t dev;
+	u_long cmd;
+	void *data;
+	int flags;
+	struct lwp *l;
 {
 	struct mbpp_softc *ms = device_lookup_private(&mbpp_cd,
 						      MAGMA_CARD(dev));
@@ -1532,7 +1607,10 @@ mbppioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 }
 
 int
-mbpp_rw(dev_t dev, struct uio *uio, int flag)
+mbpp_rw(dev, uio, flag)
+	dev_t dev;
+	struct uio *uio;
+	int flag;
 {
 	int card = MAGMA_CARD(dev);
 	int port = MAGMA_PORT(dev);
@@ -1649,7 +1727,8 @@ again:		/* goto bad */
 }
 
 void
-mbpp_timeout(void *arg)
+mbpp_timeout(arg)
+	void *arg;
 {
 	struct mbpp_port *mp = arg;
 
@@ -1658,7 +1737,8 @@ mbpp_timeout(void *arg)
 }
 
 void
-mbpp_start(void *arg)
+mbpp_start(arg)
+	void *arg;
 {
 	struct mbpp_port *mp = arg;
 
@@ -1667,7 +1747,10 @@ mbpp_start(void *arg)
 }
 
 int
-mbpp_send(struct mbpp_port *mp, void *ptr, int len)
+mbpp_send(mp, ptr, len)
+	struct mbpp_port *mp;
+	void *ptr;
+	int len;
 {
 	int s;
 	struct cd1400 *cd = mp->mp_cd1400;
@@ -1710,7 +1793,10 @@ mbpp_send(struct mbpp_port *mp, void *ptr, int len)
 }
 
 int
-mbpp_recv(struct mbpp_port *mp, void *ptr, int len)
+mbpp_recv(mp, ptr, len)
+	struct mbpp_port *mp;
+	void *ptr;
+	int len;
 {
 	int s;
 	struct cd1400 *cd = mp->mp_cd1400;
@@ -1758,7 +1844,8 @@ mbpp_recv(struct mbpp_port *mp, void *ptr, int len)
 }
 
 int
-mbpp_hztoms(int h)
+mbpp_hztoms(h)
+	int h;
 {
 	int m = h;
 
@@ -1768,7 +1855,8 @@ mbpp_hztoms(int h)
 }
 
 int
-mbpp_mstohz(int m)
+mbpp_mstohz(m)
+	int m;
 {
 	int h = m;
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: wiconfig.8,v 1.32 2009/07/02 18:32:04 wiz Exp $
+.\"	$NetBSD: wiconfig.8,v 1.30 2004/08/25 18:48:54 wiz Exp $
 .\"
 .\" Copyright (c) 1997, 1998, 1999
 .\"	Bill Paul <wpaul@ctr.columbia.edu> All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"	From: wicontrol.8,v 1.6 1999/05/22 16:12:47 wpaul Exp $
 .\"
-.Dd July 2, 2009
+.Dd August 25, 2004
 .Dt WICONFIG 8
 .Os
 .Sh NAME
@@ -42,12 +42,33 @@
 .Nm wiconfig
 .Ar interface
 .Op Fl \&Dho
+.Bk -words
 .Op Fl A Ar 1|2
+.Ek
+.Bk -words
 .Op Fl a Ar access_point_density
+.Ek
+.Bk -words
 .Op Fl d Ar max_data_length
+.Ek
+.Bk -words
+.Op Fl g Ar fragmentation_threshold
+.Ek
+.Bk -words
 .Op Fl M Ar 0|1
+.Ek
+.Bk -words
+.Op Fl m Ar MAC_address
+.Ek
+.Bk -words
 .Op Fl R Ar 1|3
+.Ek
+.Bk -words
+.Op Fl r Ar RTS_threshold
+.Ek
+.Bk -words
 .Op Fl s Ar station_name
+.Ek
 .Sh DESCRIPTION
 The
 .Nm
@@ -112,6 +133,8 @@ The
 .Ar max data length
 can be any number from 256 to 2346.
 The default is 2304.
+.It Fl g Ar fragmentation_threshold
+Set the fragmentation threshold.
 .It Fl h
 Display a short help.
 .It Fl M Ar 0|1
@@ -122,8 +145,8 @@ This should only be used if needed.
 .Pp
 In cases of slow performance where there is a good quality signal but
 also high levels of noise (i.e., the signal to noise ratio is bad but
-the signal strength is good), or a microwave oven is operating near the
-antenna of the WLAN peer or access point, this option may be of use.
+the signal strength is good), and there is an operating microwave oven
+in or near the signal path, this option may be of use.
 .Pp
 In bad signal-to-noise conditions, the link layer will switch to lower
 transmit rates.
@@ -136,6 +159,13 @@ transmit time of each frame so that individual frames are more likely
 to be transmitted without error.
 .Pp
 Note that this does not impact the visible MTU of the link.
+.It Fl m Ar MAC_address
+Set the station address for the specified interface.
+The
+.Ar MAC address
+is specified as a series of six hexadecimal values separated by colons,
+e.g., 00:60:1d:12:34:56.
+This programs the new address into the card and updates the interface as well.
 .It Fl o
 Print out the statistics counters instead of the card settings.
 Note that, however, the statistics will only be updated every minute or so.
@@ -148,19 +178,16 @@ The legal values are
 (Roaming Disabled).
 The default is 1.
 .It Fl r Ar RTS_threshold
-.It Fl f Ar fragmentation_threshold
-.It Fl m Ar MAC_address
-These options are deprecated since
-.Nx 6.0 .
-Use
-.Xr ifconfig 8
-to set the link-layer address, the fragmentation threshold, and the RTS
-threshold.
+Set the RTS/CTS threshold for a given interface.
+This controls the number of bytes used for the RTS/CTS handshake boundary.
+The
+.Ar RTS_threshold
+can be any value between 0 and 2347.
+The default is 2347, which indicates RTS/CTS mechanism never to be used.
 .It Fl s Ar station_name
 Sets the
 .Ar station_name
-for the specified interface.
-The
+for the specified interface.  The
 .Ar station_name
 is used for diagnostic purposes.
 The

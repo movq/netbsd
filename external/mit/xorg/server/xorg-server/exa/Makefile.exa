@@ -1,19 +1,9 @@
-#	$NetBSD: Makefile.exa,v 1.5 2011/01/15 13:54:53 jmcneill Exp $
+#	$NetBSD: Makefile.exa,v 1.2.8.2 2011/03/07 18:50:49 riz Exp $
 
 .PATH:		${X11SRCDIR.xorg-server}/exa
 
-SRCS.exa=\
-	exa.c \
-	exa_classic.c \
-	exa_migration_classic.c \
-	exa_driver.c \
-	exa_mixed.c \
-	exa_migration_mixed.c \
-	exa_accel.c \
-	exa_glyphs.c \
-	exa_offscreen.c \
-	exa_render.c \
-	exa_unaccel.c
+SRCS.exa=	exa.c exa_accel.c exa_migration.c exa_offscreen.c \
+		exa_render.c exa_unaccel.c exa_glyphs.c
 
 CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/include \
 		-I${X11SRCDIR.xorg-server}/Xext \

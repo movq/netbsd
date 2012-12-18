@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf.c,v 1.11 2012/12/14 08:15:44 msaitoh Exp $	*/
+/*	$NetBSD: bpf.c,v 1.8 2008/04/28 20:24:14 martin Exp $	*/
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -44,7 +44,6 @@
 #include <net/bpfdesc.h>
 #include <net/bpf.h>
 #include "netstat.h"
-#include "prog_ops.h"
 
 void
 bpf_stats(void)
@@ -69,13 +68,13 @@ bpf_stats(void)
 }
 
 void
-bpf_dump(const char *bpfif)
+bpf_dump(char *interface)
 {
 	struct bpf_d_ext *dpe;
 
 	if (use_sysctl) {
-		int	name[CTL_MAXNAME], rc;
-		size_t	i, sz, szproc;
+		int	name[CTL_MAXNAME], rc, i;
+		size_t	sz, szproc;
 		u_int	namelen;
 		void	*v;
 		struct kinfo_proc2 p;
@@ -93,8 +92,7 @@ bpf_dump(const char *bpfif)
 		v = NULL;
 		sz = 0;
 		do {
-			rc = prog_sysctl(&name[0], namelen,
-			    v, &sz, NULL, 0);
+			rc = sysctl(&name[0], namelen, v, &sz, NULL, 0);
 			if (rc == -1 && errno != ENOMEM)
 				err(1, "sysctl: net.bpf.peers");
 			if (rc == -1 && v != NULL) {
@@ -117,8 +115,8 @@ bpf_dump(const char *bpfif)
 #define BPFEXT(entry) dpe->entry
 
 		for (i = 0; i < (sz / sizeof(*dpe)); i++, dpe++) {
-			if (bpfif && 
-			    strncmp(BPFEXT(bde_ifname), bpfif, IFNAMSIZ))
+			if (interface && 
+			    strncmp(BPFEXT(bde_ifname), interface, IFNAMSIZ))
 				continue;
 			
 			printf("%-7d ", BPFEXT(bde_pid));
@@ -160,14 +158,13 @@ bpf_dump(const char *bpfif)
 			name[namelen++] = szproc;
 			name[namelen++] = 1;
 
-			if (prog_sysctl(&name[0], namelen, &p, &szproc, 
+			if (sysctl(&name[0], namelen, &p, &szproc, 
 			    NULL, 0) == -1)
 				printf("-\n");
 			else
 				printf("%s\n", p.p_comm);
 #undef BPFEXT
 		}
-		free(v);
 	} else {
                 /* XXX */
                 errx(1, "bpf_dump not implemented using kvm");

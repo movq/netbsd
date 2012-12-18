@@ -1,4 +1,4 @@
-/*	$NetBSD: geodecntr.c,v 1.9 2011/07/01 17:37:26 dyoung Exp $	*/
+/*	$NetBSD: geodecntr.c,v 1.8 2008/05/10 13:35:56 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: geodecntr.c,v 1.9 2011/07/01 17:37:26 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: geodecntr.c,v 1.8 2008/05/10 13:35:56 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: geodecntr.c,v 1.9 2011/07/01 17:37:26 dyoung Exp $")
 #include <sys/device.h>
 #include <machine/cpu.h>
 #include <sys/timetc.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <arch/i386/pci/geodevar.h>
 #include <arch/i386/pci/geodereg.h>
 

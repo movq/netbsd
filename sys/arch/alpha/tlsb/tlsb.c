@@ -1,4 +1,4 @@
-/* $NetBSD: tlsb.c,v 1.37 2012/02/06 02:14:16 matt Exp $ */
+/* $NetBSD: tlsb.c,v 1.32 2007/03/04 05:59:12 christos Exp $ */
 /*
  * Copyright (c) 1997 by Matthew Jacob
  * NASA AMES Research Center.
@@ -39,7 +39,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: tlsb.c,v 1.37 2012/02/06 02:14:16 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tlsb.c,v 1.32 2007/03/04 05:59:12 christos Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -62,16 +62,16 @@ __KERNEL_RCSID(0, "$NetBSD: tlsb.c,v 1.37 2012/02/06 02:14:16 matt Exp $");
 
 #define KV(_addr)	((void *)ALPHA_PHYS_TO_K0SEG((_addr)))
 
-static int	tlsbmatch(device_t, cfdata_t, void *);
-static void	tlsbattach(device_t, device_t, void *);
+static int	tlsbmatch __P((struct device *, struct cfdata *, void *));
+static void	tlsbattach __P((struct device *, struct device *, void *));
 
-CFATTACH_DECL_NEW(tlsb, 0,
+CFATTACH_DECL(tlsb, sizeof (struct device),
     tlsbmatch, tlsbattach, NULL, NULL);
 
 extern struct cfdriver tlsb_cd;
 
-static int	tlsbprint(void *, const char *);
-static const char *tlsb_node_type_str(uint32_t);
+static int	tlsbprint __P((void *, const char *));
+static const char *tlsb_node_type_str __P((u_int32_t));
 
 /*
  * There can be only one TurboLaser, and we'll overload it
@@ -85,7 +85,9 @@ static const char *tlsb_node_type_str(uint32_t);
 int	tlsb_found;
 
 static int
-tlsbprint(void *aux, const char *pnp)
+tlsbprint(aux, pnp)
+	void *aux;
+	const char *pnp;
 {
 	struct tlsb_dev_attach_args *tap = aux;
 
@@ -100,7 +102,10 @@ tlsbprint(void *aux, const char *pnp)
 }
 
 static int
-tlsbmatch(device_t parent, cfdata_t cf, void *aux)
+tlsbmatch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -120,10 +125,13 @@ tlsbmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-tlsbattach(device_t parent, device_t self, void *aux)
+tlsbattach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct tlsb_dev_attach_args ta;
-	uint32_t tldev;
+	u_int32_t tldev;
 	int node;
 	int locs[TLSBCF_NLOCS];
 
@@ -147,7 +155,7 @@ tlsbattach(device_t parent, device_t self, void *aux)
 		 * Check for invalid address.  This may not really
 		 * be necessary, but what the heck...
 		 */
-		if (badaddr(TLSB_NODE_REG_ADDR(node, TLDEV), sizeof(uint32_t)))
+		if (badaddr(TLSB_NODE_REG_ADDR(node, TLDEV), sizeof(u_int32_t)))
 			continue;
 		tldev = TLSB_GET_NODEREG(node, TLDEV);
 		if (tldev == 0) {
@@ -171,7 +179,7 @@ tlsbattach(device_t parent, device_t self, void *aux)
 		 * Deal with hooking CPU instances to TurboLaser nodes.
 		 */
 		if (TLDEV_ISCPU(tldev)) {
-			aprint_normal("%s node %d: %s\n", device_xname(self),
+			printf("%s node %d: %s\n", self->dv_xname,
 			    node, tlsb_node_type_str(tldev));
 		}
 		/*
@@ -187,7 +195,7 @@ tlsbattach(device_t parent, device_t self, void *aux)
 	 * *Now* search for I/O nodes (in descending order)
 	 */
 	while (--node > 0) {
-		if (badaddr(TLSB_NODE_REG_ADDR(node, TLDEV), sizeof(uint32_t)))
+		if (badaddr(TLSB_NODE_REG_ADDR(node, TLDEV), sizeof(u_int32_t)))
 			continue;
 		tldev = TLSB_GET_NODEREG(node, TLDEV);
 		if (tldev == 0) {
@@ -206,8 +214,8 @@ tlsbattach(device_t parent, device_t self, void *aux)
 			 * XXX per-CPU interrupt queue?
 			 */
 			printf("%s node %d: routing interrupts to %s\n",
-			  device_xname(self), node,
-			  device_xname(cpu_info[hwrpb->rpb_primary_cpu_id]->ci_softc->sc_dev));
+			  self->dv_xname, node,
+			  cpu_info[hwrpb->rpb_primary_cpu_id]->ci_softc->sc_dev.dv_xname);
 			TLSB_PUT_NODEREG(node, TLCPUMASK,
 			    (1UL << hwrpb->rpb_primary_cpu_id));
 #else
@@ -233,7 +241,8 @@ tlsbattach(device_t parent, device_t self, void *aux)
 }
 
 static const char *
-tlsb_node_type_str(uint32_t dtype)
+tlsb_node_type_str(dtype)
+	u_int32_t dtype;
 {
 	static char	tlsb_line[64];
 

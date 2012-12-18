@@ -1,4 +1,4 @@
-/*	$NetBSD: if_devar.h,v 1.58 2012/10/27 17:18:32 chs Exp $	*/
+/*	$NetBSD: if_devar.h,v 1.50 2008/06/12 22:44:47 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1994-1997 Matt Thomas (matt@3am-software.com)
@@ -31,7 +31,10 @@
 
 #if defined(__NetBSD__)
 
+#include "rnd.h"
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #if NetBSD >= 199803
 #define	TULIP_BUS_DMA		1
@@ -487,7 +490,7 @@ struct _tulip_softc_t {
 #endif /* _BSDI_VERSION < 199401 */
 #endif /* __bsdi__ */
 #if defined(__NetBSD__)
-    device_t tulip_dev;		/* base device */
+    struct device tulip_dev;		/* base device */
     void *tulip_ih;			/* intrrupt vectoring */
     void *tulip_ats;			/* shutdown hook */
     struct callout tulip_to_ch;		/* tulip_timeout_callback() */
@@ -506,13 +509,13 @@ struct _tulip_softc_t {
 #if !defined(TULIP_BUS_DMA_NOTX)
     bus_dmamap_t tulip_setupmap;
     bus_dmamap_t tulip_txdescmap;
-    bus_dmamap_t tulip_free_txmaps[TULIP_TXDESCS];
-    unsigned tulip_num_free_txmaps;
+    bus_dmamap_t tulip_txmaps[TULIP_TXDESCS];
+    unsigned tulip_txmaps_free;
 #endif
 #if !defined(TULIP_BUS_DMA_NORX)
     bus_dmamap_t tulip_rxdescmap;
-    bus_dmamap_t tulip_free_rxmaps[TULIP_RXDESCS];
-    unsigned tulip_num_free_rxmaps;
+    bus_dmamap_t tulip_rxmaps[TULIP_RXDESCS];
+    unsigned tulip_rxmaps_free;
 #endif
 #endif
 #if !defined(__NetBSD__)
@@ -682,7 +685,7 @@ struct _tulip_softc_t {
     char tulip_boardid[16];		/* buffer for board ID */
     u_int8_t tulip_rombuf[128];
 #if defined(__NetBSD__)
-    device_t tulip_pci_busno;	/* needed for multiport boards */
+    struct device *tulip_pci_busno;	/* needed for multiport boards */
 #else
     u_int8_t tulip_pci_busno;		/* needed for multiport boards */
 #endif
@@ -691,8 +694,8 @@ struct _tulip_softc_t {
     tulip_srom_connection_t tulip_conntype;
     tulip_desc_t *tulip_rxdescs;
     tulip_desc_t *tulip_txdescs;
-#if defined(__NetBSD__)
-    krndsource_t    tulip_rndsource;
+#if defined(__NetBSD__) && NRND > 0
+    rndsource_element_t    tulip_rndsource;
 #endif
 };
 
@@ -939,6 +942,11 @@ static tulip_softc_t *tulips[TULIP_MAX_DEVICES];
 #endif
 #if BSD >= 199506
 #define TULIP_IFP_TO_SOFTC(ifp) ((tulip_softc_t *)((ifp)->if_softc))
+#if NBPFILTER > 0
+#define	TULIP_BPF_MTAP(sc, m)	bpf_mtap(&(sc)->tulip_if, m)
+#define	TULIP_BPF_TAP(sc, p, l)	bpf_tap(&(sc)->tulip_if, p, l)
+#define	TULIP_BPF_ATTACH(sc)	bpfattach(&(sc)->tulip_if, DLT_EN10MB, sizeof(struct ether_header))
+#endif
 #define	tulip_intrfunc_t	void
 #define	TULIP_VOID_INTRFUNC
 #define	IFF_NOTRAILERS		0
@@ -968,7 +976,7 @@ typedef u_long ioctl_cmd_t;
 extern struct cfdriver de_cd;
 #define	TULIP_UNIT_TO_SOFTC(unit)	((tulip_softc_t *)device_lookup_private(&de_cd,unit))
 #define TULIP_IFP_TO_SOFTC(ifp)         ((tulip_softc_t *)((ifp)->if_softc))
-#define	tulip_unit(sc)			device_unit((sc)->tulip_dev)
+#define	tulip_unit			tulip_dev.dv_unit
 #define	tulip_xname			tulip_if.if_xname
 #define	TULIP_RAISESPL()		splnet()
 #define	TULIP_RAISESOFTSPL()		splsoftnet()
@@ -1005,7 +1013,7 @@ extern struct cfdriver de_cd;
 #define	tulip_if	tulip_ac.ac_if
 #endif
 #ifndef tulip_unit
-#define	tulip_unit(sc)	(sc)->tulip_if.if_unit
+#define	tulip_unit	tulip_if.if_unit
 #endif
 #define	tulip_name	tulip_if.if_name
 #ifndef tulip_enaddr
@@ -1047,6 +1055,16 @@ extern struct cfdriver de_cd;
 #endif
 #ifndef TULIP_RESTORESPL
 #define	TULIP_RESTORESPL(s)		splx(s)
+#endif
+
+/*
+ * While I think FreeBSD's 2.2 change to the bpf is a nice simplification,
+ * it does add yet more conditional code to this driver.  Sigh.
+ */
+#if !defined(TULIP_BPF_MTAP) && NBPFILTER > 0
+#define	TULIP_BPF_MTAP(sc, m)	bpf_mtap((sc)->tulip_bpf, m)
+#define	TULIP_BPF_TAP(sc, p, l)	bpf_tap((sc)->tulip_bpf, p, l)
+#define	TULIP_BPF_ATTACH(sc)	bpfattach(&(sc)->tulip_bpf, &(sc)->tulip_if, DLT_EN10MB, sizeof(struct ether_header))
 #endif
 
 #if defined(TULIP_PERFSTATS)

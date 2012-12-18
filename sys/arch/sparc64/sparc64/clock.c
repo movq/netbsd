@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.107 2012/11/08 00:34:38 macallan Exp $ */
+/*	$NetBSD: clock.c,v 1.97 2008/05/18 22:40:14 martin Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.107 2012/11/08 00:34:38 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.97 2008/05/18 22:40:14 martin Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -81,7 +81,7 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.107 2012/11/08 00:34:38 macallan Exp $")
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/autoconf.h>
 #include <machine/eeprom.h>
 #include <machine/cpu.h>
@@ -90,6 +90,10 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.107 2012/11/08 00:34:38 macallan Exp $")
 #include <sparc64/sparc64/intreg.h>
 #include <sparc64/sparc64/timerreg.h>
 #include <sparc64/dev/iommureg.h>
+#include <sparc64/dev/sbusreg.h>
+#include <dev/sbus/sbusvar.h>
+#include <dev/ebus/ebusreg.h>
+#include <dev/ebus/ebusvar.h>
 
 
 /*
@@ -99,7 +103,6 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.107 2012/11/08 00:34:38 macallan Exp $")
  *  counter-timer	 timer#0	 timer#1	 %tick
  *  counter-timer + SMP	 timer#0/%tick	 -		 timer#1 or %tick
  *  no counter-timer	 %tick		 -		 %tick
- *  US-IIIi		 %stick		 -		 %stick
  */
 
 /*
@@ -118,18 +121,18 @@ int timerok;
 static int statscheddiv;
 #endif
 
-static struct intrhand level10 = { .ih_fun = clockintr, .ih_pil = PIL_CLOCK };
+static struct intrhand level10 = { .ih_fun = clockintr };
 #ifndef MULTIPROCESSOR
-static struct intrhand level14 = { .ih_fun = statintr, .ih_pil = PIL_STATCLOCK };
+static struct intrhand level14 = { .ih_fun = statintr };
 static struct intrhand *schedint;
 #endif
 
-static int	timermatch(device_t, cfdata_t, void *);
-static void	timerattach(device_t, device_t, void *);
+static int	timermatch(struct device *, struct cfdata *, void *);
+static void	timerattach(struct device *, struct device *, void *);
 
 struct timerreg_4u	timerreg_4u;	/* XXX - need more cleanup */
 
-CFATTACH_DECL_NEW(timer, 0,
+CFATTACH_DECL(timer, sizeof(struct device),
     timermatch, timerattach, NULL, NULL);
 
 struct chiptime;
@@ -138,7 +141,6 @@ void stopcounter(struct timer_4u *);
 int timerblurb = 10; /* Guess a value; used before clock is attached */
 
 static u_int tick_get_timecount(struct timecounter *);
-static u_int stick_get_timecount(struct timecounter *);
 
 /*
  * define timecounter "tick-counter"
@@ -155,17 +157,6 @@ static struct timecounter tick_timecounter = {
 	NULL			/* next timecounter */
 };
 
-static struct timecounter stick_timecounter = {
-	stick_get_timecount,	/* get_timecount */
-	0,			/* no poll_pps */
-	~0u,			/* counter_mask */
-	0,                      /* frequency - set at initialisation */
-	"stick-counter",	/* name */
-	100,			/* quality */
-	0,			/* private reference - UNUSED */
-	NULL			/* next timecounter */
-};
-
 /*
  * tick_get_timecount provide current tick counter value
  */
@@ -173,12 +164,6 @@ static u_int
 tick_get_timecount(struct timecounter *tc)
 {
 	return cpu_counter();
-}
-
-static u_int
-stick_get_timecount(struct timecounter *tc)
-{
-	return getstick();
 }
 
 #ifdef MULTIPROCESSOR
@@ -215,7 +200,7 @@ counter_get_timecount(struct timecounter *tc)
  * the lame UltraSPARC IIi PCI machines that don't have them.
  */
 static int
-timermatch(device_t parent, cfdata_t cf, void *aux)
+timermatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -223,7 +208,7 @@ timermatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-timerattach(device_t parent, device_t self, void *aux)
+timerattach(struct device *parent, struct device *self, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	u_int *va = ma->ma_address;
@@ -253,7 +238,7 @@ timerattach(device_t parent, device_t self, void *aux)
 	     (CPU_UPAID << INTMAP_TID_SHIFT));
 
 	/* Install the appropriate interrupt vector here */
-	level10.ih_number = INTVEC(ma->ma_interrupts[0]);
+	level10.ih_number = ma->ma_interrupts[0];
 	level10.ih_clr = &timerreg_4u.t_clrintr[0];
 	intr_establish(PIL_CLOCK, true, &level10);
 	printf(" irq vectors %lx", (u_long)level10.ih_number);
@@ -261,7 +246,7 @@ timerattach(device_t parent, device_t self, void *aux)
 	/*
 	 * On SMP kernel, don't establish interrupt to use it as timecounter.
 	 */
-	level14.ih_number = INTVEC(ma->ma_interrupts[1]);
+	level14.ih_number = ma->ma_interrupts[1];
 	level14.ih_clr = &timerreg_4u.t_clrintr[1];
 	intr_establish(PIL_STATCLOCK, true, &level14);
 	printf(" and %lx", (u_long)level14.ih_number);
@@ -342,30 +327,12 @@ tickintr_establish(int pil, int (*fun)(void *))
 
 	/* set the next interrupt time */
 	ci->ci_tick_increment = ci->ci_cpu_clockrate[0] / hz;
-
+#ifdef DEBUG
+	printf("Using %%tick -- intr in %ld cycles\n",
+	    ci->ci_tick_increment);
+#endif
 	s = intr_disable();
 	next_tick(ci->ci_tick_increment);
-	intr_restore(s);
-}
-
-void
-stickintr_establish(int pil, int (*fun)(void *))
-{
-	int s;
-	struct intrhand *ih;
-	struct cpu_info *ci = curcpu();
-
-	ih = sparc_softintr_establish(pil, fun, NULL);
-	ih->ih_number = 1;
-	if (CPU_IS_PRIMARY(ci))
-		intr_establish(pil, true, ih);
-	ci->ci_tick_ih = ih;
-
-	/* set the next interrupt time */
-	ci->ci_tick_increment = ci->ci_system_clockrate[0] / hz;
-
-	s = intr_disable();
-	next_stick(ci->ci_tick_increment);
 	intr_restore(s);
 }
 
@@ -376,12 +343,12 @@ stickintr_establish(int pil, int (*fun)(void *))
  * The frequencies of these clocks must be an even number of microseconds.
  */
 void
-cpu_initclocks(void)
+cpu_initclocks()
 {
-	struct cpu_info *ci = curcpu();
 #ifndef MULTIPROCESSOR
 	int statint, minint;
 #endif
+	uint64_t start_time = 0;
 #ifdef DEBUG
 	extern int intrdebug;
 #endif
@@ -402,24 +369,26 @@ cpu_initclocks(void)
 	}
 
 	/* Make sure we have a sane cpu_clockrate -- we'll need it */
-	if (!ci->ci_cpu_clockrate[0]) {
+	if (!curcpu()->ci_cpu_clockrate[0]) {
 		/* Default to 200MHz clock XXXXX */
-		ci->ci_cpu_clockrate[0] = 200000000;
-		ci->ci_cpu_clockrate[1] = 200000000 / 1000000;
+		curcpu()->ci_cpu_clockrate[0] = 200000000;
+		curcpu()->ci_cpu_clockrate[1] = 200000000 / 1000000;
 	}
-
+	
 	/* Initialize the %tick register */
-	settick(0);
-
-	if (ci->ci_system_clockrate[0] == 0) {
-		tick_timecounter.tc_frequency = ci->ci_cpu_clockrate[0];
-		tc_init(&tick_timecounter);
-	} else {
-		setstick(0);
-		stick_timecounter.tc_frequency = 
-		    ci->ci_system_clockrate[0];
-		tc_init(&stick_timecounter);
+#ifdef __arch64__
+	__asm volatile("wrpr %0, 0, %%tick" : : "r" (start_time));
+#else
+	{
+		int start_hi = (start_time>>32), start_lo = start_time;
+		__asm volatile("sllx %1,32,%0; or %0,%2,%0; wrpr %0, 0, %%tick" 
+				 : "=&r" (start_hi) /* scratch register */
+				 : "r" ((int)(start_hi)), "r" ((int)(start_lo)));
 	}
+#endif
+
+	tick_timecounter.tc_frequency = curcpu()->ci_cpu_clockrate[0];
+	tc_init(&tick_timecounter);
 
 	/*
 	 * Now handle machines w/o counter-timers.
@@ -427,21 +396,13 @@ cpu_initclocks(void)
 
 	if (!timerreg_4u.t_timer || !timerreg_4u.t_clrintr) {
 
-		if (ci->ci_system_clockrate[0] == 0) {
-			aprint_normal("No counter-timer -- using %%tick "
-			    "at %luMHz as system clock.\n",
-			    (unsigned long)ci->ci_cpu_clockrate[1]);
+		printf("No counter-timer -- using %%tick at %luMHz as "
+			"system clock.\n",
+			(unsigned long)curcpu()->ci_cpu_clockrate[1]);
 
-			/* We don't have a counter-timer -- use %tick */
-			tickintr_establish(PIL_CLOCK, tickintr);
-		} else {
-			aprint_normal("No counter-timer -- using %%stick "
-			    "at %luMHz as system clock.\n",
-			    (unsigned long)ci->ci_system_clockrate[1]);
+		/* We don't have a counter-timer -- use %tick */
+		tickintr_establish(PIL_CLOCK, tickintr);
 
-			/* We don't have a counter-timer -- use %stick */
-			stickintr_establish(PIL_CLOCK, stickintr);
-		}
 		/* We only have one timer so we have no statclock */
 		stathz = 0;
 
@@ -513,7 +474,8 @@ cpu_initclocks(void)
  */
 /* ARGSUSED */
 void
-setstatclockrate(int newhz)
+setstatclockrate(newhz)
+	int newhz;
 {
 	/* nothing */
 }
@@ -532,7 +494,7 @@ clockintr(void *cap)
 #ifdef DEBUG
 	static int64_t tick_base = 0;
 	struct timeval ctime;
-	int64_t t = gettick();
+	int64_t t = (uint64_t)tick();
 
 	microtime(&ctime);
 	if (!tick_base) {
@@ -581,28 +543,13 @@ tickintr(void *cap)
 	return (1);
 }
 
-int
-stickintr(void *cap)
-{
-	int s;
-
-	hardclock((struct clockframe *)cap);
-
-	s = intr_disable();
-	/* Reset the interrupt */
-	next_stick(curcpu()->ci_tick_increment);
-	intr_restore(s);
-	curcpu()->ci_tick_evcnt.ev_count++;
-
-	return (1);
-}
-
 #ifndef MULTIPROCESSOR
 /*
  * Level 14 (stat clock) interrupt handler.
  */
 int
-statintr(void *cap)
+statintr(cap)
+	void *cap;
 {
 	register u_long newint, r, var;
 	struct cpu_info *ci = curcpu();

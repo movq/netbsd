@@ -1,4 +1,4 @@
-/*	$NetBSD: wskbdmap_sun.c,v 1.17 2010/01/14 02:18:59 macallan Exp $	*/
+/*	$NetBSD: wskbdmap_sun.c,v 1.15 2008/05/25 15:51:44 ghen Exp $	*/
 /*	$OpenBSD: sunkbd.c,v 1.9 2002/09/08 23:22:00 miod Exp $	*/
 
 /*
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wskbdmap_sun.c,v 1.17 2010/01/14 02:18:59 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wskbdmap_sun.c,v 1.15 2008/05/25 15:51:44 ghen Exp $");
 
 #include <sys/types.h>
 #include <dev/wscons/wsksymdef.h>
@@ -51,9 +51,9 @@ __KERNEL_RCSID(0, "$NetBSD: wskbdmap_sun.c,v 1.17 2010/01/14 02:18:59 macallan E
 static const keysym_t wssun_keydesctab_us [] = {
 /*  pos      command			normal		shifted */
     KC(0x01), KS_Cmd,
-    KC(0x02), KS_Cmd_VolumeDown,
+    KC(0x02), KS_Cmd_BrightnessDown,
     KC(0x03),				KS_Again,
-    KC(0x04), KS_Cmd_VolumeUp,
+    KC(0x04), KS_Cmd_BrightnessUp,
     KC(0x05), KS_Cmd_Screen0,				KS_f1,
     KC(0x06), KS_Cmd_Screen1,				KS_f2,
     KC(0x07), KS_Cmd_Screen9,				KS_f10,
@@ -251,6 +251,7 @@ const keysym_t wssun_keydesctab_uk[] = {
     KC(0x2a),		KS_grave,	KS_notsign,
     KC(0x57),		KS_apostrophe,	KS_at,
     KC(0x58),		KS_numbersign,	KS_asciitilde,
+    KC(0x7c),		KS_backslash,	KS_bar,
     KC(0x7c),		KS_backslash,	KS_bar,
 };
 

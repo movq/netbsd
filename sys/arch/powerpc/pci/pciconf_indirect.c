@@ -1,4 +1,4 @@
-/* $NetBSD: pciconf_indirect.c,v 1.5 2011/06/18 06:41:43 matt Exp $ */
+/* $NetBSD: pciconf_indirect.c,v 1.3 2008/04/28 20:23:32 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -35,9 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pciconf_indirect.c,v 1.5 2011/06/18 06:41:43 matt Exp $");
-
-#define _POWERPC_BUS_DMA_PRIVATE
+__KERNEL_RCSID(0, "$NetBSD: pciconf_indirect.c,v 1.3 2008/04/28 20:23:32 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -45,11 +43,12 @@ __KERNEL_RCSID(0, "$NetBSD: pciconf_indirect.c,v 1.5 2011/06/18 06:41:43 matt Ex
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-#include <sys/bus.h>
-#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
 
+#define _POWERPC_BUS_DMA_PRIVATE
+#include <machine/bus.h>
+#include <machine/intr.h>
 #include <machine/pio.h>
 
 #if NISA > 0
@@ -63,7 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: pciconf_indirect.c,v 1.5 2011/06/18 06:41:43 matt Ex
 #define	PCI_MODE1_ENABLE	0x80000000UL
 
 void
-genppc_pci_indirect_attach_hook(device_t parent, device_t self,
+genppc_pci_indirect_attach_hook(struct device *parent, struct device *self,
     struct pcibus_attach_args *pba)
 {
 

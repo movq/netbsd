@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.266 2012/12/08 12:36:30 kiyohara Exp $	*/
+/*	$NetBSD: trap.c,v 1.241.4.4 2012/02/04 16:57:58 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2005, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -68,70 +68,77 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.266 2012/12/08 12:36:30 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.241.4.4 2012/02/04 16:57:58 bouyer Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_lockdebug.h"
 #include "opt_multiprocessor.h"
 #include "opt_vm86.h"
+#include "opt_kvm86.h"
 #include "opt_kstack_dr0.h"
 #include "opt_xen.h"
-#include "opt_dtrace.h"
+#if !defined(XEN)
+#include "tprof.h"
+#else /* defined(XEN) */
+#define	NTPROF	0
+#endif /* defined(XEN) */
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/pool.h>
+#include <sys/user.h>
 #include <sys/acct.h>
-#include <sys/kauth.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
 #include <sys/ras.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
+#include <sys/kauth.h>
 #include <sys/cpu.h>
 #include <sys/ucontext.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 
 #include <uvm/uvm_extern.h>
+
+#if NTPROF > 0
+#include <x86/tprof.h>
+#endif /* NTPROF > 0 */
 
 #include <machine/cpufunc.h>
 #include <machine/psl.h>
 #include <machine/reg.h>
 #include <machine/trap.h>
 #include <machine/userret.h>
+#ifdef DDB
 #include <machine/db_machdep.h>
+#endif
 
 #include "mca.h"
 #if NMCA > 0
 #include <machine/mca_machdep.h>
 #endif
 
-#include <x86/nmi.h>
-
 #include "isa.h"
 
+#ifdef KGDB
 #include <sys/kgdb.h>
-
-#include "npx.h"
-
-#ifdef KDTRACE_HOOKS
-#include <sys/dtrace_bsd.h>
-
-/*
- * This is a hook which is initialised by the dtrace module
- * to handle traps which might occur during DTrace probe
- * execution.
- */
-dtrace_trap_func_t	dtrace_trap_func = NULL;
-
-dtrace_doubletrap_func_t	dtrace_doubletrap_func = NULL;
 #endif
 
+#include "npx.h"
 
 static inline int xmm_si_code(struct lwp *);
 void trap(struct trapframe *);
 void trap_tss(struct i386tss *, int, int);
 void trap_return_fault_return(struct trapframe *) __dead;
+
+#ifdef KVM86
+#include <machine/kvm86.h>
+#define KVM86MODE (kvm86_incall)
+#else
+#define KVM86MODE (0)
+#endif
 
 const char * const trap_type[] = {
 	"privileged instruction fault",		/*  0 T_PRIVINFLT */
@@ -193,7 +200,6 @@ trap_tss(struct i386tss *tss, int trapno, int code)
 static inline int
 xmm_si_code(struct lwp *l)
 {
-	struct pcb *pcb;
 	uint32_t mxcsr, mask;
 
 	if (!i386_use_fxsave) {
@@ -202,8 +208,7 @@ xmm_si_code(struct lwp *l)
 #endif
 		return 0;
 	}
-	pcb = lwp_getpcb(l);
-	mxcsr = pcb->pcb_savefpu.sv_xmm.sv_env.en_mxcsr;
+	mxcsr = l->l_addr->u_pcb.pcb_savefpu.sv_xmm.sv_env.en_mxcsr;
 
 	/*
          * Since we only have a single status and control register,
@@ -227,7 +232,7 @@ xmm_si_code(struct lwp *l)
 	case 0:
 	default:
 		return 0;
-	}
+        }
 }
 
 static void *
@@ -255,70 +260,33 @@ onfault_handler(const struct pcb *pcb, const struct trapframe *tf)
 	return NULL;
 }
 
-static void
-trap_print(const struct trapframe *frame, const lwp_t *l)
-{
-	const int type = frame->tf_trapno;
-
-	if (frame->tf_trapno < trap_types) {
-		printf("fatal %s", trap_type[type]);
-	} else {
-		printf("unknown trap %d", type);
-	}
-	printf(" in %s mode\n", (type & T_USER) ? "user" : "supervisor");
-
-	printf("trap type %d code %x eip %x cs %x eflags %x cr2 %lx "
-	    "ilevel %x esp %x\n",
-	    type, frame->tf_err, frame->tf_eip, frame->tf_cs, frame->tf_eflags,
-	    (long)rcr2(), curcpu()->ci_ilevel, frame->tf_esp);
-
-	printf("curlwp %p pid %d lid %d lowest kstack %p\n",
-	    l, l->l_proc->p_pid, l->l_lid, KSTACK_LOWEST_ADDR(l));
-}
-
-static void
-check_dr0(void)
-{
-#ifdef KSTACK_CHECK_DR0
-	u_int mask, dr6 = rdr6();
-
-	mask = 1 << 0; /* dr0 */
-	if (dr6 & mask) {
-		panic("trap on DR0: maybe kernel stack overflow\n");
-#if 0
-		dr6 &= ~mask;
-		ldr6(dr6);
-		return;
-#endif
-	}
-#endif
-}
-
 /*
- * trap(frame): exception, fault, and trap interface to BSD kernel.
- *
- * This common code is called from assembly language IDT gate entry routines
- * that prepare a suitable stack frame, and restore this frame after the
- * exception has been processed. Note that the effect is as if the arguments
- * were passed call by reference.
+ * trap(frame):
+ *	Exception, fault, and trap interface to BSD kernel. This
+ * common code is called from assembly language IDT gate entry
+ * routines that prepare a suitable stack frame, and restore this
+ * frame after the exception has been processed. Note that the
+ * effect is as if the arguments were passed call by reference.
  */
+/*ARGSUSED*/
 void
-trap(struct trapframe *frame)
+trap(frame)
+	struct trapframe *frame;
 {
 	struct lwp *l = curlwp;
 	struct proc *p;
+	int type = frame->tf_trapno;
 	struct pcb *pcb;
-	extern char fusubail[], kcopy_fault[], return_address_fault[],
-	    IDTVEC(osyscall)[];
+	extern char fusubail[], kcopy_fault[], IDTVEC(osyscall)[];
 	struct trapframe *vframe;
 	ksiginfo_t ksi;
 	void *onfault;
-	int type, error;
+	int error;
 	uint32_t cr2;
 	bool pfail;
 
 	if (__predict_true(l != NULL)) {
-		pcb = lwp_getpcb(l);
+		pcb = &l->l_addr->u_pcb;
 		p = l->l_proc;
 	} else {
 		/*
@@ -327,14 +295,18 @@ trap(struct trapframe *frame)
 		pcb = NULL;
 		p = NULL;
 	}
-	type = frame->tf_trapno;
-
 #ifdef DEBUG
 	if (trapdebug) {
-		trap_print(frame, l);
+		printf("trap %d code %x eip %x cs %x eflags %x cr2 %lx cpl %x\n",
+		    frame->tf_trapno, frame->tf_err, frame->tf_eip, frame->tf_cs,
+		    frame->tf_eflags, rcr2(), curcpu()->ci_ilevel);
+		printf("curlwp %p%s", curlwp, curlwp ? " " : "\n");
+		if (curlwp)
+			printf("pid %d lid %d\n", l->l_proc->p_pid, l->l_lid);
 	}
 #endif
-	if (type != T_NMI &&
+
+	if (type != T_NMI && !KVM86MODE &&
 	    !KERNELMODE(frame->tf_cs, frame->tf_eflags)) {
 		type |= T_USER;
 		l->l_md.md_regs = frame;
@@ -342,54 +314,67 @@ trap(struct trapframe *frame)
 		LWP_CACHE_CREDS(l, p);
 	}
 
-#ifdef KDTRACE_HOOKS
-	/*
-	 * A trap can occur while DTrace executes a probe. Before
-	 * executing the probe, DTrace blocks re-scheduling and sets
-	 * a flag in it's per-cpu flags to indicate that it doesn't
-	 * want to fault. On returning from the the probe, the no-fault
-	 * flag is cleared and finally re-scheduling is enabled.
-	 *
-	 * If the DTrace kernel module has registered a trap handler,
-	 * call it and if it returns non-zero, assume that it has
-	 * handled the trap and modified the trap frame so that this
-	 * function can return normally.
-	 */
-	if ((type == T_PROTFLT || type == T_PAGEFLT) &&
-	    dtrace_trap_func != NULL) {
-		if ((*dtrace_trap_func)(frame, type)) {
-			return;
-		}
-	}
-#endif
-
 	switch (type) {
 
 	case T_ASTFLT:
+		if (KVM86MODE) {
+			break;
+		}
 		/*FALLTHROUGH*/
 
 	default:
 	we_re_toast:
-		if (type == T_TRCTRAP)
-			check_dr0();
-		else
-			trap_print(frame, l);
+#ifdef KSTACK_CHECK_DR0
+		if (type == T_TRCTRAP) {
+			u_int mask, dr6 = rdr6();
 
+			mask = 1 << 0; /* dr0 */
+			if (dr6 & mask) {
+				panic("trap on DR0: maybe kernel stack overflow\n");
+#if 0
+				dr6 &= ~mask;
+				ldr6(dr6);
+				return;
+#endif
+			}
+		}
+#endif
+		if (frame->tf_trapno < trap_types)
+			printf("fatal %s", trap_type[frame->tf_trapno]);
+		else
+			printf("unknown trap %d", frame->tf_trapno);
+		printf(" in %s mode\n", (type & T_USER) ? "user" : "supervisor");
+		printf("trap type %d code %x eip %x cs %x eflags %x cr2 %lx ilevel %x\n",
+		    type, frame->tf_err, frame->tf_eip, frame->tf_cs,
+		    frame->tf_eflags, (long)rcr2(), curcpu()->ci_ilevel);
+#ifdef DDB
 		if (kdb_trap(type, 0, frame))
 			return;
+#endif
+#ifdef KGDB
 		if (kgdb_trap(type, frame))
 			return;
-		/*
-		 * If this is a breakpoint, don't panic if we're not connected.
-		 */
-		if (type == T_BPTFLT && kgdb_disconnected()) {
-			printf("kgdb: ignored %s\n", trap_type[type]);
-			return;
+		else {
+			/*
+			 * If this is a breakpoint, don't panic
+			 * if we're not connected.
+			 */
+			if (type == T_BPTFLT) {
+				printf("kgdb: ignored %s\n", trap_type[type]);
+				return;
+			}
 		}
+#endif
 		panic("trap");
 		/*NOTREACHED*/
 
 	case T_PROTFLT:
+#ifdef KVM86
+		if (KVM86MODE) {
+			kvm86_gpfault(frame);
+			return;
+		}
+#endif
 	case T_SEGNPFLT:
 	case T_ALIGNFLT:
 	case T_TSSFLT:
@@ -416,7 +401,7 @@ copyfault:
 		 * returning from a trap, syscall, or interrupt.
 		 */
 
-kernelfault:
+kern_pagefault:
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_signo = SIGSEGV;
 		ksi.ksi_code = SEGV_ACCERR;
@@ -443,7 +428,8 @@ kernelfault:
 			break;
 		case 0x8e:
 			switch (*(uint32_t *)frame->tf_eip) {
-			case 0x8e242c8e:	/* mov (%esp,%gs), then */
+			case 0x8e242c8e:	/* mov (%esp),%gs */
+			case 0x00246c8e:	/* mov 0x0(%esp),%gs */
 			case 0x0424648e:	/* mov 0x4(%esp),%fs */
 			case 0x0824448e:	/* mov 0x8(%esp),%es */
 			case 0x0c245c8e:	/* mov 0xc(%esp),%ds */
@@ -481,25 +467,39 @@ kernelfault:
 		/* NOTREACHED */
 
 	case T_PROTFLT|T_USER:		/* protection fault */
+#ifdef VM86
+		if (frame->tf_eflags & PSL_VM) {
+			vm86_gpfault(l, type & ~T_USER);
+			goto out;
+		}
+#endif
+		/* If pmap_exec_fixup does something, let's retry the trap. */
+		if (pmap_exec_fixup(&p->p_vmspace->vm_map, frame,
+		    &l->l_addr->u_pcb)) {
+			goto out;
+		}
+		KSI_INIT_TRAP(&ksi);
+		ksi.ksi_signo = SIGSEGV;
+		ksi.ksi_addr = (void *)rcr2();
+		ksi.ksi_code = SEGV_ACCERR;
+		goto trapsignal;
+
 	case T_TSSFLT|T_USER:
 	case T_SEGNPFLT|T_USER:
 	case T_STKFLT|T_USER:
 	case T_ALIGNFLT|T_USER:
 		KSI_INIT_TRAP(&ksi);
-
+		ksi.ksi_signo = SIGBUS;
 		ksi.ksi_addr = (void *)rcr2();
 		switch (type) {
 		case T_SEGNPFLT|T_USER:
 		case T_STKFLT|T_USER:
-			ksi.ksi_signo = SIGBUS;
 			ksi.ksi_code = BUS_ADRERR;
 			break;
 		case T_TSSFLT|T_USER:
-			ksi.ksi_signo = SIGBUS;
 			ksi.ksi_code = BUS_OBJERR;
 			break;
 		case T_ALIGNFLT|T_USER:
-			ksi.ksi_signo = SIGBUS;
 			ksi.ksi_code = BUS_ADRALN;
 			break;
 		case T_PROTFLT|T_USER:
@@ -520,7 +520,7 @@ kernelfault:
 			ksi.ksi_code = SEGV_ACCERR;
 			break;
 		default:
-			KASSERT(0);
+			KASSERT(1);
 			break;
 		}
 		goto trapsignal;
@@ -529,7 +529,7 @@ kernelfault:
 	case T_FPOPFLT|T_USER:		/* coprocessor operand fault */
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_signo = SIGILL;
-		ksi.ksi_addr = (void *) frame->tf_eip;
+		ksi.ksi_addr = (void *)frame->tf_eip;
 		switch (type) {
 		case T_PRIVINFLT|T_USER:
 			ksi.ksi_code = ILL_PRVOPC;
@@ -543,17 +543,15 @@ kernelfault:
 		}
 		goto trapsignal;
 
-	case T_ASTFLT|T_USER:
-		/* Allow process switch. */
-		//curcpu()->ci_data.cpu_nast++;
+	case T_ASTFLT|T_USER:		/* Allow process switch */
+		uvmexp.softs++;
 		if (l->l_pflag & LP_OWEUPC) {
 			l->l_pflag &= ~LP_OWEUPC;
 			ADDUPROF(l);
 		}
 		/* Allow a forced task switch. */
-		if (curcpu()->ci_want_resched) {
+		if (curcpu()->ci_want_resched)
 			preempt();
-		}
 		goto out;
 
 	case T_DNA|T_USER: {
@@ -578,43 +576,47 @@ kernelfault:
 			ksi.ksi_code = xmm_si_code(l);
 			break;
 		case T_BOUND|T_USER:
-			ksi.ksi_code = FPE_FLTSUB;
-			break;
 		case T_OFLOW|T_USER:
-			ksi.ksi_code = FPE_INTOVF;
+			ksi.ksi_code = FPE_FLTOVF;
 			break;
 		case T_DIVIDE|T_USER:
-			ksi.ksi_code = FPE_INTDIV;
+			ksi.ksi_code = FPE_FLTDIV;
 			break;
-#if NNPX > 0
 		case T_ARITHTRAP|T_USER:
-			ksi.ksi_code = npxtrap(l);
+			ksi.ksi_code = FPE_INTOVF;
 			break;
-#endif
 		default:
 			ksi.ksi_code = 0;
 			break;
 		}
 		goto trapsignal;
 
-	case T_PAGEFLT:
-		/* Allow page faults in kernel mode. */
-		if (__predict_false(l == NULL))
+	case T_PAGEFLT:			/* allow page faults in kernel mode */
+		if (l == 0)
 			goto we_re_toast;
 
 		/*
 		 * fusubail is used by [fs]uswintr() to prevent page faulting
 		 * from inside the profiling interrupt.
 		 */
-		onfault = pcb->pcb_onfault;
-		if (onfault == fusubail || onfault == return_address_fault) {
+		if ((onfault = pcb->pcb_onfault) == fusubail) {
 			goto copyefault;
 		}
 		if (cpu_intr_p() || (l->l_pflag & LP_INTR) != 0) {
 			goto we_re_toast;
 		}
 
-		cr2 = rcr2();
+		/*
+		 * XXXhack: xen2 hypervisor pushes cr2 onto guest's stack
+		 * and Xtrap0e passes it to us as an extra hidden argument.
+		 */
+#if defined(XEN) && !defined(XEN3)
+#define	FETCH_CR2	(((uint32_t *)(void *)&frame)[1])
+#else /* defined(XEN) && !defined(XEN3) */
+#define	FETCH_CR2	rcr2()
+#endif /* defined(XEN) && !defined(XEN3) */
+
+		cr2 = FETCH_CR2;
 		goto faultcommon;
 
 	case T_PAGEFLT|T_USER: {	/* page fault */
@@ -624,14 +626,17 @@ kernelfault:
 		vm_prot_t ftype;
 		extern struct vm_map *kernel_map;
 
-		cr2 = rcr2();
-faultcommon:
-		vm = p->p_vmspace;
-		if (__predict_false(vm == NULL)) {
-			goto we_re_toast;
+		cr2 = FETCH_CR2;
+		if (l->l_flag & LW_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)cr2;
+			l->l_pflag |= LP_SA_PAGEFAULT;
 		}
+	faultcommon:
+		vm = p->p_vmspace;
+		if (vm == NULL)
+			goto we_re_toast;
 		pcb->pcb_cr2 = cr2;
-		va = trunc_page((vaddr_t)cr2);
+		va = trunc_page((vaddr_t)pcb->pcb_cr2);
 		/*
 		 * It is only a kernel address space fault iff:
 		 *	1. (type & T_USER) == 0  and
@@ -646,8 +651,6 @@ faultcommon:
 			map = &vm->vm_map;
 		if (frame->tf_err & PGEX_W)
 			ftype = VM_PROT_WRITE;
-		else if (frame->tf_err & PGEX_X)
-			ftype = VM_PROT_EXECUTE;
 		else
 			ftype = VM_PROT_READ;
 
@@ -657,6 +660,7 @@ faultcommon:
 			goto we_re_toast;
 		}
 #endif
+
 		/* Fault the original page in. */
 		onfault = pcb->pcb_onfault;
 		pcb->pcb_onfault = NULL;
@@ -713,6 +717,7 @@ faultcommon:
 				 */
 				pfail = kpreempt(0);
 			}
+			l->l_pflag &= ~LP_SA_PAGEFAULT;
 			goto out;
 		}
 		KSI_INIT_TRAP(&ksi);
@@ -731,7 +736,7 @@ faultcommon:
 				goto copyfault;
 			printf("uvm_fault(%p, %#lx, %d) -> %#x\n",
 			    map, va, ftype, error);
-			goto kernelfault;
+			goto kern_pagefault;
 		}
 		if (error == ENOMEM) {
 			ksi.ksi_signo = SIGKILL;
@@ -743,6 +748,7 @@ faultcommon:
 			ksi.ksi_signo = SIGSEGV;
 		}
 		(*p->p_emul->e_trapsignal)(l, &ksi);
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
 		break;
 	}
 
@@ -776,18 +782,44 @@ faultcommon:
 		break;
 
 	case T_NMI:
-		if (nmi_dispatch(frame))
+#if NTPROF > 0
+		if (tprof_pmi_nmi(frame))
 			return;
+#endif /* NTPROF > 0 */
+#if !defined(XEN)
+		if (nmi_dispatch())
+			return;
+#if (NISA > 0 || NMCA > 0)
+#if defined(KGDB) || defined(DDB)
 		/* NMI can be hooked up to a pushbutton for debugging */
+		printf ("NMI ... going to debugger\n");
+#ifdef KGDB
+
 		if (kgdb_trap(type, frame))
 			return;
+#endif
+#ifdef DDB
 		if (kdb_trap(type, 0, frame))
 			return;
-		/* machine/parity/power fail/"kitchen sink" faults */
-#if NMCA > 0
-		mca_nmi();
 #endif
-		x86_nmi();
+#endif /* KGDB || DDB */
+		/* machine/parity/power fail/"kitchen sink" faults */
+
+#if NMCA > 0
+		/* mca_nmi() takes care to call x86_nmi() if appropriate */
+		if (mca_nmi() != 0)
+			goto we_re_toast;
+		else
+			return;
+#else /* NISA > 0 */
+		if (x86_nmi() != 0)
+			goto we_re_toast;
+		else
+			return;
+#endif /* NMCA > 0 */
+#endif /* (NISA > 0 || NMCA > 0) */
+#endif /* !defined(XEN) */
+		;	/* avoid a label at end of compound statement */
 	}
 
 	if ((type & T_USER) == 0)
@@ -801,19 +833,33 @@ trapsignal:
 	userret(l);
 }
 
-/* 
- * startlwp: start of a new LWP.
+/*
+ * XXX This is a terrible name.
  */
 void
-startlwp(void *arg)
+upcallret(struct lwp *l)
 {
+	KERNEL_UNLOCK_LAST(l);
+	userret(l);
+}
+
+/* 
+ * Start a new LWP
+ */
+void
+startlwp(arg)
+	void *arg;
+{
+	int err;
 	ucontext_t *uc = arg;
-	lwp_t *l = curlwp;
-	int error;
+	struct lwp *l = curlwp;
 
-	error = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
-	KASSERT(error == 0);
-
-	kmem_free(uc, sizeof(ucontext_t));
+	err = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
+#if DIAGNOSTIC
+	if (err) {
+		printf("Error %d from cpu_setmcontext.", err);
+	}
+#endif
+	pool_put(&lwp_uc_pool, uc);
 	userret(l);
 }

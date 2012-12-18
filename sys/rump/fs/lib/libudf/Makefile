@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2011/05/26 12:56:32 joerg Exp $
+#	$NetBSD: Makefile,v 1.4 2008/09/28 09:02:45 reinoud Exp $
 #
 
 .PATH:  ${.CURDIR}/../../../../fs/udf
@@ -9,7 +9,7 @@ SRCS=	udf_osta.c udf_vfsops.c udf_vnops.c udf_subr.c \
 	udf_allocation.c udf_readwrite.c udf_strat_bootstrap.c \
 	udf_strat_direct.c udf_strat_sequential.c udf_strat_rmw.c
 
-CWARNFLAGS.clang+=	-Wno-self-assign
+CFLAGS+=	-Wno-pointer-sign -DDEBUG -DDIAGNOSTIC
 
 .include <bsd.lib.mk>
 .include <bsd.klinks.mk>

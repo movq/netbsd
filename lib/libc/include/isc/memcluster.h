@@ -1,4 +1,4 @@
-/*	$NetBSD: memcluster.h,v 1.1.1.4 2009/04/12 16:35:44 christos Exp $	*/
+/*	$NetBSD: memcluster.h,v 1.1.1.3.18.1 2011/01/06 21:42:47 riz Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")

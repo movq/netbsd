@@ -1,4 +1,4 @@
-/*	$NetBSD: esp.c,v 1.60 2012/10/27 17:18:05 chs Exp $	*/
+/*	$NetBSD: esp.c,v 1.56 2008/04/28 20:23:30 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esp.c,v 1.60 2012/10/27 17:18:05 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esp.c,v 1.56 2008/04/28 20:23:30 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -86,6 +86,7 @@ __KERNEL_RCSID(0, "$NetBSD: esp.c,v 1.60 2012/10/27 17:18:05 chs Exp $");
 #include <sys/device.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/queue.h>
 
 #include <uvm/uvm_extern.h>
@@ -137,7 +138,7 @@ bus_dmamap_t esp_dmacb_continue(void *);
 void esp_dmacb_completed(bus_dmamap_t, void *);
 void esp_dmacb_shutdown(void *);
 
-static void	findchannel_defer(device_t);
+static void	findchannel_defer(struct device *);
 
 #ifdef ESP_DEBUG
 char esp_dma_dump[5*1024] = "";
@@ -222,7 +223,7 @@ espmatch_intio(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-findchannel_defer(device_t self)
+findchannel_defer(struct device *self)
 {
 	struct esp_softc *esc = device_private(self);
 	struct ncr53c9x_softc *sc = &esc->sc_ncr53c9x;
@@ -278,7 +279,7 @@ findchannel_defer(device_t self)
 			     device_xname(sc->sc_dev), "intr");
 
 	aprint_normal_dev(sc->sc_dev, "using DMA channel %s\n",
-	    device_xname(esc->sc_dma->sc_dev));
+	    device_xname(&esc->sc_dma->sc_dev));
 }
 
 void
@@ -504,9 +505,8 @@ esp_dma_intr(struct ncr53c9x_softc *sc)
 			if (esp_debug) {
 				char sbuf[256];
 
-				snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS, 
-				    (*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)));
-				
+				bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)),
+						 NEXT_INTR_BITS, sbuf, sizeof(sbuf));
 				printf("esp_dma_isintr = 0x%s\n", sbuf);
 			}
 #endif
@@ -648,6 +648,7 @@ esp_dma_intr(struct ncr53c9x_softc *sc)
 				}
 				xfer_len = esc->sc_dmasize - resid;
 			} else {
+extern void	ncr53c9x_abort(struct ncr53c9x_softc *, struct ncr53c9x_ecb *);
 #define ncr53c9x_sched_msgout(m) \
 	do {							\
 		NCR_MISC(("ncr53c9x_sched_msgout %x %d", m, __LINE__));	\
@@ -747,12 +748,12 @@ esp_dma_reset(struct ncr53c9x_softc *sc)
 	if (esp_debug) {
 		char sbuf[256];
 
-		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS, 
-		    (*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)));
+		bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)),
+		    NEXT_INTR_BITS, sbuf, sizeof(sbuf));
 		printf("  *intrstat = 0x%s\n", sbuf);
 
-		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS, 
-		    (*(volatile u_long *)IIOV(NEXT_P_INTRMASK)));
+		bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRMASK)),
+		    NEXT_INTR_BITS, sbuf, sizeof(sbuf));
 		printf("  *intrmask = 0x%s\n", sbuf);
 	}
 #endif
@@ -1645,7 +1646,7 @@ esp_dmacb_continue(void *arg)
 	struct esp_softc *esc = (struct esp_softc *)sc;
 
 	NDTRACEIF (*ndtracep++ = 'x');
-	DPRINTF(("%s: DMA continue\n", device_xname(sc->sc_dev)));
+	DPRINTF(("%s: DMA continue\n",sc->sc_dev.dv_xname));
 
 #ifdef DIAGNOSTIC
 	if ((esc->sc_datain < 0) || (esc->sc_datain > 1)) {
@@ -1917,12 +1918,12 @@ esp_dmacb_shutdown(void *arg)
 	if (esp_debug) {
 		char sbuf[256];
 
-		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS, 
-		    (*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)));
+		bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)),
+		    NEXT_INTR_BITS, sbuf, sizeof(sbuf));
 		printf("  *intrstat = 0x%s\n", sbuf);
 
-		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS, 
-		    (*(volatile u_long *)IIOV(NEXT_P_INTRMASK)));
+		bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRMASK)),
+		    NEXT_INTR_BITS, sbuf, sizeof(sbuf));
 		printf("  *intrmask = 0x%s\n", sbuf);
 	}
 #endif

@@ -1,4 +1,4 @@
-/* $NetBSD: pciconf_ofmethod.c,v 1.4 2011/06/18 06:41:43 matt Exp $ */
+/* $NetBSD: pciconf_ofmethod.c,v 1.2 2008/04/28 20:23:32 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -35,9 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pciconf_ofmethod.c,v 1.4 2011/06/18 06:41:43 matt Exp $");
-
-#define _POWERPC_BUS_DMA_PRIVATE
+__KERNEL_RCSID(0, "$NetBSD: pciconf_ofmethod.c,v 1.2 2008/04/28 20:23:32 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -45,13 +43,13 @@ __KERNEL_RCSID(0, "$NetBSD: pciconf_ofmethod.c,v 1.4 2011/06/18 06:41:43 matt Ex
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-#include <sys/bus.h>
-#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
 
+#define _POWERPC_BUS_DMA_PRIVATE
+#include <machine/bus.h>
+#include <machine/intr.h>
 #include <machine/pio.h>
-
 #include <dev/ofw/openfirm.h>
 #include <dev/ofw/ofw_pci.h>
 
@@ -64,7 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: pciconf_ofmethod.c,v 1.4 2011/06/18 06:41:43 matt Ex
 #include <dev/pci/pcidevs.h>
 
 void
-genppc_pci_ofmethod_attach_hook(device_t parent, device_t self,
+genppc_pci_ofmethod_attach_hook(struct device *parent, struct device *self,
     struct pcibus_attach_args *pba)
 {
 

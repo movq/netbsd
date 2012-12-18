@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.10 2012/03/22 23:46:27 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.2.6 2010/04/08 23:14:27 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -7,7 +7,7 @@ LIBISMODULE=	yes
 
 SHLIB_MAJOR=	0
 
-MESA_SRC_MODULES=	glapi main math vbo tnl shader swrast slang ss common
+MESA_SRC_MODULES=	glapi main math vbo tnl shader swrast slang ss
 
 CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src/mesa/main \
 		-I${X11SRCDIR.MesaLib}/src/mesa/glapi \
@@ -15,26 +15,18 @@ CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src/mesa/main \
 		-I${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/common \
 		-I${X11SRCDIR.MesaLib}/src/mesa \
 		-I${X11SRCDIR.MesaLib}/include \
+		-I${DESTDIR}${X11INCDIR}/drm \
 		-I${DESTDIR}${X11INCDIR}/X11
-
 
 CPPFLAGS+=	${X11FLAGS.THREADLIB} \
 		-DPTHREADS -D_NETBSD_SOURCE -DUSE_EXTERNAL_DXTN_LIB=1 \
-		-DHAVE_ALIAS -DIN_DRI_DRIVER
-#CPPFLAGS+=	-DGLX_DIRECT_RENDERING -DGLX_INDIRECT_RENDERING -DHAVE_POSIX_MEMALIGN
+		-DHAVE_ALIAS
 CFLAGS+=	-pthread
 
 .include "../../libOSMesa/libmesa.mk"
-.include "../../../tools/glsl/Makefile.glslsrcs"
-
-SRCS+=  ${SRCS.pp} ${SRCS.cl}
 
 .include <bsd.x11.mk>
 
 LIBDIR=		${X11USRLIBDIR}/modules/dri
-
-#LIBDPLIBS+=	GL	${.CURDIR}/../../libGL
-
-CWARNFLAGS.clang+=	-Wno-format -Wno-constant-conversion
 
 .include <bsd.lib.mk>

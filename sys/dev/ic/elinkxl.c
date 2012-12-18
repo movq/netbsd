@@ -1,4 +1,4 @@
-/*	$NetBSD: elinkxl.c,v 1.115 2012/07/22 14:32:57 matt Exp $	*/
+/*	$NetBSD: elinkxl.c,v 1.105 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: elinkxl.c,v 1.115 2012/07/22 14:32:57 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: elinkxl.c,v 1.105 2008/04/28 20:23:49 martin Exp $");
+
+#include "bpfilter.h"
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,15 +46,21 @@ __KERNEL_RCSID(0, "$NetBSD: elinkxl.c,v 1.115 2012/07/22 14:32:57 matt Exp $");
 #include <sys/syslog.h>
 #include <sys/select.h>
 #include <sys/device.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
+
+#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <sys/cpu.h>
 #include <sys/bus.h>
@@ -74,8 +83,6 @@ int exdebug = 0;
 /* ifmedia callbacks */
 int ex_media_chg(struct ifnet *ifp);
 void ex_media_stat(struct ifnet *ifp, struct ifmediareq *req);
-
-static int ex_ifflags_cb(struct ethercom *);
 
 void ex_probe_media(struct ex_softc *);
 void ex_set_filter(struct ex_softc *);
@@ -102,7 +109,7 @@ static void ex_txstat(struct ex_softc *);
 
 int ex_mii_readreg(device_t, int, int);
 void ex_mii_writereg(device_t, int, int, int);
-void ex_mii_statchg(struct ifnet *);
+void ex_mii_statchg(device_t);
 
 void ex_probemedia(struct ex_softc *);
 
@@ -174,8 +181,6 @@ ex_config(struct ex_softc *sc)
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	int i, error, attach_stage;
-
-	pmf_self_suspensor_init(sc->sc_dev, &sc->sc_suspensor, &sc->sc_qual);
 
 	callout_init(&sc->ex_mii_callout, 0);
 
@@ -427,7 +432,6 @@ ex_config(struct ex_softc *sc)
 
 	if_attach(ifp);
 	ether_ifattach(ifp, macaddr);
-	ether_set_ifflags_cb(&sc->sc_ethercom, ex_ifflags_cb);
 
 	GO_WINDOW(1);
 
@@ -436,14 +440,15 @@ ex_config(struct ex_softc *sc)
 
 	/* TODO: set queues to 0 */
 
+#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_NET, 0);
+#endif
 
-	if (pmf_device_register1(sc->sc_dev, NULL, NULL, ex_shutdown))
-		pmf_class_network_register(sc->sc_dev, &sc->sc_ethercom.ec_if);
+	if (!pmf_device_register1(sc->sc_dev, NULL, NULL, ex_shutdown))
+		aprint_error_dev(sc->sc_dev, "couldn't establish power handler\n");
 	else
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
+		pmf_class_network_register(sc->sc_dev, &sc->sc_ethercom.ec_if);
 
 	/* The attach is successful. */
 	sc->ex_flags |= EX_FLAGS_ATTACHED;
@@ -1125,7 +1130,7 @@ ex_start(struct ifnet *ifp)
 			 *
 			 * XXX Should we still consider if such short
 			 *     (36 bytes or less) packets might already
-			 *     occupy EX_NTFRAG (== 32) fragments here?
+			 *     occupy EX_NTFRAG (== 32) fragements here?
 			 */
 			KASSERT(segment < EX_NTFRAGS);
 			fr->fr_addr = htole32(DPDMEMPAD_DMADDR(sc));
@@ -1192,10 +1197,13 @@ ex_start(struct ifnet *ifp)
 			sc->tx_tail = sc->tx_head = txp;
 		}
 
+#if NBPFILTER > 0
 		/*
 		 * Pass packet to bpf if there is a listener.
 		 */
-		bpf_mtap(ifp, mb_head);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, mb_head);
+#endif
 	}
  out:
 	if (sc->tx_head) {
@@ -1372,7 +1380,10 @@ ex_intr(void *arg)
 					}
 					m->m_pkthdr.rcvif = ifp;
 					m->m_pkthdr.len = m->m_len = total_len;
-					bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+					if (ifp->if_bpf)
+						bpf_mtap(ifp->if_bpf, m);
+#endif
 		/*
 		 * Set the incoming checksum information for the packet.
 		 */
@@ -1414,28 +1425,16 @@ ex_intr(void *arg)
 			}
 		}
 
+#if NRND > 0
 		if (stat)
 			rnd_add_uint32(&sc->rnd_source, stat);
+#endif
 	}
 
 	/* no more interrupts */
 	if (ret && IFQ_IS_EMPTY(&ifp->if_snd) == 0)
 		ex_start(ifp);
 	return ret;
-}
-
-static int
-ex_ifflags_cb(struct ethercom *ec)
-{
-	struct ifnet *ifp = &ec->ec_if;
-	struct ex_softc *sc = ifp->if_softc;
-	int change = ifp->if_flags ^ sc->sc_if_flags;
-	 
-	if ((change & ~(IFF_CANTCHANGE|IFF_DEBUG)) != 0)
-		return ENETRESET;
-	else if ((change & IFF_PROMISC) != 0)
-		ex_set_mc(sc);
-	return 0;
 }
 
 int
@@ -1452,6 +1451,22 @@ ex_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	case SIOCGIFMEDIA:
 		error = ifmedia_ioctl(ifp, ifr, &sc->ex_mii.mii_media, cmd);
 		break;
+	case SIOCSIFFLAGS:
+		/* If the interface is up and running, only modify the receive
+		 * filter when setting promiscuous or debug mode.  Otherwise
+		 * fall through to ether_ioctl, which will reset the chip.
+		 */
+#define RESETIGN (IFF_CANTCHANGE|IFF_DEBUG)
+		if (((ifp->if_flags & (IFF_UP|IFF_RUNNING))
+		    == (IFF_UP|IFF_RUNNING))
+		    && ((ifp->if_flags & (~RESETIGN))
+		    == (sc->sc_if_flags & (~RESETIGN)))) {
+			ex_set_mc(sc);
+			error = 0;
+			break;
+#undef RESETIGN
+		}
+		/* FALLTHROUGH */
 	default:
 		if ((error = ether_ioctl(ifp, cmd, data)) != ENETRESET)
 			break;
@@ -1662,14 +1677,24 @@ int
 ex_activate(device_t self, enum devact act)
 {
 	struct ex_softc *sc = device_private(self);
+	int s, error = 0;
 
+	s = splnet();
 	switch (act) {
+	case DVACT_ACTIVATE:
+		error = EOPNOTSUPP;
+		break;
+
 	case DVACT_DEACTIVATE:
+		if (sc->ex_conf & EX_CONF_MII)
+			mii_activate(&sc->ex_mii, act, MII_PHY_ANY,
+			    MII_OFFSET_ANY);
 		if_deactivate(&sc->sc_ethercom.ec_if);
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		break;
 	}
+	splx(s);
+
+	return (error);
 }
 
 int
@@ -1677,19 +1702,14 @@ ex_detach(struct ex_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct ex_rxdesc *rxd;
-	int i, s;
+	int i;
 
 	/* Succeed now if there's no work to do. */
 	if ((sc->ex_flags & EX_FLAGS_ATTACHED) == 0)
 		return (0);
 
-	s = splnet();
-	/* Stop the interface. Callouts are stopped in it. */
-	ex_stop(ifp, 1);
-	splx(s);
-
-	/* Destroy our callout. */
-	callout_destroy(&sc->ex_mii_callout);
+	/* Unhook our tick handler. */
+	callout_stop(&sc->ex_mii_callout);
 
 	if (sc->ex_conf & EX_CONF_MII) {
 		/* Detach all PHYs */
@@ -1699,7 +1719,9 @@ ex_detach(struct ex_softc *sc)
 	/* Delete all remaining media. */
 	ifmedia_delete_instance(&sc->ex_mii.mii_media, IFM_INST_ANY);
 
+#if NRND > 0
 	rnd_detach_source(&sc->rnd_source);
+#endif
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
@@ -1924,9 +1946,9 @@ ex_mii_writereg(device_t v, int phy, int reg, int data)
 }
 
 void
-ex_mii_statchg(struct ifnet *ifp)
+ex_mii_statchg(device_t v)
 {
-	struct ex_softc *sc = ifp->if_softc;
+	struct ex_softc *sc = device_private(v);
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	int mctl;

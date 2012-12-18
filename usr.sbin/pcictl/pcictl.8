@@ -1,4 +1,4 @@
-.\"	$NetBSD: pcictl.8,v 1.10 2011/02/25 21:40:48 jmcneill Exp $
+.\"	$NetBSD: pcictl.8,v 1.6 2007/01/29 00:48:34 hubertf Exp $
 .\"
 .\" Copyright 2001 Wasabi Systems, Inc.
 .\" All rights reserved.
@@ -33,9 +33,9 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd February 25, 2011
-.Dt PCICTL 8
+.Dd January 29, 2007
 .Os
+.Dt PCICTL 8
 .Sh NAME
 .Nm pcictl
 .Nd a program to manipulate the PCI bus
@@ -65,7 +65,9 @@ List the devices in the PCI domain, either as names or, if
 is given, as numbers.
 The bus, device, and function
 numbers may be specified by flags.
-Any locator not specified defaults
+If the bus is not specified, it defaults to the bus number of the
+PCI bus specified on the command line.
+Any other locator not specified defaults
 to a wildcard, or may be explicitly wildcarded by specifying
 .Dq any .
 .Pp

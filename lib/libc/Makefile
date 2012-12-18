@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.149 2012/01/20 16:31:29 joerg Exp $
+#	$NetBSD: Makefile,v 1.136 2008/10/26 07:43:07 mrg Exp $
 #	@(#)Makefile	8.2 (Berkeley) 2/3/94
 #
 # All library objects contain sccsid strings by default; they may be
@@ -55,7 +55,6 @@ COMPATDIR=${.CURDIR}/compat
 
 .include "${.CURDIR}/../../common/lib/libc/Makefile.inc"
 .include "${.CURDIR}/atomic/Makefile.inc"
-.include "${.CURDIR}/cdb/Makefile.inc"
 .include "${.CURDIR}/db/Makefile.inc"
 .include "${.CURDIR}/citrus/Makefile.inc"
 .include "${.CURDIR}/compat-43/Makefile.inc"
@@ -73,14 +72,10 @@ COMPATDIR=${.CURDIR}/compat
 .include "${.CURDIR}/net/Makefile.inc"
 .include "${.CURDIR}/nameser/Makefile.inc"
 .include "${.CURDIR}/nls/Makefile.inc"
-.if (${MACHINE_ARCH} != "alpha") && (${ARCHSUBDIR} != "sparc64")
+.if (${MACHINE_ARCH} != "alpha") && (${MACHINE_ARCH} != "sparc64")
 .include "${.CURDIR}/quad/Makefile.inc"
 .endif
-.if (${USE_LIBTRE} == "yes")
-.include "${NETBSDSRCDIR}/external/bsd/tre/Makefile.inc"
-.else
 .include "${.CURDIR}/regex/Makefile.inc"
-.endif
 .include "${.CURDIR}/resolv/Makefile.inc"
 .include "${.CURDIR}/rpc/Makefile.inc"
 .include "${.CURDIR}/ssp/Makefile.inc"
@@ -90,32 +85,11 @@ COMPATDIR=${.CURDIR}/compat
 .include "${.CURDIR}/termios/Makefile.inc"
 .include "${.CURDIR}/thread-stub/Makefile.inc"
 .include "${.CURDIR}/time/Makefile.inc"
-.include "${.CURDIR}/tls/Makefile.inc"
 .include "${.CURDIR}/sys/Makefile.inc"
 .include "${.CURDIR}/uuid/Makefile.inc"
 .if (${MKYP} != "no")
 .include "${.CURDIR}/yp/Makefile.inc"
 .endif
-
-# Remove from SRCS the .c files for any .S files added by the MD makefiles,
-# also remove from SRCS the .c files for the .S and .c files in NO_SRCS.
-# Add the .c file for .S files (in both variables) to LSRCS so that the
-# 'normal' .c file for assembly files is used for the lint librray.
-#
-# Usage:
-# Add .S files to NO_SRSC when another .S file provides the entry points.
-# Add .c files to NO_SRSC when another .c file provides the entry points.
-# (lint is run on all .c files in SRCS)
-
-.for check_file in ${SRCS:M*.S} ${NO_SRCS}
-unwanted_file := ${SRCS:M${check_file:.S=.c}}
-.if "${unwanted_file}" != ""
-SRCS := ${SRCS:N${unwanted_file}}
-.if "${unwanted_file}" != "${check_file}"
-LSRCS := ${LSRCS} ${unwanted_file}
-.endif
-.endif
-.endfor
 
 NLS=	C.msg Pig.msg ca.msg cs.msg de.msg es.msg fi.msg fr.msg nl.msg \
 	no.msg pl.msg sk.msg sv.msg
@@ -142,3 +116,4 @@ CSHLIBFLAGS+=	-D_I18N_DYNAMIC
 
 # force the dynamic linker to initialize libc first
 SHLIB_SHFLAGS+=	-Wl,-z,initfirst
+

@@ -1,4 +1,4 @@
-/*	$NetBSD: externs1.h,v 1.30 2011/02/05 17:14:14 christos Exp $	*/
+/*	$NetBSD: externs1.h,v 1.23 2008/07/31 15:21:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -62,7 +62,7 @@ extern	int	blklev;
 extern	int	mblklev;
 extern	int	yydebug;
 
-extern	int	yyerror(const char *);
+extern	int	yyerror(char *);
 extern	int	yyparse(void);
 
 /*
@@ -99,7 +99,7 @@ extern	int	getfnid(const char *);
 extern	void	initmem(void);
 
 extern	void	*getblk(size_t);
-extern	void	*getlblk(size_t, size_t);
+extern	void	*getlblk(int, size_t);
 extern	void	freeblk(void);
 extern	void	freelblk(int);
 
@@ -141,7 +141,6 @@ extern	void	setcompl(type_t *, int);
 extern	void	addscl(scl_t);
 extern	void	addtype(type_t *);
 extern	void	addqual(tqual_t);
-extern	void	addpacked(void);
 extern	void	pushdecl(scl_t);
 extern	void	popdecl(void);
 extern	void	setasm(void);
@@ -167,7 +166,6 @@ extern	sym_t	*ename(sym_t *, int, int);
 extern	void	decl1ext(sym_t *, int);
 extern	void	cpuinfo(sym_t *, sym_t *);
 extern	int	isredec(sym_t *, int *);
-extern	int	eqptrtype(type_t *, type_t *, int);
 extern	int	eqtype(type_t *, type_t *, int, int, int *);
 extern	void	compltyp(sym_t *, sym_t *);
 extern	sym_t	*decl1arg(sym_t *, int);
@@ -187,6 +185,7 @@ extern	void	prevdecl(int, sym_t *);
 /*
  * tree.c
  */
+extern	void	initmtab(void);
 extern	type_t	*incref(type_t *, tspec_t);
 extern	type_t	*tincref(type_t *, tspec_t);
 extern	tnode_t	*getcnode(type_t *, val_t *);
@@ -200,7 +199,6 @@ extern	tnode_t	*promote(op_t, int, tnode_t *);
 extern	tnode_t	*convert(op_t, int, type_t *, tnode_t *);
 extern	void	cvtcon(op_t, int, type_t *, val_t *, val_t *);
 extern	tnode_t	*bldszof(type_t *);
-extern	tnode_t	*bldalof(type_t *);
 extern	tnode_t	*cast(tnode_t *, type_t *);
 extern	tnode_t	*funcarg(tnode_t *, tnode_t *);
 extern	tnode_t	*funccall(tnode_t *, tnode_t *);
@@ -209,7 +207,6 @@ extern	void	expr(tnode_t *, int, int, int);
 extern	void	chkmisc(tnode_t *, int, int, int, int, int, int);
 extern	int	conaddr(tnode_t *, sym_t **, ptrdiff_t *);
 extern	strg_t	*catstrg(strg_t *, strg_t *);
-extern  int64_t tsize(type_t *);
 
 /*
  * func.c

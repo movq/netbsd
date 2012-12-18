@@ -1,4 +1,4 @@
-/*	$NetBSD: flush_clnt.h,v 1.1.1.1 2009/06/23 10:08:46 tron Exp $	*/
+/*	$NetBSD: flush_clnt.h,v 1.1.1.1.2.3 2011/01/07 01:24:02 riz Exp $	*/
 
 #ifndef _FLUSH_CLNT_H_INCLUDED_
 #define _FLUSH_CLNT_H_INCLUDED_

@@ -1,4 +1,4 @@
-/* $NetBSD: sio_pic.c,v 1.42 2012/02/06 02:14:15 matt Exp $ */
+/* $NetBSD: sio_pic.c,v 1.36 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -35,17 +35,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -59,7 +59,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: sio_pic.c,v 1.42 2012/02/06 02:14:15 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sio_pic.c,v 1.36 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,7 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: sio_pic.c,v 1.42 2012/02/06 02:14:15 matt Exp $");
 #include <sys/syslog.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -114,29 +114,29 @@ static struct alpha_shared_intr *sio_intr;
  * If prom console is broken, must remember the initial interrupt
  * settings and enforce them.  WHEE!
  */
-uint8_t initial_ocw1[2];
-uint8_t initial_elcr[2];
+u_int8_t initial_ocw1[2];
+u_int8_t initial_elcr[2];
 #endif
 
-void		sio_setirqstat(int, int, int);
+void		sio_setirqstat __P((int, int, int));
 
-uint8_t	(*sio_read_elcr)(int);
-void		(*sio_write_elcr)(int, uint8_t);
-static void	specific_eoi(int);
+u_int8_t	(*sio_read_elcr) __P((int));
+void		(*sio_write_elcr) __P((int, u_int8_t));
+static void	specific_eoi __P((int));
 #ifdef BROKEN_PROM_CONSOLE
-void		sio_intr_shutdown(void *);
+void		sio_intr_shutdown __P((void *));
 #endif
 
 /******************** i82378 SIO ELCR functions ********************/
 
-int		i82378_setup_elcr(void);
-uint8_t	i82378_read_elcr(int);
-void		i82378_write_elcr(int, uint8_t);
+int		i82378_setup_elcr __P((void));
+u_int8_t	i82378_read_elcr __P((int));
+void		i82378_write_elcr __P((int, u_int8_t));
 
 bus_space_handle_t sio_ioh_elcr;
 
 int
-i82378_setup_elcr(void)
+i82378_setup_elcr()
 {
 	int rv;
 
@@ -156,15 +156,18 @@ i82378_setup_elcr(void)
 	return (rv);
 }
 
-uint8_t
-i82378_read_elcr(int elcr)
+u_int8_t
+i82378_read_elcr(elcr)
+	int elcr;
 {
 
 	return (bus_space_read_1(sio_iot, sio_ioh_elcr, elcr));
 }
 
 void
-i82378_write_elcr(int elcr, uint8_t val)
+i82378_write_elcr(elcr, val)
+	int elcr;
+	u_int8_t val;
 {
 
 	bus_space_write_1(sio_iot, sio_ioh_elcr, elcr, val);
@@ -172,14 +175,14 @@ i82378_write_elcr(int elcr, uint8_t val)
 
 /******************** Cypress CY82C693 ELCR functions ********************/
 
-int		cy82c693_setup_elcr(void);
-uint8_t	cy82c693_read_elcr(int);
-void		cy82c693_write_elcr(int, uint8_t);
+int		cy82c693_setup_elcr __P((void));
+u_int8_t	cy82c693_read_elcr __P((int));
+void		cy82c693_write_elcr __P((int, u_int8_t));
 
 const struct cy82c693_handle *sio_cy82c693_handle;
 
 int
-cy82c693_setup_elcr(void)
+cy82c693_setup_elcr()
 {
 	int device, maxndevs;
 	pcitag_t tag;
@@ -236,15 +239,18 @@ cy82c693_setup_elcr(void)
 	return (ENODEV);
 }
 
-uint8_t
-cy82c693_read_elcr(int elcr)
+u_int8_t
+cy82c693_read_elcr(elcr)
+	int elcr;
 {
 
 	return (cy82c693_read(sio_cy82c693_handle, CONFIG_ELCR1 + elcr));
 }
 
 void
-cy82c693_write_elcr(int elcr, uint8_t val)
+cy82c693_write_elcr(elcr, val)
+	int elcr;
+	u_int8_t val;
 {
 
 	cy82c693_write(sio_cy82c693_handle, CONFIG_ELCR1 + elcr, val);
@@ -259,7 +265,7 @@ cy82c693_write_elcr(int elcr, uint8_t val)
  * they should panic.
  */
 
-int (*const sio_elcr_setup_funcs[])(void) = {
+int (*sio_elcr_setup_funcs[]) __P((void)) = {
 	cy82c693_setup_elcr,
 	i82378_setup_elcr,
 	NULL,
@@ -268,9 +274,11 @@ int (*const sio_elcr_setup_funcs[])(void) = {
 /******************** Shared SIO/Cypress functions ********************/
 
 void
-sio_setirqstat(int irq, int enabled, int type)
+sio_setirqstat(irq, enabled, type)
+	int irq, enabled;
+	int type;
 {
-	uint8_t ocw1[2], elcr[2];
+	u_int8_t ocw1[2], elcr[2];
 	int icu, bit;
 
 #if 0
@@ -316,7 +324,9 @@ sio_setirqstat(int irq, int enabled, int type)
 }
 
 void
-sio_intr_setup(pci_chipset_tag_t pc, bus_space_tag_t iot)
+sio_intr_setup(pc, iot)
+	pci_chipset_tag_t pc;
+	bus_space_tag_t iot;
 {
 	char *cp;
 	int i;
@@ -399,7 +409,8 @@ sio_intr_setup(pci_chipset_tag_t pc, bus_space_tag_t iot)
 
 #ifdef BROKEN_PROM_CONSOLE
 void
-sio_intr_shutdown(void *arg)
+sio_intr_shutdown(arg)
+	void *arg;
 {
 	/*
 	 * Restore the initial values, to make the PROM happy.
@@ -412,7 +423,9 @@ sio_intr_shutdown(void *arg)
 #endif
 
 const char *
-sio_intr_string(void *v, int irq)
+sio_intr_string(v, irq)
+	void *v;
+	int irq;
 {
 	static char irqstr[12];		/* 8 + 2 + NULL + sanity */
 
@@ -424,7 +437,9 @@ sio_intr_string(void *v, int irq)
 }
 
 const struct evcnt *
-sio_intr_evcnt(void *v, int irq)
+sio_intr_evcnt(v, irq)
+	void *v;
+	int irq;
 {
 
 	if (irq == 0 || irq >= ICU_LEN || irq == 2)
@@ -434,7 +449,12 @@ sio_intr_evcnt(void *v, int irq)
 }
 
 void *
-sio_intr_establish(void *v, int irq, int type, int level, int (*fn)(void *), void *arg)
+sio_intr_establish(v, irq, type, level, fn, arg)
+	void *v, *arg;
+        int irq;
+        int type;
+        int level;
+        int (*fn)(void *);
 {
 	void *cookie;
 
@@ -456,7 +476,9 @@ sio_intr_establish(void *v, int irq, int type, int level, int (*fn)(void *), voi
 }
 
 void
-sio_intr_disestablish(void *v, void *cookie)
+sio_intr_disestablish(v, cookie)
+	void *v;
+	void *cookie;
 {
 	struct alpha_shared_intrhand *ih = cookie;
 	int s, ist, irq = ih->ih_num;
@@ -505,7 +527,9 @@ sio_intr_disestablish(void *v, void *cookie)
 }
 
 void
-sio_iointr(void *arg, unsigned long vec)
+sio_iointr(arg, vec)
+	void *arg;
+	unsigned long vec;
 {
 	int irq;
 
@@ -533,7 +557,11 @@ sio_iointr(void *arg, unsigned long vec)
 #define	LEGAL_IRQ(x)	((x) >= 0 && (x) < ICU_LEN && (x) != 2)
 
 int
-sio_intr_alloc(void *v, int mask, int type, int *irq)
+sio_intr_alloc(v, mask, type, irq)
+	void *v;
+	int mask;
+	int type;
+	int *irq;
 {
 	int i, tmp, bestirq, count;
 	struct alpha_shared_intrhand **p, *q;
@@ -602,7 +630,8 @@ sio_intr_alloc(void *v, int mask, int type, int *irq)
 }
 
 static void
-specific_eoi(int irq)
+specific_eoi(irq)
+	int irq;
 {
 	if (irq > 7)
 		bus_space_write_1(sio_iot,

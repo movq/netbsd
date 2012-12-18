@@ -1,4 +1,4 @@
-/*	$NetBSD: c_ksh.c,v 1.18 2011/10/16 17:12:11 joerg Exp $	*/
+/*	$NetBSD: c_ksh.c,v 1.15 2006/04/24 20:00:31 christos Exp $	*/
 
 /*
  * built-in Korn commands: c_*
@@ -6,7 +6,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: c_ksh.c,v 1.18 2011/10/16 17:12:11 joerg Exp $");
+__RCSID("$NetBSD: c_ksh.c,v 1.15 2006/04/24 20:00:31 christos Exp $");
 #endif
 
 #include "sh.h"
@@ -573,7 +573,7 @@ c_whence(wp)
 			break;
 		}
 		if (vflag || !ret)
-			shprintf("%s", newline);
+			shprintf(newline);
 	}
 	return ret;
 }
@@ -873,7 +873,7 @@ c_typeset(wp)
 				else
 				    print_value_quoted(s);
 			    }
-			    shprintf("%s", newline);
+			    shprintf(newline);
 			}
 			/* Only report first `element' of an array with
 			 * no set elements.
@@ -964,7 +964,7 @@ c_alias(wp)
 					shf_putc('=', shl_stdout);
 					print_value_quoted(ap->val.s);
 				}
-				shprintf("%s", newline);
+				shprintf(newline);
 			}
 	}
 
@@ -988,7 +988,7 @@ c_alias(wp)
 					shf_putc('=', shl_stdout);
 					print_value_quoted(ap->val.s);
 				}
-				shprintf("%s", newline);
+				shprintf(newline);
 			} else {
 				shprintf("%s alias not found\n", alias);
 				rv = 1;
@@ -1236,7 +1236,7 @@ c_kill(wp)
 "usage: kill [ -s signame | -signum | -signame ] {pid|job}...\n\
        kill -l [exit_status]\n"
 			);
-		bi_errorf("%s", null);
+		bi_errorf(null);
 		return 1;
 	}
 
@@ -1257,7 +1257,7 @@ c_kill(wp)
 			for (i = 1; i < SIGNALS; i++, p = space)
 				if (sigtraps[i].name)
 					shprintf("%s%s", p, sigtraps[i].name);
-			shprintf("%s", newline);
+			shprintf(newline);
 		} else {
 			int w, si;
 			int mess_width;
@@ -1268,8 +1268,7 @@ c_kill(wp)
 			ki.name_width = mess_width = 0;
 			for (si = 0; si < SIGNALS; si++) {
 				w = sigtraps[si].name ?
-				    (int)strlen(sigtraps[si].name) :
-				    ki.num_width;
+				    strlen(sigtraps[si].name) : ki.num_width;
 				if (w > ki.name_width)
 					ki.name_width = w;
 				w = strlen(sigtraps[si].mess);
@@ -1439,7 +1438,7 @@ c_bind(wp)
 	wp += builtin_opt.optind;
 
 	if (*wp == NULL)	/* list all */
-		rv = x_bind(NULL, NULL, 0, list);
+		rv = x_bind((char*)NULL, (char*)NULL, 0, list);
 
 	for (; *wp != NULL; wp++) {
 		cp = strchr(*wp, '=');

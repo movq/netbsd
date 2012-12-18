@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.locale,v 1.2 2009/06/03 18:47:06 bouyer Exp $
+# $NetBSD: Makefile.locale,v 1.1.2.3 2009/09/29 23:30:05 snj Exp $
 
 LANGUAGE=	af be bg ca cs da de el en es \
 		et eu fi fr hr hu hy is it ja \

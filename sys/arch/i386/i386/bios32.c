@@ -1,4 +1,4 @@
-/*	$NetBSD: bios32.c,v 1.29 2012/06/15 23:01:16 joerg Exp $	*/
+/*	$NetBSD: bios32.c,v 1.22 2008/04/28 20:23:24 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bios32.c,v 1.29 2012/06/15 23:01:16 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bios32.c,v 1.22 2008/04/28 20:23:24 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -116,7 +116,7 @@ struct smbios_entry smbios_entry;
  * Initialize the BIOS32 interface.
  */
 void
-bios32_init(void)
+bios32_init()
 {
 	paddr_t entry = 0;
 	char *p;
@@ -156,7 +156,7 @@ bios32_init(void)
 		bios32_entry.offset = (void *)ISA_HOLE_VADDR(entry);
 		bios32_entry.segment = GSEL(GCODE_SEL, SEL_KPL);
 	}
-	/* see if we have SMBIOS extensions */
+	/* see if we have SMBIOS extentions */
 	for (p = ISA_HOLE_VADDR(SMBIOS_START);
 	    p < (char *)ISA_HOLE_VADDR(SMBIOS_END); p+= 16) {
 		struct smbhdr * sh = (struct smbhdr *)p;
@@ -175,8 +175,8 @@ bios32_init(void)
 		if (p[0] != '_' && p[1] != 'D' && p[2] != 'M' &&
 		    p[3] != 'I' && p[4] != '_')
 			continue;
-		for (chksum = 0, i = 0xf; i--;)
-			chksum += p[i];
+		for (chksum = 0, i = 0xf; i--; chksum += p[i]);
+			;
 		if (chksum != 0)
 			continue;
 
@@ -195,9 +195,9 @@ bios32_init(void)
 
     		for (; pa < end; pa+= NBPG, eva+= NBPG)
 #ifdef XEN
-			pmap_kenter_ma(eva, pa, VM_PROT_READ, 0);
+			pmap_kenter_ma(eva, pa, VM_PROT_READ);
 #else
-			pmap_kenter_pa(eva, pa, VM_PROT_READ, 0);
+			pmap_kenter_pa(eva, pa, VM_PROT_READ);
 #endif
 
 		aprint_debug("SMBIOS rev. %d.%d @ 0x%lx (%d entries)\n",
@@ -214,7 +214,10 @@ bios32_init(void)
  * in the entry point information.
  */
 int
-bios32_service(uint32_t service, bios32_entry_t e, bios32_entry_info_t ei)
+bios32_service(service, e, ei)
+	uint32_t service;
+	bios32_entry_t e;
+	bios32_entry_info_t ei;
 {
 	uint32_t eax, ebx, ecx, edx;
 	paddr_t entry;
@@ -327,7 +330,7 @@ smbios_get_string(struct smbtable *st, uint8_t indx, char *dest, size_t len)
 	if (i == indx) {
 		if (va + len < end) {
 			ret = dest;
-			memcpy(ret, va, len);
+			bcopy(va, ret, len);
 			ret[len - 1] = '\0';
 		}
 	}

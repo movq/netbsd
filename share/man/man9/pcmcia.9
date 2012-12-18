@@ -1,4 +1,4 @@
-.\"     $NetBSD: pcmcia.9,v 1.20 2011/05/30 01:48:40 dyoung Exp $
+.\"     $NetBSD: pcmcia.9,v 1.16 2008/04/30 13:10:58 martin Exp $
 .\"
 .\" Copyright (c) 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd April 15, 2010
+.Dd November 2, 2005
 .Dt PCMCIA 9
 .Os
 .Sh NAME
@@ -53,7 +53,7 @@
 .Nm pcmcia_scan_cis
 .Nd support for PCMCIA PC-Card devices
 .Sh SYNOPSIS
-.In sys/bus.h
+.In machine/bus.h
 .In dev/pcmcia/pcmciareg.h
 .In dev/pcmcia/pcmciavar.h
 .In dev/pcmcia/pcmciadevs.h
@@ -247,7 +247,7 @@ Force 8-bit I/O width.
 .It PCMCIA_WIDTH_IO16
 Force 16-bit I/O width.
 .El
-.Pp
+.sp
 A handle for the mapped I/O window is returned in
 .Fa windowp .
 .It Fn pcmcia_io_unmap "pf" "window"
@@ -286,7 +286,7 @@ Force 8-bit memory width.
 .It PCMCIA_WIDTH_MEM16
 Force 16-bit memory width.
 .El
-.Pp
+.sp
 A handle for the mapped memory window is returned in
 .Fa windowp
 and a bus-space offset into the memory window is returned in
@@ -397,13 +397,19 @@ Finally, power should be removed from the device using
 .Pp
 Since PCMCIA devices support dynamic configuration, drivers should
 make use of
-.Xr pmf 9
-framework.
+.Fn powerhook_establish 9 .
 Power can be applied and the interrupt handler should be established
 through this interface.
 .Sh DMA SUPPORT
 PCMCIA devices do not support DMA.
 .Sh CODE REFERENCES
+This section describes places within the
+.Nx
+source tree where actual code implementing or using the
+machine-independent PCMCIA subsystem can be found.
+All pathnames are relative to
+.Pa /usr/src .
+.Pp
 The PCMCIA subsystem itself is implemented within the file
 .Pa sys/dev/pcmcia/pcmcia.c .
 The database of known devices exists within the file

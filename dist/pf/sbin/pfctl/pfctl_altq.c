@@ -1,4 +1,4 @@
-/*	$NetBSD: pfctl_altq.c,v 1.9 2010/03/01 00:14:08 joerg Exp $	*/
+/*	$NetBSD: pfctl_altq.c,v 1.8.4.1 2010/03/06 22:42:08 sborrill Exp $	*/
 /*	$OpenBSD: pfctl_altq.c,v 1.92 2007/05/27 05:15:17 claudio Exp $	*/
 
 /*

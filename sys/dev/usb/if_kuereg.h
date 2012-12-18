@@ -1,4 +1,4 @@
-/*	$NetBSD: if_kuereg.h,v 1.18 2012/02/02 19:43:07 tls Exp $	*/
+/*	$NetBSD: if_kuereg.h,v 1.11.140.1 2010/11/22 03:00:29 riz Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -58,14 +58,14 @@
 #define KUE_CMD_SEND_SCAN			0xFF
 
 struct kue_ether_desc {
-	uint8_t			kue_len;
-	uint8_t			kue_rsvd0;
-	uint8_t			kue_rsvd1;
-	uint8_t			kue_macaddr[ETHER_ADDR_LEN];
-	uint8_t			kue_etherstats[4];
-	uint8_t			kue_maxseg[2];
-	uint8_t			kue_mcastfilt[2];
-	uint8_t			kue_rsvd2;
+	u_int8_t		kue_len;
+	u_int8_t		kue_rsvd0;
+	u_int8_t		kue_rsvd1;
+	u_int8_t		kue_macaddr[ETHER_ADDR_LEN];
+	u_int8_t		kue_etherstats[4];
+	u_int8_t		kue_maxseg[2];
+	u_int8_t		kue_mcastfilt[2];
+	u_int8_t		kue_rsvd2;
 };
 
 #define KUE_ETHERSTATS(x)	\
@@ -136,8 +136,8 @@ struct kue_ether_desc {
 #define KUE_ENDPT_MAX		0x3
 
 struct kue_type {
-	uint16_t		kue_vid;
-	uint16_t		kue_did;
+	u_int16_t		kue_vid;
+	u_int16_t		kue_did;
 };
 
 struct kue_softc;
@@ -145,7 +145,8 @@ struct kue_softc;
 struct kue_chain {
 	struct kue_softc	*kue_sc;
 	usbd_xfer_handle	kue_xfer;
-	uint8_t			*kue_buf;
+	char			*kue_buf;
+	struct mbuf		*kue_mbuf;
 	int			kue_idx;
 };
 
@@ -159,26 +160,33 @@ struct kue_cdata {
 };
 
 struct kue_softc {
-	device_t kue_dev;
+	USBBASEDEVICE		kue_dev;
 
+#if defined(__FreeBSD__) || defined(__OpenBSD__)
+	struct arpcom		arpcom;
+#define GET_IFP(sc) (&(sc)->arpcom.ac_if)
+#elif defined(__NetBSD__)
 	struct ethercom		kue_ec;
-	krndsource_t	rnd_source;
+#if NRND > 0
+	rndsource_element_t	rnd_source;
+#endif
 #define GET_IFP(sc) (&(sc)->kue_ec.ec_if)
+#endif
 
 	usbd_device_handle	kue_udev;
 	usbd_interface_handle	kue_iface;
-	uint16_t		kue_vendor;
-	uint16_t		kue_product;
+	u_int16_t		kue_vendor;
+	u_int16_t		kue_product;
 	struct kue_ether_desc	kue_desc;
 	int			kue_ed[KUE_ENDPT_MAX];
 	usbd_pipe_handle	kue_ep[KUE_ENDPT_MAX];
 	int			kue_if_flags;
-	uint16_t		kue_rxfilt;
-	uint8_t			*kue_mcfilters;
+	u_int16_t		kue_rxfilt;
+	u_int8_t		*kue_mcfilters;
 	struct kue_cdata	kue_cdata;
 
-	bool			kue_dying;
-	bool			kue_attached;
+	char			kue_dying;
+	char			kue_attached;
 	u_int			kue_rx_errs;
 	struct timeval		kue_rx_notice;
 };

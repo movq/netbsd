@@ -1,4 +1,4 @@
-/*	$NetBSD: ka650.c,v 1.36 2010/12/14 23:44:49 matt Exp $	*/
+/*	$NetBSD: ka650.c,v 1.34 2008/03/11 05:34:03 matt Exp $	*/
 /*
  * Copyright (c) 1988 The Regents of the University of California.
  * All rights reserved.
@@ -38,17 +38,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka650.c,v 1.36 2010/12/14 23:44:49 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka650.c,v 1.34 2008/03/11 05:34:03 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
-#include <sys/kernel.h>
 #include <sys/time.h>
+#include <sys/kernel.h>
+#include <sys/systm.h>
+#include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/ka650.h>
 #include <machine/clock.h>
+#include <machine/cpu.h>
+#include <machine/psl.h>
+#include <machine/mtpr.h>
 #include <machine/sid.h>
 
 struct	ka650_merr *ka650merr_ptr;
@@ -201,7 +205,8 @@ ka650_mchk(void *cmcf)
 	printf("\n\tvap %x istate1 %x istate2 %x pc %x psl %x\n",
 	    mcf->mc65_mrvaddr, mcf->mc65_istate1, mcf->mc65_istate2,
 	    mcf->mc65_pc, mcf->mc65_psl);
-	snprintb(sbuf, sizeof(sbuf), DMASER_BITS, ka650merr_ptr->merr_dser);
+	bitmask_snprintf(ka650merr_ptr->merr_dser, DMASER_BITS,
+			 sbuf, sizeof(sbuf));
 	printf("dmaser=0x%s qbear=0x%x dmaear=0x%x\n", sbuf,
 	    (int)ka650merr_ptr->merr_qbear,
 	    (int)ka650merr_ptr->merr_dear);

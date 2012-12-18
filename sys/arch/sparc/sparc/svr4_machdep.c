@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.c,v 1.71 2009/12/10 14:13:52 matt Exp $	 */
+/*	$NetBSD: svr4_machdep.c,v 1.66 2008/04/28 20:23:36 martin Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.71 2009/12/10 14:13:52 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.66 2008/04/28 20:23:36 martin Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_kgdb.h"
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.71 2009/12/10 14:13:52 matt Exp $
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
+#include <sys/user.h>
 #include <sys/filedesc.h>
 #include <sys/ioctl.h>
 #include <sys/kernel.h>
@@ -68,7 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.71 2009/12/10 14:13:52 matt Exp $
 static void svr4_getsiginfo(union svr4_siginfo *, int, u_long, void *);
 
 void
-svr4_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
+svr4_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 {
 
 	setregs(l, epp, stack);
@@ -161,7 +162,7 @@ svr4_getmcontext(struct lwp *l, struct svr4_mcontext *mc, u_long *flags)
 	/*
 	 * Get the floating point registers
 	 */
-	memcpy(f->fpu_regs, fps->fs_regs, sizeof(fps->fs_regs));
+	bcopy(fps->fs_regs, f->fpu_regs, sizeof(fps->fs_regs));
 	f->fp_nqsize = sizeof(struct fp_qentry);
 	f->fp_nqel = fps->fs_qsize;
 	f->fp_fsr = fps->fs_fsr;
@@ -282,7 +283,7 @@ svr4_setmcontext(struct lwp *l, struct svr4_mcontext *mc, u_long flags)
 #endif
 			return EINVAL;
 		}
-		memcpy(fps->fs_regs, f->fpu_regs, sizeof(fps->fs_regs));
+		bcopy(f->fpu_regs, fps->fs_regs, sizeof(fps->fs_regs));
 		fps->fs_qsize = f->fp_nqel;
 		fps->fs_fsr = f->fp_fsr;
 		if (f->fp_q != NULL) {
@@ -620,16 +621,4 @@ svr4_sys_sysarch(struct lwp *l, const struct svr4_sys_sysarch_args *uap, registe
 		printf("(sparc) svr4_sysarch(%d)\n", SCARG(uap, op));
 		return EINVAL;
 	}
-}
-
-void
-svr4_md_init(void)
-{
-
-}
-
-void
-svr4_md_fini(void)
-{
-
 }

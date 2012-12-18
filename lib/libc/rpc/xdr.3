@@ -1,7 +1,7 @@
 .\"	@(#)xdr.3n	2.2 88/08/03 4.0 RPCSRC; from 1.16 88/03/14 SMI
-.\"	$NetBSD: xdr.3,v 1.14 2011/07/08 19:28:22 wiz Exp $
+.\"	$NetBSD: xdr.3,v 1.10 2003/09/07 16:22:21 wiz Exp $
 .\"
-.Dd July 4, 2011
+.Dd April 17, 2003
 .Dt XDR 3
 .Os
 .Sh NAME
@@ -31,7 +31,6 @@
 .Nm xdr_reference ,
 .Nm xdr_setpos ,
 .Nm xdr_short ,
-.Nm xdr_sizeof ,
 .Nm xdrstdio_create ,
 .Nm xdr_string ,
 .Nm xdr_u_char ,
@@ -100,8 +99,6 @@
 .Fn xdr_setpos "XDR *xdrs" "u_int pos"
 .Ft int
 .Fn xdr_short "XDR *xdrs" "short *sp"
-.Ft nsigned long
-.Fn xdr_sizeof "xdrproc_t func" "void *data"
 .Ft void
 .Fn xdrstdio_create "XDR *xdrs" "FILE *file" "enum xdr_op op"
 .Ft int
@@ -381,11 +378,6 @@ another.
 A filter primitive that translates between C short integers
 and their external representations.
 This routine returns one if it succeeds, zero otherwise.
-.It Fn xdr_sizeof
-This routine returns the amount of memory required to encode
-.Fa data
-using filter
-.Fa func .
 .It Fn xdrstdio_create
 This routine initializes the XDR stream object pointed to by
 .Fa xdrs .
@@ -513,7 +505,7 @@ The following manuals:
 .Re
 .Rs
 .%B "eXternal Data Representation: Sun Technical Notes"
-.Re
+.Pp
 .Rs
 .%A Sun Microsystems, Inc., USC-ISI
 .%T "XDR: External Data Representation Standard"

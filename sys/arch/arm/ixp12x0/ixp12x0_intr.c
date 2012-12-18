@@ -1,4 +1,4 @@
-/* $NetBSD: ixp12x0_intr.c,v 1.24 2012/11/12 18:00:37 skrll Exp $ */
+/* $NetBSD: ixp12x0_intr.c,v 1.19 2008/04/28 20:23:14 martin Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp12x0_intr.c,v 1.24 2012/11/12 18:00:37 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp12x0_intr.c,v 1.19 2008/04/28 20:23:14 martin Exp $");
 
 /*
  * Interrupt support for the Intel ixp12x0
@@ -42,7 +42,9 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0_intr.c,v 1.24 2012/11/12 18:00:37 skrll Exp 
 #include <sys/simplelock.h>
 #include <sys/termios.h>
 
-#include <sys/bus.h>
+#include <uvm/uvm_extern.h>
+
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -54,37 +56,37 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0_intr.c,v 1.24 2012/11/12 18:00:37 skrll Exp 
 #include <arm/ixp12x0/ixp12x0_pcireg.h> 
 
 
-extern uint32_t	ixpcom_cr;	/* current cr from *_com.c */
-extern uint32_t	ixpcom_imask;	/* tell mask to *_com.c */
+extern u_int32_t	ixpcom_cr;	/* current cr from *_com.c */
+extern u_int32_t	ixpcom_imask;	/* tell mask to *_com.c */
 
 /* Interrupt handler queues. */
 struct intrq intrq[NIRQ];
 
 /* Interrupts to mask at each level. */
-static uint32_t imask[NIPL];
-static uint32_t pci_imask[NIPL];
+static u_int32_t imask[NIPL];
+static u_int32_t pci_imask[NIPL];
 
 /* Current interrupt priority level. */
 volatile int hardware_spl_level;
 
 /* Software copy of the IRQs we have enabled. */
-volatile uint32_t intr_enabled;
-volatile uint32_t pci_intr_enabled;
+volatile u_int32_t intr_enabled;
+volatile u_int32_t pci_intr_enabled;
 
 /* Interrupts pending. */
 static volatile int ipending;
 
-void	ixp12x0_intr_dispatch(struct trapframe *);
+void	ixp12x0_intr_dispatch(struct irqframe *frame);
 
-#define IXPREG(reg)	*((volatile uint32_t*) (reg))
+#define IXPREG(reg)	*((volatile u_int32_t*) (reg))
 
-static inline uint32_t
+static inline u_int32_t
 ixp12x0_irq_read(void)
 {
 	return IXPREG(IXP12X0_IRQ_VBASE) & IXP12X0_INTR_MASK;
 }
 
-static inline uint32_t
+static inline u_int32_t
 ixp12x0_pci_irq_read(void)
 {
 	return IXPREG(IXPPCI_IRQ_STATUS);
@@ -109,7 +111,7 @@ ixp12x0_disable_uart_irq(void)
 }
 
 static void
-ixp12x0_set_intrmask(uint32_t irqs, uint32_t pci_irqs)
+ixp12x0_set_intrmask(u_int32_t irqs, u_int32_t pci_irqs)
 {
 	if (irqs & (1U << IXP12X0_INTR_UART)) {
 		ixp12x0_disable_uart_irq();
@@ -204,29 +206,21 @@ ixp12x0_intr_calculate_masks(void)
 
 	KASSERT(imask[IPL_NONE] == 0);
 	KASSERT(pci_imask[IPL_NONE] == 0);
-	KASSERT(imask[IPL_SOFTCLOCK] == 0);
-	KASSERT(pci_imask[IPL_SOFTCLOCK] == 0);
-	KASSERT(imask[IPL_SOFTBIO] == 0);
-	KASSERT(pci_imask[IPL_SOFTBIO] == 0);
-	KASSERT(imask[IPL_SOFTNET] == 0);
-	KASSERT(pci_imask[IPL_SOFTNET] == 0);
-	KASSERT(imask[IPL_SOFTSERIAL] == 0);
-	KASSERT(pci_imask[IPL_SOFTSERIAL] == 0);
 
 	KASSERT(imask[IPL_VM] != 0);
 	KASSERT(pci_imask[IPL_VM] != 0);
 
 	/*
-	 * splsched() must block anything that uses the scheduler.
+	 * splclock() must block anything that uses the scheduler.
 	 */
-	imask[IPL_SCHED] |= imask[IPL_VM];
-	pci_imask[IPL_SCHED] |= pci_imask[IPL_VM];
+	imask[IPL_CLOCK] |= imask[IPL_VM];
+	pci_imask[IPL_CLOCK] |= pci_imask[IPL_VM];
 
 	/*
 	 * splhigh() must block "everything".
 	 */
-	imask[IPL_HIGH] |= imask[IPL_SCHED];
-	pci_imask[IPL_HIGH] |= pci_imask[IPL_SCHED];
+	imask[IPL_HIGH] |= imask[IPL_CLOCK];
+	pci_imask[IPL_HIGH] |= pci_imask[IPL_CLOCK];
 
 	/*
 	 * Now compute which IRQs must be blocked when servicing any
@@ -341,7 +335,7 @@ ixp12x0_intr_establish(int irq, int ipl, int (*ih_func)(void *), void *arg)
 	u_int			oldirqstate;
 #ifdef DEBUG
 	printf("ixp12x0_intr_establish(irq=%d, ipl=%d, ih_func=%08x, arg=%08x)\n",
-	       irq, ipl, (uint32_t) ih_func, (uint32_t) arg);
+	       irq, ipl, (u_int32_t) ih_func, (u_int32_t) arg);
 #endif
 	if (irq < 0 || irq > NIRQ)
 		panic("ixp12x0_intr_establish: IRQ %d out of range", ipl);
@@ -382,17 +376,17 @@ ixp12x0_intr_disestablish(void *cookie)
 }
 
 void
-ixp12x0_intr_dispatch(struct trapframe *frame)
+ixp12x0_intr_dispatch(struct irqframe *frame)
 {
 	struct intrq*		iq;
 	struct intrhand*	ih;
 	struct cpu_info* const	ci = curcpu();
 	const int		ppl = ci->ci_cpl;
 	u_int			oldirqstate;
-	uint32_t		hwpend;
-	uint32_t		pci_hwpend;
+	u_int32_t		hwpend;
+	u_int32_t		pci_hwpend;
 	int			irq;
-	uint32_t		ibit;
+	u_int32_t		ibit;
 
 
 	hwpend = ixp12x0_irq_read();
@@ -410,7 +404,7 @@ ixp12x0_intr_dispatch(struct trapframe *frame)
 
 		iq = &intrq[irq];
 		iq->iq_ev.ev_count++;
-		ci->ci_data.cpu_nintr++;
+		uvmexp.intrs++;
 		TAILQ_FOREACH(ih, &iq->iq_list, ih_list) {
 			ci->ci_cpl = ih->ih_ipl;
 			oldirqstate = enable_interrupts(I32_bit);
@@ -425,7 +419,7 @@ ixp12x0_intr_dispatch(struct trapframe *frame)
 
 		iq = &intrq[irq + SYS_NIRQ];
 		iq->iq_ev.ev_count++;
-		ci->ci_data.cpu_nintr++;
+		uvmexp.intrs++;
 		TAILQ_FOREACH(ih, &iq->iq_list, ih_list) {
 			ci->ci_cpl = ih->ih_ipl;
 			oldirqstate = enable_interrupts(I32_bit);

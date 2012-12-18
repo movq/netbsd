@@ -1,4 +1,4 @@
-/* $NetBSD: ioasic.c,v 1.45 2012/02/06 02:14:16 matt Exp $ */
+/* $NetBSD: ioasic.c,v 1.39 2008/06/13 05:36:50 cegger Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -35,17 +35,17 @@
  * All rights reserved.
  *
  * Author: Keith Bostic, Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -61,7 +61,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: ioasic.c,v 1.45 2012/02/06 02:14:16 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioasic.c,v 1.39 2008/06/13 05:36:50 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -70,7 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: ioasic.c,v 1.45 2012/02/06 02:14:16 matt Exp $");
 #include <sys/malloc.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/pte.h>
 #include <machine/rpb.h>
 
@@ -79,14 +79,14 @@ __KERNEL_RCSID(0, "$NetBSD: ioasic.c,v 1.45 2012/02/06 02:14:16 matt Exp $");
 #include <dev/tc/ioasicvar.h>
 
 /* Definition of the driver for autoconfig. */
-int	ioasicmatch(device_t, cfdata_t, void *);
-void	ioasicattach(device_t, device_t, void *);
+int	ioasicmatch __P((struct device *, struct cfdata *, void *));
+void	ioasicattach __P((struct device *, struct device *, void *));
 
-CFATTACH_DECL_NEW(ioasic, sizeof(struct ioasic_softc),
+CFATTACH_DECL(ioasic, sizeof(struct ioasic_softc),
     ioasicmatch, ioasicattach, NULL, NULL);
 
-int	ioasic_intr(void *);
-int	ioasic_intrnull(void *);
+int	ioasic_intr __P((void *));
+int	ioasic_intrnull __P((void *));
 
 #define	C(x)	((void *)(x))
 
@@ -114,7 +114,7 @@ struct ioasic_dev ioasic_devs[] = {
 int ioasic_ndevs = sizeof(ioasic_devs) / sizeof(ioasic_devs[0]);
 
 struct ioasicintr {
-	int	(*iai_func)(void *);
+	int	(*iai_func) __P((void *));
 	void	*iai_arg;
 	struct evcnt iai_evcnt;
 } ioasicintrs[IOASIC_NCOOKIES];
@@ -125,7 +125,10 @@ tc_addr_t ioasic_base;		/* XXX XXX XXX */
 int ioasicfound;
 
 int
-ioasicmatch(device_t parent, cfdata_t cf, void *aux)
+ioasicmatch(parent, cfdata, aux)
+	struct device *parent;
+	struct cfdata *cfdata;
+	void *aux;
 {
 	struct tc_attach_args *ta = aux;
 
@@ -144,9 +147,11 @@ ioasicmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-ioasicattach(device_t parent, device_t self, void *aux)
+ioasicattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct ioasic_softc *sc = device_private(self);
+	struct ioasic_softc *sc = (struct ioasic_softc *)self;
 	struct tc_attach_args *ta = aux;
 #ifdef DEC_3000_300
 	u_long ssr;
@@ -157,11 +162,10 @@ ioasicattach(device_t parent, device_t self, void *aux)
 
 	ioasicfound = 1;
 
-	sc->sc_dev = self;
-	sc->sc_bst = ta->ta_memt;
+	sc->sc_bst = ta->ta_memt; 
 	if (bus_space_map(ta->ta_memt, ta->ta_addr,
 			0x400000, 0, &sc->sc_bsh)) {
-		printf("%s: unable to map device\n", device_xname(self));
+		printf("%s: unable to map device\n", sc->sc_dv.dv_xname);
 		return;
 	}
 	sc->sc_dmat = ta->ta_dmat;
@@ -200,7 +204,7 @@ ioasicattach(device_t parent, device_t self, void *aux)
 			panic("ioasicattach");
 		sprintf(cp, "slot %lu", i);
 		evcnt_attach_dynamic(&ioasicintrs[i].iai_evcnt,
-		    EVCNT_TYPE_INTR, pevcnt, device_xname(self), cp);
+		    EVCNT_TYPE_INTR, pevcnt, self->dv_xname, cp);
 	}
 	tc_intr_establish(parent, ta->ta_cookie, TC_IPL_NONE, ioasic_intr, sc);
 
@@ -236,8 +240,8 @@ ioasic_intr_establish(device_t ioa, void *cookie, tc_intrlevel_t level,
 		panic("ioasic_intr_establish: invalid cookie.");
 
 	imsk = bus_space_read_4(sc->sc_bst, sc->sc_bsh, IOASIC_IMSK);
-	imsk |= ioasic_devs[i].iad_intrbits;
-	bus_space_write_4(sc->sc_bst, sc->sc_bsh, IOASIC_IMSK, imsk);
+        imsk |= ioasic_devs[i].iad_intrbits;
+        bus_space_write_4(sc->sc_bst, sc->sc_bsh, IOASIC_IMSK, imsk);
 }
 
 void
@@ -270,7 +274,8 @@ ioasic_intr_disestablish(device_t ioa, void *cookie)
 }
 
 int
-ioasic_intrnull(void *val)
+ioasic_intrnull(val)
+	void *val;
 {
 
 	panic("ioasic_intrnull: uncaught IOASIC intr for cookie %ld",
@@ -281,12 +286,13 @@ ioasic_intrnull(void *val)
  * ASIC interrupt handler.
  */
 int
-ioasic_intr(void *val)
+ioasic_intr(val)
+	void *val;
 {
 	register struct ioasic_softc *sc = val;
 	register int ifound;
 	int gifound;
-	uint32_t sir, osir;
+	u_int32_t sir, osir;
 
 	gifound = 0;
 	do {

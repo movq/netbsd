@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2011/05/26 12:56:28 joerg Exp $
+#	$NetBSD: Makefile,v 1.5 2006/11/01 17:10:36 skrll Exp $
 
 .include "${.CURDIR}/../Makefile.inc"
 
@@ -8,17 +8,8 @@ DIST=		${IDIST}/src
 PROG=		grep
 SRCS=		grep.c dfa.c kwset.c search.c grepmat.c
 
-CWARNFLAGS.clang+=	-Wno-format-security -Wno-tautological-compare
-
-.ifndef HOSTPROG
 DPADD+=		${LIBGREPUTILS} ${LIBINTL}
 LDADD+=		${LIBGREPUTILS} -lintl
-.else
-.PATH:	${IDIST}/lib
-SRCS+=	closeout.c error.c exclude.c hard-locale.c isdir.c \
-	obstack.c quotearg.c regex.c savedir.c stpcpy.c \
-	xmalloc.c xstrtol.c xstrtoumax.c
-.endif
 
 INFOFLAGS=	-I${IDIST}/doc -I${.CURDIR}/../include
 TEXINFO=	grep.texi
@@ -28,7 +19,7 @@ LINKS=		${BINDIR}/grep ${BINDIR}/egrep \
 MLINKS=		grep.1 egrep.1 \
 		grep.1 fgrep.1
 
-.if !defined(HOSTPROG) && ${MKNLS} != "no"
+.if ${MKNLS} != "no"
 .for F in cs.gmo de.gmo el.gmo eo.gmo es.gmo et.gmo fr.gmo gl.gmo hr.gmo \
 	id.gmo it.gmo ja.gmo ko.gmo nl.gmo no.gmo pl.gmo pt_BR.gmo ru.gmo \
 	sl.gmo sv.gmo

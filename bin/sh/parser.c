@@ -1,4 +1,4 @@
-/*	$NetBSD: parser.c,v 1.83 2012/06/17 20:48:27 wiz Exp $	*/
+/*	$NetBSD: parser.c,v 1.69 2008/08/23 10:05:52 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,12 +37,11 @@
 #if 0
 static char sccsid[] = "@(#)parser.c	8.7 (Berkeley) 5/16/95";
 #else
-__RCSID("$NetBSD: parser.c,v 1.83 2012/06/17 20:48:27 wiz Exp $");
+__RCSID("$NetBSD: parser.c,v 1.69 2008/08/23 10:05:52 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdlib.h>
-#include <limits.h>
 
 #include "shell.h"
 #include "parser.h"
@@ -102,7 +101,7 @@ int quoteflag;			/* set if (part of) last token was quoted */
 int startlinno;			/* line # where last token started */
 
 
-STATIC union node *list(int, int);
+STATIC union node *list(int);
 STATIC union node *andor(void);
 STATIC union node *pipeline(void);
 STATIC union node *command(void);
@@ -143,12 +142,12 @@ parsecmd(int interact)
 	if (t == TNL)
 		return NULL;
 	tokpushback++;
-	return list(1, 0);
+	return list(1);
 }
 
 
 STATIC union node *
-list(int nlflag, int erflag)
+list(int nlflag)
 {
 	union node *n1, *n2, *n3;
 	int tok;
@@ -208,7 +207,7 @@ list(int nlflag, int erflag)
 				pungetc();		/* push back EOF on input */
 			return n1;
 		default:
-			if (nlflag || erflag)
+			if (nlflag)
 				synexpect(-1);
 			tokpushback++;
 			return n1;
@@ -326,22 +325,22 @@ command(void)
 	case TIF:
 		n1 = (union node *)stalloc(sizeof (struct nif));
 		n1->type = NIF;
-		n1->nif.test = list(0, 0);
+		n1->nif.test = list(0);
 		if (readtoken() != TTHEN)
 			synexpect(TTHEN);
-		n1->nif.ifpart = list(0, 0);
+		n1->nif.ifpart = list(0);
 		n2 = n1;
 		while (readtoken() == TELIF) {
 			n2->nif.elsepart = (union node *)stalloc(sizeof (struct nif));
 			n2 = n2->nif.elsepart;
 			n2->type = NIF;
-			n2->nif.test = list(0, 0);
+			n2->nif.test = list(0);
 			if (readtoken() != TTHEN)
 				synexpect(TTHEN);
-			n2->nif.ifpart = list(0, 0);
+			n2->nif.ifpart = list(0);
 		}
 		if (lasttoken == TELSE)
-			n2->nif.elsepart = list(0, 0);
+			n2->nif.elsepart = list(0);
 		else {
 			n2->nif.elsepart = NULL;
 			tokpushback++;
@@ -355,12 +354,12 @@ command(void)
 		int got;
 		n1 = (union node *)stalloc(sizeof (struct nbinary));
 		n1->type = (lasttoken == TWHILE)? NWHILE : NUNTIL;
-		n1->nbinary.ch1 = list(0, 0);
+		n1->nbinary.ch1 = list(0);
 		if ((got=readtoken()) != TDO) {
 TRACE(("expecting DO got %s %s\n", tokname[got], got == TWORD ? wordtext : ""));
 			synexpect(TDO);
 		}
-		n1->nbinary.ch2 = list(0, 0);
+		n1->nbinary.ch2 = list(0);
 		if (readtoken() != TDONE)
 			synexpect(TDONE);
 		checkkwd = 1;
@@ -409,7 +408,7 @@ TRACE(("expecting DO got %s %s\n", tokname[got], got == TWORD ? wordtext : ""));
 			t = TEND;
 		else
 			synexpect(-1);
-		n1->nfor.body = list(0, 0);
+		n1->nfor.body = list(0);
 		if (readtoken() != t)
 			synexpect(t);
 		checkkwd = 1;
@@ -451,7 +450,7 @@ TRACE(("expecting DO got %s %s\n", tokname[got], got == TWORD ? wordtext : ""));
 			if (lasttoken != TRP) {
 				synexpect(TRP);
 			}
-			cp->nclist.body = list(0, 0);
+			cp->nclist.body = list(0);
 
 			checkkwd = 2;
 			if ((t = readtoken()) != TESAC) {
@@ -473,14 +472,14 @@ TRACE(("expecting DO got %s %s\n", tokname[got], got == TWORD ? wordtext : ""));
 	case TLP:
 		n1 = (union node *)stalloc(sizeof (struct nredir));
 		n1->type = NSUBSHELL;
-		n1->nredir.n = list(0, 0);
+		n1->nredir.n = list(0);
 		n1->nredir.redirect = NULL;
 		if (readtoken() != TRP)
 			synexpect(TRP);
 		checkkwd = 1;
 		break;
 	case TBEGIN:
-		n1 = list(0, 0);
+		n1 = list(0);
 		if (readtoken() != TEND)
 			synexpect(TEND);
 		checkkwd = 1;
@@ -815,6 +814,8 @@ xxreadtoken(void)
 	startlinno = plinno;
 	for (;;) {	/* until token or start of word found */
 		c = pgetc_macro();
+		if (c == ' ' || c == '\t')
+			continue;		/* quick check for white space first */
 		switch (c) {
 		case ' ': case '\t':
 			continue;
@@ -863,7 +864,7 @@ xxreadtoken(void)
 		}
 	}
 breakloop:
-	return readtoken1(c, BASESYNTAX, NULL, 0);
+	return readtoken1(c, BASESYNTAX, (char *)NULL, 0);
 #undef RETURN
 }
 
@@ -923,7 +924,7 @@ readtoken1(int firstc, char const *syn, char *eofmark, int striptabs)
 	int * volatile dblquotep = NULL;
 	volatile size_t maxnest = 32;
 	volatile int dblquote;
-	volatile size_t varnest;	/* levels of variables expansion */
+	volatile int varnest;	/* levels of variables expansion */
 	volatile int arinest;	/* levels of arithmetic expansion */
 	volatile int parenlevel;	/* levels of parens in arithmetic */
 	volatile int oldstyle;
@@ -1109,7 +1110,7 @@ readtoken1(int firstc, char const *syn, char *eofmark, int striptabs)
 			case CEOF:
 				goto endword;		/* exit outer loop */
 			default:
-				if (varnest == 0 && !ISDBLQUOTE())
+				if (varnest == 0)
 					goto endword;	/* exit outer loop */
 				USTPUTC(c, out);
 			}
@@ -1362,9 +1363,9 @@ parsebackq: {
 	struct nodelist **nlpp;
 	int savepbq;
 	union node *n;
-	char *volatile str = NULL;
+	char *volatile str;
 	struct jmploc jmploc;
-	struct jmploc *volatile savehandler = NULL;
+	struct jmploc *volatile savehandler;
 	int savelen;
 	int saveprompt;
 
@@ -1462,7 +1463,7 @@ done:
 	} else
 		saveprompt = 0;
 
-	n = list(0, oldstyle);
+	n = list(0);
 
 	if (oldstyle)
 		doprompt = saveprompt;
@@ -1612,7 +1613,7 @@ synerror(const char *msg)
 	else
 		outfmt(&errout, "%s: ", getprogname());
 	outfmt(&errout, "Syntax error: %s\n", msg);
-	error(NULL);
+	error((char *)NULL);
 	/* NOTREACHED */
 }
 

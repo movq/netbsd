@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.33 2009/06/16 21:05:34 bouyer Exp $	*/
+/*	$NetBSD: clock.c,v 1.30.8.1 2009/06/19 21:22:10 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -121,7 +121,7 @@ WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.33 2009/06/16 21:05:34 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.30.8.1 2009/06/19 21:22:10 snj Exp $");
 
 /* #define CLOCKDEBUG */
 /* #define CLOCK_PARANOIA */
@@ -168,9 +168,8 @@ int sysbeepmatch(device_t, cfdata_t, void *);
 void sysbeepattach(device_t, device_t, void *);
 int sysbeepdetach(device_t, int);
 
-CFATTACH_DECL3_NEW(sysbeep, 0,
-    sysbeepmatch, sysbeepattach, sysbeepdetach, NULL, NULL, NULL,
-    DVF_DETACH_SHUTDOWN);
+CFATTACH_DECL_NEW(sysbeep, 0,
+    sysbeepmatch, sysbeepattach, sysbeepdetach, NULL);
 
 static int ppi_attached;
 static pcppi_tag_t ppicookie;
@@ -334,8 +333,8 @@ startrtclock(void)
 	/* Check diagnostic status */
 	if ((s = mc146818_read(NULL, NVRAM_DIAG)) != 0) { /* XXX softc */
 		char bits[128];
-		snprintb(bits, sizeof(bits), NVRAM_DIAG_BITS, s);
-		printf("RTC BIOS diagnostic error %s\n", bits);
+		printf("RTC BIOS diagnostic error %s\n",
+		    bitmask_snprintf(s, NVRAM_DIAG_BITS, bits, sizeof(bits)));
 	}
 
 	tc_init(&i8254_timecounter);

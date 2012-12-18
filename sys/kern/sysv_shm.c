@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_shm.c,v 1.123 2012/03/13 18:40:54 elad Exp $	*/
+/*	$NetBSD: sysv_shm.c,v 1.113.2.1 2009/01/14 17:54:21 snj Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2007 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_shm.c,v 1.123 2012/03/13 18:40:54 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_shm.c,v 1.113.2.1 2009/01/14 17:54:21 snj Exp $");
 
 #define SYSVSHM
 
@@ -76,10 +76,14 @@ __KERNEL_RCSID(0, "$NetBSD: sysv_shm.c,v 1.123 2012/03/13 18:40:54 elad Exp $");
 #include <sys/mount.h>		/* XXX for <sys/syscallargs.h> */
 #include <sys/syscallargs.h>
 #include <sys/queue.h>
+#include <sys/pool.h>
 #include <sys/kauth.h>
 
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_object.h>
+
+int shm_nused;
+struct	shmid_ds *shmsegs;
 
 struct shmmap_entry {
 	SLIST_ENTRY(shmmap_entry) next;
@@ -87,14 +91,11 @@ struct shmmap_entry {
 	int shmid;
 };
 
-int			shm_nused		__cacheline_aligned;
-struct shmid_ds *	shmsegs			__read_mostly;
-
-static kmutex_t		shm_lock		__cacheline_aligned;
-static kcondvar_t *	shm_cv			__cacheline_aligned;
-static int		shm_last_free		__cacheline_aligned;
-static size_t		shm_committed		__cacheline_aligned;
-static int		shm_use_phys		__read_mostly;
+static kmutex_t		shm_lock;
+static kcondvar_t *	shm_cv;
+static struct pool	shmmap_entry_pool;
+static int		shm_last_free, shm_use_phys;
+static size_t		shm_committed;
 
 static kcondvar_t	shm_realloc_cv;
 static bool		shm_realloc_state;
@@ -229,7 +230,7 @@ shmmap_getprivate(struct proc *p)
 
 	/* 3. A shared shm map, copy to a fresh one and adjust refcounts */
 	SLIST_FOREACH(oshmmap_se, &oshmmap_s->entries, next) {
-		shmmap_se = kmem_alloc(sizeof(struct shmmap_entry), KM_SLEEP);
+		shmmap_se = pool_get(&shmmap_entry_pool, PR_WAITOK);
 		shmmap_se->va = oshmmap_se->va;
 		shmmap_se->shmid = oshmmap_se->shmid;
 		SLIST_INSERT_HEAD(&shmmap_s->entries, shmmap_se, next);
@@ -267,15 +268,13 @@ shm_memlock(struct lwp *l, struct shmid_ds *shmseg, int shmid, int cmd)
 		if (cmd == SHM_LOCK &&
 		    (shmseg->shm_perm.mode & SHMSEG_WIRED) == 0) {
 			/* Wire the object and map, then tag it */
-			error = uvm_obj_wirepages(shmseg->_shm_internal,
-			    0, size, NULL);
+			error = uobj_wirepages(shmseg->_shm_internal, 0, size);
 			if (error)
 				return EIO;
 			error = uvm_map_pageable(&p->p_vmspace->vm_map,
 			    shmmap_se->va, shmmap_se->va + size, false, 0);
 			if (error) {
-				uvm_obj_unwirepages(shmseg->_shm_internal,
-				    0, size);
+				uobj_unwirepages(shmseg->_shm_internal, 0, size);
 				if (error == EFAULT)
 					error = ENOMEM;
 				return error;
@@ -285,7 +284,7 @@ shm_memlock(struct lwp *l, struct shmid_ds *shmseg, int shmid, int cmd)
 		} else if (cmd == SHM_UNLOCK &&
 		    (shmseg->shm_perm.mode & SHMSEG_WIRED) != 0) {
 			/* Unwire the object and map, then untag it */
-			uvm_obj_unwirepages(shmseg->_shm_internal, 0, size);
+			uobj_unwirepages(shmseg->_shm_internal, 0, size);
 			error = uvm_map_pageable(&p->p_vmspace->vm_map,
 			    shmmap_se->va, shmmap_se->va + size, true, 0);
 			if (error)
@@ -355,10 +354,9 @@ sys_shmdt(struct lwp *l, const struct sys_shmdt_args *uap, register_t *retval)
 	mutex_exit(&shm_lock);
 
 	uvm_deallocate(&p->p_vmspace->vm_map, shmmap_se->va, size);
-	if (uobj != NULL) {
+	if (uobj != NULL)
 		uao_detach(uobj);
-	}
-	kmem_free(shmmap_se, sizeof(struct shmmap_entry));
+	pool_put(&shmmap_entry_pool, shmmap_se);
 
 	return 0;
 }
@@ -387,7 +385,7 @@ sys_shmat(struct lwp *l, const struct sys_shmat_args *uap, register_t *retval)
 	vsize_t size;
 
 	/* Allocate a new map entry and set it */
-	shmmap_se = kmem_alloc(sizeof(struct shmmap_entry), KM_SLEEP);
+	shmmap_se = pool_get(&shmmap_entry_pool, PR_WAITOK);
 	shmmap_se->shmid = SCARG(uap, shmid);
 
 	mutex_enter(&shm_lock);
@@ -477,9 +475,8 @@ sys_shmat(struct lwp *l, const struct sys_shmat_args *uap, register_t *retval)
 err:
 	cv_broadcast(&shm_realloc_cv);
 	mutex_exit(&shm_lock);
-	if (error && shmmap_se) {
-		kmem_free(shmmap_se, sizeof(struct shmmap_entry));
-	}
+	if (error && shmmap_se)
+		pool_put(&shmmap_entry_pool, shmmap_se);
 	return error;
 
 err_detach:
@@ -489,10 +486,9 @@ err_detach:
 	shm_realloc_disable--;
 	cv_broadcast(&shm_realloc_cv);
 	mutex_exit(&shm_lock);
-	if (uobj != NULL) {
+	if (uobj != NULL)
 		uao_detach(uobj);
-	}
-	kmem_free(shmmap_se, sizeof(struct shmmap_entry));
+	pool_put(&shmmap_entry_pool, shmmap_se);
 	return error;
 }
 
@@ -500,8 +496,7 @@ err_detach:
  * Shared memory control operations.
  */
 int
-sys___shmctl50(struct lwp *l, const struct sys___shmctl50_args *uap,
-    register_t *retval)
+sys___shmctl13(struct lwp *l, const struct sys___shmctl13_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) shmid;
@@ -574,10 +569,8 @@ shmctl1(struct lwp *l, int shmid, int cmd, struct shmid_ds *shmbuf)
 		break;
 	case SHM_LOCK:
 	case SHM_UNLOCK:
-		if ((error = kauth_authorize_system(cred,
-		    KAUTH_SYSTEM_SYSVIPC,
-		    (cmd == SHM_LOCK) ? KAUTH_REQ_SYSTEM_SYSVIPC_SHM_LOCK :
-		    KAUTH_REQ_SYSTEM_SYSVIPC_SHM_UNLOCK, NULL, NULL, NULL)) != 0)
+		if ((error = kauth_authorize_generic(cred,
+		    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
 			break;
 		error = shm_memlock(l, shmseg, shmid, cmd);
 		break;
@@ -668,7 +661,7 @@ sys_shmget(struct lwp *l, const struct sys_shmget_args *uap, register_t *retval)
 	if (SCARG(uap, shmflg) & _SHM_RMLINGER)
 		mode |= SHMSEG_RMLINGER;
 
-	SHMPRINTF(("shmget: key 0x%lx size 0x%zx shmflg 0x%x mode 0x%x\n",
+	SHMPRINTF(("shmget: key 0x%lx size 0x%x shmflg 0x%x mode 0x%x\n",
 	    SCARG(uap, key), SCARG(uap, size), SCARG(uap, shmflg), mode));
 
 	mutex_enter(&shm_lock);
@@ -736,7 +729,7 @@ sys_shmget(struct lwp *l, const struct sys_shmget_args *uap, register_t *retval)
 	shmseg->_shm_internal = uao_create(size, 0);
 	if (lockmem) {
 		/* Wire the pages and tag it */
-		error = uvm_obj_wirepages(shmseg->_shm_internal, 0, size, NULL);
+		error = uobj_wirepages(shmseg->_shm_internal, 0, size);
 		if (error) {
 			uao_detach(shmseg->_shm_internal);
 			mutex_enter(&shm_lock);
@@ -806,6 +799,11 @@ shmexit(struct vmspace *vm)
 {
 	struct shmmap_state *shmmap_s;
 	struct shmmap_entry *shmmap_se;
+	struct uvm_object **uobj;
+	size_t *size;
+	u_int i, n;
+
+	SLIST_HEAD(, shmmap_entry) tmp_entries;
 
 	mutex_enter(&shm_lock);
 	shmmap_s = (struct shmmap_state *)vm->vm_shm;
@@ -813,54 +811,62 @@ shmexit(struct vmspace *vm)
 		mutex_exit(&shm_lock);
 		return;
 	}
+
 	vm->vm_shm = NULL;
 
 	if (--shmmap_s->nrefs > 0) {
 		SHMPRINTF(("shmexit: vm %p drop ref (%d entries), refs = %d\n",
 		    vm, shmmap_s->nitems, shmmap_s->nrefs));
-		SLIST_FOREACH(shmmap_se, &shmmap_s->entries, next) {
+		SLIST_FOREACH(shmmap_se, &shmmap_s->entries, next)
 			shmsegs[IPCID_TO_IX(shmmap_se->shmid)].shm_nattch--;
-		}
 		mutex_exit(&shm_lock);
 		return;
 	}
 
-	SHMPRINTF(("shmexit: vm %p cleanup (%d entries)\n", vm, shmmap_s->nitems));
-	if (shmmap_s->nitems == 0) {
-		mutex_exit(&shm_lock);
+	KASSERT(shmmap_s->nrefs == 0);
+	n = shmmap_s->nitems;
+	SHMPRINTF(("shmexit: vm %p cleanup (%d entries)\n", vm, n));
+	mutex_exit(&shm_lock);
+	if (n == 0) {
 		kmem_free(shmmap_s, sizeof(struct shmmap_state));
 		return;
 	}
 
-	/*
-	 * Delete the entry from shm map.
-	 */
-	for (;;) {
+	/* Allocate the arrays */
+	SLIST_INIT(&tmp_entries);
+	uobj = kmem_zalloc(n * sizeof(void *), KM_SLEEP);
+	size = kmem_zalloc(n * sizeof(size_t), KM_SLEEP);
+
+	/* Delete the entry from shm map */
+	i = 0;
+	mutex_enter(&shm_lock);
+	while (!SLIST_EMPTY(&shmmap_s->entries)) {
 		struct shmid_ds *shmseg;
-		struct uvm_object *uobj;
-		size_t sz;
 
 		shmmap_se = SLIST_FIRST(&shmmap_s->entries);
-		KASSERT(shmmap_se != NULL);
-
 		shmseg = &shmsegs[IPCID_TO_IX(shmmap_se->shmid)];
-		sz = (shmseg->shm_segsz + PGOFSET) & ~PGOFSET;
-		/* shm_delete_mapping() removes from the list. */
-		uobj = shm_delete_mapping(shmmap_s, shmmap_se);
-		mutex_exit(&shm_lock);
-
-		uvm_deallocate(&vm->vm_map, shmmap_se->va, sz);
-		if (uobj != NULL) {
-			uao_detach(uobj);
-		}
-		kmem_free(shmmap_se, sizeof(struct shmmap_entry));
-
-		if (SLIST_EMPTY(&shmmap_s->entries)) {
-			break;
-		}
-		mutex_enter(&shm_lock);
-		KASSERT(!SLIST_EMPTY(&shmmap_s->entries));
+		size[i] = (shmseg->shm_segsz + PGOFSET) & ~PGOFSET;
+		uobj[i] = shm_delete_mapping(shmmap_s, shmmap_se);
+		SLIST_INSERT_HEAD(&tmp_entries, shmmap_se, next);
+		i++;
 	}
+	mutex_exit(&shm_lock);
+
+	/* Unmap all segments, free the entries */
+	i = 0;
+	while (!SLIST_EMPTY(&tmp_entries)) {
+		KASSERT(i < n);
+		shmmap_se = SLIST_FIRST(&tmp_entries);
+		SLIST_REMOVE(&tmp_entries, shmmap_se, shmmap_entry, next);
+		uvm_deallocate(&vm->vm_map, shmmap_se->va, size[i]);
+		if (uobj[i] != NULL)
+			uao_detach(uobj[i]);
+		pool_put(&shmmap_entry_pool, shmmap_se);
+		i++;
+	}
+
+	kmem_free(uobj, n * sizeof(void *));
+	kmem_free(size, n * sizeof(size_t));
 	kmem_free(shmmap_s, sizeof(struct shmmap_state));
 }
 
@@ -879,8 +885,8 @@ shmrealloc(int newshmni)
 	/* Allocate new memory area */
 	sz = ALIGN(newshmni * sizeof(struct shmid_ds)) +
 	    ALIGN(newshmni * sizeof(kcondvar_t));
-	sz = round_page(sz);
-	v = uvm_km_alloc(kernel_map, sz, 0, UVM_KMF_WIRED|UVM_KMF_ZERO);
+	v = uvm_km_alloc(kernel_map, round_page(sz), 0,
+	    UVM_KMF_WIRED|UVM_KMF_ZERO);
 	if (v == 0)
 		return ENOMEM;
 
@@ -938,7 +944,6 @@ shmrealloc(int newshmni)
 
 	sz = ALIGN(oldshmni * sizeof(struct shmid_ds)) +
 	    ALIGN(oldshmni * sizeof(kcondvar_t));
-	sz = round_page(sz);
 	uvm_km_free(kernel_map, (vaddr_t)oldshmsegs, sz, UVM_KMF_WIRED);
 
 	return 0;
@@ -952,24 +957,22 @@ shminit(void)
 	int i;
 
 	mutex_init(&shm_lock, MUTEX_DEFAULT, IPL_NONE);
+	pool_init(&shmmap_entry_pool, sizeof(struct shmmap_entry), 0, 0, 0,
+	    "shmmp", &pool_allocator_nointr, IPL_NONE);
 	cv_init(&shm_realloc_cv, "shmrealc");
 
 	/* Allocate the wired memory for our structures */
 	sz = ALIGN(shminfo.shmmni * sizeof(struct shmid_ds)) +
 	    ALIGN(shminfo.shmmni * sizeof(kcondvar_t));
-	sz = round_page(sz);
-	v = uvm_km_alloc(kernel_map, sz, 0, UVM_KMF_WIRED|UVM_KMF_ZERO);
+	v = uvm_km_alloc(kernel_map, round_page(sz), 0,
+	    UVM_KMF_WIRED|UVM_KMF_ZERO);
 	if (v == 0)
 		panic("sysv_shm: cannot allocate memory");
 	shmsegs = (void *)v;
 	shm_cv = (void *)((uintptr_t)shmsegs +
 	    ALIGN(shminfo.shmmni * sizeof(struct shmid_ds)));
 
-	if (shminfo.shmmax == 0)
-		shminfo.shmmax = max(physmem / 4, 1024) * PAGE_SIZE;
-	else
-		shminfo.shmmax *= PAGE_SIZE;
-	shminfo.shmall = shminfo.shmmax / PAGE_SIZE;
+	shminfo.shmmax *= PAGE_SIZE;
 
 	for (i = 0; i < shminfo.shmmni; i++) {
 		cv_init(&shm_cv[i], "shmwait");
@@ -981,8 +984,6 @@ shminit(void)
 	shm_committed = 0;
 	shm_realloc_disable = 0;
 	shm_realloc_state = false;
-
-	sysvipcinit();
 }
 
 static int

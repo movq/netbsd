@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs.h,v 1.33 2012/11/21 23:11:23 jakllsch Exp $	*/
+/*	$NetBSD: ext2fs.h,v 1.26 2007/12/25 18:33:49 perry Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -43,6 +43,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -126,46 +131,46 @@
  * Super block for an ext2fs file system.
  */
 struct ext2fs {
-	uint32_t  e2fs_icount;		/* Inode count */
-	uint32_t  e2fs_bcount;		/* blocks count */
-	uint32_t  e2fs_rbcount;		/* reserved blocks count */
-	uint32_t  e2fs_fbcount;		/* free blocks count */
-	uint32_t  e2fs_ficount;		/* free inodes count */
-	uint32_t  e2fs_first_dblock;	/* first data block */
-	uint32_t  e2fs_log_bsize;	/* block size = 1024*(2^e2fs_log_bsize) */
-	uint32_t  e2fs_fsize;		/* fragment size */
-	uint32_t  e2fs_bpg;		/* blocks per group */
-	uint32_t  e2fs_fpg;		/* frags per group */
-	uint32_t  e2fs_ipg;		/* inodes per group */
-	uint32_t  e2fs_mtime;		/* mount time */
-	uint32_t  e2fs_wtime;		/* write time */
-	uint16_t  e2fs_mnt_count;	/* mount count */
-	uint16_t  e2fs_max_mnt_count;	/* max mount count */
-	uint16_t  e2fs_magic;		/* magic number */
-	uint16_t  e2fs_state;		/* file system state */
-	uint16_t  e2fs_beh;		/* behavior on errors */
-	uint16_t  e2fs_minrev;		/* minor revision level */
-	uint32_t  e2fs_lastfsck;	/* time of last fsck */
-	uint32_t  e2fs_fsckintv;	/* max time between fscks */
-	uint32_t  e2fs_creator;		/* creator OS */
-	uint32_t  e2fs_rev;		/* revision level */
-	uint16_t  e2fs_ruid;		/* default uid for reserved blocks */
-	uint16_t  e2fs_rgid;		/* default gid for reserved blocks */
+	u_int32_t  e2fs_icount;		/* Inode count */
+	u_int32_t  e2fs_bcount;		/* blocks count */
+	u_int32_t  e2fs_rbcount;	/* reserved blocks count */
+	u_int32_t  e2fs_fbcount;	/* free blocks count */
+	u_int32_t  e2fs_ficount;	/* free inodes count */
+	u_int32_t  e2fs_first_dblock;	/* first data block */
+	u_int32_t  e2fs_log_bsize;	/* block size = 1024*(2^e2fs_log_bsize) */
+	u_int32_t  e2fs_fsize;		/* fragment size */
+	u_int32_t  e2fs_bpg;		/* blocks per group */
+	u_int32_t  e2fs_fpg;		/* frags per group */
+	u_int32_t  e2fs_ipg;		/* inodes per group */
+	u_int32_t  e2fs_mtime;		/* mount time */
+	u_int32_t  e2fs_wtime;		/* write time */
+	u_int16_t  e2fs_mnt_count;	/* mount count */
+	u_int16_t  e2fs_max_mnt_count;	/* max mount count */
+	u_int16_t  e2fs_magic;		/* magic number */
+	u_int16_t  e2fs_state;		/* file system state */
+	u_int16_t  e2fs_beh;		/* behavior on errors */
+	u_int16_t  e2fs_minrev;		/* minor revision level */
+	u_int32_t  e2fs_lastfsck;	/* time of last fsck */
+	u_int32_t  e2fs_fsckintv;	/* max time between fscks */
+	u_int32_t  e2fs_creator;	/* creator OS */
+	u_int32_t  e2fs_rev;		/* revision level */
+	u_int16_t  e2fs_ruid;		/* default uid for reserved blocks */
+	u_int16_t  e2fs_rgid;		/* default gid for reserved blocks */
 	/* EXT2_DYNAMIC_REV superblocks */
-	uint32_t  e2fs_first_ino;	/* first non-reserved inode */
-	uint16_t  e2fs_inode_size;	/* size of inode structure */
-	uint16_t  e2fs_block_group_nr;	/* block grp number of this sblk*/
-	uint32_t  e2fs_features_compat;	/*  compatible feature set */
-	uint32_t  e2fs_features_incompat; /* incompatible feature set */
-	uint32_t  e2fs_features_rocompat; /* RO-compatible feature set */
-	uint8_t   e2fs_uuid[16];	/* 128-bit uuid for volume */
-	char      e2fs_vname[16];	/* volume name */
-	char      e2fs_fsmnt[64];	/* name mounted on */
-	uint32_t  e2fs_algo;		/* For compression */
-	uint8_t   e2fs_prealloc;	/* # of blocks to preallocate */
-	uint8_t   e2fs_dir_prealloc;	/* # of blocks to preallocate for dir */
-	uint16_t  e2fs_reserved_ngdb;	/* # of reserved gd blocks for resize */
-	uint32_t  reserved2[204];
+	u_int32_t  e2fs_first_ino;	/* first non-reserved inode */
+	u_int16_t  e2fs_inode_size;	/* size of inode structure */
+	u_int16_t  e2fs_block_group_nr;	/* block grp number of this sblk*/
+	u_int32_t  e2fs_features_compat; /*  compatible feature set */
+	u_int32_t  e2fs_features_incompat; /* incompatible feature set */
+	u_int32_t  e2fs_features_rocompat; /* RO-compatible feature set */
+	u_int8_t   e2fs_uuid[16];	/* 128-bit uuid for volume */
+	char       e2fs_vname[16];	/* volume name */
+	char       e2fs_fsmnt[64]; 	/* name mounted on */
+	u_int32_t  e2fs_algo;		/* For compression */
+	u_int8_t   e2fs_prealloc;	/* # of blocks to preallocate */
+	u_int8_t   e2fs_dir_prealloc;	/* # of blocks to preallocate for dir */
+	u_int16_t  e2fs_reserved_ngdb; /* # of reserved gd blocks for resize */
+	u_int32_t  reserved2[204];
 };
 
 
@@ -198,57 +203,14 @@ struct m_ext2fs {
 
 /* compatible/incompatible features */
 #define EXT2F_COMPAT_PREALLOC		0x0001
-#define EXT2F_COMPAT_AFS		0x0002
-#define EXT2F_COMPAT_HASJOURNAL		0x0004
-#define EXT2F_COMPAT_EXTATTR		0x0008
 #define EXT2F_COMPAT_RESIZE		0x0010
-#define EXT2F_COMPAT_DIRHASHINDEX	0x0020
-#define	EXT2F_COMPAT_BITS \
-	"\20" \
-	"\06COMPAT_DIRHASHINDEX" \
-	"\05COMPAT_RESIZE" \
-	"\04COMPAT_EXTATTR" \
-	"\03COMPAT_HASJOURNAL" \
-	"\02COMPAT_AFS" \
-	"\01COMPAT_PREALLOC"
 
 #define EXT2F_ROCOMPAT_SPARSESUPER	0x0001
 #define EXT2F_ROCOMPAT_LARGEFILE	0x0002
 #define EXT2F_ROCOMPAT_BTREE_DIR	0x0004
-#define EXT2F_ROCOMPAT_HUGE_FILE	0x0008
-#define EXT2F_ROCOMPAT_GDT_CSUM		0x0010
-#define EXT2F_ROCOMPAT_DIR_NLINK	0x0020
-#define EXT2F_ROCOMPAT_EXTRA_ISIZE	0x0040
-#define	EXT2F_ROCOMPAT_BITS \
-	"\20" \
-	"\07ROCOMPAT_EXTRA_ISIZE" \
-	"\06ROCOMPAT_DIR_NLINK" \
-	"\05ROCOMPAT_GDT_CSUM" \
-	"\04ROCOMPAT_HUGE_FILE" \
-	"\03ROCOMPAT_BTREE_DIR" \
-	"\02ROCOMPAT_LARGEFILE" \
-	"\01ROCOMPAT_SPARSESUPER"
 
 #define EXT2F_INCOMPAT_COMP		0x0001
 #define EXT2F_INCOMPAT_FTYPE		0x0002
-#define	EXT2F_INCOMPAT_REPLAY_JOURNAL	0x0004
-#define	EXT2F_INCOMPAT_USES_JOURNAL	0x0008
-#define EXT2F_INCOMPAT_META_BG		0x0010
-#define EXT2F_INCOMPAT_EXTENTS		0x0040
-#define EXT2F_INCOMPAT_64BIT		0x0080
-#define EXT2F_INCOMPAT_MMP		0x0100
-#define EXT2F_INCOMPAT_FLEX_BG		0x0200
-#define	EXT2F_INCOMPAT_BITS \
-	"\20" \
-	"\012INCOMPAT_FLEX_BG" \
-	"\011INCOMPAT_MMP" \
-	"\010INCOMPAT_64BIT" \
-	"\07INCOMPAT_EXTENTS" \
-	"\05INCOMPAT_META_BG" \
-	"\04INCOMPAT_USES_JOURNAL" \
-	"\03INCOMPAT_REPLAY_JOURNAL" \
-	"\02INCOMPAT_FTYPE" \
-	"\01INCOMPAT_COMP"
 
 /*
  * Features supported in this implementation
@@ -265,8 +227,7 @@ struct m_ext2fs {
  */
 #define EXT2F_COMPAT_SUPP		0x0000
 #define EXT2F_ROCOMPAT_SUPP		(EXT2F_ROCOMPAT_SPARSESUPER \
-					 | EXT2F_ROCOMPAT_LARGEFILE \
-					 | EXT2F_ROCOMPAT_HUGE_FILE)
+					 | EXT2F_ROCOMPAT_LARGEFILE)
 #define EXT2F_INCOMPAT_SUPP		EXT2F_INCOMPAT_FTYPE
 
 /*
@@ -295,14 +256,14 @@ struct m_ext2fs {
 /* ext2 file system block group descriptor */
 
 struct ext2_gd {
-	uint32_t ext2bgd_b_bitmap;	/* blocks bitmap block */
-	uint32_t ext2bgd_i_bitmap;	/* inodes bitmap block */
-	uint32_t ext2bgd_i_tables;	/* inodes table block  */
-	uint16_t ext2bgd_nbfree;	/* number of free blocks */
-	uint16_t ext2bgd_nifree;	/* number of free inodes */
-	uint16_t ext2bgd_ndirs;		/* number of directories */
-	uint16_t reserved;
-	uint32_t reserved2[3];
+	u_int32_t ext2bgd_b_bitmap;	/* blocks bitmap block */
+	u_int32_t ext2bgd_i_bitmap;	/* inodes bitmap block */
+	u_int32_t ext2bgd_i_tables;	/* inodes table block  */
+	u_int16_t ext2bgd_nbfree;	/* number of free blocks */
+	u_int16_t ext2bgd_nifree;	/* number of free inodes */
+	u_int16_t ext2bgd_ndirs;	/* number of directories */
+	u_int16_t reserved;
+	u_int32_t reserved2[3];
 };
 
 
@@ -410,6 +371,6 @@ void e2fs_cg_bswap(struct ext2_gd *, struct ext2_gd *, int);
 /*
  * Number of indirects in a file system block.
  */
-#define	NINDIR(fs)	((fs)->e2fs_bsize / sizeof(uint32_t))
+#define	NINDIR(fs)	((fs)->e2fs_bsize / sizeof(u_int32_t))
 
 #endif /* !_UFS_EXT2FS_EXT2FS_H_ */

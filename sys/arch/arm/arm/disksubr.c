@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.23 2009/03/15 22:23:16 cegger Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.20 2008/01/02 11:48:23 ad Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -97,7 +97,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.23 2009/03/15 22:23:16 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.20 2008/01/02 11:48:23 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -125,8 +125,11 @@ __KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.23 2009/03/15 22:23:16 cegger Exp $")
  */
 
 const char *
-readdisklabel(dev_t dev, void (*strat)(struct buf *),
-		struct disklabel *lp, struct cpu_disklabel *osdep)
+readdisklabel(dev, strat, lp, osdep)
+	dev_t dev;
+	void (*strat) __P((struct buf *));
+	struct disklabel *lp;
+	struct cpu_disklabel *osdep;
 {
 	struct buf *bp;
 	struct disklabel *dlp;
@@ -262,7 +265,11 @@ done:
  */
 
 int
-setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask, struct cpu_disklabel *osdep)
+setdisklabel(olp, nlp, openmask, osdep)
+	struct disklabel *olp;
+	struct disklabel *nlp;
+	u_long openmask;
+	struct cpu_disklabel *osdep;
 {
 	int i;
 	struct partition *opp, *npp;
@@ -319,8 +326,11 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask, stru
  */
  
 int
-writedisklabel(dev_t dev, void (*strat)(struct buf *),
-	struct disklabel *lp, struct cpu_disklabel *osdep)
+writedisklabel(dev, strat, lp, osdep)
+	dev_t dev;
+	void (*strat) __P((struct buf *));
+	struct disklabel *lp;
+	struct cpu_disklabel *osdep;
 {
 	struct buf *bp;
 	struct disklabel *dlp;

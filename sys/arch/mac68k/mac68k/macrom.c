@@ -1,4 +1,4 @@
-/*	$NetBSD: macrom.c,v 1.72 2012/02/12 16:34:09 matt Exp $	*/
+/*	$NetBSD: macrom.c,v 1.68 2008/01/05 00:31:55 ad Exp $	*/
 
 /*-
  * Copyright (C) 1994	Bradley A. Grantham
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Bradley A. Grantham.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -41,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: macrom.c,v 1.72 2012/02/12 16:34:09 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: macrom.c,v 1.68 2008/01/05 00:31:55 ad Exp $");
 
 #include "opt_adb.h"
 #include "opt_ddb.h"
@@ -384,7 +389,7 @@ mrg_lvl2dtpanic(void)		/* Lvl2DT stopper */
 }
 
 void
-mrg_jadbprocpanic(void)	/* JADBProc stopper */
+mrg_jadbprocpanic()	/* JADBProc stopper */
 {
 	panic("Agh!  Called JADBProc!");
 }
@@ -508,7 +513,7 @@ mrg_NewPtr(void)
 #endif
 		*(u_int32_t *)ptr = numbytes;
 		ptr += 4;
-		memset(ptr, 0, numbytes); /* NewPtr, 0, Clear ! */
+		bzero(ptr, numbytes); /* NewPtr, Clear ! */
 	}
 
 	__asm volatile("movl	%0,%%a0" :  : "g" (ptr) : "a0");

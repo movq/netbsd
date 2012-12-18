@@ -1,4 +1,4 @@
-/*	$NetBSD: sets.c,v 1.16 2009/04/18 14:58:06 tsutsui Exp $	*/
+/*	$NetBSD: sets.c,v 1.11 2007/01/18 12:43:38 cbiere Exp $	*/
 
 /*
  * This code is such a kludge that I don't want to put my name on it.
@@ -7,7 +7,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sets.c,v 1.16 2009/04/18 14:58:06 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sets.c,v 1.11 2007/01/18 12:43:38 cbiere Exp $");
 
 #include "main.h"
 #include "malloc.h"
@@ -38,7 +38,8 @@ void dumptree();
 void defineitem();
 
 void
-initsets(FILE *f,FILE *s)
+initsets(f,s)
+	FILE *f, *s;
 {
 	static char errorstring[20];
 	extern struct Object *SameState;
@@ -111,7 +112,8 @@ char *name;
 static int states_done  = 0;
 
 void
-end_states(FILE *f)
+end_states(f)
+	FILE *f;
 {
 	register unsigned n = Nstates;
 	register int i;
@@ -138,7 +140,8 @@ end_states(FILE *f)
 int FirstEventAttribute = 1;
 
 static void
-insert(struct Object *o)
+insert(o)
+	struct Object *o;
 {
 	struct Object *p = Objtree;
 	struct Object **q = &Objtree;
@@ -227,7 +230,8 @@ insert(struct Object *o)
 }
 
 void
-delete(struct Object *o)
+delete(o)
+	struct Object *o;
 {
 	register struct Object *p = o->obj_right;
 	register struct Object *q;
@@ -283,7 +287,10 @@ delete(struct Object *o)
 }
 
 struct Object *
-defineset(unsigned char type, char *adr, int keep)
+defineset(type, adr, keep)
+unsigned char type;
+char *adr;
+int keep;
 {
 	struct Object *onew;
 	IFDEBUG(o)
@@ -291,7 +298,7 @@ defineset(unsigned char type, char *adr, int keep)
 	ENDDEBUG
 
 	onew = (struct Object *)Malloc(sizeof (struct Object));
-	memset(onew, 0, sizeof(struct Object));
+	bzero(onew, sizeof(struct Object));
 	onew->obj_name = adr;
 	onew->obj_kind = OBJ_SET;
 	onew->obj_type = type;
@@ -306,7 +313,9 @@ defineset(unsigned char type, char *adr, int keep)
 }
 
 void
-dumpit(char *o, char *s)
+dumpit(o, s)
+	char *o;
+	char *s;
 {
 	register unsigned i;
 
@@ -320,7 +329,10 @@ ENDDEBUG
 }
 
 void
-defineitem(unsigned char type, char *adr, char *struc)
+defineitem(type, adr, struc)
+	unsigned char type;
+	char *adr;
+	char *struc;
 {
 	struct Object *onew;
 	IFDEBUG(o)
@@ -334,7 +346,7 @@ defineitem(unsigned char type, char *adr, char *struc)
 		exit(1);
 	} else {
 		onew = (struct Object *)Malloc(sizeof (struct Object));
-		memset(onew, 0, sizeof(struct Object));
+		bzero(onew, sizeof(struct Object));
 		onew->obj_name = stash(adr);
 		onew->obj_kind = OBJ_ITEM;
 		onew->obj_type =  type;
@@ -347,7 +359,9 @@ defineitem(unsigned char type, char *adr, char *struc)
 }
 
 void
-member(struct Object *o, char *adr)
+member(o, adr)
+	struct Object *o;
+	char *adr;
 {
 	struct Object *onew, *oold;
 	IFDEBUG(o)
@@ -364,7 +378,7 @@ member(struct Object *o, char *adr)
 		"Warning at line %d: set definition of %s causes definition of\n",
 			lineno, OBJ_NAME(o));
 		fprintf(stderr, "\t (previously undefined) member %s\n", adr);
-		memset(onew, 0, sizeof(struct Object));
+		bzero(onew, sizeof(struct Object));
 		onew->obj_name = stash(adr);
 		onew->obj_kind = OBJ_ITEM;
 		onew->obj_type = o->obj_type;
@@ -375,7 +389,7 @@ member(struct Object *o, char *adr)
 			fprintf(stderr, "Sets cannot be members of sets; %s\n", adr);
 			exit(1);
 		}
-		memcpy(onew, oold, sizeof(struct Object));
+		bcopy(oold, onew, sizeof(struct Object));
 		onew->obj_members = onew->obj_left = onew->obj_right = NULL;
 	}
 	onew->obj_members = o->obj_members;
@@ -397,7 +411,8 @@ char *name;
 }
 
 void
-AddCurrentEventName(register char **x)
+AddCurrentEventName(x)
+	register char **x;
 {
 	register char *n = EV_PREFIX; ;
 
@@ -422,7 +437,9 @@ AddCurrentEventName(register char **x)
 }
 
 void
-dumptree(register struct Object *o,int i)
+dumptree(o,i)
+	register struct Object *o;
+	int i;
 {
 	register int j;
 
@@ -440,7 +457,9 @@ dumptree(register struct Object *o,int i)
 }
 
 void
-dump(int c,int a)
+dump(c,a)
+	int c;
+	int a;
 {
 	fprintf(stderr, "dump: c 0x%x, a 0x%x\n",c,a);
 

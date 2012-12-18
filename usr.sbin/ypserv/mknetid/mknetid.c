@@ -1,4 +1,4 @@
-/*	$NetBSD: mknetid.c,v 1.18 2011/08/30 21:10:28 joerg Exp $	*/
+/*	$NetBSD: mknetid.c,v 1.15 2004/10/30 16:01:48 dsl Exp $	*/
 
 /*
  * Copyright (c) 1996 Mats O Jansson <moj@stacken.kth.se>
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -28,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mknetid.c,v 1.18 2011/08/30 21:10:28 joerg Exp $");
+__RCSID("$NetBSD: mknetid.c,v 1.15 2004/10/30 16:01:48 dsl Exp $");
 #endif
 
 /*
@@ -65,28 +70,29 @@ struct user {
 
 #define HASHMAX 55
 
-static void	add_group(const char *, const char *);
-static void	add_user(const char *, const char *, const char *);
-static int	hashidx(char);
-static int	isgsep(char);
-static void	print_hosts(const char *, const char *);
-static void	print_netid(const char *);
-static void	print_passwd_group(int, const char *);
-static void	read_group(const char *);
-static void	read_passwd(const char *);
-__dead static void	usage(void);
+void	add_group(const char *, const char *);
+void	add_user(const char *, const char *, const char *);
+int	hashidx(char);
+int	isgsep(char);
+int	main(int, char *[]);
+void	print_hosts(const char *, const char *);
+void	print_netid(const char *);
+void	print_passwd_group(int, const char *);
+void	read_group(const char *);
+void	read_passwd(const char *);
+void	usage(void);
 
 TAILQ_HEAD(user_list, user);
-static struct user_list root;
-static struct user_list hroot[HASHMAX];
+struct user_list root;
+struct user_list hroot[HASHMAX];
 
 int
 main(int argc, char *argv[])
 {
-	const char *HostFile = _PATH_HOSTS;
-	const char *PasswdFile = _PATH_PASSWD;
-	const char *GroupFile = _PATH_GROUP;
-	const char *NetidFile = "/etc/netid";
+	char *HostFile = _PATH_HOSTS;
+	char *PasswdFile = _PATH_PASSWD;
+	char *GroupFile = _PATH_GROUP;
+	char *NetidFile = "/etc/netid";
 
 	int qflag, ch;
 	char *domain;
@@ -145,7 +151,7 @@ main(int argc, char *argv[])
 	exit (0);
 }
 
-static int
+int
 hashidx(char key)
 {
 	if (key < 'A')
@@ -163,7 +169,7 @@ hashidx(char key)
 	return(54);
 }
 
-static void
+void
 add_user(const char *username, const char *uid, const char *gid)
 {
 	struct user *u;
@@ -188,7 +194,7 @@ add_user(const char *username, const char *uid, const char *gid)
 	TAILQ_INSERT_TAIL((&hroot[idx]), u, hash);
 }
 
-static void
+void
 add_group(const char *username, const char *gid)
 {
 	struct user *u;
@@ -210,7 +216,7 @@ add_group(const char *username, const char *gid)
 	}
 }
 
-static void
+void
 read_passwd(const char *fname)
 {
 	FILE	*pfile;
@@ -270,7 +276,7 @@ read_passwd(const char *fname)
 	(void)fclose(pfile);
 }
 
-static int
+int
 isgsep(char ch)
 {
 
@@ -285,7 +291,7 @@ isgsep(char ch)
 	return (0);
 }
 
-static void
+void
 read_group(const char *fname)
 {
 	FILE	*gfile;
@@ -353,7 +359,7 @@ read_group(const char *fname)
 	(void)fclose(gfile);
 }
 
-static void
+void
 print_passwd_group(int qflag, const char *domain)
 {
 	struct user *u, *p;
@@ -379,7 +385,7 @@ print_passwd_group(int qflag, const char *domain)
 	}
 }
 
-static void
+void
 print_hosts(const char *fname, const char *domain)
 {
 	FILE	*hfile;
@@ -412,7 +418,7 @@ print_hosts(const char *fname, const char *domain)
 	(void) fclose(hfile);
 }
 
-static void
+void
 print_netid(const char *fname)
 {
 	FILE	*mfile;
@@ -445,7 +451,7 @@ print_netid(const char *fname)
 	}
 }
 
-static void
+void
 usage(void)
 {
 

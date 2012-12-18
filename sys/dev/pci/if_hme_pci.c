@@ -1,4 +1,4 @@
-/*	$NetBSD: if_hme_pci.c,v 1.36 2011/05/10 18:31:33 dyoung Exp $	*/
+/*	$NetBSD: if_hme_pci.c,v 1.25 2008/05/29 14:51:27 mrg Exp $	*/
 
 /*
  * Copyright (c) 2000 Matthew R. Green
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_hme_pci.c,v 1.36 2011/05/10 18:31:33 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_hme_pci.c,v 1.25 2008/05/29 14:51:27 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,8 +55,17 @@ __KERNEL_RCSID(0, "$NetBSD: if_hme_pci.c,v 1.36 2011/05/10 18:31:33 dyoung Exp $
 #include <dev/pci/pcidevs.h>
 
 #include <dev/ic/hmevar.h>
+#ifdef __sparc__
+#include <machine/promlib.h>
+#endif
 
-#define PCI_HME_BASEADDR	PCI_BAR(0)
+#ifndef HME_USE_LOCAL_MAC_ADDRESS
+#ifdef __sparc__
+#define HME_USE_LOCAL_MAC_ADDRESS	0	/* use system-wide address */
+#else
+#define HME_USE_LOCAL_MAC_ADDRESS	1
+#endif
+#endif
 
 struct hme_pci_softc {
 	struct	hme_softc	hsc_hme;	/* HME device */
@@ -65,14 +74,15 @@ struct hme_pci_softc {
 	void			*hsc_ih;
 };
 
-int	hmematch_pci(device_t, cfdata_t, void *);
-void	hmeattach_pci(device_t, device_t, void *);
+int	hmematch_pci(struct device *, struct cfdata *, void *);
+void	hmeattach_pci(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(hme_pci, sizeof(struct hme_pci_softc),
+CFATTACH_DECL(hme_pci, sizeof(struct hme_pci_softc),
     hmematch_pci, hmeattach_pci, NULL, NULL);
 
 int
-hmematch_pci(device_t parent, cfdata_t cf, void *aux)
+hmematch_pci(struct device *parent, struct cfdata *cf,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -83,8 +93,9 @@ hmematch_pci(device_t parent, cfdata_t cf, void *aux)
 	return (0);
 }
 
+#if HME_USE_LOCAL_MAC_ADDRESS
 static inline int
-hmepromvalid(uint8_t* buf)
+hmepromvalid(u_int8_t* buf)
 {
 	return buf[0] == 0x18 && buf[1] == 0x00 &&	/* structure length */
 	    buf[2] == 0x00 &&				/* revision */
@@ -108,30 +119,31 @@ hmevpdoff(bus_space_tag_t romt, bus_space_handle_t romh, int vpdoff, int dev)
 	}
 	return vpdoff;
 }
+#endif
 
 void
-hmeattach_pci(device_t parent, device_t self, void *aux)
+hmeattach_pci(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct hme_pci_softc *hsc = device_private(self);
+	struct hme_pci_softc *hsc = (void *)self;
 	struct hme_softc *sc = &hsc->hsc_hme;
 	pci_intr_handle_t ih;
 	pcireg_t csr;
 	const char *intrstr;
 	int type;
+#if HME_USE_LOCAL_MAC_ADDRESS
 	struct pci_attach_args	ebus_pa;
-	prop_data_t		eaddrprop;
 	pcireg_t		ebus_cl, ebus_id;
-	uint8_t			*enaddr;
+	u_int8_t		*enaddr;
 	bus_space_tag_t		romt;
 	bus_space_handle_t	romh;
 	bus_size_t		romsize;
-	uint8_t			buf[64];
+	u_int8_t		buf[64];
 	int			dataoff, vpdoff;
 	struct pci_vpd		*vpd;
-	static const uint8_t promhdr[] = { 0x55, 0xaa };
+	static const u_int8_t promhdr[] = { 0x55, 0xaa };
 #define PROMHDR_PTR_DATA	0x18
-	static const uint8_t promdat[] = {
+	static const u_int8_t promdat[] = {
 		0x50, 0x43, 0x49, 0x52,		/* "PCIR" */
 		PCI_VENDOR_SUN & 0xff, PCI_VENDOR_SUN >> 8,
 		PCI_PRODUCT_SUN_HMENETWORK & 0xff,
@@ -139,29 +151,28 @@ hmeattach_pci(device_t parent, device_t self, void *aux)
 	};
 #define PROMDATA_PTR_VPD	0x08
 #define PROMDATA_DATA2		0x0a
+#endif	/* HME_USE_LOCAL_MAC_ADDRESS */
 
-	sc->sc_dev = self;
-
-	aprint_normal(": Sun Happy Meal Ethernet, rev. %d\n",
+	printf(": Sun Happy Meal Ethernet, rev. %d\n",
 	    PCI_REVISION(pa->pa_class));
-	aprint_naive(": Ethernet controller\n");
-
-	csr = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
-	type = pci_mapreg_type(pa->pa_pc, pa->pa_tag, PCI_HME_BASEADDR);
 
 	/*
 	 * enable io/memory-space accesses.  this is kinda of gross; but
-	 * the hme comes up with neither IO space enabled, or memory space.
+	 # the hme comes up with neither IO space enabled, or memory space.
 	 */
-	switch (type) {
-	case PCI_MAPREG_TYPE_MEM:
+	if (pa->pa_memt)
+		pa->pa_flags |= PCI_FLAGS_MEM_ENABLED;
+	if (pa->pa_iot)
+		pa->pa_flags |= PCI_FLAGS_IO_ENABLED;
+	csr = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
+	if (pa->pa_memt) {
+		type = PCI_MAPREG_TYPE_MEM;
 		csr |= PCI_COMMAND_MEM_ENABLE;
 		sc->sc_bustag = pa->pa_memt;
-		break;
-	case PCI_MAPREG_TYPE_IO:
+	} else {
+		type = PCI_MAPREG_TYPE_IO;
 		csr |= PCI_COMMAND_IO_ENABLE;
 		sc->sc_bustag = pa->pa_iot;
-		break;
 	}
 	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG,
 	    csr | PCI_COMMAND_MEM_ENABLE);
@@ -180,45 +191,36 @@ hmeattach_pci(device_t parent, device_t self, void *aux)
 	 *
 	 */
 
+#define PCI_HME_BASEADDR	0x10
 	if (pci_mapreg_map(pa, PCI_HME_BASEADDR, type, 0,
-	    &hsc->hsc_memt, &hsc->hsc_memh, NULL, NULL) != 0) {
-		aprint_error_dev(self, "unable to map device registers\n");
+	    &hsc->hsc_memt, &hsc->hsc_memh, NULL, NULL) != 0)
+	{
+		aprint_error_dev(&sc->sc_dev, "unable to map device registers\n");
 		return;
 	}
 	sc->sc_seb = hsc->hsc_memh;
 	if (bus_space_subregion(hsc->hsc_memt, hsc->hsc_memh, 0x2000,
 	    0x1000, &sc->sc_etx)) {
-		aprint_error_dev(self, "unable to subregion ETX registers\n");
+		aprint_error_dev(&sc->sc_dev, "unable to subregion ETX registers\n");
 		return;
 	}
 	if (bus_space_subregion(hsc->hsc_memt, hsc->hsc_memh, 0x4000,
 	    0x1000, &sc->sc_erx)) {
-		aprint_error_dev(self, "unable to subregion ERX registers\n");
+		aprint_error_dev(&sc->sc_dev, "unable to subregion ERX registers\n");
 		return;
 	}
 	if (bus_space_subregion(hsc->hsc_memt, hsc->hsc_memh, 0x6000,
 	    0x1000, &sc->sc_mac)) {
-		aprint_error_dev(self, "unable to subregion MAC registers\n");
+		aprint_error_dev(&sc->sc_dev, "unable to subregion MAC registers\n");
 		return;
 	}
 	if (bus_space_subregion(hsc->hsc_memt, hsc->hsc_memh, 0x7000,
 	    0x1000, &sc->sc_mif)) {
-		aprint_error_dev(self, "unable to subregion MIF registers\n");
+		aprint_error_dev(&sc->sc_dev, "unable to subregion MIF registers\n");
 		return;
 	}
 
-
-	/*
-	 * Check if we got a mac-address property passed
-	 */
-	eaddrprop = prop_dictionary_get(device_properties(self), "mac-address");
-
-	if (eaddrprop != NULL && prop_data_size(eaddrprop) == ETHER_ADDR_LEN) {
-		memcpy(&sc->sc_enaddr, prop_data_data_nocopy(eaddrprop),
-			    ETHER_ADDR_LEN);
-		goto got_eaddr;
-	}
-
+#if HME_USE_LOCAL_MAC_ADDRESS
 	/*
 	 * Dig out VPD (vital product data) and acquire Ethernet address.
 	 * The VPD of hme resides in the Boot PROM (PCI FCode) attached
@@ -289,31 +291,33 @@ hmeattach_pci(device_t parent, device_t self, void *aux)
 		bus_space_unmap(romt, romh, romsize);
 	}
 
-	if (enaddr) {
+	if (enaddr)
 		memcpy(sc->sc_enaddr, enaddr, ETHER_ADDR_LEN);
-		goto got_eaddr;
-	}
-
-	aprint_error_dev(self, "no Ethernet address found\n");
-got_eaddr:
+	else
+#endif	/* HME_USE_LOCAL_MAC_ADDRESS */
+#ifdef __sparc__
+		prom_getether(PCITAG_NODE(pa->pa_tag), sc->sc_enaddr);
+#else
+		printf("%s: no Ethernet address found\n", device_xname(&sc->sc_dev));
+#endif
 
 	/*
 	 * Map and establish our interrupt.
 	 */
 	if (pci_intr_map(pa, &ih) != 0) {
-		aprint_error_dev(self, "unable to map interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "unable to map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pa->pa_pc, ih);
 	hsc->hsc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_NET, hme_intr, sc);
 	if (hsc->hsc_ih == NULL) {
-		aprint_error_dev(self, "unable to establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "unable to establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			printf(" at %s", intrstr);
+		printf("\n");
 		return;
 	}
-	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
+	printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev), intrstr);
 
 	sc->sc_burst = 16;	/* XXX */
 

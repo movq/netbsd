@@ -35,7 +35,7 @@
 #include <sys/conf.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <evbarm/g42xxeb/g42xxeb_reg.h>
 
 
@@ -43,7 +43,7 @@
  * G42xxeb on-board IO bus
  */
 struct obio_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_obioreg_ioh;
 

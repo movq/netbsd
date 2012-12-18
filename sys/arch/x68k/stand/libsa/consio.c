@@ -1,4 +1,4 @@
-/*	$NetBSD: consio.c,v 1.10 2012/10/12 18:01:53 tsutsui Exp $	*/
+/*	$NetBSD: consio.c,v 1.5 2007/11/11 05:20:26 isaki Exp $	*/
 
 /*
  * Copyright (c) 2001 MINOURA Makoto.
@@ -25,6 +25,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <machine/stdarg.h>
 #include <lib/libkern/libkern.h>
 #include <lib/libsa/stand.h>
 
@@ -41,13 +42,12 @@ enum {
 int
 consio_init(int device)
 {
-
 	if (device < 0) {	/* undetemined yet */
 		if (KEYCTRL & 8)
 			device = ITE;
 		else {
-			IOCS_B_PRINT("No keyboard; "
-				     "switching to serial console...");
+			IOCS_B_PRINT ("No keyboard; "
+				      "switching to serial console...");
 			device = SERIAL;
 		}
 	}
@@ -56,12 +56,12 @@ consio_init(int device)
 	case ITE:
 		x68k_console_device = ITE;
 		/* set palette here */
-		IOCS_OS_CURON();
+		IOCS_OS_CURON ();
 		break;
 	case SERIAL:
 		x68k_console_device = SERIAL;
-		IOCS_OS_CUROF();
-		IOCS_SET232C(SERPARAM);
+		IOCS_OS_CUROF ();
+		IOCS_SET232C (SERPARAM);
 	}
 
 	return x68k_console_device;
@@ -74,10 +74,10 @@ getchar(void)
 
 	switch (x68k_console_device) {
 	case ITE:
-		while ((r = IOCS_B_KEYINP() & 0xff) == 0);
+		while ((r = IOCS_B_KEYINP () & 0xff) == 0);
 		return r;
 	case SERIAL:
-		while ((r = IOCS_INP232C() & 0xff) == 0);
+		while ((r = IOCS_INP232C () & 0xff) == 0);
 		return r;
 	}
 
@@ -87,39 +87,24 @@ getchar(void)
 void
 putchar(int c)
 {
-
 	if (c == '\n')
 		putchar('\r');
 	switch (x68k_console_device) {
 	case ITE:
-		IOCS_B_PUTC(c);
-		break;
+		IOCS_B_PUTC (c);
 	case SERIAL:
-		IOCS_OUT232C(c);
-		break;
+		IOCS_OUT232C (c);
 	}
 }
 
 int
 check_getchar(void)
 {
-	int keycode;
-
 	switch (x68k_console_device) {
 	case ITE:
-		while ((keycode = IOCS_B_KEYSNS()) != 0) {
-			keycode &= 0xff;
-			if (keycode != 0) {
-				/* valid ASCII code */
-				return keycode;
-			}
-			/* discard non ASCII keys (CTRL, OPT.1 etc) */
-			(void)IOCS_B_KEYINP();
-		} 
-		/* no input */
-		return 0;
+		return IOCS_B_KEYSNS () & 0xff;
 	case SERIAL:
-		return IOCS_ISNS232C() & 0xff;
+		return IOCS_ISNS232C () & 0xff;
 	}
 
 	return -1;
@@ -144,6 +129,20 @@ awaitkey_1sec(void)
 		getchar();
 
 	return c;
+}
+
+__dead void
+panic(const char *fmt,...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+
+	printf(fmt, ap);
+	printf("\n");
+	va_end(ap);
+
+	exit(1);
 }
 
 extern void put_image(int, int);

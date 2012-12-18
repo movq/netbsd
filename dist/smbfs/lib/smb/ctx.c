@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ctx.c,v 1.15 2009/09/06 20:07:03 pooka Exp $");
+__RCSID("$NetBSD: ctx.c,v 1.12 2007/10/16 15:37:32 he Exp $");
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
@@ -58,8 +58,6 @@ __RCSID("$NetBSD: ctx.c,v 1.15 2009/09/06 20:07:03 pooka Exp $");
 #include <netsmb/nb_lib.h>
 #include <netsmb/smb_conn.h>
 #include <cflib.h>
-
-#include "smb_kernelops.h"
 
 /*
  * Prescan command line for [-U user] argument
@@ -603,7 +601,7 @@ smb_ctx_gethandle(struct smb_ctx *ctx)
 	/*
 	 * First, try to open as cloned device
 	 */
-	fd = smb_kops.ko_open("/dev/"NSMB_NAME, O_RDWR, 0);
+	fd = open("/dev/"NSMB_NAME, O_RDWR);
 	if (fd >= 0) {
 		ctx->ct_fd = fd;
 		return 0;
@@ -615,7 +613,7 @@ smb_ctx_gethandle(struct smb_ctx *ctx)
 	 */
 	 for (i = 0; i < 1024; i++) {
 	         snprintf(buf, sizeof(buf), "/dev/"NSMB_NAME"%d", i);
-		 fd = smb_kops.ko_open(buf, O_RDWR, 0);
+		 fd = open(buf, O_RDWR);
 		 if (fd >= 0) {
 			ctx->ct_fd = fd;
 			return 0;
@@ -623,6 +621,22 @@ smb_ctx_gethandle(struct smb_ctx *ctx)
 		 if (errno == ENOENT)
 		         return ENOENT;
 	 }
+
+#ifndef __NetBSD
+	 /*
+	  * This is a compatibility with old /dev/net/nsmb device
+	  */
+	 for (i = 0; i < 1024; i++) {
+	         snprintf(buf, sizeof(buf), "/dev/net/%s%d", NSMB_NAME, i);
+		 fd = open(buf, O_RDWR);
+		 if (fd >= 0) {
+			ctx->ct_fd = fd;
+			return 0;
+		 }
+		 if (errno == ENOENT)
+		         return ENOENT;
+	 }
+#endif
 
 	 return ENOENT;
 }
@@ -638,7 +652,7 @@ smb_ctx_lookup(struct smb_ctx *ctx, int level, int flags)
 		return EINVAL;
 	}
 	if (ctx->ct_fd != -1) {
-		smb_kops.ko_close(ctx->ct_fd);
+		close(ctx->ct_fd);
 		ctx->ct_fd = -1;
 	}
 	error = smb_ctx_gethandle(ctx);
@@ -651,10 +665,10 @@ smb_ctx_lookup(struct smb_ctx *ctx, int level, int flags)
 	bcopy(&ctx->ct_sh, &rq.ioc_sh, sizeof(struct smbioc_oshare));
 	rq.ioc_flags = flags;
 	rq.ioc_level = level;
-	if (smb_kops.ko_ioctl(ctx->ct_fd, SMBIOC_LOOKUP, &rq) == -1) {
+	if (ioctl(ctx->ct_fd, SMBIOC_LOOKUP, &rq) == -1) {
 		error = errno;
 
-		smb_kops.ko_close(ctx->ct_fd);
+		close(ctx->ct_fd);
 		ctx->ct_fd = -1;
 
 		/*
@@ -675,9 +689,8 @@ smb_ctx_lookup(struct smb_ctx *ctx, int level, int flags)
 
 		bcopy(&ctx->ct_ssn, &rq.ioc_ssn, sizeof(struct smbioc_ossn));
 
-		if (smb_kops.ko_ioctl(ctx->ct_fd, SMBIOC_LOOKUP, &rq) != -1)
+		if (ioctl(ctx->ct_fd, SMBIOC_LOOKUP, &rq) != -1)
 			goto success;
-		error = errno;
 
 	    fail:
 		if (flags & SMBLK_CREATE)
@@ -701,7 +714,7 @@ smb_ctx_login(struct smb_ctx *ctx)
 		return EINVAL;
 	}
 	if (ctx->ct_fd != -1) {
-		smb_kops.ko_close(ctx->ct_fd);
+		close(ctx->ct_fd);
 		ctx->ct_fd = -1;
 	}
 	error = smb_ctx_gethandle(ctx);
@@ -709,14 +722,14 @@ smb_ctx_login(struct smb_ctx *ctx)
 		smb_error("can't get handle to requester", 0);
 		return EINVAL;
 	}
-	if (smb_kops.ko_ioctl(ctx->ct_fd, SMBIOC_OPENSESSION, ssn) == -1) {
+	if (ioctl(ctx->ct_fd, SMBIOC_OPENSESSION, ssn) == -1) {
 		error = errno;
 		smb_error("can't open session to server %s", error, ssn->ioc_srvname);
 		return error;
 	}
 	if (sh->ioc_share[0] == 0)
 		return 0;
-	if (smb_kops.ko_ioctl(ctx->ct_fd, SMBIOC_OPENSHARE, sh) == -1) {
+	if (ioctl(ctx->ct_fd, SMBIOC_OPENSHARE, sh) == -1) {
 		error = errno;
 		smb_error("can't connect to share //%s/%s", error,
 		    ssn->ioc_srvname, sh->ioc_share);
@@ -735,7 +748,7 @@ smb_ctx_setflags(struct smb_ctx *ctx, int level, int mask, int flags)
 	fl.ioc_level = level;
 	fl.ioc_mask = mask;
 	fl.ioc_flags = flags;
-	if (smb_kops.ko_ioctl(ctx->ct_fd, SMBIOC_SETFLAGS, &fl) == -1)
+	if (ioctl(ctx->ct_fd, SMBIOC_SETFLAGS, &fl) == -1)
 		return errno;
 	return 0;
 }

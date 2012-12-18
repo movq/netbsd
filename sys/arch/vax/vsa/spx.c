@@ -1,4 +1,4 @@
-/*	$NetBSD: spx.c,v 1.6 2012/05/14 08:44:13 abs Exp $ */
+/*	$NetBSD: spx.c,v 1.1.10.1 2010/11/21 21:27:37 riz Exp $ */
 /*
  * SPX/LCSPX/SPXg/SPXgt accelerated framebuffer driver for NetBSD/VAX
  * Copyright (c) 2005 Blaz Antonic
@@ -32,19 +32,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spx.c,v 1.6 2012/05/14 08:44:13 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spx.c,v 1.1.10.1 2010/11/21 21:27:37 riz Exp $");
 
 #include <sys/param.h>
+#include <sys/device.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
-#include <sys/conf.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
-#include <sys/malloc.h>
 #include <sys/time.h>
+#include <sys/malloc.h>
+#include <sys/conf.h>
+#include <sys/kernel.h>
+
+#include <uvm/uvm.h>
 
 #include <machine/vsbus.h>
 #include <machine/sid.h>
+#include <machine/cpu.h>
 #include <machine/ka420.h>
 
 #include <dev/cons.h>
@@ -884,7 +887,7 @@ spx_erasecols(void *id, int row, int startcol, int ncols, long fillattr)
 	int offset = row * spx_cols + startcol;
 	int i;
 
-	memset(&ss->ss_image[row * spx_cols + startcol], 0, 
+	bzero(&ss->ss_image[row * spx_cols + startcol], 
 	      ncols * sizeof(ss->ss_image[0]));
 
 	for (i = offset; i < offset + ncols; ++i)
@@ -919,7 +922,7 @@ spx_eraserows(void *id, int startrow, int nrows, long fillattr)
 	struct spx_screen *ss = id;
 	int i;
 	
-	memset(&ss->ss_image[startrow * spx_cols], 0,
+	bzero(&ss->ss_image[startrow * spx_cols],
 	      nrows * spx_cols * sizeof(ss->ss_image[0]));
 
 	for (i = startrow * spx_cols; i < startrow + nrows * spx_cols; ++i)
@@ -1021,10 +1024,6 @@ spx_ioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 	case WSDISPLAYIO_GVIDEO:
 		*(u_int *)data = spx_off == 0 ?
 		WSDISPLAYIO_VIDEO_ON : WSDISPLAYIO_VIDEO_OFF;
-		break;
-
-	case WSDISPLAYIO_LINEBYTES:
-		*(u_int *)data = spx_xsize;
 		break;
 
 	default:
@@ -1481,19 +1480,16 @@ spx_init_common(device_t self, struct vsbus_attach_args *va)
 	wsfont_init();
 
 	cookie = wsfont_find(NULL, 12, 21, 0, WSDISPLAY_FONTORDER_R2L,
-			     WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
+			     WSDISPLAY_FONTORDER_L2R);
 	if (cookie == -1)
-		cookie = wsfont_find(NULL, 16, 0, 0, WSDISPLAY_FONTORDER_R2L, 0,
-		    WSFONT_FIND_BITMAP);
+		cookie = wsfont_find(NULL, 16, 0, 0, WSDISPLAY_FONTORDER_R2L, 0);
 	if (cookie == -1)
-		cookie = wsfont_find(NULL, 12, 0, 0, WSDISPLAY_FONTORDER_R2L, 0,
-		    WSFONT_FIND_BITMAP);
+		cookie = wsfont_find(NULL, 12, 0, 0, WSDISPLAY_FONTORDER_R2L, 0);
 	if (cookie == -1)
-		cookie = wsfont_find(NULL, 8, 0, 0, WSDISPLAY_FONTORDER_R2L, 0,
-		    WSFONT_FIND_BITMAP);
+		cookie = wsfont_find(NULL, 8, 0, 0, WSDISPLAY_FONTORDER_R2L, 0);
 	if (cookie == -1)
 		cookie = wsfont_find(NULL, 0, 0, 0, WSDISPLAY_FONTORDER_R2L,
-		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
+				     WSDISPLAY_FONTORDER_L2R);
 
 	if (cookie == -1 || wsfont_lock(cookie, &wf))
 		panic("spx_common_init: unable to load console font");

@@ -1,4 +1,4 @@
-/*	$NetBSD: vscanf.c,v 1.14 2012/03/15 18:22:31 christos Exp $	*/
+/*	$NetBSD: vscanf.c,v 1.12 2003/08/07 16:43:35 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)vscanf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: vscanf.c,v 1.14 2012/03/15 18:22:31 christos Exp $");
+__RCSID("$NetBSD: vscanf.c,v 1.12 2003/08/07 16:43:35 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -49,10 +49,12 @@ __RCSID("$NetBSD: vscanf.c,v 1.14 2012/03/15 18:22:31 christos Exp $");
 #include "local.h"
 
 int
-vscanf(const char *fmt, va_list ap)
+vscanf(fmt, ap)
+	const char *fmt;
+	_BSD_VA_LIST_ ap;
 {
 
 	_DIAGASSERT(fmt != NULL);
 
-	return __svfscanf(stdin, fmt, ap);
+	return (__svfscanf(stdin, fmt, ap));
 }

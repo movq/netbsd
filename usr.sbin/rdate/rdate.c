@@ -1,4 +1,4 @@
-/*	$NetBSD: rdate.c,v 1.19 2009/10/21 01:07:47 snj Exp $	*/
+/*	$NetBSD: rdate.c,v 1.17 2007/03/10 01:19:55 hubertf Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Christos Zoulas.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,7 +39,7 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rdate.c,v 1.19 2009/10/21 01:07:47 snj Exp $");
+__RCSID("$NetBSD: rdate.c,v 1.17 2007/03/10 01:19:55 hubertf Exp $");
 #endif /* lint */
 
 #include <sys/types.h>
@@ -52,7 +57,7 @@ __RCSID("$NetBSD: rdate.c,v 1.19 2009/10/21 01:07:47 snj Exp $");
 #include <util.h>
 
 /* seconds from midnight Jan 1900 - 1970 */
-#define DIFFERENCE 2208988800ULL
+#define DIFFERENCE 2208988800UL
 
 	int	main(int, char **);
 static	void	usage(void);
@@ -72,7 +77,6 @@ main(int argc, char *argv[])
 	int             pr = 0, silent = 0, s;
 	int		slidetime = 0;
 	int		adjustment;
-	uint32_t	data;
 	time_t          tim;
 	char           *hname;
 	const char     *emsg = NULL;
@@ -133,11 +137,11 @@ main(int argc, char *argv[])
 	if (s < 0)
 		err(1, "%s", emsg);
 
-	if (read(s, &data, sizeof(uint32_t)) != sizeof(uint32_t))
+	if (read(s, &tim, sizeof(time_t)) != sizeof(time_t))
 		err(1, "Could not read data");
 
 	(void) close(s);
-	tim = ntohl(data) - DIFFERENCE;
+	tim = ntohl(tim) - DIFFERENCE;
 
 	if (!pr) {
 	    struct timeval  tv;

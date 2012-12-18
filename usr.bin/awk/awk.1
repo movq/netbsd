@@ -1,4 +1,4 @@
-.\"	$NetBSD: awk.1,v 1.19 2009/03/15 16:21:46 joerg Exp $
+.\"	$NetBSD: awk.1,v 1.17.4.1 2009/03/15 19:57:45 snj Exp $
 .\"
 .\" Copyright (C) Lucent Technologies 1997
 .\" All Rights Reserved
@@ -129,9 +129,9 @@ If
 is null, the input line is split into one field per character.
 .Pp
 A pattern-action statement has the form
-.Lp
+.sp
 .Dl pattern \&{ action \&}
-.Lp
+.sp
 A missing \&{ action \&}
 means print the line;
 a missing pattern always matches.
@@ -144,8 +144,7 @@ An empty
 .Ar expression-list
 stands for
 .Va $0 .
-String constants are quoted
-.Em \&"\ \&" ,
+String constants are quoted \&\f(CW"\ "\fR,
 with the usual C escapes recognized within.
 Expressions take on string or numeric values as appropriate,
 and are built using the
@@ -204,7 +203,7 @@ Logical OR
 .It Ic ?:
 C conditional expression.
 This is used as
-.Ar expr1 Ic \&? Ar expr2 Ic \&: Ar expr3 No .
+.Ar expr1 Ic ? Ar expr2 Ic : Ar expr3 No .
 If
 .Ar expr1
 is true, the result value is
@@ -224,12 +223,25 @@ Assignment and Operator-Assignment
 The control statements are as follows:
 .Pp
 .Bl -hang -offset indent -width indent -compact
-.It Ic if \&( Ar expression Ic \&) Ar statement Bq Ic else Ar statement
-.It Ic while \&( Ar expression Ic \&) Ar statement
-.It Ic for \&( Ar expression Ic \&; Ar expression Ic \&; \
-Ar expression Ic \&) Ar statement
-.It Ic for \&( Va var Ic in Ar array Ic \&) Ar statement
-.It Ic do Ar statement Ic while \&( Ar expression Ic \&)
+.It Xo
+.Ic if \&( Ar expression Ic \&) Ar statement
+.Bq Ic else Ar statement
+.Xc
+.It Ic while( Ar expression Ic \&) Ar statement
+.It Xo
+.Ic for( Ar expression Ic \&; Ar expression Ic \&;
+.Ar expression Ic \&)
+.Ar statement
+.Xc
+.It Xo
+.Ic for( Va var Ic in Ar array
+.Ic \&)
+.Ar statement
+.Xc
+.It Xo
+.Ic do Ar statement
+.Ic while( Ar expression Ic \&)
+.Xc
 .It Ic break
 .It Ic continue
 .It Ic delete Va array Bq Ar expression
@@ -237,7 +249,7 @@ Ar expression Ic \&) Ar statement
 .It Ic exit Bq Ar expression
 .Ar expression
 .It Ic return Bq Ar expression
-.It Ic \&{ Ar [ statement ... ] Ic \&}
+.It Ic { Ar [ statement ... ] Ic }
 .El
 .Ss I/O Statements
 The input/output statements are as follows:
@@ -262,7 +274,12 @@ to the next input record from the current input file.
 .Ic getline
 returns 1 for a successful input,
 0 for end of file, and \-1 for an error.
-.It Ic getline Bo Va var Bc Ic \*[Lt] Ar file
+.It Xo
+.Ic getline
+.Bq Va var
+.Ic \*[Lt]
+.Ar file
+.Xc
 Set
 .Va var
 (or
@@ -284,7 +301,11 @@ returns the next line of output from
 Skip remaining patterns on this input line.
 .It Ic nextfile
 Skip rest of this file, open next, start at top.
-.It Ic print Bo Ar expr-list Bc Bq Ic \*[Gt] Ar file
+.It Xo
+.Ic print
+.Bq Ar expr-list
+.Bq Ic \*[Gt] Ar file
+.Xc
 The
 .Ic print
 statement prints its arguments on the standard output (or to a file
@@ -304,7 +325,12 @@ and
 .Ar expr
 may be literal names or parenthesized expressions; identical string values in
 different statements denote the same open file.
-.It Ic printf Ar format Bo Ic \&, Ar expr-list Bc Bq Ic \*[Gt] Ar file
+.It Xo
+.Ic printf
+.Ar format
+.Bq Ic , Ar expr-list
+.Bq Ic \*[Gt] Ar file
+.Xc
 Format and print its expression list according to
 .Ar format .
 See
@@ -675,7 +701,7 @@ the function definition.
 .It Ic length($0) \*[Gt] 72
 Print lines longer than 72 characters.
 .Pp
-.It Ic \&{ print $2, $1 \&}
+.It Ic { print $2, $1 }
 Print first two fields in opposite order.
 .Pp
 .It Ic BEGIN { FS =  \&",[ \et]*|[ \et]+\&" }
@@ -683,7 +709,9 @@ Print first two fields in opposite order.
 Same, with input fields separated by comma and/or blanks and tabs.
 .Pp
 .It Ic "\ \ \ \ {" s += $1 }
-.It Ic END { print \&"sum is\&", s, \&" average is\ \&",\ s/NR\ }
+.It Xo
+.Ic END { print \&"sum is\&", s, \&" average is\ \&",\ s/NR\ }
+.Xc
 Add up first column, print sum and average.
 .Pp
 .It Ic /start/, /stop/
@@ -727,6 +755,6 @@ There are no explicit conversions between numbers and strings.
 To force an expression to be treated as a number add 0 to it;
 to force it to be treated as a string concatenate
 \&"\&" to it.
-.Pp
+.br
 The scope rules for variables in functions are a botch;
 the syntax is worse.

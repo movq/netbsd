@@ -34,4 +34,4 @@
  *  Top users/processes display for Unix
  */
 
-const char *version_string(void);
+char *version_string();

@@ -1,4 +1,4 @@
-/* $NetBSD: irongate_pci.c,v 1.9 2012/02/06 02:14:14 matt Exp $ */
+/* $NetBSD: irongate_pci.c,v 1.5 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -36,26 +36,28 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: irongate_pci.c,v 1.9 2012/02/06 02:14:14 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irongate_pci.c,v 1.5 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <alpha/pci/irongatereg.h>
 #include <alpha/pci/irongatevar.h>
 
-void		irongate_attach_hook(device_t, device_t,
-		    struct pcibus_attach_args *);
-int		irongate_bus_maxdevs(void *, int);
-pcitag_t	irongate_make_tag(void *, int, int, int);
-void		irongate_decompose_tag(void *, pcitag_t, int *, int *,
-		    int *);
-pcireg_t	irongate_conf_read(void *, pcitag_t, int);
-void		irongate_conf_write(void *, pcitag_t, int, pcireg_t);
+void		irongate_attach_hook __P((struct device *, struct device *,
+		    struct pcibus_attach_args *));
+int		irongate_bus_maxdevs __P((void *, int));
+pcitag_t	irongate_make_tag __P((void *, int, int, int));
+void		irongate_decompose_tag __P((void *, pcitag_t, int *, int *,
+		    int *));
+pcireg_t	irongate_conf_read __P((void *, pcitag_t, int));
+void		irongate_conf_write __P((void *, pcitag_t, int, pcireg_t));
 
 /* AMD 751 systems are always single-processor, so this is easy. */
 #define	PCI_CONF_LOCK(s)	(s) = splhigh()
@@ -64,7 +66,7 @@ void		irongate_conf_write(void *, pcitag_t, int, pcireg_t);
 #define	PCI_CONF_ADDR	(IRONGATE_IO_BASE|IRONGATE_CONFADDR)
 #define	PCI_CONF_DATA	(IRONGATE_IO_BASE|IRONGATE_CONFDATA)
 
-#define	REGVAL(r)	(*(volatile uint32_t *)ALPHA_PHYS_TO_K0SEG(r))
+#define	REGVAL(r)	(*(volatile u_int32_t *)ALPHA_PHYS_TO_K0SEG(r))
 
 void
 irongate_pci_init(pci_chipset_tag_t pc, void *v)
@@ -80,7 +82,7 @@ irongate_pci_init(pci_chipset_tag_t pc, void *v)
 }
 
 void
-irongate_attach_hook(device_t parent, device_t self,
+irongate_attach_hook(struct device *parent, struct device *self,
     struct pcibus_attach_args *pba)
 {
 }

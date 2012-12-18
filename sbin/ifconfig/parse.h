@@ -83,17 +83,11 @@ extern const struct parser_methods pterm_methods;
 }
 
 #define	PSTR_INITIALIZER(__ps, __name, __defexec, __defkey, __defnext)	\
-    PSTR_INITIALIZER1((__ps), (__name), (__defexec), (__defkey),	\
-    true, (__defnext))
-
-#define	PSTR_INITIALIZER1(__ps, __name, __defexec, __defkey, __defhexok,\
-    __defnext)								\
 {									\
 	.ps_parser = {.p_name = (__name), .p_methods = &pstr_methods,	\
 	               .p_exec = (__defexec),				\
 	               .p_nextparser = (__defnext)},			\
-	.ps_key = (__defkey),						\
-	.ps_hexok = (__defhexok)					\
+	.ps_key = (__defkey)						\
 }
 
 #define	PADDR_INITIALIZER(__pa, __name, __defexec, __addrkey,		\
@@ -209,7 +203,6 @@ struct pkw {
 struct pstr {
 	struct parser		ps_parser;
 	const char		*ps_key;
-	bool			ps_hexok;
 };
 
 struct pinteger {
@@ -264,7 +257,7 @@ struct prest *prest_create(const char *);
 struct paddr *paddr_create(const char *, parser_exec_t, const char *,
     const char *, struct parser *);
 struct pstr *pstr_create(const char *, parser_exec_t, const char *,
-    bool, struct parser *);
+    struct parser *);
 struct piface *piface_create(const char *, parser_exec_t, const char *,
     struct parser *);
 struct pkw *pkw_create(const char *, parser_exec_t,

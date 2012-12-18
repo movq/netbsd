@@ -1,10 +1,6 @@
-# $NetBSD: Makefile.bootxx,v 1.43 2012/08/10 12:18:15 joerg Exp $
+# $NetBSD: Makefile.bootxx,v 1.33 2008/10/20 03:02:07 christos Exp $
 
-S=	${.CURDIR}/../../../../..
-
-AFLAGS.bootxx.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
-AFLAGS.label.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
-AFLAGS.pbr.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
+S=	${.CURDIR}/../../../../../
 
 PIE_CFLAGS=
 PIE_LDFLAGS=
@@ -14,7 +10,7 @@ PROG?= bootxx_${FS}
 BINDIR= /usr/mdec
 BINMODE= 0444
 
-PRIMARY_LOAD_ADDRESS=0x1000
+PRIMARY_LOAD_ADDRESS=0x600
 SECONDARY_LOAD_ADDRESS=0x10000
 
 # We ought (need?) to fit into track 0 of a 1.2M floppy.
@@ -50,16 +46,15 @@ CPPFLAGS+= -DXXfs_close=${FS}_close
 CPPFLAGS+= -DXXfs_read=${FS}_read
 CPPFLAGS+= -DXXfs_stat=${FS}_stat
 CPPFLAGS+= -DFS=${FS}
-# CPPFLAGS+= -DBOOT_MSG_COM0
 
 # Make sure we override any optimization options specified by the user
-.include "${.PARSEDIR}/../Makefile.inc"
-COPTS=	${OPT_SIZE.${ACTIVE_CC}}
+COPTS=  -Os -momit-leaf-frame-pointer
 DBG=
 
 CPPFLAGS+= -DNO_LBA_CHECK
 
-.if ${MACHINE_ARCH} == "x86_64"
+.if defined(HAVE_GCC)
+.if ${MACHINE} == "amd64"
 LDFLAGS+=  -Wl,-m,elf_i386
 AFLAGS+=   -m32
 CPUFLAGS=  -m32
@@ -67,9 +62,15 @@ LIBKERN_ARCH=i386
 KERNMISCMAKEFLAGS="LIBKERN_ARCH=i386"
 .else
 CPPFLAGS+= -DEPIA_HACK
+.if ${HAVE_GCC} == 3
+CPUFLAGS=  -mcpu=i386
+.else
 CPUFLAGS=  -march=i386 -mtune=i386
 .endif
+.endif
+.endif
 
+COPTS+=    -ffreestanding
 CFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes
 CPPFLAGS+= -nostdinc -D_STANDALONE
 CPPFLAGS+= -I$S
@@ -80,6 +81,8 @@ CPPFLAGS+= -DLIBSA_SINGLE_FILESYSTEM=xxfs \
 		-DLIBSA_NO_RAW_ACCESS \
 		-DLIBSA_NO_FS_WRITE \
 		-DLIBSA_NO_FS_SEEK \
+		-DLIBSA_USE_MEMCPY \
+		-DLIBSA_USE_MEMSET \
 		-DLIBSA_SINGLE_DEVICE=blkdev \
 		-DLIBKERN_OPTIMISE_SPACE \
 		-D"blkdevioctl(x,y,z)=EINVAL" \
@@ -122,7 +125,7 @@ KERN_AS=        library
 LIBKERN=        ${KERNLIB}
 
 
-cleandir distclean: .WAIT cleanlibdir
+cleandir distclean: cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib

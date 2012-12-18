@@ -1,5 +1,5 @@
-/*	$Id: mpcsa_leds.c,v 1.5 2012/11/12 18:00:39 skrll Exp $	*/
-/*	$NetBSD: mpcsa_leds.c,v 1.5 2012/11/12 18:00:39 skrll Exp $	*/
+/*	$Id: mpcsa_leds.c,v 1.2 2008/07/03 01:15:39 matt Exp $	*/
+/*	$NetBSD: mpcsa_leds.c,v 1.2 2008/07/03 01:15:39 matt Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy. All rights reserved.
@@ -30,14 +30,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpcsa_leds.c,v 1.5 2012/11/12 18:00:39 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpcsa_leds.c,v 1.2 2008/07/03 01:15:39 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/lock.h>
-#include <sys/gpio.h>
 #include <dev/spi/spivar.h>
 #include <dev/gpio/gpiovar.h>
 #include <evbarm/mpcsa/mpcsa_leds_var.h>
@@ -79,6 +78,7 @@ typedef struct led_state {
 } led_state_t;
 
 struct mpcsa_leds_softc {
+	struct device		sc_dev;
 	struct spi_handle	*sc_sh;
 
 #if NGPIO > 0
@@ -110,7 +110,7 @@ static int mpcsa_leds_search(device_t , cfdata_t , const int *, void *);
 static int mpcsa_leds_print(void *, const char *);
 #endif
 
-CFATTACH_DECL_NEW(mpcsa_leds, sizeof(struct mpcsa_leds_softc),
+CFATTACH_DECL(mpcsa_leds, sizeof(struct mpcsa_leds_softc),
 	      mpcsa_leds_match, mpcsa_leds_attach, NULL, NULL);
 
 static struct mpcsa_leds_softc *mpcsa_leds_sc;
@@ -236,7 +236,7 @@ static void mpcsa_leds_timer(void *aux)
 {
 	int n, s;
 	struct mpcsa_leds_softc *sc = aux;
-	uint16_t pins;
+	u_int16_t pins;
 
 	callout_schedule(&sc->sc_c, mstohz(LEDS_UPDATE_INTERVAL));
 

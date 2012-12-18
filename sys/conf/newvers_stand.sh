@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-# $NetBSD: newvers_stand.sh,v 1.8 2011/01/22 19:19:25 joerg Exp $
+# $NetBSD: newvers_stand.sh,v 1.6 2008/07/15 20:10:06 perry Exp $
 #
 # Copyright (c) 2000 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -33,20 +33,22 @@
 # bootblock build on various architectures.
 #
 # Called as:
-#	sh ${S}/conf/newvers_stand.sh [-N] VERSION_FILE ARCH [EXTRA_MSG]
+#	sh ${S}/conf/newvers_stand.sh [-NDM] VERSION_FILE ARCH [EXTRA_MSG]
 
 cwd=$(dirname $0)
 
 add_name=yes
-add_date=no
+add_date=yes
+add_maker=yes
 add_kernrev=yes
 
 # parse command args
-while getopts "DKN?" OPT; do
+while getopts "NDMK?" OPT; do
 	case $OPT in
-	D)	add_date=yes;;
-	K)	add_kernrev=no;;
 	N)	add_name=no;;
+	D)	add_date=no;;
+	M)	add_maker=no;;
+	K)	add_kernrev=no;;
 	?)	echo "Syntax: newvers_stand.sh [-NDMK] VERSION_TEMPLATE ARCH EXTRA_COMMENT" >&2
 		exit 1;;
 	esac
@@ -55,19 +57,25 @@ done
 shift `expr $OPTIND - 1`
 
 r=`awk -F: '$1 ~ /^[0-9.]*$/ { it = $1; } END { print it }' $1`
-t=`LC_ALL=C date`
 
-if [ $add_date = yes ]; then
-	echo "const char bootprog_rev[] = \"${r} (${t})\";" > vers.c
-else
-	echo "const char bootprog_rev[] = \"${r}\";" > vers.c
-fi
+# always add revision info
+echo "const char bootprog_rev[] = \"${r}\";" > vers.c
 
 if [ $add_name = yes ]; then
 	a="$2"		# architecture name
 	extra=${3:+" $3"}
 
 	echo "const char bootprog_name[] = \"NetBSD/${a}${extra}\";" >> vers.c
+fi
+
+if [ $add_date = yes ]; then
+	t=`date`
+	echo "const char bootprog_date[] = \"${t}\";" >> vers.c
+fi
+
+if [ $add_maker = yes ]; then
+	u=${USER-root} h=`hostname`
+	echo "const char bootprog_maker[] = \"${u}@${h}\";" >> vers.c
 fi
 
 if [ $add_kernrev = yes ]; then

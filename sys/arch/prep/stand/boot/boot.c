@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.19 2012/05/19 14:40:13 kiyohara Exp $	*/
+/*	$NetBSD: boot.c,v 1.15 2006/06/10 07:49:29 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -40,13 +40,10 @@
 #include <machine/cpu.h>
 #include <machine/residual.h>
 #include <powerpc/spr.h>
-#include <powerpc/oea/spr.h>
 
 #include "boot.h"
-#include "sdvar.h"
 
 char *names[] = {
-	"sd(0,0,0)netbsd", "sd(0,0,0)onetbsd",
 	"in()",
 };
 #define	NUMNAMES (sizeof (names) / sizeof (names[0]))
@@ -63,7 +60,7 @@ struct btinfo_clock btinfo_clock;
 RESIDUAL residual;
 
 extern u_long ns_per_tick;
-extern char bootprog_name[], bootprog_rev[];
+extern char bootprog_name[], bootprog_rev[], bootprog_maker[], bootprog_date[];
 
 void boot(void *, u_long);
 static void exec_kernel(char *);
@@ -140,12 +137,7 @@ boot(void *resp, u_long loadaddr)
 
 	printf("\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf("\n");
-
-	/*
-	 * Initialize siop@pci0 dev 16 func 0
-	 */
-	siop_init(0, 16, 0);
+	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 
 	for (;;) {
 		name = names[n++];
@@ -167,7 +159,7 @@ exec_kernel(char *name)
 	u_long marks[MARK_MAX];
 #ifdef DBMONITOR
 	int go_monitor;
-	extern int db_monitor(void);
+	extern int db_monitor __P((void));
 
 ret:
 #endif /* DBMONITOR */
@@ -231,11 +223,4 @@ next:
 		    (void *)bootinfo,
 		    (void *)marks[MARK_ENTRY]);
 	}
-}
-
-void
-_rtt(void)
-{
-
-	/* XXXX */
 }

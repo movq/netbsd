@@ -1,4 +1,4 @@
-/*	$NetBSD: scr.c,v 1.28 2012/10/29 12:51:39 chs Exp $	*/
+/*	$NetBSD: scr.c,v 1.23 2008/06/11 21:16:28 cegger Exp $	*/
 
 /*
  * Copyright 1997
@@ -102,7 +102,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scr.c,v 1.28 2012/10/29 12:51:39 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scr.c,v 1.23 2008/06/11 21:16:28 cegger Exp $");
 
 #include "opt_ddb.h"
 
@@ -112,6 +112,7 @@ __KERNEL_RCSID(0, "$NetBSD: scr.c,v 1.28 2012/10/29 12:51:39 chs Exp $");
 /* #include <sys/select.h> */
 /* #include <sys/tty.h> */
 #include <sys/proc.h>
+/* #include <sys/user.h> */
 #include <sys/conf.h>
 /* #include <sys/file.h> */
 /* #include <sys/uio.h> */
@@ -450,7 +451,8 @@ typedef unsigned char BYTE;
 /* our soft c structure */
 struct scr_softc 
 {
-    int     open;
+    struct device       dev;
+    int                 open;
 
     /* configuration information */
     int     status;                 /* status to be returned */
@@ -480,7 +482,7 @@ struct scr_softc
     int     dataMax;                /* max number of data bytes to send/recv */
 
     /* extra stuff kept for t0RecvByteS, t0SendByteS machines */
-    void    (*t0ByteParent)(struct scr_softc *,int);  /* state machine that is controlling this SM */
+    void    (*t0ByteParent) __P((struct scr_softc *,int));  /* state machine that is controlling this SM */
     int     shiftBits;              /* number of bits shifted	*/
     BYTE    shiftByte;              /* intermediate value of bit being shifted */
     BYTE    dataByte;               /* actual value of byte */
@@ -530,7 +532,7 @@ typedef struct callout_t
     struct callout_t *c_next;                       /* next callout in queue */
     struct scr_softc *c_sc;                         /* soft c */
     int     c_arg;                                  /* function argument */
-    void    (*c_func)(struct scr_softc*,int); /* function to call */
+    void    (*c_func) __P((struct scr_softc*,int)); /* function to call */
     int     c_time;                                 /* ticks to the event */
 }Callout;
 
@@ -576,10 +578,10 @@ static unsigned char hatStack[HATSTACKSIZE];   /* actual stack used during a FIQ
 */
 
 /* configure routines */
-int     scrprobe(device_t, cfdata_t, void *);
-void    scrattach(device_t, device_t, void *);
+int     scrprobe    __P((struct device *, struct cfdata *, void *));
+void    scrattach   __P((struct device *, struct device *, void *));
 
-static void   initStates(struct scr_softc * sc); 
+static void   initStates           __P((struct scr_softc * sc)); 
 
 
 
@@ -591,47 +593,47 @@ static void   initStates(struct scr_softc * sc);
 */
 
 /* top level state machine */
-static void   masterSM(struct scr_softc * sc,int cmd);
+static void   masterSM             __P((struct scr_softc * sc,int cmd));
 
 /* mid level state machines, ie protocols  */
-static void   t0SendSM(struct scr_softc * sc,int cnd);
-static void   t0RecvSM(struct scr_softc * sc,int cnd);
-static void   ATRSM(struct scr_softc * sc,int cnd);
+static void   t0SendSM             __P((struct scr_softc * sc,int cnd));
+static void   t0RecvSM             __P((struct scr_softc * sc,int cnd));
+static void   ATRSM                __P((struct scr_softc * sc,int cnd));
 
 /* low level state machines, ie bash hardware bits */
-static void   coldResetSM(struct scr_softc * sc,int cnd);
+static void   coldResetSM          __P((struct scr_softc * sc,int cnd));
 
-static void   t0SendByteSM(struct scr_softc * sc,int cnd);
-static void   t0RecvByteSM(struct scr_softc * sc,int cnd);
+static void   t0SendByteSM         __P((struct scr_softc * sc,int cnd));
+static void   t0RecvByteSM         __P((struct scr_softc * sc,int cnd));
 
-static void   cardOff(struct scr_softc * sc);              
+static void   cardOff              __P((struct scr_softc * sc));              
 
 /* 
 ** functions used for our own timeout routines.
 ** we cannot use system ones as we are running at a spl level
 ** that can interrupt the system timeout routines
 */
-static void scrClkInit(void);
-static void scrClkStart(struct scr_softc* sc,int countPerTick);
-static void scrClkAdj(int count);
-static void scrClkStop(void);
-static void hatClkIrq(int count);               
+static void scrClkInit     __P((void));
+static void scrClkStart    __P((struct scr_softc* sc,int countPerTick));
+static void scrClkAdj      __P((int count));
+static void scrClkStop     __P((void));
+static void hatClkIrq      __P((int count));               
 
-static void scrTimeout(void (*func)(struct scr_softc*,int), struct scr_softc*, int arg, int count);  
-static void scrUntimeout(void (*func)(struct scr_softc*,int), struct scr_softc*, int arg);
+static void scrTimeout     __P((void (*func)(struct scr_softc*,int), struct scr_softc*, int arg, int count));  
+static void scrUntimeout   __P((void (*func)(struct scr_softc*,int), struct scr_softc*, int arg));
 
 
 /* debug functions */
 #ifdef SCR_DEBUG
-    static void invalidStateCmd(struct scr_softc* sc,int state,int cmd, int line);
-    static char * getText(int x);
+    static void invalidStateCmd __P((struct scr_softc* sc,int state,int cmd, int line));
+    static char * getText       __P((int x));
 #endif
 
 
 
 
 
-CFATTACH_DECL_NEW(scr, sizeof(struct scr_softc),
+CFATTACH_DECL(scr, sizeof(struct scr_softc),
     scrprobe, scrattach, NULL, NULL);
 
 extern struct cfdriver scr_cd;
@@ -679,8 +681,10 @@ const struct cdevsw scr_cdevsw = {
 **     none.
 **--
 */
-int
-scrprobe(device_t parent, cfdata_t match, void *aux)
+int scrprobe(parent, match, aux)
+    struct  device  *parent;
+    struct cfdata   *match;
+    void            *aux;
 {
     struct isa_attach_args  *ia = aux;
     int                     rv = 0;           
@@ -743,10 +747,12 @@ scrprobe(device_t parent, cfdata_t match, void *aux)
 **      none.
 **--
 */
-void
-scrattach(device_t parent, device_t self, void *aux)
+void scrattach(parent, self, aux)
+    struct device *parent;
+    struct device *self;
+    void         *aux;
 {
-    struct scr_softc       *sc = device_private(self);
+    struct scr_softc       *sc = (void *)self;
 
     printf("\n");
     if (device_is_a(parent, "ofisascr"))
@@ -3581,7 +3587,7 @@ static void hatClkIrq(int  x)
     register int needsoft =0;
     register Callout *c;
     register int arg;
-    register void (*func)(struct scr_softc*,int);
+    register void (*func) __P((struct scr_softc*,int));
     struct scr_softc * sc;
 
     ASSERT(scrClkEnable);
@@ -3690,12 +3696,11 @@ static void myHatWedge(int nFIQs)
 **--
 */
 
-static void
-scrTimeout(
-    void (*ftn)(struct scr_softc*,int),
-    struct scr_softc* sc,
-    int arg,
-    int count)
+static void scrTimeout(ftn, sc, arg, count)
+    void (*ftn) __P((struct scr_softc*,int));
+    struct scr_softc* sc;
+    int arg;
+    register int count;
 {
 
     register Callout *new, *p, *t;
@@ -3779,11 +3784,10 @@ scrTimeout(
 **      nill
 **--
 */
-static void
-scrUntimeout(
-    void (*ftn)(struct scr_softc*, int),
-    struct scr_softc* sc,
-    int arg)
+static void scrUntimeout(ftn, sc, arg)
+void (*ftn) __P((struct scr_softc*,int));
+struct scr_softc* sc;
+int arg;
 {
     register Callout *p, *t;
     ASSERT(scrClkEnable);
@@ -4016,3 +4020,6 @@ char * getText(int x)
 }
 
 #endif /*  SCR_DEBUG */
+
+
+

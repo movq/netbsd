@@ -1,4 +1,4 @@
-/*	$NetBSD: move.c,v 1.11 2011/07/03 06:44:01 mrg Exp $	*/
+/*	$NetBSD: move.c,v 1.6 2003/08/07 09:37:52 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,13 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)move.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: move.c,v 1.11 2011/07/03 06:44:01 mrg Exp $");
+__RCSID("$NetBSD: move.c,v 1.6 2003/08/07 09:37:52 agc Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdio.h>
 #include <math.h>
-#include <float.h>
 #include "trek.h"
 
 /*
@@ -78,8 +77,11 @@ __RCSID("$NetBSD: move.c,v 1.11 2011/07/03 06:44:01 mrg Exp $");
 **	Uses trace flag 4.
 */
 
-double
-move(int ramflag, int course, double time, double speed)
+double move(ramflag, course, time, speed)
+int	ramflag;
+int	course;
+double	time;
+double	speed;
 {
 	double			angle;
 	double			x, y, dx, dy;
@@ -92,11 +94,11 @@ move(int ramflag, int course, double time, double speed)
 	double			xn;
 	double			evtime;
 
-#ifdef xTRACE
+#	ifdef xTRACE
 	if (Trace)
 		printf("move: ramflag %d course %d time %.2f speed %.2f\n",
 			ramflag, course, time, speed);
-#endif
+#	endif
 	sectsize = NSECTS;
 	/* initialize delta factors for move */
 	angle = course * 0.0174532925;
@@ -117,19 +119,20 @@ move(int ramflag, int course, double time, double speed)
 	/* check for long range tractor beams */
 	/****  TEMPORARY CODE == DEBUGGING  ****/
 	evtime = Now.eventptr[E_LRTB]->date - Now.date;
-#ifdef xTRACE
+#	ifdef xTRACE
 	if (Trace)
-		printf("E.ep = %p, ->evcode = %d, ->date = %.2f, "
-		       "evtime = %.2f\n",
+		printf("E.ep = %p, ->evcode = %d, ->date = %.2f, evtime = %.2f\n",
 			Now.eventptr[E_LRTB], Now.eventptr[E_LRTB]->evcode,
 			Now.eventptr[E_LRTB]->date, evtime);
-#endif
-	if (time > evtime && Etc.nkling < 3) {
+#	endif
+	if (time > evtime && Etc.nkling < 3)
+	{
 		/* then we got a LRTB */
 		evtime += 0.005;
 		time = evtime;
-	} else
-		evtime = DBL_MIN;
+	}
+	else
+		evtime = -1.0e50;
 	dist = time * speed;
 
 	/* move within quadrant */
@@ -138,22 +141,22 @@ move(int ramflag, int course, double time, double speed)
 	y = Ship.secty + 0.5;
 	xn = NSECTS * dist * bigger;
 	n = xn + 0.5;
-#ifdef xTRACE
+#	ifdef xTRACE
 	if (Trace)
-		printf("dx = %.2f, dy = %.2f, xn = %.2f, n = %d\n",
-			dx, dy, xn, n);
-#endif
+		printf("dx = %.2f, dy = %.2f, xn = %.2f, n = %d\n", dx, dy, xn, n);
+#	endif
 	Move.free = 0;
 
-	for (i = 0; i < n; i++) {
+	for (i = 0; i < n; i++)
+	{
 		ix = (x += dx);
 		iy = (y += dy);
-#ifdef xTRACE
+#		ifdef xTRACE
 		if (Trace)
-			printf("ix = %d, x = %.2f, iy = %d, y = %.2f\n",
-				ix, x, iy, y);
-#endif
-		if (x < 0.0 || y < 0.0 || x >= sectsize || y >= sectsize) {
+			printf("ix = %d, x = %.2f, iy = %d, y = %.2f\n", ix, x, iy, y);
+#		endif
+		if (x < 0.0 || y < 0.0 || x >= sectsize || y >= sectsize)
+		{
 			/* enter new quadrant */
 			dx = Ship.quadx * NSECTS + Ship.sectx + dx * xn;
 			dy = Ship.quady * NSECTS + Ship.secty + dy * xn;
@@ -165,10 +168,10 @@ move(int ramflag, int course, double time, double speed)
 				iy = -1;
 			else
 				iy = dy + 0.5;
-#ifdef xTRACE
+#			ifdef xTRACE
 			if (Trace)
 				printf("New quad: ix = %d, iy = %d\n", ix, iy);
-#endif
+#			endif
 			Ship.sectx = x;
 			Ship.secty = y;
 			compkldist(0);
@@ -190,19 +193,21 @@ move(int ramflag, int course, double time, double speed)
 			n = 0;
 			break;
 		}
-		if (Sect[ix][iy] != EMPTY) {
+		if (Sect[ix][iy] != EMPTY)
+		{
 			/* we just hit something */
-			if (!damaged(COMPUTER) && ramflag <= 0) {
+			if (!damaged(COMPUTER) && ramflag <= 0)
+			{
 				ix = x - dx;
 				iy = y - dy;
-				printf("Computer reports navigation error; "
-				       "%s stopped at %d,%d\n",
+				printf("Computer reports navigation error; %s stopped at %d,%d\n",
 					Ship.shipname, ix, iy);
 				Ship.energy -= Param.stopengy * speed;
 				break;
 			}
 			/* test for a black hole */
-			if (Sect[ix][iy] == HOLE) {
+			if (Sect[ix][iy] == HOLE)
+			{
 				/* get dumped elsewhere in the galaxy */
 				dumpme(1);
 				initquad(0);
@@ -213,15 +218,14 @@ move(int ramflag, int course, double time, double speed)
 			break;
 		}
 	}
-	if (n > 0) {
+	if (n > 0)
+	{
 		dx = Ship.sectx - ix;
 		dy = Ship.secty - iy;
 		dist = sqrt(dx * dx + dy * dy) / NSECTS;
 		time = dist / speed;
-		if (evtime > time) {
-			/* spring the LRTB trap */
-			time = evtime;
-		}
+		if (evtime > time)
+			time = evtime;		/* spring the LRTB trap */
 		Ship.sectx = ix;
 		Ship.secty = iy;
 	}

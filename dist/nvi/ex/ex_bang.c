@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_bang.c,v 1.3 2009/11/14 23:40:11 christos Exp $ */
+/*	$NetBSD: ex_bang.c,v 1.1.1.2.6.1 2009/01/20 02:41:12 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -90,8 +90,7 @@ ex_bang(SCR *sp, EXCMD *cmdp)
 		if (F_ISSET(sp, SC_VI))
 			vs_update(sp, "!", ap->bp);
 		else {
-			INT2CHAR(sp, ap->bp, ap->len+1, np, nlen);
-			(void)ex_printf(sp, "!%s\n", np);
+			(void)ex_printf(sp, "!%s\n", ap->bp);
 			(void)ex_fflush(sp);
 		}
 	}

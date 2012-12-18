@@ -1,4 +1,4 @@
-/*	$NetBSD: pvctxctl.c,v 1.7 2011/08/30 21:28:27 joerg Exp $	*/
+/*	$NetBSD: pvctxctl.c,v 1.5 2007/01/16 17:32:05 hubertf Exp $	*/
 
 /*
  * Copyright (C) 1998
@@ -42,7 +42,7 @@
 #include <net/if_atm.h>
 
 static int str2vc(char *str, int *vpi, int *vci);
-__dead static void usage(void);
+static void usage(void);
 
 static void 
 usage(void)
@@ -53,6 +53,16 @@ usage(void)
 	exit(1);
 }
 
+int vpi = 0;
+int vci = 0;
+int joint_vpi = 0;
+int joint_vci = 0;
+int pcr = 0;
+int llcsnap = ATM_PH_LLCSNAP;
+int getinfo = 1;
+int subinterface = 0;
+int verbose = 1;
+
 int
 main(int argc, char **argv)
 {
@@ -60,15 +70,6 @@ main(int argc, char **argv)
 	int s, ch;
 	long bandwidth;
 	char *if_name, *cp;
-	int vpi = 0;
-	int vci = 0;
-	int joint_vpi = 0;
-	int joint_vci = 0;
-	int pcr = 0;
-	int llcsnap = ATM_PH_LLCSNAP;
-	int getinfo = 1;
-	int subinterface = 0;
-	int verbose = 1;
 
 	if (argc < 2)
 		usage();
@@ -183,19 +184,19 @@ main(int argc, char **argv)
 }
 
 static int 
-str2vc(char *str, int *vpip, int *vcip)
+str2vc(char *str, int *vpi, int *vci)
 {
 	char *c;
 
 	if ((c = strchr(str, ':')) != NULL) {
 		*c = '\0';
-		*vpip = strtol(str, NULL, 0);
+		*vpi = strtol(str, NULL, 0);
 		str = c + 1;
 	}
 	else
-		*vpip = 0;
+		*vpi = 0;
 
-	*vcip = strtol(str, NULL, 0);
+	*vci = strtol(str, NULL, 0);
 	return (0);
 }
 

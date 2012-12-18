@@ -1,4 +1,4 @@
-/*	$NetBSD: power.c,v 1.19 2012/07/29 00:04:05 matt Exp $ */
+/*	$NetBSD: power.c,v 1.17 2005/11/16 00:49:03 uwe Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: power.c,v 1.19 2012/07/29 00:04:05 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: power.c,v 1.17 2005/11/16 00:49:03 uwe Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -51,12 +51,11 @@ __KERNEL_RCSID(0, "$NetBSD: power.c,v 1.19 2012/07/29 00:04:05 matt Exp $");
 
 #include <sparc/dev/power.h>
 
-volatile uint8_t *power_reg;
+static int powermatch(struct device *, struct cfdata *, void *);
+static void powerattach(struct device *, struct device *, void *);
 
-static int powermatch(device_t, cfdata_t, void *);
-static void powerattach(device_t, device_t, void *);
-
-CFATTACH_DECL_NEW(power, 0, powermatch, powerattach, NULL, NULL);
+CFATTACH_DECL(power, sizeof(struct device),
+    powermatch, powerattach, NULL, NULL);
 
 /*
  * This is the driver for the "power" register available on some Sun4m
@@ -65,7 +64,7 @@ CFATTACH_DECL_NEW(power, 0, powermatch, powerattach, NULL, NULL);
  */
 
 static int
-powermatch(device_t parent, cfdata_t cf, void *aux)
+powermatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct sbus_attach_args *sa = &uoba->uoba_sbus;
@@ -78,7 +77,7 @@ powermatch(device_t parent, cfdata_t cf, void *aux)
 
 /* ARGSUSED */
 static void
-powerattach(device_t parent, device_t self, void *aux)
+powerattach(struct device *parent, struct device *self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct sbus_attach_args *sa = &uoba->uoba_sbus;
@@ -88,7 +87,7 @@ powerattach(device_t parent, device_t self, void *aux)
 	if (sbus_bus_map(sa->sa_bustag,
 			 sa->sa_slot, sa->sa_offset, sizeof(uint8_t),
 			 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-		printf("%s: cannot map register\n", device_xname(self));
+		printf("%s: cannot map register\n", self->dv_xname);
 		return;
 	}
 	power_reg = (volatile uint8_t *)bh;

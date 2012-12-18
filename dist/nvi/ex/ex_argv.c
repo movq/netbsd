@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_argv.c,v 1.4 2011/03/21 14:53:03 tnozaki Exp $ */
+/*	$NetBSD: ex_argv.c,v 1.1.1.2.6.2 2009/01/20 03:02:35 snj Exp $ */
 
 /*-
  * Copyright (c) 1993, 1994
@@ -105,7 +105,7 @@ argv_exp1(SCR *sp, EXCMD *excp, const CHAR_T *cmd, size_t cmdlen, int is_bang)
 	/* If it's empty, we're done. */
 	if (len != 0) {
 		for (p = bp, t = bp + len; p < t; ++p)
-			if (!ISBLANK((UCHAR_T)*p))
+			if (!isblank(*p))
 				break;
 		if (p == t)
 			goto ret;
@@ -252,16 +252,15 @@ argv_exp3(SCR *sp, EXCMD *excp, const CHAR_T *cmd, size_t cmdlen)
 {
 	EX_PRIVATE *exp;
 	size_t len;
-	ARG_CHAR_T ch;
-	int off;
+	int ch, off;
 	const CHAR_T *ap;
 	CHAR_T *p;
 
 	for (exp = EXP(sp); cmdlen > 0; ++exp->argsoff) {
 		/* Skip any leading whitespace. */
 		for (; cmdlen > 0; --cmdlen, ++cmd) {
-			ch = (UCHAR_T)*cmd;
-			if (!ISBLANK(ch))
+			ch = *cmd;
+			if (!isblank(ch))
 				break;
 		}
 		if (cmdlen == 0)
@@ -277,11 +276,11 @@ argv_exp3(SCR *sp, EXCMD *excp, const CHAR_T *cmd, size_t cmdlen)
 		 * character.
 		 */
 		for (ap = cmd, len = 0; cmdlen > 0; ++cmd, --cmdlen, ++len) {
-			ch = (UCHAR_T)*cmd;
+			ch = *cmd;
 			if (IS_ESCAPE(sp, excp, ch) && cmdlen > 1) {
 				++cmd;
 				--cmdlen;
-			} else if (ISBLANK(ch))
+			} else if (isblank(ch))
 				break;
 		}
 
@@ -746,7 +745,7 @@ alloc_err:	rval = SEXP_ERR;
 		rval = SEXP_EXPANSION_ERR;
 
 	for (p = bp; len; ++p, --len)
-		if (!ISBLANK((UCHAR_T)*p))
+		if (!isblank(*p))
 			break;
 	if (len == 0)
 		rval = SEXP_EXPANSION_ERR;

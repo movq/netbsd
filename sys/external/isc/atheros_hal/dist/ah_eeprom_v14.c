@@ -14,8 +14,9 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ah_eeprom_v14.c,v 1.6 2012/12/11 09:22:16 msaitoh Exp $
+ * $Id: ah_eeprom_v14.c,v 1.4.10.2 2009/08/07 06:43:30 snj Exp $
  */
+#include <sys/endian.h>
 #include "opt_ah.h"
 
 #include "ah.h"
@@ -53,8 +54,8 @@ v14EepromGet(struct ath_hal *ah, int param, void *val)
 			HALDEBUG(ah, HAL_DEBUG_ANY, "%s: bad mac address %s\n",
 			    __func__, ath_hal_ether_sprintf(macaddr));
 			return HAL_EEBADMAC;
-		}
-		return HAL_OK;
+		} else
+			return HAL_OK;
         case AR_EEP_REGDMN_0:
 		return pBase->regDmn[0];
         case AR_EEP_REGDMN_1:
@@ -160,6 +161,20 @@ v14EepromDiag(struct ath_hal *ah, int request,
 	return AH_FALSE;
 }
 
+#if 0
+/* XXX conditionalize by target byte order */
+#ifndef bswap16
+static __inline__ uint16_t
+__bswap16(uint16_t _x)
+{
+ 	return ((uint16_t)(
+	      (((const uint8_t *)(&_x))[0]    ) |
+	      (((const uint8_t *)(&_x))[1]<< 8))
+	);
+}
+#endif
+#endif
+
 /* Do structure specific swaps if Eeprom format is non native to host */
 static void
 eepromSwap(struct ar5416eeprom *ee)
@@ -255,7 +270,7 @@ v14EepromReadCTLInfo(struct ath_hal *ah, HAL_EEPROM_v14 *ee)
 	
 	HALASSERT(AR5416_NUM_CTLS <= sizeof(ee->ee_rdEdgesPower)/NUM_EDGES);
 
-	for (i = 0; i < AR5416_NUM_CTLS && ee->ee_base.ctlIndex[i] != 0; i++) {
+	for (i = 0; ee->ee_base.ctlIndex[i] != 0 && i < AR5416_NUM_CTLS; i++) {
 		for (j = 0; j < NUM_EDGES; j ++) {
 			/* XXX Confirm this is the right thing to do when an invalid channel is stored */
 			if (ee->ee_base.ctlData[i].ctlEdges[CTL_CHAIN][j].bChannel == AR5416_BCHAN_UNUSED) {

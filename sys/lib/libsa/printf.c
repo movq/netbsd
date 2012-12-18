@@ -1,4 +1,4 @@
-/*	$NetBSD: printf.c,v 1.18 2011/07/17 20:54:52 joerg Exp $	*/
+/*	$NetBSD: printf.c,v 1.17 2005/12/11 12:24:46 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -33,16 +33,29 @@
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
-#include <sys/stdarg.h>
+#ifdef __STDC__
+#include <machine/stdarg.h>
+#else
+#include <machine/varargs.h>
+#endif
 
 #include "stand.h"
 
 void
+#ifdef __STDC__
 printf(const char *fmt, ...)
+#else
+printf(fmt, va_alist)
+	char *fmt;
+#endif
 {
 	va_list ap;
 
+#ifdef __STDC__
 	va_start(ap, fmt);
+#else
+	va_start(ap);
+#endif
 	vprintf(fmt, ap);
 	va_end(ap);
 }

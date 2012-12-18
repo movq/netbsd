@@ -1,4 +1,4 @@
-/*	$NetBSD: qop_hfsc.c,v 1.9 2010/03/01 00:13:47 joerg Exp $	*/
+/*	$NetBSD: qop_hfsc.c,v 1.8.24.1 2010/03/06 22:42:08 sborrill Exp $	*/
 /*	$KAME: qop_hfsc.c,v 1.12 2005/01/05 04:53:47 itojun Exp $	*/
 /*
  * Copyright (C) 1999-2000

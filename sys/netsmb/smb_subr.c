@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_subr.c,v 1.36 2011/09/25 13:42:30 chs Exp $	*/
+/*	$NetBSD: smb_subr.c,v 1.32.6.1 2010/07/16 18:47:10 riz Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_subr.c,v 1.36 2011/09/25 13:42:30 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_subr.c,v 1.32.6.1 2010/07/16 18:47:10 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,8 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: smb_subr.c,v 1.36 2011/09/25 13:42:30 chs Exp $");
 
 const smb_unichar smb_unieol = 0;
 
-/* XXX M_SMBSTR could be static but that doesn't work with gcc 4.5 on alpha. */
-MALLOC_DEFINE(M_SMBSTR, "smbstr", "SMB strings");
+static MALLOC_DEFINE(M_SMBSTR, "smbstr", "SMB strings");
 MALLOC_DEFINE(M_SMBTEMP, "smbtemp", "Temp netsmb data");
 
 void
@@ -102,7 +101,7 @@ smb_strdup(const char *s)
 	len = s ? strlen(s) + 1 : 1;
 	p = malloc(len, M_SMBSTR, M_WAITOK);
 	if (s)
-		memcpy(p, s, len);
+		bcopy(s, p, len);
 	else
 		*p = 0;
 	return p;

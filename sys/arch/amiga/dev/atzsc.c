@@ -1,4 +1,4 @@
-/*	$NetBSD: atzsc.c,v 1.43 2012/10/27 17:17:27 chs Exp $ */
+/*	$NetBSD: atzsc.c,v 1.38 2008/06/13 08:13:37 cegger Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -66,14 +66,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atzsc.c,v 1.43 2012/10/27 17:17:27 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atzsc.c,v 1.38 2008/06/13 08:13:37 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/intr.h>
-#include <machine/cpu.h>
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
@@ -87,8 +86,8 @@ __KERNEL_RCSID(0, "$NetBSD: atzsc.c,v 1.43 2012/10/27 17:17:27 chs Exp $");
 #include <amiga/dev/atzscreg.h>
 #include <amiga/dev/zbusvar.h>
 
-void atzscattach(device_t, device_t, void *);
-int atzscmatch(device_t, cfdata_t, void *);
+void atzscattach(struct device *, struct device *, void *);
+int atzscmatch(struct device *, struct cfdata *, void *);
 
 void atzsc_enintr(struct sbic_softc *);
 void atzsc_dmastop(struct sbic_softc *);
@@ -104,18 +103,18 @@ void atzsc_dump(void);
 int	atzsc_dmadebug = 0;
 #endif
 
-CFATTACH_DECL_NEW(atzsc, sizeof(struct sbic_softc),
+CFATTACH_DECL(atzsc, sizeof(struct sbic_softc),
     atzscmatch, atzscattach, NULL, NULL);
 
 /*
- * if we are a A2091 SCSI
+ * if we are an A3000 we are here.
  */
 int
-atzscmatch(device_t parent, cfdata_t cf, void *aux)
+atzscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 
 	/*
 	 * Check manufacturer and product id.
@@ -128,25 +127,22 @@ atzscmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-atzscattach(device_t parent, device_t self, void *aux)
+atzscattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	volatile struct sdmac *rp;
-	struct sbic_softc *sc = device_private(self);
+	struct sbic_softc *sc = (struct sbic_softc *)dp;
 	struct zbus_args *zap;
 	struct scsipi_adapter *adapt = &sc->sc_adapter;
 	struct scsipi_channel *chan = &sc->sc_channel;
 
-	zap = aux;
+	zap = auxp;
 
-	sc->sc_dev = self;
 	sc->sc_cregs = rp = zap->va;
 	/*
 	 * disable ints and reset bank register
 	 */
 	rp->CNTR = CNTR_PDMD;
-	amiga_membarrier();
 	rp->DAWR = DAWR_ATZSC;
-	amiga_membarrier();
 	sc->sc_enintr = atzsc_enintr;
 	sc->sc_dmago = atzsc_dmago;
 	sc->sc_dmanext = atzsc_dmanext;
@@ -183,7 +179,7 @@ atzscattach(device_t parent, device_t self, void *aux)
 	 * Fill in the scsipi_adapter.
 	 */
 	memset(adapt, 0, sizeof(*adapt));
-	adapt->adapt_dev = self;
+	adapt->adapt_dev = &sc->sc_dev;
 	adapt->adapt_nchannels = 1;
 	adapt->adapt_openings = 7;
 	adapt->adapt_max_periph = 1;
@@ -211,7 +207,7 @@ atzscattach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(self, chan, scsiprint);
+	config_found(dp, chan, scsiprint);
 }
 
 void
@@ -223,7 +219,6 @@ atzsc_enintr(struct sbic_softc *dev)
 
 	dev->sc_flags |= SBICF_INTR;
 	sdp->CNTR = CNTR_PDMD | CNTR_INTEN;
-	amiga_membarrier();
 }
 
 int
@@ -245,11 +240,8 @@ atzsc_dmago(struct sbic_softc *dev, char *addr, int count, int flags)
 
 	dev->sc_flags |= SBICF_INTR;
 	sdp->CNTR = dev->sc_dmacmd;
-	amiga_membarrier();
 	sdp->ACR = (u_int) dev->sc_cur->dc_addr;
-	amiga_membarrier();
 	sdp->ST_DMA = 1;
-	amiga_membarrier();
 
 	return(dev->sc_tcnt);
 }
@@ -259,7 +251,6 @@ atzsc_dmastop(struct sbic_softc *dev)
 {
 	volatile struct sdmac *sdp;
 	int s;
-	vu_short istr;
 
 	sdp = dev->sc_cregs;
 
@@ -275,19 +266,14 @@ atzsc_dmastop(struct sbic_softc *dev)
 			 * and reading from peripheral
 			 */
 			sdp->FLUSH = 1;
-			amiga_membarrier();
-			do {
-				istr = sdp->ISTR;
-				amiga_membarrier();
-			} while ((istr & ISTR_FE_FLG) == 0);
+			while ((sdp->ISTR & ISTR_FE_FLG) == 0)
+				;
 		}
 		/*
 		 * clear possible interrupt and stop DMA
 		 */
 		sdp->CINT = 1;
-		amiga_membarrier();
 		sdp->SP_DMA = 1;
-		amiga_membarrier();
 		dev->sc_dmacmd = 0;
 		splx(s);
 	}
@@ -308,7 +294,7 @@ atzsc_dmaintr(void *arg)
 
 #ifdef DEBUG
 	if (atzsc_dmadebug & DDB_FOLLOW)
-		printf("%s: dmaintr 0x%x\n", device_xname(dev->sc_dev), stat);
+		printf("%s: dmaintr 0x%x\n", dev->sc_dev.dv_xname, stat);
 #endif
 
 	/*
@@ -321,7 +307,6 @@ atzsc_dmaintr(void *arg)
 		found++;
 
 		sdp->CINT = 1;	/* clear possible interrupt */
-		amiga_membarrier();
 
 		/*
 		 * check for SCSI ints in the same go and
@@ -339,7 +324,6 @@ int
 atzsc_dmanext(struct sbic_softc *dev)
 {
 	volatile struct sdmac *sdp;
-	vu_short istr;
 
 	sdp = dev->sc_cregs;
 
@@ -355,25 +339,17 @@ atzsc_dmanext(struct sbic_softc *dev)
 		   * and reading from peripheral
 		   */
 		sdp->FLUSH = 1;
-		amiga_membarrier();
-		do {
-			istr = sdp->ISTR;
-			amiga_membarrier();
-		} while ((istr & ISTR_FE_FLG) == 0);
+		while ((sdp->ISTR & ISTR_FE_FLG) == 0)
+			;
 	}
 	/*
 	 * clear possible interrupt and stop DMA
 	 */
 	sdp->CINT = 1;	/* clear possible interrupt */
-	amiga_membarrier();
 	sdp->SP_DMA = 1;	/* stop DMA */
-	amiga_membarrier();
 	sdp->CNTR = dev->sc_dmacmd;
-	amiga_membarrier();
 	sdp->ACR = (u_int)dev->sc_cur->dc_addr;
-	amiga_membarrier();
 	sdp->ST_DMA = 1;
-	amiga_membarrier();
 
 	dev->sc_tcnt = dev->sc_cur->dc_count << 1;
 	return(dev->sc_tcnt);
@@ -388,7 +364,7 @@ atzsc_dump(void)
 	int i;
 
 	for (i = 0; i < atzsc_cd.cd_ndevs; ++i) {
-		sc = device_lookup_private(&atzsc_cd, i);
+		sc = device_lookup_private(&atysc_cd, i);
 		if (sc != NULL)
 			sbic_dump(sc);
 	}

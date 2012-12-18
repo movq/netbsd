@@ -1,4 +1,4 @@
-/*	$NetBSD: sa11x0.c,v 1.27 2012/10/27 17:17:41 chs Exp $	*/
+/*	$NetBSD: sa11x0.c,v 1.23 2008/06/13 13:24:10 rafal Exp $	*/
 
 /*-
  * Copyright (c) 2001, The NetBSD Foundation, Inc.  All rights reserved.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sa11x0.c,v 1.27 2012/10/27 17:17:41 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sa11x0.c,v 1.23 2008/06/13 13:24:10 rafal Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,7 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: sa11x0.c,v 1.27 2012/10/27 17:17:41 chs Exp $");
 #include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/arm32/psl.h>
 #include <arm/arm32/machdep.h>
@@ -87,13 +87,14 @@ __KERNEL_RCSID(0, "$NetBSD: sa11x0.c,v 1.27 2012/10/27 17:17:41 chs Exp $");
 #include "locators.h"
 
 /* prototypes */
-static int	sa11x0_match(device_t, cfdata_t, void *);
-static void	sa11x0_attach(device_t, device_t, void *);
-static int 	sa11x0_search(device_t, cfdata_t, const int *, void *);
+static int	sa11x0_match(struct device *, struct cfdata *, void *);
+static void	sa11x0_attach(struct device *, struct device *, void *);
+static int 	sa11x0_search(struct device *, struct cfdata *,
+				const int *, void *);
 static int	sa11x0_print(void *, const char *);
 
 /* attach structures */
-CFATTACH_DECL_NEW(saip, sizeof(struct sa11x0_softc),
+CFATTACH_DECL(saip, sizeof(struct sa11x0_softc),
     sa11x0_match, sa11x0_attach, NULL, NULL);
 
 extern struct bus_space sa11x0_bs_tag;
@@ -122,46 +123,45 @@ sa11x0_print(void *aux, const char *name)
 }
 
 int
-sa11x0_match(device_t parent, cfdata_t match, void *aux)
+sa11x0_match(struct device *parent, struct cfdata *match, void *aux)
 {
 
 	return 1;
 }
 
 void
-sa11x0_attach(device_t parent, device_t self, void *aux)
+sa11x0_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct sa11x0_softc *sc = device_private(self);
+	struct sa11x0_softc *sc = (struct sa11x0_softc*)self;
 
-	sc->sc_dev = self;
 	sc->sc_iot = &sa11x0_bs_tag;
 
 	/* Map the SAIP */
 	if (bus_space_map(sc->sc_iot, SAIPIC_BASE, SAIPIC_NPORTS,
 			0, &sc->sc_ioh))
-		panic("%s: Cannot map registers", device_xname(self));
+		panic("%s: Cannot map registers", self->dv_xname);
 	saipic_base = sc->sc_ioh;
 
 	/* Map the GPIO registers */
 	if (bus_space_map(sc->sc_iot, SAGPIO_BASE, SAGPIO_NPORTS,
 			  0, &sc->sc_gpioh))
-		panic("%s: unable to map GPIO registers", device_xname(self));
+		panic("%s: unable to map GPIO registers", self->dv_xname);
 	bus_space_write_4(sc->sc_iot, sc->sc_gpioh, SAGPIO_EDR, 0xffffffff);
 
 	/* Map the PPC registers */
 	if (bus_space_map(sc->sc_iot, SAPPC_BASE, SAPPC_NPORTS,
 			  0, &sc->sc_ppch))
-		panic("%s: unable to map PPC registers", device_xname(self));
+		panic("%s: unable to map PPC registers", self->dv_xname);
 
 	/* Map the DMA controller registers */
 	if (bus_space_map(sc->sc_iot, SADMAC_BASE, SADMAC_NPORTS,
 			  0, &sc->sc_dmach))
-		panic("%s: unable to map DMAC registers", device_xname(self));
+		panic("%s: unable to map DMAC registers", self->dv_xname);
 
 	/* Map the reset controller registers */
 	if (bus_space_map(sc->sc_iot, SARCR_BASE, PAGE_SIZE,
 			  0, &sc->sc_reseth))
-		panic("%s: unable to map reset registers", device_xname(self));
+		panic("%s: unable to map reset registers", self->dv_xname);
 
 	printf("\n");
 
@@ -197,17 +197,17 @@ sa11x0_attach(device_t parent, device_t self, void *aux)
 }
 
 int
-sa11x0_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+sa11x0_search(struct device *parent, struct cfdata *cf, const int *ldesc,
+    void *aux)
 {
-	struct sa11x0_softc *sc = device_private(parent);
+	struct sa11x0_softc *sc = (struct sa11x0_softc *)parent;
 	struct sa11x0_attach_args sa;
 
 	sa.sa_sc = sc;
-	sa.sa_iot = sc->sc_iot;
-	sa.sa_name = cf->cf_name;
-	sa.sa_addr = cf->cf_loc[SAIPCF_ADDR];
-	sa.sa_size = cf->cf_loc[SAIPCF_SIZE];
-	sa.sa_intr = cf->cf_loc[SAIPCF_INTR];
+        sa.sa_iot = sc->sc_iot;
+        sa.sa_addr = cf->cf_loc[SAIPCF_ADDR];
+        sa.sa_size = cf->cf_loc[SAIPCF_SIZE];
+        sa.sa_intr = cf->cf_loc[SAIPCF_INTR];
 	sa.sa_gpio = cf->cf_loc[SAIPCF_GPIO];
 
         if (config_match(parent, cf, &sa) > 0)

@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_lookup.c,v 1.120 2012/11/05 17:27:40 dholland Exp $	*/
+/*	$NetBSD: ufs_lookup.c,v 1.99.4.2 2012/05/19 17:28:29 riz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_lookup.c,v 1.120 2012/11/05 17:27:40 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_lookup.c,v 1.99.4.2 2012/05/19 17:28:29 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ffs.h"
@@ -68,13 +68,15 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_lookup.c,v 1.120 2012/11/05 17:27:40 dholland Ex
 #include <ufs/ufs/ufs_bswap.h>
 #include <ufs/ufs/ufs_wapbl.h>
 
-#include <miscfs/genfs/genfs.h>
+#include "fs_ffs.h"
 
 #ifdef DIAGNOSTIC
 int	dirchk = 1;
 #else
 int	dirchk = 0;
 #endif
+
+#define	FSFMT(vp)	(((vp)->v_mount->mnt_iflag & IMNT_DTYPE) == 0)
 
 /*
  * Convert a component of a pathname into a pointer to a locked inode.
@@ -122,27 +124,19 @@ ufs_lookup(void *v)
 	struct buf *bp;			/* a buffer of directory entries */
 	struct direct *ep;		/* the current directory entry */
 	int entryoffsetinblock;		/* offset of ep in bp's buffer */
-	enum {
-		NONE,		/* need to search a slot for our new entry */
-		COMPACT,	/* a compaction can make a slot in the current
-				   DIRBLKSIZ block */
-		FOUND,		/* found a slot (or no need to search) */
-	} slotstatus;
-	doff_t slotoffset;		/* offset of area with free space.
-					   a special value -1 for invalid */
+	enum {NONE, COMPACT, FOUND} slotstatus;
+	doff_t slotoffset;		/* offset of area with free space */
 	int slotsize;			/* size of area at slotoffset */
-	int slotfreespace;		/* accumulated amount of space free in
-					   the current DIRBLKSIZ block */
+	int slotfreespace;		/* amount of space free in slot */
 	int slotneeded;			/* size of the entry we're seeking */
 	int numdirpasses;		/* strategy for directory search */
 	doff_t endsearch;		/* offset to end directory search */
-	doff_t prevoff;			/* previous value of ulr_offset */
+	doff_t prevoff;			/* prev entry dp->i_offset */
 	struct vnode *pdp;		/* saved dp during symlink work */
 	struct vnode *tdp;		/* returned by VFS_VGET */
-	doff_t enduseful;		/* pointer past last used dir slot.
-					   used for directory truncation. */
+	doff_t enduseful;		/* pointer past last used dir slot */
 	u_long bmask;			/* block offset mask */
-	int error;
+	int namlen, error;
 	struct vnode **vpp = ap->a_vpp;
 	struct componentname *cnp = ap->a_cnp;
 	kauth_cred_t cred = cnp->cn_cred;
@@ -153,7 +147,6 @@ ufs_lookup(void *v)
 	int dirblksiz = ump->um_dirblksiz;
 	ino_t foundino;
 	struct ufs_lookup_results *results;
-	int iswhiteout;			/* temp result from cache_lookup() */
 
 	flags = cnp->cn_flags;
 
@@ -163,12 +156,10 @@ ufs_lookup(void *v)
 	endsearch = 0; /* silence compiler warning */
 
 	/*
-	 * Produce the auxiliary lookup results into i_crap. Increment
-	 * its serial number so elsewhere we can tell if we're using
-	 * stale results. This should not be done this way. XXX.
+	 * Produce the auxiliary lookup results into i_crap.
+	 *This should not be done this way. XXX.
 	 */
 	results = &dp->i_crap;
-	dp->i_crapcounter++;
 
 	/*
 	 * Check accessiblity of directory.
@@ -187,25 +178,8 @@ ufs_lookup(void *v)
 	 * check the name cache to see if the directory/name pair
 	 * we are looking for is known already.
 	 */
-	if (cache_lookup(vdp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags, &iswhiteout, vpp)) {
-		if (iswhiteout) {
-			cnp->cn_flags |= ISWHITEOUT;
-		}
-		return *vpp == NULLVP ? ENOENT : 0;
-	}
-	if (iswhiteout) {
-		/*
-		 * The namecache set iswhiteout without finding a
-		 * cache entry. As of this writing (20121014), this
-		 * can happen if there was a whiteout entry that has
-		 * been invalidated by the lookup. It is not clear if
-		 * it is correct to set ISWHITEOUT in this case or
-		 * not; however, doing so retains the prior behavior,
-		 * so we'll go with that until some clearer answer
-		 * appears. XXX
-		 */
-		cnp->cn_flags |= ISWHITEOUT;
+	if ((error = cache_lookup(vdp, vpp, cnp)) >= 0) {
+		return (error);
 	}
 
 	fstrans_start(vdp->v_mount, FSTRANS_SHARED);
@@ -218,7 +192,8 @@ ufs_lookup(void *v)
 	 */
 	slotstatus = FOUND;
 	slotfreespace = slotsize = slotneeded = 0;
-	if ((nameiop == CREATE || nameiop == RENAME) && (flags & ISLASTCN)) {
+	if ((nameiop == CREATE || nameiop == RENAME) &&
+	    (flags & ISLASTCN)) {
 		slotstatus = NONE;
 		slotneeded = DIRECTSIZ(cnp->cn_namelen);
 	}
@@ -303,8 +278,8 @@ searchloop:
 		if ((results->ulr_offset & bmask) == 0) {
 			if (bp != NULL)
 				brelse(bp, 0);
-			error = ufs_blkatoff(vdp, (off_t)results->ulr_offset,
-			    NULL, &bp, false);
+			error = ufs_blkatoff(vdp, (off_t)results->ulr_offset, NULL,
+			    &bp, false);
 			if (error)
 				goto out;
 			entryoffsetinblock = 0;
@@ -374,8 +349,6 @@ searchloop:
 		 * Check for a name match.
 		 */
 		if (ep->d_ino) {
-			int namlen;
-
 #if (BYTE_ORDER == LITTLE_ENDIAN)
 			if (FSFMT(vdp) && needswap == 0)
 				namlen = ep->d_type;
@@ -395,7 +368,8 @@ foundentry:
 #endif
 				/*
 				 * Save directory entry's inode number and
-				 * reclen, and release directory buffer.
+				 * reclen in ndp->ni_ufs area, and release
+				 * directory buffer.
 				 */
 				if (!FSFMT(vdp) && ep->d_type == DT_WHT) {
 					slotstatus = FOUND;
@@ -404,9 +378,8 @@ foundentry:
 					    needswap);
 					results->ulr_reclen = slotsize;
 					/*
-					 * This is used to set
-					 * results->ulr_endoff,
-					 * which may be used by ufs_direnter()
+					 * This is used to set results->ulr_endoff,
+					 * which may be used by ufs_direnter2()
 					 * as a length to truncate the
 					 * directory to.  Therefore, it must
 					 * point past the end of the last
@@ -421,13 +394,12 @@ foundentry:
 					 * an existing entry anyway.
 					 */
 					enduseful = endsearch;
-					cnp->cn_flags |= ISWHITEOUT;
+					ap->a_cnp->cn_flags |= ISWHITEOUT;
 					numdirpasses--;
 					goto notfound;
 				}
 				foundino = ufs_rw32(ep->d_ino, needswap);
-				results->ulr_reclen =
-				    ufs_rw16(ep->d_reclen, needswap);
+				results->ulr_reclen = ufs_rw16(ep->d_reclen, needswap);
 				goto found;
 			}
 		}
@@ -457,9 +429,9 @@ notfound:
 	 */
 	if ((nameiop == CREATE || nameiop == RENAME ||
 	     (nameiop == DELETE &&
-	      (cnp->cn_flags & DOWHITEOUT) &&
-	      (cnp->cn_flags & ISWHITEOUT))) &&
-	    (flags & ISLASTCN) && dp->i_nlink != 0) {
+	      (ap->a_cnp->cn_flags & DOWHITEOUT) &&
+	      (ap->a_cnp->cn_flags & ISWHITEOUT))) &&
+	    (flags & ISLASTCN) && dp->i_ffs_effnlink != 0) {
 		/*
 		 * Access for write is interpreted as allowing
 		 * creation of files in the directory.
@@ -485,8 +457,7 @@ notfound:
 			if ((results->ulr_offset & (dirblksiz - 1)) == 0)
 				results->ulr_count = 0;
 			else
-				results->ulr_count =
-				    results->ulr_offset - prevoff;
+				results->ulr_count = results->ulr_offset - prevoff;
 		} else {
 			results->ulr_offset = slotoffset;
 			results->ulr_count = slotsize;
@@ -504,20 +475,21 @@ notfound:
 		 * We return ni_vp == NULL to indicate that the entry
 		 * does not currently exist; we leave a pointer to
 		 * the (locked) directory inode in ndp->ni_dvp.
+		 * The pathname buffer is saved so that the name
+		 * can be obtained later.
 		 *
 		 * NB - if the directory is unlocked, then this
 		 * information cannot be used.
 		 */
+		cnp->cn_flags |= SAVENAME;
 		error = EJUSTRETURN;
 		goto out;
 	}
 	/*
 	 * Insert name into cache (as non-existent) if appropriate.
 	 */
-	if (nameiop != CREATE) {
-		cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-			    cnp->cn_flags);
-	}
+	if ((cnp->cn_flags & MAKEENTRY) && nameiop != CREATE)
+		cache_enter(vdp, *vpp, cnp);
 	error = ENOENT;
 	goto out;
 
@@ -530,8 +502,7 @@ found:
 	 */
 	if (results->ulr_offset + DIRSIZ(FSFMT(vdp), ep, needswap) > dp->i_size) {
 		ufs_dirbad(dp, results->ulr_offset, "i_size too small");
-		dp->i_size =
-		    results->ulr_offset + DIRSIZ(FSFMT(vdp), ep, needswap);
+		dp->i_size = results->ulr_offset + DIRSIZ(FSFMT(vdp), ep, needswap);
 		DIP_ASSIGN(dp, size, dp->i_size);
 		dp->i_flag |= IN_CHANGE | IN_UPDATE;
 		UFS_WAPBL_UPDATE(vdp, NULL, NULL, UPDATE_DIROP);
@@ -553,6 +524,12 @@ found:
 	 */
 	if (nameiop == DELETE && (flags & ISLASTCN)) {
 		/*
+		 * Write access to directory required to delete files.
+		 */
+		error = VOP_ACCESS(vdp, VWRITE, cred);
+		if (error)
+			goto out;
+		/*
 		 * Return pointer to current entry in results->ulr_offset,
 		 * and distance past previous entry (if there
 		 * is a previous entry in this block) in results->ulr_count.
@@ -563,46 +540,32 @@ found:
 		else
 			results->ulr_count = results->ulr_offset - prevoff;
 		if (dp->i_number == foundino) {
-			vref(vdp);
-			tdp = vdp;
-		} else {
-			if (flags & ISDOTDOT)
-				VOP_UNLOCK(vdp); /* race to get the inode */
-			error = VFS_VGET(vdp->v_mount, foundino, &tdp);
-			if (flags & ISDOTDOT)
-				vn_lock(vdp, LK_EXCLUSIVE | LK_RETRY);
-			if (error)
-				goto out;
-		}
-		/*
-		 * Write access to directory required to delete files.
-		 */
-		error = VOP_ACCESS(vdp, VWRITE, cred);
-		if (error) {
-			if (dp->i_number == foundino)
-				vrele(tdp);
-			else
-				vput(tdp);
+			VREF(vdp);
+			*vpp = vdp;
+			error = 0;
 			goto out;
 		}
+		if (flags & ISDOTDOT)
+			VOP_UNLOCK(vdp, 0); /* race to get the inode */
+		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
+		if (flags & ISDOTDOT)
+			vn_lock(vdp, LK_EXCLUSIVE | LK_RETRY);
+		if (error)
+			goto out;
 		/*
 		 * If directory is "sticky", then user must own
 		 * the directory, or the file in it, else she
 		 * may not delete it (unless she's root). This
 		 * implements append-only directories.
 		 */
-		if (dp->i_mode & ISVTX) {
-			error = kauth_authorize_vnode(cred, KAUTH_VNODE_DELETE,
-			    tdp, vdp, genfs_can_sticky(cred, dp->i_uid,
-			    VTOI(tdp)->i_uid));
-			if (error) {
-				if (dp->i_number == foundino)
-					vrele(tdp);
-				else
-					vput(tdp);
-				error = EPERM;
-				goto out;
-			}
+		if ((dp->i_mode & ISVTX) &&
+		    kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
+		     NULL) != 0 &&
+		    kauth_cred_geteuid(cred) != dp->i_uid &&
+		    VTOI(tdp)->i_uid != kauth_cred_geteuid(cred)) {
+			vput(tdp);
+			error = EPERM;
+			goto out;
 		}
 		*vpp = tdp;
 		error = 0;
@@ -628,13 +591,14 @@ found:
 			goto out;
 		}
 		if (flags & ISDOTDOT)
-			VOP_UNLOCK(vdp); /* race to get the inode */
+			VOP_UNLOCK(vdp, 0); /* race to get the inode */
 		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
 		if (flags & ISDOTDOT)
 			vn_lock(vdp, LK_EXCLUSIVE | LK_RETRY);
 		if (error)
 			goto out;
 		*vpp = tdp;
+		cnp->cn_flags |= SAVENAME;
 		error = 0;
 		goto out;
 	}
@@ -660,7 +624,7 @@ found:
 	 */
 	pdp = vdp;
 	if (flags & ISDOTDOT) {
-		VOP_UNLOCK(pdp);	/* race to get the inode */
+		VOP_UNLOCK(pdp, 0);	/* race to get the inode */
 		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
 		vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY);
 		if (error) {
@@ -668,7 +632,7 @@ found:
 		}
 		*vpp = tdp;
 	} else if (dp->i_number == foundino) {
-		vref(vdp);	/* we want ourself, ie "." */
+		VREF(vdp);	/* we want ourself, ie "." */
 		*vpp = vdp;
 	} else {
 		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
@@ -680,7 +644,8 @@ found:
 	/*
 	 * Insert name into cache if appropriate.
 	 */
-	cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen, cnp->cn_flags);
+	if (cnp->cn_flags & MAKEENTRY)
+		cache_enter(vdp, *vpp, cnp);
 	error = 0;
 
 out:
@@ -768,6 +733,10 @@ void
 ufs_makedirentry(struct inode *ip, struct componentname *cnp,
     struct direct *newdirp)
 {
+#ifdef DIAGNOSTIC
+	if ((cnp->cn_flags & SAVENAME) == 0)
+		panic("makedirentry: missing name");
+#endif
 	newdirp->d_ino = ip->i_number;
 	newdirp->d_namlen = cnp->cn_namelen;
 	memcpy(newdirp->d_name, cnp->cn_nameptr, (size_t)cnp->cn_namelen);
@@ -819,7 +788,7 @@ ufs_direnter(struct vnode *dvp, const struct ufs_lookup_results *ulr,
 	struct buf *bp;
 	u_int dsize;
 	struct direct *ep, *nep;
-	int error, ret, blkoff, loc, spacefree;
+	int error, ret, blkoff, loc, spacefree, flags;
 	char *dirbuf;
 	struct timespec ts;
 	struct ufsmount *ump = VFSTOUFS(dvp->v_mount);
@@ -834,21 +803,35 @@ ufs_direnter(struct vnode *dvp, const struct ufs_lookup_results *ulr,
 
 	dp = VTOI(dvp);
 	newentrysize = DIRSIZ(0, dirp, 0);
+	if (DOINGSOFTDEP(dvp))
+		dp->i_offset = ulr->ulr_offset; /*sofdep tags buffers withthis value*/
 
-	if (ulr->ulr_count == 0) {
+ #if 0
+ 	struct ufs_lookup_results *ulr;
+ 	/* XXX should handle this material another way */
+ 	ulr = &dp->i_crap;
+ 	UFS_CHECK_CRAPCOUNTER(dp);
+ #endif
+ 
+ 	if (ulr->ulr_count == 0) {
 		/*
-		 * If ulr_count is 0, then namei could find no
-		 * space in the directory. Here, ulr_offset will
+ 		 * If ulr_count is 0, then namei could find no
+ 		 * space in the directory. Here, ulr_offset will
 		 * be on a directory block boundary and we will write the
 		 * new entry into a fresh block.
 		 */
-		if (ulr->ulr_offset & (dirblksiz - 1))
+ 		if (ulr->ulr_offset & (dirblksiz - 1))
 			panic("ufs_direnter: newblk");
-		if ((error = UFS_BALLOC(dvp, (off_t)ulr->ulr_offset, dirblksiz,
-		    cr, B_CLRBUF | B_SYNC, &bp)) != 0) {
+		flags = B_CLRBUF;
+		if (!DOINGSOFTDEP(dvp))
+			flags |= B_SYNC;
+ 		if ((error = UFS_BALLOC(dvp, (off_t)ulr->ulr_offset, dirblksiz,
+		    cr, flags, &bp)) != 0) {
+			if (DOINGSOFTDEP(dvp) && newdirbp != NULL)
+				bdwrite(newdirbp);
 			return (error);
 		}
-		dp->i_size = ulr->ulr_offset + dirblksiz;
+ 		dp->i_size = ulr->ulr_offset + dirblksiz;
 		DIP_ASSIGN(dp, size, dp->i_size);
 		dp->i_flag |= IN_CHANGE | IN_UPDATE;
 		uvm_vnp_setsize(dvp, dp->i_size);
@@ -875,7 +858,47 @@ ufs_direnter(struct vnode *dvp, const struct ufs_lookup_results *ulr,
 			    ulr->ulr_offset);
 		}
 #endif
-		error = VOP_BWRITE(bp->b_vp, bp);
+		if (DOINGSOFTDEP(dvp)) {
+			/*
+			 * Ensure that the entire newly allocated block is a
+			 * valid directory so that future growth within the
+			 * block does not have to ensure that the block is
+			 * written before the inode.
+			 */
+			blkoff += dirblksiz;
+			while (blkoff < bp->b_bcount) {
+				((struct direct *)
+				   ((char *)bp->b_data + blkoff))->d_reclen = dirblksiz;
+				blkoff += dirblksiz;
+			}
+			if (softdep_setup_directory_add(bp, dp, dp->i_offset,
+			    ufs_rw32(dirp->d_ino, needswap), newdirbp, 1) == 0) {
+				bdwrite(bp);
+				vfs_timestamp(&ts);
+				return UFS_UPDATE(dvp, &ts, &ts, UPDATE_DIROP);
+			}
+			/* We have just allocated a directory block in an
+			 * indirect block. Rather than tracking when it gets
+			 * claimed by the inode, we simply do a VOP_FSYNC
+			 * now to ensure that it is there (in case the user
+			 * does a future fsync). Note that we have to unlock
+			 * the inode for the entry that we just entered, as
+			 * the VOP_FSYNC may need to lock other inodes which
+			 * can lead to deadlock if we also hold a lock on
+			 * the newly entered node.
+			 */
+			error = VOP_BWRITE(bp);
+			if (error != 0)
+				return (error);
+			if (tvp != NULL)
+				VOP_UNLOCK(tvp, 0);
+			error = VOP_FSYNC(dvp, l->l_cred, FSYNC_WAIT, 0, 0);
+			if (tvp != 0)
+				vn_lock(tvp, LK_EXCLUSIVE | LK_RETRY);
+			return (error);
+		} else {
+			error = VOP_BWRITE(bp);
+		}
 		vfs_timestamp(&ts);
 		ret = UFS_UPDATE(dvp, &ts, &ts, UPDATE_DIROP);
 		if (error == 0)
@@ -885,7 +908,7 @@ ufs_direnter(struct vnode *dvp, const struct ufs_lookup_results *ulr,
 
 	/*
 	 * If ulr_count is non-zero, then namei found space for the new
-	 * entry in the range ulr_offset to ulr_offset + ulr_count
+	 * entry in the range ulr_offset to url_offset + url_count
 	 * in the directory. To use this space, we may have to compact
 	 * the entries located there, by copying them together towards the
 	 * beginning of the block, leaving the free space in one usable
@@ -914,16 +937,18 @@ ufs_direnter(struct vnode *dvp, const struct ufs_lookup_results *ulr,
 	 */
 	error = ufs_blkatoff(dvp, (off_t)ulr->ulr_offset, &dirbuf, &bp, true);
 	if (error) {
+		if (DOINGSOFTDEP(dvp) && newdirbp != NULL)
+			bdwrite(newdirbp);
 		return (error);
 	}
 	/*
 	 * Find space for the new entry. In the simple case, the entry at
 	 * offset base will have the space. If it does not, then namei
-	 * arranged that compacting the region ulr_offset to
-	 * ulr_offset + ulr_count would yield the space.
+	 * arranged that compacting the region dp->i_offset to
+	 * dp->i_offset + dp->i_count would yield the space.
 	 */
 	ep = (struct direct *)dirbuf;
-	dsize = (ep->d_ino != 0) ? DIRSIZ(FSFMT(dvp), ep, needswap) : 0;
+	dsize = (ep->d_ino != 0) ?  DIRSIZ(FSFMT(dvp), ep, needswap) : 0;
 	spacefree = ufs_rw16(ep->d_reclen, needswap) - dsize;
 	for (loc = ufs_rw16(ep->d_reclen, needswap); loc < ulr->ulr_count; ) {
 		uint16_t reclen;
@@ -958,7 +983,11 @@ ufs_direnter(struct vnode *dvp, const struct ufs_lookup_results *ulr,
 			    ulr->ulr_offset + ((char *)nep - dirbuf),
 			    ulr->ulr_offset + ((char *)ep - dirbuf));
 #endif
-		memcpy((void *)ep, (void *)nep, dsize);
+		if (DOINGSOFTDEP(dvp))
+			softdep_change_directoryentry_offset(dp, dirbuf,
+			    (void *)nep, (void *)ep, dsize);
+		else
+			memcpy((void *)ep, (void *)nep, dsize);
 	}
 	/*
 	 * Here, `ep' points to a directory entry containing `dsize' in-use
@@ -1007,7 +1036,14 @@ ufs_direnter(struct vnode *dvp, const struct ufs_lookup_results *ulr,
 		    (ulr->ulr_offset & (dirblksiz - 1)),
 		    ulr->ulr_offset & ~(dirblksiz - 1));
 #endif
-	error = VOP_BWRITE(bp->b_vp, bp);
+	if (DOINGSOFTDEP(dvp)) {
+		softdep_setup_directory_add(bp, dp,
+		    dp->i_offset + (char *)ep - dirbuf,
+			ufs_rw32(dirp->d_ino, needswap), newdirbp, 0);
+		bdwrite(bp);
+	} else {
+		error = VOP_BWRITE(bp);
+	}
 	dp->i_flag |= IN_CHANGE | IN_UPDATE;
 	/*
 	 * If all went well, and the directory can be shortened, proceed
@@ -1016,55 +1052,59 @@ ufs_direnter(struct vnode *dvp, const struct ufs_lookup_results *ulr,
 	 * lock other inodes which can lead to deadlock if we also hold a
 	 * lock on the newly entered node.
 	 */
-	if (error == 0 && ulr->ulr_endoff && ulr->ulr_endoff < dp->i_size) {
+ 	if (error == 0 && ulr->ulr_endoff && ulr->ulr_endoff < dp->i_size) {
+		if (DOINGSOFTDEP(dvp) && (tvp != NULL))
+			VOP_UNLOCK(tvp, 0);
 #ifdef UFS_DIRHASH
 		if (dp->i_dirhash != NULL)
-			ufsdirhash_dirtrunc(dp, ulr->ulr_endoff);
+ 			ufsdirhash_dirtrunc(dp, ulr->ulr_endoff);
 #endif
-		(void) UFS_TRUNCATE(dvp, (off_t)ulr->ulr_endoff, IO_SYNC, cr);
+ 		(void) UFS_TRUNCATE(dvp, (off_t)ulr->ulr_endoff, IO_SYNC, cr);
+		if (DOINGSOFTDEP(dvp) && (tvp != NULL))
+			vn_lock(tvp, LK_EXCLUSIVE | LK_RETRY);
 	}
 	UFS_WAPBL_UPDATE(dvp, NULL, NULL, UPDATE_DIROP);
 	return (error);
 }
 
 /*
- * Remove a directory entry after a call to namei, using the
- * parameters that ufs_lookup left in nameidata and in the
- * ufs_lookup_results.
- *
- * DVP is the directory to be updated. It must be locked.
- * ULR is the ufs_lookup_results structure from the final lookup step.
- * IP, if not null, is the inode being unlinked.
- * FLAGS may contain DOWHITEOUT.
- * ISRMDIR is not used and (XXX) should be removed.
- *
- * If FLAGS contains DOWHITEOUT the entry is replaced with a whiteout
- * instead of being cleared.
- *
- * ulr->ulr_offset contains the position of the directory entry
- * to be removed.
- *
- * ulr->ulr_reclen contains the size of the directory entry to be
- * removed.
- *
- * ulr->ulr_count contains the size of the *previous* directory
- * entry. This allows finding it, for free space management. If
- * ulr_count is 0, the target entry is at the beginning of the
- * directory. (Does this ever happen? The first entry should be ".",
- * which should only be removed at rmdir time. Does rmdir come here
- * to clear out the "." and ".." entries? Perhaps, but I doubt it.)
- *
- * The space is marked free by adding it to the record length (not
- * name length) of the preceding entry. If the first entry becomes
- * free, it is marked free by setting the inode number to 0.
- *
- * The link count of IP is decremented. Note that this is not the
- * inverse behavior of ufs_direnter, which does not adjust link
- * counts. Sigh.
+  * Remove a directory entry after a call to namei, using the
+  * parameters that ufs_lookup left in nameidata and in the
+  * ufs_lookup_results.
+  *
+  * DVP is the directory to be updated. It must be locked.
+  * ULR is the ufs_lookup_results structure from the final lookup step.
+  * IP, if not null, is the inode being unlinked.
+  * FLAGS may contain DOWHITEOUT.
+  * ISRMDIR is not used and (XXX) should be removed.
+  *
+  * If FLAGS contains DOWHITEOUT the entry is replaced with a whiteout
+  * instead of being cleared.
+  *
+  * ulr->ulr_offset contains the position of the directory entry
+  * to be removed.
+  *
+  * ulr->ulr_reclen contains the size of the directory entry to be
+  * removed.
+  *
+  * ulr->ulr_count contains the size of the *previous* directory
+  * entry. This allows finding it, for free space management. If
+  * ulr_count is 0, the target entry is at the beginning of the
+  * directory. (Does this ever happen? The first entry should be ".",
+  * which should only be removed at rmdir time. Does rmdir come here
+  * to clear out the "." and ".." entries? Perhaps, but I doubt it.)
+  *
+  * The space is marked free by adding it to the record length (not
+  * name length) of the preceding entry. If the first entry becomes
+  * free, it is marked free by setting the inode number to 0.
+  *
+  * The link count of IP is decremented. Note that this is not the
+  * inverse behavior of ufs_direnter, which does not adjust link
+  * counts. Sigh.
  */
 int
-ufs_dirremove(struct vnode *dvp, const struct ufs_lookup_results *ulr,
-	      struct inode *ip, int flags, int isrmdir)
+ ufs_dirremove(struct vnode *dvp, const struct ufs_lookup_results *ulr,
+ 	      struct inode *ip, int flags, int isrmdir)
 {
 	struct inode *dp = VTOI(dvp);
 	struct direct *ep;
@@ -1096,7 +1136,7 @@ ufs_dirremove(struct vnode *dvp, const struct ufs_lookup_results *ulr,
 #ifdef UFS_DIRHASH
 	/*
 	 * Remove the dirhash entry. This is complicated by the fact
-	 * that `ep' is the previous entry when ulr_count != 0.
+	 * that `ep' is the previous entry when dp->i_count != 0.
 	 */
 	if (dp->i_dirhash != NULL)
 		ufsdirhash_remove(dp, (ulr->ulr_count == 0) ? ep :
@@ -1128,30 +1168,40 @@ ufs_dirremove(struct vnode *dvp, const struct ufs_lookup_results *ulr,
 #endif
 
 out:
-	if (ip) {
-		ip->i_nlink--;
-		DIP_ASSIGN(ip, nlink, ip->i_nlink);
-		ip->i_flag |= IN_CHANGE;
-		UFS_WAPBL_UPDATE(ITOV(ip), NULL, NULL, 0);
+	if (DOINGSOFTDEP(dvp)) {
+		if (ip) {
+			ip->i_ffs_effnlink--;
+			softdep_change_linkcnt(ip);
+			dp->i_count = ulr->ulr_count;
+			dp->i_endoff = ulr->ulr_endoff;
+			dp->i_diroff = ulr->ulr_diroff;
+			dp->i_offset = ulr->ulr_offset;
+			dp->i_reclen = ulr->ulr_reclen;
+			softdep_setup_remove(bp, dp, ip, isrmdir);
+		}
+		bdwrite(bp);
+	} else {
+		if (ip) {
+			ip->i_ffs_effnlink--;
+			ip->i_nlink--;
+			DIP_ASSIGN(ip, nlink, ip->i_nlink);
+			ip->i_flag |= IN_CHANGE;
+			UFS_WAPBL_UPDATE(ITOV(ip), NULL, NULL, 0);
+		}
+		error = VOP_BWRITE(bp);
 	}
-	/*
-	 * XXX did it ever occur to anyone that it might be a good
-	 * idea to restore ip->i_nlink if this fails? Or something?
-	 * Currently on error return from this function the state of
-	 * ip->i_nlink depends on what happened, and callers
-	 * definitely do not take this into account.
-	 */
-	error = VOP_BWRITE(bp->b_vp, bp);
 	dp->i_flag |= IN_CHANGE | IN_UPDATE;
+#ifdef FFS
 	/*
 	 * If the last named reference to a snapshot goes away,
 	 * drop its snapshot reference so that it will be reclaimed
 	 * when last open reference goes away.
 	 */
 	if (ip != 0 && (ip->i_flags & SF_SNAPSHOT) != 0 &&
-	    ip->i_nlink == 0)
+	    ip->i_ffs_effnlink == 0)
 		ffs_snapgone(ip);
 	UFS_WAPBL_UPDATE(dvp, NULL, NULL, 0);
+#endif
 	return (error);
 }
 
@@ -1187,20 +1237,30 @@ ufs_dirrewrite(struct inode *dp, off_t offset,
 	ep->d_ino = ufs_rw32(newinum, UFS_MPNEEDSWAP(dp->i_ump));
 	if (!FSFMT(vdp))
 		ep->d_type = newtype;
-	oip->i_nlink--;
-	DIP_ASSIGN(oip, nlink, oip->i_nlink);
-	oip->i_flag |= IN_CHANGE;
-	UFS_WAPBL_UPDATE(ITOV(oip), NULL, NULL, UPDATE_DIROP);
-	error = VOP_BWRITE(bp->b_vp, bp);
+	oip->i_ffs_effnlink--;
+	if (DOINGSOFTDEP(vdp)) {
+		softdep_change_linkcnt(oip);
+		dp->i_offset = offset; /*softdep gets this from the inode*/
+		softdep_setup_directory_change(bp, dp, oip, newinum, isrmdir);
+		bdwrite(bp);
+	} else {
+		oip->i_nlink--;
+		DIP_ASSIGN(oip, nlink, oip->i_nlink);
+		oip->i_flag |= IN_CHANGE;
+		UFS_WAPBL_UPDATE(ITOV(oip), NULL, NULL, UPDATE_DIROP);
+		error = VOP_BWRITE(bp);
+	}
 	dp->i_flag |= iflags;
+#ifdef FFS
 	/*
 	 * If the last named reference to a snapshot goes away,
 	 * drop its snapshot reference so that it will be reclaimed
 	 * when last open reference goes away.
 	 */
-	if ((oip->i_flags & SF_SNAPSHOT) != 0 && oip->i_nlink == 0)
+	if ((oip->i_flags & SF_SNAPSHOT) != 0 && oip->i_ffs_effnlink == 0)
 		ffs_snapgone(oip);
 	UFS_WAPBL_UPDATE(vdp, NULL, NULL, UPDATE_DIROP);
+#endif
 	return (error);
 }
 
@@ -1328,7 +1388,7 @@ ufs_checkpath(struct inode *source, struct inode *target, kauth_cred_t cred)
 		}
 		if (ufs_rw32(dirbuf.dotdot_ino, needswap) == rootino)
 			break;
-		VOP_UNLOCK(vp);
+		VOP_UNLOCK(vp, 0);
 		error = VFS_VGET(vp->v_mount,
 		    ufs_rw32(dirbuf.dotdot_ino, needswap), &nextvp);
 		vrele(vp);
@@ -1436,7 +1496,7 @@ ufs_parentcheck(struct vnode *upper, struct vnode *lower, kauth_cred_t cred,
 			return error;
 		}
 		if (found_ino == upper_ino) {
-			VOP_UNLOCK(current);
+			VOP_UNLOCK(current, 0);
 			*found_ret = 1;
 			*upperchild_ret = current;
 			return 0;
@@ -1447,7 +1507,7 @@ ufs_parentcheck(struct vnode *upper, struct vnode *lower, kauth_cred_t cred,
 			*upperchild_ret = NULL;
 			return 0;
 		}
-		VOP_UNLOCK(current);
+		VOP_UNLOCK(current, 0);
 		error = VFS_VGET(current->v_mount, found_ino, &next);
 		if (error) {
 			vrele(current);
@@ -1475,7 +1535,7 @@ int ufs_dirrablks = UFS_DIRRABLKS;
 
 /*
  * ufs_blkatoff: Return buffer with the contents of block "offset" from
- * the beginning of directory "vp".  If "res" is non-NULL, fill it in with
+ * the beginning of directory "vp".  If "res" is non-zero, fill it in with
  * a pointer to the remaining space in the directory.  If the caller intends
  * to modify the buffer returned, "modify" must be true.
  */

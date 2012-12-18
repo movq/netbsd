@@ -1,4 +1,4 @@
-/*	$NetBSD: revnetgroup.c,v 1.15 2011/08/30 21:10:29 joerg Exp $ */
+/*	$NetBSD: revnetgroup.c,v 1.13 2004/10/30 16:01:48 dsl Exp $ */
 
 /*
  * Copyright (c) 1995
@@ -41,7 +41,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: revnetgroup.c,v 1.15 2011/08/30 21:10:29 joerg Exp $");
+__RCSID("$NetBSD: revnetgroup.c,v 1.13 2004/10/30 16:01:48 dsl Exp $");
 #endif
 
 #include <ctype.h>
@@ -55,12 +55,13 @@ __RCSID("$NetBSD: revnetgroup.c,v 1.15 2011/08/30 21:10:29 joerg Exp $");
 #include "hash.h"
 #include "protos.h"
 
-__dead static void	usage(void);
+int	main(int, char *[]);
+void	usage(void);
 
 
 
 /* Default location of netgroup file. */
-const char *netgroup = "/etc/netgroup";
+char *netgroup = "/etc/netgroup";
 
 /* Stored hash table version of 'forward' netgroup database. */
 struct group_entry *gtable[TABLESIZE];
@@ -71,7 +72,7 @@ struct group_entry *gtable[TABLESIZE];
  */
 struct member_entry *mtable[TABLESIZE];
 
-static void
+void
 usage(void)
 {
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_fcntl.c,v 1.9 2011/05/30 17:50:32 alnsn Exp $ */
+/*	$NetBSD: linux32_fcntl.c,v 1.6 2008/02/04 22:23:43 dsl Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_fcntl.c,v 1.9 2011/05/30 17:50:32 alnsn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_fcntl.c,v 1.6 2008/02/04 22:23:43 dsl Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -52,8 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_fcntl.c,v 1.9 2011/05/30 17:50:32 alnsn Exp 
 #include <compat/linux/common/linux_fcntl.h>
 #include <compat/linux/common/linux_machdep.h>
 #include <compat/linux/common/linux_misc.h>
-#include <compat/linux/common/linux_ipc.h>
-#include <compat/linux/common/linux_sem.h>
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/linux32/common/linux32_types.h>
@@ -112,7 +110,7 @@ int
 linux32_sys_fcntl(struct lwp *l, const struct linux32_sys_fcntl_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(int) fd;
+		syscallcarg(int) fd;
                 syscallarg(int) cmd;
 		syscallarg(netbsd32_voidp) arg;
 	} */
@@ -143,48 +141,4 @@ linux32_sys_fcntl(struct lwp *l, const struct linux32_sys_fcntl_args *uap, regis
 	NETBSD32TOP_UAP(arg, void);
 
 	return linux_sys_fcntl(l, &ua, retval);
-}
-
-int
-linux32_sys_fadvise64(struct lwp *l,
-    const struct linux32_sys_fadvise64_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(int) fd;
-		syscallarg(off_t) offset;
-		syscallarg(size_t) len;
-		syscallarg(int) advice;
-	} */
-	struct sys___posix_fadvise50_args ua;
-
-	/* Linux doesn't have the 'pad' pseudo-parameter */
-	NETBSD32TO64_UAP(fd);
-	SCARG(&ua, PAD) = 0;
-	SCARG(&ua, offset) = ((off_t)SCARG(uap, offhi) << 32) + SCARG(uap, offlo);
-	SCARG(&ua, len) = SCARG(uap, len);
-	SCARG(&ua, advice) = linux_to_bsd_posix_fadv(SCARG(uap, advice));
-
-	return sys___posix_fadvise50(l, &ua, retval);
-}
-
-int
-linux32_sys_fadvise64_64(struct lwp *l,
-    const struct linux32_sys_fadvise64_64_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(int) fd;
-		syscallarg(off_t) offset;
-		syscallarg(off_t) len;
-		syscallarg(int) advice;
-	} */
-	struct sys___posix_fadvise50_args ua;
-
-	/* Linux doesn't have the 'pad' pseudo-parameter */
-	NETBSD32TO64_UAP(fd);
-	SCARG(&ua, PAD) = 0;
-	SCARG(&ua, offset) = ((off_t)SCARG(uap, offhi) << 32) + SCARG(uap, offlo);
-	SCARG(&ua, len) = ((off_t)SCARG(uap, lenhi) << 32) + SCARG(uap, lenlo);
-	SCARG(&ua, advice) = linux_to_bsd_posix_fadv(SCARG(uap, advice));
-
-	return sys___posix_fadvise50(l, &ua, retval);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.31 2010/01/12 14:45:31 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.29 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 4/20/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.31 2010/01/12 14:45:31 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.29 2008/07/21 14:19:24 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,7 +50,6 @@ __RCSID("$NetBSD: main.c,v 1.31 2010/01/12 14:45:31 christos Exp $");
 #include <util.h>
 
 #include "extern.h"
-#include "sig.h"
 
 #ifdef USE_EDITLINE
 #include "complete.h"
@@ -69,26 +68,19 @@ __RCSID("$NetBSD: main.c,v 1.31 2010/01/12 14:45:31 christos Exp $");
  * Startup -- interface with user.
  */
 
-__dead
+static jmp_buf	hdrjmp;
+
+/*
+ * Interrupt printing of the headers.
+ */
+/*ARGSUSED*/
 static void
-usage(void)
+hdrstop(int signo __unused)
 {
-#ifdef MIME_SUPPORT
-	(void)fputs("\
-Usage: mail [-EiInv] [-r rcfile] [-s subject] [-a file] [-c cc-addr]\n\
-            [-b bcc-addr] to-addr ... [- sendmail-options ...]\n\
-       mail [-EiInNv] [-H[colon-modifier]] -f [name]\n\
-       mail [-EiInNv] [-H[colon-modifier]] [-u user]\n",
-				stderr);
-#else /* MIME_SUPPORT */
-	(void)fputs("\
-Usage: mail [-EiInv] [-r rcfile] [-s subject] [-c cc-addr] [-b bcc-addr]\n\
-            to-addr ... [- sendmail-options ...]\n\
-       mail [-EiInNv] [-H[colon-modifier]] -f [name]\n\
-       mail [-EiInNv] [-H[colon-modifier]] [-u user]\n",
-				stderr);
-#endif /* MIME_SUPPORT */
-	exit(1);
+
+	(void)fflush(stdout);
+	(void)fprintf(stderr, "\nInterrupt\n");
+	longjmp(hdrjmp, 1);
 }
 
 /*
@@ -176,8 +168,7 @@ lexpand(char *str, int ntype)
 PUBLIC int
 main(int argc, char *argv[])
 {
-	jmp_buf jmpbuf;
-	struct sigaction sa;
+	int i;
 	struct name *to, *cc, *bcc, *smopts;
 #ifdef MIME_SUPPORT
 	struct name *attach_optargs;
@@ -186,9 +177,9 @@ main(int argc, char *argv[])
 	char *subject;
 	const char *ef;
 	char nosrc = 0;
+	sig_t prevint;
 	const char *rc;
-	int Hflag;
-	int i;
+	int volatile Hflag;
 
 	/*
 	 * For portability, call setprogname() early, before
@@ -200,17 +191,11 @@ main(int argc, char *argv[])
 	 * Set up a reasonable environment.
 	 * Figure out whether we are being run interactively,
 	 * start the SIGCHLD catcher, and so forth.
-	 * (Other signals are setup later by sig_setup().)
 	 */
-	(void)sigemptyset(&sa.sa_mask);
-	sa.sa_flags = SA_RESTART;
-	sa.sa_handler = sigchild;
-	(void)sigaction(SIGCHLD, &sa, NULL);
-
+	(void)signal(SIGCHLD, sigchild);
 	if (isatty(0))
 		assign(ENAME_INTERACTIVE, "");
 	image = -1;
-
 	/*
 	 * Now, determine how we are being used.
 	 * We successively pick off - flags.
@@ -218,7 +203,6 @@ main(int argc, char *argv[])
 	 * of users to mail to.  Argp will be set to point to the
 	 * first of these users.
 	 */
-	rc = NULL;
 	ef = NULL;
 	to = NULL;
 	cc = NULL;
@@ -229,9 +213,9 @@ main(int argc, char *argv[])
 #ifdef MIME_SUPPORT
 	attach_optargs = NULL;
 	attach_end = NULL;
-	while ((i = getopt(argc, argv, ":~EH:INT:a:b:c:dfinr:s:u:v")) != -1)
+	while ((i = getopt(argc, argv, ":~EH:INT:a:b:c:dfins:u:v")) != -1)
 #else
-	while ((i = getopt(argc, argv, ":~EH:INT:b:c:dfinr:s:u:v")) != -1)
+	while ((i = getopt(argc, argv, ":~EH:INT:b:c:dfins:u:v")) != -1)
 #endif
 	{
 		switch (i) {
@@ -277,9 +261,6 @@ main(int argc, char *argv[])
 			break;
 		case 'd':
 			debug++;
-			break;
-		case 'r':
-			rc = optarg;
 			break;
 		case 's':
 			/*
@@ -375,8 +356,23 @@ main(int argc, char *argv[])
 				(void)fprintf(stderr,
 				    "%s: unknown option -- %c\n", getprogname(),
 				    optopt);
-			usage();	/* print usage message and die */
-			/*NOTREACHED*/
+#ifdef MIME_SUPPORT
+			(void)fputs("\
+Usage: mail [-EiInv] [-s subject] [-a file] [-c cc-addr] [-b bcc-addr] to-addr ...\n\
+            [- sendmail-options ...]\n\
+       mail [-EiInNv] [-H[colon-modifier]] -f [name]\n\
+       mail [-EiInNv] [-H[colon-modifier]] [-u user]\n",
+				stderr);
+#else /* MIME_SUPPORT */
+			(void)fputs("\
+Usage: mail [-EiInv] [-s subject] [-c cc-addr] [-b bcc-addr] to-addr ...\n\
+            [- sendmail-options ...]\n\
+       mail [-EiInNv] [-H[colon-modifier]] -f [name]\n\
+       mail [-EiInNv] [-H[colon-modifier]] [-u user]\n",
+				stderr);
+#endif /* MIME_SUPPORT */
+
+			exit(1);
 		}
 	}
 	for (i = optind; (argv[i]) && (*argv[i] != '-'); i++)
@@ -387,9 +383,9 @@ main(int argc, char *argv[])
 	 * Check for inconsistent arguments.
 	 */
 	if (to == NULL && (subject != NULL || cc != NULL || bcc != NULL))
-		errx(EXIT_FAILURE, "You must specify direct recipients with -s, -c, or -b.");
+		errx(1, "You must specify direct recipients with -s, -c, or -b.");
 	if (ef != NULL && to != NULL) {
-		errx(EXIT_FAILURE, "Cannot give -f and people to send to.");
+		errx(1, "Cannot give -f and people to send to.");
 	}
 	if (Hflag != 0 && to != NULL)
 		errx(EXIT_FAILURE, "Cannot give -H and people to send to.");
@@ -409,7 +405,7 @@ main(int argc, char *argv[])
 	 * Expand returns a savestr, but load only uses the file name
 	 * for fopen, so it's safe to do this.
 	 */
-	if (rc == NULL && (rc = getenv("MAILRC")) == NULL)
+	if ((rc = getenv("MAILRC")) == 0)
 		rc = "~/.mailrc";
 	load(expand(rc));
 	setscreensize();	/* do this after loading the rcfile */
@@ -423,8 +419,6 @@ main(int argc, char *argv[])
 	if (mailmode != mm_hdrsonly)
 		init_editline();
 #endif
-
-	sig_setup();
 
 	switch (mailmode) {
 	case mm_sending:
@@ -447,25 +441,23 @@ main(int argc, char *argv[])
 			ef = "%";
 		if (setfile(ef) < 0)
 			exit(1);		/* error already reported */
-		if (value(ENAME_QUIET) == NULL)
-			(void)printf("Mail version %s.  Type ? for help.\n",
-			    version);
-		if (mailmode == mm_hdrsonly)
-			show_headers_and_exit(Hflag);	/* NORETURN */
-		announce();
-		(void)fflush(stdout);
-
-		if (setjmp(jmpbuf) != 0) {
-			/* Return here if quit() fails below. */
-			(void)printf("Use 'exit' to quit without saving changes.\n");
+		if (setjmp(hdrjmp) == 0) {
+			if ((prevint = signal(SIGINT, SIG_IGN)) != SIG_IGN)
+				(void)signal(SIGINT, hdrstop);
+			if (value(ENAME_QUIET) == NULL)
+				(void)printf("Mail version %s.  Type ? for help.\n",
+				    version);
+			if (mailmode == mm_hdrsonly)
+				show_headers_and_exit(Hflag);	/* NORETURN */
+			announce();
+			(void)fflush(stdout);
+			(void)signal(SIGINT, prevint);
 		}
 		commands();
-
-		/* Ignore these signals from now on! */
 		(void)signal(SIGHUP, SIG_IGN);
 		(void)signal(SIGINT, SIG_IGN);
 		(void)signal(SIGQUIT, SIG_IGN);
-		quit(jmpbuf);
+		quit();
 		break;
 
 	default:

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2012/03/22 23:46:26 joerg Exp $
+#	$NetBSD: Makefile,v 1.2.4.2 2009/09/28 02:02:50 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -10,27 +10,22 @@ SRCS=	button.c charproc.c charsets.c cursor.c data.c doublechr.c \
 	wcwidth.c xutf8.c cachedGCs.c xtermcap.c
 
 CPPFLAGS+=	-I${X11SRCDIR.${PROG}} \
-		-I${X11SRCDIR.${PROG}}/../include \
 		-I${DESTDIR}${X11INCDIR}/freetype2 \
-		-DPROJECTROOT=${X11ROOTDIR} \
-		-DHAVE_CONFIG_H \
-		-D_REENTRANT \
-		${X11FLAGS.VERSION}
+		-DSCROLLBAR_RIGHT -DOPT_WIDE_CHARS \
+		-DXRENDERFONT -DXFREE86_FT2 -DOPT_PASTE64 \
+		-DPROJECTROOT=${X11ROOTDIR}
 
-CWARNFLAGS.clang+=	-Wno-empty-body
+CPPFLAGS.main.c=-DUTMP -DUSE_TTY_GROUP ${X11FLAGS.VERSION}
 
 APPDEFS=XTerm.ad XTerm-color.ad
 
 BUILDSYMLINKS=	XTerm-col.ad XTerm-color.ad
 
-#CPPFLAGS+=-DOPT_TRACE
-#SRCS+=trace.c
-
 LDADD+=	-lXft -lfontconfig -lfreetype -lexpat -lXrender
 DPADD+=	${LIBXFT} ${LIBFONTCONFIG} ${LIBFREETYPE} ${LIBEXPAT} ${LIBXRENDER}
-LDADD+=	-lXaw -lXmu -lXt -lSM -lICE -lXpm -lXext -lX11 -lcurses -lterminfo -lutil
+LDADD+=	-lXaw -lXmu -lXt -lSM -lICE -lXpm -lXext -lX11 -ltermcap -lutil
 DPADD+=	${LIBXAW} ${LIBXMU} ${LIBXT} ${LIBSM} ${LIBICE} \
-	${LIBXPM} ${LIBXEXT} ${LIBX11} ${LIBCURSES} ${LIBTERMINFO} ${LIBUTIL}
+	${LIBXPM} ${LIBXEXT} ${LIBX11} ${LIBTERMCAP} ${LIBUTIL}
 
 SUBDIR=	resize uxterm
 

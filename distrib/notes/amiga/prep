@@ -1,4 +1,4 @@
-.\"	$NetBSD: prep,v 1.28 2009/04/23 01:56:48 snj Exp $
+.\"	$NetBSD: prep,v 1.27.2.1 2009/04/25 23:16:33 snj Exp $
 .
 You will need an
 .Tn AmigaDOS

@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.c,v 1.44 2012/10/02 23:54:51 christos Exp $	*/
+/*	$NetBSD: bus.c,v 1.35.8.1 2009/09/16 03:40:41 snj Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,12 +31,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.44 2012/10/02 23:54:51 christos Exp $");
-
-#define _COBALT_BUS_DMA_PRIVATE
+__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.35.8.1 2009/09/16 03:40:41 snj Exp $");
 
 #include <sys/param.h>
-#include <sys/bus.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
@@ -44,17 +41,12 @@ __KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.44 2012/10/02 23:54:51 christos Exp $");
 #include <sys/proc.h>
 #include <sys/mbuf.h>
 
-#include <dev/bus_dma/bus_dmamem_common.h>
+#define _COBALT_BUS_DMA_PRIVATE
+#include <machine/bus.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <mips/cache.h>
-
-/*
- * Utility macros; do not use outside this file.
- */
-#define	__PB_TYPENAME_PREFIX(BITS)	___CONCAT(uint,BITS)
-#define	__PB_TYPENAME(BITS)		___CONCAT(__PB_TYPENAME_PREFIX(BITS),_t)
 
 static int	_bus_dmamap_load_buffer(bus_dmamap_t, void *, bus_size_t,
 				struct vmspace *, int, vaddr_t *, int *, int);
@@ -74,291 +66,6 @@ struct cobalt_bus_dma_tag cobalt_default_bus_dma_tag = {
 	_bus_dmamem_unmap,
 	_bus_dmamem_mmap,
 };
-
-/*
- *	void bus_space_read_multi_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    uintN_t *addr, bus_size_t count);
- *
- * Read `count' 1, 2, 4, or 8 byte quantities from bus space
- * described by tag/handle/offset and copy into buffer provided.
- */
-
-#define __COBALT_bus_space_read_multi(BYTES,BITS)			\
-void __CONCAT(bus_space_read_multi_,BYTES)				\
-	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
-	__PB_TYPENAME(BITS) *, bus_size_t);				\
-									\
-void									\
-__CONCAT(bus_space_read_multi_,BYTES)(					\
-	bus_space_tag_t t,						\
-	bus_space_handle_t h,						\
-	bus_size_t o,							\
-	__PB_TYPENAME(BITS) *a,						\
-	bus_size_t c)							\
-{									\
-									\
-	while (c--)							\
-		*a++ = __CONCAT(bus_space_read_,BYTES)(t, h, o);	\
-}
-
-__COBALT_bus_space_read_multi(1,8)
-__COBALT_bus_space_read_multi(2,16)
-__COBALT_bus_space_read_multi(4,32)
-
-#if 0	/* Cause a link error for bus_space_read_multi_8 */
-#define	bus_space_read_multi_8	!!! bus_space_read_multi_8 unimplemented !!!
-#endif
-
-#undef __COBALT_bus_space_read_multi
-
-/*
- *	void bus_space_read_region_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    uintN_t *addr, bus_size_t count);
- *
- * Read `count' 1, 2, 4, or 8 byte quantities from bus space
- * described by tag/handle and starting at `offset' and copy into
- * buffer provided.
- */
-
-#define __COBALT_bus_space_read_region(BYTES,BITS)			\
-void __CONCAT(bus_space_read_region_,BYTES)				\
-	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
-	__PB_TYPENAME(BITS) *, bus_size_t);				\
-									\
-void									\
-__CONCAT(bus_space_read_region_,BYTES)(					\
-	bus_space_tag_t t,						\
-	bus_space_handle_t h,						\
-	bus_size_t o,							\
-	__PB_TYPENAME(BITS) *a,						\
-	bus_size_t c)							\
-{									\
-									\
-	while (c--) {							\
-		*a++ = __CONCAT(bus_space_read_,BYTES)(t, h, o);	\
-		o += BYTES;						\
-	}								\
-}
-
-__COBALT_bus_space_read_region(1,8)
-__COBALT_bus_space_read_region(2,16)
-__COBALT_bus_space_read_region(4,32)
-
-#if 0	/* Cause a link error for bus_space_read_region_8 */
-#define	bus_space_read_region_8	!!! bus_space_read_region_8 unimplemented !!!
-#endif
-
-#undef __COBALT_bus_space_read_region
-
-/*
- *	void bus_space_write_multi_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    const uintN_t *addr, bus_size_t count);
- *
- * Write `count' 1, 2, 4, or 8 byte quantities from the buffer
- * provided to bus space described by tag/handle/offset.
- */
-
-#define __COBALT_bus_space_write_multi(BYTES,BITS)			\
-void __CONCAT(bus_space_write_multi_,BYTES)				\
-	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
-	const __PB_TYPENAME(BITS) *, bus_size_t);			\
-									\
-void									\
-__CONCAT(bus_space_write_multi_,BYTES)(					\
-	bus_space_tag_t t,						\
-	bus_space_handle_t h,						\
-	bus_size_t o,							\
-	const __PB_TYPENAME(BITS) *a,					\
-	bus_size_t c)							\
-{									\
-									\
-	while (c--)							\
-		__CONCAT(bus_space_write_,BYTES)(t, h, o, *a++);	\
-}
-
-__COBALT_bus_space_write_multi(1,8)
-__COBALT_bus_space_write_multi(2,16)
-__COBALT_bus_space_write_multi(4,32)
-
-#if 0	/* Cause a link error for bus_space_write_8 */
-#define	bus_space_write_multi_8(t, h, o, a, c)				\
-			!!! bus_space_write_multi_8 unimplimented !!!
-#endif
-
-#undef __COBALT_bus_space_write_multi
-
-/*
- *	void bus_space_write_region_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    const uintN_t *addr, bus_size_t count);
- *
- * Write `count' 1, 2, 4, or 8 byte quantities from the buffer provided
- * to bus space described by tag/handle starting at `offset'.
- */
-
-#define __COBALT_bus_space_write_region(BYTES,BITS)			\
-void __CONCAT(bus_space_write_region_,BYTES)				\
-	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
-	const __PB_TYPENAME(BITS) *, bus_size_t);			\
-									\
-void									\
-__CONCAT(bus_space_write_region_,BYTES)(				\
-	bus_space_tag_t t,						\
-	bus_space_handle_t h,						\
-	bus_size_t o,							\
-	const __PB_TYPENAME(BITS) *a,					\
-	bus_size_t c)							\
-{									\
-									\
-	while (c--) {							\
-		__CONCAT(bus_space_write_,BYTES)(t, h, o, *a++);	\
-		o += BYTES;						\
-	}								\
-}
-
-__COBALT_bus_space_write_region(1,8)
-__COBALT_bus_space_write_region(2,16)
-__COBALT_bus_space_write_region(4,32)
-
-#if 0	/* Cause a link error for bus_space_write_region_8 */
-#define	bus_space_write_region_8					\
-			!!! bus_space_write_region_8 unimplemented !!!
-#endif
-
-#undef __COBALT_bus_space_write_region
-
-/*
- *	void bus_space_set_multi_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t val,
- *	    bus_size_t count);
- *
- * Write the 1, 2, 4, or 8 byte value `val' to bus space described
- * by tag/handle/offset `count' times.
- */
-
-#define __COBALT_bus_space_set_multi(BYTES,BITS)			\
-void __CONCAT(bus_space_set_multi_,BYTES)				\
-	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
-	__PB_TYPENAME(BITS), bus_size_t);				\
-									\
-void									\
-__CONCAT(bus_space_set_multi_,BYTES)(					\
-	bus_space_tag_t t,						\
-	bus_space_handle_t h,						\
-	bus_size_t o,							\
-	__PB_TYPENAME(BITS) v,						\
-	bus_size_t c)							\
-{									\
-									\
-	while (c--)							\
-		__CONCAT(bus_space_write_,BYTES)(t, h, o, v);		\
-}
-
-__COBALT_bus_space_set_multi(1,8)
-__COBALT_bus_space_set_multi(2,16)
-__COBALT_bus_space_set_multi(4,32)
-
-#if 0	/* Cause a link error for bus_space_set_multi_8 */
-#define	bus_space_set_multi_8						\
-			!!! bus_space_set_multi_8 unimplemented !!!
-#endif
-
-#undef __COBALT_bus_space_set_multi
-
-/*
- *	void bus_space_set_region_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t val,
- *	    bus_size_t count);
- *
- * Write `count' 1, 2, 4, or 8 byte value `val' to bus space described
- * by tag/handle starting at `offset'.
- */
-
-#define __COBALT_bus_space_set_region(BYTES,BITS)			\
-void __CONCAT(bus_space_set_region_,BYTES)				\
-	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
-	__PB_TYPENAME(BITS), bus_size_t);				\
-									\
-void									\
-__CONCAT(bus_space_set_region_,BYTES)(					\
-	bus_space_tag_t t,						\
-	bus_space_handle_t h,						\
-	bus_size_t o,							\
-	__PB_TYPENAME(BITS) v,						\
-	bus_size_t c)							\
-{									\
-									\
-	while (c--) {							\
-		__CONCAT(bus_space_write_,BYTES)(t, h, o, v);		\
-		o += BYTES;						\
-	}								\
-}
-
-__COBALT_bus_space_set_region(1,8)
-__COBALT_bus_space_set_region(2,16)
-__COBALT_bus_space_set_region(4,32)
-
-#if 0	/* Cause a link error for bus_space_set_region_8 */
-#define	bus_space_set_region_8						\
-			!!! bus_space_set_region_8 unimplemented !!!
-#endif
-
-#undef __COBALT_bus_space_set_region
-
-/*
- *	void bus_space_copy_region_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh1, bus_size_t off1,
- *	    bus_space_handle_t bsh2, bus_size_t off2,
- *	    bus_size_t count);
- *
- * Copy `count' 1, 2, 4, or 8 byte values from bus space starting
- * at tag/bsh1/off1 to bus space starting at tag/bsh2/off2.
- */
-
-#define	__COBALT_copy_region(BYTES)					\
-void __CONCAT(bus_space_copy_region_,BYTES)				\
-	(bus_space_tag_t,						\
-	    bus_space_handle_t bsh1, bus_size_t off1,			\
-	    bus_space_handle_t bsh2, bus_size_t off2,			\
-	    bus_size_t count);						\
-									\
-void									\
-__CONCAT(bus_space_copy_region_,BYTES)(					\
-	bus_space_tag_t t,						\
-	bus_space_handle_t h1,						\
-	bus_size_t o1,							\
-	bus_space_handle_t h2,						\
-	bus_size_t o2,							\
-	bus_size_t c)							\
-{									\
-	bus_size_t o;							\
-									\
-	if ((h1 + o1) >= (h2 + o2)) {					\
-		/* src after dest: copy forward */			\
-		for (o = 0; c != 0; c--, o += BYTES)			\
-			__CONCAT(bus_space_write_,BYTES)(t, h2, o2 + o,	\
-			    __CONCAT(bus_space_read_,BYTES)(t, h1, o1 + o)); \
-	} else {							\
-		/* dest after src: copy backwards */			\
-		for (o = (c - 1) * BYTES; c != 0; c--, o -= BYTES)	\
-			__CONCAT(bus_space_write_,BYTES)(t, h2, o2 + o,	\
-			    __CONCAT(bus_space_read_,BYTES)(t, h1, o1 + o)); \
-	}								\
-}
-
-__COBALT_copy_region(1)
-__COBALT_copy_region(2)
-__COBALT_copy_region(4)
-
-#if 0	/* Cause a link error for bus_space_copy_region_8 */
-#define	bus_space_copy_region_8						\
-			!!! bus_space_copy_region_8 unimplemented !!!
-#endif
-
-#undef __COBALT_copy_region
 
 int
 bus_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags,
@@ -491,7 +198,6 @@ _bus_dmamap_load_buffer(bus_dmamap_t map, void *buf, bus_size_t buflen,
 	bus_size_t sgsize;
 	bus_addr_t curaddr, lastaddr, baddr, bmask;
 	vaddr_t vaddr = (vaddr_t)buf;
-	paddr_t pa;
 	int seg;
 
 	lastaddr = *lastaddrp;
@@ -503,15 +209,14 @@ _bus_dmamap_load_buffer(bus_dmamap_t map, void *buf, bus_size_t buflen,
 		 */
 		if (!VMSPACE_IS_KERNEL_P(vm))
 			(void)pmap_extract(vm_map_pmap(&vm->vm_map),
-			    vaddr, &pa);
+			    vaddr, &curaddr);
 		else
-			pa = kvtophys(vaddr);
-		curaddr = pa;
+			curaddr = kvtophys(vaddr);
 
 		/*
 		 * Compute the segment size, and adjust counts.
 		 */
-		sgsize = PAGE_SIZE - (vaddr & PGOFSET);
+		sgsize = PAGE_SIZE - ((u_long)vaddr & PGOFSET);
 		if (buflen < sgsize)
 			sgsize = buflen;
 
@@ -859,24 +564,22 @@ _bus_dmamap_sync(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 			mips_dcache_wbinv_range(start, minlen);
 			break;
 
-		case BUS_DMASYNC_PREREAD: {
-			struct mips_cache_info * const mci = &mips_cache_info;
+		case BUS_DMASYNC_PREREAD:
 			end = start + minlen;
-			preboundary = start & ~mci->mci_dcache_align_mask;
-			firstboundary = (start + mci->mci_dcache_align_mask)
-			    & ~mci->mci_dcache_align_mask;
-			lastboundary = end & ~mci->mci_dcache_align_mask;
+			preboundary = start & ~mips_dcache_align_mask;
+			firstboundary = (start + mips_dcache_align_mask)
+			    & ~mips_dcache_align_mask;
+			lastboundary = end & ~mips_dcache_align_mask;
 			if (preboundary < start && preboundary < lastboundary)
 				mips_dcache_wbinv_range(preboundary,
-				    mci->mci_dcache_align);
+				    mips_dcache_align);
 			if (firstboundary < lastboundary)
 				mips_dcache_inv_range(firstboundary,
 				    lastboundary - firstboundary);
 			if (lastboundary < end)
 				mips_dcache_wbinv_range(lastboundary,
-				    mci->mci_dcache_align);
+				    mips_dcache_align);
 			break;
-		}
 
 		case BUS_DMASYNC_PREWRITE:
 			mips_dcache_wb_range(start, minlen);
@@ -899,11 +602,58 @@ _bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
     bus_size_t boundary, bus_dma_segment_t *segs, int nsegs, int *rsegs,
     int flags)
 {
-	extern paddr_t mips_avail_start, mips_avail_end;
+	extern paddr_t avail_start, avail_end;
+	vaddr_t curaddr, lastaddr;
+	psize_t high;
+	struct vm_page *m;
+	struct pglist mlist;
+	int curseg, error;
 
-	return (_bus_dmamem_alloc_range_common(t, size, alignment, boundary,
-	    segs, nsegs, rsegs, flags,
-	    mips_avail_start /*low*/, mips_avail_end - PAGE_SIZE /*high*/));
+	/* Always round the size. */
+	size = round_page(size);
+
+	high = avail_end - PAGE_SIZE;
+
+	/*
+	 * Allocate pages from the VM system.
+	 */
+	error = uvm_pglistalloc(size, avail_start, high, alignment, boundary,
+	    &mlist, nsegs, (flags & BUS_DMA_NOWAIT) == 0);
+	if (error)
+		return error;
+
+	/*
+	 * Compute the location, size, and number of segments actually
+	 * returned by the VM code.
+	 */
+	m = mlist.tqh_first;
+	curseg = 0;
+	lastaddr = segs[curseg].ds_addr = VM_PAGE_TO_PHYS(m);
+	segs[curseg].ds_len = PAGE_SIZE;
+	m = m->pageq.queue.tqe_next;
+
+	for (; m != NULL; m = m->pageq.queue.tqe_next) {
+		curaddr = VM_PAGE_TO_PHYS(m);
+#ifdef DIAGNOSTIC
+		if (curaddr < avail_start || curaddr >= high) {
+			printf("uvm_pglistalloc returned non-sensical"
+			    " address 0x%lx\n", curaddr);
+			panic("_bus_dmamem_alloc");
+		}
+#endif
+		if (curaddr == (lastaddr + PAGE_SIZE))
+			segs[curseg].ds_len += PAGE_SIZE;
+		else {
+			curseg++;
+			segs[curseg].ds_addr = curaddr;
+			segs[curseg].ds_len = PAGE_SIZE;
+		}
+		lastaddr = curaddr;
+	}
+
+	*rsegs = curseg + 1;
+
+	return 0;
 }
 
 /*
@@ -913,8 +663,25 @@ _bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
 void
 _bus_dmamem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
 {
+	struct vm_page *m;
+	bus_addr_t addr;
+	struct pglist mlist;
+	int curseg;
 
-	_bus_dmamem_free_common(t, segs, nsegs);
+	/*
+	 * Build a list of pages to free back to the VM system.
+	 */
+	TAILQ_INIT(&mlist);
+	for (curseg = 0; curseg < nsegs; curseg++) {
+		for (addr = segs[curseg].ds_addr;
+		    addr < (segs[curseg].ds_addr + segs[curseg].ds_len);
+		    addr += PAGE_SIZE) {
+			m = PHYS_TO_VM_PAGE(addr);
+			TAILQ_INSERT_TAIL(&mlist, m, pageq.queue);
+		}
+	}
+
+	uvm_pglistfree(&mlist);
 }
 
 /*
@@ -925,6 +692,11 @@ int
 _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
     size_t size, void **kvap, int flags)
 {
+	vaddr_t va;
+	bus_addr_t addr;
+	int curseg;
+	const uvm_flag_t kmflags =
+	    (flags & BUS_DMA_NOWAIT) != 0 ? UVM_KMF_NOWAIT : 0;
 
 	/*
 	 * If we're only mapping 1 segment, use KSEG0 or KSEG1, to avoid
@@ -938,8 +710,31 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 		return 0;
 	}
 
-	/* XXX BUS_DMA_COHERENT */
-	return (_bus_dmamem_map_common(t, segs, nsegs, size, kvap, flags, 0));
+	size = round_page(size);
+
+	va = uvm_km_alloc(kernel_map, size, 0, UVM_KMF_VAONLY | kmflags);
+
+	if (va == 0)
+		return (ENOMEM);
+
+	*kvap = (void *)va;
+
+	for (curseg = 0; curseg < nsegs; curseg++) {
+		for (addr = segs[curseg].ds_addr;
+		    addr < (segs[curseg].ds_addr + segs[curseg].ds_len);
+		    addr += PAGE_SIZE, va += PAGE_SIZE, size -= PAGE_SIZE) {
+			if (size == 0)
+				panic("_bus_dmamem_map: size botch");
+			pmap_enter(pmap_kernel(), va, addr,
+			    VM_PROT_READ | VM_PROT_WRITE,
+			    VM_PROT_READ | VM_PROT_WRITE | PMAP_WIRED);
+
+			/* XXX Do something about COHERENT here. */
+		}
+	}
+	pmap_update(pmap_kernel());
+
+	return 0;
 }
 
 /*
@@ -950,6 +745,11 @@ void
 _bus_dmamem_unmap(bus_dma_tag_t t, void *kva, size_t size)
 {
 
+#ifdef DIAGNOSTIC
+	if ((u_long)kva & PGOFSET)
+		panic("_bus_dmamem_unmap");
+#endif
+
 	/*
 	 * Nothing to do if we mapped it with KSEG0 or KSEG1 (i.e.
 	 * not in KSEG2).
@@ -958,7 +758,10 @@ _bus_dmamem_unmap(bus_dma_tag_t t, void *kva, size_t size)
 	    kva < (void *)MIPS_KSEG2_START)
 		return;
 
-	_bus_dmamem_unmap_common(t, kva, size);
+	size = round_page(size);
+	pmap_remove(pmap_kernel(), (vaddr_t)kva, (vaddr_t)kva + size);
+	pmap_update(pmap_kernel());
+	uvm_km_free(kernel_map, (vaddr_t)kva, size, UVM_KMF_VAONLY);
 }
 
 /*
@@ -969,11 +772,26 @@ paddr_t
 _bus_dmamem_mmap(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
     off_t off, int prot, int flags)
 {
-	bus_addr_t rv;
+	int i;
 
-	rv = _bus_dmamem_mmap_common(t, segs, nsegs, off, prot, flags);
-	if (rv == (bus_addr_t)-1)
-		return (-1);
+	for (i = 0; i < nsegs; i++) {
+#ifdef DIAGNOSTIC
+		if (off & PGOFSET)
+			panic("_bus_dmamem_mmap: offset unaligned");
+		if (segs[i].ds_addr & PGOFSET)
+			panic("_bus_dmamem_mmap: segment unaligned");
+		if (segs[i].ds_len & PGOFSET)
+			panic("_bus_dmamem_mmap: segment size not multiple"
+			    " of page size");
+#endif
+		if (off >= segs[i].ds_len) {
+			off -= segs[i].ds_len;
+			continue;
+		}
 
-	return (mips_btop((char *)rv));
+		return mips_btop((char *)segs[i].ds_addr + off);
+	}
+
+	/* Page not found. */
+	return -1;
 }

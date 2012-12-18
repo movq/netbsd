@@ -1,9 +1,7 @@
-/*	$NetBSD: controls.c,v 1.1.1.3 2010/12/12 15:22:27 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/servers/slapd/controls.c,v 1.174.2.23 2010/04/15 20:15:19 quanah Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/controls.c,v 1.174.2.10 2008/04/14 22:15:21 quanah Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2010 The OpenLDAP Foundation.
+ * Copyright 1998-2008 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,9 +47,6 @@ static SLAP_CTRL_PARSE_FN parseTreeDelete;
 static SLAP_CTRL_PARSE_FN parseValuesReturnFilter;
 #ifdef SLAP_CONTROL_X_SESSION_TRACKING
 static SLAP_CTRL_PARSE_FN parseSessionTracking;
-#endif
-#ifdef SLAP_CONTROL_X_WHATFAILED
-static SLAP_CTRL_PARSE_FN parseWhatFailed;
 #endif
 
 #undef sc_mask /* avoid conflict with Irix 6.5 <sys/signal.h> */
@@ -125,7 +120,8 @@ static char *session_tracking_extops[] = {
 static struct slap_control control_defs[] = {
 	{  LDAP_CONTROL_ASSERT,
  		(int)offsetof(struct slap_control_ids, sc_assert),
-		SLAP_CTRL_UPDATE|SLAP_CTRL_COMPARE|SLAP_CTRL_SEARCH,
+		SLAP_CTRL_DELETE|SLAP_CTRL_MODIFY|SLAP_CTRL_RENAME|
+			SLAP_CTRL_COMPARE|SLAP_CTRL_SEARCH,
 		NULL, NULL,
 		parseAssert, LDAP_SLIST_ENTRY_INITIALIZER(next) },
 	{ LDAP_CONTROL_PRE_READ,
@@ -221,14 +217,6 @@ static struct slap_control control_defs[] = {
 		session_tracking_extops, NULL,
 		parseSessionTracking, LDAP_SLIST_ENTRY_INITIALIZER(next) },
 #endif
-#ifdef SLAP_CONTROL_X_WHATFAILED
-	{ LDAP_CONTROL_X_WHATFAILED,
- 		(int)offsetof(struct slap_control_ids, sc_whatFailed),
-		SLAP_CTRL_GLOBAL|SLAP_CTRL_ACCESS|SLAP_CTRL_HIDE,
-		NULL, NULL,
-		parseWhatFailed, LDAP_SLIST_ENTRY_INITIALIZER(next) },
-#endif
-
 	{ NULL, 0, 0, NULL, 0, NULL, LDAP_SLIST_ENTRY_INITIALIZER(next) }
 };
 
@@ -541,37 +529,6 @@ void slap_free_ctrls(
 	op->o_tmpfree( ctrls, op->o_tmpmemctx );
 }
 
-int slap_add_ctrls(
-	Operation *op,
-	SlapReply *rs,
-	LDAPControl **ctrls )
-{
-	int i = 0, j;
-	LDAPControl **ctrlsp;
-
-	if ( rs->sr_ctrls ) {
-		for ( ; rs->sr_ctrls[ i ]; i++ ) ;
-	}
-
-	for ( j=0; ctrls[j]; j++ ) ;
-
-	ctrlsp = op->o_tmpalloc(( i+j+1 )*sizeof(LDAPControl *), op->o_tmpmemctx );
-	i = 0;
-	if ( rs->sr_ctrls ) {
-		for ( ; rs->sr_ctrls[i]; i++ )
-			ctrlsp[i] = rs->sr_ctrls[i];
-	}
-	for ( j=0; ctrls[j]; j++)
-		ctrlsp[i++] = ctrls[j];
-	ctrlsp[i] = NULL;
-
-	if ( rs->sr_flags & REP_CTRLS_MUSTBEFREED )
-		op->o_tmpfree( rs->sr_ctrls, op->o_tmpmemctx );
-	rs->sr_ctrls = ctrlsp;
-	rs->sr_flags |= REP_CTRLS_MUSTBEFREED;
-	return i;
-}
-
 int slap_parse_ctrl(
 	Operation *op,
 	SlapReply *rs,
@@ -579,7 +536,6 @@ int slap_parse_ctrl(
 	const char **text )
 {
 	struct slap_control *sc;
-	int rc = LDAP_SUCCESS;
 
 	sc = find_ctrl( control->ldctl_oid );
 	if( sc != NULL ) {
@@ -635,29 +591,31 @@ int slap_parse_ctrl(
 
 		if (( sc->sc_mask & tagmask ) == tagmask ) {
 			/* available extension */
-			if ( sc->sc_parse ) {
-				rc = sc->sc_parse( op, rs, control );
-				assert( rc != LDAP_UNAVAILABLE_CRITICAL_EXTENSION );
+			int	rc;
 
-			} else if ( control->ldctl_iscritical ) {
+			if( !sc->sc_parse ) {
 				*text = "not yet implemented";
-				rc = LDAP_OTHER;
+				return LDAP_OTHER;
 			}
 
+			rc = sc->sc_parse( op, rs, control );
+			if ( rc ) {
+				assert( rc != LDAP_UNAVAILABLE_CRITICAL_EXTENSION );
+				return rc;
+			}
 
-		} else if ( control->ldctl_iscritical ) {
+		} else if( control->ldctl_iscritical ) {
 			/* unavailable CRITICAL control */
 			*text = "critical extension is unavailable";
-			rc = LDAP_UNAVAILABLE_CRITICAL_EXTENSION;
+			return LDAP_UNAVAILABLE_CRITICAL_EXTENSION;
 		}
-
-	} else if ( control->ldctl_iscritical ) {
+	} else if( control->ldctl_iscritical ) {
 		/* unrecognized CRITICAL control */
 		*text = "critical extension is not recognized";
-		rc = LDAP_UNAVAILABLE_CRITICAL_EXTENSION;
+		return LDAP_UNAVAILABLE_CRITICAL_EXTENSION;
 	}
 
-	return rc;
+	return LDAP_SUCCESS;
 }
 
 int get_ctrls(
@@ -671,15 +629,6 @@ int get_ctrls(
 	char *opaque;
 	BerElement *ber = op->o_ber;
 	struct berval bv;
-#ifdef SLAP_CONTROL_X_WHATFAILED
-	/* NOTE: right now, slapd checks the validity of each control
-	 * while parsing.  As a consequence, it can only detect one
-	 * cause of failure at a time.  This results in returning
-	 * exactly one OID with the whatFailed control, or no control
-	 * at all.
-	 */
-	char *failed_oid = NULL;
-#endif
 
 	len = ber_pvt_ber_remaining(ber);
 
@@ -820,9 +769,6 @@ int get_ctrls(
 
 		rs->sr_err = slap_parse_ctrl( op, rs, c, &rs->sr_text );
 		if ( rs->sr_err != LDAP_SUCCESS ) {
-#ifdef SLAP_CONTROL_X_WHATFAILED
-			failed_oid = c->ldctl_oid;
-#endif
 			goto return_results;
 		}
 	}
@@ -838,71 +784,6 @@ return_results:
 			send_ldap_disconnect( op, rs );
 			rs->sr_err = SLAPD_DISCONNECT;
 		} else {
-#ifdef SLAP_CONTROL_X_WHATFAILED
-			/* might have not been parsed yet? */
-			if ( failed_oid != NULL ) {
-				if ( !get_whatFailed( op ) ) {
-					/* look it up */
-
-					/* step through each remaining element */
-					for ( ; tag != LBER_ERROR; tag = ber_next_element( ber, &len, opaque ) )
-					{
-						LDAPControl c = { 0 };
-
-						tag = ber_scanf( ber, "{m" /*}*/, &bv );
-						c.ldctl_oid = bv.bv_val;
-
-						if ( tag == LBER_ERROR ) {
-							slap_free_ctrls( op, op->o_ctrls );
-							op->o_ctrls = NULL;
-							break;
-
-						} else if ( c.ldctl_oid == NULL ) {
-							slap_free_ctrls( op, op->o_ctrls );
-							op->o_ctrls = NULL;
-							break;
-						}
-
-						tag = ber_peek_tag( ber, &len );
-						if ( tag == LBER_BOOLEAN ) {
-							ber_int_t crit;
-							tag = ber_scanf( ber, "b", &crit );
-							if( tag == LBER_ERROR ) {
-								slap_free_ctrls( op, op->o_ctrls );
-								op->o_ctrls = NULL;
-								break;
-							}
-
-							tag = ber_peek_tag( ber, &len );
-						}
-
-						if ( tag == LBER_OCTETSTRING ) {
-							tag = ber_scanf( ber, "m", &c.ldctl_value );
-
-							if( tag == LBER_ERROR ) {
-								slap_free_ctrls( op, op->o_ctrls );
-								op->o_ctrls = NULL;
-								break;
-							}
-						}
-
-						if ( strcmp( c.ldctl_oid, LDAP_CONTROL_X_WHATFAILED ) == 0 ) {
-							const char *text;
-							slap_parse_ctrl( op, rs, &c, &text );
-							break;
-						}
-					}
-				}
-
-				if ( get_whatFailed( op ) ) {
-					char *oids[ 2 ];
-					oids[ 0 ] = failed_oid;
-					oids[ 1 ] = NULL;
-					slap_ctrl_whatFailed_add( op, rs, oids );
-				}
-			}
-#endif
-
 			send_ldap_result( op, rs );
 		}
 	}
@@ -994,17 +875,12 @@ static int parseDontUseCopy (
 		return LDAP_PROTOCOL_ERROR;
 	}
 
-	if ( ( global_disallows & SLAP_DISALLOW_DONTUSECOPY_N_CRIT )
-		&& !ctrl->ldctl_iscritical )
-	{
+	if ( !ctrl->ldctl_iscritical ) {
 		rs->sr_text = "dontUseCopy criticality of FALSE not allowed";
 		return LDAP_PROTOCOL_ERROR;
 	}
 
-	op->o_dontUseCopy = ctrl->ldctl_iscritical
-		? SLAP_CONTROL_CRITICAL
-		: SLAP_CONTROL_NONCRITICAL;
-
+	op->o_dontUseCopy = SLAP_CONTROL_CRITICAL;
 	return LDAP_SUCCESS;
 }
 
@@ -1067,13 +943,6 @@ static int parseProxyAuthz (
 
 	if ( BER_BVISNULL( &ctrl->ldctl_value )) {
 		rs->sr_text = "proxy authorization control value absent";
-		return LDAP_PROTOCOL_ERROR;
-	}
-
-	if ( ( global_disallows & SLAP_DISALLOW_PROXY_AUTHZ_N_CRIT )
-		&& !ctrl->ldctl_iscritical )
-	{
-		rs->sr_text = "proxied authorization criticality of FALSE not allowed";
 		return LDAP_PROTOCOL_ERROR;
 	}
 
@@ -1236,8 +1105,6 @@ static int parsePagedResults (
 	if ( !cookie.bv_len ) {
 		ps->ps_count = 0;
 		ps->ps_cookie = 0;
-		/* taint ps_cookie, to detect whether it's set */
-		op->o_conn->c_pagedresults_state.ps_cookie = NOID;
 	}
 
 	/* NOTE: according to RFC 2696 3.:
@@ -1245,11 +1112,11 @@ static int parsePagedResults (
     If the page size is greater than or equal to the sizeLimit value, the
     server should ignore the control as the request can be satisfied in a
     single page.
-
+	 
 	 * NOTE: this assumes that the op->ors_slimit be set
 	 * before the controls are parsed.     
 	 */
-
+		
 	if ( op->ors_slimit > 0 && size >= op->ors_slimit ) {
 		op->o_pagedresults = SLAP_CONTROL_IGNORED;
 
@@ -1325,7 +1192,7 @@ static int parseAssert (
 		rs->sr_text = "assert control: internal error";
 		return LDAP_OTHER;
 	}
-
+	
 	rs->sr_err = get_filter( op, ber, (Filter **)&(op->o_assertion),
 		&rs->sr_text);
 	(void) ber_free( ber, 1 );
@@ -1338,7 +1205,7 @@ static int parseAssert (
 			send_ldap_result( op, rs );
 		}
 		if( op->o_assertion != NULL ) {
-			filter_free_x( op, op->o_assertion, 1 );
+			filter_free_x( op, op->o_assertion );
 		}
 		return rs->sr_err;
 	}
@@ -1359,47 +1226,113 @@ static int parseAssert (
 	return LDAP_SUCCESS;
 }
 
-#define READMSG(post, msg) \
-	( post ? "postread control: " msg : "preread control: " msg )
-
-static int
-parseReadAttrs(
+static int parsePreRead (
 	Operation *op,
 	SlapReply *rs,
-	LDAPControl *ctrl,
-	int post )
+	LDAPControl *ctrl )
 {
-	ber_len_t	siz, off, i;
+	ber_len_t siz, off, i;
+	AttributeName *an = NULL;
 	BerElement	*ber;
-	AttributeName	*an = NULL;
 
-	if ( ( post && op->o_postread != SLAP_CONTROL_NONE ) ||
-		( !post && op->o_preread != SLAP_CONTROL_NONE ) )
-	{
-		rs->sr_text = READMSG( post, "specified multiple times" );
+	if ( op->o_preread != SLAP_CONTROL_NONE ) {
+		rs->sr_text = "preread control specified multiple times";
 		return LDAP_PROTOCOL_ERROR;
 	}
 
-	if ( BER_BVISNULL( &ctrl->ldctl_value ) ) {
-		rs->sr_text = READMSG( post, "value is absent" );
+	if ( BER_BVISNULL( &ctrl->ldctl_value )) {
+		rs->sr_text = "preread control value is absent";
 		return LDAP_PROTOCOL_ERROR;
 	}
 
-	if ( BER_BVISEMPTY( &ctrl->ldctl_value ) ) {
-		rs->sr_text = READMSG( post, "value is empty" );
+	if ( BER_BVISEMPTY( &ctrl->ldctl_value )) {
+		rs->sr_text = "preread control value is empty";
 		return LDAP_PROTOCOL_ERROR;
 	}
 
 #ifdef LDAP_X_TXN
 	if ( op->o_txnSpec ) { /* temporary limitation */
-		rs->sr_text = READMSG( post, "cannot perform in transaction" );
+		rs->sr_text = "cannot perform pre-read in transaction";
 		return LDAP_UNWILLING_TO_PERFORM;
 	}
 #endif
 
-	ber = ber_init( &ctrl->ldctl_value );
-	if ( ber == NULL ) {
-		rs->sr_text = READMSG( post, "internal error" );
+	ber = ber_init( &(ctrl->ldctl_value) );
+	if (ber == NULL) {
+		rs->sr_text = "preread control: internal error";
+		return LDAP_OTHER;
+	}
+
+	rs->sr_err = LDAP_SUCCESS;
+
+	siz = sizeof( AttributeName );
+	off = offsetof( AttributeName, an_name );
+	if ( ber_scanf( ber, "{M}", &an, &siz, off ) == LBER_ERROR ) {
+		rs->sr_text = "preread control: decoding error";
+		rs->sr_err = LDAP_PROTOCOL_ERROR;
+		goto done;
+	}
+
+	for( i=0; i<siz; i++ ) {
+		const char	*dummy = NULL;
+
+		an[i].an_desc = NULL;
+		an[i].an_oc = NULL;
+		an[i].an_oc_exclude = 0;
+		rs->sr_err = slap_bv2ad( &an[i].an_name, &an[i].an_desc, &dummy );
+		if ( rs->sr_err != LDAP_SUCCESS && ctrl->ldctl_iscritical ) {
+			rs->sr_text = dummy
+				? dummy
+				: "postread control: unknown attributeType";
+			goto done;
+		}
+	}
+
+	op->o_preread = ctrl->ldctl_iscritical
+		? SLAP_CONTROL_CRITICAL
+		: SLAP_CONTROL_NONCRITICAL;
+
+	op->o_preread_attrs = an;
+
+done:
+	(void) ber_free( ber, 1 );
+	return rs->sr_err;
+}
+
+static int parsePostRead (
+	Operation *op,
+	SlapReply *rs,
+	LDAPControl *ctrl )
+{
+	ber_len_t siz, off, i;
+	AttributeName *an = NULL;
+	BerElement	*ber;
+
+	if ( op->o_postread != SLAP_CONTROL_NONE ) {
+		rs->sr_text = "postread control specified multiple times";
+		return LDAP_PROTOCOL_ERROR;
+	}
+
+	if ( BER_BVISNULL( &ctrl->ldctl_value )) {
+		rs->sr_text = "postread control value is absent";
+		return LDAP_PROTOCOL_ERROR;
+	}
+
+	if ( BER_BVISEMPTY( &ctrl->ldctl_value )) {
+		rs->sr_text = "postread control value is empty";
+		return LDAP_PROTOCOL_ERROR;
+	}
+
+#ifdef LDAP_X_TXN
+	if ( op->o_txnSpec ) { /* temporary limitation */
+		rs->sr_text = "cannot perform post-read in transaction";
+		return LDAP_UNWILLING_TO_PERFORM;
+	}
+#endif
+
+	ber = ber_init( &(ctrl->ldctl_value) );
+	if (ber == NULL) {
+		rs->sr_text = "postread control: internal error";
 		return LDAP_OTHER;
 	}
 
@@ -1407,7 +1340,7 @@ parseReadAttrs(
 	siz = sizeof( AttributeName );
 	off = offsetof( AttributeName, an_name );
 	if ( ber_scanf( ber, "{M}", &an, &siz, off ) == LBER_ERROR ) {
-		rs->sr_text = READMSG( post, "decoding error" );
+		rs->sr_text = "postread control: decoding error";
 		rs->sr_err = LDAP_PROTOCOL_ERROR;
 		goto done;
 	}
@@ -1418,13 +1351,10 @@ parseReadAttrs(
 
 		an[i].an_desc = NULL;
 		an[i].an_oc = NULL;
-		an[i].an_flags = 0;
+		an[i].an_oc_exclude = 0;
 		rc = slap_bv2ad( &an[i].an_name, &an[i].an_desc, &dummy );
-		if ( rc == LDAP_SUCCESS ) {
-			an[i].an_name = an[i].an_desc->ad_cname;
-
-		} else {
-			int			j;
+		if ( rc != LDAP_SUCCESS ) {
+			int			i;
 			static struct berval	special_attrs[] = {
 				BER_BVC( LDAP_NO_ATTRS ),
 				BER_BVC( LDAP_ALL_USER_ATTRIBUTES ),
@@ -1433,53 +1363,31 @@ parseReadAttrs(
 			};
 
 			/* deal with special attribute types */
-			for ( j = 0; !BER_BVISNULL( &special_attrs[ j ] ); j++ ) {
-				if ( bvmatch( &an[i].an_name, &special_attrs[ j ] ) ) {
-					an[i].an_name = special_attrs[ j ];
+			for ( i = 0; !BER_BVISNULL( &special_attrs[ i ] ); i++ ) {
+				if ( bvmatch( &an[i].an_name, &special_attrs[ i ] ) ) {
 					break;
 				}
 			}
 
-			if ( BER_BVISNULL( &special_attrs[ j ] ) && ctrl->ldctl_iscritical ) {
+			if ( BER_BVISNULL( &special_attrs[ i ] ) && ctrl->ldctl_iscritical ) {
 				rs->sr_err = rc;
-				rs->sr_text = dummy ? dummy
-					: READMSG( post, "unknown attributeType" );
+				rs->sr_text = dummy
+					? dummy
+					: "postread control: unknown attributeType";
 				goto done;
 			}
 		}
 	}
 
-	if ( post ) {
-		op->o_postread_attrs = an;
-		op->o_postread = ctrl->ldctl_iscritical
-			? SLAP_CONTROL_CRITICAL
-			: SLAP_CONTROL_NONCRITICAL;
-	} else {
-		op->o_preread_attrs = an;
-		op->o_preread = ctrl->ldctl_iscritical
-			? SLAP_CONTROL_CRITICAL
-			: SLAP_CONTROL_NONCRITICAL;
-	}
+	op->o_postread = ctrl->ldctl_iscritical
+		? SLAP_CONTROL_CRITICAL
+		: SLAP_CONTROL_NONCRITICAL;
+
+	op->o_postread_attrs = an;
 
 done:
 	(void) ber_free( ber, 1 );
 	return rs->sr_err;
-}
-
-static int parsePreRead (
-	Operation *op,
-	SlapReply *rs,
-	LDAPControl *ctrl )
-{
-	return parseReadAttrs( op, rs, ctrl, 0 );
-}
-
-static int parsePostRead (
-	Operation *op,
-	SlapReply *rs,
-	LDAPControl *ctrl )
-{
-	return parseReadAttrs( op, rs, ctrl, 1 );
 }
 
 static int parseValuesReturnFilter (
@@ -1510,7 +1418,7 @@ static int parseValuesReturnFilter (
 		rs->sr_text = "internal error";
 		return LDAP_OTHER;
 	}
-
+	
 	rs->sr_err = get_vrFilter( op, ber,
 		(ValuesReturnFilter **)&(op->o_vrFilter), &rs->sr_text);
 
@@ -1675,24 +1583,6 @@ static int parseSearchOptions (
 		return LDAP_PROTOCOL_ERROR;
 	}
 
-	if ( search_flags & ~(LDAP_SEARCH_FLAG_DOMAIN_SCOPE) ) {
-		/* Search flags not recognised so far,
-		 * including:
-		 *		LDAP_SEARCH_FLAG_PHANTOM_ROOT
-		 */
-		if ( ctrl->ldctl_iscritical ) {
-			rs->sr_text = "searchOptions contained unrecognized flag";
-			return LDAP_UNWILLING_TO_PERFORM;
-		}
-
-		/* Ignore */
-		Debug( LDAP_DEBUG_TRACE,
-			"searchOptions: conn=%lu unrecognized flag(s) 0x%x (non-critical)\n", 
-			op->o_connid, (unsigned)search_flags, 0 );
-
-		return LDAP_SUCCESS;
-	}
-
 	if ( search_flags & LDAP_SEARCH_FLAG_DOMAIN_SCOPE ) {
 		if ( op->o_domain_scope != SLAP_CONTROL_NONE ) {
 			rs->sr_text = "searchOptions control specified multiple times "
@@ -1703,6 +1593,15 @@ static int parseSearchOptions (
 		op->o_domain_scope = ctrl->ldctl_iscritical
 			? SLAP_CONTROL_CRITICAL
 			: SLAP_CONTROL_NONCRITICAL;
+	}
+
+	if ( search_flags & ~(LDAP_SEARCH_FLAG_DOMAIN_SCOPE) ) {
+		/* Other search flags not recognised so far,
+		 * including:
+		 *		LDAP_SEARCH_FLAG_PHANTOM_ROOM
+		 */
+		rs->sr_text = "searchOptions contained unrecognized flag";
+		return LDAP_UNWILLING_TO_PERFORM;
 	}
 
 	return LDAP_SUCCESS;
@@ -2005,89 +1904,5 @@ slap_ctrl_session_tracking_request_add( Operation *op, SlapReply *rs, LDAPContro
 	}
 
 	return slap_ctrl_session_tracking_add( op, rs, &ip, &name, &id, ctrl );
-}
-#endif
-
-#ifdef SLAP_CONTROL_X_WHATFAILED
-static int parseWhatFailed(
-	Operation *op,
-	SlapReply *rs,
-	LDAPControl *ctrl )
-{
-	if ( op->o_whatFailed != SLAP_CONTROL_NONE ) {
-		rs->sr_text = "\"WHat Failed?\" control specified multiple times";
-		return LDAP_PROTOCOL_ERROR;
-	}
-
-	if ( !BER_BVISNULL( &ctrl->ldctl_value )) {
-		rs->sr_text = "\"What Failed?\" control value not absent";
-		return LDAP_PROTOCOL_ERROR;
-	}
-
-	op->o_whatFailed = ctrl->ldctl_iscritical
-		? SLAP_CONTROL_CRITICAL
-		: SLAP_CONTROL_NONCRITICAL;
-
-	return LDAP_SUCCESS;
-}
-
-int
-slap_ctrl_whatFailed_add(
-	Operation *op,
-	SlapReply *rs,
-	char **oids )
-{
-	BerElementBuffer berbuf;
-	BerElement *ber = (BerElement *) &berbuf;
-	LDAPControl **ctrls = NULL;
-	struct berval ctrlval;
-	int i, rc = LDAP_SUCCESS;
-
-	ber_init2( ber, NULL, LBER_USE_DER );
-	ber_set_option( ber, LBER_OPT_BER_MEMCTX, &op->o_tmpmemctx );
-	ber_printf( ber, "[" /*]*/ );
-	for ( i = 0; oids[ i ] != NULL; i++ ) {
-		ber_printf( ber, "s", oids[ i ] );
-	}
-	ber_printf( ber, /*[*/ "]" );
-
-	if ( ber_flatten2( ber, &ctrlval, 0 ) == -1 ) {
-		rc = LDAP_OTHER;
-		goto done;
-	}
-
-	i = 0;
-	if ( rs->sr_ctrls != NULL ) {
-		for ( ; rs->sr_ctrls[ i ] != NULL; i++ ) {
-			if ( strcmp( rs->sr_ctrls[ i ]->ldctl_oid, LDAP_CONTROL_X_WHATFAILED ) != 0 ) {
-				/* TODO: add */
-				assert( 0 );
-			}
-		}
-	}
-
-	ctrls = op->o_tmprealloc( rs->sr_ctrls,
-			sizeof(LDAPControl *)*( i + 2 )
-			+ sizeof(LDAPControl)
-			+ ctrlval.bv_len + 1,
-			op->o_tmpmemctx );
-	if ( ctrls == NULL ) {
-		rc = LDAP_OTHER;
-		goto done;
-	}
-	ctrls[ i + 1 ] = NULL;
-	ctrls[ i ] = (LDAPControl *)&ctrls[ i + 2 ];
-	ctrls[ i ]->ldctl_oid = LDAP_CONTROL_X_WHATFAILED;
-	ctrls[ i ]->ldctl_iscritical = 0;
-	ctrls[ i ]->ldctl_value.bv_val = (char *)&ctrls[ i ][ 1 ];
-	AC_MEMCPY( ctrls[ i ]->ldctl_value.bv_val, ctrlval.bv_val, ctrlval.bv_len + 1 );
-	ctrls[ i ]->ldctl_value.bv_len = ctrlval.bv_len;
-
-	ber_free_buf( ber );
-
-	rs->sr_ctrls = ctrls;
-
-done:;
-	return rc;
 }
 #endif

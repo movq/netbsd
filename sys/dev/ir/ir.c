@@ -1,4 +1,4 @@
-/*	$NetBSD: ir.c,v 1.6 2010/12/28 14:45:30 jmcneill Exp $	*/
+/*	$NetBSD: ir.c,v 1.5 2008/04/28 20:23:51 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,13 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ir.c,v 1.6 2010/12/28 14:45:30 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ir.c,v 1.5 2008/04/28 20:23:51 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/module.h>
 
 #include <dev/ir/ir.h>
 
@@ -59,18 +58,4 @@ ir_print(void *aux, const char *pnp)
 	}
 
 	return (UNCONF);
-}
-
-MODULE(MODULE_CLASS_DRIVER, ir, NULL);
-
-static int
-ir_modcmd(modcmd_t cmd, void *opaque)
-{
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-	case MODULE_CMD_FINI:
-		return 0;
-	default:
-		return ENOTTY;
-	}
 }

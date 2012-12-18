@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_misc.c,v 1.86 2011/07/22 10:02:08 njoly Exp $ */
+/* $NetBSD: osf1_misc.c,v 1.82 2008/04/22 21:29:21 ad Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_misc.c,v 1.86 2011/07/22 10:02:08 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_misc.c,v 1.82 2008/04/22 21:29:21 ad Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -72,6 +72,7 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_misc.c,v 1.86 2011/07/22 10:02:08 njoly Exp $")
 #include <sys/stat.h>
 #include <sys/filedesc.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
 #include <sys/signal.h>
@@ -83,6 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_misc.c,v 1.86 2011/07/22 10:02:08 njoly Exp $")
 #include <sys/socketvar.h>
 #include <sys/resource.h>
 #include <sys/resourcevar.h>
+#include <sys/user.h>
 #include <sys/wait.h>
 
 #include <machine/alpha.h>
@@ -94,6 +96,10 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_misc.c,v 1.86 2011/07/22 10:02:08 njoly Exp $")
 #include <compat/osf1/osf1_syscallargs.h>
 #include <compat/common/compat_util.h>
 #include <compat/osf1/osf1_cvt.h>
+
+#ifdef SYSCALL_DEBUG
+extern int scdebug;
+#endif
 
 int
 osf1_sys_classcntl(struct lwp *l, const struct osf1_sys_classcntl_args *uap, register_t *retval)
@@ -396,7 +402,7 @@ osf1_sys_wait4(struct lwp *l, const struct osf1_sys_wait4_args *uap, register_t 
 	struct osf1_rusage osf1_rusage;
 	struct rusage netbsd_rusage;
 	unsigned long leftovers;
-	int error, status;
+	int error, status, was_zombie;
 	int options = SCARG(uap, options);
 	int pid = SCARG(uap, pid);
 
@@ -406,8 +412,8 @@ osf1_sys_wait4(struct lwp *l, const struct osf1_sys_wait4_args *uap, register_t 
 	if (leftovers != 0)
 		return (EINVAL);
 
-	error = do_sys_wait(&pid, &status, options | WOPTSCHECKED,
-	    SCARG(uap, rusage) != NULL ? &netbsd_rusage : NULL);
+	error = do_sys_wait(l, & pid, &status, options | WOPTSCHECKED,
+	    SCARG(uap, rusage) != NULL ? &netbsd_rusage : NULL, &was_zombie);
 
 	retval[0] = pid;
 	if (pid == 0)

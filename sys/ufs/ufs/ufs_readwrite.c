@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_readwrite.c,v 1.104 2012/04/29 22:54:01 chs Exp $	*/
+/*	$NetBSD: ufs_readwrite.c,v 1.92 2008/10/19 18:17:14 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: ufs_readwrite.c,v 1.104 2012/04/29 22:54:01 chs Exp $");
+__KERNEL_RCSID(1, "$NetBSD: ufs_readwrite.c,v 1.92 2008/10/19 18:17:14 hannken Exp $");
 
 #ifdef LFS_READWRITE
 #define	FS			struct lfs
@@ -106,7 +106,7 @@ READ(void *v)
 		return (0);
 
 #ifndef LFS_READWRITE
-	if ((ip->i_flags & (SF_SNAPSHOT | SF_SNAPINVAL)) == SF_SNAPSHOT)
+	if ((ip->i_flags & SF_SNAPSHOT))
 		return ffs_snapshot_read(vp, uio, ioflag);
 #endif /* !LFS_READWRITE */
 
@@ -132,7 +132,8 @@ READ(void *v)
 			if (bytelen == 0)
 				break;
 			error = ubc_uiomove(&vp->v_uobj, uio, bytelen, advice,
-			    UBC_READ | UBC_PARTIALOK | UBC_UNMAP_FLAG(vp));
+			    UBC_READ | UBC_PARTIALOK |
+			    (UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0));
 			if (error)
 				break;
 		}
@@ -216,6 +217,7 @@ WRITE(void *v)
 	struct inode *ip;
 	FS *fs;
 	struct buf *bp;
+	struct lwp *l;
 	kauth_cred_t cred;
 	daddr_t lbn;
 	off_t osize, origoff, oldoff, preallocoff, endallocoff, nsize;
@@ -270,6 +272,19 @@ WRITE(void *v)
 	if (vp == fs->lfs_ivnode)
 		return (EPERM);
 #endif
+	/*
+	 * Maybe this should be above the vnode op call, but so long as
+	 * file servers have no limits, I don't think it matters.
+	 */
+	l = curlwp;
+	if (vp->v_type == VREG && l &&
+	    uio->uio_offset + uio->uio_resid >
+	    l->l_proc->p_rlimit[RLIMIT_FSIZE].rlim_cur) {
+		mutex_enter(proc_lock);
+		psignal(l->l_proc, SIGXFSZ);
+		mutex_exit(proc_lock);
+		return (EFBIG);
+	}
 	if (uio->uio_resid == 0)
 		return (0);
 
@@ -294,7 +309,6 @@ WRITE(void *v)
 
 #ifdef LFS_READWRITE
 	async = true;
-	lfs_availwait(fs, btofsb(fs, uio->uio_resid));
 	lfs_check(vp, LFS_UNUSED_LBN, 0);
 #endif /* !LFS_READWRITE */
 	if (!usepc)
@@ -321,7 +335,7 @@ WRITE(void *v)
 		if (error)
 			goto out;
 		if (flags & B_SYNC) {
-			mutex_enter(vp->v_interlock);
+			mutex_enter(&vp->v_interlock);
 			VOP_PUTPAGES(vp, trunc_page(osize & fs->fs_bmask),
 			    round_page(eob),
 			    PGO_CLEANIT | PGO_SYNCIO | PGO_JOURNALLOCKED);
@@ -390,14 +404,16 @@ WRITE(void *v)
 		 * copy the data.
 		 */
 
-		error = ubc_uiomove(&vp->v_uobj, uio, bytelen,
-		    IO_ADV_DECODE(ioflag), ubc_flags | UBC_UNMAP_FLAG(vp));
+		ubc_flags |= UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
+		error = ubc_uiomove(&vp->v_uobj, uio, bytelen, UVM_ADV_RANDOM,
+		    ubc_flags);
 
 		/*
 		 * update UVM's notion of the size now that we've
 		 * copied the data into the vnode's pages.
 		 *
 		 * we should update the size even when uiomove failed.
+		 * otherwise ffs_truncate can't flush soft update states.
 		 */
 
 		if (vp->v_size < newoff) {
@@ -415,17 +431,17 @@ WRITE(void *v)
 
 #ifndef LFS_READWRITE
 		if (!async && oldoff >> 16 != uio->uio_offset >> 16) {
-			mutex_enter(vp->v_interlock);
+			mutex_enter(&vp->v_interlock);
 			error = VOP_PUTPAGES(vp, (oldoff >> 16) << 16,
 			    (uio->uio_offset >> 16) << 16,
-			    PGO_CLEANIT | PGO_JOURNALLOCKED | PGO_LAZY);
+			    PGO_CLEANIT | PGO_JOURNALLOCKED);
 			if (error)
 				break;
 		}
 #endif
 	}
 	if (error == 0 && ioflag & IO_SYNC) {
-		mutex_enter(vp->v_interlock);
+		mutex_enter(&vp->v_interlock);
 		error = VOP_PUTPAGES(vp, trunc_page(origoff & fs->fs_bmask),
 		    round_page(blkroundup(fs, uio->uio_offset)),
 		    PGO_CLEANIT | PGO_SYNCIO | PGO_JOURNALLOCKED);
@@ -433,7 +449,7 @@ WRITE(void *v)
 	goto out;
 
  bcache:
-	mutex_enter(vp->v_interlock);
+	mutex_enter(&vp->v_interlock);
 	VOP_PUTPAGES(vp, trunc_page(origoff), round_page(origoff + resid),
 	    PGO_CLEANIT | PGO_FREE | PGO_SYNCIO | PGO_JOURNALLOCKED);
 	while (uio->uio_resid > 0) {
@@ -479,7 +495,7 @@ WRITE(void *v)
 			break;
 		}
 #ifdef LFS_READWRITE
-		(void)VOP_BWRITE(bp->b_vp, bp);
+		(void)VOP_BWRITE(bp);
 		lfs_reserve(fs, vp, NULL,
 		    -btofsb(fs, (NIADDR + 1) << fs->lfs_bshift));
 		need_unreserve = false;
@@ -508,24 +524,10 @@ WRITE(void *v)
 	 */
 out:
 	ip->i_flag |= IN_CHANGE | IN_UPDATE;
-	if (vp->v_mount->mnt_flag & MNT_RELATIME)
-		ip->i_flag |= IN_ACCESS;
-	if (resid > uio->uio_resid && ap->a_cred) {
-		if (ip->i_mode & ISUID) {
-			if (kauth_authorize_vnode(ap->a_cred,
-			    KAUTH_VNODE_RETAIN_SUID, vp, NULL, EPERM) != 0) {
-				ip->i_mode &= ~ISUID;
-				DIP_ASSIGN(ip, mode, ip->i_mode);
-			}
-		}
-
-		if (ip->i_mode & ISGID) {
-			if (kauth_authorize_vnode(ap->a_cred,
-			    KAUTH_VNODE_RETAIN_SGID, vp, NULL, EPERM) != 0) {
-				ip->i_mode &= ~ISGID;
-				DIP_ASSIGN(ip, mode, ip->i_mode);
-			}
-		}
+	if (resid > uio->uio_resid && ap->a_cred &&
+	    kauth_authorize_generic(ap->a_cred, KAUTH_GENERIC_ISSUSER, NULL)) {
+		ip->i_mode &= ~(ISUID | ISGID);
+		DIP_ASSIGN(ip, mode, ip->i_mode);
 	}
 	if (resid > uio->uio_resid)
 		VN_KNOTE(vp, NOTE_WRITE | (extended ? NOTE_EXTEND : 0));

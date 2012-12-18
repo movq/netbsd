@@ -1,10 +1,8 @@
-/*	$NetBSD: attr.c,v 1.1.1.4 2010/12/12 15:22:18 adam Exp $	*/
-
 /* attr.c - routines for dealing with attributes */
-/* OpenLDAP: pkg/ldap/servers/slapd/attr.c,v 1.112.2.12 2010/04/13 20:23:10 kurt Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/attr.c,v 1.112.2.8 2008/07/10 00:17:13 quanah Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2010 The OpenLDAP Foundation.
+ * Copyright 1998-2008 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -215,7 +213,7 @@ attr_dup2( Attribute *tmp, Attribute *a )
 {
 	tmp->a_flags = a->a_flags & SLAP_ATTR_PERSISTENT_FLAGS;
 	if ( a->a_vals != NULL ) {
-		unsigned	i, j;
+		int	i;
 
 		tmp->a_numvals = a->a_numvals;
 		tmp->a_vals = ch_malloc( (tmp->a_numvals + 1) * sizeof(struct berval) );
@@ -230,6 +228,7 @@ attr_dup2( Attribute *tmp, Attribute *a )
 		assert( a->a_nvals != NULL );
 
 		if ( a->a_nvals != a->a_vals ) {
+			int	j;
 
 			tmp->a_nvals = ch_malloc( (tmp->a_numvals + 1) * sizeof(struct berval) );
 			for ( j = 0; !BER_BVISNULL( &a->a_nvals[j] ); j++ ) {
@@ -405,7 +404,7 @@ attr_valadd(
 					rc = LDAP_TYPE_OR_VALUE_EXISTS;
 				return rc;
 			}
-			for ( j = a->a_numvals; j >= (int)slot; j-- ) {
+			for ( j = a->a_numvals; j >= slot; j-- ) {
 				a->a_vals[j+1] = a->a_vals[j];
 				if ( nvals )
 					a->a_nvals[j+1] = a->a_nvals[j];

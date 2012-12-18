@@ -1,4 +1,4 @@
-/* $NetBSD: vrecu.c,v 1.10 2012/10/27 17:17:56 chs Exp $ */
+/* $NetBSD: vrecu.c,v 1.7 2008/04/28 20:23:22 martin Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vrecu.c,v 1.10 2012/10/27 17:17:56 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vrecu.c,v 1.7 2008/04/28 20:23:22 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -55,8 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD: vrecu.c,v 1.10 2012/10/27 17:17:56 chs Exp $");
 #include <dev/ic/i82365var.h>
 #include <dev/isa/i82365_isavar.h>
 
-static int pcic_vrip_match(device_t, cfdata_t, void *);
-static void pcic_vrip_attach(device_t, device_t, void *);
+static int pcic_vrip_match(struct device *, struct cfdata *, void *);
+static void pcic_vrip_attach(struct device *, struct device *, void *);
 static void *pcic_vrip_chip_intr_establish(pcmcia_chipset_handle_t,
 					   struct pcmcia_function *, int,
 					   int (*)(void *), void *);
@@ -65,15 +65,15 @@ static int pcic_vrip_intr(void *);
 
 struct pcic_vrip_softc {
 	struct pcic_softc	sc_pcic;	/* real pcic softc */
-	uint16_t		sc_intr_mask;
-	uint16_t		sc_intr_valid;
+	u_int16_t		sc_intr_mask;
+	u_int16_t		sc_intr_valid;
 	struct intrhand {
 		int	(*ih_fun)(void *);
 		void	*ih_arg;
 	} 			sc_intrhand[ECU_MAX_INTR];
 };
 
-CFATTACH_DECL_NEW(pcic_vrip, sizeof(struct pcic_vrip_softc),
+CFATTACH_DECL(pcic_vrip, sizeof(struct pcic_vrip_softc),
 	      pcic_vrip_match, pcic_vrip_attach, NULL, NULL);
 
 static struct pcmcia_chip_functions pcic_vrip_functions = {
@@ -97,31 +97,30 @@ static struct pcmcia_chip_functions pcic_vrip_functions = {
 
 
 static int
-pcic_vrip_match(device_t parent, cfdata_t match, void *aux)
+pcic_vrip_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	return 1;
 }
 
 static void
-pcic_vrip_attach(device_t parent, device_t self, void *aux)
+pcic_vrip_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct pcic_vrip_softc	*vsc = device_private(self);
-	struct pcic_softc	*sc = &vsc->sc_pcic;
+	struct pcic_softc	*sc = (void *) self;
+	struct pcic_vrip_softc	*vsc = (void *) self;
 	struct vrip_attach_args	*va = aux;
 	bus_space_handle_t	ioh;
 	bus_space_handle_t	memh;
 	int			i;
 
-	sc->dev = self;
 	vsc->sc_intr_valid = PCIC_INTR_IRQ_VALIDMASK;
 	vsc->sc_intr_mask = 0xffff;
 	for (i = 0; i < ECU_MAX_INTR; i++)
 		vsc->sc_intrhand[i].ih_fun = NULL;
 
 	if ((sc->ih = vrip_intr_establish(va->va_vc, va->va_unit, 0,
-					  IPL_NET, pcic_vrip_intr, vsc))
+					  IPL_NET, pcic_vrip_intr, sc))
 	    == NULL) {
-		printf(": can't establish interrupt");
+		printf("%s: can't establish interrupt", sc->dev.dv_xname);
 	}
 
         /* Map i/o space. */
@@ -204,8 +203,8 @@ pcic_vrip_chip_intr_establish(pcmcia_chipset_handle_t pch,
 
 
 	h = (struct pcic_handle *) pch;
-	vsc = device_private(h->ph_parent);
-	sc = &vsc->sc_pcic;
+	sc = (struct pcic_softc *) h->ph_parent;
+	vsc = (struct pcic_vrip_softc *) h->ph_parent;
 
 
 	ih = &vsc->sc_intrhand[irq];
@@ -240,8 +239,8 @@ pcic_vrip_chip_intr_disestablish(pcmcia_chipset_handle_t pch, void *arg)
 	int	r;
 
 	h = (struct pcic_handle *) pch;
-	vsc = device_private(h->ph_parent);
-	sc = &vsc->sc_pcic;
+	sc = (struct pcic_softc *) h->ph_parent;
+	vsc = (struct pcic_vrip_softc *) h->ph_parent;
 
 	if (ih != &vsc->sc_intrhand[h->ih_irq])
 		panic("pcic_vrip_chip_intr_disestablish: bad handler");
@@ -271,10 +270,10 @@ pcic_vrip_chip_intr_disestablish(pcmcia_chipset_handle_t pch, void *arg)
 static int
 pcic_vrip_intr(void *arg)
 {
+	struct pcic_softc	*sc = arg;
 	struct pcic_vrip_softc	*vsc = arg;
-	struct pcic_softc	*sc = &vsc->sc_pcic;
 	int			i;
-	uint16_t		r;
+	u_int16_t		r;
 
 	r = bus_space_read_2(sc->iot, sc->ioh, ECU_INTSTAT_REG_W)
 		& ~vsc->sc_intr_mask;

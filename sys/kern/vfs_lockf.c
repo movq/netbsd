@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_lockf.c,v 1.73 2011/01/31 08:25:32 dholland Exp $	*/
+/*	$NetBSD: vfs_lockf.c,v 1.69.4.3 2009/09/05 11:36:29 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_lockf.c,v 1.73 2011/01/31 08:25:32 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_lockf.c,v 1.69.4.3 2009/09/05 11:36:29 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -138,11 +138,11 @@ lf_print(const char *tag, struct lockf *lock)
 		printf("proc %d", ((struct proc *)lock->lf_id)->p_pid);
 	else
 		printf("file %p", (struct file *)lock->lf_id);
-	printf(" %s, start %jd, end %jd",
+	printf(" %s, start %qx, end %qx",
 		lock->lf_type == F_RDLCK ? "shared" :
 		lock->lf_type == F_WRLCK ? "exclusive" :
 		lock->lf_type == F_UNLCK ? "unlock" :
-		"unknown", (intmax_t)lock->lf_start, (intmax_t)lock->lf_end);
+		"unknown", lock->lf_start, lock->lf_end);
 	if (TAILQ_FIRST(&lock->lf_blkhd))
 		printf(" block %p\n", TAILQ_FIRST(&lock->lf_blkhd));
 	else
@@ -161,22 +161,22 @@ lf_printlist(const char *tag, struct lockf *lock)
 			printf("proc %d", ((struct proc *)lf->lf_id)->p_pid);
 		else
 			printf("file %p", (struct file *)lf->lf_id);
-		printf(", %s, start %jd, end %jd",
+		printf(", %s, start %qx, end %qx",
 			lf->lf_type == F_RDLCK ? "shared" :
 			lf->lf_type == F_WRLCK ? "exclusive" :
 			lf->lf_type == F_UNLCK ? "unlock" :
-			"unknown", (intmax_t)lf->lf_start, (intmax_t)lf->lf_end);
+			"unknown", lf->lf_start, lf->lf_end);
 		TAILQ_FOREACH(blk, &lf->lf_blkhd, lf_block) {
 			if (blk->lf_flags & F_POSIX)
 				printf("; proc %d",
 				    ((struct proc *)blk->lf_id)->p_pid);
 			else
 				printf("; file %p", (struct file *)blk->lf_id);
-			printf(", %s, start %jd, end %jd",
+			printf(", %s, start %qx, end %qx",
 				blk->lf_type == F_RDLCK ? "shared" :
 				blk->lf_type == F_WRLCK ? "exclusive" :
 				blk->lf_type == F_UNLCK ? "unlock" :
-				"unknown", (intmax_t)blk->lf_start, (intmax_t)blk->lf_end);
+				"unknown", blk->lf_start, blk->lf_end);
 			if (TAILQ_FIRST(&blk->lf_blkhd))
 				 panic("lf_printlist: bad list");
 		}

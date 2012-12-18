@@ -1,4 +1,4 @@
-/*	$NetBSD: rlogin.c,v 1.41 2011/09/06 18:28:35 joerg Exp $	*/
+/*	$NetBSD: rlogin.c,v 1.39 2008/07/21 14:19:25 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1990, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1993\
 #if 0
 static char sccsid[] = "@(#)rlogin.c	8.4 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: rlogin.c,v 1.41 2011/09/06 18:28:35 joerg Exp $");
+__RCSID("$NetBSD: rlogin.c,v 1.39 2008/07/21 14:19:25 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -87,11 +87,11 @@ __RCSID("$NetBSD: rlogin.c,v 1.41 2011/09/06 18:28:35 joerg Exp $");
 #define CCEQ(val, c)	(c == val ? val != _POSIX_VDISABLE : 0)
 #endif
 
-static int eight, rem;
-static struct termios deftty;
+int eight, rem;
+struct termios deftty;
 
-static int noescape;
-static u_char escapechar = '~';
+int noescape;
+u_char escapechar = '~';
 
 #ifdef OLDSUN
 struct winsize {
@@ -101,29 +101,30 @@ struct winsize {
 #else
 #define	get_window_size(fd, wp)	ioctl(fd, TIOCGWINSZ, wp)
 #endif
-static struct	winsize winsize;
+struct	winsize winsize;
 
-static void		catch_child(int);
-static void		copytochild(int);
-__dead static void	doit(sigset_t *);
-__dead static void	done(int);
-static void		echo(int);
-static u_int		getescape(char *);
-__dead static void	lostpeer(int);
-static void		mode(int);
-static void		msg(const char *);
-static void		oob(int);
-static int		reader(sigset_t *);
-static void		sendwindow(void);
-static void		setsignal(int);
-static void		sigwinch(int);
-static void		stop(int);
-__dead static void	usage(void);
-static void		writer(void);
-static void		writeroob(int);
+void		catch_child(int);
+void		copytochild(int);
+void		doit(sigset_t *);
+void		done(int);
+void		echo(int);
+u_int		getescape(char *);
+void		lostpeer(int);
+int		main(int, char **);
+void		mode(int);
+void		msg(const char *);
+void		oob(int);
+int		reader(sigset_t *);
+void		sendwindow(void);
+void		setsignal(int);
+void		sigwinch(int);
+void		stop(int);
+void		usage(void);
+void		writer(void);
+void		writeroob(int);
 
 #ifdef OLDSUN
-static int		get_window_size(int, struct winsize *);
+int		get_window_size(int, struct winsize *);
 #endif
 
 int
@@ -228,12 +229,12 @@ main(int argc, char *argv[])
 	if ((p = getenv("TERM")) != NULL)
 		(void)strlcpy(term, p, sizeof(term));
 	len = strlen(term);
-	if (len < (int)(sizeof(term) - 1) && tcgetattr(0, &tty) == 0) {
+	if (len < (sizeof(term) - 1) && tcgetattr(0, &tty) == 0) {
 		/* start at 2 to include the / */
 		for (ospeed = i = cfgetospeed(&tty), len2 = 2; i > 9; len2++)
 			i /= 10;
 
-		if (len + len2 < (int)sizeof(term))
+		if (len + len2 < sizeof(term))
 			(void)snprintf(term + len, len2 + 1, "/%d", ospeed);
 	}
 
@@ -293,9 +294,9 @@ main(int argc, char *argv[])
 	return (0);
 }
 
-static pid_t child;
+pid_t child;
 
-static void
+void
 doit(sigset_t *smask)
 {
 	struct sigaction sa;
@@ -339,7 +340,7 @@ doit(sigset_t *smask)
 }
 
 /* trap a signal, unless it is being ignored. */
-static void
+void
 setsignal(int sig)
 {
 	struct sigaction sa;
@@ -359,7 +360,7 @@ setsignal(int sig)
 	(void)sigprocmask(SIG_SETMASK, &sigs, (sigset_t *) 0);
 }
 
-static void
+void
 done(int status)
 {
 	pid_t w;
@@ -380,13 +381,13 @@ done(int status)
 	exit(status);
 }
 
-static int dosigwinch;
+int dosigwinch;
 
 /*
  * This is called when the reader process gets the out-of-band (urgent)
  * request to turn on the window-changing protocol.
  */
-static void
+void
 writeroob(int signo)
 {
 	struct sigaction sa;
@@ -401,7 +402,7 @@ writeroob(int signo)
 	dosigwinch = 1;
 }
 
-static void
+void
 catch_child(int signo)
 {
 	int status;
@@ -424,7 +425,7 @@ catch_child(int signo)
  * ~^Z				suspend rlogin process.
  * ~<delayed-suspend char>	suspend rlogin process, but leave reader alone.
  */
-static void
+void
 writer(void)
 {
 	int bol, local, n;
@@ -488,7 +489,7 @@ writer(void)
 	}
 }
 
-static void
+void
 echo(int i)
 {
 	char c = (char)i;
@@ -511,7 +512,7 @@ echo(int i)
 	(void)write(STDOUT_FILENO, buf, p - buf);
 }
 
-static void
+void
 stop(int all)
 {
 	struct sigaction sa;
@@ -528,7 +529,7 @@ stop(int all)
 	sigwinch(0);			/* check for size changes */
 }
 
-static void
+void
 sigwinch(int signo)
 {
 	struct winsize ws;
@@ -543,7 +544,7 @@ sigwinch(int signo)
 /*
  * Send the window size to the server via the magic escape
  */
-static void
+void
 sendwindow(void)
 {
 	struct winsize *wp;
@@ -568,12 +569,12 @@ sendwindow(void)
 #define	READING	1
 #define	WRITING	2
 
-static jmp_buf rcvtop;
-static pid_t ppid;
-static int rcvcnt, rcvstate;
-static char rcvbuf[8 * 1024];
+jmp_buf rcvtop;
+pid_t ppid;
+int rcvcnt, rcvstate;
+char rcvbuf[8 * 1024];
 
-static void
+void
 oob(int signo)
 {
 	struct termios tty;
@@ -589,7 +590,7 @@ oob(int signo)
 			 * to send it yet if we are blocked for output and
 			 * our input buffer is full.
 			 */
-			if (rcvcnt < (int)sizeof(rcvbuf)) {
+			if (rcvcnt < sizeof(rcvbuf)) {
 				n = read(rem, rcvbuf + rcvcnt,
 				    sizeof(rcvbuf) - rcvcnt);
 				if (n <= 0)
@@ -654,7 +655,7 @@ oob(int signo)
 }
 
 /* reader: read from remote: line -> 1 */
-static int
+int
 reader(sigset_t *smask)
 {
 	pid_t pid;
@@ -702,7 +703,7 @@ reader(sigset_t *smask)
 	}
 }
 
-static void
+void
 mode(int f)
 {
 	struct termios tty;
@@ -733,7 +734,7 @@ mode(int f)
 	}
 }
 
-static void
+void
 lostpeer(int signo)
 {
 	struct sigaction sa;
@@ -745,14 +746,14 @@ lostpeer(int signo)
 }
 
 /* copy SIGURGs to the child process. */
-static void
+void
 copytochild(int signo)
 {
 
 	(void)kill(child, SIGURG);
 }
 
-static void
+void
 msg(const char *str)
 {
 
@@ -760,7 +761,7 @@ msg(const char *str)
 }
 
 
-static void
+void
 usage(void)
 {
 	(void)fprintf(stderr,
@@ -774,8 +775,10 @@ usage(void)
  * Suns and others.  Suns have only a `ttysize', so we convert it to a winsize.
  */
 #ifdef OLDSUN
-static int
-get_window_size(int fd, struct winsize *wp)
+int
+get_window_size(fd, wp)
+	int fd;
+	struct winsize *wp;
 {
 	struct ttysize ts;
 	int error;
@@ -790,7 +793,7 @@ get_window_size(int fd, struct winsize *wp)
 }
 #endif
 
-static u_int
+u_int
 getescape(char *p)
 {
 	long val;

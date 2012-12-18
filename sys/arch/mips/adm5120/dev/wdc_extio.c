@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_extio.c,v 1.8 2012/07/31 15:50:33 bouyer Exp $ */
+/*	$NetBSD: wdc_extio.c,v 1.2 2008/03/18 20:46:36 cube Exp $ */
 
 /*-
  * Copyright (c) 2007 David Young.  All rights reserved.
@@ -15,6 +15,9 @@
  *    copyright notice, this list of conditions and the following
  *    disclaimer in the documentation and/or other materials provided
  *    with the distribution.
+ * 3. The name of the author may not be used to endorse or promote
+ *    products derived from this software without specific prior
+ *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -61,17 +64,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_extio.c,v 1.8 2012/07/31 15:50:33 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_extio.c,v 1.2 2008/03/18 20:46:36 cube Exp $");
 
+#include <sys/types.h>
 #include <sys/param.h>
-#include <sys/bus.h>
-#include <sys/callout.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
-#include <sys/intr.h>
-#include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/systm.h>
+#include <sys/device.h>
+#include <sys/malloc.h>
+#include <sys/kernel.h>
+#include <sys/callout.h>
+
+#include <machine/bus.h>
+#include <machine/intr.h>
+#include <machine/cpu.h>
 
 #include <mips/adm5120/include/adm5120_extiovar.h>
 
@@ -307,10 +312,10 @@ wdc_extio_attach(device_t parent, device_t self, void *aux)
 	sc->sc_chanlist[0] = chp;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanlist;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 	chp->ch_channel = 0;
 	chp->ch_atac = &sc->sc_wdcdev.sc_atac;
 	chp->ch_queue = &sc->sc_chqueue;
+	chp->ch_ndrive = 2;
 
 	aprint_normal("\n");
 

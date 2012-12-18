@@ -1,4 +1,4 @@
-/*	$NetBSD: optr.c,v 1.38 2012/04/07 16:44:10 christos Exp $	*/
+/*	$NetBSD: optr.c,v 1.36 2006/12/18 20:07:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)optr.c	8.2 (Berkeley) 1/6/94";
 #else
-__RCSID("$NetBSD: optr.c,v 1.38 2012/04/07 16:44:10 christos Exp $");
+__RCSID("$NetBSD: optr.c,v 1.36 2006/12/18 20:07:32 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,7 +56,6 @@ __RCSID("$NetBSD: optr.c,v 1.38 2012/04/07 16:44:10 christos Exp $");
 #include <time.h>
 #include <tzfile.h>
 #include <unistd.h>
-#include <util.h>
 
 #include <ufs/ufs/dinode.h>
 
@@ -322,15 +321,11 @@ struct fstab *
 allocfsent(struct fstab *fs)
 {
 	struct fstab *new;
-	char buf[MAXPATHLEN];
 
-	new = xmalloc(sizeof (*fs));
+	new = (struct fstab *)xmalloc(sizeof (*fs));
 	new->fs_file = xstrdup(fs->fs_file);
 	new->fs_type = xstrdup(fs->fs_type);
-
-	if (getfsspecname(buf, sizeof(buf), fs->fs_spec) == NULL)
-		msg("%s (%s)", buf, strerror(errno));
-	new->fs_spec = xstrdup(buf);
+	new->fs_spec = xstrdup(fs->fs_spec);
 	new->fs_passno = fs->fs_passno;
 	new->fs_freq = fs->fs_freq;
 	return (new);
@@ -391,15 +386,14 @@ fstabsearch(const char *key)
 {
 	struct pfstab *pf;
 	struct fstab *fs;
-	const char *rn;
-	char buf[MAXPATHLEN];
+	char *rn;
 
 	SLIST_FOREACH(pf, &table, pf_list) {
 		fs = pf->pf_fstab;
 		if (strcmp(fs->fs_file, key) == 0 ||
 		    strcmp(fs->fs_spec, key) == 0)
 			return (fs);
-		rn = getdiskrawname(buf, sizeof(buf), fs->fs_spec);
+		rn = rawname(fs->fs_spec);
 		if (rn != NULL && strcmp(rn, key) == 0)
 			return (fs);
 		if (key[0] != '/') {
@@ -428,8 +422,7 @@ mntinfosearch(const char *key)
 {
 	int i, mntbufc;
 	struct statvfs *mntbuf, *fs;
-	const char *rn;
-	char buf[MAXPATHLEN];
+	char *rn;
 
 	if ((mntbufc = getmntinfo(&mntbuf, MNT_NOWAIT)) == 0)
 		quit("Can't get mount list: %s", strerror(errno));
@@ -445,7 +438,7 @@ mntinfosearch(const char *key)
 		if (strcmp(fs->f_mntonname, key) == 0 ||
 		    strcmp(fs->f_mntfromname, key) == 0)
 			return (fs);
-		rn = getdiskrawname(buf, sizeof(buf), fs->f_mntfromname);
+		rn = rawname(fs->f_mntfromname);
 		if (rn != NULL && strcmp(rn, key) == 0)
 			return (fs);
 	}

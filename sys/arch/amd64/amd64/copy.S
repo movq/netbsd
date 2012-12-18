@@ -1,4 +1,4 @@
-/*	$NetBSD: copy.S,v 1.18 2010/07/07 01:13:29 chs Exp $	*/
+/*	$NetBSD: copy.S,v 1.12.4.1 2009/02/26 20:38:00 snj Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -45,7 +45,7 @@
 
 #define GET_CURPCB(reg)	\
 	movq	CPUVAR(CURLWP), reg; \
-	movq	L_PCB(reg), reg
+	movq	L_ADDR(reg), reg
 
 /*
  * These are arranged so that the abnormal case is a forwards
@@ -62,10 +62,6 @@
 	call	_C_LABEL(do_pmap_load)		; \
 	jmp	98b
 
-/*
- * The following primitives are to copy regions of memory.
- * Label must be before all copy functions.
- */
 	.text
 
 x86_copyfunc_start:	.globl	x86_copyfunc_start
@@ -107,9 +103,6 @@ ENTRY(do_pmap_load)
 	ret
 
 /*
- * int kcopy(const void *from, void *to, size_t len);
- * Copy len bytes, abort on fault.
- *
  * Copy routines from and to userland, plus a few more. See the
  * section 9 manpages for info. Some cases can be optimized more.
  *
@@ -126,9 +119,14 @@ ENTRY(do_pmap_load)
  */
 
 ENTRY(kcopy)
+	GET_CURPCB(%rax)
+	pushq	PCB_ONFAULT(%rax)
+	leaq	_C_LABEL(kcopy_fault)(%rip),%r11
+	movq	%r11, PCB_ONFAULT(%rax)
+
 	xchgq	%rdi,%rsi
 	movq	%rdx,%rcx
-.Lkcopy_start:
+
 	movq	%rdi,%rax
 	subq	%rsi,%rax
 	cmpq	%rcx,%rax		# overlapping?
@@ -143,6 +141,8 @@ ENTRY(kcopy)
 	rep
 	movsb
 
+	GET_CURPCB(%rdx)
+	popq	PCB_ONFAULT(%rdx)
 	xorq	%rax,%rax
 	ret
 
@@ -166,23 +166,29 @@ ENTRY(kcopy)
 	rep
 	movsq
 	cld
-.Lkcopy_end:
+
+	GET_CURPCB(%rdx)
+	popq	PCB_ONFAULT(%rdx)
 	xorq	%rax,%rax
 	ret
 
 ENTRY(copyout)
 	DEFERRED_SWITCH_CHECK
+	pushq	$0			# Restored to PCB_ONFAULT(%rdx)
 
 	xchgq	%rdi,%rsi		# kernel address to %rsi, user to %rdi
 	movq	%rdx,%rax		# save transfer length (bytes)
-
+	
 	addq	%rdi,%rdx		# end address to %rdx
 	jc	_C_LABEL(copy_efault)	# jump if wraps
 	movq	$VM_MAXUSER_ADDRESS,%r8
 	cmpq	%r8,%rdx
 	ja	_C_LABEL(copy_efault)	# jump if end in kernel space
 
-.Lcopyout_start:
+	GET_CURPCB(%rdx)
+	leaq	_C_LABEL(copy_fault)(%rip),%r11
+	movq	%r11,PCB_ONFAULT(%rdx)	# prime fault handler
+
 	movq	%rax,%rcx		# length
 	shrq	$3,%rcx			# count of 8-byte words
 	rep
@@ -191,13 +197,18 @@ ENTRY(copyout)
 	andb	$7,%cl			# remaining number of bytes
 	rep
 	movsb				# copy remaining bytes
-.Lcopyout_end:
+
+	popq	PCB_ONFAULT(%rdx)
 	xorl	%eax,%eax
 	ret
 	DEFERRED_SWITCH_CALL
 
 ENTRY(copyin)
 	DEFERRED_SWITCH_CHECK
+	GET_CURPCB(%rax)
+	pushq	$0
+	leaq	_C_LABEL(copy_fault)(%rip),%r11
+	movq	%r11,PCB_ONFAULT(%rax)
 
 	xchgq	%rdi,%rsi
 	movq	%rdx,%rax
@@ -208,7 +219,6 @@ ENTRY(copyin)
 	cmpq	%r8,%rdx
 	ja	_C_LABEL(copy_efault)	# j if end in kernel space
 
-.Lcopyin_start:
 3:	/* bcopy(%rsi, %rdi, %rax); */
 	movq	%rax,%rcx
 	shrq	$3,%rcx
@@ -218,7 +228,9 @@ ENTRY(copyin)
 	andb	$7,%cl
 	rep
 	movsb
-.Lcopyin_end:
+
+	GET_CURPCB(%rdx)
+	popq	PCB_ONFAULT(%rdx)
 	xorl	%eax,%eax
 	ret
 	DEFERRED_SWITCH_CALL
@@ -233,9 +245,13 @@ NENTRY(copy_efault)
  */
 
 NENTRY(kcopy_fault)
+	GET_CURPCB(%rdx)
+	popq	PCB_ONFAULT(%rdx)
 	ret
 
 NENTRY(copy_fault)
+	GET_CURPCB(%rdx)
+	popq	PCB_ONFAULT(%rdx)
 	ret
 
 ENTRY(copyoutstr)
@@ -244,6 +260,9 @@ ENTRY(copyoutstr)
 	movq	%rdx,%r8
 	movq	%rcx,%r9
 
+5:	GET_CURPCB(%rax)
+	leaq	_C_LABEL(copystr_fault)(%rip),%r11
+	movq	%r11,PCB_ONFAULT(%rax)
 	/*
 	 * Get min(%rdx, VM_MAXUSER_ADDRESS-%rdi).
 	 */
@@ -254,7 +273,7 @@ ENTRY(copyoutstr)
 	jae	1f
 	movq	%rax,%rdx
 	movq	%rax,%r8
-.Lcopyoutstr_start:
+
 1:	incq	%rdx
 
 1:	decq	%rdx
@@ -263,7 +282,7 @@ ENTRY(copyoutstr)
 	stosb
 	testb	%al,%al
 	jnz	1b
-.Lcopyoutstr_end:
+
 	/* Success -- 0 byte reached. */
 	decq	%rdx
 	xorq	%rax,%rax
@@ -283,6 +302,10 @@ ENTRY(copyinstr)
 	movq	%rdx,%r8
 	movq	%rcx,%r9
 
+	GET_CURPCB(%rcx)
+	leaq	_C_LABEL(copystr_fault)(%rip),%r11
+	movq	%r11,PCB_ONFAULT(%rcx)
+
 	/*
 	 * Get min(%rdx, VM_MAXUSER_ADDRESS-%rsi).
 	 */
@@ -293,7 +316,7 @@ ENTRY(copyinstr)
 	jae	1f
 	movq	%rax,%rdx
 	movq	%rax,%r8
-.Lcopyinstr_start:
+
 1:	incq	%rdx
 
 1:	decq	%rdx
@@ -302,7 +325,6 @@ ENTRY(copyinstr)
 	stosb
 	testb	%al,%al
 	jnz	1b
-.Lcopyinstr_end:
 
 	/* Success -- 0 byte reached. */
 	decq	%rdx
@@ -323,6 +345,8 @@ ENTRY(copystr_efault)
 ENTRY(copystr_fault)
 copystr_return:
 	/* Set *lencopied and return %eax. */
+	GET_CURPCB(%rcx)
+	movq	$0,PCB_ONFAULT(%rcx)
 	testq	%r9,%r9
 	jz	8f
 	subq	%rdx,%r8
@@ -386,7 +410,7 @@ ENTRY(fusword)
 	DEFERRED_SWITCH_CALL
 	
 ENTRY(fuswintr)
-	cmpl	$TLBSTATE_VALID, CPUVAR(TLBSTATE)
+	cmpq	$TLBSTATE_VALID, CPUVAR(TLBSTATE)
 	jnz	_C_LABEL(fusuaddrfault)
 	movq	$VM_MAXUSER_ADDRESS-2,%r11
 	cmpq	%r11,%rdi
@@ -444,7 +468,7 @@ ENTRY(susword)
 	DEFERRED_SWITCH_CALL
 
 ENTRY(suswintr)
-	cmpl	$TLBSTATE_VALID, CPUVAR(TLBSTATE)
+	cmpq	$TLBSTATE_VALID, CPUVAR(TLBSTATE)
 	jnz	_C_LABEL(fusuaddrfault)
 	movq	$VM_MAXUSER_ADDRESS-2,%r11
 	cmpq	%r11,%rdi
@@ -501,19 +525,27 @@ ENTRY(ucas_64)
 	/* Fail if kernel-space */
 	movq	$VM_MAXUSER_ADDRESS-8, %r8
 	cmpq	%r8, %rdi
-	ja	_C_LABEL(ucas_fault)
-	movq	%rsi, %rax
-.Lucas64_start:
+	ja	1f
+	/* Set the fault handler */
+	GET_CURPCB(%r8)
+	leaq	_C_LABEL(ucas_fault)(%rip), %r9
+	movq	%r9, PCB_ONFAULT(%r8)
 	/* Perform the CAS */
 	lock
 	cmpxchgq %rdx, (%rdi)
-.Lucas64_end:
+	/* Clear the fault handler */
+	movq	%rax, PCB_ONFAULT(%r8)
 	/*
 	 * Note: %rax is "old" value.
 	 * Set the return values.
 	 */
 	movq	%rax, (%rcx)
 	xorq	%rax, %rax
+	/* Clear the fault handler */
+	movq	%rax, PCB_ONFAULT(%r8)
+1:
+	/* Failure case */
+	movq	$EFAULT, %rax
 	ret
 	DEFERRED_SWITCH_CALL
 
@@ -525,75 +557,39 @@ ENTRY(ucas_32)
 	/* Fail if kernel-space */
 	movq	$VM_MAXUSER_ADDRESS-4, %r8
 	cmpq	%r8, %rdi
-	ja	_C_LABEL(ucas_fault)
-	movl	%esi, %eax
-.Lucas32_start:
+	ja	1f
+	/* Set the fault handler */
+	GET_CURPCB(%r8)
+	leaq	_C_LABEL(ucas_fault)(%rip), %r9
+	movq	%r9, PCB_ONFAULT(%r8)
 	/* Perform the CAS */
 	lock
 	cmpxchgl %edx, (%rdi)
-.Lucas32_end:
 	/*
 	 * Note: %eax is "old" value.
 	 * Set the return values.
 	 */
 	movl	%eax, (%rcx)
 	xorq	%rax, %rax
+1:
+	/* Failure case */
+	movq	$EFAULT, %rax
 	ret
 	DEFERRED_SWITCH_CALL
 
 /*
- * Fault handler for ucas_*().
- * Just return the error set by trap().
+ * Fault handler for ucas_32() and ucas_64().
+ * Unset the handler and return the failure.
  */
 NENTRY(ucas_fault)
+	movq	$0, PCB_ONFAULT(%r8)
+	movq	$EFAULT, %rax
 	ret
 
 /*
- * int	ucas_ptr(volatile void **uptr, void *old, void *new, void **ret);
- * int	ucas_int(volatile int *uptr, int old, intnew, int *ret);
+ * int	ucas_ptr(volatile void *uptr, void *old, void *new, void *ret);
  */
 STRONG_ALIAS(ucas_ptr, ucas_64)
 STRONG_ALIAS(ucas_int, ucas_32)
 
-/*
- * Label must be after all copy functions.
- */
 x86_copyfunc_end:	.globl	x86_copyfunc_end
-
-/*
- * Fault table of copy functions for trap().
- */
-	.section ".rodata"
-	.globl _C_LABEL(onfault_table)
-_C_LABEL(onfault_table):
-	.quad .Lcopyin_start
-	.quad .Lcopyin_end
-	.quad _C_LABEL(copy_fault)
-
-	.quad .Lcopyout_start
-	.quad .Lcopyout_end
-	.quad _C_LABEL(copy_fault)
-
-	.quad .Lkcopy_start
-	.quad .Lkcopy_end
-	.quad _C_LABEL(kcopy_fault)
-
-	.quad .Lcopyoutstr_start
-	.quad .Lcopyoutstr_end
-	.quad _C_LABEL(copystr_fault)
-
-	.quad .Lcopyinstr_start
-	.quad .Lcopyinstr_end
-	.quad _C_LABEL(copystr_fault)
-
-	.quad .Lucas64_start
-	.quad .Lucas64_end
-	.quad _C_LABEL(ucas_fault)
-
-	.quad .Lucas32_start
-	.quad .Lucas32_end
-	.quad _C_LABEL(ucas_fault)
-
-	.quad 0	/* terminate */
-
-	.text

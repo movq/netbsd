@@ -1,4 +1,4 @@
-.\" $NetBSD: pkg_add.1,v 1.1.1.12 2011/02/18 22:32:28 aymeric Exp $
+.\" $NetBSD: pkg_add.1,v 1.1.1.1.6.3 2010/02/03 00:38:21 snj Exp $
 .\"
 .\" FreeBSD install - a package for the installation and maintenance
 .\" of non-core utilities.
@@ -17,7 +17,7 @@
 .\"
 .\"     @(#)pkg_add.1
 .\"
-.Dd June 16, 2010
+.Dd January 30, 2010
 .Dt PKG_ADD 1
 .Os
 .Sh NAME
@@ -26,7 +26,6 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl AfILnRUuVv
-.Op Fl C Ar config
 .Op Fl K Ar pkg_dbdir
 .Op Fl m Ar machine
 .Op Fl P Ar destdir
@@ -117,10 +116,6 @@ a package without specifying
 .Fl A
 after it had already been automatically installed, the mark is
 removed.
-.It Fl C Ar config
-Read the configuration file from
-.Ar config
-instead of the system default.
 .It Fl f
 Force installation to proceed even if prerequisite packages are not
 installed or the install script fails.
@@ -130,11 +125,6 @@ will still try to find and auto-install missing prerequisite packages,
 a failure to find one will not be fatal.
 This flag also overrides the fatal error when the operating system or
 architecture the package was built on differ from that of the host.
-.It Fl D
-Force updating even if the dependencies of depending packages are not
-satisfied by the new package.
-This is used by "make replace", after which one would typically
-replace the depending packages.
 .It Fl I
 If an installation script exists for a given package, do not execute it.
 .It Fl K Ar pkg_dbdir
@@ -172,8 +162,8 @@ Implies
 .It Fl u
 If the package that's being installed is already installed,
 an update is performed.
-Installed dependent packages are updated recursively, if they are too
-old to fulfill the dependencies of the to-be-installed version.
+If this is specified twice, then any dependent packages that are
+too old will also be updated to fulfill the dependency.
 See below for a more detailed description of the process.
 .It Fl V
 Print version number and exit.
@@ -234,21 +224,15 @@ is already recorded as installed.
 If it is,
 installation is terminated if the
 .Fl u
-or
-.Fl U
-options are not given.
+option is not given.
 .Pp
-If the same version is installed and
-.Fl U
-is not given, it is marked as manually installed and process stops.
 If the
 .Fl u
 option is given, it's assumed the package should be replaced by the
 new version instead.
 Before doing so, all packages that depend on the
 pkg being upgraded are checked if they also work with the new version.
-If that test is not successful, the dependent packages are updated first.
-The replacing is then prepared by moving an existing
+If that test is successful, replacing is prepared by moving an existing
 .Pa +REQUIRED_BY
 file aside (if it exists), and running
 .Xr pkg_delete 1
@@ -298,6 +282,14 @@ If any of these required packages are not currently installed,
 an attempt is made to find and install it;
 if the missing package cannot be found or installed,
 the installation is terminated.
+If the
+.Fl u
+option was specified twice, any required packages that are installed,
+but which have a version number that is considered to be too old,
+are also updated.
+The dependent packages are found according to the normal
+.Ev PKG_PATH
+rules.
 .It
 If the package contains an
 .Ar install

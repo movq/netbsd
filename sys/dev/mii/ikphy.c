@@ -1,4 +1,4 @@
-/*	$NetBSD: ikphy.c,v 1.9 2009/10/19 18:41:14 bouyer Exp $	*/
+/*	$NetBSD: ikphy.c,v 1.7 2008/05/04 17:06:09 xtraeme Exp $	*/
 
 /*******************************************************************************
 Copyright (c) 2001-2005, Intel Corporation 
@@ -41,6 +41,11 @@ POSSIBILITY OF SUCH DAMAGE.
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -59,7 +64,7 @@ POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ikphy.c,v 1.9 2009/10/19 18:41:14 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ikphy.c,v 1.7 2008/05/04 17:06:09 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -143,6 +148,9 @@ ikphyattach(device_t parent, device_t self, void *aux)
 	else
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, mii_phy_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int

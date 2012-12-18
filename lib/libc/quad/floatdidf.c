@@ -1,4 +1,4 @@
-/*	$NetBSD: floatdidf.c,v 1.9 2012/08/05 04:28:58 matt Exp $	*/
+/*	$NetBSD: floatdidf.c,v 1.6 2003/08/07 16:43:16 agc Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -38,13 +38,9 @@
 #if 0
 static char sccsid[] = "@(#)floatdidf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: floatdidf.c,v 1.9 2012/08/05 04:28:58 matt Exp $");
+__RCSID("$NetBSD: floatdidf.c,v 1.6 2003/08/07 16:43:16 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
-
-#ifdef SOFTFLOAT
-#include "softfloat/softfloat-for-gcc.h"
-#endif
 
 #include "quad.h"
 
@@ -52,7 +48,8 @@ __RCSID("$NetBSD: floatdidf.c,v 1.9 2012/08/05 04:28:58 matt Exp $");
  * Convert (signed) quad to double.
  */
 double
-__floatdidf(quad_t x)
+__floatdidf(x)
+	quad_t x;
 {
 	double d;
 	union uu u;
@@ -73,7 +70,7 @@ __floatdidf(quad_t x)
 	 * code and does not know how to get at an exponent.  Machine-
 	 * specific code may be able to do this more efficiently.
 	 */
-	d = (double)u.ul[H] * (((int)1 << (unsigned int)(INT_BITS - 2)) * 4.0);
+	d = (double)u.ul[H] * (((int)1 << (INT_BITS - 2)) * 4.0);
 	d += u.ul[L];
 
 	return (neg ? -d : d);

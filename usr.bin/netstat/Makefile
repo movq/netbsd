@@ -1,31 +1,20 @@
-#	$NetBSD: Makefile,v 1.38 2012/03/22 20:34:43 drochner Exp $
+#	$NetBSD: Makefile,v 1.28 2007/05/28 12:06:29 tls Exp $
 #	from: @(#)Makefile	8.1 (Berkeley) 6/12/93
 
 .include <bsd.own.mk>
 
 USE_FORT?= yes	# setgid
 
-RUMPPRG=netstat
-SRCS=	atalk.c bpf.c fast_ipsec.c if.c inet.c inet6.c iso.c \
-	main.c mbuf.c mroute.c mroute6.c pfkey.c pfsync.c show.c route.c \
-	tp_astring.c unix.c vtw.c
-.PATH:	${NETBSDSRCDIR}/sys/netiso 
+PROG=	netstat
+SRCS=	atalk.c bpf.c fast_ipsec.c if.c inet.c inet6.c ipsec.c iso.c \
+	main.c mbuf.c mroute.c mroute6.c show.c route.c tp_astring.c \
+	unix.c
+.PATH:	${NETBSDSRCDIR}/sys/netiso
 BINGRP=	kmem
 BINMODE=2555
 LDADD=	-lkvm
 DPADD=	${LIBKVM}
 CPPFLAGS+= -DIPSEC
-CPPFLAGS+= -I${NETBSDSRCDIR}/sys/dist/pf
-
-CWARNFLAGS.clang+=	-Wno-format
-COPTS.iso.c += -Wno-format-nonliteral
-COPTS.show.c += -Wno-format-nonliteral
-
-.PATH:  ${.CURDIR}/../../lib/libc/gen
-.PATH:  ${.CURDIR}/../../lib/libc/net
-CPPFLAGS+= -DRUMP_ACTION
-RUMPSRCS+= sysctlbyname.c sysctlgetmibinfo.c sysctlnametomib.c
-RUMPSRCS+= if_indextoname.c getifaddrs.c
 
 .if (${USE_INET6} != "no")
 CPPFLAGS+= -DINET6

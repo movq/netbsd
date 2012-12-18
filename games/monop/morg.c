@@ -1,4 +1,4 @@
-/*	$NetBSD: morg.c,v 1.19 2012/06/19 05:35:32 dholland Exp $	*/
+/*	$NetBSD: morg.c,v 1.18 2008/02/24 06:07:06 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)morg.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: morg.c,v 1.19 2012/06/19 05:35:32 dholland Exp $");
+__RCSID("$NetBSD: morg.c,v 1.18 2008/02/24 06:07:06 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -80,7 +80,7 @@ static void unm(int);
  * be mortgaged.
  */
 void
-mortgage(void)
+mortgage()
 {
 	int propnum;
 
@@ -114,7 +114,7 @@ mortgage(void)
  *	This routine sets up the list of mortgageable property
  */
 static int
-set_mlist(void)
+set_mlist()
 {
 	OWN *op;
 
@@ -137,7 +137,8 @@ set_mlist(void)
  *	This routine actually mortgages the property.
  */
 static void
-m(int propnum)
+m(propnum)
+	int propnum;
 {
 	int price;
 
@@ -153,7 +154,7 @@ m(int propnum)
  * to be unmortgaged.
  */
 void
-unmortgage(void)
+unmortgage()
 {
 	int propnum;
 
@@ -181,7 +182,7 @@ unmortgage(void)
  *	This routine sets up the list of mortgaged property
  */
 static int
-set_umlist(void)
+set_umlist()
 {
 	OWN *op;
 

@@ -1,7 +1,7 @@
-#	$NetBSD: Makefile,v 1.2 2010/10/05 14:16:19 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.1 2007/03/06 21:56:56 bouyer Exp $
 CDBASE=		catscd			# gives ${CDBASE}.iso
 CDRELEASE=	true			# include $RELEASEDIR/$MACHINE
-CDKERNELS=	netbsd-INSTALL.aout netbsd
+CDKERNELS=	netbsd.aout-INSTALL netbsd
 CDINSTKERNEL=	../../instkernel
 
 .include "${.CURDIR}/../../../common/Makefile.bootcd"

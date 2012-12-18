@@ -1,6 +1,7 @@
-/*	$NetBSD: xyvar.h,v 1.14 2012/10/27 17:18:39 chs Exp $	*/
+/*	$NetBSD: xyvar.h,v 1.12 2006/08/27 19:18:08 christos Exp $	*/
 
 /*
+ *
  * Copyright (c) 1995 Charles D. Cranor
  * All rights reserved.
  *
@@ -12,6 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +37,7 @@
  * this file defines the software structure we use to control the
  * 450/451.
  *
- * author: Chuck Cranor <chuck@netbsd>
+ * author: Chuck Cranor <chuck@ccrc.wustl.edu>
  */
 
 #include <sys/callout.h>
@@ -92,7 +98,7 @@ struct xy_iorq {
  * a "xy_softc" structure contains per-disk state info.
  */
 struct xy_softc {
-	device_t sc_dev;	/* device struct, reqd by autoconf */
+	struct device sc_dev;	/* device struct, reqd by autoconf */
 	struct disk sc_dk;	/* generic disk info */
 	struct xyc_softc *parent;/* parent */
 	u_short flags;		/* flags */
@@ -131,7 +137,7 @@ struct xy_softc {
  */
 
 struct xyc_softc {
-	device_t sc_dev;		/* device struct, reqd by autoconf */
+	struct device sc_dev;		/* device struct, reqd by autoconf */
 	struct evcnt sc_intrcnt;	/* event counter (for vmstat -i) */
 
 	struct callout sc_tick_ch;

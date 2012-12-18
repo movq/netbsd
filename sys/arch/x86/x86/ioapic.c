@@ -1,11 +1,11 @@
-/* 	$NetBSD: ioapic.c,v 1.47 2012/01/30 17:45:37 jakllsch Exp $	*/
+/* 	$NetBSD: ioapic.c,v 1.38.6.2 2012/04/21 16:00:47 riz Exp $	*/
 
 /*-
- * Copyright (c) 2000, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by RedBack Networks Inc, and by Andrew Doran.
+ * by RedBack Networks Inc.
  *
  * Author: Bill Sommerfeld
  *
@@ -30,6 +30,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 
 /*
  * Copyright (c) 1999 Stefan Grefen
@@ -64,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ioapic.c,v 1.47 2012/01/30 17:45:37 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioapic.c,v 1.38.6.2 2012/04/21 16:00:47 riz Exp $");
 
 #include "opt_ddb.h"
 
@@ -88,11 +89,11 @@ __KERNEL_RCSID(0, "$NetBSD: ioapic.c,v 1.47 2012/01/30 17:45:37 jakllsch Exp $")
 #include <machine/pmap.h>
 #include <machine/lock.h>
 
-#include "acpica.h"
+#include "acpi.h"
 #include "opt_mpbios.h"
 #include "opt_acpi.h"
 
-#if !defined(MPBIOS) && NACPICA == 0
+#if !defined(MPBIOS) && NACPI == 0
 #error "ioapic needs at least one of the MPBIOS or ACPI options"
 #endif
 
@@ -100,15 +101,14 @@ __KERNEL_RCSID(0, "$NetBSD: ioapic.c,v 1.47 2012/01/30 17:45:37 jakllsch Exp $")
  * XXX locking
  */
 
-int     ioapic_match(device_t, cfdata_t, void *);
-void    ioapic_attach(device_t, device_t, void *);
+int     ioapic_match(struct device *, struct cfdata *, void *);
+void    ioapic_attach(struct device *, struct device *, void *);
 
 extern int x86_mem_add_mapping(bus_addr_t, bus_size_t,
     int, bus_space_handle_t *); /* XXX XXX */
 
 void ioapic_hwmask(struct pic *, int);
 void ioapic_hwunmask(struct pic *, int);
-bool ioapic_trymask(struct pic *, int);
 static void ioapic_addroute(struct pic *, struct cpu_info *, int, int, int);
 static void ioapic_delroute(struct pic *, struct cpu_info *, int, int, int);
 
@@ -249,7 +249,7 @@ CFATTACH_DECL_NEW(ioapic, sizeof(struct ioapic_softc),
     ioapic_match, ioapic_attach, NULL, NULL);
 
 int
-ioapic_match(device_t parent, cfdata_t match, void *aux)
+ioapic_match(struct device *parent, struct cfdata *match, void *aux)
 {
 
 	return 1;
@@ -259,7 +259,7 @@ ioapic_match(device_t parent, cfdata_t match, void *aux)
  * can't use bus_space_xxx as we don't have a bus handle ...
  */
 void 
-ioapic_attach(device_t parent, device_t self, void *aux)
+ioapic_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ioapic_softc *sc = device_private(self);  
 	struct apic_attach_args *aaa = (struct apic_attach_args *)aux;
@@ -279,6 +279,8 @@ ioapic_attach(device_t parent, device_t self, void *aux)
 		aprint_error(": duplicate apic id (ignored)\n");
 		return;
 	}
+
+	ioapic_add(sc);
 
 	aprint_verbose(": pa 0x%jx", (uintmax_t)aaa->apic_address);
 #ifndef _IOAPIC_CUSTOM_RW
@@ -301,20 +303,12 @@ ioapic_attach(device_t parent, device_t self, void *aux)
 	sc->sc_pic.pic_hwunmask = ioapic_hwunmask;
 	sc->sc_pic.pic_addroute = ioapic_addroute;
 	sc->sc_pic.pic_delroute = ioapic_delroute;
-	sc->sc_pic.pic_trymask = ioapic_trymask;
 	sc->sc_pic.pic_edge_stubs = ioapic_edge_stubs;
 	sc->sc_pic.pic_level_stubs = ioapic_level_stubs;
 
 	apic_id = (ioapic_read(sc,IOAPIC_ID)&IOAPIC_ID_MASK)>>IOAPIC_ID_SHIFT;
 	ver_sz = ioapic_read(sc, IOAPIC_VER);
-
-	if (ver_sz == 0xffffffff) {
-		aprint_error(": failed to read version/size\n");
-		goto out;
-	}
-
-	ioapic_add(sc);
-
+	
 	sc->sc_apic_vers = (ver_sz & IOAPIC_VER_MASK) >> IOAPIC_VER_SHIFT;
 	sc->sc_apic_sz = (ver_sz & IOAPIC_MAX_MASK) >> IOAPIC_MAX_SHIFT;
 	sc->sc_apic_sz++;
@@ -361,9 +355,9 @@ ioapic_attach(device_t parent, device_t self, void *aux)
 		 */  
 		if (i >= 16)
 			redlo |= IOAPIC_REDLO_LEVEL | IOAPIC_REDLO_ACTLO;
+		ioapic_write(sc, IOAPIC_REDLO(i), redlo);
 		redhi = (cpu_info_primary.ci_cpuid << IOAPIC_REDHI_DEST_SHIFT);
 		ioapic_write(sc, IOAPIC_REDHI(i), redhi);
-		ioapic_write(sc, IOAPIC_REDLO(i), redlo);
 	}
 	
 	/*
@@ -391,7 +385,6 @@ ioapic_attach(device_t parent, device_t self, void *aux)
 		}
 	}
 
- out:
 	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
@@ -410,36 +403,47 @@ apic_set_redir(struct ioapic_softc *sc, int pin, int idt_vec,
 	uint32_t redlo;
 	uint32_t redhi;
 	int delmode;
+
 	struct ioapic_pin *pp;
 	struct mp_intr_map *map;
 	
 	pp = &sc->sc_pins[pin];
 	map = pp->ip_map;
 	redlo = map == NULL ? IOAPIC_REDLO_MASK : map->redir;
-	redhi = 0;
 	delmode = (redlo & IOAPIC_REDLO_DEL_MASK) >> IOAPIC_REDLO_DEL_SHIFT;
 
-	if (delmode == IOAPIC_REDLO_DEL_FIXED ||
-	    delmode == IOAPIC_REDLO_DEL_LOPRI) {
-	    	if (pp->ip_type == IST_NONE) {
-			redlo |= IOAPIC_REDLO_MASK;
-		} else {
-			redhi = (ci->ci_cpuid << IOAPIC_REDHI_DEST_SHIFT);
-			redlo |= (idt_vec & 0xff);
-			redlo |= (IOAPIC_REDLO_DEL_FIXED<<IOAPIC_REDLO_DEL_SHIFT);
-			redlo &= ~IOAPIC_REDLO_DSTMOD;
+	/* XXX magic numbers */
+	if ((delmode != 0) && (delmode != 1))
+		redhi = 0;
+	else if (pp->ip_type == IST_NONE) {
+		redlo |= IOAPIC_REDLO_MASK;
+		redhi = 0;
+	} else {
+		redlo |= (idt_vec & 0xff);
+		redlo |= (IOAPIC_REDLO_DEL_FIXED<<IOAPIC_REDLO_DEL_SHIFT);
+		redlo &= ~IOAPIC_REDLO_DSTMOD;
+		
+		/*
+		 * Destination: BSP CPU
+		 *
+		 * XXX will want to distribute interrupts across CPUs
+		 * eventually.  most likely, we'll want to vector each
+		 * interrupt to a specific CPU and load-balance across
+		 * CPUs.  but there's no point in doing that until after 
+		 * most interrupts run without the kernel lock.  
+		 */
+		redhi = (ci->ci_cpuid << IOAPIC_REDHI_DEST_SHIFT);
 
-			/* XXX derive this bit from BIOS info */
+		/* XXX derive this bit from BIOS info */
+		if (pp->ip_type == IST_LEVEL)
+			redlo |= IOAPIC_REDLO_LEVEL;
+		else
+			redlo &= ~IOAPIC_REDLO_LEVEL;
+		if (map != NULL && ((map->flags & 3) == MPS_INTPO_DEF)) {
 			if (pp->ip_type == IST_LEVEL)
-				redlo |= IOAPIC_REDLO_LEVEL;
+				redlo |= IOAPIC_REDLO_ACTLO;
 			else
-				redlo &= ~IOAPIC_REDLO_LEVEL;
-			if (map != NULL && ((map->flags & 3) == MPS_INTPO_DEF)) {
-				if (pp->ip_type == IST_LEVEL)
-					redlo |= IOAPIC_REDLO_ACTLO;
-				else
-					redlo &= ~IOAPIC_REDLO_ACTLO;
-			}
+				redlo &= ~IOAPIC_REDLO_ACTLO;
 		}
 	}
 	ioapic_write(sc, IOAPIC_REDHI(pin), redhi);
@@ -508,33 +512,6 @@ ioapic_hwmask(struct pic *pic, int pin)
 	redlo |= IOAPIC_REDLO_MASK;
 	ioapic_write_ul(sc, IOAPIC_REDLO(pin), redlo);
 	ioapic_unlock(sc, flags);
-}
-
-bool
-ioapic_trymask(struct pic *pic, int pin)
-{
-	uint32_t redlo;
-	struct ioapic_softc *sc = pic->pic_ioapic;
-	u_long flags;
-	bool rv;
-
-	/* Mask it. */
-	flags = ioapic_lock(sc);
-	redlo = ioapic_read_ul(sc, IOAPIC_REDLO(pin));
-	redlo |= IOAPIC_REDLO_MASK;
-	ioapic_write_ul(sc, IOAPIC_REDLO(pin), redlo);
-
-	/* If pending, unmask and abort. */
-	redlo = ioapic_read_ul(sc, IOAPIC_REDLO(pin));
-	if ((redlo & (IOAPIC_REDLO_RIRR|IOAPIC_REDLO_DELSTS)) != 0) {
-		redlo &= ~IOAPIC_REDLO_MASK;
-		ioapic_write_ul(sc, IOAPIC_REDLO(pin), redlo);
-		rv = false;
-	} else {
-		rv = true;
-	}
-	ioapic_unlock(sc, flags);
-	return rv;
 }
 
 void

@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_nfs.c,v 1.69 2011/08/29 14:35:02 joerg Exp $	*/
+/*	$NetBSD: mount_nfs.c,v 1.64 2008/10/16 09:12:54 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)mount_nfs.c	8.11 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: mount_nfs.c,v 1.69 2011/08/29 14:35:02 joerg Exp $");
+__RCSID("$NetBSD: mount_nfs.c,v 1.64 2008/10/16 09:12:54 pooka Exp $");
 #endif
 #endif /* not lint */
 
@@ -115,7 +115,7 @@ static const struct mntopt mopts[] = {
 	{ "nfsv3", 0, ALTF_NFSV3, 1 },
 	{ "rdirplus", 0, ALTF_RDIRPLUS, 1 },
 	{ "mntudp", 0, ALTF_MNTUDP, 1 },
-	{ "resport", 1, ALTF_NORESPORT, 1 },
+	{ "noresport", 0, ALTF_NORESPORT, 1 },
 #ifdef ISO
 	{ "seqpacket", 0, ALTF_SEQPACKET, 1 },
 #endif
@@ -137,24 +137,24 @@ static const struct mntopt mopts[] = {
 };
 
 struct nfs_args nfsdefargs = {
-	.version = NFS_ARGSVERSION,
-	.addr = NULL,
-	.addrlen = sizeof(struct sockaddr_in),
-	.sotype = SOCK_DGRAM,
-	.proto = 0,
-	.fh = NULL,
-	.fhsize = 0,
-	.flags = NFSMNT_NFSV3|NFSMNT_NOCONN|NFSMNT_RESVPORT,
-	.wsize = NFS_WSIZE,
-	.rsize = NFS_RSIZE,
-	.readdirsize = NFS_READDIRSIZE,
-	.timeo = 10,
-	.retrans = NFS_RETRANS,
-	.maxgrouplist = NFS_MAXGRPS,
-	.readahead = NFS_DEFRAHEAD,
-	.leaseterm = 0,	/* Ignored; lease term */
-	.deadthresh = NFS_DEFDEADTHRESH,
-	.hostname = NULL,
+	NFS_ARGSVERSION,
+	(struct sockaddr *)0,
+	sizeof (struct sockaddr_in),
+	SOCK_DGRAM,
+	0,
+	(u_char *)0,
+	0,
+	NFSMNT_NFSV3|NFSMNT_NOCONN|NFSMNT_RESVPORT,
+	NFS_WSIZE,
+	NFS_RSIZE,
+	NFS_READDIRSIZE,
+	10,
+	NFS_RETRANS,
+	NFS_MAXGRPS,
+	NFS_DEFRAHEAD,
+	0,	/* Ignored; lease term */
+	NFS_DEFDEADTHRESH,
+	(char *)0,
 };
 
 #define DEF_RETRY 10000
@@ -172,7 +172,7 @@ static struct	iso_addr *iso_addr(const char *);
 #endif
 int	mount_nfs(int argc, char **argv);
 /* void	set_rpc_maxgrouplist(int); */
-__dead static void	usage(void);
+static void	usage(void);
 
 #ifndef MOUNT_NOMAIN
 int
@@ -187,7 +187,7 @@ main(int argc, char **argv)
 void
 mount_nfs_dogetargs(struct nfs_args *nfsargsp, int mntflags, const char *spec)
 {
-	static struct sockaddr_storage sa;
+	struct sockaddr_storage sa;
 	char *tspec;
 
 	if ((mntflags & MNT_GETARGS) != 0) {
@@ -527,7 +527,7 @@ shownfsargs(const struct nfs_args *nfsargsp)
 static void
 usage(void)
 {
-	(void)fprintf(stderr, "usage: %s %s\n%s\n%s\n%s\n%s\n", getprogname(),
+	(void)fprintf(stderr, "usage: mount_nfs %s\n%s\n%s\n%s\n%s\n",
 "[-23bCcdilPpqsTUX] [-a maxreadahead] [-D deadthresh]",
 "\t[-g maxgroups] [-I readdirsize] [-L leaseterm]",
 "\t[-o options] [-R retrycnt] [-r readsize] [-t timeout]",

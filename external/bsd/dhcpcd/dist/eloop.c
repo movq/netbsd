@@ -1,6 +1,6 @@
 /* 
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2010 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2008 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,6 @@ static struct timeout {
 	struct timeval when;
 	void (*callback)(void *);
 	void *arg;
-	int queue;
 	struct timeout *next;
 } *timeouts;
 static struct timeout *free_timeouts;
@@ -110,8 +109,7 @@ delete_event(int fd)
 }
 
 void
-add_q_timeout_tv(int queue,
-    const struct timeval *when, void (*callback)(void *), void *arg)
+add_timeout_tv(const struct timeval *when, void (*callback)(void *), void *arg)
 {
 	struct timeval w;
 	struct timeout *t, *tt = NULL;
@@ -149,7 +147,6 @@ add_q_timeout_tv(int queue,
 	t->when.tv_usec = w.tv_usec;
 	t->callback = callback;
 	t->arg = arg;
-	t->queue = queue;
 
 	/* The timeout list should be in chronological order,
 	 * soonest first.
@@ -171,30 +168,28 @@ add_q_timeout_tv(int queue,
 }
 
 void
-add_q_timeout_sec(int queue, time_t when, void (*callback)(void *), void *arg)
+add_timeout_sec(time_t when, void (*callback)(void *), void *arg)
 {
 	struct timeval tv;
 
 	tv.tv_sec = when;
 	tv.tv_usec = 0;
-	add_q_timeout_tv(queue, &tv, callback, arg);
+	add_timeout_tv(&tv, callback, arg);
 }
 
 /* This deletes all timeouts for the interface EXCEPT for ones with the
  * callbacks given. Handy for deleting everything apart from the expire
  * timeout. */
-static void
-v_delete_q_timeouts(int queue, void *arg, void (*callback)(void *), va_list v)
+void
+delete_timeouts(void *arg, void (*callback)(void *), ...)
 {
 	struct timeout *t, *tt, *last = NULL;
 	va_list va;
 	void (*f)(void *);
 
 	for (t = timeouts; t && (tt = t->next, 1); t = tt) {
-		if (t->queue == queue && t->arg == arg &&
-		    t->callback != callback)
-		{
-			va_copy(va, v);
+		if (t->arg == arg && t->callback != callback) {
+			va_start(va, callback);
 			while ((f = va_arg(va, void (*)(void *))))
 				if (f == t->callback)
 					break;
@@ -214,22 +209,12 @@ v_delete_q_timeouts(int queue, void *arg, void (*callback)(void *), va_list v)
 }
 
 void
-delete_q_timeouts(int queue, void *arg, void (*callback)(void *), ...)
-{
-	va_list va;
-
-	va_start(va, callback);
-	v_delete_q_timeouts(queue, arg, callback, va);
-	va_end(va);
-}
-
-void
-delete_q_timeout(int queue, void (*callback)(void *), void *arg)
+delete_timeout(void (*callback)(void *), void *arg)
 {
 	struct timeout *t, *tt, *last = NULL;
 
 	for (t = timeouts; t && (tt = t->next, 1); t = tt) {
-		if (t->queue == queue && t->arg == arg &&
+		if (t->arg == arg &&
 		    (!callback || t->callback == callback))
 		{
 			if (last)
@@ -276,13 +261,6 @@ cleanup(void)
 	}
 	free(fds);
 }
-
-void
-eloop_init(void)
-{
-
-	atexit(cleanup);
-}
 #endif
 
 _noreturn void
@@ -293,6 +271,10 @@ start_eloop(void)
 	struct event *e;
 	struct timeout *t;
 	struct timeval tv;
+
+#ifdef DEBUG_MEMORY
+	atexit(cleanup);
+#endif
 
 	for (;;) {
 		/* Run all timeouts first.

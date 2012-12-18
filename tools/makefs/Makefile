@@ -1,9 +1,9 @@
-#	$NetBSD: Makefile,v 1.9 2011/03/07 13:28:06 he Exp $
+#	$NetBSD: Makefile,v 1.7 2003/05/14 00:30:27 dbj Exp $
 
 HOSTPROGNAME=	${_TOOL_PREFIX}makefs
 HOST_SRCDIR=	usr.sbin/makefs
 
-HOST_CPPFLAGS+=	-I. -I${TOOLDIR}/include/nbinclude
+HOST_CPPFLAGS+=	-I.
 
-.include "${.CURDIR}/../Makefile.nbincludes"
 .include "${.CURDIR}/../Makefile.host"
+

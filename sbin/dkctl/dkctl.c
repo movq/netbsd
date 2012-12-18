@@ -1,4 +1,4 @@
-/*	$NetBSD: dkctl.c,v 1.20 2011/08/27 16:34:38 joerg Exp $	*/
+/*	$NetBSD: dkctl.c,v 1.16.28.1 2009/08/14 20:55:29 snj Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -41,7 +41,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: dkctl.c,v 1.20 2011/08/27 16:34:38 joerg Exp $");
+__RCSID("$NetBSD: dkctl.c,v 1.16.28.1 2009/08/14 20:55:29 snj Exp $");
 #endif
 
 
@@ -78,32 +78,29 @@ struct command {
 	int open_flags;
 };
 
-static struct command *lookup(const char *);
-__dead static void	usage(void);
-static void	run(int, char *[]);
-static void	showall(void);
+void	usage(void);
 
-static int	fd;				/* file descriptor for device */
-static const	char *dvname;			/* device name */
-static char	dvname_store[MAXPATHLEN];	/* for opendisk(3) */
-static const	char *cmdname;			/* command user issued */
+int	fd;				/* file descriptor for device */
+const	char *dvname;			/* device name */
+char	dvname_store[MAXPATHLEN];	/* for opendisk(3) */
+const	char *cmdname;			/* command user issued */
+const	char *argnames;			/* helpstring; expected arguments */
 
-static int dkw_sort(const void *, const void *);
-static int yesno(const char *);
+int yesno(const char *);
 
-static void	disk_getcache(int, char *[]);
-static void	disk_setcache(int, char *[]);
-static void	disk_synccache(int, char *[]);
-static void	disk_keeplabel(int, char *[]);
-static void	disk_badsectors(int, char *[]);
+void	disk_getcache(int, char *[]);
+void	disk_setcache(int, char *[]);
+void	disk_synccache(int, char *[]);
+void	disk_keeplabel(int, char *[]);
+void	disk_badsectors(int, char *[]);
 
-static void	disk_addwedge(int, char *[]);
-static void	disk_delwedge(int, char *[]);
-static void	disk_getwedgeinfo(int, char *[]);
-static void	disk_listwedges(int, char *[]);
-static void	disk_strategy(int, char *[]);
+void	disk_addwedge(int, char *[]);
+void	disk_delwedge(int, char *[]);
+void	disk_getwedgeinfo(int, char *[]);
+void	disk_listwedges(int, char *[]);
+void	disk_strategy(int, char *[]);
 
-static struct command commands[] = {
+struct command commands[] = {
 	{ "getcache",
 	  "",
 	  disk_getcache,
@@ -163,69 +160,46 @@ static struct command commands[] = {
 int
 main(int argc, char *argv[])
 {
+	int i;
 
 	/* Must have at least: device command */
-	if (argc < 2)
+	if (argc < 3)
 		usage();
 
+	/* Skip program name, get and skip device name and command. */
 	dvname = argv[1];
-	if (argc == 2)
-		showall();
-	else {
-		/* Skip program name, get and skip device name and command. */
-		cmdname = argv[2];
-		argv += 3;
-		argc -= 3;
-		run(argc, argv);
-	}
+	cmdname = argv[2];
+	argv += 3;
+	argc -= 3;
 
-	exit(0);
-}
+	/* Look up and call the command. */
+	for (i = 0; commands[i].cmd_name != NULL; i++)
+		if (strcmp(cmdname, commands[i].cmd_name) == 0)
+			break;
+	if (commands[i].cmd_name == NULL)
+		errx(1, "unknown command: %s", cmdname);
 
-static void
-run(int argc, char *argv[])
-{
-	struct command *command;
-
-	command = lookup(cmdname);
+	argnames = commands[i].arg_names;
 
 	/* Open the device. */
-	fd = opendisk(dvname, command->open_flags, dvname_store,
+	fd = opendisk(dvname, commands[i].open_flags, dvname_store,
 	    sizeof(dvname_store), 0);
 	if (fd == -1)
 		err(1, "%s", dvname);
+
 	dvname = dvname_store;
 
-	(*command->cmd_func)(argc, argv);
-
-	/* Close the device. */
-	(void)close(fd);
+	(*commands[i].cmd_func)(argc, argv);
+	exit(0);
 }
 
-static struct command *
-lookup(const char *name)
-{
-	int i;
-
-	/* Look up the command. */
-	for (i = 0; commands[i].cmd_name != NULL; i++)
-		if (strcmp(name, commands[i].cmd_name) == 0)
-			break;
-	if (commands[i].cmd_name == NULL)
-		errx(1, "unknown command: %s", name);
-
-	return &commands[i];
-}
-
-static void
+void
 usage(void)
 {
 	int i;
 
-	fprintf(stderr,
-	    "usage: %s device\n"
-	    "       %s device command [arg [...]]\n",
-	    getprogname(), getprogname());
+	fprintf(stderr, "usage: %s device command [arg [...]]\n",
+	    getprogname());
 
 	fprintf(stderr, "   Available commands:\n");
 	for (i = 0; commands[i].cmd_name != NULL; i++)
@@ -235,27 +209,7 @@ usage(void)
 	exit(1);
 }
 
-static void
-showall(void)
-{
-	printf("strategy:\n");
-	cmdname = "strategy";
-	run(0, NULL);
-
-	putchar('\n');
-
-	printf("cache:\n");
-	cmdname = "getcache";
-	run(0, NULL);
-
-	putchar('\n');
-
-	printf("wedges:\n");
-	cmdname = "listwedges";
-	run(0, NULL);
-}
-
-static void
+void
 disk_strategy(int argc, char *argv[])
 {
 	struct disk_strategy odks;
@@ -286,7 +240,7 @@ disk_strategy(int argc, char *argv[])
 	}
 }
 
-static void
+void
 disk_getcache(int argc, char *argv[])
 {
 	int bits;
@@ -312,7 +266,7 @@ disk_getcache(int argc, char *argv[])
 	    (bits & DKCACHE_SAVE) ? "" : "not ");
 }
 
-static void
+void
 disk_setcache(int argc, char *argv[])
 {
 	int bits;
@@ -342,7 +296,7 @@ disk_setcache(int argc, char *argv[])
 		err(1, "%s: setcache", dvname);
 }
 
-static void
+void
 disk_synccache(int argc, char *argv[])
 {
 	int force;
@@ -367,7 +321,7 @@ disk_synccache(int argc, char *argv[])
 		err(1, "%s: sync cache", dvname);
 }
 
-static void
+void
 disk_keeplabel(int argc, char *argv[])
 {
 	int keep;
@@ -387,7 +341,7 @@ disk_keeplabel(int argc, char *argv[])
 }
 
 
-static void
+void
 disk_badsectors(int argc, char *argv[])
 {
 	struct disk_badsectors *dbs, *dbs2, buffer[200];
@@ -535,7 +489,7 @@ disk_badsectors(int argc, char *argv[])
 	}
 }
 
-static void
+void
 disk_addwedge(int argc, char *argv[])
 {
 	struct dkwedge_info dkw;
@@ -546,8 +500,8 @@ disk_addwedge(int argc, char *argv[])
 	if (argc != 4)
 		usage();
 
-	/* XXX Unicode: dkw_wname is supposed to be utf-8 */
-	if (strlcpy((char *)dkw.dkw_wname, argv[0], sizeof(dkw.dkw_wname)) >=
+	/* XXX Unicode. */
+	if (strlcpy(dkw.dkw_wname, argv[0], sizeof(dkw.dkw_wname)) >=
 	    sizeof(dkw.dkw_wname))
 		errx(1, "Wedge name too long; max %zd characters",
 		    sizeof(dkw.dkw_wname) - 1);
@@ -584,7 +538,7 @@ disk_addwedge(int argc, char *argv[])
 
 }
 
-static void
+void
 disk_delwedge(int argc, char *argv[])
 {
 	struct dkwedge_info dkw;
@@ -601,7 +555,7 @@ disk_delwedge(int argc, char *argv[])
 		err(1, "%s: delwedge", dvname);
 }
 
-static void
+void
 disk_getwedgeinfo(int argc, char *argv[])
 {
 	struct dkwedge_info dkw;
@@ -618,7 +572,7 @@ disk_getwedgeinfo(int argc, char *argv[])
 	    dkw.dkw_devname, dkw.dkw_size, dkw.dkw_offset, dkw.dkw_ptype);
 }
 
-static void
+void
 disk_listwedges(int argc, char *argv[])
 {
 	struct dkwedge_info *dkw;
@@ -654,8 +608,6 @@ disk_listwedges(int argc, char *argv[])
 		return;
 	}
 
-	qsort(dkw, dkwl.dkwl_nwedges, sizeof(*dkw), dkw_sort);
-
 	printf("%s: %u wedge%s:\n", dvname, dkwl.dkwl_nwedges,
 	    dkwl.dkwl_nwedges == 1 ? "" : "s");
 	for (i = 0; i < dkwl.dkwl_nwedges; i++) {
@@ -666,19 +618,10 @@ disk_listwedges(int argc, char *argv[])
 	}
 }
 
-static int
-dkw_sort(const void *a, const void *b)
-{
-	const struct dkwedge_info *dkwa = a, *dkwb = b;
-	const daddr_t oa = dkwa->dkw_offset, ob = dkwb->dkw_offset;
-
-	return (oa < ob) ? -1 : (oa > ob) ? 1 : 0;
-}
-
 /*
  * return YES, NO or -1.
  */
-static int
+int
 yesno(const char *p)
 {
 

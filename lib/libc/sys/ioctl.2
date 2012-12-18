@@ -1,4 +1,4 @@
-.\"	$NetBSD: ioctl.2,v 1.23 2010/12/19 22:19:27 wiz Exp $
+.\"	$NetBSD: ioctl.2,v 1.20.32.1 2010/11/21 02:27:39 riz Exp $
 .\"
 .\" Copyright (c) 1980, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)ioctl.2	8.2 (Berkeley) 12/11/93
 .\"
-.Dd December 19, 2010
+.Dd May 11, 2010
 .Dt IOCTL 2
 .Os
 .Sh NAME
@@ -40,7 +40,7 @@
 .Sh SYNOPSIS
 .In sys/ioctl.h
 .Ft int
-.Fn ioctl "int d" "unsigned long request" "..."
+.Fn ioctl "int d" "unsigned long request" "void *argp"
 .Sh DESCRIPTION
 The
 .Fn ioctl
@@ -54,26 +54,20 @@ The argument
 .Fa d
 must be an open file descriptor.
 .Pp
-An
-.Fn ioctl
+An  ioctl
 .Fa request
 has encoded in it whether the argument is an
-.Dq in ,
-.Dq out ,
+.Dq in
+parameter
 or
-.Dq inout
-parameter, and the size of the first variadic argument
+.Dq out
+parameter, and the size of the argument
+.Fa argp
 in bytes.
-Note that there can be only one variadic argument but cannot be represented as
-a
-.Ft "void *"
-argument in the prototype because this would require a cast to pass integral
-types without warnings.
-Macros and defines used in specifying an
-.Fn ioctl
+Macros and defines used in specifying an ioctl
 .Fa request
-are located in the header
-.In sys/ioctl.h .
+are located in the file
+.Ao Pa sys/ioctl.h Ac .
 .Sh GENERIC IOCTLS
 Some ioctls are applicable to any file descriptor.
 These include:
@@ -82,25 +76,11 @@ These include:
 Set close-on-exec flag.
 The file will be closed when
 .Xr exec 3
-is invoked
-(This is equivalent to
-.Fn fcntl
-.Dv F_SETFD
-.Dv FD_CLOEXEC
-and the
-.Fn fcntl
-form should be preferred).
+is invoked.
 .It Dv FIONCLEX
 Clear close-on-exec flag.
 The file will remain open across
-.Xr exec 3
-(This is equivalent to
-.Fn fcntl
-.Dv F_SETFD
-.Dv 0
-and the
-.Fn fcntl
-form should be preferred).
+.Xr exec 3 .
 .El
 .Pp
 Some generic ioctls are not implemented for all types of file
@@ -135,29 +115,13 @@ In non-blocking mode,
 .Xr read 2
 or
 .Xr write 2
-calls return
-.Dv \-1
-and set
+calls return \-1 and set
 .Va errno
 to
 .Er EAGAIN
-immediately when no data is available
-(This is equivalent to
-.Fn fcntl
-.Dv F_SETFL
-.Dv O_NONBLOCK
-and the
-.Fn fcntl
-form should be preferred).
+immediately when no data is available.
 .It Dv FIOASYNC "int"
-Set asynchronous I/O mode if the argument is non-zero
-(This is equivalent to
-.Fn fcntl
-.Dv F_SETFL
-.Dv O_ASYNC
-and the
-.Fn fcntl
-form should be preferred).
+Set asynchronous I/O mode if the argument is non-zero.
 In asynchronous mode, the process or process group specified by
 .Dv FIOSETOWN
 will start receiving
@@ -170,14 +134,7 @@ descriptor.
 .It Dv FIOSETOWN, FIOGETOWN "int"
 Set/get the process or the process group (if negative) that should receive
 .Dv SIGIO
-signals when data is available
-(This is equivalent to
-.Fn fcntl
-.Dv F_SETOWN
-.Ft pid_t
-and the
-.Ft fcntl
-form should be preferred).
+signals when data is available.
 .El
 .Sh RETURN VALUES
 If an error has occurred, a value of \-1 is returned and
@@ -190,22 +147,23 @@ will fail if:
 .It Bq Er EBADF
 .Fa d
 is not a valid descriptor.
-.It Bq Er EFAULT
-.Fa argp
-points outside the process's allocated address space.
+.It Bq Er ENOTTY
+.Fa d
+is not associated with a character
+special device.
+.It Bq Er ENOTTY
+The specified request does not apply to the kind
+of object that the descriptor
+.Fa d
+references.
 .It Bq Er EINVAL
 .Fa request
 or
 .Fa argp
 is not valid.
-.It Bq Er ENOTTY
-.Fa d
-is not associated with a character
-special device; or
-the specified request does not apply to the kind
-of object that the descriptor
-.Fa d
-references.
+.It Bq Er EFAULT
+.Fa argp
+points outside the process's allocated address space.
 .El
 .Sh SEE ALSO
 .Xr mt 1 ,

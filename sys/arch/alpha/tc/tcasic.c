@@ -1,21 +1,21 @@
-/* $NetBSD: tcasic.c,v 1.44 2012/02/06 02:14:16 matt Exp $ */
+/* $NetBSD: tcasic.c,v 1.40 2007/12/03 15:33:09 ad Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: tcasic.c,v 1.44 2012/02/06 02:14:16 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcasic.c,v 1.40 2007/12/03 15:33:09 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,29 +46,32 @@ __KERNEL_RCSID(0, "$NetBSD: tcasic.c,v 1.44 2012/02/06 02:14:16 matt Exp $");
 #include <alpha/tc/tc_conf.h>
 
 /* Definition of the driver for autoconfig. */
-int	tcasicmatch(device_t, cfdata_t, void *);
-void	tcasicattach(device_t, device_t, void *);
+int	tcasicmatch(struct device *, struct cfdata *, void *);
+void	tcasicattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(tcasic, 0,
+CFATTACH_DECL(tcasic, sizeof (struct device),
     tcasicmatch, tcasicattach, NULL, NULL);
 
 extern struct cfdriver tcasic_cd;
 
-int	tcasicprint(void *, const char *);
+int	tcasicprint __P((void *, const char *));
 
 /* There can be only one. */
 int	tcasicfound;
 
 int
-tcasicmatch(device_t parent, cfdata_t cf, void *aux)
+tcasicmatch(parent, cfdata, aux)
+	struct device *parent;
+	struct cfdata *cfdata;
+	void *aux;
 {
 	struct mainbus_attach_args *ma = aux;
 
-	/* Make sure that we're looking for a TurboChannel ASIC. */
-	if (strcmp(ma->ma_name, tcasic_cd.cd_name))
-	        return (0);
+        /* Make sure that we're looking for a TurboChannel ASIC. */
+        if (strcmp(ma->ma_name, tcasic_cd.cd_name))
+                return (0);
 
-	/* Make sure that the system supports a TurboChannel ASIC. */
+        /* Make sure that the system supports a TurboChannel ASIC. */
 	if ((cputype != ST_DEC_3000_500) && (cputype != ST_DEC_3000_300))
 		return (0);
 
@@ -79,11 +82,14 @@ tcasicmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-tcasicattach(device_t parent, device_t self, void *aux)
+tcasicattach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct tcbus_attach_args tba;
-	void (*intr_setup)(void);
-	void (*iointr)(void *, unsigned long);
+	void (*intr_setup) __P((void));
+	void (*iointr) __P((void *, unsigned long));
 
 	printf("\n");
 	tcasicfound = 1;
@@ -151,7 +157,9 @@ tcasicattach(device_t parent, device_t self, void *aux)
 }
 
 int
-tcasicprint(void *aux, const char *pnp)
+tcasicprint(aux, pnp)
+	void *aux;
+	const char *pnp;
 {
 
 	/* only TCs can attach to tcasics; easy. */
@@ -172,14 +180,14 @@ tcasicprint(void *aux, const char *pnp)
 #include "px.h"
 #include "pxg.h"
 
-extern void	sfb_cnattach(tc_addr_t);
-extern void	sfbp_cnattach(tc_addr_t);
-extern void	cfb_cnattach(tc_addr_t);
-extern void	mfb_cnattach(tc_addr_t);
-extern void	tfb_cnattach(tc_addr_t);
-extern void	px_cnattach(tc_addr_t);
-extern void	pxg_cnattach(tc_addr_t);
-extern int	tc_checkslot(tc_addr_t, char *);
+extern void	sfb_cnattach __P((tc_addr_t));
+extern void	sfbp_cnattach __P((tc_addr_t));
+extern void	cfb_cnattach __P((tc_addr_t));
+extern void	mfb_cnattach __P((tc_addr_t));
+extern void	tfb_cnattach __P((tc_addr_t));
+extern void	px_cnattach __P((tc_addr_t));
+extern void	pxg_cnattach __P((tc_addr_t));
+extern int	tc_checkslot __P((tc_addr_t, char *));
 
 struct cnboards {
 	const char	*cb_tcname;
@@ -218,7 +226,8 @@ struct cnboards {
  * output console.
  */
 int
-tc_fb_cnattach(tc_addr_t tcaddr)
+tc_fb_cnattach(tcaddr)
+	tc_addr_t tcaddr;
 {
 	char tcname[TC_ROM_LLEN];
 	int i;

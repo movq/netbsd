@@ -1,8 +1,8 @@
-.\"	$NetBSD: mq_close.3,v 1.3 2012/03/15 19:04:47 njoly Exp $
+.\"	$NetBSD: mq_close.3,v 1.1.2.2 2009/01/16 01:12:31 snj Exp $
 .\"
 .\" Copyright (c) 2001-2003 The Open Group, All Rights Reserved
 .\"
-.Dd June 7, 2010
+.Dd January 5, 2009
 .Dt MQ_CLOSE 3
 .Os
 .Sh NAME
@@ -39,8 +39,12 @@ The
 argument is not a valid message queue descriptor.
 .El
 .Sh SEE ALSO
-.Xr mq 3 ,
+.Xr mq_getattr 3 ,
+.Xr mq_notify 3 ,
 .Xr mq_open 3 ,
+.Xr mq_receive 3 ,
+.Xr mq_send 3 ,
+.Xr mq_setattr 3 ,
 .Xr mq_unlink 3
 .Sh STANDARDS
 This function conforms to the
@@ -62,4 +66,4 @@ event of any discrepancy between this version and the original IEEE and
 The Open Group Standard, the original IEEE and The Open Group Standard
 is the referee document.
 The original Standard can be obtained online at
-.Lk http://www.opengroup.org/unix/online.html .
+http://www.opengroup.org/unix/online.html .

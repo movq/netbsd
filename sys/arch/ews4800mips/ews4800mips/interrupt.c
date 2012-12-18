@@ -1,4 +1,4 @@
-/*	$NetBSD: interrupt.c,v 1.8 2011/02/20 07:55:20 matt Exp $	*/
+/*	$NetBSD: interrupt.c,v 1.4 2008/04/28 20:23:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -30,15 +30,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.8 2011/02/20 07:55:20 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.4 2008/04/28 20:23:18 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/intr.h>
-#include <sys/cpu.h>
+
+#include <uvm/uvm_extern.h>	/* uvmexp.intrs */
 
 #include <machine/sbdvar.h>
 
-static void (*platform_intr)(int, vaddr_t, uint32_t);
+const uint32_t *ipl_sr_bits;
+static void (*platform_intr)(uint32_t, uint32_t, uint32_t, uint32_t);
 
 void
 intr_init(void)
@@ -63,9 +65,22 @@ intr_disestablish(void *arg)
 }
 
 void
-cpu_intr(int ppl, vaddr_t pc, uint32_t status)
+cpu_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
 {
-	curcpu()->ci_data.cpu_nintr++;
+	struct cpu_info *ci;
 
-	(*platform_intr)(ppl, pc, status);
+	ci = curcpu();
+	uvmexp.intrs++;
+
+	ci->ci_idepth++;
+	(*platform_intr)(status, cause, pc, ipending);
+	ci->ci_idepth--;
+
+#ifdef __HAVE_FAST_SOFTINTS
+	ipending &= (MIPS_SOFT_INT_MASK_1 | MIPS_SOFT_INT_MASK_0);
+	if (ipending == 0)
+		return;
+	_clrsoftintr(ipending);
+	softintr_dispatch(ipending);
+#endif
 }

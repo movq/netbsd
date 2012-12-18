@@ -1,4 +1,4 @@
-/*	$NetBSD: prep_pciconf_direct.c,v 1.8 2011/07/01 16:56:52 dyoung Exp $	*/
+/*	$NetBSD: prep_pciconf_direct.c,v 1.6 2007/10/17 19:56:52 garbled Exp $	*/
 
 /*
  * Copyright (c) 2002 Klaus J. Klein.  All rights reserved.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: prep_pciconf_direct.c,v 1.8 2011/07/01 16:56:52 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: prep_pciconf_direct.c,v 1.6 2007/10/17 19:56:52 garbled Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -51,7 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: prep_pciconf_direct.c,v 1.8 2011/07/01 16:56:52 dyou
 #include <uvm/uvm_extern.h>
 
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/platform.h>
 
@@ -83,7 +83,7 @@ __KERNEL_RCSID(0, "$NetBSD: prep_pciconf_direct.c,v 1.8 2011/07/01 16:56:52 dyou
 #define	PCI_DCONF_DEV  \
     (~(~(PCI_DCONF_SIZE - 1) | PCI_DCONF_FUNC | PCI_DCONF_REG))
 
-void prep_pci_direct_attach_hook(device_t, device_t,
+void prep_pci_direct_attach_hook(struct device *, struct device *,
     struct pcibus_attach_args *);
 pcitag_t prep_pci_direct_make_tag(void *, int, int, int);
 pcireg_t prep_pci_direct_conf_read(void *, pcitag_t, int);
@@ -116,7 +116,7 @@ prep_pci_get_chipset_tag_direct(pci_chipset_tag_t pc)
 }
 
 void
-prep_pci_direct_attach_hook(device_t parent, device_t self,
+prep_pci_direct_attach_hook(struct device *parent, struct device *self,
     struct pcibus_attach_args *pba)
 {
 

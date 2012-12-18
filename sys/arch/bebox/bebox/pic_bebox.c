@@ -1,4 +1,4 @@
-/* $NetBSD: pic_bebox.c,v 1.10 2012/10/20 14:56:31 kiyohara Exp $ */
+/* $NetBSD: pic_bebox.c,v 1.6 2008/04/28 20:23:15 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,9 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_bebox.c,v 1.10 2012/10/20 14:56:31 kiyohara Exp $");
-
-#include "opt_multiprocessor.h"
+__KERNEL_RCSID(0, "$NetBSD: pic_bebox.c,v 1.6 2008/04/28 20:23:15 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -40,11 +38,19 @@ __KERNEL_RCSID(0, "$NetBSD: pic_bebox.c,v 1.10 2012/10/20 14:56:31 kiyohara Exp 
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bebox.h>
+#include <machine/atomic.h>
 #include <machine/pio.h>
 
 #include <arch/powerpc/pic/picvar.h>
 
+extern paddr_t bebox_mb_reg;
+
+#define BEBOX_INTR_MASK		0x0ffffffc
+#define BEBOX_SET_MASK		0x80000000
+#define BEBOX_INTR(x)		(0x80000000 >> x)
+#define CPU0_INT_MASK		0x0f0
+#define CPU1_INT_MASK		0x1f0
+#define INT_STATE_REG		0x2f0
 
 static void bebox_enable_irq(struct pic_ops *, int, int);
 static void bebox_disable_irq(struct pic_ops *, int);
@@ -61,7 +67,7 @@ setup_bebox_intr(void)
 	KASSERT(pic != NULL);
 
 	pic->pic_numintrs = 32;
-	pic->pic_cookie = (void *)BEBOX_REG;
+	pic->pic_cookie = (void *)bebox_mb_reg;
 	pic->pic_enable_irq = bebox_enable_irq;
 	pic->pic_reenable_irq = bebox_enable_irq;
 	pic->pic_disable_irq = bebox_disable_irq;
@@ -70,11 +76,6 @@ setup_bebox_intr(void)
 	pic->pic_establish_irq = dummy_pic_establish_intr;
 	strcpy(pic->pic_name, "bebox");
 	pic_add(pic);
-
-#ifdef MULTIPROCESSOR
-	setup_bebox_ipi();
-#endif
-
 	return(pic);
 }
 
@@ -82,14 +83,16 @@ static void
 bebox_enable_irq(struct pic_ops *pic, int irq, int type)
 {
 
-	SET_BEBOX_REG(CPU0_INT_MASK, 1 << (31 - irq));
+	*(volatile unsigned int *)(bebox_mb_reg + CPU0_INT_MASK) =
+	    BEBOX_SET_MASK | (1 << (31 - irq));
 }
 
 static void
 bebox_disable_irq(struct pic_ops *pic, int irq)
 {
 
-	CLEAR_BEBOX_REG(CPU0_INT_MASK, 1 << (31 - irq));
+	*(volatile unsigned int *)(bebox_mb_reg + CPU0_INT_MASK) =
+	    (1 << (31 - irq));
 }
 
 static int
@@ -97,9 +100,9 @@ bebox_get_irq(struct pic_ops *pic, int mode)
 {
 	unsigned int state;
 
-	state = READ_BEBOX_REG(INT_SOURCE);
+	state = *(volatile unsigned int *)(bebox_mb_reg + INT_STATE_REG);
 	state &= BEBOX_INTR_MASK;
-	state &= READ_BEBOX_REG(CPU0_INT_MASK);
+	state &= *(volatile unsigned int *)(bebox_mb_reg + CPU0_INT_MASK);
 	if (state == 0)
 		return 255;
 	return __builtin_clz(state);

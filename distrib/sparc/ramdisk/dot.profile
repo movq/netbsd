@@ -1,4 +1,4 @@
-# $NetBSD: dot.profile,v 1.20 2009/12/24 14:56:14 tsutsui Exp $
+# $NetBSD: dot.profile,v 1.19.4.1 2010/01/23 17:47:36 bouyer Exp $
 #
 # Copyright (c) 2000 The NetBSD Foundation, Inc.
 # All rights reserved.

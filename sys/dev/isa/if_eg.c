@@ -1,4 +1,4 @@
-/*	$NetBSD: if_eg.c,v 1.85 2012/10/27 17:18:24 chs Exp $	*/
+/*	$NetBSD: if_eg.c,v 1.76 2008/04/08 20:08:49 cegger Exp $	*/
 
 /*
  * Copyright (c) 1993 Dean Huxley <dean@fsa.ca>
@@ -40,9 +40,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_eg.c,v 1.85 2012/10/27 17:18:24 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_eg.c,v 1.76 2008/04/08 20:08:49 cegger Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +55,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_eg.c,v 1.85 2012/10/27 17:18:24 chs Exp $");
 #include <sys/syslog.h>
 #include <sys/select.h>
 #include <sys/device.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -70,8 +74,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_eg.c,v 1.85 2012/10/27 17:18:24 chs Exp $");
 #endif
 
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <sys/cpu.h>
 #include <sys/intr.h>
@@ -97,7 +103,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_eg.c,v 1.85 2012/10/27 17:18:24 chs Exp $");
  * Ethernet software status per interface.
  */
 struct eg_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	void *sc_ih;
 	struct ethercom sc_ethercom;	/* Ethernet common part */
 	bus_space_tag_t sc_iot;		/* bus space identifier */
@@ -110,13 +116,15 @@ struct eg_softc {
 	void *	eg_inbuf;		/* Incoming packet buffer */
 	void *	eg_outbuf;		/* Outgoing packet buffer */
 
-	krndsource_t rnd_source;
+#if NRND > 0
+	rndsource_element_t rnd_source;
+#endif
 };
 
-int egprobe(device_t, cfdata_t, void *);
-void egattach(device_t, device_t, void *);
+int egprobe(struct device *, struct cfdata *, void *);
+void egattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(eg, sizeof(struct eg_softc),
+CFATTACH_DECL(eg, sizeof(struct eg_softc),
     egprobe, egattach, NULL, NULL);
 
 int egintr(void *);
@@ -143,7 +151,8 @@ static int egreadPCB(bus_space_tag_t, bus_space_handle_t, u_int8_t *);
  */
 
 static inline void
-egprintpcb(u_int8_t *pcb)
+egprintpcb(pcb)
+	u_int8_t *pcb;
 {
 	int i;
 
@@ -166,7 +175,10 @@ egprintstat(u_char b)
 }
 
 static int
-egoutPCB(bus_space_tag_t iot, bus_space_handle_t ioh, u_int8_t b)
+egoutPCB(iot, ioh, b)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	u_int8_t b;
 {
 	int i;
 
@@ -182,7 +194,10 @@ egoutPCB(bus_space_tag_t iot, bus_space_handle_t ioh, u_int8_t b)
 }
 
 static int
-egreadPCBstat(bus_space_tag_t iot, bus_space_handle_t ioh, u_int8_t statb)
+egreadPCBstat(iot, ioh, statb)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	u_int8_t statb;
 {
 	int i;
 
@@ -198,7 +213,9 @@ egreadPCBstat(bus_space_tag_t iot, bus_space_handle_t ioh, u_int8_t statb)
 }
 
 static int
-egreadPCBready(bus_space_tag_t iot, bus_space_handle_t ioh)
+egreadPCBready(iot, ioh)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
 {
 	int i;
 
@@ -212,7 +229,10 @@ egreadPCBready(bus_space_tag_t iot, bus_space_handle_t ioh)
 }
 
 static int
-egwritePCB(bus_space_tag_t iot, bus_space_handle_t ioh, u_int8_t *pcb)
+egwritePCB(iot, ioh, pcb)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	u_int8_t *pcb;
 {
 	int i;
 	u_int8_t len;
@@ -241,7 +261,10 @@ egwritePCB(bus_space_tag_t iot, bus_space_handle_t ioh, u_int8_t *pcb)
 }
 
 static int
-egreadPCB(bus_space_tag_t iot, bus_space_handle_t ioh, u_int8_t *pcb)
+egreadPCB(iot, ioh, pcb)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	u_int8_t *pcb;
 {
 	int i;
 
@@ -290,7 +313,8 @@ egreadPCB(bus_space_tag_t iot, bus_space_handle_t ioh, u_int8_t *pcb)
  */
 
 int
-egprobe(device_t parent, cfdata_t match, void *aux)
+egprobe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -375,16 +399,14 @@ egprobe(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-egattach(device_t parent, device_t self, void *aux)
+egattach(struct device *parent, struct device *self, void *aux)
 {
-	struct eg_softc *sc = device_private(self);
+	struct eg_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	u_int8_t myaddr[ETHER_ADDR_LEN];
-
-	sc->sc_dev = self;
 
 	printf("\n");
 
@@ -464,7 +486,7 @@ egattach(device_t parent, device_t self, void *aux)
 	}
 
 	/* Initialize ifnet structure. */
-	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = egstart;
 	ifp->if_ioctl = egioctl;
@@ -479,12 +501,15 @@ egattach(device_t parent, device_t self, void *aux)
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_NET, egintr, sc);
 
-	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
+#if NRND > 0
+	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dev),
 			  RND_TYPE_NET, 0);
+#endif
 }
 
 void
-eginit(struct eg_softc *sc)
+eginit(sc)
+	struct eg_softc *sc;
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -503,18 +528,18 @@ eginit(struct eg_softc *sc)
 	sc->eg_pcb[2] = 3; /* receive broadcast & multicast */
 	sc->eg_pcb[3] = 0;
 	if (egwritePCB(iot, ioh, sc->eg_pcb) != 0)
-		aprint_error_dev(sc->sc_dev, "can't send Configure 82586\n");
+		aprint_error_dev(&sc->sc_dev, "can't send Configure 82586\n");
 
 	if (egreadPCB(iot, ioh, sc->eg_pcb) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't read Configure 82586 status\n");
+		aprint_error_dev(&sc->sc_dev, "can't read Configure 82586 status\n");
 		egprintpcb(sc->eg_pcb);
 	} else if (sc->eg_pcb[2] != 0 || sc->eg_pcb[3] != 0)
-		aprint_error_dev(sc->sc_dev, "configure card command failed\n");
+		aprint_error_dev(&sc->sc_dev, "configure card command failed\n");
 
 	if (sc->eg_inbuf == NULL) {
 		sc->eg_inbuf = malloc(EG_BUFLEN, M_TEMP, M_NOWAIT);
 		if (sc->eg_inbuf == NULL) {
-			aprint_error_dev(sc->sc_dev, "can't allocate inbuf\n");
+			aprint_error_dev(&sc->sc_dev, "can't allocate inbuf\n");
 			panic("eginit");
 		}
 	}
@@ -523,7 +548,7 @@ eginit(struct eg_softc *sc)
 	if (sc->eg_outbuf == NULL) {
 		sc->eg_outbuf = malloc(EG_BUFLEN, M_TEMP, M_NOWAIT);
 		if (sc->eg_outbuf == NULL) {
-			aprint_error_dev(sc->sc_dev, "can't allocate outbuf\n");
+			aprint_error_dev(&sc->sc_dev, "can't allocate outbuf\n");
 			panic("eginit");
 		}
 	}
@@ -542,7 +567,8 @@ eginit(struct eg_softc *sc)
 }
 
 void
-egrecv(struct eg_softc *sc)
+egrecv(sc)
+	struct eg_softc *sc;
 {
 
 	while (sc->eg_incount < EG_INLEN) {
@@ -563,7 +589,8 @@ egrecv(struct eg_softc *sc)
 }
 
 void
-egstart(struct ifnet *ifp)
+egstart(ifp)
+	struct ifnet *ifp;
 {
 	struct eg_softc *sc = ifp->if_softc;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -587,12 +614,15 @@ loop:
 
 	/* We need to use m->m_pkthdr.len, so require the header */
 	if ((m0->m_flags & M_PKTHDR) == 0) {
-		aprint_error_dev(sc->sc_dev, "no header mbuf\n");
+		aprint_error_dev(&sc->sc_dev, "no header mbuf\n");
 		panic("egstart");
 	}
 	len = max(m0->m_pkthdr.len, ETHER_MIN_LEN - ETHER_CRC_LEN);
 
-	bpf_mtap(ifp, m0);
+#if NBPFILTER > 0
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, m0);
+#endif
 
 	sc->eg_pcb[0] = EG_CMD_SENDPACKET;
 	sc->eg_pcb[1] = 0x06;
@@ -603,7 +633,7 @@ loop:
 	sc->eg_pcb[6] = len; /* length of packet */
 	sc->eg_pcb[7] = len >> 8;
 	if (egwritePCB(iot, ioh, sc->eg_pcb) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't send Send Packet command\n");
+		aprint_error_dev(&sc->sc_dev, "can't send Send Packet command\n");
 		ifp->if_oerrors++;
 		ifp->if_flags &= ~IFF_OACTIVE;
 		m_freem(m0);
@@ -632,7 +662,8 @@ loop:
 }
 
 int
-egintr(void *arg)
+egintr(arg)
+	void *arg;
 {
 	struct eg_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -671,7 +702,7 @@ egintr(void *arg)
 		case EG_RSP_SENDPACKET:
 			if (sc->eg_pcb[6] || sc->eg_pcb[7]) {
 				DPRINTF(("%s: packet dropped\n",
-				    device_xname(sc->sc_dev)));
+				    device_xname(&sc->sc_dev)));
 				sc->sc_ethercom.ec_if.if_oerrors++;
 			} else
 				sc->sc_ethercom.ec_if.if_opackets++;
@@ -685,7 +716,7 @@ egintr(void *arg)
 		/* XXX byte-order and type-size bugs here... */
 		case EG_RSP_GETSTATS:
 			DPRINTF(("%s: Card Statistics\n",
-			    device_xname(sc->sc_dev)));
+			    device_xname(&sc->sc_dev)));
 			memcpy(&i, &sc->eg_pcb[2], sizeof(i));
 			DPRINTF(("Receive Packets %d\n", i));
 			memcpy(&i, &sc->eg_pcb[6], sizeof(i));
@@ -703,12 +734,14 @@ egintr(void *arg)
 
 		default:
 			printf("%s: egintr: Unknown response %x??\n",
-			    device_xname(sc->sc_dev), sc->eg_pcb[0]);
+			    device_xname(&sc->sc_dev), sc->eg_pcb[0]);
 			egprintpcb(sc->eg_pcb);
 			break;
 		}
 
+#if NRND > 0
 		rnd_add_uint32(&sc->rnd_source, sc->eg_pcb[0]);
+#endif
 	}
 
 	return serviced;
@@ -718,14 +751,17 @@ egintr(void *arg)
  * Pass a packet up to the higher levels.
  */
 void
-egread(struct eg_softc *sc, void *buf, int len)
+egread(sc, buf, len)
+	struct eg_softc *sc;
+	void *buf;
+	int len;
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct mbuf *m;
 
 	if (len <= sizeof(struct ether_header) ||
 	    len > ETHER_MAX_LEN) {
-		aprint_error_dev(sc->sc_dev, "invalid packet size %d; dropping\n", len);
+		aprint_error_dev(&sc->sc_dev, "invalid packet size %d; dropping\n", len);
 		ifp->if_ierrors++;
 		return;
 	}
@@ -739,11 +775,14 @@ egread(struct eg_softc *sc, void *buf, int len)
 
 	ifp->if_ipackets++;
 
+#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.
 	 * If so, hand off the raw packet to BPF.
 	 */
-	bpf_mtap(ifp, m);
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, m);
+#endif
 
 	(*ifp->if_input)(ifp, m);
 }
@@ -752,7 +791,10 @@ egread(struct eg_softc *sc, void *buf, int len)
  * convert buf into mbufs
  */
 struct mbuf *
-egget(struct eg_softc *sc, void *buf, int totlen)
+egget(sc, buf, totlen)
+	struct eg_softc *sc;
+	void *buf;
+	int totlen;
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct mbuf *m, *m0, *newm;
@@ -796,7 +838,10 @@ bad:
 }
 
 int
-egioctl(struct ifnet *ifp, unsigned long cmd, void *data)
+egioctl(ifp, cmd, data)
+	struct ifnet *ifp;
+	u_long cmd;
+	void *data;
 {
 	struct eg_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -806,42 +851,39 @@ egioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 
-		eginit(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
+			eginit(sc);
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
 		default:
+			eginit(sc);
 			break;
 		}
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		/* XXX re-use ether_ioctl() */
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_RUNNING:
+		if ((ifp->if_flags & IFF_UP) == 0 &&
+		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
 			 * If interface is marked down and it is running, then
 			 * stop it.
 			 */
 			egstop(sc);
 			ifp->if_flags &= ~IFF_RUNNING;
-			break;
-		case IFF_UP:
+		} else if ((ifp->if_flags & IFF_UP) != 0 &&
+			   (ifp->if_flags & IFF_RUNNING) == 0) {
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
 			 */
 			eginit(sc);
-			break;
-		default:
+		} else {
 			sc->eg_pcb[0] = EG_CMD_GETSTATS;
 			sc->eg_pcb[1] = 0;
 			if (egwritePCB(sc->sc_iot, sc->sc_ioh, sc->eg_pcb) != 0) {
@@ -852,12 +894,11 @@ egioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 			 * IFF_MULTICAST, IFF_PROMISC,
 			 * IFF_LINK0, IFF_LINK1,
 			 */
-			break;
 		}
 		break;
 
 	default:
-		error = ether_ioctl(ifp, cmd, data);
+		error = EINVAL;
 		break;
 	}
 
@@ -866,11 +907,12 @@ egioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 }
 
 void
-egreset(struct eg_softc *sc)
+egreset(sc)
+	struct eg_softc *sc;
 {
 	int s;
 
-	DPRINTF(("%s: egreset()\n", device_xname(sc->sc_dev)));
+	DPRINTF(("%s: egreset()\n", device_xname(&sc->sc_dev)));
 	s = splnet();
 	egstop(sc);
 	eginit(sc);
@@ -878,18 +920,20 @@ egreset(struct eg_softc *sc)
 }
 
 void
-egwatchdog(struct ifnet *ifp)
+egwatchdog(ifp)
+	struct ifnet *ifp;
 {
 	struct eg_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", device_xname(sc->sc_dev));
+	log(LOG_ERR, "%s: device timeout\n", device_xname(&sc->sc_dev));
 	sc->sc_ethercom.ec_if.if_oerrors++;
 
 	egreset(sc);
 }
 
 void
-egstop(struct eg_softc *sc)
+egstop(sc)
+	struct eg_softc *sc;
 {
 
 	bus_space_write_1(sc->sc_iot, sc->sc_ioh, EG_CONTROL, 0);

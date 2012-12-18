@@ -1,4 +1,4 @@
-/*	$NetBSD: ofisa_machdep.c,v 1.10 2012/10/27 17:18:11 chs Exp $	*/
+/*	$NetBSD: ofisa_machdep.c,v 1.6 2007/10/17 19:57:10 garbled Exp $	*/
 
 /*
  * Copyright 1998
@@ -34,14 +34,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofisa_machdep.c,v 1.10 2012/10/27 17:18:11 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofisa_machdep.c,v 1.6 2007/10/17 19:57:10 garbled Exp $");
 
 #include "opt_compat_old_ofw.h"
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/ofw/openfirm.h>
@@ -51,7 +51,9 @@ __KERNEL_RCSID(0, "$NetBSD: ofisa_machdep.c,v 1.10 2012/10/27 17:18:11 chs Exp $
 #include "isadma.h"
 
 int
-ofisa_get_isabus_data(int phandle, struct isabus_attach_args *iba)
+ofisa_get_isabus_data(phandle, iba)
+	int phandle;
+	struct isabus_attach_args *iba;
 {
 
 	iba->iba_iot = &isa_io_bs_tag;
@@ -65,7 +67,8 @@ ofisa_get_isabus_data(int phandle, struct isabus_attach_args *iba)
 }
 
 int
-ofisa_ignore_child(int pphandle, int cphandle)
+ofisa_ignore_child(pphandle, cphandle)
+	int pphandle, cphandle;
 {
 	
 	return (0);
@@ -74,7 +77,10 @@ ofisa_ignore_child(int pphandle, int cphandle)
 #ifdef COMPAT_OLD_OFW
 
 int
-ofisa_md_match(device_t parent, cfdata_t cf, void *aux)
+ofisa_md_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct ofbus_attach_args *oba = aux;
 	char type[8];

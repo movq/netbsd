@@ -1,4 +1,4 @@
-/*	$NetBSD: aml_evalobj.h,v 1.2 2011/07/17 20:54:55 joerg Exp $	*/
+/*	$NetBSD: aml_evalobj.h,v 1.1 2007/01/14 04:36:13 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 Takanori Watanabe
@@ -32,7 +32,7 @@
 #ifndef _AML_EVALOBJ_H_
 #define _AML_EVALOBJ_H_
 
-#include <stdarg.h>
+#include <machine/stdarg.h>
 
 union aml_object	*aml_eval_objref(struct aml_environ *,
 					 union aml_object *);

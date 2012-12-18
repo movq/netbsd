@@ -1,4 +1,4 @@
-/*	$NetBSD: common.c,v 1.2 2011/06/25 20:27:01 christos Exp $	*/
+/*	$NetBSD: common.c,v 1.1.1.2.4.3 2010/11/20 20:37:40 riz Exp $	*/
 /*-
  * Copyright (c) 1998-2004 Dag-Erling Coïdan Smørgrav
  * Copyright (c) 2008, 2010 Joerg Sonnenberger <joerg@NetBSD.org>
@@ -232,7 +232,6 @@ fetch_reopen(int sd)
 	if ((conn = calloc(1, sizeof(*conn))) == NULL)
 		return (NULL);
 	conn->ftp_home = NULL;
-	conn->cache_url = NULL;
 	conn->next_buf = NULL;
 	conn->next_len = 0;
 	conn->sd = sd;
@@ -539,7 +538,7 @@ fetch_read(conn_t *conn, char *buf, size_t len)
 		}
 #ifdef WITH_SSL
 		if (conn->ssl != NULL)
-			rlen = SSL_read(conn->ssl, buf, (int)len);
+			rlen = SSL_read(conn->ssl, buf, len);
 		else
 #endif
 			rlen = read(conn->sd, buf, len);
@@ -588,7 +587,7 @@ fetch_getln(conn_t *conn)
 			return (-1);
 		if (len == 0)
 			break;
-		next = memchr(conn->buf + conn->buflen, '\n', (size_t)len);
+		next = memchr(conn->buf + conn->buflen, '\n', len);
 		conn->buflen += len;
 		if (conn->buflen == conn->bufsize && next == NULL) {
 			tmp = conn->buf;
@@ -674,7 +673,7 @@ fetch_write(conn_t *conn, const void *buf, size_t len)
 		errno = 0;
 #ifdef WITH_SSL
 		if (conn->ssl != NULL)
-			wlen = SSL_write(conn->ssl, buf, (int)len);
+			wlen = SSL_write(conn->ssl, buf, len);
 		else
 #endif
 #ifndef MSG_NOSIGNAL

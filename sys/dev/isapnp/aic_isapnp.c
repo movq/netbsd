@@ -1,4 +1,4 @@
-/*	$NetBSD: aic_isapnp.c,v 1.21 2009/09/22 13:20:36 tsutsui Exp $	*/
+/*	$NetBSD: aic_isapnp.c,v 1.17 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic_isapnp.c,v 1.21 2009/09/22 13:20:36 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic_isapnp.c,v 1.17 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,14 +57,15 @@ struct aic_isapnp_softc {
 	void	*sc_ih;			/* interrupt handler */
 };
 
-static int	aic_isapnp_match(device_t, cfdata_t, void *);
-static void	aic_isapnp_attach(device_t, device_t, void *);
+int	aic_isapnp_match(struct device *, struct cfdata *, void *);
+void	aic_isapnp_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(aic_isapnp, sizeof(struct aic_isapnp_softc),
+CFATTACH_DECL(aic_isapnp, sizeof(struct aic_isapnp_softc),
     aic_isapnp_match, aic_isapnp_attach, NULL, NULL);
 
 int
-aic_isapnp_match(device_t parent, cfdata_t match, void *aux)
+aic_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -75,18 +76,17 @@ aic_isapnp_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-aic_isapnp_attach(device_t parent, device_t self, void *aux)
+aic_isapnp_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct aic_isapnp_softc *isc = device_private(self);
 	struct aic_softc *sc = &isc->sc_aic;
 	struct isapnp_attach_args *ipa = aux;
 
-	sc->sc_dev = self;
-
 	printf("\n");
 
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		aprint_error_dev(self, "error in region allocation\n");
+		aprint_error_dev(&sc->sc_dev, "error in region allocation\n");
 		return;
 	}
 
@@ -94,7 +94,7 @@ aic_isapnp_attach(device_t parent, device_t self, void *aux)
 	sc->sc_ioh = ipa->ipa_io[0].h;
 
 	if (!aic_find(sc->sc_iot, sc->sc_ioh)) {
-		aprint_error_dev(self, "couldn't find device\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't find device\n");
 		return;
 	}
 
@@ -104,5 +104,5 @@ aic_isapnp_attach(device_t parent, device_t self, void *aux)
 	isc->sc_ih = isa_intr_establish(ipa->ipa_ic, ipa->ipa_irq[0].num,
 	    ipa->ipa_irq[0].type, IPL_BIO, aicintr, sc);
 	if (isc->sc_ih == NULL)
-		aprint_error_dev(self, "couldn't establish interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt\n");
 }

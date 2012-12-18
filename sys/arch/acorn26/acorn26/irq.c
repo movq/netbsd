@@ -1,4 +1,4 @@
-/* $NetBSD: irq.c,v 1.17 2012/05/11 15:39:17 skrll Exp $ */
+/* $NetBSD: irq.c,v 1.8.28.2 2009/02/02 00:29:10 snj Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 Ben Harris
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: irq.c,v 1.17 2012/05/11 15:39:17 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irq.c,v 1.8.28.2 2009/02/02 00:29:10 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -43,6 +43,8 @@ __KERNEL_RCSID(0, "$NetBSD: irq.c,v 1.17 2012/05/11 15:39:17 skrll Exp $");
 #include <sys/bus.h>
 #include <sys/intr.h>
 #include <sys/cpu.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/frame.h>
 #include <machine/irq.h>
@@ -74,6 +76,8 @@ __KERNEL_RCSID(0, "$NetBSD: irq.c,v 1.17 2012/05/11 15:39:17 skrll Exp $");
 #define NIRQ 20
 extern char *irqnames[];
 
+int current_intr_depth = 0;
+
 #if NFIQ > 0
 void (*fiq_downgrade_handler)(void);
 int fiq_want_downgrade;
@@ -87,16 +91,16 @@ int fiq_want_downgrade;
  * be represented eventually.
  */
 
-static uint32_t irqmask[NIPL];
+static u_int32_t irqmask[NIPL];
 
 LIST_HEAD(irq_handler_head, irq_handler) irq_list_head =
     LIST_HEAD_INITIALIZER(irq_list_head);
 
 struct irq_handler {
 	LIST_ENTRY(irq_handler)	link;
-	int	(*func)(void *);
+	int	(*func) __P((void *));
 	void	*arg;
-	uint32_t	mask;
+	u_int32_t	mask;
 	int	irqnum;
 	int	ipl;
 	int	enabled;
@@ -125,7 +129,7 @@ irq_handler(struct irqframe *irqf)
 	int s, status, result, stray;
 	struct irq_handler *h;
 
-	curcpu()->ci_intr_depth++;
+	current_intr_depth++;
 	KASSERT(the_ioc != NULL);
 	/* Get the current interrupt state */
 	status = ioc_irq_status_full();
@@ -139,7 +143,7 @@ irq_handler(struct irqframe *irqf)
 #if 0
 	printf("*");
 #endif
-	curcpu()->ci_data.cpu_nintr++;
+	uvmexp.intrs++;
 
 	stray = 1;
 #if NFIQ > 0
@@ -197,7 +201,7 @@ handled:
 #endif
 
 	hardsplx(s);
-	curcpu()->ci_intr_depth--;
+	current_intr_depth--;
 
 	/* Check if we're in the kernel restartable atomic sequence. */
 	if ((irqf->if_r15 & R15_MODE) != R15_MODE_USR) {
@@ -207,7 +211,7 @@ handled:
 		extern struct evcnt _lock_cas_restart;
 #endif
 
-		if (pc > _lock_cas && pc < _lock_cas_end) {
+		if (pc >= _lock_cas && pc < _lock_cas_end) {
 			irqf->if_r15 = (irqf->if_r15 & ~R15_PC) | 
 			    (register_t)_lock_cas;
 #ifdef ARM_LOCK_CAS_DEBUG
@@ -216,6 +220,13 @@ handled:
 		}
 	}
 	    
+}
+
+bool
+cpu_intr_p(void)
+{
+
+	return current_intr_depth != 0;
 }
 
 struct irq_handler *
@@ -228,8 +239,9 @@ irq_establish(int irqnum, int ipl, int (*func)(void *), void *arg,
 	if (irqnum >= NIRQ)
 		panic("irq_register: bad irq: %d", irqnum);
 #endif
-	new = (struct irq_handler *)malloc(sizeof(struct irq_handler),
-	       M_DEVBUF, M_WAITOK | M_ZERO);
+	MALLOC(new, struct irq_handler *, sizeof(struct irq_handler),
+	       M_DEVBUF, M_WAITOK);
+	bzero(new, sizeof(*new));
 	new->irqnum = irqnum;
 	new->mask = 1 << irqnum;
 #if NUNIXBP > 0
@@ -301,7 +313,7 @@ irq_enable(struct irq_handler *h)
 }
 
 
-void irq_genmasks(void)
+void irq_genmasks()
 {
 	struct irq_handler *h;
 	int s, i;
@@ -355,7 +367,7 @@ inline int
 hardsplx(int s)
 {
 	int was;
-	uint32_t mask;
+	u_int32_t mask;
 
 	KASSERT(s < IPL_HIGH);
 	int_off();
@@ -426,7 +438,7 @@ irq_stat(void (*pr)(const char *, ...))
 {
 	struct irq_handler *h;
 	int i;
-	uint32_t last;
+	u_int32_t last;
 
 	for (h = irq_list_head.lh_first; h != NULL; h = h->link.le_next)
 		(*pr)("%12s: ipl %2d, IRQ %2d, mask 0x%05x, count %llu\n",

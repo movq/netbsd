@@ -1,6 +1,3 @@
-/*	Id: order.c,v 1.7 2011/06/05 08:54:42 plunky Exp 	*/	
-/*	$NetBSD: order.c,v 1.1.1.4 2011/09/01 12:46:50 plunky Exp $	*/
-
 /*
  * Copyright (c) 2008 David Crawshaw <david@zentus.com>
  * 
@@ -19,13 +16,10 @@
 
 #include "pass2.h"
 
-/* is it legal to make an OREG or NAME entry which has an
- * offset of off, (from a register of r), if the
- * resulting thing had type t */
 int
 notoff(TWORD t, int r, CONSZ off, char *cp)
 {
-	return !SIMM13(off);
+	return 0;
 }
 
 /*
@@ -38,7 +32,7 @@ offstar(NODE *p, int shape)
 		printf("offstar(%p)\n", p);
 
 	if (p->n_op == PLUS || p->n_op == MINUS) {
-		if (p->n_right->n_op == ICON && SIMM13(p->n_right->n_lval)) {
+		if (p->n_right->n_op == ICON) {
 			if (isreg(p->n_left) == 0)
 				(void)geninsn(p->n_left, INAREG);
 			/* Converted in ormake() */
@@ -54,11 +48,9 @@ myormake(NODE *q)
 }
 
 int
-shumul(NODE *p, int shape)
+shumul(NODE *p)
 {
-	if (shape & SOREG)
-		return SROREG;
-	return SRNOPE;
+	return SOREG;
 }
 
 int

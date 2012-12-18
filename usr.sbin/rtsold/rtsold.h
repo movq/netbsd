@@ -1,4 +1,4 @@
-/*	$NetBSD: rtsold.h,v 1.10 2011/10/17 16:31:14 mbalmer Exp $	*/
+/*	$NetBSD: rtsold.h,v 1.8 2002/05/31 10:22:17 itojun Exp $	*/
 /*	$KAME: rtsold.h,v 1.14 2002/05/31 10:10:03 itojun Exp $	*/
 
 /*
@@ -39,7 +39,7 @@ struct ifinfo {
 	int active;		/* interface status */
 	int probeinterval;	/* interval of probe timer(if necessary) */
 	int probetimer;		/* rest of probe timer */
-	int mediareqok;		/* whether the IF supports SIOCGIFMEDIA */
+	int mediareqok;		/* wheter the IF supports SIOCGIFMEDIA */
 	int state;
 	int probes;
 	int dadcount;
@@ -91,7 +91,7 @@ extern int probe_init __P((void));
 extern void defrouter_probe __P((struct ifinfo *));
 
 /* dump.c */
-extern void rtsold_dump_file __P((const char *));
+extern void rtsold_dump_file __P((char *));
 
 /* rtsock.c */
 extern int rtsock_open __P((void));

@@ -1,4 +1,4 @@
-/*	$NetBSD: sliplogin.c,v 1.23 2011/08/30 20:42:22 joerg Exp $	*/
+/*	$NetBSD: sliplogin.c,v 1.22 2008/07/21 13:36:59 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1990, 1993\
 #if 0
 static char sccsid[] = "@(#)sliplogin.c	8.2 (Berkeley) 2/1/94";
 #else
-__RCSID("$NetBSD: sliplogin.c,v 1.23 2011/08/30 20:42:22 joerg Exp $");
+__RCSID("$NetBSD: sliplogin.c,v 1.22 2008/07/21 13:36:59 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -100,19 +100,21 @@ __RCSID("$NetBSD: sliplogin.c,v 1.23 2011/08/30 20:42:22 joerg Exp $");
 
 #include "pathnames.h"
 
-static int	unit;
-static int	speed;
-static int	uid;
-static char	loginargs[BUFSIZ];
-static char	loginfile[MAXPATHLEN];
-static char	loginname[BUFSIZ];
+int	unit;
+int	speed;
+int	uid;
+char	loginargs[BUFSIZ];
+char	loginfile[MAXPATHLEN];
+char	loginname[BUFSIZ];
 
-static void	 findid(const char *);
-__dead static void	hup_handler(int);
-static const char *sigstr(int);
+void	 findid __P((char *));
+void	hup_handler __P((int));
+int	main __P((int, char **));
+const char *sigstr __P((int));
 
-static void
-findid(const char *name)
+void
+findid(name)
+	char *name;
 {
 	FILE *fp;
 	static char slopt[5][16];
@@ -166,8 +168,9 @@ findid(const char *name)
 	/* NOTREACHED */
 }
 
-static const char *
-sigstr(int s)
+const char *
+sigstr(s)
+	int s;
 {
 
 	if (s > 0 && s < NSIG)
@@ -180,8 +183,9 @@ sigstr(int s)
 	}
 }
 
-static void
-hup_handler(int s)
+void
+hup_handler(s)
+	int s;
 {
 	char logoutfile[MAXPATHLEN];
 
@@ -204,7 +208,9 @@ hup_handler(int s)
 }
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	int fd, s, ldisc, odisc;
 	char *name;

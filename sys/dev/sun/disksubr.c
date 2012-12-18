@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.14 2010/03/23 20:01:09 martin Exp $ */
+/*	$NetBSD: disksubr.c,v 1.9 2007/10/08 20:12:05 ad Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.14 2010/03/23 20:01:09 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.9 2007/10/08 20:12:05 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -88,7 +88,11 @@ static	int disklabel_bsd_to_sun(struct disklabel *, char *);
  * Returns null on success and an error string on failure.
  */
 const char *
-readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp, struct cpu_disklabel *clp)
+readdisklabel(dev, strat, lp, clp)
+	dev_t dev;
+	void (*strat)(struct buf *);
+	struct disklabel *lp;
+	struct cpu_disklabel *clp;
 {
 	struct buf *bp;
 	struct disklabel *dlp;
@@ -168,7 +172,10 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp, stru
  * before setting it.
  */
 int
-setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask, struct cpu_disklabel *clp)
+setdisklabel(olp, nlp, openmask, clp)
+	struct disklabel *olp, *nlp;
+	u_long openmask;
+	struct cpu_disklabel *clp;
 {
 	int i;
 	struct partition *opp, *npp;
@@ -208,7 +215,11 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask, stru
  * Current label is already in clp->cd_block[]
  */
 int
-writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp, struct cpu_disklabel *clp)
+writedisklabel(dev, strat, lp, clp)
+	dev_t dev;
+	void (*strat)(struct buf *);
+	struct disklabel *lp;
+	struct cpu_disklabel *clp;
 {
 	struct buf *bp;
 	int error;
@@ -275,13 +286,14 @@ sun_fstypes[8] = {
  * The BSD label is cleared out before this is called.
  */
 static const char *
-disklabel_sun_to_bsd(char *cp, struct disklabel *lp)
+disklabel_sun_to_bsd(cp, lp)
+	char *cp;
+	struct disklabel *lp;
 {
 	struct sun_disklabel *sl;
 	struct partition *npp;
 	struct sun_dkpart *spp;
 	int i, secpercyl;
-	unsigned int secpblck;
 	u_short cksum, *sp1, *sp2;
 
 	sl = (struct sun_disklabel *)cp;
@@ -300,8 +312,6 @@ disklabel_sun_to_bsd(char *cp, struct disklabel *lp)
 	lp->d_magic2 = DISKMAGIC;
 	memcpy(lp->d_packname, sl->sl_text, sizeof(lp->d_packname));
 
-	secpblck = lp->d_secsize / 512;
-	if (secpblck == 0) secpblck = 1; /* can't happen */
 	lp->d_secsize = 512;
 	lp->d_nsectors   = sl->sl_nsectors;
 	lp->d_ntracks    = sl->sl_ntracks;
@@ -324,23 +334,6 @@ disklabel_sun_to_bsd(char *cp, struct disklabel *lp)
 	for (i = 0; i < 8; i++) {
 		spp = &sl->sl_part[i];
 		npp = &lp->d_partitions[i];
-
-		if (npp->p_fstype == FS_ISO9660
-		    && spp->sdkp_cyloffset * secpercyl == npp->p_offset*secpblck
-		    && spp->sdkp_nsectors <= npp->p_size*secpblck
-		    && npp->p_size > 0 && spp->sdkp_nsectors > 0) {
-			/*
-			 * This happens for example on sunlabel'd hybrid
-			 * (ffs + ISO9660) CDs, like our install CDs.
-			 * The cd driver has initialized a valid ISO9660
-			 * partition (including session parameters), so
-			 * we better not overwrite it.
-			 */
-			npp->p_offset *= secpblck;
-			npp->p_size = spp->sdkp_nsectors;
-			npp->p_cdsession *= secpblck;
-			continue;
-		}
 		npp->p_offset = spp->sdkp_cyloffset * secpercyl;
 		npp->p_size = spp->sdkp_nsectors;
 		if (npp->p_size == 0) {
@@ -371,7 +364,9 @@ disklabel_sun_to_bsd(char *cp, struct disklabel *lp)
  * Returns zero or error code.
  */
 static int
-disklabel_bsd_to_sun(struct disklabel *lp, char *cp)
+disklabel_bsd_to_sun(lp, cp)
+	struct disklabel *lp;
+	char *cp;
 {
 	struct sun_disklabel *sl;
 	struct partition *npp;
@@ -432,7 +427,9 @@ disklabel_bsd_to_sun(struct disklabel *lp, char *cp)
  * Return -1 if not found.
  */
 int
-isbad(struct dkbad *bt, int cyl, int trk, int sec)
+isbad(bt, cyl, trk, sec)
+	struct dkbad *bt;
+	int cyl, trk, sec;
 {
 	int i;
 	long blk, bblk;

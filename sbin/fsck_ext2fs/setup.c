@@ -1,4 +1,4 @@
-/*	$NetBSD: setup.c,v 1.28 2011/09/16 16:13:18 plunky Exp $	*/
+/*	$NetBSD: setup.c,v 1.25.6.1 2011/01/16 12:38:27 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,6 +40,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *	notice, this list of conditions and the following disclaimer in the
  *	documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *	must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -58,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)setup.c	8.5 (Berkeley) 11/23/94";
 #else
-__RCSID("$NetBSD: setup.c,v 1.28 2011/09/16 16:13:18 plunky Exp $");
+__RCSID("$NetBSD: setup.c,v 1.25.6.1 2011/01/16 12:38:27 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -134,7 +139,7 @@ setup(const char *dev)
 	asblk.b_un.b_buf = malloc(SBSIZE);
 	if (sblk.b_un.b_buf == NULL || asblk.b_un.b_buf == NULL)
 		errexit("cannot allocate space for superblock");
-	if ((lp = getdisklabel(NULL, fsreadfd)) != NULL)
+	if ((lp = getdisklabel((char *)NULL, fsreadfd)) != NULL)
 		dev_bsize = secsize = lp->d_secsize;
 	else
 		dev_bsize = secsize = DEV_BSIZE;

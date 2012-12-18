@@ -1,9 +1,11 @@
-#	$NetBSD: Makefile,v 1.7 2012/09/15 17:46:25 plunky Exp $
+#	$NetBSD: Makefile,v 1.3 2008/06/18 09:06:28 yamt Exp $
 #	$OpenBSD: Makefile,v 1.3 2006/11/26 11:31:13 deraadt Exp $
 
 PROG=	ftp-proxy
 SRCS=	ftp-proxy.c filter.c
 MAN=	ftp-proxy.8
+
+WARNS?=	2
 
 CFLAGS+= -I${.CURDIR}
 LDADD+=	-levent
@@ -13,17 +15,10 @@ CPPFLAGS+=-I${NETBSDSRCDIR}/sys
 
 .include <bsd.own.mk>
 
-# NPF support
-.if (${MKNPF} != "no")
-SRCS+=		npf.c
-CPPFLAGS+=	-DWITH_NPF
-LDADD+=		-lnpf -lprop
-.endif
-
 # IP Filter support
 .if (${MKIPFILTER} != "no")
 SRCS+=	ipf.c
-CPPFLAGS+=-DWITH_IPF
+CPPFLAGS+=-I${NETBSDSRCDIR}/sys/dist/ipf -DWITH_IPF
 .endif
 
 BINDIR= /usr/sbin

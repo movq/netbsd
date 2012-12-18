@@ -1,7 +1,9 @@
-/*	$NetBSD: cpu.h,v 1.15 2011/03/21 16:41:08 pooka Exp $	*/
+/*	$NetBSD: cpu.h,v 1.4 2008/10/12 22:08:08 pooka Exp $	*/
 
 /*
- * Copyright (c) 2008-2011 Antti Kantee.  All Rights Reserved.
+ * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
+ *
+ * Development of this software was supported by Google Summer of Code.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,17 +30,11 @@
 #ifndef _SYS_RUMP_CPU_H_
 #define _SYS_RUMP_CPU_H_
 
-#ifndef _LOCORE
-
 #include <sys/cpu_data.h>
-#include <machine/pcb.h>
 
 struct cpu_info {
 	struct cpu_data ci_data;
 	cpuid_t ci_cpuid;
-	struct lwp *ci_curlwp;
-
-	struct cpu_info *ci_next;
 
 /*
  * XXX: horrible workaround for vax lock.h.
@@ -50,18 +46,6 @@ struct cpu_info {
 #define IPI_SEND_CNCHAR 0
 #define IPI_DDB 0
 #endif /* __vax__ */
-
-/*
- * More stinky hacks, this time for powerpc.  Will go away eventually.
- */
-#ifdef __powerpc__
-	struct cache_info {
-		int dcache_size;
-		int dcache_line_size;
-		int icache_size;
-		int icache_line_size;
-	} ci_ci;
-#endif /* __powerpc */
 };
 
 /* more dirty rotten vax kludges */
@@ -69,23 +53,11 @@ struct cpu_info {
 static __inline void cpu_handle_ipi(void) {}
 #endif /* __vax__ */
 
-#ifdef __powerpc__
-void __syncicache(void *, size_t);
-#endif
+extern struct cpu_info rump_cpu;
+#define curcpu() (&rump_cpu)
+#define cpu_number() 0 /* XXX: good enuf? */
 
-struct lwp *rumpuser_get_curlwp(void);
-#define curlwp rumpuser_get_curlwp()
-
-#define curcpu() (curlwp->l_cpu)
-#define cpu_number() (cpu_index(curcpu))
-
-extern struct cpu_info *rumpcpu_info_list;
-#define CPU_INFO_ITERATOR		int
-#define CPU_INFO_FOREACH(_cii_, _ci_)	_cii_ = 0, _ci_ = rumpcpu_info_list; \
-					_ci_ != NULL; _ci_ = _ci_->ci_next
-#define CPU_IS_PRIMARY(_ci_)		(_ci_->ci_index == 0)
-
-
-#endif /* !_LOCORE */
+struct lwp *rump_get_curlwp(void); /* XXX */
+#define curlwp rump_get_curlwp()
 
 #endif /* _SYS_RUMP_CPU_H_ */

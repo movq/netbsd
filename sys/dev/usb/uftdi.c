@@ -1,4 +1,4 @@
-/*	$NetBSD: uftdi.c,v 1.54 2012/11/02 02:30:15 jakllsch Exp $	*/
+/*	$NetBSD: uftdi.c,v 1.39.4.1 2009/10/10 20:34:45 sborrill Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uftdi.c,v 1.54 2012/11/02 02:30:15 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uftdi.c,v 1.39.4.1 2009/10/10 20:34:45 sborrill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,21 +63,14 @@ int uftdidebug = 0;
 #define UFTDI_MAX_PORTS		4
 
 /*
- * These are the default number of bytes transferred per frame if the
- * endpoint doesn't tell us.  The output buffer size is a hard limit
- * for devices that use a 6-bit size encoding.
+ * These are the maximum number of bytes transferred per frame.
+ * The output buffer size cannot be increased due to the size encoding.
  */
 #define UFTDIIBUFSIZE 64
 #define UFTDIOBUFSIZE 64
 
-/*
- * Magic constants!  Where do these come from?  They're what Linux uses...
- */
-#define	UFTDI_MAX_IBUFSIZE	512
-#define	UFTDI_MAX_OBUFSIZE	256
-
 struct uftdi_softc {
-	device_t		sc_dev;		/* base device */
+	USBBASEDEVICE		sc_dev;		/* base device */
 	usbd_device_handle	sc_udev;	/* device */
 	usbd_interface_handle	sc_iface[UFTDI_MAX_PORTS];	/* interface */
 
@@ -89,7 +82,7 @@ struct uftdi_softc {
 	u_char			sc_msr;
 	u_char			sc_lsr;
 
-	device_t		sc_subdev[UFTDI_MAX_PORTS];
+	device_ptr_t		sc_subdev[UFTDI_MAX_PORTS];
 
 	u_char			sc_dying;
 
@@ -119,7 +112,7 @@ struct ucom_methods uftdi_methods = {
 
 /* 
  * The devices default to UFTDI_TYPE_8U232AM.
- * Remember to update uftdi_attach() if it should be UFTDI_TYPE_SIO instead
+ * Remember to update USB_ATTACH if it should be UFTDI_TYPE_SIO instead
  */
 static const struct usb_devno uftdi_devs[] = {
 	{ USB_VENDOR_BBELECTRONICS, USB_PRODUCT_BBELECTRONICS_USOTL4 },
@@ -138,8 +131,6 @@ static const struct usb_devno uftdi_devs[] = {
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_MHAM_RS232 },
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_MHAM_Y9 },
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_COASTAL_TNCX },
-	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_CTI_485_MINI },
-	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_CTI_NANO_485 },
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_SEMC_DSS20 },
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_LCD_LK202_24_USB },
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_LCD_LK204_24_USB },
@@ -150,20 +141,14 @@ static const struct usb_devno uftdi_devs[] = {
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_LCD_CFA_633 },
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_LCD_CFA_634 },
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_LCD_CFA_635 },
-	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_OPENRD_JTAGKEY },
-	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_MAXSTREAM_PKG_U },
-	{ USB_VENDOR_xxFTDI, USB_PRODUCT_xxFTDI_SHEEVAPLUG_JTAG },
 	{ USB_VENDOR_INTREPIDCS, USB_PRODUCT_INTREPIDCS_VALUECAN },
 	{ USB_VENDOR_INTREPIDCS, USB_PRODUCT_INTREPIDCS_NEOVI },
-	{ USB_VENDOR_RATOC, USB_PRODUCT_RATOC_REXUSB60F },
 	{ USB_VENDOR_SEALEVEL, USB_PRODUCT_SEALEVEL_USBSERIAL },
 	{ USB_VENDOR_SEALEVEL, USB_PRODUCT_SEALEVEL_SEAPORT4P1 },
 	{ USB_VENDOR_SEALEVEL, USB_PRODUCT_SEALEVEL_SEAPORT4P2 },
 	{ USB_VENDOR_SEALEVEL, USB_PRODUCT_SEALEVEL_SEAPORT4P3 },
 	{ USB_VENDOR_SEALEVEL, USB_PRODUCT_SEALEVEL_SEAPORT4P4 },
 	{ USB_VENDOR_SIIG2, USB_PRODUCT_SIIG2_US2308 },
-	{ USB_VENDOR_MISC, USB_PRODUCT_MISC_TELLSTICK },
-	{ USB_VENDOR_MISC, USB_PRODUCT_MISC_TELLSTICK_DUO },
 };
 #define uftdi_lookup(v, p) usb_lookup(uftdi_devs, v, p)
 
@@ -176,10 +161,9 @@ extern struct cfdriver uftdi_cd;
 CFATTACH_DECL2_NEW(uftdi, sizeof(struct uftdi_softc), uftdi_match,
     uftdi_attach, uftdi_detach, uftdi_activate, NULL, uftdi_childdet);
 
-int 
-uftdi_match(device_t parent, cfdata_t match, void *aux)
+USB_MATCH(uftdi)
 {
-	struct usb_attach_arg *uaa = aux;
+	USB_MATCH_START(uftdi, uaa);
 
 	DPRINTFN(20,("uftdi: vendor=0x%x, product=0x%x\n",
 		     uaa->vendor, uaa->product));
@@ -188,11 +172,9 @@ uftdi_match(device_t parent, cfdata_t match, void *aux)
                 UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
 }
 
-void 
-uftdi_attach(device_t parent, device_t self, void *aux)
+USB_ATTACH(uftdi)
 {
-	struct uftdi_softc *sc = device_private(self);
-	struct usb_attach_arg *uaa = aux;
+	USB_ATTACH_START(uftdi, sc, uaa);
 	usbd_device_handle dev = uaa->device;
 	usbd_interface_handle iface;
 	usb_device_descriptor_t *ddesc;
@@ -206,13 +188,6 @@ uftdi_attach(device_t parent, device_t self, void *aux)
 
 	DPRINTFN(10,("\nuftdi_attach: sc=%p\n", sc));
 
-	aprint_naive("\n");
-	aprint_normal("\n");
-
-	devinfop = usbd_devinfo_alloc(dev, 0);
-	aprint_normal_dev(self, "%s\n", devinfop);
-	usbd_devinfo_free(devinfop);
-
 	/* Move the device into the configured state. */
 	err = usbd_set_config_index(dev, UFTDI_CONFIG_INDEX, 1);
 	if (err) {
@@ -220,6 +195,11 @@ uftdi_attach(device_t parent, device_t self, void *aux)
 		       devname, usbd_errstr(err));
 		goto bad;
 	}
+
+	devinfop = usbd_devinfo_alloc(dev, 0);
+	USB_ATTACH_SETUP;
+	aprint_normal_dev(self, "%s\n", devinfop);
+	usbd_devinfo_free(devinfop);
 
 	sc->sc_dev = self;
 	sc->sc_udev = dev;
@@ -263,7 +243,6 @@ uftdi_attach(device_t parent, device_t self, void *aux)
 		sc->sc_iface[idx] = iface;
 
 		uca.bulkin = uca.bulkout = -1;
-		uca.ibufsize = uca.obufsize = 0;
 		for (i = 0; i < id->bNumEndpoints; i++) {
 			int addr, dir, attr;
 			ed = usbd_interface2endpoint_descriptor(iface, i);
@@ -277,22 +256,11 @@ uftdi_attach(device_t parent, device_t self, void *aux)
 			addr = ed->bEndpointAddress;
 			dir = UE_GET_DIR(ed->bEndpointAddress);
 			attr = ed->bmAttributes & UE_XFERTYPE;
-			if (dir == UE_DIR_IN && attr == UE_BULK) {
+			if (dir == UE_DIR_IN && attr == UE_BULK)
 				uca.bulkin = addr;
-				uca.ibufsize = UGETW(ed->wMaxPacketSize);
-				if (uca.ibufsize >= UFTDI_MAX_IBUFSIZE)
-					uca.ibufsize = UFTDI_MAX_IBUFSIZE;
-			} else if (dir == UE_DIR_OUT && attr == UE_BULK) {
+			else if (dir == UE_DIR_OUT && attr == UE_BULK)
 				uca.bulkout = addr;
-				uca.obufsize = UGETW(ed->wMaxPacketSize)
-				    - sc->sc_hdrlen;
-				if (uca.obufsize >= UFTDI_MAX_OBUFSIZE)
-					uca.obufsize = UFTDI_MAX_OBUFSIZE;
-				/* Limit length if we have a 6-bit header.  */
-				if ((sc->sc_hdrlen > 0) &&
-				    (uca.obufsize > UFTDIOBUFSIZE))
-					uca.obufsize = UFTDIOBUFSIZE;
-			} else {
+			else {
 				aprint_error_dev(self,
 				    "unexpected endpoint\n");
 				goto bad;
@@ -311,11 +279,9 @@ uftdi_attach(device_t parent, device_t self, void *aux)
 
 		uca.portno = FTDI_PIT_SIOA + idx;
 		/* bulkin, bulkout set above */
-		if (uca.ibufsize == 0)
-			uca.ibufsize = UFTDIIBUFSIZE;
-		uca.ibufsizepad = uca.ibufsize;
-		if (uca.obufsize == 0)
-			uca.obufsize = UFTDIOBUFSIZE - sc->sc_hdrlen;
+		uca.ibufsize = UFTDIIBUFSIZE;
+		uca.obufsize = UFTDIOBUFSIZE - sc->sc_hdrlen;
+		uca.ibufsizepad = UFTDIIBUFSIZE;
 		uca.opkthdrlen = sc->sc_hdrlen;
 		uca.device = dev;
 		uca.iface = iface;
@@ -323,36 +289,40 @@ uftdi_attach(device_t parent, device_t self, void *aux)
 		uca.arg = sc;
 		uca.info = NULL;
 
-		DPRINTF(("uftdi: in=0x%x out=0x%x isize=0x%x osize=0x%x\n",
-			uca.bulkin, uca.bulkout,
-			uca.ibufsize, uca.obufsize));
+		DPRINTF(("uftdi: in=0x%x out=0x%x\n", uca.bulkin, uca.bulkout));
 		sc->sc_subdev[idx] = config_found_sm_loc(self, "ucombus", NULL,
 		    &uca, ucomprint, ucomsubmatch);
 	}
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-			   sc->sc_dev);
+			   USBDEV(sc->sc_dev));
 
-	return;
+	USB_ATTACH_SUCCESS_RETURN;
 
 bad:
 	DPRINTF(("uftdi_attach: ATTACH ERROR\n"));
 	sc->sc_dying = 1;
-	return;
+	USB_ATTACH_ERROR_RETURN;
 }
 
 int
 uftdi_activate(device_t self, enum devact act)
 {
 	struct uftdi_softc *sc = device_private(self);
+	int rv = 0,i;
 
 	switch (act) {
+	case DVACT_ACTIVATE:
+		return (EOPNOTSUPP);
+
 	case DVACT_DEACTIVATE:
+		for (i=0; i < sc->sc_numports; i++)
+			if (sc->sc_subdev[i] != NULL)
+				rv = config_deactivate(sc->sc_subdev[i]);
 		sc->sc_dying = 1;
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		break;
 	}
+	return (rv);
 }
 
 void
@@ -383,7 +353,7 @@ uftdi_detach(device_t self, int flags)
 	}
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-			   sc->sc_dev);
+			   USBDEV(sc->sc_dev));
 
 	return (0);
 }
@@ -457,8 +427,9 @@ uftdi_read(void *vsc, int portno, u_char **ptr, u_int32_t *count)
 		ucom_status_change(device_private(sc->sc_subdev[portno-1]));
 	}
 
-	/* Adjust buffer pointer to skip status prefix */
+	/* Pick up status and adjust data part. */
 	*ptr += 2;
+	*count -= 2;
 }
 
 Static void

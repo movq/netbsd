@@ -33,7 +33,6 @@ pwdMustChange: TRUE
 pwdMaxFailure: 3
 pwdFailureCountInterval: 120
 pwdSafeModify: TRUE
-pwdLockout: TRUE
 
 dn: uid=nd, ou=People, dc=example, dc=com
 objectClass: top

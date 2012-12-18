@@ -1,4 +1,4 @@
-/*	$NetBSD: dir.c,v 1.25 2012/11/25 19:42:14 jakllsch Exp $	*/
+/*	$NetBSD: dir.c,v 1.22 2008/03/16 23:17:55 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,6 +40,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -58,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)dir.c	8.5 (Berkeley) 12/8/94";
 #else
-__RCSID("$NetBSD: dir.c,v 1.25 2012/11/25 19:42:14 jakllsch Exp $");
+__RCSID("$NetBSD: dir.c,v 1.22 2008/03/16 23:17:55 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -569,7 +574,7 @@ expanddir(struct ext2fs_dinode *dp, char *name)
 	dp->e2di_blocks[lastbn + 1] = dp->e2di_blocks[lastbn];
 	dp->e2di_blocks[lastbn] = h2fs32(newblk);
 	inossize(dp, inosize(dp) + sblock.e2fs_bsize);
-	inosnblock(dp, inonblock(dp) + btodb(sblock.e2fs_bsize));
+	dp->e2di_nblock = h2fs32(fs2h32(dp->e2di_nblock) + 1);
 	bp = getdirblk(fs2h32(dp->e2di_blocks[lastbn + 1]),
 		sblock.e2fs_bsize);
 	if (bp->b_errs)
@@ -603,7 +608,7 @@ bad:
 	dp->e2di_blocks[lastbn] = dp->e2di_blocks[lastbn + 1];
 	dp->e2di_blocks[lastbn + 1] = 0;
 	inossize(dp, inosize(dp) - sblock.e2fs_bsize);
-	inosnblock(dp, inonblock(dp) - btodb(sblock.e2fs_bsize));
+	dp->e2di_nblock = h2fs32(fs2h32(dp->e2di_nblock) - 1);
 	freeblk(newblk);
 	return (0);
 }

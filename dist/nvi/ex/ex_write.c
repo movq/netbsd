@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_write.c,v 1.4 2011/03/21 14:53:03 tnozaki Exp $ */
+/*	$NetBSD: ex_write.c,v 1.1.1.2.6.1 2009/01/20 02:41:12 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -134,7 +134,6 @@ exwr(SCR *sp, EXCMD *cmdp, enum which cmd)
 	size_t nlen;
 	const char *n;
 	int rc;
-	EX_PRIVATE *exp;
 
 	NEEDFILE(sp, cmdp);
 
@@ -145,7 +144,7 @@ exwr(SCR *sp, EXCMD *cmdp, enum which cmd)
 
 	/* Skip any leading whitespace. */
 	if (cmdp->argc != 0)
-		for (p = cmdp->argv[0]->bp; *p != '\0' && ISBLANK((UCHAR_T)*p); ++p);
+		for (p = cmdp->argv[0]->bp; *p != '\0' && isblank(*p); ++p);
 
 	/* If "write !" it's a pipe to a utility. */
 	if (cmdp->argc != 0 && cmd == WRITE && *p == '!') {
@@ -156,19 +155,13 @@ exwr(SCR *sp, EXCMD *cmdp, enum which cmd)
 		}
 
 		/* Expand the argument. */
-		for (++p; *p && ISBLANK((UCHAR_T)*p); ++p);
+		for (++p; *p && isblank(*p); ++p);
 		if (*p == '\0') {
 			ex_emsg(sp, cmdp->cmd->usage, EXM_USAGE);
 			return (1);
 		}
 		if (argv_exp1(sp, cmdp, p, STRLEN(p), 1))
 			return (1);
-
-		/* Set the last bang command */
-		exp = EXP(sp);
-		free(exp->lastbcomm);
-		exp->lastbcomm = v_wstrdup(sp, cmdp->argv[1]->bp,
-		    cmdp->argv[1]->len);
 
 		/*
 		 * Historically, vi waited after a write filter even if there
@@ -203,7 +196,7 @@ exwr(SCR *sp, EXCMD *cmdp, enum which cmd)
 		LF_SET(FS_APPEND);
 
 		/* Skip ">>" and whitespace. */
-		for (p += 2; *p && ISBLANK((UCHAR_T)*p); ++p);
+		for (p += 2; *p && isblank(*p); ++p);
 	}
 
 	/* If no other arguments, just write the file back. */

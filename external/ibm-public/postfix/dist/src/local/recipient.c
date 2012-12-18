@@ -1,4 +1,4 @@
-/*	$NetBSD: recipient.c,v 1.1.1.3 2011/03/02 19:32:20 tron Exp $	*/
+/*	$NetBSD: recipient.c,v 1.1.1.1.2.5 2011/03/24 19:54:08 riz Exp $	*/
 
 /*++
 /* NAME

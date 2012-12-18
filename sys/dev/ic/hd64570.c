@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64570.c,v 1.43 2010/04/05 07:19:34 joerg Exp $	*/
+/*	$NetBSD: hd64570.c,v 1.39 2008/04/08 12:07:26 cegger Exp $	*/
 
 /*
  * Copyright (c) 1999 Christian E. Hopps
@@ -65,8 +65,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.43 2010/04/05 07:19:34 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.39 2008/04/08 12:07:26 cegger Exp $");
 
+#include "bpfilter.h"
 #include "opt_inet.h"
 #include "opt_iso.h"
 
@@ -98,7 +99,9 @@ __KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.43 2010/04/05 07:19:34 joerg Exp $");
 #include <netiso/iso_var.h>
 #endif
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <sys/cpu.h>
 #include <sys/bus.h>
@@ -459,7 +462,10 @@ sca_port_attach(struct sca_softc *sc, u_int port)
 	IFQ_SET_READY(&ifp->if_snd);
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
-	bpf_attach(ifp, DLT_HDLC, HDLC_HDRLEN);
+
+#if NBPFILTER > 0
+	bpfattach(ifp, DLT_HDLC, HDLC_HDRLEN);
+#endif
 
 	if (sc->sc_parent == NULL)
 		printf("%s: port %d\n", ifp->if_xname, port);
@@ -920,7 +926,10 @@ sca_output(
 }
 
 static int
-sca_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+sca_ioctl(ifp, cmd, addr)
+     struct ifnet *ifp;
+     u_long cmd;
+     void *addr;
 {
 	struct ifreq *ifr;
 	struct ifaddr *ifa;
@@ -929,12 +938,12 @@ sca_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	s = splnet();
 
-	ifr = (struct ifreq *)data;
-	ifa = (struct ifaddr *)data;
+	ifr = (struct ifreq *)addr;
+	ifa = (struct ifaddr *)addr;
 	error = 0;
 
 	switch (cmd) {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		switch(ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
@@ -988,8 +997,6 @@ sca_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
 		if (ifr->ifr_flags & IFF_UP) {
 			ifp->if_flags |= IFF_UP;
 			sca_port_up(ifp->if_softc);
@@ -1001,7 +1008,7 @@ sca_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ifioctl_common(ifp, cmd, data);
+		error = EINVAL;
 	}
 
 	splx(s);
@@ -1014,7 +1021,8 @@ sca_ioctl(struct ifnet *ifp, u_long cmd, void *data)
  * MUST BE CALLED AT splnet()
  */
 static void
-sca_start(struct ifnet *ifp)
+sca_start(ifp)
+	struct ifnet *ifp;
 {
 	sca_port_t *scp = ifp->if_softc;
 	struct sca_softc *sc = scp->sca;
@@ -1135,10 +1143,13 @@ X
 
 	ifp->if_opackets++;
 
+#if NBPFILTER > 0
 	/*
 	 * Pass packet to bpf if there is a listener.
 	 */
-	bpf_mtap(ifp, mb_head);
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, mb_head);
+#endif
 
 	m_freem(mb_head);
 
@@ -1594,7 +1605,10 @@ sca_frame_process(sca_port_t *scp)
 		return;
 	}
 
-	bpf_mtap(&scp->sp_if, m);
+#if NBPFILTER > 0
+	if (scp->sp_if.if_bpf)
+		bpf_mtap(scp->sp_if.if_bpf, m);
+#endif
 
 	scp->sp_if.if_ipackets++;
 

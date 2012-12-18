@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.28 2012/02/18 16:29:37 christos Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.26 2007/10/25 13:03:03 yamt Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -29,10 +29,10 @@
  * SUCH DAMAGE.
  */
 
-#ifndef	_CATS_VMPARAM_H_
-#define	_CATS_VMPARAM_H_
+#ifndef	_ARM32_VMPARAM_H_
+#define	_ARM32_VMPARAM_H_
 
-#if defined(_KERNEL) || defined(_KMEMUSER)
+#ifdef _KERNEL
 
 #include <arm/arm32/vmparam.h>
 
@@ -76,6 +76,13 @@
 #define	VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH
 
 /*
+ * this indicates that we can't add RAM to the VM system after the
+ * vm system is init'd.
+ */
+
+#define	VM_PHYSSEG_NOADD
+
+/*
  * we support 2 free lists:
  *
  *	- DEFAULT for all systems
@@ -86,6 +93,6 @@
 #define	VM_FREELIST_DEFAULT	0
 #define	VM_FREELIST_ISADMA	1
 
-#endif /* _KERNEL || _KMEMUSER */
+#endif /* _KERNEL */
 
-#endif	/* _CATS_VMPARAM_H_ */
+#endif	/* _ARM32_VMPARAM_H_ */

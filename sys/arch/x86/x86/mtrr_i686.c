@@ -1,7 +1,7 @@
-/*	$NetBSD: mtrr_i686.c,v 1.27 2012/04/22 18:59:41 rmind Exp $ */
+/*	$NetBSD: mtrr_i686.c,v 1.19.4.1 2011/02/16 20:54:13 bouyer Exp $ */
 
 /*-
- * Copyright (c) 2000, 2011 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -30,17 +30,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mtrr_i686.c,v 1.27 2012/04/22 18:59:41 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mtrr_i686.c,v 1.19.4.1 2011/02/16 20:54:13 bouyer Exp $");
 
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-
+#include <sys/proc.h>
+#include <sys/user.h>
+#include <sys/malloc.h>
 #include <sys/atomic.h>
 #include <sys/cpu.h>
-#include <sys/kmem.h>
-#include <sys/proc.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -84,22 +84,6 @@ mtrr_raw[] = {
 	{ MSR_MTRRphysMask6, 0 },
 	{ MSR_MTRRphysBase7, 0 },
 	{ MSR_MTRRphysMask7, 0 },
-	{ MSR_MTRRphysBase8, 0 },
-	{ MSR_MTRRphysMask8, 0 },
-	{ MSR_MTRRphysBase9, 0 },
-	{ MSR_MTRRphysMask9, 0 },
-	{ MSR_MTRRphysBase10, 0 },
-	{ MSR_MTRRphysMask10, 0 },
-	{ MSR_MTRRphysBase11, 0 },
-	{ MSR_MTRRphysMask11, 0 },
-	{ MSR_MTRRphysBase12, 0 },
-	{ MSR_MTRRphysMask12, 0 },
-	{ MSR_MTRRphysBase13, 0 },
-	{ MSR_MTRRphysMask13, 0 },
-	{ MSR_MTRRphysBase14, 0 },
-	{ MSR_MTRRphysMask14, 0 },
-	{ MSR_MTRRphysBase15, 0 },
-	{ MSR_MTRRphysMask15, 0 },
 	{ MSR_MTRRfix64K_00000, 0 },
 	{ MSR_MTRRfix16K_80000, 0 },
 	{ MSR_MTRRfix16K_A0000, 0 },
@@ -115,7 +99,7 @@ mtrr_raw[] = {
 
 };
 
-static const int nmtrr_raw = __arraycount(mtrr_raw);
+static const int nmtrr_raw = sizeof(mtrr_raw)/sizeof(mtrr_raw[0]);
 static int i686_mtrr_vcnt = 0;
 
 static struct mtrr_state *mtrr_var_raw;
@@ -134,9 +118,11 @@ struct mtrr_funcs i686_mtrr_funcs = {
 	i686_mtrr_dump
 };
 
-static kcpuset_t *		mtrr_waiting;
+#ifdef MULTIPROCESSOR
+static volatile uint32_t mtrr_waiting;
+#endif
 
-static uint64_t			i686_mtrr_cap;
+static uint64_t i686_mtrr_cap;
 
 static void
 i686_mtrr_dump(const char *tag)
@@ -173,10 +159,14 @@ i686_mtrr_reload(int synch)
 	vaddr_t cr3, cr4;
 	uint32_t origcr0;
 	vaddr_t origcr4;
+#ifdef MULTIPROCESSOR
+	uint32_t mymask = 1 << cpu_number();
+#endif
 
 	/*
 	 * 2. Disable interrupts
 	 */
+
 	x86_disable_intr();
 
 #ifdef MULTIPROCESSOR
@@ -184,10 +174,11 @@ i686_mtrr_reload(int synch)
 		/*
 		 * 3. Wait for all processors to reach this point.
 		 */
-		kcpuset_atomic_set(mtrr_waiting, cpu_index(curcpu()));
-		while (!kcpuset_match(mtrr_waiting, kcpuset_running)) {
+
+		atomic_or_32(&mtrr_waiting, mymask);
+
+		while (mtrr_waiting != cpus_running)
 			DELAY(10);
-		}
 	}
 #endif
 
@@ -283,10 +274,10 @@ i686_mtrr_reload(int synch)
 		/*
 		 * 14. Wait for all processors to reach this point.
 		 */
-		kcpuset_atomic_clear(mtrr_waiting, cpu_index(curcpu()));
-		while (!kcpuset_iszero(mtrr_waiting)) {
+		atomic_and_32(&mtrr_waiting, ~mymask);
+
+		while (mtrr_waiting != 0)
 			DELAY(10);
-		}
 	}
 #endif
 
@@ -311,36 +302,34 @@ i686_mtrr_init_first(void)
 	i686_mtrr_vcnt = i686_mtrr_cap & MTRR_I686_CAP_VCNT_MASK;
 
 	if (i686_mtrr_vcnt > MTRR_I686_NVAR_MAX)
-		printf("\%s: FIXME: more than %d MTRRs (%d)\n", __FILE__,
-		    MTRR_I686_NVAR_MAX, i686_mtrr_vcnt);
+		printf("\%s: FIXME: more than %d MTRRs\n", __FILE__,
+		    MTRR_I686_NVAR_MAX);
 	else if (i686_mtrr_vcnt < MTRR_I686_NVAR_MAX) {
 		for (i = MTRR_I686_NVAR_MAX - i686_mtrr_vcnt; i; i--) {
-			mtrr_raw[(MTRR_I686_NVAR_MAX - i) * 2].msraddr = 0;
-			mtrr_raw[(MTRR_I686_NVAR_MAX - i) * 2 + 1].msraddr = 0;
+			mtrr_raw[16 - (i*2)].msraddr = 0;
+			mtrr_raw[17 - (i*2)].msraddr = 0;
 		}
 	}
 
-	for (i = 0; i < nmtrr_raw; i++) {
+	for (i = 0; i < nmtrr_raw; i++)
 		if (mtrr_raw[i].msraddr)
 			mtrr_raw[i].msrval = rdmsr(mtrr_raw[i].msraddr);
 		else
 			mtrr_raw[i].msrval = 0;
-	}
 #if 0
 	mtrr_dump("init mtrr");
 #endif
 
-	kcpuset_create(&mtrr_waiting, true);
+	mtrr_fixed = (struct mtrr *)
+	    malloc(MTRR_I686_NFIXED_SOFT * sizeof (struct mtrr), M_TEMP,
+		   M_NOWAIT);
+	if (mtrr_fixed == NULL)
+		panic("can't allocate fixed MTRR array");
 
-	mtrr_fixed =
-	    kmem_zalloc(MTRR_I686_NFIXED_SOFT * sizeof(struct mtrr), KM_SLEEP);
-	KASSERT(mtrr_fixed != NULL);
-
-	if (i686_mtrr_vcnt) {
-		mtrr_var =
-		    kmem_zalloc(i686_mtrr_vcnt * sizeof(struct mtrr), KM_SLEEP);
-		KASSERT(mtrr_var != NULL);
-	}
+	mtrr_var = (struct mtrr *)
+	    malloc(i686_mtrr_vcnt * sizeof (struct mtrr), M_TEMP, M_NOWAIT);
+	if (mtrr_var == NULL)
+		panic("can't allocate variable MTRR array");
 
 	mtrr_var_raw = &mtrr_raw[0];
 	mtrr_fixed_raw = &mtrr_raw[MTRR_I686_NVAR_MAX * 2];
@@ -763,12 +752,9 @@ i686_mtrr_get(struct mtrr *mtrrp, int *n, struct proc *p, int flags)
 static void
 i686_mtrr_commit(void)
 {
-
 	i686_soft2raw();
-	kpreempt_disable();
 #ifdef MULTIPROCESSOR
 	x86_broadcast_ipi(X86_IPI_MTRR);
 #endif
 	i686_mtrr_reload(1);
-	kpreempt_enable();
 }

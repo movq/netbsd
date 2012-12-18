@@ -1,4 +1,4 @@
-/*  $NetBSD: ufs_wapbl.c,v 1.23 2012/01/27 19:22:50 para Exp $ */
+/*  $NetBSD: ufs_wapbl.c,v 1.2.8.2 2012/05/19 17:28:29 riz Exp $ */
 
 /*-
  * Copyright (c) 2003,2006,2008 The NetBSD Foundation, Inc.
@@ -66,7 +66,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_wapbl.c,v 1.23 2012/01/27 19:22:50 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_wapbl.c,v 1.2.8.2 2012/05/19 17:28:29 riz Exp $");
+
+#if defined(_KERNEL_OPT)
+#include "opt_quota.h"
+#include "fs_lfs.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,6 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_wapbl.c,v 1.23 2012/01/27 19:22:50 para Exp $");
 #include <sys/proc.h>
 #include <sys/mount.h>
 #include <sys/vnode.h>
+#include <sys/malloc.h>
 #include <sys/dirent.h>
 #include <sys/lockf.h>
 #include <sys/kauth.h>
@@ -100,16 +106,25 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_wapbl.c,v 1.23 2012/01/27 19:22:50 para Exp $");
 
 #include <uvm/uvm.h>
 
+/* XXX following lifted from ufs_lookup.c */
+#define	FSFMT(vp)	(((vp)->v_mount->mnt_iflag & IMNT_DTYPE) == 0)
+
+/*
+ * A virgin directory (no blushing please).
+ */
+static const struct dirtemplate mastertemplate = {
+	0,	12,		DT_DIR,	1,	".",
+	0,	DIRBLKSIZ - 12,	DT_DIR,	2,	".."
+};
+
 #ifdef WAPBL_DEBUG_INODES
-#error WAPBL_DEBUG_INODES: not functional before ufs_wapbl.c is updated
 void
 ufs_wapbl_verify_inodes(struct mount *mp, const char *str)
 {
 	struct vnode *vp, *nvp;
 	struct inode *ip;
-	struct buf *bp, *nbp;
 
-	mutex_enter(&mntvnode_lock);
+	simple_lock(&mntvnode_slock);
  loop:
 	TAILQ_FOREACH_REVERSE(vp, &mp->mnt_vnodelist, vnodelst, v_mntvnodes) {
 		/*
@@ -118,11 +133,11 @@ ufs_wapbl_verify_inodes(struct mount *mp, const char *str)
 		 */
 		if (vp->v_mount != mp)
 			goto loop;
-		mutex_enter(&vp->v_interlock);
+		simple_lock(&vp->v_interlock);
 		nvp = TAILQ_NEXT(vp, v_mntvnodes);
 		ip = VTOI(vp);
 		if (vp->v_type == VNON) {
-			mutex_exit(&vp->v_interlock);
+			simple_unlock(&vp->v_interlock);
 			continue;
 		}
 		/* verify that update has been called on all inodes */
@@ -130,36 +145,56 @@ ufs_wapbl_verify_inodes(struct mount *mp, const char *str)
 			panic("wapbl_verify: mp %p: dirty vnode %p (inode %p): 0x%x\n",
 				mp, vp, ip, ip->i_flag);
 		}
-		mutex_exit(&mntvnode_lock);
+		KDASSERT(ip->i_nlink == ip->i_ffs_effnlink);
 
-		mutex_enter(&bufcache_lock);
-		for (bp = LIST_FIRST(&vp->v_dirtyblkhd); bp; bp = nbp) {
-			nbp = LIST_NEXT(bp, b_vnbufs);
-			if ((bp->b_cflags & BC_BUSY)) {
-				continue;
+		simple_unlock(&mntvnode_slock);
+		{
+			int s;
+			struct buf *bp;
+			struct buf *nbp;
+			s = splbio();
+			for (bp = LIST_FIRST(&vp->v_dirtyblkhd); bp; bp = nbp) {
+				nbp = LIST_NEXT(bp, b_vnbufs);
+				simple_lock(&bp->b_interlock);
+				if ((bp->b_flags & B_BUSY)) {
+					simple_unlock(&bp->b_interlock);
+					continue;
+				}
+				if ((bp->b_flags & B_DELWRI) == 0)
+					panic("wapbl_verify: not dirty, bp %p", bp);
+				if ((bp->b_flags & B_LOCKED) == 0)
+					panic("wapbl_verify: not locked, bp %p", bp);
+				simple_unlock(&bp->b_interlock);
 			}
-			KASSERT((bp->b_oflags & BO_DELWRI) != 0);
-			KASSERT((bp->b_flags & B_LOCKED) != 0);
+			splx(s);
 		}
-		mutex_exit(&bufcache_lock);
-		mutex_exit(&vp->v_interlock);
-
-		mutex_enter(&mntvnode_lock);
+		simple_unlock(&vp->v_interlock);
+		simple_lock(&mntvnode_slock);
 	}
-	mutex_exit(&mntvnode_lock);
+	simple_unlock(&mntvnode_slock);
 
 	vp = VFSTOUFS(mp)->um_devvp;
-	mutex_enter(&vp->v_interlock);
-	mutex_enter(&bufcache_lock);
-	for (bp = LIST_FIRST(&vp->v_dirtyblkhd); bp; bp = nbp) {
-		nbp = LIST_NEXT(bp, b_vnbufs);
-		if ((bp->b_cflags & BC_BUSY)) {
-			continue;
+	simple_lock(&vp->v_interlock);
+	{
+		int s;
+		struct buf *bp;
+		struct buf *nbp;
+		s = splbio();
+		for (bp = LIST_FIRST(&vp->v_dirtyblkhd); bp; bp = nbp) {
+			nbp = LIST_NEXT(bp, b_vnbufs);
+			simple_lock(&bp->b_interlock);
+			if ((bp->b_flags & B_BUSY)) {
+				simple_unlock(&bp->b_interlock);
+				continue;
+			}
+			if ((bp->b_flags & B_DELWRI) == 0)
+				panic("wapbl_verify: devvp not dirty, bp %p", bp);
+			if ((bp->b_flags & B_LOCKED) == 0)
+				panic("wapbl_verify: devvp not locked, bp %p", bp);
+			simple_unlock(&bp->b_interlock);
 		}
-		KASSERT((bp->b_oflags & BO_DELWRI) != 0);
-		KASSERT((bp->b_flags & B_LOCKED) != 0);
+		splx(s);
 	}
-	mutex_exit(&bufcache_lock);
-	mutex_exit(&vp->v_interlock);
+	simple_unlock(&vp->v_interlock);
 }
 #endif /* WAPBL_DEBUG_INODES */

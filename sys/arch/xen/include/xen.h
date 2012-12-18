@@ -1,4 +1,4 @@
-/*	$NetBSD: xen.h,v 1.35 2011/09/20 00:12:24 jym Exp $	*/
+/*	$NetBSD: xen.h,v 1.30.4.1 2009/10/03 23:54:05 snj Exp $	*/
 
 /*
  *
@@ -27,10 +27,7 @@
 
 #ifndef _XEN_H
 #define _XEN_H
-
-#ifdef _KERNEL_OPT
 #include "opt_xen.h"
-#endif
 
 
 #ifndef _LOCORE
@@ -72,14 +69,9 @@ void	xenevt_notify(void);
 
 void	idle_block(void);
 
-/* xen_machdep.c */
-void	sysctl_xen_suspend_setup(void);
-
 #if defined(XENDEBUG) || 1 /* XXX */
-#include <sys/stdarg.h>
-
 void printk(const char *, ...);
-void vprintk(const char *, va_list);
+void vprintk(const char *, _BSD_VA_LIST_);
 #endif
 
 #endif
@@ -111,6 +103,7 @@ void vprintk(const char *, va_list);
  * a bit more...
  */
 
+#ifdef XEN3
 #ifndef FLAT_RING1_CS
 #define FLAT_RING1_CS 0xe019    /* GDT index 259 */
 #define FLAT_RING1_DS 0xe021    /* GDT index 260 */
@@ -119,6 +112,14 @@ void vprintk(const char *, va_list);
 #define FLAT_RING3_DS 0xe033    /* GDT index 262 */
 #define FLAT_RING3_SS 0xe033    /* GDT index 262 */
 #endif
+#else /* XEN3 */
+#ifndef FLAT_RING1_CS
+#define FLAT_RING1_CS		0x0819
+#define FLAT_RING1_DS		0x0821
+#define FLAT_RING3_CS		0x082b
+#define FLAT_RING3_DS		0x0833
+#endif
+#endif /* XEN3 */
 
 #define __KERNEL_CS        FLAT_RING1_CS
 #define __KERNEL_DS        FLAT_RING1_DS
@@ -188,6 +189,7 @@ do {									\
  */
 #define __LOCK_PREFIX "lock; "
 
+#ifdef XEN3
 #define XATOMIC_T u_long
 #ifdef __x86_64__
 #define LONG_SHIFT 6
@@ -196,6 +198,11 @@ do {									\
 #define LONG_SHIFT 5
 #define LONG_MASK 31
 #endif /* __x86_64__ */
+#else /* XEN3 */
+#define XATOMIC_T uint32_t
+#define LONG_SHIFT 5
+#define LONG_MASK 31
+#endif /* XEN3 */
 
 #define xen_ffs __builtin_ffsl
 

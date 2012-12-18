@@ -1,4 +1,4 @@
-/*	$NetBSD: attack.c,v 1.9 2009/05/24 22:55:03 dholland Exp $	*/
+/*	$NetBSD: attack.c,v 1.5 2003/08/07 09:37:49 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)attack.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: attack.c,v 1.9 2009/05/24 22:55:03 dholland Exp $");
+__RCSID("$NetBSD: attack.c,v 1.5 2003/08/07 09:37:49 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -70,12 +70,11 @@ __RCSID("$NetBSD: attack.c,v 1.9 2009/05/24 22:55:03 dholland Exp $");
 **	entry for the particular device.
 **
 **	Casualties can also occur.
-**
-**  resting -- set if attack while resting
 */
 
 void
-attack(int resting)
+attack(resting)
+int	resting;	/* set if attack while resting */
 {
 	int		hit, i, l;
 	int		maxhit, tothit, shldabsb;
@@ -92,10 +91,10 @@ attack(int resting)
 		return;
 	/* move before attack */
 	klmove(0);
-	if (Ship.cond == DOCKED) {
+	if (Ship.cond == DOCKED)
+	{
 		if (!resting)
-			printf("Starbase shields protect the %s\n",
-				Ship.shipname);
+			printf("Starbase shields protect the %s\n", Ship.shipname);
 		return;
 	}
 	/* setup shield effectiveness */
@@ -106,11 +105,13 @@ attack(int resting)
 	hitflag = 0;
 
 	/* let each Klingon do his damndest */
-	for (i = 0; i < Etc.nkling; i++) {
+	for (i = 0; i < Etc.nkling; i++)
+	{
 		/* if he's low on power he won't attack */
 		if (Etc.klingon[i].power < 20)
 			continue;
-		if (!hitflag) {
+		if (!hitflag)
+		{
 			printf("\nStardate %.2f: Klingon attack:\n",
 				Now.date);
 			hitflag++;
@@ -121,11 +122,11 @@ attack(int resting)
 		hit = Etc.klingon[i].power * pow(dustfac, tothe) * Param.hitfac;
 		/* deplete his energy */
 		dustfac = Etc.klingon[i].power;
-		Etc.klingon[i].power = dustfac * Param.phasfac *
-			(1.0 + (franf() - 0.5) * 0.2);
+		Etc.klingon[i].power = dustfac * Param.phasfac * (1.0 + (franf() - 0.5) * 0.2);
 		/* see how much of hit shields will absorb */
 		shldabsb = 0;
-		if (Ship.shldup || Move.shldchg) {
+		if (Ship.shldup || Move.shldchg)
+		{
 			propor = Ship.shield;
 			propor /= Param.shield;
 			shldabsb = propor * chgfac * hit;
@@ -134,10 +135,9 @@ attack(int resting)
 			Ship.shield -= shldabsb;
 		}
 		/* actually do the hit */
-		printf("\aHIT: %d units", hit);
+		printf("HIT: %d units", hit);
 		if (!damaged(SRSCAN))
-			printf(" from %d,%d",
-				Etc.klingon[i].x, Etc.klingon[i].y);
+			printf(" from %d,%d", Etc.klingon[i].x, Etc.klingon[i].y);
 		cas = (shldabsb * 100) / hit;
 		hit -= shldabsb;
 		if (shldabsb > 0)
@@ -150,22 +150,22 @@ attack(int resting)
 			maxhit = hit;
 		Ship.energy -= hit;
 		/* see if damages occurred */
-		if (hit >= (15 - Game.skill) * (25 - ranf(12))) {
-			printf("\aCRITICAL HIT!!!\a\n");
+		if (hit >= (15 - Game.skill) * (25 - ranf(12)))
+		{
+			printf("CRITICAL HIT!!!\n");
 			/* select a device from probability vector */
 			cas = ranf(1000);
 			for (l = 0; cas >= 0; l++)
 				cas -= Param.damprob[l];
 			l -= 1;
 			/* compute amount of damage */
-			extradm = (hit * Param.damfac[l]) /
-				(75 + ranf(25)) + 0.5;
+			extradm = (hit * Param.damfac[l]) / (75 + ranf(25)) + 0.5;
 			/* damage the device */
 			damage(l, extradm);
-			if (damaged(SHIELD)) {
+			if (damaged(SHIELD))
+			{
 				if (Ship.shldup)
-					printf("Sulu: Shields knocked down, "
-					       "captain.\n");
+					printf("Sulu: Shields knocked down, captain.\n");
 				Ship.shldup = 0;
 				Move.shldchg = 0;
 			}
@@ -175,11 +175,12 @@ attack(int resting)
 	}
 
 	/* see what our casualities are like */
-	if (maxhit >= 200 || tothit >= 500) {
+	if (maxhit >= 200 || tothit >= 500)
+	{
 		cas = tothit * 0.015 * franf();
-		if (cas >= 2) {
-			printf("McCoy: we suffered %d casualties in that "
-			       "attack.\n",
+		if (cas >= 2)
+		{
+			printf("McCoy: we suffered %d casualties in that attack.\n",
 				cas);
 			Game.deaths += cas;
 			Ship.crew -= cas;

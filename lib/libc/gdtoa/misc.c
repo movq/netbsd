@@ -1,4 +1,4 @@
-/* $NetBSD: misc.c,v 1.11 2011/11/21 09:46:19 mlelstv Exp $ */
+/* $NetBSD: misc.c,v 1.4 2008/03/21 23:13:48 christos Exp $ */
 
 /****************************************************************
 
@@ -53,13 +53,11 @@ Balloc
 	int x;
 	Bigint *rv;
 #ifndef Omit_Private_Memory
-	size_t len;
+	unsigned int len;
 #endif
 
 	ACQUIRE_DTOA_LOCK(0);
-	/* The k > Kmax case does not need ACQUIRE_DTOA_LOCK(0), */
-	/* but this case seems very unlikely. */
-	if ((size_t)k <= Kmax && (rv = freelist[k]) !=0) {
+	if ( (rv = freelist[k]) !=0) {
 		freelist[k] = rv->next;
 		}
 	else {
@@ -69,17 +67,15 @@ Balloc
 #else
 		len = (sizeof(Bigint) + (x-1)*sizeof(ULong) + sizeof(double) - 1)
 			/sizeof(double);
-		if ((size_t)k <= Kmax && pmem_next - private_mem + len <= PRIVATE_mem) {
+		if (pmem_next - private_mem + len <= PRIVATE_mem) {
 			rv = (Bigint*)(void *)pmem_next;
 			pmem_next += len;
 			}
 		else
 			rv = (Bigint*)MALLOC(len*sizeof(double));
 #endif
-		if (rv == NULL) {
-			FREE_DTOA_LOCK(0);
+		if (rv == NULL)
 			return NULL;
-		}
 		rv->k = k;
 		rv->maxwds = x;
 		}
@@ -97,18 +93,10 @@ Bfree
 #endif
 {
 	if (v) {
-		if ((size_t)v->k > Kmax)
-#ifdef FREE
-			FREE((void*)v);
-#else
-			free((void*)v);
-#endif
-		else {
-			ACQUIRE_DTOA_LOCK(0);
-			v->next = freelist[v->k];
-			freelist[v->k] = v;
-			FREE_DTOA_LOCK(0);
-			}
+		ACQUIRE_DTOA_LOCK(0);
+		v->next = freelist[v->k];
+		freelist[v->k] = v;
+		FREE_DTOA_LOCK(0);
 		}
 	}
 
@@ -417,10 +405,8 @@ pow5mult
 		ACQUIRE_DTOA_LOCK(1);
 		if (!(p5 = p5s)) {
 			p5 = p5s = i2b(625);
-			if (p5 == NULL) {
-				FREE_DTOA_LOCK(1);
+			if (p5 == NULL)
 				return NULL;
-			}
 			p5->next = 0;
 			}
 		FREE_DTOA_LOCK(1);
@@ -436,7 +422,6 @@ pow5mult
 			b1 = mult(b, p5);
 			if (b1 == NULL)
 				return NULL;
-			Bfree(b);
 			b = b1;
 			}
 		if (!(k = (unsigned int)k >> 1))
@@ -446,10 +431,8 @@ pow5mult
 			ACQUIRE_DTOA_LOCK(1);
 			if (!(p51 = p5->next)) {
 				p51 = p5->next = mult(p5,p5);
-				if (p51 == NULL) {
-					FREE_DTOA_LOCK(1);
+				if (p51 == NULL)
 					return NULL;
-				}
 				p51->next = 0;
 				}
 			FREE_DTOA_LOCK(1);
@@ -665,12 +648,12 @@ b2d
 {
 	ULong *xa, *xa0, w, y, z;
 	int k;
-	U d;
+	double d;
 #ifdef VAX
 	ULong d0, d1;
 #else
-#define d0 word0(&d)
-#define d1 word1(&d)
+#define d0 word0(d)
+#define d1 word1(d)
 #endif
 
 	xa0 = a->x;
@@ -716,10 +699,10 @@ b2d
 #endif
  ret_d:
 #ifdef VAX
-	word0(&d) = d0 >> 16 | d0 << 16;
-	word1(&d) = d1 >> 16 | d1 << 16;
+	word0(d) = d0 >> 16 | d0 << 16;
+	word1(d) = d1 >> 16 | d1 << 16;
 #endif
-	return dval(&d);
+	return dval(d);
 	}
 #undef d0
 #undef d1
@@ -727,13 +710,12 @@ b2d
  Bigint *
 d2b
 #ifdef KR_headers
-	(dd, e, bits) double dd; int *e, *bits;
+	(d, e, bits) double d; int *e, *bits;
 #else
-	(double dd, int *e, int *bits)
+	(double d, int *e, int *bits)
 #endif
 {
 	Bigint *b;
-	U d;
 #ifndef Sudden_Underflow
 	int i;
 #endif
@@ -741,14 +723,11 @@ d2b
 	ULong *x, y, z;
 #ifdef VAX
 	ULong d0, d1;
+	d0 = word0(d) >> 16 | word0(d) << 16;
+	d1 = word1(d) >> 16 | word1(d) << 16;
 #else
-#define d0 word0(&d)
-#define d1 word1(&d)
-#endif
-	d.d = dd;
-#ifdef VAX
-	d0 = word0(&d) >> 16 | word0(&d) << 16;
-	d1 = word1(&d) >> 16 | word1(&d) << 16;
+#define d0 word0(d)
+#define d1 word1(d)
 #endif
 
 #ifdef Pack_32
@@ -785,6 +764,10 @@ d2b
 		     b->wds = (x[1] = z) !=0 ? 2 : 1;
 		}
 	else {
+#ifdef DEBUG
+		if (!z)
+			Bug("Zero passed to d2b");
+#endif
 		k = lo0bits(&z);
 		x[0] = z;
 #ifndef Sudden_Underflow
@@ -843,7 +826,7 @@ d2b
 #endif
 #ifdef IBM
 		*e = (de - Bias - (P-1) << 2) + k;
-		*bits = 4*P + 8 - k - hi0bits(word0(&d) & Frac_mask);
+		*bits = 4*P + 8 - k - hi0bits(word0(d) & Frac_mask);
 #else
 		*e = de - Bias - (P-1) + k;
 		*bits = P - k;

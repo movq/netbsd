@@ -1,4 +1,4 @@
-/*	$NetBSD: in6.h,v 1.70 2012/06/22 14:54:35 christos Exp $	*/
+/*	$NetBSD: in6.h,v 1.66 2007/12/25 18:33:47 perry Exp $	*/
 /*	$KAME: in6.h,v 1.83 2001/03/29 02:55:07 jinmei Exp $	*/
 
 /*
@@ -231,37 +231,37 @@ extern const struct in6_addr in6addr_linklocal_allrouters;
  * Unspecified
  */
 #define IN6_IS_ADDR_UNSPECIFIED(a)	\
-	((a)->__u6_addr.__u6_addr32[0] == 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[1] == 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[2] == 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[3] == 0)
+	((*(const uint32_t *)(const void *)(&(a)->s6_addr[0]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[4]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[8]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[12]) == 0))
 
 /*
  * Loopback
  */
 #define IN6_IS_ADDR_LOOPBACK(a)		\
-	((a)->__u6_addr.__u6_addr32[0] == 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[1] == 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[2] == 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[3] == ntohl(1))
+	((*(const uint32_t *)(const void *)(&(a)->s6_addr[0]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[4]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[8]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[12]) == ntohl(1)))
 
 /*
  * IPv4 compatible
  */
 #define IN6_IS_ADDR_V4COMPAT(a)		\
-	((a)->__u6_addr.__u6_addr32[0] == 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[1] == 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[2] == 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[3] != 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[3] != ntohl(1))
+	((*(const uint32_t *)(const void *)(&(a)->s6_addr[0]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[4]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[8]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[12]) != 0) &&	\
+	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[12]) != ntohl(1)))
 
 /*
  * Mapped
  */
 #define IN6_IS_ADDR_V4MAPPED(a)		      \
-	((a)->__u6_addr.__u6_addr32[0] == 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[1] == 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[2] == ntohl(0x0000ffff))
+	((*(const uint32_t *)(const void *)(&(a)->s6_addr[0]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[4]) == 0) &&	\
+	 (*(const uint32_t *)(const void *)(&(a)->s6_addr[8]) == ntohl(0x0000ffff)))
 
 /*
  * KAME Scope Values
@@ -385,7 +385,6 @@ extern const struct in6_addr in6addr_linklocal_allrouters;
 #define IPV6_LEAVE_GROUP	13 /* ip6_mreq; leave a group membership */
 #define IPV6_PORTRANGE		14 /* int; range to choose for unspec port */
 #if defined(_NETBSD_SOURCE)
-#define IPV6_PORTALGO		17 /* int; port selection algo (rfc6056) */
 #define ICMP6_FILTER		18 /* icmp6_filter; icmp6 filter */
 #endif
 /* RFC2292 options */
@@ -576,13 +575,9 @@ struct ip6_mtuinfo {
 /* 40: reserved */
 #define IPV6CTL_MAXFRAGS	41	/* max fragments */
 #define IPV6CTL_IFQ		42	/* ip6intrq node */
-#define IPV6CTL_RTADV_MAXROUTES 43	/* maximum number of routes */
-					/* via router advertisement */
-#define IPV6CTL_RTADV_NUMROUTES 44	/* current number of routes */
-					/* via router advertisement */
 /* New entries should be added here from current IPV6CTL_MAXID value. */
 /* to define items, should talk with KAME guys first, for *BSD compatibility */
-#define IPV6CTL_MAXID		45
+#define IPV6CTL_MAXID		43
 
 #define IPV6CTL_NAMES { \
 	{ 0, 0 }, \
@@ -628,8 +623,6 @@ struct ip6_mtuinfo {
 	{ 0, 0 }, \
 	{ "maxfrags", CTLTYPE_INT }, \
 	{ "ifq", CTLTYPE_NODE }, \
-	{ "rtadv_maxroutes", CTLTYPE_INT }, \
-	{ "rtadv_numroutes", CTLTYPE_INT }, \
 }
 
 #endif /* _NETBSD_SOURCE */
@@ -691,8 +684,6 @@ in6_cksum_phdr(const struct in6_addr *src, const struct in6_addr *dst,
 struct mbuf;
 struct ifnet;
 int sockaddr_in6_cmp(const struct sockaddr *, const struct sockaddr *);
-struct sockaddr *sockaddr_in6_externalize(struct sockaddr *, socklen_t,
-    const struct sockaddr *);
 int	in6_cksum(struct mbuf *, u_int8_t, u_int32_t, u_int32_t);
 void	in6_delayed_cksum(struct mbuf *);
 int	in6_localaddr(const struct in6_addr *);

@@ -1,4 +1,4 @@
-/*	$NetBSD: esiopvar.h,v 1.21 2012/08/24 09:01:22 msaitoh Exp $	*/
+/*	$NetBSD: esiopvar.h,v 1.16 2007/12/25 18:33:38 perry Exp $	*/
 
 /*
  * Copyright (c) 2002 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,10 +40,10 @@
  * A_ncmd_slots of this.
  */
 struct esiop_slot {
-	uint32_t dsa; /* DSA of the xfer. The first 2 bits holds flags */
+	u_int32_t dsa; /* DSA of the xfer. The first 2 bits holds flags */
 } __packed;
 
-#define CMD_SLOTSIZE (sizeof(struct esiop_slot) / sizeof(uint32_t))
+#define CMD_SLOTSIZE (sizeof(struct esiop_slot) / sizeof(u_int32_t))
 
 /*
  * xfer description of the script: tables and reselect script
@@ -47,15 +52,15 @@ struct esiop_slot {
  */
 struct esiop_xfer {
 	struct siop_common_xfer siop_tables;
-	uint32_t tlq; /* target/lun/tag loaded in scratchC by script */
-	uint32_t saved_offset;/* contains scratchA if script saved an offset */
+	u_int32_t tlq; /* target/lun/tag loaded in scratchC by script */
+	u_int32_t saved_offset;/* contains scratchA if script saved an offset */
 } __packed;
 
 #define ESIOP_XFER(cmd, m) (((struct esiop_xfer *)((cmd)->cmd_tables))->m)
 
 /*
  * This describes a command handled by the SCSI controller
- * These are chained in either a free list or an active list
+ * These are chained in either a free list or a active list
  * We have one queue per target
  */
 
@@ -80,8 +85,8 @@ TAILQ_HEAD(cbd_list, esiop_cbd);
 /* DSA table descriptor for tags. Free tables are in a list */
 struct esiop_dsatbl {
 	TAILQ_ENTRY (esiop_dsatbl) next;
-	uint32_t *tbl; /* the table itself */
-	uint32_t tbl_dsa; /* DSA of base of this table */
+	u_int32_t *tbl; /* the table itself */
+	u_int32_t tbl_dsa; /* DSA of base of this table */
 	bus_addr_t tbl_offset; /* offset of this table in the map */
 	struct esiop_dsatblblk *tblblk; /* pointer back to our block */
 };
@@ -96,7 +101,7 @@ TAILQ_HEAD(tbl_list, esiop_dsatbl);
 TAILQ_HEAD(tblblk_list, esiop_dsatblblk);
 
 /* Number of table per block */
-#define ESIOP_NTPB ((PAGE_SIZE) / (sizeof(uint32_t) * ESIOP_NTAG))
+#define ESIOP_NTPB ((PAGE_SIZE) / (sizeof(u_int32_t) * ESIOP_NTAG))
 
 /* per lun struct */
 struct esiop_lun {
@@ -113,12 +118,14 @@ struct esiop_lun {
 struct esiop_target {
 	struct siop_common_target target_c;
 	struct esiop_lun *esiop_lun[8]; /* per-lun state */
-	uint32_t lun_table_offset; /* pointer to our DSA table */
+	u_int32_t lun_table_offset; /* pointer to our DSA table */
 };
 
 static __inline void esiop_table_sync(struct esiop_cmd *, int);
 static __inline void
-esiop_table_sync(struct esiop_cmd *esiop_cmd, int ops)
+esiop_table_sync(esiop_cmd, ops)
+	struct esiop_cmd *esiop_cmd;
+	int ops;
 {
 	struct siop_common_softc *sc  = esiop_cmd->cmd_c.siop_sc;
 	bus_addr_t offset;
@@ -134,20 +141,20 @@ esiop_table_sync(struct esiop_cmd *esiop_cmd, int ops)
 /* Driver internal state */
 struct esiop_softc {
 	struct siop_common_softc sc_c;
-	uint32_t sc_semoffset;		/* semaphore */
-	uint32_t sc_shedoffset;		/* base of scheduler ring */
+	u_int32_t sc_semoffset;		/* semaphore */
+	u_int32_t sc_shedoffset;	/* base of scheduler ring */
 	int sc_currschedslot;		/* current scheduler slot */
 	struct cbd_list cmds;		/* list of command block descriptors */
 	struct cmd_list free_list;	/* cmd descr free list */
 	struct tbl_list free_tagtbl;	/* list of free tag DSA tables */
 	struct tblblk_list tag_tblblk;	/* tag DSA table blocks */
-	uint32_t sc_flags;
-	uint32_t sc_free_offset;	/* pointer to free RAM */
-	uint32_t sc_target_table_offset;/* pointer to target DSA table */
+	u_int32_t sc_flags;
+	u_int32_t sc_free_offset;	/* pointer to free RAM */
+	u_int32_t sc_target_table_offset;/* pointer to target DSA table */
 	int sc_currdoneslot;		/* current done slot */
 	bus_dmamap_t sc_done_map;	/* dma map for done ring (shared) */
-	bus_addr_t sc_done_offset;	/* offset of ring in sc_done_map */
-	uint32_t *sc_done_slot;		/* The done ring itself */
+	bus_addr_t sc_done_offset; 	/* offset of ring in sc_done_map */
+	u_int32_t *sc_done_slot;	/* The done ring itself */
 };
 
 /* defs for sc_flags */

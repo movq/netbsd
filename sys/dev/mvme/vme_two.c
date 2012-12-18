@@ -1,4 +1,4 @@
-/*	$NetBSD: vme_two.c,v 1.8 2009/03/14 15:36:19 dsl Exp $	*/
+/*	$NetBSD: vme_two.c,v 1.7 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme_two.c,v 1.8 2009/03/14 15:36:19 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme_two.c,v 1.7 2008/04/28 20:23:54 martin Exp $");
 
 #include "vmetwo.h"
 
@@ -59,7 +59,8 @@ void vmetwo_slave_range(struct vmetwo_softc *, int, vme_am_t,
 
 /* ARGSUSED */
 void
-vmetwo_init(struct vmetwo_softc *sc)
+vmetwo_init(sc)
+	struct vmetwo_softc *sc;
 {
 	u_int32_t reg;
 	int i;
@@ -167,7 +168,10 @@ vmetwo_init(struct vmetwo_softc *sc)
 }
 
 void
-vmetwo_master_range(struct vmetwo_softc *sc, int range, struct mvmebus_range *vr)
+vmetwo_master_range(sc, range, vr)
+	struct vmetwo_softc *sc;
+	int range;
+	struct mvmebus_range *vr;
 {
 	u_int32_t start, end, attr;
 	u_int32_t reg;
@@ -261,7 +265,11 @@ vmetwo_master_range(struct vmetwo_softc *sc, int range, struct mvmebus_range *vr
 }
 
 void
-vmetwo_slave_range(struct vmetwo_softc *sc, int range, vme_am_t am, struct mvmebus_range *vr)
+vmetwo_slave_range(sc, range, am, vr)
+	struct vmetwo_softc *sc;
+	int range;
+	vme_am_t am;
+	struct mvmebus_range *vr;
 {
 	u_int32_t reg;
 

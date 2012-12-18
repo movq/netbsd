@@ -4,4 +4,4 @@
 #define LIBEXECDIR	"/libexec"
 #define DBDIR		"/var/db"
 #define RUNDIR		"/var/run"
-#include <spawn.h>
+#include "compat/getline.h"

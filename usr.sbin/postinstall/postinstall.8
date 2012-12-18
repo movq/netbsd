@@ -1,4 +1,4 @@
-.\"	$NetBSD: postinstall.8,v 1.16 2012/08/15 16:21:41 apb Exp $
+.\"	$NetBSD: postinstall.8,v 1.13 2008/10/04 08:07:38 apb Exp $
 .\"
 .\" Copyright (c) 2005-2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd August 15, 2012
+.Dd October 4, 2008
 .Dt POSTINSTALL 8
 .Os
 .Sh NAME
@@ -126,7 +126,7 @@ argument may be one of:
 .Bl -tag -width usageXX -offset indent
 .It Cm check
 Perform post-installation checks on items.
-.It Cm diff Op Xr diff 1 Li options
+.It Cm diff Op Xr diff 1 options
 Similar to
 .Cm check ,
 but also show the differences between the files.
@@ -178,15 +178,6 @@ option was added.
 .Pp
 In
 .Nx 5.0 ,
-the ability to specify multiple colon-separated files with a single
+the the ability to specify multiple colon-separated files with a single
 .Fl s
 option was deprecated.
-.Pp
-In
-.Nx 7.0 ,
-the ability to specify multiple colon-separated files with a single
-.Fl s
-option was removed.
-Multiple
-.Fl s
-options must be used instead.

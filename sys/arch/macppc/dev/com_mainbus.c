@@ -41,13 +41,11 @@
 #include <sys/device.h>
 #include <sys/tty.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <dev/ofw/openfirm.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
-
-#include <machine/autoconf.h>
 
 struct com_mainbus_softc
 {

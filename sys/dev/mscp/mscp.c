@@ -1,4 +1,4 @@
-/*	$NetBSD: mscp.c,v 1.36 2012/10/27 17:18:26 chs Exp $	*/
+/*	$NetBSD: mscp.c,v 1.29 2008/04/08 20:10:44 cegger Exp $	*/
 
 /*
  * Copyright (c) 1988 Regents of the University of California.
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mscp.c,v 1.36 2012/10/27 17:18:26 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mscp.c,v 1.29 2008/04/08 20:10:44 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -101,7 +101,9 @@ __KERNEL_RCSID(0, "$NetBSD: mscp.c,v 1.36 2012/10/27 17:18:26 chs Exp $");
  * we cannot wait.
  */
 struct mscp *
-mscp_getcp(struct mscp_softc *mi, int canwait)
+mscp_getcp(mi, canwait)
+	struct mscp_softc *mi;
+	int canwait;
 {
 #define mri	(&mi->mi_cmd)
 	struct mscp *mp;
@@ -163,9 +165,10 @@ int	mscp_aeb_xor = 0x8000bb80;
  * Handle a response ring transition.
  */
 void
-mscp_dorsp(struct mscp_softc *mi)
+mscp_dorsp(mi)
+	struct mscp_softc *mi;
 {
-	device_t drive;
+	struct device *drive;
 	struct mscp_device *me = mi->mi_me;
 	struct mscp_ctlr *mc = mi->mi_mc;
 	struct buf *bp;
@@ -173,8 +176,7 @@ mscp_dorsp(struct mscp_softc *mi)
 	struct mscp_xi *mxi;
 	int nextrsp;
 	int st, error;
-	extern struct mscp mscp_cold_reply;
-	extern int mscp_cold_unit;
+	extern struct mscp slavereply;
 
 	nextrsp = mi->mi_rsp.mri_next;
 loop:
@@ -203,7 +205,7 @@ loop:
 			mi->mi_flags |= MSC_READY;
 		} else {
 			printf("%s: SETCTLRC failed: %d ",
-			    device_xname(mi->mi_dev), mp->mscp_status);
+			    device_xname(&mi->mi_dev), mp->mscp_status);
 			mscp_printevent(mp);
 		}
 		goto done;
@@ -215,7 +217,7 @@ loop:
 	 */
 	if (mp->mscp_unit >= mi->mi_driveno) { /* Must expand drive table */
 		int tmpno = (mp->mscp_unit + 32) & ~31;
-		device_t *tmp = (device_t *)
+		struct device **tmp = (struct device **)
 		    malloc(tmpno * sizeof(tmp[0]), M_DEVBUF, M_NOWAIT|M_ZERO);
 		/* XXX tmp should be checked for NULL */
 		if (mi->mi_driveno) {
@@ -243,7 +245,7 @@ loop:
 	case MSCPT_MAINTENANCE:
 	default:
 		printf("%s: unit %d: unknown message type 0x%x ignored\n",
-			device_xname(mi->mi_dev), mp->mscp_unit,
+			device_xname(&mi->mi_dev), mp->mscp_unit,
 			MSCP_MSGTYPE(mp->mscp_msgtc));
 		goto done;
 	}
@@ -288,35 +290,18 @@ loop:
 		 * to set it up, otherwise it's just a "normal" unit
 		 * status.
 		 */
-		if (cold) {
-			memcpy(&mscp_cold_reply, mp, sizeof(struct mscp));
-			/* Detect that we've reached the end of all units */
-			if (mp->mscp_unit < mscp_cold_unit)
-				break;
-		}
+		if (cold)
+			bcopy(mp, &slavereply, sizeof(struct mscp));
 
 		if (mp->mscp_status == (M_ST_OFFLINE|M_OFFLINE_UNKNOWN))
 			break;
 
 		if (drive == 0) {
-			struct mscp_work *mw;
+			struct	drive_attach_args da;
 
-			mutex_spin_enter(&mi->mi_mtx);
-
-			mw = SLIST_FIRST(&mi->mi_freelist);
-			if (mw == NULL) {
-				aprint_error_dev(mi->mi_dev,
-				    "couldn't attach drive (no free items)\n");
-				mutex_spin_exit(&mi->mi_mtx);
-			} else {
-				SLIST_REMOVE_HEAD(&mi->mi_freelist, mw_list);
-				mutex_spin_exit(&mi->mi_mtx);
-
-				mw->mw_mi = mi;
-				mw->mw_mp = *mp;
-				workqueue_enqueue(mi->mi_wq,
-				    (struct work *)mw, NULL);
-			}
+			da.da_mp = (struct mscp *)mp;
+			da.da_typ = mi->mi_type;
+			config_found(&mi->mi_dev, (void *)&da, mscp_print);
 		} else
 			/* Hack to avoid complaints */
 			if (!(((mp->mscp_event & M_ST_MASK) == M_ST_AVAILABLE)
@@ -419,7 +404,7 @@ rwend:
 		bp->b_resid = bp->b_bcount - mp->mscp_seq.seq_bytecount;
 		bus_dmamap_unload(mi->mi_dmat, mxi->mxi_dmam);
 
-		(*mc->mc_ctlrdone)(device_parent(mi->mi_dev));
+		(*mc->mc_ctlrdone)(device_parent(&mi->mi_dev));
 		(*me->me_iodone)(drive, bp);
 out:
 		mxi->mxi_inuse = 0;
@@ -478,27 +463,9 @@ done:
  * info pending.
  */
 void
-mscp_requeue(struct mscp_softc *mi)
+mscp_requeue(mi)
+	struct mscp_softc *mi;
 {
 	panic("mscp_requeue");
 }
 
-void
-mscp_worker(struct work *wk, void *dummy)
-{
-	struct mscp_softc *mi;
-	struct mscp_work *mw;
-	struct	drive_attach_args da;
-
-	mw = (struct mscp_work *)wk;
-	mi = mw->mw_mi;
-
-	da.da_mp = &mw->mw_mp;
-	da.da_typ = mi->mi_type;
-
-	config_found(mi->mi_dev, (void *)&da, mscp_print);
-
-	mutex_spin_enter(&mi->mi_mtx);
-	SLIST_INSERT_HEAD(&mw->mw_mi->mi_freelist, mw, mw_list);
-	mutex_spin_exit(&mi->mi_mtx);
-}

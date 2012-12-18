@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.33 2011/07/12 07:51:34 mrg Exp $ */
+/*	$NetBSD: db_machdep.h,v 1.25.4.1 2008/11/27 03:46:31 snj Exp $ */
 
 /*
  * Mach Operating System
@@ -33,15 +33,9 @@
  * Machine-dependent defines for new kernel debugger.
  */
 
-#include <sys/types.h>
-
 #include <uvm/uvm_extern.h>
 
-#ifndef SUN4U
-#define SUN4U	/* see .../sparc/include/frame.h for the reason */
-#endif
 #include <machine/frame.h>
-#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
 #include <machine/reg.h>
@@ -49,11 +43,6 @@
 
 /* use 64-bit types explicitly for 32-bit kernels */
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
-#ifdef __arch64__
-#define	DDB_EXPR_FMT	"l"		/* expression is int64_t (long) */
-#else
-#define	DDB_EXPR_FMT	"ll"		/* expression is int64_t (long long) */
-#endif
 typedef	int64_t		db_expr_t;	/* expression - signed */
 
 struct trapstate {
@@ -68,7 +57,7 @@ typedef struct {
 	struct frame64		db_fr;
 	struct trapstate	db_ts[5];
 	int			db_tl;
-	struct fpstate64	db_fpstate __aligned(SPARC64_BLOCK_SIZE);
+	struct fpstate64	db_fpstate __aligned(BLOCK_SIZE);
 } db_regs_t;
 
 /* Current CPU register state */
@@ -134,15 +123,18 @@ db_addr_t	db_branch_taken(int inst, db_addr_t pc, db_regs_t *regs);
 int kdb_trap(int, struct trapframe64 *);
 
 /*
- * We use elf symbols in DDB.
+ * We will use elf symbols in DDB when they work.
  */
+#if 1
 #define	DB_ELF_SYMBOLS
 #ifdef __arch64__
 #define DB_ELFSIZE	64
 #else
 #define DB_ELFSIZE	32
 #endif
-
+#else
+#define DB_AOUT_SYMBOLS
+#endif
 /*
  * KGDB definitions
  */

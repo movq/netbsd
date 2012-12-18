@@ -40,7 +40,7 @@ __COPYRIGHT("@(#) Copyright (c) 1991, 1993\
 #if 0
 static char sccsid[] = "@(#)tail.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: tail.c,v 1.16 2011/09/03 10:59:11 christos Exp $");
+__RCSID("$NetBSD: tail.c,v 1.13 2008/07/21 14:19:26 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -53,10 +53,11 @@ __RCSID("$NetBSD: tail.c,v 1.16 2011/09/03 10:59:11 christos Exp $");
 #include "extern.h"
 
 int fflag, rflag, rval;
-const char *fname;
+char *fname;
 
+int	main(int, char **);
 static void obsolete(char **);
-static void usage(void) __dead;
+static void usage(void);
 
 int
 main(int argc, char *argv[])
@@ -68,7 +69,6 @@ main(int argc, char *argv[])
 	int ch, first;
 	char *p;
 
-	setprogname(argv[0]);
 	off = 0;
 	/*
 	 * Tail's options are weird.  First, -n10 is the same as -n-10, not
@@ -87,7 +87,7 @@ main(int argc, char *argv[])
 		usage();						\
 	off = strtoll(optarg, &p, 10) * (units);			\
 	if (*p)								\
-		xerrx(1, "illegal offset -- %s", optarg);		\
+		err(1, "illegal offset -- %s", optarg);			\
 	switch(optarg[0]) {						\
 	case '+':							\
 		if (off)						\
@@ -133,8 +133,7 @@ main(int argc, char *argv[])
 	argv += optind;
 
 	if (fflag && argc > 1)
-		xerrx(1,
-		    "-f and -F options only appropriate for a single file");
+		err(1, "-f and -F options only appropriate for a single file");
 
 	/*
 	 * If displaying in reverse, don't permit follow option, and convert
@@ -236,7 +235,7 @@ obsolete(char *argv[])
 			/* Malloc space for dash, new option and argument. */
 			len = strlen(*argv);
 			if ((start = p = malloc(len + 3)) == NULL)
-				xerr(1, "malloc");
+				err(1, "%s", strerror(errno));
 			*p++ = '-';
 
 			/*
@@ -266,7 +265,7 @@ obsolete(char *argv[])
 				*p++ = 'n';
 				break;
 			default:
-				xerrx(1, "illegal option -- %s", *argv);
+				err(1, "illegal option -- %s", *argv);
 			}
 			*p++ = *argv[0];
 			(void)strcpy(p, ap);
@@ -299,7 +298,6 @@ static void
 usage(void)
 {
 	(void)fprintf(stderr,
-	    "Usage: %s [-f | -F | -r] [-b # | -c # | -n #] [file ...]\n",
-	    getprogname());
+	    "usage: tail [-f | -F | -r] [-b # | -c # | -n #] [file ...]\n");
 	exit(1);
 }

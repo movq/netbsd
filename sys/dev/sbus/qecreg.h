@@ -1,4 +1,4 @@
-/*	$NetBSD: qecreg.h,v 1.4 2009/09/19 11:53:42 tsutsui Exp $	*/
+/*	$NetBSD: qecreg.h,v 1.3 2008/04/28 20:23:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -58,17 +58,16 @@
 
 /*
  * QEC registers layout
- */
-#if 0
+ *-
 struct qecregs {
-	uint32_t	qec_ctrl;	/* control			*/
-	uint32_t	qec_stat;	/* status			*/
-	uint32_t	qec_psize;	/* packet size			*/
-	uint32_t	qec_msize;	/* local-mem size (64K)		*/
-	uint32_t	qec_rsize;	/* receive partition size	*/
-	uint32_t	qec_tsize;	/* transmit partition size	*/
+	u_int32_t	qec_ctrl;	// control
+	u_int32_t	qec_stat;	// status
+	u_int32_t	qec_psize;	// packet size
+	u_int32_t	qec_msize;	// local-mem size (64K)
+	u_int32_t	qec_rsize;	// receive partition size
+	u_int32_t	qec_tsize;	// transmit partition size
 };
-#endif
+ */
 #define QEC_QRI_CTRL	(0*4)
 #define QEC_QRI_STAT	(1*4)
 #define QEC_QRI_PSIZE	(2*4)
@@ -102,8 +101,8 @@ struct qecregs {
  * Transmit & receive buffer descriptor.
  */
 struct qec_xd {
-	volatile uint32_t	xd_flags;	/* see below */
-	volatile uint32_t	xd_addr;	/* Buffer address (DMA) */
+	volatile u_int32_t	xd_flags;	/* see below */
+	volatile u_int32_t	xd_addr;	/* Buffer address (DMA) */
 };
 #define QEC_XD_OWN	0x80000000	/* ownership: 1=hw, 0=sw */
 #define QEC_XD_SOP	0x40000000	/* start of packet marker (xmit) */

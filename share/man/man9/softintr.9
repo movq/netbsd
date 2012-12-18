@@ -1,4 +1,4 @@
-.\"	$NetBSD: softintr.9,v 1.21 2011/06/30 20:09:16 wiz Exp $
+.\"	$NetBSD: softintr.9,v 1.18 2008/10/06 13:51:38 pooka Exp $
 .\"
 .\" Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -59,7 +59,7 @@
 .\"
 .\" --(license Id: LICENSE.proto,v 1.1 2000/06/13 21:40:26 cgd Exp )--
 .\"
-.Dd August 3, 2009
+.Dd October 6, 2008
 .Dt SOFTINT 9
 .Os
 .Sh NAME
@@ -93,14 +93,13 @@ connection with a particular kind of device activity: they are
 only meant as a guide.
 .Pp
 The four priority levels map directly to scheduler priority
-levels, and where the architecture implements
-.Dq fast
-software interrupts, they also map onto interrupt priorities.
+levels, and where the architecture implements 'fast' software
+interrupts, they also map onto interrupt priorities. 
 The interrupt priorities are intended to be hidden from machine
 independent code, which should in general use thread-safe mechanisms
 to synchronize with software interrupts (for example: mutexes).
 .Pp
-Software interrupts run with limited machine context.
+Software interrupts run with limited machine context. 
 In particular, they do not possess any address space context.
 They should not try to operate on user space addresses, or to use
 virtual memory facilities other than those noted as interrupt
@@ -196,13 +195,9 @@ the same soft interrupt handler can be in flight simultaneously
 (at most one per-CPU).
 .El
 .Sh SEE ALSO
-.Xr callout 9 ,
-.Xr condvar 9 ,
-.Xr kthread 9 ,
 .Xr mutex 9 ,
 .Xr rwlock 9 ,
-.Xr spl 9 ,
-.Xr workqueue 9
+.Xr spl 9
 .Sh HISTORY
 The
 .Nx
@@ -215,5 +210,5 @@ Between
 .Nx 4.0
 and
 .Nx 5.0
-the framework was re-implemented in a machine-independent way to
+the framework was re-implemented in a machine-independant way to
 provide software interrupts with thread context.

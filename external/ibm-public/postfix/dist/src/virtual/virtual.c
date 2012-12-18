@@ -1,4 +1,4 @@
-/*	$NetBSD: virtual.c,v 1.1.1.2 2010/06/17 18:07:17 tron Exp $	*/
+/*	$NetBSD: virtual.c,v 1.1.1.1.2.4 2011/01/07 01:24:21 riz Exp $	*/
 
 /*++
 /* NAME

@@ -1,9 +1,9 @@
-/*	$NetBSD: db_trace.c,v 1.12 2012/01/18 09:35:48 skrll Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.2 2008/07/02 19:49:58 rmind Exp $	*/
 
 /*	$OpenBSD: db_interface.c,v 1.16 2001/03/22 23:31:45 mickey Exp $	*/
 
 /*
- * Copyright (c) 1999-2003 Michael Shalayeff
+ * Copyright (c) 1999-2000 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,33 +14,37 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Michael Shalayeff.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR OR HIS RELATIVES BE LIABLE FOR ANY DIRECT,
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF MIND, USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.12 2012/01/18 09:35:48 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.2 2008/07/02 19:49:58 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/user.h> 
 
 #include <machine/db_machdep.h>
 
 #include <ddb/db_access.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_interface.h>
-#include <ddb/db_proc.h>
 
 void
 db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
@@ -76,62 +80,50 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 		rp = ddb_regs.tf_rp;
 	} else {
 		if (trace_thread) {
-			proc_t p;
-			lwp_t l;
-			pid_t pid;
-
+			struct proc *p;
+			struct user *u;
+			struct lwp *l;
 			if (lwpaddr) {
-				db_read_bytes(addr, sizeof(l), (char *)&l);
-				db_read_bytes((db_addr_t)l.l_proc, sizeof(p),
-				    (char *)&p);
-				(*pr)("trace: pid %d ", p.p_pid);
+				l = (struct lwp *)addr;
+				p = l->l_proc;
+				(*pr)("trace: pid %d ", p->p_pid);
 			} else {
-				proc_t *pp;
-
-				pid = (pid_t)addr;
-				(*pr)("trace: pid %d ", pid);
-				pp = db_proc_find(pid);
-				if (pp == NULL) {
+				(*pr)("trace: pid %d ", (int)addr);
+				p = p_find(addr, PFIND_LOCKED);
+				if (p == NULL) {
 					(*pr)("not found\n");
 					return;
 				}
-				db_read_bytes((db_addr_t)pp, sizeof(p),
-				    (char *)&p);
-				addr = (db_addr_t)p.p_lwps.lh_first;
-				db_read_bytes(addr, sizeof(l), (char *)&l);
+				l = LIST_FIRST(&p->p_lwps);
+				KASSERT(l != NULL);
 			}
-			(*pr)("lid %d ", l.l_lid);
-#ifdef _KERNEL
-			if (l.l_proc == curproc && (lwp_t *)addr == curlwp) {
+			(*pr)("lid %d ", l->l_lid);
+			if (!(l->l_flag & LW_INMEM)) {
+				(*pr)("swapped out\n");
+				return;
+			}
+			u = l->l_addr;
+			if (p == curproc && l == curlwp) {
 				fp = (int *)ddb_regs.tf_r3;
 				pc = ddb_regs.tf_iioq_head;
 				rp = ddb_regs.tf_rp;
-			} else
-#endif
-			{
-				struct pcb *pcb = lwp_getpcb(&l);
-				register_t sp;
+			} else {
 				/* cpu_switchto fp, and return point */
-				db_read_bytes((db_addr_t)&pcb->pcb_ksp,
-				    sizeof(sp), (char *)&sp);
-				fp = (register_t *)(sp -
+				fp = (int *)(u->u_pcb.pcb_ksp -
 				    (HPPA_FRAME_SIZE + 16*4));
 				pc = 0;
-
-				db_read_bytes((db_addr_t)&fp[-5], sizeof(rp),
-				    (char *)&rp);
+				rp = fp[-5];
 			}
 			(*pr)("at %p\n", fp);
 		} else {
 			pc = 0;
 			fp = (register_t *)addr;
-			db_read_bytes((db_addr_t)&fp[-5], sizeof(rp),
-			    (char *)&rp);
+			rp = fp[-5];
 		}
 	}
 
 	while (fp && count--) {
-		register_t *newfp;
+
 #ifdef DDB_DEBUG
 		pr(">> %08x %08x %08x\t", fp, pc, rp);
 #endif
@@ -139,59 +131,57 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 		if (USERMODE(pc))
 			return;
 
-		if (pc) {
-			sym = db_search_symbol(pc, DB_STGY_ANY, &off);
-			db_symbol_values (sym, &name, NULL);
+		sym = db_search_symbol(pc, DB_STGY_ANY, &off);
+		db_symbol_values (sym, &name, NULL);
 
-			pr("%s() at ", name);
-			db_printsym(pc, DB_STGY_PROC, pr);
-			pr("\n");
-		}
+		pr("%s() at ", name);
+		db_printsym(pc, DB_STGY_PROC, pr);
+		pr("\n");
 
-		db_read_bytes((db_addr_t)&fp[0], sizeof(newfp), (char *)&newfp);
+		/* XXX NH - unwind info here */
+		/* aue = ue_find(pc); */
 
 		/*
-		 * if a terminal frame then report the trapframe and continue
-		 * after it (if not the last one).
+		 * get rp?
+		 * fp -= ue_total_frame_size(aue)
 		 */
-		if (!newfp) {
-			register_t scargs[5];
-			struct trapframe tf, *ktf;
+
+		/*
+		 * if a terminal frame then report the trapframe
+		 * and continue after it (if not the last one).
+		 */
+		if (!fp[0]) {
+			register_t *scargs;
+			struct trapframe *tf;
 			int scoff;
 
 			/* Stack space for syscall args */
-			scoff = HPPA_FRAME_ROUND(HPPA_FRAME_SIZE +
-			    HPPA_FRAME_MAXARGS);
-			ktf = (struct trapframe *)((char *)fp - scoff -
-			    sizeof(tf));
+			scoff = HPPA_FRAME_ROUND(HPPA_FRAME_SIZE + HPPA_FRAME_MAXARGS);
 
-			db_read_bytes((db_addr_t)((char *)fp - scoff),
-			     sizeof(scargs), (char *)&scargs);
-			db_read_bytes((db_addr_t)ktf, sizeof(tf), (char *)&tf);
+			scargs = (register_t *)((char *)fp - scoff);
+			tf = (struct trapframe *)((char *)scargs - sizeof(*tf));
 
-			if (tf.tf_flags & TFF_SYS)
-				pr("-- syscall #%d(%x, %x, %x, %x, ...) (%p)\n",
-				    tf.tf_t1, scargs[1], scargs[2],
-				    scargs[3], scargs[4], ktf);
+			if (tf->tf_flags & TFF_SYS)
+				pr("-- syscall #%d(%x, %x, %x, %x, ...)\n",
+				    tf->tf_t1, scargs[1], scargs[2],
+				    scargs[3], scargs[4]);
 			else
-				pr("-- trap #%d (%p) %s\n", tf.tf_flags & 0x3f,
-				    ktf, (tf.tf_flags & T_USER)? " from user" :
-				    "");
+				pr("-- trap #%d%s\n", tf->tf_flags & 0x3f,
+				    (tf->tf_flags & T_USER)? " from user" : "");
 
-			if (!(tf.tf_flags & TFF_LAST)) {
-				fp = (register_t *)tf.tf_r3;
-				pc = tf.tf_iioq_head;
-				rp = tf.tf_rp;
+			if (!(tf->tf_flags & TFF_LAST)) {
+				fp = (register_t *)tf->tf_r3;
+				pc = tf->tf_iioq_head;
+				rp = tf->tf_rp;
 			} else {
 				pc = 0;
 				fp = 0;
 			}
 		} else {
 			/* next frame */
-			fp = newfp;
+			fp = (register_t *)fp[0];
 			pc = rp;
-			db_read_bytes((db_addr_t)&fp[-5], sizeof(rp),
-			    (char *)&rp);
+			rp = fp[-5];
 		}
 	}
 

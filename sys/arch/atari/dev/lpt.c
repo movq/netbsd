@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt.c,v 1.35 2012/10/27 17:17:42 chs Exp $ */
+/*	$NetBSD: lpt.c,v 1.30 2008/06/13 08:50:12 cegger Exp $ */
 
 /*
  * Copyright (c) 1996 Leo Weppelman
@@ -56,12 +56,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lpt.c,v 1.35 2012/10/27 17:17:42 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lpt.c,v 1.30 2008/06/13 08:50:12 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/buf.h>
 #include <sys/kernel.h>
 #include <sys/ioctl.h>
@@ -73,11 +74,9 @@ __KERNEL_RCSID(0, "$NetBSD: lpt.c,v 1.35 2012/10/27 17:17:42 chs Exp $");
 #include <machine/cpu.h>
 #include <machine/iomap.h>
 #include <machine/mfp.h>
-#include <machine/intr.h>
 
 #include <atari/dev/ym2149reg.h>
-
-#include "ioconf.h"
+#include <atari/atari/intr.h>
 
 #define	TIMEOUT		hz*16	/* wait up to 16 seconds for a ready */
 #define	STEP		hz/4
@@ -106,7 +105,6 @@ struct lpt_softc {
 	u_char		sc_flags;
 #define	LPT_AUTOLF	0x20	/* automatic LF on CR XXX: LWP - not yet... */
 #define	LPT_NOINTR	0x40	/* do not use interrupt */
-	void		*sc_sicookie;
 };
 
 #define	LPTUNIT(s)	(minor(s) & 0x1f)
@@ -121,9 +119,9 @@ dev_type_ioctl(lpioctl);
 
 static void lptwakeup (void *arg);
 static int pushbytes (struct lpt_softc *);
-static void lptpseudointr (void *);
+static void lptpseudointr (struct lpt_softc *);
 int lptintr (struct lpt_softc *);
-int lpthwintr (void *);
+int lpthwintr (struct lpt_softc *, int);
 
 
 /*
@@ -135,6 +133,8 @@ static int  lpmatch (device_t, cfdata_t , void *);
 CFATTACH_DECL_NEW(lp, sizeof(struct lpt_softc),
     lpmatch, lpattach, NULL, NULL);
 
+extern struct cfdriver lp_cd;
+
 const struct cdevsw lp_cdevsw = {
 	lpopen, lpclose, noread, lpwrite, lpioctl,
 	nostop, notty, nopoll, nommap, nokqfilter,
@@ -142,12 +142,12 @@ const struct cdevsw lp_cdevsw = {
 
 /*ARGSUSED*/
 static	int
-lpmatch(device_t parent, cfdata_t cf, void *aux)
+lpmatch(device_t pdp, cfdata_t cfp, void *auxp)
 {
 	static int	lpt_matched = 0;
 
 	/* Match at most 1 lpt unit */
-	if (strcmp((char *)aux, "lpt") || lpt_matched)
+	if (strcmp((char *)auxp, "lpt") || lpt_matched)
 		return 0;
 	lpt_matched = 1;
 	return (1);
@@ -155,19 +155,18 @@ lpmatch(device_t parent, cfdata_t cf, void *aux)
 
 /*ARGSUSED*/
 static void
-lpattach(device_t parent, device_t self, void *aux)
+lpattach(device_t pdp, device_t dp, void *auxp)
 {
-	struct lpt_softc *sc = device_private(self);
+	struct lpt_softc *sc = device_private(dp);
 
-	sc->sc_dev = self;
+	sc->sc_dev = dp;
 	sc->sc_state = 0;
 
 	aprint_normal("\n");
 
 	if (intr_establish(0, USER_VEC, 0, (hw_ifun_t)lpthwintr, sc) == NULL)
-		aprint_error_dev(self, "Can't establish interrupt\n");
+		aprint_error_dev(dp, "Can't establish interrupt\n");
 	ym2149_strobe(1);
-	sc->sc_sicookie = softint_establish(SOFTINT_SERIAL, lptpseudointr, sc);
 
 	callout_init(&sc->sc_wakeup_ch, 0);
 }
@@ -384,24 +383,21 @@ lptintr(struct lpt_softc *sc)
 }
 
 static void
-lptpseudointr(void *arg)
+lptpseudointr(struct lpt_softc *sc)
 {
-	struct lpt_softc *sc;
 	int	s;
 
-	sc = arg;
 	s = spltty();
 	lptintr(sc);
 	splx(s);
 }
 
 int
-lpthwintr(void *arg)
+lpthwintr(struct lpt_softc *sc, int sr)
 {
-	struct lpt_softc *sc;
-
-	sc = arg;
-	softint_schedule(sc->sc_sicookie);
+	if (!BASEPRI(sr))
+		add_sicallback((si_farg)lptpseudointr, sc, 0);
+	else lptpseudointr(sc);
 	return 1;
 }
 

@@ -1,5 +1,4 @@
-/*	Id: macdefs.h,v 1.16 2011/07/28 14:12:07 ragge Exp 	*/	
-/*	$NetBSD: macdefs.h,v 1.1.1.4 2011/09/01 12:46:40 plunky Exp $	*/
+/*	$Id: macdefs.h,v 1.1.1.1 2008/08/24 05:32:56 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -36,7 +35,7 @@
  * Machine-dependent defines for both passes.
  */
 
-#if defined(os_netbsd)
+#if TARGOS == netbsd
 #define USE_GAS
 #endif
 
@@ -77,8 +76,8 @@
 #define ALLONGLONG	64
 #define ALSHORT		16
 #define ALPOINT		32
-#define ALSTRUCT	64
-#define ALSTACK		32 
+#define ALSTRUCT	32
+#define ALSTACK		64 
 
 /*
  * Min/max values.
@@ -101,6 +100,7 @@
 
 #undef	CHAR_UNSIGNED
 #define BOOL_TYPE	INT
+#define WCHAR_TYPE	INT
 
 /*
  * Use large-enough types.
@@ -122,16 +122,17 @@ typedef long long OFFSZ;
 #define BACKTEMP 		/* stack grows negatively for temporaries */
 
 #undef	FIELDOPS		/* no bit-field instructions */
-#define TARGET_ENDIAN TARGET_LE
-#define	MYALIGN
+#define RTOLBYTES		/* bytes are numbered right to left */
+
+#define ENUMSIZE(high,low) INT	/* enums are always stored in full int */
 
 /* Definitions mostly used in pass2 */
 
 #define BYTEOFF(x)	((x)&03)
 #define BITOOR(x)	(x)	/* bit offset to oreg offset */
 
-#define	szty(t)		(((t) == DOUBLE || (t) == LDOUBLE || \
-	DEUNSIGN(t) == LONGLONG) ? 2 : 1)
+#define	szty(t)	(((t) == DOUBLE || (t) == FLOAT || \
+	(t) == LONGLONG || (t) == ULONGLONG) ? 2 : 1)
 
 /*
  * Register names.  These must match rnames[] and rstatus[] in local2.c.
@@ -338,13 +339,13 @@ extern int nargregs;
 
 #define TARGET_STDARGS
 #define TARGET_BUILTINS						\
-	{ "__builtin_stdarg_start", mips_builtin_stdarg_start, 2 },	\
-	{ "__builtin_va_arg", mips_builtin_va_arg, 2 },		\
-	{ "__builtin_va_end", mips_builtin_va_end, 1 },		\
-	{ "__builtin_va_copy", mips_builtin_va_copy, 2 },
+	{ "__builtin_stdarg_start", mips_builtin_stdarg_start },	\
+	{ "__builtin_va_arg", mips_builtin_va_arg },		\
+	{ "__builtin_va_end", mips_builtin_va_end },		\
+	{ "__builtin_va_copy", mips_builtin_va_copy },
 
 struct node;
-struct node *mips_builtin_stdarg_start(struct node *f, struct node *a, unsigned int);
-struct node *mips_builtin_va_arg(struct node *f, struct node *a, unsigned int);
-struct node *mips_builtin_va_end(struct node *f, struct node *a, unsigned int);
-struct node *mips_builtin_va_copy(struct node *f, struct node *a, unsigned int);
+struct node *mips_builtin_stdarg_start(struct node *f, struct node *a);
+struct node *mips_builtin_va_arg(struct node *f, struct node *a);
+struct node *mips_builtin_va_end(struct node *f, struct node *a);
+struct node *mips_builtin_va_copy(struct node *f, struct node *a);

@@ -1,4 +1,4 @@
-/*	$NetBSD: igsfb_pci.c,v 1.23 2012/01/30 19:41:21 drochner Exp $ */
+/*	$NetBSD: igsfb_pci.c,v 1.17 2007/10/19 12:00:50 ad Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Valeriy E. Ushakov
@@ -31,7 +31,7 @@
  * Integraphics Systems IGA 168x and CyberPro series.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: igsfb_pci.c,v 1.23 2012/01/30 19:41:21 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: igsfb_pci.c,v 1.17 2007/10/19 12:00:50 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,10 +72,10 @@ static pcitag_t igsfb_pci_constag;
 
 
 
-static int	igsfb_pci_match(device_t, cfdata_t, void *);
-static void	igsfb_pci_attach(device_t, device_t, void *);
+static int	igsfb_pci_match(struct device *, struct cfdata *, void *);
+static void	igsfb_pci_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(igsfb_pci, sizeof(struct igsfb_softc),
+CFATTACH_DECL(igsfb_pci, sizeof(struct igsfb_softc),
     igsfb_pci_match, igsfb_pci_attach, NULL, NULL);
 
 
@@ -142,7 +142,7 @@ igsfb_pci_is_console(pci_chipset_tag_t pc, pcitag_t tag)
 
 
 static int
-igsfb_pci_match(device_t parent, cfdata_t match, void *aux)
+igsfb_pci_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -151,15 +151,16 @@ igsfb_pci_match(device_t parent, cfdata_t match, void *aux)
 
 
 static void
-igsfb_pci_attach(device_t parent, device_t self, void *aux)
+igsfb_pci_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct igsfb_softc *sc = device_private(self);
+	struct igsfb_softc *sc = (struct igsfb_softc *)self;
 	struct pci_attach_args *pa = aux;
 	int isconsole;
+	char devinfo[256];
 
-	sc->sc_dev = self;
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	printf(": %s (rev. 0x%02x)\n", devinfo, PCI_REVISION(pa->pa_class));
 
-	pci_aprint_devinfo(pa, NULL);
 
 #if defined(__sparc__) && !defined(KRUPS_FORCE_SERIAL_CONSOLE)
 	/* XXX: this doesn't belong here */

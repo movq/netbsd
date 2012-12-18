@@ -1,4 +1,4 @@
-/*	$NetBSD: icmp6.c,v 1.161 2012/06/23 03:14:03 christos Exp $	*/
+/*	$NetBSD: icmp6.c,v 1.150 2008/10/03 08:23:06 adrianp Exp $	*/
 /*	$KAME: icmp6.c,v 1.217 2001/06/20 15:03:29 jinmei Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.161 2012/06/23 03:14:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.150 2008/10/03 08:23:06 adrianp Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -98,6 +98,11 @@ __KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.161 2012/06/23 03:14:03 christos Exp $")
 #include <netinet6/in6_ifattach.h>
 #include <netinet6/ip6protosw.h>
 #include <netinet6/scope6_var.h>
+
+#ifdef IPSEC
+#include <netinet6/ipsec.h>
+#include <netkey/key.h>
+#endif
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
@@ -165,14 +170,11 @@ static int icmp6_notify_error(struct mbuf *, int, int, int);
 static struct rtentry *icmp6_mtudisc_clone(struct sockaddr *);
 static void icmp6_mtudisc_timeout(struct rtentry *, struct rttimer *);
 static void icmp6_redirect_timeout(struct rtentry *, struct rttimer *);
-static void sysctl_net_inet6_icmp6_setup(struct sysctllog **);
 
 
 void
 icmp6_init(void)
 {
-
-	sysctl_net_inet6_icmp6_setup(NULL);
 	mld_init();
 	icmp6_mtudisc_timeout_q = rt_timer_queue_create(pmtu_expire);
 	icmp6_redirect_timeout_q = rt_timer_queue_create(icmp6_redirtimeout);
@@ -473,9 +475,7 @@ icmp6_input(struct mbuf **mp, int *offp, int proto)
 	i = off + sizeof(*icmp6);
 	if ((m->m_len < i || M_READONLY(m)) && (m = m_pullup(m, i)) == 0) {
 		ICMP6_STATINC(ICMP6_STAT_TOOSHORT);
-#if 0 /* m is 0 here */
 		icmp6_ifstat_inc(m->m_pkthdr.rcvif, ifs6_in_error);
-#endif
 		goto freeit;
 	}
 	ip6 = mtod(m, struct ip6_hdr *);
@@ -733,7 +733,7 @@ icmp6_input(struct mbuf **mp, int *offp, int proto)
 			nicmp6 = (struct icmp6_hdr *)(nip6 + 1);
 			bcopy(icmp6, nicmp6, sizeof(struct icmp6_hdr));
 			p = (u_char *)(nicmp6 + 1);
-			memset(p, 0, 4);
+			bzero(p, 4);
 			bcopy(hostname, p + 4, maxhlen); /* meaningless TTL */
 			noff = sizeof(struct ip6_hdr);
 			M_COPY_PKTHDR(n, m); /* just for rcvif */
@@ -1116,7 +1116,7 @@ icmp6_mtudisc_update(struct ip6ctlparam *ip6cp, int validated)
 			return;
 	}
 
-	memset(&sin6, 0, sizeof(sin6));
+	bzero(&sin6, sizeof(sin6));
 	sin6.sin6_family = PF_INET6;
 	sin6.sin6_len = sizeof(struct sockaddr_in6);
 	sin6.sin6_addr = *dst;
@@ -1157,6 +1157,9 @@ icmp6_mtudisc_update(struct ip6ctlparam *ip6cp, int validated)
  * - joins NI group address at in6_ifattach() time only, does not cope
  *   with hostname changes by sethostname(3)
  */
+#ifndef offsetof		/* XXX */
+#define	offsetof(type, member)	((size_t)(&((type *)0)->member))
+#endif
 static struct mbuf *
 ni6_input(struct mbuf *m, int off)
 {
@@ -1569,7 +1572,7 @@ ni6_dnsmatch(const char *a, int alen, const char *b, int blen)
 	int l;
 
 	/* simplest case - need validation? */
-	if (alen == blen && memcmp(a, b, alen) == 0)
+	if (alen == blen && bcmp(a, b, alen) == 0)
 		return 1;
 
 	a0 = a;
@@ -1606,7 +1609,7 @@ ni6_dnsmatch(const char *a, int alen, const char *b, int blen)
 		l = a[0];
 		if (a - a0 + 1 + l > alen || b - b0 + 1 + l > blen)
 			return 0;
-		if (memcmp(a + 1, b + 1, l) != 0)
+		if (bcmp(a + 1, b + 1, l) != 0)
 			return 0;
 
 		a += 1 + l;
@@ -2194,7 +2197,7 @@ icmp6_redirect_input(struct mbuf *m, int off)
 		}
 
 		gw6 = &(((struct sockaddr_in6 *)rt->rt_gateway)->sin6_addr);
-		if (memcmp(&src6, gw6, sizeof(struct in6_addr)) != 0) {
+		if (bcmp(&src6, gw6, sizeof(struct in6_addr)) != 0) {
 			nd6log((LOG_ERR,
 				"ICMP6 redirect rejected; "
 				"not equal to gw-for-src=%s (must be same): "
@@ -2225,7 +2228,7 @@ icmp6_redirect_input(struct mbuf *m, int off)
 	is_router = is_onlink = 0;
 	if (IN6_IS_ADDR_LINKLOCAL(&redtgt6))
 		is_router = 1;	/* router case */
-	if (memcmp(&redtgt6, &reddst6, sizeof(redtgt6)) == 0)
+	if (bcmp(&redtgt6, &reddst6, sizeof(redtgt6)) == 0)
 		is_onlink = 1;	/* on-link destination case */
 	if (!is_router && !is_onlink) {
 		nd6log((LOG_ERR,
@@ -2279,8 +2282,6 @@ icmp6_redirect_input(struct mbuf *m, int off)
 		 * (there will be additional hops, though).
 		 */
 		rtcount = rt_timer_count(icmp6_redirect_timeout_q);
-		if (0 <= ip6_maxdynroutes && rtcount >= ip6_maxdynroutes)
-			goto freeit;
 		if (0 <= icmp6_redirect_hiwat && rtcount > icmp6_redirect_hiwat)
 			return;
 		else if (0 <= icmp6_redirect_lowat &&
@@ -2290,9 +2291,9 @@ icmp6_redirect_input(struct mbuf *m, int off)
 			 */
 		}
 
-		memset(&sdst, 0, sizeof(sdst));
-		memset(&sgw, 0, sizeof(sgw));
-		memset(&ssrc, 0, sizeof(ssrc));
+		bzero(&sdst, sizeof(sdst));
+		bzero(&sgw, sizeof(sgw));
+		bzero(&ssrc, sizeof(ssrc));
 		sdst.sin6_family = sgw.sin6_family = ssrc.sin6_family = AF_INET6;
 		sdst.sin6_len = sgw.sin6_len = ssrc.sin6_len =
 			sizeof(struct sockaddr_in6);
@@ -2300,7 +2301,7 @@ icmp6_redirect_input(struct mbuf *m, int off)
 		bcopy(&reddst6, &sdst.sin6_addr, sizeof(struct in6_addr));
 		bcopy(&src6, &ssrc.sin6_addr, sizeof(struct in6_addr));
 		rtredirect((struct sockaddr *)&sdst, (struct sockaddr *)&sgw,
-			   NULL, RTF_GATEWAY | RTF_HOST,
+			   (struct sockaddr *)NULL, RTF_GATEWAY | RTF_HOST,
 			   (struct sockaddr *)&ssrc,
 			   &newrt);
 
@@ -2316,7 +2317,7 @@ icmp6_redirect_input(struct mbuf *m, int off)
 
 		sockaddr_in6_init(&sdst, &reddst6, 0, 0, 0);
 		pfctlinput(PRC_REDIRECT_HOST, (struct sockaddr *)&sdst);
-#if defined(FAST_IPSEC)
+#if defined(IPSEC) || defined(FAST_IPSEC)
 		key_sa_routechange((struct sockaddr *)&sdst);
 #endif
 	}
@@ -2376,15 +2377,12 @@ icmp6_redirect_output(struct mbuf *m0, struct rtentry *rt)
 	 * we almost always ask for an mbuf cluster for simplicity.
 	 * (MHLEN < IPV6_MMTU is almost always true)
 	 */
-	MGETHDR(m, M_DONTWAIT, MT_HEADER);
-	if (m && IPV6_MMTU >= MHLEN) {
 #if IPV6_MMTU >= MCLBYTES
-		_MCLGET(m, mcl_cache, IPV6_MMTU, M_DONTWAIT);
-#else
-		MCLGET(m, M_DONTWAIT);
+# error assumption failed about IPV6_MMTU and MCLBYTES
 #endif
-	}
-
+	MGETHDR(m, M_DONTWAIT, MT_HEADER);
+	if (m && IPV6_MMTU >= MHLEN)
+		MCLGET(m, M_DONTWAIT);
 	if (!m)
 		goto fail;
 	m->m_pkthdr.rcvif = NULL;
@@ -2538,7 +2536,7 @@ icmp6_redirect_output(struct mbuf *m0, struct rtentry *rt)
 		}
 
 		nd_opt_rh = (struct nd_opt_rd_hdr *)p;
-		memset(nd_opt_rh, 0, sizeof(*nd_opt_rh));
+		bzero(nd_opt_rh, sizeof(*nd_opt_rh));
 		nd_opt_rh->nd_opt_rh_type = ND_OPT_REDIRECTED_HEADER;
 		nd_opt_rh->nd_opt_rh_len = len >> 3;
 		p += sizeof(*nd_opt_rh);
@@ -2568,7 +2566,8 @@ noredhdropt:
 		= in6_cksum(m, IPPROTO_ICMPV6, sizeof(*ip6), ntohs(ip6->ip6_plen));
 
 	/* send the packet to outside... */
-	if (ip6_output(m, NULL, NULL, 0, NULL, NULL, NULL) != 0)
+	if (ip6_output(m, NULL, NULL, 0,
+		(struct ip6_moptions *)NULL, (struct socket *)NULL, NULL) != 0)
 		icmp6_ifstat_inc(ifp, ifs6_out_error);
 
 	icmp6_ifstat_inc(ifp, ifs6_out_msg);
@@ -2684,7 +2683,8 @@ icmp6_mtudisc_clone(struct sockaddr *dst)
 		struct rtentry *nrt;
 
 		error = rtrequest((int) RTM_ADD, dst,
-		    (struct sockaddr *) rt->rt_gateway, NULL,
+		    (struct sockaddr *) rt->rt_gateway,
+		    (struct sockaddr *) 0,
 		    RTF_GATEWAY | RTF_HOST | RTF_DYNAMIC, &nrt);
 		if (error) {
 			rtfree(rt);
@@ -2756,8 +2756,8 @@ sysctl_net_inet6_icmp6_stats(SYSCTLFN_ARGS)
 	return (NETSTAT_SYSCTL(icmp6stat_percpu, ICMP6_NSTATS));
 }
 
-static void
-sysctl_net_inet6_icmp6_setup(struct sysctllog **clog)
+SYSCTL_SETUP(sysctl_net_inet6_icmp6_setup,
+	     "sysctl net.inet6.icmp6 subtree setup")
 {
 	extern int nd6_maxqueuelen; /* defined in nd6.c */
 

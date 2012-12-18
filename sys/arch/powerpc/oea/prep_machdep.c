@@ -1,4 +1,4 @@
-/* $NetBSD: prep_machdep.c,v 1.10 2012/02/11 13:53:59 kiyohara Exp $ */
+/* $NetBSD: prep_machdep.c,v 1.3 2008/04/28 20:23:32 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -37,19 +37,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: prep_machdep.c,v 1.10 2012/02/11 13:53:59 kiyohara Exp $");
-
-#include "opt_modular.h"
+__KERNEL_RCSID(0, "$NetBSD: prep_machdep.c,v 1.3 2008/04/28 20:23:32 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/extent.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/reboot.h>
 #include <sys/ksyms.h>
 
 #include <uvm/uvm_extern.h>
 #include <machine/powerpc.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/pmap.h>
 #include <powerpc/oea/bat.h>
 
@@ -61,7 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: prep_machdep.c,v 1.10 2012/02/11 13:53:59 kiyohara E
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 extern void *endsym, *startsym;
 #endif
 extern struct mem_region physmemr[2], availmemr[2];
@@ -146,9 +145,7 @@ prep_initppc(u_long startkernel, u_long endkernel, u_int args)
 	oea_batinit(
 	    PREP_BUS_SPACE_MEM, BAT_BL_256M,
 	    PREP_BUS_SPACE_IO,  BAT_BL_256M,
-#if defined(bebox)
-	    0x7ffff000, BAT_BL_8M,	/* BeBox Mainboard Registers (4KB) */
-#elif defined(prep)
+#ifdef prep
 	    0xbf800000, BAT_BL_8M,
 #endif
 	    0);
@@ -168,8 +165,8 @@ prep_initppc(u_long startkernel, u_long endkernel, u_int args)
 	/* Initialize pmap module */
 	pmap_bootstrap(startkernel, endkernel);
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-	ksyms_addsyms_elf((int)((u_long)endsym - (u_long)startsym), startsym, endsym);
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init((int)((u_long)endsym - (u_long)startsym), startsym, endsym);
 #endif
 
 #ifdef DDB

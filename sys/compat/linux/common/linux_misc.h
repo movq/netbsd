@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_misc.h,v 1.23 2012/09/22 22:34:02 joerg Exp $	*/
+/*	$NetBSD: linux_misc.h,v 1.17 2008/05/28 12:01:10 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -78,10 +78,8 @@ struct linux_sysinfo {
 #define	LINUX_RLIMIT_LOCKS	10
 #ifdef __mips__  /* XXX only mips32. On mips64, it's ~0ul */
 #define	LINUX_RLIM_INFINITY	0x7fffffffUL
-#define	LINUX32_RLIM_INFINITY	0x7fffffffU
 #else
 #define	LINUX_RLIM_INFINITY	~0ul
-#define	LINUX32_RLIM_INFINITY	~0u
 #endif
 
 
@@ -118,32 +116,17 @@ struct linux_sysinfo {
 #define	LINUX_XENIX_SUPER_MAGIC		(LINUX_SYSV_MAGIC_BASE + 1)
 
 struct linux_mnttypes {
-	const char *mty_bsd;
-	int mty_linux;
+	const char *bsd;
+	int linux;
 };
 extern const struct linux_mnttypes linux_fstypes[];
 extern const int linux_fstypes_cnt;
-
-/* Personality types. */
-#define LINUX_PER_QUERY		0xffffffff
-#define LINUX_PER_LINUX		0x00
-#define LINUX_PER_LINUX32	0x08
-#define LINUX_PER_MASK		0xff
-
-/* Personality flags. */
-#define LINUX_PER_ADDR_NO_RANDOMIZE	0x00040000
-
-/* 
- * Convert POSIX_FADV_* constants from Linux to NetBSD
- * (it's f(x)=x everywhere except S390)
- */
-#define linux_to_bsd_posix_fadv(advice) (advice)
 
 #ifdef _KERNEL
 __BEGIN_DECLS
 int bsd_to_linux_wstat(int);
 int linux_select1(struct lwp *, register_t *, int, fd_set *, fd_set *,
-		       fd_set *, struct linux_timeval *);
+		       fd_set *, struct timeval *);
 __END_DECLS
 #endif /* !_KERNEL */
 

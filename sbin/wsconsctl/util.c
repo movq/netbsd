@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.30 2011/12/15 14:25:12 phx Exp $ */
+/*	$NetBSD: util.c,v 1.27 2008/04/28 20:23:09 martin Exp $ */
 
 /*-
  * Copyright (c) 1998, 2006 The NetBSD Foundation, Inc.
@@ -118,15 +118,14 @@ static struct nameint dpytype_tab[] = {
 	{ WSDISPLAY_TYPE_SB_P9100,	"sparcbook-p9100" },
 	{ WSDISPLAY_TYPE_EGA,		"ega" },
 	{ WSDISPLAY_TYPE_DCPVR,		"dreamcast-pvr" },
-	{ WSDISPLAY_TYPE_GBOX,		"hp-gator" },
+	{ WSDISPLAY_TYPE_GATOR,		"hp-gator" },
 	{ WSDISPLAY_TYPE_TOPCAT,	"hp-topcat" },
-	{ WSDISPLAY_TYPE_RBOX,		"hp-renaissance" },
+	{ WSDISPLAY_TYPE_RENAISSANCE,	"hp-renaissance" },
 	{ WSDISPLAY_TYPE_CATSEYE,	"hp-catseye" },
-	{ WSDISPLAY_TYPE_DVBOX,		"hp-davinci" },
-	{ WSDISPLAY_TYPE_TVRX,		"hp-tiger" },
+	{ WSDISPLAY_TYPE_DAVINCI,	"hp-davinci" },
+	{ WSDISPLAY_TYPE_TIGER,		"hp-tiger" },
 	{ WSDISPLAY_TYPE_HYPERION,	"hp-hyperion" },
 	{ WSDISPLAY_TYPE_AMIGACC,	"amiga-cc" },
-	{ WSDISPLAY_TYPE_GRF,		"grf" },
 	{ WSDISPLAY_TYPE_SUN24,		"sun24" },
 	{ WSDISPLAY_TYPE_NEWPORT,	"sgi-newport" },
 	{ WSDISPLAY_TYPE_GR2,		"sgi-gr2" },
@@ -331,12 +330,11 @@ pr_bitfield(unsigned int f)
 	if (f == 0)
 		(void)printf("none");
 	else {
-		unsigned int i;
-		int first, mask;
+		int i, first, mask;
 
 		for (i = 0, first = 1, mask = 1; i < sizeof(f) * 8; i++) {
 			if (f & mask) {
-				(void)printf("%s%u", first ? "" : " ", i);
+				(void)printf("%s%d", first ? "" : " ", i);
 				first = 0;
 			}
 			mask = mask << 1;
@@ -398,14 +396,14 @@ rd_field(struct field *f, char *val, int merge)
 		if (merge) {
 			if (newkbmap.maplen < kbmap.maplen)
 				newkbmap.maplen = kbmap.maplen;
-			for (u = 0; u < kbmap.maplen; u++) {
-				mp = newkbmap.map + u;
+			for (i = 0; i < kbmap.maplen; i++) {
+				mp = newkbmap.map + i;
 				if (mp->command == KS_voidSymbol &&
 				    mp->group1[0] == KS_voidSymbol &&
 				    mp->group1[1] == KS_voidSymbol &&
 				    mp->group2[0] == KS_voidSymbol &&
 				    mp->group2[1] == KS_voidSymbol)
-					*mp = kbmap.map[u];
+					*mp = kbmap.map[i];
 			}
 		}
 		kbmap.maplen = newkbmap.maplen;
@@ -457,7 +455,7 @@ rd_bitfield(const char *str)
 			errx(EXIT_FAILURE, "%s: not a valid number list", str);
 		if (errno == ERANGE && (lval == LONG_MAX || lval == LONG_MIN))
 			errx(EXIT_FAILURE, "%s: not a valid number list", str);
-		if (lval >= (long)sizeof(result) * 8)
+		if (lval >= sizeof(result) * 8)
 			errx(EXIT_FAILURE, "%ld: number out of range", lval);
 		result |= (1 << lval);
 
@@ -472,7 +470,7 @@ rd_bitfield(const char *str)
 static void
 print_kmap(struct wskbd_map_data *map)
 {
-	unsigned int i;
+	int i;
 	struct wscons_keymap *mp;
 
 	for (i = 0; i < map->maplen; i++) {

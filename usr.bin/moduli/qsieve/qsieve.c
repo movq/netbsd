@@ -1,4 +1,4 @@
-/* $NetBSD: qsieve.c,v 1.3 2011/09/04 20:55:43 joerg Exp $ */
+/* $NetBSD: qsieve.c,v 1.1 2006/01/24 18:59:23 elad Exp $ */
 
 /*-
  * Copyright 1994 Phil Karn <karn@qualcomm.com>
@@ -110,34 +110,34 @@
 /*
  * sieve relative to the initial value
  */
-static uint32_t       *LargeSieve;
-static uint32_t        largewords;
-static uint32_t        largetries;
-static uint32_t        largenumbers;
-static uint32_t        largememory;	/* megabytes */
-static uint32_t        largebits;
-static BIGNUM         *largebase;
+uint32_t       *LargeSieve;
+uint32_t        largewords;
+uint32_t        largetries;
+uint32_t        largenumbers;
+uint32_t        largememory;	/* megabytes */
+uint32_t        largebits;
+BIGNUM         *largebase;
 
 /*
  * sieve 2**30 in 2**16 parts
  */
-static uint32_t       *SmallSieve;
-static uint32_t        smallbits;
-static uint32_t        smallbase;
+uint32_t       *SmallSieve;
+uint32_t        smallbits;
+uint32_t        smallbase;
 
 /*
  * sieve 2**16
  */
-static uint32_t       *TinySieve;
-static uint32_t        tinybits;
+uint32_t       *TinySieve;
+uint32_t        tinybits;
 
-__dead static void     usage(void);
-static void            sieve_large(uint32_t);
+static void     usage(void);
+void            sieve_large(uint32_t);
 
 /*
  * Sieve p's and q's with small factors
  */
-static void
+void
 sieve_large(uint32_t s)
 {
 	BN_ULONG        r;
@@ -239,7 +239,7 @@ main(int argc, char *argv[])
          * This is changed to 1 less than the desired safe prime moduli p.
          */
 	power = (int) strtoul(argv[2], NULL, 10);
-	if ((unsigned)power > TEST_MAXIMUM) {
+	if (power > TEST_MAXIMUM) {
 		errx(1, "Too many bits: %d > %lu.", power,
 		     (unsigned long)TEST_MAXIMUM);
 	} else if (power < TEST_MINIMUM) {

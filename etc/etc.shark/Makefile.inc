@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.12 2010/10/04 13:45:28 tsutsui Exp $
+#	$NetBSD: Makefile.inc,v 1.10.6.2 2010/11/22 16:37:15 riz Exp $
 #
 #	etc.shark/Makefile.inc -- shark-specific etc Makefile targets
 #

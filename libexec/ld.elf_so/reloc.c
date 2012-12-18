@@ -1,4 +1,4 @@
-/*	$NetBSD: reloc.c,v 1.106 2012/01/06 10:38:56 skrll Exp $	 */
+/*	$NetBSD: reloc.c,v 1.96.4.3 2012/03/17 18:28:33 bouyer Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -39,7 +39,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: reloc.c,v 1.106 2012/01/06 10:38:56 skrll Exp $");
+__RCSID("$NetBSD: reloc.c,v 1.96.4.3 2012/03/17 18:28:33 bouyer Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -52,7 +52,6 @@ __RCSID("$NetBSD: reloc.c,v 1.106 2012/01/06 10:38:56 skrll Exp $");
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
-#include <sys/bitops.h>
 #include <dirent.h>
 
 #include "debug.h"
@@ -73,12 +72,9 @@ _rtld_do_copy_relocation(const Obj_Entry *dstobj, const Elf_Rela *rela)
 	const Elf_Sym  *srcsym = NULL;
 	Obj_Entry      *srcobj;
 
-	for (srcobj = dstobj->next; srcobj != NULL; srcobj = srcobj->next) {
-		srcsym = _rtld_symlook_obj(name, hash, srcobj, 0,
-		    _rtld_fetch_ventry(dstobj, ELF_R_SYM(rela->r_info)));
-		if (srcsym != NULL)
+	for (srcobj = dstobj->next; srcobj != NULL; srcobj = srcobj->next)
+		if ((srcsym = _rtld_symlook_obj(name, hash, srcobj, false)) != NULL)
 			break;
-	}
 
 	if (srcobj == NULL) {
 		_rtld_error("Undefined symbol \"%s\" referenced from COPY"
@@ -158,10 +154,6 @@ _rtld_relocate_objects(Obj_Entry *first, bool bind_now)
 			    " symbol table", obj->path);
 			return -1;
 		}
-		if (obj->nbuckets == UINT32_MAX) {
-			_rtld_error("%s: Symbol table too large", obj->path);
-			return -1;
-		}
 		rdbg((" relocating %s (%ld/%ld rel/rela, %ld/%ld plt rel/rela)",
 		    obj->path,
 		    (long)(obj->rellim - obj->rel),
@@ -195,7 +187,7 @@ _rtld_relocate_objects(Obj_Entry *first, bool bind_now)
 		dbg(("doing lazy PLT binding"));
 		if (_rtld_relocate_plt_lazy(obj) < 0)
 			ok = 0;
-		if (obj->z_now || bind_now) {
+		if (bind_now) {
 			dbg(("doing immediate PLT binding"));
 			if (_rtld_relocate_plt_objects(obj) < 0)
 				ok = 0;
@@ -207,11 +199,7 @@ _rtld_relocate_objects(Obj_Entry *first, bool bind_now)
 		obj->magic = RTLD_MAGIC;
 		obj->version = RTLD_VERSION;
 
-		/*
-		 * Fill in the backwards compatibility dynamic linker entry points.
-		 *
-		 * DO NOT ADD TO THIS LIST
-		 */
+		/* Fill in the dynamic linker entry points. */
 		obj->dlopen = dlopen;
 		obj->dlsym = dlsym;
 		obj->dlerror = dlerror;

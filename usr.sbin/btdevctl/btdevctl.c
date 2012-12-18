@@ -1,4 +1,4 @@
-/*	$NetBSD: btdevctl.c,v 1.10 2011/08/27 22:24:14 joerg Exp $	*/
+/*	$NetBSD: btdevctl.c,v 1.7 2008/07/21 13:36:57 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,10 +32,8 @@
  */
 
 #include <sys/cdefs.h>
-__COPYRIGHT("@(#) Copyright (c) 2006 The NetBSD Foundation, Inc.\
-  @(#) Copyright (c) 2006 Itronix, Inc.\
-  All rights reserved.");
-__RCSID("$NetBSD: btdevctl.c,v 1.10 2011/08/27 22:24:14 joerg Exp $");
+__COPYRIGHT("@(#) Copyright (c) 2006 Itronix, Inc.  All rights reserved.");
+__RCSID("$NetBSD: btdevctl.c,v 1.7 2008/07/21 13:36:57 lukem Exp $");
 
 #include <prop/proplib.h>
 #include <sys/ioctl.h>
@@ -54,9 +52,10 @@ __RCSID("$NetBSD: btdevctl.c,v 1.10 2011/08/27 22:24:14 joerg Exp $");
 
 #define BTHUB_PATH		"/dev/bthub"
 
-__dead static void usage(void);
-static char *uppercase(const char *);
-static int bthub_pioctl(unsigned long, prop_dictionary_t);
+int main(int, char *[]);
+void usage(void);
+char *uppercase(const char *);
+int bthub_pioctl(unsigned long, prop_dictionary_t);
 
 int
 main(int argc, char *argv[])
@@ -157,6 +156,9 @@ main(int argc, char *argv[])
 			printf("Performing SDP query for service '%s'..\n", service);
 
 		dev = cfg_query(&laddr, &raddr, service);
+		if (dev == NULL)
+			errx(EXIT_FAILURE, "%s/%s not found", bt_ntoa(&raddr, NULL), service);
+
 		set = true;
 	}
 
@@ -210,7 +212,7 @@ main(int argc, char *argv[])
 	exit(EXIT_SUCCESS);
 }
 
-static void
+void
 usage(void)
 {
 
@@ -230,7 +232,7 @@ usage(void)
 	exit(EXIT_FAILURE);
 }
 
-static char *
+char *
 uppercase(const char *arg)
 {
 	char *str, *ptr;
@@ -245,7 +247,7 @@ uppercase(const char *arg)
 	return str;
 }
 
-static int
+int
 bthub_pioctl(unsigned long cmd, prop_dictionary_t dict)
 {
 	int fd;

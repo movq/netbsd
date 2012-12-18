@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_reconmap.c,v 1.34 2012/02/20 22:42:05 oster Exp $	*/
+/*	$NetBSD: rf_reconmap.c,v 1.31.8.1 2012/02/24 17:58:44 sborrill Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -34,7 +34,7 @@
  *************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_reconmap.c,v 1.34 2012/02/20 22:42:05 oster Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_reconmap.c,v 1.31.8.1 2012/02/24 17:58:44 sborrill Exp $");
 
 #include "rf_raid.h"
 #include <sys/time.h>
@@ -100,7 +100,7 @@ rf_MakeReconMap(RF_Raid_t *raidPtr, RF_SectorCount_t ru_sectors,
 	p->head = 0;
 
 	RF_Malloc(p->status, p->status_size * sizeof(RF_ReconMapListElem_t *), (RF_ReconMapListElem_t **));
-	RF_ASSERT(p->status != NULL);
+	RF_ASSERT(p->status != (RF_ReconMapListElem_t **) NULL);
 
 	(void) memset((char *) p->status, 0,
 	    p->status_size * sizeof(RF_ReconMapListElem_t *));
@@ -109,9 +109,7 @@ rf_MakeReconMap(RF_Raid_t *raidPtr, RF_SectorCount_t ru_sectors,
 	    0, 0, "raidreconpl", NULL, IPL_BIO);
 	pool_prime(&p->elem_pool, RF_NUM_RECON_POOL_ELEM);
 
-	rf_init_mutex2(p->mutex, IPL_VM);
-	rf_init_cond2(p->cv, "reconupdate");
-
+	rf_mutex_init(&p->mutex);
 	return (p);
 }
 
@@ -141,12 +139,13 @@ rf_ReconMapUpdate(RF_Raid_t *raidPtr, RF_ReconMap_t *mapPtr,
 	RF_SectorNum_t i, first_in_RU, last_in_RU, ru;
 	RF_ReconMapListElem_t *p, *pt;
 
-	rf_lock_mutex2(mapPtr->mutex);
+	RF_LOCK_MUTEX(mapPtr->mutex);
 	while(mapPtr->lock) {
-		rf_wait_cond2(mapPtr->cv, mapPtr->mutex);
+		ltsleep(&mapPtr->lock, PRIBIO, "reconupdate", 0, 
+			&mapPtr->mutex);
 	}
 	mapPtr->lock = 1;
-	rf_unlock_mutex2(mapPtr->mutex);
+	RF_UNLOCK_MUTEX(mapPtr->mutex);
 	RF_ASSERT(startSector >= 0 && stopSector < mapPtr->sectorsInDisk &&
 		  stopSector >= startSector);
 
@@ -220,10 +219,10 @@ rf_ReconMapUpdate(RF_Raid_t *raidPtr, RF_ReconMap_t *mapPtr,
 		}
 		startSector = RF_MIN(stopSector, last_in_RU) + 1;
 	}
-	rf_lock_mutex2(mapPtr->mutex);    
+	RF_LOCK_MUTEX(mapPtr->mutex);    
 	mapPtr->lock = 0;
-	rf_broadcast_cond2(mapPtr->cv);
-	rf_unlock_mutex2(mapPtr->mutex);
+	wakeup(&mapPtr->lock);
+	RF_UNLOCK_MUTEX(mapPtr->mutex);
 }
 
 
@@ -339,9 +338,6 @@ rf_FreeReconMap(RF_ReconMap_t *mapPtr)
 			RF_Free(q, sizeof(*q));
 		}
 	}
-
-	rf_destroy_mutex2(mapPtr->mutex);
-	rf_destroy_cond2(mapPtr->cv);
 
 	pool_destroy(&mapPtr->elem_pool);
 	RF_Free(mapPtr->status, mapPtr->status_size *

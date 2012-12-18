@@ -1,4 +1,4 @@
-/*	$NetBSD: qop_cbq.c,v 1.9 2010/01/06 06:30:37 mbalmer Exp $	*/
+/*	$NetBSD: qop_cbq.c,v 1.7 2008/05/02 19:07:44 xtraeme Exp $	*/
 /*	$KAME: qop_cbq.c,v 1.7 2002/05/31 06:03:35 kjc Exp $	*/
 /*
  * Copyright (c) Sun Microsystems, Inc. 1993-1998 All rights reserved.
@@ -421,10 +421,9 @@ qcmd_cbq_add_ctl_filters(const char *ifname, const char *clname)
 	struct flow_filter6	sfilt6;
 	u_int8_t ctl6_protos[3] = {IPPROTO_ICMPV6, IPPROTO_IGMP, IPPROTO_RSVP};
 #endif
-	int error;
-	size_t i;
+	int error, i;
 
-	for (i = 0; i < sizeof(ctl_protos); i++) {
+	for (i = 0; i < (int)sizeof(ctl_protos); i++) {
 		memset(&sfilt, 0, sizeof(sfilt));
 		sfilt.ff_flow.fi_family = AF_INET;
 		sfilt.ff_flow.fi_proto = ctl_protos[i];
@@ -557,7 +556,7 @@ qop_cbq_add_class(struct classinfo **rp, const char *class_name,
 	cbq_clinfo->bandwidth = bandwidth;
 	cbq_clinfo->allocated = 0;
 
-	/* if average packet size isn't specified, set if mtu. */
+	/* if average paket size isn't specified, set if mtu. */
 	if (av_pkt_size == 0) {	/* use default */
 		av_pkt_size = ifinfo->ifmtu;
 		if (av_pkt_size > MCLBYTES)	/* do what TCP does */
@@ -682,7 +681,7 @@ qop_cbq_modify_class(struct classinfo *clinfo, u_int pri, u_int bandwidth,
 		}
 	}
 
-	/* if average packet size isn't specified, set if mtu. */
+	/* if average paket size isn't specified, set if mtu. */
 	if (av_pkt_size == 0) {	/* use default */
 		av_pkt_size = ifinfo->ifmtu;
 		if (av_pkt_size > MCLBYTES)	/* do what TCP does */

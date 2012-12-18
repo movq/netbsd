@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.18 2011/07/01 20:52:02 dyoung Exp $	*/
+/*	$NetBSD: cpu.c,v 1.15 2008/04/28 20:23:33 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -30,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.18 2011/07/01 20:52:02 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.15 2008/04/28 20:23:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/platform.h>
 
@@ -50,16 +50,16 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.18 2011/07/01 20:52:02 dyoung Exp $");
 extern void openpic_set_priority(int, int);
 #endif
 
-int cpumatch(device_t, cfdata_t, void *);
-void cpuattach(device_t, device_t, void *);
+int cpumatch(struct device *, struct cfdata *, void *);
+void cpuattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(cpu, 0,
+CFATTACH_DECL(cpu, sizeof(struct device),
     cpumatch, cpuattach, NULL, NULL);
 
 extern struct cfdriver cpu_cd;
 
 int
-cpumatch(device_t parent, cfdata_t cfdata, void *aux)
+cpumatch(struct device *parent, struct cfdata *cfdata, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -73,7 +73,7 @@ cpumatch(device_t parent, cfdata_t cfdata, void *aux)
 }
 
 void
-cpuattach(device_t parent, device_t self, void *aux)
+cpuattach(struct device *parent, struct device *self, void *aux)
 {
 	struct cpu_info *ci;
 	struct confargs *ca = aux;
@@ -105,7 +105,7 @@ md_setup_trampoline(volatile struct cpu_hatch_data *h, struct cpu_info *ci)
 	/* ba cpu_spinup_trampoline */
 	*(u_int *)EXC_RST = 0x48000002 | (u_int)cpu_spinup_trampoline;
 	__syncicache((void *)EXC_RST, 0x100);
-	h->hatch_running = -1;
+	h->running = -1;
 
 	/* Start secondary CPU. */
 	openpic_write(OPENPIC_PROC_INIT, (1 << 1));
@@ -121,14 +121,14 @@ md_presync_timebase(volatile struct cpu_hatch_data *h)
 	tb = mftb();
 	tb += 100000;  /* 3ms @ 33MHz */
 
-	h->hatch_tbu = tb >> 32;
-	h->hatch_tbl = tb & 0xffffffff;
+	h->tbu = tb >> 32;
+	h->tbl = tb & 0xffffffff;
 
 	while (tb > mftb())
 		;
 
 	__asm volatile ("sync; isync");
-	h->hatch_running = 0;
+	h->running = 0;
 
 	delay(500000);
 }
@@ -142,10 +142,10 @@ md_start_timebase(volatile struct cpu_hatch_data *h)
 void
 md_sync_timebase(volatile struct cpu_hatch_data *h)
 {
-	u_int tbu = h->hatch_tbu;
-	u_int tbl = h->hatch_tbl;
+	u_int tbu = h->tbu;
+	u_int tbl = h->tbl;
 
-	while (h->hatch_running == -1)
+	while (h->running == -1)
 		;
 
 	__asm volatile ("sync; isync");

@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_timezone.c,v 1.4 2012/03/20 17:05:59 matt Exp $	*/
+/*	$NetBSD: compat_timezone.c,v 1.2 2005/11/29 03:11:58 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)timezone.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: compat_timezone.c,v 1.4 2012/03/20 17:05:59 matt Exp $");
+__RCSID("$NetBSD: compat_timezone.c,v 1.2 2005/11/29 03:11:58 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -60,13 +60,14 @@ __warn_references(timezone,
  *	application code, by a call to localtime.
  */
 
-char *_tztab(int, int);
+char *_tztab __P((int, int));
 
 static char	czone[TZ_MAX_CHARS];		/* space for zone name */
 
-char *timezone(int, int);
 char *
-timezone(int zone, int dst)
+timezone(zone, dst)
+	int	zone,
+		dst;
 {
 	char	*beg,
 			*end;
@@ -116,7 +117,9 @@ static const struct zone {
  *	STANDARD LIBRARY.
  */
 char *
-_tztab(int zone, int dst)
+_tztab(zone,dst)
+	int	zone;
+	int	dst;
 {
 	const struct zone	*zp;
 	char	sign;

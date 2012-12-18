@@ -1,4 +1,4 @@
-/*	$NetBSD: clmpcc_pcctwo.c,v 1.19 2012/10/27 17:18:27 chs Exp $	*/
+/*	$NetBSD: clmpcc_pcctwo.c,v 1.15 2008/04/28 20:23:53 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clmpcc_pcctwo.c,v 1.19 2012/10/27 17:18:27 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clmpcc_pcctwo.c,v 1.15 2008/04/28 20:23:53 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,12 +68,12 @@ __KERNEL_RCSID(0, "$NetBSD: clmpcc_pcctwo.c,v 1.19 2012/10/27 17:18:27 chs Exp $
 
 
 /* Definition of the driver for autoconfig. */
-int clmpcc_pcctwo_match(device_t, cfdata_t, void *);
-void clmpcc_pcctwo_attach(device_t, device_t, void *);
+int clmpcc_pcctwo_match(struct device *, struct cfdata *, void *);
+void clmpcc_pcctwo_attach(struct device *, struct device *, void *);
 void clmpcc_pcctwo_iackhook(struct clmpcc_softc *, int);
 void clmpcc_pcctwo_consiackhook(struct clmpcc_softc *, int);
 
-CFATTACH_DECL_NEW(clmpcc_pcctwo, sizeof(struct clmpcc_softc),
+CFATTACH_DECL(clmpcc_pcctwo, sizeof(struct clmpcc_softc),
     clmpcc_pcctwo_match, clmpcc_pcctwo_attach, NULL, NULL);
 
 extern struct cfdriver clmpcc_cd;
@@ -90,7 +90,10 @@ cons_decl(clmpcc);
  * Is the CD2401 chip present?
  */
 int
-clmpcc_pcctwo_match(device_t parent, cfdata_t cf, void *aux)
+clmpcc_pcctwo_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct pcctwo_attach_args *pa;
 
@@ -108,14 +111,16 @@ clmpcc_pcctwo_match(device_t parent, cfdata_t cf, void *aux)
  * Attach a found CD2401.
  */
 void
-clmpcc_pcctwo_attach(device_t parent, device_t self, void *aux)
+clmpcc_pcctwo_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct clmpcc_softc *sc;
 	struct pcctwo_attach_args *pa = aux;
 	int level = pa->pa_ipl;
 
 	sc = device_private(self);
-	sc->sc_dev = self;
 	level = pa->pa_ipl;
 	sc->sc_iot = pa->pa_bust;
 	bus_space_map(pa->pa_bust, pa->pa_offset, 0x100, 0, &sc->sc_ioh);
@@ -142,7 +147,9 @@ clmpcc_pcctwo_attach(device_t parent, device_t self, void *aux)
 }
 
 void
-clmpcc_pcctwo_iackhook(struct clmpcc_softc *sc, int which)
+clmpcc_pcctwo_iackhook(sc, which)
+	struct clmpcc_softc *sc;
+	int which;
 {
 	bus_size_t offset;
 	volatile u_char foo;
@@ -162,7 +169,7 @@ clmpcc_pcctwo_iackhook(struct clmpcc_softc *sc, int which)
 	default:
 #ifdef DEBUG
 		printf("%s: Invalid IACK number '%d'\n",
-		    device_xname(sc->sc_dev), which);
+		    device_xname(&sc->sc_dev), which);
 #endif
 		panic("clmpcc_pcctwo_iackhook %d", which);
 	}
@@ -174,7 +181,9 @@ clmpcc_pcctwo_iackhook(struct clmpcc_softc *sc, int which)
  * This routine is only used prior to clmpcc_attach() being called
  */
 void
-clmpcc_pcctwo_consiackhook(struct clmpcc_softc *sc, int which)
+clmpcc_pcctwo_consiackhook(sc, which)
+	struct clmpcc_softc *sc;
+	int which;
 {
 	bus_space_handle_t bush;
 	bus_size_t offset;
@@ -195,7 +204,7 @@ clmpcc_pcctwo_consiackhook(struct clmpcc_softc *sc, int which)
 	default:
 #ifdef DEBUG
 		printf("%s: Invalid IACK number '%d'\n",
-		    device_xname(sc->sc_dev), which);
+		    device_xname(&sc->sc_dev), which);
 		panic("clmpcc_pcctwo_consiackhook");
 #endif
 		panic("clmpcc_pcctwo_iackhook %d", which);
@@ -224,7 +233,8 @@ clmpcc_pcctwo_consiackhook(struct clmpcc_softc *sc, int which)
  * Check for CD2401 console.
  */
 void
-clmpcccnprobe(struct consdev *cp)
+clmpcccnprobe(cp)
+	struct consdev *cp;
 {
 	int maj;
 
@@ -249,7 +259,8 @@ clmpcccnprobe(struct consdev *cp)
 }
 
 void
-clmpcccninit(struct consdev *cp)
+clmpcccninit(cp)
+	struct consdev *cp;
 {
 	static struct clmpcc_softc cons_sc;
 

@@ -1,4 +1,4 @@
-#	$NetBSD: list,v 1.22 2010/02/11 09:06:49 roy Exp $
+#	$NetBSD: list,v 1.17 2008/10/30 12:39:16 tsutsui Exp $
 
 # extras in bin
 PROG	bin/csh
@@ -32,15 +32,26 @@ COPYDIR	${DESTDIR}/usr/mdec	usr/mdec
 # and /boot.pmax
 COPY	${DESTDIR}/boot.pmax	boot.pmax
 
+# the zoneinfo (dont use)
+#COPYDIR	${DESTDIR}/usr/share/zoneinfo	usr/share/zoneinfo
+
+# a subset termcap file
+COPY	${ARCHDIR}/termcap.vt100 usr/share/misc/termcap
+
 # copy the kernel(s)
 COPY	${KERNOBJDIR}/GENERIC/netbsd		netbsd
 COPY	${KERNOBJDIR}/GENERIC/netbsd.ecoff	netbsd.ecoff
 COPY	${KERNOBJDIR}/INSTALL/nfsnetbsd.ecoff	nfsnetbsd.ecoff
 
 # various files that we need in /etc for the install
+#COPY	${DESTDIR}/etc/disktab		etc/disktab.shadow
+#SYMLINK	/tmp/disktab.shadow		etc/disktab
 #SYMLINK	/tmp/fstab.shadow		etc/fstab
 #SYMLINK	/tmp/resolv.conf.shadow		etc/resolv.conf
 #SYMLINK	/tmp/hosts			etc/hosts
+
+# sysinst needs disktab template
+COPY	${DESTDIR}/etc/disktab		etc/disktab.preinstall
 
 # and the installation tools
 COPY	${ARCHDIR}/dot.profile		.profile

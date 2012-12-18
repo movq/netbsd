@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.21 2011/06/05 17:03:19 matt Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.20 2008/04/28 20:23:29 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.21 2011/06/05 17:03:19 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.20 2008/04/28 20:23:29 martin Exp $");
 
 #include "vmetwo.h"
 
@@ -60,11 +60,11 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.21 2011/06/05 17:03:19 matt Exp $");
 #endif
 #endif
 
-void mainbus_attach(device_t, device_t, void *);
-int mainbus_match(device_t, cfdata_t, void *);
+void mainbus_attach(struct device *, struct device *, void *);
+int mainbus_match(struct device *, struct cfdata *, void *);
 int mainbus_print(void *, const char *);
 
-CFATTACH_DECL_NEW(mainbus, 0,
+CFATTACH_DECL(mainbus, sizeof(struct device),
     mainbus_match, mainbus_attach, NULL, NULL);
 
 
@@ -122,7 +122,7 @@ struct mvme68k_bus_space_tag _mainbus_space_tag = {
 
 /* ARGSUSED */
 int
-mainbus_match(device_t parent, cfdata_t cf, void *args)
+mainbus_match(struct device *parent, struct cfdata *cf, void *args)
 {
 	static int mainbus_matched;
 
@@ -134,7 +134,7 @@ mainbus_match(device_t parent, cfdata_t cf, void *args)
 
 /* ARGSUSED */
 void
-mainbus_attach(device_t parent, device_t self, void *args)
+mainbus_attach(struct device *parent, struct device *self, void *args)
 {
 	struct mainbus_attach_args ma;
 	struct mainbus_devices *devices;

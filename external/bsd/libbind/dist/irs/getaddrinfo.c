@@ -1,4 +1,4 @@
-/*	$NetBSD: getaddrinfo.c,v 1.1.1.1 2009/04/12 15:33:44 christos Exp $	*/
+/*	$NetBSD: getaddrinfo.c,v 1.1.1.1.4.2 2011/01/06 21:42:16 riz Exp $	*/
 
 /*	$KAME: getaddrinfo.c,v 1.14 2001/01/06 09:41:15 jinmei Exp $	*/
 

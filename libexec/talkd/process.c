@@ -1,4 +1,4 @@
-/*	$NetBSD: process.c,v 1.14 2009/03/16 01:13:38 lukem Exp $	*/
+/*	$NetBSD: process.c,v 1.12 2007/01/08 17:51:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)process.c	8.2 (Berkeley) 11/16/93";
 #else
-__RCSID("$NetBSD: process.c,v 1.14 2009/03/16 01:13:38 lukem Exp $");
+__RCSID("$NetBSD: process.c,v 1.12 2007/01/08 17:51:34 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -66,7 +66,9 @@ __RCSID("$NetBSD: process.c,v 1.14 2009/03/16 01:13:38 lukem Exp $");
 #include "utmpentry.h"
 
 void
-process_request(CTL_MSG *mp, CTL_RESPONSE *rp)
+process_request(mp, rp)
+	CTL_MSG *mp;
+	CTL_RESPONSE *rp;
 {
 	CTL_MSG *ptr;
 
@@ -135,7 +137,9 @@ process_request(CTL_MSG *mp, CTL_RESPONSE *rp)
 }
 
 void
-do_announce(CTL_MSG *mp, CTL_RESPONSE *rp)
+do_announce(mp, rp)
+	CTL_MSG *mp;
+	CTL_RESPONSE *rp;
 {
 	CTL_MSG *ptr;
 	int result;
@@ -180,7 +184,9 @@ do_announce(CTL_MSG *mp, CTL_RESPONSE *rp)
  * Search utmp for the local user
  */
 int
-find_user(const char *name, char *tty, size_t ttysize)
+find_user(name, tty, ttysize)
+	char *name, *tty;
+	size_t ttysize;
 {
 	int status;
 	struct stat statb;

@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.18 2012/05/07 18:16:38 tsutsui Exp $	*/
+/*	$NetBSD: bus.h,v 1.15 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -64,7 +64,6 @@
  */
 #define	HP300_BUS_SPACE_INTIO	0	/* space is intio space */
 #define	HP300_BUS_SPACE_DIO	1	/* space is dio space */
-#define	HP300_BUS_SPACE_SGC	2	/* space is sgc space */
 
 /*
  * Bus address and size types
@@ -727,35 +726,6 @@ __HP300_copy_region_N(4)
 #undef __HP300_copy_region_N
 
 /*
- * Bus stream operations--defined in terms of non-stream counterparts
- */
-#define	__BUS_SPACE_HAS_STREAM_METHODS 1
-#define	bus_space_read_stream_1 bus_space_read_1
-#define	bus_space_read_stream_2 bus_space_read_2
-#define	bus_space_read_stream_4 bus_space_read_4
-#define	bus_space_read_stream_8 bus_space_read_8
-#define	bus_space_read_multi_stream_1 bus_space_read_multi_1
-#define	bus_space_read_multi_stream_2 bus_space_read_multi_2
-#define	bus_space_read_multi_stream_4 bus_space_read_multi_4
-#define	bus_space_read_multi_stream_8 bus_space_read_multi_8
-#define	bus_space_read_region_stream_1 bus_space_read_region_1
-#define	bus_space_read_region_stream_2 bus_space_read_region_2
-#define	bus_space_read_region_stream_4 bus_space_read_region_4
-#define	bus_space_read_region_stream_8 bus_space_read_region_8
-#define	bus_space_write_stream_1 bus_space_write_1
-#define	bus_space_write_stream_2 bus_space_write_2
-#define	bus_space_write_stream_4 bus_space_write_4
-#define	bus_space_write_stream_8 bus_space_write_8
-#define	bus_space_write_multi_stream_1 bus_space_write_multi_1
-#define	bus_space_write_multi_stream_2 bus_space_write_multi_2
-#define	bus_space_write_multi_stream_4 bus_space_write_multi_4
-#define	bus_space_write_multi_stream_8 bus_space_write_multi_8
-#define	bus_space_write_region_stream_1 bus_space_write_region_1
-#define	bus_space_write_region_stream_2 bus_space_write_region_2
-#define	bus_space_write_region_stream_4 bus_space_write_region_4
-#define	bus_space_write_region_stream_8	bus_space_write_region_8
-
-/*
  * Bus read/write barrier methods.
  *
  *	void bus_space_barrier(bus_space_tag_t tag,
@@ -772,9 +742,4 @@ __HP300_copy_region_N(4)
 
 #define BUS_SPACE_ALIGNED_POINTER(p, t) ALIGNED_POINTER(p, t)
 
-/*
- * There is no bus_dma(9)'fied bus drivers on this port.
- */
-#define __HAVE_NO_BUS_DMA
- 
 #endif /* _HP300_BUS_H_ */

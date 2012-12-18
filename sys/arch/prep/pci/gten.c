@@ -1,4 +1,4 @@
-/*	$NetBSD: gten.c,v 1.20 2011/07/01 16:56:52 dyoung Exp $	*/
+/*	$NetBSD: gten.c,v 1.17 2008/04/28 20:23:33 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gten.c,v 1.20 2011/07/01 16:56:52 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gten.c,v 1.17 2008/04/28 20:23:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -51,14 +51,14 @@ __KERNEL_RCSID(0, "$NetBSD: gten.c,v 1.20 2011/07/01 16:56:52 dyoung Exp $");
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/rasops/rasops.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/gtenvar.h>
 
-static	int	gten_match(device_t, cfdata_t, void *);
-static	void	gten_attach(device_t, device_t, void *);
+static	int	gten_match(struct device *, struct cfdata *, void *);
+static	void	gten_attach(struct device *, struct device *, void *);
 static	int	gten_print(void *, const char *);
 
-CFATTACH_DECL_NEW(gten, sizeof(struct gten_softc),
+CFATTACH_DECL(gten, sizeof(struct gten_softc),
     gten_match, gten_attach, NULL, NULL);
 
 static struct rasops_info gten_console_ri;
@@ -105,7 +105,7 @@ static int gten_putcmap(struct gten_softc *, struct wsdisplay_cmap *);
 #define	GTEN_VRAM_OFFSET	0xf00000
 
 static int
-gten_match(device_t parent, cfdata_t match, void *aux)
+gten_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -117,9 +117,9 @@ gten_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-gten_attach(device_t parent, device_t self, void *aux)
+gten_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct gten_softc *gt = device_private(self);
+	struct gten_softc *gt = (struct gten_softc *)self;
 	struct pci_attach_args *pa = aux;
 	struct wsemuldisplaydev_attach_args a;
 	int console = (pa->pa_tag == gten_console_pcitag);
@@ -134,17 +134,17 @@ gten_attach(device_t parent, device_t self, void *aux)
 			error);
 		return;
 	}
-	gt->gt_dev = self;
 	if (console) {
 		gt->gt_ri = &gten_console_ri;
 		gt->gt_nscreens = 1;
 	} else {
-		gt->gt_ri = malloc(sizeof(*gt->gt_ri),
-			M_DEVBUF, M_NOWAIT|M_ZERO);
+		MALLOC(gt->gt_ri, struct rasops_info *, sizeof(*gt->gt_ri),
+			M_DEVBUF, M_NOWAIT);
 		if (gt->gt_ri == NULL) {
 			aprint_error(": can't alloc memory\n");
 			return;
 		}
+		memset(gt->gt_ri, 0, sizeof(*gt->gt_ri));
 #if 0
 		error = pci_mapreg_map(pa, 0x14, 
 			PCI_MAPREG_TYPE_MEM|PCI_MAPREG_MEM_TYPE_32BIT,
@@ -175,11 +175,11 @@ gten_attach(device_t parent, device_t self, void *aux)
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
 	aprint_normal(": %s\n", devinfo);
 	format_bytes(pbuf, sizeof(pbuf), gt->gt_psize);
-	aprint_normal_dev(self, "%s: %s, %dx%d, %dbpp\n", pbuf,
+	aprint_normal("%s: %s, %dx%d, %dbpp\n", self->dv_xname, pbuf,
 	       gt->gt_ri->ri_width, gt->gt_ri->ri_height,
 	       gt->gt_ri->ri_depth);
 #if defined(DEBUG)
-	aprint_debug_dev(self, "%s: text %dx%d, =+%d+%d\n",
+	aprint_debug("%s: text %dx%d, =+%d+%d\n", self->dv_xname,
 	       gt->gt_ri->ri_cols, gt->gt_ri->ri_rows,
 	       gt->gt_ri->ri_xorigin, gt->gt_ri->ri_yorigin);
 

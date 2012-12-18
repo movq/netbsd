@@ -1,4 +1,4 @@
-/*	$NetBSD: iso9660_rrip.h,v 1.5 2009/01/10 22:06:29 bjh21 Exp $	*/
+/*	$NetBSD: iso9660_rrip.h,v 1.4.26.1 2010/01/02 06:45:03 snj Exp $	*/
 
 /*
  * Copyright (c) 2005 Daniel Watt, Walter Deignan, Ryan Gabrys, Alan

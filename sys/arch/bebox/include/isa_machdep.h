@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.h,v 1.21 2011/08/07 15:22:19 kiyohara Exp $	*/
+/*	$NetBSD: isa_machdep.h,v 1.18 2008/04/28 20:23:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -44,12 +44,11 @@
 
 extern struct powerpc_bus_dma_tag isa_bus_dma_tag;
 extern struct pic_ops *isa_pic;
+extern int isa_pcmciamask;
 
 /* function mappings */
 #define isa_attach_hook(p, s, iaa)					\
 	genppc_isa_attach_hook(p, s, iaa)
-#define isa_detach_hook(c, s)						\
-	genppc_isa_detach_hook(c, s)
 #define isa_intr_evcnt(ic, irq)						\
 	genppc_isa_intr_evcnt(ic, irq)
 #define isa_intr_establish(ic, irq, type, level, fun, arg)		\
@@ -57,7 +56,7 @@ extern struct pic_ops *isa_pic;
 #define isa_intr_disestablish(ic, arg)					\
 	genppc_isa_intr_disestablish(ic, arg)
 #define isa_intr_alloc(ic, mask, type, irqp)				\
-	genppc_isa_intr_alloc(ic, isa_pic, mask, type, irqp)
+	genppc_isa_intr_alloc(ic, isa_pic, mask & isa_pcmciamask, type, irqp)
 
 /*
  * Miscellanous functions.

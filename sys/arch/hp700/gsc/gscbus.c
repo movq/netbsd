@@ -1,4 +1,4 @@
-/*	$NetBSD: gscbus.c,v 1.23 2012/05/23 16:11:37 skrll Exp $	*/
+/*	$NetBSD: gscbus.c,v 1.13 2006/09/22 14:08:04 skrll Exp $	*/
 
 /*	$OpenBSD: gscbus.c,v 1.13 2001/08/01 20:32:04 miod Exp $	*/
 
@@ -14,18 +14,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Michael Shalayeff.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR OR HIS RELATIVES BE LIABLE FOR ANY DIRECT,
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF MIND, USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 /*
@@ -68,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gscbus.c,v 1.23 2012/05/23 16:11:37 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gscbus.c,v 1.13 2006/09/22 14:08:04 skrll Exp $");
 
 #define GSCDEBUG
 
@@ -78,6 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: gscbus.c,v 1.23 2012/05/23 16:11:37 skrll Exp $");
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+#include <sys/user.h>
 #include <sys/mbuf.h>
 #include <sys/reboot.h>
 
@@ -88,16 +93,16 @@ __KERNEL_RCSID(0, "$NetBSD: gscbus.c,v 1.23 2012/05/23 16:11:37 skrll Exp $");
 #include <hp700/gsc/gscbusvar.h>
 #include <hp700/hp700/machdep.h>
 
-int	gscmatch(device_t, cfdata_t, void *);
-void	gscattach(device_t, device_t, void *);
+int	gscmatch(struct device *, struct cfdata *, void *);
+void	gscattach(struct device *, struct device *, void *);
 
 struct gsc_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	struct gsc_attach_args sc_ga;
 	void *sc_ih;
 };
 
-CFATTACH_DECL_NEW(gsc, sizeof(struct gsc_softc),
+CFATTACH_DECL(gsc, sizeof(struct gsc_softc),
     gscmatch, gscattach, NULL, NULL);
 
 /*
@@ -106,11 +111,11 @@ CFATTACH_DECL_NEW(gsc, sizeof(struct gsc_softc),
  * to fix up the module's attach arguments, then we match
  * and attach it.
  */
-static device_t gsc_module_callback(device_t, struct confargs *);
-static device_t
-gsc_module_callback(device_t self, struct confargs *ca)
+static void gsc_module_callback(struct device *, struct confargs *);
+static void
+gsc_module_callback(struct device *self, struct confargs *ca)
 {
-	struct gsc_softc *sc = device_private(self);
+	struct gsc_softc *sc = (struct gsc_softc *)self;
 	struct gsc_attach_args ga;
 
 	/* Make the GSC attach args. */
@@ -120,11 +125,11 @@ gsc_module_callback(device_t self, struct confargs *ca)
 	ga.ga_dmatag = sc->sc_ga.ga_dmatag;
 	(*sc->sc_ga.ga_fix_args)(sc->sc_ga.ga_fix_args_cookie, &ga);
 
-	return config_found_sm_loc(self, "gsc", NULL, &ga, mbprint, mbsubmatch);
+	config_found_sm_loc(self, "gsc", NULL, &ga, mbprint, mbsubmatch);
 }
 
 int
-gscmatch(device_t parent, cfdata_t cf, void *aux)
+gscmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct gsc_attach_args *ga = aux;
 
@@ -132,29 +137,26 @@ gscmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-gscattach(device_t parent, device_t self, void *aux)
+gscattach(struct device *parent, struct device *self, void *aux)
 {
-	struct gsc_softc *sc = device_private(self);
+	struct gsc_softc *sc = (struct gsc_softc *)self;
 	struct gsc_attach_args *ga = aux;
-	struct cpu_info *ci = &cpus[0];
 
-	sc->sc_dev = self;
 	sc->sc_ga = *ga;
 
 #ifdef USELEDS
 	if (machine_ledaddr)
-		aprint_normal(": %sleds", machine_ledword? "word" : "");
+		printf(": %sleds", machine_ledword? "word" : "");
 #endif
 
-	aprint_normal("\n");
+	printf ("\n");
 
 	/* Add the I/O subsystem's interrupt register. */
-	ga->ga_ir->ir_name = device_xname(self);
-	sc->sc_ih = hp700_intr_establish(IPL_NONE, NULL, ga->ga_ir,
-	    &ci->ci_ir, ga->ga_irq);
+	ga->ga_int_reg->int_reg_dev = parent->dv_xname;
+	sc->sc_ih = hp700_intr_establish(&sc->sc_dev, IPL_NONE,
+					 NULL, ga->ga_int_reg,
+					 &int_reg_cpu, ga->ga_irq);
 
-	ga->ga_ca.ca_nmodules = MAXMODBUS;
-	ga->ga_ca.ca_hpabase = 0;
 	pdc_scanbus(self, &ga->ga_ca, gsc_module_callback);
 }
 

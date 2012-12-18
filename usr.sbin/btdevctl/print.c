@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.10 2010/04/28 06:18:07 plunky Exp $	*/
+/*	$NetBSD: print.c,v 1.9.14.1 2010/11/21 03:05:06 riz Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: print.c,v 1.10 2010/04/28 06:18:07 plunky Exp $");
+__RCSID("$NetBSD: print.c,v 1.9.14.1 2010/11/21 03:05:06 riz Exp $");
 
 #include <sys/types.h>
 

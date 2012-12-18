@@ -1,4 +1,4 @@
-/*	$NetBSD: terminal.c,v 1.7 2009/07/04 04:29:55 dholland Exp $	*/
+/*	$NetBSD: terminal.c,v 1.5 2008/01/28 03:23:29 dholland Exp $	*/
 /*
  * Copyright (c) 1983-2003, Regents of the University of California.
  * All rights reserved.
@@ -32,12 +32,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: terminal.c,v 1.7 2009/07/04 04:29:55 dholland Exp $");
+__RCSID("$NetBSD: terminal.c,v 1.5 2008/01/28 03:23:29 dholland Exp $");
 #endif /* not lint */
 
 #include <stdarg.h>
 #include "hunt.h"
-#define TERM_WIDTH	80	/* Assume terminals are 80-char wide */
+#define	TERM_WIDTH	80	/* Assume terminals are 80-char wide */
 
 /*
  * cgoto:
@@ -45,7 +45,9 @@ __RCSID("$NetBSD: terminal.c,v 1.7 2009/07/04 04:29:55 dholland Exp $");
  *	terminal.
  */
 void
-cgoto(PLAYER *pp, int y, int x)
+cgoto(pp, y, x)
+	PLAYER	*pp;
+	int	y, x;
 {
 	if (x == pp->p_curx && y == pp->p_cury)
 		return;
@@ -59,7 +61,9 @@ cgoto(PLAYER *pp, int y, int x)
  *	Put out a single character.
  */
 void
-outch(PLAYER *pp, int ch)
+outch(pp, ch)
+	PLAYER	*pp;
+	char	ch;
 {
 	if (++pp->p_curx >= TERM_WIDTH) {
 		pp->p_curx = 0;
@@ -73,7 +77,10 @@ outch(PLAYER *pp, int ch)
  *	Put out a string of the given length.
  */
 void
-outstr(PLAYER *pp, const char *str, int len)
+outstr(pp, str, len)
+	PLAYER	*pp;
+	const char *str;
+	int	len;
 {
 	pp->p_curx += len;
 	pp->p_cury += (pp->p_curx / TERM_WIDTH);
@@ -87,7 +94,8 @@ outstr(PLAYER *pp, const char *str, int len)
  *	Clear the screen, and reset the current position on the screen.
  */
 void
-clrscr(PLAYER *pp)
+clrscr(pp)
+	PLAYER	*pp;
 {
 	sendcom(pp, CLEAR);
 	pp->p_cury = 0;
@@ -99,18 +107,20 @@ clrscr(PLAYER *pp)
  *	Clear to the end of the line
  */
 void
-ce(PLAYER *pp)
+ce(pp)
+	PLAYER	*pp;
 {
 	sendcom(pp, CLRTOEOL);
 }
 
-#if 0		/* XXX lukem */
+#if 0		/* XXX lukem*/
 /*
  * ref;
  *	Refresh the screen
  */
 void
-ref(PLAYER *pp)
+ref(pp)
+	PLAYER	*pp;
 {
 	sendcom(pp, REFRESH);
 }
@@ -124,7 +134,7 @@ void
 sendcom(PLAYER *pp, int command, ...)
 {
 	va_list	ap;
-	int arg1, arg2;
+	int	arg1, arg2;
 
 	va_start(ap, command);
 	(void) putc(command, pp->p_output);

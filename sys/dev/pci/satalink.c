@@ -1,4 +1,4 @@
-/*	$NetBSD: satalink.c,v 1.49 2012/10/27 17:18:35 chs Exp $	*/
+/*	$NetBSD: satalink.c,v 1.38 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: satalink.c,v 1.49 2012/10/27 17:18:35 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: satalink.c,v 1.38 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -262,10 +262,8 @@ static void satalink_attach(device_t, device_t, void *);
 CFATTACH_DECL_NEW(satalink, sizeof(struct pciide_softc),
     satalink_match, satalink_attach, NULL, NULL);
 
-static void sii3112_chip_map(struct pciide_softc*,
-    const struct pci_attach_args*);
-static void sii3114_chip_map(struct pciide_softc*,
-    const struct pci_attach_args*);
+static void sii3112_chip_map(struct pciide_softc*, struct pci_attach_args*);
+static void sii3114_chip_map(struct pciide_softc*, struct pci_attach_args*);
 static void sii3112_drv_probe(struct ata_channel*);
 static void sii3112_setup_channel(struct ata_channel*);
 
@@ -273,11 +271,6 @@ static const struct pciide_product_desc pciide_satalink_products[] =  {
 	{ PCI_PRODUCT_CMDTECH_3112,
 	  0,
 	  "Silicon Image SATALink 3112",
-	  sii3112_chip_map,
-	},
-	{ PCI_PRODUCT_CMDTECH_240,
-	  0,
-	  "Silicon Image SATALink Sil240",
 	  sii3112_chip_map,
 	},
 	{ PCI_PRODUCT_CMDTECH_3512,
@@ -294,11 +287,6 @@ static const struct pciide_product_desc pciide_satalink_products[] =  {
 	  0,
 	  "Silicon Image SATALink 3114",
 	  sii3114_chip_map,
-	},
-	{ PCI_PRODUCT_ATI_IXP_SATA_300,
-	  0,
-	  "ATI IXP 300 SATA",
-	  sii3112_chip_map,
 	},
 	{ 0,
 	  0,
@@ -395,8 +383,7 @@ ba5_write_4(struct pciide_softc *sc, bus_addr_t reg, uint32_t val)
  * This may also happen on the 3114 (ragge 050527)
  */
 static void
-sii_fixup_cacheline(struct pciide_softc *sc, const struct pci_attach_args *pa,
-    int n)
+sii_fixup_cacheline(struct pciide_softc *sc, struct pci_attach_args *pa, int n)
 {
 	pcireg_t cls, reg;
 	int i;
@@ -423,9 +410,10 @@ sii_fixup_cacheline(struct pciide_softc *sc, const struct pci_attach_args *pa,
 }
 
 static void
-sii3112_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
+sii3112_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
+	bus_size_t cmdsize, ctlsize;
 	pcireg_t interface, scs_cmd, cfgctl;
 	int channel;
 
@@ -455,7 +443,7 @@ sii3112_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 				   PCI_MAPREG_TYPE_MEM|
 				   PCI_MAPREG_MEM_TYPE_32BIT, 0,
 				   &sc->sc_ba5_st, &sc->sc_ba5_sh,
-				   NULL, &sc->sc_ba5_ss) != 0)
+				   NULL, NULL) != 0)
 			aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
 			    "unable to map SATALink BA5 register space\n");
 		else
@@ -481,9 +469,7 @@ sii3112_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 	 * apparently hard to tickle, but we'll go ahead and play it
 	 * safe.
 	 */
-	if ((PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_CMDTECH_3112 ||
-	     PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_CMDTECH_AAR_1210SA) &&
-	    PCI_REVISION(pa->pa_class) <= 0x01) {
+	if (PCI_REVISION(pa->pa_class) <= 0x01) {
 		sc->sc_dma_maxsegsz = 8192;
 		sc->sc_dma_boundary = 8192;
 	}
@@ -505,7 +491,6 @@ sii3112_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
-	sc->sc_wdcdev.wdc_maxdrives = 1;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -526,12 +511,13 @@ sii3112_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 		cp = &sc->pciide_channels[channel];
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
-		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
+		    pciide_pci_intr);
 	}
 }
 
 static void
-sii3114_mapreg_dma(struct pciide_softc *sc, const struct pci_attach_args *pa)
+sii3114_mapreg_dma(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *pc;
 	int chan, reg;
@@ -607,6 +593,7 @@ sii3114_chansetup(struct pciide_softc *sc, int channel)
 	cp->ata_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
 	cp->ata_channel.ch_queue =
 	    malloc(sizeof(struct ata_queue), M_DEVBUF, M_NOWAIT);
+	cp->ata_channel.ch_ndrive = 2;
 	if (cp->ata_channel.ch_queue == NULL) {
 		aprint_error("%s %s channel: "
 		    "can't allocate memory for command queue",
@@ -667,7 +654,7 @@ sii3114_mapchan(struct pciide_channel *cp)
 }
 
 static void
-sii3114_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
+sii3114_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	pcireg_t scs_cmd;
@@ -710,7 +697,7 @@ sii3114_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 			   PCI_MAPREG_TYPE_MEM|
 			   PCI_MAPREG_MEM_TYPE_32BIT, 0,
 			   &sc->sc_ba5_st, &sc->sc_ba5_sh,
-			   NULL, &sc->sc_ba5_ss) != 0) {
+			   NULL, NULL) != 0) {
 		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
 		    "unable to map SATALink BA5 register space\n");
 		return;
@@ -750,7 +737,6 @@ sii3114_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 4;
-	sc->sc_wdcdev.wdc_maxdrives = 1;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -772,8 +758,8 @@ sii3114_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
 		    "couldn't establish native-PCI interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
 
@@ -796,7 +782,13 @@ sii3112_drv_probe(struct ata_channel *chp)
 	struct wdc_regs *wdr = CHAN_TO_WDC_REGS(chp);
 	uint32_t scontrol, sstatus;
 	uint8_t scnt, sn, cl, ch;
-	int s;
+	int i, s;
+
+	/* XXX This should be done by other code. */
+	for (i = 0; i < 2; i++) {
+		chp->ch_drive[i].chnl_softc = chp;
+		chp->ch_drive[i].drive = i;
+	}
 
 	/*
 	 * The 3112 is a 2-port part, and only has one drive per channel
@@ -825,7 +817,7 @@ sii3112_drv_probe(struct ata_channel *chp)
 
 	sstatus = BA5_READ_4(sc, chp->ch_channel, ba5_SStatus);
 #if 0
-	aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	aprint_normal_dev(&sc->sc_wdcdev.sc_atac.atac_dev,
 	    "port %d: SStatus=0x%08x, SControl=0x%08x\n",
 	    chp->ch_channel, sstatus,
 	    BA5_READ_4(sc, chp->ch_channel, ba5_SControl));
@@ -867,20 +859,18 @@ sii3112_drv_probe(struct ata_channel *chp)
 				      wdr->cmd_iohs[wd_cyl_hi], 0);
 #if 0
 		printf("%s: port %d: scnt=0x%x sn=0x%x cl=0x%x ch=0x%x\n",
-		    device_xname(sc->sc_wdcdev.sc_atac.atac_dev), chp->ch_channel,
+		    device_xname(&sc->sc_wdcdev.sc_atac.atac_dev), chp->ch_channel,
 		    scnt, sn, cl, ch);
 #endif
-		if (atabus_alloc_drives(chp, 1) != 0)
-			return;
 		/*
 		 * scnt and sn are supposed to be 0x1 for ATAPI, but in some
 		 * cases we get wrong values here, so ignore it.
 		 */
 		s = splbio();
 		if (cl == 0x14 && ch == 0xeb)
-			chp->ch_drive[0].drive_type = ATA_DRIVET_ATAPI;
+			chp->ch_drive[0].drive_flags |= DRIVE_ATAPI;
 		else
-			chp->ch_drive[0].drive_type = ATA_DRIVET_ATA;
+			chp->ch_drive[0].drive_flags |= DRIVE_ATA;
 		splx(s);
 
 		aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
@@ -914,16 +904,16 @@ sii3112_setup_channel(struct ata_channel *chp)
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if (drvp->drive_type == ATA_DRIVET_NONE)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
-		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
+		if (drvp->drive_flags & DRIVE_UDMA) {
 			/* use Ultra/DMA */
 			s = splbio();
-			drvp->drive_flags &= ~ATA_DRIVE_DMA;
+			drvp->drive_flags &= ~DRIVE_DMA;
 			splx(s);
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
 			dtm |= DTM_IDEx_DMA;
-		} else if (drvp->drive_flags & ATA_DRIVE_DMA) {
+		} else if (drvp->drive_flags & DRIVE_DMA) {
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
 			dtm |= DTM_IDEx_DMA;
 		} else {

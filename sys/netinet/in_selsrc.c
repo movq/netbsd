@@ -1,4 +1,4 @@
-/*	$NetBSD: in_selsrc.c,v 1.9 2012/06/02 21:36:47 dsl Exp $	*/
+/*	$NetBSD: in_selsrc.c,v 1.6.26.1 2009/09/26 18:30:50 snj Exp $	*/
 
 /*-
  * Copyright (c) 2005 David Young.  All rights reserved.
@@ -13,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by David Young.
+ * 4. The name of David Young may not be used to endorse or promote
+ *    products derived from this software without specific prior
+ *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY DAVID YOUNG ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -29,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_selsrc.c,v 1.9 2012/06/02 21:36:47 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_selsrc.c,v 1.6.26.1 2009/09/26 18:30:50 snj Exp $");
 
 #include "opt_inet.h"
 #include "opt_inet_conf.h"
@@ -525,7 +531,7 @@ in_domifattach_sysctl(struct in_ifsysctl *isc)
 				 "selectsrc",
 				 SYSCTL_DESCR("source selection policy"),
 				 in_sysctl_selectsrc, 0,
-				 (void *)isc->isc_selsrc, IN_SELECTSRC_LEN,
+				 isc->isc_selsrc, IN_SELECTSRC_LEN,
 				 CTL_CREATE, CTL_EOL)) != 0) {
 		printf(
 		    "%s: could not create net.inet.ip.%s.selectsrc, rc = %d\n",

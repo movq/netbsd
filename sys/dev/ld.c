@@ -1,4 +1,4 @@
-/*	$NetBSD: ld.c,v 1.70 2012/10/27 17:18:14 chs Exp $	*/
+/*	$NetBSD: ld.c,v 1.63 2008/09/09 12:45:39 tron Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -34,7 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.70 2012/10/27 17:18:14 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.63 2008/09/09 12:45:39 tron Exp $");
+
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,7 +56,9 @@ __KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.70 2012/10/27 17:18:14 chs Exp $");
 #include <sys/vnode.h>
 #include <sys/syslog.h>
 #include <sys/mutex.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <dev/ldvar.h>
 
@@ -63,12 +67,10 @@ __KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.70 2012/10/27 17:18:14 chs Exp $");
 static void	ldgetdefaultlabel(struct ld_softc *, struct disklabel *);
 static void	ldgetdisklabel(struct ld_softc *);
 static void	ldminphys(struct buf *bp);
-static bool	ld_suspend(device_t, const pmf_qual_t *);
 static bool	ld_shutdown(device_t, int);
 static void	ldstart(struct ld_softc *, struct buf *);
 static void	ld_set_properties(struct ld_softc *);
-static void	ld_config_interrupts (device_t);
-static int	ldlastclose(device_t);
+static void	ld_config_interrupts (struct device *);
 
 extern struct	cfdriver ld_cd;
 
@@ -141,16 +143,17 @@ ldattach(struct ld_softc *sc)
 	    "%d bytes/sect x %"PRIu64" sectors\n",
 	    tbuf, sc->sc_ncylinders, sc->sc_nheads,
 	    sc->sc_nsectors, sc->sc_secsize, sc->sc_secperunit);
-	sc->sc_disksize512 = sc->sc_secperunit * sc->sc_secsize / DEV_BSIZE;
 
 	ld_set_properties(sc);
 
+#if NRND > 0
 	/* Attach the device into the rnd source list. */
 	rnd_attach_source(&sc->sc_rnd_source, device_xname(sc->sc_dv),
 	    RND_TYPE_DISK, 0);
+#endif
 
 	/* Register with PMF */
-	if (!pmf_device_register1(sc->sc_dv, ld_suspend, NULL, ld_shutdown))
+	if (!pmf_device_register1(sc->sc_dv, NULL, NULL, ld_shutdown))
 		aprint_error_dev(sc->sc_dv,
 		    "couldn't establish power handler\n");
 
@@ -180,10 +183,8 @@ ldbegindetach(struct ld_softc *sc, int flags)
 	if ((sc->sc_flags & LDF_ENABLED) == 0)
 		return (0);
 
-	rv = disk_begindetach(&sc->sc_dk, ldlastclose, sc->sc_dv, flags);
-
-	if (rv != 0)
-		return rv;
+	if ((flags & DETACH_FORCE) == 0 && sc->sc_dk.dk_openmask != 0)
+		return (EBUSY);
 
 	s = splbio();
 	sc->sc_maxqueuecnt = 0;
@@ -237,8 +238,10 @@ ldenddetach(struct ld_softc *sc)
 	disk_detach(&sc->sc_dk);
 	disk_destroy(&sc->sc_dk);
 
+#if NRND > 0
 	/* Unhook the entropy source. */
 	rnd_detach_source(&sc->sc_rnd_source);
+#endif
 
 	/* Deregister with PMF */
 	pmf_device_deregister(sc->sc_dv);
@@ -252,16 +255,9 @@ ldenddetach(struct ld_softc *sc)
 	/* Flush the device's cache. */
 	if (sc->sc_flush != NULL)
 		if ((*sc->sc_flush)(sc, 0) != 0)
-			aprint_error_dev(sc->sc_dv, "unable to flush cache\n");
+			aprint_error_dev(&sc->sc_dv, "unable to flush cache\n");
 #endif
 	mutex_destroy(&sc->sc_mutex);
-}
-
-/* ARGSUSED */
-static bool
-ld_suspend(device_t dev, const pmf_qual_t *qual)
-{
-	return ld_shutdown(dev, 0);
 }
 
 /* ARGSUSED */
@@ -325,19 +321,6 @@ ldopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	return (error);
 }
 
-static int
-ldlastclose(device_t self)
-{
-	struct ld_softc *sc = device_private(self);
-
-	if (sc->sc_flush != NULL && (*sc->sc_flush)(sc, 0) != 0)
-		aprint_error_dev(self, "unable to flush cache\n");
-	if ((sc->sc_flags & LDF_KLABEL) == 0)
-		sc->sc_flags &= ~LDF_VLABEL;
-
-	return 0;
-}
-
 /* ARGSUSED */
 static int
 ldclose(dev_t dev, int flags, int fmt, struct lwp *l)
@@ -362,8 +345,12 @@ ldclose(dev_t dev, int flags, int fmt, struct lwp *l)
 	sc->sc_dk.dk_openmask =
 	    sc->sc_dk.dk_copenmask | sc->sc_dk.dk_bopenmask;
 
-	if (sc->sc_dk.dk_openmask == 0)
-		ldlastclose(sc->sc_dv);
+	if (sc->sc_dk.dk_openmask == 0) {
+		if (sc->sc_flush != NULL && (*sc->sc_flush)(sc, 0) != 0)
+			aprint_error_dev(sc->sc_dv, "unable to flush cache\n");
+		if ((sc->sc_flags & LDF_KLABEL) == 0)
+			sc->sc_flags &= ~LDF_VLABEL;
+	}
 
 	mutex_exit(&sc->sc_dk.dk_openlock);
 	return (0);
@@ -619,14 +606,10 @@ ldstrategy(struct buf *bp)
 	 * Do bounds checking and adjust the transfer.  If error, process.
 	 * If past the end of partition, just return.
 	 */
-	if (part == RAW_PART) {
-		if (bounds_check_with_mediasize(bp, DEV_BSIZE,
-		    sc->sc_disksize512) <= 0)
-			goto done;
-	} else {
-		if (bounds_check_with_label(&sc->sc_dk, bp,
-		    (sc->sc_flags & (LDF_WLABEL | LDF_LABELLING)) != 0) <= 0)
-			goto done;
+	if (part != RAW_PART &&
+	    bounds_check_with_label(&sc->sc_dk, bp,
+	    (sc->sc_flags & (LDF_WLABEL | LDF_LABELLING)) != 0) <= 0) {
+		goto done;
 	}
 
 	/*
@@ -663,11 +646,11 @@ ldstart(struct ld_softc *sc, struct buf *bp)
 	mutex_enter(&sc->sc_mutex);
 
 	if (bp != NULL)
-		bufq_put(sc->sc_bufq, bp);
+		BUFQ_PUT(sc->sc_bufq, bp);
 
 	while (sc->sc_queuecnt < sc->sc_maxqueuecnt) {
 		/* See if there is work to do. */
-		if ((bp = bufq_peek(sc->sc_bufq)) == NULL)
+		if ((bp = BUFQ_PEEK(sc->sc_bufq)) == NULL)
 			break;
 
 		disk_busy(&sc->sc_dk);
@@ -678,7 +661,7 @@ ldstart(struct ld_softc *sc, struct buf *bp)
 			 * The back-end is running the job; remove it from
 			 * the queue.
 			 */
-			(void) bufq_get(sc->sc_bufq);
+			(void) BUFQ_GET(sc->sc_bufq);
 		} else  {
 			disk_unbusy(&sc->sc_dk, 0, (bp->b_flags & B_READ));
 			sc->sc_queuecnt--;
@@ -693,7 +676,7 @@ ldstart(struct ld_softc *sc, struct buf *bp)
 				 */
 				break;
 			} else {
-				(void) bufq_get(sc->sc_bufq);
+				(void) BUFQ_GET(sc->sc_bufq);
 				bp->b_error = error;
 				bp->b_resid = bp->b_bcount;
 				mutex_exit(&sc->sc_mutex);
@@ -717,7 +700,9 @@ lddone(struct ld_softc *sc, struct buf *bp)
 
 	disk_unbusy(&sc->sc_dk, bp->b_bcount - bp->b_resid,
 	    (bp->b_flags & B_READ));
+#if NRND > 0
 	rnd_add_uint32(&sc->sc_rnd_source, bp->b_rawblkno);
+#endif
 	biodone(bp);
 
 	mutex_enter(&sc->sc_mutex);
@@ -930,7 +915,7 @@ ld_set_properties(struct ld_softc *ld)
 }
 
 static void
-ld_config_interrupts(device_t d)
+ld_config_interrupts (struct device *d)
 {
 	struct ld_softc *sc = device_private(d);
 	dkwedge_discover(&sc->sc_dk);

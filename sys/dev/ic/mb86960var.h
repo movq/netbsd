@@ -1,4 +1,4 @@
-/*	$NetBSD: mb86960var.h,v 1.39 2012/02/02 19:43:03 tls Exp $	*/
+/*	$NetBSD: mb86960var.h,v 1.36 2008/04/12 06:37:51 tsutsui Exp $	*/
 
 /*
  * All Rights Reserved, Copyright (C) Fujitsu Limited 1995
@@ -44,7 +44,11 @@
  * they are useful.
  */
 
+#include "rnd.h"
+
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 /*
  * Default settings for fe driver specific options.
@@ -157,7 +161,9 @@ struct mb86960_softc {
 
 	uint8_t sc_enaddr[ETHER_ADDR_LEN];
 
-	krndsource_t rnd_source;
+#if NRND > 0
+	rndsource_element_t rnd_source;
+#endif
 
 	uint32_t sc_stat;	/* driver status */
 #define FE_STAT_ENABLED		0x0001	/* power enabled on interface */
@@ -193,6 +199,6 @@ void	mb86960_config(struct mb86960_softc *, int *, int, int);
 int	mb86960_intr(void *);
 int	mb86960_enable(struct mb86960_softc *);
 void	mb86960_disable(struct mb86960_softc *);
-int	mb86960_activate(device_t, enum devact);
+int	mb86960_activate(struct device *, enum devact);
 int	mb86960_detach(struct mb86960_softc *);
 void	mb86965_read_eeprom(bus_space_tag_t, bus_space_handle_t, uint8_t *);

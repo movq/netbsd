@@ -1,4 +1,4 @@
-/*	$NetBSD: aic_pcmcia.c,v 1.43 2009/11/12 19:24:06 dyoung Exp $	*/
+/*	$NetBSD: aic_pcmcia.c,v 1.37.14.1 2008/11/20 02:56:40 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic_pcmcia.c,v 1.43 2009/11/12 19:24:06 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic_pcmcia.c,v 1.37.14.1 2008/11/20 02:56:40 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,16 +62,16 @@ struct aic_pcmcia_softc {
 #define	AIC_PCMCIA_ATTACHED	3
 };
 
-static int	aic_pcmcia_match(device_t, cfdata_t, void *);
-static int	aic_pcmcia_validate_config(struct pcmcia_config_entry *);
-static void	aic_pcmcia_attach(device_t, device_t, void *);
-static int	aic_pcmcia_detach(device_t, int);
-static int	aic_pcmcia_enable(device_t, int);
+int	aic_pcmcia_match(struct device *, struct cfdata *, void *);
+int	aic_pcmcia_validate_config(struct pcmcia_config_entry *);
+void	aic_pcmcia_attach(struct device *, struct device *, void *);
+int	aic_pcmcia_detach(struct device *, int);
+int	aic_pcmcia_enable(struct device *, int);
 
-CFATTACH_DECL_NEW(aic_pcmcia, sizeof(struct aic_pcmcia_softc),
-    aic_pcmcia_match, aic_pcmcia_attach, aic_pcmcia_detach, NULL);
+CFATTACH_DECL(aic_pcmcia, sizeof(struct aic_pcmcia_softc),
+    aic_pcmcia_match, aic_pcmcia_attach, aic_pcmcia_detach, aic_activate);
 
-static const struct pcmcia_product aic_pcmcia_products[] = {
+const struct pcmcia_product aic_pcmcia_products[] = {
 	{ PCMCIA_VENDOR_ADAPTEC, PCMCIA_PRODUCT_ADAPTEC_APA1460,
 	  PCMCIA_CIS_INVALID },
 
@@ -81,10 +81,12 @@ static const struct pcmcia_product aic_pcmcia_products[] = {
 	{ PCMCIA_VENDOR_NEWMEDIA, PCMCIA_PRODUCT_NEWMEDIA_BUSTOASTER,
 	  PCMCIA_CIS_INVALID },
 };
-static const size_t aic_pcmcia_nproducts = __arraycount(aic_pcmcia_products);
+const size_t aic_pcmcia_nproducts =
+    sizeof(aic_pcmcia_products) / sizeof(aic_pcmcia_products[0]);
 
 int
-aic_pcmcia_match(device_t parent, cfdata_t match, void *aux)
+aic_pcmcia_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -95,31 +97,36 @@ aic_pcmcia_match(device_t parent, cfdata_t match, void *aux)
 }
 
 int
-aic_pcmcia_validate_config(struct pcmcia_config_entry *cfe)
+aic_pcmcia_validate_config(cfe)
+	struct pcmcia_config_entry *cfe;
 {
 	if (cfe->iftype != PCMCIA_IFTYPE_IO ||
 	    cfe->num_memspace != 0 ||
 	    cfe->num_iospace != 1)
 		return (EINVAL);
+/* XXX  Below line is a hack to get around an rbus resource allocation */
+/* XXX  problem.  It should be removed when the problem is fixed.      */
+	cfe->iomask = 0;
 	return (0);
 }
 
 void
-aic_pcmcia_attach(device_t parent, device_t self, void *aux)
+aic_pcmcia_attach(struct device *parent, struct device *self,
+    void *aux)
 {
-	struct aic_pcmcia_softc *psc = device_private(self);
+	struct aic_pcmcia_softc *psc = (void *)self;
 	struct aic_softc *sc = &psc->sc_aic;
 	struct pcmcia_attach_args *pa = aux;
 	struct pcmcia_config_entry *cfe;
 	struct pcmcia_function *pf = pa->pf;
 	int error;
 
-	sc->sc_dev = self;
 	psc->sc_pf = pf;
 
 	error = pcmcia_function_configure(pf, aic_pcmcia_validate_config);
 	if (error) {
-		aprint_error_dev(self, "configure failed, error=%d\n", error);
+		aprint_error_dev(self, "configure failed, error=%d\n",
+		    error);
 		return;
 	}
 
@@ -152,50 +159,53 @@ fail:
 }
 
 int
-aic_pcmcia_detach(device_t self, int flags)
+aic_pcmcia_detach(self, flags)
+	struct device *self;
+	int flags;
 {
-	struct aic_pcmcia_softc *psc = device_private(self);
+	struct aic_pcmcia_softc *sc = (void *)self;
 	int error;
 
-	if (psc->sc_state != AIC_PCMCIA_ATTACHED)
+	if (sc->sc_state != AIC_PCMCIA_ATTACHED)
 		return (0);
 
 	error = aic_detach(self, flags);
 	if (error)
 		return (error);
 
-	pcmcia_function_unconfigure(psc->sc_pf);
+	pcmcia_function_unconfigure(sc->sc_pf);
 
 	return (0);
 }
 
 int
-aic_pcmcia_enable(device_t self, int onoff)
+aic_pcmcia_enable(self, onoff)
+	struct device *self;
+	int onoff;
 {
-	struct aic_pcmcia_softc *psc = device_private(self);
-	struct aic_softc *sc = &psc->sc_aic;
+	struct aic_pcmcia_softc *sc = (void *)self;
 	int error;
 
 	if (onoff) {
 		/* Establish the interrupt handler. */
-		psc->sc_ih = pcmcia_intr_establish(psc->sc_pf, IPL_BIO,
-		    aicintr, sc);
-		if (!psc->sc_ih)
+		sc->sc_ih = pcmcia_intr_establish(sc->sc_pf, IPL_BIO,
+		    aicintr, &sc->sc_aic);
+		if (!sc->sc_ih)
 			return (EIO);
 
-		error = pcmcia_function_enable(psc->sc_pf);
+		error = pcmcia_function_enable(sc->sc_pf);
 		if (error) {
-			pcmcia_intr_disestablish(psc->sc_pf, psc->sc_ih);
-			psc->sc_ih = 0;
+			pcmcia_intr_disestablish(sc->sc_pf, sc->sc_ih);
+			sc->sc_ih = 0;
 			return (error);
 		}
 
 		/* Initialize only chip.  */
-		aic_init(sc, 0);
+		aic_init(&sc->sc_aic, 0);
 	} else {
-		pcmcia_function_disable(psc->sc_pf);
-		pcmcia_intr_disestablish(psc->sc_pf, psc->sc_ih);
-		psc->sc_ih = 0;
+		pcmcia_function_disable(sc->sc_pf);
+		pcmcia_intr_disestablish(sc->sc_pf, sc->sc_ih);
+		sc->sc_ih = 0;
 	}
 
 	return (0);

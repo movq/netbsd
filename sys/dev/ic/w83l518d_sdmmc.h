@@ -1,4 +1,4 @@
-/* $NetBSD: w83l518d_sdmmc.h,v 1.2 2010/08/19 14:58:22 jmcneill Exp $ */
+/* $NetBSD: w83l518d_sdmmc.h,v 1.1.2.3 2010/11/21 21:44:07 riz Exp $ */
 
 /*
  * Copyright (c) 2009 Jared D. McNeill <jmcneill@invisible.ca>

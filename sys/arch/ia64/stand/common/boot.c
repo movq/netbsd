@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.5 2009/07/20 04:59:03 kiyohara Exp $	*/
+/*	$NetBSD: boot.c,v 1.3 2006/07/02 17:28:11 cherry Exp $	*/
 
 /*-
  * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
@@ -35,7 +35,6 @@
  */
 
 #include <lib/libsa/stand.h>
-#include <lib/libsa/loadfile.h>
 #include <lib/libkern/libkern.h>
 
 #include "bootstrap.h"
@@ -107,6 +106,7 @@ command_boot(int argc, char *argv[])
 	return(CMD_ERROR);
 
     /* Call the exec handler from the loader matching the kernel */
+    file_formats[fp->f_loader]->l_exec(fp);
     command_errmsg = strerror(file_formats[fp->f_loader]->l_exec(fp));
     return(CMD_ERROR);
 }
@@ -148,7 +148,7 @@ command_autoboot(int argc, char *argv[])
  * we haven't tried already, try now.
  */
 void
-autoboot_maybe(void)
+autoboot_maybe()
 {
     char	*cp;
     

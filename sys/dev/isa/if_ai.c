@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ai.c,v 1.33 2011/06/03 16:28:40 tsutsui Exp $	*/
+/*	$NetBSD: if_ai.c,v 1.28 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ai.c,v 1.33 2011/06/03 16:28:40 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ai.c,v 1.28 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,14 +98,16 @@ static int 	check_ie_present(struct ie_softc*, bus_space_tag_t,
 static int	ai_find_mem_size(struct ai_softc*, bus_space_tag_t,
 					bus_size_t);
 
-int ai_match(device_t, cfdata_t, void *);
-void ai_attach(device_t, device_t, void *);
+int ai_match(struct device *, struct cfdata *, void *);
+void ai_attach(struct device *, struct device *, void *);
 
 /*
  * AT&T StarLan support routines
  */
 static void
-ai_reset(struct ie_softc *sc, int why)
+ai_reset(sc, why)
+	struct ie_softc *sc;
+	int why;
 {
 	struct ai_softc* asc = (struct ai_softc *) sc;
 
@@ -133,7 +135,11 @@ ai_atten(struct ie_softc *sc, int why)
 }
 
 static void
-ai_copyin (struct ie_softc *sc, void *dst, int offset, size_t size)
+ai_copyin (sc, dst, offset, size)
+        struct ie_softc *sc;
+        void *dst;
+        int offset;
+        size_t size;
 {
 	int dribble;
 	u_int8_t* bptr = dst;
@@ -158,7 +164,11 @@ ai_copyin (struct ie_softc *sc, void *dst, int offset, size_t size)
 }
 
 static void
-ai_copyout (struct ie_softc *sc, const void *src, int offset, size_t size)
+ai_copyout (sc, src, offset, size)
+        struct ie_softc *sc;
+        const void *src;
+        int offset;
+        size_t size;
 {
 	int dribble;
 	int osize = size;
@@ -184,21 +194,28 @@ ai_copyout (struct ie_softc *sc, const void *src, int offset, size_t size)
 }
 
 static u_int16_t
-ai_read_16 (struct ie_softc *sc, int offset)
+ai_read_16 (sc, offset)
+        struct ie_softc *sc;
+        int offset;
 {
 	bus_space_barrier(sc->bt, sc->bh, offset, 2, BUS_SPACE_BARRIER_READ);
         return bus_space_read_2(sc->bt, sc->bh, offset);
 }
 
 static void
-ai_write_16 (struct ie_softc *sc, int offset, u_int16_t value)
+ai_write_16 (sc, offset, value)
+        struct ie_softc *sc;
+        int offset;
+        u_int16_t value;
 {
         bus_space_write_2(sc->bt, sc->bh, offset, value);
 	bus_space_barrier(sc->bt, sc->bh, offset, 2, BUS_SPACE_BARRIER_WRITE);
 }
 
 static void
-ai_write_24 (struct ie_softc *sc, int offset, int addr)
+ai_write_24 (sc, offset, addr)
+        struct ie_softc *sc;
+        int offset, addr;
 {
         bus_space_write_4(sc->bt, sc->bh, offset, addr +
                                 (u_long) sc->sc_maddr - (u_long) sc->sc_iobase);
@@ -206,7 +223,7 @@ ai_write_24 (struct ie_softc *sc, int offset, int addr)
 }
 
 int
-ai_match(device_t parent, cfdata_t cf, void *aux)
+ai_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	int rv = 0;
 	u_int8_t val, type;
@@ -302,9 +319,9 @@ out:
 }
 
 void
-ai_attach(device_t parent, device_t self, void *aux)
+ai_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ai_softc *asc = device_private(self);
+	struct ai_softc *asc = (void *)self;
 	struct ie_softc *sc = &asc->sc_ie;
 	struct isa_attach_args *ia = aux;
 
@@ -313,12 +330,10 @@ ai_attach(device_t parent, device_t self, void *aux)
 	u_int8_t ethaddr[ETHER_ADDR_LEN];
 	char name[80];
 
-	sc->sc_dev = self;
-
 	if (bus_space_map(ia->ia_iot, ia->ia_io[0].ir_addr,
 			  ia->ia_io[0].ir_size, 0, &ioh) != 0) {
 		DPRINTF(("\n%s: can't map i/o space 0x%x-0x%x\n",
-			 device_xname(self),
+			 device_xname(&sc->sc_dev),
 		         ia->ia_io[0].ir_addr, ia->ia_io[0].ir_addr +
 		         ia->ia_io[0].ir_size - 1));
 		return;
@@ -327,7 +342,7 @@ ai_attach(device_t parent, device_t self, void *aux)
 	if (bus_space_map(ia->ia_memt, ia->ia_iomem[0].ir_addr,
 			  ia->ia_iomem[0].ir_size, 0, &memh) != 0) {
 		DPRINTF(("\n%s: can't map iomem space 0x%x-0x%x\n",
-			 device_xname(self),
+			 device_xname(&sc->sc_dev),
 			 ia->ia_iomem[0].ir_addr, ia->ia_iomem[0].ir_addr +
 			 ia->ia_iomem[0].ir_size - 1));
 		bus_space_unmap(ia->ia_iot, ioh, ia->ia_io[0].ir_size);
@@ -388,7 +403,7 @@ ai_attach(device_t parent, device_t self, void *aux)
 			  BUS_SPACE_BARRIER_WRITE);
 	if (!i82586_proberam(sc)) {
 		DPRINTF(("\n%s: can't talk to i82586!\n",
-			device_xname(self)));
+			device_xname(&sc->sc_dev)));
 		bus_space_unmap(ia->ia_iot, ioh, ia->ia_io[0].ir_size);
 		bus_space_unmap(ia->ia_memt, memh, ia->ia_iomem[0].ir_size);
 		return;
@@ -406,7 +421,7 @@ ai_attach(device_t parent, device_t self, void *aux)
 	    IST_EDGE, IPL_NET, i82586_intr, sc);
 	if (asc->sc_ih == NULL) {
 		DPRINTF(("\n%s: can't establish interrupt\n",
-			device_xname(self)));
+			device_xname(&sc->sc_dev)));
 	}
 }
 
@@ -415,7 +430,10 @@ ai_attach(device_t parent, device_t self, void *aux)
  * Better hope there's nothing important hiding just below the card...
  */
 static int
-ai_find_mem_size(struct ai_softc* asc, bus_space_tag_t memt, bus_size_t maddr)
+ai_find_mem_size(asc, memt, maddr)
+	struct ai_softc* asc;
+	bus_space_tag_t memt;
+	bus_size_t maddr;
 {
 	int size;
 	bus_space_handle_t memh;
@@ -438,7 +456,11 @@ ai_find_mem_size(struct ai_softc* asc, bus_space_tag_t memt, bus_size_t maddr)
  * Check to see if there's an 82586 out there.
  */
 static int
-check_ie_present(struct ie_softc* sc, bus_space_tag_t memt, bus_space_handle_t memh, bus_size_t size)
+check_ie_present(sc, memt, memh, size)
+	struct ie_softc* sc;
+	bus_space_tag_t memt;
+	bus_space_handle_t memh;
+	bus_size_t size;
 {
 	sc->hwreset = ai_reset;
 	sc->chan_attn = ai_atten;
@@ -477,5 +499,5 @@ check_ie_present(struct ie_softc* sc, bus_space_tag_t memt, bus_space_handle_t m
 	return (size);
 }
 
-CFATTACH_DECL_NEW(ai, sizeof(struct ai_softc),
+CFATTACH_DECL(ai, sizeof(struct ai_softc),
     ai_match, ai_attach, NULL, NULL);

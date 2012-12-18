@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_ip.c,v 1.114 2012/03/22 20:34:39 drochner Exp $	*/
+/*	$NetBSD: raw_ip.c,v 1.108 2008/08/06 15:01:23 plunky Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,10 +61,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: raw_ip.c,v 1.114 2012/03/22 20:34:39 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: raw_ip.c,v 1.108 2008/08/06 15:01:23 plunky Exp $");
 
 #include "opt_inet.h"
-#include "opt_compat_netbsd.h"
 #include "opt_ipsec.h"
 #include "opt_mrouting.h"
 
@@ -94,15 +93,18 @@ __KERNEL_RCSID(0, "$NetBSD: raw_ip.c,v 1.114 2012/03/22 20:34:39 drochner Exp $"
 #include <netinet/in_proto.h>
 #include <netinet/in_var.h>
 
+#include <machine/stdarg.h>
+
+#ifdef IPSEC
+#include <netinet6/ipsec.h>
+#include <netinet6/ipsec_private.h>
+#endif /* IPSEC */
+
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
 #include <netipsec/ipsec_var.h>
 #include <netipsec/ipsec_private.h>
 #endif	/* FAST_IPSEC */
-
-#ifdef COMPAT_50
-#include <compat/sys/socket.h>
-#endif
 
 struct inpcbtable rawcbtable;
 
@@ -111,8 +113,6 @@ int	 rip_pcbnotify(struct inpcbtable *, struct in_addr,
 int	 rip_bind(struct inpcb *, struct mbuf *);
 int	 rip_connect(struct inpcb *, struct mbuf *);
 void	 rip_disconnect(struct inpcb *);
-
-static void sysctl_net_inet_raw_setup(struct sysctllog **);
 
 /*
  * Nominal space allocated to a raw ip socket.
@@ -131,7 +131,6 @@ void
 rip_init(void)
 {
 
-	sysctl_net_inet_raw_setup(NULL);
 	in_pcbinit(&rawcbtable, 1, 1);
 }
 
@@ -141,11 +140,8 @@ rip_sbappendaddr(struct inpcb *last, struct ip *ip, const struct sockaddr *sa,
 {
 	if (last->inp_flags & INP_NOHEADER)
 		m_adj(n, hlen);
-	if (last->inp_flags & INP_CONTROLOPTS 
-#ifdef SO_OTIMESTAMP
-	    || last->inp_socket->so_options & SO_OTIMESTAMP
-#endif
-	    || last->inp_socket->so_options & SO_TIMESTAMP)
+	if (last->inp_flags & INP_CONTROLOPTS ||
+	    last->inp_socket->so_options & SO_TIMESTAMP)
 		ip_savecontrol(last, &opts, ip, n);
 	if (sbappendaddr(&last->inp_socket->so_rcv, sa, n, opts) == 0) {
 		/* should notify about lost packet */
@@ -203,7 +199,7 @@ rip_input(struct mbuf *m, ...)
 			continue;
 		if (last == NULL)
 			;
-#if defined(FAST_IPSEC)
+#if defined(IPSEC) || defined(FAST_IPSEC)
 		/* check AH/ESP integrity. */
 		else if (ipsec4_in_reject_so(m, last->inp_socket)) {
 			IPSEC_STATINC(IPSEC_STAT_IN_POLVIO);
@@ -217,7 +213,7 @@ rip_input(struct mbuf *m, ...)
 		}
 		last = inp;
 	}
-#if defined(FAST_IPSEC)
+#if defined(IPSEC) || defined(FAST_IPSEC)
 	/* check AH/ESP integrity. */
 	if (last != NULL && ipsec4_in_reject_so(m, last->inp_socket)) {
 		m_freem(m);
@@ -527,7 +523,8 @@ rip_usrreq(struct socket *so, int req,
 #endif
 
 	if (req == PRU_CONTROL)
-		return in_control(so, (long)m, nam, (struct ifnet *)control, l);
+		return (in_control(so, (long)m, (void *)nam,
+		    (struct ifnet *)control, l));
 
 	s = splsoftnet();
 
@@ -546,7 +543,7 @@ rip_usrreq(struct socket *so, int req,
 	if (req != PRU_SEND && req != PRU_SENDOOB && control)
 		panic("rip_usrreq: unexpected control mbuf");
 #endif
-	if (inp == NULL && req != PRU_ATTACH) {
+	if (inp == 0 && req != PRU_ATTACH) {
 		error = EINVAL;
 		goto release;
 	}
@@ -691,8 +688,7 @@ release:
 	return (error);
 }
 
-static void
-sysctl_net_inet_raw_setup(struct sysctllog **clog)
+SYSCTL_SETUP(sysctl_net_inet_raw_setup, "sysctl net.inet.raw subtree setup")
 {
 
 	sysctl_createv(clog, 0, NULL, NULL,

@@ -1,4 +1,4 @@
-.\"	$NetBSD: inet6.4,v 1.33 2012/03/13 19:25:40 njoly Exp $
+.\"	$NetBSD: inet6.4,v 1.29 2005/06/14 12:14:15 peter Exp $
 .\"	$KAME: inet6.4,v 1.18 2000/11/24 08:50:32 itojun Exp $
 .\"
 .\" Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -28,7 +28,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd March 10, 2010
+.Dd January 29, 1999
 .Dt INET6 4
 .Os
 .Sh NAME
@@ -68,7 +68,7 @@ protocol.
 .Sh ADDRESSING
 IPv6 addresses are 16 byte quantities, stored in network standard byteorder.
 The include file
-.In netinet/in.h
+.Aq Pa netinet/in.h
 defines this address
 as a discriminated union.
 .Pp
@@ -147,7 +147,7 @@ socket, kernel memory accesses via
 and on some other occasions.
 HOWEVER, users should never use the embedded form.
 For details please consult
-.Lk http://www.kame.net/dev/cvsweb2.cgi/kame/IMPLEMENTATION .
+.Pa http://www.kame.net/dev/cvsweb.cgi/kame/IMPLEMENTATION .
 Note that the above URL describes the situation with the latest KAME tree,
 not the
 .Nx
@@ -364,25 +364,9 @@ sockets.
 .Xr ip6 4 ,
 .Xr tcp 4 ,
 .Xr udp 4
-.Rs
-.%A Qing \&Li
-.%A Tatuya Jinmei
-.%A Keiichi Shima
-.%B "IPv6 Core Protocols Implementation"
-.%D 2006
-.%I Morgan Kaufmann
-.Re
-.Rs
-.%A Qing \&Li
-.%A Tatuya Jinmei
-.%A Keiichi Shima
-.%B "IPv6 Advanced Protocols Implementation"
-.%D 2007
-.%I Morgan Kaufmann
-.Re
 .Sh STANDARDS
 .Rs
-.%A Tatuya Jinmei
+.%A Tatsuya Jinmei
 .%A Atsushi Onoe
 .%T "An Extension of Format for IPv6 Scoped Addresses"
 .%R internet draft

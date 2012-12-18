@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2011/08/11 23:15:41 joerg Exp $
+#	$NetBSD: Makefile,v 1.2.8.1 2009/09/17 04:24:38 snj Exp $
 
 LIBISPRIVATE=yes
 
@@ -7,7 +7,7 @@ LIBISPRIVATE=yes
 LIB=		ddc
 
 .PATH:		${X11SRCDIR.xorg-server}/hw/xfree86/${LIB}
-SRCS=		ddc.c interpret_edid.c print_edid.c ddcProperty.c
+SRCS=		xf86DDC.c edid.c interpret_edid.c print_edid.c ddcProperty.c
 
 CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/hw/xfree86/${LIB} \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86/common \
@@ -17,8 +17,6 @@ CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/hw/xfree86/${LIB} \
 		-I${X11SRCDIR.xorg-server}/include \
 		-I${DESTDIR}${X11INCDIR}/pixman-1 \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86/i2c
-
-CWARNFLAGS.clang+=	-Wno-format
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

@@ -1,11 +1,8 @@
-/*	$NetBSD: frameasm.h,v 1.20 2012/07/15 15:17:56 dsl Exp $	*/
+/*	$NetBSD: frameasm.h,v 1.12.12.1 2012/06/12 20:43:47 riz Exp $	*/
 
 #ifndef _AMD64_MACHINE_FRAMEASM_H
 #define _AMD64_MACHINE_FRAMEASM_H
-
-#ifdef _KERNEL_OPT
 #include "opt_xen.h"
-#endif
 
 /*
  * Macros to define pushing/popping frames for interrupts, traps
@@ -17,25 +14,7 @@
 /* Xen do not need swapgs, done by hypervisor */
 #define swapgs
 #define iretq	pushq $0 ; jmp HYPERVISOR_iret
-#define	XEN_ONLY2(x,y)	x,y
-#define	NOT_XEN(x)
-
-#define CLI(temp_reg) \
- 	movq CPUVAR(VCPU),%r ## temp_reg ;			\
-	movb $1,EVTCHN_UPCALL_MASK(%r ## temp_reg);
-
-#define STI(temp_reg) \
- 	movq CPUVAR(VCPU),%r ## temp_reg ;			\
-	movb $0,EVTCHN_UPCALL_MASK(%r ## temp_reg);
-
-#else /* XEN */
-#define	XEN_ONLY2(x,y)
-#define	NOT_XEN(x)	x
-#define CLI(temp_reg) cli
-#define STI(temp_reg) sti
-#endif	/* XEN */
-
-#define	SWAPGS	NOT_XEN(swapgs)
+#endif
 
 /*
  * These are used on interrupt or trap entry or exit.
@@ -75,13 +54,14 @@
 	movq	TF_RBX(%rsp),%rbx	; \
 	movq	TF_RAX(%rsp),%rax
 
+
 #define	INTRENTRY_L(kernel_trap, usertrap) \
 	subq	$TF_REGSIZE,%rsp	; \
 	INTR_SAVE_GPRS			; \
 	testb	$SEL_UPL,TF_CS(%rsp)	; \
 	je	kernel_trap		; \
 usertrap				; \
-	SWAPGS				; \
+	swapgs				; \
 	movw	%gs,TF_GS(%rsp)		; \
 	movw	%fs,TF_FS(%rsp)		; \
 	movw	%es,TF_ES(%rsp)		; \
@@ -91,15 +71,17 @@ usertrap				; \
 	INTRENTRY_L(98f,)		; \
 98:
 
+#ifndef XEN
 #define INTRFASTEXIT \
 	INTR_RESTORE_GPRS 		; \
 	testq	$SEL_UPL,TF_CS(%rsp)	/* Interrupted %cs */ ; \
 	je	99f			; \
-/* Disable interrupts until the 'iret', user registers loaded. */ \
-	NOT_XEN(cli;)			  \
+	cli				; \
+	movw	TF_FS(%rsp),%fs		; \
 	movw	TF_ES(%rsp),%es		; \
 	movw	TF_DS(%rsp),%ds		; \
-	SWAPGS				; \
+	swapgs				; \
+	movw	TF_GS(%rsp),%gs		; /* can fault */ \
 99:	addq	$TF_REGSIZE+16,%rsp	/* + T_xxx and error code */ ; \
 	iretq
 
@@ -111,20 +93,63 @@ usertrap				; \
 	pushfq				; \
 	movl	%cs,%r11d		; \
 	pushq	%r11			; \
-/* XEN: We must fixup CS, as even kernel mode runs at CPL 3 */ \
- 	XEN_ONLY2(andb	$0xfc,(%rsp);)	  \
 	pushq	%r13			;
 
+#else	/* !XEN */
+/*
+ * Disabling events before going to user mode sounds like a BAD idea
+ * do no restore gs either, HYPERVISOR_iret will do a swapgs
+ */
+#define INTRFASTEXIT \
+ 	INTR_RESTORE_GPRS 		; \
+ 	testq	$SEL_UPL,TF_CS(%rsp)	; \
+ 	je	99f			; \
+ 	movw	TF_FS(%rsp),%fs		; \
+ 	movw	TF_ES(%rsp),%es		; \
+ 	movw	TF_DS(%rsp),%ds		; \
+99:	addq	$TF_REGSIZE+16,%rsp	/* + T_xxx and error code */ ; \
+ 	iretq
+  
+/* We must fixup CS, as even kernel mode runs at CPL 3 */
+#define INTR_RECURSE_HWFRAME \
+ 	movq	%rsp,%r10		; \
+ 	movl	%ss,%r11d		; \
+ 	pushq	%r11			; \
+ 	pushq	%r10			; \
+ 	pushfq				; \
+ 	movl	%cs,%r11d		; \
+ 	pushq	%r11			; \
+ 	andb	$0xfc,(%rsp)		; \
+ 	pushq	%r13			;
+ 
+#endif	/* !XEN */
+ 
 #define	DO_DEFERRED_SWITCH \
-	cmpl	$0, CPUVAR(WANT_PMAPLOAD)		; \
+	cmpq	$0, CPUVAR(WANT_PMAPLOAD)		; \
 	jz	1f					; \
 	call	_C_LABEL(do_pmap_load)			; \
-1:
+	1:
 
 #define	CHECK_DEFERRED_SWITCH \
-	cmpl	$0, CPUVAR(WANT_PMAPLOAD)
+	cmpq	$0, CPUVAR(WANT_PMAPLOAD)
 
 #define CHECK_ASTPENDING(reg)	cmpl	$0, L_MD_ASTPENDING(reg)
 #define CLEAR_ASTPENDING(reg)	movl	$0, L_MD_ASTPENDING(reg)
+
+#ifdef XEN
+#define CLI(temp_reg) \
+ 	movl CPUVAR(CPUID),%e/**/temp_reg ;			\
+ 	shlq $6,%r/**/temp_reg ;				\
+ 	addq CPUVAR(VCPU),%r/**/temp_reg ;			\
+ 	movb $1,EVTCHN_UPCALL_MASK(%r/**/temp_reg)
+#define STI(temp_reg) \
+ 	movl CPUVAR(CPUID),%e/**/temp_reg ;			\
+ 	shlq $6,%r/**/temp_reg ;				\
+ 	addq CPUVAR(VCPU),%r/**/temp_reg ;			\
+ 	movb $0,EVTCHN_UPCALL_MASK(%r/**/temp_reg)
+#else /* XEN */
+#define CLI(temp_reg) cli
+#define STI(temp_reg) sti
+#endif	/* XEN */
 
 #endif /* _AMD64_MACHINE_FRAMEASM_H */

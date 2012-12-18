@@ -1,26 +1,22 @@
-#	$NetBSD: Makefile,v 1.5 2011/04/08 14:58:46 dyoung Exp $
+#	$NetBSD: Makefile,v 1.3 2008/10/25 22:27:37 apb Exp $
 
 # Makefile for cats tags file and boot blocks
 
-# Find where ARM source files are for inclusion in tags
-.include <../arm/Makefile.inc>
-
-TCATS=	${SYSDIR}/arch/cats/tags
-SCATS=	${SYSDIR}/arch/cats/cats/*.[ch] ${SYSDIR}/arch/cats/include/*.h \
-	${SYSDIR}/arch/cats/pci/*.[ch]
+TCATS=	../cats/tags
+SCATS=	../cats/cats/*.[ch] ../cats/include/*.h \
+		../cats/isa/*.[ch]
+ACATS=	../cats/cats/*.S
 
 # Directories in which to place tags links
-DCATS=	include
+DCATS=	isa include
 
 .include "../../kern/Make.tags.inc"
 
 tags:
-	-rm -f ${TCATS}
-	-echo ${SCATS} ${SARM} | xargs ctags -wadtf ${TCATS}
-	-${FINDCOMM} | xargs ctags -wadtf ${TCATS}
-	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${ACATS} ${AARM} | \
+	-ctags -wdtf ${TCATS} ${SCATS} ${COMM}
+	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${ACATS} | \
 	    ${TOOL_SED} -e \
-		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3	\1	/^\2(\3\4$$/;" \
+		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 	    >> ${TCATS}
 	sort -o ${TCATS} ${TCATS}
 

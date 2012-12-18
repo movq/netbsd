@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.7 2011/06/05 17:03:18 matt Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.5 2005/12/11 12:17:12 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -31,39 +31,60 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.7 2011/06/05 17:03:18 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.5 2005/12/11 12:17:12 christos Exp $");
 
 #include "mainbus.h"
+#include "pci.h"
 #include "opt_multiprocessor.h"
+#include "opt_pci.h"
 
 #include <sys/param.h>
-#include <sys/bus.h>
+#include <sys/extent.h>
 #include <sys/device.h>
-#include <sys/errno.h>
+#include <sys/malloc.h>
+#include <sys/systm.h>
 
-#include <evbppc/ev64260/ev64260.h>
+#include <machine/bus.h>
 
-#include "locators.h"
+#include <dev/pci/pcivar.h>
+#include <dev/pci/pciconf.h>
+
+#include <dev/marvell/gtvar.h>
 
 #if NCPU == 0
 #error	A cpu device is now required
 #endif
 
+struct	mainbus_attach_args {
+	const char *mba_busname;
+	int mba_unit;
+};
 
-int	mainbus_match(device_t, cfdata_t, void *);
-void	mainbus_attach(device_t, device_t, void *);
 int	mainbus_cfprint(void *, const char *);
+int	mainbus_match(struct device *, struct cfdata *, void *);
+void	mainbus_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(mainbus, 0,
+CFATTACH_DECL(mainbus, sizeof(struct device),
 	mainbus_match, mainbus_attach, NULL, NULL);
+
+int
+mainbus_cfprint(void *aux, const char *pnp)
+{
+	struct mainbus_attach_args *mba = aux;
+
+	if (pnp)
+		aprint_normal("%s at %s", mba->mba_busname, pnp);
+	aprint_normal(" unit %d", mba->mba_unit);
+	return (UNCONF);
+}
+
 
 /*
  * Probe for the mainbus; always succeeds.
  */
 int
-mainbus_match(device_t parent, cfdata_t match, void *aux)
+mainbus_match(struct device *parent, struct cfdata *match, void *aux)
 {
-
 	return 1;
 }
 
@@ -71,10 +92,9 @@ mainbus_match(device_t parent, cfdata_t match, void *aux)
  * Attach the mainbus.
  */
 void
-mainbus_attach(device_t parent, device_t self, void *aux)
+mainbus_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct mainbus_attach_args mba;
-	extern bus_addr_t gt_base;
 
 	printf("\n");
 
@@ -83,65 +103,50 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * Always find the CPU
 	 */
-	mba.mba_name = "cpu";
+	mba.mba_busname = "cpu";
 	mba.mba_unit = 0;
-	mba.mba_addr = MAINBUSCF_ADDR_DEFAULT;
 	config_found(self, &mba, mainbus_cfprint);
 
 #ifdef MULTIPROCESSOR
 	/*
 	 * Try for a second one...
 	 */
-	mba.mba_name = "cpu";
+	mba.mba_busname = "cpu";
 	mba.mba_unit = 1;
-	mba.mba_addr = MAINBUSCF_ADDR_DEFAULT;
 	config_found(self, &mba, mainbus_cfprint);
 #endif
 
 	/*
 	 * Now try to configure the Discovery
 	 */
-	mba.mba_name = "gt";
-	mba.mba_unit = -1;
-	mba.mba_addr = gt_base;
+	mba.mba_busname = "gt";
+	mba.mba_unit = 0;
 	config_found(self, &mba, mainbus_cfprint);
 }
 
+static int	cpu_match(struct device *, struct cfdata *, void *);
+static void	cpu_attach(struct device *, struct device *, void *);
+
+CFATTACH_DECL(cpu, sizeof(struct device), cpu_match, cpu_attach, NULL, NULL);
+
+extern struct cfdriver cpu_cd;
+
 int
-mainbus_cfprint(void *aux, const char *pnp)
+cpu_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *mba = aux;
 
-	if (pnp)
-		aprint_normal("%s at %s", mba->mba_name, pnp);
-	if (mba->mba_unit != -1)
-		aprint_normal(" unit %d", mba->mba_unit);
-	if (mba->mba_addr != MAINBUSCF_ADDR_DEFAULT)
-		aprint_normal(" addr 0x%08x", mba->mba_addr);
-	return UNCONF;
-}
+	if (strcmp(mba->mba_busname, cpu_cd.cd_name) != 0)
+		return 0;
 
-
-static int	cpu_match(device_t, cfdata_t, void *);
-static void	cpu_attach(device_t, device_t, void *);
-
-CFATTACH_DECL_NEW(cpu, 0, cpu_match, cpu_attach, NULL, NULL);
-
-int
-cpu_match(device_t parent, cfdata_t cf, void *aux)
-{
-	struct mainbus_attach_args *mba = aux;
-
-	if (strcmp(mba->mba_name, "cpu") != 0)
+	if (cpu_info[0].ci_dev != NULL)
 		return 0;
 
 	return 1;
 }
 
 void
-cpu_attach(device_t parent, device_t self, void *aux)
+cpu_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct mainbus_attach_args *mba = aux;
-
-	(void) cpu_attach_common(self, mba->mba_unit);
+	(void) cpu_attach_common(self, 0);
 }

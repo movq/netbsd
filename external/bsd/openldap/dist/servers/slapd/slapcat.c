@@ -1,9 +1,7 @@
-/*	$NetBSD: slapcat.c,v 1.1.1.3 2010/12/12 15:22:48 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/servers/slapd/slapcat.c,v 1.7.2.10 2010/04/14 22:59:10 quanah Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/slapcat.c,v 1.7.2.6 2008/04/14 18:45:07 quanah Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2010 The OpenLDAP Foundation.
+ * Copyright 1998-2008 The OpenLDAP Foundation.
  * Portions Copyright 1998-2003 Kurt D. Zeilenga.
  * Portions Copyright 2003 IBM Corporation.
  * All rights reserved.
@@ -49,12 +47,8 @@ slapcat( int argc, char **argv )
 	int rc = EXIT_SUCCESS;
 	Operation op = {0};
 	const char *progname = "slapcat";
-	int requestBSF;
-	int doBSF = 0;
 
 	slap_tool_init( progname, SLAPCAT, argc, argv );
-
-	requestBSF = ( sub_ndn.bv_len || filter );
 
 #ifdef SIGPIPE
 	(void) SIGNAL( SIGPIPE, slapcat_sig );
@@ -67,7 +61,7 @@ slapcat( int argc, char **argv )
 
 	if( !be->be_entry_open ||
 		!be->be_entry_close ||
-		!( be->be_entry_first_x || be->be_entry_first ) ||
+		!be->be_entry_first ||
 		!be->be_entry_next ||
 		!be->be_entry_get )
 	{
@@ -83,22 +77,9 @@ slapcat( int argc, char **argv )
 	}
 
 	op.o_bd = be;
-	if ( !requestBSF && be->be_entry_first ) {
-		id = be->be_entry_first( be );
-
-	} else {
-		if ( be->be_entry_first_x ) {
-			id = be->be_entry_first_x( be,
-				sub_ndn.bv_len ? &sub_ndn : NULL, scope, filter );
-
-		} else {
-			assert( be->be_entry_first != NULL );
-			doBSF = 1;
-			id = be->be_entry_first( be );
-		}
-	}
-
-	for ( ; id != NOID; id = be->be_entry_next( be ) )
+	for ( id = be->be_entry_first( be );
+		id != NOID;
+		id = be->be_entry_next( be ) )
 	{
 		char *data;
 		int len;
@@ -115,24 +96,20 @@ slapcat( int argc, char **argv )
 			break;
 		}
 
-		if ( doBSF ) {
-			if ( sub_ndn.bv_len && !dnIsSuffixScope( &e->e_nname, &sub_ndn, scope ) )
-			{
+		if( sub_ndn.bv_len && !dnIsSuffix( &e->e_nname, &sub_ndn ) ) {
+			be_entry_release_r( &op, e );
+			continue;
+		}
+
+		if( filter != NULL ) {
+			int rc = test_filter( NULL, e, filter );
+			if( rc != LDAP_COMPARE_TRUE ) {
 				be_entry_release_r( &op, e );
 				continue;
 			}
-
-
-			if ( filter != NULL ) {
-				int rc = test_filter( NULL, e, filter );
-				if ( rc != LDAP_COMPARE_TRUE ) {
-					be_entry_release_r( &op, e );
-					continue;
-				}
-			}
 		}
 
-		if ( verbose ) {
+		if( verbose ) {
 			printf( "# id=%08lx\n", (long) id );
 		}
 
@@ -157,7 +134,6 @@ slapcat( int argc, char **argv )
 
 	be->be_entry_close( be );
 
-	if ( slap_tool_destroy())
-		rc = EXIT_FAILURE;
+	slap_tool_destroy();
 	return rc;
 }

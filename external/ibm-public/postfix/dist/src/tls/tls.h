@@ -1,4 +1,4 @@
-/*	$NetBSD: tls.h,v 1.1.1.3 2012/06/09 11:27:18 tron Exp $	*/
+/*	$NetBSD: tls.h,v 1.1.1.1.2.3 2011/01/07 01:24:15 riz Exp $	*/
 
 #ifndef _TLS_H_INCLUDED_
 #define _TLS_H_INCLUDED_
@@ -94,15 +94,14 @@ typedef struct {
     int     cipher_algbits;
     /* Private. */
     SSL    *con;
+    BIO    *internal_bio;		/* postfix/TLS side of pair */
+    BIO    *network_bio;		/* network side of pair */
     char   *cache_type;			/* tlsmgr(8) cache type if enabled */
     char   *serverid;			/* unique server identifier */
     char   *namaddr;			/* nam[addr] for logging */
     int     log_level;			/* TLS library logging level */
     int     session_reused;		/* this session was reused */
     int     am_server;			/* Are we an SSL server or client? */
-    /* Built-in vs external SSL_accept/read/write/shutdown support. */
-    char   *fpt_dgst;			/* Certificate fingerprint digest */
-    VSTREAM *stream;			/* Blocking-mode SMTP session */
 } TLS_SESS_STATE;
 
  /*
@@ -157,23 +156,8 @@ extern void tls_param_init(void);
 #define TLS_PROTOCOL_SSLv2	(1<<0)	/* SSLv2 */
 #define TLS_PROTOCOL_SSLv3	(1<<1)	/* SSLv3 */
 #define TLS_PROTOCOL_TLSv1	(1<<2)	/* TLSv1 */
-#ifdef SSL_TXT_TLSV1_1
-#define TLS_PROTOCOL_TLSv1_1	(1<<3)	/* TLSv1_1 */
-#else
-#define TLS_PROTOCOL_TLSv1_1	0	/* Unknown */
-#undef  SSL_OP_NO_TLSv1_1
-#define SSL_OP_NO_TLSv1_1	0L	/* Noop */
-#endif
-#ifdef SSL_TXT_TLSV1_2
-#define TLS_PROTOCOL_TLSv1_2	(1<<4)	/* TLSv1_2 */
-#else
-#define TLS_PROTOCOL_TLSv1_2	0	/* Unknown */
-#undef  SSL_OP_NO_TLSv1_2
-#define SSL_OP_NO_TLSv1_2	0L	/* Noop */
-#endif
 #define TLS_KNOWN_PROTOCOLS	\
-	( TLS_PROTOCOL_SSLv2 | TLS_PROTOCOL_SSLv3 | TLS_PROTOCOL_TLSv1 \
-	   | TLS_PROTOCOL_TLSv1_1 | TLS_PROTOCOL_TLSv1_2 )
+	( TLS_PROTOCOL_SSLv2 | TLS_PROTOCOL_SSLv3 | TLS_PROTOCOL_TLSv1 )
 
 extern int tls_protocol_mask(const char *);
 
@@ -285,7 +269,6 @@ typedef struct {
 typedef struct {
     TLS_APPL_STATE *ctx;		/* TLS application context */
     VSTREAM *stream;			/* Client stream */
-    int     fd;				/* Event-driven file descriptor */
     int     log_level;			/* TLS log level */
     int     timeout;			/* TLS handshake timeout */
     int     requirecert;		/* Insist on client cert? */
@@ -298,7 +281,6 @@ typedef struct {
 
 extern TLS_APPL_STATE *tls_server_init(const TLS_SERVER_INIT_PROPS *);
 extern TLS_SESS_STATE *tls_server_start(const TLS_SERVER_START_PROPS *props);
-extern TLS_SESS_STATE *tls_server_post_accept(TLS_SESS_STATE *);
 
 #define tls_server_stop(ctx, stream, timeout, failure, TLScontext) \
 	tls_session_stop(ctx, (stream), (timeout), (failure), (TLScontext))
@@ -311,10 +293,10 @@ extern TLS_SESS_STATE *tls_server_post_accept(TLS_SESS_STATE *);
     ((props)->a12), ((props)->a13), ((props)->a14), ((props)->a15), \
     ((props)->a16), ((props)->a17), ((props)->a18), ((props)->a19), (props)))
 
-#define TLS_SERVER_START(props, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11) \
+#define TLS_SERVER_START(props, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10) \
     tls_server_start((((props)->a1), ((props)->a2), ((props)->a3), \
     ((props)->a4), ((props)->a5), ((props)->a6), ((props)->a7), \
-    ((props)->a8), ((props)->a9), ((props)->a10), ((props)->a11), (props)))
+    ((props)->a8), ((props)->a9), ((props)->a10), (props)))
 
  /*
   * tls_session.c

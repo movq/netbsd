@@ -1,4 +1,4 @@
-/*	$NetBSD: bha_isa.c,v 1.35 2012/10/27 17:18:24 chs Exp $	*/
+/*	$NetBSD: bha_isa.c,v 1.32 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bha_isa.c,v 1.35 2012/10/27 17:18:24 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bha_isa.c,v 1.32 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,10 +50,10 @@ __KERNEL_RCSID(0, "$NetBSD: bha_isa.c,v 1.35 2012/10/27 17:18:24 chs Exp $");
 
 #define	BHA_ISA_IOSIZE	4
 
-int	bha_isa_probe(device_t, cfdata_t, void *);
-void	bha_isa_attach(device_t, device_t, void *);
+int	bha_isa_probe(struct device *, struct cfdata *, void *);
+void	bha_isa_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(bha_isa, sizeof(struct bha_softc),
+CFATTACH_DECL(bha_isa, sizeof(struct bha_softc),
     bha_isa_probe, bha_isa_attach, NULL, NULL);
 
 /*
@@ -62,7 +62,8 @@ CFATTACH_DECL_NEW(bha_isa, sizeof(struct bha_softc),
  * the actual probe routine to check it out.
  */
 int
-bha_isa_probe(device_t parent, cfdata_t match, void *aux)
+bha_isa_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -117,10 +118,11 @@ bha_isa_probe(device_t parent, cfdata_t match, void *aux)
  * Attach all the sub-devices we can find
  */
 void
-bha_isa_attach(device_t parent, device_t self, void *aux)
+bha_isa_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
-	struct bha_softc *sc = device_private(self);
+	struct bha_softc *sc = (void *)self;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
 	struct bha_probe_data bpd;
@@ -129,9 +131,8 @@ bha_isa_attach(device_t parent, device_t self, void *aux)
 
 	printf("\n");
 
-	sc->sc_dev = self;
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, BHA_ISA_IOSIZE, 0, &ioh)) {
-		aprint_error_dev(sc->sc_dev, "can't map i/o space\n");
+		aprint_error_dev(&sc->sc_dev, "can't map i/o space\n");
 		return;
 	}
 
@@ -139,14 +140,14 @@ bha_isa_attach(device_t parent, device_t self, void *aux)
 	sc->sc_ioh = ioh;
 	sc->sc_dmat = ia->ia_dmat;
 	if (!bha_probe_inquiry(iot, ioh, &bpd)) {
-		aprint_error_dev(sc->sc_dev, "bha_isa_attach failed\n");
+		aprint_error_dev(&sc->sc_dev, "bha_isa_attach failed\n");
 		return;
 	}
 
 	sc->sc_dmaflags = 0;
 	if (bpd.sc_drq != -1) {
 		if ((error = isa_dmacascade(ic, bpd.sc_drq)) != 0) {
-			aprint_error_dev(sc->sc_dev, " unable to cascade DRQ, error = %d\n", error);
+			aprint_error_dev(&sc->sc_dev, " unable to cascade DRQ, error = %d\n", error);
 			return;
 		}
 	} else {
@@ -159,7 +160,7 @@ bha_isa_attach(device_t parent, device_t self, void *aux)
 		(void) bha_info(sc);
 		if (strcmp(sc->sc_firmware, "3.37") < 0)
 		    printf("%s: buggy VLB controller, disabling 32-bit DMA\n",
-		        device_xname(sc->sc_dev));
+		        device_xname(&sc->sc_dev));
 		else
 			sc->sc_dmaflags = ISABUS_DMA_32BIT;
 	}
@@ -167,7 +168,7 @@ bha_isa_attach(device_t parent, device_t self, void *aux)
 	sc->sc_ih = isa_intr_establish(ic, bpd.sc_irq, IST_EDGE, IPL_BIO,
 	    bha_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt\n");
 		return;
 	}
 

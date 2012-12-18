@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.pl,v 1.37 2012/10/24 11:36:02 tsutsui Exp $	*/
+/*	$NetBSD: msg.md.pl,v 1.30 2008/04/30 15:29:11 ad Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.md.en,v 1.24 2001/01/27 07:34:39 jmc Exp 	*/
 
@@ -16,7 +16,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -37,11 +41,8 @@
 /* MD Message catalog -- Polish, i386 version */
 
 message md_hello
-{
-}
+{Jesli uruchomiles komputer z dyskietki, mozesz ja teraz wyciagnac.
 
-message md_may_remove_boot_medium
-{
 }
 
 message Keyboard_type {Keyboard type}
@@ -56,19 +57,21 @@ message getboottype
 
 Selected bootblock: }
 
-message console_PC {Konsola BIOS}
-message console_com {Port szeregowy com%d, %d bodow}
-message console_unchanged {Bez zmian}
+message console_PC {BIOS console}
+message console_com {Serial port com%d, baud rate %d}
+message console_unchanged {Unchanged}
 
 message Bootblocks_selection
 {Wybor bootblokow}
-message Use_normal_bootblocks	{Uzyj konsoli BIOS}
-message Use_serial_com0		{Uzyj portu szeregowego com0}
-message Use_serial_com1		{Uzyj portu szeregowego com1}
-message Use_serial_com2		{Uzyj portu szeregowego com2}
-message Use_serial_com3		{Uzyj portu szeregowego com3}
-message serial_baud_rate	{Liczba bodow}
-message Use_existing_bootblocks	{Uzyj istniejacych bootblokow}
+message Use_normal_bootblocks	{Use BIOS console}
+message Use_serial_com0		{Use serial port com0}
+message Use_serial_com1		{Use serial port com1}
+message Use_serial_com2		{Use serial port com2}
+message Use_serial_com3		{Use serial port com3}
+message serial_baud_rate	{Serial baud rate}
+message Use_existing_bootblocks	{Use existing bootblocks}
+
+message No_Bootcode		{No bootcode for root partition}
 
 message dobootblks
 {Instalowanie bootblokow na %s....
@@ -79,8 +82,8 @@ message onebiosmatch
 
 }
 
-message onebiosmatch_header
-{BIOS # cylindry glowice sektory razem sektory  GB
+message onebiosmatch_header	/* XXX translate total */
+{BIOS # cylindry glowice sektory total sektory  GB
 ------ -------- ------- ------- ------------- ---
 }
 
@@ -99,8 +102,8 @@ message biosmultmatch
 
 }
 
-message biosmultmatch_header
-{   BIOS # cylindry glowice sektory razem sektory  GB
+message biosmultmatch_header	/* XXX translate total */
+{   BIOS # cylindry glowice sektory total sektory  GB
    ------ -------- ------- ------- ------------- ---
 }
 
@@ -125,34 +128,34 @@ chcesz to zrobic?
 
 (Odpowiedz 'nie' zabierze cie spowrotem do menu edycji partycji.)}
 
-message missing_bootmenu_text
-{Masz wiecej niz jeden system operacyjny na tym dysku, ale nie
-zostalo wskazane menu ani dla aktywnej partycji ani dla partycji
-NetBSD, ktora bedzie zainstalowana.
+message missing_bootmenu_text	/* XXX translate */
+{You have more than one operating system on this disk, but have not
+specified a 'bootmenu' for either the active partition or the
+NetBSD partition that you are going to install into. 
 
-Chcesz zmienic partycje, aby dodac wpis do menu?}
+Do you want to re-edit the partition to add a bootmenu entry?}
 
-message no_extended_bootmenu
-{Wskazane zostalo, ze w menu zostanie zawarta partycja rozszerzona.
-Nie wyglada na to, ze system BIOS wspiera polecenie odczytu uzywane
-przez te wersje kodu menu.
-Czy na pewno chcesz tak zrobic?
+message no_extended_bootmenu	/* XXX translate */
+{You have requested that an extended partition be included in the bootmenu.
+However your system BIOS doesn't appear to support the read command used
+by that version of the bootmenu code. 
+Are you sure you that you want to do this?
 
-(Odpowiedz 'nie' przeniesie z powrotem do menu zmiany partycji.)}
+(Answering 'no' will take you back to the partition edit menu.)}
 
-message installbootsel
-{Twoje konfiguracja wymaga kodu rozruchowego NetBSD, aby
-wybierac, ktorego systemu operacyjnego uzywac.
+message installbootsel	/* XXX translate */
+{Your configuration requires the NetBSD bootselect code to
+select which operating system to use. 
 
-Nie jest on obecnie zainstalowany. Czy zainstalowac go teraz?}
+It is not currently installed, do you want to install it now?}
 
-message installmbr
-{Kod rozruchowy w MBR nie wyglada na poprawny.
+message installmbr	/* XXX translate */
+{The bootcode in the Master Boot Record does not appear to be valid.
 
-Chcesz zainstalowac kod rozruchowy NetBSD?}
+Do you want to install the NetBSD bootcode?}
 
-message updatembr
-{Chcesz uaktualnic kod rozruchowy w MBR do najnowszej wersji
-kodu rozruchowego NetBSD?}
+message updatembr	/* XXX translate */
+{Do you want to update the bootcode in the Master Boot Record to
+the latest version of the NetBSD bootcode?}
 
 message set_kernel_1	{Kernel (GENERIC)}

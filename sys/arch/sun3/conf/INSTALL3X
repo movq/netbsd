@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL3X,v 1.51 2012/10/17 14:48:17 apb Exp $
+# $NetBSD: INSTALL3X,v 1.41 2008/07/31 07:41:07 simonb Exp $
 #
 # INSTALL3X - Installation kernel for the Sun3X
 #
@@ -25,6 +25,8 @@ maxusers	2
 #options 	SYSVMSG		# System V message queues
 #options 	SYSVSEM		# System V semaphores
 #options 	SYSVSHM		# System V shared memory
+#options 	SHMMAXPGS=1024	# 1024 pages is the default
+#options 	LKM		# loadable kernel modules
 #options 	INSECURE	# disable kernel security level
 options 	USERCONF	# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
@@ -58,9 +60,7 @@ options 	COMPAT_15	# NetBSD 1.5
 options 	COMPAT_16	# NetBSD 1.6
 options 	COMPAT_20	# NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0
-options 	COMPAT_40	# NetBSD 4.0
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
 #options 	COMPAT_LINUX	# can run Linux/m68k executables
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
@@ -79,12 +79,11 @@ file-system	KERNFS		# /kern
 
 # Filesystem options
 #options 	NFSSERVER	# nfs server support
-#options 	QUOTA		# legacy UFS quotas
-#options 	QUOTA2		# new, in-filesystem UFS quotas
-#options 	FFS_EI		# FFS Endian Independent support
+#options 	QUOTA		# FFS quotas
+#options 	FFS_EI		# FFS Endian Independant support
 #options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
-options 	WAPBL		# File system journaling support
+options 	WAPBL		# File system journaling support - Experimental
 
 # Networking options
 options 	INET		# IP protocol stack support
@@ -184,7 +183,7 @@ cd* at scsibus? target ? lun ?		# SCSI CD-ROMs
 #uk* at scsibus? target ? lun ?		# unknown SCSI devices
 
 # Memory-disk drivers
-#pseudo-device	md		
+#pseudo-device	md		2
 
 # Misc.
 pseudo-device	loop		1	# network loopback
@@ -194,8 +193,9 @@ pseudo-device	ppp			# PPP
 pseudo-device	tun			# network tunneling over tty
 #pseudo-device	gre			# generic L3 over IP tunnel
 #pseudo-device	ipfilter		# ip filter
+#pseudo-device	rnd			# /dev/random and in-kernel generator
 
 pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
 #pseudo-device	vnd			# paging to files
 #pseudo-device	ccd		4	# concatenated disks
-#pseudo-device	fss			# file system snapshot device
+#pseudo-device	fss		4	# file system snapshot device

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.31 2012/10/27 17:18:12 chs Exp $ */
+/*	$NetBSD: autoconf.h,v 1.28 2008/04/28 20:23:36 martin Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -73,8 +73,9 @@
  * Autoconfiguration information.
  */
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/promlib.h>
+#include <dev/sbus/sbusvar.h>
 
 /* This is used to map device classes to IPLs */
 struct intrmap {
@@ -123,13 +124,15 @@ struct mainbus_attach_args {
  * its aux pointer to point to a pointer to the name (the address of
  * a romaux structure suffices, for instance). (OBSOLETE)
  */
-int	matchbyname(device_t, cfdata_t, void *);
+struct device;
+struct cfdata;
+int	matchbyname(struct device *, struct cfdata *cf, void *aux);
 
 /*
  * `clockfreq' produces a printable representation of a clock frequency
  * (this is just a frill).
  */
-char	*clockfreq(long);
+char	*clockfreq(long freq);
 
 /* Kernel initialization routine. */
 void	bootstrap(void *, void *, void *, void *, void *);

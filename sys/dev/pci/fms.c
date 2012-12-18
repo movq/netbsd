@@ -1,7 +1,7 @@
-/*	$NetBSD: fms.c,v 1.41 2012/10/27 17:18:32 chs Exp $	*/
+/*	$NetBSD: fms.c,v 1.33 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
- * Copyright (c) 1999, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -34,16 +34,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fms.c,v 1.41 2012/10/27 17:18:32 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fms.c,v 1.33 2008/04/28 20:23:54 martin Exp $");
 
 #include "mpu.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/audioio.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 #include <sys/cpu.h>
@@ -71,8 +73,8 @@ struct fms_dma {
 
 
 
-static int	fms_match(device_t, cfdata_t, void *);
-static void	fms_attach(device_t, device_t, void *);
+static int	fms_match(struct device *, struct cfdata *, void *);
+static void	fms_attach(struct device *, struct device *, void *);
 static int	fms_intr(void *);
 
 static int	fms_query_encoding(void *, struct audio_encoding *);
@@ -86,8 +88,8 @@ static int	fms_getdev(void *, struct audio_device *);
 static int	fms_set_port(void *, mixer_ctrl_t *);
 static int	fms_get_port(void *, mixer_ctrl_t *);
 static int	fms_query_devinfo(void *, mixer_devinfo_t *);
-static void	*fms_malloc(void *, int, size_t);
-static void	fms_free(void *, void *, size_t);
+static void	*fms_malloc(void *, int, size_t, struct malloc_type *, int);
+static void	fms_free(void *, void *, struct malloc_type *);
 static size_t	fms_round_buffersize(void *, int, size_t);
 static paddr_t	fms_mappage(void *, void *, off_t, int);
 static int	fms_get_props(void *);
@@ -97,9 +99,8 @@ static int	fms_trigger_output(void *, void *, void *, int,
 static int	fms_trigger_input(void *, void *, void *, int,
 				  void (*)(void *), void *,
 				  const audio_params_t *);
-static void	fms_get_locks(void *, kmutex_t **, kmutex_t **);
 
-CFATTACH_DECL_NEW(fms, sizeof (struct fms_softc),
+CFATTACH_DECL(fms, sizeof (struct fms_softc),
     fms_match, fms_attach, NULL, NULL);
 
 static struct audio_device fms_device = {
@@ -137,7 +138,7 @@ static const struct audio_hw_if fms_hw_if = {
 	fms_trigger_output,
 	fms_trigger_input,
 	NULL,
-	fms_get_locks,
+	NULL,
 };
 
 static int	fms_attach_codec(void *, struct ac97_codec_if *);
@@ -208,7 +209,8 @@ static int	fms_reset_codec(void *);
 
 
 static int
-fms_match(device_t parent, cfdata_t match, void *aux)
+fms_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -222,7 +224,7 @@ fms_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-fms_attach(device_t parent, device_t self, void *aux)
+fms_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa;
 	struct fms_softc *sc;
@@ -234,49 +236,45 @@ fms_attach(device_t parent, device_t self, void *aux)
 	uint16_t k1;
 
 	pa = aux;
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (struct fms_softc *)self;
 	intrstr = NULL;
 	pc = pa->pa_pc;
 	pt = pa->pa_tag;
 	aprint_naive(": Audio controller\n");
 	aprint_normal(": Forte Media FM-801\n");
 
-	if (pci_mapreg_map(pa, 0x10, PCI_MAPREG_TYPE_IO, 0, &sc->sc_iot,
-			   &sc->sc_ioh, &sc->sc_ioaddr, &sc->sc_iosize)) {
-		aprint_error_dev(sc->sc_dev, "can't map i/o space\n");
-		return;
-	}
-	if (bus_space_subregion(sc->sc_iot, sc->sc_ioh, 0x30, 2,
-				&sc->sc_mpu_ioh))
-		panic("fms_attach: can't get mpu subregion handle");
-	if (bus_space_subregion(sc->sc_iot, sc->sc_ioh, 0x68, 4,
-				&sc->sc_opl_ioh))
-		panic("fms_attach: can't get opl subregion handle");
-
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error_dev(sc->sc_dev, "couldn't map interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
-
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_AUDIO, fms_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
-		mutex_destroy(&sc->sc_lock);
-		mutex_destroy(&sc->sc_intr_lock);
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
 
 	sc->sc_dmat = pa->pa_dmat;
 
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
+
+	if (pci_mapreg_map(pa, 0x10, PCI_MAPREG_TYPE_IO, 0, &sc->sc_iot,
+			   &sc->sc_ioh, &sc->sc_ioaddr, &sc->sc_iosize)) {
+		aprint_error_dev(&sc->sc_dev, "can't map i/o space\n");
+		return;
+	}
+
+	if (bus_space_subregion(sc->sc_iot, sc->sc_ioh, 0x30, 2,
+				&sc->sc_mpu_ioh))
+		panic("fms_attach: can't get mpu subregion handle");
+
+	if (bus_space_subregion(sc->sc_iot, sc->sc_ioh, 0x68, 4,
+				&sc->sc_opl_ioh))
+		panic("fms_attach: can't get opl subregion handle");
 
 	/* Disable legacy audio (SBPro compatibility) */
 	pci_conf_write(pc, pt, 0x40, 0);
@@ -309,23 +307,20 @@ fms_attach(device_t parent, device_t self, void *aux)
 	sc->host_if.write = fms_write_codec;
 	sc->host_if.reset = fms_reset_codec;
 
-	if (ac97_attach(&sc->host_if, self, &sc->sc_lock) != 0) {
-		mutex_destroy(&sc->sc_intr_lock);
-		mutex_destroy(&sc->sc_lock);
+	if (ac97_attach(&sc->host_if, self) != 0)
 		return;
-	}
 
-	audio_attach_mi(&fms_hw_if, sc, sc->sc_dev);
+	audio_attach_mi(&fms_hw_if, sc, &sc->sc_dev);
 
 	aa.type = AUDIODEV_TYPE_OPL;
 	aa.hwif = NULL;
 	aa.hdl = NULL;
-	config_found(sc->sc_dev, &aa, audioprint);
+	config_found(&sc->sc_dev, &aa, audioprint);
 
 	aa.type = AUDIODEV_TYPE_MPU;
 	aa.hwif = NULL;
 	aa.hdl = NULL;
-	sc->sc_mpu_dev = config_found(sc->sc_dev, &aa, audioprint);
+	sc->sc_mpu_dev = config_found(&sc->sc_dev, &aa, audioprint);
 }
 
 /*
@@ -423,8 +418,6 @@ fms_intr(void *arg)
 #endif
 	uint16_t istat;
 
-	mutex_spin_enter(&sc->sc_intr_lock);
-
 	istat = bus_space_read_2(sc->sc_iot, sc->sc_ioh, FM_INTSTATUS);
 
 	if (istat & FM_INTSTATUS_PLAY) {
@@ -464,8 +457,6 @@ fms_intr(void *arg)
 
 	bus_space_write_2(sc->sc_iot, sc->sc_ioh, FM_INTSTATUS,
 			  istat & (FM_INTSTATUS_PLAY | FM_INTSTATUS_REC));
-
-	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return 1;
 }
@@ -676,7 +667,8 @@ fms_get_port(void *addr, mixer_ctrl_t *cp)
 }
 
 static void *
-fms_malloc(void *addr, int direction, size_t size)
+fms_malloc(void *addr, int direction, size_t size,
+	   struct malloc_type *pool, int flags)
 {
 	struct fms_softc *sc;
 	struct fms_dma *p;
@@ -684,34 +676,34 @@ fms_malloc(void *addr, int direction, size_t size)
 	int rseg;
 
 	sc = addr;
-	p = kmem_alloc(sizeof(*p), KM_SLEEP);
+	p = malloc(sizeof(*p), pool, flags);
 	if (p == NULL)
 		return NULL;
 
 	p->size = size;
 	if ((error = bus_dmamem_alloc(sc->sc_dmat, size, PAGE_SIZE, 0, &p->seg,
-				      1, &rseg, BUS_DMA_WAITOK)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to allocate DMA, error = %d\n", error);
+				      1, &rseg, BUS_DMA_NOWAIT)) != 0) {
+		aprint_error_dev(&sc->sc_dev, "unable to allocate DMA, error = %d\n", error);
 		goto fail_alloc;
 	}
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, &p->seg, rseg, size, &p->addr,
-				    BUS_DMA_WAITOK | BUS_DMA_COHERENT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to map DMA, error = %d\n",
+				    BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
+		aprint_error_dev(&sc->sc_dev, "unable to map DMA, error = %d\n",
 		       error);
 		goto fail_map;
 	}
 
 	if ((error = bus_dmamap_create(sc->sc_dmat, size, 1, size, 0,
-				       BUS_DMA_WAITOK, &p->map)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to create DMA map, error = %d\n",
+				       BUS_DMA_NOWAIT, &p->map)) != 0) {
+		aprint_error_dev(&sc->sc_dev, "unable to create DMA map, error = %d\n",
 		       error);
 		goto fail_create;
 	}
 
 	if ((error = bus_dmamap_load(sc->sc_dmat, p->map, p->addr, size, NULL,
-				     BUS_DMA_WAITOK)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to load DMA map, error = %d\n",
+				     BUS_DMA_NOWAIT)) != 0) {
+		aprint_error_dev(&sc->sc_dev, "unable to load DMA map, error = %d\n",
 		       error);
 		goto fail_load;
 	}
@@ -729,12 +721,12 @@ fail_create:
 fail_map:
 	bus_dmamem_free(sc->sc_dmat, &p->seg, 1);
 fail_alloc:
-	kmem_free(p, sizeof(*p));
+	free(p, pool);
 	return NULL;
 }
 
 static void
-fms_free(void *addr, void *ptr, size_t size)
+fms_free(void *addr, void *ptr, struct malloc_type *pool)
 {
 	struct fms_softc *sc;
 	struct fms_dma **pp, *p;
@@ -748,7 +740,7 @@ fms_free(void *addr, void *ptr, size_t size)
 			bus_dmamem_free(sc->sc_dmat, &p->seg, 1);
 
 			*pp = p->next;
-			kmem_free(p, sizeof(*p));
+			free(p, pool);
 			return;
 		}
 
@@ -862,14 +854,4 @@ fms_trigger_input(void *addr, void *start, void *end, int blksize,
 	bus_space_write_2(sc->sc_iot, sc->sc_ioh, FM_REC_CTL,
 			  FM_REC_START | FM_REC_STOPNOW | sc->sc_rec_reg);
 	return 0;
-}
-
-static void
-fms_get_locks(void *addr, kmutex_t **intr, kmutex_t **thread)
-{
-	struct fms_softc *sc;
-
-	sc = addr;
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
 }

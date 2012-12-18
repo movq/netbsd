@@ -1,9 +1,9 @@
-/*	$NetBSD: libsa.h,v 1.9 2011/01/22 19:19:18 joerg Exp $	*/
+/*	$NetBSD: libsa.h,v 1.5 2005/12/11 12:17:25 christos Exp $	*/
 
 /*	$OpenBSD: libsa.h,v 1.7 1999/12/23 04:07:47 mickey Exp $	*/
 
 /*
- * Copyright (c) 1998-2004 Michael Shalayeff
+ * Copyright (c) 1998 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,18 +14,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Michael Shalayeff.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR OR HIS RELATIVES BE LIABLE FOR ANY DIRECT,
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF MIND, USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <lib/libsa/stand.h>
@@ -38,9 +42,7 @@
 
 #define	NENTS(a)	(sizeof(a) / sizeof(a[0]))
 
-typedef unsigned int btdev_t;
-
-extern	btdev_t bootdev;
+extern dev_t bootdev;
 
 extern	struct consdev constab[];
 extern	struct consdev *cn_tab;
@@ -48,6 +50,7 @@ int	cngetc(void);
 int	tcngetc(void);
 void	cnputc(int);
 void	cninit(void);
+time_t	getsecs(void);
 int	tgetchar(void);
 
 void pdc_init(void);
@@ -73,7 +76,7 @@ void ite_putc(dev_t, int);
 void ite_pollc(dev_t, int);
 
 void machdep(void);
-void devboot(btdev_t, char *);
+void devboot(dev_t, char *);
 void fcacheall(void);
 
 int     lif_open(const char *, struct open_file *);
@@ -91,4 +94,5 @@ int	som_load(int, struct x_param *);
 int	som_ldsym(int, struct x_param *);
 
 extern int debug;
-extern	char bootprog_name[], bootprog_rev[];
+extern	char bootprog_name[], bootprog_rev[], bootprog_date[],
+		bootprog_maker[];

@@ -1,4 +1,4 @@
-/*	$NetBSD: rccide.c,v 1.26 2012/07/31 15:50:36 bouyer Exp $	*/
+/*	$NetBSD: rccide.c,v 1.18 2008/03/18 20:46:37 cube Exp $	*/
 
 /*
  * Copyright (c) 2003 By Noon Software, Inc.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rccide.c,v 1.26 2012/07/31 15:50:36 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rccide.c,v 1.18 2008/03/18 20:46:37 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: rccide.c,v 1.26 2012/07/31 15:50:36 bouyer Exp $");
 #include <dev/pci/pciidevar.h>
 
 static void serverworks_chip_map(struct pciide_softc *,
-				 const struct pci_attach_args *);
+				 struct pci_attach_args *);
 static void serverworks_setup_channel(struct ata_channel *);
 static int  serverworks_pci_intr(void *);
 static int  serverworkscsb6_pci_intr(void *);
@@ -110,12 +110,13 @@ rccide_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-serverworks_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
+serverworks_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	pcireg_t interface = PCI_INTERFACE(pa->pa_class);
 	pcitag_t pcib_tag;
 	int channel;
+	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
@@ -152,7 +153,6 @@ serverworks_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 	sc->sc_wdcdev.sc_atac.atac_set_modes = serverworks_setup_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 2;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -164,11 +164,11 @@ serverworks_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 		switch (sc->sc_pp->ide_product) {
 		case PCI_PRODUCT_SERVERWORKS_CSB6_IDE:
 		case PCI_PRODUCT_SERVERWORKS_CSB6_RAID:
-			pciide_mapchan(pa, cp, interface,
+			pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
 			    serverworkscsb6_pci_intr);
 			break;
 		default:
-			pciide_mapchan(pa, cp, interface,
+			pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
 			    serverworks_pci_intr);
 		}
 	}
@@ -212,14 +212,14 @@ serverworks_setup_channel(struct ata_channel *chp)
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if (drvp->drive_type == ATA_DRIVET_NONE)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
 		unit = drive + 2 * channel;
 		/* add timing values, setup DMA if needed */
 		pio_time |= pio_modes[drvp->PIO_mode] << (8 * (unit^1));
 		pio_mode |= drvp->PIO_mode << (4 * unit + 16);
 		if ((atac->atac_cap & ATAC_CAP_UDMA) &&
-		    (drvp->drive_flags & ATA_DRIVE_UDMA)) {
+		    (drvp->drive_flags & DRIVE_UDMA)) {
 			/* use Ultra/DMA, check for 80-pin cable */
 			if (drvp->UDMA_mode > 2 &&
 			    (PCI_PRODUCT(pci_conf_read(sc->sc_pc, sc->sc_tag,
@@ -231,17 +231,17 @@ serverworks_setup_channel(struct ata_channel *chp)
 			udma_mode |= 1 << unit;
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
 		} else if ((atac->atac_cap & ATAC_CAP_DMA) &&
-		    (drvp->drive_flags & ATA_DRIVE_DMA)) {
+		    (drvp->drive_flags & DRIVE_DMA)) {
 			/* use Multiword DMA */
 			s = splbio();
-			drvp->drive_flags &= ~ATA_DRIVE_UDMA;
+			drvp->drive_flags &= ~DRIVE_UDMA;
 			splx(s);
 			dma_time |= dma_modes[drvp->DMA_mode] << (8 * (unit^1));
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
 		} else {
 			/* PIO only */
 			s = splbio();
-			drvp->drive_flags &= ~(ATA_DRIVE_UDMA | ATA_DRIVE_DMA);
+			drvp->drive_flags &= ~(DRIVE_UDMA | DRIVE_DMA);
 			splx(s);
 		}
 	}
@@ -260,7 +260,8 @@ serverworks_setup_channel(struct ata_channel *chp)
 }
 
 static int
-serverworks_pci_intr(void *arg)
+serverworks_pci_intr(arg)
+	void *arg;
 {
 	struct pciide_softc *sc = arg;
 	struct pciide_channel *cp;
@@ -289,7 +290,8 @@ serverworks_pci_intr(void *arg)
 }
 
 static int
-serverworkscsb6_pci_intr(void *arg)
+serverworkscsb6_pci_intr(arg)
+	void *arg;
 {
 	struct pciide_softc *sc = arg;
 	struct pciide_channel *cp;

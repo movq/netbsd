@@ -1,4 +1,4 @@
-/*	$NetBSD: sbus.c,v 1.78 2012/09/23 09:54:04 jdc Exp $ */
+/*	$NetBSD: sbus.c,v 1.70 2008/06/13 13:10:18 cegger Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.78 2012/09/23 09:54:04 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.70 2008/06/13 13:10:18 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -85,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.78 2012/09/23 09:54:04 jdc Exp $");
 #include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <sparc/dev/sbusreg.h>
 #include <dev/sbus/sbusvar.h>
 #include <dev/sbus/xboxvar.h>
@@ -113,10 +113,8 @@ void	sbus_attach_mainbus(device_t, device_t, void *);
 void	sbus_attach_iommu(device_t, device_t, void *);
 void	sbus_attach_xbox(device_t, device_t, void *);
 
-#if (defined(SUN4M) && !defined(MSIIEP)) || defined(SUN4D)
 static	int sbus_error(void);
-extern	int (*sbuserr_handler)(void);
-#endif
+int	(*sbuserr_handler)(void);
 
 CFATTACH_DECL_NEW(sbus_mainbus, sizeof(struct sbus_softc),
     sbus_match_mainbus, sbus_attach_mainbus, NULL, NULL);
@@ -313,9 +311,7 @@ sbus_attach_iommu(device_t parent, device_t self, void *aux)
 	printf(": clock = %s MHz\n", clockfreq(sc->sc_clockfreq));
 
 	sbus_sc = sc;
-#if (defined(SUN4M) && !defined(MSIIEP)) || defined(SUN4D)
 	sbuserr_handler = sbus_error;
-#endif
 	sbus_attach_common(sc, "sbus", node, NULL);
 }
 
@@ -444,11 +440,11 @@ sbus_setup_attach_args(struct sbus_softc *sc,
 {
 	int n, error;
 
-	memset(sa, 0, sizeof(struct sbus_attach_args));
+	bzero(sa, sizeof(struct sbus_attach_args));
 	error = prom_getprop(node, "name", 1, &n, &sa->sa_name);
 	if (error != 0)
 		return (error);
-	KASSERT(sa->sa_name[n-1] == '\0');
+	sa->sa_name[n] = '\0';
 
 	sa->sa_bustag = bustag;
 	sa->sa_dmatag = dmatag;
@@ -501,7 +497,7 @@ sbus_destroy_attach_args(struct sbus_attach_args *sa)
 	if (sa->sa_promvaddrs)
 		free(sa->sa_promvaddrs, M_DEVBUF);
 
-	memset(sa, 0, sizeof(struct sbus_attach_args));/*DEBUG*/
+	bzero(sa, sizeof(struct sbus_attach_args));/*DEBUG*/
 }
 
 bus_addr_t
@@ -510,6 +506,60 @@ sbus_bus_addr(bus_space_tag_t t, u_int btype, u_int offset)
 
 	/* XXX: sbus_bus_addr should be g/c'ed */
 	return (BUS_ADDR(btype, offset));
+}
+
+
+/*
+ * Each attached device calls sbus_establish after it initializes
+ * its sbusdev portion.
+ */
+void
+sbus_establish(struct sbusdev *sd, device_t dev)
+{
+	register struct sbus_softc *sc;
+	register device_t curdev;
+
+	/*
+	 * We have to look for the sbus by name, since it is not necessarily
+	 * our immediate parent (i.e. sun4m /iommu/sbus/espdma/esp)
+	 * We don't just use the device structure of the above-attached
+	 * sbus, since we might (in the future) support multiple sbus's.
+	 */
+	for (curdev = device_parent(dev); ; curdev = device_parent(curdev)) {
+		if ((curdev == NULL) || (device_xname(curdev) == NULL))
+			panic("sbus_establish: can't find sbus parent for %s",
+			      device_xname(dev)
+					? device_xname(dev)
+					: "<unknown>" );
+
+		if (strncmp(device_xname(curdev), "sbus", 4) == 0)
+			break;
+	}
+	sc = device_private(curdev);
+
+	sd->sd_dev = dev;
+	sd->sd_bchain = sc->sc_sbdev;
+	sc->sc_sbdev = sd;
+}
+
+/*
+ * Reset the given sbus. (???)
+ */
+void
+sbusreset(int sbus)
+{
+	register struct sbusdev *sd;
+	struct sbus_softc *sc = device_lookup_private(&sbus_cd, sbus);
+	device_t dev;
+
+	printf("reset %s:", device_xname(sc->sc_dev));
+	for (sd = sc->sc_sbdev; sd != NULL; sd = sd->sd_bchain) {
+		if (sd->sd_reset) {
+			dev = sd->sd_dev;
+			(*sd->sd_reset)(dev);
+			printf(" %s", device_xname(dev));
+		}
+	}
 }
 
 
@@ -594,11 +644,10 @@ sbus_intr_establish(bus_space_tag_t t, int pri, int level,
 
 	ih->ih_fun = handler;
 	ih->ih_arg = arg;
-	intr_establish(pil, level, ih, fastvec, false);
+	intr_establish(pil, level, ih, fastvec);
 	return (ih);
 }
 
-#if (defined(SUN4M) && !defined(MSIIEP)) || defined(SUN4D)
 static int
 sbus_error(void)
 {
@@ -611,8 +660,8 @@ static	int straytime, nstray;
 
 	afsr = bus_space_read_4(sc->sc_bustag, bh, SBUS_AFSR_REG);
 	afva = bus_space_read_4(sc->sc_bustag, bh, SBUS_AFAR_REG);
-	snprintb(bits, sizeof(bits), SBUS_AFSR_BITS, afsr);
-	printf("sbus error:\n\tAFSR %s\n", bits);
+	printf("sbus error:\n\tAFSR %s\n",
+		bitmask_snprintf(afsr, SBUS_AFSR_BITS, bits, sizeof(bits)));
 	printf("\taddress: 0x%x%x\n", afsr & SBUS_AFSR_PAH, afva);
 
 	/* For now, do the same dance as on stray interrupts */
@@ -630,4 +679,3 @@ static	int straytime, nstray;
 
 	return (0);
 }
-#endif

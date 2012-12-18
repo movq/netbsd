@@ -1,4 +1,4 @@
-/*	$NetBSD: amps.c,v 1.20 2012/10/27 17:17:23 chs Exp $	*/
+/*	$NetBSD: amps.c,v 1.14 2008/04/28 20:23:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amps.c,v 1.20 2012/10/27 17:17:23 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amps.c,v 1.14 2008/04/28 20:23:10 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,6 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: amps.c,v 1.20 2012/10/27 17:17:23 chs Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -52,10 +53,10 @@ __KERNEL_RCSID(0, "$NetBSD: amps.c,v 1.20 2012/10/27 17:17:23 chs Exp $");
 #include <sys/syslog.h>
 #include <sys/types.h>
 #include <sys/device.h>
-#include <sys/bus.h>
 
 #include <machine/intr.h>
 #include <machine/io.h>
+#include <machine/bus.h>
 #include <acorn32/podulebus/podulebus.h>
 #include <acorn32/podulebus/ampsreg.h>
 #include <dev/ic/comreg.h>
@@ -79,16 +80,16 @@ __KERNEL_RCSID(0, "$NetBSD: amps.c,v 1.20 2012/10/27 17:17:23 chs Exp $");
  */
 
 struct amps_softc {
-	device_t		sc_dev;			/* device node */
+	struct device		sc_dev;			/* device node */
 	podule_t 		*sc_podule;		/* Our podule info */
 	int 			sc_podule_number;	/* Our podule number */
 	bus_space_tag_t		sc_iot;			/* Bus tag */
 };
 
-int	amps_probe(device_t, cfdata_t, void *);
-void	amps_attach(device_t, device_t, void *);
+int	amps_probe(struct device *, struct cfdata *, void *);
+void	amps_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(amps, sizeof(struct amps_softc),
+CFATTACH_DECL(amps, sizeof(struct amps_softc),
     amps_probe, amps_attach, NULL, NULL);
 
 int	amps_print(void *, const char *);
@@ -113,7 +114,9 @@ struct amps_attach_args {
 /* Print function used during child config */
 
 int
-amps_print(void *aux, const char *name)
+amps_print(aux, name)
+	void *aux;
+	const char *name;
 {
 	struct amps_attach_args *aa = aux;
 
@@ -130,9 +133,12 @@ amps_print(void *aux, const char *name)
  */
 
 int
-amps_probe(device_t parent, cfdata_t cf, void *aux)
+amps_probe(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
-	struct podule_attach_args *pa = aux;
+	struct podule_attach_args *pa = (void *)aux;
 
 	return (pa->pa_product == PODULE_ATOMWIDE_SERIAL);
 }
@@ -145,10 +151,12 @@ amps_probe(device_t parent, cfdata_t cf, void *aux)
  */
 
 void
-amps_attach(device_t parent, device_t self, void *aux)
+amps_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct amps_softc *sc = device_private(self);
-	struct podule_attach_args *pa = aux;
+	struct amps_softc *sc = (void *)self;
+	struct podule_attach_args *pa = (void *)aux;
 	struct amps_attach_args aa;
 
 	/* Note the podule number and validate */
@@ -156,7 +164,6 @@ amps_attach(device_t parent, device_t self, void *aux)
 	if (pa->pa_podule_number == -1)
 		panic("Podule has disappeared !");
 
-	sc->sc_dev = self;
 	sc->sc_podule_number = pa->pa_podule_number;
 	sc->sc_podule = pa->pa_podule;
 	podules[sc->sc_podule_number].attached = 1;
@@ -165,7 +172,7 @@ amps_attach(device_t parent, device_t self, void *aux)
 
 	/* Install a clean up handler to make sure IRQ's are disabled */
 /*	if (shutdownhook_establish(amps_shutdown, (void *)sc) == NULL)
-		panic("%s: Cannot install shutdown handler", device_xname(self));*/
+		panic("%s: Cannot install shutdown handler", self->dv_xname);*/
 
 	/* Set the interrupt info for this podule */
 
@@ -194,7 +201,8 @@ amps_attach(device_t parent, device_t self, void *aux)
  */
 
 /*void
-amps_shutdown(void *arg)
+amps_shutdown(arg)
+	void *arg;
 {
 }*/
 

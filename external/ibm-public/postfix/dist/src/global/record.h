@@ -1,4 +1,4 @@
-/*	$NetBSD: record.h,v 1.1.1.2 2010/06/17 18:06:51 tron Exp $	*/
+/*	$NetBSD: record.h,v 1.1.1.1.2.4 2011/01/07 01:24:05 riz Exp $	*/
 
 #ifndef _RECORD_H_INCLUDED_
 #define _RECORD_H_INCLUDED_

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_socket.c,v 1.16 2012/03/15 16:17:48 bouyer Exp $ */
+/*	$NetBSD: linux32_socket.c,v 1.9.4.1 2009/11/28 15:45:02 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_socket.c,v 1.16 2012/03/15 16:17:48 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_socket.c,v 1.9.4.1 2009/11/28 15:45:02 bouyer Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -78,8 +78,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_socket.c,v 1.16 2012/03/15 16:17:48 bouyer E
 #include <compat/linux/common/linux_oldolduname.h>
 #include <compat/linux/common/linux_ioctl.h>
 #include <compat/linux/common/linux_sockio.h>
-#include <compat/linux/common/linux_ipc.h>
-#include <compat/linux/common/linux_sem.h>
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/linux32/common/linux32_types.h>
@@ -109,7 +107,7 @@ linux32_sys_socketpair(struct lwp *l, const struct linux32_sys_socketpair_args *
 	NETBSD32TO64_UAP(domain);
 	NETBSD32TO64_UAP(type);
 	NETBSD32TO64_UAP(protocol);
-	NETBSD32TOP_UAP(rsv, int);
+	NETBSD32TOP_UAP(rsv, int)
 
 	return linux_sys_socketpair(l, &ua, retval);
 }
@@ -232,7 +230,7 @@ linux32_sys_bind(struct lwp *l, const struct linux32_sys_bind_args *uap, registe
 	struct linux_sys_bind_args ua;
 
 	NETBSD32TO64_UAP(s);
-	NETBSD32TOP_UAP(name, struct osockaddr);
+	NETBSD32TOP_UAP(name, struct osockaddr)
 	NETBSD32TO64_UAP(namelen);
 
 	return linux_sys_bind(l, &ua, retval);
@@ -249,7 +247,7 @@ linux32_sys_connect(struct lwp *l, const struct linux32_sys_connect_args *uap, r
 	struct linux_sys_connect_args ua;
 
 	NETBSD32TO64_UAP(s);
-	NETBSD32TOP_UAP(name, struct osockaddr);
+	NETBSD32TOP_UAP(name, struct osockaddr)
 	NETBSD32TO64_UAP(namelen);
 
 #ifdef DEBUG_LINUX
@@ -271,7 +269,7 @@ linux32_sys_accept(struct lwp *l, const struct linux32_sys_accept_args *uap, reg
 	struct linux_sys_accept_args ua;
 
 	NETBSD32TO64_UAP(s);
-	NETBSD32TOP_UAP(name, struct osockaddr);
+	NETBSD32TOP_UAP(name, struct osockaddr)
 	NETBSD32TOP_UAP(anamelen, int);
 
 	return linux_sys_accept(l, &ua, retval);
@@ -288,7 +286,7 @@ linux32_sys_getpeername(struct lwp *l, const struct linux32_sys_getpeername_args
 	struct linux_sys_getpeername_args ua;
 
 	NETBSD32TO64_UAP(fdes);
-	NETBSD32TOP_UAP(asa, struct sockaddr);
+	NETBSD32TOP_UAP(asa, struct sockaddr)
 	NETBSD32TOP_UAP(alen, int);
 
 	return linux_sys_getpeername(l, &ua, retval);
@@ -305,7 +303,7 @@ linux32_sys_getsockname(struct lwp *l, const struct linux32_sys_getsockname_args
 	struct linux_sys_getsockname_args ua;
 
 	NETBSD32TO64_UAP(fdec);
-	NETBSD32TOP_UAP(asa, char);
+	NETBSD32TOP_UAP(asa, char)
 	NETBSD32TOP_UAP(alen, int);
 
 	return linux_sys_getsockname(l, &ua, retval);
@@ -533,7 +531,7 @@ linux32_getifhwaddr(struct lwp *l, register_t *retval, u_int fd,
 
 	if (strncmp(lreq.ifr_name, "eth", 3) == 0) {
 		for (ifnum = 0, index = 3;
-		     index < LINUX32_IFNAMSIZ && lreq.ifr_name[index] != '\0';
+		     lreq.ifr_name[index] != '\0' && index < LINUX32_IFNAMSIZ;
 		     index++) {
 			ifnum *= 10;
 			ifnum += lreq.ifr_name[index] - '0';
@@ -639,31 +637,28 @@ linux32_ioctl_socket(struct lwp *l, const struct linux32_sys_ioctl_args *uap, re
 		dosys = 0;
 		break;
 	case LINUX_SIOCGIFFLAGS:
-		SCARG(&ia, com) = OSIOCGIFFLAGS32;
+		SCARG(&ia, com) = OSIOCGIFFLAGS;
 		break;
 	case LINUX_SIOCSIFFLAGS:
-		SCARG(&ia, com) = OSIOCSIFFLAGS32;
+		SCARG(&ia, com) = OSIOCSIFFLAGS;
 		break;
 	case LINUX_SIOCGIFADDR:
-		SCARG(&ia, com) = OOSIOCGIFADDR32;
+		SCARG(&ia, com) = OOSIOCGIFADDR;
 		break;
 	case LINUX_SIOCGIFDSTADDR:
-		SCARG(&ia, com) = OOSIOCGIFDSTADDR32;
+		SCARG(&ia, com) = OOSIOCGIFDSTADDR;
 		break;
 	case LINUX_SIOCGIFBRDADDR:
-		SCARG(&ia, com) = OOSIOCGIFBRDADDR32;
+		SCARG(&ia, com) = OOSIOCGIFBRDADDR;
 		break;
 	case LINUX_SIOCGIFNETMASK:
-		SCARG(&ia, com) = OOSIOCGIFNETMASK32;
-		break;
-	case LINUX_SIOCGIFMTU:
-		SCARG(&ia, com) = OSIOCGIFMTU32;
+		SCARG(&ia, com) = OOSIOCGIFNETMASK;
 		break;
 	case LINUX_SIOCADDMULTI:
-		SCARG(&ia, com) = OSIOCADDMULTI32;
+		SCARG(&ia, com) = OSIOCADDMULTI;
 		break;
 	case LINUX_SIOCDELMULTI:
-		SCARG(&ia, com) = OSIOCDELMULTI32;
+		SCARG(&ia, com) = OSIOCDELMULTI;
 		break;
 	case LINUX_SIOCGIFHWADDR:
 		error = linux32_getifhwaddr(l, retval, SCARG(uap, fd),

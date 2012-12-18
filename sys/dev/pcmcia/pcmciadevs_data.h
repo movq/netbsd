@@ -1,10 +1,10 @@
-/*	$NetBSD: pcmciadevs_data.h,v 1.232 2012/08/23 10:39:25 kiyohara Exp $	*/
+/*	$NetBSD: pcmciadevs_data.h,v 1.230 2008/09/06 22:08:38 rmind Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcmciadevs,v 1.230 2012/08/23 10:37:56 kiyohara Exp
+ *	NetBSD: pcmciadevs,v 1.227 2008/09/06 22:07:11 rmind Exp
  */
 /* $FreeBSD: src/sys/dev/pccard/pccarddevs,v 1.20 2001/11/19 05:02:55 imp Exp $*/
 
@@ -188,13 +188,6 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    0,
 	    "Alvarion Ltd.",
 	    "Alvarion Ltd. BreezeNET PC-DS.11b",	}
-	,
-	{
-	    PCMCIA_VENDOR_AMBICOM, PCMCIA_PRODUCT_AMBICOM_WL54CF,
-	    PCMCIA_CIS_AMBICOM_WL54CF,
-	    0,
-	    "AmbiCom Inc",
-	    "AmbiCom WL54-CF",	}
 	,
 	{
 	    PCMCIA_VENDOR_ANYCOM, PCMCIA_PRODUCT_ANYCOM_LSE041,
@@ -1359,13 +1352,6 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    "CNet CN40BC NE2000 Compatible",	}
 	,
 	{
-	    PCMCIA_VENDOR_UNKNOWN, PCMCIA_PRODUCT_COREGA_ETHER_CF_TD,
-	    PCMCIA_CIS_COREGA_ETHER_CF_TD,
-	    0,
-	    "Corega K.K.",
-	    "Corega Ether CF-TD LAN Card",	}
-	,
-	{
 	    PCMCIA_VENDOR_UNKNOWN, PCMCIA_PRODUCT_COREGA_ETHER_PCC_T,
 	    PCMCIA_CIS_COREGA_ETHER_PCC_T,
 	    0,
@@ -2293,14 +2279,6 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    NULL,
 	},
 	{
-	    PCMCIA_VENDOR_AMBICOM,
-	    PCMCIA_KNOWNDEV_NOPROD,
-	    PCMCIA_CIS_INVALID,
-	    0,
-	    "AmbiCom Inc",
-	    NULL,
-	},
-	{
 	    PCMCIA_VENDOR_BREEZECOM,
 	    PCMCIA_KNOWNDEV_NOPROD,
 	    PCMCIA_CIS_INVALID,
@@ -2466,6 +2444,14 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    PCMCIA_CIS_INVALID,
 	    0,
 	    "ACCTON",
+	    NULL,
+	},
+	{
+	    PCMCIA_VENDOR_AMBICOM,
+	    PCMCIA_KNOWNDEV_NOPROD,
+	    PCMCIA_CIS_INVALID,
+	    0,
+	    "AmbiCom Inc",
 	    NULL,
 	},
 	{

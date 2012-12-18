@@ -1,4 +1,4 @@
-/* $NetBSD: intr.h,v 1.70 2012/02/06 02:14:13 matt Exp $ */
+/* $NetBSD: intr.h,v 1.66 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001, 2002 The NetBSD Foundation, Inc.
@@ -86,7 +86,7 @@
 
 #define	SCB_NIOVECS	SCB_VECTOIDX(SCB_SIZE - SCB_IOVECBASE)
 
-struct scbvec {
+struct scbvec { 
 	void	(*scb_func)(void *, u_long);
 	void	*scb_arg;
 };
@@ -162,10 +162,12 @@ _splraise(int s)
 #define	ALPHA_IPI_SHOOTDOWN		(1UL << 2)
 #define	ALPHA_IPI_IMB			(1UL << 3)
 #define	ALPHA_IPI_AST			(1UL << 4)
-#define	ALPHA_IPI_PAUSE			(1UL << 5)
-#define	ALPHA_IPI_XCALL			(1UL << 6)
+#define	ALPHA_IPI_SYNCH_FPU		(1UL << 5)
+#define	ALPHA_IPI_DISCARD_FPU		(1UL << 6)
+#define	ALPHA_IPI_PAUSE			(1UL << 7)
+#define	ALPHA_IPI_PMAP_REACTIVATE	(1UL << 8)
 
-#define	ALPHA_NIPIS		7	/* must not exceed 64 */
+#define	ALPHA_NIPIS		9	/* must not exceed 64 */
 
 struct cpu_info;
 struct trapframe;

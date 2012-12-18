@@ -1,4 +1,4 @@
-.\"	$NetBSD: crunchgen.1,v 1.29 2012/04/08 22:00:38 wiz Exp $
+.\"	$NetBSD: crunchgen.1,v 1.27 2006/10/26 10:49:35 wiz Exp $
 .\"
 .\" Copyright (c) 1994 University of Maryland
 .\" All Rights Reserved.
@@ -33,13 +33,27 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl fOoq
+.Bk -words
 .Op Fl c Ar c-file-name
+.Ek
+.Bk -words
 .Op Fl D Ar src-root
+.Ek
+.Bk -words
 .Op Fl d Ar build-options
+.Ek
+.Bk -words
 .Op Fl e Ar exec-file-name
+.Ek
+.Bk -words
 .Op Fl L Ar lib-dir
+.Ek
+.Bk -words
 .Op Fl m Ar makefile-name
+.Ek
+.Bk -words
 .Op Fl v Ar var-spec
+.Ek
 .Ar conf-file
 .Sh DESCRIPTION
 A crunched binary is a program made up of many other programs linked
@@ -215,7 +229,7 @@ and if that is not found, the
 .Ar srcdir
 itself becomes the
 .Ar objdir .
-.Pp
+.br
 .Nm Note :
 This option only takes effect if the -o option to use existing object files is also
 specified.
@@ -279,7 +293,7 @@ If the environment variable
 .Ev MAKEOBJDIRPREFIX
 is set, the object directory will be prefixed with the path contained in this
 environment variable.
-.Pp
+.br
 .Nm Note :
 This variable is only used if the -o option to use existing object files is also
 specified.
@@ -290,7 +304,7 @@ is set, it is used as the name of the machine type, when accessing object
 directories of the form obj.MACHINE.
 If it is not set, it defaults to the machine type returned by
 .Xr uname 3 .
-.Pp
+.br
 .Nm Note :
 This option is only used if the -o option to use existing object files is also
 specified.

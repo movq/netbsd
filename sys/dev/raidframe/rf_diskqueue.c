@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_diskqueue.c,v 1.53 2011/05/05 06:04:09 mrg Exp $	*/
+/*	$NetBSD: rf_diskqueue.c,v 1.51.6.1 2009/05/01 02:18:29 snj Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -66,7 +66,7 @@
  ****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_diskqueue.c,v 1.53 2011/05/05 06:04:09 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_diskqueue.c,v 1.51.6.1 2009/05/01 02:18:29 snj Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -154,14 +154,6 @@ static const RF_DiskQueueSW_t diskqueuesw[] = {
 
 /* configures a single disk queue */
 
-static void
-rf_ShutdownDiskQueue(void *arg)
-{
-	RF_DiskQueue_t *diskqueue = arg;
-
-	rf_destroy_mutex2(diskqueue->mutex);
-}
-
 int
 rf_ConfigureDiskQueue(RF_Raid_t *raidPtr, RF_DiskQueue_t *diskqueue,
 		      RF_RowCol_t c, const RF_DiskQueueSW_t *p,
@@ -180,8 +172,8 @@ rf_ConfigureDiskQueue(RF_Raid_t *raidPtr, RF_DiskQueue_t *diskqueue,
 	diskqueue->flags = 0;
 	diskqueue->raidPtr = raidPtr;
 	diskqueue->rf_cinfo = &raidPtr->raid_cinfo[c];
-	rf_init_mutex2(diskqueue->mutex, IPL_VM);
-	rf_ShutdownCreate(listp, rf_ShutdownDiskQueue, diskqueue);
+	rf_mutex_init(&diskqueue->mutex);
+	diskqueue->cond = 0;
 	return (0);
 }
 

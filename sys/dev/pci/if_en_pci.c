@@ -1,6 +1,7 @@
-/*	$NetBSD: if_en_pci.c,v 1.36 2011/07/26 20:51:24 dyoung Exp $	*/
+/*	$NetBSD: if_en_pci.c,v 1.27 2008/04/10 19:13:36 cegger Exp $	*/
 
 /*
+ *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -12,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor and
+ *	Washington University.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,14 +36,14 @@
  *
  * i f _ e n _ p c i . c
  *
- * author: Chuck Cranor <chuck@netbsd>
+ * author: Chuck Cranor <chuck@ccrc.wustl.edu>
  * started: spring, 1996.
  *
  * PCI glue for the eni155p card.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_en_pci.c,v 1.36 2011/07/26 20:51:24 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_en_pci.c,v 1.27 2008/04/10 19:13:36 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,7 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_en_pci.c,v 1.36 2011/07/26 20:51:24 dyoung Exp $"
 
 struct en_pci_softc {
   /* bus independent stuff */
-  struct en_softc esc;
+  struct en_softc esc;		/* includes "device" structure */
 
   /* PCI bus glue */
   void *sc_ih;			/* interrupt handle */
@@ -85,7 +92,7 @@ static  void adp_get_macaddr(struct en_pci_softc *, struct pci_attach_args *);
  * (this is card specific)
  */
 
-#define PCI_CBMA PCI_BAR(0)
+#define PCI_CBMA        0x10
 
 /*
  * tonga (pci bridge).   ENI cards only!
@@ -112,14 +119,14 @@ static  void adp_get_macaddr(struct en_pci_softc *, struct pci_attach_args *);
  * prototypes
  */
 
-static	int en_pci_match(device_t, cfdata_t, void *);
-static	void en_pci_attach(device_t, device_t, void *);
+static	int en_pci_match(struct device *, struct cfdata *, void *);
+static	void en_pci_attach(struct device *, struct device *, void *);
 
 /*
  * PCI autoconfig attachments
  */
 
-CFATTACH_DECL_NEW(en_pci, sizeof(struct en_pci_softc),
+CFATTACH_DECL(en_pci, sizeof(struct en_pci_softc),
     en_pci_match, en_pci_attach, NULL, NULL);
 
 #if !defined(MIDWAY_ENIONLY)
@@ -130,7 +137,10 @@ static void adp_busreset(void *);
  * bus specific reset function [ADP only!]
  */
 
-static void adp_busreset(void *v)
+static void adp_busreset(v)
+
+void *v;
+
 {
   struct en_softc *sc = (struct en_softc *) v;
   u_int32_t dummy;
@@ -155,7 +165,8 @@ static void adp_busreset(void *v)
  */
 
 static int
-en_pci_match(device_t parent, cfdata_t match, void *aux)
+en_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
   struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -178,16 +189,14 @@ en_pci_match(device_t parent, cfdata_t match, void *aux)
 
 
 static void
-en_pci_attach(device_t parent, device_t self, void *aux)
+en_pci_attach(struct device *parent, struct device *self, void *aux)
 {
-  struct en_pci_softc *scp = device_private(self);
-  struct en_softc *sc = &scp->esc;
+  struct en_softc *sc = (void *)self;
+  struct en_pci_softc *scp = (void *)self;
   struct pci_attach_args *pa = aux;
   pci_intr_handle_t ih;
   const char *intrstr;
   int retval;
-
-  sc->sc_dev = self;
 
   aprint_naive(": ATM controller\n");
   aprint_normal("\n");
@@ -207,19 +216,19 @@ en_pci_attach(device_t parent, device_t self, void *aux)
    */
 
   if (pci_intr_map(pa, &ih)) {
-    aprint_error_dev(sc->sc_dev, "couldn't map interrupt\n");
+    aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
     return;
   }
   intrstr = pci_intr_string(scp->en_pc, ih);
   scp->sc_ih = pci_intr_establish(scp->en_pc, ih, IPL_NET, en_intr, sc);
   if (scp->sc_ih == NULL) {
-    aprint_error_dev(sc->sc_dev, "couldn't establish interrupt\n");
+    aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt\n");
     if (intrstr != NULL)
-      aprint_error(" at %s", intrstr);
-    aprint_error("\n");
+      aprint_normal(" at %s", intrstr);
+    aprint_normal("\n");
     return;
   }
-  aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+  aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
   sc->ipl = 1; /* XXX */
 
   /*
@@ -230,7 +239,7 @@ en_pci_attach(device_t parent, device_t self, void *aux)
 			  PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_32BIT, 0,
 			  &sc->en_memt, &sc->en_base, NULL, &sc->en_obmemsz);
   if (retval) {
-    aprint_error_dev(sc->sc_dev, "couldn't map memory\n");
+    aprint_error_dev(&sc->sc_dev, "couldn't map memory\n");
     return;
   }
 
@@ -308,7 +317,9 @@ adp_get_macaddr(struct en_pci_softc *scp, struct pci_attach_args *pa)
 #define EN_ESI         64
 
 static void
-eni_get_macaddr(struct en_pci_softc *scp, struct pci_attach_args *pa)
+eni_get_macaddr(scp, pa)
+  struct en_pci_softc *scp;
+  struct pci_attach_args *pa;
 {
   struct en_softc *sc = (struct en_softc *)scp;
   pci_chipset_tag_t id = scp->en_pc;

@@ -1,4 +1,4 @@
-/*	$NetBSD: server.c,v 1.31 2009/04/13 04:35:36 lukem Exp $	*/
+/*	$NetBSD: server.c,v 1.30 2006/12/18 15:14:42 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)server.c	8.1 (Berkeley) 6/9/93";
 #else
-__RCSID("$NetBSD: server.c,v 1.31 2009/04/13 04:35:36 lukem Exp $");
+__RCSID("$NetBSD: server.c,v 1.30 2006/12/18 15:14:42 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -564,12 +564,12 @@ dospecial:
 }
 
 static struct linkbuf *
-savelink(struct stat *st)
+savelink(struct stat *stp)
 {
 	struct linkbuf *lp;
 
 	for (lp = ihead; lp != NULL; lp = lp->nextp)
-		if (lp->inum == st->st_ino && lp->devnum == st->st_dev) {
+		if (lp->inum == stp->st_ino && lp->devnum == stp->st_dev) {
 			lp->count--;
 			return(lp);
 		}
@@ -579,9 +579,9 @@ savelink(struct stat *st)
 	else {
 		lp->nextp = ihead;
 		ihead = lp;
-		lp->inum = st->st_ino;
-		lp->devnum = st->st_dev;
-		lp->count = st->st_nlink - 1;
+		lp->inum = stp->st_ino;
+		lp->devnum = stp->st_dev;
+		lp->count = stp->st_nlink - 1;
  		if (Destcopy) {
  			/*
  			 * Change the starting directory of target
@@ -605,14 +605,14 @@ savelink(struct stat *st)
  * and 3 if comparing binaries to determine if out of date.
  */
 static int
-update(char *rname, int opts, struct stat *st)
+update(char *rname, int opts, struct stat *stp)
 {
 	char *cp, *s;
 	off_t size;
 	time_t mtime;
 
 	if (debug) 
-		printf("update(%s, %lx, %lx)\n", rname, (long)opts, (long)st);
+		printf("update(%s, %lx, %lx)\n", rname, (long)opts, (long)stp);
 
 	/*
 	 * Check to see if the file exists on the remote machine.
@@ -684,14 +684,14 @@ again:
 	 * File needs to be updated?
 	 */
 	if (opts & YOUNGER) {
-		if (st->st_mtime == mtime)
+		if (stp->st_mtime == mtime)
 			return(0);
-		if (st->st_mtime < mtime) {
+		if (stp->st_mtime < mtime) {
 			dolog(lfp, "Warning: %s: remote copy is newer\n",
 			    target);
 			return(0);
 		}
-	} else if (st->st_mtime == mtime && st->st_size == size)
+	} else if (stp->st_mtime == mtime && stp->st_size == size)
 		return(0);
 	return(2);
 }
@@ -802,7 +802,7 @@ recvf(char *cmd, int type)
 	*cp++ = '\0';
 
 	if (type == S_IFDIR) {
-		if (catname >= (int)sizeof(stp)) {
+		if (catname >= sizeof(stp)) {
 			error("%s:%s: too many directory levels\n",
 				host, target);
 			return;
@@ -1296,7 +1296,7 @@ clean(char *cp)
  * or an error message.
  */
 static void
-removeit(struct stat *st)
+removeit(struct stat *stp)
 {
 	DIR *d;
 	struct dirent *dp;
@@ -1305,7 +1305,7 @@ removeit(struct stat *st)
 	char *otp;
 	int len;
 
-	switch (st->st_mode & S_IFMT) {
+	switch (stp->st_mode & S_IFMT) {
 	case S_IFREG:
 	case S_IFLNK:
 		if (unlink(target) < 0)
@@ -1575,13 +1575,13 @@ cleanup(int signo __unused)
 static void
 note(const char *fmt, ...)
 {
-	static char nbuf[BUFSIZ];
+	static char buf[BUFSIZ];
 	va_list ap;
 
 	va_start(ap, fmt);
-	(void)vsnprintf(nbuf, sizeof(nbuf), fmt, ap);
+	(void)vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
-	comment(nbuf);
+	comment(buf);
 }
 
 static void

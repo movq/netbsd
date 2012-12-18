@@ -1,4 +1,4 @@
-/*	$NetBSD: vi.c,v 1.12 2011/06/22 03:56:17 mrg Exp $	*/
+/*	$NetBSD: vi.c,v 1.10 2005/06/26 19:09:00 christos Exp $	*/
 
 /*
  *	vi command editing
@@ -9,7 +9,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: vi.c,v 1.12 2011/06/22 03:56:17 mrg Exp $");
+__RCSID("$NetBSD: vi.c,v 1.10 2005/06/26 19:09:00 christos Exp $");
 #endif
 
 #include "config.h"
@@ -244,7 +244,7 @@ x_vi(buf, len)
 
 	x_putc('\r'); x_putc('\n'); x_flush();
 
-	if (c == -1 || len <= (size_t)es->linelen)
+	if (c == -1 || len <= es->linelen)
 		return -1;
 
 	if (es->cbuf != buf)
@@ -1763,7 +1763,7 @@ redraw_line(newlinex)
 	int newlinex;
 {
 	(void) memset(wbuf[win], ' ', wbuf_len);
-	if (newlinex) {
+	if (newline) {
 		x_putc('\r');
 		x_putc('\n');
 	}

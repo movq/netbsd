@@ -1,4 +1,4 @@
-/* $NetBSD: sio.c,v 1.11 2011/07/28 10:01:44 tsutsui Exp $ */
+/* $NetBSD: sio.c,v 1.5 2008/04/28 20:23:26 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: sio.c,v 1.11 2011/07/28 10:01:44 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sio.c,v 1.5 2008/04/28 20:23:26 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,20 +43,22 @@ __KERNEL_RCSID(0, "$NetBSD: sio.c,v 1.11 2011/07/28 10:01:44 tsutsui Exp $");
 #include <luna68k/luna68k/isr.h>
 #include <luna68k/dev/siovar.h>
 
-#include "ioconf.h"
+static int  sio_match __P((struct device *, struct cfdata *, void *));
+static void sio_attach __P((struct device *, struct device *, void *));
+static int  sio_print __P((void *, const char *));
 
-static int  sio_match(device_t, cfdata_t, void *);
-static void sio_attach(device_t, device_t, void *);
-static int  sio_print(void *, const char *);
-
-CFATTACH_DECL_NEW(sio, sizeof(struct sio_softc),
+CFATTACH_DECL(sio, sizeof(struct sio_softc),
     sio_match, sio_attach, NULL, NULL);
+extern struct cfdriver sio_cd;
 
-static void nullintr(int);
-static int xsiointr(void *);
+static void nullintr __P((int));
+static int xsiointr __P((void *));
 
 static int
-sio_match(device_t parent, cfdata_t cf, void *aux)
+sio_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -68,17 +70,18 @@ sio_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-sio_attach(device_t parent, device_t self, void *aux)
+sio_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct sio_softc *sc = device_private(self);
+	struct sio_softc *sc = (void *)self;
 	struct mainbus_attach_args *ma = aux;
 	struct sio_attach_args sio_args;
 	int channel;
 	extern int sysconsole; /* console: 0 for ttya, 1 for desktop */
 
-	aprint_normal(": uPD7201A\n");
+	printf(": 7201a\n");
 
-	sc->scp_dev = self;
 	sc->scp_ctl = (void *)ma->ma_addr;
 	sc->scp_intr[0] = sc->scp_intr[1] = nullintr;
 	for (channel = 0; channel < 2; channel++) {
@@ -91,7 +94,9 @@ sio_attach(device_t parent, device_t self, void *aux)
 }
 
 static int
-sio_print(void *aux, const char *name)
+sio_print(aux, name)
+	void *aux;
+	const char *name;
 {
 	struct sio_attach_args *args = aux;
 
@@ -105,7 +110,8 @@ sio_print(void *aux, const char *name)
 }
 
 static int
-xsiointr(void *arg)
+xsiointr(arg)
+	void *arg;
 {
 	struct sio_softc *sc = arg;
 
@@ -114,7 +120,4 @@ xsiointr(void *arg)
 	return 1;
 }
 
-static void
-nullintr(int v)
-{
-}
+static void nullintr(v) int v; { }

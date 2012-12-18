@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_cc.c,v 1.39 2009/03/18 16:00:09 cegger Exp $ */
+/*	$NetBSD: ite_cc.c,v 1.38 2007/03/04 05:59:21 christos Exp $ */
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -33,7 +33,7 @@
 #include "opt_amigaccgrf.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite_cc.c,v 1.39 2009/03/18 16:00:09 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite_cc.c,v 1.38 2007/03/04 05:59:21 christos Exp $");
 
 #include "grfcc.h"
 #if NGRFCC > 0
@@ -700,7 +700,7 @@ clear8(struct ite_softc *ip, int sy, int sx, int h, int w)
 	  int i;
 	  u_char *ptr = cci->row_ptr[sy];
 	  for (i=0; i < ip->ftheight; i++) {
-            memset(ptr, 0, bm->bytes_per_row);
+            bzero(ptr, bm->bytes_per_row);
             ptr += bm->bytes_per_row + bm->row_mod;			/* don't get any smart
                                                    ideas, because this is for
                                                    interleaved bitmaps */

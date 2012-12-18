@@ -1,4 +1,4 @@
-/*	$NetBSD: job.h,v 1.40 2010/09/13 15:36:57 sjg Exp $	*/
+/*	$NetBSD: job.h,v 1.37 2008/02/15 21:29:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -80,7 +80,7 @@
 #ifndef _JOB_H_
 #define _JOB_H_
 
-#define TMPPAT	"makeXXXXXX"		/* relative to tmpdir */
+#define TMPPAT	"/tmp/makeXXXXXX"
 
 #ifdef USE_SELECT
 /*
@@ -118,7 +118,7 @@ emul_poll(struct pollfd *fd, int nfd, int timeout);
  *	1) The process id of the child shell
  *	2) The graph node describing the target being made by this job
  *	3) A LstNode for the first command to be saved after the job
- *	   completes. This is NULL if there was no "..." in the job's
+ *	   completes. This is NILLNODE if there was no "..." in the job's
  *	   commands.
  *	4) An FILE* for writing out the commands. This is only
  *	   used before the job is actually started.
@@ -134,11 +134,6 @@ emul_poll(struct pollfd *fd, int nfd, int timeout);
  * traversal of the dependency graph.
  */
 struct pollfd;
-
-
-#ifdef USE_META
-# include "meta.h"
-#endif
 
 #define JOB_BUFSIZE	1024
 typedef struct Job {
@@ -170,10 +165,6 @@ typedef struct Job {
 				/* Buffer for storing the output of the
 				 * job, line by line */
     int   	curPos;	/* Current position in op_outBuf */
-
-#ifdef USE_META
-    struct BuildMon	bm;
-#endif
 } Job;
 
 #define inPipe jobPipe[0]

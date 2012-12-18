@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_subr.c,v 1.16 2012/11/30 23:24:21 nakayama Exp $	*/
+/*	$NetBSD: smbfs_subr.c,v 1.14 2007/06/30 09:37:57 pooka Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_subr.c,v 1.16 2012/11/30 23:24:21 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_subr.c,v 1.14 2007/06/30 09:37:57 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -145,7 +145,7 @@ smb_time_local2NT(struct timespec *tsp, int tzoff, int64_t *nsec)
 	u_long seconds;
 
 	smb_time_local2server(tsp, 0, &seconds);
-	*nsec = ((int64_t)seconds + DIFF1970TO1601) * (int64_t)10000000;
+	*nsec = (((int64_t)(seconds) & ~1) + DIFF1970TO1601) * (int64_t)10000000;
 }
 
 void
@@ -268,11 +268,11 @@ smb_fphelp(struct mbchain *mbp, struct smb_vc *vcp, struct smbnode *np,
 	struct smbnode **npp = smp->sm_npstack;
 	int i, error = 0;
 
-/*	mutex_enter(&smp->sm_npslock);*/
+/*	simple_lock(&smp->sm_npslock);*/
 	i = 0;
 	while (np->n_parent) {
 		if (i++ == SMBFS_MAXPATHCOMP) {
-/*			mutex_exit(&smp->sm_npslock);*/
+/*			simple_unlock(&smp->sm_npslock);*/
 			return ENAMETOOLONG;
 		}
 		*npp++ = np;
@@ -287,7 +287,7 @@ smb_fphelp(struct mbchain *mbp, struct smb_vc *vcp, struct smbnode *np,
 		if (error)
 			break;
 	}
-/*	mutex_exit(&smp->sm_npslock);*/
+/*	simple_unlock(&smp->sm_npslock);*/
 	return error;
 }
 

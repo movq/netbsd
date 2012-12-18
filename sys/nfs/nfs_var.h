@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_var.h,v 1.90 2010/03/02 23:19:09 pooka Exp $	*/
+/*	$NetBSD: nfs_var.h,v 1.82 2008/10/22 12:29:35 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -36,6 +36,9 @@
 #ifdef _KERNEL
 #include <sys/mallocvar.h>
 #include <sys/pool.h>
+
+MALLOC_DECLARE(M_NFSD);
+MALLOC_DECLARE(M_NFSDIROFF);
 
 struct vnode;
 struct uio;
@@ -77,7 +80,6 @@ int nfs_doio(struct buf *);
 
 /* nfs_kq.c */
 void nfs_kqinit(void);
-void nfs_kqfini(void);
 
 /* nfs_node.c */
 void nfs_rbtinit(struct nfsmount *);
@@ -176,14 +178,11 @@ int nfs_rephead(int, struct nfsrv_descript *, struct nfssvc_sock *,
 	int, int, u_quad_t *, struct mbuf **, struct mbuf **, char **);
 void nfs_timer(void *);
 void nfs_timer_init(void);
-void nfs_timer_fini(void);
 void nfs_timer_start(void);
-void nfs_timer_srvinit(bool (*)(void));
-void nfs_timer_srvfini(void);
 int nfs_sigintr(struct nfsmount *, struct nfsreq *, struct lwp *);
 int nfs_getreq(struct nfsrv_descript *, struct nfsd *, int);
 int nfs_msg(struct lwp *, const char *, const char *);
-void nfsrv_soupcall(struct socket *, void *, int, int);
+void nfsrv_soupcall(struct socket *, void *, int);
 void nfsrv_rcv(struct nfssvc_sock *);
 int nfsrv_getstream(struct nfssvc_sock *, int);
 int nfsrv_dorec(struct nfssvc_sock *, struct nfsd *, struct nfsrv_descript **,
@@ -194,49 +193,15 @@ void nfsdsock_unlock(struct nfssvc_sock *);
 int nfsdsock_drain(struct nfssvc_sock *);
 int nfsdsock_sendreply(struct nfssvc_sock *, struct nfsrv_descript *);
 void nfsdreq_init(void);
-void nfsdreq_fini(void);
 struct nfsrv_descript *nfsdreq_alloc(void);
 void nfsdreq_free(struct nfsrv_descript *);
-bool nfsrv_timer(void);
-int nfs_rcvlock(struct nfsmount *, struct nfsreq *);
-void nfs_rcvunlock(struct nfsmount *);
 
 void nfsdsock_setbits(struct nfssvc_sock *, int);
 void nfsdsock_clearbits(struct nfssvc_sock *, int);
 bool nfsdsock_testbits(struct nfssvc_sock *, int);
 
-/*
- * Estimate rto for an nfs rpc sent via. an unreliable datagram.
- * Use the mean and mean deviation of rtt for the appropriate type of rpc
- * for the frequent rpcs and a default for the others.
- * The justification for doing "other" this way is that these rpcs
- * happen so infrequently that timer est. would probably be stale.
- * Also, since many of these rpcs are
- * non-idempotent, a conservative timeout is desired.
- * getattr, lookup - A+2D
- * read, write     - A+4D
- * other           - nm_timeo
- */
-#define	NFS_RTO(n, t) \
-	((t) == 0 ? (n)->nm_timeo : \
-	 ((t) < 3 ? \
-	  (((((n)->nm_srtt[t-1] + 3) >> 2) + (n)->nm_sdrtt[t-1] + 1) >> 1) : \
-	  ((((n)->nm_srtt[t-1] + 7) >> 3) + (n)->nm_sdrtt[t-1] + 1)))
-#define	NFS_SRTT(r)	(r)->r_nmp->nm_srtt[nfs_proct[(r)->r_procnum] - 1]
-#define	NFS_SDRTT(r)	(r)->r_nmp->nm_sdrtt[nfs_proct[(r)->r_procnum] - 1]
-
-extern int nfsrtton;
-extern struct nfsrtt nfsrtt;
-extern const int nfs_proct[];
-
-extern const struct timeval nfs_err_interval;
-extern struct timeval nfs_reply_last_err_time;
-extern struct timeval nfs_timer_last_err_time;
-
-
 /* nfs_srvcache.c */
 void nfsrv_initcache(void);
-void nfsrv_finicache(void);
 int nfsrv_getcache(struct nfsrv_descript *, struct nfssvc_sock *,
 	struct mbuf **);
 void nfsrv_updatecache(struct nfsrv_descript *, int, struct mbuf *);
@@ -261,8 +226,7 @@ void nfs_putdircache(struct nfsnode *, struct nfsdircache *);
 void nfs_invaldircache(struct vnode *, int);
 #define	NFS_INVALDIRCACHE_FORCE		1
 #define	NFS_INVALDIRCACHE_KEEPEOF	2
-void nfs_init(void);
-void nfs_fini(void);
+void nfs_init __P((void));
 int nfsm_loadattrcache(struct vnode **, struct mbuf **, char **,
 	struct vattr *, int flags);
 int nfs_loadattrcache(struct vnode **, struct nfs_fattr *, struct vattr *,
@@ -282,7 +246,7 @@ void nfsm_srvpostopattr(struct nfsrv_descript *, int, struct vattr *,
 void nfsm_srvfattr(struct nfsrv_descript *, struct vattr *, struct nfs_fattr *);
 int nfsrv_fhtovp(nfsrvfh_t *, int, struct vnode **, kauth_cred_t,
 	struct nfssvc_sock *, struct mbuf *, int *, int, int);
-int nfs_ispublicfh(const nfsrvfh_t *);
+int nfs_ispublicfh __P((const nfsrvfh_t *));
 int netaddr_match(int, union nethostaddr *, struct mbuf *);
 time_t nfs_attrtimeo(struct nfsmount *, struct nfsnode *);
 
@@ -308,16 +272,6 @@ int nfsrv_composefh(struct vnode *, nfsrvfh_t *, bool);
 int nfsrv_comparefh(const nfsrvfh_t *, const nfsrvfh_t *);
 void nfsrv_copyfh(nfsrvfh_t *, const nfsrvfh_t *);
 
-extern const enum vtype nv2tov_type[8];
-extern const enum vtype nv3tov_type[8];
-
-extern u_int32_t rpc_reply, rpc_msgdenied, rpc_mismatch, rpc_vers,
-        rpc_auth_unix, rpc_msgaccepted, rpc_call, rpc_autherr,
-	rpc_auth_kerb;
-extern u_int32_t nfs_prog;
-extern const int nfsv3_procid[NFS_NPROCS];
-extern int nfs_ticks;
-
 /* nfs_syscalls.c */
 struct sys_getfh_args;
 struct sys_nfssvc_args;
@@ -328,9 +282,7 @@ int nfssvc_nfsd(struct nfsd_srvargs *, void *, struct lwp *);
 void nfsrv_zapsock(struct nfssvc_sock *);
 void nfsrv_slpderef(struct nfssvc_sock *);
 void nfsrv_init(int);
-void nfsrv_fini(void);
 void nfs_iodinit(void);
-void nfs_iodfini(void);
 int nfs_set_niothreads(int);
 int nfs_getauth(struct nfsmount *, struct nfsreq *, kauth_cred_t, char **,
 	int *, char *, int *, NFSKERBKEY_T);
@@ -341,12 +293,13 @@ int nfs_savenickauth(struct nfsmount *, kauth_cred_t, int, NFSKERBKEY_T,
 
 /* nfs_export.c */
 extern struct nfs_public nfs_pub;
-int mountd_set_exports_list(const struct mountd_exports_list *, struct lwp *,
-    struct mount *);
+int mountd_set_exports_list(const struct mountd_exports_list *, struct lwp *);
 int netexport_check(const fsid_t *, struct mbuf *, struct mount **, int *,
     kauth_cred_t *);
 void netexport_rdlock(void);
 void netexport_rdunlock(void);
-void netexport_init(void);
-void netexport_fini(void);
+#ifdef COMPAT_30
+int nfs_update_exports_30(struct mount *, const char *,
+    struct mnt_export_args30 *, struct lwp *);
+#endif
 #endif /* _KERNEL */

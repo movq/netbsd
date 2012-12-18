@@ -1,4 +1,4 @@
-/*	$NetBSD: mcontext.h,v 1.13 2012/09/12 02:00:54 manu Exp $	*/
+/*	$NetBSD: mcontext.h,v 1.10 2008/10/26 06:58:02 mrg Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,7 +34,6 @@
 
 #define _UC_SETSTACK	0x00010000
 #define _UC_CLRSTACK	0x00020000
-#define _UC_TLSBASE	0x00080000
 
 /*
  * Layout of mcontext_t according the System V Application Binary Interface,
@@ -160,15 +159,5 @@ do {									\
 	(uc)->uc_mcontext.__gregs[_REG_PC] = (pc);			\
 	(uc)->uc_mcontext.__gregs[_REG_nPC] = (pc) + 4;			\
 } while (/*CONSTCOND*/0)
-
-static __inline void *
-__lwp_getprivate_fast(void)
-{
-	register void *__tmp;
-
-	__asm volatile("mov %%g7, %0" : "=r" (__tmp));
-
-	return __tmp;
-}
 
 #endif	/* !_SPARC_MCONTEXT_H_ */

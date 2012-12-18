@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.c,v 1.9 2009/03/14 21:04:12 dsl Exp $	*/
+/*	$NetBSD: bootxx.c,v 1.6 2008/04/28 20:23:29 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -68,10 +68,10 @@
 #include <lib/libsa/stand.h>
 #include <machine/prom.h>
 
-typedef void (*entrypt)(int, char **, int, const void *);
+typedef void (*entrypt) __P((int, char **, int, const void *));
 
-int main(int, char **);
-entrypt loadfile(char *path, char *name);
+int main __P((int, char **));
+entrypt loadfile __P((char *path, char *name));
 
 /*
  * This gets arguments from the PROM, calls other routines to open
@@ -79,11 +79,13 @@ entrypt loadfile(char *path, char *name);
  * execution to that program.
  */
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	entrypt entry;
 	char *cp;
-	extern void prom_init(void);
+	extern void prom_init __P((void));
 
 	prom_init();
 
@@ -113,7 +115,8 @@ main(int argc, char **argv)
  * Open 'filename', read in program and return the entry point or -1 if error.
  */
 entrypt
-loadfile(char *path, char *name)
+loadfile(path, name)
+	char *path, *name;
 {
 	int fd, i;
 	char *src, *dst, bootfname[64];

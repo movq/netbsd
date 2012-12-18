@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_machdep.c,v 1.38 2011/07/17 20:54:48 joerg Exp $	*/
+/*	$NetBSD: ofw_machdep.c,v 1.31 2006/10/03 21:06:58 mrg Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -34,7 +34,7 @@
 #include "opt_multiprocessor.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_machdep.c,v 1.38 2011/07/17 20:54:48 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_machdep.c,v 1.31 2006/10/03 21:06:58 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -54,6 +54,12 @@ __KERNEL_RCSID(0, "$NetBSD: ofw_machdep.c,v 1.38 2011/07/17 20:54:48 joerg Exp $
 
 #include <dev/ofw/ofw_pci.h>
 
+/*
+ * Note that stdarg.h and the ANSI style va_start macro is used for both
+ * ANSI and traditional C compilers.
+ */
+#include <machine/stdarg.h>
+
 #include <machine/sparc64.h>
 
 static u_int mmuh = -1, memh = -1;
@@ -62,7 +68,7 @@ static u_int get_mmu_handle(void);
 static u_int get_memory_handle(void);
 
 static u_int 
-get_mmu_handle(void)
+get_mmu_handle()
 {
 	u_int chosen;
 
@@ -78,12 +84,12 @@ get_mmu_handle(void)
 }
 
 static u_int 
-get_memory_handle(void)
+get_memory_handle()
 {
 	u_int chosen;
 
 	if ((chosen = OF_finddevice("/chosen")) == -1) {
-		prom_printf("get_memory_handle: cannot get /chosen\r\n");
+		prom_printf("get_mmu_handle: cannot get /chosen\r\n");
 		return -1;
 	}
 	if (OF_getprop(chosen, "memory", &memh, sizeof(memh)) == -1) {
@@ -98,7 +104,8 @@ get_memory_handle(void)
  * Point prom to our trap table.  This stops the prom from mapping us.
  */
 int
-prom_set_trap_table(vaddr_t tba)
+prom_set_trap_table(tba)
+	vaddr_t tba;
 {
 	struct {
 		cell_t name;
@@ -120,7 +127,8 @@ prom_set_trap_table(vaddr_t tba)
  * Only works while the prom is actively mapping us.
  */
 paddr_t
-prom_vtop(vaddr_t vaddr)
+prom_vtop(vaddr)
+	vaddr_t vaddr;
 {
 	struct {
 		cell_t name;
@@ -146,7 +154,7 @@ prom_vtop(vaddr_t vaddr)
 	args.method = ADR2CELL(&"translate");
 	args.ihandle = HDL2CELL(mmuh);
 	args.vaddr = ADR2CELL(vaddr);
-	if (openfirmware(&args) == -1)
+	if(openfirmware(&args) == -1)
 		return -1;
 #if 0
 	prom_printf("Called \"translate\", mmuh=%x, vaddr=%x, status=%x %x,\r\n retaddr=%x %x, mode=%x %x, phys_hi=%x %x, phys_lo=%x %x\r\n",
@@ -154,7 +162,7 @@ prom_vtop(vaddr_t vaddr)
 		    (int)(args.mode>>32), (int)args.mode, (int)(args.phys_hi>>32), (int)args.phys_hi,
 		    (int)(args.phys_lo>>32), (int)args.phys_lo);
 #endif
-	return (paddr_t)CELL2HDQ(args.phys_hi, args.phys_lo);
+	return (paddr_t)((((paddr_t)args.phys_hi)<<32)|(uint32_t)args.phys_lo); 
 }
 
 /* 
@@ -163,7 +171,9 @@ prom_vtop(vaddr_t vaddr)
  * Only works while the prom is actively mapping us.
  */
 vaddr_t
-prom_claim_virt(vaddr_t vaddr, int len)
+prom_claim_virt(vaddr, len)
+	vaddr_t vaddr;
+	int len;
 {
 	struct {
 		cell_t name;
@@ -192,7 +202,7 @@ prom_claim_virt(vaddr_t vaddr, int len)
 	args.vaddr = ADR2CELL(vaddr);
 	if (openfirmware(&args) == -1)
 		return -1;
-	return (vaddr_t)args.retaddr;
+	return (paddr_t)args.retaddr;
 }
 
 /* 
@@ -201,8 +211,11 @@ prom_claim_virt(vaddr_t vaddr, int len)
  * Only works while the prom is actively mapping us.
  */
 vaddr_t
-prom_alloc_virt(int len, int align)
+prom_alloc_virt(len, align)
+	int len;
+	int align;
 {
+	static int retaddr;
 	struct {
 		cell_t name;
 		cell_t nargs;
@@ -226,9 +239,10 @@ prom_alloc_virt(int len, int align)
 	args.ihandle = HDL2CELL(mmuh);
 	args.align = align;
 	args.len = len;
+	args.retaddr = ADR2CELL(&retaddr);
 	if (openfirmware(&args) != 0)
 		return -1;
-	return (vaddr_t)args.retaddr;
+	return retaddr; /* Kluge till we go 64-bit */
 }
 
 /* 
@@ -237,7 +251,9 @@ prom_alloc_virt(int len, int align)
  * Only works while the prom is actively mapping us.
  */
 int
-prom_free_virt(vaddr_t vaddr, int len)
+prom_free_virt(vaddr, len)
+	vaddr_t vaddr;
+	int len;
 {
 	struct {
 		cell_t name;
@@ -270,7 +286,9 @@ prom_free_virt(vaddr_t vaddr, int len)
  * Only works while the prom is actively mapping us.
  */
 int
-prom_unmap_virt(vaddr_t vaddr, int len)
+prom_unmap_virt(vaddr, len)
+	vaddr_t vaddr;
+	int len;
 {
 	struct {
 		cell_t name;
@@ -302,7 +320,11 @@ prom_unmap_virt(vaddr_t vaddr, int len)
  * Only works while the prom is actively mapping us.
  */
 int
-prom_map_phys(paddr_t paddr, off_t size, vaddr_t vaddr, int mode)
+prom_map_phys(paddr, size, vaddr, mode)
+	paddr_t paddr;
+	off_t size;
+	vaddr_t vaddr;
+	int mode;
 {
 	struct {
 		cell_t name;
@@ -331,14 +353,14 @@ prom_map_phys(paddr_t paddr, off_t size, vaddr_t vaddr, int mode)
 	args.mode = mode;
 	args.size = size;
 	args.vaddr = ADR2CELL(vaddr);
-	args.phys_hi = HDQ2CELL_HI(paddr);
-	args.phys_lo = HDQ2CELL_LO(paddr);
+	args.phys_hi = HDL2CELL(paddr>>32); 
+	args.phys_lo = HDL2CELL(paddr);
 
 	if (openfirmware(&args) == -1)
 		return -1;
 	if (args.status)
 		return -1;
-	return (int)args.retaddr;
+	return args.retaddr;
 }
 
 
@@ -348,7 +370,9 @@ prom_map_phys(paddr_t paddr, off_t size, vaddr_t vaddr, int mode)
  * Only works while the prom is actively mapping us.
  */
 paddr_t
-prom_alloc_phys(int len, int align)
+prom_alloc_phys(len, align)
+	int len;
+	int align;
 {
 	struct {
 		cell_t name;
@@ -376,7 +400,7 @@ prom_alloc_phys(int len, int align)
 	args.len = len;
 	if (openfirmware(&args) != 0)
 		return -1;
-	return (paddr_t)CELL2HDQ(args.phys_hi, args.phys_lo);
+	return (paddr_t)((((paddr_t)args.phys_hi)<<32)|(uint32_t)args.phys_lo);
 }
 
 /* 
@@ -385,7 +409,9 @@ prom_alloc_phys(int len, int align)
  * Only works while the prom is actively mapping us.
  */
 paddr_t
-prom_claim_phys(paddr_t phys, int len)
+prom_claim_phys(phys, len)
+	paddr_t phys;
+	int len;
 {
 	struct {
 		cell_t name;
@@ -413,11 +439,11 @@ prom_claim_phys(paddr_t phys, int len)
 	args.ihandle = HDL2CELL(memh);
 	args.align = 0;
 	args.len = len;
-	args.phys_hi = HDQ2CELL_HI(phys);
-	args.phys_lo = HDQ2CELL_LO(phys);
+	args.phys_hi = HDL2CELL(phys>>32);
+	args.phys_lo = HDL2CELL(phys);
 	if (openfirmware(&args) != 0)
 		return -1;
-	return (paddr_t)CELL2HDQ(args.rphys_hi, args.rphys_lo);
+	return (paddr_t)((((paddr_t)args.rphys_hi)<<32)|(uint32_t)args.rphys_lo);
 }
 
 /* 
@@ -426,7 +452,9 @@ prom_claim_phys(paddr_t phys, int len)
  * Only works while the prom is actively mapping us.
  */
 int
-prom_free_phys(paddr_t phys, int len)
+prom_free_phys(phys, len)
+	paddr_t phys;
+	int len;
 {
 	struct {
 		cell_t name;
@@ -449,8 +477,8 @@ prom_free_phys(paddr_t phys, int len)
 	args.method = ADR2CELL(&"release");
 	args.ihandle = HDL2CELL(memh);
 	args.len = len;
-	args.phys_hi = HDQ2CELL_HI(phys);
-	args.phys_lo = HDQ2CELL_LO(phys);
+	args.phys_hi = HDL2CELL(phys>>32);
+	args.phys_lo = HDL2CELL(phys);
 	return openfirmware(&args);
 }
 
@@ -460,7 +488,9 @@ prom_free_phys(paddr_t phys, int len)
  * Only works while the prom is actively mapping us.
  */
 paddr_t
-prom_get_msgbuf(int len, int align)
+prom_get_msgbuf(len, align)
+	int len;
+	int align;
 {
 	struct {
 		cell_t name;
@@ -509,7 +539,8 @@ prom_get_msgbuf(int len, int align)
 			args.align = align;
 			args.status = -1;
 			if (openfirmware(&args) == 0 && args.status == 0) {
-				return (paddr_t)CELL2HDQ(args.phys_hi, args.phys_lo);
+				return (((paddr_t)args.phys_hi<<32)|
+					(uint32_t)args.phys_lo);
 			} else prom_printf("prom_get_msgbuf: SUNW,retain failed\r\n");
 		} else prom_printf("prom_get_msgbuf: test-method failed\r\n");
 	} else prom_printf("prom_get_msgbuf: test failed\r\n");
@@ -569,41 +600,7 @@ prom_stopself(void)
 	args.nreturns = 0;
 
 	openfirmware_exit(&args);
-	panic("prom_stopself: failed.");
-}
-
-bool
-prom_has_stopself(void)
-{
-	return OF_test("SUNW,stop-self") == 0;
-}
-
-int
-prom_stop_other(u_int id)
-{
-	static struct {
-		cell_t  name;
-		cell_t  nargs;
-		cell_t  nreturns;
-		cell_t	cpuid;
-		cell_t	result;
-	} args;
-
-	args.name = ADR2CELL(&"SUNW,stop-cpu-by-cpuid");
-	args.nargs = 1;
-	args.nreturns = 1;
-	args.cpuid = id;
-	args.result = 0;
-
-	if (openfirmware(&args) == -1)
-		return -1;
-	return args.result;
-}
-
-bool
-prom_has_stop_other(void)
-{
-	return OF_test("SUNW,stop-cpu-by-cpuid") == 0;
+	panic("sun4u_stopself: failed.");
 }
 #endif
 
@@ -687,11 +684,8 @@ OF_mapintr(int node, int *interrupt, int validlen, int buflen)
 {
 	int i, len;
 	int address_cells, size_cells, interrupt_cells, interrupt_map_len;
-	int static_interrupt_map[100];
+	int interrupt_map[100];
 	int interrupt_map_mask[10];
-	int *interrupt_map = &static_interrupt_map[0];
-	int maplen = sizeof static_interrupt_map;
-	int *free_map = NULL;
 	int reg[10];
 	char dev_type[32];
 	int phc_node;
@@ -733,23 +727,19 @@ OF_mapintr(int node, int *interrupt, int validlen, int buflen)
 		}
 #endif
 
- retry_map:
 		if ((interrupt_map_len = OF_getprop(node,
-			"interrupt-map", interrupt_map, maplen)) <= 0) {
+			"interrupt-map", &interrupt_map,
+			sizeof(interrupt_map))) <= 0) {
 
 			/* Swizzle interrupt if this is a PCI bridge. */
 			if (((len = OF_getprop(node, "device_type", &dev_type,
 					      sizeof(dev_type))) > 0) &&
 			    !strcmp(dev_type, "pci") &&
 			    (node != phc_node)) {
-#ifdef DEBUG
-				int ointerrupt = *interrupt;
-#endif
-
 				*interrupt = ((*interrupt +
 				    OFW_PCI_PHYS_HI_DEVICE(reg[0]) - 1) & 3) + 1;
-				DPRINTF(("OF_mapintr: interrupt %x -> %x, reg[0] %x\n",
-					 ointerrupt, *interrupt, reg[0]));
+				DPRINTF(("OF_mapintr: interrupt %x, reg[0] %x\n",
+					 *interrupt, reg[0]));
 			}
 
 			/* Get reg for next level compare. */
@@ -757,34 +747,20 @@ OF_mapintr(int node, int *interrupt, int validlen, int buflen)
 			OF_getprop(node, "reg", &reg, sizeof(reg));
 			continue;
 		}
-		if (interrupt_map_len > maplen) {
-			DPRINTF(("interrupt_map_len %d > maplen %d, "
-				 "allocating\n", interrupt_map_len, maplen));
-			KASSERT(!free_map);
-			free_map = malloc(interrupt_map_len, M_DEVBUF,
-					  M_NOWAIT);
-			if (!free_map) {
-				interrupt_map_len = sizeof static_interrupt_map;
-			} else {
-				interrupt_map = free_map;
-				maplen = interrupt_map_len;
-				goto retry_map;
-			}
-		}
 		/* Convert from bytes to cells. */
 		interrupt_map_len = interrupt_map_len/sizeof(int);
-		if ((len = (OF_searchprop(node, "#address-cells",
-			&address_cells, sizeof(address_cells)))) <= 0) {
+		if ((len = (OF_searchprop(node, "#address-cells", &address_cells,
+			sizeof(address_cells)))) <= 0) {
 			/* How should I know. */
 			address_cells = 2;
 		}
-		DPRINTF(("#address-cells = %d len %d ", address_cells, len));
+		DPRINTF(("#address-cells = %d len %d", address_cells, len));
 		if ((len = OF_searchprop(node, "#size-cells", &size_cells,
 			sizeof(size_cells))) <= 0) {
 			/* How should I know. */
 			size_cells = 2;
 		}
-		DPRINTF(("#size-cells = %d len %d ", size_cells, len));
+		DPRINTF(("#size-cells = %d len %d", size_cells, len));
 		if ((len = OF_getprop(node, "#interrupt-cells", &interrupt_cells,
 			sizeof(interrupt_cells))) <= 0) {
 			/* How should I know. */
@@ -812,18 +788,18 @@ OF_mapintr(int node, int *interrupt, int validlen, int buflen)
 #endif
 
 		/* finally we can attempt the compare */
-		i = 0;
-		while (i < interrupt_map_len) {
+		i=0;
+		while ( i < interrupt_map_len ) {
 			int pintr_cells;
 			int *imap = &interrupt_map[i];
 			int *parent = &imap[address_cells + interrupt_cells];
 
 #ifdef DEBUG
 			DPRINTF(("\ninterrupt-map addr "));
-			for (len = 0; len < address_cells; len++)
+			for (len=0; len<address_cells; len++)
 				DPRINTF(("%x.", imap[len]));
 			DPRINTF((" intr "));
-			for (; len < (address_cells+interrupt_cells); len++)
+			for (; len<(address_cells+interrupt_cells); len++)
 				DPRINTF(("%x.", imap[len]));
 			DPRINTF(("\nnode %x vs parent %x\n",
 				imap[len], *parent));
@@ -846,18 +822,15 @@ OF_mapintr(int node, int *interrupt, int validlen, int buflen)
 				/* Bingo! */
 				if (buflen < pintr_cells) {
 					/* Error -- ran out of storage. */
-					if (free_map)
-						free(free_map, M_DEVBUF);
 					return (-1);
 				}
 				parent++;
 #ifdef DEBUG
 				DPRINTF(("Match! using "));
-				for (len = 0; len < pintr_cells; len++)
+				for (len=0; len<pintr_cells; len++)
 					DPRINTF(("%x.", parent[len]));
-				DPRINTF(("\n"));
 #endif
-				for (i = 0; i < pintr_cells; i++)
+				for (i=0; i<pintr_cells; i++)
 					interrupt[i] = parent[i];
 				rc = validlen = pintr_cells;
 				break;
@@ -867,7 +840,7 @@ OF_mapintr(int node, int *interrupt, int validlen, int buflen)
 			DPRINTF(("skip %d cells:",
 				address_cells + interrupt_cells +
 				pintr_cells + 1));
-			for (len = 0; len < (address_cells +
+			for (len=0; len<(address_cells +
 				interrupt_cells + pintr_cells + 1); len++)
 				DPRINTF(("%x.", imap[len]));
 #endif
@@ -881,10 +854,6 @@ OF_mapintr(int node, int *interrupt, int validlen, int buflen)
 		}
 		DPRINTF(("reg len %d\n", len));
 
-		if (free_map) {
-			free(free_map, M_DEVBUF);
-			free_map = NULL;
-		}
 	} 
 	return (rc);
 }

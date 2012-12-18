@@ -1,4 +1,4 @@
-/*	$NetBSD: tape.c,v 1.66 2011/08/29 14:35:03 joerg Exp $	*/
+/*	$NetBSD: tape.c,v 1.60.10.1 2009/01/02 21:08:49 snj Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)tape.c	8.9 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: tape.c,v 1.66 2011/08/29 14:35:03 joerg Exp $");
+__RCSID("$NetBSD: tape.c,v 1.60.10.1 2009/01/02 21:08:49 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -94,18 +94,33 @@ int		oldinofmt;	/* old inode format conversion required */
 int		Bcvt;		/* Swap Bytes (for CCI or sun) */
 
 const struct digest_desc *ddesc;
+const struct digest_desc digest_descs[] = {
+	{ "MD5",
+	  (void (*)(void *))MD5Init,
+	  (void (*)(void *, const u_char *, u_int))MD5Update,
+	  (char *(*)(void *, void *))MD5End, },
+	{ "SHA1",
+	  (void (*)(void *))SHA1Init,
+	  (void (*)(void *, const u_char *, u_int))SHA1Update,
+	  (char *(*)(void *, void *))SHA1End, },
+	{ "RMD160",
+	  (void (*)(void *))RMD160Init,
+	  (void (*)(void *, const u_char *, u_int))RMD160Update,
+	  (char *(*)(void *, void *))RMD160End, },
+	{ .dd_name = NULL },
+};
 
 static union digest_context {
-	MD5_CTX dc_MD5;
-	SHA1_CTX dc_SHA1;
-	RMD160_CTX dc_RMD160;
+	MD5_CTX dc_md5;
+	SHA1_CTX dc_sha1;
+	RMD160_CTX dc_rmd160;
 } dcontext;
 
-/*
- * 32 for md5; 40 for sha1 and rmd160
- * plus a null terminator.
- */
-#define DIGEST_BUFFER_SIZE (40 + 1)
+union digest_buffer {
+	char db_md5[32 + 1];
+	char db_sha1[40 + 1];
+	char db_rmd160[40 + 1];
+};
 
 #define	FLUSHTAPEBUF()	blkcnt = ntrec + 1
 
@@ -148,55 +163,10 @@ static void	 setdumpnum(void);
 static void	 terminateinput(void);
 static void	 xtrfile(char *, long);
 static void	 xtrlnkfile(char *, long);
-__dead static void	 xtrlnkskip(char *, long);
+static void	 xtrlnkskip(char *, long);
 static void	 xtrskip(char *, long);
 static void	 swap_header(struct s_spcl *);
 static void	 swap_old_header(struct s_ospcl *);
-
-////////////////////////////////////////////////////////////
-// thunks for type correctness
-
-#define WRAP(alg) \
-	static void							\
-	do_##alg##Init(void *ctx)					\
-	{								\
-		alg##Init(ctx);						\
-	}								\
-									\
-	static void							\
-	do_##alg##Update(union digest_context *ctx,			\
-		const void *buf, unsigned len)				\
-	{								\
-		alg##Update(&ctx->dc_##alg, buf, len);			\
-	}								\
-									\
-	static char *							\
-	do_##alg##End(void *ctx, char *str)				\
-	{								\
-		return alg##End(ctx, str);				\
-	}
-
-WRAP(MD5);
-WRAP(SHA1);
-WRAP(RMD160);
-
-static const struct digest_desc digest_descs[] = {
-	{ "MD5",
-	  do_MD5Init,
-	  do_MD5Update,
-	  do_MD5End, },
-	{ "SHA1",
-	  do_SHA1Init,
-	  do_SHA1Update,
-	  do_SHA1End, },
-	{ "RMD160",
-	  do_RMD160Init,
-	  do_RMD160Update,
-	  do_RMD160End, },
-	{ .dd_name = NULL },
-};
-
-////////////////////////////////////////////////////////////
 
 const struct digest_desc *
 digest_lookup(const char *name)
@@ -619,7 +589,7 @@ printdumpinfo(void)
 int
 extractfile(char *name)
 {
-	char dbuffer[DIGEST_BUFFER_SIZE];
+	union digest_buffer dbuffer;
 	int flags;
 	uid_t uid;
 	gid_t gid;
@@ -769,12 +739,12 @@ extractfile(char *name)
 			(*ddesc->dd_init)(&dcontext);
 		getfile(xtrfile, xtrskip);
 		if (Dflag) {
-			(*ddesc->dd_end)(&dcontext, dbuffer);
+			(*ddesc->dd_end)(&dcontext, &dbuffer);
 			for (ep = lookupname(name); ep != NULL;
 			    ep = ep->e_links)
 				fprintf(stdout, "%s (%s) = %s\n",
 				    ddesc->dd_name, myname(ep),
-				    dbuffer);
+				    (char *)&dbuffer);
 		}
 		if (Nflag)
 			return (GOOD);
@@ -894,7 +864,7 @@ loop:
 	for (i = 0; i < spcl.c_count; i++) {
 		if (spcl.c_addr[i]) {
 			readtape(&buf[curblk++][0]);
-			if ((uint32_t)curblk == fssize / TP_BSIZE) {
+			if (curblk == fssize / TP_BSIZE) {
 				(*fill)((char *)buf, (long)(size > TP_BSIZE ?
 				     fssize : (curblk - 1) * TP_BSIZE + size));
 				curblk = 0;
@@ -1225,7 +1195,7 @@ gethead(struct s_spcl *buf)
 		swap_old_header(&u_ospcl.s_ospcl);
 	}
 
-	memset(buf, 0, TP_BSIZE);
+	memset(buf, 0, (long)TP_BSIZE);
 	buf->c_type = u_ospcl.s_ospcl.c_type;
 	buf->c_date = u_ospcl.s_ospcl.c_date;
 	buf->c_ddate = u_ospcl.s_ospcl.c_ddate;

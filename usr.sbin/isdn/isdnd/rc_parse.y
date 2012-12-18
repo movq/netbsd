@@ -30,7 +30,7 @@
  *	i4b daemon - runtime configuration parser
  *	-----------------------------------------
  *
- *	$Id: rc_parse.y,v 1.7 2011/08/16 10:39:31 christos Exp $ 
+ *	$Id: rc_parse.y,v 1.5 2006/05/27 20:11:14 martin Exp $ 
  *
  * $FreeBSD$
  *
@@ -249,31 +249,26 @@ sysentry:	sysfileentry
 sysmonitorstart:
 		MONITOR '=' STRING '\n'
 			{
-			    const char *emsg;
+			    char *err = NULL;
 			    switch (monitor_start_rights($3)) {
 			    	case I4BMAR_OK:
-					emsg = NULL;
 			    		break;
 			    	case I4BMAR_LENGTH:
-			    		emsg = "local socket name too long";
+			    		err = "local socket name too long: %s";
 			    		break;
 			    	case I4BMAR_DUP:
-			    		emsg = "duplicate entry";
+			    		err = "duplicate entry: %s";
 			    		break;
 			    	case I4BMAR_CIDR:
-			    		emsg = "invalid CIDR specification";
+			    		err = "invalid CIDR specification: %s";
 			    		break;
 			    	case I4BMAR_NOIP:
-			    		emsg = "could not resolve host or net "
-					    "specification";
+			    		err = "could not resolve host or net specification: %s";
 			    		break;
-				default:
-					emsg = "unknown";
-					break;
 			    }
-			    if (emsg) {
+			    if (err) {
 			    	char msg[1024];
-		    		snprintf(msg, sizeof msg, "%s: %s", emsg, $3);
+		    		snprintf(msg, sizeof msg, err, $3);
 		    		yyerror(msg);
 		    	    }
 			}

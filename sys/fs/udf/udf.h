@@ -1,4 +1,4 @@
-/* $NetBSD: udf.h,v 1.45 2012/07/27 22:55:30 drochner Exp $ */
+/* $NetBSD: udf.h,v 1.27.4.4 2009/07/09 19:44:34 snj Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -30,7 +30,7 @@
 #define _FS_UDF_UDF_H_
 
 #include <sys/queue.h>
-#include <sys/rbtree.h>
+#include <sys/rb.h>
 #include <sys/uio.h>
 #include <sys/mutex.h>
 
@@ -139,7 +139,7 @@ extern int udf_verbose;
 
 
 /* constants */
-#define UDF_MAXNAMLEN		255			/* as per SPEC */
+#define UDF_MAX_NAMELEN		255			/* as per SPEC */
 #define UDF_TRANS_ZERO		((uint64_t) -1)
 #define UDF_TRANS_UNMAPPED	((uint64_t) -2)
 #define UDF_TRANS_INTERN	((uint64_t) -3)
@@ -190,10 +190,9 @@ extern int udf_verbose;
 #define UDF_WRITE_LVINT		  0x10	/* write out open lvint              */
 #define UDF_WRITE_PART_BITMAPS	  0x20	/* write out partition space bitmaps */
 #define UDF_APPENDONLY_LVINT	  0x40	/* no shifting, only appending       */
-#define UDF_WRITE_METAPART_NODES  0x80	/* write out metadata partition nodes*/
 #define UDFLOGVOL_BITS "\20\1OPEN_SESSION\2CLOSE_SESSION\3FINALISE_DISC" \
 			"\4WRITE_VAT\5WRITE_LVINT\6WRITE_PART_BITMAPS" \
-			"\7APPENDONLY_LVINT\10WRITE_METAPART_NODES"
+			"\7APPENDONLY_LVINT"
 
 /* logical volume error handling actions */
 #define UDF_UPDATE_TRACKINFO	  0x01	/* update trackinfo and re-shedule   */
@@ -210,7 +209,7 @@ MALLOC_DECLARE(M_UDFMNT);
 MALLOC_DECLARE(M_UDFVOLD);
 MALLOC_DECLARE(M_UDFTEMP);
 
-extern struct pool udf_node_pool;
+struct pool udf_node_pool;
 struct udf_node;
 struct udf_strategy;
 
@@ -331,11 +330,8 @@ struct udf_mount {
 	struct udf_node 	*metadatabitmap_node;	/* system node       */
 	struct space_bitmap_desc*metadata_unalloc_dscr;
 	struct udf_bitmap	 metadata_unalloc_bits;
-	uint32_t		 metadata_alloc_unit_size;
-	uint16_t		 metadata_alignment_unit_size;
-	uint8_t			 metadata_flags;
 
-	/* rb tree for lookup icb to udf_node and sorted list for sync */
+	/* hash table to lookup icb -> udf_node and sorted list for sync */
 	kmutex_t	ihash_lock;
 	kmutex_t	get_node_lock;
 	struct rb_tree	udf_node_tree;
@@ -357,6 +353,12 @@ struct udf_mount {
 	void			*strategy_private;
 };
 
+
+#define RBTOUDFNODE(node) \
+	((node) ? \
+	 (void *)((uintptr_t)(node) - offsetof(struct udf_node, rbnode)) \
+	 : NULL)
+
 /*
  * UDF node describing a file/directory.
  *
@@ -372,7 +374,7 @@ struct udf_node {
 	char const		*lock_fname;
 	int			 lock_lineno;
 
-	/* rb_node for fast lookup and fast sequential visiting */
+	/* rb_node for fast lookup and fast sequentual visiting */
 	struct rb_node		 rbnode;
 
 	/* one of `fe' or `efe' can be set, not both (UDF file entry dscr.)  */

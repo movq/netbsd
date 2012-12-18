@@ -1,4 +1,4 @@
-/*	$NetBSD: vi.c,v 1.4 2011/03/21 14:53:04 tnozaki Exp $ */
+/*	$NetBSD: vi.c,v 1.1.1.2.6.1 2009/01/20 02:41:13 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -450,7 +450,7 @@ v_cmd(SCR *sp, VICMD *dp, VICMD *vp, VICMD *ismotion, int *comcountp, int *mappe
 	                         
 {
 	enum { COMMANDMODE, ISPARTIAL, NOTPARTIAL } cpart;
-	ARG_CHAR_T key;
+	CHAR_T key;
 	VIKEYS const *kp;
 	gcret_t gcret;
 	u_int flags;
@@ -981,7 +981,7 @@ v_init(SCR *sp)
 		if (sp->t_rows > sp->rows - 1) {
 			sp->t_minrows = sp->t_rows = sp->rows - 1;
 			msgq(sp, M_INFO,
-			    "214|Windows option value is too large, max is %zu",
+			    "214|Windows option value is too large, max is %u",
 			    sp->t_rows);
 		}
 		sp->t_maxrows = sp->rows - 1;
@@ -1084,7 +1084,7 @@ v_curword(SCR *sp)
 	 * follow the same rule.
 	 */
 	for (moved = 0,
-	    beg = sp->cno; beg < len && ISSPACE((UCHAR_T)p[beg]); moved = 1, ++beg);
+	    beg = sp->cno; beg < len && isspace(p[beg]); moved = 1, ++beg);
 	if (beg >= len) {
 		msgq(sp, M_BERR, "212|Cursor not in a word");
 		return (1);
@@ -1254,9 +1254,9 @@ v_comlog(sp, vp)
 	SCR *sp;
 	VICMD *vp;
 {
-	vtrace(sp, "vcmd: "WC, vp->key);
+	vtrace(sp, "vcmd: %c", vp->key);
 	if (F_ISSET(vp, VC_BUFFER))
-		vtrace(sp, " buffer: "WC, vp->buffer);
+		vtrace(sp, " buffer: %c", vp->buffer);
 	if (F_ISSET(vp, VC_C1SET))
 		vtrace(sp, " c1: %lu", vp->count);
 	if (F_ISSET(vp, VC_C2SET))

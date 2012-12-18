@@ -27,12 +27,12 @@
  * SUCH DAMAGE.
  */
 
-#include "SYS.h"
-
 #if defined(SYSLIBC_SCCS) && !defined(lint)
 	/* .asciz "@(#)sigprocmask.s	8.1 (Berkeley) 6/4/93" */
-RCSID("$NetBSD: compat_sigprocmask13.S,v 1.2 2011/01/25 02:38:16 matt Exp $")
+	.asciz "$NetBSD: compat_sigprocmask13.S,v 1.1 2006/02/18 22:54:51 matt Exp $"
 #endif /* SYSLIBC_SCCS and not lint */
+
+#include "SYS.h"
 
 WARN_REFERENCES(sigprocmask, \
     "warning: reference to compatibility sigprocmask(); include <signal.h> for correct reference")
@@ -54,4 +54,3 @@ ENTRY(sigprocmask, 0)
 out:
 	clrl	%r0
 	ret
-END(sigprocmask)

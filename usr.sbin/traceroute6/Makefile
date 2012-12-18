@@ -1,10 +1,7 @@
-# $NetBSD: Makefile,v 1.9 2011/05/10 01:52:49 christos Exp $
+# $NetBSD: Makefile,v 1.7 2007/05/28 12:06:42 tls Exp $
 
 USE_FORT?= yes	# network client
 
-TRACEROUTE?= ${.CURDIR}/../traceroute
-
-SRCS=	traceroute6.c as.c
 PROG=	traceroute6
 MAN=	traceroute6.8
 
@@ -17,8 +14,5 @@ LDADD+=	-lipsec
 DPADD+=	${LIBIPSEC}
 
 CPPFLAGS+=-DHAVE_POLL
-CPPFLAGS+=-I${TRACEROUTE}
-
-.PATH: ${TRACEROUTE}
 
 .include <bsd.prog.mk>

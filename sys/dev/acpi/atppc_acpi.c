@@ -1,4 +1,4 @@
-/* $NetBSD: atppc_acpi.c,v 1.17 2010/03/05 14:00:17 jruoho Exp $ */
+/* $NetBSD: atppc_acpi.c,v 1.14.10.2 2009/05/01 01:38:16 snj Exp $ */
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -30,20 +30,29 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atppc_acpi.c,v 1.17 2010/03/05 14:00:17 jruoho Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atppc_acpi.c,v 1.14.10.2 2009/05/01 01:38:16 snj Exp $");
 
 #include "opt_atppc.h"
 
 #include <sys/param.h>
-#include <sys/device.h>
 #include <sys/systm.h>
+#include <sys/errno.h>
+#include <sys/ioctl.h>
+#include <sys/syslog.h>
+#include <sys/device.h>
+#include <sys/proc.h>
 #include <sys/termios.h>
 
+#include <sys/bus.h>
+
+#include <dev/isa/isavar.h>
+#include <dev/isa/isadmavar.h>
+
+#include <dev/acpi/acpica.h>
+#include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 
 #include <dev/ic/atppcvar.h>
-
-#include <dev/isa/isadmavar.h>
 #include <dev/isa/atppc_isadma.h>
 
 static int	atppc_acpi_match(device_t, cfdata_t, void *);

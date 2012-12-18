@@ -1,4 +1,4 @@
-/*	$NetBSD: thread-stub.c,v 1.22 2011/09/16 16:05:59 joerg Exp $	*/
+/*	$NetBSD: thread-stub.c,v 1.20.6.1 2009/02/02 22:07:40 snj Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2009 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: thread-stub.c,v 1.22 2011/09/16 16:05:59 joerg Exp $");
+__RCSID("$NetBSD: thread-stub.c,v 1.20.6.1 2009/02/02 22:07:40 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -343,7 +343,7 @@ thr_t	__libc_thr_self_stub(void);
 int	__libc_thr_yield_stub(void);
 int	__libc_thr_create_stub(thr_t *, const thrattr_t *,
 	    void *(*)(void *), void *);
-__dead void	__libc_thr_exit_stub(void *);
+void	__libc_thr_exit_stub(void *);
 int	*__libc_thr_errno_stub(void);
 int	__libc_thr_setcancelstate_stub(int, int *);
 int	__libc_thr_equal_stub(pthread_t, pthread_t);

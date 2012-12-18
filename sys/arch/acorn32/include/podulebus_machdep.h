@@ -1,4 +1,4 @@
-/* $NetBSD: podulebus_machdep.h,v 1.5 2012/05/10 10:27:10 skrll Exp $ */
+/* $NetBSD: podulebus_machdep.h,v 1.1 2001/10/05 22:27:52 reinoud Exp $ */
 
 /*
  * Copyright (c) 1995 Mark Brinicombe.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/param.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/io.h>
 
 /* Define the structure used to describe a podule */
@@ -150,19 +150,19 @@ struct podule_attach_args {
 
 extern podule_t podules[MAX_PODULES + MAX_NETSLOTS];
 
-int matchpodule(struct podule_attach_args *pa,
-    int manufacturer, int product, int required_slot);
+int matchpodule __P((struct podule_attach_args *pa,
+    int manufacturer, int product, int required_slot));
 
-void netslot_ea(uint8_t *buffer);
+void netslot_ea	__P((u_int8_t *buffer));
 
-extern void *podulebus_irq_establish(podulebus_intr_handle_t, int,
-    int (*)(void *), void *, struct evcnt *);
-extern void podulebus_shift_tag(bus_space_tag_t, u_int,
-    bus_space_tag_t *);
+extern void *podulebus_irq_establish __P((podulebus_intr_handle_t, int,
+    int (*)(void *), void *, struct evcnt *));
+extern void podulebus_shift_tag __P((bus_space_tag_t, u_int,
+    bus_space_tag_t *));
 
 /* Used internally by the podulebus code */
-extern void netslotscan(device_t);
-extern void poduleexamine(podule_t *, device_t, int);
+extern void netslotscan(struct device *);
+extern void poduleexamine(podule_t *, struct device *, int);
 
 #endif
 

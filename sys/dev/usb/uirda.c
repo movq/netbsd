@@ -1,4 +1,4 @@
-/*	$NetBSD: uirda.c,v 1.37 2012/03/06 03:35:29 mrg Exp $	*/
+/*	$NetBSD: uirda.c,v 1.31 2008/05/24 16:40:58 cube Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uirda.c,v 1.37 2012/03/06 03:35:29 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uirda.c,v 1.31 2008/05/24 16:40:58 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,8 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: uirda.c,v 1.37 2012/03/06 03:35:29 mrg Exp $");
 #include <dev/usb/uirdavar.h>
 
 #ifdef UIRDA_DEBUG
-#define DPRINTF(x)	if (uirdadebug) printf x
-#define DPRINTFN(n,x)	if (uirdadebug>(n)) printf x
+#define DPRINTF(x)	if (uirdadebug) logprintf x
+#define DPRINTFN(n,x)	if (uirdadebug>(n)) logprintf x
 int	uirdadebug = 0;
 #else
 #define DPRINTF(x)
@@ -151,10 +151,9 @@ extern struct cfdriver uirda_cd;
 CFATTACH_DECL2_NEW(uirda, sizeof(struct uirda_softc), uirda_match,
     uirda_attach, uirda_detach, uirda_activate, NULL, uirda_childdet);
 
-int 
-uirda_match(device_t parent, cfdata_t match, void *aux)
+USB_MATCH(uirda)
 {
-	struct usbif_attach_arg *uaa = aux;
+	USB_IFMATCH_START(uirda, uaa);
 
 	DPRINTFN(50,("uirda_match\n"));
 
@@ -168,11 +167,9 @@ uirda_match(device_t parent, cfdata_t match, void *aux)
 	return (UMATCH_NONE);
 }
 
-void 
-uirda_attach(device_t parent, device_t self, void *aux)
+USB_ATTACH(uirda)
 {
-	struct uirda_softc *sc = device_private(self);
-	struct usbif_attach_arg *uaa = aux;
+	USB_IFATTACH_START(uirda, sc, uaa);
 	usbd_device_handle	dev = uaa->device;
 	usbd_interface_handle	iface = uaa->iface;
 	char			*devinfop;
@@ -187,10 +184,8 @@ uirda_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_dev = self;
 
-	aprint_naive("\n");
-	aprint_normal("\n");
-
 	devinfop = usbd_devinfo_alloc(dev, 0);
+	USB_ATTACH_SETUP;
 	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
@@ -209,7 +204,7 @@ uirda_attach(device_t parent, device_t self, void *aux)
 		ed = usbd_interface2endpoint_descriptor(iface, i);
 		if (ed == NULL) {
 			aprint_error_dev(self, "couldn't get ep %d\n", i);
-			return;
+			USB_ATTACH_ERROR_RETURN;
 		}
 		if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_IN &&
 		    UE_GET_XFERTYPE(ed->bmAttributes) == UE_BULK) {
@@ -221,11 +216,11 @@ uirda_attach(device_t parent, device_t self, void *aux)
 	}
 	if (sc->sc_rd_addr == -1 || sc->sc_wr_addr == -1) {
 		aprint_error_dev(self, "missing endpoint\n");
-		return;
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	if (sc->sc_loadfw(sc) != 0) {
-		return;
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	/* Get the IrDA descriptor */
@@ -250,7 +245,7 @@ uirda_attach(device_t parent, device_t self, void *aux)
 		if (d == NULL) {
 			aprint_error_dev(self,
 			    "Cannot get IrDA descriptor\n");
-			return;
+			USB_ATTACH_ERROR_RETURN;
 		}
 		memcpy(&sc->sc_irdadesc, d, USB_IRDA_DESCRIPTOR_SIZE);
 	}
@@ -275,7 +270,7 @@ uirda_attach(device_t parent, device_t self, void *aux)
 	DPRINTFN(10, ("uirda_attach: %p\n", sc->sc_udev));
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-			   sc->sc_dev);
+			   USBDEV(sc->sc_dev));
 
 	mutex_init(&sc->sc_wr_buf_lk, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&sc->sc_rd_buf_lk, MUTEX_DEFAULT, IPL_NONE);
@@ -288,13 +283,12 @@ uirda_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_child = config_found(self, &ia, ir_print);
 
-	return;
+	USB_ATTACH_SUCCESS_RETURN;
 }
 
-int 
-uirda_detach(device_t self, int flags)
+USB_DETACH(uirda)
 {
-	struct uirda_softc *sc = device_private(self);
+	USB_DETACH_START(uirda, sc);
 	int s;
 	int rv = 0;
 
@@ -317,7 +311,7 @@ uirda_detach(device_t self, int flags)
 	s = splusb();
 	if (--sc->sc_refcnt >= 0) {
 		/* Wait for processes to go away. */
-		usb_detach_waitold(sc->sc_dev);
+		usb_detach_wait(USBDEV(sc->sc_dev));
 	}
 	splx(s);
 
@@ -325,7 +319,7 @@ uirda_detach(device_t self, int flags)
 		rv = config_detach(sc->sc_child, flags);
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-			   sc->sc_dev);
+			   USBDEV(sc->sc_dev));
 
 	mutex_destroy(&sc->sc_wr_buf_lk);
 	mutex_destroy(&sc->sc_rd_buf_lk);
@@ -348,14 +342,20 @@ int
 uirda_activate(device_t self, enum devact act)
 {
 	struct uirda_softc *sc = device_private(self);
+	int error = 0;
 
 	switch (act) {
+	case DVACT_ACTIVATE:
+		return (EOPNOTSUPP);
+		break;
+
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		if (sc->sc_child != NULL)
+			error = config_deactivate(sc->sc_child);
+		break;
 	}
+	return (error);
 }
 
 int
@@ -518,7 +518,7 @@ uirda_read(void *h, struct uio *uio, int flag)
 
  ret:
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(USBDEV(sc->sc_dev));
 	return (error);
 }
 
@@ -570,7 +570,7 @@ uirda_write(void *h, struct uio *uio, int flag)
 
 	mutex_exit(&sc->sc_wr_buf_lk);
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(USBDEV(sc->sc_dev));
 
 	DPRINTFN(1,("%s: sc=%p done\n", __func__, sc));
 	return (error);

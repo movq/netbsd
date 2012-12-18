@@ -1,4 +1,4 @@
-/*	$NetBSD: if_de.c,v 1.29 2010/04/05 07:21:47 joerg Exp $	*/
+/*	$NetBSD: if_de.c,v 1.23 2008/03/11 05:34:01 matt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989 Regents of the University of California.
@@ -81,9 +81,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.29 2010/04/05 07:21:47 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.23 2008/03/11 05:34:01 matt Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,8 +106,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.29 2010/04/05 07:21:47 joerg Exp $");
 #include <netinet/if_inarp.h>
 #endif
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <sys/bus.h>
 
@@ -177,7 +180,7 @@ static	void deattach(device_t, device_t, void *);
 static	void dewait(struct de_softc *, const char *);
 static	int deinit(struct ifnet *);
 static	int deioctl(struct ifnet *, u_long, void *);
-static	void dereset(device_t);
+static	void dereset(device_t );
 static	void destop(struct ifnet *, int);
 static	void destart(struct ifnet *);
 static	void derecv(struct de_softc *);
@@ -258,7 +261,7 @@ deattach(device_t parent, device_t self, void *aux)
 	DE_WLOW(CMD_GETCMD);
 	dewait(sc, "read addr ");
 
-	memcpy(myaddr, (void *)&sc->sc_dedata->dc_pcbb.pcbb2, sizeof (myaddr));
+	bcopy((void *)&sc->sc_dedata->dc_pcbb.pcbb2, myaddr, sizeof (myaddr));
 	printf(": %s, hardware address %s\n", c, ether_sprintf(myaddr));
 
 	uba_intr_establish(ua->ua_icookie, ua->ua_cvec, deintr, sc,
@@ -437,7 +440,10 @@ destart(struct ifnet *ifp)
 		rp = &dc->dc_xrent[sc->sc_xfree];
 		if (rp->r_flags & XFLG_OWN)
 			panic("deuna xmit in progress");
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 
 		len = if_ubaput(&sc->sc_ifuba, &sc->sc_ifw[sc->sc_xfree], m);
 		rp->r_slen = len;
@@ -555,7 +561,10 @@ derecv(struct de_softc *sc)
 			sc->sc_if.if_ierrors++;
 			goto next;
 		}
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 
 		(*ifp->if_input)(ifp, m);
 
@@ -606,10 +615,10 @@ dewait(struct de_softc *sc, const char *fn)
 		char bits0[64];
 		char bits1[64];
 		csr1 = DE_RCSR(DE_PCSR1);
-		snprintb(bits0, sizeof(bits0), PCSR0_BITS, csr0);
-		snprintb(bits1, sizeof(bits1), PCSR1_BITS, csr1);
 		aprint_error_dev(sc->sc_dev, "%s failed, csr0=%s csr1=%s\n",
-		    fn, bits0, bits1);
+		    fn,
+		    bitmask_snprintf(csr0, PCSR0_BITS, bits0, sizeof(bits0)),
+		    bitmask_snprintf(csr1, PCSR1_BITS, bits1, sizeof(bits1)));
 	}
 }
 

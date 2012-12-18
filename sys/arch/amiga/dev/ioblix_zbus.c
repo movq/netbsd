@@ -1,4 +1,4 @@
-/*	$NetBSD: ioblix_zbus.c,v 1.19 2012/10/27 17:17:29 chs Exp $ */
+/*	$NetBSD: ioblix_zbus.c,v 1.14 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,18 +30,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ioblix_zbus.c,v 1.19 2012/10/27 17:17:29 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioblix_zbus.c,v 1.14 2008/04/28 20:23:12 martin Exp $");
 
 /* IOBlix Zorro driver */
 /* XXX to be done: we need to probe the com clock speed! */
 
 #include <sys/types.h>
 
-#include <sys/device.h>
 #include <sys/conf.h>
+#include <sys/device.h>
 #include <sys/systm.h>
 #include <sys/param.h>
-#include <sys/bus.h>
+
+#include <machine/bus.h>
 
 #include <amiga/include/cpu.h>
 
@@ -51,27 +52,27 @@ __KERNEL_RCSID(0, "$NetBSD: ioblix_zbus.c,v 1.19 2012/10/27 17:17:29 chs Exp $")
 #include <amiga/dev/supio.h>
 #include <amiga/dev/zbusvar.h>
 
-#include "opt_iobzclock.h"
 
 struct iobz_softc {
+	struct device sc_dev;
 	struct bus_space_tag sc_bst;
 };
 
-int iobzmatch(device_t, cfdata_t, void *);
-void iobzattach(device_t, device_t, void *);
-int iobzprint(void *, const char *);
+int iobzmatch(struct device *, struct cfdata *, void *);
+void iobzattach(struct device *, struct device *, void *);
+int iobzprint(void *auxp, const char *);
 void iobz_shutdown(void *);
 
-CFATTACH_DECL_NEW(iobl_zbus, sizeof(struct iobz_softc),
+CFATTACH_DECL(iobl_zbus, sizeof(struct iobz_softc),
     iobzmatch, iobzattach, NULL, NULL);
 
 int
-iobzmatch(device_t parent, cfdata_t cf, void *aux)
+iobzmatch(struct device *parent, struct cfdata *cfp, void *auxp)
 {
 
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 
 	if (zap->manid != 4711)
 		return (0);
@@ -87,10 +88,10 @@ struct iobz_devs {
 	unsigned off;
 	int arg;
 } iobzdevices[] = {
-	{ "com", 0x108, 24000000 },	/* XXX see below */
-	{ "com", 0x100, 24000000 },
-	{ "com", 0x118, 24000000 },
+	{ "com", 0x100, 24000000 },	/* XXX see below */
+	{ "com", 0x108, 24000000 },
 	{ "com", 0x110, 24000000 },
+	{ "com", 0x118, 24000000 },
 	{ "lpt", 0x200, 0 },
 	{ "lpt", 0x300, 0 },
 	{ 0, 0, 0}
@@ -102,7 +103,7 @@ struct iobz_devs {
 int iobzclock = IOBZCLOCK;		/* patchable! */
 
 void
-iobzattach(device_t parent, device_t self, void *aux)
+iobzattach(struct device *parent, struct device *self, void *auxp)
 {
 	struct iobz_softc *iobzsc;
 	struct iobz_devs  *iobzd;
@@ -112,8 +113,8 @@ iobzattach(device_t parent, device_t self, void *aux)
 	volatile u_int8_t *p;
 
 
-	iobzsc = device_private(self);
-	zap = aux;
+	iobzsc = (struct iobz_softc *)self;
+	zap = auxp;
 
 	if (parent)
 		printf("\n");
@@ -129,7 +130,7 @@ iobzattach(device_t parent, device_t self, void *aux)
 	while (iobzd->name) {
 		supa.supio_name = iobzd->name;
 		supa.supio_iobase = iobzd->off;
-		supa.supio_arg = iobzd->arg ? iobzclock : 0 /* XXX iobzd->arg */;
+		supa.supio_arg = iobzclock /* XXX iobzd->arg */;
 		config_found(self, &supa, iobzprint); /* XXX */
 		++iobzd;
 	}
@@ -140,10 +141,10 @@ iobzattach(device_t parent, device_t self, void *aux)
 }
 
 int
-iobzprint(void *aux, const char *pnp)
+iobzprint(void *auxp, const char *pnp)
 {
 	struct supio_attach_args *supa;
-	supa = aux;
+	supa = auxp;
 
 	if (pnp == NULL)
 		return(QUIET);

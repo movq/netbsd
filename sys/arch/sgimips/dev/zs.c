@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.37 2011/02/20 07:59:50 matt Exp $	*/
+/*	$NetBSD: zs.c,v 1.35 2008/06/13 12:27:26 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1996, 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.37 2011/02/20 07:59:50 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.35 2008/06/13 12:27:26 cegger Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -127,12 +127,7 @@ struct consdev zs_cn = {
 	zscninit,
 	zscngetc,
 	zscnputc,
-	zscnpollc,
-	NULL,
-	NULL,
-	NULL,
-	NODEV,
-	CN_NORMAL
+	zscnpollc
 };
 
 /* Flags from cninit() */
@@ -213,7 +208,7 @@ zs_hpc_attach(device_t parent, device_t self, void *aux)
 	int    zs_unit, channel, err, s;
 	const char  *promconsdev;
 
-	promconsdev = arcbios_GetEnvironmentVariable("ConsoleOut");
+	promconsdev = ARCBIOS->GetEnvironmentVariable("ConsoleOut");
 
 	zsc->zsc_dev = self;
 	zsc->zsc_bustag = haa->ha_st;
@@ -730,7 +725,7 @@ zscninit(struct consdev *cn)
 	extern const struct cdevsw zstty_cdevsw;
 	const char* consdev;
 
-	if ((consdev = arcbios_GetEnvironmentVariable("ConsoleOut")) == NULL)
+	if ((consdev = ARCBIOS->GetEnvironmentVariable("ConsoleOut")) == NULL)
 		panic("zscninit without valid ARCS ConsoleOut setting!");
 
 	if (strlen(consdev) != 9 ||

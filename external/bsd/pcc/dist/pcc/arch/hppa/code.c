@@ -1,5 +1,3 @@
-/*	Id: code.c,v 1.26 2011/06/05 08:54:42 plunky Exp 	*/	
-/*	$NetBSD: code.c,v 1.1.1.3 2011/09/01 12:46:32 plunky Exp $	*/
 /*	$OpenBSD: code.c,v 1.2 2007/11/22 15:06:43 stefan Exp $	*/
 
 /*
@@ -36,8 +34,6 @@
 NODE *funarg(NODE *, int *);
 int argreg(TWORD, int *);
 
-static const char *const loctbl[] = { "text", "data", "section .rodata" };
-
 /*
  * Define everything needed to print out some data (or text).
  * This means segment, alignment, visibility, etc.
@@ -46,9 +42,9 @@ void
 defloc(struct symtab *sp)
 {
 	extern char *nextsect;
+	static char *loctbl[] = { "text", "data", "section .rodata" };
 	static int lastloc = -1;
 	TWORD t;
-	char *n;
 	int s;
 
 	if (sp == NULL) {
@@ -66,16 +62,14 @@ defloc(struct symtab *sp)
 	lastloc = s;
 	while (ISARY(t))
 		t = DECREF(t);
-	s = ISFTN(t) ? ALINT : talign(t, sp->ssue);
-	if (s > ALCHAR)
-		printf("\t.align\t%d\n", s / ALCHAR);
-	n = sp->soname ? sp->soname : sp->sname;
+	if (t > UCHAR)
+		printf("\t.align\t%d\n", ISFTN(t)? 4 : talign(t, sp->ssue));
 	if (sp->sclass == EXTDEF)
-		printf("\t.export %s, %s\n", n,
+		printf("\t.export %s, %s\n", sp->soname,
 		    ISFTN(t)? "code" : "data");
 	if (sp->slevel == 0)
 		printf("\t.type\t%s, @%s\n\t.label %s\n",
-		    n, ISFTN(t)? "function" : "object", n);
+		    sp->soname, ISFTN(t)? "function" : "object", sp->soname);
 	else
 		printf("\t.type\t" LABFMT ", @%s\n\t.label\t" LABFMT "\n", 
 		    sp->soffset, ISFTN(t)? "function" : "object", sp->soffset);
@@ -93,19 +87,19 @@ efcode()
 
 	if (cftnsp->stype != STRTY+FTN && cftnsp->stype != UNIONTY+FTN)
 		return;
-	/* address of return struct is in %ret0 */
+	/* address of return struct is in ret0 */
 	/* create a call to memcpy() */
 	/* will get the result in %ret0 */
-	p = block(REG, NIL, NIL, CHAR+PTR, 0, 0);
+	p = block(REG, NIL, NIL, CHAR+PTR, 0, MKSUE(CHAR+PTR));
 	p->n_rval = RET0;
-	q = block(OREG, NIL, NIL, CHAR+PTR, 0, 0);
+	q = block(OREG, NIL, NIL, CHAR+PTR, 0, MKSUE(CHAR+PTR));
 	q->n_rval = FP;
 	q->n_lval = 8; /* return buffer offset */
-	p = block(CM, q, p, INT, 0, 0);
+	p = block(CM, q, p, INT, 0, MKSUE(INT));
 	sz = (tsize(STRTY, cftnsp->sdf, cftnsp->ssue)+SZCHAR-1)/SZCHAR;
-	p = block(CM, p, bcon(sz), INT, 0, 0);
+	p = block(CM, p, bcon(sz), INT, 0, MKSUE(INT));
 	p->n_right->n_name = "";
-	p = block(CALL, bcon(0), p, CHAR+PTR, 0, 0);
+	p = block(CALL, bcon(0), p, CHAR+PTR, 0, MKSUE(CHAR+PTR));
 	p->n_left->n_name = "memcpy";
 	p = clocal(p);
 	send_passt(IP_NODE, p);
@@ -144,7 +138,7 @@ bfcode(struct symtab **a, int cnt)
 	if (cftnsp->stype == STRTY+FTN || cftnsp->stype == UNIONTY+FTN) {
 		/* Function returns struct, adjust arg offset */
 		for (i = 0; i < n; i++)
-			a[i]->soffset += SZPOINT(LONG);
+			a[i]->soffset += SZPOINT(INT);
 	}
 
 	/* recalculate the arg offset and create TEMP moves */
@@ -179,6 +173,15 @@ bfcode(struct symtab **a, int cnt)
 }
 
 
+/*
+ * by now, the automatics and register variables are allocated
+ */
+void
+bccode()
+{
+	SETOFF(autooff, SZINT);
+}
+
 /* called just before final exit */
 /* flag is 1 if errors, 0 if none */
 void
@@ -196,6 +199,16 @@ bjobcode(void)
 	printf("\t.level\t1.1\n"
 	    "\t.import $global$, data\n"
 	    "\t.import $$dyncall, millicode\n");
+}
+
+/*
+ * return the alignment of field of type t
+ */
+int
+fldal(unsigned int t)
+{
+	uerror("illegal field type");
+	return(ALINT);
 }
 
 /* fix up type of field p */
@@ -231,7 +244,8 @@ funarg(NODE *p, int *n)
 
 	if (*n >= 4) {
 		*n += sz;
-		r = block(OREG, NIL, NIL, p->n_type|PTR, 0, 0);
+		r = block(OREG, NIL, NIL, p->n_type|PTR, 0,
+		    MKSUE(p->n_type|PTR));
 		r->n_rval = SP;
 		r->n_lval = -(32 + *n * 4);
 	} else {

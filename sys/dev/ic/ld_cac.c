@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_cac.c,v 1.27 2012/02/24 18:04:51 mhitch Exp $	*/
+/*	$NetBSD: ld_cac.c,v 1.22.4.2 2009/03/24 20:48:14 snj Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2006 The NetBSD Foundation, Inc.
@@ -34,7 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_cac.c,v 1.27 2012/02/24 18:04:51 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_cac.c,v 1.22.4.2 2009/03/24 20:48:14 snj Exp $");
+
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,7 +47,9 @@ __KERNEL_RCSID(0, "$NetBSD: ld_cac.c,v 1.27 2012/02/24 18:04:51 mhitch Exp $");
 #include <sys/endian.h>
 #include <sys/dkio.h>
 #include <sys/disk.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <sys/bus.h>
 
@@ -103,7 +107,7 @@ ld_cac_attach(device_t parent, device_t self, void *aux)
 
 	ld->sc_secsize = CAC_GET2(dinfo.secsize);
 	ld->sc_maxxfer = CAC_MAX_XFER;
-	ld->sc_maxqueuecnt = (CAC_MAX_CCBS - 1) / cac->sc_nunits;
+	ld->sc_maxqueuecnt = CAC_MAX_CCBS / cac->sc_nunits;	/* XXX */
 	ld->sc_secperunit = CAC_GET2(dinfo.ncylinders) *
 	    CAC_GET1(dinfo.nheads) * CAC_GET1(dinfo.nsectors);
 	ld->sc_start = ld_cac_start;
@@ -174,7 +178,7 @@ ld_cac_dump(struct ld_softc *ld, void *data, int blkno, int blkcnt)
 }
 
 void
-ld_cac_done(device_t dv, void *context, int error)
+ld_cac_done(struct device *dv, void *context, int error)
 {
 	struct buf *bp;
 	struct ld_cac_softc *sc;

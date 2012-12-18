@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2009/12/13 09:07:32 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2011/01/06 05:19:55 riz Exp $
 
 BSD_MK_COMPAT_FILE=${.CURDIR}/bsd.i386.mk
 

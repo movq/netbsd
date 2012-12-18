@@ -1,4 +1,4 @@
-/*	$NetBSD: nslm7x.c,v 1.59 2012/01/21 15:50:13 jakllsch Exp $ */
+/*	$NetBSD: nslm7x.c,v 1.49 2008/10/13 12:44:46 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,14 +30,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nslm7x.c,v 1.59 2012/01/21 15:50:13 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nslm7x.c,v 1.49 2008/10/13 12:44:46 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/device.h>
-#include <sys/module.h>
 #include <sys/conf.h>
 #include <sys/time.h>
 
@@ -74,7 +73,6 @@ __KERNEL_RCSID(0, "$NetBSD: nslm7x.c,v 1.59 2012/01/21 15:50:13 jakllsch Exp $")
 static int lm_match(struct lm_softc *);
 static int wb_match(struct lm_softc *);
 static int def_match(struct lm_softc *);
-static void wb_temp_diode_type(struct lm_softc *, int);
 
 static void lm_refresh(void *);
 
@@ -1668,7 +1666,6 @@ lm_attach(struct lm_softc *lmsc)
 	lmsc->sc_sme = sysmon_envsys_create();
 	/* Initialize sensors */
 	for (i = 0; i < lmsc->numsensors; i++) {
-		lmsc->sensors[i].state = ENVSYS_SINVALID;
 		if (sysmon_envsys_sensor_attach(lmsc->sc_sme,
 						&lmsc->sensors[i])) {
 			sysmon_envsys_destroy(lmsc->sc_sme);
@@ -1742,7 +1739,6 @@ lm_match(struct lm_softc *sc)
 		return 0;
 	}
 
-	aprint_naive("\n");
 	aprint_normal("\n");
 	aprint_normal_dev(sc->sc_dev,
 	    "National Semiconductor %s Hardware monitor\n", model);
@@ -1758,7 +1754,6 @@ def_match(struct lm_softc *sc)
 	int chipid;
 
 	chipid = (*sc->lm_readreg)(sc, LMD_CHIPID) & LM_ID_MASK;
-	aprint_naive("\n");
 	aprint_normal("\n");
 	aprint_error_dev(sc->sc_dev, "Unknown chip (ID %d)\n", chipid);
 
@@ -1767,61 +1762,12 @@ def_match(struct lm_softc *sc)
 	return 1;
 }
 
-static void
-wb_temp_diode_type(struct lm_softc *sc, int diode_type)
-{
-	int regval, banksel;
-
-	banksel = (*sc->lm_readreg)(sc, WB_BANKSEL);
-	switch (diode_type) {
-	    case 1:	/* Switch to Pentium-II diode mode */
-		lm_generic_banksel(sc, WB_BANKSEL_B0);
-		regval = (*sc->lm_readreg)(sc, WB_BANK0_VBAT);
-		regval |= 0x0e;
-		(*sc->lm_writereg)(sc, WB_BANK0_VBAT, regval);
-		regval = (*sc->lm_readreg)(sc, WB_BANK0_RESVD1);
-		regval |= 0x70;
-		(*sc->lm_writereg)(sc, WB_BANK0_RESVD1, 0x0);
-		lm_generic_banksel(sc, banksel);
-		aprint_verbose_dev(sc->sc_dev, "Pentium-II diode temp sensors\n");
-		break;
-	    case 2:	/* Switch to 2N3904 mode */
-		lm_generic_banksel(sc, WB_BANKSEL_B0);
-		regval = (*sc->lm_readreg)(sc, WB_BANK0_VBAT);
-		regval |= 0xe;
-		(*sc->lm_writereg)(sc, WB_BANK0_VBAT, regval);
-		regval = (*sc->lm_readreg)(sc, WB_BANK0_RESVD1);
-		regval &= ~0x70;
-		(*sc->lm_writereg)(sc, WB_BANK0_RESVD1, 0x0);
-		lm_generic_banksel(sc, banksel);
-		aprint_verbose_dev(sc->sc_dev, "2N3904 bipolar temp sensors\n");
-		break;
-	    case 4:	/* Switch to generic thermistor mode */
-		lm_generic_banksel(sc, WB_BANKSEL_B0);
-		regval = (*sc->lm_readreg)(sc, WB_BANK0_VBAT);
-		regval &= ~0xe;
-		(*sc->lm_writereg)(sc, WB_BANK0_VBAT, regval);
-		lm_generic_banksel(sc, banksel);
-		aprint_verbose_dev(sc->sc_dev, "Thermistor temp sensors\n");
-		break;
-	    case 0:	/* Unspecified - use default */
-		aprint_verbose_dev(sc->sc_dev, "Using default temp sensors\n");
-		break;
-	    default:
-		aprint_error_dev(sc->sc_dev,
-				 "Ignoring invalid temp sensor mode %d\n",
-				 diode_type);
-		break;
-	}
-}
-
 static int
 wb_match(struct lm_softc *sc)
 {
 	const char *model = NULL;
-	int banksel, vendid, devid, cf_flags;
+	int banksel, vendid, devid;
 
-	aprint_naive("\n");
 	aprint_normal("\n");
 	/* Read vendor ID */
 	banksel = (*sc->lm_readreg)(sc, WB_BANKSEL);
@@ -1838,23 +1784,16 @@ wb_match(struct lm_softc *sc)
 	devid = (*sc->lm_readreg)(sc, LMD_CHIPID);
 	sc->chipid = (*sc->lm_readreg)(sc, WB_BANK0_CHIPID);
 	lm_generic_banksel(sc, banksel);
-	cf_flags = device_cfdata(sc->sc_dev)->cf_flags;
 	DPRINTF(("%s: winbond chip id 0x%x\n", __func__, sc->chipid));
 
 	switch(sc->chipid) {
 	case WB_CHIPID_W83627HF:
 		model = "W83627HF";
 		lm_setup_sensors(sc, w83627hf_sensors);
-		wb_temp_diode_type(sc, cf_flags);
 		break;
 	case WB_CHIPID_W83627THF:
 		model = "W83627THF";
-		lm_generic_banksel(sc, WB_BANKSEL_B0);
-		if ((*sc->lm_readreg)(sc, WB_BANK0_CONFIG) & WB_CONFIG_VMR9)
-			sc->vrm9 = 1;
-		lm_generic_banksel(sc, banksel);
 		lm_setup_sensors(sc, w83637hf_sensors);
-		wb_temp_diode_type(sc, cf_flags);
 		break;
 	case WB_CHIPID_W83627EHF_A:
 		model = "W83627EHF-A";
@@ -1863,12 +1802,10 @@ wb_match(struct lm_softc *sc)
 	case WB_CHIPID_W83627EHF:
 		model = "W83627EHF";
 		lm_setup_sensors(sc, w83627ehf_sensors);
-		wb_temp_diode_type(sc, cf_flags);
 		break;
 	case WB_CHIPID_W83627DHG:
 		model = "W83627DHG";
 		lm_setup_sensors(sc, w83627dhg_sensors);
-		wb_temp_diode_type(sc, cf_flags);
 		break;
 	case WB_CHIPID_W83637HF:
 		model = "W83637HF";
@@ -1877,12 +1814,10 @@ wb_match(struct lm_softc *sc)
 			sc->vrm9 = 1;
 		lm_generic_banksel(sc, banksel);
 		lm_setup_sensors(sc, w83637hf_sensors);
-		wb_temp_diode_type(sc, cf_flags);
 		break;
 	case WB_CHIPID_W83697HF:
 		model = "W83697HF";
 		lm_setup_sensors(sc, w83697hf_sensors);
-		wb_temp_diode_type(sc, cf_flags);
 		break;
 	case WB_CHIPID_W83781D:
 	case WB_CHIPID_W83781D_2:
@@ -1892,17 +1827,14 @@ wb_match(struct lm_softc *sc)
 	case WB_CHIPID_W83782D:
 		model = "W83782D";
 		lm_setup_sensors(sc, w83782d_sensors);
-		wb_temp_diode_type(sc, cf_flags);
 		break;
 	case WB_CHIPID_W83783S:
 		model = "W83783S";
 		lm_setup_sensors(sc, w83783s_sensors);
-		wb_temp_diode_type(sc, cf_flags);
 		break;
 	case WB_CHIPID_W83791D:
 		model = "W83791D";
 		lm_setup_sensors(sc, w83791d_sensors);
-		wb_temp_diode_type(sc, cf_flags);
 		break;
 	case WB_CHIPID_W83791SD:
 		model = "W83791SD";
@@ -1942,8 +1874,6 @@ lm_setup_sensors(struct lm_softc *sc, struct lm_sensor *sensors)
 
 	for (i = 0; sensors[i].desc; i++) {
 		sc->sensors[i].units = sensors[i].type;
-		if (sc->sensors[i].units == ENVSYS_SVOLTS_DC)
-			sc->sensors[i].flags = ENVSYS_FCHANGERFACT;
 		strlcpy(sc->sensors[i].desc, sensors[i].desc,
 		    sizeof(sc->sensors[i].desc));
 		sc->numsensors++;
@@ -1969,6 +1899,7 @@ lm_refresh_volt(struct lm_softc *sc, int n)
 	if (data == 0xff) {
 		sc->sensors[n].state = ENVSYS_SINVALID;
 	} else {
+		sc->sensors[n].flags = ENVSYS_FCHANGERFACT;
 		sc->sensors[n].value_cur = (data << 4);
 		if (sc->sensors[n].rfact) {
 			sc->sensors[n].value_cur *= sc->sensors[n].rfact;
@@ -2074,7 +2005,6 @@ wb_w83637hf_refresh_vcore(struct lm_softc *sc, int n)
 		sc->sensors[n].value_cur = (data * 4880) + 700000;
 	else
 		sc->sensors[n].value_cur = (data * 16000);
-	sc->sensors[n].state = ENVSYS_SVALID;
 	DPRINTF(("%s: volt[%d] data=0x%x value_cur=%d\n",
 	   __func__, n, data, sc->sensors[n].value_cur));
 }
@@ -2085,6 +2015,7 @@ wb_refresh_nvolt(struct lm_softc *sc, int n)
 	int data;
 
 	data = (*sc->lm_readreg)(sc, sc->lm_sensors[n].reg);
+	sc->sensors[n].flags = ENVSYS_FCHANGERFACT;
 	sc->sensors[n].value_cur = ((data << 4) - WB_VREF);
 	if (sc->sensors[n].rfact)
 		sc->sensors[n].value_cur *= sc->sensors[n].rfact;
@@ -2093,7 +2024,6 @@ wb_refresh_nvolt(struct lm_softc *sc, int n)
 
 	sc->sensors[n].value_cur /= 10;
 	sc->sensors[n].value_cur += WB_VREF * 1000;
-	sc->sensors[n].state = ENVSYS_SVALID;
 	DPRINTF(("%s: volt[%d] data=0x%x value_cur=%d\n",
 	     __func__, n , data, sc->sensors[n].value_cur));
 }
@@ -2105,6 +2035,7 @@ wb_w83627ehf_refresh_nvolt(struct lm_softc *sc, int n)
 
 	data = (*sc->lm_readreg)(sc, sc->lm_sensors[n].reg);
 	sc->sensors[n].value_cur = ((data << 3) - WB_W83627EHF_VREF);
+	sc->sensors[n].flags = ENVSYS_FCHANGERFACT;
 	if (sc->sensors[n].rfact)
 		sc->sensors[n].value_cur *= sc->sensors[n].rfact;
 	else	
@@ -2112,7 +2043,6 @@ wb_w83627ehf_refresh_nvolt(struct lm_softc *sc, int n)
 
 	sc->sensors[n].value_cur /= 10;
 	sc->sensors[n].value_cur += WB_W83627EHF_VREF * 1000;
-	sc->sensors[n].state = ENVSYS_SVALID;
 	DPRINTF(("%s: volt[%d] data=0x%x value_cur=%d\n",
 	    __func__, n , data, sc->sensors[n].value_cur));
 }
@@ -2260,18 +2190,4 @@ as_refresh_temp(struct lm_softc *sc, int n)
 	}
 	DPRINTF(("%s: temp[%d] data=0x%x value_cur=%d\n",
 	    __func__, n, data, sc->sensors[n].value_cur));
-}
-
-MODULE(MODULE_CLASS_DRIVER, lm, NULL);
-
-static int
-lm_modcmd(modcmd_t cmd, void *opaque)
-{
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-	case MODULE_CMD_FINI:
-		return 0;
-	default:
-		return ENOTTY;
-	}
 }

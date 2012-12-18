@@ -1,4 +1,4 @@
-/*	$NetBSD: ne2000.c,v 1.73 2012/10/27 17:18:22 chs Exp $	*/
+/*	$NetBSD: ne2000.c,v 1.59.10.1 2010/11/20 00:33:44 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.73 2012/10/27 17:18:22 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.59.10.1 2010/11/20 00:33:44 riz Exp $");
 
 #include "opt_ipkdb.h"
 
@@ -92,18 +92,16 @@ __KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.73 2012/10/27 17:18:22 chs Exp $");
 
 #include <dev/ic/ax88190reg.h>
 
-static int	ne2000_write_mbuf(struct dp8390_softc *, struct mbuf *, int);
-static int	ne2000_ring_copy(struct dp8390_softc *, int, void *, u_short);
-static void	ne2000_read_hdr(struct dp8390_softc *, int,
-		    struct dp8390_ring *);
-static int	ne2000_test_mem(struct dp8390_softc *);
+int	ne2000_write_mbuf(struct dp8390_softc *, struct mbuf *, int);
+int	ne2000_ring_copy(struct dp8390_softc *, int, void *, u_short);
+void	ne2000_read_hdr(struct dp8390_softc *, int, struct dp8390_ring *);
+int	ne2000_test_mem(struct dp8390_softc *);
 
-static void	ne2000_writemem(bus_space_tag_t, bus_space_handle_t,
-		    bus_space_tag_t, bus_space_handle_t, const uint8_t *, int,
-		    size_t, int, int);
-static void	ne2000_readmem(bus_space_tag_t, bus_space_handle_t,
-		    bus_space_tag_t, bus_space_handle_t, int, uint8_t *,
-		    size_t, int);
+void	ne2000_writemem(bus_space_tag_t, bus_space_handle_t,
+	    bus_space_tag_t, bus_space_handle_t, u_int8_t *, int, size_t,
+	    int, int);
+void	ne2000_readmem(bus_space_tag_t, bus_space_handle_t,
+	    bus_space_tag_t, bus_space_handle_t, int, u_int8_t *, size_t, int);
 
 #ifdef NE2000_DETECT_8BIT
 static bool	ne2000_detect_8bit(bus_space_tag_t, bus_space_handle_t,
@@ -115,14 +113,16 @@ static bool	ne2000_detect_8bit(bus_space_tag_t, bus_space_handle_t,
 	    BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE)
 
 int
-ne2000_attach(struct ne2000_softc *nsc, uint8_t *myea)
+ne2000_attach(nsc, myea)
+	struct ne2000_softc *nsc;
+	u_int8_t *myea;
 {
 	struct dp8390_softc *dsc = &nsc->sc_dp8390;
 	bus_space_tag_t nict = dsc->sc_regt;
 	bus_space_handle_t nich = dsc->sc_regh;
 	bus_space_tag_t asict = nsc->sc_asict;
 	bus_space_handle_t asich = nsc->sc_asich;
-	uint8_t romdata[16];
+	u_int8_t romdata[16];
 	int memstart, memsize, i, useword;
 
 	/*
@@ -140,7 +140,7 @@ ne2000_attach(struct ne2000_softc *nsc, uint8_t *myea)
 	case NE2000_TYPE_UNKNOWN:
 	default:
 		aprint_error_dev(dsc->sc_dev, "where did the card go?\n");
-		return 1;
+		return (1);
 	case NE2000_TYPE_NE1000:
 		memstart = 8192;
 		memsize = 8192;
@@ -248,9 +248,8 @@ ne2000_attach(struct ne2000_softc *nsc, uint8_t *myea)
 		}
 
 		if (memstart == 0) {
-			aprint_error_dev(dsc->sc_dev,
-			    "cannot find start of RAM\n");
-			return 1;
+			aprint_error_dev(&dsc->sc_dev, "cannot find start of RAM\n");
+			return (1);
 		}
 
 		/* Search for the end of RAM. */
@@ -277,7 +276,7 @@ ne2000_attach(struct ne2000_softc *nsc, uint8_t *myea)
 		}
 
 		printf("%s: RAM start 0x%x, size %d\n",
-		    device_xname(dsc->sc_dev), memstart, memsize);
+		    device_xname(&dsc->sc_dev), memstart, memsize);
 	}
 #endif /* GWETHER */
 	dsc->mem_start = memstart;
@@ -322,21 +321,24 @@ ne2000_attach(struct ne2000_softc *nsc, uint8_t *myea)
 
 	if (dp8390_config(dsc)) {
 		aprint_error_dev(dsc->sc_dev, "setup failed\n");
-		return 1;
+		return (1);
 	}
 
-	return 0;
+	return (0);
 }
 
 /*
  * Detect an NE-2000 or compatible.  Returns a model code.
  */
 int
-ne2000_detect(bus_space_tag_t nict, bus_space_handle_t nich,
-    bus_space_tag_t asict, bus_space_handle_t asich)
+ne2000_detect(nict, nich, asict, asich)
+	bus_space_tag_t nict;
+	bus_space_handle_t nich;
+	bus_space_tag_t asict;
+	bus_space_handle_t asich;
 {
-	const uint8_t test_pattern[32] = "THIS is A memory TEST pattern";
-	uint8_t test_buffer[32], tmp;
+	static u_int8_t test_pattern[32] = "THIS is A memory TEST pattern";
+	u_int8_t test_buffer[32], tmp;
 	int i, rv = NE2000_TYPE_UNKNOWN;
 	int useword;
 
@@ -511,7 +513,7 @@ ne2000_detect(bus_space_tag_t nict, bus_space_handle_t nich,
 	NIC_BARRIER(nict, nich);
 	bus_space_write_1(nict, nich, ED_P0_ISR, 0xff);
 
-	return rv;
+	return (rv);
 }
 
 #ifdef NE2000_DETECT_8BIT
@@ -548,7 +550,10 @@ ne2000_detect_8bit(bus_space_tag_t nict, bus_space_handle_t nich,
  * I/O.
  */
 int
-ne2000_write_mbuf(struct dp8390_softc *sc, struct mbuf *m, int buf)
+ne2000_write_mbuf(sc, m, buf)
+	struct dp8390_softc *sc;
+	struct mbuf *m;
+	int buf;
 {
 	struct ne2000_softc *nsc = (struct ne2000_softc *)sc;
 	bus_space_tag_t nict = sc->sc_regt;
@@ -598,10 +603,10 @@ ne2000_write_mbuf(struct dp8390_softc *sc, struct mbuf *m, int buf)
 	 */
 	if (nsc->sc_useword == 0) {
 		/* byte ops are easy. */
-		for (; m != NULL; m = m->m_next) {
+		for (; m != 0; m = m->m_next) {
 			if (m->m_len) {
 				bus_space_write_multi_1(asict, asich,
-				    NE2000_ASIC_DATA, mtod(m, uint8_t *),
+				    NE2000_ASIC_DATA, mtod(m, u_int8_t *),
 				    m->m_len);
 			}
 		}
@@ -612,20 +617,20 @@ ne2000_write_mbuf(struct dp8390_softc *sc, struct mbuf *m, int buf)
 		}
 	} else {
 		/* word ops are a bit trickier. */
-		uint8_t *data, savebyte[2];
+		u_int8_t *data, savebyte[2];
 		int l, leftover;
 #ifdef DIAGNOSTIC
-		uint8_t *lim;
+		u_int8_t *lim;
 #endif
 		/* Start out with no leftover data. */
 		leftover = 0;
 		savebyte[0] = savebyte[1] = 0;
 
-		for (; m != NULL; m = m->m_next) {
+		for (; m != 0; m = m->m_next) {
 			l = m->m_len;
 			if (l == 0)
 				continue;
-			data = mtod(m, uint8_t *);
+			data = mtod(m, u_int8_t *);
 #ifdef DIAGNOSTIC
 			lim = data + l;
 #endif
@@ -641,10 +646,10 @@ ne2000_write_mbuf(struct dp8390_softc *sc, struct mbuf *m, int buf)
 					l--;
 					bus_space_write_stream_2(asict, asich,
 					    NE2000_ASIC_DATA,
-					    *(uint16_t *)savebyte);
+					    *(u_int16_t *)savebyte);
 					leftover = 0;
 				} else if (BUS_SPACE_ALIGNED_POINTER(data,
-					   uint16_t) == 0) {
+					   u_int16_t) == 0) {
 					/*
 					 * Unaligned data; buffer the next
 					 * byte.
@@ -662,7 +667,7 @@ ne2000_write_mbuf(struct dp8390_softc *sc, struct mbuf *m, int buf)
 					l &= ~1;
 					bus_space_write_multi_stream_2(asict,
 					    asich, NE2000_ASIC_DATA,
-					    (uint16_t *)data, l >> 1);
+					    (u_int16_t *)data, l >> 1);
 					data += l;
 					if (leftover)
 						savebyte[0] = *data++;
@@ -679,7 +684,7 @@ ne2000_write_mbuf(struct dp8390_softc *sc, struct mbuf *m, int buf)
 		if (leftover) {
 			savebyte[1] = 0;
 			bus_space_write_stream_2(asict, asich, NE2000_ASIC_DATA,
-			    *(uint16_t *)savebyte);
+			    *(u_int16_t *)savebyte);
 		}
 		if (padlen) {
 			for(; padlen > 1; padlen -= 2)
@@ -691,7 +696,7 @@ ne2000_write_mbuf(struct dp8390_softc *sc, struct mbuf *m, int buf)
 
 	/* AX88796 doesn't seem to have remote DMA complete */
 	if (sc->sc_flags & DP8390_NO_REMOTE_DMA_COMPLETE)
-		return savelen;
+		return(savelen);
 
 	/*
 	 * Wait for remote DMA to complete.  This is necessary because on the
@@ -715,7 +720,7 @@ ne2000_write_mbuf(struct dp8390_softc *sc, struct mbuf *m, int buf)
 		dp8390_reset(sc);
 	}
 
-	return savelen;
+	return (savelen);
 }
 
 /*
@@ -724,7 +729,11 @@ ne2000_write_mbuf(struct dp8390_softc *sc, struct mbuf *m, int buf)
  * ring-wrap.
  */
 int
-ne2000_ring_copy(struct dp8390_softc *sc, int src, void *dstv, u_short amount)
+ne2000_ring_copy(sc, src, dstv, amount)
+	struct dp8390_softc *sc;
+	int src;
+	void *dstv;
+	u_short amount;
 {
 	char *dst = dstv;
 	struct ne2000_softc *nsc = (struct ne2000_softc *)sc;
@@ -741,26 +750,29 @@ ne2000_ring_copy(struct dp8390_softc *sc, int src, void *dstv, u_short amount)
 
 		/* Copy amount up to end of NIC memory. */
 		ne2000_readmem(nict, nich, asict, asich, src,
-		    (uint8_t *)dst, tmp_amount, useword);
+		    (u_int8_t *)dst, tmp_amount, useword);
 
 		amount -= tmp_amount;
 		src = sc->mem_ring;
 		dst += tmp_amount;
 	}
 
-	ne2000_readmem(nict, nich, asict, asich, src, (uint8_t *)dst,
+	ne2000_readmem(nict, nich, asict, asich, src, (u_int8_t *)dst,
 	    amount, useword);
 
-	return src + amount;
+	return (src + amount);
 }
 
 void
-ne2000_read_hdr(struct dp8390_softc *sc, int buf, struct dp8390_ring *hdr)
+ne2000_read_hdr(sc, buf, hdr)
+	struct dp8390_softc *sc;
+	int buf;
+	struct dp8390_ring *hdr;
 {
 	struct ne2000_softc *nsc = (struct ne2000_softc *)sc;
 
 	ne2000_readmem(sc->sc_regt, sc->sc_regh, nsc->sc_asict, nsc->sc_asich,
-	    buf, (uint8_t *)hdr, sizeof(struct dp8390_ring),
+	    buf, (u_int8_t *)hdr, sizeof(struct dp8390_ring),
 	    nsc->sc_useword);
 #if BYTE_ORDER == BIG_ENDIAN
 	hdr->count = bswap16(hdr->count);
@@ -772,7 +784,7 @@ ne2000_test_mem(struct dp8390_softc *sc)
 {
 
 	/* Noop. */
-	return 0;
+	return (0);
 }
 
 /*
@@ -781,9 +793,15 @@ ne2000_test_mem(struct dp8390_softc *sc)
  * rounded up to a word - ok as long as mbufs are word sized.
  */
 void
-ne2000_readmem(bus_space_tag_t nict, bus_space_handle_t nich,
-    bus_space_tag_t asict, bus_space_handle_t asich,
-    int src, uint8_t *dst, size_t amount, int useword)
+ne2000_readmem(nict, nich, asict, asich, src, dst, amount, useword)
+	bus_space_tag_t nict;
+	bus_space_handle_t nich;
+	bus_space_tag_t asict;
+	bus_space_handle_t asich;
+	int src;
+	u_int8_t *dst;
+	size_t amount;
+	int useword;
 {
 
 	/* Select page 0 registers. */
@@ -810,7 +828,7 @@ ne2000_readmem(bus_space_tag_t nict, bus_space_handle_t nich,
 	ASIC_BARRIER(asict, asich);
 	if (useword)
 		bus_space_read_multi_stream_2(asict, asich, NE2000_ASIC_DATA,
-		    (uint16_t *)dst, amount >> 1);
+		    (u_int16_t *)dst, amount >> 1);
 	else
 		bus_space_read_multi_1(asict, asich, NE2000_ASIC_DATA,
 		    dst, amount);
@@ -821,9 +839,16 @@ ne2000_readmem(bus_space_tag_t nict, bus_space_handle_t nich,
  * used in the probe routine to test the memory.  'len' must be even.
  */
 void
-ne2000_writemem(bus_space_tag_t nict, bus_space_handle_t nich,
-    bus_space_tag_t asict, bus_space_handle_t asich,
-    const uint8_t *src, int dst, size_t len, int useword, int quiet)
+ne2000_writemem(nict, nich, asict, asich, src, dst, len, useword, quiet)
+	bus_space_tag_t nict;
+	bus_space_handle_t nich;
+	bus_space_tag_t asict;
+	bus_space_handle_t asich;
+	u_int8_t *src;
+	int dst;
+	size_t len;
+	int useword;
+	int quiet;
 {
 	int maxwait = 100;	/* about 120us */
 
@@ -854,7 +879,7 @@ ne2000_writemem(bus_space_tag_t nict, bus_space_handle_t nich,
 	ASIC_BARRIER(asict, asich);
 	if (useword)
 		bus_space_write_multi_stream_2(asict, asich, NE2000_ASIC_DATA,
-		    (const uint16_t *)src, len >> 1);
+		    (u_int16_t *)src, len >> 1);
 	else
 		bus_space_write_multi_1(asict, asich, NE2000_ASIC_DATA,
 		    src, len);
@@ -876,10 +901,12 @@ ne2000_writemem(bus_space_tag_t nict, bus_space_handle_t nich,
 }
 
 int
-ne2000_detach(struct ne2000_softc *sc, int flags)
+ne2000_detach(sc, flags)
+	struct ne2000_softc *sc;
+	int flags;
 {
 
-	return dp8390_detach(&sc->sc_dp8390, flags);
+	return (dp8390_detach(&sc->sc_dp8390, flags));
 }
 
 #ifdef IPKDB_NE
@@ -887,7 +914,8 @@ ne2000_detach(struct ne2000_softc *sc, int flags)
  * This code is essentially the same as ne2000_attach above.
  */
 int
-ne2000_ipkdb_attach(struct ipkdb_if *kip)
+ne2000_ipkdb_attach(kip)
+	struct ipkdb_if *kip;
 {
 	struct ne2000_softc *np = kip->port;
 	struct dp8390_softc *dp = &np->sc_dp8390;
@@ -1015,37 +1043,31 @@ ne2000_ipkdb_attach(struct ipkdb_if *kip)
 }
 #endif
 
-bool
-ne2000_suspend(device_t self, const pmf_qual_t *qual)
+void
+ne2000_power(int why, void *arg)
 {
-	struct ne2000_softc *sc = device_private(self);
-	struct dp8390_softc *dsc = &sc->sc_dp8390;
-	int s;
-
-	s = splnet();
-
-	dp8390_stop(dsc);
-	dp8390_disable(dsc);
-
-	splx(s);
-	return true;
-}
-
-bool
-ne2000_resume(device_t self, const pmf_qual_t *qual)
-{
-	struct ne2000_softc *sc = device_private(self);
+	struct ne2000_softc *sc = arg;
 	struct dp8390_softc *dsc = &sc->sc_dp8390;
 	struct ifnet *ifp = &dsc->sc_ec.ec_if;
 	int s;
 
 	s = splnet();
-
-	if (ifp->if_flags & IFF_UP) {
-		if (dp8390_enable(dsc) == 0)
-			dp8390_init(dsc);
+	switch (why) {
+	case PWR_SUSPEND:
+	case PWR_STANDBY:
+		dp8390_stop(dsc);
+		dp8390_disable(dsc);
+		break;
+	case PWR_RESUME:
+		if (ifp->if_flags & IFF_UP) {
+			if (dp8390_enable(dsc) == 0)
+				dp8390_init(dsc);
+		}
+		break;
+	case PWR_SOFTSUSPEND:
+	case PWR_SOFTSTANDBY:
+	case PWR_SOFTRESUME:
+		break;
 	}
-
 	splx(s);
-	return true;
 }

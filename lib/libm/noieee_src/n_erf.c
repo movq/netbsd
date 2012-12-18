@@ -1,4 +1,4 @@
-/*	$NetBSD: n_erf.c,v 1.8 2011/11/02 02:34:56 christos Exp $	*/
+/*	$NetBSD: n_erf.c,v 1.7 2005/05/03 04:18:32 matt Exp $	*/
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -161,7 +161,7 @@ static char sccsid[] = "@(#)erf.c	8.1 (Berkeley) 6/4/93";
 #endif
 
 static const double
-tiny	    = _TINY,
+tiny	    = 1e-300,
 half	    = 0.5,
 one	    = 1.0,
 two	    = 2.0,
@@ -275,7 +275,7 @@ erf(double x)
 		ax = - ax;
 	if (ax < .84375) {
 	    if (ax < 3.7e-09) {
-		if (ax < _TINYER)
+		if (ax < 1.0e-308)
 		    return 0.125*(8.0*x+p0t8*x);  /*avoid underflow */
 		return x + p0*x;
 	    }

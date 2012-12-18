@@ -1,4 +1,4 @@
-/*	$NetBSD: netif_small.c,v 1.12 2009/10/21 23:12:09 snj Exp $	*/
+/*	$NetBSD: netif_small.c,v 1.8 2003/03/13 16:02:39 drochner Exp $	*/
 
 /* minimal netif - for boot ROMs we don't have to select between
   several interfaces, and we have to save space
@@ -18,6 +18,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ * 4. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Gordon W. Ross
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -52,23 +57,24 @@
 #include "etherdrv.h"
 
 #ifdef NETIF_DEBUG
-int netif_debug = 1;
+int netif_debug=1;
 #endif
 
 /* we allow for one socket only */
 static struct iodesc iosocket;
 
 struct iodesc *
-socktodesc(int sock)
+socktodesc(sock)
+	int sock;
 {
 	if (sock != 0) {
-		return NULL;
+		return (NULL);
 	}
-	return &iosocket;
+	return (&iosocket);
 }
 
 int
-netif_open(void)
+netif_open()
 {
 	struct iodesc *io;
 
@@ -77,22 +83,23 @@ netif_open(void)
 #ifdef NETIF_DEBUG
 		printf("netif_open: device busy\n");
 #endif
-		return -1;
+		return (-1);
 	}
 	memset(io, 0, sizeof(*io));
 
 	if (!EtherInit(io->myea)) {
 		printf("EtherInit failed\n");
-		return -1;
+		return (-1);
 	}
 
 	io->io_netif = (void*)1; /* mark busy */
 
-	return 0;
+	return (0);
 }
 
 void
-netif_close(int fd)
+netif_close(fd)
+	int fd;
 {
 	struct iodesc *io;
 
@@ -112,7 +119,10 @@ netif_close(int fd)
  * Return the length sent (or -1 on error).
  */
 int
-netif_put(struct iodesc *desc, void *pkt, size_t len)
+netif_put(desc, pkt, len)
+	struct iodesc *desc;
+	void *pkt;
+	size_t len;
 {
 #ifdef NETIF_DEBUG
 	if (netif_debug) {
@@ -126,7 +136,7 @@ netif_put(struct iodesc *desc, void *pkt, size_t len)
 		printf("type: 0x%x\n", eh->ether_type & 0xFFFF);
 	}
 #endif
-	return EtherSend(pkt, len);
+	return (EtherSend(pkt, len));
 }
 
 /*
@@ -134,14 +144,18 @@ netif_put(struct iodesc *desc, void *pkt, size_t len)
  * Return the total length received (or -1 on error).
  */
 int
-netif_get(struct iodesc *desc, void *pkt, size_t maxlen, saseconds_t timo)
+netif_get(desc, pkt, maxlen, timo)
+	struct iodesc *desc;
+	void *pkt;
+	size_t maxlen;
+	time_t timo;
 {
 	int len;
-	satime_t t;
+	time_t t;
 
 #ifdef NETIF_DEBUG
 	if (netif_debug)
-		printf("netif_get: pkt=%p, maxlen=%d, tmo=%d\n",
+		printf("netif_get: pkt=%p, maxlen=%d, tmo=%ld\n",
 			   pkt, maxlen, timo);
 #endif
 

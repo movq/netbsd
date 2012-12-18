@@ -1,4 +1,4 @@
-/*	$NetBSD: init_disp.c,v 1.12 2011/09/06 18:32:03 joerg Exp $	*/
+/*	$NetBSD: init_disp.c,v 1.11 2003/08/07 11:16:04 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)init_disp.c	8.2 (Berkeley) 2/16/94";
 #endif
-__RCSID("$NetBSD: init_disp.c,v 1.12 2011/09/06 18:32:03 joerg Exp $");
+__RCSID("$NetBSD: init_disp.c,v 1.11 2003/08/07 11:16:04 agc Exp $");
 #endif /* not lint */
 
 /*
@@ -56,7 +56,7 @@ __RCSID("$NetBSD: init_disp.c,v 1.12 2011/09/06 18:32:03 joerg Exp $");
  * and build the various windows.
  */
 void
-init_display(void)
+init_display()
 {
 	struct sigaction sa;
 
@@ -99,7 +99,7 @@ init_display(void)
  * connection are the three edit characters.
  */
 void
-set_edit_chars(void)
+set_edit_chars()
 {
 	char buf[3];
 	int cc;
@@ -127,7 +127,8 @@ set_edit_chars(void)
 }
 
 void
-sig_sent(int dummy)
+sig_sent(dummy)
+	int dummy;
 {
 
 	message("Connection closing. Exiting");
@@ -138,7 +139,7 @@ sig_sent(int dummy)
  * All done talking...hang up the phone and reset terminal thingy's
  */
 void
-quit(void)
+quit()
 {
 
 	if (curses_initialized) {

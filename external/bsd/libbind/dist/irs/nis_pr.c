@@ -1,4 +1,4 @@
-/*	$NetBSD: nis_pr.c,v 1.1.1.2 2012/09/09 16:07:55 christos Exp $	*/
+/*	$NetBSD: nis_pr.c,v 1.1.1.1.4.2 2011/01/06 21:42:18 riz Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -18,7 +18,7 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-static const char rcsid[] = "Id: nis_pr.c,v 1.4 2005/04/27 04:56:33 sra Exp ";
+static const char rcsid[] = "Id: nis_pr.c,v 1.4 2005/04/27 04:56:33 sra Exp";
 #endif
 
 /* Imports */

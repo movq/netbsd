@@ -1,4 +1,4 @@
-/* $NetBSD: if_tr_mca.c,v 1.22 2012/10/27 17:18:26 chs Exp $ */
+/* $NetBSD: if_tr_mca.c,v 1.18 2008/05/04 13:11:14 martin Exp $ */
 
 /*_
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tr_mca.c,v 1.22 2012/10/27 17:18:26 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tr_mca.c,v 1.18 2008/05/04 13:11:14 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,10 +61,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_tr_mca.c,v 1.22 2012/10/27 17:18:26 chs Exp $");
 #define TR_MBPS_4 0
 #define TR_MBPS_16 1
 
-int	tr_mca_probe(device_t, cfdata_t, void *);
-void	tr_mca_attach(device_t, device_t, void *);
+int	tr_mca_probe(struct device *, struct cfdata *, void *);
+void	tr_mca_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(tr_mca, sizeof(struct tr_softc),
+CFATTACH_DECL(tr_mca, sizeof(struct tr_softc),
     tr_mca_probe, tr_mca_attach, NULL, NULL);
 
 /* supported products */
@@ -79,7 +79,8 @@ static const struct tr_mca_product {
 static const struct tr_mca_product *tr_mca_lookup(int);
 
 static const struct tr_mca_product *
-tr_mca_lookup(int id)
+tr_mca_lookup(id)
+	int id;
 {
 	const struct tr_mca_product *trp;
 
@@ -91,7 +92,7 @@ tr_mca_lookup(int id)
 }
 
 int
-tr_mca_probe(device_t parent, cfdata_t match,
+tr_mca_probe(struct device *parent, struct cfdata *match,
     void *aux)
 {
 	struct mca_attach_args *ma = aux;
@@ -104,7 +105,7 @@ tr_mca_probe(device_t parent, cfdata_t match,
 
 
 void
-tr_mca_attach(device_t parent, device_t self, void *aux)
+tr_mca_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct tr_softc *sc = device_private(self);
 	struct mca_attach_args *ma = aux;
@@ -169,23 +170,22 @@ tr_mca_attach(device_t parent, device_t self, void *aux)
 
 	/* map the pio registers */
 	if (bus_space_map(ma->ma_iot, iobase, TR_PIOSIZE, 0, &pioh)) {
-		aprint_error_dev(self, "unable to map PIO space\n");
+		aprint_error_dev(&sc->sc_dev, "unable to map PIO space\n");
 		return;
 	}
 
 	/* map the mmio registers */
 	if (bus_space_map(ma->ma_memt, rom_addr, TR_MMIOSIZE, 0, &mmioh)) {
-		aprint_error_dev(self, "unable to map MMIO space\n");
+		aprint_error_dev(&sc->sc_dev, "unable to map MMIO space\n");
 		return;
 	}
 
 	/* map the sram space */
 	if (bus_space_map(ma->ma_memt, sram_addr, sram_size, 0, &sramh)) {
-		aprint_error_dev(self, "unable to map SRAM space\n");
+		aprint_error_dev(&sc->sc_dev, "unable to map SRAM space\n");
 		return;
 	}
 
-	sc->sc_dev = self;
 	sc->sc_piot = ma->ma_iot;
 	sc->sc_pioh = pioh;
 	sc->sc_memt = ma->ma_memt;
@@ -218,7 +218,7 @@ tr_mca_attach(device_t parent, device_t self, void *aux)
 	/* establish interrupt handler */
 	sc->sc_ih = mca_intr_establish(ma->ma_mc, irq, IPL_NET, tr_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(self, "couldn't establish interrupt handler\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt handler\n");
 		return;
 	}
 

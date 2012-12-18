@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.19 2011/01/22 19:19:21 joerg Exp $	*/
+/*	$NetBSD: boot.c,v 1.16 2008/04/28 20:23:31 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -95,8 +95,8 @@ char *kernelnames[] = {
 };
 
 
-static char *devname(char *);
-int main(int, char **);
+static char *devname __P((char *));
+int main __P((int, char **));
 
 /*
  * This gets arguments from the first stage boot lader, calls PROM routines
@@ -108,7 +108,9 @@ int main(int, char **);
  * The argument "-a" means netbsd should do an automatic reboot.
  */
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	char *name, **namep, *dev, *kernel;
 	char bootname[PATH_MAX], bootpath[PATH_MAX];
@@ -121,6 +123,7 @@ main(int argc, char **argv)
 	printf("\n");
 	printf("NetBSD/pmax " NETBSD_VERS " " BOOT_TYPE_NAME " Bootstrap, Revision %s\n",
 	    bootprog_rev);
+	printf("(%s, %s)\n", bootprog_maker, bootprog_date);
 	printf("\n");
 
 	/* initialise bootinfo structure early */
@@ -195,7 +198,8 @@ fail:
  *        without a trailing slash.
  */
 static char *
-devname(char *fname)
+devname(fname)
+	char *fname;
 {
 	char c;
 

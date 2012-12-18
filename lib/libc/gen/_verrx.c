@@ -1,4 +1,4 @@
-/*	$NetBSD: _verrx.c,v 1.11 2011/07/17 20:54:34 joerg Exp $	*/
+/*	$NetBSD: _verrx.c,v 1.10 2005/09/13 01:44:09 christos Exp $	*/
 
 /*
  * J.T. Conklin, December 12, 1994
@@ -7,19 +7,17 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: _verrx.c,v 1.11 2011/07/17 20:54:34 joerg Exp $");
+__RCSID("$NetBSD: _verrx.c,v 1.10 2005/09/13 01:44:09 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
-
-#include <stdarg.h>
 
 #if defined(__indr_reference)
 __indr_reference(_verrx, verrx)
 #else
 
-__dead void _verrx(int, const char *, va_list);
+__dead void _verrx(int, const char *, _BSD_VA_LIST_);
 
 void
-verrx(int eval, const char *fmt, va_list ap)
+verrx(int eval, const char *fmt, _BSD_VA_LIST_ ap)
 {
 	_verrx(eval, fmt, ap);
 }

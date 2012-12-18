@@ -1,4 +1,4 @@
-/*	$NetBSD: match_list.h,v 1.1.1.1 2009/06/23 10:09:00 tron Exp $	*/
+/*	$NetBSD: match_list.h,v 1.1.1.1.2.3 2011/01/07 01:24:18 riz Exp $	*/
 
 #ifndef _MATCH_LIST_H_INCLUDED_
 #define _MATCH_LIST_H_INCLUDED_

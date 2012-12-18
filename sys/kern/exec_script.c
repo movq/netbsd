@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_script.c,v 1.66 2010/11/19 06:44:42 dholland Exp $	*/
+/*	$NetBSD: exec_script.c,v 1.62 2008/03/21 21:55:00 ad Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1996 Christopher G. Demetriou
@@ -31,11 +31,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exec_script.c,v 1.66 2010/11/19 06:44:42 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exec_script.c,v 1.62 2008/03/21 21:55:00 ad Exp $");
 
 #if defined(SETUIDSCRIPTS) && !defined(FDSCRIPTS)
 #define FDSCRIPTS		/* Need this for safe set-id scripts. */
 #endif
+
+#include "veriexec.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,53 +52,9 @@ __KERNEL_RCSID(0, "$NetBSD: exec_script.c,v 1.66 2010/11/19 06:44:42 dholland Ex
 #include <sys/filedesc.h>
 #include <sys/exec.h>
 #include <sys/resourcevar.h>
-#include <sys/module.h>
+
 #include <sys/exec_script.h>
 #include <sys/exec_elf.h>
-
-MODULE(MODULE_CLASS_MISC, exec_script, NULL);
-
-static struct execsw exec_script_execsw[] = {
-	{ SCRIPT_HDR_SIZE,
-	  exec_script_makecmds,
-	  { NULL },
-	  NULL,
-	  EXECSW_PRIO_ANY,
-	  0,
-	  NULL,
-	  NULL,
-	  NULL,
-	  exec_setup_stack },
-};
-
-static int
-exec_script_modcmd(modcmd_t cmd, void *arg)
-{
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-		return exec_add(exec_script_execsw,
-		    __arraycount(exec_script_execsw));
-
-	case MODULE_CMD_FINI:
-		return exec_remove(exec_script_execsw,
-		    __arraycount(exec_script_execsw));
-
-	case MODULE_CMD_AUTOUNLOAD:
-		/*
-		 * We don't want to be autounloaded because our use is
-		 * transient: no executables with p_execsw equal to
-		 * exec_script_execsw will exist, so FINI will never
-		 * return EBUSY.  However, the system will run scripts
-		 * often.  Return EBUSY here to prevent this module from
-		 * ping-ponging in and out of the kernel.
-		 */
-		return EBUSY;
-
-	default:
-		return ENOTTY;
-        }
-}
 
 /*
  * exec_script_makecmds(): Check if it's an executable shell script.
@@ -115,11 +73,10 @@ exec_script_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	int error, hdrlinelen, shellnamelen, shellarglen;
 	char *hdrstr = epp->ep_hdr;
-	char *cp, *shellname, *shellarg;
+	char *cp, *shellname, *shellarg, *oldpnbuf;
 	size_t shellargp_len;
 	struct exec_fakearg *shellargp;
 	struct exec_fakearg *tmpsap;
-	struct pathbuf *shell_pathbuf;
 	struct vnode *scriptvp;
 #ifdef SETUIDSCRIPTS
 	/* Gcc needs those initialized for spurious uninitialized warning */
@@ -221,7 +178,7 @@ check_shell:
 	 */
 	vn_lock(epp->ep_vp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_ACCESS(epp->ep_vp, VREAD, l->l_cred);
-	VOP_UNLOCK(epp->ep_vp);
+	VOP_UNLOCK(epp->ep_vp, 0);
 	if (error == EACCES
 #ifdef SETUIDSCRIPTS
 	    || script_sbits
@@ -248,7 +205,12 @@ check_shell:
 	}
 #endif
 
-	/* set up the fake args list */
+	/* set up the parameters for the recursive check_exec() call */
+	epp->ep_ndp->ni_dirp = shellname;
+	epp->ep_ndp->ni_segflg = UIO_SYSSPACE;
+	epp->ep_flags |= EXEC_INDIR;
+
+	/* and set up the fake args list, for later */
 	shellargp_len = 4 * sizeof(*shellargp);
 	shellargp = kmem_alloc(shellargp_len, KM_SLEEP);
 	tmpsap = shellargp;
@@ -268,12 +230,12 @@ check_shell:
 	if ((epp->ep_flags & EXEC_HASFD) == 0) {
 #endif
 		/* normally can't fail, but check for it if diagnostic */
-		error = copystr(epp->ep_kname, tmpsap->fa_arg, MAXPATHLEN,
+		error = copyinstr(epp->ep_name, tmpsap->fa_arg, MAXPATHLEN,
 		    (size_t *)0);
 		tmpsap++;
 #ifdef DIAGNOSTIC
 		if (error != 0)
-			panic("exec_script: copystr couldn't fail");
+			panic("exec_script: copyinstr couldn't fail");
 #endif
 #ifdef FDSCRIPTS
 	} else {
@@ -283,31 +245,22 @@ check_shell:
 #endif
 	tmpsap->fa_arg = NULL;
 
-	/* Save the old vnode so we can clean it up later. */
-	scriptvp = epp->ep_vp;
-	epp->ep_vp = NULL;
-
-	/* Note that we're trying recursively. */
-	epp->ep_flags |= EXEC_INDIR;
-
 	/*
 	 * mark the header we have as invalid; check_exec will read
 	 * the header from the new executable
 	 */
 	epp->ep_hdrvalid = 0;
 
-	/* try loading the interpreter */
-	shell_pathbuf = pathbuf_create(shellname);
-	if (shell_pathbuf == NULL) {
-		error = ENOMEM;
-	} else {
-		error = check_exec(l, epp, shell_pathbuf);
-		pathbuf_destroy(shell_pathbuf);
-	}
+	/*
+	 * remember the old vp and pnbuf for later, so we can restore
+	 * them if check_exec() fails.
+	 */
+	scriptvp = epp->ep_vp;
+	oldpnbuf = epp->ep_ndp->ni_cnd.cn_pnbuf;
 
+	error = check_exec(l, epp);
 	/* note that we've clobbered the header */
 	epp->ep_flags |= EXEC_DESTR;
-
 	if (error == 0) {
 		/*
 		 * It succeeded.  Unlock the script and
@@ -320,6 +273,9 @@ check_shell:
 			VOP_CLOSE(scriptvp, FREAD, l->l_cred);
 			vput(scriptvp);
 		}
+
+		/* free the old pathname buffer */
+		PNBUF_PUT(oldpnbuf);
 
 		epp->ep_flags |= (EXEC_HASARGL | EXEC_SKIPARG);
 		epp->ep_fa = shellargp;
@@ -340,6 +296,8 @@ check_shell:
 		return (0);
 	}
 
+	/* XXX oldpnbuf not set for "goto fail" path */
+	epp->ep_ndp->ni_cnd.cn_pnbuf = oldpnbuf;
 #ifdef FDSCRIPTS
 fail:
 #endif
@@ -353,6 +311,8 @@ fail:
 		VOP_CLOSE(scriptvp, FREAD, l->l_cred);
 		vput(scriptvp);
 	}
+
+        PNBUF_PUT(epp->ep_ndp->ni_cnd.cn_pnbuf);
 
 	/* free the fake arg list, because we're not returning it */
 	if ((tmpsap = shellargp) != NULL) {

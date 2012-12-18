@@ -1,4 +1,4 @@
-/*	$NetBSD: mopprobe.c,v 1.11 2011/08/30 19:49:11 joerg Exp $	*/
+/*	$NetBSD: mopprobe.c,v 1.8 2003/04/20 00:18:33 christos Exp $	*/
 
 /*
  * Copyright (c) 1993-96 Mats O Jansson.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mopprobe.c,v 1.11 2011/08/30 19:49:11 joerg Exp $");
+__RCSID("$NetBSD: mopprobe.c,v 1.8 2003/04/20 00:18:33 christos Exp $");
 #endif
 
 /*
@@ -53,8 +58,9 @@ __RCSID("$NetBSD: mopprobe.c,v 1.11 2011/08/30 19:49:11 joerg Exp $");
  */
 struct if_info *iflist;
 
-__dead static void	Usage(void);
-void	mopProcess(struct if_info *, u_char *);
+void	Usage __P((void));
+int	main __P((int, char **));
+void	mopProcess __P((struct if_info *, u_char *));
 
 int     AllFlag = 0;		/* listen on "all" interfaces  */
 int     DebugFlag = 0;		/* print debugging messages    */
@@ -64,7 +70,9 @@ int     oflag = 0;		/* print only once             */
 int	promisc = 1;		/* Need promisc mode           */
 
 int
-main(int argc, char  **argv)
+main(argc, argv)
+	int     argc;
+	char  **argv;
 {
 	int     op;
 	char   *interface;
@@ -112,8 +120,8 @@ main(int argc, char  **argv)
 	return (0);
 }
 
-static void
-Usage(void)
+void
+Usage()
 {
 	(void) fprintf(stderr, "usage: %s -a [ -3 | -4 ]\n", getprogname());
 	(void) fprintf(stderr, "       %s [ -3 | -4 ] interface\n",
@@ -125,16 +133,18 @@ Usage(void)
  * Process incomming packages.
  */
 void
-mopProcess(struct if_info *ii, u_char *pkt)
+mopProcess(ii, pkt)
+	struct if_info *ii;
+	u_char *pkt;
 {
 	u_char  *dst, *src, *p, mopcode, tmpc, ilen;
 	u_short *ptype, moplen, tmps, itype, len;
-	int	idx, i, device, trans;
+	int	index, i, device, trans;
 
 	dst	= pkt;
 	src	= pkt+6;
 	ptype   = (u_short *)(pkt+12);
-	idx   = 0;
+	index   = 0;
 	
 	if (*ptype < 1600) {
 		len = *ptype;
@@ -166,9 +176,9 @@ mopProcess(struct if_info *ii, u_char *pkt)
 		moplen = len;
 		break;
 	default:
-		moplen = mopGetShort(pkt,&idx);
+		moplen = mopGetShort(pkt,&index);
 	}
-	mopcode	= mopGetChar(p,&idx);
+	mopcode	= mopGetChar(p,&index);
 
 	/* Just process System Information */
 
@@ -176,60 +186,60 @@ mopProcess(struct if_info *ii, u_char *pkt)
 		return;
 	}
 	
-	tmpc	= mopGetChar(pkt,&idx);		/* Reserved  */
-	tmps	= mopGetShort(pkt,&idx);		/* Receipt # */
+	tmpc	= mopGetChar(pkt,&index);		/* Reserved  */
+	tmps	= mopGetShort(pkt,&index);		/* Receipt # */
 
 	device	= 0;					/* Unknown Device */
 	
-	itype	= mopGetShort(pkt,&idx);
+	itype	= mopGetShort(pkt,&index);
 
-	while (idx < (int)(moplen + 2)) {
-		ilen	= mopGetChar(pkt,&idx);
+	while (index < (int)(moplen + 2)) {
+		ilen	= mopGetChar(pkt,&index);
 		switch (itype) {
 		case 0:
-			tmpc  = mopGetChar(pkt,&idx);
-			idx = idx + tmpc;
+			tmpc  = mopGetChar(pkt,&index);
+			index = index + tmpc;
 			break;
 	        case MOP_K_INFO_VER:
-			idx = idx + 3;
+			index = index + 3;
 			break;
 		case MOP_K_INFO_MFCT:
-			idx = idx + 2;
+			index = index + 2;
 			break;
 		case MOP_K_INFO_CNU:
-			idx = idx + 6;
+			index = index + 6;
 			break;
 		case MOP_K_INFO_RTM:
-			idx = idx + 2;
+			index = index + 2;
 			break;
 		case MOP_K_INFO_CSZ:
-			idx = idx + 2;
+			index = index + 2;
 			break;
 		case MOP_K_INFO_RSZ:
-			idx = idx + 2;
+			index = index + 2;
 			break;
 		case MOP_K_INFO_HWA:
-			idx = idx + 6;
+			index = index + 6;
 			break;
 		case MOP_K_INFO_TIME:
-			idx = idx + 10;
+			index = index + 10;
 			break;
 	        case MOP_K_INFO_SOFD:
-			device = mopGetChar(pkt,&idx);
+			device = mopGetChar(pkt,&index);
 			break;
 		case MOP_K_INFO_SFID:
-			tmpc = mopGetChar(pkt,&idx);
-			if ((idx > 0) && (idx < 17)) 
-			  idx = idx + tmpc;
+			tmpc = mopGetChar(pkt,&index);
+			if ((index > 0) && (index < 17)) 
+			  index = index + tmpc;
 			break;
 		case MOP_K_INFO_PRTY:
-			idx = idx + 1;
+			index = index + 1;
 			break;
 		case MOP_K_INFO_DLTY:
-			idx = idx + 1;
+			index = index + 1;
 			break;
 	        case MOP_K_INFO_DLBSZ:
-			idx = idx + 2;
+			index = index + 2;
 			break;
 		default:
 			if (((device = NMA_C_SOFD_LCS) ||   /* DECserver 100 */
@@ -240,32 +250,32 @@ mopProcess(struct if_info *ii, u_char *pkt)
 			{
 				switch (itype) {
 				case 102:
-					idx = idx + ilen;
+					index = index + ilen;
 					break;
 				case 103:
-					idx = idx + ilen;
+					index = index + ilen;
 					break;
 				case 104:
-					idx = idx + 2;
+					index = index + 2;
 					break;
 				case 105:
 					(void)fprintf(stdout,"%x:%x:%x:%x:%x:%x\t",
 						      src[0],src[1],src[2],src[3],src[4],src[5]);
 					for (i = 0; i < ilen; i++) {
-					  (void)fprintf(stdout, "%c",pkt[idx+i]);
+					  (void)fprintf(stdout, "%c",pkt[index+i]);
 					}
-					idx = idx + ilen;
+					index = index + ilen;
 					(void)fprintf(stdout, "\n");
 					break;
 				case 106:
-					idx = idx + ilen;
+					index = index + ilen;
 					break;
 				};
 			} else {
-				idx = idx + ilen;
+				index = index + ilen;
 			};
 		}
-		itype = mopGetShort(pkt,&idx); 
+		itype = mopGetShort(pkt,&index); 
 	}
 
 }

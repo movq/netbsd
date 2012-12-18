@@ -1,5 +1,5 @@
-/*	$Id: at91rm9200busvar.h,v 1.4 2012/07/30 23:35:28 matt Exp $	*/
-/*	$NetBSD: at91rm9200busvar.h,v 1.4 2012/07/30 23:35:28 matt Exp $ */
+/*	$Id: at91rm9200busvar.h,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
+/*	$NetBSD: at91rm9200busvar.h,v 1.2 2008/07/03 01:15:38 matt Exp $ */
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -13,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -57,6 +63,6 @@ const char *at91rm9200bus_peripheral_name(int pid);
 void at91rm9200bus_search_peripherals(device_t self,
 				   device_t (*found_func)(device_t, bus_addr_t, int));
 
-extern const struct at91bus_machdep at91rm9200bus;
+const struct at91bus_machdep at91rm9200bus;
 
 #endif	// _AT91RM9200BUSVAR_H_

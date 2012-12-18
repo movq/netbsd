@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.34 2011/05/05 04:38:20 tsutsui Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.33.20.1 2011/05/20 19:32:44 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.34 2011/05/05 04:38:20 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.33.20.1 2011/05/20 19:32:44 bouyer Exp $");
 
 #include "opt_compat_netbsd.h"
 

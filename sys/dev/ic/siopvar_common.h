@@ -1,4 +1,4 @@
-/*	$NetBSD: siopvar_common.h,v 1.40 2009/10/19 18:41:13 bouyer Exp $	*/
+/*	$NetBSD: siopvar_common.h,v 1.36 2008/06/11 02:09:16 kiyohara Exp $	*/
 
 /*
  * Copyright (c) 2000 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,8 +40,8 @@
 
 /* tables used by SCRIPT */
 typedef struct scr_table {
-	uint32_t count;
-	uint32_t addr;
+	u_int32_t count;
+	u_int32_t addr;
 } __packed scr_table_t;
 
 /* Number of scatter/gather entries */
@@ -48,12 +53,12 @@ typedef struct scr_table {
  * If you change something here, don't forget to update offsets in {s,es}iop.ss
  */
 struct siop_common_xfer {
-	uint8_t msg_out[16];	/* 0 */
-	uint8_t msg_in[16];	/* 16 */
-	uint32_t status;	/* 32 */
-	uint32_t pad1;		/* 36 */
-	uint32_t id;		/* 40 */
-	uint32_t pad2;		/* 44 */
+	u_int8_t msg_out[16];	/* 0 */
+	u_int8_t msg_in[16];	/* 16 */
+	u_int32_t status;	/* 32 */
+	u_int32_t pad1; 	/* 36 */
+	u_int32_t id;		/* 40 */
+	u_int32_t pad2;		/* 44 */
 	scr_table_t t_msgin;	/* 48 */
 	scr_table_t t_extmsgin;	/* 56 */
 	scr_table_t t_extmsgdata; /* 64 */
@@ -101,7 +106,7 @@ struct siop_common_cmd {
 struct siop_common_target {
 	int status;	/* target status, see below */
 	int flags;	/* target flags, see below */
-	uint32_t id;	/* for SELECT FROM */
+	u_int32_t id;	/* for SELECT FROM */
 	int period;
 	int offset;
 };
@@ -124,7 +129,7 @@ struct siop_common_target {
 
 /* Driver internal state */
 struct siop_common_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	struct scsipi_channel sc_chan;
 	struct scsipi_adapter sc_adapt;
 	int features;			/* chip's features */
@@ -147,7 +152,7 @@ struct siop_common_softc {
 	void (*sc_reset)(struct siop_common_softc*); /* reset callback */
 	bus_dmamap_t  sc_scriptdma;	/* DMA map for script */
 	bus_addr_t sc_scriptaddr;	/* on-board ram or physical address */
-	uint32_t *sc_script;		/* script location in memory */
+	u_int32_t *sc_script;		/* script location in memory */
 	struct siop_common_target *targets[16]; /* per-target states */
 };
 
@@ -201,9 +206,9 @@ int	siop_iwr(struct siop_common_cmd *);
 void	siop_minphys(struct buf *);
 int	siop_ioctl(struct scsipi_channel *, u_long,
 		void *, int, struct proc *);
-void	siop_ma (struct siop_common_cmd *);
-void	siop_sdp(struct siop_common_cmd *, int);
-void	siop_update_resid(struct siop_common_cmd *, int);
+void 	siop_ma (struct siop_common_cmd *);
+void 	siop_sdp(struct siop_common_cmd *, int);
+void 	siop_update_resid(struct siop_common_cmd *, int);
 void	siop_clearfifo(struct siop_common_softc *);
 void	siop_resetbus(struct siop_common_softc *);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: vfscanf.c,v 1.43 2012/03/15 18:22:30 christos Exp $	*/
+/*	$NetBSD: vfscanf.c,v 1.39 2008/08/28 16:41:21 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -38,7 +38,7 @@
 static char sccsid[] = "@(#)vfscanf.c	8.1 (Berkeley) 6/4/93";
 __FBSDID("$FreeBSD: src/lib/libc/stdio/vfscanf.c,v 1.41 2007/01/09 00:28:07 imp Exp $");
 #else
-__RCSID("$NetBSD: vfscanf.c,v 1.43 2012/03/15 18:22:30 christos Exp $");
+__RCSID("$NetBSD: vfscanf.c,v 1.39 2008/08/28 16:41:21 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -109,7 +109,7 @@ __weak_alias(vfscanf,__svfscanf)
 
 static const u_char *__sccl(char *, const u_char *);
 #ifndef NO_FLOATING_POINT
-static size_t parsefloat(FILE *, char *, char *);
+static int parsefloat(FILE *, char *, char *);
 #endif
 
 int __scanfdebug = 0;
@@ -137,7 +137,7 @@ __svfscanf(FILE *fp, char const *fmt0, va_list ap)
 	FLOCKFILE(fp);
 	ret = __svfscanf_unlocked(fp, fmt0, ap);
 	FUNLOCKFILE(fp);
-	return ret;
+	return (ret);
 }
 
 #define SCANF_SKIP_SPACE() \
@@ -161,11 +161,11 @@ __svfscanf_unlocked(FILE *fp, const char *fmt0, va_list ap)
 	char *p0;		/* saves original value of p when necessary */
 	int nassigned;		/* number of fields assigned */
 	int nconversions;	/* number of conversions */
-	size_t nread;		/* number of characters consumed from fp */
+	int nread;		/* number of characters consumed from fp */
 	int base;		/* base argument to conversion function */
 	char ccltab[256];	/* character class table for %[...] */
 	char buf[BUF];		/* buffer for numeric and mb conversions */
-	wchar_t *wcp;		/* handy wide-character pointer */
+	wchar_t *wcp;		/* handy wide character pointer */
 	size_t nconv;		/* length of multibyte sequence converted */
 	static const mbstate_t initial;
 	mbstate_t mbs;
@@ -186,7 +186,7 @@ __svfscanf_unlocked(FILE *fp, const char *fmt0, va_list ap)
 	for (;;) {
 		c = (unsigned char)*fmt++;
 		if (c == 0)
-			return nassigned;
+			return (nassigned);
 		if (isspace(c)) {
 			while ((fp->_r > 0 || __srefill(fp) == 0) &&
 			    isspace(*fp->_p))
@@ -325,9 +325,9 @@ literal:
 			if (flags & SUPPRESS)	/* ??? */
 				continue;
 			if (flags & SHORTSHORT)
-				*va_arg(ap, char *) = (char)nread;
+				*va_arg(ap, char *) = nread;
 			else if (flags & SHORT)
-				*va_arg(ap, short *) = (short)nread;
+				*va_arg(ap, short *) = nread;
 			else if (flags & LONG)
 				*va_arg(ap, long *) = nread;
 			else if (flags & LONGLONG)
@@ -339,7 +339,7 @@ literal:
 			else if (flags & PTRDIFFT)
 				*va_arg(ap, ptrdiff_t *) = nread;
 			else
-				*va_arg(ap, int *) = (int)nread;
+				*va_arg(ap, int *) = nread;
 			continue;
 
 		default:
@@ -349,7 +349,7 @@ literal:
 		 * Disgusting backwards compatibility hack.	XXX
 		 */
 		case '\0':	/* compat */
-			return EOF;
+			return (EOF);
 		}
 
 		/*
@@ -439,9 +439,7 @@ literal:
 						}
 					} else {
 						sum += width;
-						_DIAGASSERT(__type_fit(int,
-						    fp->_r - width));
-						fp->_r -= (int)width;
+						fp->_r -= width;
 						fp->_p += width;
 						break;
 					}
@@ -820,7 +818,7 @@ literal:
 					float res = strtof(buf, &p);
 					*va_arg(ap, float *) = res;
 				}
-				if (__scanfdebug && (size_t)(p - buf) != width)
+				if (__scanfdebug && p - buf != width)
 					abort();
 				nassigned++;
 			}
@@ -831,9 +829,9 @@ literal:
 		}
 	}
 input_failure:
-	return nconversions != 0 ? nassigned : EOF;
+	return (nconversions != 0 ? nassigned : EOF);
 match_failure:
-	return nassigned;
+	return (nassigned);
 }
 
 /*
@@ -843,7 +841,9 @@ match_failure:
  * considered part of the scanset.
  */
 static const u_char *
-__sccl(char *tab, const u_char *fmt)
+__sccl(tab, fmt)
+	char *tab;
+	const u_char *fmt;
 {
 	int c, n, v, i;
 
@@ -861,7 +861,7 @@ __sccl(char *tab, const u_char *fmt)
 	(void)memset(tab, v, 256);
 
 	if (c == 0)
-		return fmt - 1;/* format ended before closing ] */
+		return (fmt - 1);/* format ended before closing ] */
 
 	/*
 	 * Now set the entries corresponding to the actual scanset
@@ -878,7 +878,7 @@ doswitch:
 		switch (n) {
 
 		case 0:			/* format ended too soon */
-			return fmt - 1;
+			return (fmt - 1);
 
 		case '-':
 			/*
@@ -928,13 +928,13 @@ doswitch:
 #else
 			c = *fmt++;
 			if (c == 0)
-				return fmt - 1;
+				return (fmt - 1);
 			if (c == ']')
-				return fmt;
+				return (fmt);
 #endif
 
 		case ']':		/* end of scanset */
-			return fmt;
+			return (fmt);
 
 		default:		/* just another character */
 			c = n;
@@ -945,7 +945,7 @@ doswitch:
 }
 
 #ifndef NO_FLOATING_POINT
-static size_t
+static int
 parsefloat(FILE *fp, char *buf, char *end)
 {
 	char *commit, *p;
@@ -1093,6 +1093,6 @@ parsedone:
 	while (commit < --p)
 		(void)ungetc(*(u_char *)p, fp);
 	*++commit = '\0';
-	return commit - buf;
+	return (commit - buf);
 }
 #endif

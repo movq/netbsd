@@ -1,5 +1,4 @@
-/*	Id: cpy.y,v 1.18 2010/02/25 15:49:00 ragge Exp 	*/	
-/*	$NetBSD: cpy.y,v 1.1.1.3 2010/06/03 18:57:35 plunky Exp $	*/
+/*	$Id: cpy.y,v 1.1.1.1 2008/08/24 05:33:05 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 2004 Anders Magnusson (ragge@ludd.luth.se).
@@ -66,7 +65,7 @@
 
 #include "cpp.h"
 
-void yyerror(const char *);
+void yyerror(char *);
 int yylex(void);
 int setd(int l, int r);
 
@@ -84,11 +83,11 @@ int setd(int l, int r);
 
 %term stop
 %term EQ NE LE GE LS RS
-%term ANDAND OROR IDENT NUMBER UNUMBER DEFINED
+%term ANDAND OROR IDENT NUMBER UNUMBER
 /*
  * The following terminals are not used in the yacc code.
  */
-%term STRING WSPACE CMNT
+%term STRING FPOINT WSPACE VA_ARGS CONCAT MKSTR ELLIPS CMNT
 
 %left ','
 %right '?' ':'
@@ -193,16 +192,12 @@ term:
 		{ EVALUNARY(~, $$, $2); }
 	| '(' e ')'
 		{$$ = $2;}
-	| DEFINED '(' NUMBER ')'
-		{$$= $3;}
-	| DEFINED NUMBER
-		{$$ = $2;}
 	| NUMBER
 		{$$ = $1;}
 %%
 
 void
-yyerror(const char *err)
+yyerror(char *err)
 {
 	error(err);
 }

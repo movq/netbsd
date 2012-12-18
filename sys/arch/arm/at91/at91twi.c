@@ -1,5 +1,5 @@
-/*	$Id: at91twi.c,v 1.6 2012/10/27 17:17:36 chs Exp $	*/
-/*	$NetBSD: at91twi.c,v 1.6 2012/10/27 17:17:36 chs Exp $	*/
+/*	$Id: at91twi.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
+/*	$NetBSD: at91twi.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
 
 /*-
  * Copyright (c) 2007 Embedtronics Oy. All rights reserved.
@@ -31,13 +31,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91twi.c,v 1.6 2012/10/27 17:17:36 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91twi.c,v 1.2 2008/07/03 01:15:38 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <sys/lock.h>
 
 #include <arm/at91/at91var.h>
@@ -89,7 +89,7 @@ at91twi_attach(device_t parent, device_t self, void *aux)
 	sc->sc_pid = sa->sa_pid;
 
 	if (bus_space_map(sa->sa_iot, sa->sa_addr, sa->sa_size, 0, &sc->sc_ioh))
-		panic("%s: Cannot map registers", device_xname(self));
+		panic("%s: Cannot map registers", self->dv_xname);
 
 	printf(": I2C controller\n");
 
@@ -115,7 +115,7 @@ found_ckdiv:
 	at91twi_writereg(sc, TWI_CR, TWI_CR_MSEN);
 
 //#ifdef AT91TWI_DEBUG
-	printf("%s: ckdiv=%d cxdiv=%d CWGR=0x%08X SR=0x%08X\n", device_xname(self), ckdiv, cxdiv, at91twi_readreg(sc, TWI_CWGR), at91twi_readreg(sc, TWI_SR));
+	printf("%s: ckdiv=%d cxdiv=%d CWGR=0x%08X SR=0x%08X\n", self->dv_xname, ckdiv, cxdiv, at91twi_readreg(sc, TWI_CWGR), at91twi_readreg(sc, TWI_SR));
 //#endif
 
 	/* initialize rest */
@@ -139,13 +139,18 @@ found_ckdiv:
 }
 
 u_int
-at91twi_readreg(struct at91twi_softc *sc, int reg)
+at91twi_readreg(sc, reg)
+	struct at91twi_softc *sc;
+	int reg;
 {
 	return bus_space_read_4(sc->sc_iot, sc->sc_ioh, reg);
 }
 
 void
-at91twi_writereg(struct at91twi_softc *sc, int reg, u_int val)
+at91twi_writereg(sc, reg, val)
+	struct at91twi_softc *sc;
+	int reg;
+	u_int val;
 {
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, reg, val);
 }
@@ -212,7 +217,9 @@ out:
 }
 
 int
-at91twi_poll(struct at91twi_softc *sc, int timo, int flags)
+at91twi_poll(sc, timo, flags)
+	struct at91twi_softc *sc;
+	int timo, flags;
 {
 
 	timo = 1000000U;
@@ -274,7 +281,11 @@ at91twi_start(struct at91twi_softc *sc, int addr, void *data, int len,
 }
 
 int
-at91twi_read(struct at91twi_softc *sc, int addr, void *data, int len, int flags)
+at91twi_read(sc, addr, data, len, flags)
+	struct at91twi_softc *sc;
+	int addr, len;
+	void *data;
+	int flags;
 {
 	sc->sc_flags = I2C_READING;
 	#ifdef AT91TWI_DEBUG
@@ -284,7 +295,11 @@ at91twi_read(struct at91twi_softc *sc, int addr, void *data, int len, int flags)
 }
 
 int
-at91twi_write(struct at91twi_softc *sc, int addr, void *data, int len, int flags)
+at91twi_write(sc, addr, data, len, flags)
+	struct at91twi_softc *sc;
+	int addr, len;
+	void *data;
+	int flags;
 {
 	sc->sc_flags = 0;
 	#ifdef AT91TWI_DEBUG

@@ -1,4 +1,4 @@
-/*	$NetBSD: uhci_pci.c,v 1.55 2012/06/10 06:15:53 mrg Exp $	*/
+/*	$NetBSD: uhci_pci.c,v 1.44 2008/04/28 20:23:55 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhci_pci.c,v 1.55 2012/06/10 06:15:53 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhci_pci.c,v 1.44 2008/04/28 20:23:55 martin Exp $");
 
 #include "ehci.h"
 
@@ -55,7 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: uhci_pci.c,v 1.55 2012/06/10 06:15:53 mrg Exp $");
 #include <dev/usb/uhcireg.h>
 #include <dev/usb/uhcivar.h>
 
-static bool	uhci_pci_resume(device_t, const pmf_qual_t *);
+static bool	uhci_pci_resume(device_t PMF_FN_PROTO);
 
 struct uhci_pci_softc {
 	uhci_softc_t		sc;
@@ -68,7 +68,7 @@ struct uhci_pci_softc {
 };
 
 static int
-uhci_pci_match(device_t parent, cfdata_t match, void *aux)
+uhci_pci_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -91,13 +91,18 @@ uhci_pci_attach(device_t parent, device_t self, void *aux)
 	pci_intr_handle_t ih;
 	pcireg_t csr;
 	const char *vendor;
+	char devinfo[256];
 	usbd_status r;
 	int s;
 
 	sc->sc.sc_dev = self;
 	sc->sc.sc_bus.hci_private = sc;
 
-	pci_aprint_devinfo(pa, NULL);
+	aprint_naive("\n");
+
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	aprint_normal(": %s (rev. 0x%02x)\n",
+		      devinfo, PCI_REVISION(pa->pa_class));
 
 	/* Map I/O registers */
 	if (pci_mapreg_map(pa, PCI_CBIO, PCI_MAPREG_TYPE_IO, 0,
@@ -129,12 +134,12 @@ uhci_pci_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
-	sc->sc_ih = pci_intr_establish(pc, ih, IPL_SCHED, uhci_intr, sc);
+	sc->sc_ih = pci_intr_establish(pc, ih, IPL_USB, uhci_intr, sc);
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
@@ -198,17 +203,11 @@ uhci_pci_detach(device_t self, int flags)
 	struct uhci_pci_softc *sc = device_private(self);
 	int rv;
 
+	pmf_device_deregister(self);
+
 	rv = uhci_detach(&sc->sc, flags);
 	if (rv)
 		return (rv);
-
-	pmf_device_deregister(self);
-
-	/* disable interrupts and acknowledge any pending */
-	bus_space_write_2(sc->sc.iot, sc->sc.ioh, UHCI_INTR, 0);
-	bus_space_write_2(sc->sc.iot, sc->sc.ioh, UHCI_STS,
-	    bus_space_read_2(sc->sc.iot, sc->sc.ioh, UHCI_STS));
-
 	if (sc->sc_ih != NULL) {
 		pci_intr_disestablish(sc->sc_pc, sc->sc_ih);
 		sc->sc_ih = NULL;
@@ -224,7 +223,7 @@ uhci_pci_detach(device_t self, int flags)
 }
 
 static bool
-uhci_pci_resume(device_t dv, const pmf_qual_t *qual)
+uhci_pci_resume(device_t dv PMF_FN_ARGS)
 {
 	struct uhci_pci_softc *sc = device_private(dv);
 
@@ -232,9 +231,9 @@ uhci_pci_resume(device_t dv, const pmf_qual_t *qual)
 	pci_conf_write(sc->sc_pc, sc->sc_tag, PCI_LEGSUP,
 	    PCI_LEGSUP_USBPIRQDEN);
 
-	return uhci_resume(dv, qual);
+	return uhci_resume(dv PMF_FN_CALL);
 }
 
-CFATTACH_DECL3_NEW(uhci_pci, sizeof(struct uhci_pci_softc),
+CFATTACH_DECL2_NEW(uhci_pci, sizeof(struct uhci_pci_softc),
     uhci_pci_match, uhci_pci_attach, uhci_pci_detach, uhci_activate,
-    NULL, uhci_childdet, DVF_DETACH_SHUTDOWN);
+    NULL, uhci_childdet);

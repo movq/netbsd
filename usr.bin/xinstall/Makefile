@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.22 2011/08/17 14:00:30 christos Exp $
+#	$NetBSD: Makefile,v 1.21 2006/12/16 12:59:17 bouyer Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/6/93
 
 .include <bsd.own.mk>
@@ -14,8 +14,6 @@ CPPFLAGS+=	-I${NETBSDSRCDIR}/usr.sbin/mtree
 DPADD+= ${LIBUTIL}
 LDADD+= -lutil
 .endif
-
-COPTS.xinstall.c += -Wno-format-nonliteral
 
 
 PROGNAME=install

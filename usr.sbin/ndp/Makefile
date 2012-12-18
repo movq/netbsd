@@ -1,19 +1,17 @@
-# $NetBSD: Makefile,v 1.8 2010/12/12 18:50:31 christos Exp $
+# $NetBSD: Makefile,v 1.6 2007/05/28 12:06:38 tls Exp $
 
+WARNS?=4
 .include <bsd.own.mk>
 
 USE_FORT?= yes	# network client
 
-TCPDUMP= ${NETBSDSRCDIR}/external/bsd/tcpdump/dist
-.PATH:	${TCPDUMP}
+.PATH:	${NETBSDSRCDIR}/dist/tcpdump
 
 PROG=	ndp
 SRCS=	ndp.c gmt2local.c
 MAN=	ndp.8
 
-.if ${MKINET6} != "no"
 CPPFLAGS+=-DINET6
-.endif
-CPPFLAGS+=-I. -I${TCPDUMP}
+CPPFLAGS+=-I. -I${NETBSDSRCDIR}/dist/tcpdump
 
 .include <bsd.prog.mk>

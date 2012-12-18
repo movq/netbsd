@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.pl,v 1.6 2012/01/09 11:51:41 skrll Exp $	*/
+/*	$NetBSD: msg.md.pl,v 1.3 2008/02/02 05:40:02 itohy Exp $	*/
 /* Based on english version: */
 /*	NetBSD: msg.md.en,v 1.2 2002/12/03 01:54:49 minoura Exp */
 
@@ -17,7 +17,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -42,10 +46,6 @@ message md_hello
 {
 }
 
-message md_may_remove_boot_medium
-{
-}
-
 message dobootblks
 {Instalowanie bootblokow na %s....
 }
@@ -53,5 +53,3 @@ message dobootblks
 message set_kernel_1
 {Kernel (GENERIC)}
 
-message md_pdclimit
-{Partycja jest d?u?szy ni? PDC 2GB}

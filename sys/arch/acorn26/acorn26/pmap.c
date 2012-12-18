@@ -1,4 +1,4 @@
-/* $NetBSD: pmap.c,v 1.36 2012/05/11 15:39:17 skrll Exp $ */
+/* $NetBSD: pmap.c,v 1.19 2007/10/17 19:52:52 garbled Exp $ */
 /*-
  * Copyright (c) 1997, 1998, 2000 Ben Harris
  * All rights reserved.
@@ -102,16 +102,14 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.36 2012/05/11 15:39:17 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.19 2007/10/17 19:52:52 garbled Exp $");
 
 #include <sys/kernel.h> /* for cold */
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/pool.h>
 #include <sys/systm.h>
-#include <sys/lwp.h>
-#include <sys/proc.h>
 
-#include <uvm/uvm.h>
+#include <uvm/uvm_extern.h>
 #include <uvm/uvm_stat.h>
 
 #include <arm/cpuconf.h>
@@ -136,15 +134,15 @@ struct pv_entry {
 	pmap_t	pv_pmap;
 	int	pv_ppn;
 	int	pv_lpn;
-	uint32_t	pv_activate;  /* MEMC command to activate mapping */
-	uint32_t	pv_deactivate;/* MEMC command to deactivate mapping */
+	u_int32_t	pv_activate;  /* MEMC command to activate mapping */
+	u_int32_t	pv_deactivate;/* MEMC command to deactivate mapping */
 	vm_prot_t	pv_prot; /* requested protection */
-	uint8_t	pv_ppl;  /* Actual PPL */
-	uint8_t	pv_vflags; /* Per-mapping flags */
+	u_int8_t	pv_ppl;  /* Actual PPL */
+	u_int8_t	pv_vflags; /* Per-mapping flags */
 #define PV_WIRED	0x01 /* This is a wired mapping */
 #define PV_UNMANAGED	0x02 /* Mapping was entered by pmap_kenter_*() */
 	/* From pv_pflags onwards is per-physical-page state. */
-	uint8_t	pv_pflags; /* Per-physical-page flags */
+	u_int8_t	pv_pflags; /* Per-physical-page flags */
 #define PV_REFERENCED	0x01
 #define PV_MODIFIED	0x02
 #ifdef PMAP_DEBUG_MODIFIED
@@ -181,8 +179,7 @@ struct pv_entry *pv_table;
 
 /* Kernel pmap -- statically allocated to make life slightly less odd. */
 
-static struct pmap kernel_pmap_store;
-struct pmap *const kernel_pmap_ptr = &kernel_pmap_store;
+struct pmap kernel_pmap_store;
 struct pv_entry *kernel_pmap_entries[PM_NENTRIES];
 
 static bool pmap_initialised = false;
@@ -204,7 +201,7 @@ static void pv_free(struct pv_entry *pv);
 static struct pv_entry *pv_get(pmap_t pmap, int ppn, int lpn);
 static void pv_release(pmap_t pmap, int ppn, int lpn);
 
-static int pmap_enter1(pmap_t, vaddr_t, paddr_t, vm_prot_t, u_int, int);
+static int pmap_enter1(pmap_t, vaddr_t, paddr_t, vm_prot_t, int, int);
 
 static void *pmap_find(paddr_t);
 
@@ -258,7 +255,7 @@ pmap_bootstrap(int npages, paddr_t zp_physaddr)
 	pv_table_size = round_page(physmem * sizeof(struct pv_entry));
 	pv_table =
 	    (struct pv_entry *)uvm_pageboot_alloc(pv_table_size);
-	memset(pv_table, 0, pv_table_size);
+	bzero(pv_table, pv_table_size);
 #ifdef PMAP_DEBUG_MODIFIED
 	for (i = 0; i < physmem; i++)
 		pv_table[i].pv_pflags |= PV_MODIFIED;
@@ -266,11 +263,11 @@ pmap_bootstrap(int npages, paddr_t zp_physaddr)
 
 	/* Set up the kernel's pmap */
 	pmap = pmap_kernel();
-	memset(pmap, 0, sizeof(*pmap));
+	bzero(pmap, sizeof(*pmap));
 	pmap->pm_count = 1;
 	pmap->pm_flags = PM_ACTIVE; /* Kernel pmap always is */
 	pmap->pm_entries = kernel_pmap_entries;
-	memset(pmap->pm_entries, 0, sizeof(struct pv_entry *) * PM_NENTRIES);
+	bzero(pmap->pm_entries, sizeof(struct pv_entry *) * PM_NENTRIES);
 	/* pmap_pinit(pmap); */
 	/* Clear the MEMC's page table */
 	/* XXX Maybe we should leave zero page alone? */
@@ -301,11 +298,11 @@ pmap_steal_memory(vsize_t size, vaddr_t *vstartp, vaddr_t *vendp)
 	addr = 0;
 	size = round_page(size);
 	for (i = 0; i < vm_nphysseg; i++) {
-		if (VM_PHYSMEM_PTR(i)->avail_start < VM_PHYSMEM_PTR(i)->avail_end) {
+		if (vm_physmem[i].avail_start < vm_physmem[i].avail_end) {
 			addr = (vaddr_t)
 			    ((char*)MEMC_PHYS_BASE +
-				ptoa(VM_PHYSMEM_PTR(i)->avail_start));
-			VM_PHYSMEM_PTR(i)->avail_start++;
+				ptoa(vm_physmem[i].avail_start));
+			vm_physmem[i].avail_start++;
 			break;
 		}
 	}
@@ -321,7 +318,7 @@ pmap_steal_memory(vsize_t size, vaddr_t *vstartp, vaddr_t *vendp)
  * use the pool allocator.  malloc is still taboo.
  */
 void
-pmap_init(void)
+pmap_init()
 {
 	UVMHIST_FUNC("pmap_init");
 
@@ -336,7 +333,7 @@ pmap_init(void)
  * for allocating user pmaps, and frees some unnecessary memory.
  */
 void
-pmap_init2(void)
+pmap_init2()
 {
 	struct pmap *pmap;
 	struct pv_entry *new_pv_table, *old_pv_table;
@@ -347,7 +344,7 @@ pmap_init2(void)
 	UVMHIST_CALLED(pmaphist);
 	/* We can now call malloc().  Rationalise our memory usage. */
 	pv_table_size = physmem * sizeof(struct pv_entry);
-	new_pv_table = kmem_alloc(pv_table_size, KM_SLEEP);
+	new_pv_table = malloc(pv_table_size, M_VMPMAP, M_WAITOK);
 	memcpy(new_pv_table, pv_table, pv_table_size);
 	old_pv_table = pv_table;
 	pv_table = new_pv_table;
@@ -370,7 +367,7 @@ pmap_init2(void)
 }
 
 struct pmap *
-pmap_create(void)
+pmap_create()
 {
 	struct pmap *pmap;
 	UVMHIST_FUNC("pmap_create");
@@ -379,10 +376,10 @@ pmap_create(void)
 	if (!pmap_initialised) 
 		pmap_init2();
 	pmap = pool_get(&pmap_pool, PR_WAITOK);
-	memset(pmap, 0, sizeof(*pmap));
-	pmap->pm_entries = (struct pv_entry **)kmem_zalloc(
-		sizeof(struct pv_entry *) * PM_NENTRIES,
-		KM_SLEEP);
+	bzero(pmap, sizeof(*pmap));
+	MALLOC(pmap->pm_entries, struct pv_entry **,
+	    sizeof(struct pv_entry *) * PM_NENTRIES, M_VMPMAP, M_WAITOK);
+	bzero(pmap->pm_entries, sizeof(struct pv_entry *) * PM_NENTRIES);
 	pmap->pm_count = 1;
 	return pmap;
 }
@@ -406,8 +403,7 @@ pmap_destroy(pmap_t pmap)
 		if (pmap->pm_entries[i] != NULL)
 			panic("pmap_destroy: pmap isn't empty");
 #endif
-	kmem_free((void *)pmap->pm_entries,
-		sizeof(struct pv_entry *) * PM_NENTRIES);
+	FREE(pmap->pm_entries, M_VMPMAP);
 	pool_put(&pmap_pool, pmap);
 }
 
@@ -486,7 +482,20 @@ pmap_unwire(pmap_t pmap, vaddr_t va)
 }
 
 void
-pmap_copy(pmap_t dst_pmap, pmap_t src_pmap, vaddr_t dst_addr, vsize_t len, vaddr_t src_addr)
+pmap_collect(pmap)
+	pmap_t pmap;
+{
+	UVMHIST_FUNC("pmap_collect");
+
+	UVMHIST_CALLED(pmaphist);
+	/* This is allowed to be a no-op. */
+}
+
+void
+pmap_copy(dst_pmap, src_pmap, dst_addr, len, src_addr)
+	pmap_t dst_pmap, src_pmap;
+	vaddr_t dst_addr, src_addr;
+	vsize_t len;
 {
 	UVMHIST_FUNC("pmap_copy");
 
@@ -530,16 +539,21 @@ pv_update(struct pv_entry *pv)
 
 
 static struct pv_entry *
-pv_alloc(void)
+pv_alloc()
 {
-	return kmem_intr_zalloc(sizeof(struct pv_entry), KM_NOSLEEP);
+	struct pv_entry *pv;
+
+	MALLOC(pv, struct pv_entry *, sizeof(*pv), M_VMPMAP, M_NOWAIT);
+	if (pv != NULL)
+		bzero(pv, sizeof(*pv));
+	return pv;
 }
 
 static void
 pv_free(struct pv_entry *pv)
 {
 
-	kmem_intr_free(pv, sizeof(struct pv_entry));
+	FREE(pv, M_VMPMAP);
 }
 
 static struct pv_entry *
@@ -632,7 +646,7 @@ pv_release(pmap_t pmap, int ppn, int lpn)
  */
 
 int
-pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
+pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
 {
 	UVMHIST_FUNC("pmap_enter");
 
@@ -641,7 +655,7 @@ pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 }
 
 static int
-pmap_enter1(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags,
+pmap_enter1(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags,
     int unmanaged)
 {
 	int ppn, lpn, s;
@@ -741,7 +755,7 @@ pmap_extract(pmap_t pmap, vaddr_t va, paddr_t *ppa)
 }
 
 void
-pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
+pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot)
 {
 	UVMHIST_FUNC("pmap_kenter_pa");
 
@@ -759,7 +773,8 @@ pmap_kremove(vaddr_t va, vsize_t len)
 }
 
 inline bool
-pmap_is_modified(struct vm_page *page)
+pmap_is_modified(page)
+	struct vm_page *page;
 {
 	int ppn;
 	bool rv;
@@ -792,7 +807,8 @@ pmap_is_modified(struct vm_page *page)
 }
 
 inline bool
-pmap_is_referenced(struct vm_page *page)
+pmap_is_referenced(page)
+	struct vm_page *page;
 {
 	int ppn;
 	UVMHIST_FUNC("pmap_is_referenced");
@@ -965,7 +981,8 @@ pmap_page_protect(struct vm_page *page, vm_prot_t prot)
 }
 
 paddr_t
-pmap_phys_address(paddr_t ppn)
+pmap_phys_address(ppn)
+	paddr_t ppn;
 {
 	panic("pmap_phys_address not implemented");
 }
@@ -1055,7 +1072,7 @@ pmap_zero_page(paddr_t pa)
 	UVMHIST_FUNC("pmap_zero_page");
 
 	UVMHIST_CALLED(pmaphist);
-	memset(pmap_find(pa), 0, PAGE_SIZE);
+	bzero(pmap_find(pa), PAGE_SIZE);
 }
 
 void

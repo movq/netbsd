@@ -1,4 +1,4 @@
-/*	$NetBSD: gspa.c,v 1.15 2011/08/30 18:53:41 joerg Exp $	*/
+/*	$NetBSD: gspa.c,v 1.13 2006/12/18 20:12:21 christos Exp $	*/
 /*
  * GSP assembler main program
  *
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: gspa.c,v 1.15 2011/08/30 18:53:41 joerg Exp $");
+__RCSID("$NetBSD: gspa.c,v 1.13 2006/12/18 20:12:21 christos Exp $");
 #endif
 
 #include <sys/param.h>
@@ -56,7 +56,7 @@ extern YYSTYPE yylval;
 int err_count;
 
 char line[MAXLINE];
-unsigned lineno;
+int lineno;
 
 extern int yydebug;
 short pass2;
@@ -83,7 +83,7 @@ struct input {
 jmp_buf synerrjmp;
 
 void	setext(char *, const char *, const char *);
-__dead static void	usage(void);
+void	usage(void);
 int	yyparse(void);
 
 void	c_dumpbuf(void);
@@ -250,7 +250,7 @@ get_line(char *lp, int maxlen)
 }
 
 void
-perr(const char *fmt, ...)
+perr(char *fmt, ...)
 {
 	va_list ap;
 	char error_string[256];
@@ -267,7 +267,7 @@ perr(const char *fmt, ...)
 }
 
 void
-p1err(const char *fmt, ...)
+p1err(char *fmt, ...)
 {
 	va_list ap;
 
@@ -280,15 +280,15 @@ p1err(const char *fmt, ...)
 }
 
 void
-yyerror(const char *errs)
+yyerror(char *err)
 {
 
-	perr("%s", errs);
+	perr("%s", err);
 	longjmp(synerrjmp, 1);
 }
 
-static void
-usage(void)
+void
+usage()
 {
 	fprintf(stderr,
 		"Usage: gspa [-c c_array_name] [-l list_file] [-o hex_file] [infile]\n");

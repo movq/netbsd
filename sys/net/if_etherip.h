@@ -1,4 +1,4 @@
-/*      $NetBSD: if_etherip.h,v 1.11 2012/07/28 00:43:24 matt Exp $        */
+/*      $NetBSD: if_etherip.h,v 1.9 2008/10/24 21:41:04 dyoung Exp $        */
 
 /*
  *  Copyright (c) 2006, Hans Rosenfeld <rosenfeld@grumpf.hope-2000.org>
@@ -34,7 +34,7 @@
 
 #include <sys/queue.h>
 
-#ifdef _KERNEL_OPT
+#if defined(_KERNEL) && !defined(_LKM)
 #include "opt_inet.h"
 #endif
 
@@ -51,8 +51,7 @@ struct etherip_softc {
 	LIST_ENTRY(etherip_softc) etherip_list; /* list of etherip tunnels    */
 };
 
-LIST_HEAD(etherip_softc_list, etherip_softc);
-extern struct etherip_softc_list etherip_softc_list;
+LIST_HEAD(, etherip_softc) etherip_softc_list;
 
 struct etherip_header {
 	uint8_t eip_ver;       /* version/reserved */

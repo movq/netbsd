@@ -1,4 +1,4 @@
-/*      $NetBSD: en.c,v 1.17 2009/10/26 19:16:57 cegger Exp $        */
+/*      $NetBSD: en.c,v 1.14 2005/12/11 12:18:29 christos Exp $        */
 /*
  * Copyright (c) 1996 Rolf Grossmann
  * All rights reserved.
@@ -61,7 +61,7 @@ extern char *mg;
 int en_match(struct netif *, void *);
 int en_probe(struct netif *, void *);
 void en_init(struct iodesc *, void *);
-int en_get(struct iodesc *, void *, size_t, saseconds_t);
+int en_get(struct iodesc *, void *, size_t, time_t);
 int en_put(struct iodesc *, void *, size_t);
 void en_end(struct netif *);
 
@@ -221,7 +221,7 @@ en_put(struct iodesc *desc, void *pkt, size_t len)
 
 	for (retries = 0; retries < EN_RETRIES; retries++) {
 		er->txstat = 0xff;
-		memcpy(dma_buffers[0], pkt, len);
+		bcopy(pkt, dma_buffers[0], len);
 		txdma->dd_csr = (turbo ? DMACSR_INITBUFTURBO : DMACSR_INITBUF) |
 			DMACSR_RESET | DMACSR_WRITE;
 		txdma->dd_csr = 0;
@@ -273,7 +273,7 @@ en_put(struct iodesc *desc, void *pkt, size_t len)
 }
 
 int
-en_get(struct iodesc *desc, void *pkt, size_t len, saseconds_t timeout)
+en_get(struct iodesc *desc, void *pkt, size_t len, time_t timeout)
 {
 	volatile struct en_regs *er;
 	volatile struct dma_dev *rxdma;
@@ -391,7 +391,7 @@ dump_pkt(gotpkt, rlen < 255 ? rlen : 128);
 		rlen = len;
 	}
 
-	memcpy(pkt, gotpkt, rlen);
+	bcopy(gotpkt, pkt, rlen);
 
 #if 0
 	printf("DEBUG: gotpkt = 0x%lx, pkt = 0x%lx, rlen = %d\n",

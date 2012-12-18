@@ -1,4 +1,4 @@
-/*	$NetBSD: if_jme.c,v 1.21 2012/07/22 14:33:02 matt Exp $	*/
+/*	$NetBSD: if_jme.c,v 1.4.6.4 2011/04/05 06:12:46 riz Exp $	*/
 
 /*
  * Copyright (c) 2008 Manuel Bouyer.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *  This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -58,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_jme.c,v 1.21 2012/07/22 14:33:02 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_jme.c,v 1.4.6.4 2011/04/05 06:12:46 riz Exp $");
 
 
 #include <sys/param.h>
@@ -84,22 +89,28 @@ __KERNEL_RCSID(0, "$NetBSD: if_jme.c,v 1.21 2012/07/22 14:33:02 matt Exp $");
 #include <net/route.h>
 #include <net/netisr.h>
 
+#include "bpfilter.h"
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-
-#include <sys/rnd.h>
-
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/ip.h>
-
-#ifdef INET
-#include <netinet/in_var.h>
 #endif
 
+#include "rnd.h"
+#if NRND > 0
+#include <sys/rnd.h>
+#endif
+
+#ifdef INET
+#include <netinet/in.h>
+#include <netinet/in_systm.h>
+#include <netinet/in_var.h>
+#include <netinet/ip.h>
 #include <netinet/tcp.h>
+#endif
+
 
 #include <net/if_ether.h>
+#include <uvm/uvm_extern.h>
 #if defined(INET)
 #include <netinet/if_inarp.h>
 #endif
@@ -164,7 +175,9 @@ struct jme_softc {
 	u_int32_t jme_flags;		/* device features, see below */
 	uint32_t jme_txcsr;		/* TX config register */
 	uint32_t jme_rxcsr;		/* RX config register */
-	krndsource_t rnd_source;
+#if NRND > 0
+	rndsource_element_t rnd_source;
+#endif
 	/* interrupt coalition parameters */
 	struct sysctllog *jme_clog;
 	int jme_intrxto;		/* interrupt RX timeout */
@@ -191,7 +204,7 @@ static int jme_intr(void *);
 static int jme_ifioctl(struct ifnet *, ioctl_cmd_t, void *);
 static int jme_mediachange(struct ifnet *);
 static void jme_ifwatchdog(struct ifnet *);
-static bool jme_shutdown(device_t, int);
+static void jme_shutdown(void *);
 
 static void jme_txeof(struct jme_softc *);
 static void jme_ifstart(struct ifnet *);
@@ -206,7 +219,7 @@ static void jme_set_filter(jme_softc_t *);
 
 int jme_mii_read(device_t, int, int);
 void jme_mii_write(device_t, int, int, int);
-void jme_statchg(struct ifnet *);
+void jme_statchg(device_t);
 
 static int jme_eeprom_read_byte(struct jme_softc *, uint8_t, uint8_t *);
 static int jme_eeprom_macaddr(struct jme_softc *);
@@ -448,6 +461,11 @@ jme_pci_attach(device_t parent, device_t self, void *aux)
 		}
 	}
 	/*
+	 * Add shutdown hook so that DMA is disabled prior to reboot.
+	 */
+	(void)shutdownhook_establish(jme_shutdown, ifp);
+
+	/*
 	 * Initialize our media structures and probe the MII.
 	 *
 	 * Note that we don't care about the media instance.  We
@@ -500,17 +518,10 @@ jme_pci_attach(device_t parent, device_t self, void *aux)
 	if_attach(ifp);
 	ether_ifattach(&(sc)->jme_if, (sc)->jme_enaddr);
 
-	/*
-	 * Add shutdown hook so that DMA is disabled prior to reboot.
-	 */
-	if (pmf_device_register1(self, NULL, NULL, jme_shutdown))
-		pmf_class_network_register(self, ifp);
-	else
-		aprint_error_dev(self, "couldn't establish power handler\n");
-
+#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
-
+#endif
 	sc->jme_intrxto = PCCRX_COAL_TO_DEFAULT;
 	sc->jme_intrxct = PCCRX_COAL_PKT_DEFAULT;
 	sc->jme_inttxto = PCCTX_COAL_TO_DEFAULT;
@@ -530,7 +541,7 @@ jme_pci_attach(device_t parent, device_t self, void *aux)
 	    CTLFLAG_READWRITE,
 	    CTLTYPE_INT, "int_rxto",
 	    SYSCTL_DESCR("jme RX interrupt moderation timer"),
-	    jme_sysctl_intrxto, 0, (void *)sc,
+	    jme_sysctl_intrxto, 0, sc,
 	    0, CTL_HW, jme_root_num, jme_nodenum, CTL_CREATE,
 	    CTL_EOL) != 0) {
 		aprint_normal_dev(sc->jme_dev,
@@ -540,7 +551,7 @@ jme_pci_attach(device_t parent, device_t self, void *aux)
 	    CTLFLAG_READWRITE,
 	    CTLTYPE_INT, "int_rxct",
 	    SYSCTL_DESCR("jme RX interrupt moderation packet counter"),
-	    jme_sysctl_intrxct, 0, (void *)sc,
+	    jme_sysctl_intrxct, 0, sc,
 	    0, CTL_HW, jme_root_num, jme_nodenum, CTL_CREATE,
 	    CTL_EOL) != 0) {
 		aprint_normal_dev(sc->jme_dev,
@@ -550,7 +561,7 @@ jme_pci_attach(device_t parent, device_t self, void *aux)
 	    CTLFLAG_READWRITE,
 	    CTLTYPE_INT, "int_txto",
 	    SYSCTL_DESCR("jme TX interrupt moderation timer"),
-	    jme_sysctl_inttxto, 0, (void *)sc,
+	    jme_sysctl_inttxto, 0, sc,
 	    0, CTL_HW, jme_root_num, jme_nodenum, CTL_CREATE,
 	    CTL_EOL) != 0) {
 		aprint_normal_dev(sc->jme_dev,
@@ -560,7 +571,7 @@ jme_pci_attach(device_t parent, device_t self, void *aux)
 	    CTLFLAG_READWRITE,
 	    CTLTYPE_INT, "int_txct",
 	    SYSCTL_DESCR("jme TX interrupt moderation packet counter"),
-	    jme_sysctl_inttxct, 0, (void *)sc,
+	    jme_sysctl_inttxct, 0, sc,
 	    0, CTL_HW, jme_root_num, jme_nodenum, CTL_CREATE,
 	    CTL_EOL) != 0) {
 		aprint_normal_dev(sc->jme_dev,
@@ -620,17 +631,11 @@ jme_reset(jme_softc_t *sc)
 	bus_space_write_4(sc->jme_bt_mac, sc->jme_bh_mac, JME_GHC, 0);
 }
 
-static bool
-jme_shutdown(device_t self, int howto)
+static void
+jme_shutdown(void *v)
 {
-	jme_softc_t *sc;
-	struct ifnet *ifp;
 
-	sc = device_private(self);
-	ifp = &sc->jme_if;
-	jme_stop(ifp, 1);
-
-	return true;
+	jme_stop(v, 1);
 }
 
 static void
@@ -780,7 +785,7 @@ jme_init(struct ifnet *ifp, int do_ifinit)
 	sc->jme_tx_cons = sc->jme_tx_prod = sc->jme_tx_cnt = 0;
 
 	/* Reprogram the station address. */
-	memcpy(eaddr, CLLADDR(ifp->if_sadl), ETHER_ADDR_LEN);
+	bcopy(CLLADDR(ifp->if_sadl), eaddr, ETHER_ADDR_LEN);
 	bus_space_write_4(sc->jme_bt_mac, sc->jme_bh_mac, JME_PAR0,
 	    eaddr[3] << 24 | eaddr[2] << 16 | eaddr[1] << 8 | eaddr[0]);
 	bus_space_write_4(sc->jme_bt_mac, sc->jme_bh_mac,
@@ -1037,8 +1042,10 @@ jme_mii_write(device_t self, int phy, int reg, int val)
 }
 
 void
-jme_statchg(struct ifnet *ifp)
+jme_statchg(device_t self)
 {
+	jme_softc_t *sc = device_private(self);
+	struct ifnet *ifp = &sc->jme_if;
 	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) == (IFF_UP|IFF_RUNNING))
 		jme_init(ifp, 0);
 }
@@ -1170,7 +1177,10 @@ jme_intr_rx(jme_softc_t *sc) {
 		}
 		ifp->if_ipackets++;
 		ipackets++;
-		bpf_mtap(ifp, mhead);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, mhead);
+#endif /* NBPFILTER > 0 */
 
 		if ((ifp->if_capenable & IFCAP_CSUM_IPv4_Rx) &&
 		    (flags & JME_RD_IPV4)) {
@@ -1213,8 +1223,11 @@ jme_intr_rx(jme_softc_t *sc) {
 		}
 		(*ifp->if_input)(ifp, mhead);
 	}
-	if (ipackets)
+#if NRND > 0
+	if (ipackets && RND_ENABLED(&sc->rnd_source))
 		rnd_add_uint32(&sc->rnd_source, ipackets);
+#endif /* NRND > 0 */
+
 }
 
 static int
@@ -1683,8 +1696,11 @@ nexttx:
 			ifp->if_flags |= IFF_OACTIVE;
 			break;
 		}
+#if NBPFILTER > 0
 		/* Pass packet to bpf if there is a listener */
-		bpf_mtap(ifp, mb_head);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, mb_head);
+#endif
 	}
 #ifdef JMEDEBUG_TX
 	printf("jme_ifstart enq %d\n", enq);
@@ -1879,7 +1895,7 @@ jme_set_filter(jme_softc_t *sc)
 	 * select the bit within the register.
 	 */
 	rxcfg |= RXMAC_MULTICAST;
-	memset(hash, 0, sizeof(hash));
+	bzero(hash, sizeof(hash));
 
 	ETHER_FIRST_MULTI(step, &sc->jme_ec, enm);
 	while (enm != NULL) {
@@ -2018,7 +2034,7 @@ jme_eeprom_macaddr(struct jme_softc *sc)
 	} while (match != ETHER_ADDR_LEN && offset < JME_EEPROM_END);
 
 	if (match == ETHER_ADDR_LEN) {
-		memcpy(sc->jme_enaddr, eaddr, ETHER_ADDR_LEN);
+		bcopy(eaddr, sc->jme_enaddr, ETHER_ADDR_LEN);
 		return (0);
 	}
 

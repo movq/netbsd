@@ -27,7 +27,7 @@
  *	q932_fac.c - decode Q.932 facilities
  *	------------------------------------
  *
- *	$Id: q932_fac.c,v 1.4 2009/04/16 05:56:33 lukem Exp $ 
+ *	$Id: q932_fac.c,v 1.3 2006/05/24 23:51:39 christos Exp $ 
  *
  * $FreeBSD$
  *
@@ -59,9 +59,9 @@
 #include "q932_fac.h"
 
 static int do_component(int length, char *pbuf);
-static const char *uni_str(int code);
-static const char *opval_str(int val);
-static const char *bid_str(int val);
+static char *uni_str(int code);
+static char *opval_str(int val);
+static char *bid_str(int val);
 static void next_state(char *pbuf, int class, int form, int code, int val);
 
 static void object_id(int comp_length, unsigned char *pbuf);
@@ -369,9 +369,9 @@ again:
 /*---------------------------------------------------------------------------*
  *	print universal id type
  *---------------------------------------------------------------------------*/
-static const char *uni_str(int code)
+static char *uni_str(int code)
 {
-	static const char *tbl[] = {
+	static char *tbl[] = {
 		"BOOLEAN",
 		"INTEGER",
 		"BIT STRING",
@@ -401,7 +401,7 @@ static const char *uni_str(int code)
 		"GENERAL STRING"
 	};
 
-	if (code >= 1 && code <=	(int)(sizeof(tbl) / sizeof(tbl[0])))
+	if (code >= 1 && code <=	sizeof(tbl) / sizeof(tbl[0]))
 		return(tbl[code-1]);
 	else
 		return("ERROR, Value out of Range!");
@@ -410,10 +410,10 @@ static const char *uni_str(int code)
 /*---------------------------------------------------------------------------*
  *	print operation value 
  *---------------------------------------------------------------------------*/
-static const char *opval_str(int val)
+static char *opval_str(int val)
 {
 	static char buffer[80];
-	const char *r;
+	char *r;
 	
 	switch (val)
 	{
@@ -559,10 +559,10 @@ static const char *opval_str(int val)
 /*---------------------------------------------------------------------------*
  *	billing id string
  *---------------------------------------------------------------------------*/
-static const char *bid_str(int val)
+static char *bid_str(int val)
 {
 	static char buffer[80];
-	const char *r;
+	char *r;
 	
 	switch (val)
 	{

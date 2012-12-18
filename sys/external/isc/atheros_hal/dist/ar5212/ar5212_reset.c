@@ -14,7 +14,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ar5212_reset.c,v 1.4 2011/03/07 11:25:43 cegger Exp $
+ * $Id: ar5212_reset.c,v 1.2.10.2 2009/08/07 06:43:43 snj Exp $
  */
 #include "opt_ah.h"
 
@@ -692,7 +692,7 @@ bad:
 	RESTORE_CCK(ah, chan, isBmode);
 
 	OS_MARK(ah, AH_MARK_RESET_DONE, ecode);
-	if (status != AH_NULL)
+	if (*status)
 		*status = ecode;
 	return AH_FALSE;
 #undef FAIL
@@ -1138,7 +1138,7 @@ ar5212SetResetReg(struct ath_hal *ah, uint32_t resetMask)
 
 	/* XXX ar5212MacStop & co. */
 
-	if (AH_PRIVATE(ah)->ah_ispcie) {
+	if (IS_PCIE(ah)) {
 		resetMask &= ~AR_RC_PCI;
 	}
 

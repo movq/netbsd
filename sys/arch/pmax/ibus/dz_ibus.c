@@ -1,4 +1,4 @@
-/*	$NetBSD: dz_ibus.c,v 1.11 2011/07/09 17:32:29 matt Exp $	*/
+/*	$NetBSD: dz_ibus.c,v 1.9 2008/04/28 20:23:31 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -61,21 +61,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dz_ibus.c,v 1.11 2011/07/09 17:32:29 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dz_ibus.c,v 1.9 2008/04/28 20:23:31 martin Exp $");
 
 #include "dzkbd.h"
 #include "dzms.h"
 
 #include <sys/param.h>
-#include <sys/bus.h>
+#include <sys/proc.h>
+#include <sys/systm.h>
+#include <sys/ioctl.h>
+#include <sys/tty.h>
+#include <sys/file.h>
 #include <sys/conf.h>
 #include <sys/device.h>
-#include <sys/file.h>
-#include <sys/ioctl.h>
-#include <sys/proc.h>
 #include <sys/reboot.h>
-#include <sys/systm.h>
-#include <sys/tty.h>
+
+#include <machine/bus.h>
 
 #include <dev/cons.h>
 
@@ -135,7 +136,9 @@ int	dz_ibus_consln = -1;
 int
 dz_ibus_match(device_t parent, cfdata_t cf, void *aux)
 {
-	struct ibus_attach_args *iba = aux;
+	struct ibus_attach_args *iba;
+
+	iba = aux;
 
 	if (strcmp(iba->ia_name, "dc") != 0 &&
 	    strcmp(iba->ia_name, "mdc") != 0 &&
@@ -154,9 +157,7 @@ dz_ibus_attach(device_t parent, device_t self, void *aux)
 	struct ibus_attach_args *iba = aux;
 	struct dz_softc *sc = device_private(self);
 	volatile struct dzregs *dz;
-#if NDZMS > 0 || NDZKBD > 0
 	struct dzkm_attach_args daa;
-#endif
 	int i;
 
 

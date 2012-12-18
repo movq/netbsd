@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_vga.c,v 1.14 2009/10/20 19:10:11 snj Exp $	*/
+/*	$NetBSD: pci_vga.c,v 1.11 2005/12/11 12:17:00 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Leo Weppelman.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Leo Weppelman.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -25,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_vga.c,v 1.14 2009/10/20 19:10:11 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_vga.c,v 1.11 2005/12/11 12:17:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/queue.h>
@@ -71,7 +76,8 @@ static int		tags_valid = 0;
  * bus0 for VGA cards. The first card found is used.
  */
 int
-check_for_vga(bus_space_tag_t iot, bus_space_tag_t memt)
+check_for_vga(iot, memt)
+	bus_space_tag_t iot, memt;
 {
 	pci_chipset_tag_t	pc = NULL; /* XXX */
 	bus_space_handle_t	ioh_regs, memh_fb;
@@ -211,14 +217,16 @@ void vgacnprobe(struct consdev *);
 void vgacninit(struct consdev *);
 
 void
-vgacnprobe(struct consdev *cp)
+vgacnprobe(cp)
+	struct consdev *cp;
 {
 	if (tags_valid)
 		cp->cn_pri = CN_NORMAL;
 }
 
 void
-vgacninit(struct consdev *cp)
+vgacninit(cp)
+	struct consdev *cp;
 {
 	if (tags_valid) {
 		/* XXX: Are those arguments correct? Leo */
@@ -232,9 +240,9 @@ vgacninit(struct consdev *cp)
  * place the card into textmode.
  */
 static void
-loadfont(volatile u_char *ba, u_char *fb)
-	/* ba:	 Register area KVA */
-	/* fb:	 Frame buffer	KVA  */
+loadfont(ba, fb)
+	volatile u_char *ba;	/* Register area KVA */
+	u_char		*fb;	/* Frame buffer	KVA  */
 {
 	font_info	*fd;
 	u_char		*c, *f, tmp;

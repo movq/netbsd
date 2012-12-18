@@ -1,4 +1,4 @@
-/*	$NetBSD: wcscmp.c,v 1.9 2012/06/25 22:32:46 abs Exp $	*/
+/*	$NetBSD: wcscmp.c,v 1.5.38.2 2009/01/15 04:21:26 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)strcmp.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: wcscmp.c,v 1.9 2012/06/25 22:32:46 abs Exp $");
+__RCSID("$NetBSD: wcscmp.c,v 1.5.38.2 2009/01/15 04:21:26 snj Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -49,7 +49,8 @@ __RCSID("$NetBSD: wcscmp.c,v 1.9 2012/06/25 22:32:46 abs Exp $");
  * Compare strings.
  */
 int
-wcscmp(const wchar_t *s1, const wchar_t *s2)
+wcscmp(s1, s2)
+	const wchar_t *s1, *s2;
 {
 
 	_DIAGASSERT(s1 != NULL);

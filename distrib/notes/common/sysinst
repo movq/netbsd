@@ -1,6 +1,6 @@
-.\"	$NetBSD: sysinst,v 1.102 2012/08/17 19:55:14 riz Exp $
+.\"	$NetBSD: sysinst,v 1.95.2.2 2009/04/25 23:16:34 snj Exp $
 .\"
-.\" Copyright (c) 1999-2012 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1999-2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -49,7 +49,7 @@
 .\}
 .if \n[amiga]:\n[amigappc]:\n[arc]:\n[atari]:\n[cobalt]:\n[evbmips]:\
 \n[evbppc]:\n[hp700]:\n[hpcmips]:\n[i386]:\n[macppc]:\n[ofppc]:\
-\n[sandpoint]:\n[sbmips]:\n[sgimips]:\n[x86_64] \{\
+\n[playstation2]:\n[sandpoint]:\n[sbmips]:\n[sgimips]:\n[x86_64] \{\
 .  ds part_max p
 .\}
 .if \n[acorn26]:\n[acorn32]:\n[cats]:\n[evbarm]:\n[evbppc]:\n[ews4800mips]:\
@@ -390,11 +390,7 @@ progress as this may leave the keyboard locked to
 The main menu will be displayed.
 .\} \" \n[mac68k]
 .ie \n[alpha]:\n[amd64]:\n[i386] \{\
-Insert the CD into the drive 
-.if \n[amd64]:\n[i386] \{\
-or the USB memstick into an available USB port
-.\}
-and boot the computer from it.
+Insert the CD into the drive and boot the computer.
 .if \n[alpha] \{\
 Type
 .Pp
@@ -442,7 +438,6 @@ After language selection, the main menu will be displayed.
   * c: Re-install sets or install additional sets *
   * d: Reboot the computer                        *
   * e: Utility menu                               *
-  * f: Config menu                                *
   * x: Exit Install System                        *
   .***********************************************.
 . cs \n(.f
@@ -504,13 +499,7 @@ The CD-ROM device is usually cd0 and the partition
 .\}
 .el \{\
 .Me CD-ROM
-as the medium
-.if \n[amd64]:\n[i386] \{\
-if booted from CD-ROM, or
-.Me Local directory
-if booted from USB memstick
-.\}
-\&.
+as the medium.
 The default values for the path and device should be ok.
 .\}
 .It
@@ -677,7 +666,7 @@ Boot the system as described in the "Booting the installer" section above.
 .el \{\
 Boot your machine.
 The boot loader will start, and will print a countdown and begin booting.
-.if !\n[alpha]:\n[amd64]:\n[i386] \{\
+.if !\n[alpha]:\n[amd64]:\n[i386] \{
 .Pp
 If the boot loader messages do not appear in a reasonable
 amount of time, you either have a bad boot floppy or a
@@ -1606,40 +1595,64 @@ for the name of this directory.
 .To 2 "Extracting the distribution sets"
 .Em Extracting the distribution sets
 .Pp
-A progress bar will be displayed while the distribution sets are
-being extracted.
+Before extraction begins, you can elect to watch the files being
+extracted; the name of each file that is extracted will be shown.
+This can slow down the installation process considerably
+on machines with slow graphics consoles or serial consoles.
+Alternatively, you can choose to see a progress bar.
+This is the preferred option as it shows progress without significantly
+slowing down the installation process.
 .Pp
-After all the files have been extracted,
+.ie \n[macppc] \{\
+If you are installing using the
+.Me "Re-install sets or install additional sets"
+option, then you will need to create the device nodes in
+.Pa /dev ,
+otherwise,
+.\}
+.el After all the files have been extracted,
 the device node files will be created.
 If you have already configured networking, you will be asked if you want to
 use this configuration for normal operation.
 If so, these values will be installed in the network configuration files.
+The next menu will allow you to select the time zone that you're in,
+to make sure your clock has the right offset from UTC.
+Finally you will be asked to select a password encryption algorithm
+and can then set a password for the "root" account, to prevent
+the machine from coming up without access restrictions.
+.if \n[macppc] \{\
 .It
-.To 2 "Configure additional items"
-.Em Configure additional items
+.To 2 "Making the device nodes"
+.Em Making the device nodes
 .Pp
-The next menu will allow you to select a number of additional items
-to configure, including the time zone that you're in,
-to make sure your clock has the right offset from UTC,
-the root user's shell, and the initial root password.
+If you are installing using the
+.Me "Re-install sets or install additional sets"
+option, then you will need to create the device nodes in
+.Pa /dev
+now.
+Otherwise, skip this step.
 .Pp
-You can also enable installation of binary packages, which installs the
-.Xr pkgin 1
-tool for managing binary packages for third-party software.
-This will
-feel familiar to users of other package tools, such as
-.Ic apt-get
-or
-.Ic yum .
-Or, you can install the
-.Xr pkgsrc 7
-tree for installing third-party software from source.
+Go to the main installation menu, and select
+.Me "Utility menu"
+and then select the
+.Me "Run /bin/sh"
+option, which will give you a shell prompt.
+You may need to type one of the following commands to get your delete key
+to work properly, depending on your keyboard:
+.Dl # Ic "stty erase '^h'"
+.Dl # Ic "stty erase '^?'"
 .Pp
-Finally, you can enable some daemons such as
-.Xr sshd 8 ,
-.Xr ntpd 8 ,
-or
-.Xr mdnsd 8 .
+Type the following command (replacing
+.Pa wd0a
+with the partition name of your destination root partition):
+Now you need to mount your destination root partition:
+.Dl # Ic "mount /dev/wd0a /mnt"
+.Dl # Ic "cd /mnt/dev"
+.Dl # Ic "sh MAKEDEV all"
+.Dl # Ic "cd /"
+.Dl # Ic "umount /mnt"
+.Dl # Ic "exit"
+.\}
 .if \n[sparc64] \{\
 .It
 .To 2 "Ensure you have the correct kernel installed"

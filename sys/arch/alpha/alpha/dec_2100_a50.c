@@ -1,21 +1,21 @@
-/* $NetBSD: dec_2100_a50.c,v 1.67 2012/10/13 17:58:54 jdc Exp $ */
+/* $NetBSD: dec_2100_a50.c,v 1.61 2007/03/04 15:18:10 yamt Exp $ */
 
 /*
  * Copyright (c) 1995, 1996, 1997 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_2100_a50.c,v 1.67 2012/10/13 17:58:54 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_2100_a50.c,v 1.61 2007/03/04 15:18:10 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: dec_2100_a50.c,v 1.67 2012/10/13 17:58:54 jdc Exp $"
 #include <machine/alpha.h>
 #include <machine/autoconf.h>
 #include <machine/cpuconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -74,15 +74,15 @@ __KERNEL_RCSID(0, "$NetBSD: dec_2100_a50.c,v 1.67 2012/10/13 17:58:54 jdc Exp $"
 #endif
 static int comcnrate = CONSPEED;
 
-void dec_2100_a50_init(void);
-static void dec_2100_a50_cons_init(void);
-static void dec_2100_a50_device_register(device_t, void *);
+void dec_2100_a50_init __P((void));
+static void dec_2100_a50_cons_init __P((void));
+static void dec_2100_a50_device_register __P((struct device *, void *));
 
 static void dec_2100_a50_mcheck_handler
-(unsigned long, struct trapframe *, unsigned long, unsigned long);
+	__P((unsigned long, struct trapframe *, unsigned long, unsigned long));
 
-static void dec_2100_a50_mcheck(unsigned long, unsigned long,
-				     unsigned long, struct trapframe *);
+static void dec_2100_a50_mcheck __P((unsigned long, unsigned long,
+				     unsigned long, struct trapframe *));
 
 
 #ifdef KGDB
@@ -105,9 +105,9 @@ const struct alpha_variation_table dec_2100_a50_variations[] = {
 };
 
 void
-dec_2100_a50_init(void)
+dec_2100_a50_init()
 {
-	uint64_t variation;
+	u_int64_t variation;
 
 	platform.family = "AlphaStation 200/400 (\"Avanti\")";
 
@@ -130,7 +130,7 @@ dec_2100_a50_init(void)
 }
 
 static void
-dec_2100_a50_cons_init(void)
+dec_2100_a50_cons_init()
 {
 	struct ctb *ctb;
 	struct apecs_config *acp;
@@ -142,7 +142,7 @@ dec_2100_a50_cons_init(void)
 	ctb = (struct ctb *)(((char *)hwrpb) + hwrpb->rpb_ctb_off);
 
 	switch (ctb->ctb_term_type) {
-	case CTB_PRINTERPORT:
+	case CTB_PRINTERPORT: 
 		/* serial console ... */
 		/* XXX */
 		{
@@ -166,7 +166,7 @@ dec_2100_a50_cons_init(void)
 		/* display console ... */
 		/* XXX */
 		(void) pckbc_cnattach(&acp->ac_iot, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT, 0);
+		    PCKBC_KBD_SLOT);
 
 		if (CTB_TURBOSLOT_TYPE(ctb->ctb_turboslot) ==
 		    CTB_TURBOSLOT_TYPE_ISA)
@@ -194,12 +194,14 @@ dec_2100_a50_cons_init(void)
 }
 
 static void
-dec_2100_a50_device_register(device_t dev, void *aux)
+dec_2100_a50_device_register(dev, aux)
+	struct device *dev;
+	void *aux;
 {
 	static int found, initted, diskboot, netboot;
-	static device_t pcidev, ctrlrdev;
+	static struct device *pcidev, *ctrlrdev;
 	struct bootdev_data *b = bootdev_data;
-	device_t parent = device_parent(dev);
+	struct device *parent = device_parent(dev);
 
 	if (found)
 		return;
@@ -225,7 +227,7 @@ dec_2100_a50_device_register(device_t dev, void *aux)
 	
 			pcidev = dev;
 #if 0
-			printf("\npcidev = %s\n", device_xname(dev));
+			printf("\npcidev = %s\n", dev->dv_xname);
 #endif
 			return;
 		}
@@ -246,13 +248,13 @@ dec_2100_a50_device_register(device_t dev, void *aux)
 			if (netboot) {
 				booted_device = dev;
 #if 0
-				printf("\nbooted_device = %s\n", device_xname(dev));
+				printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 				found = 1;
 			} else {
 				ctrlrdev = dev;
 #if 0
-				printf("\nctrlrdev = %s\n", device_xname(dev));
+				printf("\nctrlrdev = %s\n", dev->dv_xname);
 #endif
 			}
 			return;
@@ -281,7 +283,7 @@ dec_2100_a50_device_register(device_t dev, void *aux)
 		/* we've found it! */
 		booted_device = dev;
 #if 0
-		printf("\nbooted_device = %s\n", device_xname(dev));
+		printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 		found = 1;
 	}
@@ -289,7 +291,11 @@ dec_2100_a50_device_register(device_t dev, void *aux)
 
 
 static void
-dec_2100_a50_mcheck(unsigned long mces, unsigned long type, unsigned long logout, struct trapframe *framep)
+dec_2100_a50_mcheck(mces, type, logout, framep)
+	unsigned long mces;
+	unsigned long type;
+	unsigned long logout;
+	struct trapframe *framep;
 {
 	struct mchkinfo *mcp;
 	static const char *fmt1 = "        %-25s = 0x%016lx\n";
@@ -399,19 +405,19 @@ dec_2100_a50_mcheck(unsigned long mces, unsigned long type, unsigned long logout
 
 	  case AVANTI_IO_PARITY:
 	    printf("\tI/O parity error at 0x%08lx during PCI cycle 0x%0lx.\n",
-		   ptr->epic_pear & 0xffffffff,
+		   ptr->epic_pear & 0xffffffff, 
 		   (ptr->epic_dcsr >> 18) & 0xf);
 	    break;
 
 	  case AVANTI_TARGET_ABORT:
 	    printf("\tPCI target abort at 0x%08lx during PCI cycle 0x%0lx.\n",
-		   ptr->epic_pear & 0xffffffff,
+		   ptr->epic_pear & 0xffffffff, 
 		   (ptr->epic_dcsr >> 18) & 0xf);
 	    break;
 
 	  case AVANTI_NO_DEVICE:
 	    printf("\tNo device responded at 0x%08lx during PCI cycle 0x%0lx\n.",
-		   ptr->epic_pear & 0xffffffff,
+		   ptr->epic_pear & 0xffffffff, 
 		   (ptr->epic_dcsr >> 18) & 0xf);
 	    break;
 
@@ -433,7 +439,7 @@ dec_2100_a50_mcheck(unsigned long mces, unsigned long type, unsigned long logout
 	      printf("\tAddress lost.\n");
 	    else
 	      printf("\tBus address to 0x%08lx, PCI cycle 0x%0lx\n",
-		     ptr->epic_pear & 0xffffffff,
+		     ptr->epic_pear & 0xffffffff, 
 		     (ptr->epic_dcsr >> 18) & 0xf);
 	    break;
 
@@ -476,7 +482,7 @@ dec_2100_a50_mcheck(unsigned long mces, unsigned long type, unsigned long logout
 	    else
 	      printf("CPU. cpuCReq<2:0> = %0lx\n", (ptr->coma_edsr >> 6) & 7);
 	    break;
-	
+	    
 	  case AVANTI_NONEXISTENT_MEMORY:
 	    printf("\tNonexistent memory error, caused by ");
 	    if (ptr->coma_edsr & 0x20)
@@ -557,7 +563,7 @@ dec_2100_a50_mcheck(unsigned long mces, unsigned long type, unsigned long logout
 	    break;
 	  }
 	}
-	
+	  
 	/*
 	 * Now that we've printed all sorts of useful information
 	 * and have decided that we really can't do any more to
@@ -571,7 +577,11 @@ dec_2100_a50_mcheck(unsigned long mces, unsigned long type, unsigned long logout
 }
 
 static void
-dec_2100_a50_mcheck_handler(unsigned long mces, struct trapframe *framep, unsigned long vector, unsigned long param)
+dec_2100_a50_mcheck_handler(mces, framep, vector, param)
+	unsigned long mces;
+	struct trapframe *framep;
+	unsigned long vector;
+	unsigned long param;
 {
 	switch (vector) {
 	case ALPHA_SYS_MCHECK:

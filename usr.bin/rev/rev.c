@@ -1,4 +1,4 @@
-/*	$NetBSD: rev.c,v 1.12 2011/09/16 15:39:28 joerg Exp $	*/
+/*	$NetBSD: rev.c,v 1.8 2008/07/21 14:19:25 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1987, 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1992, 1993\
 #if 0
 static char sccsid[] = "@(#)rev.c	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: rev.c,v 1.12 2011/09/16 15:39:28 joerg Exp $");
+__RCSID("$NetBSD: rev.c,v 1.8 2008/07/21 14:19:25 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -47,25 +47,23 @@ __RCSID("$NetBSD: rev.c,v 1.12 2011/09/16 15:39:28 joerg Exp $");
 
 #include <err.h>
 #include <errno.h>
-#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
-#include <wchar.h>
 
-__dead static void usage(void);
+int	main __P((int, char **));
+void	usage __P((void));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
-	const char *filename;
-	wchar_t *p, *t;
+	char *filename, *p, *t;
 	FILE *fp;
 	size_t len;
 	int ch, rval;
-
-	setlocale(LC_ALL, "");
-	setprogname(argv[0]);
 
 	while ((ch = getopt(argc, argv, "")) != -1)
 		switch(ch) {
@@ -90,13 +88,13 @@ main(int argc, char *argv[])
 			}
 			filename = *argv++;
 		}
-		while ((p = fgetwln(fp, &len)) != NULL) {
-			if (p[len - 1] == L'\n')
+		while ((p = fgetln(fp, &len)) != NULL) {
+			if (p[len - 1] == '\n')
 				--len;
 			t = p + len - 1;
 			for (t = p + len - 1; t >= p; --t)
-				putwchar(*t);
-			putwchar(L'\n');
+				putchar(*t);
+			putchar('\n');
 		}
 		if (ferror(fp)) {
 			warn("%s", filename);
@@ -107,9 +105,9 @@ main(int argc, char *argv[])
 	exit(rval);
 }
 
-static void
-usage(void)
+void
+usage()
 {
-	(void)fprintf(stderr, "usage: %s [file ...]\n", getprogname());
-	exit(EXIT_FAILURE);
+	(void)fprintf(stderr, "usage: rev [file ...]\n");
+	exit(1);
 }

@@ -1,21 +1,21 @@
-/* $NetBSD: tc_3000_300.c,v 1.32 2012/02/06 02:14:16 matt Exp $ */
+/* $NetBSD: tc_3000_300.c,v 1.27 2002/09/27 15:35:39 provos Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: tc_3000_300.c,v 1.32 2012/02/06 02:14:16 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tc_3000_300.c,v 1.27 2002/09/27 15:35:39 provos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,10 +48,10 @@ __KERNEL_RCSID(0, "$NetBSD: tc_3000_300.c,v 1.32 2012/02/06 02:14:16 matt Exp $"
 #include "sfb.h"
 
 #if NSFB > 0
-extern int	sfb_cnattach(tc_addr_t);
+extern int	sfb_cnattach __P((tc_addr_t));
 #endif
 
-int	tc_3000_300_intrnull(void *);
+int	tc_3000_300_intrnull __P((void *));
 
 #define	C(x)	((void *)(u_long)x)
 #define	KV(x)	(ALPHA_PHYS_TO_K0SEG(x))
@@ -85,30 +85,30 @@ int tc_3000_300_nbuiltins =
     sizeof(tc_3000_300_builtins) / sizeof(tc_3000_300_builtins[0]);
 
 struct tcintr {
-	int	(*tci_func)(void *);
+	int	(*tci_func) __P((void *));
 	void	*tci_arg;
 	struct evcnt tci_evcnt;
 } tc_3000_300_intr[TC_3000_300_NCOOKIES];
 
 void
-tc_3000_300_intr_setup(void)
+tc_3000_300_intr_setup()
 {
-	volatile uint32_t *imskp;
+	volatile u_int32_t *imskp;
 	char *cp;
 	u_long i;
 
 	/*
 	 * Disable all interrupts that we can (can't disable builtins).
 	 */
-	imskp = (volatile uint32_t *)(DEC_3000_300_IOASIC_ADDR + IOASIC_IMSK);
+	imskp = (volatile u_int32_t *)(DEC_3000_300_IOASIC_ADDR + IOASIC_IMSK);
 	*imskp &= ~(IOASIC_INTR_300_OPT0 | IOASIC_INTR_300_OPT1);
 
 	/*
 	 * Set up interrupt handlers.
 	 */
 	for (i = 0; i < TC_3000_300_NCOOKIES; i++) {
-	        tc_3000_300_intr[i].tci_func = tc_3000_300_intrnull;
-	        tc_3000_300_intr[i].tci_arg = (void *)i;
+                tc_3000_300_intr[i].tci_func = tc_3000_300_intrnull;
+                tc_3000_300_intr[i].tci_arg = (void *)i;
 		
 		cp = malloc(12, M_DEVBUF, M_NOWAIT);
 		if (cp == NULL)
@@ -120,7 +120,9 @@ tc_3000_300_intr_setup(void)
 }
 
 const struct evcnt *
-tc_3000_300_intr_evcnt(device_t tcadev, void *cookie)
+tc_3000_300_intr_evcnt(tcadev, cookie)
+	struct device *tcadev;
+	void *cookie;
 {
 	u_long dev = (u_long)cookie;
 
@@ -132,9 +134,13 @@ tc_3000_300_intr_evcnt(device_t tcadev, void *cookie)
 }
 
 void
-tc_3000_300_intr_establish(device_t tcadev, void *cookie, tc_intrlevel_t level, int (*func)(void *), void *arg)
+tc_3000_300_intr_establish(tcadev, cookie, level, func, arg)
+	struct device *tcadev;
+	void *cookie, *arg;
+	tc_intrlevel_t level;
+	int (*func) __P((void *));
 {
-	volatile uint32_t *imskp;
+	volatile u_int32_t *imskp;
 	u_long dev = (u_long)cookie;
 
 #ifdef DIAGNOSTIC
@@ -147,7 +153,7 @@ tc_3000_300_intr_establish(device_t tcadev, void *cookie, tc_intrlevel_t level, 
 	tc_3000_300_intr[dev].tci_func = func;
 	tc_3000_300_intr[dev].tci_arg = arg;
 
-	imskp = (volatile uint32_t *)(DEC_3000_300_IOASIC_ADDR + IOASIC_IMSK);
+	imskp = (volatile u_int32_t *)(DEC_3000_300_IOASIC_ADDR + IOASIC_IMSK);
 	switch (dev) {
 	case TC_3000_300_DEV_OPT0:
 		*imskp |= IOASIC_INTR_300_OPT0;
@@ -162,9 +168,11 @@ tc_3000_300_intr_establish(device_t tcadev, void *cookie, tc_intrlevel_t level, 
 }
 
 void
-tc_3000_300_intr_disestablish(device_t tcadev, void *cookie)
+tc_3000_300_intr_disestablish(tcadev, cookie)
+	struct device *tcadev;
+	void *cookie;
 {
-	volatile uint32_t *imskp;
+	volatile u_int32_t *imskp;
 	u_long dev = (u_long)cookie;
 
 #ifdef DIAGNOSTIC
@@ -175,7 +183,7 @@ tc_3000_300_intr_disestablish(device_t tcadev, void *cookie)
 		panic("tc_3000_300_intr_disestablish: cookie %lu bad intr",
 		    dev);
 
-	imskp = (volatile uint32_t *)(DEC_3000_300_IOASIC_ADDR + IOASIC_IMSK);
+	imskp = (volatile u_int32_t *)(DEC_3000_300_IOASIC_ADDR + IOASIC_IMSK);
 	switch (dev) {
 	case TC_3000_300_DEV_OPT0:
 		*imskp &= ~IOASIC_INTR_300_OPT0;
@@ -193,7 +201,8 @@ tc_3000_300_intr_disestablish(device_t tcadev, void *cookie)
 }
 
 int
-tc_3000_300_intrnull(void *val)
+tc_3000_300_intrnull(val)
+	void *val;
 {
 
 	panic("tc_3000_300_intrnull: uncaught TC intr for cookie %ld",
@@ -201,9 +210,11 @@ tc_3000_300_intrnull(void *val)
 }
 
 void
-tc_3000_300_iointr(void *arg, unsigned long vec)
+tc_3000_300_iointr(arg, vec)
+	void *arg;
+	unsigned long vec;
 {
-	uint32_t tcir, ioasicir, ioasicimr;
+	u_int32_t tcir, ioasicir, ioasicimr;
 	int ifound;
 
 #ifdef DIAGNOSTIC
@@ -221,10 +232,10 @@ tc_3000_300_iointr(void *arg, unsigned long vec)
 		tc_syncbus();
 
 		/* find out what interrupts/errors occurred */
-		tcir = *(volatile uint32_t *)TC_3000_300_IR;
-		ioasicir = *(volatile uint32_t *)
+		tcir = *(volatile u_int32_t *)TC_3000_300_IR;
+		ioasicir = *(volatile u_int32_t *)
 		    (DEC_3000_300_IOASIC_ADDR + IOASIC_INTR);
-		ioasicimr = *(volatile uint32_t *)
+		ioasicimr = *(volatile u_int32_t *)
 		    (DEC_3000_300_IOASIC_ADDR + IOASIC_IMSK);
 		tc_mb();
 
@@ -232,7 +243,7 @@ tc_3000_300_iointr(void *arg, unsigned long vec)
 		ioasicir &= ioasicimr;
 
 		/* clear the interrupts/errors we found. */
-		*(volatile uint32_t *)TC_3000_300_IR = tcir;
+		*(volatile u_int32_t *)TC_3000_300_IR = tcir;
 		/* XXX can't clear TC option slot interrupts here? */
 		tc_wmb();
 
@@ -283,9 +294,10 @@ tc_3000_300_iointr(void *arg, unsigned long vec)
  * framebuffer as the output side of the console.
  */
 int
-tc_3000_300_fb_cnattach(uint64_t turbo_slot)
+tc_3000_300_fb_cnattach(turbo_slot)
+	u_int64_t turbo_slot;
 {
-	uint32_t output_slot;
+	u_int32_t output_slot;
 
 	output_slot = turbo_slot & 0xffffffff;
 

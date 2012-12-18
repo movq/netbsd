@@ -1,4 +1,4 @@
-/*	$NetBSD: sdmmcchip.h,v 1.4 2011/05/18 01:07:17 dyoung Exp $	*/
+/*	$NetBSD: sdmmcchip.h,v 1.1.8.2 2009/10/07 15:41:13 sborrill Exp $	*/
 /*	$OpenBSD: sdmmcchip.h,v 1.3 2007/05/31 10:09:01 uwe Exp $	*/
 
 /*
@@ -22,12 +22,11 @@
 
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 struct sdmmc_command;
 
 typedef struct sdmmc_chip_functions *sdmmc_chipset_tag_t;
-typedef struct sdmmc_spi_chip_functions *sdmmc_spi_chipset_tag_t;
 typedef void *sdmmc_chipset_handle_t;
 
 struct sdmmc_chip_functions {
@@ -44,11 +43,10 @@ struct sdmmc_chip_functions {
 	/* write protect */
 	int		(*write_protect)(sdmmc_chipset_handle_t);
 
-	/* bus power, clock frequency, width and ROD(OpenDrain/PushPull) */
+	/* bus power, clock frequency and width */
 	int		(*bus_power)(sdmmc_chipset_handle_t, uint32_t);
 	int		(*bus_clock)(sdmmc_chipset_handle_t, int);
 	int		(*bus_width)(sdmmc_chipset_handle_t, int);
-	int		(*bus_rod)(sdmmc_chipset_handle_t, int);
 
 	/* command execution */
 	void		(*exec_command)(sdmmc_chipset_handle_t,
@@ -73,15 +71,13 @@ struct sdmmc_chip_functions {
 /* write protect */
 #define sdmmc_chip_write_protect(tag, handle)				\
 	((tag)->write_protect((handle)))
-/* bus power, clock frequency, width and rod */
+/* bus power, clock frequency and width */
 #define sdmmc_chip_bus_power(tag, handle, ocr)				\
 	((tag)->bus_power((handle), (ocr)))
 #define sdmmc_chip_bus_clock(tag, handle, freq)				\
 	((tag)->bus_clock((handle), (freq)))
 #define sdmmc_chip_bus_width(tag, handle, width)			\
 	((tag)->bus_width((handle), (width)))
-#define sdmmc_chip_bus_rod(tag, handle, width)				\
-	((tag)->bus_rod((handle), (width)))
 /* command execution */
 #define sdmmc_chip_exec_command(tag, handle, cmdp)			\
 	((tag)->exec_command((handle), (cmdp)))
@@ -95,18 +91,9 @@ struct sdmmc_chip_functions {
 #define SDMMC_SDCLK_OFF		0
 #define SDMMC_SDCLK_400K	400
 
-/* SPI mode */
-struct sdmmc_spi_chip_functions {
-	/* card initialize */
-	void		(*initialize)(sdmmc_chipset_handle_t);
-};
-#define sdmmc_spi_chip_initialize(tag, handle)				\
-	((tag)->initialize((handle)))
-
 struct sdmmcbus_attach_args {
 	const char		*saa_busname;
 	sdmmc_chipset_tag_t	saa_sct;
-	sdmmc_spi_chipset_tag_t	saa_spi_sct;
 	sdmmc_chipset_handle_t	saa_sch;
 	bus_dma_tag_t		saa_dmat;
 	u_int			saa_clkmin;

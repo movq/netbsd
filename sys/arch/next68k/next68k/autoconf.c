@@ -1,7 +1,6 @@
-/*	$NetBSD: autoconf.c,v 1.27 2012/10/27 17:18:07 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.23 2008/02/14 00:04:51 joerg Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  * 	The Regents of the University of California. All rights reserved.
  *
@@ -37,6 +36,45 @@
  * 
  *	@(#)autoconf.c  8.2 (Berkeley) 1/12/94
  */
+/*
+ * Copyright (c) 1988 University of Utah.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: autoconf.c 1.36 92/12/20$
+ * 
+ *	@(#)autoconf.c  8.2 (Berkeley) 1/12/94
+ */
 
 /*
  * Setup the system to run on the current machine.
@@ -47,7 +85,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.27 2012/10/27 17:18:07 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.23 2008/02/14 00:04:51 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,7 +108,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.27 2012/10/27 17:18:07 chs Exp $");
 volatile u_long *intrstat;
 volatile u_long *intrmask;
 
-static device_t getdevunit(const char *, int);
+static struct device *getdevunit(const char *, int);
 static int devidentparse(const char *, int *, int *, int *);
 static int atoi(const char *);
 
@@ -95,9 +133,6 @@ cpu_configure(void)
 	extern u_int rom_intrstat;
 
 	booted_device = NULL;	/* set by device drivers (if found) */
-
-	/* Initialize the interrupt handlers. */
-	isrinit();
 
 #if 0
 	dma_rev = ((volatile u_char *)IIOV(NEXT_P_SCR1))[1];
@@ -142,15 +177,15 @@ cpu_rootconf(void)
 	booted_device = getdevunit (rom_boot_dev, count);
 	
 	printf("boot device: %s\n",
-		(booted_device) ? device_xname(booted_device) : "<unknown>");
+		(booted_device) ? booted_device->dv_xname : "<unknown>");
 
-	rootconf();
+	setroot(booted_device, part);
 }
 
 /*
  * find a device matching "name" and unit number
  */
-static device_t
+static struct device *
 getdevunit(const char *name, int unit)
 {
 	int i;

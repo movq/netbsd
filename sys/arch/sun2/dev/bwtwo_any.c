@@ -1,4 +1,4 @@
-/*	$NetBSD: bwtwo_any.c,v 1.17 2009/09/19 04:52:44 tsutsui Exp $ */
+/*	$NetBSD: bwtwo_any.c,v 1.16 2008/04/28 20:23:37 martin Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bwtwo_any.c,v 1.17 2009/09/19 04:52:44 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bwtwo_any.c,v 1.16 2008/04/28 20:23:37 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -100,18 +100,18 @@ __KERNEL_RCSID(0, "$NetBSD: bwtwo_any.c,v 1.17 2009/09/19 04:52:44 tsutsui Exp $
 #include <dev/sun/bwtwovar.h>
 
 /* autoconfiguration driver */
-static int	bwtwomatch_any(device_t, cfdata_t, void *);
-static void	bwtwoattach_any(device_t, device_t, void *);
+static void	bwtwoattach_any (struct device *, struct device *, void *);
+static int	bwtwomatch_any (struct device *, struct cfdata *, void *);
 
 struct bwtwosun2_softc {
 	struct bwtwo_softc sc;
 	bus_space_handle_t bh;
 };
 
-CFATTACH_DECL_NEW(bwtwo_obio, sizeof(struct bwtwosun2_softc),
+CFATTACH_DECL(bwtwo_obio, sizeof(struct bwtwosun2_softc),
     bwtwomatch_any, bwtwoattach_any, NULL, NULL);
 
-CFATTACH_DECL_NEW(bwtwo_obmem, sizeof(struct bwtwosun2_softc),
+CFATTACH_DECL(bwtwo_obmem, sizeof(struct bwtwosun2_softc),
     bwtwomatch_any, bwtwoattach_any, NULL, NULL);
 
 static int	bwtwo_get_video_sun2(struct bwtwo_softc *);
@@ -120,7 +120,7 @@ static void	bwtwo_set_video_sun2(struct bwtwo_softc *, int);
 extern int fbnode;
 
 static int 
-bwtwomatch_any(device_t parent, cfdata_t cf, void *aux)
+bwtwomatch_any(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	bus_space_handle_t bh;
@@ -136,9 +136,9 @@ bwtwomatch_any(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void 
-bwtwoattach_any(device_t parent, device_t self, void *aux)
+bwtwoattach_any(struct device *parent, struct device *self, void *aux)
 {
-	struct bwtwosun2_softc *scsun2 = device_private(self);
+	struct bwtwosun2_softc *scsun2 = (struct bwtwosun2_softc *)self;
 	struct bwtwo_softc *sc = &scsun2->sc;
 	struct mainbus_attach_args *ma = aux;
 	struct fbdevice *fb = &sc->sc_fb;
@@ -146,13 +146,11 @@ bwtwoattach_any(device_t parent, device_t self, void *aux)
 	int isconsole;
 	const char *name;
 
-	sc->sc_dev = self;
-
 	/* Remember cookies for bwtwo_mmap() */
 	sc->sc_bustag = ma->ma_bustag;
 	sc->sc_paddr = ma->ma_paddr;
 
-	fb->fb_flags = device_cfdata(self)->cf_flags;
+	fb->fb_flags = device_cfdata(&sc->sc_dev)->cf_flags;
 	fb->fb_type.fb_depth = 1;
 	fb_setsize_eeprom(fb, fb->fb_type.fb_depth, 1152, 900);
 
@@ -169,7 +167,7 @@ bwtwoattach_any(device_t parent, device_t self, void *aux)
 	/* Map the registers. */
 	if (bus_space_map(ma->ma_bustag, ma->ma_paddr + BWREG_REG,
 			  sizeof(struct bwtworeg), 0, &scsun2->bh)) {
-		printf("%s: cannot map regs\n", device_xname(self));
+		printf("%s: cannot map regs\n", self->dv_xname);
 		return;
 	}
 
@@ -179,7 +177,7 @@ bwtwoattach_any(device_t parent, device_t self, void *aux)
 				  ma->ma_paddr + sc->sc_pixeloffset,
 				  ramsize,
 				  BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-			printf("%s: cannot map pixels\n", device_xname(self));
+			printf("%s: cannot map pixels\n", self->dv_xname);
 			return;
 		}
 		sc->sc_fb.fb_pixels = (char *)bh;

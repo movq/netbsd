@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_main.c,v 1.34 2011/08/31 16:24:58 plunky Exp $	*/
+/*	$NetBSD: rpc_main.c,v 1.32 2008/03/08 19:49:08 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)rpc_main.c 1.30 89/03/30 (C) 1987 SMI";
 #else
-__RCSID("$NetBSD: rpc_main.c,v 1.34 2011/08/31 16:24:58 plunky Exp $");
+__RCSID("$NetBSD: rpc_main.c,v 1.32 2008/03/08 19:49:08 christos Exp $");
 #endif
 #endif
 
@@ -373,7 +373,7 @@ open_input(infile, define)
 		putarg(1, CPPFLAGS);
 		addarg(define);
 		addarg(infile);
-		addarg(NULL);
+		addarg((char *) NULL);
 		(void) close(1);
 		(void) dup2(pd[1], 1);
 		(void) close(pd[0]);
@@ -855,16 +855,16 @@ addarg(cp)
 }
 
 static void
-putarg(pwhere, cp)
+putarg(where, cp)
 	char   *cp;
-	int     pwhere;
+	int     where;
 {
-	if (pwhere >= ARGLISTLEN) {
+	if (where >= ARGLISTLEN) {
 		f_print(stderr, "rpcgen: arglist coding error\n");
 		crash();
 		/* NOTREACHED */
 	}
-	arglist[pwhere] = cp;
+	arglist[where] = cp;
 
 }
 /*

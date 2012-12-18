@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.S,v 1.17 2011/09/24 21:24:52 jym Exp $	*/
+/*	$NetBSD: cpufunc.S,v 1.13 2008/09/23 08:50:11 ad Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.
@@ -35,10 +35,8 @@
  * These are shared with NetBSD/xen.
  */
 
-#include <sys/errno.h>
-
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: cpufunc.S,v 1.17 2011/09/24 21:24:52 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpufunc.S,v 1.13 2008/09/23 08:50:11 ad Exp $");
 
 #include "opt_xen.h"
 
@@ -46,6 +44,10 @@ __KERNEL_RCSID(0, "$NetBSD: cpufunc.S,v 1.17 2011/09/24 21:24:52 jym Exp $");
 #include <machine/segments.h>
 
 #include "assym.h"
+
+/* Small and slow, so align less. */
+#undef _ALIGN_TEXT
+#define	_ALIGN_TEXT	.align 8
 
 ENTRY(x86_lfence)
 	lock
@@ -139,40 +141,6 @@ ENTRY(wrmsr_locked)
 	ret
 END(wrmsr_locked)
 
-/*
- * Support for reading MSRs in the safe manner (returns EFAULT on fault)
- */
-/* int rdmsr_safe(u_int msr, uint64_t *data) */
-ENTRY(rdmsr_safe)
-	movl	CPUVAR(CURLWP), %ecx
-	movl	L_PCB(%ecx), %ecx
-	movl	$_C_LABEL(msr_onfault), PCB_ONFAULT(%ecx)
-
-	movl	4(%esp), %ecx /* u_int msr */
-	rdmsr
-	movl	8(%esp), %ecx /* *data */
-	movl	%eax, (%ecx)  /* low-order bits */
-	movl	%edx, 4(%ecx) /* high-order bits */
-	xorl	%eax, %eax    /* "no error" */
-
-	movl	CPUVAR(CURLWP), %ecx
-	movl	L_PCB(%ecx), %ecx
-	movl	%eax, PCB_ONFAULT(%ecx)
-
-	ret
-
-/*
- * MSR operations fault handler
- */
-NENTRY(msr_onfault)
-	movl	CPUVAR(CURLWP), %ecx
-	movl	L_PCB(%ecx), %ecx
-	movl	$0, PCB_ONFAULT(%ecx)
-	movl	$EFAULT, %eax
-	ret
-
-END(rdmsr_safe)
-
 ENTRY(cpu_counter)
 	rdtsc
 	addl	CPUVAR(CC_SKEW), %eax
@@ -199,6 +167,45 @@ ENTRY(breakpoint)
 	popl	%ebp
 	ret
 END(breakpoint)
+
+ENTRY(x86_atomic_testset_ul)
+	movl	4(%esp), %ecx
+	movl	8(%esp), %eax
+	xchgl	%eax, (%ecx)
+	ret
+END(x86_atomic_testset_ul)
+
+ENTRY(x86_atomic_testset_i)
+	movl	4(%esp), %ecx
+	movl	8(%esp), %eax
+	xchgl	%eax, (%ecx)
+	ret
+END(x86_atomic_testset_i)
+
+ENTRY(x86_atomic_testset_b)
+	movl	4(%esp), %ecx
+	movl	8(%esp), %eax
+	xchgb	%al, (%ecx)
+	andl	$0xff, %eax
+	ret
+END(x86_atomic_testset_b)
+
+ENTRY(x86_atomic_setbits_l)
+	movl	4(%esp), %ecx
+	movl	8(%esp), %eax
+	lock
+	orl	%eax, (%ecx)
+	ret
+END(x86_atomic_setbits_l)
+
+ENTRY(x86_atomic_clearbits_l)
+	movl	4(%esp), %ecx
+	movl	8(%esp), %eax
+	notl	%eax
+	lock
+	andl	%eax, (%ecx)
+	ret
+END(x86_atomic_clearbits_l)
 
 ENTRY(x86_curcpu)
 	movl	%fs:(CPU_INFO_SELF), %eax
@@ -387,7 +394,7 @@ END(fxrstor)
 ENTRY(fldummy)
 	movl	4(%esp), %eax
 	ffree	%st(7)
-	flds	(%eax)
+	fld	(%eax)
 	ret
 END(fldummy)
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: stubs.c,v 1.24 2012/11/12 18:00:35 skrll Exp $	*/
+/*	$NetBSD: stubs.c,v 1.18 2008/01/01 14:06:42 chris Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: stubs.c,v 1.24 2012/11/12 18:00:35 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: stubs.c,v 1.18 2008/01/01 14:06:42 chris Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,7 +69,7 @@ u_long	cpu_dump_mempagecnt(void);
 /*
  * These variables are needed by /sbin/savecore
  */
-uint32_t dumpmag = 0x8fca0101;	/* magic number */
+u_int32_t dumpmag = 0x8fca0101;	/* magic number */
 int 	dumpsize = 0;		/* pages */
 long	dumplo = 0; 		/* blocks */
 
@@ -84,13 +84,19 @@ struct pcb dumppcb;
  */
 
 void
-cpu_dumpconf(void)
+cpu_dumpconf()
 {
+	const struct bdevsw *bdev;
 	int nblks, dumpblks;	/* size of dump area */
 
 	if (dumpdev == NODEV)
 		return;
-	nblks = bdev_size(dumpdev);
+	bdev = bdevsw_lookup(dumpdev);
+	if (bdev == NULL)
+		panic("dumpconf: bad dumpdev=0x%x", dumpdev);
+	if (bdev->d_psize == NULL)
+		return;
+	nblks = (*bdev->d_psize)(dumpdev);
 	if (nblks <= ctod(1))
 		return;
 
@@ -118,7 +124,7 @@ cpu_dumpconf(void)
  * cpu_dump: dump the machine-dependent kernel core dump headers.
  */
 int
-cpu_dump(void)
+cpu_dump()
 {
 	int (*dump)(dev_t, daddr_t, void *, size_t);
 	char bf[dbtob(1)];
@@ -169,7 +175,7 @@ cpu_dump(void)
  * cpu_dumpsize: calculate size of machine-dependent kernel core dump headers.
  */
 int
-cpu_dumpsize(void)
+cpu_dumpsize()
 {
 	int size;
 
@@ -186,7 +192,7 @@ cpu_dumpsize(void)
  * cpu_dump_mempagecnt: calculate the size of RAM (in pages) to be dumped.
  */
 u_long
-cpu_dump_mempagecnt(void)
+cpu_dump_mempagecnt()
 {
 	u_long i, n;
 
@@ -210,7 +216,7 @@ extern vaddr_t memhook;		/* XXX */
 void dodumpsys(void);
 
 void
-dodumpsys(void)
+dodumpsys()
 {
 	const struct bdevsw *bdev;
 	daddr_t blkno;
@@ -230,19 +236,19 @@ dodumpsys(void)
 		cpu_dumpconf();
 	}
 	if (dumplo <= 0 || dumpsize == 0) {
-		printf("\ndump to dev %u,%u not possible\n",
-		    major(dumpdev), minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
+		    minor(dumpdev));
 		delay(5000000);
 		return;
 	}
-	printf("\ndumping to dev %u,%u offset %ld\n",
-	    major(dumpdev), minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
+	    minor(dumpdev), dumplo);
 
 
 	bdev = bdevsw_lookup(dumpdev);
 	if (bdev == NULL || bdev->d_psize == NULL)
 		return;
-	psize = bdev_size(dumpdev);
+	psize = (*bdev->d_psize)(dumpdev);
 	printf("dump ");
 	if (psize == -1) {
 		printf("area unavailable\n");
@@ -265,7 +271,7 @@ dodumpsys(void)
 		    	if ((len % (1024*1024)) == 0)
 		    		printf("%d ", len / (1024*1024));
 
-			pmap_kenter_pa(dumpspace, addr, VM_PROT_READ, 0);
+			pmap_kenter_pa(dumpspace, addr, VM_PROT_READ);
 			pmap_update(pmap_kernel());
 			error = (*bdev->d_dump)(dumpdev,
 			    blkno, (void *) dumpspace, PAGE_SIZE);

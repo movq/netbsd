@@ -1,4 +1,4 @@
-/*	$NetBSD: sprayd.c,v 1.18 2011/09/16 16:13:17 plunky Exp $	*/
+/*	$NetBSD: sprayd.c,v 1.14 2006/05/09 20:18:07 mrg Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Christos Zoulas.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -27,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: sprayd.c,v 1.18 2011/09/16 16:13:17 plunky Exp $");
+__RCSID("$NetBSD: sprayd.c,v 1.14 2006/05/09 20:18:07 mrg Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -40,9 +45,11 @@ __RCSID("$NetBSD: sprayd.c,v 1.18 2011/09/16 16:13:17 plunky Exp $");
 #include <rpc/rpc.h>
 #include <rpcsvc/spray.h>
 
-__dead static void cleanup(int);
-__dead static void die(int);
+static void cleanup(int);
+static void die(int);
 static void spray_service(struct svc_req *, SVCXPRT *);
+
+int main(int, char *[]);
 
 static int from_inetd = 1;
 
@@ -131,7 +138,7 @@ spray_service(struct svc_req *rqstp, SVCXPRT *transp)
 		/*FALLTHROUGH*/
 
 	case NULLPROC:
-		(void)svc_sendreply(transp, (xdrproc_t)xdr_void, NULL);
+		(void)svc_sendreply(transp, xdr_void, (char *)NULL);
 		return;
 
 	case SPRAYPROC_SPRAY:
@@ -150,7 +157,7 @@ spray_service(struct svc_req *rqstp, SVCXPRT *transp)
 		return;
 	}
 
-	if (!svc_sendreply(transp, (xdrproc_t)xdr_spraycumul, (caddr_t)&scum)) {
+	if (!svc_sendreply(transp, xdr_spraycumul, (caddr_t)&scum)) {
 		svcerr_systemerr(transp);
 		syslog(LOG_WARNING, "bad svc_sendreply");
 	}

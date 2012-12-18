@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie_obio.c,v 1.40 2011/07/01 18:50:41 dyoung Exp $	*/
+/*	$NetBSD: if_ie_obio.c,v 1.36 2008/04/28 20:23:35 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
+/*-
  * Copyright (c) 1995 Charles D. Cranor
  * All rights reserved.
  *
@@ -41,6 +41,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -73,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ie_obio.c,v 1.40 2011/07/01 18:50:41 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ie_obio.c,v 1.36 2008/04/28 20:23:35 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,7 +96,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ie_obio.c,v 1.40 2011/07/01 18:50:41 dyoung Exp $
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/autoconf.h>
 
@@ -120,10 +125,10 @@ static void ie_obreset(struct ie_softc *, int);
 static void ie_obattend(struct ie_softc *, int);
 static void ie_obrun(struct ie_softc *);
 
-int ie_obio_match(device_t, cfdata_t, void *);
-void ie_obio_attach(device_t, device_t, void *);
+int ie_obio_match(struct device *, struct cfdata *, void *);
+void ie_obio_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ie_obio, sizeof(struct ie_softc),
+CFATTACH_DECL(ie_obio, sizeof(struct ie_softc),
     ie_obio_match, ie_obio_attach, NULL, NULL);
 
 /* Supported media */
@@ -226,7 +231,7 @@ ie_obio_write24(struct ie_softc *sc, int offset, int addr)
 }
 
 int
-ie_obio_match(device_t parent, cfdata_t cf, void *aux)
+ie_obio_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct obio4_attach_args *oba;
@@ -243,11 +248,11 @@ ie_obio_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-ie_obio_attach(device_t parent, device_t self, void *aux)
+ie_obio_attach(struct device *parent, struct device *self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct obio4_attach_args *oba = &uoba->uoba_oba4;
-	struct ie_softc *sc = device_private(self);
+	struct ie_softc *sc = (void *) self;
 	bus_dma_tag_t dmatag = oba->oba_dmatag;
 	bus_space_handle_t bh;
 	bus_dma_segment_t seg;
@@ -259,7 +264,6 @@ ie_obio_attach(device_t parent, device_t self, void *aux)
 	u_long iebase;
 	uint8_t myaddr[ETHER_ADDR_LEN];
 
-	sc->sc_dev = self;
 	sc->bt = oba->oba_bustag;
 
 	sc->hwreset = ie_obreset;
@@ -278,7 +282,7 @@ ie_obio_attach(device_t parent, device_t self, void *aux)
 			  sizeof(struct ieob),
 			  BUS_SPACE_MAP_LINEAR,
 			  &bh) != 0) {
-		printf("%s: cannot map registers\n", device_xname(self));
+		printf("%s: cannot map registers\n", self->dv_xname);
 		return;
 	}
 	sc->sc_reg = (void *)bh;
@@ -290,14 +294,14 @@ ie_obio_attach(device_t parent, device_t self, void *aux)
 					BUS_DMA_NOWAIT|BUS_DMA_24BIT,
 					&sc->sc_dmamap)) != 0) {
 		printf("%s: DMA map create error %d\n",
-		    device_xname(self), error);
+			sc->sc_dev.dv_xname, error);
 		return;
 	}
 	if ((error = bus_dmamem_alloc(dmatag, memsize, 64*1024, 0,
 			     &seg, 1, &rseg,
 			     BUS_DMA_NOWAIT | BUS_DMA_24BIT)) != 0) {
 		printf("%s: DMA memory allocation error %d\n",
-		    device_xname(self), error);
+			self->dv_xname, error);
 		return;
 	}
 
@@ -306,7 +310,7 @@ ie_obio_attach(device_t parent, device_t self, void *aux)
 				    (void **)&sc->sc_maddr,
 				    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
 		printf("%s: DMA buffer map error %d\n",
-		    device_xname(self), error);
+			sc->sc_dev.dv_xname, error);
 		bus_dmamem_free(dmatag, &seg, rseg);
 		return;
 	}
@@ -316,7 +320,7 @@ ie_obio_attach(device_t parent, device_t self, void *aux)
 				     sc->sc_maddr, memsize, NULL,
 				     BUS_DMA_NOWAIT)) != 0) {
 		printf("%s: DMA buffer map load error %d\n",
-		    device_xname(self), error);
+			sc->sc_dev.dv_xname, error);
 		bus_dmamem_unmap(dmatag, sc->sc_maddr, memsize);
 		bus_dmamem_free(dmatag, &seg, rseg);
 		return;

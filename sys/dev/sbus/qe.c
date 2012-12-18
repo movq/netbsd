@@ -1,4 +1,4 @@
-/*	$NetBSD: qe.c,v 1.62 2012/06/23 17:21:12 jdc Exp $	*/
+/*	$NetBSD: qe.c,v 1.45 2008/04/28 20:23:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -66,12 +66,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: qe.c,v 1.62 2012/06/23 17:21:12 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: qe.c,v 1.45 2008/04/28 20:23:57 martin Exp $");
 
 #define QEDEBUG
 
 #include "opt_ddb.h"
 #include "opt_inet.h"
+#include "bpfilter.h"
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -83,7 +85,9 @@ __KERNEL_RCSID(0, "$NetBSD: qe.c,v 1.62 2012/06/23 17:21:12 jdc Exp $");
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -101,8 +105,10 @@ __KERNEL_RCSID(0, "$NetBSD: qe.c,v 1.62 2012/06/23 17:21:12 jdc Exp $");
 #endif
 
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -114,7 +120,8 @@ __KERNEL_RCSID(0, "$NetBSD: qe.c,v 1.62 2012/06/23 17:21:12 jdc Exp $");
 #include <dev/sbus/qereg.h>
 
 struct qe_softc {
-	device_t	sc_dev;
+	struct	device	sc_dev;		/* base device */
+	struct	sbusdev sc_sd;		/* sbus device */
 	bus_space_tag_t	sc_bustag;	/* bus & DMA tags */
 	bus_dma_tag_t	sc_dmatag;
 	bus_dmamap_t	sc_dmamap;
@@ -135,15 +142,15 @@ struct qe_softc {
 	struct  qec_ring	sc_rb;	/* Packet Ring Buffer */
 
 	/* MAC address */
-	uint8_t sc_enaddr[6];
+	u_int8_t sc_enaddr[6];
 
 #ifdef QEDEBUG
 	int	sc_debug;
 #endif
 };
 
-int	qematch(device_t, cfdata_t, void *);
-void	qeattach(device_t, device_t, void *);
+int	qematch(struct device *, struct cfdata *, void *);
+void	qeattach(struct device *, struct device *, void *);
 
 void	qeinit(struct qe_softc *);
 void	qestart(struct ifnet *);
@@ -153,7 +160,7 @@ int	qeioctl(struct ifnet *, u_long, void *);
 void	qereset(struct qe_softc *);
 
 int	qeintr(void *);
-int	qe_eint(struct qe_softc *, uint32_t);
+int	qe_eint(struct qe_softc *, u_int32_t);
 int	qe_rint(struct qe_softc *);
 int	qe_tint(struct qe_softc *);
 void	qe_mcreset(struct qe_softc *);
@@ -166,11 +173,14 @@ static struct mbuf	*qe_get(struct qe_softc *, int, int);
 void	qe_ifmedia_sts(struct ifnet *, struct ifmediareq *);
 int	qe_ifmedia_upd(struct ifnet *);
 
-CFATTACH_DECL_NEW(qe, sizeof(struct qe_softc),
+CFATTACH_DECL(qe, sizeof(struct qe_softc),
     qematch, qeattach, NULL, NULL);
 
 int
-qematch(device_t parent, cfdata_t cf, void *aux)
+qematch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -178,19 +188,19 @@ qematch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-qeattach(device_t parent, device_t self, void *aux)
+qeattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct sbus_attach_args *sa = aux;
-	struct qec_softc *qec = device_private(parent);
-	struct qe_softc *sc = device_private(self);
+	struct qec_softc *qec = (struct qec_softc *)parent;
+	struct qe_softc *sc = (struct qe_softc *)self;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	int node = sa->sa_node;
 	bus_dma_tag_t dmatag = sa->sa_dmatag;
 	bus_dma_segment_t seg;
 	bus_size_t size;
 	int rseg, error;
-
-	sc->sc_dev = self;
 
 	if (sa->sa_nreg < 2) {
 		printf("%s: only %d register sets\n",
@@ -299,7 +309,7 @@ qeattach(device_t parent, device_t self, void *aux)
 		    0, NULL);
 	ifmedia_set(&sc->sc_ifmedia, IFM_ETHER|IFM_AUTO);
 
-	memcpy(ifp->if_xname, device_xname(self), IFNAMSIZ);
+	memcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = qestart;
 	ifp->if_ioctl = qeioctl;
@@ -322,15 +332,17 @@ qeattach(device_t parent, device_t self, void *aux)
  * we copy into clusters.
  */
 static inline struct mbuf *
-qe_get(struct qe_softc *sc, int idx, int totlen)
+qe_get(sc, idx, totlen)
+	struct qe_softc *sc;
+	int idx, totlen;
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct mbuf *m;
 	struct mbuf *top, **mp;
 	int len, pad, boff = 0;
-	uint8_t *bp;
+	void *bp;
 
-	bp = sc->sc_rb.rb_rxbuf + (idx % sc->sc_rb.rb_nrbuf) * QE_PKT_BUF_SZ;
+	bp = (char *)sc->sc_rb.rb_rxbuf + (idx % sc->sc_rb.rb_nrbuf) * QE_PKT_BUF_SZ;
 
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL)
@@ -358,7 +370,7 @@ qe_get(struct qe_softc *sc, int idx, int totlen)
 				len = MCLBYTES;
 		}
 		m->m_len = len = min(totlen, len);
-		memcpy(mtod(m, void *), bp + boff, len);
+		memcpy(mtod(m, void *), (char *)bp + boff, len);
 		boff += len;
 		totlen -= len;
 		*mp = m;
@@ -373,13 +385,16 @@ qe_get(struct qe_softc *sc, int idx, int totlen)
  * network buffer memory.
  */
 inline int
-qe_put(struct qe_softc *sc, int idx, struct mbuf *m)
+qe_put(sc, idx, m)
+	struct qe_softc *sc;
+	int idx;
+	struct mbuf *m;
 {
 	struct mbuf *n;
 	int len, tlen = 0, boff = 0;
-	uint8_t *bp;
+	void *bp;
 
-	bp = sc->sc_rb.rb_txbuf + (idx % sc->sc_rb.rb_ntbuf) * QE_PKT_BUF_SZ;
+	bp = (char *)sc->sc_rb.rb_txbuf + (idx % sc->sc_rb.rb_ntbuf) * QE_PKT_BUF_SZ;
 
 	for (; m; m = n) {
 		len = m->m_len;
@@ -387,7 +402,7 @@ qe_put(struct qe_softc *sc, int idx, struct mbuf *m)
 			MFREE(m, n);
 			continue;
 		}
-		memcpy(bp + boff, mtod(m, void *), len);
+		memcpy((char *)bp + boff, mtod(m, void *), len);
 		boff += len;
 		tlen += len;
 		MFREE(m, n);
@@ -399,7 +414,9 @@ qe_put(struct qe_softc *sc, int idx, struct mbuf *m)
  * Pass a packet to the higher levels.
  */
 inline void
-qe_read(struct qe_softc *sc, int idx, int len)
+qe_read(sc, idx, len)
+	struct qe_softc *sc;
+	int idx, len;
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct mbuf *m;
@@ -424,11 +441,14 @@ qe_read(struct qe_softc *sc, int idx, int len)
 	}
 	ifp->if_ipackets++;
 
+#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.
 	 * If so, hand off the raw packet to BPF.
 	 */
-	bpf_mtap(ifp, m);
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, m);
+#endif
 	/* Pass the packet up. */
 	(*ifp->if_input)(ifp, m);
 }
@@ -443,9 +463,10 @@ qe_read(struct qe_softc *sc, int idx, int len)
  *     (i.e. that the output part of the interface is idle)
  */
 void
-qestart(struct ifnet *ifp)
+qestart(ifp)
+	struct ifnet *ifp;
 {
-	struct qe_softc *sc = ifp->if_softc;
+	struct qe_softc *sc = (struct qe_softc *)ifp->if_softc;
 	struct qec_xd *txd = sc->sc_rb.rb_txd;
 	struct mbuf *m;
 	unsigned int bix, len;
@@ -461,11 +482,14 @@ qestart(struct ifnet *ifp)
 		if (m == 0)
 			break;
 
+#if NBPFILTER > 0
 		/*
 		 * If BPF is listening on this interface, let it see the
 		 * packet before we commit it to the wire.
 		 */
-		bpf_mtap(ifp, m);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 
 		/*
 		 * Copy the mbuf chain into the transmit buffer.
@@ -493,7 +517,8 @@ qestart(struct ifnet *ifp)
 }
 
 void
-qestop(struct qe_softc *sc)
+qestop(sc)
+	struct qe_softc *sc;
 {
 	bus_space_tag_t t = sc->sc_bustag;
 	bus_space_handle_t mr = sc->sc_mr;
@@ -526,7 +551,8 @@ qestop(struct qe_softc *sc)
  * Reset interface.
  */
 void
-qereset(struct qe_softc *sc)
+qereset(sc)
+	struct qe_softc *sc;
 {
 	int s;
 
@@ -537,11 +563,12 @@ qereset(struct qe_softc *sc)
 }
 
 void
-qewatchdog(struct ifnet *ifp)
+qewatchdog(ifp)
+	struct ifnet *ifp;
 {
 	struct qe_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", device_xname(sc->sc_dev));
+	log(LOG_ERR, "%s: device timeout\n", device_xname(&sc->sc_dev));
 	ifp->if_oerrors++;
 
 	qereset(sc);
@@ -551,11 +578,12 @@ qewatchdog(struct ifnet *ifp)
  * Interrupt dispatch.
  */
 int
-qeintr(void *arg)
+qeintr(arg)
+	void *arg;
 {
-	struct qe_softc *sc = arg;
+	struct qe_softc *sc = (struct qe_softc *)arg;
 	bus_space_tag_t t = sc->sc_bustag;
-	uint32_t qecstat, qestat;
+	u_int32_t qecstat, qestat;
 	int r = 0;
 
 #if defined(SUN4U) || defined(__GNUC__)
@@ -582,8 +610,8 @@ qeintr(void *arg)
 		bus_space_tag_t t1 = sc->sc_bustag;
 		bus_space_handle_t mr = sc->sc_mr;
 
-		snprintb(bits, sizeof(bits), QE_CR_STAT_BITS, qestat);
-		printf("qe%d: intr: qestat=%s\n", sc->sc_channel, bits);
+		printf("qe%d: intr: qestat=%s\n", sc->sc_channel,
+		bitmask_snprintf(qestat, QE_CR_STAT_BITS, bits, sizeof(bits)));
 
 		printf("MACE registers:\n");
 		for (i = 0 ; i < 32; i++) {
@@ -598,8 +626,9 @@ qeintr(void *arg)
 #ifdef QEDEBUG
 		if (sc->sc_debug) {
 			char bits[64];
-			snprintb(bits, sizeof(bits), QE_CR_STAT_BITS, qestat);
-			printf("qe%d: eint: qestat=%s\n", sc->sc_channel, bits);
+			printf("qe%d: eint: qestat=%s\n", sc->sc_channel,
+			    bitmask_snprintf(qestat, QE_CR_STAT_BITS, bits,
+			    sizeof(bits)));
 		}
 #endif
 		r |= qe_eint(sc, qestat);
@@ -620,7 +649,8 @@ qeintr(void *arg)
  * Transmit interrupt.
  */
 int
-qe_tint(struct qe_softc *sc)
+qe_tint(sc)
+	struct qe_softc *sc;
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	unsigned int bix, txflags;
@@ -659,7 +689,8 @@ qe_tint(struct qe_softc *sc)
  * Receive interrupt.
  */
 int
-qe_rint(struct qe_softc *sc)
+qe_rint(sc)
+	struct qe_softc *sc;
 {
 	struct qec_xd *xd = sc->sc_rb.rb_rxd;
 	unsigned int bix, len;
@@ -696,7 +727,7 @@ qe_rint(struct qe_softc *sc)
 #ifdef QEDEBUG
 	if (npackets == 0 && sc->sc_debug)
 		printf("%s: rint: no packets; rb index %d; status 0x%x\n",
-			device_xname(sc->sc_dev), bix, len);
+			device_xname(&sc->sc_dev), bix, len);
 #endif
 
 	sc->sc_rb.rb_rdtail = bix;
@@ -708,27 +739,27 @@ qe_rint(struct qe_softc *sc)
  * Error interrupt.
  */
 int
-qe_eint(struct qe_softc *sc, uint32_t why)
+qe_eint(sc, why)
+	struct qe_softc *sc;
+	u_int32_t why;
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
-	device_t self = sc->sc_dev;
-	const char *xname = device_xname(self);
 	int r = 0, rst = 0;
 
 	if (why & QE_CR_STAT_EDEFER) {
-		printf("%s: excessive tx defers.\n", xname);
+		printf("%s: excessive tx defers.\n", device_xname(&sc->sc_dev));
 		r |= 1;
 		ifp->if_oerrors++;
 	}
 
 	if (why & QE_CR_STAT_CLOSS) {
-		printf("%s: no carrier, link down?\n", xname);
+		printf("%s: no carrier, link down?\n", device_xname(&sc->sc_dev));
 		ifp->if_oerrors++;
 		r |= 1;
 	}
 
 	if (why & QE_CR_STAT_ERETRIES) {
-		printf("%s: excessive tx retries\n", xname);
+		printf("%s: excessive tx retries\n", device_xname(&sc->sc_dev));
 		ifp->if_oerrors++;
 		r |= 1;
 		rst = 1;
@@ -736,26 +767,26 @@ qe_eint(struct qe_softc *sc, uint32_t why)
 
 
 	if (why & QE_CR_STAT_LCOLL) {
-		printf("%s: late tx transmission\n", xname);
+		printf("%s: late tx transmission\n", device_xname(&sc->sc_dev));
 		ifp->if_oerrors++;
 		r |= 1;
 		rst = 1;
 	}
 
 	if (why & QE_CR_STAT_FUFLOW) {
-		printf("%s: tx fifo underflow\n", xname);
+		printf("%s: tx fifo underflow\n", device_xname(&sc->sc_dev));
 		ifp->if_oerrors++;
 		r |= 1;
 		rst = 1;
 	}
 
 	if (why & QE_CR_STAT_JERROR) {
-		printf("%s: jabber seen\n", xname);
+		printf("%s: jabber seen\n", device_xname(&sc->sc_dev));
 		r |= 1;
 	}
 
 	if (why & QE_CR_STAT_BERROR) {
-		printf("%s: babble seen\n", xname);
+		printf("%s: babble seen\n", device_xname(&sc->sc_dev));
 		r |= 1;
 	}
 
@@ -766,27 +797,27 @@ qe_eint(struct qe_softc *sc, uint32_t why)
 	}
 
 	if (why & QE_CR_STAT_TXDERROR) {
-		printf("%s: tx descriptor is bad\n", xname);
+		printf("%s: tx descriptor is bad\n", device_xname(&sc->sc_dev));
 		rst = 1;
 		r |= 1;
 	}
 
 	if (why & QE_CR_STAT_TXLERR) {
-		printf("%s: tx late error\n", xname);
+		printf("%s: tx late error\n", device_xname(&sc->sc_dev));
 		ifp->if_oerrors++;
 		rst = 1;
 		r |= 1;
 	}
 
 	if (why & QE_CR_STAT_TXPERR) {
-		printf("%s: tx DMA parity error\n", xname);
+		printf("%s: tx DMA parity error\n", device_xname(&sc->sc_dev));
 		ifp->if_oerrors++;
 		rst = 1;
 		r |= 1;
 	}
 
 	if (why & QE_CR_STAT_TXSERR) {
-		printf("%s: tx DMA sbus error ack\n", xname);
+		printf("%s: tx DMA sbus error ack\n", device_xname(&sc->sc_dev));
 		ifp->if_oerrors++;
 		rst = 1;
 		r |= 1;
@@ -809,13 +840,13 @@ qe_eint(struct qe_softc *sc, uint32_t why)
 	}
 
 	if (why & QE_CR_STAT_RXFOFLOW) {
-		printf("%s: rx fifo overflow\n", xname);
+		printf("%s: rx fifo overflow\n", device_xname(&sc->sc_dev));
 		ifp->if_ierrors++;
 		r |= 1;
 	}
 
 	if (why & QE_CR_STAT_RLCOLL) {
-		printf("%s: rx late collision\n", xname);
+		printf("%s: rx late collision\n", device_xname(&sc->sc_dev));
 		ifp->if_ierrors++;
 		ifp->if_collisions++;
 		r |= 1;
@@ -832,45 +863,45 @@ qe_eint(struct qe_softc *sc, uint32_t why)
 	}
 
 	if (why & QE_CR_STAT_RXDROP) {
-		printf("%s: rx packet dropped\n", xname);
+		printf("%s: rx packet dropped\n", device_xname(&sc->sc_dev));
 		ifp->if_ierrors++;
 		r |= 1;
 	}
 
 	if (why & QE_CR_STAT_RXSMALL) {
-		printf("%s: rx buffer too small\n", xname);
+		printf("%s: rx buffer too small\n", device_xname(&sc->sc_dev));
 		ifp->if_ierrors++;
 		r |= 1;
 		rst = 1;
 	}
 
 	if (why & QE_CR_STAT_RXLERR) {
-		printf("%s: rx late error\n", xname);
+		printf("%s: rx late error\n", device_xname(&sc->sc_dev));
 		ifp->if_ierrors++;
 		r |= 1;
 		rst = 1;
 	}
 
 	if (why & QE_CR_STAT_RXPERR) {
-		printf("%s: rx DMA parity error\n", xname);
+		printf("%s: rx DMA parity error\n", device_xname(&sc->sc_dev));
 		ifp->if_ierrors++;
 		r |= 1;
 		rst = 1;
 	}
 
 	if (why & QE_CR_STAT_RXSERR) {
-		printf("%s: rx DMA sbus error ack\n", xname);
+		printf("%s: rx DMA sbus error ack\n", device_xname(&sc->sc_dev));
 		ifp->if_ierrors++;
 		r |= 1;
 		rst = 1;
 	}
 
 	if (r == 0)
-		aprint_error_dev(self, "unexpected interrupt error: %08x\n",
+		aprint_error_dev(&sc->sc_dev, "unexpected interrupt error: %08x\n",
 			why);
 
 	if (rst) {
-		printf("%s: resetting...\n", xname);
+		printf("%s: resetting...\n", device_xname(&sc->sc_dev));
 		qereset(sc);
 		return (-1);
 	}
@@ -879,58 +910,59 @@ qe_eint(struct qe_softc *sc, uint32_t why)
 }
 
 int
-qeioctl(struct ifnet *ifp, u_long cmd, void *data)
+qeioctl(ifp, cmd, data)
+	struct ifnet *ifp;
+	u_long cmd;
+	void *data;
 {
 	struct qe_softc *sc = ifp->if_softc;
-	struct ifaddr *ifa = data;
-	struct ifreq *ifr = data;
+	struct ifaddr *ifa = (struct ifaddr *)data;
+	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error = 0;
 
 	s = splnet();
 
 	switch (cmd) {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
-		qeinit(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
+			qeinit(sc);
 			arp_ifinit(ifp, ifa);
 			break;
 #endif /* INET */
 		default:
+			qeinit(sc);
 			break;
 		}
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		/* XXX re-use ether_ioctl() */
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_RUNNING:
+		if ((ifp->if_flags & IFF_UP) == 0 &&
+		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
 			 * If interface is marked down and it is running, then
 			 * stop it.
 			 */
 			qestop(sc);
 			ifp->if_flags &= ~IFF_RUNNING;
-			break;
-		case IFF_UP:
+
+		} else if ((ifp->if_flags & IFF_UP) != 0 &&
+			   (ifp->if_flags & IFF_RUNNING) == 0) {
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
 			 */
 			qeinit(sc);
-			break;
-		default:
+
+		} else {
 			/*
 			 * Reset the interface to pick up changes in any other
 			 * flags that affect hardware registers.
 			 */
 			qestop(sc);
 			qeinit(sc);
-			break;
 		}
 #ifdef QEDEBUG
 		sc->sc_debug = (ifp->if_flags & IFF_DEBUG) != 0 ? 1 : 0;
@@ -956,7 +988,7 @@ qeioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ether_ioctl(ifp, cmd, data);
+		error = EINVAL;
 		break;
 	}
 
@@ -966,15 +998,16 @@ qeioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 
 void
-qeinit(struct qe_softc *sc)
+qeinit(sc)
+	struct qe_softc *sc;
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	bus_space_tag_t t = sc->sc_bustag;
 	bus_space_handle_t cr = sc->sc_cr;
 	bus_space_handle_t mr = sc->sc_mr;
 	struct qec_softc *qec = sc->sc_qec;
-	uint32_t qecaddr;
-	uint8_t *ea;
+	u_int32_t qecaddr;
+	u_int8_t *ea;
 	int s;
 
 #if defined(SUN4U) || defined(__GNUC__)
@@ -990,8 +1023,8 @@ qeinit(struct qe_softc *sc)
 	qec_meminit(&sc->sc_rb, QE_PKT_BUF_SZ);
 
 	/* Channel registers: */
-	bus_space_write_4(t, cr, QE_CRI_RXDS, (uint32_t)sc->sc_rb.rb_rxddma);
-	bus_space_write_4(t, cr, QE_CRI_TXDS, (uint32_t)sc->sc_rb.rb_txddma);
+	bus_space_write_4(t, cr, QE_CRI_RXDS, (u_int32_t)sc->sc_rb.rb_rxddma);
+	bus_space_write_4(t, cr, QE_CRI_TXDS, (u_int32_t)sc->sc_rb.rb_txddma);
 
 	bus_space_write_4(t, cr, QE_CRI_RIMASK, 0);
 	bus_space_write_4(t, cr, QE_CRI_TIMASK, 0);
@@ -1066,7 +1099,8 @@ qeinit(struct qe_softc *sc)
  * Reset multicast filter.
  */
 void
-qe_mcreset(struct qe_softc *sc)
+qe_mcreset(sc)
+	struct qe_softc *sc;
 {
 	struct ethercom *ec = &sc->sc_ethercom;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -1074,10 +1108,10 @@ qe_mcreset(struct qe_softc *sc)
 	bus_space_handle_t mr = sc->sc_mr;
 	struct ether_multi *enm;
 	struct ether_multistep step;
-	uint32_t crc;
-	uint16_t hash[4];
-	uint8_t octet, maccc, *ladrp = (uint8_t *)&hash[0];
-	int i;
+	u_int32_t crc;
+	u_int16_t hash[4];
+	u_int8_t octet, maccc, *ladrp = (u_int8_t *)&hash[0];
+	int i, j;
 
 #if defined(SUN4U) || defined(__GNUC__)
 	(void)&t;
@@ -1125,18 +1159,27 @@ qe_mcreset(struct qe_softc *sc)
 			break;
 		}
 
-		crc = ether_crc32_le(enm->enm_addrlo, ETHER_ADDR_LEN);
+		crc = 0xffffffff;
+
+		for (i = 0; i < ETHER_ADDR_LEN; i++) {
+			octet = enm->enm_addrlo[i];
+
+			for (j = 0; j < 8; j++) {
+				if ((crc & 1) ^ (octet & 1)) {
+					crc >>= 1;
+					crc ^= MC_POLY_LE;
+				}
+				else
+					crc >>= 1;
+				octet >>= 1;
+			}
+		}
+
 		crc >>= 26;
 		hash[crc >> 4] |= 1 << (crc & 0xf);
 		ETHER_NEXT_MULTI(step, enm);
 	}
 
-	/* We need to byte-swap the hash before writing to the chip. */
-	for (i = 0; i < 7; i += 2) {
-		octet = ladrp[i];
-		ladrp[i] = ladrp[i + 1];
-		ladrp[i + 1] = octet;
-	}
 	bus_space_write_1(t, mr, QE_MRI_IAC,
 			  QE_MR_IAC_ADDRCHG | QE_MR_IAC_LOGADDR);
 	bus_space_write_multi_1(t, mr, QE_MRI_LADRF, ladrp, 8);
@@ -1148,12 +1191,14 @@ qe_mcreset(struct qe_softc *sc)
  * Get current media settings.
  */
 void
-qe_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
+qe_ifmedia_sts(ifp, ifmr)
+	struct ifnet *ifp;
+	struct ifmediareq *ifmr;
 {
 	struct qe_softc *sc = ifp->if_softc;
 	bus_space_tag_t t = sc->sc_bustag;
 	bus_space_handle_t mr = sc->sc_mr;
-	uint8_t v;
+	u_int8_t v;
 
 #if defined(SUN4U) || defined(__GNUC__)
 	(void)&t;
@@ -1186,14 +1231,15 @@ qe_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
  * Set media options.
  */
 int
-qe_ifmedia_upd(struct ifnet *ifp)
+qe_ifmedia_upd(ifp)
+	struct ifnet *ifp;
 {
 	struct qe_softc *sc = ifp->if_softc;
 	struct ifmedia *ifm = &sc->sc_ifmedia;
 	bus_space_tag_t t = sc->sc_bustag;
 	bus_space_handle_t mr = sc->sc_mr;
 	int newmedia = ifm->ifm_media;
-	uint8_t plscc, phycc;
+	u_int8_t plscc, phycc;
 
 #if defined(SUN4U) || defined(__GNUC__)
 	(void)&t;

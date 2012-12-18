@@ -1,11 +1,10 @@
-#	$NetBSD: Makefile,v 1.55 2012/04/24 16:52:26 christos Exp $
+#	$NetBSD: Makefile,v 1.49 2008/10/19 22:05:23 apb Exp $
 #	@(#)Makefile	8.1 (Berkeley) 7/19/93
-
-WARNS?=	5
 
 .include <bsd.own.mk>
 
 USE_FORT?= yes	# setuid
+WARNS=	2
 PROG=	login
 SRCS=	copyrightstr.c
 DPADD+=	${LIBUTIL} ${LIBCRYPT}
@@ -13,7 +12,6 @@ LDADD+=	-lutil -lcrypt
 BINOWN=	root
 BINMODE=4555
 
-SRCS+=	common.c
 .if (${USE_PAM} != "no")
 SRCS+=	login_pam.c
 LDADD+=	-lpam ${PAM_STATIC_LDADD}
@@ -24,7 +22,7 @@ CPPFLAGS+=-DLOGIN_CAP -DSUPPORT_UTMP -DSUPPORT_UTMPX
 
 .if (${USE_KERBEROS} != "no")
 SRCS+= k5login.c
-CPPFLAGS+=-DKERBEROS5
+CPPFLAGS+=-DKERBEROS5 -I${DESTDIR}/usr/include/krb5
 DPADD+=	${LIBKRB5} ${LIBASN1}
 LDADD+= -lkrb5 -lasn1
 

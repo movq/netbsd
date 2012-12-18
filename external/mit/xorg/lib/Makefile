@@ -1,36 +1,28 @@
-#	$NetBSD: Makefile,v 1.25 2012/02/29 20:07:56 tron Exp $
+#	$NetBSD: Makefile,v 1.4.6.6 2009/09/17 04:24:29 snj Exp $
 
 # build libraries for xorg
 
-SUBDIR=	libfontenc freetype libFS libICE libOSMesa \
-	libXau libXdmcp libdrm libpciaccess .WAIT
+SUBDIR=	expat libfontenc freetype libFS libICE libOSMesa \
+	libXau libXdmcp libdrm libpciaccess
 .if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
 SUBDIR+=libdrm_intel
 .endif
-SUBDIR+=libdrm_radeon pixman xkeyboard-config libxcb \
+SUBDIR+=pixman xkeyboard-config \
 	.WAIT \
-	dri fontconfig libSM libX11 \
+	dri fontconfig libSM libX11 liblbxutil \
 	.WAIT \
 	libXcomposite libXdamage libXext libXfixes libXt \
 	libxkbfile \
 	.WAIT \
-	libXi libXxf86vm \
+	libXi libXp libXxf86vm \
 	.WAIT \
 	libGL libXScrnSaver libXTrap libXevie libXfont libXfontcache \
-	libXinerama libXmu libXmuu libXpm libXrender \
-	libXres libXtst libXvMC libXvMCW libXv libXxf86dga libXxf86misc \
-	libxkbui \
-	.WAIT
-.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
-SUBDIR+=libI810XvMC
-SUBDIR+=libIntelXvMC
-SUBDIR+=libchromeXvMC
-SUBDIR+=libchromeXvMCPro
-.endif
-SUBDIR+=libGLU libGLw libXaw6 libXaw libXcursor \
+	libXinerama libXmu libXmuu libXpm libXprintUtil libXrender \
+	libXres libXtst libXvMC libXv libXxf86dga libXxf86misc libxkbui \
+	.WAIT \
+	libGLU libGLw libXaw6 libXaw7 libXaw libXcursor libXprintAppUtil \
 	libXrandr \
 	.WAIT \
-	libXft libglut \
-	xcb-util
+	libXft libglut
 	
 .include <bsd.subdir.mk>

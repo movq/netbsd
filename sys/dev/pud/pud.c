@@ -1,4 +1,4 @@
-/*	$NetBSD: pud.c,v 1.11 2011/07/08 09:32:45 mrg Exp $	*/
+/*	$NetBSD: pud.c,v 1.6 2007/11/28 17:01:59 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007  Antti Kantee.  All Rights Reserved.
@@ -29,12 +29,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pud.c,v 1.11 2011/07/08 09:32:45 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pud.c,v 1.6 2007/11/28 17:01:59 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/kmem.h>
-#include <sys/module.h>
 #include <sys/poll.h>
 #include <sys/queue.h>
 
@@ -81,7 +80,7 @@ pud_putter_getout(void *this, size_t maxsize, int nonblock,
 	uint8_t **data, size_t *dlen, void **cookie)
 {
 	struct pud_dev *pd = this;
-	struct pud_touser *putp = NULL;
+	struct pud_touser *putp;
 	int error = 0;
 
 	mutex_enter(&pd->pd_mtx);
@@ -176,8 +175,7 @@ static int
 pudconf_reg(struct pud_dev *pd, struct pud_conf_reg *pcr)
 {
 	struct bdevsw *bsw;
-	devmajor_t cmajor, bmajor;
-	int error;
+	int cmajor, bmajor, error;
 
 	if (pcr->pm_version != (PUD_DEVELVERSION | PUD_VERSION)) {
 		printf("pud version mismatch %d vs %d\n",
@@ -191,7 +189,7 @@ pudconf_reg(struct pud_dev *pd, struct pud_conf_reg *pcr)
 		bmajor = cmajor;
 	} else {
 		bsw = NULL;
-		bmajor = NODEVMAJOR;
+		bmajor = -1;
 	}
 
 	pcr->pm_devname[PUD_DEVNAME_MAX] = '\0';
@@ -372,7 +370,7 @@ pud_config(int fd, int flags, int fmt)
 }
 
 void
-pudattach(void)
+pudattach()
 {
 	int error;
 
@@ -381,29 +379,4 @@ pudattach(void)
 		return;
 	}
 	mutex_init(&pud_mtx, MUTEX_DEFAULT, IPL_NONE);
-}
-
-MODULE(MODULE_CLASS_DRIVER, pud, "putter");
-
-static int
-pud_modcmd(modcmd_t cmd, void *arg)
-{
-	#ifdef _MODULE
-	devmajor_t bmajor = NODEVMAJOR, cmajor = NODEVMAJOR;
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-		pudattach();
-		return devsw_attach("pud", NULL, &bmajor,
-		    &pud_cdevsw, &cmajor);
-	case MODULE_CMD_FINI:
-		return ENOTTY; /* XXX: puddetach */
-	default:
-		return ENOTTY;
-	}
-	#else
-	if (cmd == MODULE_CMD_INIT)
-		return 0;
-	return ENOTTY;
-	#endif
 }

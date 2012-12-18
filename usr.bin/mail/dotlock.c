@@ -1,4 +1,4 @@
-/*	$NetBSD: dotlock.c,v 1.11 2009/10/21 01:07:46 snj Exp $	*/
+/*	$NetBSD: dotlock.c,v 1.9 2007/10/29 23:20:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Christos Zoulas.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,12 +31,11 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: dotlock.c,v 1.11 2009/10/21 01:07:46 snj Exp $");
+__RCSID("$NetBSD: dotlock.c,v 1.9 2007/10/29 23:20:38 christos Exp $");
 #endif
 
 #include "rcv.h"
 #include "extern.h"
-#include "sig.h"
 
 #ifndef O_SYNC
 #define O_SYNC	0
@@ -135,7 +139,6 @@ dot_lock(const char *fname, int pollinterval, FILE *fp, const char *msg)
 {
 	char path[MAXPATHLEN];
 	sigset_t nset, oset;
-	int retval;
 
 	(void)sigemptyset(&nset);
 	(void)sigaddset(&nset, SIGHUP);
@@ -149,20 +152,17 @@ dot_lock(const char *fname, int pollinterval, FILE *fp, const char *msg)
 
 	(void)snprintf(path, sizeof(path), "%s.lock", fname);
 
-	retval = -1;
 	for (;;) {
-		sig_check();
 		(void)sigprocmask(SIG_BLOCK, &nset, &oset);
 		if (create_exclusive(path) != -1) {
 			(void)sigprocmask(SIG_SETMASK, &oset, NULL);
-			retval = 0;
-			break;
+			return 0;
 		}
 		else
 			(void)sigprocmask(SIG_SETMASK, &oset, NULL);
 
 		if (errno != EEXIST)
-			break;
+			return -1;
 
 		if (fp && msg)
 		    (void)fputs(msg, fp);
@@ -170,13 +170,11 @@ dot_lock(const char *fname, int pollinterval, FILE *fp, const char *msg)
 		if (pollinterval) {
 			if (pollinterval == -1) {
 				errno = EEXIST;
-				break;
+				return -1;
 			}
 			(void)sleep((unsigned int)pollinterval);
 		}
 	}
-	sig_check();
-	return retval;
 }
 
 PUBLIC void

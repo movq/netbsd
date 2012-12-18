@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_socket.c,v 1.65 2011/12/20 23:56:28 christos Exp $	*/
+/*	$NetBSD: sys_socket.c,v 1.58.10.2 2009/04/08 23:10:13 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_socket.c,v 1.65 2011/12/20 23:56:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_socket.c,v 1.58.10.2 2009/04/08 23:10:13 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,7 +89,7 @@ const struct fileops socketops = {
 	.fo_stat = soo_stat,
 	.fo_close = soo_close,
 	.fo_kqfilter = soo_kqfilter,
-	.fo_restart = soo_restart,
+	.fo_drain = fnullop_drain, 	/* soo_drain, */
 };
 
 /* ARGSUSED */
@@ -100,7 +100,8 @@ soo_read(file_t *fp, off_t *offset, struct uio *uio, kauth_cred_t cred,
 	struct socket *so = fp->f_data;
 	int error;
 
-	error = (*so->so_receive)(so, NULL, uio, NULL, NULL, NULL);
+	error = (*so->so_receive)(so, (struct mbuf **)0,
+	    uio, (struct mbuf **)0, (struct mbuf **)0, (int *)0);
 
 	return error;
 }
@@ -113,7 +114,8 @@ soo_write(file_t *fp, off_t *offset, struct uio *uio, kauth_cred_t cred,
 	struct socket *so = fp->f_data;
 	int error;
 
-	error = (*so->so_send)(so, NULL, uio, NULL, NULL, 0, curlwp);
+	error = (*so->so_send)(so, (struct mbuf *)0,
+		uio, (struct mbuf *)0, (struct mbuf *)0, 0, curlwp);
 
 	return error;
 }
@@ -124,16 +126,12 @@ soo_ioctl(file_t *fp, u_long cmd, void *data)
 	struct socket *so = fp->f_data;
 	int error = 0;
 
-	switch (cmd) {
+	if (cmd == FIONBIO) {
+		so->so_nbio = *(int *)data;
+		return 0;
+	}
 
-	case FIONBIO:
-		solock(so);
-		if (*(int *)data)
-			so->so_state |= SS_NBIO;
-		else 
-			so->so_state &= ~SS_NBIO; 
-		sounlock(so);
-		break;
+	switch (cmd) {
 
 	case FIOASYNC:
 		solock(so);
@@ -236,12 +234,13 @@ soo_stat(file_t *fp, struct stat *ub)
 	struct socket *so = fp->f_data;
 	int error;
 
-	memset(ub, 0, sizeof(*ub));
+	memset((void *)ub, 0, sizeof(*ub));
 	ub->st_mode = S_IFSOCK;
 
 	solock(so);
 	error = (*so->so_proto->pr_usrreq)(so, PRU_SENSE,
-	    (struct mbuf *)ub, NULL, NULL, curlwp);
+	    (struct mbuf *)ub, (struct mbuf *)0, (struct mbuf *)0,
+	    curlwp);
 	sounlock(so);
 
 	return error;
@@ -261,8 +260,8 @@ soo_close(file_t *fp)
 }
 
 void
-soo_restart(file_t *fp)
+soo_drain(file_t *fp)
 {
 
-	sorestart(fp->f_data);
+	(void)sodrain(fp->f_data);
 }

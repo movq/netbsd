@@ -1,7 +1,7 @@
-/*	$NetBSD: client.c,v 1.7 2012/10/14 08:31:35 plunky Exp $	*/
+/*	$NetBSD: client.c,v 1.1.6.1 2009/02/24 02:30:08 snj Exp $	*/
 
 /*-
- * Copyright (c) 2008-2009 Iain Hibbert
+ * Copyright (c) 2008 Iain Hibbert
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: client.c,v 1.7 2012/10/14 08:31:35 plunky Exp $");
+__RCSID("$NetBSD: client.c,v 1.1.6.1 2009/02/24 02:30:08 snj Exp $");
 
 #include <bluetooth.h>
 #include <errno.h>
@@ -35,8 +35,8 @@ __RCSID("$NetBSD: client.c,v 1.7 2012/10/14 08:31:35 plunky Exp $");
 
 #include "btpand.h"
 #include "bnep.h"
+#include "sdp.h"
 
-__dead static void client_down(channel_t *);
 static void client_query(void);
 
 void
@@ -45,13 +45,13 @@ client_init(void)
 	struct sockaddr_bt sa;
 	channel_t *chan;
 	socklen_t len;
-	int fd, n;
+	int fd;
 	uint16_t mru, mtu;
 
 	if (bdaddr_any(&remote_bdaddr))
 		return;
 
-	if (service_type)
+	if (service_name)
 		client_query();
 
 	fd = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
@@ -102,17 +102,6 @@ client_init(void)
 		exit(EXIT_FAILURE);
 	}
 
-	len = sizeof(n);
-	if (getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &n, &len) == -1) {
-		log_err("Could not read SO_RCVBUF");
-		exit(EXIT_FAILURE);
-	}
-	if (n < 10 * mru) {
-		n = 10 * mru;
-		if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &n, sizeof(n)) == -1)
-			log_info("Could not increase SO_RCVBUF (to %d)", n);
-	}
-
 	len = sizeof(mtu);
 	if (getsockopt(fd, BTPROTO_L2CAP, SO_L2CAP_OMTU, &mtu, &len) == -1) {
 		log_err("Could not get L2CAP OMTU: %m");
@@ -123,34 +112,12 @@ client_init(void)
 		exit(EXIT_FAILURE);
 	}
 
-	len = sizeof(n);
-	if (getsockopt(fd, SOL_SOCKET, SO_SNDBUF, &n, &len) == -1) {
-		log_err("Could not get socket send buffer size: %m");
-		close(fd);
-		return;
-	}
-	if (n < (mtu * 2)) {
-		n = mtu * 2;
-		if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &n, sizeof(n)) == -1) {
-			log_err("Could not set socket send buffer size (%d): %m", n);
-			close(fd);
-			return;
-		}
-	}
-	n = mtu;
-	if (setsockopt(fd, SOL_SOCKET, SO_SNDLOWAT, &n, sizeof(n)) == -1) {
-		log_err("Could not set socket low water mark (%d): %m", n);
-		close(fd);
-		return;
-	}
-
 	chan = channel_alloc();
 	if (chan == NULL)
 		exit(EXIT_FAILURE);
 
 	chan->send = bnep_send;
 	chan->recv = bnep_recv;
-	chan->down = client_down;
 	chan->mru = mru;
 	chan->mtu = mtu;
 	b2eaddr(chan->raddr, &remote_bdaddr);
@@ -165,93 +132,66 @@ client_init(void)
 }
 
 static void
-client_down(channel_t *chan)
-{
-
-	log_err("Client connection shut down, exiting");
-	exit(EXIT_FAILURE);
-}
-
-static void
 client_query(void)
 {
-	uint8_t buf[12];	/* enough for SSP and AIL both */
-	sdp_session_t ss;
-	sdp_data_t ssp, ail, rsp, rec, value, pdl, seq;
-	uintmax_t psm;
-	uint16_t attr;
-	bool rv;
+	uint8_t buffer[512];
+	sdp_attr_t attr;
+	uint32_t range;
+	void *ss;
+	int rv;
+	uint8_t *seq0, *seq1;
+
+	attr.flags = SDP_ATTR_INVALID;
+	attr.attr = 0;
+	attr.vlen = sizeof(buffer);
+	attr.value = buffer;
+
+	range = SDP_ATTR_RANGE(SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST,
+			       SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST);
 
 	ss = sdp_open(&local_bdaddr, &remote_bdaddr);
-	if (ss == NULL) {
-		log_err("%s: %m", service_type);
+	if (ss == NULL || (errno = sdp_error(ss)) != 0) {
+		log_err("%s: %m", service_name);
 		exit(EXIT_FAILURE);
 	}
 
 	log_info("Searching for %s service at %s",
-	    service_type, bt_ntoa(&remote_bdaddr, NULL));
+	    service_name, bt_ntoa(&remote_bdaddr, NULL));
 
-	seq.next = buf;
-	seq.end = buf + sizeof(buf);
-
-	/*
-	 * build ServiceSearchPattern (9 bytes)
-	 *
-	 *	uuid16	"service_class"
-	 *	uuid16	L2CAP
-	 *	uuid16	BNEP
-	 */
-	ssp.next = seq.next;
-	sdp_put_uuid16(&seq, service_class);
-	sdp_put_uuid16(&seq, SDP_UUID_PROTOCOL_L2CAP);
-	sdp_put_uuid16(&seq, SDP_UUID_PROTOCOL_BNEP);
-	ssp.end = seq.next;
-
-	/*
-	 * build AttributeIDList (3 bytes)
-	 *
-	 *	uint16	ProtocolDescriptorList
-	 */
-	ail.next = seq.next;
-	sdp_put_uint16(&seq, SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST);
-	ail.end = seq.next;
-
-	rv = sdp_service_search_attribute(ss, &ssp, &ail, &rsp);
-	if (!rv) {
-		log_err("%s: %m", service_type);
+	rv = sdp_search(ss, 1, &service_class, 1, &range, 1, &attr);
+	if (rv != 0) {
+		log_err("%s: %s", service_name, strerror(sdp_error(ss)));
 		exit(EXIT_FAILURE);
-	}
-
-	/*
-	 * we expect the response to contain a list of records
-	 * containing a ProtocolDescriptorList. Find the first
-	 * one containing L2CAP and BNEP protocols and extract
-	 * the PSM.
-	 */
-	rv = false;
-	while (!rv && sdp_get_seq(&rsp, &rec)) {
-		if (!sdp_get_attr(&rec, &attr, &value)
-		    || attr != SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST)
-			continue;
-
-		sdp_get_alt(&value, &value);	/* drop any alt header */
-		while (!rv && sdp_get_seq(&value, &pdl)) {
-			if (sdp_get_seq(&pdl, &seq)
-			    && sdp_match_uuid16(&seq, SDP_UUID_PROTOCOL_L2CAP)
-			    && sdp_get_uint(&seq, &psm)
-			    && sdp_get_seq(&pdl, &seq)
-			    && sdp_match_uuid16(&seq, SDP_UUID_PROTOCOL_BNEP))
-				rv = true;
-		}
 	}
 
 	sdp_close(ss);
 
-	if (!rv) {
-		log_err("%s query failed", service_type);
+	if (attr.flags != SDP_ATTR_OK
+	    || attr.attr != SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST) {
+		log_err("%s service not found", service_name);
 		exit(EXIT_FAILURE);
 	}
 
-	l2cap_psm = (uint16_t)psm;
-	log_info("Found PSM %u for service %s", l2cap_psm, service_type);
+	/*
+	 * we expect the following protocol descriptor list
+	 *
+	 *	seq len
+	 *	  seq len
+	 *	    uuid value == L2CAP
+	 *	    uint16 value16 => PSM
+	 *	  seq len
+	 *	    uuid value == BNEP
+	 */
+	if (_sdp_get_seq(&attr.value, attr.value + attr.vlen, &seq0)
+	    && _sdp_get_seq(&seq0, attr.value, &seq1)
+	    && _sdp_match_uuid16(&seq1, seq0, SDP_UUID_PROTOCOL_L2CAP)
+	    && _sdp_get_uint16(&seq1, seq0, &l2cap_psm)
+	    && _sdp_get_seq(&seq0, attr.value, &seq1)
+	    && _sdp_match_uuid16(&seq1, seq0, SDP_UUID_PROTOCOL_BNEP)) {
+		log_info("Found PSM %d for service %s", l2cap_psm, service_name);
+		return;
+	}
+
+	log_err("%s query failed", service_name);
+	exit(EXIT_FAILURE);
 }

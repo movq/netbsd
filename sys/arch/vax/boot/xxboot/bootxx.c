@@ -1,4 +1,4 @@
-/* $NetBSD: bootxx.c,v 1.36 2009/09/18 21:40:09 mhitch Exp $ */
+/* $NetBSD: bootxx.c,v 1.28 2007/03/05 20:53:34 christos Exp $ */
 
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
@@ -36,7 +36,6 @@
 #include <sys/disklabel.h>
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
-#include <sys/exec_aout.h>
 
 #include <lib/libsa/stand.h>
 #include <lib/libsa/ufs.h>
@@ -93,7 +92,7 @@ extern int from;
  * VS3100/??, VS4000 and VAX6000/???, and only when booting from disk.
  */
 void
-Xmain(void)
+Xmain()
 {
 	union {
 		struct exec aout;
@@ -115,7 +114,7 @@ Xmain(void)
 		bcopy ((void *)bootregs[11], rpb, sizeof(struct rpb));
 		bcopy ((void*)rpb->iovec, bqo, rpb->iovecsz);
 	} else {
-		memset(rpb, 0, sizeof(struct rpb));
+		bzero(rpb, sizeof(struct rpb));
 		rpb->devtyp = bootregs[0];
 		rpb->unit = bootregs[3];
 		rpb->rpb_bootr5 = bootregs[5];
@@ -203,19 +202,25 @@ int tar_open(char *path, struct open_file *f);
 ssize_t tar_read(struct open_file *f, void *buf, size_t size, size_t *resid);
 
 int
-tar_open(char *path, struct open_file *f)
+tar_open(path, f)
+	char *path;
+	struct open_file *f;
 {
 	char *buf = alloc(512);
 
-	memset(buf, 0, 512);
+	bzero(buf, 512);
 	romstrategy(0, 0, 8192, 512, buf, 0);
-	if (memcmp(buf, "boot", 5) || memcmp(&buf[257], "ustar", 5))
+	if (bcmp(buf, "boot", 5) || bcmp(&buf[257], "ustar", 5))
 		return EINVAL; /* Not a ustarfs with "boot" first */
 	return 0;
 }
 
 ssize_t
-tar_read(struct open_file *f, void *buf, size_t size, size_t *resid)
+tar_read(f, buf, size, resid)
+	struct open_file *f;
+	void *buf;
+	size_t size;
+	size_t *resid;
 {
 	romstrategy(0, 0, (8192+512), size, buf, 0);
 	*resid = size;
@@ -225,7 +230,10 @@ tar_read(struct open_file *f, void *buf, size_t size, size_t *resid)
 
 
 int
-devopen(struct open_file *f, const char *fname, char **file)
+devopen(f, fname, file)
+	struct open_file *f;
+	const char    *fname;
+	char          **file;
 {
 	*file = (char *)fname;
 
@@ -260,7 +268,13 @@ devopen(struct open_file *f, const char *fname, char **file)
 extern struct disklabel romlabel;
 
 int
-romstrategy(void *sc, int func, daddr_t dblk, size_t size, void *buf, size_t *rsize)
+romstrategy(sc, func, dblk, size, buf, rsize)
+	void    *sc;
+	int     func;
+	daddr_t dblk;
+	size_t	size;
+	void    *buf;
+	size_t	*rsize;
 {
 	int	block = dblk;
 	int     nsize = size;
@@ -285,7 +299,7 @@ romstrategy(void *sc, int func, daddr_t dblk, size_t size, void *buf, size_t *rs
 				hpread(block);
 			else
 				read750(block, (int *)bootregs);
-			memcpy(cbuf, 0, 512);
+			bcopy(0, cbuf, 512);
 			size -= 512;
 			cbuf += 512;
 			block++;
@@ -359,7 +373,8 @@ extern char end[];
 static char *top = (char*)end;
 
 void *
-alloc(size_t size)
+alloc(size)
+        size_t size;
 {
 	void *ut = top;
 	top += size;
@@ -367,12 +382,15 @@ alloc(size_t size)
 }
 
 void
-dealloc(void *ptr, size_t size)
+dealloc(ptr, size)
+        void *ptr;
+        size_t size;
 {
 }
 
 int
-romclose(struct open_file *f)
+romclose(f)
+	struct open_file *f;
 {
 	return 0;
 }

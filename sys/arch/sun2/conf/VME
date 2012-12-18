@@ -1,4 +1,4 @@
-# $NetBSD: VME,v 1.40 2011/11/22 21:25:39 tls Exp $
+# $NetBSD: VME,v 1.32 2008/01/11 11:45:24 tsutsui Exp $
 
 # VME Sun2 (2/50, 2/130, 2/160...)
 # Supports root on: ie0, sd*, ...
@@ -7,7 +7,7 @@ include "arch/sun2/conf/std.sun2"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"VME-$Revision: 1.40 $"
+#ident 		"VME-$Revision: 1.32 $"
 
 # Machines to be supported by this kernel
 #options 	FPU_EMULATE
@@ -24,6 +24,8 @@ options 	SYSVSEM		# System V semaphores
 #options 	SEMUME=10	# max number of undo entries per process
 #options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V shared memory
+#options 	SHMMAXPGS=1024	# 1024 pages is the default
+options 	LKM		# loadable kernel modules
 #options 	INSECURE	# disable kernel security level
 options 	USERCONF	# userconf(4) support
 #options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -71,9 +73,9 @@ file-system	MFS		# memory-based filesystem
 file-system	PTYFS		# /dev/pts/N support
 
 options 	NFSSERVER	# nfs server support
-#options 	QUOTA		# legacy UFS quotas
-#options 	QUOTA2		# new, in-filesystem UFS quotas
-#options 	FFS_EI		# FFS Endian Independent support
+#options 	QUOTA		# FFS quotas
+#options 	FFS_EI		# FFS Endian Independant support
+#options 	SOFTDEP		# FFS soft updates support.
 #options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
@@ -191,7 +193,7 @@ xyc1	at vme0 addr 0xee48 irq 2 vect 0x49
 xy*	at xyc? drive ?
 
 ## Memory-disk device.
-pseudo-device	md		
+pseudo-device	md		2
 
 #### Network interfaces.
 
@@ -231,11 +233,12 @@ pseudo-device	loop		1	# network loopback
 #pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
 #pseudo-device	faith			# IPv[46] tcp relay translation i/f
 #pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
+pseudo-device	rnd			# /dev/random and in-kernel generator
 
 pseudo-device	pty			# pseudo-terminals
 #pseudo-device	vnd			# paging to files
 #pseudo-device	ccd		4	# concatenated disks
 #pseudo-device	raid		4	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
-#pseudo-device	fss			# file system snapshot device
+#pseudo-device	fss		4	# file system snapshot device
 pseudo-device	clockctl		# user control of clock subsystem

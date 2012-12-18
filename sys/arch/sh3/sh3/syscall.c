@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.14 2012/02/19 21:06:27 rmind Exp $	*/
+/*	$NetBSD: syscall.c,v 1.12 2008/10/21 12:16:59 ad Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc. All rights reserved.
@@ -78,9 +78,13 @@
  * T.Horiuchi 1998.06.8
  */
 
+#include "opt_sa.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
 #include <sys/syscallvar.h>
 
@@ -88,8 +92,10 @@
 
 #include <uvm/uvm_extern.h>
 
+
 static void syscall_plain(struct lwp *, struct trapframe *);
 static void syscall_fancy(struct lwp *, struct trapframe *);
+
 
 void
 syscall_intern(struct proc *p)
@@ -117,13 +123,20 @@ syscall_plain(struct lwp *l, struct trapframe *tf)
 	size_t argsize;
 	register_t code, args[8], rval[2], ocode;
 
-	curcpu()->ci_data.cpu_nsyscall++;
+	uvmexp.syscalls++;
 
 	opc = tf->tf_spc;
 	ocode = code = tf->tf_r0;
 
 	nsys = p->p_emul->e_nsysent;
 	callp = p->p_emul->e_sysent;
+
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
+
 	params = (void *)tf->tf_r15;
 
 	switch (code) {
@@ -249,13 +262,20 @@ syscall_fancy(struct lwp *l, struct trapframe *tf)
 	size_t argsize;
 	register_t code, args[8], rval[2], ocode;
 
-	curcpu()->ci_data.cpu_nsyscall++;
+	uvmexp.syscalls++;
 
 	opc = tf->tf_spc;
 	ocode = code = tf->tf_r0;
 
 	nsys = p->p_emul->e_nsysent;
 	callp = p->p_emul->e_sysent;
+
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
+
 	params = (void *)tf->tf_r15;
 
 	switch (code) {

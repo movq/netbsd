@@ -1,4 +1,4 @@
-/*	$NetBSD: spray.c,v 1.7 2011/08/30 20:45:31 joerg Exp $	*/
+/*	$NetBSD: spray.c,v 1.5 1997/10/17 13:39:12 lukem Exp $	*/
 
 /*
  * Copyright (c) 1993 Winning Strategies, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: spray.c,v 1.7 2011/08/30 20:45:31 joerg Exp $");
+__RCSID("$NetBSD: spray.c,v 1.5 1997/10/17 13:39:12 lukem Exp $");
 #endif
 
 #include <stdio.h>
@@ -46,19 +46,22 @@ __RCSID("$NetBSD: spray.c,v 1.7 2011/08/30 20:45:31 joerg Exp $");
 #define SPRAYOVERHEAD	86
 #endif
 
-static void	print_xferstats(int, int, double);
-__dead static void	usage(void);
+int	main __P((int, char **));
+void	print_xferstats __P((int, int, double));
+void	usage __P((void));
 
 /* spray buffer */
-static char spray_buffer[SPRAYMAX];
+char spray_buffer[SPRAYMAX];
 
 /* RPC timeouts */
-static struct timeval NO_DEFAULT = { -1, -1 };
-static struct timeval ONE_WAY = { 0, 0 };
-static struct timeval TIMEOUT = { 25, 0 };
+struct timeval NO_DEFAULT = { -1, -1 };
+struct timeval ONE_WAY = { 0, 0 };
+struct timeval TIMEOUT = { 25, 0 };
 
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	char *progname;
 	spraycumul	host_stats;
@@ -174,7 +177,7 @@ main(int argc, char **argv)
 
 
 	/* report dropped packets */
-	if (host_stats.counter != (unsigned)count) {
+	if (host_stats.counter != count) {
 		int packets_dropped = count - host_stats.counter;
 
 		printf("\t%d packets (%.2f%%) dropped\n",
@@ -194,8 +197,11 @@ main(int argc, char **argv)
 }
 
 
-static void
-print_xferstats(int packets, int packetlen, double xfertime)
+void
+print_xferstats(packets, packetlen, xfertime)
+	int packets;
+	int packetlen;
+	double xfertime;
 {
 	int datalen;
 	double pps;		/* packets per second */
@@ -215,8 +221,9 @@ print_xferstats(int packets, int packetlen, double xfertime)
 	printf("bytes/sec\n");
 }
 
-static void
-usage(void)
+
+void
+usage ()
 {
 	fprintf(stderr, "usage: spray [-c count] [-l length] [-d delay] host\n");
 	exit(1);

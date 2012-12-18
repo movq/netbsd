@@ -1,4 +1,4 @@
-/*	$NetBSD: if_we_pnpbus.c,v 1.9 2012/10/27 17:18:08 chs Exp $	*/
+/*	$NetBSD: if_we_pnpbus.c,v 1.4 2008/04/28 20:23:33 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_we_pnpbus.c,v 1.9 2012/10/27 17:18:08 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_we_pnpbus.c,v 1.4 2008/04/28 20:23:33 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -67,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_we_pnpbus.c,v 1.9 2012/10/27 17:18:08 chs Exp $")
 
 #include <net/if_ether.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/isa_machdep.h>
 #include <machine/residual.h>
@@ -79,10 +79,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_we_pnpbus.c,v 1.9 2012/10/27 17:18:08 chs Exp $")
 
 #include <prep/pnpbus/pnpbusvar.h>
 
-int	we_pnpbus_probe(device_t, cfdata_t, void *);
-void	we_pnpbus_attach(device_t, device_t, void *);
+int	we_pnpbus_probe(struct device *, struct cfdata *, void *);
+void	we_pnpbus_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(we_pnpbus, sizeof(struct we_softc),
+CFATTACH_DECL(we_pnpbus, sizeof(struct we_softc),
     we_pnpbus_probe, we_pnpbus_attach, NULL, NULL);
 
 extern struct cfdriver we_cd;
@@ -124,7 +124,7 @@ do { \
 } while (0)
 
 int
-we_pnpbus_probe(device_t parent, cfdata_t cf, void *aux)
+we_pnpbus_probe(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct pnpbus_dev_attach_args *pna = aux;
 	int ret = 0;
@@ -142,9 +142,9 @@ we_pnpbus_probe(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-we_pnpbus_attach(device_t parent, device_t self, void *aux)
+we_pnpbus_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct we_softc *wsc = device_private(self);
+	struct we_softc *wsc = (struct we_softc *)self;
 	struct dp8390_softc *sc = &wsc->sc_dp8390;
 	struct pnpbus_dev_attach_args *pna = aux;
 	struct pnpbus_irq *irq;
@@ -153,8 +153,6 @@ we_pnpbus_attach(device_t parent, device_t self, void *aux)
 	bus_size_t memsize = 0x4000;
 	const char *typestr;
 	int memfound = 0, i, irqnum;
-
-	sc->sc_dev = self;
 
 	nict = asict = pna->pna_iot;
 	memt = pna->pna_memt;
@@ -240,7 +238,7 @@ we_pnpbus_attach(device_t parent, device_t self, void *aux)
 		/* some cards think they are level.  force them to edge */
 		if (irq->flags & 0x0c)
 			irq->flags = 0x01;
-		if (!LEGAL_HWIRQ_P(irqnum))
+		if (!LEGAL_IRQ(irqnum))
 			continue;
 		if (irqnum < 2)
 			continue;
@@ -254,7 +252,12 @@ we_pnpbus_attach(device_t parent, device_t self, void *aux)
 }
 
 static const char *
-we_params(bus_space_tag_t asict, bus_space_handle_t asich, u_int8_t *typep, bus_size_t *memsizep, u_int8_t *flagp, int *is790p)
+we_params(asict, asich, typep, memsizep, flagp, is790p)
+	bus_space_tag_t asict;
+	bus_space_handle_t asich;
+	u_int8_t *typep, *flagp;
+	bus_size_t *memsizep;
+	int *is790p;
 {
 	const char *typestr;
 	bus_size_t memsize;

@@ -1,4 +1,4 @@
-/*	$NetBSD: timer.c,v 1.30 2012/07/29 00:04:05 matt Exp $ */
+/*	$NetBSD: timer.c,v 1.23.28.1 2011/03/08 17:29:46 riz Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer.c,v 1.30 2012/07/29 00:04:05 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer.c,v 1.23.28.1 2011/03/08 17:29:46 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -69,7 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: timer.c,v 1.30 2012/07/29 00:04:05 matt Exp $");
 #include <sys/timetc.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <sparc/sparc/timerreg.h>
 #include <sparc/sparc/timervar.h>
@@ -78,8 +78,6 @@ static struct intrhand level10;
 static struct intrhand level14;
 
 static u_int timer_get_timecount(struct timecounter *);
-
-void *sched_cookie;
 
 /*
  * timecounter local state
@@ -141,7 +139,7 @@ timer_get_timecount(struct timecounter *tc)
 }
 
 void
-tickle_tc(void)
+tickle_tc()
 {
 	if (timecounter->tc_get_timecount == timer_get_timecount) {
 		cntr.offset += cntr.limit;
@@ -222,8 +220,8 @@ timerattach(volatile int *cntreg, volatile int *limreg)
 	}
 #endif
 	/* link interrupt handlers */
-	intr_establish(10, 0, &level10, NULL, true);
-	intr_establish(14, 0, &level14, NULL, true);
+	intr_establish(10, 0, &level10, NULL);
+	intr_establish(14, 0, &level14, NULL);
 
 	/* Establish a soft interrupt at a lower level for schedclock */
 	sched_cookie = sparc_softintr_establish(IPL_SCHED, sched_intr_fn, NULL);
@@ -242,7 +240,7 @@ timerattach(volatile int *cntreg, volatile int *limreg)
  * The sun4 timer must be probed.
  */
 static int
-timermatch_obio(device_t parent, cfdata_t cf, void *aux)
+timermatch_obio(struct device *parent, struct cfdata *cf, void *aux)
 {
 #if defined(SUN4) || defined(SUN4M)
 	union obio_attach_args *uoba = aux;
@@ -279,7 +277,7 @@ timermatch_obio(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-timerattach_obio(device_t parent, device_t self, void *aux)
+timerattach_obio(struct device *parent, struct device *self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 
@@ -299,14 +297,14 @@ timerattach_obio(device_t parent, device_t self, void *aux)
 	}
 }
 
-CFATTACH_DECL_NEW(timer_obio, 0,
+CFATTACH_DECL(timer_obio, sizeof(struct device),
     timermatch_obio, timerattach_obio, NULL, NULL);
 
 /*
  * Only sun4c attaches a timer at mainbus
  */
 static int
-timermatch_mainbus(device_t parent, cfdata_t cf, void *aux)
+timermatch_mainbus(struct device *parent, struct cfdata *cf, void *aux)
 {
 #if defined(SUN4C)
 	struct mainbus_attach_args *ma = aux;
@@ -318,7 +316,7 @@ timermatch_mainbus(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-timerattach_mainbus(device_t parent, device_t self, void *aux)
+timerattach_mainbus(struct device *parent, struct device *self, void *aux)
 {
 
 #if defined(SUN4C)
@@ -326,5 +324,5 @@ timerattach_mainbus(device_t parent, device_t self, void *aux)
 #endif /* SUN4C */
 }
 
-CFATTACH_DECL_NEW(timer_mainbus, 0,
+CFATTACH_DECL(timer_mainbus, sizeof(struct device),
     timermatch_mainbus, timerattach_mainbus, NULL, NULL);

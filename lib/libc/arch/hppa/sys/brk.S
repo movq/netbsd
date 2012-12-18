@@ -1,4 +1,4 @@
-/*	$NetBSD: brk.S,v 1.5 2012/03/14 14:18:10 skrll Exp $	*/
+/*	$NetBSD: brk.S,v 1.3 2003/10/06 05:30:21 matt Exp $	*/
 
 /*	$OpenBSD: brk.S,v 1.7 2001/06/04 23:14:04 mickey Exp $	*/
 
@@ -14,6 +14,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Michael Shalayeff.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,11 +36,11 @@
 #include "SYS.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: brk.S,v 1.5 2012/03/14 14:18:10 skrll Exp $")
+	RCSID("$NetBSD: brk.S,v 1.3 2003/10/06 05:30:21 matt Exp $")
 #endif /* LIBC_SCCS and not lint */
 
 	.import	curbrk, data
-	.global	_end
+	.import	end, data
 
 #ifdef WEAK_ALIAS
 	WEAK_ALIAS(brk, _brk) 
@@ -44,7 +49,7 @@
 	.data
 	.export	__minbrk, data
 __minbrk:
-	.long	_end
+	.long	end
 
 ENTRY(_brk,0)
 #ifdef PIC

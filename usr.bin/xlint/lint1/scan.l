@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: scan.l,v 1.50 2012/03/27 19:24:03 christos Exp $ */
+/* $NetBSD: scan.l,v 1.41 2008/10/13 14:00:37 dholland Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: scan.l,v 1.50 2012/03/27 19:24:03 christos Exp $");
+__RCSID("$NetBSD: scan.l,v 1.41 2008/10/13 14:00:37 dholland Exp $");
 #endif
 
 #include <stdlib.h>
@@ -50,6 +50,7 @@ __RCSID("$NetBSD: scan.l,v 1.50 2012/03/27 19:24:03 christos Exp $");
 #include "cgram.h"
 
 #define CHAR_MASK	(~(~0 << CHAR_BIT))
+#define YY_NO_UNPUT
 
 /* Current position (its also updated when an included file is parsed) */
 pos_t	curr_pos = { 1, "", 0 };
@@ -89,10 +90,6 @@ NZD	[1-9]
 OD	[0-7]
 HD	[0-9A-Fa-f]
 EX	([eE][+-]?[0-9]+)
-HX	(p[+-]?[0-9A-Fa-f]+)
-TL	([fFlL]?[i]?)
-
-%option nounput
 
 %%
 
@@ -100,11 +97,10 @@ TL	([fFlL]?[i]?)
 0{OD}*[lLuU]*			return (icon(8));
 {NZD}{D}*[lLuU]*		return (icon(10));
 0[xX]{HD}+[lLuU]*		return (icon(16));
-{D}+\.{D}*{EX}?{TL}	|
-{D}+{EX}{TL}		|
-0[xX]{HD}+\.{HD}*{HX}{TL} |
-0[xX]{HD}+{HX}{TL} 	|
-\.{D}+{EX}?{TL}		return (fcon());
+{D}+\.{D}*{EX}?[fFlL]?[i]?	|
+{D}+{EX}[fFlL]?[i]?		|
+0[xX]{HD}+p{HD}+[fFlL]?[i]? 	|
+\.{D}+{EX}?[fFlL]?[i]?		return (fcon());
 "="				return (operator(T_ASSIGN, ASSIGN));
 "*="				return (operator(T_OPASS, MULASS));
 "/="				return (operator(T_OPASS, DIVASS));
@@ -197,21 +193,6 @@ static	struct	kwtab {
 	u_int	kw_c99;		/* c99 keyword */
 	u_int	kw_gcc;		/* GCC keyword */
 } kwtab[] = {
-	{ "__alignof__", T_ALIGNOF,	0,	0,	0,	  0, 0, 0 },
-	{ "__attribute__",T_ATTRIBUTE,	0,	0,	0,	  0, 0, 1 },
-	{ "attribute",	T_ATTRIBUTE,	0,	0,	0,	  0, 0, 1 },
-	{ "__packed__",	T_AT_PACKED,	0,	0,	0,	  0, 0, 1 },
-	{ "packed",	T_AT_PACKED,	0,	0,	0,	  0, 0, 1 },
-	{ "__aligned__",T_AT_ALIGNED,	0,	0,	0,	  0, 0, 1 },
-	{ "aligned",	T_AT_ALIGNED,	0,	0,	0,	  0, 0, 1 },
-	{ "__transparent_union__",T_AT_TUNION,0,0,	0,	  0, 0, 1 },
-	{ "transparent_union",T_AT_TUNION,0,	0,	0,	  0, 0, 1 },
-	{ "__unused__",	T_AT_UNUSED,	0,	0,	0,	  0, 0, 1 },
-	{ "unused",	T_AT_UNUSED,	0,	0,	0,	  0, 0, 1 },
-	{ "__deprecated__",T_AT_DEPRECATED,0,	0,	0,	  0, 0, 1 },
-	{ "deprecated",	T_AT_DEPRECATED,0,	0,	0,	  0, 0, 1 },
-	{ "__may_alias__",T_AT_MAY_ALIAS,0,	0,	0,	  0, 0, 1 },
-	{ "may_alias",	T_AT_MAY_ALIAS,	0,	0,	0,	  0, 0, 1 },
 	{ "asm",	T_ASM,		0,	0,	0,	  0, 0, 1 },
 	{ "__asm",	T_ASM,		0,	0,	0,	  0, 0, 0 },
 	{ "__asm__",	T_ASM,		0,	0,	0,	  0, 0, 0 },
@@ -244,9 +225,7 @@ static	struct	kwtab {
 	{ "long",	T_TYPE,		0,	LONG,	0,	  0, 0, 0 },
 	{ "__real__",	T_REAL,		0,	0,	0,	  0, 1, 0 },
 	{ "register",	T_SCLASS,	REG,	0,	0,	  0, 0, 0 },
-	{ "restrict",	T_QUAL,		0,	0,	RESTRICT, 0, 1, 0 },
 	{ "return",	T_RETURN,	0,	0,	0,	  0, 0, 0 },
-	{ "__packed",	T_PACKED,	0,	0,	0,	  0, 0, 0 },
 	{ "short",	T_TYPE,		0,	SHORT,	0,	  0, 0, 0 },
 	{ "signed",	T_TYPE,		0,	SIGNED,	0,	  1, 0, 0 },
 	{ "__signed__",	T_TYPE,		0,	SIGNED,	0,	  0, 0, 0 },
@@ -294,7 +273,7 @@ initscan(void)
 {
 	struct	kwtab *kw;
 	sym_t	*sym;
-	size_t	h, i;
+	int	h, i;
 	uint64_t uq;
 
 	for (kw = kwtab; kw->kw_name != NULL; kw++) {
@@ -716,8 +695,6 @@ fcon(void)
 		typ = LDOUBLE;
 		len--;
 	} else {
-		if (c == 'd' || c == 'D') 
-			len--;
 		typ = DOUBLE;
 	}
 
@@ -743,7 +720,7 @@ fcon(void)
 			errno = 0;
 			break;
 		default:
-			LERROR("fcon(%s->%s)", cp, eptr);
+			LERROR("fcon()");
 		}
 	}
 	if (errno != 0)
@@ -783,8 +760,7 @@ operator(int t, op_t o)
 static int
 ccon(void)
 {
-	size_t	n;
-	int val, c;
+	int	n, val, c;
 	char	cv;
 
 	n = 0;
@@ -827,8 +803,7 @@ static int
 wccon(void)
 {
 	static	char buf[MB_LEN_MAX + 1];
-	size_t	i;
-	int c;
+	int	i, c;
 	wchar_t	wc;
 
 	i = 0;
@@ -953,7 +928,7 @@ getescc(int d)
 				/* bad octal digit %c */
 				warning(77, c);
 			pbc = c;
-			if (v > TARG_UCHAR_MAX) {
+			if (v > UCHAR_MAX) {
 				/* character escape does not fit in char. */
 				warning(76);
 				v &= CHAR_MASK;
@@ -1122,8 +1097,7 @@ comment(void)
 	};
 	char	keywd[32];
 	char	arg[32];
-	size_t	l, i;
-	int	a;
+	int	l, i, a;
 	int	eoc;
 
 	eoc = 0;
@@ -1267,8 +1241,7 @@ static int
 wcstrg(void)
 {
 	char	*s;
-	int	c, n;
-	size_t	i, wi;
+	int	c, i, n, wi;
 	size_t	len, max, wlen;
 	wchar_t	*ws;
 	strg_t	*strg;
@@ -1286,7 +1259,7 @@ wcstrg(void)
 		/* unterminated string constant */
 		error(258);
 
-	/* get length of wide-character string */
+	/* get length of wide character string */
 	(void)mblen(NULL, 0);
 	for (i = 0, wlen = 0; i < len; i += n, wlen++) {
 		if ((n = mblen(&s[i], MB_CUR_MAX)) == -1) {

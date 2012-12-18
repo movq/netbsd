@@ -1,4 +1,4 @@
-/*	$NetBSD: iteide.c,v 1.18 2012/10/27 17:18:34 chs Exp $	*/
+/*	$NetBSD: iteide.c,v 1.10 2008/04/10 19:13:37 cegger Exp $	*/
 
 /*
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iteide.c,v 1.18 2012/10/27 17:18:34 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iteide.c,v 1.10 2008/04/10 19:13:37 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,7 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: iteide.c,v 1.18 2012/10/27 17:18:34 chs Exp $");
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_ite_reg.h>
 
-static void ite_chip_map(struct pciide_softc*, const struct pci_attach_args*);
+static void ite_chip_map(struct pciide_softc*, struct pci_attach_args*);
 static void ite_setup_channel(struct ata_channel*);
 
 static int  iteide_match(device_t, cfdata_t, void *);
@@ -94,11 +94,12 @@ iteide_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-ite_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
+ite_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int channel;
 	pcireg_t interface;
+	bus_size_t cmdsize, ctlsize;
 	pcireg_t cfg, modectl;
 
 	/* fake interface since IT8212 claims to be a RAID device */
@@ -132,7 +133,6 @@ ite_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 	sc->sc_wdcdev.sc_atac.atac_set_modes = ite_setup_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -149,7 +149,8 @@ ite_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
 
-		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
+		    pciide_pci_intr);
 	}
 	/* Re-read configuration registers after channels setup */
 	cfg = pci_conf_read(sc->sc_pc, sc->sc_tag, IT_CFG);
@@ -189,13 +190,13 @@ ite_setup_channel(struct ata_channel *chp)
 		drvp = &chp->ch_drive[drive];
 
 		/* If no drive, skip */
-		if (drvp->drive_type == ATA_DRIVET_NONE)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
 
 		if ((chp->ch_atac->atac_cap & ATAC_CAP_UDMA) != 0 &&
-		    (drvp->drive_flags & ATA_DRIVE_UDMA) != 0) {
+		    (drvp->drive_flags & DRIVE_UDMA) != 0) {
 			/* Setup UltraDMA mode */
-			drvp->drive_flags &= ~ATA_DRIVE_DMA;
+			drvp->drive_flags &= ~DRIVE_DMA;
 			modectl &= ~IT_MODE_DMA(channel, drive);
 
 #if 0
@@ -204,7 +205,7 @@ ite_setup_channel(struct ata_channel *chp)
 			    (cfg & IT_CFG_CABLE(channel, drive)) == 0) {
 				ATADEBUG_PRINT(("(%s:%d:%d): "
 				    "80-wire cable not detected\n",
-				    device_xname(sc->sc_wdcdev.sc_atac.atac_dev),
+				    device_xname(&sc->sc_wdcdev.sc_atac.atac_dev),
 				    channel, drive), DEBUG_PROBE);
 				drvp->UDMA_mode = 2;
 			}
@@ -217,9 +218,9 @@ ite_setup_channel(struct ata_channel *chp)
 
 			mode = drvp->PIO_mode;
 		} else if ((chp->ch_atac->atac_cap & ATAC_CAP_DMA) != 0 &&
-		    (drvp->drive_flags & ATA_DRIVE_DMA) != 0) {
+		    (drvp->drive_flags & DRIVE_DMA) != 0) {
 			/* Setup multiword DMA mode */
-			drvp->drive_flags &= ~ATA_DRIVE_UDMA;
+			drvp->drive_flags &= ~DRIVE_UDMA;
 			modectl |= IT_MODE_DMA(channel, drive);
 
 			/* mode = min(pio, dma + 2) */

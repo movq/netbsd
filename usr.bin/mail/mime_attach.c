@@ -1,4 +1,4 @@
-/*	$NetBSD: mime_attach.c,v 1.14 2012/04/29 23:50:22 christos Exp $	*/
+/*	$NetBSD: mime_attach.c,v 1.10 2008/04/28 20:24:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef __lint__
-__RCSID("$NetBSD: mime_attach.c,v 1.14 2012/04/29 23:50:22 christos Exp $");
+__RCSID("$NetBSD: mime_attach.c,v 1.10 2008/04/28 20:24:14 martin Exp $");
 #endif /* not __lint__ */
 
 #include <assert.h>
@@ -41,6 +41,7 @@ __RCSID("$NetBSD: mime_attach.c,v 1.14 2012/04/29 23:50:22 christos Exp $");
 #include <fcntl.h>
 #include <libgen.h>
 #include <magic.h>
+#include <setjmp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,7 +60,6 @@ __RCSID("$NetBSD: mime_attach.c,v 1.14 2012/04/29 23:50:22 christos Exp $");
 #include "mime_child.h"
 #endif
 #include "glob.h"
-#include "sig.h"
 
 #if 0
 /*
@@ -271,7 +271,7 @@ content_encoding_by_name(const char *filename, const char *ctype)
 {
 	FILE *fp;
 	const char *enc;
-	fp = Fopen(filename, "re");
+	fp = Fopen(filename, "r");
 	if (fp == NULL) {
 		warn("content_encoding_by_name: %s", filename);
 		return MIME_TRANSFER_BASE64;	/* safe */
@@ -291,7 +291,7 @@ content_encoding_by_fileno(int fd, const char *ctype)
 
 	cur_pos = lseek(fd, (off_t)0, SEEK_CUR);
 	if ((fd2 = dup(fd)) == -1 ||
-	    (fp = Fdopen(fd2, "re")) == NULL) {
+	    (fp = Fdopen(fd2, "r")) == NULL) {
 		warn("content_encoding_by_fileno");
 		if (fd2 != -1)
 			(void)close(fd2);
@@ -337,11 +337,10 @@ content_type_by_name(char *filename)
 	magic_t magic;
 	struct stat sb;
 
-#ifdef BROKEN_MAGIC
 	/*
-	 * libmagic(3) produces annoying results on very short files.
-	 * The common case is MIME encoding an empty message body.
-	 * XXX - it would be better to fix libmagic(3)!
+	 * libmagic produces annoying results on very short files.
+	 * The common case is with mime-encode-message defined and an
+	 * empty message body.
 	 *
 	 * Note: a 1-byte message body always consists of a newline,
 	 * so size determines all there.  However, 1-byte attachments
@@ -352,9 +351,8 @@ content_type_by_name(char *filename)
 		if (sb.st_size < 2 && S_ISREG(sb.st_mode)) {
 			FILE *fp;
 			int ch;
-
 			if (sb.st_size == 0 || filename == NULL ||
-			    (fp = Fopen(filename, "re")) == NULL)
+			    (fp = Fopen(filename, "r")) == NULL)
 				return "text/plain";
 
 			ch = fgetc(fp);
@@ -364,19 +362,18 @@ content_type_by_name(char *filename)
 			    "text/plain" : "application/octet-stream";
 		}
 	}
-#endif
 	magic = magic_open(MAGIC_MIME);
 	if (magic == NULL) {
-		warnx("magic_open: %s", magic_error(magic));
+		warn("magic_open: %s", magic_error(magic));
 		return NULL;
 	}
 	if (magic_load(magic, NULL) != 0) {
-		warnx("magic_load: %s", magic_error(magic));
+		warn("magic_load: %s", magic_error(magic));
 		return NULL;
 	}
 	cp = magic_file(magic, filename);
 	if (cp == NULL) {
-		warnx("magic_load: %s", magic_error(magic));
+		warn("magic_load: %s", magic_error(magic));
 		return NULL;
 	}
 	if (filename &&
@@ -543,7 +540,7 @@ fput_attachment(FILE *fo, struct attachment *ap)
 
 	switch (ap->a_type) {
 	case ATTACH_FNAME:
-		fi = Fopen(ap->a_name, "re");
+		fi = Fopen(ap->a_name, "r");
 		if (fi == NULL)
 			err(EXIT_FAILURE, "Fopen: %s", ap->a_name);
 		break;
@@ -554,7 +551,7 @@ fput_attachment(FILE *fo, struct attachment *ap)
 		 * finished with the attachment, so the Fclose() below
 		 * is OK for now.  This will be changed in the future.
 		 */
-		fi = Fdopen(ap->a_fileno, "re");
+		fi = Fdopen(ap->a_fileno, "r");
 		if (fi == NULL)
 			err(EXIT_FAILURE, "Fdopen: %d", ap->a_fileno);
 		break;
@@ -567,7 +564,7 @@ fput_attachment(FILE *fo, struct attachment *ap)
 		(void)snprintf(mailtempname, sizeof(mailtempname),
 		    "%s/mail.RsXXXXXXXXXX", tmpdir);
 		if ((fd = mkstemp(mailtempname)) == -1 ||
-		    (fi = Fdopen(fd, "we+")) == NULL) {
+		    (fi = Fdopen(fd, "w+")) == NULL) {
 			if (fd != -1)
 				(void)close(fd);
 			err(EXIT_FAILURE, "%s", mailtempname);
@@ -612,7 +609,7 @@ mktemp_file(FILE **nfo, FILE **nfi, const char *hint)
 	(void)snprintf(tempname, sizeof(tempname), "%s/%sXXXXXXXXXX",
 	    tmpdir, hint);
 	if ((fd = mkstemp(tempname)) == -1 ||
-	    (*nfo = Fdopen(fd, "we")) == NULL) {
+	    (*nfo = Fdopen(fd, "w")) == NULL) {
 		if (fd != -1)
 			(void)close(fd);
 		warn("%s", tempname);
@@ -620,7 +617,7 @@ mktemp_file(FILE **nfo, FILE **nfi, const char *hint)
 	}
 	(void)rm(tempname);
 	if ((fd2 = dup(fd)) == -1 ||
-	    (*nfi = Fdopen(fd2, "re")) == NULL) {
+	    (*nfi = Fdopen(fd2, "r")) == NULL) {
 		warn("%s", tempname);
 		(void)Fclose(*nfo);
 		return -1;
@@ -790,15 +787,9 @@ get_line(el_mode_t *em, const char *pr, const char *str, int i)
 	 * seems to handle it badly.
 	 */
 	(void)easprintf(&prompt, "#%-7d %s: ", i, pr);
-	line = my_gets(em, prompt, __UNCONST(str));
-	if (line != NULL) {
-		(void)strip_WSP(line);	/* strip trailing whitespace */
-		line = skip_WSP(line);	/* skip leading white space */
-		line = savestr(line);	/* XXX - do we need this? */
-	}
-	else {
-		line = __UNCONST("");
-	}
+	line = my_getline(em, prompt, __UNCONST(str));
+	/* LINTED */
+	line = line ? savestr(line) : __UNCONST("");
 	free(prompt);
 
 	return line;
@@ -809,8 +800,8 @@ sget_line(el_mode_t *em, const char *pr, const char **str, int i)
 {
 	char *line;
 	line = get_line(em, pr, *str, i);
-	if (line != NULL && strcmp(line, *str) != 0)
-		*str = line;
+	if (strcmp(line, *str) != 0)
+		*str = savestr(line);
 }
 
 static void
@@ -958,14 +949,14 @@ edit_attachlist(struct attachment *alist)
  * Hook used by the '~@' escape to attach files.
  */
 PUBLIC struct attachment*
-mime_attach_files(struct attachment * volatile attach, char *linebuf)
+mime_attach_files(struct attachment *attach, char *linebuf)
 {
 	struct attachment *ap;
 	char *argv[MAXARGC];
 	int argc;
 	int attach_num;
 
-	argc = getrawlist(linebuf, argv, (int)__arraycount(argv));
+	argc = getrawlist(linebuf, argv, sizeofarray(argv));
 	attach_num = 1;
 	for (ap = attach; ap && ap->a_flink; ap = ap->a_flink)
 			attach_num++;
@@ -1013,8 +1004,7 @@ mime_attach_optargs(struct name *optargs)
 		int i;
 
 		if (expand_optargs != NULL)
-			argc = getrawlist(np->n_name,
-			    argv, (int)__arraycount(argv));
+			argc = getrawlist(np->n_name, argv, sizeofarray(argv));
 		else {
 			if (np->n_name == '\0')
 				argc = 0;

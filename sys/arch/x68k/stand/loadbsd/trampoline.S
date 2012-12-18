@@ -1,10 +1,10 @@
 |
 |	copy binary image and execute
 |
-|	written by ITOH Yasufumi
+|	written by Yasha (ITOH Yasufumi)
 |	public domain
 |
-|	$NetBSD: trampoline.S,v 1.3 2011/02/21 02:31:59 itohy Exp $
+|	$NetBSD: trampoline.S,v 1.2 2001/06/12 16:57:28 minoura Exp $
 
 #include <machine/asm.h>
 #include "trampoline.h"

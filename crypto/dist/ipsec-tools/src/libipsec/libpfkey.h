@@ -1,4 +1,4 @@
-/*	$NetBSD: libpfkey.h,v 1.19 2012/01/04 15:55:35 drochner Exp $	*/
+/*	$NetBSD: libpfkey.h,v 1.13.18.1 2009/02/08 18:42:15 snj Exp $	*/
 
 /* Id: libpfkey.h,v 1.13 2005/12/04 20:26:43 manubsd Exp */
 
@@ -59,11 +59,7 @@ struct sadb_alg;
 
 #ifndef HAVE_IPSEC_POLICY_T
 typedef caddr_t ipsec_policy_t;
-#ifdef __NetBSD__
-#define __ipsec_const const
-#else
 #define __ipsec_const
-#endif
 #else
 #define __ipsec_const const
 #endif
@@ -121,10 +117,6 @@ u_int pfkey_set_softrate __P((u_int, u_int));
 u_int pfkey_get_softrate __P((u_int));
 int pfkey_send_getspi __P((int, u_int, u_int, struct sockaddr *,
 	struct sockaddr *, u_int32_t, u_int32_t, u_int32_t, u_int32_t));
-int pfkey_send_getspi_nat __P((int, u_int, u_int,
-	struct sockaddr *, struct sockaddr *, u_int8_t, u_int16_t, u_int16_t,
-	u_int32_t, u_int32_t, u_int32_t, u_int32_t));
-
 int pfkey_send_update2 __P((struct pfkey_send_sa_args *));
 int pfkey_send_add2 __P((struct pfkey_send_sa_args *)); 
 int pfkey_send_delete __P((int, u_int, u_int,
@@ -158,22 +150,12 @@ int pfkey_send_spdsetidx __P((int, struct sockaddr *, u_int,
 int pfkey_send_spdflush __P((int));
 int pfkey_send_spddump __P((int));
 #ifdef SADB_X_MIGRATE
-int pfkey_send_migrate __P((int, struct sockaddr *, struct sockaddr *,
-        struct sockaddr *, u_int, struct sockaddr *, u_int, u_int,
-        caddr_t, int, u_int32_t));
+int pfkey_send_migrate __P((int, struct sockaddr *, u_int,
+	struct sockaddr *, u_int, u_int, caddr_t, int, u_int32_t));
 #endif
-
-/* XXX should be somewhere else !!!
- */
-#ifdef SADB_X_EXT_NAT_T_TYPE
-#define PFKEY_ADDR_X_PORT(ext) (ntohs(((struct sadb_x_nat_t_port *)ext)->sadb_x_nat_t_port_port))
-#define PFKEY_ADDR_X_NATTYPE(ext) ( ext != NULL && ((struct sadb_x_nat_t_type *)ext)->sadb_x_nat_t_type_type )
-#endif
-
 
 int pfkey_open __P((void));
 void pfkey_close __P((int));
-int pfkey_set_buffer_size __P((int, int));
 struct sadb_msg *pfkey_recv __P((int));
 int pfkey_send __P((int, struct sadb_msg *, int));
 int pfkey_align __P((struct sadb_msg *, caddr_t *));
@@ -212,10 +194,6 @@ int pfkey_send_add_nat __P((int, u_int, u_int, struct sockaddr *,
 
 #ifndef IPPROTO_IPCOMP
 #define IPPROTO_IPCOMP IPPROTO_COMP
-#endif
-
-#ifndef IPPROTO_MH
-#define IPPROTO_MH		135
 #endif
 
 static __inline u_int8_t

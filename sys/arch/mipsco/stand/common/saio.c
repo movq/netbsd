@@ -1,4 +1,4 @@
-/*	$NetBSD: saio.c,v 1.13 2011/07/17 20:54:44 joerg Exp $	*/
+/*	$NetBSD: saio.c,v 1.9 2006/09/20 13:03:49 he Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -37,6 +37,7 @@
 #include <lib/libsa/stand.h>
 #include <lib/libkern/libkern.h>
 #include <machine/prom.h>
+#include <machine/stdarg.h>
 
 #include <sys/param.h>
 #include <sys/disklabel.h>
@@ -65,10 +66,10 @@ struct io_arg {
 struct device_table {
 	char *dt_string;	/* device name */
 	int (*dt_init) (int);	/* device init routine */
-	int (*dt_open)(int);	/* device open routine */
-	int (*dt_strategy)(int);	/* device strategy routine, returns cnt */
-	int (*dt_close)(int);	/* device close routine */
-	int (*dt_ioctl)(int);	/* device ioctl routine */
+	int (*dt_open) __P((int));	/* device open routine */
+	int (*dt_strategy) __P((int));	/* device strategy routine, returns cnt */
+	int (*dt_close) __P((int));	/* device close routine */
+	int (*dt_ioctl) __P((int));	/* device ioctl routine */
 	int dt_type;		/* device "type" */
 	int dt_fs;		/* file system type */
 	char *dt_desc;		/* device description */
@@ -97,8 +98,13 @@ struct sa_iob {
 extern struct sa_iob *saiob[];
 
 int
-saiostrategy(void *devdata, int rw, daddr_t bn, size_t reqcnt, void *addr, size_t *cnt)
-	/* cnt:	 out: number of bytes transfered */
+saiostrategy(devdata, rw, bn, reqcnt, addr, cnt)
+	void *devdata;
+	int rw;
+	daddr_t bn;
+	size_t reqcnt;
+	void *addr;
+	size_t *cnt;	/* out: number of bytes transfered */
 {
 	struct saio_softc *sc = (struct saio_softc *)devdata;
 	int part = sc->sc_part;
@@ -214,7 +220,8 @@ saioopen(struct open_file *f, ...)
 
 #ifndef LIBSA_NO_DEV_CLOSE
 int
-saioclose(struct open_file *f)
+saioclose(f)
+	struct open_file *f;
 {
 
 	prom_close(((struct saio_softc *)f->f_devdata)->sc_fd);

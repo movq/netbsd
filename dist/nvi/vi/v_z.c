@@ -1,4 +1,4 @@
-/*	$NetBSD: v_z.c,v 1.2 2011/11/23 19:18:53 tnozaki Exp $ */
+/*	$NetBSD: v_z.c,v 1.1.1.2 2008/05/18 14:31:48 aymeric Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -36,7 +36,7 @@ int
 v_z(SCR *sp, VICMD *vp)
 {
 	db_recno_t lno;
-	e_key_t value;
+	u_int value;
 
 	/*
 	 * The first count is the line to use.  If the value doesn't

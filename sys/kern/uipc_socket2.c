@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_socket2.c,v 1.110 2011/12/20 23:56:28 christos Exp $	*/
+/*	$NetBSD: uipc_socket2.c,v 1.100.4.1 2009/02/02 21:04:45 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_socket2.c,v 1.110 2011/12/20 23:56:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_socket2.c,v 1.100.4.1 2009/02/02 21:04:45 snj Exp $");
 
 #include "opt_mbuftrace.h"
 #include "opt_sb_max.h"
@@ -68,6 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_socket2.c,v 1.110 2011/12/20 23:56:28 christos 
 #include <sys/proc.h>
 #include <sys/file.h>
 #include <sys/buf.h>
+#include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/protosw.h>
 #include <sys/domain.h>
@@ -189,8 +190,7 @@ soisconnected(struct socket *so)
 			so->so_upcallarg = head->so_accf->so_accept_filter_arg;
 			so->so_rcv.sb_flags |= SB_UPCALL;
 			so->so_options &= ~SO_ACCEPTFILTER;
-			(*so->so_upcall)(so, so->so_upcallarg,
-					 POLLIN|POLLRDNORM, M_DONTWAIT);
+			(*so->so_upcall)(so, so->so_upcallarg, M_DONTWAIT);
 		}
 	} else {
 		cv_broadcast(&so->so_cv);
@@ -247,8 +247,6 @@ sonewconn(struct socket *head, int connstatus)
 	struct socket	*so;
 	int		soqueue, error;
 
-	KASSERT(connstatus == 0 || connstatus == SS_ISCONFIRMING ||
-	    connstatus == SS_ISCONNECTED);
 	KASSERT(solocked(head));
 
 	if ((head->so_options & SO_ACCEPTFILTER) != 0)
@@ -265,33 +263,33 @@ sonewconn(struct socket *head, int connstatus)
 	so->so_options = head->so_options &~ SO_ACCEPTCONN;
 	so->so_linger = head->so_linger;
 	so->so_state = head->so_state | SS_NOFDREF;
+	so->so_nbio = head->so_nbio;
 	so->so_proto = head->so_proto;
 	so->so_timeo = head->so_timeo;
 	so->so_pgid = head->so_pgid;
 	so->so_send = head->so_send;
 	so->so_receive = head->so_receive;
 	so->so_uidinfo = head->so_uidinfo;
+	so->so_egid = head->so_egid;
 	so->so_cpid = head->so_cpid;
 #ifdef MBUFTRACE
 	so->so_mowner = head->so_mowner;
 	so->so_rcv.sb_mowner = head->so_rcv.sb_mowner;
 	so->so_snd.sb_mowner = head->so_snd.sb_mowner;
 #endif
-	if (soreserve(so, head->so_snd.sb_hiwat, head->so_rcv.sb_hiwat) != 0)
-		goto out;
+	(void) soreserve(so, head->so_snd.sb_hiwat, head->so_rcv.sb_hiwat);
 	so->so_snd.sb_lowat = head->so_snd.sb_lowat;
 	so->so_rcv.sb_lowat = head->so_rcv.sb_lowat;
 	so->so_rcv.sb_timeo = head->so_rcv.sb_timeo;
 	so->so_snd.sb_timeo = head->so_snd.sb_timeo;
-	so->so_rcv.sb_flags |= head->so_rcv.sb_flags & (SB_AUTOSIZE | SB_ASYNC);
-	so->so_snd.sb_flags |= head->so_snd.sb_flags & (SB_AUTOSIZE | SB_ASYNC);
+	so->so_rcv.sb_flags |= head->so_rcv.sb_flags & SB_AUTOSIZE;
+	so->so_snd.sb_flags |= head->so_snd.sb_flags & SB_AUTOSIZE;
 	soqinsque(head, so, soqueue);
 	error = (*so->so_proto->pr_usrreq)(so, PRU_ATTACH, NULL, NULL,
 	    NULL, NULL);
 	KASSERT(solocked(so));
 	if (error != 0) {
 		(void) soqremque(so, soqueue);
-out:
 		/*
 		 * Remove acccept filter if one is present.
 		 * XXX Is this really needed?
@@ -470,7 +468,7 @@ sowakeup(struct socket *so, struct sockbuf *sb, int code)
 	if (sb->sb_flags & SB_ASYNC)
 		fownsignal(so->so_pgid, SIGIO, code, band, so);
 	if (sb->sb_flags & SB_UPCALL)
-		(*so->so_upcall)(so, so->so_upcallarg, band, M_DONTWAIT);
+		(*so->so_upcall)(so, so->so_upcallarg, M_DONTWAIT);
 }
 
 /*
@@ -594,7 +592,10 @@ sbreserve(struct sockbuf *sb, u_long cc, struct socket *so)
 	if (cc == 0 || cc > sb_max_adj)
 		return (0);
 
-	maxcc = l->l_proc->p_rlimit[RLIMIT_SBSIZE].rlim_cur;
+	if (kauth_cred_geteuid(l->l_cred) == so->so_uidinfo->ui_uid)
+		maxcc = l->l_proc->p_rlimit[RLIMIT_SBSIZE].rlim_cur;
+	else
+		maxcc = RLIM_INFINITY;
 
 	uidinfo = so->so_uidinfo;
 	if (!chgsbsize(uidinfo, &sb->sb_hiwat, cc, maxcc))
@@ -1312,7 +1313,7 @@ sbcreatecontrol(void *p, int size, int type, int level)
 	}
 
 	if ((m = m_get(M_DONTWAIT, MT_CONTROL)) == NULL)
-		return (NULL);
+		return ((struct mbuf *) NULL);
 	if (CMSG_SPACE(size) > MLEN) {
 		MCLGET(m, M_DONTWAIT);
 		if ((m->m_flags & M_EXT) == 0) {

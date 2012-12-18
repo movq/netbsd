@@ -1,4 +1,4 @@
-/*	$NetBSD: skpc.c,v 1.7 2009/03/14 15:36:22 dsl Exp $	*/
+/*	$NetBSD: skpc.c,v 1.6 2005/12/11 12:24:37 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989 Regents of the University of California.
@@ -35,7 +35,10 @@
 #include <lib/libkern/libkern.h>
 
 int
-skpc(int mask, size_t size, u_char *cp)
+skpc(mask, size, cp)
+	int mask;
+	size_t size;
+	u_char *cp;
 {
 	u_char *end = &cp[size];
 

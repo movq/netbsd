@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: yearistype.sh,v 1.7 2012/07/22 10:40:29 apb Exp $
+#	$NetBSD: yearistype.sh,v 1.6.24.1 2012/09/15 09:26:44 bouyer Exp $
 #
 
 : 'This file is in the public domain, so clarified as of'

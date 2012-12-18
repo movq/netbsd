@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_exec.c,v 1.27 2012/02/19 21:06:45 rmind Exp $	 */
+/*	$NetBSD: svr4_32_exec.c,v 1.24 2008/10/15 06:51:20 wrstuden Exp $	 */
 
 /*-
  * Copyright (c) 1994, 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_exec.c,v 1.27 2012/02/19 21:06:45 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_exec.c,v 1.24 2008/10/15 06:51:20 wrstuden Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -41,7 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_32_exec.c,v 1.27 2012/02/19 21:06:45 rmind Exp 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/exec.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -63,42 +62,44 @@ void syscall(void);
 
 struct uvm_object *emul_svr4_32_object;
 
-struct emul emul_svr4_32 = {
-	.e_name =		"svr4_32",
-	.e_path =		"/emul/svr4_32",
+const struct emul emul_svr4_32 = {
+	"svr4_32",
+	"/emul/svr4_32",
 #ifndef __HAVE_MINIMAL_EMUL
-	.e_flags =		0,
-	.e_errno =		native_to_svr4_errno,
-	.e_nosys =		SVR4_32_SYS_syscall,
-	.e_nsysent =		SVR4_32_SYS_NSYSENT,
+	0,
+	native_to_svr4_errno,
+	SVR4_32_SYS_syscall,
+	SVR4_32_SYS_NSYSENT,
 #endif
-	.e_sysent =		svr4_32_sysent,
+	svr4_32_sysent,
 #ifdef SYSCALL_DEBUG
-	.e_syscallnames =	svr4_32_syscallnames,
+	svr4_32_syscallnames,
 #else
-	.e_syscallnames =	NULL,
+	NULL,
 #endif
-	.e_sendsig =		svr4_32_sendsig,
-	.e_trapsignal =		trapsignal,
-	.e_tracesig =		NULL,
-	.e_sigcode =		svr4_32_sigcode,
-	.e_esigcode =		svr4_32_esigcode,
-	.e_sigobject =		&emul_svr4_32_object,
-	.e_setregs =		svr4_32_setregs,
-	.e_proc_exec =		NULL,
-	.e_proc_fork =		NULL,
-	.e_proc_exit =		NULL,
-	.e_lwp_fork =		NULL,
-	.e_lwp_exit =		NULL,
+	svr4_32_sendsig,
+	trapsignal,
+	NULL,
+	svr4_32_sigcode,
+	svr4_32_esigcode,
+	&emul_svr4_32_object,
+	svr4_32_setregs,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
 #ifdef __HAVE_SYSCALL_INTERN
-	.e_syscall_intern =	svr4_32_syscall_intern,
+	svr4_32_syscall_intern,
 #else
-	.e_syscall_intern =	syscall,
+	syscall,
 #endif
-	.e_sysctlovly =		NULL,
-	.e_fault =		NULL,
-	.e_vm_default_addr =	svr4_32_vm_default_addr,
-	.e_usertrap =		NULL,
-	.e_ucsize =		0,
-	.e_startlwp =		NULL
+	NULL,
+	NULL,
+
+	svr4_32_vm_default_addr,
+	NULL,
+	NULL,
+	0,
+	NULL,
 };

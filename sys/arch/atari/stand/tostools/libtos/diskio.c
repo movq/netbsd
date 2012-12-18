@@ -1,4 +1,4 @@
-/*	$NetBSD: diskio.c,v 1.3 2009/03/18 10:22:26 cegger Exp $	*/
+/*	$NetBSD: diskio.c,v 1.1 2002/02/24 20:51:08 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens.
@@ -59,7 +59,8 @@ static int	setsizes PROTO((disk_t *));
 static int	ahdi_compatible PROTO((void));
 
 disk_t *
-disk_open(char *name)
+disk_open(name)
+	char	*name;
 {
 	disk_t	*dd;
 	
@@ -74,7 +75,8 @@ disk_open(char *name)
 }
 
 void
-disk_close(disk_t *dd)
+disk_close(dd)
+	disk_t	*dd;
 {
 	if (dd) {
 		free(dd->product);
@@ -136,7 +138,7 @@ disk_write(dd, start, count, buffer)
 }
 
 static int
-ahdi_compatible(void)
+ahdi_compatible()
 {
 	static int	ahdi_compat;
 
@@ -153,7 +155,9 @@ ahdi_compatible(void)
 }
 
 static int
-setmami(disk_t *dd, char *name)
+setmami(dd, name)
+	disk_t	*dd;
+	char	*name;
 {
 	char	*p = name;
 	u_int	target, lun;
@@ -213,7 +217,8 @@ setmami(disk_t *dd, char *name)
 }
 
 static int
-setnames(disk_t *dd)
+setnames(dd)
+	disk_t	*dd;
 {
 	char	sn[16], us[16], ls[16], *bs;
 	int	b, u, l;
@@ -257,7 +262,8 @@ setnames(disk_t *dd)
 }
 
 static int
-setsizes(disk_t *dd)
+setsizes(dd)
+	disk_t	*dd;
 {
 	if (XHGetVersion() != -1) {
 	    char	*p, prod[1024];
@@ -312,7 +318,8 @@ setsizes(disk_t *dd)
 }
 
 static char *
-strbd(char *string1)
+strbd(string1)
+	char	*string1;
 {
 	char		*p, *result;
 	size_t		length = 1;

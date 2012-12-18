@@ -1,4 +1,4 @@
-/*      $NetBSD: sa11x1_pcic.c,v 1.22 2011/07/26 22:52:47 dyoung Exp $        */
+/*      $NetBSD: sa11x1_pcic.c,v 1.19 2008/06/03 13:45:22 rafal Exp $        */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sa11x1_pcic.c,v 1.22 2011/07/26 22:52:47 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sa11x1_pcic.c,v 1.19 2008/06/03 13:45:22 rafal Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,7 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: sa11x1_pcic.c,v 1.22 2011/07/26 22:52:47 dyoung Exp 
 #include <sys/kthread.h>
 #include <sys/malloc.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/pcmcia/pcmciachip.h>
 #include <dev/pcmcia/pcmciavar.h>
@@ -59,9 +59,9 @@ __KERNEL_RCSID(0, "$NetBSD: sa11x1_pcic.c,v 1.22 2011/07/26 22:52:47 dyoung Exp 
 static int	sacpcic_print(void *, const char *);
 
 static void
-sacpcic_config_deferred(device_t dev)
+sacpcic_config_deferred(struct device *dev)
 {
-	struct sacpcic_softc *sc = device_private(dev);
+	struct sacpcic_softc *sc = (struct sacpcic_softc *)dev;
 	struct sapcic_socket *so;
 	int i;
 
@@ -82,7 +82,7 @@ sacpcic_attach_common(struct sacc_softc *psc, struct sacpcic_softc *sc,
 	int i;
 	struct pcmciabus_attach_args paa;
 
-	aprint_normal("\n");
+	printf("\n");
 
 	sc->sc_pc.sc_iot = psc->sc_iot;
 	sc->sc_ioh = psc->sc_ioh;
@@ -104,13 +104,15 @@ sacpcic_attach_common(struct sacc_softc *psc, struct sacpcic_softc *sc,
 		paa.paa_busname = "pcmcia";
 		paa.pct = (pcmcia_chipset_tag_t)&sa11x0_pcmcia_functions;
 		paa.pch = (pcmcia_chipset_handle_t)&sc->sc_socket[i];
+		paa.iobase = 0;
+		paa.iosize = 0x4000000;
 
 		sc->sc_socket[i].pcmcia =
-		    config_found_ia(sc->sc_pc.sc_dev, "pcmciabus", &paa,
+		    config_found_ia(&sc->sc_pc.sc_dev, "pcmciabus", &paa,
 				    sacpcic_print);
 	}
 
-	config_interrupts(sc->sc_pc.sc_dev, sacpcic_config_deferred);
+	config_interrupts(&sc->sc_pc.sc_dev, sacpcic_config_deferred);
 }
 
 int

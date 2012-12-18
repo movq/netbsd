@@ -1,4 +1,4 @@
-/* $NetBSD: kftxx.c,v 1.16 2011/06/14 15:34:23 matt Exp $ */
+/* $NetBSD: kftxx.c,v 1.13 2007/03/04 05:59:12 christos Exp $ */
 
 /*
  * Copyright (c) 1997 by Matthew Jacob
@@ -39,7 +39,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: kftxx.c,v 1.16 2011/06/14 15:34:23 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kftxx.c,v 1.13 2007/03/04 05:59:12 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,23 +57,24 @@ __KERNEL_RCSID(0, "$NetBSD: kftxx.c,v 1.16 2011/06/14 15:34:23 matt Exp $");
 #include <alpha/pci/dwlpxvar.h>
 
 struct kft_softc {
-	device_t	sc_dev;
+	struct device	sc_dev;
 	int		sc_node;	/* TLSB node */
-	uint16_t	sc_dtype;	/* device type */
+	u_int16_t	sc_dtype;	/* device type */
 };
 
 #define KV(_addr)	((void *)ALPHA_PHYS_TO_K0SEG((_addr)))
 
-static int	kftmatch(device_t, cfdata_t, void *);
-static void	kftattach(device_t, device_t, void *);
-
-CFATTACH_DECL_NEW(kft, sizeof(struct kft_softc),
+static int	kftmatch __P((struct device *, struct cfdata *, void *));
+static void	kftattach __P((struct device *, struct device *, void *));
+CFATTACH_DECL(kft, sizeof(struct kft_softc),
     kftmatch, kftattach, NULL, NULL);
 
-static int	kftprint(void *, const char *);
+static int	kftprint __P((void *, const char *));
 
 static int
-kftprint(void *aux, const char *pnp)
+kftprint(aux, pnp)
+	void *aux;
+	const char *pnp;
 {
 	register struct kft_dev_attach_args *ka = aux;
 	if (pnp)
@@ -83,7 +84,10 @@ kftprint(void *aux, const char *pnp)
 }
 
 static int
-kftmatch(device_t parent, cfdata_t cf, void *aux)
+kftmatch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct tlsb_dev_attach_args *ta = aux;
 	if (TLDEV_ISIOPORT(ta->ta_dtype))
@@ -92,37 +96,38 @@ kftmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-kftattach(device_t parent, device_t self, void *aux)
+kftattach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct tlsb_dev_attach_args *ta = aux;
-	struct kft_softc *sc = device_private(self);
+	struct kft_softc *sc = (struct kft_softc *)self;
 	struct kft_dev_attach_args ka;
 	int hoseno;
 
-	sc->sc_dev = self;
 	sc->sc_node = ta->ta_node;
 	sc->sc_dtype = ta->ta_dtype;
 
-	aprint_normal("\n");
+	printf("\n");
 
 	for (hoseno = 0; hoseno < MAXHOSE; hoseno++) {
-		uint32_t value =
+		u_int32_t value =
 		    TLSB_GET_NODEREG(sc->sc_node, KFT_IDPNSEX(hoseno));
 		if (value & 0x0E000000) {
-			aprint_error_dev(self, "Hose %d IDPNSE has %x\n",
+			printf("%s: Hose %d IDPNSE has %x\n", self->dv_xname,
 			    hoseno, value);
 			continue;
 		}
 		if ((value & 0x1) != 0x0) {
-			aprint_error_dev(self,
-			    "Hose %d has a Bad Cable (0x%x)\n", hoseno, value);
+			printf("%s: Hose %d has a Bad Cable (0x%x)\n",
+			    self->dv_xname, hoseno, value);
 			continue;
 		}
 		if ((value & 0x6) != 0x6) {
 			if (value)
-				aprint_error_dev(self,
-				    "Hose %d is missing PWROK (0x%x)\n",
-				    hoseno, value);
+				printf("%s: Hose %d is missing PWROK (0x%x)\n",
+				    self->dv_xname, hoseno, value);
 			continue;
 		}
 		ka.ka_name = "dwlpx";

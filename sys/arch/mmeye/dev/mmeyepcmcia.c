@@ -1,4 +1,4 @@
-/*	$NetBSD: mmeyepcmcia.c,v 1.22 2012/10/27 17:18:03 chs Exp $	*/
+/*	$NetBSD: mmeyepcmcia.c,v 1.14 2007/10/17 19:55:46 garbled Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mmeyepcmcia.c,v 1.22 2012/10/27 17:18:03 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mmeyepcmcia.c,v 1.14 2007/10/17 19:55:46 garbled Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -48,11 +48,11 @@ __KERNEL_RCSID(0, "$NetBSD: mmeyepcmcia.c,v 1.22 2012/10/27 17:18:03 chs Exp $")
 #include <sys/extent.h>
 #include <sys/malloc.h>
 #include <sys/kthread.h>
-#include <sys/bus.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/mmeye.h>
 
@@ -61,8 +61,6 @@ __KERNEL_RCSID(0, "$NetBSD: mmeyepcmcia.c,v 1.22 2012/10/27 17:18:03 chs Exp $")
 #include <dev/pcmcia/pcmciachip.h>
 
 #include <mmeye/dev/mmeyepcmciareg.h>
-
-#include "locators.h"
 
 #ifdef MMEYEPCMCIADEBUG
 int	mmeyepcmcia_debug = 1;
@@ -86,34 +84,37 @@ struct mmeyepcmcia_handle {
 	int	laststate;
 	int	memalloc;
 	struct {
-		bus_addr_t		addr;
-		bus_size_t		size;
-		int			kind;
-		bus_space_tag_t		memt;
-		bus_space_handle_t	memh;
+		bus_addr_t	addr;
+		bus_size_t	size;
+		long		offset;
+		int		kind;
 	} mem[MMEYEPCMCIA_MEM_WINS];
 	int	ioalloc;
 	struct {
-		bus_addr_t		addr;
-		bus_size_t		size;
-		int			width;
-		bus_space_tag_t		iot;
-		bus_space_handle_t	ioh;
+		bus_addr_t	addr;
+		bus_size_t	size;
+		int		width;
 	} io[MMEYEPCMCIA_IO_WINS];
 	int	ih_irq;
-	device_t pcmcia;
+	struct device *pcmcia;
 
 	int	shutdown;
 	lwp_t	*event_thread;
 	SIMPLEQ_HEAD(, mmeyepcmcia_event) events;
 };
 
+/* These four lines are MMTA specific */
+#define MMEYEPCMCIA_IRQ1 10
+#define MMEYEPCMCIA_IRQ2 9
+#define MMEYEPCMCIA_SLOT1_ADDR 0xb8000000
+#define MMEYEPCMCIA_SLOT2_ADDR 0xb9000000
+
+#define	MMEYEPCMCIA_FLAG_SOCKETP		0x0001
 #define	MMEYEPCMCIA_FLAG_CARDP		0x0002
-#define	MMEYEPCMCIA_FLAG_SOCKETP	0x0001
 
 #define MMEYEPCMCIA_LASTSTATE_PRESENT	0x0002
-#define MMEYEPCMCIA_LASTSTATE_HALF	0x0001
-#define MMEYEPCMCIA_LASTSTATE_EMPTY	0x0000
+#define MMEYEPCMCIA_LASTSTATE_HALF		0x0001
+#define MMEYEPCMCIA_LASTSTATE_EMPTY		0x0000
 
 /*
  * This is sort of arbitrary.  It merely needs to be "enough". It can be
@@ -121,6 +122,7 @@ struct mmeyepcmcia_handle {
  */
 
 #define	MMEYEPCMCIA_MEM_PAGES	4
+#define	MMEYEPCMCIA_MEMSIZE	MMEYEPCMCIA_MEM_PAGES*MMEYEPCMCIA_MEM_PAGESIZE
 
 #define	MMEYEPCMCIA_NSLOTS	1
 
@@ -128,15 +130,15 @@ struct mmeyepcmcia_handle {
 #define MMEYEPCMCIA_IOWINS	2
 
 struct mmeyepcmcia_softc {
-	device_t dev;
+	struct device dev;
 
-	bus_space_tag_t iot;		/* mmeyepcmcia registers */
-	bus_space_handle_t ioh;
-	int controller_irq;
-
-	bus_space_tag_t memt;		/* PCMCIA spaces */
+	bus_space_tag_t memt;
 	bus_space_handle_t memh;
-	int card_irq;
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+
+	/* XXX isa_chipset_tag_t, pci_chipset_tag_t, etc. */
+	void	*intr_est;
 
 	pcmcia_chipset_tag_t pct;
 
@@ -144,8 +146,11 @@ struct mmeyepcmcia_softc {
 	int	subregionmask;
 #define MMEYEPCMCIA_MAX_MEM_PAGES (8 * sizeof(int))
 
+	/* used by memory window mapping functions */
+	bus_addr_t membase;
+
 	/*
-	 * used by io/mem window mapping functions.  These can actually overlap
+	 * used by io window mapping functions.  These can actually overlap
 	 * with another pcic, since the underlying extent mapper will deal
 	 * with individual allocations.  This is here to deal with the fact
 	 * that different busses have different real widths (different pc
@@ -154,35 +159,38 @@ struct mmeyepcmcia_softc {
 	bus_addr_t iobase;
 	bus_addr_t iosize;
 
+	int	controller_irq;
+	int	card_irq;
+
+	void	*ih;
+
 	struct mmeyepcmcia_handle handle[MMEYEPCMCIA_NSLOTS];
 };
 
-static void	mmeyepcmcia_attach_sockets(struct mmeyepcmcia_softc *);
-static int	mmeyepcmcia_intr(void *arg);
+void	mmeyepcmcia_attach_sockets(struct mmeyepcmcia_softc *);
+int	mmeyepcmcia_intr(void *arg);
 
 static inline int mmeyepcmcia_read(struct mmeyepcmcia_handle *, int);
 static inline void mmeyepcmcia_write(struct mmeyepcmcia_handle *, int, int);
 
-static int	mmeyepcmcia_chip_mem_alloc(pcmcia_chipset_handle_t, bus_size_t,
-		    struct pcmcia_mem_handle *);
-static void	mmeyepcmcia_chip_mem_free(pcmcia_chipset_handle_t,
-		    struct pcmcia_mem_handle *);
-static int	mmeyepcmcia_chip_mem_map(pcmcia_chipset_handle_t, int,
-		    bus_addr_t, bus_size_t, struct pcmcia_mem_handle *,
-		    bus_size_t *, int *);
-static void	mmeyepcmcia_chip_mem_unmap(pcmcia_chipset_handle_t, int);
+int	mmeyepcmcia_chip_mem_alloc(pcmcia_chipset_handle_t, bus_size_t,
+	    struct pcmcia_mem_handle *);
+void	mmeyepcmcia_chip_mem_free(pcmcia_chipset_handle_t,
+	    struct pcmcia_mem_handle *);
+int	mmeyepcmcia_chip_mem_map(pcmcia_chipset_handle_t, int, bus_addr_t,
+	    bus_size_t, struct pcmcia_mem_handle *, bus_size_t *, int *);
+void	mmeyepcmcia_chip_mem_unmap(pcmcia_chipset_handle_t, int);
 
-static int	mmeyepcmcia_chip_io_alloc(pcmcia_chipset_handle_t, bus_addr_t,
-		    bus_size_t, bus_size_t, struct pcmcia_io_handle *);
-static void	mmeyepcmcia_chip_io_free(pcmcia_chipset_handle_t,
-		    struct pcmcia_io_handle *);
-static int	mmeyepcmcia_chip_io_map(pcmcia_chipset_handle_t, int,
-		    bus_addr_t, bus_size_t, struct pcmcia_io_handle *, int *);
-static void	mmeyepcmcia_chip_io_unmap(pcmcia_chipset_handle_t, int);
+int	mmeyepcmcia_chip_io_alloc(pcmcia_chipset_handle_t, bus_addr_t,
+	    bus_size_t, bus_size_t, struct pcmcia_io_handle *);
+void	mmeyepcmcia_chip_io_free(pcmcia_chipset_handle_t,
+	    struct pcmcia_io_handle *);
+int	mmeyepcmcia_chip_io_map(pcmcia_chipset_handle_t, int, bus_addr_t,
+	    bus_size_t, struct pcmcia_io_handle *, int *);
+void	mmeyepcmcia_chip_io_unmap(pcmcia_chipset_handle_t, int);
 
-static void	mmeyepcmcia_chip_socket_enable(pcmcia_chipset_handle_t);
-static void	mmeyepcmcia_chip_socket_disable(pcmcia_chipset_handle_t);
-static void	mmeyepcmcia_chip_socket_settype(pcmcia_chipset_handle_t, int);
+void	mmeyepcmcia_chip_socket_enable(pcmcia_chipset_handle_t);
+void	mmeyepcmcia_chip_socket_disable(pcmcia_chipset_handle_t);
 
 static inline int mmeyepcmcia_read(struct mmeyepcmcia_handle *, int);
 static inline int
@@ -194,7 +202,7 @@ mmeyepcmcia_read(struct mmeyepcmcia_handle *h, int idx)
 		idx = prev_idx;
 	}
 	prev_idx = idx;
-	return bus_space_read_stream_2(h->sc->iot, h->sc->ioh, idx);
+	return (bus_space_read_stream_2(h->sc->iot, h->sc->ioh, idx));
 }
 
 static inline void mmeyepcmcia_write(struct mmeyepcmcia_handle *, int, int);
@@ -209,29 +217,28 @@ mmeyepcmcia_write(struct mmeyepcmcia_handle *h, int idx, int data)
 	bus_space_write_stream_2(h->sc->iot, h->sc->ioh, idx, (data));
 }
 
-static void	*mmeyepcmcia_chip_intr_establish(pcmcia_chipset_handle_t,
-		    struct pcmcia_function *, int, int (*) (void *), void *);
-static void	mmeyepcmcia_chip_intr_disestablish(pcmcia_chipset_handle_t,
-		    void *);
-static void	*mmeyepcmcia_chip_intr_establish(pcmcia_chipset_handle_t,
-		    struct pcmcia_function *, int, int (*) (void *), void *);
-static void	mmeyepcmcia_chip_intr_disestablish(pcmcia_chipset_handle_t,
-		    void *);
+void	*mmeyepcmcia_chip_intr_establish(pcmcia_chipset_handle_t,
+	    struct pcmcia_function *, int, int (*) (void *), void *);
+void	mmeyepcmcia_chip_intr_disestablish(pcmcia_chipset_handle_t, void *);
+void	*mmeyepcmcia_chip_intr_establish(pcmcia_chipset_handle_t,
+	    struct pcmcia_function *, int, int (*) (void *), void *);
+void	mmeyepcmcia_chip_intr_disestablish(pcmcia_chipset_handle_t,
+	    void *);
 
-static void	mmeyepcmcia_attach_socket(struct mmeyepcmcia_handle *);
-static void	mmeyepcmcia_init_socket(struct mmeyepcmcia_handle *);
-static int	mmeyepcmcia_print (void *, const char *);
-static int	mmeyepcmcia_intr_socket(struct mmeyepcmcia_handle *);
-static void	mmeyepcmcia_attach_card(struct mmeyepcmcia_handle *);
-static void	mmeyepcmcia_detach_card(struct mmeyepcmcia_handle *, int);
-static void	mmeyepcmcia_deactivate_card(struct mmeyepcmcia_handle *);
-static void	mmeyepcmcia_event_thread(void *);
-static void	mmeyepcmcia_queue_event(struct mmeyepcmcia_handle *, int);
+void	mmeyepcmcia_attach_socket(struct mmeyepcmcia_handle *);
+void	mmeyepcmcia_init_socket(struct mmeyepcmcia_handle *);
+int	mmeyepcmcia_print (void *, const char *);
+int	mmeyepcmcia_intr_socket(struct mmeyepcmcia_handle *);
+void	mmeyepcmcia_attach_card(struct mmeyepcmcia_handle *);
+void	mmeyepcmcia_detach_card(struct mmeyepcmcia_handle *, int);
+void	mmeyepcmcia_deactivate_card(struct mmeyepcmcia_handle *);
+void	mmeyepcmcia_event_thread(void *);
+void	mmeyepcmcia_queue_event(struct mmeyepcmcia_handle *, int);
 
-static int	mmeyepcmcia_match(device_t, cfdata_t, void *);
-static void	mmeyepcmcia_attach(device_t, device_t, void *);
+int	mmeyepcmcia_match(struct device *, struct cfdata *, void *);
+void	mmeyepcmcia_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(mmeyepcmcia, sizeof(struct mmeyepcmcia_softc),
+CFATTACH_DECL(mmeyepcmcia, sizeof(struct mmeyepcmcia_softc),
     mmeyepcmcia_match, mmeyepcmcia_attach, NULL, NULL);
 
 static struct pcmcia_chip_functions mmeyepcmcia_functions = {
@@ -250,50 +257,37 @@ static struct pcmcia_chip_functions mmeyepcmcia_functions = {
 
 	mmeyepcmcia_chip_socket_enable,
 	mmeyepcmcia_chip_socket_disable,
-	mmeyepcmcia_chip_socket_settype,
-	NULL,
 };
 
-static int
-mmeyepcmcia_match(device_t parent, cfdata_t match, void *aux)
+int
+mmeyepcmcia_match(struct device *parent, struct cfdata *match, void *aux)
 {
+	extern struct cfdriver mmeyepcmcia_cd;
 	struct mainbus_attach_args *ma = aux;
 
-	if (strcmp(ma->ma_name, match->cf_name) != 0)
-		return 0;
+	if (strcmp(ma->ma_name, mmeyepcmcia_cd.cd_name) == 0)
+		return (1);
 
-	/* Disallow wildcarded values. */
-	if (ma->ma_addr1 == MAINBUSCF_ADDR1_DEFAULT ||
-	    ma->ma_addr2 == MAINBUSCF_ADDR2_DEFAULT ||
-	    ma->ma_irq2 == MAINBUSCF_IRQ2_DEFAULT)
-		return 0;
-
-	return 1;
+	return (0);
 }
 
-static void
-mmeyepcmcia_attach(device_t parent, device_t self, void *aux)
+void
+mmeyepcmcia_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
-	struct mmeyepcmcia_softc *sc = device_private(self);
+	struct mmeyepcmcia_softc *sc = (void *)self;
 
-	aprint_naive("\n");
-
-	sc->dev = self;
 	sc->subregionmask = 1;	/* 1999.05.17 T.Horiuchi for R1.4 */
 
 	sc->pct = (pcmcia_chipset_tag_t)&mmeyepcmcia_functions;
 	sc->iot = 0;
-	/* Map i/o space. */
-	if (bus_space_map(sc->iot, ma->ma_addr1, MMEYEPCMCIA_IOSIZE,
-	    0, &sc->ioh)) {
-		aprint_error(": can't map i/o space\n");
-		return;
-	}
+	sc->ioh = ma->ma_addr1;
 	sc->memt = 0;
-	sc->iobase = ma->ma_addr2;
+	sc->memh = ma->ma_addr2;
 	sc->controller_irq = ma->ma_irq1;
 	sc->card_irq = ma->ma_irq2;
+
+	printf(": using MMTA irq %d\n", sc->controller_irq);
 
 	sc->handle[0].sc = sc;
 	sc->handle[0].flags = MMEYEPCMCIA_FLAG_SOCKETP;
@@ -301,19 +295,19 @@ mmeyepcmcia_attach(device_t parent, device_t self, void *aux)
 
 	SIMPLEQ_INIT(&sc->handle[0].events);
 
-	if (sc->controller_irq != MAINBUSCF_IRQ1_DEFAULT) {
-		aprint_normal(": using MMTA irq %d\n", sc->controller_irq);
-		mmeye_intr_establish(sc->controller_irq,
-		    IST_LEVEL, IPL_TTY, mmeyepcmcia_intr, sc);
-	} else
-		aprint_normal("\n");
+	mmeye_intr_establish(sc->controller_irq,
+	    IST_LEVEL, IPL_TTY, mmeyepcmcia_intr, sc);
 
 	mmeyepcmcia_attach_sockets(sc);
 }
 
-static void *
-mmeyepcmcia_chip_intr_establish(pcmcia_chipset_handle_t pch,
-    struct pcmcia_function *pf, int ipl, int (*fct)(void *), void *arg)
+void *
+mmeyepcmcia_chip_intr_establish(pch, pf, ipl, fct, arg)
+	pcmcia_chipset_handle_t pch;
+	struct pcmcia_function *pf;
+	int ipl;
+	int (*fct)(void *);
+	void *arg;
 {
 	struct mmeyepcmcia_handle *h = (struct mmeyepcmcia_handle *) pch;
 	int irq = h->sc->card_irq;
@@ -322,12 +316,12 @@ mmeyepcmcia_chip_intr_establish(pcmcia_chipset_handle_t pch,
 	ih = mmeye_intr_establish(irq, IST_LEVEL, ipl, fct, arg);
 	h->ih_irq = irq;
 
-	printf("%s: card irq %d\n", device_xname(h->pcmcia), irq);
+	printf("%s: card irq %d\n", h->pcmcia->dv_xname, irq);
 
-	return ih;
+	return (ih);
 }
 
-static void
+void
 mmeyepcmcia_chip_intr_disestablish(pcmcia_chipset_handle_t pch, void *ih)
 {
 	struct mmeyepcmcia_handle *h = (struct mmeyepcmcia_handle *) pch;
@@ -337,14 +331,14 @@ mmeyepcmcia_chip_intr_disestablish(pcmcia_chipset_handle_t pch, void *ih)
 }
 
 
-static void
+void
 mmeyepcmcia_attach_sockets(struct mmeyepcmcia_softc *sc)
 {
 
 	mmeyepcmcia_attach_socket(&sc->handle[0]);
 }
 
-static void
+void
 mmeyepcmcia_attach_socket(struct mmeyepcmcia_handle *h)
 {
 	struct pcmciabus_attach_args paa;
@@ -361,8 +355,10 @@ mmeyepcmcia_attach_socket(struct mmeyepcmcia_handle *h)
 	paa.paa_busname = "pcmcia";
 	paa.pct = (pcmcia_chipset_tag_t) h->sc->pct;
 	paa.pch = (pcmcia_chipset_handle_t) h;
+	paa.iobase = h->sc->iobase;
+	paa.iosize = h->sc->iosize;
 
-	h->pcmcia = config_found_ia(h->sc->dev, "pcmciabus", &paa,
+	h->pcmcia = config_found_ia(&h->sc->dev, "pcmciabus", &paa,
 				    mmeyepcmcia_print);
 
 	/* if there's actually a pcmcia device attached, initialize the slot */
@@ -371,7 +367,7 @@ mmeyepcmcia_attach_socket(struct mmeyepcmcia_handle *h)
 		mmeyepcmcia_init_socket(h);
 }
 
-static void
+void
 mmeyepcmcia_event_thread(void *arg)
 {
 	struct mmeyepcmcia_handle *h = arg;
@@ -415,7 +411,7 @@ mmeyepcmcia_event_thread(void *arg)
 			}
 			splx(s);
 
-			DPRINTF(("%s: insertion event\n", device_xname(h->sc->dev)));
+			DPRINTF(("%s: insertion event\n", h->sc->dev.dv_xname));
 			mmeyepcmcia_attach_card(h);
 			break;
 
@@ -439,7 +435,7 @@ mmeyepcmcia_event_thread(void *arg)
 			}
 			splx(s);
 
-			DPRINTF(("%s: removal event\n", device_xname(h->sc->dev)));
+			DPRINTF(("%s: removal event\n", h->sc->dev.dv_xname));
 			mmeyepcmcia_detach_card(h, DETACH_FORCE);
 			break;
 
@@ -458,7 +454,7 @@ mmeyepcmcia_event_thread(void *arg)
 	kthread_exit(0);
 }
 
-static void
+void
 mmeyepcmcia_init_socket(struct mmeyepcmcia_handle *h)
 {
 	int reg;
@@ -495,36 +491,36 @@ mmeyepcmcia_init_socket(struct mmeyepcmcia_handle *h)
 	}
 
 	if (kthread_create(PRI_NONE, 0, NULL, mmeyepcmcia_event_thread, h,
-	    &h->event_thread, "%s", device_xname(h->sc->dev))) {
+	    &h->event_thread, "%s", h->sc->dev.dv_xname)) {
 		printf("%s: unable to create event thread\n",
-		    device_xname(h->sc->dev));
+		    h->sc->dev.dv_xname);
 		panic("mmeyepcmcia_create_event_thread");
 	}
 }
 
-static int
+int
 mmeyepcmcia_print(void *arg, const char *pnp)
 {
 
 	if (pnp)
 		aprint_normal("pcmcia at %s", pnp);
 
-	return UNCONF;
+	return (UNCONF);
 }
 
-static int
+int
 mmeyepcmcia_intr(void *arg)
 {
 	struct mmeyepcmcia_softc *sc = arg;
 
-	DPRINTF(("%s: intr\n", device_xname(sc->dev)));
+	DPRINTF(("%s: intr\n", sc->dev.dv_xname));
 
 	mmeyepcmcia_intr_socket(&sc->handle[0]);
 
-	return 0;
+	return (0);
 }
 
-static int
+int
 mmeyepcmcia_intr_socket(struct mmeyepcmcia_handle *h)
 {
 	int cscreg;
@@ -538,21 +534,21 @@ mmeyepcmcia_intr_socket(struct mmeyepcmcia_handle *h)
 		   MMEYEPCMCIA_CSC_BATTDEAD);
 
 	if (cscreg & MMEYEPCMCIA_CSC_GPI) {
-		DPRINTF(("%s: %02x GPI\n", device_xname(h->sc->dev), h->sock));
+		DPRINTF(("%s: %02x GPI\n", h->sc->dev.dv_xname, h->sock));
 	}
 	if (cscreg & MMEYEPCMCIA_CSC_CD) {
 		int statreg;
 
 		statreg = mmeyepcmcia_read(h, MMEYEPCMCIA_IF_STATUS);
 
-		DPRINTF(("%s: %02x CD %x\n", device_xname(h->sc->dev), h->sock,
+		DPRINTF(("%s: %02x CD %x\n", h->sc->dev.dv_xname, h->sock,
 		    statreg));
 
 		if ((statreg & MMEYEPCMCIA_IF_STATUS_CARDDETECT_MASK) ==
 		    MMEYEPCMCIA_IF_STATUS_CARDDETECT_PRESENT) {
 			if (h->laststate != MMEYEPCMCIA_LASTSTATE_PRESENT) {
 				DPRINTF(("%s: enqueing INSERTION event\n",
-						 device_xname(h->sc->dev)));
+						 h->sc->dev.dv_xname));
 				mmeyepcmcia_queue_event(h, MMEYEPCMCIA_EVENT_INSERTION);
 			}
 			h->laststate = MMEYEPCMCIA_LASTSTATE_PRESENT;
@@ -560,11 +556,11 @@ mmeyepcmcia_intr_socket(struct mmeyepcmcia_handle *h)
 			if (h->laststate == MMEYEPCMCIA_LASTSTATE_PRESENT) {
 				/* Deactivate the card now. */
 				DPRINTF(("%s: deactivating card\n",
-						 device_xname(h->sc->dev)));
+						 h->sc->dev.dv_xname));
 				mmeyepcmcia_deactivate_card(h);
 
 				DPRINTF(("%s: enqueing REMOVAL event\n",
-						 device_xname(h->sc->dev)));
+						 h->sc->dev.dv_xname));
 				mmeyepcmcia_queue_event(h, MMEYEPCMCIA_EVENT_REMOVAL);
 			}
 			h->laststate = ((statreg & MMEYEPCMCIA_IF_STATUS_CARDDETECT_MASK) == 0)
@@ -572,19 +568,19 @@ mmeyepcmcia_intr_socket(struct mmeyepcmcia_handle *h)
 		}
 	}
 	if (cscreg & MMEYEPCMCIA_CSC_READY) {
-		DPRINTF(("%s: %02x READY\n", device_xname(h->sc->dev), h->sock));
+		DPRINTF(("%s: %02x READY\n", h->sc->dev.dv_xname, h->sock));
 		/* shouldn't happen */
 	}
 	if (cscreg & MMEYEPCMCIA_CSC_BATTWARN) {
-		DPRINTF(("%s: %02x BATTWARN\n", device_xname(h->sc->dev), h->sock));
+		DPRINTF(("%s: %02x BATTWARN\n", h->sc->dev.dv_xname, h->sock));
 	}
 	if (cscreg & MMEYEPCMCIA_CSC_BATTDEAD) {
-		DPRINTF(("%s: %02x BATTDEAD\n", device_xname(h->sc->dev), h->sock));
+		DPRINTF(("%s: %02x BATTDEAD\n", h->sc->dev.dv_xname, h->sock));
 	}
-	return cscreg ? 1 : 0;
+	return (cscreg ? 1 : 0);
 }
 
-static void
+void
 mmeyepcmcia_queue_event(struct mmeyepcmcia_handle *h, int event)
 {
 	struct mmeyepcmcia_event *pe;
@@ -601,7 +597,7 @@ mmeyepcmcia_queue_event(struct mmeyepcmcia_handle *h, int event)
 	wakeup(&h->events);
 }
 
-static void
+void
 mmeyepcmcia_attach_card(struct mmeyepcmcia_handle *h)
 {
 
@@ -615,7 +611,7 @@ mmeyepcmcia_attach_card(struct mmeyepcmcia_handle *h)
 	}
 }
 
-static void
+void
 mmeyepcmcia_detach_card(struct mmeyepcmcia_handle *h, int flags)
 {
 
@@ -629,7 +625,7 @@ mmeyepcmcia_detach_card(struct mmeyepcmcia_handle *h, int flags)
 	}
 }
 
-static void
+void
 mmeyepcmcia_deactivate_card(struct mmeyepcmcia_handle *h)
 {
 
@@ -639,11 +635,12 @@ mmeyepcmcia_deactivate_card(struct mmeyepcmcia_handle *h)
 	/* Power down and reset XXX notyet */
 }
 
-static int
+int
 mmeyepcmcia_chip_mem_alloc(pcmcia_chipset_handle_t pch, bus_size_t size,
     struct pcmcia_mem_handle *pcmhp)
 {
 	struct mmeyepcmcia_handle *h = (struct mmeyepcmcia_handle *) pch;
+	bus_space_handle_t memh = 0;
 	bus_addr_t addr;
 	bus_size_t sizepg;
 	int i, mask, mhandle;
@@ -653,7 +650,7 @@ mmeyepcmcia_chip_mem_alloc(pcmcia_chipset_handle_t pch, bus_size_t size,
 	/* convert size to PCIC pages */
 	sizepg = (size + (MMEYEPCMCIA_MEM_ALIGN - 1)) / MMEYEPCMCIA_MEM_ALIGN;
 	if (sizepg > MMEYEPCMCIA_MAX_MEM_PAGES)
-		return 1;
+		return (1);
 
 	mask = (1 << sizepg) - 1;
 
@@ -662,23 +659,30 @@ mmeyepcmcia_chip_mem_alloc(pcmcia_chipset_handle_t pch, bus_size_t size,
 
 	for (i = 0; i <= MMEYEPCMCIA_MAX_MEM_PAGES - sizepg; i++) {
 		if ((h->sc->subregionmask & (mask << i)) == (mask << i)) {
+#if 0
+			if (bus_space_subregion(h->sc->memt, h->sc->memh,
+			    i * MMEYEPCMCIA_MEM_PAGESIZE,
+			    sizepg * MMEYEPCMCIA_MEM_PAGESIZE, &memh))
+				return (1);
+#endif
+			memh = h->sc->memh;
 			mhandle = mask << i;
-			addr = h->sc->iobase + (i * MMEYEPCMCIA_MEM_PAGESIZE);
+			addr = h->sc->membase + (i * MMEYEPCMCIA_MEM_PAGESIZE);
 			h->sc->subregionmask &= ~(mhandle);
 			pcmhp->memt = h->sc->memt;
-			pcmhp->memh = 0;
+			pcmhp->memh = memh;
 			pcmhp->addr = addr;
 			pcmhp->size = size;
 			pcmhp->mhandle = mhandle;
 			pcmhp->realsize = sizepg * MMEYEPCMCIA_MEM_PAGESIZE;
-			return 0;
+			return (0);
 		}
 	}
 
-	return 1;
+	return (1);
 }
 
-static void
+void
 mmeyepcmcia_chip_mem_free(pcmcia_chipset_handle_t pch,
     struct pcmcia_mem_handle *pcmhp)
 {
@@ -687,17 +691,19 @@ mmeyepcmcia_chip_mem_free(pcmcia_chipset_handle_t pch,
 	h->sc->subregionmask |= pcmhp->mhandle;
 }
 
-static int
+int
 mmeyepcmcia_chip_mem_map(pcmcia_chipset_handle_t pch, int kind,
     bus_addr_t card_addr, bus_size_t size, struct pcmcia_mem_handle *pcmhp,
     bus_size_t *offsetp, int *windowp)
 {
 	struct mmeyepcmcia_handle *h = (struct mmeyepcmcia_handle *) pch;
 	bus_addr_t busaddr;
+	long card_offset;
 	int i, win;
 
 	win = -1;
-	for (i = 0; i < MMEYEPCMCIA_WINS; i++) {
+	for (i = 0; i < MMEYEPCMCIA_WINS;
+	    i++) {
 		if ((h->memalloc & (1 << i)) == 0) {
 			win = i;
 			h->memalloc |= (1 << i);
@@ -706,45 +712,16 @@ mmeyepcmcia_chip_mem_map(pcmcia_chipset_handle_t pch, int kind,
 	}
 
 	if (win == -1)
-		return 1;
+		return (1);
 
 	*windowp = win;
 
 	/* XXX this is pretty gross */
 
-	busaddr = pcmhp->addr + card_addr;
-
-#if defined(SH7750R)
-	switch (kind) {
-	case PCMCIA_MEM_ATTR:
-	case PCMCIA_MEM_ATTR | PCMCIA_WIDTH_MEM16:
-		pcmhp->memt = SH3_BUS_SPACE_PCMCIA_ATT;
-		break;
-
-	case PCMCIA_MEM_ATTR | PCMCIA_WIDTH_MEM8:
-		pcmhp->memt = SH3_BUS_SPACE_PCMCIA_ATT8;
-		break;
-
-	case PCMCIA_MEM_COMMON:
-	case PCMCIA_MEM_COMMON | PCMCIA_WIDTH_MEM16:
-		pcmhp->memt = SH3_BUS_SPACE_PCMCIA_MEM;
-		break;
-
-	case PCMCIA_MEM_COMMON | PCMCIA_WIDTH_MEM8:
-		pcmhp->memt = SH3_BUS_SPACE_PCMCIA_MEM8;
-		break;
-
-	default:
-		panic("mmeyepcmcia_chip_mem_map kind is bogus: 0x%x", kind);
-	}
-#else
-	if (!bus_space_is_equal(h->sc->memt, pcmhp->memt))
+	if (h->sc->memt != pcmhp->memt)
 		panic("mmeyepcmcia_chip_mem_map memt is bogus");
-	if (kind != PCMCIA_MEM_ATTR)
-		busaddr += MMEYEPCMCIA_ATTRMEM_SIZE;
-#endif
-	if (bus_space_map(pcmhp->memt, busaddr, pcmhp->size, 0, &pcmhp->memh))
-		return 1;
+
+	busaddr = pcmhp->addr;
 
 	/*
 	 * compute the address offset to the pcmcia address space for the
@@ -754,6 +731,7 @@ mmeyepcmcia_chip_mem_map(pcmcia_chipset_handle_t pch, int kind,
 	 */
 
 	*offsetp = 0;
+	card_addr -= *offsetp;
 
 	DPRINTF(("mmeyepcmcia_chip_mem_map window %d bus %lx+%lx+%lx at card addr "
 	    "%lx\n", win, (u_long) busaddr, (u_long) * offsetp, (u_long) size,
@@ -763,16 +741,25 @@ mmeyepcmcia_chip_mem_map(pcmcia_chipset_handle_t pch, int kind,
 	 * include the offset in the size, and decrement size by one, since
 	 * the hw wants start/stop
 	 */
-	h->mem[win].addr = busaddr;
-	h->mem[win].size = size - 1;
-	h->mem[win].kind = kind;
-	h->mem[win].memt = pcmhp->memt;
-	h->mem[win].memh = pcmhp->memh;
+	size += *offsetp - 1;
 
-	return 0;
+	card_offset = (((long) card_addr) - ((long) busaddr));
+
+	h->mem[win].addr = busaddr;
+	h->mem[win].size = size;
+	h->mem[win].offset = card_offset;
+	h->mem[win].kind = kind;
+
+	if (kind == PCMCIA_MEM_ATTR) {
+		pcmhp->memh = h->sc->memh + card_addr;
+	} else {
+		pcmhp->memh = h->sc->memh + card_addr + MMEYEPCMCIA_ATTRMEM_SIZE;
+	}
+
+	return (0);
 }
 
-static void
+void
 mmeyepcmcia_chip_mem_unmap(pcmcia_chipset_handle_t pch, int window)
 {
 	struct mmeyepcmcia_handle *h = (struct mmeyepcmcia_handle *) pch;
@@ -781,49 +768,62 @@ mmeyepcmcia_chip_mem_unmap(pcmcia_chipset_handle_t pch, int window)
 		panic("mmeyepcmcia_chip_mem_unmap: window out of range");
 
 	h->memalloc &= ~(1 << window);
-
-	bus_space_unmap(h->mem[window].memt, h->mem[window].memh,
-	    h->mem[window].size);
 }
 
-static int
+int
 mmeyepcmcia_chip_io_alloc(pcmcia_chipset_handle_t pch, bus_addr_t start,
     bus_size_t size, bus_size_t align, struct pcmcia_io_handle *pcihp)
 {
 	struct mmeyepcmcia_handle *h = (struct mmeyepcmcia_handle *) pch;
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	bus_addr_t ioaddr;
+	int flags = 0;
 
 	/*
 	 * Allocate some arbitrary I/O space.
 	 */
 
-	DPRINTF(("mmeyepcmcia_chip_io_alloc alloc port %lx+%lx\n",
-	    (u_long) ioaddr, (u_long) size));
+	iot = h->sc->iot;
 
-	pcihp->iot = h->sc->memt;
-	pcihp->ioh = 0;
-	pcihp->addr = h->sc->iobase + start;
+	if (start) {
+		ioaddr = start;
+		ioh = start;
+		DPRINTF(("mmeyepcmcia_chip_io_alloc map port %lx+%lx\n",
+		    (u_long) ioaddr, (u_long) size));
+	} else {
+		flags |= PCMCIA_IO_ALLOCATED;
+		ioaddr = ioh = h->sc->iobase;
+		DPRINTF(("mmeyepcmcia_chip_io_alloc alloc port %lx+%lx\n",
+		    (u_long) ioaddr, (u_long) size));
+	}
+
+	pcihp->iot = iot;
+	pcihp->ioh = ioh + h->sc->memh + MMEYEPCMCIA_ATTRMEM_SIZE;
+	pcihp->addr = ioaddr;
 	pcihp->size = size;
+	pcihp->flags = flags;
 
-	return 0;
+	return (0);
 }
 
-static void
+void
 mmeyepcmcia_chip_io_free(pcmcia_chipset_handle_t pch,
     struct pcmcia_io_handle *pcihp)
 {
 }
 
-static int
-mmeyepcmcia_chip_io_map(pcmcia_chipset_handle_t pch, int width,
-    bus_addr_t offset, bus_size_t size, struct pcmcia_io_handle *pcihp,
-    int *windowp)
+int
+mmeyepcmcia_chip_io_map(pcmcia_chipset_handle_t pch, int width, bus_addr_t offset,
+    bus_size_t size, struct pcmcia_io_handle *pcihp, int *windowp)
 {
 	struct mmeyepcmcia_handle *h = (struct mmeyepcmcia_handle *) pch;
-	bus_addr_t busaddr;
+	bus_addr_t ioaddr = pcihp->addr + offset;
 	int i, win;
 #ifdef MMEYEPCMCIADEBUG
 	static char *width_names[] = { "auto", "io8", "io16" };
 #endif
+	int reg;
 
 	/* I/O width is hardwired to 16bit mode on mmeye. */
 	width = PCMCIA_WIDTH_IO16;
@@ -838,51 +838,41 @@ mmeyepcmcia_chip_io_map(pcmcia_chipset_handle_t pch, int width,
 	}
 
 	if (win == -1)
-		return 1;
+		return (1);
 
 	*windowp = win;
 
 	/* XXX this is pretty gross */
 
-	busaddr = pcihp->addr + offset;
-
-#if defined(SH7750R)
-	switch (width) {
-	case PCMCIA_WIDTH_IO8:
-		pcihp->iot = SH3_BUS_SPACE_PCMCIA_IO8;
-		break;
-
-	case PCMCIA_WIDTH_IO16:
-		pcihp->iot = SH3_BUS_SPACE_PCMCIA_IO;
-		break;
-
-	case PCMCIA_WIDTH_AUTO:
-	default:
-		panic("mmeyepcmcia_chip_io_map width is bogus: 0x%x", width);
-	}
-#else
-	if (!bus_space_is_equal(h->sc->iot, pcihp->iot))
+	if (h->sc->iot != pcihp->iot)
 		panic("mmeyepcmcia_chip_io_map iot is bogus");
-	busaddr += MMEYEPCMCIA_ATTRMEM_SIZE;
-#endif
-	if (bus_space_map(pcihp->iot, busaddr, pcihp->size, 0, &pcihp->ioh))
-		return 1;
 
 	DPRINTF(("mmeyepcmcia_chip_io_map window %d %s port %lx+%lx\n",
-		 win, width_names[width], (u_long) offset, (u_long) size));
+		 win, width_names[width], (u_long) ioaddr, (u_long) size));
 
 	/* XXX wtf is this doing here? */
 
-	h->io[win].addr = busaddr;
+	printf("%s: port 0x%lx", h->sc->dev.dv_xname, (u_long) ioaddr);
+	if (size > 1)
+		printf("-0x%lx", (u_long) ioaddr + (u_long) size - 1);
+	printf("\n");
+
+	h->io[win].addr = ioaddr;
 	h->io[win].size = size;
 	h->io[win].width = width;
-	h->io[win].iot = pcihp->iot;
-	h->io[win].ioh = pcihp->ioh;
 
-	return 0;
+	pcihp->ioh = h->sc->memh + MMEYEPCMCIA_ATTRMEM_SIZE;
+
+	if (width == PCMCIA_WIDTH_IO8) { /* IO8 */
+		reg = mmeyepcmcia_read(h, MMEYEPCMCIA_IF_STATUS);
+		reg |= MMEYEPCMCIA_IF_STATUS_BUSWIDTH; /* Set bus width to 8bit */
+		mmeyepcmcia_write(h, MMEYEPCMCIA_IF_STATUS, reg);
+	}
+
+	return (0);
 }
 
-static void
+void
 mmeyepcmcia_chip_io_unmap(pcmcia_chipset_handle_t pch, int window)
 {
 	struct mmeyepcmcia_handle *h = (struct mmeyepcmcia_handle *) pch;
@@ -891,22 +881,14 @@ mmeyepcmcia_chip_io_unmap(pcmcia_chipset_handle_t pch, int window)
 		panic("mmeyepcmcia_chip_io_unmap: window out of range");
 
 	h->ioalloc &= ~(1 << window);
-
-	bus_space_unmap(h->io[window].iot, h->io[window].ioh,
-	    h->io[window].size);
 }
 
-static void
+void
 mmeyepcmcia_chip_socket_enable(pcmcia_chipset_handle_t pch)
 {
 }
 
-static void
+void
 mmeyepcmcia_chip_socket_disable(pcmcia_chipset_handle_t pch)
-{
-}
-
-static void
-mmeyepcmcia_chip_socket_settype(pcmcia_chipset_handle_t pch, int type)
 {
 }

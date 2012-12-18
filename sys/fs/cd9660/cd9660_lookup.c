@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_lookup.c,v 1.22 2012/11/05 17:27:37 dholland Exp $	*/
+/*	$NetBSD: cd9660_lookup.c,v 1.16 2008/05/16 09:21:59 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993, 1994
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_lookup.c,v 1.22 2012/11/05 17:27:37 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_lookup.c,v 1.16 2008/05/16 09:21:59 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/namei.h>
@@ -116,7 +116,7 @@ cd9660_lookup(void *v)
 	ino_t ino = 0;
 	int reclen;
 	u_short namelen;
-	char altname[ISO_MAXNAMLEN];
+	char altname[NAME_MAX];
 	int res;
 	int assoc, len;
 	const char *name;
@@ -151,10 +151,8 @@ cd9660_lookup(void *v)
 	 * check the name cache to see if the directory/name pair
 	 * we are looking for is known already.
 	 */
-	if (cache_lookup(vdp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags, NULL, vpp)) {
-		return *vpp == NULLVP ? ENOENT : 0;
-	}
+	if ((error = cache_lookup(vdp, vpp, cnp)) >= 0)
+		return (error);
 
 	len = cnp->cn_namelen;
 	name = cnp->cn_nameptr;
@@ -338,8 +336,11 @@ notfound:
 	/*
 	 * Insert name into cache (as non-existent) if appropriate.
 	 */
-	cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen, cnp->cn_flags);
-	return (nameiop == CREATE || nameiop == RENAME) ? EROFS : ENOENT;
+	if (cnp->cn_flags & MAKEENTRY)
+		cache_enter(vdp, *vpp, cnp);
+	if (nameiop == CREATE || nameiop == RENAME)
+		return (EROFS);
+	return (ENOENT);
 
 found:
 	if (numdirpasses == 2)
@@ -380,7 +381,7 @@ found:
 	 */
 	brelse(bp, 0);
 	if (flags & ISDOTDOT) {
-		VOP_UNLOCK(pdp);	/* race to get the inode */
+		VOP_UNLOCK(pdp, 0);	/* race to get the inode */
 		error = cd9660_vget_internal(vdp->v_mount, dp->i_ino, &tdp,
 					     dp->i_ino != ino, ep);
 		vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY);
@@ -388,7 +389,7 @@ found:
 			return error;
 		*vpp = tdp;
 	} else if (dp->i_number == dp->i_ino) {
-		vref(vdp);	/* we want ourself, ie "." */
+		VREF(vdp);	/* we want ourself, ie "." */
 		*vpp = vdp;
 	} else {
 		error = cd9660_vget_internal(vdp->v_mount, dp->i_ino, &tdp,
@@ -401,8 +402,9 @@ found:
 	/*
 	 * Insert name into cache if appropriate.
 	 */
-	cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen, cnp->cn_flags);
-	return 0;
+	if (cnp->cn_flags & MAKEENTRY)
+		cache_enter(vdp, *vpp, cnp);
+	return (0);
 }
 
 /*

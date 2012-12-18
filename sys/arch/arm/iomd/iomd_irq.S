@@ -1,4 +1,4 @@
-/*	$NetBSD: iomd_irq.S,v 1.14 2012/08/29 07:06:27 matt Exp $	*/
+/*	$NetBSD: iomd_irq.S,v 1.12 2008/08/19 19:10:08 matt Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -120,8 +120,6 @@ ASENTRY_NP(irq_entry)
 
 	PUSHFRAMEINSVC			/* Push an interrupt frame */
 	ENABLE_ALIGNMENT_FAULTS
-
-	str	r7, [sp, #TF_FILL]	/* save r7 */
 
 	/* Load r8 with the IOMD interrupt requests */
 
@@ -266,29 +264,25 @@ irqloop:
 	 *	- unsetting of the irq bit in r11
 	 *	- irq stats (if enabled) also get put in the mix
 	 */
+	ldr	r5, Lcnt		/* Stat info A */
 	ldr	r6, [r7, r9, lsl #2]	/* Get address of first handler structure */
 
+	ldr	r1, [r5, #(V_INTR)]	/* Stat info B */
+	
 	teq	r6, #0x00000000		/* Do we have a handler */
 	moveq	r0, r8			/* IRQ requests as arg 0 */
 	adreq	lr, nextirq		/* return Address */
 	beq	_C_LABEL(stray_irqhandler) /* call special handler */
 	
-	/* stat info C */
-	ldr	r1, [r4, #(CI_CC_NINTR)] /* Stat info B */
-	ldr	r2, [r4, #(CI_CC_NINTR+4)]
-#ifdef _ARMEL
-	adds	r1, r1, #0x00000001
-	adc	r2, r2, #0x00000000
-#else
-	adds	r2, r2, #0x00000001
-	adc	r1, r1, #0x00000000
-#endif
-	str	r1, [r4, #(CI_CC_NINTR)]
-	str	r2, [r4, #(CI_CC_NINTR+4)]
-
 #ifdef IRQSTATS
 	ldr	r2, Lintrcnt
 	ldr	r3, [r6, #(IH_NUM)]
+#endif
+	/* stat info C */
+	add	r1, r1, #0x00000001
+	str	r1, [r5, #(V_INTR)]
+
+#ifdef IRQSTATS
 	ldr	r3, [r2, r3, lsl #2]!
 #endif
 	bic	r11, r11, r10		/* clear the IRQ bit */
@@ -341,7 +335,6 @@ exitirq:
 	sub	r0, r0, #1
 	str	r0, [r4, #CI_INTR_DEPTH]
 
-	ldr	r7, [sp, #TF_FILL]		/* restore r7 */
 	LOCK_CAS_CHECK
 
 	DO_AST_AND_RESTORE_ALIGNMENT_FAULTS
@@ -403,6 +396,9 @@ continue_setting_masks:
 	msr	cpsr_all, r3
 	mov	pc, lr
 
+Lcnt:
+	.word	_C_LABEL(uvmexp)
+
 Lintrcnt:
 	.word	_C_LABEL(intrcnt)
 
@@ -413,11 +409,12 @@ Lirqhandlers:
 #ifdef IRQSTATS
 /* These symbols are used by vmstat */
 
-	.section .rodata
-
+	.text
 	.global	_C_LABEL(_intrnames)
 _C_LABEL(_intrnames):
 	.word	_C_LABEL(intrnames)
+
+	.data
 
         .globl  _C_LABEL(intrnames), _C_LABEL(eintrnames), _C_LABEL(intrcnt), _C_LABEL(sintrcnt), _C_LABEL(eintrcnt)
 _C_LABEL(intrnames):
@@ -501,7 +498,7 @@ _C_LABEL(eintrcnt):
 #else	/* IRQSTATS */
 	/* Dummy entries to keep vmstat happy */
 
-	.section .rodata
+	.text
         .globl  _C_LABEL(intrnames), _C_LABEL(eintrnames), _C_LABEL(intrcnt), _C_LABEL(eintrcnt)
 _C_LABEL(intrnames):
 	.long	0

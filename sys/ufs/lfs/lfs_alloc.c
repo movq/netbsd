@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_alloc.c,v 1.112 2012/02/16 02:47:55 perseant Exp $	*/
+/*	$NetBSD: lfs_alloc.c,v 1.107 2008/04/28 20:24:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2007 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_alloc.c,v 1.112 2012/02/16 02:47:55 perseant Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_alloc.c,v 1.107 2008/04/28 20:24:11 martin Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -87,6 +87,8 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_alloc.c,v 1.112 2012/02/16 02:47:55 perseant Exp
 
 #include <ufs/lfs/lfs.h>
 #include <ufs/lfs/lfs_extern.h>
+
+extern kmutex_t ufs_hashlock;
 
 /* Constants for inode free bitmap */
 #define BMSHIFT 5	/* 2 ** 5 = 32 */
@@ -207,6 +209,7 @@ lfs_valloc(struct vnode *pvp, int mode, kauth_cred_t cred,
 	ASSERT_NO_SEGLOCK(fs);
 
 	lfs_seglock(fs, SEGM_PROT);
+	vn_lock(fs->lfs_ivnode, LK_EXCLUSIVE);
 
 	/* Get the head of the freelist. */
 	LFS_GET_HEADFREE(fs, cip, cbp, &new_ino);
@@ -235,6 +238,7 @@ lfs_valloc(struct vnode *pvp, int mode, kauth_cred_t cred,
 	if (fs->lfs_freehd == LFS_UNUSED_INUM) {
 		if ((error = lfs_extend_ifile(fs, cred)) != 0) {
 			LFS_PUT_HEADFREE(fs, cip, cbp, new_ino);
+			VOP_UNLOCK(fs->lfs_ivnode, 0);
 			lfs_segunlock(fs);
 			return error;
 		}
@@ -250,6 +254,7 @@ lfs_valloc(struct vnode *pvp, int mode, kauth_cred_t cred,
 	mutex_exit(&lfs_lock);
 	++fs->lfs_nfiles;
 
+	VOP_UNLOCK(fs->lfs_ivnode, 0);
 	lfs_segunlock(fs);
 
 	return lfs_ialloc(fs, pvp, new_ino, new_gen, vpp);
@@ -301,7 +306,7 @@ lfs_ialloc(struct lfs *fs, struct vnode *pvp, ino_t new_ino, int new_gen,
 	uvm_vnp_setsize(vp, 0);
 	lfs_mark_vnode(vp);
 	genfs_node_init(vp, &lfs_genfsops);
-	vref(ip->i_devvp);
+	VREF(ip->i_devvp);
 	return (0);
 }
 
@@ -430,13 +435,14 @@ lfs_vfree(struct vnode *vp, ino_t ino, int mode)
 	DLOG((DLOG_ALLOC, "lfs_vfree: free ino %lld\n", (long long)ino));
 
 	/* Drain of pending writes */
-	mutex_enter(vp->v_interlock);
+	mutex_enter(&vp->v_interlock);
 	while (fs->lfs_version > 1 && WRITEINPROG(vp)) {
-		cv_wait(&vp->v_cv, vp->v_interlock);
+		cv_wait(&vp->v_cv, &vp->v_interlock);
 	}
-	mutex_exit(vp->v_interlock);
+	mutex_exit(&vp->v_interlock);
 
 	lfs_seglock(fs, SEGM_PROT);
+	vn_lock(fs->lfs_ivnode, LK_EXCLUSIVE);
 
 	lfs_unmark_vnode(vp);
 	mutex_enter(&lfs_lock);
@@ -571,6 +577,7 @@ lfs_vfree(struct vnode *vp, ino_t ino, int mode)
 	mutex_exit(&lfs_lock);
 	--fs->lfs_nfiles;
 
+	VOP_UNLOCK(fs->lfs_ivnode, 0);
 	lfs_segunlock(fs);
 
 	return (0);

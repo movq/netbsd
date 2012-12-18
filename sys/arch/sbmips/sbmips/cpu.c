@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.c,v 1.21 2011/07/09 16:59:40 matt Exp $ */
+/* $NetBSD: cpu.c,v 1.18 2008/05/26 15:59:30 tsutsui Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,39 +33,38 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.21 2011/07/09 16:59:40 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.18 2008/05/26 15:59:30 tsutsui Exp $");
 
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
-#include <sys/cpu.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
+#include <sys/cpu.h>
 
 #include <mips/locore.h>
 #include <mips/cache.h>
 
-#include <sbmips/cpuvar.h>
+#include <machine/cpu.h>
 
 #include <mips/sibyte/include/zbbusvar.h>
 #include <mips/sibyte/include/sb1250_regs.h>
 #include <mips/sibyte/include/sb1250_scd.h>
 #include <mips/sibyte/dev/sbscdvar.h>
-#include <mips/cfe/cfe_api.h>
 
-#define	READ_REG(rp)		(mips3_ld((volatile uint64_t *)(rp)))
+#define	READ_REG(rp)		(mips3_ld((uint64_t *)(rp)))
 
-static int	cpu_match(device_t, cfdata_t, void *);
-static void	cpu_attach(device_t, device_t, void *);
+static int	cpu_match(struct device *, struct cfdata *, void *);
+static void	cpu_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(cpu, sizeof(struct cpu_softc),
+CFATTACH_DECL(cpu, sizeof(struct device),
     cpu_match, cpu_attach, NULL, NULL);
 
-static u_int found = 0;
+static int found = 0;
 
 static int
-cpu_match(device_t parent, cfdata_t match, void *aux)
+cpu_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct zbbus_attach_args *zap = aux;
 	int part;
@@ -82,19 +81,26 @@ cpu_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-cpu_attach(device_t parent, device_t self, void *aux)
+cpu_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct cpu_info *ci;
-	struct cpu_softc * const cpu = device_private(self);
-	const char * const xname = device_xname(self);
-	uint32_t config;
 	int plldiv;
-
-	found++;
+	uint32_t config;
 
 	/* XXX this code must run on the target CPU */
 	config = mips3_cp0_config_read();
-	KASSERT((config & MIPS3_CONFIG_K0_MASK) == 5);
+	config &= ~MIPS3_CONFIG_K0_MASK;
+	config |= 0x05;				/* XXX.  cacheable coherent */
+	mips3_cp0_config_write(config);
+
+	found++;
+
+	/*
+	 * Flush all of the caches, so that any lines marked non-coherent will
+	 * be flushed.  Don't need to worry about L2; it's always
+	 * coherent (XXX???).
+	 */
+	mips_icache_sync_all();
+	mips_dcache_wbinv_all();
 
 	/* Determine CPU frequency */
 
@@ -104,74 +110,36 @@ cpu_attach(device_t parent, device_t self, void *aux)
 	 */
 	plldiv = G_SYS_PLL_DIV(READ_REG(MIPS_PHYS_TO_KSEG1(A_SCD_SYSTEM_CFG)));
 	if (plldiv == 0) {
-		aprint_normal(": PLL_DIV of zero found, assuming 6 (300MHz)\n");
+		printf("PLL_DIV of zero found, assuming 6 (300MHz)\n");
 		plldiv = 6;
 
-		aprint_normal("%s", xname);
+		printf("%s", self->dv_xname);
 	}
 
-	if (found == 1) {
-		ci = curcpu();
-		ci->ci_cpu_freq = 50000000 * plldiv;
-		/* Compute the delay divisor. */
-		ci->ci_divisor_delay = (ci->ci_cpu_freq + 500000) / 1000000;
-		/* Compute clock cycles per hz */
-		ci->ci_cycles_per_hz = (ci->ci_cpu_freq + hz / 2 ) / hz;
+	curcpu()->ci_cpu_freq = 50000000 * plldiv;
+	/* Compute the delay divisor. */
+	curcpu()->ci_divisor_delay = (curcpu()->ci_cpu_freq + 500000) / 1000000;
+	/* Compute clock cycles per hz */
+	curcpu()->ci_cycles_per_hz = (curcpu()->ci_cpu_freq + hz / 2 ) / hz;
 
-		aprint_normal(": %lu.%02luMHz (hz cycles = %lu, delay divisor = %lu)\n",
-		    ci->ci_cpu_freq / 1000000,
-		    (ci->ci_cpu_freq % 1000000) / 10000,
-		    ci->ci_cycles_per_hz, ci->ci_divisor_delay);
-
-		KASSERT(ci->ci_cpuid == 0);
-
-		cpu->sb1cpu_dev = self;
-		cpu->sb1cpu_ci = ci;
-		ci->ci_softc = cpu;
-
-		sb1250_cpu_init(cpu);
-	} else {
-#if defined(MULTIPROCESSOR)
-		int status;
-		ci = cpu_info_alloc(NULL, found - 1, 0, found - 1, 0);
-		KASSERT(ci);
-
-		cpu->sb1cpu_dev = self;
-		cpu->sb1cpu_ci = ci;
-		ci->ci_softc = cpu;
-
-		sb1250_cpu_init(cpu);
-
-		status = cfe_cpu_start(ci->ci_cpuid, cpu_trampoline,
-		    (long) ci->ci_data.cpu_idlelwp->l_md.md_utf, 0,
-		    (long) ci);
-		if (status != 0) {
-			aprint_error(": CFE call to start failed: %d\n",
-			    status);
-		}
-		const u_long cpu_mask = 1L << cpu_index(ci);
-		for (size_t i = 0; i < 10000; i++) {
-			if (cpus_hatched & cpu_mask)
-				 break;
-			DELAY(100);
-		}
-		if ((cpus_hatched & cpu_mask) == 0) {
-			aprint_error(": failed to hatch!\n");
-			return;
-		}
-#else
-		aprint_normal_dev(self,
-		    "processor off-line; "
-		    "multiprocessor support not present in kernel\n");
-		return;
-#endif
-	}
+	printf(": %lu.%02luMHz (hz cycles = %lu, delay divisor = %lu)\n",
+	    curcpu()->ci_cpu_freq / 1000000,
+	    (curcpu()->ci_cpu_freq % 1000000) / 10000,
+	    curcpu()->ci_cycles_per_hz, curcpu()->ci_divisor_delay);
 
 	/*
-	 * Announce ourselves.
+	 * If we're the primary CPU, no more work to do; we're already
+	 * running!
 	 */
-	aprint_normal("%s: ", xname);
-	cpu_identify(self);
-
-	cpu_attach_common(self, ci);
+	if (found == 1) {
+		printf("%s: ", self->dv_xname);
+		cpu_identify();
+	} else {
+#if defined(MULTIPROCESSOR)
+# error!
+#else
+		printf("%s: processor off-line; multiprocessor support "
+		    "not present in kernel\n", /* sc->sc_dev. */self->dv_xname);
+#endif
+	}
 }

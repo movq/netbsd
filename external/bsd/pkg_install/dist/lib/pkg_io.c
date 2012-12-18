@@ -1,4 +1,4 @@
-/*	$NetBSD: pkg_io.c,v 1.1.1.9 2010/04/23 20:54:11 joerg Exp $	*/
+/*	$NetBSD: pkg_io.c,v 1.1.1.1.6.3 2010/02/03 00:38:23 snj Exp $	*/
 /*-
  * Copyright (c) 2008, 2009 Joerg Sonnenberger <joerg@NetBSD.org>.
  * All rights reserved.
@@ -36,7 +36,7 @@
 #include <sys/cdefs.h>
 #endif
 
-__RCSID("$NetBSD: pkg_io.c,v 1.1.1.9 2010/04/23 20:54:11 joerg Exp $");
+__RCSID("$NetBSD: pkg_io.c,v 1.1.1.1.6.3 2010/02/03 00:38:23 snj Exp $");
 
 #include <archive.h>
 #include <archive_entry.h>
@@ -63,22 +63,16 @@ struct fetch_archive {
 	struct url *url;
 	fetchIO *fetch;
 	char buffer[32768];
-	off_t size;
-	int restart;
 };
 
 static int
 fetch_archive_open(struct archive *a, void *client_data)
 {
 	struct fetch_archive *f = client_data;
-	struct url_stat us;
 
-	f->fetch = fetchXGet(f->url, &us, fetch_flags);
+	f->fetch = fetchGet(f->url, fetch_flags);
 	if (f->fetch == NULL)
 		return ENOENT;
-	f->size = us.size;
-	f->restart = 1;
-	f->url->offset = 0;
 	return 0;
 }
 
@@ -87,39 +81,9 @@ fetch_archive_read(struct archive *a, void *client_data,
     const void **buffer)
 {
 	struct fetch_archive *f = client_data;
-	struct url_stat us;
-	ssize_t rv;	
-
+	
 	*buffer = f->buffer;
-	rv = fetchIO_read(f->fetch, f->buffer, sizeof(f->buffer));
-	if (rv > 0) {
-		f->url->offset += rv;
-		return rv;
-	}
-	if (f->restart == 0)
-		return rv;
-	if (rv == 0) {
-		if (f->size == -1)
-			return 0;
-		if (f->url->offset == f->size)
-			return 0;
-	}
-	f->restart = 0;
-	if (1) {
-		char *url = fetchStringifyURL(f->url);
-		fprintf(stderr, "Trying to reconnect %s\n", url);
-		free(url);
-	}
-	fetchIO_close(f->fetch);
-	f->fetch = fetchXGet(f->url, &us, fetch_flags);
-	if (f->fetch == NULL)
-		return -1;
-	if (us.size != f->size)
-		return -1;
-	rv = fetchIO_read(f->fetch, f->buffer, sizeof(f->buffer));
-	if (rv > 0)
-		f->url->offset += rv;
-	return rv;
+	return fetchIO_read(f->fetch, f->buffer, sizeof(f->buffer));	
 }
 
 static int
@@ -129,29 +93,24 @@ fetch_archive_close(struct archive *a, void *client_data)
 
 	if (f->fetch != NULL)
 		fetchIO_close(f->fetch);
-	fetchFreeURL(f->url);
 	free(f);
 	return 0;
 }
 
 static struct archive *
-open_archive_by_url(struct url *url, char **archive_name)
+open_archive_by_url(struct url *url)
 {
 	struct fetch_archive *f;
 	struct archive *a;
 
 	f = xmalloc(sizeof(*f));
-	f->url = fetchCopyURL(url);
-
-	*archive_name = fetchStringifyURL(url);
+	f->url = url;
 
 	a = archive_read_new();
 	archive_read_support_compression_all(a);
 	archive_read_support_format_all(a);
 	if (archive_read_open(a, f, fetch_archive_open, fetch_archive_read,
 	    fetch_archive_close)) {
-		free(*archive_name);
-		*archive_name = NULL;
 		archive_read_finish(a);
 		return NULL;
 	}
@@ -160,12 +119,10 @@ open_archive_by_url(struct url *url, char **archive_name)
 }
 
 struct archive *
-open_archive(const char *url, char **archive_name)
+open_archive(const char *url)
 {
 	struct url *u;
 	struct archive *a;
-
-	*archive_name = NULL;
 
 	if (!IS_URL(url)) {
 		a = archive_read_new();
@@ -175,14 +132,13 @@ open_archive(const char *url, char **archive_name)
 			archive_read_close(a);
 			return NULL;
 		}
-		*archive_name = xstrdup(url);
 		return a;
 	}
 
 	if ((u = fetchParseURL(url)) == NULL)
 		return NULL;
 
-	a = open_archive_by_url(u, archive_name);
+	a = open_archive_by_url(u);
 
 	fetchFreeURL(u);
 	return a;
@@ -335,7 +291,7 @@ find_best_package(const char *toplevel, const char *pattern, int do_path)
 }
 
 struct archive *
-find_archive(const char *fname, int top_level, char **archive_name)
+find_archive(const char *fname, int top_level)
 {
 	struct archive *a;
 	struct url *best_match;
@@ -359,7 +315,7 @@ find_archive(const char *fname, int top_level, char **archive_name)
 		*last_slash = '/';
 	}
 
-	a = open_archive(full_fname, archive_name);
+	a = open_archive(full_fname);
 	if (a != NULL) {
 		free(full_fname);
 		return a;
@@ -377,7 +333,7 @@ find_archive(const char *fname, int top_level, char **archive_name)
 
 	if (best_match == NULL)
 		return NULL;
-	a = open_archive_by_url(best_match, archive_name);
+	a = open_archive_by_url(best_match);
 	fetchFreeURL(best_match);
 	return a;
 }

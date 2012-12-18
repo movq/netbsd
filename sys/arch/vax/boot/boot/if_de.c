@@ -1,4 +1,4 @@
-/*	$NetBSD: if_de.c,v 1.8 2009/10/26 19:16:58 cegger Exp $	*/
+/*	$NetBSD: if_de.c,v 1.4 2006/07/01 05:55:34 mrg Exp $	*/
 
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden. All rights reserved.
@@ -56,7 +56,7 @@
 
 #include "vaxstand.h"
 
-static int de_get(struct iodesc *, void *, size_t, saseconds_t);
+static int de_get(struct iodesc *, void *, size_t, time_t);
 static int de_put(struct iodesc *, void *, size_t);
 static void dewait(char *);
 
@@ -122,7 +122,7 @@ deopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 		map[i] = PG_V | (cdata + i);
 	}
 
-	memset((char *)dc, 0, sizeof(struct de_cdata));
+	bzero((char *)dc, sizeof(struct de_cdata));
 	
 	/* Tell the DEUNA about our PCB */
 	DE_WCSR(DE_PCSR2, LOWORD(pdc));
@@ -134,7 +134,7 @@ deopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 	dc->dc_pcbb.pcbb0 = FC_RDPHYAD;
 	DE_WLOW(CMD_GETCMD);
 	dewait("read physaddr");
-	memcpy(eaddr, (char *)&dc->dc_pcbb.pcbb2, 6);
+	bcopy((char *)&dc->dc_pcbb.pcbb2, eaddr, 6);
 
 	/* Create and link the descriptors */
 	for (i=0; i < NRCV; i++) {
@@ -191,7 +191,7 @@ deopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 }
 
 int
-de_get(struct iodesc *desc, void *pkt, size_t maxlen, saseconds_t timeout)
+de_get(struct iodesc *desc, void *pkt, size_t maxlen, time_t timeout)
 {
 	volatile int to = 100000 * timeout;
 	int len, csr0;
@@ -213,7 +213,7 @@ retry:
 	if (len > maxlen)
 		len = maxlen;
 	if (len)
-		memcpy(pkt, (char *)&dc->dc_rbuf[crx][0], len);
+		bcopy((char *)&dc->dc_rbuf[crx][0], pkt, len);
 
 	dc->dc_rrent[crx].r_flags = RFLG_OWN;
 	dc->dc_rrent[crx].r_lenerr = 0;
@@ -247,7 +247,7 @@ retry:
 	if (dc->dc_xrent[ctx].r_flags & RFLG_OWN)
 		goto retry;
 
-	memcpy((char *)&dc->dc_xbuf[ctx][0], pkt, len);
+	bcopy(pkt, (char *)&dc->dc_xbuf[ctx][0], len);
 
 	dc->dc_xrent[ctx].r_slen = len;
 	dc->dc_xrent[ctx].r_tdrerr = 0;

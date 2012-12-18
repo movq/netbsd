@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile,v 1.7 2010/02/03 15:34:47 roy Exp $
+#	$NetBSD: Makefile,v 1.6 2003/11/12 02:17:53 matt Exp $
 
 PROG=	sunlabel
 MAN=	sunlabel.8
 
 .ifndef HOSTPROG
-LDADD+=	-lterminfo
-DPADD+=	${LIBTERMINFO}
+LDADD+=	-ltermcap
+DPADD+=	${LIBTERMCAP}
 
 DPADD+=	${LIBUTIL}
 LDADD+=	-lutil

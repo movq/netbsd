@@ -1,6 +1,7 @@
-#	$NetBSD: Makefile,v 1.38 2009/04/11 07:58:12 lukem Exp $
+#	$NetBSD: Makefile,v 1.37 2007/02/04 20:54:02 christos Exp $
 #	@(#)Makefile	8.1 (Berkeley) 7/19/93
 
+WARNS=	4
 PROG=	init
 MAN=	init.8
 DPADD=	${LIBUTIL}

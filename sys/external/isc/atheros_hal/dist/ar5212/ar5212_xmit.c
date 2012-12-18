@@ -14,7 +14,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ar5212_xmit.c,v 1.3 2011/03/07 11:25:43 cegger Exp $
+ * $Id: ar5212_xmit.c,v 1.1.1.1.10.2 2009/08/07 06:43:43 snj Exp $
  */
 #include "opt_ah.h"
 
@@ -48,19 +48,16 @@ ar5212UpdateTxTrigLevel(struct ath_hal *ah, HAL_BOOL bIncTrigLevel)
 	uint32_t txcfg, curLevel, newLevel;
 	HAL_INT omask;
 
-	if (ahp->ah_txTrigLev >= ahp->ah_maxTxTrigLev)
-		return AH_FALSE;
-
 	/*
 	 * Disable interrupts while futzing with the fifo level.
 	 */
-	omask = ath_hal_setInterrupts(ah, ahp->ah_maskReg &~ HAL_INT_GLOBAL);
+	omask = ar5212SetInterrupts(ah, ahp->ah_maskReg &~ HAL_INT_GLOBAL);
 
 	txcfg = OS_REG_READ(ah, AR_TXCFG);
 	curLevel = MS(txcfg, AR_FTRIG);
 	newLevel = curLevel;
 	if (bIncTrigLevel) {		/* increase the trigger level */
-		if (curLevel < ahp->ah_maxTxTrigLev)
+		if (curLevel < MAX_TX_FIFO_THRESHOLD)
 			newLevel++;
 	} else if (curLevel > MIN_TX_FIFO_THRESHOLD)
 		newLevel--;
@@ -69,10 +66,8 @@ ar5212UpdateTxTrigLevel(struct ath_hal *ah, HAL_BOOL bIncTrigLevel)
 		OS_REG_WRITE(ah, AR_TXCFG,
 			(txcfg &~ AR_FTRIG) | SM(newLevel, AR_FTRIG));
 
-	ahp->ah_txTrigLev = newLevel;
-
 	/* re-enable chip interrupts */
-	ath_hal_setInterrupts(ah, omask);
+	ar5212SetInterrupts(ah, omask);
 
 	return (newLevel != curLevel);
 }

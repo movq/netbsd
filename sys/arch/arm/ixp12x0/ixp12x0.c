@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp12x0.c,v 1.19 2012/10/27 17:17:39 chs Exp $ */
+/*	$NetBSD: ixp12x0.c,v 1.14 2005/12/11 12:16:50 christos Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -27,14 +33,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp12x0.c,v 1.19 2012/10/27 17:17:39 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp12x0.c,v 1.14 2005/12/11 12:16:50 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <uvm/uvm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/ixp12x0/ixp12x0reg.h>
 #include <arm/ixp12x0/ixp12x0var.h>
@@ -43,7 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0.c,v 1.19 2012/10/27 17:17:39 chs Exp $");
 static struct ixp12x0_softc *ixp12x0_softc;
 
 void
-ixp12x0_attach(struct ixp12x0_softc *sc)
+ixp12x0_attach(sc)
+	struct ixp12x0_softc *sc;
 {
 	struct pcibus_attach_args pba;
 	pcireg_t reg;
@@ -59,15 +66,15 @@ ixp12x0_attach(struct ixp12x0_softc *sc)
 	 */
 	if (bus_space_map(sc->sc_iot, IXP12X0_PCI_HWBASE, IXP12X0_PCI_SIZE,
 			  0, &sc->sc_pci_ioh))
-		panic("%s: unable to map PCI registers", device_xname(sc->sc_dev)); 
+		panic("%s: unable to map PCI registers", sc->sc_dev.dv_xname); 
 	if (bus_space_map(sc->sc_iot, IXP12X0_PCI_TYPE0_HWBASE,
 			  IXP12X0_PCI_TYPE0_SIZE, 0, &sc->sc_conf0_ioh))
 		panic("%s: unable to map PCI Configutation 0\n",
-		      device_xname(sc->sc_dev));
+		      sc->sc_dev.dv_xname);
 	if (bus_space_map(sc->sc_iot, IXP12X0_PCI_TYPE1_HWBASE,
 			  IXP12X0_PCI_TYPE0_SIZE, 1, &sc->sc_conf1_ioh))
 		panic("%s: unable to map PCI Configutation 1\n",
-		      device_xname(sc->sc_dev));
+		      sc->sc_dev.dv_xname);
 
 	/*
 	 * PCI bus reset
@@ -174,9 +181,9 @@ ixp12x0_attach(struct ixp12x0_softc *sc)
 	pba.pba_bus = 0;	/* bus number = 0 */
 	pba.pba_intrswiz = 0;	/* XXX */
 	pba.pba_intrtag = 0;
-	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
+	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
 		PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
-	(void) config_found_ia(sc->sc_dev, "pcibus", &pba, pcibusprint);
+	(void) config_found_ia(&sc->sc_dev, "pcibus", &pba, pcibusprint);
 }
 
 void

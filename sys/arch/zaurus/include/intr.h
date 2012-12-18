@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.8 2012/06/10 13:15:24 skrll Exp $	*/
+/*	$NetBSD: intr.h,v 1.6 2008/04/27 18:58:47 matt Exp $	*/
 
 /*
  * Copyright (c) 2001, 2003 Wasabi Systems, Inc.
@@ -78,8 +78,11 @@
 
 #else /* ! __OLD_INTERRUPT_CODE */
 
+#define	__NEWINTR	/* enables new hooks in cpu_fork()/cpu_switch() */
+
 #ifndef _LOCORE
 
+#include <sys/device.h>
 #include <sys/queue.h>
 
 #if defined(_LKM)

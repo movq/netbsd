@@ -1,9 +1,7 @@
-/*	$NetBSD: search.c,v 1.1.1.3 2010/12/12 15:23:27 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/servers/slapd/back-sql/search.c,v 1.117.2.13 2010/04/13 20:23:43 kurt Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/back-sql/search.c,v 1.117.2.8 2008/02/11 23:26:48 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1999-2010 The OpenLDAP Foundation.
+ * Copyright 1999-2008 The OpenLDAP Foundation.
  * Portions Copyright 1999 Dmitry Kovalev.
  * Portions Copyright 2002 Pierangelo Masarati.
  * Portions Copyright 2004 Mark Adamson.
@@ -50,9 +48,6 @@ static int backsql_process_filter_attr( backsql_srch_info *bsi, Filter *f,
    and the other 26 for ldap_entries ID number. If your max(oc_map_id) is more
    than 63, you will need to steal more bits from ldap_entries ID number and
    put them into the OC ID part of the cookie. */
-
-/* NOTE: not supported when BACKSQL_ARBITRARY_KEY is defined */
-#ifndef BACKSQL_ARBITRARY_KEY
 #define SQL_TO_PAGECOOKIE(id, oc) (((id) << 6 ) | ((oc) & 0x3F))
 #define PAGECOOKIE_TO_SQL_ID(pc) ((pc) >> 6)
 #define PAGECOOKIE_TO_SQL_OC(pc) ((pc) & 0x3F)
@@ -63,7 +58,6 @@ static void send_paged_response(
 	Operation *op,
 	SlapReply *rs,
 	ID  *lastid );
-#endif /* ! BACKSQL_ARBITRARY_KEY */
 
 static int
 backsql_attrlist_add( backsql_srch_info *bsi, AttributeDescription *ad )
@@ -190,7 +184,7 @@ backsql_init_search(
 			BER_BVZERO( &bsi->bsi_attrs[ 0 ].an_name );
 	
 			for ( p = attrs; !BER_BVISNULL( &p->an_name ); p++ ) {
-				if ( BACKSQL_NCMP( &p->an_name, slap_bv_all_user_attrs ) == 0 ) {
+				if ( BACKSQL_NCMP( &p->an_name, &AllUser ) == 0 ) {
 					/* handle "*" */
 					bsi->bsi_flags |= BSQL_SF_ALL_USER;
 
@@ -204,7 +198,7 @@ backsql_init_search(
 					}
 					continue;
 
-				} else if ( BACKSQL_NCMP( &p->an_name, slap_bv_all_operational_attrs ) == 0 ) {
+				} else if ( BACKSQL_NCMP( &p->an_name, &AllOper ) == 0 ) {
 					/* handle "+" */
 					bsi->bsi_flags |= BSQL_SF_ALL_OPER;
 
@@ -218,7 +212,7 @@ backsql_init_search(
 					}
 					continue;
 
-				} else if ( BACKSQL_NCMP( &p->an_name, slap_bv_no_attrs ) == 0 ) {
+				} else if ( BACKSQL_NCMP( &p->an_name, &NoAttrs ) == 0 ) {
 					/* ignore "1.1" */
 					continue;
 
@@ -243,7 +237,7 @@ backsql_init_search(
 			
 			/* use hints if available */
 			for ( p = bi->sql_anlist; !BER_BVISNULL( &p->an_name ); p++ ) {
-				if ( BACKSQL_NCMP( &p->an_name, slap_bv_all_user_attrs ) == 0 ) {
+				if ( BACKSQL_NCMP( &p->an_name, &AllUser ) == 0 ) {
 					/* handle "*" */
 					bsi->bsi_flags |= BSQL_SF_ALL_USER;
 
@@ -257,7 +251,7 @@ backsql_init_search(
 					}
 					continue;
 
-				} else if ( BACKSQL_NCMP( &p->an_name, slap_bv_all_operational_attrs ) == 0 ) {
+				} else if ( BACKSQL_NCMP( &p->an_name, &AllOper ) == 0 ) {
 					/* handle "+" */
 					bsi->bsi_flags |= BSQL_SF_ALL_OPER;
 
@@ -719,16 +713,6 @@ backsql_process_filter( backsql_srch_info *bsi, Filter *f )
 			"filter computed (%s)\n", msg, 0, 0 );
 		backsql_strfcat_x( &bsi->bsi_flt_where,
 				bsi->bsi_op->o_tmpmemctx, "b", &flt );
-		rc = 1;
-		goto done;
-	}
-
-	if ( f->f_choice & SLAPD_FILTER_UNDEFINED ) {
-		backsql_strfcat_x( &bsi->bsi_flt_where,
-			bsi->bsi_op->o_tmpmemctx,
-			"l",
-			(ber_len_t)STRLENOF( "1=0" ), "1=0" );
-		done = 1;
 		rc = 1;
 		goto done;
 	}
@@ -1208,14 +1192,6 @@ backsql_process_filter_attr( backsql_srch_info *bsi, Filter *f, backsql_at_map_r
 				&at->bam_join_where );
 	}
 
-	if ( f->f_choice & SLAPD_FILTER_UNDEFINED ) {
-		backsql_strfcat_x( &bsi->bsi_flt_where,
-			bsi->bsi_op->o_tmpmemctx,
-			"l",
-			(ber_len_t)STRLENOF( "1=0" ), "1=0" );
-		return 1;
-	}
-
 	switch ( f->f_choice ) {
 	case LDAP_FILTER_EQUALITY:
 		filter_value = &f->f_av_value;
@@ -1575,7 +1551,6 @@ backsql_srch_query( backsql_srch_info *bsi, struct berval *query )
 		assert( 0 );
 	}
 
-#ifndef BACKSQL_ARBITRARY_KEY
 	/* If paged results are in effect, ignore low ldap_entries.id numbers */
 	if ( get_pagedresults(bsi->bsi_op) > SLAP_CONTROL_IGNORED ) {
 		unsigned long lowid = 0;
@@ -1599,7 +1574,6 @@ backsql_srch_query( backsql_srch_info *bsi, struct berval *query )
 					lowidstring );
 		}
 	}
-#endif /* ! BACKSQL_ARBITRARY_KEY */
 
 	rc = backsql_process_filter( bsi, bsi->bsi_filter );
 	if ( rc > 0 ) {
@@ -1680,7 +1654,6 @@ backsql_oc_get_candidates( void *v_oc, void *v_bsi )
 		return BACKSQL_AVL_STOP;
 	}
 
-#ifndef BACKSQL_ARBITRARY_KEY
 	/* If paged results have already completed this objectClass, skip it */
 	if ( get_pagedresults(op) > SLAP_CONTROL_IGNORED ) {
 		if ( oc->bom_id < PAGECOOKIE_TO_SQL_OC( ((PagedResultsState *)op->o_pagedresults_state)->ps_cookie ) )
@@ -1688,7 +1661,6 @@ backsql_oc_get_candidates( void *v_oc, void *v_bsi )
 			return BACKSQL_AVL_CONTINUE;
 		}
 	}
-#endif /* ! BACKSQL_ARBITRARY_KEY */
 
 	if ( bsi->bsi_n_candidates == -1 ) {
 		Debug( LDAP_DEBUG_TRACE, "backsql_oc_get_candidates(): "
@@ -2016,9 +1988,7 @@ backsql_search( Operation *op, SlapReply *rs )
 	backsql_srch_info	bsi = { 0 };
 	backsql_entryID		*eid = NULL;
 	struct berval		nbase = BER_BVNULL;
-#ifndef BACKSQL_ARBITRARY_KEY
-	ID			lastid = 0;
-#endif /* ! BACKSQL_ARBITRARY_KEY */
+	unsigned long 		lastid = 0;
 
 	Debug( LDAP_DEBUG_TRACE, "==>backsql_search(): "
 		"base=\"%s\", filter=\"%s\", scope=%d,", 
@@ -2155,7 +2125,6 @@ backsql_search( Operation *op, SlapReply *rs )
 		( op->ors_limit->lms_s_unchecked == -1 ? -2 :
 		( op->ors_limit->lms_s_unchecked ) ) );
 
-#ifndef BACKSQL_ARBITRARY_KEY
 	/* If paged results are in effect, check the paging cookie */
 	if ( get_pagedresults( op ) > SLAP_CONTROL_IGNORED ) {
 		rs->sr_err = parse_paged_cookie( op, rs );
@@ -2164,7 +2133,6 @@ backsql_search( Operation *op, SlapReply *rs )
 			goto done;
 		}
 	}
-#endif /* ! BACKSQL_ARBITRARY_KEY */
 
 	switch ( bsi.bsi_scope ) {
 	case LDAP_SCOPE_BASE:
@@ -2441,7 +2409,6 @@ backsql_search( Operation *op, SlapReply *rs )
 
 		if ( test_filter( op, e, op->ors_filter ) == LDAP_COMPARE_TRUE )
 		{
-#ifndef BACKSQL_ARBITRARY_KEY
 			/* If paged results are in effect, see if the page limit was exceeded */
 			if ( get_pagedresults(op) > SLAP_CONTROL_IGNORED ) {
 				if ( rs->sr_nentries >= ((PagedResultsState *)op->o_pagedresults_state)->ps_size )
@@ -2452,7 +2419,6 @@ backsql_search( Operation *op, SlapReply *rs )
 				}
 				lastid = SQL_TO_PAGECOOKIE( eid->eid_id, eid->eid_oc_id );
 			}
-#endif /* ! BACKSQL_ARBITRARY_KEY */
 			rs->sr_attrs = op->ors_attrs;
 			rs->sr_operational_attrs = NULL;
 			rs->sr_entry = e;
@@ -2500,12 +2466,9 @@ end_of_search:;
 
 send_results:;
 	if ( rs->sr_err != SLAPD_ABANDON ) {
-#ifndef BACKSQL_ARBITRARY_KEY
 		if ( get_pagedresults(op) > SLAP_CONTROL_IGNORED ) {
 			send_paged_response( op, rs, NULL );
-		} else
-#endif /* ! BACKSQL_ARBITRARY_KEY */
-		{
+		} else {
 			send_ldap_result( op, rs );
 		}
 	}
@@ -2700,7 +2663,7 @@ backsql_entry_release(
 	return 0;
 }
 
-#ifndef BACKSQL_ARBITRARY_KEY
+
 /* This function is copied verbatim from back-bdb/search.c */
 static int
 parse_paged_cookie( Operation *op, SlapReply *rs )
@@ -2753,7 +2716,7 @@ static void
 send_paged_response( 
 	Operation	*op,
 	SlapReply	*rs,
-	ID		*lastid )
+	unsigned long	*lastid )
 {
 	LDAPControl	ctrl, *ctrls[2];
 	BerElementBuffer berbuf;
@@ -2804,4 +2767,3 @@ send_paged_response(
 done:
 	(void) ber_free_buf( ber );
 }
-#endif /* ! BACKSQL_ARBITRARY_KEY */

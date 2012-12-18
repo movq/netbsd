@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_subr.c,v 1.15 2010/11/13 13:52:11 uebayasi Exp $ */
+/*	$NetBSD: bt_subr.c,v 1.9 2005/12/11 12:23:56 christos Exp $ */
 
 /*
  * Copyright (c) 1993
@@ -41,13 +41,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bt_subr.c,v 1.15 2010/11/13 13:52:11 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bt_subr.c,v 1.9 2005/12/11 12:23:56 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/errno.h>
 #include <sys/malloc.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/sun/fbio.h>
 
@@ -64,7 +66,11 @@ __KERNEL_RCSID(0, "$NetBSD: bt_subr.c,v 1.15 2010/11/13 13:52:11 uebayasi Exp $"
  * Implement an FBIOGETCMAP-like ioctl.
  */
 int
-bt_getcmap(struct fbcmap *p, union bt_cmap *cm, int cmsize, int uspace)
+bt_getcmap(p, cm, cmsize, uspace)
+	struct fbcmap *p;
+	union bt_cmap *cm;
+	int cmsize;
+	int uspace;
 {
 	u_int i, start, count;
 	int error = 0;
@@ -119,7 +125,11 @@ out:
  * Implement the software portion of an FBIOPUTCMAP-like ioctl.
  */
 int
-bt_putcmap(struct fbcmap *p, union bt_cmap *cm, int cmsize, int uspace)
+bt_putcmap(p, cm, cmsize, uspace)
+	struct fbcmap *p;
+	union bt_cmap *cm;
+	int cmsize;
+	int uspace;
 {
 	u_int i, start, count;
 	int error = 0;
@@ -174,7 +184,9 @@ out:
  *	- all other entries are black	(PROM uses entry 255 for foreground)
  */
 void
-bt_initcmap(union bt_cmap *cm, int cmsize)
+bt_initcmap(cm, cmsize)
+	union bt_cmap *cm;
+	int cmsize;
 {
 	int i;
 	u_char *cp;
@@ -193,14 +205,17 @@ bt_initcmap(union bt_cmap *cm, int cmsize)
 		 * be replaced by more general colormap handling)
 		 */
 		extern u_char rasops_cmap[];
-		memcpy(&cm->cm_map[1][0], rasops_cmap, 3*16);
+		bcopy(rasops_cmap, &cm->cm_map[1][0], 3*16);
 	}
 #endif
 }
 
 #if notyet
 static void
-bt_loadcmap_packed256(struct fbdevice *fb, volatile struct bt_regs *bt, int start, int ncolors)
+bt_loadcmap_packed256(fb, bt, start, ncolors)
+	struct fbdevice	*fb;
+	volatile struct bt_regs *bt;
+	int start, ncolors;
 {
 	u_int v;
 	int count, i;
@@ -215,7 +230,7 @@ bt_loadcmap_packed256(struct fbdevice *fb, volatile struct bt_regs *bt, int star
 	 * Figure out where to start in the RGB arrays
 	 * See btreg.h for the way RGB triplets are packed into 4-byte words.
 	 */
-	c[0] = &cm->red[(4 * count) / 3];
+	c[0] = &cm->red[(4 * count) / 3)];
 	c[1] = &cm->green[(4 * count) / 3];
 	c[2] = &cm->blue[(4 * count) / 3];
 	p = &c[0];

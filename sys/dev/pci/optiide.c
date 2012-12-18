@@ -1,4 +1,4 @@
-/*	$NetBSD: optiide.c,v 1.24 2012/07/31 15:50:36 bouyer Exp $	*/
+/*	$NetBSD: optiide.c,v 1.17 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: optiide.c,v 1.24 2012/07/31 15:50:36 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: optiide.c,v 1.17 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,7 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: optiide.c,v 1.24 2012/07/31 15:50:36 bouyer Exp $");
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_opti_reg.h>
 
-static void opti_chip_map(struct pciide_softc*, const struct pci_attach_args*);
+static void opti_chip_map(struct pciide_softc*, struct pci_attach_args*);
 static void opti_setup_channel(struct ata_channel*);
 
 static int  optiide_match(device_t, cfdata_t, void *);
@@ -101,9 +101,10 @@ optiide_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-opti_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
+opti_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
+	bus_size_t cmdsize, ctlsize;
 	pcireg_t interface;
 	u_int8_t init_ctrl;
 	int channel;
@@ -141,7 +142,6 @@ opti_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	init_ctrl = pciide_pci_read(sc->sc_pc, sc->sc_tag,
 	    OPTI_REG_INIT_CONTROL);
@@ -162,7 +162,8 @@ opti_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 			cp->ata_channel.ch_flags |= ATACH_DISABLED;
 			continue;
 		}
-		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
+		    pciide_pci_intr);
 	}
 }
 
@@ -198,12 +199,12 @@ opti_setup_channel(struct ata_channel *chp)
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if (drvp->drive_type == ATA_DRIVET_NONE) {
+		if ((drvp->drive_flags & DRIVE) == 0) {
 			mode[drive] = -1;
 			continue;
 		}
 
-		if ((drvp->drive_flags & ATA_DRIVE_DMA)) {
+		if ((drvp->drive_flags & DRIVE_DMA)) {
 			/*
 			 * Timings will be used for both PIO and DMA,
 			 * so adjust DMA mode if needed
@@ -234,7 +235,7 @@ opti_setup_channel(struct ata_channel *chp)
 			chp->ch_drive[d].PIO_mode = chp->ch_drive[1-d].PIO_mode;
 			chp->ch_drive[d].DMA_mode = 0;
 			s = splbio();
-			chp->ch_drive[d].drive_flags &= ~ATA_DRIVE_DMA;
+			chp->ch_drive[d].drive_flags &= ~DRIVE_DMA;
 			splx(s);
 		}
 	}

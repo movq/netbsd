@@ -1,4 +1,4 @@
-/* $NetBSD: citrus_lc_messages.c,v 1.5 2012/03/04 21:14:55 tnozaki Exp $ */
+/* $NetBSD: citrus_lc_messages.c,v 1.2.2.2 2009/01/15 03:24:06 snj Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_lc_messages.c,v 1.5 2012/03/04 21:14:55 tnozaki Exp $");
+__RCSID("$NetBSD: citrus_lc_messages.c,v 1.2.2.2 2009/01/15 03:24:06 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -61,7 +61,7 @@ __RCSID("$NetBSD: citrus_lc_messages.c,v 1.5 2012/03/04 21:14:55 tnozaki Exp $")
 #include "citrus_db.h"
 #include "citrus_db_hash.h"
 #include "citrus_memstream.h"
-#include "runetype_local.h"
+#include "rune.h"
 
 /*
  * macro required by all template headers
@@ -160,3 +160,4 @@ fatal:
 #define _CATEGORY_MAGIC		_CITRUS_LC_MESSAGES_MAGIC_1
 
 #include "citrus_lc_template.h"
+_LOCALE_CATEGORY_ENTRY(_citrus_LC_MESSAGES_);

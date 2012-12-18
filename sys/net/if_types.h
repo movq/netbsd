@@ -1,4 +1,4 @@
-/*	$NetBSD: if_types.h,v 1.26 2012/08/05 21:21:41 wiz Exp $	*/
+/*	$NetBSD: if_types.h,v 1.25.74.1 2012/08/22 21:16:32 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994

@@ -1,4 +1,4 @@
-/* $NetBSD: obio.c,v 1.4 2011/07/01 18:44:45 dyoung Exp $ */
+/* $NetBSD: obio.c,v 1.1 2006/02/08 09:04:01 gdamore Exp $ */
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,13 +36,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.4 2011/07/01 18:44:45 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.1 2006/02/08 09:04:01 gdamore Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <mips/cache.h>
 #include <mips/cpuregs.h>
@@ -52,19 +52,20 @@ __KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.4 2011/07/01 18:44:45 dyoung Exp $");
 
 #include "locators.h"
 
-static int	obio_match(device_t, cfdata_t, void *);
-static void	obio_attach(device_t, device_t, void *);
-static int	obio_submatch(device_t, cfdata_t, const int *, void *);
+static int	obio_match(struct device *, struct cfdata *, void *);
+static void	obio_attach(struct device *, struct device *, void *);
+static int	obio_submatch(struct device *, struct cfdata *,
+			      const int *, void *);
 static int	obio_print(void *, const char *);
 
-CFATTACH_DECL_NEW(obio, 0,
+CFATTACH_DECL(obio, sizeof(struct device),
     obio_match, obio_attach, NULL, NULL);
 
 /* There can be only one. */
 static int	obio_found = 0;
 
 static int
-obio_match(device_t parent, cfdata_t match, void *aux)
+obio_match(struct device *parent, struct cfdata *match, void *aux)
 {
 
 	if (obio_found)
@@ -74,7 +75,7 @@ obio_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-obio_attach(device_t parent, device_t self, void *aux)
+obio_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct obio_attach_args oa;
 	const struct obiodev *od;
@@ -94,7 +95,7 @@ obio_attach(device_t parent, device_t self, void *aux)
 }
 
 static int
-obio_submatch(device_t parent, cfdata_t cf,
+obio_submatch(struct device *parent, struct cfdata *cf,
 	      const int *ldesc, void *aux)
 {
 	struct obio_attach_args *oa = aux;
@@ -114,7 +115,7 @@ obio_print(void *aux, const char *pnp)
 	if (pnp)
 		aprint_normal("%s at %s", oa->oba_name, pnp);
 	if (oa->oba_addr != OBIOCF_ADDR_DEFAULT)
-		aprint_normal(" addr 0x%"PRIxBUSADDR, oa->oba_addr);
+		aprint_normal(" addr 0x%lx", oa->oba_addr);
 
 	return (UNCONF);
 }

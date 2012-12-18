@@ -1,13 +1,11 @@
-#	$NetBSD: Makefile,v 1.18 2012/03/22 23:46:27 joerg Exp $
+#	$NetBSD: Makefile,v 1.5.6.2 2009/10/10 19:53:22 sborrill Exp $
 
 .include <bsd.own.mk>
 
 LIB=		GL
 
-SUBDIR=		internal
-
 # glx
-.PATH:		${X11SRCDIR.MesaLib}/src/glx
+.PATH:		${X11SRCDIR.MesaLib}/src/glx/x11
 SRCS.glx=	glcontextmodes.c clientattrib.c compsize.c eval.c glxcmds.c \
 		glxext.c glxextensions.c indirect.c indirect_init.c \
 		indirect_size.c indirect_window_pos.c \
@@ -18,7 +16,7 @@ SRCS.glx=	glcontextmodes.c clientattrib.c compsize.c eval.c glxcmds.c \
 		glxcurrent.c indirect_texture_compression.c
 
 .PATH:		${X11SRCDIR.MesaLib}/src/mesa/glapi
-SRCS.glx+=	glapi.c glapi_dispatch.c glapi_getproc.c glapi_nop.c glthread.c
+SRCS.glx+=	glapi.c glapi_getproc.c glthread.c
 
 # XXX see TODO
 #.if ${MACHINE_ARCH} == "i386"
@@ -38,10 +36,10 @@ CPPFLAGS.${fn}=-DDEFAULT_DRIVER_DIR=\"${X11USRLIBDIR}/modules/dri\"
 .endfor
 .endif
 
-MESA_SRC_MODULES=  main math vbo tnl shader swrast slang glapi common \
-                        osmesa ss
 
-.include "../libOSMesa/libmesa.mk"
+# mesa
+.PATH:		${X11SRCDIR.MesaLib}/src/mesa/main
+SRCS.mesa=	dispatch.c
 
 
 .PATH:		${X11SRCDIR.MesaLib}/src/glw
@@ -52,19 +50,15 @@ INCS=	GLwDrawA.h GLwDrawAP.h GLwMDrawA.h GLwMDrawAP.h gl.h gl_mangle.h \
 	xmesa_xf86.h
 INCSDIR=${X11INCDIR}/GL
 
-SRCS+=	${SRCS.dri} ${SRCS.glx}
-
-.include "../../tools/glsl/Makefile.glslsrcs"
-
-SRCS+=	${SRCS.pp} ${SRCS.cl}
+SRCS+=	${SRCS.dri} ${SRCS.mesa} ${SRCS.glx}
 
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/GL \
 		-I${DESTDIR}${X11INCDIR}/X11 \
 		-I${DESTDIR}${X11INCDIR}/X11/extensions \
-		-I${DESTDIR}${X11INCDIR}/libdrm \
+		-I${DESTDIR}${X11INCDIR}/drm \
 		-I${X11SRCDIR.MesaLib}/include \
 		-I${X11SRCDIR.MesaLib}/include/GL/internal \
-		-I${X11SRCDIR.MesaLib}/src/mesa/main \
+		-I${X11SRCDIR.MesaLib}/src/mesa \
 		-I${X11SRCDIR.MesaLib}/src/mesa/glapi \
 		-I${X11SRCDIR.MesaLib}/src/mesa \
 		${X11FLAGS.THREADLIB}
@@ -98,19 +92,13 @@ LIBDPLIBS=	Xext	${.CURDIR}/../libXext \
 
 # XXX XXX
 COPTS.dri_glx.c=			-Wno-error
-COPTS.dri2_glx.c=			-Wno-error
-COPTS.drisw_glx.c=			-Wno-error
 COPTS.glxext.c=				-Wno-error
 COPTS.indirect_vertex_program.c=	-Wno-error
 MKLINT=no
 
 PKGCONFIG=	gl
 PKGDIST.gl=	${X11SRCDIR.MesaLib}/src/mesa
-.include "${.CURDIR}/../libGL/mesa-ver.mk"
-PKGCONFIG_VERSION.gl=	${MESA_VER}
-
-CWARNFLAGS.clang+=	-Wno-tautological-compare -Wno-format -Wno-constant-conversion
+PKGCONFIG_VERSION.gl=	7.4.2
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>
-.include <bsd.subdir.mk>

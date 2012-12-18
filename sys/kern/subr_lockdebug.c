@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_lockdebug.c,v 1.46 2012/08/04 12:38:20 christos Exp $	*/
+/*	$NetBSD: subr_lockdebug.c,v 1.37 2008/06/30 20:14:09 matt Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_lockdebug.c,v 1.46 2012/08/04 12:38:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_lockdebug.c,v 1.37 2008/06/30 20:14:09 matt Exp $");
 
 #include "opt_ddb.h"
 
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: subr_lockdebug.c,v 1.46 2012/08/04 12:38:20 christos
 #include <sys/cpu.h>
 #include <sys/atomic.h>
 #include <sys/lock.h>
-#include <sys/rbtree.h>
+#include <sys/rb.h>
 
 #include <machine/lock.h>
 
@@ -68,7 +68,7 @@ unsigned int		ld_panic;
 #define	LD_WRITE_LOCK	0x80000000
 
 typedef struct lockdebug {
-	struct rb_node	ld_rb_node;
+	struct rb_node	ld_rb_node;	/* must be the first member */
 	__cpu_simple_lock_t ld_spinlock;
 	_TAILQ_ENTRY(struct lockdebug, volatile) ld_chain;
 	_TAILQ_ENTRY(struct lockdebug, volatile) ld_achain;
@@ -103,41 +103,39 @@ static int	lockdebug_more(int);
 static void	lockdebug_init(void);
 
 static signed int
-ld_rbto_compare_nodes(void *ctx, const void *n1, const void *n2)
+ld_rbto_compare_nodes(const struct rb_node *n1, const struct rb_node *n2)
 {
-	const lockdebug_t *ld1 = n1;
-	const lockdebug_t *ld2 = n2;
+	const lockdebug_t *ld1 = (const void *)n1;
+	const lockdebug_t *ld2 = (const void *)n2;
 	const uintptr_t a = (uintptr_t)ld1->ld_lock;
 	const uintptr_t b = (uintptr_t)ld2->ld_lock;
 
 	if (a < b)
-		return -1;
-	if (a > b)
 		return 1;
+	if (a > b)
+		return -1;
 	return 0;
 }
 
 static signed int
-ld_rbto_compare_key(void *ctx, const void *n, const void *key)
+ld_rbto_compare_key(const struct rb_node *n, const void *key)
 {
-	const lockdebug_t *ld = n;
+	const lockdebug_t *ld = (const void *)n;
 	const uintptr_t a = (uintptr_t)ld->ld_lock;
 	const uintptr_t b = (uintptr_t)key;
 
 	if (a < b)
-		return -1;
-	if (a > b)
 		return 1;
+	if (a > b)
+		return -1;
 	return 0;
 }
 
-static rb_tree_t ld_rb_tree;
+static struct rb_tree ld_rb_tree;
 
-static const rb_tree_ops_t ld_rb_tree_ops = {
+static const struct rb_tree_ops ld_rb_tree_ops = {
 	.rbto_compare_nodes = ld_rbto_compare_nodes,
 	.rbto_compare_key = ld_rbto_compare_key,
-	.rbto_node_offset = offsetof(lockdebug_t, ld_rb_node),
-	.rbto_context = NULL
 };
 
 static inline lockdebug_t *
@@ -186,15 +184,13 @@ lockdebug_unlock_cpus(void)
  *	Find a lockdebug structure by a pointer to a lock and return it locked.
  */
 static inline lockdebug_t *
-lockdebug_lookup(volatile void *lock, uintptr_t where)
+lockdebug_lookup(volatile void *lock)
 {
 	lockdebug_t *ld;
 
 	ld = lockdebug_lookup1(lock);
-	if (ld == NULL) {
-		panic("lockdebug_lookup: uninitialized lock "
-		    "(lock=%p, from=%08"PRIxPTR")", lock, where);
-	}
+	if (ld == NULL)
+		panic("lockdebug_lookup: uninitialized lock (lock=%p)", lock);
 	return ld;
 }
 
@@ -296,7 +292,7 @@ lockdebug_alloc(volatile void *lock, lockops_t *lo, uintptr_t initaddr)
 	ld->ld_initaddr = initaddr;
 	ld->ld_flags = (lo->lo_type == LOCKOPS_SLEEP ? LD_SLEEPER : 0);
 	lockdebug_lock_cpus();
-	(void)rb_tree_insert_node(&ld_rb_tree, __UNVOLATILE(ld));
+	rb_tree_insert_node(&ld_rb_tree, __UNVOLATILE(&ld->ld_rb_node));
 	lockdebug_unlock_cpus();
 	__cpu_simple_unlock(&ld_mod_lk);
 
@@ -320,11 +316,12 @@ lockdebug_free(volatile void *lock)
 
 	s = splhigh();
 	__cpu_simple_lock(&ld_mod_lk);
-	ld = lockdebug_lookup(lock, (uintptr_t) __builtin_return_address(0));
+	ld = lockdebug_lookup(lock);
 	if (ld == NULL) {
 		__cpu_simple_unlock(&ld_mod_lk);
 		panic("lockdebug_free: destroying uninitialized object %p"
 		    "(ld_lock=%p)", lock, ld->ld_lock);
+		lockdebug_abort1(ld, s, __func__, "record follows", true);
 		return;
 	}
 	if ((ld->ld_flags & LD_LOCKED) != 0 || ld->ld_shares != 0) {
@@ -333,7 +330,7 @@ lockdebug_free(volatile void *lock)
 		return;
 	}
 	lockdebug_lock_cpus();
-	rb_tree_remove_node(&ld_rb_tree, __UNVOLATILE(ld));
+	rb_tree_remove_node(&ld_rb_tree, __UNVOLATILE(&ld->ld_rb_node));
 	lockdebug_unlock_cpus();
 	ld->ld_lock = NULL;
 	TAILQ_INSERT_TAIL(&ld_free, ld, ld_chain);
@@ -426,7 +423,7 @@ lockdebug_wantlock(volatile void *lock, uintptr_t where, bool shared,
 		return;
 
 	s = splhigh();
-	if ((ld = lockdebug_lookup(lock, where)) == NULL) {
+	if ((ld = lockdebug_lookup(lock)) == NULL) {
 		splx(s);
 		return;
 	}
@@ -434,7 +431,7 @@ lockdebug_wantlock(volatile void *lock, uintptr_t where, bool shared,
 		if ((ld->ld_flags & LD_SLEEPER) != 0) {
 			if (ld->ld_lwp == l && !(shared && trylock))
 				recurse = true;
-		} else if (ld->ld_cpu == (uint16_t)cpu_index(curcpu()))
+		} else if (ld->ld_cpu == (uint16_t)cpu_number())
 			recurse = true;
 	}
 	if (cpu_intr_p()) {
@@ -475,7 +472,7 @@ lockdebug_locked(volatile void *lock, void *cvlock, uintptr_t where,
 		return;
 
 	s = splhigh();
-	if ((ld = lockdebug_lookup(lock, where)) == NULL) {
+	if ((ld = lockdebug_lookup(lock)) == NULL) {
 		splx(s);
 		return;
 	}
@@ -492,7 +489,6 @@ lockdebug_locked(volatile void *lock, void *cvlock, uintptr_t where,
 		}
 	} else if (shared) {
 		l->l_shlocks++;
-		ld->ld_locked = where;
 		ld->ld_shares++;
 		ld->ld_shwant--;
 	} else {
@@ -511,7 +507,7 @@ lockdebug_locked(volatile void *lock, void *cvlock, uintptr_t where,
 			    ld, ld_chain);
 		}
 	}
-	ld->ld_cpu = (uint16_t)cpu_index(curcpu());
+	ld->ld_cpu = (uint16_t)cpu_number();
 	ld->ld_lwp = l;
 	__cpu_simple_unlock(&ld->ld_spinlock);
 	splx(s);
@@ -533,7 +529,7 @@ lockdebug_unlocked(volatile void *lock, uintptr_t where, int shared)
 		return;
 
 	s = splhigh();
-	if ((ld = lockdebug_lookup(lock, where)) == NULL) {
+	if ((ld = lockdebug_lookup(lock)) == NULL) {
 		splx(s);
 		return;
 	}
@@ -556,11 +552,9 @@ lockdebug_unlocked(volatile void *lock, uintptr_t where, int shared)
 		}
 		l->l_shlocks--;
 		ld->ld_shares--;
-		if (ld->ld_lwp == l) {
-			ld->ld_unlocked = where;
+		if (ld->ld_lwp == l)
 			ld->ld_lwp = NULL;
-		}
-		if (ld->ld_cpu == (uint16_t)cpu_index(curcpu()))
+		if (ld->ld_cpu == (uint16_t)cpu_number())
 			ld->ld_cpu = (uint16_t)-1;
 	} else {
 		if ((ld->ld_flags & LD_LOCKED) == 0) {
@@ -574,19 +568,22 @@ lockdebug_unlocked(volatile void *lock, uintptr_t where, int shared)
 				    "not held by current LWP", true);
 				return;
 			}
+			ld->ld_flags &= ~LD_LOCKED;
+			ld->ld_unlocked = where;
+			ld->ld_lwp = NULL;
 			TAILQ_REMOVE(&l->l_ld_locks, ld, ld_chain);
 		} else {
-			if (ld->ld_cpu != (uint16_t)cpu_index(curcpu())) {
+			if (ld->ld_cpu != (uint16_t)cpu_number()) {
 				lockdebug_abort1(ld, s, __func__,
 				    "not held by current CPU", true);
 				return;
 			}
+			ld->ld_flags &= ~LD_LOCKED;
+			ld->ld_unlocked = where;		
+			ld->ld_lwp = NULL;
 			TAILQ_REMOVE(&curcpu()->ci_data.cpu_ld_locks, ld,
 			    ld_chain);
 		}
-		ld->ld_flags &= ~LD_LOCKED;
-		ld->ld_unlocked = where;		
-		ld->ld_lwp = NULL;
 	}
 	__cpu_simple_unlock(&ld->ld_spinlock);
 	splx(s);
@@ -608,7 +605,7 @@ lockdebug_wakeup(volatile void *lock, uintptr_t where)
 
 	s = splhigh();
 	/* Find the CV... */
-	if ((ld = lockdebug_lookup(lock, where)) == NULL) {
+	if ((ld = lockdebug_lookup(lock)) == NULL) {
 		splx(s);
 		return;
 	}
@@ -732,15 +729,12 @@ lockdebug_dump(lockdebug_t *ld, void (*pr)(const char *, ...))
 		    "shares wanted: %18u exclusive: %18u\n"
 		    "current cpu  : %18u last held: %18u\n"
 		    "current lwp  : %#018lx last held: %#018lx\n"
-		    "last locked%c : %#018lx unlocked%c: %#018lx\n",
+		    "last locked  : %#018lx unlocked : %#018lx\n",
 		    (unsigned)ld->ld_shares, ((ld->ld_flags & LD_LOCKED) != 0),
 		    (unsigned)ld->ld_shwant, (unsigned)ld->ld_exwant,
-		    (unsigned)cpu_index(curcpu()), (unsigned)ld->ld_cpu,
+		    (unsigned)cpu_number(), (unsigned)ld->ld_cpu,
 		    (long)curlwp, (long)ld->ld_lwp,
-		    ((ld->ld_flags & LD_LOCKED) ? '*' : ' '),
-		    (long)ld->ld_locked,
-		    ((ld->ld_flags & LD_LOCKED) ? ' ' : '*'),
-		    (long)ld->ld_unlocked);
+		    (long)ld->ld_locked, (long)ld->ld_unlocked);
 	}
 
 	if (ld->ld_lockops->lo_dump != NULL)
@@ -763,7 +757,7 @@ lockdebug_abort1(lockdebug_t *ld, int s, const char *func,
 {
 
 	/*
-	 * Don't make the situation worse if the system is already going
+	 * Don't make the situation wose if the system is already going
 	 * down in flames.  Once a panic is triggered, lockdebug state
 	 * becomes stale and cannot be trusted.
 	 */
@@ -798,18 +792,12 @@ lockdebug_lock_print(void *addr, void (*pr)(const char *, ...))
 	lockdebug_t *ld;
 
 	TAILQ_FOREACH(ld, &ld_all, ld_achain) {
-		if (ld->ld_lock == NULL)
-			continue;
-		if (addr == NULL || ld->ld_lock == addr) {
+		if (ld->ld_lock == addr) {
 			lockdebug_dump(ld, pr);
-			if (addr != NULL)
-				return;
+			return;
 		}
 	}
-	if (addr != NULL) {
-		(*pr)("Sorry, no record of a lock with address %p found.\n",
-		    addr);
-	}
+	(*pr)("Sorry, no record of a lock with address %p found.\n", addr);
 #else
 	(*pr)("Sorry, kernel not built with the LOCKDEBUG option.\n");
 #endif	/* LOCKDEBUG */
@@ -830,8 +818,7 @@ lockdebug_abort(volatile void *lock, lockops_t *ops, const char *func,
 	int s;
 
 	s = splhigh();
-	if ((ld = lockdebug_lookup(lock, 
-			(uintptr_t) __builtin_return_address(0))) != NULL) {
+	if ((ld = lockdebug_lookup(lock)) != NULL) {
 		lockdebug_abort1(ld, s, func, msg, true);
 		return;
 	}
@@ -848,8 +835,8 @@ lockdebug_abort(volatile void *lock, lockops_t *ops, const char *func,
 		    "lock address : %#018lx\n"
 		    "current cpu  : %18d\n"
 		    "current lwp  : %#018lx\n",
-		    ops->lo_name, func, msg, (long)lock,
-		    (int)cpu_index(curcpu()), (long)curlwp);
+		    ops->lo_name, func, msg, (long)lock, (int)cpu_number(),
+		    (long)curlwp);
 		(*ops->lo_dump)(lock);
 		printf_nolog("\n");
 	}

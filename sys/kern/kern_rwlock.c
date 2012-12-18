@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_rwlock.c,v 1.39 2012/12/12 14:53:01 yamt Exp $	*/
+/*	$NetBSD: kern_rwlock.c,v 1.28.4.2 2009/07/01 22:32:42 snj Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002, 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_rwlock.c,v 1.39 2012/12/12 14:53:01 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_rwlock.c,v 1.28.4.2 2009/07/01 22:32:42 snj Exp $");
 
 #define	__RWLOCK_PRIVATE
 
@@ -103,10 +103,10 @@ do {									\
 
 #endif	/* DIAGNOSTIC */
 
-#define	RW_SETDEBUG(rw, on)		((rw)->rw_owner |= (on) ? 0 : RW_NODEBUG)
-#define	RW_DEBUG_P(rw)			(((rw)->rw_owner & RW_NODEBUG) == 0)
+#define	RW_SETDEBUG(rw, on)		((rw)->rw_owner |= (on) ? RW_DEBUG : 0)
+#define	RW_DEBUG_P(rw)			(((rw)->rw_owner & RW_DEBUG) != 0)
 #if defined(LOCKDEBUG)
-#define	RW_INHERITDEBUG(new, old)	(new) |= (old) & RW_NODEBUG
+#define	RW_INHERITDEBUG(new, old)	(new) |= (old) & RW_DEBUG
 #else /* defined(LOCKDEBUG) */
 #define	RW_INHERITDEBUG(new, old)	/* nothing */
 #endif /* defined(LOCKDEBUG) */
@@ -218,44 +218,51 @@ void
 rw_destroy(krwlock_t *rw)
 {
 
-	RW_ASSERT(rw, (rw->rw_owner & ~RW_NODEBUG) == 0);
+	RW_ASSERT(rw, (rw->rw_owner & ~RW_DEBUG) == 0);
 	LOCKDEBUG_FREE(RW_DEBUG_P(rw), rw);
 }
 
 /*
- * rw_oncpu:
+ * rw_onproc:
  *
  *	Return true if an rwlock owner is running on a CPU in the system.
  *	If the target is waiting on the kernel big lock, then we must
  *	release it.  This is necessary to avoid deadlock.
+ *
+ *	Note that we can't use the rwlock owner field as an LWP pointer.  We
+ *	don't have full control over the timing of our execution, and so the
+ *	pointer could be completely invalid by the time we dereference it.
  */
-static bool
-rw_oncpu(uintptr_t owner)
+static int
+rw_onproc(uintptr_t owner, struct cpu_info **cip)
 {
 #ifdef MULTIPROCESSOR
+	CPU_INFO_ITERATOR cii;
 	struct cpu_info *ci;
 	lwp_t *l;
 
-	KASSERT(kpreempt_disabled());
-
-	if ((owner & (RW_WRITE_LOCKED|RW_HAS_WAITERS)) != RW_WRITE_LOCKED) {
-		return false;
-	}
-
-	/*
-	 * See lwp_dtor() why dereference of the LWP pointer is safe.
-	 * We must have kernel preemption disabled for that.
-	 */
+	if ((owner & (RW_WRITE_LOCKED|RW_HAS_WAITERS)) != RW_WRITE_LOCKED)
+		return 0;
 	l = (lwp_t *)(owner & RW_THREAD);
-	ci = l->l_cpu;
 
-	if (ci && ci->ci_curlwp == l) {
-		/* Target is running; do we need to block? */
-		return (ci->ci_biglock_wanted != l);
-	}
-#endif
-	/* Not running.  It may be safe to block now. */
-	return false;
+	/* See if the target is running on a CPU somewhere. */
+	if ((ci = *cip) != NULL && ci->ci_curlwp == l)
+		goto run;
+	for (CPU_INFO_FOREACH(cii, ci))
+		if (ci->ci_curlwp == l)
+			goto run;
+
+	/* No: it may be safe to block now. */
+	*cip = NULL;
+	return 0;
+
+ run:
+ 	/* Target is running; do we need to block? */
+ 	*cip = ci;
+	return ci->ci_biglock_wanted != l;
+#else
+	return 0;
+#endif	/* MULTIPROCESSOR */
 }
 
 /*
@@ -267,6 +274,7 @@ void
 rw_vector_enter(krwlock_t *rw, const krw_t op)
 {
 	uintptr_t owner, incr, need_wait, set_wait, curthread, next;
+	struct cpu_info *ci;
 	turnstile_t *ts;
 	int queue;
 	lwp_t *l;
@@ -311,8 +319,7 @@ rw_vector_enter(krwlock_t *rw, const krw_t op)
 
 	LOCKSTAT_ENTER(lsflag);
 
-	KPREEMPT_DISABLE(curlwp);
-	for (owner = rw->rw_owner; ;) {
+	for (ci = NULL, owner = rw->rw_owner;;) {
 		/*
 		 * Read the lock owner field.  If the need-to-wait
 		 * indicator is clear, then try to acquire the lock.
@@ -333,26 +340,23 @@ rw_vector_enter(krwlock_t *rw, const krw_t op)
 			owner = next;
 			continue;
 		}
-		if (__predict_false(panicstr != NULL)) {
-			kpreempt_enable();
+
+		if (__predict_false(panicstr != NULL))
 			return;
-		}
-		if (__predict_false(RW_OWNER(rw) == curthread)) {
+		if (__predict_false(RW_OWNER(rw) == curthread))
 			rw_abort(rw, __func__, "locking against myself");
-		}
+
 		/*
 		 * If the lock owner is running on another CPU, and
 		 * there are no existing waiters, then spin.
 		 */
-		if (rw_oncpu(owner)) {
+		if (rw_onproc(owner, &ci)) {
 			LOCKSTAT_START_TIMER(lsflag, spintime);
 			u_int count = SPINLOCK_BACKOFF_MIN;
 			do {
-				KPREEMPT_ENABLE(curlwp);
 				SPINLOCK_BACKOFF(count);
-				KPREEMPT_DISABLE(curlwp);
 				owner = rw->rw_owner;
-			} while (rw_oncpu(owner));
+			} while (rw_onproc(owner, &ci));
 			LOCKSTAT_STOP_TIMER(lsflag, spintime);
 			LOCKSTAT_COUNT(spincnt, 1);
 			if ((owner & need_wait) == 0)
@@ -372,7 +376,7 @@ rw_vector_enter(krwlock_t *rw, const krw_t op)
 		 * spun on the turnstile chain lock.
 		 */
 		owner = rw->rw_owner;
-		if ((owner & need_wait) == 0 || rw_oncpu(owner)) {
+		if ((owner & need_wait) == 0 || rw_onproc(owner, &ci)) {
 			turnstile_exit(rw);
 			continue;
 		}
@@ -394,10 +398,7 @@ rw_vector_enter(krwlock_t *rw, const krw_t op)
 		 */
 		if (op == RW_READER || (rw->rw_owner & RW_THREAD) == curthread)
 			break;
-
-		owner = rw->rw_owner;
 	}
-	KPREEMPT_ENABLE(curlwp);
 
 	LOCKSTAT_EVENT(lsflag, rw, LB_RWLOCK |
 	    (op == RW_WRITER ? LB_SLEEP1 : LB_SLEEP2), slpcnt, slptime);
@@ -485,7 +486,7 @@ rw_vector_exit(krwlock_t *rw)
 	 * set WRITE_WANTED to block out new readers, and let them
 	 * do the work of acquring the lock in rw_vector_enter().
 	 */
-	if (rcnt == 0 || decr == RW_READ_INCR) {
+	if (rcnt == 0 || (decr == RW_READ_INCR && wcnt != 0)) {
 		RW_DASSERT(rw, wcnt != 0);
 		RW_DASSERT(rw, (owner & RW_WRITE_WANTED) != 0);
 

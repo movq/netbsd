@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_hades.c,v 1.13 2012/02/13 20:00:00 jdc Exp $	*/
+/*	$NetBSD: pci_hades.c,v 1.8 2008/05/30 19:26:35 ad Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.  All rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_hades.c,v 1.13 2012/02/13 20:00:00 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_hades.c,v 1.8 2008/05/30 19:26:35 ad Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -41,7 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_hades.c,v 1.13 2012/02/13 20:00:00 jdc Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -56,17 +56,20 @@ __KERNEL_RCSID(0, "$NetBSD: pci_hades.c,v 1.13 2012/02/13 20:00:00 jdc Exp $");
 #include <atari/dev/grf_etreg.h>
 
 int
-pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
+pci_bus_maxdevs(pc, busno)
+	pci_chipset_tag_t pc;
+	int busno;
 {
 	return (4);
 }
 
-static int pci_config_offset(pcitag_t);
+static int pci_config_offset __P((pcitag_t));
 
 /*
  * Atari_init.c maps the config areas PAGE_SIZE bytes apart....
  */
-static int pci_config_offset(pcitag_t tag)
+static int pci_config_offset(tag)
+pcitag_t	tag;
 {
 	int	device;
 
@@ -75,7 +78,10 @@ static int pci_config_offset(pcitag_t tag)
 }
 
 pcireg_t
-pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
+pci_conf_read(pc, tag, reg)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	int reg;
 {
 	u_long	data;
 
@@ -84,7 +90,11 @@ pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 }
 
 void
-pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
+pci_conf_write(pc, tag, reg, data)
+	pci_chipset_tag_t pc;
+	pcitag_t tag;
+	int reg;
+	pcireg_t data;
 {
 	*((u_long *)(pci_conf_addr + pci_config_offset(tag) + reg))
 		= bswap32(data);
@@ -98,10 +108,12 @@ pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
  */
 static pci_intr_info_t iinfo[4] = { { -1 }, { -1 }, { -1 }, { -1 } };
 
-static int	iifun(int, int);
+static int	iifun __P((int, int));
 
 static int
-iifun(int slot, int sr)
+iifun(slot, sr)
+int	slot;
+int	sr;
 {
 	pci_intr_info_t *iinfo_p;
 	int		s;
@@ -146,7 +158,12 @@ pci_intr_setattr(pci_chipset_tag_t pc, pci_intr_handle_t *ih,
 }
 
 void *
-pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih, int level, int (*ih_fun)(void *), void *ih_arg)
+pci_intr_establish(pc, ih, level, ih_fun, ih_arg)
+	pci_chipset_tag_t	pc;
+	pci_intr_handle_t	ih;
+	int			level;
+	int			(*ih_fun) __P((void *));
+	void			*ih_arg;
 {
 	pci_intr_info_t *iinfo_p;
 	struct intrhand	*ihand;
@@ -178,7 +195,9 @@ pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih, int level, int (*
 }
 
 void
-pci_intr_disestablish(pci_chipset_tag_t pc, void *cookie)
+pci_intr_disestablish(pc, cookie)
+	pci_chipset_tag_t pc;
+	void *cookie;
 {
 	pci_intr_info_t *iinfo_p = (pci_intr_info_t *)cookie;
 
@@ -212,7 +231,12 @@ static u_char gdc_tab[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x0e, 0x00, 0xff };
 
 void
-ati_vga_init(pci_chipset_tag_t pc, pcitag_t tag, int id, volatile u_char *ba, u_char *fb)
+ati_vga_init(pc, tag, id, ba, fb)
+	pci_chipset_tag_t	pc;
+	pcitag_t		tag;
+	int			id;
+	volatile u_char		*ba;
+	u_char			*fb;
 {
 	int			i, csr;
 

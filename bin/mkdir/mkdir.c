@@ -1,4 +1,4 @@
-/* $NetBSD: mkdir.c,v 1.38 2011/08/29 14:45:28 joerg Exp $ */
+/* $NetBSD: mkdir.c,v 1.37 2008/07/20 00:52:40 lukem Exp $ */
 
 /*
  * Copyright (c) 1983, 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1992, 1993\
 #if 0
 static char sccsid[] = "@(#)mkdir.c	8.2 (Berkeley) 1/25/94";
 #else
-__RCSID("$NetBSD: mkdir.c,v 1.38 2011/08/29 14:45:28 joerg Exp $");
+__RCSID("$NetBSD: mkdir.c,v 1.37 2008/07/20 00:52:40 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,8 +55,9 @@ __RCSID("$NetBSD: mkdir.c,v 1.38 2011/08/29 14:45:28 joerg Exp $");
 #include <string.h>
 #include <unistd.h>
 
-static int		mkpath(char *, mode_t, mode_t);
-__dead static void	usage(void);
+int	mkpath(char *, mode_t, mode_t);
+void	usage(void);
+int	main(int, char *[]);
 
 int
 main(int argc, char *argv[])
@@ -148,7 +149,7 @@ main(int argc, char *argv[])
  *	mode     - file mode of terminal directory
  *	dir_mode - file mode of intermediate directories
  */
-static int
+int
 mkpath(char *path, mode_t mode, mode_t dir_mode)
 {
 	struct stat sb;
@@ -212,7 +213,7 @@ mkpath(char *path, mode_t mode, mode_t dir_mode)
 	return 0;
 }
 
-static void
+void
 usage(void)
 {
 

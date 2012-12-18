@@ -1,4 +1,4 @@
-/*	$NetBSD: ultrix_pathname.c,v 1.38 2009/12/14 00:47:12 matt Exp $	*/
+/*	$NetBSD: ultrix_pathname.c,v 1.35 2008/06/24 11:18:15 ad Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ultrix_pathname.c,v 1.38 2009/12/14 00:47:12 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ultrix_pathname.c,v 1.35 2008/06/24 11:18:15 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -191,15 +191,15 @@ ultrix_sys_open(struct lwp *l, const struct ultrix_sys_open_args *uap, register_
 
 
 struct ultrix_statfs {
-	int32_t	f_type;		/* type of info, zero for now */
-	int32_t	f_bsize;	/* fundamental file system block size */
-	int32_t	f_blocks;	/* total blocks in file system */
-	int32_t	f_bfree;	/* free blocks */
-	int32_t	f_bavail;	/* free blocks available to non-super-user */
-	int32_t	f_files;	/* total file nodes in file system */
-	int32_t	f_ffree;	/* free file nodes in fs */
+	long	f_type;		/* type of info, zero for now */
+	long	f_bsize;	/* fundamental file system block size */
+	long	f_blocks;	/* total blocks in file system */
+	long	f_bfree;	/* free blocks */
+	long	f_bavail;	/* free blocks available to non-super-user */
+	long	f_files;	/* total file nodes in file system */
+	long	f_ffree;	/* free file nodes in fs */
 	fsid_t	f_fsid;		/* file system id */
-	int32_t	f_spare[7];	/* spare for later */
+	long	f_spare[7];	/* spare for later */
 };
 
 /*
@@ -232,16 +232,16 @@ ultrix_sys_statfs(struct lwp *l, const struct ultrix_sys_statfs_args *uap, regis
 	struct mount *mp;
 	struct statvfs *sp;
 	int error;
-	struct vnode *vp;
+	struct nameidata nd;
 
-	error = namei_simple_user(SCARG(uap, path),
-				NSM_FOLLOW_TRYEMULROOT, &vp);
-	if (error != 0)
+	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
+	    SCARG(uap, path));
+	if ((error = namei(&nd)) != 0)
 		return error;
 
-	mp = vp->v_mount;
+	mp = nd.ni_vp->v_mount;
 	sp = &mp->mnt_stat;
-	vrele(vp);
+	vrele(nd.ni_vp);
 	if ((error = VFS_STATVFS(mp, sp)) != 0)
 		return error;
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
@@ -283,7 +283,5 @@ ultrix_sys_mknod(struct lwp *l, const struct ultrix_sys_mknod_args *uap, registe
 		return sys_mkfifo(l, (const struct sys_mkfifo_args *)uap,
 		    retval);
 
-	return compat_50_sys_mknod(l,
-				   (const struct compat_50_sys_mknod_args *)uap,
-				   retval);
+	return sys_mknod(l, (const struct sys_mknod_args *)uap, retval);
 }

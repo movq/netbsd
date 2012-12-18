@@ -1,4 +1,4 @@
-/* 	$NetBSD: pstwo.c,v 1.5 2012/10/27 17:17:51 chs Exp $ */
+/* 	$NetBSD: pstwo.c,v 1.2 2007/02/21 22:59:40 thorpej Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pstwo.c,v 1.5 2012/10/27 17:17:51 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pstwo.c,v 1.2 2007/02/21 22:59:40 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: pstwo.c,v 1.5 2012/10/27 17:17:51 chs Exp $");
 #include <sys/syslog.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/pckbport/pckbportvar.h>
 
@@ -57,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: pstwo.c,v 1.5 2012/10/27 17:17:51 chs Exp $");
 #define NEXT(idx) 		(void)((idx) = ((idx) + 1) % PSTWO_RXBUF_SIZE)
 
 struct pstwo_softc {
-	device_t 		sc_dev;
+	struct device 		sc_dev;
 	void 			*sc_ih;
 
 	bus_space_tag_t 	sc_iot;
@@ -82,9 +82,9 @@ static void 	pstwo_intr_establish(void *, pckbport_slot_t);
 static void 	pstwo_set_poll(void *, pckbport_slot_t, int);
 
 /* Generic device. */
-static void 	pstwo_attach(device_t, device_t, void *);
+static void 	pstwo_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(pstwo, sizeof(struct pstwo_softc),
+CFATTACH_DECL(pstwo, sizeof(struct pstwo_softc),
     xcvbus_child_match, pstwo_attach, NULL, NULL);
 
 static struct pckbport_accessops pstwo_ops = {
@@ -97,26 +97,26 @@ static struct pckbport_accessops pstwo_ops = {
 };
 
 static void
-pstwo_attach(device_t parent, device_t self, void *aux)
+pstwo_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct xcvbus_attach_args 	*vaa = aux;
 	struct pstwo_softc 		*sc = device_private(self);
 	int 				i;
 
-	aprint_normal(": PS2 port\n");
+	printf(": PS2 port\n");
 
 	if ((sc->sc_ih = intr_establish(vaa->vaa_intr, IST_LEVEL, IPL_TTY,
 	    pstwo_intr, sc)) == NULL) {
-		aprint_error_dev(self, "could not establish interrupt\n");
-		return;
+		printf("%s: could not establish interrupt\n",
+		    device_xname(self));
+		return ;
 	}
 
-	sc->sc_dev = self;
 	sc->sc_iot = vaa->vaa_iot;
 
 	if (bus_space_map(vaa->vaa_iot, vaa->vaa_addr, PSTWO_SIZE, 0,
 	    &sc->sc_ioh) != 0) {
-		aprint_error_dev(self, "could not map registers\n");
+		printf("%s: could not map registers\n", device_xname(self));
 		return ;
 	}
 
@@ -137,7 +137,7 @@ static void
 pstwo_printreg(struct pstwo_softc *sc)
 {
 #define PRINTREG(name, reg) \
-	printf("%s: [0x%08x] %s -> 0x%08x\n", device_xname(sc->sc_dev), \
+	printf("%s: [0x%08x] %s -> 0x%08x\n", device_xname(&sc->sc_dev), \
 	    reg, name, bus_space_read_4(sc->sc_iot, sc->sc_ioh, reg))
 
 	PRINTREG("status   ", PSTWO_STAT);

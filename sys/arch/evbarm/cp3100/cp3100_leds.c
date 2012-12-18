@@ -1,4 +1,4 @@
-/*	$NetBSD: cp3100_leds.c,v 1.2 2011/07/01 20:38:16 dyoung Exp $	*/
+/*	$NetBSD: cp3100_leds.c,v 1.1 2006/11/08 23:49:02 scw Exp $	*/
 
 /*
  * Copyright 2006 Wasabi Systems, Inc.
@@ -36,12 +36,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cp3100_leds.c,v 1.2 2011/07/01 20:38:16 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cp3100_leds.c,v 1.1 2006/11/08 23:49:02 scw Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <evbarm/iq80321/iq80321reg.h>
 #include <evbarm/iq80321/iq80321var.h>

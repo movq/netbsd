@@ -1,4 +1,4 @@
-.\"	$NetBSD: fss.4,v 1.15 2011/02/24 09:38:57 hannken Exp $	*/
+.\"	$NetBSD: fss.4,v 1.12.2.1 2011/06/18 17:00:25 bouyer Exp $	*/
 .\"
 .\"
 .\" Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -50,7 +50,7 @@ It can be configured via
 The
 .Xr ioctl 2
 command codes below are defined in
-.In sys/dev/fssvar.h .
+.Aq Pa sys/dev/fssvar.h .
 .Pp
 The (third) argument to
 .Xr ioctl 2
@@ -156,3 +156,7 @@ The
 .Nm
 device appeared in
 .Nx 2.0 .
+.Sh BUGS
+This driver is
+.Em experimental .
+Be sure you have a backup before you use it.

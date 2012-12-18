@@ -1,4 +1,4 @@
-/*	$NetBSD: boot32.c,v 1.39 2012/05/10 10:27:10 skrll Exp $	*/
+/*	$NetBSD: boot32.c,v 1.34 2008/04/12 16:10:46 chris Exp $	*/
 
 /*-
  * Copyright (c) 2002 Reinoud Zandijk
@@ -121,7 +121,6 @@ char	*memory_image, *bottom_memory, *top_memory;
 /* kernel info */
 u_long	 marks[MARK_MAX];		/* loader mark pointers 	*/
 u_long	 kernel_physical_start;		/* where does it get relocated	*/
-u_long	 kernel_physical_maxsize;	/* Max allowed size of kernel	*/
 u_long	 kernel_free_vm_start;		/* where does the free VM start	*/
 /* some free space to mess with	*/
 u_long	 scratch_virtualbase, scratch_physicalbase;
@@ -130,6 +129,9 @@ u_long	 scratch_virtualbase, scratch_physicalbase;
 /* bootprogram identifiers */
 extern const char bootprog_rev[];
 extern const char bootprog_name[];
+extern const char bootprog_date[];
+extern const char bootprog_maker[];
+
 
 /* predefines / prototypes */
 void	 init_datastructures(void);
@@ -657,7 +659,7 @@ vsync_rate(void)
 	time0 = os_read_monotonic_time();
 	while (os_read_monotonic_time() - time0 < 100)
 		continue;
-	return (uint8_t)(count0 - osbyte_read(osbyte_VAR_VSYNC_TIMER));
+	return (u_int8_t)(count0 - osbyte_read(osbyte_VAR_VSYNC_TIMER));
 }
 
 void
@@ -709,13 +711,9 @@ create_configuration(int argc, char **argv, int start_args)
 	strcpy(bconfig->args, "");
 	for (i = start_args; i < argc; i++) {
 		if (strncmp(argv[i], "root=",5) ==0) root_specified = 1;
-		if (i > start_args)
-			strcat(bconfig->args, " ");
 		strcat(bconfig->args, argv[i]);
 	}
 	if (!root_specified) {
-		if (start_args < argc)
-			strcat(bconfig->args, " ");
 		strcat(bconfig->args, "root=");
 		strcat(bconfig->args, DEFAULT_ROOT);
 	}
@@ -767,10 +765,10 @@ int
 main(int argc, char **argv)
 {
 	int howto, start_args, ret;
-	int class;
 
 	printf("\n\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
+	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 	printf(">> Booting NetBSD/acorn32 on a RiscPC/A7000/NC\n");
 	printf("\n");
 
@@ -790,12 +788,10 @@ main(int argc, char **argv)
 		free_relocation_page =
 		    mem_pages_info + first_mapped_PODRAM_page_index;
 		kernel_physical_start = PODRAM_addr[0];
-		kernel_physical_maxsize = PODRAM_pages[0] * nbpp;
 	} else {
 		free_relocation_page =
 		    mem_pages_info + first_mapped_DRAM_page_index;
 		kernel_physical_start = DRAM_addr[0];
-		kernel_physical_maxsize = DRAM_pages[0] * nbpp;
 	}
 
 	printf("\nLoading %s ", booted_file);
@@ -804,11 +800,6 @@ main(int argc, char **argv)
 	ret = loadfile(booted_file, marks, COUNT_KERNEL);
 	if (ret == -1) panic("Kernel load failed"); /* lie to the user ... */
 	close(ret);
-
-	if (marks[MARK_END] - marks[MARK_START] > kernel_physical_maxsize) 
-	{
-		panic("\nKernel is bigger than the first DRAM module, unable to boot\n");
-	}
 
 	/*
 	 * calculate how much the difference is between physical and
@@ -819,7 +810,7 @@ main(int argc, char **argv)
 	kernel_free_vm_start = (marks[MARK_END] + nbpp-1) & ~(nbpp-1);
 
 	/* we seem to be forced to clear the marks[] ? */
-	memset(marks, 0, sizeof(marks));
+	bzero(marks, sizeof(marks));
 
 	/* really load it ! */
 	ret = loadfile(booted_file, marks, LOAD_KERNEL);
@@ -856,11 +847,8 @@ main(int argc, char **argv)
 	/* dismount all filesystems */
 	xosfscontrol_shutdown();
 
-	os_readsysinfo_platform_class(&class, NULL, NULL);
-	if (class != osreadsysinfo_Platform_Pace) {
-		/* reset devices, well they try to anyway */
-		service_pre_reset();
-	}
+	/* reset devices, well they try to anyway */
+	service_pre_reset();
 
 	start_kernel(
 		/* r0 relocation code page (V)	*/ relocate_code_page->logical,

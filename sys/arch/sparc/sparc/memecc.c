@@ -1,4 +1,4 @@
-/*	$NetBSD: memecc.c,v 1.15 2012/10/10 16:51:51 tsutsui Exp $	*/
+/*	$NetBSD: memecc.c,v 1.10 2008/04/28 20:23:36 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -34,17 +34,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: memecc.c,v 1.15 2012/10/10 16:51:51 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: memecc.c,v 1.10 2008/04/28 20:23:36 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/autoconf.h>
 #include <sparc/sparc/memeccreg.h>
 
 struct memecc_softc {
+	struct device		sc_dev;		/* base device */
 	bus_space_tag_t		sc_bt;
 	bus_space_handle_t	sc_bh;
 };
@@ -52,17 +53,17 @@ struct memecc_softc {
 struct memecc_softc *memecc_sc;
 
 /* autoconfiguration driver */
-static void	memecc_attach(device_t, device_t, void *);
-static int	memecc_match(device_t, cfdata_t, void *);
+static void	memecc_attach(struct device *, struct device *, void *);
+static int	memecc_match(struct device *, struct cfdata *, void *);
 static int	memecc_error(void);
 
-extern int (*memerr_handler)(void);
+int	(*memerr_handler)(void);
 
-CFATTACH_DECL_NEW(eccmemctl, sizeof(struct memecc_softc),
+CFATTACH_DECL(eccmemctl, sizeof(struct memecc_softc),
     memecc_match, memecc_attach, NULL, NULL);
 
 int
-memecc_match(device_t parent, cfdata_t cf, void *aux)
+memecc_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -73,17 +74,12 @@ memecc_match(device_t parent, cfdata_t cf, void *aux)
  * Attach the device.
  */
 void
-memecc_attach(device_t parent, device_t self, void *aux)
+memecc_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct memecc_softc *sc = device_private(self);
+	struct memecc_softc *sc = (struct memecc_softc *)self;
 	struct mainbus_attach_args *ma = aux;
 	int node;
 	uint32_t reg;
-
-	if (memerr_handler) {
-		printf("%s: already attached\n", __func__);
-		return;
-	}
 
 	sc->sc_bt = ma->ma_bustag;
 	node = ma->ma_node;
@@ -128,10 +124,10 @@ memecc_error(void)
 	efsr = bus_space_read_4(memecc_sc->sc_bt, bh, ECC_FSR_REG);
 	efar0 = bus_space_read_4(memecc_sc->sc_bt, bh, ECC_AFR0_REG);
 	efar1 = bus_space_read_4(memecc_sc->sc_bt, bh, ECC_AFR1_REG);
-	snprintb(bits, sizeof(bits), ECC_FSR_BITS, efsr);
-	printf("memory error:\n\tEFSR: %s\n", bits);
-	snprintb(bits, sizeof(bits), ECC_AFR_BITS, efar0);
-	printf("\tMBus transaction: %s\n", bits);
+	printf("memory error:\n\tEFSR: %s\n",
+		bitmask_snprintf(efsr, ECC_FSR_BITS, bits, sizeof(bits)));
+	printf("\tMBus transaction: %s\n",
+		bitmask_snprintf(efar0, ECC_AFR_BITS, bits, sizeof(bits)));
 	printf("\taddress: 0x%x%x\n", efar0 & ECC_AFR_PAH, efar1);
 	printf("\tmodule location: %s\n",
 		prom_pa_location(efar1, efar0 & ECC_AFR_PAH));

@@ -1,5 +1,4 @@
-/*	Id: order.c,v 1.12 2008/11/30 21:00:24 ragge Exp 	*/	
-/*	$NetBSD: order.c,v 1.1.1.3 2010/06/03 18:57:20 plunky Exp $	*/
+/*	$Id: order.c,v 1.1.1.1 2008/08/24 05:32:56 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -82,15 +81,13 @@ myormake(NODE * q)
  * Shape matches for UMUL.  Cooperates with offstar().
  */
 int
-shumul(NODE *p, int shape)
+shumul(NODE * p)
 {
 	if (x2debug)
 		printf("shumul(%p)\n", p);
 
 	/* Always turn it into OREG */
-	if (shape & SOREG)
-		return SROREG;
-	return SRNOPE;
+	return SOREG;
 }
 
 /*

@@ -1,6 +1,4 @@
-/*	$NetBSD: LDAPAttrType.h,v 1.1.1.2 2010/03/08 02:14:20 lukem Exp $	*/
-
-// OpenLDAP: pkg/ldap/contrib/ldapc++/src/LDAPAttrType.h,v 1.3.4.4 2008/09/02 23:58:15 quanah Exp
+// $OpenLDAP: pkg/ldap/contrib/ldapc++/src/LDAPAttrType.h,v 1.3.4.3 2008/05/01 21:28:42 quanah Exp $
 /*
  * Copyright 2003, OpenLDAP Foundation, All Rights Reserved.
  * COPYING RESTRICTIONS APPLY, see COPYRIGHT file
@@ -13,6 +11,9 @@
 #include <string>
 
 #include "StringList.h"
+
+#define SCHEMA_PARSE_FLAG    0x03
+
 
 using namespace std;
 
@@ -42,8 +43,7 @@ class LDAPAttrType{
 	 * "( SuSE.YaST.Attr:19 NAME ( 'skelDir' ) DESC ''
 	 *    EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )"
          */   
-        LDAPAttrType (string at_item, int flags = LDAP_SCHEMA_ALLOW_NO_OID | 
-                      LDAP_SCHEMA_ALLOW_QUOTED );
+        LDAPAttrType (string at_item);
 
         /**
          * Destructor

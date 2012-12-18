@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_global.c,v 1.4 2011/03/21 14:53:03 tnozaki Exp $ */
+/*	$NetBSD: ex_global.c,v 1.1.1.2.6.1 2009/01/20 02:41:12 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -80,8 +80,9 @@ ex_g_setup(SCR *sp, EXCMD *cmdp, enum which cmd)
 	NEEDFILE(sp, cmdp);
 
 	if (F_ISSET(sp, SC_EX_GLOBAL)) {
-		msgq_wstr(sp, M_ERR, cmdp->cmd->name,
-	"124|The %s command can't be used as part of a global or v command");
+		msgq(sp, M_ERR,
+	"124|The %s command can't be used as part of a global or v command",
+		    cmdp->cmd->name);
 		return (1);
 	}
 
@@ -92,7 +93,7 @@ ex_g_setup(SCR *sp, EXCMD *cmdp, enum which cmd)
 	if (cmdp->argc == 0)
 		goto usage;
 	for (p = cmdp->argv[0]->bp; ISBLANK(*p); ++p);
-	if (*p == '\0' || ISALNUM((UCHAR_T)*p) ||
+	if (*p == '\0' || ISALNUM(*p) ||
 	    *p == '\\' || *p == '|' || *p == '\n') {
 usage:		ex_emsg(sp, cmdp->cmd->usage, EXM_USAGE);
 		return (1);

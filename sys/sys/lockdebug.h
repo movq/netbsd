@@ -1,4 +1,4 @@
-/*	$NetBSD: lockdebug.h,v 1.13 2011/11/21 04:36:05 christos Exp $	*/
+/*	$NetBSD: lockdebug.h,v 1.10 2008/05/31 13:15:21 ad Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
 #include "opt_lockdebug.h"
 #endif
 
-#if !defined(_KERNEL) && !defined(_KMEMUSER)
+#ifndef _KERNEL
 #error "Sorry, nothing of interest to user level programs here."
 #endif
 
@@ -55,8 +55,7 @@ typedef	struct lockops {
 void	lockdebug_abort(volatile void *, lockops_t *,
 			const char *, const char *);
 
-void	lockdebug_lock_print(void *, void (*)(const char *, ...)
-    __printflike(1, 2));
+void	lockdebug_lock_print(void *, void (*)(const char *, ...));
 
 #ifdef LOCKDEBUG
 

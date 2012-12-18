@@ -74,11 +74,9 @@ struct drm_file;
 #include <machine/param.h>
 #endif
 #include <machine/pmap.h>
-#include <sys/bus.h>
-#if defined(__i386__) || defined(__x86_64__)
+#include <machine/bus.h>
 #include <machine/specialreg.h>
 #include <machine/sysarch.h>
-#endif
 #include <sys/endian.h>
 #include <sys/mman.h>
 #if defined( __FreeBSD__)
@@ -96,9 +94,7 @@ struct drm_file;
 #include <sys/selinfo.h>
 #include <sys/bus.h>
 #elif   defined(__NetBSD__)
-#if defined(__i386__) || defined(__x86_64__)
 #include <machine/mtrr.h>
-#endif
 #include <sys/vnode.h>
 #include <sys/select.h>
 #include <sys/device.h>
@@ -186,7 +182,6 @@ MALLOC_DECLARE(DRM_MEM_AGPLISTS);
 MALLOC_DECLARE(DRM_MEM_CTXBITMAP);
 MALLOC_DECLARE(DRM_MEM_SGLISTS);
 MALLOC_DECLARE(DRM_MEM_DRAWABLE);
-MALLOC_DECLARE(DRM_MEM_MM);
 
 #define DRM_MAX_CTXBITMAP (PAGE_SIZE * 8)
 
@@ -267,10 +262,6 @@ typedef int			irqreturn_t;
 #define IRQ_NONE		0
 #endif
 
-#define container_of(ptr, type, member) ({			\
-	__typeof( ((type *)0)->member ) *__mptr = (ptr);	\
-	(type *)( (char *)__mptr - offsetof(type,member) );})
-
 enum {
 	DRM_IS_NOT_AGP,
 	DRM_IS_AGP,
@@ -302,11 +293,7 @@ enum {
 #define PAGE_ALIGN(addr)	round_page(addr)
 #define DRM_SUSER(p)    (kauth_cred_getsvuid((p)->p_cred) == 0)
 #define DRM_AGP_FIND_DEVICE()	agp_find_device(0)
-#ifdef MTRR_TYPE_WC
 #define DRM_MTRR_WC		MTRR_TYPE_WC
-#else
-#define DRM_MTRR_WC		0
-#endif
 #define jiffies			hardclock_ticks
 
 #define DRM_MAXUNITS    128
@@ -696,7 +683,7 @@ struct drm_ati_pcigart_info {
 };
 
 #ifndef DMA_BIT_MASK
-#define DMA_BIT_MASK(n) ((dma_addr_t)(((n) == 64) ? ~0ULL : (1ULL<<(n)) - 1))
+#define DMA_BIT_MASK(n) (((n) == 64) ? ~0ULL : (1ULL<<(n)) - 1)
 #endif
 
 #define upper_32_bits(n) ((u32)(((n) >> 16) >> 16))
@@ -728,9 +715,9 @@ struct drm_driver_info {
 	int	(*irq_postinstall)(struct drm_device *dev);
 	void	(*irq_uninstall)(struct drm_device *dev);
 	irqreturn_t	(*irq_handler)(DRM_IRQ_ARGS);
-	u32	(*get_vblank_counter)(struct drm_device *dev, unsigned int crtc);
-	int	(*enable_vblank)(struct drm_device *dev, unsigned int crtc);
-	void	(*disable_vblank)(struct drm_device *dev, unsigned int crtc);
+	u32	(*get_vblank_counter)(struct drm_device *dev, int crtc);
+	int	(*enable_vblank)(struct drm_device *dev, int crtc);
+	void	(*disable_vblank)(struct drm_device *dev, int crtc);
 
 	drm_pci_id_list_t *id_entry;	/* PCI ID, name, and chipset private */
 
@@ -998,6 +985,7 @@ d_mmap_t drm_mmap;
 int	drm_probe(struct pci_attach_args *pa, drm_pci_id_list_t *idlist);
 void	drm_attach(device_t kdev, struct pci_attach_args *pa, drm_pci_id_list_t *idlist);
 int     drm_detach(device_t self, int flags);
+int     drm_activate(device_t self, devact_t act);
 dev_type_ioctl(drm_ioctl);
 dev_type_open(drm_open);
 dev_type_close(drm_close);
@@ -1027,8 +1015,13 @@ void	drm_mem_uninit(void);
 void	*drm_ioremap_wc(struct drm_device *dev, drm_local_map_t *map);
 void	*drm_ioremap(struct drm_device *dev, drm_local_map_t *map);
 void	drm_ioremapfree(drm_local_map_t *map);
+#if defined(__FreeBSD__)
 int	drm_mtrr_add(unsigned long offset, size_t size, int flags);
 int	drm_mtrr_del(int handle, unsigned long offset, size_t size, int flags);
+#elif   defined(__NetBSD__)
+int	drm_mtrr_add(unsigned long offset, size_t size, int flags);
+int	drm_mtrr_del(unsigned long offset, size_t size, int flags);
+#endif
 
 int	drm_context_switch(struct drm_device *dev, int old, int new);
 int	drm_context_switch_complete(struct drm_device *dev, int new);
@@ -1075,14 +1068,14 @@ irqreturn_t drm_irq_handler(DRM_IRQ_ARGS);
 void	drm_driver_irq_preinstall(struct drm_device *dev);
 void	drm_driver_irq_postinstall(struct drm_device *dev);
 void	drm_driver_irq_uninstall(struct drm_device *dev);
-void	drm_handle_vblank(struct drm_device *dev, unsigned int crtc);
-u32	drm_vblank_count(struct drm_device *dev, unsigned int crtc);
-int	drm_vblank_get(struct drm_device *dev, unsigned int crtc);
-void	drm_vblank_put(struct drm_device *dev, unsigned int crtc);
+void	drm_handle_vblank(struct drm_device *dev, int crtc);
+u32	drm_vblank_count(struct drm_device *dev, int crtc);
+int	drm_vblank_get(struct drm_device *dev, int crtc);
+void	drm_vblank_put(struct drm_device *dev, int crtc);
 void	drm_vblank_cleanup(struct drm_device *dev);
 int	drm_vblank_wait(struct drm_device *dev, unsigned int *vbl_seq);
 int	drm_vblank_init(struct drm_device *dev, int num_crtcs);
-void	drm_vbl_send_signals(struct drm_device *dev, unsigned int crtc);
+void	drm_vbl_send_signals(struct drm_device *dev, int crtc);
 int 	drm_modeset_ctl(struct drm_device *dev, void *data,
 			struct drm_file *file_priv);
 

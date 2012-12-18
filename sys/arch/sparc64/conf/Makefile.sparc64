@@ -1,4 +1,4 @@
-# 	$NetBSD: Makefile.sparc64,v 1.71 2012/03/03 03:21:16 nakayama Exp $
+# 	$NetBSD: Makefile.sparc64,v 1.67.4.2 2012/03/17 18:44:07 bouyer Exp $
 
 #=========================================================================
 #
@@ -70,7 +70,7 @@ CPPFLAGS+=	-m32 -Wa,-Av8plusa -mcpu=ultrasparc
 AFLAGS+=	-Wa,-Av8plusa
 .endif
 CFLAGS+=	-mno-fpu
-AFLAGS+=	-x assembler-with-cpp
+AFLAGS+=	-x assembler-with-cpp -traditional-cpp
 
 ##
 ## (3) libkern and compat
@@ -80,18 +80,11 @@ AFLAGS+=	-x assembler-with-cpp
 ##
 ## (4) local objects, compile rules, and dependencies
 ##
-MD_OBJS=	locore.o copy.o mp_subr.o
+MD_OBJS=	locore.o
 MD_CFILES=
-MD_SFILES=	${SPARC64}/sparc64/locore.s ${SPARC64}/sparc64/copy.S \
-	 ${SPARC64}/sparc64/mp_subr.S
+MD_SFILES=	${SPARC64}/sparc64/locore.s
 
 locore.o: ${SPARC64}/sparc64/locore.s assym.h
-	${NORMAL_S}
-
-copy.o:	${SPARC64}/sparc64/copy.S assym.h
-	${NORMAL_S}
-
-mp_subr.o:	${SPARC64}/sparc64/mp_subr.S assym.h
 	${NORMAL_S}
 
 ##

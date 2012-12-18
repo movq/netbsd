@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_lock.c,v 1.153 2012/08/30 02:23:14 matt Exp $	*/
+/*	$NetBSD: kern_lock.c,v 1.146 2008/07/02 14:47:34 matt Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002, 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_lock.c,v 1.153 2012/08/30 02:23:14 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_lock.c,v 1.146 2008/07/02 14:47:34 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -42,8 +42,8 @@ __KERNEL_RCSID(0, "$NetBSD: kern_lock.c,v 1.153 2012/08/30 02:23:14 matt Exp $")
 #include <sys/cpu.h>
 #include <sys/syslog.h>
 #include <sys/atomic.h>
-#include <sys/lwp.h>
 
+#include <machine/stdarg.h>
 #include <machine/lock.h>
 
 #include <dev/lockstat.h>
@@ -53,14 +53,13 @@ __KERNEL_RCSID(0, "$NetBSD: kern_lock.c,v 1.153 2012/08/30 02:23:14 matt Exp $")
 bool	kernel_lock_dodebug;
 
 __cpu_simple_lock_t kernel_lock[CACHE_LINE_SIZE / sizeof(__cpu_simple_lock_t)]
-    __cacheline_aligned;
+    __aligned(CACHE_LINE_SIZE);
 
+#if defined(DEBUG) || defined(LKM)
 void
 assert_sleepable(void)
 {
 	const char *reason;
-	uint64_t pctr;
-	bool idle;
 
 	if (panicstr != NULL) {
 		return;
@@ -68,23 +67,14 @@ assert_sleepable(void)
 
 	LOCKDEBUG_BARRIER(kernel_lock, 1);
 
-	/*
-	 * Avoid disabling/re-enabling preemption here since this
-	 * routine may be called in delicate situations.
-	 */
-	do {
-		pctr = lwp_pctr();
-		idle = CURCPU_IDLE_P();
-	} while (pctr != lwp_pctr());
-
 	reason = NULL;
-	if (idle && !cold) {
+	if (CURCPU_IDLE_P() && !cold) {
 		reason = "idle";
 	}
 	if (cpu_intr_p()) {
 		reason = "interrupt";
 	}
-	if (cpu_softintr_p()) {
+	if ((curlwp->l_pflag & LP_INTR) != 0) {
 		reason = "softint";
 	}
 
@@ -93,6 +83,7 @@ assert_sleepable(void)
 		    (void *)RETURN_ADDRESS);
 	}
 }
+#endif /* defined(DEBUG) || defined(LKM) */
 
 /*
  * Functions for manipulating the kernel_lock.  We put them here
@@ -148,7 +139,8 @@ _kernel_lock_dump(volatile void *junk)
 }
 
 /*
- * Acquire 'nlocks' holds on the kernel lock.
+ * Acquire 'nlocks' holds on the kernel lock.  If 'l' is non-null, the
+ * acquisition is from process context.
  */
 void
 _kernel_lock(int nlocks)
@@ -255,7 +247,7 @@ _kernel_lock(int nlocks)
 
 /*
  * Release 'nlocks' holds on the kernel lock.  If 'nlocks' is zero, release
- * all holds.
+ * all holds.  If 'l' is non-null, the release is from process context.
  */
 void
 _kernel_unlock(int nlocks, int *countp)
@@ -304,10 +296,4 @@ _kernel_unlock(int nlocks, int *countp)
 
 	if (countp != NULL)
 		*countp = olocks;
-}
-
-bool
-_kernel_locked_p(void)
-{
-	return __SIMPLELOCK_LOCKED_P(kernel_lock);
 }

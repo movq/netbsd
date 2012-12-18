@@ -1,4 +1,4 @@
-/*	$NetBSD: leave.c,v 1.15 2011/09/16 15:39:27 joerg Exp $	*/
+/*	$NetBSD: leave.c,v 1.14 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)leave.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: leave.c,v 1.15 2011/09/16 15:39:27 joerg Exp $");
+__RCSID("$NetBSD: leave.c,v 1.14 2008/07/21 14:19:23 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,8 +64,10 @@ __RCSID("$NetBSD: leave.c,v 1.15 2011/09/16 15:39:27 joerg Exp $");
  * It nags you like a mother hen.
  */
 
-__dead static void doalarm(u_int);
-__dead static void usage(void);
+int main(int argc, char **argv);
+
+static void doalarm(u_int);
+static void usage(void);
 
 int
 main(int argc, char **argv)

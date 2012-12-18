@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mc.c,v 1.22 2011/07/26 08:36:02 macallan Exp $	*/
+/*	$NetBSD: if_mc.c,v 1.14 2008/10/05 05:01:08 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1997 David Huang <khym@bga.com>
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.22 2011/07/26 08:36:02 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.14 2008/10/05 05:01:08 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -48,9 +48,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.22 2011/07/26 08:36:02 macallan Exp $");
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <dev/ofw/openfirm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/autoconf.h>
 #include <machine/pio.h>
 
@@ -59,17 +61,17 @@ __KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.22 2011/07/26 08:36:02 macallan Exp $");
 
 #define MC_BUFSIZE 0x800
 
-hide int	mc_match(device_t, cfdata_t, void *);
-hide void	mc_attach(device_t, device_t, void *);
-hide void	mc_init(struct mc_softc *sc);
-hide void	mc_putpacket(struct mc_softc *sc, u_int len);
-hide int	mc_dmaintr(void *arg);
-hide void	mc_reset_rxdma(struct mc_softc *sc);
-hide void	mc_reset_txdma(struct mc_softc *sc);
-hide void	mc_select_utp(struct mc_softc *sc);
-hide void	mc_select_aui(struct mc_softc *sc);
-hide int	mc_mediachange(struct mc_softc *sc);
-hide void	mc_mediastatus(struct mc_softc *sc, struct ifmediareq *);
+hide int	mc_match __P((struct device *, struct cfdata *, void *));
+hide void	mc_attach __P((struct device *, struct device *, void *));
+hide void	mc_init __P((struct mc_softc *sc));
+hide void	mc_putpacket __P((struct mc_softc *sc, u_int len));
+hide int	mc_dmaintr __P((void *arg));
+hide void	mc_reset_rxdma __P((struct mc_softc *sc));
+hide void	mc_reset_txdma __P((struct mc_softc *sc));
+hide void	mc_select_utp __P((struct mc_softc *sc));
+hide void	mc_select_aui __P((struct mc_softc *sc));
+hide int	mc_mediachange __P((struct mc_softc *sc));
+hide void	mc_mediastatus __P((struct mc_softc *sc, struct ifmediareq *));
 
 int mc_supmedia[] = {
 	IFM_ETHER | IFM_10_T,
@@ -79,11 +81,14 @@ int mc_supmedia[] = {
 
 #define N_SUPMEDIA (sizeof(mc_supmedia) / sizeof(int));
 
-CFATTACH_DECL_NEW(mc, sizeof(struct mc_softc),
+CFATTACH_DECL(mc, sizeof(struct mc_softc),
     mc_match, mc_attach, NULL, NULL);
 
 hide int
-mc_match(device_t parent, cfdata_t cf, void *aux)
+mc_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct confargs *ca = aux;
 
@@ -102,14 +107,15 @@ mc_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 hide void
-mc_attach(device_t parent, device_t self, void *aux)
+mc_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct confargs *ca = aux;
-	struct mc_softc *sc = device_private(self);
+	struct mc_softc *sc = (struct mc_softc *)self;
 	u_int8_t myaddr[ETHER_ADDR_LEN];
 	u_int *reg;
 
-	sc->sc_dev = self;
 	sc->sc_node = ca->ca_node;
 	sc->sc_regt = ca->ca_tag;
 
@@ -118,8 +124,8 @@ mc_attach(device_t parent, device_t self, void *aux)
 	reg[2] += ca->ca_baseaddr;
 	reg[4] += ca->ca_baseaddr;
 
-	sc->sc_txdma = mapiodev(reg[2], reg[3], false);
-	sc->sc_rxdma = mapiodev(reg[4], reg[5], false);
+	sc->sc_txdma = mapiodev(reg[2], reg[3]);
+	sc->sc_rxdma = mapiodev(reg[4], reg[5]);
 	bus_space_map(sc->sc_regt, reg[0], reg[1], 0, &sc->sc_regh);
 
 	sc->sc_tail = 0;
@@ -195,14 +201,17 @@ mc_attach(device_t parent, device_t self, void *aux)
 
 /* Bus-specific initialization */
 hide void
-mc_init(struct mc_softc *sc)
+mc_init(sc)
+	struct mc_softc *sc;
 {
 	mc_reset_rxdma(sc);
 	mc_reset_txdma(sc);
 }
 
 hide void
-mc_putpacket(struct mc_softc *sc, u_int len)
+mc_putpacket(sc, len)
+	struct mc_softc *sc;
+	u_int len;
 {
 	dbdma_command_t *cmd = sc->sc_txdmacmd;
 
@@ -216,7 +225,8 @@ mc_putpacket(struct mc_softc *sc, u_int len)
  * Interrupt handler for the MACE DMA completion interrupts
  */
 int
-mc_dmaintr(void *arg)
+mc_dmaintr(arg)
+	void *arg;
 {
 	struct mc_softc *sc = arg;
 	int status, offset, statoff;
@@ -286,7 +296,8 @@ next:
 }
 
 hide void
-mc_reset_rxdma(struct mc_softc *sc)
+mc_reset_rxdma(sc)
+	struct mc_softc *sc;
 {
 	dbdma_command_t *cmd = sc->sc_rxdmacmd;
 	dbdma_regmap_t *dmareg = sc->sc_rxdma;
@@ -320,7 +331,8 @@ mc_reset_rxdma(struct mc_softc *sc)
 }
 
 hide void
-mc_reset_txdma(struct mc_softc *sc)
+mc_reset_txdma(sc)
+	struct mc_softc *sc;
 {
 	dbdma_command_t *cmd = sc->sc_txdmacmd;
 	dbdma_regmap_t *dmareg = sc->sc_txdma;
@@ -346,19 +358,22 @@ mc_reset_txdma(struct mc_softc *sc)
 }
 
 void
-mc_select_utp(struct mc_softc *sc)
+mc_select_utp(sc)
+	struct mc_softc *sc;
 {
 	sc->sc_plscc = PORTSEL_GPSI | ENPLSIO;
 }
 
 void
-mc_select_aui(struct mc_softc *sc)
+mc_select_aui(sc)
+	struct mc_softc *sc;
 {
 	sc->sc_plscc = PORTSEL_AUI;
 }
 
 int
-mc_mediachange(struct mc_softc *sc)
+mc_mediachange(sc)
+	struct mc_softc *sc;
 {
 	struct ifmedia *ifm = &sc->sc_media;
 
@@ -383,7 +398,9 @@ mc_mediachange(struct mc_softc *sc)
 }
 
 void
-mc_mediastatus(struct mc_softc *sc, struct ifmediareq *ifmr)
+mc_mediastatus(sc, ifmr)
+	struct mc_softc *sc;
+	struct ifmediareq *ifmr;
 {
 	if (sc->sc_plscc == PORTSEL_AUI)
 		ifmr->ifm_active = IFM_ETHER | IFM_10_5;

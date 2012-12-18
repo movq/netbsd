@@ -1,4 +1,4 @@
-/*	$NetBSD: specdev.h,v 1.39 2009/11/14 18:36:57 elad Exp $	*/
+/*	$NetBSD: specdev.h,v 1.36 2008/04/28 20:24:08 martin Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -99,6 +99,7 @@ typedef struct specdev {
 #endif
 
 extern vnode_t	*specfs_hash[SPECHSZ];
+extern kmutex_t	specfs_lock;
 
 void	spec_node_init(vnode_t *, dev_t);
 void	spec_node_destroy(vnode_t *);
@@ -154,8 +155,5 @@ int	spec_advlock(void *);
 #define	spec_bwrite	vn_bwrite
 #define	spec_getpages	genfs_getpages
 #define	spec_putpages	genfs_putpages
-
-bool	iskmemvp(struct vnode *);
-void	spec_init(void);
 
 #endif /* _MISCFS_SPECFS_SPECDEV_H_ */

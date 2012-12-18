@@ -1,4 +1,4 @@
-/* $NetBSD: pmap.h,v 1.9 2009/01/14 23:14:48 bjh21 Exp $ */
+/* $NetBSD: pmap.h,v 1.7 2007/02/21 22:59:36 thorpej Exp $ */
 /*-
  * Copyright (c) 1997, 1998 Ben Harris
  * All rights reserved.
@@ -32,10 +32,18 @@
 #ifndef _ARM26_PMAP_H
 #define _ARM26_PMAP_H
 
+struct pmap;
+
+typedef struct pmap *pmap_t;
+
 #ifdef _KERNEL
 #include <machine/memcreg.h>
 
-extern void pmap_bootstrap(int, paddr_t);
+extern void pmap_bootstrap __P((int, paddr_t));
+
+extern struct pmap kernel_pmap_store;
+
+#define pmap_kernel()	(&kernel_pmap_store)
 
 extern bool pmap_fault(pmap_t, vaddr_t, vm_prot_t);
 

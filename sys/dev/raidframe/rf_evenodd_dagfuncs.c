@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_evenodd_dagfuncs.c,v 1.20 2009/03/14 15:36:20 dsl Exp $	*/
+/*	$NetBSD: rf_evenodd_dagfuncs.c,v 1.18 2007/03/04 06:02:38 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -31,13 +31,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_evenodd_dagfuncs.c,v 1.20 2009/03/14 15:36:20 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_evenodd_dagfuncs.c,v 1.18 2007/03/04 06:02:38 christos Exp $");
 
 #include "rf_archs.h"
-
-#ifdef _KERNEL_OPT
 #include "opt_raid_diagnostic.h"
-#endif
 
 #if RF_INCLUDE_EVENODD > 0
 
@@ -67,7 +64,8 @@ RF_RedFuncs_t rf_eoERecoveryFuncs = {rf_RecoveryEFunc, "Recovery E Func", rf_Rec
  *   the following encoding node functions is used in  EO_000_CreateLargeWriteDAG
  **********************************************************************************************/
 int
-rf_RegularPEFunc(RF_DagNode_t *node)
+rf_RegularPEFunc(node)
+	RF_DagNode_t *node;
 {
 	rf_RegularESubroutine(node, node->results[1]);
 	rf_RegularXorFunc(node);/* does the wakeup here! */
@@ -96,7 +94,8 @@ rf_RegularPEFunc(RF_DagNode_t *node)
    take the same speed as the previous, and need more memory.
 */
 int
-rf_RegularONEFunc(RF_DagNode_t *node)
+rf_RegularONEFunc(node)
+	RF_DagNode_t *node;
 {
 	RF_Raid_t *raidPtr = (RF_Raid_t *) node->params[node->numParams - 1].p;
 	RF_RaidLayout_t *layoutPtr = (RF_RaidLayout_t *) & raidPtr->Layout;
@@ -155,7 +154,8 @@ rf_RegularONEFunc(RF_DagNode_t *node)
 }
 
 int
-rf_SimpleONEFunc(RF_DagNode_t *node)
+rf_SimpleONEFunc(node)
+	RF_DagNode_t *node;
 {
 	RF_Raid_t *raidPtr = (RF_Raid_t *) node->params[node->numParams - 1].p;
 	RF_RaidLayout_t *layoutPtr = (RF_RaidLayout_t *) & raidPtr->Layout;
@@ -195,7 +195,9 @@ rf_SimpleONEFunc(RF_DagNode_t *node)
 
 /****** called by rf_RegularPEFunc(node) and rf_RegularEFunc(node) in f.f. large write  ********/
 void
-rf_RegularESubroutine(RF_DagNode_t *node, char *ebuf)
+rf_RegularESubroutine(node, ebuf)
+	RF_DagNode_t *node;
+	char   *ebuf;
 {
 	RF_Raid_t *raidPtr = (RF_Raid_t *) node->params[node->numParams - 1].p;
 	RF_RaidLayout_t *layoutPtr = (RF_RaidLayout_t *) & raidPtr->Layout;
@@ -226,7 +228,8 @@ rf_RegularESubroutine(RF_DagNode_t *node, char *ebuf)
  *			 Used in  EO_001_CreateLargeWriteDAG
  ******************************************************************************************/
 int
-rf_RegularEFunc(RF_DagNode_t *node)
+rf_RegularEFunc(node)
+	RF_DagNode_t *node;
 {
 	rf_RegularESubroutine(node, node->results[0]);
 	rf_GenericWakeupFunc(node, 0);
@@ -248,7 +251,9 @@ rf_RegularEFunc(RF_DagNode_t *node)
  *  DegrESubroutin in the future.
  *******************************************************************************************/
 void
-rf_DegrESubroutine(RF_DagNode_t *node, char *ebuf)
+rf_DegrESubroutine(node, ebuf)
+	RF_DagNode_t *node;
+	char   *ebuf;
 {
 	RF_Raid_t *raidPtr = (RF_Raid_t *) node->params[node->numParams - 1].p;
 	RF_RaidLayout_t *layoutPtr = (RF_RaidLayout_t *) & raidPtr->Layout;
@@ -284,7 +289,8 @@ rf_DegrESubroutine(RF_DagNode_t *node, char *ebuf)
  * the rf_EOWriteDoubleRecoveryFunc().
  **************************************************************************************/
 int
-rf_Degraded_100_EOFunc(RF_DagNode_t *node)
+rf_Degraded_100_EOFunc(node)
+	RF_DagNode_t *node;
 {
 	rf_DegrESubroutine(node, node->results[1]);
 	rf_RecoveryXorFunc(node);	/* does the wakeup here! */
@@ -396,7 +402,8 @@ rf_e_encToBuf(
  * for EO_110_CreateReadDAG
  **************************************************************************************/
 int
-rf_RecoveryEFunc(RF_DagNode_t *node)
+rf_RecoveryEFunc(node)
+	RF_DagNode_t *node;
 {
 	RF_Raid_t *raidPtr = (RF_Raid_t *) node->params[node->numParams - 1].p;
 	RF_RaidLayout_t *layoutPtr = (RF_RaidLayout_t *) & raidPtr->Layout;
@@ -648,7 +655,8 @@ rf_doubleEOdecode(
 *
 ***************************************************************************************/
 int
-rf_EvenOddDoubleRecoveryFunc(RF_DagNode_t *node)
+rf_EvenOddDoubleRecoveryFunc(node)
+	RF_DagNode_t *node;
 {
 	int     ndataParam = 0;
 	int     np = node->numParams;
@@ -848,7 +856,8 @@ rf_EvenOddDoubleRecoveryFunc(RF_DagNode_t *node)
  */
 
 int
-rf_EOWriteDoubleRecoveryFunc(RF_DagNode_t *node)
+rf_EOWriteDoubleRecoveryFunc(node)
+	RF_DagNode_t *node;
 {
 	int     np = node->numParams;
 	RF_AccessStripeMap_t *asmap = (RF_AccessStripeMap_t *) node->params[np - 1].p;

@@ -1,11 +1,10 @@
-# $NetBSD: GENERIC,v 1.294 2012/11/25 23:37:28 rkujawa Exp $
+# $NetBSD: GENERIC,v 1.256 2008/09/24 17:27:49 tsutsui Exp $
 #
 # This file was automatically created.
 # Changes will be lost when make is run in this directory.
 #
-# Created from: # NetBSD: GENERIC.in,v 1.107 2012/11/25 23:37:10 rkujawa Exp $
+# Created from: # NetBSD: GENERIC.in,v 1.69 2008/09/24 17:26:37 tsutsui Exp $
 #
-##
 # GENERIC machine description file
 #
 # This machine description file is used to generate the default NetBSD
@@ -29,7 +28,7 @@ include "arch/amiga/conf/std.amiga"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.294 $"
+#ident 		"GENERIC-$Revision: 1.256 $"
 
 
 maxusers	8
@@ -82,7 +81,6 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
-options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 
 #options 	ALTQ		# Manipulate network interfaces' output queues
@@ -115,21 +113,22 @@ file-system 	KERNFS		# kernel data-structure filesystem
 file-system 	FDESC		# user file descriptor filesystem
 file-system 	NULLFS		# loopback filesystem
 file-system 	OVERLAY		# overlay filesystem
+#file-system 	PORTAL		# Portal filesystem
 file-system 	PROCFS		# /proc filesystem
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union filesystem
 file-system	SMBFS		# experimental - CIFS; also needs nsmb (below)
 file-system	PTYFS		# /dev/pts/N support
-file-system	TMPFS		# Efficient memory file-system
+#file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # Filesystem options
 
-#options 	FFS_EI		# FFS Endian Independent support
-options 	WAPBL		# File system journaling support
+#options 	FFS_EI		# FFS Endian Independant support
+options 	WAPBL		# File system journaling support - Experimental
 
-options 	QUOTA		# legacy UFS quotas
-options 	QUOTA2		# new, in-filesystem UFS quotas
+options 	QUOTA		# User and group quotas in FFS
+options 	SOFTDEP		# FFS soft updates support.
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server side code
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -153,8 +152,6 @@ options 	COMPAT_16	# compatibility with NetBSD 1.6
 options 	COMPAT_20	# compatibility with NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_SUNOS	# Support to run Sun (m68k) executables
 options 	COMPAT_SVR4	# Support to run SVR4 (m68k) executables
 options 	COMPAT_NOMID	# allow nonvalid machine id executables
@@ -170,12 +167,14 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVSHM		# System V-like shared memory
 options 	SYSVMSG		# System V-like messages
 options 	SYSVSEM		# System V-like semaphores
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 #
 # Support for various kernel options
 #
 
 options 	KTRACE		# system call tracing support
+options 	LKM		# Loadable kernel modules
 #options 	INSECURE	# disable kernel security levels
 options 	SCSIVERBOSE	# human readable SCSI error messages
 options 	USERCONF	# userconf(4) support
@@ -265,17 +264,12 @@ options        KFONT_CONS_ISO8859_1
 # wscons aware interface to amiga custom chips.
 # If you enable it enable also wskbd.
 #
+
 #amidisplaycc0	at mainbus0		# wscons interface to custom chips
 #wsdisplay0	at amidisplaycc0 console ?
 #options 	WSEMUL_VT100
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 #options 	FONT_VT220L8x10
 #options	FONT_VT220ISO8x16
-
-#z3rambd*	at zbus0		# Zorro III RAM block devices
-#altmem*	at z3rambd?
-
-p5bus0		at zbus0		# Phase5 CSPPC/BPPC internal bus
 
 grfcc0		at mainbus0		# custom chips
 grfrt0		at zbus0		# retina II
@@ -302,9 +296,6 @@ ite4		at grf4			# terminal emulators for grfs
 ite5		at grf5			# terminal emulators for grfs
 ite6		at grf6			# terminal emulators for grfs
 ite7		at grf7			# terminal emulators for grfs
-
-#wsdisplay*	at grf5 console ?	# wsdisplay on top of grf (CV64)
-#wsdisplay*	at grf7 console ?	# wsdisplay on top of grf (CV64/3D)
 
 msc0		at zbus0		# A2232 MSC multiport serial.
 mfc0		at zbus0		# MultiFaceCard I/O board
@@ -335,6 +326,7 @@ lpt*		at iobl? port ?		# IOBlix parallel ports
 # Don't enable wskbd if you use ite.
 #
 # XXX in std.amiga: kbd0 at mainbus0
+
 #wskbd0		at kbd0 console ?
 
 
@@ -352,10 +344,6 @@ a2kbbc0 	at mainbus0		# A2000 battery backed clock
 aucc*		at mainbus0		# Amiga CC audio
 audio*		at aucc?
 
-a1k2cp0         at mainbus0             # A1200 on-board clockport
-clockport*      at a1k2cp0
-
-#com*            at clockport?           # Individual Computers SilverSurfer
 
 #wsmouse*	at ms?
 
@@ -381,16 +369,10 @@ audio*		at toccata?
 
 # Ethernet cards:
 le*		at zbus0		# A2065, Ameristar, Ariadne
-ne*		at zbus0		# AriadneII
+ne*		at zbus0		# AriadneII, X-surf
 ed*		at zbus0		# Hydra, ASDG LanRover
 es*		at zbus0		# CEI A4066 EthernetPLUS
 qn*		at zbus0		# Quicknet
-
-xsurf*		at zbus0		# X-Surf
-ne*		at xsurfbus?		# NE2000 chip on X-Surf
-gencp*		at xsurfbus?		# clockports on X-Surf
-wdc*		at xsurfbus?		# IDE on X-Surf
-clockport*	at gencp?
 
 # Arcnet
 bah*		at zbus0		# C=/Ameristar A2060 / 560
@@ -419,8 +401,6 @@ mgnsc0		at zbus0		# Magnum scsi
 scsibus*	at mgnsc0
 wesc0		at zbus0		# Warp Engine scsi
 scsibus*	at wesc0
-bppcsc0		at p5bus0		# BlizzardPPC 603e+ scsi
-scsibus*	at bppcsc0
 afsc0		at zbus0		# A4091 scsi
 scsibus*	at afsc0
 aftsc0		at mainbus0		# A4000T scsi
@@ -437,17 +417,15 @@ cbsc0		at zbus0		# CyberSCSI I
 scsibus*	at cbsc0
 cbiisc0 	at zbus0		# CyberSCSI II
 scsibus*	at cbiisc0
-cbiiisc0 	at p5bus0		# Cyberstorm mk.III/Cyberstorm PPC SCSI
+cbiiisc0 	at zbus0		# Cyberstorm mk.III/Cyberstorm PPC SCSI
 scsibus*	at cbiiisc0
 empsc0		at zbus0		# Emplant scsi
 scsibus*	at empsc0
 
 wdc0		at mainbus0		# A4000 & A1200 IDE bus
 wdc*		at zbus0		# Buddha / Catweasel
-#efa0		at mainbus0		# ELBOX FastATA 1200 Mk-III/Mk-IV 
 
 atabus* 	at wdc? channel ?	# ATA bus
-#atabus*	at efa? channel ?	# ATA bus 
 wd*		at atabus? drive ?	#  + drives
 atapibus*	at atabus?		# ATAPI bus
 cd*		at atapibus? drive ?	# ATAPI CD-ROM drives
@@ -482,64 +460,6 @@ ch*	at scsibus? target ? lun ?	# scsi autochangers
 ss*	at scsibus? target ? lun ?	# scsi scanner
 uk*	at scsibus? target ? lun ?	# scsi unknown
 
-# PCI bus support
-options		PCIVERBOSE              # verbose PCI device autoconfig messages
-#options	PCI_CONFIG_DUMP
-options		PCI_NETBSD_CONFIGURE	# supported by mppb(4), p5pb(4), empb(4)
-
-p5pb0		at p5bus0		# Phase5 PCI bridge (CVPPC/BVPPC/G-REX)
-p5membar*	at zbus0		# Phase5 PCI bridge autoconfiguring BARs
-#options	P5PB_DEBUG		# enable excessive debug for p5pb
-#options	P5PB_CONSOLE		# console on CVPPC/BVPPC/Voodoo3
-pci*		at p5pb0
-
-mppb*           at zbus0		# Matay Prometheus Zorro-PCI bridge
-pci*            at mppb?
-
-empb0		at zbus0		# ELBOX Mediator PCI 1200
-emmem0		at zbus0		# ELBOX Mediator PCI memory space
-pci*		at empb0
-
-#cv3dpb*	at zbus0		# CyberVision 64/3D PCI bridge
-
-#genfb*		at pci?			# generic fb, CVPPC/BVPPC only
-#voodoofb*	at pci?			# 3Dfx Voodoo 3 in G-REX
-#radeonfb*	at pci?			# untested
-
-ne*             at pci?			# NE2000 Ethernet
-satalink* at pci? dev ? function ? flags 0x0002	# SiI SATALink 3112 
-
-# Bluetooth Controller and Device support
-# tested only with btuart on an A1200
-
-# Bluetooth PCMCIA Controllers
-bt3c*   at pcmcia? function ?           # 3Com 3CRWB6096-A
-btbc*   at pcmcia? function ?           # AnyCom BlueCard LSE041/039/139
-
-# Bluetooth Device Hub
-bthub*  at bcsp?
-bthub*  at bt3c?
-bthub*  at btbc?
-bthub*  at btuart?
-
-# Bluetooth HID support
-bthidev* at bthub?
-
-# Bluetooth Mouse
-#btms*   at bthidev? reportid ?
-#wsmouse* at btms? mux 0
-
-# Bluetooth Keyboard
-#btkbd* at bthidev? reportid ?
-#wskbd* at btkbd? console ? mux 1
-
-# Bluetooth Apple Magic Mouse
-#btmagic* at bthub?
-#wsmouse* at btmagic? mux 0
-
-# Bluetooth Audio support
-#btsco* at bthub?
-
 #
 # accept filters
 pseudo-device	accf_data		# "dataready" accept filter
@@ -564,8 +484,7 @@ pseudo-device	bridge			# simple inter-network bridging
 pseudo-device	agr			# IEEE 802.3ad link aggregation
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
-pseudo-device	fss			# file system snapshot device
-pseudo-device	putter			# for puffs and pud
+pseudo-device	fss		4	# file system snapshot device
 
 pseudo-device	view		4	# views (needed for grfcc)
 pseudo-device	pty			# pseudo-terminals
@@ -589,12 +508,11 @@ options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 # options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
 
+pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 
 pseudo-device	ksyms			# /dev/ksyms (kernel symbols)
 pseudo-device	nsmb			# experimental - SMB requester
-pseudo-device   bcsp                    # BlueCore Serial Protocol
-pseudo-device   btuart                  # Bluetooth HCI UART (H4)
 
 # Veriexec
 #

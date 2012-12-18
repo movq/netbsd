@@ -1,4 +1,4 @@
-/*	$NetBSD: fdc_isa.c,v 1.19 2012/02/02 19:43:04 tls Exp $	*/
+/*	$NetBSD: fdc_isa.c,v 1.18 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -64,7 +64,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdc_isa.c,v 1.19 2012/02/02 19:43:04 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdc_isa.c,v 1.18 2008/04/28 20:23:52 martin Exp $");
+
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,7 +74,9 @@ __KERNEL_RCSID(0, "$NetBSD: fdc_isa.c,v 1.19 2012/02/02 19:43:04 tls Exp $");
 #include <sys/device.h>
 #include <sys/buf.h>
 #include <sys/queue.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>

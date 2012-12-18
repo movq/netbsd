@@ -1,4 +1,4 @@
-/*	$NetBSD: db.c,v 1.26 2012/02/17 11:37:33 apb Exp $	*/
+/*	$NetBSD: db.c,v 1.22.2.1 2009/02/06 00:45:43 snj Exp $	*/
 
 /*-
  * Copyright (c) 2002-2009 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #ifdef __RCSID
-__RCSID("$NetBSD: db.c,v 1.26 2012/02/17 11:37:33 apb Exp $");
+__RCSID("$NetBSD: db.c,v 1.22.2.1 2009/02/06 00:45:43 snj Exp $");
 #endif /* __RCSID */
 #endif /* not lint */
 
@@ -61,7 +61,7 @@ typedef enum {
 	F_IGNORECASE	= 1<<11,
 	F_ENDIAN_BIG	= 1<<12,
 	F_ENDIAN_LITTLE	= 1<<13,
-	F_INCLUDE_NUL	= 1<<14,
+	F_NO_NUL	= 1<<14,
 	F_CREATENEW	= 1<<20,
 	F_DUPLICATES	= 1<<21,
 	F_REPLACE	= 1<<22,
@@ -71,24 +71,25 @@ typedef enum {
 	F_DECODE_VAL	= 1<<26,
 } flags_t;
 
-static void	db_print(DBT *, DBT *);
-static int	db_dump(void);
-static int	db_del(char *);
-static int	db_get(char *);
-static int	db_seq(char *);
-static int	db_put(char *, char *);
-static int	parseline(FILE *, const char *, char **, char **);
-static int	encode_data(size_t, char *, char **);
-static int	decode_data(char *, char **);
-static void	parse_encode_decode_arg(const char *, int);
-static int	parse_encode_option(char **);
-__dead static void	usage(void);
+int	main(int, char *[]);
+void	db_print(DBT *, DBT *);
+int	db_dump(void);
+int	db_del(char *);
+int	db_get(char *);
+int	db_seq(char *);
+int	db_put(char *, char *);
+int	parseline(FILE *, const char *, char **, char **);
+int	encode_data(size_t, char *, char **);
+int	decode_data(char *, char **);
+void	parse_encode_decode_arg(const char *, int);
+int	parse_encode_option(char **);
+void	usage(void);
 
-static flags_t	 	 flags = 0;
-static DB		*db;
-static const char	*outputsep = "\t";
-static int		 visflags = 0;
-static const char	*extra_echars = NULL;
+flags_t	 	 flags = 0;
+DB		*db;
+const char	*outputsep = "\t";
+int		 visflags = 0;
+const char	*extra_echars = NULL;
 
 int
 main(int argc, char *argv[])
@@ -184,7 +185,7 @@ main(int argc, char *argv[])
 			break;
 
 		case 'N':
-			flags |= F_INCLUDE_NUL;
+			flags |= F_NO_NUL;
 			break;
 
 		case 'O':
@@ -195,7 +196,7 @@ main(int argc, char *argv[])
 			lval = strtol(optarg, &p, 10);
 			if (p == optarg || *p != '\0')
 				errx(1, "Invalid pagesize `%s'", optarg);
-			if (lval < 0 || (unsigned int)lval >= UINT_MAX)
+			if (lval < 0 || lval >= UINT_MAX)
 				errx(1, "Pagesize `%s' out of range", optarg);
 			oi.pagesize = (unsigned int)lval;
 			break;
@@ -377,13 +378,13 @@ main(int argc, char *argv[])
 	return (rv);
 }
 
-static void
+void
 db_print(DBT *key, DBT *val)
 {
 	int	len;
 	char	*data;
 
-#define	MINUSNUL(x) ((x) > 0  ?  (x) - (flags & F_INCLUDE_NUL ? 0 : 1)  :  0)
+#define	MINUSNUL(x)	((x) > 0  ?  (x) - (flags & F_NO_NUL ? 0 : 1)  :  0)
 
 	if (flags & F_SHOW_KEY) {
 		if (flags & F_ENCODE_KEY) {
@@ -410,7 +411,7 @@ db_print(DBT *key, DBT *val)
 	printf("\n");
 }
 
-static int
+int
 db_dump(void)
 {
 	DBT	key, val;
@@ -438,7 +439,7 @@ db_makekey(DBT *key, char *keystr, int downcase, int decode)
 		ks = keystr;
 	}
 	key->data = ks;
-	key->size = klen + (flags & F_INCLUDE_NUL ? 0 : 1);
+	key->size = klen + (flags & F_NO_NUL ? 0 : 1);
 	if (downcase && (flags & F_IGNORECASE)) {
 		for (p = ks; *p; p++)
 			if (isupper((int)*p))
@@ -446,7 +447,7 @@ db_makekey(DBT *key, char *keystr, int downcase, int decode)
 	}
 }
 
-static int
+int
 db_del(char *keystr)
 {
 	DBT	key;
@@ -476,7 +477,7 @@ db_del(char *keystr)
 	return (r);
 }
 
-static int
+int
 db_get(char *keystr)
 {
 	DBT	key, val;
@@ -506,7 +507,7 @@ db_get(char *keystr)
 	return (r);
 }
 
-static int
+int
 db_seq(char *keystr)
 {
 	DBT	key, val, want;
@@ -557,7 +558,7 @@ db_seq(char *keystr)
 	return (r);
 }
 
-static int
+int
 db_put(char *keystr, char *valstr)
 {
 	DBT	key, val;
@@ -589,7 +590,7 @@ db_put(char *keystr, char *valstr)
 	return (r);
 }
 
-static int
+int
 parseline(FILE *fp, const char *sep, char **kp, char **vp)
 {
 	size_t	len;
@@ -617,7 +618,7 @@ parseline(FILE *fp, const char *sep, char **kp, char **vp)
 	return (1);
 }
 
-static int
+int
 encode_data(size_t len, char *data, char **edata)
 {
 	static char	*buf = NULL;
@@ -640,7 +641,7 @@ encode_data(size_t len, char *data, char **edata)
 	}
 }
 
-static int
+int
 decode_data(char *data, char **ddata)
 {
 	char	*buf;
@@ -651,7 +652,7 @@ decode_data(char *data, char **ddata)
 	return (strunvisx(buf, data, (visflags & VIS_HTTPSTYLE)));
 }
 
-static void
+void
 parse_encode_decode_arg(const char *arg, int encode)
 {
 	if (! arg[0] || arg[1])
@@ -671,7 +672,7 @@ parse_encode_decode_arg(const char *arg, int encode)
 	return;
 }
 
-static int
+int
 parse_encode_option(char **arg)
 {
 	int	r = 0;
@@ -711,7 +712,7 @@ parse_encode_option(char **arg)
 	return (r);
 }
 
-static void
+void
 usage(void)
 {
 	const char *p = getprogname();

@@ -1,4 +1,4 @@
-/* $NetBSD: if_plip.c,v 1.24 2010/04/05 07:21:47 joerg Exp $ */
+/* $NetBSD: if_plip.c,v 1.21 2008/04/18 14:56:40 cegger Exp $ */
 
 /*-
  * Copyright (c) 1997 Poul-Henning Kamp
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_plip.c,v 1.24 2010/04/05 07:21:47 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_plip.c,v 1.21 2008/04/18 14:56:40 cegger Exp $");
 
 /*
  * Parallel port TCP/IP interfaces added.  I looked at the driver from
@@ -86,6 +86,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_plip.c,v 1.24 2010/04/05 07:21:47 joerg Exp $");
 
 #include "opt_inet.h"
 #include "opt_plip.h"
+#include "bpfilter.h"
 
 #include <sys/systm.h>
 #include <sys/param.h>
@@ -100,8 +101,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_plip.c,v 1.24 2010/04/05 07:21:47 joerg Exp $");
 #include <net/if_types.h>
 #include <net/netisr.h>
 
+#if NBPFILTER > 0
 #include <sys/time.h>
 #include <net/bpf.h>
+#endif
 
 #ifdef INET
 #include <netinet/in_var.h>
@@ -241,7 +244,9 @@ lp_attach(device_t parent, device_t self, void *aux)
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
 
-	bpf_attach(ifp, DLT_NULL, sizeof(u_int32_t));
+#if NBPFILTER > 0
+	bpfattach(ifp, DLT_NULL, sizeof(u_int32_t));
+#endif
 
 	if(lp_count++ == 0)
 		lpinittables();
@@ -340,7 +345,7 @@ lpfreetables (void)
 
 /* Process an ioctl request. */
 static int
-lpioctl(struct ifnet *ifp, u_long cmd, void *data)
+lpioctl (struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct lp_softc * sc = ifp->if_softc;
 	device_t dev = sc->ppbus_dev.sc_dev;
@@ -367,7 +372,7 @@ lpioctl(struct ifnet *ifp, u_long cmd, void *data)
 			error = EAFNOSUPPORT;
 		break;
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		if (ifa->ifa_addr->sa_family != AF_INET) {
 			error = EAFNOSUPPORT;
 			break;
@@ -375,8 +380,6 @@ lpioctl(struct ifnet *ifp, u_long cmd, void *data)
 		ifp->if_flags |= IFF_UP;
 	/* FALLTHROUGH */
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
 		if((ifp->if_flags & (IFF_UP|IFF_RUNNING)) == IFF_UP) {
 			if((error = ppbus_request_bus(ppbus, dev, 0, 0)))
 				break;
@@ -456,7 +459,7 @@ lpioctl(struct ifnet *ifp, u_long cmd, void *data)
 		 */
 	default:
 		LP_PRINTF("LP:ioctl(0x%lx)\n", cmd);
-		error = ifioctl_common(ifp, cmd, data);
+		error = EINVAL;
 	}
 
 end:
@@ -510,6 +513,7 @@ clpinbyte (int spin, device_t ppbus)
 	return (ctrecvl[cl] | ctrecvh[c]);
 }
 
+#if NBPFILTER > 0
 static void
 lptap(struct ifnet *ifp, struct mbuf *m)
 {
@@ -525,8 +529,9 @@ lptap(struct ifnet *ifp, struct mbuf *m)
 	m0.m_next = m;
 	m0.m_len = sizeof(u_int32_t);
 	m0.m_data = (char *)&af;
-	bpf_mtap(ifp, &m0);
+	bpf_mtap(ifp->if_bpf, &m0);
 }
+#endif
 
 /* Soft interrupt handler called by hardware interrupt handler */
 static void
@@ -643,8 +648,10 @@ end:
 		LP_PRINTF("DROP");
 		goto err;
 	}
+#if NBPFILTER > 0
 	if(ifp->if_bpf)
 		lptap(ifp, top);
+#endif
 	IF_ENQUEUE(&ipintrq, top);
 	schednetisr(NETISR_IP);
 	ifp->if_ipackets++;
@@ -926,8 +933,10 @@ nend:
 		else {
 			/* Dequeue packet on success */
 			IFQ_DEQUEUE(&ifp->if_snd, m);
+#if NBPFILTER > 0
 			if(ifp->if_bpf)
 				lptap(ifp, m);
+#endif
 			ifp->if_opackets++;
 			ifp->if_obytes += m->m_pkthdr.len;
 			m_freem(m);

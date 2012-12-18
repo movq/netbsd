@@ -1,4 +1,4 @@
-/* $NetBSD: ipmivar.h,v 1.11 2010/08/01 08:16:14 mlelstv Exp $ */
+/* $NetBSD: ipmivar.h,v 1.8.4.1 2008/11/06 22:58:07 snj Exp $ */
 
 /*
  * Copyright (c) 2005 Jordan Hargrave
@@ -28,7 +28,6 @@
  */
 
 #include <sys/mutex.h>
-#include <sys/condvar.h>
 
 #include <dev/sysmon/sysmonvar.h>
 
@@ -45,6 +44,13 @@
 
 struct ipmi_thread;
 struct ipmi_softc;
+
+struct ipmi_bmc_args{
+	int			offset;
+	uint8_t		mask;
+	uint8_t		value;
+	volatile uint8_t	*v;
+};
 
 struct ipmi_attach_args {
 	bus_space_tag_t	iaa_iot;
@@ -86,27 +92,22 @@ struct ipmi_softc {
 
 	struct lwp		*sc_kthread;
 
+	struct callout		sc_callout;
 	int			sc_max_retries;
+	int			sc_retries;
+	int			sc_wakeup;
 
-	kmutex_t		sc_poll_mtx;
-	kcondvar_t		sc_poll_cv;
-
-	kmutex_t		sc_cmd_mtx;
-	kmutex_t		sc_sleep_mtx;
-	kcondvar_t		sc_cmd_sleep;
+	kmutex_t		sc_lock;
 
 	struct ipmi_bmc_args	*sc_iowait_args;
 
 	struct ipmi_sensor	*current_sensor;
-	volatile bool		sc_thread_running;
-	volatile bool		sc_tickle_due;
+	volatile int		sc_thread_running;
 	struct sysmon_wdog	sc_wdog;
 	struct sysmon_envsys	*sc_envsys;
 	envsys_data_t		*sc_sensor;
 	int 		sc_nsensors; /* total number of sensors */
-
-	char		sc_buf[64];
-	bool		sc_buf_rsvd;
+	int		sc_nsensors_typ[ENVSYS_NSENSORS]; /* number per type */
 };
 
 struct ipmi_thread {
@@ -114,37 +115,26 @@ struct ipmi_thread {
 	volatile int	    running;
 };
 
-#define IPMI_WDOG_USE_NOLOG		__BIT(7)
-#define IPMI_WDOG_USE_NOSTOP		__BIT(6)
-#define IPMI_WDOG_USE_RSVD1		__BITS(5, 3)
-#define IPMI_WDOG_USE_USE_MASK		__BITS(2, 0)
-#define IPMI_WDOG_USE_USE_RSVD		__SHIFTIN(0, IPMI_WDOG_USE_USE_MASK);
-#define IPMI_WDOG_USE_USE_FRB2		__SHIFTIN(1, IPMI_WDOG_USE_USE_MASK);
-#define IPMI_WDOG_USE_USE_POST		__SHIFTIN(2, IPMI_WDOG_USE_USE_MASK);
-#define IPMI_WDOG_USE_USE_OSLOAD	__SHIFTIN(3, IPMI_WDOG_USE_USE_MASK);
-#define IPMI_WDOG_USE_USE_OS		__SHIFTIN(4, IPMI_WDOG_USE_USE_MASK);
-#define IPMI_WDOG_USE_USE_OEM		__SHIFTIN(5, IPMI_WDOG_USE_USE_MASK);
+#define IPMI_WDOG_USE_NLOG		0x80
+#define IPMI_WDOG_USE_NSTOP		0x40
+#define IPMI_WDOG_USE_USE_MASK		0x07
+#define IPMI_WDOG_USE_USE_FRB2		0x01
+#define IPMI_WDOG_USE_USE_POST		0x02
+#define IPMI_WDOG_USE_USE_OSLOAD	0x03
+#define IPMI_WDOG_USE_USE_OS		0x04
+#define IPMI_WDOG_USE_USE_EOM		0x05
 
-#define IPMI_WDOG_ACT_PRE_RSVD1		__BIT(7)
-#define IPMI_WDOG_ACT_PRE_MASK		__BITS(6, 4)
-#define IPMI_WDOG_ACT_PRE_DISABLED	__SHIFTIN(0, IPMI_WDOG_ACT_MASK)
-#define IPMI_WDOG_ACT_PRE_SMI		__SHIFTIN(1, IPMI_WDOG_ACT_MASK)
-#define IPMI_WDOG_ACT_PRE_NMI		__SHIFTIN(2, IPMI_WDOG_ACT_MASK)
-#define IPMI_WDOG_ACT_PRE_INTERRUPT	__SHIFTIN(3, IPMI_WDOG_ACT_MASK)
-#define IPMI_WDOG_ACT_PRE_RSVD0		__BIT(3)
-#define IPMI_WDOG_ACT_MASK		__BITS(2, 0)
-#define IPMI_WDOG_ACT_DISABLED		__SHIFTIN(0, IPMI_WDOG_ACT_MASK)
-#define IPMI_WDOG_ACT_RESET		__SHIFTIN(1, IPMI_WDOG_ACT_MASK)
-#define IPMI_WDOG_ACT_PWROFF		__SHIFTIN(2, IPMI_WDOG_ACT_MASK)
-#define IPMI_WDOG_ACT_PWRCYCLE		__SHIFTIN(3, IPMI_WDOG_ACT_MASK)
+#define IPMI_WDOG_ACT_MASK		0x07
+#define IPMI_WDOG_ACT_DISABLED		0x00
+#define IPMI_WDOG_ACT_RESET		0x01
+#define IPMI_WDOG_ACT_PWROFF		0x02
+#define IPMI_WDOG_ACT_PWRCYCLE		0x03
 
-#define IPMI_WDOG_FLAGS_RSVD1		__BITS(7, 6)
-#define IPMI_WDOG_FLAGS_OEM		__BIT(5)
-#define IPMI_WDOG_FLAGS_OS		__BIT(4)
-#define IPMI_WDOG_FLAGS_OSLOAD		__BIT(3)
-#define IPMI_WDOG_FLAGS_POST		__BIT(2)
-#define IPMI_WDOG_FLAGS_FRB2		__BIT(1)
-#define IPMI_WDOG_FLAGS_RSVD0		__BIT(0)
+#define IPMI_WDOG_ACT_PRE_MASK		0x70
+#define IPMI_WDOG_ACT_PRE_DISABLED	0x00
+#define IPMI_WDOG_ACT_PRE_SMI		0x10
+#define IPMI_WDOG_ACT_PRE_NMI		0x20
+#define IPMI_WDOG_ACT_PRE_INTERRUPT	0x30
 
 struct ipmi_set_watchdog {
 	uint8_t		wdog_use;

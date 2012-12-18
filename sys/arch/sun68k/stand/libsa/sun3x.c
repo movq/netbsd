@@ -1,4 +1,4 @@
-/*	$NetBSD: sun3x.c,v 1.12 2009/12/11 18:45:05 tsutsui Exp $	*/
+/*	$NetBSD: sun3x.c,v 1.10 2008/04/28 20:23:39 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -39,6 +39,12 @@
 #define get_pte sun3x_get_pte
 #define set_pte sun3x_set_pte
 
+/*
+ * We need to get the sun3x NBSG definition, even if we're
+ * building this with a different sun68k target.
+ */
+#include <arch/sun3/include/param.h>
+
 #include <sys/param.h>
 #include <machine/mon.h>
 
@@ -67,7 +73,6 @@ void set_iommupte(vaddr_t, paddr_t);
 
 u_int	get_pte(vaddr_t);
 void	set_pte(vaddr_t, paddr_t);
-void	dvma3x_init(void);
 char *	dvma3x_alloc(int);
 void	dvma3x_free(char *, int);
 char *	dvma3x_mapin(char *, int);

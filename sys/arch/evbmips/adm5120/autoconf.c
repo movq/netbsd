@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.6 2012/10/27 17:17:50 chs Exp $ */
+/* $NetBSD: autoconf.c,v 1.3 2008/04/28 20:23:17 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.6 2012/10/27 17:17:50 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.3 2008/04/28 20:23:17 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -90,11 +90,11 @@ void
 cpu_rootconf(void)
 {
 
-	rootconf();
+	setroot(booted_device, booted_partition);
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 	prop_object_t po;
 	prop_dictionary_t properties = adm5120_configuration.properties;
@@ -108,17 +108,17 @@ device_register(device_t dev, void *aux)
 		if (prop_dictionary_set(device_properties(dev),
 					"initial-gpio", po) == FALSE) {
 			printf("WARNING: unable to set initial-gpio "
-			    "property for %s\n", device_xname(dev));
+			    "property for %s\n", dev->dv_xname);
 		}
 		prop_object_release(po);
 	}
 	if (device_is_a(dev, "admsw") &&
-	    (po = prop_dictionary_get(properties, "mac-address")) != NULL) {
+	    (po = prop_dictionary_get(properties, "mac-addr")) != NULL) {
 
 		if (prop_dictionary_set(device_properties(dev),
-					"mac-address", po) == FALSE) {
+					"mac-addr", po) == FALSE) {
 			printf("WARNING: unable to set mac-addr "
-			    "property for %s\n", device_xname(dev));
+			    "property for %s\n", dev->dv_xname);
 		}
 		prop_object_release(po);
 	}

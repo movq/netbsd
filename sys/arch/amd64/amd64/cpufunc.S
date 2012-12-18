@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.S,v 1.21 2011/09/24 21:24:52 jym Exp $	*/
+/*	$NetBSD: cpufunc.S,v 1.15 2008/06/24 16:32:53 ad Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007, 2008 The NetBSD Foundation, Inc.
@@ -33,10 +33,7 @@
  * Functions to provide access to i386-specific instructions.
  */
 
-#include <sys/errno.h>
-
 #include <machine/asm.h>
-#include <machine/frameasm.h>
 #include <machine/specialreg.h>
 #include <machine/segments.h>
 
@@ -138,14 +135,10 @@ ENTRY(rcr8)
  * modify the PSE, PGE, or PAE flag."
  *
  * (the alternatives not quoted above are not an option here.)
- *
- * If PGE is not in use, we reload CR3.
  */
 #ifndef XEN
 ENTRY(tlbflushg)
 	movq	%cr4, %rax
-	testq	$CR4_PGE, %rax
-	jz	1f
 	movq	%rax, %rdx
 	andq	$~CR4_PGE, %rdx
 	movq	%rdx, %cr4
@@ -153,7 +146,6 @@ ENTRY(tlbflushg)
 	ret
 
 ENTRY(tlbflush)
-1:
 	movq	%cr3, %rax
 	movq	%rax, %cr3
 	ret
@@ -221,37 +213,6 @@ ENTRY(wrmsr_locked)
 	shrq	$32, %rdx
 	movl	$OPTERON_MSR_PASSCODE, %edi
 	wrmsr
-	ret
-
-/*
- * Support for reading MSRs in the safe manner (returns EFAULT on fault)
- */
-/* int rdmsr_safe(u_int msr, uint64_t *data) */
-ENTRY(rdmsr_safe)
-	movq	CPUVAR(CURLWP), %r8
-	movq	L_PCB(%r8), %r8
-	movq	$_C_LABEL(msr_onfault), PCB_ONFAULT(%r8)
-
-	movl	%edi, %ecx /* u_int msr */
-	rdmsr			/* Read MSR pointed by %ecx. Returns
-				   hi byte in edx, lo in %eax */
-	salq	$32, %rdx	/* sign-shift %rdx left */
-	movl	%eax, %eax	/* zero-extend %eax -> %rax */
-	orq	%rdx, %rax
-	movq	%rax, (%rsi)  /* *data */
-	xorq	%rax, %rax    /* "no error" */
-
-	movq	%rax, PCB_ONFAULT(%r8)
-	ret
-
-/*
- * MSR operations fault handler
- */
-NENTRY(msr_onfault)
-	movq	CPUVAR(CURLWP), %r8
-	movq	L_PCB(%r8), %r8
-	movq	$0, PCB_ONFAULT(%r8)
-	movl	$EFAULT, %eax
 	ret
 
 #ifndef XEN
@@ -372,7 +333,7 @@ ENTRY(x86_stihlt)
 ENTRY(x86_monitor)
 	movq	%rdi, %rax
 	movq	%rsi, %rcx
-	monitor	%rax, %rcx, %rdx
+	monitor	%eax, %ecx, %edx	/* XXXgas %rax */
 	ret
 
 /* Waits - set up stack frame. */
@@ -381,7 +342,7 @@ ENTRY(x86_mwait)
 	movq	%rsp, %rbp
 	movq	%rdi, %rax
 	movq	%rsi, %rcx
-	mwait	%rax, %rcx
+	mwait	%eax, %ecx
 	leave
 	ret
 
@@ -465,7 +426,7 @@ ENTRY(fxrstor)
 
 ENTRY(fldummy)
 	ffree	%st(7)
-	flds	(%rdi)
+	fld	(%rdi)
 	ret
 
 ENTRY(x86_ldmxcsr)
@@ -551,16 +512,4 @@ ENTRY(outsl)
 	movl	%edi, %edx
 	rep
 	outsl
-	ret
-
-ENTRY(setfs)
-	movw	%di, %fs
-	ret
-
-ENTRY(setusergs)
-	CLI(ax)
-	swapgs
-	movw	%di, %gs
-	swapgs
-	STI(ax)
 	ret

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.23 2009/08/31 08:27:16 dholland Exp $	*/
+/*	$NetBSD: main.c,v 1.17 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Phantasia 3.3.2 -- Interterminal fantasy game
@@ -27,25 +27,9 @@
  * AT&T is in no way connected with this game.
  */
 
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <err.h>
-#include <math.h>
+#include <sys/types.h>
 #include <pwd.h>
-#include <setjmp.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
-#include "macros.h"
-#include "phantdefs.h"
-#include "phantstruct.h"
-#include "phantglobs.h"
-#include "pathnames.h"
-
-#undef bool
-#include <curses.h>
 
 /*
  * The program allocates as much file space as it needs to store characters,
@@ -72,19 +56,16 @@
  * main.c	Main routines for Phantasia
  */
 
-static void genchar(int);
-static void initialstate(void);
-static void neatstuff(void);
-static void playinit(void);
-static void procmain(void);
-static long recallplayer(void);
-static long rollnewplayer(void);
-static void titlelist(void);
+#include "include.h"
+#undef bool
+#include <curses.h>
 
 int	main(int, char **);
 
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int     argc;
+	char  **argv;
 {
 	bool    noheader = FALSE;	/* set if don't want header */
 	bool    headeronly = FALSE;	/* set if only want header */
@@ -182,7 +163,7 @@ main(int argc, char **argv)
 		Timeout = TRUE;
 
 	/* update some important player statistics */
-	strlcpy(Player.p_login, Login, sizeof(Player.p_login));
+	strcpy(Player.p_login, Login);
 	time(&seconds);
 	Player.p_lastused = localtime(&seconds)->tm_yday;
 	Player.p_status = S_PLAYING;
@@ -288,11 +269,10 @@ main(int argc, char **argv)
 	}
 }
 
-static void
-initialstate(void)
+void
+initialstate()
 {
 	struct stat sb;
-	struct passwd *pw;
 
 	Beyond = FALSE;
 	Marsh = FALSE;
@@ -305,13 +285,8 @@ initialstate(void)
 	Echo = TRUE;
 
 	/* setup login name */
-	if ((Login = getlogin()) == NULL) {
-		pw = getpwuid(getuid());
-		if (pw == NULL) {
-			errx(1, "Who are you?");
-		}
-		Login = pw->pw_name;
-	}
+	if ((Login = getlogin()) == NULL)
+		Login = getpwuid(getuid())->pw_name;
 
 	/* open some files */
 	if ((Playersfp = fopen(_PATH_PEOPLE, "r+")) == NULL)
@@ -345,8 +320,8 @@ initialstate(void)
 	srandom((unsigned) time(NULL));	/* prime random numbers */
 }
 
-static long
-rollnewplayer(void)
+long
+rollnewplayer()
 {
 	int     chartype;	/* character type */
 	int     ch;		/* input */
@@ -435,8 +410,8 @@ rollnewplayer(void)
 	return (allocrecord());
 }
 
-static void
-procmain(void)
+void
+procmain()
 {
 	int     ch;		/* input */
 	double  x;		/* desired new x coordinate */
@@ -645,8 +620,8 @@ procmain(void)
 	}
 }
 
-static void
-titlelist(void)
+void
+titlelist()
 {
 	FILE   *fp;		/* used for opening various files */
 	bool    councilfound = FALSE;	/* set if we find a member of the
@@ -674,8 +649,7 @@ titlelist(void)
 		    Other.p_status != S_NOTUSED)
 			/* found the king */
 		{
-			snprintf(Databuf, SZ_DATABUF,
-			    "The present ruler is %s  Level:%.0f",
+			sprintf(Databuf, "The present ruler is %s  Level:%.0f",
 			    Other.p_name, Other.p_level);
 			mvaddstr(4, 40 - strlen(Databuf) / 2, Databuf);
 			kingfound = TRUE;
@@ -690,9 +664,7 @@ titlelist(void)
 		if (Other.p_specialtype == SC_VALAR && Other.p_status != S_NOTUSED)
 			/* found the valar */
 		{
-			snprintf(Databuf, SZ_DATABUF,
-				"The Valar is %s   Login:  %s",
-				Other.p_name, Other.p_login);
+			sprintf(Databuf, "The Valar is %s   Login:  %s", Other.p_name, Other.p_login);
 			mvaddstr(6, 40 - strlen(Databuf) / 2, Databuf);
 			break;
 		}
@@ -708,8 +680,7 @@ titlelist(void)
 				councilfound = TRUE;
 			}
 			/* This assumes a finite (<=5) number of C.O.W.: */
-			snprintf(Databuf, SZ_DATABUF,
-				"%s   Login:  %s", Other.p_name, Other.p_login);
+			sprintf(Databuf, "%s   Login:  %s", Other.p_name, Other.p_login);
 			mvaddstr(Lines++, 40 - strlen(Databuf) / 2, Databuf);
 		}
 	/* search for the two highest players */
@@ -739,8 +710,7 @@ titlelist(void)
 				strcpy(nxtname, Other.p_name);
 			}
 	mvaddstr(15, 28, "Highest characters are:");
-	snprintf(Databuf, SZ_DATABUF,
-	    "%s  Level:%.0f   and   %s  Level:%.0f",
+	sprintf(Databuf, "%s  Level:%.0f   and   %s  Level:%.0f",
 	    hiname, hilvl, nxtname, nxtlvl);
 	mvaddstr(17, 40 - strlen(Databuf) / 2, Databuf);
 
@@ -755,8 +725,8 @@ titlelist(void)
 	refresh();
 }
 
-static long
-recallplayer(void)
+long
+recallplayer()
 {
 	long    loc = 0L;	/* location in player file */
 	int     loop;		/* loop counter */
@@ -814,8 +784,8 @@ recallplayer(void)
 	return (-1L);
 }
 
-static void
-neatstuff(void)
+void
+neatstuff()
 {
 	double  temp;		/* for temporary calculations */
 	int     ch;		/* input */
@@ -916,8 +886,9 @@ neatstuff(void)
 	}
 }
 
-static void
-genchar(int type)
+void
+genchar(type)
+	int     type;
 {
 	int     subscript;	/* used for subscripting into Stattable */
 	const struct charstats *statptr; /* for pointing into Stattable */
@@ -952,8 +923,8 @@ genchar(int type)
 		Player.p_experience = ROLL(600.0, 200.0);
 }
 
-static void
-playinit(void)
+void
+playinit()
 {
 	/* catch/ingnore signals */
 
@@ -1036,7 +1007,8 @@ playinit(void)
 }
 
 void
-cleanup(int doexit)
+cleanup(doexit)
+	int    doexit;
 {
 	if (Windows) {
 		move(LINES - 2, 0);

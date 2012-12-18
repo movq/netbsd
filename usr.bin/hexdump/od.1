@@ -1,4 +1,4 @@
-.\"  $NetBSD: od.1,v 1.27 2012/07/06 09:05:26 wiz Exp $
+.\"  $NetBSD: od.1,v 1.23 2008/09/03 16:32:57 drochner Exp $
 .\"
 .\" Copyright (c) 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"/
-.Dd June 24, 2012
+.Dd September 3, 2008
 .Dt OD 1
 .Os
 .Sh NAME
@@ -36,10 +36,16 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl aBbcDdeFfHhIiLlOovXx
+.Bk -words
 .Op Fl A Ar base
 .Op Fl j Ar skip
+.Ek
+.Bk -words
 .Op Fl N Ar length
+.Ek
+.Bk -words
 .Op Fl t Ar type_string
+.Ek
 .Sm off
 .Oo
 .Op Cm \&+
@@ -48,16 +54,27 @@
 .Op Cm Bb
 .Sm on
 .Oc
-.Op Ar
+.Ar file ...
 .Sh DESCRIPTION
-The
 .Nm
-utility is a filter which displays each specified
-.Ar file ,
-or the standard input if no
-.Ar file
-arguments are specified, in a user specified
-format.
+has been deprecated in favor of
+.Xr hexdump 1 .
+.Pp
+.Xr hexdump 1 ,
+if called as
+.Nm ,
+provides compatibility for the options described below.
+It does not provide compatibility for the
+.Fl s
+option (see
+.Xr strings 1 )
+or the
+.Fl P ,
+.Fl p ,
+or
+.Fl w
+options, nor is compatibility provided for the ``label'' component
+of the offset syntax.
 .Pp
 The options are as follows:
 .Bl -tag -width Fl
@@ -134,22 +151,22 @@ decimal, per line.
 Display the input offset in octal, followed by eight space-separated,
 six column, space filled, two-byte units of input data, in decimal,
 per line.
-.It Fl j Ar skip
+.It Fl j Ar offset
 Skip
-.Ar skip
+.Ar offset
 bytes from the beginning of the input.
 By default,
-.Ar skip
+.Ar offset
 is interpreted as a decimal number.
 With a leading
 .Cm 0x
 or
 .Cm 0X ,
-.Ar skip
-is interpreted as a hexadecimal number;
+.Ar offset
+is interpreted as a hexadecimal number,
 otherwise, with a leading
 .Cm 0 ,
-.Ar skip
+.Ar offset
 is interpreted as an octal number.
 Appending the character
 .Cm b ,
@@ -157,7 +174,7 @@ Appending the character
 or
 .Cm m
 to
-.Ar skip
+.Ar offset
 causes it to be interpreted as a multiple of
 .Li 512 ,
 .Li 1024 ,
@@ -197,15 +214,13 @@ selects US-ASCII output, with control characters replaced with their
 names instead of as C escape sequences.
 See also the
 .Cm _u
-conversion provided by
-.Xr hexdump 1 .
+conversion provided by hexdump(1).
 .Pp
 .Cm c
 selects a standard character based conversion.
 See also the
 .Cm _c
-conversion provided by
-.Xr hexdump 1 .
+conversion provided by hexdump(1).
 .Pp
 .Cm f
 selects the floating point output format.
@@ -221,8 +236,7 @@ to specify eight byte floating point output.
 The default output format is eight byte floats.
 See also the
 .Cm e
-conversion provided by
-.Xr hexdump 1 .
+conversion provided by hexdump(1).
 .Pp
 .Cm d ,
 .Cm o ,
@@ -262,8 +276,7 @@ See also the
 .Cm u ,
 and
 .Cm x
-conversions provided by
-.Xr hexdump 1 .
+conversions provided by hexdump(1).
 .\"(a|c|f[FLD]?|[doux][C1S2I4L8]?)*
 .It Fl v
 The
@@ -276,8 +289,7 @@ Without the
 option, any number of groups of output lines, which would be
 identical to the immediately preceding group of output lines (except
 for the input offsets), are replaced with a line comprised of a
-single asterisk
-.Pq Sq \&* .
+single asterisk.
 .It Fl X
 Same as
 .Fl H .
@@ -294,19 +306,18 @@ If no options are specified, the
 default display is equivalent to specifying the
 .Fl o
 option.
-.Sh EXIT STATUS
-.Ex -std
+.Pp
+.Nm
+exits 0 on success and \*[Gt]0 if an error occurred.
 .Sh SEE ALSO
 .Xr hexdump 1 ,
 .Xr strings 1
 .Sh HISTORY
-An
+A
 .Nm
-command appeared in
+command appears in
 .At v1 .
 .Pp
-This man page was initially written in February 2001 by Andrew Brown, shortly
-after he augmented the deprecated
-.Nm
-syntax to include things he felt
+This man page was written in February 2001 by Andrew Brown, shortly
+after he augmented the deprecated od syntax to include things he felt
 had been missing for a long time.

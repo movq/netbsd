@@ -1,4 +1,4 @@
-.\"	$NetBSD: boot.8,v 1.12 2009/09/04 23:29:02 apb Exp $
+.\"	$NetBSD: boot.8,v 1.9 2008/10/30 09:49:23 apb Exp $
 .\"
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,9 +32,9 @@
 .\"
 .\"     @(#)boot_i386.8	8.2 (Berkeley) 4/19/94
 .\"
-.Dd September 4, 2009
-.Dt BOOT 8
+.Dd October 30, 2008
 .Os
+.Dt BOOT 8
 .Sh NAME
 .Nm boot
 .Nd
@@ -53,8 +53,12 @@ In the native
 boot protocol, options are passed from the boot loader
 to the kernel via flag bits in the
 .Va boothowto
-variable (see
-.Xr boothowto 9 ) .
+variable, which is interpreted by the kernel in much the same way
+as the
+.Va howto
+argument passed to the
+.Xr reboot 2
+system call.
 .Ss Interactive mode
 In interactive mode, the boot loader will present a prompt, allowing
 input of these commands:
@@ -62,7 +66,11 @@ input of these commands:
 .\" man pages (man8/man8.*/*boot*.8);
 .\" please try to keep all relevant files synchronized.
 .Bl -tag -width 04n -offset 04n
-.It Ic boot Oo Va device : Ns Oc Oo Va filename Oc Oo Fl 1234abcdmqsvxz Oc
+.It Xo Ic boot
+.Op Va device : Ns
+.Op Va filename
+.Op Fl 1234abcdmqsvxz
+.Xc
 The default
 .Va device
 will be set to the disk that the boot loader was
@@ -274,8 +282,7 @@ manual pages,
 .Xr installboot 8 ,
 .Xr reboot 8 ,
 .Xr rescue 8 ,
-.Xr shutdown 8 ,
-.Xr boothowto 9
+.Xr shutdown 8
 .Sh BUGS
 The kernel file name must be specified before, not after, the boot options.
 Any

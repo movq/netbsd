@@ -1,4 +1,4 @@
-/*	$NetBSD: bridgestp.c,v 1.14 2009/01/18 10:28:55 mrg Exp $	*/
+/*	$NetBSD: bridgestp.c,v 1.13 2007/12/25 18:33:44 perry Exp $	*/
 
 /*
  * Copyright (c) 2000 Jason L. Wright (jason@thought.net)
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bridgestp.c,v 1.14 2009/01/18 10:28:55 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bridgestp.c,v 1.13 2007/12/25 18:33:44 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -580,8 +580,10 @@ bstp_acknowledge_topology_change(struct bridge_softc *sc,
 }
 
 struct mbuf *
-bstp_input(struct bridge_softc *sc, struct bridge_iflist *bif, struct mbuf *m)
+bstp_input(struct ifnet *ifp, struct mbuf *m)
 {
+	struct bridge_softc *sc = ifp->if_bridge;
+	struct bridge_iflist *bif = NULL;
 	struct ether_header *eh;
 	struct bstp_tbpdu tpdu;
 	struct bstp_cbpdu cpdu;
@@ -591,8 +593,14 @@ bstp_input(struct bridge_softc *sc, struct bridge_iflist *bif, struct mbuf *m)
 
 	eh = mtod(m, struct ether_header *);
 
-	if ((bif->bif_flags & IFBIF_STP) == 0)
-		return (m);
+	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
+		if ((bif->bif_flags & IFBIF_STP) == 0)
+			continue;
+		if (bif->bif_ifp == ifp)
+			break;
+	}
+	if (bif == NULL)
+		goto out;
 
 	len = ntohs(eh->ether_type);
 	if (len < sizeof(tpdu))
@@ -827,12 +835,12 @@ bstp_initialization(struct bridge_softc *sc)
 
 	sc->sc_bridge_id =
 	    (((uint64_t)sc->sc_bridge_priority) << 48) |
-	    (((uint64_t)(uint8_t)CLLADDR(mif->bif_ifp->if_sadl)[0]) << 40) |
-	    (((uint64_t)(uint8_t)CLLADDR(mif->bif_ifp->if_sadl)[1]) << 32) |
-	    (((uint64_t)(uint8_t)CLLADDR(mif->bif_ifp->if_sadl)[2]) << 24) |
-	    (((uint64_t)(uint8_t)CLLADDR(mif->bif_ifp->if_sadl)[3]) << 16) |
-	    (((uint64_t)(uint8_t)CLLADDR(mif->bif_ifp->if_sadl)[4]) << 8) |
-	    (((uint64_t)(uint8_t)CLLADDR(mif->bif_ifp->if_sadl)[5]) << 0);
+	    (((uint64_t)CLLADDR(mif->bif_ifp->if_sadl)[0]) << 40) |
+	    (((uint64_t)CLLADDR(mif->bif_ifp->if_sadl)[1]) << 32) |
+	    (CLLADDR(mif->bif_ifp->if_sadl)[2] << 24) |
+	    (CLLADDR(mif->bif_ifp->if_sadl)[3] << 16) |
+	    (CLLADDR(mif->bif_ifp->if_sadl)[4] << 8) |
+	    (CLLADDR(mif->bif_ifp->if_sadl)[5]);
 
 	sc->sc_designated_root = sc->sc_bridge_id;
 	sc->sc_root_path_cost = 0;

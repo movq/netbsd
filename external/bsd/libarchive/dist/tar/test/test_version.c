@@ -51,9 +51,8 @@ DEFINE_TEST(test_version)
 	q = p = slurpfile(&s, "version.stdout");
 	/* Version message should start with name of program, then space. */
 	assert(s > 6);
-	failure("Version must start with 'bsdtar': ``%s''", p);
-	if (!assertEqualMem(q, "bsdtar ", 7))
-		return;
+	failure("Version: %s", p);
+	assertEqualMem(q, "bsdtar ", 7);
 	q += 7; s -= 7;
 	/* Version number is a series of digits and periods. */
 	while (s > 0 && (*q == '.' || (*q >= '0' && *q <= '9'))) {
@@ -61,22 +60,22 @@ DEFINE_TEST(test_version)
 		--s;
 	}
 	/* Version number terminated by space. */
-	failure("No space after bsdtar version: ``%s''", p);
+	failure("Version: %s", p);
 	assert(s > 1);
 	/* Skip a single trailing a,b,c, or d. */
 	if (*q == 'a' || *q == 'b' || *q == 'c' || *q == 'd')
 		++q;
-	failure("No space after bsdtar version: ``%s''", p);
+	failure("Version: %s", p);
 	assert(*q == ' ');
 	++q; --s;
 	/* Separator. */
-	failure("No `-' between bsdtar and libarchive versions: ``%s''", p);
+	failure("Version: %s", p);
 	assertEqualMem(q, "- ", 2);
 	q += 2; s -= 2;
 	/* libarchive name and version number */
-	failure("Not long enough for libarchive version: ``%s''", p);
+	failure("Version: %s", p);
 	assert(s > 11);
-	failure("Libarchive version must start with `libarchive': ``%s''", p);
+	failure("Version: %s", p);
 	assertEqualMem(q, "libarchive ", 11);
 	q += 11; s -= 11;
 	/* Version number is a series of digits and periods. */
@@ -87,11 +86,8 @@ DEFINE_TEST(test_version)
 	/* Skip a single trailing a,b,c, or d. */
 	if (*q == 'a' || *q == 'b' || *q == 'c' || *q == 'd')
 		++q;
-	/* All terminated by end-of-line. */
+	/* All terminated by a newline. */
 	assert(s >= 1);
-	/* Skip an optional CR character (e.g., Windows) */
-	failure("Version output must end with \\n or \\r\\n");
-	if (*q == '\r') { ++q; --s; }
 	assertEqualMem(q, "\n", 1);
 	free(p);
 }

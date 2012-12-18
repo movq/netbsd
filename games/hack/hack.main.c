@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.main.c,v 1.17 2011/08/06 20:42:43 dholland Exp $	*/
+/*	$NetBSD: hack.main.c,v 1.10.10.2 2009/06/29 23:33:53 snj Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.main.c,v 1.17 2011/08/06 20:42:43 dholland Exp $");
+__RCSID("$NetBSD: hack.main.c,v 1.10.10.2 2009/06/29 23:33:53 snj Exp $");
 #endif				/* not lint */
 
 #include <signal.h>
@@ -90,14 +90,15 @@ const char     *catmore;	/* default pager */
 #endif
 char            SAVEF[PL_NSIZ + 11] = "save/";	/* save/99999player */
 char           *hname;		/* name of the game (argv[0] of call) */
-
-static char obuf[BUFSIZ];	/* BUFSIZ is defined in stdio.h */
+char            obuf[BUFSIZ];	/* BUFSIZ is defined in stdio.h */
 
 int main(int, char *[]);
 static void chdirx(const char *, boolean);
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int             argc;
+	char           *argv[];
 {
 	int             fd;
 #ifdef CHDIR
@@ -184,7 +185,7 @@ main(int argc, char *argv[])
 	cls();
 	u.uhp = 1;		/* prevent RIP on early quits */
 	u.ux = FAR;		/* prevent nscr() */
-	(void) signal(SIGHUP, hang_up);
+	(void) signal(SIGHUP, hangup);
 
 	/*
 	 * Find the creation date of this game,
@@ -418,10 +419,8 @@ not_recovered:
 		}
 		if (multi < 0) {
 			if (!++multi) {
-				if (nomovemsg)
-					pline("%s", nomovemsg);
-				else
-					pline("You can move again.");
+				pline(nomovemsg ? nomovemsg :
+				      "You can move again.");
 				nomovemsg = 0;
 				if (afternmv)
 					(*afternmv) ();
@@ -471,7 +470,7 @@ not_recovered:
 #ifdef MAIL
 			ckmailstatus();
 #endif
-			rhack(NULL);
+			rhack((char *) 0);
 		}
 		if (multi && multi % 7 == 0)
 			(void) fflush(stdout);
@@ -479,7 +478,8 @@ not_recovered:
 }
 
 void
-glo(int foo)
+glo(foo)
+	int foo;
 {
 	/* construct the string  xlock.n  */
 	size_t pos;
@@ -496,7 +496,7 @@ glo(int foo)
  * It may still contain a suffix denoting pl_character.
  */
 void
-askname(void)
+askname()
 {
 	int             c, ct;
 	printf("\nWho are you? ");
@@ -536,7 +536,9 @@ impossible(const char *s, ...)
 
 #ifdef CHDIR
 static void
-chdirx(const char *dir, boolean wr)
+chdirx(dir, wr)
+	const char     *dir;
+	boolean         wr;
 {
 
 #ifdef SECURE
@@ -577,7 +579,7 @@ chdirx(const char *dir, boolean wr)
 #endif
 
 void
-stop_occupation(void)
+stop_occupation()
 {
 	if (occupation) {
 		pline("You stop %s.", occtxt);

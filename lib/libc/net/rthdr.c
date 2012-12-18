@@ -1,4 +1,4 @@
-/*	$NetBSD: rthdr.c,v 1.18 2012/03/13 21:13:42 christos Exp $	*/
+/*	$NetBSD: rthdr.c,v 1.16 2006/05/05 00:03:21 rpaulo Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: rthdr.c,v 1.18 2012/03/13 21:13:42 christos Exp $");
+__RCSID("$NetBSD: rthdr.c,v 1.16 2006/05/05 00:03:21 rpaulo Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -67,7 +67,8 @@ __weak_alias(inet6_rth_getaddr, _inet6_rth_getaddr)
  */
 
 size_t
-inet6_rthdr_space(int type, int seg)
+inet6_rthdr_space(type, seg)
+	int type, seg;
 {
 	switch (type) {
 	case IPV6_RTHDR_TYPE_0:
@@ -81,7 +82,9 @@ inet6_rthdr_space(int type, int seg)
 }
 
 struct cmsghdr *
-inet6_rthdr_init(void *bp, int type)
+inet6_rthdr_init(bp, type)
+	void *bp;
+	int type;
 {
 	struct cmsghdr *ch;
 	struct ip6_rthdr *rthdr;
@@ -111,7 +114,10 @@ inet6_rthdr_init(void *bp, int type)
 }
 
 int
-inet6_rthdr_add(struct cmsghdr *cmsg, const struct in6_addr *addr, u_int flags)
+inet6_rthdr_add(cmsg, addr, flags)
+	struct cmsghdr *cmsg;
+	const struct in6_addr *addr;
+	u_int flags;
 {
 	struct ip6_rthdr *rthdr;
 
@@ -123,7 +129,6 @@ inet6_rthdr_add(struct cmsghdr *cmsg, const struct in6_addr *addr, u_int flags)
 	switch (rthdr->ip6r_type) {
 	case IPV6_RTHDR_TYPE_0:
 	{
-		size_t len;
 		struct ip6_rthdr0 *rt0 = (struct ip6_rthdr0 *)(void *)rthdr;
 		if (flags != IPV6_RTHDR_LOOSE && flags != IPV6_RTHDR_STRICT)
 			return (-1);
@@ -135,9 +140,7 @@ inet6_rthdr_add(struct cmsghdr *cmsg, const struct in6_addr *addr, u_int flags)
 		(void)memcpy(((caddr_t)(void *)rt0) +
 		    ((rt0->ip6r0_len + 1) << 3), addr, sizeof(struct in6_addr));
 		rt0->ip6r0_len += sizeof(struct in6_addr) >> 3;
-		len = CMSG_LEN((rt0->ip6r0_len + 1) << 3);
-		_DIAGASSERT(__type_fit(socklen_t, len));
-		cmsg->cmsg_len = (socklen_t)len;
+		cmsg->cmsg_len = CMSG_LEN((rt0->ip6r0_len + 1) << 3);
 		break;
 	}
 	default:
@@ -148,7 +151,9 @@ inet6_rthdr_add(struct cmsghdr *cmsg, const struct in6_addr *addr, u_int flags)
 }
 
 int
-inet6_rthdr_lasthop(struct cmsghdr *cmsg, unsigned int flags)
+inet6_rthdr_lasthop(cmsg, flags)
+	struct cmsghdr *cmsg;
+	unsigned int flags;
 {
 	struct ip6_rthdr *rthdr;
 
@@ -175,7 +180,9 @@ inet6_rthdr_lasthop(struct cmsghdr *cmsg, unsigned int flags)
 
 #if 0
 int
-inet6_rthdr_reverse(const struct cmsghdr *in, struct cmsghdr *out)
+inet6_rthdr_reverse(in, out)
+	const struct cmsghdr *in;
+	struct cmsghdr *out;
 {
 
 	return (-1);
@@ -183,7 +190,8 @@ inet6_rthdr_reverse(const struct cmsghdr *in, struct cmsghdr *out)
 #endif
 
 int
-inet6_rthdr_segments(const struct cmsghdr *cmsg)
+inet6_rthdr_segments(cmsg)
+	const struct cmsghdr *cmsg;
 {
 	const struct ip6_rthdr *rthdr;
 
@@ -196,14 +204,11 @@ inet6_rthdr_segments(const struct cmsghdr *cmsg)
 	{
 		const struct ip6_rthdr0 *rt0 =
 		    (const struct ip6_rthdr0 *)(const void *)rthdr;
-		size_t len;
 
 		if (rt0->ip6r0_len % 2 || 46 < rt0->ip6r0_len)
 			return (-1);
 
-		len = (rt0->ip6r0_len * 8) / sizeof(struct in6_addr);
-		_DIAGASSERT(__type_fit(int, len));
-		return (int)len;
+		return (rt0->ip6r0_len * 8) / sizeof(struct in6_addr);
 	}
 
 	default:
@@ -212,7 +217,9 @@ inet6_rthdr_segments(const struct cmsghdr *cmsg)
 }
 
 struct in6_addr *
-inet6_rthdr_getaddr(struct cmsghdr *cmsg, int idx)
+inet6_rthdr_getaddr(cmsg, idx)
+	struct cmsghdr *cmsg;
+	int idx;
 {
 	struct ip6_rthdr *rthdr;
 
@@ -225,13 +232,10 @@ inet6_rthdr_getaddr(struct cmsghdr *cmsg, int idx)
 	{
 		struct ip6_rthdr0 *rt0 = (struct ip6_rthdr0 *)(void *)rthdr;
 		int naddr;
-		size_t len;
 
 		if (rt0->ip6r0_len % 2 || 46 < rt0->ip6r0_len)
 			return NULL;
-		len = (rt0->ip6r0_len * 8) / sizeof(struct in6_addr);
-		_DIAGASSERT(__type_fit(int, len));
-		naddr = (int)len;
+		naddr = (rt0->ip6r0_len * 8) / sizeof(struct in6_addr);
 		if (idx <= 0 || naddr < idx)
 			return NULL;
 #ifdef COMPAT_RFC2292
@@ -247,7 +251,9 @@ inet6_rthdr_getaddr(struct cmsghdr *cmsg, int idx)
 }
 
 int
-inet6_rthdr_getflags(const struct cmsghdr *cmsg, int idx)
+inet6_rthdr_getflags(cmsg, idx)
+	const struct cmsghdr *cmsg;
+	int idx;
 {
 	const struct ip6_rthdr *rthdr;
 
@@ -261,13 +267,10 @@ inet6_rthdr_getflags(const struct cmsghdr *cmsg, int idx)
 		const struct ip6_rthdr0 *rt0 = (const struct ip6_rthdr0 *)
 		(const void *)rthdr;
 		int naddr;
-		size_t len;
 
 		if (rt0->ip6r0_len % 2 || 46 < rt0->ip6r0_len)
 			return (-1);
-		len = (rt0->ip6r0_len * 8) / sizeof(struct in6_addr);
-		_DIAGASSERT(__type_fit(int, len));
-		naddr = (int)len;
+		naddr = (rt0->ip6r0_len * 8) / sizeof(struct in6_addr);
 		if (idx < 0 || naddr < idx)
 			return (-1);
 		return IPV6_RTHDR_LOOSE;
@@ -449,7 +452,7 @@ inet6_rth_getaddr(const void *bp, int idx)
 		    (addrs = (rh0->ip6r0_len / 2)) < rh0->ip6r0_segleft)
 			return (NULL);
 
-		if (idx < 0 || addrs <= (unsigned int)idx)
+		if (idx < 0 || addrs <= idx)
 			return (NULL);
 
 		return (((struct in6_addr *)(void *)__UNCONST(rh0 + 1)) + idx);

@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365_pci.c,v 1.33 2012/10/27 17:18:32 chs Exp $	*/
+/*	$NetBSD: i82365_pci.c,v 1.26 2008/06/26 12:33:17 drochner Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82365_pci.c,v 1.33 2012/10/27 17:18:32 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82365_pci.c,v 1.26 2008/06/26 12:33:17 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,10 +57,10 @@ __KERNEL_RCSID(0, "$NetBSD: i82365_pci.c,v 1.33 2012/10/27 17:18:32 chs Exp $");
  */
 #define	PCI_CBIO		0x10	/* Configuration Base IO Address */
 
-int	pcic_pci_match(device_t, cfdata_t, void *);
-void	pcic_pci_attach(device_t, device_t, void *);
+int	pcic_pci_match(struct device *, struct cfdata *, void *);
+void	pcic_pci_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(pcic_pci, sizeof(struct pcic_pci_softc),
+CFATTACH_DECL(pcic_pci, sizeof(struct pcic_pci_softc),
     pcic_pci_match, pcic_pci_attach, NULL, NULL);
 
 static const struct pcmcia_chip_functions pcic_pci_functions = {
@@ -85,40 +85,41 @@ static const struct pcmcia_chip_functions pcic_pci_functions = {
 	NULL,				/* card_detect */
 };
 
-static void pcic_pci_callback(device_t);
+static void pcic_pci_callback(struct device *);
 
 int
-pcic_pci_match(device_t parent, cfdata_t match, void *aux)
+pcic_pci_match(struct device *parent, struct cfdata  *match,
+    void *aux)
 {
-	struct pci_attach_args *pa = aux;
+	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
 	switch (PCI_VENDOR(pa->pa_id)) {
 	case PCI_VENDOR_CIRRUS:
-		switch (PCI_PRODUCT(pa->pa_id)) {
+		switch(PCI_PRODUCT(pa->pa_id)) {
 		case PCI_PRODUCT_CIRRUS_CL_PD6729:
 			break;
 		default:
-			return 0;
+			return (0);
 		}
 		break;
 	default:
-		return 0;
+		return (0);
 	}
-	return 1;
+	return (1);
 }
 
+void pcic_isa_config_interrupts(struct device *);
+
 void
-pcic_pci_attach(device_t parent, device_t self, void *aux)
+pcic_pci_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct pcic_pci_softc *psc = device_private(self);
-	struct pcic_softc *sc = &psc->sc_pcic;
+	struct pcic_softc *sc = (void *) self;
+	struct pcic_pci_softc *psc = (void *) self;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	bus_space_tag_t memt = pa->pa_memt;
 	bus_space_handle_t memh;
 	const char *model;
-
-	sc->dev = self;
 
 	aprint_naive(": PCMCIA controller\n");
 
@@ -152,7 +153,7 @@ pcic_pci_attach(device_t parent, device_t self, void *aux)
 
 	/* end XXX */
 
-	sc->pct = &pcic_pci_functions;
+	sc->pct = (pcmcia_chipset_tag_t) & pcic_pci_functions;
 
 	sc->memt = memt;
 	sc->memh = memh;
@@ -182,10 +183,10 @@ pcic_pci_attach(device_t parent, device_t self, void *aux)
 	 * we'll need to fix this.
 	 */
 	pcic_write(&sc->handle[0], PCIC_CIRRUS_EXTENDED_INDEX,
-	    PCIC_CIRRUS_EXT_CONTROL_1);
+		   PCIC_CIRRUS_EXT_CONTROL_1);
 	if ((pcic_read(&sc->handle[0], PCIC_CIRRUS_EXTENDED_DATA) &
 	    PCIC_CIRRUS_EXT_CONTROL_1_PCI_INTR_MASK)) {
-		aprint_error_dev(self, "PCI interrupts not supported\n");
+		aprint_error_dev(&sc->dev, "PCI interrupts not supported\n");
 		return;
 	}
 
@@ -196,7 +197,7 @@ pcic_pci_attach(device_t parent, device_t self, void *aux)
 	/* Map and establish the interrupt. */
 	sc->ih = pcic_pci_machdep_pcic_intr_establish(sc, pcic_intr);
 	if (sc->ih == NULL) {
-		aprint_error_dev(self, "couldn't map interrupt\n");
+		aprint_error_dev(&sc->dev, "couldn't map interrupt\n");
 		return;
 	}
 #endif
@@ -212,9 +213,10 @@ pcic_pci_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-pcic_pci_callback(device_t self)
+pcic_pci_callback(self)
+	struct device *self;
 {
-	struct pcic_softc *sc = device_private(self);
+	struct pcic_softc *sc = (void *) self;
 
 	pcic_attach_sockets(sc);
 }

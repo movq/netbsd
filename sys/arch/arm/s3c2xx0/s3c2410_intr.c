@@ -1,4 +1,4 @@
-/* $NetBSD: s3c2410_intr.c,v 1.13 2011/07/01 20:31:39 dyoung Exp $ */
+/* $NetBSD: s3c2410_intr.c,v 1.9 2008/04/27 18:58:45 matt Exp $ */
 
 /*
  * Copyright (c) 2003  Genetec corporation.  All rights reserved.
@@ -35,15 +35,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: s3c2410_intr.c,v 1.13 2011/07/01 20:31:39 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: s3c2410_intr.c,v 1.9 2008/04/27 18:58:45 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
-
-#include <sys/bus.h>
+#include <uvm/uvm_extern.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
-
 #include <arm/cpufunc.h>
 
 #include <arm/s3c2xx0/s3c2410reg.h>
@@ -317,17 +316,15 @@ s3c2410_intr_init(struct s3c24x0_softc *sc)
 void
 s3c2410_mask_subinterrupts(int bits)
 {
-	int psw = disable_interrupts(IF32_bits);
-	icreg(INTCTL_INTSUBMSK) |= bits;
-	restore_interrupts(psw);
+	atomic_set_bit((uint32_t *)__UNVOLATILE(&icreg(INTCTL_INTSUBMSK)),
+		bits);
 }
 
 void
 s3c2410_unmask_subinterrupts(int bits)
 {
-	int psw = disable_interrupts(IF32_bits);
-	icreg(INTCTL_INTSUBMSK) &= ~bits;
-	restore_interrupts(psw);
+	atomic_clear_bit((uint32_t *)__UNVOLATILE(&icreg(INTCTL_INTSUBMSK)),
+		bits);
 }
 
 /*

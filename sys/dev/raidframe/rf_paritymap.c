@@ -1,4 +1,4 @@
-/* $NetBSD: rf_paritymap.c,v 1.8 2011/04/27 07:55:15 mrg Exp $ */
+/* $NetBSD: rf_paritymap.c,v 1.3.2.4 2011/03/07 17:38:22 snj Exp $ */
 
 /*-
  * Copyright (c) 2009 Jed Davis.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_paritymap.c,v 1.8 2011/04/27 07:55:15 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_paritymap.c,v 1.3.2.4 2011/03/07 17:38:22 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -259,10 +259,7 @@ rf_paritymap_tick(void *arg)
 	mutex_enter(&pm->lk_flags);
 	pm->flags |= TICKED;
 	mutex_exit(&pm->lk_flags);
-
-	rf_lock_mutex2(pm->raid->iodone_lock);
-	rf_signal_cond2(pm->raid->iodone_cv); /* XXX */
-	rf_unlock_mutex2(pm->raid->iodone_lock);
+	wakeup(&(pm->raid->iodone)); /* XXX */
 }
 
 /*
@@ -585,25 +582,13 @@ rf_paritymap_detach(RF_Raid_t *raidPtr)
 	if (raidPtr->parity_map == NULL)
 		return;
 
-	rf_lock_mutex2(raidPtr->iodone_lock);
+	simple_lock(&(raidPtr->iodone_lock));
 	struct rf_paritymap *pm = raidPtr->parity_map;
 	raidPtr->parity_map = NULL;
-	rf_unlock_mutex2(raidPtr->iodone_lock);
+	simple_unlock(&(raidPtr->iodone_lock));
 	/* XXXjld is that enough locking?  Or too much? */
 	rf_paritymap_destroy(pm, 0);
 	kmem_free(pm, sizeof(*pm));
-}
-
-/*
- * Is this RAID set ineligible for parity-map use due to not actually
- * having any parity?  (If so, rf_paritymap_attach is a no-op, but
- * rf_paritymap_{get,set}_disable will still pointlessly act on the
- * component labels.)
- */
-int
-rf_paritymap_ineligible(RF_Raid_t *raidPtr)
-{
-	return raidPtr->Layout.map->faultsTolerated == 0;
 }
 
 /*
@@ -621,7 +606,7 @@ rf_paritymap_attach(RF_Raid_t *raidPtr, int force)
 	u_int flags, regions;
 	struct rf_pmparams params;
 
-	if (rf_paritymap_ineligible(raidPtr)) {
+	if (raidPtr->Layout.map->faultsTolerated == 0) {
 		/* There isn't any parity. */
 		return;
 	}

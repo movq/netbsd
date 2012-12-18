@@ -1,4 +1,4 @@
-.\" $NetBSD: time_second.9,v 1.5 2011/03/13 05:03:21 jruoho Exp $
+.\" $NetBSD: time_second.9,v 1.1.24.2 2008/12/01 01:44:14 snj Exp $
 .\"
 .\" Copyright (c) 1994 Christopher G. Demetriou
 .\" All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\" <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
 .\"
-.Dd March 13, 2008
+.Dd November 28, 2008
 .Dt TIME_SECOND 9
 .Os
 .Sh NAME
@@ -42,10 +42,14 @@
 .Nd system time variables
 .Sh SYNOPSIS
 .In sys/time.h
-.Vt extern time_t time_second;
-.Vt extern time_t time_uptime;
+.Pp
+.Va extern time_t time_second;
+.br
+.Va extern time_t time_uptime;
+.Pp
 .In sys/kernel.h
-.Vt extern struct timeval boottime;
+.Pp
+.Va extern struct timeval boottime;
 .Sh DESCRIPTION
 The
 .Va time_second
@@ -73,7 +77,6 @@ variable holds the system boot time.
 It is set at system boot, and is updated when the system time is adjusted
 with
 .Xr settimeofday 2 .
-The variable may be read and written without special precautions.
 .Pp
 All of these variables contain times
 expressed in seconds and microseconds since midnight (0 hour),
@@ -100,9 +103,26 @@ and
 .Xr getnanouptime 9
 functions can be used to get the time elapsed since boot more accurately
 and in an atomic manner.
+.Pp
+.Va boottime
+may be read and written without special precautions.
 .Sh SEE ALSO
 .Xr clock_settime 2 ,
 .Xr ntp_adjtime 2 ,
-.Xr timeval 3 ,
+.Xr settimeofday 2 ,
+.Xr bintime 9 ,
+.Xr binuptime 9 ,
+.Xr getbintime 9 ,
+.Xr getbinuptime 9 ,
+.Xr getmicrotime 9 ,
+.Xr getmicrouptime 9 ,
+.Xr getnanotime 9 ,
+.Xr getnanouptime 9 ,
 .Xr hardclock 9 ,
-.Xr hz 9
+.Xr hz 9 ,
+.Xr inittodr 9 ,
+.Xr microtime 9 ,
+.Xr microuptime 9 ,
+.Xr nanotime 9 ,
+.Xr nanouptime 9 ,
+.Xr timecounter 9

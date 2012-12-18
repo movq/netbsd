@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_machdep.c,v 1.18 2011/04/04 20:37:55 dyoung Exp $	*/
+/*	$NetBSD: pciide_machdep.c,v 1.11.6.2 2010/02/22 04:36:52 snj Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.18 2011/04/04 20:37:55 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.11.6.2 2010/02/22 04:36:52 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,7 +54,9 @@ __KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.18 2011/04/04 20:37:55 dyoung E
 
 #include <xen/evtchn.h>
 
+#ifdef XEN3
 #include "ioapic.h"
+#endif
 
 #if NIOAPIC > 0
 #include <machine/i82093var.h>
@@ -62,9 +64,12 @@ __KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.18 2011/04/04 20:37:55 dyoung E
 #endif  
 
 void *
-pciide_machdep_compat_intr_establish(device_t dev,
-	const struct pci_attach_args *pa, int chan,
-	int (*func)(void *), void *arg)
+pciide_machdep_compat_intr_establish(dev, pa, chan, func, arg)
+	struct device *dev;
+	struct pci_attach_args *pa;
+	int chan;
+	int (*func) __P((void *));
+	void *arg;
 {
 	struct pintrhand *ih;
 	char evname[16];
@@ -74,7 +79,16 @@ pciide_machdep_compat_intr_establish(device_t dev,
 #endif
 	int evtch;
 
-	xenih.pirq = PCIIDE_COMPAT_IRQ(chan);
+#ifndef XEN3
+	physdev_op_t physdev_op;
+
+	physdev_op.cmd = PHYSDEVOP_PCI_INITIALISE_DEVICE;
+	physdev_op.u.pci_cfgreg_read.bus = pa->pa_bus;
+	physdev_op.u.pci_cfgreg_read.dev = pa->pa_device;
+	physdev_op.u.pci_cfgreg_read.func = pa->pa_function;
+	if (HYPERVISOR_physdev_op(&physdev_op) < 0)
+		panic("HYPERVISOR_physdev_op(PHYSDEVOP_PCI_INITIALISE_DEVICE)");
+#endif /* !XEN3 */
 	xenih.pirq = 0;
 #if NIOAPIC > 0
 	if (mp_busses != NULL) {

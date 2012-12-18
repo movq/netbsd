@@ -1,4 +1,4 @@
-/*	$NetBSD: denode.h,v 1.20 2012/11/04 17:57:59 jakllsch Exp $	*/
+/*	$NetBSD: denode.h,v 1.16 2007/11/26 19:01:46 pooka Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -101,7 +101,7 @@
 #define	MSDOSFSROOT_OFS	0x1fffffff
 
 /*
- * The FAT cache structure. fc_fsrcn is the filesystem relative cluster
+ * The fat cache structure. fc_fsrcn is the filesystem relative cluster
  * number that corresponds to the file relative cluster number in this
  * structure (fc_frcn).
  */
@@ -111,11 +111,11 @@ struct fatcache {
 };
 
 /*
- * The FAT entry cache as it stands helps make extending files a "quick"
- * operation by avoiding having to scan the FAT to discover the last
+ * The fat entry cache as it stands helps make extending files a "quick"
+ * operation by avoiding having to scan the fat to discover the last
  * cluster of the file. The cache also helps sequential reads by
  * remembering the last cluster read from the file.  This also prevents us
- * from having to rescan the FAT to find the next cluster to read.  This
+ * from having to rescan the fat to find the next cluster to read.  This
  * cache is probably pretty worthless if a file is opened by multiple
  * processes.
  */
@@ -128,7 +128,7 @@ struct fatcache {
 #define	FCE_EMPTY	0xffffffff	/* doesn't represent an actual cluster # */
 
 /*
- * Set a slot in the FAT cache.
+ * Set a slot in the fat cache.
  */
 #define	fc_setcache(dep, slot, frcn, fsrcn) \
 	(dep)->de_fc[slot].fc_frcn = frcn; \
@@ -169,7 +169,7 @@ struct denode {
 	u_short de_MDate;	/* modification date */
 	u_long de_StartCluster; /* starting cluster of file */
 	u_long de_FileSize;	/* size of file in bytes */
-	struct fatcache de_fc[FC_SIZE];	/* FAT cache */
+	struct fatcache de_fc[FC_SIZE];	/* fat cache */
 };
 
 /*
@@ -249,7 +249,9 @@ struct defid {
 
 	u_int32_t defid_dirclust; /* cluster this dir entry came from */
 	u_int32_t defid_dirofs;	/* offset of entry within the cluster */
+#if 0
 	u_int32_t defid_gen;	/* generation number */
+#endif
 };
 
 /*
@@ -257,6 +259,8 @@ struct defid {
  */
 int	msdosfs_lookup		(void *);
 int	msdosfs_create		(void *);
+int	msdosfs_mknod		(void *);
+int	msdosfs_open		(void *);
 int	msdosfs_close		(void *);
 int	msdosfs_access		(void *);
 int	msdosfs_getattr		(void *);
@@ -271,10 +275,13 @@ int	msdosfs_write		(void *);
 int	msdosfs_fsync		(void *);
 #define	msdosfs_seek		genfs_seek
 int	msdosfs_remove		(void *);
+int	msdosfs_link		(void *);
 int	msdosfs_rename		(void *);
 int	msdosfs_mkdir		(void *);
 int	msdosfs_rmdir		(void *);
+int	msdosfs_symlink		(void *);
 int	msdosfs_readdir		(void *);
+int	msdosfs_readlink	(void *);
 #define	msdosfs_abortop		genfs_abortop
 int	msdosfs_inactive	(void *);
 int	msdosfs_reclaim		(void *);
@@ -308,9 +315,5 @@ int msdosfs_gop_alloc(struct vnode *, off_t, off_t, int, kauth_cred_t);
 void msdosfs_gop_markupdate(struct vnode *, int);
 void msdosfs_detimes(struct denode *, const struct timespec *,
     const struct timespec *, const struct timespec *, int);
-int msdosfs_fh_enter(struct msdosfsmount *, uint32_t, uint32_t, uint32_t *);
-int msdosfs_fh_remove(struct msdosfsmount *, uint32_t, uint32_t);
-int msdosfs_fh_lookup(struct msdosfsmount *, uint32_t, uint32_t, uint32_t *);
-void msdosfs_fh_destroy(struct msdosfsmount *);
 #endif	/* _KERNEL */
 #endif /* _MSDOSFS_DENODE_H_ */

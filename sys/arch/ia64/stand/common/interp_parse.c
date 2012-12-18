@@ -1,4 +1,4 @@
-/*	$NetBSD: interp_parse.c,v 1.5 2009/10/26 19:16:56 cegger Exp $	*/
+/*	$NetBSD: interp_parse.c,v 1.2 2006/04/22 07:58:53 cherry Exp $	*/
 
 /*-
  * Redistribution and use in source and binary forms, with or without
@@ -20,7 +20,6 @@
 /* __FBSDID("$FreeBSD: src/sys/boot/common/interp_parse.c,v 1.10 2003/08/25 23:30:41 obrien Exp $"); */
 
 #include <lib/libsa/stand.h>
-#include <lib/libsa/loadfile.h>
 #include <lib/libkern/libkern.h>
 
 #include "bootstrap.h"
@@ -169,7 +168,7 @@ parse(int *argc, char ***argv, char *str)
     args[ac] = NULL;
     *argc = ac;
     *argv = (char **)alloc((sizeof(char *) * ac + 1));
-    memcpy(*argv, args, sizeof(char *) * ac + 1);
+    bcopy(args, *argv, sizeof(char *) * ac + 1);
     free(buf);
     free(copy);
     return 0;

@@ -1,21 +1,21 @@
-/* $NetBSD: pci_machdep.c,v 1.19 2012/02/06 02:14:15 matt Exp $ */
+/* $NetBSD: pci_machdep.c,v 1.15 2001/07/16 00:55:17 elric Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.19 2012/02/06 02:14:15 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.15 2001/07/16 00:55:17 elric Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -41,6 +41,8 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.19 2012/02/06 02:14:15 matt Exp $"
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/isa/isavar.h>
 #include <dev/pci/pcireg.h>
@@ -60,13 +62,16 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.19 2012/02/06 02:14:15 matt Exp $"
 #endif
 
 void
-pci_display_console(bus_space_tag_t iot, bus_space_tag_t memt, pci_chipset_tag_t pc, int bus, int device, int function)
+pci_display_console(iot, memt, pc, bus, device, function)
+	bus_space_tag_t iot, memt;
+	pci_chipset_tag_t pc;
+	int bus, device, function;
 {
 	pcitag_t tag;
 	pcireg_t id, class;
 	int match, nmatch;
-	int (*fn)(bus_space_tag_t, bus_space_tag_t, pci_chipset_tag_t,
-	    int, int, int);
+	int (*fn) __P((bus_space_tag_t, bus_space_tag_t, pci_chipset_tag_t,
+	    int, int, int));
 
 	tag = pci_make_tag(pc, bus, device, function);
 	id = pci_conf_read(pc, tag, PCI_ID_REG);

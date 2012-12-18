@@ -39,16 +39,16 @@ static drm_pci_id_list_t via_pciidlist[] = {
 	viadrv_PCI_IDS
 };
 
-static void
-via_configure(struct drm_device *dev)
+static void via_configure(struct drm_device *dev)
 {
 	dev->driver->driver_features =
 	    DRIVER_USE_AGP | DRIVER_USE_MTRR | DRIVER_HAVE_IRQ;
 
-	dev->driver->buf_priv_size	= sizeof(drm_via_private_t);
+	dev->driver->buf_priv_size	= 1;
 	dev->driver->load		= via_driver_load;
 	dev->driver->unload		= via_driver_unload;
-	dev->driver->lastclose		= via_lastclose;
+	dev->driver->context_ctor	= via_init_context;
+	dev->driver->context_dtor	= via_final_context;
 	dev->driver->get_vblank_counter	= via_get_vblank_counter;
 	dev->driver->enable_vblank	= via_enable_vblank;
 	dev->driver->disable_vblank	= via_disable_vblank;
@@ -70,65 +70,52 @@ via_configure(struct drm_device *dev)
 }
 
 static int
-viadrm_probe(device_t parent, cfdata_t match, void *aux)
+via_probe(device_t kdev)
 {
-	struct pci_attach_args *pa = aux;
-	return drm_probe(pa, via_pciidlist);
+	return drm_probe(kdev, via_pciidlist);
 }
 
-static void
-viadrm_attach(device_t parent, device_t self, void *aux)
+static int
+via_attach(device_t kdev)
 {
-	struct pci_attach_args *pa = aux;
-	struct drm_device *dev = device_private(self);
-
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "couldn't establish power handler\n");
+	struct drm_device *dev = device_get_softc(kdev);
 
 	dev->driver = malloc(sizeof(struct drm_driver_info), DRM_MEM_DRIVER,
 	    M_WAITOK | M_ZERO);
 
 	via_configure(dev);
 
-	drm_attach(self, pa, via_pciidlist);
+	return drm_attach(kdev, via_pciidlist);
 }
 
 static int
-viadrm_detach(device_t self, int flags)
+via_detach(device_t kdev)
 {
-	pmf_device_deregister(self);
+	struct drm_device *dev = device_get_softc(kdev);
+	int ret;
 
-	return drm_detach(self, flags);
+	ret = drm_detach(kdev);
+
+	free(dev->driver, DRM_MEM_DRIVER);
+
+	return ret;
 }
 
-CFATTACH_DECL_NEW(viadrm, sizeof(struct drm_device),
-    viadrm_probe, viadrm_attach, viadrm_detach, NULL);
+static device_method_t via_methods[] = {
+	/* Device interface */
+	DEVMETHOD(device_probe,		via_probe),
+	DEVMETHOD(device_attach,	via_attach),
+	DEVMETHOD(device_detach,	via_detach),
 
-MODULE(MODULE_CLASS_DRIVER, viadrm, "drm");
+	{ 0, 0 }
+};
 
-#ifdef _MODULE
-#include "ioconf.c"
-#endif
+static driver_t via_driver = {
+	"drm",
+	via_methods,
+	sizeof(struct drm_device)
+};
 
-static int
-viadrm_modcmd(modcmd_t cmd, void *arg)
-{
-	int err = 0;
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-#ifdef _MODULE
-		err = config_init_component(cfdriver_ioconf_viadrm,
-		    cfattach_ioconf_viadrm, cfdata_ioconf_viadrm);
-#endif
-		return err;
-	case MODULE_CMD_FINI:
-#ifdef _MODULE
-		err = config_fini_component(cfdriver_ioconf_viadrm,
-		    cfattach_ioconf_viadrm, cfdata_ioconf_viadrm);
-#endif
-		return err;
-	default:
-		return ENOTTY;
-	}
-}
+extern devclass_t drm_devclass;
+DRIVER_MODULE(via, pci, via_driver, drm_devclass, 0, 0);
+MODULE_DEPEND(via, drm, 1, 1, 1);

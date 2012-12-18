@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.26 2012/01/27 18:52:47 para Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.20 2008/04/28 20:23:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.26 2012/01/27 18:52:47 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.20 2008/04/28 20:23:10 martin Exp $");
 
 #include "opt_algor_p4032.h"
 #include "opt_algor_p5064.h"
@@ -39,15 +39,15 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.26 2012/01/27 18:52:47 para Exp $");
 #include "opt_pci.h"
 
 #include <sys/param.h>
-#include <sys/bus.h>
-#include <sys/conf.h>
-#include <sys/device.h>
-#include <sys/extent.h>
-#include <sys/malloc.h>
-#include <sys/reboot.h>
 #include <sys/systm.h>
+#include <sys/conf.h>
+#include <sys/reboot.h>
+#include <sys/device.h>
+#include <sys/malloc.h>
+#include <sys/extent.h>
 
-#include <algor/autoconf.h>
+#include <machine/bus.h>
+#include <machine/autoconf.h>
 
 #include <mips/cache.h>
 
@@ -63,14 +63,14 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.26 2012/01/27 18:52:47 para Exp $");
 #include "locators.h"
 #include "pci.h"
 
-int	mainbus_match(device_t, cfdata_t, void *);
-void	mainbus_attach(device_t, device_t, void *);
+int	mainbus_match(struct device *, struct cfdata *, void *);
+void	mainbus_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(mainbus, 0,
+CFATTACH_DECL(mainbus, sizeof(struct device),
     mainbus_match, mainbus_attach, NULL, NULL);
 
 int	mainbus_print(void *, const char *);
-int	mainbus_submatch(device_t, cfdata_t,
+int	mainbus_submatch(struct device *, struct cfdata *,
 			 const int *, void *);
 
 /* There can be only one. */
@@ -125,7 +125,7 @@ struct mainbusdev mainbusdevs[] = {
 #endif /* ALGOR_P6032 */
 
 int
-mainbus_match(device_t parent, cfdata_t cf, void *aux)
+mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	if (mainbus_found)
@@ -135,7 +135,7 @@ mainbus_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-mainbus_attach(device_t parent, device_t self, void *aux)
+mainbus_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct mainbus_attach_args ma;
 	struct mainbusdev *md;
@@ -159,9 +159,9 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 	 * Reserve the bottom 64K of the I/O space for ISA devices.
 	 */
 	ioext  = extent_create("pciio",  0x00010000, 0x000effff,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", 0x01000000, 0x07ffffff,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 
 	pc = &p4032_configuration.ac_pc;
 #elif defined(ALGOR_P5064)
@@ -171,9 +171,9 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 	 * a bug in the ISA bridge.
 	 */
 	ioext  = extent_create("pciio",  0x00080000, 0x00ffffff,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", 0x01000000, 0x07ffffff,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 
 	pc = &p5064_configuration.ac_pc;
 #if defined(PCI_NETBSD_ENABLE_IDE)
@@ -184,9 +184,9 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 	 * Reserve the bottom 64K of the I/O space for ISA devices.
 	 */
 	ioext  = extent_create("pciio",  0x00010000, 0x000effff,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", 0x01000000, 0x0affffff,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 
 	pc = &p6032_configuration.ac_pc;
 #if defined(PCI_NETBSD_ENABLE_IDE)
@@ -194,7 +194,7 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 #endif
 #endif /* ALGOR_P4032 || ALGOR_P5064 || ALGOR_P6032 */
 
-	pci_configure_bus(pc, ioext, memext, NULL, 0, mips_cache_info.mci_dcache_align);
+	pci_configure_bus(pc, ioext, memext, NULL, 0, mips_dcache_align);
 	extent_destroy(ioext);
 	extent_destroy(memext);
 
@@ -241,13 +241,13 @@ mainbus_print(void *aux, const char *pnp)
 	if (pnp)
 		aprint_normal("%s at %s", ma->ma_name, pnp);
 	if (ma->ma_addr != (bus_addr_t) -1)
-		aprint_normal(" addr %#" PRIxBUSADDR, ma->ma_addr);
+		aprint_normal(" addr 0x%lx", ma->ma_addr);
 
 	return (UNCONF);
 }
 
 int
-mainbus_submatch(device_t parent, cfdata_t cf,
+mainbus_submatch(struct device *parent, struct cfdata *cf,
 		 const int *ldesc, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;

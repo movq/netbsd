@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.29 2011/05/26 04:25:27 uebayasi Exp $	*/
+/*	$NetBSD: main.c,v 1.15 2008/09/26 14:12:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -45,10 +45,8 @@
 #include <lib/libsa/stand.h>
 
 #include <libi386.h>
-#include <bootmenu.h>
-#include <bootmod.h>
 #include "pxeboot.h"
-#include "vbe.h"
+#include "bootmod.h"
 
 extern struct x86_boot_params boot_params;
 
@@ -59,12 +57,12 @@ extern char	bootprog_name[], bootprog_rev[], bootprog_kernrev[];
 
 int	main(void);
 
-void	command_help(char *);
-void	command_quit(char *);
-void	command_boot(char *);
+void	command_help __P((char *));
+void	command_quit __P((char *));
+void	command_boot __P((char *));
 void	command_consdev(char *);
+void	command_load(char *);
 void	command_modules(char *);
-void	command_multiboot(char *);
 
 const struct bootblk_command commands[] = {
 	{ "help",	command_help },
@@ -73,32 +71,14 @@ const struct bootblk_command commands[] = {
 	{ "boot",	command_boot },
 	{ "consdev",	command_consdev },
 	{ "modules",    command_modules },
-	{ "multiboot",  command_multiboot },
-	{ "load",	module_add },
-	{ "vesa",	command_vesa },
-	{ "userconf",	userconf_add },
+	{ "load",	command_load },
 	{ NULL,		NULL },
 };
-
-static void
-clearit(void)
-{
-
-	if (bootconf.clear)
-		clear_pc_screen();
-}
-
-static void
-alldone(void)
-{
-	pxe_fini();
-	clearit();
-}
 
 static int 
 bootit(const char *filename, int howto)
 {
-	if (exec_netbsd(filename, 0, howto, 0, alldone) < 0)
+	if (exec_netbsd(filename, 0, howto, 0) < 0)
 		printf("boot: %s\n", strerror(errno));
 	else
 		printf("boot returned\n");
@@ -111,21 +91,17 @@ print_banner(void)
 	int base = getbasemem();
 	int ext = getextmem();
 
-	clearit();
 	printf("\n"
-	       ">> NetBSD/x86 PXE boot, Revision %s (from NetBSD %s)\n"
+	       ">> %s, Revision %s (from NetBSD %s)\n"
 	       ">> Memory: %d/%d k\n",
-	       bootprog_rev, bootprog_kernrev,
+	       bootprog_name, bootprog_rev, bootprog_kernrev,
 	       base, ext);
 }
 
 int
 main(void)
 {
-	extern char twiddle_toggle;
         char c;
-
-	twiddle_toggle = 1;	/* no twiddling until we're ready */
 
 #ifdef SUPPORT_SERIAL
 	initio(SUPPORT_SERIAL);
@@ -133,49 +109,16 @@ main(void)
 	initio(CONSDEV_PC);
 #endif
 	gateA20();
-	boot_modules_enabled = !(boot_params.bp_flags
-				 & X86_BP_FLAGS_NOMODULES);
 
-#ifndef SMALL
-	if (!(boot_params.bp_flags & X86_BP_FLAGS_NOBOOTCONF)) {
-		parsebootconf(BOOTCONF);
-	} else {
-		bootconf.timeout = boot_params.bp_timeout;
-	}
-
-	/*
-	 * If console set in boot.cfg, switch to it.
-	 * This will print the banner, so we don't need to explicitly do it
-	 */
-	if (bootconf.consdev)
-		command_consdev(bootconf.consdev);
-	else 
-		print_banner();
-
-	/* Display the menu, if applicable */
-	twiddle_toggle = 0;
-	if (bootconf.nummenu > 0) {
-		/* Does not return */
-		doboottypemenu();
-	}
-#else
-	twiddle_toggle = 0;
 	print_banner();
-#endif
 
 	printf("Press return to boot now, any other key for boot menu\n");
-	printf("booting netbsd - starting in ");
+	printf("Starting in ");
 
-#ifdef SMALL
 	c = awaitkey(boot_params.bp_timeout, 1);
-#else
-	c = awaitkey((bootconf.timeout < 0) ? 0 : bootconf.timeout, 1);
-#endif
-	if ((c != '\r') && (c != '\n') && (c != '\0') &&
-	    ((boot_params.bp_flags & X86_BP_FLAGS_PASSWORD) == 0
-	     || check_password((char *)boot_params.bp_password))) {
+	if ((c != '\r') && (c != '\n') && (c != '\0')) {
 		printf("type \"?\" or \"help\" for help.\n");
-		bootmenu(); /* does not return */
+		bootmenu();	/* does not return */
 	}
 
 	/*
@@ -198,11 +141,8 @@ command_help(char *arg)
 	       "boot [filename] [-adsqv]\n"
 	       "     (ex. \"netbsd.old -s\"\n"
 	       "consdev {pc|com[0123]|com[0123]kbd|auto}\n"
-	       "vesa {modenum|on|off|enabled|disabled|list}\n"
-	       "multiboot [filename] [<args>]\n"
-	       "modules {on|off|enabled|disabled}\n"
+	       "modules {enabled|disabled}\n"
 	       "load {path_to_module}\n"
-	       "userconf {command}\n"
 	       "help|?\n"
 	       "quit\n");
 }
@@ -217,6 +157,7 @@ command_quit(char *arg)
 	reboot();
 	/* Note: we shouldn't get to this point! */
 	panic("Could not reboot!");
+	exit(0);
 }
 
 void
@@ -273,14 +214,28 @@ command_modules(char *arg)
 }
 
 void
-command_multiboot(char *arg)
+command_load(char *arg)
 {
-	char *filename;
-
-	filename = arg;
-	if (exec_multiboot(filename, gettrailer(arg)) < 0)
-		printf("multiboot: %s: %s\n", filename,
-		  strerror(errno));
-	else
-		printf("boot returned\n");
+	boot_module_t *bm, *bmp;
+	size_t len;
+	char *str;
+	
+	bm = alloc(sizeof(boot_module_t));
+	len = strlen(arg) + 1;
+	str = alloc(len);
+	if (bm == NULL || str == NULL) {
+		printf("couldn't allocate module\n");
+		return;
+	}
+	memcpy(str, arg, len);
+	bm->bm_path = str;
+	bm->bm_next = NULL;
+	if (boot_modules == NULL)
+		boot_modules = bm;
+	else {
+		for (bmp = boot_modules; bmp->bm_next;
+				bmp = bmp->bm_next)
+			;
+		bmp->bm_next = bm;
+	}
 }

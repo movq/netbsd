@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.35 2012/08/04 14:59:05 matt Exp $
+#	$NetBSD: Makefile.inc,v 1.30.4.2 2011/01/09 11:34:18 martin Exp $
 
 .if !defined(ELFSIZE)
 ELFSIZE=32
@@ -14,11 +14,11 @@ CPPFLAGS+=	-DDWARF2_EH
 CPPFLAGS+=	-DJCR
 CPPFLAGS+=	-DDSO_HANDLE
 
-.if defined(HAVE_GCC)
-COPTS+=		-fno-unit-at-a-time
-.endif
-
 .include <bsd.own.mk>
+
+.if defined(HAVE_GCC) && ${HAVE_GCC} > 3
+CFLAGS+=	-fno-unit-at-a-time
+.endif
 
 .PATH:		${.CURDIR}/../common_elf
 
@@ -35,37 +35,25 @@ crt0.o: crt0.c
 	${COMPILE.c} -DCRT0 ${.IMPSRC} -o ${.TARGET}.o
 	${LD} -x -r -o ${.TARGET} ${.TARGET}.o
 	rm -f ${.TARGET}.o
-.if ${MKSTRIPIDENT} != "no"
-	${OBJCOPY} -R .ident ${.TARGET}
-.endif
 
-# dependent on crt0.o to pick up header dependencies
+# dependant on crt0.o to pick up header dependencies
 gcrt0.o: ${.CURDIR}/crt0.c crt0.o
 	${_MKTARGET_COMPILE}
 	${COMPILE.c} -DMCRT0 ${.CURDIR}/crt0.c -o ${.TARGET}.o
 	${LD} -x -r -o ${.TARGET} ${.TARGET}.o
 	rm -f ${.TARGET}.o
-.if ${MKSTRIPIDENT} != "no"
-	${OBJCOPY} -R .ident ${.TARGET}
-.endif
 
 crti.o: crti.c
 	${_MKTARGET_COMPILE}
-	${COMPILE.c} -DCRTI ${.IMPSRC} -o ${.TARGET}.o
+	${COMPILE.c} ${.IMPSRC} -o ${.TARGET}.o
 	${LD} -X -r -o ${.TARGET} ${.TARGET}.o
 	rm -f ${.TARGET}.o
-.if ${MKSTRIPIDENT} != "no"
-	${OBJCOPY} -R .ident ${.TARGET}
-.endif
 
 crtn.o: crtn.c
 	${_MKTARGET_COMPILE}
-	${COMPILE.c} -DCRTN ${.IMPSRC} -o ${.TARGET}.o
+	${COMPILE.c} ${.IMPSRC} -o ${.TARGET}.o
 	${LD} -X -r -o ${.TARGET} ${.TARGET}.o
 	rm -f ${.TARGET}.o
-.if ${MKSTRIPIDENT} != "no"
-	${OBJCOPY} -R .ident ${.TARGET}
-.endif
 
 FILES=${OBJS}
 FILESDIR=${LIBDIR}

@@ -1,4 +1,4 @@
-/* $NetBSD: rtwvar.h,v 1.43 2010/03/15 23:21:08 dyoung Exp $ */
+/* $NetBSD: rtwvar.h,v 1.37 2008/03/12 18:02:21 dyoung Exp $ */
 /*-
  * Copyright (c) 2004, 2005 David Young.  All rights reserved.
  *
@@ -12,6 +12,9 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of David Young may not be used to endorse or promote
+ *    products derived from this software without specific prior
+ *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY David Young ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -111,48 +114,6 @@ struct rtw_regs {
 	bus_size_t		r_sz;
 	enum rtw_access		r_access;
 };
-
-/*
- * Bus barrier
- *
- * Complete outstanding read and/or write ops on [reg0, reg1]
- * ([reg1, reg0]) before starting new ops on the same region. See
- * acceptable bus_space_barrier(9) for the flag definitions.
- */
-static inline void
-rtw_barrier(const struct rtw_regs *r, int reg0, int reg1, int flags)
-{
-	bus_space_barrier(r->r_bt, r->r_bh, MIN(reg0, reg1),
-	    MAX(reg0, reg1) - MIN(reg0, reg1) + 4, flags);
-}
-
-/*
- * Barrier convenience macros.
- */
-/* sync */
-#define RTW_SYNC(regs, reg0, reg1)				\
-	rtw_barrier(regs, reg0, reg1, BUS_SPACE_BARRIER_SYNC)
-
-/* write-before-write */
-#define RTW_WBW(regs, reg0, reg1)				\
-	rtw_barrier(regs, reg0, reg1, BUS_SPACE_BARRIER_WRITE_BEFORE_WRITE)
-
-/* write-before-read */
-#define RTW_WBR(regs, reg0, reg1)				\
-	rtw_barrier(regs, reg0, reg1, BUS_SPACE_BARRIER_WRITE_BEFORE_READ)
-
-/* read-before-read */
-#define RTW_RBR(regs, reg0, reg1)				\
-	rtw_barrier(regs, reg0, reg1, BUS_SPACE_BARRIER_READ_BEFORE_READ)
-
-/* read-before-write */
-#define RTW_RBW(regs, reg0, reg1)				\
-	rtw_barrier(regs, reg0, reg1, BUS_SPACE_BARRIER_READ_BEFORE_WRITE)
-
-#define RTW_WBRW(regs, reg0, reg1)				\
-		rtw_barrier(regs, reg0, reg1,			\
-		    BUS_SPACE_BARRIER_WRITE_BEFORE_READ |	\
-		    BUS_SPACE_BARRIER_WRITE_BEFORE_WRITE)
 
 #define RTW_SR_GET(sr, ofs) \
     (((sr)->sr_content[(ofs)/2] >> (((ofs) % 2 == 0) ? 0 : 8)) & 0xff)
@@ -457,9 +418,6 @@ struct rtw_led_state {
 
 struct rtw_softc {
 	device_t		sc_dev;
-	device_suspensor_t	sc_suspensor;
-	pmf_qual_t		sc_qual;
-
 	struct ethercom		sc_ec;
 	struct ieee80211com	sc_ic;
 	struct rtw_regs		sc_regs;
@@ -500,7 +458,7 @@ struct rtw_softc {
 
 	struct rtw_mtbl		sc_mtbl;
 
-	struct bpf_if *		sc_radiobpf;
+	void *			sc_radiobpf;
 
 	struct callout		sc_scan_ch;
 	u_int			sc_cur_chan;
@@ -544,8 +502,8 @@ void rtw_attach(struct rtw_softc *);
 int rtw_detach(struct rtw_softc *);
 int rtw_intr(void *);
 
-bool rtw_suspend(device_t, const pmf_qual_t *);
-bool rtw_resume(device_t, const pmf_qual_t *);
+bool rtw_suspend(device_t PMF_FN_PROTO);
+bool rtw_resume(device_t PMF_FN_PROTO);
 
 int rtw_activate(device_t, enum devact);
 

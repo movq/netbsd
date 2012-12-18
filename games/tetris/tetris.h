@@ -1,4 +1,4 @@
-/*	$NetBSD: tetris.h,v 1.12 2009/08/12 08:51:21 dholland Exp $	*/
+/*	$NetBSD: tetris.h,v 1.10 2004/01/27 20:30:30 jsm Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -130,6 +130,7 @@ struct shape {
 extern const struct shape shapes[];
 #define	randshape() (&shapes[random() % 7])
 
+extern const struct shape *curshape;
 extern const struct shape *nextshape;
 
 /*
@@ -170,4 +171,4 @@ extern int	showpreview;
 
 int	fits_in(const struct shape *, int);
 void	place(const struct shape *, int, int);
-void	stop(const char *) __dead;
+void	stop(const char *) __attribute__((__noreturn__));

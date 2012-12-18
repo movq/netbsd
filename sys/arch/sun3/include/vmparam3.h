@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam3.h,v 1.37 2010/10/15 15:55:52 tsutsui Exp $	*/
+/*	$NetBSD: vmparam3.h,v 1.34 2007/10/25 13:03:05 yamt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -92,6 +92,11 @@
  */
 
 /*
+ * USRSTACK is the top (end) of the user stack.
+ */
+#define	USRSTACK	KERNBASE	/* High end of user stack */
+
+/*
  * Virtual memory related constants, all in bytes.
  * The Sun3 has only 224 MB of user-virtual space,
  * so we need to be conservative with these limits.
@@ -110,6 +115,24 @@
 #endif
 #ifndef	MAXSSIZ
 #define	MAXSSIZ		MAXDSIZ			/* max stack size */
+#endif
+
+/*
+ * PTEs for mapping user space into the kernel for phyio operations.
+ * The actual limitation for physio requests will be the DVMA space,
+ * and that is fixed by hardware design at 1MB.  We could make the
+ * physio map larger than that, but it would not buy us much.
+ */
+#ifndef USRIOSIZE
+#define USRIOSIZE	128		/* 1 MB */
+#endif
+
+/*
+ * PTEs for system V style shared memory.
+ * This is basically slop for kmempt which we actually allocate (malloc) from.
+ */
+#ifndef SHMMAXPGS
+#define SHMMAXPGS	512 	/* 4 MB */
 #endif
 
 #define	PAGER_MAP_DEFAULT_SIZE (4 * 1024 * 1024)

@@ -1,4 +1,4 @@
-/*	$NetBSD: ipkdb_glue.c,v 1.14 2010/04/28 19:17:03 dyoung Exp $	*/
+/*	$NetBSD: ipkdb_glue.c,v 1.9 2008/06/24 16:30:09 ad Exp $	*/
 
 /*
  * Copyright (C) 2000 Wolfgang Solfrank.
@@ -31,7 +31,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipkdb_glue.c,v 1.14 2010/04/28 19:17:03 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipkdb_glue.c,v 1.9 2008/06/24 16:30:09 ad Exp $");
 
 #include "opt_ipkdb.h"
 
@@ -42,7 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: ipkdb_glue.c,v 1.14 2010/04/28 19:17:03 dyoung Exp $
 
 #include <machine/ipkdb.h>
 #include <machine/psl.h>
-#include <machine/cpufunc.h>
 
 int ipkdbregs[NREG];
 
@@ -58,26 +57,27 @@ int ne_pci_ipkdb_attach(struct ipkdb_if *, bus_space_tag_t,		/* XXX */
 static char ipkdb_mode = IPKDB_CMD_EXIT;
 
 void
-ipkdbinit(void)
+ipkdbinit()
 {
 }
 
 int
-ipkdb_poll(void)
+ipkdb_poll()
 {
 	/* For now */
 	return 0;
 }
 
 void
-ipkdb_trap(void)
+ipkdb_trap()
 {
 	ipkdb_mode = IPKDB_CMD_STEP;
-	x86_write_flags(x86_read_flags() | PSL_T);
+	x86_write_eflags(x86_read_eflags() | PSL_T));
 }
 
 int
-ipkdb_trap_glue(struct trapframe frame)
+ipkdb_trap_glue(frame)
+	struct trapframe frame;
 {
 	if (ISPL(frame.tf_cs) != SEL_KPL)
 		return 0;
@@ -132,7 +132,8 @@ ipkdb_trap_glue(struct trapframe frame)
 }
 
 int
-ipkdbif_init(struct ipkdb_if *kip)
+ipkdbif_init(kip)
+	struct ipkdb_if *kip;
 {
 #ifdef IPKDB_NE_PCI
 	pci_mode_detect();	/* XXX */
@@ -141,7 +142,7 @@ ipkdbif_init(struct ipkdb_if *kip)
 #error You must specify the IPKDB_NE_PCISLOT to use IPKDB_NE_PCI.
 #endif
 
-	if (ne_pci_ipkdb_attach(kip, x86_bus_space_io, NULL, 0,
+	if (ne_pci_ipkdb_attach(kip, X86_BUS_SPACE_IO, NULL, 0,
 	    IPKDB_NE_PCISLOT) == 0) {
 		printf("IPKDB on %s\n", kip->name);
 		return 0;

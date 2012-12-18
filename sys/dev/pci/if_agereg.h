@@ -1,4 +1,4 @@
-/*	$NetBSD: if_agereg.h,v 1.3 2009/07/28 21:03:46 cegger Exp $ */
+/*	$NetBSD: if_agereg.h,v 1.2.2.3 2009/11/08 21:56:54 snj Exp $ */
 /*	$OpenBSD: if_agereg.h,v 1.1 2009/01/16 05:00:34 kevlo Exp $	*/
 
 /*-

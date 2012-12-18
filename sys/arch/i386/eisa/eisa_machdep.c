@@ -1,4 +1,4 @@
-/*	$NetBSD: eisa_machdep.c,v 1.37 2011/09/01 15:10:31 christos Exp $	*/
+/*	$NetBSD: eisa_machdep.c,v 1.32 2008/06/27 11:12:06 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.37 2011/09/01 15:10:31 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.32 2008/06/27 11:12:06 cegger Exp $");
 
 #include "ioapic.h"
 
@@ -75,8 +75,9 @@ __KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.37 2011/09/01 15:10:31 christos E
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
+#include <sys/extent.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/bus_private.h>
 
 #include <dev/isa/isareg.h>
@@ -91,15 +92,28 @@ __KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.37 2011/09/01 15:10:31 christos E
 /*
  * EISA doesn't have any special needs; just use the generic versions
  * of these funcions.
- *
- * XXX really doesn't use bounce buffers? --dyoung
  */
 struct x86_bus_dma_tag eisa_bus_dma_tag = {
-	._tag_needs_free	= 0,
-	._bounce_thresh		= 0,
-	._bounce_alloc_lo	= 0,
-	._bounce_alloc_hi	= 0,
-	._may_bounce		= NULL,
+	0,			/* _tag_needs_free */
+	0,			/* _bounce_thresh */
+	0,			/* _bounce_alloc_lo */
+	0,			/* _bounce_alloc_hi */
+	NULL,			/* _may_bounce */
+	_bus_dmamap_create,
+	_bus_dmamap_destroy,
+	_bus_dmamap_load,
+	_bus_dmamap_load_mbuf,
+	_bus_dmamap_load_uio,
+	_bus_dmamap_load_raw,
+	_bus_dmamap_unload,
+	NULL,			/* _dmamap_sync */
+	_bus_dmamem_alloc,
+	_bus_dmamem_free,
+	_bus_dmamem_map,
+	_bus_dmamem_unmap,
+	_bus_dmamem_mmap,
+	_bus_dmatag_subregion,
+	_bus_dmatag_destroy,
 };
 
 void
@@ -220,6 +234,27 @@ eisa_intr_disestablish(eisa_chipset_tag_t ec, void *cookie)
 {
 
 	intr_disestablish(cookie);
+}
+
+int
+eisa_mem_alloc(bus_space_tag_t t, bus_size_t size, bus_size_t align,
+    bus_addr_t boundary, int cacheable,
+    bus_addr_t *addrp, bus_space_handle_t *bahp)
+{
+	extern struct extent *iomem_ex;
+
+	/*
+	 * Allocate physical address space after the ISA hole.
+	 */
+	return bus_space_alloc(t, IOM_END, iomem_ex->ex_end, size, align,
+	    boundary, cacheable, addrp, bahp);
+}
+
+void
+eisa_mem_free(bus_space_tag_t t, bus_space_handle_t bah, bus_size_t size)
+{
+
+	bus_space_free(t, bah, size);
 }
 
 int

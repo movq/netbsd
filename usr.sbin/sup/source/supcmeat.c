@@ -1,4 +1,4 @@
-/*	$NetBSD: supcmeat.c,v 1.40 2011/09/21 19:34:54 christos Exp $	*/
+/*	$NetBSD: supcmeat.c,v 1.32 2008/09/30 20:49:14 christos Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -140,7 +140,6 @@ static int deleteone(TREE *, void *);
 static int linkone(TREE *, void *);
 static int execone(TREE *, void *);
 static int finishone(TREE *, void *);
-static int canonicalize(const char *);
 
 
 /* The next two routines define the fsm to support multiple fileservers
@@ -211,7 +210,7 @@ getcoll(void)
 		t = getcollhost(&tout, &backoff, &state, &nhosts);
 		if (t == NULL) {
 			finishup(SCMEOF);
-			notify(NULL);
+			notify((char *) NULL);
 			return;
 		}
 		t->Tmode = SCMEOF;
@@ -234,7 +233,7 @@ getcoll(void)
 		thisC->Clockfd = -1;
 	}
 	finishup(x);
-	notify(NULL);
+	notify((char *) NULL);
 }
 /***  Sign on to file server ***/
 
@@ -274,7 +273,7 @@ signon(TREE * t, int nhosts, int *tout)
 	x = msgsignonack();	/* receive signon ack from fileserver */
 	if (x != SCMOK)
 		goaway("Error reading signon reply from fileserver");
-	tloc = time(NULL);
+	tloc = time((time_t *) NULL);
 	vnotify("SUP Fileserver %d.%d (%s) %d on %s at %.8s\n",
 	    protver, pgmver, scmver, fspid, remotehost(), ctime(&tloc) + 11);
 	free(scmver);
@@ -375,7 +374,7 @@ setup(TREE * t)
 		t->Tmode = SCMOK;
 		doneack = FDONESRVERROR;
 		donereason = "Fileserver is busy";
-		(void) netcrypt(NULL);
+		(void) netcrypt((char *) NULL);
 		(void) msgdone();
 		return (TRUE);
 	default:
@@ -430,13 +429,13 @@ suplogin(void)
 		thisC->Clockfd = f;
 		vnotify("SUP Locked collection %s for exclusive access\n", collname);
 	}
-	logcrypt = NULL;
+	logcrypt = (char *) NULL;
 	loguser = thisC->Clogin;
 	logpswd = thisC->Cpswd;
 
 #ifndef	CRYPTING		/* Define CRYPTING for backwards compatibility
 				 * with old supfileservers */
-	if (thisC->Clogin != NULL)		/* othewise we only encrypt if
+	if (thisC->Clogin != (char *) NULL)	/* othewise we only encrypt if
 						 * there is a login id */
 #endif				/* CRYPTING */
 	{
@@ -445,9 +444,9 @@ suplogin(void)
 	}
 	x = msglogin();
 #ifndef CRYPTING
-	if (thisC->Clogin != NULL)
+	if (thisC->Clogin != (char *) NULL)
 #endif
-		(void) netcrypt(NULL);		/* turn off encryption */
+		(void) netcrypt((char *) NULL);	/* turn off encryption */
 	if (x != SCMOK)
 		goaway("Error sending login request to file server");
 	x = msglogack();
@@ -490,11 +489,9 @@ listfiles(void)
 	f = fopen(buf, "r");
 	if (f) {
 		while ((p = fgets(buf, STRINGLENGTH, f))) {
-			if ((q = strchr(p, '\n')))
+			if ((q = index(p, '\n')))
 				*q = '\0';
-			if (strchr("#;:", *p))
-				continue;
-			if (canonicalize(p) != 0)
+			if (index("#;:", *p))
 				continue;
 			(void) Tinsert(&lastT, p, FALSE);
 		}
@@ -505,9 +502,9 @@ listfiles(void)
 	f = fopen(buf, "r");
 	if (f) {
 		while ((p = fgets(buf, STRINGLENGTH, f))) {
-			if ((q = strchr(p, '\n')))
+			if ((q = index(p, '\n')))
 				*q = '\0';
-			if (strchr("#;:", *p))
+			if (index("#;:", *p))
 				continue;
 			(void) Tinsert(&refuseT, p, FALSE);
 		}
@@ -631,8 +628,8 @@ deleteone(TREE * t, void *v __unused)
 		}
 		x = unlink(name);
 		if (x < 0) {
-			notify("SUP: Unable to delete symbolic link %s (%s)\n",
-			    name, strerror(errno));
+			notify("SUP: Unable to delete symbolic link %s\n",
+			    name);
 			t->Tflags |= FUPDATE;
 			return (SCMOK);
 		}
@@ -663,9 +660,8 @@ deleteone(TREE * t, void *v __unused)
 			}
 			runp("rm", "rm", "-rf", name, 0);
 		}
-		if (rmdir(name) < 0 && errno != ENOENT) {
-			notify("SUP: Unable to delete directory %s (%s)\n",
-			    name, strerror(errno));
+		if (lstat(name, &sbuf) == 0) {
+			notify("SUP: Unable to delete directory %s\n", name);
 			t->Tflags |= FUPDATE;
 			return (SCMOK);
 		}
@@ -688,8 +684,7 @@ deleteone(TREE * t, void *v __unused)
 	}
 	x = unlink(name);
 	if (x < 0) {
-		notify("SUP: Unable to delete file %s (%s)\n", name,
-		    strerror(errno));
+		notify("SUP: Unable to delete file %s\n", name);
 		t->Tflags |= FUPDATE;
 		return (SCMOK);
 	}
@@ -723,8 +718,6 @@ recvfiles(void)
 			goaway("Error sending compression check to server");
 		if (docompress)
 			vnotify("SUP Using compressed file transfer\n");
-		if (thisC->Cflags & CFCANONICALIZE)
-			vnotify("SUP Filename canonicalization is on\n");
 	}
 	recvmore = TRUE;
 	upgradeT = NULL;
@@ -732,7 +725,7 @@ recvfiles(void)
 		x = msgsend();
 		if (x != SCMOK)
 			goaway("Error sending receive file request to file server");
-		(void) Tinsert(&upgradeT, NULL, FALSE);
+		(void) Tinsert(&upgradeT, (char *) NULL, FALSE);
 		x = msgrecv(recvone, &recvmore);
 		if (x != SCMOK)
 			goaway("Error receiving file from file server");
@@ -746,7 +739,6 @@ prepare(char *name, int mode, int *newp, struct stat * statp)
 	char *type;
 	char pname[MAXPATHLEN];
 	struct stat pbuf;
-	int er = 0;
 
 	if (mode == S_IFLNK)
 		*newp = (lstat(name, statp) < 0);
@@ -790,17 +782,13 @@ prepare(char *name, int mode, int *newp, struct stat * statp)
 			}
 			runp("rm", "rm", "-rf", name, 0);
 		}
-		if (rmdir(name) < 0)
-			er = errno;
-	} else {
-		if (unlink(name) < 0)
-			er = errno;
-	}
+	} else
+		(void) unlink(name);
 	if (stat(name, statp) < 0) {
 		vnotify("SUP Removed %s %s\n", type, name);
 		return (FALSE);
 	}
-	notify("SUP: Couldn't remove %s %s (%s)\n", type, name, strerror(er));
+	notify("SUP: Couldn't remove %s %s\n", type, name);
 	return (TRUE);
 }
 
@@ -826,8 +814,7 @@ recvone(TREE * t, va_list ap)
 		return (SCMOK);
 	}
 	if (prepare(t->Tname, t->Tmode & S_IFMT, &new, &sbuf)) {
-		notify("SUP: Can't prepare path for %s (%s)\n", t->Tname,
-		    strerror(errno));
+		notify("SUP: Can't prepare path for %s\n", t->Tname);
 		if (S_ISREG(t->Tmode)) {
 			x = readskip();	/* skip over file */
 			if (x != SCMOK)
@@ -871,8 +858,7 @@ recvdir(TREE * t, int new, struct stat * statp)
 			return (FALSE);
 		}
 		if (makedir(t->Tname, 0755, statp) == -1) {
-			notify("SUP: Can't create directory %s (%s)\n",
-			    t->Tname, strerror(errno));
+			vnotify("SUP: Can't create directory %s\n", t->Tname);
 			return TRUE;
 		}
 	}
@@ -894,7 +880,7 @@ recvdir(TREE * t, int new, struct stat * statp)
 		(void) chown(t->Tname, t->Tuid, t->Tgid);
 		(void) chmod(t->Tname, t->Tmode & S_IMODE);
 	}
-	tbuf[0].tv_sec = time(NULL);
+	tbuf[0].tv_sec = time((time_t *) NULL);
 	tbuf[0].tv_usec = 0;
 	tbuf[1].tv_sec = t->Tmtime;
 	tbuf[1].tv_usec = 0;
@@ -932,8 +918,7 @@ recvsym(TREE * t, int new, struct stat * statp)
 	if (!new)
 		(void) unlink(t->Tname);
 	if (symlink(linkname, t->Tname) < 0 || lstat(t->Tname, statp) < 0) {
-		notify("SUP: Unable to create symbolic link %s (%s)\n",
-		    t->Tname, strerror(errno));
+		notify("SUP: Unable to create symbolic link %s\n", t->Tname);
 		return (TRUE);
 	}
 	vnotify("SUP Created symbolic link %s to %s\n", t->Tname, linkname);
@@ -947,22 +932,10 @@ recvreg(TREE * t, int new, struct stat * statp)
 	char dirpart[STRINGLENGTH], filepart[STRINGLENGTH];
 	char filename[STRINGLENGTH], buf[STRINGLENGTH];
 	struct timeval tbuf[2];
-	int x, noupdate = 0;
+	int x;
 	char *p;
 
-	switch (canonicalize(t->Tname)) {
-	case 0:	/* Ok no changes */
-		break;
-	case 1:
-		noupdate = 1;
-		break;
-	case -1:
-		notify("SUP: Can't create path for %s (%s)\n", t->Tname,
-		    strerror(errno));
-		return TRUE;
-	}
-		
-	if ((t->Tflags & FUPDATE) && !noupdate) {
+	if (t->Tflags & FUPDATE) {
 		if ((t->Tflags & FNOACCT) == 0) {
 			/* convert user and group names to local ids */
 			ugconvert(t->Tuser, t->Tgroup, &t->Tuid, &t->Tgid,
@@ -985,7 +958,7 @@ recvreg(TREE * t, int new, struct stat * statp)
 			(void) chown(t->Tname, t->Tuid, t->Tgid);
 			(void) chmod(t->Tname, t->Tmode & S_IMODE);
 		}
-		tbuf[0].tv_sec = time(NULL);
+		tbuf[0].tv_sec = time((time_t *) NULL);
 		tbuf[0].tv_usec = 0;
 		tbuf[1].tv_sec = t->Tmtime;
 		tbuf[1].tv_usec = 0;
@@ -1038,7 +1011,7 @@ recvreg(TREE * t, int new, struct stat * statp)
 		(void) fclose(fout);
 		vnotify("SUP Backup of %s created\n", t->Tname);
 	}
-	x = copyfile(t->Tname, NULL);
+	x = copyfile(t->Tname, (char *) NULL);
 	if (x)
 		return (TRUE);
 	if ((t->Tflags & FNOACCT) == 0) {
@@ -1047,7 +1020,7 @@ recvreg(TREE * t, int new, struct stat * statp)
 		(void) chown(t->Tname, t->Tuid, t->Tgid);
 		(void) chmod(t->Tname, t->Tmode & S_IMODE);
 	}
-	tbuf[0].tv_sec = time(NULL);
+	tbuf[0].tv_sec = time((time_t *) NULL);
 	tbuf[0].tv_usec = 0;
 	tbuf[1].tv_sec = t->Tmtime;
 	tbuf[1].tv_usec = 0;
@@ -1075,6 +1048,7 @@ linkone(TREE * t, void *fv)
 		return (SCMOK);
 	}
 	if (prepare(name, S_IFLNK, &new, &sbuf)) {
+		notify("SUP: Can't prepare path for link %s\n", name);
 		thisC->Cnogood = TRUE;
 		return (SCMOK);
 	}
@@ -1092,8 +1066,7 @@ linkone(TREE * t, void *fv)
 		x = symlink(fname, name);
 	}
 	if (x < 0 || lstat(name, &sbuf) < 0) {
-		notify("SUP: Unable to create %slink %s (%s)\n", type, name,
-		    strerror(x));
+		notify("SUP: Unable to create %slink %s\n", type, name);
 		return (TRUE);
 	}
 	vnotify("SUP Created %slink %s to %s\n", type, name, fname);
@@ -1132,62 +1105,6 @@ execone(TREE * t, void *v __unused)
 	return (SCMOK);
 }
 
-/*
- * We know that since "to" is a pathname coming from the server, it must
- * not contain any symbolic links after the root, because otherwise the
- * server would send us only the symlink above it. So we hunt for the symlink
- * above and if found we convert the symlink to a directory, prepare the
- * path below the symlink, and keep 
- */
-static int
-canonicalize(const char *to)
-{
-	char absto[STRINGLENGTH], cabsto[STRINGLENGTH * 4];
-	char dir[STRINGLENGTH], file[STRINGLENGTH];
-	char *a;
-	char *c;
-	size_t len;
-	struct stat st;
-	const char *pwd = thisC->Cprefix ? thisC->Cprefix : thisC->Cbase;
-
-	if ((thisC->Cflags & CFCANONICALIZE) == 0)
-		return 0;
-
-	path(to, dir, file);
-
-	len = strlen(pwd);
-	(void)snprintf(absto, sizeof(absto), "%s/%s", pwd, dir);
-
-	len++;
-	if (realpath(absto, cabsto) == NULL)
-		return -1;
-
-	a = absto + len;
-	c = cabsto + len;
-
-	while (*a && *c && *a == *c)
-		a++, c++;
-
-	if (*a == '\0' && *c == '\0')
-		return 0;
-
-	while (*a && *a != '/')
-		a++;
-
-	*a = '\0';
-	if (lstat(absto, &st) == -1 || !S_ISLNK(st.st_mode))
-		return -1;
-
-	if (unlink(absto) == -1)
-		return -1;
-
-	strcpy(c, a);
-	if (estabd(file, cabsto) == -1) {
-		return -1;
-	}
-	return 1;
-}
-
 /* from will be 0 if reading from network */
 int 
 copyfile(char *to, char *from)
@@ -1202,8 +1119,8 @@ copyfile(char *to, char *from)
 	if (from) {		/* reading file */
 		fromf = open(from, O_RDONLY, 0);
 		if (fromf < 0) {
-			notify("SUP: Can't open %s to copy to %s (%s)\n",
-			    from, to, strerror(errno));
+			notify("SUP: Can't open %s to copy to %s: %s\n",
+			    from, to, errmsg(-1));
 			return (TRUE);
 		}
 	} else			/* reading network */
@@ -1262,8 +1179,7 @@ copyfile(char *to, char *from)
 		if (tof >= 0)
 			break;
 		/* no luck */
-		notify("SUP: Can't create %s or temp file for it (%s)\n", to,
-		    strerror(errno));
+		notify("SUP: Can't create %s or temp file for it\n", to);
 		lockout(FALSE);
 		if (fromf >= 0)
 			(void) close(fromf);
@@ -1390,8 +1306,8 @@ copyfile(char *to, char *from)
 	}
 	fromf = open(tname, O_RDONLY, 0);
 	if (fromf < 0) {
-		notify("SUP: Error in moving temp file to %s (%s)\n",
-		    to, strerror(errno));
+		notify("SUP: Error in moving temp file to %s: %s\n",
+		    to, errmsg(-1));
 		(void) unlink(tname);
 		lockout(FALSE);
 		return (TRUE);
@@ -1399,8 +1315,8 @@ copyfile(char *to, char *from)
 	tof = open(to, (O_WRONLY | O_CREAT | O_TRUNC | O_EXCL), 0600);
 	if (tof < 0) {
 		(void) close(fromf);
-		notify("SUP: Can't create %s from temp file (%s)\n",
-		    to, strerror(errno));
+		notify("SUP: Can't create %s from temp file: %s\n",
+		    to, errmsg(-1));
 		(void) unlink(tname);
 		lockout(FALSE);
 		return (TRUE);
@@ -1435,14 +1351,14 @@ finishup(int x)
 		(void) strcpy(collrelname, collname);
 	}
 	dontjump = TRUE;	/* once here, no more longjmp */
-	(void) netcrypt(NULL);
+	(void) netcrypt((char *) NULL);
 	if (protver < 6) {
 		/* done with server */
 		if (x == SCMOK)
-			goaway(NULL);
+			goaway((char *) NULL);
 		(void) requestend();
 	}
-	tloc = time(NULL);
+	tloc = time((time_t *) NULL);
 	if (x != SCMOK) {
 		notify("SUP: Upgrade of %s aborted at %s",
 		    collrelname, ctime(&tloc) + 4);
@@ -1480,24 +1396,21 @@ finishup(int x)
 	}
 	(void) sprintf(fname, FILEWHEN, collname, relsufix);
 	if (establishdir(fname)) {
-		int oerrno = errno;
+		notify("SUP: Can't create directory for upgrade timestamp\n");
 		Tfree(&lastT);
 		if (protver < 6)
 			return;
-		done(FDONEUSRERROR, "Couldn't create directory `%s' (%s)",
-			fname, strerror(oerrno));
+		done(FDONEUSRERROR, "Couldn't timestamp");
 		(void) requestend();
 		return;
 	}
 	if (!putwhen(fname, scantime)) {
-		int oerrno = errno;
-		notify("SUP: Can't record current time in %s (%s)\n",
-		    fname, strerror(oerrno));
+		notify("SUP: Can't record current time in %s: %s\n",
+		    fname, errmsg(-1));
 		Tfree(&lastT);
 		if (protver < 6)
 			return;
-		done(FDONEUSRERROR, "Couldn't timestamp `%s' (%s)",
-			fname, strerror(oerrno));
+		done(FDONEUSRERROR, "Couldn't timestamp");
 		(void) requestend();
 		return;
 	}
@@ -1518,8 +1431,7 @@ finishup(int x)
 	(void) fclose(finishfile);
 	(void) sprintf(fname, FILELAST, collname, relsufix);
 	if (rename(tname, fname) < 0)
-		notify("SUP: Can't change %s to %s (%s)\n", tname, fname,
-		    strerror(errno));
+		notify("SUP: Can't change %s to %s\n", tname, fname);
 	(void) unlink(tname);
 	Tfree(&lastT);
 }
@@ -1534,13 +1446,13 @@ finishone(TREE * t, void *fv)
 }
 
 void
-done(int value, const char *fmt, ...)
+done(int value, char *fmt, ...)
 {
 	char buf[STRINGLENGTH];
 	va_list ap;
 
 	va_start(ap, fmt);
-	(void) netcrypt(NULL);
+	(void) netcrypt((char *) NULL);
 
 	if (fmt)
 		vsnprintf(buf, sizeof(buf), fmt, ap);
@@ -1548,11 +1460,11 @@ done(int value, const char *fmt, ...)
 	if (protver < 6) {
 		if (goawayreason)
 			free(goawayreason);
-		goawayreason = (fmt) ? estrdup(buf) : NULL;
+		goawayreason = (fmt) ? estrdup(buf) : (char *) NULL;
 		(void) msggoaway();
 	} else {
 		doneack = value;
-		donereason = (fmt) ? buf : NULL;
+		donereason = (fmt) ? buf : (char *) NULL;
 		(void) msgdone();
 	}
 	if (!dontjump)
@@ -1560,14 +1472,14 @@ done(int value, const char *fmt, ...)
 }
 
 void
-goaway(const char *fmt, ...)
+goaway(char *fmt, ...)
 {
 	char buf[STRINGLENGTH];
 	va_list ap;
 
 	va_start(ap, fmt);
 
-	(void) netcrypt(NULL);
+	(void) netcrypt((char *) NULL);
 	if (fmt) {
 		vsnprintf(buf, sizeof(buf), fmt, ap);
 		goawayreason = buf;

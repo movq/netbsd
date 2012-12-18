@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_m68k.c,v 1.18 2010/09/20 23:23:16 jym Exp $	*/
+/*	$NetBSD: kvm_m68k.c,v 1.16 2008/04/28 20:23:01 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -42,7 +42,6 @@
 #include <sys/exec.h>
 #include <sys/kcore.h>
 #include <sys/sysctl.h>
-#include <sys/types.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -79,7 +78,8 @@ static struct name_ops optbl[] = {
  * into crash dump files.  This is where we do the dispatch work.
  */
 int
-_kvm_initvtop(kvm_t *kd)
+_kvm_initvtop(kd)
+	kvm_t *kd;
 {
 	cpu_kcore_hdr_t *h;
 	struct name_ops *nop;
@@ -125,20 +125,26 @@ _kvm_initvtop(kvm_t *kd)
 }
 
 void
-_kvm_freevtop(kvm_t *kd)
+_kvm_freevtop(kd)
+	kvm_t *kd;
 {
 	(kd->vmst->ops->freevtop)(kd);
 	free(kd->vmst);
 }
 
 int
-_kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pap)
+_kvm_kvatop(kd, va, pap)
+	kvm_t *kd;
+	u_long va;
+	u_long *pap;
 {
 	return ((kd->vmst->ops->kvatop)(kd, va, pap));
 }
 
 off_t
-_kvm_pa2off(kvm_t *kd, paddr_t pa)
+_kvm_pa2off(kd, pa)
+	kvm_t	*kd;
+	u_long	pa;
 {
 	return ((kd->vmst->ops->pa2off)(kd, pa));
 }
@@ -149,7 +155,8 @@ _kvm_pa2off(kvm_t *kd, paddr_t pa)
  * have to deal with these NOT being constants!  (i.e. m68k)
  */
 int
-_kvm_mdopen(kvm_t *kd)
+_kvm_mdopen(kd)
+	kvm_t	*kd;
 {
 	u_long max_uva;
 	extern struct ps_strings *__ps_strings;

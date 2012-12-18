@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tlp_pci.c,v 1.122 2012/09/23 01:10:59 chs Exp $	*/
+/*	$NetBSD: if_tlp_pci.c,v 1.106 2008/06/08 18:18:34 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tlp_pci.c,v 1.122 2012/09/23 01:10:59 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tlp_pci.c,v 1.106 2008/06/08 18:18:34 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,6 +57,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_tlp_pci.c,v 1.122 2012/09/23 01:10:59 chs Exp $")
 
 #include <sys/bus.h>
 #include <sys/intr.h>
+#ifdef __sparc__
+#include <machine/promlib.h>
+#endif
 
 #include <dev/mii/miivar.h>
 #include <dev/mii/mii_bitbang.h>
@@ -71,8 +74,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_tlp_pci.c,v 1.122 2012/09/23 01:10:59 chs Exp $")
 /*
  * PCI configuration space registers used by the Tulip.
  */
-#define TULIP_PCI_IOBA PCI_BAR(0)	/* i/o mapped base */
-#define TULIP_PCI_MMBA PCI_BAR(1)	/* memory mapped base */
+#define	TULIP_PCI_IOBA		0x10	/* i/o mapped base */
+#define	TULIP_PCI_MMBA		0x14	/* memory mapped base */
 #define	TULIP_PCI_CFDA		0x40	/* configuration driver area */
 
 #define	CFDA_SLEEP		0x80000000	/* sleep mode */
@@ -83,7 +86,6 @@ struct tulip_pci_softc {
 
 	/* PCI-specific goo. */
 	void	*sc_ih;			/* interrupt handle */
-	bus_size_t sc_mapsize;
 
 	pci_chipset_tag_t sc_pc;	/* our PCI chipset */
 	pcitag_t sc_pcitag;		/* our PCI tag */
@@ -103,13 +105,11 @@ struct tulip_pci_softc {
 #define	TULIP_PCI_SHAREDROM	0x04	/* ROM is shared */
 #define	TULIP_PCI_SLAVEROM	0x08	/* slave of shared ROM */
 
-static int	tlp_pci_match(device_t, cfdata_t, void *);
+static int	tlp_pci_match(device_t, struct cfdata *, void *);
 static void	tlp_pci_attach(device_t, device_t, void *);
-static int	tlp_pci_detach(device_t, int);
 
-CFATTACH_DECL3_NEW(tlp_pci, sizeof(struct tulip_pci_softc),
-    tlp_pci_match, tlp_pci_attach, tlp_pci_detach, NULL, NULL, NULL,
-    DVF_DETACH_SHUTDOWN);
+CFATTACH_DECL(tlp_pci, sizeof(struct tulip_pci_softc),
+    tlp_pci_match, tlp_pci_attach, NULL, NULL);
 
 static const struct tulip_pci_product {
 	uint32_t	tpp_vendor;	/* PCI vendor ID */
@@ -270,8 +270,9 @@ tlp_pci_lookup(const struct pci_attach_args *pa)
 	    PCI_SUBSYS_ID_REG)) == PCI_VENDOR_LMC)
 		return NULL;
 
-	for (tpp = tlp_pci_products; tpp->tpp_chip != TULIP_CHIP_INVALID;
-	    tpp++) {
+	for (tpp = tlp_pci_products;
+	     tlp_chip_names[tpp->tpp_chip] != NULL;
+	     tpp++) {
 		if (PCI_VENDOR(pa->pa_id) == tpp->tpp_vendor &&
 		    PCI_PRODUCT(pa->pa_id) == tpp->tpp_product)
 			return tpp;
@@ -309,8 +310,8 @@ tlp_pci_check_slaved(struct tulip_pci_softc *psc, int shared, int slaved)
 	for (i = 0; i < tlp_cd.cd_ndevs; i++) {
 		if ((cur = device_lookup_private(&tlp_cd, i)) == NULL)
 			continue;
-		if (device_parent(cur->sc_tulip.sc_dev) !=
-		    device_parent(sc->sc_dev))
+		if (device_parent(&cur->sc_tulip.sc_dev) !=
+		    device_parent(&sc->sc_dev))
 			continue;
 		if ((cur->sc_flags & shared) == 0)
 			continue;
@@ -328,7 +329,7 @@ tlp_pci_check_slaved(struct tulip_pci_softc *psc, int shared, int slaved)
 }
 
 static int
-tlp_pci_match(device_t parent, cfdata_t match, void *aux)
+tlp_pci_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -356,9 +357,7 @@ tlp_pci_attach(device_t parent, device_t self, void *aux)
 	uint32_t val = 0;
 	pcireg_t reg;
 	int error;
-	bus_size_t iosize = 0, memsize = 0;
 
-	sc->sc_dev = self;
 	sc->sc_devno = pa->pa_device;
 	psc->sc_pc = pa->pa_pc;
 	psc->sc_pcitag = pa->pa_tag;
@@ -459,23 +458,23 @@ tlp_pci_attach(device_t parent, device_t self, void *aux)
 		break;
 	}
 
-	aprint_normal(": %s Ethernet, pass %d.%d\n",
-	    tlp_chip_name(sc->sc_chip),
+	printf(": %s Ethernet, pass %d.%d\n",
+	    tlp_chip_names[sc->sc_chip],
 	    (sc->sc_rev >> 4) & 0xf, sc->sc_rev & 0xf);
 
 	switch (sc->sc_chip) {
 	case TULIP_CHIP_21040:
 		if (sc->sc_rev < 0x20) {
-			aprint_normal_dev(self,
-			    "21040 must be at least pass 2.0\n");
+			printf("%s: 21040 must be at least pass 2.0\n",
+			    device_xname(&sc->sc_dev));
 			return;
 		}
 		break;
 
 	case TULIP_CHIP_21140:
 		if (sc->sc_rev < 0x11) {
-			aprint_normal_dev(self,
-			    "21140 must be at least pass 1.1\n");
+			printf("%s: 21140 must be at least pass 1.1\n",
+			    device_xname(&sc->sc_dev));
 			return;
 		}
 		break;
@@ -521,7 +520,7 @@ tlp_pci_attach(device_t parent, device_t self, void *aux)
 	/* power up chip */
 	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, self,
 	    NULL)) && error != EOPNOTSUPP) {
-		aprint_error_dev(self, "cannot activate %d\n",
+		aprint_error_dev(&sc->sc_dev, "cannot activate %d\n",
 		    error);
 		return;
 	}
@@ -532,29 +531,19 @@ tlp_pci_attach(device_t parent, device_t self, void *aux)
 
 	ioh_valid = (pci_mapreg_map(pa, TULIP_PCI_IOBA,
 	    PCI_MAPREG_TYPE_IO, 0,
-	    &iot, &ioh, NULL, &iosize) == 0);
+	    &iot, &ioh, NULL, NULL) == 0);
 	memh_valid = (pci_mapreg_map(pa, TULIP_PCI_MMBA,
 	    PCI_MAPREG_TYPE_MEM|PCI_MAPREG_MEM_TYPE_32BIT, 0,
-	    &memt, &memh, NULL, &memsize) == 0);
+	    &memt, &memh, NULL, NULL) == 0);
 	if (memh_valid) {
 		sc->sc_st = memt;
 		sc->sc_sh = memh;
-		psc->sc_mapsize = memsize;
-		if (ioh_valid) {
-			bus_space_unmap(iot, ioh, iosize);
-			ioh_valid = 0;
-		}
 	} else if (ioh_valid) {
 		sc->sc_st = iot;
 		sc->sc_sh = ioh;
-		psc->sc_mapsize = iosize;
-		if (memh_valid) {
-			bus_space_unmap(memt, memh, memsize);
-			memh_valid = 0;
-		}
 	} else {
-		aprint_error_dev(self, "unable to map device registers\n");
-		goto fail;
+		aprint_error_dev(&sc->sc_dev, "unable to map device registers\n");
+		return;
 	}
 
 	sc->sc_dmat = pa->pa_dmat;
@@ -621,8 +610,9 @@ tlp_pci_attach(device_t parent, device_t self, void *aux)
 					break;
 			}
 			if (val & PNIC_MIIROM_BUSY) {
-				aprint_error_dev(self, "EEPROM timed out\n");
-				goto fail;
+				printf("%s: EEPROM timed out\n",
+				    device_xname(&sc->sc_dev));
+				return;
 			}
 			val &= PNIC_MIIROM_DATA;
 			sc->sc_srom[i] = val >> 8;
@@ -640,8 +630,8 @@ tlp_pci_attach(device_t parent, device_t self, void *aux)
 		 * XXX logic, and for now we can at least remove a machine-
 		 * XXX dependent wart from the PCI front-end.
 		 */
-		ea = prop_dictionary_get(device_properties(self),
-					 "mac-address");
+		ea = prop_dictionary_get(device_properties(&sc->sc_dev),
+					 "mac-addr");
 		if (ea != NULL) {
 			extern int tlp_srom_debug;
 			KASSERT(prop_object_type(ea) == PROP_TYPE_DATA);
@@ -655,13 +645,13 @@ tlp_pci_attach(device_t parent, device_t self, void *aux)
 			    M_NOWAIT|M_ZERO);
 			memcpy(sc->sc_srom, enaddr, sizeof(enaddr));
 			if (tlp_srom_debug) {
-				aprint_normal("SROM CONTENTS:");
+				printf("SROM CONTENTS:");
 				for (i = 0; i < TULIP_ROM_SIZE(6); i++) {
 					if ((i % 8) == 0)
-						aprint_normal("\n\t");
-					aprint_normal("0x%02x ", sc->sc_srom[i]);
+						printf("\n\t");
+					printf("0x%02x ", sc->sc_srom[i]);
 				}
-				aprint_normal("\n");
+				printf("\n");
 			}
 			break;
 		}
@@ -926,20 +916,17 @@ tlp_pci_attach(device_t parent, device_t self, void *aux)
 		 * multi-port boards).
 		 */
 		if (!tlp_isv_srom_enaddr(sc, enaddr)) {
-
-			prop_data_t eaddrprop;
-
-			eaddrprop = prop_dictionary_get(
-				device_properties(self), "mac-address");
-
-			if (eaddrprop != NULL
-			    && prop_data_size(eaddrprop) == ETHER_ADDR_LEN)
-				memcpy(enaddr,
-				    prop_data_data_nocopy(eaddrprop),
-				    ETHER_ADDR_LEN);
-			else
-				memcpy(enaddr, &sc->sc_srom[20],
-				    ETHER_ADDR_LEN);
+#ifdef __sparc__
+			if ((sc->sc_srom[20] == 0 &&
+			     sc->sc_srom[21] == 0 &&
+			     sc->sc_srom[22] == 0) ||
+			    (sc->sc_srom[20] == 0xff &&
+			     sc->sc_srom[21] == 0xff &&
+			     sc->sc_srom[22] == 0xff)) {
+				prom_getether(PCITAG_NODE(pa->pa_tag), enaddr);
+			} else
+#endif
+			memcpy(enaddr, &sc->sc_srom[20], ETHER_ADDR_LEN);
 		}
 
 		/*
@@ -979,8 +966,9 @@ tlp_pci_attach(device_t parent, device_t self, void *aux)
 
 	default:
  cant_cope:
-		aprint_error_dev(self, "sorry, unable to handle your board\n");
-		goto fail;
+		printf("%s: sorry, unable to handle your board\n",
+		    device_xname(&sc->sc_dev));
+		return;
 	}
 
 	/*
@@ -1000,75 +988,36 @@ tlp_pci_attach(device_t parent, device_t self, void *aux)
 	}
 
 	if (psc->sc_flags & TULIP_PCI_SLAVEINTR) {
-		aprint_normal_dev(self, "sharing interrupt with %s\n",
-		    device_xname(psc->sc_master->sc_tulip.sc_dev));
+		printf("%s: sharing interrupt with %s\n",
+		    device_xname(&sc->sc_dev),
+		    device_xname(&psc->sc_master->sc_tulip.sc_dev));
 	} else {
 		/*
 		 * Map and establish our interrupt.
 		 */
 		if (pci_intr_map(pa, &ih)) {
-			aprint_error_dev(self, "unable to map interrupt\n");
-			goto fail;
+			aprint_error_dev(&sc->sc_dev, "unable to map interrupt\n");
+			return;
 		}
 		intrstr = pci_intr_string(pc, ih);
 		psc->sc_ih = pci_intr_establish(pc, ih, IPL_NET,
 		    (psc->sc_flags & TULIP_PCI_SHAREDINTR) ?
 		    tlp_pci_shared_intr : tlp_intr, sc);
 		if (psc->sc_ih == NULL) {
-			aprint_error_dev(self, "unable to establish interrupt");
+			aprint_error_dev(&sc->sc_dev, "unable to establish interrupt");
 			if (intrstr != NULL)
-				aprint_error(" at %s", intrstr);
-			aprint_error("\n");
-			goto fail;
+				printf(" at %s", intrstr);
+			printf("\n");
+			return;
 		}
-		aprint_normal_dev(self, "interrupting at %s\n",
+		printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev),
 		    intrstr);
 	}
 
 	/*
 	 * Finish off the attach.
 	 */
-	error = tlp_attach(sc, enaddr);
-	if (error)
-		goto fail;
-	return;
-
-fail:
-	if (psc->sc_ih != NULL) {
-		pci_intr_disestablish(psc->sc_pc, psc->sc_ih);
-		psc->sc_ih = NULL;
-	}
-
-	if (ioh_valid)
-		bus_space_unmap(iot, ioh, iosize);
-	if (memh_valid)
-		bus_space_unmap(memt, memh, memsize);
-	psc->sc_mapsize = 0;
-	return;
-}
-
-static int
-tlp_pci_detach(device_t self, int flags)
-{
-	struct tulip_pci_softc *psc = device_private(self);
-	struct tulip_softc *sc = &psc->sc_tulip;
-	int rv;
-
-	rv = tlp_detach(sc);
-	if (rv)
-		return rv;
-
-	if (psc->sc_ih != NULL) {
-		pci_intr_disestablish(psc->sc_pc, psc->sc_ih);
-		psc->sc_ih = NULL;
-	}
-
-	if (psc->sc_mapsize) {
-		bus_space_unmap(sc->sc_st, sc->sc_sh, psc->sc_mapsize);
-		psc->sc_mapsize = 0;
-	}
-
-	return 0;
+	tlp_attach(sc, enaddr);
 }
 
 static int
@@ -1207,7 +1156,7 @@ tlp_pci_znyx_21142_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 	case 0x2b:	/* ZX244 */
 	case 0x2c:	/* ZX424 */
 	case 0x2e:	/* ZX422 */
-		aprint_normal_dev(sc->sc_dev, "QS6611 PHY\n");
+		printf("%s: QS6611 PHY\n", device_xname(&sc->sc_dev));
 		sc->sc_reset = tlp_pci_znyx_21142_qs6611_reset;
 		break;
 	}
@@ -1341,7 +1290,7 @@ tlp_pci_phobos_21140_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 	struct tulip_softc *sc = &psc->sc_tulip;
 
 	/*
-	 * Phobos boards just use MII-on-SIO.
+	 * Phobo boards just use MII-on_SIO.
 	 */
 	sc->sc_mediasw = &tlp_sio_mii_mediasw;
 	sc->sc_reset = tlp_pci_phobos_21140_reset;
@@ -1357,7 +1306,7 @@ static void
 tlp_pci_phobos_21140_reset(struct tulip_softc *sc)
 {
 
-	TULIP_WRITE(sc, CSR_GPP, GPP_GPC | 0xfd);
+	TULIP_WRITE(sc, CSR_GPP, 0x1fd);
 	delay(10);
 	TULIP_WRITE(sc, CSR_GPP, 0xfd);
 	delay(10);
@@ -1380,6 +1329,9 @@ tlp_pci_smc_21140_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 {
 	struct tulip_softc *sc = &psc->sc_tulip;
 
+	if (sc->sc_mediasw != NULL) {
+		return;
+	}
 	strcpy(psc->sc_tulip.sc_name, "SMC 9332DST");
 	sc->sc_mediasw = &tlp_smc9332dst_mediasw;
 }
@@ -1398,14 +1350,14 @@ tlp_smc9332dst_tmsw_init(struct tulip_softc *sc)
 
 	ifmedia_init(&sc->sc_mii.mii_media, 0, tlp_mediachange,
 	    tlp_mediastatus);
-	aprint_normal_dev(sc->sc_dev, "");
+	printf("%s: ", device_xname(&sc->sc_dev));
 
 #define	ADD(m, c) \
 	tm = malloc(sizeof(*tm), M_DEVBUF, M_WAITOK|M_ZERO);		\
 	tm->tm_opmode = (c);						\
 	tm->tm_gpdata = GPP_SMC9332DST_INIT;				\
 	ifmedia_add(&sc->sc_mii.mii_media, (m), 0, tm)
-#define	PRINT(str)	aprint_normal("%s%s", sep, str); sep = ", "
+#define	PRINT(str)	printf("%s%s", sep, str); sep = ", "
 
 	ADD(IFM_MAKEWORD(IFM_ETHER, IFM_10_T, 0, 0), OPMODE_TTM);
 	PRINT("10baseT");
@@ -1425,7 +1377,7 @@ tlp_smc9332dst_tmsw_init(struct tulip_softc *sc)
 #undef ADD
 #undef PRINT
 
-	aprint_normal("\n");
+	printf("\n");
 
 	tlp_reset(sc);
 	TULIP_WRITE(sc, CSR_OPMODE, sc->sc_opmode | OPMODE_PCS | OPMODE_SCR);
@@ -1544,13 +1496,6 @@ tlp_pci_adaptec_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 			sc->sc_mediasw = &tlp_cogent_em1x0_mediasw;
 			break;
 
-		case 0x13:
-			strcpy(psc->sc_tulip.sc_name, "Cogent ???");
- 			sc->sc_mediasw = &tlp_cogent_em1x0_mediasw;
-			psc->sc_flags |= TULIP_PCI_SHAREDINTR |
-			    TULIP_PCI_SHAREDROM;
-			break;
-
 		case 0x15:
 			strcpy(psc->sc_tulip.sc_name, "Cogent EM100FX");
 			sc->sc_mediasw = &tlp_cogent_em1x0_mediasw;
@@ -1565,7 +1510,7 @@ tlp_pci_adaptec_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 
 		default:
 			printf("%s: unknown Cogent board ID 0x%02x\n",
-			    device_xname(sc->sc_dev), id0);
+			    device_xname(&sc->sc_dev), id0);
 		}
 		return;
 	}
@@ -1598,7 +1543,7 @@ tlp_pci_adaptec_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 	default:
  unknown:
 		printf("%s: unknown Adaptec/Cogent board ID 0x%04x/0x%04x\n",
-		    device_xname(sc->sc_dev), id1, id2);
+		    device_xname(&sc->sc_dev), id1, id2);
 	}
 }
 
@@ -1614,14 +1559,14 @@ tlp_cogent_em1x0_tmsw_init(struct tulip_softc *sc)
 
 	ifmedia_init(&sc->sc_mii.mii_media, 0, tlp_mediachange,
 	    tlp_mediastatus);
-	aprint_normal_dev(sc->sc_dev, "");
+	printf("%s: ", device_xname(&sc->sc_dev));
 
 #define	ADD(m, c) \
 	tm = malloc(sizeof(*tm), M_DEVBUF, M_WAITOK|M_ZERO);		\
 	tm->tm_opmode = (c);						\
 	tm->tm_gpdata = GPP_COGENT_EM1x0_INIT;				\
 	ifmedia_add(&sc->sc_mii.mii_media, (m), 0, tm)
-#define	PRINT(str)	aprint_normal("%s%s", sep, str); sep = ", "
+#define	PRINT(str)	printf("%s%s", sep, str); sep = ", "
 
 	if (sc->sc_srom[32] == 0x15) {
 		ADD(IFM_MAKEWORD(IFM_ETHER, IFM_100_FX, 0, 0),
@@ -1631,7 +1576,7 @@ tlp_cogent_em1x0_tmsw_init(struct tulip_softc *sc)
 		ADD(IFM_MAKEWORD(IFM_ETHER, IFM_100_FX, IFM_FDX, 0),
 		    OPMODE_PS | OPMODE_PCS | OPMODE_FD);
 		PRINT("100baseFX-FDX");
-		aprint_normal("\n");
+		printf("\n");
 
 		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_100_FX);
 	} else {
@@ -1642,7 +1587,7 @@ tlp_cogent_em1x0_tmsw_init(struct tulip_softc *sc)
 		ADD(IFM_MAKEWORD(IFM_ETHER, IFM_100_FX, IFM_FDX, 0),
 		    OPMODE_PS | OPMODE_PCS | OPMODE_SCR | OPMODE_FD);
 		PRINT("100baseTX-FDX");
-		aprint_normal("\n");
+		printf("\n");
 
 		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_100_TX);
 	}
@@ -1660,7 +1605,7 @@ tlp_pci_netwinder_21142_quirks(struct tulip_pci_softc *psc,
 	struct tulip_softc *sc = &psc->sc_tulip;
 
 	/*
-	 * Netwinders just use MII-on-SIO.
+	 * Netwinders just use MII-on_SIO.
 	 */
 	sc->sc_mediasw = &tlp_sio_mii_mediasw;
 	sc->sc_reset = tlp_pci_netwinder_21142_reset;
@@ -1689,7 +1634,7 @@ tlp_pci_phobos_21142_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 	struct tulip_softc *sc = &psc->sc_tulip;
 
 	/*
-	 * Phobos boards just use MII-on-SIO.
+	 * Phobo boards just use MII-on_SIO.
 	 */
 	sc->sc_mediasw = &tlp_sio_mii_mediasw;
 	sc->sc_reset = tlp_pci_phobos_21142_reset;

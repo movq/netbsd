@@ -1,5 +1,3 @@
-/*	Id: local.c,v 1.36 2011/09/23 18:19:35 plunky Exp 	*/	
-/*	$NetBSD: local.c,v 1.1.1.5 2012/01/11 20:32:45 plunky Exp $	*/
 /*	$OpenBSD: local.c,v 1.2 2007/11/18 17:39:55 ragge Exp $	*/
 
 /*
@@ -15,6 +13,8 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,10 +34,7 @@
 
 /*	this file contains code which is dependent on the target machine */
 
-#define	IALLOC(sz)	(isinlining ? permalloc(sz) : tmpalloc(sz))
-
 struct symtab *makememcpy(void);
-char *section2string(char *, int);
 
 /* clocal() is called to do local transformations on
  * an expression tree preparitory to its being
@@ -56,7 +53,7 @@ clocal(NODE *p)
 	register struct symtab *q, *sp;
 	register NODE *r, *l, *s;
 	register int o, m, rn;
-	char *ch, name[16], *n;
+	char *ch, name[16];
 	TWORD t;
 
 #ifdef PCC_DEBUG
@@ -121,8 +118,7 @@ clocal(NODE *p)
 			if (p->n_sp->sflags & SSTRING)
 				break;
 
-			n = p->n_sp->soname ? p->n_sp->soname : p->n_sp->sname;
-			if (strncmp(n, "__builtin", 9) == 0)
+			if (strncmp(p->n_sp->soname, "__builtin", 9) == 0)
 				break;
 
 			l = block(REG, NIL, NIL, INT, 0, 0);
@@ -188,10 +184,11 @@ clocal(NODE *p)
 			l->n_lval = (unsigned)l->n_lval;
 			goto delp;
 		}
-		if (l->n_type < INT || l->n_type == LONGLONG ||
+		if (l->n_type < INT || l->n_type == LONGLONG || 
 		    l->n_type == ULONGLONG) {
 			/* float etc? */
-			p->n_left = block(SCONV, l, NIL, UNSIGNED, 0, 0);
+			p->n_left = block(SCONV, l, NIL,
+			    UNSIGNED, 0, MKSUE(UNSIGNED));
 			break;
 		}
 		/* if left is SCONV, cannot remove */
@@ -214,7 +211,7 @@ clocal(NODE *p)
 		nfree(p);
 		p = l;
 		break;
-
+		
 	case SCONV:
 		l = p->n_left;
 
@@ -296,7 +293,7 @@ clocal(NODE *p)
 				cerror("unknown type %d", m);
 			}
 			l->n_type = m;
-			l->n_sue = 0;
+			l->n_sue = MKSUE(m);
 			nfree(p);
 			return l;
                 } else if (l->n_op == FCON) {
@@ -304,7 +301,7 @@ clocal(NODE *p)
 			l->n_sp = NULL;
 			l->n_op = ICON;
 			l->n_type = m;
-			l->n_sue = 0;
+			l->n_sue = MKSUE(m);
 			nfree(p);
 			return clocal(l);
 		}
@@ -331,11 +328,17 @@ clocal(NODE *p)
 		if (o == MOD && p->n_type != CHAR && p->n_type != SHORT)
 			break;
 		/* make it an int division by inserting conversions */
-		p->n_left = block(SCONV, p->n_left, NIL, INT, 0, 0);
-		p->n_right = block(SCONV, p->n_right, NIL, INT, 0, 0);
-		p = block(SCONV, p, NIL, p->n_type, 0, 0);
+		p->n_left = block(SCONV, p->n_left, NIL, INT, 0, MKSUE(INT));
+		p->n_right = block(SCONV, p->n_right, NIL, INT, 0, MKSUE(INT));
+		p = block(SCONV, p, NIL, p->n_type, 0, MKSUE(p->n_type));
 		p->n_left->n_type = INT;
 		break;
+
+	case PMCONV:
+	case PVCONV:
+                if( p->n_right->n_op != ICON ) cerror( "bad conversion", 0);
+                nfree(p);
+                return(buildtree(o==PMCONV?MUL:DIV, p->n_left, p->n_right));
 
 	case LS:
 	case RS:
@@ -343,7 +346,8 @@ clocal(NODE *p)
 		if (p->n_right->n_op == ICON || p->n_right->n_lval <= 32)
 			break;	/* do not do anything */
 		if (p->n_right->n_type != INT || p->n_right->n_lval > 32)
-			p->n_right = block(SCONV, p->n_right, NIL, INT, 0, 0);
+			p->n_right = block(SCONV, p->n_right, NIL,
+			    INT, 0, MKSUE(INT));
 		break;
 
 #if 0
@@ -364,7 +368,7 @@ clocal(NODE *p)
 		p->n_op = ASSIGN;
 		p->n_right = p->n_left;
 		p->n_left = block(REG, NIL, NIL, p->n_type, p->n_df, p->n_sue);
-		p->n_left->n_rval = p->n_left->n_type == BOOL ?
+		p->n_left->n_rval = p->n_left->n_type == BOOL ? 
 		    RETREG(CHAR) : RETREG(p->n_type);
 		if (p->n_right->n_op != FLD)
 			break;
@@ -407,20 +411,20 @@ clocal(NODE *p)
 		l = p->n_left;
 		/* guess struct return */
 		if (l->n_op == NAME && ISFTN(l->n_sp->stype)) {
-			l = block(REG, NIL, NIL, VOID|PTR, 0, 0);
+			l = block(REG, NIL, NIL, VOID|PTR, 0, MKSUE(LONG));
 			l->n_lval = 0;
 			l->n_rval = RET0;
 		} else if (l->n_op == UMUL)
 			l = tcopy(l->n_left);
 		else if (l->n_op == NAME)
-			l = block(ADDROF,tcopy(l),NIL,PTR|STRTY,0,0);
+			l = block(ADDROF,tcopy(l),NIL,PTR|STRTY,0,MKSUE(LONG));
 		l = block(CALL, block(ADDROF,
-		    (s = block(NAME, NIL, NIL, FTN, 0, 0)),
-		    NIL, PTR|FTN, 0, 0),
+		    (s = block(NAME, NIL, NIL, FTN, 0, MKSUE(LONG))),
+		    NIL, PTR|FTN, 0, MKSUE(LONG)),
 		    block(CM, block(CM, l, tcopy(p->n_right),
-		    STRTY|PTR, 0, 0),
-		    (r = block(ICON, NIL, NIL, INT, 0, 0)), 0, 0, 0),
-		    INT, 0, 0);
+		    STRTY|PTR, 0, MKSUE(LONG)),
+		    (r = block(ICON, NIL, NIL, INT, 0, MKSUE(LONG))), 0, 0, 0),
+		    INT, 0, MKSUE(LONG));
 		r->n_lval = p->n_sue->suesize/SZCHAR;
 		s->n_sp = sp;
 		s->n_df = s->n_sp->sdf;
@@ -437,10 +441,10 @@ clocal(NODE *p)
 		/* arg = memcpy(argN-size, src, size) */
 		sp = makememcpy();
 		l = block(CALL, block(ADDROF,
-		    (s = block(NAME, NIL, NIL, FTN, 0, 0)),NIL,0,0,0),
+		    (s = block(NAME, NIL, NIL, FTN, 0, MKSUE(LONG))),NIL,0,0,0),
 		    block(CM, block(CM, tcopy(p), tcopy(p->n_left), 0, 0, 0),
-		    (r = block(ICON, NIL, NIL, INT, 0, 0)), 0, 0, 0),
-		    INT, 0, 0);
+		    (r = block(ICON, NIL, NIL, INT, 0, MKSUE(LONG))), 0, 0, 0),
+		    INT, 0, MKSUE(LONG));
 		r->n_lval = p->n_sue->suesize/SZCHAR;
 		s->n_sp = sp;
 		s->n_df = s->n_sp->sdf;
@@ -496,7 +500,8 @@ clocal(NODE *p)
 		snprintf(name, sizeof(name), "__%sdi3", ch);
 		p->n_right = block(CM, p->n_left, p->n_right, 0, 0, 0);
 		p->n_left = block(ADDROF,
-		    block(NAME, NIL, NIL, FTN, 0, 0), NIL, PTR|FTN, 0, 0);
+		    block(NAME, NIL, NIL, FTN, 0, MKSUE(INT)), NIL,
+		    PTR|FTN, 0, MKSUE(INT));
 		p->n_left->n_left->n_sp = lookup(addname(name), 0);
 		defid(p->n_left->n_left, EXTERN);
 		p->n_left = clocal(p->n_left);
@@ -525,14 +530,14 @@ makememcpy()
 	if ((sp = lookup(addname("memcpy"), SNORMAL)))
 		return sp;
 
-	memcpy = block(NAME, NIL, NIL, 0, 0, 0);
+	memcpy = block(NAME, NIL, NIL, 0, 0, MKSUE(LONG));
 	memcpy->n_sp = sp = lookup(addname("memcpy"), SNORMAL);
 	defid(memcpy, EXTERN);
 
 	args = block(CM, block(CM,
-	    block(NAME, NIL, NIL, VOID|PTR, 0, 0),
-	    block(NAME, NIL, NIL, VOID|PTR, 0, 0), 0, 0, 0),
-	    block(NAME, NIL, NIL, LONG, 0, 0), 0, 0, 0);
+	    block(NAME, NIL, NIL, VOID|PTR, 0, MKSUE(LONG)),
+	    block(NAME, NIL, NIL, VOID|PTR, 0, MKSUE(LONG)), 0, 0, 0),
+	    block(NAME, NIL, NIL, LONG, 0, MKSUE(LONG)), 0, 0, 0);
 
 	tymerge(t = block(TYPE, NIL, NIL, VOID|PTR, 0, 0),
 	    (u = block(UMUL, block(CALL, memcpy, args, LONG, 0, 0),
@@ -546,36 +551,28 @@ makememcpy()
 void
 myp2tree(NODE *p)
 {
-	struct symtab *sp;
 	int o = p->n_op;
 
-	if (o != FCON)
+	if (o != FCON) 
 		return;
 
 	/* Write float constants to memory */
 	/* Should be volontary per architecture */
-
+ 
 #if 0
 	setloc1(RDATA);
 	defalign(p->n_type == FLOAT ? ALFLOAT : p->n_type == DOUBLE ?
 	    ALDOUBLE : ALLDOUBLE );
-	deflab1(i = getlab());
+	deflab1(i = getlab()); 
 #endif
-	sp = inlalloc(sizeof(struct symtab));
-	sp->sclass = STATIC;
-	sp->ssue = 0;
-	sp->slevel = 1; /* fake numeric label */
-	sp->soffset = getlab();
-	sp->sflags = 0;
-	sp->stype = p->n_type;
-	sp->squal = (CON >> TSHIFT);
 
-	defloc(sp);
 	ninval(0, btdims[p->n_type].suesize, p);
-
 	p->n_op = NAME;
-	p->n_lval = 0;
-	p->n_sp = sp;
+	p->n_lval = 0;	
+	p->n_sp = tmpalloc(sizeof(struct symtab_hdr));
+	p->n_sp->sclass = ILABEL;
+	p->n_sp->soffset = getlab();
+	p->n_sp->sflags = 0;
 
 }
 
@@ -587,12 +584,46 @@ andable(NODE *p)
 }
 
 /*
+ * at the end of the arguments of a ftn, set the automatic offset
+ */
+void
+cendarg()
+{
+	/* TODO can use to generate sp/rp tree ops? */
+	autooff = AUTOINIT;
+}
+
+/*
  * Return 1 if a variable of type "t" is OK to put in register.
  */
 int
 cisreg(TWORD t)
 {
 	return 1;
+}
+
+/*
+ * return a node, for structure references, which is suitable for
+ * being added to a pointer of type t, in order to be off bits offset
+ * into a structure
+ * t, d, and s are the type, dimension offset, and sizeoffset
+ * For pdp10, return the type-specific index number which calculation
+ * is based on its size. For example, short a[3] would return 3.
+ * Be careful about only handling first-level pointers, the following
+ * indirections must be fullword.
+ */
+NODE *
+offcon(OFFSZ off, TWORD t, union dimfun *d, struct suedef *sue)
+{
+	register NODE *p;
+
+	if (xdebug)
+		printf("offcon: OFFSZ %lld type %x dim %p siz %d\n",
+		    off, t, d, sue->suesize);
+
+	p = bcon(0);
+	p->n_lval = off/SZCHAR;	/* Default */
+	return(p);
 }
 
 /*
@@ -608,7 +639,7 @@ spalloc(NODE *t, NODE *p, OFFSZ off)
 	p = buildtree(MUL, p, bcon(off/SZCHAR)); /* XXX word alignment? */
 
 	/* sub the size from sp */
-	sp = block(REG, NIL, NIL, p->n_type, 0, 0);
+	sp = block(REG, NIL, NIL, p->n_type, 0, MKSUE(INT));
 	sp->n_lval = 0;
 	sp->n_rval = STKREG;
 	ecomp(buildtree(PLUSEQ, sp, p));
@@ -622,6 +653,136 @@ spalloc(NODE *t, NODE *p, OFFSZ off)
 
 }
 
+#if 0
+/*
+ * Print out an integer constant of size size.
+ * can only be sizes <= SZINT.
+ */
+void
+indata(CONSZ val, int size)
+{
+	switch (size) {
+	case SZCHAR:
+		printf("\t.byte %d\n", (int)val & 0xff);
+		break;
+	case SZSHORT:
+		printf("\t.word %d\n", (int)val & 0xffff);
+		break;
+	case SZINT:
+		printf("\t.long %d\n", (int)val & 0xffffffff);
+		break;
+	default:
+		cerror("indata");
+	}
+}
+#endif
+
+/*
+ * Print out a string of characters.
+ * Assume that the assembler understands C-style escape
+ * sequences.  Location is already set.
+ */
+void
+instring(struct symtab *sp)
+{
+	char *s, *str;
+
+	defloc(sp);
+	str = sp->sname;
+
+	/* be kind to assemblers and avoid long strings */
+	printf("\t.ascii\t\"");
+	for (s = str; *s != 0; ) {
+		if (*s++ == '\\') {
+			(void)esccon(&s);
+		}
+		if (s - str > 64) {
+			fwrite(str, 1, s - str, stdout);
+			printf("\"\n\t.ascii\t\"");
+			str = s;
+		}
+	}
+	fwrite(str, 1, s - str, stdout);
+	printf("\\0\"\n");
+}
+
+/*
+ * Print out a wide string by calling ninval().
+ */
+void
+inwstring(struct symtab *sp)
+{
+	char *s = sp->sname;
+	NODE *p;
+
+	defloc(sp);
+	p = bcon(0);
+	do { 
+		if (*s++ == '\\')
+			p->n_lval = esccon(&s);
+		else
+			p->n_lval = (unsigned char)s[-1];
+		ninval(0, (MKSUE(WCHAR_TYPE))->suesize, p);
+	} while (s[-1] != 0);
+	nfree(p);
+}
+
+static int inbits, inval;
+
+/*
+ * set fsz bits in sequence to zero.
+ */
+void
+zbits(OFFSZ off, int fsz)
+{
+	int m;
+
+	if (idebug)
+		printf("zbits off %lld, fsz %d inbits %d\n", off, fsz, inbits);
+	if ((m = (inbits % SZCHAR))) {
+		m = SZCHAR - m;
+		if (fsz < m) {
+			inbits += fsz;
+			return;
+		} else {
+			fsz -= m;
+			printf("\t.byte %d\n", inval);
+			inval = inbits = 0;
+		}
+	}
+	if (fsz >= SZCHAR) {
+		printf("\t.zero %d\n", fsz/SZCHAR);
+		fsz -= (fsz/SZCHAR) * SZCHAR;
+	}
+	if (fsz) {
+		inval = 0;
+		inbits = fsz;
+	}
+}
+
+/*
+ * Initialize a bitfield.
+ */
+void
+infld(CONSZ off, int fsz, CONSZ val)
+{
+	if (idebug)
+		printf("infld off %lld, fsz %d, val %lld inbits %d\n",
+		    off, fsz, val, inbits);
+	val &= (1 << fsz)-1;
+	while (fsz + inbits >= SZCHAR) {
+		inval |= (val << inbits);
+		printf("\t.byte %d\n", inval & 255);
+		fsz -= (SZCHAR - inbits);
+		val >>= (SZCHAR - inbits);
+		inval = inbits = 0;
+	}
+	if (fsz) {
+		inval |= (val << inbits);
+		inbits += fsz;
+	}
+}
+
 /*
  * print out a constant node, may be associated with a label.
  * Do not free the node after use.
@@ -630,7 +791,7 @@ spalloc(NODE *t, NODE *p, OFFSZ off)
  *
  * XXX this relies on the host fp numbers representation
  */
-int
+void
 ninval(CONSZ off, int fsz, NODE *p)
 {
 	union { float f; double d; long double l; int i[3]; } u;
@@ -640,7 +801,10 @@ ninval(CONSZ off, int fsz, NODE *p)
 
 	t = p->n_type;
 	if (t > BTMASK)
-		p->n_type = t = INT; /* pointer */
+		t = INT; /* pointer */
+
+	if (p->n_op != ICON && p->n_op != FCON)
+		cerror("ninval: init node not constant");
 
 	if (p->n_op == ICON && p->n_sp != NULL && DEUNSIGN(t) != INT)
 		uerror("element not constant");
@@ -659,13 +823,26 @@ ninval(CONSZ off, int fsz, NODE *p)
 	case UNSIGNED:
 		printf("\t.long 0x%x", (int)p->n_lval);
 		if ((q = p->n_sp) != NULL) {
-			if ((q->sclass == STATIC && q->slevel > 0)) {
+			if ((q->sclass == STATIC && q->slevel > 0) ||
+			    q->sclass == ILABEL) {
 				printf("+" LABFMT, q->soffset);
 			} else
-				printf("+%s",
-				    q->soname ? q->soname : exname(q->sname));
+				printf("+%s", exname(q->soname));
 		}
 		printf("\n");
+		break;
+	case SHORT:
+	case USHORT:
+		printf("\t.short 0x%x\n", (int)p->n_lval & 0xffff);
+		break;
+	case BOOL:
+		if (p->n_lval > 1)
+			p->n_lval = p->n_lval != 0;
+		/* FALLTHROUGH */
+	case CHAR:
+	case UCHAR:
+		/* TODO make the upper layer give an .asciz */
+		printf("\t.byte %d\n", (int)p->n_lval & 0xff);
 		break;
 	case LDOUBLE:
 	case DOUBLE:
@@ -677,9 +854,8 @@ ninval(CONSZ off, int fsz, NODE *p)
 		printf("\t.long\t0x%x\n", u.i[0]);
 		break;
 	default:
-		return 0;
+		cerror("ninval");
 	}
-	return 1;
 }
 
 /* make a name look like an external name in the local machine */
@@ -710,7 +886,7 @@ ctype(TWORD type)
 }
 
 void
-calldec(NODE *f, NODE *a)
+calldec(NODE *f, NODE *a) 
 {
 	struct symtab *q;
 	if (f->n_op == UMUL && f->n_left->n_op == PLUS &&
@@ -724,13 +900,13 @@ calldec(NODE *f, NODE *a)
 		return;
 	}
 
-	printf("\t.import\t%s,code\n", q->soname ? q->soname : exname(q->sname));
+	printf("\t.import\t%s,code\n", exname(q->soname));
 }
 
 void
 extdec(struct symtab *q)
 {
-	printf("\t.import\t%s,data\n", q->soname ? q->soname : exname(q->sname));
+	printf("\t.import\t%s,data\n", exname(q->soname));
 }
 
 /* make a common declaration for id, if reasonable */
@@ -743,33 +919,12 @@ defzero(struct symtab *sp)
 	off = (off + (SZCHAR - 1)) / SZCHAR;
 	printf("\t.%scomm\t", sp->sclass == STATIC ? "l" : "");
 	if (sp->slevel == 0)
-		printf("%s,0%o\n", sp->soname ? sp->soname : exname(sp->sname), off);
+		printf("%s,0%o\n", exname(sp->soname), off);
 	else
 		printf(LABFMT ",0%o\n", sp->soffset, off);
 }
 
-char *
-section2string(char *name, int len)
-{
-	char *s;
-	int n;
-
-	if (strncmp(name, "link_set", 8) == 0) {
-		const char *postfix = ",\"aw\",@progbits";
-		n = len + strlen(postfix) + 1;
-		s = IALLOC(n);
-		strlcpy(s, name, n);
-		strlcat(s, postfix, n);
-		return s;
-	}
-
-	return newstring(name, len);
-}
-
 char *nextsect;
-char *alias;
-int constructor;
-int destructor;
 
 #define	SSECTION	010000
 
@@ -777,27 +932,12 @@ int destructor;
  * Give target the opportunity of handling pragmas.
  */
 int
-mypragma(char *str)
+mypragma(char **ary)
 {
-	char *a2 = pragtok(NULL);
-
-	if (strcmp(str, "constructor") == 0 || strcmp(str, "init") == 0) {
-		constructor = 1;
-		return 1;
-	}
-	if (strcmp(str, "destructor") == 0 || strcmp(str, "fini") == 0) {
-		destructor = 1;
-		return 1;
-	}
-	if (strcmp(str, "section") == 0 && a2 != NULL) {
-		nextsect = section2string(a2, strlen(a2));
-		return 1;
-	}
-	if (strcmp(str, "alias") == 0 && a2 != NULL) {
-		alias = tmpstrdup(a2);
-		return 1;
-	}
-	return 0;
+	if (strcmp(ary[1], "section") || ary[2] == NULL)
+		return 0;
+	nextsect = newstring(ary[2], strlen(ary[2]));
+	return 1;
 }
 
 /*
@@ -806,17 +946,6 @@ mypragma(char *str)
 void
 fixdef(struct symtab *sp)
 {
-	if (alias != NULL && (sp->sclass != PARAM)) {
-		printf("\t.globl %s\n%s = %s\n", exname(sp->soname),
-		    exname(sp->soname), exname(alias));
-		alias = NULL;
-	}
-	if ((constructor || destructor) && (sp->sclass != PARAM)) {
-		printf("\t.section .%ctors,\"aw\",@progbits\n"
-		    "\t.p2align 2\n\t.long %s\n\t.previous\n",
-		    constructor ? 'c' : 'd', exname(sp->sname));
-		constructor = destructor = 0;
-	}
 }
 
 void

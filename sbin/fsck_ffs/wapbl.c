@@ -1,4 +1,4 @@
-/*	$NetBSD: wapbl.c,v 1.5 2010/03/06 11:31:40 mlelstv Exp $	*/
+/*	$NetBSD: wapbl.c,v 1.2.6.1 2009/10/03 22:49:42 snj Exp $	*/
 
 /*-
  * Copyright (c) 2005,2008 The NetBSD Foundation, Inc.
@@ -31,10 +31,9 @@
 
 /* This file contains fsck support for wapbl
  */
-#define WAPBL_INTERNAL
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wapbl.c,v 1.5 2010/03/06 11:31:40 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wapbl.c,v 1.2.6.1 2009/10/03 22:49:42 snj Exp $");
 
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -170,7 +169,6 @@ check_wapbl(void)
 			}
 			pwarn("CLEARING EXISTING JOURNAL\n");
 			sblock->fs_flags &= ~FS_DOWAPBL;
-			sblock->fs_journal_flags = UFS_WAPBL_FLAGS_CLEAR_LOG;
 			sbdirty();
 			ret = FSCK_EXIT_CHECK_FAILED;
 		} else {
@@ -199,7 +197,6 @@ check_wapbl(void)
 				}
 				pwarn("CLEARING EXISTING JOURNAL\n");
 				sblock->fs_flags &= ~FS_DOWAPBL;
-				sblock->fs_journal_flags = UFS_WAPBL_FLAGS_CLEAR_LOG;
 				sblock->fs_journal_location =
 				    UFS_WAPBL_JOURNALLOC_NONE;
 				sbdirty();
@@ -217,7 +214,6 @@ check_wapbl(void)
 					}
 					pwarn("CLEARING EXISTING JOURNAL\n");
 					sblock->fs_flags &= ~FS_DOWAPBL;
-					sblock->fs_journal_flags = UFS_WAPBL_FLAGS_CLEAR_LOG;
 					sbdirty();
 					ret = FSCK_EXIT_CHECK_FAILED;
 				}

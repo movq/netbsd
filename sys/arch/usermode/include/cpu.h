@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.h,v 1.10 2012/02/08 17:55:21 reinoud Exp $ */
+/* $NetBSD: cpu.h,v 1.1 2007/12/29 14:38:32 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *        This product includes software developed by Jared D. McNeill.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,30 +42,19 @@
 
 extern void	cpu_signotify(struct lwp *);
 extern void	cpu_need_proftick(struct lwp *);
-extern void	userret(struct lwp *);
-
-#define	curcpu()	usermode_curcpu()
-#define cpu_number()	0
-
-#define cpu_proc_fork(p1, p2)
-
-struct cpu_info;
-extern int	astpending;
-#define aston(ci) (astpending++)
-extern void cpu_need_resched(struct cpu_info *ci, int flags);
-
 
 struct cpu_info {
-	struct cpu_data	ci_data;		/* MI per-cpu data */
-	device_t	ci_dev;			/* pointer to our device */
+	device_t	ci_dev;
 	struct cpu_info	*ci_self;
 	struct cpu_info	*ci_next;
+	struct cpu_data	ci_data;
 	u_int		ci_cpuid;
 	int		ci_want_resched;
-	int		ci_idepth;
 	volatile int	ci_mtx_count;
 	volatile int	ci_mtx_oldspl;
+#if notyet
 	lwp_t		*ci_curlwp;
+#endif
 	lwp_t		*ci_stash;
 };
 
@@ -74,9 +69,15 @@ usermode_curcpu(void)
 __inline static void
 usermode_delay(unsigned int ms)
 {
-	extern int thunk_usleep(unsigned int);
-	thunk_usleep(ms);
+	extern int usleep(useconds_t);
+
+	usleep(ms);
 }
+
+#define	curcpu()	usermode_curcpu()
+#define cpu_number()	0
+
+#define cpu_proc_fork(p1, p2)
 
 #define delay(ms)	usermode_delay(ms)
 #define DELAY(ms)	usermode_delay(ms)
@@ -89,5 +90,8 @@ struct clockframe {
 #define CLKF_USERMODE(frame)	0
 #define CLKF_PC(frame)		0
 #define CLKF_INTR(frame)	0
+
+#define cpu_swapin(l)
+#define cpu_swapout(l)
 
 #endif /* !_ARCH_USERMODE_INCLUDE_CPU_H */

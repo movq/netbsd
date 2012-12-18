@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: arith.y,v 1.22 2012/03/20 18:42:29 matt Exp $	*/
+/*	$NetBSD: arith.y,v 1.18 2007/03/25 06:29:26 apb Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -38,13 +38,12 @@
 #if 0
 static char sccsid[] = "@(#)arith.y	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: arith.y,v 1.22 2012/03/20 18:42:29 matt Exp $");
+__RCSID("$NetBSD: arith.y,v 1.18 2007/03/25 06:29:26 apb Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdlib.h>
 #include "expand.h"
-#include "builtins.h"
 #include "shell.h"
 #include "error.h"
 #include "output.h"
@@ -56,7 +55,7 @@ typedef intmax_t YYSTYPE;
 intmax_t arith_result;
 const char *arith_buf, *arith_startbuf;
 
-__dead static void yyerror(const char *);
+void yyerror(const char *);
 #ifdef TESTARITH
 int main(int , char *[]);
 int error(char *);
@@ -84,6 +83,7 @@ exp:	expr {
 			 * the desired result elsewhere.
 			 */
 			arith_result = $1;
+			return 0;
 		}
 	;
 
@@ -123,7 +123,8 @@ expr:	ARITH_LPAREN expr ARITH_RPAREN { $$ = $2; }
 	;
 %%
 intmax_t
-arith(const char *s)
+arith(s)
+	const char *s;
 {
 	intmax_t result;
 
@@ -143,7 +144,9 @@ arith(const char *s)
  *  The exp(1) builtin.
  */
 int
-expcmd(int argc, char **argv)
+expcmd(argc, argv)
+	int argc;
+	char **argv;
 {
 	const char *p;
 	char *concat;
@@ -194,8 +197,9 @@ error(s)
 }
 #endif
 
-static void
-yyerror(const char *s)
+void
+yyerror(s)
+	const char *s;
 {
 
 	yyerrok;

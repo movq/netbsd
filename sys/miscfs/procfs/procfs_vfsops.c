@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_vfsops.c,v 1.87 2012/04/30 22:51:28 rmind Exp $	*/
+/*	$NetBSD: procfs_vfsops.c,v 1.81 2008/06/28 01:34:06 rumble Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.87 2012/04/30 22:51:28 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.81 2008/06/28 01:34:06 rumble Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -109,8 +109,6 @@ MODULE(MODULE_CLASS_VFS, procfs, NULL);
 VFS_PROTOS(procfs);
 
 static struct sysctllog *procfs_sysctl_log;
-
-static kauth_listener_t procfs_listener;
 
 /*
  * VFS Operations.
@@ -154,9 +152,10 @@ procfs_mount(
 	if (*data_len >= sizeof *args && args->version != PROCFS_ARGSVERSION)
 		return EINVAL;
 
-	pmnt = kmem_zalloc(sizeof(struct procfsmount), KM_SLEEP);
+	pmnt = (struct procfsmount *) malloc(sizeof(struct procfsmount),
+	    M_UFSMNT, M_WAITOK);   /* XXX need new malloc type */
 
-	mp->mnt_stat.f_namemax = PROCFS_MAXNAMLEN;
+	mp->mnt_stat.f_namemax = MAXNAMLEN;
 	mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_data = pmnt;
 	vfs_getnewfsid(mp);
@@ -190,14 +189,16 @@ procfs_unmount(struct mount *mp, int mntflags)
 
 	exechook_disestablish(VFSTOPROC(mp)->pmnt_exechook);
 
-	kmem_free(mp->mnt_data, sizeof(struct procfsmount));
+	free(mp->mnt_data, M_UFSMNT);
 	mp->mnt_data = NULL;
 
-	return 0;
+	return (0);
 }
 
 int
-procfs_root(struct mount *mp, struct vnode **vpp)
+procfs_root(mp, vpp)
+	struct mount *mp;
+	struct vnode **vpp;
 {
 
 	return (procfs_allocvp(mp, vpp, 0, PFSroot, -1, NULL));
@@ -218,16 +219,18 @@ int
 procfs_statvfs(struct mount *mp, struct statvfs *sbp)
 {
 
-	genfs_statvfs(mp, sbp);
-
 	sbp->f_bsize = PAGE_SIZE;
 	sbp->f_frsize = PAGE_SIZE;
 	sbp->f_iosize = PAGE_SIZE;
-	sbp->f_blocks = 1;
+	sbp->f_blocks = 1;	/* avoid divide by zero in some df's */
+	sbp->f_bfree = 0;
+	sbp->f_bavail = 0;
+	sbp->f_bresvd = 0;
 	sbp->f_files = maxproc;			/* approx */
 	sbp->f_ffree = maxproc - nprocs;	/* approx */
 	sbp->f_favail = maxproc - nprocs;	/* approx */
-
+	sbp->f_fresvd = 0;
+	copy_statvfs_info(sbp, mp);
 	return (0);
 }
 
@@ -251,19 +254,19 @@ procfs_vget(struct mount *mp, ino_t ino,
 }
 
 void
-procfs_init(void)
+procfs_init()
 {
 	procfs_hashinit();
 }
 
 void
-procfs_reinit(void)
+procfs_reinit()
 {
 	procfs_hashreinit();
 }
 
 void
-procfs_done(void)
+procfs_done()
 {
 	procfs_hashdone();
 }
@@ -304,45 +307,6 @@ struct vfsops procfs_vfsops = {
 };
 
 static int
-procfs_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
-    void *arg0, void *arg1, void *arg2, void *arg3)
-{
-	struct proc *p;
-	struct pfsnode *pfs;
-	enum kauth_process_req req;
-	int result;
-
-	result = KAUTH_RESULT_DEFER;
-	p = arg0;
-	pfs = arg1;
-	req = (enum kauth_process_req)(unsigned long)arg2;
-
-	if (action != KAUTH_PROCESS_PROCFS)
-		return result;
-
-	/* Privileged; let secmodel handle that. */
-	if (req == KAUTH_REQ_PROCESS_PROCFS_CTL)
-		return result;
-
-	switch (pfs->pfs_type) {
-	case PFSregs:
-	case PFSfpregs:
-	case PFSmem:
-		if (kauth_cred_getuid(cred) != kauth_cred_getuid(p->p_cred) ||
-		    ISSET(p->p_flag, PK_SUGID))
-			break;
-
-		/*FALLTHROUGH*/
-	default:
-		result = KAUTH_RESULT_ALLOW;
-		break;
-	}
-
-	return result;
-}
-
-
-static int
 procfs_modcmd(modcmd_t cmd, void *arg)
 {
 	int error;
@@ -368,17 +332,12 @@ procfs_modcmd(modcmd_t cmd, void *arg)
 		 * one more instance of the "number to vfs" mapping problem,
 		 * but "12" is the order as taken from sys/mount.h
 		 */
-
-		procfs_listener = kauth_listen_scope(KAUTH_SCOPE_PROCESS,
-		    procfs_listener_cb, NULL);
-
 		break;
 	case MODULE_CMD_FINI:
 		error = vfs_detach(&procfs_vfsops);
 		if (error != 0)
 			break;
 		sysctl_teardown(&procfs_sysctl_log);
-		kauth_unlisten_scope(procfs_listener);
 		break;
 	default:
 		error = ENOTTY;

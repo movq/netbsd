@@ -1,4 +1,4 @@
-/*	$NetBSD: locate.bigram.c,v 1.12 2009/11/17 18:31:12 drochner Exp $	*/
+/*	$NetBSD: locate.bigram.c,v 1.11 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)locate.bigram.c	8.2 (Berkeley) 4/28/95";
 #endif
-__RCSID("$NetBSD: locate.bigram.c,v 1.12 2009/11/17 18:31:12 drochner Exp $");
+__RCSID("$NetBSD: locate.bigram.c,v 1.11 2008/07/21 14:19:23 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -57,9 +57,9 @@ __RCSID("$NetBSD: locate.bigram.c,v 1.12 2009/11/17 18:31:12 drochner Exp $");
 #include <string.h>
 #include <sys/param.h>			/* for MAXPATHLEN */
 
-int	main(int, char **);
-static int compare_bigrams(const void *, const void *);
-static void add_bigram(u_char, u_char);
+int	main __P((int, char **));
+static int compare_bigrams __P((const void *, const void *));
+static void add_bigram __P((u_char, u_char));
 
 static char buf1[MAXPATHLEN] = " ";	
 static char buf2[MAXPATHLEN];
@@ -72,14 +72,16 @@ struct bigram {
 struct bigram bigrams[256 * 256];
 
 static void
-add_bigram(u_char i1, u_char i2)
+add_bigram(i1, i2)
+	u_char i1, i2;
 {
 	if (i1 != '\n' && i2 != '\n')
 		bigrams[(i1<<8)+i2].count++;
 }
 
 static int
-compare_bigrams(const void *item1, const void *item2)
+compare_bigrams(item1, item2)
+	const void *item1, *item2;
 {
 	const struct bigram *it1=item1, *it2=item2;
 
@@ -92,7 +94,9 @@ compare_bigrams(const void *item1, const void *item2)
 }
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
   	char *cp;
 	char *oldpath = buf1, *path = buf2;

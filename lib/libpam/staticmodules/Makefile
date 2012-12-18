@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2010/05/03 22:12:32 christos Exp $
+#	$NetBSD: Makefile,v 1.1.2.4 2011/01/07 23:50:30 riz Exp $
 
 MAKEDIRTARGETENV=MKPIC=no
 .include <bsd.own.mk>

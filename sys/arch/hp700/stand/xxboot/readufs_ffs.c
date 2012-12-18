@@ -1,10 +1,10 @@
-/*	$NetBSD: readufs_ffs.c,v 1.6 2011/02/21 02:31:57 itohy Exp $	*/
+/*	$NetBSD: readufs_ffs.c,v 1.3 2005/12/11 12:17:25 christos Exp $	*/
 /*	from Id: readufs_ffs.c,v 1.8 2004/06/12 04:26:39 itohy Exp	*/
 
 /*
  * FS specific support for 4.2BSD Fast Filesystem
  *
- * Written in 1999, 2002, 2003 by ITOH Yasufumi.
+ * Written in 1999, 2002, 2003 by ITOH Yasufumi (itohy@NetBSD.org).
  * Public domain.
  *
  * Intended to be used for boot programs (first stage).
@@ -23,7 +23,7 @@
  * If it is an FFS, save information from the superblock.
  */
 int
-try_ffs(void)
+try_ffs()
 {
 	union {
 		struct fs	sblk;
@@ -121,7 +121,9 @@ try_ffs(void)
  * Get inode from disk.
  */
 int
-get_ffs_inode(ino32_t ino, union ufs_dinode *dibuf)
+get_ffs_inode(ino, dibuf)
+	ino32_t ino;
+	union ufs_dinode *dibuf;
 {
 	struct ufs_info *ufsinfo = &ufs_info;
 	union ufs_dinode *buf = alloca((size_t) fsi.bsize);

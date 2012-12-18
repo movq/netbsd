@@ -1,4 +1,4 @@
-/*	$NetBSD: dkcksum.c,v 1.13 2010/01/05 15:45:26 tsutsui Exp $	*/
+/*	$NetBSD: dkcksum.c,v 1.11 2005/06/12 19:18:34 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)dkcksum.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: dkcksum.c,v 1.13 2010/01/05 15:45:26 tsutsui Exp $");
+__RCSID("$NetBSD: dkcksum.c,v 1.11 2005/06/12 19:18:34 dyoung Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,23 +50,16 @@ __RCSID("$NetBSD: dkcksum.c,v 1.13 2010/01/05 15:45:26 tsutsui Exp $");
 #endif /* HAVE_NBTOOL_CONFIG_H */
 #include "dkcksum.h"
 
-uint16_t
+u_short
 dkcksum(struct disklabel *lp)
 {
-
-	return dkcksum_sized(lp, lp->d_npartitions);
-}
-
-uint16_t
-dkcksum_sized(struct disklabel *lp, size_t npartitions)
-{
-	uint16_t *start, *end;
-	uint16_t sum;
+	u_short	*start, *end;
+	u_short	 sum;
 
 	sum = 0;
-	start = (uint16_t *)lp;
-	end = (uint16_t *)&lp->d_partitions[npartitions];
+	start = (u_short *)lp;
+	end = (u_short *)&lp->d_partitions[lp->d_npartitions];
 	while (start < end)
 		sum ^= *start++;
-	return sum;
+	return (sum);
 }

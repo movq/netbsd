@@ -1,6 +1,6 @@
-# $NetBSD: t_vnd.sh,v 1.8 2011/04/21 22:26:46 haad Exp $
+# $NetBSD: t_vnd.sh,v 1.2 2008/04/30 13:11:00 martin Exp $
 #
-# Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
+# Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
 # All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -28,7 +28,7 @@
 # Verifies that vnd works with files stored in tmpfs.
 #
 
-atf_test_case basic cleanup
+atf_test_case basic
 basic_head() {
 	atf_set "descr" "Verifies that vnd works with files stored in tmpfs"
 	atf_set "require.user" "root"
@@ -36,38 +36,34 @@ basic_head() {
 basic_body() {
 	test_mount
 
-	atf_check -s eq:0 -o ignore -e ignore \
-	    dd if=/dev/zero of=disk.img bs=1m count=10
-	atf_check -s eq:0 -o empty -e empty vnconfig /dev/vnd3 disk.img
+	atf_check 'dd if=/dev/zero of=disk.img bs=1m count=10' 0 ignore ignore
+	atf_check 'vnconfig /dev/vnd3 disk.img' 0 null null
 
-	atf_check -s eq:0 -o ignore -e ignore newfs /dev/rvnd3a
+	atf_check 'newfs /dev/rvnd3a' 0 ignore ignore
 
-	atf_check -s eq:0 -o empty -e empty mkdir mnt
-	atf_check -s eq:0 -o empty -e empty mount /dev/vnd3a mnt
+	atf_check 'mkdir mnt' 0 null null
+	atf_check 'mount /dev/vnd3a mnt' 0 null null
 
 	echo "Creating test files"
-	for f in $(jot -w %u 100 | uniq); do
+	for f in $(jot 100); do
 		jot 1000 >mnt/${f} || atf_fail "Failed to create file ${f}"
 	done
 
 	echo "Verifying created files"
-	for f in $(jot -w %u 100 | uniq); do
+	for f in $(jot 100); do
 		[ $(md5 mnt/${f} | cut -d ' ' -f 4) = \
 		    53d025127ae99ab79e8502aae2d9bea6 ] || \
 		    atf_fail "Invalid checksum for file ${f}"
 	done
 
-	atf_check -s eq:0 -o empty -e empty umount mnt
-	atf_check -s eq:0 -o empty -e empty vnconfig -u /dev/vnd3
+	atf_check 'umount mnt' 0 null null
+	atf_check 'vnconfig -u /dev/vnd3' 0 null null
 
 	test_unmount
-	touch done
 }
 basic_cleanup() {
-	if [ ! -f done ]; then
-		umount mnt 2>/dev/null 1>&2
-		vnconfig -u /dev/vnd3 2>/dev/null 1>&2
-	fi
+	umount mnt 2>/dev/null 1>&2
+	vnconfig -u /dev/vnd3 2>/dev/null 1>&2
 }
 
 atf_init_test_cases() {

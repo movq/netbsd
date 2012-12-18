@@ -1,4 +1,4 @@
-/*	$NetBSD: ucb1200.c,v 1.19 2012/10/27 17:17:53 chs Exp $ */
+/*	$NetBSD: ucb1200.c,v 1.17 2008/04/28 20:23:21 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ucb1200.c,v 1.19 2012/10/27 17:17:53 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ucb1200.c,v 1.17 2008/04/28 20:23:21 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,7 +62,8 @@ struct ucbchild_state {
 };
 
 struct ucb1200_softc {
-	device_t	sc_parent; /* parent (TX39 SIB module) */
+	struct device	sc_dev;
+	struct device	*sc_parent; /* parent (TX39 SIB module) */
 	tx_chipset_tag_t sc_tc;
 	
 	int		sc_snd_rate; /* passed down from SIB module */
@@ -72,17 +73,18 @@ struct ucb1200_softc {
 	struct ucbchild_state sc_child[UCB1200_MODULE_MAX];
 };
 
-int	ucb1200_match(device_t, cfdata_t, void *);
-void	ucb1200_attach(device_t, device_t, void *);
+int	ucb1200_match(struct device *, struct cfdata *, void *);
+void	ucb1200_attach(struct device *, struct device *, void *);
 int	ucb1200_print(void *, const char *);
-int	ucb1200_search(device_t, cfdata_t, const int *, void *);
+int	ucb1200_search(struct device *, struct cfdata *,
+		       const int *, void *);
 int	ucb1200_check_id(u_int16_t, int);
 
 #ifdef UCB1200_DEBUG
 void	ucb1200_dump(struct ucb1200_softc *);
 #endif
 
-CFATTACH_DECL_NEW(ucb, sizeof(struct ucb1200_softc),
+CFATTACH_DECL(ucb, sizeof(struct ucb1200_softc),
     ucb1200_match, ucb1200_attach, NULL, NULL);
 
 const struct ucb_id {
@@ -97,7 +99,7 @@ const struct ucb_id {
 };
 
 int
-ucb1200_match(device_t parent, cfdata_t cf, void *aux)
+ucb1200_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct txsib_attach_args *sa = aux;
 	u_int16_t reg;
@@ -110,10 +112,10 @@ ucb1200_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-ucb1200_attach(device_t parent, device_t self, void *aux)
+ucb1200_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct txsib_attach_args *sa = aux;
-	struct ucb1200_softc *sc = device_private(self);
+	struct ucb1200_softc *sc = (void*)self;
 	u_int16_t reg;
 
 	printf(": ");
@@ -137,9 +139,10 @@ ucb1200_attach(device_t parent, device_t self, void *aux)
 }
 
 int
-ucb1200_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+ucb1200_search(struct device *parent, struct cfdata *cf,
+	       const int *ldesc, void *aux)
 {
-	struct ucb1200_softc *sc = device_private(parent);
+	struct ucb1200_softc *sc = (void*)parent;
 	struct ucb1200_attach_args ucba;
 	
 	ucba.ucba_tc = sc->sc_tc;
@@ -180,19 +183,20 @@ ucb1200_check_id(u_int16_t idreg, int print)
 }
 
 void
-ucb1200_state_install(device_t dev, int (*sfun)(void *), void *sarg,
+ucb1200_state_install(struct device *dev, int (*sfun)(void *), void *sarg,
     int sid)
 {
-	struct ucb1200_softc *sc = device_private(dev);
+	struct ucb1200_softc *sc = (void*)dev;
 	
 	sc->sc_child[sid].cs_busy = sfun;
 	sc->sc_child[sid].cs_arg = sarg;
 }
 
 int
-ucb1200_state_idle(device_t dev)
+ucb1200_state_idle(dev)
+	struct device *dev;
 {
-	struct ucb1200_softc *sc = device_private(dev);
+	struct ucb1200_softc *sc = (void*)dev;
 	struct ucbchild_state *cs;
 	int i;
 

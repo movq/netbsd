@@ -1,4 +1,4 @@
-/*	$NetBSD: makphy.c,v 1.37 2012/01/21 16:48:08 chs Exp $	*/
+/*	$NetBSD: makphy.c,v 1.28 2008/05/04 17:06:09 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -41,6 +41,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -59,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: makphy.c,v 1.37 2012/01/21 16:48:08 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: makphy.c,v 1.28 2008/05/04 17:06:09 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -101,26 +106,11 @@ static const struct mii_phydesc makphys[] = {
 	{ MII_OUI_xxMARVELL,		MII_MODEL_xxMARVELL_E1011,
 	  MII_STR_xxMARVELL_E1011 },
 
-#if 0
-/* doesn't work on eg. HP XW9400 */
-	{ MII_OUI_xxMARVELL,		MII_MODEL_xxMARVELL_E1149,
-	  MII_STR_xxMARVELL_E1149 },
-#endif
-
 	{ MII_OUI_xxMARVELL,		MII_MODEL_xxMARVELL_E1111,
 	  MII_STR_xxMARVELL_E1111 },
 
 	{ MII_OUI_xxMARVELL,		MII_MODEL_xxMARVELL_E1116,
 	  MII_STR_xxMARVELL_E1116 },
-
-	{ MII_OUI_xxMARVELL,		MII_MODEL_xxMARVELL_E1145,
-	  MII_STR_xxMARVELL_E1145 },
-
-	{ MII_OUI_xxMARVELL,		MII_MODEL_xxMARVELL_E1116R,
-	  MII_STR_xxMARVELL_E1116R },
-
-	{ MII_OUI_xxMARVELL,		MII_MODEL_xxMARVELL_E1116R_29,
-	  MII_STR_xxMARVELL_E1116R_29 },
 
 	{ 0,				0,
 	  NULL },
@@ -171,6 +161,9 @@ makphyattach(device_t parent, device_t self, void *aux)
 	else
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, mii_phy_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static void

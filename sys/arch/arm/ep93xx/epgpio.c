@@ -1,4 +1,4 @@
-/*	$NetBSD: epgpio.c,v 1.5 2012/10/27 17:17:37 chs Exp $	*/
+/*	$NetBSD: epgpio.c,v 1.1 2005/11/12 05:33:23 hamajima Exp $	*/
 
 /*
  * Copyright (c) 2005 HAMAJIMA Katsuomi. All rights reserved.
@@ -26,22 +26,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: epgpio.c,v 1.5 2012/10/27 17:17:37 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: epgpio.c,v 1.1 2005/11/12 05:33:23 hamajima Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
-#include <sys/gpio.h>
 #include <dev/gpio/gpiovar.h>
 #include <arm/ep93xx/ep93xxvar.h> 
 #include <arm/ep93xx/epsocvar.h> 
 #include <arm/ep93xx/epgpioreg.h>
 #include <arm/ep93xx/epgpiovar.h>
-#include "opt_ep93xx_gpio_mask.h"
 #include "gpio.h"
+#if NGPIO > 0
+#include <sys/gpio.h>
+#endif
 #include "locators.h"
 
 #ifdef EPGPIO_DEBUG
@@ -60,8 +61,6 @@ struct port_info {
 #if NGPIO > 0
 	struct gpio_chipset_tag	gpio_chipset;
 	gpio_pin_t		pins[EPGPIO_NPINS];
-	int			gpio_mask;
-	int			gpio_npins;
 #endif
 	bus_size_t		pxdr;
 	bus_size_t		pxddr;
@@ -81,6 +80,7 @@ struct intr_req {
 };
 
 struct epgpio_softc {
+	struct device		sc_dev;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	struct port_info	sc_port[EPGPIO_NPORTS];
@@ -88,8 +88,8 @@ struct epgpio_softc {
 	struct intr_req		sc_ireq_f[EPGPIO_NPINS];
 };
 
-static int epgpio_match(device_t, cfdata_t, void *);
-static void epgpio_attach(device_t, device_t, void *);
+static int epgpio_match(struct device *, struct cfdata *, void *);
+static void epgpio_attach(struct device *, struct device *, void *);
 
 #if NGPIO > 0
 static int epgpiobus_print(void *, const char *);
@@ -98,7 +98,7 @@ static void epgpio_pin_write(void *, int, int);
 static void epgpio_pin_ctl(void *, int, int);
 #endif
 
-static int epgpio_search(device_t, cfdata_t, const int *, void *);
+static int epgpio_search(struct device *, struct cfdata *, const int *, void *);
 static int epgpio_print(void *, const char *);
 
 static int epgpio_intr_combine(void* arg);
@@ -115,25 +115,25 @@ static int epgpio_intr_7(void* arg);
 static void epgpio_bit_set(struct epgpio_softc *, bus_size_t, int);
 static void epgpio_bit_clear(struct epgpio_softc *, bus_size_t, int);
 
-CFATTACH_DECL_NEW(epgpio, sizeof(struct epgpio_softc),
+CFATTACH_DECL(epgpio, sizeof(struct epgpio_softc),
 	      epgpio_match, epgpio_attach, NULL, NULL);
 
 static int
-epgpio_match(device_t parent, cfdata_t match, void *aux)
+epgpio_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	return 2;
 }
 
 static void
-epgpio_attach(device_t parent, device_t self, void *aux)
+epgpio_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct epgpio_softc *sc = device_private(self);
+	struct epgpio_softc *sc = (struct epgpio_softc*)self;
 	struct epsoc_attach_args *sa = aux;
 	struct port_info *pi;
 #if NGPIO > 0
 	struct gpiobus_attach_args gba;
 	int dir, val;
-	int i, j, pin;
+	int i, j;
 #endif
 
 	printf("\n");
@@ -141,7 +141,7 @@ epgpio_attach(device_t parent, device_t self, void *aux)
 
 	if (bus_space_map(sa->sa_iot, sa->sa_addr,
 			  sa->sa_size, 0, &sc->sc_ioh)){
-		printf("%s: Cannot map registers", device_xname(self));
+		printf("%s: Cannot map registers", self->dv_xname);
 		return;
 	}
 
@@ -156,9 +156,6 @@ epgpio_attach(device_t parent, device_t self, void *aux)
 	pi->xinttype2 = EP93XX_GPIO_AIntType2;
 	pi->xeoi = EP93XX_GPIO_AEOI;
 	pi->xdb = EP93XX_GPIO_ADB;
-#if NGPIO > 0
-	pi->gpio_mask = EPGPIO_PORT_A_MASK;
-#endif
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, pi->xinten, 0);
 	/* PORT B */
 	pi = &sc->sc_port[1];
@@ -171,9 +168,6 @@ epgpio_attach(device_t parent, device_t self, void *aux)
 	pi->xinttype2 = EP93XX_GPIO_BIntType2;
 	pi->xeoi = EP93XX_GPIO_BEOI;
 	pi->xdb = EP93XX_GPIO_BDB;
-#if NGPIO > 0
-	pi->gpio_mask = EPGPIO_PORT_B_MASK;
-#endif
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, pi->xinten, 0);
 	/* PORT C */
 	pi = &sc->sc_port[2];
@@ -182,9 +176,6 @@ epgpio_attach(device_t parent, device_t self, void *aux)
 	pi->pxdr = EP93XX_GPIO_PCDR;
 	pi->pxddr = EP93XX_GPIO_PCDDR;
 	pi->xinten = pi->xinttype1 = pi->xinttype2 = pi->xeoi = pi->xdb = -1;
-#if NGPIO > 0
-	pi->gpio_mask = EPGPIO_PORT_C_MASK;
-#endif
 	/* PORT D */
 	pi = &sc->sc_port[3];
 	pi->unit = 3;
@@ -192,9 +183,6 @@ epgpio_attach(device_t parent, device_t self, void *aux)
 	pi->pxdr = EP93XX_GPIO_PDDR;
 	pi->pxddr = EP93XX_GPIO_PDDDR;
 	pi->xinten = pi->xinttype1 = pi->xinttype2 = pi->xeoi = pi->xdb = -1;
-#if NGPIO > 0
-	pi->gpio_mask = EPGPIO_PORT_D_MASK;
-#endif
 	/* PORT E */
 	pi = &sc->sc_port[4];
 	pi->unit = 4;
@@ -202,9 +190,6 @@ epgpio_attach(device_t parent, device_t self, void *aux)
 	pi->pxdr = EP93XX_GPIO_PEDR;
 	pi->pxddr = EP93XX_GPIO_PEDDR;
 	pi->xinten = pi->xinttype1 = pi->xinttype2 = pi->xeoi = pi->xdb = -1;
-#if NGPIO > 0
-	pi->gpio_mask = EPGPIO_PORT_E_MASK;
-#endif
 	/* PORT F */
 	pi = &sc->sc_port[5];
 	pi->unit = 5;
@@ -216,9 +201,6 @@ epgpio_attach(device_t parent, device_t self, void *aux)
 	pi->xinttype2 = EP93XX_GPIO_FIntType2;
 	pi->xeoi = EP93XX_GPIO_FEOI;
 	pi->xdb = EP93XX_GPIO_FDB;
-#if NGPIO > 0
-	pi->gpio_mask = EPGPIO_PORT_F_MASK;
-#endif
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, pi->xinten, 0);
 	/* PORT G */
 	pi = &sc->sc_port[6];
@@ -227,9 +209,6 @@ epgpio_attach(device_t parent, device_t self, void *aux)
 	pi->pxdr = EP93XX_GPIO_PGDR;
 	pi->pxddr = EP93XX_GPIO_PGDDR;
 	pi->xinten = pi->xinttype1 = pi->xinttype2 = pi->xeoi = pi->xdb = -1;
-#if NGPIO > 0
-	pi->gpio_mask = EPGPIO_PORT_G_MASK;
-#endif
 	/* PORT H */
 	pi = &sc->sc_port[7];
 	pi->unit = 7;
@@ -237,9 +216,6 @@ epgpio_attach(device_t parent, device_t self, void *aux)
 	pi->pxdr = EP93XX_GPIO_PHDR;
 	pi->pxddr = EP93XX_GPIO_PHDDR;
 	pi->xinten = pi->xinttype1 = pi->xinttype2 = pi->xeoi = pi->xdb = -1;
-#if NGPIO > 0
-	pi->gpio_mask = EPGPIO_PORT_H_MASK;
-#endif
 
 	/* PORT A & B */
 	sc->sc_ireq_combine.irq = EP93XX_GPIO_INTR;
@@ -266,42 +242,20 @@ epgpio_attach(device_t parent, device_t self, void *aux)
 	/* initialize and attach gpio(4) */
 	for (i = 0; i < EPGPIO_NPORTS; i++) {
 		pi = &sc->sc_port[i];
-		/*
-		 * If this port is completely disabled for gpio attachment,
-		 * then skip it.
-		 */
-		if (pi->gpio_mask == 0x00)
-			continue;
-
 		dir = bus_space_read_4(sc->sc_iot, sc->sc_ioh, pi->pxddr) & 0xff;
 		val = bus_space_read_4(sc->sc_iot, sc->sc_ioh, pi->pxdr) & 0xff;
-
-		/*
-		 * pin_num doesn't seem to be used for anything in the GPIO
-		 * code.  So we're going to use it to refer to the REAL pin
-		 * on the port.  Just to keep things straight below:
-		 *
-		 * pin - The pin number as seen by the GPIO code
-		 * j   - The ACTUAL pin on the port
-		 */
-
-		for (j = 0, pin = 0; j < EPGPIO_NPINS; j++) {
-			if (pi->gpio_mask & (1 << j)) {
-				pi->pins[pin].pin_num = j;
-				pi->pins[pin].pin_caps = (GPIO_PIN_INPUT
-							| GPIO_PIN_OUTPUT);
-				if((dir >> j) & 0x01)
-					pi->pins[pin].pin_flags =
-							GPIO_PIN_OUTPUT;
-				else
-					pi->pins[pin].pin_flags =
-						GPIO_PIN_INPUT;
-				if((val >> j) & 0x01)
-					pi->pins[pin].pin_state = GPIO_PIN_HIGH;
-				else
-					pi->pins[pin].pin_state = GPIO_PIN_LOW;
-				pin++;
-			}
+		for (j = 0; j < EPGPIO_NPINS; j++) {
+			pi->pins[j].pin_num = j;
+			pi->pins[j].pin_caps = (GPIO_PIN_INPUT
+						| GPIO_PIN_OUTPUT);
+			if((dir >> j) & 0x01)
+				pi->pins[j].pin_flags = GPIO_PIN_OUTPUT;
+			else
+				pi->pins[j].pin_flags = GPIO_PIN_INPUT;
+			if((val >> j) & 0x01)
+				pi->pins[j].pin_state = GPIO_PIN_HIGH;
+			else
+				pi->pins[j].pin_state = GPIO_PIN_LOW;
 		}
 		pi->gpio_chipset.gp_cookie = pi;
 		pi->gpio_chipset.gp_pin_read = epgpio_pin_read;
@@ -309,11 +263,12 @@ epgpio_attach(device_t parent, device_t self, void *aux)
 		pi->gpio_chipset.gp_pin_ctl = epgpio_pin_ctl;
 		gba.gba_gc = &pi->gpio_chipset;
 		gba.gba_pins = pi->pins;
-		gba.gba_npins = pin;
+		gba.gba_npins = EPGPIO_NPINS;
 		config_found_ia(self, "gpiobus", &gba, epgpiobus_print);
 	}
 #endif
 
+	/* attach device */
 	config_search_ia(epgpio_search, self, "epgpio", epgpio_print);
 }
 
@@ -333,9 +288,10 @@ epgpiobus_print(void *aux, const char *name)
 
 
 static int
-epgpio_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+epgpio_search(struct device *parent, struct cfdata *cf,
+	      const int *ldesc, void *aux)
 {
-	struct epgpio_softc *sc = device_private(parent);
+	struct epgpio_softc *sc = (struct epgpio_softc*)parent;
 	struct epgpio_attach_args ga;
 
 	ga.ga_gc = sc;
@@ -353,8 +309,8 @@ epgpio_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 static int
 epgpio_print(void *aux, const char *name)
 {
-	struct epgpio_attach_args *ga = aux;
-	struct epgpio_softc *sc = ga->ga_gc;
+	struct epgpio_attach_args *ga = (struct epgpio_attach_args*)aux;
+	struct epgpio_softc *sc = (struct epgpio_softc*)ga->ga_gc;
 
 	aprint_normal(":");
 	if (ga->ga_port > -1)
@@ -600,12 +556,12 @@ epgpio_pin_read(void *arg, int pin)
 	struct port_info *pi = arg;
 	struct epgpio_softc *sc = pi->sc;
 
-	pin %= pi->gpio_npins;
+	pin %= EPGPIO_NPINS;
 	if (!pi->pins[pin].pin_caps)
 		return 0; /* EBUSY? */
 
 	return (bus_space_read_4(sc->sc_iot, sc->sc_ioh,
-				 pi->pxdr) >> pi->pins[pin].pin_num) & 1;
+				 pi->pxdr) >> pin) & 1;
 }
 
 static void
@@ -614,14 +570,14 @@ epgpio_pin_write(void *arg, int pin, int val)
 	struct port_info *pi = arg;
 	struct epgpio_softc *sc = pi->sc;
 
-	pin %= pi->gpio_npins;
+	pin %= EPGPIO_NPINS;
 	if (!pi->pins[pin].pin_caps)
 		return;
 
 	if (val)
-		epgpio_bit_set(sc, pi->pxdr, pi->pins[pin].pin_num);
+		epgpio_bit_set(sc, pi->pxdr, pin);
 	else
-		epgpio_bit_clear(sc, pi->pxdr, pi->pins[pin].pin_num);
+		epgpio_bit_clear(sc, pi->pxdr, pin);
 }
 
 static void
@@ -630,14 +586,14 @@ epgpio_pin_ctl(void *arg, int pin, int flags)
 	struct port_info *pi = arg;
 	struct epgpio_softc *sc = pi->sc;
 
-	pin %= pi->gpio_npins;
+	pin %= EPGPIO_NPINS;
 	if (!pi->pins[pin].pin_caps)
 		return;
 
 	if (flags & GPIO_PIN_INPUT)
-		epgpio_bit_clear(sc, pi->pxddr, pi->pins[pin].pin_num);
+		epgpio_bit_clear(sc, pi->pxddr, pin);
 	else if (flags & GPIO_PIN_OUTPUT)
-		epgpio_bit_set(sc, pi->pxddr, pi->pins[pin].pin_num);
+		epgpio_bit_set(sc, pi->pxddr, pin);
 }
 #endif
 

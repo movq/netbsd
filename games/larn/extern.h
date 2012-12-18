@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.16 2011/08/29 20:30:37 joerg Exp $	*/
+/*	$NetBSD: extern.h,v 1.12 2008/02/19 06:05:26 dholland Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Christos Zoulas.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -36,7 +41,7 @@ void act_ignore_altar(void);
 void act_open_chest(int, int);
 
 /* bill.c */
-__dead void mailbill(void);
+void mailbill(void);
 
 /* config.c */
 
@@ -108,6 +113,7 @@ int rund(int);
 /* help.c */
 void help(void);
 void welcome(void);
+void retcont(void);
 
 /* io.c */
 void setupvt100(void);
@@ -116,7 +122,7 @@ int ttgetch(void);
 void scbr(void);
 void sncbr(void);
 void newgame(void);
-void lprintf(const char *, ...) __printflike(1, 2);
+void lprintf(const char *, ...) __attribute__((__format__(__printf__, 1, 2)));
 void lprint(long);
 void lwrite(char *, int);
 long lgetc(void);
@@ -144,9 +150,29 @@ void beep(void);
 
 /* main.c */
 int main(int, char **);
+void showstr(void);
 void qshowstr(void);
+void t_setup(int);
+void t_endup(int);
+void showwear(void);
+void showwield(void);
+void showread(void);
+void showeat(void);
+void showquaff(void);
+void show1(int, const char *[]);
 void show3(int);
+void randmonst(void);
+void parse(void);
 void parse2(void);
+void run(int);
+void wield(void);
+void ydhi(int);
+void ycwi(int);
+void wear(void);
+void dropobj(void);
+void readscr(void);
+void eatcookie(void);
+void quaff(void);
 unsigned long readnum(long);
 void szero(char *);
 
@@ -154,9 +180,20 @@ void szero(char *);
 void createmonster(int);
 void createitem(int, int);
 void cast(void);
+void speldamage(int);
+void loseint(void);
+int isconfuse(void);
+int nospell(int, int);
+int fullhit(int);
+void direct(int, int, const char *, int);
 void godirect(int, int, const char *, int, int);
+void ifblind(int, int);
+void tdirect(int);
+void omnidirect(int, int, const char *);
 int vxy(int *, int *);
+void dirpoly(int);
 void hitmonster(int, int);
+int hitm(int, int, int);
 void hitplayer(int, int);
 void dropgold(int);
 void something(int);
@@ -165,6 +202,8 @@ void checkloss(int);
 int annihilate(void);
 int newsphere(int, int, int, int);
 int rmsphere(int, int);
+void sphboom(int, int);
+void genmonst(void);
 
 /* moreobj.c */
 void oaltar(void);
@@ -176,17 +215,34 @@ void fntchange(int);
 
 /* movem.c */
 void movemonst(void);
+void movemt(int, int);
+void mmove(int, int, int, int);
+void movsphere(void);
 
 /* nap.c */
 void nap(int);
 
 /* object.c */
 void lookforobject(void);
+void finditem(int);
+void ostairs(int);
 void oteleport(int);
+void opotion(int);
 void quaffpotion(int);
+void oscroll(int);
 void adjusttime(long);
 void read_scroll(int);
+void oorb(void);
+void opit(void);
+void obottomless(void);
+void oelevator(int);
+void ostatue(void);
+void omirror(void);
+void obook(void);
 void readbook(int);
+void ocookie(void);
+void ogold(int);
+void ohome(void);
 void iopts(void);
 void ignore(void);
 
@@ -198,12 +254,21 @@ void savelevel(void);
 void getlevel(void);
 
 /* scores.c */
+int readboard(void);
+int writeboard(void);
 int makeboard(void);
 int hashewon(void);
 long paytaxes(long);
+int winshou(void);
+int shou(int);
 void showscores(void);
 void showallscores(void);
+int sortboard(void);
+void newscore(long, char *, int, int);
+void new1sub(long, int, char *, long);
+void new2sub(long, int, char *, int);
 void died(int);
+void diedsub(int);
 void diedlog(void);
 int getplid(char *);
 
@@ -211,12 +276,18 @@ int getplid(char *);
 void sigsetup(void);
 
 /* store.c */
+void dnd_2hed(void);
+void dnd_hed(void);
 void dndstore(void);
+void sch_hed(void);
 void oschool(void);
 void obank(void);
 void obank2(void);
 void ointerest(void);
+void obanksub(void);
+void appraise(int);
 void otradepost(void);
+void cnsitm(void);
 void olrs(void);
 
 /* tok.c */

@@ -1,4 +1,4 @@
-/*	$NetBSD: swapcontext.S,v 1.5 2012/09/12 02:00:52 manu Exp $	*/
+/*	$NetBSD: swapcontext.S,v 1.4 2008/04/28 20:22:56 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #include <machine/mcontext.h>
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: swapcontext.S,v 1.5 2012/09/12 02:00:52 manu Exp $")
+	RCSID("$NetBSD: swapcontext.S,v 1.4 2008/04/28 20:22:56 martin Exp $")
 #endif /* SYSLIBC_SCCS && !lint */
 
 LEAF_ENTRY(swapcontext)
@@ -44,15 +44,10 @@ LEAF_ENTRY(swapcontext)
 
 	ldw	HPPA_FRAME_ARG(0)(%sp), %arg1
 	ldw	HPPA_FRAME_ARG(1)(%sp), %arg0
-
-	ldw	HPPA_FRAME_CRP(%sp), %rp
+	stw	%r0, (_OFFSETOF_UC_GREGS + _REG_RET0 * SZREG)(%arg1)
 	ldo	4(%rp), %r1
 	stw	%r1, (_OFFSETOF_UC_GREGS + _REG_PCOQT * SZREG)(%arg1)
 	stw	%rp, (_OFFSETOF_UC_GREGS + _REG_PCOQH * SZREG)(%arg1)
-	bl	setcontext, %rp
-	stw	%r0, (_OFFSETOF_UC_GREGS + _REG_RET0 * SZREG)(%arg1)
-
-	ldw	HPPA_FRAME_CRP(%sp), %rp
-	bv,n	%r0(%rp)
+	SYSCALL(setcontext)
 EXIT(swapcontext)
 	.end

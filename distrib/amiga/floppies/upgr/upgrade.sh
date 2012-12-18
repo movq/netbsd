@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: upgrade.sh,v 1.9 2009/12/23 09:13:21 mbalmer Exp $
+# $NetBSD: upgrade.sh,v 1.8.40.1 2010/01/09 01:15:43 snj Exp $
 #
 # Copyright (c) 1994 Christopher G. Demetriou
 # All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ifpgavar.h,v 1.6 2011/07/01 20:39:34 dyoung Exp $ */
+/*	$NetBSD: ifpgavar.h,v 1.4 2005/12/11 12:17:09 christos Exp $ */
 
 /*
  * Copyright (c) 2001 ARM Ltd
@@ -32,7 +32,7 @@
 #ifndef _IFPGAVAR_H_
 #define _IFPGAVAR_H_
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 /* We statically map the UARTS at boot so that we can access the console
    before we've probed for the IFPGA. */
@@ -45,6 +45,7 @@
 typedef paddr_t ifpga_addr_t;
 
 struct ifpga_softc {
+	struct device		sc_dev;		/* Device node */
 	bus_space_tag_t		sc_iot;		/* Bus tag */
 	bus_space_handle_t	sc_sc_ioh;	/* System Controller handle */
 	bus_space_handle_t	sc_cm_ioh;	/* Core Module handle */

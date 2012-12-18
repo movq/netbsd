@@ -1,4 +1,4 @@
-/*	$NetBSD: dlfcn.h,v 1.24 2012/02/16 23:00:39 joerg Exp $	*/
+/*	$NetBSD: dlfcn.h,v 1.19.8.1 2009/10/14 09:31:28 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -48,8 +48,6 @@ typedef struct _dl_info {
  * User interface to the run-time linker.
  */
 __BEGIN_DECLS
-void *_dlauxinfo(void) __pure;
-
 void	*dlopen(const char *, int);
 int	dlclose(void *);
 void	*dlsym(void * __restrict, const char * __restrict);
@@ -57,8 +55,6 @@ void	*dlsym(void * __restrict, const char * __restrict);
 int	dladdr(const void * __restrict, Dl_info * __restrict);
 int	dlctl(void *, int, void *);
 int	dlinfo(void *, int, void *);
-void	*dlvsym(void * __restrict, const char * __restrict,
-	    const char * __restrict);
 #endif
 __aconst char *dlerror(void);
 __END_DECLS
@@ -68,8 +64,6 @@ __END_DECLS
 #define RTLD_NOW	2
 #define RTLD_GLOBAL	0x100		/* Allow global searches in object */
 #define RTLD_LOCAL	0x200
-#define RTLD_NODELETE	0x01000		/* Do not remove members. */
-#define RTLD_NOLOAD	0x02000		/* Do not load if not already loaded. */
 #if defined(_NETBSD_SOURCE)
 #define DL_LAZY		RTLD_LAZY	/* Compat */
 #endif
@@ -98,7 +92,7 @@ __END_DECLS
 /*
  * dlinfo() commands
  *
- * From Solaris: http://docs.sun.com/app/docs/doc/816-5168/dlinfo-3c?a=view
+ * From Solarisa: http://docs.sun.com/app/docs/doc/816-5168/dlinfo-3c?a=view
  */
 #if defined(_NETBSD_SOURCE)
 #define RTLD_DI_LINKMAP		3

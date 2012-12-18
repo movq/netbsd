@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_subr.c,v 1.70 2011/08/08 06:30:43 enami Exp $	*/
+/*	$NetBSD: exec_subr.c,v 1.61.8.2 2010/08/31 10:55:00 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1996 Christopher G. Demetriou
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exec_subr.c,v 1.70 2011/08/08 06:30:43 enami Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exec_subr.c,v 1.61.8.2 2010/08/31 10:55:00 bouyer Exp $");
 
 #include "opt_pax.h"
 
@@ -46,11 +46,11 @@ __KERNEL_RCSID(0, "$NetBSD: exec_subr.c,v 1.70 2011/08/08 06:30:43 enami Exp $")
 #include <sys/resourcevar.h>
 #include <sys/device.h>
 
-#if defined(PAX_ASLR) || defined(PAX_MPROTECT)
+#ifdef PAX_MPROTECT
 #include <sys/pax.h>
-#endif /* PAX_ASLR || PAX_MPROTECT */
+#endif /* PAX_MPROTECT */
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 #define	VMCMD_EVCNT_DECL(name)					\
 static struct evcnt vmcmd_ev_##name =				\
@@ -64,12 +64,6 @@ VMCMD_EVCNT_DECL(calls);
 VMCMD_EVCNT_DECL(extends);
 VMCMD_EVCNT_DECL(kills);
 
-#ifdef DEBUG_STACK
-#define DPRINTF(a) uprintf a
-#else
-#define DPRINTF(a)
-#endif
-
 /*
  * new_vmcmd():
  *	create a new vmcmd structure and fill in its fields based
@@ -80,14 +74,12 @@ VMCMD_EVCNT_DECL(kills);
 void
 new_vmcmd(struct exec_vmcmd_set *evsp,
     int (*proc)(struct lwp * l, struct exec_vmcmd *),
-    vsize_t len, vaddr_t addr, struct vnode *vp, u_long offset,
+    u_long len, u_long addr, struct vnode *vp, u_long offset,
     u_int prot, int flags)
 {
 	struct exec_vmcmd    *vcp;
 
 	VMCMD_EVCNT_INCR(calls);
-	KASSERT(proc != vmcmd_map_pagedvn || (vp->v_iflag & VI_TEXT));
-	KASSERT(vp == NULL || vp->v_usecount > 0);
 
 	if (evsp->evs_used >= evsp->evs_cnt)
 		vmcmdset_extend(evsp);
@@ -199,7 +191,7 @@ vmcmd_map_pagedvn(struct lwp *l, struct exec_vmcmd *cmd)
 	if ((vp->v_vflag & VV_MAPPED) == 0) {
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 		vp->v_vflag |= VV_MAPPED;
-		VOP_UNLOCK(vp);
+		VOP_UNLOCK(vp, 0);
 	}
 
 	/*
@@ -379,33 +371,22 @@ exec_read_from(struct lwp *l, struct vnode *vp, u_long off, void *bf,
 int
 exec_setup_stack(struct lwp *l, struct exec_package *epp)
 {
-	vsize_t max_stack_size;
-	vaddr_t access_linear_min;
-	vsize_t access_size;
-	vaddr_t noaccess_linear_min;
-	vsize_t noaccess_size;
+	u_long max_stack_size;
+	u_long access_linear_min, access_size;
+	u_long noaccess_linear_min, noaccess_size;
 
 #ifndef	USRSTACK32
 #define USRSTACK32	(0x00000000ffffffffL&~PGOFSET)
 #endif
-#ifndef MAXSSIZ32
-#define MAXSSIZ32	(MAXSSIZ >> 2)
-#endif
 
 	if (epp->ep_flags & EXEC_32) {
 		epp->ep_minsaddr = USRSTACK32;
-		max_stack_size = MAXSSIZ32;
+		max_stack_size = MAXSSIZ;
 	} else {
 		epp->ep_minsaddr = USRSTACK;
 		max_stack_size = MAXSSIZ;
 	}
-
-	DPRINTF(("ep_minsaddr=%llx max_stack_size=%llx\n",
-	    (unsigned long long)epp->ep_minsaddr,
-	    (unsigned long long)max_stack_size));
-
-	epp->ep_ssize = MIN(l->l_proc->p_rlimit[RLIMIT_STACK].rlim_cur,
-	    max_stack_size);
+	epp->ep_ssize = l->l_proc->p_rlimit[RLIMIT_STACK].rlim_cur;
 
 #ifdef PAX_ASLR
 	pax_aslr_stack(l, epp, &max_stack_size);
@@ -413,12 +394,8 @@ exec_setup_stack(struct lwp *l, struct exec_package *epp)
 
 	l->l_proc->p_stackbase = epp->ep_minsaddr;
 	
-	epp->ep_maxsaddr = (vaddr_t)STACK_GROW(epp->ep_minsaddr,
+	epp->ep_maxsaddr = (u_long)STACK_GROW(epp->ep_minsaddr,
 		max_stack_size);
-
-	DPRINTF(("ep_ssize=%llx ep_maxsaddr=%llx\n", 
-	    (unsigned long long)epp->ep_ssize,
-	    (unsigned long long)epp->ep_maxsaddr));
 
 	/*
 	 * set up commands for stack.  note that this takes *two*, one to
@@ -429,18 +406,10 @@ exec_setup_stack(struct lwp *l, struct exec_package *epp)
 	 * addition of another mapping proc, which is unnecessary
 	 */
 	access_size = epp->ep_ssize;
-	access_linear_min = (vaddr_t)STACK_ALLOC(epp->ep_minsaddr, access_size);
+	access_linear_min = (u_long)STACK_ALLOC(epp->ep_minsaddr, access_size);
 	noaccess_size = max_stack_size - access_size;
-	noaccess_linear_min = (vaddr_t)STACK_ALLOC(STACK_GROW(epp->ep_minsaddr,
+	noaccess_linear_min = (u_long)STACK_ALLOC(STACK_GROW(epp->ep_minsaddr,
 	    access_size), noaccess_size);
-
-	DPRINTF(("access_size=%llx, access_linear_min=%llx, "
-	    "noaccess_size=%llx, noaccess_linear_min=%llx\n",
-	    (unsigned long long)access_size,
-	    (unsigned long long)access_linear_min,
-	    (unsigned long long)noaccess_size,
-	    (unsigned long long)noaccess_linear_min));
-
 	if (noaccess_size > 0 && noaccess_size <= MAXSSIZ) {
 		NEW_VMCMD2(&epp->ep_vmcmds, vmcmd_map_zero, noaccess_size,
 		    noaccess_linear_min, NULL, 0, VM_PROT_NONE, VMCMD_STACK);

@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.search.c,v 1.6 2009/06/07 18:30:39 dholland Exp $	*/
+/*	$NetBSD: hack.search.c,v 1.5 2003/04/02 18:36:40 jsm Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,14 +63,14 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.search.c,v 1.6 2009/06/07 18:30:39 dholland Exp $");
+__RCSID("$NetBSD: hack.search.c,v 1.5 2003/04/02 18:36:40 jsm Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
 #include "extern.h"
 
 int
-findit(void)
+findit()
 {				/* returns number of things found */
 	int             num;
 	xchar           zx, zy;
@@ -116,7 +116,7 @@ findit(void)
 }
 
 int
-dosearch(void)
+dosearch()
 {
 	xchar           x, y;
 	struct trap    *trap;
@@ -174,7 +174,7 @@ dosearch(void)
 }
 
 int
-doidtrap(void)
+doidtrap()
 {
 	struct trap    *trap;
 	int             x, y;
@@ -195,7 +195,8 @@ doidtrap(void)
 }
 
 void
-wakeup(struct monst *mtmp)
+wakeup(mtmp)
+	struct monst   *mtmp;
 {
 	mtmp->msleep = 0;
 	setmangry(mtmp);
@@ -205,7 +206,8 @@ wakeup(struct monst *mtmp)
 
 /* NOTE: we must check if(mtmp->mimic) before calling this routine */
 void
-seemimic(struct monst *mtmp)
+seemimic(mtmp)
+	struct monst   *mtmp;
 {
 	mtmp->mimic = 0;
 	mtmp->mappearance = 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ninjascsi32.c,v 1.22 2012/03/10 20:54:21 mrg Exp $	*/
+/*	$NetBSD: ninjascsi32.c,v 1.18 2008/07/09 19:08:44 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2006, 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ninjascsi32.c,v 1.22 2012/03/10 20:54:21 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ninjascsi32.c,v 1.18 2008/07/09 19:08:44 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,6 +43,8 @@ __KERNEL_RCSID(0, "$NetBSD: ninjascsi32.c,v 1.22 2012/03/10 20:54:21 mrg Exp $")
 
 #include <sys/bus.h>
 #include <sys/intr.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -457,8 +459,7 @@ njsc32_init_cmds(struct njsc32_softc *sc)
 	if ((error = bus_dmamem_alloc(sc->sc_dmat,
 	    sizeof(struct njsc32_dma_page), PAGE_SIZE, 0,
 	    &sc->sc_cmdpg_seg, 1, &sc->sc_cmdpg_nsegs, BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "unable to allocate cmd page, error = %d\n",
+		aprint_error_dev(sc->sc_dev, "unable to allocate cmd page, error = %d\n",
 		    error);
 		return 0;
 	}
@@ -466,8 +467,7 @@ njsc32_init_cmds(struct njsc32_softc *sc)
 	    sc->sc_cmdpg_nsegs, sizeof(struct njsc32_dma_page),
 	    (void **)&sc->sc_cmdpg,
 	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "unable to map cmd page, error = %d\n",
+		aprint_error_dev(sc->sc_dev, "unable to map cmd page, error = %d\n",
 		    error);
 		goto fail1;
 	}
@@ -475,16 +475,14 @@ njsc32_init_cmds(struct njsc32_softc *sc)
 	    sizeof(struct njsc32_dma_page), 1,
 	    sizeof(struct njsc32_dma_page), 0, BUS_DMA_NOWAIT,
 	    &sc->sc_dmamap_cmdpg)) != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "unable to create cmd DMA map, error = %d\n",
+		aprint_error_dev(sc->sc_dev, "unable to create cmd DMA map, error = %d\n",
 		    error);
 		goto fail2;
 	}
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_dmamap_cmdpg,
 	    sc->sc_cmdpg, sizeof(struct njsc32_dma_page),
 	    NULL, BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "unable to load cmd DMA map, error = %d\n",
+		aprint_error_dev(sc->sc_dev, "unable to load cmd DMA map, error = %d\n",
 		    error);
 		goto fail3;
 	}
@@ -511,8 +509,7 @@ njsc32_init_cmds(struct njsc32_softc *sc)
 		    0,				/* boundary */
 		    BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW, &cmd->c_dmamap_xfer);
 		if (error) {
-			aprint_error_dev(sc->sc_dev,
-			    "only %d cmd descs available (error = %d)\n",
+			aprint_error_dev(sc->sc_dev, "only %d cmd descs available (error = %d)\n",
 			    i, error);
 			break;
 		}
@@ -1152,8 +1149,8 @@ njsc32_run_xfer(struct njsc32_softc *sc, struct scsipi_xfer *xs)
 		default:
 			xs->error = XS_DRIVER_STUFFUP;
 		map_failed:
-			printf("%s: njsc32_run_xfer: map failed, error %d\n",
-			    device_xname(sc->sc_dev), error);
+			aprint_error_dev(sc->sc_dev, "njsc32_run_xfer: map failed, error %d\n",
+			    error);
 			/* put it back to free command list */
 			s = splbio();
 			TAILQ_INSERT_HEAD(&sc->sc_freecmd, cmd, c_q);
@@ -1283,7 +1280,7 @@ njsc32_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 	struct scsipi_xfer_mode *xm;
 	struct njsc32_target *target;
 
-	sc = device_private(chan->chan_adapter->adapt_dev);
+	sc = (void *)chan->chan_adapter->adapt_dev;
 
 	switch (req) {
 	case ADAPTER_REQ_RUN_XFER:
@@ -1355,8 +1352,7 @@ njsc32_wait_reset_release(void *arg)
 		case NJSC32_STAT_RESET1:
 			/* print message if Bus Reset is detected twice */
 			sc->sc_stat = NJSC32_STAT_RESET2;
-			printf("%s: detected excessive bus reset "
-			    "--- missing termination power?\n",
+			printf("%s: detected excessive bus reset --- missing termination power?\n",
 			    device_xname(sc->sc_dev));
 			break;
 		default:
@@ -1399,13 +1395,9 @@ njsc32_reset_bus(struct njsc32_softc *sc)
 	/* initialize target structure */
 	njsc32_init_targets(sc);
 
-	/* XXXSMP scsipi */
-	KERNEL_LOCK(1, curlwp);
 	s = splbio();
 	scsipi_async_event(&sc->sc_channel, ASYNC_EVENT_RESET, NULL);
 	splx(s);
-	/* XXXSMP scsipi */
-	KERNEL_UNLOCK_ONE(curlwp);
 
 	/* release SCSI bus reset */
 	njsc32_write_1(sc, NJSC32_REG_SCSI_BUS_CONTROL, 0);
@@ -1452,9 +1444,7 @@ static int
 njsc32_scsipi_ioctl(struct scsipi_channel *chan, u_long cmd,
     void *addr, int flag, struct proc *p)
 {
-	struct njsc32_softc *sc;
-
-	sc = device_private(chan->chan_adapter->adapt_dev);
+	struct njsc32_softc *sc = (void *)chan->chan_adapter->adapt_dev;
 
 	switch (cmd) {
 	case SCBUSIORESET:
@@ -1507,8 +1497,8 @@ njsc32_set_ptr(struct njsc32_softc *sc, struct njsc32_cmd *cmd, u_int32_t pos)
 		/* transfer done */
 #if 1 /*def DIAGNOSTIC*/
 		if (pos > cmd->c_datacnt)
-			printf("%s: pos %u too large\n",
-			    device_xname(sc->sc_dev), pos - cmd->c_datacnt);
+			aprint_error_dev(sc->sc_dev, "pos %u too large\n",
+			    pos - cmd->c_datacnt);
 #endif
 		cmd->c_xferctl = 0;	/* XXX correct? */
 
@@ -1595,8 +1585,7 @@ njsc32_wait_req_negate(struct njsc32_softc *sc)
 			return;
 		delay(1);
 	}
-	printf("%s: njsc32_wait_req_negate: timed out\n",
-	    device_xname(sc->sc_dev));
+	printf("%s: njsc32_wait_req_negate: timed out\n", device_xname(sc->sc_dev));
 }
 
 static void
@@ -1638,8 +1627,7 @@ njsc32_resel_identify(struct njsc32_softc *sc, int lun,
 		    NJSC32_RESEL_THROUGH : NJSC32_RESEL_ERROR;
 
 	default:
-		printf("%s: njsc32_resel_identify: not in reselection\n",
-		    device_xname(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev, "njsc32_resel_identify: not in reselection\n");
 		return NJSC32_RESEL_ERROR;
 	}
 
@@ -1785,7 +1773,7 @@ njsc32_msgin(struct njsc32_softc *sc)
 	if (njsc32_read_1(sc, NJSC32_REG_PARITY_STATUS) &
 	    NJSC32_PARITYSTATUS_ERROR_LSB) {
 
-		printf("%s: msgin: parity error\n", device_xname(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev, "msgin: parity error\n");
 
 		/* clear parity error */
 		njsc32_write_1(sc, NJSC32_REG_PARITY_CONTROL,
@@ -1831,8 +1819,7 @@ njsc32_msgin(struct njsc32_softc *sc)
 			/*
 			 * invalid Simple Queue Tag -> Abort Tag
 			 */
-			printf("%s: msgin: invalid tag\n",
-			    device_xname(sc->sc_dev));
+			printf("%s: msgin: invalid tag\n", device_xname(sc->sc_dev));
 			njsc32_add_msgout(sc, MSG_ABORT_TAG);
 			goto reply;
 		}
@@ -1933,8 +1920,7 @@ njsc32_msgin(struct njsc32_softc *sc)
 			offset = sc->sc_msginbuf[EXTCODEOFF + 2];
 			if (offset > NJSC32_SYNCOFFSET_MAX) {
 				if (target->t_state == NJSC32_TARST_SDTR) {
-					printf("%s: wrong sync offset: %d\n",
-					    device_xname(sc->sc_dev), offset);
+					aprint_error_dev(cmd->c_xs->xs_periph->periph_dev, "wrong sync offset: %d\n", offset);
 					/* XXX what to do? */
 				}
 				offset = NJSC32_SYNCOFFSET_MAX;
@@ -1990,8 +1976,7 @@ njsc32_msgin(struct njsc32_softc *sc)
 			case NJSC32_TARST_WDTR:
 				if (sc->sc_msginbuf[EXTCODEOFF + 1] !=
 				    MSG_EXT_WDTR_BUS_8_BIT) {
-					printf("%s: unexpected transfer width:"
-					    " %#x\n", device_xname(sc->sc_dev),
+					aprint_error_dev(cmd->c_xs->xs_periph->periph_dev, "unexpected transfer width: %#x\n",
 					    sc->sc_msginbuf[EXTCODEOFF + 1]);
 					/* XXX what to do? */
 				}
@@ -2072,8 +2057,8 @@ njsc32_msgin(struct njsc32_softc *sc)
 #ifdef NJSC32_DUALEDGE
 		target = cmd->c_target;
 		if (target->t_state == NJSC32_TARST_DE) {
-			printf("%s: DualEdge transfer\n",
-			    device_xname(sc->sc_dev));
+			aprint_normal_dev(&cmd->c_xs->xs_periph->periph_dev,
+				"%s: DualEdge transfer\n");
 			target->t_xferctl = NJSC32_XFR_DUALEDGE_ENABLE;
 			/* go to next negotiation */
 			target->t_state = NJSC32_TARST_SDTR;
@@ -2430,8 +2415,7 @@ njsc32_intr(void *arg)
 		njsc32_arbitration_failed(sc);	/* just in case */
 		if ((cmd = sc->sc_curcmd) != NULL) {
 			/* ? */
-			printf("%s: unexpected reselection\n",
-			    device_xname(sc->sc_dev));
+			aprint_error_dev(sc->sc_dev, "unexpected reselection\n");
 			sc->sc_curcmd = NULL;
 			sc->sc_stat = NJSC32_STAT_IDLE;
 			njsc32_end_cmd(sc, cmd, XS_DRIVER_STUFFUP);
@@ -2441,8 +2425,8 @@ njsc32_intr(void *arg)
 		if ((idbit & (1 << NJSC32_INITIATOR_ID)) == 0 ||
 		    (sc->sc_reselid =
 		     ffs(idbit & ~(1 << NJSC32_INITIATOR_ID)) - 1) < 0) {
-			printf("%s: invalid reselection (id: %#x)\n",
-			    device_xname(sc->sc_dev), idbit);
+			aprint_error_dev(sc->sc_dev, "invalid reselection (id: %#x)\n",
+			    idbit);
 			sc->sc_stat = NJSC32_STAT_IDLE;	/* XXX ? */
 		} else {
 			sc->sc_stat = NJSC32_STAT_RESEL;
@@ -2482,8 +2466,7 @@ njsc32_intr(void *arg)
 			}
 			break;
 		case NJSC32_PHASE_BUSFREE:
-			printf("%s: unexpected bus phase: Bus Free\n",
-			    device_xname(sc->sc_dev));
+			aprint_error_dev(sc->sc_dev, "unexpected bus phase: Bus Free\n");
 			if ((cmd = sc->sc_curcmd) != NULL) {
 				sc->sc_curcmd = NULL;
 				sc->sc_stat = NJSC32_STAT_IDLE;
@@ -2499,27 +2482,20 @@ njsc32_intr(void *arg)
 			    device_xname(sc->sc_dev));
 			switch (bus_phase) {
 			case NJSC32_PHASE_COMMAND:
-				printf("Command\n");
-				break;
+				printf("Command\n");	break;
 			case NJSC32_PHASE_MESSAGE_OUT:
-				printf("Message Out\n");
-				break;
+				printf("Message Out\n");break;
 			case NJSC32_PHASE_DATA_IN:
-				printf("Data In\n");
-				break;
+				printf("Data In\n");	break;
 			case NJSC32_PHASE_DATA_OUT:
-				printf("Data Out\n");
-				break;
+				printf("Data Out\n");	break;
 			case NJSC32_PHASE_RESELECT:
-				printf("Reselect\n");
-				break;
-			default:
-				printf("%#x\n", bus_phase);
-				break;
+				printf("Reselect\n");break;
+			default: printf("%#x\n", bus_phase);	break;
 			}
 #else
-			printf("%s: unexpected bus phase: %#x",
-			    device_xname(sc->sc_dev), bus_phase);
+			aprint_error_dev(sc->sc_dev, "unexpected bus phase: %#x",
+			    bus_phase);
 #endif
 			break;
 		}
@@ -2537,8 +2513,7 @@ njsc32_intr(void *arg)
 		if (auto_phase & NJSC32_XPHASE_SEL_TIMEOUT) {
 			cmd = sc->sc_curcmd;
 			if (cmd == NULL) {
-				printf("%s: sel no cmd\n",
-				    device_xname(sc->sc_dev));
+				aprint_error_dev(sc->sc_dev, "sel no cmd\n");
 				goto out;
 			}
 			DPRINTC(cmd, ("njsc32_intr: selection timeout\n"));
@@ -2593,10 +2568,10 @@ njsc32_intr(void *arg)
 			if (auto_phase & NJSC32_XPHASE_DATA_OUT)
 				PRINTC(cmd, ("njsc32_intr: data out done\n"));
 			printf("BM %u, SGT %u, SACK %u, SAVED_ACK %u\n",
-			    njsc32_read_4(sc, NJSC32_REG_BM_CNT),
-			    njsc32_read_4(sc, NJSC32_REG_SGT_ADR),
-			    njsc32_read_4(sc, NJSC32_REG_SACK_CNT),
-			    njsc32_read_4(sc, NJSC32_REG_SAVED_ACK_CNT));
+				njsc32_read_4(sc, NJSC32_REG_BM_CNT),
+				njsc32_read_4(sc, NJSC32_REG_SGT_ADR),
+				njsc32_read_4(sc, NJSC32_REG_SACK_CNT),
+				njsc32_read_4(sc, NJSC32_REG_SAVED_ACK_CNT));
 #endif
 
 			/*
@@ -2625,8 +2600,7 @@ njsc32_intr(void *arg)
 				} else {
 					/* XXX does this case occur? */
 #if 1
-					printf("%s: datain: parity error\n",
-					    device_xname(sc->sc_dev));
+					aprint_error_dev(sc->sc_dev, "datain: parity error\n");
 #endif
 					/*
 					 * Make attention condition and try

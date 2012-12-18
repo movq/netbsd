@@ -1,4 +1,4 @@
-/*	$NetBSD: posix_signals.c,v 1.1.1.1 2009/06/23 10:09:00 tron Exp $	*/
+/*	$NetBSD: posix_signals.c,v 1.1.1.1.2.3 2011/01/07 01:24:19 riz Exp $	*/
 
 /*++
 /* NAME

@@ -60,7 +60,7 @@ typedef struct dst_key {
 #ifdef REPORT_ERRORS
 #define EREPORT(str)		printf str
 #else
-#define EREPORT(str)		(void)0
+#define EREPORT(str)
 #endif
 
 /* use our own special macro to FRRE memory */

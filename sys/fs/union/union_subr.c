@@ -1,4 +1,4 @@
-/*	$NetBSD: union_subr.c,v 1.56 2012/11/05 17:24:11 dholland Exp $	*/
+/*	$NetBSD: union_subr.c,v 1.33 2008/03/21 21:55:00 ad Exp $	*/
 
 /*
  * Copyright (c) 1994
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_subr.c,v 1.56 2012/11/05 17:24:11 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_subr.c,v 1.33 2008/03/21 21:55:00 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,7 +82,6 @@ __KERNEL_RCSID(0, "$NetBSD: union_subr.c,v 1.56 2012/11/05 17:24:11 dholland Exp
 #include <sys/vnode.h>
 #include <sys/namei.h>
 #include <sys/malloc.h>
-#include <sys/dirent.h>
 #include <sys/file.h>
 #include <sys/filedesc.h>
 #include <sys/queue.h>
@@ -93,19 +92,23 @@ __KERNEL_RCSID(0, "$NetBSD: union_subr.c,v 1.56 2012/11/05 17:24:11 dholland Exp
 #include <uvm/uvm_extern.h>
 
 #include <fs/union/union.h>
-#include <miscfs/genfs/genfs.h>
-#include <miscfs/specfs/specdev.h>
 
-static LIST_HEAD(uhashhead, union_node) *uhashtbl;
-static u_long uhash_mask;		/* size of hash table - 1 */
+/* must be power of two, otherwise change UNION_HASH() */
+#define NHASH 32
+
+/* unsigned int ... */
 #define UNION_HASH(u, l) \
-	((((u_long) (u) + (u_long) (l)) >> 8) & uhash_mask)
-#define NOHASH	((u_long)-1)
+	(((((unsigned long) (u)) + ((unsigned long) l)) >> 8) & (NHASH-1))
 
-static kmutex_t uhash_lock;
+static LIST_HEAD(unhead, union_node) unhead[NHASH];
+static int unvplock[NHASH];
 
+static int union_list_lock(int);
+static void union_list_unlock(int);
 void union_updatevp(struct union_node *, struct vnode *, struct vnode *);
-static int union_do_lookup(struct vnode *, struct componentname *, kauth_cred_t,    const char *);
+static int union_relookup(struct union_mount *, struct vnode *,
+			       struct vnode **, struct componentname *,
+			       struct componentname *, const char *, int);
 int union_vn_close(struct vnode *, int, kauth_cred_t, struct lwp *);
 static void union_dircache_r(struct vnode *, struct vnode ***, int *);
 struct vnode *union_dircache(struct vnode *, struct lwp *);
@@ -113,34 +116,11 @@ struct vnode *union_dircache(struct vnode *, struct lwp *);
 void
 union_init(void)
 {
-
-	mutex_init(&uhash_lock, MUTEX_DEFAULT, IPL_NONE);
-	uhashtbl = hashinit(desiredvnodes, HASH_LIST, true, &uhash_mask);
-}
-
-void
-union_reinit(void)
-{
-	struct union_node *un;
-	struct uhashhead *oldhash, *hash;
-	u_long oldmask, mask, val;
 	int i;
 
-	hash = hashinit(desiredvnodes, HASH_LIST, true, &mask);
-	mutex_enter(&uhash_lock);
-	oldhash = uhashtbl;
-	oldmask = uhash_mask;
-	uhashtbl = hash;
-	uhash_mask = mask;
-	for (i = 0; i <= oldmask; i++) {
-		while ((un = LIST_FIRST(&oldhash[i])) != NULL) {
-			LIST_REMOVE(un, un_cache);
-			val = UNION_HASH(un->un_uppervp, un->un_lowervp);
-			LIST_INSERT_HEAD(&hash[val], un, un_cache);
-		}
-	}
-	mutex_exit(&uhash_lock);
-	hashdone(oldhash, HASH_LIST, oldmask);
+	for (i = 0; i < NHASH; i++)
+		LIST_INIT(&unhead[i]);
+	memset(unvplock, 0, sizeof(unvplock));
 }
 
 /*
@@ -150,11 +130,35 @@ void
 union_done(void)
 {
 
-	hashdone(uhashtbl, HASH_LIST, uhash_mask);
-	mutex_destroy(&uhash_lock);
-
 	/* Make sure to unset the readdir hook. */
 	vn_union_readdir_hook = NULL;
+}
+
+static int
+union_list_lock(int ix)
+{
+
+	if (unvplock[ix] & UN_LOCKED) {
+		unvplock[ix] |= UN_WANTED;
+		(void) tsleep(&unvplock[ix], PINOD, "unionlk", 0);
+		return (1);
+	}
+
+	unvplock[ix] |= UN_LOCKED;
+
+	return (0);
+}
+
+static void
+union_list_unlock(int ix)
+{
+
+	unvplock[ix] &= ~UN_LOCKED;
+
+	if (unvplock[ix] & UN_WANTED) {
+		unvplock[ix] &= ~UN_WANTED;
+		wakeup(&unvplock[ix]);
+	}
 }
 
 void
@@ -164,18 +168,36 @@ union_updatevp(struct union_node *un, struct vnode *uppervp,
 	int ohash = UNION_HASH(un->un_uppervp, un->un_lowervp);
 	int nhash = UNION_HASH(uppervp, lowervp);
 	int docache = (lowervp != NULLVP || uppervp != NULLVP);
-	bool un_unlock;
+	int lhash, uhash;
 
-	KASSERT(VOP_ISLOCKED(UNIONTOV(un)) == LK_EXCLUSIVE);
+	/*
+	 * Ensure locking is ordered from lower to higher
+	 * to avoid deadlocks.
+	 */
+	if (nhash < ohash) {
+		lhash = nhash;
+		uhash = ohash;
+	} else {
+		lhash = ohash;
+		uhash = nhash;
+	}
 
-	mutex_enter(&uhash_lock);
+	if (lhash != uhash)
+		while (union_list_lock(lhash))
+			continue;
 
-	if (!docache || ohash != nhash) {
-		if (un->un_cflags & UN_CACHED) {
-			un->un_cflags &= ~UN_CACHED;
+	while (union_list_lock(uhash))
+		continue;
+
+	if (ohash != nhash || !docache) {
+		if (un->un_flags & UN_CACHED) {
+			un->un_flags &= ~UN_CACHED;
 			LIST_REMOVE(un, un_cache);
 		}
 	}
+
+	if (ohash != nhash)
+		union_list_unlock(ohash);
 
 	if (un->un_lowervp != lowervp) {
 		if (un->un_lowervp) {
@@ -190,44 +212,23 @@ union_updatevp(struct union_node *un, struct vnode *uppervp,
 			}
 		}
 		un->un_lowervp = lowervp;
-		mutex_enter(&un->un_lock);
 		un->un_lowersz = VNOVAL;
-		mutex_exit(&un->un_lock);
 	}
 
 	if (un->un_uppervp != uppervp) {
-		if (un->un_uppervp) {
-			un_unlock = false;
+		if (un->un_uppervp)
 			vrele(un->un_uppervp);
-		} else
-			un_unlock = true;
 
-		mutex_enter(&un->un_lock);
 		un->un_uppervp = uppervp;
-		mutex_exit(&un->un_lock);
-		if (un_unlock) {
-			struct vop_unlock_args ap;
-
-			ap.a_vp = UNIONTOV(un);
-			genfs_unlock(&ap);
-		}
-		mutex_enter(&un->un_lock);
 		un->un_uppersz = VNOVAL;
-		mutex_exit(&un->un_lock);
-		/* Update union vnode interlock. */
-		if (uppervp != NULL) {
-			mutex_obj_hold(uppervp->v_interlock);
-			uvm_obj_setlock(&UNIONTOV(un)->v_uobj,
-			    uppervp->v_interlock);
-		}
 	}
 
 	if (docache && (ohash != nhash)) {
-		LIST_INSERT_HEAD(&uhashtbl[nhash], un, un_cache);
-		un->un_cflags |= UN_CACHED;
+		LIST_INSERT_HEAD(&unhead[nhash], un, un_cache);
+		un->un_flags |= UN_CACHED;
 	}
 
-	mutex_exit(&uhash_lock);
+	union_list_unlock(nhash);
 }
 
 void
@@ -248,23 +249,20 @@ union_newupper(struct union_node *un, struct vnode *uppervp)
  * Keep track of size changes in the underlying vnodes.
  * If the size changes, then callback to the vm layer
  * giving priority to the upper layer size.
- *
- * Mutex un_lock hold on entry and released on return.
  */
 void
 union_newsize(struct vnode *vp, off_t uppersz, off_t lowersz)
 {
-	struct union_node *un = VTOUNION(vp);
+	struct union_node *un;
 	off_t sz;
 
-	KASSERT(mutex_owned(&un->un_lock));
 	/* only interested in regular files */
 	if (vp->v_type != VREG) {
-		mutex_exit(&un->un_lock);
 		uvm_vnp_setsize(vp, 0);
 		return;
 	}
 
+	un = VTOUNION(vp);
 	sz = VNOVAL;
 
 	if ((uppersz != VNOVAL) && (un->un_uppersz != uppersz)) {
@@ -278,7 +276,6 @@ union_newsize(struct vnode *vp, off_t uppersz, off_t lowersz)
 		if (sz == VNOVAL)
 			sz = un->un_lowersz;
 	}
-	mutex_exit(&un->un_lock);
 
 	if (sz != VNOVAL) {
 #ifdef UNION_DIAGNOSTIC
@@ -333,17 +330,13 @@ union_allocvp(
 {
 	int error;
 	struct vattr va;
-	struct union_node *un = NULL, *un1;
-	struct vnode *vp, *xlowervp = NULLVP;
+	struct union_node *un = NULL;
+	struct vnode *xlowervp = NULLVP;
 	struct union_mount *um = MOUNTTOUNIONMOUNT(mp);
 	voff_t uppersz, lowersz;
-	dev_t rdev;
-	u_long hash[3];
-	int vflag, iflag, lflag;
+	int hash = 0;
+	int vflag, iflag;
 	int try;
-
-	if (uppervp)
-		KASSERT(VOP_ISLOCKED(uppervp) == LK_EXCLUSIVE);
 
 	if (uppervp == NULLVP && lowervp == NULLVP)
 		panic("union: unidentifiable allocation");
@@ -361,75 +354,108 @@ union_allocvp(
 		if (lowervp == NULLVP) {
 			lowervp = um->um_lowervp;
 			if (lowervp != NULLVP)
-				vref(lowervp);
+				VREF(lowervp);
 		}
 		iflag = 0;
 		vflag = VV_ROOT;
 	}
 
-	if (!docache) {
-		un = NULL;
-		goto found;
-	}
-
-	/*
-	 * If both uppervp and lowervp are not NULL we have to
-	 * search union nodes with one vnode as NULL too.
-	 */
-	hash[0] = UNION_HASH(uppervp, lowervp);
-	if (uppervp == NULL || lowervp == NULL) {
-		hash[1] = hash[2] = NOHASH;
-	} else {
-		hash[1] = UNION_HASH(uppervp, NULLVP);
-		hash[2] = UNION_HASH(NULLVP, lowervp);
-	}
-
 loop:
-	mutex_enter(&uhash_lock);
-
-	for (try = 0; try < 3; try++) {
-		if (hash[try] == NOHASH)
-			continue;
-		LIST_FOREACH(un, &uhashtbl[hash[try]], un_cache) {
-			if ((un->un_lowervp && un->un_lowervp != lowervp) ||
-			    (un->un_uppervp && un->un_uppervp != uppervp) ||
-			    UNIONTOV(un)->v_mount != mp)
+	if (!docache) {
+		un = 0;
+	} else for (try = 0; try < 3; try++) {
+		switch (try) {
+		case 0:
+			if (lowervp == NULLVP)
 				continue;
+			hash = UNION_HASH(uppervp, lowervp);
+			break;
 
-			if (uppervp != NULL &&
-			    (uppervp == dvp || uppervp == un->un_uppervp))
-				/* "." or already locked. */
-				lflag = 0;
-			else
-				lflag = LK_EXCLUSIVE;
-			vp = UNIONTOV(un);
-			mutex_enter(vp->v_interlock);
-			/*
-			 * If this node being cleaned out and our caller
-			 * holds a lock, then ignore it and continue.  To
-			 * allow the cleaning to succeed the current thread
-			 * must make progress.  For a brief time the cache
-			 * may contain more than one vnode referring to
-			 * a lower node.
-			 */
-			if ((vp->v_iflag & VI_XLOCK) != 0 && lflag == 0) {
-				mutex_exit(vp->v_interlock);
+		case 1:
+			if (uppervp == NULLVP)
 				continue;
-			}
-			mutex_exit(&uhash_lock);
-			if (vget(vp, lflag))
-				goto loop;
-			goto found;
+			hash = UNION_HASH(uppervp, NULLVP);
+			break;
+
+		case 2:
+			if (lowervp == NULLVP)
+				continue;
+			hash = UNION_HASH(NULLVP, lowervp);
+			break;
 		}
+
+		while (union_list_lock(hash))
+			continue;
+
+		for (un = unhead[hash].lh_first; un != 0;
+					un = un->un_cache.le_next) {
+			if ((un->un_lowervp == lowervp ||
+			     un->un_lowervp == NULLVP) &&
+			    (un->un_uppervp == uppervp ||
+			     un->un_uppervp == NULLVP) &&
+			    (UNIONTOV(un)->v_mount == mp)) {
+				if (vget(UNIONTOV(un), 0)) {
+					union_list_unlock(hash);
+					goto loop;
+				}
+				break;
+			}
+		}
+
+		union_list_unlock(hash);
+
+		if (un)
+			break;
 	}
 
-	mutex_exit(&uhash_lock);
-
-found:
 	if (un) {
-		KASSERT(VOP_ISLOCKED(UNIONTOV(un)) == LK_EXCLUSIVE);
-		KASSERT(uppervp == NULL ||
-		    VOP_ISLOCKED(uppervp) == LK_EXCLUSIVE);
+		/*
+		 * Obtain a lock on the union_node.
+		 * uppervp is locked, though un->un_uppervp
+		 * may not be.  this doesn't break the locking
+		 * hierarchy since in the case that un->un_uppervp
+		 * is not yet locked it will be vrele'd and replaced
+		 * with uppervp.
+		 */
+
+		if ((dvp != NULLVP) && (uppervp == dvp)) {
+			/*
+			 * Access ``.'', so (un) will already
+			 * be locked.  Since this process has
+			 * the lock on (uppervp) no other
+			 * process can hold the lock on (un).
+			 */
+#ifdef DIAGNOSTIC
+			if ((un->un_flags & UN_LOCKED) == 0)
+				panic("union: . not locked");
+			else if (curproc && un->un_pid != curproc->p_pid &&
+				    un->un_pid > -1 && curproc->p_pid > -1)
+				panic("union: allocvp not lock owner");
+#endif
+		} else {
+			if (un->un_flags & UN_LOCKED) {
+				vrele(UNIONTOV(un));
+				un->un_flags |= UN_WANTED;
+				(void) tsleep(&un->un_flags, PINOD,
+				    "unionalloc", 0);
+				goto loop;
+			}
+			un->un_flags |= UN_LOCKED;
+
+#ifdef DIAGNOSTIC
+			if (curproc)
+				un->un_pid = curproc->p_pid;
+			else
+				un->un_pid = -1;
+#endif
+		}
+
+		/*
+		 * At this point, the union_node is locked,
+		 * un->un_uppervp may not be locked, and uppervp
+		 * is locked or nil.
+		 */
+
 		/*
 		 * Save information about the upper layer.
 		 */
@@ -439,8 +465,10 @@ found:
 			vrele(uppervp);
 		}
 
-		if (un->un_uppervp)
+		if (un->un_uppervp) {
+			un->un_flags |= UN_ULOCK;
 			un->un_flags &= ~UN_KLOCK;
+		}
 
 		/*
 		 * Save information about the lower layer.
@@ -451,12 +479,13 @@ found:
 		if (lowervp != un->un_lowervp) {
 			union_newlower(un, lowervp);
 			if (cnp && (lowervp != NULLVP)) {
+				un->un_hash = cnp->cn_hash;
 				un->un_path = malloc(cnp->cn_namelen+1,
 						M_TEMP, M_WAITOK);
 				memcpy(un->un_path, cnp->cn_nameptr,
 						cnp->cn_namelen);
 				un->un_path[cnp->cn_namelen] = '\0';
-				vref(dvp);
+				VREF(dvp);
 				un->un_dirvp = dvp;
 			}
 		} else if (lowervp) {
@@ -470,21 +499,22 @@ found:
 	if (uppervp != NULLVP)
 		if (VOP_GETATTR(uppervp, &va, FSCRED) == 0)
 			uppersz = va.va_size;
-	if (lowervp != NULLVP) {
-		vn_lock(lowervp, LK_SHARED | LK_RETRY);
-		error = VOP_GETATTR(lowervp, &va, FSCRED);
-		VOP_UNLOCK(lowervp);
-		if (error == 0)
+	if (lowervp != NULLVP)
+		if (VOP_GETATTR(lowervp, &va, FSCRED) == 0)
 			lowersz = va.va_size;
+
+	if (docache) {
+		/*
+		 * otherwise lock the vp list while we call getnewvnode
+		 * since that can block.
+		 */
+		hash = UNION_HASH(uppervp, lowervp);
+
+		if (union_list_lock(hash))
+			goto loop;
 	}
 
-	/*
-	 * Get a new vnode and share the lock with upper layer vnode,
-	 * unless layers are inverted.
-	 */
-	vnode_t *svp = (uppervp != NULLVP) ? uppervp : lowervp;
-	error = getnewvnode(VT_UNION, mp, union_vnodeop_p,
-	    svp->v_interlock, vpp);
+	error = getnewvnode(VT_UNION, mp, union_vnodeop_p, vpp);
 	if (error) {
 		if (uppervp) {
 			if (dvp == uppervp)
@@ -495,102 +525,66 @@ found:
 		if (lowervp)
 			vrele(lowervp);
 
-		return error;
+		goto out;
 	}
 
-	if (docache) {
-		mutex_enter(&uhash_lock);
-		LIST_FOREACH(un1, &uhashtbl[hash[0]], un_cache) {
-			if (un1->un_lowervp == lowervp &&
-			    un1->un_uppervp == uppervp &&
-			    UNIONTOV(un1)->v_mount == mp) {
-				vp = UNIONTOV(un1);
-				mutex_enter(vp->v_interlock);
-				/*
-				 * Ignore nodes being cleaned out.
-				 * See the cache lookup above.
-				 */
-				if ((vp->v_iflag & VI_XLOCK) != 0) {
-					mutex_exit(vp->v_interlock);
-					continue;
-				}
-				mutex_exit(vp->v_interlock);
-				/*
-				 * Another thread beat us, push back freshly
-				 * allocated vnode and retry.
-				 */
-				mutex_exit(&uhash_lock);
-				ungetnewvnode(*vpp);
-				goto loop;
-			}
-		}
-	}
-
-	(*vpp)->v_data = malloc(sizeof(struct union_node), M_TEMP, M_WAITOK);
+	MALLOC((*vpp)->v_data, void *, sizeof(struct union_node),
+		M_TEMP, M_WAITOK);
 
 	(*vpp)->v_vflag |= vflag;
 	(*vpp)->v_iflag |= iflag;
-	rdev = NODEV;
-	if (uppervp) {
+	(*vpp)->v_vnlock = NULL;	/* Make upper layers call VOP_LOCK */
+	if (uppervp)
 		(*vpp)->v_type = uppervp->v_type;
-		if (uppervp->v_type == VCHR || uppervp->v_type == VBLK)
-			rdev = uppervp->v_rdev;
-	} else {
+	else
 		(*vpp)->v_type = lowervp->v_type;
-		if (lowervp->v_type == VCHR || lowervp->v_type == VBLK)
-			rdev = lowervp->v_rdev;
-	}
-	if (rdev != NODEV)
-		spec_node_init(*vpp, rdev);
-
 	un = VTOUNION(*vpp);
-	mutex_init(&un->un_lock, MUTEX_DEFAULT, IPL_NONE);
 	un->un_vnode = *vpp;
 	un->un_uppervp = uppervp;
 	un->un_lowervp = lowervp;
 	un->un_pvp = undvp;
 	if (undvp != NULLVP)
-		vref(undvp);
+		VREF(undvp);
 	un->un_dircache = 0;
 	un->un_openl = 0;
-	un->un_flags = 0;
-	un->un_cflags = 0;
+	un->un_flags = UN_LOCKED;
 
-	if (uppervp == NULL) {
-		struct vop_lock_args ap;
-
-		ap.a_vp = UNIONTOV(un);
-		ap.a_flags = LK_EXCLUSIVE;
-		error = genfs_lock(&ap);
-		KASSERT(error == 0);
-	}
-
-	mutex_enter(&un->un_lock);
 	un->un_uppersz = VNOVAL;
 	un->un_lowersz = VNOVAL;
 	union_newsize(*vpp, uppersz, lowersz);
 
+	if (un->un_uppervp)
+		un->un_flags |= UN_ULOCK;
+#ifdef DIAGNOSTIC
+	if (curproc)
+		un->un_pid = curproc->p_pid;
+	else
+		un->un_pid = -1;
+#endif
 	if (dvp && cnp && (lowervp != NULLVP)) {
+		un->un_hash = cnp->cn_hash;
 		un->un_path = malloc(cnp->cn_namelen+1, M_TEMP, M_WAITOK);
 		memcpy(un->un_path, cnp->cn_nameptr, cnp->cn_namelen);
 		un->un_path[cnp->cn_namelen] = '\0';
-		vref(dvp);
+		VREF(dvp);
 		un->un_dirvp = dvp;
 	} else {
+		un->un_hash = 0;
 		un->un_path = 0;
 		un->un_dirvp = 0;
 	}
 
 	if (docache) {
-		LIST_INSERT_HEAD(&uhashtbl[hash[0]], un, un_cache);
-		un->un_cflags |= UN_CACHED;
+		LIST_INSERT_HEAD(&unhead[hash], un, un_cache);
+		un->un_flags |= UN_CACHED;
 	}
 
 	if (xlowervp)
 		vrele(xlowervp);
 
+out:
 	if (docache)
-		mutex_exit(&uhash_lock);
+		union_list_unlock(hash);
 
 	return (error);
 }
@@ -598,17 +592,12 @@ found:
 int
 union_freevp(struct vnode *vp)
 {
-	int hash;
 	struct union_node *un = VTOUNION(vp);
 
-	hash = UNION_HASH(un->un_uppervp, un->un_lowervp);
-
-	mutex_enter(&uhash_lock);
-	if (un->un_cflags & UN_CACHED) {
-		un->un_cflags &= ~UN_CACHED;
+	if (un->un_flags & UN_CACHED) {
+		un->un_flags &= ~UN_CACHED;
 		LIST_REMOVE(un, un_cache);
 	}
-	mutex_exit(&uhash_lock);
 
 	if (un->un_pvp != NULLVP)
 		vrele(un->un_pvp);
@@ -620,10 +609,9 @@ union_freevp(struct vnode *vp)
 		vrele(un->un_dirvp);
 	if (un->un_path)
 		free(un->un_path, M_TEMP);
-	mutex_destroy(&un->un_lock);
 
-	free(vp->v_data, M_TEMP);
-	vp->v_data = NULL;
+	FREE(vp->v_data, M_TEMP);
+	vp->v_data = 0;
 
 	return (0);
 }
@@ -652,6 +640,11 @@ union_copyfile(struct vnode *fvp, struct vnode *tvp, kauth_cred_t cred,
 
 	uio.uio_offset = 0;
 	UIO_SETUP_SYSSPACE(&uio);
+
+	VOP_UNLOCK(fvp, 0);			/* XXX */
+	vn_lock(fvp, LK_EXCLUSIVE | LK_RETRY);	/* XXX */
+	VOP_UNLOCK(tvp, 0);			/* XXX */
+	vn_lock(tvp, LK_EXCLUSIVE | LK_RETRY);	/* XXX */
 
 	tbuf = malloc(MAXBSIZE, M_TEMP, M_WAITOK);
 
@@ -706,8 +699,9 @@ union_copyup(struct union_node *un, int docopy, kauth_cred_t cred,
 	if (error)
 		return (error);
 
-	KASSERT(VOP_ISLOCKED(uvp) == LK_EXCLUSIVE);
+	/* at this point, uppervp is locked */
 	union_newupper(un, uvp);
+	un->un_flags |= UN_ULOCK;
 
 	lvp = un->un_lowervp;
 
@@ -727,12 +721,12 @@ union_copyup(struct union_node *un, int docopy, kauth_cred_t cred,
 		}
 		if (error == 0) {
 			/* Copy permissions up too */
-			vattr_null(&uvattr);
+			VATTR_NULL(&uvattr);
 			uvattr.va_mode = lvattr.va_mode;
 			uvattr.va_flags = lvattr.va_flags;
         		error = VOP_SETATTR(uvp, &uvattr, cred);
 		}
-		VOP_UNLOCK(lvp);
+		VOP_UNLOCK(lvp, 0);
 #ifdef UNION_DIAGNOSTIC
 		if (error == 0)
 			uprintf("union: copied up %s\n", un->un_path);
@@ -758,49 +752,60 @@ union_copyup(struct union_node *un, int docopy, kauth_cred_t cred,
 			(void) VOP_OPEN(uvp, FREAD, cred);
 		}
 		un->un_openl = 0;
-		VOP_UNLOCK(lvp);
+		VOP_UNLOCK(lvp, 0);
 	}
 
 	return (error);
 
 }
 
-/*
- * Prepare the creation of a new node in the upper layer.
- *
- * (dvp) is the directory in which to create the new node.
- * it is locked on entry and exit.
- * (cnp) is the componentname to be created.
- * (cred, path, hash) are credentials, path and its hash to fill (cnp).
- */
 static int
-union_do_lookup(struct vnode *dvp, struct componentname *cnp, kauth_cred_t cred,
-    const char *path)
+union_relookup(
+	struct union_mount *um,
+	struct vnode *dvp,
+	struct vnode **vpp,
+	struct componentname *cnp,
+	struct componentname *cn,
+	const char *path,
+	int pathlen)
 {
 	int error;
-	struct vnode *vp;
 
-	cnp->cn_nameiop = CREATE;
-	cnp->cn_flags = LOCKPARENT | ISLASTCN;
-	cnp->cn_cred = cred;
-	cnp->cn_nameptr = path;
-	cnp->cn_namelen = strlen(path);
+	/*
+	 * A new componentname structure must be faked up because
+	 * there is no way to know where the upper level cnp came
+	 * from or what it is being used for.  This must duplicate
+	 * some of the work done by NDINIT, some of the work done
+	 * by namei, some of the work done by lookup and some of
+	 * the work done by VOP_LOOKUP when given a CREATE flag.
+	 * Conclusion: Horrible.
+	 *
+	 * The pathname buffer will be PNBUF_PUT'd by VOP_MKDIR.
+	 */
+	cn->cn_namelen = pathlen;
+	if ((cn->cn_namelen + 1) > MAXPATHLEN)
+		return (ENAMETOOLONG);
+	cn->cn_pnbuf = PNBUF_GET();
+	memcpy(cn->cn_pnbuf, path, cn->cn_namelen);
+	cn->cn_pnbuf[cn->cn_namelen] = '\0';
 
-	error = VOP_LOOKUP(dvp, &vp, cnp);
+	cn->cn_nameiop = CREATE;
+	cn->cn_flags = (LOCKPARENT|HASBUF|SAVENAME|ISLASTCN);
+	if (um->um_op == UNMNT_ABOVE)
+		cn->cn_cred = cnp->cn_cred;
+	else
+		cn->cn_cred = um->um_cred;
+	cn->cn_nameptr = cn->cn_pnbuf;
+	cn->cn_hash = cnp->cn_hash;
+	cn->cn_consume = cnp->cn_consume;
 
-	if (error == 0) {
-		KASSERT(vp != NULL);
-		VOP_ABORTOP(dvp, cnp);
-		if (dvp != vp)
-			vput(vp);
-		else
-			vrele(vp);
-		error = EEXIST;
-	} else if (error == EJUSTRETURN) {
-		error = 0;
+	error = relookup(dvp, vpp, cn);
+	if (error) {
+		PNBUF_PUT(cn->cn_pnbuf);
+		cn->cn_pnbuf = 0;
 	}
 
-	return error;
+	return (error);
 }
 
 /*
@@ -825,22 +830,22 @@ union_mkshadow(struct union_mount *um, struct vnode *dvp,
 	int error;
 	struct vattr va;
 	struct componentname cn;
-	char *pnbuf;
-
-	if (cnp->cn_namelen + 1 > MAXPATHLEN)
-		return ENAMETOOLONG;
-	pnbuf = PNBUF_GET();
-	memcpy(pnbuf, cnp->cn_nameptr, cnp->cn_namelen);
-	pnbuf[cnp->cn_namelen] = '\0';
 
 	vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
-
-	error = union_do_lookup(dvp, &cn,
-	    (um->um_op == UNMNT_ABOVE ? cnp->cn_cred : um->um_cred), pnbuf);
+	error = union_relookup(um, dvp, vpp, cnp, &cn,
+			cnp->cn_nameptr, cnp->cn_namelen);
 	if (error) {
-		VOP_UNLOCK(dvp);
-		PNBUF_PUT(pnbuf);
-		return error;
+		VOP_UNLOCK(dvp, 0);
+		return (error);
+	}
+
+	if (*vpp) {
+		VOP_ABORTOP(dvp, &cn);
+		if (dvp != *vpp)
+			VOP_UNLOCK(dvp, 0);
+		vput(*vpp);
+		*vpp = NULLVP;
+		return (EEXIST);
 	}
 
 	/*
@@ -851,14 +856,13 @@ union_mkshadow(struct union_mount *um, struct vnode *dvp,
 	 * mkdir syscall).  (jsp, kb)
 	 */
 
-	vattr_null(&va);
+	VATTR_NULL(&va);
 	va.va_type = VDIR;
 	va.va_mode = um->um_cmode;
 
 	vref(dvp);
 	error = VOP_MKDIR(dvp, vpp, &cn, &va);
-	PNBUF_PUT(pnbuf);
-	return error;
+	return (error);
 }
 
 /*
@@ -869,23 +873,34 @@ union_mkshadow(struct union_mount *um, struct vnode *dvp,
  * (dvp) is the directory in which to create the whiteout.
  * it is locked on entry and exit.
  * (cnp) is the componentname to be created.
- * (un) holds the path and its hash to be created.
  */
 int
 union_mkwhiteout(struct union_mount *um, struct vnode *dvp,
-	struct componentname *cnp, struct union_node *un)
+	struct componentname *cnp, char *path)
 {
 	int error;
+	struct vnode *wvp;
 	struct componentname cn;
 
-	error = union_do_lookup(dvp, &cn,
-	    (um->um_op == UNMNT_ABOVE ? cnp->cn_cred : um->um_cred),
-	    un->un_path);
+	VOP_UNLOCK(dvp, 0);
+	vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
+	error = union_relookup(um, dvp, &wvp, cnp, &cn, path, strlen(path));
 	if (error)
-		return error;
+		return (error);
+
+	if (wvp) {
+		VOP_ABORTOP(dvp, &cn);
+		if (dvp != wvp)
+			VOP_UNLOCK(dvp, 0);
+		vput(wvp);
+		return (EEXIST);
+	}
 
 	error = VOP_WHITEOUT(dvp, &cn, CREATE);
-	return error;
+	if (error)
+		VOP_ABORTOP(dvp, &cn);
+
+	return (error);
 }
 
 /*
@@ -894,7 +909,7 @@ union_mkwhiteout(struct union_mount *um, struct vnode *dvp,
  * in spirit to calling vn_open but it avoids calling namei().
  * the problem with calling namei is that a) it locks too many
  * things, and b) it doesn't start at the "right" directory,
- * whereas union_do_lookup is told where to start.
+ * whereas relookup is told where to start.
  */
 int
 union_vn_create(struct vnode **vpp, struct union_node *un, struct lwp *l)
@@ -910,13 +925,40 @@ union_vn_create(struct vnode **vpp, struct union_node *un, struct lwp *l)
 
 	*vpp = NULLVP;
 
-	vn_lock(un->un_dirvp, LK_EXCLUSIVE | LK_RETRY);
+	/*
+	 * Build a new componentname structure (for the same
+	 * reasons outlines in union_mkshadow).
+	 * The difference here is that the file is owned by
+	 * the current user, rather than by the person who
+	 * did the mount, since the current user needs to be
+	 * able to write the file (that's why it is being
+	 * copied in the first place).
+	 */
+	cn.cn_namelen = strlen(un->un_path);
+	if ((cn.cn_namelen + 1) > MAXPATHLEN)
+		return (ENAMETOOLONG);
+	cn.cn_pnbuf = PNBUF_GET();
+	memcpy(cn.cn_pnbuf, un->un_path, cn.cn_namelen+1);
+	cn.cn_nameiop = CREATE;
+	cn.cn_flags = (LOCKPARENT|HASBUF|SAVENAME|ISLASTCN);
+	cn.cn_cred = l->l_cred;
+	cn.cn_nameptr = cn.cn_pnbuf;
+	cn.cn_hash = un->un_hash;
+	cn.cn_consume = 0;
 
-	error = union_do_lookup(un->un_dirvp, &cn, l->l_cred,
-	    un->un_path);
+	vn_lock(un->un_dirvp, LK_EXCLUSIVE | LK_RETRY);
+	error = relookup(un->un_dirvp, &vp, &cn);
 	if (error) {
-		VOP_UNLOCK(un->un_dirvp);
-		return error;
+		VOP_UNLOCK(un->un_dirvp, 0);
+		return (error);
+	}
+
+	if (vp) {
+		VOP_ABORTOP(un->un_dirvp, &cn);
+		if (un->un_dirvp != vp)
+			VOP_UNLOCK(un->un_dirvp, 0);
+		vput(vp);
+		return (EEXIST);
 	}
 
 	/*
@@ -929,23 +971,21 @@ union_vn_create(struct vnode **vpp, struct union_node *un, struct lwp *l)
 	 * require access to the top-level file.
 	 * TODO: confirm choice of access permissions.
 	 */
-	vattr_null(vap);
+	VATTR_NULL(vap);
 	vap->va_type = VREG;
 	vap->va_mode = cmode;
 	vref(un->un_dirvp);
-	error = VOP_CREATE(un->un_dirvp, &vp, &cn, vap);
-	if (error)
-		return error;
+	if ((error = VOP_CREATE(un->un_dirvp, &vp, &cn, vap)) != 0)
+		return (error);
 
-	error = VOP_OPEN(vp, fmode, cred);
-	if (error) {
+	if ((error = VOP_OPEN(vp, fmode, cred)) != 0) {
 		vput(vp);
-		return error;
+		return (error);
 	}
 
 	vp->v_writecount++;
 	*vpp = vp;
-	return 0;
+	return (0);
 }
 
 int
@@ -960,10 +1000,6 @@ union_vn_close(struct vnode *vp, int fmode, kauth_cred_t cred, struct lwp *l)
 void
 union_removed_upper(struct union_node *un)
 {
-	struct vnode *vp = UNIONTOV(un);
-	int hash;
-
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 #if 1
 	/*
 	 * We do not set the uppervp to NULLVP here, because lowervp
@@ -979,15 +1015,15 @@ union_removed_upper(struct union_node *un)
 	union_newupper(un, NULLVP);
 #endif
 
-	hash = UNION_HASH(un->un_uppervp, un->un_lowervp);
-	VOP_UNLOCK(vp);
-
-	mutex_enter(&uhash_lock);
-	if (un->un_cflags & UN_CACHED) {
-		un->un_cflags &= ~UN_CACHED;
+	if (un->un_flags & UN_CACHED) {
+		un->un_flags &= ~UN_CACHED;
 		LIST_REMOVE(un, un_cache);
 	}
-	mutex_exit(&uhash_lock);
+
+	if (un->un_flags & UN_ULOCK) {
+		un->un_flags &= ~UN_ULOCK;
+		VOP_UNLOCK(un->un_uppervp, 0);
+	}
 }
 
 #if 0
@@ -1032,7 +1068,7 @@ union_dircache_r(struct vnode *vp, struct vnode ***vppp, int *cntp)
 
 	if (vp->v_op != union_vnodeop_p) {
 		if (vppp) {
-			vref(vp);
+			VREF(vp);
 			*(*vppp)++ = vp;
 			if (--(*cntp) == 0)
 				panic("union: dircache table too small");
@@ -1088,7 +1124,7 @@ union_dircache(struct vnode *vp, struct lwp *l)
 		goto out;
 
 	vn_lock(*vpp, LK_EXCLUSIVE | LK_RETRY);
-	vref(*vpp);
+	VREF(*vpp);
 	error = union_allocvp(&nvp, vp->v_mount, NULLVP, NULLVP, 0, *vpp, NULLVP, 0);
 	if (!error) {
 		VTOUNION(vp)->un_dircache = 0;
@@ -1096,7 +1132,7 @@ union_dircache(struct vnode *vp, struct lwp *l)
 	}
 
 out:
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	return (nvp);
 }
 
@@ -1105,101 +1141,12 @@ union_diruncache(struct union_node *un)
 {
 	struct vnode **vpp;
 
-	KASSERT(VOP_ISLOCKED(UNIONTOV(un)) == LK_EXCLUSIVE);
 	if (un->un_dircache != 0) {
 		for (vpp = un->un_dircache; *vpp != NULLVP; vpp++)
 			vrele(*vpp);
 		free(un->un_dircache, M_TEMP);
 		un->un_dircache = 0;
 	}
-}
-
-/*
- * Check whether node can rmdir (check empty).
- */
-int
-union_check_rmdir(struct union_node *un, kauth_cred_t cred)
-{
-	int dirlen, eofflag, error;
-	char *dirbuf;
-	struct vattr va;
-	struct vnode *tvp;
-	struct dirent *dp, *edp;
-	struct componentname cn;
-	struct iovec aiov;
-	struct uio auio;
-
-	KASSERT(un->un_uppervp != NULL);
-
-	/* Check upper for being opaque. */
-	KASSERT(VOP_ISLOCKED(un->un_uppervp));
-	error = VOP_GETATTR(un->un_uppervp, &va, cred);
-	if (error || (va.va_flags & OPAQUE))
-		return error;
-
-	if (un->un_lowervp == NULL)
-		return 0;
-
-	/* Check lower for being empty. */
-	vn_lock(un->un_lowervp, LK_SHARED | LK_RETRY);
-	error = VOP_GETATTR(un->un_lowervp, &va, cred);
-	if (error) {
-		VOP_UNLOCK(un->un_lowervp);
-		return error;
-	}
-	dirlen = va.va_blocksize;
-	dirbuf = kmem_alloc(dirlen, KM_SLEEP);
-	if (dirbuf == NULL) {
-		VOP_UNLOCK(un->un_lowervp);
-		return ENOMEM;
-	}
-	/* error = 0; */
-	eofflag = 0;
-	auio.uio_offset = 0;
-	do {
-		aiov.iov_len = dirlen;
-		aiov.iov_base = dirbuf;
-		auio.uio_iov = &aiov;
-		auio.uio_iovcnt = 1;
-		auio.uio_resid = aiov.iov_len;
-		auio.uio_rw = UIO_READ;
-		UIO_SETUP_SYSSPACE(&auio);
-		error = VOP_READDIR(un->un_lowervp, &auio, cred, &eofflag,
-		    NULL, NULL);
-		if (error)
-			break;
-		edp = (struct dirent *)&dirbuf[dirlen - auio.uio_resid];
-		for (dp = (struct dirent *)dirbuf;
-		    error == 0 && dp < edp;
-		    dp = (struct dirent *)((char *)dp + dp->d_reclen)) {
-			if (dp->d_reclen == 0) {
-				error = ENOTEMPTY;
-				break;
-			}
-			if (dp->d_type == DT_WHT ||
-			    (dp->d_namlen == 1 && dp->d_name[0] == '.') ||
-			    (dp->d_namlen == 2 && !memcmp(dp->d_name, "..", 2)))
-				continue;
-			/* Check for presence in the upper layer. */
-			cn.cn_nameiop = LOOKUP;
-			cn.cn_flags = ISLASTCN | RDONLY;
-			cn.cn_cred = cred;
-			cn.cn_nameptr = dp->d_name;
-			cn.cn_namelen = dp->d_namlen;
-			error = VOP_LOOKUP(un->un_uppervp, &tvp, &cn);
-			if (error == ENOENT && (cn.cn_flags & ISWHITEOUT)) {
-				error = 0;
-				continue;
-			}
-			if (error == 0)
-				vput(tvp);
-			error = ENOTEMPTY;
-		}
-	} while (error == 0 && !eofflag);
-	kmem_free(dirbuf, dirlen);
-	VOP_UNLOCK(un->un_lowervp);
-
-	return error;
 }
 
 /*
@@ -1216,25 +1163,25 @@ union_readdirhook(struct vnode **vpp, struct file *fp, struct lwp *l)
 	if (vp->v_op != union_vnodeop_p)
 		return (0);
 
+	if ((lvp = union_dircache(vp, l)) == NULLVP)
+		return (0);
+
 	/*
 	 * If the directory is opaque,
 	 * then don't show lower entries
 	 */
-	vn_lock(vp, LK_SHARED | LK_RETRY);
 	error = VOP_GETATTR(vp, &va, fp->f_cred);
-	VOP_UNLOCK(vp);
-	if (error || (va.va_flags & OPAQUE))
-		return error;
-
-	if ((lvp = union_dircache(vp, l)) == NULLVP)
-		return (0);
+	if (error || (va.va_flags & OPAQUE)) {
+		vput(lvp);
+		return (error);
+	}
 
 	error = VOP_OPEN(lvp, FREAD, fp->f_cred);
 	if (error) {
 		vput(lvp);
 		return (error);
 	}
-	VOP_UNLOCK(lvp);
+	VOP_UNLOCK(lvp, 0);
 	fp->f_data = lvp;
 	fp->f_offset = 0;
 	error = vn_close(vp, FREAD, fp->f_cred);

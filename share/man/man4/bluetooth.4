@@ -1,4 +1,4 @@
-.\"	$NetBSD: bluetooth.4,v 1.18 2010/11/22 19:59:43 plunky Exp $
+.\"	$NetBSD: bluetooth.4,v 1.11 2008/08/06 07:08:31 skrll Exp $
 .\"
 .\" Copyright (c) 2006 Itronix Inc.
 .\" All rights reserved.
@@ -30,7 +30,7 @@
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\"
-.Dd November 20, 2010
+.Dd December 28, 2007
 .Dt BLUETOOTH 4
 .Os
 .Sh NAME
@@ -51,7 +51,7 @@ Bluetooth Protocol Family sockets all use a
 structure which contains a Bluetooth Device Address (BDADDR).
 This consists of a six byte string in least significant byte
 first order.
-.Bd -literal -offset indent
+.Bd -literal -offset -indent
 struct sockaddr_bt {
 	uint8_t		bt_len;
 	sa_family_t	bt_family;
@@ -70,11 +70,9 @@ Protocols included are:
 This gives raw access to the Host Controller Interface of local devices
 using the HCI protocol as described in the Bluetooth Core Specification.
 Any user may open an HCI socket but there are limitations on what
-unprivileged users can send and receive.
-The local address specified by
+unprivileged users can send and receive. The local address specified by
 .Xr bind 2
-may be used to select the device that the socket will receive packets from.
-If
+may be used to select the device that the socket will receive packets from. If
 .Dv BDADDR_ANY
 is specified then the socket will receive packets from all
 devices on the system.
@@ -95,16 +93,13 @@ and should be set to zero.
 HCI socket options:
 .Bl -tag -width XX
 .It Dv SO_HCI_EVT_FILTER Op Ar struct hci_filter
-This filter controls which events will be received at the socket.
-See
+This filter controls which events will be received at the socket. See
 .In netbt/hci.h
-for available events.
-By default, Command_Complete and Command_Status
+for available events. By default, Command_Complete and Command_Status
 events only are enabled.
 .It Dv SO_HCI_PKT_FILTER Op Ar struct hci_filter
 This filter controls the type of packets that will be received at the
-socket.
-By default, Event packets only are enabled.
+socket. By default, Event packets only are enabled.
 .It Dv SO_HCI_DIRECTION Op Ar int
 When set, this enables control messages on packets received at the socket
 indicating the direction of travel of the packet.
@@ -120,12 +115,11 @@ Default send buffer size for HCI sockets.
 Default receive buffer size for HCI sockets
 .It Dv net.bluetooth.hci.acl_expiry
 If set, this is the time in seconds after which unused ACL data connections
-will be expired.
-If zero, connections will not be closed.
+will be expired. If zero, connections will not be closed.
 .It Dv net.bluetooth.hci.memo_expiry
 Time, in seconds, that the system will keep records of Bluetooth devices
-in the vicinity after an Inquiry Response packet has been received.
-This information is used for routing purposes.
+in the vicinity after an Inquiry Response packet has been received. This
+information is used for routing purposes.
 .It Dv net.bluetooth.hci.eventq_max
 The maximum number of packets on the low level Event queue.
 .It Dv net.bluetooth.hci.aclrxq_max
@@ -141,14 +135,6 @@ field in the
 .Ar sockaddr_bt
 structure to select the Protocol/Sevice Multiplexer to specify when making
 connections.
-If the special value of
-.Dv L2CAP_PSM_ANY
-is bound when the
-.Xr listen 2
-call is made, the next available PSM from the dynamic range above 0x1001
-will be selected and may be discovered using the
-.Xr getsockname 2
-call.
 .Pp
 L2CAP socket options:
 .Bl -tag -width XXX
@@ -292,19 +278,17 @@ Default receive buffer size for SCO sockets.
 .Sh INFORMATION
 The following
 .Xr ioctl 2
-calls may be used to manipulate Bluetooth devices.
-The
+calls may be used to manipulate Bluetooth devices. The
 .Xr ioctl 2
 must be made on
 .Cm BTPROTO_HCI
-sockets.
-All of the requests take a
+sockets. All of the requests take a
 .Ar btreq
 structure defined as follows as their parameter and unless otherwise
 specified, use the
 .Ar btr_name
 field to identify the device.
-.Bd -literal
+.Bd -literal -offset
 struct btreq {
     char btr_name[HCI_DEVNAME_SIZE];	/* device name */
 
@@ -319,13 +303,7 @@ struct btreq {
 	    uint16_t btri_sco_mtu;	/* SCO mtu */
 	    uint16_t btri_link_policy;	/* Link Policy */
 	    uint16_t btri_packet_type;	/* Packet Type */
-	    uint16_t btri_max_acl;	/* max ACL buffers */
-	    uint16_t btri_max_sco;	/* max SCO buffers */
 	} btri;
-	struct {
-	    uint8_t btrf_page0[HCI_FEATURES_SIZE]; /* basic */
-	    uint8_t btrf_page1[HCI_FEATURES_SIZE]; /* extended */
-	} btrf;
 	struct bt_stats btrs;   /* unit stats */
     } btru;
 };
@@ -339,10 +317,6 @@ struct btreq {
 #define btr_sco_mtu	btru.btri.btri_sco_mtu
 #define btr_link_policy btru.btri.btri_link_policy
 #define btr_packet_type btru.btri.btri_packet_type
-#define btr_max_acl	btru.btri.btri_max_acl
-#define btr_max_sco	btru.btri.btri_max_sco
-#define btr_features0	btru.btrf.btrf_page0
-#define btr_features1	btru.btrf.btrf_page1
 #define btr_stats	btru.btrs
 
 /* btr_flags */
@@ -356,7 +330,6 @@ struct btreq {
 #define BTF_INIT_FEATURES	(1\*[Lt]\*[Lt]7)	/* waiting for features */
 #define BTF_NOOP_ON_RESET	(1\*[Lt]\*[Lt]8)	/* wait for No-op on reset */
 #define BTF_INIT_COMMANDS	(1\*[Lt]\*[Lt]9)	/* waiting for supported commands */
-#define BTF_MASTER		(1\*[Lt]\*[Lt]10)	/* request Master role */
 
 struct bt_stats {
 	uint32_t	err_tx;
@@ -374,33 +347,25 @@ struct bt_stats {
 .Ed
 .Bl -tag -width SIOCGBTPOLICY
 .It Dv SIOCGBTINFO
-Get Bluetooth device Info.
-Given the device name, fill in the
+Get Bluetooth device Info. Given the device name, fill in the
 btreq structure including the address field for use with socket addressing
 as above.
 .It Dv SIOCGBTINFOA
-Get Bluetooth device Info from Address.
-Given the device address, fill in the
+Get Bluetooth device Info from Address. Given the device address, fill in the
 btreq structure including the name field.
 .It Dv SIOCNBTINFO
-Next Bluetooth device Info.
-If name field is empty, the first device will be returned.
-Otherwise, the next device will be returned.
-Thus, you can cycle through all devices in the system.
+Next Bluetooth device Info . If name field is empty, the first device
+will be returned. Otherwise, the next device will be returned. Thus, you
+can cycle through all devices in the system.
 .It Dv SIOCSBTFLAGS
-Set Bluetooth device Flags.
-Not all flags are settable.
-.It Dv SIOCGBTFEAT
-Get Bluetooth device Features.
-This returns the cached basic (page 0) and extended (page 1) features.
+Set Bluetooth device Flags. Not all flags are settable.
 .It Dv SIOCSBTPOLICY
-Set Bluetooth device Link Policy.
-Link Policy bits are defined in
+Set Bluetooth device Link Policy. Link Policy bits are defined in
 .In netbt/hci.h ,
 though you can only set bits that the device supports.
 .It Dv SIOCSBTPTYPE
-Set Bluetooth device Packet Types.
-You can only set packet types that the device supports.
+Set Bluetooth device Packet Types. You can only set packet types
+that the device supports.
 .It Dv SIOCGBTSTATS
 Read device statistics.
 .It Dv SIOCZBTSTATS

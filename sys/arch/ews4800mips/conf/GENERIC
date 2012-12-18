@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.39 2012/10/17 14:48:12 apb Exp $
+# $NetBSD: GENERIC,v 1.25 2008/08/10 15:31:20 tls Exp $
 #
 # GENERIC machine description file
 # This machine description file is used to generate the default NetBSD
@@ -25,7 +25,7 @@ include 	"arch/ews4800mips/conf/std.ews4800mips"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.39 $"
+#ident		"GENERIC-$Revision: 1.25 $"
 
 maxusers	16
 
@@ -51,6 +51,9 @@ options 	SYSVMSG			# System V-like message queues
 options 	SYSVSEM			# System V-like semaphores
 options 	SEMMNI=10		# number of semaphore identifiers
 options 	SYSVSHM			# System V shared memory
+options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
+
+options 	LKM			# loadable kernel modules
 
 options 	USERCONF		# userconf(4) support
 #options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
@@ -81,8 +84,6 @@ options 	COMPAT_16	# NetBSD 1.6
 options 	COMPAT_20	# NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0
 options 	COMPAT_40	# NetBSD 4.0
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# 4.3BSD
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
@@ -102,7 +103,7 @@ file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
 file-system	OVERLAY		# overlay file system
-file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
+file-system	PORTAL		# portal file system (still exxperimental)
 file-system	PROCFS		# /proc
 file-system	UMAPFS		# NULLFS + uid and gid remapping
 file-system	UNION		# union file system
@@ -110,14 +111,14 @@ file-system	UNION		# union file system
 #file-system	SMBFS		# experimental - CIFS; also needs nsmb (below)
 file-system	SYSVBFS		# System V boot filesystem.
 file-system	PTYFS		# /dev/pts/N support
-file-system	TMPFS		# Efficient memory file-system
+#file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-options 	QUOTA		# legacy UFS quotas
-options 	QUOTA2		# new, in-filesystem UFS quotas
+options 	QUOTA		# UFS quotas
 #options 	FFS_EI		# FFS Endian Indpendent support
-options 	WAPBL		# File system journaling support
+options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# no FFS snapshot support
@@ -143,7 +144,6 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
-options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -169,7 +169,6 @@ options 	NFS_BOOT_DHCP
 
 # workstation console options
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	WS_KERNEL_FG=WSCOL_GREEN
 options 	WS_KERNEL_BG=WSCOL_BLACK
 
@@ -239,10 +238,9 @@ options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss			# file system snapshot device
-pseudo-device	putter			# for puffs and pud
+pseudo-device	fss		4	# file system snapshot device
 
-pseudo-device	md			# memory disk device (ramdisk)
+pseudo-device	md		1	# memory disk device (ramdisk)
 pseudo-device	vnd			# virtual disk ick
 options 	VND_COMPRESSION		# compressed vnd(4)
 
@@ -277,6 +275,7 @@ pseudo-device   accf_http		# "httpready" accept filter
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
 #pseudo-device	tb		1	# tablet line discipline
+pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 

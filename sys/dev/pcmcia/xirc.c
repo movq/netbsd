@@ -1,4 +1,4 @@
-/*	$NetBSD: xirc.c,v 1.33 2012/02/14 13:51:19 drochner Exp $	*/
+/*	$NetBSD: xirc.c,v 1.25 2008/07/28 14:25:30 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2004 The NetBSD Foundation, Inc.
@@ -31,9 +31,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xirc.c,v 1.33 2012/02/14 13:51:19 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xirc.c,v 1.25 2008/07/28 14:25:30 drochner Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,8 +61,10 @@ __KERNEL_RCSID(0, "$NetBSD: xirc.c,v 1.33 2012/02/14 13:51:19 drochner Exp $");
 #endif
 
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <sys/intr.h>
 #include <sys/bus.h>
@@ -86,7 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: xirc.c,v 1.33 2012/02/14 13:51:19 drochner Exp $");
 #include <dev/pcmcia/if_xireg.h>
 
 struct xirc_softc {
-	device_t sc_dev;		/* generic device glue */
+	struct device sc_dev;		/* generic device glue */
 
 	struct pcmcia_function *sc_pf;	/* our PCMCIA function */
 	void *sc_ih;			/* interrupt handle */
@@ -98,14 +101,14 @@ struct xirc_softc {
 	/*
 	 * Data for the Modem portion.
 	 */
-	device_t sc_modem;
+	struct device *sc_modem;
 	struct pcmcia_io_handle sc_modem_pcioh;
 	int sc_modem_io_window;
 
 	/*
 	 * Data for the Ethernet portion.
 	 */
-	device_t sc_ethernet;
+	struct device *sc_ethernet;
 	struct pcmcia_io_handle sc_ethernet_pcioh;
 	int sc_ethernet_io_window;
 
@@ -118,13 +121,13 @@ struct xirc_softc {
 #define	XIRC_ETHERNET_ALLOCED	0x20
 };
 
-int	xirc_match(device_t, cfdata_t, void *);
-void	xirc_attach(device_t, device_t, void *);
-int	xirc_detach(device_t, int);
-void	xirc_childdet(device_t, device_t);
+int	xirc_match(struct device *, struct cfdata *, void *);
+void	xirc_attach(struct device *, struct device *, void *);
+int	xirc_detach(struct device *, int);
+int	xirc_activate(struct device *, enum devact);
 
-CFATTACH_DECL2_NEW(xirc, sizeof(struct xirc_softc),
-    xirc_match, xirc_attach, xirc_detach, NULL, NULL, xirc_childdet);
+CFATTACH_DECL(xirc, sizeof(struct xirc_softc),
+    xirc_match, xirc_attach, xirc_detach, xirc_activate);
 
 int	xirc_print(void *, const char *);
 
@@ -142,7 +145,7 @@ void	xirc_disable(struct xirc_softc *, int, int);
 int	xirc_intr(void *);
 
 int
-xirc_match(device_t parent, cfdata_t match,
+xirc_match(struct device *parent, struct cfdata *match,
     void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
@@ -165,15 +168,15 @@ xirc_match(device_t parent, cfdata_t match,
 }
 
 void
-xirc_attach(device_t parent, device_t self, void *aux)
+xirc_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct xirc_softc *sc = device_private(self);
+	struct xirc_softc *sc = (void *)self;
 	struct pcmcia_attach_args *pa = aux;
 	struct pcmcia_config_entry *cfe;
 	int rv;
 	int error;
-
-	sc->sc_dev = self;
 
 	sc->sc_pf = pa->pf;
 
@@ -279,7 +282,9 @@ fail:
 }
 
 int
-xirc_manfid_ciscallback(struct pcmcia_tuple *tuple, void *arg)
+xirc_manfid_ciscallback(tuple, arg)
+	struct pcmcia_tuple *tuple;
+	void *arg;
 {
 	u_int16_t *id = arg;
 
@@ -295,7 +300,8 @@ xirc_manfid_ciscallback(struct pcmcia_tuple *tuple, void *arg)
 }
 
 struct pcmcia_config_entry *
-xirc_mako_alloc(struct xirc_softc *sc)
+xirc_mako_alloc(sc)
+	struct xirc_softc *sc;
 {
 	struct pcmcia_config_entry *cfe;
 
@@ -330,7 +336,8 @@ xirc_mako_alloc(struct xirc_softc *sc)
 }
 
 struct pcmcia_config_entry *
-xirc_dingo_alloc_modem(struct xirc_softc *sc)
+xirc_dingo_alloc_modem(sc)
+	struct xirc_softc *sc;
 {
 	struct pcmcia_config_entry *cfe;
 
@@ -352,7 +359,8 @@ xirc_dingo_alloc_modem(struct xirc_softc *sc)
 }
 
 struct pcmcia_config_entry *
-xirc_dingo_alloc_ethernet(struct xirc_softc *sc)
+xirc_dingo_alloc_ethernet(sc)
+	struct xirc_softc *sc;
 {
 	struct pcmcia_config_entry *cfe;
 	bus_addr_t port;
@@ -372,7 +380,9 @@ xirc_dingo_alloc_ethernet(struct xirc_softc *sc)
 }
 
 int
-xirc_print(void *aux, const char *pnp)
+xirc_print(aux, pnp)
+	void *aux;
+	const char *pnp;
 {
 	const char *name = aux;
 
@@ -382,32 +392,26 @@ xirc_print(void *aux, const char *pnp)
 	return (UNCONF);
 }
 
-void
-xirc_childdet(device_t self, device_t child)
-{
-	struct xirc_softc *sc = device_private(self);
-
-	if (sc->sc_ethernet == child)
-		sc->sc_ethernet = NULL;
-
-	if (sc->sc_modem == child)
-		sc->sc_modem = NULL;
-}
-
 int
-xirc_detach(device_t self, int flags)
+xirc_detach(self, flags)
+	struct device *self;
+	int flags;
 {
-	struct xirc_softc *sc = device_private(self);
+	struct xirc_softc *sc = (void *)self;
 	int rv;
 
 	if (sc->sc_ethernet != NULL) {
-		if ((rv = config_detach(sc->sc_ethernet, flags)) != 0)
-			return rv;
+		rv = config_detach(sc->sc_ethernet, flags);
+		if (rv != 0)
+			return (rv);
+		sc->sc_ethernet = NULL;
 	}
 
 	if (sc->sc_modem != NULL) {
-		if ((rv = config_detach(sc->sc_modem, flags)) != 0)
-			return rv;
+		rv = config_detach(sc->sc_modem, flags);
+		if (rv != 0)
+			return (rv);
+		sc->sc_modem = NULL;
 	}
 
 	/* Unmap our i/o windows. */
@@ -427,7 +431,41 @@ xirc_detach(device_t self, int flags)
 }
 
 int
-xirc_intr(void *arg)
+xirc_activate(self, act)
+	struct device *self;
+	enum devact act;
+{
+	struct xirc_softc *sc = (void *)self;
+	int s, rv = 0;
+
+	s = splhigh();
+	switch (act) {
+	case DVACT_ACTIVATE:
+		rv = EOPNOTSUPP;
+		break;
+
+	case DVACT_DEACTIVATE:
+		if (sc->sc_ethernet != NULL) {
+			rv = config_deactivate(sc->sc_ethernet);
+			if (rv != 0)
+				goto out;
+		}
+
+		if (sc->sc_modem != NULL) {
+			rv = config_deactivate(sc->sc_modem);
+			if (rv != 0)
+				goto out;
+		}
+		break;
+	}
+ out:
+	splx(s);
+	return (rv);
+}
+
+int
+xirc_intr(arg)
+	void *arg;
 {
 	struct xirc_softc *sc = arg;
 	int rval = 0;
@@ -448,12 +486,14 @@ xirc_intr(void *arg)
 }
 
 int
-xirc_enable(struct xirc_softc *sc, int flag, int media)
+xirc_enable(sc, flag, media)
+	struct xirc_softc *sc;
+	int flag, media;
 {
 	int error;
 
 	if ((sc->sc_flags & flag) == flag) {
-		printf("%s: already enabled\n", device_xname(sc->sc_dev));
+		printf("%s: already enabled\n", device_xname(&sc->sc_dev));
 		return (0);
 	}
 
@@ -496,11 +536,13 @@ xirc_enable(struct xirc_softc *sc, int flag, int media)
 }
 
 void
-xirc_disable(struct xirc_softc *sc, int flag, int media)
+xirc_disable(sc, flag, media)
+	struct xirc_softc *sc;
+	int flag, media;
 {
 
 	if ((sc->sc_flags & flag) == 0) {
-		printf("%s: already disabled\n", device_xname(sc->sc_dev));
+		printf("%s: already disabled\n", device_xname(&sc->sc_dev));
 		return;
 	}
 
@@ -529,7 +571,7 @@ int	com_xirc_detach(device_t, int);
 
 /* No xirc-specific goo in the softc; it's all in the parent. */
 CFATTACH_DECL_NEW(com_xirc, sizeof(struct com_softc),
-    com_xirc_match, com_xirc_attach, com_detach, NULL);
+    com_xirc_match, com_xirc_attach, com_detach, com_activate);
 
 int	com_xirc_enable(struct com_softc *);
 void	com_xirc_disable(struct com_softc *);
@@ -598,19 +640,20 @@ com_xirc_disable(struct com_softc *sc)
 /****** Here begins the xi attachment code. ******/
 
 #if NXI_XIRC > 0
-int	xi_xirc_match(device_t, cfdata_t, void *);
-void	xi_xirc_attach(device_t, device_t, void *);
+int	xi_xirc_match(struct device *, struct cfdata *, void *);
+void	xi_xirc_attach(struct device *, struct device *, void *);
 
 /* No xirc-specific goo in the softc; it's all in the parent. */
-CFATTACH_DECL_NEW(xi_xirc, sizeof(struct xi_softc),
-    xi_xirc_match, xi_xirc_attach, xi_detach, NULL);
+CFATTACH_DECL(xi_xirc, sizeof(struct xi_softc),
+    xi_xirc_match, xi_xirc_attach, xi_detach, xi_activate);
 
 int	xi_xirc_enable(struct xi_softc *);
 void	xi_xirc_disable(struct xi_softc *);
 int	xi_xirc_lan_nid_ciscallback(struct pcmcia_tuple *, void *);
 
 int
-xi_xirc_match(device_t parent, cfdata_t match, void *aux)
+xi_xirc_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	extern struct cfdriver xi_cd;
 	const char *name = aux;
@@ -622,13 +665,11 @@ xi_xirc_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-xi_xirc_attach(device_t parent, device_t self, void *aux)
+xi_xirc_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct xi_softc *sc = device_private(self);
-	struct xirc_softc *msc = device_private(parent);
+	struct xi_softc *sc = (void *)self;
+	struct xirc_softc *msc = (void *)parent;
 	u_int8_t myla[ETHER_ADDR_LEN];
-
-	sc->sc_dev = self;
 
 	aprint_normal("\n");
 
@@ -640,7 +681,7 @@ xi_xirc_attach(device_t parent, device_t self, void *aux)
 	sc->sc_enable = xi_xirc_enable;
 	sc->sc_disable = xi_xirc_disable;
 
-	if (!pcmcia_scan_cis(device_parent(msc->sc_dev),
+	if (!pcmcia_scan_cis(device_parent(&msc->sc_dev),
 	    xi_xirc_lan_nid_ciscallback, myla)) {
 		aprint_error_dev(self, "can't find MAC address\n");
 		return;
@@ -651,23 +692,29 @@ xi_xirc_attach(device_t parent, device_t self, void *aux)
 }
 
 int
-xi_xirc_enable(struct xi_softc *sc)
+xi_xirc_enable(sc)
+	struct xi_softc *sc;
 {
-	struct xirc_softc *msc = device_private(device_parent(sc->sc_dev));
+	struct xirc_softc *msc =
+	    (struct xirc_softc *)device_parent(&sc->sc_dev);
 
 	return (xirc_enable(msc, XIRC_ETHERNET_ENABLED, XIMEDIA_ETHER));
 }
 
 void
-xi_xirc_disable(struct xi_softc *sc)
+xi_xirc_disable(sc)
+	struct xi_softc *sc;
 {
-	struct xirc_softc *msc = device_private(device_parent(sc->sc_dev));
+	struct xirc_softc *msc =
+	    (struct xirc_softc *)device_parent(&sc->sc_dev);
 
 	xirc_disable(msc, XIRC_ETHERNET_ENABLED, XIMEDIA_ETHER);
 }
 
 int
-xi_xirc_lan_nid_ciscallback(struct pcmcia_tuple *tuple, void *arg)
+xi_xirc_lan_nid_ciscallback(tuple, arg)
+	struct pcmcia_tuple *tuple;
+	void *arg;
 {
 	u_int8_t *myla = arg;
 	int i;

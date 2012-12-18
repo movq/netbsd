@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_vnops.c,v 1.34 2012/03/13 18:40:37 elad Exp $	*/
+/*	$NetBSD: filecore_vnops.c,v 1.27 2008/05/16 09:21:59 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1994 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_vnops.c,v 1.34 2012/03/13 18:40:37 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_vnops.c,v 1.27 2008/05/16 09:21:59 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,17 +91,30 @@ __KERNEL_RCSID(0, "$NetBSD: filecore_vnops.c,v 1.34 2012/03/13 18:40:37 elad Exp
 #include <fs/filecorefs/filecore_extern.h>
 #include <fs/filecorefs/filecore_node.h>
 
-static int
-filecore_check_possible(struct vnode *vp, struct filecore_node *ip,
-    mode_t mode)
+/*
+ * Check mode permission on inode pointer. Mode is READ, WRITE or EXEC.
+ * The mode is shifted to select the owner/group/other fields. The
+ * super user is granted all permissions.
+ */
+int
+filecore_access(v)
+	void *v;
 {
+	struct vop_access_args /* {
+		struct vnode *a_vp;
+		int  a_mode;
+		kauth_cred_t a_cred;
+	} */ *ap = v;
+	struct vnode *vp = ap->a_vp;
+	struct filecore_node *ip = VTOI(vp);
+	struct filecore_mnt *fcmp = ip->i_mnt;
 
 	/*
 	 * Disallow write attempts unless the file is a socket,
 	 * fifo, or a block or character device resident on the
 	 * file system.
 	 */
-	if (mode & VWRITE) {
+	if (ap->a_mode & VWRITE) {
 		switch (vp->v_type) {
 		case VDIR:
 		case VLNK:
@@ -112,49 +125,13 @@ filecore_check_possible(struct vnode *vp, struct filecore_node *ip,
 		}
 	}
 
-	return 0;
-}
-
-/*
- * Check mode permission on inode pointer. Mode is READ, WRITE or EXEC.
- * The mode is shifted to select the owner/group/other fields. The
- * super user is granted all permissions.
- */
-static int
-filecore_check_permitted(struct vnode *vp, struct filecore_node *ip,
-    mode_t mode, kauth_cred_t cred)
-{
-	struct filecore_mnt *fcmp = ip->i_mnt;
-
-	return kauth_authorize_vnode(cred, kauth_access_action(mode,
-	    vp->v_type, filecore_mode(ip)), vp, NULL,
-	    genfs_can_access(vp->v_type, filecore_mode(ip), fcmp->fc_uid,
-	    fcmp->fc_gid, mode, cred));
+	return (vaccess(vp->v_type, filecore_mode(ip),
+	    fcmp->fc_uid, fcmp->fc_gid, ap->a_mode, ap->a_cred));
 }
 
 int
-filecore_access(void *v)
-{
-	struct vop_access_args /* {
-		struct vnode *a_vp;
-		int  a_mode;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
-	struct filecore_node *ip = VTOI(vp);
-	int error;
-
-	error = filecore_check_possible(vp, ip, ap->a_mode);
-	if (error)
-		return error;
-
-	error = filecore_check_permitted(vp, ip, ap->a_mode, ap->a_cred);
-
-	return error;
-}
-
-int
-filecore_getattr(void *v)
+filecore_getattr(v)
+	void *v;
 {
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
@@ -191,7 +168,8 @@ filecore_getattr(void *v)
  * Vnode op for reading.
  */
 int
-filecore_read(void *v)
+filecore_read(v)
+	void *v;
 {
 	struct vop_read_args /* {
 		struct vnode *a_vp;
@@ -223,14 +201,19 @@ filecore_read(void *v)
 		error = 0;
 
 		while (uio->uio_resid > 0) {
+			void *win;
+			int flags;
 			vsize_t bytelen = MIN(ip->i_size - uio->uio_offset,
 					      uio->uio_resid);
 
 			if (bytelen == 0) {
 				break;
 			}
-			error = ubc_uiomove(&vp->v_uobj, uio, bytelen, advice,
-			    UBC_READ | UBC_PARTIALOK | UBC_UNMAP_FLAG(vp));
+			win = ubc_alloc(&vp->v_uobj, uio->uio_offset,
+					&bytelen, advice, UBC_READ);
+			error = uiomove(win, bytelen, uio);
+			flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
+			ubc_release(win, flags);
 			if (error) {
 				break;
 			}
@@ -285,7 +268,8 @@ out:
  * Vnode op for readdir
  */
 int
-filecore_readdir(void *v)
+filecore_readdir(v)
+	void *v;
 {
 	struct vop_readdir_args /* {
 		struct vnode *a_vp;
@@ -335,7 +319,7 @@ filecore_readdir(void *v)
 		cookies = malloc(ncookies * sizeof(off_t), M_TEMP, M_WAITOK);
 	}
 
-	de = kmem_zalloc(sizeof(struct dirent), KM_SLEEP);
+	de = malloc(sizeof(struct dirent), M_FILECORETMP, M_WAITOK | M_ZERO);
 
 	for (; ; i++) {
 		switch (i) {
@@ -399,7 +383,7 @@ out:
 #endif
 	brelse (bp, 0);
 
-	kmem_free(de, sizeof(*de));
+	free(de, M_FILECORETMP);
 
 	return (error);
 }
@@ -411,7 +395,8 @@ out:
  * But otherwise the block read here is in the block buffer two times.
  */
 int
-filecore_readlink(void *v)
+filecore_readlink(v)
+	void *v;
 {
 #if 0
 	struct vop_readlink_args /* {
@@ -425,7 +410,8 @@ filecore_readlink(void *v)
 }
 
 int
-filecore_link(void *v)
+filecore_link(v)
+	void *v;
 {
 	struct vop_link_args /* {
 		struct vnode *a_dvp;
@@ -439,7 +425,8 @@ filecore_link(void *v)
 }
 
 int
-filecore_symlink(void *v)
+filecore_symlink(v)
+	void *v;
 {
 	struct vop_symlink_args /* {
 		struct vnode *a_dvp;
@@ -459,7 +446,8 @@ filecore_symlink(void *v)
  * then call the device strategy routine.
  */
 int
-filecore_strategy(void *v)
+filecore_strategy(v)
+	void *v;
 {
 	struct vop_strategy_args /* {
 		struct vnode *a_vp;
@@ -494,7 +482,8 @@ filecore_strategy(void *v)
  */
 /*ARGSUSED*/
 int
-filecore_print(void *v)
+filecore_print(v)
+	void *v;
 {
 
 	printf("tag VT_FILECORE, filecore vnode\n");
@@ -505,7 +494,8 @@ filecore_print(void *v)
  * Return POSIX pathconf information applicable to filecore filesystems.
  */
 int
-filecore_pathconf(void *v)
+filecore_pathconf(v)
+	void *v;
 {
 	struct vop_pathconf_args /* {
 		struct vnode *a_vp;
@@ -561,7 +551,7 @@ filecore_pathconf(void *v)
 /*
  * Global vfs data structures for filecore
  */
-int (**filecore_vnodeop_p)(void *);
+int (**filecore_vnodeop_p) __P((void *));
 const struct vnodeopv_entry_desc filecore_vnodeop_entries[] = {
 	{ &vop_default_desc, vn_default_error },
 	{ &vop_lookup_desc, filecore_lookup },		/* lookup */

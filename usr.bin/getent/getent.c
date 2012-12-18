@@ -1,4 +1,4 @@
-/*	$NetBSD: getent.c,v 1.19 2012/03/15 02:02:23 joerg Exp $	*/
+/*	$NetBSD: getent.c,v 1.14 2008/05/14 11:44:09 tron Exp $	*/
 
 /*-
  * Copyright (c) 2004-2006 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: getent.c,v 1.19 2012/03/15 02:02:23 joerg Exp $");
+__RCSID("$NetBSD: getent.c,v 1.14 2008/05/14 11:44:09 tron Exp $");
 #endif /* not lint */
 
 #include <sys/socket.h>
@@ -80,6 +80,7 @@ static int	protocols(int, char *[]);
 static int	rpc(int, char *[]);
 static int	services(int, char *[]);
 static int	shells(int, char *[]);
+static int	termcap(int, char *[]);
 
 enum {
 	RV_OK		= 0,
@@ -100,11 +101,12 @@ static struct getentdb {
 	{	"netgroup",	netgroup,	},
 	{	"networks",	networks,	},
 	{	"passwd",	passwd,		},
-	{	"printcap",	printcap,	},
+	{	"princap",	printcap,	},
 	{	"protocols",	protocols,	},
 	{	"rpc",		rpc,		},
 	{	"services",	services,	},
 	{	"shells",	shells,		},
+	{	"termcap",	termcap,	},
 
 	{	NULL,		NULL,		},
 };
@@ -132,17 +134,12 @@ static int
 usage(void)
 {
 	struct getentdb	*curdb;
-	size_t i;
 
 	(void)fprintf(stderr, "Usage: %s database [key ...]\n",
 	    getprogname());
-	(void)fprintf(stderr, "\tdatabase may be one of:");
-	for (i = 0, curdb = databases; curdb->name != NULL; curdb++, i++) {
-		if (i % 7 == 0)
-			(void)fputs("\n\t\t", stderr);
-		(void)fprintf(stderr, "%s%s", i % 7 == 0 ? "" : " ",
-		    curdb->name);
-	}
+	(void)fprintf(stderr, "       database may be one of:\n\t");
+	for (curdb = databases; curdb->name != NULL; curdb++)
+		(void)fprintf(stderr, " %s", curdb->name);
 	(void)fprintf(stderr, "\n");
 	exit(RV_USAGE);
 	/* NOTREACHED */
@@ -175,7 +172,7 @@ parsenum(const char *word, unsigned long *result)
  *	then the aliases (beginning with prefix, separated by sep),
  *	then a newline
  */
-static __printflike(4, 5) void
+static void
 printfmtstrings(char *strings[], const char *prefix, const char *sep,
     const char *fmt, ...)
 {
@@ -597,8 +594,7 @@ handlecap(const char *db, int argc, char *argv[])
 	static const char sfx[] = "=#:";
 	const char *db_array[] = { db, NULL };
 	char	*b, *cap;
-	int	i, rv, c;
-	size_t	j;
+	int	i, j, rv, c;
 	int	expand = 1, recurse = 0, pretty = 0;
 
 	assert(argc > 1);
@@ -685,6 +681,15 @@ disktab(int argc, char *argv[])
 	return handlecap(_PATH_DISKTAB, argc, argv);
 }
 
+		/*
+		 * termcap
+		 */
+
+static int
+termcap(int argc, char *argv[])
+{
+	return handlecap(_PATH_TERMCAP, argc, argv);
+}
 		/*
 		 * protocols
 		 */

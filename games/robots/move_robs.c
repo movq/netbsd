@@ -1,4 +1,4 @@
-/*	$NetBSD: move_robs.c,v 1.10 2009/07/20 06:39:06 dholland Exp $	*/
+/*	$NetBSD: move_robs.c,v 1.7 2003/08/07 09:37:37 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,32 +34,30 @@
 #if 0
 static char sccsid[] = "@(#)move_robs.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: move_robs.c,v 1.10 2009/07/20 06:39:06 dholland Exp $");
+__RCSID("$NetBSD: move_robs.c,v 1.7 2003/08/07 09:37:37 agc Exp $");
 #endif
 #endif /* not lint */
 
-#include <curses.h>
-#include <signal.h>
-#include <unistd.h>
-#include "robots.h"
+# include	"robots.h"
 
 /*
  * move_robots:
  *	Move the robots around
  */
 void
-move_robots(int was_sig)
+move_robots(was_sig)
+	int	was_sig;
 {
-	COORD *rp;
+	COORD		*rp;
 
 	if (Real_time)
 		signal(SIGALRM, move_robots);
-#ifdef DEBUG
+# ifdef DEBUG
 	move(Min.y, Min.x);
 	addch(inch());
 	move(Max.y, Max.x);
 	addch(inch());
-#endif /* DEBUG */
+# endif /* DEBUG */
 	for (rp = Robots; rp < &Robots[MAXROBOTS]; rp++) {
 		if (rp->y < 0)
 			continue;
@@ -86,7 +84,7 @@ move_robots(int was_sig)
 		if (rp->y < 0)
 			continue;
 		else if (rp->y == My_pos.y && rp->x == My_pos.x)
-			Dead = true;
+			Dead = TRUE;
 		else if (Field[rp->y][rp->x] > 1) {
 			mvaddch(rp->y, rp->x, HEAP);
 			Scrap[Num_scrap++] = *rp;
@@ -114,14 +112,14 @@ move_robots(int was_sig)
 			longjmp(End_move, 0);
 	}
 
-#ifdef DEBUG
+# ifdef DEBUG
 	standout();
 	move(Min.y, Min.x);
 	addch(inch());
 	move(Max.y, Max.x);
 	addch(inch());
 	standend();
-#endif /* DEBUG */
+# endif /* DEBUG */
 	if (Real_time)
 		alarm(3);
 }
@@ -131,7 +129,8 @@ move_robots(int was_sig)
  *	Add a score to the overall point total
  */
 void
-add_score(int add)
+add_score(add)
+	int	add;
 {
 	Score += add;
 	move(Y_SCORE, X_SCORE);
@@ -143,7 +142,8 @@ add_score(int add)
  *	Return the sign of the number
  */
 int
-sign(int n)
+sign(n)
+	int	n;
 {
 	if (n < 0)
 		return -1;

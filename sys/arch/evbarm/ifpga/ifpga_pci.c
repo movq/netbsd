@@ -1,4 +1,4 @@
-/*	$NetBSD: ifpga_pci.c,v 1.15 2012/09/07 04:32:03 matt Exp $	*/
+/*	$NetBSD: ifpga_pci.c,v 1.12 2005/12/11 12:17:09 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 ARM Ltd
@@ -64,7 +64,7 @@
 #define _ARM32_BUS_DMA_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ifpga_pci.c,v 1.15 2012/09/07 04:32:03 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ifpga_pci.c,v 1.12 2005/12/11 12:17:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: ifpga_pci.c,v 1.15 2012/09/07 04:32:03 matt Exp $");
 #include <evbarm/dev/v360reg.h>
 
 
-void		ifpga_pci_attach_hook (device_t, device_t,
+void		ifpga_pci_attach_hook (struct device *, struct device *,
 		    struct pcibus_attach_args *);
 int		ifpga_pci_bus_maxdevs (void *, int);
 pcitag_t	ifpga_pci_make_tag (void *, int, int, int);
@@ -93,7 +93,7 @@ void		ifpga_pci_decompose_tag (void *, pcitag_t, int *, int *,
 		    int *);
 pcireg_t	ifpga_pci_conf_read (void *, pcitag_t, int);
 void		ifpga_pci_conf_write (void *, pcitag_t, int, pcireg_t);
-int		ifpga_pci_intr_map (const struct pci_attach_args *,
+int		ifpga_pci_intr_map (struct pci_attach_args *,
 		    pci_intr_handle_t *);
 const char	*ifpga_pci_intr_string (void *, pci_intr_handle_t);
 const struct evcnt *ifpga_pci_intr_evcnt (void *, pci_intr_handle_t);
@@ -114,11 +114,7 @@ struct arm32_pci_chipset ifpga_pci_chipset = {
 	ifpga_pci_intr_string,
 	ifpga_pci_intr_evcnt,
 	ifpga_pci_intr_establish,
-	ifpga_pci_intr_disestablish,
-#ifdef __HAVE_PCI_CONF_HOOK
-	NULL,
-#endif
-	ifpga_pci_conf_interrupt,
+	ifpga_pci_intr_disestablish
 };
 
 /*
@@ -160,7 +156,7 @@ pci_intr(void *arg)
 
 
 void
-ifpga_pci_attach_hook(device_t parent, device_t self,
+ifpga_pci_attach_hook(struct device *parent, struct device *self,
     struct pcibus_attach_args *pba)
 {
 #ifdef PCI_DEBUG
@@ -300,7 +296,7 @@ ifpga_pci_conf_write(void *pcv, pcitag_t tag, int reg, pcireg_t data)
 }
 
 int
-ifpga_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+ifpga_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int line = pa->pa_intrline;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: apm.c,v 1.28 2012/09/30 21:36:19 dsl Exp $ */
+/*	$NetBSD: apm.c,v 1.22.6.1 2010/03/13 07:27:09 riz Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -33,9 +33,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.28 2012/09/30 21:36:19 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.22.6.1 2010/03/13 07:27:09 riz Exp $");
 
 #include "opt_apm.h"
+
+#ifdef APM_NOIDLE
+#error APM_NOIDLE option deprecated; use APM_NO_IDLE instead
+#endif
 
 #if defined(DEBUG) && !defined(APMDEBUG)
 #define	APMDEBUG
@@ -47,6 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.28 2012/09/30 21:36:19 dsl Exp $");
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
+#include <sys/user.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/fcntl.h>
@@ -56,6 +61,8 @@ __KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.28 2012/09/30 21:36:19 dsl Exp $");
 #include <sys/conf.h>
 
 #include <dev/apm/apmvar.h>
+
+#include <machine/stdarg.h>
 
 #ifdef APMDEBUG
 #define DPRINTF(f, x)		do { if (apmdebug & (f)) printf x; } while (0)
@@ -119,6 +126,17 @@ const struct cdevsw apm_cdevsw = {
 };
 
 /* configurable variables */
+int	apm_bogus_bios = 0;
+#ifdef APM_DISABLE
+int	apm_enabled = 0;
+#else
+int	apm_enabled = 1;
+#endif
+#ifdef APM_NO_IDLE
+int	apm_do_idle = 0;
+#else
+int	apm_do_idle = 1;
+#endif
 #ifdef APM_NO_STANDBY
 int	apm_do_standby = 0;
 #else
@@ -133,6 +151,16 @@ int	apm_v11_enabled = 1;
 int	apm_v12_enabled = 0;
 #else
 int	apm_v12_enabled = 1;
+#endif
+#ifdef APM_FORCE_64K_SEGMENTS
+int	apm_force_64k_segments = 1;
+#else
+int	apm_force_64k_segments = 0;
+#endif
+#ifdef APM_ALLOW_BOGUS_SEGMENTS
+int	apm_allow_bogus_segments = 1;
+#else
+int	apm_allow_bogus_segments = 0;
 #endif
 
 /* variables used during operation (XXX cgd) */
@@ -281,7 +309,7 @@ apm_suspend(struct apm_softc *sc)
 	sc->sc_power_state = PWR_SUSPEND;
  
 	if (!(sc->sc_hwflags & APM_F_DONT_RUN_HOOKS)) {
-		pmf_system_suspend(PMF_Q_NONE);
+		pmf_system_suspend(PMF_F_NONE);
 		apm_spl = splhigh();
 	}
 
@@ -309,7 +337,7 @@ apm_standby(struct apm_softc *sc)
 	sc->sc_power_state = PWR_STANDBY;
 
 	if (!(sc->sc_hwflags & APM_F_DONT_RUN_HOOKS)) {
-		pmf_system_suspend(PMF_Q_NONE);
+		pmf_system_suspend(PMF_F_NONE);
 		apm_spl = splhigh();
 	}
 	error = (*sc->sc_ops->aa_set_powstate)(sc->sc_cookie, APM_DEV_ALLDEVS,
@@ -341,7 +369,7 @@ apm_resume(struct apm_softc *sc, u_int event_type, u_int event_info)
 	inittodr(time_second);
 	if (!(sc->sc_hwflags & APM_F_DONT_RUN_HOOKS)) {
 		splx(apm_spl);
-		pmf_system_resume(PMF_Q_NONE);
+		pmf_system_resume(PMF_F_NONE);
 	}
 
 	apm_record_event(sc, event_type);
@@ -572,6 +600,20 @@ apm_set_ver(struct apm_softc *sc)
 ok:
 	aprint_normal("Power Management spec V%d.%d", apm_majver, apm_minver);
 	apm_inited = 1;
+	if (sc->sc_detail & APM_IDLE_SLOWS) {
+#ifdef DIAGNOSTIC
+		/* not relevant often */
+		aprint_normal(" (slowidle)");
+#endif
+		/* leave apm_do_idle at its user-configured setting */
+	} else
+		apm_do_idle = 0;
+#ifdef DIAGNOSTIC
+	if (sc->sc_detail & APM_BIOS_PM_DISABLED)
+		aprint_normal(" (BIOS mgmt disabled)");
+	if (sc->sc_detail & APM_BIOS_PM_DISENGAGED)
+		aprint_normal(" (BIOS managing devices)");
+#endif
 }
 
 int
@@ -796,7 +838,6 @@ apmioctl(dev_t dev, u_long cmd, void *data, int flag,
 		}
 		break;
 
-	case OAPM_IOC_GETPOWER:
 	case APM_IOC_GETPOWER:
 		powerp = (struct apm_power_info *)data;
 		if ((error = (*sc->sc_ops->aa_get_powstat)(sc->sc_cookie, 0,

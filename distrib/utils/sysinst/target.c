@@ -1,4 +1,4 @@
-/*	$NetBSD: target.c,v 1.55 2012/04/06 23:48:54 riz Exp $	*/
+/*	$NetBSD: target.c,v 1.51 2006/10/23 19:44:57 he Exp $	*/
 
 /*
  * Copyright 1997 Jonathan Stone
@@ -71,7 +71,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: target.c,v 1.55 2012/04/06 23:48:54 riz Exp $");
+__RCSID("$NetBSD: target.c,v 1.51 2006/10/23 19:44:57 he Exp $");
 #endif
 
 /*
@@ -110,6 +110,8 @@ int	target_test(unsigned int mode, const char *path);
 int	target_test_dir (const char *path);	/* deprecated */
 int	target_test_file (const char *path);	/* deprecated */
 int	target_test_symlink (const char *path);	/* deprecated */
+
+void backtowin(void);
 
 void unwind_mounts(void);
 
@@ -284,11 +286,11 @@ do_target_chdir(const char *dir, int must_succeed)
 	/* chdir returns -1 on error and sets errno. */
 	if (chdir(tgt_dir) < 0)
 		error = errno;
-	if (logfp) {
+	if (logging) {
 		fprintf(logfp, "cd to %s\n", tgt_dir);
 		fflush(logfp);
 	}
-	if (script) {
+	if (scripting) {
 		scripting_fprintf(NULL, "cd %s\n", tgt_dir);
 		fflush(script);
 	}
@@ -296,7 +298,7 @@ do_target_chdir(const char *dir, int must_succeed)
 	if (error && must_succeed) {
 		fprintf(stderr, msg_string(MSG_realdir),
 		       target_prefix(), strerror(error));
-		if (logfp)
+		if (logging)
 			fprintf(logfp, msg_string(MSG_realdir),
 			       target_prefix(), strerror(error));
 		exit(1);
@@ -465,7 +467,7 @@ target_collect_file(int kind, char **buffer, const char *name)
 #ifdef	DEBUG
 	printf("collect real name %s\n", realname);
 #endif
-	return collect(kind, buffer, "%s", realname);
+	return collect(kind, buffer, realname);
 }
 
 /*
@@ -537,10 +539,4 @@ target_symlink_exists_p(const char *path)
 {
 
 	return (target_test_symlink(path) == 0);
-}
-
-int
-target_mounted(void)
-{
-	return (unwind_mountlist != NULL);
 }

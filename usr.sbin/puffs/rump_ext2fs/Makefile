@@ -1,14 +1,11 @@
-#	$NetBSD: Makefile,v 1.6 2010/01/25 15:55:36 pooka Exp $
+#	$NetBSD: Makefile,v 1.2 2008/08/05 20:57:46 pooka Exp $
 #
-
-.include <bsd.own.mk>
 
 MOUNTNAME=	ext2fs
 
-LDADD+=		-lrumpfs_ffs
-DPADD+=		${LIBRUMPFS_FFS}
+LDADD+=		-lrumpfs_ext2fs -lrumpfs_ufs -lrumpfs_ffs
+DPADD+=		${LIBRUMPFS_EXT2FS} ${LIBRUMPFS_UFS} ${LIBRUMPFS_FFS}
 
 ISRUMP=		# yea baby
-RUMP_DISKFS=
 
 .include <bsd.prog.mk>

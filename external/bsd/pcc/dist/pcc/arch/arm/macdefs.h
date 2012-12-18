@@ -1,5 +1,4 @@
-/*	Id: macdefs.h,v 1.14 2011/06/05 10:19:24 ragge Exp 	*/	
-/*	$NetBSD: macdefs.h,v 1.1.1.4 2011/09/01 12:46:31 plunky Exp $	*/
+/*	$Id: macdefs.h,v 1.1.1.1 2008/08/24 05:32:53 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -86,6 +85,7 @@
 #define	MAX_ULONGLONG	0xffffffffffffffffULL
 
 #define	BOOL_TYPE	INT	/* what used to store _Bool */
+#define	WCHAR_TYPE	INT	/* what used to store wchar_t */
 
 /*
  * Use large-enough types.
@@ -100,6 +100,8 @@ typedef long long OFFSZ;
 #define STAB_LINE_ABSOLUTE	/* S_LINE fields use absolute addresses */
 
 #undef	FIELDOPS		/* no bit-field instructions */
+
+#define ENUMSIZE(high,low) INT	/* enums are always stored in full int */
 
 /* Definitions mostly used in pass2 */
 
@@ -214,7 +216,7 @@ typedef long long OFFSZ;
 #define AUTOINIT	(12*8)	/* # bits above fp where automatics start */
 
 #undef	FIELDOPS		/* no bit-field instructions */
-#define TARGET_ENDIAN TARGET_LE
+#define RTOLBYTES 1		/* bytes are numbered right to left */
 
 /* XXX - to die */
 #define FPREG   FP	/* frame pointer */

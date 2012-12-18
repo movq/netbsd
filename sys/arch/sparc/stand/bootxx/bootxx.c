@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.c,v 1.25 2009/10/26 19:16:57 cegger Exp $ */
+/*	$NetBSD: bootxx.c,v 1.20 2008/04/28 20:23:36 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,6 @@
 
 #include <sys/param.h>
 #include <sys/exec.h>
-#include <sys/exec_aout.h>
 #include <sys/bootblock.h>
 
 #include <lib/libkern/libkern.h>
@@ -126,18 +125,32 @@ loadboot(struct open_file *f, char *addr)
 			printf("%s: read failure", progname);
 			_rtt();
 		}
-		memcpy(addr, buf, bbinfo.bbi_block_size);
+		bcopy(buf, addr, bbinfo.bbi_block_size);
 		if (n != bbinfo.bbi_block_size)
 			panic("%s: short read", progname);
 		if (i == 0) {
 			int m = N_GETMAGIC(*(struct exec *)addr);
 			if (m == ZMAGIC || m == NMAGIC || m == OMAGIC) {
 				/* Move exec header out of the way */
-				memcpy(addr - sizeof(struct exec), addr, n);
+				bcopy(addr, addr - sizeof(struct exec), n);
 				addr -= sizeof(struct exec);
 			}
 		}
 		addr += n;
 	}
 
+}
+
+/*
+ * We don't need the overlap handling feature that the libkern version
+ * of bcopy() provides. We DO need code compactness..
+ */
+void
+bcopy(const void *src, void *dst, size_t n)
+{
+	const char *p = src;
+	char *q = dst;
+
+	while (n-- > 0)
+		*q++ = *p++;
 }

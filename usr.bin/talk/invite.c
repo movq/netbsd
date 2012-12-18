@@ -1,4 +1,4 @@
-/*	$NetBSD: invite.c,v 1.9 2011/09/06 18:32:03 joerg Exp $	*/
+/*	$NetBSD: invite.c,v 1.7 2005/09/24 16:40:01 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)invite.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: invite.c,v 1.9 2011/09/06 18:32:03 joerg Exp $");
+__RCSID("$NetBSD: invite.c,v 1.7 2005/09/24 16:40:01 christos Exp $");
 #endif /* not lint */
 
 #include "talk.h"
@@ -57,11 +57,11 @@ __RCSID("$NetBSD: invite.c,v 1.9 2011/09/06 18:32:03 joerg Exp $");
  * These are used to delete the 
  * invitations.
  */
-static int	local_id, remote_id;
-static jmp_buf invitebuf;
+int	local_id, remote_id;
+jmp_buf invitebuf;
 
 void
-invite_remote(void)
+invite_remote()
 {
 	int new_sockt;
 	struct itimerval itimer;
@@ -117,7 +117,8 @@ invite_remote(void)
  * Routine called on interrupt to re-invite the callee
  */
 void
-re_invite(int dummy)
+re_invite(dummy)
+	int dummy;
 {
 
 	message("Ringing your party again");
@@ -128,7 +129,7 @@ re_invite(int dummy)
 	longjmp(invitebuf, 1);
 }
 
-static	const char *answers[] = {
+static	char *answers[] = {
 	"answer #0",					/* SUCCESS */
 	"Your party is not logged on",			/* NOT_HERE */
 	"Target machine is too confused to talk to us",	/* FAILED */
@@ -145,7 +146,7 @@ static	const char *answers[] = {
  * Transmit the invitation and process the response
  */
 void
-announce_invite(void)
+announce_invite()
 {
 	CTL_RESPONSE response;
 
@@ -166,7 +167,7 @@ announce_invite(void)
  * Tell the daemon to remove your invitation
  */
 void
-send_delete(void)
+send_delete()
 {
 
 	msg.type = DELETE;

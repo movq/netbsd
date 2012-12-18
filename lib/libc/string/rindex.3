@@ -28,9 +28,9 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)rindex.3	8.1 (Berkeley) 6/4/93
-.\"	$NetBSD: rindex.3,v 1.14 2012/05/05 21:18:43 dholland Exp $
+.\"	$NetBSD: rindex.3,v 1.11 2006/10/16 08:48:45 wiz Exp $
 .\"
-.Dd May 5, 2012
+.Dd June 4, 1993
 .Dt RINDEX 3
 .Os
 .Sh NAME
@@ -53,11 +53,6 @@ matching
 .Em char )
 in the nul-terminated string
 .Fa s .
-.Pp
-This function is obsolete.
-The equivalent function
-.Xr strrchr 3
-should be used instead.
 .Sh RETURN VALUES
 A pointer to the character is returned if it is found; otherwise
 .Dv NULL
@@ -80,21 +75,6 @@ locates the terminating
 .Xr strspn 3 ,
 .Xr strstr 3 ,
 .Xr strtok 3
-.Sh STANDARDS
-The
-.Fn rindex
-function conforms to
-.St -p1003.1-2001 .
-The
-.St -p1003.1-2004
-revision marked it as legacy and recommended the use of
-.Xr strrchr 3
-instead.
-The
-.St -p1003.1-2008
-revision removed
-.Fn rindex
-from the specification.
 .Sh HISTORY
 A
 .Fn rindex

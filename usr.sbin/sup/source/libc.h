@@ -1,4 +1,4 @@
-/*	$NetBSD: libc.h,v 1.9 2011/03/16 20:15:59 christos Exp $	*/
+/*	$NetBSD: libc.h,v 1.7 2006/04/02 01:39:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1991 Carnegie Mellon University
@@ -143,6 +143,7 @@ extern char *concat(const char*, int, ...);
 /* CMU library routines */
 extern char *getname(int);
 extern char *pathof(char *);
+extern const char *errmsg(int);
 
 /*  CMU time additions */
 extern long gtime(const struct tm*);
@@ -152,8 +153,4 @@ extern long atot(const char*);
 #if defined(c_plusplus)
 typedef int (*PFI2)(...);
 #endif /* c_plusplus */
-
-#ifndef __UNCONST
-#define __UNCONST(a)	(void *)(intptr_t)(a)
-#endif
 #endif	/* not _LIBC_H_ */

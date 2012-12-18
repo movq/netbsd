@@ -1,6 +1,6 @@
-/*	$NetBSD: vmparam.h,v 1.19 2010/11/16 09:34:24 uebayasi Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.12 2008/02/05 10:10:21 skrll Exp $	*/
 
-/*	$OpenBSD: vmparam.h,v 1.33 2006/06/04 17:21:24 miod Exp $	*/
+/*	$OpenBSD: vmparam.h,v 1.17 2001/09/22 18:00:09 miod Exp $	*/
 
 /* 
  * Copyright (c) 1988-1994, The University of Utah and
@@ -70,6 +70,14 @@
 #endif
 
 /*
+ * PTEs for system V style shared memory.
+ * This is basically slop for kmempt which we actually allocate (malloc) from.
+ */
+#ifndef SHMMAXPGS
+#define SHMMAXPGS	((1024*1024*10)/PAGE_SIZE)	/* 10mb */
+#endif
+
+/*
  * The time for a process to be blocked before being very swappable.
  * This is a number of seconds which the system takes as being a non-trivial
  * amount of real time.  You probably shouldn't change this;
@@ -78,16 +86,14 @@
  * It is related to human patience and other factors which don't really
  * change over time.
  */
-/* XXXNH - remove??? */
 #define	MAXSLP 		20
 
 /* user/kernel map constants */
 #define	VM_MIN_ADDRESS		((vaddr_t)0)
 #define	VM_MAXUSER_ADDRESS	((vaddr_t)0xc0000000)
 #define	VM_MAX_ADDRESS		VM_MAXUSER_ADDRESS
-
-#define	VM_MIN_KERNEL_ADDRESS	((vaddr_t)0xc0001000)
-#define	VM_MAX_KERNEL_ADDRESS	((vaddr_t)0xef000000)
+#define	VM_MIN_KERNEL_ADDRESS	((vaddr_t)0)
+#define	VM_MAX_KERNEL_ADDRESS	((vaddr_t)0xf0000000)
 
 /* virtual sizes (bytes) for various kernel submaps */
 #define VM_PHYS_SIZE		(USRIOSIZE*PAGE_SIZE)
@@ -95,8 +101,9 @@
 #define	VM_PHYSSEG_MAX	8	/* this many physmem segments */
 #define	VM_PHYSSEG_STRAT	VM_PSTRAT_BIGFIRST
 
-#define	VM_NFREELIST		2
+#define	VM_PHYSSEG_NOADD	/* XXX until uvm code is fixed */
+
+#define	VM_NFREELIST		1
 #define	VM_FREELIST_DEFAULT	0
-#define	VM_FREELIST_ISADMA	1
 
 #endif	/* _HPPA_VMPARAM_H_ */

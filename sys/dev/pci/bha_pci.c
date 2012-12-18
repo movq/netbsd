@@ -1,4 +1,4 @@
-/*	$NetBSD: bha_pci.c,v 1.38 2012/10/27 17:18:28 chs Exp $	*/
+/*	$NetBSD: bha_pci.c,v 1.33 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bha_pci.c,v 1.38 2012/10/27 17:18:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bha_pci.c,v 1.33 2008/04/28 20:23:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,7 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: bha_pci.c,v 1.38 2012/10/27 17:18:28 chs Exp $");
  * the actual probe routine to check it out.
  */
 static int
-bha_pci_match(device_t parent, cfdata_t match, void *aux)
+bha_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	bus_space_tag_t iot;
@@ -86,18 +87,16 @@ bha_pci_match(device_t parent, cfdata_t match, void *aux)
  * Attach all the sub-devices we can find
  */
 static void
-bha_pci_attach(device_t parent, device_t self, void *aux)
+bha_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct bha_softc *sc = device_private(self);
+	struct bha_softc *sc = (void *)self;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
 	pcireg_t csr;
 	const char *model, *intrstr;
-
-	sc->sc_dev = self;
 
 	aprint_naive(": SCSI controller\n");
 
@@ -111,7 +110,7 @@ bha_pci_attach(device_t parent, device_t self, void *aux)
 
 	if (pci_mapreg_map(pa, PCI_CBIO, PCI_MAPREG_TYPE_IO, 0, &iot, &ioh,
 	    NULL, NULL)) {
-		aprint_error_dev(sc->sc_dev, "unable to map device registers\n");
+		aprint_error_dev(&sc->sc_dev, "unable to map device registers\n");
 		return;
 	}
 
@@ -128,24 +127,24 @@ bha_pci_attach(device_t parent, device_t self, void *aux)
 	    csr | PCI_COMMAND_MASTER_ENABLE | PCI_COMMAND_IO_ENABLE);
 
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error_dev(sc->sc_dev, "couldn't map interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_BIO, bha_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	bha_attach(sc);
 
 	bha_disable_isacompat(sc);
 }
 
-CFATTACH_DECL_NEW(bha_pci, sizeof(struct bha_softc),
+CFATTACH_DECL(bha_pci, sizeof(struct bha_softc),
     bha_pci_match, bha_pci_attach, NULL, NULL);

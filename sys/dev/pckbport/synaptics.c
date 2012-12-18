@@ -1,4 +1,4 @@
-/*	$NetBSD: synaptics.c,v 1.30 2012/06/03 13:52:46 dsl Exp $	*/
+/*	$NetBSD: synaptics.c,v 1.21.10.1 2010/11/20 01:19:01 riz Exp $	*/
 
 /*
  * Copyright (c) 2005, Steve C. Woodford
@@ -48,7 +48,7 @@
 #include "opt_pms.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: synaptics.c,v 1.30 2012/06/03 13:52:46 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: synaptics.c,v 1.21.10.1 2010/11/20 01:19:01 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,7 +56,6 @@ __KERNEL_RCSID(0, "$NetBSD: synaptics.c,v 1.30 2012/06/03 13:52:46 dsl Exp $");
 #include <sys/ioctl.h>
 #include <sys/sysctl.h>
 #include <sys/kernel.h>
-#include <sys/proc.h>
 
 #include <sys/bus.h>
 
@@ -87,13 +86,14 @@ struct synaptics_packet {
 	char	sp_down;	/* Down button status */
 };
 
+static int pms_synaptics_send_command(pckbport_tag_t, pckbport_slot_t, u_char);
 static void pms_synaptics_input(void *, int);
 static void pms_synaptics_process_packet(struct pms_softc *,
 		struct synaptics_packet *);
 static void pms_sysctl_synaptics(struct sysctllog **);
 static int pms_sysctl_synaptics_verify(SYSCTLFN_ARGS);
 
-/* Controlled by sysctl. */
+/* Controled by sysctl. */
 static int synaptics_up_down_emul = 2;
 static int synaptics_up_down_motion_delta = 1;
 static int synaptics_gesture_move = 200;
@@ -136,18 +136,20 @@ pms_synaptics_probe_init(void *vsc)
 {
 	struct pms_softc *psc = vsc;
 	struct synaptics_softc *sc = &psc->u.synaptics;
-	u_char cmd[1], resp[3];
+	u_char cmd[2], resp[3];
 	int res, ver_minor, ver_major;
 	struct sysctllog *clog = NULL;
 
-	res = pms_sliced_command(psc->sc_kbctag, psc->sc_kbcslot,
+	res = pms_synaptics_send_command(psc->sc_kbctag, psc->sc_kbcslot,
 	    SYNAPTICS_IDENTIFY_TOUCHPAD);
 	cmd[0] = PMS_SEND_DEV_STATUS;
 	res |= pckbport_poll_cmd(psc->sc_kbctag, psc->sc_kbcslot, cmd, 1, 3,
 	    resp, 0);
 	if (res) {
-		aprint_debug_dev(psc->sc_dev,
+#ifdef SYNAPTICSDEBUG
+		aprint_normal_dev(psc->sc_dev,
 		    "synaptics_probe: Identify Touchpad error.\n");
+#endif
 		/*
 		 * Reset device in case the probe confused it.
 		 */
@@ -159,8 +161,10 @@ pms_synaptics_probe_init(void *vsc)
 	}
 
 	if (resp[1] != SYNAPTICS_MAGIC_BYTE) {
-		aprint_debug_dev(psc->sc_dev,
+#ifdef SYNAPTICSDEBUG
+		aprint_normal_dev(psc->sc_dev,
 		    "synaptics_probe: Not synaptics.\n");
+#endif
 		res = 1;
 		goto doreset;
 	}
@@ -179,7 +183,7 @@ pms_synaptics_probe_init(void *vsc)
 	}
 
 	/* Query the hardware capabilities. */
-	res = pms_sliced_command(psc->sc_kbctag, psc->sc_kbcslot,
+	res = pms_synaptics_send_command(psc->sc_kbctag, psc->sc_kbcslot,
 	    SYNAPTICS_READ_CAPABILITIES);
 	cmd[0] = PMS_SEND_DEV_STATUS;
 	res |= pckbport_poll_cmd(psc->sc_kbctag, psc->sc_kbcslot, cmd, 1, 3,
@@ -200,8 +204,10 @@ pms_synaptics_probe_init(void *vsc)
 		sc->flags |= SYN_FLAG_HAS_BUTTONS_4_5;
 
 	if (sc->caps & SYNAPTICS_CAP_EXTENDED) {
-		aprint_debug_dev(psc->sc_dev,
+#ifdef SYNAPTICSDEBUG
+		aprint_normal_dev(psc->sc_dev,
 		    "synaptics_probe: Capabilities 0x%04x.\n", sc->caps);
+#endif
 		if (sc->caps & SYNAPTICS_CAP_PASSTHROUGH)
 			sc->flags |= SYN_FLAG_HAS_PASSTHROUGH;
 
@@ -213,15 +219,17 @@ pms_synaptics_probe_init(void *vsc)
 
 		/* Ask about extra buttons to detect up/down. */
 		if (sc->caps & SYNAPTICS_CAP_EXTNUM) {
-			res = pms_sliced_command(psc->sc_kbctag,
+			res = pms_synaptics_send_command(psc->sc_kbctag,
 			    psc->sc_kbcslot, SYNAPTICS_EXTENDED_QUERY);
 			cmd[0] = PMS_SEND_DEV_STATUS;
 			res |= pckbport_poll_cmd(psc->sc_kbctag,
 			    psc->sc_kbcslot, cmd, 1, 3, resp, 0);
+#ifdef SYNAPTICSDEBUG
 			if (res == 0)
-				aprint_debug_dev(psc->sc_dev,
+				aprint_normal_dev(psc->sc_dev,
 				    "synaptics_probe: Extended "
 				    "Capabilities 0x%02x.\n", resp[1]);
+#endif
 			if (!res && (resp[1] >> 4) >= 2) {
 				/* Yes. */
 				sc->flags |= SYN_FLAG_HAS_UP_DOWN_BUTTONS;
@@ -289,7 +297,7 @@ pms_synaptics_enable(void *vsc)
 	 * Enable Absolute mode with W (width) reporting, and set
 	 * the packet rate to maximum (80 packets per second).
 	 */
-	res = pms_sliced_command(psc->sc_kbctag, psc->sc_kbcslot,
+	res = pms_synaptics_send_command(psc->sc_kbctag, psc->sc_kbcslot,
 	    SYNAPTICS_MODE_ABSOLUTE | SYNAPTICS_MODE_W | SYNAPTICS_MODE_RATE);
 	cmd[0] = PMS_SET_SAMPLE;
 	cmd[1] = SYNAPTICS_CMD_SET_MODE2;
@@ -615,6 +623,39 @@ pms_sysctl_synaptics_verify(SYSCTLFN_ARGS)
 	return (0);
 }
 
+static int
+pms_synaptics_send_command(pckbport_tag_t tag, pckbport_slot_t slot,
+    u_char syn_cmd)
+{
+	u_char cmd[2];
+	int res;
+
+	cmd[0] = PMS_SET_SCALE11;
+	res = pckbport_poll_cmd(tag, slot, cmd, 1, 0, NULL, 0);
+
+	/*
+	 * Need to send 4 Set Resolution commands, with the argument
+	 * encoded in the bottom most 2 bits.
+	 */
+	cmd[0] = PMS_SET_RES;
+	cmd[1] = syn_cmd >> 6;
+	res |= pckbport_poll_cmd(tag, slot, cmd, 2, 0, NULL, 0);
+
+	cmd[0] = PMS_SET_RES;
+	cmd[1] = (syn_cmd & 0x30) >> 4;
+	res |= pckbport_poll_cmd(tag, slot, cmd, 2, 0, NULL, 0);
+
+	cmd[0] = PMS_SET_RES;
+	cmd[1] = (syn_cmd & 0x0c) >> 2;
+	res |= pckbport_poll_cmd(tag, slot, cmd, 2, 0, NULL, 0);
+
+	cmd[0] = PMS_SET_RES;
+	cmd[1] = (syn_cmd & 0x03);
+	res |= pckbport_poll_cmd(tag, slot, cmd, 2, 0, NULL, 0);
+
+	return (res);
+}
+
 /* Masks for the first byte of a packet */
 #define PMS_LBUTMASK 0x01
 #define PMS_RBUTMASK 0x02
@@ -724,7 +765,7 @@ pms_synaptics_input(void *vsc, int data)
 	struct timeval diff;
 
 	if (!psc->sc_enabled) {
-		/* Interrupts are not expected. Discard the byte. */
+		/* Interrupts are not expected.	 Discard the byte. */
 		return;
 	}
 
@@ -748,16 +789,20 @@ pms_synaptics_input(void *vsc, int data)
 	switch (psc->inputstate) {
 	case 0:
 		if ((data & 0xc8) != 0x80) {
-			aprint_debug_dev(psc->sc_dev,
+#ifdef SYNAPTICSDEBUG
+			aprint_normal_dev(psc->sc_dev,
 			    "pms_input: 0x%02x out of sync\n", data);
+#endif
 			return;	/* not in sync yet, discard input */
 		}
 		/*FALLTHROUGH*/
 
 	case 3:
 		if ((data & 8) == 8) {
-			aprint_debug_dev(psc->sc_dev,
+#ifdef SYNAPTICSDEBUG
+			aprint_normal_dev(psc->sc_dev,
 			    "pms_input: dropped in relative mode, reset\n");
+#endif
 			psc->inputstate = 0;
 			psc->sc_enabled = 0;
 			wakeup(&psc->sc_enabled);
@@ -775,7 +820,7 @@ pms_synaptics_input(void *vsc, int data)
 
 		if ((psc->packet[0] & 0xfc) == 0x84 &&
 		    (psc->packet[3] & 0xcc) == 0xc4) {
-			/* W = SYNAPTICS_WIDTH_PASSTHROUGH, PS/2 passthrough */
+			/* PS/2 passthrough */
 			pms_synaptics_passthrough(psc);
 		} else {
 			pms_synaptics_parse(psc);

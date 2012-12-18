@@ -1,4 +1,4 @@
-/*	$NetBSD: nsdispatch.c,v 1.37 2012/03/13 21:13:42 christos Exp $	*/
+/*	$NetBSD: nsdispatch.c,v 1.33 2008/08/17 10:51:19 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2004 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: nsdispatch.c,v 1.37 2012/03/13 21:13:42 christos Exp $");
+__RCSID("$NetBSD: nsdispatch.c,v 1.33 2008/08/17 10:51:19 gmcgarry Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -172,12 +172,12 @@ static mutex_t _ns_drec_lock = MUTEX_INITIALIZER;
 /*
  * Runtime determination of whether we are dynamically linked or not.
  */
-#ifndef __ELF__
-#define	is_dynamic()		(0)	/* don't bother - switch to ELF! */
+#ifdef __ELF__
+extern	int			_DYNAMIC __weak_reference(_DYNAMIC);
+#define	is_dynamic()		(&_DYNAMIC != NULL)
 #else
-__weakref_visible int rtld_DYNAMIC __weak_reference(_DYNAMIC);
-#define	is_dynamic()		(&rtld_DYNAMIC != NULL)
-#endif
+#define	is_dynamic()		(0)	/* don't bother - switch to ELF! */
+#endif /* __ELF__ */
 
 
 /*
@@ -390,7 +390,8 @@ _nsdbtaddsrc(ns_dbt *dbt, const ns_src *src)
 	/* dbt->srclistsize already incremented */
 
 	modkey.name = src->name;
-	mod = bsearch(&modkey, _nsmod, _nsmodsize, sizeof(*_nsmod), _nsmodcmp);
+	mod = bsearch(&modkey, _nsmod, _nsmodsize, sizeof(*_nsmod),
+	    _nsmodcmp);
 	if (mod == NULL)
 		return (_nsloadmod(src->name, NULL));
 
@@ -400,7 +401,7 @@ _nsdbtaddsrc(ns_dbt *dbt, const ns_src *src)
 void
 _nsdbtdump(const ns_dbt *dbt)
 {
-	unsigned int	i;
+	int	i;
 
 	_DIAGASSERT(dbt != NULL);
 

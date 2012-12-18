@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_kintf.h,v 1.23 2011/08/03 14:44:38 oster Exp $	*/
+/*	$NetBSD: rf_kintf.h,v 1.20.68.1 2009/12/10 22:59:17 snj Exp $	*/
 /*
  * rf_kintf.h
  *
@@ -37,8 +37,6 @@
 #include <dev/raidframe/raidframevar.h>
 
 int     rf_GetSpareTableFromDaemon(RF_SparetWait_t * req);
-int rf_reasonable_label(RF_ComponentLabel_t *, uint64_t);
-
 
 void    raidstart(RF_Raid_t * raidPtr);
 int     rf_DispatchKernelIO(RF_DiskQueue_t * queue, RF_DiskQueueData_t * req);
@@ -60,7 +58,7 @@ void rf_print_component_label(RF_ComponentLabel_t *);
 void rf_UnconfigureVnodes( RF_Raid_t * );
 void rf_close_component( RF_Raid_t *, struct vnode *, int);
 void rf_disk_unbusy(RF_RaidAccessDesc_t *);
-int rf_getdisksize(struct vnode *, RF_RaidDisk_t *);
+int rf_getdisksize(struct vnode *, struct lwp *, RF_RaidDisk_t *);
 int rf_sync_component_caches(RF_Raid_t *raidPtr);
 #endif				/* _RF__RF_KINTF_H_ */
 

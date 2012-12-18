@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.18 2010/12/20 01:12:44 jakllsch Exp $	 */
+/*	$NetBSD: main.c,v 1.12 2008/09/26 14:12:50 christos Exp $	 */
 
 /*
  * Copyright (c) 1996
@@ -49,9 +49,9 @@ extern char	bootprog_name[], bootprog_rev[], bootprog_kernrev[];
 
 #define TIMEOUT 5
 
-void	command_help(char *);
-void	command_quit(char *);
-void	command_boot(char *);
+void	command_help __P((char *));
+void	command_quit __P((char *));
+void	command_boot __P((char *));
 
 const struct bootblk_command commands[] = {
 	{ "help",	command_help },
@@ -62,9 +62,11 @@ const struct bootblk_command commands[] = {
 };
 
 int 
-bootit(const char *filename, int howto)
+bootit(filename, howto)
+	const char     *filename;
+	int             howto;
 {
-	if (exec_netbsd(filename, 0, howto, 0, clear_pc_screen) < 0)
+	if (exec_netbsd(filename, 0, howto, 0) < 0)
 		printf("boot: %s\n", strerror(errno));
 	else
 		printf("boot returned\n");
@@ -74,7 +76,6 @@ bootit(const char *filename, int howto)
 static void
 print_banner(void)
 {
-	clear_pc_screen();
 
 	printf("\n"
 	       ">> %s, Revision %s (from NetBSD %s)\n"
@@ -86,7 +87,7 @@ print_banner(void)
 }
 
 int
-main(void)
+main()
 {
         char c;
 
@@ -109,7 +110,8 @@ main(void)
 
 /* ARGSUSED */
 void
-command_help(char *arg)
+command_help(arg)
+	char *arg;
 {
 	printf("commands are:\n"
 	       "boot [filename] [-acdqsv]\n"
@@ -120,14 +122,16 @@ command_help(char *arg)
 
 /* ARGSUSED */
 void
-command_quit(char *arg)
+command_quit(arg)
+	char *arg;
 {
 	printf("Exiting... goodbye...\n");
-	_rtt();
+	exit(0);
 }
 
 void
-command_boot(char *arg)
+command_boot(arg)
+	char *arg;
 {
 	char *filename;
 	int howto;

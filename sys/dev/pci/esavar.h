@@ -1,4 +1,4 @@
-/* $NetBSD: esavar.h,v 1.12 2012/10/27 17:18:31 chs Exp $ */
+/* $NetBSD: esavar.h,v 1.10 2008/03/27 14:13:34 jmcneill Exp $ */
 
 /*
  * Copyright (c) 2001, 2002 Jared D. McNeill <jmcneill@invisible.ca>
@@ -102,8 +102,6 @@ struct esa_softc
 	bus_space_handle_t	sc_ioh;
 	bus_addr_t		sc_iob;
 	bus_size_t		sc_ios;
-	kmutex_t		sc_lock;
-	kmutex_t		sc_intr_lock;
 
 	pcitag_t		sc_tag;
 	pci_chipset_tag_t	sc_pct;
@@ -116,7 +114,7 @@ struct esa_softc
 	struct ac97_host_if	host_if;
 	enum ac97_host_flags	codec_flags;
 
-	device_t		sc_audiodev[ESA_NUM_VOICES];
+	struct device		*sc_audiodev[ESA_NUM_VOICES];
 
 	struct esa_voice	voice[ESA_NUM_VOICES];
 	struct esa_dma		*sc_dmas;
@@ -135,5 +133,4 @@ struct esa_softc
 	int			delay1, delay2;
 
 	uint16_t		*savemem;
-	size_t			savememsz;
 };

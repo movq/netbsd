@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_ms.c,v 1.14 2012/10/27 17:18:14 chs Exp $	*/
+/*	$NetBSD: adb_ms.c,v 1.8 2008/03/26 18:04:15 matt Exp $	*/
 
 /*
  * Copyright (C) 1998	Colin Wood
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb_ms.c,v 1.14 2012/10/27 17:18:14 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb_ms.c,v 1.8 2008/03/26 18:04:15 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -76,7 +76,7 @@ struct adbms_softc {
 	char		sc_devid[5];	/* device indentifier */
 	uint8_t		sc_us;		/* cmd to watch for */
 	int		sc_mb;		/* current button state */
-	device_t	sc_wsmousedev;
+	struct device	*sc_wsmousedev;
 	/* helpers for trackpads */
 	int		sc_down;
 	/*
@@ -107,6 +107,7 @@ struct adbms_softc {
 static int	adbms_match(device_t, cfdata_t, void *);
 static void	adbms_attach(device_t, device_t, void *);
 static void	ems_init(struct adbms_softc *);
+//static void	ms_processevent(adb_event_t *event, struct adbms_softc *);
 static void	init_trackpad(struct adbms_softc *);
 static void	adbms_init_mouse(struct adbms_softc *);
 static void	adbms_init_turbo(struct adbms_softc *);
@@ -179,17 +180,17 @@ adbms_attach(device_t parent, device_t self, void *aux)
 	/* print out the type of mouse we have */
 	switch (sc->sc_adbdev->handler_id) {
 	case ADBMS_100DPI:
-		printf("%d-button, %u dpi mouse\n", sc->sc_buttons,
-		    sc->sc_res);
+		printf("%d-button, %d dpi mouse\n", sc->sc_buttons,
+		    (int)(sc->sc_res));
 		break;
 	case ADBMS_200DPI:
 		sc->sc_res = 200;
-		printf("%d-button, %u dpi mouse\n", sc->sc_buttons,
-		    sc->sc_res);
+		printf("%d-button, %d dpi mouse\n", sc->sc_buttons,
+		    (int)(sc->sc_res));
 		break;
 	case ADBMS_MSA3:
-		printf("Mouse Systems A3 mouse, %d-button, %u dpi\n",
-		    sc->sc_buttons, sc->sc_res);
+		printf("Mouse Systems A3 mouse, %d-button, %d dpi\n",
+		    sc->sc_buttons, (int)(sc->sc_res));
 		break;
 	case ADBMS_USPEED:
 		printf("MicroSpeed mouse, default parameters\n");
@@ -235,8 +236,8 @@ adbms_attach(device_t parent, device_t self, void *aux)
 				printf("unknown device");
 				break;
 			}
-			printf(" <%s> %d-button, %u dpi\n", sc->sc_devid,
-			    sc->sc_buttons, sc->sc_res);
+			printf(" <%s> %d-button, %d dpi\n", sc->sc_devid,
+			    sc->sc_buttons, (int)(sc->sc_res));
 		}
 		break;
 	default:
@@ -390,7 +391,6 @@ adbms_init_mouse(struct adbms_softc *sc)
 		memcpy(buffer, sc->sc_buffer, len);
 
 		if (sc->sc_msg_len == 8) {
-			uint16_t res;
 			/* we have a true EMP device */
 #ifdef ADB_PRINT_EMP
 		
@@ -398,11 +398,10 @@ adbms_init_mouse(struct adbms_softc *sc)
 			    buffer[0], buffer[1], buffer[2], buffer[3],
 			    buffer[4], buffer[5], buffer[6], buffer[7]);
 #endif
-			memcpy(sc->sc_devid, &buffer[0], 4);
-			memcpy(&res, &buffer[4], sizeof(res));
-			sc->sc_res = res;
 			sc->sc_class = buffer[6];
 			sc->sc_buttons = buffer[7];
+			sc->sc_res = (int)*(short *)&buffer[4];
+				memcpy(sc->sc_devid, &(buffer[0]), 4);
 		} else if (buffer[0] == 0x9a &&
 		    ((buffer[1] == 0x20) || (buffer[1] == 0x21))) {
 			/*
@@ -615,7 +614,7 @@ adbms_mangle_2(struct adbms_softc *sc, int buttons)
 		/* finger up */
 		if (sc->sc_down) {
 			if (((sc->sc_x * sc->sc_x + 
-			    sc->sc_y * sc->sc_y) < 3) && 
+			    sc->sc_y * sc->sc_y) < 20) && 
 			    (sc->sc_wsmousedev)) {
 				/* 
 				 * if there wasn't much movement between
@@ -647,7 +646,7 @@ adbms_mangle_4(struct adbms_softc *sc, int buttons)
 		/* finger up */
 		if (sc->sc_down) {
 			if (((sc->sc_x * sc->sc_x + 
-			    sc->sc_y * sc->sc_y) < 3) && 
+			    sc->sc_y * sc->sc_y) < 20) && 
 			    (sc->sc_wsmousedev)) {
 				/* 
 				 * if there wasn't much movement between
@@ -692,7 +691,7 @@ adbms_disable(void *v)
 static void
 init_trackpad(struct adbms_softc *sc)
 {
-	const struct sysctlnode *me = NULL, *node = NULL;
+	struct sysctlnode *me = NULL, *node = NULL;
 	int cmd, addr, ret;
 	uint8_t buffer[16];
 	uint8_t b2[] = {0x99, 0x94, 0x19, 0xff, 0xb2, 0x8a, 0x1b, 0x50};
@@ -726,23 +725,26 @@ init_trackpad(struct adbms_softc *sc)
 	delay(1000);
 
 	/*
-	 * setup a sysctl node to control whether tapping the pad should
+	 * setup a sysctl node to control wether tapping the pad should
 	 * trigger mouse button events
 	 */
 
 	sc->sc_tapping = 1;
 	
-	ret = sysctl_createv(NULL, 0, NULL, &me,
+	ret = sysctl_createv(NULL, 0, NULL, (const struct sysctlnode **)&me,
 	    CTLFLAG_READWRITE,
 	    CTLTYPE_NODE, device_xname(sc->sc_dev), NULL,
 	    NULL, 0, NULL, 0,
 	    CTL_MACHDEP, CTL_CREATE, CTL_EOL);
 
-	ret = sysctl_createv(NULL, 0, NULL, &node,
-	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC,
+	ret = sysctl_createv(NULL, 0, NULL, (const struct sysctlnode **)&node,
+	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC | CTLFLAG_IMMEDIATE,
 	    CTLTYPE_INT, "tapping", "tapping the pad causes button events",
-	    sysctl_adbms_tap, 1, (void *)sc, 0,
+	    sysctl_adbms_tap, 1, NULL, 0,
 	    CTL_MACHDEP, me->sysctl_num, CTL_CREATE, CTL_EOL);
+	if (node != NULL) {
+		node->sysctl_data = sc;
+	}	
 }
 
 static int
@@ -756,7 +758,7 @@ adbms_wait(struct adbms_softc *sc, int timeout)
 		}
 	} else {
 		while ((sc->sc_msg_len == -1) && (cnt < timeout)) {
-			tsleep(&sc->sc_event, 0, "adbmsio", hz);
+			tsleep(&sc->sc_event, 0, "adbkbdio", hz);
 			cnt++;
 		}
 	}
@@ -792,13 +794,12 @@ sysctl_adbms_tap(SYSCTLFN_ARGS)
 		node.sysctl_data = &sc->sc_tapping;
 		if (sysctl_lookup(SYSCTLFN_CALL(&node)) == 0) {
 
-			sc->sc_tapping = (*(int *)node.sysctl_data == 0) ? 0 : 1;
+			sc->sc_tapping = (node.sysctl_idata == 0) ? 0 : 1;
 			return 0;
 		}
 		return EINVAL;
 	} else {
 
-		node.sysctl_data = &sc->sc_tapping;
 		node.sysctl_size = 4;
 		return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: ssn.c,v 1.12 2012/10/27 17:17:23 chs Exp $	*/
+/*	$NetBSD: ssn.c,v 1.8 2005/12/11 12:16:04 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 Ben Harris
@@ -28,12 +28,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ssn.c,v 1.12 2012/10/27 17:17:23 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ssn.c,v 1.8 2005/12/11 12:16:04 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
+
+#include <machine/bus.h>
 
 #include <acorn26/iobus/iocreg.h>
 #include <acorn26/iobus/iocvar.h>
@@ -41,36 +42,37 @@ __KERNEL_RCSID(0, "$NetBSD: ssn.c,v 1.12 2012/10/27 17:17:23 chs Exp $");
 #include <dev/ic/ds.h>
 
 struct ssn_softc {
+	struct device sc_dev;
 	struct ds_handle sc_dsh;
-	device_t sc_ioc;
+	struct device *sc_ioc;
 	int sc_timebase;
 };
 
-static int ssn_match(device_t, cfdata_t, void *);
-static void ssn_attach(device_t, device_t, void *);
+static int ssn_match(struct device *, struct cfdata *, void *);
+static void ssn_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ssn, sizeof(struct ssn_softc),
+CFATTACH_DECL(ssn, sizeof(struct ssn_softc),
     ssn_match, ssn_attach, NULL, NULL);
 
 static int ds_ioc_read_bit(void *);
 static void ds_ioc_write_bit(void *, int);
 static void ds_ioc_reset(void *);
 
-static int ds_crc(const uint8_t *data, size_t len);
+static int ds_crc(const u_int8_t *data, size_t len);
 
 static int
-ssn_match(device_t parent, cfdata_t cf, void *aux)
+ssn_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	return (1);
 }
 
 static void
-ssn_attach(device_t parent, device_t self, void *aux)
+ssn_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ssn_softc *sc = device_private(self);
+	struct ssn_softc *sc = (void *)self;
 	int i;
-	uint8_t rombuf[8];
+	u_int8_t rombuf[8];
 
 	sc->sc_ioc = parent;
 	sc->sc_dsh.ds_read_bit = ds_ioc_read_bit;
@@ -160,9 +162,9 @@ ds_ioc_reset(void *cookie)
 #define DS_CRC_POLY 0x8c
 
 static int
-ds_crc(const uint8_t *buf, size_t len)
+ds_crc(const u_int8_t *buf, size_t len)
 {
-	uint8_t c, crc, carry;
+	u_int8_t c, crc, carry;
 	size_t i, j;
 
 	crc = 0;

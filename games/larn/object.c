@@ -1,28 +1,13 @@
-/*	$NetBSD: object.c,v 1.16 2012/06/19 05:30:43 dholland Exp $	*/
+/*	$NetBSD: object.c,v 1.14 2008/02/04 01:07:01 dholland Exp $	*/
 
 /* object.c		Larn is copyrighted 1986 by Noah Morgan. */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: object.c,v 1.16 2012/06/19 05:30:43 dholland Exp $");
+__RCSID("$NetBSD: object.c,v 1.14 2008/02/04 01:07:01 dholland Exp $");
 #endif				/* not lint */
 #include "header.h"
 #include "extern.h"
-
-static void finditem(int);
-static void ostairs(int);
-static void opotion(int);
-static void oscroll(int);
-static void oorb(void);
-static void opit(void);
-static void obottomless(void);
-static void oelevator(int);
-static void ostatue(void);
-static void omirror(void);
-static void obook(void);
-static void ocookie(void);
-static void ogold(int);
-static void ohome(void);
 
 /*
 	lookforobject
@@ -31,7 +16,7 @@ static void ohome(void);
 	if an object was found.
  */
 void
-lookforobject(void)
+lookforobject()
 {
 	int    i, j;
 	if (c[TIMESTOP])
@@ -510,7 +495,7 @@ lookforobject(void)
 /*
 	function to say what object we found and ask if player wants to take it
  */
-static void
+void
 finditem(int theitem)
 {
 	int             tmp, i;
@@ -553,8 +538,9 @@ finditem(int theitem)
 	subroutine to process the stair cases
 	if dir > 0 the up else down
  */
-static void
-ostairs(int dir)
+void
+ostairs(dir)
+	int             dir;
 {
 	int    k;
 	lprcat("\nDo you (s) stay here  ");
@@ -619,7 +605,8 @@ ostairs(int dir)
 	subroutine to handle a teleport trap +/- 1 level maximum
  */
 void
-oteleport(int err)
+oteleport(err)
+	int             err;
 {
 	int    tmp;
 	if (err)
@@ -654,8 +641,9 @@ oteleport(int err)
 /*
 	function to process a potion
  */
-static void
-opotion(int pot)
+void
+opotion(pot)
+	int             pot;
 {
 	lprcat("\nDo you (d) drink it, (t) take it");
 	iopts();
@@ -684,7 +672,8 @@ opotion(int pot)
 	function to drink a potion
  */
 void
-quaffpotion(int pot)
+quaffpotion(pot)
+	int             pot;
 {
 	int    i, j, k;
 	if (pot < 0 || pot >= MAXPOTION)
@@ -861,8 +850,9 @@ quaffpotion(int pot)
 /*
 	function to process a magic scroll
  */
-static void
-oscroll(int typ)
+void
+oscroll(typ)
+	int             typ;
 {
 	lprcat("\nDo you ");
 	if (c[BLINDCOUNT] == 0)
@@ -910,7 +900,7 @@ static u_char     exten[] = {
 	CANCELLATION, HASTESELF, GLOBE, SCAREMONST, HOLDMONST, TIMESTOP
 };
 
-static u_char time_change[] = {
+u_char time_change[] = {
 	HASTESELF, HERO, ALTPRO, PROTECTIONTIME, DEXCOUNT, STRCOUNT,
 	GIANTSTR, CHARMCOUNT, INVISIBILITY, CANCELLATION, HASTESELF,
 	AGGRAVATE, SCAREMONST, STEALTH, AWARENESS, HOLDMONST,
@@ -922,7 +912,8 @@ static u_char time_change[] = {
  *	function to adjust time when time warping and taking courses in school
  */
 void
-adjusttime(long tim)
+adjusttime(tim)
+	long   tim;
 {
 	int    j;
 	for (j = 0; j < 26; j++)/* adjust time related parameters */
@@ -936,7 +927,8 @@ adjusttime(long tim)
 	function to read a scroll
  */
 void
-read_scroll(int typ)
+read_scroll(typ)
+	int             typ;
 {
 	int    i, j;
 	if (typ < 0 || typ >= MAXSCROLL)
@@ -1090,13 +1082,13 @@ read_scroll(int typ)
 
 
 
-static void
-oorb(void)
+void
+oorb()
 {
 }
 
-static void
-opit(void)
+void
+opit()
 {
 	int    i;
 	if (rnd(101) < 81) {
@@ -1124,17 +1116,17 @@ opit(void)
 	}
 }
 
-static void
-obottomless(void)
+void
+obottomless()
 {
 	lprcat("\nYou fell into a bottomless pit!");
 	beep();
 	nap(3000);
 	died(262);
 }
-
-static void
-oelevator(int dir)
+void
+oelevator(dir)
+	int             dir;
 {
 #ifdef lint
 	int             x;
@@ -1143,18 +1135,18 @@ oelevator(int dir)
 #endif	/* lint */
 }
 
-static void
-ostatue(void)
+void
+ostatue()
 {
 }
 
-static void
-omirror(void)
+void
+omirror()
 {
 }
 
-static void
-obook(void)
+void
+obook()
 {
 	lprcat("\nDo you ");
 	if (c[BLINDCOUNT] == 0)
@@ -1188,7 +1180,8 @@ obook(void)
 	function to read a book
  */
 void
-readbook(int lev)
+readbook(lev)
+	int    lev;
 {
 	int    i, tmp;
 	if (lev <= 3)
@@ -1204,7 +1197,7 @@ readbook(int lev)
 	}
 }
 
-static void
+void
 ocookie(void)
 {
 	const char *p;
@@ -1242,8 +1235,9 @@ ocookie(void)
  * routine to pick up some gold -- if arg==OMAXGOLD then the pile is worth
  * 100* the argument
  */
-static void
-ogold(int arg)
+void
+ogold(arg)
+	int             arg;
 {
 	long   i;
 	i = iarg[playerx][playery];
@@ -1259,8 +1253,8 @@ ogold(int arg)
 	item[playerx][playery] = know[playerx][playery] = 0;	/* destroy gold	 */
 }
 
-static void
-ohome(void)
+void
+ohome()
 {
 	int    i;
 	nosignal = 1;		/* disable signals */
@@ -1324,13 +1318,13 @@ ohome(void)
 
 /* routine to save program space	 */
 void
-iopts(void)
+iopts()
 {
 	lprcat(", or (i) ignore it? ");
 }
 
 void
-ignore(void)
+ignore()
 {
 	lprcat("ignore\n");
 }

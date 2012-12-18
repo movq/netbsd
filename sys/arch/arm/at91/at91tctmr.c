@@ -1,4 +1,4 @@
-/*$NetBSD: at91tctmr.c,v 1.7 2012/11/12 18:00:36 skrll Exp $*/
+/*$NetBSD: at91tctmr.c,v 1.2 2008/07/03 01:15:38 matt Exp $*/
 
 /*
  * AT91 Timer Counter (TC) based clock functions
@@ -20,6 +20,13 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *This product includes software developed by the NetBSD
+ *Foundation, Inc. and its contributors.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91tctmr.c,v 1.7 2012/11/12 18:00:36 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91tctmr.c,v 1.2 2008/07/03 01:15:38 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -52,7 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: at91tctmr.c,v 1.7 2012/11/12 18:00:36 skrll Exp $");
 
 #include <dev/clock_subr.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -90,9 +97,7 @@ struct at91tctmr_softc {
 };
 
 static struct at91tctmr_softc *at91tctmr_sc = NULL;
-#if 0
 static struct timeval lasttv;
-#endif
 
     
     
@@ -134,18 +139,18 @@ usec_to_timer_count(uint32_t usec)
 #endif
 
 /* macros to simplify writing to the timer controller */
-static inline uint32_t
+static inline u_int32_t
 READ_TC(struct at91tctmr_softc *sc, uint offset)
 {
-	volatile uint32_t *addr = (void*)(sc->sc_addr + offset);
+	volatile u_int32_t *addr = (void*)(sc->sc_addr + offset);
 	return *addr;
 }
 
 //bus_space_read_4(sc->sc_iot, sc->sc_ioh, offset)
 static inline void
-WRITE_TC(struct at91tctmr_softc *sc, uint offset, uint32_t value)
+WRITE_TC(struct at91tctmr_softc *sc, uint offset, u_int32_t value)
 {
-	volatile uint32_t *addr = (void*)(sc->sc_addr + offset);
+	volatile u_int32_t *addr = (void*)(sc->sc_addr + offset);
 	*addr = value;
 }
 
@@ -153,7 +158,6 @@ WRITE_TC(struct at91tctmr_softc *sc, uint offset, uint32_t value)
 CFATTACH_DECL_NEW(at91tctmr, sizeof(struct at91tctmr_softc),
     at91tctmr_match, at91tctmr_attach, NULL, NULL);
 
-#if 0
 static u_int at91tctmr_get_timecount(struct timecounter *);
 
 static struct timecounter at91tctmr_timecounter = {
@@ -166,7 +170,6 @@ static struct timecounter at91tctmr_timecounter = {
 	NULL,			/* prev */
 	NULL,			/* next */
 };
-#endif
 
 static int
 at91tctmr_match(device_t parent, cfdata_t match, void *aux)
@@ -197,7 +200,7 @@ at91tctmr_attach(device_t parent, device_t self, void *aux)
     WRITE_TC(sc, TC_IDR, -1);	/* make sure interrupts are disabled	*/
 
     /* find divider */
-    uint32_t cmr = 0;
+    u_int32_t cmr = 0;
     if (AT91_MSTCLK / 2U / HZ <= 65536) {
       sc->sc_timerclock = AT91_MSTCLK / 2U;
       cmr = TC_CMR_TCCLKS_MCK_DIV_2;
@@ -211,7 +214,7 @@ at91tctmr_attach(device_t parent, device_t self, void *aux)
       sc->sc_timerclock = AT91_MSTCLK / 128U;
       cmr = TC_CMR_TCCLKS_MCK_DIV_128;
     } else
-      panic("%s: cannot setup timer to reach HZ", device_xname(sc->sc_dev));
+      panic("%s: cannot setup timer to reach HZ", device-xname(sc->sc_dev));
 
     sc->sc_divider = (sc->sc_timerclock + HZ - 1) / HZ; /* round up */
     sc->sc_usec_per_tick = 1000000UL / (sc->sc_timerclock / sc->sc_divider);
@@ -300,7 +303,7 @@ cpu_initclocks(void)
 static void udelay(unsigned int usec)
 {
     struct at91tctmr_softc *sc = at91tctmr_sc;
-    uint32_t prev_cvr, cvr, divi = READ_TC(sc, TC_RC), diff;
+    u_int32_t prev_cvr, cvr, divi = READ_TC(sc, TC_RC), diff;
     int prev_ticks, ticks, ticks2;
     unsigned footick = (sc->sc_timerclock * 64ULL / 1000000UL);
 

@@ -1,10 +1,8 @@
-#	$NetBSD: compatsubdir.mk,v 1.8 2012/08/17 16:22:27 joerg Exp $
+#	$NetBSD: compatsubdir.mk,v 1.5.2.3 2011/01/07 18:25:21 riz Exp $
 
 # Build netbsd libraries.
 
 .include <bsd.own.mk>
-
-TARGETS+=	build_install
 
 .if ${MKCOMPAT} != "no"
 .if !make(includes)
@@ -12,19 +10,26 @@ TARGETS+=	build_install
 # make sure we get an objdir built early enough
 .include <bsd.prog.mk>
 
-MAKEDIRTARGETENV=
-.if defined(MAKEOBJDIRPREFIX)
-MAKEDIRTARGETENV+=	unset MAKEOBJDIRPREFIX &&
-.endif
-MAKEDIRTARGETENV+=	MAKEOBJDIR='$${.CURDIR:C,^${NETBSDSRCDIR},${.OBJDIR},}'
-MAKEDIRTARGETENV+=	MKOBJDIRS=yes MKSHARE=no
-MAKEDIRTARGETENV+=	BSD_MK_COMPAT_FILE=${BSD_MK_COMPAT_FILE}
+# XXX make this use MAKEOBJDIR
+MAKEDIRTARGETENV=	MAKEOBJDIRPREFIX=${.OBJDIR} MKOBJDIRS=yes MKSHARE=no BSD_MK_COMPAT_FILE=${BSD_MK_COMPAT_FILE}
 
+# XXX fix the "library" list to include all 'external' libs?
 .if defined(BOOTSTRAP_SUBDIRS)
 SUBDIR=	${BOOTSTRAP_SUBDIRS}
 .else
-SUBDIR= ../../../lib .WAIT \
+SUBDIR= ../../../gnu/lib/crtstuff4 .WAIT \
+	../../../lib/csu .WAIT \
+	../../../gnu/lib/libgcc4 .WAIT \
+	../../../lib/libc .WAIT \
+	../../../lib/libutil .WAIT \
+	../../../lib .WAIT \
+	../../../gnu/lib \
 	../../../libexec/ld.elf_so
+
+.if (${MKLDAP} != "no")
+SUBDIR+= ../../../external/bsd/openldap/lib
+.endif
+
 .endif
 
 .include <bsd.subdir.mk>

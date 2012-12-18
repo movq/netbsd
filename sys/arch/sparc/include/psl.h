@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.48 2011/08/28 22:30:09 mrg Exp $ */
+/*	$NetBSD: psl.h,v 1.44.56.1 2009/05/18 19:54:56 bouyer Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -142,7 +142,6 @@
 #define PSTATE_USER	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_IE)
 #endif
 
-
 /*
  * SPARC V9 TSTATE register
  *
@@ -150,7 +149,7 @@
  *  +-----+-----+-----+--------+---+-----+
  *  | CCR | ASI |  -  | PSTATE | - | CWP |
  *  +-----+-----+-----+--------+---+-----+
- */
+ * */
 
 #define TSTATE_CWP		0x01f
 #define TSTATE_PSTATE		0x6ff00
@@ -160,8 +159,8 @@
 #define TSTATE_CCR		0xff00000000LL
 #define TSTATE_CCR_SHIFT	32
 
-#define PSRCC_TO_TSTATE(x)	(((int64_t)(x)&PSR_ICC)<<(TSTATE_CCR_SHIFT-20))
-#define TSTATECCR_TO_PSR(x)	(((x)&TSTATE_CCR)>>(TSTATE_CCR_SHIFT-20))
+#define PSRCC_TO_TSTATE(x)	(((int64_t)(x)&PSR_ICC)<<(TSTATE_CCR_SHIFT-19))
+#define TSTATECCR_TO_PSR(x)	(((x)&TSTATE_CCR)>>(TSTATE_CCR_SHIFT-19))
 
 /*
  * These are here to simplify life.
@@ -183,8 +182,8 @@
 
 #define TSTATE_BITS "\20\14IG\13MG\12CLE\11TLE\10\7MM\6RED\5PEF\4AM\3PRIV\2IE\1AG"
 
-#define TSTATE_KERN	((PSTATE_KERN)<<TSTATE_PSTATE_SHIFT)
-#define TSTATE_USER	((PSTATE_USER)<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_KERN	((TSTATE_KERN)<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_USER	((TSTATE_USER)<<TSTATE_PSTATE_SHIFT)
 /*
  * SPARC V9 VER version register.
  *
@@ -224,15 +223,15 @@
 #define CWP		0x01f
 
 /* 64-byte alignment -- this seems the best place to put this. */
-#define SPARC64_BLOCK_SIZE	64
-#define SPARC64_BLOCK_ALIGN	0x3f
+#define BLOCK_SIZE	64
+#define BLOCK_ALIGN	0x3f
 
 #if defined(_KERNEL) && !defined(_LOCORE)
 
 /*
  * GCC pseudo-functions for manipulating PSR (primarily PIL field).
  */
-static __inline __attribute__((__always_inline__)) int
+static __inline int
 getpsr(void)
 {
 	int psr;
@@ -241,7 +240,7 @@ getpsr(void)
 	return (psr);
 }
 
-static __inline __attribute__((__always_inline__)) int
+static __inline int
 getmid(void)
 {
 	int mid;
@@ -250,14 +249,14 @@ getmid(void)
 	return ((mid >> 20) & 0x3);
 }
 
-static __inline __attribute__((__always_inline__)) void
+static __inline void
 setpsr(int newpsr)
 {
 	__asm volatile("wr %0,0,%%psr" : : "r" (newpsr) : "memory");
 	__asm volatile("nop; nop; nop");
 }
 
-static __inline __attribute__((__always_inline__)) void
+static __inline void
 spl0(void)
 {
 	int psr, oldipl;
@@ -284,7 +283,7 @@ spl0(void)
  * into the ipl field.)
  */
 #define	_SPLSET(name, newipl) \
-static __inline __attribute__((__always_inline__)) void name(void) \
+static __inline void name(void) \
 { \
 	int psr; \
 	__asm volatile("rd %%psr,%0" : "=r" (psr)); \
@@ -341,7 +340,7 @@ splraiseipl(ipl_cookie_t icookie)
 #define	splzs()		splraiseipl(makeiplcookie(IPL_ZS))
 
 /* splx does not have a return value */
-static __inline __attribute__((__always_inline__)) void
+static __inline void
 splx(int newipl)
 {
 	int psr;

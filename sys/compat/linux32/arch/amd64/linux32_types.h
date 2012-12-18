@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_types.h,v 1.7 2010/07/07 01:30:35 chs Exp $ */
+/*	$NetBSD: linux32_types.h,v 1.5 2008/09/04 17:45:00 njoly Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -30,20 +30,16 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef _AMD64_LINUX32_TYPES_H
-#define _AMD64_LINUX32_TYPES_H
+#ifndef _I386_LINUX32_TYPES_H
+#define _I386_LINUX32_TYPES_H
 
-typedef uint16_t linux32_uid_t;
-typedef uint16_t linux32_gid_t;
-typedef int32_t linux32_pid_t;
+typedef unsigned short linux32_uid_t;
+typedef unsigned short linux32_gid_t;
+typedef int linux32_pid_t;
 typedef int32_t linux32_clock_t;
 typedef int32_t linux32_time_t;
 typedef int32_t linux32_off_t;
 typedef uint32_t linux32_ino_t;
-typedef uint32_t linux32_size_t;
-typedef netbsd32_pointer_t linux32_ulongp_t;
-
-typedef netbsd32_pointer_t linux32_user_descp_t;
 
 #define LINUX32_STAT64_HAS_NSEC   1
 struct linux32_stat64 {
@@ -97,4 +93,4 @@ struct linux32_utimbuf {
 	linux32_time_t l_modtime;
 };
 
-#endif /* _AMD64_LINUX32_TYPES_H */
+#endif /* _I386_LINUX32_TYPES_H */

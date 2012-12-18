@@ -1,4 +1,4 @@
-/*	$NetBSD: quotaon.c,v 1.30 2012/04/07 05:07:33 christos Exp $	*/
+/*	$NetBSD: quotaon.c,v 1.22 2008/07/21 13:36:59 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\
 #if 0
 static char sccsid[] = "@(#)quotaon.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: quotaon.c,v 1.30 2012/04/07 05:07:33 christos Exp $");
+__RCSID("$NetBSD: quotaon.c,v 1.22 2008/07/21 13:36:59 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,42 +52,41 @@ __RCSID("$NetBSD: quotaon.c,v 1.30 2012/04/07 05:07:33 christos Exp $");
 #include <sys/param.h>
 #include <sys/file.h>
 #include <sys/mount.h>
-
-#include <quota.h>
-#include <ufs/ufs/quota1.h>
+#include <ufs/ufs/quota.h>
 
 #include <err.h>
 #include <fstab.h>
 #include <stdio.h>
-#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <util.h>
 
+char *qfname = QUOTAFILENAME;
+char *qfextension[] = INITQFNAMES;
 
-static int	vflag;		/* verbose */
+int	aflag;		/* all file systems */
+int	gflag;		/* operate on group quotas */
+int	uflag;		/* operate on user quotas */
+int	vflag;		/* verbose */
 
-static void usage(void) __dead;
-static int quotaonoff(struct fstab *, struct quotahandle *, int, int, int,
-    const char *);
-static int readonly(struct fstab *, const char *);
-static int oneof(const char *target, char *list[], int cnt);
+int main __P((int, char *[]));
+
+static void usage __P((void));
+static int quotaonoff __P((struct fstab *, int, int, char *));
+static int oneof __P((const char *, char *[], int));
+static int hasquota __P((struct fstab *, int, char **));
+static int readonly __P((struct fstab *));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	struct fstab *fs;
-	struct quotahandle *qh;
+	char *qfnp;
 	long argnum, done = 0;
 	int i, offmode = 0, errs = 0;
-	unsigned restrictions;
 	int ch;
-
-	int aflag = 0;		/* all file systems */
-	int gflag = 0;		/* operate on group quotas */
-	int uflag = 0;		/* operate on user quotas */
-	int noguflag = 0;	/* operate on both (by default) */
 
 	if (strcmp(getprogname(), "quotaoff") == 0)
 		offmode++;
@@ -120,162 +119,156 @@ main(int argc, char *argv[])
 		usage();
 
 	if (!gflag && !uflag) {
-		noguflag = 1;
+		gflag++;
+		uflag++;
 	}
-
-	/*
-	 * XXX at the moment quota_open also uses getfsent(), but it
-	 * uses it only up front. To avoid conflicting with it, let it
-	 * initialize first.
-	 */
-	qh = quota_open("/");
-	if (qh != NULL) {
-		quota_close(qh);
-	}
-
 	setfsent();
 	while ((fs = getfsent()) != NULL) {
-		char buf[MAXPATHLEN];
-		const char *fsspec;
 		if ((strcmp(fs->fs_vfstype, "ffs") &&
 		     strcmp(fs->fs_vfstype, "lfs")) ||
 		    strcmp(fs->fs_type, FSTAB_RW))
 			continue;
-
-		fsspec = getfsspecname(buf, sizeof(buf), fs->fs_spec);
-		if (fsspec == NULL) {
-			warn("%s", buf);
+		if (aflag) {
+			if (gflag && hasquota(fs, GRPQUOTA, &qfnp))
+				errs += quotaonoff(fs, offmode, GRPQUOTA, qfnp);
+			if (uflag && hasquota(fs, USRQUOTA, &qfnp))
+				errs += quotaonoff(fs, offmode, USRQUOTA, qfnp);
 			continue;
 		}
-		if (!aflag) {
-			if ((argnum = oneof(fs->fs_file, argv, argc)) < 0 &&
-			    (argnum = oneof(fsspec, argv, argc)) < 0) {
-				continue;
-			}
-			done |= 1U << argnum;
+		if ((argnum = oneof(fs->fs_file, argv, argc)) >= 0 ||
+		    (argnum = oneof(fs->fs_spec, argv, argc)) >= 0) {
+			done |= 1 << argnum;
+			if (gflag && hasquota(fs, GRPQUOTA, &qfnp))
+				errs += quotaonoff(fs, offmode, GRPQUOTA, qfnp);
+			if (uflag && hasquota(fs, USRQUOTA, &qfnp))
+				errs += quotaonoff(fs, offmode, USRQUOTA, qfnp);
 		}
-
-		qh = quota_open(fs->fs_file);
-		if (qh == NULL) {
-			if (!aflag) {
-				warn("quota_open");
-				errs++;
-			}
-			continue;
-		}
-
-		restrictions = quota_getrestrictions(qh);
-		if ((restrictions & QUOTA_RESTRICT_NEEDSQUOTACHECK) == 0) {
-			/* Not a quota v1 volume, skip it */
-			if (!aflag) {
-				errno = EBUSY;
-				warn("%s", fs->fs_file);
-				errs++;
-			}
-			quota_close(qh);
-			continue;
-		}
-
-		/*
-		 * The idea here is to warn if someone explicitly
-		 * tries to turn on group quotas and there are no
-		 * group quotas, and likewise for user quotas, but not
-		 * to warn if just doing the default thing and one of
-		 * the quota types isn't configured.
-		 */
-
-		if (noguflag) {
-			errs += quotaonoff(fs, qh, offmode, GRPQUOTA, 0, fsspec);
-			errs += quotaonoff(fs, qh, offmode, USRQUOTA, 0, fsspec);
-		}
-		if (gflag) {
-			errs += quotaonoff(fs, qh, offmode, GRPQUOTA, 1, fsspec);
-		}
-		if (uflag) {
-			errs += quotaonoff(fs, qh, offmode, USRQUOTA, 1, fsspec);
-		}
-		quota_close(qh);
 	}
 	endfsent();
 	for (i = 0; i < argc; i++)
-		if ((done & (1U << i)) == 0)
+		if ((done & (1 << i)) == 0)
 			warnx("%s not found in fstab", argv[i]);
-	return errs;
+	exit(errs);
 }
 
 static void
-usage(void)
+usage()
 {
-	const char *p = getprogname();
-	(void) fprintf(stderr, "Usage: %s [-g] [-u] [-v] -a\n"
-	    "\t%s [-g] [-u] [-v] filesys ...\n", p, p);
+
+	(void) fprintf(stderr, "usage:\n\t%s [-g] [-u] [-v] -a\n",
+	    getprogname());
+	(void) fprintf(stderr, "\t%s [-g] [-u] [-v] filesys ...\n",
+	    getprogname());
 	exit(1);
 }
 
 static int
-quotaonoff(struct fstab *fs, struct quotahandle *qh, int offmode, int idtype,
-    int warn_on_enxio, const char *fsspec)
+quotaonoff(fs, offmode, type, qfpathname)
+	struct fstab *fs;
+	int offmode, type;
+	char *qfpathname;
 {
-	const char *mode = (offmode == 1) ? "off" : "on";
 
-	if (strcmp(fs->fs_file, "/") && readonly(fs, fsspec)) {
-		return 1;
-	}
-
+	if (strcmp(fs->fs_file, "/") && readonly(fs))
+		return (1);
 	if (offmode) {
-		if (quota_quotaoff(qh, idtype)) {
-			if (warn_on_enxio || errno != ENXIO) {
-				warn("quota%s for %s", mode, fs->fs_file);
-			}
-			return 1;
+		if (quotactl(fs->fs_file, QCMD(Q_QUOTAOFF, type), 0, 0) < 0) {
+			warn("%s", fs->fs_file);
+			return (1);
 		}
-	} else {
-		if (quota_quotaon(qh, idtype)) {
-			if (warn_on_enxio || errno != ENXIO) {
-				warn("quota%s for %s", mode, fs->fs_file);
-			}
-			return 1;
-		}
+		if (vflag)
+			printf("%s: %s quotas turned off\n",
+			    fs->fs_file, qfextension[type]);
+		return (0);
 	}
-
-	if (vflag) {
-		printf("%s: %s quotas turned %s\n",
-		    fs->fs_file, quota_idtype_getname(qh, idtype), mode);
+	if (quotactl(fs->fs_file, QCMD(Q_QUOTAON, type), 0, qfpathname) < 0) {
+		warn("%s quotas using %s on %s",
+		    qfextension[type], qfpathname, fs->fs_file);
+		return (1);
 	}
-	return 0;
-}
-
-/*
- * Verify file system is mounted and not readonly.
- */
-static int
-readonly(struct fstab *fs, const char *fsspec)
-{
-	struct statvfs fsbuf;
-
-	if (statvfs(fs->fs_file, &fsbuf) < 0 ||
-	    strcmp(fsbuf.f_mntonname, fs->fs_file) ||
-	    strcmp(fsbuf.f_mntfromname, fsspec)) {
-		printf("%s: not mounted\n", fs->fs_file);
-		return 1;
-	}
-	if (fsbuf.f_flag & MNT_RDONLY) {
-		printf("%s: mounted read-only\n", fs->fs_file);
-		return 1;
-	}
-	return 0;
+	if (vflag)
+		printf("%s: %s quotas turned on\n", fs->fs_file,
+		    qfextension[type]);
+	return (0);
 }
 
 /*
  * Check to see if target appears in list of size cnt.
  */
 static int
-oneof(const char *target, char *list[], int cnt)
+oneof(target, list, cnt)
+	const char *target;
+	char *list[];
+	int cnt;
 {
 	int i;
 
 	for (i = 0; i < cnt; i++)
 		if (strcmp(target, list[i]) == 0)
-			return i;
-	return -1;
+			return (i);
+	return (-1);
+}
+
+/*
+ * Check to see if a particular quota is to be enabled.
+ */
+static int
+hasquota(fs, type, qfnamep)
+	struct fstab *fs;
+	int type;
+	char **qfnamep;
+{
+	char *opt;
+	char *cp = NULL;
+	static char initname, usrname[100], grpname[100];
+	static char buf[BUFSIZ];
+
+	if (!initname) {
+		(void) snprintf(usrname, sizeof(usrname), "%s%s",
+		    qfextension[USRQUOTA], qfname);
+		(void) snprintf(grpname, sizeof(grpname), "%s%s",
+		    qfextension[GRPQUOTA], qfname);
+		initname = 1;
+	}
+	strcpy(buf, fs->fs_mntops);
+	for (opt = strtok(buf, ","); opt; opt = strtok(NULL, ",")) {
+		if ((cp = strchr(opt, '=')) != NULL)
+			*cp++ = '\0';
+		if (type == USRQUOTA && strcmp(opt, usrname) == 0)
+			break;
+		if (type == GRPQUOTA && strcmp(opt, grpname) == 0)
+			break;
+	}
+	if (!opt)
+		return (0);
+	if (cp) {
+		*qfnamep = cp;
+		return (1);
+	}
+	(void) snprintf(buf, sizeof(buf), "%s/%s.%s", fs->fs_file, qfname,
+	    qfextension[type]);
+	*qfnamep = buf;
+	return (1);
+}
+
+/*
+ * Verify file system is mounted and not readonly.
+ */
+static int
+readonly(fs)
+	struct fstab *fs;
+{
+	struct statvfs fsbuf;
+
+	if (statvfs(fs->fs_file, &fsbuf) < 0 ||
+	    strcmp(fsbuf.f_mntonname, fs->fs_file) ||
+	    strcmp(fsbuf.f_mntfromname, fs->fs_spec)) {
+		printf("%s: not mounted\n", fs->fs_file);
+		return (1);
+	}
+	if (fsbuf.f_flag & MNT_RDONLY) {
+		printf("%s: mounted read-only\n", fs->fs_file);
+		return (1);
+	}
+	return (0);
 }

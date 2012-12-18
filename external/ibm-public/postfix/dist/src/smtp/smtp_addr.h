@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp_addr.h,v 1.1.1.1 2009/06/23 10:08:54 tron Exp $	*/
+/*	$NetBSD: smtp_addr.h,v 1.1.1.1.2.3 2011/01/07 01:24:13 riz Exp $	*/
 
 /*++
 /* NAME

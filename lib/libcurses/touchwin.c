@@ -1,4 +1,4 @@
-/*	$NetBSD: touchwin.c,v 1.26 2010/02/23 19:48:26 drochner Exp $	*/
+/*	$NetBSD: touchwin.c,v 1.24 2007/05/28 15:01:58 blymn Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)touchwin.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: touchwin.c,v 1.26 2010/02/23 19:48:26 drochner Exp $");
+__RCSID("$NetBSD: touchwin.c,v 1.24 2007/05/28 15:01:58 blymn Exp $");
 #endif
 #endif				/* not lint */
 
@@ -51,7 +51,7 @@ is_linetouched(WINDOW *win, int line)
 	if (line > win->maxy)
 		return FALSE;
 
-	return ((win->alines[line]->flags & __ISDIRTY) != 0);
+	return ((win->lines[line]->flags & __ISDIRTY) != 0);
 }
 
 /*
@@ -159,7 +159,7 @@ wtouchln(WINDOW *win, int line, int n, int changed)
 		if (changed == 1)
 			__touchline(win, y, 0, (int) win->maxx - 1);
 		else {
-			wlp = win->alines[y];
+			wlp = win->lines[y];
 			if (*wlp->firstchp >= win->ch_off &&
 			    *wlp->firstchp < win->maxx + win->ch_off)
 				*wlp->firstchp = win->maxx + win->ch_off;
@@ -194,44 +194,20 @@ __touchline(WINDOW *win, int y, int sx, int ex)
 	__CTRACE(__CTRACE_LINE, "__touchline: (%p, %d, %d, %d)\n",
 	    win, y, sx, ex);
 	__CTRACE(__CTRACE_LINE, "__touchline: first = %d, last = %d\n",
-	    *win->alines[y]->firstchp, *win->alines[y]->lastchp);
+	    *win->lines[y]->firstchp, *win->lines[y]->lastchp);
 #endif
 	sx += win->ch_off;
 	ex += win->ch_off;
-	if (!(win->alines[y]->flags & __ISDIRTY))
-		win->alines[y]->flags |= __ISDIRTY;
+	if (!(win->lines[y]->flags & __ISDIRTY))
+		win->lines[y]->flags |= __ISDIRTY;
 	/* firstchp/lastchp are shared between parent window and sub-window. */
-	if (*win->alines[y]->firstchp > sx)
-		*win->alines[y]->firstchp = sx;
-	if (*win->alines[y]->lastchp < ex)
-		*win->alines[y]->lastchp = ex;
+	if (*win->lines[y]->firstchp > sx)
+		*win->lines[y]->firstchp = sx;
+	if (*win->lines[y]->lastchp < ex)
+		*win->lines[y]->lastchp = ex;
 #ifdef DEBUG
 	__CTRACE(__CTRACE_LINE, "__touchline: first = %d, last = %d\n",
-	    *win->alines[y]->firstchp, *win->alines[y]->lastchp);
+	    *win->lines[y]->firstchp, *win->lines[y]->lastchp);
 #endif
 	return (OK);
-}
-
-void
-wsyncup(WINDOW *win)
-{
-
-	do {
-		touchwin(win);
-		win = win->orig;
-	} while (win);
-}
-
-void
-wsyncdown(WINDOW *win)
-{
-	WINDOW *w = win->orig;
-
-	while (w) {
-		if (is_wintouched(w)) {
-			touchwin(win);
-			break;
-		}
-		w = w->orig;
-	}
 }

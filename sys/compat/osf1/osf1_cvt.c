@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_cvt.c,v 1.27 2010/04/23 15:19:20 rmind Exp $ */
+/* $NetBSD: osf1_cvt.c,v 1.25 2007/12/08 18:36:20 dsl Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_cvt.c,v 1.27 2010/04/23 15:19:20 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_cvt.c,v 1.25 2007/12/08 18:36:20 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,6 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_cvt.c,v 1.27 2010/04/23 15:19:20 rmind Exp $");
 #include <sys/stat.h>
 #include <sys/filedesc.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
 #include <sys/signal.h>
@@ -406,7 +407,8 @@ printf("osf1_cvt_msghdr_xopen_to_native: leftovers 0x%lx\n", leftovers);
 }
 
 int
-osf1_cvt_pathconf_name_to_native(int oname, int *bnamep)
+osf1_cvt_pathconf_name_to_native(oname, bnamep)
+	int oname, *bnamep;
 {
 	int error;
 

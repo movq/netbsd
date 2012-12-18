@@ -1,4 +1,4 @@
-/*      $NetBSD: sacc_hpcarm.c,v 1.12 2011/07/19 15:37:38 dyoung Exp $	*/
+/*      $NetBSD: sacc_hpcarm.c,v 1.10 2008/04/28 20:23:21 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sacc_hpcarm.c,v 1.12 2011/07/19 15:37:38 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sacc_hpcarm.c,v 1.10 2008/04/28 20:23:21 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,8 +44,8 @@ __KERNEL_RCSID(0, "$NetBSD: sacc_hpcarm.c,v 1.12 2011/07/19 15:37:38 dyoung Exp 
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/uio.h>
-#include <sys/bus.h>
 
+#include <machine/bus.h>
 #include <machine/platid.h>
 #include <machine/platid_mask.h>
 
@@ -55,7 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: sacc_hpcarm.c,v 1.12 2011/07/19 15:37:38 dyoung Exp 
 #include <arm/sa11x0/sa1111_reg.h>
 #include <arm/sa11x0/sa1111_var.h>
 
-static void	sacc_attach(device_t, device_t, void *);
+static void	sacc_attach(struct device *, struct device *, void *);
 static int	sacc_intr(void *);
 
 struct platid_data sacc_platid_table[] = {
@@ -63,28 +63,27 @@ struct platid_data sacc_platid_table[] = {
 	{ NULL, NULL }
 };
 
-CFATTACH_DECL_NEW(sacc, sizeof(struct sacc_softc),
+CFATTACH_DECL(sacc, sizeof(struct sacc_softc),
     sacc_probe, sacc_attach, NULL, NULL);
 
 #ifdef INTR_DEBUG
-#define DPRINTF(arg)	aprint_normal arg
+#define DPRINTF(arg)	printf arg
 #else
 #define DPRINTF(arg)
 #endif
 
 static void
-sacc_attach(device_t parent, device_t self, void *aux)
+sacc_attach(struct device *parent, struct device *self, void *aux)
 {
 	int i, gpiopin;
 	uint32_t skid;
-	struct sacc_softc *sc = device_private(self);
-	struct sa11x0_softc *psc = device_private(parent);
+	struct sacc_softc *sc = (struct sacc_softc *)self;
+	struct sa11x0_softc *psc = (struct sa11x0_softc *)parent;
 	struct sa11x0_attach_args *sa = aux;
 	struct platid_data *p;
 
-	aprint_normal("\n");
+	printf("\n");
 
-	sc->sc_dev = self;
 	sc->sc_iot = sa->sa_iot;
 	sc->sc_piot = psc->sc_iot;
 	sc->sc_gpioh = psc->sc_gpioh;
@@ -98,14 +97,14 @@ sacc_attach(device_t parent, device_t self, void *aux)
 
 	if (bus_space_map(sa->sa_iot, sa->sa_addr, sa->sa_size, 0,
 			  &sc->sc_ioh)) {
-		aprint_normal_dev(self, "unable to map registers\n");
+		printf("%s: unable to map registers\n", sc->sc_dev.dv_xname);
 		return;
 	}
 
 	skid = bus_space_read_4(sc->sc_iot, sc->sc_ioh, SACCSBI_SKID);
 
-	aprint_normal_dev(self, "SA-1111 rev %d.%d\n",
-			  (skid & 0xf0) >> 4, skid & 0xf);
+	printf("%s: SA-1111 rev %d.%d\n", sc->sc_dev.dv_xname,
+	       (skid & 0xf0) >> 4, skid & 0xf);
 
 	for (i = 0; i < SACCIC_LEN; i++)
 		sc->sc_intrhand[i] = NULL;

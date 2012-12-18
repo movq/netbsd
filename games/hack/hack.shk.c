@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.shk.c,v 1.14 2012/06/19 05:46:08 dholland Exp $	*/
+/*	$NetBSD: hack.shk.c,v 1.8.26.1 2009/06/29 23:31:28 snj Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.shk.c,v 1.14 2012/06/19 05:46:08 dholland Exp $");
+__RCSID("$NetBSD: hack.shk.c,v 1.8.26.1 2009/06/29 23:31:28 snj Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -77,7 +77,6 @@ static void findshk(int);
 static struct bill_x *onbill(struct obj *);
 static void pay(long, struct monst *);
 static int dopayobj(struct bill_x *);
-static struct obj *bp_to_obj(struct bill_x *);
 static int getprice(struct obj *);
 static int realhunger(void);
 #endif
@@ -87,64 +86,73 @@ int             shlevel = 0;
 struct monst   *shopkeeper = 0;
 struct obj     *billobjs = 0;
 void
-obfree(struct obj *obj, struct obj *merge)
+obfree(obj, merge)
+	struct obj     *obj, *merge;
 {
-	free(obj);
+	free((char *) obj);
 }
 int
-inshop(void) {
+inshop() {
 	return (0);
 }
 void
-shopdig(int n)
+shopdig(n)
+	int n;
 {
 }
 void
-addtobill(struct obj *obj)
+addtobill(obj)
+	struct obj *obj;
 {
 }
 void
-subfrombill(struct obj *obj)
+subfrombill(obj)
+	struct obj *obj;
 {
 }
 void
-splitbill(struct obj *o1, struct obj *o2)
+splitbill(o1, o2)
+	struct obj *o1, *o2;
 {
 }
 int
-dopay(void)
-{
+dopay() {
 	return (0);
 }
 void
-paybill(void)
+paybill()
 {
 }
 int
-doinvbill(int n)
-{
-	return (0);
-}
-void
-shkdead(struct monst *m)
-{
-}
-int
-shkcatch(struct obj *obj)
-{
-	return (0);
-}
-int
-shk_move(struct monst *m)
+doinvbill(n)
+	int n;
 {
 	return (0);
 }
 void
-replshk(struct monst *mtmp, struct monst *mtmp2)
+shkdead(m)
+	struct monst *m;
 {
 }
-char           *
-shkname(struct monst *m)
+int
+shkcatch(obj)
+	struct obj *obj;
+{
+	return (0);
+}
+int
+shk_move(m)
+	struct monst *m;
+{
+	return (0);
+}
+void
+replshk(mtmp, mtmp2)
+	struct monst   *mtmp, *mtmp2;
+{
+}
+char           *shkname(m)
+	struct monst *m;
 {
 	return ("");
 }
@@ -188,13 +196,15 @@ static const char    *const shopnam[] = {
 };
 
 char           *
-shkname(struct monst *mtmp)		/* called in do_name.c */
+shkname(mtmp)			/* called in do_name.c */
+	struct monst   *mtmp;
 {
 	return (ESHK(mtmp)->shknam);
 }
 
 void
-shkdead(struct monst *mtmp)		/* called in mon.c */
+shkdead(mtmp)			/* called in mon.c */
+	struct monst   *mtmp;
 {
 	struct eshk    *eshk = ESHK(mtmp);
 
@@ -209,7 +219,8 @@ shkdead(struct monst *mtmp)		/* called in mon.c */
 }
 
 void
-replshk(struct monst *mtmp, struct monst *mtmp2)
+replshk(mtmp, mtmp2)
+	struct monst   *mtmp, *mtmp2;
 {
 	if (mtmp == shopkeeper) {
 		shopkeeper = mtmp2;
@@ -218,7 +229,7 @@ replshk(struct monst *mtmp, struct monst *mtmp2)
 }
 
 static void
-setpaid(void)
+setpaid()
 {				/* caller has checked that shopkeeper exists */
 	/* either we paid or left the shop or he just died */
 	struct obj     *obj;
@@ -237,13 +248,13 @@ setpaid(void)
 			obj->unpaid = 0;
 	while ((obj = billobjs) != NULL) {
 		billobjs = obj->nobj;
-		free(obj);
+		free((char *) obj);
 	}
 	ESHK(shopkeeper)->billct = 0;
 }
 
 static void
-addupbill(void)
+addupbill()
 {				/* delivers result in total */
 	/* caller has checked that shopkeeper exists */
 	int ct = ESHK(shopkeeper)->billct;
@@ -256,7 +267,7 @@ addupbill(void)
 }
 
 int
-inshop(void)
+inshop()
 {
 	int roomno = inroom(u.ux, u.uy);
 
@@ -349,7 +360,8 @@ inshop(void)
 }
 
 static void
-findshk(int roomno)
+findshk(roomno)
+	int roomno;
 {
 	struct monst   *mtmp;
 	for (mtmp = fmon; mtmp; mtmp = mtmp->nmon)
@@ -377,7 +389,8 @@ findshk(int roomno)
 }
 
 static struct bill_x *
-onbill(struct obj *obj)
+onbill(obj)
+	struct obj     *obj;
 {
 	struct bill_x  *bp;
 	if (!shopkeeper)
@@ -395,7 +408,8 @@ onbill(struct obj *obj)
 
 /* called with two args on merge */
 void
-obfree(struct obj *obj, struct obj *merge)
+obfree(obj, merge)
+	struct obj     *obj, *merge;
 {
 	struct bill_x  *bp = onbill(obj);
 	struct bill_x  *bpm;
@@ -419,11 +433,13 @@ obfree(struct obj *obj, struct obj *merge)
 			*bp = bill[ESHK(shopkeeper)->billct];
 		}
 	}
-	free(obj);
+	free((char *) obj);
 }
 
 static void
-pay(long tmp, struct monst *shkp)
+pay(tmp, shkp)
+	long            tmp;
+	struct monst   *shkp;
 {
 	long            robbed = ESHK(shkp)->robbed;
 
@@ -439,7 +455,7 @@ pay(long tmp, struct monst *shkp)
 }
 
 int
-dopay(void)
+dopay()
 {
 	long            ltmp;
 	struct bill_x  *bp;
@@ -561,7 +577,8 @@ dopay(void)
 /* 0 if not enough money */
 /* -1 if object could not be found (but was paid) */
 static int
-dopayobj(struct bill_x *bp)
+dopayobj(bp)
+	struct bill_x  *bp;
 {
 	struct obj     *obj;
 	long            ltmp;
@@ -603,14 +620,14 @@ dopayobj(struct bill_x *bp)
 			else
 				pline("Error in shopkeeper administration.");
 		}
-		free(obj);
+		free((char *) obj);
 	}
 	return (1);
 }
 
 /* routine called after dying (or quitting) with nonempty bill */
 void
-paybill(void)
+paybill()
 {
 	if (shlevel == dlevel && shopkeeper && ESHK(shopkeeper)->billct) {
 		addupbill();
@@ -630,8 +647,9 @@ paybill(void)
 }
 
 /* find obj on one of the lists */
-static struct obj *
-bp_to_obj(struct bill_x *bp)
+struct obj     *
+bp_to_obj(bp)
+	struct bill_x  *bp;
 {
 	struct obj     *obj;
 	struct monst   *mtmp;
@@ -654,7 +672,8 @@ bp_to_obj(struct bill_x *bp)
 
 /* called in hack.c when we pickup an object */
 void
-addtobill(struct obj *obj)
+addtobill(obj)
+	struct obj     *obj;
 {
 	struct bill_x  *bp;
 	if (!inshop() ||
@@ -677,7 +696,8 @@ addtobill(struct obj *obj)
 }
 
 void
-splitbill(struct obj *obj, struct obj *otmp)
+splitbill(obj, otmp)
+	struct obj     *obj, *otmp;
 {
 	/* otmp has been split off from obj */
 	struct bill_x  *bp;
@@ -710,7 +730,8 @@ splitbill(struct obj *obj, struct obj *otmp)
 }
 
 void
-subfrombill(struct obj *obj)
+subfrombill(obj)
+	struct obj     *obj;
 {
 	long            ltmp;
 	int             tmp;
@@ -775,9 +796,9 @@ subfrombill(struct obj *obj)
 		      plur(ltmp));
 }
 
-/* mode:  0: deliver count 1: paged */
 int
-doinvbill(int mode)
+doinvbill(mode)
+	int             mode;	/* 0: deliver count 1: paged */
 {
 	struct bill_x  *bp;
 	struct obj     *obj;
@@ -840,7 +861,8 @@ quit:
 }
 
 static int
-getprice(struct obj *obj)
+getprice(obj)
+	struct obj     *obj;
 {
 	int             tmp, ac;
 
@@ -890,7 +912,6 @@ getprice(struct obj *obj)
 		break;
 	case CHAIN_SYM:
 		pline("Strange ..., carrying a chain?");
-		/* FALLTHROUGH */
 	case BALL_SYM:
 		tmp = 10;
 		break;
@@ -901,7 +922,7 @@ getprice(struct obj *obj)
 }
 
 static int
-realhunger(void)
+realhunger()
 {				/* not completely foolproof */
 	int		tmp = u.uhunger;
 	struct obj     *otmp = invent;
@@ -914,7 +935,8 @@ realhunger(void)
 }
 
 int
-shkcatch(struct obj *obj)
+shkcatch(obj)
+	struct obj     *obj;
 {
 	struct monst   *shkp = shopkeeper;
 
@@ -935,7 +957,8 @@ shkcatch(struct obj *obj)
  * shk_move: return 1: he moved  0: he didnt  -1: let m_move do it
  */
 int
-shk_move(struct monst *shkp)
+shk_move(shkp)
+	struct monst   *shkp;
 {
 	struct monst   *mtmp;
 	const struct permonst *mdat = shkp->data;
@@ -1103,7 +1126,8 @@ notonl_ok:
 
 /* He is digging in the shop. */
 void
-shopdig(int fall)
+shopdig(fall)
+	int             fall;
 {
 	if (!fall) {
 		if (u.utraptype == TT_PIT)
@@ -1137,7 +1161,8 @@ online(int x, int y)
 
 /* Does this monster follow me downstairs? */
 int
-follower(struct monst *mtmp)
+follower(mtmp)
+	struct monst   *mtmp;
 {
 	return (mtmp->mtame || strchr("1TVWZi&, ", mtmp->data->mlet)
 #ifndef QUEST

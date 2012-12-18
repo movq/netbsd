@@ -1,4 +1,4 @@
-/*	$NetBSD: ctl.c,v 1.39 2011/08/28 01:17:48 joerg Exp $	*/
+/*	$NetBSD: ctl.c,v 1.37 2008/04/28 20:24:12 martin Exp $	*/
 
 /*
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: ctl.c,v 1.39 2011/08/28 01:17:48 joerg Exp $");
+__RCSID("$NetBSD: ctl.c,v 1.37 2008/04/28 20:24:12 martin Exp $");
 #endif
 
 
@@ -51,22 +51,23 @@ __RCSID("$NetBSD: ctl.c,v 1.39 2011/08/28 01:17:48 joerg Exp $");
 
 #include "libaudio.h"
 
-static struct field *findfield(const char *name);
-static void prfield(const struct field *p, const char *sep);
-static void rdfield(struct field *p, char *q);
-static void getinfo(int fd);
-static void audioctl_write(int, int, char *[]);
-__dead static void usage(void);
+struct field *findfield (const char *name);
+void prfield (struct field *p, const char *sep);
+void rdfield (struct field *p, char *q);
+void getinfo (int fd);
+void audioctl_write (int, int, char *[]);
+void usage (void);
+int main (int argc, char **argv);
 
-static audio_device_t adev;
+audio_device_t adev;
 
-static audio_info_t info;
+audio_info_t info;
 
-static char encbuf[1000];
+char encbuf[1000];
 
-static int properties, fullduplex, rerror;
+int properties, fullduplex, rerror;
 
-static struct field {
+struct field {
 	const char *name;
 	void *valp;
 	int format;
@@ -139,7 +140,7 @@ static struct field {
 	{ .name = NULL },
 };
 
-static const struct {
+static struct {
 	const char *name;
 	u_int prop;
 } props[] = {
@@ -149,8 +150,9 @@ static const struct {
 	{ .name = NULL },
 };
 
-static struct field *
-findfield(const char *name)
+struct field *
+findfield(name)
+	const char *name;
 {
 	int i;
 	for (i = 0; fields[i].name; i++)
@@ -159,8 +161,10 @@ findfield(const char *name)
 	return 0;
 }
 
-static void
-prfield(const struct field *p, const char *sep)
+void
+prfield(p, sep)
+	struct field *p;
+	const char *sep;
 {
 	u_int v;
 	const char *cm, *encstr;
@@ -170,25 +174,25 @@ prfield(const struct field *p, const char *sep)
 		printf("%s%s", p->name, sep);
 	switch(p->format) {
 	case STRING:
-		printf("%s", (const char*)p->valp);
+		printf("%s", (char*)p->valp);
 		break;
 	case INT:
-		printf("%d", *(const int*)p->valp);
+		printf("%d", *(int*)p->valp);
 		break;
 	case UINT:
-		printf("%u", *(const u_int*)p->valp);
+		printf("%u", *(u_int*)p->valp);
 		break;
 	case XINT:
-		printf("0x%x", *(const u_int*)p->valp);
+		printf("0x%x", *(u_int*)p->valp);
 		break;
 	case UCHAR:
-		printf("%u", *(const u_char*)p->valp);
+		printf("%u", *(u_char*)p->valp);
 		break;
 	case ULONG:
-		printf("%lu", *(const u_long*)p->valp);
+		printf("%lu", *(u_long*)p->valp);
 		break;
 	case P_R:
-		v = *(const u_int*)p->valp;
+		v = *(u_int*)p->valp;
 		cm = "";
 		if (v & AUMODE_PLAY) {
 			if (v & AUMODE_PLAY_ALL)
@@ -231,8 +235,10 @@ prfield(const struct field *p, const char *sep)
 	}
 }
 
-static void
-rdfield(struct field *p, char *q)
+void
+rdfield(p, q)
+	struct field *p;
+	char *q;
 {
 	int enc;
 	u_int u;
@@ -283,8 +289,9 @@ rdfield(struct field *p, char *q)
 	p->flags |= SET;
 }
 
-static void
-getinfo(int fd)
+void
+getinfo(fd)
+	int fd;
 {
 	int pos, i;
 
@@ -295,11 +302,11 @@ getinfo(int fd)
 		enc.index = i;
 		if (ioctl(fd, AUDIO_GETENC, &enc) < 0)
 			break;
-		if (pos >= (int)sizeof(encbuf)-1)
+		if (pos >= sizeof(encbuf)-1)
 			break;
 		if (pos)
 			encbuf[pos++] = ',';
-		if (pos >= (int)sizeof(encbuf)-1)
+		if (pos >= sizeof(encbuf)-1)
 			break;
 		pos += snprintf(encbuf+pos, sizeof(encbuf)-pos, "%s:%d%s",
 			enc.name, enc.precision,
@@ -315,8 +322,8 @@ getinfo(int fd)
 		err(1, "AUDIO_GETINFO");
 }
 
-static void
-usage(void)
+void
+usage()
 {
 	const char *prog = getprogname();
 
@@ -327,7 +334,9 @@ usage(void)
 }
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	int fd, i, ch;
 	int aflag = 0, wflag = 0;
@@ -419,8 +428,11 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-static void
-audioctl_write(int fd, int argc, char *argv[])
+void
+audioctl_write(fd, argc, argv)
+	int fd;
+	int argc;
+	char *argv[];
 {
 	struct field *p;
 

@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.52 2012/07/29 18:05:39 mlelstv Exp $ */
+/* $NetBSD: autoconf.c,v 1.44 2007/12/03 15:33:04 ad Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -42,7 +42,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.52 2012/07/29 18:05:39 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.44 2007/12/03 15:33:04 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,15 +62,15 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.52 2012/07/29 18:05:39 mlelstv Exp $"
 
 struct bootdev_data	*bootdev_data;
 
-void	parse_prom_bootdev(void);
-static inline int atoi(const char *);
+void	parse_prom_bootdev __P((void));
+int	atoi __P((char *));
 
 /*
  * cpu_configure:
  * called at boot time, configure all devices on system
  */
 void
-cpu_configure(void)
+cpu_configure()
 {
 
 	parse_prom_bootdev();
@@ -87,24 +87,24 @@ cpu_configure(void)
 	(void)spl0();
 
 	/*
-	 * Note that bootstrapping is finished, and set the HWRPB up
+	 * Note that bootstrapping is finished, and set the HWRPB up  
 	 * to do restarts.
 	 */
 	hwrpb_restart_setup();
 }
 
 void
-cpu_rootconf(void)
+cpu_rootconf()
 {
 
 	if (booted_device == NULL)
 		printf("WARNING: can't figure what device matches \"%s\"\n",
 		    bootinfo.booted_dev);
-	rootconf();
+	setroot(booted_device, booted_partition);
 }
 
 void
-parse_prom_bootdev(void)
+parse_prom_bootdev()
 {
 	static char hacked_boot_dev[128];
 	static struct bootdev_data bd;
@@ -163,14 +163,35 @@ parse_prom_bootdev(void)
 	bootdev_data = &bd;
 }
 
-static inline int
-atoi(const char *s)
+int
+atoi(s)
+	char *s;
 {
-	return (int)strtoll(s, NULL, 10);
+	int n, neg;
+
+	n = 0;
+	neg = 0;
+
+	while (*s == '-') {
+		s++;
+		neg = !neg;
+	}
+
+	while (*s != '\0') {
+		if (*s < '0' && *s > '9')
+			break;
+
+		n = (10 * n) + (*s - '0');
+		s++;
+	}
+
+	return (neg ? -n : n);
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(dev, aux)
+	struct device *dev;
+	void *aux;
 {
 	if (bootdev_data == NULL) {
 		/*

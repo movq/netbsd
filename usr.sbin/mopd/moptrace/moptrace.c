@@ -1,4 +1,4 @@
-/*	$NetBSD: moptrace.c,v 1.11 2011/08/30 19:49:11 joerg Exp $	*/
+/*	$NetBSD: moptrace.c,v 1.9 2003/04/20 00:20:29 christos Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: moptrace.c,v 1.11 2011/08/30 19:49:11 joerg Exp $");
+__RCSID("$NetBSD: moptrace.c,v 1.9 2003/04/20 00:20:29 christos Exp $");
 #endif
 
 /*
@@ -53,8 +58,9 @@ __RCSID("$NetBSD: moptrace.c,v 1.11 2011/08/30 19:49:11 joerg Exp $");
  */
 struct if_info *iflist;
 
-__dead static void	Usage(void);
-void	mopProcess(struct if_info *, u_char *);
+void	Usage __P((void));
+int	main __P((int, char **));
+void	mopProcess __P((struct if_info *, u_char *));
 
 int     AllFlag = 0;		/* listen on "all" interfaces  */
 int     DebugFlag = 0;		/* print debugging messages    */
@@ -63,7 +69,9 @@ int	Not4Flag = 0;		/* Ignore MOP V4 messages      */
 int	promisc = 1;		/* Need promisc mode           */
 
 int
-main(int argc, char  **argv)
+main(argc, argv)
+	int     argc;
+	char  **argv;
 {
 	int     op;
 	char   *interface;
@@ -107,8 +115,8 @@ main(int argc, char  **argv)
 	return (0);
 }
 
-static void
-Usage(void)
+void
+Usage()
 {
 	(void) fprintf(stderr, "usage: %s -a [ -d ] [ -3 | -4 ]\n",
 		       getprogname());
@@ -121,7 +129,9 @@ Usage(void)
  * Process incoming packages.
  */
 void
-mopProcess(struct if_info *ii, u_char *pkt)
+mopProcess(ii, pkt)
+	struct if_info *ii;
+	u_char *pkt;
 {
 	int	 trans;
 

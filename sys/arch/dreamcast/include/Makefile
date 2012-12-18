@@ -1,9 +1,9 @@
-#	$NetBSD: Makefile,v 1.18 2011/07/19 15:52:30 dyoung Exp $
+#	$NetBSD: Makefile,v 1.16 2007/02/09 21:55:02 ad Exp $
 
 INCSDIR= /usr/include/dreamcast
 
 INCS=	ansi.h aout_machdep.h asm.h \
-	bswap.h \
+	bswap.h bus.h \
 	cdefs.h coff_machdep.h cpu.h cputypes.h \
 	disklabel.h \
 	elf_machdep.h endian.h endian_machdep.h \
@@ -15,9 +15,9 @@ INCS=	ansi.h aout_machdep.h asm.h \
 	math.h mcontext.h mutex.h \
 	param.h pcb.h pmap.h pmc.h proc.h profile.h psl.h pte.h ptrace.h \
 	reg.h rwlock.h \
-	setjmp.h signal.h \
+	setjmp.h signal.h stdarg.h \
 	types.h \
-	vmparam.h \
+	varargs.h vmparam.h \
 	wchar_limits.h
 
 .include <bsd.kinc.mk>

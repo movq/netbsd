@@ -1,4 +1,4 @@
-/*	$NetBSD: clri.c,v 1.22 2009/07/26 03:22:01 dholland Exp $	*/
+/*	$NetBSD: clri.c,v 1.20 2008/07/20 01:20:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1990, 1993\
 #if 0
 static char sccsid[] = "@(#)clri.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: clri.c,v 1.22 2009/07/26 03:22:01 dholland Exp $");
+__RCSID("$NetBSD: clri.c,v 1.20 2008/07/20 01:20:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -76,7 +76,7 @@ main(int argc, char *argv[])
 	struct ufs1_dinode *ip1;
 	struct ufs2_dinode *ip2;
 	int fd;
-	void *ibuf;
+	char *ibuf[MAXBSIZE];
 	int32_t generation;
 	off_t offset;
 	size_t bsize;
@@ -122,7 +122,7 @@ main(int argc, char *argv[])
 
 		/* check we haven't found an alternate */
 		if (is_ufs2 || sbp->fs_old_flags & FS_FLAGS_UPDATED) {
-			if ((uint64_t)sblockloc != ufs_rw64(sbp->fs_sblockloc, needswap))
+			if (sblockloc != ufs_rw64(sbp->fs_sblockloc, needswap))
 				continue;
 		} else {
 			if (sblockloc == SBLOCK_UFS2)
@@ -150,12 +150,7 @@ main(int argc, char *argv[])
 
 	if (needswap)
 		ffs_sb_swap(sbp, sbp);
-
 	bsize = sbp->fs_bsize;
-	ibuf = malloc(bsize);
-	if (ibuf == NULL) {
-		err(1, "malloc");
-	}
 
 	/* remaining arguments are inode numbers. */
 	while (*++argv) {
@@ -171,7 +166,7 @@ main(int argc, char *argv[])
 		/* seek and read the block */
 		if (lseek(fd, offset, SEEK_SET) < 0)
 			err(1, "%s", fs);
-		if ((size_t)read(fd, ibuf, bsize) != bsize)
+		if (read(fd, ibuf, bsize) != bsize)
 			err(1, "%s", fs);
 
 		/* get the inode within the block. */
@@ -194,11 +189,10 @@ main(int argc, char *argv[])
 		/* backup and write the block */
 		if (lseek(fd, offset, SEEK_SET) < 0)
 			err(1, "%s", fs);
-		if ((size_t)write(fd, ibuf, bsize) != bsize)
+		if (write(fd, ibuf, bsize) != bsize)
 			err(1, "%s", fs);
 		(void)fsync(fd);
 	}
-	free(ibuf);
 	(void)close(fd);
 	exit(0);
 }

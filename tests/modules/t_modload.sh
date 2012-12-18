@@ -1,4 +1,4 @@
-# $NetBSD: t_modload.sh,v 1.13 2012/04/20 05:41:25 jruoho Exp $
+# $NetBSD: t_modload.sh,v 1.3.6.1 2009/01/09 02:12:50 snj Exp $
 #
 # Copyright (c) 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -27,43 +27,32 @@
 
 check_sysctl() {
 	echo "${1} = ${2}" >expout
-	atf_check -s eq:0 -o file:expout -e empty sysctl ${1}
+	atf_check "sysctl ${1}" 0 expout null
 }
 
-atf_test_case plain cleanup
+atf_test_case plain
 plain_head() {
 	atf_set "descr" "Test load without arguments"
 	atf_set "require.user" "root"
 }
 plain_body() {
-
-	# XXX: Adjust when modctl(8) fails consistently.
-	#
-	$(atf_get_srcdir)/k_helper3 \
-		"%s/k_helper/k_helper.kmod" $(atf_get_srcdir)
-
-	if [ $? -eq 1 ] || [ $? -eq 78 ]; then
-		atf_skip "host does not support modules"
-	fi
-
 	cat >experr <<EOF
 modload: No such file or directory
 EOF
-	atf_check -s eq:1 -o empty -e ignore modload non-existent.o
+	atf_check "modload non-existent.o" 1 null experr
 
-	atf_check -s eq:0 -o empty -e empty \
-	    modload $(atf_get_srcdir)/k_helper/k_helper.kmod
+	atf_check "modload $(atf_get_srcdir)/k_helper/k_helper.kmod" \
+	    0 null null
 	check_sysctl vendor.k_helper.present 1
 	check_sysctl vendor.k_helper.prop_int_ok 0
 	check_sysctl vendor.k_helper.prop_str_ok 0
-	atf_check -s eq:0 -o empty -e empty modunload k_helper
-	touch done
+	atf_check "modunload k_helper" 0 null null
 }
 plain_cleanup() {
-	test -f done || modunload k_helper >/dev/null 2>&1
+	modunload k_helper >/dev/null 2>&1
 }
 
-atf_test_case bflag cleanup
+atf_test_case bflag
 bflag_head() {
 	atf_set "descr" "Test the -b flag"
 	atf_set "require.user" "root"
@@ -71,129 +60,85 @@ bflag_head() {
 bflag_body() {
 	echo "Checking error conditions"
 
-	atf_check -s eq:1 -o empty -e save:stderr \
-	    modload -b foo k_helper.kmod
-	atf_check -s eq:0 -o ignore -e empty \
-	    grep 'Invalid parameter.*foo' stderr
+	atf_check "modload -b foo k_helper/k_helper.kmod" 1 null stderr
+	atf_check "grep 'Invalid parameter.*foo' stderr" 0 ignore null
 
-	atf_check -s eq:1 -o empty -e save:stderr \
-	    modload -b foo= k_helper.kmod
-	atf_check -s eq:0 -o ignore -e empty \
-	    grep 'Invalid boolean value' stderr
+	atf_check "modload -b foo= k_helper/k_helper.kmod" 1 null stderr
+	atf_check "grep 'Invalid boolean value' stderr" 0 ignore null
 
-	atf_check -s eq:1 -o empty -e save:stderr \
-	    modload -b foo=bar k_helper.kmod
-	atf_check -s eq:0 -o ignore -e empty \
-	    grep 'Invalid boolean value.*bar' stderr
+	atf_check "modload -b foo=bar k_helper/k_helper.kmod" 1 null stderr
+	atf_check "grep 'Invalid boolean value.*bar' stderr" 0 ignore null
 
-	atf_check -s eq:1 -o empty -e save:stderr \
-	    modload -b foo=falsea k_helper.kmod
-	atf_check -s eq:0 -o ignore -e empty \
-	    grep 'Invalid boolean value.*falsea' stderr
+	atf_check "modload -b foo=falsea k_helper/k_helper.kmod" 1 null stderr
+	atf_check "grep 'Invalid boolean value.*falsea' stderr" 0 ignore null
 
-	atf_check -s eq:1 -o empty -e save:stderr \
-	    modload -b foo=truea k_helper.kmod
-	atf_check -s eq:0 -o ignore -e empty \
-	    grep 'Invalid boolean value.*truea' stderr
+	atf_check "modload -b foo=truea k_helper/k_helper.kmod" 1 null stderr
+	atf_check "grep 'Invalid boolean value.*truea' stderr" 0 ignore null
 
 	# TODO Once sysctl(8) supports CTLTYPE_BOOL nodes.
 	#echo "Checking valid values"
 }
 bflag_cleanup() {
-	modunload k_helper >/dev/null 2>&1 || true
+	modunload k_helper >/dev/null 2>&1
 }
 
-atf_test_case iflag cleanup
+atf_test_case iflag
 iflag_head() {
 	atf_set "descr" "Test the -i flag"
 	atf_set "require.user" "root"
 }
 iflag_body() {
-
-	# XXX: Adjust when modctl(8) fails consistently.
-	#
-	$(atf_get_srcdir)/k_helper3 \
-		"%s/k_helper/k_helper.kmod" $(atf_get_srcdir)
-
-	if [ $? -eq 1 ] || [ $? -eq 78 ]; then
-		atf_skip "host does not support modules"
-	fi
-
 	echo "Checking error conditions"
 
-	atf_check -s eq:1 -o empty -e save:stderr modload -i foo \
-	    k_helper/k_helper.kmod
-	atf_check -s eq:0 -o ignore -e empty \
-	    grep 'Invalid parameter.*foo' stderr
+	atf_check "modload -i foo k_helper/k_helper.kmod" 1 null stderr
+	atf_check "grep 'Invalid parameter.*foo' stderr" 0 ignore null
 
-	atf_check -s eq:1 -o empty -e save:stderr modload -i foo= \
-	    k_helper/k_helper.kmod
-	atf_check -s eq:0 -o ignore -e empty \
-	    grep 'Invalid integer value' stderr
+	atf_check "modload -i foo= k_helper/k_helper.kmod" 1 null stderr
+	atf_check "grep 'Invalid integer value' stderr" 0 ignore null
 
-	atf_check -s eq:1 -o empty -e save:stderr \
-	    modload -i foo=bar k_helper/k_helper.kmod
-	atf_check -s eq:0 -o ignore -e empty \
-	    grep 'Invalid integer value.*bar' stderr
+	atf_check "modload -i foo=bar k_helper/k_helper.kmod" 1 null stderr
+	atf_check "grep 'Invalid integer value.*bar' stderr" 0 ignore null
 
-	atf_check -s eq:1 -o empty -e save:stderr \
-	    modload -i foo=123a k_helper/k_helper.kmod
-	atf_check -s eq:0 -o ignore -e empty \
-	    grep 'Invalid integer value.*123a' stderr
+	atf_check "modload -i foo=123a k_helper/k_helper.kmod" 1 null stderr
+	atf_check "grep 'Invalid integer value.*123a' stderr" 0 ignore null
 
 	echo "Checking valid values"
 
 	for v in 5 10; do
-		atf_check -s eq:0 -o empty -e empty \
-		    modload -i prop_int="${v}" \
-		    $(atf_get_srcdir)/k_helper/k_helper.kmod
+		atf_check "modload -i prop_int='${v}' \
+		    $(atf_get_srcdir)/k_helper/k_helper.kmod" 0 null null
 		check_sysctl vendor.k_helper.prop_int_ok 1
 		check_sysctl vendor.k_helper.prop_int_val "${v}"
-		atf_check -s eq:0 -o empty -e empty modunload k_helper
+		atf_check "modunload k_helper" 0 null null
 	done
-	touch done
 }
 iflag_cleanup() {
-	test -f done || modunload k_helper >/dev/null 2>&1
+	modunload k_helper >/dev/null 2>&1
 }
 
-atf_test_case sflag cleanup
+atf_test_case sflag
 sflag_head() {
 	atf_set "descr" "Test the -s flag"
 	atf_set "require.user" "root"
 }
 sflag_body() {
-
-	# XXX: Adjust when modctl(8) fails consistently.
-	#
-	$(atf_get_srcdir)/k_helper3 \
-		"%s/k_helper/k_helper.kmod" $(atf_get_srcdir)
-
-	if [ $? -eq 1 ] || [ $? -eq 78 ]; then
-		atf_skip "host does not support modules"
-	fi
-
 	echo "Checking error conditions"
 
-	atf_check -s eq:1 -o empty -e save:stderr modload -s foo \
-	    k_helper/k_helper.kmod
-	atf_check -s eq:0 -o ignore -e empty \
-	    grep 'Invalid parameter.*foo' stderr
+	atf_check "modload -s foo k_helper/k_helper.kmod" 1 null stderr
+	atf_check "grep 'Invalid parameter.*foo' stderr" 0 ignore null
 
 	echo "Checking valid values"
 
 	for v in '1st string' '2nd string'; do
-		atf_check -s eq:0 -o empty -e empty \
-		    modload -s prop_str="${v}" \
-		    $(atf_get_srcdir)/k_helper/k_helper.kmod
+		atf_check "modload -s prop_str='${v}' \
+		    $(atf_get_srcdir)/k_helper/k_helper.kmod" 0 null null
 		check_sysctl vendor.k_helper.prop_str_ok 1
 		check_sysctl vendor.k_helper.prop_str_val "${v}"
-		atf_check -s eq:0 -o empty -e empty modunload k_helper
+		atf_check "modunload k_helper" 0 null null
 	done
-	touch done
 }
 sflag_cleanup() {
-	test -f done || modunload k_helper >/dev/null 2>&1
+	modunload k_helper >/dev/null 2>&1
 }
 
 atf_init_test_cases()

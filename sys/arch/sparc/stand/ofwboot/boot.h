@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.h,v 1.9 2011/06/01 11:43:12 tsutsui Exp $	*/
+/*	$NetBSD: boot.h,v 1.5 2008/04/28 20:23:36 martin Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -42,31 +42,30 @@
  */
 extern const char bootprog_rev[];
 extern const char bootprog_name[];
+extern const char bootprog_date[];
+extern const char bootprog_maker[];
 
 /* bootinfo.c */
-u_long	bi_init(u_long);
-void	bi_add(void *, int, size_t);
+extern u_long	bi_init(u_long);
+extern void	bi_add(void *, int, size_t);
 
 /* sparc64.c */
-ssize_t	sparc64_read(int, void *, size_t);
-void	*sparc64_memcpy(void *, const void *, size_t);
-void	*sparc64_memset(void *, int, size_t);
-void	sparc64_bi_add(void);
-void	sparc64_finalize_tlb(u_long);
+extern ssize_t	sparc64_read(int, void *, size_t);
+extern void*	sparc64_memcpy(void *, const void *, size_t);
+extern void*	sparc64_memset(void *, int, size_t);
+extern void	sparc64_bi_add(void);
+extern void	sparc64_finalize_tlb(u_long);
 
 /* srt0.s */
-u_int	get_cpuid(void);
+extern u_int	get_cpuid(void);
 
 /* loadfile_machdep.c */
 #define LOADFILE_NOP_ALLOCATOR		0x0
 #define LOADFILE_OFW_ALLOCATOR		0x1
 #define LOADFILE_MMU_ALLOCATOR		0x2
-void	loadfile_set_allocator(int);
-
-/* alloc.c */
-void	freeall(void);
+extern void	loadfile_set_allocator(int);
 
 /* ofdev.c */
-char *filename(char *, char *);
+char *filename(char*, char*);
 
 #endif /* _BOOT_H_ */

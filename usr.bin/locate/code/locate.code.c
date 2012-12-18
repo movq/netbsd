@@ -1,4 +1,4 @@
-/*	$NetBSD: locate.code.c,v 1.11 2011/09/04 20:28:40 joerg Exp $	*/
+/*	$NetBSD: locate.code.c,v 1.10 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)locate.code.c	8.4 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: locate.code.c,v 1.11 2011/09/04 20:28:40 joerg Exp $");
+__RCSID("$NetBSD: locate.code.c,v 1.10 2008/07/21 14:19:23 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -93,15 +93,18 @@ __RCSID("$NetBSD: locate.code.c,v 1.11 2011/09/04 20:28:40 joerg Exp $");
 
 #define	BGBUFSIZE	(NBG * 2)	/* size of bigram buffer */
 
-static char buf1[MAXPATHLEN] = " ";
-static char buf2[MAXPATHLEN];
-static char bigrams[BGBUFSIZE + 1] = { 0 };
+char buf1[MAXPATHLEN] = " ";	
+char buf2[MAXPATHLEN];
+char bigrams[BGBUFSIZE + 1] = { 0 };
 
-static int	bgindex(char *);
-__dead static void	usage(void);
+int	bgindex __P((char *));
+int	main __P((int, char **));
+void	usage __P((void));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	char *cp, *oldpath, *path;
 	int ch, code, count, diffcount, oldcount;
@@ -185,8 +188,9 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-static int
-bgindex(char *bg)			/* Return location of bg in bigrams or -1. */
+int
+bgindex(bg)			/* Return location of bg in bigrams or -1. */
+	char *bg;
 {
 	char bg0, bg1, *p;
 
@@ -198,8 +202,8 @@ bgindex(char *bg)			/* Return location of bg in bigrams or -1. */
 	return (*p == '\0' ? -1 : p - bigrams);
 }
 
-static void
-usage(void)
+void
+usage()
 {
 	(void)fprintf(stderr,
 	    "usage: locate.code common_bigrams < list > squozen_list\n");

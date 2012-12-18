@@ -1,4 +1,4 @@
-/*	$NetBSD: prephandlers.c,v 1.3 2011/01/04 09:25:21 wiz Exp $	*/
+/*	$NetBSD: prephandlers.c,v 1.2 2008/04/28 20:24:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -111,10 +111,8 @@ prep_handler(char *keyword, char *arg)
 
 			nvio.pnv_buf = &nvio_buf[0];
 			nvio.pnv_buflen = sizeof(nvio_buf);
-			if (ioctl(fd, PNVIOCGET, (char *) &nvio) < 0) {
-				(void)close(fd);
+			if (ioctl(fd, PNVIOCGET, (char *) &nvio) < 0)
 				BARF("PNVIOCGET", strerror(errno));
-			}
 
 			if (nvio.pnv_buflen <= 0) {
 				printf("nothing available for %s\n", keyword);
@@ -133,10 +131,8 @@ out:
 			nvio.pnv_buflen = strlen(arg);
 		}
 
-		if (ioctl(fd, PNVIOCSET, (char *) &nvio) < 0) {
-			(void)close(fd);
+		if (ioctl(fd, PNVIOCSET, (char *) &nvio) < 0)
 			BARF("invalid keyword", keyword);
-		}
 
 		if (verbose) {
 			printf("new: ");
@@ -148,10 +144,8 @@ out:
 	} else {
 		nvio.pnv_buf = &nvio_buf[0];
 		nvio.pnv_buflen = sizeof(nvio_buf);
-		if (ioctl(fd, PNVIOCGET, (char *) &nvio) < 0) {
-			(void)close(fd);
+		if (ioctl(fd, PNVIOCGET, (char *) &nvio) < 0)
 			BARF("PNVIOCGET", strerror(errno));
-		}
 
 		if (nvio.pnv_buflen <= 0) {
 			(void) snprintf(err_str, sizeof err_str,

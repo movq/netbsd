@@ -1,4 +1,4 @@
-/* $NetBSD: udf_create.h,v 1.3 2009/01/18 00:18:41 lukem Exp $ */
+/* $NetBSD: udf_create.h,v 1.2.4.1 2009/02/18 00:34:51 snj Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk

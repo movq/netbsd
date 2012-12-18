@@ -1,4 +1,4 @@
-/* $NetBSD: wb_acpi.c,v 1.5 2010/08/19 18:37:38 jmcneill Exp $ */
+/* $NetBSD: wb_acpi.c,v 1.1.2.3 2010/11/21 21:44:07 riz Exp $ */
 
 /*
  * Copyright (c) 2009 Jared D. McNeill <jmcneill@invisible.ca>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wb_acpi.c,v 1.5 2010/08/19 18:37:38 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wb_acpi.c,v 1.1.2.3 2010/11/21 21:44:07 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -48,8 +48,8 @@ ACPI_MODULE_NAME	("wb_acpi")
 static int	wb_acpi_match(device_t, cfdata_t, void *);
 static void	wb_acpi_attach(device_t, device_t, void *);
 static int	wb_acpi_detach(device_t, int);
-static bool	wb_acpi_suspend(device_t, const pmf_qual_t *);
-static bool	wb_acpi_resume(device_t, const pmf_qual_t *);
+static bool	wb_acpi_suspend(device_t PMF_FN_PROTO);
+static bool	wb_acpi_resume(device_t PMF_FN_PROTO);
 
 struct wb_acpi_softc {
 	struct wb_softc sc_wb;
@@ -177,7 +177,7 @@ wb_acpi_detach(device_t self, int flags)
 }
 
 static bool
-wb_acpi_suspend(device_t self, const pmf_qual_t *qual)
+wb_acpi_suspend(device_t self PMF_FN_ARGS)
 {
 	struct wb_acpi_softc *sc = device_private(self);
 
@@ -185,7 +185,7 @@ wb_acpi_suspend(device_t self, const pmf_qual_t *qual)
 }
 
 static bool
-wb_acpi_resume(device_t self, const pmf_qual_t *qual)
+wb_acpi_resume(device_t self PMF_FN_ARGS)
 {
 	struct wb_acpi_softc *sc = device_private(self);
 	ACPI_STATUS rv;

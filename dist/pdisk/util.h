@@ -52,7 +52,7 @@
 /*
  * Forward declarations
  */
-void clear_memory(void *dataPtr, uint32_t size);
+void clear_memory(void *dataPtr, unsigned long size);
 #if !defined(__linux__) && !defined(__unix__)
 int TrapAvailable(short theTrap);
 #endif

@@ -1,5 +1,5 @@
 '\" t
-.\" $NetBSD: ksh.Man,v 1.23 2011/10/18 12:36:31 reed Exp $
+.\" $NetBSD: ksh.Man,v 1.21 2008/10/27 19:52:28 apb Exp $
 .\"{{{}}}
 .\"{{{  Notes about man page
 .\"     - use the pseudo-macros .sh( and .sh) to begin and end sh-specific
@@ -996,7 +996,7 @@ BTW, don't blame me for this hack; it's in the original ksh.
 .sh(
 The prompt is printed verbatim (\fIi.e.\fP, no substitutions are done).
 .sh)
-Default is `\fB$\ \fP' for non-root users, `\fB#\ \fP' for root.
+Default is `\fB$\ \fP' for non-root users, `\fB#\ \fP' for root..
 .\"}}}
 .\"{{{  PS2
 .IP \fBPS2\fP
@@ -1716,7 +1716,7 @@ This command is only available on systems which support job control.
 See Job Control below for more information.
 .\"}}}
 .\"{{{  bind [-l] [-m] [key[=editing-command] ...]
-.IP "\fBbind\fP [\fB\-l\fP] [\fB\-m\fP] [\fIkey\fP[\fB=\fP\fIediting-command\fP] ...]"
+.IP "\fBbind\fP [\fB\-m\fP] [\fIkey\fP[\fB=\fP\fIediting-command\fP] ...]"
 Set or view the current emacs command editing key bindings/macros.
 See Emacs Editing Mode below for a complete description.
 .\"}}}

@@ -50,16 +50,16 @@ extern char smart_terminal;     /* set if the terminal has sufficient termcap
 extern int  screen_length;
 extern int  screen_width;
 
-void screen_getsize(void);
+void screen_getsize();
 int screen_readtermcap(int interactive);
-void screen_init(void);
-void screen_end(void);
-void screen_reinit(void);
+void screen_init();
+void screen_end();
+void screen_reinit();
 void screen_move(int x, int y);
-void screen_standout(const char *msg);
-void screen_clear(void);
-int screen_cte(void);
+void screen_standout(char *msg);
+void screen_clear();
+int screen_cte();
 void screen_cleareol(int len);
-void screen_home(void);
+void screen_home();
 
 #endif /* _SCREEN_H_ */

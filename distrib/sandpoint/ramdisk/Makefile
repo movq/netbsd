@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.10 2012/08/14 07:24:41 martin Exp $
+#	$NetBSD: Makefile,v 1.2 2007/10/25 14:48:00 nisimura Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -15,12 +15,12 @@ CRUNCHGEN_FLAGS=-d "${DBG}"
 LISTS=		${.CURDIR}/list ${DISTRIBDIR}/common/list.sysinst
 MTREECONF=	${DISTRIBDIR}/common/mtree.common
 IMAGEENDIAN=	be
-MAKEDEVTARGETS=	std md0 wd0 wd1 wd2 wd3 sd0 cd0 ipty satmgr raid0 raid1
+MAKEDEVTARGETS=	std md0 wd0 pty0
 IMAGEDEPENDS=	${CRUNCHBIN} \
-		dot.profile \
+		dot.profile termcap.src \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
-		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \
-		${DISTRIBDIR}/common/services
+		${NETBSDSRCDIR}/etc/netconfig ${NETBSDSRCDIR}/etc/protocols \
+		${NETBSDSRCDIR}/distrib/common/services
 
 # Use stubs to eliminate some large stuff from libc
 HACKSRC=	${DISTRIBDIR}/utils/libhack

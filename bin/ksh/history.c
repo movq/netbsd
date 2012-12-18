@@ -1,4 +1,4 @@
-/*	$NetBSD: history.c,v 1.11 2011/08/31 16:24:54 plunky Exp $	*/
+/*	$NetBSD: history.c,v 1.9 2005/06/26 19:09:00 christos Exp $	*/
 
 /*
  * command history
@@ -19,7 +19,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: history.c,v 1.11 2011/08/31 16:24:54 plunky Exp $");
+__RCSID("$NetBSD: history.c,v 1.9 2005/06/26 19:09:00 christos Exp $");
 #endif
 
 
@@ -604,7 +604,7 @@ sethistfile(name)
 void
 init_histvec()
 {
-	if (histlist == NULL) {
+	if (histlist == (char **)NULL) {
 		histsize = HISTORYSIZE;
 		histlist = (char **)alloc(histsize*sizeof (char *), APERM);
 		histptr = histlist - 1;
@@ -740,27 +740,20 @@ void
 hist_finish()
 {
   static int once;
-  int fd;
   FILE *fh;
   register int i;
   register char **hp;
 
   if (once++)
     return;
-  if (hname == NULL || hname[0] == 0)
-    return;
-
   /* check how many we have */
   i = histptr - histlist;
   if (i >= histsize)
     hp = &histptr[-histsize];
   else
     hp = histlist;
-
-  fd = open(hname, O_WRONLY | O_CREAT | O_TRUNC | O_EXLOCK, 0777);
-  /* Remove anything written before we got the lock */
-  ftruncate(fd, 0);
-  if (fd >= 0 && (fh = fdopen(fd, "w"))) {
+  if (hname && (fh = fopen(hname, "w")))
+  {
     for (i = 0; hp + i <= histptr && hp[i]; i++)
       fprintf(fh, "%s%c", hp[i], '\0');
     fclose(fh);

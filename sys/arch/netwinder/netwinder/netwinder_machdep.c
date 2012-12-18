@@ -1,4 +1,4 @@
-/*	$NetBSD: netwinder_machdep.c,v 1.80 2012/10/13 17:58:55 jdc Exp $	*/
+/*	$NetBSD: netwinder_machdep.c,v 1.66 2008/04/27 18:58:47 matt Exp $	*/
 
 /*
  * Copyright (c) 1997,1998 Mark Brinicombe.
@@ -33,14 +33,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependent functions for kernel setup for EBSA285 core architecture
+ * Machine dependant functions for kernel setup for EBSA285 core architecture
  * using Netwinder firmware
  *
  * Created      : 24/11/97
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netwinder_machdep.c,v 1.80 2012/10/13 17:58:55 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netwinder_machdep.c,v 1.66 2008/04/27 18:58:47 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_pmap_debug.h"
@@ -68,7 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: netwinder_machdep.c,v 1.80 2012/10/13 17:58:55 jdc E
 
 #include <machine/bootconfig.h>
 #define	_ARM32_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <machine/intr.h>
@@ -110,9 +110,20 @@ bs_protos(generic);
 #define	ISA_GETBYTE(r)		generic_bs_r_1(0, isa_base, (r))
 #define	ISA_PUTBYTE(r,v)	generic_bs_w_1(0, isa_base, (r), (v))
 
+/*
+ * Address to call from cpu_reset() to reset the machine.
+ * This is machine architecture dependant as it varies depending
+ * on where the ROM appears when you turn the MMU off.
+ */
 static void netwinder_reset(void);
+u_int cpu_reset_address;
 
 u_int dc21285_fclk = 63750000;
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#define UND_STACK_SIZE	1
 
 struct nwbootinfo nwbootinfo;
 BootConfig bootconfig;		/* Boot config storage */
@@ -126,13 +137,24 @@ vm_offset_t physical_freeend;
 vm_offset_t physical_end;
 u_int free_pages;
 vm_offset_t pagetables_start;
+int physmem = 0;
 
 /*int debug_flags;*/
 #ifndef PMAP_STATIC_L1S
 int max_processes = 64;			/* Default number */
 #endif	/* !PMAP_STATIC_L1S */
 
+/* Physical and virtual addresses for some global pages */
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+extern pv_addr_t kernelstack;	/* in arm32_machdep.c */
+
 vm_offset_t msgbufphys;
+
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -157,6 +179,8 @@ pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
 #else
 #define KERNEL_VM_SIZE		0x0C000000
 #endif
+
+extern struct user *proc0paddr;	/* in arm32_machdep.c */
 
 /* Prototypes */
 
@@ -240,7 +264,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -271,8 +294,6 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -674,14 +695,15 @@ initarm(void *arg)
 #endif
 
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	setttb(kernel_l1pt.pv_pa);
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
 	/*
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+	proc0paddr = (struct user *)kernelstack.pv_va;
+	lwp0.l_addr = proc0paddr;
 
 #ifdef VERBOSE_INIT_ARM
 	printf("done!\n");
@@ -816,7 +838,7 @@ initarm(void *arg)
 	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
 
 	/* Now that pmap is inited, we can set cpu_reset_address */
-	cpu_reset_address_paddr = vtophys((vaddr_t)netwinder_reset);
+	cpu_reset_address = (u_int)vtophys((vaddr_t)netwinder_reset);
 
 	/* Setup the IRQ system */
 	printf("irq ");
@@ -829,6 +851,11 @@ initarm(void *arg)
 	 */
 	if (nwbootinfo.bi_pagesize == 0xdeadbeef)
 		printf("WARNING: NeTTrom boot info corrupt\n");
+
+#if NKSYMS || defined(DDB) || defined(LKM)
+	/* Firmware doesn't load symbols. */
+	ksyms_init(0, NULL, NULL);
+#endif
 
 #ifdef DDB
 	db_machine_init();
@@ -919,7 +946,7 @@ consinit(void)
 				   0, 8, 0);
 #if NPCKBC > 0
 		res = pckbc_cnattach(&isa_io_bs_tag,
-				     IO_KBD, KBCMDP, PCKBC_KBD_SLOT, 0);
+				     IO_KBD, KBCMDP, PCKBC_KBD_SLOT);
 		if (res)
 			printf("pckbc_cnattach: %d!\n", res);
 #endif
@@ -946,7 +973,12 @@ consinit(void)
 
 #if NIGSFB > 0
 static int
-nw_footbridge_mem_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int cacheable, bus_space_handle_t *bshp)
+nw_footbridge_mem_bs_map(t, bpa, size, cacheable, bshp)
+	void *t;
+	bus_addr_t bpa;
+	bus_size_t size;
+	int cacheable;
+	bus_space_handle_t *bshp;
 {
 	bus_addr_t startpa, endpa;
 
@@ -977,7 +1009,10 @@ nw_footbridge_mem_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int cacheable
 
 
 static void
-nw_footbridge_mem_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
+nw_footbridge_mem_bs_unmap(t, bsh, size)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
 {
 
 	/*

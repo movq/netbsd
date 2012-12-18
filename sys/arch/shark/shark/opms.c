@@ -1,4 +1,4 @@
-/*      $NetBSD: opms.c,v 1.24 2011/07/26 08:56:26 mrg Exp $        */
+/*      $NetBSD: opms.c,v 1.21 2008/06/13 13:09:55 cegger Exp $        */
 
 /*
  * Copyright 1997
@@ -91,7 +91,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.24 2011/07/26 08:56:26 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.21 2008/06/13 13:09:55 cegger Exp $");
 
 #include "opms.h"
 #if NOPMS > 1
@@ -166,6 +166,7 @@ __KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.24 2011/07/26 08:56:26 mrg Exp $");
 /* Softc structure for the mouse */
 struct opms_softc 
 {               
+    struct device      sc_dev;
     void               *sc_ih;
     struct clist       sc_q;
     struct selinfo     sc_rsel;
@@ -181,16 +182,20 @@ struct opms_softc
 /*
 ** Forward routine declarations
 */
-int           opmsprobe(device_t, cfdata_t, void *);
-void          opmsattach(device_t, device_t, void *);
-int           opmsintr(void *);
+int                  opmsprobe       __P((struct device *, 
+                                         struct cfdata *, 
+                                         void *));
+void                 opmsattach      __P((struct device *, 
+                                         struct device *, 
+                                         void *));
+int                  opmsintr         __P((void *));
 
 /* 
 ** Global variables 
 */
 
 /* Autoconfiguration data structures */
-CFATTACH_DECL_NEW(opms, sizeof(struct opms_softc),
+CFATTACH_DECL(opms, sizeof(struct opms_softc),
     opmsprobe, opmsattach, NULL, NULL);
 
 extern struct cfdriver opms_cd;
@@ -249,7 +254,10 @@ int opmsdebug = KERN_DEBUG_WARNING | KERN_DEBUG_ERROR;
 **--
 */
 int
-opmsprobe(device_t parent, cfdata_t match, void *aux)
+opmsprobe(parent, match, aux)
+    struct device *parent;
+    struct cfdata *match;
+    void          *aux;
 {
     struct cfdata             *cf     = match;
     int                       probeOk = 0;    /* assume failure */
@@ -347,9 +355,12 @@ opmsprobe(device_t parent, cfdata_t match, void *aux)
 **--
 */
 void
-opmsattach(device_t parent, device_t self, void *aux)
+opmsattach(parent, self, aux)
+    struct device *parent;
+    struct device *self;
+    void          *aux;
 {
-    struct opms_softc         *sc = device_private(self);
+    struct opms_softc          *sc = (void *)self;
     int                       irq = device_cfdata(self)->cf_loc[SPCKBDCF_IRQ];
     struct isa_attach_args    *ia = aux;                   
 
@@ -748,7 +759,8 @@ opmsioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 **--
 */
 int
-opmsintr(void *arg)
+opmsintr(arg)
+        void *arg;
 {
     struct opms_softc     *sc   = arg;
     static u_char        buttons;

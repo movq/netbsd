@@ -1,4 +1,4 @@
-/*	$NetBSD: event.c,v 1.13 2009/03/14 15:36:03 dsl Exp $	*/
+/*	$NetBSD: event.c,v 1.12 2008/03/01 14:16:49 rmind Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: event.c,v 1.13 2009/03/14 15:36:03 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: event.c,v 1.12 2008/03/01 14:16:49 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/fcntl.h>
@@ -65,7 +65,8 @@ __KERNEL_RCSID(0, "$NetBSD: event.c,v 1.13 2009/03/14 15:36:03 dsl Exp $");
  * Initialize a firm_event queue.
  */
 void
-ev_init(register struct evvar *ev)
+ev_init(ev)
+	register struct evvar *ev;
 {
 
 	ev->ev_get = ev->ev_put = 0;
@@ -78,7 +79,8 @@ ev_init(register struct evvar *ev)
  * Tear down a firm_event queue.
  */
 void
-ev_fini(register struct evvar *ev)
+ev_fini(ev)
+	register struct evvar *ev;
 {
 
 	seldestroy(&ev->ev_sel);
@@ -90,7 +92,10 @@ ev_fini(register struct evvar *ev)
  * (User cannot write an event queue.)
  */
 int
-ev_read(register struct evvar *ev, struct uio *uio, int flags)
+ev_read(ev, uio, flags)
+	register struct evvar *ev;
+	struct uio *uio;
+	int flags;
 {
 	int s, n, cnt, error;
 
@@ -144,7 +149,10 @@ ev_read(register struct evvar *ev, struct uio *uio, int flags)
 }
 
 int
-ev_poll(register struct evvar *ev, int events, struct lwp *l)
+ev_poll(ev, events, l)
+	register struct evvar *ev;
+	int events;
+	struct lwp *l;
 {
 	int revents = 0;
 	int s = splev();

@@ -1,4 +1,4 @@
-/*	$NetBSD: extent.h,v 1.19 2012/01/27 18:53:10 para Exp $	*/
+/*	$NetBSD: extent.h,v 1.18 2008/04/28 20:24:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -54,6 +54,7 @@ struct extent {
 	LIST_HEAD(, extent_region) ex_regions;
 	u_long	ex_start;		/* start of extent */
 	u_long	ex_end;			/* end of extent */
+	struct malloc_type *ex_mtype;	/* memory type */
 	int	ex_flags;		/* misc. information */
 };
 
@@ -78,7 +79,7 @@ struct extent_fixed {
 #define EX_FAST		0x02		/* take first fit in extent_alloc() */
 #define EX_CATCH	0x04		/* catch signals while sleeping */
 #define EX_NOCOALESCE	0x08		/* create a non-coalescing extent */
-#define EX_MALLOCOK	0x10		/* safe to call kmem_alloc() */
+#define EX_MALLOCOK	0x10		/* safe to call malloc() */
 #define EX_WAITSPACE	0x20		/* wait for space to become free */
 #define EX_BOUNDZERO	0x40		/* boundary lines start at 0 */
 
@@ -95,8 +96,10 @@ struct extent_fixed {
 	((ALIGN(sizeof(struct extent_region))) *	\
 	 (_nregions)))
 
+struct malloc_type;
+
 struct	extent *extent_create(const char *, u_long, u_long,
-	    void *, size_t, int);
+	    struct malloc_type *, void *, size_t, int);
 void	extent_destroy(struct extent *);
 int	extent_alloc_subregion1(struct extent *, u_long, u_long,
 	    u_long, u_long, u_long, u_long, int, u_long *);

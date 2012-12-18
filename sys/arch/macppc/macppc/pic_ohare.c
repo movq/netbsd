@@ -1,4 +1,4 @@
-/*	$NetBSD: pic_ohare.c,v 1.11 2012/03/13 18:24:54 macallan Exp $ */
+/*	$NetBSD: pic_ohare.c,v 1.6 2008/05/08 01:27:43 macallan Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -27,13 +27,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_ohare.c,v 1.11 2012/03/13 18:24:54 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_ohare.c,v 1.6 2008/05/08 01:27:43 macallan Exp $");
 
 #include "opt_interrupt.h"
 
 #include <sys/param.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/kernel.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/pio.h>
 
@@ -49,20 +51,20 @@ static int  ohare_get_irq(struct pic_ops *, int);
 static void ohare_ack_irq(struct pic_ops *, int);
 static void ohare_establish_irq(struct pic_ops *, int, int, int);
 
-#define OHARE_NIRQ 32
+#define NIRQ 32
 
 struct ohare_ops {
 	struct pic_ops pic;
 	uint32_t pending_events;
 	uint32_t enable_mask;
 	uint32_t level_mask;
-	uint32_t irqs[NIPL];			/* per priority level */
-	uint32_t priority_masks[OHARE_NIRQ];	/* per IRQ */
+	uint32_t irqs[NIPL];		/* per priority level */
+	uint32_t priority_masks[NIRQ];	/* per IRQ */
 };
 
 static struct ohare_ops *setup_ohare(uint32_t, int);
 static void setup_ohare2(uint32_t, int);
-static inline void ohare_read_events(struct ohare_ops *);
+inline void ohare_read_events(struct ohare_ops *);
 
 #define INT_STATE_REG	((uint32_t)pic->pic_cookie + 0x20)
 #define INT_ENABLE_REG	((uint32_t)pic->pic_cookie + 0x24)
@@ -118,11 +120,11 @@ setup_ohare(uint32_t addr, int is_gc)
 	struct pic_ops *pic;
 	int i;
 
-	ohare = kmem_alloc(sizeof(struct ohare_ops), KM_SLEEP);
+	ohare = malloc(sizeof(struct ohare_ops), M_DEVBUF, M_NOWAIT);
 	KASSERT(ohare != NULL);
 	pic = &ohare->pic;
 
-	pic->pic_numintrs = OHARE_NIRQ;
+	pic->pic_numintrs = NIRQ;
 	pic->pic_cookie = (void *)addr;
 	pic->pic_enable_irq = ohare_enable_irq;
 	pic->pic_reenable_irq = ohare_reenable_irq;
@@ -141,7 +143,7 @@ setup_ohare(uint32_t addr, int is_gc)
 		strcpy(pic->pic_name, "ohare");
 		ohare->level_mask = 0;
 	}
-	for (i = 0; i < OHARE_NIRQ; i++)
+	for (i = 0; i < NIRQ; i++)
 		ohare->priority_masks[i] = 0;
 	for (i = 0; i < NIPL; i++)
 		ohare->irqs[i] = 0;
@@ -199,7 +201,7 @@ ohare_disable_irq(struct pic_ops *pic, int irq)
 	out32rb(INT_ENABLE_REG, ohare->enable_mask); 
 }
 
-static inline void
+inline void
 ohare_read_events(struct ohare_ops *ohare)
 {
 	struct pic_ops *pic = &ohare->pic;
@@ -236,9 +238,8 @@ ohare_get_irq(struct pic_ops *pic, int mode)
 	if (ohare->pending_events == 0)
 		return 255;
 
-	bit = 31 - __builtin_clz(ohare->pending_events);
+	bit = 31 - cntlzw(ohare->pending_events);
 	mask = 1 << bit;
-
 	if ((ohare->pending_events & ~mask) == 0) {
 
 		ohare->pending_events = 0;
@@ -253,7 +254,7 @@ ohare_get_irq(struct pic_ops *pic, int mode)
 	evt = ohare->pending_events & ~mask;
 	prio = ohare->priority_masks[bit];
 	while (evt != 0) {
-		bit = 31 - __builtin_clz(evt);
+		bit = 31 - cntlzw(evt);
 		prio |= ohare->priority_masks[bit];
 		evt &= ~(1 << bit);
 #ifdef OHARE_DEBUG
@@ -262,22 +263,16 @@ ohare_get_irq(struct pic_ops *pic, int mode)
 			panic("hanging in ohare_get_irq");
 #endif
 	}
-	lvl = 31 - __builtin_clz(prio);
+	lvl = 31 - cntlzw(prio);
 	evt = ohare->pending_events & ohare->irqs[lvl];
 
 	if (evt == 0) {
-#ifdef OHARE_DEBUG
 		aprint_verbose("%s: spurious interrupt\n", 
 		    ohare->pic.pic_name);
-		printf("levels: %08x\n", in32rb(INT_LEVEL_REG));
-		printf("states: %08x\n", in32rb(INT_STATE_REG));
-		printf("enable: %08x\n", in32rb(INT_ENABLE_REG));
-		printf("events: %08x\n", ohare->pending_events);
-#endif
 		evt = ohare->pending_events;
 	}
 
-	bit = 31 - __builtin_clz(evt);
+	bit = 31 - cntlzw(evt);
 	mask = 1 << bit;
 	ohare->pending_events &= ~mask;
 	return bit;	
@@ -296,7 +291,7 @@ ohare_establish_irq(struct pic_ops *pic, int irq, int type, int pri)
 	int realpri = min(NIPL, max(0, pri)), i;
 	uint32_t level = 1 << realpri;
 
-	KASSERT((irq >= 0) && (irq < OHARE_NIRQ));
+	KASSERT((irq >= 0) && (irq < NIRQ));
 
 	if (type == IST_LEVEL) {
 
@@ -310,10 +305,10 @@ ohare_establish_irq(struct pic_ops *pic, int irq, int type, int pri)
 	for (i = 0; i < NIPL; i++)
 		ohare->irqs[i] = 0;
 		
-	for (i = 0; i < OHARE_NIRQ; i++) {
+	for (i = 0; i < NIRQ; i++) {
 		if (ohare->priority_masks[i] == 0)
 			continue;
-		level = 31 - __builtin_clz(ohare->priority_masks[i]);
+		level = 31 - cntlzw(ohare->priority_masks[i]);
 		ohare->irqs[level] |= (1 << i);
 	}
 }

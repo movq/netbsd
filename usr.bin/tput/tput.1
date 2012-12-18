@@ -1,4 +1,4 @@
-.\"	$NetBSD: tput.1,v 1.16 2012/04/21 12:27:30 roy Exp $
+.\"	$NetBSD: tput.1,v 1.13 2004/03/29 20:56:24 jdc Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)tput.1	8.2 (Berkeley) 3/19/94
 .\"
-.Dd April 5, 2012
+.Dd March 29, 2004
 .Dt TPUT 1
 .Os
 .Sh NAME
@@ -50,7 +50,7 @@ The options are as follows:
 .Bl -tag -width Ds
 .It Fl T
 The terminal name as specified in the
-.Xr terminfo 5
+.Xr termcap 5
 database, for example,
 .Dq vt100
 or
@@ -74,8 +74,8 @@ without further action.
 If the
 .Ar attribute
 is of type string, and takes arguments (e.g. cursor movement,
-the terminfo
-.Dq cup
+the termcap
+.Dq cm
 sequence) the arguments are taken from the command line immediately
 following the attribute.
 .Pp
@@ -83,22 +83,20 @@ The following special attributes are available:
 .Bl -tag -width Ar
 .It clear
 Clear the screen (the
-.Xr terminfo 5
+.Xr termcap 5
 .Dq cl
 sequence).
 .It init
 Initialize the terminal (the
-.Xr terminfo 5
-.Dq is2
+.Xr termcap 5
+.Dq is
 sequence).
 .It longname
 Print the descriptive name of the user's terminal type.
 .It reset
 Reset the terminal (the
-.Xr terminfo 5
-.Dq rs1 , rs2 , rs3
-and
-.Dq rf
+.Xr termcap 5
+.Dq rs
 sequence).
 .El
 .Sh EXIT STATUS
@@ -124,8 +122,7 @@ goto line 6 column 11 and delete 6 characters
 .El
 .Sh SEE ALSO
 .Xr termcap 3 ,
-.Xr terminfo 3 ,
-.Xr terminfo 5
+.Xr termcap 5
 .Sh HISTORY
 The
 .Nm
@@ -135,5 +132,5 @@ command appears in
 .Nm
 can't really distinguish between different types of attributes.
 .Pp
-Not all terminfo entries contain the reset sequence, so using the init
+Not all termcap entries contain the reset sequence, so using the init
 sequence may be more useful.

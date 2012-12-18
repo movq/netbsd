@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_mysql.c,v 1.1.1.2 2011/03/02 19:32:14 tron Exp $	*/
+/*	$NetBSD: dict_mysql.c,v 1.1.1.1.2.3 2011/01/07 01:24:02 riz Exp $	*/
 
 /*++
 /* NAME
@@ -33,7 +33,7 @@
 /*	main.cf configuration parameters for this search.
 /*
 /*	In the first case, the configuration parameters below are
-/*	specified in the file as \fIname\fR=\fIvalue\fR pairs.
+/*	specified in the file as \fIname\fR=\fBvalue\fR pairs.
 /*
 /*	In the second case, the configuration parameters are
 /*	prefixed with the value of \fIname\fR and an underscore,
@@ -49,25 +49,29 @@
 /*	See dict_open(3).
 /* .PP
 /*	Configuration parameters:
-/* .IP user
+/*
+/*	The parameters encodes a number of pieces of information:
+/*	username, password, databasename, table, select_field,
+/*	where_field, and hosts:
+/* .IP \fIuser\fR
 /* 	Username for connecting to the database.
-/* .IP password
+/* .IP \fIpassword\fR
 /*	Password for the above.
-/* .IP dbname
+/* .IP \fIdbname\fR
 /*	Name of the database.
-/* .IP domain
+/* .IP \fIdomain\fR
 /*      List of domains the queries should be restricted to.  If
 /*      specified, only FQDN addresses whose domain parts matching this
 /*      list will be queried against the SQL database.  Lookups for
 /*      partial addresses are also supressed.  This can significantly
 /*      reduce the query load on the server.
-/* .IP query
+/* .IP \fIquery\fR
 /*      Query template, before the query is actually issued, variable
 /*	substitutions are performed. See mysql_table(5) for details. If
 /*	No query is specified, the legacy variables \fItable\fR,
 /*	\fIselect_field\fR, \fIwhere_field\fR and \fIadditional_conditions\fR
 /*	are used to construct the query template.
-/* .IP result_format
+/* .IP \fIresult_format\fR
 /*      The format used to expand results from queries.  Substitutions
 /*      are performed as described in mysql_table(5). Defaults to returning
 /*	the lookup result unchanged.
@@ -76,22 +80,22 @@
 /*	exceed the limit fail with dict_errno=DICT_ERR_RETRY. Note that each
 /*	non-empty (and non-NULL) column of a multi-column result row counts as
 /*	one result.
-/* .IP table
+/* .IP \fItable\fR
 /*	When \fIquery\fR is not set, name of the table used to construct the
 /*	query string. This provides compatibility with older releases.
-/* .IP select_field
+/* .IP \fIselect_field\fR
 /*	When \fIquery\fR is not set, name of the result field used to
 /*	construct the query string. This provides compatibility with older
 /*	releases.
-/* .IP where_field
+/* .IP \fIwhere_field\fR
 /*	When \fIquery\fR is not set, name of the where clause field used to
 /*	construct the query string. This provides compatibility with older
 /*	releases.
-/* .IP additional_conditions
+/* .IP \fIadditional_conditions\fR
 /*	When \fIquery\fR is not set, additional where clause conditions used
 /*	to construct the query string. This provides compatibility with older
 /*	releases.
-/* .IP hosts
+/* .IP \fIhosts\fR
 /*	List of hosts to connect to.
 /* .PP
 /*	For example, if you want the map to reference databases of
@@ -102,23 +106,23 @@
 /*	"vmailer" and password "passwd" then the configuration file
 /*	should read:
 /* .PP
-/*	user = vmailer
+/*	\fIuser\fR = \fBvmailer\fR
 /* .br
-/*	password = passwd
+/*	\fIpassword\fR = \fBpasswd\fR
 /* .br
-/*	dbname = vmailer_info
+/*	\fIdbname\fR = \fBvmailer_info\fR
 /* .br
-/*	table = aliases
+/*	\fItable\fR = \fBaliases\fR
 /* .br
-/*	select_field = forw_addr
+/*	\fIselect_field\fR = \fBforw_addr\fR
 /* .br
-/*	where_field = alias
+/*	\fIwhere_field\fR = \fBalias\fR
 /* .br
-/*	hosts = host1.some.domain\fR \fBhost2.some.domain
-/* .IP additional_conditions
+/*	\fIhosts\fR = \fBhost1.some.domain\fR \fBhost2.some.domain\fR
+/* .IP \fIadditional_conditions\fR
 /*      Backward compatibility when \fIquery\fR is not set, additional
 /*	conditions to the WHERE clause.
-/* .IP hosts
+/* .IP \fIhosts\fR
 /*	List of hosts to connect to.
 /* .PP
 /*	For example, if you want the map to reference databases of
@@ -129,19 +133,19 @@
 /*	"vmailer" and password "passwd" then the configuration file
 /*	should read:
 /* .PP
-/*	user = vmailer
+/*	\fIuser\fR = \fBvmailer\fR
 /* .br
-/*	password = passwd
+/*	\fIpassword\fR = \fBpasswd\fR
 /* .br
-/*	dbname = vmailer_info
+/*	\fIdbname\fR = \fBvmailer_info\fR
 /* .br
-/*	table = aliases
+/*	\fItable\fR = \fBaliases\fR
 /* .br
-/*	select_field = forw_addr
+/*	\fIselect_field\fR = \fBforw_addr\fR
 /* .br
-/*	where_field = alias
+/*	\fIwhere_field\fR = \fBalias\fR
 /* .br
-/*	hosts = host1.some.domain\fR \fBhost2.some.domain
+/*	\fIhosts\fR = \fBhost1.some.domain\fR \fBhost2.some.domain\fR
 /* .PP
 /* SEE ALSO
 /*	dict(3) generic dictionary manager

@@ -1,4 +1,4 @@
-/*	$NetBSD: vsprintf.c,v 1.5 2011/07/17 20:54:52 joerg Exp $	*/
+/*	$NetBSD: vsprintf.c,v 1.4 2007/11/24 13:20:58 isaki Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -33,6 +33,11 @@
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
+#ifdef __STDC__
+#include <machine/stdarg.h>
+#else
+#include <machine/varargs.h>
+#endif
 
 #include "stand.h"
 

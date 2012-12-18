@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.85 2012/02/19 21:06:22 rmind Exp $	*/
+/*	$NetBSD: trap.c,v 1.74.4.1 2009/02/02 00:48:56 snj Exp $	*/
 
 /*
  * This file was taken from mvme68k/mvme68k/trap.c
@@ -8,7 +8,6 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -44,15 +43,53 @@
  *
  *	@(#)trap.c	8.5 (Berkeley) 1/4/94
  */
+/*
+ * Copyright (c) 1988 University of Utah.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: trap.c 1.37 92/12/20$
+ *
+ *	@(#)trap.c	8.5 (Berkeley) 1/4/94
+ */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.85 2012/02/19 21:06:22 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.74.4.1 2009/02/02 00:48:56 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
 #include "opt_kgdb.h"
 #include "opt_compat_sunos.h"
-#include "opt_m68k_arch.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,8 +98,11 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.85 2012/02/19 21:06:22 rmind Exp $");
 #include <sys/kernel.h>
 #include <sys/signalvar.h>
 #include <sys/resourcevar.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
 #include <sys/syslog.h>
+#include <sys/user.h>
 #include <sys/userret.h>
 #include <sys/kauth.h>
 
@@ -71,7 +111,6 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.85 2012/02/19 21:06:22 rmind Exp $");
 #endif
 
 #include <machine/db_machdep.h>
-#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
 #include <machine/cpu.h>
@@ -264,21 +303,23 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 	extern char fubail[], subail[];
 	struct lwp *l;
 	struct proc *p;
-	struct pcb *pcb;
-	void *onfault;
 	ksiginfo_t ksi;
 	int s;
-	int rv;
 	u_quad_t sticks = 0 /* XXX initialiser works around compiler bug */;
 	static int panicking = 0;
 
-	curcpu()->ci_data.cpu_ntrap++;
+	uvmexp.traps++;
 	l = curlwp;
-	p = l->l_proc;
-	pcb = lwp_getpcb(l);
 
 	KSI_INIT_TRAP(&ksi);
 	ksi.ksi_trap = type & ~T_USER;
+
+	p = l->l_proc;
+
+#ifdef DIAGNOSTIC
+	if (l->l_addr == NULL)
+		panic("trap: no pcb");
+#endif
 
 	if (USERMODE(fp->f_sr)) {
 		type |= T_USER;
@@ -326,10 +367,8 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 		panic("trap");
 
 	case T_BUSERR:		/* kernel bus error */
-		onfault = pcb->pcb_onfault;
-		if (onfault == NULL)
+		if (l->l_addr->u_pcb.pcb_onfault == 0)
 			goto dopanic;
-		rv = EFAULT;
 		/* FALLTHROUGH */
 
 	copyfault:
@@ -341,8 +380,7 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 		 */
 		fp->f_stackadj = exframesize[fp->f_format];
 		fp->f_format = fp->f_vector = 0;
-		fp->f_pc = (int)onfault;
-		fp->f_regs[D0] = rv;
+		fp->f_pc = (int) l->l_addr->u_pcb.pcb_onfault;
 		return;
 
 	case T_BUSERR|T_USER:	/* bus error */
@@ -500,7 +538,7 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 		 * If this was not an AST trap, we are all done.
 		 */
 		if (type != (T_ASTFLT|T_USER)) {
-			curcpu()->ci_data.cpu_ntrap--;
+			uvmexp.traps--;
 			return;
 		}
 		spl0();
@@ -517,11 +555,9 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 		 * If we were doing profiling ticks or other user mode
 		 * stuff from interrupt code, Just Say No.
 		 */
-		onfault = pcb->pcb_onfault;
-		if (onfault == fubail || onfault == subail) {
-			rv = EFAULT;
+		if (l->l_addr->u_pcb.pcb_onfault == fubail ||
+		    l->l_addr->u_pcb.pcb_onfault == subail)
 			goto copyfault;
-		}
 		/* fall into ... */
 
 	case T_MMUFLT|T_USER:	/* page fault */
@@ -529,10 +565,9 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 		vaddr_t va;
 		struct vmspace *vm = p->p_vmspace;
 		struct vm_map *map;
+		int rv;
 		vm_prot_t ftype;
 		extern struct vm_map *kernel_map;
-
-		onfault = pcb->pcb_onfault;
 
 #ifdef DEBUG
 		if ((mmudebug & MDB_WBFOLLOW) || MDB_ISPID(p->p_pid))
@@ -547,10 +582,16 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 		 * The last can occur during an exec() copyin where the
 		 * argument space is lazy-allocated.
 		 */
-		if ((type & T_USER) == 0 && (onfault == NULL || KDFAULT(code)))
+		if ((type & T_USER) == 0 &&
+		    ((l->l_addr->u_pcb.pcb_onfault == 0) || KDFAULT(code)))
 			map = kernel_map;
 		else {
 			map = vm ? &vm->vm_map : kernel_map;
+			if ((l->l_flag & LW_SA)
+			    && (~l->l_pflag & LP_SA_NOBLOCK)) {
+				l->l_savp->savp_faultaddr = (vaddr_t)v;
+				l->l_pflag |= LP_SA_PAGEFAULT;
+			}
 		}
 
 		if (WRFAULT(code))
@@ -574,9 +615,7 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 		}
 #endif
 		
-		pcb->pcb_onfault = NULL;
 		rv = uvm_fault(map, va, ftype);
-		pcb->pcb_onfault = onfault;
 #ifdef DEBUG
 		if (rv && MDB_ISPID(p->p_pid))
 			printf("uvm_fault(%p, 0x%lx, 0x%x) -> 0x%x\n",
@@ -594,15 +633,13 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 				uvm_grow(p, va);
 
 			if (type == T_MMUFLT) {
-				if (ucas_ras_check(&fp->F_t)) {
-					return;
-				}
 #ifdef M68040
 				if (cputype == CPU_68040)
 					(void) writeback(fp, 1);
 #endif
 				return;
 			}
+			l->l_pflag &= ~LP_SA_PAGEFAULT;
 			goto out;
 		}
 		if (rv == EACCES) {
@@ -611,7 +648,7 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 		} else
 			ksi.ksi_code = SEGV_MAPERR;
 		if (type == T_MMUFLT) {
-			if (onfault)
+			if (l->l_addr->u_pcb.pcb_onfault)
 				goto copyfault;
 			printf("uvm_fault(%p, 0x%lx, 0x%x) -> 0x%x\n",
 			    map, va, ftype, rv);
@@ -619,6 +656,7 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 			       type, code);
 			goto dopanic;
 		}
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
 		ksi.ksi_addr = (void *)v;
 		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
@@ -663,10 +701,9 @@ writeback(struct frame *fp, int docachepush)
 	struct fmt7 *f = &fp->f_fmt7;
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
-	struct pcb *pcb = lwp_getpcb(l);
 	int err = 0;
 	u_int fa;
-	void *oonfault = pcb->pcb_onfault;
+	void *oonfault = l->l_addr->u_pcb.pcb_onfault;
 	paddr_t pa;
 
 #ifdef DEBUG
@@ -709,7 +746,7 @@ writeback(struct frame *fp, int docachepush)
 			    VM_PROT_WRITE|PMAP_WIRED);
 			pmap_update(pmap_kernel());
 			fa = (u_int)&vmmap[(f->f_fa & PGOFSET) & ~0xF];
-			memcpy((void *)fa, (void *)&f->f_pd0, 16);
+			bcopy((void *)&f->f_pd0, (void *)fa, 16);
 			(void) pmap_extract(pmap_kernel(), (vaddr_t)fa, &pa);
 			DCFL(pa);
 			pmap_remove(pmap_kernel(), (vaddr_t)vmmap,
@@ -734,7 +771,7 @@ writeback(struct frame *fp, int docachepush)
 		wbstats.move16s++;
 #endif
 		if (KDFAULT(f->f_wb1s))
-			memcpy((void *)(f->f_fa & ~0xF), (void *)&f->f_pd0, 16);
+			bcopy((void *)&f->f_pd0, (void *)(f->f_fa & ~0xF), 16);
 		else
 			err = suline((void *)(f->f_fa & ~0xF), (void *)&f->f_pd0);
 		if (err) {
@@ -887,7 +924,7 @@ writeback(struct frame *fp, int docachepush)
 #endif
 		}
 	}
-	pcb->pcb_onfault = oonfault;
+	l->l_addr->u_pcb.pcb_onfault = oonfault;
 	if (err)
 		err = SIGSEGV;
 	return (err);

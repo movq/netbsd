@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.22 2010/12/22 02:42:29 matt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.20 2008/01/26 14:02:54 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -101,6 +101,29 @@
  * The name "cpu" is historical, and used in the common
  * code to identify machine-dependent functions, etc.
  */
+
+#include <sys/cpu_data.h>
+struct cpu_info {
+	struct cpu_data ci_data;	/* MI per-cpu data */
+	cpuid_t	ci_cpuid;
+	int	ci_mtx_count;
+	int	ci_mtx_oldspl;
+	int	ci_want_resched;
+};
+
+extern struct cpu_info cpu_info_store;
+
+#define	curcpu()			(&cpu_info_store)
+
+/*
+ * definitions of cpu-dependent requirements
+ * referenced in generic code
+ */
+#define	cpu_number()			0
+#define	cpu_swapin(p)			/* nothing */
+#define	cpu_swapout(p)			/* nothing */
+
+void	cpu_proc_fork(struct proc *, struct proc *);
 
 /*
  * Arguments to hardclock and gatherstats encapsulate the previous

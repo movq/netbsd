@@ -1,4 +1,4 @@
-/*	$NetBSD: sbusvar.h,v 1.18 2011/07/01 18:48:37 dyoung Exp $ */
+/*	$NetBSD: sbusvar.h,v 1.15 2008/04/28 20:23:36 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
 #ifndef _SBUS_VAR_SPARC64_H_
 #define _SBUS_VAR_SPARC64_H_
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 /*
  * Macro to convert a PROM virtual address to a bus_space_handle_t.
@@ -95,11 +95,12 @@
 
 /* variables per Sbus */
 struct sbus_softc {
-	device_t		sc_dev;		/* base device */
+	struct	device		sc_dev;		/* base device */
 	bus_space_tag_t		sc_bustag;
 	bus_space_handle_t	sc_bh;
 	bus_dma_tag_t		sc_dmatag;
 	int			sc_clockfreq;	/* clock frequency (in Hz) */
+	struct sbusdev		*sc_sbdev;	/* list of all children */
 	int			sc_burst;	/* burst transfer sizes supported */
 	int			*sc_intr2ipl;	/* Interrupt level translation */
 	int			*sc_intr_compat;/* `intr' property to sbus compat */

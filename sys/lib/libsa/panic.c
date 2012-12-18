@@ -1,4 +1,4 @@
-/*	$NetBSD: panic.c,v 1.7 2011/07/17 20:54:52 joerg Exp $	*/
+/*	$NetBSD: panic.c,v 1.6 2007/11/24 13:20:56 isaki Exp $	*/
 
 /*-
  *  Copyright (c) 1993 John Brezak
@@ -27,12 +27,21 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include <sys/stdarg.h>
+#ifdef __STDC__
+#include <machine/stdarg.h>
+#else
+#include <machine/varargs.h>
+#endif
 
 #include "stand.h"
 
 __dead void
+#ifdef __STDC__
 panic(const char *fmt, ...)
+#else
+panic(fmt /*, va_alist */)
+	char *fmt;
+#endif
 {
 	va_list ap;
 #ifndef LIBSA_NO_FS_CLOSE
@@ -44,7 +53,11 @@ panic(const char *fmt, ...)
 	}
 #endif
 
+#ifdef __STDC__
 	va_start(ap, fmt);
+#else
+	va_start(ap);
+#endif
 	vprintf(fmt, ap);
 	printf("\n");
 	va_end(ap);

@@ -1,4 +1,4 @@
-/*	$NetBSD: get.h,v 1.6 2011/08/30 19:49:10 joerg Exp $	*/
+/*	$NetBSD: get.h,v 1.3 1997/10/16 23:24:40 lukem Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -23,7 +28,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$NetBSD: get.h,v 1.6 2011/08/30 19:49:10 joerg Exp $
+ *	$NetBSD: get.h,v 1.3 1997/10/16 23:24:40 lukem Exp $
  *
  */
 
@@ -31,14 +36,14 @@
 #define _GET_H_
 
 __BEGIN_DECLS
-u_char		mopGetChar(const u_char *, int *);
-u_short		mopGetShort(const u_char *, int *);
-u_int32_t	mopGetLong(const u_char *, int *);
-void		mopGetMulti(const u_char *, int *, u_char *, int);
-int		mopGetTrans(const u_char *, int);
-void		mopGetHeader(const u_char *, int *, const u_char **, const u_char **,
-		    u_short *, int *, int);
-u_short		mopGetLength(const u_char *, int);
+u_char		mopGetChar __P((u_char *, int *));
+u_short		mopGetShort __P((u_char *, int *));
+u_int32_t	mopGetLong __P((u_char *, int *));
+void		mopGetMulti __P((u_char *, int *, u_char *, int));
+int		mopGetTrans __P((u_char *, int));
+void		mopGetHeader __P((u_char *, int *, u_char **, u_char **,
+		    u_short *, int *, int));
+u_short		mopGetLength __P((u_char *, int));
 __END_DECLS
 
 #endif /* _GET_H_ */

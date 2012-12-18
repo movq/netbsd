@@ -1,7 +1,7 @@
-/*	$NetBSD: subr_vmem.c,v 1.76 2012/09/13 21:44:50 joerg Exp $	*/
+/*	$NetBSD: subr_vmem.c,v 1.42.14.1 2009/02/02 02:40:27 snj Exp $	*/
 
 /*-
- * Copyright (c)2006,2007,2008,2009 YAMAMOTO Takashi,
+ * Copyright (c)2006 YAMAMOTO Takashi,
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,11 +31,16 @@
  * -	Magazines and Vmem: Extending the Slab Allocator
  *	to Many CPUs and Arbitrary Resources
  *	http://www.usenix.org/event/usenix01/bonwick.html
+ *
+ * todo:
+ * -	decide how to import segments for vmem_xalloc.
+ * -	don't rely on malloc(9).
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_vmem.c,v 1.76 2012/09/13 21:44:50 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_vmem.c,v 1.42.14.1 2009/02/02 02:40:27 snj Exp $");
 
+#define	VMEM_DEBUG
 #if defined(_KERNEL)
 #include "opt_ddb.h"
 #define	QCACHE
@@ -44,86 +49,51 @@ __KERNEL_RCSID(0, "$NetBSD: subr_vmem.c,v 1.76 2012/09/13 21:44:50 joerg Exp $")
 #include <sys/param.h>
 #include <sys/hash.h>
 #include <sys/queue.h>
-#include <sys/bitops.h>
 
 #if defined(_KERNEL)
 #include <sys/systm.h>
 #include <sys/kernel.h>	/* hz */
 #include <sys/callout.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
+#include <sys/once.h>
 #include <sys/pool.h>
 #include <sys/vmem.h>
 #include <sys/workqueue.h>
-#include <sys/atomic.h>
-#include <uvm/uvm.h>
-#include <uvm/uvm_extern.h>
-#include <uvm/uvm_km.h>
-#include <uvm/uvm_page.h>
-#include <uvm/uvm_pdaemon.h>
 #else /* defined(_KERNEL) */
 #include "../sys/vmem.h"
 #endif /* defined(_KERNEL) */
 
-
 #if defined(_KERNEL)
-#include <sys/evcnt.h>
-#define VMEM_EVCNT_DEFINE(name) \
-struct evcnt vmem_evcnt_##name = EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL, \
-    "vmemev", #name); \
-EVCNT_ATTACH_STATIC(vmem_evcnt_##name);
-#define VMEM_EVCNT_INCR(ev)	vmem_evcnt_##ev.ev_count++
-#define VMEM_EVCNT_DECR(ev)	vmem_evcnt_##ev.ev_count--
-
-VMEM_EVCNT_DEFINE(bt_pages)
-VMEM_EVCNT_DEFINE(bt_count)
-VMEM_EVCNT_DEFINE(bt_inuse)
-
 #define	LOCK_DECL(name)		\
     kmutex_t name; char lockpad[COHERENCY_UNIT - sizeof(kmutex_t)]
-
-#define CONDVAR_DECL(name)	\
-    kcondvar_t name
-
 #else /* defined(_KERNEL) */
-#include <stdio.h>
 #include <errno.h>
 #include <assert.h>
 #include <stdlib.h>
-#include <string.h>
 
-#define VMEM_EVCNT_INCR(ev)	/* nothing */
-#define VMEM_EVCNT_DECR(ev)	/* nothing */
-
-#define	UNITTEST
 #define	KASSERT(a)		assert(a)
 #define	LOCK_DECL(name)		/* nothing */
-#define	CONDVAR_DECL(name)	/* nothing */
-#define	VMEM_CONDVAR_INIT(vm, wchan)	/* nothing */
-#define	VMEM_CONDVAR_BROADCAST(vm)	/* nothing */
 #define	mutex_init(a, b, c)	/* nothing */
 #define	mutex_destroy(a)	/* nothing */
 #define	mutex_enter(a)		/* nothing */
-#define	mutex_tryenter(a)	true
 #define	mutex_exit(a)		/* nothing */
 #define	mutex_owned(a)		/* nothing */
-#define	ASSERT_SLEEPABLE()	/* nothing */
-#define	panic(...)		printf(__VA_ARGS__); abort()
+#define	ASSERT_SLEEPABLE()	 /* nothing */
+#define	IPL_VM			0
 #endif /* defined(_KERNEL) */
 
 struct vmem;
 struct vmem_btag;
 
-#if defined(VMEM_SANITY)
-static void vmem_check(vmem_t *);
-#else /* defined(VMEM_SANITY) */
-#define vmem_check(vm)	/* nothing */
-#endif /* defined(VMEM_SANITY) */
+#if defined(VMEM_DEBUG)
+void vmem_dump(const vmem_t *);
+#endif /* defined(VMEM_DEBUG) */
 
 #define	VMEM_MAXORDER		(sizeof(vmem_size_t) * CHAR_BIT)
 
 #define	VMEM_HASHSIZE_MIN	1	/* XXX */
-#define	VMEM_HASHSIZE_MAX	65536	/* XXX */
-#define	VMEM_HASHSIZE_INIT	1
+#define	VMEM_HASHSIZE_MAX	8192	/* XXX */
+#define	VMEM_HASHSIZE_INIT	VMEM_HASHSIZE_MIN
 
 #define	VM_FITMASK	(VM_BESTFIT | VM_INSTANTFIT)
 
@@ -145,29 +115,21 @@ typedef struct qcache qcache_t;
 #define	QC_POOL_TO_QCACHE(pool)	((qcache_t *)(pool->pr_qcache))
 #endif /* defined(QCACHE) */
 
-#define	VMEM_NAME_MAX	16
-
 /* vmem arena */
 struct vmem {
-	CONDVAR_DECL(vm_cv);
 	LOCK_DECL(vm_lock);
-	vm_flag_t vm_flags;
-	vmem_import_t *vm_importfn;
-	vmem_release_t *vm_releasefn;
-	size_t vm_nfreetags;
-	LIST_HEAD(, vmem_btag) vm_freetags;
-	void *vm_arg;
+	vmem_addr_t (*vm_allocfn)(vmem_t *, vmem_size_t, vmem_size_t *,
+	    vm_flag_t);
+	void (*vm_freefn)(vmem_t *, vmem_addr_t, vmem_size_t);
+	vmem_t *vm_source;
 	struct vmem_seglist vm_seglist;
 	struct vmem_freelist vm_freelist[VMEM_MAXORDER];
 	size_t vm_hashsize;
 	size_t vm_nbusytag;
 	struct vmem_hashlist *vm_hashlist;
-	struct vmem_hashlist vm_hash0;
 	size_t vm_quantum_mask;
 	int vm_quantum_shift;
-	size_t vm_size;
-	size_t vm_inuse;
-	char vm_name[VMEM_NAME_MAX+1];
+	const char *vm_name;
 	LIST_ENTRY(vmem) vm_alllist;
 
 #if defined(QCACHE)
@@ -185,13 +147,6 @@ struct vmem {
 #define	VMEM_LOCK_INIT(vm, ipl)	mutex_init(&vm->vm_lock, MUTEX_DEFAULT, ipl)
 #define	VMEM_LOCK_DESTROY(vm)	mutex_destroy(&vm->vm_lock)
 #define	VMEM_ASSERT_LOCKED(vm)	KASSERT(mutex_owned(&vm->vm_lock))
-
-#if defined(_KERNEL)
-#define	VMEM_CONDVAR_INIT(vm, wchan)	cv_init(&vm->vm_cv, wchan)
-#define	VMEM_CONDVAR_DESTROY(vm)	cv_destroy(&vm->vm_cv)
-#define	VMEM_CONDVAR_WAIT(vm)		cv_wait(&vm->vm_cv, &vm->vm_lock)
-#define	VMEM_CONDVAR_BROADCAST(vm)	cv_broadcast(&vm->vm_cv)
-#endif /* defined(_KERNEL) */
 
 /* boundary tag */
 struct vmem_btag {
@@ -213,193 +168,100 @@ struct vmem_btag {
 #define	BT_TYPE_BUSY		4
 #define	BT_ISSPAN_P(bt)	((bt)->bt_type <= BT_TYPE_SPAN_STATIC)
 
-#define	BT_END(bt)	((bt)->bt_start + (bt)->bt_size - 1)
+#define	BT_END(bt)	((bt)->bt_start + (bt)->bt_size)
 
 typedef struct vmem_btag bt_t;
-
-#if defined(_KERNEL)
-static kmutex_t vmem_list_lock;
-static LIST_HEAD(, vmem) vmem_list = LIST_HEAD_INITIALIZER(vmem_list);
-#endif /* defined(_KERNEL) */
 
 /* ---- misc */
 
 #define	VMEM_ALIGNUP(addr, align) \
 	(-(-(addr) & -(align)))
-
 #define	VMEM_CROSS_P(addr1, addr2, boundary) \
 	((((addr1) ^ (addr2)) & -(boundary)) != 0)
 
 #define	ORDER2SIZE(order)	((vmem_size_t)1 << (order))
-#define	SIZE2ORDER(size)	((int)ilog2(size))
 
-#if !defined(_KERNEL)
-#define	xmalloc(sz, flags)	malloc(sz)
-#define	xfree(p, sz)		free(p)
-#define	bt_alloc(vm, flags)	malloc(sizeof(bt_t))
-#define	bt_free(vm, bt)		free(bt)
+static int
+calc_order(vmem_size_t size)
+{
+	vmem_size_t target;
+	int i;
+
+	KASSERT(size != 0);
+
+	i = 0;
+	target = size >> 1;
+	while (ORDER2SIZE(i) <= target) {
+		i++;
+	}
+
+	KASSERT(ORDER2SIZE(i) <= size);
+	KASSERT(size < ORDER2SIZE(i + 1) || ORDER2SIZE(i + 1) < ORDER2SIZE(i));
+
+	return i;
+}
+
+#if defined(_KERNEL)
+static MALLOC_DEFINE(M_VMEM, "vmem", "vmem");
+#endif /* defined(_KERNEL) */
+
+static void *
+xmalloc(size_t sz, vm_flag_t flags)
+{
+
+#if defined(_KERNEL)
+	return malloc(sz, M_VMEM,
+	    M_CANFAIL | ((flags & VM_SLEEP) ? M_WAITOK : M_NOWAIT));
 #else /* defined(_KERNEL) */
+	return malloc(sz);
+#endif /* defined(_KERNEL) */
+}
 
-#define	xmalloc(sz, flags) \
-    kmem_intr_alloc(sz, ((flags) & VM_SLEEP) ? KM_SLEEP : KM_NOSLEEP);
-#define	xfree(p, sz)		kmem_intr_free(p, sz);
+static void
+xfree(void *p)
+{
 
-/*
- * Memory for arenas initialized during bootstrap.
- * There is memory for STATIC_VMEM_COUNT bootstrap arenas.
- *
- * BT_RESERVE calculation:
- * we allocate memory for boundry tags with vmem, therefor we have
- * to keep a reserve of bts used to allocated memory for bts. 
- * This reserve is 4 for each arena involved in allocating vmems memory.
- * BT_MAXFREE: don't cache excessive counts of bts in arenas
- */
-#define STATIC_VMEM_COUNT 4
-#define STATIC_BT_COUNT 200
-#define BT_MINRESERVE 4
-#define BT_MAXFREE 64
-/* must be equal or greater then qcache multiplier for kmem_va_arena */
-#define STATIC_QC_POOL_COUNT 8
-
-static struct vmem static_vmems[STATIC_VMEM_COUNT];
-static int static_vmem_count = STATIC_VMEM_COUNT;
-
-static struct vmem_btag static_bts[STATIC_BT_COUNT];
-static int static_bt_count = STATIC_BT_COUNT;
-
-static struct pool_cache static_qc_pools[STATIC_QC_POOL_COUNT];
-static int static_qc_pool_count = STATIC_QC_POOL_COUNT;
-
-vmem_t *kmem_va_meta_arena;
-vmem_t *kmem_meta_arena;
-
-static kmutex_t vmem_btag_lock;
-static LIST_HEAD(, vmem_btag) vmem_btag_freelist;
-static size_t vmem_btag_freelist_count = 0;
-static size_t vmem_btag_count = STATIC_BT_COUNT;
+#if defined(_KERNEL)
+	return free(p, M_VMEM);
+#else /* defined(_KERNEL) */
+	return free(p);
+#endif /* defined(_KERNEL) */
+}
 
 /* ---- boundary tag */
 
-#define	BT_PER_PAGE	(PAGE_SIZE / sizeof(bt_t))
+#if defined(_KERNEL)
+static struct pool_cache bt_cache;
+#endif /* defined(_KERNEL) */
 
-static int bt_refill(vmem_t *vm, vm_flag_t flags);
-
-static int
-bt_refillglobal(vm_flag_t flags)
-{
-	vmem_addr_t va;
-	bt_t *btp;
-	bt_t *bt;
-	int i;
-
-	mutex_enter(&vmem_btag_lock);
-	if (vmem_btag_freelist_count > 0) {
-		mutex_exit(&vmem_btag_lock);
-		return 0;
-	}
-
-	if (vmem_alloc(kmem_meta_arena, PAGE_SIZE,
-	    (flags & ~VM_FITMASK) | VM_INSTANTFIT | VM_POPULATING, &va) != 0) {
-		mutex_exit(&vmem_btag_lock);
-		return ENOMEM;
-	}
-	VMEM_EVCNT_INCR(bt_pages);
-
-	btp = (void *) va;
-	for (i = 0; i < (BT_PER_PAGE); i++) {
-		bt = btp;
-		memset(bt, 0, sizeof(*bt));
-		LIST_INSERT_HEAD(&vmem_btag_freelist, bt,
-		    bt_freelist);
-		vmem_btag_freelist_count++;
-		vmem_btag_count++;
-		VMEM_EVCNT_INCR(bt_count);
-		btp++;
-	}
-	mutex_exit(&vmem_btag_lock);
-
-	bt_refill(kmem_arena, (flags & ~VM_FITMASK) | VM_INSTANTFIT);
-	bt_refill(kmem_va_meta_arena, (flags & ~VM_FITMASK) | VM_INSTANTFIT);
-	bt_refill(kmem_meta_arena, (flags & ~VM_FITMASK) | VM_INSTANTFIT);
-
-	return 0;
-}
-
-static int
-bt_refill(vmem_t *vm, vm_flag_t flags)
-{
-	bt_t *bt;
-
-	bt_refillglobal(flags);
-
-	VMEM_LOCK(vm);
-	mutex_enter(&vmem_btag_lock);
-	while (!LIST_EMPTY(&vmem_btag_freelist) &&
-	    vm->vm_nfreetags <= BT_MINRESERVE) {
-		bt = LIST_FIRST(&vmem_btag_freelist);
-		LIST_REMOVE(bt, bt_freelist);
-		LIST_INSERT_HEAD(&vm->vm_freetags, bt, bt_freelist);
-		vm->vm_nfreetags++;
-		vmem_btag_freelist_count--;
-	}
-	mutex_exit(&vmem_btag_lock);
-
-	if (vm->vm_nfreetags == 0) {
-		VMEM_UNLOCK(vm);
-		return ENOMEM;
-	}
-	VMEM_UNLOCK(vm);
-
-	return 0;
-}
-
-static inline bt_t *
+static bt_t *
 bt_alloc(vmem_t *vm, vm_flag_t flags)
 {
 	bt_t *bt;
-again:
-	VMEM_LOCK(vm);
-	if (vm->vm_nfreetags <= BT_MINRESERVE &&
-	    (flags & VM_POPULATING) == 0) {
-		VMEM_UNLOCK(vm);
-		if (bt_refill(vm, VM_NOSLEEP | VM_INSTANTFIT)) {
-			return NULL;
-		}
-		goto again;
-	}
-	bt = LIST_FIRST(&vm->vm_freetags);
-	LIST_REMOVE(bt, bt_freelist);
-	vm->vm_nfreetags--;
-	VMEM_UNLOCK(vm);
-	VMEM_EVCNT_INCR(bt_inuse);
+
+#if defined(_KERNEL)
+	bt = pool_cache_get(&bt_cache,
+	    (flags & VM_SLEEP) != 0 ? PR_WAITOK : PR_NOWAIT);
+#else /* defined(_KERNEL) */
+	bt = malloc(sizeof *bt);
+#endif /* defined(_KERNEL) */
 
 	return bt;
 }
 
-static inline void
+static void
 bt_free(vmem_t *vm, bt_t *bt)
 {
 
-	VMEM_LOCK(vm);
-	LIST_INSERT_HEAD(&vm->vm_freetags, bt, bt_freelist);
-	vm->vm_nfreetags++;
-	while (vm->vm_nfreetags > BT_MAXFREE) {
-		bt = LIST_FIRST(&vm->vm_freetags);
-		LIST_REMOVE(bt, bt_freelist);
-		vm->vm_nfreetags--;
-		mutex_enter(&vmem_btag_lock);
-		LIST_INSERT_HEAD(&vmem_btag_freelist, bt, bt_freelist);
-		vmem_btag_freelist_count++;
-		mutex_exit(&vmem_btag_lock);
-	}
-	VMEM_UNLOCK(vm);
-	VMEM_EVCNT_DECR(bt_inuse);
+#if defined(_KERNEL)
+	pool_cache_put(&bt_cache, bt);
+#else /* defined(_KERNEL) */
+	free(bt);
+#endif /* defined(_KERNEL) */
 }
 
-#endif	/* defined(_KERNEL) */
-
 /*
- * freelist[0] ... [1, 1]
+ * freelist[0] ... [1, 1] 
  * freelist[1] ... [2, 3]
  * freelist[2] ... [4, 7]
  * freelist[3] ... [8, 15]
@@ -412,34 +274,28 @@ static struct vmem_freelist *
 bt_freehead_tofree(vmem_t *vm, vmem_size_t size)
 {
 	const vmem_size_t qsize = size >> vm->vm_quantum_shift;
-	const int idx = SIZE2ORDER(qsize);
+	int idx;
 
-	KASSERT(size != 0 && qsize != 0);
 	KASSERT((size & vm->vm_quantum_mask) == 0);
+	KASSERT(size != 0);
+
+	idx = calc_order(qsize);
 	KASSERT(idx >= 0);
 	KASSERT(idx < VMEM_MAXORDER);
 
 	return &vm->vm_freelist[idx];
 }
 
-/*
- * bt_freehead_toalloc: return the freelist for the given size and allocation
- * strategy.
- *
- * for VM_INSTANTFIT, return the list in which any blocks are large enough
- * for the requested size.  otherwise, return the list which can have blocks
- * large enough for the requested size.
- */
-
 static struct vmem_freelist *
 bt_freehead_toalloc(vmem_t *vm, vmem_size_t size, vm_flag_t strat)
 {
 	const vmem_size_t qsize = size >> vm->vm_quantum_shift;
-	int idx = SIZE2ORDER(qsize);
+	int idx;
 
-	KASSERT(size != 0 && qsize != 0);
 	KASSERT((size & vm->vm_quantum_mask) == 0);
+	KASSERT(size != 0);
 
+	idx = calc_order(qsize);
 	if (strat == VM_INSTANTFIT && ORDER2SIZE(idx) != qsize) {
 		idx++;
 		/* check too large request? */
@@ -485,7 +341,6 @@ bt_rembusy(vmem_t *vm, bt_t *bt)
 {
 
 	KASSERT(vm->vm_nbusytag > 0);
-	vm->vm_inuse -= bt->bt_size;
 	vm->vm_nbusytag--;
 	LIST_REMOVE(bt, bt_hashlist);
 }
@@ -500,7 +355,6 @@ bt_insbusy(vmem_t *vm, bt_t *bt)
 	list = bt_hashhead(vm, bt->bt_start);
 	LIST_INSERT_HEAD(list, bt, bt_hashlist);
 	vm->vm_nbusytag++;
-	vm->vm_inuse += bt->bt_size;
 }
 
 /* ---- boundary tag list */
@@ -546,6 +400,11 @@ bt_insfree(vmem_t *vm, bt_t *bt)
 
 /* ---- vmem internal functions */
 
+#if defined(_KERNEL)
+static kmutex_t vmem_list_lock;
+static LIST_HEAD(, vmem) vmem_list = LIST_HEAD_INITIALIZER(vmem_list);
+#endif /* defined(_KERNEL) */
+
 #if defined(QCACHE)
 static inline vm_flag_t
 prf_to_vmf(int prflags)
@@ -590,12 +449,9 @@ qc_poolpage_alloc(struct pool *pool, int prflags)
 {
 	qcache_t *qc = QC_POOL_TO_QCACHE(pool);
 	vmem_t *vm = qc->qc_vmem;
-	vmem_addr_t addr;
 
-	if (vmem_alloc(vm, pool->pr_alloc->pa_pagesz,
-	    prf_to_vmf(prflags) | VM_INSTANTFIT, &addr) != 0)
-		return NULL;
-	return (void *)addr;
+	return (void *)vmem_alloc(vm, pool->pr_alloc->pa_pagesz,
+	    prf_to_vmf(prflags) | VM_INSTANTFIT);
 }
 
 static void
@@ -631,36 +487,19 @@ qc_init(vmem_t *vm, size_t qcache_max, int ipl)
 	for (i = qcache_idx_max; i > 0; i--) {
 		qcache_t *qc = &vm->vm_qcache_store[i - 1];
 		size_t size = i << vm->vm_quantum_shift;
-		pool_cache_t pc;
 
 		qc->qc_vmem = vm;
 		snprintf(qc->qc_name, sizeof(qc->qc_name), "%s-%zu",
 		    vm->vm_name, size);
-
-		if (vm->vm_flags & VM_BOOTSTRAP) {
-			KASSERT(static_qc_pool_count > 0);
-			pc = &static_qc_pools[--static_qc_pool_count];
-			pool_cache_bootstrap(pc, size,
-			    ORDER2SIZE(vm->vm_quantum_shift), 0,
-			    PR_NOALIGN | PR_NOTOUCH | PR_RECURSIVE /* XXX */,
-			    qc->qc_name, pa, ipl, NULL, NULL, NULL);
-		} else {
-			pc = pool_cache_init(size,
-			    ORDER2SIZE(vm->vm_quantum_shift), 0,
-			    PR_NOALIGN | PR_NOTOUCH /* XXX */,
-			    qc->qc_name, pa, ipl, NULL, NULL, NULL);
-		}
-		qc->qc_cache = pc;
+		qc->qc_cache = pool_cache_init(size,
+		    ORDER2SIZE(vm->vm_quantum_shift), 0,
+		    PR_NOALIGN | PR_NOTOUCH /* XXX */,
+		    qc->qc_name, pa, ipl, NULL, NULL, NULL);
 		KASSERT(qc->qc_cache != NULL);	/* XXX */
 		if (prevqc != NULL &&
 		    qc->qc_cache->pc_pool.pr_itemsperpage ==
 		    prevqc->qc_cache->pc_pool.pr_itemsperpage) {
-			if (vm->vm_flags & VM_BOOTSTRAP) {
-				pool_cache_bootstrap_destroy(pc);
-				//static_qc_pool_count++;
-			} else {
-				pool_cache_destroy(qc->qc_cache);
-			}
+			pool_cache_destroy(qc->qc_cache);
 			vm->vm_qcache[i - 1] = prevqc;
 			continue;
 		}
@@ -685,48 +524,50 @@ qc_destroy(vmem_t *vm)
 		if (prevqc == qc) {
 			continue;
 		}
-		if (vm->vm_flags & VM_BOOTSTRAP) {
-			pool_cache_bootstrap_destroy(qc->qc_cache);
-		} else {
-			pool_cache_destroy(qc->qc_cache);
-		}
+		pool_cache_destroy(qc->qc_cache);
 		prevqc = qc;
 	}
 }
-#endif
+
+static bool
+qc_reap(vmem_t *vm)
+{
+	const qcache_t *prevqc;
+	int i;
+	int qcache_idx_max;
+	bool didsomething = false;
+
+	qcache_idx_max = vm->vm_qcache_max >> vm->vm_quantum_shift;
+	prevqc = NULL;
+	for (i = 0; i < qcache_idx_max; i++) {
+		qcache_t *qc = vm->vm_qcache[i];
+
+		if (prevqc == qc) {
+			continue;
+		}
+		if (pool_cache_reclaim(qc->qc_cache) != 0) {
+			didsomething = true;
+		}
+		prevqc = qc;
+	}
+
+	return didsomething;
+}
+#endif /* defined(QCACHE) */
 
 #if defined(_KERNEL)
-void
-vmem_bootstrap(void)
+static int
+vmem_init(void)
 {
 
-	mutex_init(&vmem_list_lock, MUTEX_DEFAULT, IPL_VM);
-	mutex_init(&vmem_btag_lock, MUTEX_DEFAULT, IPL_VM);
-
-	while (static_bt_count-- > 0) {
-		bt_t *bt = &static_bts[static_bt_count];
-		LIST_INSERT_HEAD(&vmem_btag_freelist, bt, bt_freelist);
-		VMEM_EVCNT_INCR(bt_count);
-		vmem_btag_freelist_count++;
-	}
-}
-
-void
-vmem_init(vmem_t *vm)
-{
-
-	kmem_va_meta_arena = vmem_create("vmem-va", 0, 0, PAGE_SIZE,
-	    vmem_alloc, vmem_free, vm,
-	    0, VM_NOSLEEP | VM_BOOTSTRAP | VM_LARGEIMPORT,
-	    IPL_VM);
-
-	kmem_meta_arena = vmem_create("vmem-meta", 0, 0, PAGE_SIZE,
-	    uvm_km_kmem_alloc, uvm_km_kmem_free, kmem_va_meta_arena,
-	    0, VM_NOSLEEP | VM_BOOTSTRAP, IPL_VM);
+	mutex_init(&vmem_list_lock, MUTEX_DEFAULT, IPL_NONE);
+	pool_cache_bootstrap(&bt_cache, sizeof(bt_t), 0, 0, 0, "vmembt",
+	    NULL, IPL_VM, NULL, NULL, NULL);
+	return 0;
 }
 #endif /* defined(_KERNEL) */
 
-static int
+static vmem_addr_t
 vmem_add1(vmem_t *vm, vmem_addr_t addr, vmem_size_t size, vm_flag_t flags,
     int spanbttype)
 {
@@ -735,17 +576,15 @@ vmem_add1(vmem_t *vm, vmem_addr_t addr, vmem_size_t size, vm_flag_t flags,
 
 	KASSERT((flags & (VM_SLEEP|VM_NOSLEEP)) != 0);
 	KASSERT((~flags & (VM_SLEEP|VM_NOSLEEP)) != 0);
-	KASSERT(spanbttype == BT_TYPE_SPAN ||
-	    spanbttype == BT_TYPE_SPAN_STATIC);
 
 	btspan = bt_alloc(vm, flags);
 	if (btspan == NULL) {
-		return ENOMEM;
+		return VMEM_ADDR_NULL;
 	}
 	btfree = bt_alloc(vm, flags);
 	if (btfree == NULL) {
 		bt_free(vm, btspan);
-		return ENOMEM;
+		return VMEM_ADDR_NULL;
 	}
 
 	btspan->bt_type = spanbttype;
@@ -760,10 +599,9 @@ vmem_add1(vmem_t *vm, vmem_addr_t addr, vmem_size_t size, vm_flag_t flags,
 	bt_insseg_tail(vm, btspan);
 	bt_insseg(vm, btfree, btspan);
 	bt_insfree(vm, btfree);
-	vm->vm_size += size;
 	VMEM_UNLOCK(vm);
 
-	return 0;
+	return addr;
 }
 
 static void
@@ -784,54 +622,28 @@ vmem_destroy1(vmem_t *vm)
 				bt_free(vm, bt);
 			}
 		}
-		if (vm->vm_hashlist != &vm->vm_hash0) {
-			xfree(vm->vm_hashlist,
-			    sizeof(struct vmem_hashlist *) * vm->vm_hashsize);
-		}
+		xfree(vm->vm_hashlist);
 	}
-
-	while (vm->vm_nfreetags > 0) {
-		bt_t *bt = LIST_FIRST(&vm->vm_freetags);
-		LIST_REMOVE(bt, bt_freelist);
-		vm->vm_nfreetags--;
-		mutex_enter(&vmem_btag_lock);
-#if defined (_KERNEL)
-		LIST_INSERT_HEAD(&vmem_btag_freelist, bt, bt_freelist);
-		vmem_btag_freelist_count++;
-#endif /* defined(_KERNEL) */
-		mutex_exit(&vmem_btag_lock);
-	}
-
 	VMEM_LOCK_DESTROY(vm);
-	xfree(vm, sizeof(*vm));
+	xfree(vm);
 }
 
 static int
 vmem_import(vmem_t *vm, vmem_size_t size, vm_flag_t flags)
 {
 	vmem_addr_t addr;
-	int rc;
 
-	if (vm->vm_importfn == NULL) {
+	if (vm->vm_allocfn == NULL) {
 		return EINVAL;
 	}
 
-	if (vm->vm_flags & VM_LARGEIMPORT) {
-		size *= 8;
-	}
-
-	if (vm->vm_flags & VM_XIMPORT) {
-		rc = ((vmem_ximport_t *)vm->vm_importfn)(vm->vm_arg, size,
-		    &size, flags, &addr);
-	} else {
-		rc = (vm->vm_importfn)(vm->vm_arg, size, flags, &addr);
-	}
-	if (rc) {
+	addr = (*vm->vm_allocfn)(vm->vm_source, size, &size, flags);
+	if (addr == VMEM_ADDR_NULL) {
 		return ENOMEM;
 	}
 
-	if (vmem_add1(vm, addr, size, flags, BT_TYPE_SPAN) != 0) {
-		(*vm->vm_releasefn)(vm->vm_arg, addr, size);
+	if (vmem_add1(vm, addr, size, flags, BT_TYPE_SPAN) == VMEM_ADDR_NULL) {
+		(*vm->vm_freefn)(vm->vm_source, addr, size);
 		return ENOMEM;
 	}
 
@@ -859,8 +671,7 @@ vmem_rehash(vmem_t *vm, size_t newhashsize, vm_flag_t flags)
 	}
 
 	if (!VMEM_TRYLOCK(vm)) {
-		xfree(newhashlist,
-		    sizeof(struct vmem_hashlist *) * newhashsize);
+		xfree(newhashlist);
 		return EBUSY;
 	}
 	oldhashlist = vm->vm_hashlist;
@@ -879,31 +690,23 @@ vmem_rehash(vmem_t *vm, size_t newhashsize, vm_flag_t flags)
 	}
 	VMEM_UNLOCK(vm);
 
-	if (oldhashlist != &vm->vm_hash0) {
-		xfree(oldhashlist,
-		    sizeof(struct vmem_hashlist *) * oldhashsize);
-	}
+	xfree(oldhashlist);
 
 	return 0;
 }
 
 /*
  * vmem_fit: check if a bt can satisfy the given restrictions.
- *
- * it's a caller's responsibility to ensure the region is big enough
- * before calling us.
  */
 
-static int
-vmem_fit(const bt_t *bt, vmem_size_t size, vmem_size_t align,
-    vmem_size_t phase, vmem_size_t nocross,
-    vmem_addr_t minaddr, vmem_addr_t maxaddr, vmem_addr_t *addrp)
+static vmem_addr_t
+vmem_fit(const bt_t *bt, vmem_size_t size, vmem_size_t align, vmem_size_t phase,
+    vmem_size_t nocross, vmem_addr_t minaddr, vmem_addr_t maxaddr)
 {
 	vmem_addr_t start;
 	vmem_addr_t end;
 
-	KASSERT(size > 0);
-	KASSERT(bt->bt_size >= size); /* caller's responsibility */
+	KASSERT(bt->bt_size >= size);
 
 	/*
 	 * XXX assumption: vmem_addr_t and vmem_size_t are
@@ -915,11 +718,11 @@ vmem_fit(const bt_t *bt, vmem_size_t size, vmem_size_t align,
 		start = minaddr;
 	}
 	end = BT_END(bt);
-	if (end > maxaddr) {
-		end = maxaddr;
+	if (end > maxaddr - 1) {
+		end = maxaddr - 1;
 	}
-	if (start > end) {
-		return ENOMEM;
+	if (start >= end) {
+		return VMEM_ADDR_NULL;
 	}
 
 	start = VMEM_ALIGNUP(start - phase, align) + phase;
@@ -930,100 +733,17 @@ vmem_fit(const bt_t *bt, vmem_size_t size, vmem_size_t align,
 		KASSERT(align < nocross);
 		start = VMEM_ALIGNUP(start - phase, nocross) + phase;
 	}
-	if (start <= end && end - start >= size - 1) {
+	if (start < end && end - start >= size) {
 		KASSERT((start & (align - 1)) == phase);
 		KASSERT(!VMEM_CROSS_P(start, start + size - 1, nocross));
 		KASSERT(minaddr <= start);
-		KASSERT(maxaddr == 0 || start + size - 1 <= maxaddr);
+		KASSERT(maxaddr == 0 || start + size <= maxaddr);
 		KASSERT(bt->bt_start <= start);
-		KASSERT(BT_END(bt) - start >= size - 1);
-		*addrp = start;
-		return 0;
+		KASSERT(start + size <= BT_END(bt));
+		return start;
 	}
-	return ENOMEM;
+	return VMEM_ADDR_NULL;
 }
-
-
-/*
- * vmem_create_internal: creates a vmem arena.
- */
-
-static vmem_t *
-vmem_create_internal(const char *name, vmem_addr_t base, vmem_size_t size,
-    vmem_size_t quantum, vmem_import_t *importfn, vmem_release_t *releasefn,
-    void *arg, vmem_size_t qcache_max, vm_flag_t flags, int ipl)
-{
-	vmem_t *vm = NULL;
-	int i;
-
-	KASSERT((flags & (VM_SLEEP|VM_NOSLEEP)) != 0);
-	KASSERT((~flags & (VM_SLEEP|VM_NOSLEEP)) != 0);
-	KASSERT(quantum > 0);
-
-	if (flags & VM_BOOTSTRAP) {
-#if defined(_KERNEL)
-		KASSERT(static_vmem_count > 0);
-		vm = &static_vmems[--static_vmem_count];
-#endif /* defined(_KERNEL) */
-	} else {
-		vm = xmalloc(sizeof(*vm), flags);
-	}
-	if (vm == NULL) {
-		return NULL;
-	}
-
-	VMEM_CONDVAR_INIT(vm, "vmem");
-	VMEM_LOCK_INIT(vm, ipl);
-	vm->vm_flags = flags;
-	vm->vm_nfreetags = 0;
-	LIST_INIT(&vm->vm_freetags);
-	strlcpy(vm->vm_name, name, sizeof(vm->vm_name));
-	vm->vm_quantum_mask = quantum - 1;
-	vm->vm_quantum_shift = SIZE2ORDER(quantum);
-	KASSERT(ORDER2SIZE(vm->vm_quantum_shift) == quantum);
-	vm->vm_importfn = importfn;
-	vm->vm_releasefn = releasefn;
-	vm->vm_arg = arg;
-	vm->vm_nbusytag = 0;
-	vm->vm_size = 0;
-	vm->vm_inuse = 0;
-#if defined(QCACHE)
-	qc_init(vm, qcache_max, ipl);
-#endif /* defined(QCACHE) */
-
-	CIRCLEQ_INIT(&vm->vm_seglist);
-	for (i = 0; i < VMEM_MAXORDER; i++) {
-		LIST_INIT(&vm->vm_freelist[i]);
-	}
-	vm->vm_hashlist = NULL;
-	if (flags & VM_BOOTSTRAP) {
-		vm->vm_hashsize = 1;
-		vm->vm_hashlist = &vm->vm_hash0;
-	} else if (vmem_rehash(vm, VMEM_HASHSIZE_INIT, flags)) {
-		vmem_destroy1(vm);
-		return NULL;
-	}
-
-	if (size != 0) {
-		if (vmem_add(vm, base, size, flags) != 0) {
-			vmem_destroy1(vm);
-			return NULL;
-		}
-	}
-
-#if defined(_KERNEL)
-	if (flags & VM_BOOTSTRAP) {
-		bt_refill(vm, VM_NOSLEEP);
-	}
-
-	mutex_enter(&vmem_list_lock);
-	LIST_INSERT_HEAD(&vmem_list, vm, vm_alllist);
-	mutex_exit(&vmem_list_lock);
-#endif /* defined(_KERNEL) */
-
-	return vm;
-}
-
 
 /* ---- vmem API */
 
@@ -1035,37 +755,68 @@ vmem_create_internal(const char *name, vmem_addr_t base, vmem_size_t size,
 
 vmem_t *
 vmem_create(const char *name, vmem_addr_t base, vmem_size_t size,
-    vmem_size_t quantum, vmem_import_t *importfn, vmem_release_t *releasefn,
-    vmem_t *source, vmem_size_t qcache_max, vm_flag_t flags, int ipl)
+    vmem_size_t quantum,
+    vmem_addr_t (*allocfn)(vmem_t *, vmem_size_t, vmem_size_t *, vm_flag_t),
+    void (*freefn)(vmem_t *, vmem_addr_t, vmem_size_t),
+    vmem_t *source, vmem_size_t qcache_max, vm_flag_t flags,
+    int ipl)
 {
+	vmem_t *vm;
+	int i;
+#if defined(_KERNEL)
+	static ONCE_DECL(control);
+#endif /* defined(_KERNEL) */
 
 	KASSERT((flags & (VM_SLEEP|VM_NOSLEEP)) != 0);
 	KASSERT((~flags & (VM_SLEEP|VM_NOSLEEP)) != 0);
-	KASSERT((flags & (VM_XIMPORT)) == 0);
 
-	return vmem_create_internal(name, base, size, quantum,
-	    importfn, releasefn, source, qcache_max, flags, ipl);
-}
+#if defined(_KERNEL)
+	if (RUN_ONCE(&control, vmem_init)) {
+		return NULL;
+	}
+#endif /* defined(_KERNEL) */
+	vm = xmalloc(sizeof(*vm), flags);
+	if (vm == NULL) {
+		return NULL;
+	}
 
-/*
- * vmem_xcreate: create an arena takes alternative import func.
- *
- * => must not be called from interrupt context.
- */
+	VMEM_LOCK_INIT(vm, ipl);
+	vm->vm_name = name;
+	vm->vm_quantum_mask = quantum - 1;
+	vm->vm_quantum_shift = calc_order(quantum);
+	KASSERT(ORDER2SIZE(vm->vm_quantum_shift) == quantum);
+	vm->vm_allocfn = allocfn;
+	vm->vm_freefn = freefn;
+	vm->vm_source = source;
+	vm->vm_nbusytag = 0;
+#if defined(QCACHE)
+	qc_init(vm, qcache_max, ipl);
+#endif /* defined(QCACHE) */
 
-vmem_t *
-vmem_xcreate(const char *name, vmem_addr_t base, vmem_size_t size,
-    vmem_size_t quantum, vmem_ximport_t *importfn, vmem_release_t *releasefn,
-    vmem_t *source, vmem_size_t qcache_max, vm_flag_t flags, int ipl)
-{
+	CIRCLEQ_INIT(&vm->vm_seglist);
+	for (i = 0; i < VMEM_MAXORDER; i++) {
+		LIST_INIT(&vm->vm_freelist[i]);
+	}
+	vm->vm_hashlist = NULL;
+	if (vmem_rehash(vm, VMEM_HASHSIZE_INIT, flags)) {
+		vmem_destroy1(vm);
+		return NULL;
+	}
 
-	KASSERT((flags & (VM_SLEEP|VM_NOSLEEP)) != 0);
-	KASSERT((~flags & (VM_SLEEP|VM_NOSLEEP)) != 0);
-	KASSERT((flags & (VM_XIMPORT)) == 0);
+	if (size != 0) {
+		if (vmem_add(vm, base, size, flags) == 0) {
+			vmem_destroy1(vm);
+			return NULL;
+		}
+	}
 
-	return vmem_create_internal(name, base, size, quantum,
-	    (vmem_import_t *)importfn, releasefn, source,
-	    qcache_max, flags | VM_XIMPORT, ipl);
+#if defined(_KERNEL)
+	mutex_enter(&vmem_list_lock);
+	LIST_INSERT_HEAD(&vmem_list, vm, vm_alllist);
+	mutex_exit(&vmem_list_lock);
+#endif /* defined(_KERNEL) */
+
+	return vm;
 }
 
 void
@@ -1095,8 +846,8 @@ vmem_roundup_size(vmem_t *vm, vmem_size_t size)
  *    if the arena can be accessed from interrupt context.
  */
 
-int
-vmem_alloc(vmem_t *vm, vmem_size_t size, vm_flag_t flags, vmem_addr_t *addrp)
+vmem_addr_t
+vmem_alloc(vmem_t *vm, vmem_size_t size, vm_flag_t flags)
 {
 	const vm_flag_t strat __unused = flags & VM_FITMASK;
 
@@ -1111,26 +862,21 @@ vmem_alloc(vmem_t *vm, vmem_size_t size, vm_flag_t flags, vmem_addr_t *addrp)
 
 #if defined(QCACHE)
 	if (size <= vm->vm_qcache_max) {
-		void *p;
 		int qidx = (size + vm->vm_quantum_mask) >> vm->vm_quantum_shift;
 		qcache_t *qc = vm->vm_qcache[qidx - 1];
 
-		p = pool_cache_get(qc->qc_cache, vmf_to_prf(flags));
-		if (addrp != NULL)
-			*addrp = (vmem_addr_t)p;
-		return (p == NULL) ? ENOMEM : 0;
+		return (vmem_addr_t)pool_cache_get(qc->qc_cache,
+		    vmf_to_prf(flags));
 	}
 #endif /* defined(QCACHE) */
 
-	return vmem_xalloc(vm, size, 0, 0, 0, VMEM_ADDR_MIN, VMEM_ADDR_MAX,
-	    flags, addrp);
+	return vmem_xalloc(vm, size, 0, 0, 0, 0, 0, flags);
 }
 
-int
-vmem_xalloc(vmem_t *vm, const vmem_size_t size0, vmem_size_t align,
-    const vmem_size_t phase, const vmem_size_t nocross,
-    const vmem_addr_t minaddr, const vmem_addr_t maxaddr, const vm_flag_t flags,
-    vmem_addr_t *addrp)
+vmem_addr_t
+vmem_xalloc(vmem_t *vm, vmem_size_t size0, vmem_size_t align, vmem_size_t phase,
+    vmem_size_t nocross, vmem_addr_t minaddr, vmem_addr_t maxaddr,
+    vm_flag_t flags)
 {
 	struct vmem_freelist *list;
 	struct vmem_freelist *first;
@@ -1141,7 +887,6 @@ vmem_xalloc(vmem_t *vm, const vmem_size_t size0, vmem_size_t align,
 	const vmem_size_t size = vmem_roundup_size(vm, size0);
 	vm_flag_t strat = flags & VM_FITMASK;
 	vmem_addr_t start;
-	int rc;
 
 	KASSERT(size0 > 0);
 	KASSERT(size > 0);
@@ -1156,79 +901,46 @@ vmem_xalloc(vmem_t *vm, const vmem_size_t size0, vmem_size_t align,
 	KASSERT((nocross & (nocross - 1)) == 0);
 	KASSERT((align == 0 && phase == 0) || phase < align);
 	KASSERT(nocross == 0 || nocross >= size);
-	KASSERT(minaddr <= maxaddr);
+	KASSERT(maxaddr == 0 || minaddr < maxaddr);
 	KASSERT(!VMEM_CROSS_P(phase, phase + size - 1, nocross));
 
 	if (align == 0) {
 		align = vm->vm_quantum_mask + 1;
 	}
-
-	/*
-	 * allocate boundary tags before acquiring the vmem lock.
-	 */
 	btnew = bt_alloc(vm, flags);
 	if (btnew == NULL) {
-		return ENOMEM;
+		return VMEM_ADDR_NULL;
 	}
 	btnew2 = bt_alloc(vm, flags); /* XXX not necessary if no restrictions */
 	if (btnew2 == NULL) {
 		bt_free(vm, btnew);
-		return ENOMEM;
+		return VMEM_ADDR_NULL;
 	}
 
-	/*
-	 * choose a free block from which we allocate.
-	 */
 retry_strat:
 	first = bt_freehead_toalloc(vm, size, strat);
 	end = &vm->vm_freelist[VMEM_MAXORDER];
 retry:
 	bt = NULL;
 	VMEM_LOCK(vm);
-	vmem_check(vm);
 	if (strat == VM_INSTANTFIT) {
-		/*
-		 * just choose the first block which satisfies our restrictions.
-		 *
-		 * note that we don't need to check the size of the blocks
-		 * because any blocks found on these list should be larger than
-		 * the given size.
-		 */
 		for (list = first; list < end; list++) {
 			bt = LIST_FIRST(list);
 			if (bt != NULL) {
-				rc = vmem_fit(bt, size, align, phase,
-				    nocross, minaddr, maxaddr, &start);
-				if (rc == 0) {
+				start = vmem_fit(bt, size, align, phase,
+				    nocross, minaddr, maxaddr);
+				if (start != VMEM_ADDR_NULL) {
 					goto gotit;
 				}
-				/*
-				 * don't bother to follow the bt_freelist link
-				 * here.  the list can be very long and we are
-				 * told to run fast.  blocks from the later free
-				 * lists are larger and have better chances to
-				 * satisfy our restrictions.
-				 */
 			}
 		}
 	} else { /* VM_BESTFIT */
-		/*
-		 * we assume that, for space efficiency, it's better to
-		 * allocate from a smaller block.  thus we will start searching
-		 * from the lower-order list than VM_INSTANTFIT.
-		 * however, don't bother to find the smallest block in a free
-		 * list because the list can be very long.  we can revisit it
-		 * if/when it turns out to be a problem.
-		 *
-		 * note that the 'first' list can contain blocks smaller than
-		 * the requested size.  thus we need to check bt_size.
-		 */
 		for (list = first; list < end; list++) {
 			LIST_FOREACH(bt, list, bt_freelist) {
 				if (bt->bt_size >= size) {
-					rc = vmem_fit(bt, size, align, phase,
-					    nocross, minaddr, maxaddr, &start);
-					if (rc == 0) {
+					start = vmem_fit(bt, size, align, phase,
+					    nocross, minaddr, maxaddr);
+					if (start != VMEM_ADDR_NULL) {
 						goto gotit;
 					}
 				}
@@ -1242,7 +954,8 @@ retry:
 		goto retry_strat;
 	}
 #endif
-	if (align != vm->vm_quantum_mask + 1 || phase != 0 || nocross != 0) {
+	if (align != vm->vm_quantum_mask + 1 || phase != 0 ||
+	    nocross != 0 || minaddr != 0 || maxaddr != 0) {
 
 		/*
 		 * XXX should try to import a region large enough to
@@ -1251,33 +964,19 @@ retry:
 
 		goto fail;
 	}
-	/* XXX eeek, minaddr & maxaddr not respected */
 	if (vmem_import(vm, size, flags) == 0) {
 		goto retry;
 	}
 	/* XXX */
-
-	if ((flags & VM_SLEEP) != 0) {
-#if defined(_KERNEL) && !defined(_RUMPKERNEL)
-		mutex_spin_enter(&uvm_fpageqlock);
-		uvm_kick_pdaemon();
-		mutex_spin_exit(&uvm_fpageqlock);
-#endif
-		VMEM_LOCK(vm);
-		VMEM_CONDVAR_WAIT(vm);
-		VMEM_UNLOCK(vm);
-		goto retry;
-	}
 fail:
 	bt_free(vm, btnew);
 	bt_free(vm, btnew2);
-	return ENOMEM;
+	return VMEM_ADDR_NULL;
 
 gotit:
 	KASSERT(bt->bt_type == BT_TYPE_FREE);
 	KASSERT(bt->bt_size >= size);
 	bt_remfree(vm, bt);
-	vmem_check(vm);
 	if (bt->bt_start != start) {
 		btnew2->bt_type = BT_TYPE_FREE;
 		btnew2->bt_start = bt->bt_start;
@@ -1287,7 +986,6 @@ gotit:
 		bt_insfree(vm, btnew2);
 		bt_insseg(vm, btnew2, CIRCLEQ_PREV(bt, bt_seglist));
 		btnew2 = NULL;
-		vmem_check(vm);
 	}
 	KASSERT(bt->bt_start == start);
 	if (bt->bt_size != size && bt->bt_size - size > vm->vm_quantum_mask) {
@@ -1300,12 +998,10 @@ gotit:
 		bt_insfree(vm, bt);
 		bt_insseg(vm, btnew, CIRCLEQ_PREV(bt, bt_seglist));
 		bt_insbusy(vm, btnew);
-		vmem_check(vm);
 		VMEM_UNLOCK(vm);
 	} else {
 		bt->bt_type = BT_TYPE_BUSY;
 		bt_insbusy(vm, bt);
-		vmem_check(vm);
 		VMEM_UNLOCK(vm);
 		bt_free(vm, btnew);
 		btnew = bt;
@@ -1316,9 +1012,7 @@ gotit:
 	KASSERT(btnew->bt_size >= size);
 	btnew->bt_type = BT_TYPE_BUSY;
 
-	if (addrp != NULL)
-		*addrp = btnew->bt_start;
-	return 0;
+	return btnew->bt_start;
 }
 
 /*
@@ -1332,6 +1026,7 @@ void
 vmem_free(vmem_t *vm, vmem_addr_t addr, vmem_size_t size)
 {
 
+	KASSERT(addr != VMEM_ADDR_NULL);
 	KASSERT(size > 0);
 
 #if defined(QCACHE)
@@ -1339,8 +1034,7 @@ vmem_free(vmem_t *vm, vmem_addr_t addr, vmem_size_t size)
 		int qidx = (size + vm->vm_quantum_mask) >> vm->vm_quantum_shift;
 		qcache_t *qc = vm->vm_qcache[qidx - 1];
 
-		pool_cache_put(qc->qc_cache, (void *)addr);
-		return;
+		return pool_cache_put(qc->qc_cache, (void *)addr);
 	}
 #endif /* defined(QCACHE) */
 
@@ -1352,10 +1046,8 @@ vmem_xfree(vmem_t *vm, vmem_addr_t addr, vmem_size_t size)
 {
 	bt_t *bt;
 	bt_t *t;
-	LIST_HEAD(, vmem_btag) tofree;
 
-	LIST_INIT(&tofree);
-
+	KASSERT(addr != VMEM_ADDR_NULL);
 	KASSERT(size > 0);
 
 	VMEM_LOCK(vm);
@@ -1372,26 +1064,26 @@ vmem_xfree(vmem_t *vm, vmem_addr_t addr, vmem_size_t size)
 	/* coalesce */
 	t = CIRCLEQ_NEXT(bt, bt_seglist);
 	if (t != NULL && t->bt_type == BT_TYPE_FREE) {
-		KASSERT(BT_END(bt) < t->bt_start);	/* YYY */
+		KASSERT(BT_END(bt) == t->bt_start);
 		bt_remfree(vm, t);
 		bt_remseg(vm, t);
 		bt->bt_size += t->bt_size;
-		LIST_INSERT_HEAD(&tofree, t, bt_freelist);
+		bt_free(vm, t);
 	}
 	t = CIRCLEQ_PREV(bt, bt_seglist);
 	if (t != NULL && t->bt_type == BT_TYPE_FREE) {
-		KASSERT(BT_END(t) < bt->bt_start);	/* YYY */
+		KASSERT(BT_END(t) == bt->bt_start);
 		bt_remfree(vm, t);
 		bt_remseg(vm, t);
 		bt->bt_size += t->bt_size;
 		bt->bt_start = t->bt_start;
-		LIST_INSERT_HEAD(&tofree, t, bt_freelist);
+		bt_free(vm, t);
 	}
 
 	t = CIRCLEQ_PREV(bt, bt_seglist);
 	KASSERT(t != NULL);
 	KASSERT(BT_ISSPAN_P(t) || t->bt_type == BT_TYPE_BUSY);
-	if (vm->vm_releasefn != NULL && t->bt_type == BT_TYPE_SPAN &&
+	if (vm->vm_freefn != NULL && t->bt_type == BT_TYPE_SPAN &&
 	    t->bt_size == bt->bt_size) {
 		vmem_addr_t spanaddr;
 		vmem_size_t spansize;
@@ -1400,23 +1092,14 @@ vmem_xfree(vmem_t *vm, vmem_addr_t addr, vmem_size_t size)
 		spanaddr = bt->bt_start;
 		spansize = bt->bt_size;
 		bt_remseg(vm, bt);
-		LIST_INSERT_HEAD(&tofree, bt, bt_freelist);
+		bt_free(vm, bt);
 		bt_remseg(vm, t);
-		LIST_INSERT_HEAD(&tofree, t, bt_freelist);
-		vm->vm_size -= spansize;
-		VMEM_CONDVAR_BROADCAST(vm);
+		bt_free(vm, t);
 		VMEM_UNLOCK(vm);
-		(*vm->vm_releasefn)(vm->vm_arg, spanaddr, spansize);
+		(*vm->vm_freefn)(vm->vm_source, spanaddr, spansize);
 	} else {
 		bt_insfree(vm, bt);
-		VMEM_CONDVAR_BROADCAST(vm);
 		VMEM_UNLOCK(vm);
-	}
-
-	while (!LIST_EMPTY(&tofree)) {
-		t = LIST_FIRST(&tofree);
-		LIST_REMOVE(t, bt_freelist);
-		bt_free(vm, t);
 	}
 }
 
@@ -1427,7 +1110,7 @@ vmem_xfree(vmem_t *vm, vmem_addr_t addr, vmem_size_t size)
  *    if the arena can be accessed from interrupt context.
  */
 
-int
+vmem_addr_t
 vmem_add(vmem_t *vm, vmem_addr_t addr, vmem_size_t size, vm_flag_t flags)
 {
 
@@ -1435,24 +1118,20 @@ vmem_add(vmem_t *vm, vmem_addr_t addr, vmem_size_t size, vm_flag_t flags)
 }
 
 /*
- * vmem_size: information about arenas size
+ * vmem_reap: reap unused resources.
  *
- * => return free/allocated size in arena
+ * => return true if we successfully reaped something.
  */
-vmem_size_t
-vmem_size(vmem_t *vm, int typemask)
-{
 
-	switch (typemask) {
-	case VMEM_ALLOC:
-		return vm->vm_inuse;
-	case VMEM_FREE:
-		return vm->vm_size - vm->vm_inuse;
-	case VMEM_FREE|VMEM_ALLOC:
-		return vm->vm_size;
-	default:
-		panic("vmem_size");
-	}
+bool
+vmem_reap(vmem_t *vm)
+{
+	bool didsomething = false;
+
+#if defined(QCACHE)
+	didsomething = qc_reap(vm);
+#endif /* defined(QCACHE) */
+	return didsomething;
 }
 
 /* ---- rehash */
@@ -1522,62 +1201,6 @@ vmem_rehash_start(void)
 
 /* ---- debug */
 
-#if defined(DDB) || defined(UNITTEST) || defined(VMEM_SANITY)
-
-static void bt_dump(const bt_t *, void (*)(const char *, ...));
-
-static const char *
-bt_type_string(int type)
-{
-	static const char * const table[] = {
-		[BT_TYPE_BUSY] = "busy",
-		[BT_TYPE_FREE] = "free",
-		[BT_TYPE_SPAN] = "span",
-		[BT_TYPE_SPAN_STATIC] = "static span",
-	};
-
-	if (type >= __arraycount(table)) {
-		return "BOGUS";
-	}
-	return table[type];
-}
-
-static void
-bt_dump(const bt_t *bt, void (*pr)(const char *, ...))
-{
-
-	(*pr)("\t%p: %" PRIu64 ", %" PRIu64 ", %d(%s)\n",
-	    bt, (uint64_t)bt->bt_start, (uint64_t)bt->bt_size,
-	    bt->bt_type, bt_type_string(bt->bt_type));
-}
-
-static void
-vmem_dump(const vmem_t *vm , void (*pr)(const char *, ...))
-{
-	const bt_t *bt;
-	int i;
-
-	(*pr)("vmem %p '%s'\n", vm, vm->vm_name);
-	CIRCLEQ_FOREACH(bt, &vm->vm_seglist, bt_seglist) {
-		bt_dump(bt, pr);
-	}
-
-	for (i = 0; i < VMEM_MAXORDER; i++) {
-		const struct vmem_freelist *fl = &vm->vm_freelist[i];
-
-		if (LIST_EMPTY(fl)) {
-			continue;
-		}
-
-		(*pr)("freelist[%d]\n", i);
-		LIST_FOREACH(bt, fl, bt_freelist) {
-			bt_dump(bt, pr);
-		}
-	}
-}
-
-#endif /* defined(DDB) || defined(UNITTEST) || defined(VMEM_SANITY) */
-
 #if defined(DDB)
 static bt_t *
 vmem_whatis_lookup(vmem_t *vm, uintptr_t addr)
@@ -1588,7 +1211,7 @@ vmem_whatis_lookup(vmem_t *vm, uintptr_t addr)
 		if (BT_ISSPAN_P(bt)) {
 			continue;
 		}
-		if (bt->bt_start <= addr && addr <= BT_END(bt)) {
+		if (bt->bt_start <= addr && addr < BT_END(bt)) {
 			return bt;
 		}
 	}
@@ -1614,95 +1237,57 @@ vmem_whatis(uintptr_t addr, void (*pr)(const char *, ...))
 		    (bt->bt_type == BT_TYPE_BUSY) ? "allocated" : "free");
 	}
 }
-
-void
-vmem_printall(const char *modif, void (*pr)(const char *, ...))
-{
-	const vmem_t *vm;
-
-	LIST_FOREACH(vm, &vmem_list, vm_alllist) {
-		vmem_dump(vm, pr);
-	}
-}
-
-void
-vmem_print(uintptr_t addr, const char *modif, void (*pr)(const char *, ...))
-{
-	const vmem_t *vm = (const void *)addr;
-
-	vmem_dump(vm, pr);
-}
 #endif /* defined(DDB) */
 
-#if defined(_KERNEL)
-#define vmem_printf printf
-#else
+#if defined(VMEM_DEBUG)
+
+#if !defined(_KERNEL)
 #include <stdio.h>
-#include <stdarg.h>
+#endif /* !defined(_KERNEL) */
 
-static void
-vmem_printf(const char *fmt, ...)
+void bt_dump(const bt_t *);
+
+void
+bt_dump(const bt_t *bt)
 {
-	va_list ap;
-	va_start(ap, fmt);
-	vprintf(fmt, ap);
-	va_end(ap);
+
+	printf("\t%p: %" PRIu64 ", %" PRIu64 ", %d\n",
+	    bt, (uint64_t)bt->bt_start, (uint64_t)bt->bt_size,
+	    bt->bt_type);
 }
-#endif
 
-#if defined(VMEM_SANITY)
-
-static bool
-vmem_check_sanity(vmem_t *vm)
+void
+vmem_dump(const vmem_t *vm)
 {
-	const bt_t *bt, *bt2;
+	const bt_t *bt;
+	int i;
 
-	KASSERT(vm != NULL);
-
+	printf("vmem %p '%s'\n", vm, vm->vm_name);
 	CIRCLEQ_FOREACH(bt, &vm->vm_seglist, bt_seglist) {
-		if (bt->bt_start > BT_END(bt)) {
-			printf("corrupted tag\n");
-			bt_dump(bt, vmem_printf);
-			return false;
-		}
+		bt_dump(bt);
 	}
-	CIRCLEQ_FOREACH(bt, &vm->vm_seglist, bt_seglist) {
-		CIRCLEQ_FOREACH(bt2, &vm->vm_seglist, bt_seglist) {
-			if (bt == bt2) {
-				continue;
-			}
-			if (BT_ISSPAN_P(bt) != BT_ISSPAN_P(bt2)) {
-				continue;
-			}
-			if (bt->bt_start <= BT_END(bt2) &&
-			    bt2->bt_start <= BT_END(bt)) {
-				printf("overwrapped tags\n");
-				bt_dump(bt, vmem_printf);
-				bt_dump(bt2, vmem_printf);
-				return false;
+
+	for (i = 0; i < VMEM_MAXORDER; i++) {
+		const struct vmem_freelist *fl = &vm->vm_freelist[i];
+
+		if (LIST_EMPTY(fl)) {
+			continue;
+		}
+
+		printf("freelist[%d]\n", i);
+		LIST_FOREACH(bt, fl, bt_freelist) {
+			bt_dump(bt);
+			if (bt->bt_size) {
 			}
 		}
 	}
-
-	return true;
 }
 
-static void
-vmem_check(vmem_t *vm)
-{
+#if !defined(_KERNEL)
 
-	if (!vmem_check_sanity(vm)) {
-		panic("insanity vmem %p", vm);
-	}
-}
-
-#endif /* defined(VMEM_SANITY) */
-
-#if defined(UNITTEST)
 int
-main(void)
+main()
 {
-	int rc;
 	vmem_t *vm;
 	vmem_addr_t p;
 	struct reg {
@@ -1720,51 +1305,20 @@ main(void)
 	vm_flag_t strat = VM_BESTFIT;
 #endif
 
-	vm = vmem_create("test", 0, 0, 1, NULL, NULL, NULL, 0, VM_SLEEP,
-#ifdef _KERNEL
-	    IPL_NONE
-#else
-	    0
-#endif
-	    );
+	vm = vmem_create("test", VMEM_ADDR_NULL, 0, 1,
+	    NULL, NULL, NULL, 0, VM_SLEEP);
 	if (vm == NULL) {
 		printf("vmem_create\n");
 		exit(EXIT_FAILURE);
 	}
-	vmem_dump(vm, vmem_printf);
+	vmem_dump(vm);
 
-	rc = vmem_add(vm, 0, 50, VM_SLEEP);
-	assert(rc == 0);
-	rc = vmem_add(vm, 100, 200, VM_SLEEP);
-	assert(rc == 0);
-	rc = vmem_add(vm, 2000, 1, VM_SLEEP);
-	assert(rc == 0);
-	rc = vmem_add(vm, 40000, 65536, VM_SLEEP);
-	assert(rc == 0);
-	rc = vmem_add(vm, 10000, 10000, VM_SLEEP);
-	assert(rc == 0);
-	rc = vmem_add(vm, 500, 1000, VM_SLEEP);
-	assert(rc == 0);
-	rc = vmem_add(vm, 0xffffff00, 0x100, VM_SLEEP);
-	assert(rc == 0);
-	rc = vmem_xalloc(vm, 0x101, 0, 0, 0,
-	    0xffffff00, 0xffffffff, strat|VM_SLEEP, &p);
-	assert(rc != 0);
-	rc = vmem_xalloc(vm, 50, 0, 0, 0, 0, 49, strat|VM_SLEEP, &p);
-	assert(rc == 0 && p == 0);
-	vmem_xfree(vm, p, 50);
-	rc = vmem_xalloc(vm, 25, 0, 0, 0, 0, 24, strat|VM_SLEEP, &p);
-	assert(rc == 0 && p == 0);
-	rc = vmem_xalloc(vm, 0x100, 0, 0, 0,
-	    0xffffff01, 0xffffffff, strat|VM_SLEEP, &p);
-	assert(rc != 0);
-	rc = vmem_xalloc(vm, 0x100, 0, 0, 0,
-	    0xffffff00, 0xfffffffe, strat|VM_SLEEP, &p);
-	assert(rc != 0);
-	rc = vmem_xalloc(vm, 0x100, 0, 0, 0,
-	    0xffffff00, 0xffffffff, strat|VM_SLEEP, &p);
-	assert(rc == 0);
-	vmem_dump(vm, vmem_printf);
+	p = vmem_add(vm, 100, 200, VM_SLEEP);
+	p = vmem_add(vm, 2000, 1, VM_SLEEP);
+	p = vmem_add(vm, 40000, 0x10000000>>12, VM_SLEEP);
+	p = vmem_add(vm, 10000, 10000, VM_SLEEP);
+	p = vmem_add(vm, 500, 1000, VM_SLEEP);
+	vmem_dump(vm);
 	for (;;) {
 		struct reg *r;
 		int t = rand() % 100;
@@ -1789,10 +1343,12 @@ main(void)
 				    nocross)) {
 					nocross = 0;
 				}
-				do {
-					minaddr = rand() % 50000;
-					maxaddr = rand() % 70000;
-				} while (minaddr > maxaddr);
+				minaddr = rand() % 50000;
+				maxaddr = rand() % 70000;
+				if (minaddr > maxaddr) {
+					minaddr = 0;
+					maxaddr = 0;
+				}
 				printf("=== xalloc %" PRIu64
 				    " align=%" PRIu64 ", phase=%" PRIu64
 				    ", nocross=%" PRIu64 ", min=%" PRIu64
@@ -1803,16 +1359,16 @@ main(void)
 				    (uint64_t)nocross,
 				    (uint64_t)minaddr,
 				    (uint64_t)maxaddr);
-				rc = vmem_xalloc(vm, sz, align, phase, nocross,
-				    minaddr, maxaddr, strat|VM_SLEEP, &p);
+				p = vmem_xalloc(vm, sz, align, phase, nocross,
+				    minaddr, maxaddr, strat|VM_SLEEP);
 			} else {
 				x = false;
 				printf("=== alloc %" PRIu64 "\n", (uint64_t)sz);
-				rc = vmem_alloc(vm, sz, strat|VM_SLEEP, &p);
+				p = vmem_alloc(vm, sz, strat|VM_SLEEP);
 			}
 			printf("-> %" PRIu64 "\n", (uint64_t)p);
-			vmem_dump(vm, vmem_printf);
-			if (rc != 0) {
+			vmem_dump(vm);
+			if (p == VMEM_ADDR_NULL) {
 				if (x) {
 					continue;
 				}
@@ -1837,7 +1393,7 @@ main(void)
 				vmem_free(vm, r->p, r->sz);
 			}
 			total -= r->sz;
-			vmem_dump(vm, vmem_printf);
+			vmem_dump(vm);
 			*r = reg[nreg - 1];
 			nreg--;
 			nfree++;
@@ -1848,4 +1404,5 @@ main(void)
 	    (uint64_t)total, nalloc, nfree);
 	exit(EXIT_SUCCESS);
 }
-#endif /* defined(UNITTEST) */
+#endif /* !defined(_KERNEL) */
+#endif /* defined(VMEM_DEBUG) */

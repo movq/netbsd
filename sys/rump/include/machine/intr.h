@@ -1,7 +1,9 @@
-/*	$NetBSD: intr.h,v 1.18 2011/03/21 16:41:08 pooka Exp $	*/
+/*	$NetBSD: intr.h,v 1.11 2008/10/14 14:09:29 pooka Exp $	*/
 
 /*
- * Copyright (c) 2009, 2010 Antti Kantee.  All Rights Reserved.
+ * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
+ *
+ * Development of this software was supported by Google Summer of Code.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,40 +30,28 @@
 #ifndef _SYS_RUMP_INTR_H_
 #define _SYS_RUMP_INTR_H_
 
-#ifndef _LOCORE
-
 typedef uint8_t ipl_t;
 typedef struct {
         ipl_t _ipl;
 } ipl_cookie_t;
 
-static inline ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-	ipl_cookie_t c;
-	c._ipl = ipl;
-	return c;
-}
+int  rump_splfoo(void);
+void rump_splx(int);
 
-#endif /* !_LOCORE */
-
-#define spllower(x) ((void)x)
+#define spllower(x) ((void)0)
 #define splraise(x) 0
-#define splsoftnet() 0
-#define splsoftclock() 0
-#define splhigh() 0
-#define splsched() 0
-#define splvm() 0
-#define splx(x) ((void)x)
+#define splsoftnet() rump_splfoo()
+#define splhigh() rump_splfoo()
+#define splsched() rump_splfoo()
+#define splvm() rump_splfoo()
+#define splx(x) rump_splx(x)
 #define spl0() ((void)0)
 
 #define IPL_NONE 0
-#define	IPL_SOFTBIO 1
-#define	IPL_SOFTCLOCK 1
-#define IPL_SOFTSERIAL 1
-#define	IPL_SOFTNET 1
-#define IPL_SCHED 2
-#define IPL_VM 2
-#define IPL_HIGH 2
+#define	IPL_SOFTBIO 0
+#define	IPL_SOFTCLOCK 0
+#define	IPL_SOFTNET 0
+#define IPL_SCHED 0
+#define IPL_VM 0
 
 #endif /* _SYS_RUMP_INTR_H_ */

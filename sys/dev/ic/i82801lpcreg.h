@@ -1,4 +1,4 @@
-/*	$NetBSD: i82801lpcreg.h,v 1.11 2010/07/23 02:23:58 jakllsch Exp $	*/
+/*	$NetBSD: i82801lpcreg.h,v 1.8 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -34,25 +34,18 @@
  *   register definitions.
  */
 
-#ifndef _DEV_IC_I82801LPCREG_H_
-#define _DEV_IC_I82801LPCREG_H_
+#ifndef _DEV_IC_I82801LPGREG_H_
+#define _DEV_IC_I82801LPGREG_H_
 /*
  * PCI configuration registers
  */
 #define LPCIB_PCI_PMBASE	0x40
 #define LPCIB_PCI_ACPI_CNTL	0x44
 # define LPCIB_PCI_ACPI_CNTL_EN	(1 << 4)
-/* GPIO config registers ICH6+ */
-#define LPCIB_PCI_GPIO_BASE_ICH6	0x48
-#define LPCIB_PCI_GPIO_CNTL_ICH6	0x4c
-#define LPCIB_PCI_BIOS_CNTL	0x4c /* actually 0x4e */
-#define LPCIB_PCI_BIOS_CNTL_BWE	(0x0001 << 16) /* write enable */
-#define LPCIB_PCI_BIOS_CNTL_BLE	(0x0002 << 16) /* lock enable */
+#define LPCIB_PCI_BIOS_CNTL	0x4e
 #define LPCIB_PCI_TCO_CNTL	0x54
-/* GPIO config registers ICH0-ICH5 */
 #define LPCIB_PCI_GPIO_BASE	0x58
 #define LPCIB_PCI_GPIO_CNTL	0x5c
-#define LPCIB_PCI_GPIO_CNTL_EN	(1 << 4)
 #define LPCIB_PCI_PIRQA_ROUT	0x60
 #define LPCIB_PCI_PIRQB_ROUT	0x61
 #define LPCIB_PCI_PIRQC_ROUT	0x62
@@ -76,7 +69,7 @@
 #define LPCIB_PCI_MON5_TRP_RNG	0xc5
 #define LPCIB_PCI_MON6_TRP_RNG	0xc6
 #define LPCIB_PCI_MON7_TRP_RNG	0xc7
-#define LPCIB_PCI_MON_TRP_MSK	0xcc
+#define LPCIB_PCI_MON_TRP_MSK	oxcc
 #define LPCIB_PCI_GEN_CNTL	0xd0
 #define	LPCIB_ICH5_HPTC_EN		0x00020000
 #define	LPCIB_ICH5_HPTC_WIN_MASK	0x0000c000
@@ -143,20 +136,6 @@
 #define LPCIB_BUS_CYC_TRACK	0x4e
 #define LPCIB_PM_SS_CNTL	0x50		/* SpeedStep control */
 # define LPCIB_PM_SS_CNTL_ARB_DIS	0x01	/* disable arbiter */
-
-/*
- * General Purpose I/O Registers
- *  (offset from GPIO_BASE)
- */
-#define LPCIB_GPIO_GPIO_USE_SEL		0x00
-#define LPCIB_GPIO_GP_IO_SEL		0x04
-#define LPCIB_GPIO_GP_LVL		0x0c
-#define LPCIB_GPIO_GPO_TTL		0x14
-#define LPCIB_GPIO_GPO_BLINK		0x18
-#define LPCIB_GPIO_GPI_INV		0x2c
-#define LPCIB_GPIO_GPIO_USE_SEL2	0x30
-#define LPCIB_GPIO_GP_IO_SEL2		0x34
-#define LPCIB_GPIO_GP_LVL2		0x38
 
 /*
  * SMBus controller registers.
@@ -299,4 +278,4 @@ lpcib_tcotimer_second_to_tick(int ltick)
 #define LPCIB_TCOTIMER_MAX_TICK 	0x3f 	/* 39 seconds max */
 #define LPCIB_TCOTIMER2_MAX_TICK 	0x265	/* 613 seconds max */
 
-#endif /*  _DEV_IC_I82801LPCREG_H_ */
+#endif /*  _DEV_IC_I82801LPGREG_H_ */

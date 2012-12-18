@@ -1,4 +1,4 @@
-/*	$NetBSD: intio.c,v 1.29 2010/12/31 22:41:55 tsutsui Exp $	*/
+/*	$NetBSD: intio.c,v 1.28 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998, 2001 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intio.c,v 1.29 2010/12/31 22:41:55 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intio.c,v 1.28 2008/04/28 20:23:19 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,25 +70,15 @@ static const struct intio_builtins intio_3xx_builtins[] = {
 #define nintio_3xx_builtins	__arraycount(intio_3xx_builtins)
 #endif
 
-#if defined(HP362)
-static const struct intio_builtins intio_362_builtins[] = {
-	{ "rtc",	RTC_BASE,	-1},
-	{ "hil",	HIL_BASE,	1},
-	{ "hpib",	HPIB_BASE,	3},
-	{ "dma",	DMA_BASE,	1},
-};
-#define nintio_362_builtins	__arraycount(intio_362_builtins)
-#endif
-
-#if defined(HP382)
-static const struct intio_builtins intio_382_builtins[] = {
+#if defined(HP362) || defined(HP382)
+static const struct intio_builtins intio_3x2_builtins[] = {
 	{ "rtc",	RTC_BASE,	-1},
 	{ "frodo",	FRODO_BASE,	5},
 	{ "hil",	HIL_BASE,	1},
 	{ "hpib",	HPIB_BASE,	3},
 	{ "dma",	DMA_BASE,	1},
 };
-#define nintio_382_builtins	__arraycount(intio_382_builtins)
+#define nintio_3x2_builtins	__arraycount(intio_3x2_builtins)
 #endif
 
 #if defined(HP400) || defined(HP425) || defined(HP433)
@@ -151,16 +141,11 @@ intioattach(device_t parent, device_t self, void *aux)
 		ndevs = nintio_3xx_builtins;
 		break;
 #endif
-#if defined(HP362)
+#if defined(HP362) || defined(HP382)
 	case HP_362:
-		ib = intio_362_builtins;
-		ndevs = nintio_362_builtins;
-		break;
-#endif
-#if defined(HP382)
 	case HP_382:
-		ib = intio_382_builtins;
-		ndevs = nintio_382_builtins;
+		ib = intio_3x2_builtins;
+		ndevs = nintio_3x2_builtins;
 		break;
 #endif
 #if defined(HP400) || defined(HP425) || defined(HP433)

@@ -1,4 +1,4 @@
-.\"	$NetBSD: ipsec.4,v 1.38 2012/03/22 20:34:38 drochner Exp $
+.\"	$NetBSD: ipsec.4,v 1.30 2006/10/11 10:14:31 hubertf Exp $
 .\"	$KAME: ipsec.4,v 1.17 2001/06/27 15:25:10 itojun Exp $
 .\"
 .\" Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -28,15 +28,24 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd January 16, 2012
+.Dd February 12, 2005
 .Dt IPSEC 4
 .Os
 .Sh NAME
 .Nm ipsec
 .Nd IP security protocol
+.Sh SYNOPSIS
+.In sys/types.h
+.In netinet/in.h
+.In netinet6/ipsec.h
+.Pp
+.Cd options IPSEC
+.Cd options IPSEC_ESP
+.Cd options IPSEC_NAT_T
+.Cd options IPSEC_DEBUG
 .Sh DESCRIPTION
 .Nm
-is a security protocol in Internet Protocol (IP) layer.
+is a security protocol in Internet Protocol layer.
 .Nm
 is defined for both IPv4 and IPv6
 .Po
@@ -45,37 +54,77 @@ and
 .Xr inet6 4
 .Pc .
 .Nm
-consists of two sub-protocols:
-.Pp
-.Bl -hang
-.It Em Encapsulated Security Payload Pq ESP
-protects IP payload from wire-tapping (interception) by encrypting it with
+consists of two sub-protocols, namely
+ESP
+.Pq encapsulated security payload
+and AH
+.Pq authentication header .
+ESP protects IP payload from wire-tapping by encrypting it by
 secret key cryptography algorithms.
-.It Em Authentication Header Pq AH
-guarantees integrity of IP packet
+AH guarantees integrity of IP packet
 and protects it from intermediate alteration or impersonation,
 by attaching cryptographic checksum computed by one-way hash functions.
-.El
-.Pp
 .Nm
-has two operation modes:
+has two operation modes: transport mode and tunnel mode.
+Transport mode is for protecting peer-to-peer communication between end nodes.
+Tunnel mode includes IP-in-IP encapsulation operation
+and is designed for security gateways, like VPN configurations.
 .Pp
-.Bl -hang
-.It Em Transport mode
-is for protecting peer-to-peer communication between end nodes.
-.It Em Tunnel mode
-includes IP-in-IP encapsulation operation
-and is designed for security gateways, as in Virtual Private Network
-.Pq Tn VPN
-configurations.
+The following kernel options are available:
+.Bl -ohang
+.It Cd options IPSEC
+Includes support for the
+.Tn IPsec
+protocol.
+.Em IPSEC
+will enable
+secret key management part,
+policy management part,
+.Tn AH
+and
+.Tn IPComp .
+Kernel binary will not be subject to export control in most of countries,
+even if compiled with
+.Em IPSEC .
+For example, it should be okay to export it from within the United States
+to the outside.
+.Em INET6
+and
+.Em IPSEC
+are orthogonal so you can get IPv4-only kernel with IPsec support,
+IPv4/v6 dual support kernel without IPsec, and so forth.
+This option requires
+.Em INET
+at this moment, but it should not.
+.It Cd options IPSEC_DEBUG
+Enables debugging code in
+.Tn IPsec
+stack.
+This option assumes
+.Em IPSEC .
+.It Cd options IPSEC_ESP
+Includes support for
+.Tn IPsec
+.Tn ESP
+protocol.
+.Em IPSEC_ESP
+will enable source code that is subject to export control in some countries
+.Pq including the United States ,
+and compiled kernel binary will be subject to certain restriction.
+This option assumes
+.Em IPSEC .
+.It Cd options IPSEC_NAT_T
+Includes support for
+.Tn IPsec
+Network Address Translator traversal (NAT-T), as described in RFCs 3947
+and 3948.
+This feature might be patent-encumbered in some countries.
+This option assumes
+.Em IPSEC
+and
+.Em IPSEC_ESP .
 .El
-.Pp
-Since version 6,
-.Nx
-uses the IPSEC implementation formerly known as FAST_IPSEC.
-Its specifics and kernel options are describes in the
-.Xr fast_ipsec 4
-manual page.
+.\"
 .Ss Kernel interface
 .Nm
 is controlled by key management engine and policy engine,
@@ -156,15 +205,15 @@ means
 .Dq Li require
 in the syntax.
 .Bl -column net.inet6.ipsec6.esp_trans_deflev integerxxx
-.It Sy Name Ta Sy Type Ta Sy Changeable
-.It net.inet.ipsec.esp_trans_deflev Ta integer Ta yes
-.It net.inet.ipsec.esp_net_deflev Ta integer Ta yes
-.It net.inet.ipsec.ah_trans_deflev Ta integer Ta yes
-.It net.inet.ipsec.ah_net_deflev Ta integer Ta yes
-.It net.inet6.ipsec6.esp_trans_deflev Ta integer Ta yes
-.It net.inet6.ipsec6.esp_net_deflev Ta integer Ta yes
-.It net.inet6.ipsec6.ah_trans_deflev Ta integer Ta yes
-.It net.inet6.ipsec6.ah_net_deflev Ta integer Ta yes
+.It Sy Name	Type	Changeable
+.It net.inet.ipsec.esp_trans_deflev	integer	yes
+.It net.inet.ipsec.esp_net_deflev	integer	yes
+.It net.inet.ipsec.ah_trans_deflev	integer	yes
+.It net.inet.ipsec.ah_net_deflev	integer	yes
+.It net.inet6.ipsec6.esp_trans_deflev	integer	yes
+.It net.inet6.ipsec6.esp_net_deflev	integer	yes
+.It net.inet6.ipsec6.ah_trans_deflev	integer	yes
+.It net.inet6.ipsec6.ah_net_deflev	integer	yes
 .El
 .Pp
 If kernel finds no matching policy system wide default value is applied.
@@ -178,25 +227,25 @@ which asks the kernel to drop the packet.
 .Li 1
 means
 .Dq Li none .
-.Bl -column net.inet6.ipsec6.esp_trans_deflev integerxxx
-.It Sy Name Ta Sy Type Ta Sy Changeable
-.It net.inet.ipsec.def_policy Ta integer Ta yes
-.It net.inet6.ipsec6.def_policy Ta integer Ta yes
+.Bl -column net.inet6.ipsec6.def_policy integerxxx
+.It Sy Name	Type	Changeable
+.It net.inet.ipsec.def_policy	integer	yes
+.It net.inet6.ipsec6.def_policy	integer	yes
 .El
 .\"
 .Ss Miscellaneous sysctl variables
 The following variables are accessible via
 .Xr sysctl 8 ,
 for tweaking kernel IPsec behavior:
-.Bl -column net.inet6.ipsec6.esp_trans_deflev integerxxx
-.It Sy Name Ta Sy Type Ta Sy Changeable
-.It net.inet.ipsec.ah_cleartos Ta integer Ta yes
-.It net.inet.ipsec.ah_offsetmask Ta integer Ta yes
-.It net.inet.ipsec.dfbit Ta integer Ta yes
-.It net.inet.ipsec.ecn Ta integer Ta yes
-.It net.inet.ipsec.debug Ta integer Ta yes
-.It net.inet6.ipsec6.ecn Ta integer Ta yes
-.It net.inet6.ipsec6.debug Ta integer Ta yes
+.Bl -column net.inet6.ipsec6.inbound_call_ike integerxxx
+.It Sy Name	Type	Changeable
+.It net.inet.ipsec.ah_cleartos	integer	yes
+.It net.inet.ipsec.ah_offsetmask	integer	yes
+.It net.inet.ipsec.dfbit	integer	yes
+.It net.inet.ipsec.ecn	integer	yes
+.It net.inet.ipsec.debug	integer	yes
+.It net.inet6.ipsec6.ecn	integer	yes
+.It net.inet6.ipsec6.debug	integer	yes
 .El
 .Pp
 The variables are interpreted as follows:
@@ -289,12 +338,13 @@ routines from looking into IP payload.
 .%R RFC
 .%N 2367
 .Re
+.Sh HISTORY
+The implementation described herein appeared in WIDE/KAME IPv6/IPsec stack.
 .Sh BUGS
 The IPsec support is subject to change as the IPsec protocols develop.
 .Pp
 There is no single standard for policy engine API,
-so the policy engine API described herein is just for the version
-introduced by KAME.
+so the policy engine API described herein is just for KAME implementation.
 .Pp
 AH and tunnel mode encapsulation may not work as you might expect.
 If you configure inbound

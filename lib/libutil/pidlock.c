@@ -1,4 +1,4 @@
-/*	$NetBSD: pidlock.c,v 1.16 2012/04/07 16:17:17 christos Exp $ */
+/*	$NetBSD: pidlock.c,v 1.14 2006/03/19 21:55:37 christos Exp $ */
 
 /*
  * Copyright 1996, 1997 by Curt Sampson <cjs@NetBSD.org>.
@@ -24,7 +24,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: pidlock.c,v 1.16 2012/04/07 16:17:17 christos Exp $");
+__RCSID("$NetBSD: pidlock.c,v 1.14 2006/03/19 21:55:37 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
@@ -52,8 +52,8 @@ pidlock(const char *lockfile, int flags, pid_t *locker, const char *info)
 	char	hostname[MAXHOSTNAMELEN + 1];
 	pid_t	pid2 = -1;
 	struct	stat st;
-	ssize_t	n;
-	int	f = -1, savee;
+	int	err;
+	int	f = -1;
 	char	s[256];
 	char	*p;
 	size_t	len;
@@ -73,7 +73,7 @@ pidlock(const char *lockfile, int flags, pid_t *locker, const char *info)
 	 * XXX This is not thread safe.
 	 */
 	if (snprintf(tempfile, sizeof(tempfile), "%s.%d.%s", lockfile,
-	    (int) getpid(), hostname) >= (int)sizeof(tempfile))  {
+	    (int) getpid(), hostname) >= sizeof(tempfile))  {
 		errno = ENAMETOOLONG;
 		return -1;
 	}
@@ -88,7 +88,7 @@ pidlock(const char *lockfile, int flags, pid_t *locker, const char *info)
 
 	if ((flags & PIDLOCK_USEHOSTNAME))  {		/* hostname */
 		len = strlen(hostname);
-		if ((size_t)write(f, hostname, len) != len
+		if (write(f, hostname, len) != len
 		    || write(f, "\n", (size_t)1) != 1)
 			goto out;
 	}
@@ -99,7 +99,7 @@ pidlock(const char *lockfile, int flags, pid_t *locker, const char *info)
 				goto out;
 		}
 		len = strlen(info);
-		if ((size_t)write(f, info, len) != len ||
+		if (write(f, info, len) != len ||
 		    write(f, "\n", (size_t)1) != 1)
 			goto out;
 	}
@@ -114,16 +114,16 @@ lockfailed:
 			goto out;
 		/* Find out who has this lockfile. */
 		if ((f = open(lockfile, O_RDONLY, 0)) != -1)  {
-			if ((n = read(f, s, (size_t)11)) == -1)
+			if ((err = read(f, s, (size_t)11)) == -1)
 				goto out;
-			if (n == 0) {
+			if (err == 0) {
 				errno = EINVAL;
 				goto out;
 			}
 			pid2 = atoi(s);
-			if ((n = read(f, s, sizeof(s) - 2)) == -1)
+			if ((err = read(f, s, sizeof(s) - 2)) == -1)
 				goto out;
-			if (n == 0)
+			if (err == 0)
 				*s = '\0';
 			s[sizeof(s) - 1] = '\0';
 			if ((p = strchr(s, '\n')) != NULL)
@@ -164,11 +164,11 @@ lockfailed:
 	errno = 0;
 	return 0;
 out:
-	savee = errno;
+	err = errno;
 	if (f != -1)
 		(void)close(f);
 	(void)unlink(tempfile);
-	errno = savee;
+	errno = err;
 	return -1;
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_mbuf2.c,v 1.29 2011/08/08 19:10:33 dyoung Exp $	*/
+/*	$NetBSD: uipc_mbuf2.c,v 1.26 2007/03/04 06:03:11 christos Exp $	*/
 /*	$KAME: uipc_mbuf2.c,v 1.29 2001/02/14 13:42:10 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf2.c,v 1.29 2011/08/08 19:10:33 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf2.c,v 1.26 2007/03/04 06:03:11 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -335,7 +335,7 @@ m_tag_delete_nonpersistent(struct mbuf *m)
 
 /* Find a tag, starting from a given position. */
 struct m_tag *
-m_tag_find(const struct mbuf *m, int type, struct m_tag *t)
+m_tag_find(struct mbuf *m, int type, struct m_tag *t)
 {
 	struct m_tag *p;
 
@@ -360,7 +360,7 @@ m_tag_copy(struct m_tag *t)
 	p = m_tag_get(t->m_tag_id, t->m_tag_len, M_NOWAIT);
 	if (p == NULL)
 		return (NULL);
-	memcpy(p + 1, t + 1, t->m_tag_len); /* Copy the data */
+	bcopy(t + 1, p + 1, t->m_tag_len); /* Copy the data */
 	return (p);
 }
 

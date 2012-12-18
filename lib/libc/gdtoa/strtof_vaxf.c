@@ -1,4 +1,4 @@
-/* $NetBSD: strtof_vaxf.c,v 1.6 2011/07/01 03:20:06 matt Exp $ */
+/* $NetBSD: strtof_vaxf.c,v 1.5 2008/03/28 00:56:54 he Exp $ */
 
 /****************************************************************
 
@@ -56,13 +56,14 @@ strtof(CONST char *s, char **sp)
 	k = strtodg(s, sp, &fpi, &expt, bits);
 	if (k == STRTOG_NoMemory) {
 		errno = ERANGE;
-		return HUGE_VALF;
+		u.L[0] = Big0;
+		u.L[1] = Big1;
+		return u.f;
 	}
 	switch(k & STRTOG_Retmask) {
 	  case STRTOG_NoNumber:
 	  case STRTOG_Zero:
-	  default:
-		u.f = 0.0;
+		u.L[0] = 0;
 		break;
 
 	  case STRTOG_Normal:
@@ -72,11 +73,11 @@ strtof(CONST char *s, char **sp)
 		break;
 
 	  case STRTOG_Infinite:
-		u.f = HUGE_VALF;
+		u.L[0] = 0xffff7fff;
 		break;
 
 	  }
 	if (k & STRTOG_Neg)
 		u.L[0] |= 0x00008000L;
 	return u.f;
-}
+	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ec.c,v 1.20 2012/02/02 19:43:00 tls Exp $	*/
+/*	$NetBSD: if_ec.c,v 1.15 2008/07/06 13:29:50 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,10 +34,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.20 2012/02/02 19:43:00 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.15 2008/07/06 13:29:50 tsutsui Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
+#include "bpfilter.h"
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,7 +50,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.20 2012/02/02 19:43:00 tls Exp $");
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/endian.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -70,8 +74,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.20 2012/02/02 19:43:00 tls Exp $");
 #include <netns/ns_if.h>
 #endif
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <machine/cpu.h>
 #include <machine/autoconf.h>
@@ -98,7 +104,9 @@ struct ec_softc {
 	u_char sc_colliding;	/* nonzero if the net is colliding */
 	uint32_t sc_backoff_seed;	/* seed for the backoff PRNG */
 
-	krndsource_t rnd_source;
+#if NRND > 0
+	rndsource_element_t rnd_source;
+#endif
 };
 
 /* Macros to read and write the CSR. */
@@ -244,8 +252,10 @@ ec_attach(device_t parent, device_t self, void *aux)
 	bus_intr_establish(mbma->mbma_bustag, mbma->mbma_pri, IPL_NET, 0,
 	    ec_intr, sc);
 
+#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
+#endif
 }
 
 /*
@@ -322,8 +332,11 @@ ec_start(struct ifnet *ifp)
 		return;
 	}
 
+#if NBPFILTER > 0
 	/* The BPF tap. */
-	bpf_mtap(ifp, m0);
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, m0);
+#endif
 
 	/* Size the packet. */
 	count = EC_BUF_SZ - m0->m_pkthdr.len;
@@ -530,11 +543,14 @@ ec_recv(struct ec_softc *sc, int intbit)
 	if (total_length == 0) {
 		ifp->if_ipackets++;
 
+#if NBPFILTER > 0
 		/*
 	 	* Check if there's a BPF listener on this interface.
 	 	* If so, hand off the raw packet to BPF.
 	 	*/
-		bpf_mtap(ifp, m0);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m0);
+#endif
 
 		/* Pass the packet up. */
 		(*ifp->if_input)(ifp, m0);
@@ -585,7 +601,7 @@ ec_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 
 		switch (ifa->ifa_addr->sa_family) {
@@ -602,30 +618,26 @@ ec_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_RUNNING:
+		if ((ifp->if_flags & IFF_UP) == 0 &&
+		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
 			 * If interface is marked down and it is running, then
 			 * stop it.
 			 */
 			ifp->if_flags &= ~IFF_RUNNING;
-			break;
-		case IFF_UP:
+		} else if ((ifp->if_flags & IFF_UP) != 0 &&
+		    (ifp->if_flags & IFF_RUNNING) == 0) {
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
 			 */
 			ec_init(ifp);
-			break;
-		default:
+		} else {
 			/*
 			 * Some other important flag might have changed, so
 			 * reset.
 			 */
 			ec_reset(ifp);
-			break;
 		}
 		break;
 
@@ -635,7 +647,7 @@ ec_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ether_ioctl(ifp, cmd, data);
+		error = EINVAL;
 		break;
 	}
 

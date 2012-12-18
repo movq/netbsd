@@ -1,4 +1,4 @@
-.\"	$NetBSD: wmemchr.3,v 1.15 2010/12/16 17:42:28 wiz Exp $
+.\"	$NetBSD: wmemchr.3,v 1.12 2006/10/14 07:52:15 wiz Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -33,7 +33,7 @@
 .\"
 .\"     from: @(#)strcpy.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd May 1, 2009
+.Dd October 13, 2006
 .Dt WMEMCHR 3
 .Os
 .Sh NAME
@@ -58,7 +58,7 @@
 .Nm wcsspn ,
 .Nm wcsstr
 .Nm wcswcs
-.Nd wide-character string manipulation operations
+.Nd wide character string manipulation operations
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
@@ -106,7 +106,7 @@
 .Ft wchar_t *
 .Fn wcswcs "const wchar_t *s1" "const wchar_t *s2"
 .Sh DESCRIPTION
-These functions implement string manipulation operations over wide-character
+These functions implement string manipulation operations over wide character
 strings.
 For a detailed description, refer to the documents for the respective
 single-byte counterpart, such as
@@ -126,22 +126,17 @@ function is strongly recommended to be used.
 .Xr memcpy 3 ,
 .Xr memmove 3 ,
 .Xr memset 3 ,
-.Xr stpcpy 3 ,
-.Xr stpncpy 3 ,
-.Xr strcasecmp 3 ,
 .Xr strcat 3 ,
 .Xr strchr 3 ,
 .Xr strcmp 3 ,
 .Xr strcpy 3 ,
 .Xr strcspn 3 ,
-.Xr strdup 3 ,
 .Xr strlcat 3 ,
 .Xr strlcpy 3 ,
 .Xr strlen 3 ,
 .Xr strncat 3 ,
 .Xr strncmp 3 ,
 .Xr strncpy 3 ,
-.Xr strnlen 3 ,
 .Xr strpbrk 3 ,
 .Xr strrchr 3 ,
 .Xr strspn 3 ,

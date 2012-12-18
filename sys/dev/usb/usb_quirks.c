@@ -1,4 +1,4 @@
-/*	$NetBSD: usb_quirks.c,v 1.75 2012/05/25 16:33:54 buhrow Exp $	*/
+/*	$NetBSD: usb_quirks.c,v 1.62 2008/09/10 20:34:40 jmcneill Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usb_quirks.c,v 1.30 2003/01/02 04:15:55 imp Exp $	*/
 
 /*
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usb_quirks.c,v 1.75 2012/05/25 16:33:54 buhrow Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usb_quirks.c,v 1.62 2008/09/10 20:34:40 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,14 +56,12 @@ Static const struct usbd_quirk_entry {
 } usb_quirks[] = {
  /* Devices which should be ignored by uhid */
  { USB_VENDOR_APC, USB_PRODUCT_APC_UPS,		    ANY,   { UQ_HID_IGNORE }},
- { USB_VENDOR_CYBERPOWER, USB_PRODUCT_CYBERPOWER_UPS, ANY, { UQ_HID_IGNORE }},
  { USB_VENDOR_MGE, USB_PRODUCT_MGE_UPS1,	    ANY,   { UQ_HID_IGNORE }},
  { USB_VENDOR_MGE, USB_PRODUCT_MGE_UPS2,	    ANY,   { UQ_HID_IGNORE }},
- { USB_VENDOR_MICROCHIP,  USB_PRODUCT_MICROCHIP_PICKIT1,
-	ANY,	{ UQ_HID_IGNORE }},
  { USB_VENDOR_TRIPPLITE2, USB_PRODUCT_TRIPPLITE2_UPS,	    
 	ANY,   { UQ_HID_IGNORE }},
- { USB_VENDOR_MISC, USB_PRODUCT_MISC_WISPY_24X, ANY, { UQ_HID_IGNORE }},
+
+ { USB_VENDOR_METAGEEK, USB_PRODUCT_METAGEEK_WISPY_24X, ANY, { UQ_HID_IGNORE }},
 
  { USB_VENDOR_KYE, USB_PRODUCT_KYE_NICHE,	    0x100, { UQ_NO_SET_PROTO}},
  { USB_VENDOR_INSIDEOUT, USB_PRODUCT_INSIDEOUT_EDGEPORT4,
@@ -110,7 +108,6 @@ Static const struct usbd_quirk_entry {
  { USB_VENDOR_HP, USB_PRODUCT_HP_840C,		    ANY,   { UQ_BROKEN_BIDIR }},
  { USB_VENDOR_HP, USB_PRODUCT_HP_816C,		    ANY,   { UQ_BROKEN_BIDIR }},
  { USB_VENDOR_HP, USB_PRODUCT_HP_959C,		    ANY,   { UQ_BROKEN_BIDIR }},
- { USB_VENDOR_MTK, USB_PRODUCT_MTK_GPS_RECEIVER,    ANY,   { UQ_NO_UNION_NRM }},
  { USB_VENDOR_NEC, USB_PRODUCT_NEC_PICTY900,	    ANY,   { UQ_BROKEN_BIDIR }},
  { USB_VENDOR_NEC, USB_PRODUCT_NEC_PICTY760,	    ANY,   { UQ_BROKEN_BIDIR }},
  { USB_VENDOR_NEC, USB_PRODUCT_NEC_PICTY920,	    ANY,   { UQ_BROKEN_BIDIR }},
@@ -118,32 +115,18 @@ Static const struct usbd_quirk_entry {
 
  { USB_VENDOR_HP, USB_PRODUCT_HP_1220C,		    ANY,   { UQ_BROKEN_BIDIR }},
 
- /* Apple internal notebook ISO keyboards have swapped keys */
- { USB_VENDOR_APPLE, USB_PRODUCT_APPLE_FOUNTAIN_ISO,
-	ANY, { UQ_APPLE_ISO }},
- { USB_VENDOR_APPLE, USB_PRODUCT_APPLE_GEYSER_ISO,
-	ANY, { UQ_APPLE_ISO }},
-
  /* HID and audio are both invalid on iPhone/iPod Touch */
  { USB_VENDOR_APPLE, USB_PRODUCT_APPLE_IPHONE,
 	ANY, { UQ_HID_IGNORE | UQ_BAD_AUDIO }},
  { USB_VENDOR_APPLE, USB_PRODUCT_APPLE_IPOD_TOUCH,
 	ANY, { UQ_HID_IGNORE | UQ_BAD_AUDIO }},
- { USB_VENDOR_APPLE, USB_PRODUCT_APPLE_IPOD_TOUCH_4G,
-	ANY, { UQ_HID_IGNORE | UQ_BAD_AUDIO }},
  { USB_VENDOR_APPLE, USB_PRODUCT_APPLE_IPHONE_3G,
-	ANY, { UQ_HID_IGNORE | UQ_BAD_AUDIO }},
- { USB_VENDOR_APPLE, USB_PRODUCT_APPLE_IPHONE_3GS,
 	ANY, { UQ_HID_IGNORE | UQ_BAD_AUDIO }},
 
  { USB_VENDOR_QUALCOMM, USB_PRODUCT_QUALCOMM_CDMA_MSM,
 	ANY, { UQ_ASSUME_CM_OVER_DATA }},
  { USB_VENDOR_QUALCOMM2, USB_PRODUCT_QUALCOMM2_CDMA_MSM,
 	ANY, { UQ_ASSUME_CM_OVER_DATA }},
- { USB_VENDOR_HYUNDAI, USB_PRODUCT_HYUNDAI_UM175,
-	ANY, { UQ_ASSUME_CM_OVER_DATA }},
- { USB_VENDOR_ZOOM, USB_PRODUCT_ZOOM_3095,
-	ANY, { UQ_LOST_CS_DESC }},
  { 0, 0, 0, { 0 } }
 };
 
@@ -165,7 +148,7 @@ usbd_find_quirk(usb_device_descriptor_t *d)
 	}
 #ifdef USB_DEBUG
 	if (usbdebug && t->quirks.uq_flags)
-		printf("usbd_find_quirk 0x%04x/0x%04x/%x: %d\n",
+		logprintf("usbd_find_quirk 0x%04x/0x%04x/%x: %d\n",
 			  UGETW(d->idVendor), UGETW(d->idProduct),
 			  UGETW(d->bcdDevice), t->quirks.uq_flags);
 #endif

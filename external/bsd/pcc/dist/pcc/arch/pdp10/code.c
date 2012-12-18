@@ -1,5 +1,4 @@
-/*	Id: code.c,v 1.41 2011/06/04 07:41:11 ragge Exp 	*/	
-/*	$NetBSD: code.c,v 1.1.1.3 2011/09/01 12:46:42 plunky Exp $	*/
+/*	$Id: code.c,v 1.1.1.1 2008/08/24 05:32:57 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -113,6 +112,15 @@ bfcode(struct symtab **sp, int cnt)
 }
 
 
+/*
+ * by now, the automatics and register variables are allocated
+ */
+void
+bccode()
+{
+	SETOFF(autooff, SZINT);
+}
+
 void
 bjobcode()
 {
@@ -187,6 +195,16 @@ funcode(NODE *p)
 
 	fixargs(p->n_right);
 	return p;
+}
+
+/*
+ * return the alignment of field of type t
+ */
+int
+fldal(unsigned int t)
+{
+	uerror("illegal field type");
+	return(ALINT);
 }
 
 /* fix up type of field p */

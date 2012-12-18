@@ -1,4 +1,4 @@
-/* $NetBSD: pci_6600.c,v 1.24 2012/02/06 02:14:15 matt Exp $ */
+/* $NetBSD: pci_6600.c,v 1.15 2007/12/03 15:33:07 ad Exp $ */
 
 /*-
  * Copyright (c) 1999 by Ross Harvey.  All rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pci_6600.c,v 1.24 2012/02/06 02:14:15 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_6600.c,v 1.15 2007/12/03 15:33:07 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,9 +41,11 @@ __KERNEL_RCSID(0, "$NetBSD: pci_6600.c,v 1.24 2012/02/06 02:14:15 matt Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <machine/autoconf.h>
 #define _ALPHA_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/rpb.h>
 #include <machine/alpha.h>
 
@@ -78,35 +80,36 @@ __KERNEL_RCSID(0, "$NetBSD: pci_6600.c,v 1.24 2012/02/06 02:14:15 matt Exp $");
 static const char *irqtype = "6600 irq";
 static struct tsp_config *sioprimary;
 
-void dec_6600_intr_disestablish(void *, void *);
-void *dec_6600_intr_establish(
-    void *, pci_intr_handle_t, int, int (*func)(void *), void *);
-const char *dec_6600_intr_string(void *, pci_intr_handle_t);
-const struct evcnt *dec_6600_intr_evcnt(void *, pci_intr_handle_t);
-int dec_6600_intr_map(const struct pci_attach_args *, pci_intr_handle_t *);
-void *dec_6600_pciide_compat_intr_establish(void *, device_t,
-    const struct pci_attach_args *, int, int (*)(void *), void *);
+void dec_6600_intr_disestablish __P((void *, void *));
+void *dec_6600_intr_establish __P((
+    void *, pci_intr_handle_t, int, int (*func)(void *), void *));
+const char *dec_6600_intr_string __P((void *, pci_intr_handle_t));
+const struct evcnt *dec_6600_intr_evcnt __P((void *, pci_intr_handle_t));
+int dec_6600_intr_map __P((struct pci_attach_args *, pci_intr_handle_t *));
+void *dec_6600_pciide_compat_intr_establish __P((void *, struct device *,
+    struct pci_attach_args *, int, int (*)(void *), void *));
 
 struct alpha_shared_intr *dec_6600_pci_intr;
 
-void dec_6600_iointr(void *arg, unsigned long vec);
-extern void dec_6600_intr_enable(int irq);
-extern void dec_6600_intr_disable(int irq);
+void dec_6600_iointr __P((void *arg, unsigned long vec));
+extern void dec_6600_intr_enable __P((int irq));
+extern void dec_6600_intr_disable __P((int irq));
 
 void
-pci_6600_pickintr(struct tsp_config *pcp)
+pci_6600_pickintr(pcp)
+	struct tsp_config *pcp;
 {
 	bus_space_tag_t iot = &pcp->pc_iot;
 	pci_chipset_tag_t pc = &pcp->pc_pc;
 	char *cp;
 	int i;
 
-	pc->pc_intr_v = pcp;
-	pc->pc_intr_map = dec_6600_intr_map;
-	pc->pc_intr_string = dec_6600_intr_string;
+        pc->pc_intr_v = pcp;
+        pc->pc_intr_map = dec_6600_intr_map;
+        pc->pc_intr_string = dec_6600_intr_string;
 	pc->pc_intr_evcnt = dec_6600_intr_evcnt;
-	pc->pc_intr_establish = dec_6600_intr_establish;
-	pc->pc_intr_disestablish = dec_6600_intr_disestablish;
+        pc->pc_intr_establish = dec_6600_intr_establish;
+        pc->pc_intr_disestablish = dec_6600_intr_disestablish;
 	pc->pc_pciide_compat_intr_establish = NULL;
 
 	/*
@@ -136,8 +139,10 @@ pci_6600_pickintr(struct tsp_config *pcp)
 	}
 }
 
-int
-dec_6600_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+int     
+dec_6600_intr_map(pa, ihp)
+	struct pci_attach_args *pa;
+        pci_intr_handle_t *ihp;
 {
 	pcitag_t bustag = pa->pa_intrtag;
 	int buspin = pa->pa_intrpin, line = pa->pa_intrline;
@@ -182,7 +187,9 @@ dec_6600_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 }
 
 const char *
-dec_6600_intr_string(void *acv, pci_intr_handle_t ih)
+dec_6600_intr_string(acv, ih)
+	void *acv;
+	pci_intr_handle_t ih;
 {
 
 	static const char irqfmt[] = "dec 6600 irq %ld";
@@ -199,7 +206,9 @@ dec_6600_intr_string(void *acv, pci_intr_handle_t ih)
 }
 
 const struct evcnt *
-dec_6600_intr_evcnt(void *acv, pci_intr_handle_t ih)
+dec_6600_intr_evcnt(acv, ih)
+	void *acv;
+	pci_intr_handle_t ih;
 {
 
 #if NSIO
@@ -212,7 +221,11 @@ dec_6600_intr_evcnt(void *acv, pci_intr_handle_t ih)
 }
 
 void *
-dec_6600_intr_establish(void *acv, pci_intr_handle_t ih, int level, int (*func)(void *), void *arg)
+dec_6600_intr_establish(acv, ih, level, func, arg)
+        void *acv, *arg;
+        pci_intr_handle_t ih;
+        int level;
+        int (*func) __P((void *));
 {
 	void *cookie;
 
@@ -239,7 +252,8 @@ dec_6600_intr_establish(void *acv, pci_intr_handle_t ih, int level, int (*func)(
 }
 
 void
-dec_6600_intr_disestablish(void *acv, void *cookie)
+dec_6600_intr_disestablish(acv, cookie)
+        void *acv, *cookie;
 {
 	struct alpha_shared_intrhand *ih = cookie;
 	unsigned int irq = ih->ih_num;
@@ -257,7 +271,7 @@ dec_6600_intr_disestablish(void *acv, void *cookie)
 		return;
 	}
 #endif
-
+ 
 	s = splhigh();
 
 	alpha_shared_intr_disestablish(dec_6600_pci_intr, cookie, irqtype);
@@ -267,14 +281,16 @@ dec_6600_intr_disestablish(void *acv, void *cookie)
 		    IST_NONE);
 		scb_free(0x900 + SCB_IDXTOVEC(irq));
 	}
-
+ 
 	splx(s);
 }
 
 void
-dec_6600_iointr(void *arg, unsigned long vec)
+dec_6600_iointr(arg, vec)
+	void *arg;
+	unsigned long vec;
 {
-	int irq;
+	int irq; 
 
 	irq = SCB_VECTOIDX(vec - 0x900);
 
@@ -291,7 +307,8 @@ dec_6600_iointr(void *arg, unsigned long vec)
 }
 
 void
-dec_6600_intr_enable(int irq)
+dec_6600_intr_enable(irq)
+	int irq;
 {
 	alpha_mb();
 	STQP(TS_C_DIM0) |= 1UL << irq;
@@ -299,7 +316,8 @@ dec_6600_intr_enable(int irq)
 }
 
 void
-dec_6600_intr_disable(int irq)
+dec_6600_intr_disable(irq)
+	int irq;
 {
 	alpha_mb();
 	STQP(TS_C_DIM0) &= ~(1UL << irq);
@@ -307,8 +325,13 @@ dec_6600_intr_disable(int irq)
 }
 
 void *
-dec_6600_pciide_compat_intr_establish(void *v, device_t dev,
-    const struct pci_attach_args *pa, int chan, int (*func)(void *), void *arg)
+dec_6600_pciide_compat_intr_establish(v, dev, pa, chan, func, arg)
+	void *v;
+	struct device *dev;
+	struct pci_attach_args *pa;
+	int chan;
+	int (*func) __P((void *));
+	void *arg;
 {
 	pci_chipset_tag_t pc = pa->pa_pc;
 	void *cookie = NULL;
@@ -329,7 +352,7 @@ dec_6600_pciide_compat_intr_establish(void *v, device_t dev,
 	    func, arg);
 	if (cookie == NULL)
 		return (NULL);
-	aprint_normal_dev(dev, "%s channel interrupting at %s\n",
+	printf("%s: %s channel interrupting at %s\n", dev->dv_xname,
 	    PCIIDE_CHANNEL_NAME(chan), sio_intr_string(NULL /*XXX*/, irq));
 #endif
 	return (cookie);

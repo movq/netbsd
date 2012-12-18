@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt_mvme.c,v 1.16 2009/11/23 02:13:47 rmind Exp $	*/
+/*	$NetBSD: lpt_mvme.c,v 1.14 2008/06/12 22:45:46 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -84,11 +84,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lpt_mvme.c,v 1.16 2009/11/23 02:13:47 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lpt_mvme.c,v 1.14 2008/06/12 22:45:46 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/buf.h>
 #include <sys/kernel.h>
 #include <sys/ioctl.h>
@@ -135,7 +136,8 @@ const struct cdevsw lpt_cdevsw = {
 };
 
 void
-lpt_attach_subr(struct lpt_softc *sc)
+lpt_attach_subr(sc)
+	struct lpt_softc *sc;
 {
 
 	sc->sc_state = 0;
@@ -211,7 +213,8 @@ lptopen(dev_t dev, int flag, int mode, struct lwp *l)
 }
 
 void
-lpt_wakeup(void *arg)
+lpt_wakeup(arg)
+	void *arg;
 {
 	struct lpt_softc *sc;
 	int s;
@@ -251,7 +254,8 @@ lptclose(dev_t dev, int flag, int mode, struct lwp *l)
 }
 
 int
-pushbytes(struct lpt_softc *sc)
+pushbytes(sc)
+	struct lpt_softc *sc;
 {
 	int s, error, spin, tic;
 
@@ -339,7 +343,8 @@ lptwrite(dev_t dev, struct uio *uio, int flags)
  * another char.
  */
 int
-lpt_intr(struct lpt_softc *sc)
+lpt_intr(sc)
+	struct lpt_softc *sc;
 {
 
 	if (sc->sc_count) {
@@ -360,7 +365,12 @@ lpt_intr(struct lpt_softc *sc)
 
 /* ARGSUSED */
 int
-lptioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+lptioctl(dev, cmd, data, flag, l)
+	dev_t dev;
+	u_long cmd;
+	void *data;
+	int flag;
+	struct lwp *l;
 {
 
 	return (ENODEV);

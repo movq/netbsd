@@ -1,4 +1,4 @@
-/*	$NetBSD: comm.c,v 1.20 2012/09/05 04:01:23 simonb Exp $	*/
+/*	$NetBSD: comm.c,v 1.16.4.1 2010/11/22 03:08:36 riz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)comm.c	8.4 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: comm.c,v 1.20 2012/09/05 04:01:23 simonb Exp $");
+__RCSID("$NetBSD: comm.c,v 1.16.4.1 2010/11/22 03:08:36 riz Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -55,12 +55,12 @@ __RCSID("$NetBSD: comm.c,v 1.20 2012/09/05 04:01:23 simonb Exp $");
 
 #define	MAXLINELEN	(LINE_MAX + 1)
 
-static const char *tabs[] = { "", "\t", "\t\t" };
+char *tabs[] = { "", "\t", "\t\t" };
 
-static FILE   *file(const char *);
-static void	show(FILE *, const char *, char *);
-__dead static void	usage(void);
-static char   *getnextln(char *buf, FILE *);
+FILE   *file(const char *);
+void	show(FILE *, char *, char *);
+void	usage(void);
+char   *getnextln(char *buf, FILE *);
 
 int
 main(int argc, char **argv)
@@ -68,8 +68,8 @@ main(int argc, char **argv)
 	int comp, file1done, file2done, read1, read2;
 	int ch, flag1, flag2, flag3;
 	FILE *fp1, *fp2;
-	const char *col1, *col2, *col3, **p;
-	char line1[MAXLINELEN], line2[MAXLINELEN];
+	char *col1, *col2, *col3;
+	char **p, line1[MAXLINELEN], line2[MAXLINELEN];
 	int (*compare)(const char*,const char*);
 
 	(void)setlocale(LC_ALL, "");
@@ -164,14 +164,14 @@ main(int argc, char **argv)
 	exit(0);
 }
 
-static void
-show(FILE *fp, const char *offset, char *buf)
+void
+show(FILE *fp, char *offset, char *buf)
 {
 	while (printf("%s%s\n", offset, buf) >= 0 && getnextln(buf, fp))
 		;
 }
 
-static FILE *
+FILE *
 file(const char *name)
 {
 	FILE *fp;
@@ -183,7 +183,7 @@ file(const char *name)
 	return (fp);
 }
 
-static void
+void
 usage(void)
 {
 
@@ -191,13 +191,13 @@ usage(void)
 	exit(1);
 }
 
-static char *
+char *
 getnextln(char *buf, FILE *fp)
 {
 	size_t i = 0;
 	int c;
 
-	while ((c = getc(fp)) != '\n' && c != EOF) {
+	while ((c = fgetc(fp)) != '\n' && c != EOF) {
 		buf[i++] = c;
 
 		if (i >= MAXLINELEN)

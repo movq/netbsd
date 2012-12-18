@@ -1,4 +1,4 @@
-/*	$NetBSD: mailbox.c,v 1.1.1.3 2012/02/17 08:36:10 tron Exp $	*/
+/*	$NetBSD: mailbox.c,v 1.1.1.1.2.4 2011/08/09 18:58:17 riz Exp $	*/
 
 /*++
 /* NAME
@@ -291,8 +291,7 @@ int     deliver_mailbox(LOCAL_STATE state, USER_ATTR usr_attr, int *statusp)
     } else if (dict_errno != 0) {
 	/* Details in the logfile. */
 	dsb_simple(state.msg_attr.why, "4.3.0", "table lookup failure");
-	*statusp = defer_append(BOUNCE_FLAGS(state.request),
-				BOUNCE_ATTR(state.msg_attr));
+	*statusp = DEL_STAT_DEFER;
 	return (YES);
     }
     if (*var_mailbox_transport) {
@@ -336,8 +335,7 @@ int     deliver_mailbox(LOCAL_STATE state, USER_ATTR usr_attr, int *statusp)
     } else if (dict_errno != 0) {
 	/* Details in the logfile. */
 	dsb_simple(state.msg_attr.why, "4.3.0", "table lookup failure");
-	status = defer_append(BOUNCE_FLAGS(state.request),
-			      BOUNCE_ATTR(state.msg_attr));
+	status = DEL_STAT_DEFER;
     } else if (*var_mailbox_command) {
 	status = deliver_command(state, usr_attr, var_mailbox_command);
     } else if (*var_home_mailbox && LAST_CHAR(var_home_mailbox) == '/') {

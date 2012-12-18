@@ -1,4 +1,4 @@
-/*	$NetBSD: fsck.h,v 1.49 2011/03/06 17:08:16 bouyer Exp $	*/
+/*	$NetBSD: fsck.h,v 1.47 2008/10/09 16:56:23 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -39,7 +39,6 @@
  */
 
 #include <stdio.h>
-#include <sys/queue.h>
 #include <machine/bswap.h>
 
 #ifdef PROGRESS
@@ -190,8 +189,6 @@ struct inodesc {
 	struct direct *id_dirp;	/* for DATA nodes, ptr to current entry */
 	const char *id_name;	/* for DATA nodes, name to find or enter */
 	char id_type;		/* type of descriptor, DATA or ADDR */
-	uid_t id_uid;		/* ownerchip of inode described */
-	gid_t id_gid;
 };
 /* file types */
 #define	DATA	1
@@ -249,21 +246,6 @@ struct inoinfo {
 	int64_t i_blks[1];		/* actually longer */
 } **inphead, **inpsort;
 long numdirs, dirhash, listmax, inplast;
-
-/*
- * quota usage structures
- */
-struct uquot {
-	uint64_t  uq_b; /* block usage */
-	uint64_t  uq_i; /* inode usage */
-	SLIST_ENTRY(uquot) uq_entries;
-	uint32_t uq_uid; /* uid/gid of the owner */
-};
-SLIST_HEAD(uquot_hash, uquot);
-struct uquot_hash *uquot_user_hash;
-struct uquot_hash *uquot_group_hash;
-uint8_t q2h_hash_shift;
-uint16_t q2h_hash_mask;
 
 long	dev_bsize;		/* computed value of DEV_BSIZE */
 long	secsize;		/* actual disk sector size */
@@ -339,24 +321,24 @@ static inline u_int16_t iswap16 (u_int16_t);
 static inline u_int32_t iswap32 (u_int32_t);
 static inline u_int64_t iswap64 (u_int64_t);
 
-static inline u_int16_t
-iswap16(u_int16_t x)
+static inline u_int16_t iswap16(x)
+	u_int16_t x;
 {
 	if (needswap)
 		return bswap16(x);
 	else return x;
 }
 
-static inline u_int32_t
-iswap32(u_int32_t x)
+static inline u_int32_t iswap32(x)
+	u_int32_t x;
 {
 	if (needswap)
 		return bswap32(x);
 	else return x;
 }
 
-static inline u_int64_t
-iswap64(u_int64_t x)
+static inline u_int64_t iswap64(x)
+	u_int64_t x;
 {
 	if (needswap)
 		return bswap64(x);

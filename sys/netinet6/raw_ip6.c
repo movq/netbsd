@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_ip6.c,v 1.110 2012/03/22 20:34:41 drochner Exp $	*/
+/*	$NetBSD: raw_ip6.c,v 1.100 2008/08/06 15:01:23 plunky Exp $	*/
 /*	$KAME: raw_ip6.c,v 1.82 2001/07/23 18:57:56 jinmei Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: raw_ip6.c,v 1.110 2012/03/22 20:34:41 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: raw_ip6.c,v 1.100 2008/08/06 15:01:23 plunky Exp $");
 
 #include "opt_ipsec.h"
 
@@ -97,6 +97,11 @@ __KERNEL_RCSID(0, "$NetBSD: raw_ip6.c,v 1.110 2012/03/22 20:34:41 drochner Exp $
 #include <netinet6/scope6_var.h>
 #include <netinet6/raw_ip6.h>
 
+#ifdef IPSEC
+#include <netinet6/ipsec.h>
+#include <netinet6/ipsec_private.h>
+#endif /* IPSEC */
+
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
 #include <netipsec/ipsec_var.h>
@@ -121,16 +126,13 @@ static percpu_t *rip6stat_percpu;
 
 #define	RIP6_STATINC(x)		_NET_STATINC(rip6stat_percpu, x)
 
-static void sysctl_net_inet6_raw6_setup(struct sysctllog **);
-
 /*
  * Initialize raw connection block queue.
  */
 void
-rip6_init(void)
+rip6_init()
 {
 
-	sysctl_net_inet6_raw6_setup(NULL);
 	in6_pcbinit(&raw6cbtable, 1, 1);
 
 	rip6stat_percpu = percpu_alloc(sizeof(uint64_t) * RIP6_NSTATS);
@@ -201,6 +203,15 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 		if (last) {
 			struct	mbuf *n;
 
+#ifdef IPSEC
+			/*
+			 * Check AH/ESP integrity.
+			 */
+			if (ipsec6_in_reject(m, last)) {
+				IPSEC6_STATINC(IPSEC_STAT_IN_INVAL);
+				/* do not inject data into pcb */
+			} else
+#endif /* IPSEC */
 #ifdef FAST_IPSEC
 			/*
 			 * Check AH/ESP integrity
@@ -226,6 +237,17 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 		}
 		last = in6p;
 	}
+#ifdef IPSEC
+	/*
+	 * Check AH/ESP integrity.
+	 */
+	if (last && ipsec6_in_reject(m, last)) {
+		m_freem(m);
+		IPSEC6_STATINC(IPSEC_STAT_IN_INVAL);
+		IP6_STATDEC(IP6_STAT_DELIVERED);
+		/* do not inject data into pcb */
+	} else
+#endif /* IPSEC */
 #ifdef FAST_IPSEC
 	if (last && ipsec6_in_reject(m, last)) {
 		m_freem(m);
@@ -283,10 +305,10 @@ rip6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
 
 	if (sa->sa_family != AF_INET6 ||
 	    sa->sa_len != sizeof(struct sockaddr_in6))
-		return NULL;
+		return NULL;;
 
 	if ((unsigned)cmd >= PRC_NCMDS)
-		return NULL;
+		return NULL;;
 	if (PRC_IS_REDIRECT(cmd))
 		notify = in6_rtchange, d = NULL;
 	else if (cmd == PRC_HOSTDEAD)
@@ -294,7 +316,7 @@ rip6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
 	else if (cmd == PRC_MSGSIZE)
 		; /* special code is present, see below */
 	else if (inet6ctlerrmap[cmd] == 0)
-		return NULL;
+		return NULL;;
 
 	/* if the parameter is from icmp6, decode it. */
 	if (d != NULL) {
@@ -324,7 +346,7 @@ rip6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
 		 */
 		in6p = NULL;
 		in6p = in6_pcblookup_connect(&raw6cbtable, &sa6->sin6_addr, 0,
-					     (const struct in6_addr *)&sa6_src->sin6_addr, 0, 0, 0);
+		    (const struct in6_addr *)&sa6_src->sin6_addr, 0, 0);
 #if 0
 		if (!in6p) {
 			/*
@@ -371,8 +393,8 @@ rip6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
  * Tack on options user may have setup with control call.
  */
 int
-rip6_output(struct mbuf *m, struct socket * const so,
-    struct sockaddr_in6 * const dstsock, struct mbuf * const control)
+rip6_output(struct mbuf *m, struct socket *so, struct sockaddr_in6 *dstsock,
+    struct mbuf *control)
 {
 	struct in6_addr *dst;
 	struct ip6_hdr *ip6;
@@ -382,16 +404,22 @@ rip6_output(struct mbuf *m, struct socket * const so,
 	struct ip6_pktopts opt, *optp = NULL;
 	struct ifnet *oifp = NULL;
 	int type, code;		/* for ICMPv6 output statistics only */
+	int priv = 0;
 	int scope_ambiguous = 0;
 	struct in6_addr *in6a;
 
 	in6p = sotoin6pcb(so);
 
+	priv = 0;
+	if (curlwp && !kauth_authorize_generic(curlwp->l_cred,
+	    KAUTH_GENERIC_ISSUSER, NULL))
+		priv = 1;
+
 	dst = &dstsock->sin6_addr;
 	if (control) {
 		if ((error = ip6_setpktopts(control, &opt,
 		    in6p->in6p_outputopts,
-		    kauth_cred_get(), so->so_proto->pr_protocol)) != 0) {
+		    priv, so->so_proto->pr_protocol)) != 0) {
 			goto bad;
 		}
 		optp = &opt;
@@ -444,7 +472,7 @@ rip6_output(struct mbuf *m, struct socket * const so,
 	 * Source address selection.
 	 */
 	if ((in6a = in6_selectsrc(dstsock, optp, in6p->in6p_moptions,
-	    &in6p->in6p_route, &in6p->in6p_laddr, &oifp,
+	    (struct route *)&in6p->in6p_route, &in6p->in6p_laddr, &oifp,
 	    &error)) == 0) {
 		if (error == 0)
 			error = EADDRNOTAVAIL;
@@ -591,6 +619,12 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m,
 	struct in6pcb *in6p = sotoin6pcb(so);
 	int s;
 	int error = 0;
+	int priv;
+
+	priv = 0;
+	if (l && !kauth_authorize_generic(l->l_cred,
+	    KAUTH_GENERIC_ISSUSER, NULL))
+		priv++;
 
 	if (req == PRU_CONTROL)
 		return in6_control(so, (u_long)m, (void *)nam,
@@ -607,15 +641,11 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m,
 
 	switch (req) {
 	case PRU_ATTACH:
-		error = kauth_authorize_network(l->l_cred,
-		    KAUTH_NETWORK_SOCKET, KAUTH_REQ_NETWORK_SOCKET_RAWSOCK,
-		    KAUTH_ARG(AF_INET6),
-		    KAUTH_ARG(SOCK_RAW),
-		    KAUTH_ARG(so->so_proto->pr_protocol));
 		sosetlock(so);
 		if (in6p != NULL)
 			panic("rip6_attach");
-		if (error) {
+		if (!priv) {
+			error = EACCES;
 			break;
 		}
 		s = splsoftnet();
@@ -633,8 +663,8 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m,
 		in6p->in6p_ip6.ip6_nxt = (long)nam;
 		in6p->in6p_cksum = -1;
 
-		in6p->in6p_icmp6filt = malloc(sizeof(struct icmp6_filter),
-			M_PCB, M_NOWAIT);
+		MALLOC(in6p->in6p_icmp6filt, struct icmp6_filter *,
+		    sizeof(struct icmp6_filter), M_PCB, M_NOWAIT);
 		if (in6p->in6p_icmp6filt == NULL) {
 			in6_pcbdetach(in6p);
 			error = ENOMEM;
@@ -662,7 +692,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m,
 			ip6_mrouter_done();
 		/* xxx: RSVP */
 		if (in6p->in6p_icmp6filt != NULL) {
-			free(in6p->in6p_icmp6filt, M_PCB);
+			FREE(in6p->in6p_icmp6filt, M_PCB);
 			in6p->in6p_icmp6filt = NULL;
 		}
 		in6_pcbdetach(in6p);
@@ -742,7 +772,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m,
 
 		/* Source address selection. XXX: need pcblookup? */
 		in6a = in6_selectsrc(addr, in6p->in6p_outputopts,
-		    in6p->in6p_moptions, &in6p->in6p_route,
+		    in6p->in6p_moptions, (struct route *)&in6p->in6p_route,
 		    &in6p->in6p_laddr, &ifp, &error);
 		if (in6a == NULL) {
 			if (error == 0)
@@ -850,8 +880,7 @@ sysctl_net_inet6_raw6_stats(SYSCTLFN_ARGS)
 	return (NETSTAT_SYSCTL(rip6stat_percpu, RIP6_NSTATS));
 }
 
-static void
-sysctl_net_inet6_raw6_setup(struct sysctllog **clog)
+SYSCTL_SETUP(sysctl_net_inet6_raw6_setup, "sysctl net.inet6.raw6 subtree setup")
 {
 
 	sysctl_createv(clog, 0, NULL, NULL,

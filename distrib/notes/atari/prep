@@ -1,4 +1,4 @@
-.\"	$NetBSD: prep,v 1.13 2009/04/23 01:56:48 snj Exp $
+.\"	$NetBSD: prep,v 1.12.40.1 2009/04/25 23:16:33 snj Exp $
 .
 .Ss2 Preparing your hard disk for the NetBSD installation.
 Note that you will be modifying your hard drives and if you mess something

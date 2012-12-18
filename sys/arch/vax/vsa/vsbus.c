@@ -1,4 +1,4 @@
-/*	$NetBSD: vsbus.c,v 1.60 2012/06/28 13:58:21 abs Exp $ */
+/*	$NetBSD: vsbus.c,v 1.54 2008/03/11 05:34:03 matt Exp $ */
 /*
  * Copyright (c) 1996, 1999 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -33,21 +33,30 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vsbus.c,v 1.60 2012/06/28 13:58:21 abs Exp $");
-
-#include "opt_cputype.h"
-
-#define _VAX_BUS_DMA_PRIVATE
+__KERNEL_RCSID(0, "$NetBSD: vsbus.c,v 1.54 2008/03/11 05:34:03 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
+#include <sys/buf.h>
+#include <sys/conf.h>
+#include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/device.h>
+#include <sys/disklabel.h>
+#include <sys/syslog.h>
+#include <sys/stat.h>
 
 #include <uvm/uvm_extern.h>
 
+#define _VAX_BUS_DMA_PRIVATE
+#include <machine/bus.h>
+#include <machine/pte.h>
 #include <machine/sid.h>
 #include <machine/scb.h>
+#include <machine/cpu.h>
+#include <machine/trap.h>
 #include <machine/nexus.h>
 
 #include <machine/uvax.h>
@@ -60,6 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: vsbus.c,v 1.60 2012/06/28 13:58:21 abs Exp $");
 
 #include "ioconf.h"
 #include "locators.h"
+#include "opt_cputype.h"
 
 static int	vsbus_match(device_t, cfdata_t, void *);
 static void	vsbus_attach(device_t, device_t, void *);
@@ -122,7 +132,7 @@ vsbus_attach(device_t parent, device_t self, void *aux)
 #if VAX49 || VAX53
 	case VAX_BTYP_53:
 	case VAX_BTYP_49:
-		sc->sc_vsregs = vax_map_physmem(VS_REGS_KA49, 1);
+		sc->sc_vsregs = vax_map_physmem(0x25c00000, 1);
 		sc->sc_intreq = (char *)sc->sc_vsregs + 12;
 		sc->sc_intclr = (char *)sc->sc_vsregs + 12;
 		sc->sc_intmsk = (char *)sc->sc_vsregs + 8;
@@ -278,7 +288,7 @@ vsbus_copytoproc(struct proc *p, void *fromv, void *tov, int len)
 	paddr_t pa;
 
 	if ((vaddr_t)to & KERNBASE) { /* In kernel space */
-		memcpy(to, from, len);
+		bcopy(from, to, len);
 		return;
 	}
 
@@ -295,7 +305,7 @@ vsbus_copytoproc(struct proc *p, void *fromv, void *tov, int len)
 		int cz = round_page((vaddr_t)to) - (vaddr_t)to;
 
 		pa = (pte->pg_pfn << VAX_PGSHIFT) | (PAGE_SIZE - cz) | KERNBASE;
-		memcpy((void *)pa, from, min(cz, len));
+		bcopy(from, (void *)pa, min(cz, len));
 		from += cz;
 		to += cz;
 		len -= cz;
@@ -303,7 +313,7 @@ vsbus_copytoproc(struct proc *p, void *fromv, void *tov, int len)
 	}
 	while (len > 0) {
 		pa = (pte->pg_pfn << VAX_PGSHIFT) | KERNBASE;
-		memcpy((void *)pa, from, min(PAGE_SIZE, len));
+		bcopy(from, (void *)pa, min(PAGE_SIZE, len));
 		from += PAGE_SIZE;
 		to += PAGE_SIZE;
 		len -= PAGE_SIZE;
@@ -319,7 +329,7 @@ vsbus_copyfromproc(struct proc *p, void *fromv, void *tov, int len)
 	paddr_t pa;
 
 	if ((vaddr_t)from & KERNBASE) { /* In kernel space */
-		memcpy(to, from, len);
+		bcopy(from, to, len);
 		return;
 	}
 
@@ -336,7 +346,7 @@ vsbus_copyfromproc(struct proc *p, void *fromv, void *tov, int len)
 		int cz = round_page((vaddr_t)from) - (vaddr_t)from;
 
 		pa = (pte->pg_pfn << VAX_PGSHIFT) | (PAGE_SIZE - cz) | KERNBASE;
-		memcpy(to, (void *)pa, min(cz, len));
+		bcopy((void *)pa, to, min(cz, len));
 		from += cz;
 		to += cz;
 		len -= cz;
@@ -344,7 +354,7 @@ vsbus_copyfromproc(struct proc *p, void *fromv, void *tov, int len)
 	}
 	while (len > 0) {
 		pa = (pte->pg_pfn << VAX_PGSHIFT) | KERNBASE;
-		memcpy(to,  (void *)pa, min(PAGE_SIZE, len));
+		bcopy((void *)pa, to, min(PAGE_SIZE, len));
 		from += PAGE_SIZE;
 		to += PAGE_SIZE;
 		len -= PAGE_SIZE;

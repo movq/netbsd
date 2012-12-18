@@ -1,33 +1,35 @@
-#	$NetBSD: Makefile,v 1.2 2009/04/23 14:14:35 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.1 2008/04/14 17:24:56 skrll Exp $
 #
 # boot.fs is the image for wd booting.
 #
-# It is constructed by packaging an INSTALL kernel into an ustarfs.
+# It is constructed by packaging an INSTALL kernel into a FFS
+# filesystem and slapping on a disklabel and bootblock.
 #
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
-FLOPPYBASE=	boot
-FLOPPYSUFFIX=	.fs
+.include <bsd.kernobj.mk>
 
-FLOPPYMAX=1
-FLOPPYSIZE=	8192
-FLOPPYMETAFILE!=	printf "USTAR.volsize.%o" ${FLOPPYSIZE}
+IMAGE=		boot.fs
+IMAGESIZE=	10m
+IMAGEENDIAN=	le
 
-FLOPPYKERNEL=	netbsd-INSTALL.gz
-FLOPPYKERNDIR=	instkernel
-FLOPPYKERNOBJ!=	cd ${.CURDIR}/../${FLOPPYKERNDIR} && ${PRINTOBJDIR}
+LISTS=		${.CURDIR}/list
+MTREECONF=	${DISTRIBDIR}/common/mtree.dot
 
-MDEC=		${DESTDIR}/usr/mdec
-FLOPPYINSTBOOT=	"${TOOL_INSTALLBOOT} -m ${MACHINE} @IMAGE@ ${MDEC}/bootxx_ustarfs"
+RAMDISKDIR!=	cd ${.CURDIR}/../instkernel && ${PRINTOBJDIR}
+PRIMARYBOOT=	${DESTDIR}/usr/mdec/bootxx_ffsv1
+SECONDARYBOOT=	${DESTDIR}/usr/mdec/boot
 
-FLOPPY_BOOT=	${MDEC}/boot
-FLOPPY_NETBSD=	${FLOPPYKERNOBJ}/${FLOPPYKERNEL}
-FLOPPYFILES=	boot ${FLOPPYMETAFILE} netbsd
+PARSELISTENV=	RAMDISKDIR=${RAMDISKDIR:Q}
+IMAGEDEPENDS=	${RAMDISKDIR}/netbsd-INSTALL.gz  \
+		${PRIMARYBOOT} ${SECONDARYBOOT}
+IMAGEPOSTBUILD=	${TOOL_INSTALLBOOT} -v -m ${MACHINE} ${IMAGE} \
+		${PRIMARYBOOT} ${SECONDARYBOOT}
 
-FLOPPY_RELEASEDIR=	installation/misc
+IMAGE_RELEASEDIR=	installation/misc
 
-.include "${DISTRIBDIR}/common/Makefile.tarfloppy"
+.include "${DISTRIBDIR}/common/Makefile.image"
 
 .include <bsd.prog.mk>

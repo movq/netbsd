@@ -1,4 +1,4 @@
-/* $NetBSD: pi1ppc.c,v 1.11 2011/07/01 18:53:47 dyoung Exp $ */
+/* $NetBSD: pi1ppc.c,v 1.6 2008/04/22 14:02:04 cegger Exp $ */
 
 /*
  * Copyright (c) 2001 Alcove - Nicolas Souchu
@@ -33,18 +33,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pi1ppc.c,v 1.11 2011/07/01 18:53:47 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pi1ppc.c,v 1.6 2008/04/22 14:02:04 cegger Exp $");
 
 #include "opt_pi1ppc.h"
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
 #include <sys/device.h>
+#include <sys/malloc.h>
+#include <sys/proc.h>
 #include <sys/systm.h>
+#include <sys/vnode.h>
+#include <sys/syslog.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 /*#include <machine/intr.h>*/
 
 #include <dev/ppbus/ppbus_conf.h>
@@ -71,11 +74,12 @@ int pi1ppc_debug = 1;
 int pi1ppc_verbose = 1;
 #endif
 
+
 /* Prototypes for functions. */
 
 /* PC-style register emulation */
-static uint8_t r_reg(int reg, struct pi1ppc_softc *pi1ppc);
-static void w_reg(int reg, struct pi1ppc_softc *pi1ppc, uint8_t byte);
+static u_int8_t r_reg(int reg, struct pi1ppc_softc *pi1ppc);
+static void w_reg(int reg, struct pi1ppc_softc *pi1ppc, u_int8_t byte);
 
 #define	AT_DATA_REG	0
 #define	AT_STAT_REG	1
@@ -96,6 +100,7 @@ static void w_reg(int reg, struct pi1ppc_softc *pi1ppc, uint8_t byte);
 					0,4,BUS_SPACE_BARRIER_WRITE)
 #define	pi1ppc_barrier(_x)  pi1ppc_barrier_r(_x)
 
+
 /* Print function for config_found() */
 static int pi1ppc_print(void *, const char *);
 
@@ -105,7 +110,7 @@ static int pi1ppc_write(device_t, char *, int, int, size_t *);
 static int pi1ppc_setmode(device_t, int);
 static int pi1ppc_getmode(device_t);
 static int pi1ppc_exec_microseq(device_t, struct ppbus_microseq * *);
-static uint8_t pi1ppc_io(device_t, int, u_char *, int, u_char);
+static u_int8_t pi1ppc_io(device_t, int, u_char *, int, u_char);
 static int pi1ppc_read_ivar(device_t, int, unsigned int *);
 static int pi1ppc_write_ivar(device_t, int, unsigned int *);
 static int pi1ppc_add_handler(device_t, void (*)(void *), void *);
@@ -125,20 +130,20 @@ static void pi1ppc_byte_read(struct pi1ppc_softc * const);
 static void pi1ppc_std_write(struct pi1ppc_softc * const);
 
 /* Miscellaneous */
-static void pi1ppc_set_intr_mask(struct pi1ppc_softc * const, uint8_t);
-static uint8_t pi1ppc_get_intr_stat(struct pi1ppc_softc * const);
+static void pi1ppc_set_intr_mask(struct pi1ppc_softc * const, u_int8_t);
+static u_int8_t pi1ppc_get_intr_stat(struct pi1ppc_softc * const);
 
 #ifdef USE_INDY_ACK_HACK
-static uint8_t pi1ppc_get_intr_mask(struct pi1ppc_softc * const);
+static u_int8_t pi1ppc_get_intr_mask(struct pi1ppc_softc * const);
 #endif
 
-static int pi1ppc_poll_str(struct pi1ppc_softc * const, const uint8_t,
-	const uint8_t);
-static int pi1ppc_wait_interrupt(struct pi1ppc_softc * const, kcondvar_t *,
-	const uint8_t);
+static int pi1ppc_poll_str(struct pi1ppc_softc * const, const u_int8_t,
+	const u_int8_t);
+static int pi1ppc_wait_interrupt(struct pi1ppc_softc * const, const void *,
+	const u_int8_t);
 
 static int pi1ppc_poll_interrupt_stat(struct pi1ppc_softc * const, 
-	const uint8_t);
+	const u_int8_t);
 
 static int pi1ppc_match(device_t parent, cfdata_t match, void *aux);
 static void pi1ppc_attach(device_t parent, device_t self, void *aux);
@@ -157,11 +162,6 @@ CFATTACH_DECL_NEW(pi1ppc, sizeof(struct pi1ppc_softc),
 static int
 pi1ppc_match(device_t parent, cfdata_t match, void *aux)
 {
-	struct hpc_attach_args *ha = aux;
-
-	if (strcmp(ha->ha_name, match->cf_name) != 0)
-		return 0;
-
 	if (mach_type == MACH_SGI_IP22)
 		return 1;
 
@@ -204,6 +204,8 @@ pi1ppc_sc_attach(struct pi1ppc_softc *lsc)
 	struct parport_adapter sc_parport_adapter;
 	char buf[64];
 
+	PI1PPC_LOCK_INIT(lsc);
+
 	/* For a PC, this is where the installed chipset is probed.
 	 * We *know* what we have, no need to probe.
 	 */
@@ -212,14 +214,10 @@ pi1ppc_sc_attach(struct pi1ppc_softc *lsc)
 
 	/* XXX Once we support Interrupts & DMA, update this */
 	lsc->sc_has = PI1PPC_HAS_PS2;
-
-	mutex_init(&lsc->sc_lock, MUTEX_DEFAULT, IPL_TTY);
-	cv_init(&lsc->sc_in_cv, "pi1ppcin");
-	cv_init(&lsc->sc_out_cv, "pi1ppcou");
-
+	   
         /* Print out chipset capabilities */
-	snprintb(buf, sizeof(buf), "\20\1INTR\2DMA\3FIFO\4PS2\5ECP\6EPP",
-	    lsc->sc_has);
+	bitmask_snprintf(lsc->sc_has, "\20\1INTR\2DMA\3FIFO\4PS2\5ECP\6EPP",
+		buf, sizeof(buf));
 	printf("\n%s: capabilities=%s\n", device_xname(lsc->sc_dev), buf);
 
 	/* Initialize device's buffer pointers */
@@ -230,8 +228,13 @@ pi1ppc_sc_attach(struct pi1ppc_softc *lsc)
 	/* Last configuration step: set mode to standard mode */
 	if (pi1ppc_setmode(lsc->sc_dev, PPBUS_COMPATIBLE) != 0) {
 		PI1PPC_DPRINTF(("%s: unable to initialize mode.\n",
-                   device_xname(lsc->sc_dev)));
+                                device_xname(lsc->sc_dev)));
 	}
+
+#if defined (MULTIPROCESSOR) || defined (LOCKDEBUG)
+	/* Initialize lock structure */
+	simple_lock_init(&(lsc->sc_lock));
+#endif
 
 	/* Set up parport_adapter structure */
 
@@ -303,12 +306,10 @@ pi1ppc_sc_detach(struct pi1ppc_softc *lsc, int flag)
 			printf("continuing (DETACH_FORCE)\n");
 		}
 	}
+
 	if (!(flag & DETACH_QUIET))
 		printf("%s detached", device_xname(dev));
 
-	mutex_destroy(&lsc->sc_lock);
-	cv_destroy(&lsc->sc_in_cv);
-	cv_destroy(&lsc->sc_out_cv);
 	return 0;
 }
 
@@ -335,7 +336,9 @@ pi1ppcintr(void *arg)
 	struct pi1ppc_softc *pi1ppc = device_private(dev);
 	int claim = 1;
 	enum { NONE, READER, WRITER } wake_up = NONE;
+	int s;
 
+	s = splpi1ppc();
 	PI1PPC_LOCK(pi1ppc);
 
 	/* Record registers' status */
@@ -427,14 +430,16 @@ pi1ppcintr(void *arg)
 			break;
 
 		case READER:
-			cv_broadcast(atppc->sc_in_cv);
+			wakeup(atppc->sc_inb);
 			break;
 
 		case WRITER:
-			cv_broadcast(atppc->sc_out_cv);
+			wakeup(atppc->sc_outb);
 			break;
 		}
 	}
+
+	PI1PPC_UNLOCK(atppc);
 
 	/* Call all of the installed handlers */
 	if (claim) {
@@ -444,7 +449,8 @@ pi1ppcintr(void *arg)
 				(*callback->func)(callback->arg);
 		}
 	}
-	PI1PPC_UNLOCK(atppc);
+
+	splx(s);
 
 	return claim;
 #else
@@ -467,7 +473,9 @@ pi1ppc_read(device_t dev, char *buf, int len, int ioflag,
 {
 	struct pi1ppc_softc *pi1ppc = device_private(dev);
 	int error = 0;
+	int s;
 
+	s = splpi1ppc();
 	PI1PPC_LOCK(pi1ppc);
 
 	*cnt = 0;
@@ -509,6 +517,7 @@ pi1ppc_read(device_t dev, char *buf, int len, int ioflag,
 		error = pi1ppc->sc_inerr;
 
 	PI1PPC_UNLOCK(pi1ppc);
+	splx(s);
 
 	return (error);
 }
@@ -519,9 +528,11 @@ pi1ppc_write(device_t dev, char *buf, int len, int ioflag, size_t *cnt)
 {
 	struct pi1ppc_softc * const pi1ppc = device_private(dev);
 	int error = 0;
+	int s;
 
 	*cnt = 0;
 
+	s = splpi1ppc();
 	PI1PPC_LOCK(pi1ppc);
 
 	/* Set up line buffer */
@@ -558,6 +569,7 @@ pi1ppc_write(device_t dev, char *buf, int len, int ioflag, size_t *cnt)
 		error = pi1ppc->sc_outerr;
 
 	PI1PPC_UNLOCK(pi1ppc);
+	splx(s);
 
 	return (error);
 }
@@ -577,10 +589,12 @@ static int
 pi1ppc_setmode(device_t dev, int mode)
 {
 	struct pi1ppc_softc *pi1ppc = device_private(dev);
-	uint8_t ecr;
-	uint8_t chipset_mode;
+	u_int8_t ecr;
+	u_int8_t chipset_mode;
+	int s;
 	int rval = 0;
 
+	s = splpi1ppc();
 	PI1PPC_LOCK(pi1ppc);
 
 	switch (mode) {
@@ -622,6 +636,7 @@ pi1ppc_setmode(device_t dev, int mode)
 
 end:
 	PI1PPC_UNLOCK(pi1ppc);
+	splx(s);
 
 	return rval;
 }
@@ -632,7 +647,9 @@ pi1ppc_getmode(device_t dev)
 {
 	struct pi1ppc_softc *pi1ppc = device_private(dev);
 	int mode;
+	int s;
 
+	s = splpi1ppc();
 	PI1PPC_LOCK(pi1ppc);
 
 	/* The chipset can only be in one mode at a time logically */
@@ -656,6 +673,7 @@ pi1ppc_getmode(device_t dev)
 	}
 
 	PI1PPC_UNLOCK(pi1ppc);
+	splx(s);
 
 	return mode;
 }
@@ -676,9 +694,9 @@ pi1ppc_ecp_sync(device_t dev)
 /* Bit 4 of ctl_reg_int_en is used to emulate the PC's int enable
    bit.  Without it, lpt doesn't like the port.
  */
-static uint8_t ctl_reg_int_en = 0;
+static u_int8_t ctl_reg_int_en = 0;
 
-static uint8_t
+static u_int8_t
 r_reg(int reg, struct pi1ppc_softc *pi1ppc)
 {
 	int val = 0;
@@ -728,7 +746,7 @@ r_reg(int reg, struct pi1ppc_softc *pi1ppc)
 }
 
 static void
-w_reg(int reg, struct pi1ppc_softc *pi1ppc, uint8_t byte)
+w_reg(int reg, struct pi1ppc_softc *pi1ppc, u_int8_t byte)
 {
 	/* don't try to write to the status reg */
 
@@ -761,12 +779,14 @@ pi1ppc_exec_microseq(device_t dev, struct ppbus_microseq **p_msq)
 	char cc, *p;
 	int i, iter, len;
 	int error;
+	int s;
 	register int reg;
 	register unsigned char mask;
 	register int accum = 0;
 	register char *ptr = NULL;
 	struct ppbus_microseq *stack = NULL;
 
+	s = splpi1ppc();
 	PI1PPC_LOCK(pi1ppc);
 
 	/* Loop until microsequence execution finishes (ending op code) */
@@ -852,7 +872,8 @@ pi1ppc_exec_microseq(device_t dev, struct ppbus_microseq **p_msq)
 
 		case MS_OP_ADELAY:
 			if (mi->arg[0].i) {
-				DELAY(mi->arg[0].i * 1000);
+				tsleep(pi1ppc, PPBUSPRI, "pi1ppcdelay",
+					mi->arg[0].i * (hz/1000));
 			}
 			mi++;
 			break;
@@ -921,6 +942,7 @@ pi1ppc_exec_microseq(device_t dev, struct ppbus_microseq **p_msq)
 			if ((error = mi->arg[0].f(mi->arg[1].p,
 				pi1ppc->sc_ptr))) {
 				PI1PPC_UNLOCK(pi1ppc);
+				splx(s);
 				return (error);
 			}
 			mi++;
@@ -975,7 +997,9 @@ pi1ppc_exec_microseq(device_t dev, struct ppbus_microseq **p_msq)
 			*p_msq = mi;
 
 			PI1PPC_UNLOCK(pi1ppc);
+			splx(s);
 			return (0);
+			break;
 
 		default:
 			panic("%s: unknown microsequence "
@@ -991,12 +1015,14 @@ pi1ppc_exec_microseq(device_t dev, struct ppbus_microseq **p_msq)
 }
 
 /* General I/O routine */
-static uint8_t
+static u_int8_t
 pi1ppc_io(device_t dev, int iop, u_char *addr, int cnt, u_char byte)
 {
 	struct pi1ppc_softc *pi1ppc = device_private(dev);
-	uint8_t val = 0;
+	u_int8_t val = 0;
+	int s;
 
+	s = splpi1ppc();
 	PI1PPC_LOCK(pi1ppc);
 
 	switch (iop) {
@@ -1027,6 +1053,7 @@ pi1ppc_io(device_t dev, int iop, u_char *addr, int cnt, u_char byte)
 	pi1ppc_barrier(pi1ppc);
 
 	PI1PPC_UNLOCK(pi1ppc);
+	splx(s);
 
 	return val;
 }
@@ -1037,7 +1064,9 @@ pi1ppc_read_ivar(device_t dev, int index, unsigned int *val)
 {
 	struct pi1ppc_softc *pi1ppc = device_private(dev);
 	int rval = 0;
+	int s;
 
+	s = splpi1ppc();
 	PI1PPC_LOCK(pi1ppc);
 
 	switch(index) {
@@ -1054,6 +1083,8 @@ pi1ppc_read_ivar(device_t dev, int index, unsigned int *val)
 	}
 
 	PI1PPC_UNLOCK(pi1ppc);
+	splx(s);
+
 	return rval;
 }
 
@@ -1063,7 +1094,9 @@ pi1ppc_write_ivar(device_t dev, int index, unsigned int *val)
 {
 	struct pi1ppc_softc *pi1ppc = device_private(dev);
 	int rval = 0;
+	int s;
 
+	s = splpi1ppc();
 	PI1PPC_LOCK(pi1ppc);
 
 	switch(index) {
@@ -1090,6 +1123,8 @@ pi1ppc_write_ivar(device_t dev, int index, unsigned int *val)
 	}
 
 	PI1PPC_UNLOCK(pi1ppc);
+	splx(s);
+
 	return rval;
 }
 
@@ -1099,21 +1134,33 @@ pi1ppc_add_handler(device_t dev, void (*handler)(void *), void *arg)
 {
 	struct pi1ppc_softc *pi1ppc = device_private(dev);
 	struct pi1ppc_handler_node *callback;
+	int rval = 0;
+	int s;
+
+	s = splpi1ppc();
+	PI1PPC_LOCK(pi1ppc);
 
 	if (handler == NULL) {
 		PI1PPC_DPRINTF(("%s(%s): attempt to register NULL handler.\n",
 			__func__, device_xname(dev)));
-		return EINVAL;
+		rval = EINVAL;
+	} else {
+		callback = malloc(sizeof(struct pi1ppc_handler_node), M_DEVBUF,
+			M_NOWAIT);
+		if (callback) {
+			callback->func = handler;
+			callback->arg = arg;
+			SLIST_INSERT_HEAD(&(pi1ppc->sc_handler_listhead),
+				callback, entries);
+		} else {
+			rval = ENOMEM;
+		}
 	}
-	callback = kmem_alloc(sizeof(struct pi1ppc_handler_node), KM_SLEEP);
 
-	PI1PPC_LOCK(pi1ppc);
-	callback->func = handler;
-	callback->arg = arg;
-	SLIST_INSERT_HEAD(&(pi1ppc->sc_handler_listhead), callback, entries);
 	PI1PPC_UNLOCK(pi1ppc);
+	splx(s);
 
-	return 0;
+	return rval;
 }
 
 /* Remove a handler added by pi1ppc_add_handler() */
@@ -1122,26 +1169,30 @@ pi1ppc_remove_handler(device_t dev, void (*handler)(void *))
 {
 	struct pi1ppc_softc *pi1ppc = device_private(dev);
 	struct pi1ppc_handler_node *callback;
-	int rval;
+	int rval = EINVAL;
+	int s;
 
+	s = splpi1ppc();
 	PI1PPC_LOCK(pi1ppc);
-	KASSERT(!SLIST_EMPTY(&(pi1ppc->sc_handler_listhead)));
+
+	if (SLIST_EMPTY(&(pi1ppc->sc_handler_listhead)))
+		panic("%s(%s): attempt to remove handler from empty list.\n",
+			__func__, device_xname(dev));
+
+	/* Search list for handler */
 	SLIST_FOREACH(callback, &(pi1ppc->sc_handler_listhead), entries) {
 		if (callback->func == handler) {
 			SLIST_REMOVE(&(pi1ppc->sc_handler_listhead), callback,
 				pi1ppc_handler_node, entries);
-			
+			free(callback, M_DEVBUF);
+			rval = 0;
 			break;
 		}
 	}
-	PI1PPC_UNLOCK(pi1ppc);
 
-	if (callback) {
-		kmem_free(callback, sizeof(struct pi1ppc_handler_node));
-		rval = 0;
-	} else {
-		rval = EINVAL;
-	}
+	PI1PPC_UNLOCK(pi1ppc);
+	splx(s);
+
 	return rval;
 }
 
@@ -1165,9 +1216,9 @@ static void
 pi1ppc_nibble_read(struct pi1ppc_softc *pi1ppc)
 {
 	int i;
-	uint8_t nibble[2];
-	uint8_t ctr;
-	uint8_t str;
+	u_int8_t nibble[2];
+	u_int8_t ctr;
+	u_int8_t str;
 
 	/* Enable interrupts if needed */
 	if (pi1ppc->sc_use & PI1PPC_USE_INTR) {
@@ -1220,7 +1271,7 @@ pi1ppc_nibble_read(struct pi1ppc_softc *pi1ppc)
 			/* Event 11 - wait ack from peripherial */
 			if (pi1ppc->sc_use & PI1PPC_USE_INTR)
 				pi1ppc->sc_inerr = pi1ppc_wait_interrupt(pi1ppc,
-				    &pi1ppc->sc_in_cv, PI1PPC_IRQ_nACK);
+					pi1ppc->sc_inb, PI1PPC_IRQ_nACK);
 			else
 				pi1ppc->sc_inerr = pi1ppc_poll_str(pi1ppc, PTRCLK,
 					PTRCLK);
@@ -1239,8 +1290,8 @@ pi1ppc_nibble_read(struct pi1ppc_softc *pi1ppc)
 static void
 pi1ppc_byte_read(struct pi1ppc_softc * const pi1ppc)
 {
-	uint8_t ctr;
-	uint8_t str;
+	u_int8_t ctr;
+	u_int8_t str;
 
 	/* Check direction bit */
 	ctr = pi1ppc_r_ctr(pi1ppc);
@@ -1295,7 +1346,7 @@ pi1ppc_byte_read(struct pi1ppc_softc * const pi1ppc)
 		/* Event 11 - peripheral ack */
 		if (pi1ppc->sc_use & PI1PPC_USE_INTR)
 			pi1ppc->sc_inerr = pi1ppc_wait_interrupt(pi1ppc,
-			    &pi1ppc->sc_in_cv, PI1PPC_IRQ_nACK);
+				pi1ppc->sc_inb, PI1PPC_IRQ_nACK);
 		else
 			pi1ppc->sc_inerr = pi1ppc_poll_str(pi1ppc, PTRCLK, PTRCLK);
 		if (pi1ppc->sc_inerr)
@@ -1321,7 +1372,7 @@ pi1ppc_byte_read(struct pi1ppc_softc * const pi1ppc)
  */
 
 static void
-pi1ppc_set_intr_mask(struct pi1ppc_softc * const pi1ppc, uint8_t mask)
+pi1ppc_set_intr_mask(struct pi1ppc_softc * const pi1ppc, u_int8_t mask)
 {
 	/* invert valid bits (0 = enabled) */
 	mask = ~mask;
@@ -1333,7 +1384,7 @@ pi1ppc_set_intr_mask(struct pi1ppc_softc * const pi1ppc, uint8_t mask)
 
 
 #ifdef USE_INDY_ACK_HACK
-static uint8_t
+static u_int8_t
 pi1ppc_get_intr_mask(struct pi1ppc_softc * const pi1ppc)
 {
 	int val;
@@ -1347,7 +1398,7 @@ pi1ppc_get_intr_mask(struct pi1ppc_softc * const pi1ppc)
 }
 #endif
 
-static uint8_t
+static u_int8_t
 pi1ppc_get_intr_stat(struct pi1ppc_softc * const pi1ppc)
 {
 	int val;
@@ -1415,7 +1466,7 @@ pi1ppc_std_write(struct pi1ppc_softc * const pi1ppc)
 		/* Wait for nACK for MAXBUSYWAIT */
 		if (pi1ppc->sc_use & PI1PPC_USE_INTR) {
 			pi1ppc->sc_outerr = pi1ppc_wait_interrupt(pi1ppc,
-			    &pi1ppc->sc_out_cv, PI1PPC_IRQ_nACK);
+				pi1ppc->sc_outb, PI1PPC_IRQ_nACK);
 			if (pi1ppc->sc_outerr)
 				return;
 		} else {
@@ -1434,16 +1485,17 @@ pi1ppc_std_write(struct pi1ppc_softc * const pi1ppc)
 	}
 }
 
+
 /*
  * Poll status register using mask and status for MAXBUSYWAIT.
  * Returns 0 if device ready, error value otherwise.
  */
 static int
-pi1ppc_poll_str(struct pi1ppc_softc * const pi1ppc, const uint8_t status,
-	const uint8_t mask)
+pi1ppc_poll_str(struct pi1ppc_softc * const pi1ppc, const u_int8_t status,
+	const u_int8_t mask)
 {
 	unsigned int timecount;
-	uint8_t str;
+	u_int8_t str;
 	int error = EIO;
 
 	/* Wait for str to have status for MAXBUSYWAIT */
@@ -1464,17 +1516,22 @@ pi1ppc_poll_str(struct pi1ppc_softc * const pi1ppc, const uint8_t status,
 
 /* Wait for interrupt for MAXBUSYWAIT: returns 0 if acknowledge received. */
 static int
-pi1ppc_wait_interrupt(struct pi1ppc_softc * const sc, kcondvar_t *cv,
-    const uint8_t irqstat)
+pi1ppc_wait_interrupt(struct pi1ppc_softc * const pi1ppc, const void *where,
+	const u_int8_t irqstat)
 {
 	int error = EIO;
 
-	sc->sc_irqstat &= ~irqstat;
-	error = cv_timedwait_sig(cv, &sc->sc_lock, MAXBUSYWAIT);
-	if (!error && (sc->sc_irqstat & irqstat) == 0) {
-		sc->sc_irqstat &= ~irqstat;
+	pi1ppc->sc_irqstat &= ~irqstat;
+
+	/* Wait for interrupt for MAXBUSYWAIT */
+	error = ltsleep(where, PPBUSPRI | PCATCH, __func__, MAXBUSYWAIT,
+		PI1PPC_SC_LOCK(pi1ppc));
+
+	if (!(error) && (pi1ppc->sc_irqstat & irqstat)) {
+		pi1ppc->sc_irqstat &= ~irqstat;
 		error = 0;
 	}
+
 	return error;
 }
 
@@ -1518,10 +1575,10 @@ pi1ppc_wait_interrupt(struct pi1ppc_softc * const sc, kcondvar_t *cv,
 
 static int
 pi1ppc_poll_interrupt_stat(struct pi1ppc_softc * const pi1ppc, 
-	const uint8_t match)
+	const u_int8_t match)
 {
 	unsigned int timecount;
-	uint8_t cur;
+	u_int8_t cur;
 	int error = EIO;
 
 #ifdef USE_INDY_ACK_HACK

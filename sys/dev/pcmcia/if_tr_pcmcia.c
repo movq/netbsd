@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tr_pcmcia.c,v 1.25 2012/10/27 17:18:37 chs Exp $	*/
+/*	$NetBSD: if_tr_pcmcia.c,v 1.20 2008/04/05 21:31:23 cegger Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *  This product includes software developed by Soren S. Jorvang.
+ *  This product includes software developed by Onno van der Linden.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tr_pcmcia.c,v 1.25 2012/10/27 17:18:37 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tr_pcmcia.c,v 1.20 2008/04/05 21:31:23 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,20 +93,20 @@ struct tr_pcmcia_softc {
 	struct	pcmcia_function *sc_pf;
 };
 
-static int	tr_pcmcia_match(device_t, cfdata_t, void *);
-static void	tr_pcmcia_attach(device_t, device_t, void *);
-static int	tr_pcmcia_detach(device_t, int);
+static int	tr_pcmcia_match(struct device *, struct cfdata *, void *);
+static void	tr_pcmcia_attach(struct device *, struct device *, void *);
+static int	tr_pcmcia_detach(struct device *, int);
 static int	tr_pcmcia_enable(struct tr_softc *);
 static int	tr_pcmcia_mediachange(struct tr_softc *);
 static void	tr_pcmcia_mediastatus(struct tr_softc *, struct ifmediareq *);
 static void	tr_pcmcia_disable(struct tr_softc *);
 static void	tr_pcmcia_setup(struct tr_softc *);
 
-CFATTACH_DECL_NEW(tr_pcmcia, sizeof(struct tr_pcmcia_softc),
+CFATTACH_DECL(tr_pcmcia, sizeof(struct tr_pcmcia_softc),
     tr_pcmcia_match, tr_pcmcia_attach, tr_pcmcia_detach, tr_activate);
 
 static int
-tr_pcmcia_match(device_t parent, cfdata_t match,
+tr_pcmcia_match(struct device *parent, struct cfdata *match,
     void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
@@ -115,9 +121,9 @@ tr_pcmcia_match(device_t parent, cfdata_t match,
 }
 
 static void
-tr_pcmcia_attach(device_t parent, device_t self, void *aux)
+tr_pcmcia_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct tr_pcmcia_softc *psc = device_private(self);
+	struct tr_pcmcia_softc *psc = (void *)self;
 	struct tr_softc *sc = &psc->sc_tr;
 	struct pcmcia_attach_args *pa = aux;
 	struct pcmcia_config_entry *cfe;
@@ -205,14 +211,15 @@ fail1:
 }
 
 static int
-tr_pcmcia_enable(struct tr_softc *sc)
+tr_pcmcia_enable(sc)
+	struct tr_softc *sc;
 {
 	struct tr_pcmcia_softc *psc = (struct tr_pcmcia_softc *) sc;
 	int ret;
 
 	sc->sc_ih = pcmcia_intr_establish(psc->sc_pf, IPL_NET, tr_intr, psc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(psc->sc_tr.sc_dev, "couldn't establish interrupt\n");
+		aprint_error_dev(&psc->sc_tr.sc_dev, "couldn't establish interrupt\n");
 		return 1;
 	}
 
@@ -231,7 +238,8 @@ tr_pcmcia_enable(struct tr_softc *sc)
 }
 
 static void
-tr_pcmcia_disable(struct tr_softc *sc)
+tr_pcmcia_disable(sc)
+	struct tr_softc *sc;
 {
 	struct tr_pcmcia_softc *psc = (struct tr_pcmcia_softc *) sc;
 
@@ -240,7 +248,8 @@ tr_pcmcia_disable(struct tr_softc *sc)
 }
 
 static int
-tr_pcmcia_mediachange(struct tr_softc *sc)
+tr_pcmcia_mediachange(sc)
+	struct tr_softc *sc;
 {
 	int setspeed = 0;
 
@@ -278,7 +287,9 @@ tr_pcmcia_mediachange(struct tr_softc *sc)
  * XXX Copy of tropic_mediastatus()
  */
 static void
-tr_pcmcia_mediastatus(struct tr_softc *sc, struct ifmediareq *ifmr)
+tr_pcmcia_mediastatus(sc, ifmr)
+	struct tr_softc *sc;
+	struct ifmediareq *ifmr;
 {
 	struct ifmedia	*ifm = &sc->sc_media;
 
@@ -286,9 +297,11 @@ tr_pcmcia_mediastatus(struct tr_softc *sc, struct ifmediareq *ifmr)
 }
 
 int
-tr_pcmcia_detach(device_t self, int flags)
+tr_pcmcia_detach(self, flags)
+	struct device *self;
+	int flags;
 {
-	struct tr_pcmcia_softc *psc = device_private(self);
+	struct tr_pcmcia_softc *psc = (struct tr_pcmcia_softc *)self;
 	int rv;
 
 	rv = tr_detach(self, flags);
@@ -306,7 +319,8 @@ tr_pcmcia_detach(device_t self, int flags)
 }
 
 static void
-tr_pcmcia_setup(struct tr_softc *sc)
+tr_pcmcia_setup(sc)
+	struct tr_softc *sc;
 {
 	int s;
 

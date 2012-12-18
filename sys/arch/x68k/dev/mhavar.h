@@ -1,4 +1,4 @@
-/*	$NetBSD: mhavar.h,v 1.10 2012/07/29 00:08:19 matt Exp $	*/
+/*	$NetBSD: mhavar.h,v 1.8 2007/03/04 06:01:06 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Peter Galbavy.  All rights reserved.
@@ -82,10 +82,10 @@ struct spc_tinfo {
 	u_char  period;		/* Period suggestion */
 	u_char  offset;		/* Offset suggestion */
 	u_char	width;		/* Width suggestion */
-};
+} tinfo_t;
 
 struct mha_softc {
-	device_t sc_dev;
+	struct device sc_dev;			/* us as a device */
 	volatile void *sc_iobase;
 	volatile u_char	*sc_pc;
 	volatile u_short *sc_ps;

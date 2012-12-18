@@ -1,4 +1,4 @@
-/*	$NetBSD: pdqvar.h,v 1.47 2012/10/27 17:18:22 chs Exp $	*/
+/*	$NetBSD: pdqvar.h,v 1.40 2008/06/24 10:12:06 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -84,6 +84,8 @@ typedef enum _pdq_state_t pdq_state_t;
 #include <sys/mbuf.h>
 #endif /* M_CAST */
 #include <sys/malloc.h>
+
+#include <uvm/uvm_extern.h>
 
 #define	PDQ_USE_MBUFS
 #if defined(__NetBSD__)
@@ -247,11 +249,11 @@ extern void pdq_os_databuf_free(struct _pdq_os_ctx_t *, struct mbuf *);
 #endif
 
 #if !defined(PDQ_BPF_MTAP)
-#define	PDQ_BPF_MTAP(sc, m)	bpf_mtap3((sc)->sc_bpf, m)
+#define	PDQ_BPF_MTAP(sc, m)	bpf_mtap((sc)->sc_bpf, m)
 #endif
 
 #if !defined(PDQ_BPFATTACH)
-#define	PDQ_BPFATTACH(sc, t, s)	bpf_attach(&(sc)->sc_bpf, &(sc)->sc_if, t, s)
+#define	PDQ_BPFATTACH(sc, t, s)	bpfattach(&(sc)->sc_bpf, &(sc)->sc_if, t, s)
 #endif
 
 #if !defined(PDQ_OS_SPL_RAISE)
@@ -316,12 +318,11 @@ typedef struct _pdq_os_ctx_t {
     struct arpcom sc_ac;
 #define	sc_if		sc_ac.ac_if
 #elif defined(__NetBSD__)
-    device_t sc_dev;		/* base device */
+    struct device sc_dev;		/* base device */
     void *sc_ih;			/* interrupt vectoring */
     void *sc_ats;			/* shutdown hook */
     struct ethercom sc_ec;
     bus_dma_tag_t sc_dmatag;
-    bool sc_csr_memmapped;
 #define	sc_if		sc_ec.ec_if
 #elif defined(__FreeBSD__)
     struct kern_devconf *sc_kdc;	/* freebsd cruft */
@@ -347,7 +348,7 @@ typedef struct _pdq_os_ctx_t {
 #if !defined(__bsdi__) || _BSDI_VERSION >= 199401
 #define	sc_bpf		sc_if.if_bpf
 #else
-    struct bpf_if *sc_bpf;
+    void *sc_bpf;
 #endif
 #if defined(PDQ_BUS_DMA)
 #if !defined(__NetBSD__)
@@ -381,7 +382,7 @@ extern void pdq_ifattach(pdq_softc_t *, ifnet_ret_t (*ifwatchdog)(int));
 
 #define	PDQ_OS_PAGESIZE			PAGESIZE
 #define	PDQ_OS_USEC_DELAY(n)		drv_usecwait(n)
-#define	PDQ_OS_MEMZERO(p, n)		memset((void *)(p), 0, (n))
+#define	PDQ_OS_MEMZERO(p, n)		bzero((void *)(p), (n))
 #define	PDQ_OS_VA_TO_BUSPA(pdq, p)		vtop((void *)p, NULL)
 #define	PDQ_OS_MEMALLOC(n)		kmem_zalloc(n, KM_NOSLEEP)
 #define	PDQ_OS_MEMFREE(p, n)		kmem_free((void *) p, n)

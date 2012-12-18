@@ -51,7 +51,7 @@
 
 #include <fs/unionfs/unionfs.h>
 
-MODULE(MODULE_CLASS_VFS, unionfs, "layerfs");
+MODULE(MODULE_CLASS_VFS, unionfs, NULL);
 
 MALLOC_DEFINE(M_UNIONFSMNT, "UNIONFS mount", "UNIONFS mount structure");
 
@@ -78,7 +78,6 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	u_short		ufile;
 	unionfs_copymode copymode;
 	unionfs_whitemode whitemode;
-	struct pathbuf *pb;
 	struct componentname fakecn;
 	struct nameidata nd, *ndp;
 	struct vattr	va;
@@ -138,7 +137,7 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		uid = va.va_uid;
 		gid = va.va_gid;
 	}
-	VOP_UNLOCK(mp->mnt_vnodecovered);
+	VOP_UNLOCK(mp->mnt_vnodecovered, 0);
 	if (error)
 		return (error);
 
@@ -169,15 +168,9 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	/*
 	 * Find upper node
 	 */
-	error = pathbuf_copyin(args->target, &pb);
-	if (error) {
-		return error;
-	}
-	NDINIT(ndp, LOOKUP, FOLLOW | LOCKLEAF, pb);
-	if ((error = namei(ndp))) {
-		pathbuf_destroy(pb);
-		return error;
-	}
+	NDINIT(ndp, LOOKUP, FOLLOW | LOCKLEAF, UIO_USERSPACE, args->target);
+	if ((error = namei(ndp)))
+		return (error);
 
 	/* get root vnodes */
 	lowerrootvp = mp->mnt_vnodecovered;
@@ -185,7 +178,6 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 
 	vrele(ndp->ni_dvp);
 	ndp->ni_dvp = NULLVP;
-	pathbuf_destroy(pb);
 
 	/* create unionfs_mount */
 	ump = (struct unionfs_mount *)malloc(sizeof(struct unionfs_mount),
@@ -195,7 +187,7 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	 * Save reference
 	 */
 	if (below) {
-		VOP_UNLOCK(upperrootvp);
+		VOP_UNLOCK(upperrootvp, 0);
 		vn_lock(lowerrootvp, LK_EXCLUSIVE | LK_RETRY);
 		ump->um_lowervp = upperrootvp;
 		ump->um_uppervp = lowerrootvp;
@@ -230,7 +222,7 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		error = VOP_WHITEOUT(ump->um_uppervp, &fakecn, LOOKUP);
 		if (error) {
 			if (below) {
-				VOP_UNLOCK(ump->um_uppervp);
+				VOP_UNLOCK(ump->um_uppervp, 0);
 				vrele(upperrootvp);
 			} else
 				vput(ump->um_uppervp);
@@ -243,7 +235,7 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	/*
 	 * Unlock the node
 	 */
-	VOP_UNLOCK(ump->um_uppervp);
+	VOP_UNLOCK(ump->um_uppervp, 0);
 
 	ump->um_op = args->mntflags & UNMNT_OPMASK;
 
@@ -371,7 +363,7 @@ unionfs_root(struct mount *mp, struct vnode **vpp)
 }
 
 int
-unionfs_quotactl(struct mount *mp, struct quotactl_args *args)
+unionfs_quotactl(struct mount *mp, int cmd, uid_t uid, void *arg)
 {
 	struct unionfs_mount *ump;
 
@@ -380,7 +372,7 @@ unionfs_quotactl(struct mount *mp, struct quotactl_args *args)
 	/*
 	 * Writing is always performed to upper vnode.
 	 */
-	return (VFS_QUOTACTL(ump->um_uppervp->v_mount, args));
+	return (VFS_QUOTACTL(ump->um_uppervp->v_mount, cmd, uid, arg));
 }
 
 int

@@ -1,4 +1,4 @@
-/*	$NetBSD: power.c,v 1.12 2011/06/03 03:20:39 christos Exp $ */
+/*	$NetBSD: power.c,v 1.8 2006/05/12 23:35:24 uwe Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: power.c,v 1.12 2011/06/03 03:20:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: power.c,v 1.8 2006/05/12 23:35:24 uwe Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -51,10 +51,10 @@ __KERNEL_RCSID(0, "$NetBSD: power.c,v 1.12 2011/06/03 03:20:39 christos Exp $");
 
 #include <sparc64/dev/power.h>
 
-static int powermatch(device_t, cfdata_t, void *);
-static void powerattach(device_t, device_t, void *);
+static int powermatch(struct device *, struct cfdata *, void *);
+static void powerattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(power, 0,
+CFATTACH_DECL(power, sizeof(struct device),
     powermatch, powerattach, NULL, NULL);
 
 extern struct cfdriver power_cd;
@@ -68,19 +68,24 @@ extern struct cfdriver power_cd;
  */
 
 static int
-powermatch(device_t parent, cfdata_t cf, void *aux)
+powermatch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
-	struct confargs *ca = aux;
+	register struct confargs *ca = aux;
 
 	if (CPU_ISSUN4M)
-		return strcmp("power", ca->ca_ra.ra_name) == 0;
+		return (strcmp("power", ca->ca_ra.ra_name) == 0);
 
-	return 0;
+	return (0);
 }
 
 /* ARGSUSED */
 static void
-powerattach(device_t parent, device_t self, void *aux)
+powerattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct confargs *ca = aux;
 	struct romaux *ra = &ca->ca_ra;
@@ -91,7 +96,7 @@ powerattach(device_t parent, device_t self, void *aux)
 }
 
 void
-powerdown(void)
+powerdown()
 {
 	*POWER_REG |= POWER_OFF;
 }

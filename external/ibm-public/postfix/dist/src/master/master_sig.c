@@ -1,4 +1,4 @@
-/*	$NetBSD: master_sig.c,v 1.1.1.2 2011/03/02 19:32:21 tron Exp $	*/
+/*	$NetBSD: master_sig.c,v 1.1.1.1.2.4 2011/03/24 19:54:08 riz Exp $	*/
 
 /*++
 /* NAME

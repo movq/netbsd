@@ -1,4 +1,4 @@
-/* $NetBSD: if_ei.c,v 1.17 2011/06/03 16:28:40 tsutsui Exp $ */
+/* $NetBSD: if_ei.c,v 1.14 2008/04/05 20:08:52 cegger Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 Ben Harris
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ei.c,v 1.17 2011/06/03 16:28:40 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ei.c,v 1.14 2008/04/05 20:08:52 cegger Exp $");
 
 #include <sys/param.h>
 
@@ -69,8 +69,8 @@ static void ei_write16(struct ie_softc *, int, u_int16_t);
 static void ei_write24(struct ie_softc *, int, int);
 
 /* autoconfiguration glue */
-static int ei_match(device_t, cfdata_t, void *);
-static void ei_attach(device_t, device_t, void *);
+static int ei_match(struct device *, struct cfdata *, void *);
+static void ei_attach(struct device *, struct device *, void *);
 
 struct ei_softc {
 	struct	ie_softc sc_ie;
@@ -85,7 +85,7 @@ struct ei_softc {
 	struct		evcnt	sc_intrcnt;
 };
 
-CFATTACH_DECL_NEW(ei, sizeof(struct ei_softc),
+CFATTACH_DECL(ei, sizeof(struct ei_softc),
     ei_match, ei_attach, NULL, NULL);
 
 static inline void
@@ -103,7 +103,7 @@ ei_cli(struct ei_softc *sc)
 }
 
 static int
-ei_match(device_t parent, cfdata_t cf, void *aux)
+ei_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct podulebus_attach_args *pa = aux;
 
@@ -111,14 +111,12 @@ ei_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-ei_attach(device_t parent, device_t self, void *aux)
+ei_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct podulebus_attach_args *pa = aux;
 	struct ei_softc *sc = device_private(self);
 	int i;
 	char descr[16];
-
-	sc->sc_ie.sc_dev = self;
 
 	/* Set up bus spaces */
 	sc->sc_ctl_t = sc->sc_mem_t = pa->pa_fast_t;
@@ -254,7 +252,7 @@ ei_copyin(struct ie_softc *sc_ie, void *dest, int src, size_t size)
 
 #ifdef DIAGNOSTIC
 	if (src % 2 != 0 || !ALIGNED_POINTER(dest, u_int16_t))
-		panic("%s: unaligned copyin", device_xname(sc_ie->sc_dev));
+		panic("%s: unaligned copyin", device_xname(&sc_ie->sc_dev));
 #endif
 	wptr = dest;
 	extra_byte = size % 2;
@@ -294,13 +292,13 @@ ei_copyout(struct ie_softc *sc_ie, const void *src, int dest, size_t size)
 
 #ifdef DIAGNOSTIC
 	if (dest % 2 != 0)
-		panic("%s: unaligned copyout", device_xname(sc_ie->sc_dev));
+		panic("%s: unaligned copyout", device_xname(&sc_ie->sc_dev));
 #endif
 	if (!ALIGNED_POINTER(src, u_int16_t)) {
 		bounce = (u_int16_t *) malloc(size, M_DEVBUF, M_NOWAIT);
 		if (bounce == NULL)
 			panic("%s: no memory to align copyout",
-			      device_xname(sc_ie->sc_dev));
+			      device_xname(&sc_ie->sc_dev));
 		memcpy(bounce, src, size);
 		src = bounce;
 	}
@@ -333,7 +331,7 @@ ei_read16(struct ie_softc *sc_ie, int addr)
 
 #ifdef DIAGNOSTIC
 	if (addr % 2 != 0)
-		panic("%s: unaligned read16", device_xname(sc_ie->sc_dev));
+		panic("%s: unaligned read16", device_xname(&sc_ie->sc_dev));
 #endif
 	s = splnet();
 	ei_setpage(sc, ei_atop(addr));
@@ -351,7 +349,7 @@ ei_write16(struct ie_softc *sc_ie, int addr, u_int16_t value)
 
 #ifdef DIAGNOSTIC
 	if (addr % 2 != 0)
-		panic("%s: unaligned write16", device_xname(sc_ie->sc_dev));
+		panic("%s: unaligned write16", device_xname(&sc_ie->sc_dev));
 #endif
 	s = splnet();
 	ei_setpage(sc, ei_atop(addr));
@@ -367,7 +365,7 @@ ei_write24(struct ie_softc *sc_ie, int addr, int value)
 
 #ifdef DIAGNOSTIC
 	if (addr % 2 != 0)
-		panic("%s: unaligned write24", device_xname(sc_ie->sc_dev));
+		panic("%s: unaligned write24", device_xname(&sc_ie->sc_dev));
 #endif
 	s = splnet();
 	ei_write16(sc_ie, addr, value & 0xffff);

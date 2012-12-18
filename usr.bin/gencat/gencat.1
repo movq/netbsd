@@ -1,4 +1,4 @@
-.\" $NetBSD: gencat.1,v 1.13 2011/12/29 16:41:38 christos Exp $
+.\" $NetBSD: gencat.1,v 1.10 2008/10/19 17:57:19 wiz Exp $
 .\"
 .\" Copyright (c) 2007 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -29,22 +29,23 @@
 .\"
 .\" Written by Kee Hinckley <nazgul@somewhere.com>
 .\"
-.Dd December 29, 2011
-.Dt GENCAT 1
+.Dd October 17, 2008
 .Os
+.Dt GENCAT 1
 .Sh NAME
 .Nm gencat
 .Nd generates a Native Language Support (NLS) message catalog file
 .Sh SYNOPSIS
 .Nm
 .Ar catfile
-.Op Ar msgfile|- ...
+.Ar msgfile
+.Op Ar msgfile ...
 .Sh DESCRIPTION
 The
 .Nm
 utility generates a formatted message catalog
 .Ar catfile
-from stdin or one or more message source text files
+from one or more message source text files
 .Ar msgfile .
 The file
 .Ar catfile
@@ -131,16 +132,18 @@ the set identifier specified by the last
 .Li $set
 directive, and the message identifier
 .Ar m .
-If the
-.Ar message-text
-is empty and there is a space or tab character
-following the message identifier,
-an empty string is stored in the message catalog.
+.\" XXX Required by POSIX; the code must be fixed first.
+.\" If the
+.\" .Ar message-text
+.\" is empty and there is a space or tab character
+.\" following the message identifier,
+.\" an empty string is stored in the message catalog.
 If no
 .Ar message-text
 is provided,
-and if there is no space or tab character following the message
-identifier,
+.\" XXX Required by POSIX; the code must be fixed first.
+.\" and if there is no space or tab character following the message
+.\" identifier,
 the message with the message identifier
 .Ar m
 in the current set is removed from the catalog.

@@ -27,7 +27,7 @@
  *	isdntel - isdn4bsd telephone answering support
  *      ==============================================
  *
- *	$Id: defs.h,v 1.4 2011/08/31 13:30:44 joerg Exp $ 
+ *	$Id: defs.h,v 1.2 2002/09/20 15:15:50 mycroft Exp $ 
  *
  * $FreeBSD$
  *
@@ -120,8 +120,8 @@ WINDOW *main_w;			/* curses main window pointer */
 int nofiles = 0;
 int cur_pos = 0;
 
-const char *spooldir = SPOOLDIR;
-const char *playstring = PLAYCMD;
+char *spooldir = SPOOLDIR;
+char *playstring = PLAYCMD;
 
 #else
 
@@ -141,16 +141,16 @@ extern char *playstring;
 
 #endif
 
-extern void init_alias( const char *filename );
+extern void init_alias( char *filename );
 extern void init_files( int inipos );
 extern void init_screen ( void );
 extern void do_menu ( void );
 extern int fill_list( void );
 extern char *get_alias( char *number );
 extern int main ( int argc, char **argv );
-extern void do_quit ( int exitval ) __dead;
-extern void fatal ( const char *fmt, ... ) __dead __printflike(1, 2);
-extern void error ( const char *fmt, ... ) __printflike(1, 2);
+extern void do_quit ( int exitval );
+extern void fatal ( char *fmt, ... );
+extern void error ( char *fmt, ... );
 extern void play ( struct onefile * );
 extern void delete ( struct onefile * );
 extern void reread( void );

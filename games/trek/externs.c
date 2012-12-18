@@ -1,4 +1,4 @@
-/*	$NetBSD: externs.c,v 1.10 2009/05/24 21:44:56 dholland Exp $	*/
+/*	$NetBSD: externs.c,v 1.8 2003/08/07 09:37:51 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,17 +34,18 @@
 #if 0
 static char sccsid[] = "@(#)externs.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: externs.c,v 1.10 2009/05/24 21:44:56 dholland Exp $");
+__RCSID("$NetBSD: externs.c,v 1.8 2003/08/07 09:37:51 agc Exp $");
 #endif
 #endif /* not lint */
 
-#include "trek.h"
+# include	"trek.h"
 
 /*
 **	global variable definitions
 */
 
-const struct device Device[NDEV] = {
+const struct device	Device[NDEV] =
+{
 	{ "warp drive",		"Scotty" },
 	{ "S.R. scanners",	"Scotty" },
 	{ "L.R. scanners",	"Scotty" },
@@ -63,7 +64,8 @@ const struct device Device[NDEV] = {
 	{ "*ERR 15*",		"Nobody" }
 };
 
-const char *const Systemname[NINHAB] = {
+const char	*const Systemname[NINHAB] =
+{
 	"ERROR",
 	"Talos IV",
 	"Rigel III",
@@ -103,8 +105,7 @@ struct quad	Quad[NQUADS][NQUADS];
 /* current sector map */
 char	Sect[NSECTS][NSECTS];
 
-/* dynamic event list; one entry per pending event */
-struct event Event[MAXEVENTS];
+struct event	Event[MAXEVENTS];	/* dynamic event list; one entry per pending event */
 
 struct Ship_struct Ship;
 struct Game_struct Game;

@@ -1,7 +1,9 @@
-#	$NetBSD: files.i386,v 1.369 2012/12/16 13:09:20 mbalmer Exp $
+#	$NetBSD: files.i386,v 1.338.6.4 2009/10/07 15:41:12 sborrill Exp $
 #
 # new style config file for i386 architecture
 #
+
+version 20071109
 
 ifndef xen
 
@@ -15,11 +17,12 @@ defparam opt_kernbase.h	KERNBASE
 # delay before cpu_reset() for reboot.
 defparam		CPURESET_DELAY
 
-# Obsolete Xbox support
-obsolete defflag	XBOX
+# Xbox support
+defflag			XBOX
 
 # VM86 emulation
 defflag			VM86
+defflag			KVM86
 
 # User-settable LDT (used by WINE)
 defflag			USER_LDT
@@ -44,9 +47,6 @@ defparam opt_pcibios.h	PCIBIOS_IRQS_HINT
 # kernel stack debug
 defflag	opt_kstack_dr0.h		KSTACK_CHECK_DR0
 
-# splraise()/spllower() debug
-defflag	opt_spldebug.h			SPLDEBUG
-
 # Beep on halt
 defflag 	opt_beep.h		BEEP_ONHALT
 defparam 	opt_beep.h		BEEP_ONHALT_COUNT=3
@@ -58,18 +58,20 @@ defflag 	opt_multiboot.h		MULTIBOOT
 obsolete 	defparam		MULTIBOOT_SYMTAB_SPACE
 file 	arch/i386/i386/multiboot.c	multiboot
 
+# PowerNow K7
+defflag 	POWERNOW_K7
+
 file	arch/i386/i386/autoconf.c
-file	arch/i386/i386/aout_machdep.c	exec_aout
 file	arch/i386/i386/busfunc.S
 file	arch/i386/i386/cpufunc.S
 file	arch/i386/i386/cpu_in_cksum.S	(inet | inet6) & cpu_in_cksum
 file	arch/i386/i386/db_dbgreg.S	ddb | kstack_check_dr0
 file	arch/i386/i386/db_disasm.c	ddb
 file	arch/i386/i386/db_interface.c	ddb
-file	arch/i386/i386/db_machdep.c	ddb
+file	arch/i386/i386/db_memrw.c	ddb | kgdb
+file	arch/i386/i386/db_trace.c	ddb
 file	arch/i386/i386/dumpsys.c
 file	kern/subr_disk_mbr.c		disk
-file	kern/subr_spldebug.c		spldebug
 file	arch/i386/i386/gdt.c
 file	arch/i386/i386/i386func.S
 file	arch/i386/i386/ipkdb_glue.c	ipkdb
@@ -77,12 +79,17 @@ file	arch/i386/i386/kgdb_machdep.c	kgdb
 file	arch/i386/i386/kobj_machdep.c	modular
 file	arch/i386/i386/machdep.c
 file 	arch/i386/i386/longrun.c
+file	arch/i386/i386/mem.c
 file	arch/i386/i386/mtrr_k6.c	mtrr
 file	arch/i386/i386/process_machdep.c
+file	arch/i386/i386/procfs_machdep.c	procfs
+file	arch/i386/i386/syscall.c
 file	arch/i386/i386/trap.c
+file	arch/i386/i386/vm_machdep.c
 file	dev/cons.c
 
-file	arch/i386/i386/mptramp.S	multiprocessor
+file	arch/i386/i386/mptramp.S  	multiprocessor
+file    arch/i386/i386/ipifuncs.c       multiprocessor
 
 file	arch/i386/i386/pmc.c		perfctrs
 
@@ -91,12 +98,6 @@ file	crypto/des/arch/i386/des_cbc.S		des
 
 file	crypto/blowfish/arch/i386/bf_enc.S	blowfish
 file	crypto/blowfish/arch/i386/bf_cbc.S	blowfish & !i386_cpu
-
-#
-# Stack-less Just-In-Time compiler
-#
-
-include	"external/bsd/sljit/conf/files.sljit"
 
 #
 # Machine-independent SCSI drivers
@@ -131,6 +132,7 @@ file	arch/i386/i386/bios32.c		bios32 needs-flag
 # i386 specific mainbus attributes
 define	apmbus {}
 define	pnpbiosbus {}
+define	vesabiosbus {}
 
 #
 # System bus types
@@ -138,7 +140,7 @@ define	pnpbiosbus {}
 
 # XXX BIOS32 only if something that uses it is configured!
 device	mainbus: isabus, eisabus, mcabus, pcibus, bios32, acpibus,
-	cpubus, ioapicbus, apmbus, pnpbiosbus, ipmibus,
+	cpubus, ioapicbus, apmbus, pnpbiosbus, vesabiosbus, ipmibus,
 	bioscall
 attach	mainbus at root
 file	arch/i386/i386/mainbus.c	mainbus
@@ -217,9 +219,8 @@ file	arch/i386/pci/gscpcib.c		gscpcib
 
 # AMD Geode CS5535/CS5536 PCI-ISA bridge
 device	gcscpcib: isabus, sysmon_wdog, gpiobus
-attach	gcscpcib at pci with gcscpcib_pci
-file	arch/i386/pci/gcscpcib_pci.c	gcscpcib_pci
-file	dev/ic/gcscpcib.c		gcscpcib
+attach	gcscpcib at pci
+file	arch/i386/pci/gcscpcib.c	gcscpcib
 
 device	piixpcib: isabus, bioscall
 attach	piixpcib at pci
@@ -248,11 +249,6 @@ include	"dev/isa/files.isa"
 # PC clock
 file	arch/x86/isa/clock.c		isa
 file	arch/x86/isa/rtc.c		isa
-
-# Protech PS3100 cash drawer
-device	ptcd: gpiobus
-attach	ptcd at isa
-file	dev/isa/ptcd.c			ptcd
 
 # TSC support
 file	arch/x86/x86/tsc.c
@@ -332,6 +328,22 @@ file	arch/i386/isa/cmos.c		cmos needs-flag
 
 include "dev/apm/files.apm"
 
+# Advanced Power Management support (APM)
+attach	apm at apmbus with apmbios: bioscall
+file	arch/i386/i386/apmbios.c	apmbios	needs-flag
+file	arch/i386/i386/apmcall.S	apmbios
+
+# XBox LED & system support
+file	arch/i386/xbox/xbox.c			xbox
+
+# XBox X3LCD support (*very* rudimentary)
+file	arch/i386/xbox/xboxlcd.c		xbox
+
+# XBox framebuffer support
+device	xboxfb: wsemuldisplaydev, rasops32, vcons
+attach	xboxfb at pci
+file	arch/i386/xbox/xboxfb.c			xboxfb needs-flag
+
 #
 # Compatibility modules
 #
@@ -339,7 +351,13 @@ include "dev/apm/files.apm"
 # VM86 mode
 file	arch/i386/i386/vm86.c			vm86
 
+# VM86 in kernel
+file	arch/i386/i386/kvm86.c			kvm86
+file	arch/i386/i386/kvm86call.S		kvm86
+
 # Binary compatibility with previous NetBSD releases (COMPAT_XX)
+defflag opt_sa.h	COMPAT_30_PTHREAD
+
 file	arch/i386/i386/compat_13_machdep.c	compat_13
 file	arch/i386/i386/compat_16_machdep.c	compat_16 | compat_ibcs2
 
@@ -348,6 +366,18 @@ include	"compat/svr4/files.svr4"
 file	arch/i386/i386/svr4_machdep.c		compat_svr4
 file	arch/i386/i386/svr4_sigcode.S		compat_svr4
 file	arch/i386/i386/svr4_syscall.c		compat_svr4
+
+# MACH binary compatibility (COMPAT_MACH)
+include	"compat/mach/files.mach"
+file	arch/i386/i386/mach_machdep.c		compat_mach | compat_darwin
+file	arch/i386/i386/mach_sigcode.S		compat_mach | compat_darwin
+file	arch/i386/i386/mach_syscall.c		compat_mach | compat_darwin
+file	arch/i386/i386/darwin_commpage_machdep.S compat_darwin
+file	arch/i386/i386/macho_machdep.c		exec_macho
+
+# DARWIN binary compatibility (COMPAT_DARWIN)
+include	"compat/darwin/files.darwin"
+file	arch/i386/i386/darwin_machdep.c		compat_darwin
 
 # iBCS-2 binary compatibility (COMPAT_IBCS2)
 include	"compat/ibcs2/files.ibcs2"
@@ -370,6 +400,9 @@ file	arch/i386/i386/freebsd_syscall.c	compat_freebsd
 
 # NDIS compatibilty (COMPAT_NDIS)
 include "compat/ndis/files.ndis"
+
+# Win32 binary compatibility (COMPAT_PECOFF)
+include	"compat/pecoff/files.pecoff"
 
 # OSS audio driver compatibility
 include	"compat/ossaudio/files.ossaudio"
@@ -451,14 +484,36 @@ include	"arch/i386/pnpbios/files.pnpbios"
 include "dev/acpi/files.acpi"
 file	arch/i386/acpi/acpi_wakeup_low.S	acpi
 
+# Toshiba VALD 
+device	vald
+attach	vald at acpinodebus with vald_acpi
+file	arch/i386/acpi/vald_acpi.c		vald_acpi
+
+# Sony SPIC (jog dial etc.)
+attach	spic at acpinodebus with spic_acpi
+file	arch/i386/acpi/spic_acpi.c		spic_acpi
+
 # Numeric Processing Extension; Math Co-processor
 attach	npx at acpinodebus with npx_acpi
 file	arch/i386/acpi/npx_acpi.c		npx_acpi
 
-# Obsolete vesabios/vesafb flags
-obsolete	defflag	opt_vesabios.h	VESABIOSVERBOSE
-obsolete	defparam opt_vesafb.h	VESAFB_WIDTH VESAFB_HEIGHT VESAFB_DEPTH
-obsolete	defflag	opt_vesafb.h	VESAFB_PM
+device	vesabios {}
+attach	vesabios at vesabiosbus
+file	arch/i386/bios/vesabios.c		vesabios needs-flag
+defflag	opt_vesabios.h	VESABIOSVERBOSE
+
+device	vesafb: displaydev, wsemuldisplaydev, vcons, rasops8, rasops16, rasops32, splash, bioscall
+attach	vesafb at vesabios
+file	arch/i386/bios/vesafb.c		vesafb needs-flag
+defparam opt_vesafb.h	VESAFB_WIDTH VESAFB_HEIGHT VESAFB_DEPTH
+defflag	opt_vesafb.h	VESAFB_PM
+
+device	vesatext
+attach	vesatext at vesabios
+file	arch/i386/bios/vesa_text.c	vesatext
+
+# AMD PowerNow K7
+file	arch/i386/i386/powernow_k7.c	powernow_k7
 
 # AMD Geode LX Security Block
 device	glxsb: opencrypto

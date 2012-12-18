@@ -1,4 +1,4 @@
-/*	$NetBSD: lm75.c,v 1.25 2012/10/27 17:18:17 chs Exp $	*/
+/*	$NetBSD: lm75.c,v 1.19 2008/04/06 20:25:59 cegger Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,13 +36,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lm75.c,v 1.25 2012/10/27 17:18:17 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lm75.c,v 1.19 2008/04/06 20:25:59 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
-#include <sys/sysctl.h>
 
 #include <dev/sysmon/sysmonvar.h>
 
@@ -50,13 +49,11 @@ __KERNEL_RCSID(0, "$NetBSD: lm75.c,v 1.25 2012/10/27 17:18:17 chs Exp $");
 #include <dev/i2c/lm75reg.h>
 
 struct lmtemp_softc {
-	device_t sc_dev;
 	i2c_tag_t sc_tag;
 	int sc_address;
 
 	struct sysmon_envsys *sc_sme;
 	envsys_data_t sc_sensor;
-	int sc_tmax;
 
 	uint32_t (*sc_lmtemp_decode)(const uint8_t *);
 };
@@ -70,22 +67,9 @@ CFATTACH_DECL_NEW(lmtemp, sizeof(struct lmtemp_softc),
 static void	lmtemp_refresh(struct sysmon_envsys *, envsys_data_t *);
 
 static int	lmtemp_config_write(struct lmtemp_softc *, uint8_t);
-static int	lmtemp_temp_write(struct lmtemp_softc *, int, uint16_t);
 static uint32_t lmtemp_decode_lm75(const uint8_t *);
 static uint32_t lmtemp_decode_ds75(const uint8_t *);
 static uint32_t lmtemp_decode_lm77(const uint8_t *);
-
-static void	lmtemp_setup_sysctl(struct lmtemp_softc *);
-static int	sysctl_lm75_temp(SYSCTLFN_ARGS);
-
-static const char * lmtemp_compats[] = {
-	"i2c-lm75",
-	/*
-	 * see XXX in _attach() below: add code once non-lm75 matches are
-	 * added here!
-	 */
-	NULL
-};
 
 enum {
 	lmtemp_lm75 = 0,
@@ -116,28 +100,15 @@ lmtemp_match(device_t parent, cfdata_t cf, void *aux)
 	struct i2c_attach_args *ia = aux;
 	int i;
 
-	if (ia->ia_name == NULL) {
-		/*
-		 * Indirect config - not much we can do!
-		 */
-		for (i = 0; lmtemptbl[i].lmtemp_type != -1 ; i++)
-			if (lmtemptbl[i].lmtemp_type == cf->cf_flags)
-				break;
-		if (lmtemptbl[i].lmtemp_type == -1)
-			return 0;
+	for (i = 0; lmtemptbl[i].lmtemp_type != -1 ; i++)
+		if (lmtemptbl[i].lmtemp_type == cf->cf_flags)
+			break;
+	if (lmtemptbl[i].lmtemp_type == -1)
+		return 0;
 
-		if ((ia->ia_addr & lmtemptbl[i].lmtemp_addrmask) ==
-		    lmtemptbl[i].lmtemp_addr)
-			return 1;
-	} else {
-		/*
-		 * Direct config - match via the list of compatible
-		 * hardware.
-		 */
-		if (iic_compat_match(ia, lmtemp_compats))
-			return 1;
-	}
-
+	if ((ia->ia_addr & lmtemptbl[i].lmtemp_addrmask) ==
+	    lmtemptbl[i].lmtemp_addr)
+		return 1;
 
 	return 0;
 }
@@ -149,40 +120,20 @@ lmtemp_attach(device_t parent, device_t self, void *aux)
 	struct i2c_attach_args *ia = aux;
 	int i;
 
-	sc->sc_dev = self;
-	if (ia->ia_name == NULL) {
-		for (i = 0; lmtemptbl[i].lmtemp_type != -1 ; i++)
-			if (lmtemptbl[i].lmtemp_type ==
-			    device_cfdata(self)->cf_flags)
-				break;
-	} else {
-		/* XXX - add code when adding other direct matches! */
-		i = 0;
-	}
+	for (i = 0; lmtemptbl[i].lmtemp_type != -1 ; i++)
+		if (lmtemptbl[i].lmtemp_type ==
+		    device_cfdata(self)->cf_flags)
+			break;
 
 	sc->sc_tag = ia->ia_tag;
 	sc->sc_address = ia->ia_addr;
 
 	aprint_naive(": Temperature Sensor\n");
-	if (ia->ia_name) {
-		aprint_normal(": %s %s Temperature Sensor\n", ia->ia_name,
-			lmtemptbl[i].lmtemp_name);
-	} else {
-		aprint_normal(": %s Temperature Sensor\n",
-			lmtemptbl[i].lmtemp_name);
-	}
-
-	/*
-	 * according to the LM75 data sheet 80C is the default, so leave it
-	 * there to avoid unexpected behaviour
-	 */
-	sc->sc_tmax = 80;
-	if (i == lmtemp_lm75)
-		lmtemp_setup_sysctl(sc);
+	aprint_normal(": %s Temperature Sensor\n", lmtemptbl[i].lmtemp_name);
 
 	/* Set the configuration of the LM75 to defaults. */
 	iic_acquire_bus(sc->sc_tag, I2C_F_POLL);
-	if (lmtemp_config_write(sc, LM75_CONFIG_FAULT_QUEUE_4) != 0) {
+	if (lmtemp_config_write(sc, 0) != 0) {
 		aprint_error_dev(self, "unable to write config register\n");
 		iic_release_bus(sc->sc_tag, I2C_F_POLL);
 		return;
@@ -192,9 +143,7 @@ lmtemp_attach(device_t parent, device_t self, void *aux)
 	sc->sc_sme = sysmon_envsys_create();
 	/* Initialize sensor data. */
 	sc->sc_sensor.units =  ENVSYS_STEMP;
-	sc->sc_sensor.state =  ENVSYS_SINVALID;
-	(void)strlcpy(sc->sc_sensor.desc,
-	    ia->ia_name? ia->ia_name : device_xname(self),
+	(void)strlcpy(sc->sc_sensor.desc, device_xname(self),
 	    sizeof(sc->sc_sensor.desc));
 	if (sysmon_envsys_sensor_attach(sc->sc_sme, &sc->sc_sensor)) {
 		sysmon_envsys_destroy(sc->sc_sme);
@@ -227,19 +176,6 @@ lmtemp_config_write(struct lmtemp_softc *sc, uint8_t val)
 }
 
 static int
-lmtemp_temp_write(struct lmtemp_softc *sc, int reg, uint16_t val)
-{
-	uint8_t cmdbuf[3];
-
-	cmdbuf[0] = reg;
-	cmdbuf[1] = (val >> 1) & 0xff;
-	cmdbuf[2] = (val & 1) << 7;
-
-	return iic_exec(sc->sc_tag, I2C_OP_WRITE_WITH_STOP,
-	    sc->sc_address, cmdbuf, 1, &cmdbuf[1], 2, I2C_F_POLL);
-}
-
-static int
 lmtemp_temp_read(struct lmtemp_softc *sc, uint8_t which, uint32_t *valp)
 {
 	int error;
@@ -266,7 +202,7 @@ lmtemp_refresh_sensor_data(struct lmtemp_softc *sc)
 	error = lmtemp_temp_read(sc, LM75_REG_TEMP, &val);
 	if (error) {
 #if 0
-		aprint_error_dev(sc->sc_dev, "unable to read temperature, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to read temperature, error = %d\n",
 		    error);
 #endif
 		sc->sc_sensor.state = ENVSYS_SINVALID;
@@ -290,18 +226,26 @@ lmtemp_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 static uint32_t
 lmtemp_decode_lm75(const uint8_t *buf)
 {
-	int temp;
+	int neg, temp;
 	uint32_t val;
 
-	/*
-	 * LM75 temps are the most-significant 9 bits of a 16-bit reg.
-	 * sign-extend the MSB and add in the 0.5 from the LSB
-	 */
-	temp = (int8_t) buf[0];
-	temp = (temp << 1) + ((buf[1] >> 7) & 0x1);
+	if (buf[0] & 1) {
+		/* Below 0C */
+		temp = ~buf[1] + 1;
+		neg = 1;
+	} else {
+		temp = buf[1];
+		neg = 0;
+	}
 
 	/* Temp is given in 1/2 deg. C, we convert to uK. */
-	val = temp * 500000 + 273150000;
+	val = ((neg ? -temp : temp) / 2) * 1000000 + 273150000;
+	if (temp & 1) {
+		if (neg)
+			val -= 500000;
+		else
+			val += 500000;
+	}
 
 	return val;
 }
@@ -343,72 +287,4 @@ lmtemp_decode_lm77(const uint8_t *buf)
 
 	return val;
 }
-
-static void
-lmtemp_setup_sysctl(struct lmtemp_softc *sc)
-{
-	const struct sysctlnode *me = NULL, *node = NULL;
-
-	iic_acquire_bus(sc->sc_tag, I2C_F_POLL);
-	lmtemp_temp_write(sc, LM75_REG_THYST_SET_POINT, (sc->sc_tmax - 5) * 2);
-	lmtemp_temp_write(sc, LM75_REG_TOS_SET_POINT, sc->sc_tmax * 2);
-	iic_release_bus(sc->sc_tag, I2C_F_POLL);
-
-	sysctl_createv(NULL, 0, NULL, &me,
-	    CTLFLAG_READWRITE,
-	    CTLTYPE_NODE, device_xname(sc->sc_dev), NULL,
-	    NULL, 0, NULL, 0,
-	    CTL_MACHDEP, CTL_CREATE, CTL_EOL);
-
-	sysctl_createv(NULL, 0, NULL, &node,
-	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC,
-	    CTLTYPE_INT, "temp", "Threshold temperature",
-	    sysctl_lm75_temp, 1, (void *)sc, 0,
-	    CTL_MACHDEP, me->sysctl_num, CTL_CREATE, CTL_EOL);
-}
-
-static int
-sysctl_lm75_temp(SYSCTLFN_ARGS)
-{
-	struct sysctlnode node = *rnode;
-	struct lmtemp_softc *sc = node.sysctl_data;
-	int temp;
-
-	if (newp) {
-
-		/* we're asked to write */	
-		node.sysctl_data = &sc->sc_tmax;
-		if (sysctl_lookup(SYSCTLFN_CALL(&node)) == 0) {
-
-			temp = *(int *)node.sysctl_data;
-			sc->sc_tmax = temp;
-			iic_acquire_bus(sc->sc_tag, I2C_F_POLL);
-			lmtemp_temp_write(sc, LM75_REG_THYST_SET_POINT,
-			    (sc->sc_tmax - 5) * 2);
-			lmtemp_temp_write(sc, LM75_REG_TOS_SET_POINT,
-			    sc->sc_tmax * 2);
-			iic_release_bus(sc->sc_tag, I2C_F_POLL);
-			return 0;
-		}
-		return EINVAL;
-	} else {
-
-		node.sysctl_data = &sc->sc_tmax;
-		node.sysctl_size = 4;
-		return (sysctl_lookup(SYSCTLFN_CALL(&node)));
-	}
-
-	return 0;
-}
-
-SYSCTL_SETUP(sysctl_lmtemp_setup, "sysctl lmtemp subtree setup")
-{
-
-	sysctl_createv(NULL, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "machdep", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_MACHDEP, CTL_EOL);
-}
-
 

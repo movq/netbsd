@@ -1,5 +1,4 @@
-/*	Id: order.c,v 1.8 2009/01/07 11:44:03 gmcgarry Exp 	*/	
-/*	$NetBSD: order.c,v 1.1.1.3 2010/06/03 18:57:29 plunky Exp $	*/
+/*	$Id: order.c,v 1.1.1.1 2008/08/24 05:32:59 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -115,16 +114,14 @@ myormake(NODE *q)
  * Shape matches for UMUL.  Cooperates with offstar().
  */
 int
-shumul(NODE *p, int shape)
+shumul(NODE *p)
 {
 
 	if (x2debug)
 		printf("shumul(%p)\n", p);
 
 	/* Turns currently anything into OREG on x86 */
-	if (shape & SOREG)
-		return SROREG;
-	return SRNOPE;
+	return SOREG;
 }
 
 /*
@@ -317,6 +314,7 @@ nspecial(struct optab *q)
 			if (q->visit & SAREG) {
 				static struct rspecial s[] = {
 					{ NEVER, R0 },
+//					{ NRES, R3 }, // hack - i don't know why
 					{ 0 } };
 				return s;
 			}

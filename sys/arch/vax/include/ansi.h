@@ -1,4 +1,4 @@
-/*	$NetBSD: ansi.h,v 1.26 2011/07/17 20:54:49 joerg Exp $	*/
+/*	$NetBSD: ansi.h,v 1.23 2008/08/29 18:25:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -52,7 +52,12 @@
 #define	_BSD_PTRDIFF_T_		long int	/* ptr1 - ptr2 */
 #define	_BSD_SIZE_T_		unsigned long int /* sizeof() */
 #define	_BSD_SSIZE_T_		long int	/* byte count or error */
-#define	_BSD_TIME_T_		__int64_t	/* time() */
+#define	_BSD_TIME_T_		int		/* time() */
+#if __GNUC_PREREQ__(2,96)
+#define	_BSD_VA_LIST_		__builtin_va_list /* va_list */
+#else
+#define	_BSD_VA_LIST_		char *		/* va_list */
+#endif
 #define	_BSD_WINT_T_		int		/* wint_t */
 #define	_BSD_CLOCKID_T_		int		/* clockid_t */
 #define	_BSD_TIMER_T_		int		/* timer_t */
@@ -60,5 +65,17 @@
 #define	_BSD_USECONDS_T_	unsigned int	/* useconds_t */
 #define	_BSD_WCHAR_T_		int		/* wchar_t */
 #define	_BSD_WINT_T_		int		/* wint_t */
+#define _BSD_WCTRANS_T_		void *		/* wctrans_t */
+#define _BSD_WCTYPE_T_		void *		/* wctype_t */
+
+/*
+ * mbstate_t is an opaque object to keep conversion state, during multibyte
+ * stream conversions.  The content must not be referenced by user programs.
+ */
+typedef union {
+	__int64_t __mbstateL;	/* for alignment */
+	char __mbstate8[128];
+} __mbstate_t;
+#define	_BSD_MBSTATE_T_		__mbstate_t	/* mbstate_t */
 
 #endif  /* _ANSI_H_ */

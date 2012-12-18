@@ -1,4 +1,4 @@
-/*	$NetBSD: pcnfsd_v2.c,v 1.12 2011/10/07 10:46:29 joerg Exp $	*/
+/*	$NetBSD: pcnfsd_v2.c,v 1.9 2003/07/16 08:22:01 itojun Exp $	*/
 
 /* RE_SID: @(%)/usr/dosnfs/shades_SCCS/unix/pcnfsd/v2/src/SCCS/s.pcnfsd_v2.c 1.2 91/12/18 13:26:13 SMI */
 /*
@@ -129,7 +129,7 @@ pcnfsd2_auth_2_svc(arg, req)
 #endif
 
 	p = get_password(uname);
-	if (p == NULL)
+	if (p == (struct passwd *) NULL)
 		return (&r);
 
 	c1 = strlen(pw);
@@ -333,11 +333,9 @@ static char *
 my_strdup(s)
 	const char   *s;
 {
-	size_t len;
 	char   *r;
-	len = strlen(s);
-	r = (char *) grab(len + 1);
-	memcpy(r, s, len + 1);
+	r = (char *) grab(strlen(s) + 1);
+	strlcpy(r, s, strlen(s) + 1);
 	return (r);
 }
 
@@ -514,8 +512,8 @@ fillin_extra_groups(uname, main_gid, len, extra_gids)
  */
 char   *
 find_entry(key, map)
-	const char   *key;
-	const char   *map;
+	char   *key;
+	char   *map;
 {
 	int     err;
 	char   *val = NULL;

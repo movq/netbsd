@@ -1,6 +1,5 @@
 %{
-/*	Id: scanner.l,v 1.50 2011/06/03 15:42:45 plunky Exp    */	
-/*	$NetBSD: scanner.l,v 1.1.1.4 2011/09/01 12:46:55 plunky Exp $   */
+/*	$Id: scanner.l,v 1.1.1.1 2008/08/24 05:33:05 gmcgarry Exp $   */
 
 /*
  * Copyright (c) 2004 Anders Magnusson. All rights reserved.
@@ -377,12 +376,11 @@ inch(void)
 
 again:	switch (c = inpch()) {
 	case '\\': /* continued lines */
-msdos:		if ((c = inpch()) == '\n') {
+		if ((c = inpch()) == '\n') {
 			ifiles->lineno++;
 			putch('\n');
 			goto again;
-		} else if (c == '\r')
-			goto msdos;
+		}
 		unch(c);
 		return '\\';
 	case '?': /* trigraphs */
@@ -531,7 +529,7 @@ prtline()
 void
 cunput(int c)
 {
-#ifdef PCC_DEBUG
+#ifdef CPP_DEBUG
 	extern int dflag;
 	if (dflag)printf(": '%c'(%d)", c > 31 ? c : ' ', c);
 #endif

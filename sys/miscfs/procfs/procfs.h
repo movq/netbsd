@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs.h,v 1.68 2012/05/28 13:16:10 christos Exp $	*/
+/*	$NetBSD: procfs.h,v 1.65 2008/06/28 01:34:06 rumble Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -108,8 +108,6 @@ typedef enum {
 	PFScpustat,	/* status info (if -o linux) */
 	PFSloadavg,	/* load average (if -o linux) */
 	PFSstatm,	/* process memory info (if -o linux) */
-	PFSversion,	/* kernel version (if -o linux) */
-	PFStask,	/* task subdirector (if -o linux) */
 #ifdef __HAVE_PROCFS_MACHDEP
 	PROCFS_MACHDEP_NODE_TYPES
 #endif
@@ -131,7 +129,6 @@ struct pfsnode {
 
 #define PROCFS_NOTELEN	64	/* max length of a note (/proc/$pid/note) */
 #define PROCFS_CTLLEN 	8	/* max length of a ctl msg (/proc/$pid/ctl */
-#define PROCFS_MAXNAMLEN	255
 
 #endif /* _KERNEL */
 
@@ -227,8 +224,6 @@ int procfs_douptime(struct lwp *, struct proc *, struct pfsnode *,
 int procfs_domounts(struct lwp *, struct proc *, struct pfsnode *,
     struct uio *);
 int procfs_doemul(struct lwp *, struct proc *, struct pfsnode *,
-    struct uio *);
-int procfs_doversion(struct lwp *, struct proc *, struct pfsnode *,
     struct uio *);
 
 void procfs_revoke_vnodes(struct proc *, void *);

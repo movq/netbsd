@@ -1,4 +1,4 @@
-/*	$NetBSD: vme.c,v 1.17 2011/06/05 06:33:43 tsutsui Exp $	*/
+/*	$NetBSD: vme.c,v 1.13 2008/04/28 20:23:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.17 2011/06/05 06:33:43 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.13 2008/04/28 20:23:15 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,17 +40,21 @@ __KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.17 2011/06/05 06:33:43 tsutsui Exp $");
 
 #include <atari/vme/vmevar.h>
 
-int vmematch(device_t, cfdata_t, void *);
-void vmeattach(device_t, device_t, void *);
-int vmeprint(void *, const char *);
+int vmematch __P((struct device *, struct cfdata *, void *));
+void vmeattach __P((struct device *, struct device *, void *));
+int vmeprint __P((void *, const char *));
 
-CFATTACH_DECL_NEW(vme, sizeof(struct vme_softc),
+CFATTACH_DECL(vme, sizeof(struct vme_softc),
     vmematch, vmeattach, NULL, NULL);
 
-int	vmesearch(device_t, cfdata_t, const int *, void *);
+int	vmesearch __P((struct device *, struct cfdata *,
+		       const int *, void *));
 
 int
-vmematch(device_t parent, cfdata_t cf, void *aux)
+vmematch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct vmebus_attach_args *vba = aux;
 
@@ -61,14 +65,15 @@ vmematch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-vmeattach(device_t parent, device_t self, void *aux)
+vmeattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct vme_softc *sc = device_private(self);
+	struct vme_softc *sc = (struct vme_softc *)self;
 	struct vmebus_attach_args *vba = aux;
 
 	printf("\n");
 
-	sc->sc_dev = self;
 	sc->sc_iot  = vba->vba_iot;
 	sc->sc_memt = vba->vba_memt;
 	sc->sc_vc   = vba->vba_vc;
@@ -77,7 +82,9 @@ vmeattach(device_t parent, device_t self, void *aux)
 }
 
 int
-vmeprint(void *aux, const char *vme)
+vmeprint(aux, vme)
+	void *aux;
+	const char *vme;
 {
 	struct vme_attach_args *va = aux;
 
@@ -95,9 +102,13 @@ vmeprint(void *aux, const char *vme)
 }
 
 int
-vmesearch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+vmesearch(parent, cf, ldesc, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	const int *ldesc;
+	void *aux;
 {
-	struct vme_softc *sc = device_private(parent);
+	struct vme_softc *sc = (struct vme_softc *)parent;
 	struct vme_attach_args va;
 
 	va.va_iot    = sc->sc_iot;

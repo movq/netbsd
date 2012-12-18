@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2012/03/22 23:46:27 joerg Exp $
+#	$NetBSD: Makefile,v 1.2.8.1 2009/09/17 04:24:37 snj Exp $
 
 DRIVER=		xf86-video-trident
 DRIVER_NAME=	trident_drv
@@ -10,9 +10,5 @@ SRCS+=		trident_i2c.c trident_shadow.c
 SRCS+=		trident_tv.c trident_video.c tvga_dac.c xp_accel.c
 SRCS+=		xp4_accel.c xp4_accel_exa.c
 MAN=		trident.4
-
-COPTS.trident_driver.c=	-Wno-error	# XXX xf86dgastr.h
-
-CWARNFLAGS.clang+=	-Wno-return-type -Wno-empty-body
 
 .include "../Makefile.xf86-driver"

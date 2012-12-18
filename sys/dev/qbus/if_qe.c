@@ -1,4 +1,4 @@
-/*      $NetBSD: if_qe.c,v 1.71 2010/04/05 07:21:47 joerg Exp $ */
+/*      $NetBSD: if_qe.c,v 1.67 2008/03/11 05:34:01 matt Exp $ */
 /*
  * Copyright (c) 1999 Ludd, University of Lule}, Sweden. All rights reserved.
  *
@@ -38,9 +38,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_qe.c,v 1.71 2010/04/05 07:21:47 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_qe.c,v 1.67 2008/03/11 05:34:01 matt Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -56,8 +57,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_qe.c,v 1.71 2010/04/05 07:21:47 joerg Exp $");
 #include <netinet/in.h>
 #include <netinet/if_inarp.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <sys/bus.h>
 
@@ -145,7 +148,7 @@ qematch(device_t parent, cfdata_t cf, void *aux)
 	int error;
 
 	ring = malloc(PROBESIZE, M_TEMP, M_WAITOK|M_ZERO);
-	memset(sc, 0, sizeof(*sc));
+	bzero(sc, sizeof(*sc));
 	sc->sc_iot = ua->ua_iot;
 	sc->sc_ioh = ua->ua_ioh;
 	sc->sc_dmat = ua->ua_dmat;
@@ -237,7 +240,7 @@ qeattach(device_t parent, device_t self, void *aux)
 	/*
 	 * Zero the newly allocated memory.
 	 */
-	memset(sc->sc_qedata, 0, sizeof(struct qe_cdata) + ETHER_PAD_LEN);
+	bzero(sc->sc_qedata, sizeof(struct qe_cdata) + ETHER_PAD_LEN);
 	nullbuf = ((char*)sc->sc_qedata) + sizeof(struct qe_cdata);
 	/*
 	 * Create the transmit descriptor DMA maps. We take advantage
@@ -492,7 +495,10 @@ qestart(struct ifnet *ifp)
 
 		IFQ_DEQUEUE(&ifp->if_snd, m);
 
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 		/*
 		 * m now points to a mbuf chain that can be loaded.
 		 * Loop around and set it.
@@ -591,7 +597,10 @@ qeintr(void *arg)
 			m->m_pkthdr.len = m->m_len = len;
 			if (++sc->sc_nextrx == RXDESCS)
 				sc->sc_nextrx = 0;
-			bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+			if (ifp->if_bpf)
+				bpf_mtap(ifp->if_bpf, m);
+#endif
 			if ((status1 & QE_ESETUP) == 0)
 				(*ifp->if_input)(ifp, m);
 			else
@@ -651,7 +660,7 @@ qeioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 		switch(ifa->ifa_addr->sa_family) {
 #ifdef INET
@@ -664,11 +673,8 @@ qeioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		/* XXX re-use ether_ioctl() */
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_RUNNING:
+		if ((ifp->if_flags & IFF_UP) == 0 &&
+		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
 			 * If interface is marked down and it is running,
 			 * stop it. (by disabling receive mechanism).
@@ -676,23 +682,19 @@ qeioctl(struct ifnet *ifp, u_long cmd, void *data)
 			QE_WCSR(QE_CSR_CSR,
 			    QE_RCSR(QE_CSR_CSR) & ~QE_RCV_ENABLE);
 			ifp->if_flags &= ~IFF_RUNNING;
-			break;
-		case IFF_UP:
+		} else if ((ifp->if_flags & IFF_UP) != 0 &&
+			   (ifp->if_flags & IFF_RUNNING) == 0) {
 			/*
 			 * If interface it marked up and it is stopped, then
 			 * start it.
 			 */
 			qeinit(sc);
-			break;
-		case IFF_UP|IFF_RUNNING:
+		} else if ((ifp->if_flags & IFF_UP) != 0) {
 			/*
 			 * Send a new setup packet to match any new changes.
 			 * (Like IFF_PROMISC etc)
 			 */
 			qe_setup(sc);
-			break;
-		case 0:
-			break;
 		}
 		break;
 
@@ -713,7 +715,8 @@ qeioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ether_ioctl(ifp, cmd, data);
+		error = EINVAL;
+
 	}
 	splx(s);
 	return (error);

@@ -1,4 +1,4 @@
-/*	$NetBSD: match_list.c,v 1.1.1.2 2010/06/17 18:07:14 tron Exp $	*/
+/*	$NetBSD: match_list.c,v 1.1.1.1.2.4 2011/01/07 01:24:18 riz Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-/*	$NetBSD: pool.h,v 1.75 2012/06/05 22:51:47 jym Exp $	*/
+/*	$NetBSD: pool.h,v 1.64 2008/07/04 16:38:59 ad Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2000, 2007 The NetBSD Foundation, Inc.
@@ -37,17 +37,22 @@
 #define	__POOL_EXPOSE
 #endif
 
+#if defined(_KERNEL_OPT)
+#include "opt_pool.h"
+#endif
+
 #ifdef __POOL_EXPOSE
-#include <sys/param.h>
 #include <sys/mutex.h>
 #include <sys/condvar.h>
 #include <sys/queue.h>
 #include <sys/time.h>
 #include <sys/tree.h>
 #include <sys/callback.h>
+#endif
 
 #define	POOL_PADDR_INVALID	((paddr_t) -1)
 
+#ifdef __POOL_EXPOSE
 struct pool;
 
 struct pool_allocator {
@@ -58,9 +63,15 @@ struct pool_allocator {
 	/* The following fields are for internal use only. */
 	kmutex_t	pa_lock;
 	TAILQ_HEAD(, pool) pa_list;	/* list of pools using this allocator */
-	uint32_t	pa_refcnt;	/* number of pools using this allocator */
+	int		pa_flags;
+#define	PA_INITIALIZED	0x01
 	int		pa_pagemask;
 	int		pa_pageshift;
+	struct vm_map *pa_backingmap;
+#if defined(_KERNEL)
+	struct vm_map **pa_backingmapptr;
+	SLIST_ENTRY(pool_allocator) pa_q;
+#endif /* defined(_KERNEL) */
 };
 
 LIST_HEAD(pool_pagelist,pool_item_header);
@@ -153,6 +164,14 @@ struct pool {
 	/*
 	 * Diagnostic aides.
 	 */
+	struct pool_log	*pr_log;
+	int		pr_curlogentry;
+	int		pr_logsize;
+
+	const char	*pr_entered_file; /* reentrancy check */
+	long		pr_entered_line;
+
+	struct callback_entry pr_reclaimerentry;
 	void		*pr_freecheck;
 	void		*pr_qcache;
 };
@@ -246,6 +265,23 @@ extern struct pool_allocator pool_allocator_kmem_fullpage;
 extern struct pool_allocator pool_allocator_nointr_fullpage;
 #endif
 
+struct link_pool_init {	/* same as args to pool_init() */
+	struct pool *pp;
+	size_t size;
+	u_int align;
+	u_int align_offset;
+	int flags;
+	const char *wchan;
+	struct pool_allocator *palloc;
+	int ipl;
+};
+#define	POOL_INIT(pp, size, align, align_offset, flags, wchan, palloc, ipl)\
+struct pool pp;								\
+static const struct link_pool_init _link_ ## pp[1] = {			\
+	{ &pp, size, align, align_offset, flags, wchan, palloc, ipl }	\
+};									\
+__link_set_add_rodata(pools, _link_ ## pp)
+
 void		pool_subsystem_init(void);
 
 void		pool_init(struct pool *, size_t, u_int, u_int,
@@ -259,19 +295,32 @@ void		*pool_get(struct pool *, int);
 void		pool_put(struct pool *, void *);
 int		pool_reclaim(struct pool *);
 
+#ifdef POOL_DIAGNOSTIC
+/*
+ * These versions do reentrancy checking.
+ */
+void		*_pool_get(struct pool *, int, const char *, long);
+void		_pool_put(struct pool *, void *, const char *, long);
+int		_pool_reclaim(struct pool *, const char *, long);
+#define		pool_get(h, f)	_pool_get((h), (f), __FILE__, __LINE__)
+#define		pool_put(h, v)	_pool_put((h), (v), __FILE__, __LINE__)
+#define		pool_reclaim(h)	_pool_reclaim((h), __FILE__, __LINE__)
+#endif /* POOL_DIAGNOSTIC */
+
 int		pool_prime(struct pool *, int);
 void		pool_setlowat(struct pool *, int);
 void		pool_sethiwat(struct pool *, int);
 void		pool_sethardlimit(struct pool *, int, const char *, int);
-bool		pool_drain(struct pool **);
+void		pool_drain_start(struct pool **, uint64_t *);
+void		pool_drain_end(struct pool *, uint64_t);
 
 /*
  * Debugging and diagnostic aides.
  */
+void		pool_print(struct pool *, const char *);
 void		pool_printit(struct pool *, const char *,
-    void (*)(const char *, ...) __printflike(1, 2));
-void		pool_printall(const char *, void (*)(const char *, ...)
-    __printflike(1, 2));
+		    void (*)(const char *, ...));
+void		pool_printall(const char *, void (*)(const char *, ...));
 int		pool_chk(struct pool *, const char *);
 
 /*
@@ -285,7 +334,6 @@ void		pool_cache_bootstrap(pool_cache_t, size_t, u_int, u_int, u_int,
 		    int (*)(void *, void *, int), void (*)(void *, void *),
 		    void *);
 void		pool_cache_destroy(pool_cache_t);
-void		pool_cache_bootstrap_destroy(pool_cache_t);
 void		*pool_cache_get_paddr(pool_cache_t, int, paddr_t *);
 void		pool_cache_put_paddr(pool_cache_t, void *, paddr_t);
 void		pool_cache_destruct_object(pool_cache_t, void *);
@@ -302,8 +350,7 @@ void		pool_cache_cpu_init(struct cpu_info *);
 #define		pool_cache_put(pc, o) pool_cache_put_paddr((pc), (o), \
 				          POOL_PADDR_INVALID)
 
-void 		pool_whatis(uintptr_t, void (*)(const char *, ...)
-    __printflike(1, 2));
+void 		pool_whatis(uintptr_t, void (*)(const char *, ...));
 #endif /* _KERNEL */
 
 #endif /* _SYS_POOL_H_ */

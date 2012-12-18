@@ -1,4 +1,4 @@
-/*	$NetBSD: arcbios_tty.c,v 1.22 2011/04/24 16:26:59 rmind Exp $	*/
+/*	$NetBSD: arcbios_tty.c,v 1.19 2007/11/19 18:51:45 ad Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -28,9 +28,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arcbios_tty.c,v 1.22 2011/04/24 16:26:59 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arcbios_tty.c,v 1.19 2007/11/19 18:51:45 ad Exp $");
 
 #include <sys/param.h>
+#include <sys/user.h>
 #include <sys/uio.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
@@ -87,7 +88,7 @@ arcbios_ttyopen(dev_t dev, int flag, int mode, struct lwp *l)
 	s = spltty();
 
 	if (arcbios_tty[unit] == NULL) {
-		tp = arcbios_tty[unit] = tty_alloc();
+		tp = arcbios_tty[unit] = ttymalloc();
 		tty_attach(tp);
 	} else
 		tp = arcbios_tty[unit];
@@ -191,7 +192,7 @@ arcbios_tty_start(struct tty *tp)
 	ttypull(tp);
 	tp->t_state |= TS_BUSY;
 	while (tp->t_outq.c_cc != 0) {
-		arcbios_Write(ARCBIOS_STDOUT, tp->t_outq.c_cf,
+		(*ARCBIOS->Write)(ARCBIOS_STDOUT, tp->t_outq.c_cf,
 		    ndqb(&tp->t_outq, 0), &count);
 		ndflush(&tp->t_outq, count);
 	}
@@ -219,10 +220,10 @@ arcbios_tty_getchar(int *cp)
 	int32_t q;
 	u_long count;
 
-	q = arcbios_GetReadStatus(ARCBIOS_STDIN);
+	q = ARCBIOS->GetReadStatus(ARCBIOS_STDIN);
 
 	if (q == 0) {
-		arcbios_Read(ARCBIOS_STDIN, &c, 1, &count);
+		ARCBIOS->Read(ARCBIOS_STDIN, &c, 1, &count);
 		*cp = c;
 
 		return 1;

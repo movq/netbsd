@@ -1,7 +1,7 @@
-/*	$NetBSD: progressbar.c,v 1.22 2012/06/27 22:07:36 riastradh Exp $	*/
+/*	$NetBSD: progressbar.c,v 1.20 2008/09/30 03:41:53 lukem Exp $	*/
 
 /*-
- * Copyright (c) 1997-2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997-2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -31,15 +31,14 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: progressbar.c,v 1.22 2012/06/27 22:07:36 riastradh Exp $");
+__RCSID("$NetBSD: progressbar.c,v 1.20 2008/09/30 03:41:53 lukem Exp $");
 #endif /* not lint */
 
 /*
  * FTP User Program -- Misc support routines
  */
-#include <sys/param.h>
 #include <sys/types.h>
-#include <sys/time.h>
+#include <sys/param.h>
 
 #include <err.h>
 #include <errno.h>
@@ -101,7 +100,7 @@ static const char * const suffixes[] = {
 	"YiB",	/* 2^80 Yobibyte */
 #endif
 };
-#define NSUFFIXES	(int)(sizeof(suffixes) / sizeof(suffixes[0]))
+#define NSUFFIXES	(sizeof(suffixes) / sizeof(suffixes[0]))
 
 /*
  * Display a transfer progress bar if progress is non-zero.
@@ -220,7 +219,7 @@ progressmeter(int flag)
 			 * calculate the length of the `*' bar, ensuring that
 			 * the number of stars won't exceed the buffer size
 			 */
-		barlength = MIN((int)(sizeof(buf) - 1), ttywidth) - BAROVERHEAD;
+		barlength = MIN(sizeof(buf) - 1, ttywidth) - BAROVERHEAD;
 		if (prefix)
 			barlength -= (int)strlen(prefix);
 		if (barlength > 0) {

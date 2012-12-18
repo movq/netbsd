@@ -1,4 +1,4 @@
-/*	$NetBSD: files.c,v 1.11 2012/03/11 08:21:53 dholland Exp $	*/
+/*	$NetBSD: files.c,v 1.7 2007/11/30 23:19:18 dsl Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -69,6 +69,9 @@ static int	checkaux(const char *, void *);
 static int	fixcount(const char *, void *);
 static int	fixfsel(const char *, void *);
 static int	fixsel(const char *, void *);
+static int	expr_eval(struct nvlist *,
+		    int (*)(const char *, void *), void *);
+static void	expr_free(struct nvlist *);
 
 void
 initfiles(void)
@@ -82,7 +85,7 @@ initfiles(void)
 }
 
 void
-addfile(const char *path, struct condexpr *optx, int flags, const char *rule)
+addfile(const char *path, struct nvlist *optx, int flags, const char *rule)
 {
 	struct files *fi;
 	const char *dotp, *tail;
@@ -160,11 +163,11 @@ addfile(const char *path, struct condexpr *optx, int flags, const char *rule)
 	TAILQ_INSERT_TAIL(&allfiles, fi, fi_next);
 	return;
  bad:
-	condexpr_destroy(optx);
+	expr_free(optx);
 }
 
 void
-addobject(const char *path, struct condexpr *optx, int flags)
+addobject(const char *path, struct nvlist *optx, int flags)
 {
 	struct objects *oi;
 
@@ -379,7 +382,7 @@ fixdevsw(void)
 		    !expr_eval(dm->dm_opts, fixsel, NULL))
 			continue;
 
-		if (dm->dm_cmajor != NODEVMAJOR) {
+		if (dm->dm_cmajor != -1) {
 			if (ht_lookup(cdevmtab, intern(dm->dm_name)) != NULL) {
 				cfgxerror(dm->dm_srcfile, dm->dm_srcline,
 				       "device-major of character device '%s' "
@@ -401,7 +404,7 @@ fixdevsw(void)
 				      dm->dm_name, dm->dm_cmajor);
 			}
 		}
-		if (dm->dm_bmajor != NODEVMAJOR) {
+		if (dm->dm_bmajor != -1) {
 			if (ht_lookup(bdevmtab, intern(dm->dm_name)) != NULL) {
 				cfgxerror(dm->dm_srcfile, dm->dm_srcline,
 				       "device-major of block device '%s' "
@@ -493,32 +496,63 @@ fixsel(const char *name, void *context)
  * No short circuiting ever occurs.  fn must return 0 or 1 (otherwise
  * our mixing of C's bitwise & boolean here may give surprises).
  */
-int
-expr_eval(struct condexpr *expr, int (*fn)(const char *, void *), void *ctx)
+static int
+expr_eval(struct nvlist *expr, int (*fn)(const char *, void *), void *context)
 {
 	int lhs, rhs;
 
-	switch (expr->cx_type) {
+	switch (expr->nv_int) {
 
-	case CX_ATOM:
-		return ((*fn)(expr->cx_atom, ctx));
+	case FX_ATOM:
+		return ((*fn)(expr->nv_name, context));
 
-	case CX_NOT:
-		return (!expr_eval(expr->cx_not, fn, ctx));
+	case FX_NOT:
+		return (!expr_eval(expr->nv_next, fn, context));
 
-	case CX_AND:
-		lhs = expr_eval(expr->cx_and.left, fn, ctx);
-		rhs = expr_eval(expr->cx_and.right, fn, ctx);
+	case FX_AND:
+		lhs = expr_eval(expr->nv_ptr, fn, context);
+		rhs = expr_eval(expr->nv_next, fn, context);
 		return (lhs & rhs);
 
-	case CX_OR:
-		lhs = expr_eval(expr->cx_or.left, fn, ctx);
-		rhs = expr_eval(expr->cx_or.right, fn, ctx);
+	case FX_OR:
+		lhs = expr_eval(expr->nv_ptr, fn, context);
+		rhs = expr_eval(expr->nv_next, fn, context);
 		return (lhs | rhs);
 	}
-	panic("invalid condexpr type %d", (int)expr->cx_type);
+	panic("expr_eval %d", expr->nv_int);
 	/* NOTREACHED */
 	return (0);
+}
+
+/*
+ * Free an expression tree.
+ */
+static void
+expr_free(struct nvlist *expr)
+{
+	struct nvlist *rhs;
+
+	/* This loop traverses down the RHS of each subexpression. */
+	for (; expr != NULL; expr = rhs) {
+		switch (expr->nv_int) {
+
+		/* Atoms and !-exprs have no left hand side. */
+		case FX_ATOM:
+		case FX_NOT:
+			break;
+
+		/* For AND and OR nodes, free the LHS. */
+		case FX_AND:
+		case FX_OR:
+			expr_free(expr->nv_ptr);
+			break;
+
+		default:
+			panic("expr_free %d", expr->nv_int);
+		}
+		rhs = expr->nv_next;
+		nvfree(expr);
+	}
 }
 
 #ifdef DEBUG
@@ -540,7 +574,7 @@ static void
 pr0(struct nvlist *e)
 {
 
-	switch (e->nv_num) {
+	switch (e->nv_int) {
 	case FX_ATOM:
 		printf(" %s", e->nv_name);
 		return;
@@ -554,7 +588,7 @@ pr0(struct nvlist *e)
 		printf(" (|");
 		break;
 	default:
-		printf(" (?%lld?", e->nv_num);
+		printf(" (?%d?", e->nv_int);
 		break;
 	}
 	if (e->nv_ptr)

@@ -1,4 +1,4 @@
-.\" $NetBSD: pthread_condattr.3,v 1.9 2012/11/03 09:20:36 wiz Exp $
+.\" $NetBSD: pthread_condattr.3,v 1.4 2008/05/04 19:43:05 martin Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -50,11 +50,12 @@
 .\" EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\" $FreeBSD: src/lib/libpthread/man/pthread_condattr.3,v 1.10 2002/09/16 19:29:28 mini Exp $
-.Dd November 2, 2012
+.Dd January 30, 2003
 .Dt PTHREAD_CONDATTR 3
 .Os
 .Sh NAME
-.Nm pthread_condattr_init
+.Nm pthread_condattr_init ,
+.Nm pthread_condattr_destroy
 .Nd condition attribute operations
 .Sh LIBRARY
 .Lb libpthread
@@ -63,39 +64,30 @@
 .Ft int
 .Fn pthread_condattr_init "pthread_condattr_t *attr"
 .Ft int
-.Fn pthread_condattr_setclock "pthread_condattr_t *attr" "clockid_t clock"
-.Ft int
 .Fn pthread_condattr_destroy "pthread_condattr_t *attr"
 .Sh DESCRIPTION
-Condition attribute objects are used to specify parameters to the
-.Xr pthread_cond_init 3
-function.
+Condition attribute objects are used to specify parameters to
+.Fn pthread_cond_init .
 The
 .Fn pthread_condattr_init
-function initializes a condition attribute object with the default attributes
-and the
+function initializes a condition attribute object with the default attributes.
+.Pp
+The
 .Fn pthread_condattr_destroy
 function destroys a condition attribute object.
-The
-.Fn pthread_condattr_setclock
-function sets the system clock to be used for time comparisons to
-the one specified in
-.Fa clock .
-Valid clock values are
-.Dv CLOCK_MONOTONIC
-and
-.Dv CLOCK_REALTIME
-(the default).
 .Sh RETURN VALUES
 If successful, these functions return 0.
 Otherwise, an error number is returned to indicate the error.
 .Sh ERRORS
-No errors are defined for
-.Fn pthread_condattr_init .
+.Fn pthread_condattr_init
+shall fail if:
+.Bl -tag -width Er
+.It Bq Er ENOMEM
+Insufficient memory exists to initialize the condition attribute object.
+.El
 .Pp
-The
 .Fn pthread_condattr_destroy
-function may fail if:
+may fail if:
 .Bl -tag -width Er
 .It Bq Er EINVAL
 The value specified by
@@ -105,13 +97,8 @@ is invalid.
 .Sh SEE ALSO
 .Xr pthread_cond_init 3
 .Sh STANDARDS
-Both functions conform to
-.St -p1003.1-2001 .
-.Sh CAVEATS
-The usefulness of the functions is questionable as the
-.Nx
-implementation does not support any non-default attributes.
-These functions do not conform to the
-.St -p1003.1-2008
-revision of the standard, which mandates two additional attributes,
-the clock attribute and the process-shared attribute.
+.Fn pthread_condattr_init
+and
+.Fn pthread_condattr_destroy
+conform to
+.St -p1003.1-96 .

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.325 2012/11/02 00:01:20 chs Exp $ */
+/*	$NetBSD: machdep.c,v 1.282.4.4 2011/03/08 17:29:46 riz Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -71,20 +71,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.325 2012/11/02 00:01:20 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.282.4.4 2011/03/08 17:29:46 riz Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_compat_sunos.h"
 #include "opt_sparc_arch.h"
-#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/extent.h>
-#include <sys/cpu.h>
+#include <sys/savar.h>
 #include <sys/buf.h>
 #include <sys/device.h>
 #include <sys/reboot.h>
@@ -98,14 +98,8 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.325 2012/11/02 00:01:20 chs Exp $");
 #include <sys/msgbuf.h>
 #include <sys/syscallargs.h>
 #include <sys/exec.h>
-#include <sys/exec_aout.h>
 #include <sys/ucontext.h>
 #include <sys/simplelock.h>
-#include <sys/module.h>
-#include <sys/mutex.h>
-#include <sys/ras.h>
-
-#include <dev/mm.h>
 
 #include <uvm/uvm.h>		/* we use uvm.kernel_object */
 
@@ -118,15 +112,13 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.325 2012/11/02 00:01:20 chs Exp $");
 
 #define _SPARC_BUS_DMA_PRIVATE
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/frame.h>
 #include <machine/cpu.h>
-#include <machine/pcb.h>
 #include <machine/pmap.h>
 #include <machine/oldmon.h>
 #include <machine/bsd_openprom.h>
 #include <machine/bootinfo.h>
-#include <machine/eeprom.h>
 
 #include <sparc/sparc/asm.h>
 #include <sparc/sparc/cache.h>
@@ -140,9 +132,18 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.325 2012/11/02 00:01:20 chs Exp $");
 #include <sparc/dev/power.h>
 #endif
 
+struct vm_map *mb_map = NULL;
 extern paddr_t avail_end;
 
-kmutex_t fpu_mtx;
+int	physmem;
+
+struct simplelock fpulock = SIMPLELOCK_INITIALIZER;
+
+/*
+ * safepri is a safe priority for sleep to set for a spin-wait
+ * during autoconfiguration or after a panic.
+ */
+int   safepri = 0;
 
 /*
  * dvmamap24 is used to manage DVMA memory for devices that have the upper
@@ -163,7 +164,7 @@ cpu_startup(void)
 	extern int pmapdebug;
 	int opmapdebug = pmapdebug;
 #endif
-	struct pcb *pcb;
+	vaddr_t minaddr, maxaddr;
 	vsize_t size;
 	paddr_t pa;
 	char pbuf[9];
@@ -173,9 +174,8 @@ cpu_startup(void)
 #endif
 
 	/* XXX */
-	pcb = lwp_getpcb(&lwp0);
-	if (pcb && pcb->pcb_psr == 0)
-		pcb->pcb_psr = getpsr();
+	if (lwp0.l_addr && lwp0.l_addr->u_pcb.pcb_psr == 0)
+		lwp0.l_addr->u_pcb.pcb_psr = getpsr();
 
 	/*
 	 * Re-map the message buffer from its temporary address
@@ -233,7 +233,7 @@ cpu_startup(void)
 
 	/* Map first 8192 */
 	while (va < va0 + 8192) {
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
 		pa += PAGE_SIZE;
 		va += PAGE_SIZE;
 	}
@@ -244,7 +244,7 @@ cpu_startup(void)
 		if (va >= va0 + size)
 			panic("cpu_start: memory buffer size botch");
 		pa = VM_PAGE_TO_PHYS(m);
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
 		va += PAGE_SIZE;
 	}
 	pmap_update(pmap_kernel());
@@ -308,6 +308,7 @@ cpu_startup(void)
 #endif
 	}
 
+	minaddr = 0;
 	if (CPU_ISSUN4 || CPU_ISSUN4C) {
 		/*
 		 * Allocate DMA map for 24-bit devices (le, ie)
@@ -315,10 +316,16 @@ cpu_startup(void)
 		 */
 		dvmamap24 = extent_create("dvmamap24",
 					  D24_DVMA_BASE, D24_DVMA_END,
-					  0, 0, EX_NOWAIT);
+					  M_DEVBUF, 0, 0, EX_NOWAIT);
 		if (dvmamap24 == NULL)
 			panic("unable to allocate DVMA map");
 	}
+
+	/*
+	 * Finally, allocate mbuf cluster submap.
+	 */
+        mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
+	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, false, NULL);
 
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
@@ -327,8 +334,6 @@ cpu_startup(void)
 	printf("avail memory = %s\n", pbuf);
 
 	pmap_redzone();
-
-	mutex_init(&fpu_mtx, MUTEX_DEFAULT, IPL_SCHED);
 }
 
 /*
@@ -338,7 +343,7 @@ cpu_startup(void)
  */
 /* ARGSUSED */
 void
-setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
+setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 {
 	struct trapframe *tf = l->l_md.md_tf;
 	struct fpstate *fs;
@@ -351,7 +356,7 @@ setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 	 * Set the registers to 0 except for:
 	 *	%o6: stack pointer, built in exec())
 	 *	%psr: (retain CWP and PSR_S bits)
-	 *	%g1: p->p_psstrp (used by crt0)
+	 *	%g1: address of p->p_psstr (used by crt0)
 	 *	%pc,%npc: entry point of program
 	 */
 	psr = tf->tf_psr & (PSR_S | PSR_CWP);
@@ -378,12 +383,12 @@ setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 		}
 		l->l_md.md_fpu = NULL;
 		FPU_UNLOCK(s);
-		kmem_free(fs, sizeof(struct fpstate));
+		free((void *)fs, M_SUBPROC);
 		l->l_md.md_fpstate = NULL;
 	}
-	memset((void *)tf, 0, sizeof *tf);
+	bzero((void *)tf, sizeof *tf);
 	tf->tf_psr = psr;
-	tf->tf_global[1] = l->l_proc->p_psstrp;
+	tf->tf_global[1] = (int)l->l_proc->p_psstr;
 	tf->tf_pc = pack->ep_entry & ~3;
 	tf->tf_npc = tf->tf_pc + 4;
 	stack -= sizeof(struct rwindow);
@@ -470,13 +475,160 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 /*
  * Send an interrupt to process.
  */
+#ifdef COMPAT_16
+struct sigframe_sigcontext {
+	int	sf_signo;		/* signal number */
+	int	sf_code;		/* code */
+	struct	sigcontext *sf_scp;	/* SunOS user addr of sigcontext */
+	int	sf_addr;		/* SunOS compat, always 0 for now */
+	struct	sigcontext sf_sc;	/* actual sigcontext */
+};
+
+static void
+sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
+{
+	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
+	struct sigacts *ps = p->p_sigacts;
+	struct sigframe_sigcontext *fp;
+	struct trapframe *tf;
+	int addr, onstack, oldsp, newsp, error;
+	struct sigframe_sigcontext sf;
+	int sig = ksi->ksi_signo;
+	u_long code = KSI_TRAPCODE(ksi);
+	sig_t catcher = SIGACTION(p, sig).sa_handler;
+
+	tf = l->l_md.md_tf;
+	oldsp = tf->tf_out[6];
+
+	/*
+	 * Compute new user stack addresses, subtract off
+	 * one signal frame, and align.
+	 */
+	onstack =
+	    (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
+	    (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
+
+	if (onstack)
+		fp = (struct sigframe_sigcontext *)
+			((char *)l->l_sigstk.ss_sp +
+			 l->l_sigstk.ss_size);
+	else
+		fp = (struct sigframe_sigcontext *)oldsp;
+
+	fp = (struct sigframe_sigcontext *)((int)(fp - 1) & ~7);
+
+#ifdef DEBUG
+	if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
+		printf("sendsig: %s[%d] sig %d newusp %p scp %p\n",
+		    p->p_comm, p->p_pid, sig, fp, &fp->sf_sc);
+#endif
+	/*
+	 * Now set up the signal frame.  We build it in kernel space
+	 * and then copy it out.  We probably ought to just build it
+	 * directly in user space....
+	 */
+	sf.sf_signo = sig;
+	sf.sf_code = code;
+	sf.sf_scp = 0;
+	sf.sf_addr = 0;			/* XXX */
+
+	/*
+	 * Build the signal context to be used by sigreturn.
+	 */
+	sf.sf_sc.sc_onstack = l->l_sigstk.ss_flags & SS_ONSTACK;
+	sf.sf_sc.sc_mask = *mask;
+#ifdef COMPAT_13
+	/*
+	 * XXX We always have to save an old style signal mask because
+	 * XXX we might be delivering a signal to a process which will
+	 * XXX escape from the signal in a non-standard way and invoke
+	 * XXX sigreturn() directly.
+	 */
+	native_sigset_to_sigset13(mask, &sf.sf_sc.__sc_mask13);
+#endif
+	sf.sf_sc.sc_sp = oldsp;
+	sf.sf_sc.sc_pc = tf->tf_pc;
+	sf.sf_sc.sc_npc = tf->tf_npc;
+	sf.sf_sc.sc_psr = tf->tf_psr;
+	sf.sf_sc.sc_g1 = tf->tf_global[1];
+	sf.sf_sc.sc_o0 = tf->tf_out[0];
+
+	/*
+	 * Put the stack in a consistent state before we whack away
+	 * at it.  Note that write_user_windows may just dump the
+	 * registers into the pcb; we need them in the process's memory.
+	 * We also need to make sure that when we start the signal handler,
+	 * its %i6 (%fp), which is loaded from the newly allocated stack area,
+	 * joins seamlessly with the frame it was in when the signal occurred,
+	 * so that the debugger and _longjmp code can back up through it.
+	 */
+	sendsig_reset(l, sig);
+	mutex_exit(p->p_lock);
+	newsp = (int)fp - sizeof(struct rwindow);
+	write_user_windows();
+	error = (rwindow_save(l) || copyout((void *)&sf, (void *)fp, sizeof sf) ||
+	    suword(&((struct rwindow *)newsp)->rw_in[6], oldsp));
+	mutex_enter(p->p_lock);
+
+	if (error) {
+		/*
+		 * Process has trashed its stack; give it an illegal
+		 * instruction to halt it in its tracks.
+		 */
+#ifdef DEBUG
+		if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
+			printf("sendsig: window save or copyout error\n");
+#endif
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+#ifdef DEBUG
+	if (sigdebug & SDB_FOLLOW)
+		printf("sendsig: %s[%d] sig %d scp %p\n",
+		       p->p_comm, p->p_pid, sig, &fp->sf_sc);
+#endif
+	/*
+	 * Arrange to continue execution at the code copied out in exec().
+	 * It needs the function to call in %g1, and a new stack pointer.
+	 */
+	switch (ps->sa_sigdesc[sig].sd_vers) {
+	case 0:		/* legacy on-stack sigtramp */
+		addr = (int)p->p_sigctx.ps_sigcode;
+		break;
+
+	case 1:
+		addr = (int)ps->sa_sigdesc[sig].sd_tramp;
+		break;
+
+	default:
+		/* Don't know what trampoline version; kill it. */
+		addr = 0;
+		sigexit(l, SIGILL);
+	}
+
+	tf->tf_global[1] = (int)catcher;
+	tf->tf_pc = addr;
+	tf->tf_npc = addr + 4;
+	tf->tf_out[6] = newsp;
+
+	/* Remember that we're now on the signal stack. */
+	if (onstack)
+		l->l_sigstk.ss_flags |= SS_ONSTACK;
+
+#ifdef DEBUG
+	if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
+		printf("sendsig: about to return to catcher\n");
+#endif
+}
+#endif /* COMPAT_16 */
+
 struct sigframe {
 	siginfo_t sf_si;
 	ucontext_t sf_uc;
 };
 
-void
-sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
+void sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
@@ -490,6 +642,13 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	size_t ucsz;
 
 	sig = ksi->ksi_signo;
+
+#ifdef COMPAT_16
+	if (ps->sa_sigdesc[sig].sd_vers < 2) {
+		sendsig_sigcontext(ksi, mask);
+		return;
+	}
+#endif /* COMPAT_16 */
 
 	tf = l->l_md.md_tf;
 	oldsp = tf->tf_out[6];
@@ -590,12 +749,115 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 #endif
 }
 
+#ifdef COMPAT_16
+/*
+ * System call to cleanup state after a signal
+ * has been taken.  Reset signal mask and
+ * stack state from context left by sendsig (above),
+ * and return to the given trap frame (if there is one).
+ * Check carefully to make sure that the user has not
+ * modified the state to gain improper privileges or to cause
+ * a machine fault.
+ */
+/* ARGSUSED */
+int
+compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigreturn14_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(struct sigcontext *) sigcntxp;
+	} */
+	struct sigcontext sc, *scp;
+	struct trapframe *tf;
+	struct proc *p;
+	int error;
+
+	p = l->l_proc;
+
+	/* First ensure consistent stack state (see sendsig). */
+	write_user_windows();
+	if (rwindow_save(l)) {
+		mutex_enter(p->p_lock);
+		sigexit(l, SIGILL);
+	}
+#ifdef DEBUG
+	if (sigdebug & SDB_FOLLOW)
+		printf("sigreturn: %s[%d], sigcntxp %p\n",
+		    p->p_comm, p->p_pid, SCARG(uap, sigcntxp));
+#endif
+	if ((error = copyin(SCARG(uap, sigcntxp), &sc, sizeof sc)) != 0)
+		return (error);
+	scp = &sc;
+
+	tf = l->l_md.md_tf;
+	/*
+	 * Only the icc bits in the psr are used, so it need not be
+	 * verified.  pc and npc must be multiples of 4.  This is all
+	 * that is required; if it holds, just do it.
+	 */
+	if (((scp->sc_pc | scp->sc_npc) & 3) != 0)
+		return (EINVAL);
+
+	/* take only psr ICC field */
+	tf->tf_psr = (tf->tf_psr & ~PSR_ICC) | (scp->sc_psr & PSR_ICC);
+	tf->tf_pc = scp->sc_pc;
+	tf->tf_npc = scp->sc_npc;
+	tf->tf_global[1] = scp->sc_g1;
+	tf->tf_out[0] = scp->sc_o0;
+	tf->tf_out[6] = scp->sc_sp;
+
+	mutex_enter(p->p_lock);
+	if (scp->sc_onstack & SS_ONSTACK)
+		l->l_sigstk.ss_flags |= SS_ONSTACK;
+	else
+		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
+	/* Restore signal mask */
+	(void) sigprocmask1(l, SIG_SETMASK, &scp->sc_mask, 0);
+	mutex_exit(p->p_lock);
+
+	return (EJUSTRETURN);
+}
+#endif /* COMPAT_16 */
+
+/*
+ * cpu_upcall:
+ *
+ *	Send an an upcall to userland.
+ */
+void
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+	   void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct trapframe *tf;
+	vaddr_t addr;
+
+	tf = l->l_md.md_tf;
+	addr = (vaddr_t) upcall;
+
+	/* Arguments to the upcall... */
+	tf->tf_out[0] = type;
+	tf->tf_out[1] = (vaddr_t) sas;
+	tf->tf_out[2] = nevents;
+	tf->tf_out[3] = ninterrupted;
+	tf->tf_out[4] = (vaddr_t) ap;
+
+	/*
+	 * Ensure the stack is double-word aligned, and provide a
+	 * C call frame.
+	 */
+	sp = (void *)(((vaddr_t)sp & ~0x7) - CCFSZ);
+
+	/* Arrange to begin execution at the upcall handler. */
+	tf->tf_pc = addr;
+	tf->tf_npc = addr + 4;
+	tf->tf_out[6] = (vaddr_t) sp;
+	tf->tf_out[7] = -1;		/* "you lose" if upcall returns */
+}
+
 void
 cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 {
 	struct trapframe *tf = (struct trapframe *)l->l_md.md_tf;
 	__greg_t *r = mcp->__gregs;
-	__greg_t ras_pc;
 #ifdef FPU_CONTEXT
 	__fpregset_t *f = &mcp->__fpregs;
 	struct fpstate *fps = l->l_md.md_fpstate;
@@ -607,7 +869,7 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 	 * registers into the pcb; we need them in the process's memory.
 	 */
 	write_user_windows();
-	if (rwindow_save(l)) {
+	if ((l->l_flag & LW_SA_SWITCHING) == 0 && rwindow_save(l)) {
 		mutex_enter(l->l_proc->p_lock);
 		sigexit(l, SIGILL);
 	}
@@ -635,19 +897,13 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 	r[_REG_O6] = tf->tf_out[6];
 	r[_REG_O7] = tf->tf_out[7];
 
-	if ((ras_pc = (__greg_t)ras_lookup(l->l_proc,
-	    (void *) r[_REG_PC])) != -1) {
-		r[_REG_PC] = ras_pc;
-		r[_REG_nPC] = ras_pc + 4;
-	}
-
-	*flags |= (_UC_CPU|_UC_TLSBASE);
+	*flags |= _UC_CPU;
 
 #ifdef FPU_CONTEXT
 	/*
 	 * Get the floating point registers
 	 */
-	memcpy(f->__fpu_regs, fps->fs_regs, sizeof(fps->fs_regs));
+	bcopy(fps->fs_regs, f->__fpu_regs, sizeof(fps->fs_regs));
 	f->__fp_nqsize = sizeof(struct fp_qentry);
 	f->__fp_nqel = fps->fs_qsize;
 	f->__fp_fsr = fps->fs_fsr;
@@ -674,23 +930,6 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 	return;
 }
 
-int
-cpu_mcontext_validate(struct lwp *l, const mcontext_t *mc)
-{
-	const __greg_t *gr = mc->__gregs;
-
-	/*
- 	 * Only the icc bits in the psr are used, so it need not be
- 	 * verified.  pc and npc must be multiples of 4.  This is all
- 	 * that is required; if it holds, just do it.
-	 */
-	if (((gr[_REG_PC] | gr[_REG_nPC]) & 3) != 0 ||
-	    gr[_REG_PC] == 0 || gr[_REG_nPC] == 0)
-		return EINVAL;
-
-	return 0;
-}
-
 /*
  * Set to mcontext specified.
  * Return to previous pc and psl as specified by
@@ -706,7 +945,6 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 	struct trapframe *tf;
 	const __greg_t *r = mcp->__gregs;
 	struct proc *p = l->l_proc;
-	int error;
 #ifdef FPU_CONTEXT
 	__fpregset_t *f = &mcp->__fpregs;
 	struct fpstate *fps = l->l_md.md_fpstate;
@@ -725,13 +963,18 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 #endif
 
 	if (flags & _UC_CPU) {
-		/* Validate */
-		error = cpu_mcontext_validate(l, mcp);
-		if (error)
-			return error;
-
 		/* Restore register context. */
 		tf = (struct trapframe *)l->l_md.md_tf;
+
+		/*
+		 * Only the icc bits in the psr are used, so it need not be
+		 * verified.  pc and npc must be multiples of 4.  This is all
+		 * that is required; if it holds, just do it.
+		 */
+		if (((r[_REG_PC] | r[_REG_nPC]) & 3) != 0) {
+			printf("pc or npc are not multiples of 4!\n");
+			return (EINVAL);
+		}
 
 		/* take only psr ICC field */
 		tf->tf_psr = (tf->tf_psr & ~PSR_ICC) |
@@ -747,8 +990,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_global[4] = r[_REG_G4];
 		tf->tf_global[5] = r[_REG_G5];
 		tf->tf_global[6] = r[_REG_G6];
-		/* done in lwp_setprivate */
-		/* tf->tf_global[7] = r[_REG_G7]; */
+		tf->tf_global[7] = r[_REG_G7];
 
 		tf->tf_out[0] = r[_REG_O0];
 		tf->tf_out[1] = r[_REG_O1];
@@ -758,9 +1000,6 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_out[5] = r[_REG_O5];
 		tf->tf_out[6] = r[_REG_O6];
 		tf->tf_out[7] = r[_REG_O7];
-
-		if (flags & _UC_TLSBASE)
-			lwp_setprivate(l, (void *)(uintptr_t)r[_REG_G7]);
 	}
 
 #ifdef FPU_CONTEXT
@@ -776,7 +1015,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 #endif
 			return (EINVAL);
 		}
-		memcpy(fps->fs_regs, f->__fpu_regs, sizeof(fps->fs_regs));
+		bcopy(f->__fpu_regs, fps->fs_regs, sizeof(fps->fs_regs));
 		fps->fs_qsize = f->__fp_nqel;
 		fps->fs_fsr = f->__fp_fsr;
 		if (f->__fp_q != NULL) {
@@ -862,8 +1101,6 @@ cpu_reboot(int howto, char *user_boot_string)
 	/* Run any shutdown hooks. */
 	doshutdownhooks();
 
-	pmf_system_shutdown(boothowto);
-
 	/* If powerdown was requested, do it. */
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN) {
 		prom_interpret("power-off");
@@ -901,7 +1138,7 @@ cpu_reboot(int howto, char *user_boot_string)
 		i = strlen(user_boot_string);
 		if (i > sizeof(str) - sizeof(opts) - 1)
 			prom_boot(user_boot_string);	/* XXX */
-		memcpy(str, user_boot_string, i);
+		bcopy(user_boot_string, str, i);
 		if (opts[0] != '\0')
 			str[i] = ' ';
 	}
@@ -917,11 +1154,16 @@ long	dumplo = 0;
 void
 cpu_dumpconf(void)
 {
+	const struct bdevsw *bdev;
 	int nblks, dumpblks;
 
 	if (dumpdev == NODEV)
 		return;
-	nblks = bdev_size(dumpdev);
+	bdev = bdevsw_lookup(dumpdev);
+	if (bdev == NULL || bdev->d_psize == NULL)
+		return;
+
+	nblks = (*bdev->d_psize)(dumpdev);
 
 	dumpblks = ctod(physmem) + pmap_dumpsize();
 	if (dumpblks > (nblks - ctod(1)))
@@ -986,14 +1228,14 @@ dumpsys(void)
 	if (dumpsize == 0)
 		cpu_dumpconf();
 	if (dumplo <= 0) {
-		printf("\ndump to dev %u,%u not possible\n",
-		    major(dumpdev), minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
+		    minor(dumpdev));
 		return;
 	}
-	printf("\ndumping to dev %u,%u offset %ld\n",
-	    major(dumpdev), minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
+	    minor(dumpdev), dumplo);
 
-	psize = bdev_size(dumpdev);
+	psize = (*bdev->d_psize)(dumpdev);
 	printf("dump ");
 	if (psize == -1) {
 		printf("area unavailable\n");
@@ -1079,9 +1321,10 @@ stackdump(void)
 	printf("Frame pointer is at %p\n", fp);
 	printf("Call traceback:\n");
 	while (fp && ((u_long)fp >> PGSHIFT) == ((u_long)sfp >> PGSHIFT)) {
-		printf("  pc = 0x%x  args = (0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x) fp = %p\n",
+		printf("  pc = 0x%x  args = (0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x) fp = %p\n",
 		    fp->fr_pc, fp->fr_arg[0], fp->fr_arg[1], fp->fr_arg[2],
-		    fp->fr_arg[3], fp->fr_arg[4], fp->fr_arg[5], fp->fr_fp);
+		    fp->fr_arg[3], fp->fr_arg[4], fp->fr_arg[5], fp->fr_arg[6],
+		    fp->fr_fp);
 		fp = fp->fr_fp;
 	}
 }
@@ -1097,17 +1340,18 @@ cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 void
 oldmon_w_trace(u_long va)
 {
-	struct cpu_info * const ci = curcpu();
 	u_long stop;
 	struct frame *fp;
 
-	printf("curlwp = %p, pid %d\n", curlwp, curproc->p_pid);
+	if (curlwp)
+		printf("curlwp = %p, pid %d\n",
+			curlwp, curproc->p_pid);
+	else
+		printf("no curlwp\n");
 
-	printf("uvm: cpu%u: swtch %"PRIu64", trap %"PRIu64", sys %"PRIu64", "
-	    "intr %"PRIu64", soft %"PRIu64", faults %"PRIu64"\n",
-	    cpu_index(ci), ci->ci_data.cpu_nswtch, ci->ci_data.cpu_ntrap,
-	    ci->ci_data.cpu_nsyscall, ci->ci_data.cpu_nintr,
-	    ci->ci_data.cpu_nsoft, ci->ci_data.cpu_nfault);
+	printf("uvm: swtch %d, trap %d, sys %d, intr %d, soft %d, faults %d\n",
+	    uvmexp.swtch, uvmexp.traps, uvmexp.syscalls, uvmexp.intrs,
+		uvmexp.softs, uvmexp.faults);
 	write_user_windows();
 
 #define round_up(x) (( (x) + (PAGE_SIZE-1) ) & (~(PAGE_SIZE-1)) )
@@ -1117,9 +1361,9 @@ oldmon_w_trace(u_long va)
 	printf("stop at 0x%lx\n", stop);
 	fp = (struct frame *) va;
 	while (round_up((u_long) fp) == stop) {
-		printf("  0x%x(0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x) fp %p\n", fp->fr_pc,
+		printf("  0x%x(0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x) fp %p\n", fp->fr_pc,
 		    fp->fr_arg[0], fp->fr_arg[1], fp->fr_arg[2], fp->fr_arg[3],
-		    fp->fr_arg[4], fp->fr_arg[5], fp->fr_fp);
+		    fp->fr_arg[4], fp->fr_arg[5], fp->fr_arg[6], fp->fr_fp);
 		fp = fp->fr_fp;
 		if (fp == NULL)
 			break;
@@ -1155,6 +1399,7 @@ int
 ldcontrolb(void *addr)
 {
 	struct pcb *xpcb;
+	extern struct user *proc0paddr;
 	u_long saveonfault;
 	int res;
 	int s;
@@ -1165,7 +1410,10 @@ ldcontrolb(void *addr)
 	}
 
 	s = splhigh();
-	xpcb = lwp_getpcb(curlwp);
+	if (curlwp == NULL)
+		xpcb = (struct pcb *)proc0paddr;
+	else
+		xpcb = &curlwp->l_addr->u_pcb;
 
 	saveonfault = (u_long)xpcb->pcb_onfault;
         res = xldcontrolb(addr, xpcb);
@@ -1241,12 +1489,6 @@ wcopy(const void *vb1, void *vb2, u_int l)
 		*b2 = *b1e;
 }
 
-#ifdef MODULAR
-void
-module_init_md(void)
-{
-}
-#endif
 
 /*
  * Common function for DMA map creation.  May be called by bus-specific
@@ -1279,7 +1521,7 @@ _bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 	    (flags & BUS_DMA_NOWAIT) ? M_NOWAIT : M_WAITOK)) == NULL)
 		return (ENOMEM);
 
-	memset(mapstore, 0, mapsize);
+	bzero(mapstore, mapsize);
 	map = (struct sparc_bus_dmamap *)mapstore;
 	map->_dm_size = size;
 	map->_dm_segcnt = nsegments;
@@ -1627,7 +1869,7 @@ no_fit:
 #endif
 #endif
 		pmap_kenter_pa(dva, (pa & -pagesz) | PMAP_NC,
-		    VM_PROT_READ | VM_PROT_WRITE, 0);
+		    VM_PROT_READ | VM_PROT_WRITE);
 
 		dva += pagesz;
 		va += sgsize;
@@ -1693,7 +1935,7 @@ sun4_dmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 #endif
 #endif
 		pmap_kenter_pa(dva, (pa & -pagesz) | PMAP_NC,
-		    VM_PROT_READ | VM_PROT_WRITE, 0);
+		    VM_PROT_READ | VM_PROT_WRITE);
 
 		dva += pagesz;
 		sgsize -= pagesz;
@@ -1786,8 +2028,7 @@ sun4_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 			panic("sun4_dmamem_map: size botch");
 
 		pa = VM_PAGE_TO_PHYS(m);
-		pmap_kenter_pa(va, pa | PMAP_NC,
-		    VM_PROT_READ | VM_PROT_WRITE, 0);
+		pmap_kenter_pa(va, pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE);
 
 		va += PAGE_SIZE;
 		size -= PAGE_SIZE;
@@ -1836,950 +2077,6 @@ static void	*sparc_mainbus_intr_establish(bus_space_tag_t, int, int,
 						   void (*)(void));
 static void     sparc_bus_barrier(bus_space_tag_t, bus_space_handle_t,
 					bus_size_t, bus_size_t, int);
-
-int
-bus_space_map(
-	bus_space_tag_t	t,
-	bus_addr_t	a,
-	bus_size_t	s,
-	int		f,
-	bus_space_handle_t *hp)
-{
-	return (*t->sparc_bus_map)(t, a, s, f, (vaddr_t)0, hp);
-}
-
-int
-bus_space_map2(
-	bus_space_tag_t	t,
-	bus_addr_t	a,
-	bus_size_t	s,
-	int		f,
-	vaddr_t		v,
-	bus_space_handle_t *hp)
-{
-	return (*t->sparc_bus_map)(t, a, s, f, v, hp);
-}
-
-void
-bus_space_unmap(
-	bus_space_tag_t t,
-	bus_space_handle_t h,
-	bus_size_t	s)
-{
-	(*t->sparc_bus_unmap)(t, h, s);
-}
-
-int
-bus_space_subregion(
-	bus_space_tag_t	t,
-	bus_space_handle_t h,
-	bus_size_t	o,
-	bus_size_t	s,
-	bus_space_handle_t *hp)
-{
-	return (*t->sparc_bus_subregion)(t, h, o, s, hp);
-}
-
-paddr_t
-bus_space_mmap(
-	bus_space_tag_t	t,
-	bus_addr_t	a,
-	off_t		o,
-	int		p,
-	int		f)
-{
-	return (*t->sparc_bus_mmap)(t, a, o, p, f);
-}
-
-void *
-bus_intr_establish(
-	bus_space_tag_t t,
-	int	p,
-	int	l,
-	int	(*h)(void *),
-	void	*a)
-{
-	return (*t->sparc_intr_establish)(t, p, l, h, a, NULL);
-}
-
-void *
-bus_intr_establish2(
-	bus_space_tag_t t,
-	int	p,
-	int	l,
-	int	(*h)(void *),
-	void	*a,
-	void	(*v)(void))
-{
-	return (*t->sparc_intr_establish)(t, p, l, h, a, v);
-}
-
-void
-bus_space_barrier(
-	bus_space_tag_t t,
-	bus_space_handle_t h,
-	bus_size_t o,
-	bus_size_t s,
-	int f)
-{
-	(*t->sparc_bus_barrier)(t, h, o, s, f);
-}
-
-void
-bus_space_write_multi_stream_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint16_t		*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		bus_space_write_2_real(t, h, o, *a++);
-}
-
-void
-bus_space_write_multi_stream_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint32_t		*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		bus_space_write_4_real(t, h, o, *a++);
-}
-
-void
-bus_space_write_multi_stream_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint64_t		*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		bus_space_write_8_real(t, h, o, *a++);
-}
-
-
-/*
- *	void bus_space_set_multi_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset, u_intN_t val,
- *	    bus_size_t count);
- *
- * Write the 1, 2, 4, or 8 byte value `val' to bus space described
- * by tag/handle/offset `count' times.
- */
-void
-bus_space_set_multi_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint8_t		v,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		bus_space_write_1(t, h, o, v);
-}
-
-void
-bus_space_set_multi_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint16_t		v,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		bus_space_write_2(t, h, o, v);
-}
-
-void
-bus_space_set_multi_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint32_t		v,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		bus_space_write_4(t, h, o, v);
-}
-
-void
-bus_space_set_multi_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint64_t		v,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		bus_space_write_8(t, h, o, v);
-}
-
-
-/*
- *	void bus_space_read_region_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t off,
- *	    u_intN_t *addr, bus_size_t count);
- *
- */
-void
-bus_space_read_region_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint8_t			*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o++)
-		*a = bus_space_read_1(t, h, o);
-}
-
-void
-bus_space_read_region_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint16_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o+=2)
-		*a = bus_space_read_2(t, h, o);
-}
-
-void
-bus_space_read_region_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint32_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o+=4)
-		*a = bus_space_read_4(t, h, o);
-}
-
-void
-bus_space_read_region_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint64_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o+=8)
-		*a = bus_space_read_8(t, h, o);
-}
-
-/*
- *	void bus_space_write_region_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t off,
- *	    u_intN_t *addr, bus_size_t count);
- *
- */
-void
-bus_space_write_region_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint8_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o++)
-		bus_space_write_1(t, h, o, *a);
-}
-
-void
-bus_space_write_region_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint16_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o+=2)
-		bus_space_write_2(t, h, o, *a);
-}
-
-void
-bus_space_write_region_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint32_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o+=4)
-		bus_space_write_4(t, h, o, *a);
-}
-
-void
-bus_space_write_region_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint64_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o+=8)
-		bus_space_write_8(t, h, o, *a);
-}
-
-
-/*
- *	void bus_space_set_region_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t off,
- *	    u_intN_t *addr, bus_size_t count);
- *
- */
-void
-bus_space_set_region_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint8_t		v,
-	bus_size_t		c)
-{
-	for (; c; c--, o++)
-		bus_space_write_1(t, h, o, v);
-}
-
-void
-bus_space_set_region_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint16_t		v,
-	bus_size_t		c)
-{
-	for (; c; c--, o+=2)
-		bus_space_write_2(t, h, o, v);
-}
-
-void
-bus_space_set_region_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint32_t		v,
-	bus_size_t		c)
-{
-	for (; c; c--, o+=4)
-		bus_space_write_4(t, h, o, v);
-}
-
-void
-bus_space_set_region_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint64_t		v,
-	bus_size_t		c)
-{
-	for (; c; c--, o+=8)
-		bus_space_write_8(t, h, o, v);
-}
-
-
-/*
- *	void bus_space_copy_region_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh1, bus_size_t off1,
- *	    bus_space_handle_t bsh2, bus_size_t off2,
- *	    bus_size_t count);
- *
- * Copy `count' 1, 2, 4, or 8 byte values from bus space starting
- * at tag/bsh1/off1 to bus space starting at tag/bsh2/off2.
- */
-void
-bus_space_copy_region_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h1,
-	bus_size_t		o1,
-	bus_space_handle_t	h2,
-	bus_size_t		o2,
-	bus_size_t		c)
-{
-	for (; c; c--, o1++, o2++)
-	    bus_space_write_1(t, h1, o1, bus_space_read_1(t, h2, o2));
-}
-
-void
-bus_space_copy_region_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h1,
-	bus_size_t		o1,
-	bus_space_handle_t	h2,
-	bus_size_t		o2,
-	bus_size_t		c)
-{
-	for (; c; c--, o1+=2, o2+=2)
-	    bus_space_write_2(t, h1, o1, bus_space_read_2(t, h2, o2));
-}
-
-void
-bus_space_copy_region_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h1,
-	bus_size_t		o1,
-	bus_space_handle_t	h2,
-	bus_size_t		o2,
-	bus_size_t		c)
-{
-	for (; c; c--, o1+=4, o2+=4)
-	    bus_space_write_4(t, h1, o1, bus_space_read_4(t, h2, o2));
-}
-
-void
-bus_space_copy_region_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h1,
-	bus_size_t		o1,
-	bus_space_handle_t	h2,
-	bus_size_t		o2,
-	bus_size_t		c)
-{
-	for (; c; c--, o1+=8, o2+=8)
-	    bus_space_write_8(t, h1, o1, bus_space_read_8(t, h2, o2));
-}
-
-/*
- *	void bus_space_read_region_stream_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t off,
- *	    u_intN_t *addr, bus_size_t count);
- *
- */
-void
-bus_space_read_region_stream_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint8_t			*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o++)
-		*a = bus_space_read_stream_1(t, h, o);
-}
-void
-bus_space_read_region_stream_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint16_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o+=2)
-		*a = bus_space_read_stream_2(t, h, o);
- }
-void
-bus_space_read_region_stream_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint32_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o+=4)
-		*a = bus_space_read_stream_4(t, h, o);
-}
-void
-bus_space_read_region_stream_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint64_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o+=8)
-		*a = bus_space_read_stream_8(t, h, o);
-}
-
-/*
- *	void bus_space_write_region_stream_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t off,
- *	    u_intN_t *addr, bus_size_t count);
- *
- */
-void
-bus_space_write_region_stream_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint8_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o++)
-		bus_space_write_stream_1(t, h, o, *a);
-}
-
-void
-bus_space_write_region_stream_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint16_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o+=2)
-		bus_space_write_stream_2(t, h, o, *a);
-}
-
-void
-bus_space_write_region_stream_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint32_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o+=4)
-		bus_space_write_stream_4(t, h, o, *a);
-}
-
-void
-bus_space_write_region_stream_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint64_t		*a,
-	bus_size_t		c)
-{
-	for (; c; a++, c--, o+=8)
-		bus_space_write_stream_8(t, h, o, *a);
-}
-
-
-/*
- *	void bus_space_set_region_stream_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t off,
- *	    u_intN_t *addr, bus_size_t count);
- *
- */
-void
-bus_space_set_region_stream_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint8_t		v,
-	bus_size_t		c)
-{
-	for (; c; c--, o++)
-		bus_space_write_stream_1(t, h, o, v);
-}
-
-void
-bus_space_set_region_stream_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint16_t		v,
-	bus_size_t		c)
-{
-	for (; c; c--, o+=2)
-		bus_space_write_stream_2(t, h, o, v);
-}
-
-void
-bus_space_set_region_stream_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint32_t		v,
-	bus_size_t		c)
-{
-	for (; c; c--, o+=4)
-		bus_space_write_stream_4(t, h, o, v);
-}
-
-void
-bus_space_set_region_stream_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint64_t		v,
-	bus_size_t		c)
-{
-	for (; c; c--, o+=8)
-		bus_space_write_stream_8(t, h, o, v);
-}
-
-/*
- *	void bus_space_copy_region_stream_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh1, bus_size_t off1,
- *	    bus_space_handle_t bsh2, bus_size_t off2,
- *	    bus_size_t count);
- *
- * Copy `count' 1, 2, 4, or 8 byte values from bus space starting
- * at tag/bsh1/off1 to bus space starting at tag/bsh2/off2.
- */
-
-void
-bus_space_copy_region_stream_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h1,
-	bus_size_t		o1,
-	bus_space_handle_t	h2,
-	bus_size_t		o2,
-	bus_size_t		c)
-{
-	for (; c; c--, o1++, o2++)
-	    bus_space_write_stream_1(t, h1, o1, bus_space_read_stream_1(t, h2, o2));
-}
-
-void
-bus_space_copy_region_stream_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h1,
-	bus_size_t		o1,
-	bus_space_handle_t	h2,
-	bus_size_t		o2,
-	bus_size_t		c)
-{
-	for (; c; c--, o1+=2, o2+=2)
-	    bus_space_write_stream_2(t, h1, o1, bus_space_read_stream_2(t, h2, o2));
-}
-
-void
-bus_space_copy_region_stream_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h1,
-	bus_size_t		o1,
-	bus_space_handle_t	h2,
-	bus_size_t		o2,
-	bus_size_t		c)
-{
-	for (; c; c--, o1+=4, o2+=4)
-	    bus_space_write_stream_4(t, h1, o1, bus_space_read_stream_4(t, h2, o2));
-}
-
-void
-bus_space_copy_region_stream_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h1,
-	bus_size_t		o1,
-	bus_space_handle_t	h2,
-	bus_size_t		o2,
-	bus_size_t		c)
-{
-	for (; c; c--, o1+=8, o2+=8)
-	    bus_space_write_stream_8(t, h1, o1, bus_space_read_8(t, h2, o2));
-}
-
-void
-bus_space_write_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint8_t			v)
-{
-	(*t->sparc_write_1)(t, h, o, v);
-}
-
-void
-bus_space_write_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint16_t		v)
-{
-	(*t->sparc_write_2)(t, h, o, v);
-}
-
-void
-bus_space_write_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint32_t		v)
-{
-	(*t->sparc_write_4)(t, h, o, v);
-}
-
-void
-bus_space_write_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint64_t		v)
-{
-	(*t->sparc_write_8)(t, h, o, v);
-}
-
-#if __SLIM_SPARC_BUS_SPACE
-
-void
-bus_space_write_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint8_t			v)
-{
-	__insn_barrier();
-	bus_space_write_1_real(t, h, o, v);
-}
-
-void
-bus_space_write_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint16_t		v)
-{
-	__insn_barrier();
-	bus_space_write_2_real(t, h, o, v);
-}
-
-void
-bus_space_write_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint32_t		v)
-{
-	__insn_barrier();
-	bus_space_write_4_real(t, h, o, v);
-}
-
-void
-bus_space_write_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint64_t		v)
-{
-	__insn_barrier();
-	bus_space_write_8_real(t, h, o, v);
-}
-
-#endif /* __SLIM_SPARC_BUS_SPACE */
-
-uint8_t
-bus_space_read_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o)
-{
-	return (*t->sparc_read_1)(t, h, o);
-}
-
-uint16_t
-bus_space_read_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o)
-{
-	return (*t->sparc_read_2)(t, h, o);
-}
-
-uint32_t
-bus_space_read_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o)
-{
-	return (*t->sparc_read_4)(t, h, o);
-}
-
-uint64_t
-bus_space_read_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o)
-{
-	return (*t->sparc_read_8)(t, h, o);
-}
-
-#if __SLIM_SPARC_BUS_SPACE
-uint8_t
-bus_space_read_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o)
-{
-	__insn_barrier();
-	return bus_space_read_1_real(t, h, o);
-}
-
-uint16_t
-bus_space_read_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o)
-{
-	__insn_barrier();
-	return bus_space_read_2_real(t, h, o);
-}
-
-uint32_t
-bus_space_read_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o)
-{
-	__insn_barrier();
-	return bus_space_read_4_real(t, h, o);
-}
-
-uint64_t
-bus_space_read_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o)
-{
-	__insn_barrier();
-	return bus_space_read_8_real(t, h, o);
-}
-
-#endif /* __SLIM_SPARC_BUS_SPACE */
-
-void
-bus_space_read_multi_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint8_t			*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_1(t, h, o);
-}
-
-void
-bus_space_read_multi_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint16_t		*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_2(t, h, o);
-}
-
-void
-bus_space_read_multi_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint32_t		*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_4(t, h, o);
-}
-
-void
-bus_space_read_multi_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint64_t		*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_8(t, h, o);
-}
-
-/*
- *	void bus_space_read_multi_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    u_intN_t *addr, bus_size_t count);
- *
- * Read `count' 1, 2, 4, or 8 byte quantities from bus space
- * described by tag/handle/offset and copy into buffer provided.
- */
-void
-bus_space_read_multi_stream_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint16_t		*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_2_real(t, h, o);
-}
-
-void
-bus_space_read_multi_stream_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint32_t		*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_4_real(t, h, o);
-}
-
-void
-bus_space_read_multi_stream_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	uint64_t		*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		*a++ = bus_space_read_8_real(t, h, o);
-}
-
-/*
- *	void bus_space_write_multi_N(bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    const u_intN_t *addr, bus_size_t count);
- *
- * Write `count' 1, 2, 4, or 8 byte quantities from the buffer
- * provided to bus space described by tag/handle/offset.
- */
-void
-bus_space_write_multi_1(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint8_t		*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		bus_space_write_1(t, h, o, *a++);
-}
-
-void
-bus_space_write_multi_2(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint16_t		*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		bus_space_write_2(t, h, o, *a++);
-}
-
-void
-bus_space_write_multi_4(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint32_t		*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		bus_space_write_4(t, h, o, *a++);
-}
-
-void
-bus_space_write_multi_8(
-	bus_space_tag_t		t,
-	bus_space_handle_t	h,
-	bus_size_t		o,
-	const uint64_t		*a,
-	bus_size_t		c)
-{
-	while (c-- > 0)
-		bus_space_write_8(t, h, o, *a++);
-}
 
 /*
  * Allocate a new bus tag and have it inherit the methods of the
@@ -2830,8 +2127,8 @@ bus_space_translate_address_generic(struct openprom_range *ranges, int nranges,
 	return (EINVAL);
 }
 
-static int
-sparc_bus_map_iodev(bus_space_tag_t t, bus_addr_t ba, bus_size_t size, int flags,
+int
+sparc_bus_map(bus_space_tag_t t, bus_addr_t ba, bus_size_t size, int flags,
 	      vaddr_t va, bus_space_handle_t *hp)
 {
 	vaddr_t v;
@@ -2888,7 +2185,7 @@ static	vaddr_t iobase;
 	pa = trunc_page(pa);
 	do {
 		pmap_kenter_pa(v, pa | pmtype | PMAP_NC,
-		    VM_PROT_READ | VM_PROT_WRITE, 0);
+		    VM_PROT_READ | VM_PROT_WRITE);
 		v += PAGE_SIZE;
 		pa += PAGE_SIZE;
 	} while ((size -= PAGE_SIZE) > 0);
@@ -2897,43 +2194,10 @@ static	vaddr_t iobase;
 	return (0);
 }
 
-static int
-sparc_bus_map_large(bus_space_tag_t t, bus_addr_t ba,
-		    bus_size_t size, int flags, bus_space_handle_t *hp)
-{
-	vaddr_t v = 0;
-
-	if (uvm_map(kernel_map, &v, size, NULL, 0, PAGE_SIZE,
-	    UVM_MAPFLAG(UVM_PROT_RW, UVM_PROT_RW, UVM_INH_SHARE, UVM_ADV_NORMAL,
-			0)) == 0) {
-		return sparc_bus_map_iodev(t, ba, size, flags, v, hp);
-	}
-	return -1;
-}
-
-int
-sparc_bus_map(bus_space_tag_t t, bus_addr_t ba,
-		    bus_size_t size, int flags, vaddr_t va,
-		    bus_space_handle_t *hp)
-{
-
-	if (flags & BUS_SPACE_MAP_LARGE) {
-		return sparc_bus_map_large(t, ba, size, flags, hp);
-	} else
-		return sparc_bus_map_iodev(t, ba, size, flags, va, hp);
-		
-}
-
 int
 sparc_bus_unmap(bus_space_tag_t t, bus_space_handle_t bh, bus_size_t size)
 {
 	vaddr_t va = trunc_page((vaddr_t)bh);
-
-	/*
-	 * XXX
-	 * mappings with BUS_SPACE_MAP_LARGE need additional care here
-	 * we can just check if the VA is in the IODEV range
-	 */
 
 	pmap_kremove(va, round_page(size));
 	pmap_update(pmap_kernel());
@@ -3018,7 +2282,7 @@ sparc_mainbus_intr_establish(bus_space_tag_t t, int pil, int level,
 
 	ih->ih_fun = handler;
 	ih->ih_arg = arg;
-	intr_establish(pil, level, ih, fastvec, false);
+	intr_establish(pil, level, ih, fastvec);
 	return (ih);
 }
 
@@ -3111,39 +2375,3 @@ struct sparc_bus_space_tag mainbus_space_tag = {
 	sparc_bus_space_write_4,	/* bus_space_write_4 */
 	sparc_bus_space_write_8		/* bus_space_write_8 */
 };
-
-int
-mm_md_physacc(paddr_t pa, vm_prot_t prot)
-{
-
-	return pmap_pa_exists(pa) ? 0 : EFAULT;
-}
-
-int
-mm_md_kernacc(void *ptr, vm_prot_t prot, bool *handled)
-{
-	extern vaddr_t prom_vstart;
-	extern vaddr_t prom_vend;
-	const vaddr_t v = (vaddr_t)ptr;
-
-	*handled = (v >= MSGBUF_VA && v < MSGBUF_VA + PAGE_SIZE) ||
-	    (v >= prom_vstart && v < prom_vend && (prot & VM_PROT_WRITE) == 0);
-	return 0;
-}
-
-int
-mm_md_readwrite(dev_t dev, struct uio *uio)
-{
-
-	switch (minor(dev)) {
-#if defined(SUN4)
-	case DEV_EEPROM:
-		if (cputyp == CPU_SUN4)
-			return eeprom_uio(uio);
-		else
-#endif
-		return ENXIO;
-	default:
-		return ENXIO;
-	}
-}

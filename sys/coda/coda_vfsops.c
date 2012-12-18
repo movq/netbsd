@@ -1,4 +1,4 @@
-/*	$NetBSD: coda_vfsops.c,v 1.74 2012/08/02 16:06:58 christos Exp $	*/
+/*	$NetBSD: coda_vfsops.c,v 1.66 2008/05/10 02:26:09 rumble Exp $	*/
 
 /*
  *
@@ -45,9 +45,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.74 2012/08/02 16:06:58 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.66 2008/05/10 02:26:09 rumble Exp $");
 
-#ifndef _KERNEL_OPT
+#ifdef	_LKM
 #define	NVCODA 4
 #else
 #include <vcoda.h>
@@ -76,12 +76,17 @@ __KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.74 2012/08/02 16:06:58 christos Ex
 #include <miscfs/specfs/specdev.h>
 #include <miscfs/genfs/genfs.h>
  
-MODULE(MODULE_CLASS_VFS, coda, "vcoda");
+MODULE(MODULE_CLASS_VFS, coda, NULL);
 
+MALLOC_DEFINE(M_CODA, "coda", "Coda file system structures and tables");
+
+int codadebug = 0;
+
+int coda_vfsop_print_entry = 0;
 #define ENTRY if(coda_vfsop_print_entry) myprintf(("Entered %s\n",__func__))
 
-extern struct vnode *coda_ctlvp;
-extern struct coda_mntinfo coda_mnttbl[NVCODA]; /* indexed by minor device number */
+struct vnode *coda_ctlvp;
+struct coda_mntinfo coda_mnttbl[NVCODA]; /* indexed by minor device number */
 
 /* structure to keep statistics of internally generated/satisfied calls */
 
@@ -170,6 +175,7 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
     size_t *data_len)
 {
     struct lwp *l = curlwp;
+    struct nameidata nd;
     struct vnode *dvp;
     struct cnode *cp;
     dev_t dev;
@@ -203,8 +209,9 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
      */
     /* Ensure that namei() doesn't run off the filename buffer */
     ((char *)data)[*data_len - 1] = 0;
-    error = namei_simple_kernel((char *)data, NSM_FOLLOW_NOEMULROOT,
-		&dvp);
+    NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, data);
+    error = namei(&nd);
+    dvp = nd.ni_vp;
 
     if (error) {
 	MARK_INT_FAIL(CODA_MOUNT_STATS);
@@ -232,7 +239,7 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
 	return(ENXIO);
     }
 
-    if (minor(dev) >= NVCODA) {
+    if (minor(dev) >= NVCODA || minor(dev) < 0) {
 	MARK_INT_FAIL(CODA_MOUNT_STATS);
 	return(ENXIO);
     }
@@ -252,7 +259,7 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
     vfsp->mnt_stat.f_fsidx.__fsid_val[0] = 0;
     vfsp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_CODA);
     vfsp->mnt_stat.f_fsid = vfsp->mnt_stat.f_fsidx.__fsid_val[0];
-    vfsp->mnt_stat.f_namemax = CODA_MAXNAMLEN;
+    vfsp->mnt_stat.f_namemax = MAXNAMLEN;
     mi->mi_vfsp = vfsp;
 
     /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: osf1_mount.c,v 1.47 2010/03/02 21:09:21 pooka Exp $	*/
+/*	$NetBSD: osf1_mount.c,v 1.45 2008/06/24 11:18:15 ad Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,7 +58,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_mount.c,v 1.47 2010/03/02 21:09:21 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_mount.c,v 1.45 2008/06/24 11:18:15 ad Exp $");
+
+#if defined(_KERNEL_OPT)
+#include "fs_nfs.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -209,15 +213,15 @@ osf1_sys_statfs(struct lwp *l, const struct osf1_sys_statfs_args *uap, register_
 	struct statvfs *sp;
 	struct osf1_statfs osfs;
 	int error;
-	struct vnode *vp;
+	struct nameidata nd;
 
-	error = namei_simple_user(SCARG(uap, path),
-				NSM_FOLLOW_TRYEMULROOT, &vp);
-	if (error != 0)
+	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
+	    SCARG(uap, path));
+	if ((error = namei(&nd)))
 		return (error);
-	mp = vp->v_mount;
+	mp = nd.ni_vp->v_mount;
 	sp = &mp->mnt_stat;
-	vrele(vp);
+	vrele(nd.ni_vp);
 	if ((error = VFS_STATVFS(mp, sp)))
 		return (error);
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;

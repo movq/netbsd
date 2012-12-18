@@ -1,4 +1,4 @@
-/*	$NetBSD: state.c,v 1.29 2012/01/09 16:36:48 christos Exp $	*/
+/*	$NetBSD: state.c,v 1.27 2007/02/21 21:14:07 hubertf Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)state.c	8.5 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: state.c,v 1.29 2012/01/09 16:36:48 christos Exp $");
+__RCSID("$NetBSD: state.c,v 1.27 2007/02/21 21:14:07 hubertf Exp $");
 #endif
 #endif /* not lint */
 
@@ -45,6 +45,10 @@ __RCSID("$NetBSD: state.c,v 1.29 2012/01/09 16:36:48 christos Exp $");
 
 static int envvarok(char *);
 
+unsigned const char	doopt[] = { IAC, DO, '%', 'c', 0 };
+unsigned const char	dont[] = { IAC, DONT, '%', 'c', 0 };
+unsigned const char	will[] = { IAC, WILL, '%', 'c', 0 };
+unsigned const char	wont[] = { IAC, WONT, '%', 'c', 0 };
 int	not42 = 1;
 
 /*
@@ -433,7 +437,7 @@ send_do(int option, int init)
 			set_his_want_state_will(option);
 		do_dont_resp[option]++;
 	}
-	(void) output_data("%c%c%c", IAC, DO, option);
+	(void) output_data((const char *)doopt, option);
 
 	DIAG(TD_OPTIONS, printoption("td: send do", option));
 }
@@ -653,7 +657,7 @@ send_dont(int option, int init)
 		set_his_want_state_wont(option);
 		do_dont_resp[option]++;
 	}
-	(void) output_data("%c%c%c", IAC, DONT, option);
+	(void) output_data((const char *)dont, option);
 
 	DIAG(TD_OPTIONS, printoption("td: send dont", option));
 }
@@ -801,7 +805,7 @@ send_will(int option, int init)
 		set_my_want_state_will(option);
 		will_wont_resp[option]++;
 	}
-	(void) output_data("%c%c%c", IAC, WILL, option);
+	(void) output_data((const char *)will, option);
 
 	DIAG(TD_OPTIONS, printoption("td: send will", option));
 }
@@ -955,7 +959,7 @@ send_wont(int option, int init)
 		set_my_want_state_wont(option);
 		will_wont_resp[option]++;
 	}
-	(void) output_data("%c%c%c", IAC, WONT, option);
+	(void) output_data((const char *)wont, option);
 
 	DIAG(TD_OPTIONS, printoption("td: send wont", option));
 }
@@ -1208,7 +1212,7 @@ suboption(void)
 		 * Process suboption buffer of slc's
 		 */
 		start_slc(1);
-		do_opt_slc(subpointer, SB_LEN());
+		do_opt_slc(subpointer, subend - subpointer);
 		(void) end_slc(0);
 		break;
 	} else if (request == LM_MODE) {

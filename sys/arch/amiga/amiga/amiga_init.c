@@ -1,4 +1,4 @@
-/*	$NetBSD: amiga_init.c,v 1.129 2012/11/26 22:58:24 rkujawa Exp $	*/
+/*	$NetBSD: amiga_init.c,v 1.99.20.1 2010/07/16 18:26:13 riz Exp $	*/
 
 /*
  * Copyright (c) 1994 Michael L. Hitch
@@ -34,15 +34,15 @@
 #include "opt_amigaccgrf.h"
 #include "opt_p5ppc68kboard.h"
 #include "opt_devreload.h"
-#include "opt_m68k_arch.h"
-#include "z3rambd.h"
-#include "ser.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.129 2012/11/26 22:58:24 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.99.20.1 2010/07/16 18:26:13 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/proc.h>
+#include <uvm/uvm_extern.h>
+#include <sys/user.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <sys/tty.h>
@@ -54,10 +54,6 @@ __KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.129 2012/11/26 22:58:24 rkujawa Exp
 #include <sys/dkbad.h>
 #include <sys/reboot.h>
 #include <sys/exec.h>
-
-#include <dev/mm.h>
-#include <uvm/uvm_extern.h>
-
 #include <machine/pte.h>
 #include <machine/cpu.h>
 #include <amiga/amiga/cc.h>
@@ -68,15 +64,18 @@ __KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.129 2012/11/26 22:58:24 rkujawa Exp
 #include <amiga/amiga/gayle.h>
 #include <amiga/amiga/memlist.h>
 #include <amiga/dev/zbusvar.h>
-#include <amiga/dev/z3rambdvar.h>
 
 #define RELOC(v, t)	*((t*)((u_int)&(v) + loadbase))
 
 extern u_int	lowram;
-extern u_int	Umap;
+extern u_int	Sysptmap, Sysptsize, Sysseg, Umap, proc0paddr;
+extern u_int	Sysseg_pa;
+extern u_int	virtual_avail;
+#if defined(M68040) || defined(M68060)
+extern int	protostfree;
+#endif
 extern u_long boot_partition;
-extern vaddr_t	m68k_uptbase;
-
+vaddr_t		amiga_uptbase;
 #ifdef P5PPC68KBOARD
 extern int	p5ppc;
 #endif
@@ -86,10 +85,6 @@ extern char *esym;
 #ifdef GRF_AGA
 extern u_long aga_enable;
 #endif
-
-#if NSER > 0
-extern int serconsole;
-#endif 
 
 extern u_long noncontig_enable;
 
@@ -162,7 +157,8 @@ chipmem_steal(long amount)
  * XXX
  */
 void *
-alloc_z2mem(long amount)
+alloc_z2mem(amount)
+	long amount;
 {
 	if (use_z2_mem && z2mem_end && (z2mem_end - amount) >= z2mem_start) {
 		z2mem_end -= amount;
@@ -196,31 +192,25 @@ int kernel_copyback = 1;
 
 __attribute__ ((no_instrument_function))
 void
-start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
-	char *esym_addr, u_int flags, u_long inh_sync, u_long boot_part,
-	u_int loadbase)
+start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
+	boot_part, loadbase)
+	int id;
+	u_int fphystart, fphysize, cphysize;
+	char *esym_addr;
+	u_int flags;
+	u_long inh_sync;
+	u_long boot_part;
+	u_int loadbase;
 {
 	extern char end[];
 	extern u_int protorp[2];
 	struct cfdev *cd;
-	paddr_t pstart, pend;
-	vaddr_t vstart, vend;
-	psize_t avail;
-	paddr_t ptpa;
-	psize_t ptsize;
-	u_int ptextra, kstsize;
-	paddr_t Sysptmap_pa;
-	register st_entry_t sg_proto, *sg;
-#if defined(M68040) || defined(M68060)
-	register st_entry_t *esg;
-#endif
-	register pt_entry_t pg_proto, *pg, *epg;
-	vaddr_t end_loaded;
-	u_int ncd;
-#if defined(M68040) || defined(M68060)
-	u_int i, nl1desc, nl2desc;
-#endif
-	vaddr_t kva;
+	u_int pstart, pend, vstart, vend, avail;
+	u_int pt, ptpa, ptsize, ptextra, kstsize;
+	u_int Sysptmap_pa;
+	register st_entry_t sg_proto, *sg, *esg;
+	register pt_entry_t pg_proto, *pg;
+	u_int end_loaded, ncd, i;
 	struct boot_memlist *ml;
 
 #ifdef DEBUG_KERNEL_START
@@ -259,10 +249,6 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 #endif
 	if (flags & (3 << 1))
 		RELOC(noncontig_enable, u_long) = (flags >> 1) & 3;
-#if NSER > 0
-	if (flags & (1 << 3))
-		RELOC(serconsole, int) = 0;
-#endif
 
 	RELOC(scsi_nosync, u_long) = inh_sync;
 
@@ -272,9 +258,9 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 	 * account for kernel symbols if they are present.
 	 */
 	if (esym_addr == NULL)
-		end_loaded = (vaddr_t)&end;
+		end_loaded = (u_int) &end;
 	else
-		end_loaded = (vaddr_t)esym_addr;
+		end_loaded = (u_int) esym_addr;
 	RELOC(ncfdev, int) = *(int *)(&RELOC(*(u_int *)end_loaded, u_int));
 	RELOC(cfdev, struct cfdev *) = (struct cfdev *) ((int)end_loaded + 4);
 	end_loaded += 4 + RELOC(ncfdev, int) * sizeof(struct cfdev);
@@ -282,7 +268,7 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 	RELOC(memlist, struct boot_memlist *) =
 	    (struct boot_memlist *)end_loaded;
 	ml = &RELOC(*(struct boot_memlist *)end_loaded, struct boot_memlist);
-	end_loaded = (vaddr_t)&((RELOC(memlist, struct boot_memlist *))->
+	end_loaded = (u_int) &((RELOC(memlist, struct boot_memlist *))->
 	    m_seg[ml->m_nseg]);
 
 	/*
@@ -328,21 +314,6 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 	    ncd = RELOC(ncfdev, int); ncd > 0; ncd--, cd++) {
 		int bd_type = cd->rom.type & (ERT_TYPEMASK | ERTF_MEMLIST);
 
-		/*
-		 * Hack to support p5bus and p5pb on CyberStorm Mk-III / PPC
-		 * and Blizzard PPC. XXX: this hack should only be active if
-		 * non-autoconfiguring CyberVision PPC or BlizzardVision PPC
-		 * was found. 
-		 */
-		if (cd->rom.manid == 8512 && 
-		    (cd->rom.prodid == 100 || cd->rom.prodid == 110)) 
-			RELOC(ZBUSAVAIL, u_int) += m68k_round_page(0x1400000);
-#if NZ3RAMBD > 0
-		if (z3rambd_match_id(cd->rom.manid, cd->rom.prodid) > 0)
-		{
-			/* XXX: remove board from memlist */
-		} else
-#endif
 		if (bd_type != ERT_ZORROIII &&
 		    (bd_type != ERT_ZORROII || isztwopa(cd->addr)))
 			continue;	/* It's not Z2 or Z3 I/O board */
@@ -357,7 +328,6 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 		    (cd->rom.flags & ERT_Z3_SSMASK) == 0)
 			cd->size = 0x10000 <<
 			    ((cd->rom.type - 1) & ERT_MEMMASK);
-
 		RELOC(ZBUSAVAIL, u_int) += m68k_round_page(cd->size);
 	}
 
@@ -368,16 +338,16 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 	 */
 	vend   = fphysize;
 	avail  = vend;
-	vstart = end_loaded;
-	vstart = m68k_round_page(vstart);
-	pstart = (paddr_t)vstart + fphystart;
+	vstart = (u_int) end_loaded;
+	vstart = m68k_round_page (vstart);
+	pstart = vstart + fphystart;
 	pend   = vend   + fphystart;
 	avail -= vstart;
 
 	/*
-	 * save KVA of lwp0 u-area and allocate it.
+	 * save KVA of proc0 u-area and allocate it.
 	 */
-	RELOC(lwp0uarea, vaddr_t) = vstart;
+	RELOC(proc0paddr, u_int) = vstart;
 	pstart += USPACE;
 	vstart += USPACE;
 	avail -= USPACE;
@@ -410,6 +380,7 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 	/*
 	 * allocate initial page table pages
 	 */
+	pt = vstart;
 	ptpa = pstart;
 #ifdef DRACO
 	if ((id>>24)==0x7D) {
@@ -429,9 +400,15 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 	avail -= ptsize;
 
 	/*
+	 * pt maps the first N megs of ram Sysptmap comes directly
+	 * after pt (ptpa) and so it must map >= N meg + Its one
+	 * page and so it must map 8M of space.  Specifically
+	 * Sysptmap holds the pte's that map the kernel page tables.
+	 *
+	 * We want Sysmap to be the first address mapped by Sysptmap.
 	 * Sysmap is now placed at the end of Supervisor virtual address space.
 	 */
-	RELOC(Sysmap, u_int *) = (u_int *)SYSMAP_VA;
+	RELOC(Sysmap, u_int *) = (u_int *)-(NPTEPG * PAGE_SIZE);
 
 	/*
 	 * initialize segment table and page table map
@@ -442,7 +419,7 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 		 * First invalidate the entire "segment table" pages
 		 * (levels 1 and 2 have the same "invalid" values).
 		 */
-		sg = (st_entry_t *)RELOC(Sysseg_pa, u_int);
+		sg = (u_int *)RELOC(Sysseg_pa, u_int);
 		esg = &sg[kstsize * NPTEPG];
 		while (sg < esg)
 			*sg++ = SG_NV;
@@ -454,10 +431,9 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 		 * pages of PTEs.  Note that we set the "used" bit
 		 * now to save the HW the expense of doing it.
 		 */
-		nl2desc = (ptsize >> PGSHIFT) * (NPTEPG / SG4_LEV3SIZE);
-		sg = (st_entry_t *)RELOC(Sysseg_pa, u_int);
-		sg = &sg[SG4_LEV1SIZE];
-		esg = &sg[nl2desc];
+		i = (ptsize >> PGSHIFT) * (NPTEPG / SG4_LEV3SIZE);
+		sg = &((u_int *)(RELOC(Sysseg_pa, u_int)))[SG4_LEV1SIZE];
+		esg = &sg[i];
 		sg_proto = ptpa | SG_U | SG_RW | SG_V;
 		while (sg < esg) {
 			*sg++ = sg_proto;
@@ -466,29 +442,32 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 
 		/*
 		 * Initialize level 1 descriptors.  We need:
-		 *	howmany(nl2desc, SG4_LEV2SIZE)
-		 * level 1 descriptors to map the 'nl2desc' level 2's.
+		 *	roundup(num, SG4_LEV2SIZE) / SG4_LEVEL2SIZE
+		 * level 1 descriptors to map the 'num' level 2's.
 		 */
-		nl1desc = howmany(nl2desc, SG4_LEV2SIZE);
-		sg = (st_entry_t *)RELOC(Sysseg_pa, u_int);
-		esg = &sg[nl1desc];
-		sg_proto = (paddr_t)&sg[SG4_LEV1SIZE] | SG_U | SG_RW | SG_V;
+		i = roundup(i, SG4_LEV2SIZE) / SG4_LEV2SIZE;
+		/* Include additional level 2 table for Sysmap in protostfree */
+		RELOC(protostfree, u_int) =
+		    (-1 << (i + 2)) /* & ~(-1 << MAXKL2SIZE) */;
+		sg = (u_int *) RELOC(Sysseg_pa, u_int);
+		esg = &sg[i];
+		sg_proto = (u_int)&sg[SG4_LEV1SIZE] | SG_U | SG_RW |SG_V;
 		while (sg < esg) {
 			*sg++ = sg_proto;
 			sg_proto += (SG4_LEV2SIZE * sizeof(st_entry_t));
 		}
 
 		/* Sysmap is last entry in level 1 */
-		sg = (st_entry_t *)RELOC(Sysseg_pa, u_int);
+		sg = (u_int *) RELOC(Sysseg_pa, u_int);
 		sg = &sg[SG4_LEV1SIZE - 1];
 		*sg = sg_proto;
 
 		/*
 		 * Kernel segment table at end of next level 2 table
 		 */
-		i = SG4_LEV1SIZE + (nl1desc * SG4_LEV2SIZE);
-		sg = (st_entry_t *)RELOC(Sysseg_pa, u_int);
-		sg = &sg[i + SG4_LEV2SIZE - (NPTEPG / SG4_LEV3SIZE)];
+		/* XXX fix calculations XXX */
+		i = ((((ptsize >> PGSHIFT) + 3) & -2) - 1) * (NPTEPG / SG4_LEV3SIZE);
+		sg = &((u_int *)(RELOC(Sysseg_pa, u_int)))[SG4_LEV1SIZE + i];
 		esg = &sg[NPTEPG / SG4_LEV3SIZE];
 		sg_proto = Sysptmap_pa | SG_U | SG_RW | SG_V;
 		while (sg < esg) {
@@ -496,29 +475,25 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 			sg_proto += (SG4_LEV3SIZE * sizeof (st_entry_t));
 		}
 
-		/* Include additional level 2 table for Sysmap in protostfree */
-		RELOC(protostfree, u_int) =
-		    (~0 << (1 + nl1desc + 1)) /* & ~(~0 << MAXKL2SIZE) */;
-
 		/*
 		 * Initialize Sysptmap
 		 */
-		pg = (pt_entry_t *)Sysptmap_pa;
-		epg = &pg[ptsize >> PGSHIFT];
+		sg = (u_int *) Sysptmap_pa;
+		esg = &sg[ptsize >> PGSHIFT];
 		pg_proto = ptpa | PG_RW | PG_CI | PG_V;
-		while (pg < epg) {
-			*pg++ = pg_proto;
+		while (sg < esg) {
+			*sg++ = pg_proto;
 			pg_proto += PAGE_SIZE;
 		}
 		/*
 		 * Invalidate rest of Sysptmap page
 		 */
-		epg = (pt_entry_t *)(Sysptmap_pa + PAGE_SIZE - sizeof(st_entry_t));
-		while (pg < epg)
-			*pg++ = SG_NV;
-		pg = (pt_entry_t *)Sysptmap_pa;
-		pg = &pg[SYSMAP_VA >> SEGSHIFT];
-		*pg = Sysptmap_pa | PG_RW | PG_CI | PG_V;
+		esg = (u_int *)(Sysptmap_pa + PAGE_SIZE - sizeof(st_entry_t));
+		while (sg < esg)
+			*sg++ = SG_NV;
+		sg = (u_int *) Sysptmap_pa;
+		sg = &sg[256 - 1];		/* XXX */
+		*sg = Sysptmap_pa | PG_RW | PG_CI | PG_V;
 	} else
 #endif /* M68040 */
 	{
@@ -526,12 +501,12 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 		 * Map the page table pages in both the HW segment table
 		 * and the software Sysptmap.
 		 */
-		sg = (st_entry_t *)RELOC(Sysseg_pa, u_int);
-		pg = (pt_entry_t *)Sysptmap_pa;
-		epg = &pg[ptsize >> PGSHIFT];
+		sg = (u_int *)RELOC(Sysseg_pa, u_int);
+		pg = (u_int *)Sysptmap_pa;
+		esg = &pg[ptsize >> PGSHIFT];
 		sg_proto = ptpa | SG_RW | SG_V;
 		pg_proto = ptpa | PG_RW | PG_CI | PG_V;
-		while (pg < epg) {
+		while (pg < esg) {
 			*sg++ = sg_proto;
 			*pg++ = pg_proto;
 			sg_proto += PAGE_SIZE;
@@ -540,16 +515,12 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 		/*
 		 * invalidate the remainder of each table
 		 */
-		epg = (pt_entry_t *)Sysptmap_pa;
-		epg = &epg[TIA_SIZE];
-		while (pg < epg) {
+		/* XXX PAGE_SIZE dependent constant: 256 or 1024 */
+		esg = (u_int *)(Sysptmap_pa + (256 - 1) * sizeof(st_entry_t));
+		while (pg < esg) {
 			*sg++ = SG_NV;
 			*pg++ = PG_NV;
 		}
-		sg = (st_entry_t *)RELOC(Sysseg_pa, u_int);
-		sg = &sg[SYSMAP_VA >> SEGSHIFT];
-		pg = (pt_entry_t *)Sysptmap_pa;
-		pg = &pg[SYSMAP_VA >> SEGSHIFT];
 		*sg = Sysptmap_pa | SG_RW | SG_V;
 		*pg = Sysptmap_pa | PG_RW | PG_CI | PG_V;
 		/* XXX zero out rest of page? */
@@ -559,11 +530,11 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 	 * initialize kernel page table page(s) (assume load at VA 0)
 	 */
 	pg_proto = fphystart | PG_RO | PG_V;	/* text pages are RO */
-	pg       = (pt_entry_t *)ptpa;
+	pg       = (u_int *) ptpa;
 	*pg++ = PG_NV;				/* Make page 0 invalid */
 	pg_proto += PAGE_SIZE;
-	for (kva = PAGE_SIZE; kva < (vaddr_t)etext;
-	     kva += PAGE_SIZE, pg_proto += PAGE_SIZE)
+	for (i = PAGE_SIZE; i < (u_int) etext;
+	     i += PAGE_SIZE, pg_proto += PAGE_SIZE)
 		*pg++ = pg_proto;
 
 	/*
@@ -573,9 +544,9 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 
 #if defined(M68040) || defined(M68060)
 	/*
-	 * Map the kernel segment table cache invalidated for 68040/68060.
-	 * (for the 68040 not strictly necessary, but recommended by Motorola;
-	 *  for the 68060 mandatory)
+	 * map the kernel segment table cache invalidated for
+	 * these machines (for the 68040 not strictly necessary, but
+	 * recommended by Motorola; for the 68060 mandatory)
 	 */
 	if (RELOC(mmutype, int) == MMU_68040) {
 
@@ -587,12 +558,12 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 		 * of the kernel are contiguously allocated, start at
 		 * Sysseg and end at the current value of vstart.
 		 */
-		for (; kva < RELOC(Sysseg, u_int);
-		     kva += PAGE_SIZE, pg_proto += PAGE_SIZE)
+		for (; i<RELOC(Sysseg, u_int);
+		     i+= PAGE_SIZE, pg_proto += PAGE_SIZE)
 			*pg++ = pg_proto;
 
 		pg_proto = (pg_proto & ~PG_CCB) | PG_CI;
-		for (; kva < vstart; kva += PAGE_SIZE, pg_proto += PAGE_SIZE)
+		for (; i < vstart; i += PAGE_SIZE, pg_proto += PAGE_SIZE)
 			*pg++ = pg_proto;
 
 		pg_proto = (pg_proto & ~PG_CI);
@@ -602,9 +573,9 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 #endif
 	/*
 	 * go till end of data allocated so far
-	 * plus lwp0 u-area (to be allocated)
+	 * plus proc0 u-area (to be allocated)
 	 */
-	for (; kva < vstart; kva += PAGE_SIZE, pg_proto += PAGE_SIZE)
+	for (; i < vstart; i += PAGE_SIZE, pg_proto += PAGE_SIZE)
 		*pg++ = pg_proto;
 	/*
 	 * invalidate remainder of kernel PT
@@ -713,7 +684,7 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 	 * XXX 16 MB instead of 256 MB should be enough, but...
 	 * we need to fix the fastmem loading first. (see comment at line 375)
 	 */
-	RELOC(m68k_uptbase, vaddr_t) =
+	RELOC(amiga_uptbase, vaddr_t) =
 	    roundup(vstart + 0x10000000, 0x10000000);
 
 	/*
@@ -732,11 +703,11 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 	 * than 128k !
 	 */
 	if (loadbase == 0) {
-		register paddr_t *lp, *le, *fp;
+		register u_int *lp, *le, *fp;
 
-		lp = (paddr_t *)0;
-		le = (paddr_t *)end_loaded;
-		fp = (paddr_t *)fphystart;
+		lp = 0;
+		le = (u_int *)end_loaded;
+		fp = (u_int *)fphystart;
 		while (lp < le)
 			*fp++ = *lp++;
 	}
@@ -792,7 +763,7 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 }
 
 void
-start_c_finish(void)
+start_c_finish()
 {
 	extern u_int32_t delaydivisor;
 #ifdef	P5PPC68KBOARD
@@ -817,8 +788,8 @@ start_c_finish(void)
 ((volatile struct Custom *)CUSTOMADDR)->color[0] = 0x0a0;	/* GREEN */
 #endif
 
+	bzero ((u_char *)proc0paddr, USPACE);
 	pmap_bootstrap(start_c_pstart, start_c_fphystart);
-	pmap_bootstrap_finalize();
 
 	/*
 	 * to make life easier in locore.s, set these addresses explicitly
@@ -850,6 +821,11 @@ start_c_finish(void)
 		z2mem_end = ZTWOMEMADDR + NZTWOMEMPG * PAGE_SIZE;
 		z2mem_start = ZTWOMEMADDR;
 	}
+
+#if 0
+	i = *(int *)proc0paddr;
+	*(volatile int *)proc0paddr = i;
+#endif
 
 	/*
 	 * disable all interrupts but enable allow them to be enabled
@@ -943,7 +919,8 @@ start_c_finish(void)
 }
 
 void
-rollcolor(int color)
+rollcolor(color)
+	int color;
 {
 	int s, i;
 
@@ -977,7 +954,7 @@ static u_long kernel_symbol_size, kernel_symbol_esym;
  * will be needed after a kernel image to be reloaded.
  */
 static int
-kernel_image_magic_size(void)
+kernel_image_magic_size()
 {
 	int sz;
 
@@ -989,11 +966,12 @@ kernel_image_magic_size(void)
 
 /* This actually copies the magic information.  */
 static void
-kernel_image_magic_copy(u_char *dest)
+kernel_image_magic_copy(dest)
+	u_char *dest;
 {
 	*((int*)dest) = ncfdev;
 	dest += 4;
-	memcpy(dest, cfdev, ncfdev * sizeof(struct cfdev)
+	bcopy(cfdev, dest, ncfdev * sizeof(struct cfdev)
 	    + memlist->m_nseg * sizeof(struct boot_memseg) + 4);
 }
 
@@ -1001,7 +979,8 @@ kernel_image_magic_copy(u_char *dest)
 #define AOUT_LDPGSZ 8192 /* XXX ??? */
 
 int
-kernel_reload_write(struct uio *uio)
+kernel_reload_write(uio)
+	struct uio *uio;
 {
 	extern int eclockfreq;
 	struct iovec *iov;
@@ -1139,7 +1118,7 @@ kernel_reload_write(struct uio *uio)
 		if (kernel_image == NULL)
 			panic("kernel_reload failed second malloc");
 		for (c = 0; c < kernel_load_ofs; c += MAXPHYS)
-			memcpy(kernel_image + c, kernel_image_copy + c,
+			bcopy(kernel_image_copy + c, kernel_image + c,
 			    (kernel_load_ofs - c) > MAXPHYS ? MAXPHYS :
 			    kernel_load_ofs - c);
 #endif
@@ -1148,19 +1127,3 @@ kernel_reload_write(struct uio *uio)
 	return(0);
 }
 #endif
-
-int
-mm_md_readwrite(dev_t dev, struct uio *uio)
-{
-
-	switch (minor(dev)) {
-#ifdef DEVRELOAD
-	case DEV_RELOAD:
-		if (uio->uio_rw == UIO_READ)
-			return 0;
-		return kernel_reload_write(uio);
-#endif
-	default:
-		return ENXIO;
-	}
-}

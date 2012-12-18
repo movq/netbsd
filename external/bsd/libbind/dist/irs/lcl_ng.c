@@ -1,4 +1,4 @@
-/*	$NetBSD: lcl_ng.c,v 1.1.1.2 2012/09/09 16:07:54 christos Exp $	*/
+/*	$NetBSD: lcl_ng.c,v 1.1.1.1.4.2 2011/01/06 21:42:18 riz Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -18,7 +18,7 @@
  */
 
 #if !defined(LINT) && !defined(CODECENTER)
-static const char rcsid[] = "Id: lcl_ng.c,v 1.3 2005/04/27 04:56:31 sra Exp ";
+static const char rcsid[] = "Id: lcl_ng.c,v 1.3 2005/04/27 04:56:31 sra Exp";
 #endif
 
 /* Imports */

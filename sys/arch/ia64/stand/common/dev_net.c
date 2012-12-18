@@ -1,5 +1,5 @@
 /*	
- * $NetBSD: dev_net.c,v 1.8 2011/07/17 20:54:42 joerg Exp $
+ * $NetBSD: dev_net.c,v 1.3 2008/04/28 20:23:25 martin Exp $
  */
 
 /*-
@@ -52,6 +52,7 @@
  * for use by the NFS open code (NFS/lookup).
  */
 
+#include <machine/stdarg.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <net/if.h>
@@ -144,7 +145,8 @@ net_open(struct open_file *f, ...)
 }
 
 int
-net_close(struct open_file *f)
+net_close(f)
+    struct open_file *f;
 {
 
 #ifdef	NETIF_DEBUG
@@ -172,7 +174,7 @@ net_close(struct open_file *f)
 }
 
 int
-net_strategy(void)
+net_strategy()
 {
     return EIO;
 }
@@ -197,7 +199,8 @@ int try_bootp = 1;
 extern n_long ip_convertaddr(char *p);
 
 static int
-net_getparams(int sock)
+net_getparams(sock)
+    int sock;
 {
     char buf[MAXHOSTNAMELEN];
     char temp[FNAME_SIZE];
@@ -272,8 +275,8 @@ net_getparams(int sock)
 	    rootpath[i++] = '\0';
 	    if (inet_addr(&rootpath[0]) != INADDR_NONE)
 		    rootip.s_addr = inet_addr(&rootpath[0]);
-	    memcpy(&temp[0], &rootpath[i], strlen(&rootpath[i])+1);
-	    memcpy(&rootpath[0], &temp[0], strlen(&rootpath[i])+1);	    
+	    bcopy(&rootpath[i], &temp[0], strlen(&rootpath[i])+1);
+	    bcopy(&temp[0], &rootpath[0], strlen(&rootpath[i])+1);	    
     }
     printf("net_open: server addr: %s\n", inet_ntoa(rootip));
     printf("net_open: server path: %s\n", rootpath);	    

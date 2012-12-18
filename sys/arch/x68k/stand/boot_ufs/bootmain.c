@@ -1,4 +1,4 @@
-/*	$NetBSD: bootmain.c,v 1.13 2010/07/17 06:27:03 isaki Exp $	*/
+/*	$NetBSD: bootmain.c,v 1.8 2005/12/11 12:19:44 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994 Takumi Nakamura.
@@ -40,7 +40,6 @@
 #include <ufs/ufs/dinode.h>
 #include <ufs/ffs/fs.h>
 #include <ufs/ufs/dir.h>
-#include <machine/cpu.h>
 #include <machine/bootinfo.h>
 #ifdef SCSI_ADHOC_BOOTPART
 #include <machine/disklabel.h>
@@ -51,7 +50,7 @@
 #include "readufs.h"
 #include "exec_image.h"
 #include "../../x68k/iodevice.h"
-#define IODEVbase ((volatile struct IODEVICE *)INTIOBASE)
+#define IODEVbase ((volatile struct IODEVICE *)PHYS_IODEV)
 
 /* for debug; 起動時のレジスタが入っている */
 unsigned int startregs[16];
@@ -76,9 +75,9 @@ void bootufs (void) __attribute__ ((__noreturn__));
 
 #ifdef BOOT_DEBUG
 void
-print_hex(unsigned int x, int l)
-	/* x:	 表示する数字 */
-	/* l:		 表示する桁数 */
+print_hex(x, l)
+	unsigned int x;	/* 表示する数字 */
+	int l;		/* 表示する桁数 */
 {
 
 	if (l > 0) {
@@ -102,7 +101,7 @@ print_hex(unsigned int x, int l)
 const unsigned char partition_conv[MAXPART + 1] = { 0, 1, 3, 4, 5, 6, 7 };
 
 static int
-get_scsi_part(void)
+get_scsi_part()
 {
 	struct {
 		u_int32_t	magic;		/* 0x5836384B ("X68K") */
@@ -196,23 +195,25 @@ get_scsi_host_adapter(void)
 #endif
 	}
 
-#ifdef BOOT_DEBUG
-	B_PRINT("\r\n");
-#endif
-
 	return ha;
 }
 
 static int
-load_file(const char *path, unsigned int addr, struct exec *header)
+load_file(path, addr, header)
+	const char *path;
+	unsigned int addr;
+	struct exec *header;
 {
 
 	return load_file_ino(ufs_lookup_path(path), path, addr, header);
 }
 
 static int
-load_file_ino(ino32_t ino, const char *fn, unsigned int addr, struct exec *header)
-	/* fn:		 for message only */
+load_file_ino(ino, fn, addr, header)
+	ino32_t ino;
+	const char *fn;		/* for message only */
+	unsigned int addr;
+	struct exec *header;
 {
 	union ufs_dinode dinode;
 

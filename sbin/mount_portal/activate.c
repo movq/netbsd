@@ -1,4 +1,4 @@
-/*	$NetBSD: activate.c,v 1.15 2009/04/11 07:36:43 lukem Exp $	*/
+/*	$NetBSD: activate.c,v 1.14 2007/07/02 18:07:44 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: activate.c,v 1.15 2009/04/11 07:36:43 lukem Exp $");
+__RCSID("$NetBSD: activate.c,v 1.14 2007/07/02 18:07:44 pooka Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -55,7 +55,7 @@ __RCSID("$NetBSD: activate.c,v 1.15 2009/04/11 07:36:43 lukem Exp $");
 
 #include "portald.h"
 
-static	int	get_request(int, struct portal_cred *, char *, size_t);
+static	int	get_request(int, struct portal_cred *, char *, int);
 static	void	send_reply(int, int, int);
 
 /*
@@ -75,11 +75,11 @@ activate_argv(struct portal_cred *pcr, char *key, char **v, int *fdp)
 }
 
 static int
-get_request(int so, struct portal_cred *pcr, char *key, size_t klen)
+get_request(int so, struct portal_cred *pcr, char *key, int klen)
 {
 	struct iovec iov[2];
 	struct msghdr msg;
-	ssize_t n;
+	int n;
 
 	iov[0].iov_base = (caddr_t) pcr;
 	iov[0].iov_len = sizeof(*pcr);
@@ -94,7 +94,7 @@ get_request(int so, struct portal_cred *pcr, char *key, size_t klen)
 	if (n < 0)
 		return (errno);
 
-	if (n <= (ssize_t)sizeof(*pcr))
+	if (n <= sizeof(*pcr))
 		return (EINVAL);
 
 	n -= sizeof(*pcr);

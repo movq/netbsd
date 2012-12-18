@@ -1,4 +1,4 @@
-/*	$NetBSD: ms.c,v 1.24 2009/03/14 21:04:06 dsl Exp $	*/
+/*	$NetBSD: ms.c,v 1.20 2008/01/08 18:04:16 joerg Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ms.c,v 1.24 2009/03/14 21:04:06 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ms.c,v 1.20 2008/01/08 18:04:16 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -79,7 +79,7 @@ __KERNEL_RCSID(0, "$NetBSD: ms.c,v 1.24 2009/03/14 21:04:06 dsl Exp $");
 #define NMOUSE 1
 #endif
 
-typedef void	(*FPV)(void *);
+typedef void	(*FPV) __P((void *));
 
 static struct ms_softc	ms_softc[NMOUSE];
 
@@ -95,10 +95,11 @@ const struct cdevsw ms_cdevsw = {
 	nostop, notty, mspoll, nommap, mskqfilter,
 };
 
-static	void	ms_3b_delay(struct ms_softc *);
+static	void	ms_3b_delay __P((struct ms_softc *));
 
 int
-mouseattach(int cnt)
+mouseattach(cnt)
+	int cnt;
 {
 	printf("1 mouse configured\n");
 	ms_softc[0].ms_emul3b = 1;
@@ -107,7 +108,8 @@ mouseattach(int cnt)
 }
 
 static void
-ms_3b_delay(struct ms_softc *ms)
+ms_3b_delay(ms)
+struct ms_softc	*ms;
 {
 	REL_MOUSE	rel_ms;
 
@@ -119,7 +121,9 @@ ms_3b_delay(struct ms_softc *ms)
  * Note that we are called from the keyboard software interrupt!
  */
 void
-mouse_soft(REL_MOUSE *rel_ms, int size, int type)
+mouse_soft(rel_ms, size, type)
+REL_MOUSE	*rel_ms;
+int		size, type;
 {
 	struct ms_softc		*ms = &ms_softc[0];
 	struct firm_event	*fe, *fe2;
@@ -210,7 +214,7 @@ mouse_soft(REL_MOUSE *rel_ms, int size, int type)
 		}
 		fe->id    = LOC_X_DELTA;
 		fe->value = rel_ms->dx;
-		firm_gettime(fe);
+		getmicrotime(&fe->time);
 		if (put >= EV_QSIZE) {
 			put = 0;
 			fe  = &ms->ms_events.ev_q[0];
@@ -224,7 +228,7 @@ mouse_soft(REL_MOUSE *rel_ms, int size, int type)
 		}
 		fe->id    = LOC_Y_DELTA;
 		fe->value = rel_ms->dy;
-		firm_gettime(fe);
+		getmicrotime(&fe->time);
 		if (put >= EV_QSIZE) {
 			put = 0;
 			fe  = &ms->ms_events.ev_q[0];
@@ -242,7 +246,7 @@ mouse_soft(REL_MOUSE *rel_ms, int size, int type)
 				fe2->id = MS_LEFT;
 			else fe2->id = MS_MIDDLE;
 			fe2->value = rel_ms->id & bmask ? VKEY_DOWN : VKEY_UP;
-			firm_gettime(fe2);
+			getmicrotime(&fe2->time);
 		}
 	}
 
@@ -302,7 +306,10 @@ out:
 }
 
 int
-msopen(dev_t dev, int flags, int mode, struct lwp *l)
+msopen(dev, flags, mode, l)
+dev_t		dev;
+int		flags, mode;
+struct lwp	*l;
 {
 	u_char		report_ms_joy[] = { 0x14, 0x08 };
 	struct ms_softc	*ms;
@@ -332,7 +339,10 @@ msopen(dev_t dev, int flags, int mode, struct lwp *l)
 }
 
 int
-msclose(dev_t dev, int flags, int mode, struct lwp *l)
+msclose(dev, flags, mode, l)
+dev_t		dev;
+int		flags, mode;
+struct lwp	*l;
 {
 	u_char		disable_ms_joy[] = { 0x12, 0x1a };
 	int		unit;
@@ -351,7 +361,10 @@ msclose(dev_t dev, int flags, int mode, struct lwp *l)
 }
 
 int
-msread(dev_t dev, struct uio *uio, int flags)
+msread(dev, uio, flags)
+dev_t		dev;
+struct uio	*uio;
+int		flags;
 {
 	struct ms_softc *ms;
 
@@ -360,7 +373,12 @@ msread(dev_t dev, struct uio *uio, int flags)
 }
 
 int
-msioctl(dev_t dev, u_long cmd, register void * data, int flag, struct lwp *l)
+msioctl(dev, cmd, data, flag, l)
+dev_t			dev;
+u_long			cmd;
+register void *	data;
+int			flag;
+struct lwp		*l;
 {
 	struct ms_softc *ms;
 	int		unit;
@@ -401,7 +419,10 @@ msioctl(dev_t dev, u_long cmd, register void * data, int flag, struct lwp *l)
 }
 
 int
-mspoll(dev_t dev, int events, struct lwp *l)
+mspoll(dev, events, l)
+dev_t		dev;
+int		events;
+struct lwp	*l;
 {
 	struct ms_softc *ms;
 

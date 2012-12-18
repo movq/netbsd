@@ -1,8 +1,8 @@
-/*	$NetBSD: nanf.c,v 1.2 2009/02/22 01:34:02 martin Exp $	*/
+/*	$NetBSD: nanf.c,v 1.1 2006/07/01 16:37:20 ross Exp $	*/
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: nanf.c,v 1.2 2009/02/22 01:34:02 martin Exp $");
+__RCSID("$NetBSD: nanf.c,v 1.1 2006/07/01 16:37:20 ross Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <math.h>
@@ -11,5 +11,3 @@ __RCSID("$NetBSD: nanf.c,v 1.2 2009/02/22 01:34:02 martin Exp $");
 /* bytes for quiet NaN (IEEE single precision) */
 const union __float_u __nanf =
 		{ { 0x7f, 0xc0,    0,    0 } };
-
-__warn_references(__nanf, "warning: <math.h> defines NAN incorrectly for your compiler.")

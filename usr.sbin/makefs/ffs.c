@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs.c,v 1.48 2012/06/22 06:15:18 sjg Exp $	*/
+/*	$NetBSD: ffs.c,v 1.42 2006/12/18 21:03:29 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -71,7 +71,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: ffs.c,v 1.48 2012/06/22 06:15:18 sjg Exp $");
+__RCSID("$NetBSD: ffs.c,v 1.42 2006/12/18 21:03:29 christos Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
@@ -240,9 +240,6 @@ ffs_parse_opts(const char *option, fsinfo_t *fsopts)
 			warnx("Invalid optimization `%s'", val);
 			goto leave_ffs_parse_opts;
 		}
-		rv = 1;
-	} else if (strcmp(var, "label") == 0) {
-		strlcpy(ffs_opts->label, val, sizeof(ffs_opts->label));
 		rv = 1;
 	} else
 		rv = set_option(ffs_options, var, val);
@@ -480,7 +477,7 @@ ffs_create_image(const char *image, fsinfo_t *fsopts)
 	assert (fsopts != NULL);
 
 		/* create image */
-	if ((fsopts->fd = open(image, O_RDWR | O_CREAT | O_TRUNC, 0666))
+	if ((fsopts->fd = open(image, O_RDWR | O_CREAT | O_TRUNC, 0777))
 	    == -1) {
 		warn("Can't open `%s' for writing", image);
 		return (-1);
@@ -498,22 +495,11 @@ ffs_create_image(const char *image, fsinfo_t *fsopts)
 		bufsize = sfs.f_iosize;
 #endif
 	bufrem = fsopts->size;
-
-	if (fsopts->sparse) {
-		if (ftruncate(fsopts->fd, bufrem) == -1) {
-			printf ("ERROR in truncate. Sparse option disabled\n");
-			fsopts->sparse = 0;
-		} else {
-			bufrem = 0; /* File truncated at bufrem. Remaining is 0 */
-			buf = NULL;
-		}
-	}
-
-	if ((debug & DEBUG_FS_CREATE_IMAGE) && fsopts->sparse == 0)
+	if (debug & DEBUG_FS_CREATE_IMAGE)
 		printf(
 		    "zero-ing image `%s', %lld sectors, using %d byte chunks\n",
 		    image, (long long)bufrem, bufsize);
-	if ((bufrem > 0) && ((buf = calloc(1, bufsize)) == NULL)) {
+	if ((buf = calloc(1, bufsize)) == NULL) {
 		warn("Can't create buffer for sector");
 		return (-1);
 	}
@@ -527,8 +513,7 @@ ffs_create_image(const char *image, fsinfo_t *fsopts)
 		}
 		bufrem -= i;
 	}
-	if (buf)
-		free(buf);
+	free(buf);
 
 		/* make the file system */
 	if (debug & DEBUG_FS_CREATE_IMAGE)
@@ -548,7 +533,7 @@ ffs_create_image(const char *image, fsinfo_t *fsopts)
 		    (long long)fs->fs_cstotal.cs_ndir);
 	}
 
-	if ((off_t)(fs->fs_cstotal.cs_nifree + ROOTINO) < fsopts->inodes) {
+	if (fs->fs_cstotal.cs_nifree + ROOTINO < fsopts->inodes) {
 		warnx(
 		"Image file `%s' has %lld free inodes; %lld are required.",
 		    image,
@@ -615,7 +600,7 @@ ffs_size_dir(fsnode *root, fsinfo_t *fsopts)
 			if (node->type == S_IFREG)
 				ADDSIZE(node->inode->st.st_size);
 			if (node->type == S_IFLNK) {
-				size_t	slen;
+				int	slen;
 
 				slen = strlen(node->symlink) + 1;
 				if (slen >= (ffs_opts->version == 1 ?
@@ -638,7 +623,7 @@ static void *
 ffs_build_dinode1(struct ufs1_dinode *dinp, dirbuf_t *dbufp, fsnode *cur,
 		 fsnode *root, fsinfo_t *fsopts)
 {
-	size_t slen;
+	int slen;
 	void *membuf;
 
 	memset(dinp, 0, sizeof(*dinp));
@@ -686,7 +671,7 @@ static void *
 ffs_build_dinode2(struct ufs2_dinode *dinp, dirbuf_t *dbufp, fsnode *cur,
 		 fsnode *root, fsinfo_t *fsopts)
 {
-	size_t slen;
+	int slen;
 	void *membuf;
 
 	memset(dinp, 0, sizeof(*dinp));
@@ -796,8 +781,8 @@ ffs_populate_dir(const char *dir, fsnode *root, fsinfo_t *fsopts)
 			continue;		/* skip hard-linked entries */
 		cur->inode->flags |= FI_WRITTEN;
 
-		if ((size_t)snprintf(path, sizeof(path), "%s/%s/%s", cur->root,
-		    cur->path, cur->name) >= sizeof(path))
+		if (snprintf(path, sizeof(path), "%s/%s", dir, cur->name)
+		    >= sizeof(path))
 			errx(1, "Pathname too long.");
 
 		if (cur->child != NULL)
@@ -837,8 +822,8 @@ ffs_populate_dir(const char *dir, fsnode *root, fsinfo_t *fsopts)
 	for (cur = root; cur != NULL; cur = cur->next) {
 		if (cur->child == NULL)
 			continue;
-		if ((size_t)snprintf(path, sizeof(path), "%s/%s", dir,
-		    cur->name) >= sizeof(path))
+		if (snprintf(path, sizeof(path), "%s/%s", dir, cur->name)
+		    >= sizeof(path))
 			errx(1, "Pathname too long.");
 		if (! ffs_populate_dir(path, cur->child, fsopts))
 			return (0);
@@ -860,7 +845,6 @@ ffs_write_file(union dinode *din, uint32_t ino, void *buf, fsinfo_t *fsopts)
 	int 	isfile, ffd;
 	char	*fbuf, *p;
 	off_t	bufleft, chunk, offset;
-	ssize_t nread;
 	struct inode	in;
 	struct buf *	bp;
 	ffs_opt_t	*ffs_opts = fsopts->fs_specific;
@@ -915,19 +899,12 @@ ffs_write_file(union dinode *din, uint32_t ino, void *buf, fsinfo_t *fsopts)
 	chunk = 0;
 	for (bufleft = DIP(din, size); bufleft > 0; bufleft -= chunk) {
 		chunk = MIN(bufleft, ffs_opts->bsize);
-		if (!isfile)
-			;
-		else if ((nread = read(ffd, fbuf, chunk)) == -1)
-			err(EXIT_FAILURE, "Reading `%s', %lld bytes to go",
-			    (char *)buf, (long long)bufleft);
-		else if (nread != chunk)
-			errx(EXIT_FAILURE, "Reading `%s', %lld bytes to go, "
-			    "read %zd bytes, expected %ju bytes, does "
-			    "metalog size= attribute mismatch source size?",
-			    (char *)buf, (long long)bufleft, nread,
-			    (uintmax_t)chunk);
-		else
+		if (isfile) {
+			if (read(ffd, fbuf, chunk) != chunk)
+				err(1, "Reading `%s', %lld bytes to go",
+				    (char *)buf, (long long)bufleft);
 			p = fbuf;
+		}
 		offset = DIP(din, size) - bufleft;
 		if (debug & DEBUG_FS_WRITE_FILE_BLOCK)
 			printf(
@@ -1059,7 +1036,7 @@ ffs_write_inode(union dinode *dp, uint32_t ino, const fsinfo_t *fsopts)
 	int		cg, cgino, i;
 	daddr_t		d;
 	char		sbbuf[FFS_MAXBSIZE];
-	uint32_t	initediblk;
+	int32_t		initediblk;
 	ffs_opt_t	*ffs_opts = fsopts->fs_specific;
 
 	assert (dp != NULL);
@@ -1110,8 +1087,7 @@ ffs_write_inode(union dinode *dp, uint32_t ino, const fsinfo_t *fsopts)
 	 * Initialize inode blocks on the fly for UFS2.
 	 */
 	initediblk = ufs_rw32(cgp->cg_initediblk, fsopts->needswap);
-	if (ffs_opts->version == 2 &&
-	    (uint32_t)(cgino + INOPB(fs)) > initediblk &&
+	if (ffs_opts->version == 2 && cgino + INOPB(fs) > initediblk &&
 	    initediblk < ufs_rw32(cgp->cg_niblk, fsopts->needswap)) {
 		memset(buf, 0, fs->fs_bsize);
 		dip = (struct ufs2_dinode *)buf;

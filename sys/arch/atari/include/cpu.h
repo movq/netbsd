@@ -1,7 +1,6 @@
-/*	$NetBSD: cpu.h,v 1.69 2012/02/02 16:59:42 tsutsui Exp $	*/
+/*	$NetBSD: cpu.h,v 1.61 2008/02/27 18:26:15 xtraeme Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -37,9 +36,54 @@
  *
  *	@(#)cpu.h	7.7 (Berkeley) 6/27/91
  */
+/*
+ * Copyright (c) 1988 University of Utah.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: cpu.h 1.16 91/03/25$
+ *
+ *	@(#)cpu.h	7.7 (Berkeley) 6/27/91
+ */
 
 #ifndef _MACHINE_CPU_H_
 #define _MACHINE_CPU_H_
+
+#if defined(_KERNEL)
+
+/*
+ * Exported definitions unique to atari/68k cpu support.
+ */
 
 #if defined(_KERNEL_OPT)
 #include "opt_lockdebug.h"
@@ -49,12 +93,28 @@
  * Get common m68k CPU definitions.
  */
 #include <m68k/cpu.h>
-
-#if defined(_KERNEL)
-/*
- * Exported definitions unique to atari/68k cpu support.
- */
 #define	M68K_MMU_MOTOROLA
+
+#include <sys/cpu_data.h>
+struct cpu_info {
+	struct cpu_data ci_data;	/* MI per-cpu data */
+	cpuid_t	ci_cpuid;
+	int	ci_want_resched;
+	int	ci_mtx_count;
+	int	ci_mtx_oldspl;
+};
+
+extern struct cpu_info cpu_info_store;
+
+#define	curcpu()	(&cpu_info_store)
+
+/*
+ * definitions of cpu-dependent requirements
+ * referenced in generic code
+ */
+#define	cpu_swapin(p)			/* nothing */
+#define cpu_swapout(p)			/* nothing */
+#define	cpu_number()			0
 
 void	cpu_proc_fork(struct proc *, struct proc *);
 
@@ -147,52 +207,58 @@ extern int machineid;
 /*
  * Prototypes from atari_init.c
  */
-int	cpu_dump(int (*)(dev_t, daddr_t, void *, size_t), daddr_t *);
-int	cpu_dumpsize(void);
+int	cpu_dump __P((int (*)(dev_t, daddr_t, void *, size_t), daddr_t *));
+int	cpu_dumpsize __P((void));
 
 /*
  * Prototypes from autoconf.c
  */
-void	config_console(void);
+void	config_console __P((void));
 
 /*
  * Prototypes from fpu.c
  */
-const char *fpu_describe(int);
+const char *fpu_describe __P((int));
+int	fpu_probe __P((void));
 
 /*
  * Prototypes from locore.s
  */
-void	clearseg(paddr_t);
-void	doboot(void);
-void	loadustp(int);
-void	physcopyseg(paddr_t, paddr_t);
-u_int	probeva(u_int, u_int);
-int	suline(void *, void *);
+struct fpframe;
+struct user;
+
+void	clearseg __P((paddr_t));
+void	doboot __P((void));
+void	loadustp __P((int));
+void	m68881_save __P((struct fpframe *));
+void	m68881_restore __P((struct fpframe *));
+void	physcopyseg __P((paddr_t, paddr_t));
+u_int	probeva __P((u_int, u_int));
+int	suline __P((void *, void *));
 
 /*
  * Prototypes from machdep.c:
  */
-int	badbaddr(void *, int);
-void	consinit(void);
+int	badbaddr __P((void *, int));
+void	consinit __P((void));
 typedef void (*si_farg)(void *, void *);	/* XXX */
-void	init_sicallback(void);			/* XXX */
-void	add_sicallback(si_farg, void *, void *);
-void	rem_sicallback(si_farg);
-void	dumpsys(void);
-vaddr_t reserve_dumppages(vaddr_t);
+void	init_sicallback __P((void));		/* XXX */
+void	add_sicallback __P((si_farg, void *, void *));
+void	rem_sicallback __P((si_farg));
+void	dumpsys __P((void));
+vaddr_t reserve_dumppages __P((vaddr_t));
 
 
 /*
  * Prototypes from nvram.c:
  */
 struct uio;
-int	nvram_uio(struct uio *);
+int	nvram_uio __P((struct uio *));
 
 /*
  * Prototypes from pci_machdep.c
  */
-void init_pci_bus(void);
+void init_pci_bus __P((void));
 
 #endif /* _KERNEL */
 #endif /* !_MACHINE_CPU_H_ */

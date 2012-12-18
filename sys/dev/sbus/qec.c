@@ -1,4 +1,4 @@
-/*	$NetBSD: qec.c,v 1.50 2009/09/19 11:53:42 tsutsui Exp $ */
+/*	$NetBSD: qec.c,v 1.39 2008/04/28 20:23:57 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: qec.c,v 1.50 2009/09/19 11:53:42 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: qec.c,v 1.39 2008/04/28 20:23:57 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,8 +48,8 @@ __KERNEL_RCSID(0, "$NetBSD: qec.c,v 1.50 2009/09/19 11:53:42 tsutsui Exp $");
 #include <dev/sbus/qecvar.h>
 
 static int	qecprint(void *, const char *);
-static int	qecmatch(device_t, cfdata_t, void *);
-static void	qecattach(device_t, device_t, void *);
+static int	qecmatch(struct device *, struct cfdata *, void *);
+static void	qecattach(struct device *, struct device *, void *);
 void		qec_init(struct qec_softc *);
 
 static int qec_bus_map(
@@ -67,11 +67,13 @@ static void *qec_intr_establish(
 		void *,			/*arg*/
 		void (*)(void));	/*optional fast trap handler*/
 
-CFATTACH_DECL_NEW(qec, sizeof(struct qec_softc),
+CFATTACH_DECL(qec, sizeof(struct qec_softc),
     qecmatch, qecattach, NULL, NULL);
 
 int
-qecprint(void *aux, const char *busname)
+qecprint(aux, busname)
+	void *aux;
+	const char *busname;
 {
 	struct sbus_attach_args *sa = aux;
 	bus_space_tag_t t = sa->sa_bustag;
@@ -84,7 +86,10 @@ qecprint(void *aux, const char *busname)
 }
 
 int
-qecmatch(device_t parent, cfdata_t cf, void *aux)
+qecmatch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -95,18 +100,18 @@ qecmatch(device_t parent, cfdata_t cf, void *aux)
  * Attach all the sub-devices we can find
  */
 void
-qecattach(device_t parent, device_t self, void *aux)
+qecattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct sbus_attach_args *sa = aux;
-	struct qec_softc *sc = device_private(self);
-	struct sbus_softc *sbsc = device_private(parent);
+	struct qec_softc *sc = (void *)self;
 	int node;
 	int sbusburst;
 	bus_space_tag_t sbt;
 	bus_space_handle_t bh;
 	int error;
 
-	sc->sc_dev = self;
 	sc->sc_bustag = sa->sa_bustag;
 	sc->sc_dmatag = sa->sa_dmatag;
 	node = sa->sa_node;
@@ -152,7 +157,7 @@ qecattach(device_t parent, device_t self, void *aux)
 	/*
 	 * Get transfer burst size from PROM
 	 */
-	sbusburst = sbsc->sc_burst;
+	sbusburst = ((struct sbus_softc *)parent)->sc_burst;
 	if (sbusburst == 0)
 		sbusburst = SBUS_BURST_32 - 1; /* 1->16 */
 
@@ -163,6 +168,8 @@ qecattach(device_t parent, device_t self, void *aux)
 
 	/* Clamp at parent's burst sizes */
 	sc->sc_burst &= sbusburst;
+
+	sbus_establish(&sc->sc_sd, &sc->sc_dev);
 
 	/* Allocate a bus tag */
 	sbt = bus_space_tag_alloc(sc->sc_bustag, sc);
@@ -205,17 +212,21 @@ qecattach(device_t parent, device_t self, void *aux)
 	/* search through children */
 	for (node = firstchild(node); node; node = nextsibling(node)) {
 		struct sbus_attach_args sax;
-		sbus_setup_attach_args(sbsc,
+		sbus_setup_attach_args((struct sbus_softc *)parent,
 				       sbt, sc->sc_dmatag, node, &sax);
-		(void)config_found(self, (void *)&sax, qecprint);
+		(void)config_found(&sc->sc_dev, (void *)&sax, qecprint);
 		sbus_destroy_attach_args(&sax);
 	}
 }
 
 int
-qec_bus_map(bus_space_tag_t t, bus_addr_t ba, bus_size_t size, int flags,
-    vaddr_t va, bus_space_handle_t *hp)
-	/* va:	 Ignored */
+qec_bus_map(t, ba, size, flags, va, hp)
+	bus_space_tag_t t;
+	bus_addr_t ba;
+	bus_size_t size;
+	int	flags;
+	vaddr_t va;	/* Ignored */
+	bus_space_handle_t *hp;
 {
 	int error;
 
@@ -227,9 +238,13 @@ qec_bus_map(bus_space_tag_t t, bus_addr_t ba, bus_size_t size, int flags,
 }
 
 void *
-qec_intr_establish(bus_space_tag_t t, int pri, int level,
-    int (*handler)(void *), void *arg, void (*fastvec)(void))
-	/* (*fastvec)(void): ignored */
+qec_intr_establish(t, pri, level, handler, arg, fastvec)
+	bus_space_tag_t t;
+	int pri;
+	int level;
+	int (*handler)(void *);
+	void *arg;
+	void (*fastvec)(void);	/* ignored */
 {
 	struct qec_softc *sc = t->cookie;
 
@@ -240,7 +255,7 @@ qec_intr_establish(bus_space_tag_t t, int pri, int level,
 		 */
 		if (sc->sc_intr == NULL) {
 			printf("%s: warning: no interrupts\n",
-				device_xname(sc->sc_dev));
+				device_xname(&sc->sc_dev));
 			return (NULL);
 		}
 		pri = sc->sc_intr->oi_pri;
@@ -250,11 +265,12 @@ qec_intr_establish(bus_space_tag_t t, int pri, int level,
 }
 
 void
-qec_init(struct qec_softc *sc)
+qec_init(sc)
+	struct qec_softc *sc;
 {
 	bus_space_tag_t t = sc->sc_bustag;
 	bus_space_handle_t qr = sc->sc_regs;
-	uint32_t v, burst = 0, psize;
+	u_int32_t v, burst = 0, psize;
 	int i;
 
 	/* First, reset the controller */
@@ -297,14 +313,16 @@ qec_init(struct qec_softc *sc)
  * Called from be & qe drivers.
  */
 void
-qec_meminit(struct qec_ring *qr, unsigned int pktbufsz)
+qec_meminit(qr, pktbufsz)
+	struct qec_ring *qr;
+	unsigned int pktbufsz;
 {
 	bus_addr_t txbufdma, rxbufdma;
 	bus_addr_t dma;
-	uint8_t *p;
+	void *p;
 	unsigned int ntbuf, nrbuf, i;
 
-	p   = qr->rb_membase;
+	p = qr->rb_membase;
 	dma = qr->rb_dmabase;
 
 	ntbuf = qr->rb_ntbuf;
@@ -315,7 +333,7 @@ qec_meminit(struct qec_ring *qr, unsigned int pktbufsz)
 	 */
 	qr->rb_txd = (struct qec_xd *)p;
 	qr->rb_txddma = dma;
-	p   += QEC_XD_RING_MAXSIZE * sizeof(struct qec_xd);
+	p = (char *)p + QEC_XD_RING_MAXSIZE * sizeof(struct qec_xd);
 	dma += QEC_XD_RING_MAXSIZE * sizeof(struct qec_xd);
 
 	/*
@@ -323,7 +341,7 @@ qec_meminit(struct qec_ring *qr, unsigned int pktbufsz)
 	 */
 	qr->rb_rxd = (struct qec_xd *)p;
 	qr->rb_rxddma = dma;
-	p   += QEC_XD_RING_MAXSIZE * sizeof(struct qec_xd);
+	p = (char *)p + QEC_XD_RING_MAXSIZE * sizeof(struct qec_xd);
 	dma += QEC_XD_RING_MAXSIZE * sizeof(struct qec_xd);
 
 
@@ -332,7 +350,7 @@ qec_meminit(struct qec_ring *qr, unsigned int pktbufsz)
 	 */
 	qr->rb_txbuf = p;
 	txbufdma = dma;
-	p   += ntbuf * pktbufsz;
+	p = (char *)p + ntbuf * pktbufsz;
 	dma += ntbuf * pktbufsz;
 
 	/*
@@ -340,15 +358,15 @@ qec_meminit(struct qec_ring *qr, unsigned int pktbufsz)
 	 */
 	qr->rb_rxbuf = p;
 	rxbufdma = dma;
-	p   += nrbuf * pktbufsz;
+	p = (char *)p + nrbuf * pktbufsz;
 	dma += nrbuf * pktbufsz;
 
 	/*
 	 * Initialize transmit buffer descriptors
 	 */
 	for (i = 0; i < QEC_XD_RING_MAXSIZE; i++) {
-		qr->rb_txd[i].xd_addr =
-		    (uint32_t)(txbufdma + (i % ntbuf) * pktbufsz);
+		qr->rb_txd[i].xd_addr = (u_int32_t)
+			(txbufdma + (i % ntbuf) * pktbufsz);
 		qr->rb_txd[i].xd_flags = 0;
 	}
 
@@ -356,8 +374,8 @@ qec_meminit(struct qec_ring *qr, unsigned int pktbufsz)
 	 * Initialize receive buffer descriptors
 	 */
 	for (i = 0; i < QEC_XD_RING_MAXSIZE; i++) {
-		qr->rb_rxd[i].xd_addr =
-		    (uint32_t)(rxbufdma + (i % nrbuf) * pktbufsz);
+		qr->rb_rxd[i].xd_addr = (u_int32_t)
+			(rxbufdma + (i % nrbuf) * pktbufsz);
 		qr->rb_rxd[i].xd_flags = (i < nrbuf)
 			? QEC_XD_OWN | (pktbufsz & QEC_XD_LENGTH)
 			: 0;

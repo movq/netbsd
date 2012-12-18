@@ -1,4 +1,4 @@
-/*	$NetBSD: ofwgencfg_clock.c,v 1.10 2009/03/18 10:22:24 cegger Exp $	*/
+/*	$NetBSD: ofwgencfg_clock.c,v 1.8 2008/01/20 16:28:23 joerg Exp $	*/
 
 /*
  * Copyright 1997
@@ -36,7 +36,7 @@
 /* Include header files */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofwgencfg_clock.c,v 1.10 2009/03/18 10:22:24 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofwgencfg_clock.c,v 1.8 2008/01/20 16:28:23 joerg Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -79,7 +79,8 @@ clockhandler(struct clockframe *frame)
  */
 
 int
-statclockhandler(struct clockframe *frame)
+statclockhandler(frame)
+	struct clockframe *frame;
 {
 
 	statclock(frame);
@@ -112,7 +113,7 @@ setstatclockrate(int arg)
  */
  
 void
-cpu_initclocks(void)
+cpu_initclocks()
 {
 	/*
 	 * Load timer 0 with count down value
@@ -145,7 +146,8 @@ cpu_initclocks(void)
 int delaycount = 50;
 
 void
-delay(u_int n)
+delay(n)
+	u_int n;
 {
 	u_int i;
 

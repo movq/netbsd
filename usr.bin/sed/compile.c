@@ -1,4 +1,4 @@
-/*	$NetBSD: compile.c,v 1.38 2012/12/14 08:16:51 msaitoh Exp $	*/
+/*	$NetBSD: compile.c,v 1.35 2007/04/17 20:30:29 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -76,7 +76,7 @@
 #if 0
 static char sccsid[] = "@(#)compile.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: compile.c,v 1.38 2012/12/14 08:16:51 msaitoh Exp $");
+__RCSID("$NetBSD: compile.c,v 1.35 2007/04/17 20:30:29 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -118,7 +118,7 @@ static char	 *compile_text(void);
 static char	 *compile_tr(char *, char **);
 static struct s_command
 		**compile_stream(struct s_command **);
-static char	 *duptoeol(char *, const char *);
+static char	 *duptoeol(char *, char *);
 static void	  enterlabel(struct s_command *);
 static struct s_command
 		 *findlabel(char *);
@@ -193,15 +193,14 @@ static struct s_command **
 compile_stream(struct s_command **link)
 {
 	char *p;
-	static char *lbuf;	/* To avoid excessive malloc calls */
-	static size_t bufsize;
+	static char lbuf[_POSIX2_LINE_MAX + 1];	/* To save stack */
 	struct s_command *cmd, *cmd2, *stack;
 	struct s_format *fp;
 	int naddr;				/* Number of addresses */
 
 	stack = 0;
 	for (;;) {
-		if ((p = cu_fgets(&lbuf, &bufsize)) == NULL) {
+		if ((p = cu_fgets(lbuf, sizeof(lbuf))) == NULL) {
 			if (stack != 0)
 				err(COMPILE, "unexpected EOF (pending }'s)");
 			return (link);
@@ -460,13 +459,11 @@ static char *
 compile_re(char *p, regex_t **repp)
 {
 	int eval;
-	char *re;
+	char re[_POSIX2_LINE_MAX + 1];
 
-	re = xmalloc(strlen(p) + 1); /* strlen(re) <= strlen(p) */
 	p = compile_delimited(p, re);
 	if (p && strlen(re) == 0) {
 		*repp = NULL;
-		free(re);
 		return (p);
 	}
 	*repp = xmalloc(sizeof(regex_t));
@@ -474,7 +471,6 @@ compile_re(char *p, regex_t **repp)
 		err(COMPILE, "RE error: %s", strregerror(eval, *repp));
 	if (maxnsub < (*repp)->re_nsub)
 		maxnsub = (*repp)->re_nsub;
-	free(re);
 	return (p);
 }
 
@@ -486,9 +482,8 @@ compile_re(char *p, regex_t **repp)
 static char *
 compile_subst(char *p, struct s_subst *s)
 {
-	static char *lbuf;
-	static size_t bufsize;
-	int asize, ref, size, len;
+	static char lbuf[_POSIX2_LINE_MAX + 1];
+	int asize, ref, size;
 	char c, *text, *op, *sp;
 	int sawesc = 0;
 
@@ -498,16 +493,10 @@ compile_subst(char *p, struct s_subst *s)
 
 	s->maxbref = 0;
 	s->linenum = linenum;
-	text = NULL;
-	asize = size = 0;
+	asize = 2 * _POSIX2_LINE_MAX + 1;
+	text = xmalloc(asize);
+	size = 0;
 	do {
-		len = ROUNDLEN(strlen(p) + 1);
-		if (asize - size < len) {
-			do {
-				asize += len;
-			} while (asize - size < len);
-			text = xrealloc(text, asize);
-		}
 		op = sp = text + size;
 		for (; *p; p++) {
 			if (*p == '\\' || sawesc) {
@@ -536,7 +525,7 @@ compile_subst(char *p, struct s_subst *s)
 					*sp++ = '\\';
 					ref = *p - '0';
 					if (s->re != NULL &&
-					    (size_t)ref > s->re->re_nsub)
+					    ref > s->re->re_nsub)
 						err(COMPILE,
 "\\%c not defined in the RE", *p);
 					if (s->maxbref < ref)
@@ -557,7 +546,11 @@ compile_subst(char *p, struct s_subst *s)
 			*sp++ = *p;
 		}
 		size += sp - op;
-	} while ((p = cu_fgets(&lbuf, &bufsize)));
+		if (asize - size < _POSIX2_LINE_MAX + 1) {
+			asize *= 2;
+			text = xrealloc(text, asize);
+		}
+	} while (cu_fgets(p = lbuf, sizeof(lbuf)));
 	err(COMPILE, "unterminated substitute in regular expression");
 	/* NOTREACHED */
 	return (NULL);
@@ -570,7 +563,7 @@ static char *
 compile_flags(char *p, struct s_subst *s)
 {
 	int gn;			/* True if we have seen g or n */
-	char wfile[PATH_MAX], *q;
+	char wfile[_POSIX2_LINE_MAX + 1], *q;
 
 	s->n = 1;				/* Default */
 	s->p = 0;
@@ -645,27 +638,26 @@ compile_tr(char *p, char **transtab)
 {
 	int i;
 	char *lt, *op, *np;
-	char *old = NULL, *new = NULL;
+	char old[_POSIX2_LINE_MAX + 1];
+	char new[_POSIX2_LINE_MAX + 1];
 
 	if (*p == '\0' || *p == '\\')
 		err(COMPILE,
 "transform pattern can not be delimited by newline or backslash");
-	old = xmalloc(strlen(p) + 1);
 	p = compile_delimited(p, old);
 	if (p == NULL) {
 		err(COMPILE, "unterminated transform source string");
-		goto bad;
+		return (NULL);
 	}
-	new = xmalloc(strlen(p) + 1);
 	p = compile_delimited(--p, new);
 	if (p == NULL) {
 		err(COMPILE, "unterminated transform target string");
-		goto bad;
+		return (NULL);
 	}
 	EATSPACE();
 	if (strlen(new) != strlen(old)) {
 		err(COMPILE, "transform strings are not the same length");
-		goto bad;
+		return (NULL);
 	}
 	/* We assume characters are 8 bits */
 	lt = xmalloc(UCHAR_MAX+1);
@@ -674,13 +666,7 @@ compile_tr(char *p, char **transtab)
 	for (op = old, np = new; *op; op++, np++)
 		lt[(u_char)*op] = *np;
 	*transtab = lt;
-	free(old);
-	free(new);
 	return (p);
-bad:
-	free(old);
-	free(new);
-	return (NULL);
 }
 
 /*
@@ -689,21 +675,16 @@ bad:
 static char *
 compile_text(void)
 {
-	int asize, size, len;
-	char *lbuf, *text, *p, *op, *s;
-	size_t bufsize;
+	int asize, size;
+	char *text, *p, *op, *s;
+	char lbuf[_POSIX2_LINE_MAX + 1];
 
-	lbuf = text = NULL;
-	asize = size = 0;
-	while ((p = cu_fgets(&lbuf, &bufsize))) {
-		len = ROUNDLEN(strlen(p) + 1);
-		if (asize - size < len) {
-			do {
-				asize += len;
-			} while (asize - size < len);
-			text = xrealloc(text, asize);
-		}
+	asize = 2 * _POSIX2_LINE_MAX + 1;
+	text = xmalloc(asize);
+	size = 0;
+	while (cu_fgets(lbuf, sizeof(lbuf))) {
 		op = s = text + size;
+		p = lbuf;
 		for (; *p; p++) {
 			if (*p == '\\')
 				p++;
@@ -714,8 +695,11 @@ compile_text(void)
 			*s = '\0';
 			break;
 		}
+		if (asize - size < _POSIX2_LINE_MAX + 1) {
+			asize *= 2;
+			text = xrealloc(text, asize);
+		}
 	}
-	free(lbuf);
 	return (xrealloc(text, size + 1));
 }
 
@@ -759,7 +743,7 @@ compile_addr(char *p, struct s_addr *a)
  *	Return a copy of all the characters up to \n or \0.
  */
 static char *
-duptoeol(char *s, const char *ctype)
+duptoeol(char *s, char *ctype)
 {
 	size_t len;
 	int ws;

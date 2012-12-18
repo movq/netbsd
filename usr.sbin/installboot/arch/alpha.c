@@ -1,4 +1,4 @@
-/*	$NetBSD: alpha.c,v 1.21 2011/08/14 17:50:17 christos Exp $	*/
+/*	$NetBSD: alpha.c,v 1.18 2008/04/28 20:24:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -95,7 +95,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(__lint)
-__RCSID("$NetBSD: alpha.c,v 1.21 2011/08/14 17:50:17 christos Exp $");
+__RCSID("$NetBSD: alpha.c,v 1.18 2008/04/28 20:24:16 martin Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
@@ -154,8 +154,8 @@ alpha_clearboot(ib_params *params)
 	if (cksum != bb.bb_cksum) {		// XXX check bb_cksum endian?
 		warnx(
 	    "Old boot block checksum invalid (was %#llx, calculated %#llx)",
-		    (unsigned long long)le64toh(bb.bb_cksum),
-		    (unsigned long long)le64toh(cksum));
+		    (unsigned long long)bb.bb_cksum,
+		    (unsigned long long)cksum);
 		warnx("Boot block invalid");
 		return (0);
 	}
@@ -166,7 +166,7 @@ alpha_clearboot(ib_params *params)
 		printf("Old bootstrap size:         %llu\n",
 		    (unsigned long long)le64toh(bb.bb_secsize));
 		printf("Old bootstrap checksum:     %#llx\n",
-		    (unsigned long long)le64toh(bb.bb_cksum));
+		    (unsigned long long)bb.bb_cksum);
 	}
 
 	bb.bb_secstart = bb.bb_secsize = bb.bb_flags = 0;
@@ -180,7 +180,7 @@ alpha_clearboot(ib_params *params)
 	printf("New bootstrap size:         %llu\n",
 	    (unsigned long long)le64toh(bb.bb_secsize));
 	printf("New bootstrap checksum:     %#llx\n",
-	    (unsigned long long)le64toh(bb.bb_cksum));
+	    (unsigned long long)bb.bb_cksum);
 
 	if (params->flags & IB_VERBOSE)
 		printf("%slearing boot block\n",
@@ -296,7 +296,7 @@ alpha_setboot(ib_params *params)
 		printf("Bootstrap sector count:  %llu\n",
 		    (unsigned long long)le64toh(bb.bb_secsize));
 		printf("New boot block checksum: %#llx\n",
-		    (unsigned long long)le64toh(bb.bb_cksum));
+		    (unsigned long long)bb.bb_cksum);
 		printf("%sriting bootstrap\n",
 		    (params->flags & IB_NOWRITE) ? "Not w" : "W");
 	}
@@ -309,7 +309,7 @@ alpha_setboot(ib_params *params)
 	if (rv == -1) {
 		warn("Writing `%s'", params->filesystem);
 		goto done;
-	} else if ((size_t)rv != bootstrapsize) {
+	} else if (rv != bootstrapsize) {
 		warnx("Writing `%s': short write", params->filesystem);
 		goto done;
 	}
@@ -368,8 +368,7 @@ resum(ib_params *params, struct alpha_boot_block * const bb, uint16_t *bb16)
 	if (bb16 != NULL)
 		memcpy(bb16, bb, sizeof(*bb));
 	if ((params->flags & IB_VERBOSE) && lastsum != bb->bb_cksum)
-		printf("alpha checksum now %016llx\n",
-		    (unsigned long long)le64toh(bb->bb_cksum));
+		printf("alpha checksum now %016llx\n", (long long)bb->bb_cksum);
 	lastsum = bb->bb_cksum;
 }
 
@@ -432,7 +431,7 @@ sun_bootstrap(ib_params *params, struct alpha_boot_block * const bb)
 	resum(params, bb, bb16);
 	if (params->flags & IB_VERBOSE)
 		printf("final harmonized checksum: %016llx\n",
-		    (unsigned long long)le64toh(bb->bb_cksum));
+		    (long long)bb->bb_cksum);
 	check_sparc(bb, "Final");
 }
 
@@ -440,7 +439,8 @@ static void
 check_sparc(const struct alpha_boot_block * const bb, const char *when)
 {
 	uint16_t bb16[256];
-#define wmsg "%s sparc %s 0x%04x invalid, expected 0x%04x"
+	const char * const wmsg =
+	    "%s sparc %s 0x%04x invalid, expected 0x%04x";
 
 	memcpy(bb16, bb, sizeof(bb16));
 	if (compute_sunsum(bb16) != bb16[255])

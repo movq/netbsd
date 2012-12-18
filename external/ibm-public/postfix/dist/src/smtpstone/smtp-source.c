@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp-source.c,v 1.1.1.2 2011/03/02 19:32:39 tron Exp $	*/
+/*	$NetBSD: smtp-source.c,v 1.1.1.1.2.3 2011/01/07 01:24:14 riz Exp $	*/
 
 /*++
 /* NAME
@@ -232,7 +232,6 @@ static void send_rset(int, char *);
 static void rset_done(int, char *);
 static void send_quit(SESSION *);
 static void quit_done(int, char *);
-static void close_session(SESSION *);
 
 /* random_interval - generate a random value in 0 .. (small) interval */
 
@@ -576,10 +575,6 @@ static void helo_done(int unused_event, char *context)
 	 /* void */ ;
     } else if (allow_reject) {
 	msg_warn("%s rejected: %d %s", protocol, resp->code, resp->str);
-	if (resp->code == 421 || resp->code == 521) {
-	    close_session(session);
-	    return;
-	}
     } else {
 	msg_fatal("%s rejected: %d %s", protocol, resp->code, resp->str);
     }
@@ -628,10 +623,6 @@ static void mail_done(int unused, char *context)
 	send_rcpt(unused, context);
     } else if (allow_reject) {
 	msg_warn("sender rejected: %d %s", resp->code, resp->str);
-	if (resp->code == 421 || resp->code == 521) {
-	    close_session(session);
-	    return;
-	}
 	send_rset(unused, context);
     } else {
 	msg_fatal("sender rejected: %d %s", resp->code, resp->str);
@@ -684,10 +675,6 @@ static void rcpt_done(int unused, char *context)
 	session->rcpt_accepted++;
     } else if (allow_reject) {
 	msg_warn("recipient rejected: %d %s", resp->code, resp->str);
-	if (resp->code == 421 || resp->code == 521) {
-	    close_session(session);
-	    return;
-	}
     } else {
 	msg_fatal("recipient rejected: %d %s", resp->code, resp->str);
     }
@@ -742,10 +729,6 @@ static void data_done(int unused, char *context)
 	 /* see below */ ;
     } else if (allow_reject) {
 	msg_warn("data rejected: %d %s", resp->code, resp->str);
-	if (resp->code == 421 || resp->code == 521) {
-	    close_session(session);
-	    return;
-	}
 	send_rset(unused, context);
 	return;
     } else {
@@ -827,10 +810,6 @@ static void dot_done(int unused_event, char *context)
 	     /* void */ ;
 	} else if (allow_reject) {
 	    msg_warn("end of data rejected: %d %s", resp->code, resp->str);
-	    if (resp->code == 421 || resp->code == 521) {
-		close_session(session);
-		return;
-	    }
 	} else {
 	    msg_fatal("end of data rejected: %d %s", resp->code, resp->str);
 	}
@@ -875,10 +854,6 @@ static void rset_done(int unused_event, char *context)
 	/* void */
     } else if (allow_reject) {
 	msg_warn("rset rejected: %d %s", resp->code, resp->str);
-	if (resp->code == 421 || resp->code == 521) {
-	    close_session(session);
-	    return;
-	}
     } else {
 	msg_fatal("rset rejected: %d %s", resp->code, resp->str);
     }
@@ -909,16 +884,6 @@ static void quit_done(int unused_event, char *context)
     SESSION *session = (SESSION *) context;
 
     (void) response(session->stream, buffer);
-    event_disable_readwrite(vstream_fileno(session->stream));
-    vstream_fclose(session->stream);
-    session->stream = 0;
-    start_another(session);
-}
-
-/* close_session - disconnect, for example after 421 or 521 reply */
-
-static void close_session(SESSION *session)
-{
     event_disable_readwrite(vstream_fileno(session->stream));
     vstream_fclose(session->stream);
     session->stream = 0;

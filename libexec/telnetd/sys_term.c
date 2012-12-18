@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_term.c,v 1.46 2012/11/04 21:57:40 christos Exp $	*/
+/*	$NetBSD: sys_term.c,v 1.44 2007/01/17 21:44:50 hubertf Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)sys_term.c	8.4+1 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: sys_term.c,v 1.46 2012/11/04 21:57:40 christos Exp $");
+__RCSID("$NetBSD: sys_term.c,v 1.44 2007/01/17 21:44:50 hubertf Exp $");
 #endif
 #endif /* not lint */
 
@@ -44,12 +44,8 @@ __RCSID("$NetBSD: sys_term.c,v 1.46 2012/11/04 21:57:40 christos Exp $");
 #include <util.h>
 #include <vis.h>
 
-#ifdef SUPPORT_UTMP
 #include <utmp.h>
-#endif
-#ifdef SUPPORT_UTMPX
-#include <utmpx.h>
-#endif
+struct	utmp wtmp;
 
 #define SCPYN(a, b)	(void) strncpy(a, b, sizeof(a))
 #define SCMPN(a, b)	strncmp(a, b, sizeof(a))
@@ -58,7 +54,7 @@ struct termios termbuf, termbuf2;	/* pty control structure */
 
 void getptyslave(void);
 int cleanopen(char *);
-char **addarg(char **, const char *);
+char **addarg(char **, char *);
 void scrub_env(void);
 int getent(char *, char *);
 char *getstr(const char *, char **);
@@ -88,7 +84,7 @@ init_termbuf(void)
 void
 copy_termbuf(char *cp, int len)
 {
-	if ((size_t)len > sizeof(termbuf))
+	if (len > sizeof(termbuf))
 		len = sizeof(termbuf);
 	memmove((char *)&termbuf, cp, len);
 	termbuf2 = termbuf;
@@ -681,7 +677,7 @@ start_login(char *host, int autologin, char *name)
 }
 
 char **
-addarg(char **argv, const char *val)
+addarg(char **argv, char *val)
 {
 	char **cpp;
 	char **nargv;
@@ -711,7 +707,7 @@ addarg(char **argv, const char *val)
 		argv++;
 		cpp = &argv[(long)argv[-1] - 10];
 	}
-	*cpp++ = __UNCONST(val);
+	*cpp++ = val;
 	*cpp = 0;
 	return(argv);
 }

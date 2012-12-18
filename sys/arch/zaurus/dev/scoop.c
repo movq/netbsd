@@ -1,4 +1,4 @@
-/*	$NetBSD: scoop.c,v 1.12 2012/10/27 17:18:14 chs Exp $	*/
+/*	$NetBSD: scoop.c,v 1.5 2008/06/13 13:58:21 cegger Exp $	*/
 /*	$OpenBSD: zaurus_scoop.c,v 1.12 2005/11/17 05:26:31 uwe Exp $	*/
 
 /*
@@ -18,14 +18,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scoop.c,v 1.12 2012/10/27 17:18:14 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scoop.c,v 1.5 2008/06/13 13:58:21 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/conf.h>
 #include <sys/gpio.h>
-#include <sys/bus.h>
+
+#include <machine/bus.h>
 
 #include <arm/xscale/pxa2x0var.h>
 
@@ -38,7 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: scoop.c,v 1.12 2012/10/27 17:18:14 chs Exp $");
 #include "ioconf.h"
 
 struct scoop_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
@@ -46,21 +47,17 @@ struct scoop_softc {
 	uint16_t		sc_gpwr;	/* GPIO state before suspend */
 };
 
-static int	scoopmatch(device_t, cfdata_t, void *);
-static void	scoopattach(device_t, device_t, void *);
+static int	scoopmatch(struct device *, struct cfdata *, void *);
+static void	scoopattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(scoop, sizeof(struct scoop_softc),
-    scoopmatch, scoopattach, NULL, NULL);
+CFATTACH_DECL(scoop, sizeof(struct scoop_softc),
+	scoopmatch, scoopattach, NULL, NULL);
 
 #if 0
-static int	scoop_gpio_pin_read(struct scoop_softc *, int);
+static int	scoop_gpio_pin_read(struct scoop_softc *sc, int);
 #endif
-static void	scoop_gpio_pin_write(struct scoop_softc *, int, int);
-static void	scoop_gpio_pin_ctl(struct scoop_softc *, int, int);
-
-static struct scoop_softc *backlight_sc;
-static uint8_t backlight_on_init = 1;
-static uint8_t backlight_cont_init = 0;
+static void	scoop_gpio_pin_write(struct scoop_softc *sc, int, int);
+static void	scoop_gpio_pin_ctl(struct scoop_softc *sc, int, int);
 
 enum scoop_card {
 	SD_CARD,
@@ -70,7 +67,7 @@ enum scoop_card {
 static void	scoop0_set_card_power(enum scoop_card card, int new_cpr);
 
 static int
-scoopmatch(device_t parent, cfdata_t cf, void *aux)
+scoopmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	/*
@@ -82,22 +79,18 @@ scoopmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-scoopattach(device_t parent, device_t self, void *aux)
+scoopattach(struct device *parent, struct device *self, void *aux)
 {
-	struct scoop_softc *sc = device_private(self);
-	struct pxaip_attach_args *pxa = aux;
+	struct pxaip_attach_args *pxa = (struct pxaip_attach_args *)aux;
+	struct scoop_softc *sc = (struct scoop_softc *)self;
 	bus_addr_t addr;
 	bus_size_t size;
 
-	sc->sc_dev = self;
 	sc->sc_iot = pxa->pxa_iot;
-
-	aprint_normal(": PCMCIA/GPIO controller\n");
-	aprint_naive("\n");
 
 	if (pxa->pxa_addr != -1)
 		addr = pxa->pxa_addr;
-	else if (device_unit(sc->sc_dev) == 0)
+	else if (sc->sc_dev.dv_unit == 0)
 		addr = C3000_SCOOP0_BASE;
 	else
 		addr = C3000_SCOOP1_BASE;
@@ -105,21 +98,19 @@ scoopattach(device_t parent, device_t self, void *aux)
 	size = pxa->pxa_size < SCOOP_SIZE ? SCOOP_SIZE : pxa->pxa_size;
 
 	if (bus_space_map(sc->sc_iot, addr, size, 0, &sc->sc_ioh) != 0) {
-		aprint_error_dev(sc->sc_dev, "couldn't map registers\n");
+		printf(": failed to map %s\n", sc->sc_dev.dv_xname);
 		return;
 	}
 
-	if (ZAURUS_ISC3000 && device_unit(sc->sc_dev) == 1) {
+	if (ZAURUS_ISC3000 && sc->sc_dev.dv_unit == 1) {
 		scoop_gpio_pin_ctl(sc, SCOOP1_AKIN_PULLUP, GPIO_PIN_OUTPUT);
 		scoop_gpio_pin_write(sc, SCOOP1_AKIN_PULLUP, GPIO_PIN_LOW);
-		backlight_sc = sc;
-		scoop_set_backlight(backlight_on_init, backlight_cont_init);
-	} else if (ZAURUS_ISC860) {
+	} else if (!ZAURUS_ISC3000) {
 		scoop_gpio_pin_ctl(sc, SCOOP0_AKIN_PULLUP, GPIO_PIN_OUTPUT);
 		scoop_gpio_pin_write(sc, SCOOP0_AKIN_PULLUP, GPIO_PIN_LOW);
-		backlight_sc = sc;
-		scoop_set_backlight(backlight_on_init, backlight_cont_init);
 	}
+
+	printf(": PCMCIA/GPIO controller\n");
 }
 
 #if 0
@@ -169,19 +160,27 @@ scoop_gpio_pin_ctl(struct scoop_softc *sc, int pin, int flags)
 void
 scoop_set_backlight(int on, int cont)
 {
-	struct scoop_softc *sc = backlight_sc;
+	struct scoop_softc *sc;
+#if 0
+	struct scoop_softc *sc0;
 
-	if (sc == NULL) {
-		backlight_cont_init = cont;
-		backlight_on_init = on;
-	} else {
-		if (ZAURUS_ISC3000) {
-			scoop_gpio_pin_write(sc, SCOOP1_BACKLIGHT_CONT, !cont);
-			scoop_gpio_pin_write(sc, SCOOP1_BACKLIGHT_ON, on);
-		} else if (ZAURUS_ISC860) {
-			scoop_gpio_pin_write(sc, SCOOP0_BACKLIGHT_CONT, cont);
-		}
+	sc0 = device_lookup_private(&scoop_cd, 0);
+#endif
+
+	sc = device_lookup_private(&scoop_cd, 1);
+	if (sc != NULL) {
+		/* C3000 */
+		scoop_gpio_pin_write(sc,
+		    SCOOP1_BACKLIGHT_CONT, !cont);
+		scoop_gpio_pin_write(sc,
+		    SCOOP1_BACKLIGHT_ON, on);
 	}
+#if 0
+	else if (sc0 != NULL) {
+		scoop_gpio_pin_write(sc0,
+		    SCOOP0_BACKLIGHT_CONT, cont);
+	}
+#endif
 }
 
 /*
@@ -195,7 +194,8 @@ scoop_set_irled(int on)
 	sc = device_lookup_private(&scoop_cd, 1);
 	if (sc != NULL) {
 		/* IR_ON is inverted */
-		scoop_gpio_pin_write(sc, SCOOP1_IR_ON, !on);
+		scoop_gpio_pin_write(sc,
+		    SCOOP1_IR_ON, !on);
 	}
 }
 
@@ -212,10 +212,12 @@ scoop_led_set(int led, int on)
 	sc = device_lookup_private(&scoop_cd, 0);
 	if (sc != NULL) {
 		if ((led & SCOOP_LED_GREEN) != 0) {
-			scoop_gpio_pin_write(sc, SCOOP0_LED_GREEN, on);
+			scoop_gpio_pin_write(sc,
+			    SCOOP0_LED_GREEN, on);
 		}
 		if (scoop_cd.cd_ndevs > 1 && (led & SCOOP_LED_ORANGE) != 0) {
-			scoop_gpio_pin_write(sc, SCOOP0_LED_ORANGE_C3000, on);
+			scoop_gpio_pin_write(sc,
+			    SCOOP0_LED_ORANGE_C3000, on);
 		}
 	}
 }
@@ -232,29 +234,22 @@ scoop_set_headphone(int on)
 	if (sc == NULL)
 		return;
 
-	scoop_gpio_pin_ctl(sc, SCOOP0_MUTE_L, GPIO_PIN_OUTPUT);
-	scoop_gpio_pin_ctl(sc, SCOOP0_MUTE_R, GPIO_PIN_OUTPUT);
+	scoop_gpio_pin_ctl(sc, SCOOP0_MUTE_L,
+	    GPIO_PIN_OUTPUT);
+	scoop_gpio_pin_ctl(sc, SCOOP0_MUTE_R,
+	    GPIO_PIN_OUTPUT);
 
 	if (on) {
-		scoop_gpio_pin_write(sc, SCOOP0_MUTE_L, GPIO_PIN_HIGH);
-		scoop_gpio_pin_write(sc, SCOOP0_MUTE_R, GPIO_PIN_HIGH);
+		scoop_gpio_pin_write(sc, SCOOP0_MUTE_L,
+		    GPIO_PIN_HIGH);
+		scoop_gpio_pin_write(sc, SCOOP0_MUTE_R,
+		    GPIO_PIN_HIGH);
 	} else {
-		scoop_gpio_pin_write(sc, SCOOP0_MUTE_L, GPIO_PIN_LOW);
-		scoop_gpio_pin_write(sc, SCOOP0_MUTE_R, GPIO_PIN_LOW);
+		scoop_gpio_pin_write(sc, SCOOP0_MUTE_L,
+		    GPIO_PIN_LOW);
+		scoop_gpio_pin_write(sc, SCOOP0_MUTE_R,
+		    GPIO_PIN_LOW);
 	}
-}
-
-/*
- * Enable or disable the mic bias
- */
-void
-scoop_set_mic_bias(int onoff)
-{
-	struct scoop_softc *sc1;
-
-	sc1 = device_lookup_private(&scoop_cd, 1);
-	if (sc1 != NULL)
-		scoop_gpio_pin_write(sc1, SCOOP1_MIC_BIAS, onoff);
 }
 
 /*
@@ -270,9 +265,11 @@ scoop_akin_pullup(int enable)
 	sc1 = device_lookup_private(&scoop_cd, 1);
 
 	if (sc1 != NULL) {
-		scoop_gpio_pin_write(sc1, SCOOP1_AKIN_PULLUP, enable);
+		scoop_gpio_pin_write(sc1,
+		    SCOOP1_AKIN_PULLUP, enable);
 	} else if (sc0 != NULL) {
-		scoop_gpio_pin_write(sc0, SCOOP0_AKIN_PULLUP, enable);
+		scoop_gpio_pin_write(sc0,
+		    SCOOP0_AKIN_PULLUP, enable);
 	}
 }
 
@@ -284,7 +281,8 @@ scoop_battery_temp_adc(int enable)
 	sc = device_lookup_private(&scoop_cd, 0);
 
 	if (sc != NULL) {
-		scoop_gpio_pin_write(sc, SCOOP0_ADC_TEMP_ON_C3000, enable);
+		scoop_gpio_pin_write(sc,
+		    SCOOP0_ADC_TEMP_ON_C3000, enable);
 	}
 }
 
@@ -293,14 +291,13 @@ scoop_charge_battery(int enable, int voltage_high)
 {
 	struct scoop_softc *sc;
 
-	if (ZAURUS_ISC860)
-		return;
-
 	sc = device_lookup_private(&scoop_cd, 0);
 
 	if (sc != NULL) {
-		scoop_gpio_pin_write(sc, SCOOP0_JK_B_C3000, voltage_high);
-		scoop_gpio_pin_write(sc, SCOOP0_CHARGE_OFF_C3000, !enable);
+		scoop_gpio_pin_write(sc,
+		    SCOOP0_JK_B_C3000, voltage_high);
+		scoop_gpio_pin_write(sc,
+		    SCOOP0_CHARGE_OFF_C3000, !enable);
 	}
 }
 
@@ -309,13 +306,11 @@ scoop_discharge_battery(int enable)
 {
 	struct scoop_softc *sc;
 
-	if (ZAURUS_ISC860)
-		return;
-
 	sc = device_lookup_private(&scoop_cd, 0);
 
 	if (sc != NULL) {
-		scoop_gpio_pin_write(sc, SCOOP0_JK_A_C3000, enable);
+		scoop_gpio_pin_write(sc,
+		    SCOOP0_JK_A_C3000, enable);
 	}
 }
 
@@ -340,9 +335,6 @@ scoop0_set_card_power(enum scoop_card card, int new_cpr)
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	uint16_t cpr;
-
-	if (ZAURUS_ISC860)
-		return;
 
 	sc = device_lookup_private(&scoop_cd, 0);
 	if (sc == NULL)
@@ -409,9 +401,6 @@ scoop_suspend(void)
 {
 	struct scoop_softc *sc, *sc0, *sc1;
 	uint32_t rv;
-
-	if (ZAURUS_ISC860)
-		return;
 
 	sc0 = device_lookup_private(&scoop_cd, 0);
 	sc1 = device_lookup_private(&scoop_cd, 1);

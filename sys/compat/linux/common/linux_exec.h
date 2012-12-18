@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec.h,v 1.48 2010/07/07 01:30:35 chs Exp $	*/
+/*	$NetBSD: linux_exec.h,v 1.44 2008/10/25 23:38:28 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -31,10 +31,6 @@
 
 #ifndef _LINUX_EXEC_H
 #define _LINUX_EXEC_H
-
-#if defined(EXEC_AOUT)
-#include <sys/exec_aout.h>
-#endif
 
 #if defined(EXEC_ELF32) || defined(EXEC_ELF64)
 #include <sys/exec_elf.h>
@@ -124,25 +120,22 @@
 
 #ifdef _KERNEL
 __BEGIN_DECLS
-extern struct emul emul_linux;
+extern const struct emul emul_linux;
 
 int linux_sysctl(int *, u_int, void *, size_t *, void *, size_t,
     struct lwp *);
-void linux_setregs(struct lwp *, struct exec_package *, vaddr_t);
-#ifdef EXEC_AOUT
+void linux_setregs(struct lwp *, struct exec_package *, u_long);
 int exec_linux_aout_makecmds(struct lwp *, struct exec_package *);
 int linux_aout_copyargs(struct lwp *, struct exec_package *,
     struct ps_strings *, char **, void *);
-#endif
 void linux_trapsignal(struct lwp *, ksiginfo_t *);
 int linux_usertrap(struct lwp *, vaddr_t, void *);
-int linux_lwp_setprivate(struct lwp *, void *);
-
-void linux_e_proc_exec(struct proc *, struct exec_package *);
-void linux_e_proc_fork(struct proc *, struct lwp *, int);
-void linux_e_proc_exit(struct proc *);
-void linux_e_lwp_fork(struct lwp *, struct lwp *);
-void linux_e_lwp_exit(struct lwp *);
+#ifdef LINUX_NPTL
+void linux_nptl_proc_fork(struct proc *, struct proc *, void (luserret)(void));
+void linux_nptl_proc_exit(struct proc *);      
+void linux_nptl_proc_init(struct proc *, struct proc *);
+int  linux_init_thread_area(struct lwp *, struct lwp *);
+#endif
 
 #ifdef EXEC_ELF32
 int linux_elf32_probe(struct lwp *, struct exec_package *, void *,

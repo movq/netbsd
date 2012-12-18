@@ -1,4 +1,4 @@
-/*	$NetBSD: select.h,v 1.36 2009/11/11 09:48:51 rmind Exp $	*/
+/*	$NetBSD: select.h,v 1.33 2008/03/22 18:04:42 ad Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -44,18 +44,18 @@
 
 struct lwp;
 struct proc;
-struct timespec;
+struct timeval;
 struct cpu_info;
 struct socket;
 
-int	selcommon(register_t *, int, fd_set *, fd_set *, fd_set *,
-    struct timespec *, sigset_t *);
+int	selcommon(struct lwp *, register_t *, int, fd_set *, fd_set *,
+	    fd_set *, struct timeval *, sigset_t *);
 void	selrecord(struct lwp *selector, struct selinfo *);
 void	selnotify(struct selinfo *, int, long);
 void	selsysinit(struct cpu_info *);
 void	selinit(struct selinfo *);
 void	seldestroy(struct selinfo *);
-int	pollsock(struct socket *, const struct timespec *, int);
+int	pollsock(struct socket *, const struct timeval *, int);
 
 #else /* _KERNEL */
 
@@ -63,13 +63,11 @@ int	pollsock(struct socket *, const struct timespec *, int);
 #include <time.h>
 
 __BEGIN_DECLS
-#ifndef __LIBC12_SOURCE__
 int	pselect(int, fd_set * __restrict, fd_set * __restrict,
-    fd_set * __restrict, const struct timespec * __restrict,
-    const sigset_t * __restrict) __RENAME(__pselect50);
+	    fd_set * __restrict, const struct timespec * __restrict,
+	    const sigset_t * __restrict);
 int	select(int, fd_set * __restrict, fd_set * __restrict,
-    fd_set * __restrict, struct timeval * __restrict) __RENAME(__select50);
-#endif /* __LIBC12_SOURCE__ */
+	    fd_set * __restrict, struct timeval * __restrict);
 __END_DECLS
 #endif /* _KERNEL */
 

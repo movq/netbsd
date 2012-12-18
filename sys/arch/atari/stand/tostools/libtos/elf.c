@@ -1,4 +1,4 @@
-/*	$NetBSD: elf.c,v 1.14 2011/10/01 15:59:00 chs Exp $	*/
+/*	$NetBSD: elf.c,v 1.8.10.1 2009/01/16 22:57:33 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -65,13 +65,17 @@
 				(ELFMAG2 << 8) | ELFMAG3)
 
 int
-elf_load(int fd, osdsc_t *od, char **errp, int loadsyms)
+elf_load(fd, od, errp, loadsyms)
+int	fd;
+osdsc_t	*od;
+char	**errp;
+int	loadsyms;
 {
 	int		i,j;
 	int		err;
 	Elf32_Ehdr	ehdr;
 	Elf32_Phdr	*phdrs;
-	Elf32_Word	ident, symsize, symstart;
+	Elf32_Word	symsize, symstart;
 	long		kernsize;
 
 	*errp = NULL;
@@ -79,8 +83,7 @@ elf_load(int fd, osdsc_t *od, char **errp, int loadsyms)
 	if (read(fd, (char *)&ehdr, sizeof(ehdr)) != sizeof(ehdr))
 		return -1;
 
-	memcpy(&ident, ehdr.e_ident, sizeof ident);
-	if (ident != ELFMAGIC)
+	if (*((u_int *)ehdr.e_ident) != ELFMAGIC)
 		return -1;
 
 	/*
@@ -158,7 +161,7 @@ elf_load(int fd, osdsc_t *od, char **errp, int loadsyms)
 		if (read(fd, p, php->p_filesz) != php->p_filesz)
 		    goto error;
 		if (php->p_memsz > php->p_filesz)
-		    memset(p + php->p_filesz, 0, php->p_memsz - php->p_filesz);
+		    bzero(p + php->p_filesz, php->p_memsz - php->p_filesz);
 	    }
 	}
 
@@ -213,7 +216,7 @@ elf_load(int fd, osdsc_t *od, char **errp, int loadsyms)
 		}
 	    }
 	    ehdr.e_shoff = sizeof(ehdr);
-	    memcpy(symtab, &ehdr, sizeof(ehdr));
+	    bcopy(&ehdr, symtab, sizeof(ehdr));
 	}
 	return 0;
 

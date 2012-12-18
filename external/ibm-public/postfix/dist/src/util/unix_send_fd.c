@@ -1,4 +1,4 @@
-/*	$NetBSD: unix_send_fd.c,v 1.6 2012/01/20 14:08:05 joerg Exp $	*/
+/*	$NetBSD: unix_send_fd.c,v 1.2.2.4 2011/01/07 01:24:20 riz Exp $	*/
 
 /*++
 /* NAME
@@ -17,9 +17,9 @@
 /*
 /*	Arguments:
 /* .IP fd
-/*	File descriptor that connects the sending and receiving processes.
+/*	File descriptor.
 /* .IP sendfd
-/*	The file descriptor to be sent.
+/*	Another file descriptor.
 /* DIAGNOSTICS
 /*	unix_send_fd() returns -1 upon failure.
 /* LICENSE
@@ -81,7 +81,7 @@ int     unix_send_fd(int fd, int sendfd)
     if (unix_pass_fd_fix & UNIX_PASS_FD_FIX_CMSG_LEN) {
 	msg.msg_controllen = CMSG_LEN(sizeof(sendfd));	/* Fix 200506 */
     } else {
-	msg.msg_controllen = CMSG_SPACE(sizeof(sendfd));	/* normal */
+	msg.msg_controllen = sizeof(control_un.control);	/* normal */
     }
     cmptr = CMSG_FIRSTHDR(&msg);
     cmptr->cmsg_len = CMSG_LEN(sizeof(sendfd));

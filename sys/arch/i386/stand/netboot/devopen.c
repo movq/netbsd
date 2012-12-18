@@ -1,4 +1,4 @@
-/*	$NetBSD: devopen.c,v 1.8 2009/03/14 21:04:10 dsl Exp $	 */
+/*	$NetBSD: devopen.c,v 1.7 2005/12/11 12:17:49 christos Exp $	 */
 
 /*
  * Copyright (c) 1996, 1998
@@ -50,7 +50,10 @@ struct btinfo_bootpath bibp;
 #endif
 
 int
-devopen(struct open_file *f, const char *fname, char **file)
+devopen(f, fname, file)
+	struct open_file *f;
+	const char     *fname;
+	char          **file;
 {
 	struct devsw   *dp;
 	int             error = 0;

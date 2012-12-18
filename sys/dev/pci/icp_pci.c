@@ -1,4 +1,4 @@
-/*	$NetBSD: icp_pci.c,v 1.21 2012/10/27 17:18:32 chs Exp $	*/
+/*	$NetBSD: icp_pci.c,v 1.15 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: icp_pci.c,v 1.21 2012/10/27 17:18:32 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: icp_pci.c,v 1.15 2008/04/28 20:23:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,6 +79,8 @@ __KERNEL_RCSID(0, "$NetBSD: icp_pci.c,v 1.21 2012/10/27 17:18:32 chs Exp $");
 #include <sys/buf.h>
 #include <sys/endian.h>
 #include <sys/conf.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 
@@ -155,8 +157,8 @@ __KERNEL_RCSID(0, "$NetBSD: icp_pci.c,v 1.21 2012/10/27 17:18:32 chs Exp $");
 				/* SRAM structure */
 #define	ICP_MPR_SZ	0x4000
 
-int	icp_pci_match(device_t, cfdata_t, void *);
-void	icp_pci_attach(device_t, device_t, void *);
+int	icp_pci_match(struct device *, struct cfdata *, void *);
+void	icp_pci_attach(struct device *, struct device *, void *);
 void	icp_pci_enable_intr(struct icp_softc *);
 int	icp_pci_find_class(struct pci_attach_args *);
 
@@ -181,7 +183,7 @@ void	icp_mpr_release_event(struct icp_softc *, struct icp_ccb *);
 void	icp_mpr_set_sema0(struct icp_softc *);
 int	icp_mpr_test_busy(struct icp_softc *);
 
-CFATTACH_DECL_NEW(icp_pci, sizeof(struct icp_softc),
+CFATTACH_DECL(icp_pci, sizeof(struct icp_softc),
     icp_pci_match, icp_pci_attach, NULL, NULL);
 
 struct icp_pci_ident {
@@ -220,7 +222,8 @@ icp_pci_find_class(struct pci_attach_args *pa)
 }
 
 int
-icp_pci_match(device_t parent, cfdata_t match, void *aux)
+icp_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -233,7 +236,7 @@ icp_pci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-icp_pci_attach(device_t parent, device_t self, void *aux)
+icp_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa;
 	struct icp_softc *icp;
@@ -253,8 +256,7 @@ icp_pci_attach(device_t parent, device_t self, void *aux)
 
 	pa = aux;
 	status = 0;
-	icp = device_private(self);
-	icp->icp_dv = self;
+	icp = (struct icp_softc *)self;
 	icp->icp_class = icp_pci_find_class(pa);
 
 	aprint_naive(": RAID controller\n");
@@ -552,8 +554,8 @@ icp_pci_attach(device_t parent, device_t self, void *aux)
 	if (icp->icp_ih == NULL) {
 		aprint_error("couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		goto bail_out;
 	}
 	status |= INTR_ESTABLISHED;

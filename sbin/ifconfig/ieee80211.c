@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211.c,v 1.25 2010/12/13 17:35:08 pooka Exp $	*/
+/*	$NetBSD: ieee80211.c,v 1.22 2008/07/15 21:27:58 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ieee80211.c,v 1.25 2010/12/13 17:35:08 pooka Exp $");
+__RCSID("$NetBSD: ieee80211.c,v 1.22 2008/07/15 21:27:58 dyoung Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -62,7 +62,6 @@ __RCSID("$NetBSD: ieee80211.c,v 1.25 2010/12/13 17:35:08 pooka Exp $");
 #include "parse.h"
 #include "env.h"
 #include "util.h"
-#include "prog_ops.h"
 
 static void ieee80211_statistics(prop_dictionary_t);
 static void ieee80211_status(prop_dictionary_t, prop_dictionary_t);
@@ -94,6 +93,7 @@ static int setifrts(prop_dictionary_t, prop_dictionary_t);
 static int scan_exec(prop_dictionary_t, prop_dictionary_t);
 
 static void printies(const u_int8_t *, int, int);
+static void printie(const char* , const uint8_t *, size_t , int);
 static void printwmeparam(const char *, const u_int8_t *, size_t , int);
 static void printwmeinfo(const char *, const u_int8_t *, size_t , int);
 static const char * wpa_cipher(const u_int8_t *);
@@ -185,11 +185,11 @@ struct pinteger parse_powersavesleep =
     0, INT_MAX, 10, setifpowersavesleep, "powersavesleep",
     &command_root.pb_parser);
 
-struct pstr parse_nwkey = PSTR_INITIALIZER1(&parse_nwkey, "nwkey", setifnwkey,
-    "nwkey", false, &command_root.pb_parser);
+struct pstr parse_nwkey = PSTR_INITIALIZER(&parse_nwkey, "nwkey", setifnwkey,
+    "nwkey", &command_root.pb_parser);
 
-struct pstr parse_bssid = PSTR_INITIALIZER1(&parse_bssid, "bssid", setifbssid,
-    "bssid", false, &command_root.pb_parser);
+struct pstr parse_bssid = PSTR_INITIALIZER(&parse_bssid, "bssid", setifbssid,
+    "bssid", &command_root.pb_parser);
 
 static int
 set80211(prop_dictionary_t env, uint16_t type, int16_t val, int16_t len,
@@ -376,7 +376,7 @@ setifnwkey(prop_dictionary_t env, prop_dictionary_t oenv)
 			val += 2;
 			for (i = 0; i < IEEE80211_WEP_NKID; i++) {
 				val = get_string(val, ",", keybuf[i],
-				    &nwkey.i_key[i].i_keylen, true);
+				    &nwkey.i_key[i].i_keylen);
 				if (val == NULL) {
 					errno = EINVAL;
 					return -1;
@@ -387,7 +387,7 @@ setifnwkey(prop_dictionary_t env, prop_dictionary_t oenv)
 			}
 		} else {
 			val = get_string(val, NULL, keybuf[0],
-			    &nwkey.i_key[0].i_keylen, true);
+			    &nwkey.i_key[0].i_keylen);
 			if (val == NULL) {
 				errno = EINVAL;
 				return -1;
@@ -726,7 +726,7 @@ scan_and_wait(prop_dictionary_t env)
 {
 	int sroute;
 
-	sroute = prog_socket(PF_ROUTE, SOCK_RAW, 0);
+	sroute = socket(PF_ROUTE, SOCK_RAW, 0);
 	if (sroute < 0) {
 		perror("socket(PF_ROUTE,SOCK_RAW)");
 		return;
@@ -738,7 +738,7 @@ scan_and_wait(prop_dictionary_t env)
 		struct rt_msghdr *rtm;
 
 		do {
-			if (prog_read(sroute, buf, sizeof(buf)) < 0) {
+			if (read(sroute, buf, sizeof(buf)) < 0) {
 				perror("read(PF_ROUTE)");
 				break;
 			}
@@ -749,7 +749,7 @@ scan_and_wait(prop_dictionary_t env)
 		} while (rtm->rtm_type != RTM_IEEE80211 ||
 		    ifan->ifan_what != RTM_IEEE80211_SCAN);
 	}
-	prog_close(sroute);
+	close(sroute);
 }
 
 static void
@@ -768,7 +768,7 @@ list_scan(prop_dictionary_t env)
 	if (direct_ioctl(env, SIOCG80211, &ireq) < 0)
 		errx(EXIT_FAILURE, "unable to get scan results");
 	len = ireq.i_len;
-	if (len < (int)sizeof(struct ieee80211req_scan_result))
+	if (len < sizeof(struct ieee80211req_scan_result))
 		return;
 
 	ssidmax = IEEE80211_NWID_LEN;
@@ -799,10 +799,10 @@ list_scan(prop_dictionary_t env)
 			, sr->isr_intval
 			, getcaps(sr->isr_capinfo)
 		);
-		printies(vp + sr->isr_ssid_len, sr->isr_ie_len, 24);
+		printies(vp + sr->isr_ssid_len, sr->isr_ie_len, 24);;
 		printf("\n");
 		cp += sr->isr_len, len -= sr->isr_len;
-	} while (len >= (int)sizeof(struct ieee80211req_scan_result));
+	} while (len >= sizeof(struct ieee80211req_scan_result));
 }
 /*
  * Convert MHz frequency to IEEE channel number.
@@ -878,7 +878,7 @@ printie(const char* tag, const uint8_t *ie, size_t ielen, int maxlen)
 	printf("%s", tag);
 
 	maxlen -= strlen(tag)+2;
-	if ((int)(2*ielen) > maxlen)
+	if (2*ielen > maxlen)
 		maxlen--;
 	printf("<");
 	for (; ielen > 0; ie++, ielen--) {
@@ -1131,7 +1131,8 @@ static int
 copy_essid(char buf[], size_t bufsize, const u_int8_t *essid, size_t essid_len)
 {
 	const u_int8_t *p;
-	size_t maxlen, i;
+	size_t maxlen;
+	int i;
 
 	if (essid_len > bufsize)
 		maxlen = bufsize;
@@ -1174,7 +1175,7 @@ static void
 printrates(const char *tag, const u_int8_t *ie, size_t ielen, int maxlen)
 {
 	const char *sep;
-	size_t i;
+	int i;
 
 	printf("%s", tag);
 	sep = "<";

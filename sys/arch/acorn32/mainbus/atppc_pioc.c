@@ -1,4 +1,4 @@
-/* $NetBSD: atppc_pioc.c,v 1.6 2011/07/19 15:59:53 dyoung Exp $ */
+/* $NetBSD: atppc_pioc.c,v 1.4 2008/04/16 09:39:01 cegger Exp $ */
 
 /*-
  * Copyright (c) 2001 Alcove - Nicolas Souchu
@@ -32,15 +32,15 @@
 #include "opt_atppc.h"
 
 #include <sys/param.h>
-__KERNEL_RCSID(0, "$NetBSD: atppc_pioc.c,v 1.6 2011/07/19 15:59:53 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atppc_pioc.c,v 1.4 2008/04/16 09:39:01 cegger Exp $");
 
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-#include <sys/bus.h>
 
 #include <machine/intr.h>
+#include <machine/bus.h>
 
 #include <arch/acorn32/mainbus/piocvar.h>
 
@@ -75,18 +75,18 @@ atppc_pioc_probe(device_t parent, cfdata_t cf, void *aux)
 		return 0;
 
 	if (pa->pa_offset == PIOCCF_OFFSET_DEFAULT) {
-		aprint_error_dev(parent, "(%s): io port unknown.\n", __func__);
+		aprint_error("%s(%s): io port unknown.\n", __func__, 
+			parent->dv_xname);
 	} else if (bus_space_map(iot, addr, IO_LPTSIZE, 0, &ioh) == 0) {
 		if (atppc_detect_port(iot, ioh) == 0) 
 			rval = 1;
 		else 
-			aprint_error_dev(parent,
-			    "(%s): unable to write/read I/O port.\n",
-			    __func__);
+			aprint_error("%s(%s): unable to write/read I/O "
+			    "port.\n", __func__, parent->dv_xname);
 		bus_space_unmap(iot, ioh, IO_LPTSIZE);
 	} else {
-		aprint_error_dev(parent, "(%s): attempt to map bus space failed.\n",
-		    __func__);
+		aprint_error("%s(%s): attempt to map bus space failed.\n",
+		    __func__, parent->dv_xname);
 	}
 
 	return rval;
@@ -123,10 +123,10 @@ atppc_pioc_attach(device_t parent, device_t self, void *aux)
 			sc->sc_has |= ATPPC_HAS_INTR;
 		} else
 			ATPPC_DPRINTF(("%s: IRQ not assigned or bad number of "
-				"IRQs.\n", device_xname(self)));
+				"IRQs.\n", self->dv_xname));
 	} else
 		ATPPC_VPRINTF(("%s: interrupts not configured due to flags.\n", 
-			device_xname(self)));
+			self->dv_xname));
 
 	/* Run soft configuration attach */
 	atppc_sc_attach(sc);

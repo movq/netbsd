@@ -1,4 +1,4 @@
-/*	$NetBSD: xel.c,v 1.17 2008/12/31 09:50:21 isaki Exp $	*/
+/*	$NetBSD: xel.c,v 1.14 2008/04/28 20:23:39 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xel.c,v 1.17 2008/12/31 09:50:21 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xel.c,v 1.14 2008/04/28 20:23:39 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,17 +47,20 @@ __KERNEL_RCSID(0, "$NetBSD: xel.c,v 1.17 2008/12/31 09:50:21 isaki Exp $");
 
 #include <arch/x68k/dev/intiovar.h>
 
-static paddr_t xel_addr(device_t, cfdata_t, struct intio_attach_args *);
+static paddr_t xel_addr(struct device *, struct cfdata *,
+	struct intio_attach_args *);
 static int xel_probe(paddr_t);
-static int xel_match(device_t, cfdata_t, void *);
-static void xel_attach(device_t, device_t, void *);
+static int xel_match(struct device *, struct cfdata *, void *);
+static void xel_attach(struct device *, struct device *, void *);
 
 struct xel_softc {
+	struct device dev;
+
 	bus_space_tag_t sc_bst;
 	bus_space_handle_t sc_bh;
 };
 
-CFATTACH_DECL_NEW(xel, sizeof(struct xel_softc),
+CFATTACH_DECL(xel, sizeof(struct xel_softc),
     xel_match, xel_attach, NULL, NULL);
 
 static paddr_t xel_addrs[] = { 0xec0000, 0xec4000, 0xec8000, 0xecc000 };
@@ -74,7 +77,8 @@ static paddr_t xel_addrs[] = { 0xec0000, 0xec4000, 0xec8000, 0xecc000 };
 
 
 static paddr_t
-xel_addr(device_t parent, cfdata_t match, struct intio_attach_args *ia)
+xel_addr(struct device *parent, struct cfdata *match,
+    struct intio_attach_args *ia)
 {
 	paddr_t addr = 0;
 
@@ -112,9 +116,9 @@ static int
 xel_probe(paddr_t addr)
 {
 	u_int32_t b1, b2;
-	volatile u_int16_t *start = (volatile u_int16_t *)IIOV(addr);
+	volatile u_int16_t *start = (volatile void *)INTIO_ADDR(addr);
 	label_t	faultbuf;
-	volatile u_int32_t *sram = (volatile u_int32_t *)IIOV(XEL_RAM_ADDR_HIGHER);
+	volatile u_int32_t *sram = (volatile void *)INTIO_ADDR(XEL_RAM_ADDR_HIGHER);
 
 	if (badaddr(start))
 		return 0;
@@ -166,7 +170,7 @@ xel_probe(paddr_t addr)
 }
 
 static int
-xel_match(device_t parent, cfdata_t match, void *aux)
+xel_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct intio_attach_args *ia = aux;
 
@@ -184,11 +188,11 @@ xel_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-xel_attach(device_t parent, device_t self, void *aux)
+xel_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct xel_softc *sc = device_private(self);
+	struct xel_softc *sc = (void *)self;
 	struct intio_attach_args *ia = aux;
-	cfdata_t cf = device_cfdata(self);
+	struct cfdata *cf = device_cfdata(self);
 	paddr_t addr;
 	int r;
 
@@ -201,7 +205,7 @@ xel_attach(device_t parent, device_t self, void *aux)
 	if (r)
 		panic("IO map for Xellent30 corruption??");
 #endif
-	aprint_normal(": Xellent30 MPU Accelerator.\n");
+	printf(": Xellent30 MPU Accelerator.\n");
 
 	return;
 }

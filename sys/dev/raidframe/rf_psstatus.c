@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_psstatus.c,v 1.34 2011/05/03 08:18:43 mrg Exp $	*/
+/*	$NetBSD: rf_psstatus.c,v 1.33 2006/11/16 01:33:23 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -37,7 +37,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_psstatus.c,v 1.34 2011/05/03 08:18:43 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_psstatus.c,v 1.33 2006/11/16 01:33:23 christos Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -106,8 +106,7 @@ rf_MakeParityStripeStatusTable(RF_Raid_t *raidPtr)
 		  raidPtr->pssTableSize * sizeof(RF_PSStatusHeader_t),
 		  (RF_PSStatusHeader_t *));
 	for (i = 0; i < raidPtr->pssTableSize; i++) {
-		rf_init_mutex2(pssTable[i].mutex, IPL_VM);
-		rf_init_cond2(pssTable[i].cond, "rfpsslk");
+		rf_mutex_init(&pssTable[i].mutex);
 	}
 	return (pssTable);
 }
@@ -116,9 +115,9 @@ void
 rf_FreeParityStripeStatusTable(RF_Raid_t *raidPtr,
 			       RF_PSStatusHeader_t *pssTable)
 {
+#if RF_DEBUG_PSS
 	int     i;
 
-#if RF_DEBUG_PSS
 	if (rf_pssDebug)
 		RealPrintPSStatusTable(raidPtr, pssTable);
 
@@ -128,10 +127,6 @@ rf_FreeParityStripeStatusTable(RF_Raid_t *raidPtr,
 		}
 	}
 #endif
-	for (i = 0; i < raidPtr->pssTableSize; i++) {
-		rf_destroy_mutex2(pssTable[i].mutex);
-		rf_destroy_cond2(pssTable[i].cond);
-	}
 	RF_Free(pssTable, raidPtr->pssTableSize * sizeof(RF_PSStatusHeader_t));
 }
 
@@ -224,12 +219,12 @@ rf_RemoveFromActiveReconTable(RF_Raid_t *raidPtr, RF_StripeNum_t psid,
 	RF_ReconParityStripeStatus_t *p, *pt;
 	RF_CallbackDesc_t *cb, *cb1;
 
-	rf_lock_mutex2(hdr->mutex);
+	RF_LOCK_MUTEX(hdr->mutex);
 	while(hdr->lock) {
-		rf_wait_cond2(hdr->cond, hdr->mutex);
+		ltsleep(&hdr->lock, PRIBIO, "rf_racrecon", 0, &hdr->mutex);
 	}
 	hdr->lock = 1;
-	rf_unlock_mutex2(hdr->mutex);
+	RF_UNLOCK_MUTEX(hdr->mutex);
 	for (pt = NULL, p = hdr->chain; p; pt = p, p = p->next) {
 		if ((p->parityStripeID == psid) && (p->which_ru == which_ru))
 			break;
@@ -248,9 +243,9 @@ rf_RemoveFromActiveReconTable(RF_Raid_t *raidPtr, RF_StripeNum_t psid,
 		hdr->chain = p->next;
 	p->next = NULL;
 
-	rf_lock_mutex2(hdr->mutex);
+	RF_LOCK_MUTEX(hdr->mutex);
 	hdr->lock = 0;
-	rf_unlock_mutex2(hdr->mutex);
+	RF_UNLOCK_MUTEX(hdr->mutex);
 
 	/* wakup anyone waiting on the parity stripe ID */
 	cb = p->procWaitList;

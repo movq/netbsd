@@ -1,4 +1,4 @@
-.\"	$NetBSD: drm.4,v 1.13 2012/03/13 19:25:39 njoly Exp $
+.\"	$NetBSD: drm.4,v 1.4.18.3 2010/11/20 20:44:55 riz Exp $
 .\"
 .\" Copyright (c) 2007 Thomas Klausner
 .\" All rights reserved.
@@ -41,12 +41,15 @@
 .Cd viadrm*        at vga?
 .Pp
 .Cd options        DRM_DEBUG
+.Cd options        DRM_NOEXTERNAL
 .Cd options        DRM_NO_AGP
 .Sh DESCRIPTION
 The
 .Tn Direct Rendering Manager
 is part of the
 .Tn Direct Rendering Infrastructure
+(see
+.Pa http://dri.freedesktop.org/ )
 for supporting video acceleration (3d acceleration, mostly).
 .Pp
 The
@@ -143,8 +146,6 @@ etc.
 .Xr xorg.conf 5 ,
 .Xr X 7 ,
 .Pa /usr/X11R[67]/lib/X11/doc/README.DRI
-.Pp
-.Lk http://dri.freedesktop.org/ "Direct Rendering Infrastructure"
 .Sh HISTORY
 DRM was first available for Linux.
 Subsequently Eric Anholt ported the DRM kernel modules to
@@ -203,6 +204,15 @@ In case of errors,
 may be changed, make sure to recreate it in that case.
 .Pp
 .Cd options DRM_DEBUG
-can slow DRI down a lot; disable it once
+can slow DRI down a lot, disable it once
 .Nm
 works.
+.Pp
+It is not expected to need to use the older drivers, but if it is
+necessary,
+.Cd options        DRM_NOEXTERNAL
+must be added to the kernel configuration file, and the two files
+.Pa src/sys/dev/drm/files.drm
+and
+.Pa src/sys/dev/pci/drm/files.pcidrm
+require minor edits, noted at the bottom of these files.

@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_ntfs.c,v 1.6 2009/12/13 21:16:55 pooka Exp $	*/
+/*	$NetBSD: rump_ntfs.c,v 1.3 2008/09/04 15:34:56 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -36,7 +36,6 @@
 #include <unistd.h>
 
 #include <rump/p2k.h>
-#include <rump/ukfs.h> 
 
 #include "mount_ntfs.h"
 
@@ -44,19 +43,16 @@ int
 main(int argc, char *argv[])
 {
 	struct ntfs_args args;
-	char canon_dev[UKFS_DEVICE_MAXPATHLEN], canon_dir[MAXPATHLEN];
-	struct ukfs_part *part;
+	char canon_dev[MAXPATHLEN], canon_dir[MAXPATHLEN];
 	int mntflags;
 	int rv;
 
 	setprogname(argv[0]);
 
-	UKFS_DEVICE_ARGVPROBE(&part);
 	mount_ntfs_parseargs(argc, argv, &args, &mntflags,
 	    canon_dev, canon_dir);
-	rv = p2k_run_diskfs(MOUNT_NTFS, canon_dev, part, canon_dir, mntflags,
+	rv = p2k_run_fs(MOUNT_NTFS, canon_dev, canon_dir, mntflags,
 	    &args, sizeof(args), 0);
-	ukfs_part_release(part);
 	if (rv)
 		err(1, "mount");
 

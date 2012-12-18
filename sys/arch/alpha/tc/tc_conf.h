@@ -1,21 +1,21 @@
-/* $NetBSD: tc_conf.h,v 1.13 2012/02/06 02:14:16 matt Exp $ */
+/* $NetBSD: tc_conf.h,v 1.10 2000/06/04 19:14:29 cgd Exp $ */
 
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -37,14 +37,14 @@
 #ifdef DEC_3000_500
 #include <alpha/tc/tc_dma_3000_500.h>
 
-extern void	tc_3000_500_intr_setup(void);
-extern void	tc_3000_500_iointr(void *, unsigned long);
+extern void	tc_3000_500_intr_setup __P((void));
+extern void	tc_3000_500_iointr __P((void *, unsigned long));
 
 extern const struct evcnt *
-		tc_3000_500_intr_evcnt(device_t, void *);
-extern void	tc_3000_500_intr_establish(device_t, void *,
-		    tc_intrlevel_t, int (*)(void *), void *);
-extern void	tc_3000_500_intr_disestablish(device_t, void *);
+		tc_3000_500_intr_evcnt __P((struct device *, void *));
+extern void	tc_3000_500_intr_establish __P((struct device *, void *,
+		    tc_intrlevel_t, int (*)(void *), void *));
+extern void	tc_3000_500_intr_disestablish __P((struct device *, void *));
 
 extern int	tc_3000_500_nslots;
 extern struct tc_slotdesc tc_3000_500_slots[];
@@ -57,14 +57,14 @@ extern struct tc_builtin tc_3000_500_nographics_builtins[];
 #ifdef DEC_3000_300
 #include <alpha/tc/tc_dma_3000_300.h>
 
-extern void	tc_3000_300_intr_setup(void);
-extern void	tc_3000_300_iointr(void *, unsigned long);
+extern void	tc_3000_300_intr_setup __P((void));
+extern void	tc_3000_300_iointr __P((void *, unsigned long));
 
 extern const struct evcnt *
-		tc_3000_300_intr_evcnt(device_t, void *);
-extern void	tc_3000_300_intr_establish(device_t, void *,
-		    tc_intrlevel_t, int (*)(void *), void *);
-extern void	tc_3000_300_intr_disestablish(device_t, void *);
+		tc_3000_300_intr_evcnt __P((struct device *, void *));
+extern void	tc_3000_300_intr_establish __P((struct device *, void *,
+		    tc_intrlevel_t, int (*)(void *), void *));
+extern void	tc_3000_300_intr_disestablish __P((struct device *, void *));
 
 extern int	tc_3000_300_nslots;
 extern struct tc_slotdesc tc_3000_300_slots[];
@@ -72,5 +72,5 @@ extern int	tc_3000_300_nbuiltins;
 extern struct tc_builtin tc_3000_300_builtins[];
 #endif /* DEC_3000_300 */
 
-extern int	tc_fb_cnattach(tc_addr_t);
+extern int	tc_fb_cnattach __P((tc_addr_t));
 

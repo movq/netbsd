@@ -1,6 +1,6 @@
-.\" 	$NetBSD: ftp.1,v 1.133 2012/04/08 22:00:38 wiz Exp $
+.\" 	$NetBSD: ftp.1,v 1.127 2008/09/30 03:41:53 lukem Exp $
 .\"
-.\" Copyright (c) 1996-2010 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1996-2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -57,20 +57,31 @@
 .\"
 .\"	@(#)ftp.1	8.3 (Berkeley) 10/9/94
 .\"
-.Dd March 5, 2010
+.Dd May 10, 2008
 .Dt FTP 1
 .Os
 .Sh NAME
 .Nm ftp
-.Nd Internet file transfer program
+.Nd
+Internet file transfer program
 .Sh SYNOPSIS
 .Nm
 .Op Fl 46AadefginpRtVv
+.Bk -words
 .Op Fl N Ar netrc
+.Ek
+.Bk -words
 .Op Fl o Ar output
+.Ek
+.Bk -words
 .Op Fl P Ar port
+.Ek
+.Bk -words
 .Op Fl q Ar quittime
+.Ek
+.Bk -words
 .Op Fl r Ar retry
+.Ek
 .Op Fl s Ar srcaddr
 .Bk -words
 .\" [-T dir,max[,inc]]
@@ -271,7 +282,14 @@ Uses
 as the local IP address for all connections.
 .It Fl t
 Enables packet tracing.
-.It Fl T Ar direction Ns , Ns Ar maximum Ns Oo , Ns Ar increment Oc
+.It Xo
+.Fl T
+.Sm off
+.Ar direction ,
+.Ar maximum
+.Op , Ar increment
+.Sm on
+.Xc
 Set the maximum transfer rate for
 .Ar direction
 to
@@ -475,8 +493,7 @@ Toggle the use of the extended
 .Dv EPSV
 and
 .Dv EPRT
-commands on all IP, IPv4, and IPv6 connections respectively.
-First try
+commands on all IP, IPv4, and IPv6 connections respectively.  First try
 .Dv EPSV /
 .Dv EPRT ,
 and then
@@ -767,7 +784,7 @@ mode is
 .Dq stream .
 .It Ic modtime Ar remote-file
 Show the last modification time of the file on the remote machine, in
-.Li RFC 2822
+.Li RFC2822
 format.
 .It Ic more Ar file
 A synonym for
@@ -988,7 +1005,7 @@ traffic.
 servers are required to support the
 .Dv PASV
 command by
-.Li RFC 1123 ,
+.Li RFC1123 ,
 some do not.)
 .It Ic pdir Op Ar remote-path
 Perform
@@ -1136,7 +1153,10 @@ A synonym for
 The arguments specified are sent, verbatim, to the remote
 .Tn FTP
 server.
-.It Ic rate Ar direction Oo Ar maximum Oo Ar increment Oc Oc
+.It Xo
+.Ic rate Ar direction
+.Op Ar maximum Op Ar increment
+.Xc
 Throttle the maximum transfer rate to
 .Ar maximum
 bytes/second.
@@ -1159,6 +1179,7 @@ Outgoing transfers.
 can be modified on the fly by
 .Ar increment
 bytes (default: 1024) each time a given signal is received:
+.B
 .Bl -tag -width "SIGUSR1" -offset indent
 .It Dv SIGUSR1
 Increment
@@ -1420,7 +1441,10 @@ for more information.
 .It Ic usage Ar command
 Print the usage message for
 .Ar command .
-.It Ic user Ar user-name Oo Ar password Oo Ar account Oc Oc
+.It Xo
+.Ic user Ar user-name
+.Op Ar password Op Ar account
+.Xc
 Identify yourself to the remote
 .Tn FTP
 server.
@@ -1522,8 +1546,14 @@ on the command line.
 The following formats are valid syntax for an auto-fetch element:
 .Bl -tag -width "FOO "
 .\" [user@]host:[path][/]
-.It Oo Ar user Ns Li \&@ Oc Ns Ar host Ns Li \&: Ns Oo Ar path Oc \
-Ns Oo Li / Oc
+.It Xo
+.Sm off
+.Op Ar user Li \&@
+.Ar host Li \&:
+.Op Ar path
+.Op Li /
+.Sm on
+.Xc
 .Dq Classic
 .Tn FTP
 format.
@@ -1548,9 +1578,18 @@ in the current directory.
 Otherwise, the full remote name is used as the local name,
 relative to the local root directory.
 .\" ftp://[user[:password]@]host[:port]/path[/][;type=X]
-.It Li ftp:// Ns Oo Ar user Ns Oo Ns Li \&: Ns Ar password Oc Ns Li \&@ Oc \
-Ns Ar host Ns Oo Li \&: Ns Ar port Oc Ns Li / Ns Ar path Ns Oo Li / Oc \
-Ns Oo Li ;type= Ns Ar X Oc
+.It Xo
+.Sm off
+.Li ftp://
+.Oo Ar user
+.Op Li \&: Ar password
+.Li \&@ Oc
+.Ar host Oo Li \&: Ar port Oc
+.Li / Ar path
+.Op Li /
+.Op Li ;type= Ar X
+.Sm on
+.Xc
 An
 .Tn FTP
 URL, retrieved using the
@@ -1581,7 +1620,7 @@ ascii or binary (respectively).
 The default transfer type is binary.
 .Pp
 In order to be compliant with
-.Li RFC 3986 ,
+.Li RFC3986 ,
 .Nm
 interprets the
 .Ar path
@@ -1634,7 +1673,7 @@ Any
 .Sq Li \&% Ns Ar XX
 codes
 (per
-.Li RFC 3986 )
+.Li RFC3986 )
 within the path components are decoded, with
 .Ar XX
 representing a character code in hexadecimal.
@@ -1721,8 +1760,16 @@ intermediate directories that is used in the equivalent of a
 command.
 .El
 .\" http://[user[:password]@]host[:port]/path
-.It Li http:// Ns Oo Ar user Ns Oo Li \&: Ns Ar password Oc Ns Li \&@ Oc \
-Ns Ar host Ns Oo Li \&: Ns Ar port Oc Ns Li / Ns Ar path
+.It Xo
+.Sm off
+.Li http://
+.Oo Ar user
+.Op Li \&: Ar password
+.Li \&@ Oc
+.Ar host Oo Li \&: Ar port Oc
+.Li / Ar path
+.Sm on
+.Xc
 An
 .Tn HTTP
 URL, retrieved using the
@@ -1743,12 +1790,21 @@ and
 .Sq password )
 is in the URL, use them for the first attempt to authenticate.
 .\" file:///path
-.It Li file:/// Ns Ar path
+.It Xo
+.Sm off
+.Li file:/// Ar path
+.Sm on
+.Xc
 A local URL, copied from
 .Pa / Ns Ar path
 on the local host.
 .\" about:
-.It Li about: Ns Ar topic
+.It Xo
+.Sm off
+.Li about:
+.Ar topic
+.Sm on
+.Xc
 Display information regarding
 .Ar topic ;
 no file is retrieved for this auto-fetched element.
@@ -1891,7 +1947,7 @@ Failing the above checks, if
 .Dq globbing
 is enabled, local file names are expanded according to the rules
 used in the
-.Xr csh 1 ;
+.Xr csh  1  ;
 see the
 .Ic glob
 command.
@@ -2134,7 +2190,14 @@ information:
 .It Li \&%/
 The current remote working directory.
 .\" %c[[0]n], %.[[0]n]
-.It \&%c Ns Oo Oo Li 0 Oc Ns Ar n Oc , Ns Li \&%. Ns Oo Oo Li 0 Oc Ns Ar n Oc
+.It Xo
+.Sm off
+.Li \&%c
+.Op Oo Li 0 Oc Ar n Ns ,
+.Li \&%.
+.Op Oo Li 0 Oc Ar n
+.Sm on
+.Xc
 The trailing component of the current remote working directory, or
 .Em n
 trailing components if a digit
@@ -2275,7 +2338,7 @@ URL characters are required in the username or password
 or
 .Sq / ) ,
 encode them with
-.Li RFC 3986
+.Li RFC3986
 .Sq Li \&% Ns Ar XX
 encoding.
 .Pp
@@ -2320,23 +2383,23 @@ for an example of how to make this automatic.
 .Nm
 attempts to be compliant with:
 .Bl -tag -offset indent -width 8n
-.It Li RFC 959
+.It Li RFC0959
 .Em File Transfer Protocol
-.It Li RFC 1123
+.It Li RFC1123
 .Em Requirements for Internet Hosts - Application and Support
-.It Li RFC 1635
+.It Li RFC1635
 .Em How to Use Anonymous FTP
-.It Li RFC 2389
+.It Li RFC2389
 .Em Feature negotiation mechanism for the File Transfer Protocol
-.It Li RFC 2428
+.It Li RFC2428
 .Em FTP Extensions for IPv6 and NATs
-.It Li RFC 2616
+.It Li RFC2616
 .Em Hypertext Transfer Protocol -- HTTP/1.1
-.It Li RFC 2822
+.It Li RFC2822
 .Em Internet Message Format
-.It Li RFC 3659
+.It Li RFC3659
 .Em Extensions to FTP
-.It Li RFC 3986
+.It Li RFC3986
 .Em Uniform Resource Identifier (URI)
 .El
 .Sh HISTORY

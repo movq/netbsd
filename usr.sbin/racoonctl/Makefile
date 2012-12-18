@@ -1,7 +1,6 @@
-# $NetBSD: Makefile,v 1.6 2011/05/30 14:41:27 joerg Exp $
+# $NetBSD: Makefile,v 1.2.8.2 2010/12/08 04:31:41 riz Exp $
 
-WARNS?=	0	# XXX third-party program, many issues
-NOCLANGERROR=	# defined
+WARNS=	0	# Will be fixed later
 
 .include <bsd.own.mk>
 
@@ -13,7 +12,7 @@ DIST=	${NETBSDSRCDIR}/crypto/dist/ipsec-tools
 #CFLAGS+=-g
 CPPFLAGS+=	-I${DIST}/src/racoon -I${DIST}/src/libipsec	\
 		-I${NETBSDSRCDIR}/lib/libipsec 			\
-		-UIPSEC_DEBUG -DHAVE_CONFIG_H -DNOUSE_PRIVSEP	\
+		-UIPSEC_DEBUG -DHAVE_CONFIG_H 			\
 		-DADMINPORTDIR=\"/var/run\"
 LDADD+=	-lipsec
 DPADD+=	${LIBIPSEC}

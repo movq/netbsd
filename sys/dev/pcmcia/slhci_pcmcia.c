@@ -1,4 +1,4 @@
-/* $NetBSD: slhci_pcmcia.c,v 1.9 2011/11/27 14:36:20 rmind Exp $ */
+/* $NetBSD: slhci_pcmcia.c,v 1.4 2008/03/28 17:14:46 drochner Exp $ */
 /*
  * Not (c) 2007 Matthew Orgass
  * This file is public domain, meaning anyone can make any use of part or all 
@@ -11,7 +11,7 @@
 /* Glue for RATOC USB HOST CF+ Card (SL811HS chip) */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: slhci_pcmcia.c,v 1.9 2011/11/27 14:36:20 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: slhci_pcmcia.c,v 1.4 2008/03/28 17:14:46 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -26,6 +26,7 @@ __KERNEL_RCSID(0, "$NetBSD: slhci_pcmcia.c,v 1.9 2011/11/27 14:36:20 rmind Exp $
 #include <dev/pcmcia/pcmciadevs.h>
 
 #include <dev/usb/usb.h>
+#include <dev/usb/usb_port.h>
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdivar.h>
 
@@ -41,9 +42,9 @@ struct slhci_pcmcia_softc {
 };
 
 
-int slhci_pcmcia_probe(device_t, cfdata_t, void *);
-void slhci_pcmcia_attach(device_t, device_t, void *);
-int slhci_pcmcia_detach(device_t, int);
+int slhci_pcmcia_probe(struct device *, struct cfdata *, void *);
+void slhci_pcmcia_attach(struct device *, struct device *, void *);
+int slhci_pcmcia_detach(struct device *, int);
 int slhci_pcmcia_validate_config(struct pcmcia_config_entry *);
 int slhci_pcmcia_enable(struct slhci_pcmcia_softc *, int);
 
@@ -62,7 +63,7 @@ static const size_t slhci_pcmcia_nproducts =
 	sizeof(slhci_pcmcia_products) / sizeof(slhci_pcmcia_products[0]);
 
 int
-slhci_pcmcia_probe(device_t parent, cfdata_t match, void *aux)
+slhci_pcmcia_probe(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -82,14 +83,13 @@ slhci_pcmcia_validate_config(struct pcmcia_config_entry *cfe)
 }
 
 void
-slhci_pcmcia_attach(device_t parent, device_t self, void *aux)
+slhci_pcmcia_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct slhci_pcmcia_softc *psc = device_private(self);
 	struct pcmcia_attach_args *pa = aux;
 	struct pcmcia_function *pf = pa->pf;
 
 	psc->sc_slhci.sc_dev = self;
-	psc->sc_slhci.sc_bus.hci_private = &psc->sc_slhci;
 
 	psc->sc_pf = pf;
 	psc->sc_flags = 0;
@@ -100,7 +100,7 @@ slhci_pcmcia_attach(device_t parent, device_t self, void *aux)
 }
 
 int
-slhci_pcmcia_detach(device_t self, int flags)
+slhci_pcmcia_detach(struct device *self, int flags)
 {
 	struct slhci_pcmcia_softc *psc = device_private(self);
 
@@ -140,7 +140,7 @@ slhci_pcmcia_enable(struct slhci_pcmcia_softc *psc, int enable)
 		 */
 		slhci_preinit(sc, NULL, pioh->iot, pioh->ioh, 100, 2);
 
-		psc->sc_ih = pcmcia_intr_establish(pf, IPL_USB,
+		psc->sc_ih = pcmcia_intr_establish(pf, IPL_HARDUSB, 
 		    slhci_intr, sc);
 
 		if (psc->sc_ih == NULL) {

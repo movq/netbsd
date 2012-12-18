@@ -1,4 +1,4 @@
-/*	$NetBSD: aoutm68k_exec.c,v 1.27 2012/02/19 21:06:36 rmind Exp $	*/
+/*	$NetBSD: aoutm68k_exec.c,v 1.22 2008/04/28 20:23:41 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aoutm68k_exec.c,v 1.27 2012/02/19 21:06:36 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aoutm68k_exec.c,v 1.22 2008/04/28 20:23:41 martin Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -42,48 +42,49 @@ __KERNEL_RCSID(0, "$NetBSD: aoutm68k_exec.c,v 1.27 2012/02/19 21:06:36 rmind Exp
 #include <sys/proc.h>
 #include <sys/exec.h>
 #include <sys/signalvar.h>
-#include <sys/syscallvar.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <compat/aoutm68k/aoutm68k_syscall.h>
 
 extern struct sysent aoutm68k_sysent[];
+#ifdef SYSCALL_DEBUG
+extern const char * const syscallnames[];
+#endif
 extern char sigcode[], esigcode[];
 void aoutm68k_syscall_intern(struct proc *);
 
 struct uvm_object *emul_netbsd_aoutm68k_object;
 
-struct emul emul_netbsd_aoutm68k = {
-	.e_name =		"aoutm68k",
-	.e_path =		NULL,
+const struct emul emul_netbsd_aoutm68k = {
+	"aoutm68k",
+	"/emul/aout",
 #ifndef __HAVE_MINIMAL_EMUL
-	.e_flags =		EMUL_HAS_SYS___syscall,
-	.e_errno =		NULL,
-	.e_nosys =		AOUTM68K_SYS_syscall,
-	.e_nsysent =		AOUTM68K_SYS_NSYSENT,
+	EMUL_HAS_SYS___syscall,
+	NULL,
+	AOUTM68K_SYS_syscall,
+	AOUTM68K_SYS_NSYSENT,
 #endif
-	.e_sysent =		aoutm68k_sysent,
+	aoutm68k_sysent,
 #ifdef SYSCALL_DEBUG
-	.e_syscallnames =	syscallnames,
+	syscallnames,
+#else
+	NULL,
 #endif
-	.e_sendsig =		sendsig,
-	.e_trapsignal =		trapsignal,
-	.e_tracesig =		NULL,
-	.e_sigcode =		sigcode,
-	.e_esigcode =		esigcode,
-	.e_sigobject =		&emul_netbsd_aoutm68k_object,
-	.e_setregs =		setregs,
-	.e_proc_exec =		NULL,
-	.e_proc_fork =		NULL,
-	.e_proc_exit =		NULL,
-	.e_lwp_fork =		NULL,
-	.e_lwp_exit =		NULL,
-	.e_syscall_intern =	aoutm68k_syscall_intern,
-	.e_sysctlovly =		NULL,
-	.e_fault =		NULL,
-	.e_vm_default_addr =	uvm_default_mapaddr,
-	.e_usertrap =		NULL,
-	.e_ucsize =		0,
-	.e_startlwp =		NULL
+	sendsig,
+	trapsignal,
+	NULL,
+	sigcode,
+	esigcode,
+	&emul_netbsd_aoutm68k_object,
+	setregs,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	aoutm68k_syscall_intern,
+	NULL,
+	NULL,
+	uvm_default_mapaddr,
 };

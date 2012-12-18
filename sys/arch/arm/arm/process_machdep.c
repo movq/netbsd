@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.25 2012/12/08 06:46:49 matt Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.18 2007/03/04 05:59:36 christos Exp $	*/
 
 /*
  * Copyright (c) 1993 The Regents of the University of California.
@@ -133,26 +133,30 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.25 2012/12/08 06:46:49 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.18 2007/03/04 05:59:36 christos Exp $");
 
 #include <sys/proc.h>
 #include <sys/ptrace.h>
 #include <sys/systm.h>
+#include <sys/user.h>
 
 #include <machine/frame.h>
 #include <machine/pcb.h>
 #include <machine/reg.h>
 
 #include <arm/armreg.h>
-#include <arm/vfpreg.h>
+
+#ifdef ARMFPE
+#include <arm/fpe-arm/armfpe.h>
+#endif
 
 int
 process_read_regs(struct lwp *l, struct reg *regs)
 {
-	struct trapframe * const tf = lwp_trapframe(l);
+	struct trapframe *tf = process_frame(l);
 
 	KASSERT(tf != NULL);
-	memcpy((void *)regs->r, (void *)&tf->tf_r0, sizeof(regs->r));
+	bcopy((void *)&tf->tf_r0, (void *)regs->r, sizeof(regs->r));
 	regs->r_sp = tf->tf_usr_sp;
 	regs->r_lr = tf->tf_usr_lr;
 	regs->r_pc = tf->tf_pc;
@@ -164,8 +168,8 @@ process_read_regs(struct lwp *l, struct reg *regs)
 #endif
 #ifdef DIAGNOSTIC
 	if ((tf->tf_spsr & PSR_MODE) == PSR_USR32_MODE
-	     && (tf->tf_spsr & IF32_bits))
-		panic("process_read_regs: IRQs/FIQs blocked in user process");
+	    && tf->tf_spsr & I32_bit)
+		panic("process_read_regs: Interrupts blocked in user process");
 #endif
 
 	return(0);
@@ -174,26 +178,23 @@ process_read_regs(struct lwp *l, struct reg *regs)
 int
 process_read_fpregs(struct lwp *l, struct fpreg *regs)
 {
-#ifdef FPU_VFP
-	if (curcpu()->ci_vfp_id == 0) {
-		memset(regs, 0, sizeof(regs));
-		return 0;
-	}
-	const struct pcb * const pcb = lwp_getpcb(l);
-	vfp_savecontext();
-	regs->fpr_vfp = pcb->pcb_vfp;
-	regs->fpr_vfp.vfp_fpexc &= ~VFP_FPEXC_EN;
-#endif
-	return 0;
+#ifdef ARMFPE
+	arm_fpe_getcontext(p, regs);
+	return(0);
+#else	/* ARMFPE */
+	/* No hardware FP support */
+	memset(regs, 0, sizeof(struct fpreg));
+	return(0);
+#endif	/* ARMFPE */
 }
 
 int
 process_write_regs(struct lwp *l, const struct reg *regs)
 {
-	struct trapframe * const tf = lwp_trapframe(l);
+	struct trapframe *tf = process_frame(l);
 
 	KASSERT(tf != NULL);
-	memcpy(&tf->tf_r0, regs->r, sizeof(regs->r));
+	bcopy(regs->r, &tf->tf_r0, sizeof(regs->r));
 	tf->tf_usr_sp = regs->r_sp;
 	tf->tf_usr_lr = regs->r_lr;
 #ifdef __PROG32
@@ -206,8 +207,8 @@ process_write_regs(struct lwp *l, const struct reg *regs)
 #endif
 #ifdef DIAGNOSTIC
 	if ((tf->tf_spsr & PSR_MODE) == PSR_USR32_MODE
-	     && (tf->tf_spsr & IF32_bits))
-		panic("process_read_regs: IRQs/FIQs blocked in user process");
+	    && tf->tf_spsr & I32_bit)
+		panic("process_write_regs: Interrupts blocked in user process");
 #endif
 #else /* __PROG26 */
 	if ((regs->r_pc & (R15_MODE | R15_IRQ_DISABLE | R15_FIQ_DISABLE)) != 0)
@@ -222,23 +223,19 @@ process_write_regs(struct lwp *l, const struct reg *regs)
 int
 process_write_fpregs(struct lwp *l, const struct fpreg *regs)
 {
-#ifdef FPU_VFP
-	if (curcpu()->ci_vfp_id == 0) {
-		return EINVAL;
-	}
-	struct pcb * const pcb = lwp_getpcb(l);
-	vfp_discardcontext();
-	l->l_md.md_flags |= MDLWP_VFPUSED;
-	pcb->pcb_vfp = regs->fpr_vfp;
-	pcb->pcb_vfp.vfp_fpexc &= ~VFP_FPEXC_EN;
-#endif
+#ifdef ARMFPE
+	arm_fpe_setcontext(p, regs);
 	return(0);
+#else	/* ARMFPE */
+	/* No hardware FP support */
+	return(0);
+#endif	/* ARMFPE */
 }
 
 int
 process_set_pc(struct lwp *l, void *addr)
 {
-	struct trapframe * const tf = lwp_trapframe(l);
+	struct trapframe *tf = process_frame(l);
 
 	KASSERT(tf != NULL);
 #ifdef __PROG32

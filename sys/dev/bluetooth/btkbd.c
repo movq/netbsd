@@ -1,4 +1,4 @@
-/*	$NetBSD: btkbd.c,v 1.15 2012/10/27 17:18:15 chs Exp $	*/
+/*	$NetBSD: btkbd.c,v 1.10 2008/09/09 03:54:56 cube Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btkbd.c,v 1.15 2012/10/27 17:18:15 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btkbd.c,v 1.10 2008/09/09 03:54:56 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -144,7 +144,7 @@ struct btkbd_softc {
 };
 
 /* autoconf(9) methods */
-static int	btkbd_match(device_t, cfdata_t, void *);
+static int	btkbd_match(device_t, struct cfdata *, void *);
 static void	btkbd_attach(device_t, device_t, void *);
 static int	btkbd_detach(device_t, int);
 
@@ -194,7 +194,7 @@ static void btkbd_repeat(void *);
  */
 
 static int
-btkbd_match(device_t self, cfdata_t cfdata, void *aux)
+btkbd_match(device_t self, struct cfdata *cfdata, void *aux)
 {
 	struct bthidev_attach_args *ba = aux;
 
@@ -237,8 +237,6 @@ btkbd_attach(device_t parent, device_t self, void *aux)
 	wska.accesscookie = sc;
 
 	sc->sc_wskbd = config_found(self, &wska, wskbddevprint);
-
-	pmf_device_register(self, NULL, NULL);
 }
 
 static int
@@ -246,8 +244,6 @@ btkbd_detach(device_t self, int flags)
 {
 	struct btkbd_softc *sc = device_private(self);
 	int err = 0;
-
-	pmf_device_deregister(self);
 
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 #ifdef BTKBD_REPEAT
@@ -332,18 +328,18 @@ btkbd_parse_desc(struct btkbd_softc *sc, int id, const void *desc, int dlen)
  */
 
 static int
-btkbd_enable(void *cookie, int on)
+btkbd_enable(void *self, int on)
 {
-	struct btkbd_softc *sc = cookie;
+	struct btkbd_softc *sc = self;
 
 	sc->sc_enabled = on;
 	return 0;
 }
 
 static void
-btkbd_set_leds(void *cookie, int leds)
+btkbd_set_leds(void *self, int leds)
 {
-	struct btkbd_softc *sc = cookie;
+	struct btkbd_softc *sc = self;
 	uint8_t report;
 
 	if (sc->sc_leds == leds)
@@ -371,10 +367,10 @@ btkbd_set_leds(void *cookie, int leds)
 }
 
 static int
-btkbd_ioctl(void *cookie, unsigned long cmd, void *data, int flag,
+btkbd_ioctl(void *self, unsigned long cmd, void *data, int flag,
     struct lwp *l)
 {
-	struct btkbd_softc *sc = cookie;
+	struct btkbd_softc *sc = self;
 
 	switch (cmd) {
 	case WSKBDIO_GTYPE:
@@ -463,9 +459,9 @@ static const u_int8_t btkbd_trtab[256] = {
 #define REP_DELAYN	100
 
 static void
-btkbd_input(struct bthidev *hidev, uint8_t *data, int len)
+btkbd_input(struct bthidev *self, uint8_t *data, int len)
 {
-	struct btkbd_softc *sc = (struct btkbd_softc *)hidev;
+	struct btkbd_softc *sc = (struct btkbd_softc *)self;
 	struct btkbd_data *ud = &sc->sc_ndata;
 	uint16_t ibuf[MAXKEYS];
 	uint32_t mod, omod;

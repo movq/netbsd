@@ -1,5 +1,4 @@
-/*	Id: node.h,v 1.36 2010/08/11 14:08:44 ragge Exp 	*/	
-/*	$NetBSD: node.h,v 1.1.1.4 2011/09/01 12:47:13 plunky Exp $	*/
+/*	$Id: node.h,v 1.1.1.1 2008/08/24 05:33:09 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -29,22 +28,6 @@
 
 #ifndef NODE_H
 #define NODE_H
-
-/*
- * The attribute struct contains stuff that might be useful in
- * both passes; but currently it's only legal to use it in pass1.
- */
-union aarg {
-	int iarg;
-	char *sarg;
-	void *varg;
-};
-
-struct attr {
-	struct attr *next;
-	int atype;
-	union aarg aa[];
-};
 
 /*
  * The node structure is the basic element in the compiler.
@@ -81,12 +64,7 @@ typedef struct node {
 		int	_label;
 		int	_stalign;
 		int	_flags;
-#if 0
-		/* not anymore */
 		struct	suedef *_sue;
-#else
-		struct attr *_ap;
-#endif
 	} n_6;
 	union {
 		struct {
@@ -103,18 +81,7 @@ typedef struct node {
 				struct symtab *_sp;
 			} n_r;
 		} n_u;
-#ifdef SOFTFLOAT
-#ifdef FDFLOAT
-		/* To store F- or D-floats */
-		struct softfloat {
-			unsigned short fd1, fd2, fd3, fd4;
-		} _dcon;
-#else
-#error missing softfloat structure definition
-#endif
-#else
 		long double	_dcon;
-#endif
 	} n_f;
 } NODE;
 
@@ -125,7 +92,7 @@ typedef struct node {
 #define	n_label	n_6._label
 #define	n_stalign n_6._stalign
 #define	n_flags n_6._flags
-#define	n_ap	n_6._ap
+#define	n_sue	n_6._sue
 
 #define	n_left	n_f.n_u.n_l._left
 #define	n_lval	n_f.n_u.n_l._lval

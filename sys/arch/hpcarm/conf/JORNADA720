@@ -1,21 +1,20 @@
-#	$NetBSD: JORNADA720,v 1.88 2012/12/06 06:25:25 msaitoh Exp $
+#	$NetBSD: JORNADA720,v 1.70.4.1 2010/11/21 03:05:10 riz Exp $
 #
 #	JORNADA -- Windows-CE based jornada 720
 #
 
-include	"arch/hpcarm/conf/std.sa11x0"
+include	"arch/hpcarm/conf/std.hpcarm"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.88 $"
+#ident 		"GENERIC-$Revision: 1.70.4.1 $"
 
 # estimated number of users
 maxusers	32
 
 # Standard system options
 
-#options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
-				# (default timezone is passed from hpcboot)
+options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 #options 	NTP		# NTP phase/frequency locked loop
 
 # CPU options
@@ -23,6 +22,10 @@ maxusers	32
 options 	CPU_SA1110	# Support the SA-1110 core
 
 # Architecture options
+
+# FPA options
+
+#options 	ARMFPE		# ARM Ltd FPE
 
 # File systems
 
@@ -39,6 +42,7 @@ file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay filesystem
+#file-system	PORTAL		# portal filesystem (still experimental)
 file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 file-system	UNION		# union file system
@@ -47,10 +51,10 @@ file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-#options 	QUOTA		# legacy UFS quotas
-#options 	QUOTA2		# new, in-filesystem UFS quotas
-#options 	FFS_EI		# FFS Endian Independent support
-options 	WAPBL		# File system journaling support
+#options 	QUOTA		# UFS quotas
+#options 	FFS_EI		# FFS Endian Independant support
+options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options 	NFSSERVER
 
@@ -96,6 +100,7 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	SHMMAXPGS=1024	# 1024 pages is the default
 
 # Device options
 
@@ -106,6 +111,7 @@ options 	SYSVSHM		# System V-like memory sharing
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 options 	IRQSTATS	# manage IRQ statistics
+options 	LKM		# loadable kernel modules
 options 	KMEMSTATS	# kernel memory statistics
 #options 	SCSIVERBOSE	# Verbose SCSI errors
 options 	USERCONF	# userconf(4) support
@@ -222,6 +228,14 @@ tqphy*	at mii? phy ?			# TDK Semiconductor PHYs
 ukphy*	at mii? phy ?			# generic unknown PHYs
 urlphy* at mii? phy ?			# Realtek RTL8150L internal PHYs
 
+# PCMCIA audio devices
+#esl*	at pcmcia? function ?		# ESS 1688 AudioDrive
+# OPL[23] FM synthesizers
+#opl*   at esl?
+
+# Audio support
+#audio*	at audiobus?
+
 # Bluetooth Controller and Device support
 
 # Bluetooth PCMCIA Controllers
@@ -257,7 +271,7 @@ options 	WSEMUL_VT100
 options 	WSDISPLAY_DEFAULTSCREENS=2
 options 	FONT_VT220L8x10
 # The X server requires theses two options
-options         WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
+options         WSDISPLAY_COMPAT_USL
 options         WSDISPLAY_COMPAT_RAWKBD
 # customization of console and kernel output - see dev/wscons/wsdisplayvar.h
 options 	WSDISPLAY_CUSTOM_OUTPUT	# color customization from wsconsctl(8)
@@ -316,12 +330,13 @@ pseudo-device	pty			# pseudo-terminals
 #pseudo-device	cgd	2		# cryptographic disk devices
 #pseudo-device	raid	4		# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
-#pseudo-device	fss			# file system snapshot device
+#pseudo-device	fss	4		# file system snapshot device
 
 pseudo-device	biconsdev 1		# build-in console device
 pseudo-device	wsmux
 
-pseudo-device	md			# Ramdisk driver
+pseudo-device	md	1		# Ramdisk driver
+pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 pseudo-device	bcsp			# BlueCore Serial Protocol

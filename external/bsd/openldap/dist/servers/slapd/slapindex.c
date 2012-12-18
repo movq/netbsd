@@ -1,9 +1,7 @@
-/*	$NetBSD: slapindex.c,v 1.1.1.3 2010/12/12 15:22:48 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/servers/slapd/slapindex.c,v 1.3.2.7 2010/04/14 22:59:10 quanah Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/slapindex.c,v 1.3.2.3 2008/02/11 23:26:44 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2010 The OpenLDAP Foundation.
+ * Copyright 1998-2008 The OpenLDAP Foundation.
  * Portions Copyright 1998-2003 Kurt D. Zeilenga.
  * All rights reserved.
  *
@@ -45,7 +43,7 @@ slapindex( int argc, char **argv )
 
 	if( !be->be_entry_open ||
 		!be->be_entry_close ||
-		!( be->be_entry_first || be->be_entry_first_x ) ||
+		!be->be_entry_first ||
 		!be->be_entry_next  ||
 		!be->be_entry_reindex )
 	{
@@ -79,16 +77,11 @@ slapindex( int argc, char **argv )
 			progname );
 		exit( EXIT_FAILURE );
 	}
-
-	if ( be->be_entry_first ) {
-		id = be->be_entry_first( be );
-
-	} else {
-		assert( be->be_entry_first_x != NULL );
-		id = be->be_entry_first_x( be, NULL, LDAP_SCOPE_DEFAULT, NULL );
-	}
-
-	for ( ; id != NOID; id = be->be_entry_next( be ) ) {
+	
+	for ( id = be->be_entry_first( be );
+		id != NOID;
+		id = be->be_entry_next( be ) )
+	{
 		int rtn;
 
 		if( verbose ) {
@@ -106,7 +99,6 @@ slapindex( int argc, char **argv )
 
 	(void) be->be_entry_close( be );
 
-	if ( slap_tool_destroy())
-		rc = EXIT_FAILURE;
+	slap_tool_destroy();
 	return( rc );
 }

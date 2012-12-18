@@ -1,4 +1,4 @@
-/*	$NetBSD: bootbus.c,v 1.19 2011/07/18 00:31:13 mrg Exp $	*/
+/*	$NetBSD: bootbus.c,v 1.16 2008/04/28 20:23:35 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bootbus.c,v 1.19 2011/07/18 00:31:13 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bootbus.c,v 1.16 2008/04/28 20:23:35 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -42,7 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: bootbus.c,v 1.19 2011/07/18 00:31:13 mrg Exp $");
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <sparc/sparc/cpuunitvar.h>
 #include <sparc/dev/bootbusvar.h>
@@ -50,19 +50,21 @@ __KERNEL_RCSID(0, "$NetBSD: bootbus.c,v 1.19 2011/07/18 00:31:13 mrg Exp $");
 #include "locators.h"
 
 struct bootbus_softc {
+	struct device sc_dev;
 	int sc_node;				/* our OBP node */
 
 	bus_space_tag_t sc_st;			/* ours */
 	bus_space_tag_t sc_bustag;		/* passed on to children */
 };
 
-static int bootbus_match(device_t, cfdata_t, void *);
-static void bootbus_attach(device_t, device_t, void *);
+static int bootbus_match(struct device *, struct cfdata *, void *);
+static void bootbus_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(bootbus, sizeof(struct bootbus_softc),
+CFATTACH_DECL(bootbus, sizeof(struct bootbus_softc),
     bootbus_match, bootbus_attach, NULL, NULL);
 
-static int bootbus_submatch(device_t, cfdata_t, const int *, void *);
+static int bootbus_submatch(struct device *, struct cfdata *,
+			    const int *, void *);
 static int bootbus_print(void *, const char *);
 
 static int bootbus_setup_attach_args(struct bootbus_softc *, bus_space_tag_t,
@@ -70,7 +72,7 @@ static int bootbus_setup_attach_args(struct bootbus_softc *, bus_space_tag_t,
 static void bootbus_destroy_attach_args(struct bootbus_attach_args *);
 
 static int
-bootbus_match(device_t parent, cfdata_t cf, void *aux)
+bootbus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct cpuunit_attach_args *cpua = aux;
 
@@ -81,9 +83,9 @@ bootbus_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-bootbus_attach(device_t parent, device_t self, void *aux)
+bootbus_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct bootbus_softc *sc = device_private(self);
+	struct bootbus_softc *sc = (void *) self;
 	struct cpuunit_attach_args *cpua = aux;
 	int node, error;
 
@@ -110,7 +112,7 @@ bootbus_attach(device_t parent, device_t self, void *aux)
 	    &sc->sc_bustag->ranges);
 	if (error) {
 		printf("%s: error %d getting \"ranges\" property\n",
-		    device_xname(self), error);
+		    sc->sc_dev.dv_xname, error);
 		panic("bootbus_attach");
 	}
 
@@ -122,7 +124,7 @@ bootbus_attach(device_t parent, device_t self, void *aux)
 		if (bootbus_setup_attach_args(sc, sc->sc_bustag, node, &baa))
 			panic("bootbus_attach: failed to set up attach args");
 
-		(void) config_found_sm_loc(self, "bootbus", NULL, &baa,
+		(void) config_found_sm_loc(&sc->sc_dev, "bootbus", NULL, &baa,
 					   bootbus_print, bootbus_submatch);
 
 		bootbus_destroy_attach_args(&baa);
@@ -130,7 +132,8 @@ bootbus_attach(device_t parent, device_t self, void *aux)
 }
 
 static int
-bootbus_submatch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+bootbus_submatch(struct device *parent, struct cfdata *cf,
+		 const int *ldesc, void *aux)
 {
 	struct bootbus_attach_args *baa = aux;
 

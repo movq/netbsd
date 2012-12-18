@@ -1,5 +1,5 @@
 /*
- * Machine dependent startup code for SDP2430 boards.
+ * Machine dependant startup code for SDP2430 boards.
  * Based on omap_start.S
  *
  * Copyright (c) 2002, 2003  Genetec Corporation.  All rights reserved.
@@ -41,6 +41,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -84,15 +90,16 @@
 
 #include "opt_omap.h"
 #include "opt_com.h"
+#include "assym.h"
 
 #include <machine/asm.h>
 #include <arm/armreg.h>
-#include "assym.h"
-
+#undef DOMAIN_CLIENT	/* assym.h defines as 1, but pte.h defines as 0x01 */
+#include <arm/arm32/pmap.h>
 #include <arm/omap/omap2_obioreg.h>
 #include <evbarm/tisdp24xx/sdp24xx.h>  
 
-RCSID("$NetBSD: sdp24xx_start.S,v 1.6 2011/06/30 20:09:28 wiz Exp $")
+RCSID("$NetBSD: sdp24xx_start.S,v 1.3 2008/08/27 11:03:10 matt Exp $")
 
 #if 0
 #define Invalidate_I_cache(reg) \
@@ -314,17 +321,17 @@ mmu_init_table:
 	/* Map KERNEL_BASE VA to SDRAM PA, write-back cacheable */
 	MMU_INIT(KERNEL_BASE, KERNEL_BASE,
 		(MEMSIZE * L1_S_SIZE + L1_S_SIZE - 1) / L1_S_SIZE,
-		L1_S_PROTO | L1_S_AP_KRW | L1_S_B | L1_S_C)
+		L1_S_PROTO | L1_S_AP(AP_KRW) | L1_S_B | L1_S_C)
 
 	/* Map first 1MB of L4 CORE (so console will work) */
 	MMU_INIT(OMAP2430_L4_CORE_VBASE, OMAP2430_L4_CORE_BASE,
 		1,
-		L1_S_PROTO | L1_S_AP_KRW)
+		L1_S_PROTO | L1_S_AP(AP_KRW))
 
 	/* Map first 1MB of L4 WAKEUP (so console will work) */
 	MMU_INIT(OMAP2430_L4_WAKEUP_VBASE, OMAP2430_L4_WAKEUP_BASE,
 		1,
-		L1_S_PROTO | L1_S_AP_KRW)
+		L1_S_PROTO | L1_S_AP(AP_KRW))
 
 	/* end of table */
 	MMU_INIT(0, 0, 0, 0)

@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.eat.c,v 1.12 2011/08/07 06:03:45 dholland Exp $	*/
+/*	$NetBSD: hack.eat.c,v 1.6.38.1 2009/06/29 23:31:28 snj Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,12 +63,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.eat.c,v 1.12 2011/08/07 06:03:45 dholland Exp $");
+__RCSID("$NetBSD: hack.eat.c,v 1.6.38.1 2009/06/29 23:31:28 snj Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
 #include "extern.h"
-static char POISONOUS[] = "ADKSVabhks";
+char            POISONOUS[] = "ADKSVabhks";
 
 /* hunger texts used on bottom line (each 8 chars long) */
 #define	SATIATED	0
@@ -89,21 +89,15 @@ const char           *const hu_stat[] = {
 	"Starved "
 };
 
-static int opentin(void);
-static int Meatdone(void);
-static int unfaint(void);
-static void newuhs(boolean);
-static int eatcorpse(struct obj *);
-
 void
-init_uhunger(void)
+init_uhunger()
 {
 	u.uhunger = 900;
 	u.uhs = NOT_HUNGRY;
 }
 
 #define	TTSZ	SIZE(tintxts)
-static const struct {
+const struct {
 	const char           *txt;
 	int             nut;
 }               tintxts[] = {
@@ -120,8 +114,8 @@ static struct {
 	int             usedtime, reqtime;
 }               tin;
 
-static int
-opentin(void)
+int
+opentin()
 {
 	int             r;
 
@@ -138,7 +132,7 @@ opentin(void)
 	useup(tin.tin);
 	r = rn2(2 * TTSZ);
 	if (r < TTSZ) {
-		pline("%s", tintxts[r].txt);
+		pline(tintxts[r].txt);
 		lesshungry(tintxts[r].nut);
 		if (r == 1) {	/* SALMON */
 			Glib = rnd(15);
@@ -156,8 +150,8 @@ opentin(void)
 	return (0);
 }
 
-static int
-Meatdone(void)
+int
+Meatdone()
 {
 	u.usym = '@';
 	prme();
@@ -165,7 +159,7 @@ Meatdone(void)
 }
 
 int
-doeat(void)
+doeat()
 {
 	struct obj     *otmp;
 	struct objclass *ftmp;
@@ -212,7 +206,7 @@ gotit:
 				goto no_opener;
 			}
 			pline("Using your %s you try to open the tin.",
-			      aobjnam(uwep, NULL));
+			      aobjnam(uwep, (char *) 0));
 		} else {
 	no_opener:
 			pline("It is not so easy to open this tin.");
@@ -347,7 +341,7 @@ eatx:
 
 /* called in hack.main.c */
 void
-gethungry(void)
+gethungry()
 {
 	--u.uhunger;
 	if (moves % 2) {
@@ -371,7 +365,8 @@ gethungry(void)
 
 /* called after vomiting and after performing feats of magic */
 void
-morehungry(int num)
+morehungry(num)
+	int num;
 {
 	u.uhunger -= num;
 	newuhs(TRUE);
@@ -379,22 +374,24 @@ morehungry(int num)
 
 /* called after eating something (and after drinking fruit juice) */
 void
-lesshungry(int num)
+lesshungry(num)
+	int num;
 {
 	u.uhunger += num;
 	newuhs(FALSE);
 }
 
-static int
-unfaint(void)
+int
+unfaint()
 {
 	u.uhs = FAINTING;
 	flags.botl = 1;
 	return 0;
 }
 
-static void
-newuhs(boolean incr)
+void
+newuhs(incr)
+	boolean         incr;
 {
 	int             newhs, h = u.uhunger;
 
@@ -453,14 +450,16 @@ newuhs(boolean incr)
 		     ?  'a' + (otyp - DEAD_ACID_BLOB)\
 		     :	'@' + (otyp - DEAD_HUMAN))
 int
-poisonous(struct obj *otmp)
+poisonous(otmp)
+	struct obj     *otmp;
 {
 	return (strchr(POISONOUS, CORPSE_I_TO_C(otmp->otyp)) != 0);
 }
 
 /* returns 1 if some text was printed */
-static int
-eatcorpse(struct obj *otmp)
+int
+eatcorpse(otmp)
+	struct obj     *otmp;
 {
 	char            let = CORPSE_I_TO_C(otmp->otyp);
 	int             tp = 0;
@@ -495,11 +494,11 @@ eatcorpse(struct obj *otmp)
 	case 'n':
 		u.uhp = u.uhpmax;
 		flags.botl = 1;
-		/* FALLTHROUGH */
+		/* fall into next case */
 	case '@':
 		pline("You cannibal! You will be sorry for this!");
 		/* not tp++; */
-		/* FALLTHROUGH */
+		/* fall into next case */
 	case 'd':
 		Aggravate_monster |= INTRINSIC;
 		break;
@@ -512,12 +511,12 @@ eatcorpse(struct obj *otmp)
 			Invis |= INTRINSIC;
 			See_invisible |= INTRINSIC;
 		}
-		/* FALLTHROUGH */
+		/* fall into next case */
 	case 'y':
 #ifdef QUEST
 		u.uhorizon++;
 #endif	/* QUEST */
-		/* FALLTHROUGH */
+		/* fall into next case */
 	case 'B':
 		Confusion = 50;
 		break;

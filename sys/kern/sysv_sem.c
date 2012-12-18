@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_sem.c,v 1.89 2012/03/13 18:40:54 elad Exp $	*/
+/*	$NetBSD: sysv_sem.c,v 1.84 2008/09/19 11:21:33 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2007 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_sem.c,v 1.89 2012/03/13 18:40:54 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_sem.c,v 1.84 2008/09/19 11:21:33 rmind Exp $");
 
 #define SYSVSEM
 
@@ -59,22 +59,18 @@ __KERNEL_RCSID(0, "$NetBSD: sysv_sem.c,v 1.89 2012/03/13 18:40:54 elad Exp $");
  *  3rd: Conditional variables
  *  4th: Undo structures
  */
-struct semid_ds *	sema			__read_mostly;
-static struct __sem *	sem			__read_mostly;
-static kcondvar_t *	semcv			__read_mostly;
-static int *		semu			__read_mostly;
+struct semid_ds		*sema;
+static struct __sem	*sem;
+static kcondvar_t	*semcv;
+static int		*semu;
 
-static kmutex_t		semlock			__cacheline_aligned;
-static bool		sem_realloc_state	__read_mostly;
-static kcondvar_t	sem_realloc_cv;
+static kmutex_t	semlock;
+static struct	sem_undo *semu_list;	/* list of active undo structures */
+static u_int	semtot = 0;		/* total number of semaphores */
 
-/*
- * List of active undo structures, total number of semaphores,
- * and total number of semop waiters.
- */
-static struct sem_undo *semu_list		__read_mostly;
-static u_int		semtot			__cacheline_aligned;
-static u_int		sem_waiters		__cacheline_aligned;
+static u_int	sem_waiters = 0;	/* total number of semop waiters */
+static bool	sem_realloc_state;
+static kcondvar_t sem_realloc_cv;
 
 /* Macro to find a particular sem_undo vector */
 #define SEMU(s, ix)	((struct sem_undo *)(((long)s) + ix * seminfo.semusz))
@@ -98,16 +94,14 @@ seminit(void)
 	mutex_init(&semlock, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&sem_realloc_cv, "semrealc");
 	sem_realloc_state = false;
-	semtot = 0;
-	sem_waiters = 0;
 
 	/* Allocate the wired memory for our structures */
 	sz = ALIGN(seminfo.semmni * sizeof(struct semid_ds)) +
 	    ALIGN(seminfo.semmns * sizeof(struct __sem)) +
 	    ALIGN(seminfo.semmni * sizeof(kcondvar_t)) +
 	    ALIGN(seminfo.semmnu * seminfo.semusz);
-	sz = round_page(sz);
-	v = uvm_km_alloc(kernel_map, sz, 0, UVM_KMF_WIRED|UVM_KMF_ZERO);
+	v = uvm_km_alloc(kernel_map, round_page(sz), 0,
+	    UVM_KMF_WIRED|UVM_KMF_ZERO);
 	if (v == 0)
 		panic("sysv_sem: cannot allocate memory");
 	sema = (void *)v;
@@ -129,8 +123,6 @@ seminit(void)
 	}
 	semu_list = NULL;
 	exithook_establish(semexit, NULL);
-
-	sysvipcinit();
 }
 
 static int
@@ -152,8 +144,8 @@ semrealloc(int newsemmni, int newsemmns, int newsemmnu)
 	    ALIGN(newsemmns * sizeof(struct __sem)) +
 	    ALIGN(newsemmni * sizeof(kcondvar_t)) +
 	    ALIGN(newsemmnu * seminfo.semusz);
-	sz = round_page(sz);
-	v = uvm_km_alloc(kernel_map, sz, 0, UVM_KMF_WIRED|UVM_KMF_ZERO);
+	v = uvm_km_alloc(kernel_map, round_page(sz), 0,
+	    UVM_KMF_WIRED|UVM_KMF_ZERO);
 	if (v == 0)
 		return ENOMEM;
 
@@ -253,7 +245,6 @@ semrealloc(int newsemmni, int newsemmns, int newsemmnu)
 	    ALIGN(seminfo.semmns * sizeof(struct __sem)) +
 	    ALIGN(seminfo.semmni * sizeof(kcondvar_t)) +
 	    ALIGN(seminfo.semmnu * seminfo.semusz);
-	sz = round_page(sz);
 
 	/* Set the pointers and update the new values */
 	sema = new_sema;
@@ -288,48 +279,72 @@ sys_semconfig(struct lwp *l, const struct sys_semconfig_args *uap, register_t *r
 }
 
 /*
- * Allocate a new sem_undo structure for a process.
- * => Returns NULL on failure.
+ * Allocate a new sem_undo structure for a process
+ * (returns ptr to structure or NULL if no more room)
  */
+
 struct sem_undo *
 semu_alloc(struct proc *p)
 {
-	struct sem_undo *suptr, **supptr;
-	bool attempted = false;
 	int i;
+	struct sem_undo *suptr;
+	struct sem_undo **supptr;
+	int attempt;
 
 	KASSERT(mutex_owned(&semlock));
-again:
-	/* Look for a free structure. */
-	for (i = 0; i < seminfo.semmnu; i++) {
-		suptr = SEMU(semu, i);
-		if (suptr->un_proc == NULL) {
-			/* Found.  Fill it in and return. */
-			suptr->un_next = semu_list;
-			semu_list = suptr;
-			suptr->un_cnt = 0;
-			suptr->un_proc = p;
-			return suptr;
-		}
-	}
 
-	/* Not found.  Attempt to free some structures. */
-	if (!attempted) {
-		bool freed = false;
+	/*
+	 * Try twice to allocate something.
+	 * (we'll purge any empty structures after the first pass so
+	 * two passes are always enough)
+	 */
 
-		attempted = true;
-		supptr = &semu_list;
-		while ((suptr = *supptr) != NULL) {
-			if (suptr->un_cnt == 0)  {
-				suptr->un_proc = NULL;
-				*supptr = suptr->un_next;
-				freed = true;
-			} else {
-				supptr = &suptr->un_next;
+	for (attempt = 0; attempt < 2; attempt++) {
+		/*
+		 * Look for a free structure.
+		 * Fill it in and return it if we find one.
+		 */
+
+		for (i = 0; i < seminfo.semmnu; i++) {
+			suptr = SEMU(semu, i);
+			if (suptr->un_proc == NULL) {
+				suptr->un_next = semu_list;
+				semu_list = suptr;
+				suptr->un_cnt = 0;
+				suptr->un_proc = p;
+				return (suptr);
 			}
 		}
-		if (freed) {
-			goto again;
+
+		/*
+		 * We didn't find a free one, if this is the first attempt
+		 * then try to free some structures.
+		 */
+
+		if (attempt == 0) {
+			/* All the structures are in use - try to free some */
+			int did_something = 0;
+
+			supptr = &semu_list;
+			while ((suptr = *supptr) != NULL) {
+				if (suptr->un_cnt == 0)  {
+					suptr->un_proc = NULL;
+					*supptr = suptr->un_next;
+					did_something = 1;
+				} else
+					supptr = &suptr->un_next;
+			}
+
+			/* If we didn't free anything then just give-up */
+			if (!did_something)
+				return (NULL);
+		} else {
+			/*
+			 * The second pass failed even though we freed
+			 * something after the first pass!
+			 * This is IMPOSSIBLE!
+			 */
+			panic("semu_alloc - second attempt failed");
 		}
 	}
 	return NULL;
@@ -426,8 +441,7 @@ semundo_clear(int semid, int semnum)
 }
 
 int
-sys_____semctl50(struct lwp *l, const struct sys_____semctl50_args *uap,
-    register_t *retval)
+sys_____semctl13(struct lwp *l, const struct sys_____semctl13_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) semid;

@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.c,v 1.7 2012/03/10 19:59:21 joerg Exp $	*/
+/*	$NetBSD: sem.c,v 1.4 2008/04/28 20:23:02 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: sem.c,v 1.7 2012/03/10 19:59:21 joerg Exp $");
+__RCSID("$NetBSD: sem.c,v 1.4 2008/04/28 20:23:02 martin Exp $");
 
 /*
  * If an application is linked against both librt and libpthread, the
@@ -72,12 +72,11 @@ __RCSID("$NetBSD: sem.c,v 1.7 2012/03/10 19:59:21 joerg Exp $");
 #define	sem_close	_librt_sem_close
 #define	sem_unlink	_librt_sem_unlink
 #define	sem_wait	_librt_sem_wait
-#define	sem_timedwait	_librt_sem_timedwait
 #define	sem_trywait	_librt_sem_trywait
 #define	sem_post	_librt_sem_post
 #define	sem_getvalue	_librt_sem_getvalue
 
-#define	_LIBC
+#define	_LIBC		/* XXX to get semid_t type */
 
 #include <sys/types.h>
 #include <sys/ksem.h>
@@ -93,11 +92,11 @@ struct _sem_st {
 #define	KSEM_MAGIC	0x90af0421U
 
 	LIST_ENTRY(_sem_st) ksem_list;
-	intptr_t		ksem_semid;	/* 0 -> user (non-shared) */
+	semid_t		ksem_semid;	/* 0 -> user (non-shared) */
 	sem_t		*ksem_identity;
 };
 
-static int sem_alloc(unsigned int value, intptr_t semid, sem_t *semp);
+static int sem_alloc(unsigned int value, semid_t semid, sem_t *semp);
 static void sem_free(sem_t sem);
 
 static LIST_HEAD(, _sem_st) named_sems = LIST_HEAD_INITIALIZER(&named_sems);
@@ -109,7 +108,6 @@ __weak_alias(sem_open,_librt_sem_open)
 __weak_alias(sem_close,_librt_sem_close)
 __weak_alias(sem_unlink,_librt_sem_unlink)
 __weak_alias(sem_wait,_librt_sem_wait)
-__weak_alias(sem_timedwait,_librt_sem_timedwait)
 __weak_alias(sem_trywait,_librt_sem_trywait)
 __weak_alias(sem_post,_librt_sem_post)
 __weak_alias(sem_getvalue,_librt_sem_getvalue)
@@ -124,7 +122,7 @@ sem_free(sem_t sem)
 }
 
 static int
-sem_alloc(unsigned int value, intptr_t semid, sem_t *semp)
+sem_alloc(unsigned int value, semid_t semid, sem_t *semp)
 {
 	sem_t sem;
 
@@ -145,7 +143,7 @@ sem_alloc(unsigned int value, intptr_t semid, sem_t *semp)
 int
 sem_init(sem_t *sem, int pshared, unsigned int value)
 {
-	intptr_t	semid;
+	semid_t	semid;
 	int error;
 
 	if (_ksem_init(value, &semid) == -1)
@@ -163,7 +161,6 @@ sem_init(sem_t *sem, int pshared, unsigned int value)
 int
 sem_destroy(sem_t *sem)
 {
-	int error, save_errno;
 
 #ifdef ERRORCHECK
 	if (sem == NULL || *sem == NULL || (*sem)->ksem_magic != KSEM_MAGIC) {
@@ -172,19 +169,19 @@ sem_destroy(sem_t *sem)
 	}
 #endif
 
-	error = _ksem_destroy((*sem)->ksem_semid);
-	save_errno = errno;
-	sem_free(*sem);
-	errno = save_errno;
+	if (_ksem_destroy((*sem)->ksem_semid) == -1)
+		return (-1);
 
-	return error;
+	sem_free(*sem);
+
+	return (0);
 }
 
 sem_t *
 sem_open(const char *name, int oflag, ...)
 {
 	sem_t *sem, s;
-	intptr_t semid;
+	semid_t semid;
 	mode_t mode;
 	unsigned int value;
 	int error;
@@ -242,7 +239,6 @@ sem_open(const char *name, int oflag, ...)
 int
 sem_close(sem_t *sem)
 {
-	int error, save_errno;
 
 #ifdef ERRORCHECK
 	if (sem == NULL || *sem == NULL || (*sem)->ksem_magic != KSEM_MAGIC) {
@@ -251,14 +247,13 @@ sem_close(sem_t *sem)
 	}
 #endif
 
-	error = _ksem_close((*sem)->ksem_semid);
+	if (_ksem_close((*sem)->ksem_semid) == -1)
+		return (-1);
 
 	LIST_REMOVE((*sem), ksem_list);
-	save_errno = errno;
 	sem_free(*sem);
 	free(sem);
-	errno = save_errno;
-	return error;
+	return (0);
 }
 
 int
@@ -280,20 +275,6 @@ sem_wait(sem_t *sem)
 #endif
 
 	return (_ksem_wait((*sem)->ksem_semid));
-}
-
-int
-sem_timedwait(sem_t *sem, const struct timespec * __restrict abstime)
-{
-
-#ifdef ERRORCHECK
-	if (sem == NULL || *sem == NULL || (*sem)->ksem_magic != KSEM_MAGIC) {
-		errno = EINVAL;
-		return (-1);
-	}
-#endif
-
-	return (_ksem_timedwait((*sem)->ksem_semid, abstime));
 }
 
 int

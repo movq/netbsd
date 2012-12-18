@@ -1,11 +1,11 @@
-# $NetBSD: GENERIC,v 1.16 2012/08/17 20:11:40 abs Exp $
+# $NetBSD: GENERIC,v 1.5 2008/08/10 15:31:21 tls Exp $
 #
 
 include 	"arch/mvmeppc/conf/std.mvmeppc"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-ident		"GENERIC-$Revision: 1.16 $"
+#ident		"MVME1600-$Revision: 1.5 $"
 
 maxusers	8
 
@@ -49,19 +49,19 @@ file-system 	NFS		# Network File System client
 #file-system 	KERNFS		# /kern
 #file-system 	NULLFS		# loopback file system
 #file-system	OVERLAY		# overlay file system
+#file-system 	PORTAL		# portal filesystem (still experimental)
 ##file-system 	PROCFS		# /proc
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
 #file-system	CODA		# Coda File System; also needs vcoda (below)
 file-system	PTYFS		# /dev/pts/N support
-file-system	TMPFS		# Efficient memory file-system
 
 # File system options
-#options 	QUOTA		# legacy UFS quotas
-#options 	QUOTA2		# new, in-filesystem UFS quotas
-#options 	FFS_EI		# FFS Endian Independent support
+#options 	QUOTA		# UFS quotas
+#options 	FFS_EI		# FFS Endian Independant support
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
-options 	WAPBL		# File system journaling support
+options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options 	NFSSERVER	# Network File System server
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
  				# immutable) behave as system flags.
@@ -103,7 +103,6 @@ options 	NFS_BOOT_DHCP
 #
 # builtin terminal emulations
 #options 	WSEMUL_VT100		# VT100 / VT220 emulation
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 # different kernel output - see dev/wscons/wsdisplayvar.h
 #options 	WS_KERNEL_FG=WSCOL_GREEN
 #options 	WS_KERNEL_BG=WSCOL_BLACK
@@ -219,8 +218,8 @@ ukphy*	at mii? phy ?			# generic unknown PHYs
 # options	RF_INCLUDE_INTERDECLUSTER=1
 # options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 # options	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-#pseudo-device	fss			# file system snapshot device
-#pseudo-device	md			# memory disk device (ramdisk)
+#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	md		1	# memory disk device (ramdisk)
 #pseudo-device	vnd			# disk-like interface to files
 
 # network pseudo-devices
@@ -248,6 +247,7 @@ pseudo-device   accf_http		# "httpready" accept filter
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
 #pseudo-device	sequencer	1	# MIDI sequencer
+pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well
 pseudo-device	clockctl		# user control of clock subsystem
 

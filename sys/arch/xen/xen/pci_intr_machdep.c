@@ -1,4 +1,4 @@
-/*      $NetBSD: pci_intr_machdep.c,v 1.15 2011/07/01 18:36:45 dyoung Exp $      */
+/*      $NetBSD: pci_intr_machdep.c,v 1.7.6.3 2009/10/04 00:04:08 snj Exp $      */
 
 /*
  * Copyright (c) 2005 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,13 +31,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.15 2011/07/01 18:36:45 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.7.6.3 2009/10/04 00:04:08 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/bus_private.h>
 
 #include <dev/pci/pcivar.h>
@@ -43,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.15 2011/07/01 18:36:45 dyoung
 #include "locators.h"
 #include "opt_ddb.h"
 #include "ioapic.h"
-#include "acpica.h"
+#include "acpi.h"
 #include "opt_mpbios.h"
 #include "opt_acpi.h"
 
@@ -57,13 +62,14 @@ __KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.15 2011/07/01 18:36:45 dyoung
 #include <machine/mpbiosvar.h>
 #endif
 
-#if NACPICA > 0
+#if NACPI > 0
 #include <machine/mpacpi.h>
 #endif
 
 int
-pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
+	pcireg_t intr;
 	int pin;
 	int line;
 
@@ -73,8 +79,20 @@ pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 	int bus, dev, func;
 #endif
 
+#ifndef XEN3
+	physdev_op_t physdev_op;
+	/* initialise device, to get the real IRQ */
+	physdev_op.cmd = PHYSDEVOP_PCI_INITIALISE_DEVICE;
+	physdev_op.u.pci_initialise_device.bus = pa->pa_bus;
+	physdev_op.u.pci_initialise_device.dev = pa->pa_device;
+	physdev_op.u.pci_initialise_device.func = pa->pa_function;
+	if (HYPERVISOR_physdev_op(&physdev_op) < 0)
+		panic("HYPERVISOR_physdev_op(PHYSDEVOP_PCI_INITIALISE_DEVICE)");
+#endif /* !XEN3 */
+
+	intr = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_INTERRUPT_REG);
 	pin = pa->pa_intrpin;
-	line = pa->pa_intrline;
+	pa->pa_intrline = line = PCI_INTERRUPT_LINE(intr);
 #if 0 /* XXXX why is it always 0 ? */
 	if (pin == 0) {
 		/* No IRQ used */
@@ -111,6 +129,7 @@ pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 		    '@' + pin, line);
 		goto bad;
 	}
+#ifdef XEN3
 #ifdef DOM0OPS
 	if (line >= NUM_LEGACY_IRQS) {
 		printf("pci_intr_map: bad interrupt line %d\n", line);
@@ -133,6 +152,7 @@ pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 		printf("pci_intr_map: no MP mapping found\n");
 	}
 #endif /* NIOAPIC */
+#endif /* XEN3 */
 
 	ihp->pirq = line;
 

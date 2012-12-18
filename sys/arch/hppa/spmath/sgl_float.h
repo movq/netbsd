@@ -1,4 +1,4 @@
-/*	$NetBSD: sgl_float.h,v 1.3 2009/01/27 11:49:54 skrll Exp $	*/
+/*	$NetBSD: sgl_float.h,v 1.2.14.1 2009/02/02 00:13:47 snj Exp $	*/
 
 /*	$OpenBSD: sgl_float.h,v 1.10 2004/01/02 14:39:01 mickey Exp $	*/
 

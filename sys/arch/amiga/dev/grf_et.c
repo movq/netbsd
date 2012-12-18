@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_et.c,v 1.31 2012/11/08 18:04:56 rkujawa Exp $ */
+/*	$NetBSD: grf_et.c,v 1.26 2007/10/17 19:53:16 garbled Exp $ */
 
 /*
  * Copyright (c) 1997 Klaus Burkert
@@ -37,10 +37,9 @@
 #include "opt_amigacons.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_et.c,v 1.31 2012/11/08 18:04:56 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_et.c,v 1.26 2007/10/17 19:53:16 garbled Exp $");
 
 #include "grfet.h"
-#include "ite.h"
 #if NGRFET > 0
 
 /*
@@ -105,8 +104,8 @@ int	et_blank(struct grf_softc *gp, int *on);
 static int et_getControllerType(struct grf_softc *gp);
 static int et_getDACType(struct grf_softc *gp);
 
-int	grfetmatch(device_t, cfdata_t, void *);
-void	grfetattach(device_t, device_t, void *);
+int	grfetmatch(struct device *, struct cfdata *, void *);
+void	grfetattach(struct device *, struct device *, void *);
 int	grfetprint(void *, const char *);
 void	et_memset(volatile unsigned char *d, unsigned char c, int l);
 
@@ -180,18 +179,18 @@ static unsigned char et_imageptr[8 * 64], et_maskptr[8 * 64];
 static unsigned char et_sprred[2], et_sprgreen[2], et_sprblue[2];
 
 /* standard driver stuff */
-CFATTACH_DECL_NEW(grfet, sizeof(struct grf_softc),
+CFATTACH_DECL(grfet, sizeof(struct grf_softc),
     grfetmatch, grfetattach, NULL, NULL);
 
 static struct cfdata *cfdata;
 
 int
-grfetmatch(device_t parent, cfdata_t cf, void *aux)
+grfetmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 	static int regprod, regprod2 = 0, fbprod;
 
-	zap = aux;
+	zap = auxp;
 
 #ifndef TSENGCONSOLE
 	if (amiga_realconfig == 0)
@@ -259,7 +258,7 @@ grfetmatch(device_t parent, cfdata_t cf, void *aux)
 
 #ifdef TSENGCONSOLE
 	if (amiga_realconfig == 0) {
-		cfdata = cf;
+		cfdata = cfp;
 	}
 #endif
 
@@ -268,15 +267,14 @@ grfetmatch(device_t parent, cfdata_t cf, void *aux)
 
 
 void
-grfetattach(device_t parent, device_t self, void *aux)
+grfetattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	static struct grf_softc congrf;
-	static char attachflag = 0;
-	struct device temp;
 	struct zbus_args *zap;
 	struct grf_softc *gp;
+	static char attachflag = 0;
 
-	zap = aux;
+	zap = auxp;
 
 	printf("\n");
 
@@ -285,20 +283,16 @@ grfetattach(device_t parent, device_t self, void *aux)
 		return;
 
 	/* do all that messy console/grf stuff */
-	if (self == NULL) {
+	if (dp == NULL)
 		gp = &congrf;
-		gp->g_device = &temp;
-		temp.dv_private = gp;
-	} else {
-		gp = device_private(self);
-		gp->g_device = self;
-	}
+	else
+		gp = (struct grf_softc *) dp;
 
-	if (self != NULL && congrf.g_regkva != 0) {
+	if (dp != NULL && congrf.g_regkva != 0) {
 		/*
 		 * inited earlier, just copy (not device struct)
 		 */
-		memcpy(&gp->g_display, &congrf.g_display,
+		bcopy(&congrf.g_display, &gp->g_display,
 		    (char *) &gp[1] - (char *) &gp->g_display);
 	} else {
 		gp->g_regkva = (volatile void *) et_regaddr;
@@ -306,18 +300,14 @@ grfetattach(device_t parent, device_t self, void *aux)
 
 		gp->g_unit = GRF_ET4000_UNIT;
 		gp->g_mode = et_mode;
-#if NITE > 0
 		gp->g_conpri = grfet_cnprobe();
-#endif
 		gp->g_flags = GF_ALIVE;
 
 		/* wakeup the board */
 		et_boardinit(gp);
 
 #ifdef TSENGCONSOLE
-#if NITE > 0
 		grfet_iteinit(gp);
-#endif
 		(void) et_load_mon(gp, &etconsole_mode);
 #endif
 	}
@@ -325,7 +315,7 @@ grfetattach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach grf (once)
 	 */
-	if (amiga_config_found(cfdata, gp->g_device, gp, grfetprint)) {
+	if (amiga_config_found(cfdata, &gp->g_device, gp, grfetprint)) {
 		attachflag = 1;
 		printf("grfet: %dMB ", et_fbsize / 0x100000);
 		switch (ettype) {
@@ -375,7 +365,7 @@ grfetattach(device_t parent, device_t self, void *aux)
 
 
 int
-grfetprint(void *aux, const char *pnp)
+grfetprint(void *auxp, const char *pnp)
 {
 	if (pnp)
 		aprint_normal("ite at %s: ", pnp);
@@ -570,7 +560,7 @@ et_getvmode(struct grf_softc *gp, struct grfvideo_mode *vm)
 #ifdef TSENGCONSOLE
 	/* Handle grabbing console mode */
 	if (vm->mode_num == 255) {
-		memcpy(vm, &etconsole_mode, sizeof(struct grfvideo_mode));
+		bcopy(&etconsole_mode, vm, sizeof(struct grfvideo_mode));
 	/* XXX so grfconfig can tell us the correct text dimensions. */
 		vm->depth = etconsole_mode.fy;
 	} else
@@ -584,7 +574,7 @@ et_getvmode(struct grf_softc *gp, struct grfvideo_mode *vm)
 		if (gv->mode_num == 0)
 			return (EINVAL);
 
-		memcpy(vm, gv, sizeof(struct grfvideo_mode));
+		bcopy(gv, vm, sizeof(struct grfvideo_mode));
 	}
 
 	/* adjust internal values to pixel values */
@@ -805,7 +795,7 @@ et_setmonitor(struct grf_softc *gp, struct grfvideo_mode *gv)
 #ifdef TSENGCONSOLE
 	/* handle interactive setting of console mode */
 	if (gv->mode_num == 255) {
-		memcpy(&etconsole_mode.gv, gv, sizeof(struct grfvideo_mode));
+		bcopy(gv, &etconsole_mode.gv, sizeof(struct grfvideo_mode));
 		etconsole_mode.gv.hblank_start /= 8;
 		etconsole_mode.gv.hsync_start /= 8;
 		etconsole_mode.gv.hsync_stop /= 8;
@@ -814,15 +804,13 @@ et_setmonitor(struct grf_softc *gp, struct grfvideo_mode *gv)
 		etconsole_mode.cols = gv->disp_width / etconsole_mode.fx;
 		if (!(gp->g_flags & GF_GRFON))
 			et_load_mon(gp, &etconsole_mode);
-#if NITE > 0
 		ite_reinit(gp->g_itedev);
-#endif
 		return (0);
 	}
 #endif
 
 	md = monitor_def + (gv->mode_num - 1);
-	memcpy(md, gv, sizeof(struct grfvideo_mode));
+	bcopy(gv, md, sizeof(struct grfvideo_mode));
 
 	/* adjust pixel oriented values to internal rep. */
 

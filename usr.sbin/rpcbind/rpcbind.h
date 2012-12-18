@@ -1,4 +1,4 @@
-/*	$NetBSD: rpcbind.h,v 1.5 2011/08/31 13:32:40 joerg Exp $	*/
+/*	$NetBSD: rpcbind.h,v 1.3 2007/05/16 14:42:08 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -104,7 +104,7 @@ void *rpcbproc_set_com(void *, struct svc_req *, SVCXPRT *, rpcvers_t);
 void *rpcbproc_unset_com(void *, struct svc_req *, SVCXPRT *, rpcvers_t);
 bool_t map_set(RPCB *, char *);
 bool_t map_unset(RPCB *, const char *);
-void delete_prog(rpcprog_t);
+void delete_prog(int);
 void *rpcbproc_getaddr_com(RPCB *, struct svc_req *, SVCXPRT *, rpcvers_t,
 				 rpcvers_t);
 void *rpcbproc_gettime_com(void *, struct svc_req *, SVCXPRT *,
@@ -116,13 +116,13 @@ void *rpcbproc_taddr2uaddr_com(void *, struct svc_req *, SVCXPRT *,
 int create_rmtcall_fd(struct netconfig *);
 void rpcbproc_callit_com(struct svc_req *, SVCXPRT *, rpcvers_t,
 			      rpcvers_t);
-__dead void my_svc_run(void);
+void my_svc_run(void);
 
-__dead void rpcbind_abort(void);
+void rpcbind_abort(void);
 void reap(int);
 void toggle_verboselog(int);
 
-int check_access(SVCXPRT *, rpcproc_t, void *, unsigned long);
+int check_access(SVCXPRT *, rpcproc_t, void *, int);
 int check_callit(SVCXPRT *, struct r_rmtcall_args *, int);
 void logit(int, struct sockaddr *, rpcproc_t, rpcprog_t, const char *);
 int is_loopback(struct netbuf *);

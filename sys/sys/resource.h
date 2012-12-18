@@ -1,4 +1,4 @@
-/*	$NetBSD: resource.h,v 1.33 2012/06/09 02:31:15 christos Exp $	*/
+/*	$NetBSD: resource.h,v 1.29.72.1 2009/04/01 00:25:22 snj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -58,7 +58,9 @@ struct	rusage {
 	struct timeval ru_utime;	/* user time used */
 	struct timeval ru_stime;	/* system time used */
 	long	ru_maxrss;		/* max resident set size */
+#ifdef _KERNEL
 #define	ru_first	ru_ixrss
+#endif
 	long	ru_ixrss;		/* integral shared memory size */
 	long	ru_idrss;		/* integral unshared data " */
 	long	ru_isrss;		/* integral unshared stack " */
@@ -72,7 +74,9 @@ struct	rusage {
 	long	ru_nsignals;		/* signals received */
 	long	ru_nvcsw;		/* voluntary context switches */
 	long	ru_nivcsw;		/* involuntary " */
+#ifdef _KERNEL
 #define	ru_last		ru_nivcsw
+#endif
 };
 
 /*
@@ -90,10 +94,9 @@ struct	rusage {
 #define	RLIMIT_SBSIZE	9		/* maximum size of all socket buffers */
 #define	RLIMIT_AS	10		/* virtual process size (inclusive of mmap) */
 #define	RLIMIT_VMEM	RLIMIT_AS	/* common alias */
-#define	RLIMIT_NTHR	11		/* number of threads */
 
 #if defined(_NETBSD_SOURCE)
-#define	RLIM_NLIMITS	12		/* number of resource limits */
+#define	RLIM_NLIMITS	11		/* number of resource limits */
 #endif
 
 #define	RLIM_INFINITY	(~((u_quad_t)1 << 63))	/* no limit */
@@ -125,15 +128,15 @@ struct loadavg {
 extern struct loadavg averunnable;
 struct pcred;
 int	dosetrlimit(struct lwp *, struct proc *, int, struct rlimit *);
+int	donice(struct lwp *, struct proc *, int);
+
 #else
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
 int	getpriority(int, id_t);
 int	getrlimit(int, struct rlimit *);
-#ifndef __LIBC12_SOURCE__
-int	getrusage(int, struct rusage *) __RENAME(__getrusage50);
-#endif
+int	getrusage(int, struct rusage *);
 int	setpriority(int, id_t, int);
 int	setrlimit(int, const struct rlimit *);
 __END_DECLS

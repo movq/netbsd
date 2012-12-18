@@ -1,6 +1,5 @@
-#	$NetBSD: Makefile,v 1.47 2011/10/04 04:04:15 chs Exp $
+#	$NetBSD: Makefile,v 1.38 2006/01/25 13:23:50 is Exp $
 
-.include <bsd.own.mk>
 .include <bsd.sys.mk>		# for HOST_SH
 
 ### what we need:
@@ -27,13 +26,14 @@ DIR_LIBC=	${DIR_TOP}/../common/lib/libc
 
 S=	${DIR_TOP}	# ????
 Z_AS= library
+ZMISCCPPFLAGS=-DDYNAMIC_CRC_TABLE -DNOBYFOUR -UBYFOUR 
 .include "${DIR_TOP}/lib/libz/Makefile.inc"
 LIBZ= ${ZLIB}
 
 # prefer our assembler versions over assembler, and assembler over C:
 
 .SUFFIXES:
-.SUFFIXES: .out .o .po .pico .so .s .S .c .cc .C .f .y .l .ln .m4 .sh
+.SUFFIXES: .out .o .po .so .s .S .c .cc .C .f .y .l .ln .m4 .sh
 
 FILES= boot.amiga
 BINDIR=/usr/mdec
@@ -49,10 +49,9 @@ SOBJS += libstubs.o
 
 OBJS=	$(SOBJS) $(COBJS)
 
-#XX#DEFS = -D_STANDALONE -DSA_EXEC_ANYOWNER -DDYNAMIC_CRC_TABLE -DNOBYFOUR -UBYFOUR 
-DEFS = -D_STANDALONE -DSA_EXEC_ANYOWNER 
+#XX#DEFS = -D_STANDALONE -DINSECURE -DDYNAMIC_CRC_TABLE -DNOBYFOUR -UBYFOUR 
+DEFS = -D_STANDALONE -DINSECURE 
 DEFS += -D__INTERNAL_LIBSA_CREAD
-#DEFS += -DSERCONSOLE
 SOBJS += cread.o
 
 #XX#SOBJS += adler32.o crc32.o inflate.o trees.o \
@@ -74,26 +73,19 @@ CLEANFILES += boot.amiga x.out xxstart.o libboot.a vers.c machine m68k
 
 ### special  rules for bootblocks ###
 
-INCPATH = -nostdinc -I${DIR_TOP} -I${DIR_TOP}/lib/libsa
-INCPATH += -I${DIR_TOP}/../common/dist/zlib
-INCPATH += -I${.CURDIR}
+INCPATH = -nostdinc -I${DIR_TOP} -I${DIR_TOP}/lib/libsa -I${.CURDIR}
 INCPATH += -I${.CURDIR}/../../.. -I${.OBJDIR}
-INCPATH += -I${.CURDIR}/../elf2bb
+INCPATH += -I${.CURDIR}/../aout2bb -I${DESTDIR}/usr/include
 
 AFLAGS += -m68030 -l
 CAFLAGS += -Wa,-l -Wa,-m68030 ${INCPATH}
 
 COPTIM= -Os -fomit-frame-pointer -fcse-follow-jumps -fcse-skip-blocks  -Wa,-l -m68060 -Wa,-m68030
-CFLAGS= -ffreestanding ${COPTIM} ${INCPATH} ${DEFS}
-CFLAGS+= -Werror
-CFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
-
-# XXX work around a gcc 4.5 bug
-COPTS.cread.c = -O1
+CFLAGS= -ffreestanding ${COPTIM} ${INCPATH} ${DEFS} -Wall #-Wstrict-prototypes
 
 .c.o:
-	${CC} ${CFLAGS} ${COPTS.${.IMPSRC:T}} -S $< -o $*.s
-	${TXLT} < $*.s | ${AS} ${AFLAGS} -o $@
+	${CC} ${CFLAGS} -S $< -o $*.s
+	${TXLT} < $*.s | ${AS} ${AFLAGS} -o $*.o
 	rm $*.s
 
 .s.o: ; ${CC} ${CAFLAGS} ${COPTS} -x assembler-with-cpp -o $@ -c $<
@@ -101,10 +93,10 @@ COPTS.cread.c = -O1
 .S.o: ; ${CC} ${CAFLAGS} ${COPTS} -x assembler-with-cpp -o $@ -c $<
 
 boot.amiga: x.out
-	${RELOC2BB} -S x.out $@ || (${NM} -u x.out && false)
+	${RELOC2BB} -S x.out $@ || ${NM} -u x.out
 
 x.out: xxstart.o libboot.a ${LIBZ}
-	${LD} ${LDFLAGS} -r -dc -e start -o $@ $>
+	${LD} ${LDFLAGS} -r -dc -e _start -o $@ $>
 	${SIZE} $@
 	${NM} -u $@
 
@@ -115,14 +107,9 @@ xxstart.o: ${.CURDIR}/bbstart.s
 libboot.a: ${OBJS}
 	${AR} r $@ $> && ${RANLIB} $@
 
-vers.o: vers.c
+.PHONY:	vers.c
 vers.c:	${.CURDIR}/version
-	${HOST_SH} ${DIR_TOP}/conf/newvers_stand.sh \
-	    ${${MKREPRO} == "yes" :?:-D} -N ${.CURDIR}/version "amiga"
-
-.if !make(obj) && !make(clean) && !make(cleandir)
-.NOPATH: machine m68k
-.BEGIN: machine m68k
+	${HOST_SH} ${DIR_TOP}/conf/newvers_stand.sh -N ${.CURDIR}/version "amiga"
 
 machine:
 	-rm -f $@
@@ -131,7 +118,6 @@ machine:
 m68k:
 	-rm -f $@
 	ln -s ${DIR_TOP}/arch/m68k/include $@
-.endif
 
 # make sure these are built:
 

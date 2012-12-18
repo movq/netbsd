@@ -1,4 +1,4 @@
-.\"	$NetBSD: sysexits.3,v 1.6 2011/04/08 10:14:24 jruoho Exp $
+.\"	$NetBSD: sysexits.3,v 1.2 2005/10/03 19:16:35 wiz Exp $
 .\"
 .\" Copyright (c) 1996 Joerg Wunsch
 .\"
@@ -27,9 +27,9 @@
 .\" $FreeBSD: src/share/man/man3/sysexits.3,v 1.16 2005/06/30 13:13:49 hmp Exp $
 .\"
 .\" "
-.Dd March 25, 2010
-.Dt SYSEXITS 3
+.Dd March 31, 1996
 .Os
+.Dt SYSEXITS 3
 .Sh NAME
 .Nm sysexits
 .Nd preferable exit codes for programs
@@ -38,18 +38,11 @@
 .Sh DESCRIPTION
 It is not a good practice to call
 .Xr exit 3
-with arbitrary values to indicate a failure condition when ending a program.
-In addition to the two standard constants in
-.In stdlib.h ,
-.Dv EXIT_SUCCESS
-and
-.Dv EXIT_FAILURE ,
-the header
-.In sysexits.h
-defines few exit codes that can be used as a parameter to the
-.Xr exit 3
-function.
-By using these constants the caller of the process can get a rough
+with arbitrary values to indicate a failure condition when ending
+a program.
+Instead, the pre-defined exit codes from
+.Nm
+should be used, so the caller of the process can get a rough
 estimation about the failure class without looking up the source code.
 .Pp
 The successful exit is always indicated by a status of 0, or
@@ -134,14 +127,15 @@ The numerical values corresponding to the symbolical ones are given in
 parenthesis for easy reference.
 .Sh SEE ALSO
 .Xr err 3 ,
-.Xr exit 3 ,
-.Xr stdlib 3
+.Xr exit 3
 .Sh HISTORY
 The
-.In sysexits.h
-header appeared somewhere after
+.Nm
+file appeared somewhere after
 .Bx 4.3 .
-The manual page for it appeared in
+The
+.Nm
+man page appeared in
 .Nx 4.0 .
 .Sh AUTHORS
 This manual page was written by

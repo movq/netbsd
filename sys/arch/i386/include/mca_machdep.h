@@ -1,4 +1,4 @@
-/*	$NetBSD: mca_machdep.h,v 1.15 2011/07/01 18:15:11 dyoung Exp $	*/
+/*	$NetBSD: mca_machdep.h,v 1.12 2007/04/11 18:33:52 garbled Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -30,8 +30,7 @@
 #ifndef _I386_MCA_MACHDEP_H_
 #define _I386_MCA_MACHDEP_H_
 
-#include <sys/device.h>	/* for device_t */
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 /*
  * i386-specific definitions for MCA autoconfiguration.
@@ -42,7 +41,7 @@ extern struct x86_bus_dma_tag mca_bus_dma_tag;
 /* set to 1 if MCA bus is detected */
 extern int MCA_system;
 
-void	mca_nmi(void);
+int	mca_nmi(void);
 
 /*
  * Types provided to machine-independent MCA code.
@@ -59,7 +58,7 @@ typedef int mca_intr_handle_t;
  */
 struct mcabus_attach_args;
 
-void	mca_attach_hook(device_t, device_t,
+void	mca_attach_hook(struct device *, struct device *,
 		struct mcabus_attach_args *);
 int	mca_dmamap_create(bus_dma_tag_t, bus_size_t, int, bus_dmamap_t *, int);
 void	mca_dma_set_ioport(int dma, uint16_t port);

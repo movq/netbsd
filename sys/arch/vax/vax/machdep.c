@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.189 2012/08/27 22:25:09 martin Exp $	 */
+/* $NetBSD: machdep.c,v 1.167.4.1 2008/11/22 05:03:59 snj Exp $	 */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -83,62 +83,62 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.189 2012/08/27 22:25:09 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.167.4.1 2008/11/22 05:03:59 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
 #include "opt_compat_ultrix.h"
-#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
 #include "opt_compat_ibcs2.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/buf.h>
-#include <sys/conf.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
 #include <sys/extent.h>
-#include <sys/kernel.h>
-#include <sys/ksyms.h>
-#include <sys/mount.h>
-#include <sys/msgbuf.h>
-#include <sys/mbuf.h>
 #include <sys/proc.h>
-#include <sys/ptrace.h>
-#include <sys/reboot.h>
-#include <sys/kauth.h>
-#include <sys/sysctl.h>
+#include <sys/user.h>
 #include <sys/time.h>
+#include <sys/signal.h>
+#include <sys/kernel.h>
+#include <sys/msgbuf.h>
+#include <sys/buf.h>
+#include <sys/mbuf.h>
+#include <sys/reboot.h>
+#include <sys/conf.h>
+#include <sys/device.h>
+#include <sys/exec.h>
+#include <sys/mount.h>
+#include <sys/syscallargs.h>
+#include <sys/ptrace.h>
+#include <sys/ksyms.h>
 
 #include <dev/cons.h>
-#include <dev/mm.h>
 
 #include <uvm/uvm_extern.h>
+#include <sys/sysctl.h>
+#include <sys/savar.h>	/* for cpu_upcall */
 
 #include <machine/sid.h>
+#include <machine/pte.h>
+#include <machine/mtpr.h>
+#include <machine/cpu.h>
 #include <machine/macros.h>
 #include <machine/nexus.h>
+#include <machine/trap.h>
 #include <machine/reg.h>
+#include <machine/db_machdep.h>
 #include <machine/scb.h>
 #include <vax/vax/gencons.h>
 
 #ifdef DDB
-#include <machine/db_machdep.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
 #endif
 
 #include "smg.h"
 #include "ksyms.h"
-#include "leds.h"
-
-#define DEV_LEDS	13	/* minor device 13 is leds */
 
 extern vaddr_t virtual_avail, virtual_end;
-extern paddr_t avail_end;
-
 /*
  * We do these external declarations here, maybe they should be done
  * somewhere else...
@@ -147,6 +147,7 @@ char		machine[] = MACHINE;		/* from <machine/param.h> */
 char		machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
 char		cpu_model[100];
 void *		msgbufaddr;
+int		physmem;
 int		*symtab_start;
 int		*symtab_end;
 int		symtab_nsyms;
@@ -162,6 +163,7 @@ static long iomap_ex_storage[EXTENT_FIXED_STORAGE_SIZE(32) / sizeof(long)];
 static struct extent *iomap_ex;
 static int iomap_ex_malloc_safe;
 
+struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 #ifdef DEBUG
@@ -174,6 +176,7 @@ cpu_startup(void)
 #if VAX46 || VAX48 || VAX49 || VAX53 || VAXANY
 	vaddr_t		minaddr, maxaddr;
 #endif
+	extern paddr_t avail_end;
 	char pbuf[9];
 
 	/*
@@ -225,15 +228,20 @@ long	dumplo = 0;
 void
 cpu_dumpconf(void)
 {
-	int	nblks;
+	const struct bdevsw *bdev;
+	int		nblks;
 
 	/*
 	 * XXX include the final RAM page which is not included in physmem.
 	 */
 	if (dumpdev == NODEV)
 		return;
-	nblks = bdev_size(dumpdev);
-	if (nblks > 0) {
+	bdev = bdevsw_lookup(dumpdev);
+	if (bdev == NULL)
+		return;
+	dumpsize = physmem + 1;
+	if (bdev->d_psize != NULL) {
+		nblks = (*bdev->d_psize)(dumpdev);
 		if (dumpsize > btoc(dbtob(nblks - dumplo)))
 			dumpsize = btoc(dbtob(nblks - dumplo));
 		else if (dumplo == 0)
@@ -245,13 +253,6 @@ cpu_dumpconf(void)
 	 */
 	if (dumplo < btodb(PAGE_SIZE))
 		dumplo = btodb(PAGE_SIZE);
-
-	/*
-	 * If we have nothing to dump (XXX implement crash dumps),
-	 * make it clear for savecore that there is no dump.
-	 */
-	if (dumpsize <= 0)
-		dumplo = 0;
 }
 
 static int
@@ -314,21 +315,21 @@ consinit(void)
 	 */
 	KASSERT(iospace != 0);
 	iomap_ex = extent_create("iomap", iospace + VAX_NBPG,
-	    iospace + ((IOSPSZ * VAX_NBPG) - 1),
+	    iospace + ((IOSPSZ * VAX_NBPG) - 1), M_DEVBUF,
 	    (void *) iomap_ex_storage, sizeof(iomap_ex_storage),
 	    EX_NOCOALESCE|EX_NOWAIT);
 #ifdef DEBUG
 	iospace_inited = 1;
 #endif
 	cninit();
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	if (symtab_start != NULL && symtab_nsyms != 0 && symtab_end != NULL) {
-		ksyms_addsyms_elf(symtab_nsyms, symtab_start, symtab_end);
+		ksyms_init(symtab_nsyms, symtab_start, symtab_end);
 	}
 #endif
 #ifdef DEBUG
-	if (sizeof(struct pcb) > REDZONEADDR)
-		panic("struct pcb inside red zone");
+	if (sizeof(struct user) > REDZONEADDR)
+		panic("struct user inside red zone");
 #endif
 }
 
@@ -350,7 +351,6 @@ cpu_reboot(int howto, char *b)
 	splhigh();		/* extreme priority */
 	if (howto & RB_HALT) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		if (dep_call->cpu_halt)
 			(*dep_call->cpu_halt) ();
 		printf("halting (in tight loop); hit\n\t^P\n\tHALT\n\n");
@@ -426,12 +426,12 @@ dumpsys(void)
 	if (dumpsize == 0)
 		cpu_dumpconf();
 	if (dumplo <= 0) {
-		printf("\ndump to dev %u,%u not possible\n",
-		    major(dumpdev), minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
+		    minor(dumpdev));
 		return;
 	}
-	printf("\ndumping to dev %u,%u offset %ld\n",
-	    major(dumpdev), minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
+	    minor(dumpdev), dumplo);
 	printf("dump ");
 	switch ((*bdev->d_dump) (dumpdev, 0, 0, 0)) {
 
@@ -460,28 +460,28 @@ dumpsys(void)
 int
 process_read_regs(struct lwp *l, struct reg *regs)
 {
-	struct trapframe * const tf = l->l_md.md_utf;
+	struct trapframe *tf = l->l_addr->u_pcb.framep;
 
-	memcpy(&regs->r0, &tf->tf_r0, 12 * sizeof(int));
-	regs->ap = tf->tf_ap;
-	regs->fp = tf->tf_fp;
-	regs->sp = tf->tf_sp;
-	regs->pc = tf->tf_pc;
-	regs->psl = tf->tf_psl;
+	bcopy(&tf->r0, &regs->r0, 12 * sizeof(int));
+	regs->ap = tf->ap;
+	regs->fp = tf->fp;
+	regs->sp = tf->sp;
+	regs->pc = tf->pc;
+	regs->psl = tf->psl;
 	return 0;
 }
 
 int
 process_write_regs(struct lwp *l, const struct reg *regs)
 {
-	struct trapframe * const tf = l->l_md.md_utf;
+	struct trapframe *tf = l->l_addr->u_pcb.framep;
 
-	memcpy(&tf->tf_r0, &regs->r0, 12 * sizeof(int));
-	tf->tf_ap = regs->ap;
-	tf->tf_fp = regs->fp;
-	tf->tf_sp = regs->sp;
-	tf->tf_pc = regs->pc;
-	tf->tf_psl = (regs->psl|PSL_U|PSL_PREVU) &
+	bcopy(&regs->r0, &tf->r0, 12 * sizeof(int));
+	tf->ap = regs->ap;
+	tf->fp = regs->fp;
+	tf->sp = regs->sp;
+	tf->pc = regs->pc;
+	tf->psl = (regs->psl|PSL_U|PSL_PREVU) &
 	    ~(PSL_MBZ|PSL_IS|PSL_IPL1F|PSL_CM); /* Allow compat mode? */
 	return 0;
 }
@@ -489,7 +489,16 @@ process_write_regs(struct lwp *l, const struct reg *regs)
 int
 process_set_pc(struct lwp *l, void *addr)
 {
-	l->l_md.md_utf->tf_pc = (uintptr_t) addr;
+	struct	trapframe *tf;
+	void	*ptr;
+
+	if ((l->l_flag & LW_INMEM) == 0)
+		return (EIO);
+
+	ptr = (char *) l->l_addr->u_pcb.framep;
+	tf = ptr;
+
+	tf->pc = (unsigned) addr;
 
 	return (0);
 }
@@ -497,12 +506,19 @@ process_set_pc(struct lwp *l, void *addr)
 int
 process_sstep(struct lwp *l, int sstep)
 {
-	struct trapframe * const tf = l->l_md.md_utf;
+	void	       *ptr;
+	struct trapframe *tf;
+
+	if ((l->l_flag & LW_INMEM) == 0)
+		return (EIO);
+
+	ptr = l->l_addr->u_pcb.framep;
+	tf = ptr;
 
 	if (sstep)
-		tf->tf_psl |= PSL_T;
+		tf->psl |= PSL_T;
 	else
-		tf->tf_psl &= ~PSL_T;
+		tf->psl &= ~PSL_T;
 
 	return (0);
 }
@@ -622,86 +638,108 @@ krnunlock(void)
 #endif
 
 void
-cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+    void *sas, void *ap, void *sp, sa_upcall_t upcall)
 {
-	const struct trapframe * const tf = l->l_md.md_utf;
-	__greg_t *gr = mcp->__gregs;
+	struct trapframe *tf = l->l_addr->u_pcb.framep;
+	uint32_t saframe[11], *fp = saframe;
 
-	gr[_REG_R0] = tf->tf_r0;
-	gr[_REG_R1] = tf->tf_r1;
-	gr[_REG_R2] = tf->tf_r2;
-	gr[_REG_R3] = tf->tf_r3;
-	gr[_REG_R4] = tf->tf_r4;
-	gr[_REG_R5] = tf->tf_r5;
-	gr[_REG_R6] = tf->tf_r6;
-	gr[_REG_R7] = tf->tf_r7;
-	gr[_REG_R8] = tf->tf_r8;
-	gr[_REG_R9] = tf->tf_r9;
-	gr[_REG_R10] = tf->tf_r10;
-	gr[_REG_R11] = tf->tf_r11;
-	gr[_REG_AP] = tf->tf_ap;
-	gr[_REG_FP] = tf->tf_fp;
-	gr[_REG_SP] = tf->tf_sp;
-	gr[_REG_PC] = tf->tf_pc;
-	gr[_REG_PSL] = tf->tf_psl;
-	*flags |= _UC_CPU;
+	sp = (void *)((uintptr_t)sp - sizeof(saframe));
+
+	/*
+	 * We don't bother to save the callee's register mask
+	 * since the function is never expected to return.
+	 */
+
+	/*
+	 * Fake a CALLS stack frame.
+	 */
+	*fp++ = 0;			/* condition handler */
+	*fp++ = 0x20000000;		/* saved regmask & PSW */
+	*fp++ = 0;			/* saved AP */
+	*fp++ = 0;			/* saved FP, new call stack */
+	*fp++ = 0;			/* saved PC, new call stack */
+
+	/*
+	 * Now create the argument list.
+	 */
+	*fp++ = 5;			/* argc = 5 */
+	*fp++ = type;
+	*fp++ = (uintptr_t) sas;
+	*fp++ = nevents;
+	*fp++ = ninterrupted;
+	*fp++ = (uintptr_t) ap;
+
+	if (copyout(&saframe, sp, sizeof(saframe)) != 0) {
+		/* Copying onto the stack didn't work, die. */
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+
+	tf->ap = (uintptr_t) sp + 20;
+	tf->sp = (long) sp;
+	tf->fp = (long) sp;
+	tf->pc = (long) upcall + 2;
+	tf->psl = (long) PSL_U | PSL_PREVU;
 }
 
-int
-cpu_mcontext_validate(struct lwp *l, const mcontext_t *mcp)
+void
+cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 {
-	const __greg_t *gr = mcp->__gregs;
+	const struct trapframe *tf = l->l_addr->u_pcb.framep;
+	__greg_t *gr = mcp->__gregs;
 
-	if ((gr[_REG_PSL] & (PSL_IPL | PSL_IS)) ||
-	    ((gr[_REG_PSL] & (PSL_U | PSL_PREVU)) != (PSL_U | PSL_PREVU)) ||
-	    (gr[_REG_PSL] & PSL_CM))
-		return EINVAL;
-
-	return 0;
+	gr[_REG_R0] = tf->r0;
+	gr[_REG_R1] = tf->r1;
+	gr[_REG_R2] = tf->r2;
+	gr[_REG_R3] = tf->r3;
+	gr[_REG_R4] = tf->r4;
+	gr[_REG_R5] = tf->r5;
+	gr[_REG_R6] = tf->r6;
+	gr[_REG_R7] = tf->r7;
+	gr[_REG_R8] = tf->r8;
+	gr[_REG_R9] = tf->r9;
+	gr[_REG_R10] = tf->r10;
+	gr[_REG_R11] = tf->r11;
+	gr[_REG_AP] = tf->ap;
+	gr[_REG_FP] = tf->fp;
+	gr[_REG_SP] = tf->sp;
+	gr[_REG_PC] = tf->pc;
+	gr[_REG_PSL] = tf->psl;
+	*flags |= _UC_CPU;
 }
 
 int
 cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 {
-	struct trapframe * const tf = l->l_md.md_utf;
+	struct trapframe *tf = l->l_addr->u_pcb.framep;
 	const __greg_t *gr = mcp->__gregs;
-	int error;
 
 	if ((flags & _UC_CPU) == 0)
 		return 0;
 
-	error = cpu_mcontext_validate(l, mcp);
-	if (error)
-		return error;
+	if ((gr[_REG_PSL] & (PSL_IPL | PSL_IS)) ||
+	    ((gr[_REG_PSL] & (PSL_U | PSL_PREVU)) != (PSL_U | PSL_PREVU)) ||
+	    (gr[_REG_PSL] & PSL_CM))
+		return (EINVAL);
 
-	tf->tf_r0 = gr[_REG_R0];
-	tf->tf_r1 = gr[_REG_R1];
-	tf->tf_r2 = gr[_REG_R2];
-	tf->tf_r3 = gr[_REG_R3];
-	tf->tf_r4 = gr[_REG_R4];
-	tf->tf_r5 = gr[_REG_R5];
-	tf->tf_r6 = gr[_REG_R6];
-	tf->tf_r7 = gr[_REG_R7];
-	tf->tf_r8 = gr[_REG_R8];
-	tf->tf_r9 = gr[_REG_R9];
-	tf->tf_r10 = gr[_REG_R10];
-	tf->tf_r11 = gr[_REG_R11];
-	tf->tf_ap = gr[_REG_AP];
-	tf->tf_fp = gr[_REG_FP];
-	tf->tf_sp = gr[_REG_SP];
-	tf->tf_pc = gr[_REG_PC];
-	tf->tf_psl = gr[_REG_PSL];
-
-	if (flags & _UC_TLSBASE) {
-		void *tlsbase;
-
-		error = copyin((void *)tf->tf_sp, &tlsbase, sizeof(tlsbase));
-		if (error) {
-			return error;
-		}
-		lwp_setprivate(l, tlsbase);
-		tf->tf_sp += sizeof(tlsbase);
-	}
+	tf->r0 = gr[_REG_R0];
+	tf->r1 = gr[_REG_R1];
+	tf->r2 = gr[_REG_R2];
+	tf->r3 = gr[_REG_R3];
+	tf->r4 = gr[_REG_R4];
+	tf->r5 = gr[_REG_R5];
+	tf->r6 = gr[_REG_R6];
+	tf->r7 = gr[_REG_R7];
+	tf->r8 = gr[_REG_R8];
+	tf->r9 = gr[_REG_R9];
+	tf->r10 = gr[_REG_R10];
+	tf->r11 = gr[_REG_R11];
+	tf->ap = gr[_REG_AP];
+	tf->fp = gr[_REG_FP];
+	tf->sp = gr[_REG_SP];
+	tf->pc = gr[_REG_PC];
+	tf->psl = gr[_REG_PSL];
 	return 0;
 }
 
@@ -738,31 +776,3 @@ generic_reboot(int arg)
 	__asm("halt");
 }
 
-bool
-mm_md_direct_mapped_phys(paddr_t paddr, vaddr_t *vaddr)
-{
-
-	*vaddr = paddr + KERNBASE;
-	return true;
-}
-
-int
-mm_md_physacc(paddr_t pa, vm_prot_t prot)
-{
-
-	return (pa < avail_end) ? 0 : EFAULT;
-}
-
-int
-mm_md_readwrite(dev_t dev, struct uio *uio)
-{
-
-	switch (minor(dev)) {
-#if NLEDS
-	case DEV_LEDS:
-		return leds_uio(uio);
-#endif
-	default:
-		return ENXIO;
-	}
-}

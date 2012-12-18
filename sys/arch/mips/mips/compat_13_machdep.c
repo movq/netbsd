@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_13_machdep.c,v 1.21 2011/02/20 07:45:47 matt Exp $	*/
+/*	$NetBSD: compat_13_machdep.c,v 1.16 2008/04/24 18:39:21 ad Exp $	*/
 
 /*
  * Copyright 1996 The Board of Trustees of The Leland Stanford
@@ -15,13 +15,14 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.21 2011/02/20 07:45:47 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.16 2008/04/24 18:39:21 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
@@ -29,8 +30,6 @@ __KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.21 2011/02/20 07:45:47 matt 
 #include <compat/sys/signalvar.h>
 
 #include <mips/regnum.h>
-#include <mips/locore.h>
-#include <mips/pcb.h>
 
 #ifdef DEBUG
 extern int sigdebug;
@@ -38,10 +37,6 @@ extern int sigdebug;
 #define SDB_FOLLOW	0x01
 #define SDB_KSTACK	0x02
 #define SDB_FPSTATE	0x04
-#endif
-
-#if !defined(__mips_o32)
-#define	fpreg		fpreg_oabi
 #endif
 
 int
@@ -53,13 +48,8 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 	struct sigcontext13 *scp, ksc;
 	struct proc *p = l->l_proc;
 	int error;
-	struct trapframe *tf = l->l_md.md_utf;
+	struct frame *f;
 	sigset_t mask;
-
-#if !defined(__mips_o32)
-	if (p->p_md.md_abi != _MIPS_BSD_API_O32)
-		return ENOSYS;
-#endif
 
 	/*
 	 * The trampoline code hands us the context.
@@ -74,24 +64,18 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 	if ((error = copyin(scp, &ksc, sizeof(ksc))) != 0)
 		return (error);
 
-	if ((uint32_t)ksc.sc_regs[_R_ZERO] != 0xacedbadeU)/* magic number */
+	if ((u_int)ksc.sc_regs[_R_ZERO] != 0xacedbadeU)/* magic number */
 		return (EINVAL);
 
 	/* Resture the register context. */
-	tf->tf_regs[_R_PC] = ksc.sc_pc;
-	tf->tf_regs[_R_MULLO] = ksc.mullo;
-	tf->tf_regs[_R_MULHI] = ksc.mulhi;
-#if defined(__mips_o32)
-	memcpy(&tf->tf_regs[1], &scp->sc_regs[1],
+	f = (struct frame *)l->l_md.md_regs;
+	f->f_regs[_R_PC] = ksc.sc_pc;
+	f->f_regs[_R_MULLO] = ksc.mullo;
+	f->f_regs[_R_MULHI] = ksc.mulhi;
+	memcpy(&f->f_regs[1], &scp->sc_regs[1],
 	    sizeof(scp->sc_regs) - sizeof(scp->sc_regs[0]));
-#else
-	for (size_t i = 1; i < __arraycount(scp->sc_regs); i++)
-		tf->tf_regs[i] = scp->sc_regs[i];
-#endif
-	if (scp->sc_fpused) {
-		struct pcb * const pcb = lwp_getpcb(l);
-		*(struct fpreg *)&pcb->pcb_fpregs = *(struct fpreg *)scp->sc_fpregs;
-	}
+	if (scp->sc_fpused)
+		l->l_addr->u_pcb.pcb_fpregs = *(struct fpreg *)scp->sc_fpregs;
 
 	mutex_enter(p->p_lock);
 

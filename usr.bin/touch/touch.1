@@ -1,4 +1,4 @@
-.\"	$NetBSD: touch.1,v 1.25 2012/10/24 02:46:25 pgoyette Exp $
+.\"	$NetBSD: touch.1,v 1.16 2003/08/07 11:16:44 agc Exp $
 .\"
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"     @(#)touch.1	8.3 (Berkeley) 4/28/95
 .\"
-.Dd October 22, 2012
+.Dd April 28, 1995
 .Dt TOUCH 1
 .Os
 .Sh NAME
@@ -41,21 +41,18 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl acfhm
-.Op Fl d Ar human-datetime
-.Op Fl Fl date Ar human-datetime
 .Op Fl r Ar file
-.Op Fl Fl reference Ar file
-.Op Fl t Ar datetime
+.Op Fl t Ar [[CC]YY]MMDDhhmm[.SS]
 .Ar file ...
 .Sh DESCRIPTION
 The
 .Nm
-utility changes the access and modification times of files to the
+utility sets the modification and access times of files to the
 current time of day.
 If the file doesn't exist, it is created with default permissions.
 .Pp
 The following options are available:
-.Bl -tag -width "-d human-datetime"
+.Bl -tag -width Ds
 .It Fl a
 Change the access time of the file.
 The modification time of the file is not changed unless the
@@ -67,14 +64,9 @@ The
 .Nm
 utility does not treat this as an error.
 No error messages are displayed and the exit value is not affected.
-.It Fl d Ar human-datetime
-.It Fl Fl date Ar human-datetime
-Parse
-.Ar human-datetime
-using the human datetime parser
-.Xr parsedate 3 .
 .It Fl f
-This flag has no effect; it is accepted for compatibility reasons.
+Attempt to force the update, even if the file permissions do not
+currently permit it.
 .It Fl h
 If
 .Ar file
@@ -86,16 +78,12 @@ Change the modification time of the file.
 The access time of the file is not changed unless the
 .Fl a
 flag is also specified.
-.It Fl r Ar file
-.It Fl Fl reference Ar file
-Use the access and modifications times from
-.Ar file
+.It Fl r
+Use the access and modifications times from the specified file
 instead of the current time of day.
-.It Fl t Ar datetime
+.It Fl t
 Change the access and modification times to the specified time.
-The argument
-.Ar datetime
-should be in the form
+The argument should be in the form
 .Dq [[CC]YY]MMDDhhmm[.SS]
 where each pair of letters represents the following:
 .Pp
@@ -140,21 +128,16 @@ letter pair is not specified, the value defaults to 0.
 .El
 .Pp
 The
-.Fl d ,
-.Fl r ,
-and
-.Fl t
-options are mutually exclusive.
-If more than one of these options is present, the last one is used.
-.Sh EXIT STATUS
-.Ex -std
+.Nm
+utility exits 0 on success, and \*[Gt]0 if an error occurs.
+.Sh SEE ALSO
+.Xr utimes 2
 .Sh COMPATIBILITY
 The obsolescent form of
 .Nm ,
 where a time format is specified as the first argument, is supported.
 When no
-.Fl d ,
-.Fl r ,
+.Fl r
 or
 .Fl t
 option is specified, there are at least two arguments, and the first
@@ -175,8 +158,6 @@ If the
 .Dq YY
 letter pair is in the range 69 to 99, the year is set to 1969 to 1999,
 otherwise, the year is set in the 21st century.
-.Sh SEE ALSO
-.Xr utimes 2
 .Sh STANDARDS
 The
 .Nm

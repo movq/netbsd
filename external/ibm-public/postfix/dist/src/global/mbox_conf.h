@@ -1,4 +1,4 @@
-/*	$NetBSD: mbox_conf.h,v 1.1.1.1 2009/06/23 10:08:47 tron Exp $	*/
+/*	$NetBSD: mbox_conf.h,v 1.1.1.1.2.3 2011/01/07 01:24:04 riz Exp $	*/
 
 #ifndef _MBOX_CONF_H_INCLUDED_
 #define _MBOX_CONF_H_INCLUDED_

@@ -1,4 +1,4 @@
-/* $NetBSD: start.c,v 1.19 2012/08/16 18:15:10 matt Exp $ */
+/* $NetBSD: start.c,v 1.8 2007/03/05 17:52:26 he Exp $ */
 /*-
  * Copyright (c) 1998, 2000 Ben Harris
  * All rights reserved.
@@ -31,14 +31,12 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: start.c,v 1.19 2012/08/16 18:15:10 matt Exp $");
-
-#include "opt_modular.h"
+__KERNEL_RCSID(0, "$NetBSD: start.c,v 1.8 2007/03/05 17:52:26 he Exp $");
 
 #include <sys/msgbuf.h>
+#include <sys/user.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/lwp.h>
 
 #include <dev/i2c/i2cvar.h>
 #include <acorn26/ioc/iociicvar.h>
@@ -48,7 +46,6 @@ __KERNEL_RCSID(0, "$NetBSD: start.c,v 1.19 2012/08/16 18:15:10 matt Exp $");
 #include <machine/boot.h>
 #include <machine/machdep.h>
 #include <machine/memcreg.h>
-#include <machine/pcb.h>
 
 #include <dev/cons.h>
 
@@ -62,9 +59,11 @@ __KERNEL_RCSID(0, "$NetBSD: start.c,v 1.19 2012/08/16 18:15:10 matt Exp $");
 #include <arch/acorn26/iobus/iocreg.h>
 #endif
 
-extern void main(void); /* XXX Should be in a header file */
+extern void main __P((void)); /* XXX Should be in a header file */
 
 struct bootconfig bootconfig;
+
+struct user *proc0paddr;
 
 /* in machdep.h */
 extern i2c_tag_t acorn26_i2c_tag;
@@ -91,10 +90,10 @@ extern char __bss_start__[], __bss_end__[];
  * assembler to get things going.
  */
 void
-start(struct bootconfig *initbootconfig)
+start(initbootconfig)
+	struct bootconfig *initbootconfig;
 {
 	int onstack;
-	vaddr_t v;
 
 	/*
 	 * State of the world as of BBBB 0.02:
@@ -114,7 +113,7 @@ start(struct bootconfig *initbootconfig)
 #define MSGBUF_PHYSADDR	((paddr_t)0x00090000)
 
 	/* We can't trust the BSS (at least not with my linker) */
-	memset(__bss_start__, 0, __bss_end__ - __bss_start__);
+	bzero(__bss_start__, __bss_end__ - __bss_start__);
 
 	/* Save boot configuration somewhere */
 	memcpy(&bootconfig, initbootconfig, sizeof(struct bootconfig));
@@ -145,7 +144,7 @@ start(struct bootconfig *initbootconfig)
 		panic("Bootloader mislaid the data segment");
 #endif
 
-#if !NKSYMS && !defined(DDB) && !defined(MODULAR)
+#if !NKSYMS && !defined(DDB) && !defined(LKM)
 	/* Throw away the symbol table to gain space. */
 	if (bootconfig.freebase == bootconfig.esym) {
 		bootconfig.freebase = bootconfig.ssym;
@@ -188,12 +187,17 @@ start(struct bootconfig *initbootconfig)
 	fiq_off();
 
 	/*
-	 * Locate lwp0's uarea, in the bottom of its kernel stack page.
-	 * That is our current stack page too.
+	 * Locate process 0's user structure, in the bottom of its kernel
+	 * stack page.  That's our current stack page too.
 	 */
-	v = round_page((vaddr_t)&onstack) - USPACE;
-	uvm_lwp_setuarea(&lwp0, v);
-	memset((void *)v, 0, sizeof(struct pcb));
+	proc0paddr = (struct user *)(round_page((vaddr_t)&onstack) - USPACE);
+	bzero(proc0paddr, sizeof(*proc0paddr));
+
+	/*
+	 * Get a handle on the IOC's I2C interface in the event we need
+	 * it during bootstrap.
+	 */
+	acorn26_i2c_tag = iociic_bootstrap_cookie();
 
 	/* TODO: anything else? */
 	

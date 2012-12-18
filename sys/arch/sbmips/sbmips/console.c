@@ -1,4 +1,4 @@
-/* $NetBSD: console.c,v 1.6 2009/08/11 12:38:24 simonb Exp $ */
+/* $NetBSD: console.c,v 1.5 2005/12/11 12:18:51 christos Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.6 2009/08/11 12:38:24 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.5 2005/12/11 12:18:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,20 +47,17 @@ __KERNEL_RCSID(0, "$NetBSD: console.c,v 1.6 2009/08/11 12:38:24 simonb Exp $");
 #include <mips/sibyte/dev/sbscnvar.h>
 
 #define	CONMODE ((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB)) | CS8) /* 8N1 */
-#ifndef CONSPEED
-#define	CONSPEED	115200
-#endif
 
 void
 consinit(void)
 {
 
 #ifdef JTAGCONSOLE
-	sbjcn_cnattach(0x1001FF80, 0, CONSPEED, CONMODE);
+	sbjcn_cnattach(0x1001FF80, 0, 115200, CONMODE);
 #else
-	sbscn_cnattach(0x10060100, 0, CONSPEED, CONMODE);
+	sbscn_cnattach(0x10060100, 0, 115200, CONMODE);
 #ifdef KGDB
-	sbscn_kgdb_attach(0x10060100, 1, CONSPEED, CONMODE);
+	sbscn_kgdb_attach(0x10060100, 1, 115200, CONMODE);
 #endif
 #endif
 }

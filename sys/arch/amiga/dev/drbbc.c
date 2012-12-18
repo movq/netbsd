@@ -1,4 +1,4 @@
-/*	$NetBSD: drbbc.c,v 1.20 2012/10/27 17:17:28 chs Exp $ */
+/*	$NetBSD: drbbc.c,v 1.17 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -30,12 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drbbc.c,v 1.20 2012/10/27 17:17:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drbbc.c,v 1.17 2008/04/28 20:23:12 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/systm.h>
+
+#include <uvm/uvm_extern.h>
 
 #if 0
 #include <machine/psl.h>
@@ -54,29 +56,30 @@ int draco_ds_read_bit(void *);
 void draco_ds_write_bit(void *, int);
 void draco_ds_reset(void *);
 
-void drbbc_attach(device_t, device_t, void *);
-int drbbc_match(device_t, cfdata_t, void *);
+void drbbc_attach(struct device *, struct device *, void *);
+int drbbc_match(struct device *, struct cfdata *, void *);
 
-int dracougettod(todr_chip_handle_t, struct timeval *);
-int dracousettod(todr_chip_handle_t, struct timeval *);
+int dracougettod(todr_chip_handle_t, volatile struct timeval *);
+int dracousettod(todr_chip_handle_t, volatile struct timeval *);
 
 static struct todr_chip_handle dracotodr;
 struct drbbc_softc {
+	struct device sc_dev;
 	struct ds_handle sc_dsh;
 };
 
-CFATTACH_DECL_NEW(drbbc, sizeof(struct drbbc_softc),
+CFATTACH_DECL(drbbc, sizeof(struct drbbc_softc),
     drbbc_match, drbbc_attach, NULL, NULL);
 
 struct drbbc_softc *drbbc_sc;
 
 int
-drbbc_match(device_t parent, cfdata_t cf, void *aux)
+drbbc_match(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	static int drbbc_matched = 0;
 
 	/* Allow only one instance. */
-	if (!is_draco() || !matchname(aux, "drbbc") || drbbc_matched)
+	if (!is_draco() || !matchname(auxp, "drbbc") || drbbc_matched)
 		return (0);
 
 	drbbc_matched = 1;
@@ -84,13 +87,13 @@ drbbc_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-drbbc_attach(device_t parent, device_t self, void *aux)
+drbbc_attach(struct device *pdp, struct device *dp, void *auxp)
 {
 	int i;
 	struct drbbc_softc *sc;
 	u_int8_t rombuf[8];
 
-	sc = device_private(self);
+	sc = (struct drbbc_softc *)dp;
 
 	sc->sc_dsh.ds_read_bit = draco_ds_read_bit;
 	sc->sc_dsh.ds_write_bit = draco_ds_write_bit;
@@ -160,7 +163,7 @@ draco_ds_reset(void *p)
 }
 
 int
-dracougettod(todr_chip_handle_t h, struct timeval *tvp)
+dracougettod(todr_chip_handle_t h, volatile struct timeval *tvp)
 {
 	u_int32_t clkbuf;
 	u_int32_t usecs;
@@ -191,7 +194,7 @@ dracougettod(todr_chip_handle_t h, struct timeval *tvp)
 }
 
 int
-dracousettod(todr_chip_handle_t h, struct timeval *tvp)
+dracousettod(todr_chip_handle_t h, volatile struct timeval *tvp)
 {
 	return (ENXIO);
 }

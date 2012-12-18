@@ -1,4 +1,4 @@
-/*	$NetBSD: hid.h,v 1.13 2010/05/12 18:44:49 plunky Exp $	*/
+/*	$NetBSD: hid.h,v 1.12.10.1 2010/11/21 03:05:04 riz Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/hid.h,v 1.7 1999/11/17 22:33:40 n_hibma Exp $ */
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: uuencode.c,v 1.15 2011/09/16 15:39:30 joerg Exp $	*/
+/*	$NetBSD: uuencode.c,v 1.13.4.1 2008/11/29 23:14:56 snj Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)uuencode.c	8.2 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: uuencode.c,v 1.15 2011/09/16 15:39:30 joerg Exp $");
+__RCSID("$NetBSD: uuencode.c,v 1.13.4.1 2008/11/29 23:14:56 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,9 +60,10 @@ __RCSID("$NetBSD: uuencode.c,v 1.15 2011/09/16 15:39:30 joerg Exp $");
 #include <string.h>
 #include <unistd.h>
 
+int main(int, char *[]);
 static void encode(void);
 static void base64_encode(void);
-__dead static void usage(void);
+static void usage(void);
 
 int
 main(int argc, char *argv[])

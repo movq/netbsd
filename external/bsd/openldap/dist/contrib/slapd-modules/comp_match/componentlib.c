@@ -1,5 +1,3 @@
-/*	$NetBSD: componentlib.c,v 1.1.1.2 2010/03/08 02:14:20 lukem Exp $	*/
-
 /* Copyright 2004 IBM Corporation
  * All rights reserved.
  * Redisribution and use in source and binary forms, with or without

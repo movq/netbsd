@@ -1,4 +1,4 @@
-/*	$NetBSD: gemini_icu.c,v 1.5 2011/07/01 19:32:28 dyoung Exp $	*/
+/*	$NetBSD	*/
 
 /* adapted from:
  *	NetBSD: omap2_icu.c,v 1.4 2008/08/27 11:03:10 matt Exp
@@ -36,7 +36,7 @@
 #define _INTR_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gemini_icu.c,v 1.5 2011/07/01 19:32:28 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gemini_icu.c,v 1.2 2008/10/24 17:46:59 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/evcnt.h>
@@ -44,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: gemini_icu.c,v 1.5 2011/07/01 19:32:28 dyoung Exp $"
 #include <uvm/uvm_extern.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/cpu.h>
 #include <arm/armreg.h>
@@ -176,7 +176,7 @@ gemini_irq_handler(void *frame)
 	const uint32_t oldipl_mask = __BIT(oldipl);
 	int ipl_mask = 0;
 
-	ci->ci_data.cpu_nintr++;
+	uvmexp.intrs++;
 
 	KASSERT(sc->sc_enabled_mask != 0);
 

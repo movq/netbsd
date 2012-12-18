@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.32 2009/08/12 08:30:55 dholland Exp $	*/
+/*	$NetBSD: main.c,v 1.24 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,35 +39,27 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.32 2009/08/12 08:30:55 dholland Exp $");
+__RCSID("$NetBSD: main.c,v 1.24 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
-#include <ctype.h>
-#include <curses.h>
-#include <err.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <time.h>
-#include <unistd.h>
-#include "robots.h"
+# include	"robots.h"
 
-extern const char *Scorefile;
-extern int Max_per_uid;
+int main(int, char **);
 
-static bool another(void);
+extern const char	*Scorefile;
+extern int	Max_per_uid;
 
 int
-main(int argc, char **argv)
+main(ac, av)
+	int	ac;
+	char	**av;
 {
-	const char *word;
-	bool show_only;
-	int score_wfd; /* high score writable file descriptor */
-	int score_err = 0; /* hold errno from score file open */
-	int maximum = 0;
-	int ch, i;
+	const char	*sp;
+	bool	bad_arg;
+	bool	show_only;
+	int		score_wfd; /* high score writable file descriptor */
+	int		score_err = 0; /* hold errno from score file open */
 
 	score_wfd = open(Scorefile, O_RDWR);
 	if (score_wfd < 0)
@@ -78,62 +70,66 @@ main(int argc, char **argv)
 	/* Revoke setgid privileges */
 	setgid(getgid());
 
-	show_only = false;
+	show_only = FALSE;
 	Num_games = 1;
-
-	while ((ch = getopt(argc, argv, "Aajnrst")) != -1) {
-		switch (ch) {
-		    case 'A':
-			Auto_bot = true;
-			break;
-		    case 'a':
-			Start_level = 4;
-			break;
-		    case 'j':
-			Jump = true;
-			break;
-		    case 'n':
-			Num_games++;
-			break;
-		    case 'r':
-			Real_time = true;
-			break;
-		    case 's':
-			show_only = true;
-			break;
-		    case 't':
-			Teleport = true;
-			break;
-		    default:
-			errx(1,
-			    "Usage: robots [-Aajnrst] [maximum] [scorefile]");
-			break;
-		}
-	}
-
-	for (i = optind; i < argc; i++) {
-		word = argv[i];
-		if (isdigit((unsigned char)word[0])) {
-			maximum = atoi(word);
-		} else {
-			Scorefile = word;
-			Max_per_uid = maximum;
-			if (score_wfd >= 0)
-				close(score_wfd);
-			score_wfd = open(Scorefile, O_RDWR);
-			if (score_wfd < 0)
-				score_err = errno;
-#ifdef FANCY
-			word = strrchr(Scorefile, '/');
-			if (word == NULL)
-				word = Scorefile;
-			if (strcmp(word, "pattern_roll") == 0)
-				Pattern_roll = true;
-			else if (strcmp(word, "stand_still") == 0)
-				Stand_still = true;
-			if (Pattern_roll || Stand_still)
-				Teleport = true;
-#endif
+	if (ac > 1) {
+		bad_arg = FALSE;
+		for (++av; ac > 1 && *av[0]; av++, ac--)
+			if (av[0][0] != '-')
+				if (isdigit((unsigned char)av[0][0]))
+					Max_per_uid = atoi(av[0]);
+				else {
+					Scorefile = av[0];
+					if (score_wfd >= 0)
+						close(score_wfd);
+					score_wfd = open(Scorefile, O_RDWR);
+					if (score_wfd < 0)
+						score_err = errno;
+# ifdef	FANCY
+					sp = strrchr(Scorefile, '/');
+					if (sp == NULL)
+						sp = Scorefile;
+					if (strcmp(sp, "pattern_roll") == 0)
+						Pattern_roll = TRUE;
+					else if (strcmp(sp, "stand_still") == 0)
+						Stand_still = TRUE;
+					if (Pattern_roll || Stand_still)
+						Teleport = TRUE;
+# endif
+				}
+			else
+				for (sp = &av[0][1]; *sp; sp++)
+					switch (*sp) {
+					  case 'A':
+						Auto_bot = TRUE;
+						break;
+					  case 's':
+						show_only = TRUE;
+						break;
+					  case 'r':
+						Real_time = TRUE;
+						break;
+					  case 'a':
+						Start_level = 4;
+						break;
+					  case 'n':
+						Num_games++;
+						break;
+					  case 'j':
+						Jump = TRUE;
+						break;
+					  case 't':
+						Teleport = TRUE;
+						break;
+					  
+					  default:
+						fprintf(stderr, "robots: unknown option: %c\n", *sp);
+						bad_arg = TRUE;
+						break;
+					}
+		if (bad_arg) {
+			exit(1);
+			/* NOTREACHED */
 		}
 	}
 
@@ -167,7 +163,7 @@ main(int argc, char **argv)
 		stdscr = newwin(Y_SIZE, X_SIZE, 0, 0);
 	}
 
-	srandom(time(NULL));
+	srand(getpid());
 	if (Real_time)
 		signal(SIGALRM, move_robots);
 	do {
@@ -201,7 +197,8 @@ main(int argc, char **argv)
  *	Leave the program elegantly.
  */
 void
-quit(int dummy __unused)
+quit(dummy)
+	int dummy __unused;
 {
 	endwin();
 	exit(0);
@@ -212,14 +209,14 @@ quit(int dummy __unused)
  * another:
  *	See if another game is desired
  */
-static bool
-another(void)
+bool
+another()
 {
-	int y;
+	int	y;
 
-#ifdef FANCY
+#ifdef	FANCY
 	if ((Stand_still || Pattern_roll) && !Newscore)
-		return true;
+		return TRUE;
 #endif
 
 	if (query("Another game?")) {
@@ -230,7 +227,7 @@ another(void)
 			}
 			refresh();
 		}
-		return true;
+		return TRUE;
 	}
-	return false;
+	return FALSE;
 }

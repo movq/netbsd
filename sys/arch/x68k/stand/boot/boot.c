@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.18 2012/03/20 12:37:01 minoura Exp $	*/
+/*	$NetBSD: boot.c,v 1.13.30.1 2009/02/02 22:20:14 snj Exp $	*/
 
 /*
  * Copyright (c) 2001 Minoura Makoto
@@ -53,7 +53,7 @@ static void help(void);
 static int get_scsi_host_adapter(void);
 static void doboot(const char *, int);
 static void boot(char *);
-static void cmd_ls(char *);
+static void ls(char *);
 int bootmenu(void);
 void bootmain(int);
 extern int detectmpu(void);
@@ -111,7 +111,7 @@ doboot(const char *file, int flags)
 
 	loadflag = LOAD_KERNEL;
 	if (file[0] == 'f')
-		loadflag &= ~LOAD_BACKWARDS;
+		loadflag &= ~LOAD_NOTE;
 		
 	marks[MARK_START] = 0x100000;
 	if ((fd = loadfile(file, marks, loadflag)) == -1) {
@@ -124,10 +124,8 @@ doboot(const char *file, int flags)
 		printf("XXX: unknown corruption in /boot.\n");
 	}
 
-#ifdef DEBUG
 	printf("dev = %x, unit = %d, part = %c, name = %s\n",
 	       dev, unit, part + 'a', name);
-#endif
 
 	if (dev == 0) {		/* SCSI */
 		dev = X68K_MAKESCSIBOOTDEV(X68K_MAJOR_SD,
@@ -137,7 +135,6 @@ doboot(const char *file, int flags)
 	} else {
 		dev = X68K_MAKEBOOTDEV(X68K_MAJOR_FD, unit & 3, 0);
 	}
-#ifdef DEBUG
 	printf("boot device = %x\n", dev);
 	printf("if = %d, unit = %d, id = %d, lun = %d, part = %c\n",
 	       B_X68K_SCSI_IF(dev),
@@ -145,12 +142,9 @@ doboot(const char *file, int flags)
 	       B_X68K_SCSI_ID(dev),
 	       B_X68K_SCSI_LUN(dev),
 	       B_X68K_SCSI_PART(dev) + 'a');
-#endif
 
 	p = ((short*) marks[MARK_ENTRY]) - 1;
-#ifdef DEBUG
 	printf("Kernel Version: 0x%x\n", *p);
-#endif
 	if (*p != 0x4e73 && *p != 0) {
 		/*
 		 * XXX temporary solution; compatibility loader
@@ -207,7 +201,7 @@ boot(char *arg)
 }
 
 static void
-cmd_ls(char *arg)
+ls(char *arg)
 {
 	char filename[80];
 
@@ -223,7 +217,7 @@ cmd_ls(char *arg)
 		if (*(strchr(arg, ':')+1) == 0)
 			strcat(filename, "/");
 	}
-	ls(filename);
+	ufs_ls(filename);
 	devopen_open_dir = 0;
 }
 
@@ -272,7 +266,7 @@ bootmenu(void)
 		else if ((strcmp("halt", p) == 0) ||(strcmp("reboot", p) == 0))
 			exit(0);
 		else if (strcmp("ls", p) == 0)
-			cmd_ls(options);
+			ls(options);
 		else
 			printf("Unknown command %s\n", p);
 	}
@@ -281,6 +275,8 @@ bootmenu(void)
 
 extern const char bootprog_rev[];
 extern const char bootprog_name[];
+extern const char bootprog_date[];
+extern const char bootprog_maker[];
 
 /*
  * Arguments from the boot block:
@@ -325,6 +321,8 @@ bootmain(int bootdev)
 	default:
 		printf("Warning: unknown boot device: %x\n", bootdev);
 	}
-	print_title("%s, Revision %s\n", bootprog_name, bootprog_rev);
+	print_title("%s, Revision %s\n\t(%s, %s)",
+		    bootprog_name, bootprog_rev,
+		    bootprog_maker, bootprog_date);
 	bootmenu();
 }

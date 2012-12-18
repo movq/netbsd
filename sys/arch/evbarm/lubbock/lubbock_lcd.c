@@ -1,4 +1,4 @@
-/* $NetBSD: lubbock_lcd.c,v 1.13 2012/10/27 17:17:48 chs Exp $ */
+/* $NetBSD: lubbock_lcd.c,v 1.8 2008/06/11 23:24:43 cegger Exp $ */
 
 /*
  * Copyright (c) 2002, 2003  Genetec Corporation.  All rights reserved.
@@ -40,7 +40,7 @@
  *   LCD panel geometry
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lubbock_lcd.c,v 1.13 2012/10/27 17:17:48 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lubbock_lcd.c,v 1.8 2008/06/11 23:24:43 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: lubbock_lcd.c,v 1.13 2012/10/27 17:17:48 chs Exp $")
 #include <dev/wscons/wsdisplayvar.h> 
 #include <dev/wscons/wscons_callbacks.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <arm/xscale/pxa2x0var.h>
 #include <arm/xscale/pxa2x0reg.h>
 #include <arm/xscale/pxa2x0_lcd.h>
@@ -63,8 +63,8 @@ __KERNEL_RCSID(0, "$NetBSD: lubbock_lcd.c,v 1.13 2012/10/27 17:17:48 chs Exp $")
 
 #include "wsdisplay.h"
 
-int	lcd_match(device_t, cfdata_t, void *);
-void	lcd_attach(device_t, device_t, void *);
+int	lcd_match( struct device *, struct cfdata *, void *);
+void	lcd_attach( struct device *, struct device *, void *);
 int	lcdintr(void *);
 
 #if NWSDISPLAY > 0
@@ -142,11 +142,11 @@ const struct cdevsw lcd_cdevsw = {
 
 #endif
 
-CFATTACH_DECL_NEW(lcd_obio, sizeof (struct pxa2x0_lcd_softc),  lcd_match,
+CFATTACH_DECL(lcd_obio, sizeof (struct pxa2x0_lcd_softc),  lcd_match,
     lcd_attach, NULL, NULL);
 
 int
-lcd_match( device_t parent, cfdata_t cf, void *aux )
+lcd_match( struct device *parent, struct cfdata *cf, void *aux )
 {
 	return 1;
 }
@@ -171,21 +171,11 @@ static const struct lcd_panel_geometry sharp_LM8V31 =
 
 };
 
-void lcd_attach( device_t parent, device_t self, void *aux )
+void lcd_attach( struct device *parent, struct device *self, void *aux )
 {
-	struct pxa2x0_lcd_softc *sc = device_private(self);
-	struct obio_attach_args *oba = aux;
-	struct pxaip_attach_args paa;
+	struct pxa2x0_lcd_softc *sc = (struct pxa2x0_lcd_softc *)self;
 
-	sc->dev = self;
-
-	paa.pxa_name = "obio";
-	paa.pxa_iot = oba->oba_iot;
-	paa.pxa_addr = oba->oba_addr;
-	paa.pxa_size = 0;		/* XXX */
-	paa.pxa_intr = oba->oba_intr;
-
-	pxa2x0_lcd_attach_sub(sc, &paa, &sharp_LM8V31);
+	pxa2x0_lcd_attach_sub(sc, aux, &sharp_LM8V31);
 
 
 #if NWSDISPLAY > 0
@@ -203,6 +193,8 @@ void lcd_attach( device_t parent, device_t self, void *aux )
 		aa.accessops = &lcd_accessops;
 		aa.accesscookie = sc;
 
+		printf( "\n" );
+
 		(void) config_found(self, &aa, wsemuldisplaydevprint);
 	}
 #else
@@ -215,6 +207,8 @@ void lcd_attach( device_t parent, device_t self, void *aux )
 			sc->active = screen;
 			pxa2x0_lcd_start_dma( sc, screen );
 		}
+
+		printf( "\n" );
 	}
 #endif
 
@@ -225,8 +219,8 @@ void lcd_attach( device_t parent, device_t self, void *aux )
 int
 lcd_ioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct pxa2x0_lcd_softc *sc = v;
-	struct obio_softc *osc = device_private(device_parent(sc->dev));
+	struct obio_softc *osc = 
+	    (struct obio_softc *) device_parent((struct device *)v);
 	uint16_t reg;
 
 	switch (cmd) {
@@ -249,8 +243,8 @@ int
 lcd_show_screen(void *v, void *cookie, int waitok,
     void (*cb)(void *, int, int), void *cbarg)
 {
-	struct pxa2x0_lcd_softc *sc = v;
-	struct obio_softc *osc = device_private(device_parent(sc->dev));
+	struct obio_softc *osc = 
+	    (struct obio_softc *) device_parent((struct device *)v);
 
 	pxa2x0_lcd_show_screen(v,cookie,waitok,cb,cbarg);
 	

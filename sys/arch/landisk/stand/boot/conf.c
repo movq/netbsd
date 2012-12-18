@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.3 2009/04/22 17:13:36 tsutsui Exp $	*/
+/*	$NetBSD: conf.c,v 1.1 2006/09/01 21:26:18 uwe Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -38,28 +38,22 @@
 
 #include <lib/libsa/ufs.h>
 #include <lib/libsa/dosfs.h>
-#include <lib/libsa/ustarfs.h>
 
 #include "biosdisk.h"
 
 struct devsw devsw[] = {
-	{ "hd", biosdisk_strategy, biosdisk_open, biosdisk_close,
-	    biosdisk_ioctl},
+#if defined(SUPPORT_UFS)
+{ "hd", biosdisk_strategy, biosdisk_open, biosdisk_close, biosdisk_ioctl},
+#endif
 };
 int ndevs = sizeof(devsw) / sizeof(devsw[0]);
 
 struct fs_ops file_system[] = {
-#ifdef SUPPORT_FFSv1
-	FS_OPS(ffsv1),
-#endif
-#ifdef SUPPORT_FFSv2
-	FS_OPS(ffsv2),
+#ifdef SUPPORT_UFS
+{ ufs_open, ufs_close, ufs_read, ufs_write, ufs_seek, ufs_stat },
 #endif
 #ifdef SUPPORT_DOSFS
-	FS_OPS(dosfs),
-#endif
-#ifdef SUPPORT_USTARFS
-	FS_OPS(ustarfs),
+{ dosfs_open, dosfs_close, dosfs_read, dosfs_write, dosfs_seek, dosfs_stat },
 #endif
 };
 int nfsys = sizeof(file_system) / sizeof(file_system[0]);

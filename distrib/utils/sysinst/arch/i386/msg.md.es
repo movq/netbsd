@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.es,v 1.15 2012/10/24 11:36:02 tsutsui Exp $	*/
+/*	$NetBSD: msg.md.es,v 1.10 2008/04/30 15:29:11 ad Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,7 +14,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -35,11 +39,8 @@
 /* MD Message catalog -- Spanish, i386 version */
 
 message md_hello
-{
-}
+{Si ha iniciado desde disquette, ahora deberia retirar el disco.
 
-message md_may_remove_boot_medium
-{
 }
 
 message Keyboard_type {Tipo de teclado}
@@ -71,6 +72,8 @@ message Use_serial_com2		{Usar puerto serie com2}
 message Use_serial_com3		{Usar puerto serie com3}
 message serial_baud_rate	{Baudios puerto serie}
 message Use_existing_bootblocks	{Usar bootblocks existente}
+
+message No_Bootcode		{No hay código de arranque para la partición root}
 
 message dobootblks
 {Instalando bloques de arranque en %s....

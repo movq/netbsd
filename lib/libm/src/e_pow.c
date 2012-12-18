@@ -12,7 +12,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: e_pow.c,v 1.16 2010/04/23 19:17:07 drochner Exp $");
+__RCSID("$NetBSD: e_pow.c,v 1.14 2008/04/25 22:21:53 christos Exp $");
 #endif
 
 /* __ieee754_pow(x,y) return x**y
@@ -60,7 +60,6 @@ __RCSID("$NetBSD: e_pow.c,v 1.16 2010/04/23 19:17:07 drochner Exp $");
  * to produce the hexadecimal values shown.
  */
 
-#include "namespace.h"
 #include "math.h"
 #include "math_private.h"
 
@@ -130,7 +129,7 @@ __ieee754_pow(double x, double y)
 		k = (iy>>20)-0x3ff;	   /* exponent */
 		if(k>20) {
 		    j = ly>>(52-k);
-		    if((uint32_t)(j<<(52-k))==ly) yisint = 2-(j&1);
+		    if((j<<(52-k))==ly) yisint = 2-(j&1);
 		} else if(ly==0) {
 		    j = iy>>(20-k);
 		    if((j<<(20-k))==iy) yisint = 2-(j&1);

@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_misc.c,v 1.14 2009/08/12 23:51:23 enami Exp $	*/
+/*	$NetBSD: pthread_misc.c,v 1.10.4.1 2009/09/05 12:51:09 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_misc.c,v 1.14 2009/08/12 23:51:23 enami Exp $");
+__RCSID("$NetBSD: pthread_misc.c,v 1.10.4.1 2009/09/05 12:51:09 bouyer Exp $");
 
 #include <errno.h>
 #include <string.h>

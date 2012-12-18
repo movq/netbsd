@@ -1,4 +1,4 @@
-/*	$NetBSD: biovar.h,v 1.8 2009/05/07 12:15:33 cegger Exp $ */
+/*	$NetBSD: biovar.h,v 1.7 2008/03/03 13:43:19 xtraeme Exp $ */
 /*	$OpenBSD: biovar.h,v 1.26 2007/03/19 03:02:08 marco Exp $	*/
 
 /*
@@ -37,7 +37,6 @@
 #define _DEV_BIOVAR_H_
 
 #include <sys/types.h>
-#include <sys/device.h>
 
 #ifndef _KERNEL
 #include <stdbool.h>
@@ -55,8 +54,8 @@ struct bio_locate {
 };
 
 #ifdef _KERNEL
-int	bio_register(device_t, int (*)(device_t, u_long, void *));
-void	bio_unregister(device_t);
+int	bio_register(struct device *, int (*)(struct device *, u_long, void *));
+void	bio_unregister(struct device *);
 #endif
 
 #define BIOCINQ _IOWR('B', 32, struct bioc_inq)

@@ -1,4 +1,4 @@
-/*	$NetBSD: i80321_pci.c,v 1.14 2012/10/14 14:20:57 msaitoh Exp $	*/
+/*	$NetBSD: i80321_pci.c,v 1.9 2007/10/17 19:53:43 garbled Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i80321_pci.c,v 1.14 2012/10/14 14:20:57 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i80321_pci.c,v 1.9 2007/10/17 19:53:43 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,7 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: i80321_pci.c,v 1.14 2012/10/14 14:20:57 msaitoh Exp 
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/xscale/i80321reg.h>
 #include <arm/xscale/i80321var.h>
@@ -62,7 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: i80321_pci.c,v 1.14 2012/10/14 14:20:57 msaitoh Exp 
 #include "opt_i80321.h"
 #include "pci.h"
 
-void		i80321_pci_attach_hook(device_t, device_t,
+void		i80321_pci_attach_hook(struct device *, struct device *,
 		    struct pcibus_attach_args *);
 int		i80321_pci_bus_maxdevs(void *, int);
 pcitag_t	i80321_pci_make_tag(void *, int, int, int);
@@ -70,7 +70,6 @@ void		i80321_pci_decompose_tag(void *, pcitag_t, int *, int *,
 		    int *);
 pcireg_t	i80321_pci_conf_read(void *, pcitag_t, int);
 void		i80321_pci_conf_write(void *, pcitag_t, int, pcireg_t);
-void		i80321_pci_conf_interrupt(void *, int, int, int, int, int *);
 
 #define	PCI_CONF_LOCK(s)	(s) = disable_interrupts(I32_bit)
 #define	PCI_CONF_UNLOCK(s)	restore_interrupts((s))
@@ -91,7 +90,6 @@ i80321_pci_init(pci_chipset_tag_t pc, void *cookie)
 	pc->pc_decompose_tag = i80321_pci_decompose_tag;
 	pc->pc_conf_read = i80321_pci_conf_read;
 	pc->pc_conf_write = i80321_pci_conf_write;
-	pc->pc_conf_interrupt = i80321_pci_conf_interrupt;
 
 #if NPCI > 0 && defined(PCI_NETBSD_CONFIGURE)
 	/*
@@ -112,19 +110,19 @@ i80321_pci_init(pci_chipset_tag_t pc, void *cookie)
 	ioext  = extent_create("pciio",
 	    sc->sc_ioout_xlate + sc->sc_ioout_xlate_offset,
 	    sc->sc_ioout_xlate + VERDE_OUT_XLATE_IO_WIN_SIZE - 1,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 
 #ifdef I80321_USE_DIRECT_WIN
 	memext = extent_create("pcimem", VERDE_OUT_DIRECT_WIN_BASE + VERDE_OUT_DIRECT_WIN_SKIP,
 	    VERDE_OUT_DIRECT_WIN_BASE + VERDE_OUT_DIRECT_WIN_SIZE- 1,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 #else
 	memext = extent_create("pcimem", sc->sc_owin[0].owin_xlate_lo,
 	    sc->sc_owin[0].owin_xlate_lo + VERDE_OUT_XLATE_MEM_WIN_SIZE - 1,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 #endif
 
-	aprint_normal_dev(sc->sc_dev, "configuring PCI bus\n");
+	aprint_normal("%s: configuring PCI bus\n", sc->sc_dev.dv_xname);
 	pci_configure_bus(pc, ioext, memext, NULL, busno, arm_dcache_align);
 
 	extent_destroy(ioext);
@@ -133,12 +131,12 @@ i80321_pci_init(pci_chipset_tag_t pc, void *cookie)
 }
 
 void
-i80321_pci_conf_interrupt(void *v, int a, int b, int c, int d, int *p)
+pci_conf_interrupt(pci_chipset_tag_t pc, int a, int b, int c, int d, int *p)
 {
 }
 
 void
-i80321_pci_attach_hook(device_t parent, device_t self,
+i80321_pci_attach_hook(struct device *parent, struct device *self,
     struct pcibus_attach_args *pba)
 {
 

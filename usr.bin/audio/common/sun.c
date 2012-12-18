@@ -1,4 +1,4 @@
-/*	$NetBSD: sun.c,v 1.7 2011/08/28 01:17:47 joerg Exp $	*/
+/*	$NetBSD: sun.c,v 1.6 2008/05/29 14:51:27 mrg Exp $	*/
 
 /*
  * Copyright (c) 2002 Matthew R. Green
@@ -32,7 +32,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: sun.c,v 1.7 2011/08/28 01:17:47 joerg Exp $");
+__RCSID("$NetBSD: sun.c,v 1.6 2008/05/29 14:51:27 mrg Exp $");
 #endif
 
 
@@ -52,7 +52,7 @@ __RCSID("$NetBSD: sun.c,v 1.7 2011/08/28 01:17:47 joerg Exp $");
 /*
  * SunOS/NeXT .au format helpers
  */
-static const struct {
+struct {
 	int	file_encoding;
 	int	encoding;
 	int	precision;
@@ -80,7 +80,10 @@ static const struct {
 };
 
 int
-audio_sun_to_encoding(int sun_encoding, u_int *encp, u_int *precp)
+audio_sun_to_encoding(sun_encoding, encp, precp)
+	int	sun_encoding;
+	u_int	*encp;
+	u_int	*precp;
 {
 	int i;
 
@@ -94,7 +97,10 @@ audio_sun_to_encoding(int sun_encoding, u_int *encp, u_int *precp)
 }
 
 int
-audio_encoding_to_sun(int encoding, int precision, int *sunep)
+audio_encoding_to_sun(encoding, precision, sunep)
+	int	encoding;
+	int	precision;
+	int	*sunep;
 {
 	int i;
 

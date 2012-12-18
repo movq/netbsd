@@ -1,4 +1,4 @@
-/*      $NetBSD: at91dbguvar.h,v 1.5 2012/02/02 19:42:57 tls Exp $	*/
+/*      $NetBSD: at91dbguvar.h,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
 
 /*-
  * Copyright (c) 2007 Embedtronics Oy
@@ -11,7 +11,13 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- *
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by the NetBSD
+ *      Foundation, Inc. and its contributors.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -81,8 +87,8 @@ struct at91dbgu_softc {
 	int			(*disable)(struct at91dbgu_softc *);
 
 	int			enabled;
-#ifdef RND_COM
-	krndsource_t  rnd_source;
+#if NRND > 0 && defined(RND_COM)
+	rndsource_element_t  rnd_source;
 #endif
 };
 

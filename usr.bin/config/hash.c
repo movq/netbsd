@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.c,v 1.8 2012/03/12 02:58:55 dholland Exp $	*/
+/*	$NetBSD: hash.c,v 1.5 2006/12/27 17:50:27 alc Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -209,7 +209,7 @@ ht_new(void)
 void
 ht_free(struct hashtab *ht)
 {
-	size_t i;
+	int i;
 	struct hashent *hp;
 	struct hashenthead *hpp;
 
@@ -305,7 +305,7 @@ ht_enumerate(struct hashtab *ht, ht_callback cbfunc, void *arg)
 {
 	struct hashent *hp;
 	struct hashenthead *hpp;
-	size_t i;
+	u_int i;
 	int rval = 0;
 	
 	for (i = 0; i < ht->ht_size; i++) {
@@ -315,76 +315,3 @@ ht_enumerate(struct hashtab *ht, ht_callback cbfunc, void *arg)
 	}
 	return rval;
 }
-
-/************************************************************/
-
-/*
- * Type-safe wrappers.
- */
-
-#define DEFHASH(HT, VT) \
-	struct HT {						\
-		struct hashtab imp;				\
-	};							\
-								\
-	struct HT *						\
-	HT##_create(void)					\
-	{							\
-		struct HT *tbl;					\
-								\
-		tbl = ecalloc(1, sizeof(*tbl));			\
-		ht_init(&tbl->imp, 8);				\
-		return tbl;					\
-	}							\
-								\
-	int							\
-	HT##_insert(struct HT *tbl, const char *name, struct VT *val) \
-	{							\
-		return ht_insert(&tbl->imp, name, val);		\
-	}							\
-								\
-	int							\
-	HT##_replace(struct HT *tbl, const char *name, struct VT *val) \
-	{							\
-		return ht_replace(&tbl->imp, name, val);	\
-	}							\
-								\
-	int							\
-	HT##_remove(struct HT *tbl, const char *name)		\
-	{							\
-		return ht_remove(&tbl->imp, name);		\
-	}							\
-								\
-	struct VT *						\
-	HT##_lookup(struct HT *tbl, const char *name)		\
-	{							\
-		return ht_lookup(&tbl->imp, name);		\
-	}							\
-								\
-	struct HT##_enumcontext {				\
-		int (*func)(const char *, struct VT *, void *);	\
-		void *userctx;					\
-	};							\
-								\
-	static int						\
-	HT##_enumerate_thunk(const char *name, void *value, void *voidctx) \
-	{							\
-		struct HT##_enumcontext *ctx = voidctx;		\
-								\
-		return ctx->func(name, value, ctx->userctx);	\
-	}							\
-								\
-	int							\
-	HT##_enumerate(struct HT *tbl,				\
-		      int (*func)(const char *, struct VT *, void *), \
-		      void *userctx)				\
-	{							\
-		struct HT##_enumcontext ctx;			\
-								\
-		ctx.func = func;				\
-		ctx.userctx = userctx;				\
-		return ht_enumerate(&tbl->imp, HT##_enumerate_thunk, &ctx); \
-	}
-
-DEFHASH(nvhash, nvlist);
-DEFHASH(dlhash, defoptlist);

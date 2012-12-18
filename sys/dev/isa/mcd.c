@@ -1,4 +1,4 @@
-/*	$NetBSD: mcd.c,v 1.110 2012/10/27 17:18:25 chs Exp $	*/
+/*	$NetBSD: mcd.c,v 1.105 2008/06/08 12:43:52 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1995 Charles M. Hannum.  All rights reserved.
@@ -56,7 +56,7 @@
 /*static char COPYRIGHT[] = "mcd-driver (C)1993 by H.Veit & B.Moore";*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mcd.c,v 1.110 2012/10/27 17:18:25 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcd.c,v 1.105 2008/06/08 12:43:52 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -86,7 +86,7 @@ __KERNEL_RCSID(0, "$NetBSD: mcd.c,v 1.110 2012/10/27 17:18:25 chs Exp $");
 #ifndef MCDDEBUG
 #define MCD_TRACE(fmt,...)
 #else
-#define MCD_TRACE(fmt,...)	{if (sc->debug) {printf("%s: st=%02x: ", device_xname(sc->sc_dev), sc->status); printf(fmt,__VA_ARGS__);}}
+#define MCD_TRACE(fmt,...)	{if (sc->debug) {printf("%s: st=%02x: ", device_xname(&sc->sc_dev), sc->status); printf(fmt,__VA_ARGS__);}}
 #endif
 
 #define	MCDPART(dev)	DISKPART(dev)
@@ -120,7 +120,7 @@ struct mcd_mbx {
 };
 
 struct mcd_softc {
-	device_t sc_dev;
+	struct	device sc_dev;
 	struct	disk sc_dk;
 	kmutex_t sc_lock;
 	void *sc_ih;
@@ -190,10 +190,10 @@ int mcd_getqchan(struct mcd_softc *, union mcd_qchninfo *, int);
 int mcd_setlock(struct mcd_softc *, int);
 
 int mcd_find(bus_space_tag_t, bus_space_handle_t, struct mcd_softc *);
-int mcdprobe(device_t, cfdata_t, void *);
-void mcdattach(device_t, device_t, void *);
+int mcdprobe(struct device *, struct cfdata *, void *);
+void mcdattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(mcd, sizeof(struct mcd_softc),
+CFATTACH_DECL(mcd, sizeof(struct mcd_softc),
     mcdprobe, mcdattach, NULL, NULL);
 
 extern struct cfdriver mcd_cd;
@@ -235,9 +235,9 @@ struct dkdriver mcddkdriver = { mcdstrategy, NULL, };
 #define DELAY_GETREPLY		100000	/* 100000 * 25us */
 
 void
-mcdattach(device_t parent, device_t self, void *aux)
+mcdattach(struct device *parent, struct device *self, void *aux)
 {
-	struct mcd_softc *sc = device_private(self);
+	struct mcd_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
@@ -268,7 +268,7 @@ mcdattach(device_t parent, device_t self, void *aux)
 	/*
 	 * Initialize and attach the disk structure.
 	 */
-	disk_init(&sc->sc_dk, device_xname(sc->sc_dev), &mcddkdriver);
+	disk_init(&sc->sc_dk, device_xname(&sc->sc_dev), &mcddkdriver);
 	disk_attach(&sc->sc_dk);
 
 	printf(": model %s\n", sc->type != 0 ? sc->type : "unknown");
@@ -420,7 +420,8 @@ mcdclose(dev_t dev, int flag, int fmt, struct lwp *l)
 }
 
 void
-mcdstrategy(struct buf *bp)
+mcdstrategy(bp)
+	struct buf *bp;
 {
 	struct mcd_softc *sc;
 	struct disklabel *lp;
@@ -436,7 +437,7 @@ mcdstrategy(struct buf *bp)
 	if (bp->b_blkno < 0 ||
 	    (bp->b_bcount % sc->blksize) != 0) {
 		printf("%s: strategy: blkno = %" PRId64 " bcount = %d\n",
-		    device_xname(sc->sc_dev), bp->b_blkno, bp->b_bcount);
+		    device_xname(&sc->sc_dev), bp->b_blkno, bp->b_bcount);
 		bp->b_error = EINVAL;
 		goto done;
 	}
@@ -473,7 +474,7 @@ mcdstrategy(struct buf *bp)
 
 	/* Queue it. */
 	s = splbio();
-	bufq_put(sc->buf_queue, bp);
+	BUFQ_PUT(sc->buf_queue, bp);
 	splx(s);
 	if (!sc->active)
 		mcdstart(sc);
@@ -485,7 +486,8 @@ done:
 }
 
 void
-mcdstart(struct mcd_softc *sc)
+mcdstart(sc)
+	struct mcd_softc *sc;
 {
 	struct buf *bp;
 	int s;
@@ -493,7 +495,7 @@ mcdstart(struct mcd_softc *sc)
 loop:
 	s = splbio();
 
-	if ((bp = bufq_get(sc->buf_queue)) == NULL) {
+	if ((bp = BUFQ_GET(sc->buf_queue)) == NULL) {
 		/* Nothing to do. */
 		sc->active = 0;
 		splx(s);
@@ -736,7 +738,9 @@ mcdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 }
 
 void
-mcdgetdefaultlabel(struct mcd_softc *sc, struct disklabel *lp)
+mcdgetdefaultlabel(sc, lp)
+	struct mcd_softc *sc;
+	struct disklabel *lp;
 {
 
 	memset(lp, 0, sizeof(struct disklabel));
@@ -775,7 +779,8 @@ mcdgetdefaultlabel(struct mcd_softc *sc, struct disklabel *lp)
  * whether the scsi cd driver is linked in.
  */
 void
-mcdgetdisklabel(struct mcd_softc *sc)
+mcdgetdisklabel(sc)
+	struct mcd_softc *sc;
 {
 	struct disklabel *lp = sc->sc_dk.dk_label;
 
@@ -785,7 +790,8 @@ mcdgetdisklabel(struct mcd_softc *sc)
 }
 
 int
-mcd_get_parms(struct mcd_softc *sc)
+mcd_get_parms(sc)
+	struct mcd_softc *sc;
 {
 	struct mcd_mbox mbx;
 	daddr_t size;
@@ -831,7 +837,10 @@ mcddump(dev_t dev, daddr_t blkno, void *va,
  * Find the board and fill in the softc.
  */
 int
-mcd_find(bus_space_tag_t iot, bus_space_handle_t ioh, struct mcd_softc *sc)
+mcd_find(iot, ioh, sc)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	struct mcd_softc *sc;
 {
 	int i;
 	struct mcd_mbox mbx;
@@ -897,7 +906,7 @@ mcd_find(bus_space_tag_t iot, bus_space_handle_t ioh, struct mcd_softc *sc)
 
 #ifdef MCDDEBUG
 		printf("%s: unrecognized drive version %c%02x; will try to use it anyway\n",
-		    device_xname(sc->sc_dev),
+		    device_xname(&sc->sc_dev),
 		    mbx.res.data.continfo.code, mbx.res.data.continfo.version);
 #endif
 		sc->type = 0;
@@ -909,7 +918,8 @@ mcd_find(bus_space_tag_t iot, bus_space_handle_t ioh, struct mcd_softc *sc)
 }
 
 int
-mcdprobe(device_t parent, cfdata_t match, void *aux)
+mcdprobe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	struct mcd_softc sc;
@@ -956,7 +966,8 @@ mcdprobe(device_t parent, cfdata_t match, void *aux)
 }
 
 int
-mcd_getreply(struct mcd_softc *sc)
+mcd_getreply(sc)
+	struct mcd_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -977,7 +988,8 @@ mcd_getreply(struct mcd_softc *sc)
 }
 
 int
-mcd_getstat(struct mcd_softc *sc)
+mcd_getstat(sc)
+	struct mcd_softc *sc;
 {
 	struct mcd_mbox mbx;
 
@@ -988,19 +1000,21 @@ mcd_getstat(struct mcd_softc *sc)
 }
 
 int
-mcd_getresult(struct mcd_softc *sc, struct mcd_result *res)
+mcd_getresult(sc, res)
+	struct mcd_softc *sc;
+	struct mcd_result *res;
 {
 	int i, x;
 
 	if (sc->debug)
-		printf("%s: mcd_getresult: %d", device_xname(sc->sc_dev),
+		printf("%s: mcd_getresult: %d", device_xname(&sc->sc_dev),
 		    res->length);
 
 	if ((x = mcd_getreply(sc)) < 0) {
 		if (sc->debug)
 			printf(" timeout\n");
 		else if (!sc->probe)
-			printf("%s: timeout in getresult\n", device_xname(sc->sc_dev));
+			printf("%s: timeout in getresult\n", device_xname(&sc->sc_dev));
 		return EIO;
 	}
 	if (sc->debug)
@@ -1016,7 +1030,7 @@ mcd_getresult(struct mcd_softc *sc, struct mcd_result *res)
 			if (sc->debug)
 				printf(" timeout\n");
 			else
-				printf("%s: timeout in getresult\n", device_xname(sc->sc_dev));
+				printf("%s: timeout in getresult\n", device_xname(&sc->sc_dev));
 			return EIO;
 		}
 		if (sc->debug)
@@ -1033,7 +1047,7 @@ mcd_getresult(struct mcd_softc *sc, struct mcd_result *res)
 	    MCD_XF_STATUSUNAVAIL) == 0) {
 		x = bus_space_read_1(sc->sc_iot, sc->sc_ioh, MCD_STATUS);
 		printf("%s: got extra byte %02x during getstatus\n",
-		    device_xname(sc->sc_dev), (u_int)x);
+		    device_xname(&sc->sc_dev), (u_int)x);
 		delay(10);
 	}
 #endif
@@ -1042,7 +1056,8 @@ mcd_getresult(struct mcd_softc *sc, struct mcd_result *res)
 }
 
 void
-mcd_setflags(struct mcd_softc *sc)
+mcd_setflags(sc)
+	struct mcd_softc *sc;
 {
 
 	/* Check flags. */
@@ -1050,11 +1065,11 @@ mcd_setflags(struct mcd_softc *sc)
 	    (sc->status & (MCD_ST_DSKCHNG | MCD_ST_DSKIN | MCD_ST_DOOROPEN)) !=
 	    MCD_ST_DSKIN) {
 		if ((sc->status & MCD_ST_DOOROPEN) != 0)
-			printf("%s: door open\n", device_xname(sc->sc_dev));
+			printf("%s: door open\n", device_xname(&sc->sc_dev));
 		else if ((sc->status & MCD_ST_DSKIN) == 0)
-			printf("%s: no disk present\n", device_xname(sc->sc_dev));
+			printf("%s: no disk present\n", device_xname(&sc->sc_dev));
 		else if ((sc->status & MCD_ST_DSKCHNG) != 0)
-			printf("%s: media change\n", device_xname(sc->sc_dev));
+			printf("%s: media change\n", device_xname(&sc->sc_dev));
 		sc->flags &= ~MCDF_LOADED;
 	}
 
@@ -1066,14 +1081,17 @@ mcd_setflags(struct mcd_softc *sc)
 }
 
 int
-mcd_send(struct mcd_softc *sc, struct mcd_mbox *mbx, int diskin)
+mcd_send(sc, mbx, diskin)
+	struct mcd_softc *sc;
+	struct mcd_mbox *mbx;
+	int diskin;
 {
 	int retry, i, error;
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 
 	if (sc->debug) {
-		printf("%s: mcd_send: %d %02x", device_xname(sc->sc_dev),
+		printf("%s: mcd_send: %d %02x", device_xname(&sc->sc_dev),
 		    mbx->cmd.length, (u_int)mbx->cmd.opcode);
 		for (i = 0; i < mbx->cmd.length; i++)
 			printf(" %02x", (u_int)mbx->cmd.data.raw.data[i]);
@@ -1098,21 +1116,25 @@ mcd_send(struct mcd_softc *sc, struct mcd_mbox *mbx, int diskin)
 }
 
 static int
-bcd2bin(bcd_t b)
+bcd2bin(b)
+	bcd_t b;
 {
 
 	return (b >> 4) * 10 + (b & 15);
 }
 
 static bcd_t
-bin2bcd(int b)
+bin2bcd(b)
+	int b;
 {
 
 	return ((b / 10) << 4) | (b % 10);
 }
 
 static void
-hsg2msf(int hsg, bcd_t *msf)
+hsg2msf(hsg, msf)
+	int hsg;
+	bcd_t *msf;
 {
 
 	hsg += 150;
@@ -1124,7 +1146,9 @@ hsg2msf(int hsg, bcd_t *msf)
 }
 
 static daddr_t
-msf2hsg(bcd_t *msf, int relative)
+msf2hsg(msf, relative)
+	bcd_t *msf;
+	int relative;
 {
 	daddr_t blkno;
 
@@ -1137,7 +1161,8 @@ msf2hsg(bcd_t *msf, int relative)
 }
 
 void
-mcd_pseudointr(void *v)
+mcd_pseudointr(v)
+	void *v;
 {
 	struct mcd_softc *sc = v;
 	int s;
@@ -1154,7 +1179,8 @@ mcd_pseudointr(void *v)
  * MCD_S_WAITREAD: wait for read ready, read data.
  */
 int
-mcdintr(void *arg)
+mcdintr(arg)
+	void *arg;
 {
 	struct mcd_softc *sc = arg;
 	struct mcd_mbx *mbx = &sc->mbx;
@@ -1240,7 +1266,7 @@ mcdintr(void *arg)
 			goto changed;
 #if 0
 		printf("%s: got status byte %02x during read\n",
-		    device_xname(sc->sc_dev), (u_int)sc->status);
+		    device_xname(&sc->sc_dev), (u_int)sc->status);
 #endif
 		goto loop;
 
@@ -1271,12 +1297,12 @@ mcdintr(void *arg)
 	hold:
 		if (mbx->count-- < 0) {
 			printf("%s: timeout in state %d",
-			    device_xname(sc->sc_dev), mbx->state);
+			    device_xname(&sc->sc_dev), mbx->state);
 			goto readerr;
 		}
 
 #if 0
-		printf("%s: sleep in state %d\n", device_xname(sc->sc_dev),
+		printf("%s: sleep in state %d\n", device_xname(&sc->sc_dev),
 		    mbx->state);
 #endif
 		callout_reset(&sc->sc_pintr_ch, hz / 100,
@@ -1303,7 +1329,7 @@ changed:
 	return -1;
 
 #ifdef notyet
-	printf("%s: unit timeout; resetting\n", device_xname(sc->sc_dev));
+	printf("%s: unit timeout; resetting\n", device_xname(&sc->sc_dev));
 	bus_space_write_1(iot, ioh, MCD_RESET, MCD_CMDRESET);
 	delay(300000);
 	(void) mcd_getstat(sc, 1);
@@ -1314,7 +1340,8 @@ changed:
 }
 
 void
-mcd_soft_reset(struct mcd_softc *sc)
+mcd_soft_reset(sc)
+	struct mcd_softc *sc;
 {
 
 	sc->debug = 0;
@@ -1326,7 +1353,8 @@ mcd_soft_reset(struct mcd_softc *sc)
 }
 
 int
-mcd_hard_reset(struct mcd_softc *sc)
+mcd_hard_reset(sc)
+	struct mcd_softc *sc;
 {
 	struct mcd_mbox mbx;
 
@@ -1339,7 +1367,9 @@ mcd_hard_reset(struct mcd_softc *sc)
 }
 
 int
-mcd_setmode(struct mcd_softc *sc, int mode)
+mcd_setmode(sc, mode)
+	struct mcd_softc *sc;
+	int mode;
 {
 	struct mcd_mbox mbx;
 	int error;
@@ -1347,7 +1377,7 @@ mcd_setmode(struct mcd_softc *sc, int mode)
 	if (sc->lastmode == mode)
 		return 0;
 	if (sc->debug)
-		printf("%s: setting mode to %d\n", device_xname(sc->sc_dev), mode);
+		printf("%s: setting mode to %d\n", device_xname(&sc->sc_dev), mode);
 	sc->lastmode = MCD_MD_UNKNOWN;
 
 	mbx.cmd.opcode = MCD_CMDSETMODE;
@@ -1362,7 +1392,9 @@ mcd_setmode(struct mcd_softc *sc, int mode)
 }
 
 int
-mcd_setupc(struct mcd_softc *sc, int upc)
+mcd_setupc(sc, upc)
+	struct mcd_softc *sc;
+	int upc;
 {
 	struct mcd_mbox mbx;
 	int error;
@@ -1370,7 +1402,7 @@ mcd_setupc(struct mcd_softc *sc, int upc)
 	if (sc->lastupc == upc)
 		return 0;
 	if (sc->debug)
-		printf("%s: setting upc to %d\n", device_xname(sc->sc_dev), upc);
+		printf("%s: setting upc to %d\n", device_xname(&sc->sc_dev), upc);
 	sc->lastupc = MCD_UPC_UNKNOWN;
 
 	mbx.cmd.opcode = MCD_CMDCONFIGDRIVE;
@@ -1386,12 +1418,14 @@ mcd_setupc(struct mcd_softc *sc, int upc)
 }
 
 int
-mcd_toc_header(struct mcd_softc *sc, struct ioc_toc_header *th)
+mcd_toc_header(sc, th)
+	struct mcd_softc *sc;
+	struct ioc_toc_header *th;
 {
 
 	if (sc->debug)
 		printf("%s: mcd_toc_header: reading toc header\n",
-		    device_xname(sc->sc_dev));
+		    device_xname(&sc->sc_dev));
 
 	th->len = msf2hsg(sc->volinfo.vol_msf, 0);
 	th->starting_track = bcd2bin(sc->volinfo.trk_low);
@@ -1401,7 +1435,8 @@ mcd_toc_header(struct mcd_softc *sc, struct ioc_toc_header *th)
 }
 
 int
-mcd_read_toc(struct mcd_softc *sc)
+mcd_read_toc(sc)
+	struct mcd_softc *sc;
 {
 	struct ioc_toc_header th;
 	union mcd_qchninfo q;
@@ -1415,7 +1450,7 @@ mcd_read_toc(struct mcd_softc *sc)
 
 	if (sc->debug)
 		printf("%s: read_toc: reading qchannel info\n",
-		    device_xname(sc->sc_dev));
+		    device_xname(&sc->sc_dev));
 
 	for (trk = th.starting_track; trk <= th.ending_track; trk++)
 		sc->toc[trk].toc.idx_no = 0x00;
@@ -1454,7 +1489,11 @@ mcd_read_toc(struct mcd_softc *sc)
 }
 
 int
-mcd_toc_entries(struct mcd_softc *sc, struct ioc_read_toc_entry *te, struct cd_toc_entry *entries, int *count)
+mcd_toc_entries(sc, te, entries, count)
+	struct mcd_softc *sc;
+	struct ioc_read_toc_entry *te;
+	struct cd_toc_entry *entries;
+	int *count;
 {
 	int len = te->data_len;
 	struct ioc_toc_header header;
@@ -1513,13 +1552,14 @@ mcd_toc_entries(struct mcd_softc *sc, struct ioc_read_toc_entry *te, struct cd_t
 }
 
 int
-mcd_stop(struct mcd_softc *sc)
+mcd_stop(sc)
+	struct mcd_softc *sc;
 {
 	struct mcd_mbox mbx;
 	int error;
 
 	if (sc->debug)
-		printf("%s: mcd_stop: stopping play\n", device_xname(sc->sc_dev));
+		printf("%s: mcd_stop: stopping play\n", device_xname(&sc->sc_dev));
 
 	mbx.cmd.opcode = MCD_CMDSTOPAUDIO;
 	mbx.cmd.length = 0;
@@ -1532,7 +1572,10 @@ mcd_stop(struct mcd_softc *sc)
 }
 
 int
-mcd_getqchan(struct mcd_softc *sc, union mcd_qchninfo *q, int qchn)
+mcd_getqchan(sc, q, qchn)
+	struct mcd_softc *sc;
+	union mcd_qchninfo *q;
+	int qchn;
 {
 	struct mcd_mbox mbx;
 	int error;
@@ -1563,7 +1606,10 @@ mcd_getqchan(struct mcd_softc *sc, union mcd_qchninfo *q, int qchn)
 }
 
 int
-mcd_read_subchannel(struct mcd_softc *sc, struct ioc_read_subchannel *ch, struct cd_sub_channel_info *info)
+mcd_read_subchannel(sc, ch, info)
+	struct mcd_softc *sc;
+	struct ioc_read_subchannel *ch;
+	struct cd_sub_channel_info *info;
 {
 	int len = ch->data_len;
 	union mcd_qchninfo q;
@@ -1571,7 +1617,7 @@ mcd_read_subchannel(struct mcd_softc *sc, struct ioc_read_subchannel *ch, struct
 	int error;
 
 	if (sc->debug)
-		printf("%s: subchan: af=%d df=%d\n", device_xname(sc->sc_dev),
+		printf("%s: subchan: af=%d df=%d\n", device_xname(&sc->sc_dev),
 		    ch->address_format, ch->data_format);
 
 	if (len > sizeof(*info) || len < sizeof(info->header))
@@ -1638,7 +1684,9 @@ mcd_read_subchannel(struct mcd_softc *sc, struct ioc_read_subchannel *ch, struct
 }
 
 int
-mcd_playtracks(struct mcd_softc *sc, struct ioc_play_track *p)
+mcd_playtracks(sc, p)
+	struct mcd_softc *sc;
+	struct ioc_play_track *p;
 {
 	struct mcd_mbox mbx;
 	int a = p->start_track;
@@ -1647,7 +1695,7 @@ mcd_playtracks(struct mcd_softc *sc, struct ioc_play_track *p)
 
 	if (sc->debug)
 		printf("%s: playtracks: from %d:%d to %d:%d\n",
-		    device_xname(sc->sc_dev),
+		    device_xname(&sc->sc_dev),
 		    a, p->start_index, z, p->end_index);
 
 	if (a < bcd2bin(sc->volinfo.trk_low) ||
@@ -1674,14 +1722,16 @@ mcd_playtracks(struct mcd_softc *sc, struct ioc_play_track *p)
 }
 
 int
-mcd_playmsf(struct mcd_softc *sc, struct ioc_play_msf *p)
+mcd_playmsf(sc, p)
+	struct mcd_softc *sc;
+	struct ioc_play_msf *p;
 {
 	struct mcd_mbox mbx;
 	int error;
 
 	if (sc->debug)
 		printf("%s: playmsf: from %d:%d.%d to %d:%d.%d\n",
-		    device_xname(sc->sc_dev),
+		    device_xname(&sc->sc_dev),
 		    p->start_m, p->start_s, p->start_f,
 		    p->end_m, p->end_s, p->end_f);
 
@@ -1706,14 +1756,16 @@ mcd_playmsf(struct mcd_softc *sc, struct ioc_play_msf *p)
 }
 
 int
-mcd_playblocks(struct mcd_softc *sc, struct ioc_play_blocks *p)
+mcd_playblocks(sc, p)
+	struct mcd_softc *sc;
+	struct ioc_play_blocks *p;
 {
 	struct mcd_mbox mbx;
 	int error;
 
 	if (sc->debug)
 		printf("%s: playblocks: blkno %d length %d\n",
-		    device_xname(sc->sc_dev), p->blk, p->len);
+		    device_xname(&sc->sc_dev), p->blk, p->len);
 
 	if (p->blk > sc->disksize || p->len > sc->disksize ||
 	    (p->blk + p->len) > sc->disksize)
@@ -1732,7 +1784,8 @@ mcd_playblocks(struct mcd_softc *sc, struct ioc_play_blocks *p)
 }
 
 int
-mcd_pause(struct mcd_softc *sc)
+mcd_pause(sc)
+	struct mcd_softc *sc;
 {
 	union mcd_qchninfo q;
 	int error;
@@ -1740,7 +1793,7 @@ mcd_pause(struct mcd_softc *sc)
 	/* Verify current status. */
 	if (sc->audio_status != CD_AS_PLAY_IN_PROGRESS)	{
 		printf("%s: pause: attempted when not playing\n",
-		    device_xname(sc->sc_dev));
+		    device_xname(&sc->sc_dev));
 		return EINVAL;
 	}
 
@@ -1763,7 +1816,8 @@ mcd_pause(struct mcd_softc *sc)
 }
 
 int
-mcd_resume(struct mcd_softc *sc)
+mcd_resume(sc)
+	struct mcd_softc *sc;
 {
 	struct mcd_mbox mbx;
 	int error;
@@ -1780,7 +1834,8 @@ mcd_resume(struct mcd_softc *sc)
 }
 
 int
-mcd_eject(struct mcd_softc *sc)
+mcd_eject(sc)
+	struct mcd_softc *sc;
 {
 	struct mcd_mbox mbx;
 
@@ -1791,7 +1846,9 @@ mcd_eject(struct mcd_softc *sc)
 }
 
 int
-mcd_setlock(struct mcd_softc *sc, int mode)
+mcd_setlock(sc, mode)
+	struct mcd_softc *sc;
+	int mode;
 {
 	struct mcd_mbox mbx;
 

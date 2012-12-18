@@ -1,4 +1,4 @@
-/*	$NetBSD: supfilesrv.c,v 1.47 2011/08/31 16:25:00 plunky Exp $	*/
+/*	$NetBSD: supfilesrv.c,v 1.41 2007/12/20 20:17:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -363,7 +363,7 @@ TREE *linkcheck(TREE *, int, int);
 char *uconvert(int);
 char *gconvert(int);
 char *changeuid(char *, char *, int, int);
-void goaway(const char *, ...);
+void goaway(char *, ...);
 char *fmttime(time_t);
 int local_file(int, struct stat *);
 int stat_info_ok(struct stat *, struct stat *);
@@ -387,7 +387,7 @@ main(int argc, char **argv)
 
 	/* initialize global variables */
 	pgmversion = PGMVERSION;/* export version number */
-	isserver = TRUE;	/* export that we're not a server */
+	server = TRUE;		/* export that we're not a server */
 	collname = NULL;	/* no current collection yet */
 	maxchildren = MAXCHILDREN;	/* defined in sup.h */
 
@@ -399,7 +399,7 @@ main(int argc, char **argv)
 #endif
 
 	logopen("supfile");
-	tloc = time(NULL);
+	tloc = time((time_t *) NULL);
 	loginfo("SUP File Server Version %d.%d (%s) starting at %s",
 	    PROTOVERSION, PGMVERSION, scmversion, fmttime(tloc));
 	if (live) {
@@ -443,14 +443,6 @@ main(int argc, char **argv)
 			(void) servicekill();
 			continue;
 		}
-		/*
-		 * If we are being bombarded, don't even spend time forking
-		 * or conversing
-		 */
-		if (nchildren >= maxchildren + 5) {
-			(void) servicekill();
-			continue;
-		}
 		sigemptyset(&nset);
 		sigaddset(&nset, SIGCHLD);
 		sigprocmask(SIG_BLOCK, &nset, &oset);
@@ -489,25 +481,10 @@ void
 chldsig(int snum __unused)
 {
 	int w;
-	pid_t pid;
 
-	while ((pid = waitpid(-1, &w, WNOHANG)) > 0) {
-		if (kill(pid, 0) == -1)
-			switch (errno) {
-			case ESRCH:
-				if (nchildren == 0) {
-					logerr("no children but pid %jd\n",
-					    (intmax_t)pid);
-					break;
-				}
-				nchildren--;
-				break;
-			default:
-				logerr("killing pid %jd: (%s)\n", (intmax_t)
-				    pid, strerror(errno));
-				break;
-			}
-
+	while (wait3((int *) &w, WNOHANG, (struct rusage *) 0) > 0) {
+		if (nchildren)
+			nchildren--;
 	}
 }
 /*****************************************
@@ -616,14 +593,14 @@ init(int argc, char **argv)
 			uidH[i] = gidH[i] = inodeH[i] = NULL;
 		return;
 	}
-	isserver = FALSE;
+	server = FALSE;
 	if (argc < 1)
 		usage();
 	f = fopen(cryptkey, "r");
 	if (f == NULL)
 		quit(1, "Unable to open cryptfile %s\n", cryptkey);
 	if ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-		if ((q = strchr(p, '\n')) != NULL)
+		if ((q = index(p, '\n')) != NULL)
 			*q = '\0';
 		if (*p == '\0')
 			quit(1, "No cryptkey found in %s\n", cryptkey);
@@ -680,7 +657,7 @@ init(int argc, char **argv)
 	if (netcrypt(PSWDCRYPT) != SCMOK)	/* encrypt password data */
 		quit(1, "Running non-crypting fileserver\n");
 	x = msglogin();
-	(void) netcrypt(NULL);	/* turn off encryption */
+	(void) netcrypt((char *) NULL);	/* turn off encryption */
 	if (x != SCMOK)
 		quit(1, "Error sending login request to file server\n");
 	x = msglogack();
@@ -718,7 +695,7 @@ answer(void)
 	goawayreason = NULL;
 	donereason = NULL;
 	lockfd = -1;
-	starttime = time(NULL);
+	starttime = time((time_t *) NULL);
 	if (!setjmp(sjbuf)) {
 		srvsignon();
 		srvsetup();
@@ -732,7 +709,7 @@ answer(void)
 				exit(0);
 			xargv[0] = "sup";
 			xargv[1] = "-X";
-			xargv[xargc] = NULL;
+			xargv[xargc] = (char *) NULL;
 			(void) dup2(netfile, 0);
 			(void) dup2(netfile, 1);
 			(void) dup2(netfile, 2);
@@ -806,7 +783,7 @@ srvsetup(void)
 {
 	int x;
 	char *p, *q;
-	char buf[STRINGLENGTH], filename[MAXPATHLEN];
+	char buf[STRINGLENGTH];
 	FILE *f;
 	struct stat sbuf;
 	TREELIST *tl;
@@ -852,10 +829,10 @@ srvsetup(void)
 				struct stat fsbuf;
 
 				while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-					q = strchr(p, '\n');
+					q = index(p, '\n');
 					if (q)
 						*q = 0;
-					if (strchr("#;:", *p))
+					if (index("#;:", *p))
 						continue;
 					q = nxtarg(&p, " \t");
 					if (*p == '\0')
@@ -905,14 +882,14 @@ srvsetup(void)
 		release = estrdup(DEFRELEASE);
 	if (basedir == NULL || *basedir == '\0') {
 		basedir = NULL;
-		(void) sprintf(filename, FILEDIRS, DEFDIR);
-		f = fopen(filename, "r");
+		(void) sprintf(buf, FILEDIRS, DEFDIR);
+		f = fopen(buf, "r");
 		if (f) {
 			while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-				q = strchr(p, '\n');
+				q = index(p, '\n');
 				if (q)
 					*q = 0;
-				if (strchr("#;:", *p))
+				if (index("#;:", *p))
 					continue;
 				q = nxtarg(&p, " \t=");
 				if (strcmp(q, collname) == 0) {
@@ -929,22 +906,20 @@ srvsetup(void)
 		}
 	}
 	if (chdir(basedir) < 0)
-		goaway("Can't chdir to base directory %s (%s)", basedir,
-		    strerror(errno));
-	(void) sprintf(filename, FILEPREFIX, collname);
-	f = fopen(filename, "r");
+		goaway("Can't chdir to base directory %s", basedir);
+	(void) sprintf(buf, FILEPREFIX, collname);
+	f = fopen(buf, "r");
 	if (f) {
 		while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-			q = strchr(p, '\n');
+			q = index(p, '\n');
 			if (q)
 				*q = 0;
-			if (strchr("#;:", *p))
+			if (index("#;:", *p))
 				continue;
 			prefix = estrdup(p);
 			if (chdir(prefix) < 0)
-				goaway("%s: Can't chdir to %s from base "
-				    "directory %s (%s)", filename, prefix,
-				    basedir, strerror(errno));
+				goaway("Can't chdir to %s from base directory %s",
+				    prefix, basedir);
 			break;
 		}
 		(void) fclose(f);
@@ -953,8 +928,7 @@ srvsetup(void)
 	if (prefix)
 		(void) chdir(basedir);
 	if (x < 0)
-		goaway("Can't stat base/prefix directory (%s)",
-		    strerror(errno));
+		goaway("Can't stat base/prefix directory");
 	if (nchildren >= maxchildren) {
 		setupack = FSETUPBUSY;
 		(void) msgsetupack();
@@ -989,10 +963,10 @@ srvsetup(void)
 			int hostok = FALSE;
 			while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
 				int not;
-				q = strchr(p, '\n');
+				q = index(p, '\n');
 				if (q)
 					*q = 0;
-				if (strchr("#;:", *p))
+				if (index("#;:", *p))
 					continue;
 				q = nxtarg(&p, " \t");
 				if ((not = (*q == '!')) && *++q == '\0')
@@ -1065,7 +1039,7 @@ docrypt(void)
 
 				if (cryptkey == NULL &&
 				    (p = fgets(buf, STRINGLENGTH, f))) {
-					if ((q = strchr(p, '\n')) != NULL)
+					if ((q = index(p, '\n')) != NULL)
 						*q = '\0';
 					if (*p)
 						cryptkey = estrdup(buf);
@@ -1087,7 +1061,7 @@ docrypt(void)
 	x = msgcrypt();
 	if (x != SCMOK)
 		goaway("Error reading encryption test request from client");
-	(void) netcrypt(NULL);
+	(void) netcrypt((char *) NULL);
 	if (strcmp(crypttest, CRYPTTEST) != 0)
 		goaway("Client not encrypting data properly");
 	free(crypttest);
@@ -1107,7 +1081,7 @@ srvlogin(void)
 
 	(void) netcrypt(PSWDCRYPT);	/* encrypt acct name and password */
 	x = msglogin();
-	(void) netcrypt(NULL);		/* turn off encryption */
+	(void) netcrypt((char *) NULL);	/* turn off encryption */
 	if (x != SCMOK)
 		goaway("Error reading login request from client");
 	if (logcrypt) {
@@ -1468,15 +1442,15 @@ srvfinishup(time_t starttime)
 	time_t finishtime;
 	char *releasename;
 
-	(void) netcrypt(NULL);
+	(void) netcrypt((char *) NULL);
 	if (protver < 6) {
 		if (goawayreason != NULL)
 			free(goawayreason);
-		goawayreason = NULL;
+		goawayreason = (char *) NULL;
 		x = msggoaway();
 		doneack = FDONESUCCESS;
 		donereason = estrdup("Unknown");
-	} else if (goawayreason == NULL)
+	} else if (goawayreason == (char *) NULL)
 		x = msgdone();
 	else {
 		doneack = FDONEGOAWAY;
@@ -1494,21 +1468,21 @@ srvfinishup(time_t starttime)
 	if (donereason == NULL)
 		donereason = estrdup("No reason");
 	if (doneack == FDONESRVERROR || doneack == FDONEUSRERROR)
-		logerr("%s: %s", remotehost(), donereason);
+		logerr("%s", donereason);
 	else if (doneack == FDONEGOAWAY)
-		logerr("GOAWAY: %s: %s", remotehost(), donereason);
+		logerr("GOAWAY: %s", donereason);
 	else if (doneack != FDONESUCCESS)
-		logerr("%s: Reason %d: %s", remotehost(), doneack, donereason);
+		logerr("Reason %d:  %s", doneack, donereason);
 	goawayreason = donereason;
-	cdprefix(NULL);
+	cdprefix((char *) NULL);
 	if (collname == NULL) {
-		logerr("%s: NULL collection in svrfinishup", remotehost());
+		logerr("NULL collection in svrfinishup");
 		return;
 	}
 	(void) sprintf(lognam, FILELOGFILE, collname);
 	if ((logfd = open(lognam, O_APPEND | O_WRONLY, 0644)) < 0)
 		return;		/* can not open file up...error */
-	finishtime = time(NULL);
+	finishtime = time((time_t *) NULL);
 	p = tmpbuf;
 	(void) sprintf(p, "%s ", fmttime(lasttime));
 	p += strlen(p);
@@ -1587,8 +1561,8 @@ linkcheck(TREE * t, int d, int i)
 	h = Hlookup(inodeH, i, d);
 	if (h)
 		return (h->Htree);
-	Hinsert(inodeH, i, d, NULL, t);
-	return (NULL);
+	Hinsert(inodeH, i, d, (char *) NULL, t);
+	return ((TREE *) NULL);
 }
 
 char *
@@ -1604,7 +1578,7 @@ uconvert(int uid)
 	if (pw == NULL)
 		return ("");
 	p = estrdup(pw->pw_name);
-	Hinsert(uidH, uid, 0, p, NULL);
+	Hinsert(uidH, uid, 0, p, (TREE *) NULL);
 	return (p);
 }
 
@@ -1621,7 +1595,7 @@ gconvert(int gid)
 	if (gr == NULL)
 		return ("");
 	p = estrdup(gr->gr_name);
-	Hinsert(gidH, gid, 0, p, NULL);
+	Hinsert(gidH, gid, 0, p, (TREE *) NULL);
 	return (p);
 }
 
@@ -1659,10 +1633,10 @@ changeuid(char *namep, char *passwordp, int fileuid, int filegid)
 		pswdp = NULL;
 	} else {
 		(void) strcpy(nbuf, namep);
-		account = group = strchr(nbuf, ',');
+		account = group = index(nbuf, ',');
 		if (group != NULL) {
 			*group++ = '\0';
-			account = strchr(group, ',');
+			account = index(group, ',');
 			if (account != NULL) {
 				*account++ = '\0';
 				if (*account == '\0')
@@ -1803,19 +1777,19 @@ changeuid(char *namep, char *passwordp, int fileuid, int filegid)
 }
 
 void
-goaway(const char *fmt, ...)
+goaway(char *fmt, ...)
 {
 	char buf[STRINGLENGTH];
 	va_list ap;
 
 	va_start(ap, fmt);
-	(void) netcrypt(NULL);
+	(void) netcrypt((char *) NULL);
 
 	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 	goawayreason = estrdup(buf);
 	(void) msggoaway();
-	logerr("%s: %s", remotehost(), buf);
+	logerr("%s", buf);
 	longjmp(sjbuf, TRUE);
 }
 

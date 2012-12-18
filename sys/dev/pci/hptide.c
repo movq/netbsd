@@ -1,4 +1,4 @@
-/*	$NetBSD: hptide.c,v 1.33 2012/07/31 15:50:36 bouyer Exp $	*/
+/*	$NetBSD: hptide.c,v 1.25 2008/03/18 20:46:36 cube Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -25,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hptide.c,v 1.33 2012/07/31 15:50:36 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hptide.c,v 1.25 2008/03/18 20:46:36 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -36,7 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: hptide.c,v 1.33 2012/07/31 15:50:36 bouyer Exp $");
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_hpt_reg.h>
 
-static void hpt_chip_map(struct pciide_softc*, const struct pci_attach_args*);
+static void hpt_chip_map(struct pciide_softc*, struct pci_attach_args*);
 static void hpt_setup_channel(struct ata_channel*);
 static int  hpt_pci_intr(void *);
 
@@ -105,11 +110,12 @@ hptide_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-hpt_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
+hpt_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int i, compatchan, revision;
 	pcireg_t interface;
+	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
@@ -199,7 +205,6 @@ hpt_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 		else
 			sc->sc_wdcdev.sc_atac.atac_udma_cap = 5;
 	}
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -238,9 +243,11 @@ hpt_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 		if (pciide_chansetup(sc, i, interface) == 0)
 			continue;
 		if (interface & PCIIDE_INTERFACE_PCI(i)) {
-			pciide_mapregs_native(pa, cp, hpt_pci_intr);
+			pciide_mapregs_native(pa, cp, &cmdsize,
+			    &ctlsize, hpt_pci_intr);
 		} else {
-			pciide_mapregs_compat(pa, cp, compatchan);
+			pciide_mapregs_compat(pa, cp, compatchan,
+			    &cmdsize, &ctlsize);
 			if ((cp->ata_channel.ch_flags & ATACH_DISABLED) == 0)
 				pciide_map_compat_intr(pa, cp,
 				    sc->sc_cy_compatchan);
@@ -335,26 +342,26 @@ hpt_setup_channel(struct ata_channel *chp)
 	}
 
 	/* Per drive settings */
-	for (drive = 0; drive < chp->ch_ndrives; drive++) {
+	for (drive = 0; drive < chp->ch_ndrive; drive++) {
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if (drvp->drive_type == ATA_DRIVET_NONE)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
 		before = pci_conf_read(sc->sc_pc, sc->sc_tag,
 					HPT_IDETIM(chp->ch_channel, drive));
 
 		/* add timing values, setup DMA if needed */
-		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
+		if (drvp->drive_flags & DRIVE_UDMA) {
 			/* use Ultra/DMA */
 			s = splbio();
-			drvp->drive_flags &= ~ATA_DRIVE_DMA;
+			drvp->drive_flags &= ~DRIVE_DMA;
 			splx(s);
 			if ((cable & HPT_CSEL_CBLID(chp->ch_channel)) != 0 &&
 			    drvp->UDMA_mode > 2)
 				drvp->UDMA_mode = 2;
 			after = tim_udma[drvp->UDMA_mode];
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
-		} else if (drvp->drive_flags & ATA_DRIVE_DMA) {
+		} else if (drvp->drive_flags & DRIVE_DMA) {
 			/*
 			 * use Multiword DMA.
 			 * Timings will be used for both PIO and DMA, so adjust

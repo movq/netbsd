@@ -1,4 +1,4 @@
-/*	$NetBSD: rambo.c,v 1.13 2012/10/27 17:18:03 chs Exp $	*/
+/*	$NetBSD: rambo.c,v 1.9 2008/04/28 20:23:28 martin Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rambo.c,v 1.13 2012/10/27 17:18:03 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rambo.c,v 1.9 2008/04/28 20:23:28 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -50,13 +50,14 @@ __KERNEL_RCSID(0, "$NetBSD: rambo.c,v 1.13 2012/10/27 17:18:03 chs Exp $");
  * Timer & Interrupt manipulation routines for the Rambo Custom ASIC 
  */
 
-static int	rambo_match(device_t, cfdata_t, void *);
-static void	rambo_attach(device_t, device_t, void *);
+static int	rambo_match  __P((struct device *, struct cfdata *, void *));
+static void	rambo_attach __P((struct device *, struct device *, void *));
 static unsigned rambo_get_timecount(struct timecounter *);
-void rambo_clkintr(struct clockframe *);
+void rambo_clkintr __P((struct clockframe *));
 static void rambo_tc_init(void);
 
 struct rambo_softc {
+        struct device		dev; 
 	struct evcnt		sc_intrcnt;
 	bus_space_tag_t		sc_bst;
 	bus_space_handle_t	sc_bsh;
@@ -66,20 +67,25 @@ struct rambo_softc {
 
 static struct rambo_softc *rambo;
 
-CFATTACH_DECL_NEW(rambo, sizeof(struct rambo_softc),
+CFATTACH_DECL(rambo, sizeof(struct rambo_softc),
     rambo_match, rambo_attach, NULL, NULL);
 
 static int
-rambo_match(device_t parent, cfdata_t cf, void *aux)
+rambo_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	return 1;
 }
 
 static void
-rambo_attach(device_t parent, device_t self, void *aux)
+rambo_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	struct confargs *ca = aux;
-	struct rambo_softc *sc = device_private(self);
+	struct rambo_softc *sc = (void *)self;
 
 	sc->sc_bst = ca->ca_bustag;
 
@@ -108,7 +114,8 @@ rambo_attach(device_t parent, device_t self, void *aux)
 }
 
 void
-rambo_clkintr(struct clockframe *cf)
+rambo_clkintr(cf)
+	struct clockframe *cf;
 {
 	register u_int32_t tbreak, tcount;
 	register int delta;

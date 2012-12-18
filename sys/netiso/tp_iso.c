@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_iso.c,v 1.35 2011/07/17 20:54:54 joerg Exp $	*/
+/*	$NetBSD: tp_iso.c,v 1.32 2007/12/20 19:53:35 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -75,7 +75,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_iso.c,v 1.35 2011/07/17 20:54:54 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_iso.c,v 1.32 2007/12/20 19:53:35 dyoung Exp $");
 
 #include "opt_iso.h"
 #ifdef ISO
@@ -105,6 +105,8 @@ __KERNEL_RCSID(0, "$NetBSD: tp_iso.c,v 1.35 2011/07/17 20:54:54 joerg Exp $");
 #include <netiso/tp_var.h>
 #include <netiso/cltp_var.h>
 #include <netiso/idrp_var.h>
+
+#include <machine/stdarg.h>
 
 /*
  * CALLED FROM:
@@ -280,9 +282,9 @@ iso_cmpnetaddr(void *v, struct sockaddr *nm, int which)
 		dump_isoaddr(siso);
 	}
 #endif
-	if (name->siso_tlen && memcmp(TSEL(name), TSEL(siso), name->siso_tlen))
+	if (name->siso_tlen && bcmp(TSEL(name), TSEL(siso), name->siso_tlen))
 		return (0);
-	return (memcmp((void *) name->siso_data,
+	return (bcmp((void *) name->siso_data,
 		     (void *) siso->siso_data, name->siso_nlen) == 0);
 }
 
@@ -434,7 +436,7 @@ tpclnp_output_dg(struct mbuf *m0, ...)
 	 *	Fill in minimal portion of isopcb so that clnp can send the
 	 *	packet.
 	 */
-	memset((void *) & tmppcb, 0, sizeof(tmppcb));
+	bzero((void *) & tmppcb, sizeof(tmppcb));
 	tmppcb.isop_laddr = &tmppcb.isop_sladdr;
 	tmppcb.isop_laddr->siso_addr = *laddr;
 	tmppcb.isop_faddr = &tmppcb.isop_sfaddr;
@@ -674,7 +676,7 @@ static struct sockaddr_iso siso = {
 void
 tpclnp_ctlinput1(int cmd, struct iso_addr *isoa)
 {
-	memset((void *) & siso.siso_addr, 0, sizeof(siso.siso_addr));
+	bzero((void *) & siso.siso_addr, sizeof(siso.siso_addr));
 	bcopy((void *) isoa, (void *) & siso.siso_addr, isoa->isoa_len);
 	tpclnp_ctlinput(cmd, (struct sockaddr *) &siso, NULL);
 }

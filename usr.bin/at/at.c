@@ -1,4 +1,4 @@
-/*	$NetBSD: at.c,v 1.30 2011/08/29 14:24:03 joerg Exp $	*/
+/*	$NetBSD: at.c,v 1.26 2008/04/05 16:26:57 christos Exp $	*/
 
 /*
  *  at.c : Put file into atrun queue
@@ -72,7 +72,7 @@ enum { ATQ, ATRM, AT, BATCH, CAT };	/* what program we want to run */
 #if 0
 static char rcsid[] = "$OpenBSD: at.c,v 1.15 1998/06/03 16:20:26 deraadt Exp $";
 #else
-__RCSID("$NetBSD: at.c,v 1.30 2011/08/29 14:24:03 joerg Exp $");
+__RCSID("$NetBSD: at.c,v 1.26 2008/04/05 16:26:57 christos Exp $");
 #endif
 #endif
 
@@ -91,8 +91,8 @@ char atverify = 0;		/* verify time instead of queuing job */
 
 /* Function declarations */
 
-__dead static void sigc	(int);
-__dead static void alarmc	(int);
+static void sigc	(int);
+static void alarmc	(int);
 static char *cwdname	(void);
 static int  nextjob	(void);
 static void writefile	(time_t, unsigned char);
@@ -195,7 +195,7 @@ writefile(time_t runtimer, unsigned char queue)
 	(void)sigemptyset(&act.sa_mask);
 	act.sa_flags = 0;
 
-	(void)sigaction(SIGINT, &act, NULL);
+	sigaction(SIGINT, &act, NULL);
 
 	(void)strlcpy(atfile, _PATH_ATJOBS, sizeof(atfile));
 	ppos = atfile + strlen(atfile);
@@ -225,7 +225,7 @@ writefile(time_t runtimer, unsigned char queue)
 	 * Set an alarm so a timeout occurs after ALARMC seconds, in case
 	 * something is seriously broken.
 	 */
-	(void)sigaction(SIGALRM, &act, NULL);
+	sigaction(SIGALRM, &act, NULL);
 	(void)alarm(ALARMC);
 	(void)fcntl(lockdes, F_SETLKW, &lock);
 	(void)alarm(0);
@@ -322,7 +322,7 @@ writefile(time_t runtimer, unsigned char queue)
 		if (eqp == NULL)
 			eqp = *atenv;
 		else {
-			size_t i;
+			int i;
 
 			for (i = 0; i < __arraycount(no_export); i++) {
 				export = export &&
@@ -466,15 +466,7 @@ list_jobs(void)
 
 		runtimer = 60 * (time_t)ctm;
 		runtime = *localtime(&runtimer);
-#if 1
-		/*
-		 * Provide a consistent date/time format instead of a
-		 * locale-specific one that might have 2 digit years
-		 */
-		(void)strftime(timestr, TIMESIZE, "%T %F", &runtime);
-#else
 		(void)strftime(timestr, TIMESIZE, "%X %x", &runtime);
-#endif
 		if (first) {
 			(void)printf("%-*s  %-*s  %-*s  %s\n",
 			    (int)strlen(timestr), "Date",
@@ -492,7 +484,6 @@ list_jobs(void)
 		    6, (S_IXUSR & buf.st_mode) ? "" : "(done)",
 		    jobno);
 	}
-	(void)closedir(spool);
 	PRIV_END;
 }
 
@@ -574,7 +565,6 @@ process_jobs(int argc, char **argv, int what)
 			}
 		}
 	}
-	(void)closedir(spool);
 }
 
 /* Global functions */

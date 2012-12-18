@@ -1,4 +1,4 @@
-/*	$NetBSD: xsasl_dovecot_server.c,v 1.1.1.4 2012/02/17 08:36:25 tron Exp $	*/
+/*	$NetBSD: xsasl_dovecot_server.c,v 1.1.1.1.2.4 2011/01/07 01:24:22 riz Exp $	*/
 
 /*++
 /* NAME
@@ -325,8 +325,7 @@ static int xsasl_dovecot_server_connect(XSASL_DOVECOT_SERVER_IMPL *xp)
 		sec_props =
 		    name_mask_delim_opt(myname,
 					xsasl_dovecot_serv_sec_props,
-					line, "\t",
-				     NAME_MASK_ANY_CASE | NAME_MASK_IGNORE);
+					line, "\t", NAME_MASK_ANY_CASE);
 		if ((sec_props & SEC_PROPS_PRIVATE) != 0)
 		    continue;
 	    } else
@@ -372,6 +371,11 @@ XSASL_SERVER_IMPL *xsasl_dovecot_server_init(const char *server_type,
 					             const char *path_info)
 {
     XSASL_DOVECOT_SERVER_IMPL *xp;
+
+    if (strchr(path_info, '/') == 0)
+	msg_warn("when SASL type is \"%s\", SASL path \"%s\" "
+		 "should be a socket pathname",
+		 server_type, path_info);
 
     xp = (XSASL_DOVECOT_SERVER_IMPL *) mymalloc(sizeof(*xp));
     xp->xsasl.create = xsasl_dovecot_server_create;

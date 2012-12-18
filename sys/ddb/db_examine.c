@@ -1,4 +1,4 @@
-/*	$NetBSD: db_examine.c,v 1.35 2011/05/26 15:34:14 joerg Exp $	*/
+/*	$NetBSD: db_examine.c,v 1.32 2007/02/22 06:41:00 thorpej Exp $	*/
 
 /*
  * Mach Operating System
@@ -30,14 +30,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_examine.c,v 1.35 2011/05/26 15:34:14 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_examine.c,v 1.32 2007/02/22 06:41:00 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/buf.h>
 #include <sys/proc.h>
 
-#include <ddb/ddb.h>
+#include <machine/db_machdep.h>		/* type definitions */
+
+#include <ddb/db_lex.h>
+#include <ddb/db_output.h>
+#include <ddb/db_command.h>
+#include <ddb/db_sym.h>
+#include <ddb/db_access.h>
+#include <ddb/db_extern.h>
+#include <ddb/db_interface.h>
 
 static char	db_examine_format[TOK_STRING_SIZE] = "x";
 
@@ -117,7 +124,8 @@ db_examine(db_addr_t addr, char *fmt, int count)
 			case 'x':	/* unsigned hex */
 				value = db_get_value(addr, size, false);
 				addr += size;
-				db_printf("%-*" DDB_EXPR_FMT "x", width, value);
+				db_printf(DB_EXPR_T_IS_QUAD ? "%-*qx" : "%-*lx",
+				    width, value);
 				break;
 			case 'm':	/* hex dump */
 				/*
@@ -134,8 +142,8 @@ db_examine(db_addr_t addr, char *fmt, int count)
  						    db_get_value(addr+bytes, 1,
 							false);
 						db_printf(
-						    "%02" DDB_EXPR_FMT "x",
-						    value);
+						    DB_EXPR_T_IS_QUAD ? "%02qx":
+						    "%02lx", value);
 						bytes++;
 						if (!(bytes % 4))
 							db_printf(" ");
@@ -164,17 +172,20 @@ db_examine(db_addr_t addr, char *fmt, int count)
 			case 'd':	/* signed decimal */
 				value = db_get_value(addr, size, true);
 				addr += size;
-				db_printf("%-*" DDB_EXPR_FMT "d", width, value);
+				db_printf(DB_EXPR_T_IS_QUAD ? "%-*qd" : "%-*ld",
+				    width, value);
 				break;
 			case 'u':	/* unsigned decimal */
 				value = db_get_value(addr, size, false);
 				addr += size;
-				db_printf("%-*" DDB_EXPR_FMT "u", width, value);
+				db_printf(DB_EXPR_T_IS_QUAD ? "%-*qu" : "%-*lu",
+				    width, value);
 				break;
 			case 'o':	/* unsigned octal */
 				value = db_get_value(addr, size, false);
 				addr += size;
-				db_printf("%-*" DDB_EXPR_FMT "o", width, value);
+				db_printf(DB_EXPR_T_IS_QUAD ? "%-*qo" : "%-*lo",
+				    width, value);
 				break;
 			case 'c':	/* character */
 				value = db_get_value(addr, 1, false);
@@ -240,7 +251,7 @@ db_print_cmd(db_expr_t addr, bool have_addr, db_expr_t count,
 			break;
 		}
 	case 'x':
-		db_printf("%16" DDB_EXPR_FMT "x", addr);
+		db_printf(DB_EXPR_T_IS_QUAD ? "%16qx" : "%8lx", addr);
 		break;
 	case 'z':
 		{
@@ -251,13 +262,13 @@ db_print_cmd(db_expr_t addr, bool have_addr, db_expr_t count,
 			break;
 		}
 	case 'd':
-		db_printf("%11" DDB_EXPR_FMT "d", addr);
+		db_printf(DB_EXPR_T_IS_QUAD ? "%11qd" : "%11ld", addr);
 		break;
 	case 'u':
-		db_printf("%11" DDB_EXPR_FMT "u", addr);
+		db_printf(DB_EXPR_T_IS_QUAD ? "%11qu" : "%11lu", addr);
 		break;
 	case 'o':
-		db_printf("%15" DDB_EXPR_FMT "o", addr);
+		db_printf(DB_EXPR_T_IS_QUAD ? "%15qo" : "%16lo", addr);
 		break;
 	case 'c':
 		value = addr & 0xFF;

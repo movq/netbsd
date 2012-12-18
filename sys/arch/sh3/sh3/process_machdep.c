@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.20 2012/07/08 20:14:12 dsl Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.16 2008/10/27 23:50:12 uwe Exp $	*/
 
 /*
  * Copyright (c) 1993 The Regents of the University of California.
@@ -77,13 +77,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.20 2012/07/08 20:14:12 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.16 2008/10/27 23:50:12 uwe Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/vnode.h>
 #include <sys/ptrace.h>
 
@@ -240,6 +241,8 @@ process_machdep_doregs40(struct lwp *curl, struct lwp *l, struct uio *uio)
 	if (kl > uio->uio_resid)
 		kl = uio->uio_resid;
 
+	uvm_lwp_hold(l);
+
 	if (kl < 0)
 		error = EINVAL;
 	else
@@ -252,6 +255,8 @@ process_machdep_doregs40(struct lwp *curl, struct lwp *l, struct uio *uio)
 		else
 			error = process_machdep_write_regs40(l, &r);
 	}
+
+	uvm_lwp_rele(l);
 
 	uio->uio_offset = 0;
 	return error;
@@ -343,11 +348,9 @@ process_sstep(struct lwp *l, int sstep)
 {
 
 	if (sstep)
-		l->l_md.md_flags |= MDL_SSTEP;
-	else
-		l->l_md.md_flags &= ~MDL_SSTEP;
+		return (EINVAL);
 
-	return 0;
+	return (0);
 }
 
 int

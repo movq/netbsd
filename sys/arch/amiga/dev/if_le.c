@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le.c,v 1.45 2010/01/19 22:06:19 pooka Exp $ */
+/*	$NetBSD: if_le.c,v 1.43 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -74,8 +74,9 @@
 #include "opt_inet.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.45 2010/01/19 22:06:19 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.43 2008/04/28 20:23:12 martin Exp $");
 
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,6 +95,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.45 2010/01/19 22:06:19 pooka Exp $");
 #endif
 
 #include <machine/cpu.h>
+#include <machine/mtpr.h>
 
 #include <amiga/amiga/device.h>
 #include <amiga/amiga/isr.h>

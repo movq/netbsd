@@ -27,9 +27,10 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)pathnames.h	8.1 (Berkeley) 6/6/93
- *	$NetBSD: pathnames.h,v 1.6 2011/07/10 07:54:49 dholland Exp $
+ *	$NetBSD: pathnames.h,v 1.5 2003/08/07 11:25:21 agc Exp $
  */
 
 #include <paths.h>
 
-#define	_PATH_TMPFILE	_PATH_TMP "EdP.aXXXXX"
+#undef _PATH_TMP
+#define	_PATH_TMP	"/tmp/EdP.aXXXXX"

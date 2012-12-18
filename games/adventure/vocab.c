@@ -1,4 +1,4 @@
-/*	$NetBSD: vocab.c,v 1.15 2009/08/25 06:56:52 dholland Exp $	*/
+/*	$NetBSD: vocab.c,v 1.13 2006/03/18 23:35:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)vocab.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: vocab.c,v 1.15 2009/08/25 06:56:52 dholland Exp $");
+__RCSID("$NetBSD: vocab.c,v 1.13 2006/03/18 23:35:51 christos Exp $");
 #endif
 #endif				/* not lint */
 
@@ -52,7 +52,7 @@ __RCSID("$NetBSD: vocab.c,v 1.15 2009/08/25 06:56:52 dholland Exp $");
 #include "extern.h"
 
 void
-destroy(int object)
+dstroy(int object)
 {
 	move(object, 0);
 }
@@ -98,7 +98,7 @@ carry(int object, int where)
 		if (place[object] == -1)
 			return;
 		place[object] = -1;
-		holding++;
+		holdng++;
 	}
 	if (atloc[where] == object) {
 		atloc[where] = links[object];
@@ -116,7 +116,7 @@ drop(int object, int where)
 		fixed[object - 100] = where;
 	else {
 		if (place[object] == -1)
-			holding--;
+			holdng--;
 		place[object] = where;
 	}
 	if (where <= 0)
@@ -189,8 +189,8 @@ exitloop2:			/* hashed entry does not match  */
 	}
 }
 
-/* print hash table (for debugging)             */
-static __unused void
+/* print hash table             */
+void
 prht(void)
 {	
 	int     i, j, l;

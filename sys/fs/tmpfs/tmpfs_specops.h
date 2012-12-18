@@ -1,4 +1,4 @@
-/*	$NetBSD: tmpfs_specops.h,v 1.8 2011/05/24 20:17:49 rmind Exp $	*/
+/*	$NetBSD: tmpfs_specops.h,v 1.7 2008/04/28 20:24:02 martin Exp $	*/
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -39,6 +39,8 @@
 
 #include <miscfs/specfs/specdev.h>
 #include <fs/tmpfs/tmpfs_vnops.h>
+
+/* --------------------------------------------------------------------- */
 
 /*
  * Declarations for tmpfs_specops.c.
@@ -86,5 +88,7 @@ int	tmpfs_spec_write	(void *);
 #define	tmpfs_spec_bwrite	vn_bwrite
 #define	tmpfs_spec_getpages	spec_getpages
 #define	tmpfs_spec_putpages	spec_putpages
+
+/* --------------------------------------------------------------------- */
 
 #endif /* _FS_TMPFS_TMPFS_SPECOPS_H_ */

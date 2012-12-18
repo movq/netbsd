@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp_chat.c,v 1.1.1.2 2010/06/17 18:07:03 tron Exp $	*/
+/*	$NetBSD: smtp_chat.c,v 1.1.1.1.2.4 2011/01/07 01:24:13 riz Exp $	*/
 
 /*++
 /* NAME

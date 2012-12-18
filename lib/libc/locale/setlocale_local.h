@@ -1,4 +1,4 @@
-/* $NetBSD: setlocale_local.h,v 1.8 2012/03/04 21:14:57 tnozaki Exp $ */
+/* $NetBSD: setlocale_local.h,v 1.2.2.2 2009/01/15 03:24:08 snj Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -44,12 +44,12 @@ struct _locale_cache_t {
 	const short *tolower_tab;
 	const short *toupper_tab;
 	size_t mb_cur_max;
-	struct lconv *ldata;
-	const char **items;
+	struct lconv ldata;
+	const char *items[ALT_DIGITS + 1];
 };
 
 struct _locale_impl_t {
-	struct _locale_cache_t *cache;
+	struct _locale_cache_t cache;
 	char query[_LOCALENAME_LEN_MAX * (_LC_LAST - 1)];
 	const char *part_name[_LC_LAST];
 	_locale_part_t part_impl[_LC_LAST];
@@ -58,35 +58,17 @@ struct _locale_impl_t {
 typedef const char *(*_locale_set_t)(const char * __restrict,
     struct _locale_impl_t * __restrict);
 
+typedef struct {
+	const char* name;
+	int category;
+	_locale_set_t setlocale;
+} _locale_category_t;
+
 __BEGIN_DECLS
-_locale_set_t		_find_category(int);
+_locale_category_t	*_find_category(int);
 const char		*_get_locale_env(const char *);
+struct _locale_impl_t	_global_locale;
 struct _locale_impl_t	**_current_locale(void);
-char			*__setlocale(int, const char *);
-
-const char *_generic_LC_ALL_setlocale(
-    const char * __restrict, struct _locale_impl_t * __restrict);
-const char *_dummy_LC_COLLATE_setlocale(
-    const char * __restrict, struct _locale_impl_t * __restrict);
-const char *_citrus_LC_CTYPE_setlocale(
-    const char * __restrict, struct _locale_impl_t * __restrict);
-const char *_citrus_LC_MONETARY_setlocale(
-    const char * __restrict, struct _locale_impl_t * __restrict);
-const char *_citrus_LC_NUMERIC_setlocale(
-    const char * __restrict, struct _locale_impl_t * __restrict);
-const char *_citrus_LC_TIME_setlocale(
-    const char * __restrict, struct _locale_impl_t * __restrict);
-const char *_citrus_LC_MESSAGES_setlocale(
-    const char * __restrict, struct _locale_impl_t * __restrict);
 __END_DECLS
-
-static __inline struct _locale_cache_t *
-_current_cache(void)
-{
-	return (*_current_locale())->cache;
-}
-
-extern struct _locale_impl_t	_global_locale;
-extern size_t __mb_len_max_runtime;
 
 #endif /*_SETLOCALE_LOCAL_H_*/

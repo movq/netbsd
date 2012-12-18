@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2012/11/25 21:55:50 alnsn Exp $
+#	$NetBSD: Makefile,v 1.4 2007/03/08 15:39:42 tsutsui Exp $
 
 INCSDIR= /usr/include/ews4800mips
 
@@ -16,9 +16,9 @@ INCS=	ansi.h aout_machdep.h asm.h \
 	param.h pcb.h pdinfo.h pmap.h pmc.h proc.h profile.h psl.h pte.h \
 	ptrace.h \
 	reg.h regdef.h regnum.h reloc.h rwlock.h \
-	setjmp.h signal.h sljitarch.h \
+	setjmp.h signal.h stdarg.h \
 	trap.h types.h \
-	vmparam.h vtoc.h \
+	varargs.h vmparam.h vtoc.h \
 	wchar_limits.h
 
 .include <bsd.kinc.mk>

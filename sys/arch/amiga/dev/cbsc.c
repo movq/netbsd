@@ -1,4 +1,4 @@
-/*	$NetBSD: cbsc.c,v 1.33 2010/12/20 00:25:25 matt Exp $ */
+/*	$NetBSD: cbsc.c,v 1.28 2008/04/13 04:55:52 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1997 Michael L. Hitch
@@ -13,7 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product contains software written by Michael L. Hitch for
+ *	the NetBSD project.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -31,12 +35,8 @@
  *
  */
 
-#ifdef __m68k__
-#include "opt_m68k_arch.h"
-#endif
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cbsc.c,v 1.33 2010/12/20 00:25:25 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cbsc.c,v 1.28 2008/04/13 04:55:52 tsutsui Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -47,7 +47,10 @@ __KERNEL_RCSID(0, "$NetBSD: cbsc.c,v 1.33 2010/12/20 00:25:25 matt Exp $");
 #include <sys/device.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/queue.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>

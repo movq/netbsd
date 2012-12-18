@@ -1,4 +1,4 @@
-/*	$NetBSD: ctl_p.h,v 1.1.1.1 2009/04/12 15:33:47 christos Exp $	*/
+/*	$NetBSD: ctl_p.h,v 1.1.1.1.4.2 2011/01/06 21:42:19 riz Exp $	*/
 
 struct ctl_buf {
 	char *			text;

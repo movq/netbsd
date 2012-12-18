@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_nfs.c,v 1.10 2010/01/12 18:43:37 pooka Exp $	*/
+/*	$NetBSD: rump_nfs.c,v 1.1 2008/10/16 09:30:57 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -30,7 +30,6 @@
 
 #include <nfs/nfsmount.h>
 
-#include <rump/rump.h>
 #include <rump/p2k.h>
 
 #include <err.h>
@@ -48,13 +47,10 @@ main(int argc, char *argv[])
 	int rv, mntflags;
 
 	setprogname(argv[0]);
-	puffs_unmountonsignal(SIGINT, true);
-	puffs_unmountonsignal(SIGTERM, true);
-
 	mount_nfs_parseargs(argc, argv, &args, &mntflags, canon_dev, canon_dir);
 
 	rv = p2k_run_fs(MOUNT_NFS, canon_dev, canon_dir, mntflags, &args,
-	    sizeof(args), PUFFS_KFLAG_WTCACHE);
+	    sizeof(args), PUFFS_FLAG_OPDUMP);
 	if (rv == -1)
 		err(1, "mount");
 

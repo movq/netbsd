@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC32_IP3x,v 1.94 2012/10/17 14:48:16 apb Exp $
+#	$NetBSD: GENERIC32_IP3x,v 1.76.4.1 2008/12/27 03:50:52 snj Exp $
 #
 # GENERIC32_IP3x machine description file
 # 
@@ -28,7 +28,7 @@ makeoptions	TEXTADDR="0x80069000"	# entry point
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC32_IP3x-$Revision: 1.94 $"
+#ident		"GENERIC32_IP3x-$Revision: 1.76.4.1 $"
 
 maxusers	32
 
@@ -36,7 +36,7 @@ maxusers	32
 options 	MIPS3		# MIPS3 support
 options 	ENABLE_MIPS4_CACHE_R10K # enable R10000 cache ops
 #options 	BLINK		# blinkenlitzen
-makeoptions	CPUFLAGS="-march=mips3 -mtune=vr5000"
+makeoptions	CPUFLAGS="-march=mips3 -mabi=32 -mtune=vr5000"
 
 # Standard system options
 #options 	INSECURE	# disable kernel security levels
@@ -47,6 +47,9 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V message queues
 options 	SYSVSEM		# System V semaphores
 options 	SYSVSHM		# System V shared memory
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
+
+#options 	LKM		# loadable kernel modules (XXX: working?)
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -74,11 +77,10 @@ options 	COMPAT_16	# NetBSD 1.6
 options 	COMPAT_20	# NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
-options 	COMPAT_LINUX	# binary compatibility with Linux
+options 	COMPAT_IRIX	# binary compatibility with IRIX
+#options 	COMPAT_LINUX	# binary compatibility with Linux
 #options 	COMPAT_ULTRIX	# binary compatibility with Ultrix 
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
@@ -95,7 +97,7 @@ file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay file system
-file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
+file-system 	PORTAL		# portal filesystem (still experimental)
 file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
@@ -106,10 +108,10 @@ file-system	TMPFS		# Efficient memory file-system
 file-system	EFS		# Silicon Graphics Extent File System
 
 # File system options
-options 	QUOTA		# legacy UFS quotas
-options 	QUOTA2		# new, in-filesystem UFS quotas
+options 	QUOTA		# UFS quotas
 #options 	FFS_EI		# FFS Endian Independent support
-options 	WAPBL		# File system journaling support
+options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -186,7 +188,6 @@ pci*		at ppb? bus ?
 options 	PCI_NETBSD_CONFIGURE
 
 options 	WSEMUL_VT100
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	WS_KERNEL_FG=WSCOL_GREEN
 options 	WS_KERNEL_BG=WSCOL_BLACK
 options 	WS_DEFAULT_BG=WSCOL_BLACK
@@ -329,9 +330,6 @@ ulpt*   at uhub? port ? configuration ? interface ?
 umodem* at uhub? port ? configuration ?
 ucom*   at umodem?
 
-# Option N.V. Wireless WAN modems
-uhso*	at uhub? port ? configuration ?
-
 # USB Mass Storage
 umass*  at uhub? port ? configuration ? interface ?
 #wd* at umass?
@@ -428,8 +426,8 @@ pseudo-device	ccd		4	# concatenated/striped disk devices
 #pseudo-device	cgd		4	# cryptographic disk devices
 #pseudo-device	raid		4	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
-pseudo-device	fss			# file system snapshot device
-pseudo-device	md			# memory disk device (ramdisk)
+pseudo-device	fss		4	# file system snapshot device
+pseudo-device	md		1	# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
 
@@ -459,9 +457,9 @@ pseudo-device   accf_http		# "httpready" accept filter
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	sequencer	1	# MIDI sequencer
+pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
-pseudo-device	putter			# for puffs and pud
 
 # wscons pseudo-devices
 pseudo-device	wsmux			# mouse & keyboard multiplexor
@@ -472,6 +470,10 @@ pseudo-device	drvctl
 
 # a pseudo device needed for Coda	# also needs CODA (above)
 pseudo-device	vcoda		4	# coda minicache <-> venus comm.
+
+# pseudo devices used for IRIX binary compatibility
+pseudo-device	irix_kmem		# IRIX /dev/kmem
+pseudo-device	irix_usema		# IRIX /dev/usema
 
 # Veriexec
 #

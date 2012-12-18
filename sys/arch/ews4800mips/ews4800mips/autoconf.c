@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.9 2012/07/29 18:05:43 mlelstv Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.7 2008/04/28 20:23:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2004 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.9 2012/07/29 18:05:43 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.7 2008/04/28 20:23:18 martin Exp $");
 
 #include "opt_sbd.h"
 
@@ -35,7 +35,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.9 2012/07/29 18:05:43 mlelstv Exp $")
 #include <sys/systm.h>
 #include <sys/conf.h>
 #include <sys/device.h>
-#include <sys/intr.h>
 
 #include <machine/sbdvar.h>
 #include <machine/disklabel.h>
@@ -51,7 +50,7 @@ cpu_configure(void)
 	splhigh();
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
-	spl0();
+	_splnone();
 }
 
 void
@@ -112,8 +111,7 @@ cpu_rootconf(void)
 
 	if (bootdev_name &&
 	    (dv = device_find_by_xname(bootdev_name)) != NULL) {
-		booted_device = dv;
-		booted_partition = partition;
-	}
-	rootconf();
+		setroot(dv, partition);
+	} else
+		setroot(0, 0);
 }

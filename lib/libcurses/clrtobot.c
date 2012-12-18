@@ -1,4 +1,4 @@
-/*	$NetBSD: clrtobot.c,v 1.22 2012/02/19 19:38:13 christos Exp $	*/
+/*	$NetBSD: clrtobot.c,v 1.20 2007/05/29 11:10:56 blymn Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)clrtobot.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: clrtobot.c,v 1.22 2012/02/19 19:38:13 christos Exp $");
+__RCSID("$NetBSD: clrtobot.c,v 1.20 2007/05/29 11:10:56 blymn Exp $");
 #endif
 #endif				/* not lint */
 
@@ -70,34 +70,31 @@ wclrtobot(WINDOW *win)
 #ifdef __GNUC__
 	maxx = NULL;		/* XXX gcc -Wuninitialized */
 #endif
-	if (win->alines[win->cury]->flags & __ISPASTEOL) {
+	if (win->lines[win->cury]->flags & __ISPASTEOL) {
 		starty = win->cury + 1;
 		startx = 0;
 	} else {
 		starty = win->cury;
 		startx = win->curx;
 	}
-	if (win != curscr)
-		attr = win->battr & __ATTRIBUTES;
+	if (__using_color && win != curscr)
+		attr = win->battr & __COLOR;
 	else
 		attr = 0;
 	for (y = starty; y < win->maxy; y++) {
 		minx = -1;
-		end = &win->alines[y]->line[win->maxx];
-		for (sp = &win->alines[y]->line[startx]; sp < end; sp++) {
+		end = &win->lines[y]->line[win->maxx];
+		for (sp = &win->lines[y]->line[startx]; sp < end; sp++) {
 #ifndef HAVE_WCHAR
 			if (sp->ch != win->bch || sp->attr != attr) {
 #else
 			if (sp->ch != (wchar_t)btowc((int) win->bch) ||
-			    (sp->attr & WA_ATTRIBUTES) != attr || sp->nsp) {
+			    (sp->attr & WA_ATTRIBUTES) != 0 || sp->nsp) {
 #endif /* HAVE_WCHAR */
 				maxx = sp;
 				if (minx == -1)
-					minx = (int)(sp - win->alines[y]->line);
-				if (sp->attr & __ALTCHARSET)
-					sp->attr = attr | __ALTCHARSET;
-				else
-					sp->attr = attr;
+					minx = (int)(sp - win->lines[y]->line);
+				sp->attr = attr;
 #ifdef HAVE_WCHAR
 				sp->ch = ( wchar_t )btowc(( int ) win->bch);
 				if (_cursesi_copy_nsp(win->bnsp, sp) == ERR)
@@ -111,7 +108,7 @@ wclrtobot(WINDOW *win)
 
 		if (minx != -1)
 			__touchline(win, y, minx,
-				    (int) (maxx - win->alines[y]->line));
+				    (int) (maxx - win->lines[y]->line));
 		startx = 0;
 	}
 	return (OK);

@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.38 2012/10/02 23:54:52 christos Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.32 2008/06/04 12:41:41 ad Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.38 2012/10/02 23:54:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.32 2008/06/04 12:41:41 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,12 +40,9 @@ __KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.38 2012/10/02 23:54:52 christos Exp $"
 
 #include <uvm/uvm_extern.h>
 #include <mips/cache.h>
-#include <mips/locore.h>
 
 #include <machine/bus.h>
 #include <machine/bus_dma_hpcmips.h>
-
-#include <dev/bus_dma/bus_dmamem_common.h>
 
 static int _hpcmips_bd_map_load_buffer(bus_dmamap_t, void *, bus_size_t,
     struct vmspace *, int, vaddr_t *, int *, int);
@@ -105,7 +102,7 @@ _hpcmips_bd_map_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 	    (flags & BUS_DMA_NOWAIT) ? M_NOWAIT : M_WAITOK)) == NULL)
 		return (ENOMEM);
 
-	memset(mapstore, 0, mapsize);
+	bzero(mapstore, mapsize);
 	map = (struct bus_dmamap_hpcmips *)mapstore;
 	map->_dm_size = size;
 	map->_dm_segcnt = nsegments;
@@ -148,7 +145,6 @@ _hpcmips_bd_map_load_buffer(bus_dmamap_t mapx, void *buf, bus_size_t buflen,
 	bus_size_t sgsize;
 	bus_addr_t curaddr, lastaddr, baddr, bmask;
 	vaddr_t vaddr = (vaddr_t)buf;
-	paddr_t pa;
 	int seg;
 
 	lastaddr = *lastaddrp;
@@ -160,10 +156,9 @@ _hpcmips_bd_map_load_buffer(bus_dmamap_t mapx, void *buf, bus_size_t buflen,
 		 */
 		if (!VMSPACE_IS_KERNEL_P(vm))
 			(void) pmap_extract(vm_map_pmap(&vm->vm_map),
-			    vaddr, &pa);
+			    vaddr, &curaddr);
 		else
-			pa = kvtophys(vaddr);
-		curaddr = pa;
+			curaddr = kvtophys(vaddr);
 
 		/*
 		 * Compute the segment size, and adjust counts.
@@ -517,12 +512,13 @@ _hpcmips_bd_mem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
     bus_size_t boundary, bus_dma_segment_t *segs, int nsegs, int *rsegs,
     int flags)
 {
+	extern paddr_t avail_start, avail_end;		/* XXX */
 	psize_t high;
 
-	high = mips_avail_end - PAGE_SIZE;
+	high = avail_end - PAGE_SIZE;
 
 	return (_hpcmips_bd_mem_alloc_range(t, size, alignment, boundary,
-	    segs, nsegs, rsegs, flags, mips_avail_start, high));
+	    segs, nsegs, rsegs, flags, avail_start, high));
 }
 
 /*
@@ -535,15 +531,59 @@ _hpcmips_bd_mem_alloc_range(bus_dma_tag_t t, bus_size_t size,
     bus_dma_segment_t *segs, int nsegs, int *rsegs,
     int flags, paddr_t low, paddr_t high)
 {
+	vaddr_t curaddr, lastaddr;
+	struct vm_page *m;
+	struct pglist mlist;
+	int curseg, error;
 #ifdef DIAGNOSTIC
+	extern paddr_t avail_start, avail_end;		/* XXX */
 
-	high = high<(mips_avail_end - PAGE_SIZE)? high: (mips_avail_end - PAGE_SIZE);
-	low = low>mips_avail_start? low: mips_avail_start;
+	high = high<(avail_end - PAGE_SIZE)? high: (avail_end - PAGE_SIZE);
+	low = low>avail_start? low: avail_start;
 #endif
+	/* Always round the size. */
+	size = round_page(size);
 
-	return (_bus_dmamem_alloc_range_common(t, size, alignment, boundary,
-					       segs, nsegs, rsegs, flags,
-					       low, high));
+	/*
+	 * Allocate pages from the VM system.
+	 */
+	error = uvm_pglistalloc(size, low, high, alignment, boundary,
+	    &mlist, nsegs, (flags & BUS_DMA_NOWAIT) == 0);
+	if (error)
+		return (error);
+
+	/*
+	 * Compute the location, size, and number of segments actually
+	 * returned by the VM code.
+	 */
+	m = mlist.tqh_first;
+	curseg = 0;
+	lastaddr = segs[curseg].ds_addr = VM_PAGE_TO_PHYS(m);
+	segs[curseg].ds_len = PAGE_SIZE;
+	m = m->pageq.queue.tqe_next;
+
+	for (; m != NULL; m = m->pageq.queue.tqe_next) {
+		curaddr = VM_PAGE_TO_PHYS(m);
+#ifdef DIAGNOSTIC
+		if (curaddr < low || curaddr >= high) {
+			printf("uvm_pglistalloc returned non-sensical"
+			    " address 0x%lx\n", curaddr);
+			panic("_hpcmips_bd_mem_alloc");
+		}
+#endif
+		if (curaddr == (lastaddr + PAGE_SIZE))
+			segs[curseg].ds_len += PAGE_SIZE;
+		else {
+			curseg++;
+			segs[curseg].ds_addr = curaddr;
+			segs[curseg].ds_len = PAGE_SIZE;
+		}
+		lastaddr = curaddr;
+	}
+
+	*rsegs = curseg + 1;
+
+	return (0);
 }
 
 /*
@@ -553,8 +593,25 @@ _hpcmips_bd_mem_alloc_range(bus_dma_tag_t t, bus_size_t size,
 void
 _hpcmips_bd_mem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
 {
+	struct vm_page *m;
+	bus_addr_t addr;
+	struct pglist mlist;
+	int curseg;
 
-	_bus_dmamem_free_common(t, segs, nsegs);
+	/*
+	 * Build a list of pages to free back to the VM system.
+	 */
+	TAILQ_INIT(&mlist);
+	for (curseg = 0; curseg < nsegs; curseg++) {
+		for (addr = segs[curseg].ds_addr;
+		    addr < (segs[curseg].ds_addr + segs[curseg].ds_len);
+		    addr += PAGE_SIZE) {
+			m = PHYS_TO_VM_PAGE(addr);
+			TAILQ_INSERT_TAIL(&mlist, m, pageq.queue);
+		}
+	}
+
+	uvm_pglistfree(&mlist);
 }
 
 /*
@@ -565,6 +622,11 @@ int
 _hpcmips_bd_mem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
     size_t size, void **kvap, int flags)
 {
+	vaddr_t va;
+	bus_addr_t addr;
+	int curseg;
+	const uvm_flag_t kmflags =
+	    (flags & BUS_DMA_NOWAIT) != 0 ? UVM_KMF_NOWAIT : 0;
 
 	/*
 	 * If we're only mapping 1 segment, use KSEG0 or KSEG1, to avoid
@@ -578,8 +640,31 @@ _hpcmips_bd_mem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 		return (0);
 	}
 
-	/* XXX BUS_DMA_COHERENT */
-	return (_bus_dmamem_map_common(t, segs, nsegs, size, kvap, flags, 0));
+	size = round_page(size);
+
+	va = uvm_km_alloc(kernel_map, size, 0, UVM_KMF_VAONLY | kmflags);
+
+	if (va == 0)
+		return (ENOMEM);
+
+	*kvap = (void *)va;
+
+	for (curseg = 0; curseg < nsegs; curseg++) {
+		for (addr = segs[curseg].ds_addr;
+		    addr < (segs[curseg].ds_addr + segs[curseg].ds_len);
+		    addr += PAGE_SIZE, va += PAGE_SIZE, size -= PAGE_SIZE) {
+			if (size == 0)
+				panic("_hpcmips_bd_mem_map: size botch");
+			pmap_enter(pmap_kernel(), va, addr,
+			    VM_PROT_READ | VM_PROT_WRITE,
+			    VM_PROT_READ | VM_PROT_WRITE | PMAP_WIRED);
+
+			/* XXX Do something about COHERENT here. */
+		}
+	}
+	pmap_update(pmap_kernel());
+
+	return (0);
 }
 
 /*
@@ -590,6 +675,11 @@ void
 _hpcmips_bd_mem_unmap(bus_dma_tag_t t, void *kva, size_t size)
 {
 
+#ifdef DIAGNOSTIC
+	if ((u_long)kva & PGOFSET)
+		panic("_hpcmips_bd_mem_unmap");
+#endif
+
 	/*
 	 * Nothing to do if we mapped it with KSEG0 or KSEG1 (i.e.
 	 * not in KSEG2).
@@ -598,7 +688,10 @@ _hpcmips_bd_mem_unmap(bus_dma_tag_t t, void *kva, size_t size)
 	    kva < (void *)MIPS_KSEG2_START)
 		return;
 
-	_bus_dmamem_unmap_common(t, kva, size);
+	size = round_page(size);
+	pmap_remove(pmap_kernel(), (vaddr_t)kva, (vaddr_t)kva + size);
+	pmap_update(pmap_kernel());
+	uvm_km_free(kernel_map, (vaddr_t)kva, size, UVM_KMF_VAONLY);
 }
 
 /*
@@ -609,11 +702,26 @@ paddr_t
 _hpcmips_bd_mem_mmap(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
     off_t off, int prot, int flags)
 {
-	bus_addr_t rv;
+	int i;
 
-	rv = _bus_dmamem_mmap_common(t, segs, nsegs, off, prot, flags);
-	if (rv == (bus_addr_t)-1)
-		return (-1);
-	
-	return (mips_btop((char *)rv));
+	for (i = 0; i < nsegs; i++) {
+#ifdef DIAGNOSTIC
+		if (off & PGOFSET)
+			panic("_hpcmips_bd_mem_mmap: offset unaligned");
+		if (segs[i].ds_addr & PGOFSET)
+			panic("_hpcmips_bd_mem_mmap: segment unaligned");
+		if (segs[i].ds_len & PGOFSET)
+			panic("_hpcmips_bd_mem_mmap: segment size not multiple"
+			    " of page size");
+#endif
+		if (off >= segs[i].ds_len) {
+			off -= segs[i].ds_len;
+			continue;
+		}
+
+		return (mips_btop((char *)segs[i].ds_addr + off));
+	}
+
+	/* Page not found. */
+	return (-1);
 }

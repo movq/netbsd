@@ -1,4 +1,4 @@
-/*	$NetBSD: pcictl.c,v 1.18 2011/08/30 20:08:38 joerg Exp $	*/
+/*	$NetBSD: pcictl.c,v 1.11 2007/02/08 23:27:07 hubertf Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -63,21 +63,23 @@ struct command {
 	int open_flags;
 };
 
-__dead static void	usage(void);
+int	main(int, char *[]);
+void	usage(void);
 
-static int	pcifd;
+int	pcifd;
 
-static struct pciio_businfo pci_businfo;
+struct pciio_businfo pci_businfo;
 
-static const	char *dvname;
-static char	dvname_store[MAXPATHLEN];
-static const	char *cmdname;
-static int	print_numbers = 0;
+const	char *dvname;
+char	dvname_store[MAXPATHLEN];
+const	char *cmdname;
+const	char *argnames;
+int	print_numbers = 0;
 
-static void	cmd_list(int, char *[]);
-static void	cmd_dump(int, char *[]);
+void	cmd_list(int, char *[]);
+void	cmd_dump(int, char *[]);
 
-static const struct command commands[] = {
+const struct command commands[] = {
 	{ "list",
 	  "[-n] [-b bus] [-d device] [-f function]",
 	  cmd_list,
@@ -88,15 +90,15 @@ static const struct command commands[] = {
 	  cmd_dump,
 	  O_RDONLY },
 
-	{ 0, 0, 0, 0 },
+	{ 0 },
 };
 
-static int	parse_bdf(const char *);
+int	parse_bdf(const char *);
 
-static void	scan_pci(int, int, int, void (*)(u_int, u_int, u_int));
+void	scan_pci(int, int, int, void (*)(u_int, u_int, u_int));
 
-static void	scan_pci_list(u_int, u_int, u_int);
-static void	scan_pci_dump(u_int, u_int, u_int);
+void	scan_pci_list(u_int, u_int, u_int);
+void	scan_pci_dump(u_int, u_int, u_int);
 
 int
 main(int argc, char *argv[])
@@ -118,27 +120,29 @@ main(int argc, char *argv[])
 		if (strcmp(cmdname, commands[i].cmd_name) == 0)
 			break;
 	if (commands[i].cmd_name == NULL)
-		errx(EXIT_FAILURE, "unknown command: %s", cmdname);
+		errx(1, "unknown command: %s", cmdname);
+
+	argnames = commands[i].arg_names;
 
 	/* Open the device. */
 	if ((strchr(dvname, '/') == NULL) &&
 	    (snprintf(dvname_store, sizeof(dvname_store), _PATH_DEV "%s",
-	     dvname) < (int)sizeof(dvname_store)))
+	     dvname) < sizeof(dvname_store)))
 		dvname = dvname_store;
 	pcifd = open(dvname, commands[i].open_flags);
 	if (pcifd < 0)
-		err(EXIT_FAILURE, "%s", dvname);
+		err(1, "%s", dvname);
 
 	/* Make sure the device is a PCI bus. */
 	if (ioctl(pcifd, PCI_IOC_BUSINFO, &pci_businfo) != 0)
-		errx(EXIT_FAILURE, "%s: not a PCI bus device", dvname);
+		errx(1, "%s: not a PCI bus device", dvname);
 
 	(*commands[i].cmd_func)(argc, argv);
-	exit(EXIT_SUCCESS);
+	exit(0);
 }
 
-static void
-usage(void)
+void
+usage()
 {
 	int i;
 
@@ -150,16 +154,16 @@ usage(void)
 		fprintf(stderr, "\t%s %s\n", commands[i].cmd_name,
 		    commands[i].arg_names);
 
-	exit(EXIT_FAILURE);
+	exit(1);
 }
 
-static void
+void
 cmd_list(int argc, char *argv[])
 {
 	int bus, dev, func;
 	int ch;
 
-	bus = -1;
+	bus = pci_businfo.busno;
 	dev = func = -1;
 
 	while ((ch = getopt(argc, argv, "nb:d:f:")) != -1) {
@@ -189,7 +193,7 @@ cmd_list(int argc, char *argv[])
 	scan_pci(bus, dev, func, scan_pci_list);
 }
 
-static void
+void
 cmd_dump(int argc, char *argv[])
 {
 	int bus, dev, func;
@@ -221,16 +225,16 @@ cmd_dump(int argc, char *argv[])
 		usage();
 
 	if (bus == -1)
-		errx(EXIT_FAILURE, "dump: wildcard bus number not permitted");
+		errx(1, "dump: wildcard bus number not permitted");
 	if (dev == -1)
-		errx(EXIT_FAILURE, "dump: must specify a device number");
+		errx(1, "dump: must specify a device number");
 	if (func == -1)
-		errx(EXIT_FAILURE, "dump: wildcard function number not permitted");
+		errx(1, "dump: wildcard function number not permitted");
 
 	scan_pci(bus, dev, func, scan_pci_dump);
 }
 
-static int
+int
 parse_bdf(const char *str)
 {
 	long value;
@@ -241,13 +245,13 @@ parse_bdf(const char *str)
 		return (-1);
 
 	value = strtol(str, &end, 0);
-	if (*end != '\0') 
-		errx(EXIT_FAILURE, "\"%s\" is not a number", str);
+	if(*end != '\0') 
+		errx(1, "\"%s\" is not a number", str);
 
 	return value;
 }
 
-static void
+void
 scan_pci(int busarg, int devarg, int funcarg, void (*cb)(u_int, u_int, u_int))
 {
 	u_int busmin, busmax;
@@ -305,7 +309,7 @@ scan_pci(int busarg, int devarg, int funcarg, void (*cb)(u_int, u_int, u_int))
 	}
 }
 
-static void
+void
 scan_pci_list(u_int bus, u_int dev, u_int func)
 {
 	pcireg_t id, class;
@@ -325,7 +329,7 @@ scan_pci_list(u_int bus, u_int dev, u_int func)
 	}
 }
 
-static void
+void
 scan_pci_dump(u_int bus, u_int dev, u_int func)
 {
 

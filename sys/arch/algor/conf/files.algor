@@ -1,8 +1,7 @@
-#	$NetBSD: files.algor,v 1.30 2012/10/02 23:54:51 christos Exp $
+#	$NetBSD: files.algor,v 1.24 2008/02/20 21:43:33 drochner Exp $
 
 # Algorithmics evaluation board specific configuration info.
 
-ifndef evbmips
 # maxpartitions must be the first item in files.${ARCH}
 maxpartitions 8
 
@@ -16,7 +15,6 @@ defflag		ALGOR_P6032	# Algorithmics P-6032
 # Various items that a buggy PMON might not provide us.
 defparam	MEMSIZE
 defparam	ETHADDR
-endif
 
 # Platform support files
 file	arch/algor/algor/algor_p4032_bus_io.c	algor_p4032
@@ -36,21 +34,16 @@ file	arch/algor/algor/algor_p6032_dma.c	algor_p6032
 file	arch/algor/algor/algor_p6032_intr.c	algor_p6032
 
 file	arch/algor/algor/autoconf.c
-file	arch/algor/algor/algor_intr.c
+file	arch/algor/algor/bus_dma.c
+file	arch/algor/algor/disksubr.c
+file	arch/algor/algor/interrupt.c
 file	arch/algor/algor/led.c
 file	arch/algor/algor/machdep.c
 file	arch/algor/algor/pmon.c
 
-ifdef	evbmips
-file	arch/evbmips/evbmips/interrupt.c
-endif
-file	arch/evbmips/evbmips/disksubr.c
-
-file	arch/mips/mips/bus_dma.c
+file	arch/mips/mips/softintr.c
 file	arch/mips/mips/mips3_clock.c
 file	arch/mips/mips/mips3_clockintr.c
-
-file	dev/bus_dma/bus_dmamem_common.c
 
 #
 # The autoconfiguration root.
@@ -61,7 +54,7 @@ file	arch/algor/dev/mainbus.c		mainbus
 
 device	cpu
 attach	cpu at mainbus
-file	arch/evbmips/evbmips/cpu.c		cpu
+file	arch/algor/algor/cpu.c			cpu
 
 device	mcclock: mc146818
 
@@ -94,9 +87,7 @@ include "dev/usb/files.usb"
 file	dev/md_root.c				memory_disk_hooks
 
 # Console glue.
-ifndef	evbmips
 file	dev/cons.c
-endif
 
 include "dev/pci/files.pci"
 include "dev/isa/files.isa"
@@ -110,7 +101,11 @@ file	arch/algor/pci/vtpbc.c			vtpbc
 attach	vtpbc at mainbus with vtpbc_mainbus
 file	arch/algor/dev/vtpbc_mainbus.c		vtpbc_mainbus
 
-include "arch/mips/conf/files.bonito"
+device	bonito: pcibus
+file	arch/mips/bonito/bonito_pci.c		bonito
+file	arch/mips/bonito/bonito_iobc.c		bonito
+
+attach	bonito at mainbus with bonito_mainbus
 file	arch/algor/dev/bonito_mainbus.c		bonito_mainbus
 
 device	pcib: isabus
@@ -118,15 +113,16 @@ attach	pcib at pci
 file	arch/algor/pci/pcib.c			pcib & (algor_p5064 |
 							algor_p6032)
 
-file	arch/mips/pci/pciide_machdep.c		pciide_common
+file	arch/algor/pci/pciide_machdep.c		pciide_common
 
 #
 # ISA bus support.
 #
 attach	mcclock at isa with mcclock_isa
-file	arch/evbmips/isa/mcclock_isa.c		mcclock_isa
+file	arch/algor/isa/mcclock_isa.c		mcclock_isa
 
-file	arch/evbmips/isa/isadma_bounce.c	isa & (algor_p5064|algor_p6032)
+file	arch/algor/isa/isadma_bounce.c		isa & (algor_p5064 |
+							algor_p6032)
 
 # ISA speaker generates keyboard beep
 #device	isabeep
@@ -179,6 +175,4 @@ file	arch/algor/dev/com_mainbus.c		com_mainbus & algor_p4032
 attach	lpt at mainbus with lpt_mainbus
 file	arch/algor/dev/lpt_mainbus.c		lpt_mainbus & algor_p4032
 
-ifndef	evbmips
 include	"arch/algor/conf/majors.algor"
-endif

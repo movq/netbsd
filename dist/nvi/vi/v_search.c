@@ -1,4 +1,4 @@
-/*	$NetBSD: v_search.c,v 1.4 2011/03/21 14:53:04 tnozaki Exp $ */
+/*	$NetBSD: v_search.c,v 1.1.1.2.6.2 2010/11/21 22:03:00 riz Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -227,7 +227,7 @@ v_exaddr(SCR *sp, VICMD *vp, dir_t dir)
 
 		/* No blanks, just like the z command. */
 		for (t = cmd + 1, tlen = len - 1; tlen > 0; ++t, --tlen)
-			if (!ISDIGIT((UCHAR_T)*t))
+			if (!isdigit(*t))
 				break;
 		if (tlen &&
 		    (*t == '-' || *t == '.' || *t == '+' || *t == '^')) {

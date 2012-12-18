@@ -1,4 +1,4 @@
-/*	$NetBSD: collect.c,v 1.46 2012/06/12 19:03:26 christos Exp $	*/
+/*	$NetBSD: collect.c,v 1.42 2007/10/29 23:20:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)collect.c	8.2 (Berkeley) 4/19/94";
 #else
-__RCSID("$NetBSD: collect.c,v 1.46 2012/06/12 19:03:26 christos Exp $");
+__RCSID("$NetBSD: collect.c,v 1.42 2007/10/29 23:20:38 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,7 +54,6 @@ __RCSID("$NetBSD: collect.c,v 1.46 2012/06/12 19:03:26 christos Exp $");
 #ifdef MIME_SUPPORT
 #include "mime.h"
 #endif
-#include "sig.h"
 #include "thread.h"
 
 
@@ -68,12 +67,19 @@ __RCSID("$NetBSD: collect.c,v 1.46 2012/06/12 19:03:26 christos Exp $");
  * receipt of an interrupt signal, the partial message can be salted
  * away on dead.letter.
  */
+
+static	sig_t	saveint;		/* Previous SIGINT value */
+static	sig_t	savehup;		/* Previous SIGHUP value */
+static	sig_t	savetstp;		/* Previous SIGTSTP value */
+static	sig_t	savettou;		/* Previous SIGTTOU value */
+static	sig_t	savettin;		/* Previous SIGTTIN value */
 static	FILE	*collf;			/* File for saving away */
 static	int	hadintr;		/* Have seen one SIGINT so far */
 
-static 	jmp_buf	abort_jmpbuf;		/* To end collection with error */
-static 	jmp_buf	reset_jmpbuf;		/* To get back to work */
-static	int	reset_on_stop;		/* To do job control longjmp. */
+static	jmp_buf	colljmp;		/* To get back to work */
+static	int	colljmp_p;		/* whether to long jump */
+static	jmp_buf	collabort;		/* To end collection with error */
+
 
 /*
  * Write a file, ex-like if f set.
@@ -97,7 +103,7 @@ exwrite(const char name[], FILE *fp, int f)
 		(void)fprintf(stderr, "File exists\n");
 		return -1;
 	}
-	if ((of = Fopen(name, "we")) == NULL) {
+	if ((of = Fopen(name, "w")) == NULL) {
 		warn("%s", name);
 		return -1;
 	}
@@ -127,20 +133,15 @@ exwrite(const char name[], FILE *fp, int f)
 static void
 mesedit(FILE *fp, int c)
 {
-	struct sigaction osa;
-	sigset_t oset;
-	FILE *nf;
+	sig_t sigint = signal(SIGINT, SIG_IGN);
+	FILE *nf = run_editor(fp, (off_t)-1, c, 0);
 
-	sig_check();
-	(void)sig_ignore(SIGINT, &osa, &oset);
-	nf = run_editor(fp, (off_t)-1, c, 0);
 	if (nf != NULL) {
 		(void)fseek(nf, 0L, 2);
 		collf = nf;
 		(void)Fclose(fp);
 	}
-	(void)sig_restore(SIGINT, &osa, &oset);
-	sig_check();
+	(void)signal(SIGINT, sigint);
 }
 
 /*
@@ -153,19 +154,15 @@ static void
 mespipe(FILE *fp, char cmd[])
 {
 	FILE *nf;
-	struct sigaction osa;
-	sigset_t oset;
+	sig_t sigint = signal(SIGINT, SIG_IGN);
 	const char *shellcmd;
 	int fd;
 	char tempname[PATHSIZE];
 
-	sig_check();
-	(void)sig_ignore(SIGINT, &osa, &oset);
-
 	(void)snprintf(tempname, sizeof(tempname),
 	    "%s/mail.ReXXXXXXXXXX", tmpdir);
 	if ((fd = mkstemp(tempname)) == -1 ||
-	    (nf = Fdopen(fd, "we+")) == NULL) {
+	    (nf = Fdopen(fd, "w+")) == NULL) {
 		if (fd != -1)
 			(void)close(fd);
 		warn("%s", tempname);
@@ -179,7 +176,7 @@ mespipe(FILE *fp, char cmd[])
 	if ((shellcmd = value(ENAME_SHELL)) == NULL)
 		shellcmd = _PATH_CSHELL;
 	if (run_command(shellcmd,
-	    NULL, fileno(fp), fileno(nf), "-c", cmd, NULL) < 0) {
+	    0, fileno(fp), fileno(nf), "-c", cmd, NULL) < 0) {
 		(void)Fclose(nf);
 		goto out;
 	}
@@ -194,9 +191,8 @@ mespipe(FILE *fp, char cmd[])
 	(void)fseek(nf, 0L, 2);
 	collf = nf;
 	(void)Fclose(fp);
- out:
-	(void)sig_restore(SIGINT, &osa, &oset);
-	sig_check();
+out:
+	(void)signal(SIGINT, sigint);
 }
 
 /*
@@ -272,6 +268,29 @@ interpolate(char ms[], FILE *fp, char *fn, int f)
 }
 
 /*
+ * Print (continue) when continued after ^Z.
+ */
+/*ARGSUSED*/
+static void
+collstop(int s)
+{
+	sig_t old_action = signal(s, SIG_DFL);
+	sigset_t nset;
+
+	(void)sigemptyset(&nset);
+	(void)sigaddset(&nset, s);
+	(void)sigprocmask(SIG_UNBLOCK, &nset, NULL);
+	(void)kill(0, s);
+	(void)sigprocmask(SIG_BLOCK, &nset, NULL);
+	(void)signal(s, old_action);
+	if (colljmp_p) {
+		colljmp_p = 0;
+		hadintr = 0;
+		longjmp(colljmp, 1);
+	}
+}
+
+/*
  * Append the contents of the file to the end of the deadletter file.
  */
 PUBLIC void
@@ -286,11 +305,10 @@ savedeadletter(FILE *fp)
 		return;
 	cp = getdeadletter();
 	m = umask(077);
-	dbuf = Fopen(cp, "ae");
+	dbuf = Fopen(cp, "a");
 	(void)umask(m);
 	if (dbuf == NULL)
 		return;
-	(void)printf("Saving message body to `%s'.\n", cp);
 	while ((c = getc(fp)) != EOF)
 		(void)putc(c, dbuf);
 	(void)Fclose(dbuf);
@@ -301,10 +319,10 @@ savedeadletter(FILE *fp)
  * On interrupt, come here to save the partial message in ~/dead.letter.
  * Then jump out of the collection loop.
  */
+/*ARGSUSED*/
 static void
-coll_int(int signo)
+collint(int s __unused)
 {
-
 	/*
 	 * the control flow is subtle, because we can be called from ~q.
 	 */
@@ -316,50 +334,30 @@ coll_int(int signo)
 			return;
 		}
 		hadintr = 1;
-		longjmp(reset_jmpbuf, signo);
+		longjmp(colljmp, 1);
 	}
 	rewind(collf);
 	if (value(ENAME_NOSAVE) == NULL)
 		savedeadletter(collf);
-	longjmp(abort_jmpbuf, signo);
+	longjmp(collabort, 1);
 }
 
 /*ARGSUSED*/
-__dead static void
-coll_hup(int signo __unused)
+static void
+collhup(int s __unused)
 {
-
 	rewind(collf);
 	savedeadletter(collf);
 	/*
 	 * Let's pretend nobody else wants to clean up,
 	 * a true statement at this time.
 	 */
-	exit(EXIT_FAILURE);
-}
-
-/*
- * Print (continue) when continued after ^Z.
- */
-static void
-coll_stop(int signo)
-{
-
-	if (reset_on_stop) {
-		reset_on_stop = 0;
-		hadintr = 0;
-		longjmp(reset_jmpbuf, signo);
-	}
+	exit(1);
 }
 
 PUBLIC FILE *
 collect(struct header *hp, int printheaders)
 {
-	sig_t volatile old_sigint = sig_current(SIGINT);
-	sig_t volatile old_sighup = sig_current(SIGHUP);
-	sig_t volatile old_sigtstp = sig_current(SIGTSTP);
-	sig_t volatile old_sigttin = sig_current(SIGTTIN);
-	sig_t volatile old_sigttou = sig_current(SIGTTOU);
 	FILE *fbuf;
 	int lc, cc;
 	int c, fd, t;
@@ -367,10 +365,11 @@ collect(struct header *hp, int printheaders)
 	const char *cp;
 	char tempname[PATHSIZE];
 	char mailtempname[PATHSIZE];
+	int lastlong, rc;	/* So we don't make 2 or more lines
+					   out of a long input line. */
 	int eofcount;
 	int longline;
-	int lastlong, rc;	/* So we don't make 2 or more lines
-				   out of a long input line. */
+	sigset_t  nset;
 
 	/* The following are declared volatile to avoid longjmp clobbering. */
 	char volatile getsub;
@@ -378,26 +377,32 @@ collect(struct header *hp, int printheaders)
 
 	(void)memset(mailtempname, 0, sizeof(mailtempname));
 	collf = NULL;
-
-	if (setjmp(abort_jmpbuf) || setjmp(reset_jmpbuf)) {
+	/*
+	 * Start catching signals from here, but we're still die on interrupts
+	 * until we're in the main loop.
+	 */
+	(void)sigemptyset(&nset);
+	(void)sigaddset(&nset, SIGINT);
+	(void)sigaddset(&nset, SIGHUP);
+	(void)sigprocmask(SIG_BLOCK, &nset, NULL);
+	if ((saveint = signal(SIGINT, SIG_IGN)) != SIG_IGN)
+		(void)signal(SIGINT, collint);
+	if ((savehup = signal(SIGHUP, SIG_IGN)) != SIG_IGN)
+		(void)signal(SIGHUP, collhup);
+	savetstp = signal(SIGTSTP, collstop);
+	savettou = signal(SIGTTOU, collstop);
+	savettin = signal(SIGTTIN, collstop);
+	if (setjmp(collabort) || setjmp(colljmp)) {
 		(void)rm(mailtempname);
 		goto err;
 	}
-	sig_check();
-
-	sig_hold();
-	old_sigint  = sig_signal(SIGINT,  coll_int);
-	old_sighup  = sig_signal(SIGHUP,  coll_hup);
-	old_sigtstp = sig_signal(SIGTSTP, coll_stop);
-	old_sigttin = sig_signal(SIGTTIN, coll_stop);
-	old_sigttou = sig_signal(SIGTTOU, coll_stop);
-	sig_release();
+	(void)sigprocmask(SIG_UNBLOCK, &nset, NULL);
 
 	noreset++;
 	(void)snprintf(mailtempname, sizeof(mailtempname),
 	    "%s/mail.RsXXXXXXXXXX", tmpdir);
 	if ((fd = mkstemp(mailtempname)) == -1 ||
-	    (collf = Fdopen(fd, "we+")) == NULL) {
+	    (collf = Fdopen(fd, "w+")) == NULL) {
 		if (fd != -1)
 			(void)close(fd);
 		warn("%s", mailtempname);
@@ -410,13 +415,11 @@ collect(struct header *hp, int printheaders)
 	 * refrain from printing a newline after
 	 * the headers (since some people mind).
 	 */
-	t = GTO | GSUBJECT | GCC | GNL | GSMOPTS;
+	t = GTO|GSUBJECT|GCC|GNL|GSMOPTS;
 	getsub = 0;
 	if (hp->h_subject == NULL && value(ENAME_INTERACTIVE) != NULL &&
-	    (value(ENAME_ASK) != NULL || value(ENAME_ASKSUB) != NULL)) {
-		t &= ~GNL;
-		getsub++;
-	}
+	    (value(ENAME_ASK) != NULL || value(ENAME_ASKSUB) != NULL))
+		t &= ~GNL, getsub++;
 	if (printheaders) {
 		(void)puthead(hp, stdout, t);
 		(void)fflush(stdout);
@@ -425,8 +428,8 @@ collect(struct header *hp, int printheaders)
 		escape = *cp;
 	else
 		escape = ESCAPE;
-	hadintr = 0;
-	if (setjmp(reset_jmpbuf) == 0) {
+	hadintr = 0;	/* static - no longjmp problem */
+	if (!setjmp(colljmp)) {
 		if (getsub)
 			(void)grabh(hp, GSUBJECT);
 	} else {
@@ -435,7 +438,7 @@ collect(struct header *hp, int printheaders)
 		 * Duplicate messages won't be printed because
 		 * the write is aborted if we get a SIGTTOU.
 		 */
- cont:
+cont:
 		if (hadintr) {
 			(void)fflush(stdout);
 			(void)fprintf(stderr,
@@ -448,13 +451,12 @@ collect(struct header *hp, int printheaders)
 	eofcount = 0;	/* reset after possible longjmp */
 	longline = 0;	/* reset after possible longjmp */
 	for (;;) {
-		reset_on_stop = 1;
-		c = readline(stdin, linebuf, LINESIZE, reset_on_stop);
-		reset_on_stop = 0;
-
+		colljmp_p = 1;
+		c = mail_readline(stdin, linebuf, LINESIZE);
+		colljmp_p = 0;
+#ifdef USE_EDITLINE
 		if (c < 0) {
 			char *p;
-
 			if (value(ENAME_INTERACTIVE) != NULL &&
 			    (p = value(ENAME_IGNOREEOF)) != NULL &&
 			    ++eofcount < (*p == 0 ? 25 : atoi(p))) {
@@ -463,8 +465,18 @@ collect(struct header *hp, int printheaders)
 			}
 			break;
 		}
+#else
+		if (c < 0) {
+			if (value(ENAME_INTERACTIVE) != NULL &&
+			    value(ENAME_IGNOREEOF) != NULL && ++eofcount < 25) {
+				(void)printf("Use \".\" to terminate letter\n");
+				continue;
+			}
+			break;
+		}
+#endif
 		lastlong = longline;
-		longline = c == LINESIZE - 1;
+		longline = c == LINESIZE-1;
 		eofcount = 0;
 		hadintr = 0;
 		if (linebuf[0] == '.' && linebuf[1] == '\0' &&
@@ -528,7 +540,7 @@ collect(struct header *hp, int printheaders)
 			 * Act like an interrupt happened.
 			 */
 			hadintr++;
-			coll_int(SIGINT);
+			collint(SIGINT);
 			exit(1);
 			/*NOTREACHED*/
 
@@ -539,7 +551,7 @@ collect(struct header *hp, int printheaders)
 			/*
 			 * Grab a bunch of headers.
 			 */
-			(void)grabh(hp, GTO | GSUBJECT | GCC | GBCC | GSMOPTS);
+			(void)grabh(hp, GTO|GSUBJECT|GCC|GBCC|GSMOPTS);
 			goto cont;
 		case 't':
 			/*
@@ -628,7 +640,7 @@ collect(struct header *hp, int printheaders)
 				(void)snprintf(tempname, sizeof(tempname),
 				    "%s/mail.ReXXXXXXXXXX", tmpdir);
 				if ((fd = mkstemp(tempname)) == -1 ||
-				    (fbuf = Fdopen(fd, "we+")) == NULL) {
+				    (fbuf = Fdopen(fd, "w+")) == NULL) {
 					if (fd != -1)
 						(void)close(fd);
 					warn("%s", tempname);
@@ -639,7 +651,7 @@ collect(struct header *hp, int printheaders)
 				if ((shellcmd = value(ENAME_SHELL)) == NULL)
 					shellcmd = _PATH_CSHELL;
 
-				rc2 = run_command(shellcmd, NULL, nullfd, fileno(fbuf), "-c", cp + 1, NULL);
+				rc2 = run_command(shellcmd, 0, nullfd, fileno(fbuf), "-c", cp + 1, NULL);
 
 				(void)close(nullfd);
 
@@ -660,7 +672,7 @@ collect(struct header *hp, int printheaders)
 				(void)printf("%s: Directory\n", cp);
 				break;
 			}
-			else if ((fbuf = Fopen(cp, "re")) == NULL) {
+			else if ((fbuf = Fopen(cp, "r")) == NULL) {
 				warn("%s", cp);
 				break;
 			}
@@ -668,7 +680,7 @@ collect(struct header *hp, int printheaders)
 			(void)fflush(stdout);
 			lc = 0;
 			cc = 0;
-			while ((rc = readline(fbuf, linebuf, LINESIZE, 0)) >= 0) {
+			while ((rc = mail_readline(fbuf, linebuf, LINESIZE)) >= 0) {
 				if (rc != LINESIZE-1) lc++;
 				if ((t = putline(collf, linebuf,
 						 rc != LINESIZE-1)) < 0) {
@@ -717,8 +729,7 @@ collect(struct header *hp, int printheaders)
 			 */
 			rewind(collf);
 			(void)printf("-------\nMessage contains:\n");
-			(void)puthead(hp, stdout,
-			    GTO | GSUBJECT | GCC | GBCC | GSMOPTS | GNL);
+			(void)puthead(hp, stdout, GTO|GSUBJECT|GCC|GBCC|GNL);
 			while ((t = getc(collf)) != EOF)
 				(void)putchar(t);
 			goto cont;
@@ -743,24 +754,21 @@ collect(struct header *hp, int printheaders)
 		}
 	}
 	goto out;
- err:
+err:
 	if (collf != NULL) {
 		(void)Fclose(collf);
 		collf = NULL;
 	}
- out:
+out:
 	if (collf != NULL)
 		rewind(collf);
 	noreset--;
-
-	sig_hold();
-	(void)sig_signal(SIGINT,  old_sigint);
-	(void)sig_signal(SIGHUP,  old_sighup);
-	(void)sig_signal(SIGTSTP, old_sigtstp);
-	(void)sig_signal(SIGTTIN, old_sigttin);
-	(void)sig_signal(SIGTTOU, old_sigttou);
-	sig_release();
-
-	sig_check();
+	(void)sigprocmask(SIG_BLOCK, &nset, NULL);
+	(void)signal(SIGINT, saveint);
+	(void)signal(SIGHUP, savehup);
+	(void)signal(SIGTSTP, savetstp);
+	(void)signal(SIGTTOU, savettou);
+	(void)signal(SIGTTIN, savettin);
+	(void)sigprocmask(SIG_UNBLOCK, &nset, NULL);
 	return collf;
 }

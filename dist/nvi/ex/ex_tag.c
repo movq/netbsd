@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_tag.c,v 1.11 2012/02/25 00:13:00 joerg Exp $ */
+/*	$NetBSD: ex_tag.c,v 1.3.2.3 2009/11/28 16:03:26 bouyer Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -54,7 +54,7 @@ static TAGQ	*gtag_slist __P((SCR *, CHAR_T *, int));
 #endif
 static int	 ctag_sfile __P((SCR *, TAGF *, TAGQ *, char *));
 static TAGQ	*ctag_slist __P((SCR *, CHAR_T *));
-static char	*linear_search __P((char *, char *, char *, unsigned long));
+static char	*linear_search __P((char *, char *, char *, long));
 static int	 tag_copy __P((SCR *, TAG *, TAG **));
 static int	 tag_pop __P((SCR *, TAGQ *, int));
 static int	 tagf_copy __P((SCR *, TAGF *, TAGF **));
@@ -122,7 +122,7 @@ ex_tag_push(SCR *sp, EXCMD *cmdp)
 {
 	EX_PRIVATE *exp;
 	TAGQ *tqp;
-	unsigned long tl;
+	long tl;
 
 	exp = EXP(sp);
 	switch (cmdp->argc) {
@@ -204,7 +204,7 @@ ex_tag_next(SCR *sp, EXCMD *cmdp)
 	if (tqp->current->msg) {
 	    INT2CHAR(sp, tqp->current->msg, tqp->current->mlen + 1,
 		     np, nlen);
-	    msgq(sp, M_INFO, "%s", np);
+	    msgq(sp, M_INFO, np);
 	}
 	return (0);
 }
@@ -899,7 +899,7 @@ ex_tagf_alloc(SCR *sp, const char *str)
 
 	/* Create new queue. */
 	for (p = t = str;; ++p) {
-		if (*p == '\0' || isblank((unsigned char)*p)) {
+		if (*p == '\0' || isblank(*p)) {
 			if ((len = p - t) > 1) {
 				MALLOC_RET(sp, tfp, TAGF *, sizeof(TAGF));
 				MALLOC(sp, tfp->name, char *, len + 1);
@@ -962,7 +962,7 @@ ctag_search(SCR *sp, CHAR_T *search, size_t slen, char *tag)
 	 * used a line number, not a search string.  I got complaints, so
 	 * people are still using the format.  POSIX 1003.2 permits it.
 	 */
-	if (ISDIGIT((UCHAR_T)search[0])) {
+	if (ISDIGIT(search[0])) {
 		INT2CHAR(sp, search, slen+1, np, nlen);
 		m.lno = atoi(np);
 		if (!db_exist(sp, m.lno)) {
@@ -1208,7 +1208,7 @@ ctag_sfile(SCR *sp, TAGF *tfp, TAGQ *tqp, char *tname)
 	char *cname = NULL, *dname = NULL, *name = NULL;
 	const CHAR_T *wp;
 	size_t wlen;
-	unsigned long tl;
+	long tl;
 
 	if ((fd = open(tfp->name, O_RDONLY, 0)) < 0) {
 		tfp->errnum = errno;
@@ -1411,7 +1411,7 @@ ctag_file(SCR *sp, TAGF *tfp, char *name, char **dirp, size_t *dlenp)
 #define	GREATER		1
 #define	LESS		(-1)
 
-#define	SKIP_PAST_NEWLINE(p, back)	while (p < back && *p++ != '\n') continue;
+#define	SKIP_PAST_NEWLINE(p, back)	while (p < back && *p++ != '\n');
 
 static char *
 binary_search(register char *string, register char *front, register char *back)
@@ -1444,11 +1444,11 @@ binary_search(register char *string, register char *front, register char *back)
  *	o front is before or at the first line to be printed.
  */
 static char *
-linear_search(char *string, char *front, char *back, unsigned long tl)
+linear_search(char *string, char *front, char *back, long tl)
 {
 	char *end;
 	while (front < back) {
-		end = tl && (unsigned long)(back-front) > tl ? front+tl : back;
+		end = tl && back-front > tl ? front+tl : back;
 		switch (compare(string, front, end)) {
 		case EQUAL:		/* Found it. */
 			return (front);

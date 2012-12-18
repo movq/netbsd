@@ -1,4 +1,4 @@
-/*	$NetBSD: ixm1200_machdep.c,v 1.53 2012/11/12 18:00:39 skrll Exp $ */
+/*	$NetBSD: ixm1200_machdep.c,v 1.34 2008/04/27 18:58:46 matt Exp $ */
 
 /*
  * Copyright (c) 2002, 2003
@@ -13,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -61,10 +67,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixm1200_machdep.c,v 1.53 2012/11/12 18:00:39 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixm1200_machdep.c,v 1.34 2008/04/27 18:58:46 matt Exp $");
 
 #include "opt_ddb.h"
-#include "opt_modular.h"
 #include "opt_pmap_debug.h"
 
 #include <sys/param.h>
@@ -84,7 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixm1200_machdep.c,v 1.53 2012/11/12 18:00:39 skrll E
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 #include <machine/db_machdep.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
@@ -96,7 +101,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixm1200_machdep.c,v 1.53 2012/11/12 18:00:39 skrll E
 #endif
 
 #include <machine/bootconfig.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <arm/undefined.h>
@@ -129,9 +134,11 @@ void ixp12x0_reset(void) __attribute__((noreturn));
 
 /*
  * Address to call from cpu_reset() to reset the machine.
- * This is machine architecture dependent as it varies depending
+ * This is machine architecture dependant as it varies depending
  * on where the ROM appears when you turn the MMU off.
  */
+
+u_int cpu_reset_address = (u_int) ixp12x0_reset;
 
 /*
  * Define the default console speed for the board.
@@ -146,6 +153,11 @@ void ixp12x0_reset(void) __attribute__((noreturn));
 #define CONADDR IXPCOM_UART_BASE
 #endif
 
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE  1
+#define ABT_STACK_SIZE  1
+#define UND_STACK_SIZE  1
+
 BootConfig bootconfig;          /* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
@@ -155,14 +167,25 @@ vm_offset_t physical_freestart;
 vm_offset_t physical_freeend;
 vm_offset_t physical_end;
 u_int free_pages;
+vm_offset_t pagetables_start;
+int physmem = 0;
 
 /*int debug_flags;*/
 #ifndef PMAP_STATIC_L1S
 int max_processes = 64;                 /* Default number */
 #endif  /* !PMAP_STATIC_L1S */
 
+/* Physical and virtual addresses for some global pages */
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
+
 vm_offset_t msgbufphys;
 
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 extern int end;
 
 #ifdef PMAP_DEBUG
@@ -181,6 +204,8 @@ extern int pmap_debug_level;
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
 
+struct user *proc0paddr;
+
 #ifdef CPU_IXP12X0
 #define CPU_IXP12X0_CACHE_CLEAN_SIZE (0x4000 * 2)
 extern unsigned int ixp12x0_cache_clean_addr;
@@ -190,8 +215,8 @@ static vaddr_t ixp12x0_cc_base;
 
 /* Prototypes */
 
-void consinit(void);
-u_int cpu_get_control(void);
+void consinit		__P((void));
+u_int cpu_get_control	__P((void));
 
 void ixdp_ixp12x0_cc_setup(void);
 
@@ -205,7 +230,9 @@ void ixdp_ixp12x0_cc_setup(void);
  */
 
 void
-cpu_reboot(int howto, char *bootstr)
+cpu_reboot(howto, bootstr)
+	int howto;
+	char *bootstr;
 {
 	/*
 	 * If we are still cold then hit the air brakes
@@ -213,7 +240,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("Halted while still in the ICE age.\n");
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
@@ -243,8 +269,6 @@ cpu_reboot(int howto, char *bootstr)
 
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -333,11 +357,9 @@ initarm(void *arg)
 	u_int kerneldatasize, symbolsize;
 	vaddr_t l1pagetable;
 	vaddr_t freemempos;
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
         Elf_Shdr *sh;
 #endif
-
-	cpu_reset_address = ixp12x0_reset;
 
         /*
          * Since we map v0xf0000000 == p0x90000000, it's possible for
@@ -361,7 +383,7 @@ initarm(void *arg)
 	bootconfig.dram[0].pages   = 0x10000000 / PAGE_SIZE; /* SDRAM 256MB */
 	bootconfig.dramblocks = 1;
 
-	kerneldatasize = (uint32_t)&end - (uint32_t)KERNEL_TEXT_BASE;
+	kerneldatasize = (u_int32_t)&end - (u_int32_t)KERNEL_TEXT_BASE;
 
 	symbolsize = 0;
 
@@ -369,7 +391,7 @@ initarm(void *arg)
 	pmap_debug(-1);
 #endif
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
         if (! memcmp(&end, "\177ELF", 4)) {
                 sh = (Elf_Shdr *)((char *)&end + ((Elf_Ehdr *)&end)->e_shoff);
                 loop = ((Elf_Ehdr *)&end)->e_shnum;
@@ -598,7 +620,7 @@ initarm(void *arg)
 
 	/* Switch tables */
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -606,12 +628,13 @@ initarm(void *arg)
 	 * Moved here from cpu_startup() as data_abort_handler() references
 	 * this during init
 	 */
-	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+	proc0paddr = (struct user *)kernelstack.pv_va;
+	lwp0.l_addr = proc0paddr;
 
 	/*
 	 * We must now clean the cache again....
 	 * Cleaning may be done by reading new data to displace any
-	 * dirty data in the cache. This will have happened in cpu_setttb()
+	 * dirty data in the cache. This will have happened in setttb()
 	 * but since we are boot strapping the addresses used for the read
 	 * may have just been remapped and thus the cache could be out
 	 * of sync. A re-clean after the switch will cure this.
@@ -715,8 +738,8 @@ initarm(void *arg)
 	printf("bootstrap done.\n");
 #endif
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-	ksyms_addsyms_elf(symbolsize, ((int *)&end), ((char *)&end) + symbolsize);
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init(symbolsize, ((int *)&end), ((char *)&end) + symbolsize);
 #endif
 
 #ifdef DDB

@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.9 2012/07/29 18:05:39 mlelstv Exp $ */
+/* $NetBSD: autoconf.c,v 1.6 2005/12/11 12:16:03 christos Exp $ */
 /*-
  * Copyright (c) 1998, 1999 Ben Harris
  * All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.9 2012/07/29 18:05:39 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.6 2005/12/11 12:16:03 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -42,26 +42,27 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.9 2012/07/29 18:05:39 mlelstv Exp $")
 #include <machine/machdep.h>
 
 void
-cpu_configure(void)
+cpu_configure()
 {
 
 	irq_init();
 	config_rootfound("cpu", NULL);
-	config_rootfound("arcvideo", NULL);
 	config_rootfound("iobus", NULL);
+	config_rootfound("arcvideo", NULL);
 	spl0();
 	fiq_on();
 }
 
 void
-cpu_rootconf(void)
+cpu_rootconf()
 {
 
-	rootconf();
+	/* XXX This could actually do something */
+	setroot(NULL, 0);
 }
 
 void
-cpu_dumpconf(void)
+cpu_dumpconf()
 {
 
 	printf("cpu_dumpconf: Doing something here would be useful\n");

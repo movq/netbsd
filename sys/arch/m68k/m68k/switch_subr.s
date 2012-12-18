@@ -1,8 +1,7 @@
-/*	$NetBSD: switch_subr.s,v 1.29 2012/02/19 21:06:15 rmind Exp $	*/
+/*	$NetBSD: switch_subr.s,v 1.21.30.1 2009/06/05 18:34:47 snj Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation.
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1980, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -37,10 +36,47 @@
  * Split from: Utah $Hdr: locore.s 1.66 92/12/22$
  */
 
+/*
+ * Copyright (c) 1988 University of Utah.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * Split from: Utah $Hdr: locore.s 1.66 92/12/22$
+ */
+
 #include "opt_fpu_emulate.h"
 #include "opt_lockdebug.h"
 #include "opt_pmap_debug.h"
-#include "opt_m68k_arch.h"
 
 /*
  * NOTICE: This is not a standalone file.  To use it, #include it in
@@ -100,7 +136,7 @@ ENTRY(cpu_switchto)
 	/*
 	 * Save state of previous process in its pcb.
 	 */
-	movl	%a1@(L_PCB),%a1
+	movl	%a1@(L_ADDR),%a1
 	moveml	%d2-%d7/%a2-%a7,%a1@(PCB_REGS)	| save non-scratch registers
 	movl	%usp,%a2		| grab USP (a2 has been saved)
 	movl	%a2,%a1@(PCB_USP)	| and save it
@@ -144,7 +180,7 @@ Lcpu_switch_nofpsave:
 Lcpu_switch_noctxsave:
 	movl	%sp@(8),%a0		| get newlwp
 	movl	%a0,_C_LABEL(curlwp)
-	movl	%a0@(L_PCB),%a1		| get its pcb
+	movl	%a0@(L_ADDR),%a1	| get l_addr
 	movl	%a1,_C_LABEL(curpcb)
 
 #if defined(sun2) || defined(sun3)
@@ -154,12 +190,11 @@ Lcpu_switch_noctxsave:
 	tstl	%a2			| vm == VM_MAP_NULL?
 	jeq	Lcpu_switch_badsw	| panic
 #endif
-	pea	%a0@			| save newlwp
 #if !defined(_SUN3X_) || defined(PMAP_DEBUG)
 	movl	%a2@(VM_PMAP),%sp@-	| push vm->vm_map.pmap
 	jbsr	_C_LABEL(_pmap_switch)	| _pmap_switch(pmap)
 	addql	#4,%sp
-	movl	_C_LABEL(curpcb),%a1	| restore curpcb
+	movl	_C_LABEL(curpcb),%a1	| restore p_addr
 | Note: _pmap_switch() will clear the cache if needed.
 #else
 	/* Use this inline version on sun3x when not debugging the pmap. */
@@ -184,9 +219,6 @@ Lsame_mmuctx:
 	 */
 	pea	%a0@			| push newlwp
 	jbsr	_C_LABEL(pmap_activate)	| pmap_activate(newlwp)
-	/* Note that newlwp will be popped off the stack later. */
-#endif
-
 	/*
 	 *  Check for restartable atomic sequences (RAS)
 	 */
@@ -204,10 +236,11 @@ Lsame_mmuctx:
 	jeq	1f
 	movl	_C_LABEL(curlwp),%a1
 	movl	%a1@(L_MD_REGS),%a1
-	movl	%a0,%a1@(TF_PC)
+	movel	%a0,%a1@(TF_PC)
 1:
 	movl	%sp@+,%d0		| restore newlwp
-	movl	_C_LABEL(curpcb),%a1	| restore pcb
+	movl	_C_LABEL(curpcb),%a1	| restore l_addr
+#endif
 
 	movl	%sp@(4),%d1		| restore oldlwp for a return value
 	lea     _ASM_LABEL(tmpstk),%sp	| now goto a tmp stack for NMI
@@ -346,68 +379,6 @@ ENTRY(m68k_make_fpu_idle_frame)
 #endif
 
 /*
- * Save and restore 68881 state.
- */
-#ifdef FPCOPROC
-ENTRY(m68881_save)
-	movl	%sp@(4),%a0		| save area pointer
-	fsave	%a0@			| save state
-#if defined(M68020) || defined(M68030) || defined(M68040)
-#if defined(M68060)
-	cmpl	#FPU_68060,_C_LABEL(fputype)
-	jeq	Lm68060fpsave
-#endif
-Lm68881fpsave:  
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881sdone		| yes, all done
-	fmovem	%fp0-%fp7,%a0@(FPF_REGS)	| save FP general registers
-	fmovem	%fpcr/%fpsr/%fpi,%a0@(FPF_FPCR) | save FP control registers
-Lm68881sdone:
-	rts
-#endif
-#if defined(M68060)
-Lm68060fpsave:
-	tstb	%a0@(2)			| null state frame?
-	jeq	Lm68060sdone		| yes, all done
-	fmovem	%fp0-%fp7,%a0@(FPF_REGS)	| save FP general registers
-	fmovem	%fpcr,%a0@(FPF_FPCR)	| save FP control registers
-	fmovem	%fpsr,%a0@(FPF_FPSR)           
-	fmovem	%fpi,%a0@(FPF_FPI)
-Lm68060sdone:   
-        rts
-#endif  
-
-ENTRY(m68881_restore)
-	movl	%sp@(4),%a0		| save area pointer
-#if defined(M68020) || defined(M68030) || defined(M68040)
-#if defined(M68060)
-	cmpl	#FPU_68060,_C_LABEL(fputype)
-	jeq	Lm68060fprestore
-#endif
-Lm68881fprestore:
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881rdone		| yes, easy
-	fmovem	%a0@(FPF_FPCR),%fpcr/%fpsr/%fpi | restore FP control registers
-	fmovem	%a0@(FPF_REGS),%fp0-%fp7	| restore FP general registers
-Lm68881rdone:
-	frestore %a0@			| restore state
-	rts
-#endif
-#if defined(M68060)
-Lm68060fprestore:
-	tstb	%a0@(2)			| null state frame?
-	jeq	Lm68060fprdone		| yes, easy
-	fmovem	%a0@(FPF_FPCR),%fpcr	| restore FP control registers
-	fmovem	%a0@(FPF_FPSR),%fpsr
-	fmovem	%a0@(FPF_FPI),%fpi
-	fmovem	%a0@(FPF_REGS),%fp0-%fp7 | restore FP general registers
-Lm68060fprdone:
-	frestore %a0@			| restore state
-	rts
-#endif
-#endif
-
-/*
  * lwp_trampoline: call function in register %a2 with %a3 as an arg
  * and then rei.
  * %a0 will have old lwp from cpu_switchto(), and %a4 is new lwp
@@ -425,3 +396,18 @@ ENTRY_NOPROFILE(lwp_trampoline)
 	moveml	%sp@+,#0x7FFF		| restore most user regs
 	addql	#8,%sp			| toss SP and stack adjust
 	jra	_ASM_LABEL(rei)		| and return
+
+/*
+ * Very similar to lwp_trampoline, but do not call lwp_startup
+ */
+ENTRY_NOPROFILE(setfunc_trampoline)
+	movl	%a3,%sp@-		| push function arg
+	jbsr	%a2@			| call function
+	addql	#4,%sp			| pop arg
+	movl	%sp@(FR_SP),%a0		| grab and load
+	movl	%a0,%usp		|   user SP
+	moveml	%sp@+,#0x7FFF		| restore most user regs
+	addql	#8,%sp			| toss SP and stack adjust
+	jra	_ASM_LABEL(rei)		| and return
+
+

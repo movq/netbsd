@@ -1,4 +1,4 @@
-# $NetBSD: std.amd64,v 1.9 2012/09/27 18:28:55 alnsn Exp $
+# $NetBSD: std.amd64,v 1.6.10.1 2009/08/07 06:43:25 snj Exp $
 #
 # standard, required NetBSD/amd64 'options'
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmon.c,v 1.6 2009/12/14 00:45:59 matt Exp $	*/
+/*	$NetBSD: pmon.c,v 1.5 2008/04/28 20:23:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,18 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmon.c,v 1.6 2009/12/14 00:45:59 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmon.c,v 1.5 2008/04/28 20:23:10 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 
 #include <machine/pmon.h>
 
-#ifdef _LP64
-static char *environ[64];
-#else
 static char **environ;
-#endif
 
 /*
  * pmon_init:
@@ -51,22 +47,9 @@ static char **environ;
 void
 pmon_init(char *envp[])
 {
-#ifdef _LP64
-	int32_t *envp32 = (void *) envp;
 
-	envp = environ;
-	if (envp32 != NULL) {
-		while (*envp32 != 0) {
-			KASSERT(envp - environ < __arraycount(environ));
-			*envp++ = (char *)(intptr_t)*envp32++;
-		}
-	}
-	KASSERT(envp - environ < __arraycount(environ));
-	*envp = NULL;
-#else
 	if (environ == NULL)
 		environ = envp;
-#endif
 #ifdef PMON_DEBUG
 	printf("pmon_init: environ = %p (%p)\n", environ, *environ);
 #endif

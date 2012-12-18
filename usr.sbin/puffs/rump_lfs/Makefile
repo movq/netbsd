@@ -1,20 +1,11 @@
-#	$NetBSD: Makefile,v 1.9 2012/09/06 16:39:08 riz Exp $
+#	$NetBSD: Makefile,v 1.2 2008/08/05 20:57:46 pooka Exp $
 #
-
-.include <bsd.own.mk>
 
 MOUNTNAME=	lfs
 
-LDADD+=		-lrumpfs_ffs
-DPADD+=		${LIBRUMPFS_FFS}
+LDADD+=		-lrumpfs_lfs -lrumpfs_ufs -lrumpfs_ffs
+DPADD+=		${LIBRUMPFS_LFS} ${LIBRUMPFS_UFS} ${LIBRUMPFS_FFS}
 
 ISRUMP=		# don't deny it
-RUMP_DISKFS=
-
-CPPFLAGS+=	-DUSE_RUMP -DLFS_CLEANER_AS_LIB
-
-.include "../../../libexec/lfs_cleanerd/Makefile.inc"
-
-#DBG=-g
 
 .include <bsd.prog.mk>

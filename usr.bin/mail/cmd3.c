@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd3.c,v 1.42 2012/04/29 23:50:22 christos Exp $	*/
+/*	$NetBSD: cmd3.c,v 1.39 2007/10/30 16:08:11 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)cmd3.c	8.2 (Berkeley) 4/20/95";
 #else
-__RCSID("$NetBSD: cmd3.c,v 1.42 2012/04/29 23:50:22 christos Exp $");
+__RCSID("$NetBSD: cmd3.c,v 1.39 2007/10/30 16:08:11 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -43,7 +43,6 @@ __RCSID("$NetBSD: cmd3.c,v 1.42 2012/04/29 23:50:22 christos Exp $");
 #include <util.h>
 #include "extern.h"
 #include "mime.h"
-#include "sig.h"
 #include "thread.h"
 
 /*
@@ -60,7 +59,6 @@ __RCSID("$NetBSD: cmd3.c,v 1.42 2012/04/29 23:50:22 christos Exp $");
 static int
 diction(const void *a, const void *b)
 {
-
 	return strcmp(*(const char *const *)a, *(const char *const *)b);
 }
 
@@ -75,9 +73,9 @@ sort(const char **list)
 
 	for (ap = list; *ap != NULL; ap++)
 		continue;
-	if (ap - list < 2)
+	if (ap-list < 2)
 		return;
-	qsort(list, (size_t)(ap - list), sizeof(*list), diction);
+	qsort(list, (size_t)(ap-list), sizeof(*list), diction);
 }
 
 /*
@@ -90,17 +88,16 @@ bangexp(char *str)
 	static char lastbang[128];
 	char bangbuf[LINESIZE];
 	char *cp, *cp2;
-	ssize_t n;
-	int changed;
+	int n;
+	int changed = 0;
 
-	changed = 0;
 	cp = str;
 	cp2 = bangbuf;
 	n = sizeof(bangbuf);	/* bytes left in bangbuf */
 	while (*cp) {
 		if (*cp == '!') {
 			if (n < (int)strlen(lastbang)) {
- overf:
+overf:
 				(void)printf("Command buffer overflow\n");
 				return -1;
 			}
@@ -139,24 +136,19 @@ bangexp(char *str)
 PUBLIC int
 shell(void *v)
 {
-	struct sigaction osa;
-	sigset_t oset;
-	char *str;
+	char *str = v;
+	sig_t sigint = signal(SIGINT, SIG_IGN);
 	const char *shellcmd;
 	char cmd[LINESIZE];
 
-	str = v;
-	sig_check();
-	(void)sig_ignore(SIGINT, &osa, &oset);
 	(void)strcpy(cmd, str);
 	if (bangexp(cmd) < 0)
 		return 1;
 	if ((shellcmd = value(ENAME_SHELL)) == NULL)
 		shellcmd = _PATH_CSHELL;
-	(void)run_command(shellcmd, NULL, 0, 1, "-c", cmd, NULL);
-	(void)sig_restore(SIGINT, &osa, &oset);
+	(void)run_command(shellcmd, 0, 0, 1, "-c", cmd, NULL);
+	(void)signal(SIGINT, sigint);
 	(void)printf("!\n");
-	sig_check();
 	return 0;
 }
 
@@ -167,18 +159,14 @@ shell(void *v)
 PUBLIC int
 dosh(void *v __unused)
 {
-	struct sigaction osa;
-	sigset_t oset;
+	sig_t sigint = signal(SIGINT, SIG_IGN);
 	const char *shellcmd;
 
-	sig_check();
-	(void)sig_ignore(SIGINT, &osa, &oset);
 	if ((shellcmd = value(ENAME_SHELL)) == NULL)
 		shellcmd = _PATH_CSHELL;
-	(void)run_command(shellcmd, NULL, 0, 1, NULL);
-	(void)sig_restore(SIGINT, &osa, &oset);
+	(void)run_command(shellcmd, 0, 0, 1, NULL);
+	(void)signal(SIGINT, sigint);
 	(void)putchar('\n');
-	sig_check();
 	return 0;
 }
 
@@ -190,7 +178,6 @@ dosh(void *v __unused)
 PUBLIC int
 help(void *v __unused)
 {
-
 	cathelp(_PATH_HELP);
 	return 0;
 }
@@ -201,10 +188,9 @@ help(void *v __unused)
 PUBLIC int
 schdir(void *v)
 {
-	char **arglist;
+	char **arglist = v;
 	const char *cp;
 
-	arglist = v;
 	if (*arglist == NULL)
 		cp = homedir;
 	else
@@ -224,11 +210,9 @@ static struct name *
 set_smopts(struct message *mp)
 {
 	char *cp;
-	struct name *np;
-	char *reply_as_recipient;
+	struct name *np = NULL;
+	char *reply_as_recipient = value(ENAME_REPLYASRECIPIENT);
 
-	np = NULL;
-	reply_as_recipient = value(ENAME_REPLYASRECIPIENT);
 	if (reply_as_recipient &&
 	    (cp = skin(hfield("to", mp))) != NULL &&
 	    extract(cp, GTO)->n_flink == NULL) {  /* check for one recipient */
@@ -477,7 +461,7 @@ forward(void *v)
 		(void)printf("address missing!\n");
 		return 1;
 	}
-	for (ip = msgvec; *ip; ip++) {
+	for ( ip = msgvec; *ip; ip++) {
 		int e;
 		if ((e = forward_one(*ip, hdr.h_to)) != 0)
 			return e;
@@ -501,7 +485,7 @@ bounce_one(int msgno, const char **smargs, struct name *h_to)
 	(void)snprintf(mailtempname, sizeof(mailtempname),
 	    "%s/mail.RsXXXXXXXXXX", tmpdir);
 	if ((fd = mkstemp(mailtempname)) == -1 ||
-	    (obuf = Fdopen(fd, "we+")) == NULL) {
+	    (obuf = Fdopen(fd, "w+")) == NULL) {
 		if (fd != -1)
 			(void)close(fd);
 		warn("%s", mailtempname);
@@ -556,13 +540,12 @@ bounce_one(int msgno, const char **smargs, struct name *h_to)
 PUBLIC int
 bounce(void *v)
 {
-	int *msgvec;
+	int *msgvec = v;
 	int *ip;
 	const char **smargs;
 	struct header hdr;
 	int rval;
 
-	msgvec = v;
 	if (bouncetab[0].i_count == 0) {
 		/* setup the bounce tab */
 		add_ignore("Status", bouncetab);
@@ -578,7 +561,7 @@ bounce(void *v)
 		return 1;
 
 	smargs = unpack(hdr.h_to);
-	for (ip = msgvec; *ip; ip++) {
+	for ( ip = msgvec; *ip; ip++) {
 		int e;
 		if ((e = bounce_one(*ip, smargs, hdr.h_to)) != 0)
 			return e;
@@ -593,10 +576,9 @@ bounce(void *v)
 PUBLIC int
 preserve(void *v)
 {
-	int *msgvec;
+	int *msgvec = v;
 	int *ip;
 
-	msgvec = v;
 	if (edit) {
 		(void)printf("Cannot \"preserve\" in edit mode\n");
 		return 1;
@@ -613,10 +595,9 @@ preserve(void *v)
 PUBLIC int
 unread(void *v)
 {
-	int *msgvec;
+	int *msgvec = v;
 	int *ip;
 
-	msgvec = v;
 	for (ip = msgvec; *ip != 0; ip++)
 		dot = set_m_flag(*ip, ~(MREAD | MTOUCH | MSTATUS), MSTATUS);
 
@@ -629,10 +610,9 @@ unread(void *v)
 PUBLIC int
 markread(void *v)
 {
-	int *msgvec;
+	int *msgvec = v;
 	int *ip;
 
-	msgvec = v;
 	for (ip = msgvec; *ip != 0; ip++)
 		dot = set_m_flag(*ip,
 		    ~(MNEW | MTOUCH | MREAD | MSTATUS), MREAD | MSTATUS);
@@ -646,11 +626,10 @@ markread(void *v)
 PUBLIC int
 messize(void *v)
 {
-	int *msgvec;
+	int *msgvec = v;
 	struct message *mp;
 	int *ip, mesg;
 
-	msgvec = v;
 	for (ip = msgvec; *ip != 0; ip++) {
 		mesg = *ip;
 		mp = get_message(mesg);

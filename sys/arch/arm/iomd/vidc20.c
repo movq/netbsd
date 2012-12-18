@@ -1,4 +1,4 @@
-/*	$NetBSD: vidc20.c,v 1.17 2012/05/14 10:38:08 skrll Exp $	*/
+/*	$NetBSD: vidc20.c,v 1.15 2006/08/05 18:22:57 bjh21 Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe
@@ -42,14 +42,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vidc20.c,v 1.17 2012/05/14 10:38:08 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vidc20.c,v 1.15 2006/08/05 18:22:57 bjh21 Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <arm/iomd/vidc.h>
 #include <machine/io.h>
 #include <arm/iomd/iomdreg.h>
@@ -59,13 +59,14 @@ __KERNEL_RCSID(0, "$NetBSD: vidc20.c,v 1.17 2012/05/14 10:38:08 skrll Exp $");
 #include "locators.h"
 
 struct vidc20_softc {
-	device_t	sc_dev;
+	struct device	sc_dev;
 	bus_space_tag_t	sc_iot;
 };
 
-static int  vidcmatch(device_t , cfdata_t , void *);
-static void vidcattach(device_t , device_t , void *);
-static int  vidcsearch(device_t , cfdata_t , const int *, void *);
+static int  vidcmatch(struct device *, struct cfdata *, void *);
+static void vidcattach(struct device *, struct device *, void *);
+static int  vidcsearch(struct device *, struct cfdata *,
+		       const int *, void *);
 
 /*
  * vidc_base gives the base of the VIDC chip in memory; this is for
@@ -83,7 +84,7 @@ int *vidc_base = (int *)VIDC_BASE;
 int  vidc_fref = 24000000;
 
 
-CFATTACH_DECL_NEW(vidc, sizeof (struct vidc20_softc),
+CFATTACH_DECL(vidc, sizeof (struct vidc20_softc),
     vidcmatch, vidcattach, NULL, NULL);
 
 /*
@@ -93,7 +94,7 @@ CFATTACH_DECL_NEW(vidc, sizeof (struct vidc20_softc),
  * We must assume things are ok.
  */
 static int
-vidcmatch(device_t parent, cfdata_t cf, void *aux)
+vidcmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	return 1;
@@ -106,7 +107,8 @@ vidcmatch(device_t parent, cfdata_t cf, void *aux)
  */
 
 static int
-vidcsearch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+vidcsearch(struct device *parent, struct cfdata *cf,
+	   const int *ldesc, void *aux)
 {
 	
 	if (config_match(parent, cf, NULL) > 0)
@@ -121,12 +123,11 @@ vidcsearch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
  * Configure all the child devices of the VIDC
  */
 static void
-vidcattach(device_t parent, device_t self, void *aux)
+vidcattach(struct device *parent, struct device *self, void *aux)
 {
-	struct vidc20_softc *sc = device_private(self);
+	struct vidc20_softc *sc = (struct vidc20_softc *)self;
 	struct mainbus_attach_args *mb = aux;
 
-	sc->sc_dev = self;
 	sc->sc_iot = mb->mb_iot;
 
 	/*
@@ -135,16 +136,16 @@ vidcattach(device_t parent, device_t self, void *aux)
 	 */
 	switch (IOMD_ID) {
 	case ARM7500_IOC_ID:
-		aprint_normal(": ARM7500 video and sound macrocell\n");
+		printf(": ARM7500 video and sound macrocell\n");
 		vidc_fref = 32000000;
 		break;
 	case ARM7500FE_IOC_ID:
-		aprint_normal(": ARM7500FE video and sound macrocell\n");
+		printf(": ARM7500FE video and sound macrocell\n");
 		vidc_fref = 32000000;
 		break;
 	default:				/* XXX default? */
 	case RPC600_IOMD_ID:
-		aprint_normal(": VIDC20\n");
+		printf(": VIDC20\n");
 		vidc_fref = 24000000;
 		break;
 	}

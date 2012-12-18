@@ -1,4 +1,4 @@
-/*	$NetBSD: mknod.c,v 1.40 2011/08/27 18:37:41 joerg Exp $	*/
+/*	$NetBSD: mknod.c,v 1.38 2008/07/20 01:20:22 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
 #ifndef lint
 __COPYRIGHT("@(#) Copyright (c) 1998\
  The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: mknod.c,v 1.40 2011/08/27 18:37:41 joerg Exp $");
+__RCSID("$NetBSD: mknod.c,v 1.38 2008/07/20 01:20:22 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -63,7 +63,8 @@ __RCSID("$NetBSD: mknod.c,v 1.40 2011/08/27 18:37:41 joerg Exp $");
 static int gid_name(const char *, gid_t *);
 static portdev_t callPack(pack_t *, int, u_long *);
 
-__dead static	void	usage(void);
+	int	main(int, char *[]);
+static	void	usage(void);
 
 #ifdef KERN_DRIVERS
 static struct kinfo_drivers *kern_drivers;
@@ -275,7 +276,7 @@ main(int argc, char **argv)
 	}
 	if (rval < 0)
 		err(1, "%s", name);
-	if ((uid != (uid_t)-1 || gid != (uid_t)-1) && chown(name, uid, gid) == -1)
+	if ((uid != -1 || gid != -1) && chown(name, uid, gid) == -1)
 		/* XXX Should we unlink the files here? */
 		warn("%s: uid/gid not changed", name);
 

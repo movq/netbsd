@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh.c,v 1.5 2011/08/25 16:54:58 christos Exp $	*/
+/*	$NetBSD: ssh.c,v 1.2 2002/05/26 00:09:09 wiz Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ * 4. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Gordon W. Ross
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -61,7 +66,7 @@ extern int optind, opterr;
 char cur_path[MAXPATH] = "PATH=/bin:/usr/bin";
 
 char rc_name[] = ".sshrc";
-const char *prompt = "ssh: ";
+char *prompt = "ssh: ";
 
 int eflag;	/* exit on cmd failure */
 int iflag;	/* interactive mode (catch interrupts) */
@@ -69,7 +74,7 @@ int sflag;	/* read from stdin (ignore file arg) */
 int xflag;	/* execution trace */
 
 /* Command file: name, line number, arg count, arg vector */
-const char *cf_name;
+char *cf_name;
 int cf_line;
 int cf_argc;
 char **cf_argv;
@@ -79,23 +84,16 @@ int run_bg_pid;
 
 jmp_buf next_cmd;
 
-int main(int, char *[]);
-void catchsig(int sig);
-void child_newfd(int setfd, char *file, int otype);
-int find_in_path(char *cmd, char *filebuf);
-void print_termsig(FILE *fp, int cstat);
-int runfile(FILE *fp);
-
-int cmd_eval(int, char *[]);
-int cmd_cd(int, char *[]);
-int cmd_exit(int, char *[]);
-int cmd_help(int, char *[]);
-int cmd_path(int, char *[]);
-int cmd_run(int, char *[]);
+void catchsig __P((int sig));
+void child_newfd __P((int setfd, char *file, int otype));
+int find_in_path __P((char *cmd, char *filebuf));
+void print_termsig __P((FILE *fp, int cstat));
+int runfile __P((FILE *fp));
 
 
-int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	struct sigaction sa;
 	FILE *cfp;		/* command file ptr */
@@ -123,7 +121,7 @@ main(int argc, char *argv[])
 	}
 	if (error) {
 		fprintf(stderr, "usage:  ssh [-eisx] [cmd_file [...]]\n");
-		exit(EXIT_FAILURE);
+		exit(1);
 	}
 	cf_argc = argc - optind;
 	cf_argv = &argv[optind];
@@ -152,7 +150,7 @@ main(int argc, char *argv[])
 		cfp = fopen(cf_name, "r");
 		if (cfp == NULL) {
 			perror(cf_name);
-			exit(EXIT_FAILURE);
+			exit(1);
 		}
 		error = runfile(cfp);
 		fclose(cfp);
@@ -181,13 +179,13 @@ main(int argc, char *argv[])
 		}
 	}
 	error = runfile(stdin);
-	exit(error);
+	exit (error);
 }
 
 void
-catchsig(int sig)
+catchsig(sig)
+	int sig;
 {
-
 	longjmp(next_cmd, sig);
 }
 
@@ -196,7 +194,8 @@ catchsig(int sig)
  * Returns exit status.
  */
 int
-runfile(FILE *cfp)
+runfile(cfp)
+	FILE *cfp;
 {
 	char ibuf[MAXLINE];
 	char *argv[MAXARGS];
@@ -207,7 +206,7 @@ runfile(FILE *cfp)
 	exitcode = 0;
 	for (;;) {
 		if (iflag) {
-			fprintf(stderr, "%s", prompt);
+			fprintf(stderr, prompt);
 			fflush(stderr);
 		}
 
@@ -275,7 +274,7 @@ runfile(FILE *cfp)
 			break;
 	}
 	/* return status of last command */
-	return exitcode;
+	return (exitcode);
 }
 
 
@@ -285,9 +284,9 @@ runfile(FILE *cfp)
  ****************************************************************/
 
 struct cmd {
-	const char *name;
-	int (*func)(int, char *[]);
-	const char *help;
+	char *name;
+	int (*func)();
+	char *help;
 };
 struct cmd cmd_table[];
 
@@ -297,7 +296,9 @@ struct cmd cmd_table[];
  * Returns exit status.
  */
 int
-cmd_eval(int argc, char *argv[])
+cmd_eval(argc, argv)
+	int argc;
+	char **argv;
 {
 	struct cmd *cp;
 
@@ -309,7 +310,7 @@ cmd_eval(int argc, char *argv[])
 		if (!strcmp(cp->name, argv[0])) {
 			/* Pass only args to builtin. */
 			--argc; argv++;
-			return cp->func(argc, argv);
+			return (cp->func(argc, argv));
 		}
 	}
 
@@ -317,7 +318,7 @@ cmd_eval(int argc, char *argv[])
 	 * If no matching builtin, let "run ..."
 	 * have a chance to try an external.
 	 */
-	return cmd_run(argc, argv);
+	return (cmd_run(argc, argv));
 }
 
 /*****************************************************************
@@ -327,12 +328,15 @@ cmd_eval(int argc, char *argv[])
  *  All return an exit status.
  ****************************************************************/
 
-const char help_cd[] = "cd [dir]";
+char help_cd[] = "cd [dir]";
 
 int
-cmd_cd(int argc, char *argv[])
+cmd_cd(argc, argv)
+	int argc;
+	char **argv;
 {
-	const char *dir;
+	char *dir;
+	int err;
 
 	if (argc > 0)
 		dir = argv[0];
@@ -343,15 +347,17 @@ cmd_cd(int argc, char *argv[])
 	}
 	if (chdir(dir)) {
 		perror(dir);
-		return 1;
+		return (1);
 	}
-	return 0;
+	return(0);
 }
 
-const char help_exit[] = "exit [n]";
+char help_exit[] = "exit [n]";
 
 int
-cmd_exit(int argc, char **argv)
+cmd_exit(argc, argv)
+	int argc;
+	char **argv;
 {
 	int val = 0;
 
@@ -360,10 +366,12 @@ cmd_exit(int argc, char **argv)
 	exit(val);
 }
 
-const char help_help[] = "help [command]";
+char help_help[] = "help [command]";
 
 int
-cmd_help(int argc, char *argv[])
+cmd_help(argc, argv)
+	int argc;
+	char **argv;
 {
 	struct cmd *cp;
 
@@ -371,7 +379,7 @@ cmd_help(int argc, char *argv[])
 		for (cp = cmd_table; cp->name; cp++) {
 			if (!strcmp(cp->name, argv[0])) {
 				printf("usage:  %s\n", cp->help);
-				return 0;
+				return (0);
 			}
 		}
 		printf("%s: no such command\n", argv[0]);
@@ -382,24 +390,27 @@ cmd_help(int argc, char *argv[])
 		printf(" %s", cp->name);
 	}
 	printf("\nFor specific usage:  help [command]\n");
-	return 0;
+	return (0);
 }
 
-const char help_path[] = "path [dir1:dir2:...]";
+char help_path[] = "path [dir1:dir2:...]";
 
 int
-cmd_path(int argc, char *argv[])
+cmd_path(argc, argv)
+	int argc;
+	char **argv;
 {
+	int i;
 
 	if (argc <= 0) {
 		printf("%s\n", cur_path);
-		return 0;
+		return(0);
 	}
 
 	strncpy(cur_path+5, argv[0], MAXPATH-6);
 	putenv(cur_path);
 
-	return 0;
+	return (0);
 }
 
 /*****************************************************************
@@ -409,15 +420,17 @@ cmd_path(int argc, char *argv[])
  *  (or zero for a background job)
  ****************************************************************/
 
-const char help_run[] = "\
+char help_run[] = "\
 run [-bg] [-i ifile] [-o ofile] [-e efile] program [args...]\n\
 or simply:  program [args...]";
 
 int
-cmd_run(int argc, char *argv[])
+cmd_run(argc, argv)
+	int argc;
+	char **argv;
 {
 	struct sigaction sa;
-	int pid, err, cstat;
+	int pid, err, cstat, fd;
 	char file[MAXPATHLEN];
 	int background;
 	char *opt, *ifile, *ofile, *efile;
@@ -450,7 +463,7 @@ cmd_run(int argc, char *argv[])
 			goto shift;
 		default:
 			fprintf(stderr, "run %s: bad option\n", opt);
-			return 1;
+			return (1);
 		shift:
 			--argc; argv++;
 		}
@@ -459,7 +472,7 @@ cmd_run(int argc, char *argv[])
 	if (argc <= 0) {
 		fprintf(stderr, "%s:%d run: missing command\n",
 				cf_name, cf_line);
-		return 1;
+		return (1);
 	}
 
 	/* Commands containing '/' get no path search. */
@@ -467,12 +480,12 @@ cmd_run(int argc, char *argv[])
 		strncpy(file, argv[0], sizeof(file)-1);
 		if (access(file, X_OK)) {
 			perror(file);
-			return 1;
+			return (1);
 		}
 	} else {
 		if (find_in_path(argv[0], file)) {
 			fprintf(stderr, "%s: command not found\n", argv[0]);
-			return 1;
+			return (1);
 		}
 	}
 
@@ -496,23 +509,23 @@ cmd_run(int argc, char *argv[])
 		}
 		err = execve(file, argv, environ);
 		perror(argv[0]);
-		return 1;
+		return (1);
 	}
 	/* parent */
 	/* Handle background option... */
 	if (background) {
 		fprintf(stderr, "[%d]\n", pid);
 		run_bg_pid = pid;
-		return 0;
+		return (0);
 	}
 	if (waitpid(pid, &cstat, 0) < 0) {
 		perror("waitpid");
-		return 1;
+		return (1);
 	}
 	if (WTERMSIG(cstat)) {
 		print_termsig(stderr, cstat);
 	}
-	return WEXITSTATUS(cstat);
+	return (WEXITSTATUS(cstat));
 }
 
 /*****************************************************************
@@ -524,7 +537,7 @@ struct cmd cmd_table[] = {
 	{ "help", cmd_help, help_help },
 	{ "path", cmd_path, help_path },
 	{ "run",  cmd_run,  help_run },
-	{ NULL, NULL, NULL },
+	{ 0 },
 };
 
 /*****************************************************************
@@ -532,7 +545,9 @@ struct cmd cmd_table[] = {
  ****************************************************************/
 
 int
-find_in_path(char *cmd, char *filebuf)
+find_in_path(cmd, filebuf)
+	char *cmd;
+	char *filebuf;
 {
 	char *dirp, *endp, *bufp;	/* dir, end */
 
@@ -545,12 +560,12 @@ find_in_path(char *cmd, char *filebuf)
 		*bufp++ = '/';
 		strcpy(bufp, cmd);
 		if (access(filebuf, X_OK) == 0)
-			return 0;
+			return (0);
 		if (*endp == ':')
 			endp++;
 		dirp = endp;	/* next dir */
 	}
-	return -1;
+	return (-1);
 }
 
 /*
@@ -558,17 +573,17 @@ find_in_path(char *cmd, char *filebuf)
  * which was opened with OTYPE and MODE.
  */
 void
-child_newfd(int setfd, char *file, int otype)
-/*	int setfd;	what to set (i.e. 0,1,2)	*/
-/*	char *file;					*/
-/*	int otype;	O_RDONLY, etc.			*/
+child_newfd(setfd, file, otype)
+	int setfd;	/* what to set (i.e. 0,1,2) */
+	char *file;
+	int otype;	/* O_RDONLY, etc. */
 {
 	int newfd;
 
 	close(setfd);
 	if ((newfd = open(file, otype, def_omode)) < 0) {
 		perror(file);
-		exit(EXIT_FAILURE);
+		exit(1);
 	}
 	if (newfd != setfd) {
 		dup2(newfd, setfd);
@@ -577,7 +592,9 @@ child_newfd(int setfd, char *file, int otype)
 }
 
 void
-print_termsig(FILE *fp, int cstat)
+print_termsig(fp, cstat)
+	FILE *fp;
+	int cstat;
 {
 	fprintf(fp, "Terminated, signal %d",
 			WTERMSIG(cstat));

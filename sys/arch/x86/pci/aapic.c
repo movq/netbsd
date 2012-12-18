@@ -1,7 +1,7 @@
-/* 	$NetBSD: aapic.c,v 1.8 2009/11/25 15:06:26 njoly Exp $	*/
+/* 	$NetBSD: aapic.c,v 1.7 2008/07/09 21:07:55 joerg Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aapic.c,v 1.8 2009/11/25 15:06:26 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aapic.c,v 1.7 2008/07/09 21:07:55 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,8 +48,7 @@ aapic_attach(device_t parent, device_t self, void *aux)
 
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
 	rev = PCI_REVISION(pa->pa_class);
-	aprint_naive("\n");
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo, rev);
+	printf(": %s (rev. 0x%02x)\n", devinfo, rev);
 
 #if NIOAPIC > 0
 	if (nioapics == 0)

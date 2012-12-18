@@ -1,4 +1,4 @@
-/*	$NetBSD: tftpd.c,v 1.39 2011/08/29 20:41:07 joerg Exp $	*/
+/*	$NetBSD: tftpd.c,v 1.31.4.1 2011/11/02 19:58:23 riz Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -36,7 +36,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)tftpd.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: tftpd.c,v 1.39 2011/08/29 20:41:07 joerg Exp $");
+__RCSID("$NetBSD: tftpd.c,v 1.31.4.1 2011/11/02 19:58:23 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -109,19 +109,18 @@ static int	logging;
 static int	secure;
 static char	pathsep = '\0';
 static char	*securedir;
-static int	unrestricted_writes;    /* uploaded files don't have to exist */
 
 struct formats;
 
 static const char *errtomsg(int);
 static void	nak(int);
-__dead static void	tftp(struct tftphdr *, int);
-__dead static void	usage(void);
+static void	tftp(struct tftphdr *, int);
+static void	usage(void) __attribute__((__noreturn__));
 static char	*verifyhost(struct sockaddr *);
-__dead static void	justquit(int);
+static void	justquit(int);
 static void	recvfile(struct formats *, int, int);
 static void	sendfile(struct formats *, int, int);
-__dead static void	timer(int);
+static void	timer(int);
 static const char *opcode(int);
 static int	validate_access(char **, int);
 
@@ -172,12 +171,8 @@ main(int argc, char *argv[])
 	curuid = getuid();
 	curgid = getgid();
 
-	while ((ch = getopt(argc, argv, "cdg:lnp:s:u:")) != -1)
+	while ((ch = getopt(argc, argv, "dg:lnp:s:u:w:")) != -1)
 		switch (ch) {
-		case 'w':
-			unrestricted_writes = 1;
-			break;
-
 		case 'd':
 			debug++;
 			break;
@@ -233,7 +228,7 @@ main(int argc, char *argv[])
 
 	nid = (strtol(tgtuser, &ep, 10));
 	if (*ep == '\0') {
-		if ((uid_t)nid > UID_MAX) {
+		if (nid > UID_MAX) {
 			syslog(LOG_ERR, "uid %ld is too large", nid);
 			exit(1);
 		}
@@ -250,7 +245,7 @@ main(int argc, char *argv[])
 	if (tgtgroup != NULL) {
 		nid = (strtol(tgtgroup, &ep, 10));
 		if (*ep == '\0') {
-			if ((uid_t)nid > GID_MAX) {
+			if (nid > GID_MAX) {
 				syslog(LOG_ERR, "gid %ld is too large", nid);
 				exit(1);
 			}
@@ -744,8 +739,6 @@ validate_access(char **filep, int mode)
 	static char	 pathname[MAXPATHLEN];
 	char		*filename;
 	int		 fd;
-	int		 create = 0;
-	int		 trunc = 0;
 
 	filename = *filep;
 
@@ -811,45 +804,21 @@ validate_access(char **filep, int mode)
 				return (EACCESS);
 			*filep = filename = pathname;
 		} else {
-			int stat_rc;
-
 			/*
 			 * If there's no directory list, take our cue from the
 			 * absolute file request check above (*filename == '/'),
 			 * and allow access to anything.
 			 */
-			stat_rc = stat(filename, &stbuf);
+			if (stat(filename, &stbuf) < 0)
+				return (errno == ENOENT ? ENOTFOUND : EACCESS);
+			if (!S_ISREG(stbuf.st_mode))
+				return (ENOTFOUND);
 			if (mode == RRQ) {
-				/* Read request */
-				if (stat_rc < 0)
-				       return (errno == ENOENT ? ENOTFOUND : EACCESS);
-				if (!S_ISREG(stbuf.st_mode))
-				       return (ENOTFOUND);
 				if ((stbuf.st_mode & S_IROTH) == 0)
 					return (EACCESS);
 			} else {
-				if (stat_rc < 0) {
-				       /* Can't stat */
-				       if (errno == EACCES) {
-					       /* Permission denied */
-					       return EACCESS;
-				       } else {
-					       /* Not there */
-					       if (unrestricted_writes) {
-						       /* need to creat new file! */
-						       create = O_CREAT;
-					       } else {
-						       /* Permission denied */
-						       return EACCESS;
-					       }
-				       }
-				} else {
-				       /* Can stat */
-				       if ((stbuf.st_mode & S_IWOTH) == 0) {
-					       return (EACCESS);
-				       }
-				       trunc = O_TRUNC;
-				}
+				if ((stbuf.st_mode & S_IWOTH) == 0)
+					return (EACCESS);
 			}
 			*filep = filename;
 		}
@@ -858,8 +827,7 @@ validate_access(char **filep, int mode)
 	if (tftp_opt_tsize && mode == RRQ)
 		tftp_tsize = (unsigned long) stbuf.st_size;
 
-	fd = open(filename, mode == RRQ ? O_RDONLY : O_WRONLY | trunc | create,
-			0644); /* debatable */
+	fd = open(filename, mode == RRQ ? O_RDONLY : O_WRONLY | O_TRUNC);
 	if (fd < 0)
 		return (errno + 100);
 	file = fdopen(fd, (mode == RRQ)? "r":"w");
@@ -1177,7 +1145,7 @@ nak(int error)
 		syslog(LOG_DEBUG, "Send NACK %s", tp->th_msg);
 	length = strlen(tp->th_msg);
 	msglen = &tp->th_msg[length + 1] - buf;
-	if (send(peer, buf, msglen, 0) != (ssize_t)msglen)
+	if (send(peer, buf, msglen, 0) != msglen)
 		syslog(LOG_ERR, "nak: %m");
 }
 

@@ -1,9 +1,7 @@
-#	$NetBSD: Makefile,v 1.3 2012/08/16 19:47:48 jnemeth Exp $
+#	$NetBSD: Makefile,v 1.1 2008/01/16 12:34:57 ad Exp $
 
-RUMPPRG=modstat
+PROG=	modstat
 SRCS=	main.c
 MAN=	modstat.8
-
-WARNS=	5
 
 .include <bsd.prog.mk>

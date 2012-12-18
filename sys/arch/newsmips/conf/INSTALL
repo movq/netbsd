@@ -1,4 +1,4 @@
-# 	$NetBSD: INSTALL,v 1.41 2012/08/17 20:11:40 abs Exp $
+# 	$NetBSD: INSTALL,v 1.35 2008/07/31 07:41:03 simonb Exp $
 #
 #	INSTALL kernel for RISC-NEWS
 
@@ -15,7 +15,6 @@ options 	MEMORY_DISK_HOOKS
 options 	MEMORY_DISK_IS_ROOT		# Force root on ram-disk
 options 	MEMORY_DISK_SERVER=0		# no userspace md(4) support
 options 	MEMORY_DISK_ROOT_SIZE=5120	# 2.5 Megabytes
-options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
 
 options 	news3400
 options 	news5000
@@ -49,7 +48,7 @@ file-system	MSDOSFS		# MS-DOS FAT filesystem(s).
 # Filesystem options
 options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
-options 	WAPBL		# File system journaling support
+options 	WAPBL		# File system journaling support - Experimental
 
 # Networking options
 options 	INET		# Internet protocols
@@ -58,8 +57,6 @@ options 	NFS_BOOT_BOOTPARAM
 
 # wscons options
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
-options 	WSDISPLAY_DEFAULTSCREENS=1
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 #options 	FONT_GALLANT12x22
 options 	FONT_SONY8x16
 
@@ -113,6 +110,7 @@ wskbd0	at kb? console ?
 
 pseudo-device	loop			# loopback interface; required
 pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
-pseudo-device	md			# memory disk device
-#pseudo-device	fss			# file system snapshot device
+pseudo-device	md		1	# memory disk device
+#pseudo-device	fss		4	# file system snapshot device
 
+pseudo-device	rnd			# /dev/random and in-kernel generator

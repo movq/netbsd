@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr5380var.h,v 1.8 2010/04/13 13:30:37 tsutsui Exp $	*/
+/*	$NetBSD: ncr5380var.h,v 1.6 2005/12/11 12:16:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Leo Weppelman.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,42 +37,34 @@
  * Various debug definitions
  */
 #ifdef DBG_NOSTATIC
-#define	static
+#	define	static
 #endif
-
 #ifdef DBG_SEL
-#define DBG_SELPRINT(a,b)	printf(a,b)
+#	define	DBG_SELPRINT(a,b)	printf(a,b)
 #else
-#define DBG_SELPRINT(a,b)
+#	define DBG_SELPRINT(a,b)
 #endif
-
 #ifdef DBG_PIO
-#define DBG_PIOPRINT(a,b,c) 	printf(a,b,c)
+#	define DBG_PIOPRINT(a,b,c) 	printf(a,b,c)
 #else
-#define DBG_PIOPRINT(a,b,c)
+#	define DBG_PIOPRINT(a,b,c)
 #endif
-
 #ifdef DBG_INF
-#define DBG_INFPRINT(a,b,c)	a(b,c)
+#	define DBG_INFPRINT(a,b,c)	a(b,c)
 #else
-#define DBG_INFPRINT(a,b,c)
+#	define DBG_INFPRINT(a,b,c)
 #endif
-
 #ifdef DBG_PID
-#if 0
-static char *last_hit = NULL, *olast_hit = NULL;
-#endif
-static const char *last_hit[DBG_PID];
-#define	PID(a)								\
-	{								\
-		int i;							\
-		for (i = 0; i < DBG_PID - 1; i++)			\
-			last_hit[i] = last_hit[i + 1];			\
-			last_hit[DBG_PID - 1] = a;			\
-	}								\
-	/* olast_hit = last_hit; last_hit = a; */
+	/* static	char	*last_hit = NULL, *olast_hit = NULL; */
+	static const char *last_hit[DBG_PID];
+#	define	PID(a)	\
+	{ int i; \
+	  for (i=0; i< DBG_PID-1; i++) \
+		last_hit[i] = last_hit[i+1]; \
+	  last_hit[DBG_PID-1] = a; } \
+		/* olast_hit = last_hit; last_hit = a; */
 #else
-#define	PID(a)
+#	define	PID(a)
 #endif
 
 #endif /* _NCR5380VAR_H */

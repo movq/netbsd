@@ -1,4 +1,4 @@
-/*	$NetBSD: via_padlock.h,v 1.7 2011/11/19 22:51:21 tls Exp $	*/
+/*	$NetBSD: via_padlock.h,v 1.2 2008/04/16 16:06:51 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2003 Jason Wright
@@ -21,10 +21,8 @@
 #ifndef _X86_VIA_PADLOCK_H_
 #define _X86_VIA_PADLOCK_H_
 
-#if defined(_KERNEL)
+#ifdef _KERNEL
 
-#include <sys/rnd.h>
-#include <sys/callout.h>
 #include <crypto/rijndael/rijndael.h>
 
 /* VIA C3 xcrypt-* instruction context control options */
@@ -53,20 +51,12 @@ struct via_padlock_session {
 };
 
 struct via_padlock_softc {
-	device_t	sc_dev;
-
 	uint32_t	op_cw[4];	/* 128 bit aligned */
 	uint8_t	op_iv[16];	/* 128 bit aligned */
 	void		*op_buf;
 
-	int			sc_rnd_hz;
-	struct callout		sc_rnd_co;
-	krndsource_t	sc_rnd_source;
-	bool			sc_rnd_attached;
-
 	/* normal softc stuff */
 	int32_t		sc_cid;
-	bool		sc_cid_attached;
 	int		sc_nsessions;
 	struct via_padlock_session *sc_sessions;
 };
@@ -74,11 +64,6 @@ struct via_padlock_softc {
 #define VIAC3_SESSION(sid)	((sid) & 0x0fffffff)
 #define VIAC3_SID(crd,ses)	(((crd) << 28) | ((ses) & 0x0fffffff))
 
-#define VIAC3_RNG_BUFSIZ	16
-
-#endif /* _KERNEL */
-
-#if defined(_KERNEL) || defined(_KMEMUSER)
 struct cpu_info;
 
 struct via_padlock {
@@ -86,5 +71,7 @@ struct via_padlock {
 	int			vp_freq;
 };
 
-#endif /* _KERNEL || _KMEMUSER */
+void	via_padlock_attach(void);
+
+#endif /* _KERNEL */
 #endif /* _X86_VIA_PADLOCK_H_ */

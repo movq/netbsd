@@ -1,4 +1,4 @@
-/*	$NetBSD: intio_dmac.c,v 1.34 2012/10/14 16:36:31 tsutsui Exp $	*/
+/*	$NetBSD: intio_dmac.c,v 1.31 2008/06/25 13:30:24 isaki Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -33,10 +33,10 @@
  * Hitachi HD63450 (= Motorola MC68450) DMAC driver for x68k.
  */
 
-#include "opt_m68k_arch.h"
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intio_dmac.c,v 1.34 2012/10/14 16:36:31 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intio_dmac.c,v 1.31 2008/06/25 13:30:24 isaki Exp $");
+
+#include "opt_m680x0.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -164,13 +164,13 @@ dmac_alloc_channel(device_t self, int ch, const char *name, int normalv,
     dmac_intr_handler_t error, void *errorarg)
 {
 	struct intio_softc *intio = device_private(self);
-	struct dmac_softc *dmac = device_private(intio->sc_dmac);
-	struct dmac_channel_stat *chan = &dmac->sc_channels[ch];
+	struct dmac_softc *sc = device_private(intio->sc_dmac);
+	struct dmac_channel_stat *chan = &sc->sc_channels[ch];
 #ifdef DMAC_ARRAYCHAIN
 	int r, dummy;
 #endif
 
-	aprint_normal_dev(dmac->sc_dev, "allocating ch %d for %s.\n",
+	aprint_normal_dev(sc->sc_dev, "allocating ch %d for %s.\n",
 		ch, name);
 	DPRINTF(3, ("dmamap=%p\n", (void *)chan->ch_xfer.dx_dmamap));
 #ifdef DIAGNOSTIC
@@ -213,26 +213,26 @@ dmac_alloc_channel(device_t self, int ch, const char *name, int normalv,
 	chan->ch_xfer.dx_dmamap = 0;
 
 	/* setup the device-specific registers */
-	bus_space_write_1(dmac->sc_bst, chan->ch_bht, DMAC_REG_CSR, 0xff);
-	bus_space_write_1(dmac->sc_bst, chan->ch_bht,
+	bus_space_write_1(sc->sc_bst, chan->ch_bht, DMAC_REG_CSR, 0xff);
+	bus_space_write_1(sc->sc_bst, chan->ch_bht,
 			   DMAC_REG_DCR, chan->ch_dcr);
-	bus_space_write_1(dmac->sc_bst, chan->ch_bht, DMAC_REG_CPR, 0);
+	bus_space_write_1(sc->sc_bst, chan->ch_bht, DMAC_REG_CPR, 0);
 
 	/*
 	 * X68k physical user space is a subset of the kernel space;
 	 * the memory is always included in the physical user space,
 	 * while the device is not.
 	 */
-	bus_space_write_1(dmac->sc_bst, chan->ch_bht,
+	bus_space_write_1(sc->sc_bst, chan->ch_bht,
 			   DMAC_REG_BFCR, DMAC_FC_USER_DATA);
-	bus_space_write_1(dmac->sc_bst, chan->ch_bht,
+	bus_space_write_1(sc->sc_bst, chan->ch_bht,
 			   DMAC_REG_MFCR, DMAC_FC_USER_DATA);
-	bus_space_write_1(dmac->sc_bst, chan->ch_bht,
+	bus_space_write_1(sc->sc_bst, chan->ch_bht,
 			   DMAC_REG_DFCR, DMAC_FC_KERNEL_DATA);
 
 	/* setup the interrupt handlers */
-	bus_space_write_1(dmac->sc_bst, chan->ch_bht, DMAC_REG_NIVR, normalv);
-	bus_space_write_1(dmac->sc_bst, chan->ch_bht, DMAC_REG_EIVR, errorv);
+	bus_space_write_1(sc->sc_bst, chan->ch_bht, DMAC_REG_NIVR, normalv);
+	bus_space_write_1(sc->sc_bst, chan->ch_bht, DMAC_REG_EIVR, errorv);
 
 	intio_intr_establish_ext(normalv, name, "dma", dmac_done, chan);
 	intio_intr_establish_ext(errorv, name, "dmaerr", dmac_error, chan);
@@ -530,18 +530,10 @@ dmac_error(void *arg)
 {
 	struct dmac_channel_stat *chan = arg;
 	struct dmac_softc *sc = chan->ch_softc;
-	uint8_t csr, cer;
 
-	csr = bus_space_read_1(sc->sc_bst, chan->ch_bht, DMAC_REG_CSR);
-	cer = bus_space_read_1(sc->sc_bst, chan->ch_bht, DMAC_REG_CER);
-
-#ifndef DMAC_DEBUG
-	/* Software abort (CER=0x11) could happen on normal xfer termination */
-	if (cer != 0x11)
-#endif
-	{
-		printf("DMAC transfer error CSR=%02x, CER=%02x\n", csr, cer);
-	}
+	printf("DMAC transfer error CSR=%02x, CER=%02x\n",
+		bus_space_read_1(sc->sc_bst, chan->ch_bht, DMAC_REG_CSR),
+		bus_space_read_1(sc->sc_bst, chan->ch_bht, DMAC_REG_CER));
 	DDUMPREGS(3, ("registers were:\n"));
 
 	/* Clear the status bits */
@@ -560,7 +552,7 @@ dmac_abort_xfer(struct dmac_softc *dmac, struct dmac_dma_xfer *xf)
 	struct dmac_channel_stat *chan = xf->dx_channel;
 
 	bus_space_write_1(dmac->sc_bst, chan->ch_bht, DMAC_REG_CCR,
-			  DMAC_CCR_INT | DMAC_CCR_SAB);
+			  DMAC_CCR_INT | DMAC_CCR_HLT);
 	bus_space_write_1(dmac->sc_bst, chan->ch_bht, DMAC_REG_CSR, 0xff);
 	xf->dx_nextoff = xf->dx_nextsize = -1;
 

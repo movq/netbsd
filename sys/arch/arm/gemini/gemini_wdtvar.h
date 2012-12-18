@@ -1,4 +1,4 @@
-/*	$NetBSD: gemini_wdtvar.h,v 1.4 2011/07/01 19:32:28 dyoung Exp $	*/
+/*	$NetBSD: gemini_wdtvar.h,v 1.1 2008/10/24 04:23:18 matt Exp $	*/
 
 /*
  * adapted/extracted from omap_wdt.c
@@ -34,11 +34,11 @@
 #define  _ARM_GEMINI_WDTVAR_H
 
 #include <sys/device.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <dev/sysmon/sysmonvar.h>
  
 typedef struct geminiwdt_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	bus_addr_t sc_addr;
 	bus_size_t sc_size;
 	bus_space_tag_t sc_iot;
@@ -55,5 +55,6 @@ int	geminiwdt_tickle(struct sysmon_wdog *);
 
 void	geminiwdt_set_timeout(unsigned int period);
 int	geminiwdt_enable(int enable);
+void	geminiwdt_reboot(void);
 
 #endif  /* _ARM_GEMINI_WDTVAR_H */

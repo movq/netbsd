@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.6 2012/07/29 18:05:43 mlelstv Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.3 2008/04/28 20:23:25 martin Exp $	*/
 
 /*
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -37,11 +37,11 @@
 #include <sys/conf.h>
 
 void
-cpu_rootconf(void)
+cpu_rootconf()
 {
 	if (booted_device == NULL) /* XXX: Platform support. Match to boot device. */
 		printf("WARNING: can't figure what device matches \"%s\"\n", "XXX");
-	rootconf();
+	setroot(booted_device, booted_partition);
 }
 
 
@@ -50,11 +50,6 @@ cpu_rootconf(void)
  * called at boot time, configure all devices on system
  */
 void
-cpu_configure(void)
+cpu_configure()
 {
-
-	if (config_rootfound("mainbus", NULL) == NULL)
-		panic("configure: mainbus not configured");
-
-	spl0();
 }

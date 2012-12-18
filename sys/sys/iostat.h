@@ -1,4 +1,4 @@
-/*	$NetBSD: iostat.h,v 1.10 2009/04/04 07:30:09 ad Exp $	*/
+/*	$NetBSD: iostat.h,v 1.9.10.1 2009/04/04 17:49:21 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2004, 2009 The NetBSD Foundation, Inc.

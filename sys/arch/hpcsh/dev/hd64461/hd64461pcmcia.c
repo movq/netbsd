@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64461pcmcia.c,v 1.49 2011/07/26 22:52:48 dyoung Exp $	*/
+/*	$NetBSD: hd64461pcmcia.c,v 1.43 2008/04/28 20:23:22 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2004 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64461pcmcia.c,v 1.49 2011/07/26 22:52:48 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64461pcmcia.c,v 1.43 2008/04/28 20:23:22 martin Exp $");
 
 #include "opt_hd64461pcmcia.h"
 
@@ -40,8 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: hd64461pcmcia.c,v 1.49 2011/07/26 22:52:48 dyoung Ex
 #include <sys/malloc.h>
 #include <sys/kthread.h>
 #include <sys/boot_flag.h>
-#include <sys/bus.h>
 
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/pcmcia/pcmciareg.h>
@@ -56,8 +56,6 @@ __KERNEL_RCSID(0, "$NetBSD: hd64461pcmcia.c,v 1.49 2011/07/26 22:52:48 dyoung Ex
 #include <hpcsh/dev/hd64461/hd64461gpioreg.h>
 #include <hpcsh/dev/hd64461/hd64461pcmciavar.h>
 #include <hpcsh/dev/hd64461/hd64461pcmciareg.h>
-
-#include <hpcsh/bus_util.h>	/* for _BUS_SPACE_WRITE(), et cetera */
 
 #include "locators.h"
 
@@ -266,26 +264,11 @@ hd64461pcmcia_attach(device_t parent, device_t self, void *aux)
 #endif
 	/* Channel 0/1 common CSC event queue */
 	SIMPLEQ_INIT (&sc->sc_event_head);
-
 	error = kthread_create(PRI_NONE, 0, NULL,
 			       hd64461pcmcia_event_thread, sc,
 			       &sc->sc_event_thread,
 			       "%s", device_xname(self));
 	KASSERT(error == 0);
-
-	config_pending_incr();
-
-	/* XXX: TODO */
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "unable to establish power handler\n");
-}
-
-STATIC void
-hd64461pcmcia_event_thread(void *arg)
-{
-	struct hd64461pcmcia_softc *sc = arg;
-	struct hd64461pcmcia_event *pe;
-	int s;
 
 #if !defined(HD64461PCMCIA_REORDER_ATTACH)
 	hd64461pcmcia_attach_channel(sc, CHANNEL_0);
@@ -294,7 +277,14 @@ hd64461pcmcia_event_thread(void *arg)
 	hd64461pcmcia_attach_channel(sc, CHANNEL_1);
 	hd64461pcmcia_attach_channel(sc, CHANNEL_0);
 #endif
-	config_pending_decr();
+}
+
+STATIC void
+hd64461pcmcia_event_thread(void *arg)
+{
+	struct hd64461pcmcia_softc *sc = arg;
+	struct hd64461pcmcia_event *pe;
+	int s;
 
 	while (!sc->sc_shutdown) {
 		tsleep(sc, PWAIT, "CSC wait", 0);
@@ -321,9 +311,6 @@ hd64461pcmcia_event_thread(void *arg)
 		}
 		splx(s);
 	}
-
-	sc->sc_event_thread = NULL;
-	kthread_exit(0);
 	/* NOTREACHED */
 }
 
@@ -418,6 +405,8 @@ hd64461pcmcia_attach_channel(struct hd64461pcmcia_softc *sc,
 
 	paa.paa_busname = "pcmcia";
 	paa.pch = (pcmcia_chipset_handle_t)ch;
+	paa.iobase = ch->ch_iobase;
+	paa.iosize = ch->ch_iosize;
 
 	ch->ch_pcmcia = config_found_sm_loc(parent, "pcmciabus", NULL, &paa,
 	    hd64461pcmcia_print, hd64461pcmcia_submatch);

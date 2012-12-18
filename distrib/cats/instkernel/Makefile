@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.21 2011/07/10 04:37:56 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.17 2008/06/09 20:05:12 he Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -6,15 +6,18 @@
 RAMDISKDIR!=	cd ${.CURDIR}/../ramdisk && ${PRINTOBJDIR}
 RAMDISK=	${RAMDISKDIR}/ramdisk.fs
 
-MDSETTARGETS=		INSTALL ${RAMDISK} netbsd-INSTALL.aout \
-			INSTALL.ABLE ${RAMDISK} -
+MDSETTARGETS=		INSTALL ${RAMDISK} netbsd.aout-INSTALL \
+			INSTALL.ABLE ${RAMDISK} netbsd.able-INSTALL
 MDSET_RELEASEDIR=	binary/kernel
 
 MDSET_NOSTRIP=		# defined
 
-MDSET_POST.netbsd-INSTALL.aout= \
-    ${OBJCOPY} ${OBJCOPY_ELF2AOUT_FLAGS} ${.TARGET} ${.TARGET}.tmp ;\
-	mv ${.TARGET}.tmp ${.TARGET}
+MDSET_POST.netbsd.aout-INSTALL= \
+    ${OBJCOPY} -O a.out-arm-netbsd \
+	-R .debug_abbrev -R .debug_info -R .debug_line -R .debug_str \
+	-R .debug_frame -R .debug_loc -R .debug_pubnames -R .debug_aranges \
+	-R .ident -R .arm.atpcs -R .comment -R .note.netbsd.ident \
+	${.TARGET} ${.TARGET}
 
 .include "${DISTRIBDIR}/common/Makefile.mdset"
 

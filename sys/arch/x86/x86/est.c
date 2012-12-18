@@ -1,4 +1,4 @@
-/*	$NetBSD: est.c,v 1.25 2012/06/02 21:36:42 dsl Exp $	*/
+/*	$NetBSD: est.c,v 1.9.10.1 2009/10/05 10:34:07 sborrill Exp $	*/
 /*
  * Copyright (c) 2003 Michael Eriksson.
  * All rights reserved.
@@ -74,46 +74,38 @@
  * - Linux cpufreq patches, speedstep-centrino.c.
  *   Encoding of MSR_PERF_CTL and MSR_PERF_STATUS.
  *   http://www.codemonkey.org.uk/projects/cpufreq/cpufreq-2.4.22-pre6-1.gz
+ *
+ *   ACPI objects: _PCT is MSR location, _PSS is freq/voltage, _PPC is caps.
  */
+
+/* #define EST_DEBUG */
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: est.c,v 1.25 2012/06/02 21:36:42 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: est.c,v 1.9.10.1 2009/10/05 10:34:07 sborrill Exp $");
 
 #include <sys/param.h>
-#include <sys/device.h>
-#include <sys/kmem.h>
-#include <sys/module.h>
+#include <sys/systm.h>
+#include <sys/malloc.h>
 #include <sys/sysctl.h>
-#include <sys/xcall.h>
+#include <sys/once.h>
 
 #include <x86/cpuvar.h>
 #include <x86/cputypes.h>
 #include <x86/cpu_msr.h>
-#include <x86/est.h>
-#include <x86/specialreg.h>
 
-#define MSR2FREQINC(msr)	(((int) (msr) >> 8) & 0xff)
-#define MSR2VOLTINC(msr)	((int) (msr) & 0xff)
+#include <machine/cpu.h>
+#include <machine/specialreg.h>
 
-#define MSR2MHZ(msr, bus)	((MSR2FREQINC((msr)) * (bus) + 50) / 100)
-#define MSR2MV(msr)		(MSR2VOLTINC(msr) * 16 + 700)
+#include "opt_est.h"
+#ifdef EST_FREQ_USERWRITE
+#define	EST_TARGET_CTLFLAG	(CTLFLAG_READWRITE | CTLFLAG_ANYWRITE)
+#else
+#define	EST_TARGET_CTLFLAG	CTLFLAG_READWRITE
+#endif
 
 /* Convert MHz and mV into IDs for passing to the MSR. */
 #define ID16(MHz, mV, bus_clk) \
 	((((MHz * 100 + 50) / bus_clk) << 8) | ((mV ? mV - 700 : 0) >> 4))
-
-#define ENTRY(ven, bus_clk, tab) \
-	{ CPUVENDOR_##ven, bus_clk == BUS133 ? 1 : 0, __arraycount(tab), tab }
-
-#define BUS_CLK(fqp) ((fqp)->bus_clk ? BUS133 : BUS100)
-
-struct fqlist {
-	int		  vendor;
-	unsigned	  bus_clk;
-	unsigned	  n;
-	const uint16_t	 *table;
-};
-
-#ifdef __i386__
 
 /* Possible bus speeds (multiplied by 100 for rounding) */
 enum { BUS100 = 10000, BUS133 = 13333, BUS166 = 16666, BUS200 = 20000 };
@@ -758,15 +750,15 @@ static const uint16_t pm90_n770[] = {
 	ID16( 800,  988, BUS133),
 };
 
-/* Intel Pentium M processor 780 2.26 GHz */
+/* Intel Pentium M processor 780 2.26 GHz */ 
 static const uint16_t pm90_n780[] = {
 	ID16(2267, 1388, BUS133),
 	ID16(1867, 1292, BUS133),
 	ID16(1600, 1212, BUS133),
 	ID16(1333, 1148, BUS133),
-	ID16(1067, 1068, BUS133),
+	ID16(1067, 1068, BUS133), 
 	ID16( 800,  988, BUS133),
-};
+}; 
 
 /*
  * VIA C7-M 500 MHz FSB, 400 MHz FSB, and ULV variants.
@@ -901,6 +893,18 @@ static const uint16_t eden90_1000[] = {
 	ID16( 400,  844, BUS100),
 };
 
+struct fqlist {
+	int vendor;
+	unsigned bus_clk;
+	unsigned n;
+	const uint16_t *table;
+};
+
+#define ENTRY(ven, bus_clk, tab) \
+	{ CPUVENDOR_##ven, bus_clk == BUS133 ? 1 : 0, __arraycount(tab), tab }
+
+#define BUS_CLK(fqp) ((fqp)->bus_clk ? BUS133 : BUS100)
+
 static const struct fqlist est_cpus[] = {
 	ENTRY(INTEL, BUS100, pm130_900_ulv),
 	ENTRY(INTEL, BUS100, pm130_1000_ulv),
@@ -935,6 +939,7 @@ static const struct fqlist est_cpus[] = {
 	ENTRY(INTEL, BUS100, pm90_n738),
 	ENTRY(INTEL, BUS100, pm90_n758),
 	ENTRY(INTEL, BUS100, pm90_n778),
+
 	ENTRY(INTEL, BUS133, pm90_n710),
 	ENTRY(INTEL, BUS100, pm90_n715a),
 	ENTRY(INTEL, BUS100, pm90_n715b),
@@ -966,167 +971,143 @@ static const struct fqlist est_cpus[] = {
 	ENTRY(INTEL, BUS100, pm90_n765e),
 	ENTRY(INTEL, BUS133, pm90_n770),
 	ENTRY(INTEL, BUS133, pm90_n780),
-	ENTRY(IDT,   BUS100, C7M_770_ULV),
-	ENTRY(IDT,   BUS100, C7M_779_ULV),
-	ENTRY(IDT,   BUS100, C7M_772_ULV),
-	ENTRY(IDT,   BUS100, C7M_771),
-	ENTRY(IDT,   BUS100, C7M_775_ULV),
-	ENTRY(IDT,   BUS100, C7M_754),
-	ENTRY(IDT,   BUS100, C7M_764),
-	ENTRY(IDT,   BUS133, C7M_765),
-	ENTRY(IDT,   BUS100, C7M_784),
-	ENTRY(IDT,   BUS133, C7M_785),
-	ENTRY(IDT,   BUS100, C7M_794),
-	ENTRY(IDT,   BUS133, C7M_795),
-	ENTRY(IDT,   BUS100, eden90_1000)
+
+	ENTRY(IDT, BUS100, C7M_770_ULV),
+	ENTRY(IDT, BUS100, C7M_779_ULV),
+	ENTRY(IDT, BUS100, C7M_772_ULV),
+	ENTRY(IDT, BUS100, C7M_771),
+	ENTRY(IDT, BUS100, C7M_775_ULV),
+	ENTRY(IDT, BUS100, C7M_754),
+	ENTRY(IDT, BUS100, C7M_764),
+	ENTRY(IDT, BUS133, C7M_765),
+	ENTRY(IDT, BUS100, C7M_784),
+	ENTRY(IDT, BUS133, C7M_785),
+	ENTRY(IDT, BUS100, C7M_794),
+	ENTRY(IDT, BUS133, C7M_795),
+
+	ENTRY(IDT, BUS100, eden90_1000)
 };
 
-#endif	/* __i386__ */
+#define MSR2FREQINC(msr)	(((int) (msr) >> 8) & 0xff)
+#define MSR2VOLTINC(msr)	((int) (msr) & 0xff)
 
-static int	est_match(device_t, cfdata_t, void *);
-static void	est_attach(device_t, device_t, void *);
-static int	est_detach(device_t, int);
-static int	est_bus_clock(struct cpu_info *);
-static bool	est_tables(device_t);
-static void	est_xcall(uint16_t);
-static bool	est_sysctl(device_t);
-static int	est_sysctl_helper(SYSCTLFN_PROTO);
+#define MSR2MHZ(msr, bus)	((MSR2FREQINC((msr)) * (bus) + 50) / 100)
+#define MSR2MV(msr)		(MSR2VOLTINC(msr) * 16 + 700)
 
-struct est_softc {
-	device_t	  sc_dev;
-	struct cpu_info	 *sc_ci;
-	struct sysctllog *sc_log;
-	struct fqlist	 *sc_fqlist;
-	struct fqlist	  sc_fake_fqlist;
-	uint16_t	 *sc_fake_table;
-	char		 *sc_freqs;
-	size_t		  sc_freqs_len;
-	int		  sc_bus_clock;
-	int		  sc_node_target;
-	int		  sc_node_current;
-};
+static const struct 	fqlist *est_fqlist;	/* not NULL if functional */
+static uint16_t		*fake_table;		/* guessed est_cpu table */
+static struct fqlist    fake_fqlist;
+static int 		est_node_target, est_node_current;
+static const char 	est_desc[] = "Enhanced SpeedStep";
+static int		lvendor, bus_clock;
 
-CFATTACH_DECL_NEW(est, sizeof(struct est_softc),
-    est_match, est_attach, est_detach, NULL);
+static int		est_sysctl_helper(SYSCTLFN_PROTO);
+static int		est_init_once(void);
+static void		est_init_main(int);
 
 static int
-est_match(device_t parent, cfdata_t cf, void *aux)
+est_sysctl_helper(SYSCTLFN_ARGS)
 {
-	struct cpufeature_attach_args *cfaa = aux;
-	struct cpu_info *ci = cfaa->ci;
+	struct msr_cpu_broadcast mcb;
+	struct sysctlnode	node;
+	int			fq, oldfq, error;
 
-	if (strcmp(cfaa->name, "frequency") != 0)
-		return 0;
+	if (est_fqlist == NULL)
+		return EOPNOTSUPP;
 
-	if (cpu_vendor != CPUVENDOR_IDT &&
-	    cpu_vendor != CPUVENDOR_INTEL)
-		return 0;
+	node = *rnode;
+	node.sysctl_data = &fq;
 
-	if ((ci->ci_feat_val[1] & CPUID2_EST) == 0)
-		return 0;
+	oldfq = 0;
+	if (rnode->sysctl_num == est_node_target)
+		fq = oldfq = MSR2MHZ(rdmsr(MSR_PERF_CTL), bus_clock);
+	else if (rnode->sysctl_num == est_node_current)
+		fq = MSR2MHZ(rdmsr(MSR_PERF_STATUS), bus_clock);
+	else
+		return EOPNOTSUPP;
 
-	return (est_bus_clock(ci) != 0) ? 5 : 0;
-}
+	error = sysctl_lookup(SYSCTLFN_CALL(&node));
+	if (error || newp == NULL)
+		return error;
 
-static void
-est_attach(device_t parent, device_t self, void *aux)
-{
-	struct est_softc *sc = device_private(self);
-	struct cpufeature_attach_args *cfaa = aux;
-	struct cpu_info *ci = cfaa->ci;
+	/* support writing to ...frequency.target */
+	if (rnode->sysctl_num == est_node_target && fq != oldfq) {
+		int		i;
 
-	sc->sc_ci = ci;
-	sc->sc_dev = self;
-	sc->sc_log = NULL;
-	sc->sc_freqs = NULL;
-	sc->sc_fqlist = NULL;
-	sc->sc_fake_table = NULL;
-	sc->sc_bus_clock = est_bus_clock(ci);
-
-	KASSERT(sc->sc_bus_clock != 0);
-
-	aprint_naive("\n");
-	aprint_normal(": Enhanced SpeedStep\n");
-
-	(void)pmf_device_register(self, NULL, NULL);
-
-	if (est_tables(self) != false)
-		est_sysctl(self);
-}
-
-static int
-est_detach(device_t self, int flags)
-{
-	struct est_softc *sc = device_private(self);
-	uint16_t n = sc->sc_fake_fqlist.n;
-
-	if (sc->sc_log != NULL)
-		sysctl_teardown(&sc->sc_log);
-
-	if (sc->sc_freqs != NULL)
-		kmem_free(sc->sc_freqs, sc->sc_freqs_len);
-
-	if (sc->sc_fake_table != NULL)
-		kmem_free(sc->sc_fake_table, n * sizeof(*sc->sc_fake_table));
-
-	pmf_device_deregister(self);
+		for (i = est_fqlist->n - 1; i > 0; i--)
+			if (MSR2MHZ(est_fqlist->table[i], bus_clock) >= fq)
+				break;
+		fq = MSR2MHZ(est_fqlist->table[i], bus_clock);
+		mcb.msr_read = true;
+		mcb.msr_type = MSR_PERF_CTL;
+		mcb.msr_mask = 0xffffULL;
+		mcb.msr_value = est_fqlist->table[i];
+		msr_cpu_broadcast(&mcb);
+	}
 
 	return 0;
 }
 
 static int
-est_bus_clock(struct cpu_info *ci)
+est_init_once(void)
 {
-	uint32_t family, model;
-	int bus_clock = 0;
-
-	model  = CPUID2MODEL(ci->ci_signature);
-	family = CPUID2FAMILY(ci->ci_signature);
-
-	switch (family) {
-
-	case 0x0f:
-		bus_clock = p4_get_bus_clock(ci);
-		break;
-
-	case 0x06:
-
-		if (cpu_vendor != CPUVENDOR_IDT)
-			bus_clock = p3_get_bus_clock(ci);
-		else {
-			switch (model) {
-
-			case 0x0a: /* C7 Esther */
-			case 0x0d: /* C7 Esther */
-				bus_clock = viac7_get_bus_clock(ci);
-				break;
-
-			default:
-				bus_clock = via_get_bus_clock(ci);
-				break;
-			}
-		}
-	}
-
-	return bus_clock;
+	est_init_main(lvendor);
+	return 0;
 }
 
-static bool
-est_tables(device_t self)
+void
+est_init(int vendor)
 {
-	struct est_softc *sc = device_private(self);
+	int error;
+	static ONCE_DECL(est_initialized);
 
+	lvendor = vendor;
+
+	error = RUN_ONCE(&est_initialized, est_init_once);
+	if (__predict_false(error != 0))
+		return;
+}
+
+static void
+est_init_main(int vendor)
+{
 #ifdef __i386__
-	const struct fqlist *fql;
+	const struct fqlist	*fql;
 #endif
-	uint64_t msr;
-	uint16_t cur, idhi, idlo;
-	uint8_t crhi, crlo, crcur;
-	size_t len;
-	int i, mv;
+	const struct sysctlnode	*node, *estnode, *freqnode;
+	uint64_t		msr;
+	uint16_t		cur, idhi, idlo;
+	uint8_t			crhi, crlo, crcur;
+	int			i, mv, rc;
+	size_t			len, freq_len;
+	char			*freq_names;
+	const char *cpuname;
+       
+	cpuname	= device_xname(curcpu()->ci_dev);
+
+	if (CPUID2FAMILY(curcpu()->ci_signature) == 15)
+		bus_clock = p4_get_bus_clock(curcpu());
+	else if (CPUID2FAMILY(curcpu()->ci_signature) == 6) {
+		if (vendor == CPUVENDOR_IDT) {
+			switch (CPUID2MODEL(curcpu()->ci_signature)) {
+			case 0xa: /* C7 Esther */
+			case 0xd: /* C7 Esther */
+				bus_clock = viac7_get_bus_clock(curcpu());
+				break;
+			default:
+				bus_clock = via_get_bus_clock(curcpu());
+				break;
+			}
+		} else
+			bus_clock = p3_get_bus_clock(curcpu());
+	}
+
+	if (bus_clock == 0) {
+		aprint_debug("%s: unknown system bus clock\n", __func__);
+		return;
+	}
 
 	msr = rdmsr(MSR_PERF_STATUS);
-
 	idhi = (msr >> 32) & 0xffff;
 	idlo = (msr >> 48) & 0xffff;
 	cur = msr & 0xffff;
@@ -1138,22 +1119,26 @@ est_tables(device_t self)
 	if (idhi == 0 || idlo == 0 || cur == 0 ||
 	    ((cur >> 8) & 0xff) < ((idlo >> 8) & 0xff) ||
 	    ((cur >> 8) & 0xff) > ((idhi >> 8) & 0xff)) {
-		aprint_debug_dev(self, "strange msr value 0x%"PRIx64"\n", msr);
-		return false;
+		aprint_debug("%s: strange msr value 0x%016llx\n", __func__, msr);
+		return;
 	}
 #endif
 
 #ifdef __amd64__
-	if (crlo == 0 || crhi == 0 || crcur == 0 || crhi == crlo ||
-	    crlo > crhi || crcur < crlo || crcur > crhi) {
+	if (crlo == 0 || crhi == crlo) {
+		aprint_debug("%s: crlo == 0 || crhi == crlo\n", __func__);
+		return;
+	}
+
+	if (crhi == 0 || crcur == 0 || crlo > crhi ||
+	    crcur < crlo || crcur > crhi) {
 		/*
 		 * Do complain about other weirdness, because we first want to
 		 * know about it, before we decide what to do with it
 		 */
-		aprint_debug_dev(self, "strange msr value 0x%"PRIu64"\n", msr);
-		aprint_debug_dev(self, " crhi=%u, crlo=%u, crcur=%u\n",
-		    crhi, crlo, crcur);
-		return false;
+		aprint_debug("%s: strange msr value 0x%" PRIu64 "\n",
+		    __func__, msr);
+		return;
 	}
 #endif
 
@@ -1162,24 +1147,20 @@ est_tables(device_t self)
 
 #ifdef __i386__
 	/*
-	 * Find an entry which matches (vendor, bus_clock, idhi, idlo).
+	 * Find an entry which matches (vendor, bus_clock, idhi, idlo)
 	 */
-	sc->sc_fqlist = NULL;
-
+	est_fqlist = NULL;
 	for (i = 0; i < __arraycount(est_cpus); i++) {
-
 		fql = &est_cpus[i];
-
-		if (cpu_vendor == fql->vendor &&
-		    sc->sc_bus_clock == BUS_CLK(fql) &&
+		if (vendor == fql->vendor && bus_clock == BUS_CLK(fql) &&
 		    idhi == fql->table[0] && idlo == fql->table[fql->n - 1]) {
-			sc->sc_fqlist = __UNCONST(fql);
+			est_fqlist = fql;
 			break;
 		}
 	}
 #endif
 
-	if (sc->sc_fqlist == NULL) {
+	if (est_fqlist == NULL) {
 		int j, tablesize, freq, volt;
 		int minfreq, minvolt, maxfreq, maxvolt, freqinc, voltinc;
 
@@ -1188,23 +1169,23 @@ est_tables(device_t self)
 		 * so do not run est on them.
 		 */
 		if (idhi == idlo) {
-			aprint_debug_dev(self, "idhi == idlo\n");
-			return false;
+			aprint_debug("%s: idhi == idlo\n", __func__);
+			return;
 		}
 
 #ifdef EST_DEBUG
-		aprint_normal_dev(self, "bus_clock = %d\n", sc->sc_bus_clock);
-		aprint_normal_dev(self, "idlo = 0x%x\n", idlo);
-		aprint_normal_dev(self, "lo  %4d mV, %4d MHz\n",
-		    MSR2MV(idlo), MSR2MHZ(idlo, sc->sc_bus_clock));
-		aprint_normal_dev(self, "raw %4d   , %4d    \n",
+		printf("%s: bus_clock = %d\n", __func__, bus_clock);
+		printf("%s: idlo = 0x%x\n", __func__, idlo);
+		printf("%s: lo  %4d mV, %4d MHz\n", __func__,
+		    MSR2MV(idlo), MSR2MHZ(idlo, bus_clock));
+		printf("%s: raw %4d   , %4d    \n", __func__,
 		    (idlo & 0xff), ((idlo >> 8) & 0xff));
-		aprint_normal_dev(self, "idhi = 0x%x\n", idhi);
-		aprint_normal_dev(self, "hi  %4d mV, %4d MHz\n",
-		    MSR2MV(idhi), MSR2MHZ(idhi, sc->sc_bus_clock));
-		aprint_normal_dev(self, "raw %4d   , %4d    \n",
+		printf("%s: idhi = 0x%x\n", __func__, idhi);
+		printf("%s: hi  %4d mV, %4d MHz\n", __func__,
+		    MSR2MV(idhi), MSR2MHZ(idhi, bus_clock));
+		printf("%s: raw %4d   , %4d    \n", __func__,
 		    (idhi & 0xff), ((idhi >> 8) & 0xff));
-		aprint_normal_dev(self, "cur  = 0x%x\n", cur);
+		printf("%s: cur  = 0x%x\n", __func__, cur);
 #endif
 
                 /*
@@ -1222,7 +1203,7 @@ est_tables(device_t self)
 
 		/* Avoid diving by zero. */
 		if (freqinc == 0)
-			return false;
+			return;
 
 		if (freqinc < voltinc || voltinc == 0) {
 			tablesize = maxfreq - minfreq + 1;
@@ -1235,210 +1216,87 @@ est_tables(device_t self)
 			voltinc = 100;
 		}
 
-		sc->sc_fake_table = kmem_alloc(tablesize *
-		    sizeof(uint16_t), KM_SLEEP);
-
-		if (sc->sc_fake_table == NULL)
-			return false;
-
-		sc->sc_fake_fqlist.n = tablesize;
+		fake_table = malloc(tablesize * sizeof(uint16_t), M_DEVBUF,
+		    M_WAITOK);
+		fake_fqlist.n = tablesize;
 
 		/* The frequency/voltage table is highest frequency first */
 		freq = maxfreq * 100;
 		volt = maxvolt * 100;
-
 		for (j = 0; j < tablesize; j++) {
-			sc->sc_fake_table[j] = (((freq + 99) / 100) << 8) +
+			fake_table[j] = (((freq + 99) / 100) << 8) +
 			    (volt + 99) / 100;
 #ifdef EST_DEBUG
-			aprint_normal_dev(self, "fake entry %d: %4d mV, "
-			    "%4d MHz, MSR*100 mV = %4d freq = %4d\n",
-			    j, MSR2MV(sc->sc_fake_table[j]),
-			    MSR2MHZ(sc->sc_fake_table[j], sc->sc_bus_clock),
+			printf("%s: fake entry %d: %4d mV, %4d MHz  "
+			    "MSR*100 mV = %4d freq = %4d\n",
+			    __func__, j, MSR2MV(fake_table[j]),
+			    MSR2MHZ(fake_table[j], bus_clock),
 			    volt, freq);
 #endif /* EST_DEBUG */
 			freq -= freqinc;
 			volt -= voltinc;
 		}
-
-		sc->sc_fake_fqlist.table = sc->sc_fake_table;
-		sc->sc_fake_fqlist.vendor = cpu_vendor;
-		sc->sc_fqlist = &sc->sc_fake_fqlist;
+		fake_fqlist.vendor = vendor;
+		fake_fqlist.table = fake_table;
+		est_fqlist = &fake_fqlist;
 	}
 
-	sc->sc_freqs_len = sc->sc_fqlist->n * (sizeof("9999 ") - 1) + 1;
-	sc->sc_freqs = kmem_zalloc(sc->sc_freqs_len, KM_SLEEP);
-
-	if (sc->sc_freqs == NULL)
-		return false;
-
-	for (i = len = 0; i < sc->sc_fqlist->n; i++) {
-
-		len += snprintf(sc->sc_freqs + len, sc->sc_freqs_len - len,
-		    "%d%s", MSR2MHZ(sc->sc_fqlist->table[i], sc->sc_bus_clock),
-		    i < sc->sc_fqlist->n - 1 ? " " : "");
+	/*
+	 * OK, tell the user the available frequencies.
+	 */
+	freq_len = est_fqlist->n * (sizeof("9999 ")-1) + 1;
+	freq_names = malloc(freq_len, M_SYSCTLDATA, M_WAITOK);
+	freq_names[0] = '\0';
+	len = 0;
+	for (i = 0; i < est_fqlist->n; i++) {
+		len += snprintf(freq_names + len, freq_len - len, "%d%s",
+		    MSR2MHZ(est_fqlist->table[i], bus_clock),
+		    i < est_fqlist->n - 1 ? " " : "");
 	}
 
-	aprint_debug_dev(self, "%d mV, %d (MHz): %s\n", mv,
-	    MSR2MHZ(msr, sc->sc_bus_clock), sc->sc_freqs);
-
-	return true;
-}
-
-static void
-est_xcall(uint16_t val)
-{
-	struct msr_rw_info msr;
-	uint64_t xc;
-
-	msr.msr_read = true;
-	msr.msr_type = MSR_PERF_CTL;
-	msr.msr_mask = 0xffffULL;
-	msr.msr_value = val;
-
-	xc = xc_broadcast(0, x86_msr_xcall, &msr, NULL);
-	xc_wait(xc);
-}
-
-static bool
-est_sysctl(device_t self)
-{
-	struct est_softc *sc = device_private(self);
-	const struct sysctlnode	*node, *estnode, *freqnode;
-	int rv;
+	aprint_normal("%s: %s (%d mV) ", cpuname, est_desc, mv);
+	aprint_normal("%d MHz\n", MSR2MHZ(msr, bus_clock));
+	aprint_normal("%s: %s frequencies available (MHz): %s\n",
+	    cpuname, est_desc, freq_names);
 
 	/*
 	 * Setup the sysctl sub-tree machdep.est.*
 	 */
-	rv = sysctl_createv(&sc->sc_log, 0, NULL, &node,
+	if ((rc = sysctl_createv(NULL, 0, NULL, &node,
 	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "machdep", NULL,
-	    NULL, 0, NULL, 0, CTL_MACHDEP, CTL_EOL);
+	    NULL, 0, NULL, 0, CTL_MACHDEP, CTL_EOL)) != 0)
+		goto err;
 
-	if (rv != 0)
-		goto fail;
-
-	rv = sysctl_createv(&sc->sc_log, 0, &node, &estnode,
+	if ((rc = sysctl_createv(NULL, 0, &node, &estnode,
 	    0, CTLTYPE_NODE, "est", NULL,
-	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL);
+	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
 
-	if (rv != 0)
-		goto fail;
-
-	rv = sysctl_createv(&sc->sc_log, 0, &estnode, &freqnode,
+	if ((rc = sysctl_createv(NULL, 0, &estnode, &freqnode,
 	    0, CTLTYPE_NODE, "frequency", NULL,
-	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL);
+	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
 
-	if (rv != 0)
-		goto fail;
+	if ((rc = sysctl_createv(NULL, 0, &freqnode, &node,
+	    EST_TARGET_CTLFLAG, CTLTYPE_INT, "target", NULL,
+	    est_sysctl_helper, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
+	est_node_target = node->sysctl_num;
 
-	rv = sysctl_createv(&sc->sc_log, 0, &freqnode, &node,
-	    CTLFLAG_READWRITE, CTLTYPE_INT, "target", NULL,
-	    est_sysctl_helper, 0, (void *)sc, 0, CTL_CREATE, CTL_EOL);
-
-	if (rv != 0)
-		goto fail;
-
-	sc->sc_node_target = node->sysctl_num;
-
-	rv = sysctl_createv(&sc->sc_log, 0, &freqnode, &node,
+	if ((rc = sysctl_createv(NULL, 0, &freqnode, &node,
 	    0, CTLTYPE_INT, "current", NULL,
-	    est_sysctl_helper, 0, (void *)sc, 0, CTL_CREATE, CTL_EOL);
+	    est_sysctl_helper, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
+	est_node_current = node->sysctl_num;
 
-	if (rv != 0)
-		goto fail;
-
-	sc->sc_node_current = node->sysctl_num;
-
-	rv = sysctl_createv(&sc->sc_log, 0, &freqnode, &node,
+	if ((rc = sysctl_createv(NULL, 0, &freqnode, &node,
 	    0, CTLTYPE_STRING, "available", NULL,
-	    NULL, 0, sc->sc_freqs, sc->sc_freqs_len,
-	    CTL_CREATE, CTL_EOL);
+	    NULL, 0, freq_names, freq_len, CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
 
-	if (rv != 0)
-		goto fail;
+	return;
 
-	return true;
-
-fail:
-	aprint_error_dev(self, "failed to initialize sysctl (err %d)\n", rv);
-
-	sysctl_teardown(&sc->sc_log);
-	sc->sc_log = NULL;
-
-	return false;
-}
-
-static int
-est_sysctl_helper(SYSCTLFN_ARGS)
-{
-	struct sysctlnode node;
-	struct est_softc *sc;
-	int fq, err, i, oldfq;
-
-	fq = oldfq = 0;
-
-	node = *rnode;
-	sc = node.sysctl_data;
-
-	if (sc->sc_fqlist == NULL)
-		return EOPNOTSUPP;
-
-	node.sysctl_data = &fq;
-
-	if (rnode->sysctl_num == sc->sc_node_target) {
-
-		fq = oldfq = MSR2MHZ(rdmsr(MSR_PERF_CTL), sc->sc_bus_clock);
-
-	} else if (rnode->sysctl_num == sc->sc_node_current) {
-
-		fq = MSR2MHZ(rdmsr(MSR_PERF_STATUS), sc->sc_bus_clock);
-
-	} else
-		return EOPNOTSUPP;
-
-	err = sysctl_lookup(SYSCTLFN_CALL(&node));
-
-	if (err != 0 || newp == NULL)
-		return err;
-
-	if (fq == oldfq || rnode->sysctl_num != sc->sc_node_target)
-		return 0;
-
-	for (i = sc->sc_fqlist->n - 1; i > 0; i--) {
-
-		if (MSR2MHZ(sc->sc_fqlist->table[i], sc->sc_bus_clock) >= fq)
-			break;
-	}
-
-	est_xcall(sc->sc_fqlist->table[i]);
-	return 0;
-}
-
-MODULE(MODULE_CLASS_DRIVER, est, NULL);
-
-#ifdef _MODULE
-#include "ioconf.c"
-#endif
-
-static int
-est_modcmd(modcmd_t cmd, void *aux)
-{
-	int error = 0;
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-#ifdef _MODULE
-		error = config_init_component(cfdriver_ioconf_est,
-		    cfattach_ioconf_est, cfdata_ioconf_est);
-#endif
-		return error;
-	case MODULE_CMD_FINI:
-#ifdef _MODULE
-		error = config_fini_component(cfdriver_ioconf_est,
-		    cfattach_ioconf_est, cfdata_ioconf_est);
-#endif
-		return error;
-	default:
-		return ENOTTY;
-	}
+ err:
+	free(freq_names, M_SYSCTLDATA);
+	aprint_error("%s: sysctl_createv failed (rc = %d)\n", __func__, rc);
 }

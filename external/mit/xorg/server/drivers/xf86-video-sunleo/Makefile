@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2009/09/05 22:35:53 macallan Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2009/10/16 06:11:33 snj Exp $
 
 DRIVER=		xf86-video-sunleo
 DRIVER_NAME=	sunleo_drv

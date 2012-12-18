@@ -1,4 +1,4 @@
-/*	$NetBSD: ls.c,v 1.21 2011/08/31 16:24:57 plunky Exp $	*/
+/*	$NetBSD: ls.c,v 1.19 2006/10/11 19:51:10 apb Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)ls.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: ls.c,v 1.21 2011/08/31 16:24:57 plunky Exp $");
+__RCSID("$NetBSD: ls.c,v 1.19 2006/10/11 19:51:10 apb Exp $");
 #endif
 #endif /* not lint */
 
@@ -75,9 +75,8 @@ printlong(char *name,			/* filename to print */
 	    group_from_gid(sb->st_gid, 0));
 
 	if (S_ISCHR(sb->st_mode) || S_ISBLK(sb->st_mode))
-		(void)printf("%3llu,%5llu ",
-		    (unsigned long long)major(sb->st_rdev),
-		    (unsigned long long)minor(sb->st_rdev));
+		(void)printf("%3d,%5d ", major(sb->st_rdev),
+		    minor(sb->st_rdev));
 	else
 		(void)printf("%9lld ", (long long)sb->st_size);
 	printtime(sb->st_mtime);
@@ -98,7 +97,7 @@ printtime(time_t ftime)
 		(void)putchar(longstring[i]);
 
 #define	SIXMONTHS	((DAYSPERNYEAR / 2) * SECSPERDAY)
-	if (ftime + SIXMONTHS > time(NULL))
+	if (ftime + SIXMONTHS > time((time_t *)NULL))
 		for (i = 11; i < 16; ++i)
 			(void)putchar(longstring[i]);
 	else {

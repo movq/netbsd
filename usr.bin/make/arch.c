@@ -1,4 +1,4 @@
-/*	$NetBSD: arch.c,v 1.63 2012/06/12 19:21:50 joerg Exp $	*/
+/*	$NetBSD: arch.c,v 1.56 2008/10/06 22:09:21 joerg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -69,14 +69,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: arch.c,v 1.63 2012/06/12 19:21:50 joerg Exp $";
+static char rcsid[] = "$NetBSD: arch.c,v 1.56 2008/10/06 22:09:21 joerg Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)arch.c	8.2 (Berkeley) 1/2/94";
 #else
-__RCSID("$NetBSD: arch.c,v 1.63 2012/06/12 19:21:50 joerg Exp $");
+__RCSID("$NetBSD: arch.c,v 1.56 2008/10/06 22:09:21 joerg Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -165,9 +165,9 @@ typedef struct Arch {
     size_t	  fnamesize;  /* Size of the string table */
 } Arch;
 
-static int ArchFindArchive(const void *, const void *);
+static int ArchFindArchive(ClientData, ClientData);
 #ifdef CLEANUP
-static void ArchFree(void *);
+static void ArchFree(ClientData);
 #endif
 static struct ar_hdr *ArchStatMember(char *, char *, Boolean);
 static FILE *ArchFindMember(char *, char *, struct ar_hdr *, const char *);
@@ -191,7 +191,7 @@ static int ArchSVR4Entry(Arch *, char *, size_t, FILE *);
  *-----------------------------------------------------------------------
  */
 static void
-ArchFree(void *ap)
+ArchFree(ClientData ap)
 {
     Arch *a = (Arch *)ap;
     Hash_Search	  search;
@@ -375,7 +375,7 @@ Arch_ParseArchive(char **linePtr, Lst nodeLst, GNode *ctxt)
 		 */
 		gn = Targ_FindNode(buf, TARG_CREATE);
 
-		if (gn == NULL) {
+		if (gn == NILGNODE) {
 		    free(buf);
 		    return(FAILURE);
 		} else {
@@ -410,7 +410,7 @@ Arch_ParseArchive(char **linePtr, Lst nodeLst, GNode *ctxt)
 		snprintf(nameBuf, sz, "%s(%s)", libName, member);
 		free(member);
 		gn = Targ_FindNode(nameBuf, TARG_CREATE);
-		if (gn == NULL) {
+		if (gn == NILGNODE) {
 		    free(nameBuf);
 		    return (FAILURE);
 		} else {
@@ -425,7 +425,7 @@ Arch_ParseArchive(char **linePtr, Lst nodeLst, GNode *ctxt)
 		    (void)Lst_AtEnd(nodeLst, gn);
 		}
 	    }
-	    Lst_Destroy(members, NULL);
+	    Lst_Destroy(members, NOFREE);
 	    free(nameBuf);
 	} else {
 	    size_t	sz = strlen(libName) + strlen(memName) + 3;
@@ -433,7 +433,7 @@ Arch_ParseArchive(char **linePtr, Lst nodeLst, GNode *ctxt)
 	    snprintf(nameBuf, sz, "%s(%s)", libName, memName);
 	    gn = Targ_FindNode(nameBuf, TARG_CREATE);
 	    free(nameBuf);
-	    if (gn == NULL) {
+	    if (gn == NILGNODE) {
 		return (FAILURE);
 	    } else {
 		/*
@@ -493,9 +493,9 @@ Arch_ParseArchive(char **linePtr, Lst nodeLst, GNode *ctxt)
  *-----------------------------------------------------------------------
  */
 static int
-ArchFindArchive(const void *ar, const void *archName)
+ArchFindArchive(ClientData ar, ClientData archName)
 {
-    return (strcmp(archName, ((const Arch *)ar)->name));
+    return (strcmp((char *)archName, ((Arch *)ar)->name));
 }
 
 /*-
@@ -548,7 +548,7 @@ ArchStatMember(char *archive, char *member, Boolean hash)
     }
 
     ln = Lst_Find(archives, archive, ArchFindArchive);
-    if (ln != NULL) {
+    if (ln != NILLNODE) {
 	ar = (Arch *)Lst_Datum(ln);
 
 	he = Hash_FindEntry(&ar->members, member);
@@ -567,7 +567,7 @@ ArchStatMember(char *archive, char *member, Boolean hash)
 	    }
 	    if ((he = Hash_FindEntry(&ar->members, copy)) != NULL)
 		return ((struct ar_hdr *)Hash_GetValue(he));
-	    return NULL;
+	    return (NULL);
 	}
     }
 
@@ -584,7 +584,7 @@ ArchStatMember(char *archive, char *member, Boolean hash)
 	 arch = ArchFindMember(archive, member, &sarh, "r");
 
 	 if (arch == NULL) {
-	    return NULL;
+	    return (NULL);
 	} else {
 	    fclose(arch);
 	    return (&sarh);
@@ -597,7 +597,7 @@ ArchStatMember(char *archive, char *member, Boolean hash)
      */
     arch = fopen(archive, "r");
     if (arch == NULL) {
-	return NULL;
+	return (NULL);
     }
 
     /*
@@ -607,7 +607,7 @@ ArchStatMember(char *archive, char *member, Boolean hash)
     if ((fread(magic, SARMAG, 1, arch) != 1) ||
     	(strncmp(magic, ARMAG, SARMAG) != 0)) {
 	    fclose(arch);
-	    return NULL;
+	    return (NULL);
     }
 
     ar = bmake_malloc(sizeof(Arch));
@@ -705,7 +705,7 @@ ArchStatMember(char *archive, char *member, Boolean hash)
     if (he != NULL) {
 	return ((struct ar_hdr *)Hash_GetValue(he));
     } else {
-	return NULL;
+	return (NULL);
     }
 
 badarch:
@@ -714,7 +714,7 @@ badarch:
     if (ar->fnametab)
 	free(ar->fnametab);
     free(ar);
-    return NULL;
+    return (NULL);
 }
 
 #ifdef SVR4ARCHIVES
@@ -855,7 +855,7 @@ ArchFindMember(char *archive, char *member, struct ar_hdr *arhPtr,
 
     arch = fopen(archive, mode);
     if (arch == NULL) {
-	return NULL;
+	return (NULL);
     }
 
     /*
@@ -865,7 +865,7 @@ ArchFindMember(char *archive, char *member, struct ar_hdr *arhPtr,
     if ((fread(magic, SARMAG, 1, arch) != 1) ||
     	(strncmp(magic, ARMAG, SARMAG) != 0)) {
 	    fclose(arch);
-	    return NULL;
+	    return (NULL);
     }
 
     /*
@@ -890,7 +890,7 @@ ArchFindMember(char *archive, char *member, struct ar_hdr *arhPtr,
 	      * and there's no way we can recover...
 	      */
 	     fclose(arch);
-	     return NULL;
+	     return (NULL);
 	} else if (strncmp(member, arhPtr->ar_name, tlen) == 0) {
 	    /*
 	     * If the member's name doesn't take up the entire 'name' field,
@@ -966,7 +966,7 @@ skip:
      * archive and return NULL -- an error.
      */
     fclose(arch);
-    return NULL;
+    return (NULL);
 }
 
 /*-
@@ -1029,7 +1029,7 @@ Arch_Touch(GNode *gn)
  */
 void
 #if !defined(RANLIBMAG)
-Arch_TouchLib(GNode *gn MAKE_ATTR_UNUSED)
+Arch_TouchLib(GNode *gn __unused)
 #else
 Arch_TouchLib(GNode *gn)
 #endif
@@ -1120,7 +1120,7 @@ Arch_MemMTime(GNode *gn)
 	gn->mtime = 0;
 	return (0);
     }
-    while ((ln = Lst_Next(gn->parents)) != NULL) {
+    while ((ln = Lst_Next(gn->parents)) != NILLNODE) {
 	pgn = (GNode *)Lst_Datum(ln);
 
 	if (pgn->type & OP_ARCHV) {
@@ -1212,7 +1212,7 @@ Arch_FindLib(GNode *gn, Lst path)
  *	A library will be considered out-of-date for any of these reasons,
  *	given that it is a target on a dependency line somewhere:
  *	    Its modification time is less than that of one of its
- *	    	  sources (gn->mtime < gn->cmgn->mtime).
+ *	    	  sources (gn->mtime < gn->cmtime).
  *	    Its modification time is greater than the time at which the
  *	    	  make began (i.e. it's been modified in the course
  *	    	  of the make, probably by archiving).
@@ -1245,9 +1245,8 @@ Arch_LibOODate(GNode *gn)
 	oodate = TRUE;
     } else if (OP_NOP(gn->type) && Lst_IsEmpty(gn->children)) {
 	oodate = FALSE;
-    } else if ((!Lst_IsEmpty(gn->children) && gn->cmgn == NULL) ||
-	       (gn->mtime > now) ||
-	       (gn->cmgn != NULL && gn->mtime < gn->cmgn->mtime)) {
+    } else if ((!Lst_IsEmpty(gn->children) && gn->cmtime == 0) ||
+	       (gn->mtime > now) || (gn->mtime < gn->cmtime)) {
 	oodate = TRUE;
     } else {
 #ifdef RANLIBMAG
@@ -1262,7 +1261,7 @@ Arch_LibOODate(GNode *gn)
 	    if (DEBUG(ARCH) || DEBUG(MAKE)) {
 		fprintf(debug_file, "%s modified %s...", RANLIBMAG, Targ_FmtTime(modTimeTOC));
 	    }
-	    oodate = (gn->cmgn == NULL || gn->cmgn->mtime > modTimeTOC);
+	    oodate = (gn->cmtime > modTimeTOC);
 	} else {
 	    /*
 	     * A library w/o a table of contents is out-of-date

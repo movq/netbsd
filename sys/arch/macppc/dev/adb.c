@@ -1,4 +1,4 @@
-/*	$NetBSD: adb.c,v 1.34 2012/10/27 17:18:00 chs Exp $	*/
+/*	$NetBSD: adb.c,v 1.24 2007/11/07 19:47:00 garbled Exp $	*/
 
 /*-
  * Copyright (C) 1994	Bradley A. Grantham
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Bradley A. Grantham.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.34 2012/10/27 17:18:00 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.24 2007/11/07 19:47:00 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -37,7 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.34 2012/10/27 17:18:00 chs Exp $");
 #include <sys/signalvar.h>
 #include <sys/systm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/autoconf.h>
 #include <machine/pio.h>
 
@@ -55,9 +60,9 @@ __KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.34 2012/10/27 17:18:00 chs Exp $");
 /*
  * Function declarations.
  */
-static int	adbmatch(device_t, cfdata_t, void *);
-static void	adbattach(device_t, device_t, void *);
-static int	adbprint(void *, const char *);
+static int	adbmatch __P((struct device *, struct cfdata *, void *));
+static void	adbattach __P((struct device *, struct device *, void *));
+static int	adbprint __P((void *, const char *));
 static void	adb_todr_init(void);
 
 /*
@@ -72,11 +77,14 @@ int	adb_debug = 0;		/* Output debugging messages */
 /*
  * Driver definition.
  */
-CFATTACH_DECL_NEW(adb, sizeof(struct adb_softc),
+CFATTACH_DECL(adb, sizeof(struct adb_softc),
     adbmatch, adbattach, NULL, NULL);
 
 static int
-adbmatch(device_t parent, cfdata_t cf, void *aux)
+adbmatch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct confargs *ca = aux;
 
@@ -96,9 +104,11 @@ adbmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-adbattach(device_t parent, device_t self, void *aux)
+adbattach(parent, self, aux)
+	struct device *parent, *self;
+	void   *aux;
 {
-	struct adb_softc *sc = device_private(self);
+	struct adb_softc *sc = (struct adb_softc *)self;
 	struct confargs *ca = aux;
 	int irq = ca->ca_intr[0];
 	int node;
@@ -107,11 +117,11 @@ adbattach(device_t parent, device_t self, void *aux)
 	int totaladbs;
 	int adbindex, adbaddr, adb_node;
 
-	extern volatile uint8_t *Via1Base;
+	extern volatile u_char *Via1Base;
 
 	ca->ca_reg[0] += ca->ca_baseaddr;
 
-	sc->sc_regbase = mapiodev(ca->ca_reg[0], ca->ca_reg[1], false);
+	sc->sc_regbase = mapiodev(ca->ca_reg[0], ca->ca_reg[1]);
 	Via1Base = sc->sc_regbase;
 
 	if (strcmp(ca->ca_name, "via-cuda") == 0)
@@ -194,7 +204,9 @@ adbattach(device_t parent, device_t self, void *aux)
 }
 
 int
-adbprint(void *args, const char *name)
+adbprint(args, name)
+	void *args;
+	const char *name;
 {
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)args;
 	int rv = UNCONF;
@@ -267,7 +279,7 @@ adbprint(void *args, const char *name)
 #define DIFF19041970 2082844800
 
 static int
-adb_todr_get(todr_chip_handle_t tch, struct timeval *tvp)
+adb_todr_get(todr_chip_handle_t tch, volatile struct timeval *tvp)
 {
 	unsigned long sec;
 
@@ -279,7 +291,7 @@ adb_todr_get(todr_chip_handle_t tch, struct timeval *tvp)
 }
 
 static int
-adb_todr_set(todr_chip_handle_t tch, struct timeval *tvp)
+adb_todr_set(todr_chip_handle_t tch, volatile struct timeval *tvp)
 {
 	unsigned long sec;
 

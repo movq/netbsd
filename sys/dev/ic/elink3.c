@@ -1,4 +1,4 @@
-/*	$NetBSD: elink3.c,v 1.134 2012/10/27 17:18:20 chs Exp $	*/
+/*	$NetBSD: elink3.c,v 1.127 2008/08/27 05:33:47 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -62,9 +62,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.134 2012/10/27 17:18:20 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.127 2008/08/27 05:33:47 christos Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,15 +79,19 @@ __KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.134 2012/10/27 17:18:20 chs Exp $");
 #include <sys/syslog.h>
 #include <sys/select.h>
 #include <sys/device.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <sys/cpu.h>
 #include <sys/bus.h>
@@ -186,7 +192,7 @@ int	epioctl(struct ifnet *, u_long, void *);
 void	epstart(struct ifnet *);
 void	epwatchdog(struct ifnet *);
 void	epreset(struct ep_softc *);
-static bool epshutdown(device_t, int);
+static void epshutdown(void *);
 void	epread(struct ep_softc *);
 struct mbuf *epget(struct ep_softc *, int);
 void	epmbuffill(void *);
@@ -202,7 +208,7 @@ void	ep_media_status(struct ifnet *ifp, struct ifmediareq *req);
 /* MII callbacks */
 int	ep_mii_readreg(device_t, int, int);
 void	ep_mii_writereg(device_t, int, int, int);
-void	ep_statchg(struct ifnet *);
+void	ep_statchg(device_t);
 
 void	ep_tick(void *);
 
@@ -487,17 +493,15 @@ epconfig(struct ep_softc *sc, u_short chipset, u_int8_t *enaddr)
 
 	GO_WINDOW(1);		/* Window 1 is operating window */
 
+#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 	    RND_TYPE_NET, 0);
+#endif
 
 	sc->tx_start_thresh = 20;	/* probably a good starting point. */
 
 	/*  Establish callback to reset card when we reboot. */
-	if (pmf_device_register1(sc->sc_dev, NULL, NULL, epshutdown))
-		pmf_class_network_register(sc->sc_dev, ifp);
-	else
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
+	sc->sd_hook = shutdownhook_establish(epshutdown, sc);
 
 	ep_reset_cmd(sc, ELINK_COMMAND, RX_RESET);
 	ep_reset_cmd(sc, ELINK_COMMAND, TX_RESET);
@@ -1150,7 +1154,10 @@ startagain:
 	bus_space_write_2(iot, ioh, ELINK_COMMAND, SET_TX_START_THRESH |
 	    ((len / 4 + sc->tx_start_thresh) /* >> sc->ep_pktlenshift*/));
 
-	bpf_mtap(ifp, m0);
+#if NBPFILTER > 0
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, m0);
+#endif
 
 	/*
 	 * Do the output at a high interrupt priority level so that an
@@ -1379,7 +1386,7 @@ epintr(void *arg)
 			if ((status & INTR_LATCH) == 0) {
 #if 0
 				printf("%s: intr latch cleared\n",
-				       device_xname(sc->sc_dev));
+				       device_xname(&sc->sc_dev));
 #endif
 				break;
 			}
@@ -1399,7 +1406,7 @@ epintr(void *arg)
 #if 0
 		status = bus_space_read_2(iot, ioh, ELINK_STATUS);
 
-		printf("%s: intr%s%s%s%s\n", device_xname(sc->sc_dev),
+		printf("%s: intr%s%s%s%s\n", device_xname(&sc->sc_dev),
 		       (status & RX_COMPLETE)?" RX_COMPLETE":"",
 		       (status & TX_COMPLETE)?" TX_COMPLETE":"",
 		       (status & TX_AVAIL)?" TX_AVAIL":"",
@@ -1428,8 +1435,10 @@ epintr(void *arg)
 			epstart(ifp);
 		}
 
+#if NRND > 0
 		if (status)
 			rnd_add_uint32(&sc->rnd_source, status);
+#endif
 	}
 
 	/* no more interrupts */
@@ -1490,11 +1499,14 @@ again:
 
 	++ifp->if_ipackets;
 
+#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.
 	 * If so, hand off the raw packet to BPF.
 	 */
-	bpf_mtap(ifp, m);
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, m);
+#endif
 
 	(*ifp->if_input)(ifp, m);
 
@@ -1786,10 +1798,10 @@ epstop(struct ifnet *ifp, int disable)
 /*
  * Before reboots, reset card completely.
  */
-static bool
-epshutdown(device_t self, int howto)
+static void
+epshutdown(void *arg)
 {
-	struct ep_softc *sc = device_private(self);
+	struct ep_softc *sc = arg;
 	int s = splnet();
 
 	if (sc->enabled) {
@@ -1799,8 +1811,6 @@ epshutdown(device_t self, int howto)
 		sc->enabled = 0;
 	}
 	splx(s);
-
-	return true;
 }
 
 /*
@@ -1986,14 +1996,24 @@ int
 ep_activate(device_t self, enum devact act)
 {
 	struct ep_softc *sc = device_private(self);
+	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
+	int error = 0, s;
 
+	s = splnet();
 	switch (act) {
+	case DVACT_ACTIVATE:
+		error = EOPNOTSUPP;
+		break;
+
 	case DVACT_DEACTIVATE:
-		if_deactivate(&sc->sc_ethercom.ec_if);
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		if (sc->ep_flags & ELINK_FLAGS_MII)
+			mii_activate(&sc->sc_mii, act, MII_PHY_ANY,
+			    MII_OFFSET_ANY);
+		if_deactivate(ifp);
+		break;
 	}
+	splx(s);
+	return (error);
 }
 
 /*
@@ -2024,11 +2044,13 @@ ep_detach(device_t self, int flags)
 	/* Delete all remaining media. */
 	ifmedia_delete_instance(&sc->sc_mii.mii_media, IFM_INST_ANY);
 
+#if NRND > 0
 	rnd_detach_source(&sc->rnd_source);
+#endif
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
-	pmf_device_deregister(sc->sc_dev);
+	shutdownhook_disestablish(sc->sd_hook);
 
 	return (0);
 }
@@ -2081,9 +2103,9 @@ ep_mii_writereg(device_t self, int phy, int reg, int val)
 }
 
 void
-ep_statchg(struct ifnet *ifp)
+ep_statchg(device_t self)
 {
-	struct ep_softc *sc = ifp->if_softc;
+	struct ep_softc *sc = device_private(self);
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	int mctl;

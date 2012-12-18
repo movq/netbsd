@@ -1,4 +1,4 @@
-/*	$NetBSD: rrunner.c,v 1.75 2012/10/27 17:18:22 chs Exp $	*/
+/*	$NetBSD: rrunner.c,v 1.67 2008/06/08 12:43:51 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -35,10 +35,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rrunner.c,v 1.75 2012/10/27 17:18:22 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rrunner.c,v 1.67 2008/06/08 12:43:51 tsutsui Exp $");
 
 #include "opt_inet.h"
 
+#include "bpfilter.h"
 #include "esh.h"
 
 #include <sys/param.h>
@@ -75,8 +76,10 @@ __KERNEL_RCSID(0, "$NetBSD: rrunner.c,v 1.75 2012/10/27 17:18:22 chs Exp $");
 #endif
 
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <sys/cpu.h>
 #include <sys/bus.h>
@@ -174,7 +177,8 @@ static int esh_check(struct esh_softc *);
  */
 
 void
-eshconfig(struct esh_softc *sc)
+eshconfig(sc)
+	struct esh_softc *sc;
 {
 	struct ifnet *ifp = &sc->sc_if;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -188,7 +192,7 @@ eshconfig(struct esh_softc *sc)
 	int error;
 	int i;
 
-	esh_softc_debug[device_unit(sc->sc_dev)] = sc;
+	esh_softc_debug[device_unit(&sc->sc_dev)] = sc;
 	sc->sc_flags = 0;
 
 	TAILQ_INIT(&sc->sc_dmainfo_freelist);
@@ -209,12 +213,12 @@ eshconfig(struct esh_softc *sc)
 				 0, RR_DMA_BOUNDARY, &sc->sc_dmaseg, 1,
 				 &rseg, BUS_DMA_NOWAIT);
 	if (error) {
-		aprint_error_dev(sc->sc_dev, "couldn't allocate space for host-side"
+		aprint_error_dev(&sc->sc_dev, "couldn't allocate space for host-side"
 		       "data structures\n");
 		return;
 	}
 	if (rseg > 1) {
-		aprint_error_dev(sc->sc_dev, "contiguous memory not available\n");
+		aprint_error_dev(&sc->sc_dev, "contiguous memory not available\n");
 		goto bad_dmamem_map;
 	}
 
@@ -222,7 +226,7 @@ eshconfig(struct esh_softc *sc)
 			       sc->sc_dma_size, (void **)&sc->sc_dma_addr,
 			       BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
 	if (error) {
-		aprint_error_dev(sc->sc_dev, 
+		aprint_error_dev(&sc->sc_dev, 
 		       "couldn't map memory for host-side structures\n");
 		goto bad_dmamem_map;
 	}
@@ -231,13 +235,13 @@ eshconfig(struct esh_softc *sc)
 			      1, sc->sc_dma_size, RR_DMA_BOUNDARY,
 			      BUS_DMA_ALLOCNOW | BUS_DMA_NOWAIT,
 			      &sc->sc_dma)) {
-		aprint_error_dev(sc->sc_dev, "couldn't create DMA map\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't create DMA map\n");
 		goto bad_dmamap_create;
 	}
 
 	if (bus_dmamap_load(sc->sc_dmat, sc->sc_dma, sc->sc_dma_addr,
 			    sc->sc_dma_size, NULL, BUS_DMA_NOWAIT)) {
-		aprint_error_dev(sc->sc_dev, "couldn't load DMA map\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't load DMA map\n");
 		goto bad_dmamap_load;
 	}
 
@@ -268,7 +272,7 @@ eshconfig(struct esh_softc *sc)
 
 #ifdef DIAGNOSTIC
 	if (size > sc->sc_dmaseg.ds_len) {
-		aprint_error_dev(sc->sc_dev, "bogus size calculation\n");
+		aprint_error_dev(&sc->sc_dev, "bogus size calculation\n");
 		goto bad_other;
 	}
 #endif
@@ -283,7 +287,7 @@ eshconfig(struct esh_softc *sc)
 			      ESH_MAX_NSEGS, RR_DMA_MAX, RR_DMA_BOUNDARY,
 			      BUS_DMA_ALLOCNOW | BUS_DMA_NOWAIT,
 			      &sc->sc_send.ec_dma)) {
-		aprint_error_dev(sc->sc_dev, "failed bus_dmamap_create\n");
+		aprint_error_dev(&sc->sc_dev, "failed bus_dmamap_create\n");
 			goto bad_other;
 	}
 	sc->sc_send.ec_offset = 0;
@@ -296,7 +300,7 @@ eshconfig(struct esh_softc *sc)
 				      RR_DMA_BOUNDARY,
 				      BUS_DMA_ALLOCNOW | BUS_DMA_NOWAIT,
 				      &sc->sc_snap_recv.ec_dma[i])) {
-			aprint_error_dev(sc->sc_dev, "failed bus_dmamap_create\n");
+			aprint_error_dev(&sc->sc_dev, "failed bus_dmamap_create\n");
 			for (i--; i >= 0; i--)
 				bus_dmamap_destroy(sc->sc_dmat,
 						   sc->sc_snap_recv.ec_dma[i]);
@@ -326,7 +330,7 @@ eshconfig(struct esh_softc *sc)
 
 	header_format = esh_read_eeprom(sc, RR_EE_HEADER_FORMAT);
 	if (header_format != RR_EE_HEADER_FORMAT_MAGIC) {
-		aprint_error_dev(sc->sc_dev, "bogus EEPROM header format value %x\n",
+		aprint_error_dev(&sc->sc_dev, "bogus EEPROM header format value %x\n",
 		       header_format);
 		goto bad_other;
 	}
@@ -397,7 +401,7 @@ eshconfig(struct esh_softc *sc)
 
 	bus_space_write_4(iot, ioh, RR_MISC_LOCAL_CTL, misc_local_ctl);
 
-	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = eshstart;
 	ifp->if_ioctl = eshioctl;
@@ -445,7 +449,8 @@ bad_dmamem_map:
  */
 
 void
-eshinit(struct esh_softc *sc)
+eshinit(sc)
+	struct esh_softc *sc;
 {
 	struct ifnet *ifp = &sc->sc_if;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -518,13 +523,13 @@ eshinit(struct esh_softc *sc)
 
 	value = sc->sc_bist_read(sc);
 	if (value != 0) {
-		aprint_error_dev(sc->sc_dev, "BIST is %d, not 0!\n",
+		aprint_error_dev(&sc->sc_dev, "BIST is %d, not 0!\n",
 		       value);
 		goto bad_init;
 	}
 
 #ifdef ESH_PRINTF
-	printf("%s:  BIST is %x\n", device_xname(sc->sc_dev), value);
+	printf("%s:  BIST is %x\n", device_xname(&sc->sc_dev), value);
 	eshstatus(sc);
 #endif
 
@@ -594,7 +599,7 @@ eshinit(struct esh_softc *sc)
 		bus_space_read_4(iot, ioh, RR_RUNCODE_VERSION);
 	sc->sc_version = sc->sc_runcode_version >> 16;
 	if (sc->sc_version != 1 && sc->sc_version != 2) {
-		aprint_error_dev(sc->sc_dev, "bad version number %d in runcode\n",
+		aprint_error_dev(&sc->sc_dev, "bad version number %d in runcode\n",
 		       sc->sc_version);
 		goto bad_init;
 	}
@@ -607,12 +612,12 @@ eshinit(struct esh_softc *sc)
 	}
 
 	if (sc->sc_options & (RR_OP_LONG_TX | RR_OP_LONG_RX)) {
-		aprint_error_dev(sc->sc_dev, "unsupported firmware -- long descriptors\n");
+		aprint_error_dev(&sc->sc_dev, "unsupported firmware -- long descriptors\n");
 		goto bad_init;
 	}
 
 	printf("%s: startup runcode version %d.%d.%d, options %x\n",
-	       device_xname(sc->sc_dev),
+	       device_xname(&sc->sc_dev),
 	       sc->sc_version,
 	       (sc->sc_runcode_version >> 8) & 0xff,
 	       sc->sc_runcode_version & 0xff,
@@ -703,7 +708,7 @@ esh_fpopen(dev_t dev, int oflags, int devtype,
 
 #ifdef ESH_PRINTF
 	printf("esh_fpopen:  opening board %d, ulp %d\n",
-	    device_unit(sc->sc_dev), ulp);
+	    device_unit(&sc->sc_dev), ulp);
 #endif
 
 	/* If the card is not up, initialize it. */
@@ -787,13 +792,13 @@ esh_fpopen(dev_t dev, int oflags, int devtype,
 				 &rseg, BUS_DMA_WAITOK);
 
 	if (error) {
-		aprint_error_dev(sc->sc_dev, "couldn't allocate space for FP receive ring"
+		aprint_error_dev(&sc->sc_dev, "couldn't allocate space for FP receive ring"
 		       "data structures\n");
 		goto bad_fp_dmamem_alloc;
 	}
 
 	if (rseg > 1) {
-		aprint_error_dev(sc->sc_dev, "contiguous memory not available for "
+		aprint_error_dev(&sc->sc_dev, "contiguous memory not available for "
 		       "FP receive ring\n");
 		goto bad_fp_dmamem_map;
 	}
@@ -802,20 +807,20 @@ esh_fpopen(dev_t dev, int oflags, int devtype,
 			       size, (void **) &recv->ec_descr,
 			       BUS_DMA_WAITOK | BUS_DMA_COHERENT);
 	if (error) {
-		aprint_error_dev(sc->sc_dev, "couldn't map memory for FP receive ring\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't map memory for FP receive ring\n");
 		goto bad_fp_dmamem_map;
 	}
 
 	if (bus_dmamap_create(sc->sc_dmat, size, 1, size, RR_DMA_BOUNDARY,
 			      BUS_DMA_ALLOCNOW | BUS_DMA_WAITOK,
 			      &recv->ec_dma)) {
-		aprint_error_dev(sc->sc_dev, "couldn't create DMA map for FP receive ring\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't create DMA map for FP receive ring\n");
 		goto bad_fp_dmamap_create;
 	}
 
 	if (bus_dmamap_load(sc->sc_dmat, recv->ec_dma, recv->ec_descr,
 			    size, NULL, BUS_DMA_WAITOK)) {
-		aprint_error_dev(sc->sc_dev, "couldn't load DMA map for FP receive ring\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't load DMA map for FP receive ring\n");
 		goto bad_fp_dmamap_load;
 	}
 
@@ -923,7 +928,7 @@ esh_fpclose(dev_t dev, int fflag, int devtype,
 
 #ifdef ESH_PRINTF
 	printf("esh_fpclose:  closing unit %d, ulp %d\n",
-	    device_unit(sc->sc_dev), ulp);
+	    device_unit(&sc->sc_dev), ulp);
 #endif
 	assert(ring);
 	assert(ring_ctl);
@@ -941,7 +946,7 @@ esh_fpclose(dev_t dev, int fflag, int devtype,
 		error = tsleep((void *) &ring->ec_index, PCATCH | PRIBIO,
 			       "esh_fpclose", 0);
 		if (error != 0 && error != EAGAIN) {
-			aprint_error_dev(sc->sc_dev, "esh_fpclose:  wait on ring disable bad\n");
+			aprint_error_dev(&sc->sc_dev, "esh_fpclose:  wait on ring disable bad\n");
 			ring->ec_index = -1;
 			break;
 		}
@@ -1012,6 +1017,8 @@ esh_fpread(dev_t dev, struct uio *uio, int ioflag)
 		}
 	}
 
+	uvm_lwp_hold(l);	/* Lock process info into memory */
+
 	/* Lock down the pages */
 	for (i = 0; i < uio->uio_iovcnt; i++) {
 		iovp = &uio->uio_iov[i];
@@ -1050,7 +1057,7 @@ esh_fpread(dev_t dev, struct uio *uio, int ioflag)
 	error = bus_dmamap_load_uio(sc->sc_dmat, di->ed_dma,
 				    uio, BUS_DMA_READ|BUS_DMA_WAITOK);
 	if (error) {
-		aprint_error_dev(sc->sc_dev, "esh_fpread:  bus_dmamap_load_uio "
+		aprint_error_dev(&sc->sc_dev, "esh_fpread:  bus_dmamap_load_uio "
 		       "failed\terror code %d\n",
 		       error);
 		error = ENOBUFS;
@@ -1113,6 +1120,8 @@ esh_fpread(dev_t dev, struct uio *uio, int ioflag)
 		iovp = &uio->uio_iov[i];
 		uvm_vsunlock(p->p_vmspace, iovp->iov_base, iovp->iov_len);
 	}
+
+	uvm_lwp_rele(l);	/* Release process info */
 	esh_free_dmainfo(sc, di);
 
 fpread_done:
@@ -1166,6 +1175,8 @@ esh_fpwrite(dev_t dev, struct uio *uio, int ioflag)
 		}
 	}
 
+	uvm_lwp_hold(l);	/* Lock process info into memory */
+
 	/* Lock down the pages */
 	for (i = 0; i < uio->uio_iovcnt; i++) {
 		iovp = &uio->uio_iov[i];
@@ -1203,7 +1214,7 @@ esh_fpwrite(dev_t dev, struct uio *uio, int ioflag)
 	error = bus_dmamap_load_uio(sc->sc_dmat, di->ed_dma,
 				    uio, BUS_DMA_WRITE|BUS_DMA_WAITOK);
 	if (error) {
-		aprint_error_dev(sc->sc_dev, "esh_fpwrite:  bus_dmamap_load_uio "
+		aprint_error_dev(&sc->sc_dev, "esh_fpwrite:  bus_dmamap_load_uio "
 		       "failed\terror code %d\n",
 		       error);
 		error = ENOBUFS;
@@ -1264,6 +1275,7 @@ esh_fpwrite(dev_t dev, struct uio *uio, int ioflag)
 		uvm_vsunlock(p->p_vmspace, iovp->iov_base, iovp->iov_len);
 	}
 
+	uvm_lwp_rele(l);	/* Release process info */
 	esh_free_dmainfo(sc, di);
 
 fpwrite_done:
@@ -1275,7 +1287,8 @@ fpwrite_done:
 }
 
 void
-esh_fpstrategy(struct buf *bp)
+esh_fpstrategy(bp)
+	struct buf *bp;
 {
 	struct esh_softc *sc;
 	int ulp = ESHULP(bp->b_dev);
@@ -1326,7 +1339,7 @@ esh_fpstrategy(struct buf *bp)
 					bp->b_proc,
 					BUS_DMA_READ|BUS_DMA_WAITOK);
 		if (error) {
-			aprint_error_dev(sc->sc_dev, "esh_fpstrategy:  "
+			aprint_error_dev(&sc->sc_dev, "esh_fpstrategy:  "
 			       "bus_dmamap_load "
 			       "failed\terror code %d\n",
 			       error);
@@ -1352,7 +1365,7 @@ esh_fpstrategy(struct buf *bp)
 		 */
 
 		struct esh_send_ring_ctl *ring = &sc->sc_send;
-		bufq_put(ring->ec_buf_queue, bp);
+		BUFQ_PUT(ring->ec_buf_queue, bp);
 #ifdef ESH_PRINTF
 		printf("esh_fpstrategy:  ready to call eshstart to write!\n");
 #endif
@@ -1377,7 +1390,8 @@ done:
  */
 
 int
-eshintr(void *arg)
+eshintr(arg)
+	void *arg;
 {
 	struct esh_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -1446,7 +1460,7 @@ eshintr(void *arg)
 		    event->re_code != RR_EC_STATS_UPDATE &&
 		    event->re_code != RR_EC_SET_CMD_CONSUMER) {
 			printf("%s:  event code %x, ring %d, index %d\n",
-			       device_xname(sc->sc_dev), event->re_code,
+			       device_xname(&sc->sc_dev), event->re_code,
 			       event->re_ring, event->re_index);
 			if (okay == 0)
 				printf("%s\n", sbuf);
@@ -1457,7 +1471,7 @@ eshintr(void *arg)
 
 		switch(event->re_code) {
 		case RR_EC_RUNCODE_UP:
-			printf("%s:  firmware up\n", device_xname(sc->sc_dev));
+			printf("%s:  firmware up\n", device_xname(&sc->sc_dev));
 			sc->sc_flags |= ESH_FL_RUNCODE_UP;
 			esh_send_cmd(sc, RR_CC_WATCHDOG, 0, 0);
 			esh_send_cmd(sc, RR_CC_UPDATE_STATS, 0, 0);
@@ -1490,7 +1504,7 @@ eshintr(void *arg)
 			break;
 
 		case RR_EC_LINK_ON:
-			printf("%s:  link up\n", device_xname(sc->sc_dev));
+			printf("%s:  link up\n", device_xname(&sc->sc_dev));
 			sc->sc_flags |= ESH_FL_LINK_UP;
 
 			esh_send_cmd(sc, RR_CC_WATCHDOG, 0, 0);
@@ -1510,7 +1524,7 @@ eshintr(void *arg)
 
 		case RR_EC_LINK_OFF:
 			sc->sc_flags &= ~ESH_FL_LINK_UP;
-			printf("%s:  link down\n", device_xname(sc->sc_dev));
+			printf("%s:  link down\n", device_xname(&sc->sc_dev));
 			break;
 
 		/*
@@ -1530,7 +1544,7 @@ eshintr(void *arg)
 		case RR_EC_BAD_RECV_DESC:
 		case RR_EC_BAD_RECV_RING:
 		case RR_EC_UNIMPLEMENTED:
-			aprint_error_dev(sc->sc_dev, "unexpected event %x;"
+			aprint_error_dev(&sc->sc_dev, "unexpected event %x;"
 			       "shutting down interface\n",
 			       event->re_code);
 			ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
@@ -1543,7 +1557,7 @@ eshintr(void *arg)
 #define CALLOUT(a) case a:						\
 	printf("%s:  Event " #a " received -- "				\
 	       "ring %d index %d timestamp %x\n",			\
-	       device_xname(sc->sc_dev), event->re_ring, event->re_index,	\
+	       device_xname(&sc->sc_dev), event->re_ring, event->re_index,	\
 	       event->re_timestamp);					\
 	break;
 
@@ -1658,7 +1672,7 @@ eshintr(void *arg)
 
 		case RR_EC_RING_ENABLE_ERR:
 			if (event->re_ring == HIPPI_ULP_802) {
-				aprint_error_dev(sc->sc_dev, "unable to enable SNAP ring!?\n\t"
+				aprint_error_dev(&sc->sc_dev, "unable to enable SNAP ring!?\n\t"
 				       "shutting down interface\n");
 				ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 #ifdef ESH_PRINTF
@@ -1684,7 +1698,7 @@ eshintr(void *arg)
 			 */
 
 			if (event->re_ring == HIPPI_ULP_802) {
-				aprint_error_dev(sc->sc_dev, "discard on SNAP ring!?\n\t"
+				aprint_error_dev(&sc->sc_dev, "discard on SNAP ring!?\n\t"
 				       "shutting down interface\n");
 				ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 				sc->sc_flags = ESH_FL_CRASHED;
@@ -1765,7 +1779,7 @@ eshintr(void *arg)
 			break;
 
 		default:
-			aprint_error_dev(sc->sc_dev, "Bogus event code %x, "
+			aprint_error_dev(&sc->sc_dev, "Bogus event code %x, "
 			       "ring %d, index %d, timestamp %x\n",
 			       event->re_code,
 			       event->re_ring, event->re_index,
@@ -1878,7 +1892,8 @@ eshintr(void *arg)
  */
 
 void
-eshstart(struct ifnet *ifp)
+eshstart(ifp)
+	struct ifnet *ifp;
 {
 	struct esh_softc *sc = ifp->if_softc;
 	struct esh_send_ring_ctl *send = &sc->sc_send;
@@ -1910,6 +1925,7 @@ eshstart(struct ifnet *ifp)
 		if (m == 0)		/* not really needed */
 			break;
 
+#if NBPFILTER > 0
 		if (ifp->if_bpf) {
 			/*
 			 * On output, the raw packet has a eight-byte CCI
@@ -1926,11 +1942,12 @@ eshstart(struct ifnet *ifp)
 			m->m_len -= 8;
 			m->m_data += 8;
 			m->m_pkthdr.len -= 8;
-			bpf_mtap(ifp, m);
+			bpf_mtap(ifp->if_bpf, m);
 			m->m_len += 8;
 			m->m_data -= 8;
 			m->m_pkthdr.len += 8;
 		}
+#endif
 
 		send->ec_len = m->m_pkthdr.len;
 		m = send->ec_cur_mbuf = esh_adjust_mbufs(sc, m);
@@ -1942,7 +1959,7 @@ eshstart(struct ifnet *ifp)
 		if (error)
 			panic("%s:  eshstart:  "
 			      "bus_dmamap_load_mbuf failed err %d\n",
-			      device_xname(sc->sc_dev), error);
+			      device_xname(&sc->sc_dev), error);
 		send->ec_offset = 0;
 	}
 
@@ -1960,7 +1977,7 @@ eshstart(struct ifnet *ifp)
 	if ((sc->sc_flags & ESH_FL_FP_RING_UP) != 0 &&
 	    send->ec_cur_mbuf == NULL && send->ec_cur_buf == NULL &&
 	    send->ec_cur_dmainfo == NULL &&
-	    bufq_peek(send->ec_buf_queue) != NULL) {
+	    BUFQ_PEEK(send->ec_buf_queue) != NULL) {
 		struct buf *bp;
 
 #ifdef ESH_PRINTF
@@ -1968,7 +1985,7 @@ eshstart(struct ifnet *ifp)
 		       send->ec_queue);
 #endif
 
-		bp = send->ec_cur_buf = bufq_get(send->ec_buf_queue);
+		bp = send->ec_cur_buf = BUFQ_GET(send->ec_buf_queue);
 		send->ec_offset = 0;
 		send->ec_len = bp->b_bcount;
 
@@ -1985,7 +2002,7 @@ eshstart(struct ifnet *ifp)
 		if (error)
 			panic("%s:  eshstart:  "
 			      "bus_dmamap_load failed err %d\n",
-			      device_xname(sc->sc_dev), error);
+			      device_xname(&sc->sc_dev), error);
 	}
 
 	/*
@@ -2033,7 +2050,8 @@ eshstart(struct ifnet *ifp)
  */
 
 static void
-esh_send(struct esh_softc *sc)
+esh_send(sc)
+	struct esh_softc *sc;
 {
 	struct esh_send_ring_ctl *send = &sc->sc_send;
 	u_int start_producer = send->ec_producer;
@@ -2112,7 +2130,10 @@ esh_send(struct esh_softc *sc)
  */
 
 static void
-eshstart_cleanup(struct esh_softc *sc, u_int16_t consumer, int error)
+eshstart_cleanup(sc, consumer, error)
+	struct esh_softc *sc;
+	u_int16_t consumer;
+	int error;
 {
 	struct esh_send_ring_ctl *send = &sc->sc_send;
 	int start_consumer = send->ec_consumer;
@@ -2163,7 +2184,7 @@ eshstart_cleanup(struct esh_softc *sc, u_int16_t consumer, int error)
 			} else {
 				panic("%s:  eshstart_cleanup:  "
 				      "no current mbuf, buf, or dmainfo!\n",
-				      device_xname(sc->sc_dev));
+				      device_xname(&sc->sc_dev));
 			}
 
 			/*
@@ -2202,7 +2223,9 @@ eshstart_cleanup(struct esh_softc *sc, u_int16_t consumer, int error)
  */
 
 static struct mbuf *
-esh_adjust_mbufs(struct esh_softc *sc, struct mbuf *m)
+esh_adjust_mbufs(sc, m)
+	struct esh_softc *sc;
+	struct mbuf *m;
 {
 	struct mbuf *m0, *n, *n0;
 	u_int32_t write_len;
@@ -2273,7 +2296,7 @@ esh_adjust_mbufs(struct esh_softc *sc, struct mbuf *m)
 	return m;
 
 bogosity:
-	aprint_error_dev(sc->sc_dev, "esh_adjust_mbuf:  unable to allocate cluster for "
+	aprint_error_dev(&sc->sc_dev, "esh_adjust_mbuf:  unable to allocate cluster for "
 	       "mbuf %p, len %x\n",
 	       mtod(m, void *), m->m_len);
 	m_freem(m);
@@ -2290,7 +2313,10 @@ bogosity:
  */
 
 static void
-esh_read_snap_ring(struct esh_softc *sc, u_int16_t consumer, int error)
+esh_read_snap_ring(sc, consumer, error)
+	struct esh_softc *sc;
+	u_int16_t consumer;
+	int error;
 {
 	struct ifnet *ifp = &sc->sc_if;
 	struct esh_snap_ring_ctl *recv = &sc->sc_snap_recv;
@@ -2329,7 +2355,7 @@ esh_read_snap_ring(struct esh_softc *sc, u_int16_t consumer, int error)
 				m_freem(recv->ec_cur_pkt);
 				recv->ec_cur_pkt = NULL;
 				printf("%s:  possible skipped packet!\n",
-				       device_xname(sc->sc_dev));
+				       device_xname(&sc->sc_dev));
 			}
 			recv->ec_cur_pkt = recv->ec_cur_mbuf = m;
 			/* allocated buffers all have pkthdrs... */
@@ -2359,12 +2385,21 @@ esh_read_snap_ring(struct esh_softc *sc, u_int16_t consumer, int error)
 				 */
 				ifp->if_ipackets++;
 
+#if NBPFILTER > 0
 				/*
 				 * Check if there's a BPF listener on this
 				 * interface.  If so, hand off the raw packet
 				 * to BPF.
 				 */
-				bpf_mtap(ifp, m);
+				if (ifp->if_bpf) {
+					/*
+					 * Incoming packets start with the FP
+					 * data, so no alignment problems
+					 * here...
+					 */
+					bpf_mtap(ifp->if_bpf, m);
+				}
+#endif
 				if ((ifp->if_flags & IFF_RUNNING) == 0) {
 					m_freem(m);
 				} else {
@@ -2402,12 +2437,13 @@ esh_read_snap_ring(struct esh_softc *sc, u_int16_t consumer, int error)
  */
 
 static void
-esh_init_snap_ring(struct esh_softc *sc)
+esh_init_snap_ring(sc)
+	struct esh_softc *sc;
 {
 	struct rr_ring_ctl *ring = sc->sc_recv_ring_table + HIPPI_ULP_802;
 
 	if ((sc->sc_flags & ESH_FL_CLOSING_SNAP) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't reopen SNAP ring until ring disable is completed\n");
+		aprint_error_dev(&sc->sc_dev, "can't reopen SNAP ring until ring disable is completed\n");
 		return;
 	}
 
@@ -2434,12 +2470,13 @@ esh_init_snap_ring(struct esh_softc *sc)
 			     sc->sc_snap_recv.ec_producer);
 	} else {
 		printf("%s:  snap receive ring already initialized!\n",
-		       device_xname(sc->sc_dev));
+		       device_xname(&sc->sc_dev));
 	}
 }
 
 static void
-esh_close_snap_ring(struct esh_softc *sc)
+esh_close_snap_ring(sc)
+	struct esh_softc *sc;
 {
 #ifdef ESH_PRINTF
 	printf("esh_close_snap_ring:  starting\n");
@@ -2460,7 +2497,8 @@ esh_close_snap_ring(struct esh_softc *sc)
  */
 
 static void
-esh_fill_snap_ring(struct esh_softc *sc)
+esh_fill_snap_ring(sc)
+	struct esh_softc *sc;
 {
 	struct esh_snap_ring_ctl *recv = &sc->sc_snap_recv;
 	int start_producer = recv->ec_producer;
@@ -2491,7 +2529,7 @@ esh_fill_snap_ring(struct esh_softc *sc)
 		if (error) {
 			printf("%s:  esh_fill_recv_ring:  bus_dmamap_load "
 			       "failed\toffset %x, error code %d\n",
-			       device_xname(sc->sc_dev), offset, error);
+			       device_xname(&sc->sc_dev), offset, error);
 			MFREE(m, m0);
 			break;
 		}
@@ -2538,7 +2576,8 @@ esh_fill_snap_ring(struct esh_softc *sc)
 }
 
 static void
-esh_init_fp_rings(struct esh_softc *sc)
+esh_init_fp_rings(sc)
+	struct esh_softc *sc;
 {
 	struct esh_fp_ring_ctl *recv;
 	struct rr_ring_ctl *ring_ctl;
@@ -2566,7 +2605,11 @@ esh_init_fp_rings(struct esh_softc *sc)
 }
 
 static void
-esh_read_fp_ring(struct esh_softc *sc, u_int16_t consumer, int error, int ulp)
+esh_read_fp_ring(sc, consumer, error, ulp)
+	struct esh_softc *sc;
+	u_int16_t consumer;
+	int error;
+	int ulp;
 {
 	struct esh_fp_ring_ctl *recv = sc->sc_fp_recv[ulp];
 	int start_consumer = recv->ec_consumer;
@@ -2597,7 +2640,7 @@ esh_read_fp_ring(struct esh_softc *sc, u_int16_t consumer, int error, int ulp)
 			if (recv->ec_read_len) {
 				recv->ec_error = 0;
 				printf("%s:  ulp %d: possible skipped FP packet!\n",
-				       device_xname(sc->sc_dev), recv->ec_ulp);
+				       device_xname(&sc->sc_dev), recv->ec_ulp);
 			}
 			recv->ec_seen_end = 0;
 			recv->ec_read_len = 0;
@@ -2689,7 +2732,9 @@ esh_read_fp_ring(struct esh_softc *sc, u_int16_t consumer, int error, int ulp)
 
 
 static void
-esh_fill_fp_ring(struct esh_softc *sc, struct esh_fp_ring_ctl *recv)
+esh_fill_fp_ring(sc, recv)
+	struct esh_softc *sc;
+	struct esh_fp_ring_ctl *recv;
 {
 	struct esh_dmainfo *di = recv->ec_cur_dmainfo;
 	int start_producer = recv->ec_producer;
@@ -2816,7 +2861,10 @@ fp_fill_done:
  */
 
 static void
-esh_flush_fp_ring(struct esh_softc *sc, struct esh_fp_ring_ctl *recv, struct esh_dmainfo *di)
+esh_flush_fp_ring(sc, recv, di)
+	struct esh_softc *sc;
+	struct esh_fp_ring_ctl *recv;
+	struct esh_dmainfo *di;
 {
 	int error = 0;
 
@@ -2868,7 +2916,10 @@ esh_flush_fp_ring(struct esh_softc *sc, struct esh_fp_ring_ctl *recv, struct esh
 
 
 int
-eshioctl(struct ifnet *ifp, u_long cmd, void *data)
+eshioctl(ifp, cmd, data)
+	struct ifnet *ifp;
+	u_long cmd;
+	void *data;
 {
 	int error = 0;
 	struct esh_softc *sc = ifp->if_softc;
@@ -2888,7 +2939,7 @@ eshioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 		if ((sc->sc_flags & ESH_FL_INITIALIZED) == 0) {
 			eshinit(sc);
@@ -2922,8 +2973,6 @@ eshioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
 		if ((ifp->if_flags & IFF_UP) == 0 &&
 		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
@@ -2972,7 +3021,7 @@ eshioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ether_ioctl(ifp, cmd, data);
+		error = EINVAL;
 		break;
 	}
 
@@ -3012,10 +3061,8 @@ esh_generic_ioctl(struct esh_softc *sc, u_long cmd, void *data,
 			break;
 
 		default:
-			error = kauth_authorize_network(l->l_cred,
-			    KAUTH_NETWORK_INTERFACE,
-			    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV,
-			    ifp, KAUTH_ARG(cmd), NULL);
+			error = kauth_authorize_generic(l->l_cred,
+			    KAUTH_GENERIC_ISSUSER, NULL);
 			if (error)
 				return (error);
 		}
@@ -3103,7 +3150,7 @@ esh_generic_ioctl(struct esh_softc *sc, u_long cmd, void *data,
 		bus_space_write_4(iot, ioh, RR_MISC_LOCAL_CTL, value);
 
 		if (cmd == EIOCSEEPROM) {
-			printf("%s:  writing EEPROM\n", device_xname(sc->sc_dev));
+			printf("%s:  writing EEPROM\n", device_xname(&sc->sc_dev));
 			sc->sc_flags |= ESH_FL_EEPROM_BUSY;
 		}
 
@@ -3155,7 +3202,7 @@ esh_generic_ioctl(struct esh_softc *sc, u_long cmd, void *data,
 			sc->sc_flags &= ~ESH_FL_EEPROM_BUSY;
 			wakeup(&sc->sc_flags);
 			printf("%s:  done writing EEPROM\n",
-			       device_xname(sc->sc_dev));
+			       device_xname(&sc->sc_dev));
 		}
 		break;
 
@@ -3173,7 +3220,8 @@ esh_generic_ioctl(struct esh_softc *sc, u_long cmd, void *data,
 
 
 void
-eshreset(struct esh_softc *sc)
+eshreset(sc)
+	struct esh_softc *sc;
 {
 	int s;
 
@@ -3191,14 +3239,15 @@ eshreset(struct esh_softc *sc)
  */
 
 void
-eshwatchdog(struct ifnet *ifp)
+eshwatchdog(ifp)
+	struct ifnet *ifp;
 {
 	struct esh_softc *sc = ifp->if_softc;
 
 	if (!sc->sc_watchdog) {
 		printf("%s:  watchdog timer expired.  "
 		       "Should reset interface!\n",
-		       device_xname(sc->sc_dev));
+		       device_xname(&sc->sc_dev));
 		ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 		eshstatus(sc);
 #if 0
@@ -3221,7 +3270,8 @@ eshwatchdog(struct ifnet *ifp)
  */
 
 void
-eshstop(struct esh_softc *sc)
+eshstop(sc)
+	struct esh_softc *sc;
 {
 	struct ifnet *ifp = &sc->sc_if;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -3348,7 +3398,9 @@ eshstop(struct esh_softc *sc)
  */
 
 static u_int32_t
-esh_read_eeprom(struct esh_softc *sc, u_int32_t addr)
+esh_read_eeprom(sc, addr)
+	struct esh_softc *sc;
+	u_int32_t addr;
 {
 	int i;
 	u_int32_t tmp;
@@ -3380,7 +3432,10 @@ esh_read_eeprom(struct esh_softc *sc, u_int32_t addr)
  */
 
 static int
-esh_write_eeprom(struct esh_softc *sc, u_int32_t addr, u_int32_t value)
+esh_write_eeprom(sc, addr, value)
+	struct esh_softc *sc;
+	u_int32_t addr;
+	u_int32_t value;
 {
 	int i, j;
 	u_int32_t shifted_value, tmp = 0;
@@ -3423,7 +3478,11 @@ esh_write_eeprom(struct esh_softc *sc, u_int32_t addr, u_int32_t value)
  */
 
 static void
-esh_send_cmd(struct esh_softc *sc, u_int8_t cmd, u_int8_t ring, u_int8_t index)
+esh_send_cmd(sc, cmd, ring, index)
+	struct esh_softc *sc;
+	u_int8_t cmd;
+	u_int8_t ring;
+	u_int8_t index;
 {
 	union rr_cmd c;
 
@@ -3455,7 +3514,11 @@ esh_send_cmd(struct esh_softc *sc, u_int8_t cmd, u_int8_t ring, u_int8_t index)
  */
 
 static void
-esh_write_addr(bus_space_tag_t iot, bus_space_handle_t ioh, bus_addr_t addr, bus_addr_t value)
+esh_write_addr(iot, ioh, addr, value)
+	bus_space_tag_t iot;
+	bus_space_handle_t ioh;
+	bus_addr_t addr;
+	bus_addr_t value;
 {
 	bus_space_write_4(iot, ioh, addr, 0);
 	bus_space_write_4(iot, ioh, addr + sizeof(u_int32_t), value);
@@ -3465,7 +3528,8 @@ esh_write_addr(bus_space_tag_t iot, bus_space_handle_t ioh, bus_addr_t addr, bus
 /* Copy the RunCode from EEPROM to SRAM.  Ughly. */
 
 static void
-esh_reset_runcode(struct esh_softc *sc)
+esh_reset_runcode(sc)
+	struct esh_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -3517,7 +3581,15 @@ esh_reset_runcode(struct esh_softc *sc)
  */
 
 static void
-esh_dma_sync(struct esh_softc *sc, void *mem, int start, int end, int entries, int size, int do_equal, int ops)
+esh_dma_sync(sc, mem, start, end, entries, size, do_equal, ops)
+	struct esh_softc *sc;
+	void *mem;
+	int start;
+	int end;
+	int entries;
+	int size;
+	int do_equal;
+	int ops;
 {
 	int offset = (char *)mem - (char *)sc->sc_dma_addr;
 
@@ -3537,7 +3609,8 @@ esh_dma_sync(struct esh_softc *sc, void *mem, int start, int end, int entries, i
 
 
 static struct esh_dmainfo *
-esh_new_dmainfo(struct esh_softc *sc)
+esh_new_dmainfo(sc)
+	struct esh_softc *sc;
 {
 	struct esh_dmainfo *di;
 	int s;
@@ -3563,7 +3636,7 @@ esh_new_dmainfo(struct esh_softc *sc)
 			      BUS_DMA_ALLOCNOW | BUS_DMA_WAITOK,
 			      &di->ed_dma)) {
 		printf("%s:  failed dmainfo bus_dmamap_create\n",
-		       device_xname(sc->sc_dev));
+		       device_xname(&sc->sc_dev));
 		free(di,  M_DEVBUF);
 		di = NULL;
 	}
@@ -3573,7 +3646,9 @@ esh_new_dmainfo(struct esh_softc *sc)
 }
 
 static void
-esh_free_dmainfo(struct esh_softc *sc, struct esh_dmainfo *di)
+esh_free_dmainfo(sc, di)
+	struct esh_softc *sc;
+	struct esh_dmainfo *di;
 {
 	int s = splnet();
 
@@ -3596,7 +3671,8 @@ esh_free_dmainfo(struct esh_softc *sc, struct esh_dmainfo *di)
  */
 
 static int
-eshstatus(struct esh_softc *sc)
+eshstatus(sc)
+	struct esh_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -3605,7 +3681,7 @@ eshstatus(struct esh_softc *sc)
 	/* XXX:   This looks pathetic, and should be improved! */
 
 	printf("%s:  status -- fail1 %x fail2 %x\n",
-	       device_xname(sc->sc_dev),
+	       device_xname(&sc->sc_dev),
 	       bus_space_read_4(iot, ioh, RR_RUNCODE_FAIL1),
 	       bus_space_read_4(iot, ioh, RR_RUNCODE_FAIL2));
 	printf("\tmisc host ctl %x  misc local ctl %x\n",
@@ -3643,7 +3719,8 @@ eshstatus(struct esh_softc *sc)
 /* Check to make sure that the NIC is still running */
 
 static int
-esh_check(struct esh_softc *sc)
+esh_check(sc)
+	struct esh_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;

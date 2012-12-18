@@ -1,4 +1,4 @@
-/*	$NetBSD: hpcapm.c,v 1.19 2012/10/27 17:18:17 chs Exp $	*/
+/*	$NetBSD: hpcapm.c,v 1.13 2007/10/19 11:59:42 ad Exp $	*/
 
 /*
  * Copyright (c) 2000 Takemura Shin
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpcapm.c,v 1.19 2012/10/27 17:18:17 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpcapm.c,v 1.13 2007/10/19 11:59:42 ad Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_hpcapm.h"
@@ -39,7 +39,6 @@ __KERNEL_RCSID(0, "$NetBSD: hpcapm.c,v 1.19 2012/10/27 17:18:17 chs Exp $");
 #include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
-#include <sys/selinfo.h> /* XXX: for apm_softc that is exposed here */
 
 #include <dev/hpc/apm/apmvar.h>
 
@@ -61,24 +60,25 @@ int	hpcapm_debug = HPCAPMDEBUG_CONF;
 #endif
 
 /* Definition of the driver for autoconfig. */
-static int	hpcapm_match(device_t, cfdata_t, void *);
-static void	hpcapm_attach(device_t, device_t, void *);
+static int	hpcapm_match(struct device *, struct cfdata *, void *);
+static void	hpcapm_attach(struct device *, struct device *, void *);
 static int	hpcapm_hook(void *, int, long, void *);
 
 static void	hpcapm_disconnect(void *);
 static void	hpcapm_enable(void *, int);
 static int	hpcapm_set_powstate(void *, u_int, u_int);
-static int	hpcapm_get_powstat(void *, u_int, struct apm_power_info *);
+static int	hpcapm_get_powstat(void *, struct apm_power_info *);
 static int	hpcapm_get_event(void *, u_int *, u_int *);
 static void	hpcapm_cpu_busy(void *);
 static void	hpcapm_cpu_idle(void *);
 static void	hpcapm_get_capabilities(void *, u_int *, u_int *);
 
 struct apmhpc_softc {
+	struct device sc_dev;
 	void *sc_apmdev;
 	volatile unsigned int events;
 	volatile int power_state;
-	volatile int battery_flags;
+	volatile int battery_state;
 	volatile int ac_state;
 	config_hook_tag	sc_standby_hook;
 	config_hook_tag	sc_suspend_hook;
@@ -88,7 +88,7 @@ struct apmhpc_softc {
 	int minutes_left;
 };
 
-CFATTACH_DECL_NEW(hpcapm, sizeof (struct apmhpc_softc),
+CFATTACH_DECL(hpcapm, sizeof (struct apmhpc_softc),
     hpcapm_match, hpcapm_attach, NULL, NULL);
 
 struct apm_accessops hpcapm_accessops = {
@@ -105,14 +105,16 @@ struct apm_accessops hpcapm_accessops = {
 extern struct cfdriver hpcapm_cd;
 
 static int
-hpcapm_match(device_t parent, cfdata_t cf, void *aux)
+hpcapm_match(struct device *parent,
+	     struct cfdata *cf, void *aux)
 {
 
 	return 1;
 }
 
 static void
-hpcapm_attach(device_t parent, device_t self, void *aux)
+hpcapm_attach(struct device *parent,
+	      struct device *self, void *aux)
 {
 	struct apmhpc_softc *sc;
 	struct apmdev_attach_args aaa;
@@ -122,7 +124,7 @@ hpcapm_attach(device_t parent, device_t self, void *aux)
 
 	sc->events = 0;
 	sc->power_state = APM_SYS_READY;
-	sc->battery_flags = APM_BATT_FLAG_UNKNOWN;
+	sc->battery_state = APM_BATT_FLAG_UNKNOWN;
 	sc->ac_state = APM_AC_UNKNOWN;
 	sc->battery_life = APM_BATT_LIFE_UNKNOWN;
 	sc->minutes_left = 0;
@@ -150,9 +152,6 @@ hpcapm_attach(device_t parent, device_t self, void *aux)
 	aaa.apm_detail = 0x0102;
 
 	sc->sc_apmdev = config_found_ia(self, "apmdevif", &aaa, apmprint);
-
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 static int
@@ -194,22 +193,22 @@ hpcapm_hook(void *ctx, int type, long id, void *msg)
 		switch (message) {
 		case CONFIG_HOOK_BATT_CRITICAL:
 			DPRINTF(("hpcapm: battery state critical\n"));
-			charge = sc->battery_flags & APM_BATT_FLAG_CHARGING;
-			sc->battery_flags = APM_BATT_FLAG_CRITICAL;
-			sc->battery_flags |= charge;
+			charge = sc->battery_state & APM_BATT_FLAG_CHARGING;
+			sc->battery_state = APM_BATT_FLAG_CRITICAL;
+			sc->battery_state |= charge;
 			sc->battery_life = 0;
 			break;
 		case CONFIG_HOOK_BATT_LOW:
 			DPRINTF(("hpcapm: battery state low\n"));
-			charge = sc->battery_flags & APM_BATT_FLAG_CHARGING;
-			sc->battery_flags = APM_BATT_FLAG_LOW;
-			sc->battery_flags |= charge;
+			charge = sc->battery_state & APM_BATT_FLAG_CHARGING;
+			sc->battery_state = APM_BATT_FLAG_LOW;
+			sc->battery_state |= charge;
 			break;
 		case CONFIG_HOOK_BATT_HIGH:
 			DPRINTF(("hpcapm: battery state high\n"));
-			charge = sc->battery_flags & APM_BATT_FLAG_CHARGING;
-			sc->battery_flags = APM_BATT_FLAG_HIGH;
-			sc->battery_flags |= charge;
+			charge = sc->battery_state & APM_BATT_FLAG_CHARGING;
+			sc->battery_state = APM_BATT_FLAG_HIGH;
+			sc->battery_state |= charge;
 			break;
 		case CONFIG_HOOK_BATT_10P:
 			DPRINTF(("hpcapm: battery life 10%%\n"));
@@ -253,12 +252,12 @@ hpcapm_hook(void *ctx, int type, long id, void *msg)
 			break;
 		case CONFIG_HOOK_BATT_UNKNOWN:
 			DPRINTF(("hpcapm: battery state unknown\n"));
-			sc->battery_flags = APM_BATT_FLAG_UNKNOWN;
+			sc->battery_state = APM_BATT_FLAG_UNKNOWN;
 			sc->battery_life = APM_BATT_LIFE_UNKNOWN;
 			break;
 		case CONFIG_HOOK_BATT_NO_SYSTEM_BATTERY:
 			DPRINTF(("hpcapm: battery state no system battery?\n"));
-			sc->battery_flags = APM_BATT_FLAG_NO_SYSTEM_BATTERY;
+			sc->battery_state = APM_BATT_FLAG_NO_SYSTEM_BATTERY;
 			sc->battery_life = APM_BATT_LIFE_UNKNOWN;
 			break;
 		}
@@ -267,17 +266,17 @@ hpcapm_hook(void *ctx, int type, long id, void *msg)
 		switch (message) {
 		case CONFIG_HOOK_AC_OFF:
 			DPRINTF(("hpcapm: ac not connected\n"));
-			sc->battery_flags &= ~APM_BATT_FLAG_CHARGING;
+			sc->battery_state &= ~APM_BATT_FLAG_CHARGING;
 			sc->ac_state = APM_AC_OFF;
 			break;
 		case CONFIG_HOOK_AC_ON_CHARGE:
 			DPRINTF(("hpcapm: charging\n"));
-			sc->battery_flags |= APM_BATT_FLAG_CHARGING;
+			sc->battery_state |= APM_BATT_FLAG_CHARGING;
 			sc->ac_state = APM_AC_ON;
 			break;
 		case CONFIG_HOOK_AC_ON_NOCHARGE:
 			DPRINTF(("hpcapm: ac connected\n"));
-			sc->battery_flags &= ~APM_BATT_FLAG_CHARGING;
+			sc->battery_state &= ~APM_BATT_FLAG_CHARGING;
 			sc->ac_state = APM_AC_ON;
 			break;
 		case CONFIG_HOOK_AC_UNKNOWN:
@@ -368,37 +367,28 @@ hpcapm_set_powstate(void *scx, u_int devid, u_int powstat)
 }
 
 static int
-hpcapm_get_powstat(void *scx, u_int batteryid, struct apm_power_info *pinfo)
+hpcapm_get_powstat(void *scx, struct apm_power_info *pinfo)
 {
 	struct apmhpc_softc *sc;
 	int val;
 
 	sc = scx;
 
-	pinfo->nbattery = 0;
-	pinfo->batteryid = 0;
-	pinfo->minutes_valid = 0;
-	pinfo->minutes_left = 0;
-	pinfo->battery_state = APM_BATT_UNKNOWN; /* XXX: ignored */
-
 	if (config_hook_call(CONFIG_HOOK_GET,
 			     CONFIG_HOOK_ACADAPTER, &val) != -1)
 		pinfo->ac_state = val;
 	else
 		pinfo->ac_state = sc->ac_state;
-
 	if (config_hook_call(CONFIG_HOOK_GET,
 			     CONFIG_HOOK_CHARGE, &val) != -1)
-		pinfo->battery_flags = val;
+		pinfo->battery_state = val;
 	else
-		pinfo->battery_flags = sc->battery_flags;
-
+		pinfo->battery_state = sc->battery_state;
 	if (config_hook_call(CONFIG_HOOK_GET,
 			     CONFIG_HOOK_BATTERYVAL, &val) != -1)
 		pinfo->battery_life = val;
 	else
 		pinfo->battery_life = sc->battery_life;
-
 	return (0);
 }
 

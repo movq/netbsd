@@ -1,4 +1,4 @@
-# $NetBSD: ENCPP1,v 1.10 2012/02/22 12:36:14 nisimura Exp $
+# $NetBSD: ENCPP1,v 1.4 2008/04/05 04:13:48 nisimura Exp $
 #
 # Ampro EnCorePP1 machine description file
 # 
@@ -19,11 +19,10 @@
 # device.
 
 include 	"arch/sandpoint/conf/std.sandpoint"
-options 	PIC_I8259
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"ENCPP1-$Revision: 1.10 $"
+#ident 		"ENCPP1-$Revision: 1.4 $"
 
 maxusers	32
 
@@ -42,6 +41,7 @@ options 	DDB
 options 	KTRACE
 #options 	PMAPCHECK
 #options 	PMAPDEBUG
+#options 	SYMTAB_SPACE=300000
 #options 	USERCONF	# userconf(4) support
 #options	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
@@ -72,11 +72,13 @@ file-system 	FDESC
 file-system 	KERNFS
 file-system 	NULLFS
 #file-system 	OVERLAY
+#file-system 	PORTAL
 file-system 	PROCFS
 #file-system 	UMAPFS
 #file-system 	UNION
 file-system	PTYFS		# /dev/pts/N support
 
+options 	SOFTDEP		# FFS soft updates support.
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 options 	INET
@@ -112,6 +114,7 @@ pseudo-device	loop
 #pseudo-device	wsmux
 
 # miscellaneous pseudo-devices
+#pseudo-device	rnd			# /dev/random and in-kernel generator
 #pseudo-device	vnd		
 #options 	VND_COMPRESSION		# compressed vnd(4)
 #pseudo-device	cgd		4	# cryptographic disk devices
@@ -120,8 +123,6 @@ pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
-pseudo-device	fss			# file system snapshot device
-
 #
 # device
 #

@@ -1,4 +1,4 @@
-/*	$NetBSD: mfs_vfsops.c,v 1.103 2011/06/12 03:36:01 rmind Exp $	*/
+/*	$NetBSD: mfs_vfsops.c,v 1.98 2008/06/28 01:34:05 rumble Exp $	*/
 
 /*
  * Copyright (c) 1989, 1990, 1993, 1994
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mfs_vfsops.c,v 1.103 2011/06/12 03:36:01 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mfs_vfsops.c,v 1.98 2008/06/28 01:34:05 rumble Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -66,12 +66,13 @@ __KERNEL_RCSID(0, "$NetBSD: mfs_vfsops.c,v 1.103 2011/06/12 03:36:01 rmind Exp $
 #include <ufs/mfs/mfsnode.h>
 #include <ufs/mfs/mfs_extern.h>
 
-MODULE(MODULE_CLASS_VFS, mfs, "ffs");
+MODULE(MODULE_CLASS_VFS, mfs, NULL);
 
+void *	mfs_rootbase;	/* address of mini-root in kernel virtual memory */
+u_long	mfs_rootsize;	/* size of mini-root in bytes */
 kmutex_t mfs_lock;	/* global lock */
 
-/* used for building internal dev_t, minor == 0 reserved for miniroot */
-static int mfs_minor = 1;
+static int mfs_minor;	/* used for building internal dev_t */
 static int mfs_initcnt;
 
 extern int (**mfs_vnodeop_p)(void *);
@@ -240,6 +241,27 @@ mfs_mountroot(void)
 }
 
 /*
+ * This is called early in boot to set the base address and size
+ * of the mini-root.
+ */
+int
+mfs_initminiroot(void *base)
+{
+	struct fs *fs = (struct fs *)((char *)base + SBLOCK_UFS1);
+
+	/* check for valid super block */
+	if (fs->fs_magic != FS_UFS1_MAGIC || fs->fs_bsize > MAXBSIZE ||
+	    fs->fs_bsize < sizeof(struct fs))
+		return (0);
+	mountroot = mfs_mountroot;
+	mfs_rootbase = base;
+	mfs_rootsize = fs->fs_fsize * fs->fs_size;
+	rootdev = makedev(255, mfs_minor);
+	mfs_minor++;
+	return (mfs_rootsize);
+}
+
+/*
  * VFS Operations.
  *
  * mount system call
@@ -314,7 +336,7 @@ mfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 			return EINVAL;
 		return (0);
 	}
-	error = getnewvnode(VT_MFS, NULL, mfs_vnodeop_p, NULL, &devvp);
+	error = getnewvnode(VT_MFS, (struct mount *)0, mfs_vnodeop_p, &devvp);
 	if (error)
 		return (error);
 	devvp->v_vflag |= VV_MPSAFE;
@@ -386,7 +408,7 @@ mfs_start(struct mount *mp, int flags)
 	base = mfsp->mfs_baseoff;
 	mutex_enter(&mfs_lock);
 	while (mfsp->mfs_shutdown != 1) {
-		while ((bp = bufq_get(mfsp->mfs_buflist)) != NULL) {
+		while ((bp = BUFQ_GET(mfsp->mfs_buflist)) != NULL) {
 			mutex_exit(&mfs_lock);
 			mfs_doio(bp, base);
 			mutex_enter(&mfs_lock);
@@ -415,7 +437,7 @@ mfs_start(struct mount *mp, int flags)
 
 		sleepreturn = cv_wait_sig(&mfsp->mfs_cv, &mfs_lock);
 	}
-	KASSERT(bufq_peek(mfsp->mfs_buflist) == NULL);
+	KASSERT(BUFQ_PEEK(mfsp->mfs_buflist) == NULL);
 	refcnt = --mfsp->mfs_refcnt;
 	mutex_exit(&mfs_lock);
 	if (refcnt == 0) {

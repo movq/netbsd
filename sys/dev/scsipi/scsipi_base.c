@@ -1,4 +1,4 @@
-/*	$NetBSD: scsipi_base.c,v 1.159 2012/04/20 20:23:21 bouyer Exp $	*/
+/*	$NetBSD: scsipi_base.c,v 1.148 2008/05/11 05:17:23 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002, 2003, 2004 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.159 2012/04/20 20:23:21 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.148 2008/05/11 05:17:23 mlelstv Exp $");
 
 #include "opt_scsi.h"
 
@@ -48,6 +48,8 @@ __KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.159 2012/04/20 20:23:21 bouyer Exp
 #include <sys/kthread.h>
 #include <sys/hash.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <dev/scsipi/scsi_spc.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsipi_disk.h>
@@ -56,8 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.159 2012/04/20 20:23:21 bouyer Exp
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsi_message.h>
-
-#include <machine/param.h>
 
 static int	scsipi_complete(struct scsipi_xfer *);
 static void	scsipi_request_sense(struct scsipi_xfer *);
@@ -74,6 +74,8 @@ static void	scsipi_put_resource(struct scsipi_channel *);
 
 static void	scsipi_async_event_max_openings(struct scsipi_channel *,
 		    struct scsipi_max_openings *);
+static void	scsipi_async_event_xfer_mode(struct scsipi_channel *,
+		    struct scsipi_xfer_mode *);
 static void	scsipi_async_event_channel_reset(struct scsipi_channel *);
 
 static struct pool scsipi_xfer_pool;
@@ -215,8 +217,6 @@ scsipi_lookup_periph(struct scsipi_channel *chan, int target, int lun)
 	struct scsipi_periph *periph;
 	uint32_t hash;
 	int s;
-
-	KASSERT(cold || KERNEL_LOCKED_P());
 
 	if (target >= chan->chan_ntargets ||
 	    lun >= chan->chan_nluns)
@@ -499,7 +499,6 @@ scsipi_put_xs(struct scsipi_xfer *xs)
 	SC_DEBUG(periph, SCSIPI_DB3, ("scsipi_free_xs\n"));
 
 	TAILQ_REMOVE(&periph->periph_xferq, xs, device_q);
-	callout_destroy(&xs->xs_callout);
 	pool_put(&scsipi_xfer_pool, xs);
 
 #ifdef DIAGNOSTIC
@@ -705,7 +704,7 @@ scsipi_kill_pending(struct scsipi_periph *periph)
 /*
  * scsipi_print_cdb:
  * prints a command descriptor block (for debug purpose, error messages,
- * SCSIVERBOSE, ...)
+ * SCSIPI_VERBOSE, ...)
  */
 void
 scsipi_print_cdb(struct scsipi_generic *cmd)
@@ -766,6 +765,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 	struct scsipi_periph *periph = xs->xs_periph;
 	u_int8_t key;
 	int error;
+#ifndef	SCSIVERBOSE
 	u_int32_t info;
 	static const char *error_mes[] = {
 		"soft error (corrected)",
@@ -777,6 +777,7 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 		"search returned equal", "volume overflow",
 		"verify miscompare", "unknown error key"
 	};
+#endif
 
 	sense = &xs->sense.scsi_sense;
 #ifdef SCSIPI_DEBUG
@@ -853,10 +854,12 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 		printf(" DEFERRED ERROR, key = 0x%x\n", key);
 		/* FALLTHROUGH */
 	case 0x70:
+#ifndef	SCSIVERBOSE
 		if ((sense->response_code & SSD_RCODE_VALID) != 0)
 			info = _4btol(sense->info);
 		else
 			info = 0;
+#endif
 		key = SSD_SENSE_KEY(sense->flags);
 
 		switch (key) {
@@ -941,44 +944,44 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 			break;
 		}
 
-		/* Print verbose decode if appropriate and possible */
-		if ((key == 0) ||
-		    ((xs->xs_control & XS_CTL_SILENT) != 0) ||
-		    (scsipi_print_sense(xs, 0) != 0))
-			return (error);
-
-		/* Print brief(er) sense information */
-		scsipi_printaddr(periph);
-		printf("%s", error_mes[key - 1]);
-		if ((sense->response_code & SSD_RCODE_VALID) != 0) {
-			switch (key) {
-			case SKEY_NOT_READY:
-			case SKEY_ILLEGAL_REQUEST:
-			case SKEY_UNIT_ATTENTION:
-			case SKEY_DATA_PROTECT:
-				break;
-			case SKEY_BLANK_CHECK:
-				printf(", requested size: %d (decimal)",
-				    info);
-				break;
-			case SKEY_ABORTED_COMMAND:
-				if (xs->xs_retries)
-					printf(", retrying");
-				printf(", cmd 0x%x, info 0x%x",
-				    xs->cmd->opcode, info);
-				break;
-			default:
-				printf(", info = %d (decimal)", info);
+#ifdef SCSIVERBOSE
+		if (key && (xs->xs_control & XS_CTL_SILENT) == 0)
+			scsipi_print_sense(xs, 0);
+#else
+		if (key) {
+			scsipi_printaddr(periph);
+			printf("%s", error_mes[key - 1]);
+			if ((sense->response_code & SSD_RCODE_VALID) != 0) {
+				switch (key) {
+				case SKEY_NOT_READY:
+				case SKEY_ILLEGAL_REQUEST:
+				case SKEY_UNIT_ATTENTION:
+				case SKEY_DATA_PROTECT:
+					break;
+				case SKEY_BLANK_CHECK:
+					printf(", requested size: %d (decimal)",
+					    info);
+					break;
+				case SKEY_ABORTED_COMMAND:
+					if (xs->xs_retries)
+						printf(", retrying");
+					printf(", cmd 0x%x, info 0x%x",
+					    xs->cmd->opcode, info);
+					break;
+				default:
+					printf(", info = %d (decimal)", info);
+				}
 			}
+			if (sense->extra_len != 0) {
+				int n;
+				printf(", data =");
+				for (n = 0; n < sense->extra_len; n++)
+					printf(" %02x",
+					    sense->csi[n]);
+			}
+			printf("\n");
 		}
-		if (sense->extra_len != 0) {
-			int n;
-			printf(", data =");
-			for (n = 0; n < sense->extra_len; n++)
-				printf(" %02x",
-				    sense->csi[n]);
-		}
-		printf("\n");
+#endif
 		return (error);
 
 	/*
@@ -1261,8 +1264,6 @@ scsipi_done(struct scsipi_xfer *xs)
 	struct scsipi_channel *chan = periph->periph_channel;
 	int s, freezecnt;
 
-	KASSERT(cold || KERNEL_LOCKED_P());
-
 	SC_DEBUG(periph, SCSIPI_DB2, ("scsipi_done\n"));
 #ifdef SCSIPI_DEBUG
 	if (periph->periph_dbflags & SCSIPI_DB1)
@@ -1437,7 +1438,9 @@ scsipi_complete(struct scsipi_xfer *xs)
 			if (xs->resid < xs->datalen) {
 				printf("we read %d bytes of sense anyway:\n",
 				    xs->datalen - xs->resid);
+#ifdef SCSIVERBOSE
 				scsipi_print_sense_data((void *)xs->data, 0);
+#endif
 			}
 			return EINVAL;
 		}
@@ -1513,8 +1516,7 @@ scsipi_complete(struct scsipi_xfer *xs)
 			 */
 			if ((xs->xs_control & XS_CTL_POLL) ||
 			    (chan->chan_flags & SCSIPI_CHAN_TACTIVE) == 0) {
-				/* XXX: quite extreme */
-				kpause("xsbusy", false, hz, NULL);
+				delay(1000000);
 			} else if (!callout_pending(&periph->periph_callout)) {
 				scsipi_periph_freeze(periph, 1);
 				callout_reset(&periph->periph_callout,
@@ -1862,9 +1864,21 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	int oasync, async, poll, error, s;
 
 	KASSERT(!cold);
-	KASSERT(KERNEL_LOCKED_P());
 
 	(chan->chan_bustype->bustype_cmd)(xs);
+
+	if (xs->xs_control & XS_CTL_DATA_ONSTACK) {
+#if 1
+		if (xs->xs_control & XS_CTL_ASYNC)
+			panic("scsipi_execute_xs: on stack and async");
+#endif
+		/*
+		 * If the I/O buffer is allocated on stack, the
+		 * process must NOT be swapped out, as the device will
+		 * be accessing the stack.
+		 */
+		uvm_lwp_hold(curlwp);
+	}
 
 	xs->xs_status &= ~XS_STS_DONE;
 	xs->error = XS_NOERROR;
@@ -2009,6 +2023,9 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	 * into....
 	 */
  free_xs:
+	if (xs->xs_control & XS_CTL_DATA_ONSTACK)
+		uvm_lwp_rele(curlwp);
+
 	s = splbio();
 	scsipi_put_xs(xs);
 	splx(s);
@@ -2156,16 +2173,65 @@ scsipi_async_event(struct scsipi_channel *chan, scsipi_async_event_t event,
 		break;
 
 	case ASYNC_EVENT_XFER_MODE:
-		if (chan->chan_bustype->bustype_async_event_xfer_mode) {
-			chan->chan_bustype->bustype_async_event_xfer_mode(
-			    chan, arg);
-		}
+		scsipi_async_event_xfer_mode(chan,
+		    (struct scsipi_xfer_mode *)arg);
 		break;
 	case ASYNC_EVENT_RESET:
 		scsipi_async_event_channel_reset(chan);
 		break;
 	}
 	splx(s);
+}
+
+/*
+ * scsipi_print_xfer_mode:
+ *
+ *	Print a periph's capabilities.
+ */
+void
+scsipi_print_xfer_mode(struct scsipi_periph *periph)
+{
+	int period, freq, speed, mbs;
+
+	if ((periph->periph_flags & PERIPH_MODE_VALID) == 0)
+		return;
+
+	aprint_normal_dev(periph->periph_dev, "");
+	if (periph->periph_mode & (PERIPH_CAP_SYNC | PERIPH_CAP_DT)) {
+		period = scsipi_sync_factor_to_period(periph->periph_period);
+		aprint_normal("sync (%d.%02dns offset %d)",
+		    period / 100, period % 100, periph->periph_offset);
+	} else
+		aprint_normal("async");
+
+	if (periph->periph_mode & PERIPH_CAP_WIDE32)
+		aprint_normal(", 32-bit");
+	else if (periph->periph_mode & (PERIPH_CAP_WIDE16 | PERIPH_CAP_DT))
+		aprint_normal(", 16-bit");
+	else
+		aprint_normal(", 8-bit");
+
+	if (periph->periph_mode & (PERIPH_CAP_SYNC | PERIPH_CAP_DT)) {
+		freq = scsipi_sync_factor_to_freq(periph->periph_period);
+		speed = freq;
+		if (periph->periph_mode & PERIPH_CAP_WIDE32)
+			speed *= 4;
+		else if (periph->periph_mode &
+		    (PERIPH_CAP_WIDE16 | PERIPH_CAP_DT))
+			speed *= 2;
+		mbs = speed / 1000;
+		if (mbs > 0)
+			aprint_normal(" (%d.%03dMB/s)", mbs, speed % 1000);
+		else
+			aprint_normal(" (%dKB/s)", speed % 1000);
+	}
+
+	aprint_normal(" transfers");
+
+	if (periph->periph_mode & PERIPH_CAP_TQING)
+		aprint_normal(", tagged queueing");
+
+	aprint_normal("\n");
 }
 
 /*
@@ -2201,6 +2267,57 @@ scsipi_async_event_max_openings(struct scsipi_channel *chan,
 		else if (mo->mo_openings > periph->periph_openings &&
 		    (periph->periph_flags & PERIPH_GROW_OPENINGS) != 0)
 			periph->periph_openings = mo->mo_openings;
+	}
+}
+
+/*
+ * scsipi_async_event_xfer_mode:
+ *
+ *	Update the xfer mode for all periphs sharing the
+ *	specified I_T Nexus.
+ */
+static void
+scsipi_async_event_xfer_mode(struct scsipi_channel *chan,
+    struct scsipi_xfer_mode *xm)
+{
+	struct scsipi_periph *periph;
+	int lun, announce, mode, period, offset;
+
+	for (lun = 0; lun < chan->chan_nluns; lun++) {
+		periph = scsipi_lookup_periph(chan, xm->xm_target, lun);
+		if (periph == NULL)
+			continue;
+		announce = 0;
+
+		/*
+		 * Clamp the xfer mode down to this periph's capabilities.
+		 */
+		mode = xm->xm_mode & periph->periph_cap;
+		if (mode & PERIPH_CAP_SYNC) {
+			period = xm->xm_period;
+			offset = xm->xm_offset;
+		} else {
+			period = 0;
+			offset = 0;
+		}
+
+		/*
+		 * If we do not have a valid xfer mode yet, or the parameters
+		 * are different, announce them.
+		 */
+		if ((periph->periph_flags & PERIPH_MODE_VALID) == 0 ||
+		    periph->periph_mode != mode ||
+		    periph->periph_period != period ||
+		    periph->periph_offset != offset)
+			announce = 1;
+
+		periph->periph_mode = mode;
+		periph->periph_period = period;
+		periph->periph_offset = offset;
+		periph->periph_flags |= PERIPH_MODE_VALID;
+
+		if (announce)
+			scsipi_print_xfer_mode(periph);
 	}
 }
 

@@ -1,4 +1,4 @@
-/* $NetBSD: g42xxeb_lcd.c,v 1.14 2011/07/01 20:38:17 dyoung Exp $ */
+/* $NetBSD: g42xxeb_lcd.c,v 1.11 2008/06/11 23:24:43 cegger Exp $ */
 
 /*-
  * Copyright (c) 2001, 2002, 2005 Genetec corp.
@@ -44,7 +44,7 @@
 #include <dev/wscons/wsdisplayvar.h> 
 #include <dev/wscons/wscons_callbacks.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <arm/sa11x0/sa11x0_var.h>
 #include <arm/xscale/pxa2x0var.h>
 #include <arm/xscale/pxa2x0reg.h>
@@ -56,8 +56,8 @@
 #include "wsdisplay.h"
 #include "ioconf.h"
 
-int	lcd_match(device_t, cfdata_t, void *);
-void	lcd_attach(device_t, device_t, void *);
+int	lcd_match( struct device *, struct cfdata *, void *);
+void	lcd_attach( struct device *, struct device *, void *);
 int	lcdintr(void *);
 
 #if NWSDISPLAY > 0
@@ -127,16 +127,16 @@ dev_type_ioctl(lcdioctl);
 dev_type_mmap(lcdmmap);
 const struct cdevsw lcd_cdevsw = {
 	lcdopen, lcdclose, noread, nowrite,
-	lcdioctl, nostop, notty, nopoll, lcdmmap, nokqfilter, D_TTY
+	lcdioctl, nostop, notty, nopoll, lcdmmap, D_TTY
 };
 
 #endif
 
-CFATTACH_DECL_NEW(lcd_obio, sizeof (struct pxa2x0_lcd_softc),
-    lcd_match, lcd_attach, NULL, NULL);
+CFATTACH_DECL(lcd_obio, sizeof (struct pxa2x0_lcd_softc), lcd_match, lcd_attach,
+    NULL, NULL);
 
 int
-lcd_match( device_t parent, cfdata_t cf, void *aux )
+lcd_match( struct device *parent, struct cfdata *cf, void *aux )
 {
 	return 1;
 }
@@ -188,19 +188,9 @@ const struct lcd_panel_geometry toshiba_LTM035 =
 };
 #endif /* G4250_LCD_TOSHIBA_LTM035 */
 
-void lcd_attach(device_t parent, device_t self, void *aux)
+void lcd_attach( struct device *parent, struct device *self, void *aux )
 {
-	struct pxa2x0_lcd_softc *sc = device_private(self);
-	struct pxaip_attach_args paa;
-	struct obio_attach_args *oba = aux;
-
-	sc->dev = self;
-
-	paa.pxa_name = "obio";
-	paa.pxa_iot = oba->oba_iot;
-	paa.pxa_addr = oba->oba_addr;
-	paa.pxa_size = 0;		/* XXX */
-	paa.pxa_intr = oba->oba_intr;
+	struct pxa2x0_lcd_softc *sc = (struct pxa2x0_lcd_softc *)self;
 
 #ifdef G4250_LCD_TOSHIBA_LTM035
 # define PANEL	toshiba_LTM035
@@ -208,7 +198,7 @@ void lcd_attach(device_t parent, device_t self, void *aux)
 # define PANEL	nec_NL3224BC35
 #endif
 
-	pxa2x0_lcd_attach_sub(sc, &paa, &PANEL);
+	pxa2x0_lcd_attach_sub(sc, aux, &PANEL);
 
 
 #if NWSDISPLAY > 0
@@ -226,6 +216,8 @@ void lcd_attach(device_t parent, device_t self, void *aux)
 		aa.accessops = &lcd_accessops;
 		aa.accesscookie = sc;
 
+		printf("\n");
+
 		(void) config_found(self, &aa, wsemuldisplaydevprint);
 	}
 #else
@@ -238,6 +230,8 @@ void lcd_attach(device_t parent, device_t self, void *aux)
 			sc->active = screen;
 			pxa2x0_lcd_start_dma(sc, screen);
 		}
+
+		printf("\n");
 	}
 #endif
 
@@ -250,9 +244,8 @@ void lcd_attach(device_t parent, device_t self, void *aux)
 int
 lcd_ioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct pxa2x0_lcd_softc *sc = v;
 	struct obio_softc *osc = 
-	    device_private(device_parent(sc->dev));
+	    (struct obio_softc *) device_parent((struct device *)v);
 	uint16_t reg;
 
 	switch (cmd) {
@@ -278,9 +271,8 @@ int
 lcd_show_screen(void *v, void *cookie, int waitok,
     void (*cb)(void *, int, int), void *cbarg)
 {
-	struct pxa2x0_lcd_softc *sc = v;
 	struct obio_softc *osc = 
-	    device_private(device_parent(sc->dev));
+	    (struct obio_softc *) device_parent((struct device *)v);
 	uint16_t reg;
 
 	pxa2x0_lcd_show_screen(v,cookie,waitok,cb,cbarg);
@@ -301,19 +293,6 @@ lcd_show_screen(void *v, void *cookie, int waitok,
 int
 lcdopen(dev_t dev, int oflags, int devtype, struct lwp *l)
 {
-	struct pxa2x0_lcd_softc *sc =
-		device_lookup_private(&lcd_cd, minor(dev));
-	struct obio_softc *osc = 
-	    device_private(device_parent(sc->dev));
-	uint16_t reg;
-
-	/* Turn on LCD backlight.
-	   XXX: with fixed blightness. want new ioctl to set blightness. */
-	reg = bus_space_read_2(osc->sc_iot, osc->sc_obioreg_ioh, G42XXEB_LCDCTL);
-	bus_space_write_2(osc->sc_iot, osc->sc_obioreg_ioh, G42XXEB_LCDCTL,
-	    (reg & ~LCDCTL_BL_PWN) | 0x4000 | LCDCTL_BL_ON);
-
-
 	return 0;
 }
 

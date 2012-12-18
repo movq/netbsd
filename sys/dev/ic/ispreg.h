@@ -1,4 +1,4 @@
-/* $NetBSD: ispreg.h,v 1.34 2010/03/26 20:52:01 mjacob Exp $ */
+/* $NetBSD: ispreg.h,v 1.32 2008/03/11 05:33:30 mjacob Exp $ */
 /*
  * Copyright (C) 1997, 1998, 1999 National Aeronautics & Space Administration
  * All rights reserved.
@@ -473,21 +473,10 @@ typedef struct {
 	uint16_t param[MAILBOX_STORAGE];
 	uint16_t ibits;
 	uint16_t obits;
-	uint32_t
-		lineno	: 16,
-			: 12,
+	uint32_t	: 28,
 		logval	: 4;
 	uint32_t timeout;
-	const char *func;
 } mbreg_t;
-#define	MBSINIT(mbxp, code, loglev, timo)	\
-	ISP_MEMZERO((mbxp), sizeof (mbreg_t));	\
-	(mbxp)->param[0] = code;		\
-	(mbxp)->lineno = __LINE__;		\
-	(mbxp)->func = __func__;		\
-	(mbxp)->logval = loglev;		\
-	(mbxp)->timeout = timo
-
 
 /*
  * Fibre Protocol Module and Frame Buffer Register Offsets/Definitions (2X00).
@@ -679,13 +668,13 @@ typedef struct {
 #define	SXP_PINS_LVD_MODE		0x1000
 #define	SXP_PINS_HVD_MODE		0x0800
 #define	SXP_PINS_SE_MODE		0x0400
-#define	SXP_PINS_MODE_MASK		(SXP_PINS_LVD_MODE|SXP_PINS_HVD_MODE|SXP_PINS_SE_MODE)
 
 /* The above have to be put together with the DIFFM pin to make sense */
 #define	ISP1080_LVD_MODE		(SXP_PINS_LVD_MODE)
 #define	ISP1080_HVD_MODE		(SXP_PINS_HVD_MODE|SXP_PINS_DIFF_MODE)
 #define	ISP1080_SE_MODE			(SXP_PINS_SE_MODE)
-#define	ISP1080_MODE_MASK		(SXP_PINS_MODE_MASK|SXP_PINS_DIFF_MODE)
+#define	ISP1080_MODE_MASK	\
+    (SXP_PINS_LVD_MODE|SXP_PINS_HVD_MODE|SXP_PINS_SE_MODE|SXP_PINS_DIFF_MODE)
 
 /*
  * RISC and Host Command and Control Block Register Offsets

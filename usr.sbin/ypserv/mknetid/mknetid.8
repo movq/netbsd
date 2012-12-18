@@ -1,4 +1,4 @@
-.\"	$NetBSD: mknetid.8,v 1.12 2012/04/08 22:00:41 wiz Exp $
+.\"	$NetBSD: mknetid.8,v 1.10 2005/02/26 16:32:04 wiz Exp $
 .\"
 .\" Copyright (c) 1996 Mats O Jansson <moj@stacken.kth.se>
 .\" All rights reserved.
@@ -11,6 +11,11 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
+.\" 3. All advertising materials mentioning features or use of this software
+.\"    must display the following acknowledgement:
+.\"      This product includes software developed by Mats O Jansson
+.\" 4. The name of the author may not be used to endorse or promote products
+.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
 .\" OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,11 +38,21 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl q
+.Bk -words
 .Op Fl d Ar domain
-.Op Fl g Ar groupfile
-.Op Fl h Ar hostfile
-.Op Fl m Ar netidfile
+.Ek
+.Bk -words
 .Op Fl p Ar passwdfile
+.Ek
+.Bk -words
+.Op Fl g Ar groupfile
+.Ek
+.Bk -words
+.Op Fl h Ar hostfile
+.Ek
+.Bk -words
+.Op Fl m Ar netidfile
+.Ek
 .Sh DESCRIPTION
 .Nm
 is used to create a map named

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mc.c,v 1.39 2012/10/27 17:17:59 chs Exp $	*/
+/*	$NetBSD: if_mc.c,v 1.34 2007/10/17 19:55:13 garbled Exp $	*/
 
 /*-
  * Copyright (c) 1997 David Huang <khym@azeotrope.org>
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.39 2012/10/27 17:17:59 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.34 2007/10/17 19:55:13 garbled Exp $");
 
 #include "opt_ddb.h"
 #include "opt_inet.h"
@@ -67,8 +67,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.39 2012/10/27 17:17:59 chs Exp $");
 
 
 
+#include "bpfilter.h"
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #include <machine/bus.h>
 #include <mac68k/dev/if_mcreg.h>
@@ -91,7 +94,7 @@ static inline u_int16_t ether_cmp(void *, void *);
 
 /*
  * Compare two Ether/802 addresses for equality, inlined and
- * unrolled for speed.  Use this like memcmp().
+ * unrolled for speed.  Use this like bcmp().
  *
  * XXX: Add <machine/inlines.h> for stuff like this?
  * XXX: or maybe add it to libkern.h instead?
@@ -151,7 +154,7 @@ mcsetup(struct mc_softc	*sc, u_int8_t *lladdr)
 	memcpy(sc->sc_enaddr, lladdr, ETHER_ADDR_LEN);
 	printf(": address %s\n", ether_sprintf(lladdr));
 
-	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
+	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_ioctl = mcioctl;
 	ifp->if_start = mcstart;
@@ -175,25 +178,23 @@ mcioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifa = (struct ifaddr *)data;
 		ifp->if_flags |= IFF_UP;
-		mcinit(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
+			mcinit(sc);
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
 		default:
+			mcinit(sc);
 			break;
 		}
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((err = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		/* XXX see the comment in ed_ioctl() about code re-use */
 		if ((ifp->if_flags & IFF_UP) == 0 &&
 		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
@@ -232,7 +233,7 @@ mcioctl(struct ifnet *ifp, u_long cmd, void *data)
 		}
 		break;
 	default:
-		err = ether_ioctl(ifp, cmd, data);
+		err = EINVAL;
 	}
 	splx(s);
 	return (err);
@@ -258,11 +259,14 @@ mcstart(struct ifnet *ifp)
 		if (m == 0)
 			return;
 
+#if NBPFILTER > 0
 		/*
 		 * If bpf is listening on this interface, let it
 		 * see the packet before we commit it to the wire.
 		 */
-		bpf_mtap(ifp, m);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 
 		/*
 		 * Copy the mbuf chain into the transmit buffer.
@@ -411,7 +415,7 @@ maceput(struct mc_softc *sc, struct mbuf *m)
 	}
 
 	if (totlen > PAGE_SIZE)
-		panic("%s: maceput: packet overflow", device_xname(sc->sc_dev));
+		panic("%s: maceput: packet overflow", sc->sc_dev.dv_xname);
 
 #if 0
 	if (totlen < ETHERMIN + sizeof(struct ether_header)) {
@@ -436,21 +440,21 @@ struct mc_softc *sc = arg;
 	ir = NIC_GET(sc, MACE_IR) & ~NIC_GET(sc, MACE_IMR);
 	if (ir & JAB) {
 #ifdef MCDEBUG
-		printf("%s: jabber error\n", device_xname(sc->sc_dev));
+		printf("%s: jabber error\n", sc->sc_dev.dv_xname);
 #endif
 		sc->sc_if.if_oerrors++;
 	}
 
 	if (ir & BABL) {
 #ifdef MCDEBUG
-		printf("%s: babble\n", device_xname(sc->sc_dev));
+		printf("%s: babble\n", sc->sc_dev.dv_xname);
 #endif
 		sc->sc_if.if_oerrors++;
 	}
 
 	if (ir & CERR) {
 #ifdef MCDEBUG
-		printf("%s: collision error\n", device_xname(sc->sc_dev));
+		printf("%s: collision error\n", sc->sc_dev.dv_xname);
 #endif
 		sc->sc_if.if_collisions++;
 	}
@@ -480,13 +484,13 @@ mc_tint(struct mc_softc *sc)
 		return;
 
 	if (xmtfs & UFLO) {
-		printf("%s: underflow\n", device_xname(sc->sc_dev));
+		printf("%s: underflow\n", sc->sc_dev.dv_xname);
 		mcreset(sc);
 		return;
 	}
 
 	if (xmtfs & LCOL) {
-		printf("%s: late collision\n", device_xname(sc->sc_dev));
+		printf("%s: late collision\n", sc->sc_dev.dv_xname);
 		sc->sc_if.if_oerrors++;
 		sc->sc_if.if_collisions++;
 	}
@@ -497,14 +501,14 @@ mc_tint(struct mc_softc *sc)
 	else if (xmtfs & ONE)
 		sc->sc_if.if_collisions++;
 	else if (xmtfs & RTRY) {
-		printf("%s: excessive collisions\n", device_xname(sc->sc_dev));
+		printf("%s: excessive collisions\n", sc->sc_dev.dv_xname);
 		sc->sc_if.if_collisions += 16;
 		sc->sc_if.if_oerrors++;
 	}
 
 	if (xmtfs & LCAR) {
 		sc->sc_havecarrier = 0;
-		printf("%s: lost carrier\n", device_xname(sc->sc_dev));
+		printf("%s: lost carrier\n", sc->sc_dev.dv_xname);
 		sc->sc_if.if_oerrors++;
 	}
 
@@ -524,12 +528,12 @@ mc_rint(struct mc_softc *sc)
 #ifdef MCDEBUG
 	if (rxf.rx_rcvsts & 0xf0)
 		printf("%s: rcvcnt %02x rcvsts %02x rntpc 0x%02x rcvcc 0x%02x\n",
-		    device_xname(sc->sc_dev), rxf.rx_rcvcnt, rxf.rx_rcvsts,
+		    sc->sc_dev.dv_xname, rxf.rx_rcvcnt, rxf.rx_rcvsts,
 		    rxf.rx_rntpc, rxf.rx_rcvcc);
 #endif
 
 	if (rxf.rx_rcvsts & OFLO) {
-		printf("%s: receive FIFO overflow\n", device_xname(sc->sc_dev));
+		printf("%s: receive FIFO overflow\n", sc->sc_dev.dv_xname);
 		sc->sc_if.if_ierrors++;
 		return;
 	}
@@ -539,7 +543,7 @@ mc_rint(struct mc_softc *sc)
 
 	if (rxf.rx_rcvsts & FRAM) {
 #ifdef MCDEBUG
-		printf("%s: framing error\n", device_xname(sc->sc_dev));
+		printf("%s: framing error\n", sc->sc_dev.dv_xname);
 #endif
 		sc->sc_if.if_ierrors++;
 		return;
@@ -547,7 +551,7 @@ mc_rint(struct mc_softc *sc)
 
 	if (rxf.rx_rcvsts & FCS) {
 #ifdef MCDEBUG
-		printf("%s: frame control checksum error\n", device_xname(sc->sc_dev));
+		printf("%s: frame control checksum error\n", sc->sc_dev.dv_xname);
 #endif
 		sc->sc_if.if_ierrors++;
 		return;
@@ -567,7 +571,7 @@ mace_read(struct mc_softc *sc, void *pkt, int len)
 	    len > ETHERMTU + sizeof(struct ether_header)) {
 #ifdef MCDEBUG
 		printf("%s: invalid packet size %d; dropping\n",
-		    device_xname(sc->sc_dev), len);
+		    sc->sc_dev.dv_xname, len);
 #endif
 		ifp->if_ierrors++;
 		return;
@@ -581,8 +585,11 @@ mace_read(struct mc_softc *sc, void *pkt, int len)
 
 	ifp->if_ipackets++;
 
+#if NBPFILTER > 0
 	/* Pass the packet to any BPF listeners. */
-	bpf_mtap(ifp, m);
+	if (ifp->if_bpf) 
+		bpf_mtap(ifp->if_bpf, m);
+#endif
 
 	/* Pass the packet up. */
 	(*ifp->if_input)(ifp, m);

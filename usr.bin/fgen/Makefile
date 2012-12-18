@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2009/10/29 14:35:25 christos Exp $
+#	$NetBSD: Makefile,v 1.6 2003/05/18 07:57:34 lukem Exp $
 
 CPPFLAGS+= -I${.CURDIR}
 PROG=	fgen

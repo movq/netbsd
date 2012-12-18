@@ -1,4 +1,4 @@
-/* $NetBSD: main.c,v 1.12 2011/08/31 13:32:37 joerg Exp $ */
+/* $NetBSD: main.c,v 1.10 2008/07/15 17:51:38 perry Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@ int getopt(int nargc, char * const nargv[], const char *ostr);
  */
 static int connect_local(char *sockpath);
 static int connect_remote(char *host, int portno);
-__dead static void usage(void);
+static void usage(void);
 static void mloop(void);
 static void handle_input(void);
 static void print_menu(void);
@@ -96,8 +96,7 @@ static void dump_event(u_int8_t *msg, int len, int readflag);
 static ssize_t sock_read(int fd, void *buf, size_t nbytes);
 static ssize_t sock_write(int fd, void *buf, size_t nbytes);
 
-static void mprintf(const char *fmt, ...)
- __attribute__((__format__(__printf__, 1, 2)));
+static void mprintf(char *fmt, ...);
 
 /*
  * Global variables
@@ -122,7 +121,7 @@ static FILE *lfp = NULL;
  *	Display usage and exit
  *---------------------------------------------------------------------------*/
 static void
-usage(void)
+usage()
 {
         fprintf(stderr, "\n");
         fprintf(stderr, "isdnmonitor - version %02d.%02d.%d, (protocol %02d.%02d)\n", VERSION, REL, STEP, MPROT_VERSION, MPROT_REL);
@@ -257,7 +256,7 @@ int main(int argc, char **argv)
  *	Return socket if successful, -1 on error.
  ---------------------------------------------------------------------------*/
 static int
-connect_remote(char *host, int portnum)
+connect_remote(char *host, int portno)
 {
 	struct sockaddr_in sa;
 	struct hostent *h;
@@ -285,7 +284,7 @@ connect_remote(char *host, int portnum)
 	sa.sin_len = sizeof(sa);
 #endif
 	sa.sin_family = AF_INET;
-	sa.sin_port = htons(portnum);
+	sa.sin_port = htons(portno);
 
 	memcpy(&sa.sin_addr.s_addr, h->h_addr_list[0], sizeof(sa.sin_addr.s_addr));
 
@@ -304,16 +303,16 @@ connect_remote(char *host, int portnum)
  *	Return socket on success, -1 on failure.
  *---------------------------------------------------------------------------*/
 static int
-connect_local(char *clsockpath)
+connect_local(char *sockpath)
 {
 	int s;
 	struct sockaddr_un sa;
 
 	/* check path length */
-	if (strlen(clsockpath) >= sizeof(sa.sun_path))
+	if (strlen(sockpath) >= sizeof(sa.sun_path))
 	{
 		fprintf(stderr, "pathname to long for local socket: %s\n",
-			clsockpath);
+			sockpath);
 		exit(1);
 	}
 
@@ -330,11 +329,11 @@ connect_local(char *clsockpath)
 
 	sa.sun_len = sizeof(sa);
 	sa.sun_family = AF_LOCAL;
-	strlcpy(sa.sun_path, clsockpath, sizeof(sa.sun_path));
+	strlcpy(sa.sun_path, sockpath, sizeof(sa.sun_path));
 
 	if (connect(s, (struct sockaddr *)&sa, sizeof(sa)))
 	{
-		fprintf(stderr, "could not connect local monitor socket [%s]: %s\n", clsockpath, strerror(errno));
+		fprintf(stderr, "could not connect local monitor socket [%s]: %s\n", sockpath, strerror(errno));
 	}
 
 	return s;
@@ -430,7 +429,7 @@ mloop()
 
 			bytes = I4B_GET_2B(buf, I4B_MON_EVNT_LEN);
 
-			if (bytes >= (int)sizeof(buf))
+			if (bytes >= sizeof(buf))
 			{
 				fprintf(stderr, "mloop: socket recv buffer overflow %d!\n", bytes);
 				break;
@@ -468,11 +467,11 @@ mloop()
 /*
  * Dump a complete event packet.
  */
-static void dump_event(u_int8_t *msg, int len, int doread)
+static void dump_event(u_int8_t *msg, int len, int read)
 {
 	int i;
 
-	if (doread)
+	if (read)
 		mprintf("read from socket:");
 	else
 		mprintf("write to socket:");
@@ -550,7 +549,7 @@ static void print_connect(
 	int controller, /* controller number */
 	int channel,	/* channel no, used to identify this connection until disconnect */
 	char * cfgname, 	/* name of config entry/connection */
-	char * devnam, 	/* device used (e.g. isp0) */
+	char * devname, 	/* device used (e.g. isp0) */
 	char * remphone, 	/* phone no of remote side */
 	char * locphone)	/* local phone no */
 {
@@ -570,11 +569,11 @@ static void print_connect(
 		mprintf("%s: incoming call from '%s' [to msn: '%s']",
 			buf, remphone, locphone);
 	mprintf(", controller %d, channel %d, config '%s' on device '%s'\n",
-		controller, channel, cfgname, devnam);
+		controller, channel, cfgname, devname);
 
 #ifndef WIN32
 	if (fullscreen)
-		display_connect(CHPOS(controller, channel), outgoing, cfgname, remphone, devnam);
+		display_connect(CHPOS(controller, channel), outgoing, cfgname, remphone, devname);
 #endif
 }
 
@@ -620,16 +619,16 @@ print_updown(time_t tstamp, int controller, int channel, int isup)
  * Print l1 / l2 status
  */
 static void
-print_l12stat(time_t tstamp, int controller, int layer, int status)
+print_l12stat(time_t tstamp, int controller, int layer, int state)
 {
 	char buf[256];
 	strftime(buf, sizeof(buf), I4B_TIME_FORMAT, localtime(&tstamp));
 
 	mprintf("%s: layer %d change on controller %d: %s\n",
-		buf, layer, controller, status ? "up" : "down");
+		buf, layer, controller, state ? "up" : "down");
 #ifndef WIN32
 	if (fullscreen)
-		display_l12stat(controller, layer, status);
+		display_l12stat(controller, layer, state);
 #endif
 }
 
@@ -1159,7 +1158,7 @@ sock_write(int fd, void *buf, size_t nbytes)
 }
 
 static void
-mprintf(const char *fmt, ...)
+mprintf(char *fmt, ...)
 {
 #define	PRBUFLEN 1024
 	char buffer[PRBUFLEN];

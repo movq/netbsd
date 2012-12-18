@@ -100,7 +100,7 @@ struct file_media_iterator {
  * Global Constants
  */
 int potential_block_sizes[] = {
-    1, 512, 1024, 2048, 4096, 8192, 16834,
+    1, 512, 1024, 2048,
     0
 };
 
@@ -124,8 +124,8 @@ static struct file_media_globals file_info;
 int compute_block_size(int fd);
 void file_init(void);
 FILE_MEDIA new_file_media(void);
-long read_file_media(MEDIA m, long long offset, uint32_t count, void *address);
-long write_file_media(MEDIA m, long long offset, uint32_t count, void *address);
+long read_file_media(MEDIA m, long long offset, unsigned long count, void *address);
+long write_file_media(MEDIA m, long long offset, unsigned long count, void *address);
 long close_file_media(MEDIA m);
 long os_reload_file_media(MEDIA m);
 FILE_MEDIA_ITERATOR new_file_iterator(void);
@@ -249,7 +249,7 @@ open_file_as_media(char *file, int oflag)
 
 
 long
-read_file_media(MEDIA m, long long offset, uint32_t count, void *address)
+read_file_media(MEDIA m, long long offset, unsigned long count, void *address)
 {
     FILE_MEDIA a;
     long rtn_value;
@@ -270,7 +270,7 @@ read_file_media(MEDIA m, long long offset, uint32_t count, void *address)
     } else if (offset < 0 || offset % a->m.grain != 0) {
 	/* can't handle offset */
 	fprintf(stderr,"bad offset\n");
-    } else if (offset + (long long) count > a->m.size_in_bytes && a->m.size_in_bytes != (long long) 0) {
+    } else if (offset + count > a->m.size_in_bytes && a->m.size_in_bytes != (long long) 0) {
 	/* check for offset (and offset+count) too large */
 	fprintf(stderr,"offset+count too large\n");
     } else if (offset + count > (long long) LOFF_MAX) {
@@ -280,7 +280,7 @@ read_file_media(MEDIA m, long long offset, uint32_t count, void *address)
 	/* do the read */
 	off = offset;
 	if ((off = llseek(a->fd, off, 0)) >= 0) {
-	    if ((t = read(a->fd, address, count)) == (ssize_t)count) {
+	    if ((t = read(a->fd, address, count)) == count) {
 		rtn_value = 1;
 	    } else {
 		fprintf(stderr,"read failed\n");
@@ -294,7 +294,7 @@ read_file_media(MEDIA m, long long offset, uint32_t count, void *address)
 
 
 long
-write_file_media(MEDIA m, long long offset, uint32_t count, void *address)
+write_file_media(MEDIA m, long long offset, unsigned long count, void *address)
 {
     FILE_MEDIA a;
     long rtn_value;
@@ -317,8 +317,8 @@ write_file_media(MEDIA m, long long offset, uint32_t count, void *address)
 	/* do the write  */
 	off = offset;
 	if ((off = llseek(a->fd, off, 0)) >= 0) {
-		if ((t = write(a->fd, address, count)) == (ssize_t)count) {
-		if (off + (long long) count > a->m.size_in_bytes) {
+	    if ((t = write(a->fd, address, count)) == count) {
+		if (off + count > a->m.size_in_bytes) {
 			a->m.size_in_bytes = off + count;
 		}
 		rtn_value = 1;

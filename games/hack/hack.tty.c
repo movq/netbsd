@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.tty.c,v 1.16 2011/08/06 20:42:43 dholland Exp $	*/
+/*	$NetBSD: hack.tty.c,v 1.12 2003/08/07 09:37:19 agc Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char     sccsid[] = "@(#)hack.tty.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: hack.tty.c,v 1.16 2011/08/06 20:42:43 dholland Exp $");
+__RCSID("$NetBSD: hack.tty.c,v 1.12 2003/08/07 09:37:19 agc Exp $");
 #endif
 #endif				/* not lint */
 
@@ -120,9 +120,7 @@ __RCSID("$NetBSD: hack.tty.c,v 1.16 2011/08/06 20:42:43 dholland Exp $");
 
 static char     erase_char, kill_char;
 static boolean  settty_needed = FALSE;
-static struct termios  inittyb, curttyb;
-
-static void setctty(void);
+struct termios  inittyb, curttyb;
 
 /*
  * Get initial state of terminal, set ospeed (for termcap routines)
@@ -130,7 +128,7 @@ static void setctty(void);
  * Called by startup() in termcap.c and after returning from ! or ^Z
  */
 void
-gettty(void)
+gettty()
 {
 	if (tcgetattr(0, &inittyb) < 0)
 		perror("Hack (gettty)");
@@ -150,10 +148,11 @@ gettty(void)
 
 /* reset terminal to original state */
 void
-settty(const char *s)
+settty(s)
+	const char           *s;
 {
-	clearscreen();
-	endscreen();
+	clear_screen();
+	end_screen();
 	if (s)
 		printf("%s", s);
 	(void) fflush(stdout);
@@ -164,8 +163,8 @@ settty(const char *s)
 	setioctls();
 }
 
-static void
-setctty(void)
+void
+setctty()
 {
 	if (tcsetattr(0, TCSADRAIN, &curttyb) < 0)
 		perror("Hack (setctty)");
@@ -173,7 +172,7 @@ setctty(void)
 
 
 void
-setftty(void)
+setftty()
 {
 	int             change = 0;
 	flags.cbreak = ON;
@@ -193,7 +192,7 @@ setftty(void)
 	if (change) {
 		setctty();
 	}
-	startscreen();
+	start_screen();
 }
 
 
@@ -206,7 +205,7 @@ error(const char *fmt, ...)
 
 	va_start(ap, fmt);
 	if (settty_needed)
-		settty(NULL);
+		settty((char *) 0);
 	vprintf(fmt, ap);
 	va_end(ap);
 	putchar('\n');
@@ -220,7 +219,8 @@ error(const char *fmt, ...)
  * resulting string is "\033".
  */
 void
-getlin(char *bufp)
+getlin(bufp)
+	char           *bufp;
 {
 	char           *obufp = bufp;
 	int             c;
@@ -242,7 +242,7 @@ getlin(char *bufp)
 				bufp--;
 				putstr("\b \b");	/* putsym converts \b */
 			} else
-				sound_bell();
+				bell();
 		} else if (c == '\n') {
 			*bufp = 0;
 			return;
@@ -263,18 +263,19 @@ getlin(char *bufp)
 				putstr("\b \b");
 			}
 		} else
-			sound_bell();
+			bell();
 	}
 }
 
 void
-getret(void)
+getret()
 {
 	cgetret("");
 }
 
 void
-cgetret(const char *s)
+cgetret(s)
+	const char           *s;
 {
 	putsym('\n');
 	if (flags.standout)
@@ -289,9 +290,9 @@ cgetret(const char *s)
 
 char            morc;		/* tell the outside world what char he used */
 
-/* s = chars allowed besides space or return */
 void
-xwaitforspace(const char *s)
+xwaitforspace(s)
+	const char *s;	/* chars allowed besides space or return */
 {
 	int             c;
 
@@ -305,13 +306,13 @@ xwaitforspace(const char *s)
 				morc = c;
 				break;
 			}
-			sound_bell();
+			bell();
 		}
 	}
 }
 
 char           *
-parse(void)
+parse()
 {
 	static char     inputline[COLNO];
 	int		foo;
@@ -347,7 +348,7 @@ parse(void)
 }
 
 char
-readchar(void)
+readchar()
 {
 	int             sym;
 
@@ -378,7 +379,7 @@ noteof:	;
 }
 
 void
-end_of_input(void)
+end_of_input()
 {
 	settty("End of input?\n");
 	clearlocks();

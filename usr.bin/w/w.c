@@ -1,4 +1,4 @@
-/*	$NetBSD: w.c,v 1.76 2011/10/21 02:26:09 christos Exp $	*/
+/*	$NetBSD: w.c,v 1.73 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)w.c	8.6 (Berkeley) 6/30/94";
 #else
-__RCSID("$NetBSD: w.c,v 1.76 2011/10/21 02:26:09 christos Exp $");
+__RCSID("$NetBSD: w.c,v 1.73 2008/07/21 14:19:27 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -91,6 +91,7 @@ struct timeval	boottime;
 struct winsize	ws;
 kvm_t	       *kd;
 time_t		now;		/* the current time of day */
+time_t		uptime;		/* time of last reboot & elapsed time since */
 int		ttywidth;	/* width of tty */
 int		argwidth;	/* width of tty left to print process args */
 int		header = 1;	/* true if -h flag: don't print heading */
@@ -116,17 +117,17 @@ struct	entry {
 	struct	kinfo_proc2 *tp;	/* `most interesting' tty proc */
 	struct	kinfo_proc2 *pp;	/* pid proc */
 	pid_t	pid;			/* pid or ~0 if not known */
-} *ehead = NULL, **nextp = &ehead;
+} *ep, *ehead = NULL, **nextp = &ehead;
 
 static void	pr_args(struct kinfo_proc2 *);
 static void	pr_header(time_t *, int);
-static int	proc_compare_wrapper(const struct kinfo_proc2 *,
-    const struct kinfo_proc2 *);
 #if defined(SUPPORT_UTMP) || defined(SUPPORT_UTMPX)
 static int	ttystat(const char *, struct stat *);
 static void	process(struct entry *);
 #endif
-__dead static void	usage(int);
+static void	usage(int);
+
+int	main(int, char **);
 
 int
 main(int argc, char **argv)
@@ -134,10 +135,8 @@ main(int argc, char **argv)
 	struct kinfo_proc2 *kp;
 	struct hostent *hp;
 	struct in_addr l;
-	struct entry *ep;
 	int ch, i, nentries, nusers, wcmd, curtain, use_sysctl;
 	char *memf, *nlistf, *p, *x, *usrnp;
-	const char *options;
 	time_t then;
 	size_t len;
 #ifdef SUPPORT_UTMP
@@ -157,14 +156,14 @@ main(int argc, char **argv)
 		progname++;
 	if (*progname == 'u') {
 		wcmd = 0;
-		options = "";
+		p = "";
 	} else {
 		wcmd = 1;
-		options = "hiM:N:nw";
+		p = "hiM:N:nw";
 	}
 
 	memf = nlistf = NULL;
-	while ((ch = getopt(argc, argv, options)) != -1)
+	while ((ch = getopt(argc, argv, p)) != -1)
 		switch (ch) {
 		case 'h':
 			header = 0;
@@ -304,6 +303,9 @@ main(int argc, char **argv)
 	/* Include trailing space because TTY header starts one column early. */
 	for (i = 0; i < nentries; i++, kp++) {
 
+		if (kp->p_stat == SIDL || kp->p_stat == SZOMB)
+			continue;
+
 		for (ep = ehead; ep != NULL; ep = ep->next) {
 			if (ep->tdev != 0 && ep->tdev == kp->p_tdev &&
 			    kp->p__pgid == kp->p_tpgid) {
@@ -311,7 +313,7 @@ main(int argc, char **argv)
 				 * Proc is in foreground of this
 				 * terminal
 				 */
-				if (proc_compare_wrapper(ep->tp, kp))
+				if (proc_compare(ep->tp, kp))
 					ep->tp = kp;
 				break;
 			} 
@@ -390,8 +392,8 @@ main(int argc, char **argv)
 	for (ep = ehead; ep != NULL; ep = ep->next) {
 		char host_buf[MAXHOSTNAMELEN + 1];
 
-		strlcpy(host_buf, *ep->host ? ep->host : "-", sizeof(host_buf));
-		p = host_buf;
+		strlcpy(host_buf, ep->host, sizeof(host_buf));
+		p = *host_buf ? host_buf : "-";
 
 		for (x = p; x < p + MAXHOSTNAMELEN; x++)
 			if (*x == '\0' || *x == ':')
@@ -479,9 +481,9 @@ pr_header(time_t *nowp, int nusers)
 {
 	double avenrun[3];
 	time_t uptime;
-	int days, hrs, mins;
+	int days, hrs, i, mins;
 	int mib[2];
-	size_t size, i;
+	size_t size;
 	char buf[256];
 
 	/*
@@ -616,27 +618,6 @@ process(struct entry *ep)
 		ep->idle = 0;
 }
 #endif
-
-static int
-proc_compare_wrapper(const struct kinfo_proc2 *p1,
-    const struct kinfo_proc2 *p2)
-{
-	struct kinfo_lwp *l1, *l2;
-	int cnt;
-
-	if (p1 == NULL)
-		return 1;
-
-	l1 = kvm_getlwps(kd, p1->p_pid, 0, sizeof(*l1), &cnt);
-	if (l1 == NULL || cnt == 0)
-		return 1;
-
-	l2 = kvm_getlwps(kd, p2->p_pid, 0, sizeof(*l1), &cnt);
-	if (l2 == NULL || cnt == 0)
-		return 0;
-
-	return proc_compare(p1, l1, p2, l2);
-}
 
 static void
 usage(int wcmd)

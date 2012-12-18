@@ -1,4 +1,4 @@
-/* $NetBSD: pad.c,v 1.19 2011/11/24 01:54:08 agc Exp $ */
+/* $NetBSD: pad.c,v 1.10.4.1 2010/11/20 17:41:26 riz Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pad.c,v 1.19 2011/11/24 01:54:08 agc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pad.c,v 1.10.4.1 2010/11/20 17:41:26 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -41,8 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: pad.c,v 1.19 2011/11/24 01:54:08 agc Exp $");
 #include <sys/select.h>
 #include <sys/audioio.h>
 #include <sys/vnode.h>
-#include <sys/module.h>
-#include <sys/atomic.h>
 
 #include <dev/audio_if.h>
 #include <dev/audiovar.h>
@@ -54,6 +52,12 @@ __KERNEL_RCSID(0, "$NetBSD: pad.c,v 1.19 2011/11/24 01:54:08 agc Exp $");
 #define PADUNIT(x)	minor(x)
 
 extern struct cfdriver pad_cd;
+
+static struct audio_device pad_device = {
+	"Pseudo Audio",
+	"1.0",
+	"pad",
+};
 
 typedef struct pad_block {
 	uint8_t		*pb_ptr;
@@ -89,7 +93,6 @@ static int	pad_get_port(void *, mixer_ctrl_t *);
 static int	pad_query_devinfo(void *, mixer_devinfo_t *);
 static int	pad_get_props(void *);
 static int	pad_round_blocksize(void *, int, int, const audio_params_t *);
-static void	pad_get_locks(void *, kmutex_t **, kmutex_t **);
 
 static const struct audio_hw_if pad_hw_if = {
 	.query_encoding = pad_query_encoding,
@@ -104,7 +107,6 @@ static const struct audio_hw_if pad_hw_if = {
 	.query_devinfo = pad_query_devinfo,
 	.get_props = pad_get_props,
 	.round_blocksize = pad_round_blocksize,
-	.get_locks = pad_get_locks,
 };
 
 #define PAD_NFORMATS	1
@@ -133,7 +135,7 @@ const struct cdevsw pad_cdevsw = {
 	.d_poll = nopoll,
 	.d_mmap = nommap,
 	.d_kqfilter = nokqfilter,
-	.d_flag = D_OTHER | D_MPSAFE,
+	.d_flag = D_OTHER,
 };
 
 CFATTACH_DECL2_NEW(pad, sizeof(pad_softc_t), pad_match, pad_attach, pad_detach,
@@ -156,7 +158,7 @@ padattach(int n)
 	}
 
 	for (i = 0; i < n; i++) {
-		cf = kmem_alloc(sizeof(struct cfdata), KM_SLEEP);
+		cf = kmem_alloc(sizeof(struct cfdata), KM_NOSLEEP);
 		if (cf == NULL) {
 			aprint_error("%s: couldn't allocate cfdata\n",
 			    pad_cd.cd_name);
@@ -177,11 +179,6 @@ static int
 pad_add_block(pad_softc_t *sc, uint8_t *blk, int blksize)
 {
 	int l;
-
-	if (sc->sc_open == 0)
-		return EIO;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
 
 	if (sc->sc_buflen + blksize > PAD_BUFSIZE)
 		return ENOBUFS;
@@ -208,7 +205,6 @@ pad_get_block(pad_softc_t *sc, pad_block_t *pb, int blksize)
 {
 	int l;
 
-	KASSERT(mutex_owned(&sc->sc_lock));
 	KASSERT(pb != NULL);
 
 	if (sc->sc_buflen < blksize)
@@ -231,7 +227,6 @@ pad_get_block(pad_softc_t *sc, pad_block_t *pb, int blksize)
 static int
 pad_match(device_t parent, cfdata_t data, void *opaque)
 {
-
 	return 1;
 }
 
@@ -259,8 +254,7 @@ pad_attach(device_t parent, device_t self, void *opaque)
 	}
 
 	cv_init(&sc->sc_condvar, device_xname(self));
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&sc->sc_mutex, MUTEX_DEFAULT, IPL_SCHED);
 
 	sc->sc_swvol = 255;
 	sc->sc_buflen = 0;
@@ -288,8 +282,7 @@ pad_detach(device_t self, int flags)
 
 	pmf_device_deregister(self);
 
-	mutex_destroy(&sc->sc_lock);
-	mutex_destroy(&sc->sc_intr_lock);
+	mutex_destroy(&sc->sc_mutex);
 	cv_destroy(&sc->sc_condvar);
 
 	auconv_delete_encodings(sc->sc_encodings);
@@ -304,9 +297,10 @@ pad_open(dev_t dev, int flags, int fmt, struct lwp *l)
 
 	sc = device_lookup_private(&pad_cd, PADUNIT(dev));
 	if (sc == NULL)
-		return ENXIO;
+		return ENODEV;
 
-	if (atomic_swap_uint(&sc->sc_open, 1) != 0) {
+	if (sc->sc_open++) {
+		sc->sc_open--;
 		return EBUSY;
 	}
 
@@ -320,10 +314,10 @@ pad_close(dev_t dev, int flags, int fmt, struct lwp *l)
 
 	sc = device_lookup_private(&pad_cd, PADUNIT(dev));
 	if (sc == NULL)
-		return ENXIO;
+		return ENODEV;
 
 	KASSERT(sc->sc_open > 0);
-	sc->sc_open = 0;
+	sc->sc_open--;
 
 	return 0;
 }
@@ -339,47 +333,44 @@ pad_read(dev_t dev, struct uio *uio, int flags)
 
 	sc = device_lookup_private(&pad_cd, PADUNIT(dev));
 	if (sc == NULL)
-		return ENXIO;
+		return ENODEV;
 
 	err = 0;
 
-	mutex_enter(&sc->sc_lock);
 	intr = sc->sc_intr;
 	intrarg = sc->sc_intrarg;
 
 	while (uio->uio_resid > 0 && !err) {
 		err = pad_get_block(sc, &pb, min(uio->uio_resid, PAD_BLKSIZE));
-		if (!err) {
-			mutex_exit(&sc->sc_lock);
+		if (!err)
 			err = uiomove(pb.pb_ptr, pb.pb_len, uio);
-			mutex_enter(&sc->sc_lock);
-			continue;
-		}
+		else {
+			if (intr) {
+				(*intr)(intrarg);
+				intr = sc->sc_intr;
+				intrarg = sc->sc_intrarg;
+				err = 0;
+				continue;
+			}
 
-		if (intr) {
-			mutex_enter(&sc->sc_intr_lock);
-			(*intr)(intrarg);
-			mutex_exit(&sc->sc_intr_lock);
+			mutex_enter(&sc->sc_mutex);
+			err = cv_timedwait_sig(&sc->sc_condvar, &sc->sc_mutex,
+			    hz/100);
+			if (err != 0 && err != EWOULDBLOCK) {
+				mutex_exit(&sc->sc_mutex);
+				aprint_error_dev(sc->sc_dev,
+				    "cv_timedwait_sig returned %d\n", err);
+				return EINTR;
+			}
 			intr = sc->sc_intr;
 			intrarg = sc->sc_intrarg;
+			mutex_exit(&sc->sc_mutex);
 			err = 0;
-			continue;
 		}
-		err = cv_wait_sig(&sc->sc_condvar, &sc->sc_lock);
-		if (err != 0) {
-			mutex_exit(&sc->sc_lock);
-			return err;
-		}
-		intr = sc->sc_intr;
-		intrarg = sc->sc_intrarg;
 	}
 
-	if (intr) {
-		mutex_enter(&sc->sc_intr_lock);
+	if (intr)
 		(*intr)(intrarg);
-		mutex_exit(&sc->sc_intr_lock);
-	}
-	mutex_exit(&sc->sc_lock);
 
 	return err;
 }
@@ -390,8 +381,6 @@ pad_query_encoding(void *opaque, struct audio_encoding *ae)
 	pad_softc_t *sc;
 
 	sc = (pad_softc_t *)opaque;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
 
 	return auconv_query_encoding(sc->sc_encodings, ae);
 }
@@ -404,8 +393,6 @@ pad_set_params(void *opaque, int setmode, int usemode,
 	pad_softc_t *sc;
 
 	sc = (pad_softc_t *)opaque;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
 
 	if (auconv_set_converter(pad_formats, PAD_NFORMATS, AUMODE_PLAY,
 	    play, true, pfil) < 0)
@@ -441,7 +428,7 @@ pad_start_output(void *opaque, void *block, int blksize,
 
 	sc = (pad_softc_t *)opaque;
 
-	KASSERT(mutex_owned(&sc->sc_lock));
+	mutex_enter(&sc->sc_mutex);
 
 	sc->sc_intr = intr;
 	sc->sc_intrarg = intrarg;
@@ -449,7 +436,9 @@ pad_start_output(void *opaque, void *block, int blksize,
 
 	err = pad_add_block(sc, block, blksize);
 
-	cv_broadcast(&sc->sc_condvar);
+	cv_signal(&sc->sc_condvar);
+
+	mutex_exit(&sc->sc_mutex);
 
 	return err;
 }
@@ -458,13 +447,7 @@ static int
 pad_start_input(void *opaque, void *block, int blksize,
     void (*intr)(void *), void *intrarg)
 {
-	pad_softc_t *sc;
-
-	sc = (pad_softc_t *)opaque;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
-
-	return EOPNOTSUPP;
+	return EINVAL;
 }
 
 static int
@@ -473,9 +456,6 @@ pad_halt_output(void *opaque)
 	pad_softc_t *sc;
 
 	sc = (pad_softc_t *)opaque;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
-
 	sc->sc_intr = NULL;
 	sc->sc_intrarg = NULL;
 	sc->sc_buflen = 0;
@@ -487,21 +467,14 @@ pad_halt_output(void *opaque)
 static int
 pad_halt_input(void *opaque)
 {
-	pad_softc_t *sc;
-
-	sc = (pad_softc_t *)opaque;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
-
 	return 0;
 }
 
 static int
 pad_getdev(void *opaque, struct audio_device *ret)
 {
-	strlcpy(ret->name, "Virtual Audio", sizeof(ret->name));
-	strlcpy(ret->version, osrelease, sizeof(ret->version));
-	strlcpy(ret->config, "pad", sizeof(ret->config));
+
+	*ret = pad_device;
 
 	return 0;
 }
@@ -512,8 +485,6 @@ pad_set_port(void *opaque, mixer_ctrl_t *mc)
 	pad_softc_t *sc;
 
 	sc = (pad_softc_t *)opaque;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
 
 	switch (mc->dev) {
 	case PAD_OUTPUT_MASTER_VOLUME:
@@ -532,8 +503,6 @@ pad_get_port(void *opaque, mixer_ctrl_t *mc)
 
 	sc = (pad_softc_t *)opaque;
 
-	KASSERT(mutex_owned(&sc->sc_lock));
-
 	switch (mc->dev) {
 	case PAD_OUTPUT_MASTER_VOLUME:
 	case PAD_INPUT_DAC_VOLUME:
@@ -550,8 +519,6 @@ pad_query_devinfo(void *opaque, mixer_devinfo_t *di)
 	pad_softc_t *sc;
 
 	sc = (pad_softc_t *)opaque;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
 
 	switch (di->index) {
 	case PAD_OUTPUT_CLASS:
@@ -590,12 +557,6 @@ pad_query_devinfo(void *opaque, mixer_devinfo_t *di)
 static int
 pad_get_props(void *opaque)
 {
-	pad_softc_t *sc;
-
-	sc = (pad_softc_t *)opaque;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
-
 	return 0;
 }
 
@@ -603,116 +564,5 @@ static int
 pad_round_blocksize(void *opaque, int blksize, int mode,
     const audio_params_t *p)
 {
-	pad_softc_t *sc;
-
-	sc = (pad_softc_t *)opaque;
-	KASSERT(mutex_owned(&sc->sc_lock));
-
 	return PAD_BLKSIZE;
 }
-
-static void
-pad_get_locks(void *opaque, kmutex_t **intr, kmutex_t **thread)
-{
-	pad_softc_t *sc;
-
-	sc = (pad_softc_t *)opaque;
-
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
-}
-
-#ifdef _MODULE
-
-MODULE(MODULE_CLASS_DRIVER, pad, NULL);
-
-static const struct cfiattrdata audiobuscf_iattrdata = {
-	"audiobus", 0, { { NULL, NULL, 0 }, }
-};
-static const struct cfiattrdata * const pad_attrs[] = {
-	&audiobuscf_iattrdata, NULL
-};
-
-CFDRIVER_DECL(pad, DV_DULL, pad_attrs);
-extern struct cfattach pad_ca;
-static int padloc[] = { -1, -1 };
-
-static struct cfdata pad_cfdata[] = {
-	{
-		.cf_name = "pad",
-		.cf_atname = "pad",
-		.cf_unit = 0,
-		.cf_fstate = FSTATE_STAR,
-		.cf_loc = padloc,
-		.cf_flags = 0,
-		.cf_pspec = NULL,
-	},
-	{ NULL, NULL, 0, 0, NULL, 0, NULL }
-};
-
-static int
-pad_modcmd(modcmd_t cmd, void *arg)
-{
-	devmajor_t cmajor = NODEVMAJOR, bmajor = NODEVMAJOR;
-	int error;
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-		error = config_cfdriver_attach(&pad_cd);
-		if (error) {
-			return error;
-		}
-
-		error = config_cfattach_attach(pad_cd.cd_name, &pad_ca);
-		if (error) {
-			config_cfdriver_detach(&pad_cd);
-			aprint_error("%s: unable to register cfattach\n",
-				pad_cd.cd_name);
-
-			return error;
-		}
-
-		error = config_cfdata_attach(pad_cfdata, 1);
-		if (error) {
-			config_cfattach_detach(pad_cd.cd_name, &pad_ca);
-			config_cfdriver_detach(&pad_cd);
-			aprint_error("%s: unable to register cfdata\n",
-				pad_cd.cd_name);
-
-			return error;
-		}
-
-		error = devsw_attach(pad_cd.cd_name, NULL, &bmajor, &pad_cdevsw, &cmajor);
-		if (error) {
-			error = config_cfdata_detach(pad_cfdata);
-			if (error) {
-				return error;
-			}
-			config_cfattach_detach(pad_cd.cd_name, &pad_ca);
-			config_cfdriver_detach(&pad_cd);
-			aprint_error("%s: unable to register devsw\n",
-				pad_cd.cd_name);
-
-			return error;
-		}
-
-		(void)config_attach_pseudo(pad_cfdata);
-
-		return 0;
-	case MODULE_CMD_FINI:
-		error = config_cfdata_detach(pad_cfdata);
-		if (error) {
-			return error;
-		}
-
-		config_cfattach_detach(pad_cd.cd_name, &pad_ca);
-		config_cfdriver_detach(&pad_cd);
-		devsw_detach(NULL, &pad_cdevsw);
-
-		return 0;
-	default:
-		return ENOTTY;
-	}
-}
-
-#endif

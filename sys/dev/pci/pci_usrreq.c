@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_usrreq.c,v 1.24 2012/03/13 18:40:32 elad Exp $	*/
+/*	$NetBSD: pci_usrreq.c,v 1.16.6.3 2009/09/15 06:48:49 snj Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_usrreq.c,v 1.24 2012/03/13 18:40:32 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_usrreq.c,v 1.16.6.3 2009/09/15 06:48:49 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -65,62 +65,58 @@ pciopen(dev_t dev, int flags, int mode, struct lwp *l)
 
 	dv = device_lookup(&pci_cd, minor(dev));
 	if (dv == NULL)
-		return ENXIO;
+		return (ENXIO);
 
-	return 0;
+	return (0);
 }
 
 static int
 pciioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct pci_softc *sc = device_lookup_private(&pci_cd, minor(dev));
-	struct pciio_bdf_cfgreg *bdfr;
-	struct pciio_businfo *binfo;
+	struct pci_softc *sc =
+	    device_lookup_private(&pci_cd, minor(dev));
+	struct pciio_bdf_cfgreg *bdfr = (void *) data;
+	struct pciio_businfo *binfo = (void *) data;
 	pcitag_t tag;
 
 	switch (cmd) {
 	case PCI_IOC_BDF_CFGREAD:
 	case PCI_IOC_BDF_CFGWRITE:
-		bdfr = data;
 		if (bdfr->bus > 255 || bdfr->device >= sc->sc_maxndevs ||
 		    bdfr->function > 7)
-			return EINVAL;
+			return (EINVAL);
 		tag = pci_make_tag(sc->sc_pc, bdfr->bus, bdfr->device,
 		    bdfr->function);
-
-		if (cmd == PCI_IOC_BDF_CFGREAD) {
+		if (cmd == PCI_IOC_BDF_CFGREAD)
 			bdfr->cfgreg.val = pci_conf_read(sc->sc_pc, tag,
 			    bdfr->cfgreg.reg);
-		} else {
+		else {
 			if ((flag & FWRITE) == 0)
-				return EBADF;
+				return (EBADF);
 			pci_conf_write(sc->sc_pc, tag, bdfr->cfgreg.reg,
 			    bdfr->cfgreg.val);
 		}
-		return 0;
+		break;
 
 	case PCI_IOC_BUSINFO:
-		binfo = data;
 		binfo->busno = sc->sc_bus;
 		binfo->maxdevs = sc->sc_maxndevs;
-		return 0;
+		break;
 
 	default:
-		return ENOTTY;
+		return (ENOTTY);
 	}
+
+	return (0);
 }
 
 static paddr_t
 pcimmap(dev_t dev, off_t offset, int prot)
 {
 	struct pci_softc *sc = device_lookup_private(&pci_cd, minor(dev));
-	struct pci_child *c;
-	struct pci_range *r;
-	int flags = 0;
-	int device, range;
 
-	if (kauth_authorize_machdep(kauth_cred_get(), KAUTH_MACHDEP_UNMANAGEDMEM,
-	    NULL, NULL, NULL, NULL) != 0) {
+	if (kauth_authorize_generic(kauth_cred_get(), KAUTH_GENERIC_ISSUSER,
+	    NULL) != 0) {
 		return -1;
 	}
 	/*
@@ -128,7 +124,7 @@ pcimmap(dev_t dev, off_t offset, int prot)
 	 * take the offset to be the address on the bus,
 	 * and pass 0 as the offset into that range.
 	 *
-	 * XXX Need a way to deal with linear/etc.
+	 * XXX Need a way to deal with linear/prefetchable/etc.
 	 *
 	 * XXX we rely on MD mmap() methods to enforce limits since these
 	 * are hidden in *_tag_t structs if they exist at all 
@@ -149,24 +145,7 @@ pcimmap(dev_t dev, off_t offset, int prot)
 		    0, prot, 0);
 	}
 #endif /* PCI_MAGIC_IO_RANGE */
-
-	for (device = 0; device < __arraycount(sc->sc_devices); device++) {
-		c = &sc->sc_devices[device];
-		if (c->c_dev == NULL)
-			continue;
-		for (range = 0; range < __arraycount(c->c_range); range++) {
-			r = &c->c_range[range];
-			if (r->r_size == 0)
-				break;
-			if (offset >= r->r_offset &&
-			    offset < r->r_offset + r->r_size) {
-				flags = r->r_flags;
-				break;
-			}
-		}
-	}
-
-	return bus_space_mmap(sc->sc_memt, offset, 0, prot, flags);
+	return (bus_space_mmap(sc->sc_memt, offset, 0, prot, 0));
 }
 
 const struct cdevsw pci_cdevsw = {
@@ -187,18 +166,19 @@ pci_devioctl(pci_chipset_tag_t pc, pcitag_t tag, u_long cmd, void *data,
 
 	switch (cmd) {
 	case PCI_IOC_CFGREAD:
-		r->val = pci_conf_read(pc, tag, r->reg);
-		break;
-
 	case PCI_IOC_CFGWRITE:
-		if ((flag & FWRITE) == 0)
-			return EBADF;
-		pci_conf_write(pc, tag, r->reg, r->val);
+		if (cmd == PCI_IOC_CFGREAD)
+			r->val = pci_conf_read(pc, tag, r->reg);
+		else {
+			if ((flag & FWRITE) == 0)
+				return (EBADF);
+			pci_conf_write(pc, tag, r->reg, r->val);
+		}
 		break;
 
 	default:
-		return EPASSTHROUGH;
+		return (EPASSTHROUGH);
 	}
 
-	return 0;
+	return (0);
 }

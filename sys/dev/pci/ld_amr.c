@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_amr.c,v 1.21 2012/02/02 19:43:06 tls Exp $	*/
+/*	$NetBSD: ld_amr.c,v 1.17 2008/09/09 12:45:40 tron Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -34,7 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_amr.c,v 1.21 2012/02/02 19:43:06 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_amr.c,v 1.17 2008/09/09 12:45:40 tron Exp $");
+
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,7 +47,11 @@ __KERNEL_RCSID(0, "$NetBSD: ld_amr.c,v 1.21 2012/02/02 19:43:06 tls Exp $");
 #include <sys/endian.h>
 #include <sys/dkio.h>
 #include <sys/disk.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
+
+#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 
@@ -155,7 +161,7 @@ ld_amr_dobio(struct ld_amr_softc *sc, void *data, int datasize,
 	} else {
 		ac->ac_handler = ld_amr_handler;
 		ac->ac_context = bp;
-		ac->ac_dv = sc->sc_ld.sc_dv;
+		ac->ac_dv = (struct device *)sc;
 		amr_ccb_enqueue(amr, ac);
 		rv = 0;
 	}
@@ -179,7 +185,7 @@ ld_amr_handler(struct amr_ccb *ac)
 	struct amr_softc *amr;
 
 	bp = ac->ac_context;
-	sc = device_private(ac->ac_dv);
+	sc = (struct ld_amr_softc *)ac->ac_dv;
 	amr = device_private(device_parent(sc->sc_ld.sc_dv));
 
 	if (ac->ac_status != AMR_STATUS_SUCCESS) {

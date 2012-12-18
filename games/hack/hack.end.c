@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.end.c,v 1.17 2011/08/06 20:42:43 dholland Exp $	*/
+/*	$NetBSD: hack.end.c,v 1.9.10.1 2009/06/29 23:31:28 snj Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.end.c,v 1.17 2011/08/06 20:42:43 dholland Exp $");
+__RCSID("$NetBSD: hack.end.c,v 1.9.10.1 2009/06/29 23:31:28 snj Exp $");
 #endif				/* not lint */
 
 #include <signal.h>
@@ -75,16 +75,8 @@ __RCSID("$NetBSD: hack.end.c,v 1.17 2011/08/06 20:42:43 dholland Exp $");
 
 xchar           maxdlevel = 1;
 
-struct toptenentry;
-
-static void topten(void);
-static void outheader(void);
-static int outentry(int, struct toptenentry *, int);
-static char *itoa(int);
-static const char *ordin(int);
-
 int
-dodone(void)
+dodone()
 {
 	done1(0);
 	return 0;
@@ -93,7 +85,8 @@ dodone(void)
 
 /*ARGSUSED*/
 void
-done1(int n __unused)
+done1(n)
+	int n __unused;
 {
 	(void) signal(SIGINT, SIG_IGN);
 	pline("Really quit?");
@@ -109,20 +102,22 @@ done1(int n __unused)
 	/* NOTREACHED */
 }
 
-static int done_stopprint;
-static int done_hup;
+int             done_stopprint;
+int             done_hup;
 
 /*ARGSUSED*/
-static void
-done_intr(int n __unused)
+void
+done_intr(n)
+	int n __unused;
 {
 	done_stopprint++;
 	(void) signal(SIGINT, SIG_IGN);
 	(void) signal(SIGQUIT, SIG_IGN);
 }
 
-static void
-done_hangup(int n)
+void
+done_hangup(n)
+	int n;
 {
 	done_hup++;
 	(void) signal(SIGHUP, SIG_IGN);
@@ -130,7 +125,8 @@ done_hangup(int n)
 }
 
 void
-done_in_by(struct monst *mtmp)
+done_in_by(mtmp)
+	struct monst   *mtmp;
 {
 	static char     buf[BUFSZ];
 	pline("You die ...");
@@ -156,7 +152,8 @@ done_in_by(struct monst *mtmp)
  */
 /* Be careful not to call panic from here! */
 void
-done(const char *st1)
+done(st1)
+	const char           *st1;
 {
 
 #ifdef WIZARD
@@ -206,7 +203,7 @@ done(const char *st1)
 	}
 	if (*st1 == 'c')
 		killer = st1;	/* after outrip() */
-	settty(NULL);		/* does a clear_screen() */
+	settty((char *) 0);	/* does a clear_screen() */
 	if (!done_stopprint)
 		printf("Goodbye %s %s...\n\n", pl_character, plname);
 	{
@@ -300,7 +297,7 @@ done(const char *st1)
 	exit(0);
 }
 
-#define newttentry() ((struct toptenentry *) alloc(sizeof(struct toptenentry)))
+#define newttentry() (struct toptenentry *) alloc(sizeof(struct toptenentry))
 #define	NAMSZ	8
 #define	DTHSZ	40
 #define	PERSMAX	1
@@ -317,12 +314,10 @@ struct toptenentry {
 	char            name[NAMSZ + 1];
 	char            death[DTHSZ + 1];
 	char            date[7];/* yymmdd */
-};
+}              *tt_head;
 
-static struct toptenentry *tt_head;
-
-static void
-topten(void)
+void
+topten()
 {
 	int             uid = getuid();
 	int             rank, rank0 = -1, rank1 = 0;
@@ -366,7 +361,7 @@ topten(void)
 	(t0->name)[NAMSZ] = 0;
 	(void) strncpy(t0->death, killer, DTHSZ);
 	(t0->death)[DTHSZ] = 0;
-	(void) strcpy(t0->date, getdatestr());
+	(void) strcpy(t0->date, getdate());
 
 	/* assure minimum number of points */
 	if (t0->points < POINTSMIN)
@@ -488,8 +483,8 @@ unlock:
 	(void) unlink(reclock);
 }
 
-static void
-outheader(void)
+void
+outheader()
 {
 	char            linebuf[BUFSZ];
 	char           *bp;
@@ -502,7 +497,7 @@ outheader(void)
 }
 
 /* so>0: standout line; so=0: ordinary line; so<0: no output, return length */
-static int
+int
 outentry(int rank, struct toptenentry *t1, int so)
 {
 	boolean         quit = FALSE, gotkilled = FALSE, starv = FALSE;
@@ -617,16 +612,18 @@ outentry(int rank, struct toptenentry *t1, int so)
 	return /*(strlen(linebuf))*/ pos;
 }
 
-static char *
-itoa(int a)
+char           *
+itoa(a)
+	int             a;
 {
 	static char     buf[12];
 	Snprintf(buf, sizeof(buf), "%d", a);
 	return (buf);
 }
 
-static const char *
-ordin(int n)
+const char           *
+ordin(n)
+	int             n;
 {
 	int             dg = n % 10;
 
@@ -635,7 +632,7 @@ ordin(int n)
 }
 
 void
-clearlocks(void)
+clearlocks()
 {
 	int x;
 	(void) signal(SIGHUP, SIG_IGN);
@@ -648,7 +645,8 @@ clearlocks(void)
 #ifdef NOSAVEONHANGUP
 /*ARGSUSED*/
 void
-hang_up(int n __unused)
+hangup(n)
+	int n;
 {
 	(void) signal(SIGINT, SIG_IGN);
 	clearlocks();
@@ -657,7 +655,8 @@ hang_up(int n __unused)
 #endif	/* NOSAVEONHANGUP */
 
 char           *
-eos(char *s)
+eos(s)
+	char           *s;
 {
 	while (*s)
 		s++;
@@ -666,7 +665,8 @@ eos(char *s)
 
 /* it is the callers responsibility to check that there is room for c */
 void
-charcat(char *s, int c)
+charcat(s, c)
+	char           *s, c;
 {
 	while (*s)
 		s++;
@@ -680,7 +680,9 @@ charcat(char *s, int c)
  * if argc == -1).
  */
 void
-prscore(int argc, char **argv)
+prscore(argc, argv)
+	int             argc;
+	char          **argv;
 {
 	char          **players = NULL;
 	int             playerct;
@@ -804,7 +806,7 @@ prscore(int argc, char **argv)
 					break;
 				}
 			}
-		free(t1);
+		free((char *) t1);
 	}
 #ifdef nonsense
 	totchars[totcharct] = 0;

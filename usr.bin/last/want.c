@@ -1,4 +1,4 @@
-/*	$NetBSD: want.c,v 1.17 2012/03/15 03:04:05 dholland Exp $	*/
+/*	$NetBSD: want.c,v 1.11.12.1 2012/03/15 08:50:41 sborrill Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -39,15 +39,15 @@ static const char *
 /*ARGSUSED*/
 gethost(struct utmp *ut, const char *host, int numeric)
 {
-#if HAS_UT_SS == 0
+#if FIRSTVALID == 0
 	return numeric ? "" : host;
 #else
 	if (numeric) {
-		static char hbuf[512];
-		hbuf[0] = '\0';
-		(void)sockaddr_snprintf(hbuf, sizeof(hbuf), "%a",
+		static char buf[512];
+		buf[0] = '\0';
+		(void)sockaddr_snprintf(buf, sizeof(buf), "%a",
 		    (struct sockaddr *)&ut->ut_ss);
-		return hbuf;
+		return buf;
 	} else
 		return host;
 #endif
@@ -64,7 +64,7 @@ gethost(struct utmp *ut, const char *host, int numeric)
  * wtmp --
  *	read through the wtmp file
  */
-static void
+void
 wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 {
 	struct utmp	*bp;		/* current structure */
@@ -72,15 +72,14 @@ wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 	struct stat	stb;		/* stat of file for sz */
 	off_t	offset;
 	int	wfd;
-	char	*ct;
-	const char *crmsg;
+	char	*ct, *crmsg;
 	size_t  len = sizeof(*buf) * MAXUTMP;
 	char namebuf[sizeof(bp->ut_name) + 1], *namep;
 	char linebuf[sizeof(bp->ut_line) + 1], *linep;
 	char hostbuf[sizeof(bp->ut_host) + 1], *hostp;
-	int checkname = namesz > (int)sizeof(bp->ut_name);
-	int checkline = linesz > (int)sizeof(bp->ut_line);
-	int checkhost = hostsz > (int)sizeof(bp->ut_host);
+	int checkname = namesz > sizeof(bp->ut_name);
+	int checkline = linesz > sizeof(bp->ut_line);
+	int checkhost = hostsz > sizeof(bp->ut_host);
 
 	if ((buf = malloc(len)) == NULL)
 		err(EXIT_FAILURE, "Cannot allocate utmp buffer");
@@ -143,7 +142,7 @@ wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 		ssize_t ret, i;
 		size_t size;
 
-		size = MIN((off_t)len, offset);
+		size = MIN(len, offset);
 		offset -= size; /* Always a multiple of sizeof(*buf) */
 		ret = pread(wfd, buf, size, offset);
 		if (ret < 0) {
@@ -241,8 +240,7 @@ wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 						    fmttime(delta,
 						    fulltime | TIMEONLY | GMT));
 					else
-						printf(" (%lld+%s)\n",
-						    (long long)
+						printf(" (%ld+%s)\n",
 						    delta / SECSPERDAY,
 						    fmttime(delta,
 						    fulltime | TIMEONLY | GMT));

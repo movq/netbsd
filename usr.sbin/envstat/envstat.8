@@ -1,6 +1,6 @@
-.\"	$NetBSD: envstat.8,v 1.61 2012/02/09 18:10:26 riz Exp $
+.\"	$NetBSD: envstat.8,v 1.48 2008/10/29 17:26:57 jkunz Exp $
 .\"
-.\" Copyright (c) 2000, 2007, 2008, 2009 The NetBSD Foundation, Inc.
+.\" Copyright (c) 2000, 2007, 2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd June 7, 2011
+.Dd October 11, 2008
 .Dt ENVSTAT 8
 .Os
 .Sh NAME
@@ -35,7 +35,7 @@
 .Nd utility to handle environmental sensors
 .Sh SYNOPSIS
 .Nm
-.Op Fl DfIklSTWx
+.Op Fl DfIlSTWx
 .Op Fl c Ar file
 .Op Fl d Ar device
 .Op Fl i Ar interval
@@ -60,16 +60,15 @@ The following options are available:
 .Bl -tag -width flag
 .It Fl c
 Accepts a file as argument to set properties for sensors in
-devices registered with the framework.
-See the
+devices registered with the framework. See the
 .Xr envsys.conf 5
 manual page for more information.
 .It Fl D
-Display the names of the devices that are currently registered with
+Display the names of the drivers that were registered with
 the
 .Xr envsys 4
-framework, one per line, along with some properties for the device
-(for example, its refresh timeout value).
+framework, one per line and some properties for the driver: refresh timeout
+value, for example.
 .It Fl d Ar device
 Display only the sensors for the given
 .Ar device .
@@ -79,7 +78,7 @@ you want to only see results from a specific device.
 Display temperature values in degrees Fahrenheit.
 The default is to display temperature values in degrees Celsius.
 .It Fl I
-This flag skips the sensors with invalid state; these are normally
+This flag skips the sensors with invalid state, these are normally
 shown using the
 .Qq N/A
 string by default.
@@ -88,14 +87,11 @@ Repeat the display every
 .Ar interval
 seconds.
 Note that some devices do not provide fresh values on demand.
-See the individual device's manual page for meaningful values for
+See the individual devices manual page for meaningful values for
 .Ar interval .
 If not specified, or specified as 0,
 .Nm
 produces one round of values and exits.
-.It Fl k
-Display temperature values in Kelvin.
-The default is to display temperature values in degrees Celsius.
 .It Fl l
 List the names of all supported sensors, one per line.
 Use of this flag causes
@@ -103,26 +99,22 @@ Use of this flag causes
 to ignore all other option flags.
 .It Fl r
 This flag is provided for compatibility reasons and there's no need
-to use it.
-In the previous implementation, it was used to enable the
+to use it. In the previous implementation, it was used to enable the
 row mode; this mode is now the default.
 .It Fl S
 This flag is used to restore defaults to all devices registered with
-the framework.
-This will remove all properties that were set in
-the configuration file to the setting that the devices use by
+the framework. This will remove all properties that were set in
+the configuration file to the setting that the drivers use by
 default.
 .It Fl s Ar "device:sensor,..."
-Restrict the display to the named devices and sensors.
+Restrict the display to the named sensors.
 The pair device and sensor description must be supplied as a comma separated list.
 Device as well as sensor descriptions are case sensitive.
-Note that the order of the arguments given does not influence the order of output.
 .It Fl T
-Create and display max, min and average statistics for a sensor.
-Must be used with an
+Create and display max, min and average statistics for a sensor. Must
+be used with an
 .Ar interval ,
-otherwise statistics cannot be collected up.
-Please note that to get realistic
+otherwise statistics cannot be collected up. Please note that to get realistic
 values a lower interval value should be used, but that will also increase
 overhead.
 .It Fl w Ar width
@@ -132,59 +124,32 @@ as the column width for the output.
 Each column is additionally separated by a single space.
 The default is the length of the longest sensor name.
 .It Fl W
-This option has no effect.
-It is retained for historical reasons.
+Display the warning alarm minimum and maximum levels instead of the critical
+alarm levels.
 .It Fl x
-Shows the raw XML property list used by the
+Shows the property list used by the
 .Xr sysmon_envsys 9
-framework that contains details about all registered devices
+framework that contains details about all registered drivers
 and sensors.
-.El
-.Sh UNITS
-The display mode may show some values with abbreviated units;
-for example:
-.Bl -tag -width "12345678" -compact -offset indent
-.It A
-Amperes
-.It Ah
-Ampere-hours
-.It degC
-degrees Celsius
-.It degF
-degrees Fahrenheit
-.It K
-Kelvin
-.It Ohms
-Ohms
-.It RPM
-Revolutions per minute
-.It V
-Volts DC
-.It VAC
-Volts AC
-.It W
-Watts
-.It Wh
-Watt-hours
 .El
 .Sh EXAMPLES
 To display the
 .Dq charge
-sensor of the device
+sensor of the driver
 .Ar acpibat0
 in one line every ten seconds:
 .Pp
 .Dl $ envstat -s \*qacpibat0:charge\*q -i 10
 .Pp
-To list the devices that are currently registered with
+To list the drivers that are currently registered with
 .Xr envsys 4 :
 .Pp
 .Dl $ envstat -D
 .Pp
-To display the sensors of the device
-.Ar aibs0 :
+To display the sensors of the driver
+.Ar aiboost0 :
 .Pp
-.Dl $ envstat -d aibs0
+.Dl $ envstat -d aiboost0
 .Pp
 To set all properties specified in the configuration file:
 .Pp
@@ -200,13 +165,12 @@ invalid states every second:
 .Pp
 .Dl $ envstat -ITi1
 .Sh SEE ALSO
-.Xr units 1 ,
 .Xr proplib 3 ,
 .Xr acpiacad 4 ,
 .Xr acpibat 4 ,
 .Xr acpitz 4 ,
 .Xr admtemp 4 ,
-.Xr aibs 4 ,
+.Xr aiboost 4 ,
 .Xr amdtemp 4 ,
 .Xr aps 4 ,
 .Xr arcmsr 4 ,
@@ -248,9 +212,3 @@ was written by
 .An Juan Romero Pardines .
 The previous version was written by
 .An Bill Squier .
-.Sh BUGS
-When displaying statistics using the
-.Fl T
-option, the average value is an average of the minimum, maximum, and
-current sensor values.
-It is not an average of all current values displayed during the session.

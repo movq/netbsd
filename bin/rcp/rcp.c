@@ -1,4 +1,4 @@
-/*	$NetBSD: rcp.c,v 1.49 2012/05/07 15:22:54 chs Exp $	*/
+/*	$NetBSD: rcp.c,v 1.47 2008/07/20 00:52:40 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1990, 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1992, 1993\
 #if 0
 static char sccsid[] = "@(#)rcp.c	8.2 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: rcp.c,v 1.49 2012/05/07 15:22:54 chs Exp $");
+__RCSID("$NetBSD: rcp.c,v 1.47 2008/07/20 00:52:40 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -485,8 +485,6 @@ sink(int argc, char *argv[])
 	char ch, *cp, *np, *targ, *vect[1], buf[BUFSIZ];
 	const char *why;
 	off_t size;
-	char *namebuf = NULL;
-	size_t cursize = 0;
 
 #define	atime	tv[0]
 #define	mtime	tv[1]
@@ -509,7 +507,7 @@ sink(int argc, char *argv[])
 	for (first = 1;; first = 0) {
 		cp = buf;
 		if (read(rem, cp, 1) <= 0)
-			goto out;
+			return;
 		if (*cp++ == '\n')
 			SCREWUP("unexpected <newline>");
 		do {
@@ -530,7 +528,7 @@ sink(int argc, char *argv[])
 		}
 		if (buf[0] == 'E') {
 			(void)write(rem, "", 1);
-			goto out;
+			return;
 		}
 
 		if (ch == '\n')
@@ -584,22 +582,16 @@ sink(int argc, char *argv[])
 		if (*cp++ != ' ')
 			SCREWUP("size not delimited");
 		if (targisdir) {
-			char *newnamebuf;
+			static char *namebuf;
+			static int cursize;
 			size_t need;
 
-			need = strlen(targ) + strlen(cp) + 2;
+			need = strlen(targ) + strlen(cp) + 250;
 			if (need > cursize) {
-				need += 256;
-				newnamebuf = realloc(namebuf, need);
-				if (newnamebuf != NULL) {
-					namebuf = newnamebuf;
-					cursize = need;
-				} else {
+				if (!(namebuf = malloc(need)))
 					run_err("%s", strerror(errno));
-					exit(1);
-				}
 			}
-			(void)snprintf(namebuf, cursize, "%s%s%s", targ,
+			(void)snprintf(namebuf, need, "%s%s%s", targ,
 			    *targ ? "/" : "", cp);
 			np = namebuf;
 		} else
@@ -727,13 +719,6 @@ bad:			run_err("%s: %s", np, strerror(errno));
 			break;
 		}
 	}
-
-out:
-	if (namebuf) {
-		free(namebuf);
-	}
-	return;
-
 screwup:
 	run_err("protocol error: %s", why);
 	exit(1);

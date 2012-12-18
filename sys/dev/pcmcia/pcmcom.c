@@ -1,4 +1,4 @@
-/*	$NetBSD: pcmcom.c,v 1.40 2012/10/27 17:18:37 chs Exp $	*/
+/*	$NetBSD: pcmcom.c,v 1.34 2008/04/28 20:23:56 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2004 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcmcom.c,v 1.40 2012/10/27 17:18:37 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcmcom.c,v 1.34 2008/04/28 20:23:56 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,14 +68,14 @@ __KERNEL_RCSID(0, "$NetBSD: pcmcom.c,v 1.40 2012/10/27 17:18:37 chs Exp $");
 #include "locators.h"
 
 struct pcmcom_softc {
-	device_t sc_dev;			/* generic device glue */
+	struct device sc_dev;			/* generic device glue */
 
 	struct pcmcia_function *sc_pf;		/* our PCMCIA function */
 	void *sc_ih;				/* interrupt handle */
 	int sc_enabled_count;			/* enabled count */
 
 #define	NSLAVES			8
-	device_t sc_slaves[NSLAVES];	/* slave info */
+	struct device *sc_slaves[NSLAVES];	/* slave info */
 	int sc_nslaves;				/* slave count */
 
 	int sc_state;
@@ -88,14 +88,14 @@ struct pcmcom_attach_args {
 	int pca_slave;				/* slave # */
 };
 
-int	pcmcom_match(device_t, cfdata_t, void *);
+int	pcmcom_match(struct device *, struct cfdata *, void *);
 int	pcmcom_validate_config(struct pcmcia_config_entry *);
-void	pcmcom_attach(device_t, device_t, void *);
-int	pcmcom_detach(device_t, int);
-void	pcmcom_childdet(device_t, device_t);
+void	pcmcom_attach(struct device *, struct device *, void *);
+int	pcmcom_detach(struct device *, int);
+int	pcmcom_activate(struct device *, enum devact);
 
-CFATTACH_DECL_NEW(pcmcom, sizeof(struct pcmcom_softc),
-    pcmcom_match, pcmcom_attach, pcmcom_detach, NULL);
+CFATTACH_DECL(pcmcom, sizeof(struct pcmcom_softc),
+    pcmcom_match, pcmcom_attach, pcmcom_detach, pcmcom_activate);
 
 const struct pcmcia_product pcmcom_products[] = {
 	{ PCMCIA_VENDOR_SOCKET, PCMCIA_PRODUCT_SOCKET_DUAL_RS232,
@@ -105,7 +105,8 @@ const struct pcmcia_product pcmcom_products[] = {
 	  PCMCIA_CIS_INVALID },
 #endif
 };
-const size_t pcmcom_nproducts = __arraycount(pcmcom_products);
+const size_t pcmcom_nproducts =
+    sizeof(pcmcom_products) / sizeof(pcmcom_products[0]);
 
 int	pcmcom_print(void *, const char *);
 
@@ -115,7 +116,8 @@ void	pcmcom_disable(struct pcmcom_softc *);
 int	pcmcom_intr(void *);
 
 int
-pcmcom_match(device_t parent, cfdata_t cf, void *aux)
+pcmcom_match(struct device *parent, struct cfdata *cf,
+    void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -126,7 +128,8 @@ pcmcom_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 int
-pcmcom_validate_config(struct pcmcia_config_entry *cfe)
+pcmcom_validate_config(cfe)
+	struct pcmcia_config_entry *cfe;
 {
 	if (cfe->iftype != PCMCIA_IFTYPE_IO ||
 	    cfe->num_iospace < 1 || cfe->num_iospace > NSLAVES)
@@ -135,22 +138,21 @@ pcmcom_validate_config(struct pcmcia_config_entry *cfe)
 }
 
 void
-pcmcom_attach(device_t parent, device_t self, void *aux)
+pcmcom_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct pcmcom_softc *sc = device_private(self);
+	struct pcmcom_softc *sc = (void *)self;
 	struct pcmcia_attach_args *pa = aux;
 	struct pcmcia_config_entry *cfe;
 	int slave;
 	int error;
 	int locs[PCMCOMCF_NLOCS];
 
-	sc->sc_dev = self;
-
 	sc->sc_pf = pa->pf;
 
 	error = pcmcia_function_configure(pa->pf, pcmcom_validate_config);
 	if (error) {
-		aprint_error_dev(self, "configure failed, error=%d\n", error);
+		aprint_error_dev(self, "configure failed, error=%d\n",
+		    error);
 		return;
 	}
 
@@ -173,7 +175,7 @@ pcmcom_attach(device_t parent, device_t self, void *aux)
 
 		locs[PCMCOMCF_SLAVE] = slave;
 
-		sc->sc_slaves[slave] = config_found_sm_loc(sc->sc_dev,
+		sc->sc_slaves[slave] = config_found_sm_loc(&sc->sc_dev,
 			"pcmcom", locs,
 			&pca, pcmcom_print, config_stdsubmatch);
 	}
@@ -186,22 +188,12 @@ fail:
 	pcmcia_function_unconfigure(pa->pf);
 }
 
-void
-pcmcom_childdet(device_t self, device_t child)
-{
-	struct pcmcom_softc *sc = device_private(self);
-	int slave;
-
-	for (slave = sc->sc_nslaves - 1; slave >= 0; slave--) {
-		if (sc->sc_slaves[slave] == child)
-			sc->sc_slaves[slave] = NULL;
-	}
-}
-
 int
-pcmcom_detach(device_t self, int flags)
+pcmcom_detach(self, flags)
+	struct device *self;
+	int flags;
 {
-	struct pcmcom_softc *sc = device_private(self);
+	struct pcmcom_softc *sc = (void *)self;
 	int slave, error;
 
 	if (sc->sc_state != PCMCOM_ATTACHED)
@@ -213,6 +205,7 @@ pcmcom_detach(device_t self, int flags)
 			error = config_detach(sc->sc_slaves[slave], flags);
 			if (error)
 				return (error);
+			sc->sc_slaves[slave] = 0;
 		}
 	}
 
@@ -222,7 +215,42 @@ pcmcom_detach(device_t self, int flags)
 }
 
 int
-pcmcom_print(void *aux, const char *pnp)
+pcmcom_activate(self, act)
+	struct device *self;
+	enum devact act;
+{
+	struct pcmcom_softc *sc = (void *)self;
+	int slave, error = 0, s;
+
+	s = splserial();
+	switch (act) {
+	case DVACT_ACTIVATE:
+		error = EOPNOTSUPP;
+		break;
+
+	case DVACT_DEACTIVATE:
+		for (slave = sc->sc_nslaves - 1; slave >= 0; slave--) {
+			if (sc->sc_slaves[slave]) {
+				/*
+				 * Deactivate the child.  Doing so will cause
+				 * our own enabled count to drop to 0, once all
+				 * children are deactivated.
+				 */
+				error = config_deactivate(sc->sc_slaves[slave]);
+				if (error)
+					break;
+			}
+		}
+		break;
+	}
+	splx(s);
+	return (error);
+}
+
+int
+pcmcom_print(aux, pnp)
+	void *aux;
+	const char *pnp;
 {
 	struct pcmcom_attach_args *pca = aux;
 
@@ -236,7 +264,8 @@ pcmcom_print(void *aux, const char *pnp)
 }
 
 int
-pcmcom_intr(void *arg)
+pcmcom_intr(arg)
+	void *arg;
 {
 #if NCOM > 0
 	struct pcmcom_softc *sc = arg;
@@ -257,7 +286,8 @@ pcmcom_intr(void *arg)
 }
 
 int
-pcmcom_enable(struct pcmcom_softc *sc)
+pcmcom_enable(sc)
+	struct pcmcom_softc *sc;
 {
 	int error;
 
@@ -280,7 +310,8 @@ pcmcom_enable(struct pcmcom_softc *sc)
 }
 
 void
-pcmcom_disable(struct pcmcom_softc *sc)
+pcmcom_disable(sc)
+	struct pcmcom_softc *sc;
 {
 
 	if (--sc->sc_enabled_count != 0)
@@ -298,8 +329,8 @@ int	com_pcmcom_match(device_t, cfdata_t , void *);
 void	com_pcmcom_attach(device_t, device_t, void *);
 
 /* No pcmcom-specific goo in the softc; it's all in the parent. */
-CFATTACH_DECL_NEW(com_pcmcom, sizeof(struct com_softc),
-    com_pcmcom_match, com_pcmcom_attach, com_detach, NULL);
+CFATTACH_DECL(com_pcmcom, sizeof(struct com_softc),
+    com_pcmcom_match, com_pcmcom_attach, com_detach, com_activate);
 
 int	com_pcmcom_enable(struct com_softc *);
 void	com_pcmcom_disable(struct com_softc *);
@@ -335,11 +366,13 @@ com_pcmcom_attach(device_t parent, device_t self, void *aux)
 int
 com_pcmcom_enable(struct com_softc *sc)
 {
-	return pcmcom_enable(device_private(device_parent(sc->sc_dev)));
+
+	return (pcmcom_enable(device_private(device_parent(sc->sc_dev))));
 }
 
 void
-com_pcmcom_disable(struct com_softc *sc)
+com_pcmcom_disable(sc)
+	struct com_softc *sc;
 {
 
 	pcmcom_disable(device_private(device_parent(sc->sc_dev)));

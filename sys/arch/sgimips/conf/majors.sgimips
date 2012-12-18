@@ -1,4 +1,4 @@
-#	$NetBSD: majors.sgimips,v 1.27 2011/06/30 20:09:35 wiz Exp $
+#	$NetBSD: majors.sgimips,v 1.20.20.1 2009/09/26 18:05:32 snj Exp $
 #
 # Device majors for sgimips
 #
@@ -11,8 +11,6 @@ device-major	vnd		char 4   block 4	vnd
 device-major	raid		char 5   block 5	raid
 device-major	cgd		char 6   block 6	cgd
 
-device-major	scn		char 8			scn
-
 device-major	sd		char 10  block 10	sd
 device-major	st		char 11  block 11	st
 device-major	cd		char 12  block 12	cd
@@ -24,6 +22,7 @@ device-major	ctty		char 21
 device-major	pts		char 22			pty
 device-major	ptc		char 23			pty
 device-major	log		char 24
+device-major	lkm		char 25			lkm
 device-major	filedesc	char 26
 device-major	bpf		char 27			bpfilter
 device-major	tun		char 28			tun
@@ -51,6 +50,8 @@ device-major	wsmux		char 53			wsmux
 device-major	wsfont		char 54			wsfont
 
 device-major	clockctl	char 60			clockctl
+device-major	irix_kmem	char 61			compat_irix
+device-major	irix_usema	char 62			compat_irix
 device-major	audio		char 64			audio
 device-major	pci		char 65			pci
 device-major	irframe		char 66			irframedrv
@@ -69,6 +70,6 @@ device-major	lpt		char 78			lpt
 device-major    sysmon          char 79                 sysmon_envsys | sysmon_wdog
 device-major	nsmb		char 98			nsmb
 
-# Majors up to 143 are reserved for machine-dependent drivers.
+# Majors up to 143 are reserved for machine-dependant drivers.
 # New machine-independent driver majors are assigned in 
 # sys/conf/majors.

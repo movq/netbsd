@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.14 2009/04/22 15:23:08 lukem Exp $
+# $NetBSD: Makefile,v 1.12 2007/05/28 12:06:40 tls Exp $
 
 USE_FORT?= yes	# network client (local server)
 

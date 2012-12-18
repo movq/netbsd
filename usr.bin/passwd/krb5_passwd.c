@@ -1,4 +1,4 @@
-/* $NetBSD: krb5_passwd.c,v 1.20 2012/04/22 23:43:51 christos Exp $ */
+/* $NetBSD: krb5_passwd.c,v 1.17 2008/04/28 20:24:14 martin Exp $ */
 
 /*
  * Copyright (c) 2000, 2005 The NetBSD Foundation, Inc.
@@ -45,17 +45,6 @@
 
 #include "extern.h"
 
-static void
-pwkrb5_warn(const char *msg, krb5_context context, krb5_error_code ret)
-{
-    const char *errtxt = krb5_get_error_message(context, ret);
-    if (errtxt != NULL) {
-	    warnx("%s: %s", msg, errtxt);
-	    krb5_free_error_message(context, errtxt);
-    } else
-	    warnx("%s: %d", msg, ret);
-}
-
 #ifdef USE_PAM
 
 void
@@ -79,7 +68,7 @@ pwkrb5_process(const char *username, int argc, char **argv)
 {
 	krb5_context context;
 	krb5_error_code ret;
-	krb5_get_init_creds_opt *opt;
+	krb5_get_init_creds_opt opt;
 	krb5_principal principal;
 	krb5_creds cred;
 	int result_code;
@@ -136,23 +125,21 @@ pwkrb5_process(const char *username, int argc, char **argv)
 	if (ret != 0) {
 		if (ret == ENXIO)
 			errx(1, "Kerberos 5 not in use.");
-		errx(1, "Unable to initialize Kerberos 5: %s", strerror(ret));
-	}
-
-	ret = krb5_get_init_creds_opt_alloc(context, &opt);
-	if (ret) {
-		pwkrb5_warn("failed to allocate opts", context, ret);
+		warnx("Unable to initialize Kerberos 5: %s",
+		    krb5_get_err_text(context, ret));
 		goto bad;
 	}
+
+	krb5_get_init_creds_opt_init(&opt);
     
-	krb5_get_init_creds_opt_set_tkt_life(opt, 300L);
-	krb5_get_init_creds_opt_set_forwardable(opt, FALSE);
-	krb5_get_init_creds_opt_set_proxiable(opt, FALSE);
+	krb5_get_init_creds_opt_set_tkt_life(&opt, 300L);
+	krb5_get_init_creds_opt_set_forwardable(&opt, FALSE);
+	krb5_get_init_creds_opt_set_proxiable(&opt, FALSE);
 
 	ret = krb5_parse_name(context, username, &principal);
 	if (ret) {
-		krb5_get_init_creds_opt_free(context, opt);
-		pwkrb5_warn("failed to parse principal", context, ret);
+		warnx("failed to parse principal: %s", 
+		    krb5_get_err_text(context, ret));
 		goto bad;
 	}
 
@@ -164,9 +151,9 @@ pwkrb5_process(const char *username, int argc, char **argv)
 					   NULL,
 					   0L,
 					   "kadmin/changepw",
-					   opt);
+					   &opt);
 
-	krb5_get_init_creds_opt_free(context, opt);
+
 	switch (ret) {
 	case 0:
 		break;
@@ -181,7 +168,8 @@ pwkrb5_process(const char *username, int argc, char **argv)
 		goto bad;
 
 	default:
-		pwkrb5_warn("failed to get credentials", context, ret);
+		warnx("failed to get credentials: %s", 
+		    krb5_get_err_text(context, ret));
 		goto bad;
  	}
 
@@ -198,7 +186,8 @@ pwkrb5_process(const char *username, int argc, char **argv)
 				&result_code_string,
 				&result_string);
 	if (ret) {
-		pwkrb5_warn("unable to set password", context, ret);
+		warnx("unable to set password: %s",
+		    krb5_get_err_text(context, ret));
 		goto bad;
 	}
 
@@ -224,18 +213,18 @@ pwkrb5_process(const char *username, int argc, char **argv)
 
 #else /* ! USE_PAM */
 
-static krb5_context defcontext;
+static krb5_context context;
 static krb5_principal defprinc;
 static int kusage = PW_USE;
 
 int
 krb5_init(const char *progname)
 {
-    return krb5_init_context(&defcontext);
+    return krb5_init_context(&context);
 }
 
 int
-krb5_arg (char ch, const char *opt)
+krb5_arg (char ch, const char *optarg)
 {
     krb5_error_code ret;
     switch(ch) {
@@ -244,9 +233,9 @@ krb5_arg (char ch, const char *opt)
 	kusage = PW_USE_FORCE;
 	return 1;
     case 'u':
-	ret = krb5_parse_name(defcontext, opt, &defprinc);
+	ret = krb5_parse_name(context, optarg, &defprinc);
 	if(ret) {
-	    krb5_warn(defcontext, ret, "%s", opt);
+	    krb5_warn(context, ret, "%s", optarg);
 	    return 0;
 	}
 	return 1;
@@ -263,12 +252,13 @@ krb5_arg_end(void)
 void
 krb5_end(void)
 {
-    if (defcontext == NULL)
+    if (context == NULL)
 	return;
     if(defprinc)
-	krb5_free_principal(defcontext, defprinc);
-    krb5_free_context(defcontext);
+	krb5_free_principal(context, defprinc);
+    krb5_free_context(context);
 }
+
 
 int
 krb5_chpw(const char *username)
@@ -276,7 +266,7 @@ krb5_chpw(const char *username)
     krb5_error_code ret;
     krb5_context context;
     krb5_principal principal;
-    krb5_get_init_creds_opt *opt;
+    krb5_get_init_creds_opt opt;
     krb5_creds cred;
     int result_code;
     krb5_data result_code_string, result_string;
@@ -284,25 +274,22 @@ krb5_chpw(const char *username)
 
     ret = krb5_init_context (&context);
     if (ret) {
-	pwkrb5_warn("failed kerberos initialisation", context, ret);
+	warnx("failed kerberos initialisation: %s", 
+	      krb5_get_err_text(context, ret));
 	return 1;
     }
 
-    ret = krb5_get_init_creds_opt_alloc (context, &opt);
-    if (ret) {
-	pwkrb5_warn("failed to allocate credential opt", context, ret);
-	return 1;
-    }
+    krb5_get_init_creds_opt_init (&opt);
     
-    krb5_get_init_creds_opt_set_tkt_life (opt, 300);
-    krb5_get_init_creds_opt_set_forwardable (opt, FALSE);
-    krb5_get_init_creds_opt_set_proxiable (opt, FALSE);
+    krb5_get_init_creds_opt_set_tkt_life (&opt, 300);
+    krb5_get_init_creds_opt_set_forwardable (&opt, FALSE);
+    krb5_get_init_creds_opt_set_proxiable (&opt, FALSE);
 
     if(username != NULL) {
         ret = krb5_parse_name (context, username, &principal);
         if (ret) {
-	    krb5_get_init_creds_opt_free (context, opt);
-	    pwkrb5_warn("failed to parse principal", context, ret);
+	    warnx("failed to parse principal: %s", 
+		  krb5_get_err_text(context, ret));
 	    return 1;
 	}
     } else
@@ -316,9 +303,8 @@ krb5_chpw(const char *username)
                                         NULL,
                                         0,
                                         "kadmin/changepw",
-                                        opt);
+                                        &opt);
 
-    krb5_get_init_creds_opt_free (context, opt);
     switch (ret) {
     case 0:
         break;
@@ -331,7 +317,8 @@ krb5_chpw(const char *username)
 	return 1;
         break;
     default:
-	pwkrb5_warn("failed to get credentials", context, ret);
+	warnx("failed to get credentials: %s", 
+	      krb5_get_err_text(context, ret));
 	return 1;
     }
     krb5_data_zero (&result_code_string);

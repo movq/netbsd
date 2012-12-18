@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_exec.c,v 1.38 2012/02/19 21:06:36 rmind Exp $	*/
+/*	$NetBSD: freebsd_exec.c,v 1.35 2008/10/15 06:51:19 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Christopher G. Demetriou
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: freebsd_exec.c,v 1.38 2012/02/19 21:06:36 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: freebsd_exec.c,v 1.35 2008/10/15 06:51:19 wrstuden Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -62,42 +62,44 @@ struct uvm_object *emul_freebsd_object;
 void	syscall(void);
 #endif
 
-struct emul emul_freebsd = {
-	.e_name =		"freebsd",
-	.e_path =		"/emul/freebsd",
+const struct emul emul_freebsd = {
+	"freebsd",
+	"/emul/freebsd",
 #ifndef __HAVE_MINIMAL_EMUL
-	.e_flags =		EMUL_HAS_SYS___syscall,
-	.e_errno =		NULL,
-	.e_nosys =		FREEBSD_SYS_syscall,
-	.e_nsysent =		FREEBSD_SYS_NSYSENT,
+	EMUL_HAS_SYS___syscall,
+	NULL,
+	FREEBSD_SYS_syscall,
+	FREEBSD_SYS_NSYSENT,
 #endif
-	.e_sysent =		freebsd_sysent,
+	freebsd_sysent,
 #ifdef SYSCALL_DEBUG
-	.e_syscallnames =	freebsd_syscallnames,
+	freebsd_syscallnames,
 #else
-	.e_syscallnames =	NULL,
+	NULL,
 #endif
-	.e_sendsig =		freebsd_sendsig,
-	.e_trapsignal =		trapsignal,
-	.e_tracesig =		NULL,
-	.e_sigcode =		freebsd_sigcode,
-	.e_esigcode =		freebsd_esigcode,
-	.e_sigobject =		&emul_freebsd_object,
-	.e_setregs =		freebsd_setregs,
-	.e_proc_exec =		NULL,
-	.e_proc_fork =		NULL,
-	.e_proc_exit =		NULL,
-	.e_lwp_fork =		NULL,
-	.e_lwp_exit =		NULL,
+	freebsd_sendsig,
+	trapsignal,
+	NULL,
+	freebsd_sigcode,
+	freebsd_esigcode,
+	&emul_freebsd_object,
+	freebsd_setregs,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
 #ifdef __HAVE_SYSCALL_INTERN
-	.e_syscall_intern =	freebsd_syscall_intern,
+	freebsd_syscall_intern,
 #else
-	.e_syscall_intern =	syscall,
+	syscall,
 #endif
-	.e_sysctlovly =		NULL,
-	.e_fault =		NULL,
-	.e_vm_default_addr =	uvm_default_mapaddr,
-	.e_usertrap =		NULL,
-	.e_ucsize =		0,
-	.e_startlwp =		NULL
+	NULL,
+	NULL,
+
+	uvm_default_mapaddr,
+	NULL,			/* e_usertrap */
+	NULL,			/* e_sa */
+	0,			/* e_ucsize */
+	NULL,			/* e_startlwp */
 };

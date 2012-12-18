@@ -1,4 +1,4 @@
-/*	$NetBSD: exect.S,v 1.10 2009/12/14 01:07:42 matt Exp $	*/
+/*	$NetBSD: exect.S,v 1.9 2003/08/07 16:42:17 agc Exp $	*/
 /*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -34,19 +34,21 @@
 #include "SYS.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-	RCSID("from: @(#)exect.s	8.1 (Berkeley) 6/4/93")
-#else
-	RCSID("$NetBSD: exect.S,v 1.10 2009/12/14 01:07:42 matt Exp $")
-#endif
+	ASMSTR("from: @(#)exect.s	8.1 (Berkeley) 6/4/93")
+	ASMSTR("$NetBSD: exect.S,v 1.9 2003/08/07 16:42:17 agc Exp $")
 #endif /* LIBC_SCCS and not lint */
 
 LEAF(exect)
-	PIC_PROLOGUE(exect)
+#ifdef __ABICALLS__
+	.set    noreorder
+	.cpload t9
+	.set    reorder
+#endif
 	li	v0, SYS_execve
 	syscall
 	bne	a3, zero, 1f
-	PIC_RETURN()
+	j	ra
 1:
-	PIC_TAILCALL(__cerror)
+	la      t9, _C_LABEL(__cerror)
+	jr      t9
 END(exect)

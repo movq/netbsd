@@ -1,4 +1,4 @@
-/*	$NetBSD: wdvar.h,v 1.40 2012/02/02 19:43:02 tls Exp $	*/
+/*	$NetBSD: wdvar.h,v 1.36.14.1 2010/01/10 23:59:30 snj Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,8 +35,6 @@
 #ifdef _KERNEL_OPT
 #include "opt_wd_softbadsect.h"
 #endif
-
-#include <sys/rnd.h>
 
 struct wd_softc {
 	/* General disk infos */
@@ -68,7 +71,9 @@ struct wd_softc {
 	SLIST_HEAD(, disk_badsectors)	sc_bslist;
 	u_int sc_bscount;
 #endif
-	krndsource_t	rnd_source;
+#if NRND > 0
+	rndsource_element_t	rnd_source;
+#endif
 };
 
 #define sc_drive sc_wdc_bio.drive

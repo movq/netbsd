@@ -1,4 +1,4 @@
-/*	$NetBSD: zrc.c,v 1.9 2012/10/27 17:18:14 chs Exp $	*/
+/*	$NetBSD: zrc.c,v 1.5 2007/10/17 19:58:35 garbled Exp $	*/
 /*	$OpenBSD: zaurus_remote.c,v 1.1 2005/11/17 05:26:31 uwe Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zrc.c,v 1.9 2012/10/27 17:18:14 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zrc.c,v 1.5 2007/10/17 19:58:35 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -36,11 +36,10 @@ __KERNEL_RCSID(0, "$NetBSD: zrc.c,v 1.9 2012/10/27 17:18:14 chs Exp $");
 
 #include <machine/intr.h>
 
+#include <zaurus/dev/scoopvar.h>
+#include <zaurus/dev/zsspvar.h>
 #include <zaurus/zaurus/zaurus_reg.h>
 #include <zaurus/zaurus/zaurus_var.h>
-#include <zaurus/dev/zsspvar.h>
-#include <zaurus/dev/scoopvar.h>
-#include <zaurus/dev/ioexpvar.h>
 
 #define RESCAN_INTERVAL		(hz/100)
 
@@ -82,26 +81,25 @@ static const struct zrc_akey zrc_akeytab_c3000[] = {
 static const struct zrc_akey *zrc_akeytab = zrc_akeytab_c3000;
 
 struct zrc_softc {
-	device_t	 sc_dev;
+	struct device	 sc_dev;
 	struct callout	 sc_to;
 	void		*sc_ih;
 	int		 sc_key;	/* being scanned */
 	int		 sc_scans;	/* rescan counter */
 	int		 sc_noise;	/* discard if too noisy? */
 	int		 sc_keydown;	/* currently pressed key */
-	device_t	 sc_wskbddev;
+	struct device   *sc_wskbddev;
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	int		 sc_rawkbd;
 #endif
 };
 
-static int	zrc_match(device_t, cfdata_t, void *);
-static void	zrc_attach(device_t, device_t, void *);
+static int	zrc_match(struct device *, struct cfdata *, void *);
+static void	zrc_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(zrc, sizeof(struct zrc_softc), 
+CFATTACH_DECL(zrc, sizeof(struct zrc_softc), 
     zrc_match, zrc_attach, NULL, NULL);
 
-static int	zrc_finalize(device_t);
 static int	zrc_intr(void *);
 static void	zrc_timeout(void *);
 static int	zrc_scan(void);
@@ -121,10 +119,10 @@ struct wskbd_accessops zrc_accessops = {
 
 /* XXX what keys should be generated in translated mode? */
 static const keysym_t zrc_keydesc[] = {
-	KC(KEY_VOL_DOWN),	KS_Cmd_VolumeUp,
-	KC(KEY_MUTE),		KS_Cmd_VolumeToggle,
+	KC(KEY_VOL_DOWN),	KS_minus,
+	KC(KEY_MUTE),		KS_m,
 	KC(KEY_REWIND),		KS_b,
-	KC(KEY_VOL_UP),		KS_Cmd_VolumeDown,
+	KC(KEY_VOL_UP),		KS_plus,
 	KC(KEY_FORWARD),	KS_f,
 	KC(KEY_PLAY),		KS_p,
 	KC(KEY_STOP),		KS_s,
@@ -159,42 +157,33 @@ struct wskbd_mapdata zrc_keymapdata = {
 #undef	KC
 
 static int
-zrc_match(device_t parent, cfdata_t cf, void *aux)
+zrc_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 
-	if (ZAURUS_ISC1000 || ZAURUS_ISC3000)
+	if (ZAURUS_ISC3000)
 		return 1;
 	return 0;
 }
 
 static void
-zrc_attach(device_t parent, device_t self, void *aux)
+zrc_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct zrc_softc *sc = device_private(self);
+	struct zrc_softc *sc = (struct zrc_softc *)self;
 	struct wskbddev_attach_args a;
-
-	sc->sc_dev = self;
-
-	aprint_normal(": CE-RH2 remote control\n");
-	aprint_naive("\n");
 
 	/* Configure remote control interrupt handling. */
 	callout_init(&sc->sc_to, 0);
 	callout_setfunc(&sc->sc_to, zrc_timeout, sc);
-
-	/* Establish interrput */
 	pxa2x0_gpio_set_function(C3000_RC_IRQ_PIN, GPIO_IN);
 	sc->sc_ih = pxa2x0_gpio_intr_establish(C3000_RC_IRQ_PIN,
 	    IST_EDGE_BOTH, IPL_BIO, zrc_intr, sc);
-	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt.\n");
-		return;
-	}
 
-	/* defer enabling pullup until ioexp or scoop is attached */
-	config_finalize_register(self, zrc_finalize);
+	/* Enable the pullup while waiting for an interrupt. */
+	scoop_akin_pullup(1);
 
 	sc->sc_keydown = KEY_RELEASE;
+
+	printf(": CE-RH2 remote control\n");
 
 	a.console = 0;
 	a.keymap = &zrc_keymapdata;
@@ -205,19 +194,6 @@ zrc_attach(device_t parent, device_t self, void *aux)
 }
 
 static int
-zrc_finalize(device_t dv)
-{
-
-	/* Enable the pullup while waiting for an interrupt. */
-	if (ZAURUS_ISC1000)
-		ioexp_akin_pullup(1);
-	else
-		scoop_akin_pullup(1);
-
-	return 0;
-}
-
-static int
 zrc_intr(void *v)
 {
 	struct zrc_softc *sc = v;
@@ -225,10 +201,7 @@ zrc_intr(void *v)
 	/* just return if remote control isn't present */
 
 	pxa2x0_gpio_intr_mask(sc->sc_ih);
-	if (ZAURUS_ISC1000)
-		ioexp_akin_pullup(0);
-	else
-		scoop_akin_pullup(0);
+	scoop_akin_pullup(0);
 	sc->sc_key = zrc_scan();
 	sc->sc_scans = 0;
 	sc->sc_noise = 0;
@@ -272,9 +245,8 @@ zrc_timeout(void *v)
 			break;
 		default:
 #ifdef DEBUG
-			printf("%s: %s pressed (%d noise)\n",
-			    device_xname(sc->sc_dev),
-			    zrc_keyname[key], sc->sc_noise);
+			printf("%s pressed (%d noise)\n", zrc_keyname[key],
+			    sc->sc_noise);
 #endif
 			sc->sc_keydown = key;
 			sc->sc_noise = 0;
@@ -299,8 +271,7 @@ zrc_timeout(void *v)
 		if (sc->sc_keydown != KEY_RELEASE) {
 			zrc_input(sc, sc->sc_keydown, 0);
 #ifdef DEBUG
-			printf("%s: %s released (%d noise)\n",
-			    device_xname(sc->sc_dev),
+			printf("%s released (%d noise)\n",
 			    zrc_keyname[sc->sc_keydown], sc->sc_noise);
 #endif
 			sc->sc_keydown = KEY_RELEASE;
@@ -310,10 +281,7 @@ zrc_timeout(void *v)
 		/* unmask interrupt again */
 		callout_stop(&sc->sc_to);
 		sc->sc_scans = 7;
-		if (ZAURUS_ISC1000)
-			ioexp_akin_pullup(1);
-		else
-			scoop_akin_pullup(1);
+		scoop_akin_pullup(1);
 		pxa2x0_gpio_intr_unmask(sc->sc_ih);
 	}
 }

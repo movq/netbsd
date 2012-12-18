@@ -1,4 +1,4 @@
-/*	$NetBSD: tetris.c,v 1.24 2011/08/31 16:24:56 plunky Exp $	*/
+/*	$NetBSD: tetris.c,v 1.19 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -63,7 +63,7 @@ cell	board[B_SIZE];		/* 1 => occupied, 0 => empty */
 
 int	Rows, Cols;		/* current screen size */
 
-static const struct shape *curshape;
+const struct shape *curshape;
 const struct shape *nextshape;
 
 long	fallrate;		/* less than 1 million; smaller => faster */
@@ -74,10 +74,11 @@ gid_t	gid, egid;
 char	key_msg[100];
 int	showpreview;
 
-static void elide(void);
-static void setup_board(void);
-static void onintr(int) __dead;
-static void usage(void) __dead;
+static	void	elide(void);
+static	void	setup_board(void);
+	int	main(int, char **);
+	void	onintr(int) __dead;
+	void	usage(void) __dead;
 
 /*
  * Set up the initial board.  The bottom display row is completely set,
@@ -85,7 +86,7 @@ static void usage(void) __dead;
  * right edges are set.
  */
 static void
-setup_board(void)
+setup_board()
 {
 	int i;
 	cell *p;
@@ -99,7 +100,7 @@ setup_board(void)
  * Elide any full active rows.
  */
 static void
-elide(void)
+elide()
 {
 	int i, j, base;
 	cell *p;
@@ -124,7 +125,9 @@ elide(void)
 }
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	int pos, c;
 	const char *keys;
@@ -190,7 +193,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	snprintf(key_msg, sizeof(key_msg),
+	sprintf(key_msg,
 "%s - left   %s - rotate   %s - right   %s - drop   %s - pause   %s - quit",
 		key_write[0], key_write[1], key_write[2], key_write[3],
 		key_write[4], key_write[5]);
@@ -259,7 +262,7 @@ main(int argc, char *argv[])
 				scr_msg(key_msg, 0);
 				scr_msg(msg, 1);
 				(void) fflush(stdout);
-			} while (rwait(NULL) == -1);
+			} while (rwait((struct timeval *)NULL) == -1);
 			scr_msg(msg, 0);
 			scr_msg(key_msg, 1);
 			place(curshape, pos, 0);
@@ -317,18 +320,18 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-static void
-onintr(int signo __unused)
+void
+onintr(signo)
+	int signo __unused;
 {
 	scr_clear();
 	scr_end();
 	exit(0);
 }
 
-static void
-usage(void)
+void
+usage()
 {
-	(void)fprintf(stderr, "usage: %s [-ps] [-k keys] [-l level]\n",
-	    getprogname());
+	(void)fprintf(stderr, "usage: tetris [-ps] [-k keys] [-l level]\n");
 	exit(1);
 }

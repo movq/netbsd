@@ -1,4 +1,4 @@
-/*	$NetBSD: copy.S,v 1.22 2010/07/07 01:21:15 chs Exp $	*/
+/*	$NetBSD: copy.S,v 1.16.10.1 2009/02/26 20:38:00 snj Exp $	*/
 /*	NetBSD: locore.S,v 1.34 2005/04/01 11:59:31 yamt Exp $	*/
 
 /*-
@@ -65,7 +65,7 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: copy.S,v 1.22 2010/07/07 01:21:15 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: copy.S,v 1.16.10.1 2009/02/26 20:38:00 snj Exp $");
 
 #include "assym.h"
 
@@ -76,7 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: copy.S,v 1.22 2010/07/07 01:21:15 chs Exp $");
 
 #define GET_CURPCB(reg)	\
 	movl	CPUVAR(CURLWP), reg; \
-	movl	L_PCB(reg), reg
+	movl	L_ADDR(reg), reg
 
 /*
  * These are arranged so that the abnormal case is a forwards
@@ -95,10 +95,10 @@ __KERNEL_RCSID(0, "$NetBSD: copy.S,v 1.22 2010/07/07 01:21:15 chs Exp $");
 
 /*
  * The following primitives are to copy regions of memory.
- * Label must be before all copy functions.
  */
 	.text
-LABEL(x86_copyfunc_start)
+
+x86_copyfunc_start:	.globl	x86_copyfunc_start
 
 /*
  * Handle deferred pmap switch.  We must re-enable preemption without
@@ -127,29 +127,6 @@ NENTRY(do_pmap_load)
 	jnz	1b
 	popl	%ebx
 	leave
-	ret
-
-/*
- * void *return_address(unsigned int level);
- *
- * The return address if level == 0, the return address of the caller
- * `level' levels down the stack if level > 0.
- */
-ENTRY(return_address)
-	movl	%ebp,%eax	/* frame pointer -> %eax */ 
-	movl	4(%esp),%ecx	/* level -> %ecx */
-	movl	CPUVAR(CURLWP),%edx
-	movl	L_PCB(%edx),%edx
-	movl	$_C_LABEL(return_address_fault),PCB_ONFAULT(%edx)
-	cmpl	$0,%ecx
-	je	2f
-1:
-	movl	(%eax),%eax	/* next frame pointer */
-	decl	%ecx
-	jnz	1b
-2:
-	movl	0x4(%eax),%eax
-	movl	$0,PCB_ONFAULT(%edx)
 	ret
 
 /*
@@ -316,12 +293,6 @@ NENTRY(kcopy_fault)
 NENTRY(copy_fault)
 	popl	%edi
 	popl	%esi
-	ret
-
-/* LINTSTUB: Ignore */
-NENTRY(return_address_fault)
-	movl $0,PCB_ONFAULT(%edx)
-	movl $0,%eax
 	ret
 
 /*
@@ -539,7 +510,7 @@ ENTRY(fuswintr)
 	cmpl	$VM_MAXUSER_ADDRESS-2,%edx
 	ja	_C_LABEL(fusuaddrfault)
 	movl	CPUVAR(CURLWP),%ecx
-	movl	L_PCB(%ecx),%ecx
+	movl	L_ADDR(%ecx),%ecx
 	movl	$_C_LABEL(fusubail),PCB_ONFAULT(%ecx)
 	movzwl	(%edx),%eax
 	movl	$0,PCB_ONFAULT(%ecx)
@@ -645,7 +616,7 @@ ENTRY(suswintr)
 	cmpl	$VM_MAXUSER_ADDRESS-2,%edx
 	ja	_C_LABEL(fusuaddrfault)
 	movl	CPUVAR(CURLWP),%ecx
-	movl	L_PCB(%ecx),%ecx
+	movl	L_ADDR(%ecx),%ecx
 	movl	$_C_LABEL(fusubail),PCB_ONFAULT(%ecx)
 	movl	8(%esp),%eax
 	movw	%ax,(%edx)
@@ -685,7 +656,7 @@ ENTRY(ucas_32)
 	movl	12(%esp), %ecx
 	/* Fail if kernel-space */
 	cmpl	$VM_MAXUSER_ADDRESS-4, %edx
-	ja	_C_LABEL(ucas_efault)
+	ja	_C_LABEL(ucas_fault)
 	/* Label for fault handler */
 .Lucas32_start:
 	/* Perform the CAS */
@@ -702,14 +673,16 @@ ENTRY(ucas_32)
 	ret
 	DEFERRED_SWITCH_CALL
 
-NENTRY(ucas_efault)
-	mov	$EFAULT, %eax
+/*
+ * Fault handler for ucas_32().
+ * Unset the handler and return the failure.
+ */
 NENTRY(ucas_fault)
+	movl	$EFAULT, %eax
 	ret
 
 /*
  * int	ucas_int(volatile int *uptr, int old, int new, int *ret);
- * int	ucas_ptr(volatile void **uptr, void *old, void *new, void **ret);
  */
 STRONG_ALIAS(ucas_ptr, ucas_32)
 STRONG_ALIAS(ucas_int, ucas_32)
@@ -776,14 +749,8 @@ NENTRY(x86_copyargs_fault)
 	ret
 	DEFERRED_SWITCH_CALL
 
-/*
- * Label must be after all copy functions.
- */
-LABEL(x86_copyfunc_end)
+x86_copyfunc_end:	.globl	x86_copyfunc_end
 
-/*
- * Fault table of copy functions for trap().
- */
 	.section ".rodata"
 	.globl _C_LABEL(onfault_table)
 _C_LABEL(onfault_table):

@@ -1,4 +1,4 @@
-#	$NetBSD: VIPER,v 1.28 2012/10/17 14:48:11 apb Exp $
+#	$NetBSD: VIPER,v 1.13 2008/05/30 20:10:01 tsutsui Exp $
 #
 #	Arcom Viper
 #
@@ -37,17 +37,17 @@ file-system	MSDOSFS		# MS-DOS file system
 #file-system    FILECORE        # Acorn filecore file system
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
+#file-system	PORTAL		# portal filesystem (still experimental)
 file-system	PROCFS		# /proc
-#file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 file-system	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# legacy UFS quotas
-#options 	QUOTA2		# new, in-filesystem UFS quotas
-#options 	FFS_EI		# FFS Endian Independent support
+#options 	QUOTA		# UFS quotas
+#options 	FFS_EI		# FFS Endian Independant support
 options 	NFSSERVER
+options 	SOFTDEP
 
 # Networking options
 
@@ -76,8 +76,6 @@ options 	NFS_BOOT_RWSIZE=1024
 
 #options 	COMPAT_LINUX
 #options 	COMPAT_43	# 4.3BSD compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 #options 	COMPAT_20	# NetBSD 2.0 compatibility.
@@ -95,7 +93,12 @@ options 	COMPAT_30	# NetBSD 3.0 compatibility.
 
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
+options 	SEMMNI=10	# number of semaphore identifiers
+options 	SEMMNS=60	# number of semaphores in system
+options 	SEMUME=10	# max number of undo entries per process
+options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
+options 	SHMMAXPGS=1024	# 1024 pages is the default
 
 # Device options
 
@@ -109,6 +112,7 @@ options 	SYSVSHM		# System V-like memory sharing
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 options 	IRQSTATS	# manage IRQ statistics
+#options 	LKM		# loadable kernel modules
 #options 	KMEMSTATS	# kernel memory statistics
 #options 	SCSIVERBOSE	# Verbose SCSI errors
 #options 	PCIVERBOSE	# Verbose PCI descriptions
@@ -129,7 +133,7 @@ options 	DDB		# in-kernel debugger
 options		DDB_ONPANIC=1
 options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #makeoptions	DEBUG="-g"	# compile full symbol table
-options 	SYMTAB_SPACE=500000
+options 	SYMTAB_SPACE=450000
 
 ##options 	PMAP_INCLUDE_PTE_SYNC
 ##options 	LOCKDEBUG
@@ -169,10 +173,9 @@ sqphy*	at mii? phy ?			# Seeq 80220/80221/80223 PHYs
 # Pseudo-Devices
 
 # disk/mass storage pseudo-devices
-#pseudo-device	md			# memory disk device (ramdisk)
+#pseudo-device	md		1	# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
-#pseudo-device	fss			# file system snapshot device
-#pseudo-device	putter			# for puffs and pud
+#pseudo-device	fss		4	# file system snapshot device
 
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
@@ -181,10 +184,11 @@ pseudo-device	kttcp			# network loopback
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
+pseudo-device	rnd			# /dev/random and in-kernel generator
 #options	RND_COM
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 
 # data mover pseudo-devices
-#pseudo-device	swdmover		# software dmover(9) back-end
+#pseudo-device	swdmover		# softare dmover(9) back-end
 #pseudo-device	dmoverio		# /dev/dmover dmover(9) interface

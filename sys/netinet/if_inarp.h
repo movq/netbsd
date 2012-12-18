@@ -1,4 +1,4 @@
-/*	$NetBSD: if_inarp.h,v 1.44 2012/09/30 05:13:12 dholland Exp $	*/
+/*	$NetBSD: if_inarp.h,v 1.41 2008/10/24 17:07:33 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -34,14 +34,12 @@
 #ifndef _NETINET_IF_INARP_H_
 #define _NETINET_IF_INARP_H_
 
-#include <sys/queue.h>		/* for LIST_ENTRY */
-#include <netinet/in.h>		/* for struct in_addr */
-
 struct llinfo_arp {
 	LIST_ENTRY(llinfo_arp) la_list;
 	struct	rtentry *la_rt;
 	struct	mbuf *la_hold;		/* last packet until resolved/timeout */
 	long	la_asked;		/* last time we QUERIED for this addr */
+#define la_timer la_rt->rt_rmx.rmx_expire /* deletion time in seconds */
 };
 
 struct sockaddr_inarp {
@@ -54,6 +52,12 @@ struct sockaddr_inarp {
 	u_int16_t sin_other;
 #define SIN_PROXY 1
 };
+
+/*
+ * IP and ethernet specific routing flags
+ */
+#define	RTF_USETRAILERS	RTF_PROTO1	/* use trailers */
+#define	RTF_ANNOUNCE	RTF_PROTO2	/* announce new arp entry */
 
 #ifdef _KERNEL
 extern struct ifqueue arpintrq;

@@ -27,7 +27,7 @@
  *	isdntelctl - i4b set telephone interface options
  *	------------------------------------------------
  *
- *	$Id: main.c,v 1.7 2011/08/31 13:32:37 joerg Exp $
+ *	$Id: main.c,v 1.6 2008/07/15 17:51:38 perry Exp $
  *
  * $FreeBSD$
  *
@@ -52,7 +52,7 @@
 #include <netisdn/i4b_ioctl.h>
 #include <netisdn/i4b_tel_ioctl.h>
 
-__dead static void usage ( void );
+static void usage ( void );
 
 #define I4BTELDEVICE	"/dev/isdntel"
 

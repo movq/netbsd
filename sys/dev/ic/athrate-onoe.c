@@ -1,4 +1,4 @@
-/*	$NetBSD: athrate-onoe.c,v 1.15 2012/11/08 20:43:55 dyoung Exp $ */
+/*	$NetBSD: athrate-onoe.c,v 1.12.20.1 2009/08/07 06:43:27 snj Exp $ */
 
 /*-
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -41,7 +41,7 @@
 __FBSDID("$FreeBSD: src/sys/dev/ath/ath_rate/onoe/onoe.c,v 1.10 2005/08/09 10:19:43 rwatson Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: athrate-onoe.c,v 1.15 2012/11/08 20:43:55 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: athrate-onoe.c,v 1.12.20.1 2009/08/07 06:43:27 snj Exp $");
 #endif
 
 /*
@@ -71,17 +71,13 @@ __KERNEL_RCSID(0, "$NetBSD: athrate-onoe.c,v 1.15 2012/11/08 20:43:55 dyoung Exp
 #include <netinet/in.h> 
 #endif
 
-#include "ah_desc.h"
 #include <dev/ic/ath_netbsd.h>
 #include <dev/ic/athvar.h>
 #include <dev/ic/athrate-onoe.h>
 
 #include <external/isc/atheros_hal/dist/ah.h>
 
-#ifndef ONOE_DEBUG
 #define	ONOE_DEBUG
-#endif
-
 #ifdef ONOE_DEBUG
 enum {
 	ATH_DEBUG_RATE		= 0x00000010,	/* rate control */
@@ -192,7 +188,7 @@ ath_rate_update(struct ath_softc *sc, struct ieee80211_node *ni, int rate)
 	const HAL_RATE_TABLE *rt = sc->sc_currates;
 	u_int8_t rix;
 
-	KASSERTMSG(rt != NULL, "no rate table, mode %u", sc->sc_curmode);
+	KASSERT(rt != NULL, ("no rate table, mode %u", sc->sc_curmode));
 
 	DPRINTF(sc, "%s: set xmit rate for %s to %dM\n",
 	    __func__, ether_sprintf(ni->ni_macaddr),
@@ -270,7 +266,7 @@ ath_rate_ctl_start(struct ath_softc *sc, struct ieee80211_node *ni)
 	struct ieee80211com *ic = &sc->sc_ic;
 	int srate;
 
-	KASSERTMSG(ni->ni_rates.rs_nrates > 0, "no rates");
+	KASSERT(ni->ni_rates.rs_nrates > 0, ("no rates"));
 	if (ic->ic_fixed_rate == IEEE80211_FIXED_RATE_NONE) {
 		/*
 		 * No fixed rate is requested. For 11b start with
@@ -286,7 +282,7 @@ ath_rate_ctl_start(struct ath_softc *sc, struct ieee80211_node *ni)
 			/* NB: the rate set is assumed sorted */
 			for (; srate >= 0 && RATE(srate) > 72; srate--)
 				;
-			KASSERTMSG(srate >= 0, "bogus rate set");
+			KASSERT(srate >= 0, ("bogus rate set"));
 		}
 	} else {
 		/*
@@ -303,8 +299,8 @@ ath_rate_ctl_start(struct ath_softc *sc, struct ieee80211_node *ni)
 		srate = ni->ni_rates.rs_nrates - 1;
 		for (; srate >= 0 && RATE(srate) != r; srate--)
 			;
-		KASSERTMSG(srate >= 0,
-			"fixed rate %d not in rate set", ic->ic_fixed_rate);
+		KASSERT(srate >= 0,
+			("fixed rate %d not in rate set", ic->ic_fixed_rate));
 	}
 	ath_rate_update(sc, ni, srate);
 #undef RATE

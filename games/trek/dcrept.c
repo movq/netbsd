@@ -1,4 +1,4 @@
-/*	$NetBSD: dcrept.c,v 1.10 2009/05/24 22:55:03 dholland Exp $	*/
+/*	$NetBSD: dcrept.c,v 1.7 2007/12/15 19:44:44 perry Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)dcrept.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: dcrept.c,v 1.10 2009/05/24 22:55:03 dholland Exp $");
+__RCSID("$NetBSD: dcrept.c,v 1.7 2007/12/15 19:44:44 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,7 +55,8 @@ __RCSID("$NetBSD: dcrept.c,v 1.10 2009/05/24 22:55:03 dholland Exp $");
 
 /*ARGSUSED*/
 void
-dcrept(int v __unused)
+dcrept(v)
+	int v __unused;
 {
 	int		i, f;
 	double		x;
@@ -63,10 +64,13 @@ dcrept(int v __unused)
 	struct event	*e;
 
 	/* set up the magic factors to output the time till fixed */
-	if (Ship.cond == DOCKED) {
+	if (Ship.cond == DOCKED)
+	{
 		m1 = 1.0 / Param.dockfac;
 		m2 = 1.0;
-	} else {
+	}
+	else
+	{
 		m1 = 1.0;
 		m2 = Param.dockfac;
 	}
@@ -74,13 +78,15 @@ dcrept(int v __unused)
 	f = 1;
 
 	/* scan for damages */
-	for (i = 0; i < MAXEVENTS; i++) {
+	for (i = 0; i < MAXEVENTS; i++)
+	{
 		e = &Event[i];
 		if (e->evcode != E_FIXDV)
 			continue;
 
 		/* output the title first time */
-		if (f) {
+		if (f)
+		{
 			printf("\t\t\t  repair times\n");
 			printf("device\t\t\tin flight  docked\n");
 			f = 0;
@@ -89,8 +95,7 @@ dcrept(int v __unused)
 		/* compute time till fixed, then adjust by the magic factors */
 		x = e->date - Now.date;
 		printf("%-24s%7.2f  %7.2f\n",
-			Device[e->systemname].name, x * m1 + 0.005,
-			x * m2 + 0.005);
+			Device[e->systemname].name, x * m1 + 0.005, x * m2 + 0.005);
 
 		/* do a little consistancy checking */
 	}

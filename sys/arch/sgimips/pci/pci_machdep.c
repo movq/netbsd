@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.23 2012/10/27 17:18:10 chs Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.20 2008/05/30 19:26:35 ad Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.23 2012/10/27 17:18:10 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.20 2008/05/30 19:26:35 ad Exp $");
 
 #include "opt_pci.h"
 #include "pci.h"
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.23 2012/10/27 17:18:10 chs Exp $")
 #include <uvm/uvm_extern.h>
 
 #define _SGIMIPS_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/sysconf.h>
 
@@ -60,7 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.23 2012/10/27 17:18:10 chs Exp $")
 struct sgimips_bus_dma_tag pci_bus_dma_tag;
 
 void
-pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
+pci_attach_hook(struct device *parent, struct device *self, struct pcibus_attach_args *pba)
 {
 	/*
 	 * PCI doesn't have any special needs; just use
@@ -115,7 +115,7 @@ pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 }
 
 int
-pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	return (*pa->pa_pc->pc_intr_map)(pa, ihp);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_explode.c,v 1.11 2011/07/18 07:44:30 isaki Exp $ */
+/*	$NetBSD: fpu_explode.c,v 1.7 2005/12/11 12:17:52 christos Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu_explode.c,v 1.11 2011/07/18 07:44:30 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu_explode.c,v 1.7 2005/12/11 12:17:52 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>
@@ -59,10 +59,10 @@ __KERNEL_RCSID(0, "$NetBSD: fpu_explode.c,v 1.11 2011/07/18 07:44:30 isaki Exp $
 
 
 /* Conversion to internal format -- note asymmetry. */
-static int	fpu_itof(struct fpn *fp, u_int i);
-static int	fpu_stof(struct fpn *fp, u_int i);
-static int	fpu_dtof(struct fpn *fp, u_int i, u_int j);
-static int	fpu_xtof(struct fpn *fp, u_int i, u_int j, u_int k);
+static int	fpu_itof __P((struct fpn *fp, u_int i));
+static int	fpu_stof __P((struct fpn *fp, u_int i));
+static int	fpu_dtof __P((struct fpn *fp, u_int i, u_int j));
+static int	fpu_xtof __P((struct fpn *fp, u_int i, u_int j, u_int k));
 
 /*
  * N.B.: in all of the following, we assume the FP format is
@@ -87,7 +87,9 @@ static int	fpu_xtof(struct fpn *fp, u_int i, u_int j, u_int k);
  * int -> fpn.
  */
 static int
-fpu_itof(register struct fpn *fp, register u_int i)
+fpu_itof(fp, i)
+	register struct fpn *fp;
+	register u_int i;
 {
 
 	if (i == 0)
@@ -143,7 +145,9 @@ fpu_itof(register struct fpn *fp, register u_int i)
  * format: i.e., needs at most fp_mant[0] and fp_mant[1].
  */
 static int
-fpu_stof(register struct fpn *fp, register u_int i)
+fpu_stof(fp, i)
+	register struct fpn *fp;
+	register u_int i;
 {
 	register int exp;
 	register u_int frac, f0, f1;
@@ -161,7 +165,9 @@ fpu_stof(register struct fpn *fp, register u_int i)
  * We assume this uses at most (96-FP_LG) bits.
  */
 static int
-fpu_dtof(register struct fpn *fp, register u_int i, register u_int j)
+fpu_dtof(fp, i, j)
+	register struct fpn *fp;
+	register u_int i, j;
 {
 	register int exp;
 	register u_int frac, f0, f1, f2;
@@ -180,8 +186,9 @@ fpu_dtof(register struct fpn *fp, register u_int i, register u_int j)
  * 96-bit extended -> fpn.
  */
 static int
-fpu_xtof(register struct fpn *fp, register u_int i, register u_int j,
-	register u_int k)
+fpu_xtof(fp, i, j, k)
+	register struct fpn *fp;
+	register u_int i, j, k;
 {
 	register int exp;
 	register u_int frac, f0, f1, f2;
@@ -223,8 +230,11 @@ fpu_xtof(register struct fpn *fp, register u_int i, register u_int j,
  * Explode the contents of a memory operand.
  */
 void
-fpu_explode(register struct fpemu *fe, register struct fpn *fp, int type,
-	register u_int *space)
+fpu_explode(fe, fp, type, space)
+	register struct fpemu *fe;
+	register struct fpn *fp;
+	int type;
+	register u_int *space;
 {
 	register u_int s;
 

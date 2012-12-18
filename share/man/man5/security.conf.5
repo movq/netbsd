@@ -1,4 +1,4 @@
-.\"	$NetBSD: security.conf.5,v 1.39 2012/04/05 09:15:56 wiz Exp $
+.\"	$NetBSD: security.conf.5,v 1.33 2008/05/29 14:51:25 mrg Exp $
 .\"
 .\" Copyright (c) 1996 Matthew R. Green
 .\" All rights reserved.
@@ -24,7 +24,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd April 5, 2012
+.Dd May 29, 2006
 .Dt SECURITY.CONF 5
 .Os
 .Sh NAME
@@ -46,7 +46,7 @@ system, if configured do to so from
 .Pa /etc/daily.conf .
 .Pp
 The variables described below can be set to "NO" to disable the test:
-.Bl -tag -width check_pkg_vulnerabilities
+.Bl -tag -width check_network
 .It Sy check_passwd
 This checks the
 .Pa /etc/master.passwd
@@ -151,17 +151,6 @@ the contents of the file are sensitive.
 This includes files such as
 .Pa /etc/master.passwd .
 .El
-.It Sy check_pkg_vulnerabilities
-Checks the currently installed packages against a database of known
-vulnerabilities and reports those that are vulnerable.
-Check the
-.Sy fetch_pkg_vulnerabilities
-setting in
-.Xr daily.conf 5
-to keep the database up to date.
-.It Sy check_pkg_signatures
-Checks the digital signature of all files installed by packages against
-the expected values stored in the packages database.
 .El
 .Pp
 The variables described below can be set to modify the tests:
@@ -207,7 +196,7 @@ Please note, this may cause the
 .Sy check_mtree
 phase to report errors for entries for these symbolic links (i.e. of
 type=link in the mtree specification) as they will always appear to be plain
-files for the purposes of the check.
+files for the purposes of the check. 
 .Pa /etc/mtree/special.local
 may be used to override the checks for the affected links.
 .It Sy check_passwd_nowarn_shells
@@ -221,10 +210,6 @@ This is of particular value when those shells are not in
 If
 .Sy check_passwd
 is enabled, suppress warnings for these users.
-.It Sy check_passwd_permit_dups
-If
-.Sy check_passwd
-is enabled, do not warn about duplicate uids for the listed login names.
 .It Sy check_passwd_permit_nonalpha
 If
 .Sy check_passwd
@@ -257,16 +242,11 @@ Defaults to
 .Dq -u ,
 for unified-format context-diffs.
 .It Sy pkgdb_dir
-.Em DEPRECATED .
-Please set
-.Dv PKGDB_DIR
-in
-.Xr pkg_install.conf 5
-instead.
-.Pp
-If defined, points to the location of the packages database.
-Defaults to
-.Pa /var/db/pkg .
+Change the pkg database directory from
+.Pa /var/db/pkg
+when
+.Sy check_pkgs
+is enabled.
 .It Sy backup_uses_rcs
 Use
 .Xr rcs 1

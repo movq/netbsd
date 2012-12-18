@@ -1,4 +1,4 @@
-/* $NetBSD: s3c2800_clk.c,v 1.17 2012/02/07 09:06:05 nisimura Exp $ */
+/* $NetBSD: s3c2800_clk.c,v 1.14 2008/07/04 11:59:45 bsh Exp $ */
 
 /*
  * Copyright (c) 2002 Fujitsu Component Limited
@@ -34,7 +34,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: s3c2800_clk.c,v 1.17 2012/02/07 09:06:05 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: s3c2800_clk.c,v 1.14 2008/07/04 11:59:45 bsh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: s3c2800_clk.c,v 1.17 2012/02/07 09:06:05 nisimura Ex
 #include <sys/time.h>
 #include <sys/timetc.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <arm/cpufunc.h>
 
@@ -73,8 +73,8 @@ static struct timecounter s3c2800_timecounter = {
 	s3c2800_get_timecount,	/* get_timecount */
 	0,			/* no poll_pps */
 	0xffffffff,		/* counter_mask */
-	0,			/* frequency */
-	"s3c2800",		/* name */
+	0,		/* frequency */
+	"s3c23800",		/* name */
 	100,			/* quality */
 	NULL,			/* prev */
 	NULL,			/* next */
@@ -220,7 +220,7 @@ statintr(void *arg)
 }
 
 void
-cpu_initclocks(void)
+cpu_initclocks()
 {
 	struct s3c2800_softc *sc = (struct s3c2800_softc *)s3c2xx0_softc;
 	long tc;

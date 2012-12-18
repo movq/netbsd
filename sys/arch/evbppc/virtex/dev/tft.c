@@ -1,4 +1,4 @@
-/* 	$NetBSD: tft.c,v 1.5 2012/07/22 14:02:45 matt Exp $ */
+/* 	$NetBSD: tft.c,v 1.2 2007/03/04 05:59:46 christos Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tft.c,v 1.5 2012/07/22 14:02:45 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tft.c,v 1.2 2007/03/04 05:59:46 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: tft.c,v 1.5 2012/07/22 14:02:45 matt Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/wscons/wsconsio.h>
@@ -92,7 +92,8 @@ tft_attach(device_t self, struct wsdisplay_accessops *accessops)
 	sc->sc_ws_descr_storage[0] = tft_screen; 	/* struct copy */
 	sc->sc_ws_descr = sc->sc_ws_descr_storage;
 	sc->sc_ws_scrlist.nscreens = 1;
-	sc->sc_ws_scrlist.screens = (void *) &sc->sc_ws_descr;
+	sc->sc_ws_scrlist.screens =
+	    (const struct wsscreen_descr **)&sc->sc_ws_descr;
 
 	vcons_init(&sc->sc_vc_data, self, sc->sc_ws_descr, accessops);
 
@@ -118,8 +119,20 @@ tft_attach(device_t self, struct wsdisplay_accessops *accessops)
 	sc->sc_sp_info.si_stride = ri->ri_stride;
 	sc->sc_sp_info.si_fillrect = NULL;
 
-	if (splash_render(&sc->sc_sp_info, SPLASH_F_CENTER|SPLASH_F_FILL) == 0)
-		SCREEN_DISABLE_DRAWING(&sc->sc_vc_screen);
+	splash_render(&sc->sc_sp_info, SPLASH_F_CENTER | SPLASH_F_FILL);
+#endif
+
+#ifdef	SPLASHSCREEN_PROGRESS
+	sc->sc_sp_progress.sp_top = (sc->sc_height / 8) * 7;
+	sc->sc_sp_progress.sp_width = (sc->sc_width / 4) * 3;
+	sc->sc_sp_progress.sp_left = (sc->sc_width -
+	    sc->sc_sp_progress.sp_width) / 2;
+	sc->sc_sp_progress.sp_height = 20;
+	sc->sc_sp_progress.sp_state = -1;
+	sc->sc_sp_progress.sp_si = &sc->sc_sp_info;
+
+	splash_progress_init(&sc->sc_sp_progress);
+	SCREEN_DISABLE_DRAWING(&sc->sc_vc_screen);
 #endif
 
 	if (sc->sc_sdhook == NULL) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: su_pam.c,v 1.17 2012/03/15 02:02:23 joerg Exp $	*/
+/*	$NetBSD: su_pam.c,v 1.15 2008/07/21 14:19:26 lukem Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988\
 #if 0
 static char sccsid[] = "@(#)su.c	8.3 (Berkeley) 4/2/94";*/
 #else
-__RCSID("$NetBSD: su_pam.c,v 1.17 2012/03/15 02:02:23 joerg Exp $");
+__RCSID("$NetBSD: su_pam.c,v 1.15 2008/07/21 14:19:26 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -81,7 +81,7 @@ static const struct pam_conv pamc = { &openpam_ttyconv, NULL };
 #define ARGSTR ARGSTRX
 #endif
 
-static void logit(const char *, ...) __printflike(1, 2);
+static void logit(const char *, ...);
 
 int
 main(int argc, char **argv)
@@ -469,8 +469,8 @@ out:
 				 * how could we get untrusted data here?
 				 */
 				for (envitem = pamenv; *envitem; envitem++) {
-					if (putenv(*envitem) == -1)
-						free(*envitem);
+					(void)putenv(*envitem);
+					free(*envitem);
 				}
 
 				free(pamenv);

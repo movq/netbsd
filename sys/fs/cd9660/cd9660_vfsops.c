@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_vfsops.c,v 1.75 2012/03/13 18:40:35 elad Exp $	*/
+/*	$NetBSD: cd9660_vfsops.c,v 1.63.6.1 2009/10/27 21:58:34 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.75 2012/03/13 18:40:35 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.63.6.1 2009/10/27 21:58:34 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -219,6 +219,7 @@ int
 cd9660_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
+	struct nameidata nd;
 	struct vnode *devvp;
 	struct iso_args *args = data;
 	int error;
@@ -246,10 +247,10 @@ cd9660_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	 * Not an update, or updating the name: look up the name
 	 * and verify that it refers to a sensible block device.
 	 */
-	error = namei_simple_user(args->fspec,
-				NSM_FOLLOW_NOEMULROOT, &devvp);
-	if (error != 0)
+	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, args->fspec);
+	if ((error = namei(&nd)) != 0)
 		return (error);
+	devvp = nd.ni_vp;
 
 	if (devvp->v_type != VBLK) {
 		vrele(devvp);
@@ -263,25 +264,24 @@ cd9660_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	 * If mount by non-root, then verify that user has necessary
 	 * permissions on the device.
 	 */
-	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-	    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp, KAUTH_ARG(VREAD));
-	VOP_UNLOCK(devvp);
-	if (error) {
-		vrele(devvp);
-		return (error);
+	if (kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER, NULL) != 0) {
+		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
+		error = VOP_ACCESS(devvp, VREAD, l->l_cred);
+		VOP_UNLOCK(devvp, 0);
+		if (error) {
+			vrele(devvp);
+			return (error);
+		}
 	}
 	if ((mp->mnt_flag & MNT_UPDATE) == 0) {
-		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 		error = VOP_OPEN(devvp, FREAD, FSCRED);
-		VOP_UNLOCK(devvp);
 		if (error)
 			goto fail;
 		error = iso_mountfs(devvp, mp, l, args);
 		if (error) {
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 			(void)VOP_CLOSE(devvp, FREAD, NOCRED);
-			VOP_UNLOCK(devvp);
+			VOP_UNLOCK(devvp, 0);
 			goto fail;
 		}
 	} else {
@@ -371,7 +371,8 @@ iso_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l,
 	iso_bsize = ISO_DEFAULT_BLOCK_SIZE;
 
 	error = VOP_IOCTL(devvp, DIOCGDINFO, &label, FREAD, FSCRED);
-	if (!error) {
+	if (!error &&
+	    label.d_partitions[DISKPART(dev)].p_fstype == FS_ISO9660) {
 		/* XXX more sanity checks? */
 		sess = label.d_partitions[DISKPART(dev)].p_cdsession;
 	} else {
@@ -381,7 +382,7 @@ iso_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l,
 			sess = 0;	/* never mind */
 	}
 #ifdef ISO_DEBUG
-	printf("isofs: session offset (part %"PRId32") %d\n", DISKPART(dev), sess);
+	printf("isofs: session offset (part %d) %d\n", DISKPART(dev), sess);
 #endif
 
 	for (iso_blknum = 16; iso_blknum < 100; iso_blknum++) {
@@ -447,7 +448,7 @@ iso_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l,
 	mp->mnt_stat.f_fsidx.__fsid_val[0] = (long)dev;
 	mp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_CD9660);
 	mp->mnt_stat.f_fsid = mp->mnt_stat.f_fsidx.__fsid_val[0];
-	mp->mnt_stat.f_namemax = ISO_MAXNAMLEN;
+	mp->mnt_stat.f_namemax = MAXNAMLEN;
 	mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_iflag |= IMNT_MPSAFE;
 	mp->mnt_dev_bshift = iso_bsize;
@@ -719,8 +720,7 @@ cd9660_vget_internal(struct mount *mp, ino_t ino, struct vnode **vpp,
 		return (0);
 
 	/* Allocate a new vnode/iso_node. */
-	error = getnewvnode(VT_ISOFS, mp, cd9660_vnodeop_p, NULL, &vp);
-	if (error) {
+	if ((error = getnewvnode(VT_ISOFS, mp, cd9660_vnodeop_p, &vp)) != 0) {
 		*vpp = NULLVP;
 		return (error);
 	}
@@ -810,7 +810,7 @@ cd9660_vget_internal(struct mount *mp, ino_t ino, struct vnode **vpp,
 	} else
 		bp = 0;
 
-	vref(ip->i_devvp);
+	VREF(ip->i_devvp);
 
 	if (relocated) {
 		/*

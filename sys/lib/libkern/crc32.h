@@ -1,4 +1,4 @@
-/*	$NetBSD: crc32.h,v 1.1 2009/03/25 01:26:13 darran Exp $	*/
+/*	$NetBSD: crc32.h,v 1.1.4.2 2009/05/03 17:24:45 snj Exp $	*/
 
 /* crc32.h -- tables for rapid CRC calculation
  * Generated automatically by crc32.c

@@ -1,4 +1,4 @@
-/*	$NetBSD: qmgr_defer.c,v 1.1.1.1 2009/06/23 10:08:52 tron Exp $	*/
+/*	$NetBSD: qmgr_defer.c,v 1.1.1.1.2.3 2011/01/07 01:24:11 riz Exp $	*/
 
 /*++
 /* NAME

@@ -1,21 +1,21 @@
-/* $NetBSD: lcavar.h,v 1.11 2012/02/06 02:14:14 matt Exp $ */
+/* $NetBSD: lcavar.h,v 1.8 1997/09/02 12:40:22 thorpej Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Jeffrey Hsu
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -55,14 +55,14 @@ struct lca_config {
 };
 
 struct lca_softc {
-	device_t sc_dev;
+	struct	device sc_dev;
 
 	struct	lca_config *sc_lcp;
 };
 
-void	lca_init(struct lca_config *, int);
-void	lca_pci_init(pci_chipset_tag_t, void *);
-void	lca_dma_init(struct lca_config *);
+void	lca_init __P((struct lca_config *, int));
+void	lca_pci_init __P((pci_chipset_tag_t, void *));
+void	lca_dma_init __P((struct lca_config *));
 
-void	lca_bus_io_init(bus_space_tag_t, void *);
-void	lca_bus_mem_init(bus_space_tag_t, void *);
+void	lca_bus_io_init __P((bus_space_tag_t, void *));
+void	lca_bus_mem_init __P((bus_space_tag_t, void *));

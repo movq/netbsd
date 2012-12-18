@@ -1,4 +1,4 @@
-/*	$NetBSD: snscore.c,v 1.19 2012/06/19 05:46:09 dholland Exp $	*/
+/*	$NetBSD: snscore.c,v 1.17 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)snscore.c	8.1 (Berkeley) 7/19/93";
 #else
-__RCSID("$NetBSD: snscore.c,v 1.19 2012/06/19 05:46:09 dholland Exp $");
+__RCSID("$NetBSD: snscore.c,v 1.17 2008/07/20 01:03:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,21 +52,19 @@ __RCSID("$NetBSD: snscore.c,v 1.19 2012/06/19 05:46:09 dholland Exp $");
 #include <unistd.h>
 #include "pathnames.h"
 
-static const char *recfile = _PATH_RAWSCORES;
+const char *recfile = _PATH_RAWSCORES;
 #define MAXPLAYERS 256
 
 struct	player	{
 	short	uids;
 	short	scores;
 	char	*name;
-};
-
-static struct player players[MAXPLAYERS], temp;
+} players[MAXPLAYERS], temp;
 
 int	main(void);
 
 int
-main(void)
+main()
 {
 	short	uid, score;
 	FILE	*fd;

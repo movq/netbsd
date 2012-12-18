@@ -1,7 +1,6 @@
-/*	$NetBSD: grfvar.h,v 1.24 2012/10/27 17:17:29 chs Exp $	*/
+/*	$NetBSD: grfvar.h,v 1.20 2007/03/04 05:59:20 christos Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -37,13 +36,47 @@
  *
  *	@(#)grfvar.h	7.3 (Berkeley) 5/7/91
  */
+/*
+ * Copyright (c) 1988 University of Utah.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: grfvar.h 1.9 91/01/21$
+ *
+ *	@(#)grfvar.h	7.3 (Berkeley) 5/7/91
+ */
 
 struct ite_softc;
-
-#ifdef _KERNEL
-/* maximum console size */
-#define MAXROWS 200
-#define MAXCOLS 200
 
 /*
  * this struct is owned by the driver (grfcc, grfrt)
@@ -51,40 +84,25 @@ struct ite_softc;
  * uses it...
  */
 struct	grf_softc {
-	device_t	g_device;	/* config sets this up. */
-	struct grfinfo	g_display;	/* hardware description (for ioctl) */
-	volatile void	*g_regkva;	/* KVA of registers */
-	volatile void	*g_fbkva;	/* KVA of framebuffer */
-	int		g_flags;	/* software flags */
-	int		g_unit;		/* grf unit we want/have */
-	dev_t		g_itedev;	/* ite device number */
-	dev_t		g_grfdev;	/* grf device number */
-	void		*g_data;	/* device dependent data */
-	int		g_blank;	/* shadow copy of blank value */
-	int		(*g_mode)(struct grf_softc *, u_long, void *,
-				  u_long, int);
-#if NWSDISPLAY > 0
-	struct wsdisplay_accessops	*g_accessops;
-	struct wsdisplay_emulops	*g_emulops;
-	struct wsscreen_descr		g_defaultscreen;
-	struct wsscreen_descr		*g_screens[1];
-	struct wsscreen_list		g_screenlist;
-	struct vcons_data		g_vd;
-	struct ws_ao_ioctl		*g_wsioctl;
-	uint16_t g_rowoffset[MAXROWS];	/* speed up putchar-multiplication */
-	int	g_wsmode;		/* current wsdisplay mode */ 
-	
-#else
-	int	g_conpri;		/* priority of ite as console */
-	void 	(*g_iteinit)(struct ite_softc *);
-	void 	(*g_itedeinit)(struct ite_softc *);
-	void 	(*g_iteclear)(struct ite_softc *, int, int, int, int);
-	void 	(*g_iteputc)(struct ite_softc *, int, int, int, int);
-	void 	(*g_itecursor)(struct ite_softc *, int);
-	void 	(*g_itescroll)(struct ite_softc *, int, int, int, int);
-#endif /* NWSDISPLAY */
+	struct device  g_device;	/* config sets this up. */
+	struct grfinfo g_display;	/* hardware description (for ioctl) */
+	volatile void *g_regkva;	/* KVA of registers */
+	volatile void *g_fbkva;	/* KVA of framebuffer */
+	int     g_flags;		/* software flags */
+	int	g_unit;			/* grf unit we want/have */
+	dev_t	g_itedev;		/* ite device number */
+	dev_t	g_grfdev;		/* grf device number */
+	void *g_data;			/* device dependent data */
+	int  (*g_mode)(struct grf_softc *, u_long, void *, u_long, int);
+	int    g_conpri;		/* priority of ite as console */
+	void (*g_iteinit)(struct ite_softc *);
+	void (*g_itedeinit)(struct ite_softc *);
+	void (*g_iteclear)(struct ite_softc *, int, int, int, int);
+	void (*g_iteputc)(struct ite_softc *, int, int, int, int);
+	void (*g_itecursor)(struct ite_softc *, int);
+	void (*g_itescroll)(struct ite_softc *, int, int, int, int);
+	int	g_blank;		/* shadow copy of blank value */
 };
-#endif /* _KERNEL */
 
 /* flags */
 #define	GF_ALIVE	0x01
@@ -92,7 +110,6 @@ struct	grf_softc {
 #define GF_EXCLUDE	0x04
 #define GF_WANTED	0x08
 #define GF_GRFON	0x10
-#define GF_CONSOLE	0x20
 
 /* software ids defined in grfioctl.h */
 

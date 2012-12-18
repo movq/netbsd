@@ -1,4 +1,4 @@
-/* $NetBSD: wsemul_vt100_keys.c,v 1.11 2010/02/10 19:39:39 drochner Exp $ */
+/* $NetBSD: wsemul_vt100_keys.c,v 1.9 2005/12/11 12:24:12 christos Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsemul_vt100_keys.c,v 1.11 2010/02/10 19:39:39 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsemul_vt100_keys.c,v 1.9 2005/12/11 12:24:12 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,15 +85,8 @@ int
 wsemul_vt100_translate(void *cookie, keysym_t in, const char **out)
 {
 	struct wsemul_vt100_emuldata *edp = cookie;
-	struct vt100base_data *vd = &edp->bd;
 	static char c;
 
-	if (KS_GROUP(in) == KS_GROUP_Plain) {
-		/* catch ISO-1 */
-		c = KS_VALUE(in);
-		*out = &c;
-		return (1);
-	}
 	if (in >= KS_f1 && in <= KS_f20) {
 		*out = vt100_fkeys[in - KS_f1];
 		return (5);
@@ -106,7 +99,7 @@ wsemul_vt100_translate(void *cookie, keysym_t in, const char **out)
 		*out = vt100_pfkeys[in - KS_KP_F1];
 		return (3);
 	}
-	if (vd->flags & VTFL_APPLKEYPAD) {
+	if (edp->flags & VTFL_APPLKEYPAD) {
 		if (in >= KS_KP_0 && in <= KS_KP_9) {
 			*out = vt100_numpad[in - KS_KP_0];
 			return (3);
@@ -182,28 +175,28 @@ wsemul_vt100_translate(void *cookie, keysym_t in, const char **out)
 		return (4);
 	    case KS_Up:
 	    case KS_KP_Up:
-		if (vd->flags & VTFL_APPLCURSOR)
+		if (edp->flags & VTFL_APPLCURSOR)
 			*out = "\033OA";
 		else
 			*out = "\033[A";
 		return (3);
 	    case KS_Down:
 	    case KS_KP_Down:
-		if (vd->flags & VTFL_APPLCURSOR)
+		if (edp->flags & VTFL_APPLCURSOR)
 			*out = "\033OB";
 		else
 			*out = "\033[B";
 		return (3);
 	    case KS_Left:
 	    case KS_KP_Left:
-		if (vd->flags & VTFL_APPLCURSOR)
+		if (edp->flags & VTFL_APPLCURSOR)
 			*out = "\033OD";
 		else
 			*out = "\033[D";
 		return (3);
 	    case KS_Right:
 	    case KS_KP_Right:
-		if (vd->flags & VTFL_APPLCURSOR)
+		if (edp->flags & VTFL_APPLCURSOR)
 			*out = "\033OC";
 		else
 			*out = "\033[C";

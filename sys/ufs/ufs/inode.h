@@ -1,4 +1,4 @@
-/*	$NetBSD: inode.h,v 1.64 2012/11/19 00:36:21 jakllsch Exp $	*/
+/*	$NetBSD: inode.h,v 1.54.4.2 2012/05/19 17:28:29 riz Exp $	*/
 
 /*
  * Copyright (c) 1982, 1989, 1993
@@ -50,9 +50,6 @@
  * Lookup result state (other than the result inode). This is
  * currently stashed in the vnode between VOP_LOOKUP and directory
  * operation VOPs, which is gross.
- *
- * XXX ulr_diroff is a lookup hint from the previos call of VOP_LOOKUP.
- * probably it should not be here.
  */
 struct ufs_lookup_results {
 	int32_t	  ulr_count;	/* Size of free slot in directory. */
@@ -63,7 +60,7 @@ struct ufs_lookup_results {
 };
 
 /* notyet XXX */
-#define UFS_CHECK_CRAPCOUNTER(dp) ((void)(dp)->i_crapcounter)
+#define UFS_CHECK_CRAPCOUNTER(dp)
 
 /*
  * Per-filesystem inode extensions.
@@ -111,17 +108,23 @@ struct inode {
 #define	i_lfs	inode_u.lfs
 #define	i_e2fs	inode_u.e2fs
 
-	void	*i_unused1;	/* Unused. */
+	struct	 buflists i_pcbufhd;	/* softdep pagecache buffer head */
 	struct	 dquot *i_dquot[MAXQUOTAS]; /* Dquot structures. */
 	u_quad_t i_modrev;	/* Revision level for NFS lease. */
 	struct	 lockf *i_lockf;/* Head of byte-level lock list. */
 
 	/*
-	 * Side effects; used during (and after) directory lookup.
-	 * XXX should not be here.
+ 	 * Side effects; used during (and after) directory lookup.
+ 	 * XXX should not be here.
 	 */
-	struct ufs_lookup_results i_crap;
-	unsigned i_crapcounter;	/* serial number for i_crap */
+ 	struct ufs_lookup_results i_crap;
+	int       i_ffs_effnlink;  /* i_nlink when I/O completes */
+
+#define i_count i_crap.ulr_count
+#define i_endoff i_crap.ulr_endoff
+#define i_diroff i_crap.ulr_diroff
+#define i_offset i_crap.ulr_offset
+#define i_reclen i_crap.ulr_reclen
 
 	/*
 	 * Inode extensions
@@ -150,7 +153,6 @@ struct inode {
 	int32_t   i_gen;	/* Generation number. */
 	u_int32_t i_uid;	/* File owner. */
 	u_int32_t i_gid;	/* File group. */
-	u_int16_t i_omode;	/* Old mode, for ufs_reclaim. */
 
 	struct dirhash *i_dirhash;	/* Hashing for large directories */
 
@@ -220,15 +222,14 @@ struct inode {
 #define	i_e2fs_nlink		i_din.e2fs_din->e2di_nlink
 #define	i_e2fs_nblock		i_din.e2fs_din->e2di_nblock
 #define	i_e2fs_flags		i_din.e2fs_din->e2di_flags
-#define	i_e2fs_version		i_din.e2fs_din->e2di_version
 #define	i_e2fs_blocks		i_din.e2fs_din->e2di_blocks
-#define	i_e2fs_rdev		i_din.e2fs_din->e2di_rdev
 #define	i_e2fs_gen		i_din.e2fs_din->e2di_gen
 #define	i_e2fs_facl		i_din.e2fs_din->e2di_facl
 #define	i_e2fs_dacl		i_din.e2fs_din->e2di_dacl
 #define	i_e2fs_faddr		i_din.e2fs_din->e2di_faddr
-#define	i_e2fs_nblock_high	i_din.e2fs_din->e2di_nblock_high
-#define	i_e2fs_facl_high	i_din.e2fs_din->e2di_facl_high
+#define	i_e2fs_nfrag		i_din.e2fs_din->e2di_nfrag
+#define	i_e2fs_fsize		i_din.e2fs_din->e2di_fsize
+#define	i_e2fs_rdev		i_din.e2fs_din->e2di_rdev
 #define	i_e2fs_uid_high		i_din.e2fs_din->e2di_uid_high
 #define	i_e2fs_gid_high		i_din.e2fs_din->e2di_gid_high
 
@@ -239,14 +240,14 @@ struct inode {
 #define	IN_MODIFY	0x2000		/* Modification time update request. */
 #define	IN_MODIFIED	0x0008		/* Inode has been modified. */
 #define	IN_ACCESSED	0x0010		/* Inode has been accessed. */
-/* #define	IN_UNUSED	0x0020 */	/* unused, was IN_RENAME */
+#define	IN_RENAME	0x0020		/* Inode is being renamed. */
 #define	IN_SHLOCK	0x0040		/* File has shared lock. */
 #define	IN_EXLOCK	0x0080		/* File has exclusive lock. */
 #define	IN_CLEANING	0x0100		/* LFS: file is being cleaned */
 #define	IN_ADIROP	0x0200		/* LFS: dirop in progress */
 #define	IN_SPACECOUNTED	0x0400		/* Blocks to be freed in free count. */
 #define	IN_PAGING       0x1000		/* LFS: file is on paging queue */
-#define IN_CDIROP       0x4000          /* LFS: dirop completed pending i/o */
+
 #if defined(_KERNEL)
 
 /*
@@ -291,6 +292,9 @@ struct indir {
 /* Convert between inode pointers and vnode pointers. */
 #define	VTOI(vp)	((struct inode *)(vp)->v_data)
 #define	ITOV(ip)	((ip)->i_vnode)
+
+/* Determine if soft dependencies are being done */
+#define	DOINGSOFTDEP(vp)	((vp)->v_uflag & VU_SOFTDEP)
 
 /* This overlays the fid structure (see fstypes.h). */
 struct ufid {

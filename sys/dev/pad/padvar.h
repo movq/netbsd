@@ -1,4 +1,4 @@
-/* $NetBSD: padvar.h,v 1.4 2011/11/23 23:07:33 jmcneill Exp $ */
+/* $NetBSD: padvar.h,v 1.3 2008/09/04 10:42:55 christos Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -32,14 +32,13 @@
 typedef struct pad_softc {
 	device_t	sc_dev;
 
-	u_int		sc_open;
+	int		sc_open;
 	struct audio_encoding_set *sc_encodings;
 	void		(*sc_intr)(void *);
 	void		*sc_intrarg;
 
 	kcondvar_t	sc_condvar;
-	kmutex_t	sc_lock;
-	kmutex_t	sc_intr_lock;
+	kmutex_t	sc_mutex;
 
 	struct audio_softc *sc_audiodev;
 	int		sc_blksize;

@@ -1,6 +1,6 @@
 /* $SourceForge: bktr_core.c,v 1.6 2003/03/11 23:11:22 thomasklausner Exp $ */
 
-/*	$NetBSD: bktr_core.c,v 1.54 2012/12/14 19:38:36 joerg Exp $	*/
+/*	$NetBSD: bktr_core.c,v 1.49 2008/04/24 15:35:28 ad Exp $	*/
 /* $FreeBSD: src/sys/dev/bktr/bktr_core.c,v 1.114 2000/10/31 13:09:56 roger Exp$ */
 
 /*
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bktr_core.c,v 1.54 2012/12/14 19:38:36 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bktr_core.c,v 1.49 2008/04/24 15:35:28 ad Exp $");
 
 #include "opt_bktr.h"		/* Include any kernel config options */
 
@@ -194,6 +194,7 @@ bktr_name(bktr_ptr_t bktr)
 #include <sys/proc.h>
 
 #ifdef __NetBSD__
+#include <uvm/uvm_extern.h>
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcireg.h>
 #else
@@ -217,7 +218,7 @@ static int bt848_format = -1;
 const char *
 bktr_name(bktr_ptr_t bktr)
 {
-        return device_xname(bktr->bktr_dev);
+        return device_xname(&bktr->bktr_dev);
 }
 
 #define		PROC_LOCK(p)
@@ -565,7 +566,7 @@ bktr_store_address(unit, BKTR_MEM_BUF,          sbuf);
 	if (sbuf != 0) {
 		bktr->bigbuf = sbuf;
 		bktr->alloc_pages = BROOKTREE_ALLOC_PAGES;
-		memset((void *) bktr->bigbuf, 0, BROOKTREE_ALLOC);
+		bzero((void *) bktr->bigbuf, BROOKTREE_ALLOC);
 	} else {
 		bktr->alloc_pages = 0;
 	}
@@ -969,6 +970,7 @@ bktr_softintr(void *cookie)
 /*
  *
  */
+extern int bt848_format; /* used to set the default format, PAL or NTSC */
 int
 video_open(bktr_ptr_t bktr)
 {
@@ -1090,8 +1092,8 @@ vbi_open(bktr_ptr_t bktr)
 	bktr->vbi_sequence_number = 0;
 	bktr->vbi_read_blocked = FALSE;
 
-	memset((void *) bktr->vbibuffer, 0, VBI_BUFFER_SIZE);
-	memset((void *) bktr->vbidata, 0,  VBI_DATA_SIZE);
+	bzero((void *) bktr->vbibuffer, VBI_BUFFER_SIZE);
+	bzero((void *) bktr->vbidata,  VBI_DATA_SIZE);
 
 	return(0);
 }
@@ -1777,7 +1779,7 @@ video_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, void *arg,
 			    && bktr->video.addr == 0) {
 
 /*****************************/
-/* *** OS Dependent code *** */
+/* *** OS Dependant code *** */
 /*****************************/
 #if defined(__NetBSD__) || defined(__OpenBSD__)
                                 bus_dmamap_t dmamap;
@@ -3658,7 +3660,7 @@ start_capture(bktr_ptr_t bktr, unsigned type)
 
 	/*  If requested, clear out capture buf first  */
 	if (bktr->clr_on_start && (bktr->video.addr == 0)) {
-		memset((void *)bktr->bigbuf, 0,
+		bzero((void *)bktr->bigbuf,
 		      (size_t)bktr->rows * bktr->cols * bktr->frames *
 			pixfmt_table[bktr->pixfmt].public.Bpp);
 	}

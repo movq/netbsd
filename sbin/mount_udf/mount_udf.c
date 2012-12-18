@@ -1,4 +1,4 @@
-/* $NetBSD: mount_udf.c,v 1.13 2009/02/08 19:28:49 reinoud Exp $ */
+/* $NetBSD: mount_udf.c,v 1.12.2.1 2009/02/18 00:54:06 snj Exp $ */
 
 /*
  * Copyright (c) 2006 Reinoud Zandijk
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mount_udf.c,v 1.13 2009/02/08 19:28:49 reinoud Exp $");
+__RCSID("$NetBSD: mount_udf.c,v 1.12.2.1 2009/02/18 00:54:06 snj Exp $");
 #endif /* not lint */
 
 

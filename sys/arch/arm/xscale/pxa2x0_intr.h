@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0_intr.h,v 1.13 2012/07/29 00:07:10 matt Exp $ */
+/*	$NetBSD: pxa2x0_intr.h,v 1.11 2008/04/27 18:58:45 matt Exp $ */
 
 /* Derived from i80321_intr.h */
 
@@ -47,11 +47,12 @@
 #include <arm/cpu.h>
 #include <arm/armreg.h>
 #include <arm/cpufunc.h>
+#include <machine/atomic.h>
 #include <machine/intr.h>
 
 #include <arm/xscale/pxa2x0reg.h>
 
-extern vaddr_t pxaic_base;		/* Shared with pxa2x0_irq.S */
+vaddr_t pxaic_base;		/* Shared with pxa2x0_irq.S */
 #define read_icu(offset) (*(volatile uint32_t *)(pxaic_base + (offset)))
 #define write_icu(offset,value) \
  (*(volatile uint32_t *)(pxaic_base + (offset)) = (value))

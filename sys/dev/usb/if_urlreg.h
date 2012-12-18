@@ -1,4 +1,4 @@
-/*	$NetBSD: if_urlreg.h,v 1.9 2012/08/24 09:01:23 msaitoh Exp $	*/
+/*	$NetBSD: if_urlreg.h,v 1.4 2007/08/27 16:08:42 xtraeme Exp $	*/
 /*
  * Copyright (c) 2001, 2002
  *     Shingo WATANABE <nabe@nabechan.org>.  All rights reserved.
@@ -142,7 +142,7 @@ struct url_cdata {
 	struct url_chain	url_tx_chain[URL_TX_LIST_CNT];
 	struct url_chain	url_rx_chain[URL_TX_LIST_CNT];
 #if 0
-	/* XXX: Interrupt Endpoint is not yet supported! */
+	/* XXX: Intrrupt Endpoint is not yet supported! */
 	struct url_intrpkg	url_ibuf;
 #endif
 	int			url_tx_prod;
@@ -152,7 +152,7 @@ struct url_cdata {
 };
 
 struct url_softc {
-	device_t		sc_dev;	/* base device */
+	USBBASEDEVICE		sc_dev;	/* base device */
 	usbd_device_handle	sc_udev;
 
 	/* USB */
@@ -164,7 +164,7 @@ struct url_softc {
 	usbd_pipe_handle	sc_pipe_rx;
 	usbd_pipe_handle	sc_pipe_tx;
 	usbd_pipe_handle	sc_pipe_intr;
-	struct callout		sc_stat_ch;
+	usb_callout_t		sc_stat_ch;
 	u_int			sc_rx_errs;
 	/* u_int		sc_intr_errs; */
 	struct timeval		sc_rx_notice;
@@ -175,12 +175,14 @@ struct url_softc {
 	krwlock_t		sc_mii_rwlock;
 	int			sc_link;
 #define	sc_media url_mii.mii_media
-	krndsource_t	rnd_source;
+#if NRND > 0
+	rndsource_element_t	rnd_source;
+#endif
 	struct url_cdata	sc_cdata;
 
 	int                     sc_attached;
 	int			sc_dying;
-	int                     sc_refcnt;
+        int                     sc_refcnt;
 
 	struct usb_task		sc_tick_task;
 	struct usb_task		sc_stop_task;

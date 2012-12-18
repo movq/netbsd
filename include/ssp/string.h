@@ -1,4 +1,4 @@
-/*	$NetBSD: string.h,v 1.5 2012/07/22 21:05:26 joerg Exp $	*/
+/*	$NetBSD: string.h,v 1.3 2008/04/28 20:22:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -32,16 +32,6 @@
 #define _SSP_STRING_H_
 
 #include <ssp/ssp.h>
-
-__BEGIN_DECLS
-void *__memcpy_chk(void *, const void *, size_t, size_t);
-void *__memmove_chk(void *, void *, size_t, size_t);
-void *__memset_chk(void *, int, size_t, size_t);
-char *__strcat_chk(char *, const char *, size_t);
-char *__strcpy_chk(char *, const char *, size_t);
-char *__strncat_chk(char *, const char *, size_t, size_t);
-char *__strncpy_chk(char *, const char *, size_t, size_t);
-__END_DECLS
 
 #if __SSP_FORTIFY_LEVEL > 0
 

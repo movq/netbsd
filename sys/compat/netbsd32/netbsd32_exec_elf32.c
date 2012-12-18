@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_exec_elf32.c,v 1.36 2012/08/03 07:49:18 matt Exp $	*/
+/*	$NetBSD: netbsd32_exec_elf32.c,v 1.29 2008/10/26 07:07:35 mrg Exp $	*/
 /*	from: NetBSD: exec_aout.c,v 1.15 1996/09/26 23:34:46 cgd Exp */
 
 /*
@@ -57,13 +57,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_exec_elf32.c,v 1.36 2012/08/03 07:49:18 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_exec_elf32.c,v 1.29 2008/10/26 07:07:35 mrg Exp $");
 
 #define	ELFSIZE		32
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
@@ -73,11 +74,10 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_exec_elf32.c,v 1.36 2012/08/03 07:49:18 mat
 #include <sys/kauth.h>
 #include <sys/namei.h>
 
-#include <compat/common/compat_util.h>
-
 #include <compat/netbsd32/netbsd32.h>
 #include <compat/netbsd32/netbsd32_exec.h>
 
+#include <machine/frame.h>
 #include <machine/netbsd32_machdep.h>
 
 int netbsd32_copyinargs(struct exec_package *, struct ps_strings *,
@@ -96,13 +96,6 @@ ELFNAME2(netbsd32,probe)(struct lwp *l, struct exec_package *epp,
 	if ((error = ELFNAME2(netbsd,signature)(l, epp, eh)) != 0)
 		return error;
 
-#ifdef ELF_MD_PROBE_FUNC
-	if ((error = ELF_MD_PROBE_FUNC(l, epp, eh, itp, pos)) != 0)
-		return error;
-#elif defined(ELF_INTERP_NON_RELOCATABLE)
-	*pos = ELF_LINK_ADDR;
-#endif
-
 	return ELFNAME2(netbsd32,probe_noteless)(l, epp, eh, itp, pos);
 }
 
@@ -110,13 +103,45 @@ int
 ELFNAME2(netbsd32,probe_noteless)(struct lwp *l, struct exec_package *epp,
 				  void *eh, char *itp, vaddr_t *pos)
 {
- 	if (itp && epp->ep_interp == NULL) {
-		extern const char machine32[];
-		(void)compat_elf_check_interp(epp, itp, machine32);
+	int error;
+
+	if (itp) {
+		/*
+		 * If the path is exactly "/usr/libexec/ld.elf_so", first
+		 * try to see if "/usr/libexec/ld.elf_so-<arch>" exists
+		 * and if so, use that instead.
+		 * XXX maybe move this into compat/common
+		 */
+		error = 0;
+		if (strcmp(itp, "/usr/libexec/ld.elf_so") == 0 ||
+		    strcmp(itp, "/libexec/ld.elf_so") == 0) {
+			extern const char machine32[];
+			struct nameidata nd;
+			char *path;
+
+			if (epp->ep_interp != NULL)
+				vrele(epp->ep_interp);
+			
+			path = PNBUF_GET();
+			snprintf(path, MAXPATHLEN, "%s-%s", itp, machine32);
+			NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, path);
+			error = namei(&nd);
+			/*
+			 * If that worked, save interpreter in case we
+			 * actually need to load it
+			 */
+			if (error != 0)
+				epp->ep_interp = NULL;
+			else
+				epp->ep_interp = nd.ni_vp;
+			PNBUF_PUT(path);
+		}
+
+		/* Translate interpreter name if needed */
+		if (error && (error = emul_find_interp(l, epp, itp)) != 0)
+			return error;
 	}
-#ifdef _LP64
-	epp->ep_flags |= EXEC_32 | EXEC_FORCEAUX;
-#endif
+	epp->ep_flags |= EXEC_32;
 	epp->ep_vm_minaddr = VM_MIN_ADDRESS;
 	epp->ep_vm_maxaddr = USRSTACK32;
 #ifdef ELF_INTERP_NON_RELOCATABLE
@@ -197,7 +222,8 @@ netbsd32_elf32_copyargs(struct lwp *l, struct exec_package *pack,
 		a->a_v = kauth_cred_getgid(l->l_cred);
 		a++;
 
-		exec_free_emul_arg(pack);
+		free((char *)ap, M_TEMP);
+		pack->ep_emul_arg = NULL;
 	}
 
 	a->a_type = AT_NULL;

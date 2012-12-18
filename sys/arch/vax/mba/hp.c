@@ -1,4 +1,4 @@
-/*	$NetBSD: hp.c,v 1.48 2010/12/14 23:38:30 matt Exp $ */
+/*	$NetBSD: hp.c,v 1.46 2008/03/11 05:34:02 matt Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -42,12 +42,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hp.c,v 1.48 2010/12/14 23:38:30 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hp.c,v 1.46 2008/03/11 05:34:02 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
-#include <sys/cpu.h>
 #include <sys/device.h>
 #include <sys/disklabel.h>
 #include <sys/disk.h>
@@ -57,9 +55,16 @@ __KERNEL_RCSID(0, "$NetBSD: hp.c,v 1.48 2010/12/14 23:38:30 matt Exp $");
 #include <sys/stat.h>
 #include <sys/ioccom.h>
 #include <sys/fcntl.h>
+#include <sys/syslog.h>
+#include <sys/reboot.h>
 #include <sys/conf.h>
 #include <sys/event.h>
-#include <sys/syslog.h>
+
+#include <machine/bus.h>
+#include <machine/trap.h>
+#include <machine/pte.h>
+#include <machine/mtpr.h>
+#include <machine/cpu.h>
 
 #include <vax/mba/mbavar.h>
 #include <vax/mba/mbareg.h>
@@ -219,8 +224,8 @@ hpstrategy(struct buf *bp)
 
 	s = splbio();
 
-	gp = bufq_peek(sc->sc_md.md_q);
-	bufq_put(sc->sc_md.md_q, bp);
+	gp = BUFQ_PEEK(sc->sc_md.md_q);
+	BUFQ_PUT(sc->sc_md.md_q, bp);
 	if (gp == 0)
 		mbaqueue(&sc->sc_md);
 
@@ -240,7 +245,7 @@ hpstart(struct mba_device *md)
 {
 	struct hp_softc * const sc = md->md_softc;
 	struct disklabel * const lp = sc->sc_disk.dk_label;
-	struct buf *bp = bufq_peek(md->md_q);
+	struct buf *bp = BUFQ_PEEK(md->md_q);
 	unsigned bn, cn, sn, tn;
 
 	/*
@@ -368,7 +373,7 @@ enum xfer_action
 hpfinish(struct mba_device *md, int mbasr, int *attn)
 {
 	struct hp_softc * const sc = md->md_softc;
-	struct buf *bp = bufq_peek(md->md_q);
+	struct buf *bp = BUFQ_PEEK(md->md_q);
 	int er1, er2, bc;
 	unsigned byte;
 
@@ -406,8 +411,8 @@ hper2:
 	if (mbasr)
 		aprint_error_dev(sc->sc_dev, "massbuss error: %x\n", mbasr);
 
-	bufq_peek(md->md_q)->b_resid = 0;
-	disk_unbusy(&sc->sc_disk, bufq_peek(md->md_q)->b_bcount,
+	BUFQ_PEEK(md->md_q)->b_resid = 0;
+	disk_unbusy(&sc->sc_disk, BUFQ_PEEK(md->md_q)->b_bcount,
 	    (bp->b_flags & B_READ));
 	return XFER_FINISH;
 }

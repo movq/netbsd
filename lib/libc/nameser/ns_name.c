@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_name.c,v 1.9 2012/03/13 21:13:39 christos Exp $	*/
+/*	$NetBSD: ns_name.c,v 1.6.4.1 2011/01/06 21:42:48 riz Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -22,7 +22,7 @@
 #ifdef notdef
 static const char rcsid[] = "Id: ns_name.c,v 1.11 2009/01/23 19:59:16 each Exp";
 #else
-__RCSID("$NetBSD: ns_name.c,v 1.9 2012/03/13 21:13:39 christos Exp $");
+__RCSID("$NetBSD: ns_name.c,v 1.6.4.1 2011/01/06 21:42:48 riz Exp $");
 #endif
 #endif
 
@@ -33,7 +33,6 @@ __RCSID("$NetBSD: ns_name.c,v 1.9 2012/03/13 21:13:39 christos Exp $");
 #include <netinet/in.h>
 #include <arpa/nameser.h>
 
-#include <assert.h>
 #include <errno.h>
 #include <resolv.h>
 #include <string.h>
@@ -44,9 +43,9 @@ __RCSID("$NetBSD: ns_name.c,v 1.9 2012/03/13 21:13:39 christos Exp $");
 #include "port_after.h"
 
 #ifdef SPRINTF_CHAR
-# define SPRINTF(x) ((int)strlen(sprintf/**/x))
+# define SPRINTF(x) strlen(sprintf/**/x)
 #else
-# define SPRINTF(x) (sprintf x)
+# define SPRINTF(x) ((size_t)sprintf x)
 #endif
 
 #define NS_TYPE_ELT			0x40 /*%< EDNS0 extended label type */
@@ -190,8 +189,7 @@ ns_name_ntop(const u_char *src, char *dst, size_t dstsiz)
 		return (-1);
 	}
 	*dn++ = '\0';
-	_DIAGASSERT(__type_fit(int, dn - dst));
-	return (int)(dn - dst);
+	return (dn - dst);
 }
 
 /*%
@@ -258,19 +256,19 @@ ns_name_pton2(const char *src, u_char *dst, size_t dstsiz, size_t *dstlen) {
 				continue;
 			}
 			else if ((cp = strchr(digits, c)) != NULL) {
-				n = (int)(cp - digits) * 100;
+				n = (cp - digits) * 100;
 				if ((c = *src++) == 0 ||
 				    (cp = strchr(digits, c)) == NULL) {
 					errno = EMSGSIZE;
 					return (-1);
 				}
-				n += (int)(cp - digits) * 10;
+				n += (cp - digits) * 10;
 				if ((c = *src++) == 0 ||
 				    (cp = strchr(digits, c)) == NULL) {
 					errno = EMSGSIZE;
 					return (-1);
 				}
-				n += (int)(cp - digits);
+				n += (cp - digits);
 				if (n > 255) {
 					errno = EMSGSIZE;
 					return (-1);
@@ -282,7 +280,7 @@ ns_name_pton2(const char *src, u_char *dst, size_t dstsiz, size_t *dstlen) {
 			escaped = 1;
 			continue;
 		} else if (c == '.') {
-			c = (int)(bp - label - 1);
+			c = (bp - label - 1);
 			if ((c & NS_CMPRSFLGS) != 0) {	/*%< Label too big. */
 				errno = EMSGSIZE;
 				return (-1);
@@ -322,7 +320,7 @@ ns_name_pton2(const char *src, u_char *dst, size_t dstsiz, size_t *dstlen) {
 		}
 		*bp++ = (u_char)c;
 	}
-	c = (int)(bp - label - 1);
+	c = (bp - label - 1);
 	if ((c & NS_CMPRSFLGS) != 0) {		/*%< Label too big. */
 		errno = EMSGSIZE;
 		return (-1);
@@ -400,8 +398,7 @@ ns_name_ntol(const u_char *src, u_char *dst, size_t dstsiz)
 		}
 	}
 	*dn++ = '\0';
-	_DIAGASSERT(__type_fit(int, dn - dst));
-	return (int)(dn - dst);
+	return (dn - dst);
 }
 
 /*%
@@ -469,10 +466,8 @@ ns_name_unpack2(const u_char *msg, const u_char *eom, const u_char *src,
 				errno = EMSGSIZE;
 				return (-1);
 			}
-			if (len < 0) {
-				_DIAGASSERT(__type_fit(int, srcp - src + 1));
-				len = (int)(srcp - src + 1);
-			}
+			if (len < 0)
+				len = srcp - src + 1;
 			srcp = msg + (((n & 0x3f) << 8) | (*srcp & 0xff));
 			if (srcp < msg || srcp >= eom) {  /*%< Out of range. */
 				errno = EMSGSIZE;
@@ -498,11 +493,9 @@ ns_name_unpack2(const u_char *msg, const u_char *eom, const u_char *src,
 	*dstp++ = 0;
 	if (dstlen != NULL)
 		*dstlen = dstp - dst;
-	if (len < 0) {
-		_DIAGASSERT(__type_fit(int, srcp - src));
-		len = (int)(srcp - src);
-	}
-	return len;
+	if (len < 0)
+		len = srcp - src;
+	return (len);
 }
 
 /*%
@@ -582,8 +575,7 @@ ns_name_pack(const u_char *src, u_char *dst, int dstsiz,
 				}
 				*dstp++ = ((u_int32_t)l >> 8) | NS_CMPRSFLGS;
 				*dstp++ = l % 256;
-				_DIAGASSERT(__type_fit(int, dstp - dst));
-				return (int)(dstp - dst);
+				return (dstp - dst);
 			}
 			/* Not found, save it. */
 			if (lastdnptr != NULL && cpp < lastdnptr - 1 &&
@@ -614,8 +606,7 @@ cleanup:
 		errno = EMSGSIZE;
 		return (-1);
 	} 
-	_DIAGASSERT(__type_fit(int, dstp - dst));
-	return (int)(dstp - dst);
+	return (dstp - dst);
 }
 
 /*%
@@ -969,11 +960,8 @@ dn_find(const u_char *domain, const u_char *msg,
 						    mklower(*cp++))
 							goto next;
 					/* Is next root for both ? */
-					if (*dn == '\0' && *cp == '\0') {
-						_DIAGASSERT(__type_fit(int,
-						    sp - msg));
-						return (int)(sp - msg);
-					}
+					if (*dn == '\0' && *cp == '\0')
+						return (sp - msg);
 					if (*dn)
 						continue;
 					goto next;
@@ -1004,7 +992,7 @@ decode_bitstring(const unsigned char **cpp, char *dn, const char *eom)
 	if ((blen = (*cp & 0xff)) == 0)
 		blen = 256;
 	plen = (blen + 3) / 4;
-	plen += (int)sizeof("\\[x/]") + (blen > 99 ? 3 : (blen > 9) ? 2 : 1);
+	plen += sizeof("\\[x/]") + (blen > 99 ? 3 : (blen > 9) ? 2 : 1);
 	if (dn + plen >= eom)
 		return (-1);
 
@@ -1039,8 +1027,7 @@ decode_bitstring(const unsigned char **cpp, char *dn, const char *eom)
 	dn += i;
 
 	*cpp = cp;
-	_DIAGASSERT(__type_fit(int, dn - beg));
-	return (int)(dn - beg);
+	return (dn - beg);
 }
 
 static int

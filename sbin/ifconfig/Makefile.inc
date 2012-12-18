@@ -1,7 +1,6 @@
-#	$NetBSD: Makefile.inc,v 1.9 2012/10/31 10:17:34 msaitoh Exp $
+PROG=	ifconfig
 
-# shared stuff with src/distrib/utils/x_ifconfig for install media.
-# stuff not required by install media should be into Makefile.
+CPPFLAGS+=	-I${NETBSDSRCDIR}/sys/
 
 DPADD+=${LIBUTIL}
 DPADD+=${LIBPROP}
@@ -13,7 +12,6 @@ SRCS+= af_inet.c
 SRCS+= af_inetany.c
 SRCS+= agr.c
 SRCS+= env.c
-SRCS+= ether.c
 SRCS+= ieee80211.c
 SRCS+= ifconfig.c
 SRCS+= media.c

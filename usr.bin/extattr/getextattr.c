@@ -1,4 +1,4 @@
-/*	$NetBSD: getextattr.c,v 1.10 2012/06/17 08:09:29 manu Exp $	*/
+/*	$NetBSD: getextattr.c,v 1.3.26.1 2011/08/09 15:55:55 riz Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 Networks Associates Technology, Inc.
@@ -56,7 +56,7 @@
 
 static enum { EADUNNO, EAGET, EASET, EARM, EALS } what = EADUNNO;
 
-__dead static void
+static void
 usage(void) 
 {
 
@@ -143,14 +143,14 @@ hexdump(const char *addr, size_t len)
 	for (i = 0; i < len; i += 16) {
 		printf("   %03x   ", i);
 		for (j = 0; j < 16; j++) {
-			if (i + j >= len)
+			if (i + j > len)
 				printf("   ");
 			else
 				printf("%02x ", addr[i + j] & 0xff);
 		}
 		printf("   ");
 		for (j = 0; j < 16; j++) {
-			if (i + j >= len)
+			if (i + j > len)
 				printf(" ");
 			else
 				printf("%c", HEXDUMP_PRINT(addr[i + j]));
@@ -245,11 +245,11 @@ main(int argc, char *argv[])
 		usage();
 
 	/*
-	 * Normal case "namespace attribute".
+	 * Normal case "namespace attribute". 
 	 */
 	error = extattr_string_to_namespace(argv[0], &attrnamespace);
 	if (error == 0) {
-		/*
+		/* 
 		 * Namespace was specified, so we need one more argument
 		 * for the attribute (except for listing)
 		 */
@@ -275,7 +275,6 @@ main(int argc, char *argv[])
 		}
 	}
 
-
 	if (what != EALS) {
 		attrname = argv[0];
 		argc--; argv++;
@@ -298,7 +297,7 @@ main(int argc, char *argv[])
 			if (fstat(fd, &st) != 0)
 				err(1, "%s: cannot stat \"%s\"",
 				     getprogname(), filename);
-
+				
 			val_len = st.st_size;
 			mkbuf(&buf, &buflen, val_len);
 

@@ -1,4 +1,4 @@
-/* $NetBSD: except.c,v 1.29 2012/08/16 17:35:01 matt Exp $ */
+/* $NetBSD: except.c,v 1.21 2008/06/23 17:58:17 matt Exp $ */
 /*-
  * Copyright (c) 1998, 1999, 2000 Ben Harris
  * All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: except.c,v 1.29 2012/08/16 17:35:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: except.c,v 1.21 2008/06/23 17:58:17 matt Exp $");
 
 #include "opt_ddb.h"
 
@@ -40,9 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: except.c,v 1.29 2012/08/16 17:35:01 matt Exp $");
 #include <sys/kernel.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
+#include <sys/user.h>
 #include <sys/cpu.h>
-#include <sys/lwp.h>
-#include <sys/proc.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -79,22 +78,24 @@ int want_resched;
 
 #ifdef DIAGNOSTIC
 void
-checkvectors(void)
+checkvectors()
 {
-	uint32_t *ptr;
+	u_int32_t *ptr;
 
 	/* Check that the vectors are valid */
-	for (ptr = (uint32_t *)0; ptr < (uint32_t *)0x1c; ptr++)
+	for (ptr = (u_int32_t *)0; ptr < (u_int32_t *)0x1c; ptr++)
 		if (*ptr != 0xe59ff114)
 			panic("CPU vectors mangled");
 }
 #endif
 
+
 void
 prefetch_abort_handler(struct trapframe *tf)
 {
-	struct lwp * const l = curlwp;
-	struct proc * const p = l->l_proc;
+	vaddr_t pc;
+	struct proc *p;
+	struct lwp *l;
 
 	/* Enable interrupts if they were enabled before the trap. */
 	if ((tf->tf_r15 & R15_IRQ_DISABLE) == 0)
@@ -107,12 +108,18 @@ prefetch_abort_handler(struct trapframe *tf)
 	 * p15).
 	 */
 
-	curcpu()->ci_data.cpu_ntrap++;
+	uvmexp.traps++;
+	l = curlwp;
+	if (l == NULL)
+		l = &lwp0;
+	p = l->l_proc;
 
-	if (TRAP_USERMODE(tf)) {
-		lwp_settrapframe(l, tf);
+	if ((tf->tf_r15 & R15_MODE) == R15_MODE_USR) {
+		l->l_addr->u_pcb.pcb_tf = tf;
 		LWP_CACHE_CREDS(l, p);
-	} else {
+	}
+
+	if ((tf->tf_r15 & R15_MODE) != R15_MODE_USR) {
 #ifdef DDB
 		db_printf("Prefetch abort in kernel mode\n");
 		kdb_trap(T_FAULT, tf);
@@ -126,23 +133,23 @@ prefetch_abort_handler(struct trapframe *tf)
 	}
 
 	/* User-mode prefetch abort */
-	vaddr_t pc = tf->tf_r15 & R15_PC;
+	pc = tf->tf_r15 & R15_PC;
 
 	do_fault(tf, l, &p->p_vmspace->vm_map, pc, VM_PROT_EXECUTE);
 
 	userret(l);
 }
-
+
 void
 data_abort_handler(struct trapframe *tf)
 {
-	struct lwp * const l = curlwp;
-	struct proc * const p = l->l_proc;
+	vaddr_t pc, va;
+	vsize_t asize;
+	struct proc *p;
+	struct lwp *l;
 	vm_prot_t atype;
 	bool usrmode, twopages;
 	struct vm_map *map;
-	vaddr_t pc, va;
-	vsize_t asize;
 
 	/*
 	 * Data aborts in kernel mode are possible (copyout etc), so
@@ -158,9 +165,13 @@ data_abort_handler(struct trapframe *tf)
 	/* Enable interrupts if they were enabled before the trap. */
 	if ((tf->tf_r15 & R15_IRQ_DISABLE) == 0)
 		int_on();
-	curcpu()->ci_data.cpu_ntrap++;
+	uvmexp.traps++;
+	l = curlwp;
+	if (l == NULL)
+		l = &lwp0;
+	p = l->l_proc;
 	if ((tf->tf_r15 & R15_MODE) == R15_MODE_USR) {
-		lwp_settrapframe(l, tf);
+		l->l_addr->u_pcb.pcb_tf = tf;
 		LWP_CACHE_CREDS(l, p);
 	}
 	pc = tf->tf_r15 & R15_PC;
@@ -177,7 +188,7 @@ data_abort_handler(struct trapframe *tf)
 	if (twopages)
 		do_fault(tf, l, map, va + asize - 4, atype);
 
-	if (TRAP_USERMODE(tf))
+	if ((tf->tf_r15 & R15_MODE) == R15_MODE_USR)
 		userret(l);
 }
 
@@ -189,30 +200,25 @@ do_fault(struct trapframe *tf, struct lwp *l,
     struct vm_map *map, vaddr_t va, vm_prot_t atype)
 {
 	int error;
+	struct pcb *cur_pcb;
 
 	if (pmap_fault(map->pmap, va, atype))
 		return;
 
-	struct pcb * const pcb = lwp_getpcb(l);
-	void * const onfault = pcb->pcb_onfault;
-	const bool user = TRAP_USERMODE(tf);
-
 	if (cpu_intr_p()) {
-		KASSERT(!user);
+		KASSERT((tf->tf_r15 & R15_MODE) != R15_MODE_USR);
 		error = EFAULT;
-	} else {
-		pcb->pcb_onfault = NULL;
+	} else
 		error = uvm_fault(map, va, atype);
-		pcb->pcb_onfault = onfault;
-	}
 
 	if (error != 0) {
 		ksiginfo_t ksi;
 
-		if (onfault != NULL) {
+		cur_pcb = &l->l_addr->u_pcb;
+		if (cur_pcb->pcb_onfault != NULL) {
 			tf->tf_r0 = error;
 			tf->tf_r15 = (tf->tf_r15 & ~R15_PC) |
-			    (register_t)onfault;
+			    (register_t)cur_pcb->pcb_onfault;
 			return;
 		}
 #ifdef DDB
@@ -222,7 +228,7 @@ do_fault(struct trapframe *tf, struct lwp *l,
 			return;
 		}
 #endif
-		if (!user) {
+		if ((tf->tf_r15 & R15_MODE) != R15_MODE_USR) {
 #ifdef DDB
 			db_printf("Unhandled data abort in kernel mode\n");
 			kdb_trap(T_FAULT, tf);
@@ -248,8 +254,6 @@ do_fault(struct trapframe *tf, struct lwp *l,
 		ksi.ksi_code = (error == EPERM) ? SEGV_ACCERR : SEGV_MAPERR;
 		ksi.ksi_addr = (void *) va;
 		trapsignal(l, &ksi);
-	} else if (!user) {
-		ucas_ras_check(tf);
 	}
 }
 
@@ -443,7 +447,7 @@ data_abort_usrmode(struct trapframe *tf)
 {
 	register_t insn;
 
-	if (TRAP_USERMODE(tf))
+	if ((tf->tf_r15 & R15_MODE) == R15_MODE_USR)
 		return true;
 	insn = *(register_t *)(tf->tf_r15 & R15_PC);
 	if ((insn & 0x0d200000) == 0x04200000)
@@ -451,34 +455,36 @@ data_abort_usrmode(struct trapframe *tf)
 		return true;
 	return false;
 }
-
+
 void
 address_exception_handler(struct trapframe *tf)
 {
-	struct lwp * const l = curlwp;
-	struct pcb * const pcb = lwp_getpcb(l);
+	struct lwp *l;
+	vaddr_t pc;
 	ksiginfo_t ksi;
 
 	/* Enable interrupts if they were enabled before the trap. */
 	if ((tf->tf_r15 & R15_IRQ_DISABLE) == 0)
 		int_on();
-
-	curcpu()->ci_data.cpu_ntrap++;
-	if (TRAP_USERMODE(tf)) {
-		lwp_settrapframe(l, tf);
+	uvmexp.traps++;
+	l = curlwp;
+	if (l == NULL)
+		l = &lwp0;
+	if ((tf->tf_r15 & R15_MODE) == R15_MODE_USR) {
+		l->l_addr->u_pcb.pcb_tf = tf;
 		LWP_CACHE_CREDS(l, l->l_proc);
 	}
 
-	if (pcb->pcb_onfault != NULL) {
+	if (curpcb->pcb_onfault != NULL) {
 		tf->tf_r0 = EFAULT;
 		tf->tf_r15 = (tf->tf_r15 & ~R15_PC) |
-		    (uintptr_t)pcb->pcb_onfault;
+		    (register_t)curpcb->pcb_onfault;
 		return;
 	}
 
-	vaddr_t pc = tf->tf_r15 & R15_PC;
+	pc = tf->tf_r15 & R15_PC;
 
-	if (!TRAP_USERMODE(tf)) {
+	if ((tf->tf_r15 & R15_MODE) != R15_MODE_USR) {
 #ifdef DDB
 		db_printf("Address exception in kernel mode\n");
 		kdb_trap(T_FAULT, tf);
@@ -500,7 +506,7 @@ address_exception_handler(struct trapframe *tf)
 	trapsignal(l, &ksi);
 	userret(l);
 }
-
+
 #ifdef DEBUG
 static void
 printregs(struct trapframe *tf)

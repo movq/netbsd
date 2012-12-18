@@ -1,4 +1,4 @@
-.\"	$NetBSD: hardware,v 1.10 2009/04/23 01:56:50 snj Exp $
+.\"	$NetBSD: hardware,v 1.9.40.1 2009/04/25 23:16:36 snj Exp $
 .
 .Nx*M
 \*V runs on most Sun3 machines, including:

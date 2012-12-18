@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.14 2010/11/06 15:42:49 uebayasi Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.12 2008/04/28 20:23:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -87,6 +87,14 @@
 #endif
 
 /*
+ * PTEs for system V style shared memory.
+ * This is basically slop for kmempt which we actually allocate (malloc) from.
+ */
+#ifndef SHMMAXPGS
+#define SHMMAXPGS	512 	/* 4 MB */
+#endif
+
+/*
  * Mach-derived constants:
  */
 
@@ -101,6 +109,7 @@
 #define VM_PHYS_SIZE		(USRIOSIZE*PAGE_SIZE)
 
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH
+#define VM_PHYSSEG_NOADD	/* can't add RAM after vm_mem_init */
 
 #define	VM_NFREELIST		1
 #define	VM_FREELIST_DEFAULT	0

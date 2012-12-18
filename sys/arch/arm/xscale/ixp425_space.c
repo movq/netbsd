@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_space.c,v 1.8 2011/07/01 20:32:51 dyoung Exp $ */
+/*	$NetBSD: ixp425_space.c,v 1.6 2006/04/10 03:36:03 simonb Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -13,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Ichiro FUKUHARA.
+ * 4. The name of the company nor the name of the author may be used to
+ *    endorse or promote products derived from this software without specific
+ *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp425_space.c,v 1.8 2011/07/01 20:32:51 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_space.c,v 1.6 2006/04/10 03:36:03 simonb Exp $");
 
 /*
  * bus_space I/O functions for ixp425
@@ -40,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_space.c,v 1.8 2011/07/01 20:32:51 dyoung Exp 
 
 #include <uvm/uvm.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/xscale/ixp425reg.h>
 #include <arm/xscale/ixp425var.h>

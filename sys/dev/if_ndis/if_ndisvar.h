@@ -1,5 +1,3 @@
-/*	$NetBSD: if_ndisvar.h,v 1.9 2012/10/27 17:18:23 chs Exp $	*/
-
 /*-
  * Copyright (c) 2003
  *	Bill Paul <wpaul@windriver.com>.  All rights reserved.
@@ -107,11 +105,19 @@ struct ndis_resource {
 #endif
 
 #ifdef __NetBSD__
-extern int ndis_in_isr;
+int ndis_in_isr;
 #endif
 
 struct ndis_softc {
 #ifdef __NetBSD__
+/* 
+ * TODO: It seems like in the attach function the ndis "struct device" object
+ * and the softc are the same thing, so I added a "struct device" to the 
+ * front of the softc, to make sure the arpcom field wasn't getting
+ * messed up.  However, I'm not sure if the arpcom field is supposed
+ * to be first for some other reason.
+ */
+        struct device           dev;
 	struct ethercom		arpcom;
 #endif
 	struct ieee80211com	ic;		/* interface info */
@@ -169,14 +175,14 @@ struct ndis_softc {
 	
 	/* cardbus specific */
 	cardbus_devfunc_t    ndis_res_ct;	/* cardbus devfuncs */
-	pcitag_t         ndis_res_ctag;	/* carbus tag */
+	cardbustag_t         ndis_res_ctag;	/* carbus tag */
 	bus_size_t           ndis_res_mapsize;	/* size of mapped bus space region */
 #endif /* end __NetBSD__ section */
 	int			ndis_rescnt;
 #ifdef __FreeBSD__	
 	struct mtx		ndis_mtx;
 #else /* __NetBSD__ */
-	kmutex_t		ndis_mtx;
+	struct simplelock	ndis_mtx;
 #endif	
         device_t		ndis_dev;
 	int			ndis_unit;
@@ -222,8 +228,18 @@ struct ndis_softc {
 	int			ndis_mmapcnt;
 };
 
+#ifdef __FreeBSD__
+
 #define NDIS_LOCK(_sc)		mtx_lock(&(_sc)->ndis_mtx)
 #define NDIS_UNLOCK(_sc)	mtx_unlock(&(_sc)->ndis_mtx)
+
+#else /* __NetBSD__ */
+
+#define NDIS_LOCK(_sc)		do {s = spl_sc(); simple_lock(&(_sc)->ndis_mtx);} while(0)
+#define NDIS_UNLOCK(_sc)	do {simple_unlock(&(_sc)->ndis_mtx); splx(s);} while(0)
+#define spl_sc() splnet()
+
+#endif
 
 /*static*/ __stdcall void ndis_txeof	    (ndis_handle, ndis_packet *, ndis_status);
 /*static*/ __stdcall void ndis_rxeof	    (ndis_handle, ndis_packet **, uint32_t);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_output.c,v 1.217 2012/06/25 15:28:39 christos Exp $	*/
+/*	$NetBSD: ip_output.c,v 1.200.4.1 2009/07/09 19:38:27 snj Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -91,7 +91,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_output.c,v 1.217 2012/06/25 15:28:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_output.c,v 1.200.4.1 2009/07/09 19:38:27 snj Exp $");
 
 #include "opt_pfil_hooks.h"
 #include "opt_inet.h"
@@ -100,7 +100,6 @@ __KERNEL_RCSID(0, "$NetBSD: ip_output.c,v 1.217 2012/06/25 15:28:39 christos Exp
 
 #include <sys/param.h>
 #include <sys/malloc.h>
-#include <sys/kmem.h>
 #include <sys/mbuf.h>
 #include <sys/errno.h>
 #include <sys/protosw.h>
@@ -125,11 +124,19 @@ __KERNEL_RCSID(0, "$NetBSD: ip_output.c,v 1.217 2012/06/25 15:28:39 christos Exp
 #include <netinet/ip_var.h>
 #include <netinet/ip_private.h>
 #include <netinet/in_offload.h>
-#include <netinet/portalgo.h>
 
 #ifdef MROUTING
 #include <netinet/ip_mroute.h>
 #endif
+
+#include <machine/stdarg.h>
+
+#ifdef IPSEC
+#include <netinet6/ipsec.h>
+#include <netinet6/ipsec_private.h>
+#include <netkey/key.h>
+#include <netkey/key_debug.h>
+#endif /*IPSEC*/
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
@@ -182,6 +189,9 @@ ip_output(struct mbuf *m0, ...)
 #ifdef IPSEC_NAT_T
 	int natt_frag = 0;
 #endif
+#ifdef IPSEC
+	struct secpolicy *sp = NULL;
+#endif /*IPSEC*/
 #ifdef FAST_IPSEC
 	struct inpcb *inp;
 	struct secpolicy *sp = NULL;
@@ -495,6 +505,159 @@ sendit:
 	/* Remember the current ip_len */
 	ip_len = ntohs(ip->ip_len);
 
+#ifdef IPSEC
+	/* get SP for this packet */
+	if (so == NULL)
+		sp = ipsec4_getpolicybyaddr(m, IPSEC_DIR_OUTBOUND,
+		    flags, &error);
+	else {
+		if (IPSEC_PCB_SKIP_IPSEC(sotoinpcb_hdr(so)->inph_sp,
+					 IPSEC_DIR_OUTBOUND))
+			goto skip_ipsec;
+		sp = ipsec4_getpolicybysock(m, IPSEC_DIR_OUTBOUND, so, &error);
+	}
+
+	if (sp == NULL) {
+		IPSEC_STATINC(IPSEC_STAT_IN_INVAL);
+		goto bad;
+	}
+
+	error = 0;
+
+	/* check policy */
+	switch (sp->policy) {
+	case IPSEC_POLICY_DISCARD:
+		/*
+		 * This packet is just discarded.
+		 */
+		IPSEC_STATINC(IPSEC_STAT_OUT_POLVIO);
+		goto bad;
+
+	case IPSEC_POLICY_BYPASS:
+	case IPSEC_POLICY_NONE:
+		/* no need to do IPsec. */
+		goto skip_ipsec;
+
+	case IPSEC_POLICY_IPSEC:
+		if (sp->req == NULL) {
+			/* XXX should be panic ? */
+			printf("ip_output: No IPsec request specified.\n");
+			error = EINVAL;
+			goto bad;
+		}
+		break;
+
+	case IPSEC_POLICY_ENTRUST:
+	default:
+		printf("ip_output: Invalid policy found. %d\n", sp->policy);
+	}
+
+#ifdef IPSEC_NAT_T
+	/*
+	 * NAT-T ESP fragmentation: don't do IPSec processing now,
+	 * we'll do it on each fragmented packet.
+	 */
+	if (sp->req->sav &&
+	    ((sp->req->sav->natt_type & UDP_ENCAP_ESPINUDP) ||
+	     (sp->req->sav->natt_type & UDP_ENCAP_ESPINUDP_NON_IKE))) {
+		if (ntohs(ip->ip_len) > sp->req->sav->esp_frag) {
+			natt_frag = 1;
+			mtu = sp->req->sav->esp_frag;
+			goto skip_ipsec;
+		}
+	}
+#endif /* IPSEC_NAT_T */
+
+	/*
+	 * ipsec4_output() expects ip_len and ip_off in network
+	 * order.  They have been set to network order above.
+	 */
+
+    {
+	struct ipsec_output_state state;
+	bzero(&state, sizeof(state));
+	state.m = m;
+	if (flags & IP_ROUTETOIF) {
+		state.ro = &iproute;
+		memset(&iproute, 0, sizeof(iproute));
+	} else
+		state.ro = ro;
+	state.dst = sintocsa(dst);
+
+	/*
+	 * We can't defer the checksum of payload data if
+	 * we're about to encrypt/authenticate it.
+	 *
+	 * XXX When we support crypto offloading functions of
+	 * XXX network interfaces, we need to reconsider this,
+	 * XXX since it's likely that they'll support checksumming,
+	 * XXX as well.
+	 */
+	if (m->m_pkthdr.csum_flags & (M_CSUM_TCPv4|M_CSUM_UDPv4)) {
+		in_delayed_cksum(m);
+		m->m_pkthdr.csum_flags &= ~(M_CSUM_TCPv4|M_CSUM_UDPv4);
+	}
+
+	error = ipsec4_output(&state, sp, flags);
+
+	m = state.m;
+	if (flags & IP_ROUTETOIF) {
+		/*
+		 * if we have tunnel mode SA, we may need to ignore
+		 * IP_ROUTETOIF.
+		 */
+		if (state.ro != &iproute ||
+		    rtcache_validate(state.ro) != NULL) {
+			flags &= ~IP_ROUTETOIF;
+			ro = state.ro;
+		}
+	} else
+		ro = state.ro;
+	dst = satocsin(state.dst);
+	if (error) {
+		/* mbuf is already reclaimed in ipsec4_output. */
+		m0 = NULL;
+		switch (error) {
+		case EHOSTUNREACH:
+		case ENETUNREACH:
+		case EMSGSIZE:
+		case ENOBUFS:
+		case ENOMEM:
+			break;
+		default:
+			printf("ip4_output (ipsec): error code %d\n", error);
+			/*fall through*/
+		case ENOENT:
+			/* don't show these error codes to the user */
+			error = 0;
+			break;
+		}
+		goto bad;
+	}
+
+	/* be sure to update variables that are affected by ipsec4_output() */
+	ip = mtod(m, struct ip *);
+	hlen = ip->ip_hl << 2;
+	ip_len = ntohs(ip->ip_len);
+
+	if ((rt = rtcache_validate(ro)) == NULL) {
+		if ((flags & IP_ROUTETOIF) == 0) {
+			printf("ip_output: "
+				"can't update route after IPsec processing\n");
+			error = EHOSTUNREACH;	/*XXX*/
+			goto bad;
+		}
+	} else {
+		/* nobody uses ia beyond here */
+		if (state.encap) {
+			ifp = rt->rt_ifp;
+			if ((mtu = rt->rt_rmx.rmx_mtu) == 0)
+				mtu = ifp->if_mtu;
+		}
+	}
+    }
+skip_ipsec:
+#endif /*IPSEC*/
 #ifdef FAST_IPSEC
 	/*
 	 * Check the security policy (SP) for the packet and, if
@@ -655,16 +818,19 @@ spd_done:
 			}
 		}
 
+#ifdef IPSEC
+		/* clean ipsec history once it goes out of the node */
+		ipsec_delaux(m);
+#endif
+
 		if (__predict_true(
 		    (m->m_pkthdr.csum_flags & M_CSUM_TSOv4) == 0 ||
 		    (ifp->if_capenable & IFCAP_TSOv4) != 0)) {
-			KERNEL_LOCK(1, NULL);
 			error =
 			    (*ifp->if_output)(ifp, m,
 				(m->m_flags & M_MCAST) ?
 				    sintocsa(rdst) : sintocsa(dst),
 				rt);
-			KERNEL_UNLOCK_ONE(NULL);
 		} else {
 			error =
 			    ip_tso_output(ifp, m,
@@ -716,6 +882,11 @@ spd_done:
 				ia->ia_ifa.ifa_data.ifad_outbytes +=
 				    ntohs(ip->ip_len);
 #endif
+#ifdef IPSEC
+			/* clean ipsec history once it goes out of the node */
+			ipsec_delaux(m);
+#endif /* IPSEC */
+
 #ifdef IPSEC_NAT_T
 			/*
 			 * If we get there, the packet has not been handeld by
@@ -725,18 +896,16 @@ spd_done:
 			 */
 			if (natt_frag) {
 				error = ip_output(m, opt,
-				    ro, flags | IP_RAWOUTPUT | IP_NOIPNEWID, imo, so, mtu_p);
+				    ro, flags, imo, so, mtu_p);
 			} else
 #endif /* IPSEC_NAT_T */
 			{
 				KASSERT((m->m_pkthdr.csum_flags &
 				    (M_CSUM_UDPv4 | M_CSUM_TCPv4)) == 0);
-				KERNEL_LOCK(1, NULL);
 				error = (*ifp->if_output)(ifp, m,
 				    (m->m_flags & M_MCAST) ?
 					sintocsa(rdst) : sintocsa(dst),
 				    rt);
-				KERNEL_UNLOCK_ONE(NULL);
 			}
 		} else
 			m_freem(m);
@@ -747,6 +916,13 @@ spd_done:
 done:
 	rtcache_free(&iproute);
 
+#ifdef IPSEC
+	if (sp != NULL) {
+		KEYDEBUG(KEYDEBUG_IPSEC_STAMP,
+			printf("DP ip_output call free SP:%p\n", sp));
+		key_freesp(sp);
+	}
+#endif /* IPSEC */
 #ifdef FAST_IPSEC
 	if (sp != NULL)
 		KEY_FREESP(&sp);
@@ -828,21 +1004,14 @@ ip_fragment(struct mbuf *m, struct ifnet *ifp, u_long mtu)
 			goto sendorfree;
 		}
 		m->m_pkthdr.len = mhlen + len;
-		m->m_pkthdr.rcvif = NULL;
+		m->m_pkthdr.rcvif = (struct ifnet *)0;
 		mhip->ip_sum = 0;
-		KASSERT((m->m_pkthdr.csum_flags & M_CSUM_IPv4) == 0);
 		if (sw_csum & M_CSUM_IPv4) {
 			mhip->ip_sum = in_cksum(m, mhlen);
+			KASSERT((m->m_pkthdr.csum_flags & M_CSUM_IPv4) == 0);
 		} else {
-			/*
-			 * checksum is hw-offloaded or not necessary.
-			 */
-			m->m_pkthdr.csum_flags |=
-			    m0->m_pkthdr.csum_flags & M_CSUM_IPv4;
+			m->m_pkthdr.csum_flags |= M_CSUM_IPv4;
 			m->m_pkthdr.csum_data |= mhlen << 16;
-			KASSERT(!(ifp != NULL &&
-			    IN_NEED_CHECKSUM(ifp, M_CSUM_IPv4))
-			    || (m->m_pkthdr.csum_flags & M_CSUM_IPv4) != 0);
 		}
 		IP_STATINC(IP_STAT_OFRAGMENTS);
 		fragments++;
@@ -861,11 +1030,7 @@ ip_fragment(struct mbuf *m, struct ifnet *ifp, u_long mtu)
 		ip->ip_sum = in_cksum(m, hlen);
 		m->m_pkthdr.csum_flags &= ~M_CSUM_IPv4;
 	} else {
-		/*
-		 * checksum is hw-offloaded or not necessary.
-		 */
-		KASSERT(!(ifp != NULL && IN_NEED_CHECKSUM(ifp, M_CSUM_IPv4))
-		   || (m->m_pkthdr.csum_flags & M_CSUM_IPv4) != 0);
+		KASSERT(m->m_pkthdr.csum_flags & M_CSUM_IPv4);
 		KASSERT(M_CSUM_DATA_IPv4_IPHL(m->m_pkthdr.csum_data) >=
 			sizeof(struct ip));
 	}
@@ -1036,7 +1201,7 @@ ip_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 	struct inpcb *inp = sotoinpcb(so);
 	int optval = 0;
 	int error = 0;
-#if defined(FAST_IPSEC)
+#if defined(IPSEC) || defined(FAST_IPSEC)
 	struct lwp *l = curlwp;	/*XXX*/
 #endif
 
@@ -1058,12 +1223,10 @@ ip_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 
 		case IP_TOS:
 		case IP_TTL:
-		case IP_MINTTL:
 		case IP_RECVOPTS:
 		case IP_RECVRETOPTS:
 		case IP_RECVDSTADDR:
 		case IP_RECVIF:
-		case IP_RECVTTL:
 			error = sockopt_getint(sopt, &optval);
 			if (error)
 				break;
@@ -1075,13 +1238,6 @@ ip_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 
 			case IP_TTL:
 				inp->inp_ip.ip_ttl = optval;
-				break;
-
-			case IP_MINTTL:
-				if (optval > 0 && optval <= MAXTTL)
-					inp->inp_ip_minttl = optval;
-				else
-					error = EINVAL;
 				break;
 #define	OPTSET(bit) \
 	if (optval) \
@@ -1103,10 +1259,6 @@ ip_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 
 			case IP_RECVIF:
 				OPTSET(INP_RECVIF);
-				break;
-
-			case IP_RECVTTL:
-				OPTSET(INP_RECVTTL);
 				break;
 			}
 		break;
@@ -1143,20 +1295,25 @@ ip_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 			/* INP_UNLOCK(inp); */
 			break;
 
-		case IP_PORTALGO:
-			error = sockopt_getint(sopt, &optval);
-			if (error)
-				break;
-
-			error = portalgo_algo_index_select(
-			    (struct inpcb_hdr *)inp, optval);
-			break;
-
-#if defined(FAST_IPSEC)
+#if defined(IPSEC) || defined(FAST_IPSEC)
 		case IP_IPSEC_POLICY:
+		    {
+			int priv = 0;
+
+#ifdef __NetBSD__
+			if (l == 0 || kauth_authorize_generic(l->l_cred,
+			    KAUTH_GENERIC_ISSUSER, NULL))
+				priv = 0;
+			else
+				priv = 1;
+#else
+			priv = (in6p->in6p_socket->so_state & SS_PRIV);
+#endif
+
 			error = ipsec4_set_policy(inp, sopt->sopt_name,
-			    sopt->sopt_data, sopt->sopt_size, l->l_cred);
+			    sopt->sopt_data, sopt->sopt_size, priv);
 			break;
+		    }
 #endif /*IPSEC*/
 
 		default:
@@ -1185,12 +1342,10 @@ ip_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 
 		case IP_TOS:
 		case IP_TTL:
-		case IP_MINTTL:
 		case IP_RECVOPTS:
 		case IP_RECVRETOPTS:
 		case IP_RECVDSTADDR:
 		case IP_RECVIF:
-		case IP_RECVTTL:
 		case IP_ERRORMTU:
 			switch (sopt->sopt_name) {
 			case IP_TOS:
@@ -1199,10 +1354,6 @@ ip_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 
 			case IP_TTL:
 				optval = inp->inp_ip.ip_ttl;
-				break;
-
-			case IP_MINTTL:
-				optval = inp->inp_ip_minttl;
 				break;
 
 			case IP_ERRORMTU:
@@ -1226,15 +1377,11 @@ ip_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 			case IP_RECVIF:
 				optval = OPTBIT(INP_RECVIF);
 				break;
-
-			case IP_RECVTTL:
-				optval = OPTBIT(INP_RECVTTL);
-				break;
 			}
 			error = sockopt_setint(sopt, optval);
 			break;
 
-#if 0	/* defined(FAST_IPSEC) */
+#if 0	/* defined(IPSEC) || defined(FAST_IPSEC) */
 		case IP_IPSEC_POLICY:
 		{
 			struct mbuf *m = NULL;
@@ -1264,11 +1411,6 @@ ip_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 
 			error = sockopt_setint(sopt, optval);
 
-			break;
-
-		case IP_PORTALGO:
-			optval = ((struct inpcb_hdr *)inp)->inph_portalgo;
-			error = sockopt_setint(sopt, optval);
 			break;
 
 		default:
@@ -1469,27 +1611,29 @@ ip_getoptval(const struct sockopt *sopt, u_int8_t *val, u_int maxval)
 int
 ip_setmoptions(struct ip_moptions **imop, const struct sockopt *sopt)
 {
+	int error = 0;
+	int i;
 	struct in_addr addr;
 	struct ip_mreq lmreq, *mreq;
 	struct ifnet *ifp;
 	struct ip_moptions *imo = *imop;
-	int i, ifindex, error = 0;
+	int ifindex;
 
 	if (imo == NULL) {
 		/*
 		 * No multicast option buffer attached to the pcb;
 		 * allocate one and initialize to default values.
 		 */
-		imo = kmem_intr_alloc(sizeof(*imo), KM_NOSLEEP);
+		imo = malloc(sizeof(*imo), M_IPMOPTS, M_NOWAIT);
 		if (imo == NULL)
-			return ENOBUFS;
+			return (ENOBUFS);
 
+		*imop = imo;
 		imo->imo_multicast_ifp = NULL;
 		imo->imo_multicast_addr.s_addr = INADDR_ANY;
 		imo->imo_multicast_ttl = IP_DEFAULT_MULTICAST_TTL;
 		imo->imo_multicast_loop = IP_DEFAULT_MULTICAST_LOOP;
 		imo->imo_num_memberships = 0;
-		*imop = imo;
 	}
 
 	switch (sopt->sopt_name) {
@@ -1684,11 +1828,11 @@ ip_setmoptions(struct ip_moptions **imop, const struct sockopt *sopt)
 	    imo->imo_multicast_ttl == IP_DEFAULT_MULTICAST_TTL &&
 	    imo->imo_multicast_loop == IP_DEFAULT_MULTICAST_LOOP &&
 	    imo->imo_num_memberships == 0) {
-		kmem_free(imo, sizeof(*imo));
+		free(*imop, M_IPMOPTS);
 		*imop = NULL;
 	}
 
-	return error;
+	return (error);
 }
 
 /*
@@ -1750,7 +1894,7 @@ ip_freemoptions(struct ip_moptions *imo)
 	if (imo != NULL) {
 		for (i = 0; i < imo->imo_num_memberships; ++i)
 			in_delmulti(imo->imo_membership[i]);
-		kmem_free(imo, sizeof(*imo));
+		free(imo, M_IPMOPTS);
 	}
 }
 

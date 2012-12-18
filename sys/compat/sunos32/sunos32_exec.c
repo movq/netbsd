@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos32_exec.c,v 1.33 2012/02/19 21:06:44 rmind Exp $	 */
+/*	$NetBSD: sunos32_exec.c,v 1.30 2008/10/15 06:51:20 wrstuden Exp $	 */
 
 /*
  * Copyright (c) 2001 Matthew R. Green
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos32_exec.c,v 1.33 2012/02/19 21:06:44 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos32_exec.c,v 1.30 2008/10/15 06:51:20 wrstuden Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -36,7 +36,6 @@ __KERNEL_RCSID(0, "$NetBSD: sunos32_exec.c,v 1.33 2012/02/19 21:06:44 rmind Exp 
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/mount.h>
-#include <sys/exec.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -61,42 +60,43 @@ void	syscall(void);
 
 struct uvm_object *emul_sunos32_object;
 
-struct emul emul_sunos = {
-	.e_name =		"sunos32",
-	.e_path =		"/emul/sunos32",
+const struct emul emul_sunos = {
+	"sunos32",
+	"/emul/sunos",
 #ifndef __HAVE_MINIMAL_EMUL
-	.e_flags =		0,
-	.e_errno =		NULL,
-	.e_nosys =		SUNOS32_SYS_syscall,
-	.e_nsysent =		SUNOS32_SYS_NSYSENT,
+	0,
+	NULL,
+	SUNOS32_SYS_syscall,
+	SUNOS32_SYS_NSYSENT,
 #endif
-	.e_sysent =		sunos32_sysent,
+	sunos32_sysent,
 #ifdef SYSCALL_DEBUG
-	.e_syscallnames =	sunos32_syscallnames,
+	sunos32_syscallnames,
 #else
-	.e_syscallnames =	NULL,
+	NULL,
 #endif
-	.e_sendsig =		sunos32_sendsig,
-	.e_trapsignal =		trapsignal,
-	.e_tracesig =		NULL,
-	.e_sigcode =		sunos_sigcode,
-	.e_esigcode =		sunos_esigcode,
-	.e_sigobject =		&emul_sunos32_object,
-	.e_setregs =		setregs,
-	.e_proc_exec =		NULL,
-	.e_proc_fork =		NULL,
-	.e_proc_exit =		NULL,
-	.e_lwp_fork =		NULL,
-	.e_lwp_exit =		NULL,
+	sunos32_sendsig,
+	trapsignal,
+	NULL,
+	sunos_sigcode,
+	sunos_esigcode,
+	&emul_sunos32_object,
+	sunos32_setregs,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
 #ifdef __HAVE_SYSCALL_INTERN
-	.e_syscall_intern =	sunos_syscall_intern,
+	sunos_syscall_intern,
 #else
-	.e_syscall_intern =	syscall,
+	syscall,
 #endif
-	.e_sysctlovly =		NULL,
-	.e_fault =		NULL,
-	.e_vm_default_addr =	uvm_default_mapaddr,
-	.e_usertrap =		NULL,
-	.e_ucsize =		0,
-	.e_startlwp =		NULL
+	NULL,
+	NULL,
+	uvm_default_mapaddr,
+	NULL,
+	NULL,
+	0,
+	NULL,
 };

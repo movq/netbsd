@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.114 2012/07/28 23:08:56 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.98 2008/07/02 17:28:55 ad Exp $	*/
 
 /*-
  * Copyright (c) 2006 Izumi Tsutsui.  All rights reserved.
@@ -50,11 +50,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.114 2012/07/28 23:08:56 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.98 2008/07/02 17:28:55 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "opt_modular.h"
 #include "opt_execfmt.h"
 
 #include <sys/param.h>
@@ -62,19 +61,19 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.114 2012/07/28 23:08:56 matt Exp $");
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
+#include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/kcore.h>
 #include <sys/boot_flag.h>
 #include <sys/ksyms.h>
 #include <sys/cpu.h>
-#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/bootinfo.h>
+#include <machine/psl.h>
 
 #include <mips/locore.h>
-#include <mips/psl.h>
 
 #include <dev/cons.h>
 
@@ -86,17 +85,22 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.114 2012/07/28 23:08:56 matt Exp $");
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-#include <mips/db_machdep.h>
+#if NKSYMS || defined(DDB) || defined(LKM)
+#include <machine/db_machdep.h>
 #include <ddb/db_extern.h>
 #define ELFSIZE		DB_ELFSIZE
 #include <sys/exec_elf.h>
 #endif
 
+/* Our exported CPU info; we can have only one. */
+struct cpu_info cpu_info_store;
+
 /* Maps for VM objects. */
+struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
-void	*bootinfo = NULL;	/* pointer to bootinfo structure */
+int	physmem;		/* Total physical memory */
+char	*bootinfo = NULL;	/* pointer to bootinfo structure */
 
 char	bootstring[512];	/* Boot command */
 int	netboot;		/* Are we netbooting? */
@@ -121,26 +125,33 @@ static const char * const cobalt_model[] =
 phys_ram_seg_t mem_clusters[VM_PHYSSEG_MAX];
 int mem_cluster_cnt;
 
-void	mach_init(int32_t, u_int, int32_t);
+void	mach_init(unsigned int, u_int, char*);
 void	decode_bootstring(void);
 static char *strtok_light(char *, const char);
 static u_int read_board_id(void);
 
+/*
+ * safepri is a safe priority for sleep to set for a spin-wait during
+ * autoconfiguration or after a panic.  Used as an argument to splx().
+ */
+int	safepri = MIPS1_PSL_LOWIPL;
+
 extern char *esym;
+extern struct user *proc0paddr;
+
+
 
 /*
  * Do all the stuff that locore normally does before calling main().
  */
 void
-mach_init(int32_t memsize32, u_int bim, int32_t bip32)
+mach_init(unsigned int memsize, u_int bim, char *bip)
 {
-	intptr_t memsize = (int32_t)memsize32;
-	char *kernend;
-	char *bip = (char *)(intptr_t)(int32_t)bip32;
+	char *kernend, *v;
 	u_long first, last;
 	extern char edata[], end[];
 	const char *bi_msg;
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	int nsym = 0;
 	char *ssym = 0;
 	struct btinfo_symtab *bi_syms;
@@ -153,7 +164,7 @@ mach_init(int32_t memsize32, u_int bim, int32_t bip32)
 	if (memcmp(((Elf_Ehdr *)end)->e_ident, ELFMAG, SELFMAG) == 0 &&
 	    ((Elf_Ehdr *)end)->e_ident[EI_CLASS] == ELFCLASS) {
 		esym = end;
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 		esym += ((Elf_Ehdr *)end)->e_entry;
 #endif
 		kernend = (char *)mips_round_page(esym);
@@ -174,14 +185,15 @@ mach_init(int32_t memsize32, u_int bim, int32_t bip32)
 		 */
 		memset(edata, 0, kernend - edata);
 
+		/*
+		 * XXX
+		 * lwp0 and cpu_info_store are allocated in BSS
+		 * and initialized before mach_init() is called,
+		 * so restore them again.
+		 */
+		lwp0.l_cpu = &cpu_info_store;
+		cpu_info_store.ci_curlwp = &lwp0;
 	}
-
-	/*
-	 * Copy exception-dispatch code down to exception vector.
-	 * Initialize locore-function vector.
-	 * Clear out the I and D caches.
-	 */
-	mips_vector_init(NULL, false);
 
 	/* Check for valid bootinfo passed from bootstrap */
 	if (bim == BOOTINFO_MAGIC) {
@@ -189,26 +201,21 @@ mach_init(int32_t memsize32, u_int bim, int32_t bip32)
 
 		bootinfo = bip;
 		bi_magic = lookup_bootinfo(BTINFO_MAGIC);
-		if (bi_magic == NULL) {
-			bi_msg = "missing bootinfo structure";
-			bim = (uintptr_t)bip;
-		} else if (bi_magic->magic != BOOTINFO_MAGIC) {
-			bi_msg = "invalid bootinfo structure";
-			bim = bi_magic->magic;
-		} else
+		if (bi_magic == NULL || bi_magic->magic != BOOTINFO_MAGIC)
+			bi_msg = "invalid bootinfo structure.\n";
+		else
 			bi_msg = NULL;
-	} else {
-		bi_msg = "invalid bootinfo (standalone boot?)";
-	}
+	} else
+		bi_msg = "invalid bootinfo (standalone boot?)\n";
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	bi_syms = lookup_bootinfo(BTINFO_SYMTAB);
 
 	/* Load symbol table if present */
 	if (bi_syms != NULL) {
 		nsym = bi_syms->nsym;
-		ssym = (void *)(intptr_t)bi_syms->ssym;
-		esym = (void *)(intptr_t)bi_syms->esym;
+		ssym = (void *)bi_syms->ssym;
+		esym = (void *)bi_syms->esym;
 		kernend = (void *)mips_round_page(esym);
 	}
 #endif
@@ -250,11 +257,17 @@ mach_init(int32_t memsize32, u_int bim, int32_t bip32)
 
 	consinit();
 
-	KASSERT(&lwp0 == curlwp);
 	if (bi_msg != NULL)
-		printf("%s: magic=%#x bip=%p\n", bi_msg, bim, bip);
+		printf(bi_msg);
 
 	uvm_setpagesize();
+
+	/*
+	 * Copy exception-dispatch code down to exception vector.
+	 * Initialize locore-function vector.
+	 * Clear out the I and D caches.
+	 */
+	mips_vector_init();
 
 	/*
 	 * The boot command is passed in the top 512 bytes,
@@ -270,12 +283,13 @@ mach_init(int32_t memsize32, u_int bim, int32_t bip32)
 
 	decode_bootstring();
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	/* init symbols if present */
 	if ((bi_syms != NULL) && (esym != NULL))
-		ksyms_addsyms_elf(esym - ssym, ssym, esym);
+		ksyms_init(esym - ssym, ssym, esym);
+	else
+		ksyms_init(0, NULL, NULL);
 #endif
-	KASSERT(&lwp0 == curlwp);
 #ifdef DDB
 	if (boothowto & RB_KDB)
 		Debugger();
@@ -303,7 +317,11 @@ mach_init(int32_t memsize32, u_int bim, int32_t bip32)
 	/*
 	 * Allocate space for proc0's USPACE.
 	 */
-	mips_init_lwp0_uarea();
+	v = (char *)uvm_pageboot_alloc(USPACE);
+	lwp0.l_addr = proc0paddr = (struct user *)v;
+	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1;
+	proc0paddr->u_pcb.pcb_context[11] =
+	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
 }
 
 /*
@@ -347,7 +365,8 @@ cpu_reboot(int howto, char *bootstr)
 {
 
 	/* Take a snapshot before clobbering any registers. */
-	savectx(curpcb);
+	if (curlwp)
+		savectx((struct user *)curpcb);
 
 	if (cold) {
 		howto |= RB_HALT;
@@ -377,8 +396,6 @@ cpu_reboot(int howto, char *bootstr)
 
  haltsys:
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	if (howto & RB_HALT) {
 		printf("\n");
@@ -485,7 +502,7 @@ strtok_light(char *str, const char sep)
  * Look up information in bootinfo of boot loader.
  */
 void *
-lookup_bootinfo(unsigned int type)
+lookup_bootinfo(int type)
 {
 	struct btinfo_common *bt;
 	char *help = bootinfo;
@@ -498,12 +515,12 @@ lookup_bootinfo(unsigned int type)
 
 	do {
 		bt = (struct btinfo_common *)help;
-		printf("Type %d @%p\n", bt->type, (void *)(intptr_t)bt);
+		printf("Type %d @0x%x\n", bt->type, (u_int)bt);
 		if (bt->type == type)
 			return (void *)help;
 		help += bt->next;
 	} while (bt->next != 0 &&
-	    (uintptr_t)help < (uintptr_t)bootinfo + BOOTINFO_SIZE);
+	    (size_t)help < (size_t)bootinfo + BOOTINFO_SIZE);
 
 	return NULL;
 }

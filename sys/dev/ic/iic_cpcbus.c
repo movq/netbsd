@@ -1,4 +1,4 @@
-/*	$NetBSD: iic_cpcbus.c,v 1.13 2012/10/27 17:18:20 chs Exp $	*/
+/*	$NetBSD: iic_cpcbus.c,v 1.10 2008/04/28 20:23:50 martin Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iic_cpcbus.c,v 1.13 2012/10/27 17:18:20 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iic_cpcbus.c,v 1.10 2008/04/28 20:23:50 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -41,19 +41,20 @@ __KERNEL_RCSID(0, "$NetBSD: iic_cpcbus.c,v 1.13 2012/10/27 17:18:20 chs Exp $");
 #include <dev/ic/cpc700var.h>
 
 struct iic_cpcbus_softc {
+	struct device sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 	void *sc_ih;
 };
 
-static int	iic_cpcbus_match(device_t, cfdata_t, void *);
-static void	iic_cpcbus_attach(device_t, device_t, void *);
+static int	iic_cpcbus_match(struct device *, struct cfdata *, void *);
+static void	iic_cpcbus_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(iic_cpcbus, sizeof(struct iic_cpcbus_softc),
+CFATTACH_DECL(iic_cpcbus, sizeof(struct iic_cpcbus_softc),
     iic_cpcbus_match, iic_cpcbus_attach, NULL, NULL);
 
 int
-iic_cpcbus_match(device_t parent, cfdata_t cf, void *aux)
+iic_cpcbus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct cpcbus_attach_args *caa = aux;
 
@@ -61,10 +62,10 @@ iic_cpcbus_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-iic_cpcbus_attach(device_t parent, device_t self, void *aux)
+iic_cpcbus_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct cpcbus_attach_args *caa = aux;
-	struct iic_cpcbus_softc *sc = device_private(self);
+	struct iic_cpcbus_softc *sc = (struct iic_cpcbus_softc *)self;
 
 	sc->sc_iot = caa->cpca_tag;
 	if (bus_space_map(sc->sc_iot, caa->cpca_addr, CPC_IIC_SIZE, 0,

@@ -1,4 +1,4 @@
-/* $NetBSD: wss_pnpbios.c,v 1.20 2011/07/01 18:14:15 dyoung Exp $ */
+/* $NetBSD: wss_pnpbios.c,v 1.16 2008/04/04 22:18:05 cegger Exp $ */
 /*
  * Copyright (c) 1999
  * 	Matthias Drochner.  All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wss_pnpbios.c,v 1.20 2011/07/01 18:14:15 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wss_pnpbios.c,v 1.16 2008/04/04 22:18:05 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -36,7 +36,7 @@ __KERNEL_RCSID(0, "$NetBSD: wss_pnpbios.c,v 1.20 2011/07/01 18:14:15 dyoung Exp 
 #include <sys/device.h>
 #include <sys/proc.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -50,12 +50,12 @@ __KERNEL_RCSID(0, "$NetBSD: wss_pnpbios.c,v 1.20 2011/07/01 18:14:15 dyoung Exp 
 #include <dev/isa/wssreg.h>
 #include <dev/isa/wssvar.h>
 
-int wss_pnpbios_match(device_t, cfdata_t, void *);
-void wss_pnpbios_attach(device_t, device_t, void *);
+int wss_pnpbios_match(struct device *, struct cfdata *, void *);
+void wss_pnpbios_attach(struct device *, struct device *, void *);
 int wss_pnpbios_hints_index(const char *);
 
 
-CFATTACH_DECL_NEW(wss_pnpbios, sizeof(struct wss_softc),
+CFATTACH_DECL(wss_pnpbios, sizeof(struct wss_softc),
     wss_pnpbios_match, wss_pnpbios_attach, NULL, NULL);
 
 struct wss_pnpbios_hint {
@@ -74,7 +74,8 @@ struct wss_pnpbios_hint wss_pnpbios_hints[] = {
 
 
 int
-wss_pnpbios_hints_index(const char *idstr)
+wss_pnpbios_hints_index(idstr)
+	const char *idstr;
 {
 	int idx = 0;
 
@@ -88,8 +89,8 @@ wss_pnpbios_hints_index(const char *idstr)
 }
 
 int
-wss_pnpbios_match(device_t parent,
-    cfdata_t match, void *aux)
+wss_pnpbios_match(struct device *parent,
+    struct cfdata *match, void *aux)
 {
 	struct pnpbiosdev_attach_args *aa = aux;
 
@@ -100,10 +101,10 @@ wss_pnpbios_match(device_t parent,
 }
 
 void
-wss_pnpbios_attach(device_t parent, device_t self,
+wss_pnpbios_attach(struct device *parent, struct device *self,
     void *aux)
 {
-	struct wss_softc *sc = device_private(self);
+	struct wss_softc *sc = (void *)self;
 	struct pnpbiosdev_attach_args *aa = aux;
 	struct audio_attach_args arg;
 	struct wss_pnpbios_hint *wph;
@@ -128,7 +129,6 @@ wss_pnpbios_attach(device_t parent, device_t self,
 		return;
 	}
 
-	sc->sc_ad1848.sc_ad1848.sc_dev = self;
 	sc->wss_ic = aa->ic;
 
 	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->wss_irq, NULL)) {

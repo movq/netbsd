@@ -1,4 +1,4 @@
-/*	$NetBSD: Locore.c,v 1.4 2009/03/14 15:36:14 dsl Exp $	*/
+/*	$NetBSD: Locore.c,v 1.3 2005/12/11 12:19:05 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -59,7 +59,8 @@ void abort(void)
 }
 
 static int
-openfirmware(void *arg)
+openfirmware(arg)
+	void *arg;
 {
 
 	(*openfirmware_entry)(arg);

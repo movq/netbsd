@@ -1,10 +1,11 @@
-#	$NetBSD: Makefile,v 1.6 2011/11/01 13:19:53 chs Exp $
+#	$NetBSD: Makefile,v 1.5 2001/12/12 01:49:39 tv Exp $
 
-WARNS=	4
 PROG=	installboot
 NOMAN=	# defined
 SRCS=	installboot.c disklabel.c
 BINDIR=	/usr/mdec
 LDADD=	-lkvm
+
+CFLAGS+=-Wall
 
 .include <bsd.prog.mk>

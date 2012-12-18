@@ -1,4 +1,4 @@
-/* $NetBSD: segwrite.c,v 1.20 2010/02/16 23:20:30 mlelstv Exp $ */
+/* $NetBSD: segwrite.c,v 1.19 2008/05/16 09:21:59 hannken Exp $ */
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -440,8 +440,7 @@ lfs_update_single(struct lfs * fs, struct segment * sp, daddr_t lbn,
 	struct uvnode *vp;
 	daddr_t daddr, ooff;
 	int num, error;
-	int osize;
-	int frags, ofrags;
+	int bb, osize, obb;
 
 	vp = sp->vp;
 	ip = VTOI(vp);
@@ -452,23 +451,23 @@ lfs_update_single(struct lfs * fs, struct segment * sp, daddr_t lbn,
 	if (daddr > 0)
 		daddr = dbtofsb(fs, daddr);
 
-	frags = numfrags(fs, size);
+	bb = fragstofsb(fs, numfrags(fs, size));
 	switch (num) {
 	case 0:
 		ooff = ip->i_ffs1_db[lbn];
 		if (ooff == UNWRITTEN)
-			ip->i_ffs1_blocks += frags;
+			ip->i_ffs1_blocks += bb;
 		else {
 			/* possible fragment truncation or extension */
-			ofrags = btofsb(fs, ip->i_lfs_fragsize[lbn]);
-			ip->i_ffs1_blocks += (frags - ofrags);
+			obb = btofsb(fs, ip->i_lfs_fragsize[lbn]);
+			ip->i_ffs1_blocks += (bb - obb);
 		}
 		ip->i_ffs1_db[lbn] = ndaddr;
 		break;
 	case 1:
 		ooff = ip->i_ffs1_ib[a[0].in_off];
 		if (ooff == UNWRITTEN)
-			ip->i_ffs1_blocks += frags;
+			ip->i_ffs1_blocks += bb;
 		ip->i_ffs1_ib[a[0].in_off] = ndaddr;
 		break;
 	default:
@@ -479,7 +478,7 @@ lfs_update_single(struct lfs * fs, struct segment * sp, daddr_t lbn,
 
 		ooff = ((ufs_daddr_t *) bp->b_data)[ap->in_off];
 		if (ooff == UNWRITTEN)
-			ip->i_ffs1_blocks += frags;
+			ip->i_ffs1_blocks += bb;
 		((ufs_daddr_t *) bp->b_data)[ap->in_off] = ndaddr;
 		(void) VOP_BWRITE(bp);
 	}
@@ -521,7 +520,7 @@ lfs_updatemeta(struct segment * sp)
 	struct uvnode *vp;
 	daddr_t lbn;
 	int i, nblocks, num;
-	int frags;
+	int bb;
 	int bytesleft, size;
 
 	vp = sp->vp;
@@ -586,10 +585,10 @@ lfs_updatemeta(struct segment * sp)
 		for (bytesleft = sbp->b_bcount; bytesleft > 0;
 		    bytesleft -= fs->lfs_bsize) {
 			size = MIN(bytesleft, fs->lfs_bsize);
-			frags = numfrags(fs, size);
+			bb = fragstofsb(fs, numfrags(fs, size));
 			lbn = *sp->start_lbp++;
 			lfs_update_single(fs, sp, lbn, fs->lfs_offset, size);
-			fs->lfs_offset += frags;
+			fs->lfs_offset += bb;
 		}
 
 	}

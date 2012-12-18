@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_sem_14.c,v 1.16 2011/01/19 10:21:16 tsutsui Exp $	*/
+/*	$NetBSD: sysv_sem_14.c,v 1.14 2008/04/28 20:23:41 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -31,12 +31,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_sem_14.c,v 1.16 2011/01/19 10:21:16 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_sem_14.c,v 1.14 2008/04/28 20:23:41 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signal.h>
 #include <sys/proc.h>
+#include <sys/mount.h>
 #include <sys/sem.h>
 
 #ifndef SYSVSEM
@@ -47,6 +48,32 @@ __KERNEL_RCSID(0, "$NetBSD: sysv_sem_14.c,v 1.16 2011/01/19 10:21:16 tsutsui Exp
 
 #include <compat/sys/sem.h>
 
+void
+semid_ds14_to_native(struct semid_ds14  *osembuf, struct semid_ds *sembuf)
+{
+
+	ipc_perm14_to_native(&osembuf->sem_perm, &sembuf->sem_perm);
+
+#define	CVT(x)	sembuf->x = osembuf->x
+	CVT(sem_nsems);
+	CVT(sem_otime);
+	CVT(sem_ctime);
+#undef CVT
+}
+
+void
+native_to_semid_ds14(struct semid_ds *sembuf, struct semid_ds14 *osembuf)
+{
+
+	memset(sembuf, 0, sizeof *sembuf);
+	native_to_ipc_perm14(&sembuf->sem_perm, &osembuf->sem_perm);
+
+#define	CVT(x)	osembuf->x = sembuf->x
+	CVT(sem_nsems);
+	CVT(sem_otime);
+	CVT(sem_ctime);
+#undef CVT
+}
 
 int
 compat_14_sys___semctl(struct lwp *l, const struct compat_14_sys___semctl_args *uap, register_t *retval)
@@ -75,7 +102,7 @@ compat_14_sys___semctl(struct lwp *l, const struct compat_14_sys___semctl_args *
 			error = copyin(arg.buf, &osembuf, sizeof(osembuf));
 			if (error)
 				return (error);
-			__semid_ds14_to_native(&osembuf, &sembuf);
+			semid_ds14_to_native(&osembuf, &sembuf);
 		}
 	}
 
@@ -83,7 +110,7 @@ compat_14_sys___semctl(struct lwp *l, const struct compat_14_sys___semctl_args *
 	    pass_arg, retval);
 
 	if (error == 0 && cmd == IPC_STAT) {
-		__native_to_semid_ds14(&sembuf, &osembuf);
+		native_to_semid_ds14(&sembuf, &osembuf);
 		error = copyout(&osembuf, arg.buf, sizeof(osembuf));
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.25 2012/07/29 18:05:45 mlelstv Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.22 2008/04/28 20:23:33 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.25 2012/07/29 18:05:45 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.22 2008/04/28 20:23:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,9 +85,9 @@ cpu_rootconf(void)
 	findroot();
 
 	aprint_normal("boot device: %s\n",
-	    booted_device ? device_xname(booted_device) : "<unknown>");
+	    booted_device ? booted_device->dv_xname : "<unknown>");
 
-	rootconf();
+	setroot(booted_device, booted_partition);
 }
 
 /*
@@ -102,9 +102,9 @@ cpu_rootconf(void)
  */
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
-	device_t parent;
+	struct device *parent;
 	char devpath[256];
 	prop_string_t str1;
 
@@ -208,9 +208,9 @@ device_register(device_t dev, void *aux)
 }
 
 static void
-gen_fwpath(device_t dev)
+gen_fwpath(struct device *dev)
 {
-	device_t parent;
+	struct device *parent;
 	prop_string_t str1, str2, str3;
 
 	parent = device_parent(dev);
@@ -253,30 +253,26 @@ gen_fwpath(device_t dev)
 static void
 build_fwpath(void)
 {
-	device_t dev, d;
-	deviter_t di, inner_di;
+	struct device *dev, *d;
 	prop_string_t str1;
 
 	/* First, find all the PCI busses */
-	for (dev = deviter_first(&di, DEVITER_F_ROOT_FIRST); dev != NULL;
-	     dev = deviter_next(&di)) {
+	TAILQ_FOREACH(dev, &alldevs, dv_list) {
 		if (device_is_a(dev, "pci") || device_is_a(dev, "mainbus") ||
 		    device_is_a(dev, "pcib") || device_is_a(dev, "pceb") ||
 		    device_is_a(dev, "ppb"))
 			gen_fwpath(dev);
+		else
+			continue;
 	}
-	deviter_release(&di);
-
 	/* Now go find the ISA bus and fix it up */
-	for (dev = deviter_first(&di, DEVITER_F_ROOT_FIRST); dev != NULL;
-	     dev = deviter_next(&di)) {
+	TAILQ_FOREACH(dev, &alldevs, dv_list) {
 		if (device_is_a(dev, "isa"))
 			gen_fwpath(dev);
+		else
+			continue;
 	}
-	deviter_release(&di);
-
-	for (dev = deviter_first(&di, DEVITER_F_ROOT_FIRST); dev != NULL;
-	     dev = deviter_next(&di)) {
+	TAILQ_FOREACH(dev, &alldevs, dv_list) {
 		/* skip the ones we allready computed above */
 		if (device_is_a(dev, "pci") || device_is_a(dev, "pcib") ||
 		    device_is_a(dev, "pceb") || device_is_a(dev, "isa") ||
@@ -284,9 +280,7 @@ build_fwpath(void)
 			continue;
 		/* patch in the properties for the pnpbus */
 		if (device_is_a(dev, "pnpbus")) {
-			for (d = deviter_first(&inner_di, DEVITER_F_ROOT_FIRST);
-			     d != NULL;
-			     d = deviter_next(&inner_di)) {
+			TAILQ_FOREACH(d, &alldevs, dv_list) {
 				if (!device_is_a(d, "isa"))
 					continue;
 				str1 = prop_dictionary_get(device_properties(d),
@@ -296,11 +290,9 @@ build_fwpath(void)
 				prop_dictionary_set(device_properties(dev),
 					"prep-fw-path", str1);
 			}
-			deviter_release(&inner_di);
 		} else
 			gen_fwpath(dev);
 	}
-	deviter_release(&di);
 }
 
 
@@ -311,8 +303,7 @@ build_fwpath(void)
 void
 findroot(void)
 {
-	device_t d;
-	deviter_t di;
+	struct device *d;
 	char *cp;
 	prop_string_t str;
 	size_t len;
@@ -330,23 +321,19 @@ findroot(void)
 #if defined(NVRAM_DUMP)
 	printf("Modified bootpath: %s\n", bootpath);
 #endif
-	for (d = deviter_first(&di, DEVITER_F_ROOT_FIRST);
-	     d != NULL;
-	     d = deviter_next(&di)) {
+	TAILQ_FOREACH(d, &alldevs, dv_list) {
 		str = prop_dictionary_get(device_properties(d), "prep-fw-path");
 		if (str == NULL)
 			continue;
 #if defined(NVRAM_DUMP)
-		printf("dev %s: fw-path: %s\n", device_xname(d),
+		printf("dev %s: fw-path: %s\n", d->dv_xname,
 		    prop_string_cstring_nocopy(str));
 #endif
 		if (strncmp(prop_string_cstring_nocopy(str), bootpath,
-		    len) == 0)
-			break;
-	}
-	deviter_release(&di);
-	if (d != NULL) {
-		booted_device = d;
-		booted_partition = 0; /* XXX ??? */
+		    len) == 0) {
+			booted_device = d;
+			booted_partition = 0; /* XXX ??? */
+			return;
+		}
 	}
 }

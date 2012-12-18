@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_physio.c,v 1.92 2011/02/10 14:46:45 pooka Exp $	*/
+/*	$NetBSD: kern_physio.c,v 1.88.4.1 2009/05/27 21:42:08 snj Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_physio.c,v 1.92 2011/02/10 14:46:45 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_physio.c,v 1.88.4.1 2009/05/27 21:42:08 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -86,7 +86,12 @@ __KERNEL_RCSID(0, "$NetBSD: kern_physio.c,v 1.92 2011/02/10 14:46:45 pooka Exp $
 ONCE_DECL(physio_initialized);
 struct workqueue *physio_workqueue;
 
-int physio_concurrency = 16;
+/*
+ * The routines implemented in this file are described in:
+ *	Leffler, et al.: The Design and Implementation of the 4.3BSD
+ *	    UNIX Operating System (Addison Welley, 1989)
+ * on pages 231-233.
+ */
 
 /* #define	PHYSIO_DEBUG */
 #if defined(PHYSIO_DEBUG)
@@ -170,13 +175,10 @@ physio_biodone(struct buf *bp)
 #if defined(DIAGNOSTIC)
 	struct physio_stat *ps = bp->b_private;
 	size_t todo = bp->b_bufsize;
-	size_t done = bp->b_bcount - bp->b_resid;
 
 	KASSERT(ps->ps_running > 0);
 	KASSERT(bp->b_bcount <= todo);
 	KASSERT(bp->b_resid <= bp->b_bcount);
-	if (done == todo)
-		KASSERT(bp->b_error == 0);
 #endif /* defined(DIAGNOSTIC) */
 
 	workqueue_enqueue(physio_workqueue, &bp->b_work, NULL);
@@ -205,9 +207,13 @@ physio_init(void)
 	return error;
 }
 
+#define	PHYSIO_CONCURRENCY	16	/* XXX tune */
+
 /*
  * Do "physical I/O" on behalf of a user.  "Physical I/O" is I/O directly
  * from the raw device to user buffers, and bypasses the buffer cache.
+ *
+ * Comments in brackets are from Leffler, et al.'s pseudo-code implementation.
  */
 int
 physio(void (*strategy)(struct buf *), struct buf *obp, dev_t dev, int flags,
@@ -219,7 +225,7 @@ physio(void (*strategy)(struct buf *), struct buf *obp, dev_t dev, int flags,
 	int i, error;
 	struct buf *bp = NULL;
 	struct physio_stat *ps;
-	int concurrency = physio_concurrency - 1;
+	int concurrency = PHYSIO_CONCURRENCY - 1;
 
 	error = RUN_ONCE(&physio_initialized, physio_init);
 	if (__predict_false(error != 0)) {
@@ -243,6 +249,7 @@ physio(void (*strategy)(struct buf *), struct buf *obp, dev_t dev, int flags,
 
 	/* Make sure we have a buffer, creating one if necessary. */
 	if (obp != NULL) {
+		/* [raise the processor priority level to splbio;] */
 		mutex_enter(&bufcache_lock);
 		/* Mark it busy, so nobody else will use it. */
 		while (bbusy(obp, false, 0, NULL) == EPASSTHROUGH)
@@ -250,6 +257,8 @@ physio(void (*strategy)(struct buf *), struct buf *obp, dev_t dev, int flags,
 		mutex_exit(&bufcache_lock);
 		concurrency = 0; /* see "XXXkludge" comment below */
 	}
+
+	uvm_lwp_hold(l);
 
 	for (i = 0; i < uio->uio_iovcnt; i++) {
 		bool sync = true;
@@ -280,17 +289,18 @@ physio(void (*strategy)(struct buf *), struct buf *obp, dev_t dev, int flags,
 			bp->b_private = ps;
 
 			/*
-			 * Mrk the buffer busy for physical I/O.  Also set
-			 * B_PHYS because it's an I/O to user memory, and
-			 * B_RAW because B_RAW is to be "set by physio for
-			 * raw transfers".
+			 * [mark the buffer busy for physical I/O]
+			 * (i.e. set B_PHYS (because it's an I/O to user
+			 * memory, and B_RAW, because B_RAW is to be
+			 * "Set by physio for raw transfers.", in addition
+			 * to the "busy" and read/write flag.)
 			 */
 			bp->b_oflags = 0;
 			bp->b_cflags = BC_BUSY;
 			bp->b_flags = flags | B_PHYS | B_RAW;
 			bp->b_iodone = physio_biodone;
 
-			/* Set up the buffer for a maximum-sized transfer. */
+			/* [set up the buffer for a maximum-sized transfer] */
 			bp->b_blkno = btodb(uio->uio_offset);
 			if (dbtob(bp->b_blkno) != uio->uio_offset) {
 				error = EINVAL;
@@ -300,7 +310,7 @@ physio(void (*strategy)(struct buf *), struct buf *obp, dev_t dev, int flags,
 			bp->b_data = iovp->iov_base;
 
 			/*
-			 * Call minphys to bound the transfer size,
+			 * [call minphys to bound the transfer size]
 			 * and remember the amount of data to transfer,
 			 * for later comparison.
 			 */
@@ -316,31 +326,25 @@ physio(void (*strategy)(struct buf *), struct buf *obp, dev_t dev, int flags,
 			endp = (vaddr_t)bp->b_data + todo;
 			if (trunc_page(endp) != endp) {
 				/*
-				 * Following requests can overlap.
+				 * following requests can overlap.
 				 * note that uvm_vslock does round_page.
 				 */
 				sync = true;
 			}
 
 			/*
-			 * Lock the part of the user address space involved
-			 * in the transfer.
+			 * [lock the part of the user address space involved
+			 *    in the transfer]
+			 * Beware vmapbuf(); it clobbers b_data and
+			 * saves it in b_saveaddr.  However, vunmapbuf()
+			 * restores it.
 			 */
 			error = uvm_vslock(p->p_vmspace, bp->b_data, todo,
 			    (flags & B_READ) ?  VM_PROT_WRITE : VM_PROT_READ);
 			if (error) {
 				goto done;
 			}
-
-			/*
-			 * Beware vmapbuf(); if succesful it clobbers
-			 * b_data and saves it in b_saveaddr.
-			 * However, vunmapbuf() restores b_data.
-			 */
-			if ((error = vmapbuf(bp, todo)) != 0) {
-				uvm_vsunlock(p->p_vmspace, bp->b_data, todo);
-				goto done;
-			}
+			vmapbuf(bp, todo);
 
 			BIO_SETPRIO(bp, BPRIO_TIMECRITICAL);
 
@@ -348,7 +352,7 @@ physio(void (*strategy)(struct buf *), struct buf *obp, dev_t dev, int flags,
 			ps->ps_running++;
 			mutex_exit(&ps->ps_lock);
 
-			/* Call strategy to start the transfer. */
+			/* [call strategy to start the transfer] */
 			(*strategy)(bp);
 			bp = NULL;
 
@@ -386,16 +390,16 @@ done_locked:
 	kmem_free(ps, sizeof(*ps));
 
 	/*
-	 * Clean up the state of the buffer.  Remember if somebody wants
-	 * it, so we can wake them up below.  Also, if we had to steal it,
-	 * give it back.
+	 * [clean up the state of the buffer]
+	 * Remember if somebody wants it, so we can wake them up below.
+	 * Also, if we had to steal it, give it back.
 	 */
 	if (obp != NULL) {
 		KASSERT((obp->b_cflags & BC_BUSY) != 0);
 
 		/*
-		 * If another process is waiting for the raw I/O buffer,
-		 * wake up processes waiting to do physical I/O;
+		 * [if another process is waiting for the raw I/O buffer,
+		 *    wake up processes waiting to do physical I/O;
 		 */
 		mutex_enter(&bufcache_lock);
 		obp->b_cflags &= ~(BC_BUSY | BC_WANTED);
@@ -404,6 +408,7 @@ done_locked:
 		cv_broadcast(&obp->b_busy);
 		mutex_exit(&bufcache_lock);
 	}
+	uvm_lwp_rele(l);
 
 	DPRINTF(("%s: done: off=%" PRIu64 ", resid=%zu\n",
 	    __func__, uio->uio_offset, uio->uio_resid));
@@ -412,12 +417,13 @@ done_locked:
 }
 
 /*
- * A minphys() routine is called by physio() to adjust the size of each
- * I/O transfer before the latter is passed to the strategy routine.
+ * Leffler, et al., says on p. 231:
+ * "The minphys() routine is called by physio() to adjust the
+ * size of each I/O transfer before the latter is passed to
+ * the strategy routine..."
  *
- * This minphys() is a default that must be called to enforce limits
- * that are applicable to all devices, because of limitations in the
- * kernel or the hardware platform.
+ * so, just adjust the buffer's count accounting to MAXPHYS here,
+ * and return the new count;
  */
 void
 minphys(struct buf *bp)

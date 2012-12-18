@@ -1,10 +1,10 @@
 #!/bin/sh
 #
-# $NetBSD: mountcritlocal,v 1.13 2011/01/13 22:30:09 haad Exp $
+# $NetBSD: mountcritlocal,v 1.9 2006/11/12 01:22:58 christos Exp $
 #
 
 # PROVIDE: mountcritlocal
-# REQUIRE: fsck
+# REQUIRE: root
 
 $_rc_subr_loaded . /etc/rc.subr
 
@@ -25,12 +25,6 @@ mountcritlocal_start()
 	#
 	rm -f /etc/nologin /var/spool/lock/LCK.*
 	(cd /var/run && rm -rf -- *)
-	#       create LVM locking directory, it needs to be owned by operator
-	#	group and has parmissions to allow lock file creation.
-	#
-	mkdir /var/run/lvm
-	chown root:operator /var/run/lvm
-	chmod 770 /var/run/lvm
 }
 
 load_rc_config $name

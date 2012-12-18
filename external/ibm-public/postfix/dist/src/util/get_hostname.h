@@ -1,4 +1,4 @@
-/*	$NetBSD: get_hostname.h,v 1.1.1.1 2009/06/23 10:09:00 tron Exp $	*/
+/*	$NetBSD: get_hostname.h,v 1.1.1.1.2.3 2011/01/07 01:24:17 riz Exp $	*/
 
 #ifndef _GET_HOSTNAME_H_INCLUDED_
 #define _GET_HOSTNAME_H_INCLUDED_

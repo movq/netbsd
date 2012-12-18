@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd1.c,v 1.33 2012/06/12 19:03:26 christos Exp $	*/
+/*	$NetBSD: cmd1.c,v 1.29 2007/10/29 23:20:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)cmd1.c	8.2 (Berkeley) 4/20/95";
 #else
-__RCSID("$NetBSD: cmd1.c,v 1.33 2012/06/12 19:03:26 christos Exp $");
+__RCSID("$NetBSD: cmd1.c,v 1.29 2007/10/29 23:20:37 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -46,7 +46,6 @@ __RCSID("$NetBSD: cmd1.c,v 1.33 2012/06/12 19:03:26 christos Exp $");
 #ifdef MIME_SUPPORT
 #include "mime.h"
 #endif
-#include "sig.h"
 #include "thread.h"
 
 
@@ -89,7 +88,6 @@ printhead(int mesg)
 	if (screenwidth > 0)
 		msgline[screenwidth] = '\0';
 	(void)printf("%s\n", msgline);
-	sig_check();
 }
 
 /*
@@ -99,13 +97,11 @@ printhead(int mesg)
 PUBLIC int
 headers(void *v)
 {
-	int *msgvec;
-	int n;
-	int flag;
+	int *msgvec = v;
+	int n, flag;
 	struct message *mp;
 	int size;
 
-	msgvec = v;
 	size = screensize();
 	n = msgvec[0];
 	if (n != 0)
@@ -144,12 +140,10 @@ headers(void *v)
 PUBLIC int
 scroll(void *v)
 {
-	char *arg;
-	int s;
-	int size;
+	char *arg = v;
+	int s, size;
 	int cur[1];
 
-	arg = v;
 	cur[0] = 0;
 	size = screensize();
 	s = screen;
@@ -186,10 +180,9 @@ scroll(void *v)
 PUBLIC int
 from(void *v)
 {
-	int *msgvec;
+	int *msgvec = v;
 	int *ip;
 
-	msgvec = v;
 	for (ip = msgvec; *ip != 0; ip++)
 		printhead(*ip);
 	if (--ip >= msgvec)
@@ -221,11 +214,10 @@ PUBLIC int
 pcmdlist(void *v __unused)
 {
 	const struct cmd *cp;
-	size_t cc;
+	int cc;
 
 	(void)printf("Commands are:\n");
-	cc = 0;
-	for (cp = cmdtab; cp->c_name != NULL; cp++) {
+	for (cc = 0, cp = cmdtab; cp->c_name != NULL; cp++) {
 		cc += strlen(cp->c_name) + 2;
 		if (cc > 72) {
 			(void)printf("\n");
@@ -235,7 +227,6 @@ pcmdlist(void *v __unused)
 			(void)printf("%s, ", cp->c_name);
 		else
 			(void)printf("%s\n", cp->c_name);
-		sig_check();
 	}
 	return 0;
 }
@@ -245,7 +236,6 @@ PUBLIC char *
 sget_msgnum(struct message *mp, struct message *parent)
 {
 	char *p;
-
 	if (parent == NULL || parent == mp) {
 		(void)sasprintf(&p, "%d", mp->m_index);
 		return p;
@@ -259,7 +249,6 @@ sget_msgnum(struct message *mp, struct message *parent)
 PUBLIC void
 show_msgnum(FILE *obuf, struct message *mp, struct message *parent)
 {
-
 	if (value(ENAME_QUIET) == NULL)
 		(void)fprintf(obuf, "Message %s:\n", sget_msgnum(mp, parent));
 }
@@ -289,7 +278,6 @@ type1_core(struct message *mp, void *v)
 #else
 	(void)sendmessage(mp, args->obuf, args->igtab, NULL, NULL);
 #endif
-	sig_check();
 	return 0;
 }
 
@@ -300,10 +288,9 @@ type1_core(struct message *mp, void *v)
 static jmp_buf	pipestop;
 
 /*ARGSUSED*/
-__dead static void
-cmd1_brokpipe(int signo __unused)
+static void
+brokpipe(int signo __unused)
 {
-
 	longjmp(pipestop, 1);
 }
 
@@ -324,27 +311,25 @@ type1(int *msgvec, int doign, int mime_decode)
 	 * starting values.  Note it is the variable that is volatile,
 	 * not what it is pointing at!
 	 */
-	FILE *volatile obuf;		/* avoid longjmp clobbering */
-	sig_t volatile oldsigpipe;	/* avoid longjmp clobbering? */
+	FILE *volatile obuf;		/* avoid longjmp clobbering? */
 #ifdef MIME_SUPPORT
-	struct mime_info *volatile mip;	/* avoid longjmp clobbering? */
-
-	mip = NULL;
+	sig_t volatile oldsigpipe;	/* XXX - is volatile needed? */
+	struct mime_info *volatile mip; /* avoid longjmp clobbering - needed */
 #endif
 
 	if ((obuf = last_registered_file(0)) == NULL)
 		obuf = stdout;
 
-	/*
-	 * Even without MIME_SUPPORT, we need to handle SIGPIPE here
-	 * or else the handler in execute() will grab things and our
-	 * exit code will never be seen.
-	 */
-	sig_check();
-	oldsigpipe = sig_signal(SIGPIPE, cmd1_brokpipe);
+#ifdef MIME_SUPPORT
+	mip = NULL;
+
+	oldsigpipe = signal(SIGPIPE, SIG_IGN);
+
 	if (setjmp(pipestop))
 		goto close_pipe;
 
+	(void)signal(SIGPIPE, brokpipe);
+#endif
 	msgCount = get_msgCount();
 
 	recursive = do_recursion();
@@ -364,22 +349,17 @@ type1(int *msgvec, int doign, int mime_decode)
 #endif
 		(void)thread_recursion(mp, type1_core, &args);
 	}
-close_pipe:
 #ifdef MIME_SUPPORT
+close_pipe:
 	if (mip != NULL) {
-		struct sigaction osa;
-		sigset_t oset;
-
 		/*
 		 * Ignore SIGPIPE so it can't cause a duplicate close.
 		 */
-		(void)sig_ignore(SIGPIPE, &osa, &oset);
+		(void)signal(SIGPIPE, SIG_IGN);
 		mime_decode_close(mip);
-		(void)sig_restore(SIGPIPE, &osa, &oset);
+		(void)signal(SIGPIPE, oldsigpipe);
 	}
 #endif
-	(void)sig_signal(SIGPIPE, oldsigpipe);
-	sig_check();
 	return 0;
 }
 
@@ -387,7 +367,6 @@ close_pipe:
 static int
 de_mime(void)
 {
-
 	return value(ENAME_MIME_DECODE_MSG) != NULL;
 }
 
@@ -397,9 +376,7 @@ de_mime(void)
 PUBLIC int
 view(void *v)
 {
-	int *msgvec;
-
-	msgvec = v;
+	int *msgvec = v;
 	return type1(msgvec, 1, !de_mime());
 }
 
@@ -409,9 +386,8 @@ view(void *v)
 PUBLIC int
 View(void *v)
 {
-	int *msgvec;
+	int *msgvec = v;
 
-	msgvec = v;
 	return type1(msgvec, 0, !de_mime());
 }
 #endif /* MIME_SUPPORT */
@@ -422,9 +398,8 @@ View(void *v)
 PUBLIC int
 type(void *v)
 {
-	int *msgvec;
+	int *msgvec = v;
 
-	msgvec = v;
 	return type1(msgvec, 1, de_mime());
 }
 
@@ -434,9 +409,8 @@ type(void *v)
 PUBLIC int
 Type(void *v)
 {
-	int *msgvec;
+	int *msgvec = v;
 
-	msgvec = v;
 	return type1(msgvec, 0, de_mime());
 }
 
@@ -446,11 +420,9 @@ Type(void *v)
 PUBLIC int
 pipecmd(void *v)
 {
-	char *cmd;
-	FILE *volatile obuf;		/* void longjmp clobbering */
-	sig_t volatile oldsigpipe = sig_current(SIGPIPE);
-
-	cmd = v;
+	char *cmd = v;
+	FILE *volatile obuf;	/* void longjmp clobbering - we want
+				   the current value not start value */
 	if (dot == NULL) {
 		warn("pipcmd: no current message");
 		return 1;
@@ -460,36 +432,30 @@ pipecmd(void *v)
 	if (setjmp(pipestop))
 		goto close_pipe;
 
-	sig_check();
-	obuf = Popen(cmd, "we");
+	obuf = Popen(cmd, "w");
 	if (obuf == NULL) {
 		warn("pipecmd: Popen failed: %s", cmd);
 		return 1;
-	}
-
-	oldsigpipe = sig_signal(SIGPIPE, cmd1_brokpipe);
+	} else
+		(void)signal(SIGPIPE, brokpipe);
 
 	(void)sendmessage(dot, obuf, ignoreall, NULL, NULL);
  close_pipe:
-	sig_check();
 	if (obuf != stdout) {
-		struct sigaction osa;
-		sigset_t oset;
 		/*
 		 * Ignore SIGPIPE so it can't cause a duplicate close.
 		 */
-		(void)sig_ignore(SIGPIPE, &osa, &oset);
+		(void)signal(SIGPIPE, SIG_IGN);
 		(void)Pclose(obuf);
-		(void)sig_restore(SIGPIPE, &osa, &oset);
+		(void)signal(SIGPIPE, SIG_DFL);
 	}
-	(void)sig_signal(SIGPIPE, oldsigpipe);
-	sig_check();
 	return 0;
 }
 
+
 struct top_core_args_s {
 	int lineb;
-	size_t topl;
+	int topl;
 	struct message *parent;
 };
 static int
@@ -498,8 +464,8 @@ top_core(struct message *mp, void *v)
 	char buffer[LINESIZE];
 	struct top_core_args_s *args;
 	FILE *ibuf;
-	size_t lines;
-	size_t c;
+	int lines;
+	int c;
 
 	args = v;
 	touch(mp);
@@ -509,13 +475,11 @@ top_core(struct message *mp, void *v)
 	ibuf = setinput(mp);
 	c = mp->m_lines;
 	for (lines = 0; lines < c && lines <= args->topl; lines++) {
-		sig_check();
-		if (readline(ibuf, buffer, (int)sizeof(buffer), 0) < 0)
+		if (mail_readline(ibuf, buffer, sizeof(buffer)) < 0)
 			break;
 		(void)puts(buffer);
 		args->lineb = blankline(buffer);
 	}
-	sig_check();
 	return 0;
 }
 
@@ -530,12 +494,11 @@ top(void *v)
 	struct top_core_args_s args;
 	int recursive;
 	int msgCount;
-	int *msgvec;
+	int *msgvec = v;
 	int *ip;
 	int topl;
 	char *valtop;
 
-	msgvec = v;
 	topl = 5;
 	valtop = value(ENAME_TOPLINES);
 	if (valtop != NULL) {
@@ -565,14 +528,12 @@ top(void *v)
 PUBLIC int
 stouch(void *v)
 {
-	int *msgvec;
+	int *msgvec = v;
 	int *ip;
 
-	msgvec = v;
-	for (ip = msgvec; *ip != 0; ip++) {
-		sig_check();
+	for (ip = msgvec; *ip != 0; ip++)
 		dot = set_m_flag(*ip, ~(MPRESERVE | MTOUCH), MTOUCH);
-	}
+
 	return 0;
 }
 
@@ -582,15 +543,13 @@ stouch(void *v)
 PUBLIC int
 mboxit(void *v)
 {
-	int *msgvec;
+	int *msgvec = v;
 	int *ip;
 
-	msgvec = v;
-	for (ip = msgvec; *ip != 0; ip++) {
-		sig_check();
+	for (ip = msgvec; *ip != 0; ip++)
 		dot = set_m_flag(*ip,
 		    ~(MPRESERVE | MTOUCH | MBOX), MTOUCH | MBOX);
-	}
+
 	return 0;
 }
 
@@ -610,7 +569,7 @@ folders(void *v __unused)
 	}
 	if ((cmd = value(ENAME_LISTER)) == NULL)
 		cmd = "ls";
-	(void)run_command(cmd, NULL, -1, -1, dirname, NULL);
+	(void)run_command(cmd, 0, -1, -1, dirname, NULL);
 	return 0;
 }
 
@@ -622,8 +581,7 @@ folders(void *v __unused)
 PUBLIC int
 inc(void *v __unused)
 {
-	int nmsg;
-	int mdot;
+	int nmsg, mdot;
 
 	nmsg = incfile();
 
@@ -637,5 +595,6 @@ inc(void *v __unused)
 	} else {
 		(void)printf("\"inc\" command failed...\n");
 	}
+
 	return 0;
 }

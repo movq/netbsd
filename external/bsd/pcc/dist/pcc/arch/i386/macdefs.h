@@ -1,5 +1,4 @@
-/*	Id: macdefs.h,v 1.83 2011/06/23 13:41:25 ragge Exp 	*/	
-/*	$NetBSD: macdefs.h,v 1.1.1.4 2011/09/01 12:46:36 plunky Exp $	*/
+/*	$Id: macdefs.h,v 1.1.1.1 2008/08/24 05:32:55 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -47,11 +46,7 @@
 #define SZINT		32
 #define SZFLOAT		32
 #define SZDOUBLE	64
-#ifdef MACHOABI
-#define SZLDOUBLE	128
-#else
 #define SZLDOUBLE	96
-#endif
 #define SZLONG		32
 #define SZSHORT		16
 #define SZLONGLONG	64
@@ -65,18 +60,13 @@
 #define ALINT		32
 #define ALFLOAT		32
 #define ALDOUBLE	32
-#ifdef MACHOABI
-#define ALLDOUBLE	128
-#else
 #define ALLDOUBLE	32
-#endif
 #define ALLONG		32
 #define ALLONGLONG	32
 #define ALSHORT		16
 #define ALPOINT		32
-#undef ALSTRUCT		/* Not defined if ELF ABI */
+#define ALSTRUCT	32
 #define ALSTACK		32 
-#define	ALMAX		128	/* not yet supported type */
 
 /*
  * Min/max values.
@@ -99,7 +89,12 @@
 
 /* Default char is signed */
 #undef	CHAR_UNSIGNED
-#define	BOOL_TYPE	UCHAR	/* what used to store _Bool */
+#define	BOOL_TYPE	CHAR	/* what used to store _Bool */
+#if defined(os_mirbsd) || defined(os_win32)
+#define WCHAR_TYPE	USHORT	/* ISO 10646 16-bit Unicode */
+#else
+#define	WCHAR_TYPE	INT	/* what used to store wchar_t */
+#endif
 
 /*
  * Use large-enough types.
@@ -128,17 +123,15 @@ typedef long long OFFSZ;
 
 #ifdef MACHOABI
 #define STAB_LINE_ABSOLUTE	/* S_LINE fields use absolute addresses */
-#define	MYALIGN			/* user power-of-2 alignment */
 #endif
 
 #define BACKAUTO 		/* stack grows negatively for automatics */
 #define BACKTEMP 		/* stack grows negatively for temporaries */
 
 #undef	FIELDOPS		/* no bit-field instructions */
-#define TARGET_ENDIAN TARGET_LE
+#define	RTOLBYTES		/* bytes are numbered right to left */
 
-#define FINDMOPS	/* i386 has instructions that modifies memory */
-#define	CC_DIV_0	/* division by zero is safe in the compiler */
+#define ENUMSIZE(high,low) INT	/* enums are always stored in full int */
 
 /* Definitions mostly used in pass2 */
 
@@ -296,9 +289,7 @@ int COLORMAP(int c, int *r);
 			 x == LONGLONG || x == ULONGLONG ? EAXEDX : \
 			 x == FLOAT || x == DOUBLE || x == LDOUBLE ? 31 : EAX)
 
-#if 0
-#define R2REGS	1	/* permit double indexing */
-#endif
+//#define R2REGS	1	/* permit double indexing */
 
 /* XXX - to die */
 #define FPREG	EBP	/* frame pointer */
@@ -319,14 +310,15 @@ int COLORMAP(int c, int *r);
  * i386-specific symbol table flags.
  */
 #define	SSECTION	SLOCAL1
+#define	STLS		SLOCAL2
+#define	SNOUNDERSCORE	SLOCAL3
 #define SSTDCALL	SLOCAL2	
 #define SDLLINDIRECT	SLOCAL3
 
 /*
  * i386-specific node flags.
  */
-#define FSTDCALL	NLOCAL1
-#define FFPPOP		NLOCAL2
+#define FSTDCALL	0x01
 
 /*
  * i386-specific interpass stuff.
@@ -344,22 +336,18 @@ void targarg(char *w, void *arg);
 	w++, targarg(w, ary), 1 : 0)
 int numconv(void *ip, void *p, void *q);
 #define	XASM_NUMCONV(ip, p, q)	numconv(ip, p, q)
-int xasmconstregs(char *);
-#define	XASMCONSTREGS(x) xasmconstregs(x)
-#define	MYSETXARG if (XASMVAL(cw) == 'q') {	\
-	c = 'r'; addalledges(&ablock[ESI]); addalledges(&ablock[EDI]); }
 
 /*
  * builtins.
  */
 #define TARGET_BUILTINS							\
-	{ "__builtin_frame_address", i386_builtin_frame_address, -1 },	\
-	{ "__builtin_return_address", i386_builtin_return_address, -1 },
+	{ "__builtin_frame_address", i386_builtin_frame_address },	\
+	{ "__builtin_return_address", i386_builtin_return_address },
 
 #define NODE struct node
 struct node;
-NODE *i386_builtin_frame_address(NODE *f, NODE *a, unsigned int);
-NODE *i386_builtin_return_address(NODE *f, NODE *a, unsigned int);
+NODE *i386_builtin_frame_address(NODE *f, NODE *a);
+NODE *i386_builtin_return_address(NODE *f, NODE *a);
 #undef NODE
 
 #if defined(MACHOABI)

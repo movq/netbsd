@@ -1,4 +1,4 @@
-/*	$NetBSD: disks.c,v 1.127 2012/11/17 20:34:24 tsutsui Exp $ */
+/*	$NetBSD: disks.c,v 1.100.2.6 2010/01/09 01:31:57 snj Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,7 +14,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -43,12 +47,14 @@
 #include <util.h>
 
 #include <sys/param.h>
-#include <sys/sysctl.h>
 #include <sys/swap.h>
 #include <ufs/ufs/dinode.h>
 #include <ufs/ffs/fs.h>
 #define FSTYPENAMES
+#define MOUNTNAMES
+#define static
 #include <sys/disklabel.h>
+#undef static
 
 #include <dev/scsipi/scsipi_all.h>
 #include <sys/scsiio.h>
@@ -88,14 +94,6 @@ static void fixsb(const char *, const char *, char);
 #endif
 
 static const char *disk_names[] = { DISK_NAMES, "vnd", NULL };
-
-const char *
-getfslabelname(uint8_t f)
-{
-	if (f >= __arraycount(fstypenames) || fstypenames[f] == NULL)
-		return "invalid";
-	return fstypenames[f];
-}
 
 /* from src/sbin/atactl/atactl.c
  * extract_string: copy a block of bytes out of ataparams and make
@@ -218,7 +216,7 @@ get_descr_scsi(struct disk_desc *dd, int fd)
 	humanize_number(size, sizeof(size),
 	    (uint64_t)dd->dd_secsize * (uint64_t)dd->dd_totsec,
 	    "", HN_AUTOSCALE, HN_B | HN_NOSPACE | HN_DECIMAL);
-
+	
 	snprintf(dd->dd_descr, sizeof(dd->dd_descr),
 	    "%s (%s, %s %s)",
 	    dd->dd_name, size, vendor, product);
@@ -273,7 +271,7 @@ get_descr_ata(struct disk_desc *dd, int fd)
 	humanize_number(size, sizeof(size),
 	    (uint64_t)dd->dd_secsize * (uint64_t)dd->dd_totsec,
 	    "", HN_AUTOSCALE, HN_B | HN_NOSPACE | HN_DECIMAL);
-
+	
 	snprintf(dd->dd_descr, sizeof(dd->dd_descr), "%s (%s, %s)",
 	    dd->dd_name, size, model);
 
@@ -306,48 +304,6 @@ done:
 		strcpy(dd->dd_descr, dd->dd_name);
 }
 
-/* disknames - contains device names without partition letters
- * cdrom_devices - contains devices including partition letters
- * returns the first entry in hw.disknames matching a cdrom_device, or
- * first entry on error or no match
- */
-const char *
-get_default_cdrom(void)
-{
-	static const char *cdrom_devices[] = { CD_NAMES, 0};
-	static const char mib_name[] = "hw.disknames";
-	size_t len;
-	char *disknames;
-	char *last;
-	char *name;
-	const char **arg;
-	const char *cd_dev;
-
-	/* On error just use first entry in cdrom_devices */
-	if (sysctlbyname(mib_name, NULL, &len, NULL, 0) == -1)
-		return cdrom_devices[0];
-	if ((disknames = malloc(len + 2)) == 0) /* skip on malloc fail */
-		return cdrom_devices[0];
-
-	(void)sysctlbyname(mib_name, disknames, &len, NULL, 0);
-        for ((name = strtok_r(disknames, " ", &last)); name;
-	    (name = strtok_r(NULL, " ", &last))) {
-		for (arg = cdrom_devices; *arg; ++arg) {
-			cd_dev = *arg;
-			/* skip unit and partition */
-			if (strncmp(cd_dev, name, strlen(cd_dev) - 2) != 0)
-				continue;
-			if (name != disknames)
-				strcpy(disknames, name);
-			strcat(disknames, "a");
-			/* XXX: leaks, but so what? */
-			return disknames;
-		}
-	}
-	free(disknames);
-	return cdrom_devices[0];
-}
-
 static int
 get_disks(struct disk_desc *dd)
 {
@@ -377,14 +333,6 @@ get_disks(struct disk_desc *dd)
 					break;
 				continue;
 			}
-
-			/*
-			 * Exclude a disk mounted as root partition,
-			 * in case of install-image on a USB memstick.
-			 */
-			if (is_active_rootpart(dd->dd_name, 0))
-				continue;
-
 			dd->dd_cyl = l.d_ncylinders;
 			dd->dd_head = l.d_ntracks;
 			dd->dd_sec = l.d_nsectors;
@@ -453,7 +401,7 @@ find_disks(const char *doingwhat)
 			NULL, NULL, NULL, NULL, NULL);
 		if (menu_no == -1)
 			return -1;
-		msg_display(MSG_ask_disk, doingwhat);
+		msg_display(MSG_ask_disk);
 		process_menu(menu_no, &selected_disk);
 		free_menu(menu_no);
 	}
@@ -473,9 +421,9 @@ find_disks(const char *doingwhat)
 	if (dlsize == 0)
 		dlsize = disk->dd_cyl * disk->dd_head * disk->dd_sec;
 	if (dlsize > UINT32_MAX) {
-		msg_display(MSG_toobigdisklabel);
+		msg_display(MSG_toobigdisklabel);	
 		process_menu(MENU_ok, NULL);
-		return -1;
+		return -1;	
 	}
 	dlcylsize = dlhead * dlsec;
 
@@ -515,7 +463,7 @@ fmt_fspart(menudesc *m, int ptn, void *arg)
 		else
 			desc = "FFSv1";
 	else
-		desc = getfslabelname(p->pi_fstype);
+		desc = fstypenames[p->pi_fstype];
 
 #ifdef PART_BOOT
 	if (ptn == PART_BOOT)
@@ -570,11 +518,11 @@ ptn_sort(const void *a, const void *b)
 int
 make_filesystems(void)
 {
-	unsigned int i;
+	int i;
 	int ptn;
 	int ptn_order[nelem(bsdlabel)];
 	int error = 0;
-	unsigned int maxpart = getmaxpartitions();
+	int maxpart = getmaxpartitions();
 	char *newfs;
 	const char *mnt_opts;
 	const char *fsname;
@@ -684,8 +632,6 @@ make_filesystems(void)
 		if (error != 0)
 			return error;
 
-		md_pre_mount();
-
 		if (lbl->pi_flags & PIF_MOUNT && mnt_opts != NULL) {
 			make_target_dir(lbl->pi_mount);
 			error = target_mount(mnt_opts, diskdev, ptn,
@@ -711,7 +657,7 @@ make_fstab(void)
 	/* Create the fstab. */
 	make_target_dir("/etc");
 	f = target_fopen("/etc/fstab", "w");
-	if (logfp)
+	if (logging)
 		(void)fprintf(logfp,
 		    "Creating %s/etc/fstab.\n", target_prefix());
 	scripting_fprintf(NULL, "cat <<EOF >%s/etc/fstab\n", target_prefix());
@@ -719,7 +665,7 @@ make_fstab(void)
 	if (f == NULL) {
 #ifndef DEBUG
 		msg_display(MSG_createfstab);
-		if (logfp)
+		if (logging)
 			(void)fprintf(logfp, "Failed to make /etc/fstab!\n");
 		process_menu(MENU_ok, NULL);
 		return 1;
@@ -728,7 +674,7 @@ make_fstab(void)
 #endif
 	}
 
-	scripting_fprintf(f, "# NetBSD %s/etc/fstab\n# See /usr/share/examples/"
+	scripting_fprintf(f, "# NetBSD /etc/fstab\n# See /usr/share/examples/"
 		"fstab/ for more examples.\n", target_prefix());
 	for (i = 0; i < getmaxpartitions(); i++) {
 		const char *s = "";
@@ -753,10 +699,7 @@ make_fstab(void)
 			if (!check_lfs_progs())
 				s = "# ";
 			fstype = "lfs";
-			/* XXX fsck_lfs considered harmfull */
-			fsck_pass = 0;
-			dump_freq = 1;
-			break;
+			/* FALLTHROUGH */
 		case FS_BSDFFS:
 			fsck_pass = (strcmp(mp, "/") == 0) ? 1 : 2;
 			dump_freq = 1;
@@ -790,9 +733,10 @@ make_fstab(void)
 			s = "# ";
 
  		scripting_fprintf(f,
-		  "%s/dev/%s%c\t\t%s\t%s\trw%s%s%s%s%s%s%s%s\t\t %d %d\n",
+		  "%s/dev/%s%c\t\t%s\t%s\trw%s%s%s%s%s%s%s%s%s\t\t %d %d\n",
 		   s, diskdev, 'a' + i, mp, fstype,
 		   bsdlabel[i].pi_flags & PIF_LOG ? ",log" : "",
+		   bsdlabel[i].pi_flags & PIF_SOFTDEP ? ",softdep" : "",
 		   bsdlabel[i].pi_flags & PIF_MOUNT ? "" : ",noauto",
 		   bsdlabel[i].pi_flags & PIF_ASYNC ? ",async" : "",
 		   bsdlabel[i].pi_flags & PIF_NOATIME ? ",noatime" : "",
@@ -803,29 +747,20 @@ make_fstab(void)
 		   dump_freq, fsck_pass);
 	}
 
-	if (tmp_ramdisk_size != 0) {
-#ifdef HAVE_TMPFS
-		scripting_fprintf(f, "tmpfs\t\t/tmp\ttmpfs\trw,-m=1777,-s=%"
-		    PRIi64 "\n",
-		    tmp_ramdisk_size * 512);
-#else
+	if (tmp_mfs_size != 0) {
 		if (swap_dev != -1)
-			scripting_fprintf(f, "/dev/%s%c\t\t/tmp\tmfs\trw,-s=%"
-			    PRIi64 "\n",
-			    diskdev, 'a' + swap_dev, tmp_ramdisk_size);
+			scripting_fprintf(f, "/dev/%s%c\t\t/tmp\tmfs\trw,-s=%d\n",
+				diskdev, 'a' + swap_dev, tmp_mfs_size);
 		else
-			scripting_fprintf(f, "swap\t\t/tmp\tmfs\trw,-s=%"
-			    PRIi64 "\n",
-			    tmp_ramdisk_size);
-#endif
+			scripting_fprintf(f, "swap\t\t/tmp\tmfs\trw,-s=%d\n",
+				tmp_mfs_size);
 	}
 
 	/* Add /kern, /proc and /dev/pts to fstab and make mountpoint. */
 	scripting_fprintf(f, "kernfs\t\t/kern\tkernfs\trw\n");
 	scripting_fprintf(f, "ptyfs\t\t/dev/pts\tptyfs\trw\n");
 	scripting_fprintf(f, "procfs\t\t/proc\tprocfs\trw\n");
-	scripting_fprintf(f, "/dev/%s\t\t/cdrom\tcd9660\tro,noauto\n",
-	    get_default_cdrom());
+	scripting_fprintf(f, "/dev/cd0a\t\t/cdrom\tcd9660\tro,noauto\n");
 	make_target_dir("/kern");
 	make_target_dir("/proc");
 	make_target_dir("/dev/pts");
@@ -857,12 +792,8 @@ foundffs(struct data *list, size_t num)
 		return error;
 
 	error = target_mount("", list[0].u.s_val, ' '-'a', list[1].u.s_val);
-	if (error != 0) {
-		msg_display(MSG_mount_failed, list[0].u.s_val);
-		process_menu(MENU_noyes, NULL);
-		if (!yesno)
-			return error;
-	}
+	if (error != 0)
+		return error;
 	return 0;
 }
 
@@ -894,11 +825,11 @@ fsck_preen(const char *disk, int ptn, const char *fsname)
 {
 	char *prog;
 	int error;
-
+	
 	ptn += 'a';
 	if (fsname == NULL)
 		return 0;
-	/* first, check if fsck program exists, if not, assume ok */
+	/* first check fsck program exists, if not assue ok */
 	asprintf(&prog, "/sbin/fsck_%s", fsname);
 	if (prog == NULL)
 		return 0;
@@ -910,9 +841,7 @@ fsck_preen(const char *disk, int ptn, const char *fsname)
 	free(prog);
 	if (error != 0) {
 		msg_display(MSG_badfs, disk, ptn, error);
-		process_menu(MENU_noyes, NULL);
-		if (yesno)
-			error = 0;
+		process_menu(MENU_ok, NULL);
 		/* XXX at this point maybe we should run a full fsck? */
 	}
 	return error;
@@ -984,8 +913,6 @@ mount_root(void)
 	if (error != 0)
 		return error;
 
-	md_pre_mount();
-
 	/* Mount /dev/<diskdev>a on target's "".
 	 * If we pass "" as mount-on, Prefixing will DTRT.
 	 * for now, use no options.
@@ -1024,7 +951,7 @@ mount_disks(void)
 	else {
 		error = mount_root();
 		if (error != 0 && error != EBUSY)
-			return -1;
+			return 0;
 	}
 
 	/* Check the target /etc/fstab exists before trying to parse it. */
@@ -1032,7 +959,7 @@ mount_disks(void)
 	    target_file_exists_p("/etc/fstab") == 0) {
 		msg_display(MSG_noetcfstab, diskdev);
 		process_menu(MENU_ok, NULL);
-		return -1;
+		return 0;
 	}
 
 
@@ -1042,7 +969,7 @@ mount_disks(void)
 		/* error ! */
 		msg_display(MSG_badetcfstab, diskdev);
 		process_menu(MENU_ok, NULL);
-		return -1;
+		return 0;
 	}
 	error = walk(fstab, (size_t)fstabsize, fstabbuf, numfstabbuf);
 	free(fstab);
@@ -1124,49 +1051,3 @@ check_swap(const char *disk, int remove_swap)
 	rval = -1;
 	goto done;
 }
-
-#ifdef HAVE_BOOTXX_xFS
-char *
-bootxx_name(void)
-{
-	int fstype;
-	const char *bootxxname;
-	char *bootxx;
-
-	/* check we have boot code for the root partition type */
-	fstype = bsdlabel[rootpart].pi_fstype;
-	switch (fstype) {
-#if defined(BOOTXX_FFSV1) || defined(BOOTXX_FFSV2)
-	case FS_BSDFFS:
-		if (bsdlabel[rootpart].pi_flags & PIF_FFSv2) {
-#ifdef BOOTXX_FFSV2
-			bootxxname = BOOTXX_FFSV2;
-#else
-			bootxxname = NULL;
-#endif
-		} else {
-#ifdef BOOTXX_FFSV1
-			bootxxname = BOOTXX_FFSV1;
-#else
-			bootxxname = NULL;
-#endif
-		}
-		break;
-#endif
-#ifdef BOOTXX_LFS
-	case FS_BSDLFS:
-		bootxxname = BOOTXX_LFS;
-		break;
-#endif
-	default:
-		bootxxname = NULL;
-		break;
-	}
-
-	if (bootxxname == NULL)
-		return NULL;
-
-	asprintf(&bootxx, "%s/%s", BOOTXXDIR, bootxxname);
-	return bootxx;
-}
-#endif

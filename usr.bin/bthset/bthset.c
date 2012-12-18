@@ -1,4 +1,4 @@
-/*	$NetBSD: bthset.c,v 1.8 2012/03/15 02:02:23 joerg Exp $	*/
+/*	$NetBSD: bthset.c,v 1.4 2008/07/21 14:19:21 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -33,21 +33,19 @@
 
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2006 Itronix, Inc.  All rights reserved.");
-__RCSID("$NetBSD: bthset.c,v 1.8 2012/03/15 02:02:23 joerg Exp $");
+__RCSID("$NetBSD: bthset.c,v 1.4 2008/07/21 14:19:21 lukem Exp $");
 
 #include <sys/types.h>
 #include <sys/audioio.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
-#include <sys/uio.h>
-
 #include <assert.h>
 #include <bluetooth.h>
 #include <err.h>
 #include <event.h>
 #include <fcntl.h>
-#include <sdp.h>
 #include <signal.h>
+#include <sdp.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,86 +60,42 @@ __RCSID("$NetBSD: bthset.c,v 1.8 2012/03/15 02:02:23 joerg Exp $");
 
 #define RING_INTERVAL	5	/* seconds */
 
-__dead static void usage(void);
+int  main(int, char *[]);
+void usage(void);
 
-static void do_signal(int, short, void *);
-static void do_ring(int, short, void *);
-static void do_mixer(int, short, void *);
-static void do_rfcomm(int, short, void *);
-static void do_server(int, short, void *);
-static int send_rfcomm(const char *, ...) __printflike(1, 2);
+void do_signal(int, short, void *);
+void do_ring(int, short, void *);
+void do_mixer(int, short, void *);
+void do_rfcomm(int, short, void *);
+void do_server(int, short, void *);
+int send_rfcomm(const char *, ...);
 
-static int init_mixer(struct btsco_info *, const char *);
-static int init_rfcomm(struct btsco_info *);
-static int init_server(struct btsco_info *, int);
+int init_mixer(struct btsco_info *, const char *);
+int init_rfcomm(struct btsco_info *);
+int init_server(struct btsco_info *, int);
 
-static void remove_pid(void);
-static int write_pid(void);
+void remove_pid(void);
+int write_pid(void);
 
-static struct event sigint_ev;		/* bye bye */
-static struct event sigusr1_ev;	/* start ringing */
-static struct event sigusr2_ev;	/* stop ringing */
-static struct event mixer_ev;		/* mixer changed */
-static struct event rfcomm_ev;		/* headset speaks */
-static struct event server_ev;		/* headset connecting */
-static struct event ring_ev;		/* ring timer */
+struct event sigint_ev;		/* bye bye */
+struct event sigusr1_ev;	/* start ringing */
+struct event sigusr2_ev;	/* stop ringing */
+struct event mixer_ev;		/* mixer changed */
+struct event rfcomm_ev;		/* headset speaks */
+struct event server_ev;		/* headset connecting */
+struct event ring_ev;		/* ring timer */
 
-static mixer_ctrl_t vgs;	/* speaker control */
-static mixer_ctrl_t vgm;	/* mic control */
-static int ringing;		/* we are ringing */
-static int verbose;		/* copy to stdout */
-static int mx;			/* mixer fd */
-static int rf;			/* rfcomm connection fd */
-static int ag;			/* rfcomm gateway fd */
-static sdp_session_t ss;	/* SDP server session */
+mixer_ctrl_t vgs;	/* speaker control */
+mixer_ctrl_t vgm;	/* mic control */
+int ringing;		/* we are ringing */
+int verbose;		/* copy to stdout */
+int mx;			/* mixer fd */
+int rf;			/* rfcomm connection fd */
+int ag;			/* rfcomm gateway fd */
+void *ss;		/* sdp handle */
 
-static char *command;		/* answer command */
-static char *pidfile;		/* PID file name */
-
-/* Headset Audio Gateway service record */
-static uint8_t hset_data[] = {
-	0x09, 0x00, 0x00,	//  uint16	ServiceRecordHandle
-	0x0a, 0x00, 0x00, 0x00,	//  uint32	0x00000000
-	0x00,
-
-	0x09, 0x00, 0x01,	//  uint16	ServiceClassIDList
-	0x35, 0x06,		//  seq8(6)
-	0x19, 0x11, 0x12,	//   uuid16	HeadsetAudioGateway
-	0x19, 0x12, 0x03,	//   uuid16	GenericAudio
-
-	0x09, 0x00, 0x04,	//  uint16	ProtocolDescriptorList
-	0x35, 0x0c,		//  seq8(12)
-	0x35, 0x03,		//   seq8(3)
-	0x19, 0x01, 0x00,	//    uuid16	L2CAP
-	0x35, 0x05,		//   seq8(5)
-	0x19, 0x00, 0x03,	//    uuid16	RFCOMM
-	0x08, 0x00,		//    uint8	%hset_channel%
-
-	0x09, 0x00, 0x05,	//  uint16	BrowseGroupList
-	0x35, 0x03,		//  seq8(3)
-	0x19, 0x10, 0x02,	//   uuid16	PublicBrowseGroup
-
-	0x09, 0x00, 0x06,	//  uint16	LanguageBaseAttributeIDList
-	0x35, 0x09,		//  seq8(9)
-	0x09, 0x65, 0x6e,	//   uint16	0x656e	("en")
-	0x09, 0x00, 0x6a,	//   uint16	106	(UTF-8)
-	0x09, 0x01, 0x00,	//   uint16	PrimaryLanguageBaseID
-
-	0x09, 0x00, 0x09,	//  uint16	BluetoothProfileDescriptorList
-	0x35, 0x08,		//  seq8(8)
-	0x35, 0x06,		//   seq8(6)
-	0x19, 0x11, 0x08,	//    uuid16	Headset
-	0x09, 0x01, 0x00,	//    uint16	v1.0
-
-	0x09, 0x01, 0x00,	//  uint16	PrimaryLanguageBaseID + ServiceNameOffset
-	0x25, 0x0d, 0x56, 0x6f,	//  str8(13)	"Voice Gateway"
-	0x69, 0x63, 0x65, 0x20,
-	0x47, 0x61, 0x74, 0x65,
-	0x77, 0x61, 0x79
-};
-
-static sdp_data_t hset_record =	{ hset_data + 0, hset_data + 91 };
-static sdp_data_t hset_channel =	{ hset_data + 36, hset_data + 37 };
+char *command;		/* answer command */
+char *pidfile;		/* PID file name */
 
 int
 main(int ac, char *av[])
@@ -238,7 +192,7 @@ main(int ac, char *av[])
 	err(EXIT_FAILURE, "event_dispatch");
 }
 
-static void
+void
 usage(void)
 {
 
@@ -256,7 +210,7 @@ usage(void)
 	exit(EXIT_FAILURE);
 }
 
-static void
+void
 do_signal(int s, short ev, void *arg)
 {
 
@@ -276,7 +230,7 @@ do_signal(int s, short ev, void *arg)
 	}
 }
 
-static void
+void
 do_ring(int s, short ev, void *arg)
 {
 	static struct timeval tv = { RING_INTERVAL, 0 };
@@ -292,7 +246,7 @@ do_ring(int s, short ev, void *arg)
  * The mixer device has been twiddled. We check mic and speaker
  * settings and send the appropriate commands to the headset,
  */
-static void
+void
 do_mixer(int s, short ev, void *arg)
 {
 	mixer_ctrl_t mc;
@@ -324,7 +278,7 @@ do_mixer(int s, short ev, void *arg)
 /*
  * RFCOMM socket event.
  */
-static void
+void
 do_rfcomm(int fd, short ev, void *arg)
 {
 	char buf[128];
@@ -391,7 +345,7 @@ do_rfcomm(int fd, short ev, void *arg)
 /*
  * got an incoming connection on the AG socket.
  */
-static void
+void
 do_server(int fd, short ev, void *arg)
 {
 	bdaddr_t *raddr = arg;
@@ -424,35 +378,32 @@ do_server(int fd, short ev, void *arg)
 /*
  * send a message to the RFCOMM socket
  */
-static int
+int
 send_rfcomm(const char *msg, ...)
 {
-	struct iovec iov[3];
-	char buf[128];
+	char buf[128], fmt[128];
 	va_list ap;
+	int len;
+
+	va_start(ap, msg);
 
 	if (verbose) {
-		fputs("< ", stdout);
-		va_start(ap, msg);
-		vprintf(msg, ap);
-		va_end(ap);
-		putchar('\n');
+		snprintf(fmt, sizeof(fmt), "< %s\n", msg);
+		vprintf(fmt, ap);
 	}
 
-	iov[0].iov_base = iov[2].iov_base = __UNCONST("\r\n");
-	iov[0].iov_len = iov[2].iov_len = 2;
-	va_start(ap, msg);
-	iov[1].iov_base = buf;
-	iov[1].iov_len = vsnprintf(buf, sizeof(buf), msg, ap);
-	va_end(ap);
+	snprintf(fmt, sizeof(fmt), "\r\n%s\r\n", msg);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
+	len = send(rf, buf, strlen(buf), 0);
 
-	return writev(rf, iov, __arraycount(iov));
+	va_end(ap);
+	return len;
 }
 
 /*
  * Initialise mixer event
  */
-static int
+int
 init_mixer(struct btsco_info *info, const char *mixer)
 {
 
@@ -488,7 +439,7 @@ init_mixer(struct btsco_info *info, const char *mixer)
 /*
  * Initialise RFCOMM socket
  */
-static int
+int
 init_rfcomm(struct btsco_info *info)
 {
 	struct sockaddr_bt addr;
@@ -504,7 +455,7 @@ init_rfcomm(struct btsco_info *info)
 
 	if (bind(rf, (struct sockaddr *)&addr, sizeof(addr)) < 0)
 		return -1;
-
+	
 	bdaddr_copy(&addr.bt_bdaddr, &info->raddr);
 	addr.bt_channel = info->channel;
 
@@ -521,9 +472,10 @@ init_rfcomm(struct btsco_info *info)
 /*
  * Initialise server socket
  */
-static int
+int
 init_server(struct btsco_info *info, int channel)
 {
+	sdp_hset_profile_t hset;
 	struct sockaddr_bt addr;
 
 	ag = socket(PF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
@@ -546,13 +498,17 @@ init_server(struct btsco_info *info, int channel)
 	if (event_add(&server_ev, NULL) < 0)
 		return -1;
 
-	sdp_set_uint(&hset_channel, channel);
+	memset(&hset, 0, sizeof(hset));
+	hset.server_channel = channel;
 
 	ss = sdp_open_local(NULL);
-	if (ss == NULL)
+	if (ss == NULL || (errno = sdp_error(ss)))
 		return -1;
 
-	if (!sdp_record_insert(ss, &info->laddr, NULL, &hset_record)) {
+	if (sdp_register_service(ss,
+			SDP_SERVICE_CLASS_HEADSET_AUDIO_GATEWAY,
+			&info->laddr, (uint8_t *)&hset, sizeof(hset), NULL) != 0) {
+		errno = sdp_error(ss);
 		sdp_close(ss);
 		return -1;
 	}
@@ -560,7 +516,7 @@ init_server(struct btsco_info *info, int channel)
 	return 0;
 }
 
-static void
+void
 remove_pid(void)
 {
 
@@ -570,7 +526,7 @@ remove_pid(void)
 	unlink(pidfile);
 }
 
-static int
+int
 write_pid(void)
 {
 	char *buf;

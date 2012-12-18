@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_ssp.c,v 1.6 2011/11/19 22:51:25 tls Exp $	*/
+/*	$NetBSD: kern_ssp.c,v 1.2.4.3 2009/03/15 19:49:34 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -27,12 +27,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_ssp.c,v 1.6 2011/11/19 22:51:25 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_ssp.c,v 1.2.4.3 2009/03/15 19:49:34 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/intr.h>
-#include <sys/cprng.h>
 
 #if defined(__SSP__) || defined(__SSP_ALL__)
 long __stack_chk_guard[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -49,7 +48,9 @@ ssp_init(void)
 {
 	int s;
 
-	aprint_debug("Initializing SSP: ");
+#ifdef DIAGNOSTIC
+	printf("Initializing SSP:");
+#endif
 	/*
 	 * We initialize ssp here carefully:
 	 *	1. after we got some entropy
@@ -58,14 +59,16 @@ ssp_init(void)
 	size_t i;
 	long guard[__arraycount(__stack_chk_guard)];
 
-	cprng_fast(guard, sizeof(guard));
+	arc4randbytes(guard, sizeof(guard));
 	s = splhigh();
 	for (i = 0; i < __arraycount(guard); i++)
 		__stack_chk_guard[i] = guard[i];
 	splx(s);
+#ifdef DIAGNOSTIC
 	for (i = 0; i < __arraycount(guard); i++)
-		aprint_debug("%lx ", guard[i]);
-	aprint_debug("\n");
+		printf("%lx ", guard[i]);
+	printf("\n");
+#endif
 }
 #else
 void

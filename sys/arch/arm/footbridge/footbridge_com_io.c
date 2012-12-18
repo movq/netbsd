@@ -1,4 +1,4 @@
-/*	$NetBSD: footbridge_com_io.c,v 1.8 2012/02/12 16:34:07 matt Exp $	*/
+/*	$NetBSD: footbridge_com_io.c,v 1.5 2003/03/23 14:12:25 chris Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -43,11 +43,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: footbridge_com_io.c,v 1.8 2012/02/12 16:34:07 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: footbridge_com_io.c,v 1.5 2003/03/23 14:12:25 chris Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 /* Proto types for all the bus_space structure functions */
 
@@ -136,7 +136,12 @@ struct bus_space fcomcons_bs_tag = {
 /* bus space functions */
 
 int
-fcomcons_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int cacheable, bus_space_handle_t *bshp)
+fcomcons_bs_map(t, bpa, size, cacheable, bshp)
+	void *t;
+	bus_addr_t bpa;
+	bus_size_t size;
+	int cacheable;
+	bus_space_handle_t *bshp;
 {
 	/*
 	 * Temporary implementation as all I/O is already mapped etc.
@@ -148,23 +153,24 @@ fcomcons_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int cacheable, bus_spa
 	}
 
 int
-fcomcons_bs_alloc(
-	void *t,
-	bus_addr_t rstart,
-	bus_addr_t rend,
-	bus_size_t size,
-	bus_size_t alignment,
-	bus_size_t boundary,
-	int cacheable,
-	bus_addr_t *bpap,
-	bus_space_handle_t *bshp)
+fcomcons_bs_alloc(t, rstart, rend, size, alignment, boundary, cacheable,
+    bpap, bshp)
+	void *t;
+	bus_addr_t rstart, rend;
+	bus_size_t size, alignment, boundary;
+	int cacheable;
+	bus_addr_t *bpap;
+	bus_space_handle_t *bshp;
 {
 	panic("fcomcons_alloc(): Help!");
 }
 
 
 void
-fcomcons_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
+fcomcons_bs_unmap(t, bsh, size)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
 {
 	/*
 	 * Temporary implementation
@@ -172,7 +178,10 @@ fcomcons_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
 }
 
 void    
-fcomcons_bs_free(void *t, bus_space_handle_t bsh, bus_size_t size)
+fcomcons_bs_free(t, bsh, size)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
 {
 
 	panic("fcomcons_free(): Help!");
@@ -181,7 +190,11 @@ fcomcons_bs_free(void *t, bus_space_handle_t bsh, bus_size_t size)
 }
 
 int
-fcomcons_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
+fcomcons_bs_subregion(t, bsh, offset, size, nbshp)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t offset, size;
+	bus_space_handle_t *nbshp;
 {
 
 	*nbshp = bsh + offset;
@@ -189,7 +202,11 @@ fcomcons_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_si
 }
 
 void
-fcomcons_bs_barrier(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t len, int flags)
+fcomcons_bs_barrier(t, bsh, offset, len, flags)
+	void *t;
+	bus_space_handle_t bsh;
+	bus_size_t offset, len;
+	int flags;
 {
 }	
 

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.10 2011/05/26 12:56:29 joerg Exp $
+#	$NetBSD: Makefile.inc,v 1.9 2008/09/02 14:46:53 christos Exp $
 
 .if !defined(__MAKEFILE_INC_INCLUDED__)
 __MAKEFILE_INC_INCLUDED__=1
@@ -10,8 +10,6 @@ IDIST=		${DIST}/texinfo
 
 CPPFLAGS+=	-I${.CURDIR}/../common -I${IDIST}/lib \
 		-DLOCALEDIR=\"/usr/share/locale\" -DHAVE_CONFIG_H
-
-CWARNFLAGS.clang+=	-Wno-format-security
 
 .if !defined(MAKEDOC)
 DPADD+=		${LIBCOMMONDIR}/libcommon.a

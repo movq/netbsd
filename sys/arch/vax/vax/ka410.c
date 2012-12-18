@@ -1,4 +1,4 @@
-/*	$NetBSD: ka410.c,v 1.33 2010/12/14 23:44:49 matt Exp $ */
+/*	$NetBSD: ka410.c,v 1.31 2008/03/11 05:34:03 matt Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -33,16 +33,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka410.c,v 1.33 2010/12/14 23:44:49 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka410.c,v 1.31 2008/03/11 05:34:03 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/cpu.h>
+#include <sys/types.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
+#include <sys/systm.h>
 
+#include <uvm/uvm_extern.h>
+
+#include <machine/pte.h>
+#include <machine/cpu.h>
+#include <machine/mtpr.h>
 #include <machine/sid.h>
+#include <machine/pmap.h>
 #include <machine/nexus.h>
+#include <machine/uvax.h>
 #include <machine/ka410.h>
 #include <machine/ka420.h>
 #include <machine/clock.h>
@@ -123,7 +130,7 @@ void
 ka41_cache_enable(void)
 {
 	*cacr = KA420_CACR_TPE; 	/* Clear any error, disable cache */
-	memset(l2cache, 0, KA420_CH2_SIZE); /* Clear whole cache */
+	bzero(l2cache, KA420_CH2_SIZE); /* Clear whole cache */
 	*cacr = KA420_CACR_CEN;		/* Enable cache */
 }
 

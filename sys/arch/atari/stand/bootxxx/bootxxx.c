@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxxx.c,v 1.8 2009/08/24 13:04:37 tsutsui Exp $	*/
+/*	$NetBSD: bootxxx.c,v 1.3.88.1 2009/01/16 22:57:33 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2001 Leo Weppelman.
@@ -44,34 +44,37 @@
 #include <tosdefs.h>
 
 int	bootxxx(void *, void *, osdsc_t *);
-void	boot_BSD(struct kparamb *)__attribute__((noreturn));
+void	boot_BSD __P((struct kparamb *)__attribute__((noreturn)));
 
 int
-bootxxx(void *readsector, void *disklabel, osdsc_t *od)
+bootxxx(readsector, disklabel, od)
+	void	*readsector,
+		*disklabel;
+	osdsc_t	*od;
 {
 	int		fd;
 	char		*errmsg;
 	extern char	end[], edata[];
 
-	memset(edata, 0, end - edata);
+	bzero(edata, end - edata);
 
 	/* XXX: Limit should be 16MB */
 	setheap(end, (void*)0x1000000);
 	printf("\033v\nNetBSD/Atari tertiary bootloader "
-					"($Revision: 1.8 $)\n\n");
+					"($Revision: 1.3.88.1 $)\n\n");
 
 	if (init_dskio(readsector, disklabel, od->rootfs))
-		return -1;
+		return(-1);
 
 	sys_info(od);
 	if (!(od->cputype & ATARI_ANYCPU)) {
 		printf("Unknown CPU-type.\n");
-		return -2;
+		return(-2);
 	}
 
 	if ((fd = open(od->osname, 0)) < 0) {
 		printf("Cannot open kernel '%s'\n", od->osname);
-		return -3;
+		return (-3);
 	}
 
 #ifndef __ELF__		/* a.out */
@@ -79,19 +82,18 @@ bootxxx(void *readsector, void *disklabel, osdsc_t *od)
 #else
 	if (elf_load(fd, od, &errmsg, 1) != 0)
 #endif
-		return -4;
+		return(-4);
 
 	boot_BSD(&od->kp);
-	return -5;
+	return(-5);
 
 	/* NOTREACHED */
 }
 
 void
-_rtt(void)
+_rtt()
 {
-
 	printf("Halting...\n");
-	for (;;)
+	for(;;)
 		;
 }

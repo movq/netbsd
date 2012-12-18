@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: h_funcs.subr,v 1.4 2011/02/21 10:14:29 pooka Exp $
+# $NetBSD: h_funcs.subr,v 1.2 2008/04/30 13:11:00 martin Exp $
 #
 # Copyright (c) 2005, 2006, 2007 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -40,23 +40,13 @@ test_mount() {
 	require_fs tmpfs
 
 	Mount_Point=$(pwd)/mntpt
-	atf_check -s eq:0 -o empty -e empty mkdir ${Mount_Point}
+	atf_check "mkdir ${Mount_Point}" 0 null null
 	if [ $# -gt 0 ]; then
-		mount -t tmpfs $* tmpfs ${Mount_Point} 2> mounterr
-		if [ $? -ne 0 ]; then
-			if grep 'Operation not supp' mounterr > /dev/null ; then
-				atf_skip "tmpfs not supported"
-			fi 
-			atf_fail "mount tmpfs"
-		fi
-        else
-		mount -t tmpfs tmpfs ${Mount_Point} 2> mounterr
-		if [ $? -ne 0 ]; then
-			if grep 'Operation not supp' mounterr > /dev/null ; then
-				atf_skip "tmpfs not supported"
-			fi 
-			atf_fail "mount tmpfs"
-		fi
+		atf_check "mount -t tmpfs $* tmpfs ${Mount_Point}" \
+		    0 null null
+	else
+		atf_check "mount -t tmpfs tmpfs ${Mount_Point}" \
+		    0 null null
 	fi
 	cd ${Mount_Point}
 }
@@ -68,8 +58,8 @@ test_mount() {
 #
 test_unmount() {
 	cd - >/dev/null
-	atf_check -s eq:0 -o empty -e empty umount ${Mount_Point}
-	atf_check -s eq:0 -o empty -e empty rmdir ${Mount_Point}
+	atf_check "umount ${Mount_Point}" 0 null null
+	atf_check "rmdir ${Mount_Point}" 0 null null
 	Mount_Point=
 }
 

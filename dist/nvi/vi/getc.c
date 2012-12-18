@@ -1,4 +1,4 @@
-/*	$NetBSD: getc.c,v 1.5 2012/01/21 19:29:41 christos Exp $ */
+/*	$NetBSD: getc.c,v 1.1.1.2.6.1 2009/01/20 02:41:13 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -123,12 +123,12 @@ cs_next(SCR *sp, VCS *csp)
 int
 cs_fspace(SCR *sp, VCS *csp)
 {
-	if (csp->cs_flags != 0 || !ISBLANK2(csp->cs_ch))
+	if (csp->cs_flags != 0 || !isblank(csp->cs_ch))
 		return (0);
 	for (;;) {
 		if (cs_next(sp, csp))
 			return (1);
-		if (csp->cs_flags != 0 || !ISBLANK2(csp->cs_ch))
+		if (csp->cs_flags != 0 || !isblank(csp->cs_ch))
 			break;
 	}
 	return (0);
@@ -147,7 +147,7 @@ cs_fblank(SCR *sp, VCS *csp)
 		if (cs_next(sp, csp))
 			return (1);
 		if (csp->cs_flags == CS_EOL || csp->cs_flags == CS_EMP ||
-		    (csp->cs_flags == 0 && ISBLANK2(csp->cs_ch)))
+		    (csp->cs_flags == 0 && isblank(csp->cs_ch)))
 			continue;
 		break;
 	}
@@ -216,7 +216,7 @@ cs_bblank(SCR *sp, VCS *csp)
 		if (cs_prev(sp, csp))
 			return (1);
 		if (csp->cs_flags == CS_EOL || csp->cs_flags == CS_EMP ||
-		    (csp->cs_flags == 0 && ISBLANK2(csp->cs_ch)))
+		    (csp->cs_flags == 0 && isblank(csp->cs_ch)))
 			continue;
 		break;
 	}

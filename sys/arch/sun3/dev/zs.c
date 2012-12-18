@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.88 2012/08/10 14:33:35 tsutsui Exp $	*/
+/*	$NetBSD: zs.c,v 1.84 2008/06/13 13:11:42 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.88 2012/08/10 14:33:35 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.84 2008/06/13 13:11:42 cegger Exp $");
 
 #include "opt_kgdb.h"
 
@@ -259,7 +259,8 @@ zs_attach(device_t parent, device_t self, void *aux)
 	struct zsc_attach_args zsc_args;
 	volatile struct zschan *zc;
 	struct zs_chanstate *cs;
-	int zs_unit, channel;
+	int s, zs_unit, channel;
+	static int didintr;
 
 	zsc->zsc_dev = self;
 	zs_unit = device_unit(self);
@@ -323,16 +324,21 @@ zs_attach(device_t parent, device_t self, void *aux)
 			/* No sub-driver.  Just reset it. */
 			uint8_t reset = (channel == 0) ?
 				ZSWR9_A_RESET : ZSWR9_B_RESET;
-			zs_lock_chan(cs);
+			s = splhigh();
 			zs_write_reg(cs,  9, reset);
-			zs_unlock_chan(cs);
+			splx(s);
 		}
 	}
 
 	/*
-	 * Now safe to install interrupt handlers.
+	 * Now safe to install interrupt handlers.  Note the arguments
+	 * to the interrupt handlers aren't used.  Note, we only do this
+	 * once since both SCCs interrupt at the same level and vector.
 	 */
-	isr_add_autovect(zshard, zsc, ca->ca_intpri);
+	if (!didintr) {
+		didintr = 1;
+		isr_add_autovect(zshard, NULL, ca->ca_intpri);
+	}
 	zsc->zs_si = softint_establish(SOFTINT_SERIAL,
 	    (void (*)(void *))zsc_intr_soft, zsc);
 	/* XXX; evcnt_attach() ? */
@@ -342,12 +348,12 @@ zs_attach(device_t parent, device_t self, void *aux)
 	 * (common to both channels, do it on A)
 	 */
 	cs = zsc->zsc_cs[0];
-	zs_lock_chan(cs);
+	s = splhigh();
 	/* interrupt vector */
 	zs_write_reg(cs, 2, zs_init_reg[2]);
 	/* master interrupt control (enable) */
 	zs_write_reg(cs, 9, zs_init_reg[9]);
-	zs_unlock_chan(cs);
+	splx(s);
 
 	/*
 	 * XXX: L1A hack - We would like to be able to break into
@@ -376,18 +382,25 @@ zs_print(void *aux, const char *name)
 
 /*
  * Our ZS chips all share a common, autovectored interrupt,
- * but we establish zshard handler per each ZS chip
- * to avoid holding unnecessary locks in interrupt context.
+ * so we have to look at all of them on each interrupt.
  */
 static int 
 zshard(void *arg)
 {
-	struct zsc_softc *zsc = arg;
-	int rval;
+	struct zsc_softc *zsc;
+	int unit, rval, softreq;
 
-	rval = zsc_intr_hard(zsc);
-	if (zsc->zsc_cs[0]->cs_softreq || zsc->zsc_cs[1]->cs_softreq)
-		softint_schedule(zsc->zs_si);
+	rval = 0;
+	for (unit = 0; unit < zsc_cd.cd_ndevs; unit++) {
+		zsc = device_lookup_private(&zsc_cd, unit);
+		if (zsc == NULL)
+			continue;
+		rval |= zsc_intr_hard(zsc);
+		softreq  = zsc->zsc_cs[0]->cs_softreq;
+		softreq |= zsc->zsc_cs[1]->cs_softreq;
+		if (softreq)
+			softint_schedule(zsc->zs_si);
+	}
 
 	return (rval);
 }
@@ -442,6 +455,7 @@ zs_set_speed(struct zs_chanstate *cs, int bps)
 int 
 zs_set_modes(struct zs_chanstate *cs, int cflag	/* bits per second */)
 {
+	int s;
 
 	/*
 	 * Output hardware flow control on the chip is horrendous:
@@ -450,7 +464,7 @@ zs_set_modes(struct zs_chanstate *cs, int cflag	/* bits per second */)
 	 * Therefore, NEVER set the HFC bit, and instead use the
 	 * status interrupt to detect CTS changes.
 	 */
-	zs_lock_chan(cs);
+	s = splzs();
 	cs->cs_rr0_pps = 0;
 	if ((cflag & (CLOCAL | MDMBUF)) != 0) {
 		cs->cs_rr0_dcd = 0;
@@ -471,7 +485,7 @@ zs_set_modes(struct zs_chanstate *cs, int cflag	/* bits per second */)
 		cs->cs_wr5_rts = 0;
 		cs->cs_rr0_cts = 0;
 	}
-	zs_unlock_chan(cs);
+	splx(s);
 
 	/* Caller will stuff the pending registers. */
 	return (0);
@@ -674,6 +688,13 @@ struct consdev consdev_prom = {
 	nullcnpollc,
 };
 
+/*
+ * The console table pointer is statically initialized
+ * to point to the PROM (output only) table, so that
+ * early calls to printf will work.
+ */
+struct consdev *cn_tab = &consdev_prom;
+
 void 
 nullcnprobe(struct consdev *cn)
 {
@@ -707,7 +728,7 @@ prom_cnputc(dev_t dev, int c)
 
 extern struct consdev consdev_kd;
 
-static const struct {
+static struct {
 	int zs_unit, channel;
 } zstty_conf[NZS*2] = {
 	/* XXX: knowledge from the config file here... */
@@ -717,7 +738,7 @@ static const struct {
 	{ 0, 1 },	/* ttyd */
 };
 
-static const char * const prom_inSrc_name[] = {
+static const char *prom_inSrc_name[] = {
 	"keyboard/display",
 	"ttya", "ttyb",
 	"ttyc", "ttyd" };

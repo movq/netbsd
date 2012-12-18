@@ -1,7 +1,7 @@
-/*	$NetBSD: cpuio.h,v 1.8 2012/08/29 17:13:22 drochner Exp $	*/
+/*	$NetBSD: cpuio.h,v 1.2 2008/04/28 20:24:10 martin Exp $	*/
 
 /*-
- * Copyright (c) 2007, 2009, 2012 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -37,7 +37,6 @@
 #include <sys/ioccom.h>
 
 #ifndef _KERNEL
-#include <limits.h>
 #include <stdbool.h>
 #endif
 
@@ -50,34 +49,14 @@ typedef struct cpustate {
 	bool		cs_online;	/* running unbound LWPs */
 	bool		cs_intr;	/* fielding interrupts */
 	bool		cs_unused[2];	/* reserved */
-	int32_t		cs_lastmod;	/* time of last state change */
+	time_t		cs_lastmod;	/* time of last state change */
 	char		cs_name[16];	/* reserved */
-	int32_t		cs_lastmodhi;	/* time of last state change */
-	uint32_t	cs_intrcnt;	/* count of interrupt handlers + 1 */
-	uint32_t	cs_hwid;	/* hardware id */
-	uint32_t	cs_reserved;	/* reserved */
+	uint32_t	cs_reserved[4];	/* reserved */
 } cpustate_t;
 
 #define	IOC_CPU_SETSTATE	_IOW('c', 0, cpustate_t)
 #define	IOC_CPU_GETSTATE	_IOWR('c', 1, cpustate_t)
 #define	IOC_CPU_GETCOUNT	_IOR('c', 2, int)
 #define	IOC_CPU_MAPID		_IOWR('c', 3, int)
-/* 4 and 5 reserved for compat nb6 x86 amd ucode loader */
-
-struct cpu_ucode_version {
-	int loader_version;	/* IN: md version number */
-	void *data;		/* OUT: CPU ID data */
-};
-
-struct cpu_ucode {
-	int loader_version;	/* md version number */
-	int cpu_nr;		/* CPU index or special value below */
-#define CPU_UCODE_ALL_CPUS (-1)
-#define CPU_UCODE_CURRENT_CPU (-2)
-	char fwname[PATH_MAX];
-};
-
-#define IOC_CPU_UCODE_GET_VERSION	_IOWR('c', 6, struct cpu_ucode_version)
-#define IOC_CPU_UCODE_APPLY		_IOW('c', 7, struct cpu_ucode)
 
 #endif /* !_SYS_CPUIO_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_socketcall.c,v 1.8 2012/05/10 19:38:23 christos Exp $ */
+/*	$NetBSD: linux32_socketcall.c,v 1.6 2007/12/20 23:02:58 dsl Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -31,8 +31,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_socketcall.c,v 1.8 2012/05/10 19:38:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_socketcall.c,v 1.6 2007/12/20 23:02:58 dsl Exp $");
 
+#include "opt_ktrace.h"
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/time.h>
@@ -45,8 +46,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_socketcall.c,v 1.8 2012/05/10 19:38:23 chris
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
-#include <compat/linux/common/linux_ipc.h>
-#include <compat/linux/common/linux_sem.h>
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/linux32/common/linux32_types.h>
@@ -56,7 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_socketcall.c,v 1.8 2012/05/10 19:38:23 chris
 #include <compat/linux32/common/linux32_socketcall.h>
 #include <compat/linux32/linux32_syscallargs.h>
 
-#define sc(emul, fn) { "linux32/" #fn, sizeof (struct emul##_##fn##_args), \
+#define sc(emul, fn) { #fn, sizeof (struct emul##_##fn##_args), \
 	(int (*)(struct lwp *, const void *, register_t *))emul##_##fn }
 
 static const struct {

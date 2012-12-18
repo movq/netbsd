@@ -1,4 +1,4 @@
-/*	$NetBSD: xinstall.c,v 1.115 2011/09/06 18:50:32 joerg Exp $	*/
+/*	$NetBSD: xinstall.c,v 1.103.4.1 2009/06/06 22:10:13 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -46,7 +46,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993\
 #if 0
 static char sccsid[] = "@(#)xinstall.c	8.1 (Berkeley) 7/21/93";
 #else
-__RCSID("$NetBSD: xinstall.c,v 1.115 2011/09/06 18:50:32 joerg Exp $");
+__RCSID("$NetBSD: xinstall.c,v 1.103.4.1 2009/06/06 22:10:13 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,7 +55,6 @@ __RCSID("$NetBSD: xinstall.c,v 1.115 2011/09/06 18:50:32 joerg Exp $");
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-#include <sys/time.h>
 
 #include <ctype.h>
 #include <err.h>
@@ -75,7 +74,6 @@ __RCSID("$NetBSD: xinstall.c,v 1.115 2011/09/06 18:50:32 joerg Exp $");
 #include <md5.h>
 #include <rmd160.h>
 #include <sha1.h>
-#include <sha2.h>
 
 #include "pathnames.h"
 #include "mtree.h"
@@ -83,33 +81,28 @@ __RCSID("$NetBSD: xinstall.c,v 1.115 2011/09/06 18:50:32 joerg Exp $");
 #define STRIP_ARGS_MAX 32
 #define BACKUP_SUFFIX ".old"
 
-static int	dobackup, dodir, dostrip, dolink, dopreserve, dorename, dounpriv;
-static int	haveopt_f, haveopt_g, haveopt_m, haveopt_o;
-static int	numberedbackup;
-static int	mode = S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
-static char	pathbuf[MAXPATHLEN];
-static uid_t	uid = -1;
-static gid_t	gid = -1;
-static char	*group, *owner, *fflags, *tags;
-static FILE	*metafp;
-static char	*metafile;
-static u_long	fileflags;
-static char	*stripArgs;
-static char	*afterinstallcmd;
-static const char *suffix = BACKUP_SUFFIX;
-static char	*destdir;
+int	dobackup, dodir, dostrip, dolink, dopreserve, dorename, dounpriv;
+int	haveopt_f, haveopt_g, haveopt_m, haveopt_o;
+int	numberedbackup;
+int	mode = S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
+char	pathbuf[MAXPATHLEN];
+id_t	uid = -1, gid = -1;
+char	*group, *owner, *fflags, *tags;
+FILE	*metafp;
+char	*metafile;
+u_long	fileflags;
+char	*stripArgs;
+char	*afterinstallcmd;
+const char *suffix = BACKUP_SUFFIX;
+char	*destdir;
 
 enum {
 	DIGEST_NONE = 0,
 	DIGEST_MD5,
 	DIGEST_RMD160,
 	DIGEST_SHA1,
-	DIGEST_SHA256,
-	DIGEST_SHA384,
-	DIGEST_SHA512,
 } digesttype = DIGEST_NONE;
-
-static char	*digest;
+char	*digest;
 
 #define LN_ABSOLUTE	0x01
 #define LN_RELATIVE	0x02
@@ -122,21 +115,22 @@ static char	*digest;
 #define	HASUID		0x04		/* Tell install the uid was given */
 #define	HASGID		0x08		/* Tell install the gid was given */
 
-static void	afterinstall(const char *, const char *, int);
-static void	backup(const char *);
-static char   *copy(int, char *, int, char *, off_t);
-static int	do_link(char *, char *);
-static void	do_symlink(char *, char *);
-static void	install(char *, char *, u_int);
-static void	install_dir(char *, u_int);
-static void	makelink(char *, char *);
-static void	metadata_log(const char *, const char *, struct timeval *,
+void	afterinstall(const char *, const char *, int);
+void	backup(const char *);
+char   *copy(int, char *, int, char *, off_t);
+int	do_link(char *, char *);
+void	do_symlink(char *, char *);
+void	install(char *, char *, u_int);
+void	install_dir(char *, u_int);
+int	main(int, char *[]);
+void	makelink(char *, char *);
+void	metadata_log(const char *, const char *, struct timeval *,
 	    const char *, const char *, off_t);
-static int	parseid(char *, id_t *);
-static void	strip(char *);
-__dead static void	usage(void);
-static char   *xbasename(char *);
-static char   *xdirname(char *);
+int	parseid(char *, id_t *);
+void	strip(char *);
+void	usage(void);
+char   *xbasename(char *);
+char   *xdirname(char *);
 
 int
 main(int argc, char *argv[])
@@ -299,12 +293,6 @@ main(int argc, char *argv[])
 			digesttype = DIGEST_RMD160;
 		} else if (strcmp(digest, "sha1") == 0) {
 			digesttype = DIGEST_SHA1;
-		} else if (strcmp(digest, "sha256") == 0) {
-			digesttype = DIGEST_SHA256;
-		} else if (strcmp(digest, "sha384") == 0) {
-			digesttype = DIGEST_SHA384;
-		} else if (strcmp(digest, "sha512") == 0) {
-			digesttype = DIGEST_SHA512;
 		} else {
 			warnx("unknown digest `%s'", digest);
 			usage();
@@ -313,21 +301,13 @@ main(int argc, char *argv[])
 
 	/* get group and owner id's */
 	if (group && !dounpriv) {
-		if (gid_from_group(group, &gid) == -1) {
-			id_t id;
-			if (!parseid(group, &id))
-				errx(1, "unknown group %s", group);
-			gid = id;
-		}
+		if (gid_from_group(group, &gid) == -1 && ! parseid(group, &gid))
+			errx(1, "unknown group %s", group);
 		iflags |= HASGID;
 	}
 	if (owner && !dounpriv) {
-		if (uid_from_user(owner, &uid) == -1) {
-			id_t id;
-			if (!parseid(owner, &id))
-				errx(1, "unknown user %s", owner);
-			uid = id;
-		}
+		if (uid_from_user(owner, &uid) == -1 && ! parseid(owner, &uid))
+			errx(1, "unknown user %s", owner);
 		iflags |= HASUID;
 	}
 
@@ -403,7 +383,7 @@ main(int argc, char *argv[])
  * parseid --
  *	parse uid or gid from arg into id, returning non-zero if successful
  */
-static int
+int
 parseid(char *name, id_t *id)
 {
 	char	*ep;
@@ -420,14 +400,15 @@ parseid(char *name, id_t *id)
  *	make a hard link, obeying dorename if set
  *	return -1 on failure
  */
-static int
+int
 do_link(char *from_name, char *to_name)
 {
 	char tmpl[MAXPATHLEN];
 	int ret;
 
 	if (dorename) {
-		(void)snprintf(tmpl, sizeof(tmpl), "%s.inst.XXXXXX", to_name);
+		(void)snprintf(tmpl, sizeof(tmpl), "%s/inst.XXXXXX",
+		    xdirname(to_name));
 		/* This usage is safe. */
 		if (mktemp(tmpl) == NULL)
 			err(1, "%s: mktemp", tmpl);
@@ -450,13 +431,14 @@ do_link(char *from_name, char *to_name)
  *	make a symbolic link, obeying dorename if set
  *	exit on failure
  */
-static void
+void
 do_symlink(char *from_name, char *to_name)
 {
 	char tmpl[MAXPATHLEN];
 
 	if (dorename) {
-		(void)snprintf(tmpl, sizeof(tmpl), "%s.inst.XXXXXX", to_name);
+		(void)snprintf(tmpl, sizeof(tmpl), "%s/inst.XXXXXX",
+		    xdirname(to_name));
 		/* This usage is safe. */
 		if (mktemp(tmpl) == NULL)
 			err(1, "%s: mktemp", tmpl);
@@ -478,7 +460,7 @@ do_symlink(char *from_name, char *to_name)
  * makelink --
  *	make a link from source to destination
  */
-static void
+void
 makelink(char *from_name, char *to_name)
 {
 	char	src[MAXPATHLEN], dst[MAXPATHLEN], lnk[MAXPATHLEN];
@@ -525,15 +507,6 @@ makelink(char *from_name, char *to_name)
 					break;
 				case DIGEST_SHA1:
 					dres = SHA1File(from_name, NULL);
-					break;
-				case DIGEST_SHA256:
-					dres = SHA256_File(from_name, NULL);
-					break;
-				case DIGEST_SHA384:
-					dres = SHA384_File(from_name, NULL);
-					break;
-				case DIGEST_SHA512:
-					dres = SHA512_File(from_name, NULL);
 					break;
 				default:
 					dres = NULL;
@@ -616,7 +589,7 @@ makelink(char *from_name, char *to_name)
  * install --
  *	build a path name and install the file
  */
-static void
+void
 install(char *from_name, char *to_name, u_int flags)
 {
 	struct stat	from_sb;
@@ -675,7 +648,8 @@ install(char *from_name, char *to_name, u_int flags)
 		(void)chflags(to_name, to_sb.st_flags & ~(NOCHANGEBITS));
 #endif
 	if (dorename) {
-		(void)snprintf(tmpl, sizeof(tmpl), "%s.inst.XXXXXX", to_name);
+		(void)snprintf(tmpl, sizeof(tmpl), "%s/inst.XXXXXX",
+		    xdirname(to_name));
 		oto_name = to_name;
 		to_name = tmpl;
 	} else {
@@ -808,7 +782,7 @@ install(char *from_name, char *to_name, u_int flags)
  *
  *	If to_fd < 0, just calculate a digest, don't copy.
  */
-static char *
+char *
 copy(int from_fd, char *from_name, int to_fd, char *to_name, off_t size)
 {
 	ssize_t	nr, nw;
@@ -818,9 +792,6 @@ copy(int from_fd, char *from_name, int to_fd, char *to_name, off_t size)
 	MD5_CTX		ctxMD5;
 	RMD160_CTX	ctxRMD160;
 	SHA1_CTX	ctxSHA1;
-	SHA256_CTX	ctxSHA256;
-	SHA384_CTX	ctxSHA384;
-	SHA512_CTX	ctxSHA512;
 
 	switch (digesttype) {
 	case DIGEST_MD5:
@@ -831,15 +802,6 @@ copy(int from_fd, char *from_name, int to_fd, char *to_name, off_t size)
 		break;
 	case DIGEST_SHA1:
 		SHA1Init(&ctxSHA1);
-		break;
-	case DIGEST_SHA256:
-		SHA256_Init(&ctxSHA256);
-		break;
-	case DIGEST_SHA384:
-		SHA384_Init(&ctxSHA384);
-		break;
-	case DIGEST_SHA512:
-		SHA512_Init(&ctxSHA512);
 		break;
 	case DIGEST_NONE:
 		if (to_fd < 0)
@@ -887,15 +849,6 @@ copy(int from_fd, char *from_name, int to_fd, char *to_name, off_t size)
 			case DIGEST_SHA1:
 				SHA1Update(&ctxSHA1, p, size);
 				break;
-			case DIGEST_SHA256:
-				SHA256_Update(&ctxSHA256, p, size);
-				break;
-			case DIGEST_SHA384:
-				SHA384_Update(&ctxSHA384, p, size);
-				break;
-			case DIGEST_SHA512:
-				SHA512_Update(&ctxSHA512, p, size);
-				break;
 			default:
 				break;
 			}
@@ -920,15 +873,6 @@ copy(int from_fd, char *from_name, int to_fd, char *to_name, off_t size)
 				case DIGEST_SHA1:
 					SHA1Update(&ctxSHA1, buf, nr);
 					break;
-				case DIGEST_SHA256:
-					SHA256_Update(&ctxSHA256, buf, nr);
-					break;
-				case DIGEST_SHA384:
-					SHA384_Update(&ctxSHA384, buf, nr);
-					break;
-				case DIGEST_SHA512:
-					SHA512_Update(&ctxSHA512, buf, nr);
-					break;
 				default:
 					break;
 				}
@@ -947,12 +891,6 @@ copy(int from_fd, char *from_name, int to_fd, char *to_name, off_t size)
 		return RMD160End(&ctxRMD160, NULL);
 	case DIGEST_SHA1:
 		return SHA1End(&ctxSHA1, NULL);
-	case DIGEST_SHA256:
-		return SHA256_End(&ctxSHA256, NULL);
-	case DIGEST_SHA384:
-		return SHA384_End(&ctxSHA384, NULL);
-	case DIGEST_SHA512:
-		return SHA512_End(&ctxSHA512, NULL);
 	default:
 		return NULL;
 	}
@@ -962,7 +900,7 @@ copy(int from_fd, char *from_name, int to_fd, char *to_name, off_t size)
  * strip --
  *	use strip(1) to strip the target file
  */
-static void
+void
 strip(char *to_name)
 {
 	static const char exec_failure[] = ": exec of strip failed: ";
@@ -970,7 +908,7 @@ strip(char *to_name)
 	const char * volatile stripprog, *progname;
 	char *cmd;
 
-	if ((stripprog = getenv("STRIP")) == NULL || *stripprog == '\0') {
+	if ((stripprog = getenv("STRIP")) == NULL) {
 #ifdef TARGET_STRIP
 		stripprog = TARGET_STRIP;
 #else
@@ -1025,7 +963,7 @@ strip(char *to_name)
  *	run provided command on the target file or directory after it's been
  *	installed and stripped, but before permissions are set or it's renamed
  */
-static void
+void
 afterinstall(const char *command, const char *to_name, int errunlink)
 {
 	int	serrno, status;
@@ -1069,7 +1007,7 @@ afterinstall(const char *command, const char *to_name, int errunlink)
  *	if suffix contains a "%", it's taken as a printf(3) pattern
  *	used for a numbered backup.
  */
-static void
+void
 backup(const char *to_name)
 {
 	char	bname[FILENAME_MAX];
@@ -1099,38 +1037,28 @@ backup(const char *to_name)
  * install_dir --
  *	build directory hierarchy
  */
-static void
+void
 install_dir(char *path, u_int flags)
 {
-	char		*p;
-	struct stat	sb;
-	int		ch;
+        char		*p;
+        struct stat	sb;
+        int		ch;
 
-	for (p = path;; ++p)
-		if (!*p || (p != path && *p  == '/')) {
-			ch = *p;
-			*p = '\0';
-			if (mkdir(path, 0777) < 0) {
-				/*
-				 * Can't create; path exists or no perms.
-				 * stat() path to determine what's there now.
-				 */
-				int sverrno;
-				sverrno = errno;
-				if (stat(path, &sb) < 0) {
-					/* Not there; use mkdir()s error */
-					errno = sverrno;
+        for (p = path;; ++p)
+                if (!*p || (p != path && *p  == '/')) {
+                        ch = *p;
+                        *p = '\0';
+                        if (stat(path, &sb)) {
+                                if (errno != ENOENT || mkdir(path, 0777) < 0) {
 					err(1, "%s: mkdir", path);
-				}
-				if (!S_ISDIR(sb.st_mode)) {
-					errx(1,
-					    "%s exists but is not a directory",
-					    path);
-				}
+                                }
+                        }
+			else if (!S_ISDIR(sb.st_mode)) {
+				errx(1, "%s exists but is not a directory", path);
 			}
-			if (!(*p = ch))
+                        if (!(*p = ch))
 				break;
-		}
+                }
 
 	if (afterinstallcmd != NULL)
 		afterinstall(afterinstallcmd, path, 0);
@@ -1138,7 +1066,7 @@ install_dir(char *path, u_int flags)
 	if (!dounpriv && (
 	    ((flags & (HASUID | HASGID)) && chown(path, uid, gid) == -1)
 	    || chmod(path, mode) == -1 )) {
-		warn("%s: chown/chmod", path);
+                warn("%s: chown/chmod", path);
 	}
 	metadata_log(path, "dir", NULL, NULL, NULL, 0);
 }
@@ -1149,7 +1077,7 @@ install_dir(char *path, u_int flags)
  *	metafp, to allow permissions to be set correctly by other tools,
  *	or to allow integrity checks to be performed.
  */
-static void
+void
 metadata_log(const char *path, const char *type, struct timeval *tv,
 	const char *slink, const char *digestresult, off_t size)
 {
@@ -1202,8 +1130,7 @@ metadata_log(const char *path, const char *type, struct timeval *tv,
 	if (*type == 'f') /* type=file */
 		fprintf(metafp, " size=%lld", (long long)size);
 	if (tv != NULL && dopreserve)
-		fprintf(metafp, " time=%lld.%ld",
-			(long long)tv[1].tv_sec, (long)tv[1].tv_usec);
+		fprintf(metafp, " time=%ld.%ld", tv[1].tv_sec, tv[1].tv_usec);
 	if (digestresult && digest)
 		fprintf(metafp, " %s=%s", digest, digestresult);
 	if (fflags)
@@ -1225,7 +1152,7 @@ metadata_log(const char *path, const char *type, struct timeval *tv,
  *	libc basename(3) that returns a pointer to a static buffer
  *	instead of overwriting that passed-in string.
  */
-static char *
+char *
 xbasename(char *path)
 {
 	static char tmp[MAXPATHLEN];
@@ -1239,7 +1166,7 @@ xbasename(char *path)
  *	libc dirname(3) that returns a pointer to a static buffer
  *	instead of overwriting that passed-in string.
  */
-static char *
+char *
 xdirname(char *path)
 {
 	static char tmp[MAXPATHLEN];
@@ -1252,7 +1179,7 @@ xdirname(char *path)
  * usage --
  *	print a usage message and die
  */
-static void
+void
 usage(void)
 {
 	const char *prog;

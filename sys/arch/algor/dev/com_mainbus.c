@@ -1,4 +1,4 @@
-/*	$NetBSD: com_mainbus.c,v 1.14 2011/07/09 16:03:01 matt Exp $	*/
+/*	$NetBSD: com_mainbus.c,v 1.11 2008/04/28 20:23:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -33,24 +33,26 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: com_mainbus.c,v 1.14 2011/07/09 16:03:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_mainbus.c,v 1.11 2008/04/28 20:23:10 martin Exp $");
 
 #include <sys/param.h>
-#include <sys/bus.h>
-#include <sys/conf.h>
-#include <sys/device.h>
-#include <sys/file.h>
-#include <sys/intr.h>
-#include <sys/ioctl.h>
-#include <sys/kernel.h>
-#include <sys/proc.h>
-#include <sys/select.h>
-#include <sys/syslog.h>
 #include <sys/systm.h>
+#include <sys/ioctl.h>
+#include <sys/select.h>
 #include <sys/tty.h>
+#include <sys/proc.h>
+#include <sys/user.h>
+#include <sys/conf.h>
+#include <sys/file.h>
 #include <sys/uio.h>
+#include <sys/kernel.h>
+#include <sys/syslog.h>
+#include <sys/types.h>
+#include <sys/device.h>
 
-#include <algor/autoconf.h>
+#include <machine/autoconf.h>
+#include <machine/intr.h>
+#include <machine/bus.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -62,8 +64,9 @@ struct com_mainbus_softc {
 	void	*sc_ih;			/* interrupt handler */
 };
 
-static int	com_mainbus_match(device_t, cfdata_t , void *);
-static void	com_mainbus_attach(device_t, device_t, void *);
+int	com_mainbus_match(device_t, cfdata_t , void *);
+void	com_mainbus_attach(device_t, device_t, void *);
+void	com_mainbus_cleanup(void *);
 
 CFATTACH_DECL_NEW(com_mainbus, sizeof(struct com_mainbus_softc),
     com_mainbus_match, com_mainbus_attach, NULL, NULL);

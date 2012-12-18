@@ -1,4 +1,4 @@
-/*	$NetBSD: geodeide.c,v 1.24 2012/07/31 15:50:36 bouyer Exp $	*/
+/*	$NetBSD: geodeide.c,v 1.15 2008/03/18 20:46:36 cube Exp $	*/
 
 /*
  * Copyright (c) 2004 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,10 +37,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: geodeide.c,v 1.24 2012/07/31 15:50:36 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: geodeide.c,v 1.15 2008/03/18 20:46:36 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
@@ -45,7 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: geodeide.c,v 1.24 2012/07/31 15:50:36 bouyer Exp $")
 #include <dev/pci/pciide_geode_reg.h>
 
 static void geodeide_chip_map(struct pciide_softc *,
-				 const struct pci_attach_args *);
+				 struct pci_attach_args *);
 static void geodeide_setup_channel(struct ata_channel *);
 static int geodeide_dma_init(void *, int, int, void *, size_t, int);
 
@@ -100,10 +107,11 @@ geodeide_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-geodeide_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
+geodeide_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int channel;
+	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
@@ -136,7 +144,6 @@ geodeide_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
 	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	/*
 	 * Soekris Engineering Issue #0003:
@@ -161,7 +168,7 @@ geodeide_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 		/* controller is compat-only */
 		if (pciide_chansetup(sc, channel, 0) == 0)
 			continue;
-		pciide_mapchan(pa, cp, 0, pciide_pci_intr);
+		pciide_mapchan(pa, cp, 0, &cmdsize, &ctlsize, pciide_pci_intr);
 	}
 }
 
@@ -204,7 +211,7 @@ geodeide_setup_channel(struct ata_channel *chp)
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if (drvp->drive_type == ATA_DRIVET_NONE)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
 
 		switch (sc->sc_pp->ide_product) {
@@ -223,18 +230,18 @@ geodeide_setup_channel(struct ata_channel *chp)
 		}
 
 		/* add timing values, setup DMA if needed */
-		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
+		if (drvp->drive_flags & DRIVE_UDMA) {
 			/* Use Ultra-DMA */
 			dma_timing |= geode_udma[drvp->UDMA_mode];
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
-		} else if (drvp->drive_flags & ATA_DRIVE_DMA) {
+		} else if (drvp->drive_flags & DRIVE_DMA) {
 			/* use Multiword DMA */
 			dma_timing |= geode_dma[drvp->DMA_mode];
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
 		} else {
 			/* PIO only */
 			s = splbio();
-			drvp->drive_flags &= ~(ATA_DRIVE_UDMA | ATA_DRIVE_DMA);
+			drvp->drive_flags &= ~(DRIVE_UDMA | DRIVE_DMA);
 			splx(s);
 		}
 

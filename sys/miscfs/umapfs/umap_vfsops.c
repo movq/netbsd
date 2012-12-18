@@ -1,4 +1,4 @@
-/*	$NetBSD: umap_vfsops.c,v 1.88 2012/04/30 22:51:28 rmind Exp $	*/
+/*	$NetBSD: umap_vfsops.c,v 1.80 2008/06/28 01:34:06 rumble Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umap_vfsops.c,v 1.88 2012/04/30 22:51:28 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umap_vfsops.c,v 1.80 2008/06/28 01:34:06 rumble Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,7 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: umap_vfsops.c,v 1.88 2012/04/30 22:51:28 rmind Exp $
 #include <miscfs/umapfs/umap.h>
 #include <miscfs/genfs/layer_extern.h>
 
-MODULE(MODULE_CLASS_VFS, umap, "layerfs");
+MODULE(MODULE_CLASS_VFS, umapfs, NULL);
 
 VFS_PROTOS(umapfs);
 
@@ -68,10 +68,13 @@ static struct sysctllog *umapfs_sysctl_log;
  * Mount umap layer
  */
 int
-umapfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
+umapfs_mount(mp, path, data, data_len)
+	struct mount *mp;
+	const char *path;
+	void *data;
+	size_t *data_len;
 {
 	struct lwp *l = curlwp;
-	struct pathbuf *pb;
 	struct nameidata nd;
 	struct umap_args *args = data;
 	struct vnode *lowerrootvp, *vp;
@@ -96,9 +99,8 @@ umapfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	}
 
 	/* only for root */
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-	    KAUTH_REQ_SYSTEM_MOUNT_UMAP, NULL, NULL, NULL);
-	if (error)
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return error;
 
 #ifdef UMAPFS_DIAGNOSTIC
@@ -114,21 +116,15 @@ umapfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	/*
 	 * Find lower node
 	 */
-	error = pathbuf_copyin(args->umap_target, &pb);
-	if (error) {
-		return error;
-	}
-	NDINIT(&nd, LOOKUP, FOLLOW|LOCKLEAF, pb);
-	if ((error = namei(&nd)) != 0) {
-		pathbuf_destroy(pb);
-		return error;
-	}
+	NDINIT(&nd, LOOKUP, FOLLOW|LOCKLEAF,
+		UIO_USERSPACE, args->umap_target);
+	if ((error = namei(&nd)) != 0)
+		return (error);
 
 	/*
 	 * Sanity check on lower vnode
 	 */
 	lowerrootvp = nd.ni_vp;
-	pathbuf_destroy(pb);
 #ifdef UMAPFS_DIAGNOSTIC
 	printf("vp = %p, check for VDIR...\n", lowerrootvp);
 #endif
@@ -142,7 +138,10 @@ umapfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	printf("mp = %p\n", mp);
 #endif
 
-	amp = kmem_zalloc(sizeof(struct umap_mount), KM_SLEEP);
+	amp = (struct umap_mount *) malloc(sizeof(struct umap_mount),
+				M_UFSMNT, M_WAITOK);	/* XXX */
+	memset(amp, 0, sizeof(struct umap_mount));
+
 	mp->mnt_data = amp;
 	amp->umapm_vfs = lowerrootvp->v_mount;
 	if (amp->umapm_vfs->mnt_flag & MNT_LOCAL)
@@ -213,14 +212,14 @@ umapfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		vput(lowerrootvp);
 		hashdone(amp->umapm_node_hashtbl, HASH_LIST,
 		    amp->umapm_node_hash);
-		kmem_free(amp, sizeof(struct umap_mount));
-		return error;
+		free(amp, M_UFSMNT);	/* XXX */
+		return (error);
 	}
 	/*
 	 * Unlock the node (either the lower or the alias)
 	 */
 	vp->v_vflag |= VV_ROOT;
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 
 	/*
 	 * Keep a held reference to the root vnode.
@@ -272,9 +271,9 @@ umapfs_unmount(struct mount *mp, int mntflags)
 	 */
 	mutex_destroy(&amp->umapm_hashlock);
 	hashdone(amp->umapm_node_hashtbl, HASH_LIST, amp->umapm_node_hash);
-	kmem_free(amp, sizeof(struct umap_mount));
+	free(amp, M_UFSMNT);	/* XXX */
 	mp->mnt_data = NULL;
-	return 0;
+	return (0);
 }
 
 extern const struct vnodeopv_desc umapfs_vnodeop_opv_desc;
@@ -313,7 +312,7 @@ struct vfsops umapfs_vfsops = {
 };
 
 static int
-umap_modcmd(modcmd_t cmd, void *arg)
+umapfs_modcmd(modcmd_t cmd, void *arg)
 {
 	int error;
 

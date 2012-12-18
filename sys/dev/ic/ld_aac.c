@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_aac.c,v 1.27 2012/10/27 17:18:21 chs Exp $	*/
+/*	$NetBSD: ld_aac.c,v 1.22 2008/10/02 08:21:57 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_aac.c,v 1.27 2012/10/27 17:18:21 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_aac.c,v 1.22 2008/10/02 08:21:57 sborrill Exp $");
+
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,9 +43,13 @@ __KERNEL_RCSID(0, "$NetBSD: ld_aac.c,v 1.27 2012/10/27 17:18:21 chs Exp $");
 #include <sys/endian.h>
 #include <sys/dkio.h>
 #include <sys/disk.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <sys/bus.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/ldvar.h>
 
@@ -206,9 +212,9 @@ ld_aac_dobio(struct ld_aac_softc *sc, void *data, int datasize, daddr_t blkno,
 			sge->SgAddress = htole32(xfer->dm_segs[i].ds_addr);
 			sge->SgByteCount = htole32(xfer->dm_segs[i].ds_len);
 			AAC_DPRINTF(AAC_D_IO,
-			    ("#%d va %p pa %" PRIxPADDR " len %zx\n",
-			    i, data, xfer->dm_segs[i].ds_addr,
-			    xfer->dm_segs[i].ds_len));
+			    ("#%d va %p pa %lx len %lx\n", i, data,
+			    (u_long)xfer->dm_segs[i].ds_addr,
+			    (u_long)xfer->dm_segs[i].ds_len));
 		}
 
 		size += xfer->dm_nsegs * sizeof(struct aac_sg_entry);
@@ -259,9 +265,9 @@ ld_aac_dobio(struct ld_aac_softc *sc, void *data, int datasize, daddr_t blkno,
 			sge->SgAddress = htole64(xfer->dm_segs[i].ds_addr);
 			sge->SgByteCount = htole32(xfer->dm_segs[i].ds_len);
 			AAC_DPRINTF(AAC_D_IO,
-			    ("#%d va %p pa %" PRIxPADDR " len %zx\n",
-			    i, data, xfer->dm_segs[i].ds_addr,
-			    xfer->dm_segs[i].ds_len));
+			    ("#%d va %p pa %llx len %lx\n", i, data,
+			    (u_int64_t)xfer->dm_segs[i].ds_addr,
+			    (u_long)xfer->dm_segs[i].ds_len));
 		}
 		size += xfer->dm_nsegs * sizeof(struct aac_sg_entry64);
 		size = sizeof(fib->Header) + size;
@@ -299,7 +305,7 @@ ld_aac_dobio(struct ld_aac_softc *sc, void *data, int datasize, daddr_t blkno,
 			}
 		}
 	} else {
-		ac->ac_device = sc->sc_ld.sc_dv;
+		ac->ac_device = (struct device *)sc;
 		ac->ac_context = bp;
 		ac->ac_intr = ld_aac_intr;
 		aac_ccb_enqueue(aac, ac);
@@ -328,8 +334,8 @@ ld_aac_intr(struct aac_ccb *ac)
 	u_int32_t status;
 
 	bp = ac->ac_context;
-	sc = device_private(ac->ac_device);
-	aac = device_private(device_parent(ac->ac_device));
+	sc = (struct ld_aac_softc *)ac->ac_device;
+	aac = device_private(device_parent(sc->sc_ld.sc_dv));
 
 	if ((bp->b_flags & B_READ) != 0) {
 		brr = (struct aac_blockread_response *)&ac->ac_fib->data[0];

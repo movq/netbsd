@@ -1,4 +1,4 @@
-/*	$NetBSD: mca.c,v 1.3 2009/10/26 19:16:56 cegger Exp $	*/
+/*	$NetBSD: mca.c,v 1.1 2006/04/07 14:21:18 cherry Exp $	*/
 
 /*-
  * Copyright (c) 2002 Marcel Moolenaar
@@ -108,7 +108,7 @@ ia64_mca_save_state(int type)
 			}
 		}
 
-		memcpy(state, (char*)mca_info_block, recsz);
+		bcopy((char*)mca_info_block, state, recsz);
 
 		if (mca_count > 0) {
 			if (seqnr < mca_first)

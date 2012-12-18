@@ -1,4 +1,4 @@
-/*	$NetBSD: smc90cx6var.h,v 1.11 2012/10/27 17:18:22 chs Exp $	*/
+/*	$NetBSD: smc90cx6var.h,v 1.9 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1994, 1995, 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  * As the reset functionality differs between the Amiga boards (using the
  * 90c26 chip) and middle-aged ISA boards (using the 90c56 chip), we have
  * a sc_reset callback function in the softc, which does a stop function
- * (reset and leave dead) or a reset function depending on whether the 2nd
+ * (reset and leave dead) or a reset function depending on wether the 2nd
  * parameter is 0 or 1.
  */
 
@@ -48,7 +48,7 @@
 #include <sys/callout.h>
 
 struct bah_softc {
-	device_t		sc_dev;
+	struct	device		sc_dev;
 	struct	arccom		sc_arccom;	/* Common arcnet structures */
 	bus_space_tag_t		sc_bst_r, sc_bst_m;
 	bus_space_handle_t 	sc_regs, sc_mem;

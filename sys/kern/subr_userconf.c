@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_userconf.c,v 1.25 2011/08/01 10:33:26 drochner Exp $	*/
+/*	$NetBSD: subr_userconf.c,v 1.18 2005/12/11 12:24:30 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Mats O Jansson <moj@stacken.kth.se>
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson.
+ * 4. The name of the author may not be used to endorse or promote
+ *    products derived from this software without specific prior written
+ *    permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -29,13 +35,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_userconf.c,v 1.25 2011/08/01 10:33:26 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_userconf.c,v 1.18 2005/12/11 12:24:30 christos Exp $");
+
+#include "opt_userconf.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/malloc.h>
 #include <sys/time.h>
-#include <sys/userconf.h>
 
 #include <dev/cons.h>
 
@@ -80,7 +88,7 @@ static const char *userconf_cmds[] = {
 	"",		 "",
 };
 
-void
+static void
 userconf_init(void)
 {
 	int i;
@@ -92,8 +100,6 @@ userconf_init(void)
 
 	userconf_maxdev = i - 1;
 	userconf_totdev = i - 1;
-
-	userconf_bootinfo();
 }
 
 static int
@@ -304,16 +310,10 @@ userconf_device(char *cmd, int *len, short *unit, short *state)
 	char *c;
 
 	c = cmd;
-	while (!(!*c || *c == ' ' || *c == '\t' || *c == '\n'))
+	while (*c >= 'a' && *c <= 'z') {
+		l++;
 		c++;
-	while (c > cmd) {
-		c--;
-		if (!((*c >= '0' && *c <= '9') || *c == '*')) {
-			c++;
-			break;
-		}
 	}
-	l = c - cmd;
 	if (*c == '*') {
 		s = FSTATE_STAR;
 		c++;
@@ -517,7 +517,7 @@ userconf_help(void)
 
 	printf("command   args                description\n");
 	while (*userconf_cmds[j] != '\0') {
-		printf("%s", userconf_cmds[j]);
+		printf(userconf_cmds[j]);
 		k = strlen(userconf_cmds[j]);
 		while (k < 10) {
 			printf(" ");
@@ -688,7 +688,7 @@ userconf_add_read(char *prompt, char field, char *dev, int len, int *val)
 }
 #endif /* 0 */
 
-int
+static int
 userconf_parse(char *cmd)
 {
 	char *c, *v;
@@ -804,11 +804,14 @@ userconf_parse(char *cmd)
 	return(0);
 }
 
-void
-userconf_prompt(void)
-{
-	const char prompt[] = "uc> ";
+extern void user_config(void);
 
+void
+user_config(void)
+{
+	char prompt[] = "uc> ";
+
+	userconf_init();
 	printf("userconf: configure system autoconfiguration:\n");
 
 	while (1) {

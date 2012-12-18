@@ -1,4 +1,4 @@
-/* $NetBSD: cgdconfig.c,v 1.34 2012/12/05 02:23:20 christos Exp $ */
+/* $NetBSD: cgdconfig.c,v 1.27 2008/07/24 19:07:36 christos Exp $ */
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #ifndef lint
 __COPYRIGHT("@(#) Copyright (c) 2002, 2003\
  The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: cgdconfig.c,v 1.34 2012/12/05 02:23:20 christos Exp $");
+__RCSID("$NetBSD: cgdconfig.c,v 1.27 2008/07/24 19:07:36 christos Exp $");
 #endif
 
 #include <err.h>
@@ -51,7 +51,6 @@ __RCSID("$NetBSD: cgdconfig.c,v 1.34 2012/12/05 02:23:20 christos Exp $");
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/resource.h>
-#include <sys/statvfs.h>
 
 #include <dev/cgdvar.h>
 
@@ -60,8 +59,6 @@ __RCSID("$NetBSD: cgdconfig.c,v 1.34 2012/12/05 02:23:20 christos Exp $");
 #include "params.h"
 #include "pkcs5_pbkdf2.h"
 #include "utils.h"
-#include "cgdconfig.h"
-#include "prog_ops.h"
 
 #define CGDCONFIG_DIR		"/etc/cgd"
 #define CGDCONFIG_CFILE		CGDCONFIG_DIR "/cgd.conf"
@@ -74,8 +71,7 @@ enum action {
 	 ACTION_GENERATE_CONVERT,	/* generate a ``dup'' paramsfile */
 	 ACTION_CONFIGALL,		/* configure all from config file */
 	 ACTION_UNCONFIGALL,		/* unconfigure all from config file */
-	 ACTION_CONFIGSTDIN,		/* configure, key from stdin */
-	 ACTION_LIST			/* list configured devices */
+	 ACTION_CONFIGSTDIN		/* configure, key from stdin */
 };
 
 /* if nflag is set, do not configure/unconfigure the cgd's */
@@ -95,7 +91,6 @@ static int	generate_convert(struct params *, int, char **, const char *);
 static int	unconfigure(int, char **, struct params *, int);
 static int	do_all(const char *, int, char **,
 		       int (*)(int, char **, struct params *, int));
-static int	do_list(int, char **);
 
 #define CONFIG_FLAGS_FROMALL	1	/* called from configure_all() */
 #define CONFIG_FLAGS_FROMMAIN	2	/* called from main() */
@@ -117,7 +112,7 @@ static int	 verify_disklabel(int);
 static int	 verify_ffs(int);
 static int	 verify_reenter(struct params *);
 
-__dead static void	 usage(void);
+static void	 usage(void);
 
 /* Verbose Framework */
 unsigned	verbose = 0;
@@ -132,14 +127,13 @@ usage(void)
 	(void)fprintf(stderr, "usage: %s [-nv] [-V vmeth] cgd dev [paramsfile]\n",
 	    getprogname());
 	(void)fprintf(stderr, "       %s -C [-nv] [-f configfile]\n", getprogname());
+	(void)fprintf(stderr, "       %s -U [-nv] [-f configfile]\n", getprogname());
 	(void)fprintf(stderr, "       %s -G [-nv] [-i ivmeth] [-k kgmeth] "
 	    "[-o outfile] paramsfile\n", getprogname());
 	(void)fprintf(stderr, "       %s -g [-nv] [-i ivmeth] [-k kgmeth] "
 	    "[-o outfile] alg [keylen]\n", getprogname());
-	(void)fprintf(stderr, "       %s -l\n", getprogname());
 	(void)fprintf(stderr, "       %s -s [-nv] [-i ivmeth] cgd dev alg "
 	    "[keylen]\n", getprogname());
-	(void)fprintf(stderr, "       %s -U [-nv] [-f configfile]\n", getprogname());
 	(void)fprintf(stderr, "       %s -u [-nv] cgd\n", getprogname());
 	exit(EXIT_FAILURE);
 }
@@ -192,7 +186,7 @@ main(int argc, char **argv)
 	p = params_new();
 	kg = NULL;
 
-	while ((ch = getopt(argc, argv, "CGUV:b:f:gi:k:lno:spuv")) != -1)
+	while ((ch = getopt(argc, argv, "CGUV:b:f:gi:k:no:spuv")) != -1)
 		switch (ch) {
 		case 'C':
 			set_action(&action, ACTION_CONFIGALL);
@@ -239,9 +233,6 @@ main(int argc, char **argv)
 				usage();
 			keygen_addlist(&p->keygen, kg);
 			break;
-		case 'l':
-			set_action(&action, ACTION_LIST);
-			break;
 		case 'n':
 			nflag = 1;
 			break;
@@ -276,9 +267,6 @@ main(int argc, char **argv)
 	if (!cfile)
 		cfile = "";
 
-	if (prog_init && prog_init() == -1)
-		err(1, "init failed");
-
 	/* validate the consistency of the arguments */
 
 	switch (action) {
@@ -297,8 +285,6 @@ main(int argc, char **argv)
 		return do_all(cfile, argc, argv, unconfigure);
 	case ACTION_CONFIGSTDIN:
 		return configure_stdin(p, argc, argv);
-	case ACTION_LIST:
-		return do_list(argc, argv);
 	default:
 		errx(EXIT_FAILURE, "undefined action");
 		/* NOTREACHED */
@@ -396,7 +382,7 @@ maybe_getpass(char *prompt)
 }
 
 /*ARGSUSED*/
-/*
+/* 
  * XXX take, and pass through, a compat flag that indicates whether we
  * provide backwards compatibility with a previous bug.  The previous
  * behaviour is indicated by the keygen method pkcs5_pbkdf2, and a
@@ -461,7 +447,7 @@ unconfigure(int argc, char **argv, struct params *inparams, int flags)
 	if (flags == CONFIG_FLAGS_FROMALL && (argc < 2 || argc > 3))
 		return -1;
 
-	fd = opendisk1(*argv, O_RDWR, buf, sizeof(buf), 1, prog_open);
+	fd = opendisk(*argv, O_RDWR, buf, sizeof(buf), 1);
 	if (fd == -1) {
 		int saved_errno = errno;
 
@@ -478,7 +464,7 @@ unconfigure(int argc, char **argv, struct params *inparams, int flags)
 		return 0;
 
 	ret = unconfigure_fd(fd);
-	(void)prog_close(fd);
+	(void)close(fd);
 	return ret;
 }
 
@@ -487,7 +473,7 @@ unconfigure_fd(int fd)
 {
 	struct	cgd_ioctl ci;
 
-	if (prog_ioctl(fd, CGDIOCCLR, &ci) == -1) {
+	if (ioctl(fd, CGDIOCCLR, &ci) == -1) {
 		warn("ioctl");
 		return -1;
 	}
@@ -506,7 +492,7 @@ configure(int argc, char **argv, struct params *inparams, int flags)
 	int		 ret;
 	char		 cgdname[PATH_MAX];
 
-	if (argc == 2) {
+	if (argc == 2) {	
 		char *pfile;
 
 		if (asprintf(&pfile, "%s/%s",
@@ -586,7 +572,7 @@ configure(int argc, char **argv, struct params *inparams, int flags)
 			break;
 
 		(void)unconfigure_fd(fd);
-		(void)prog_close(fd);
+		(void)close(fd);
 
 		if (!loop) {
 			warnx("verification failed permanently");
@@ -597,11 +583,11 @@ configure(int argc, char **argv, struct params *inparams, int flags)
 	}
 
 	params_free(p);
-	(void)prog_close(fd);
+	(void)close(fd);
 	return 0;
 bail_err:
 	params_free(p);
-	(void)prog_close(fd);
+	(void)close(fd);
 	return -1;
 }
 
@@ -660,7 +646,7 @@ opendisk_werror(const char *cgd, char *buf, size_t buflen)
 		return 0;
 	}
 
-	fd = opendisk1(cgd, O_RDWR, buf, buflen, 0, prog_open);
+	fd = opendisk(cgd, O_RDWR, buf, buflen, 0);
 	if (fd == -1)
 		warnx("can't open cgd \"%s\", \"%s\"", cgd, buf);
 
@@ -694,7 +680,7 @@ configure_params(int fd, const char *cgd, const char *dev, struct params *p)
 	if (nflag)
 		return 0;
 
-	if (prog_ioctl(fd, CGDIOCSET, &ci) == -1) {
+	if (ioctl(fd, CGDIOCSET, &ci) == -1) {
 		int saved_errno = errno;
 		warn("ioctl");
 		return saved_errno;
@@ -742,7 +728,7 @@ verify_disklabel(int fd)
 	 * partition information.
 	 */
 
-	ret = prog_pread(fd, buf, 8192, 0);
+	ret = pread(fd, buf, 8192, 0);
 	if (ret < 0) {
 		warn("can't read disklabel area");
 		return -1;
@@ -767,7 +753,7 @@ verify_ffs(int fd)
 		} u;
 		ssize_t ret;
 
-		ret = prog_pread(fd, &u, sizeof(u), sblock_try[i]);
+		ret = pread(fd, &u, sizeof(u), sblock_try[i]);
 		if (ret < 0) {
 			warn("pread");
 			break;
@@ -798,7 +784,7 @@ verify_reenter(struct params *p)
 
 	ret = 0;
 	for (kg = p->keygen; kg && !ret; kg = kg->next) {
-		if ((kg->kg_method != KEYGEN_PKCS5_PBKDF2_SHA1) &&
+		if ((kg->kg_method != KEYGEN_PKCS5_PBKDF2_SHA1) && 
 		    (kg->kg_method != KEYGEN_PKCS5_PBKDF2_OLD ))
 			continue;
 
@@ -875,17 +861,11 @@ generate_convert(struct params *p, int argc, char **argv, const char *outfile)
 
 	/* for sanity, we ensure that none of the keygens are randomkey */
 	for (kg=p->keygen; kg; kg=kg->next)
-		if ((kg->kg_method == KEYGEN_RANDOMKEY) ||
-		    (kg->kg_method == KEYGEN_URANDOMKEY)) {
-			warnx("can't preserve randomly generated key");
+		if (kg->kg_method == KEYGEN_RANDOMKEY)
 			goto bail;
-		}
 	for (kg=oldp->keygen; kg; kg=kg->next)
-		if ((kg->kg_method == KEYGEN_RANDOMKEY) ||
-		    (kg->kg_method == KEYGEN_URANDOMKEY)) {
-			warnx("can't preserve randomly generated key");
+		if (kg->kg_method == KEYGEN_RANDOMKEY)
 			goto bail;
-		}
 
 	if (!params_verify(oldp)) {
 		warnx("invalid old parameters file \"%s\"", *argv);
@@ -983,85 +963,6 @@ do_all(const char *cfile, int argc, char **argv,
 		words_free(my_argv, my_argc);
 	}
 	return ret;
-}
-
-static const char *
-iv_method(int mode)
-{
-
-	switch (mode) {
-	case CGD_CIPHER_CBC_ENCBLKNO8:
-		return "encblkno8";
-	case CGD_CIPHER_CBC_ENCBLKNO1:
-		return "encblkno1";
-	default:
-		return "unknown";
-	}
-}
-
-static int
-do_list(int argc, char **argv)
-{
-	char path[64], buf[16];
-	struct cgd_user cgu;
-	const char *fn;
-	int fd, n, rv;
-
-	if (argc != 0 && argc != 1)
-		usage();
-
-	fn = argc ? argv[0] : "cgd0";
-	n = 0;
-	for (;;) {
-		fd = opendisk(fn, O_RDONLY, path, sizeof(path), 0);
-		if (fd == -1) {
-			if (argc)
-				err(1, "open: %s", fn);
-			break;
-		}
-
-		cgu.cgu_unit = argc ? -1 : n;
-		rv = prog_ioctl(fd, CGDIOCGET, &cgu);
-		if (rv == -1) {
-			close(fd);
-			err(1, "CGDIOCGET");
-		}
-
-		printf("%s: ", fn);
-
-		if (cgu.cgu_dev == 0)
-			printf("not in use");
-		else {
-			char *dev;
-
-			dev = devname(cgu.cgu_dev, S_IFBLK);
-			if (dev != NULL)
-				printf("%s ", dev);
-			else
-				printf("dev %llu,%llu ",
-				    (unsigned long long)major(cgu.cgu_dev),
-				    (unsigned long long)minor(cgu.cgu_dev));
-
-			if (verbose)
-				printf("%s ", cgu.cgu_alg);
-			if (verbose > 1) {
-				printf("keylen %d ", cgu.cgu_keylen);
-				printf("blksize %zd ", cgu.cgu_blocksize);
-				printf("%s ", iv_method(cgu.cgu_mode));
-			}
-		}
-		putchar('\n');
-		close(fd);
-
-		if (argc)
-			break;
-
-		n++;
-		snprintf(buf, sizeof(buf), "cgd%d", n);
-		fn = buf;
-	}
-
-	return 0;
 }
 
 static void

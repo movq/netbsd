@@ -1,4 +1,4 @@
-/*	$NetBSD: expl.c,v 1.7 2009/07/04 04:29:54 dholland Exp $	*/
+/*	$NetBSD: expl.c,v 1.4 2004/01/27 20:30:29 jsm Exp $	*/
 /*
  * Copyright (c) 1983-2003, Regents of the University of California.
  * All rights reserved.
@@ -32,13 +32,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: expl.c,v 1.7 2009/07/04 04:29:54 dholland Exp $");
+__RCSID("$NetBSD: expl.c,v 1.4 2004/01/27 20:30:29 jsm Exp $");
 #endif /* not lint */
 
-#include <stdlib.h>
-#include "hunt.h"
+# include	<stdlib.h>
+# include	"hunt.h"
 
-static void remove_wall(int, int);
+static	void	remove_wall(int, int);
 
 
 /*
@@ -46,16 +46,18 @@ static void remove_wall(int, int);
  *	Show the explosions as they currently are
  */
 void
-showexpl(int y, int x, char type)
+showexpl(y, x, type)
+	int	y, x;
+	char	type;
 {
-	PLAYER *pp;
-	EXPL *ep;
+	PLAYER	*pp;
+	EXPL	*ep;
 
 	if (y < 0 || y >= HEIGHT)
 		return;
 	if (x < 0 || x >= WIDTH)
 		return;
-	ep = malloc(sizeof(*ep));
+	ep = (EXPL *) malloc(sizeof (EXPL));	/* NOSTRICT */
 	ep->e_y = y;
 	ep->e_x = x;
 	ep->e_char = type;
@@ -72,7 +74,7 @@ showexpl(int y, int x, char type)
 		cgoto(pp, y, x);
 		outch(pp, type);
 	}
-#ifdef MONITOR
+# ifdef MONITOR
 	for (pp = Monitor; pp < End_monitor; pp++) {
 		if (pp->p_maze[y][x] == type)
 			continue;
@@ -80,18 +82,18 @@ showexpl(int y, int x, char type)
 		cgoto(pp, y, x);
 		outch(pp, type);
 	}
-#endif
+# endif
 	switch (Maze[y][x]) {
 	  case WALL1:
 	  case WALL2:
 	  case WALL3:
-#ifdef RANDOM
+# ifdef RANDOM
 	  case DOOR:
-#endif
-#ifdef REFLECT
+# endif
+# ifdef REFLECT
 	  case WALL4:
 	  case WALL5:
-#endif
+# endif
 		if (y >= UBOUND && y < DBOUND && x >= LBOUND && x < RBOUND)
 			remove_wall(y, x);
 		break;
@@ -104,13 +106,13 @@ showexpl(int y, int x, char type)
  *	top
  */
 void
-rollexpl(void)
+rollexpl()
 {
-	EXPL *ep;
-	PLAYER *pp;
-	int y, x;
-	char c;
-	EXPL *nextep;
+	EXPL	*ep;
+	PLAYER	*pp;
+	int	y, x;
+	char	c;
+	EXPL	*nextep;
 
 	for (ep = Expl[EXPLEN - 1]; ep != NULL; ep = nextep) {
 		nextep = ep->e_next;
@@ -126,11 +128,11 @@ rollexpl(void)
 				cgoto(pp, y, x);
 				outch(pp, c);
 			}
-#ifdef MONITOR
+# ifdef MONITOR
 		for (pp = Monitor; pp < End_monitor; pp++)
 			check(pp, y, x);
-#endif
-		free(ep);
+# endif
+		free((char *) ep);
 	}
 	for (x = EXPLEN - 1; x > 0; x--)
 		Expl[x] = Expl[x - 1];
@@ -139,10 +141,10 @@ rollexpl(void)
 
 /* There's about 700 walls in the initial maze.  So we pick a number
  * that keeps the maze relatively full. */
-#define MAXREMOVE	40
+# define MAXREMOVE	40
 
-static REGEN removed[MAXREMOVE];
-static REGEN *rem_index = removed;
+static	REGEN	removed[MAXREMOVE];
+static	REGEN	*rem_index = removed;
 
 /*
  * remove_wall - add a location where the wall was blown away.
@@ -150,19 +152,20 @@ static REGEN *rem_index = removed;
  *		 the location currently pointed at.
  */
 static void
-remove_wall(int y, int x)
+remove_wall(y, x)
+	int	y, x;
 {
-	REGEN *r;
-#if defined(MONITOR) || defined(FLY)
-	PLAYER *pp;
-#endif
-#ifdef FLY
-	char save_char = 0;
-#endif
+	REGEN	*r;
+# if defined(MONITOR) || defined(FLY)
+	PLAYER	*pp;
+# endif
+# ifdef	FLY
+	char	save_char = 0;
+# endif
 
 	r = rem_index;
 	while (r->r_y != 0) {
-#ifdef FLY
+# ifdef FLY
 		switch (Maze[r->r_y][r->r_x]) {
 		  case SPACE:
 		  case LEFTS:
@@ -173,10 +176,10 @@ remove_wall(int y, int x)
 			save_char = Maze[r->r_y][r->r_x];
 			goto found;
 		}
-#else
+# else
 		if (Maze[r->r_y][r->r_x] == SPACE)
 			break;
-#endif
+# endif
 		if (++r >= &removed[MAXREMOVE])
 			r = removed;
 	}
@@ -184,7 +187,7 @@ remove_wall(int y, int x)
 found:
 	if (r->r_y != 0) {
 		/* Slot being used, put back this wall */
-#ifdef FLY
+# ifdef FLY
 		if (save_char == SPACE)
 			Maze[r->r_y][r->r_x] = Orig_maze[r->r_y][r->r_x];
 		else {
@@ -201,21 +204,21 @@ found:
 			Maze[r->r_y][r->r_x] = FLYER;
 			showexpl(r->r_y, r->r_x, FLYER);
 		}
-#else
+# else
 		Maze[r->r_y][r->r_x] = Orig_maze[r->r_y][r->r_x];
-#endif
-#ifdef RANDOM
+# endif
+# ifdef RANDOM
 		if (rand_num(100) == 0)
 			Maze[r->r_y][r->r_x] = DOOR;
-#endif
-#ifdef REFLECT
+# endif
+# ifdef REFLECT
 		if (rand_num(100) == 0)		/* one percent of the time */
 			Maze[r->r_y][r->r_x] = WALL4;
-#endif
-#ifdef MONITOR
+# endif
+# ifdef MONITOR
 		for (pp = Monitor; pp < End_monitor; pp++)
 			check(pp, r->r_y, r->r_x);
-#endif
+# endif
 	}
 
 	r->r_y = y;
@@ -226,10 +229,10 @@ found:
 		rem_index = r;
 
 	Maze[y][x] = SPACE;
-#ifdef MONITOR
+# ifdef MONITOR
 	for (pp = Monitor; pp < End_monitor; pp++)
 		check(pp, y, x);
-#endif
+# endif
 }
 
 /*
@@ -237,9 +240,9 @@ found:
  *	Clear out the walls array
  */
 void
-clearwalls(void)
+clearwalls()
 {
-	REGEN *rp;
+	REGEN	*rp;
 
 	for (rp = removed; rp < &removed[MAXREMOVE]; rp++)
 		rp->r_y = 0;

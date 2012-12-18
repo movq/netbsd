@@ -1,11 +1,9 @@
-#	$NetBSD: Makefile,v 1.4 2010/05/22 02:41:33 mrg Exp $
+#	$NetBSD: Makefile,v 1.3 2008/10/04 19:00:19 cube Exp $
 
 .include <bsd.own.mk>
 
 LIB=	Xtst
-.PATH:	${X11SRCDIR.${LIB}}/src
-.PATH:	${X11SRCDIR.${LIB}}/man
-.PATH:	${X11SRCDIR.${LIB}}/include/X11/extensions
+.PATH:	${X11SRCDIR.Xtst}/src ${X11SRCDIR.Xtst}/man
 
 SRCS=	XTest.c XRecord.c
 
@@ -15,10 +13,17 @@ LIBDPLIBS=\
 	Xext	${.CURDIR}/../libXext \
 	X11	${.CURDIR}/../libX11/dynamic
 
-INCS=	XTest.h \
-	record.h
-
-INCSDIR=${X11INCDIR}/X11/extensions
+MAN=	XTestQueryExtension.3
+MLINKS= XTestQueryExtension.3 XTestCompareCurrentCursorWithWindow.3 \
+	XTestQueryExtension.3 XTestCompareCursorWithWindow.3 \
+	XTestQueryExtension.3 XTestDiscard.3 \
+	XTestQueryExtension.3 XTestFakeButtonEvent.3 \
+	XTestQueryExtension.3 XTestFakeKeyEvent.3 \
+	XTestQueryExtension.3 XTestFakeMotionEvent.3 \
+	XTestQueryExtension.3 XTestFakeRelativeMotionEvent.3 \
+	XTestQueryExtension.3 XTestGrabControl.3 \
+	XTestQueryExtension.3 XTestSetGContextOfGC.3 \
+	XTestQueryExtension.3 XTestSetVisualIDOfVisual.3
 
 PKGDIST=	${LIB}
 

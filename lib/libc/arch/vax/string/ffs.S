@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs.S,v 1.4 2011/01/25 02:38:15 matt Exp $	*/
+/*	$NetBSD: ffs.S,v 1.3 2003/08/07 16:42:32 agc Exp $	*/
 /*
  * Copyright (c) 1983, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -28,14 +28,13 @@
  * SUCH DAMAGE.
  */
 
-#include "DEFS.h"
-
 #if defined(LIBC_SCCS) && !defined(lint)
-	/* .asciz "@(#)ffs.s	8.1 (Berkeley) 6/4/93" */
-RCSID("$NetBSD: ffs.S,v 1.4 2011/01/25 02:38:15 matt Exp $")
+	.asciz "@(#)ffs.s	8.1 (Berkeley) 6/4/93"
 #endif /* LIBC_SCCS and not lint */
 
 /* bit = ffs(value) */
+
+#include "DEFS.h"
 
 ENTRY(ffs, 0)
 	ffs	$0,$32,4(%ap),%r0
@@ -44,4 +43,3 @@ ENTRY(ffs, 0)
 1:
 	incl	%r0
 	ret
-END(ffs)

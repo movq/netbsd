@@ -1,4 +1,4 @@
-.\"	$NetBSD: rmt.8,v 1.14 2009/03/11 18:23:38 joerg Exp $
+.\"	$NetBSD: rmt.8,v 1.13 2003/08/07 11:25:42 agc Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -93,7 +93,11 @@ between the command and its arguments, or between its arguments, and
 .Ql \en
 indicates that a newline should be supplied:
 .Bl -tag -width Ds
-.It Sy \&O Ns Ar device Ns \en Ns Ar mode Ns \en
+.Sm off
+.It Xo Sy \&O Ar device
+.No \en Ar mode No \en
+.Xc
+.Sm on
 Open the specified
 .Ar device
 using the indicated
@@ -108,11 +112,19 @@ number suitable for passing to
 .Xr open 2 .
 If a device had already been opened, it is
 closed before a new open is performed.
-.It Sy C Ns Ar device Ns \en
+.Sm off
+.It Xo Sy C Ar device No \en
+.Xc
+.Sm on
 Close the currently open device.  The
 .Ar device
 specified is ignored.
-.It Sy L Ns Ar offset Ns \en Ns Ar whence Ns \en
+.Sm off
+.It Xo Sy L
+.Ar offset No \en
+.Ar whence No \en
+.Xc
+.Sm on
 Perform an
 .Xr lseek 2
 operation using the specified parameters.
@@ -153,7 +165,10 @@ if the read was
 successful; otherwise an error in the
 standard format is returned.  If the read
 was successful, the data read is then sent.
-.It Sy I Ns Ar operation Ns \en Ns Ar count Ns \en
+.Sm off
+.It Xo Sy I Ar operation
+.No \en Ar count No \en
+.Xc
 .Sm on
 Perform a
 .Dv MTIOCOP

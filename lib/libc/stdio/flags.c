@@ -1,4 +1,4 @@
-/*	$NetBSD: flags.c,v 1.17 2012/11/15 03:50:36 christos Exp $	*/
+/*	$NetBSD: flags.c,v 1.14 2003/08/07 16:43:23 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)flags.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: flags.c,v 1.17 2012/11/15 03:50:36 christos Exp $");
+__RCSID("$NetBSD: flags.c,v 1.14 2003/08/07 16:43:23 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -55,7 +55,9 @@ __RCSID("$NetBSD: flags.c,v 1.17 2012/11/15 03:50:36 christos Exp $");
  * Return 0 on error.
  */
 int
-__sflags(const char *mode, int *optr)
+__sflags(mode, optr)
+	const char *mode;
+	int *optr;
 {
 	int ret, m, o;
 
@@ -83,14 +85,12 @@ __sflags(const char *mode, int *optr)
 
 	default:	/* illegal mode */
 		errno = EINVAL;
-		return 0;
+		return (0);
 	}
 
 	/*
 	 * [rwa]\+ or [rwa]b\+ means read and write 
-	 * f means open only plain files,
-	 * e means set close on exec.
-	 * x means exclusive open.
+	 * f means open only plain files.
 	 */
 	for (; *mode; mode++)
 		switch (*mode) {
@@ -101,12 +101,6 @@ __sflags(const char *mode, int *optr)
 		case 'f':
 			o |= O_NONBLOCK;
 			break;
-		case 'e':
-			o |= O_CLOEXEC;
-			break;
-		case 'x':
-			o |= O_EXCL;
-			break;
 		case 'b':
 			break;
 		default:	/* We could produce a warning here */
@@ -114,5 +108,5 @@ __sflags(const char *mode, int *optr)
 		}
 
 	*optr = m | o;
-	return ret;
+	return (ret);
 }

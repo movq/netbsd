@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec_machdep.c,v 1.19 2012/02/03 20:11:53 matt Exp $ */
+/*	$NetBSD: linux_exec_machdep.c,v 1.13.2.1 2009/04/01 00:25:22 snj Exp $ */
 
 /*-
  * Copyright (c) 2005 Emmanuel Dreyfus, all rights reserved
@@ -32,9 +32,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec_machdep.c,v 1.19 2012/02/03 20:11:53 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec_machdep.c,v 1.13.2.1 2009/04/01 00:25:22 snj Exp $");
 
+#ifdef __amd64__
 #define ELFSIZE 64
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_machdep.c,v 1.19 2012/02/03 20:11:53 matt
 #include <sys/resource.h>
 #include <sys/proc.h>
 #include <sys/conf.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/exec_elf.h>
 #include <sys/vnode.h>
 #include <sys/lwp.h>
@@ -65,8 +67,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_machdep.c,v 1.19 2012/02/03 20:11:53 matt
 #include <compat/linux/common/linux_exec.h>
 #include <compat/linux/common/linux_errno.h>
 #include <compat/linux/common/linux_prctl.h>
-#include <compat/linux/common/linux_ipc.h>
-#include <compat/linux/common/linux_sem.h>
 #include <compat/linux/linux_syscallargs.h>
 
 int
@@ -123,8 +123,12 @@ linux_exec_setup_stack(struct lwp *l, struct exec_package *epp)
 }
 
 int
-ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
-	struct ps_strings *arginfo, char **stackp, void *argp)
+ELFNAME2(linux,copyargs)(l, pack, arginfo, stackp, argp)
+	struct lwp *l;
+	struct exec_package *pack;
+	struct ps_strings *arginfo;
+	char **stackp;
+	void *argp;
 {
 	struct linux_extra_stack_data64 *esdp, esd;
 	struct elf_args *ap;
@@ -150,11 +154,11 @@ ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
 	eh = (Elf_Ehdr *)pack->ep_hdr;
 
 	/*
-	 * We forgot this, so we need to reload it now. XXX keep track of it?
+	 * We forgot this, so we ned to reload it now. XXX keep track of it?
 	 */
 	if (ap == NULL) {
 		phsize = eh->e_phnum * sizeof(Elf_Phdr);
-		ph = (Elf_Phdr *)kmem_alloc(phsize, KM_SLEEP);
+		ph = (Elf_Phdr *)malloc(phsize, M_TEMP, M_WAITOK);
 		error = exec_read_from(l, pack->ep_vp, eh->e_phoff, ph, phsize);
 		if (error != 0) {
 			for (i = 0; i < eh->e_phnum; i++) {
@@ -164,7 +168,7 @@ ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
 				}
 			}
 		}
-		kmem_free(ph, phsize);
+		free(ph, M_TEMP);
 	}
 
 
@@ -235,8 +239,11 @@ ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
 		
 	strcpy(esd.hw_platform, LINUX_PLATFORM); 
 
-	exec_free_emul_arg(pack);
-
+	if (ap) {
+		free((char *)ap, M_TEMP);
+		pack->ep_emul_arg = NULL;
+	}
+	
 	/*
 	 * Copy out the ELF auxiliary table and hw platform name
 	 */
@@ -246,3 +253,17 @@ ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
 
 	return 0;
 }
+
+#ifdef LINUX_NPTL
+int
+linux_init_thread_area(struct lwp *l, struct lwp *l2)
+{
+	register_t retval;
+	struct linux_sys_arch_prctl_args uap;
+	struct trapframe *tf = l2->l_md.md_regs;
+
+	SCARG(&uap, code) = LINUX_ARCH_SET_FS;
+	SCARG(&uap, addr) = tf->tf_r8;
+	return linux_sys_arch_prctl(l2, &uap, &retval);
+}
+#endif

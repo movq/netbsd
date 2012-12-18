@@ -1,4 +1,4 @@
-/*	$NetBSD: seq.c,v 1.3 2011/03/21 14:53:02 tnozaki Exp $ */
+/*	$NetBSD: seq.c,v 1.1.1.2.6.1 2009/01/20 02:41:12 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -118,7 +118,7 @@ mem1:		errno = sv_errno;
 	}
 
 	/* Set the fast lookup bit. */
-	if ((qp->input[0] & ~MAX_BIT_SEQ) == 0)
+	if ((UCHAR_T)qp->input[0] < MAX_BIT_SEQ)
 		bit_set(sp->gp->seqb, qp->input[0]);
 
 	return (0);
@@ -319,7 +319,7 @@ seq_save(SCR *sp, FILE *fp, const char *prefix, seq_t stype)
 	CHAR_T *p;
 	SEQ *qp;
 	size_t olen;
-	ARG_CHAR_T ch;
+	int ch;
 
 	/* Write a sequence command for all keys the user defined. */
 	for (qp = sp->gp->seqq.lh_first; qp != NULL; qp = qp->q.le_next) {
@@ -328,21 +328,21 @@ seq_save(SCR *sp, FILE *fp, const char *prefix, seq_t stype)
 		if (prefix)
 			(void)fprintf(fp, "%s", prefix);
 		for (p = qp->input, olen = qp->ilen; olen > 0; --olen) {
-			ch = (UCHAR_T)*p++;
+			ch = *p++;
 			if (ch == CH_LITERAL || ch == '|' ||
-			    ISBLANK(ch) || KEY_VAL(sp, ch) == K_NL)
+			    isblank(ch) || KEY_VAL(sp, ch) == K_NL)
 				(void)putc(CH_LITERAL, fp);
-			(void)fprintf(fp, WC, ch);
+			(void)putc(ch, fp);
 		}
 		(void)putc(' ', fp);
 		if (qp->output != NULL)
 			for (p = qp->output,
 			    olen = qp->olen; olen > 0; --olen) {
-				ch = (UCHAR_T)*p++;
+				ch = *p++;
 				if (ch == CH_LITERAL || ch == '|' ||
 				    KEY_VAL(sp, ch) == K_NL)
 					(void)putc(CH_LITERAL, fp);
-				(void)fprintf(fp, WC, ch);
+				(void)putc(ch, fp);
 			}
 		(void)putc('\n', fp);
 	}

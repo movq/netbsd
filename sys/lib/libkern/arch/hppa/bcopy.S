@@ -1,4 +1,4 @@
-/*	$NetBSD: bcopy.S,v 1.14 2011/01/31 12:10:58 skrll Exp $	*/
+/*	$NetBSD: bcopy.S,v 1.7 2008/04/28 20:24:06 martin Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -35,21 +35,11 @@
 
 #undef _LOCORE
 #define _LOCORE	/* XXX fredette - unfortunate */
-
-#if defined(SPCOPY) && !defined(_STANDALONE)
-
-#include "opt_multiprocessor.h"
-
-#include <machine/cpu.h>
-
-#endif
-
 #include <machine/asm.h>
 #include <machine/frame.h>
-#include <machine/reg.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-RCSID("$NetBSD: bcopy.S,v 1.14 2011/01/31 12:10:58 skrll Exp $")
+RCSID("$NetBSD: bcopy.S,v 1.7 2008/04/28 20:24:06 martin Exp $")
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -492,7 +482,6 @@ RCSID("$NetBSD: bcopy.S,v 1.14 2011/01/31 12:10:58 skrll Exp $")
 #endif
 
 #if defined(SPCOPY) && !defined(_STANDALONE)
-
 #include <sys/errno.h>
 #include "assym.h"
 
@@ -505,9 +494,12 @@ RCSID("$NetBSD: bcopy.S,v 1.14 2011/01/31 12:10:58 skrll Exp $")
 LEAF_ENTRY(spcopy)
 
         /*
-	 * Setup the fault handler, which will fill in %ret0 if triggered.
+	 * Setup the fault handler, and load %ret0
+	 * with EFAULT, assuming the copy will fail.
 	 */
-	GET_CURLWP(%r31)
+	.import	curlwp, data
+	ldil    L%curlwp, %r31
+	ldw     R%curlwp(%r31), %r31
 #ifdef	DIAGNOSTIC
 	comb,<>,n %r0, %r31, Lspcopy_curlwp_ok
 	ldil	L%panic, %r1
@@ -523,9 +515,10 @@ Lspcopy_curlwp_bad:
 Lspcopy_curlwp_ok:
 #endif /* DIAGNOSTIC */
 	ldil    L%spcopy_fault, %r1
-	ldw     L_PCB(%r31), %r31
+	ldw     L_ADDR(%r31), %r31
 	ldo     R%spcopy_fault(%r1), %r1
-	stw     %r1, PCB_ONFAULT(%r31)
+	ldi	EFAULT, %ret0
+	stw     %r1, U_PCB+PCB_ONFAULT(%r31)
 
 	/* Setup the space registers. */
 	mfsp	%sr2, %ret1
@@ -541,7 +534,7 @@ _LABEL(_done):
 	/* Return. */
 	copy	%r0, %ret0
 ALTENTRY(spcopy_fault)
-	stw     %r0, PCB_ONFAULT(%r31)
+	stw     %r0, U_PCB+PCB_ONFAULT(%r31)
 	bv	%r0(%rp)
 	mtsp	%ret1, %sr2
 EXIT(spcopy)

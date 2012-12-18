@@ -1,4 +1,4 @@
-/*	$NetBSD: sl811hsvar.h,v 1.9 2012/10/27 17:18:22 chs Exp $	*/
+/*	$NetBSD: sl811hsvar.h,v 1.5 2008/04/08 12:07:27 cegger Exp $	*/
 
 /*
  * Not (c) 2007 Matthew Orgass
@@ -15,6 +15,7 @@
 
 #include <sys/gcq.h>
 #include <sys/simplelock.h>
+#include "opt_slhci.h"
 
 #define SC_DEV(sc)	((sc)->sc_dev)
 #define SC_NAME(sc)	(device_xname(SC_DEV(sc)))
@@ -69,7 +70,7 @@ struct slhci_softc {
 
 	PowerFunc		sc_enable_power;
 
-	device_t		sc_child;
+	struct device		*sc_child;
 
 	struct timeval		sc_reserved_warn_rate;
 	struct timeval		sc_overflow_warn_rate;
@@ -81,16 +82,16 @@ struct slhci_softc {
 	int			sc_mem_use; /* XXX SLHCI_MEM_ACCOUNTING */
 
 	uint8_t			sc_ier; 	/* enabled interrupts */
-	uint32_t		sc_stride;	/* port stride */
+	uint8_t			sc_stride;	/* port stride */
 };
 
 /* last preinit arguments are: max current (in mA, not mA/2), port stride */
 /* register access uses byte access, but stride offsets the data port */
 int  slhci_supported_rev(uint8_t);
 void slhci_preinit(struct slhci_softc *, PowerFunc, bus_space_tag_t, 
-    bus_space_handle_t, uint16_t, uint32_t);
+    bus_space_handle_t, uint16_t, uint8_t);
 int  slhci_attach(struct slhci_softc *);
 int  slhci_detach(struct slhci_softc *, int);
-int  slhci_activate(device_t, enum devact);
+int  slhci_activate(struct device *, enum devact);
 int  slhci_intr(void *);
 

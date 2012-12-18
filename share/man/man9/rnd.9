@@ -1,4 +1,4 @@
-.\"	$NetBSD: rnd.9,v 1.22 2012/07/12 00:07:36 pgoyette Exp $
+.\"	$NetBSD: rnd.9,v 1.17 2008/09/16 23:29:49 jmcneill Exp $
 .\"
 .\" Copyright (c) 1997 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 17, 2011
+.Dd September 16, 2008
 .Dt RND 9
 .Os
 .Sh NAME
@@ -40,35 +40,30 @@
 .Sh SYNOPSIS
 .In sys/rnd.h
 .Ft void
-.Fn rnd_attach_source "krndsource_t *rnd_source" "char *devname" "uint32_t source_type" "uint32_t flags"
+.Fn rnd_attach_source "rndsource_element_t *rnd_source" "char *devname" "uint32_t source_type" "uint32_t flags"
 .Ft void
-.Fn rnd_detach_source "krndsource_t *rnd_source"
+.Fn rnd_detach_source "rndsource_element_t *rnd_source"
 .Ft void
-.Fn rnd_add_data "krndsource_t *rnd_source" "void *data" "uint32_t len" "uint32_t entropy"
+.Fn rnd_add_data "rndsource_element_t *rnd_source" "void *data" "uint32_t len" "uint32_t entropy"
 .Ft void
-.Fn rnd_add_uint32 "krndsource_t *rnd_source" "uint32_t datum"
+.Fn rnd_add_uint32 "rndsource_element_t *rnd_source" "uint32_t datum"
 .Sh DESCRIPTION
 These
 .Nm
 functions make a device available for entropy collection for
-the kernel entropy pool, which provides key material for the
-.Xr cprng 9
-and
-.Xr rnd 4
-.Pa ( /dev/random )
-interfaces.
+.Pa /dev/random .
 .Pp
 Ideally the first argument
 .Fa rnd_source
 of these functions gets included in the devices' entity struct,
-but any means to permanently (statically) attach one such argument
+but any means to permanently (static) attach one such argument
 to one incarnation of the device is ok.
 Do not share
 .Fa rnd_source
 structures between two devices.
 .Pp
 .Bl -tag -width 8n
-.It Fn rnd_attach_source "krndsource_t *rnd_source" "char *devname" "uint32_t source_type" "uint32_t flags"
+.It Fn rnd_attach_source "rndsource_element_t *rnd_source" "char *devname" "uint32_t source_type" "uint32_t flags"
 This function announces the availability of a device for entropy collection.
 It must be called before the source struct pointed to by
 .Fa rnd_source
@@ -89,11 +84,9 @@ for physical disks,
 .Dv RND_TYPE_TAPE
 for a tape drive,
 .Dv RND_TYPE_TTY
-for a tty,
+for a tty, and
 .Dv RND_TYPE_RNG
-for a random number generator, and
-.Dv RND_TYPE_ENV
-for an environment sensor.
+for a random number generator.
 .Dv RND_TYPE_UNKNOWN
 is not to be used as a type.
 It is used internally to the rnd system.
@@ -110,9 +103,9 @@ Note that devices of type
 default to
 .Dv RND_FLAG_NO_ESTIMATE .
 .Pp
-.It Fn rnd_detach_source "krndsource_t *rnd_source"
+.It Fn rnd_detach_source "rndsource_element_t *rnd_source"
 This function disconnects the device from entropy collection.
-.It Fn rnd_add_uint32 "krndsource_t *rnd_source" "uint32_t datum"
+.It Fn rnd_add_uint32 "rndsource_element_t *rnd_source" "uint32_t datum"
 This function adds the value of
 .Va datum
 to the entropy pool.
@@ -145,7 +138,7 @@ of randomness, passing
 for
 .Va rnd_source
 is permitted, and the device does not need to be attached.
-.It Fn rnd_add_data "krndsource_t *rnd_source" "void *data" "uint32_t len" "uint32_t entropy"
+.It Fn rnd_add_data "rndsource_element_t *rnd_source" "void *data" "uint32_t len" "uint32_t entropy"
 adds (hopefully) random
 .Fa data
 to the entropy pool.
@@ -174,48 +167,13 @@ for
 .Va rnd_source
 is permitted, and the device does not need to be attached.
 .El
-.Sh INTERNAL ENTROPY POOL MANAGEMENT
-When a hardware event occurs (such as completion of a hard drive
-transfer or an interrupt from a network device) a timestamp is
-generated.
-This timestamp is compared to the previous timestamp
-recorded for the device, and the first, second, and third order
-differentials are calculated.
-.Pp
-If any of these differentials is zero, no entropy is assumed to
-have been gathered.
-If all are non-zero, one bit is assumed.
-Next, data is mixed into the entropy pool using an LFSR (linear
-feedback shift register).
-.Pp
-To extract data from the entropy pool, a cryptographically strong hash
-function is used.
-The output of this hash is mixed back into the pool using the LFSR,
-and then folded in half before being returned to the caller.
-.Pp
-Mixing the actual hash into the pool causes the next extraction to
-return a different value, even if no timing events were added to the
-pool.
-Folding the data in half prevents the caller to derive the
-actual hash of the pool, preventing some attacks.
-.Pp
-In the
-.Nx
-kernel, values should be extracted from the entropy pool
-.Em only
-via the
-.Xr cprng 9
-interface.
-Direct access to the entropy pool is unsupported and may be dangerous.
-There is no supported API for direct access to the output of the entropy pool.
 .\" .Sh ERRORS
 .Sh FILES
 These functions are declared in src/sys/sys/rnd.h and defined in
-src/sys/kern/kern_rndq.c.
+src/sys/dev/rnd.c.
 .Sh SEE ALSO
 .Xr rnd 4 ,
-.Xr rndctl 8 ,
-.Xr cprng 9
+.Xr rndctl 8
 .Sh HISTORY
 The random device was introduced in
 .Nx 1.3 .

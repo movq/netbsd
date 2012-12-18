@@ -1,4 +1,4 @@
-/*	$NetBSD: uio.h,v 1.36 2011/07/27 13:20:07 uebayasi Exp $	*/
+/*	$NetBSD: uio.h,v 1.34 2006/03/01 12:38:32 yamt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993, 1994
@@ -76,8 +76,6 @@ enum uio_seg {
 
 #ifdef __UIO_EXPOSE
 
-struct vmspace;
-
 struct uio {
 	struct	iovec *uio_iov;	/* pointer to array of iovecs */
 	int	uio_iovcnt;	/* number of iovecs in array */
@@ -98,9 +96,11 @@ struct uio {
 #endif /* _NETBSD_SOURCE */
 
 #ifdef _KERNEL
+#include <sys/mallocvar.h>
 
-/* 8 on stack, more will be dynamically allocated. */
-#define UIO_SMALLIOV	8
+MALLOC_DECLARE(M_IOV);
+
+#define UIO_SMALLIOV	8		/* 8 on stack, else malloc */
 
 void uio_setup_sysspace(struct uio *);
 #endif

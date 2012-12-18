@@ -1,4 +1,4 @@
-/*	$NetBSD: if_es.c,v 1.51 2012/10/27 17:17:29 chs Exp $ */
+/*	$NetBSD: if_es.c,v 1.42 2007/10/17 19:53:16 garbled Exp $ */
 
 /*
  * Copyright (c) 1995 Michael L. Hitch
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Michael L. Hitch.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,8 +38,9 @@
 #include "opt_ns.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_es.c,v 1.51 2012/10/27 17:17:29 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_es.c,v 1.42 2007/10/17 19:53:16 garbled Exp $");
 
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,6 +72,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_es.c,v 1.51 2012/10/27 17:17:29 chs Exp $");
 #endif
 
 #include <machine/cpu.h>
+#include <machine/mtpr.h>
 #include <amiga/amiga/device.h>
 #include <amiga/amiga/isr.h>
 #include <amiga/dev/zbusvar.h>
@@ -83,7 +90,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_es.c,v 1.51 2012/10/27 17:17:29 chs Exp $");
  * This structure contains the output queue for the interface, its address, ...
  */
 struct	es_softc {
-	device_t sc_dev;
+	struct	device sc_dev;
 	struct	isr sc_isr;
 	struct	ethercom sc_ethercom;	/* common Ethernet structures */
 	struct	ifmedia sc_media;	/* our supported media */
@@ -97,8 +104,10 @@ struct	es_softc {
 #endif
 };
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #ifdef ESDEBUG
 /* console error messages */
@@ -123,14 +132,14 @@ void esstop(struct es_softc *);
 int esmediachange(struct ifnet *);
 void esmediastatus(struct ifnet *, struct ifmediareq *);
 
-int esmatch(device_t, cfdata_t, void *);
-void esattach(device_t, device_t, void *);
+int esmatch(struct device *, struct cfdata *, void *);
+void esattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(es, sizeof(struct es_softc),
+CFATTACH_DECL(es, sizeof(struct es_softc),
     esmatch, esattach, NULL, NULL);
 
 int
-esmatch(device_t parent, cfdata_t cf, void *aux)
+esmatch(struct device *parent, struct cfdata *cfp, void *aux)
 {
 	struct zbus_args *zap = aux;
 
@@ -147,15 +156,14 @@ esmatch(device_t parent, cfdata_t cf, void *aux)
  * to accept packets.
  */
 void
-esattach(device_t parent, device_t self, void *aux)
+esattach(struct device *parent, struct device *self, void *aux)
 {
-	struct es_softc *sc = device_private(self);
+	struct es_softc *sc = (void *)self;
 	struct zbus_args *zap = aux;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	unsigned long ser;
 	u_int8_t myaddr[ETHER_ADDR_LEN];
 
-	sc->sc_dev = self;
 	sc->sc_base = zap->va;
 
 	/*
@@ -176,7 +184,7 @@ esattach(device_t parent, device_t self, void *aux)
 	myaddr[5] = (ser      ) & 0xff;
 
 	/* Initialize ifnet structure. */
-	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
+	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_ioctl = esioctl;
 	ifp->if_start = esstart;
@@ -315,7 +323,7 @@ esintr(void *arg)
 #ifdef ESDEBUG
 	while ((smc->b2.bsr & BSR_MASK) != BSR_BANK2 &&
 	    ifp->if_flags & IFF_RUNNING) {
-		printf("%s: intr BSR not 2: %04x\n", device_xname(sc->sc_dev),
+		printf("%s: intr BSR not 2: %04x\n", sc->sc_dev.dv_xname,
 		    smc->b2.bsr);
 		smc->b2.bsr = BSR_BANK2;
 	}
@@ -329,13 +337,13 @@ esintr(void *arg)
 #ifdef ESDEBUG
 	if (esdebug)
 		printf ("%s: esintr ist %02x msk %02x",
-		    device_xname(sc->sc_dev), intsts, smc->b2.msk);
+		    sc->sc_dev.dv_xname, intsts, smc->b2.msk);
 	if (sc->sc_intbusy++) {
-		printf("%s: esintr re-entered\n", device_xname(sc->sc_dev));
+		printf("%s: esintr re-entered\n", sc->sc_dev.dv_xname);
 		panic("esintr re-entered");
 	}
 	if (sc->sc_smcbusy)
-		printf("%s: esintr interrupted busy %d\n", device_xname(sc->sc_dev),
+		printf("%s: esintr interrupted busy %d\n", sc->sc_dev.dv_xname,
 		    sc->sc_smcbusy);
 #endif
 	smc->b2.msk = 0;
@@ -349,7 +357,7 @@ esintr(void *arg)
 		sc->sc_intctl &= ~MSK_ALLOC;
 #ifdef ESDEBUG
 		if (esdebug || 1)
-			printf ("%s: ist %02x", device_xname(sc->sc_dev),
+			printf ("%s: ist %02x", sc->sc_dev.dv_xname,
 			    intsts);
 #endif
 		if ((smc->b2.arr & ARR_FAILED) == 0) {
@@ -374,7 +382,7 @@ esintr(void *arg)
 	}
 #ifdef ESDEBUG
 	while ((smc->b2.bsr & BSR_MASK) != BSR_BANK2) {
-		printf("%s: intr+ BSR not 2: %04x\n", device_xname(sc->sc_dev),
+		printf("%s: intr+ BSR not 2: %04x\n", sc->sc_dev.dv_xname,
 		    smc->b2.bsr);
 		smc->b2.bsr = BSR_BANK2;
 	}
@@ -384,13 +392,13 @@ esintr(void *arg)
 	}
 #ifdef ESDEBUG
 	while ((smc->b2.bsr & BSR_MASK) != BSR_BANK2) {
-		printf("%s: intr++ BSR not 2: %04x\n", device_xname(sc->sc_dev),
+		printf("%s: intr++ BSR not 2: %04x\n", sc->sc_dev.dv_xname,
 		    smc->b2.bsr);
 		smc->b2.bsr = BSR_BANK2;
 	}
 #endif
 	if (intact & IST_RX_OVRN) {
-		printf ("%s: Overrun ist %02x", device_xname(sc->sc_dev),
+		printf ("%s: Overrun ist %02x", sc->sc_dev.dv_xname,
 		    intsts);
 		smc->b2.ist = ACK_RX_OVRN;
 		printf ("->%02x\n", smc->b2.ist);
@@ -401,7 +409,7 @@ esintr(void *arg)
 #ifdef ESDEBUG
 		if (esdebug)
 			printf ("%s: TX EMPTY %02x",
-			    device_xname(sc->sc_dev), intsts);
+			    sc->sc_dev.dv_xname, intsts);
 		++estxint5;		/* count # IST_TX_EMPTY ints */
 #endif
 		smc->b2.ist = ACK_TX_EMPTY;
@@ -437,7 +445,7 @@ esintr(void *arg)
 #ifdef ESDEBUG
 		if (esdebug) {
 			printf ("%s: TX INT ist %02x",
-			    device_xname(sc->sc_dev), intsts);
+			    sc->sc_dev.dv_xname, intsts);
 			printf ("->%02x\n", smc->b2.ist);
 		}
 		++estxint3;			/* count # IST_TX */
@@ -457,7 +465,7 @@ zzzz:
 		smc->b2.ptr = PTR_READ;		/* point to status word */
 #if 0 /* XXXX */
 		printf("%s: esintr TXINT IST %02x PNR %02x(%d)",
-		    device_xname(sc->sc_dev), smc->b2.ist,
+		    sc->sc_dev.dv_xname, smc->b2.ist,
 		    tx_pnr, n);
 		printf(" Status %04x", smc->b2.data);
 		printf(" EPHSR %04x\n", ephsr);
@@ -504,7 +512,7 @@ zzzz:
 		if ((smc->b2.fifo & FIFO_TEMPTY) == 0 && n++ < 32) {
 #if 0 /* XXXX */
 			printf("%s: multiple TX int(%2d) pnr %02x ist %02x fifo %04x",
-			    device_xname(sc->sc_dev), n, tx_pnr, smc->b2.ist, smc->b2.fifo);
+			    sc->sc_dev.dv_xname, n, tx_pnr, smc->b2.ist, smc->b2.fifo);
 			smc->w2.istmsk = ACK_TX << 8;
 			printf(" %04x\n", smc->b2.fifo);
 #endif
@@ -520,7 +528,7 @@ zzzz:
 	estint(sc);
 #ifdef ESDEBUG
 	while ((smc->b2.bsr & BSR_MASK) != BSR_BANK2) {
-		printf("%s: intr+++ BSR not 2: %04x\n", device_xname(sc->sc_dev),
+		printf("%s: intr+++ BSR not 2: %04x\n", sc->sc_dev.dv_xname,
 		    smc->b2.bsr);
 		smc->b2.bsr = BSR_BANK2;
 	}
@@ -528,7 +536,7 @@ zzzz:
 	smc->b2.msk = sc->sc_intctl;
 #ifdef ESDEBUG
 	if (--sc->sc_intbusy) {
-		printf("%s: esintr busy on exit\n", device_xname(sc->sc_dev));
+		printf("%s: esintr busy on exit\n", sc->sc_dev.dv_xname);
 		panic("esintr busy on exit");
 	}
 #endif
@@ -560,14 +568,14 @@ esrint(struct es_softc *sc)
 	ifp = &sc->sc_ethercom.ec_if;
 #ifdef ESDEBUG
 	if (esdebug)
-		printf ("%s: esrint fifo %04x", device_xname(sc->sc_dev),
+		printf ("%s: esrint fifo %04x", sc->sc_dev.dv_xname,
 		    smc->b2.fifo);
 	if (sc->sc_smcbusy++) {
-		printf("%s: esrint re-entered\n", device_xname(sc->sc_dev));
+		printf("%s: esrint re-entered\n", sc->sc_dev.dv_xname);
 		panic("esrint re-entered");
 	}
 	while ((smc->b2.bsr & BSR_MASK) != BSR_BANK2) {
-		printf("%s: rint BSR not 2: %04x\n", device_xname(sc->sc_dev),
+		printf("%s: rint BSR not 2: %04x\n", sc->sc_dev.dv_xname,
 		    smc->b2.bsr);
 		smc->b2.bsr = BSR_BANK2;
 	}
@@ -595,7 +603,7 @@ esrint(struct es_softc *sc)
 		pktlen++;
 	if (len > 1530) {
 		printf("%s: Corrupted packet length-sts %04x bytcnt %04x len %04x bank %04x\n",
-		    device_xname(sc->sc_dev), pktctlw, pktlen, len, smc->b2.bsr);
+		    sc->sc_dev.dv_xname, pktctlw, pktlen, len, smc->b2.bsr);
 		/* XXX ignore packet, or just truncate? */
 #if defined(ESDEBUG) && defined(DDB)
 		if ((smc->b2.bsr & BSR_MASK) != BSR_BANK2)
@@ -609,7 +617,7 @@ esrint(struct es_softc *sc)
 #ifdef ESDEBUG
 		if (--sc->sc_smcbusy) {
 			printf("%s: esrintr busy on bad packet exit\n",
-			    device_xname(sc->sc_dev));
+			    sc->sc_dev.dv_xname);
 			panic("esrintr busy on exit");
 		}
 #endif
@@ -637,7 +645,7 @@ esrint(struct es_softc *sc)
 		;
 #ifdef ESDEBUG
 	if (pktctlw & (RFSW_ALGNERR | RFSW_BADCRC | RFSW_TOOLNG | RFSW_TOOSHORT)) {
-		printf ("%s: Packet error %04x\n", device_xname(sc->sc_dev), pktctlw);
+		printf ("%s: Packet error %04x\n", sc->sc_dev.dv_xname, pktctlw);
 		/* count input error? */
 	}
 	if (esdebug) {
@@ -654,7 +662,7 @@ esrint(struct es_softc *sc)
 	/* XXX copy directly from controller to mbuf */
 #ifdef ESDEBUG
 	if (pktctlw & (RFSW_ALGNERR | RFSW_BADCRC | RFSW_TOOLNG | RFSW_TOOSHORT)) {
-		printf ("%s: Packet error %04x\n", device_xname(sc->sc_dev), pktctlw);
+		printf ("%s: Packet error %04x\n", sc->sc_dev.dv_xname, pktctlw);
 		/* count input error? */
 	}
 	if (esdebug) {
@@ -691,7 +699,7 @@ esrint(struct es_softc *sc)
 		}
 		m->m_len = len = min(pktlen, len);
 #ifdef USEPKTBUF
-		memcpy(mtod(m, void *), (void *)b, len);
+		bcopy((void *)b, mtod(m, void *), len);
 		b += len;
 #else	/* USEPKTBUF */
 		buf = mtod(m, u_short *);
@@ -720,15 +728,18 @@ esrint(struct es_softc *sc)
 	while (smc->b2.mmucr & MMUCR_BUSY)
 		;
 #endif
+#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.  If so, hand off
 	 * the raw packet to bpf.
 	 */
-	bpf_mtap(ifp, top);
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, top);
+#endif
 	(*ifp->if_input)(ifp, top);
 #ifdef ESDEBUG
 	if (--sc->sc_smcbusy) {
-		printf("%s: esintr busy on exit\n", device_xname(sc->sc_dev));
+		printf("%s: esintr busy on exit\n", sc->sc_dev.dv_xname);
 		panic("esintr busy on exit");
 	}
 #endif
@@ -769,11 +780,11 @@ esstart(struct ifnet *ifp)
 
 #ifdef ESDEBUG
 	if (sc->sc_smcbusy++) {
-		printf("%s: esstart re-entered\n", device_xname(sc->sc_dev));
+		printf("%s: esstart re-entered\n", sc->sc_dev.dv_xname);
 		panic("esstart re-entred");
 	}
 	while ((smc->b2.bsr & BSR_MASK) != BSR_BANK2) {
-		printf("%s: esstart BSR not 2: %04x\n", device_xname(sc->sc_dev),
+		printf("%s: esstart BSR not 2: %04x\n", sc->sc_dev.dv_xname,
 		    smc->b2.bsr);
 		smc->b2.bsr = BSR_BANK2;
 	}
@@ -792,7 +803,7 @@ esstart(struct ifnet *ifp)
 #ifdef ESDEBUG
 		if (esdebug && (m->m_next || m->m_len & 1))
 			printf("%s: esstart m_next %p m_len %d\n",
-			    device_xname(sc->sc_dev), m->m_next, m->m_len);
+			    sc->sc_dev.dv_xname, m->m_next, m->m_len);
 #endif
 		for (m0 = m, pktlen = 0; m0; m0 = m0->m_next)
 			pktlen += m0->m_len;
@@ -816,7 +827,7 @@ esstart(struct ifnet *ifp)
 
 #ifdef ESDEBUG
 		while ((smc->b2.bsr & BSR_MASK) != BSR_BANK2) {
-			printf("%s: esstart+ BSR not 2: %04x\n", device_xname(sc->sc_dev),
+			printf("%s: esstart+ BSR not 2: %04x\n", sc->sc_dev.dv_xname,
 			    smc->b2.bsr);
 			smc->b2.bsr = BSR_BANK2;
 		}
@@ -829,7 +840,7 @@ esstart(struct ifnet *ifp)
 		*data = SWAP(pktlen);
 #ifdef ESDEBUG
 		while ((smc->b2.bsr & BSR_MASK) != BSR_BANK2) {
-			printf("%s: esstart++ BSR not 2: %04x\n", device_xname(sc->sc_dev),
+			printf("%s: esstart++ BSR not 2: %04x\n", sc->sc_dev.dv_xname,
 			    smc->b2.bsr);
 			smc->b2.bsr = BSR_BANK2;
 		}
@@ -837,7 +848,7 @@ esstart(struct ifnet *ifp)
 #ifdef USEPKTBUF
 		i = 0;
 		for (m0 = m; m; m = m->m_next) {
-			memcpy((char *)pktbuf + i, mtod(m, void *), m->m_len);
+			bcopy(mtod(m, void *), (char *)pktbuf + i, m->m_len);
 			i += m->m_len;
 		}
 
@@ -849,7 +860,7 @@ esstart(struct ifnet *ifp)
 #ifdef ESDEBUG
 		if (pktlen > sizeof(pktbuf) && i > (sizeof(pktbuf) * 2))
 			printf("%s: esstart packet longer than pktbuf\n",
-			    device_xname(sc->sc_dev));
+			    sc->sc_dev.dv_xname);
 #endif
 #if 0 /* doesn't quite work? */
 		lbuf = (u_long *)(pktbuf);
@@ -864,7 +875,7 @@ esstart(struct ifnet *ifp)
 #else
 #ifdef ESDEBUG
 		while ((smc->b2.bsr & BSR_MASK) != BSR_BANK2) {
-			printf("%s: esstart++2 BSR not 2: %04x\n", device_xname(sc->sc_dev),
+			printf("%s: esstart++2 BSR not 2: %04x\n", sc->sc_dev.dv_xname,
 			    smc->b2.bsr);
 			smc->b2.bsr = BSR_BANK2;
 		}
@@ -894,7 +905,7 @@ esstart(struct ifnet *ifp)
 				pktctlw = (*buf & 0xff00) | CTLB_ODD;
 			if (m->m_len & 1 && m->m_next)
 				printf("%s: esstart odd byte count in mbuf\n",
-				    device_xname(sc->sc_dev));
+				    sc->sc_dev.dv_xname);
 		}
 		*data = pktctlw;
 #endif	/* USEPKTBUF */
@@ -910,7 +921,7 @@ esstart(struct ifnet *ifp)
 			 */
 #ifdef DIAGNOSTIC
 			printf("%s: esstart+++ BSR not 2: %04x\n",
-			    device_xname(sc->sc_dev), smc->b2.bsr);
+			    sc->sc_dev.dv_xname, smc->b2.bsr);
 #endif
 			smc->b2.bsr = BSR_BANK2;
 #ifdef ESDEBUG
@@ -925,8 +936,11 @@ esstart(struct ifnet *ifp)
 		smc->b2.mmucr = MMUCR_ENQ_TX;
 		if (smc->b2.pnr != active_pnr)
 			printf("%s: esstart - PNR changed %x->%x\n",
-			    device_xname(sc->sc_dev), active_pnr, smc->b2.pnr);
-		bpf_mtap(&sc->sc_ethercom.ec_if, m0);
+			    sc->sc_dev.dv_xname, active_pnr, smc->b2.pnr);
+#if NBPFILTER > 0
+		if (sc->sc_ethercom.ec_if.if_bpf)
+			bpf_mtap(sc->sc_ethercom.ec_if.if_bpf, m0);
+#endif
 		m_freem(m0);
 		sc->sc_ethercom.ec_if.if_opackets++;	/* move to interrupt? */
 		sc->sc_intctl |= MSK_TX_EMPTY | MSK_TX;
@@ -935,19 +949,19 @@ esstart(struct ifnet *ifp)
 	smc->b2.msk = sc->sc_intctl;
 #ifdef ESDEBUG
 	while ((smc->b2.bsr & BSR_MASK) != BSR_BANK2) {
-		printf("%s: esstart++++ BSR not 2: %04x\n", device_xname(sc->sc_dev),
+		printf("%s: esstart++++ BSR not 2: %04x\n", sc->sc_dev.dv_xname,
 		    smc->b2.bsr);
 		smc->b2.bsr = BSR_BANK2;
 	}
 	if (--sc->sc_smcbusy) {
-		printf("%s: esstart busy on exit\n", device_xname(sc->sc_dev));
+		printf("%s: esstart busy on exit\n", sc->sc_dev.dv_xname);
 		panic("esstart busy on exit");
 	}
 #endif
 }
 
 int
-esioctl(struct ifnet *ifp, u_long cmd, void *data)
+esioctl(register struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct es_softc *sc = ifp->if_softc;
 	register struct ifaddr *ifa = (struct ifaddr *)data;
@@ -958,7 +972,7 @@ esioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 
 		switch (ifa->ifa_addr->sa_family) {
@@ -991,9 +1005,6 @@ esioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		/* XXX see the comment in ed_ioctl() about code re-use */
 		/*
 		 * If interface is marked down and it is running, then stop it
 		 */
@@ -1048,8 +1059,7 @@ esioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ether_ioctl(ifp, cmd, data);
-		break;
+		error = EINVAL;
 	}
 
 	splx(s);
@@ -1075,7 +1085,7 @@ eswatchdog(struct ifnet *ifp)
 {
 	struct es_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", device_xname(sc->sc_dev));
+	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
 	++ifp->if_oerrors;
 
 	esreset(sc);

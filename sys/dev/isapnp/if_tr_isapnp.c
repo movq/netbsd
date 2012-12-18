@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tr_isapnp.c,v 1.21 2012/10/27 17:18:26 chs Exp $	*/
+/*	$NetBSD: if_tr_isapnp.c,v 1.18 2008/04/28 20:23:53 martin Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tr_isapnp.c,v 1.21 2012/10/27 17:18:26 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tr_isapnp.c,v 1.18 2008/04/28 20:23:53 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,14 +61,15 @@ __KERNEL_RCSID(0, "$NetBSD: if_tr_isapnp.c,v 1.21 2012/10/27 17:18:26 chs Exp $"
 #include <dev/isapnp/isapnpvar.h>
 #include <dev/isapnp/isapnpdevs.h>
 
-int	tr_isapnp_match(device_t, cfdata_t, void *);
-void	tr_isapnp_attach(device_t, device_t, void *);
+int	tr_isapnp_match(struct device *, struct cfdata *, void *);
+void	tr_isapnp_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(tr_isapnp, sizeof(struct tr_softc),
+CFATTACH_DECL(tr_isapnp, sizeof(struct tr_softc),
     tr_isapnp_match, tr_isapnp_attach, NULL, NULL);
 
 int
-tr_isapnp_match(device_t parent, cfdata_t match, void *aux)
+tr_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -80,7 +81,8 @@ tr_isapnp_match(device_t parent, cfdata_t match, void *aux)
 
 
 void
-tr_isapnp_attach(device_t parent, device_t self, void *aux)
+tr_isapnp_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct tr_softc *sc = device_private(self);
 	struct isapnp_attach_args *ipa = aux;
@@ -89,14 +91,13 @@ tr_isapnp_attach(device_t parent, device_t self, void *aux)
 	printf("\n");
 
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		aprint_error_dev(self, "error in region allocation\n");
+		aprint_error_dev(&sc->sc_dev, "error in region allocation\n");
 		return;
 	}
 
-	printf("%s: %s %s\n", device_xname(self), ipa->ipa_devident,
+	printf("%s: %s %s\n", device_xname(&sc->sc_dev), ipa->ipa_devident,
 	    ipa->ipa_devclass);
 
-	sc->sc_dev = self;
 	sc->sc_piot = ipa->ipa_iot;
 	sc->sc_pioh = ipa->ipa_io[0].h;
 

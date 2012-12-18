@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_prot.c,v 1.20 2012/03/20 17:14:50 matt Exp $	*/
+/*	$NetBSD: rpc_prot.c,v 1.18 2003/05/29 18:15:25 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 static char *sccsid = "@(#)rpc_prot.c 1.36 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)rpc_prot.c	2.3 88/08/07 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: rpc_prot.c,v 1.20 2012/03/20 17:14:50 matt Exp $");
+__RCSID("$NetBSD: rpc_prot.c,v 1.18 2003/05/29 18:15:25 christos Exp $");
 #endif
 #endif
 
@@ -69,8 +69,8 @@ __weak_alias(xdr_rejected_reply,_xdr_rejected_reply)
 __weak_alias(xdr_replymsg,_xdr_replymsg)
 #endif
 
-static void accepted(enum accept_stat, struct rpc_err *);
-static void rejected(enum reject_stat, struct rpc_err *);
+static void accepted __P((enum accept_stat, struct rpc_err *));
+static void rejected __P((enum reject_stat, struct rpc_err *));
 
 /* * * * * * * * * * * * * * XDR Authentication * * * * * * * * * * * */
 
@@ -79,7 +79,9 @@ static void rejected(enum reject_stat, struct rpc_err *);
  * (see auth.h)
  */
 bool_t
-xdr_opaque_auth(XDR *xdrs, struct opaque_auth *ap)
+xdr_opaque_auth(xdrs, ap)
+	XDR *xdrs;
+	struct opaque_auth *ap;
 {
 
 	_DIAGASSERT(xdrs != NULL);
@@ -95,14 +97,15 @@ xdr_opaque_auth(XDR *xdrs, struct opaque_auth *ap)
  * XDR a DES block
  */
 bool_t
-xdr_des_block(XDR *xdrs, des_block *blkp)
+xdr_des_block(xdrs, blkp)
+	XDR *xdrs;
+	des_block *blkp;
 {
 
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(blkp != NULL);
 
-	return (xdr_opaque(xdrs, (caddr_t)(void *)blkp,
-	    (u_int)sizeof(des_block)));
+	return (xdr_opaque(xdrs, (caddr_t)(void *)blkp, sizeof(des_block)));
 }
 
 /* * * * * * * * * * * * * * XDR RPC MESSAGE * * * * * * * * * * * * * * * */
@@ -111,7 +114,9 @@ xdr_des_block(XDR *xdrs, des_block *blkp)
  * XDR the MSG_ACCEPTED part of a reply message union
  */
 bool_t 
-xdr_accepted_reply(XDR *xdrs, struct accepted_reply *ar)
+xdr_accepted_reply(xdrs, ar)
+	XDR *xdrs;   
+	struct accepted_reply *ar;
 {
 
 	_DIAGASSERT(xdrs != NULL);
@@ -145,7 +150,9 @@ xdr_accepted_reply(XDR *xdrs, struct accepted_reply *ar)
  * XDR the MSG_DENIED part of a reply message union
  */
 bool_t 
-xdr_rejected_reply(XDR *xdrs, struct rejected_reply *rr)
+xdr_rejected_reply(xdrs, rr)
+	XDR *xdrs;
+	struct rejected_reply *rr;
 {
 
 	_DIAGASSERT(xdrs != NULL);
@@ -177,7 +184,9 @@ static const struct xdr_discrim reply_dscrm[3] = {
  * XDR a reply message
  */
 bool_t
-xdr_replymsg(XDR *xdrs, struct rpc_msg *rmsg)
+xdr_replymsg(xdrs, rmsg)
+	XDR *xdrs;
+	struct rpc_msg *rmsg;
 {
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(rmsg != NULL);
@@ -199,7 +208,9 @@ xdr_replymsg(XDR *xdrs, struct rpc_msg *rmsg)
  * The rm_xid is not really static, but the user can easily munge on the fly.
  */
 bool_t
-xdr_callhdr(XDR *xdrs, struct rpc_msg *cmsg)
+xdr_callhdr(xdrs, cmsg)
+	XDR *xdrs;
+	struct rpc_msg *cmsg;
 {
 
 	_DIAGASSERT(xdrs != NULL);
@@ -220,7 +231,9 @@ xdr_callhdr(XDR *xdrs, struct rpc_msg *cmsg)
 /* ************************** Client utility routine ************* */
 
 static void
-accepted(enum accept_stat acpt_stat, struct rpc_err *error)
+accepted(acpt_stat, error)
+	enum accept_stat acpt_stat;
+	struct rpc_err *error;
 {
 
 	_DIAGASSERT(error != NULL);
@@ -259,7 +272,9 @@ accepted(enum accept_stat acpt_stat, struct rpc_err *error)
 }
 
 static void 
-rejected(enum reject_stat rjct_stat, struct rpc_err *error)
+rejected(rjct_stat, error)
+	enum reject_stat rjct_stat;
+	struct rpc_err *error;
 {
 
 	_DIAGASSERT(error != NULL);
@@ -284,7 +299,9 @@ rejected(enum reject_stat rjct_stat, struct rpc_err *error)
  * given a reply message, fills in the error
  */
 void
-_seterr_reply(struct rpc_msg *msg, struct rpc_err *error)
+_seterr_reply(msg, error)
+	struct rpc_msg *msg;
+	struct rpc_err *error;
 {
 
 	_DIAGASSERT(msg != NULL);

@@ -1,4 +1,4 @@
-/*	$NetBSD: fs.h,v 1.59 2012/04/23 17:19:00 drochner Exp $	*/
+/*	$NetBSD: fs.h,v 1.51 2008/07/31 08:49:47 simonb Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -29,10 +29,6 @@
  * SUCH DAMAGE.
  *
  *	@(#)fs.h	8.13 (Berkeley) 3/21/95
- */
-
-/*
- * NOTE: COORDINATE ON-DISK FORMAT CHANGES WITH THE FREEBSD PROJECT.
  */
 
 #ifndef	_UFS_FFS_FS_H_
@@ -84,7 +80,7 @@
  *
  * The ffsv2 superblock layout (which might contain an ffsv1 filesystem)
  * can be detected by checking for sb->fs_old_flags & FS_FLAGS_UPDATED.
- * This is the default superblock type for NetBSD since ffsv2 support was added.
+ * This is the default suberblock type for NetBSD since ffsv2 support was added.
  */
 #define	BBSIZE		8192
 #define	BBOFF		((off_t)(0))
@@ -336,11 +332,7 @@ struct fs {
 	uint8_t	 fs_journal_reserved[2];/* reserved for future use */
 	uint32_t fs_journal_flags;	/* journal flags */
 	uint64_t fs_journallocs[4];	/* location info for journal */
-	uint32_t fs_quota_magic;	/* see quota2.h */
-	uint8_t  fs_quota_flags;	/* see quota2.h */
-	uint8_t  fs_quota_reserved[3];	
-	uint64_t fs_quotafile[2];	/* pointer to quota inodes */
-	int64_t	 fs_sparecon64[9];	/* reserved for future use */
+	int64_t	 fs_sparecon64[12];	/* reserved for future use */
 	int64_t	 fs_sblockloc;		/* byte offset of standard superblock */
 	struct	csum_total fs_cstotal;	/* cylinder summary information */
 	int64_t  fs_time;		/* last time written */
@@ -425,13 +417,11 @@ struct fs {
 #define	FS_INDEXDIRS	0x008	/* kernel supports indexed directories */
 #define	FS_ACLS		0x010	/* file system has ACLs enabled */
 #define	FS_MULTILABEL	0x020	/* file system is MAC multi-label */
-#define	FS_GJOURNAL	0x40	/* gjournaled file system */
 #define	FS_FLAGS_UPDATED 0x80	/* flags have been moved to new location */
 #define	FS_DOWAPBL	0x100	/* Write ahead physical block logging */
-#define	FS_DOQUOTA2	0x200	/* in-filesystem quotas */
 
 /* File system flags that are ok for NetBSD if set in fs_flags */
-#define	FS_KNOWN_FLAGS	(FS_DOSOFTDEP | FS_DOWAPBL | FS_DOQUOTA2)
+#define	FS_KNOWN_FLAGS	(FS_DOSOFTDEP | FS_DOWAPBL)
 
 /*
  * File system internal flags, also in fs_flags.
@@ -604,13 +594,8 @@ struct ocg {
  * Turn file system block numbers into disk block addresses.
  * This maps file system blocks to device size blocks.
  */
-#if defined (_KERNEL)
-#define	fsbtodb(fs, b)	((b) << ((fs)->fs_fshift - DEV_BSHIFT))
-#define	dbtofsb(fs, b)	((b) >> ((fs)->fs_fshift - DEV_BSHIFT))
-#else
 #define	fsbtodb(fs, b)	((b) << (fs)->fs_fsbtodb)
 #define	dbtofsb(fs, b)	((b) >> (fs)->fs_fsbtodb)
-#endif
 
 /*
  * Cylinder group macros to locate things in cylinder groups.
@@ -672,7 +657,7 @@ struct ocg {
 #define	lfragtosize(fs, frag)	/* calculates ((off_t)frag * fs->fs_fsize) */ \
 	(((off_t)(frag)) << (fs)->fs_fshift)
 #define	lblktosize(fs, blk)	/* calculates ((off_t)blk * fs->fs_bsize) */ \
-	((uint64_t)(((off_t)(blk)) << (fs)->fs_bshift))
+	(((off_t)(blk)) << (fs)->fs_bshift)
 #define	lblkno(fs, loc)		/* calculates (loc / fs->fs_bsize) */ \
 	((loc) >> (fs)->fs_bshift)
 #define	numfrags(fs, loc)	/* calculates (loc / fs->fs_fsize) */ \
@@ -705,12 +690,12 @@ struct ocg {
 #define	blksize(fs, ip, lbn) \
 	(((lbn) >= NDADDR || (ip)->i_size >= lblktosize(fs, (lbn) + 1)) \
 	    ? (fs)->fs_bsize \
-	    : ((int32_t)fragroundup(fs, blkoff(fs, (ip)->i_size))))
+	    : (fragroundup(fs, blkoff(fs, (ip)->i_size))))
 
 #define	sblksize(fs, size, lbn) \
 	(((lbn) >= NDADDR || (size) >= ((lbn) + 1) << (fs)->fs_bshift) \
 	  ? (fs)->fs_bsize \
-	  : ((int32_t)fragroundup(fs, blkoff(fs, (uint64_t)(size)))))
+	  : (fragroundup(fs, blkoff(fs, (size)))))
 
 
 /*

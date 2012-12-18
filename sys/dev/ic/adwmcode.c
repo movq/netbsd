@@ -1,4 +1,4 @@
-/*      $NetBSD: adwmcode.c,v 1.17 2009/11/23 02:13:46 rmind Exp $        */
+/*      $NetBSD: adwmcode.c,v 1.15 2007/10/19 11:59:45 ad Exp $        */
 
 /*
  * Generic driver definitions and exported functions for the Advanced
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adwmcode.c,v 1.17 2009/11/23 02:13:46 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adwmcode.c,v 1.15 2007/10/19 11:59:45 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,6 +66,7 @@ __KERNEL_RCSID(0, "$NetBSD: adwmcode.c,v 1.17 2009/11/23 02:13:46 rmind Exp $");
 #include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -78,7 +79,9 @@ __KERNEL_RCSID(0, "$NetBSD: adwmcode.c,v 1.17 2009/11/23 02:13:46 rmind Exp $");
  * Initialize a set of Carriers and add them to the free list.
  */
 ADW_CARRIER *
-AdwInitCarriers(bus_dmamap_t carr_dmap, ADW_CARRIER *carriers)
+AdwInitCarriers(carr_dmap, carriers)
+	bus_dmamap_t	carr_dmap;
+	ADW_CARRIER	*carriers;
 {
 	ADW_CARRIER	*carr;
 	u_int32_t	carr_next = 0;

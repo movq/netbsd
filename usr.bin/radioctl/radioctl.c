@@ -1,4 +1,4 @@
-/* $NetBSD: radioctl.c,v 1.13 2011/09/06 18:27:08 joerg Exp $ */
+/* $NetBSD: radioctl.c,v 1.7 2006/05/11 01:24:14 mrg Exp $ */
 /* $OpenBSD: radioctl.c,v 1.5 2001/12/18 18:42:19 mickey Exp $ */
 /* $RuOBSD: radioctl.c,v 1.4 2001/10/20 18:09:10 pva Exp $ */
 
@@ -29,7 +29,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: radioctl.c,v 1.13 2011/09/06 18:27:08 joerg Exp $");
+__RCSID("$NetBSD: radioctl.c,v 1.7 2006/05/11 01:24:14 mrg Exp $");
 #endif
 
 #include <sys/ioctl.h>
@@ -45,7 +45,7 @@ __RCSID("$NetBSD: radioctl.c,v 1.13 2011/09/06 18:27:08 joerg Exp $");
 #define RADIO_ENV	"RADIODEVICE"
 #define RADIODEVICE	"/dev/radio"
 
-static const char *varname[] = {
+const char *varname[] = {
 	"search",
 #define OPTION_SEARCH		0x00
 	"volume",
@@ -77,9 +77,9 @@ struct opt_t {
 	u_int32_t value;
 };
 
-static const char *onchar = "on";
+const char *onchar = "on";
 #define ONCHAR_LEN	2
-static const char *offchar = "off";
+const char *offchar = "off";
 #define OFFCHAR_LEN	3
 
 static struct radio_info ri;
@@ -94,11 +94,11 @@ static void	change_value(const struct opt_t);
 static void	update_value(int, u_int *, u_int);
 
 static void     warn_unsupported(int);
-__dead static void	usage(void);
+static void	usage(void);
 
 static void	show_verbose(const char *, int);
-static void	show_int_val(u_long, const char *, const char *, int);
-static void	show_float_val(float, const char *, const char *, int);
+static void	show_int_val(u_long, const char *, char *, int);
+static void	show_float_val(float, const char *, char *, int);
 static void	show_char_val(const char *, const char *, int);
 static int	str_to_opt(const char *);
 static u_long	str_to_long(char *, int);
@@ -110,7 +110,7 @@ int
 main(int argc, char **argv)
 {
 	struct opt_t opt;
-	const char *radiodev = NULL;
+	char *radiodev = NULL;
 	int rd = -1;
 	int optchar;
 	char *param = NULL;
@@ -349,7 +349,7 @@ str_to_long(char *str, int optval)
 	if (optval == OPTION_FREQUENCY)
 		val = (u_long)1000 * atof(str);
 	else
-		val = (u_long)strtol(str, NULL, 10);
+		val = (u_long)strtol(str, (char **)NULL, 10);
 
 	return val;
 }
@@ -360,7 +360,7 @@ str_to_long(char *str, int optval)
  */
 static int
 parse_opt(char *s, struct opt_t *o) {
-	static const char badvalue[] = "bad value `%s'";
+	const char *badvalue = "bad value `%s'";
 	char *topt = NULL;
 	int slen, optlen;
 
@@ -378,7 +378,7 @@ parse_opt(char *s, struct opt_t *o) {
 	/* Set only o->optval, the rest is missing */
 	if (slen == optlen) {
 		o->option = str_to_opt(s);
-		return o->option == (int)OPTION_NONE ? 0 : 1;
+		return o->option == OPTION_NONE ? 0 : 1;
 	}
 
 	if (optlen > slen - 2) {
@@ -394,7 +394,7 @@ parse_opt(char *s, struct opt_t *o) {
 	}
 	strlcpy(topt, s, optlen);
 
-	if ((o->option = str_to_opt(topt)) == (int)OPTION_NONE) {
+	if ((o->option = str_to_opt(topt)) == OPTION_NONE) {
 		free(topt);
 		return 0;
 	}
@@ -443,7 +443,7 @@ parse_opt(char *s, struct opt_t *o) {
 static void
 print_value(int optval)
 {
-	if (optval == (int)OPTION_NONE)
+	if (optval == OPTION_NONE)
 		return;
 
 	switch (optval) {
@@ -459,13 +459,13 @@ print_value(int optval)
 		printf("%umkV", ri.lock);
 		break;
 	case OPTION_MUTE:
-		printf("%s", ri.mute ? onchar : offchar);
+		printf(ri.mute ? onchar : offchar);
 		break;
 	case OPTION_MONO:
-		printf("%s", ri.stereo ? offchar : onchar);
+		printf(ri.stereo ? offchar : onchar);
 		break;
 	case OPTION_STEREO:
-		printf("%s", ri.stereo ? onchar : offchar);
+		printf(ri.stereo ? onchar : offchar);
 		break;
 	case OPTION_VOLUME:
 	default:
@@ -475,14 +475,14 @@ print_value(int optval)
 }
 
 static void
-show_int_val(u_long val, const char *nick, const char *append, int silent)
+show_int_val(u_long val, const char *nick, char *append, int silent)
 {
 	show_verbose(nick, silent);
 	printf("%lu%s\n", val, append);
 }
 
 static void
-show_float_val(float val, const char *nick, const char *append, int silent)
+show_float_val(float val, const char *nick, char *append, int silent)
 {
 	show_verbose(nick, silent);
 	printf("%.2f%s\n", val, append);

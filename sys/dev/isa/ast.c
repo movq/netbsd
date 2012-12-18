@@ -1,4 +1,4 @@
-/*	$NetBSD: ast.c,v 1.65 2012/10/27 17:18:23 chs Exp $	*/
+/*	$NetBSD: ast.c,v 1.61 2008/05/30 10:59:42 martin Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ast.c,v 1.65 2012/10/27 17:18:23 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ast.c,v 1.61 2008/05/30 10:59:42 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,6 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: ast.c,v 1.65 2012/10/27 17:18:23 chs Exp $");
 #define	NSLAVES	4
 
 struct ast_softc {
+	struct device sc_dev;
 	void *sc_ih;
 
 	bus_space_tag_t sc_iot;
@@ -63,15 +64,16 @@ struct ast_softc {
 	bus_space_handle_t sc_slaveioh[NSLAVES];
 };
 
-int astprobe(device_t, cfdata_t, void *);
-void astattach(device_t, device_t, void *);
+int astprobe(struct device *, struct cfdata *, void *);
+void astattach(struct device *, struct device *, void *);
 int astintr(void *);
 
-CFATTACH_DECL_NEW(ast, sizeof(struct ast_softc),
+CFATTACH_DECL(ast, sizeof(struct ast_softc),
     astprobe, astattach, NULL, NULL);
 
 int
-astprobe(device_t parent, cfdata_t self, void *aux)
+astprobe(struct device *parent, struct cfdata *self,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -141,7 +143,7 @@ out:
 }
 
 void
-astattach(device_t parent, device_t self, void *aux)
+astattach(struct device *parent, struct device *self, void *aux)
 {
 	struct ast_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
@@ -160,7 +162,7 @@ astattach(device_t parent, device_t self, void *aux)
 		if (!com_is_console(iot, iobase, &sc->sc_slaveioh[i]) &&
 		    bus_space_map(iot, iobase, COM_NPORTS, 0,
 			&sc->sc_slaveioh[i])) {
-			aprint_error_dev(self, "can't map i/o space for slave %d\n", i);
+			aprint_error_dev(&sc->sc_dev, "can't map i/o space for slave %d\n", i);
 			return;
 		}
 	}
@@ -189,7 +191,8 @@ astattach(device_t parent, device_t self, void *aux)
 }
 
 int
-astintr(void *arg)
+astintr(arg)
+	void *arg;
 {
 	struct ast_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;

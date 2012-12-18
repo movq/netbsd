@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.35 2009/10/23 03:28:09 snj Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.33 2008/01/12 09:54:29 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Dale Rahn.
@@ -12,7 +12,10 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *   This product includes software developed by Dale Rahn.
+ * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -28,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.35 2009/10/23 03:28:09 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.33 2008/01/12 09:54:29 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,8 +101,8 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 	cputobsdlabel(lp, clp);
 #ifdef DEBUG
 	if(disksubr_debug > 0) {
-		printlp(lp, "readdisklabel: bsd label");
-		printclp(clp, "readdisklabel: cpu label");
+		printlp(lp, "%s:bsd label", __func__);
+		printclp(clp, "%s:cpu label", __func__);
 	}
 #endif
 	return msg;
@@ -118,9 +121,9 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
 
 #ifdef DEBUG
 	if (disksubr_debug > 0) {
-		printlp(nlp, "setdisklabel: new disklabel");
-		printlp(olp, "setdisklabel: old disklabel");
-		printclp(clp, "setdisklabel:cpu disklabel");
+		printlp(nlp, "%s:new disklabel", __func__);
+		printlp(olp, "%s:old disklabel", __func__);
+		printclp(clp, "%s:cpu disklabel", __func__);
 	}
 #endif
 
@@ -166,7 +169,7 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
 	*olp = *nlp;
 #ifdef DEBUG
 	if(disksubr_debug > 0) {
-		printlp(olp, "setdisklabel: old->new disklabel");
+		printlp(olp, "%s:old->new disklabel", __func__);
 	}
 #endif
 	return 0;
@@ -184,7 +187,7 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 
 #ifdef DEBUG
 	if(disksubr_debug > 0) {
-		printlp(lp, "writedisklabel: bsd label");
+		printlp(lp, "%s: bsd label", __func__);
 	}
 #endif
 
@@ -217,7 +220,7 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 
 #ifdef DEBUG
 	if (disksubr_debug > 0) {
-		printclp(clp, "writedisklabel: cpu label");
+		printclp(clp, "%s:cpu label", __func__);
 	}
 #endif
 

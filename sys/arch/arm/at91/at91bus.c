@@ -1,4 +1,4 @@
-/*	$NetBSD: at91bus.c,v 1.16 2012/11/12 18:00:36 skrll Exp $	*/
+/*	$NetBSD: at91bus.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -12,6 +12,13 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the NetBSD
+ *	Foundation, Inc. and its contributors.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -27,20 +34,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91bus.c,v 1.16 2012/11/12 18:00:36 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91bus.c,v 1.2 2008/07/03 01:15:38 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_pmap_debug.h"
-
-/* Define various stack sizes in pages */
-#define IRQ_STACK_SIZE	8
-#define ABT_STACK_SIZE	8
-#ifdef IPKDB
-#define UND_STACK_SIZE	16
-#else
-#define UND_STACK_SIZE	8
-#endif
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -62,7 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: at91bus.c,v 1.16 2012/11/12 18:00:36 skrll Exp $");
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <arm/undefined.h>
@@ -100,6 +98,15 @@ int cnmode = CONMODE;
 
 
 
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	8
+#define ABT_STACK_SIZE	8
+#ifdef IPKDB
+#define UND_STACK_SIZE	16
+#else
+#define UND_STACK_SIZE	8
+#endif
+
 /* boot configuration: */
 vm_offset_t physical_start;
 vm_offset_t physical_freestart;
@@ -107,10 +114,21 @@ vm_offset_t physical_freeend;
 vm_offset_t physical_freeend_low;
 vm_offset_t physical_end;
 u_int free_pages;
+int physmem = 0;
+
+/* Physical and virtual addresses for some global pages */
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
 
 vm_offset_t msgbufphys;
 
 //static struct arm32_dma_range dma_ranges[4];
+
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -128,6 +146,9 @@ extern int pmap_debug_level;
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
 
+struct user *proc0paddr;
+
+
 /* prototypes: */
 void		consinit(void);
 static int	at91bus_match(device_t, cfdata_t, void *);
@@ -139,8 +160,7 @@ static int	at91bus_submatch(device_t, cfdata_t,
 				 const int *, void *);
 
 
-CFATTACH_DECL_NEW(at91bus, sizeof(struct at91bus_softc),
-	at91bus_match, at91bus_attach, NULL, NULL);
+CFATTACH_DECL(at91bus, sizeof(struct at91bus_softc), at91bus_match, at91bus_attach, NULL, NULL);
 
 struct at91bus_clocks at91bus_clocks = {0};
 struct at91bus_softc *at91bus_sc = NULL;
@@ -151,16 +171,12 @@ struct at91bus_softc *at91bus_sc = NULL;
 #include <arm/at91/at91rm9200busvar.h>
 #endif
 
-#ifdef	AT91SAM9260
-#include <arm/at91/at91sam9260busvar.h>
-#endif
-
 #ifdef	AT91SAM9261
 #include <arm/at91/at91sam9261busvar.h>
 #endif
 
 static const struct {
-	uint32_t	cidr;
+	u_int32_t	cidr;
 	const char *	name;
 	const struct at91bus_machdep *machdep;
 } at91_types[] = {
@@ -174,9 +190,6 @@ static const struct {
 	{
 		DBGU_CIDR_AT91SAM9260,
 		"AT91SAM9260"
-#ifdef	AT91SAM9260
-		, &at91sam9260bus
-#endif
 	},
 	{
 		DBGU_CIDR_AT91SAM9260,
@@ -186,7 +199,7 @@ static const struct {
 #endif
 	},
 	{
-		DBGU_CIDR_AT91SAM9263,
+		DBGU_CIDR_AT91SAM9260,
 		"AT91SAM9263"
 	},
 	{
@@ -196,7 +209,7 @@ static const struct {
 	}
 };
 
-uint32_t at91_chip_id;
+u_int32_t at91_chip_id;
 static int at91_chip_ndx = -1;
 struct at91bus_machdep at91bus_machdep = { 0 };
 at91bus_tag_t at91bus_tag = 0;
@@ -204,7 +217,7 @@ at91bus_tag_t at91bus_tag = 0;
 static int
 match_cid(void)
 {
-	uint32_t		cidr;
+	u_int32_t		cidr;
 	int			i;
 
 	/* get chip id */
@@ -448,7 +461,7 @@ at91bus_setup(BootConfig *mem)
 	printf("switching to new L1 page table  @%#lx...", kernel_l1pt.pv_pa);
 #endif
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -456,7 +469,8 @@ at91bus_setup(BootConfig *mem)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+	proc0paddr = (struct user *)kernelstack.pv_va;
+	lwp0.l_addr = proc0paddr;
 
 #ifdef VERBOSE_INIT_ARM
 	printf("done!\n");
@@ -550,6 +564,11 @@ at91bus_setup(BootConfig *mem)
 		ipkdb_connect(0);
 #endif
 
+#if NKSYMS || defined(DDB) || defined(LKM)
+	/* Firmware doesn't load symbols. */
+	ksyms_init(0, NULL, NULL);
+#endif
+
 #ifdef DDB
 	db_machine_init();
 	if (boothowto & RB_KDB)
@@ -590,7 +609,7 @@ at91bus_found(device_t self, bus_addr_t addr, int pid)
 	locs[AT91BUSCF_ADDR] = addr;
 	locs[AT91BUSCF_PID]  = pid;
 
-	sc = device_private(self);
+	sc = (struct at91bus_softc*) self;
 	sa.sa_iot = sc->sc_iot;
 	sa.sa_dmat = sc->sc_dmat;
 	sa.sa_addr = addr;
@@ -609,7 +628,7 @@ at91bus_attach(device_t parent, device_t self, void *aux)
 	if (at91_chip_ndx < 0)
 		panic("%s: at91bus_init() has not been called!", __FUNCTION__);
 
-	sc = device_private(self);
+	sc = (struct at91bus_softc*) self;
 
         /* initialize bus space and bus dma things... */
 	sc->sc_iot = &at91_bs_tag;
@@ -641,7 +660,11 @@ at91bus_attach(device_t parent, device_t self, void *aux)
 }
 
 int
-at91bus_submatch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+at91bus_submatch(parent, cf, ldesc, aux)
+	device_t parent;
+	cfdata_t cf;
+	const int *ldesc;
+	void *aux;
 {
 	struct at91bus_attach_args *sa = aux;
 
@@ -656,7 +679,11 @@ at91bus_submatch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 }
 
 int
-at91bus_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+at91bus_search(parent, cf, ldesc, aux)
+	device_t parent;
+	cfdata_t cf;
+	const int *ldesc;
+	void *aux;
 {
 	struct at91bus_attach_args *sa = aux;
 
@@ -671,7 +698,9 @@ at91bus_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 }
 
 static int
-at91bus_print(void *aux, const char *name)
+at91bus_print(aux, name)
+	void *aux;
+	const char *name;
 {
         struct at91bus_attach_args *sa = (struct at91bus_attach_args*)aux;
 

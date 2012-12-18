@@ -1,4 +1,4 @@
-/*	$NetBSD: lebuffervar.h,v 1.8 2009/09/17 17:51:52 tsutsui Exp $ */
+/*	$NetBSD: lebuffervar.h,v 1.6 2008/04/28 20:23:57 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,8 @@
  */
 
 struct lebuf_softc {
-	device_t sc_dev;		/* us as a device */
+	struct device sc_dev;		/* us as a device */
+	struct sbusdev sc_sd;		/* sbus device */
 	u_int	sc_rev;			/* revision */
 	int	sc_node;		/* PROM node ID */
 	int	sc_burst;		/* DVMA burst size in effect */

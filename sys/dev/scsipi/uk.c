@@ -1,4 +1,4 @@
-/*	$NetBSD: uk.c,v 1.60 2012/02/08 12:22:00 mbalmer Exp $	*/
+/*	$NetBSD: uk.c,v 1.55 2008/06/08 18:18:34 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uk.c,v 1.60 2012/02/08 12:22:00 mbalmer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uk.c,v 1.55 2008/06/08 18:18:34 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,24 +50,22 @@ __KERNEL_RCSID(0, "$NetBSD: uk.c,v 1.60 2012/02/08 12:22:00 mbalmer Exp $");
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 
+#define	UKUNIT(z)	(minor(z))
+
 struct uk_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 
 	struct scsipi_periph *sc_periph; /* all the inter level info */
 };
 
-static int	ukmatch(device_t, cfdata_t, void *);
-static void	ukattach(device_t, device_t, void *);
-static int	ukdetach(device_t, int);
+static int	ukmatch(struct device *, struct cfdata *, void *);
+static void	ukattach(struct device *, struct device *, void *);
+static int	ukactivate(struct device *, enum devact);
+static int	ukdetach(struct device *, int);
 
-CFATTACH_DECL_NEW(
-    uk,
-    sizeof(struct uk_softc),
-    ukmatch,
-    ukattach,
-    ukdetach,
-    NULL
-);
+
+CFATTACH_DECL(uk, sizeof(struct uk_softc), ukmatch, ukattach, ukdetach,
+    ukactivate);
 
 extern struct cfdriver uk_cd;
 
@@ -81,9 +79,11 @@ const struct cdevsw uk_cdevsw = {
 };
 
 static int
-ukmatch(device_t parent, cfdata_t match, void *aux)
+ukmatch(struct device *parent, struct cfdata *match,
+    void *aux)
 {
-	return 1;
+
+	return (1);
 }
 
 /*
@@ -91,25 +91,46 @@ ukmatch(device_t parent, cfdata_t match, void *aux)
  * a device suitable for this driver.
  */
 static void
-ukattach(device_t parent, device_t self, void *aux)
+ukattach(struct device *parent, struct device *self, void *aux)
 {
 	struct uk_softc *uk = device_private(self);
 	struct scsipibus_attach_args *sa = aux;
 	struct scsipi_periph *periph = sa->sa_periph;
 
 	SC_DEBUG(periph, SCSIPI_DB2, ("ukattach: "));
-	uk->sc_dev = self;
 
-	/* Store information needed to contact our base driver */
+	/*
+	 * Store information needed to contact our base driver
+	 */
 	uk->sc_periph = periph;
-	periph->periph_dev = uk->sc_dev;
+	periph->periph_dev = &uk->sc_dev;
 
 	printf("\n");
 }
 
 static int
-ukdetach(device_t self, int flags)
+ukactivate(struct device *self, enum devact act)
 {
+	int rv = 0;
+
+	switch (act) {
+	case DVACT_ACTIVATE:
+		rv = EOPNOTSUPP;
+		break;
+
+	case DVACT_DEACTIVATE:
+		/*
+		 * Nothing to do; we key off the device's DVF_ACTIVE.
+		 */
+		break;
+	}
+	return (rv);
+}
+
+static int
+ukdetach(struct device *self, int flags)
+{
+	/*struct uk_softc *uk = device_private(self);*/
 	int cmaj, mn;
 
 	/* locate the major number */
@@ -119,9 +140,12 @@ ukdetach(device_t self, int flags)
 	mn = device_unit(self);
 	vdevgone(cmaj, mn, mn, VCHR);
 
-	return 0;
+	return (0);
 }
 
+/*
+ * open the device.
+ */
 static int
 ukopen(dev_t dev, int flag, int fmt, struct lwp *l)
 {
@@ -130,36 +154,42 @@ ukopen(dev_t dev, int flag, int fmt, struct lwp *l)
 	struct scsipi_periph *periph;
 	struct scsipi_adapter *adapt;
 
-	unit = minor(dev);
+	unit = UKUNIT(dev);
 	uk = device_lookup_private(&uk_cd, unit);
 	if (uk == NULL)
-		return ENXIO;
+		return (ENXIO);
 
 	periph = uk->sc_periph;
 	adapt = periph->periph_channel->chan_adapter;
 
 	SC_DEBUG(periph, SCSIPI_DB1,
-	    ("ukopen: dev=0x%"PRIx64" (unit %d (of %d))\n", dev, unit,
+	    ("ukopen: dev=0x%x (unit %d (of %d))\n", dev, unit,
 		uk_cd.cd_ndevs));
 
-	/* Only allow one at a time */
+	/*
+	 * Only allow one at a time
+	 */
 	if (periph->periph_flags & PERIPH_OPEN) {
-		aprint_error_dev(uk->sc_dev, "already open\n");
-		return EBUSY;
+		aprint_error_dev(&uk->sc_dev, "already open\n");
+		return (EBUSY);
 	}
 
 	if ((error = scsipi_adapter_addref(adapt)) != 0)
-		return error;
+		return (error);
 	periph->periph_flags |= PERIPH_OPEN;
 
 	SC_DEBUG(periph, SCSIPI_DB3, ("open complete\n"));
-	return 0;
+	return (0);
 }
 
+/*
+ * close the device.. only called if we are the LAST
+ * occurence of an open device
+ */
 static int
 ukclose(dev_t dev, int flag, int fmt, struct lwp *l)
 {
-	struct uk_softc *uk = device_lookup_private(&uk_cd, minor(dev));
+	struct uk_softc *uk = device_lookup_private(&uk_cd, UKUNIT(dev));
 	struct scsipi_periph *periph = uk->sc_periph;
 	struct scsipi_adapter *adapt = periph->periph_channel->chan_adapter;
 
@@ -170,17 +200,17 @@ ukclose(dev_t dev, int flag, int fmt, struct lwp *l)
 	scsipi_adapter_delref(adapt);
 	periph->periph_flags &= ~PERIPH_OPEN;
 
-	return 0;
+	return (0);
 }
 
 /*
- * Perform special action on behalf of the user.
+ * Perform special action on behalf of the user
  * Only does generic scsi ioctls.
  */
 static int
 ukioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
-	struct uk_softc *uk = device_lookup_private(&uk_cd, minor(dev));
+	struct uk_softc *uk = device_lookup_private(&uk_cd, UKUNIT(dev));
 
-	return scsipi_do_ioctl(uk->sc_periph, dev, cmd, addr, flag, l);
+	return (scsipi_do_ioctl(uk->sc_periph, dev, cmd, addr, flag, l));
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: multibyte_amd1.c,v 1.9 2010/06/13 04:14:57 tnozaki Exp $	*/
+/*	$NetBSD: multibyte_amd1.c,v 1.5.38.1 2009/01/15 03:24:08 snj Exp $	*/
 
 /*-
  * Copyright (c)2002, 2008 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: multibyte_amd1.c,v 1.9 2010/06/13 04:14:57 tnozaki Exp $");
+__RCSID("$NetBSD: multibyte_amd1.c,v 1.5.38.1 2009/01/15 03:24:08 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -43,7 +43,7 @@ __RCSID("$NetBSD: multibyte_amd1.c,v 1.9 2010/06/13 04:14:57 tnozaki Exp $");
 
 #include "citrus_module.h"
 #include "citrus_ctype.h"
-#include "runetype_local.h"
+#include "rune.h"
 #include "multibyte.h"
 
 #define _RUNE_LOCALE() \

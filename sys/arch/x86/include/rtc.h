@@ -1,4 +1,4 @@
-/*      $NetBSD: rtc.h,v 1.1 2009/06/16 21:05:34 bouyer Exp $    */
+/*      $NetBSD: rtc.h,v 1.1.2.2 2009/06/19 21:22:10 snj Exp $    */
 
 #include <dev/clock_subr.h>
 

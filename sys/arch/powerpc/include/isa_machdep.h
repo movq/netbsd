@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.h,v 1.9 2012/10/27 17:18:07 chs Exp $	*/
+/*	$NetBSD: isa_machdep.h,v 1.4 2008/04/28 20:23:32 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
 #ifndef _POWERPC_ISA_MACHDEP_H_
 #define _POWERPC_ISA_MACHDEP_H_
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <dev/isa/isadmavar.h>
 
 /*
@@ -92,25 +92,24 @@ struct powerpc_isa_chipset {
 
 typedef struct powerpc_isa_chipset *isa_chipset_tag_t;
 
+struct device;			/* XXX */
 struct isabus_attach_args;	/* XXX */
 struct pic_ops;			/* XXX */
 
 /*
  * Functions provided to machine-independent ISA code.
  */
-void	genppc_isa_attach_hook(device_t, device_t, struct isabus_attach_args *);
-void	genppc_isa_detach_hook(isa_chipset_tag_t, device_t);
+void	genppc_isa_attach_hook(struct device *, struct device *,
+	    struct isabus_attach_args *);
 const struct evcnt *genppc_isa_intr_evcnt(isa_chipset_tag_t, int);
 void	*genppc_isa_intr_establish(isa_chipset_tag_t, int /*irq*/, int /*type*/,
-	    int /*level*/, int (* /*ih_fun*/)(void *), void *);
+	    int /*level*/, int (*ih_fun)(void *), void *);
 void	genppc_isa_intr_disestablish(isa_chipset_tag_t, void *);
 int	genppc_isa_intr_alloc(isa_chipset_tag_t, struct pic_ops *, int,
 	    int, int *);
 
 #define	isa_dmainit(ic, bst, dmat, d)					\
 	_isa_dmainit(&(ic)->ic_dmastate, (bst), (dmat), (d))
-#define	isa_dmadestroy(ic)						\
-	_isa_dmadestroy(&(ic)->ic_dmastate)
 #define	isa_dmacascade(ic, c)						\
 	_isa_dmacascade(&(ic)->ic_dmastate, (c))
 #define	isa_dmamaxsize(ic, c)						\

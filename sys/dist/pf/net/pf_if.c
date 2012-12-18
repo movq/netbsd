@@ -1,4 +1,4 @@
-/*	$NetBSD: pf_if.c,v 1.21 2010/04/12 13:57:38 ahoka Exp $	*/
+/*	$NetBSD: pf_if.c,v 1.16 2008/06/18 09:06:27 yamt Exp $	*/
 /*	$OpenBSD: pf_if.c,v 1.47 2007/07/13 09:17:48 markus Exp $ */
 
 /*
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pf_if.c,v 1.21 2010/04/12 13:57:38 ahoka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pf_if.c,v 1.16 2008/06/18 09:06:27 yamt Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
@@ -138,7 +138,7 @@ pfi_initialize(void)
 #endif /* __NetBSD__ */
 }
 
-#ifdef _MODULE
+#ifdef _LKM
 void
 pfi_destroy(void)
 {
@@ -167,7 +167,7 @@ pfi_destroy(void)
 
 	free(pfi_buffer, PFI_MTYPE);
 }
-#endif /* _MODULE */
+#endif /* _LKM */
 
 struct pfi_kif *
 pfi_kif_get(const char *kif_name)
@@ -181,9 +181,10 @@ pfi_kif_get(const char *kif_name)
 		return (kif);
 
 	/* create new one */
-	if ((kif = malloc(sizeof(*kif), PFI_MTYPE, M_NOWAIT|M_ZERO)) == NULL)
+	if ((kif = malloc(sizeof(*kif), PFI_MTYPE, M_DONTWAIT)) == NULL)
 		return (NULL);
 
+	bzero(kif, sizeof(*kif));
 	strlcpy(kif->pfik_name, kif_name, sizeof(kif->pfik_name));
 #ifdef __NetBSD__
 	/* time_second is not valid yet */
@@ -608,13 +609,14 @@ pfi_address_add(struct sockaddr *sa, int af, int net)
 			    pfi_buffer_cnt, PFI_BUFFER_MAX);
 			return;
 		}
-		p = malloc(new_max * sizeof(*pfi_buffer), PFI_MTYPE, M_NOWAIT);
+		p = malloc(new_max * sizeof(*pfi_buffer), PFI_MTYPE,
+		    M_DONTWAIT);
 		if (p == NULL) {
 			printf("pfi_address_add: no memory to grow buffer "
 			    "(%d/%d)\n", pfi_buffer_cnt, PFI_BUFFER_MAX);
 			return;
 		}
-		memcpy(p, pfi_buffer, pfi_buffer_cnt * sizeof(*pfi_buffer));
+		memcpy(pfi_buffer, p, pfi_buffer_cnt * sizeof(*pfi_buffer));
 		/* no need to zero buffer */
 		free(pfi_buffer, PFI_MTYPE);
 		pfi_buffer = p;

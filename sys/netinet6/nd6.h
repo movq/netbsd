@@ -1,4 +1,4 @@
-/*	$NetBSD: nd6.h,v 1.57 2012/06/23 03:14:04 christos Exp $	*/
+/*	$NetBSD: nd6.h,v 1.51 2008/10/24 17:07:33 dyoung Exp $	*/
 /*	$KAME: nd6.h,v 1.95 2002/06/08 11:31:06 itojun Exp $	*/
 
 /*
@@ -33,6 +33,11 @@
 #ifndef _NETINET6_ND6_H_
 #define _NETINET6_ND6_H_
 
+/* see net/route.h, or net/if_inarp.h */
+#ifndef RTF_ANNOUNCE
+#define RTF_ANNOUNCE	RTF_PROTO2
+#endif
+
 #include <sys/queue.h>
 #include <sys/callout.h>
 
@@ -51,7 +56,6 @@ struct	llinfo_nd6 {
 	struct callout ln_timer_ch;
 };
 
-#define ND6_LLINFO_PURGE	-3
 #define ND6_LLINFO_NOSTATE	-2
 /*
  * We don't need the WAITDELETE state any more, but we keep the definition
@@ -86,35 +90,12 @@ struct nd_ifinfo {
 	u_int8_t randomid[8];	/* current random ID */
 };
 
-#define ND6_IFF_PERFORMNUD	0x01
-#define ND6_IFF_ACCEPT_RTADV	0x02	/* See "RTADV Key", below. */
-#define ND6_IFF_PREFER_SOURCE	0x04	/* XXX: not related to ND. */
-#define ND6_IFF_IFDISABLED	0x08	/* IPv6 operation is disabled due to
-					 * DAD failure.  (XXX: not ND-specific)
-					 */
-#define	ND6_IFF_OVERRIDE_RTADV	0x10	/* See "RTADV Key", below. */
-
-/*
- * RTADV Key
- *
- * The flags ND6_IFF_ACCEPT_RTADV and ND6_IFF_OVERRIDE_RTADV form a
- * tri-state variable.  (There are actually four different states, but
- * two of the states are functionally identical.)
- *
- * ND6_IFF_OVERRIDE_RTADV or 0:	This interface does not accept
- *				Router Advertisements.
- *
- * ND6_IFF_OVERRIDE_RTADV|
- * ND6_IFF_ACCEPT_RTADV:	This interface accepts Router
- *				Advertisements regardless of the
- *				global setting, ip6_accept_rtadv.
- *
- * ND6_IFF_ACCEPT_RTADV:	This interface follows the global setting,
- *				ip6_accept_rtadv.  If ip6_accept_rtadv == 0,
- *				this interface does not accept Router
- *				Advertisements.  If ip6_accept_rtadv != 0,
- *				this interface does accept them.
- */
+#define ND6_IFF_PERFORMNUD	0x1
+#define ND6_IFF_ACCEPT_RTADV	0x2
+#define ND6_IFF_PREFER_SOURCE	0x4 /* XXX: not related to ND. */
+#define ND6_IFF_IFDISABLED	0x8 /* IPv6 operation is disabled due to
+				     * DAD failure.  (XXX: not ND-specific)
+				     */
 
 #ifdef _KERNEL
 #define ND_IFINFO(ifp) \
@@ -242,7 +223,7 @@ struct	in6_ndifreq {
 #define RTR_SOLICITATION_INTERVAL	4	/* 4sec */
 #define MAX_RTR_SOLICITATIONS		3
 
-#define ND6_INFINITE_LIFETIME		((u_int32_t)~0)
+#define ND6_INFINITE_LIFETIME		0xffffffff
 
 #ifdef _KERNEL
 /* node constants */
@@ -256,7 +237,7 @@ struct	in6_ndifreq {
 #define TEMPADDR_REGEN_ADVANCE		5	/* sec */
 #define MAX_TEMP_DESYNC_FACTOR		600	/* 10 min */
 #define ND_COMPUTE_RTIME(x) \
-		(((MIN_RANDOM_FACTOR * (x >> 10)) + (cprng_fast32() & \
+		(((MIN_RANDOM_FACTOR * (x >> 10)) + (arc4random() & \
 		((MAX_RANDOM_FACTOR - MIN_RANDOM_FACTOR) * (x >> 10)))) /1000)
 
 TAILQ_HEAD(nd_drhead, nd_defrouter);
@@ -303,8 +284,6 @@ struct nd_prefix {
 	u_char	ndpr_plen;
 	int	ndpr_refcnt;	/* reference couter from addresses */
 };
-
-#define ndpr_next		ndpr_entry.le_next
 
 #define ndpr_raf		ndpr_flags
 #define ndpr_raf_onlink		ndpr_flags.onlink
@@ -370,7 +349,6 @@ extern int ip6_desync_factor;	/* seconds */
 extern u_int32_t ip6_temp_preferred_lifetime; /* seconds */
 extern u_int32_t ip6_temp_valid_lifetime; /* seconds */
 extern int ip6_temp_regen_advance; /* seconds */
-extern int nd6_numroutes;
 
 union nd_opts {
 	struct nd_opt_hdr *nd_opt_array[8];
@@ -459,7 +437,6 @@ int in6_ifdel(struct ifnet *, struct in6_addr *);
 void rt6_flush(struct in6_addr *, struct ifnet *);
 int nd6_setdefaultiface(int);
 int in6_tmpifadd(const struct in6_ifaddr *, int, int);
-bool nd6_accepts_rtadv(const struct nd_ifinfo *);
 
 #endif /* _KERNEL */
 

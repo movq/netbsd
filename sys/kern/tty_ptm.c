@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_ptm.c,v 1.28 2012/10/19 16:55:22 apb Exp $	*/
+/*	$NetBSD: tty_ptm.c,v 1.25 2008/04/28 20:24:05 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -27,9 +27,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_ptm.c,v 1.28 2012/10/19 16:55:22 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_ptm.c,v 1.25 2008/04/28 20:24:05 martin Exp $");
 
-#include "opt_compat_netbsd.h"
 #include "opt_ptm.h"
 
 /* pty multiplexor driver /dev/ptm{,x} */
@@ -49,14 +48,11 @@ __KERNEL_RCSID(0, "$NetBSD: tty_ptm.c,v 1.28 2012/10/19 16:55:22 apb Exp $");
 #include <sys/filedesc.h>
 #include <sys/conf.h>
 #include <sys/poll.h>
+#include <sys/malloc.h>
 #include <sys/pty.h>
 #include <sys/kauth.h>
 
 #include <miscfs/specfs/specdev.h>
-
-#ifdef COMPAT_60
-#include <compat/sys/ttycom.h>
-#endif /* COMPAT_60 */
 
 #ifdef DEBUG_PTM
 #define DPRINTF(a)	printf a
@@ -179,7 +175,7 @@ retry:
 	fp->f_type = DTYPE_VNODE;
 	fp->f_ops = &vnops;
 	fp->f_data = vp;
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	fd_affix(curproc, fp, *fd);
 	return 0;
 bad:
@@ -214,12 +210,12 @@ pty_grant_slave(struct lwp *l, dev_t dev)
 		error = VOP_SETATTR(vp, &vattr, lwp0.l_cred);
 		if (error) {
 			DPRINTF(("setattr %d\n", error));
-			VOP_UNLOCK(vp);
+			VOP_UNLOCK(vp, 0);
 			vrele(vp);
 			return error;
 		}
 	}
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	VOP_REVOKE(vp, REVOKEALL);
 
 	/*
@@ -256,7 +252,7 @@ pty_alloc_slave(struct lwp *l, int *fd, dev_t dev)
 	fp->f_type = DTYPE_VNODE;
 	fp->f_ops = &vnops;
 	fp->f_data = vp;
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	fd_affix(curproc, fp, *fd);
 	return 0;
 bad:
@@ -374,11 +370,6 @@ ptmioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		/* now, put the indices and names into struct ptmget */
 		return pty_fill_ptmget(l, newdev, cfd, sfd, data);
 	default:
-#ifdef COMPAT_60
-		error = compat_60_ptmioctl(dev, cmd, data, flag, l);
-		if (error != EPASSTHROUGH)
-			return error;
-#endif /* COMPAT_60 */
 		DPRINTF(("ptmioctl EINVAL\n"));
 		return EINVAL;
 	}

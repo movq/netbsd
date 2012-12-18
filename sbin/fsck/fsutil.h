@@ -1,4 +1,4 @@
-/*	$NetBSD: fsutil.h,v 1.19 2012/04/07 16:44:10 christos Exp $	*/
+/*	$NetBSD: fsutil.h,v 1.13 2007/09/15 14:35:33 ragge Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Christos Zoulas.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -25,19 +30,25 @@
  */
 
 #include <stdarg.h>
-#include <signal.h>
 
-void errexit(const char *, ...) __printflike(1, 2) __dead;
-void pfatal(const char *, ...) __printflike(1, 2);
-void pwarn(const char *, ...) __printflike(1, 2);
-void perr(const char *, ...) __printflike(1, 2);
-void panic(const char *, ...) __printflike(1, 2) __dead;
-void vmsg(int, const char *, va_list) __printflike(2, 0);
+void errexit(const char *, ...)
+    __attribute__((__noreturn__,__format__(__printf__,1,2)));  
+void pfatal(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));  
+void pwarn(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));  
+void perr(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));  
+void panic(const char *, ...)
+    __attribute__((__noreturn__,__format__(__printf__,1,2)));  
+void vmsg(int, const char *, va_list)
+     __attribute__((__format__(__printf__,2,0)));
+const char *rawname(const char *);
+const char *unrawname(const char *);
 const char *blockcheck(const char *);
 const char *cdevname(void);
 void setcdevname(const char *, int);
 int  hotroot(void);
-const char *print_mtime(time_t);
 
 #define CHECK_PREEN	1
 #define	CHECK_VERBOSE	2
@@ -49,9 +60,3 @@ const char *print_mtime(time_t);
 struct fstab;
 int checkfstab(int, int, void *(*)(struct fstab *), 
     int (*) (const char *, const char *, const char *, void *, pid_t *));
-
-void (*ckfinish)(int);
-volatile sig_atomic_t returntosingle;
-void catch(int) __dead;
-void catchquit(int);
-void voidquit(int);

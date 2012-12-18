@@ -1,4 +1,4 @@
-/*	$NetBSD: ebus.c,v 1.34 2012/01/30 04:25:14 mrg Exp $ */
+/*	$NetBSD: ebus.c,v 1.30 2008/05/29 14:51:26 mrg Exp $ */
 
 /*
  * Copyright (c) 1999, 2000 Matthew R. Green
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ebus.c,v 1.34 2012/01/30 04:25:14 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ebus.c,v 1.30 2008/05/29 14:51:26 mrg Exp $");
 
 #if defined(DEBUG) && !defined(EBUS_DEBUG)
 #define EBUS_DEBUG
@@ -60,7 +60,7 @@ int ebus_debug = 0;
 #include <sys/kernel.h>
 
 #define _SPARC_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/autoconf.h>
 
 #include <dev/pci/pcivar.h>
@@ -82,8 +82,8 @@ static void ebus_blink(void *);
 #endif
 
 struct ebus_softc {
-	device_t			sc_dev;
-	device_t			sc_parent;	/* PCI bus */
+	struct device			sc_dev;
+	struct device			*sc_parent;	/* PCI bus */
 
 	int				sc_node;	/* PROM node */
 
@@ -97,10 +97,10 @@ struct ebus_softc {
 	int				sc_nreg;
 };
 
-static int	ebus_match(device_t, cfdata_t, void *);
-static void	ebus_attach(device_t, device_t, void *);
+static int	ebus_match(struct device *, struct cfdata *, void *);
+static void	ebus_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ebus, sizeof(struct ebus_softc),
+CFATTACH_DECL(ebus, sizeof(struct ebus_softc),
     ebus_match, ebus_attach, NULL, NULL);
 
 static int	ebus_setup_attach_args(struct ebus_softc *, bus_space_tag_t,
@@ -181,7 +181,7 @@ static int ebus_init_wiring_table(struct ebus_softc *);
 
 
 static int
-ebus_match(device_t parent, cfdata_t cf, void *aux)
+ebus_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	char name[10];
@@ -212,7 +212,7 @@ ebus_init_wiring_table(struct ebus_softc *sc)
 
 	if (wiring_map != NULL) {
 		printf("%s: global ebus wiring map already initalized\n",
-		    device_xname(sc->sc_dev));
+		       sc->sc_dev.dv_xname);
 		return (0);
 	}
 
@@ -238,9 +238,9 @@ ebus_init_wiring_table(struct ebus_softc *sc)
  * after the sbus code which does similar things.
  */
 static void
-ebus_attach(device_t parent, device_t self, void *aux)
+ebus_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ebus_softc *sc = device_private(self);
+	struct ebus_softc *sc = (struct ebus_softc *)self;
 	struct pci_attach_args *pa = aux;
 	struct ebus_attach_args ea;
 	bus_space_tag_t sbt;
@@ -249,8 +249,6 @@ ebus_attach(device_t parent, device_t self, void *aux)
 	pcireg_t base14;
 	int node, error;
 	char devinfo[256];
-
-	sc->sc_dev = self;
 
 #ifdef BLINK
 	callout_init(&ebus_blink_ch, 0);
@@ -262,7 +260,7 @@ ebus_attach(device_t parent, device_t self, void *aux)
 
 	node = PCITAG_NODE(pa->pa_tag);
 	if (node == -1)
-		panic("%s: unable to find ebus node", device_xname(self));
+		panic("%s: unable to find ebus node", self->dv_xname);
 
 	if (ebus_init_wiring_table(sc) == 0)
 		return;
@@ -300,7 +298,7 @@ ebus_attach(device_t parent, device_t self, void *aux)
 			     &sc->sc_nreg, &sc->sc_reg);
 	if (error)
 		panic("%s: unable to read ebus registers (error %d)",
-		    device_xname(self), error);
+		      self->dv_xname, error);
 
 	/*
 	 * now attach all our children
@@ -332,7 +330,7 @@ ebus_setup_attach_args(struct ebus_softc *sc,
 	err = prom_getprop(node, "name", 1, &n, &ea->ea_name);
 	if (err != 0)
 		return (err);
-	KASSERT(ea->ea_name[n-1] == '\0');
+	ea->ea_name[n] = '\0';
 
 	ea->ea_node = node;
 	ea->ea_bustag = bustag;

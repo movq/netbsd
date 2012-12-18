@@ -1,4 +1,4 @@
-/* $NetBSD: mkclock_pnpbus.c,v 1.6 2011/07/01 16:55:42 dyoung Exp $ */
+/* $NetBSD: mkclock_pnpbus.c,v 1.5 2008/04/28 20:23:33 martin Exp $ */
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -42,14 +42,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mkclock_pnpbus.c,v 1.6 2011/07/01 16:55:42 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mkclock_pnpbus.c,v 1.5 2008/04/28 20:23:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/residual.h>
 #include <machine/chpidpnp.h>
 

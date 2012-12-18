@@ -1,4 +1,4 @@
-/*	$NetBSD: deliver_request.c,v 1.1.1.2 2011/03/02 19:32:13 tron Exp $	*/
+/*	$NetBSD: deliver_request.c,v 1.1.1.1.2.3 2011/01/07 01:24:02 riz Exp $	*/
 
 /*++
 /* NAME
@@ -30,10 +30,9 @@
 /*		char	*sasl_method;
 /*		char	*sasl_username;
 /*		char	*sasl_sender;
-/*		char	*log_ident;
 /*		char	*rewrite_context;
-/*		char	*dsn_envid;
-/*		int	dsn_ret;
+/*		char   *dsn_envid;
+/*		int     dsn_ret;
 /* .in -5
 /*	} DELIVER_REQUEST;
 /*
@@ -205,7 +204,6 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
     static VSTRING *sasl_method;
     static VSTRING *sasl_username;
     static VSTRING *sasl_sender;
-    static VSTRING *log_ident;
     static VSTRING *rewrite_context;
     static VSTRING *dsn_envid;
     static RCPT_BUF *rcpt_buf;
@@ -231,7 +229,6 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
 	sasl_method = vstring_alloc(10);
 	sasl_username = vstring_alloc(10);
 	sasl_sender = vstring_alloc(10);
-	log_ident = vstring_alloc(10);
 	rewrite_context = vstring_alloc(10);
 	dsn_envid = vstring_alloc(10);
 	rcpt_buf = rcpb_create();
@@ -264,10 +261,9 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
 		  ATTR_TYPE_STR, MAIL_ATTR_SASL_USERNAME, sasl_username,
 		  ATTR_TYPE_STR, MAIL_ATTR_SASL_SENDER, sasl_sender,
     /* XXX Ditto if we want to pass TLS certificate info. */
-		  ATTR_TYPE_STR, MAIL_ATTR_LOG_IDENT, log_ident,
 		  ATTR_TYPE_STR, MAIL_ATTR_RWR_CONTEXT, rewrite_context,
 		  ATTR_TYPE_INT, MAIL_ATTR_RCPT_COUNT, &rcpt_count,
-		  ATTR_TYPE_END) != 22) {
+		  ATTR_TYPE_END) != 21) {
 	msg_warn("%s: error receiving common attributes", myname);
 	return (-1);
     }
@@ -292,7 +288,6 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
     request->sasl_method = mystrdup(vstring_str(sasl_method));
     request->sasl_username = mystrdup(vstring_str(sasl_username));
     request->sasl_sender = mystrdup(vstring_str(sasl_sender));
-    request->log_ident = mystrdup(vstring_str(log_ident));
     request->rewrite_context = mystrdup(vstring_str(rewrite_context));
     request->dsn_envid = mystrdup(vstring_str(dsn_envid));
     request->dsn_ret = dsn_ret;
@@ -329,9 +324,9 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
      * queue, and releases the lock before starting deliveries from that
      * file. The queue manager does not lock the file again when reading more
      * recipients into memory. When the queue manager is restarted, the new
-     * process moves files from the active queue to the incoming queue to
-     * cool off for a while. Delivery agents should therefore never try to
-     * open a file that is locked by a queue manager process.
+     * process moves files from the active queue to the incoming queue to cool
+     * off for a while. Delivery agents should therefore never try to open a
+     * file that is locked by a queue manager process.
      * 
      * Opening the queue file can fail for a variety of reasons, such as the
      * system running out of resources. Instead of throwing away mail, we're
@@ -382,7 +377,6 @@ static DELIVER_REQUEST *deliver_request_alloc(void)
     request->sasl_method = 0;
     request->sasl_username = 0;
     request->sasl_sender = 0;
-    request->log_ident = 0;
     request->rewrite_context = 0;
     request->dsn_envid = 0;
     return (request);
@@ -423,8 +417,6 @@ static void deliver_request_free(DELIVER_REQUEST *request)
 	myfree(request->sasl_username);
     if (request->sasl_sender)
 	myfree(request->sasl_sender);
-    if (request->log_ident)
-	myfree(request->log_ident);
     if (request->rewrite_context)
 	myfree(request->rewrite_context);
     if (request->dsn_envid)

@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_pioc.c,v 1.28 2012/07/31 15:50:31 bouyer Exp $	*/
+/*	$NetBSD: wdc_pioc.c,v 1.23 2008/03/18 23:52:16 cube Exp $	*/
 
 /*
  * Copyright (c) 1997-1998 Mark Brinicombe.
@@ -34,14 +34,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_pioc.c,v 1.28 2012/07/31 15:50:31 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_pioc.c,v 1.23 2008/03/18 23:52:16 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <sys/bus.h>
 
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <acorn32/mainbus/piocvar.h>
@@ -74,7 +74,7 @@ CFATTACH_DECL_NEW(wdc_pioc, sizeof(struct wdc_pioc_softc),
     wdc_pioc_probe, wdc_pioc_attach, NULL, NULL);
 
 /*
- * int wdc_pioc_probe(device_t parent, cfdata_t cf, void *aux)
+ * int wdc_pioc_probe(struct device *parent, struct cfdata *cf, void *aux)
  *
  * Make sure we are trying to attach a wdc device and then
  * probe for one.
@@ -137,7 +137,7 @@ wdc_pioc_probe(device_t parent, cfdata_t cf, void *aux)
 }
 
 /*
- * void wdc_pioc_attach(device_t parent, device_t self, void *aux)
+ * void wdc_pioc_attach(struct device *parent, struct device *self, void *aux)
  *
  * attach the wdc device
  */
@@ -185,9 +185,9 @@ wdc_pioc_attach(device_t parent, device_t self, void *aux)
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanlist;
 	sc->sc_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 	sc->sc_channel.ch_channel = 0;
 	sc->sc_channel.ch_queue = &sc->sc_chqueue;
+	sc->sc_channel.ch_ndrive = 2;
 
 	wdc_init_shadow_regs(&sc->sc_channel);
 

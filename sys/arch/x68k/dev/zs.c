@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.41 2011/05/01 16:19:13 tsutsui Exp $	*/
+/*	$NetBSD: zs.c,v 1.38 2008/04/28 20:23:40 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 Minoura Makoto
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.41 2011/05/01 16:19:13 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.38 2008/04/28 20:23:40 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -158,7 +158,7 @@ zs_match(device_t parent, cfdata_t cf, void *aux)
 
 	if (zsaddr != (void *)zs_physaddr[i])
 		return 0;
-	if (badaddr((void *)IIOV(zsaddr)))
+	if (badaddr(INTIO_ADDR(zsaddr)))
 		return 0;
 
 	return (1);
@@ -194,7 +194,7 @@ zs_attach(device_t parent, device_t self, void *aux)
 	 * Initialize software state for each channel.
 	 */
 	for (channel = 0; channel < 2; channel++) {
-		device_t child;
+		struct device *child;
 
 		zsc_args.channel = channel;
 		zsc_args.hwflags = 0;
@@ -208,9 +208,9 @@ zs_attach(device_t parent, device_t self, void *aux)
 		cs->cs_brg_clk = PCLK / 16;
 
 		if (channel == 0)
-			zc = (volatile void *)IIOV(&zsc->zsc_addr->zs_chan_a);
+			zc = (volatile void *)INTIO_ADDR(&zsc->zsc_addr->zs_chan_a);
 		else
-			zc = (volatile void *)IIOV(&zsc->zsc_addr->zs_chan_b);
+			zc = (volatile void *)INTIO_ADDR(&zsc->zsc_addr->zs_chan_b);
 		cs->cs_reg_csr  = &zc->zc_csr;
 		cs->cs_reg_data = &zc->zc_data;
 
@@ -570,7 +570,7 @@ zs_putc(int c)
 void
 zscninit(struct consdev *cn)
 {
-	volatile struct zschan *cnchan = (volatile void *)IIOV(ZSCN_PHYSADDR);
+	volatile struct zschan *cnchan = (volatile void *)INTIO_ADDR(ZSCN_PHYSADDR);
 	int s;
 
 	memset(&zscn_cs, 0, sizeof(struct zs_chanstate));
@@ -580,11 +580,9 @@ zscninit(struct consdev *cn)
 	zscn_cs.cs_brg_clk = PCLK / 16;
 	memcpy(zscn_cs.cs_preg, zs_init_reg, 16);
 	zscn_cs.cs_preg[4] = ZSWR4_CLK_X16 | ZSWR4_ONESB; /* XXX */
-	zscn_cs.cs_preg[5] |= ZSWR5_DTR | ZSWR5_RTS;
+	zscn_cs.cs_preg[9] = 0;
 	zs_set_speed(&zscn_cs, ZSCN_SPEED);
 	s = splzs();
-	zs_write_reg(&zscn_cs, 9, 0);
-	zs_write_reg(&zscn_cs, 9, ZSWR9_HARD_RESET);
 	zs_loadchannelregs(&zscn_cs);
 	splx(s);
 	conschan = cnchan;

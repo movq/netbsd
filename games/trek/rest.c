@@ -1,4 +1,4 @@
-/*	$NetBSD: rest.c,v 1.9 2009/05/24 21:44:56 dholland Exp $	*/
+/*	$NetBSD: rest.c,v 1.7 2007/12/15 19:44:45 perry Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)rest.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: rest.c,v 1.9 2009/05/24 21:44:56 dholland Exp $");
+__RCSID("$NetBSD: rest.c,v 1.7 2007/12/15 19:44:45 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,7 +58,8 @@ __RCSID("$NetBSD: rest.c,v 1.9 2009/05/24 21:44:56 dholland Exp $");
 
 /*ARGSUSED*/
 void
-rest(int v __unused)
+rest(v)
+	int v __unused;
 {
 	double		t;
 	int		percent;
@@ -68,7 +69,8 @@ rest(int v __unused)
 	if (t <= 0.0)
 		return;
 	percent = 100 * t / Now.time + 0.5;
-	if (percent >= 70) {
+	if (percent >= 70)
+	{
 		printf("Spock: That would take %d%% of our remaining time.\n",
 			percent);
 		if (!getynpar("Are you really certain that is wise"))

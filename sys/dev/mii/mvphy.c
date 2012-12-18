@@ -1,4 +1,4 @@
-/*	$NetBSD: mvphy.c,v 1.9 2009/06/18 08:40:26 rjs Exp $	*/
+/*	$NetBSD: mvphy.c,v 1.7 2008/05/04 17:06:10 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 2006 Sam Leffler, Errno Consulting
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mvphy.c,v 1.9 2009/06/18 08:40:26 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mvphy.c,v 1.7 2008/05/04 17:06:10 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,10 +53,10 @@ __KERNEL_RCSID(0, "$NetBSD: mvphy.c,v 1.9 2009/06/18 08:40:26 rjs Exp $");
 #define	MV_CPU_PORT	5			/* port # of CPU port */
 
 #define	MV_READ(p, phy, r) \
-	(*(p)->mii_pdata->mii_readreg)(device_parent((p)->mii_dev), \
+	(*(p)->mii_pdata->mii_readreg)(device_parent(&(p)->mii_dev), \
 	    phy, (r))
 #define	MV_WRITE(p, phy, r, v) \
-	(*(p)->mii_pdata->mii_writereg)(device_parent((p)->mii_dev), \
+	(*(p)->mii_pdata->mii_writereg)(device_parent(&(p)->mii_dev), \
 	    phy, (r), (v))
 
 /* XXX sysctl'able */
@@ -213,6 +213,9 @@ mvphyattach(device_t parent, device_t self, void *aux)
 	else
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, mii_phy_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int
@@ -346,5 +349,6 @@ mvphy_flushatu(struct mii_softc *sc)
 		MV_WRITE(sc, MII_MV_SWITCH_GLOBAL_ADDR, MV_ATU_OPERATION,
 		    MV_ATU_OP_FLUSH_ALL | MV_ATU_BUSY);
 	} /*else
-		aprint_error_dev(sc->mii_dev, "timeout waiting for ATU flush\n");*/
+		printf("%s: timeout waiting for ATU flush\n",
+		    device_xname(sc->mii_dev));*/
 }

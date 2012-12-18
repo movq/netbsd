@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.27 2012/01/09 06:25:55 kiyohara Exp $	*/
+/*	$NetBSD: clock.c,v 1.21 2008/01/09 06:50:36 simonb Exp $	*/
 /*      $OpenBSD: clock.c,v 1.3 1997/10/13 13:42:53 pefo Exp $  */
 
 /*
@@ -33,21 +33,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.27 2012/01/09 06:25:55 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.21 2008/01/09 06:50:36 simonb Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/timetc.h>
-#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <prop/proplib.h>
 
+#include <machine/cpu.h>
+
 #include <powerpc/spr.h>
-#include <powerpc/ibm4xx/spr.h>
-#include <powerpc/ibm4xx/cpu.h>
 
 /*
  * Initially we assume a processor with a bus frequency of 12.5 MHz.
@@ -90,30 +89,20 @@ void stat_intr(struct clockframe *);	/* called from trap_subr.S */
 void
 stat_intr(struct clockframe *frame)
 {
-	struct cpu_info * const ci = curcpu();
 
 	mtspr(SPR_TSR, TSR_FIS);	/* Clear TSR[FIS] */
-	ci->ci_data.cpu_nintr++;
-	ci->ci_ev_statclock.ev_count++;
+	uvmexp.intrs++;
+	curcpu()->ci_ev_statclock.ev_count++;
 
 	/* Nobody can interrupt us, but see if we're allowed to run. */
-	int s = splclock();
-
-	/*
-	 * Reenable interrupts
-	 */
-	__asm volatile ("wrteei 1");
-
-	if (IPL_CLOCK > s)
+	if (! (curcpu()->ci_cpl & mask_statclock))
   		statclock(frame);
-	splx(s);
 }
 
 void
 decr_intr(struct clockframe *frame)
 {
-	struct cpu_info * const ci = curcpu();
-	int pcpl;
+	int pri;
 	long tbtick, xticks;
 	int nticks;
 
@@ -131,16 +120,10 @@ decr_intr(struct clockframe *frame)
 		xticks -= ticks_per_intr;
 	lasttb2 = tbtick - xticks;
 
-	ci->ci_data.cpu_nintr++;
-	ci->ci_ev_clock.ev_count++;
-	pcpl = splclock();
-
-	/*
-	 * Reenable interrupts
-	 */
-	__asm volatile ("wrteei 1");
-
-	if (pcpl >= IPL_CLOCK) {
+	uvmexp.intrs++;
+	curcpu()->ci_ev_clock.ev_count++;
+	pri = splclock();
+	if (pri & mask_clock) {
 		tickspending += nticks;
 		ticksmissed += nticks;
 	} else {
@@ -154,24 +137,29 @@ decr_intr(struct clockframe *frame)
 		lasttb = lasttb2;
 
 		/*
+		 * Reenable interrupts
+		 */
+		__asm volatile ("wrteei 1");
+
+		/*
 		 * Do standard timer interrupt stuff.
 		 * Do softclock stuff only on the last iteration.
 		 */
+		frame->pri = pri | mask_clock;
 		while (--nticks > 0)
 			hardclock(frame);
+		frame->pri = pri;
 		hardclock(frame);
 	}
-	splx(pcpl);
+	splx(pri);
 }
 
 void
 cpu_initclocks(void)
 {
-	struct cpu_info * const ci = curcpu();
-
 	/* Initialized in powerpc/ibm4xx/cpu.c */
-	evcnt_attach_static(&ci->ci_ev_clock);
-	evcnt_attach_static(&ci->ci_ev_statclock);
+	evcnt_attach_static(&curcpu()->ci_ev_clock);
+	evcnt_attach_static(&curcpu()->ci_ev_statclock);
 
 	ticks_per_intr = ticks_per_sec / hz;
 	stathz = profhz = ticks_per_sec / (1 << PERIOD_POWER);

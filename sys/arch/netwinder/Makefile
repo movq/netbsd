@@ -1,27 +1,22 @@
-#	$NetBSD: Makefile,v 1.4 2011/04/04 19:47:00 dyoung Exp $
+#	$NetBSD: Makefile,v 1.3 2008/10/25 22:27:38 apb Exp $
 
 # Makefile for netwinder tags file and boot blocks
 
-.include <../arm/Makefile.inc>
-
-TNETWINDER=	${SYSDIR}/arch/netwinder/tags
-SNETWINDER=	${SYSDIR}/arch/netwinder/netwinder/*.[ch] \
-		${SYSDIR}/arch/netwinder/include/*.h \
-		${SYSDIR}/arch/netwinder/pci/*.[ch]
-ANETWINDER=	${SYSDIR}/arch/netwinder/netwinder/*.S
+TNETWINDER=	../netwinder/tags
+SNETWINDER=	../netwinder/netwinder/*.[ch] ../netwinder/include/*.h \
+		../netwinder/isa/*.[ch] ../netwinder/pci/*.[ch]
+ANETWINDER=	../netwinder/netwinder/*.s
 
 # Directories in which to place tags links
-DNETWINDER=	pci include
+DNETWINDER=	isa pci include
 
 .include "../../kern/Make.tags.inc"
 
 tags:
-	-rm -f ${TNETWINDER}
-	-echo ${SNETWINDER} ${SARM} | xargs ctags -wadtf ${TNETWINDER}
-	-${FINDCOMM} | xargs ctags -wadtf ${TNETWINDER}
-	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${ANETWINDER} ${AARM} | \
+	-ctags -wdtf ${TNETWINDER} ${SNETWINDER} ${COMM}
+	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${ANETWINDER} | \
 	    ${TOOL_SED} -e \
-		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3	\1	/^\2(\3\4$$/;" \
+		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 	    >> ${TNETWINDER}
 	sort -o ${TNETWINDER} ${TNETWINDER}
 

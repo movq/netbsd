@@ -1,9 +1,7 @@
-/*	$NetBSD: main.c,v 1.1.1.4 2010/12/12 15:22:32 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/servers/slapd/main.c,v 1.239.2.21 2010/04/13 20:23:16 kurt Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/main.c,v 1.239.2.13 2008/05/20 00:10:40 quanah Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2010 The OpenLDAP Foundation.
+ * Copyright 1998-2008 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -67,7 +65,7 @@ static struct sockaddr_in	bind_addr;
 
 typedef int (MainFunc) LDAP_P(( int argc, char *argv[] ));
 extern MainFunc slapadd, slapcat, slapdn, slapindex, slappasswd,
-	slaptest, slapauth, slapacl, slapschema;
+	slaptest, slapauth, slapacl;
 
 static struct {
 	char *name;
@@ -78,7 +76,6 @@ static struct {
 	{"slapdn", slapdn},
 	{"slapindex", slapindex},
 	{"slappasswd", slappasswd},
-	{"slapschema", slapschema},
 	{"slaptest", slaptest},
 	{"slapauth", slapauth},
 	{"slapacl", slapacl},
@@ -272,18 +269,7 @@ parse_debug_level( const char *arg, int *levelp, char ***unknowns )
 		ldap_charray_free( levels );
 
 	} else {
-		int rc;
-
-		if ( arg[0] == '-' ) {
-			rc = lutil_atoix( &level, arg, 0 );
-		} else {
-			unsigned ulevel;
-
-			rc = lutil_atoux( &ulevel, arg, 0 );
-			level = (int)ulevel;
-		}
-
-		if ( rc ) {
+		if ( lutil_atoix( &level, arg, 0 ) != 0 ) {
 			fprintf( stderr,
 				"unrecognized log level "
 				"\"%s\"\n", arg );
@@ -713,7 +699,6 @@ unhandled_option:;
 	Debug( LDAP_DEBUG_ANY, "%s", Versionstr, 0, 0 );
 
 	global_host = ldap_pvt_get_fqdn( NULL );
-	ber_str2bv( global_host, 0, 0, &global_host_bv );
 
 	if( check == CHECK_NONE && slapd_daemon_init( urls ) != 0 ) {
 		rc = 1;
@@ -807,7 +792,7 @@ unhandled_option:;
 		}
 	}
 
-	if ( glue_sub_attach( 0 ) != 0 ) {
+	if ( glue_sub_attach( ) != 0 ) {
 		Debug( LDAP_DEBUG_ANY,
 		    "subordinate config error\n",
 		    0, 0, 0 );
@@ -1045,8 +1030,6 @@ stop:
 		ch_free( configdir );
 	if ( urls )
 		ch_free( urls );
-	if ( global_host )
-		ch_free( global_host );
 
 	/* kludge, get symbols referenced */
 	tavl_free( NULL, NULL );
@@ -1071,12 +1054,13 @@ wait4child( int sig )
     int save_errno = errno;
 
 #ifdef WNOHANG
-    do
-        errno = 0;
+    errno = 0;
 #ifdef HAVE_WAITPID
-    while ( waitpid( (pid_t)-1, NULL, WNOHANG ) > 0 || errno == EINTR );
+    while ( waitpid( (pid_t)-1, NULL, WNOHANG ) > 0 || errno == EINTR )
+	;	/* NULL */
 #else
-    while ( wait3( NULL, WNOHANG, NULL ) > 0 || errno == EINTR );
+    while ( wait3( NULL, WNOHANG, NULL ) > 0 || errno == EINTR )
+	;	/* NULL */
 #endif
 #else
     (void) wait( NULL );
@@ -1086,3 +1070,4 @@ wait4child( int sig )
 }
 
 #endif /* LDAP_SIGCHLD */
+

@@ -1,4 +1,4 @@
-/*	$NetBSD: init.c,v 1.105 2012/11/09 06:27:17 msaitoh Exp $	*/
+/*	$NetBSD: init.c,v 1.96 2008/07/20 01:20:22 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1991, 1993\
 #if 0
 static char sccsid[] = "@(#)init.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: init.c,v 1.105 2012/11/09 06:27:17 msaitoh Exp $");
+__RCSID("$NetBSD: init.c,v 1.96 2008/07/20 01:20:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -68,12 +68,6 @@ __RCSID("$NetBSD: init.c,v 1.105 2012/11/09 06:27:17 msaitoh Exp $");
 #include <util.h>
 #include <paths.h>
 #include <err.h>
-#ifdef SUPPORT_UTMP
-#include <utmp.h>
-#endif
-#ifdef SUPPORT_UTMPX
-#include <utmpx.h>
-#endif
 
 #include <stdarg.h>
 
@@ -95,7 +89,7 @@ __RCSID("$NetBSD: init.c,v 1.105 2012/11/09 06:27:17 msaitoh Exp $");
 #define	STALL_TIMEOUT		30	/* wait N secs after warning */
 #define	DEATH_WATCH		10	/* wait N secs for procs to die */
 
-static const struct timespec dtrtime = {.tv_sec = 0, .tv_nsec = 250000};
+const struct timespec dtrtime = {.tv_sec = 0, .tv_nsec = 250000};
 
 #if defined(RESCUEDIR)
 #define	INIT_BSHELL	RESCUEDIR "/sh"
@@ -107,14 +101,19 @@ static const struct timespec dtrtime = {.tv_sec = 0, .tv_nsec = 250000};
 #define	INIT_PATH	_PATH_STDPATH
 #endif
 
-static void handle(sig_t, ...);
-static void delset(sigset_t *, ...);
+int main(int, char *[]);
 
-static void stall(const char *, ...) __printflike(1, 2);
-static void warning(const char *, ...) __printflike(1, 2);
-static void emergency(const char *, ...) __printflike(1, 2);
-__dead static void disaster(int);
-static void badsys(int);
+void handle(sig_t, ...);
+void delset(sigset_t *, ...);
+
+void stall(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
+void warning(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
+void emergency(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
+void disaster(int);
+void badsys(int);
 
 /*
  * We really need a recursive typedef...
@@ -132,20 +131,18 @@ typedef state_func_t (*state_t)(void);
 #define	CLEAN_TTYS	'T'
 #define	CATATONIA	'c'
 
-static state_func_t single_user(void);
-#ifndef LETS_GET_SMALL
-static state_func_t runcom(void);
-static state_func_t read_ttys(void);
-static state_func_t multi_user(void);
-static state_func_t clean_ttys(void);
-static state_func_t catatonia(void);
-static state_func_t death(void);
-#endif
+state_func_t single_user(void);
+state_func_t runcom(void);
+state_func_t read_ttys(void);
+state_func_t multi_user(void);
+state_func_t clean_ttys(void);
+state_func_t catatonia(void);
+state_func_t death(void);
 
-static enum { AUTOBOOT, FASTBOOT } runcom_mode = AUTOBOOT;
+enum { AUTOBOOT, FASTBOOT } runcom_mode = AUTOBOOT;
 
-static void transition(state_t);
-static void setctty(const char *);
+void transition(state_t);
+void setctty(const char *);
 
 typedef struct init_session {
 	int	se_index;		/* index of entry in ttys file */
@@ -163,36 +160,37 @@ typedef struct init_session {
 	struct	init_session *se_next;
 } session_t;
 
-static void collect_child(pid_t, int);
-static int clang;
-static void transition_handler(int);
-static void alrm_handler(int);
-static int has_securelevel(void);
-static int securelevel_present;
+void free_session(session_t *);
+session_t *new_session(session_t *, int, struct ttyent *);
+session_t *sessions;
+
+char **construct_argv(char *);
+void start_window_system(session_t *);
+void collect_child(pid_t, int);
+pid_t start_getty(session_t *);
+void transition_handler(int);
+void alrm_handler(int);
+void setsecuritylevel(int);
+int getsecuritylevel(void);
+int setupargv(session_t *, struct ttyent *);
+int clang;
+
+int start_session_db(void);
+void add_session(session_t *);
+void del_session(session_t *);
+session_t *find_session(pid_t);
+DB *session_db;
+
+int do_setttyent(void);
 
 #ifndef LETS_GET_SMALL
-static int do_setttyent(void);
-static void start_window_system(session_t *);
-static char **construct_argv(char *);
-static int setupargv(session_t *, struct ttyent *);
-static pid_t start_getty(session_t *);
-static void free_session(session_t *);
-static session_t *new_session(session_t *, int, struct ttyent *);
-static session_t *sessions;
-static void setsecuritylevel(int);
-static int getsecuritylevel(void);
-static int start_session_db(void);
-static void add_session(session_t *);
-static void del_session(session_t *);
-static session_t *find_session(pid_t);
-static DB *session_db;
-static state_t requested_transition = runcom;
+state_t requested_transition = runcom;
 
-static void clear_session_logs(session_t *, int);
-static state_func_t runetcrc(int);
+void clear_session_logs(session_t *, int);
+state_func_t runetcrc(int);
 #ifdef SUPPORT_UTMPX
 static struct timeval boot_time;
-static state_t current_state = death;
+state_t current_state = death;
 static void session_utmpx(const session_t *, int);
 static void make_utmpx(const char *, const char *, int, pid_t,
     const struct timeval *, int);
@@ -201,14 +199,14 @@ static void utmpx_set_runlevel(char, char);
 #endif
 
 #ifdef CHROOT
-static int did_multiuser_chroot = 0;
-static char rootdir[PATH_MAX];
-static int shouldchroot(void);
-static int createsysctlnode(void);
+int did_multiuser_chroot = 0;
+char rootdir[PATH_MAX];
+int shouldchroot(void);
+int createsysctlnode(void);
 #endif /* CHROOT */
 
 #else /* LETS_GET_SMALL */
-static state_t requested_transition = single_user;
+state_t requested_transition = single_user;
 #endif /* !LETS_GET_SMALL */
 
 #ifdef MFS_DEV_IF_NO_CONSOLE
@@ -327,13 +325,6 @@ main(int argc, char **argv)
 #endif /* !LETS_GET_SMALL && CHROOT*/
 
 	/*
-	 * Securelevel might not be supported by the kernel. Query for it, and
-	 * set a variable indicating whether we should attempt anything with it
-	 * or not.
-	 */
-	securelevel_present = has_securelevel();
-
-	/*
 	 * Start the state machine.
 	 */
 	transition(requested_transition);
@@ -347,7 +338,7 @@ main(int argc, char **argv)
 /*
  * Associate a function with a signal handler.
  */
-static void
+void
 handle(sig_t handler, ...)
 {
 	int sig;
@@ -372,7 +363,7 @@ handle(sig_t handler, ...)
 /*
  * Delete a set of signals from a mask.
  */
-static void
+void
 delset(sigset_t *maskp, ...)
 {
 	int sig;
@@ -418,7 +409,7 @@ print_console(int level, const char *message, va_list ap)
  * to read it and to save log or hardcopy output if the problem is chronic).
  * NB: should send a message to the session logger to avoid blocking.
  */
-static void
+void
 stall(const char *message, ...)
 {
 	va_list ap;
@@ -435,7 +426,7 @@ stall(const char *message, ...)
  * If cpp had variadic macros, the two functions could be #defines for another.
  * NB: should send a message to the session logger to avoid blocking.
  */
-static void
+void
 warning(const char *message, ...)
 {
 	va_list ap;
@@ -450,7 +441,7 @@ warning(const char *message, ...)
  * Log an emergency message.
  * NB: should send a message to the session logger to avoid blocking.
  */
-static void
+void
 emergency(const char *message, ...)
 {
 	va_list ap;
@@ -467,7 +458,7 @@ emergency(const char *message, ...)
  * These may arise if a system does not support sysctl.
  * We tolerate up to 25 of these, then throw in the towel.
  */
-static void
+void
 badsys(int sig)
 {
 	static int badcount = 0;
@@ -480,7 +471,7 @@ badsys(int sig)
 /*
  * Catch an unexpected signal.
  */
-static void
+void
 disaster(int sig)
 {
 
@@ -490,41 +481,14 @@ disaster(int sig)
 }
 
 /*
- * Check if securelevel is present.
- */
-static int
-has_securelevel(void)
-{
-#ifdef KERN_SECURELVL
-	int name[2], curlevel;
-	size_t len;
-
-	name[0] = CTL_KERN;
-	name[1] = KERN_SECURELVL;
-	len = sizeof curlevel;
-	if (sysctl(name, 2, &curlevel, &len, NULL, 0) == -1) {
-		/* If it doesn't exist, it's okay. */
-		if (errno == ENOENT) 
-			return 0;
-	}
-	return 1;
-#else
-	return 0;
-#endif
-}
-
-/*
  * Get the security level of the kernel.
  */
-static int
+int
 getsecuritylevel(void)
 {
 #ifdef KERN_SECURELVL
 	int name[2], curlevel;
 	size_t len;
-
-	if (!securelevel_present)
-		return -1;
 
 	name[0] = CTL_KERN;
 	name[1] = KERN_SECURELVL;
@@ -542,14 +506,11 @@ getsecuritylevel(void)
 /*
  * Set the security level of the kernel.
  */
-static void
+void
 setsecuritylevel(int newlevel)
 {
 #ifdef KERN_SECURELVL
 	int name[2], curlevel;
-
-	if (!securelevel_present)
-		return;
 
 	curlevel = getsecuritylevel();
 	if (newlevel == curlevel)
@@ -572,7 +533,7 @@ setsecuritylevel(int newlevel)
  * Change states in the finite state machine.
  * The initial state is passed as an argument.
  */
-static void
+void
 transition(state_t s)
 {
 
@@ -595,7 +556,7 @@ transition(state_t s)
  * Close out the accounting files for a login session.
  * NB: should send a message to the session logger to avoid blocking.
  */
-static void
+void
 clear_session_logs(session_t *sp, int status)
 {
 #if defined(SUPPORT_UTMP) || defined(SUPPORT_UTMPX)
@@ -617,7 +578,7 @@ clear_session_logs(session_t *sp, int status)
  * Start a session and allocate a controlling terminal.
  * Only called by children of init after forking.
  */
-static void
+void
 setctty(const char *name)
 {
 	int fd;
@@ -637,7 +598,7 @@ setctty(const char *name)
 /*
  * Bring the system up single user.
  */
-static state_func_t
+state_func_t
 single_user(void)
 {
 	pid_t pid, wpid;
@@ -822,7 +783,7 @@ single_user(void)
 #ifndef LETS_GET_SMALL
 
 /* ARGSUSED */
-static state_func_t
+state_func_t
 runetcrc(int trychroot)
 {
 	pid_t pid, wpid;
@@ -917,7 +878,7 @@ runetcrc(int trychroot)
 /*
  * Run the system startup script.
  */
-static state_func_t
+state_func_t
 runcom(void)
 {
 	state_func_t next_step;
@@ -964,7 +925,7 @@ runcom(void)
  *
  * NB: We could pass in the size here; is it necessary?
  */
-static int
+int
 start_session_db(void)
 {
 
@@ -981,7 +942,7 @@ start_session_db(void)
 /*
  * Add a new login session.
  */
-static void
+void
 add_session(session_t *sp)
 {
 	DBT key;
@@ -1005,7 +966,7 @@ add_session(session_t *sp)
 /*
  * Delete an old login session.
  */
-static void
+void
 del_session(session_t *sp)
 {
 	DBT key;
@@ -1023,7 +984,7 @@ del_session(session_t *sp)
 /*
  * Look up a login session by pid.
  */
-static session_t *
+session_t *
 find_session(pid_t pid)
 {
 	DBT key;
@@ -1044,7 +1005,7 @@ find_session(pid_t pid)
 /*
  * Construct an argument vector from a command line.
  */
-static char **
+char **
 construct_argv(char *command)
 {
 	int argc = 0;
@@ -1066,7 +1027,7 @@ construct_argv(char *command)
 /*
  * Deallocate a session descriptor.
  */
-static void
+void
 free_session(session_t *sp)
 {
 
@@ -1085,7 +1046,7 @@ free_session(session_t *sp)
 /*
  * Allocate a new session descriptor.
  */
-static session_t *
+session_t *
 new_session(session_t *sprev, int session_index, struct ttyent *typ)
 {
 	session_t *sp;
@@ -1103,10 +1064,8 @@ new_session(session_t *sprev, int session_index, struct ttyent *typ)
 	sp->se_index = session_index;
 
 	(void)asprintf(&sp->se_device, "%s%s", _PATH_DEV, typ->ty_name);
-	if (!sp->se_device) {
-		free(sp);
+	if (!sp->se_device)
 		return NULL;
-	}
 
 	if (setupargv(sp, typ) == 0) {
 		free_session(sp);
@@ -1128,7 +1087,7 @@ new_session(session_t *sprev, int session_index, struct ttyent *typ)
 /*
  * Calculate getty and if useful window argv vectors.
  */
-static int
+int
 setupargv(session_t *sp, struct ttyent *typ)
 {
 
@@ -1165,7 +1124,7 @@ setupargv(session_t *sp, struct ttyent *typ)
 /*
  * Walk the list of ttys and create sessions for each active line.
  */
-static state_func_t
+state_func_t
 read_ttys(void)
 {
 	int session_index = 0;
@@ -1179,7 +1138,7 @@ read_ttys(void)
 		make_utmpx("", BOOT_MSG, BOOT_TIME, 0, &boot_time, 0);
 
 		/*
-		 * If wtmpx is not empty, pick the down time from there
+		 * If wtmpx is not empty, pick the the down time from there
 		 */
 		if (stat(_PATH_WTMPX, &st) != -1 && st.st_size != 0) {
 			struct timeval down_time;
@@ -1233,7 +1192,7 @@ read_ttys(void)
 /*
  * Start a window system running.
  */
-static void
+void
 start_window_system(session_t *sp)
 {
 	pid_t pid;
@@ -1264,7 +1223,7 @@ start_window_system(session_t *sp)
 /*
  * Start a login session running.
  */
-static pid_t
+pid_t
 start_getty(session_t *sp)
 {
 	pid_t pid;
@@ -1345,7 +1304,7 @@ make_utmpx(const char *name, const char *line, int type, pid_t pid,
 	ut.ut_session = session;
 
 	eline = line + strlen(line);
-	if ((size_t)(eline - line) >= sizeof(ut.ut_id))
+	if (eline - line >= sizeof(ut.ut_id))
 		line = eline - sizeof(ut.ut_id);
 	(void)strncpy(ut.ut_id, line, sizeof(ut.ut_id));
 
@@ -1403,7 +1362,7 @@ utmpx_set_runlevel(char old, char new)
  * Collect exit status for a child.
  * If an exiting login, start a new login running.
  */
-static void
+void
 collect_child(pid_t pid, int status)
 {
 #ifndef LETS_GET_SMALL
@@ -1445,7 +1404,7 @@ collect_child(pid_t pid, int status)
 /*
  * Catch a signal and request a state transition.
  */
-static void
+void
 transition_handler(int sig)
 {
 
@@ -1471,7 +1430,7 @@ transition_handler(int sig)
 /*
  * Take the system multiuser.
  */
-static state_func_t
+state_func_t
 multi_user(void)
 {
 	pid_t pid;
@@ -1512,7 +1471,7 @@ multi_user(void)
 /*
  * This is an n-squared algorithm.  We hope it isn't run often...
  */
-static state_func_t
+state_func_t
 clean_ttys(void)
 {
 	session_t *sp, *sprev;
@@ -1577,7 +1536,7 @@ clean_ttys(void)
 /*
  * Block further logins.
  */
-static state_func_t
+state_func_t
 catatonia(void)
 {
 	session_t *sp;
@@ -1592,7 +1551,7 @@ catatonia(void)
 /*
  * Note SIGALRM.
  */
-static void
+void
 /*ARGSUSED*/
 alrm_handler(int sig)
 {
@@ -1604,7 +1563,7 @@ alrm_handler(int sig)
 /*
  * Bring the system down to single user.
  */
-static state_func_t
+state_func_t
 death(void)
 {
 	session_t *sp;
@@ -1719,12 +1678,11 @@ mfs_dev(void)
 	default:
 		if (waitpid(pid, &status, 0) == -1)
 			break;
-		if (status != 0)
-			warn("MAKEDEV exit status %d\n", status);
-		/*
-		 * If /dev/console got created, then return 0
-		 * regardless of MAKEDEV exit status.
-		 */
+		if (status != 0) {
+			errno = EINVAL;
+			break;
+		}
+		/* Check /dev/console got created */
 		if (access(_PATH_CONSOLE, F_OK) == 0)
 			return 0;
 		_exit(11);
@@ -1734,8 +1692,7 @@ mfs_dev(void)
 }
 #endif
 
-#ifndef LETS_GET_SMALL
-static int
+int
 do_setttyent(void)
 {
 	(void)endttyent();
@@ -1750,12 +1707,11 @@ do_setttyent(void)
 #endif /* CHROOT */
 		return setttyent();
 }
-#endif
 
 #if !defined(LETS_GET_SMALL) && defined(CHROOT)
 
-static int
-createsysctlnode(void)
+int
+createsysctlnode()
 {
 	struct sysctlnode node;
 	int mib[2];
@@ -1802,8 +1758,8 @@ createsysctlnode(void)
 	return 0;
 }
 
-static int
-shouldchroot(void)
+int
+shouldchroot()
 {
 	struct sysctlnode node;
 	size_t len, cnt;

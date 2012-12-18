@@ -1,4 +1,4 @@
-/*	$NetBSD: pio.h,v 1.10 2012/02/06 02:14:13 matt Exp $	*/
+/*	$NetBSD: pio.h,v 1.7 2008/04/28 20:23:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -33,18 +33,18 @@
 #define	_ALPHA_PIO_H_
 
 #include <sys/cdefs.h>
-#include <machine/bus_user.h>
+#include <machine/bus.h>
 
 #ifdef _KERNEL
 #error This file is for userspace only.
 #else
 struct alpha_pci_io_ops {
-	uint8_t	(*apio_inb)(bus_addr_t);
-	uint16_t	(*apio_inw)(bus_addr_t);
-	uint32_t	(*apio_inl)(bus_addr_t);
-	void		(*apio_outb)(bus_addr_t, uint8_t);
-	void		(*apio_outw)(bus_addr_t, uint16_t);
-	void		(*apio_outl)(bus_addr_t, uint32_t);
+	u_int8_t	(*apio_inb)(bus_addr_t);
+	u_int16_t	(*apio_inw)(bus_addr_t);
+	u_int32_t	(*apio_inl)(bus_addr_t);
+	void		(*apio_outb)(bus_addr_t, u_int8_t);
+	void		(*apio_outw)(bus_addr_t, u_int16_t);
+	void		(*apio_outl)(bus_addr_t, u_int32_t);
 };
 
 #define	inb(addr)	(*alpha_pci_io_switch->apio_inb)((addr))

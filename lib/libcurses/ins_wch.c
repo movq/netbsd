@@ -1,4 +1,4 @@
-/*   $NetBSD: ins_wch.c,v 1.5 2010/02/23 19:48:26 drochner Exp $ */
+/*   $NetBSD: ins_wch.c,v 1.3 2007/05/29 11:10:56 blymn Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation Inc.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ins_wch.c,v 1.5 2010/02/23 19:48:26 drochner Exp $");
+__RCSID("$NetBSD: ins_wch.c,v 1.3 2007/05/29 11:10:56 blymn Exp $");
 #endif						  /* not lint */
 
 #include <string.h>
@@ -110,8 +110,6 @@ wins_wch(WINDOW *win, const cchar_t *wch)
 	if ( !wch )
 		return OK;
 	cw = wcwidth(wch->vals[0]);
-	if (cw < 0)
-		cw = 1;
 	if (!cw)
 		return wadd_wch( win, wch );
 
@@ -119,9 +117,9 @@ wins_wch(WINDOW *win, const cchar_t *wch)
 	__CTRACE(__CTRACE_INPUT, "--before--\n");
 	for ( x = 0; x < win->maxx; x++ )
 		__CTRACE(__CTRACE_INPUT, "wins_wch: (0,%d)=(%x,%x,%p)\n", x,
-		    win->alines[0]->line[x].ch,
-		    win->alines[0]->line[x].attr,
-		    win->alines[0]->line[x].nsp);
+		    win->lines[0]->line[x].ch,
+		    win->lines[0]->line[x].attr,
+		    win->lines[0]->line[x].nsp);
 #endif /* DEBUG */
 	x = win->curx;
 	y = win->cury;
@@ -155,8 +153,8 @@ wins_wch(WINDOW *win, const cchar_t *wch)
 	/* locate current cell */
 	x = win->curx;
 	y = win->cury;
-	lnp = win->alines[ y ];
-	start = &win->alines[ y ]->line[ x ];
+	lnp = win->lines[ y ];
+	start = &win->lines[ y ]->line[ x ];
 	sx = x;
 	pcw = WCOL( *start );
 	if (pcw < 0) {
@@ -174,7 +172,7 @@ wins_wch(WINDOW *win, const cchar_t *wch)
 #ifdef DEBUG
 	__CTRACE(__CTRACE_INPUT, "wins_wch: shift all characters\n");
 #endif /* DEBUG */
-	temp1 = &win->alines[ y ]->line[ win->maxx - 1 ];
+	temp1 = &win->lines[ y ]->line[ win->maxx - 1 ];
 	temp2 = temp1 - cw;
 	pcw = WCOL(*(temp2 + 1));
 	if (pcw < 0) {
@@ -238,9 +236,9 @@ wins_wch(WINDOW *win, const cchar_t *wch)
 		for ( x = 0; x < win->maxx; x++ )
 			__CTRACE(__CTRACE_INPUT,
 			    "wins_wch: (0,%d)=(%x,%x,%p)\n", x,
-			    win->alines[0]->line[x].ch,
-			    win->alines[0]->line[x].attr,
-			    win->alines[0]->line[x].nsp);
+			    win->lines[0]->line[x].ch,
+			    win->lines[0]->line[x].attr,
+			    win->lines[0]->line[x].nsp);
 	}
 #endif /* DEBUG */
 	newx = win->maxx - 1 + win->ch_off;

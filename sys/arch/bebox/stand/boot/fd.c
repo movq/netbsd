@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.10 2010/10/14 06:39:52 kiyohara Exp $	*/
+/*	$NetBSD: fd.c,v 1.8 2008/05/26 16:28:39 kiyohara Exp $	*/
 
 /*-
  * Copyright (C) 1997-1998 Kazuki Sakamoto (sakamoto@NetBSD.org)
@@ -136,6 +136,7 @@ int	fdsectors[] = {128, 256, 512, 1024, 2048, 4096};
 struct	fd_unit {
 	int	ctlr;
 	int	unit;
+	int	part;
 	u_int	un_flags;		/* unit status flag */
 	int	stat[STATUS_MAX];	/* result code */
 	FDDTYPE	*un_type;		/* floppy type (pointer) */
@@ -163,7 +164,7 @@ FD_UNIT	fd_unit[CTLR_MAX][UNIT_MAX];
  *	function declaration
  */
 int fdinit(FD_UNIT *);
-int fdopen(struct open_file *, int, int);
+int fdopen(struct open_file *, int, int, int);
 int fdclose(struct open_file *);
 int fdioctl(struct open_file *, u_long, void *);
 int fdstrategy(void *, int, daddr_t, size_t, void *, size_t *);
@@ -220,7 +221,7 @@ fdinit(FD_UNIT *un)
  *				   fdopen				     *
  *===========================================================================*/
 int
-fdopen(struct open_file *f, int ctlr, int unit)
+fdopen(struct open_file *f, int ctlr, int unit, int part)
 {
 	FD_UNIT	*un;
 	int *stat;
@@ -444,7 +445,7 @@ fdc_in(int ctlr, u_char *data)
  *                              fdc_intr_wait                                *
  *===========================================================================*/
 int
-fdc_intr_wait(void)
+fdc_intr_wait()
 {
 
 	return (irq_polling(FDC_IRQ, INT_TIMEOUT));	/* wait interrupt */
@@ -652,7 +653,7 @@ u_int INT2_MASK;
  *                             irq initialize                                *
  *===========================================================================*/
 void
-irq_init(void)
+irq_init()
 {
 	outb(INT_CTL0, ICW1_AT);		/* ICW1 */
 	outb(INT_CTL1, 0);			/* ICW2 for master */

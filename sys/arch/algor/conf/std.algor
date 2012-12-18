@@ -1,9 +1,7 @@
-#	$NetBSD: std.algor,v 1.9 2011/07/09 16:03:01 matt Exp $
+#	$NetBSD: std.algor,v 1.8 2005/12/11 12:16:08 christos Exp $
 
-ifndef		evbmips
-machine		algor mips
+machine algor mips
 include		"conf/std"	# MI standard options
-
 makeoptions	MACHINE_ARCH="mipsel"
 
 # Standard exec-package options
@@ -13,7 +11,4 @@ options 	EXEC_SCRIPT	# exec of #! scripts
 options 	MIPS3		# All supported Algor boards are MIPS3
 options 	MIPS3_ENABLE_CLOCK_INTR
 
-options 	AUTOCONF_IMPL="<algor/autoconf.h>"
-
 makeoptions	DEFTEXTADDR="0x80100000"
-endif

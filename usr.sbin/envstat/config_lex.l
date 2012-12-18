@@ -1,4 +1,4 @@
-/* 	$NetBSD: config_lex.l,v 1.8 2012/03/15 02:02:23 joerg Exp $	*/
+/* 	$NetBSD: config_lex.l,v 1.4 2008/08/22 11:27:50 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2007 Juan Romero Pardines.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: config_lex.l,v 1.8 2012/03/15 02:02:23 joerg Exp $");
+__RCSID("$NetBSD: config_lex.l,v 1.4 2008/08/22 11:27:50 pgoyette Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -39,17 +39,16 @@ __RCSID("$NetBSD: config_lex.l,v 1.8 2012/03/15 02:02:23 joerg Exp $");
 #include "config_yacc.h"
 
 extern int yyline;
-extern int yyerror(const char *, ...) __printflike(1, 2);
+extern int yyerror(const char *, ...);
 int yylex(void);
-
 
 %}
 
-%option noyywrap noinput nounput
+%option noyywrap
 
 DEVICEPROP	refresh-timeout
 SENSOR		sensor[0-9]+
-SENSORPROP	warning-max|high-capacity|warning-min|warning-capacity|critical-max|maximum-capacity|critical-min|critical-capacity|rfact|description
+SENSORPROP	warning-max|warning-min|warning-capacity|critical-max|critical-min|critical-capacity|rfact|description
 SP_STRING	[(+|\-)\$A-Za-z\.\/_\-0-9 ]*
 STRING		[\$A-Za-z\.\/_\-0-9]*
 

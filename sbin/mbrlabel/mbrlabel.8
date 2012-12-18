@@ -27,9 +27,9 @@
 .\" OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 .\" ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.\"	$NetBSD: mbrlabel.8,v 1.18 2012/07/14 20:13:30 wiz Exp $
+.\"	$NetBSD: mbrlabel.8,v 1.16 2006/01/12 20:37:23 wiz Exp $
 .\"
-.Dd July 13, 2012
+.Dd December 27, 2005
 .Dt MBRLABEL 8
 .Os
 .Sh NAME
@@ -79,12 +79,15 @@ on i386 and some other platforms) is left alone during this process.
 By default, the proposed changed disk label will be displayed and no
 disk label update will occur.
 .Pp
-The following options are available:
+Available options:
+.Pp
 .Bl -tag -width sXsectorX
 .It Fl f
 Force an update, even if there has been no change.
 .It Fl q
 Performs operations in a quiet fashion.
+.It Fl w
+Update the in-core label if it has been changed.
 .It Fl r
 In conjunction with
 .Fl w ,
@@ -95,10 +98,6 @@ in order to find the MBR.
 Useful if the disk has remapping drivers on it and the MBR is located
 in a non-standard place.
 Defaults to 0.
-.It Fl w
-Update the in-core label if it has been changed.
-See also
-.Fl r .
 .El
 .Sh SEE ALSO
 .Xr disklabel 8 ,

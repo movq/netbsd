@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.cmd.c,v 1.12 2011/08/06 20:42:43 dholland Exp $	*/
+/*	$NetBSD: hack.cmd.c,v 1.8 2008/01/28 06:55:41 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,16 +63,14 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.cmd.c,v 1.12 2011/08/06 20:42:43 dholland Exp $");
+__RCSID("$NetBSD: hack.cmd.c,v 1.8 2008/01/28 06:55:41 dholland Exp $");
 #endif				/* not lint */
 
 #include	"hack.h"
 #include	"extern.h"
 #include	"def.func_tab.h"
 
-static int doextcmd(void);
-
-static const struct func_tab cmdlist[] = {
+const struct func_tab cmdlist[] = {
 	{ '\020', doredotopl },
 	{ '\022', doredraw },
 	{ '\024', dotele },
@@ -136,17 +134,15 @@ static const struct func_tab cmdlist[] = {
 	{ 0, 0 }
 };
 
-static const struct ext_func_tab extcmdlist[] = {
+const struct ext_func_tab extcmdlist[] = {
 	{ "dip", dodip },
 	{ "pray", dopray },
-	{ NULL, donull }
+	{ (char *) 0, donull }
 };
 
-static char lowc(int);
-static char unctrl(int);
-
 void
-rhack(const char *cmd)
+rhack(cmd)
+	const char  *cmd;
 {
 	const struct func_tab *tlist = cmdlist;
 	boolean         firsttime = FALSE;
@@ -159,7 +155,7 @@ rhack(const char *cmd)
 	}
 	if (!*cmd || (*cmd & 0377) == 0377 ||
 	    (flags.no_rest_on_space && *cmd == ' ')) {
-		sound_bell();
+		bell();
 		flags.move = 0;
 		return;		/* probably we just had an interrupt */
 	}
@@ -246,8 +242,8 @@ rush:
 	multi = flags.move = 0;
 }
 
-static int
-doextcmd(void)
+int
+doextcmd()
 {				/* here after # - now read a full-word
 				 * command */
 	char            buf[BUFSZ];
@@ -267,14 +263,16 @@ doextcmd(void)
 	return (0);
 }
 
-static char
-lowc(int sym)
+char
+lowc(sym)
+	char            sym;
 {
 	return ((sym >= 'A' && sym <= 'Z') ? sym + 'a' - 'A' : sym);
 }
 
-static char
-unctrl(int sym)
+char
+unctrl(sym)
+	char            sym;
 {
 	return ((sym >= ('A' & 037) && sym <= ('Z' & 037)) ? sym + 0140 : sym);
 }
@@ -283,10 +281,11 @@ unctrl(int sym)
 char            sdir[] = "hykulnjb><";
 schar           xdir[10] = {-1, -1, 0, 1, 1, 1, 0, -1, 0, 0};
 schar           ydir[10] = {0, -1, -1, -1, 0, 1, 1, 1, 0, 0};
-static schar    zdir[10] = {0, 0, 0, 0, 0, 0, 0, 0, 1, -1};
+schar           zdir[10] = {0, 0, 0, 0, 0, 0, 0, 0, 1, -1};
 
 int
-movecmd(int sym)		/* also sets u.dz, but returns false for <> */
+movecmd(sym)			/* also sets u.dz, but returns false for <> */
+	char            sym;
 {
 	char  *dp;
 
@@ -300,7 +299,8 @@ movecmd(int sym)		/* also sets u.dz, but returns false for <> */
 }
 
 int
-getdir(boolean s)
+getdir(s)
+	boolean         s;
 {
 	char            dirsym;
 
@@ -318,7 +318,7 @@ getdir(boolean s)
 }
 
 void
-confdir(void)
+confdir()
 {
 	int x = rn2(8);
 	u.dx = xdir[x];
@@ -327,7 +327,7 @@ confdir(void)
 
 #ifdef QUEST
 int
-finddir(void)
+finddir()
 {
 	int    i, ui = u.di;
 	for (i = 0; i <= 8; i++) {
@@ -365,7 +365,8 @@ finddir(void)
 }
 
 int
-isroom(int x, int y)
+isroom(x, y)
+	int	x, y;
 {				/* what about POOL? */
 	return (isok(x, y) && (levl[x][y].typ == ROOM ||
 			       (levl[x][y].typ >= LDOOR && flags.run >= 6)));
@@ -373,7 +374,8 @@ isroom(int x, int y)
 #endif	/* QUEST */
 
 int
-isok(int x, int y)
+isok(x, y)
+	int x, y;
 {
 	/* x corresponds to curx, so x==1 is the first column. Ach. %% */
 	return (x >= 1 && x <= COLNO - 1 && y >= 0 && y <= ROWNO - 1);

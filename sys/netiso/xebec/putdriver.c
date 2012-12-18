@@ -1,4 +1,4 @@
-/*	$NetBSD: putdriver.c,v 1.9 2009/03/14 21:04:25 dsl Exp $	*/
+/*	$NetBSD: putdriver.c,v 1.8 2005/12/11 12:25:16 christos Exp $	*/
 
 /*
  * This code is such a kludge that I don't want to put my name on it.
@@ -15,7 +15,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: putdriver.c,v 1.9 2009/03/14 21:04:25 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: putdriver.c,v 1.8 2005/12/11 12:25:16 christos Exp $");
 
 #include <stdio.h>
 #include "main.h"
@@ -233,7 +233,9 @@ static struct { int start; int finish; } parts[] = {
 };
 
 void
-putdriver(FILE *f, int x)
+putdriver(f, x)
+	FILE *f;
+	int x;
 {
 	register int i;
 

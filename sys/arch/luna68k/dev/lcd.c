@@ -1,4 +1,4 @@
-/* $NetBSD: lcd.c,v 1.7 2011/11/12 13:44:26 tsutsui Exp $ */
+/* $NetBSD: lcd.c,v 1.3 2008/04/28 20:23:26 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>		/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: lcd.c,v 1.7 2011/11/12 13:44:26 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lcd.c,v 1.3 2008/04/28 20:23:26 martin Exp $");
 
 /*
  * XXX
@@ -42,8 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: lcd.c,v 1.7 2011/11/12 13:44:26 tsutsui Exp $");
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-
-#include <machine/cpu.h>
 
 #define PIO1_MODE_OUTPUT	0x84
 #define PIO1_MODE_INPUT		0x94
@@ -72,17 +70,17 @@ struct pio {
 	volatile u_int8_t cntrl;
 };
 
-void lcdbusywait(void);
-void lcdput(int);
-void lcdctrl(int);
-void lcdshow(char *);
-void greeting(void);
+void lcdbusywait __P((void));
+void lcdput __P((int));
+void lcdctrl __P((int));
+void lcdshow __P((char *));
+void greeting __P((void));
 			       /* "1234567890123456" */
 static char lcd_boot_message1[] = " NetBSD/luna68k ";
 static char lcd_boot_message2[] = "   SX-9100/DT   ";
 
 void
-lcdbusywait(void)
+lcdbusywait()
 {
 	struct pio *p1 = (struct pio *)0x4D000000;
 	int msb, s;
@@ -103,7 +101,8 @@ lcdbusywait(void)
 }	
 
 void
-lcdput(int cc)
+lcdput(cc)
+	int cc;
 {
 	struct pio *p1 = (struct pio *)0x4D000000;
 	int s;
@@ -120,7 +119,8 @@ lcdput(int cc)
 }
 
 void
-lcdctrl(int cc)
+lcdctrl(cc)
+	int cc;
 {
 	struct pio *p1 = (struct pio *)0x4D000000;
 	int s;
@@ -137,7 +137,8 @@ lcdctrl(int cc)
 }
 
 void
-lcdshow(char *s)
+lcdshow(s)
+	char *s;
 {
 	int cc;
 
@@ -146,7 +147,7 @@ lcdshow(char *s)
 }
 
 void
-greeting(void)
+greeting()
 {
 	lcdctrl(LCD_INIT);
 	lcdctrl(LCD_ENTRY);
@@ -158,7 +159,5 @@ greeting(void)
 	lcdctrl(LCD_LOCATE(0, 0));
 	lcdshow(lcd_boot_message1);
 	lcdctrl(LCD_LOCATE(0, 1));
-	if (machtype == LUNA_II)
-		lcd_boot_message2[13] = '2';
 	lcdshow(lcd_boot_message2);
 }

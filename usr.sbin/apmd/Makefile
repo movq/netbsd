@@ -1,6 +1,6 @@
-#	$NetBSD: Makefile,v 1.15 2009/12/13 05:01:33 nakayama Exp $
+#	$NetBSD: Makefile,v 1.12 2007/07/29 14:34:45 nonaka Exp $
 
-.if (${MACHINE_ARCH} == "i386" || \
+.if (${MACHINE} == "i386" || \
      ${MACHINE} == "hpcmips" || \
      ${MACHINE} == "hpcsh" || \
      ${MACHINE} == "macppc" || \
@@ -11,6 +11,8 @@ SRCS=	apmd.c apmsubr.c
 .endif
 
 MAN=	apmd.8
+
+WARNS=  3
 
 LDADD+=	-lutil
 DPADD+=	${LIBUTIL}

@@ -1,4 +1,4 @@
-/*	$NetBSD: device.h,v 1.6 2012/10/27 17:17:42 chs Exp $	*/
+/*	$NetBSD: device.h,v 1.3 2008/06/11 14:35:53 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman
@@ -39,12 +39,16 @@
  * *and know it* (i.e. everything is really tight certain params won't be 
  * passed in some cases and the devices will deal with it)
  */
-int atari_config_found(cfdata_t, device_t, void *, cfprint_t);
-int simple_devprint(void *, const char *);
-int matchname(char *, char *);
+int atari_config_found __P((struct cfdata *, struct device *,
+    void *, cfprint_t ));
+int simple_devprint __P((void *, const char *));
+int matchname __P((char *, char *));
 /*
  * false when initing for the console.
  */
 extern int atari_realconfig;
+
+
+#define getsoftc(cdnam, unit) device_lookup_private(&(cdnam), (unit))
 
 #endif /* _ATARI_DEVICE_H_ */

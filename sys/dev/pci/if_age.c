@@ -1,4 +1,4 @@
-/*	$NetBSD: if_age.c,v 1.41 2012/07/22 14:33:00 matt Exp $ */
+/*	$NetBSD: if_age.c,v 1.28.2.6 2011/11/18 23:25:40 sborrill Exp $ */
 /*	$OpenBSD: if_age.c,v 1.1 2009/01/16 05:00:34 kevlo Exp $	*/
 
 /*-
@@ -31,8 +31,9 @@
 /* Driver for Attansic Technology Corp. L1 Gigabit Ethernet. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_age.c,v 1.41 2012/07/22 14:33:00 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_age.c,v 1.28.2.6 2011/11/18 23:25:40 sborrill Exp $");
 
+#include "bpfilter.h"
 #include "vlan.h"
 
 #include <sys/param.h>
@@ -63,7 +64,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_age.c,v 1.41 2012/07/22 14:33:00 matt Exp $");
 #include <net/if_types.h>
 #include <net/if_vlanvar.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <sys/rnd.h>
 
@@ -80,11 +83,11 @@ static int	age_match(device_t, cfdata_t, void *);
 static void	age_attach(device_t, device_t, void *);
 static int	age_detach(device_t, int);
 
-static bool	age_resume(device_t, const pmf_qual_t *);
+static bool	age_resume(device_t PMF_FN_PROTO);
 
 static int	age_miibus_readreg(device_t, int, int);
 static void	age_miibus_writereg(device_t, int, int, int);
-static void	age_miibus_statchg(struct ifnet *);
+static void	age_miibus_statchg(device_t);
 
 static int	age_init(struct ifnet *);
 static int	age_ioctl(struct ifnet *, u_long, void *);
@@ -252,13 +255,10 @@ age_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_ec.ec_capabilities = ETHERCAP_VLAN_MTU;
 
-	ifp->if_capabilities |= IFCAP_CSUM_IPv4_Rx |
-				IFCAP_CSUM_TCPv4_Rx |
-				IFCAP_CSUM_UDPv4_Rx;
 #ifdef AGE_CHECKSUM
-	ifp->if_capabilities |= IFCAP_CSUM_IPv4_Tx |
-				IFCAP_CSUM_TCPv4_Tx |
-				IFCAP_CSUM_UDPv4_Tx;
+	ifp->if_capabilities |= IFCAP_CSUM_IPv4_Tx | IFCAP_CSUM_IPv4_Rx |
+				IFCAP_CSUM_TCPv4_Tx | IFCAP_CSUM_TCPv4_Rx |
+				IFCAP_CSUM_UDPv4_Tx | IFCAP_CSUM_TCPv4_Rx;
 #endif
 
 #if NVLAN > 0
@@ -288,10 +288,10 @@ age_attach(device_t parent, device_t self, void *aux)
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
-	if (pmf_device_register1(self, NULL, age_resume, age_shutdown))
-		pmf_class_network_register(self, ifp);
-	else
+	if (!pmf_device_register1(self, NULL, age_resume, age_shutdown))
 		aprint_error_dev(self, "couldn't establish power handler\n");
+	else
+		pmf_class_network_register(self, ifp);
 
 	return;
 
@@ -404,13 +404,16 @@ age_miibus_writereg(device_t dev, int phy, int reg, int val)
  *	Callback from MII layer when media changes.
  */
 static void
-age_miibus_statchg(struct ifnet *ifp)
+age_miibus_statchg(device_t dev)
 {
-	struct age_softc *sc = ifp->if_softc;
-	struct mii_data *mii = &sc->sc_miibus;
+	struct age_softc *sc = device_private(dev);
+	struct ifnet *ifp = &sc->sc_ec.ec_if;
+	struct mii_data *mii;
 
 	if ((ifp->if_flags & IFF_RUNNING) == 0)
 		return;
+
+	mii = &sc->sc_miibus;
 
 	sc->age_flags &= ~AGE_FLAG_LINK;
 	if ((mii->mii_media_status & IFM_AVALID) != 0) {
@@ -1053,11 +1056,14 @@ age_start(struct ifnet *ifp)
 		}
 		enq = 1;
 
+#if NBPFILTER > 0
 		/*
 		 * If there's a BPF listener, bounce a copy of this frame
 		 * to him.
 		 */
-		bpf_mtap(ifp, m_head);
+		if (ifp->if_bpf != NULL)
+			bpf_mtap(ifp->if_bpf, m_head);
+#endif
 	}
 
 	if (enq) {
@@ -1162,7 +1168,7 @@ age_mac_config(struct age_softc *sc)
 }
 
 static bool
-age_resume(device_t dv, const pmf_qual_t *qual)
+age_resume(device_t dv PMF_FN_ARGS)
 {
 	struct age_softc *sc = device_private(dv);
 	uint16_t cmd;
@@ -1504,7 +1510,10 @@ age_rxeof(struct age_softc *sc, struct rx_rdesc *rxrd)
 			}
 #endif
 
-			bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+			if (ifp->if_bpf)
+				bpf_mtap(ifp->if_bpf, m);
+#endif
 			/* Pass it on. */
 			ether_input(ifp, m);
 
@@ -2263,7 +2272,7 @@ age_rxvlan(struct age_softc *sc)
 
 	reg = CSR_READ_4(sc, AGE_MAC_CFG);
 	reg &= ~MAC_CFG_VLAN_TAG_STRIP;
-	if (sc->sc_ec.ec_capenable & ETHERCAP_VLAN_HWTAGGING)
+	if (sc->sc_ec.ec_capabilities & ETHERCAP_VLAN_HWTAGGING)
 		reg |= MAC_CFG_VLAN_TAG_STRIP;
 	CSR_WRITE_4(sc, AGE_MAC_CFG, reg);
 }

@@ -1,7 +1,7 @@
-/*	$NetBSD: azalia.c,v 1.79 2011/11/24 03:35:58 mrg Exp $	*/
+/*	$NetBSD: azalia.c,v 1.64.6.2 2010/01/21 08:38:45 snj Exp $	*/
 
 /*-
- * Copyright (c) 2005, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2005 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -41,20 +41,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: azalia.c,v 1.79 2011/11/24 03:35:58 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: azalia.c,v 1.64.6.2 2010/01/21 08:38:45 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/fcntl.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/systm.h>
 #include <sys/module.h>
-
 #include <dev/audio_if.h>
 #include <dev/auconv.h>
-
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
+
 #include <dev/pci/azalia.h>
 
 /* ----------------------------------------------------------------
@@ -111,8 +110,6 @@ typedef struct {
 typedef struct azalia_t {
 	device_t dev;
 	device_t audiodev;
-	kmutex_t lock;
-	kmutex_t intr_lock;
 
 	pci_chipset_tag_t pc;
 	pcitag_t tag;
@@ -156,10 +153,11 @@ typedef struct azalia_t {
 
 
 /* prototypes */
-static int	azalia_pci_match(device_t, cfdata_t, void *);
+static int	azalia_pci_match(device_t, struct cfdata *, void *);
 static void	azalia_pci_attach(device_t, device_t, void *);
+static int	azalia_pci_activate(device_t, enum devact);
 static int	azalia_pci_detach(device_t, int);
-static bool	azalia_pci_resume(device_t, const pmf_qual_t *);
+static bool	azalia_pci_resume(device_t PMF_FN_PROTO);
 static void	azalia_childdet(device_t, device_t);
 static int	azalia_intr(void *);
 static int	azalia_attach(azalia_t *);
@@ -215,21 +213,20 @@ static int	azalia_getdev(void *, struct audio_device *);
 static int	azalia_set_port(void *, mixer_ctrl_t *);
 static int	azalia_get_port(void *, mixer_ctrl_t *);
 static int	azalia_query_devinfo(void *, mixer_devinfo_t *);
-static void	*azalia_allocm(void *, int, size_t);
-static void	azalia_freem(void *, void *, size_t);
+static void	*azalia_allocm(void *, int, size_t, struct malloc_type *, int);
+static void	azalia_freem(void *, void *, struct malloc_type *);
 static size_t	azalia_round_buffersize(void *, int, size_t);
 static int	azalia_get_props(void *);
 static int	azalia_trigger_output(void *, void *, void *, int,
 	void (*)(void *), void *, const audio_params_t *);
 static int	azalia_trigger_input(void *, void *, void *, int,
 	void (*)(void *), void *, const audio_params_t *);
-static void	azalia_get_locks(void *, kmutex_t **, kmutex_t **);
 
 static int	azalia_params2fmt(const audio_params_t *, uint16_t *);
 
 /* variables */
 CFATTACH_DECL2_NEW(azalia, sizeof(azalia_t),
-    azalia_pci_match, azalia_pci_attach, azalia_pci_detach, NULL,
+    azalia_pci_match, azalia_pci_attach, azalia_pci_detach, azalia_pci_activate,
     NULL, azalia_childdet);
 
 static const struct audio_hw_if azalia_hw_if = {
@@ -260,7 +257,7 @@ static const struct audio_hw_if azalia_hw_if = {
 	azalia_trigger_output,
 	azalia_trigger_input,
 	NULL,			/* dev_ioctl */
-	azalia_get_locks,
+	NULL,			/* powerstate */
 };
 
 static const char *pin_colors[16] = {
@@ -284,7 +281,7 @@ static const char *pin_devices[16] = {
  * ================================================================ */
 
 static int
-azalia_pci_match(device_t parent, cfdata_t match, void *aux)
+azalia_pci_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -329,10 +326,6 @@ azalia_pci_attach(device_t parent, device_t self, void *aux)
 		aprint_error_dev(self, "can't map interrupt\n");
 		return;
 	}
-
-	mutex_init(&sc->lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
-
 	sc->pc = pa->pa_pc;
 	sc->tag = pa->pa_tag;
 	intrrupt_str = pci_intr_string(pa->pa_pc, ih);
@@ -342,8 +335,6 @@ azalia_pci_attach(device_t parent, device_t self, void *aux)
 		if (intrrupt_str != NULL)
 			aprint_error(" at %s", intrrupt_str);
 		aprint_error("\n");
-		mutex_destroy(&sc->lock);
-		mutex_destroy(&sc->intr_lock);
 		return;
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrrupt_str);
@@ -366,13 +357,30 @@ azalia_pci_attach(device_t parent, device_t self, void *aux)
 	if (azalia_attach(sc)) {
 		aprint_error_dev(self, "initialization failure\n");
 		azalia_pci_detach(self, 0);
-		mutex_destroy(&sc->lock);
-		mutex_destroy(&sc->intr_lock);
 		return;
 	}
 	sc->subid = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_SUBSYS_ID_REG);
 
 	config_interrupts(self, azalia_attach_intr);
+}
+
+static int
+azalia_pci_activate(device_t self, enum devact act)
+{
+	azalia_t *sc;
+	int ret;
+
+	sc = device_private(self);
+	ret = 0;
+	switch (act) {
+	case DVACT_ACTIVATE:
+		return EOPNOTSUPP;
+	case DVACT_DEACTIVATE:
+		if (sc->audiodev != NULL)
+			ret = config_deactivate(sc->audiodev);
+		return ret;
+	}
+	return EOPNOTSUPP;
 }
 
 static void
@@ -395,14 +403,11 @@ azalia_pci_detach(device_t self, int flags)
 	if (az->audiodev != NULL)
 		config_detach(az->audiodev, flags);
 
-	mutex_enter(&az->lock);
-
 #if notyet
 	DPRINTF(("%s: halt streams\n", __func__));
 	azalia_stream_halt(&az->rstream);
 	azalia_stream_halt(&az->pstream);
 #endif
-
 
 	DPRINTF(("%s: delete streams\n", __func__));
 	azalia_stream_delete(&az->rstream, az);
@@ -418,10 +423,6 @@ azalia_pci_detach(device_t self, int flags)
 	azalia_delete_corb(az);
 	azalia_delete_rirb(az);
 
-	mutex_exit(&az->lock);
-	mutex_destroy(&az->lock);
-	mutex_destroy(&az->intr_lock);
-
 	DPRINTF(("%s: delete PCI resources\n", __func__));
 	if (az->ih != NULL) {
 		pci_intr_disestablish(az->pc, az->ih);
@@ -435,16 +436,16 @@ azalia_pci_detach(device_t self, int flags)
 }
 
 static bool
-azalia_pci_resume(device_t dv, const pmf_qual_t *qual)
+azalia_pci_resume(device_t dv PMF_FN_ARGS)
 {
 	azalia_t *az = device_private(dv);
+	int s;
 
-	mutex_enter(&az->lock);
-	mutex_spin_enter(&az->intr_lock);
+	s = splaudio();
 	azalia_attach(az);
+	splx(s);
+
 	azalia_attach_intr(az->dev);
-	mutex_spin_exit(&az->intr_lock);
-	mutex_exit(&az->lock);
 
 	return true;
 }
@@ -458,20 +459,17 @@ azalia_intr(void *v)
 	uint8_t rirbsts;
 
 	az = v;
+	ret = 0;
 
 	if (!device_has_power(az->dev))
 		return 0;
 
-	mutex_spin_enter(&az->intr_lock);
-
 	intsts = AZ_READ_4(az, INTSTS);
-	if (intsts == 0) {
-		mutex_spin_exit(&az->intr_lock);
-		return 0;
-	}
+	if (intsts == 0)
+		return ret;
 
-	ret = azalia_stream_intr(&az->pstream, intsts) +
-	      azalia_stream_intr(&az->rstream, intsts);
+	ret += azalia_stream_intr(&az->pstream, intsts);
+	ret += azalia_stream_intr(&az->rstream, intsts);
 
 	rirbsts = AZ_READ_1(az, RIRBSTS);
 	if (rirbsts & (HDA_RIRBSTS_RIRBOIS | HDA_RIRBSTS_RINTFL)) {
@@ -485,7 +483,6 @@ azalia_intr(void *v)
 		ret++;
 	}
 
-	mutex_spin_exit(&az->intr_lock);
 	return ret;
 }
 
@@ -791,8 +788,8 @@ azalia_init_rirb(azalia_t *az, int reinit)
 	az->unsolq_wp = 0;
 	az->unsolq_kick = FALSE;
 	if (reinit == 0) {
-		az->unsolq = kmem_zalloc(sizeof(rirb_entry_t) * UNSOLQ_SIZE,
-		    KM_SLEEP);
+		az->unsolq = malloc(sizeof(rirb_entry_t) * UNSOLQ_SIZE,
+		    M_DEVBUF, M_ZERO | M_NOWAIT);
 	} else {
 		memset(az->unsolq, 0, sizeof(rirb_entry_t) * UNSOLQ_SIZE);
 	}
@@ -830,7 +827,7 @@ azalia_delete_rirb(azalia_t *az)
 	uint8_t rirbctl;
 
 	if (az->unsolq != NULL) {
-		kmem_free(az->unsolq, UNSOLQ_SIZE);
+		free(az->unsolq, M_DEVBUF);
 		az->unsolq = NULL;
 	}
 	if (az->rirb_dma.addr == NULL)
@@ -986,21 +983,21 @@ azalia_alloc_dmamem(azalia_t *az, size_t size, size_t align, azalia_dma_t *d)
 
 	d->size = size;
 	err = bus_dmamem_alloc(az->dmat, size, align, 0, d->segments, 1,
-	    &nsegs, BUS_DMA_WAITOK);
+	    &nsegs, BUS_DMA_NOWAIT);
 	if (err)
 		return err;
 	if (nsegs != 1)
 		goto free;
 	err = bus_dmamem_map(az->dmat, d->segments, 1, size,
-	    &d->addr, BUS_DMA_WAITOK | BUS_DMA_COHERENT | BUS_DMA_NOCACHE);
+	    &d->addr, BUS_DMA_NOWAIT | BUS_DMA_COHERENT | BUS_DMA_NOCACHE);
 	if (err)
 		goto free;
 	err = bus_dmamap_create(az->dmat, size, 1, size, 0,
-	    BUS_DMA_WAITOK, &d->map);
+	    BUS_DMA_NOWAIT, &d->map);
 	if (err)
 		goto unmap;
 	err = bus_dmamap_load(az->dmat, d->map, d->addr, size,
-	    NULL, BUS_DMA_WAITOK);
+	    NULL, BUS_DMA_NOWAIT);
 	if (err)
 		goto destroy;
 
@@ -1138,8 +1135,8 @@ azalia_codec_init(codec_t *this, int reinit, uint32_t subid)
 	}
 	this->wend = this->wstart + COP_NSUBNODES(result);
 	if (!reinit) {
-		this->w = kmem_zalloc(sizeof(widget_t) * this->wend,
-		    KM_SLEEP);
+		this->w = malloc(sizeof(widget_t) * this->wend, M_DEVBUF,
+		    M_ZERO | M_NOWAIT);
 		if (this->w == NULL) {
 			aprint_error("%s: out of memory\n",
 			    device_xname(this->dev));
@@ -1297,13 +1294,13 @@ azalia_codec_delete(codec_t *this)
 	if (this->mixer_delete != NULL)
 		this->mixer_delete(this);
 	if (this->formats != NULL) {
-		kmem_free(this->formats, this->szformats);
+		free(this->formats, M_DEVBUF);
 		this->formats = NULL;
 	}
 	auconv_delete_encodings(this->encodings);
 	this->encodings = NULL;
 	if (this->extra != NULL) {
-		kmem_free(this->extra, this->szextra);
+		free(this->extra, M_DEVBUF);
 		this->extra = NULL;
 	}
 	return 0;
@@ -1374,10 +1371,10 @@ azalia_codec_construct_format(codec_t *this, int newdac, int newadc)
 	}
 
 	if (this->formats != NULL)
-		kmem_free(this->formats, this->szformats);
+		free(this->formats, M_DEVBUF);
 	this->nformats = 0;
-	this->szformats = sizeof(struct audio_format) * variation;
-	this->formats = kmem_zalloc(this->szformats, KM_SLEEP);
+	this->formats = malloc(sizeof(struct audio_format) * variation,
+	    M_DEVBUF, M_ZERO | M_NOWAIT);
 	if (this->formats == NULL) {
 		aprint_error("%s: out of memory in %s\n",
 		    device_xname(this->dev), __func__);
@@ -1531,11 +1528,15 @@ azalia_codec_comresp(const codec_t *codec, nid_t nid, uint32_t control,
 		     uint32_t param, uint32_t* result)
 {
 	azalia_t *az = device_private(codec->dev);
-	int err;
+	int err, s;
 
+	s = splaudio();
 	err = azalia_set_command(az, codec->address, nid, control, param);
-	if (err == 0)
-		err = azalia_get_response(az, result);
+	if (err)
+		goto EXIT;
+	err = azalia_get_response(az, result);
+EXIT:
+	splx(s);
 	return err;
 }
 
@@ -1604,22 +1605,20 @@ azalia_codec_disconnect_stream(codec_t *this, int dir)
 	uint32_t v;
 	int i;
 	nid_t nid;
-	
+
 	if (dir == AUMODE_RECORD)
 		group = &this->adcs.groups[this->adcs.cur];
 	else
 		group = &this->dacs.groups[this->dacs.cur];
 	for (i = 0; i < group->nconv; i++) {
 		nid = group->conv[i];
-		this->comresp(this, nid,
-		    CORB_SET_CONVERTER_STREAM_CHANNEL, 0, NULL);/* stream#0 */
+		this->comresp(this, nid, CORB_SET_CONVERTER_STREAM_CHANNEL,
+		    0, NULL);	/* stream#0 */
 		if (this->w[nid].widgetcap & COP_AWCAP_DIGITAL) {
 			/* disable S/PDIF */
-			this->comresp(this, nid,
-			    CORB_GET_DIGITAL_CONTROL, 0, &v);
+			this->comresp(this, nid, CORB_GET_DIGITAL_CONTROL, 0, &v);
 			v = (v & ~CORB_DCC_DIGEN) & 0xff;
-			this->comresp(this, nid,
-			    CORB_SET_DIGITAL_CONTROL_L, v, NULL);
+			this->comresp(this, nid, CORB_SET_DIGITAL_CONTROL_L, v, NULL);
 		}
 	}
 	return 0;
@@ -1644,10 +1643,9 @@ azalia_widget_init(widget_t *this, const codec_t *codec,
 	this->nid = nid;
 	this->widgetcap = result;
 	this->type = COP_AWCAP_TYPE(result);
-	snprintb(flagbuf, sizeof(flagbuf),
-	    "\20\014LRSWAP\013POWER\012DIGITAL"
+	bitmask_snprintf(this->widgetcap, "\20\014LRSWAP\013POWER\012DIGITAL"
 	    "\011CONNLIST\010UNSOL\07PROC\06STRIPE\05FORMATOV\04AMPOV\03OUTAMP"
-	    "\02INAMP\01STEREO", this->widgetcap);
+	    "\02INAMP\01STEREO", flagbuf, FLAGBUFLEN);
 	DPRINTF(("%s: ", device_xname(codec->dev)));
 	if (this->widgetcap & COP_AWCAP_POWER) {
 		codec->comresp(codec, nid, CORB_SET_POWER_STATE, CORB_PS_D0, &result);
@@ -1785,8 +1783,8 @@ azalia_widget_print_audio(const widget_t *this, const char *lead, int channels)
 {
 	char flagbuf[FLAGBUFLEN];
 
-	snprintb(flagbuf, sizeof(flagbuf), 
-	    "\20\3AC3\2FLOAT32\1PCM", this->d.audio.encodings);
+	bitmask_snprintf(this->d.audio.encodings, "\20\3AC3\2FLOAT32\1PCM",
+	    flagbuf, FLAGBUFLEN);
 	if (channels < 0) {
 		aprint_normal("%sencodings=%s\n", lead, flagbuf);
 	} else if (this->widgetcap & COP_AWCAP_DIGITAL) {
@@ -1796,12 +1794,11 @@ azalia_widget_print_audio(const widget_t *this, const char *lead, int channels)
 		aprint_normal("%smax channels=%d, encodings=%s\n",
 		    lead, channels, flagbuf);
 	}
-	snprintb(flagbuf, sizeof(flagbuf), 
-	    "\20\x15""32bit\x14""24bit\x13""20bit"
+	bitmask_snprintf(this->d.audio.bits_rates, "\20\x15""32bit\x14""24bit\x13""20bit"
 	    "\x12""16bit\x11""8bit""\x0c""384kHz\x0b""192kHz\x0a""176.4kHz"
 	    "\x09""96kHz\x08""88.2kHz\x07""48kHz\x06""44.1kHz\x05""32kHz\x04"
 	    "22.05kHz\x03""16kHz\x02""11.025kHz\x01""8kHz",
-	    this->d.audio.bits_rates);
+	    flagbuf, FLAGBUFLEN);
 	aprint_normal("%sPCM formats=%s\n", lead, flagbuf);
 	return 0;
 }
@@ -1863,10 +1860,9 @@ azalia_widget_print_pin(const widget_t *this, const char *lead)
 	DPRINTF(("%spin config; device=%s color=%s assoc=%d seq=%d", lead,
 	    pin_devices[this->d.pin.device], pin_colors[this->d.pin.color],
 	    this->d.pin.association, this->d.pin.sequence));
-	snprintb(flagbuf, sizeof(flagbuf), 
-	    "\20\021EAPD\07BALANCE\06INPUT"
+	bitmask_snprintf(this->d.pin.cap, "\20\021EAPD\07BALANCE\06INPUT"
 	    "\05OUTPUT\04HEADPHONE\03PRESENCE\02TRIGGER\01IMPEDANCE",
-	    this->d.pin.cap);
+	    flagbuf, FLAGBUFLEN);
 	DPRINTF((" cap=%s\n", flagbuf));
 	return 0;
 }
@@ -1893,7 +1889,8 @@ azalia_widget_init_connection(widget_t *this, const codec_t *codec,
 	if (length == 0)
 		return 0;
 	this->nconnections = length;
-	this->connections = kmem_alloc(sizeof(nid_t) * (length + 3), KM_SLEEP);
+	this->connections = malloc(sizeof(nid_t) * (length + 3),
+	    M_DEVBUF, M_NOWAIT);
 	if (this->connections == NULL) {
 		aprint_error("%s: out of memory\n", device_xname(codec->dev));
 		return ENOMEM;
@@ -2267,7 +2264,8 @@ azalia_query_devinfo(void *v, mixer_devinfo_t *mdev)
 }
 
 static void *
-azalia_allocm(void *v, int dir, size_t size)
+azalia_allocm(void *v, int dir, size_t size, struct malloc_type *pool,
+    int flags)
 {
 	azalia_t *az;
 	stream_t *stream;
@@ -2282,7 +2280,7 @@ azalia_allocm(void *v, int dir, size_t size)
 }
 
 static void
-azalia_freem(void *v, void *addr, size_t size)
+azalia_freem(void *v, void *addr, struct malloc_type *pool)
 {
 	azalia_t *az;
 	stream_t *stream;
@@ -2427,43 +2425,69 @@ azalia_params2fmt(const audio_params_t *param, uint16_t *fmt)
 	return 0;
 }
 
-MODULE(MODULE_CLASS_DRIVER, azalia, "pci");
-
-static void
-azalia_get_locks(void *addr, kmutex_t **intr, kmutex_t **thread)
-{
-	azalia_t *az;
-
-	az = addr;
-	*intr = &az->intr_lock;
-	*thread = &az->lock;
-}
-
 #ifdef _MODULE
-#include "ioconf.c"
-#endif
+
+MODULE(MODULE_CLASS_DRIVER, azalia, NULL);
+
+static const struct cfiattrdata audiobuscf_iattrdata = {
+	"audiobus", 0, { { NULL, NULL, 0 }, }
+};
+static const struct cfiattrdata * const azalia_attrs[] = {
+	&audiobuscf_iattrdata, NULL
+};
+CFDRIVER_DECL(azalia, DV_DULL, azalia_attrs);
+extern struct cfattach azalia_ca;
+static int azalialoc[] = { -1, -1 };
+static struct cfparent pciparent = {
+	"pci", "pci", DVUNIT_ANY
+};
+static struct cfdata azalia_cfdata[] = {
+	{
+		.cf_name = "azalia",
+		.cf_atname = "azalia",
+		.cf_unit = 0,
+		.cf_fstate = FSTATE_STAR,
+		.cf_loc = azalialoc,
+		.cf_flags = 0,
+		.cf_pspec = &pciparent,
+	},
+	{ NULL }
+};
 
 static int
 azalia_modcmd(modcmd_t cmd, void *arg)
 {
-	int error = 0;
+	int err, s;
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:
-#ifdef _MODULE
-		error = config_init_component(cfdriver_ioconf_azalia,
-		    cfattach_ioconf_azalia, cfdata_ioconf_azalia);
-#endif
-		break;
+		err = config_cfdriver_attach(&azalia_cd);
+		if (err)
+			return err;
+		err = config_cfattach_attach("azalia", &azalia_ca);
+		if (err) {
+			config_cfdriver_detach(&azalia_cd);
+			return err;
+		}
+		s = splaudio();
+		err = config_cfdata_attach(azalia_cfdata, 1);
+		splx(s);
+		if (err) {
+			config_cfattach_detach("azalia", &azalia_ca);
+			config_cfdriver_detach(&azalia_cd);
+			return err;
+		}
+		return 0;
 	case MODULE_CMD_FINI:
-#ifdef _MODULE
-		error = config_fini_component(cfdriver_ioconf_azalia,
-		    cfattach_ioconf_azalia, cfdata_ioconf_azalia);
-#endif
-		break;
+		err = config_cfdata_detach(azalia_cfdata);
+		if (err)
+			return err;
+		config_cfattach_detach("azalia", &azalia_ca);
+		config_cfdriver_detach(&azalia_cd);
+		return 0;
 	default:
 		return ENOTTY;
 	}
-
-	return error;
 }
+
+#endif

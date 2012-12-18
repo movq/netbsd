@@ -1,4 +1,4 @@
-/*	$NetBSD: fopen.c,v 1.15 2012/03/15 18:22:30 christos Exp $	*/
+/*	$NetBSD: fopen.c,v 1.13 2008/03/13 15:40:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fopen.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fopen.c,v 1.15 2012/03/15 18:22:30 christos Exp $");
+__RCSID("$NetBSD: fopen.c,v 1.13 2008/03/13 15:40:00 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -53,7 +53,9 @@ __RCSID("$NetBSD: fopen.c,v 1.15 2012/03/15 18:22:30 christos Exp $");
 #include "local.h"
 
 FILE *
-fopen(const char *file, const char *mode)
+fopen(file, mode)
+	const char *file;
+	const char *mode;
 {
 	FILE *fp;
 	int f;
@@ -61,9 +63,9 @@ fopen(const char *file, const char *mode)
 
 	_DIAGASSERT(file != NULL);
 	if ((flags = __sflags(mode, &oflags)) == 0)
-		return NULL;
+		return (NULL);
 	if ((fp = __sfp()) == NULL)
-		return NULL;
+		return (NULL);
 	if ((f = open(file, oflags, DEFFILEMODE)) < 0)
 		goto release;
 	if (oflags & O_NONBLOCK) {
@@ -109,9 +111,9 @@ fopen(const char *file, const char *mode)
 	 * fseek and ftell.)
 	 */
 	if (oflags & O_APPEND)
-		(void) __sseek((void *)fp, (off_t)0, SEEK_END);
-	return fp;
+		(void) __sseek((void *)fp, (fpos_t)0, SEEK_END);
+	return (fp);
 release:
 	fp->_flags = 0;			/* release */
-	return NULL;
+	return (NULL);
 }

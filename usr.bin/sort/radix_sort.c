@@ -1,4 +1,4 @@
-/*	$NetBSD: radix_sort.c,v 1.4 2009/09/19 16:18:00 dsl Exp $	*/
+/*	$NetBSD: radix_sort.c,v 1.4.2.2 2009/10/14 20:41:53 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)radixsort.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: radix_sort.c,v 1.4 2009/09/19 16:18:00 dsl Exp $");
+__RCSID("$NetBSD: radix_sort.c,v 1.4.2.2 2009/10/14 20:41:53 sborrill Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

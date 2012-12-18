@@ -1,6 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.13 2011/05/26 12:56:35 joerg Exp $
-
-WARNS?=	1	# XXX -Wshadow -Wcast-qual -Wsign-compare
+#	$NetBSD: Makefile.inc,v 1.11 2007/05/28 12:06:41 tls Exp $
 
 .include <bsd.own.mk>
 
@@ -11,7 +9,7 @@ CPPFLAGS+=-UCMUCS -UCMU -UMACH -DVAR_TMP -DHAS_DAEMON -DHAS_POSIX_DIR \
 CPPFLAGS+=-I${.CURDIR}/../source -I${.CURDIR}/../lib -I${.CURDIR}/../sys
 CPPFLAGS+=-DEE_XXX
 
-CWARNFLAGS+=-Wextra -Wno-sign-compare
+CWARNFLAGS+=-Wextra
 
 LIBSUPDIR != cd ${.CURDIR}/../lib && ${PRINTOBJDIR}
 LIBSUP=	${LIBSUPDIR}/libsup.a

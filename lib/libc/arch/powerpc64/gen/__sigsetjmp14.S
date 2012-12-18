@@ -1,11 +1,11 @@
-/*	$NetBSD: __sigsetjmp14.S,v 1.2 2010/03/22 01:39:11 mrg Exp $	*/
+/*	$NetBSD: __sigsetjmp14.S,v 1.1 2006/07/07 21:07:35 ross Exp $	*/
 
 #include <sys/syscall.h>
 #include <machine/asm.h>
 
 #if defined(LIBC_SCCS)
 	.text
-	.asciz "$NetBSD: __sigsetjmp14.S,v 1.2 2010/03/22 01:39:11 mrg Exp $"
+	.asciz "$NetBSD: __sigsetjmp14.S,v 1.1 2006/07/07 21:07:35 ross Exp $"
 #endif
 
 ENTRY(__sigsetjmp14)
@@ -22,20 +22,12 @@ ENTRY(__sigsetjmp14)
 	mfcr	%r12
 	mr	%r10,%r1
 	mr	%r9,%r2
-	i = 0
-	.rept	32-7
-	std	7+i,i*8(%r6)		# save r7-r31
-	i = i + 1
-	.endr
+	stmd	7, 0(%r6)		# save r7-r31
 	li	%r3,0
 	blr
 
 ENTRY(__siglongjmp14)
-	i = 0
-	.rept	32-7
-	ld	7+i,i*8(%r3)		# load r7-r31
-	i = i + 1
-	.endr
+	lmd	7,0(%r3)		# load r7-r31
 	mr	%r6,%r4
 	mtlr	%r11
 	mtcr	%r12

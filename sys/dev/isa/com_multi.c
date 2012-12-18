@@ -1,4 +1,4 @@
-/*	$NetBSD: com_multi.c,v 1.29 2009/11/23 02:13:47 rmind Exp $	*/
+/*	$NetBSD: com_multi.c,v 1.27 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_multi.c,v 1.29 2009/11/23 02:13:47 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_multi.c,v 1.27 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,6 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: com_multi.c,v 1.29 2009/11/23 02:13:47 rmind Exp $")
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -101,7 +102,7 @@ int
 com_multi_probe(device_t parent, cfdata_t match, void *aux)
 {
 	int iobase;
-	cfdata_t cf = match;
+	struct cfdata *cf = match;
 	struct commulti_attach_args *ca = aux;
 
 	if (cf->cf_loc[COMMULTICF_SLAVE] != COMMULTICF_SLAVE_DEFAULT &&

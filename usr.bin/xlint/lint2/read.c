@@ -1,4 +1,4 @@
-/* $NetBSD: read.c,v 1.25 2009/04/15 01:20:57 christos Exp $ */
+/* $NetBSD: read.c,v 1.23 2008/09/26 22:52:24 matt Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: read.c,v 1.25 2009/04/15 01:20:57 christos Exp $");
+__RCSID("$NetBSD: read.c,v 1.23 2008/09/26 22:52:24 matt Exp $");
 #endif
 
 #include <ctype.h>
@@ -252,10 +252,10 @@ static void
 setfnid(int fid, const char *cp)
 {
 
-	if (fid < 0)
+	if (fid == -1)
 		inperr("bad fid");
 
-	if ((size_t)fid >= ninpfns) {
+	if (fid >= ninpfns) {
 		inpfns = xrealloc(inpfns, (ninpfns * 2) * sizeof (short));
 		(void)memset(inpfns + ninpfns, 0, ninpfns * sizeof (short));
 		ninpfns *= 2;
@@ -264,7 +264,7 @@ setfnid(int fid, const char *cp)
 	 * Should always be true because indices written in the output
 	 * file by lint1 are always the previous index + 1.
 	 */
-	if ((size_t)fid >= ninpfns)
+	if (fid >= ninpfns)
 		errx(1, "internal error: setfnid()");
 	inpfns[fid] = (u_short)getfnidx(cp);
 }
@@ -360,10 +360,10 @@ static void
 decldef(pos_t *posp, const char *cp)
 {
 	sym_t	*symp, sym;
-	char	c, *ep, *pos1, *tname;
+	char	c, *ep, *pos1;
 	int	used, renamed;
 	hte_t	*hte, *renamehte = NULL;
-	const char *name, *newname;
+	const char *name, *rename;
 
 	(void)memset(&sym, 0, sizeof (sym));
 	STRUCT_ASSIGN(sym.s_pos, *posp);
@@ -444,22 +444,22 @@ decldef(pos_t *posp, const char *cp)
 	renamed = 0;
 	if (*cp == 'r') {
 		cp++;
-		tname = xstrdup(name);
-		newname = inpname(cp, &cp);
+		name = xstrdup(name);
+		rename = inpname(cp, &cp);
 
 		/* enter it and see if it's already been renamed */
-		renamehte = _hsearch(renametab, tname, 1);
+		renamehte = _hsearch(renametab, name, 1);
 		if (renamehte->h_hte == NULL) {
-			hte = hsearch(newname, 1);
+			hte = hsearch(rename, 1);
 			renamehte->h_hte = hte;
 			renamed = 1;
-		} else if (strcmp((hte = renamehte->h_hte)->h_name, newname)) {
+		} else if (strcmp((hte = renamehte->h_hte)->h_name, rename)) {
 			pos1 = xstrdup(mkpos(&renamehte->h_syms->s_pos));
 			/* %s renamed multiple times\t%s  ::  %s */
-			msg(18, tname, pos1, mkpos(&sym.s_pos));
+			msg(18, name, pos1, mkpos(&sym.s_pos));
 			free(pos1);
 		}
-		free(tname);
+		free((char *)name);
 	} else {
 		/* it might be a previously-done rename */
 		hte = _hsearch(renametab, name, 0);
@@ -1103,7 +1103,7 @@ inpqstrg(const char *src, const char **epp)
 			}
 		}
 		/* keep space for trailing '\0' */
-		if ((size_t)(dst - strg) == slen - 1) {
+		if (dst - strg == slen - 1) {
 			strg = xrealloc(strg, slen * 2);
 			dst = strg + (slen - 1);
 			slen *= 2;

@@ -1,4 +1,4 @@
-/*	$NetBSD: wss_isapnp.c,v 1.27 2011/11/22 19:33:38 jakllsch Exp $	*/
+/*	$NetBSD: wss_isapnp.c,v 1.23 2008/04/28 20:23:53 martin Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wss_isapnp.c,v 1.27 2011/11/22 19:33:38 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wss_isapnp.c,v 1.23 2008/04/28 20:23:53 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,10 +55,10 @@ __KERNEL_RCSID(0, "$NetBSD: wss_isapnp.c,v 1.27 2011/11/22 19:33:38 jakllsch Exp
 #include <dev/isa/wssvar.h>
 #include <dev/isa/sbreg.h>
 
-int	wss_isapnp_match(device_t, cfdata_t, void *);
-void	wss_isapnp_attach(device_t, device_t, void *);
+int	wss_isapnp_match(struct device *, struct cfdata *, void *);
+void	wss_isapnp_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(wss_isapnp, sizeof(struct wss_softc),
+CFATTACH_DECL(wss_isapnp, sizeof(struct wss_softc),
     wss_isapnp_match, wss_isapnp_attach, NULL, NULL);
 
 /*
@@ -69,7 +69,8 @@ CFATTACH_DECL_NEW(wss_isapnp, sizeof(struct wss_softc),
  * Probe for the WSS hardware.
  */
 int
-wss_isapnp_match(device_t parent, cfdata_t match, void *aux)
+wss_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -84,7 +85,8 @@ wss_isapnp_match(device_t parent, cfdata_t match, void *aux)
  * pseudo-device driver.
  */
 void
-wss_isapnp_attach(device_t parent, device_t self, void *aux)
+wss_isapnp_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct wss_softc *sc;
 	struct ad1848_softc *ac;
@@ -93,7 +95,6 @@ wss_isapnp_attach(device_t parent, device_t self, void *aux)
 
 	sc = device_private(self);
 	ac = &sc->sc_ad1848.sc_ad1848;
-	ac->sc_dev = self;
 	ipa = aux;
 	printf("\n");
 
@@ -144,6 +145,7 @@ wss_isapnp_attach(device_t parent, device_t self, void *aux)
 	/* Set up AD1848 I/O handle. */
 	ac->sc_iot = sc->sc_iot;
 	ac->sc_ioh = sc->sc_ioh;
+	ac->mode = 2;
 
 	sc->sc_ad1848.sc_ic = ipa->ipa_ic;
 
@@ -161,8 +163,6 @@ wss_isapnp_attach(device_t parent, device_t self, void *aux)
 	aprint_error_dev(self, "%s %s", ipa->ipa_devident,
 	    ipa->ipa_devclass);
 
-	ac->mode = 2;
-
 	wssattach(sc);
 
 	/* set up OPL I/O handle for ISAPNP boards w/o MAD */
@@ -174,6 +174,6 @@ wss_isapnp_attach(device_t parent, device_t self, void *aux)
 		arg.type = AUDIODEV_TYPE_OPL;
 		arg.hwif = 0;
 		arg.hdl = 0;
-		(void)config_found(self, &arg, audioprint);
+		(void)config_found(&ac->sc_dev, &arg, audioprint);
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.116 2012/07/28 23:11:01 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.106 2008/04/28 20:23:31 martin Exp $	*/
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,15 +29,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.116 2012/07/28 23:11:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.106 2008/04/28 20:23:31 martin Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/boot_flag.h>
 #include <sys/mount.h>
 #include <sys/kernel.h>
-#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -48,11 +46,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.116 2012/07/28 23:11:01 matt Exp $");
 #include <machine/pmap.h>
 #include <machine/powerpc.h>
 #include <machine/trap.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/isa_machdep.h>
+#include <machine/spr.h>
 
-#include <powerpc/spr.h>
-#include <powerpc/oea/spr.h>
 #include <powerpc/oea/bat.h>
 #include <powerpc/ofw_cons.h>
 #include <powerpc/rtas.h>
@@ -63,15 +60,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.116 2012/07/28 23:11:01 matt Exp $");
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
 #endif
-#include "rtas.h"
 
-extern struct pmap ofw_pmap;
-extern char bootpath[256];
+struct pmap ofw_pmap;
+char bootpath[256];
+
+void ofwppc_batinit(void);
+void ofppc_bootstrap_console(void);
 
 extern u_int l2cr_config;
-#if (NRTAS > 0)
 extern int machine_has_rtas;
-#endif
 
 struct model_data modeldata;
 
@@ -118,10 +115,11 @@ model_init(void)
 		char buf[32];
 		int i;
 
+		modeldata.ranges_offset = 1;
 		modeldata.pciiodata[0].start = 0x00001400;
 		modeldata.pciiodata[0].limit = 0x0000ffff;
 		
-		/* the pegasos doesn't bother to set the L2 cache up */
+		/* the pegasos doesn't bother to set the L2 cache up*/
 		l2cr_config = L2CR_L2PE;
 		
 		/* fix the device_type property of a graphics card */
@@ -160,7 +158,7 @@ model_init(void)
 			}
 		}
 		if (!mode) {
-			mode = 0x103;
+			mode = 0x102;
 			width = 800;
 			height = 600;
 		}
@@ -212,10 +210,8 @@ cpu_reboot(int howto, char *what)
 {
 	static int syncing;
 	static char str[256];
-	char *ap = str, *ap1 = ap;
-#if (NRTAS > 0)
 	int junk;
-#endif
+	char *ap = str, *ap1 = ap;
 
 	boothowto = howto;
 	if (!cold && !(howto & RB_NOSYNC) && !syncing) {
@@ -226,28 +222,22 @@ cpu_reboot(int howto, char *what)
 	splhigh();
 	if (howto & RB_HALT) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		aprint_normal("halted\n\n");
-#if (NRTAS > 0)
 		if ((howto & 0x800) && machine_has_rtas &&
 		    rtas_has_func(RTAS_FUNC_POWER_OFF))
 			rtas_call(RTAS_FUNC_POWER_OFF, 2, 1, 0, 0, &junk);
-#endif
 		ppc_exit();
 	}
 	if (!cold && (howto & RB_DUMP))
 		oea_dumpsys();
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 	aprint_normal("rebooting\n\n");
 
-#if (NRTAS > 0)
 	if (machine_has_rtas && rtas_has_func(RTAS_FUNC_SYSTEM_REBOOT)) {
 		rtas_call(RTAS_FUNC_SYSTEM_REBOOT, 0, 1, &junk);
 		for(;;);
 	}
-#endif
+
 	if (what && *what) {
 		if (strlen(what) > sizeof str - 5)
 			aprint_normal("boot string too large, ignored\n");
@@ -354,7 +344,7 @@ ofppc_init_comcons(int isa_node)
 }
 
 void
-copy_disp_props(device_t dev, int node, prop_dictionary_t dict)
+copy_disp_props(struct device *dev, int node, prop_dictionary_t dict)
 {
 	uint32_t temp;
 	char typestr[32];
@@ -387,8 +377,7 @@ copy_disp_props(device_t dev, int node, prop_dictionary_t dict)
 	}
 	if (!of_to_uint32_prop(dict, node, "address", "address")) {
 		uint32_t fbaddr = 0;
-
-		OF_interpret("frame-buffer-adr", 0, 1, &fbaddr);
+			OF_interpret("frame-buffer-adr", 0, 1, &fbaddr);
 		if (fbaddr != 0)
 			prop_dictionary_set_uint32(dict, "address", fbaddr);
 	}

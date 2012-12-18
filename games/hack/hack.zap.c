@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.zap.c,v 1.9 2009/08/12 07:28:41 dholland Exp $	*/
+/*	$NetBSD: hack.zap.c,v 1.7 2004/01/27 20:30:29 jsm Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,13 +63,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.zap.c,v 1.9 2009/08/12 07:28:41 dholland Exp $");
+__RCSID("$NetBSD: hack.zap.c,v 1.7 2004/01/27 20:30:29 jsm Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
 #include "extern.h"
 
-static const char *const fl[] = {
+const char           *const fl[] = {
 	"magic missile",
 	"bolt of fire",
 	"sleep ray",
@@ -77,18 +77,12 @@ static const char *const fl[] = {
 	"death ray"
 };
 
-static void bhitm(struct monst *, struct obj *);
-static int bhito(struct obj *, struct obj *);
-static char dirlet(int, int);
-static int zhit(struct monst *, int);
-static int revive(struct obj *);
-static void rloco(struct obj *);
-static void burn_scrolls(void);
-
 /* Routines for IMMEDIATE wands. */
 /* bhitm: monster mtmp was hit by the effect of wand otmp */
-static void
-bhitm(struct monst *mtmp, struct obj *otmp)
+void
+bhitm(mtmp, otmp)
+	struct monst   *mtmp;
+	struct obj     *otmp;
 {
 	wakeup(mtmp);
 	switch (otmp->otyp) {
@@ -140,12 +134,10 @@ bhitm(struct monst *mtmp, struct obj *otmp)
 	}
 }
 
-/*
- * object obj was hit by the effect of wand otmp
- * returns TRUE if sth was done
- */
-static int
-bhito(struct obj *obj, struct obj *otmp)
+int
+bhito(obj, otmp)		/* object obj was hit by the effect of wand
+				 * otmp */
+	struct obj     *obj, *otmp;	/* returns TRUE if sth was done */
 {
 	int             res = TRUE;
 
@@ -198,7 +190,7 @@ bhito(struct obj *obj, struct obj *otmp)
 }
 
 int
-dozap(void)
+dozap()
 {
 	struct obj     *obj;
 	xchar           zx, zy;
@@ -345,7 +337,8 @@ dozap(void)
 }
 
 const char           *
-exclam(int force)
+exclam(force)
+	int             force;
 {
 	/* force == 0 occurs e.g. with sleep ray */
 	/*
@@ -356,10 +349,11 @@ exclam(int force)
 }
 
 void
-hit(const char *str, struct monst *mtmp, const char *force)
+hit(str, mtmp, force)
+	const char           *str;
+	struct monst   *mtmp;
+	const char           *force;	/* usually either "." or "!" */
 {
-	/* force is usually either "." or "!" */
-
 	if (!cansee(mtmp->mx, mtmp->my))
 		pline("The %s hits it.", str);
 	else
@@ -367,7 +361,9 @@ hit(const char *str, struct monst *mtmp, const char *force)
 }
 
 void
-miss(const char *str, struct monst *mtmp)
+miss(str, mtmp)
+	const char           *str;
+	struct monst   *mtmp;
 {
 	if (!cansee(mtmp->mx, mtmp->my))
 		pline("The %s misses it.", str);
@@ -386,12 +382,13 @@ miss(const char *str, struct monst *mtmp)
 /* check !u.uswallow before calling bhit() */
 
 struct monst   *
-bhit(int ddx, int ddy, int range,	/* direction and range */
-     int sym,				/* symbol displayed on path */
-     					/* fns called when mon/obj hit */
-     void (*fhitm)(struct monst *, struct obj *),
-     int (*fhito)(struct obj *, struct obj *),
-     struct obj *obj)			/* 2nd arg to fhitm/fhito */
+bhit(ddx, ddy, range, sym, fhitm, fhito, obj)
+	int             ddx, ddy, range;	/* direction and range */
+	char            sym;	/* symbol displayed on path */
+	/* fns called when mon/obj hit */
+	void          (*fhitm)(struct monst *, struct obj *);
+	int	      (*fhito)(struct obj *, struct obj *);
+	struct obj     *obj;	/* 2nd arg to fhitm/fhito */
 {
 	struct monst   *mtmp;
 	struct obj     *otmp;
@@ -483,8 +480,9 @@ boomhit(int dx, int dy)
 	return (0);
 }
 
-static char
-dirlet(int dx, int dy)
+char
+dirlet(dx, dy)
+	int dx, dy;
 {
 	return
 		(dx == dy) ? '\\' : (dx && dy) ? '/' : dx ? '-' : '|';
@@ -494,7 +492,10 @@ dirlet(int dx, int dy)
 /* type == -1,-2,-3: bolts sent out by wizard */
 /* called with dx = dy = 0 with vertical bolts */
 void
-buzz(int type, xchar sx, xchar sy, int dx, int dy)
+buzz(type, sx, sy, dx, dy)
+	int             type;
+	xchar           sx, sy;
+	int             dx, dy;
 {
 	int             abstype = abs(type);
 	const char     *fltxt = (type == -1) ? "blaze of fire" : fl[abstype];
@@ -646,8 +647,10 @@ buzz(int type, xchar sx, xchar sy, int dx, int dy)
 	Tmp_at(-1, -1);
 }
 
-static int
-zhit(struct monst *mon, int type)		/* returns damage to mon */
+int
+zhit(mon, type)			/* returns damage to mon */
+	struct monst   *mon;
+	int type;
 {
 	int             tmp = 0;
 
@@ -686,8 +689,9 @@ zhit(struct monst *mon, int type)		/* returns damage to mon */
 #define	CORPSE_I_TO_C(otyp)	(char) ((otyp >= DEAD_ACID_BLOB)\
 		     ?  'a' + (otyp - DEAD_ACID_BLOB)\
 		     :	'@' + (otyp - DEAD_HUMAN))
-static int
-revive(struct obj *obj)
+int
+revive(obj)
+	struct obj     *obj;
 {
 	struct monst   *mtmp = NULL;
 
@@ -703,8 +707,9 @@ revive(struct obj *obj)
 	return (!!mtmp);	/* TRUE if some monster created */
 }
 
-static void
-rloco(struct obj *obj)
+void
+rloco(obj)
+	struct obj     *obj;
 {
 	int tx, ty, otx, oty;
 
@@ -720,10 +725,9 @@ rloco(struct obj *obj)
 		newsym(otx, oty);
 }
 
-/* fractured by pick-axe or wand of striking */
-/* no texts here! */
 void
-fracture_rock(struct obj *obj)	
+fracture_rock(obj)		/* fractured by pick-axe or wand of striking */
+	struct obj     *obj;	/* no texts here! */
 {
 	/* unpobj(obj); */
 	obj->otyp = ROCK;
@@ -734,8 +738,8 @@ fracture_rock(struct obj *obj)
 		prl(obj->ox, obj->oy);
 }
 
-static void
-burn_scrolls(void)
+void
+burn_scrolls()
 {
 	struct obj     *obj, *obj2;
 	int             cnt = 0;

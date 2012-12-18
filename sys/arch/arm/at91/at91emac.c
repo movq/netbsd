@@ -1,5 +1,5 @@
-/*	$Id: at91emac.c,v 1.13 2012/11/12 18:00:36 skrll Exp $	*/
-/*	$NetBSD: at91emac.c,v 1.13 2012/11/12 18:00:36 skrll Exp $	*/
+/*	$Id: at91emac.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
+/*	$NetBSD: at91emac.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -18,6 +18,13 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the NetBSD
+ *	Foundation, Inc. and its contributors.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -33,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91emac.c,v 1.13 2012/11/12 18:00:36 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91emac.c,v 1.2 2008/07/03 01:15:38 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -46,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: at91emac.c,v 1.13 2012/11/12 18:00:36 skrll Exp $");
 #include <sys/device.h>
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -73,8 +80,11 @@ __KERNEL_RCSID(0, "$NetBSD: at91emac.c,v 1.13 2012/11/12 18:00:36 skrll Exp $");
 #include <netns/ns_if.h>
 #endif
 
+#include "bpfilter.h"
+#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
 
 #ifdef IPKDB_AT91	// @@@
 #include <ipkdb/ipkdb.h>
@@ -109,7 +119,7 @@ static int	emac_mediachange(struct ifnet *);
 static void	emac_mediastatus(struct ifnet *, struct ifmediareq *);
 int		emac_mii_readreg (device_t, int, int);
 void		emac_mii_writereg (device_t, int, int, int);
-void		emac_statchg (struct ifnet *);
+void		emac_statchg (device_t );
 void		emac_tick (void *);
 static int	emac_ifioctl (struct ifnet *, u_long, void *);
 static void	emac_ifstart (struct ifnet *);
@@ -118,7 +128,7 @@ static int	emac_ifinit (struct ifnet *);
 static void	emac_ifstop (struct ifnet *, int);
 static void	emac_setaddr (struct ifnet *);
 
-CFATTACH_DECL_NEW(at91emac, sizeof(struct emac_softc),
+CFATTACH_DECL(at91emac, sizeof(struct emac_softc),
     emac_match, emac_attach, NULL, NULL);
 
 #ifdef	EMAC_DEBUG
@@ -171,7 +181,7 @@ emac_attach(device_t parent, device_t self, void *aux)
 	EMAC_WRITE(ETH_RSR, (u & (ETH_RSR_OVR|ETH_RSR_REC|ETH_RSR_BNA)));
 
 	/* Fetch the Ethernet address from property if set. */
-	enaddr = prop_dictionary_get(device_properties(self), "mac-address");
+	enaddr = prop_dictionary_get(device_properties(self), "mac-addr");
 
 	if (enaddr != NULL) {
 		KASSERT(prop_object_type(enaddr) == PROP_TYPE_DATA);
@@ -193,7 +203,7 @@ static int
 emac_gctx(struct emac_softc *sc)
 {
 	struct ifnet * ifp = &sc->sc_ec.ec_if;
-	uint32_t tsr;
+	u_int32_t tsr;
 
 	tsr = EMAC_READ(ETH_TSR);
 	if (!(tsr & ETH_TSR_BNQ)) {
@@ -229,7 +239,7 @@ emac_intr(void *arg)
 {
 	struct emac_softc *sc = (struct emac_softc *)arg;
 	struct ifnet * ifp = &sc->sc_ec.ec_if;
-	uint32_t imr, isr, rsr, ctl;
+	u_int32_t imr, isr, rsr, ctl;
 	int bi;
 
 	imr = ~EMAC_READ(ETH_IMR);
@@ -284,7 +294,10 @@ emac_intr(void *arg)
 				sc->rxq[bi].m->m_pkthdr.rcvif = ifp;
 				sc->rxq[bi].m->m_pkthdr.len = 
 					sc->rxq[bi].m->m_len = fl;
-				bpf_mtap(ifp, sc->rxq[bi].m);
+#if NBPFILTER > 0
+				if (ifp->if_bpf) 
+					bpf_mtap(ifp->if_bpf, sc->rxq[bi].m);
+#endif /* NBPFILTER > 0 */
 				DPRINTFN(2,("received %u bytes packet\n", fl));
                                 (*ifp->if_input)(ifp, sc->rxq[bi].m);
 				if (mtod(m, intptr_t) & 3) {
@@ -360,8 +373,8 @@ emac_init(struct emac_softc *sc)
 	EMAC_WRITE(ETH_CFG, ETH_CFG_CLK_32 | ETH_CFG_SPD | ETH_CFG_FD | ETH_CFG_BIG);
 	EMAC_WRITE(ETH_CTL, ETH_CTL_MPE);
 #if 0
-	if (device_cfdata(sc->sc_dev)->cf_flags)
-		mdcdiv = device_cfdata(sc->sc_dev)->cf_flags;
+	if (device_cfdata(&sc->sc_dev)->cf_flags)
+		mdcdiv = device_cfdata(&sc->sc_dev)->cf_flags;
 #endif
 	/* set ethernet address */
 	EMAC_WRITE(ETH_SA1L, (sc->sc_enaddr[3] << 24)
@@ -405,7 +418,7 @@ emac_init(struct emac_softc *sc)
 	}
 	sc->rbqpage_dsaddr = sc->rbqpage_dmamap->dm_segs[0].ds_addr;
 
-	memset(sc->rbqpage, 0, sc->rbqlen);
+	bzero(sc->rbqpage, sc->rbqlen);
 
 	/* Set up pointers to start of each queue in kernel addr space.
 	 * Each descriptor queue or status queue entry uses 2 words
@@ -457,7 +470,7 @@ emac_init(struct emac_softc *sc)
 	bus_dmamap_sync(sc->sc_dmat, sc->rbqpage_dmamap, 0, sc->rbqlen,
 			 BUS_DMASYNC_PREREAD);
 	addr = (void *)sc->rbqpage_dmamap->dm_segs[0].ds_addr;
-	EMAC_WRITE(ETH_RBQP, (uint32_t)addr);
+	EMAC_WRITE(ETH_RBQP, (u_int32_t)addr);
 
 	/* Divide HCLK by 32 for MDC clock */
 	sc->sc_mii.mii_ifp = ifp;
@@ -503,7 +516,8 @@ emac_init(struct emac_softc *sc)
 }
 
 static int
-emac_mediachange(struct ifnet *ifp)
+emac_mediachange(ifp)
+	struct ifnet *ifp;
 {
 	if (ifp->if_flags & IFF_UP)
 		emac_ifinit(ifp);
@@ -511,7 +525,9 @@ emac_mediachange(struct ifnet *ifp)
 }
 
 static void
-emac_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
+emac_mediastatus(ifp, ifmr)
+	struct ifnet *ifp;
+	struct ifmediareq *ifmr;
 {
 	struct emac_softc *sc = ifp->if_softc;
 
@@ -522,12 +538,13 @@ emac_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
 
 
 int
-emac_mii_readreg(device_t self, int phy, int reg)
+emac_mii_readreg(self, phy, reg)
+	device_t self;
+	int phy, reg;
 {
 	struct emac_softc *sc;
 
-	sc = device_private(self);
-
+	sc = (struct emac_softc *)self;
 	EMAC_WRITE(ETH_MAN, (ETH_MAN_HIGH | ETH_MAN_RW_RD
 			     | ((phy << ETH_MAN_PHYA_SHIFT) & ETH_MAN_PHYA)
 			     | ((reg << ETH_MAN_REGA_SHIFT) & ETH_MAN_REGA)
@@ -537,12 +554,12 @@ emac_mii_readreg(device_t self, int phy, int reg)
 }
 
 void
-emac_mii_writereg(device_t self, int phy, int reg, int val)
+emac_mii_writereg(self, phy, reg, val)
+	device_t self;
+	int phy, reg, val;
 {
 	struct emac_softc *sc;
-
-	sc = device_private(self);
-
+	sc = (struct emac_softc *)self;
 	EMAC_WRITE(ETH_MAN, (ETH_MAN_HIGH | ETH_MAN_RW_WR
 			     | ((phy << ETH_MAN_PHYA_SHIFT) & ETH_MAN_PHYA)
 			     | ((reg << ETH_MAN_REGA_SHIFT) & ETH_MAN_REGA)
@@ -553,10 +570,11 @@ emac_mii_writereg(device_t self, int phy, int reg, int val)
 
 	
 void
-emac_statchg(struct ifnet *ifp)
+emac_statchg(self)
+        device_t self;
 {
-        struct emac_softc *sc = ifp->if_softc;
-        uint32_t reg;
+        struct emac_softc *sc = (struct emac_softc *)self;
+        u_int32_t reg;
 
         /*
          * We must keep the MAC and the PHY in sync as
@@ -571,12 +589,13 @@ emac_statchg(struct ifnet *ifp)
 }
 
 void
-emac_tick(void *arg)
+emac_tick(arg)
+	void *arg;
 {
 	struct emac_softc* sc = (struct emac_softc *)arg;
 	struct ifnet * ifp = &sc->sc_ec.ec_if;
 	int s;
-	uint32_t misses;
+	u_int32_t misses;
 
 	ifp->if_collisions += EMAC_READ(ETH_SCOL) + EMAC_READ(ETH_MCOL);
 	/* These misses are ok, they will happen if the RAM/CPU can't keep up */
@@ -621,7 +640,8 @@ emac_ifioctl(struct ifnet *ifp, u_long cmd, void *data)
 }
 
 static void
-emac_ifstart(struct ifnet *ifp)
+emac_ifstart(ifp)
+	struct ifnet *ifp;
 {
 	struct emac_softc *sc = (struct emac_softc *)ifp->if_softc;
 	struct mbuf *m;
@@ -678,7 +698,10 @@ start:
 		IFQ_DEQUEUE(&ifp->if_snd, m);
 	}
 
-	bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+	if (ifp->if_bpf) 
+		bpf_mtap(ifp->if_bpf, m);
+#endif /* NBPFILTER > 0 */
 
 	nsegs = sc->txq[bi].m_dmamap->dm_nsegs;
 	segs = sc->txq[bi].m_dmamap->dm_segs;
@@ -712,7 +735,8 @@ stop:
 }
 
 static void
-emac_ifwatchdog(struct ifnet *ifp)
+emac_ifwatchdog(ifp)
+	struct ifnet *ifp;
 {
 	struct emac_softc *sc = (struct emac_softc *)ifp->if_softc;
 
@@ -723,7 +747,8 @@ emac_ifwatchdog(struct ifnet *ifp)
 }
 
 static int
-emac_ifinit(struct ifnet *ifp)
+emac_ifinit(ifp)
+	struct ifnet *ifp;
 {
 	struct emac_softc *sc = ifp->if_softc;
 	int s = splnet();
@@ -747,9 +772,11 @@ emac_ifinit(struct ifnet *ifp)
 }
 
 static void
-emac_ifstop(struct ifnet *ifp, int disable)
+emac_ifstop(ifp, disable)
+	struct ifnet *ifp;
+	int disable;
 {
-//	uint32_t u;
+//	u_int32_t u;
 	struct emac_softc *sc = ifp->if_softc;
 
 #if 0
@@ -777,16 +804,17 @@ emac_ifstop(struct ifnet *ifp, int disable)
 }
 
 static void
-emac_setaddr(struct ifnet *ifp)
+emac_setaddr(ifp)
+	struct ifnet *ifp;
 {
 	struct emac_softc *sc = ifp->if_softc;
 	struct ethercom *ac = &sc->sc_ec;
 	struct ether_multi *enm;
 	struct ether_multistep step;
-	uint8_t ias[3][ETHER_ADDR_LEN];
-	uint32_t h, nma = 0, hashes[2] = { 0, 0 };
-	uint32_t ctl = EMAC_READ(ETH_CTL);
-	uint32_t cfg = EMAC_READ(ETH_CFG);
+	u_int8_t ias[3][ETHER_ADDR_LEN];
+	u_int32_t h, nma = 0, hashes[2] = { 0, 0 };
+	u_int32_t ctl = EMAC_READ(ETH_CTL);
+	u_int32_t cfg = EMAC_READ(ETH_CFG);
 
 	/* disable receiver temporarily */
 	EMAC_WRITE(ETH_CTL, ctl & ~ETH_CTL_RE);

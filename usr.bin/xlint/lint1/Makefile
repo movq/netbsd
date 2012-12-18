@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.47 2011/12/25 01:05:44 christos Exp $
+#	$NetBSD: Makefile,v 1.38.6.1 2010/12/08 04:35:23 riz Exp $
 
 .include <bsd.own.mk>
 
@@ -7,11 +7,21 @@ SRCS=		cgram.y scan.l mem1.c mem.c err.c main1.c decl.c tree.c func.c \
 		init.c emit.c emit1.c inittyp.c tyname.c print.c
 MAN=		lint.7
 YHEADER=
-#DBG=-g
-#CPPFLAGS+=-DYYDEBUG=1
-#YFLAGS+=-v
+#CFLAGS+=-g
 
 CPPFLAGS+=	-I${.CURDIR} -I. -DPASS=\"${PROG}.h\"
+
+.if ${OBJECT_FMT} == "a.out"
+CPPFLAGS+=	-DTARGET_OBJFMT_AOUT
+.elif ${OBJECT_FMT} == "COFF"
+CPPFLAGS+=	-DTARGET_OBJFMT_COFF
+.elif ${OBJECT_FMT} == "ELF"
+CPPFLAGS+=	-DTARGET_OBJFMT_ELF
+.else
+.BEGIN:
+	@echo "Unrecognized OBJECT_FMT ${OBJECT_FMT}"
+	@false
+.endif
 
 LINTFLAGS=	-aehpz
 BINDIR=		/usr/libexec
@@ -34,8 +44,5 @@ DPADD+=		${LIBM}
 LDADD+=		-ll
 DPADD+=		${LIBL}
 .endif
-
-.include "Makefile.ops-h"
-.include "Makefile.ops-c"
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.73 2012/10/17 14:48:13 apb Exp $
+#	$NetBSD: GENERIC,v 1.51.4.1 2010/11/21 03:05:04 riz Exp $
 #
 # GENERIC machine description file
 #
@@ -22,7 +22,7 @@ include	"arch/iyonix/conf/std.iyonix"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.73 $"
+#ident 		"GENERIC-$Revision: 1.51.4.1 $"
 
 maxusers	32		# estimated number of users
 
@@ -49,6 +49,7 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 #options 	SYSVMSG		# System V-like message queues
 #options 	SYSVSEM		# System V-like semaphores
 #options 	SYSVSHM		# System V-like memory sharing
+#options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 # Device options
 
@@ -58,6 +59,7 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 options 	IRQSTATS	# manage IRQ statistics
+#options 	LKM		# loadable kernel modules
 #options 	KMEMSTATS	# kernel memory statistics
 #options 	SCSIVERBOSE	# Verbose SCSI errors
 options 	PCIVERBOSE	# Verbose PCI descriptions
@@ -86,7 +88,7 @@ options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #options 	KGDB		# remote debugger
 #options 	KGDB_DEVNAME="\"com\"",KGDB_DEVADDR=0x3f8,KGDB_DEVRATE=9600
 makeoptions	DEBUG="-g"	# compile full symbol table
-options 	SYMTAB_SPACE=610000
+options 	SYMTAB_SPACE=350000
 options 	PERFCTRS	# performance counters
 #options 	PMAP_DEBUG	# Enable pmap_debug_level code
 #options 	VERBOSE_INIT_ARM # verbose bootstraping messages
@@ -107,8 +109,6 @@ options 	PERFCTRS	# performance counters
 #options 	COMPAT_20	# NetBSD 2.0
 #options 	COMPAT_30	# NetBSD 3.0
 #options 	COMPAT_40	# NetBSD 4.0
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 #options 	COMPAT_43	# 4.3BSD
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
@@ -126,6 +126,7 @@ file-system 	MSDOSFS		# MS-DOS file system
 #file-system 	KERNFS		# /kern
 #file-system 	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
+#file-system 	PORTAL		# portal filesystem (still experimental)
 #file-system 	PROCFS		# /proc
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
@@ -138,10 +139,10 @@ file-system 	MSDOSFS		# MS-DOS file system
 file-system     FILECORE        # Acorn filecore file system
 
 # File system options
-#options 	QUOTA		# legacy UFS quotas
-#options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	QUOTA		# UFS quotas
 #options 	FFS_EI		# FFS Endian Independent support
-options 	WAPBL		# File system journaling support
+#options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 # Note that UFS_DIRHASH is suspected of causing kernel memory corruption.
 # It is not recommended for general use.
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
@@ -211,27 +212,14 @@ iic1            at iopiic?
 iopwdog*        at iopxs?               # Watchdog timer
 pci0            at iopxs? bus ?         # PCI/PCI-X support
 
-# The curious can see their RAM timings.
-spdmem* at iic1 addr 0x56
-
 # PCI bridges
 ppb*	at pci? dev ? function ?	# PCI-PCI bridges
 pci*	at ppb? bus ?
 # XXX 'puc's aren't really bridges, but there's no better place for them here
 #puc*	at pci? dev ? function ?	# PCI "universal" comm. cards
 
-#options COMCONSOLE
-
 # VGA
 #vga*            at pci? dev ? function ?
-genfb*		at pci? dev ? function ?
-
-# Display
-wsdisplay0      at wsemuldisplaydev? console 1
-wsdisplay*      at wsemuldisplaydev?
-
-options 	WSEMUL_VT100			# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 # CardBus bridge support
 #cbb*		at pci? dev ? function ?
@@ -564,9 +552,6 @@ ulpt*	at uhub? port ? configuration ? interface ?
 umodem*	at uhub? port ? configuration ?
 ucom*	at umodem?
 
-# Option N.V. Wireless WAN modems
-uhso*	at uhub? port ? configuration ?
-
 # USB Mass Storage
 umass*	at uhub? port ? configuration ? interface ?
 wd*	at umass?
@@ -597,7 +582,7 @@ uaudio*	at uhub? port ? configuration ?
 
 # USB 802.11 adapters
 #atu*	at uhub? port ?		# Atmel AT76C50XX based adapters
-#ural*	at uhub? port ?		# Ralink Technology RT2500USB 802.11a/b/g
+#ral*	at uhub? port ?		# Ralink Technology RT25x0 802.11a/b/g
 #rum*	at uhub? port ?		# Ralink Technology RT2501/RT2601 802.11a/b/g
 #zyd*	at uhub? port ?		# Zydas ZD1211
 
@@ -652,6 +637,8 @@ ucom*	at uvscom? portno ?
 
 # USB Generic driver
 #ugen*	at uhub? port ?
+# On ugen bulk endpoints, perform read-ahead and write-behind.
+#options UGEN_BULK_RA_WB
 
 
 # IrDA and Consumer Ir devices
@@ -734,7 +721,6 @@ midi*	at midibus?
 
 # Bluetooth USB Controllers
 #ubt* at uhub? port ?
-#aubtfwl* at uhub? port ?
 
 # Bluetooth Device Hub
 #bthub* at bcsp?
@@ -795,9 +781,9 @@ com0	at obio? addr 0x900002f8 xint 1 # on-board UART
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss			# file system snapshot device
+pseudo-device	fss		4	# file system snapshot device
 
-pseudo-device	md			# memory disk device (ramdisk)
+pseudo-device	md		1	# memory disk device (ramdisk)
 #pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
 
@@ -834,6 +820,7 @@ pseudo-device   accf_http		# "httpready" accept filter
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
 #pseudo-device	sequencer	1	# MIDI sequencer
+pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
@@ -849,7 +836,7 @@ pseudo-device	ksyms			# /dev/ksyms
 
 # wscons pseudo-devices
 pseudo-device	wsmux			# mouse & keyboard multiplexor
-pseudo-device	wsfont
+#pseudo-device	wsfont
 
 #options 	FILEASSOC		# fileassoc(9) - required for Veriexec
 

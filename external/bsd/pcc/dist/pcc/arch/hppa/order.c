@@ -1,5 +1,4 @@
-/*	Id: order.c,v 1.10 2011/06/05 08:54:42 plunky Exp 	*/	
-/*	$NetBSD: order.c,v 1.1.1.3 2011/09/01 12:46:33 plunky Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * Copyright (c) 2007 Michael Shalayeff
@@ -98,16 +97,14 @@ myormake(NODE *q)
  * Shape matches for UMUL.  Cooperates with offstar().
  */
 int
-shumul(NODE *p, int shape)
+shumul(NODE *p)
 {
 
 	if (x2debug)
 		printf("shumul(%p)\n", p);
 
 	/* Turns currently anything into OREG on hppa */
-	if (shape & SOREG)
-		return SOREG;
-	return SRNOPE;
+	return SOREG;
 }
 
 /*

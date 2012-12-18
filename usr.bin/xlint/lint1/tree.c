@@ -1,4 +1,4 @@
-/*	$NetBSD: tree.c,v 1.71 2012/04/20 18:35:28 christos Exp $	*/
+/*	$NetBSD: tree.c,v 1.53 2008/09/27 02:30:46 matt Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: tree.c,v 1.71 2012/04/20 18:35:28 christos Exp $");
+__RCSID("$NetBSD: tree.c,v 1.53 2008/09/27 02:30:46 matt Exp $");
 #endif
 
 #include <stdlib.h>
@@ -50,6 +50,9 @@ __RCSID("$NetBSD: tree.c,v 1.71 2012/04/20 18:35:28 christos Exp $");
 #include "lint1.h"
 #include "cgram.h"
 #include "externs1.h"
+
+/* Various flags for each operator. */
+static	mod_t	modtab[NOPS];
 
 static	tnode_t	*getinode(tspec_t, int64_t);
 static	void	ptrcmpok(op_t, tnode_t *, tnode_t *);
@@ -88,6 +91,136 @@ static	void	chkcomp(op_t, tnode_t *, tnode_t *);
 static	void	precconf(tnode_t *);
 
 extern sig_atomic_t fpe;
+
+/*
+ * Initialize mods of operators.
+ */
+void
+initmtab(void)
+{
+	static	struct {
+		op_t	op;
+		mod_t	m;
+	} imods[] = {
+		{ ARROW,  { 1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
+		    "->" } },
+		{ POINT,  { 1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		    "." } },
+		{ NOT,    { 0,1,0,1,0,1,0,1,0,0,0,0,0,0,0,1,0,0,
+		    "!" } },
+		{ COMPL,  { 0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1,1,1,
+		    "~" } },
+		{ INCBEF, { 0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
+		    "prefix++" } },
+		{ DECBEF, { 0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
+		    "prefix--" } },
+		{ INCAFT, { 0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
+		    "postfix++" } },
+		{ DECAFT, { 0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
+		    "postfix--" } },
+		{ UPLUS,  { 0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,1,1,0,
+		    "unary +" } },
+		{ UMINUS, { 0,0,0,0,1,1,1,0,0,0,1,0,0,0,0,1,1,0,
+		    "unary -" } },
+		{ STAR,   { 0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
+		    "unary *" } },
+		{ AMPER,  { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		    "unary &" } },
+		{ MULT,   { 1,0,0,0,1,1,1,0,1,0,0,1,0,0,0,1,1,0,
+		    "*" } },
+		{ DIV,    { 1,0,0,0,1,1,1,0,1,0,1,1,0,0,0,1,1,0,
+		    "/" } },
+		{ MOD,    { 1,0,1,0,0,1,1,0,1,0,1,1,0,0,0,1,1,0,
+		    "%" } },
+		{ PLUS,   { 1,0,0,1,0,1,1,0,1,0,0,0,0,0,0,1,0,0,
+		    "+" } },
+		{ MINUS,  { 1,0,0,1,0,1,1,0,1,0,0,0,0,0,0,1,0,0,
+		    "-" } },
+		{ SHL,    { 1,0,1,0,0,1,1,0,0,0,0,0,1,0,0,1,1,0,
+		    "<<" } },
+		{ SHR,    { 1,0,1,0,0,1,1,0,0,0,1,0,1,0,0,1,1,0,
+		    ">>" } },
+		{ LT,     { 1,1,0,1,0,1,1,0,1,0,1,1,0,1,1,0,1,0,
+		    "<" } },
+		{ LE,     { 1,1,0,1,0,1,1,0,1,0,1,1,0,1,1,0,1,0,
+		    "<=" } },
+		{ GT,     { 1,1,0,1,0,1,1,0,1,0,1,1,0,1,1,0,1,0,
+		    ">" } },
+		{ GE,     { 1,1,0,1,0,1,1,0,1,0,1,1,0,1,1,0,1,0,
+		    ">=" } },
+		{ EQ,     { 1,1,0,1,0,1,1,0,1,0,0,0,0,1,1,0,1,0,
+		    "==" } },
+		{ NE,     { 1,1,0,1,0,1,1,0,1,0,0,0,0,1,1,0,1,0,
+		    "!=" } },
+		{ AND,    { 1,0,1,0,0,1,1,0,1,0,0,0,1,0,0,1,0,0,
+		    "&" } },
+		{ XOR,    { 1,0,1,0,0,1,1,0,1,0,0,0,1,0,0,1,0,0,
+		    "^" } },
+		{ OR,     { 1,0,1,0,0,1,1,0,1,0,0,0,1,0,0,1,0,0,
+		    "|" } },
+		{ LOGAND, { 1,1,0,1,0,1,0,1,0,0,0,0,0,0,0,1,0,0,
+		    "&&" } },
+		{ LOGOR,  { 1,1,0,1,0,1,0,1,0,0,0,0,1,0,0,1,0,0,
+		    "||" } },
+		{ QUEST,  { 1,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,
+		    "?" } },
+		{ COLON,  { 1,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,
+		    ":" } },
+		{ ASSIGN, { 1,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,
+		    "=" } },
+		{ MULASS, { 1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1,0,0,
+		    "*=" } },
+		{ DIVASS, { 1,0,0,0,1,0,0,0,0,1,0,1,0,0,0,1,0,0,
+		    "/=" } },
+		{ MODASS, { 1,0,1,0,0,0,0,0,0,1,0,1,0,0,0,1,0,0,
+		    "%=" } },
+		{ ADDASS, { 1,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
+		    "+=" } },
+		{ SUBASS, { 1,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
+		    "-=" } },
+		{ SHLASS, { 1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
+		    "<<=" } },
+		{ SHRASS, { 1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
+		    ">>=" } },
+		{ ANDASS, { 1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
+		    "&=" } },
+		{ XORASS, { 1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
+		    "^=" } },
+		{ ORASS,  { 1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
+		    "|=" } },
+		{ NAME,   { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		    "NAME" } },
+		{ CON,    { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		    "CON" } },
+		{ STRING, { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		    "STRING" } },
+		{ FSEL,   { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		    "FSEL" } },
+		{ CALL,   { 1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,
+		    "CALL" } },
+		{ COMMA,  { 1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,
+		    "," } },
+		{ CVT,    { 0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
+		    "CVT" } },
+		{ ICALL,  { 1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,
+		    "ICALL" } },
+		{ LOAD,	  { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		    "LOAD" } },
+		{ PUSH,   { 0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
+		    "PUSH" } },
+		{ RETURN, { 1,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,
+		    "RETURN" } },
+		{ INIT,   { 1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,
+		    "INIT" } },
+		{ FARG,   { 1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,
+		    "FARG" } },
+		{ NOOP }
+	};
+	int	i;
+
+	for (i = 0; imods[i].op != NOOP; i++)
+		STRUCT_ASSIGN(modtab[imods[i].op], imods[i].m);
+}
 
 /*
  * Increase degree of reference.
@@ -182,9 +315,7 @@ getnnode(sym_t *sym, int ntok)
 				error(99, sym->s_name);
 			} else {
 				int fixtype;
-				if (strcmp(sym->s_name, "__FUNCTION__") == 0 ||
-				    strcmp(sym->s_name, "__PRETTY_FUNCTION__")
-				    == 0) {
+				if (strcmp(sym->s_name, "__FUNCTION__") == 0) {
 					gnuism(316);
 					fixtype = 1;
 				} else if (strcmp(sym->s_name, "__func__") == 0) {
@@ -879,10 +1010,10 @@ typeok(op_t op, int arg, tnode_t *ln, tnode_t *rn)
 			if (!isutyp(rt) && rn->tn_val->v_quad < 0) {
 				/* negative shift */
 				warning(121);
-			} else if ((uint64_t)rn->tn_val->v_quad == (uint64_t)size(lt)) {
+			} else if ((uint64_t)rn->tn_val->v_quad == size(lt)) {
 				/* shift equal to size fo object */
 				warning(267);
-			} else if ((uint64_t)rn->tn_val->v_quad > (uint64_t)size(lt)) {
+			} else if ((uint64_t)rn->tn_val->v_quad > size(lt)) {
 				/* shift greater than size of object */
 				warning(122);
 			}
@@ -974,8 +1105,6 @@ typeok(op_t op, int arg, tnode_t *ln, tnode_t *rn)
 		}
 
 		if (rt == PTR && lt == PTR) {
-			if (eqptrtype(lstp, rstp, 1))
-				break;
 			if (!eqtype(lstp, rstp, 1, 0, NULL))
 				illptrc(mp, ltp, rtp);
 			break;
@@ -1008,7 +1137,7 @@ typeok(op_t op, int arg, tnode_t *ln, tnode_t *rn)
 		goto assign;
 	case SHRASS:
 		if (pflag && !isutyp(lt) && !(tflag && isutyp(rt))) {
-			/* bitwise operation on s.v. possibly nonportable */
+			/* bitwise operation on s.v. possibly nonportabel */
 			warning(117);
 		}
 		goto assign;
@@ -1127,7 +1256,6 @@ asgntypok(op_t op, int arg, tnode_t *ln, tnode_t *rn)
 	type_t	*ltp, *rtp, *lstp = NULL, *rstp = NULL;
 	mod_t	*mp;
 	const	char *lts, *rts;
-	char lbuf[128], rbuf[128];
 
 	if ((lt = (ltp = ln->tn_type)->t_tspec) == PTR)
 		lst = (lstp = ltp->t_subt)->t_tspec;
@@ -1179,21 +1307,19 @@ asgntypok(op_t op, int arg, tnode_t *ln, tnode_t *rn)
 		    ((!lstp->t_const && rstp->t_const) ||
 		     (!lstp->t_volatile && rstp->t_volatile))) {
 			/* left side has not all qualifiers of right */
-			tyname(lbuf, sizeof(lbuf), lstp);
-			tyname(rbuf, sizeof(rbuf), rstp);
 			switch (op) {
 			case INIT:
 			case RETURN:
 				/* incompatible pointer types */
-				warning(182, lbuf, rbuf);
+				warning(182);
 				break;
 			case FARG:
 				/* argument has incompat. ptr. type, arg #%d */
-				warning(153, arg, lbuf, rbuf);
+				warning(153, arg);
 				break;
 			default:
 				/* operands have incompat. ptr. types, op %s */
-				warning(128, mp->m_name, lbuf, rbuf);
+				warning(128, mp->m_name);
 				break;
 			}
 		}
@@ -1227,8 +1353,7 @@ asgntypok(op_t op, int arg, tnode_t *ln, tnode_t *rn)
 			break;
 		case FARG:
 			/* argument has incompatible pointer type, arg #%d */
-			warning(153, arg, tyname(lbuf, sizeof(lbuf), ltp),
-			    tyname(rbuf, sizeof(rbuf), rtp));
+			warning(153, arg);
 			break;
 		default:
 			illptrc(mp, ltp, rtp);
@@ -1382,10 +1507,6 @@ mktnode(op_t op, type_t *type, tnode_t *ln, tnode_t *rn)
 {
 	tnode_t	*ntn;
 	tspec_t	t;
-#ifdef notyet
-	size_t l;
-	uint64_t rnum;
-#endif
 
 	ntn = getnode();
 
@@ -1394,42 +1515,7 @@ mktnode(op_t op, type_t *type, tnode_t *ln, tnode_t *rn)
 	ntn->tn_left = ln;
 	ntn->tn_right = rn;
 
-	switch (op) {
-#ifdef notyet
-	case SHR:
-		if (rn->tn_op != CON)
-			break;
-		rnum = rn->tn_val->v_quad;
-		l = tsize(ln->tn_type) / CHAR_BIT;
-		t = ln->tn_type->t_tspec;
-		switch (l) {
-		case 8:
-			if (rnum >= 56)
-				t = UCHAR;
-			else if (rnum >= 48)
-				t = USHORT;
-			else if (rnum >= 32)
-				t = UINT;
-			break;
-		case 4:
-			if (rnum >= 24)
-				t = UCHAR;
-			else if (rnum >= 16)
-				t = USHORT;
-			break;
-		case 2:
-			if (rnum >= 8)
-				t = UCHAR;
-			break;
-		default:
-			break;
-		}
-		if (t != ln->tn_type->t_tspec)
-			ntn->tn_type->t_tspec = t;
-		break;
-#endif
-	case STAR:
-	case FSEL:
+	if (op == STAR || op == FSEL) {
 		if (ln->tn_type->t_tspec == PTR) {
 			t = ln->tn_type->t_subt->t_tspec;
 			if (t != FUNC && t != VOID)
@@ -1437,12 +1523,9 @@ mktnode(op_t op, type_t *type, tnode_t *ln, tnode_t *rn)
 		} else {
 			LERROR("mktnode()");
 		}
-		break;
-	default:
-		break;
 	}
 
-	return ntn;
+	return (ntn);
 }
 
 /*
@@ -1457,7 +1540,7 @@ promote(op_t op, int farg, tnode_t *tn)
 {
 	tspec_t	t;
 	type_t	*ntp;
-	u_int	len;
+	int	len;
 
 	t = tn->tn_type->t_tspec;
 
@@ -1876,24 +1959,24 @@ cvtcon(op_t op, int arg, type_t *tp, val_t *nv, val_t *v)
 		case BOOL:
 			max = 1;		min = 0;		break;
 		case CHAR:
-			max = TARG_CHAR_MAX;	min = TARG_CHAR_MIN;	break;
+			max = CHAR_MAX;		min = CHAR_MIN;		break;
 		case UCHAR:
-			max = TARG_UCHAR_MAX;	min = 0;		break;
+			max = UCHAR_MAX;	min = 0;		break;
 		case SCHAR:
-			max = TARG_SCHAR_MAX;	min = TARG_SCHAR_MIN;	break;
+			max = SCHAR_MAX;	min = SCHAR_MIN;	break;
 		case SHORT:
-			max = TARG_SHRT_MAX;	min = TARG_SHRT_MIN;	break;
+			max = SHRT_MAX;		min = SHRT_MIN;		break;
 		case USHORT:
-			max = TARG_USHRT_MAX;	min = 0;		break;
+			max = USHRT_MAX;	min = 0;		break;
 		case ENUM:
 		case INT:
-			max = TARG_INT_MAX;	min = TARG_INT_MIN;	break;
+			max = INT_MAX;		min = INT_MIN;		break;
 		case UINT:
-			max = (u_int)TARG_UINT_MAX;min = 0;		break;
+			max = (u_int)UINT_MAX;	min = 0;		break;
 		case LONG:
-			max = TARG_LONG_MAX;	min = TARG_LONG_MIN;	break;
+			max = LONG_MAX;		min = LONG_MIN;		break;
 		case ULONG:
-			max = (u_long)TARG_ULONG_MAX; min = 0;		break;
+			max = (u_long)ULONG_MAX; min = 0;		break;
 		case QUAD:
 			max = QUAD_MAX;		min = QUAD_MIN;		break;
 		case UQUAD:
@@ -1936,7 +2019,7 @@ cvtcon(op_t op, int arg, type_t *tp, val_t *nv, val_t *v)
 			nv->v_ldbl = v->v_ldbl;
 		} else {
 			nv->v_quad = (nt == PTR || isutyp(nt)) ?
-				(int64_t)v->v_ldbl : (int64_t)v->v_ldbl;
+				(uint64_t)v->v_ldbl : (int64_t)v->v_ldbl;
 		}
 	} else {
 		if (nt == FLOAT) {
@@ -2678,7 +2761,7 @@ fold(tnode_t *tn)
 		break;
 	case UMINUS:
 		q = -sl;
-		if (sl != 0 && msb(q, t, -1) == msb(sl, t, -1))
+		if (msb(q, t, -1) == msb(sl, t, -1))
 			ovfl = 1;
 		break;
 	case COMPL:
@@ -2703,7 +2786,7 @@ fold(tnode_t *tn)
 			error(139);
 			q = utyp ? UQUAD_MAX : QUAD_MAX;
 		} else {
-			q = utyp ? (int64_t)(ul / ur) : sl / sr;
+			q = utyp ? ul / ur : sl / sr;
 		}
 		break;
 	case MOD:
@@ -2712,11 +2795,11 @@ fold(tnode_t *tn)
 			error(140);
 			q = 0;
 		} else {
-			q = utyp ? (int64_t)(ul % ur) : sl % sr;
+			q = utyp ? ul % ur : sl % sr;
 		}
 		break;
 	case PLUS:
-		q = utyp ? (int64_t)(ul + ur) : sl + sr;
+		q = utyp ? ul + ur : sl + sr;
 		if (msb(sl, t, -1)  != 0 && msb(sr, t, -1) != 0) {
 			if (msb(q, t, -1) == 0)
 				ovfl = 1;
@@ -2726,7 +2809,7 @@ fold(tnode_t *tn)
 		}
 		break;
 	case MINUS:
-		q = utyp ? (int64_t)(ul - ur) : sl - sr;
+		q = utyp ? ul - ur : sl - sr;
 		if (msb(sl, t, -1) != 0 && msb(sr, t, -1) == 0) {
 			if (msb(q, t, -1) == 0)
 				ovfl = 1;
@@ -2736,7 +2819,7 @@ fold(tnode_t *tn)
 		}
 		break;
 	case SHL:
-		q = utyp ? (int64_t)(ul << sr) : sl << sr;
+		q = utyp ? ul << sr : sl << sr;
 		break;
 	case SHR:
 		/*
@@ -2765,21 +2848,20 @@ fold(tnode_t *tn)
 		q = utyp ? ul != ur : sl != sr;
 		break;
 	case AND:
-		q = utyp ? (int64_t)(ul & ur) : sl & sr;
+		q = utyp ? ul & ur : sl & sr;
 		break;
 	case XOR:
-		q = utyp ? (int64_t)(ul ^ ur) : sl ^ sr;
+		q = utyp ? ul ^ ur : sl ^ sr;
 		break;
 	case OR:
-		q = utyp ? (int64_t)(ul | ur) : sl | sr;
+		q = utyp ? ul | ur : sl | sr;
 		break;
 	default:
 		LERROR("fold()");
 	}
 
 	/* XXX does not work for quads. */
-	if (ovfl || ((uint64_t)(q | mask) != ~(uint64_t)0 &&
-	    (q & ~mask) != 0)) {
+	if (ovfl || ((q | mask) != ~(uint64_t)0 && (q & ~mask) != 0)) {
 		if (hflag)
 			/* integer overflow detected, op %s */
 			warning(141, modtab[tn->tn_op].m_name);
@@ -2941,26 +3023,14 @@ foldflt(tnode_t *tn)
 	return (getcnode(tn->tn_type, v));
 }
 
-
 /*
  * Create a constant node for sizeof.
  */
 tnode_t *
 bldszof(type_t *tp)
 {
-	tspec_t	st;
-#if SIZEOF_IS_ULONG
-	st = ULONG;
-#else
-	st = UINT;
-#endif
-	return getinode(st, tsize(tp) / CHAR_BIT);
-}
-
-int64_t
-tsize(type_t *tp)
-{
 	int	elem, elsz;
+	tspec_t	st;
 
 	elem = 1;
 	while (tp->t_tspec == ARRAY) {
@@ -3011,56 +3081,13 @@ tsize(type_t *tp)
 		break;
 	}
 
-	return (int64_t)(elem * elsz);
-}
-
-/*
- */
-tnode_t *
-bldalof(type_t *tp)
-{
-	tspec_t	st;
-
-	switch (tp->t_tspec) {
-	case ARRAY:
-		break;
-
-	case FUNC:
-		/* cannot take align of function */
-		error(144);
-		return 0;
-
-	case STRUCT:
-	case UNION:
-		if (incompl(tp)) {
-			/* cannot take align of incomplete type */
-			error(143);
-			return 0;
-		}
-		break;
-	case ENUM:
-		break;
-	default:
-		if (tp->t_isfield) {
-			/* cannot take align of bit-field */
-			error(145);
-			return 0;
-		}
-		if (tp->t_tspec == VOID) {
-			/* cannot take alignsize of void */
-			error(146);
-			return 0;
-		}
-		break;
-	}
-
 #if SIZEOF_IS_ULONG
 	st = ULONG;
 #else
 	st = UINT;
 #endif
 
-	return getinode(st, (int64_t)getbound(tp));
+	return (getinode(st, (int64_t)(elem * elsz / CHAR_BIT)));
 }
 
 /*
@@ -3265,14 +3292,14 @@ parg(	int	n,		/* pos of arg */
 	tnode_t	*tn)		/* argument */
 {
 	tnode_t	*ln;
-	int	dowarn;
+	int	warn;
 
 	ln = xcalloc(1, sizeof (tnode_t));
 	ln->tn_type = tduptyp(tp);
 	ln->tn_type->t_const = 0;
 	ln->tn_lvalue = 1;
 	if (typeok(FARG, n, ln, tn)) {
-		if (!eqtype(tp, tn->tn_type, 1, 0, (dowarn = 0, &dowarn)) || dowarn)
+		if (!eqtype(tp, tn->tn_type, 1, 0, (warn = 0, &warn)) || warn)
 			tn = convert(FARG, n, tp, tn);
 	}
 	free(ln);
@@ -3340,7 +3367,7 @@ constant(tnode_t *tn, int required)
  * for the expression.
  */
 void
-expr(tnode_t *tn, int vctx, int tctx, int dofreeblk)
+expr(tnode_t *tn, int vctx, int tctx, int freeblk)
 {
 
 	if (tn == NULL && nerr == 0)
@@ -3377,7 +3404,7 @@ expr(tnode_t *tn, int vctx, int tctx, int dofreeblk)
 		displexpr(tn, 0);
 
 	/* free the tree memory */
-	if (dofreeblk)
+	if (freeblk)
 		tfreeblk();
 }
 
@@ -3710,7 +3737,7 @@ chkaidx(tnode_t *tn, int amper)
 	if (!isutyp(rn->tn_type->t_tspec) && con < 0) {
 		/* array subscript cannot be negative: %ld */
 		warning(167, (long)con);
-	} else if (dim > 0 && (uint64_t)con >= (uint64_t)dim) {
+	} else if (dim > 0 && (uint64_t)con >= dim) {
 		/* array subscript cannot be > %d: %ld */
 		warning(168, dim - 1, (long)con);
 	}
@@ -3876,23 +3903,19 @@ catstrg(strg_t *strg1, strg_t *strg2)
 		return (strg1);
 	}
 
-	len1 = strg1->st_len;
-	len2 = strg2->st_len + 1;	/* + NUL */
-	len = len1 + len2;
+	len = (len1 = strg1->st_len) + (len2 = strg2->st_len);
 
-#define COPY(F) \
-    do { \
-	strg1->F = xrealloc(strg1->F, len * sizeof(*strg1->F)); \
-	(void)memcpy(strg1->F + len1, strg2->F, len2 * sizeof(*strg1->F)); \
-	free(strg2->F); \
-    } while (/*CONSTCOND*/0)
-
-	if (strg1->st_tspec == CHAR)
-		COPY(st_cp);
-	else
-		COPY(st_wcp);
-
-	strg1->st_len = len - 1; /* - NUL */;
+	if (strg1->st_tspec == CHAR) {
+		strg1->st_cp = xrealloc(strg1->st_cp, len + 1);
+		(void)memcpy(strg1->st_cp + len1, strg2->st_cp, len2 + 1);
+		free(strg2->st_cp);
+	} else {
+		strg1->st_wcp = xrealloc(strg1->st_wcp,
+					 (len + 1) * sizeof (wchar_t));
+		(void)memcpy(strg1->st_wcp + len1, strg2->st_wcp,
+			     (len2 + 1) * sizeof (wchar_t));
+		free(strg2->st_wcp);
+	}
 	free(strg2);
 
 	return (strg1);
@@ -3912,7 +3935,7 @@ precconf(tnode_t *tn)
 	op_t	lop, rop = NOOP;
 	int	lparn, rparn = 0;
 	mod_t	*mp;
-	int	dowarn;
+	int	warn;
 
 	if (!hflag)
 		return;
@@ -3933,22 +3956,22 @@ precconf(tnode_t *tn)
 		rop = rn->tn_op;
 	}
 
-	dowarn = 0;
+	warn = 0;
 
 	switch (tn->tn_op) {
 	case SHL:
 	case SHR:
 		if (!lparn && (lop == PLUS || lop == MINUS)) {
-			dowarn = 1;
+			warn = 1;
 		} else if (!rparn && (rop == PLUS || rop == MINUS)) {
-			dowarn = 1;
+			warn = 1;
 		}
 		break;
 	case LOGOR:
 		if (!lparn && lop == LOGAND) {
-			dowarn = 1;
+			warn = 1;
 		} else if (!rparn && rop == LOGAND) {
-			dowarn = 1;
+			warn = 1;
 		}
 		break;
 	case AND:
@@ -3956,16 +3979,16 @@ precconf(tnode_t *tn)
 	case OR:
 		if (!lparn && lop != tn->tn_op) {
 			if (lop == PLUS || lop == MINUS) {
-				dowarn = 1;
+				warn = 1;
 			} else if (lop == AND || lop == XOR) {
-				dowarn = 1;
+				warn = 1;
 			}
 		}
-		if (!dowarn && !rparn && rop != tn->tn_op) {
+		if (!warn && !rparn && rop != tn->tn_op) {
 			if (rop == PLUS || rop == MINUS) {
-				dowarn = 1;
+				warn = 1;
 			} else if (rop == AND || rop == XOR) {
-				dowarn = 1;
+				warn = 1;
 			}
 		}
 		break;
@@ -4029,7 +4052,7 @@ precconf(tnode_t *tn)
 		break;
 	}
 
-	if (dowarn) {
+	if (warn) {
 		/* precedence confusion possible: parenthesize! */
 		warning(169);
 	}

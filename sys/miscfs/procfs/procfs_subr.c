@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_subr.c,v 1.102 2012/11/25 01:03:05 christos Exp $	*/
+/*	$NetBSD: procfs_subr.c,v 1.92 2008/09/05 14:01:11 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -102,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_subr.c,v 1.102 2012/11/25 01:03:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_subr.c,v 1.92 2008/09/05 14:01:11 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -158,8 +158,13 @@ kmutex_t pfs_ihash_lock;
  * the vnode free list.
  */
 int
-procfs_allocvp(struct mount *mp, struct vnode **vpp, pid_t pid,
-    pfstype pfs_type, int fd, struct proc *p)
+procfs_allocvp(mp, vpp, pid, pfs_type, fd, p)
+	struct mount *mp;
+	struct vnode **vpp;
+	pid_t pid;
+	pfstype pfs_type;
+	int fd;
+	struct proc *p;
 {
 	struct pfsnode *pfs;
 	struct vnode *vp;
@@ -170,18 +175,17 @@ procfs_allocvp(struct mount *mp, struct vnode **vpp, pid_t pid,
 	if (*vpp != NULL)
 		return (0);
 
-	error = getnewvnode(VT_PROCFS, mp, procfs_vnodeop_p, NULL, &vp);
-	if (error) {
+	if ((error = getnewvnode(VT_PROCFS, mp, procfs_vnodeop_p, &vp)) != 0) {
 		*vpp = NULL;
 		return (error);
 	}
-	pfs = malloc(sizeof(struct pfsnode), M_TEMP, M_WAITOK);
+	MALLOC(pfs, void *, sizeof(struct pfsnode), M_TEMP, M_WAITOK);
 
 	mutex_enter(&pfs_hashlock);
 	if ((*vpp = procfs_hashget(pid, pfs_type, fd, mp, 0)) != NULL) {
 		mutex_exit(&pfs_hashlock);
 		ungetnewvnode(vp);
-		free(pfs, M_TEMP);
+		FREE(pfs, M_TEMP);
 		goto retry;
 	}
 
@@ -202,14 +206,6 @@ procfs_allocvp(struct mount *mp, struct vnode **vpp, pid_t pid,
 		vp->v_type = VDIR;
 		break;
 
-	case PFStask:	/* /proc/N/task = dr-xr-xr-x */
-		if (fd == -1) {
-			pfs->pfs_mode = S_IRUSR|S_IXUSR|S_IRGRP|S_IXGRP|
-			    S_IROTH|S_IXOTH;
-			vp->v_type = VDIR;
-			break;
-		}
-		/*FALLTHROUGH*/
 	case PFScurproc:	/* /proc/curproc = lr-xr-xr-x */
 	case PFSself:	/* /proc/self    = lr-xr-xr-x */
 	case PFScwd:	/* /proc/N/cwd = lr-xr-xr-x */
@@ -220,7 +216,7 @@ procfs_allocvp(struct mount *mp, struct vnode **vpp, pid_t pid,
 		break;
 
 	case PFSfd:
-		if (fd == -1) {	/* /proc/N/fd = dr-x------ */
+		if (fd == -1) {	/* /proc/N/fd = dr-xr-xr-x */
 			pfs->pfs_mode = S_IRUSR|S_IXUSR;
 			vp->v_type = VDIR;
 		} else {	/* /proc/N/fd/M = [ps-]rw------- */
@@ -253,7 +249,6 @@ procfs_allocvp(struct mount *mp, struct vnode **vpp, pid_t pid,
 				break;
 			case DTYPE_KQUEUE:
 			case DTYPE_MISC:
-			case DTYPE_SEM:
 			symlink:
 				pfs->pfs_mode = S_IRUSR|S_IXUSR|S_IRGRP|
 				    S_IXGRP|S_IROTH|S_IXOTH;
@@ -297,7 +292,6 @@ procfs_allocvp(struct mount *mp, struct vnode **vpp, pid_t pid,
 	case PFSmounts:	/* /proc/mounts = -r--r--r-- */
 	case PFSloadavg:	/* /proc/loadavg = -r--r--r-- */
 	case PFSstatm:	/* /proc/N/statm = -r--r--r-- */
-	case PFSversion:	/* /proc/version = -r--r--r-- */
 		pfs->pfs_mode = S_IRUSR|S_IRGRP|S_IROTH;
 		vp->v_type = VREG;
 		break;
@@ -321,26 +315,28 @@ procfs_allocvp(struct mount *mp, struct vnode **vpp, pid_t pid,
 
  bad:
 	mutex_exit(&pfs_hashlock);
-	free(pfs, M_TEMP);
+	FREE(pfs, M_TEMP);
 	vp->v_data = NULL;
 	ungetnewvnode(vp);
 	return (error);
 }
 
 int
-procfs_freevp(struct vnode *vp)
+procfs_freevp(vp)
+	struct vnode *vp;
 {
 	struct pfsnode *pfs = VTOPFS(vp);
 
 	procfs_hashrem(pfs);
 
-	free(vp->v_data, M_TEMP);
-	vp->v_data = NULL;
+	FREE(vp->v_data, M_TEMP);
+	vp->v_data = 0;
 	return (0);
 }
 
 int
-procfs_rw(void *v)
+procfs_rw(v)
+	void *v;
 {
 	struct vop_read_args *ap = v;
 	struct vnode *vp = ap->a_vp;
@@ -472,10 +468,6 @@ procfs_rw(void *v)
 		error = procfs_doemul(curl, p, pfs, uio);
 		break;
 
-	case PFSversion:
-		error = procfs_doversion(curl, p, pfs, uio);
-		break;
-
 #ifdef __HAVE_PROCFS_MACHDEP
 	PROCFS_MACHDEP_NODETYPE_CASES
 		error = procfs_machdep_rw(curl, l, pfs, uio);
@@ -509,7 +501,10 @@ procfs_rw(void *v)
  * EFAULT:    user i/o buffer is not addressable
  */
 int
-vfs_getuserstr(struct uio *uio, char *bf, int *buflenp)
+vfs_getuserstr(uio, bf, buflenp)
+	struct uio *uio;
+	char *bf;
+	int *buflenp;
 {
 	int xlen;
 	int error;
@@ -541,7 +536,10 @@ vfs_getuserstr(struct uio *uio, char *bf, int *buflenp)
 }
 
 const vfs_namemap_t *
-vfs_findname(const vfs_namemap_t *nm, const char *bf, int buflen)
+vfs_findname(nm, bf, buflen)
+	const vfs_namemap_t *nm;
+	const char *bf;
+	int buflen;
 {
 
 	for (; nm->nm_name; nm++)
@@ -555,7 +553,7 @@ vfs_findname(const vfs_namemap_t *nm, const char *bf, int buflen)
  * Initialize pfsnode hash table.
  */
 void
-procfs_hashinit(void)
+procfs_hashinit()
 {
 	mutex_init(&pfs_hashlock, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&pfs_ihash_lock, MUTEX_DEFAULT, IPL_NONE);
@@ -563,7 +561,7 @@ procfs_hashinit(void)
 }
 
 void
-procfs_hashreinit(void)
+procfs_hashreinit()
 {
 	struct pfsnode *pp;
 	struct pfs_hashhead *oldhash, *hash;
@@ -591,7 +589,7 @@ procfs_hashreinit(void)
  * Free pfsnode hash table.
  */
 void
-procfs_hashdone(void)
+procfs_hashdone()
 {
 	hashdone(pfs_hashtbl, HASH_LIST, pfs_ihash);
 	mutex_destroy(&pfs_hashlock);
@@ -599,7 +597,12 @@ procfs_hashdone(void)
 }
 
 struct vnode *
-procfs_hashget(pid_t pid, pfstype type, int fd, struct mount *mp, int flags)
+procfs_hashget(pid, type, fd, mp, flags)
+	pid_t pid;
+	pfstype type;
+	int fd;
+	struct mount *mp;
+	int flags;
 {
 	struct pfs_hashhead *ppp;
 	struct pfsnode *pp;
@@ -615,9 +618,9 @@ loop:
 		    	if (flags == 0) {
 				mutex_exit(&pfs_ihash_lock);
 			} else {
-				mutex_enter(vp->v_interlock);
+				mutex_enter(&vp->v_interlock);
 				mutex_exit(&pfs_ihash_lock);
-				if (vget(vp, flags))
+				if (vget(vp, flags | LK_INTERLOCK))
 					goto loop;
 			}
 			return (vp);
@@ -631,12 +634,13 @@ loop:
  * Insert the pfsnode into the hash table and lock it.
  */
 void
-procfs_hashins(struct pfsnode *pp)
+procfs_hashins(pp)
+	struct pfsnode *pp;
 {
 	struct pfs_hashhead *ppp;
 
 	/* lock the pfsnode, then put it on the appropriate hash list */
-	VOP_LOCK(PFSTOV(pp), LK_EXCLUSIVE);
+	vlockmgr(&pp->pfs_vnode->v_lock, LK_EXCLUSIVE);
 
 	mutex_enter(&pfs_ihash_lock);
 	ppp = &pfs_hashtbl[PFSPIDHASH(pp->pfs_pid)];
@@ -648,7 +652,8 @@ procfs_hashins(struct pfsnode *pp)
  * Remove the pfsnode from the hash table.
  */
 void
-procfs_hashrem(struct pfsnode *pp)
+procfs_hashrem(pp)
+	struct pfsnode *pp;
 {
 	mutex_enter(&pfs_ihash_lock);
 	LIST_REMOVE(pp, pfs_hash);
@@ -656,7 +661,9 @@ procfs_hashrem(struct pfsnode *pp)
 }
 
 void
-procfs_revoke_vnodes(struct proc *p, void *arg)
+procfs_revoke_vnodes(p, arg)
+	struct proc *p;
+	void *arg;
 {
 	struct pfsnode *pfs, *pnext;
 	struct vnode *vp;
@@ -671,17 +678,17 @@ procfs_revoke_vnodes(struct proc *p, void *arg)
 	for (pfs = LIST_FIRST(ppp); pfs; pfs = pnext) {
 		vp = PFSTOV(pfs);
 		pnext = LIST_NEXT(pfs, pfs_hash);
-		mutex_enter(vp->v_interlock);
+		mutex_enter(&vp->v_interlock);
 		if (vp->v_usecount > 0 && pfs->pfs_pid == p->p_pid &&
 		    vp->v_mount == mp) {
 		    	vp->v_usecount++;
-		    	mutex_exit(vp->v_interlock);
+		    	mutex_exit(&vp->v_interlock);
 			mutex_exit(&pfs_ihash_lock);
 			VOP_REVOKE(vp, REVOKEALL);
 			vrele(vp);
 			mutex_enter(&pfs_ihash_lock);
 		} else {
-			mutex_exit(vp->v_interlock);
+			mutex_exit(&vp->v_interlock);
 		}
 	}
 	mutex_exit(&pfs_ihash_lock);
@@ -697,7 +704,7 @@ procfs_proc_lock(int pid, struct proc **bunghole, int notfound)
 
 	if (pid == 0)
 		tp = &proc0;
-	else if ((tp = proc_find(pid)) == NULL)
+	else if ((tp = p_find(pid, PFIND_LOCKED)) == NULL)
 		error = notfound;
 	if (tp != NULL && !rw_tryenter(&tp->p_reflock, RW_READER))
 		error = EBUSY;

@@ -27,16 +27,15 @@
  * SUCH DAMAGE.
  */
 
-#include "SYS.h"
-
 #if defined(SYSLIBC_SCCS) && !defined(lint)
 	/* .asciz "@(#)fork.s	8.1 (Berkeley) 6/4/93" */
-RCSID("$NetBSD: fork.S,v 1.6 2011/01/25 02:38:15 matt Exp $")
+	.asciz "$NetBSD: fork.S,v 1.5 2003/08/07 16:42:33 agc Exp $"
 #endif /* SYSLIBC_SCCS and not lint */
+
+#include "SYS.h"
 
 _SYSCALL(__fork,fork)
 	jlbc	%r1,1f	# parent, since %r1 == 0 in parent, 1 in child
 	clrl	%r0
 1:
 	ret		# pid = fork()
-END(__fork)

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.31 2012/07/27 05:36:12 matt Exp $ */
+/*	$NetBSD: intr.h,v 1.25 2008/04/28 20:23:37 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -32,8 +32,6 @@
 #ifndef _SPARC64_INTR_H_
 #define _SPARC64_INTR_H_
 
-#ifdef _KERNEL
-
 #if defined(_KERNEL_OPT)
 #include "opt_multiprocessor.h"
 #endif
@@ -56,12 +54,6 @@
 #define	IPL_PAUSE	13		/* pause cpu */
 #define	IPL_FDSOFT	PIL_FDSOFT	/* floppy */
 
-/*
- * IPL_SAFEPRI is a safe priority for sleep to set for a spin-wait
- * during autoconfiguration or after a panic.
- */
-#define	IPL_SAFEPRI	IPL_NONE
-
 #ifndef _LOCORE
 void fpusave_lwp(struct lwp *, bool);
 #endif	/* _LOCORE */
@@ -69,27 +61,27 @@ void fpusave_lwp(struct lwp *, bool);
 #if defined(MULTIPROCESSOR)
 #ifndef _LOCORE
 void	sparc64_ipi_init (void);
-void	sparc64_ipi_halt_thiscpu (void *, void *);
-void	sparc64_ipi_pause_thiscpu (void *);
+int	sparc64_ipi_halt_thiscpu (void *);
+int	sparc64_ipi_pause_thiscpu (void *);
 void	sparc64_do_pause(void);
-void	sparc64_ipi_drop_fpstate (void *, void *);
-void	sparc64_ipi_save_fpstate (void *, void *);
-void	sparc64_ipi_nop (void *, void *);
-void	sparc64_ipi_ccall(void *, void *);
+void	sparc64_ipi_drop_fpstate (void *);
+void	sparc64_ipi_save_fpstate (void *);
+void	sparc64_ipi_nop (void *);
 void	mp_halt_cpus (void);
 void	mp_pause_cpus (void);
 void	mp_resume_cpus (void);
 int	mp_cpu_is_paused (sparc64_cpuset_t);
 void	mp_resume_cpu(int);
 #endif	/* _LOCORE */
-#endif
-
-#endif /* _KERNEL */
 
 #define IPI_EVCNT_TLB_PTE	0
-#define IPI_EVCNT_FPU_SYNCH	1
-#define IPI_EVCNT_FPU_FLUSH	2
-#define IPI_EVCNT_NUM		3
-#define IPI_EVCNT_NAMES { "TLB pte IPI", "FPU synch IPI", "FPU flush IPI" }
+#define IPI_EVCNT_TLB_CTX	1
+#define IPI_EVCNT_TLB_ALL	2
+#define IPI_EVCNT_FPU_SYNCH	3
+#define IPI_EVCNT_FPU_FLUSH	4
+#define IPI_EVCNT_NUM		5
+#define IPI_EVCNT_NAMES { "TLB pte IPI", "TLB ctx IPI", "TLB all IPI", \
+			  "FPU synch IPI", "FPU flush IPI" }
+#endif
 
 #endif /* _SPARC64_INTR_H_ */

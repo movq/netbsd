@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.c,v 1.27 2011/09/04 20:27:27 joerg Exp $	*/
+/*	$NetBSD: parse.c,v 1.24.24.1 2009/03/27 14:50:36 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)parse.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: parse.c,v 1.27 2011/09/04 20:27:27 joerg Exp $");
+__RCSID("$NetBSD: parse.c,v 1.24.24.1 2009/03/27 14:50:36 msaitoh Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,18 +49,12 @@ __RCSID("$NetBSD: parse.c,v 1.27 2011/09/04 20:27:27 joerg Exp $");
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <util.h>
 
 #include "hexdump.h"
-
-__dead static void	 badcnt(char *);
-__dead static void	 badconv(char *);
-__dead static void	 badfmt(const char *);
-__dead static void	 badsfmt(void);
 
 FU *endfu;					/* format at end-of-data */
 
@@ -222,7 +216,7 @@ rewrite(FS *fs)
 	PR *pr, **nextpr;
 	FU *fu;
 	char *p1, *p2;
-	char savech, *fmtp, cs[sizeof(PRId64)];
+	char savech, *fmtp, cs[4];
 	int nconv, prec;
 
 	prec = 0;
@@ -293,26 +287,10 @@ rewrite(FS *fs)
 				goto isint;
 			case 'o': case 'u': case 'x': case 'X':
 				pr->flags = F_UINT;
-isint:
-				/*
-				 * Regardless of pr->bcnt, all integer
-				 * values are cast to [u]int64_t before
-				 * being printed by display().  We
-				 * therefore need to use PRI?64 as the
-				 * format, where '?' could actually
-				 * be any of [diouxX].  We make the
-				 * assumption (not guaranteed by the
-				 * C99 standard) that we can derive
-				 * all the other PRI?64 values from
-				 * PRId64 simply by changing the last
-				 * character.  For example, if PRId64 is
-				 * "lld" or "qd", and cs[0] is 'o', then
-				 * we end up with "llo" or "qo".
-				 */
-				savech = cs[0];
-				strncpy(cs, PRId64, sizeof(PRId64) - 2);
-				cs[sizeof(PRId64) - 2] = savech;
-				cs[sizeof(PRId64) - 1] = '\0';
+isint:				cs[3] = '\0';
+				cs[2] = cs[0];
+				cs[1] = 'l';
+				cs[0] = 'l';
 				switch(fu->bcnt) {
 				case 0: case 4:
 					pr->bcnt = 4;
@@ -370,14 +348,10 @@ isint:
 					++p2;
 					switch(p1[2]) {
 					case 'd': case 'o': case'x':
-						/*
-						 * See comments above for
-						 * the way we use PRId64.
-						 */
-						strncpy(cs, PRId64,
-							sizeof(PRId64) - 2);
-						cs[sizeof(PRId64) - 2] = p1[2];
-						cs[sizeof(PRId64) - 1] = '\0';
+						cs[0] = 'l';
+						cs[1] = 'l';
+						cs[2] = p1[2];
+						cs[3] = '\0';
 						break;
 					default:
 						p1[3] = '\0';
@@ -523,25 +497,25 @@ escape(char *p1)
 	}
 }
 
-static void
+void
 badcnt(char *s)
 {
 	errx(1, "%s: bad byte count", s);
 }
 
-static void
+void
 badsfmt(void)
 {
 	errx(1, "%%s: requires a precision or a byte count");
 }
 
-static void
+void
 badfmt(const char *fmt)
 {
 	errx(1, "\"%s\": bad format", fmt);
 }
 
-static void
+void
 badconv(char *ch)
 {
 	errx(1, "%%%s: bad conversion character", ch);

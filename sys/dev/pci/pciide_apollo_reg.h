@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_apollo_reg.h,v 1.20 2011/07/10 20:01:37 jakllsch Exp $	*/
+/*	$NetBSD: pciide_apollo_reg.h,v 1.17 2007/12/25 18:33:41 perry Exp $	*/
 
 /*
  * Copyright (c) 1998 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -87,11 +92,10 @@
  */
 #define AMD756_CHIPREV_DISABLEDMA(rev) ((rev) <= AMD756_CHIPREV_D2)
 
-/* registers offset - vendor dependent */
+/* registers offset - vendor dependant */
 #define APO_VIA_REGBASE			0x40
 #define APO_AMD_REGBASE			0x40
 #define APO_NVIDIA_REGBASE		0x50
-#define APO_VIA_VT6421_REGBASE		0xa0
 
 /* misc. configuration registers */
 #define APO_IDECONF(sc) ((sc)->sc_apo_regbase + 0x00)
@@ -111,7 +115,7 @@
 #define APO_IDECONF_FIFO_CONF_MASK 0x60000000
 
 /* Misc. controls register - VIA only */
-#define APO_CTLMISC(sc) ((sc)->sc_apo_regbase + 0x04)
+#define APO_CTLMISC(sc) 0x44
 #define APO_CTLMISC_BM_STS_RTY	0x00000008
 #define APO_CTLMISC_FIFO_HWS	0x00000010
 #define APO_CTLMISC_WR_IRDY_WS	0x00000020
@@ -130,7 +134,7 @@
 	(((1 - (channel)) << 4) + ((1 - (drive)) << 3) + 4))
 
 /* misc timings control - VIA only */
-#define APO_MISCTIM(sc) ((sc)->sc_apo_regbase + 0x0c)
+#define APO_MISCTIM(sc) 0x4c
 
 /* Ultra-DMA control (586A/B only, amd and nvidia ) */
 #define APO_UDMA(sc) ((sc)->sc_apo_regbase + 0x10)

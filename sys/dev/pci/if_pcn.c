@@ -1,4 +1,4 @@
-/*	$NetBSD: if_pcn.c,v 1.55 2012/07/22 14:33:03 matt Exp $	*/
+/*	$NetBSD: if_pcn.c,v 1.46.14.1 2010/11/20 17:38:28 riz Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -65,7 +65,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_pcn.c,v 1.55 2012/07/22 14:33:03 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_pcn.c,v 1.46.14.1 2010/11/20 17:38:28 riz Exp $");
+
+#include "bpfilter.h"
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,14 +82,20 @@ __KERNEL_RCSID(0, "$NetBSD: if_pcn.c,v 1.55 2012/07/22 14:33:03 matt Exp $");
 #include <sys/device.h>
 #include <sys/queue.h>
 
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
+
+#include <uvm/uvm_extern.h>		/* for PAGE_SIZE */
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -242,6 +251,7 @@ struct pcn_softc {
 	bus_space_handle_t sc_sh;	/* bus space handle */
 	bus_dma_tag_t sc_dmat;		/* bus DMA tag */
 	struct ethercom sc_ethercom;	/* Ethernet common data */
+	void *sc_sdhook;		/* shutdown hook */
 
 	/* Points to our media routines, etc. */
 	const struct pcn_variant *sc_variant;
@@ -308,7 +318,9 @@ struct pcn_softc {
 	uint32_t sc_csr5;		/* prototype CSR5 register */
 	uint32_t sc_mode;		/* prototype MODE register */
 
-	krndsource_t rnd_source;	/* random source */
+#if NRND > 0
+	rndsource_element_t rnd_source;	/* random source */
+#endif
 };
 
 /* sc_flags */
@@ -386,7 +398,7 @@ static int	pcn_ioctl(struct ifnet *, u_long, void *);
 static int	pcn_init(struct ifnet *);
 static void	pcn_stop(struct ifnet *, int);
 
-static bool	pcn_shutdown(device_t, int);
+static void	pcn_shutdown(void *);
 
 static void	pcn_reset(struct pcn_softc *);
 static void	pcn_rxdrain(struct pcn_softc *);
@@ -401,9 +413,9 @@ static int	pcn_intr(void *);
 static void	pcn_txintr(struct pcn_softc *);
 static int	pcn_rxintr(struct pcn_softc *);
 
-static int	pcn_mii_readreg(device_t, int, int);
-static void	pcn_mii_writereg(device_t, int, int, int);
-static void	pcn_mii_statchg(struct ifnet *);
+static int	pcn_mii_readreg(struct device *, int, int);
+static void	pcn_mii_writereg(struct device *, int, int, int);
+static void	pcn_mii_statchg(struct device *);
 
 static void	pcn_79c970_mediainit(struct pcn_softc *);
 static int	pcn_79c970_mediachange(struct ifnet *);
@@ -812,8 +824,10 @@ pcn_attach(device_t parent, device_t self, void *aux)
 	/* Attach the interface. */
 	if_attach(ifp);
 	ether_ifattach(ifp, enaddr);
+#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
+#endif
 
 #ifdef PCN_EVENT_COUNTERS
 	/* Attach event counters. */
@@ -848,15 +862,11 @@ pcn_attach(device_t parent, device_t self, void *aux)
 	    NULL, device_xname(self), "txcopy");
 #endif /* PCN_EVENT_COUNTERS */
 
-	/*
-	 * Establish power handler with shutdown hook, to make sure
-	 * the interface is shutdown during reboot.
-	 */
-	if (pmf_device_register1(self, NULL, NULL, pcn_shutdown))
-		pmf_class_network_register(self, ifp);
-	else
-		aprint_error_dev(self, "couldn't establish power handler\n");
-
+	/* Make sure the interface is shutdown during reboot. */
+	sc->sc_sdhook = shutdownhook_establish(pcn_shutdown, sc);
+	if (sc->sc_sdhook == NULL)
+		aprint_error_dev(self,
+		    "WARNING: unable to establish shutdown hook\n");
 	return;
 
 	/*
@@ -892,16 +902,14 @@ pcn_attach(device_t parent, device_t self, void *aux)
  *
  *	Make sure the interface is stopped at reboot time.
  */
-static bool
-pcn_shutdown(device_t self, int howto)
+static void
+pcn_shutdown(void *arg)
 {
-	struct pcn_softc *sc = device_private(self);
+	struct pcn_softc *sc = arg;
 
 	pcn_stop(&sc->sc_ethercom.ec_if, 1);
 	/* explicitly reset the chip for some onboard one with lazy firmware */
 	pcn_reset(sc);
-
-	return true;
 }
 
 /*
@@ -1125,8 +1133,11 @@ pcn_start(struct ifnet *ifp)
 		sc->sc_txsfree--;
 		sc->sc_txsnext = PCN_NEXTTXS(sc->sc_txsnext);
 
+#if NBPFILTER > 0
 		/* Pass the packet to any BPF listeners. */
-		bpf_mtap(ifp, m0);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m0);
+#endif /* NBPFILTER > 0 */
 	}
 
 	if (sc->sc_txsfree == 0 || sc->sc_txfree == 0) {
@@ -1229,7 +1240,10 @@ pcn_intr(void *arg)
 		if ((csr0 & LE_C0_INTR) == 0)
 			break;
 
-		rnd_add_uint32(&sc->rnd_source, csr0);
+#if NRND > 0
+		if (RND_ENABLED(&sc->rnd_source))
+			rnd_add_uint32(&sc->rnd_source, csr0);
+#endif
 
 		/* ACK the bits and re-enable interrupts. */
 		pcn_csr_write(sc, LE_CSR0, csr0 &
@@ -1545,8 +1559,11 @@ pcn_rxintr(struct pcn_softc *sc)
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 
+#if NBPFILTER > 0
 		/* Pass this up to any BPF listeners. */
-		bpf_mtap(ifp, m);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif /* NBPFILTER > 0 */
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);
@@ -2183,9 +2200,9 @@ pcn_mii_writereg(device_t self, int phy, int reg, int val)
  *	Callback from MII layer when media changes.
  */
 static void
-pcn_mii_statchg(struct ifnet *ifp)
+pcn_mii_statchg(device_t self)
 {
-	struct pcn_softc *sc = ifp->if_softc;
+	struct pcn_softc *sc = device_private(self);
 
 	if ((sc->sc_mii.mii_media_active & IFM_FDX) != 0)
 		pcn_bcr_write(sc, LE_BCR9, LE_B9_FDEN);

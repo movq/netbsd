@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_pax.c,v 1.26 2011/11/19 22:51:25 tls Exp $	*/
+/*	$NetBSD: kern_pax.c,v 1.22.8.1 2010/08/31 10:55:00 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_pax.c,v 1.26 2011/11/19 22:51:25 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_pax.c,v 1.22.8.1 2010/08/31 10:55:00 bouyer Exp $");
 
 #include "opt_pax.h"
 
@@ -37,13 +37,12 @@ __KERNEL_RCSID(0, "$NetBSD: kern_pax.c,v 1.26 2011/11/19 22:51:25 tls Exp $");
 #include <sys/exec_elf.h>
 #include <sys/pax.h>
 #include <sys/sysctl.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/fileassoc.h>
 #include <sys/syslog.h>
 #include <sys/vnode.h>
 #include <sys/queue.h>
 #include <sys/kauth.h>
-#include <sys/cprng.h>
 
 #ifdef PAX_ASLR
 #include <sys/mman.h>
@@ -311,7 +310,7 @@ pax_aslr_init(struct lwp *l, struct vmspace *vm)
 	if (!pax_aslr_active(l))
 		return;
 
-	vm->vm_aslr_delta_mmap = PAX_ASLR_DELTA(cprng_fast32(),
+	vm->vm_aslr_delta_mmap = PAX_ASLR_DELTA(arc4random(),
 	    PAX_ASLR_DELTA_MMAP_LSB, PAX_ASLR_DELTA_MMAP_LEN);
 }
 
@@ -322,7 +321,7 @@ pax_aslr(struct lwp *l, vaddr_t *addr, vaddr_t orig_addr, int f)
 		return;
 
 	if (!(f & MAP_FIXED) && ((orig_addr == 0) || !(f & MAP_ANON))) {
-#ifdef PAX_ASLR_DEBUG
+#ifdef DEBUG_ASLR
 		uprintf("applying to 0x%lx orig_addr=0x%lx f=%x\n",
 		    (unsigned long)*addr, (unsigned long)orig_addr, f);
 #endif
@@ -330,11 +329,11 @@ pax_aslr(struct lwp *l, vaddr_t *addr, vaddr_t orig_addr, int f)
 			*addr += l->l_proc->p_vmspace->vm_aslr_delta_mmap;
 		else
 			*addr -= l->l_proc->p_vmspace->vm_aslr_delta_mmap;
-#ifdef PAX_ASLR_DEBUG
+#ifdef DEBUG_ASLR
 		uprintf("result 0x%lx\n", *addr);
 #endif
 	}
-#ifdef PAX_ASLR_DEBUG
+#ifdef DEBUG_ASLR
 	else
 	    uprintf("not applying to 0x%lx orig_addr=0x%lx f=%x\n",
 		(unsigned long)*addr, (unsigned long)orig_addr, f);
@@ -345,10 +344,10 @@ void
 pax_aslr_stack(struct lwp *l, struct exec_package *epp, u_long *max_stack_size)
 {
 	if (pax_aslr_active(l)) {
-		u_long d =  PAX_ASLR_DELTA(cprng_fast32(),
+		u_long d =  PAX_ASLR_DELTA(arc4random(),
 		    PAX_ASLR_DELTA_STACK_LSB,
 		    PAX_ASLR_DELTA_STACK_LEN);
-#ifdef PAX_ASLR_DEBUG
+#ifdef DEBUG_ASLR
 		uprintf("stack 0x%lx d=0x%lx 0x%lx\n",
 		    epp->ep_minsaddr, d, epp->ep_minsaddr - d);
 #endif
@@ -364,17 +363,19 @@ pax_aslr_stack(struct lwp *l, struct exec_package *epp, u_long *max_stack_size)
 static void
 pax_segvguard_cb(void *v)
 {
-	struct pax_segvguard_entry *p = v;
+	struct pax_segvguard_entry *p;
 	struct pax_segvguard_uid_entry *up;
 
-	if (p == NULL) {
+	if (v == NULL)
 		return;
-	}
+
+	p = v;
 	while ((up = LIST_FIRST(&p->segv_uids)) != NULL) {
 		LIST_REMOVE(up, sue_list);
-		kmem_free(up, sizeof(*up));
+		free(up, M_TEMP);
 	}
-	kmem_free(p, sizeof(*p));
+
+	free(v, M_TEMP);
 }
 
 /*
@@ -416,7 +417,7 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 	 * for it.
 	 */
 	if (p == NULL) {
-		p = kmem_alloc(sizeof(*p), KM_SLEEP);
+		p = malloc(sizeof(*p), M_TEMP, M_WAITOK);
 		fileassoc_add(vp, segvguard_id, p);
 		LIST_INIT(&p->segv_uids);
 
@@ -425,7 +426,7 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 		 * The expiry time is when we purge the entry if it didn't
 		 * reach the limit.
 		 */
-		up = kmem_alloc(sizeof(*up), KM_SLEEP);
+		up = malloc(sizeof(*up), M_TEMP, M_WAITOK);
 		up->sue_uid = kauth_cred_getuid(l->l_cred);
 		up->sue_ncrashes = 1;
 		up->sue_expiry = tv.tv_sec + pax_segvguard_expiry;
@@ -454,7 +455,7 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 	 */
 	if (!have_uid) {
 		if (crashed) {
-			up = kmem_alloc(sizeof(*up), KM_SLEEP);
+			up = malloc(sizeof(*up), M_TEMP, M_WAITOK);
 			up->sue_uid = uid;
 			up->sue_ncrashes = 1;
 			up->sue_expiry = tv.tv_sec + pax_segvguard_expiry;
@@ -462,6 +463,7 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 
 			LIST_INSERT_HEAD(&p->segv_uids, up, sue_list);
 		}
+
 		return (0);
 	}
 

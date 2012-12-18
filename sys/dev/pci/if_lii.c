@@ -1,4 +1,4 @@
-/*	$NetBSD: if_lii.c,v 1.11 2012/07/22 14:33:02 matt Exp $	*/
+/*	$NetBSD: if_lii.c,v 1.5.4.1 2011/05/20 19:19:57 bouyer Exp $	*/
 
 /*
  *  Copyright (c) 2008 The NetBSD Foundation.
@@ -31,8 +31,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_lii.c,v 1.11 2012/07/22 14:33:02 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_lii.c,v 1.5.4.1 2011/05/20 19:19:57 bouyer Exp $");
 
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,7 +47,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_lii.c,v 1.11 2012/07/22 14:33:02 matt Exp $");
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -125,7 +128,7 @@ static int	lii_free_tx_space(struct lii_softc *);
 
 static int	lii_mii_readreg(device_t, int, int);
 static void	lii_mii_writereg(device_t, int, int, int);
-static void	lii_mii_statchg(struct ifnet *);
+static void	lii_mii_statchg(device_t);
 
 static int	lii_media_change(struct ifnet *);
 static void	lii_media_status(struct ifnet *, struct ifmediareq *);
@@ -240,7 +243,6 @@ lii_attach(device_t parent, device_t self, void *aux)
 	pci_intr_handle_t ih;
 	const char *intrstr;
 	pcireg_t cmd;
-	bus_size_t memsize = 0;
 
 	aprint_naive("\n");
 	aprint_normal(": Attansic/Atheros L2 Fast Ethernet\n");
@@ -265,7 +267,7 @@ lii_attach(device_t parent, device_t self, void *aux)
 		break;
 	}
 	if (pci_mapreg_map(pa, PCI_MAPREG_START, cmd, 0,
-	    &sc->sc_mmiot, &sc->sc_mmioh, NULL, &memsize) != 0) {
+	    &sc->sc_mmiot, &sc->sc_mmioh, NULL, NULL) != 0) {
 		aprint_error_dev(self, "failed to map registers\n");
 		return;
 	}
@@ -289,7 +291,7 @@ lii_attach(device_t parent, device_t self, void *aux)
 
 	if (pci_intr_map(pa, &ih) != 0) {
 		aprint_error_dev(self, "failed to map interrupt\n");
-		goto fail;
+		return;
 	}
 	intrstr = pci_intr_string(sc->sc_pc, ih);
 	sc->sc_ih = pci_intr_establish(sc->sc_pc, ih, IPL_NET, lii_intr, sc);
@@ -298,12 +300,14 @@ lii_attach(device_t parent, device_t self, void *aux)
 		if (intrstr != NULL)
 			aprint_error(" at %s", intrstr);
 		aprint_error("\n");
-		goto fail;
+		return;
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
-	if (lii_alloc_rings(sc))
-		goto fail;
+	if (lii_alloc_rings(sc)) {
+		pci_intr_disestablish(sc->sc_pc, sc->sc_ih);
+		return;
+	}
 
 	callout_init(&sc->sc_tick_ch, 0);
 	callout_setfunc(&sc->sc_tick_ch, lii_tick, sc);
@@ -337,20 +341,12 @@ lii_attach(device_t parent, device_t self, void *aux)
 	if_attach(ifp);
 	ether_ifattach(ifp, eaddr);
 
-	if (pmf_device_register(self, NULL, NULL))
-		pmf_class_network_register(self, ifp);
-	else
+	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
+	else
+		pmf_class_network_register(self, ifp);
 
 	return;
-
-fail:
-	if (sc->sc_ih != NULL) {
-		pci_intr_disestablish(sc->sc_pc, sc->sc_ih);
-		sc->sc_ih = NULL;
-	}
-	if (memsize)
-		bus_space_unmap(sc->sc_mmiot, sc->sc_mmioh, memsize);
 }
 
 static int
@@ -635,9 +631,9 @@ lii_mii_writereg(device_t dev, int phy, int reg, int data)
 }
 
 static void
-lii_mii_statchg(struct ifnet *ifp)
+lii_mii_statchg(device_t dev)
 {
-	struct lii_softc *sc = ifp->if_softc;
+	struct lii_softc *sc = device_private(dev);
 	uint32_t val;
 
 	DPRINTF(("lii_mii_statchg\n"));
@@ -887,7 +883,10 @@ lii_start(struct ifnet *ifp)
 
 		IFQ_DEQUEUE(&ifp->if_snd, m0);
 
-		bpf_mtap(ifp, m0);
+#if NBPFILTER > 0
+		if (ifp->if_bpf != NULL)
+			bpf_mtap(ifp->if_bpf, m0);
+#endif
 		m_freem(m0);
 	}
 }
@@ -998,7 +997,10 @@ lii_rxintr(struct lii_softc *sc)
 		memcpy(mtod(m, void *), &rxp->rxp_data[0], size);
 		++ifp->if_ipackets;
 
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 
 		(*ifp->if_input)(ifp, m);
 	}

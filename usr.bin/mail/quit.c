@@ -1,4 +1,4 @@
-/*	$NetBSD: quit.c,v 1.28 2012/04/29 23:50:22 christos Exp $	*/
+/*	$NetBSD: quit.c,v 1.26 2006/11/28 18:45:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,14 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)quit.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: quit.c,v 1.28 2012/04/29 23:50:22 christos Exp $");
+__RCSID("$NetBSD: quit.c,v 1.26 2006/11/28 18:45:32 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include "rcv.h"
 #include "extern.h"
 #include "thread.h"
-#include "sig.h"
 
 /*
  * Rcv -- receive mail rationally.
@@ -79,7 +78,7 @@ writeback(FILE *res)
 	FILE *obuf;
 
 	p = 0;
-	if ((obuf = Fopen(mailname, "re+")) == NULL) {
+	if ((obuf = Fopen(mailname, "r+")) == NULL) {
 		warn("%s", mailname);
 		return -1;
 	}
@@ -133,24 +132,20 @@ writeback(FILE *res)
  * file from the temporary.  Save any new stuff appended to the file.
  */
 static void
-edstop(jmp_buf jmpbuf)
+edstop(void)
 {
 	int gotcha, c;
 	struct message *mp;
-	FILE *obuf;
-	FILE *ibuf;
-	FILE *readstat;
+	FILE *obuf, *ibuf, *readstat = NULL;
 	struct stat statb;
 	char tempname[PATHSIZE];
 	int fd;
 
-	sig_check();
 	if (readonly)
 		return;
-
-	readstat = NULL;
+	holdsigs();
 	if (Tflag != NULL) {
-		if ((readstat = Fopen(Tflag, "we")) == NULL)
+		if ((readstat = Fopen(Tflag, "w")) == NULL)
 			Tflag = NULL;
 	}
 	for (mp = get_message(1), gotcha = 0; mp; mp = next_message(mp)) {
@@ -176,19 +171,19 @@ edstop(jmp_buf jmpbuf)
 		(void)snprintf(tempname, sizeof(tempname),
 		    "%s/mbox.XXXXXXXXXX", tmpdir);
 		if ((fd = mkstemp(tempname)) == -1 ||
-		    (obuf = Fdopen(fd, "we")) == NULL) {
+		    (obuf = Fdopen(fd, "w")) == NULL) {
 			warn("%s", tempname);
 			if (fd != -1)
 				(void)close(fd);
-			sig_release();
-			longjmp(jmpbuf, -11);
+			relsesigs();
+			reset(0);
 		}
-		if ((ibuf = Fopen(mailname, "re")) == NULL) {
+		if ((ibuf = Fopen(mailname, "r")) == NULL) {
 			warn("%s", mailname);
 			(void)Fclose(obuf);
 			(void)rm(tempname);
-			sig_release();
-			longjmp(jmpbuf, -1);
+			relsesigs();
+			reset(0);
 		}
 		(void)fseek(ibuf, (long)mailsize, 0);
 		while ((c = getc(ibuf)) != EOF)
@@ -199,25 +194,25 @@ edstop(jmp_buf jmpbuf)
 			(void)Fclose(obuf);
 			(void)Fclose(ibuf);
 			(void)rm(tempname);
-			sig_release();
-			longjmp(jmpbuf, -1);
+			relsesigs();
+			reset(0);
 		}
 		(void)Fclose(ibuf);
 		(void)Fclose(obuf);
-		if ((ibuf = Fopen(tempname, "re")) == NULL) {
+		if ((ibuf = Fopen(tempname, "r")) == NULL) {
 			warn("%s", tempname);
 			(void)rm(tempname);
-			sig_release();
-			longjmp(jmpbuf, -1);
+			relsesigs();
+			reset(0);
 		}
 		(void)rm(tempname);
 	}
 	(void)printf("\"%s\" ", mailname);
 	(void)fflush(stdout);
-	if ((obuf = Fopen(mailname, "re+")) == NULL) {
+	if ((obuf = Fopen(mailname, "r+")) == NULL) {
 		warn("%s", mailname);
-		sig_release();
-		longjmp(jmpbuf, -1);
+		relsesigs();
+		reset(0);
 	}
 	trunc(obuf);
 	c = 0;
@@ -227,8 +222,8 @@ edstop(jmp_buf jmpbuf)
 		c++;
 		if (sendmessage(mp, obuf, NULL, NULL, NULL) < 0) {
 			warn("%s", mailname);
-			sig_release();
-			longjmp(jmpbuf, -1);
+			relsesigs();
+			reset(0);
 		}
 	}
 	gotcha = (c == 0 && ibuf == NULL);
@@ -240,8 +235,8 @@ edstop(jmp_buf jmpbuf)
 	(void)fflush(obuf);
 	if (ferror(obuf)) {
 		warn("%s", mailname);
-		sig_release();
-		longjmp(jmpbuf, -1);
+		relsesigs();
+		reset(0);
 	}
 	(void)Fclose(obuf);
 	if (gotcha) {
@@ -252,8 +247,7 @@ edstop(jmp_buf jmpbuf)
 	(void)fflush(stdout);
 
 done:
-	sig_release();
-	sig_check();
+	relsesigs();
 }
 
 /*
@@ -262,21 +256,20 @@ done:
  * Remove the system mailbox, if none saved there.
  */
 PUBLIC void
-quit(jmp_buf jmpbuf)
+quit(void)
 {
 	int mcount, p, modify, autohold, anystat, holdbit, nohold;
-	_Bool append;
-	FILE *ibuf, *obuf, *fbuf, *rbuf, *readstat, *abuf;
+	FILE *ibuf = NULL, *obuf, *fbuf, *rbuf, *readstat = NULL, *abuf;
 	struct message *mp;
 	int c, fd;
 	struct stat minfo;
 	const char *mbox;
 	char tempname[PATHSIZE];
 
-#ifdef __GNUC__		/* XXX gcc -Wuninitialized */
-	ibuf = NULL;
-	readstat = NULL;
+#ifdef __GNUC__
+	obuf = NULL;		/* XXX gcc -Wuninitialized */
 #endif
+
 	/*
 	 * If we are read only, we can't do anything,
 	 * so just return quickly.
@@ -293,7 +286,7 @@ quit(jmp_buf jmpbuf)
 	 * in edstop()
 	 */
 	if (edit) {
-		edstop(jmpbuf);
+		edstop();
 		return;
 	}
 
@@ -307,7 +300,7 @@ quit(jmp_buf jmpbuf)
 	 * a message.
 	 */
 
-	fbuf = Fopen(mailname, "re");
+	fbuf = Fopen(mailname, "r");
 	if (fbuf == NULL)
 		goto newmail;
 	if (flock(fileno(fbuf), LOCK_EX) == -1) {
@@ -324,7 +317,7 @@ nolock:
 		(void)snprintf(tempname, sizeof(tempname),
 		    "%s/mail.RqXXXXXXXXXX", tmpdir);
 		if ((fd = mkstemp(tempname)) == -1 ||
-		    (rbuf = Fdopen(fd, "we")) == NULL) {
+		    (rbuf = Fdopen(fd, "w")) == NULL) {
 		    	if (fd != -1)
 				(void)close(fd);
 			goto newmail;
@@ -351,7 +344,7 @@ nolock:
 			return;
 		}
 		(void)Fclose(rbuf);
-		if ((rbuf = Fopen(tempname, "re")) == NULL)
+		if ((rbuf = Fopen(tempname, "r")) == NULL)
 			goto newmail;
 		(void)rm(tempname);
 	}
@@ -380,7 +373,7 @@ nolock:
 	}
 	modify = 0;
 	if (Tflag != NULL) {
-		if ((readstat = Fopen(Tflag, "we")) == NULL)
+		if ((readstat = Fopen(Tflag, "w")) == NULL)
 			Tflag = NULL;
 	}
 	for (c = 0, p = 0, mp = get_message(1); mp; mp = next_message(mp)) {
@@ -425,12 +418,11 @@ nolock:
 
 	mbox = expand("&");
 	mcount = c;
-	append = value(ENAME_APPEND) != NULL;
-	if (!append) {
+	if (value(ENAME_APPEND) == NULL) {
 		(void)snprintf(tempname, sizeof(tempname),
 		    "%s/mail.RmXXXXXXXXXX", tmpdir);
 		if ((fd = mkstemp(tempname)) == -1 ||
-		    (obuf = Fdopen(fd, "we")) == NULL) {
+		    (obuf = Fdopen(fd, "w")) == NULL) {
 			warn("%s", tempname);
 			if (fd != -1)
 				(void)close(fd);
@@ -438,7 +430,7 @@ nolock:
 			dot_unlock(mailname);
 			return;
 		}
-		if ((ibuf = Fopen(tempname, "re")) == NULL) {
+		if ((ibuf = Fopen(tempname, "r")) == NULL) {
 			warn("%s", tempname);
 			(void)rm(tempname);
 			(void)Fclose(obuf);
@@ -447,7 +439,7 @@ nolock:
 			return;
 		}
 		(void)rm(tempname);
-		if ((abuf = Fopen(mbox, "re")) != NULL) {
+		if ((abuf = Fopen(mbox, "r")) != NULL) {
 			while ((c = getc(abuf)) != EOF)
 				(void)putc(c, obuf);
 			(void)Fclose(abuf);
@@ -463,7 +455,7 @@ nolock:
 		(void)Fclose(obuf);
 		if ((fd = creat(mbox, 0600)) != -1)
 			(void)close(fd);
-		if ((obuf = Fopen(mbox, "re+")) == NULL) {
+		if ((obuf = Fopen(mbox, "r+")) == NULL) {
 			warn("%s", mbox);
 			(void)Fclose(ibuf);
 			(void)Fclose(fbuf);
@@ -472,7 +464,7 @@ nolock:
 		}
 	}
 	else {
-		if ((obuf = Fopen(mbox, "ae")) == NULL) {
+		if ((obuf = Fopen(mbox, "a")) == NULL) {
 			warn("%s", mbox);
 			(void)Fclose(fbuf);
 			dot_unlock(mailname);
@@ -484,8 +476,7 @@ nolock:
 		if (mp->m_flag & MBOX)
 			if (sendmessage(mp, obuf, saveignore, NULL, NULL) < 0) {
 				warn("%s", mbox);
-				if (!append)
-					(void)Fclose(ibuf);
+				(void)Fclose(ibuf);
 				(void)Fclose(obuf);
 				(void)Fclose(fbuf);
 				dot_unlock(mailname);
@@ -498,7 +489,7 @@ nolock:
 	 * If we are appending, this is unnecessary.
 	 */
 
-	if (!append) {
+	if (value(ENAME_APPEND) == NULL) {
 		rewind(ibuf);
 		c = getc(ibuf);
 		while (c != EOF) {
@@ -544,7 +535,7 @@ nolock:
 
 cream:
 	if (rbuf != NULL) {
-		abuf = Fopen(mailname, "re+");
+		abuf = Fopen(mailname, "r+");
 		if (abuf == NULL)
 			goto newmail;
 		while ((c = getc(rbuf)) != EOF)

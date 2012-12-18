@@ -1,6 +1,7 @@
-/*	$NetBSD: uvm.h,v 1.63 2012/02/02 19:43:08 tls Exp $	*/
+/*	$NetBSD: uvm.h,v 1.55 2008/06/04 15:06:04 ad Exp $	*/
 
 /*
+ *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -12,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor and
+ *      Washington University.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,14 +41,11 @@
 #include "opt_lockdebug.h"
 #include "opt_multiprocessor.h"
 #include "opt_uvmhist.h"
-#include "opt_uvm_page_trkown.h"
 #endif
 
 #include <uvm/uvm_extern.h>
 
-#ifdef _KERNEL
 #include <uvm/uvm_stat.h>
-#endif
 
 /*
  * pull in prototypes
@@ -59,7 +63,6 @@
 #include <uvm/uvm_pager.h>
 #include <uvm/uvm_pdaemon.h>
 #include <uvm/uvm_swap.h>
-#include <sys/rnd.h>
 
 #ifdef _KERNEL
 
@@ -81,12 +84,6 @@ struct uvm_cpu {
 	bool page_idle_zero;		/* TRUE if we should try to zero
 					   pages in the idle loop */
 	int pages[PGFL_NQUEUES];	/* total of pages in page_free */
-	u_int emap_gen;			/* emap generation number */
-
-	uintptr_t last_fltaddr;		/* last faulted address */
-	uintptr_t last_delta;		/* difference of last two flt addrs */
-	uintptr_t last_delta2;		/* difference of differences */
-	krndsource_t rs;		/* entropy source */
 };
 
 /*
@@ -111,8 +108,14 @@ struct uvm {
 	/* aio_done is locked by uvm.pagedaemon_lock and splbio! */
 	TAILQ_HEAD(, buf) aio_done;		/* done async i/o reqs */
 
+	/* swap-related items */
+	bool swap_running;
+	kcondvar_t scheduler_cv;
+	bool scheduler_kicked;
+	int swapout_enabled;
+
 	/* per-cpu data */
-	struct uvm_cpu *cpus[MAXCPUS];
+	struct uvm_cpu cpus[MAXCPUS];
 };
 
 /*
@@ -128,6 +131,7 @@ extern kmutex_t uvm_pageqlock;		/* lock for active/inactive page q */
 extern kmutex_t uvm_fpageqlock;		/* lock for free page q */
 extern kmutex_t uvm_kentry_lock;
 extern kmutex_t uvm_swap_data_lock;
+extern kmutex_t uvm_scheduler_mutex;
 
 #endif /* _KERNEL */
 

@@ -1,4 +1,4 @@
-/*      $NetBSD: mtpr.h,v 1.22 2009/05/13 09:40:48 skrll Exp $     */
+/*      $NetBSD: mtpr.h,v 1.20.58.1 2009/05/18 21:38:03 bouyer Exp $     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.

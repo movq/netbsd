@@ -1,4 +1,4 @@
-/* $NetBSD: udf_create.c,v 1.17 2009/12/23 09:13:21 mbalmer Exp $ */
+/* $NetBSD: udf_create.c,v 1.12.4.4 2010/01/09 01:15:43 snj Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: udf_create.c,v 1.17 2009/12/23 09:13:21 mbalmer Exp $");
+__RCSID("$NetBSD: udf_create.c,v 1.12.4.4 2010/01/09 01:15:43 snj Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -335,11 +335,11 @@ udf_calculate_disc_layout(int format_flags, int min_udf,
 #endif
 
 	kbsize = (uint64_t) last_lba * sector_size;
-	printf("Total space on this medium approx. %"PRIu64" KiB, %"PRIu64" MiB\n",
+	printf("Total space on this medium aprox. %"PRIu64" KiB, %"PRIu64" MiB\n",
 			kbsize/1024, kbsize/(1024*1024));
 	kbsize = (uint64_t) (layout.part_size_lba - layout.alloc_bitmap_dscr_size
 		- layout.meta_bitmap_dscr_size) * sector_size;
-	printf("Free space on this volume approx.  %"PRIu64" KiB, %"PRIu64" MiB\n\n",
+	printf("Free space on this volume aprox.  %"PRIu64" KiB, %"PRIu64" MiB\n\n",
 			kbsize/1024, kbsize/(1024*1024));
 
 	return 0;

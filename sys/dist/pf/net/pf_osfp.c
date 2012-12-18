@@ -1,4 +1,4 @@
-/*	$NetBSD: pf_osfp.c,v 1.11 2011/05/18 12:54:15 drochner Exp $	*/
+/*	$NetBSD: pf_osfp.c,v 1.8 2008/06/18 09:06:27 yamt Exp $	*/
 /*	$OpenBSD: pf_osfp.c,v 1.12 2006/12/13 18:14:10 itojun Exp $ */
 
 /*
@@ -19,7 +19,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pf_osfp.c,v 1.11 2011/05/18 12:54:15 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pf_osfp.c,v 1.8 2008/06/18 09:06:27 yamt Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
@@ -315,7 +315,7 @@ pf_osfp_initialize(void)
 	SLIST_INIT(&pf_osfp_list);
 }
 
-#ifdef _MODULE
+#ifdef _LKM
 void
 pf_osfp_destroy(void)
 {
@@ -324,7 +324,7 @@ pf_osfp_destroy(void)
 	pool_destroy(&pf_osfp_pl);
 	pool_destroy(&pf_osfp_entry_pl);
 }
-#endif /* _MODULE */
+#endif /* _LKM */
 
 /* Flush the fingerprint list */
 void
@@ -585,7 +585,7 @@ pf_osfp_validate(void)
 		if (find.fp_mss == 0)
 			find.fp_mss = 128;
 		if (f->fp_flags & PF_OSFP_WSIZE_MSS)
-			find.fp_wsize *= find.fp_mss;
+			find.fp_wsize *= find.fp_mss, 1;
 		else if (f->fp_flags & PF_OSFP_WSIZE_MTU)
 			find.fp_wsize *= (find.fp_mss + 40);
 		else if (f->fp_flags & PF_OSFP_WSIZE_MOD)

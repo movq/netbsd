@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ndis_pccard.c,v 1.4 2009/03/14 15:36:18 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ndis_pccard.c,v 1.3 2007/12/11 12:36:02 lukem Exp $");
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/sys/dev/if_ndis/if_ndis_pccard.c,v 1.6.2.3 2005/03/31 04:24:36 wpaul Exp $");
 #endif
@@ -146,7 +146,8 @@ DRIVER_MODULE(ndis, pccard, ndis_driver, ndis_devclass, ndisdrv_modevent, 0);
  * IDs against our list and return a device name if we find a match.
  */
 static int
-ndis_probe_pccard(device_t dev)
+ndis_probe_pccard(dev)
+	device_t		dev;
 {
 	struct ndis_pccard_type	*t;
 	const char		*prodstr, *vendstr;
@@ -185,7 +186,8 @@ ndis_probe_pccard(device_t dev)
  * setup and ethernet/BPF attach.
  */
 static int
-ndis_attach_pccard(device_t dev)
+ndis_attach_pccard(dev)
+	device_t		dev;
 {
 	struct ndis_softc	*sc;
 	int			unit, error = 0, rid;
@@ -257,7 +259,9 @@ fail:
 }
 
 static struct resource_list *
-ndis_get_resource_list(device_t dev, device_t child)
+ndis_get_resource_list(dev, child)
+	device_t		dev;
+	device_t		child;
 {
 	struct ndis_softc	*sc;
 
@@ -270,7 +274,8 @@ ndis_get_resource_list(device_t dev, device_t child)
 #define NDIS_AM_RID 3
 
 int
-ndis_alloc_amem(void *arg)
+ndis_alloc_amem(arg)
+	void			*arg;
 {
 	struct ndis_softc	*sc;
 	int			error, rid;
@@ -317,7 +322,8 @@ ndis_alloc_amem(void *arg)
 }
 
 void
-ndis_free_amem(void *arg)
+ndis_free_amem(arg)
+	void			*arg;
 {
 	struct ndis_softc	*sc;
 

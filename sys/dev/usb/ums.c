@@ -1,4 +1,4 @@
-/*	$NetBSD: ums.c,v 1.84 2012/04/30 17:27:50 christos Exp $	*/
+/*	$NetBSD: ums.c,v 1.73.8.3 2010/01/16 17:47:12 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.84 2012/04/30 17:27:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.73.8.3 2010/01/16 17:47:12 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,6 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.84 2012/04/30 17:27:50 christos Exp $");
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
+#include <sys/tty.h>
 #include <sys/file.h>
 #include <sys/select.h>
 #include <sys/proc.h>
@@ -63,8 +64,8 @@ __KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.84 2012/04/30 17:27:50 christos Exp $");
 #include <dev/wscons/wsmousevar.h>
 
 #ifdef USB_DEBUG
-#define DPRINTF(x)	if (umsdebug) printf x
-#define DPRINTFN(n,x)	if (umsdebug>(n)) printf x
+#define DPRINTF(x)	if (umsdebug) logprintf x
+#define DPRINTFN(n,x)	if (umsdebug>(n)) logprintf x
 int	umsdebug = 0;
 #else
 #define DPRINTF(x)
@@ -90,16 +91,12 @@ struct ums_softc {
 
 	int sc_enabled;
 
-	u_int flags;		/* device configuration */
-#define UMS_Z			0x001	/* z direction available */
-#define UMS_SPUR_BUT_UP		0x002	/* spurious button up events */
-#define UMS_REVZ		0x004	/* Z-axis is reversed */
-#define UMS_W			0x008	/* w direction/tilt available */
-#define UMS_ABS			0x010	/* absolute position, touchpanel */
-#define UMS_TIP_SWITCH  	0x020	/* digitizer tip switch */
-#define UMS_SEC_TIP_SWITCH 	0x040	/* digitizer secondary tip switch */
-#define UMS_BARREL_SWITCH 	0x080	/* digitizer barrel switch */
-#define UMS_ERASER 		0x100	/* digitizer eraser */
+	int flags;		/* device configuration */
+#define UMS_Z		0x01	/* z direction available */
+#define UMS_SPUR_BUT_UP	0x02	/* spurious button up events */
+#define UMS_REVZ	0x04	/* Z-axis is reversed */
+#define UMS_W		0x08	/* w direction/tilt available */
+#define UMS_ABS		0x10	/* absolute position, touchpanel */
 
 	int nbuttons;
 
@@ -107,16 +104,6 @@ struct ums_softc {
 	device_t sc_wsmousedev;
 
 	char			sc_dying;
-};
-
-static const struct {
-	u_int feature;
-	u_int flag;
-} digbut[] = {
-	{ HUD_TIP_SWITCH, UMS_TIP_SWITCH },
-	{ HUD_SEC_TIP_SWITCH, UMS_SEC_TIP_SWITCH },
-	{ HUD_BARREL_SWITCH, UMS_BARREL_SWITCH },
-	{ HUD_ERASER, UMS_ERASER },
 };
 
 #define MOUSE_FLAGS_MASK (HIO_CONST|HIO_RELATIVE)
@@ -149,21 +136,9 @@ ums_match(device_t parent, cfdata_t match, void *aux)
 	int size;
 	void *desc;
 
-	/*
-	 * Some (older) Griffin PowerMate knobs may masquerade as a
-	 * mouse, avoid treating them as such, they have only one axis.
-	 */
-	if (uha->uaa->vendor == USB_VENDOR_GRIFFIN &&
-	    uha->uaa->product == USB_PRODUCT_GRIFFIN_POWERMATE)
-		return (UMATCH_NONE);
-
 	uhidev_get_report_desc(uha->parent, &desc, &size);
 	if (!hid_is_collection(desc, size, uha->reportid,
-			       HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_MOUSE)) &&
-	    !hid_is_collection(desc, size, uha->reportid,
-			       HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_POINTER)) &&
-	    !hid_is_collection(desc, size, uha->reportid,
-                               HID_USAGE2(HUP_DIGITIZERS, 0x0002)))
+			       HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_MOUSE)))
 		return (UMATCH_NONE);
 
 	return (UMATCH_IFACECLASS);
@@ -180,7 +155,7 @@ ums_attach(device_t parent, device_t self, void *aux)
 	u_int32_t flags, quirks;
 	int i, hl;
 	struct hid_location *zloc;
-	bool isdigitizer;
+	struct hid_location loc_btn;
 
 	aprint_naive("\n");
 
@@ -197,17 +172,14 @@ ums_attach(device_t parent, device_t self, void *aux)
 
 	uhidev_get_report_desc(uha->parent, &desc, &size);
 
-	isdigitizer = hid_is_collection(desc, size, uha->reportid,
-	    HID_USAGE2(HUP_DIGITIZERS, 0x0002));
-
 	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	if (!hid_locate(desc, size, HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_X),
 	       uha->reportid, hid_input, &sc->sc_loc_x, &flags)) {
 		aprint_error("\n%s: mouse has no X report\n",
-		       device_xname(sc->sc_hdev.sc_dev));
-		return;
+		       USBDEVNAME(sc->sc_hdev.sc_dev));
+		USB_ATTACH_ERROR_RETURN;
 	}
 	switch (flags & MOUSE_FLAGS_MASK) {
 	case 0:
@@ -217,15 +189,15 @@ ums_attach(device_t parent, device_t self, void *aux)
 		break;
 	default:
 		aprint_error("\n%s: X report 0x%04x not supported\n",
-		       device_xname(sc->sc_hdev.sc_dev), flags);
-		return;
+		       USBDEVNAME(sc->sc_hdev.sc_dev), flags);
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	if (!hid_locate(desc, size, HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_Y),
 	       uha->reportid, hid_input, &sc->sc_loc_y, &flags)) {
 		aprint_error("\n%s: mouse has no Y report\n",
-		       device_xname(sc->sc_hdev.sc_dev));
-		return;
+		       USBDEVNAME(sc->sc_hdev.sc_dev));
+		USB_ATTACH_ERROR_RETURN;
 	}
 	switch (flags & MOUSE_FLAGS_MASK) {
 	case 0:
@@ -235,8 +207,8 @@ ums_attach(device_t parent, device_t self, void *aux)
 		break;
 	default:
 		aprint_error("\n%s: Y report 0x%04x not supported\n",
-		       device_xname(sc->sc_hdev.sc_dev), flags);
-		return;
+		       USBDEVNAME(sc->sc_hdev.sc_dev), flags);
+		USB_ATTACH_ERROR_RETURN;
 	}
 
 	/* Try the wheel first as the Z activator since it's tradition. */
@@ -252,7 +224,7 @@ ums_attach(device_t parent, device_t self, void *aux)
 	if (hl) {
 		if ((flags & MOUSE_FLAGS_MASK) != HIO_RELATIVE) {
 			aprint_verbose("\n%s: Wheel report 0x%04x not "
-			    "supported\n", device_xname(sc->sc_hdev.sc_dev),
+			    "supported\n", USBDEVNAME(sc->sc_hdev.sc_dev),
 			    flags);
 			sc->sc_loc_z.size = 0;	/* Bad Z coord, ignore it */
 		} else {
@@ -290,7 +262,7 @@ ums_attach(device_t parent, device_t self, void *aux)
 	if (hl) {
 		if ((flags & MOUSE_FLAGS_MASK) != HIO_RELATIVE) {
 			aprint_verbose("\n%s: Z report 0x%04x not supported\n",
-			       device_xname(sc->sc_hdev.sc_dev), flags);
+			       USBDEVNAME(sc->sc_hdev.sc_dev), flags);
 			zloc->size = 0;	/* Bad Z coord, ignore it */
 		} else {
 			if (sc->flags & UMS_Z)
@@ -317,35 +289,20 @@ ums_attach(device_t parent, device_t self, void *aux)
 	/* figure out the number of buttons */
 	for (i = 1; i <= MAX_BUTTONS; i++)
 		if (!hid_locate(desc, size, HID_USAGE2(HUP_BUTTON, i),
-		    uha->reportid, hid_input, &sc->sc_loc_btn[i - 1], 0))
+			uha->reportid, hid_input, &loc_btn, 0))
 			break;
-
-	if (isdigitizer) {
-		for (size_t j = 0; j < __arraycount(digbut); j++) {
-			if (hid_locate(desc, size, HID_USAGE2(HUP_DIGITIZERS, 
-			    digbut[j].feature), uha->reportid, hid_input,
-			    &sc->sc_loc_btn[i - 1], 0)) {
-				if (i <= MAX_BUTTONS) {
-					i++;
-					sc->flags |= digbut[j].flag;
-				} else
-					aprint_error_dev(self,
-					    "ran out of buttons\n");
-			}
-		}
-	}
 	sc->nbuttons = i - 1;
 
-	aprint_normal(": %d button%s%s%s%s%s%s%s%s%s\n",
+	aprint_normal(": %d button%s%s%s%s\n",
 	    sc->nbuttons, sc->nbuttons == 1 ? "" : "s",
 	    sc->flags & UMS_W ? ", W" : "",
 	    sc->flags & UMS_Z ? " and Z dir" : "",
-	    sc->flags & UMS_W ? "s" : "",
-	    isdigitizer ? " digitizer"  : "",
-	    sc->flags & UMS_TIP_SWITCH ? ", tip" : "",
-	    sc->flags & UMS_SEC_TIP_SWITCH ? ", sec tip" : "",
-	    sc->flags & UMS_BARREL_SWITCH ? ", barrel" : "",
-	    sc->flags & UMS_ERASER ? ", eraser" : "");
+	    sc->flags & UMS_W ? "s" : "");
+
+	for (i = 1; i <= sc->nbuttons; i++)
+		hid_locate(desc, size, HID_USAGE2(HUP_BUTTON, i),
+			   uha->reportid, hid_input,
+			   &sc->sc_loc_btn[i-1], 0);
 
 #ifdef USB_DEBUG
 	DPRINTF(("ums_attach: sc=%p\n", sc));
@@ -370,21 +327,26 @@ ums_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_wsmousedev = config_found(self, &a, wsmousedevprint);
 
-	return;
+	USB_ATTACH_SUCCESS_RETURN;
 }
 
 int
-ums_activate(device_t self, enum devact act)
+ums_activate(device_ptr_t self, enum devact act)
 {
 	struct ums_softc *sc = device_private(self);
+	int rv = 0;
 
 	switch (act) {
+	case DVACT_ACTIVATE:
+		return (EOPNOTSUPP);
+
 	case DVACT_DEACTIVATE:
+		if (sc->sc_wsmousedev != NULL)
+			rv = config_deactivate(sc->sc_wsmousedev);
 		sc->sc_dying = 1;
-		return 0;
-	default:
-		return EOPNOTSUPP;
+		break;
 	}
+	return (rv);
 }
 
 void

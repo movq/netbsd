@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.18 2011/02/26 12:08:30 tsutsui Exp $	*/
+/*	$NetBSD: cpu.c,v 1.15 2008/01/04 22:13:55 ad Exp $	*/
 /*-
  * Copyright (c) 1999 Shin Takemura, All rights reserved.
  * Copyright (c) 1999-2001 SATO Kazumi, All rights reserved.
@@ -56,30 +56,27 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.18 2011/02/26 12:08:30 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.15 2008/01/04 22:13:55 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/cpu.h>
 #include <sys/bus.h>
-
-#include <mips/locore.h>
 
 #include <machine/sysconf.h>
 #include <machine/autoconf.h>
 
 /* Definition of the driver for autoconfig. */
-static int	cpumatch(device_t, cfdata_t, void *);
-static void	cpuattach(device_t, device_t, void *);
+static int	cpumatch(struct device *, struct cfdata *, void *);
+static void	cpuattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(cpu, 0,
+CFATTACH_DECL(cpu, sizeof (struct device),
     cpumatch, cpuattach, NULL, NULL);
 
 extern struct cfdriver cpu_cd;
 
 static int
-cpumatch(device_t parent, cfdata_t cf, void *aux)
+cpumatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -88,18 +85,14 @@ cpumatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-cpuattach(device_t parent, device_t self, void *aux)
+cpuattach(struct device *parent, struct device *dev, void *aux)
 {
-	struct cpu_info * const ci = curcpu();
 
-	ci->ci_dev = self;
-	self->dv_private = ci;
+	printf(": ");
 
-	aprint_normal(": ");
-
-	cpu_identify(self);
+	cpu_identify();
 
 	/* install CPU specific idle routine if any. */
 	if (platform.cpu_idle != NULL)
-		mips_locoresw.lsw_cpu_idle = platform.cpu_idle;
+		CPU_IDLE = (long *)platform.cpu_idle;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: rz.c,v 1.26 2011/07/17 20:54:45 joerg Exp $	*/
+/*	$NetBSD: rz.c,v 1.22 2006/01/25 18:28:27 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -37,6 +37,7 @@
 #include <lib/libsa/stand.h>
 #include <lib/libkern/libkern.h>
 #include <machine/dec_prom.h>
+#include <machine/stdarg.h>
 
 #include <sys/param.h>
 #include <sys/disklabel.h>
@@ -56,8 +57,13 @@ struct	rz_softc {
 };
 
 int
-rzstrategy(void *devdata, int rw, daddr_t bn, size_t reqcnt, void *addr, size_t *cnt)
-	/* cnt:	 out: number of bytes transfered */
+rzstrategy(devdata, rw, bn, reqcnt, addr, cnt)
+	void *devdata;
+	int rw;
+	daddr_t bn;
+	size_t reqcnt;
+	void *addr;
+	size_t *cnt;	/* out: number of bytes transfered */
 {
 	struct rz_softc *sc = (struct rz_softc *)devdata;
 	int part = sc->sc_part;
@@ -109,7 +115,7 @@ rzopen(struct open_file *f, ...)
 	int i;
 	char *msg;
 	char buf[DEV_BSIZE];
-	size_t cnt;
+	int cnt;
 	static char device[] = "rz(0,0,0)";
 	va_list ap;
 
@@ -176,7 +182,8 @@ rzopen(struct open_file *f, ...)
 
 #ifndef LIBSA_NO_DEV_CLOSE
 int
-rzclose(struct open_file *f)
+rzclose(f)
+	struct open_file *f;
 {
 	if (callv == &callvec)
 		prom_close(((struct rz_softc *)f->f_devdata)->sc_fd);

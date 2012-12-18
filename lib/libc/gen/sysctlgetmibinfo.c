@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctlgetmibinfo.c,v 1.10 2012/03/13 21:13:37 christos Exp $ */
+/*	$NetBSD: sysctlgetmibinfo.c,v 1.6 2008/04/29 06:53:01 martin Exp $ */
 
 /*-
  * Copyright (c) 2003,2004 The NetBSD Foundation, Inc.
@@ -31,32 +31,24 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: sysctlgetmibinfo.c,v 1.10 2012/03/13 21:13:37 christos Exp $");
+__RCSID("$NetBSD: sysctlgetmibinfo.c,v 1.6 2008/04/29 06:53:01 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
-#ifndef RUMP_ACTION
 #include "namespace.h"
 #ifdef _REENTRANT
 #include "reentrant.h"
 #endif /* _REENTRANT */
-#endif /* RUMP_ACTION */
 #include <sys/param.h>
 #include <sys/sysctl.h>
 
-#include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef RUMP_ACTION
-#include <rump/rump_syscalls.h>
-#define sysctl(a,b,c,d,e,f) rump_sys___sysctl(a,b,c,d,e,f)
-#else
 #ifdef __weak_alias
 __weak_alias(__learn_tree,___learn_tree)
 __weak_alias(sysctlgetmibinfo,_sysctlgetmibinfo)
-#endif
 #endif
 
 /*
@@ -132,9 +124,7 @@ relearnhead(void)
 {
 	struct sysctlnode *h, *i, *o, qnode;
 	size_t si, so;
-	int rc, name;
-	size_t nlen, olen, ni, oi;
-	uint32_t t;
+	int rc, name, nlen, olen, ni, oi, t;
 
 	/*
 	 * if there's nothing there, there's no need to expend any
@@ -167,7 +157,7 @@ relearnhead(void)
 	 * order the new copy of the head
 	 */
 	nlen = so / sizeof(struct sysctlnode);
-	qsort(h, nlen, sizeof(struct sysctlnode), compar);
+	qsort(h, (size_t)nlen, sizeof(struct sysctlnode), compar);
 
 	/*
 	 * verify that everything is the same.  if it is, we don't
@@ -261,9 +251,8 @@ relearnhead(void)
 	/*
 	 * pop new head in
 	 */
-	_DIAGASSERT(__type_fit(uint32_t, nlen));
-	sysctl_mibroot.sysctl_csize =
-	    sysctl_mibroot.sysctl_clen = (uint32_t)nlen;
+	sysctl_mibroot.sysctl_clen = nlen;
+	sysctl_mibroot.sysctl_csize = nlen;
 	sysctl_mibroot.sysctl_child = h;
 	free(o);
 }
@@ -275,7 +264,7 @@ int
 __learn_tree(int *name, u_int namelen, struct sysctlnode *pnode)
 {
 	struct sysctlnode qnode;
-	uint32_t rc;
+	int rc;
 	size_t sz;
 
 	if (pnode == NULL)
@@ -333,9 +322,9 @@ __learn_tree(int *name, u_int namelen, struct sysctlnode *pnode)
 	/*
 	 * how many did we get?
 	 */
-	sz /= sizeof(struct sysctlnode);
-	pnode->sysctl_csize = pnode->sysctl_clen = (uint32_t)sz;
-	if (pnode->sysctl_clen != sz) {
+	pnode->sysctl_clen = sz / sizeof(struct sysctlnode);
+	pnode->sysctl_csize = sz / sizeof(struct sysctlnode);
+	if (pnode->sysctl_clen * sizeof(struct sysctlnode) != sz) {
 		free(pnode->sysctl_child);
 		pnode->sysctl_child = NULL;
 		errno = EINVAL;
@@ -409,8 +398,8 @@ sysctlgetmibinfo_unlocked(const char *gname, int *iname, u_int *namelenp,
 #endif /* _REENTRANT */
 {
 	struct sysctlnode *pnode, *node;
-	int name[CTL_MAXNAME], n, haven;
-	u_int ni, nl;
+	int name[CTL_MAXNAME], ni, n, haven;
+	u_int nl;
 	intmax_t q;
 	char sep[2], token[SYSCTL_NAMELEN],
 		pname[SYSCTL_NAMELEN * CTL_MAXNAME + CTL_MAXNAME];
@@ -428,7 +417,7 @@ sysctlgetmibinfo_unlocked(const char *gname, int *iname, u_int *namelenp,
 		}
 		else {
 			/* this is just someone being silly */
-			if (SYSCTL_VERS((*rnode)->sysctl_flags) != (uint32_t)v)
+			if (SYSCTL_VERS((*rnode)->sysctl_flags) != v)
 				return (EINVAL);
 
 			/* XXX later deal with other people's trees */
@@ -487,7 +476,7 @@ sysctlgetmibinfo_unlocked(const char *gname, int *iname, u_int *namelenp,
 				return (-1);
 			}
 		}
-		else if (dot - piece > (intptr_t)(sizeof(token) - 1)) {
+		else if (dot - piece > sizeof(token) - 1) {
 			COPY_OUT_DATA(token, cname, csz, namelenp, nl);
 			errno = ENAMETOOLONG;
 			return (-1);

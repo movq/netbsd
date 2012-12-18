@@ -1,4 +1,4 @@
-/*   $NetBSD: add_wchstr.c,v 1.4 2010/02/23 19:48:26 drochner Exp $ */
+/*   $NetBSD: add_wchstr.c,v 1.2 2007/05/28 15:01:53 blymn Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation Inc.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: add_wchstr.c,v 1.4 2010/02/23 19:48:26 drochner Exp $");
+__RCSID("$NetBSD: add_wchstr.c,v 1.2 2007/05/28 15:01:53 blymn Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -195,8 +195,8 @@ wadd_wchnstr(WINDOW *win, const cchar_t *wchstr, int n)
 	chp = wchstr;
 	x = win->curx;
 	y = win->cury;
-	lp = &win->alines[y]->line[x];
-	lnp = win->alines[y];
+	lp = &win->lines[y]->line[x];
+	lnp = win->lines[y];
 
 	cw = WCOL(*lp);
 	if (cw >= 0) {
@@ -233,8 +233,6 @@ wadd_wchnstr(WINDOW *win, const cchar_t *wchstr, int n)
 		__CTRACE(__CTRACE_INPUT, "wadd_wchnstr: adding %x", wc);
 #endif /* DEBUG */
 		cw = wcwidth(wc);
-		if (cw < 0)
-			cw = 1;
 		if (cw) {
 			/* spacing character */
 #ifdef DEBUG
@@ -322,9 +320,9 @@ wadd_wchnstr(WINDOW *win, const cchar_t *wchstr, int n)
 #ifdef DEBUG
 	for (i = sx; i < ex; i++) {
 		__CTRACE(__CTRACE_INPUT, "wadd_wchnstr: (%d,%d)=(%x,%x,%p)\n",
-		    win->cury, i, win->alines[win->cury]->line[i].ch,
-		    win->alines[win->cury]->line[i].attr,
-		    win->alines[win->cury]->line[i].nsp);
+		    win->cury, i, win->lines[win->cury]->line[i].ch,
+		    win->lines[win->cury]->line[i].attr,
+		    win->lines[win->cury]->line[i].nsp);
 	}
 #endif /* DEBUG */
 	lnp->flags |= __ISDIRTY;

@@ -1,31 +1,41 @@
-/*	$NetBSD: if_iwi.c,v 1.91 2012/06/02 21:36:44 dsl Exp $  */
-/*	$OpenBSD: if_iwi.c,v 1.111 2010/11/15 19:11:57 damien Exp $	*/
+/*	$NetBSD: if_iwi.c,v 1.74.2.4 2009/09/29 23:57:41 snj Exp $  */
 
 /*-
- * Copyright (c) 2004-2008
+ * Copyright (c) 2004, 2005
  *      Damien Bergamini <damien.bergamini@free.fr>. All rights reserved.
  *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice unmodified, this list of conditions, and the following
+ *    disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
  *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_iwi.c,v 1.91 2012/06/02 21:36:44 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_iwi.c,v 1.74.2.4 2009/09/29 23:57:41 snj Exp $");
 
 /*-
  * Intel(R) PRO/Wireless 2200BG/2225BG/2915ABG driver
  * http://www.intel.com/network/connectivity/products/wireless/prowireless_mobile.htm
  */
 
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -37,8 +47,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_iwi.c,v 1.91 2012/06/02 21:36:44 dsl Exp $");
 #include <sys/malloc.h>
 #include <sys/conf.h>
 #include <sys/kauth.h>
-#include <sys/proc.h>
-#include <sys/cprng.h>
 
 #include <sys/bus.h>
 #include <machine/endian.h>
@@ -50,7 +58,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_iwi.c,v 1.91 2012/06/02 21:36:44 dsl Exp $");
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_dl.h>
@@ -65,6 +75,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_iwi.c,v 1.91 2012/06/02 21:36:44 dsl Exp $");
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
+
+#include <crypto/arc4/arc4.h>
 
 #include <dev/pci/if_iwireg.h>
 #include <dev/pci/if_iwivar.h>
@@ -81,7 +93,7 @@ int iwi_debug = 4;
 /* Permit loading the Intel firmware */
 static int iwi_accept_eula;
 
-static int	iwi_match(device_t, cfdata_t, void *);
+static int	iwi_match(device_t, struct cfdata *, void *);
 static void	iwi_attach(device_t, device_t, void *);
 static int	iwi_detach(device_t, int);
 
@@ -176,7 +188,7 @@ CFATTACH_DECL_NEW(iwi, sizeof (struct iwi_softc), iwi_match, iwi_attach,
     iwi_detach, NULL);
 
 static int
-iwi_match(device_t parent, cfdata_t match, void *aux)
+iwi_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -203,18 +215,21 @@ iwi_attach(device_t parent, device_t self, void *aux)
 	struct ifnet *ifp = &sc->sc_if;
 	struct pci_attach_args *pa = aux;
 	const char *intrstr;
+	char devinfo[256];
 	bus_space_tag_t memt;
 	bus_space_handle_t memh;
 	pci_intr_handle_t ih;
 	pcireg_t data;
 	uint16_t val;
-	int error, i;
+	int error, revision, i;
 
 	sc->sc_dev = self;
 	sc->sc_pct = pa->pa_pc;
 	sc->sc_pcitag = pa->pa_tag;
 
-	pci_aprint_devinfo(pa, NULL);
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof devinfo);
+	revision = PCI_REVISION(pa->pa_class);
+	aprint_normal(": %s (rev. 0x%02x)\n", devinfo, revision);
 
 	/* clear unit numbers allocated to IBSS */
 	sc->sc_unr = 0;
@@ -225,12 +240,6 @@ iwi_attach(device_t parent, device_t self, void *aux)
 		aprint_error_dev(self, "cannot activate %d\n", error);
 		return;
 	}
-
-	/* clear device specific PCI configuration register 0x41 */
-	data = pci_conf_read(sc->sc_pct, sc->sc_pcitag, 0x40);
-	data &= ~0x0000ff00;
-	pci_conf_write(sc->sc_pct, sc->sc_pcitag, 0x40, data);
-
 
 	/* enable bus-mastering */
 	data = pci_conf_read(sc->sc_pct, sc->sc_pcitag, PCI_COMMAND_STATUS_REG);
@@ -269,9 +278,49 @@ iwi_attach(device_t parent, device_t self, void *aux)
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	if (iwi_reset(sc) != 0) {
-		pci_intr_disestablish(sc->sc_pct, sc->sc_ih);
 		aprint_error_dev(self, "could not reset adapter\n");
 		return;
+	}
+
+	/*
+	 * Allocate rings.
+	 */
+	if (iwi_alloc_cmd_ring(sc, &sc->cmdq, IWI_CMD_RING_COUNT) != 0) {
+		aprint_error_dev(self, "could not allocate command ring\n");
+		goto fail;
+	}
+
+	error = iwi_alloc_tx_ring(sc, &sc->txq[0], IWI_TX_RING_COUNT,
+	    IWI_CSR_TX1_RIDX, IWI_CSR_TX1_WIDX);
+	if (error != 0) {
+		aprint_error_dev(self, "could not allocate Tx ring 1\n");
+		goto fail;
+	}
+
+	error = iwi_alloc_tx_ring(sc, &sc->txq[1], IWI_TX_RING_COUNT,
+	    IWI_CSR_TX2_RIDX, IWI_CSR_TX2_WIDX);
+	if (error != 0) {
+		aprint_error_dev(self, "could not allocate Tx ring 2\n");
+		goto fail;
+	}
+
+	error = iwi_alloc_tx_ring(sc, &sc->txq[2], IWI_TX_RING_COUNT,
+	    IWI_CSR_TX3_RIDX, IWI_CSR_TX3_WIDX);
+	if (error != 0) {
+		aprint_error_dev(self, "could not allocate Tx ring 3\n");
+		goto fail;
+	}
+
+	error = iwi_alloc_tx_ring(sc, &sc->txq[3], IWI_TX_RING_COUNT,
+	    IWI_CSR_TX4_RIDX, IWI_CSR_TX4_WIDX);
+	if (error != 0) {
+		aprint_error_dev(self, "could not allocate Tx ring 4\n");
+		goto fail;
+	}
+
+	if (iwi_alloc_rx_ring(sc, &sc->rxq, IWI_RX_RING_COUNT) != 0) {
+		aprint_error_dev(self, "could not allocate Rx ring\n");
+		goto fail;
 	}
 
 	ic->ic_ifp = ifp;
@@ -364,49 +413,9 @@ iwi_attach(device_t parent, device_t self, void *aux)
 	ic->ic_newstate = iwi_newstate;
 	ieee80211_media_init(ic, iwi_media_change, iwi_media_status);
 
-	/*
-	 * Allocate rings.
-	 */
-	if (iwi_alloc_cmd_ring(sc, &sc->cmdq, IWI_CMD_RING_COUNT) != 0) {
-		aprint_error_dev(self, "could not allocate command ring\n");
-		goto fail;
-	}
-
-	error = iwi_alloc_tx_ring(sc, &sc->txq[0], IWI_TX_RING_COUNT,
-	    IWI_CSR_TX1_RIDX, IWI_CSR_TX1_WIDX);
-	if (error != 0) {
-		aprint_error_dev(self, "could not allocate Tx ring 1\n");
-		goto fail;
-	}
-
-	error = iwi_alloc_tx_ring(sc, &sc->txq[1], IWI_TX_RING_COUNT,
-	    IWI_CSR_TX2_RIDX, IWI_CSR_TX2_WIDX);
-	if (error != 0) {
-		aprint_error_dev(self, "could not allocate Tx ring 2\n");
-		goto fail;
-	}
-
-	error = iwi_alloc_tx_ring(sc, &sc->txq[2], IWI_TX_RING_COUNT,
-	    IWI_CSR_TX3_RIDX, IWI_CSR_TX3_WIDX);
-	if (error != 0) {
-		aprint_error_dev(self, "could not allocate Tx ring 3\n");
-		goto fail;
-	}
-
-	error = iwi_alloc_tx_ring(sc, &sc->txq[3], IWI_TX_RING_COUNT,
-	    IWI_CSR_TX4_RIDX, IWI_CSR_TX4_WIDX);
-	if (error != 0) {
-		aprint_error_dev(self, "could not allocate Tx ring 4\n");
-		goto fail;
-	}
-
-	if (iwi_alloc_rx_ring(sc, &sc->rxq, IWI_RX_RING_COUNT) != 0) {
-		aprint_error_dev(self, "could not allocate Rx ring\n");
-		goto fail;
-	}
-
-	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
-	    sizeof(struct ieee80211_frame) + 64, &sc->sc_drvbpf);
+#if NBPFILTER > 0
+	bpfattach2(ifp, DLT_IEEE802_11_RADIO,
+	    sizeof (struct ieee80211_frame) + 64, &sc->sc_drvbpf);
 
 	sc->sc_rxtap_len = sizeof sc->sc_rxtapu;
 	sc->sc_rxtap.wr_ihdr.it_len = htole16(sc->sc_rxtap_len);
@@ -415,13 +424,14 @@ iwi_attach(device_t parent, device_t self, void *aux)
 	sc->sc_txtap_len = sizeof sc->sc_txtapu;
 	sc->sc_txtap.wt_ihdr.it_len = htole16(sc->sc_txtap_len);
 	sc->sc_txtap.wt_ihdr.it_present = htole32(IWI_TX_RADIOTAP_PRESENT);
+#endif
 
 	iwi_sysctlattach(sc);	
 
-	if (pmf_device_register(self, NULL, NULL))
-		pmf_class_network_register(self, ifp);
-	else
+	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
+	else
+		pmf_class_network_register(self, ifp);
 
 	ieee80211_announce(ic);
 
@@ -484,7 +494,6 @@ iwi_alloc_cmd_ring(struct iwi_softc *sc, struct iwi_cmd_ring *ring,
 	if (error != 0) {
 		aprint_error_dev(sc->sc_dev,
 		    "could not create command ring DMA map\n");
-		ring->desc_map = NULL;
 		goto fail;
 	}
 
@@ -520,7 +529,8 @@ iwi_alloc_cmd_ring(struct iwi_softc *sc, struct iwi_cmd_ring *ring,
 
 	return 0;
 
-fail:	return error;
+fail:	iwi_free_cmd_ring(sc, ring);
+	return error;
 }
 
 static void
@@ -561,7 +571,7 @@ iwi_alloc_tx_ring(struct iwi_softc *sc, struct iwi_tx_ring *ring,
 {
 	int i, error, nsegs;
 
-	ring->count  = 0;
+	ring->count = count;
 	ring->queued = 0;
 	ring->cur = ring->next = 0;
 	ring->csr_ridx = csr_ridx;
@@ -577,7 +587,6 @@ iwi_alloc_tx_ring(struct iwi_softc *sc, struct iwi_tx_ring *ring,
 	if (error != 0) {
 		aprint_error_dev(sc->sc_dev,
 		    "could not create tx ring DMA map\n");
-		ring->desc_map = NULL;
 		goto fail;
 	}
 
@@ -617,7 +626,6 @@ iwi_alloc_tx_ring(struct iwi_softc *sc, struct iwi_tx_ring *ring,
 		error = ENOMEM;
 		goto fail;
 	}
-	ring->count = count;
 
 	/*
 	 * Allocate Tx buffers DMA maps
@@ -628,13 +636,13 @@ iwi_alloc_tx_ring(struct iwi_softc *sc, struct iwi_tx_ring *ring,
 		if (error != 0) {
 			aprint_error_dev(sc->sc_dev,
 			    "could not create tx buf DMA map");
-			ring->data[i].map = NULL;
 			goto fail;
 		}
 	}
 	return 0;
 
-fail:	return error;
+fail:	iwi_free_tx_ring(sc, ring);
+	return error;
 }
 
 static void
@@ -647,14 +655,11 @@ iwi_reset_tx_ring(struct iwi_softc *sc, struct iwi_tx_ring *ring)
 		data = &ring->data[i];
 
 		if (data->m != NULL) {
-			m_freem(data->m);
-			data->m = NULL;
-		}
-		
-		if (data->map != NULL) {
 			bus_dmamap_sync(sc->sc_dmat, data->map, 0,
 			    data->map->dm_mapsize, BUS_DMASYNC_POSTWRITE);
 			bus_dmamap_unload(sc->sc_dmat, data->map);
+			m_freem(data->m);
+			data->m = NULL;
 		}
 
 		if (data->ni != NULL) {
@@ -671,7 +676,6 @@ static void
 iwi_free_tx_ring(struct iwi_softc *sc, struct iwi_tx_ring *ring)
 {
 	int i;
-	struct iwi_tx_data *data;
 
 	if (ring->desc_map != NULL) {
 		if (ring->desc != NULL) {
@@ -684,16 +688,11 @@ iwi_free_tx_ring(struct iwi_softc *sc, struct iwi_tx_ring *ring)
 	}
 
 	for (i = 0; i < ring->count; i++) {
-		data = &ring->data[i];
-
-		if (data->m != NULL) {
-			m_freem(data->m);
+		if (ring->data[i].m != NULL) {
+			bus_dmamap_unload(sc->sc_dmat, ring->data[i].map);
+			m_freem(ring->data[i].m);
 		}
-
-		if (data->map != NULL) {
-			bus_dmamap_unload(sc->sc_dmat, data->map);
-			bus_dmamap_destroy(sc->sc_dmat, data->map);
-		}
+		bus_dmamap_destroy(sc->sc_dmat, ring->data[i].map);
 	}
 }
 
@@ -702,7 +701,7 @@ iwi_alloc_rx_ring(struct iwi_softc *sc, struct iwi_rx_ring *ring, int count)
 {
 	int i, error;
 
-	ring->count = 0;
+	ring->count = count;
 	ring->cur = 0;
 
 	ring->data = malloc(count * sizeof (struct iwi_rx_data), M_DEVBUF,
@@ -712,8 +711,6 @@ iwi_alloc_rx_ring(struct iwi_softc *sc, struct iwi_rx_ring *ring, int count)
 		error = ENOMEM;
 		goto fail;
 	}
-
-	ring->count = count;
 
 	/*
 	 * Allocate and map Rx buffers
@@ -725,7 +722,6 @@ iwi_alloc_rx_ring(struct iwi_softc *sc, struct iwi_rx_ring *ring, int count)
 		if (error != 0) {
 			aprint_error_dev(sc->sc_dev,
 			    "could not create rx buf DMA map");
-			ring->data[i].map = NULL;
 			goto fail;
 		}
 
@@ -748,7 +744,8 @@ iwi_alloc_rx_ring(struct iwi_softc *sc, struct iwi_rx_ring *ring, int count)
 
 	return 0;
 
-fail:	return error;
+fail:	iwi_free_rx_ring(sc, ring);
+	return error;
 }
 
 static void
@@ -761,20 +758,13 @@ static void
 iwi_free_rx_ring(struct iwi_softc *sc, struct iwi_rx_ring *ring)
 {
 	int i;
-	struct iwi_rx_data *data;
 
 	for (i = 0; i < ring->count; i++) {
-		data = &ring->data[i];
-
-		if (data->m != NULL) {
-			m_freem(data->m);
+		if (ring->data[i].m != NULL) {
+			bus_dmamap_unload(sc->sc_dmat, ring->data[i].map);
+			m_freem(ring->data[i].m);
 		}
-
-		if (data->map != NULL) {
-			bus_dmamap_unload(sc->sc_dmat, data->map);
-			bus_dmamap_destroy(sc->sc_dmat, data->map);
-		}
-
+		bus_dmamap_destroy(sc->sc_dmat, ring->data[i].map);
 	}
 }
 
@@ -1205,6 +1195,7 @@ iwi_frame_intr(struct iwi_softc *sc, struct iwi_rx_data *data, int i,
 	if (ic->ic_state == IEEE80211_S_SCAN)
 		iwi_fix_channel(ic, m);
 
+#if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
 		struct iwi_rx_radiotap_header *tap = &sc->sc_rxtap;
 
@@ -1219,6 +1210,7 @@ iwi_frame_intr(struct iwi_softc *sc, struct iwi_rx_data *data, int i,
 
 		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_rxtap_len, m);
 	}
+#endif
 	wh = mtod(m, struct ieee80211_frame *);
 	ni = ieee80211_find_rxnode(ic, (struct ieee80211_frame_min *)wh);
 
@@ -1581,6 +1573,7 @@ iwi_tx_start(struct ifnet *ifp, struct mbuf *m0, struct ieee80211_node *ni,
 		wh = mtod(m0, struct ieee80211_frame *);
 	}
 
+#if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
 		struct iwi_tx_radiotap_header *tap = &sc->sc_txtap;
 
@@ -1590,6 +1583,7 @@ iwi_tx_start(struct ifnet *ifp, struct mbuf *m0, struct ieee80211_node *ni,
 
 		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_txtap_len, m0);
 	}
+#endif
 
 	data = &txq->data[txq->cur];
 	desc = &txq->desc[txq->cur];
@@ -1748,7 +1742,10 @@ iwi_start(struct ifnet *ifp)
 			break;
 		}
 
-		bpf_mtap(ifp, m0);
+#if NBPFILTER > 0
+		if (ifp->if_bpf != NULL)
+			bpf_mtap(ifp->if_bpf, m0);
+#endif
 
 		m0 = ieee80211_encap(ic, m0, ni);
 		if (m0 == NULL) {
@@ -1757,7 +1754,10 @@ iwi_start(struct ifnet *ifp)
 			continue;
 		}
 
-		bpf_mtap3(ic->ic_rawbpf, m0);
+#if NBPFILTER > 0
+		if (ic->ic_rawbpf != NULL)
+			bpf_mtap(ic->ic_rawbpf, m0);
+#endif
 
 		if (iwi_tx_start(ifp, m0, ni, ac) != 0) {
 			ieee80211_free_node(ni);
@@ -1824,8 +1824,6 @@ iwi_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
 		if (ifp->if_flags & IFF_UP) {
 			if (!(ifp->if_flags & IFF_RUNNING))
 				iwi_init(ifp);
@@ -2028,7 +2026,6 @@ iwi_load_firmware(struct iwi_softc *sc, void *fw, int size)
 	if (error != 0) {
 		aprint_error_dev(sc->sc_dev,
 		    "could not create firmware DMA map\n");
-		map = NULL;
 		goto fail1;
 	}
 
@@ -2138,8 +2135,7 @@ fail3:
 	bus_dmamap_sync(sc->sc_dmat, map, 0, size, BUS_DMASYNC_POSTWRITE);
 	bus_dmamap_unload(sc->sc_dmat, map);
 fail2:
-	if (map != NULL)
-		bus_dmamap_destroy(sc->sc_dmat, map);
+	bus_dmamap_destroy(sc->sc_dmat, map);
 
 fail1:
 	return error;
@@ -2154,7 +2150,7 @@ iwi_cache_firmware(struct iwi_softc *sc)
 {
 	struct iwi_firmware *kfw = &sc->fw;
 	firmware_handle_t fwh;
-	struct iwi_firmware_hdr *hdr;
+	const struct iwi_firmware_hdr *hdr;
 	off_t size;	
 	char *fw;
 	int error;
@@ -2192,12 +2188,8 @@ iwi_cache_firmware(struct iwi_softc *sc)
 	if (error != 0)
 		goto fail2;
 
-	hdr = (struct iwi_firmware_hdr *)sc->sc_blob;
-	hdr->version = le32toh(hdr->version);
-	hdr->bsize = le32toh(hdr->bsize);
-	hdr->usize = le32toh(hdr->usize);
-	hdr->fsize = le32toh(hdr->fsize);
 
+	hdr = (const struct iwi_firmware_hdr *)sc->sc_blob;
 	if (size < sizeof(struct iwi_firmware_hdr) + hdr->bsize + hdr->usize + hdr->fsize) {
 		aprint_error_dev(sc->sc_dev, "image '%s' too small\n",
 		    sc->sc_fwname);
@@ -2205,13 +2197,14 @@ iwi_cache_firmware(struct iwi_softc *sc)
 		goto fail2;
 	}
 
-	DPRINTF(("firmware version = %d\n", hdr->version));
-	if ((IWI_FW_GET_MAJOR(hdr->version) != IWI_FW_REQ_MAJOR) ||
-	    (IWI_FW_GET_MINOR(hdr->version) != IWI_FW_REQ_MINOR)) {
+	hdr = (const struct iwi_firmware_hdr *)sc->sc_blob;
+	DPRINTF(("firmware version = %d\n", le32toh(hdr->version)));
+	if ((IWI_FW_GET_MAJOR(le32toh(hdr->version)) != IWI_FW_REQ_MAJOR) ||
+	    (IWI_FW_GET_MINOR(le32toh(hdr->version)) != IWI_FW_REQ_MINOR)) {
 		aprint_error_dev(sc->sc_dev,
 		    "version for '%s' %d.%d != %d.%d\n", sc->sc_fwname,
-		    IWI_FW_GET_MAJOR(hdr->version),
-		    IWI_FW_GET_MINOR(hdr->version),
+		    IWI_FW_GET_MAJOR(le32toh(hdr->version)),
+		    IWI_FW_GET_MINOR(le32toh(hdr->version)),
 		    IWI_FW_REQ_MAJOR, IWI_FW_REQ_MINOR);
 		error = EIO;
 		goto fail2;
@@ -2387,8 +2380,7 @@ iwi_config(struct iwi_softc *sc)
 			return error;
 	}
 
-	cprng_fast(&data, sizeof(data));
-	data = htole32(data);
+	data = htole32(arc4random());
 	DPRINTF(("Setting initialization vector to %u\n", le32toh(data)));
 	error = iwi_cmd(sc, IWI_CMD_SET_IV, &data, sizeof data, 0);
 	if (error != 0)
@@ -2830,7 +2822,7 @@ iwi_sysctlattach(struct iwi_softc *sc)
 	if ((rc = sysctl_createv(clog, 0, &rnode, &cnode,
 	    CTLFLAG_PERMANENT, CTLTYPE_INT, "radio",
 	    SYSCTL_DESCR("radio transmitter switch state (0=off, 1=on)"),
-	    iwi_sysctl_radio, 0, (void *)sc, 0, CTL_CREATE, CTL_EOL)) != 0)
+	    iwi_sysctl_radio, 0, sc, 0, CTL_CREATE, CTL_EOL)) != 0)
 		goto err;
 
 	sc->dwelltime = 100;

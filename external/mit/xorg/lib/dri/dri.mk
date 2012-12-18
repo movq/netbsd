@@ -1,4 +1,4 @@
-# $NetBSD: dri.mk,v 1.12 2012/03/10 20:52:30 tron Exp $
+# $NetBSD: dri.mk,v 1.3.4.4 2009/10/10 19:53:22 sborrill Exp $
 
 # XXX DRI_LIB_DEPS
 
@@ -15,7 +15,7 @@ CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src/mesa/main \
 		-I${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/${MODULE}/server \
 		-I${X11SRCDIR.MesaLib}/src/mesa \
 		-I${X11SRCDIR.MesaLib}/include \
-		-I${DESTDIR}${X11INCDIR}/libdrm \
+		-I${DESTDIR}${X11INCDIR}/drm \
 		-I${DESTDIR}${X11INCDIR}/X11
 
 CPPFLAGS+=	-D_NETBSD_SOURCE -DPTHREADS -DUSE_EXTERNAL_DXTN_LIB=1 \
@@ -33,7 +33,6 @@ CPPFLAGS+=	-Wno-stack-protector
 SRCS+=	driverfuncs.c utils.c
 .else
 SRCS+=	dri_util.c drirenderbuffer.c driverfuncs.c texmem.c
-SRCS+=	dri_metaops.c
 SRCS+=	utils.c vblank.c xmlconfig.c
 .endif
 
@@ -43,7 +42,7 @@ LIB=		${MODULE}_dri
 LIBDIR=		${X11USRLIBDIR}/modules/dri
 
 LIBDPLIBS+= 	drm		${.CURDIR}/../../libdrm
-LIBDPLIBS+=	expat		${NETBSDSRCDIR}/external/mit/expat/lib/libexpat
+LIBDPLIBS+=	expat		${.CURDIR}/../../expat
 LIBDPLIBS+=	m		${NETBSDSRCDIR}/lib/libm
 LIBDPLIBS+= 	mesa_dri	${.CURDIR}/../libmesa
 # to find mesa_dri.so

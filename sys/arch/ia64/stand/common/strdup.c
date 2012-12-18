@@ -1,4 +1,4 @@
-/*	$NetBSD: strdup.c,v 1.3 2009/07/20 04:59:03 kiyohara Exp $	*/
+/*	$NetBSD: strdup.c,v 1.1 2006/04/07 14:21:29 cherry Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -40,14 +40,14 @@ static char sccsid[] = "@(#)strdup.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
 #include <lib/libsa/stand.h>
-#include <lib/libsa/loadfile.h>
 #include <lib/libkern/libkern.h>
 
 #include "bootstrap.h"
 
 
 char *
-strdup(const char *str)
+strdup(str)
+	const char *str;
 {
 	size_t len;
 	char *copy = NULL;

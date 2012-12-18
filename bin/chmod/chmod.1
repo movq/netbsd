@@ -1,4 +1,4 @@
-.\"	$NetBSD: chmod.1,v 1.24 2012/10/22 17:47:06 christos Exp $
+.\"	$NetBSD: chmod.1,v 1.21 2005/12/09 20:27:02 wiz Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"	@(#)chmod.1	8.4 (Berkeley) 3/31/94
 .\"
-.Dd October 22, 2012
+.Dd December 9, 2005
 .Dt CHMOD 1
 .Os
 .Sh NAME
@@ -44,16 +44,8 @@
 .Fl R
 .Op Fl H | Fl L | Fl P
 .Oc
-.Op Fl fh
+.Op Fl h
 .Ar mode
-.Ar
-.Nm
-.Oo
-.Fl R
-.Op Fl H | Fl L | Fl P
-.Oc
-.Op Fl fh
-.Fl Fl reference=rfile
 .Ar
 .Sh DESCRIPTION
 The
@@ -61,12 +53,7 @@ The
 utility modifies the file mode bits of the listed files
 as specified by the
 .Ar mode
-operand, or
-copied from a reference
-.Ar rfile ,
-as specified with the
-.Fl Fl reference
-argument.
+operand.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
@@ -86,10 +73,6 @@ option is specified, no symbolic links are followed.
 .It Fl R
 Change the modes of the file hierarchies rooted in the files
 instead of just the files themselves.
-.It Fl f
-Do not display a diagnostic message or modify the exit status if
-.Nm
-fails to change the mode of a file.
 .It Fl h
 If
 .Ar file
@@ -161,6 +144,7 @@ The
 .Ar who
 symbol ``a'' is equivalent to ``ugo''.
 .Pp
+.ne 1i
 The
 .Ar perm
 symbols represent the portions of the mode bits as follows:

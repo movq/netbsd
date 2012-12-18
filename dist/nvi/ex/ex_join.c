@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_join.c,v 1.3 2011/03/21 14:53:03 tnozaki Exp $ */
+/*	$NetBSD: ex_join.c,v 1.1.1.2.6.1 2009/01/20 02:41:12 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -38,8 +38,7 @@ ex_join(SCR *sp, EXCMD *cmdp)
 {
 	db_recno_t from, to;
 	size_t blen, clen, len, tlen;
-	ARG_CHAR_T echar = 0;
-	int extra, first;
+	int echar = 0, extra, first;
 	CHAR_T *bp, *tbp = NULL;
 	CHAR_T *p;
 
@@ -106,17 +105,17 @@ ex_join(SCR *sp, EXCMD *cmdp)
 		 */
 		extra = 0;
 		if (!first && !FL_ISSET(cmdp->iflags, E_C_FORCE)) {
-			if (ISBLANK(echar))
-				for (; len && ISBLANK((UCHAR_T)*p); --len, ++p);
+			if (isblank(echar))
+				for (; len && isblank(*p); --len, ++p);
 			else if (p[0] != ')') {
-				if (STRCHR(L(".?!"), echar)) {
+				if (strchr(".?!", echar)) {
 					*tbp++ = ' ';
 					++clen;
 					extra = 1;
 				}
 				*tbp++ = ' ';
 				++clen;
-				for (; len && ISBLANK((UCHAR_T)*p); --len, ++p);
+				for (; len && isblank(*p); --len, ++p);
 			}
 		}
 

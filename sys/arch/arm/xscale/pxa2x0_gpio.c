@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0_gpio.c,v 1.16 2012/11/12 18:00:38 skrll Exp $	*/
+/*	$NetBSD: pxa2x0_gpio.c,v 1.10 2008/04/24 11:46:30 nonaka Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pxa2x0_gpio.c,v 1.16 2012/11/12 18:00:38 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pxa2x0_gpio.c,v 1.10 2008/04/24 11:46:30 nonaka Exp $");
 
 #include "opt_pxa2x0_gpio.h"
 
@@ -46,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: pxa2x0_gpio.c,v 1.16 2012/11/12 18:00:38 skrll Exp $
 #include <sys/malloc.h>
 
 #include <machine/intr.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <arm/xscale/pxa2x0cpu.h>
 #include <arm/xscale/pxa2x0reg.h>
@@ -65,11 +65,11 @@ struct gpio_irq_handler {
 };
 
 struct pxagpio_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	bus_space_tag_t sc_bust;
 	bus_space_handle_t sc_bush;
 	void *sc_irqcookie[4];
-	uint32_t sc_mask[4];
+	u_int32_t sc_mask[4];
 #ifdef PXAGPIO_HAS_GPION_INTRS
 	struct gpio_irq_handler *sc_handlers[GPIO_NPINS];
 #else
@@ -77,16 +77,16 @@ struct pxagpio_softc {
 #endif
 };
 
-static int	pxagpio_match(device_t, cfdata_t, void *);
-static void	pxagpio_attach(device_t, device_t, void *);
+static int	pxagpio_match(struct device *, struct cfdata *, void *);
+static void	pxagpio_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(pxagpio, sizeof(struct pxagpio_softc),
+CFATTACH_DECL(pxagpio, sizeof(struct pxagpio_softc),
     pxagpio_match, pxagpio_attach, NULL, NULL);
 
 static struct pxagpio_softc *pxagpio_softc;
 static vaddr_t pxagpio_regs;
 #define GPIO_BOOTSTRAP_REG(reg)	\
-	(*((volatile uint32_t *)(pxagpio_regs + (reg))))
+	(*((volatile u_int32_t *)(pxagpio_regs + (reg))))
 
 static int gpio_intr0(void *);
 static int gpio_intr1(void *);
@@ -95,7 +95,7 @@ static int gpio_dispatch(struct pxagpio_softc *, int);
 static int gpio_intrN(void *);
 #endif
 
-static inline uint32_t
+static inline u_int32_t
 pxagpio_reg_read(struct pxagpio_softc *sc, int reg)
 {
 	if (__predict_true(sc != NULL))
@@ -107,7 +107,7 @@ pxagpio_reg_read(struct pxagpio_softc *sc, int reg)
 }
 
 static inline void
-pxagpio_reg_write(struct pxagpio_softc *sc, int reg, uint32_t val)
+pxagpio_reg_write(struct pxagpio_softc *sc, int reg, u_int32_t val)
 {
 	if (__predict_true(sc != NULL))
 		bus_space_write_4(sc->sc_bust, sc->sc_bush, reg, val);
@@ -120,7 +120,7 @@ pxagpio_reg_write(struct pxagpio_softc *sc, int reg, uint32_t val)
 }
 
 static int
-pxagpio_match(device_t parent, cfdata_t cf, void *aux)
+pxagpio_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct pxaip_attach_args *pxa = aux;
 
@@ -133,19 +133,18 @@ pxagpio_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-pxagpio_attach(device_t parent, device_t self, void *aux)
+pxagpio_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct pxagpio_softc *sc = device_private(self);
+	struct pxagpio_softc *sc = (struct pxagpio_softc *)self;
 	struct pxaip_attach_args *pxa = aux;
 
-	sc->sc_dev = self;
 	sc->sc_bust = pxa->pxa_iot;
 
 	aprint_normal(": GPIO Controller\n");
 
 	if (bus_space_map(sc->sc_bust, pxa->pxa_addr, pxa->pxa_size, 0,
 	    &sc->sc_bush)) {
-		aprint_error_dev(self, "Can't map registers!\n");
+		aprint_error("%s: Can't map registers!\n", sc->sc_dev.dv_xname);
 		return;
 	}
 
@@ -177,7 +176,8 @@ pxagpio_attach(device_t parent, device_t self, void *aux)
 	sc->sc_irqcookie[2] = pxa2x0_intr_establish(PXA2X0_INT_GPION, IPL_BIO,
 	    gpio_intrN, sc);
 	if (sc->sc_irqcookie[2] == NULL) {
-		aprint_error_dev(self, "failed to hook main GPIO interrupt\n");
+		aprint_error("%s: failed to hook main GPIO interrupt\n",
+		    sc->sc_dev.dv_xname);
 		return;
 	}
 #endif
@@ -200,14 +200,16 @@ pxa2x0_gpio_intr_establish(u_int gpio, int level, int spl, int (*func)(void *),
 {
 	struct pxagpio_softc *sc = pxagpio_softc;
 	struct gpio_irq_handler *gh;
-	uint32_t bit, reg;
+	u_int32_t bit, reg;
 
+#ifdef DEBUG
 #ifdef PXAGPIO_HAS_GPION_INTRS
 	if (gpio >= GPIO_NPINS)
 		panic("pxa2x0_gpio_intr_establish: bad pin number: %d", gpio);
 #else
 	if (gpio > 1)
 		panic("pxa2x0_gpio_intr_establish: bad pin number: %d", gpio);
+#endif
 #endif
 
 	if (!GPIO_IS_GPIO_IN(pxa2x0_gpio_get_function(gpio)))
@@ -227,7 +229,8 @@ pxa2x0_gpio_intr_establish(u_int gpio, int level, int spl, int (*func)(void *),
 	if (sc->sc_handlers[gpio] != NULL)
 		panic("pxa2x0_gpio_intr_establish: illegal shared interrupt");
 
-	gh = malloc(sizeof(struct gpio_irq_handler), M_DEVBUF, M_NOWAIT);
+	MALLOC(gh, struct gpio_irq_handler *, sizeof(struct gpio_irq_handler),
+	    M_DEVBUF, M_NOWAIT);
 
 	gh->gh_func = func;
 	gh->gh_arg = arg;
@@ -280,7 +283,7 @@ pxa2x0_gpio_intr_disestablish(void *cookie)
 {
 	struct pxagpio_softc *sc = pxagpio_softc;
 	struct gpio_irq_handler *gh = cookie;
-	uint32_t bit, reg;
+	u_int32_t bit, reg;
 
 	bit = GPIO_BIT(gh->gh_gpio);
 
@@ -313,7 +316,7 @@ pxa2x0_gpio_intr_disestablish(void *cookie)
 #endif
 	}
 
-	free(gh, M_DEVBUF);
+	FREE(gh, M_DEVBUF);
 }
 
 static int
@@ -323,7 +326,8 @@ gpio_intr0(void *arg)
 
 #ifdef DIAGNOSTIC
 	if (sc->sc_handlers[0] == NULL) {
-		aprint_error_dev(sc->sc_dev, "stray GPIO#0 edge interrupt\n");
+		printf("%s: stray GPIO#0 edge interrupt\n",
+		    sc->sc_dev.dv_xname);
 		return (0);
 	}
 #endif
@@ -341,7 +345,8 @@ gpio_intr1(void *arg)
 
 #ifdef DIAGNOSTIC
 	if (sc->sc_handlers[1] == NULL) {
-		aprint_error_dev(sc->sc_dev, "stray GPIO#1 edge interrupt\n");
+		printf("%s: stray GPIO#1 edge interrupt\n",
+		    sc->sc_dev.dv_xname);
 		return (0);
 	}
 #endif
@@ -358,7 +363,7 @@ gpio_dispatch(struct pxagpio_softc *sc, int gpio_base)
 {
 	struct gpio_irq_handler **ghp, *gh;
 	int i, s, nhandled, handled, pins;
-	uint32_t gedr, mask;
+	u_int32_t gedr, mask;
 	int bank;
 
 	/* Fetch bitmap of pending interrupts on this GPIO bank */
@@ -383,9 +388,8 @@ gpio_dispatch(struct pxagpio_softc *sc, int gpio_base)
 	 */
 #ifdef DEBUG
 	if ((gedr & sc->sc_mask[bank]) == 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "stray GPIO interrupt. Bank %d, GEDR 0x%08x, mask 0x%08x\n",
-		    bank, gedr, sc->sc_mask[bank]);
+		printf("%s: stray GPIO interrupt. Bank %d, GEDR 0x%08x, mask 0x%08x\n",
+		    sc->sc_dev.dv_xname, bank, gedr, sc->sc_mask[bank]);
 		return (1);	/* XXX: Pretend we dealt with it */
 	}
 #endif
@@ -404,9 +408,8 @@ gpio_dispatch(struct pxagpio_softc *sc, int gpio_base)
 		gedr &= ~mask;
 
 		if ((gh = *ghp) == NULL) {
-			aprint_error_dev(sc->sc_dev,
-			    "unhandled GPIO interrupt. GPIO#%d\n",
-			    gpio_base + i);
+			printf("%s: unhandled GPIO interrupt. GPIO#%d\n",
+			    sc->sc_dev.dv_xname, gpio_base + i);
 			continue;
 		}
 
@@ -441,7 +444,7 @@ u_int
 pxa2x0_gpio_get_function(u_int gpio)
 {
 	struct pxagpio_softc *sc = pxagpio_softc;
-	uint32_t rv, io;
+	u_int32_t rv, io;
 
 	KDASSERT(gpio < GPIO_NPINS);
 
@@ -463,7 +466,7 @@ u_int
 pxa2x0_gpio_set_function(u_int gpio, u_int fn)
 {
 	struct pxagpio_softc *sc = pxagpio_softc;
-	uint32_t rv, bit;
+	u_int32_t rv, bit;
 	u_int oldfn;
 
 	KDASSERT(gpio < GPIO_NPINS);
@@ -573,7 +576,7 @@ pxa2x0_gpio_set_dir(u_int gpio, int dir)
 {
 	struct pxagpio_softc *sc = pxagpio_softc;
 	int bit;
-	uint32_t reg;
+	u_int32_t reg;
 
 	bit = GPIO_BIT(gpio);
 
@@ -629,9 +632,9 @@ void
 pxa2x0_gpio_set_intr_level(u_int gpio, int level)
 {
 	struct pxagpio_softc *sc = pxagpio_softc;
-	uint32_t bit;
-	uint32_t gfer;
-	uint32_t grer;
+	u_int32_t bit;
+	u_int32_t gfer;
+	u_int32_t grer;
 	int s;
 
 	s = splhigh();
@@ -850,6 +853,10 @@ struct pxa2x0_gpioconf pxa27x_com_ffuart_gpioconf[] = {
 	{  -1 }
 };
 
+struct pxa2x0_gpioconf pxa27x_com_hwuart_gpioconf[] = {
+	{  -1 }
+};
+
 struct pxa2x0_gpioconf pxa27x_com_stuart_gpioconf[] = {
 	{  46, GPIO_CLR | GPIO_ALT_FN_2_IN },	/* STD_RXD */
 	{  47, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* STD_TXD */
@@ -871,16 +878,6 @@ struct pxa2x0_gpioconf pxa27x_i2s_gpioconf[] = {
 	{  -1 }
 };
 
-struct pxa2x0_gpioconf pxa27x_ohci_gpioconf[] = {
-#if 0	/* We can select and/or. */
-	{  88, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* USBHPWR1 */
-	{  89, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* USBHPEN1 */
-	{ 119, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* USBHPWR2 */
-	{ 120, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* USBHPEN2 */
-#endif
-	{  -1 }
-};
-
 struct pxa2x0_gpioconf pxa27x_pcic_gpioconf[] = {
 	{  48, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* nPOE */
 	{  49, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* nPWE */
@@ -889,6 +886,7 @@ struct pxa2x0_gpioconf pxa27x_pcic_gpioconf[] = {
 	{  55, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* nPREG */
 	{  56, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* nPWAIT */
 	{  57, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* nIOIS16 */
+	{ 104, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* pSKTSEL */
 
 #if 0	/* We can select and/or. */
 	{  85, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* nPCE1 */
@@ -898,9 +896,6 @@ struct pxa2x0_gpioconf pxa27x_pcic_gpioconf[] = {
 	{  54, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* nPCE2 */
 	{  78, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* nPCE2 */
 	{ 105, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* nPCE2 */
-
-	{  79, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* pSKTSEL */
-	{ 104, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* pSKTSEL */
 #endif
 
 	{  -1 }
@@ -929,11 +924,14 @@ struct pxa2x0_gpioconf pxa27x_pxaacu_gpioconf[] = {
 
 struct pxa2x0_gpioconf pxa27x_pxamci_gpioconf[] = {
 	{  32, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* MMCLK */
+	{ 112, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* MMCMD */
 	{  92, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* MMDAT<0> */
+
+#if 0	/* optional */
 	{ 109, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* MMDAT<1> */
 	{ 110, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* MMDAT<2>/MMCCS<0> */
 	{ 111, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* MMDAT<3>/MMCCS<1> */
-	{ 112, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* MMCMD */
+#endif
 
 	{  -1 }
 };

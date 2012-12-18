@@ -1,10 +1,10 @@
-/*	$NetBSD: pcmciadevs.h,v 1.232 2012/08/23 10:39:25 kiyohara Exp $	*/
+/*	$NetBSD: pcmciadevs.h,v 1.230 2008/09/06 22:08:38 rmind Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcmciadevs,v 1.230 2012/08/23 10:37:56 kiyohara Exp
+ *	NetBSD: pcmciadevs,v 1.227 2008/09/06 22:07:11 rmind Exp
  */
 /* $FreeBSD: src/sys/dev/pccard/pccarddevs,v 1.20 2001/11/19 05:02:55 imp Exp $*/
 
@@ -35,11 +35,6 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- */
-
-/*
- * Use "make -f Makefile.pcmicadevs" to regenerate pcmicadevs.h and
- * pcmicadevs_data.h
  */
 
 /*
@@ -105,7 +100,6 @@
 #define	PCMCIA_VENDOR_ASUSTEK	0x02aa	/* Asustek Computer */
 #define	PCMCIA_VENDOR_SIEMENS	0x02ac	/* Siemens */
 #define	PCMCIA_VENDOR_MICROSOFT	0x02d2	/* Microsoft Corporation */
-#define	PCMCIA_VENDOR_AMBICOM	0x02df	/* AmbiCom Inc */
 #define	PCMCIA_VENDOR_BREEZECOM	0x0a02	/* BreezeCOM */
 #define	PCMCIA_VENDOR_NEWMEDIA2	0x10cd	/* NewMedia */
 #define	PCMCIA_VENDOR_ACTIONTEC	0x1668	/* ACTIONTEC */
@@ -181,10 +175,6 @@
 /* Alvarion Ltd. */
 #define	PCMCIA_CIS_ALVARION_BREEZENET	{ NULL, NULL, NULL, NULL }
 #define	PCMCIA_PRODUCT_ALVARION_BREEZENET	0x0001
-
-/* AmbiCom Inc */
-#define	PCMCIA_CIS_AMBICOM_WL54CF	{ NULL, NULL, NULL, NULL }
-#define	PCMCIA_PRODUCT_AMBICOM_WL54CF	0x8103
 
 /* Anycom */
 #define	PCMCIA_CIS_ANYCOM_LSE041	{ NULL, NULL, NULL, NULL }
@@ -632,6 +622,7 @@
  * Cards we know only by their cis, sorted by name.
  */
 #define	PCMCIA_VENDOR_ACCTON	-1	/* ACCTON */
+#define	PCMCIA_VENDOR_AMBICOM	-1	/* AmbiCom Inc */
 #define	PCMCIA_VENDOR_AMD	-1	/* AMD */
 #define	PCMCIA_VENDOR_BILLIONTON	-1	/* Billionton Systems Inc. */
 #define	PCMCIA_VENDOR_CNET	-1	/* CNet */
@@ -673,8 +664,6 @@
 #define	PCMCIA_PRODUCT_BILLIONTON_LNT10TN	-1
 #define	PCMCIA_CIS_CNET_NE2000	{ "CNet", "CN40BC Ethernet", NULL, NULL }
 #define	PCMCIA_PRODUCT_CNET_NE2000	-1
-#define	PCMCIA_CIS_COREGA_ETHER_CF_TD	{ "corega K.K.", "corega Ether CF-TD LAN Card", NULL, NULL }
-#define	PCMCIA_PRODUCT_COREGA_ETHER_CF_TD	-1
 #define	PCMCIA_CIS_COREGA_ETHER_PCC_T	{ "corega K.K.", "corega Ether PCC-T", NULL, NULL }
 #define	PCMCIA_PRODUCT_COREGA_ETHER_PCC_T	-1
 #define	PCMCIA_CIS_COREGA_ETHER_PCC_TD	{ "corega K.K.", "corega Ether PCC-TD", NULL, NULL }

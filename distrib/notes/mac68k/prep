@@ -1,4 +1,4 @@
-.\"	$NetBSD: prep,v 1.16 2009/04/23 01:56:49 snj Exp $
+.\"	$NetBSD: prep,v 1.15.26.1 2009/04/25 23:16:34 snj Exp $
 .
 No matter which installation method you use, there is some planning
 and preparation that is required beforehand.  First and foremost,

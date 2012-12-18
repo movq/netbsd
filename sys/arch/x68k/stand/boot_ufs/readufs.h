@@ -1,8 +1,8 @@
-/*	$NetBSD: readufs.h,v 1.10 2011/02/21 02:31:58 itohy Exp $	*/
+/*	$NetBSD: readufs.h,v 1.8 2005/12/11 12:19:44 christos Exp $	*/
 /*	from Id: readufs.h,v 1.9 2003/10/15 14:16:58 itohy Exp 	*/
 
 /*
- * Written in 1999, 2002, 2003 by ITOH Yasufumi.
+ * Written in 1999, 2002, 2003 by ITOH Yasufumi (itohy@NetBSD.org).
  * Public domain.
  */
 
@@ -71,7 +71,7 @@ struct ufs_info {
 		UFSTYPE_UFS1, UFSTYPE_UFS2
 	} ufstype;
 #endif
-	int (*get_inode)(ino32_t ino, union ufs_dinode *dibuf);
+	int (*get_inode) __P((ino32_t ino, union ufs_dinode *dibuf));
 
 	/* superblock information */
 	u_int32_t bsize;	/* fs block size */
@@ -108,21 +108,21 @@ struct ufs_info {
 extern struct ufs_info	ufs_info;
 #define ufs_get_inode(ino, di)	((*ufs_info.get_inode)((ino), (di)))
 
-void RAW_READ(void *buf, daddr_t blkpos, size_t bytelen);
+void RAW_READ __P((void *buf, daddr_t blkpos, size_t bytelen));
 
-size_t ufs_read(union ufs_dinode *di, void *buf, unsigned off,
-    size_t count);
-ino32_t ufs_lookup(ino32_t dirino, const char *fn);
-ino32_t ufs_lookup_path(const char *path);
-size_t ufs_load_file(void *buf, ino32_t dirino, const char *fn);
-int ufs_init(void);
+size_t ufs_read __P((union ufs_dinode *di, void *buf, unsigned off,
+    size_t count));
+ino32_t ufs_lookup __P((ino32_t dirino, const char *fn));
+ino32_t ufs_lookup_path __P((const char *path));
+size_t ufs_load_file __P((void *buf, ino32_t dirino, const char *fn));
+int ufs_init __P((void));
 
 #ifdef USE_FFS
-int try_ffs(void);
+int try_ffs __P((void));
 #endif
 
 #ifdef USE_LFS
-int try_lfs(void);
+int try_lfs __P((void));
 #endif
 
 #ifdef DEBUG_WITH_STDIO

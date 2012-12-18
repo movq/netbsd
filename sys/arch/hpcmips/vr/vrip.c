@@ -1,4 +1,4 @@
-/*	$NetBSD: vrip.c,v 1.37 2012/10/27 17:17:56 chs Exp $	*/
+/*	$NetBSD: vrip.c,v 1.33 2007/12/15 00:39:18 perry Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vrip.c,v 1.37 2012/10/27 17:17:56 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vrip.c,v 1.33 2007/12/15 00:39:18 perry Exp $");
 
 #include "opt_vr41xx.h"
 #include "opt_tx39xx.h"
@@ -75,12 +75,13 @@ __KERNEL_RCSID(0, "$NetBSD: vrip.c,v 1.37 2012/10/27 17:17:56 chs Exp $");
 #define VALID_UNIT(sc, unit)	(0 <= (unit) && (unit) < (sc)->sc_nunits)
 
 #ifdef SINGLE_VRIP_BASE
-int	vripmatch(device_t, cfdata_t, void *);
-void	vripattach(device_t, device_t, void *);
+int	vripmatch(struct device *, struct cfdata *, void *);
+void	vripattach(struct device *, struct device *, void *);
 #endif
 int	vrip_print(void *, const char *);
-int	vrip_search(device_t, cfdata_t, const int *, void *);
-int	vrip_intr(void *, vaddr_t, u_int32_t);
+int	vrip_search(struct device *, struct cfdata *,
+		    const int *, void *);
+int	vrip_intr(void *, u_int32_t, u_int32_t);
 
 int __vrip_power(vrip_chipset_tag_t, int, int);
 vrip_intr_handle_t __vrip_intr_establish(vrip_chipset_tag_t, int, int,
@@ -113,7 +114,7 @@ static const struct vrip_chipset_tag vrip_chipset_methods = {
 };
 
 #ifdef SINGLE_VRIP_BASE
-CFATTACH_DECL_NEW(vrip, sizeof(struct vrip_softc),
+CFATTACH_DECL(vrip, sizeof(struct vrip_softc),
     vripmatch, vripattach, NULL, NULL);
 
 static const struct vrip_unit vrip_units[] = {
@@ -169,9 +170,9 @@ static const struct vrip_unit vrip_units[] = {
 };
 
 void
-vripattach(device_t parent, device_t self, void *aux)
+vripattach(struct device *parent, struct device *self, void *aux)
 {
-	struct vrip_softc *sc = device_private(self);
+	struct vrip_softc *sc = (struct vrip_softc*)self;
 
 	printf("\n");
 
@@ -186,7 +187,7 @@ vripattach(device_t parent, device_t self, void *aux)
 #endif /* SINGLE_VRIP_BASE */
 
 int
-vripmatch(device_t parent, cfdata_t match, void *aux)
+vripmatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
    
@@ -201,10 +202,10 @@ vripmatch(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-vripattach_common(device_t parent, device_t self, void *aux)
+vripattach_common(struct device *parent, struct device *self, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
-	struct vrip_softc *sc = device_private(self);
+	struct vrip_softc *sc = (struct vrip_softc*)self;
 
 	sc->sc_chipset = vrip_chipset_methods; /* structure assignment */
 	sc->sc_chipset.vc_sc = sc;
@@ -237,7 +238,7 @@ vripattach_common(device_t parent, device_t self, void *aux)
 	/*
 	 *  Level 1 interrupts are redirected to HwInt0
 	 */
-	vr_intr_establish(VR_INTR0, vrip_intr, sc);
+	vr_intr_establish(VR_INTR0, vrip_intr, self);
 	the_vrip_sc = sc;
 	/*
 	 *  Attach each devices
@@ -274,9 +275,10 @@ vrip_print(void *aux, const char *hoge)
 }
 
 int
-vrip_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+vrip_search(struct device *parent, struct cfdata *cf,
+	    const int *ldesc, void *aux)
 {
-	struct vrip_softc *sc = device_private(parent);
+	struct vrip_softc *sc = (struct vrip_softc *)parent;
 	struct vrip_attach_args va;
 	platid_mask_t mask;
 
@@ -360,7 +362,7 @@ __vrip_intr_disestablish(vrip_chipset_tag_t vc, vrip_intr_handle_t handle)
 }
 
 void
-vrip_intr_suspend(void)
+vrip_intr_suspend()
 {
 	struct vrip_softc *sc = the_vrip_sc;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -371,7 +373,7 @@ vrip_intr_suspend(void)
 }
 
 void
-vrip_intr_resume(void)
+vrip_intr_resume()
 {
 	struct vrip_softc *sc = the_vrip_sc;
 	u_int32_t reg = sc->sc_intrmask;
@@ -489,9 +491,9 @@ __vrip_intr_setmask2(vrip_chipset_tag_t vc, vrip_intr_handle_t handle,
 }
 
 int
-vrip_intr(void *arg, vaddr_t pc, u_int32_t status)
+vrip_intr(void *arg, u_int32_t pc, u_int32_t statusReg)
 {
-	struct vrip_softc *sc = (struct vrip_softc *)arg;
+	struct vrip_softc *sc = (struct vrip_softc*)arg;
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	int i;

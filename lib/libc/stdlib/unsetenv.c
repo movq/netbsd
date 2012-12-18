@@ -1,4 +1,4 @@
-/*	$NetBSD: unsetenv.c,v 1.10 2010/11/14 18:11:43 tron Exp $	*/
+/*	$NetBSD: unsetenv.c,v 1.3 2005/09/13 01:44:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)setenv.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: unsetenv.c,v 1.10 2010/11/14 18:11:43 tron Exp $");
+__RCSID("$NetBSD: unsetenv.c,v 1.3 2005/09/13 01:44:10 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -44,63 +44,39 @@ __RCSID("$NetBSD: unsetenv.c,v 1.10 2010/11/14 18:11:43 tron Exp $");
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <bitstring.h>
-
-#include "env.h"
-#include "reentrant.h"
 #include "local.h"
+#include "reentrant.h"
+
+#ifdef _REENTRANT
+extern rwlock_t __environ_lock;
+#endif
+
+extern char **environ;
 
 /*
  * unsetenv(name) --
  *	Delete environmental variable "name".
  */
 int
-unsetenv(const char *name)
+unsetenv(name)
+	const char *name;
 {
-	size_t l_name;
-	ssize_t r_offset, w_offset;
+	char **p;
+	int offset;
 
 	_DIAGASSERT(name != NULL);
 
-	l_name = __envvarnamelen(name, false);
-	if (l_name == 0) {
+	if (name == NULL || *name == '\0' || strchr(name, '=') != NULL) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	if (!__writelockenv())
-		return -1;
+	rwlock_wrlock(&__environ_lock);
+	while (__findenv(name, &offset))	/* if set multiple times */
+		for (p = &environ[offset];; ++p)
+			if (!(*p = *(p + 1)))
+				break;
+	rwlock_unlock(&__environ_lock);
 
-	/* Search for the given name in the environment. */
-	r_offset = __getenvslot(name, l_name, false);
-	if (r_offset == -1) {
-		/* Not found. */
-		(void)__unlockenv();
-		return 0;
-	}
-	__freeenvvar(environ[r_offset]);
-
-	/*
-	 * Remove all matches from the environment and free the associated
-	 * memory if possible.
-	 */
-	w_offset = r_offset;
-	while (environ[++r_offset] != NULL) {
-		if (strncmp(environ[r_offset], name, l_name) != 0 ||
-		    environ[r_offset][l_name] != '=') {
-			/* Not a match, keep this entry. */
-			environ[w_offset++] = environ[r_offset];
-		} else {
-			/* We found another match. */
-			__freeenvvar(environ[r_offset]);
-		}
-	}
-
-	/* Clear out remaining stale entries in the environment vector. */
-	do {
-		environ[w_offset++] = NULL;
-	} while (w_offset < r_offset);
-
-	(void)__unlockenv();
 	return 0;
 }

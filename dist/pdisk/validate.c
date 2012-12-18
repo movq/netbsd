@@ -38,7 +38,6 @@
 #include <fcntl.h>
 // for errno
 #include <errno.h>
-#include <inttypes.h>
 
 #include "validate.h"
 #include "deblock_media.h"
@@ -67,8 +66,8 @@ struct range_list {
     struct range_list *prev;
     enum range_state state;
     int valid;
-    uint32_t start;
-    uint32_t end;
+    u32 start;
+    u32 end;
 };
 typedef struct range_list range_list;
 
@@ -94,9 +93,9 @@ static int g;
 //
 int get_block_zero(void);
 int get_block_n(int n);
-range_list *new_range_list_item(enum range_state state, int valid, uint32_t low, uint32_t high);
+range_list *new_range_list_item(enum range_state state, int valid, u32 low, u32 high);
 void initialize_list(range_list **list);
-void add_range(range_list **list, uint32_t base, uint32_t len, int allocate);
+void add_range(range_list **list, u32 base, u32 len, int allocate);
 void print_range_list(range_list *list);
 void delete_list(range_list *list);
 void coalesce_list(range_list *list);
@@ -154,7 +153,7 @@ get_block_n(int n)
 
 
 range_list *
-new_range_list_item(enum range_state state, int valid, uint32_t low, uint32_t high)
+new_range_list_item(enum range_state state, int valid, u32 low, u32 high)
 {
     range_list *item;
     
@@ -194,12 +193,12 @@ delete_list(range_list *list)
 
 
 void
-add_range(range_list **list, uint32_t base, uint32_t len, int allocate)
+add_range(range_list **list, u32 base, u32 len, int allocate)
 {
     range_list *item;
     range_list *cur;
-    uint32_t low;
-    uint32_t high;
+    u32 low;
+    u32 high;
     
     if (list == 0 || *list == 0) {
     	/* XXX initialized list will always have one element */
@@ -326,7 +325,7 @@ print_range_list(range_list *list)
 		break;
 	    }
 	    printed = 1;
-	    printf("\t%"PRIu32":%"PRIu32" %s\n", cur->start, cur->end, s);
+	    printf("\t%lu:%lu %s\n", cur->start, cur->end, s);
 	} else {
 	    switch (cur->state) {
 	    case kUnallocated:
@@ -341,7 +340,7 @@ print_range_list(range_list *list)
 		break;
 	    }
 	    printed = 1;
-	    printf("\t%"PRIu32":%"PRIu32" out of range, but %s\n", cur->start, cur->end, s);
+	    printf("\t%lu:%lu out of range, but %s\n", cur->start, cur->end, s);
 	}
     }
     if (printed == 0) {
@@ -355,8 +354,8 @@ validate_map(partition_map_header *map)
 {
     range_list *list;
     char *name;
-    uint32_t i;
-    uint32_t limit;
+    int i;
+    u32 limit;
     int printed;
     
     //printf("Validation not implemented yet.\n");
@@ -459,18 +458,18 @@ check_map:
 #if 0
 	if (limit < 0) {
 	    printed = 1;
-	    printf("\tentry count is 0x%"PRIx32", real value unknown\n", mb->dpme_map_entries);
+	    printf("\tentry count is 0x%lx, real value unknown\n", mb->dpme_map_entries);
 	} else
 #endif
 	if (mb->dpme_map_entries != limit) {
 	    printed = 1;
-	    printf("\tentry count is 0x%"PRIx32", should be %"PRId32"\n", mb->dpme_map_entries, limit);
+	    printf("\tentry count is 0x%lx, should be %ld\n", mb->dpme_map_entries, limit);
 	}
 	// lblocks contained within physical
 	if (mb->dpme_lblock_start >= mb->dpme_pblocks
 		|| mb->dpme_lblocks > mb->dpme_pblocks - mb->dpme_lblock_start) {
 	    printed = 1;
-	    printf("\tlogical blocks (%"PRId32" for %"PRId32") not within physical size (%"PRId32")\n",
+	    printf("\tlogical blocks (%ld for %ld) not within physical size (%ld)\n",
 		    mb->dpme_lblock_start, mb->dpme_lblocks, mb->dpme_pblocks);
 	}
 	// remember stuff for post processing

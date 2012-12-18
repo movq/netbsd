@@ -1,4 +1,4 @@
-.\" $NetBSD: btbc.4,v 1.6 2012/10/10 18:14:14 njoly Exp $
+.\" $NetBSD: btbc.4,v 1.2 2008/08/26 12:21:44 lukem Exp $
 .\"
 .\" Copyright (c) 2007 KIYOHARA Takashi
 .\" All rights reserved.
@@ -31,21 +31,21 @@
 .Nm btbc
 .Nd AnyCom BlueCard driver
 .Sh SYNOPSIS
-.Cd "btbc* at pcmcia? function ?"
+.Cd "btbc* at pcmcia? function ?
 .Sh DESCRIPTION
 The
 .Nm
-driver provides support for the AnyCom BlueCard (LSE041, LSE039, LSE139)
+driver provides support for the AnyCom BlueCard (LSE041, LSE039, LSE139),
 to the Bluetooth protocol stack.
 .Sh SEE ALSO
 .Xr bluetooth 4 ,
-.Xr pcmcia 4
+.Xr pcmcia 4 ,
 .Sh HISTORY
 This
 .Nm
 device driver was written by
 .An "KIYOHARA Takashi"
 using
-Linux bluecard_cs driver as a reference.
-It first appeared in
+Linux bluecard_cs driver as a reference.  It first appeared in
 .Nx 4.0 .
+.Sh BUGS

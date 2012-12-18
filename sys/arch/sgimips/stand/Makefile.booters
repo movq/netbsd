@@ -1,9 +1,5 @@
-# $NetBSD: Makefile.booters,v 1.21 2011/02/26 16:26:58 matt Exp $
+# $NetBSD: Makefile.booters,v 1.15 2008/03/28 16:41:37 tsutsui Exp $
 
-# PROG set by parent.
-NOMAN=		# defined
-
-.include <bsd.own.mk>
 .include <bsd.sys.mk>		# for HOST_SH
 
 # $S must correspond to the top of the 'sys' tree
@@ -20,25 +16,21 @@ LIBCRTEND=
 realall: ${PROG}
 
 .PATH:		${.CURDIR}/../common
-.PATH.S:	${S}/dev/arcbios
 AFLAGS+=	-D_LOCORE -D_KERNEL -mno-abicalls
 CPPFLAGS+=	-nostdinc -D_STANDALONE -DNO_ABICALLS -I${.OBJDIR} -I${S}
 # compiler flags for smallest code size
 CFLAGS=		-ffreestanding -Os -Wall -Werror -mno-abicalls -msoft-float -G 1024
-.if ${MACHINE_ARCH} == "mips64eb"
-AFLAGS+=	-mips3 -mabi=32
-CFLAGS+=	-mips3 -mabi=32
-.endif
-CWARNFLAGS+=	-Wall -Werror
-CWARNFLAGS+=	-Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
-CWARNFLAGS+=	-Wno-pointer-sign
+CFLAGS+=	-Wall -Werror
+CFLAGS+=	-Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
+CFLAGS+=	-Wno-pointer-sign
 LDBUG=		-T $S/arch/mips/conf/stand.ldscript
 NETBSD_VERS!=	${HOST_SH} ${.CURDIR}/../../../../conf/osrelease.sh
 CPPFLAGS+=	-DNETBSD_VERS='"${NETBSD_VERS}"'
 
 CPPFLAGS+=	-Dsgimips
 
-.include "${S}/dev/arcbios/Makefile.inc"
+# PROG set by parent.
+NOMAN=		# defined
 
 # We load the kernel at 420K in from the start of RAM to give the boot
 # loader plenty of breathing room.  Load the boot loader starting at
@@ -52,8 +44,7 @@ LOAD_ADDRESS_IP32?=	0x80002000
 .if exists(version)
 .PHONY: vers.c
 vers.c: ${.CURDIR}/version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
-	    ${.CURDIR}/version "sgimips"
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version "sgimips"
 
 SRCS+=	vers.c
 CLEANFILES+= vers.c
@@ -77,8 +68,15 @@ SAMISCMAKEFLAGS+=SA_INCLUDE_NET=no
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=		${SALIB}
 
+.if !make(obj) && !make(clean) && !make(cleandir)
+.BEGIN:
+	@([ -h machine ] || ln -s ${S}/arch/${MACHINE}/include machine)
+	@([ -h mips ] || ln -s ${S}/arch/mips/include mips)
+.NOPATH: machine mips
+.endif
+CLEANFILES+= machine mips
+
 
 LIBS=		${LIBSA} ${LIBZ} ${LIBSA} ${LIBKERN}
 
-.include <bsd.klinks.mk>
 .include <bsd.prog.mk>

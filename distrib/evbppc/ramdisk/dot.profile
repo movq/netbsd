@@ -1,4 +1,4 @@
-# $NetBSD: dot.profile,v 1.4 2012/07/20 11:19:51 matt Exp $
+# $NetBSD: dot.profile,v 1.2 2003/07/26 17:06:41 salo Exp $
 #
 # Copyright (c) 1995 Jason R. Thorpe
 # Copyright (c) 1994 Christopher G. Demetriou
@@ -47,14 +47,14 @@ if [ "X${DONEPROFILE}" = "X" ]; then
 	export DONEPROFILE
 
 	# set up some sane defaults
-	echo 'erase ^?, werase ^W, kill ^U, intr ^C, status ^T'
-	stty newcrt werase ^W intr ^C kill ^U erase ^? status ^T
+	echo 'erase ^H, werase ^W, kill ^U, intr ^C, status ^T'
+	stty newcrt werase ^W intr ^C kill ^U erase ^H status ^T
 
 	# mount root read-write
 	mount -u /dev/md0a /
 
-	# mount a /tmp on tmpfs, to avoid filling the md
-	mount_tmpfs tmpfs /tmp
+	# mount a /tmp on mfs, to avoid filling the md
+	mount -t mfs swap /tmp
 
 	# get the terminal type
 	_forceloop=""

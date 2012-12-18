@@ -1,4 +1,4 @@
-/*	$NetBSD: sdp24xx_machdep.c,v 1.15 2012/09/22 00:33:40 matt Exp $ */
+/*	$NetBSD: sdp24xx_machdep.c,v 1.4 2008/08/27 11:03:10 matt Exp $ */
 
 /*
  * Machine dependent functions for kernel setup for TI OSK5912 board.
@@ -125,7 +125,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sdp24xx_machdep.c,v 1.15 2012/09/22 00:33:40 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sdp24xx_machdep.c,v 1.4 2008/08/27 11:03:10 matt Exp $");
 
 #include "opt_machdep.h"
 #include "opt_ddb.h"
@@ -134,6 +134,7 @@ __KERNEL_RCSID(0, "$NetBSD: sdp24xx_machdep.c,v 1.15 2012/09/22 00:33:40 matt Ex
 #include "opt_md.h"
 #include "opt_com.h"
 #include "opt_omap.h"
+#include "md.h"
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -160,7 +161,7 @@ __KERNEL_RCSID(0, "$NetBSD: sdp24xx_machdep.c,v 1.15 2012/09/22 00:33:40 matt Ex
 #endif
 
 #include <machine/bootconfig.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <arm/armreg.h>
@@ -176,6 +177,24 @@ __KERNEL_RCSID(0, "$NetBSD: sdp24xx_machdep.c,v 1.15 2012/09/22 00:33:40 matt Ex
 
 #include "omapwdt32k.h"
 
+/*
+ * Address to call from cpu_reset() to reset the machine.
+ * This is machine architecture dependant as it varies depending
+ * on where the ROM appears when you turn the MMU off.
+ */
+
+u_int cpu_reset_address = 0;
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define FIQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#ifdef IPKDB
+#define UND_STACK_SIZE	2
+#else
+#define UND_STACK_SIZE	1
+#endif
+
 BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
@@ -184,14 +203,26 @@ char *boot_file = NULL;
 paddr_t physical_start;
 /* Physical address of the first byte after the end of SDRAM. */
 paddr_t physical_end;
+/* Number of pages of memory. */
+int physmem = 0;
 
 /* Same things, but for the free (unused by the kernel) memory. */
 static paddr_t physical_freestart, physical_freeend;
 static u_int free_pages;
 
+/* Physical and virtual addresses for some global pages */
+pv_addr_t fiqstack;
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;	/* stack for SVC mode */
+
 /* Physical address of the message buffer. */
 paddr_t msgbufphys;
 
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 extern char KERNEL_BASE_phys[];
 extern char etext[], __data_start[], _edata[], __bss_start[], __bss_end__[];
 extern char _end[];
@@ -205,6 +236,8 @@ extern char _end[];
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
+
+extern struct user *proc0paddr;
 
 /*
  * Macros to translate between physical and virtual for a subset of the
@@ -262,7 +295,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -296,8 +328,6 @@ cpu_reboot(int howto, char *bootstr)
 
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -491,7 +521,8 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init.
 	 */
-	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+	proc0paddr = (struct user *)kernelstack.pv_va;
+	lwp0.l_addr = proc0paddr;
 
 #ifdef VERBOSE_INIT_ARM
 	printf("bootstrap done.\n");
@@ -933,7 +964,7 @@ printf("\t%#lx:%#lx\n", kernel_pt_table[pt_index].pv_va, kernel_pt_table[pt_inde
 #endif
 
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	cpu_setttb(l1_pa, true);
+	setttb(l1_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 

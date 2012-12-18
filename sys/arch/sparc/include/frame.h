@@ -1,4 +1,4 @@
-/*	$NetBSD: frame.h,v 1.8 2011/04/12 07:54:16 mrg Exp $ */
+/*	$NetBSD: frame.h,v 1.7 2006/03/04 02:56:21 uwe Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -39,9 +39,6 @@
  *
  *	@(#)frame.h	8.1 (Berkeley) 6/11/93
  */
-
-#ifndef _SPARC_FRAME_H_
-#define _SPARC_FRAME_H_
 
 #if defined(_KERNEL_OPT)
 #include "opt_sparc_arch.h"
@@ -135,4 +132,3 @@ struct frame64 {
  */
 #define BIAS	(2048-1)
 
-#endif /* _SPARC_FRAME_H_ */

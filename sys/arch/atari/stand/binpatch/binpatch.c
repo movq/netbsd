@@ -1,4 +1,4 @@
-/* $NetBSD: binpatch.c,v 1.6 2009/08/20 15:14:49 tsutsui Exp $ */
+/* $NetBSD: binpatch.c,v 1.4.72.1 2009/10/04 00:26:57 snj Exp $ */
 
 /*-
  * Copyright (c) 2009 Izumi Tsutsui.  All rights reserved.
@@ -60,7 +60,7 @@ __COPYRIGHT("@(#) Copyright (c) 1996\
 #endif /* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: binpatch.c,v 1.6 2009/08/20 15:14:49 tsutsui Exp $");
+__RCSID("$NetBSD: binpatch.c,v 1.4.72.1 2009/10/04 00:26:57 snj Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>

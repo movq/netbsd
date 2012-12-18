@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.14 2009/12/13 09:31:47 mrg Exp $
+#	$NetBSD: Makefile.inc,v 1.11.2.2 2011/01/06 05:20:25 riz Exp $
 
 SRCS+=		rtld_start.S mdreloc.c
 

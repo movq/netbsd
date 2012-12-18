@@ -1,4 +1,4 @@
-/* $NetBSD: udf_strat_direct.c,v 1.10 2009/05/20 15:30:26 reinoud Exp $ */
+/* $NetBSD: udf_strat_direct.c,v 1.5.4.5 2009/07/09 19:44:34 snj Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: udf_strat_direct.c,v 1.10 2009/05/20 15:30:26 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_strat_direct.c,v 1.5.4.5 2009/07/09 19:44:34 snj Exp $");
 #endif /* not lint */
 
 

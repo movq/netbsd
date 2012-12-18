@@ -1748,7 +1748,7 @@ static int radeon_cp_dispatch_texture(struct drm_device * dev,
 	DRM_DEBUG("tex=%dx%d blit=%d\n", tex_width, tex->height, blit_width);
 
 	do {
-		DRM_DEBUG("tex: ofs=0x%x p=%d f=%d x=%u y=%u w=%u h=%u\n",
+		DRM_DEBUG("tex: ofs=0x%x p=%d f=%d x=%hd y=%hd w=%hd h=%hd\n",
 			  tex->offset >> 10, tex->pitch, tex->format,
 			  image->x, image->y, image->width, image->height);
 
@@ -3226,6 +3226,7 @@ void radeon_driver_lastclose(struct drm_device *dev)
 		if (dev_priv->sarea_priv &&
 		    dev_priv->sarea_priv->pfCurrentPage != 0)
 			radeon_cp_dispatch_flip(dev);
+		DRM_SPINUNINIT(&dev_priv->cs.cs_mutex);
 	}
 
 	radeon_do_release(dev);

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.17 2009/04/10 16:16:12 apb Exp $
+#	$NetBSD: Makefile,v 1.16.38.1 2009/06/06 22:10:13 bouyer Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/5/93
 
 # Missing: connectives, words

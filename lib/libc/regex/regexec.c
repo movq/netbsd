@@ -1,4 +1,4 @@
-/*	$NetBSD: regexec.c,v 1.22 2012/03/13 21:13:43 christos Exp $	*/
+/*	$NetBSD: regexec.c,v 1.20 2007/02/09 23:44:18 junyoung Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -76,7 +76,7 @@
 #if 0
 static char sccsid[] = "@(#)regexec.c	8.3 (Berkeley) 3/20/94";
 #else
-__RCSID("$NetBSD: regexec.c,v 1.22 2012/03/13 21:13:43 christos Exp $");
+__RCSID("$NetBSD: regexec.c,v 1.20 2007/02/09 23:44:18 junyoung Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -171,7 +171,7 @@ __weak_alias(regexec,_regexec)
 #define	STATETEARDOWN(m)	{ free((m)->space); m->space = NULL; }
 #define	SETUP(v)	((v) = &m->space[(size_t)(m->vn++ * m->g->nstates)])
 #define	onestate	int
-#define	INIT(o, n)	((o) = (int)(n))
+#define	INIT(o, n)	((o) = (n))
 #define	INC(o)	((o)++)
 #define	ISSTATEIN(v, o)	((v)[o])
 /* some abbreviations; note that some of these know variable names! */
@@ -227,7 +227,7 @@ regexec(
 
 	s = __UNCONST(string);
 
-	if (g->nstates <= (sopno)(CHAR_BIT*sizeof(states1)) && !(eflags&REG_LARGE))
+	if (g->nstates <= CHAR_BIT*sizeof(states1) && !(eflags&REG_LARGE))
 		return(smatcher(g, s, nmatch, pmatch, eflags));
 	else
 		return(lmatcher(g, s, nmatch, pmatch, eflags));

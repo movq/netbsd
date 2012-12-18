@@ -1,4 +1,4 @@
-.\" $NetBSD: btsco.4,v 1.11 2009/08/21 23:45:15 joerg Exp $
+.\" $NetBSD: btsco.4,v 1.9 2006/10/04 19:29:25 wiz Exp $
 .\"
 .\" Copyright (c) 2006 Itronix Inc.
 .\" All rights reserved.
@@ -95,7 +95,7 @@ an application setting up a control channel prior to use, via the
 call on the mixer device, which returns a
 .Ar btsco_info
 structure as follows:
-.Bd -literal
+.Bd -literal -offset
 #include \*[Lt]dev/bluetooth/btsco.h\*[Gt]
 
 struct btsco_info {
@@ -114,7 +114,7 @@ The
 driver can be configured to act in Connect or Listen mode.
 In Connect mode, the
 .Nm
-driver will initiate a connection to the remote device on an
+driver will initate a connection to the remote device on an
 .Xr open 2
 call, whereas in Listen mode,
 .Xr open 2

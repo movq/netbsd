@@ -1,4 +1,4 @@
-/*	$NetBSD: osiop_gsc.c,v 1.20 2011/07/01 18:33:09 dyoung Exp $	*/
+/*	$NetBSD: osiop_gsc.c,v 1.12 2008/05/14 13:29:28 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2001 Matt Fredette.  All rights reserved.
@@ -64,7 +64,10 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Michael Shalayeff.
+ * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -80,7 +83,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osiop_gsc.c,v 1.20 2011/07/01 18:33:09 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osiop_gsc.c,v 1.12 2008/05/14 13:29:28 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -96,7 +99,7 @@ __KERNEL_RCSID(0, "$NetBSD: osiop_gsc.c,v 1.20 2011/07/01 18:33:09 dyoung Exp $"
 #include <machine/intr.h>
 #include <machine/iomod.h>
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/ic/osiopreg.h>
 #include <dev/ic/osiopvar.h>
@@ -126,7 +129,7 @@ osiop_gsc_match(device_t parent, cfdata_t cf, void *aux)
 	    (ga->ga_type.iodc_sv_model != HPPA_FIO_GSCSI))
 		return 0;
 
-	if (bus_space_map(ga->ga_iot, ga->ga_hpa,
+	if (bus_space_map(ga->ga_iot, ga->ga_hpa, 
 	    OSIOP_GSC_OFFSET + OSIOP_NREGS, 0, &ioh))
 		return 0;
 
@@ -146,17 +149,13 @@ osiop_gsc_attach(device_t parent, device_t self, void *aux)
 	sc->sc_bst = ga->ga_iot;
 	sc->sc_dmat = ga->ga_dmatag;
 	if (bus_space_map(sc->sc_bst, ga->ga_hpa,
-	    OSIOP_GSC_OFFSET + OSIOP_NREGS, 0, &ioh)) {
-		aprint_error(": couldn't map I/O ports\n");
-		return;
-	}
-	if (bus_space_subregion(sc->sc_bst, ioh,
-	    OSIOP_GSC_OFFSET, OSIOP_NREGS, &sc->sc_reg)) {
-		aprint_error(": couldn't get chip ports\n");
-		return;
-	}
+	    OSIOP_GSC_OFFSET + OSIOP_NREGS, 0, &ioh))
+		panic("%s: couldn't map I/O ports", __func__);
+	if (bus_space_subregion(sc->sc_bst, ioh, 
+	    OSIOP_GSC_OFFSET, OSIOP_NREGS, &sc->sc_reg))
+		panic("%s: couldn't get chip ports", __func__);
 
-	sc->sc_clock_freq = ga->ga_ca.ca_pir.filler2[14] / 1000000;
+	sc->sc_clock_freq = ga->ga_ca.ca_pdc_iodc_read->filler2[14] / 1000000;
 	if (!sc->sc_clock_freq)
 		sc->sc_clock_freq = 50;
 
@@ -183,8 +182,8 @@ osiop_gsc_attach(device_t parent, device_t self, void *aux)
 #endif /* OSIOP_DEBUG */
 	osiop_attach(sc);
 
-	(void)hp700_intr_establish(IPL_BIO, osiop_gsc_intr, sc, ga->ga_ir,
-	    ga->ga_irq);
+	(void)hp700_intr_establish(self, IPL_BIO,
+	    osiop_gsc_intr, sc, ga->ga_int_reg, ga->ga_irq);
 }
 
 /*
@@ -194,7 +193,7 @@ int
 osiop_gsc_intr(void *arg)
 {
 	struct osiop_softc *sc = arg;
-	uint8_t istat;
+	u_int8_t istat;
 
 	/* This is potentially nasty, since the IRQ is level triggered... */
 	if (sc->sc_flags & OSIOP_INTSOFF)

@@ -1,6 +1,7 @@
-/*      $NetBSD: if_atmsubr.c,v 1.50 2012/10/11 20:05:50 christos Exp $       */
+/*      $NetBSD: if_atmsubr.c,v 1.42 2008/06/15 16:37:21 christos Exp $       */
 
 /*
+ *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -12,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor and
+ *	Washington University.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,12 +37,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atmsubr.c,v 1.50 2012/10/11 20:05:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atmsubr.c,v 1.42 2008/06/15 16:37:21 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_gateway.h"
 #include "opt_natm.h"
 
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,7 +66,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_atmsubr.c,v 1.50 2012/10/11 20:05:50 christos Exp
 #include <net/if_atm.h>
 #include <net/ethertypes.h> /* XXX: for ETHERTYPE_* */
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <netinet/in.h>
 #include <netinet/if_atm.h>
@@ -177,7 +187,7 @@ atm_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 			 * assuming dst contains 12 bytes (atm pseudo
 			 * header (4) + LLC/SNAP (8))
 			 */
-			memcpy(&atmdst, dst->sa_data, sizeof(atmdst));
+			bcopy(dst->sa_data, &atmdst, sizeof(atmdst));
 			break;
 
 		default:
@@ -204,7 +214,7 @@ atm_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 		*ad = atmdst;
 		if (atm_flags & ATM_PH_LLCSNAP) {
 			atmllc = (struct atmllc *)(ad + 1);
-			memcpy(atmllc->llchdr, ATMLLC_HDR,
+			bcopy(ATMLLC_HDR, atmllc->llchdr,
 						sizeof(atmllc->llchdr));
 			ATM_LLC_SETTYPE(atmllc, etype);
 		}
@@ -259,7 +269,7 @@ atm_input(struct ifnet *ifp, struct atm_pseudohdr *ah, struct mbuf *m,
 	    if (m->m_len < sizeof(*alc) && (m = m_pullup(m, sizeof(*alc))) == 0)
 		  return; /* failed */
 	    alc = mtod(m, struct atmllc *);
-	    if (memcmp(alc, ATMLLC_HDR, 6)) {
+	    if (bcmp(alc, ATMLLC_HDR, 6)) {
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 	      printf("%s: recv'd invalid LLC/SNAP frame [vp=%d,vc=%d]\n",
 		  ifp->if_xname, ATM_PH_VPI(ah), ATM_PH_VCI(ah));
@@ -288,7 +298,7 @@ atm_input(struct ifnet *ifp, struct atm_pseudohdr *ah, struct mbuf *m,
 #ifdef INET6
 	  case ETHERTYPE_IPV6:
 #ifdef GATEWAY  
-		if (ip6flow_fastforward(&m))
+		if (ip6flow_fastforward(m))
 			return;
 #endif
 		  schednetisr(NETISR_IPV6);
@@ -330,7 +340,9 @@ atm_ifattach(struct ifnet *ifp)
 	if_alloc_sadl(ifp);
 	/* XXX Store LLADDR for ATMARP. */
 
-	bpf_attach(ifp, DLT_ATM_RFC1483, sizeof(struct atmllc));
+#if NBPFILTER > 0
+	bpfattach(ifp, DLT_ATM_RFC1483, sizeof(struct atmllc));
+#endif
 }
 
 #ifdef ATM_PVCEXT
@@ -345,7 +357,7 @@ pvcsif_alloc(void)
 
 	if (pvc_number >= pvc_max_number)
 		return (NULL);
-	pvcsif = malloc(sizeof(struct pvcsif),
+	MALLOC(pvcsif, struct pvcsif *, sizeof(struct pvcsif),
 	       M_DEVBUF, M_WAITOK|M_ZERO);
 	if (pvcsif == NULL)
 		return (NULL);

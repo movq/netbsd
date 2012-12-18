@@ -1,4 +1,4 @@
-/* $NetBSD: main.c,v 1.43 2011/06/09 19:57:53 christos Exp $	 */
+/* $NetBSD: main.c,v 1.40 2008/10/12 20:49:43 wiz Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -52,7 +52,7 @@
 #include "fsutil.h"
 #include "exitvalues.h"
 
-volatile sig_atomic_t returntosingle = 0;
+int returntosingle = 0;
 
 static int argtoi(int, const char *, const char *, int);
 static int checkfilesys(const char *, char *, long, int);
@@ -76,7 +76,6 @@ main(int argc, char **argv)
 	int ret = FSCK_EXIT_OK;
 	const char *optstring = "b:dfi:m:npPqUy";
 
-	ckfinish = ckfini;
 	skipclean = 1;
 	exitonfail = 0;
 	idaddr = 0x0;

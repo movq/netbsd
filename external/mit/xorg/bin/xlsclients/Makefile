@@ -1,17 +1,15 @@
-#	$NetBSD: Makefile,v 1.5 2011/07/23 07:11:48 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2008/07/29 05:01:22 mrg Exp $
 
 .include <bsd.own.mk>
 
 PROG=	xlsclients
 
-CPPFLAGS+=	-I${DESTDIR}${X11INCDIR} -DHAVE_STRNLEN
-
 #BUILDSYMLINKS=	xlscli.man xlsclients.man
 
-LDADD+=	-lxcb -lxcb-atom
-DPADD+=	${LIBXCB} ${LIBXCB_ATOM}
+LDADD+=	-lXmuu -lXt -lSM -lICE -lXext -lX11
+DPADD+=	${LIBXMUU} ${LIBXT} ${LIBSM} ${LIBICE} ${LIBXEXT} ${LIBX11}
 
-.PATH:	${X11SRCDIR.${PROG}} ${X11SRCDIR.${PROG}}/man
+.PATH:	${X11SRCDIR.${PROG}}
 
 .include <bsd.x11.mk>
 .include <bsd.prog.mk>

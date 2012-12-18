@@ -1,4 +1,4 @@
-.\"	$NetBSD: genassym.1,v 1.5 2010/04/13 09:01:10 jruoho Exp $
+.\"	$NetBSD: genassym.1,v 1.3 2005/08/18 01:09:02 rpaulo Exp $
 .\"
 .\" Copyright (c) 1997 Matthias Pfaller.
 .\" All rights reserved.
@@ -11,6 +11,11 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
+.\" 3. All advertising materials mentioning features or use of this software
+.\"    must display the following acknowledgement:
+.\"	  This product includes software developed by Matthias Pfaller.
+.\" 4. The name of the author may not be used to endorse or promote products
+.\"    derived from this software without specific prior written permission
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -23,7 +28,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd April 13, 2010
+.Dd August 18, 2005
 .Dt GENASSYM 1
 .Os
 .Sh NAME
@@ -44,7 +49,6 @@ information
 reads from stdin. The generated file is used by kernel sources
 written in assembler to gain access to information (e.g. structure
 offsets and sizes) normally only known to the C compiler.
-.Pp
 Arguments to
 .Nm
 are usually of the form
@@ -57,9 +61,7 @@ and
 .Ar ${CPPFLAGS}
 are flag arguments to the C compiler. The script creates a C source file
 from its input. Then the C compiler is called according to the script's
-arguments to compile this file.
-.Pp
-Normally
+arguments to compile this file. Normally
 .Nm
 instructs the C compiler to create an assembler source from the constructed
 C source. The resulting file is then processed to extract the information
@@ -84,9 +86,7 @@ The
 .Nm
 command appeared in
 .Nx 1.3
-as
-.Dq genassym.sh
-in
+as genassym.sh in
 .Pa /usr/src/sys/kern .
 It became a userland utility in
 .Nx 4.0 .

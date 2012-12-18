@@ -1,24 +1,16 @@
-/*	$NetBSD: gamesupport.c,v 1.11 2009/08/31 08:27:16 dholland Exp $	*/
+/*	$NetBSD: gamesupport.c,v 1.9 2005/02/15 12:58:21 jsm Exp $	*/
 
 /*
  * gamesupport.c - auxiliary routines for support of Phantasia
  */
 
-#include <setjmp.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-
-#include "phantdefs.h"
-#include "phantstruct.h"
-#include "phantglobs.h"
-#include "pathnames.h"
-
+#include "include.h"
 #undef bool
 #include <curses.h>
 
 void
-changestats(phbool ingameflag)
+changestats(ingameflag)
+	phbool  ingameflag;
 {
 	static char flag[2] =	/* for printing values of bools */
 	{'F', 'T'};
@@ -448,7 +440,7 @@ BALTER:
 }
 
 void
-monstlist(void)
+monstlist()
 {
 	int     count = 0;	/* count in file */
 
@@ -462,7 +454,7 @@ monstlist(void)
 }
 
 void
-scorelist(void)
+scorelist()
 {
 	struct scoreboard sbuf;	/* for reading entries */
 	FILE   *fp;		/* to open the file */
@@ -476,7 +468,7 @@ scorelist(void)
 }
 
 void
-activelist(void)
+activelist()
 {
 	fseek(Playersfp, 0L, SEEK_SET);
 	printf("Current characters on file are:\n\n");
@@ -490,7 +482,7 @@ activelist(void)
 }
 
 void
-purgeoldplayers(void)
+purgeoldplayers()
 {
 	int     today;		/* day of year for today */
 	int     daysold;	/* how many days since the character has been
@@ -519,7 +511,7 @@ purgeoldplayers(void)
 }
 
 void
-enterscore(void)
+enterscore()
 {
 	struct scoreboard sbuf;	/* buffer to read in scoreboard entries */
 	FILE   *fp;		/* to open scoreboard file */

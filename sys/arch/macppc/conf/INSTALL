@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.117 2012/08/17 20:11:40 abs Exp $
+#	$NetBSD: INSTALL,v 1.107 2008/07/31 07:41:02 simonb Exp $
 #
 # config file for INSTALL FLOPPY
 #
@@ -17,8 +17,7 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 options 	MEMORY_DISK_HOOKS
 options 	MEMORY_DISK_IS_ROOT	# Force root on ram-disk
 options 	MEMORY_DISK_SERVER=0	# no userspace memory disk support
-options 	MEMORY_DISK_ROOT_SIZE=4424	# 2212 KiB
-options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
+options 	MEMORY_DISK_ROOT_SIZE=4096	# 2 Megabytes
 
 options 	USERCONF	# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
@@ -47,7 +46,7 @@ file-system 	MSDOSFS		# MS-DOS file system
 options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
 options 	APPLE_UFS	# Apple UFS support in FFS
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
-options 	WAPBL		# File system journaling support
+options 	WAPBL		# File system journaling support - Experimental
 
 # Networking options
 options 	INET		# IP + ICMP + TCP + UDP
@@ -55,10 +54,7 @@ options 	INET6		# IPV6
 options 	NFS_BOOT_DHCP	# Support DHCP NFS root
 
 options 	WSEMUL_VT100	# VT100 / VT220 emulation
-options 	WSDISPLAY_DEFAULTSCREENS=1
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
-options 	FONT_GALLANT12x22	# big, Sun-like font
-options 	FONT_QVSS8x15		# a smaller font for lower resolutions
+options 	FONT_SONY8x16
 
 # Kernel root file system and dump configuration.
 config		netbsd	root on ? type ?
@@ -193,13 +189,13 @@ uhub*	at usb?
 uhub*	at uhub? port ?
 uhidev* 	at uhub? port ? configuration ? interface ?
 ukbd* 	at uhidev? reportid ?
-umass*	at uhub? port ? configuration ? interface ?	# USB Mass Storage
 
-pseudo-device	md			# memory disk
-#pseudo-device	fss			# file system snapshot device
+pseudo-device	md		1	# memory disk
+#pseudo-device	fss		4	# file system snapshot device
 pseudo-device	loop			# network loopback
 pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
 
+pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	wsmux			# mouse and keyboard multiplexor
 pseudo-device	openfirm		# /dev/openfirm
 

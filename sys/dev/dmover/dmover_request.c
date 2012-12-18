@@ -1,4 +1,4 @@
-/*	$NetBSD: dmover_request.c,v 1.8 2011/05/14 18:24:47 jakllsch Exp $	*/
+/*	$NetBSD: dmover_request.c,v 1.7 2008/01/04 21:17:52 ad Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.
@@ -40,9 +40,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dmover_request.c,v 1.8 2011/05/14 18:24:47 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dmover_request.c,v 1.7 2008/01/04 21:17:52 ad Exp $");
 
 #include <sys/param.h>
+#include <sys/simplelock.h>
 #include <sys/pool.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
@@ -51,24 +52,40 @@ __KERNEL_RCSID(0, "$NetBSD: dmover_request.c,v 1.8 2011/05/14 18:24:47 jakllsch 
 
 pool_cache_t dmover_request_cache;
 
-static bool initialized;
+static int initialized;
+static struct simplelock initialized_slock = SIMPLELOCK_INITIALIZER;
 
 void
 dmover_request_initialize(void)
 {
+	pool_cache_t pc;
+	int s;
 
-	KASSERT(initialized == false);
+	if (initialized == 0) {
+		pc = pool_cache_init(sizeof(struct dmover_request), 0, 0, 0,
+		        "dmreq", NULL, IPL_BIO, NULL, NULL, NULL);
+	} else {
+		pc = NULL;
+	}
 
-	dmover_request_cache = pool_cache_init(sizeof(struct dmover_request),
-		0, 0, 0, "dmreq", NULL, IPL_BIO, NULL, NULL, NULL);
+	s = splbio();
+	simple_lock(&initialized_slock);
+	if (__predict_true(initialized == 0)) {
+		dmover_request_cache = pc;
+		pc = NULL;
+		initialized = 1;
+	}
+	simple_unlock(&initialized_slock);
+	splx(s);
 
-	initialized = true;
+	if (pc != NULL)
+		pool_cache_destroy(pc);
 }
 
 /*
  * dmover_request_alloc:	[client interface function]
  *
- *	Allocate a transform request for the specified session.
+ *	Allocate a tranform request for the specified session.
  */
 struct dmover_request *
 dmover_request_alloc(struct dmover_session *dses, dmover_buffer *inbuf)
@@ -76,7 +93,7 @@ dmover_request_alloc(struct dmover_session *dses, dmover_buffer *inbuf)
 	struct dmover_request *dreq;
 	int inputs = dses->dses_ninputs;
 
-	if (__predict_false(initialized == false))
+	if (__predict_false(initialized == 0))
 		return (NULL);
 
 	dreq = pool_cache_get(dmover_request_cache, PR_NOWAIT);
@@ -111,8 +128,6 @@ dmover_request_alloc(struct dmover_session *dses, dmover_buffer *inbuf)
 void
 dmover_request_free(struct dmover_request *dreq)
 {
-
-	KASSERT(initialized == true);
 
 	if (dreq->dreq_flags & __DMOVER_REQ_INBUF_FREE)
 		free(dreq->dreq_inbuf, M_DEVBUF);

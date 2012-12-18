@@ -1,7 +1,7 @@
-/*	$NetBSD: fmsvar.h,v 1.7 2012/10/27 17:18:32 chs Exp $	*/
+/*	$NetBSD: fmsvar.h,v 1.4 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
- * Copyright (c) 1999, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -34,10 +34,8 @@
 #define _DEV_PCI_FMSVAR_H_
 
 struct fms_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	void *sc_ih;
-	kmutex_t sc_lock;
-	kmutex_t sc_intr_lock;
 
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
@@ -48,7 +46,7 @@ struct fms_softc {
 	bus_space_handle_t sc_opl_ioh;
 
 	bus_space_handle_t sc_mpu_ioh;
-	device_t  sc_mpu_dev;
+	struct device * sc_mpu_dev;
 
 	struct ac97_codec_if *codec_if;
 	struct ac97_host_if host_if;

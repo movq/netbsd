@@ -14,7 +14,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ar5212_gpio.c,v 1.2 2011/03/07 11:25:43 cegger Exp $
+ * $Id: ar5212_gpio.c,v 1.1.1.1.10.2 2009/08/07 06:43:42 snj Exp $
  */
 #include "opt_ah.h"
 
@@ -36,7 +36,7 @@
  * Configure GPIO Output lines
  */
 HAL_BOOL
-ar5212GpioCfgOutput(struct ath_hal *ah, uint32_t gpio, HAL_GPIO_MUX_TYPE type)
+ar5212GpioCfgOutput(struct ath_hal *ah, uint32_t gpio)
 {
 	HALASSERT(gpio < AR_NUM_GPIO);
 

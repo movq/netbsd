@@ -1,4 +1,4 @@
-/*	$NetBSD: qmqpd_peer.c,v 1.1.1.2 2011/03/02 19:32:30 tron Exp $	*/
+/*	$NetBSD: qmqpd_peer.c,v 1.1.1.1.2.3 2011/01/07 01:24:12 riz Exp $	*/
 
 /*++
 /* NAME
@@ -59,7 +59,6 @@
 #include <myaddrinfo.h>
 #include <sock_addr.h>
 #include <inet_proto.h>
-#include <split_at.h>
 
 /* Global library. */
 
@@ -154,14 +153,6 @@ void    qmqpd_peer_init(QMQPD_STATE *state)
 	state->port = mystrdup(client_port.buf);
 
 	/*
-	 * XXX Strip off the IPv6 datalink suffix to avoid false alarms with
-	 * strict address syntax checks.
-	 */
-#ifdef HAS_IPV6
-	(void) split_at(client_addr.buf, '%');
-#endif
-
-	/*
 	 * We convert IPv4-in-IPv6 address to 'true' IPv4 address early on,
 	 * but only if IPv4 support is enabled (why would anyone want to turn
 	 * it off)? With IPv4 support enabled we have no need for the IPv6
@@ -245,8 +236,7 @@ void    qmqpd_peer_init(QMQPD_STATE *state)
 	    /*
 	     * Reject the hostname if it does not list the peer address.
 	     */
-	    aierr = hostname_to_sockaddr_pf(state->name, state->addr_family,
-					    (char *) 0, 0, &res0);
+	    aierr = hostname_to_sockaddr(state->name, (char *) 0, 0, &res0);
 	    if (aierr) {
 		msg_warn("%s: hostname %s verification failed: %s",
 			 state->addr, state->name, MAI_STRERROR(aierr));

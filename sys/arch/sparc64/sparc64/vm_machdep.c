@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.99 2012/02/19 21:06:32 rmind Exp $ */
+/*	$NetBSD: vm_machdep.c,v 1.84.4.2 2009/06/05 18:28:34 snj Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -50,34 +50,36 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.99 2012/02/19 21:06:32 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.84.4.2 2009/06/05 18:28:34 snj Exp $");
 
 #include "opt_multiprocessor.h"
+#include "opt_coredump.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/buf.h>
 #include <sys/exec.h>
 #include <sys/vnode.h>
-#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 #include <machine/frame.h>
-#include <machine/pcb.h>
 #include <machine/trap.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 /*
  * Map a user I/O request into kernel virtual address space.
  * Note: the pages are already locked by uvm_vslock(), so we
  * do not need to pass an access_type to pmap_enter().   
  */
-int
-vmapbuf(struct buf *bp, vsize_t len)
+void
+vmapbuf(bp, len)
+	struct buf *bp;
+	vsize_t len;
 {
 	struct pmap *upmap, *kpmap;
 	vaddr_t uva;	/* User VA (map from) */
@@ -101,22 +103,22 @@ vmapbuf(struct buf *bp, vsize_t len)
 		if (pmap_extract(upmap, uva, &pa) == FALSE)
 			panic("vmapbuf: null page frame");
 		/* Now map the page into kernel space. */
-		pmap_kenter_pa(kva, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
+		pmap_kenter_pa(kva, pa, VM_PROT_READ | VM_PROT_WRITE);
 
 		uva += PAGE_SIZE;
 		kva += PAGE_SIZE;
 		len -= PAGE_SIZE;
 	} while (len);
 	pmap_update(pmap_kernel());
-
-	return 0;
 }
 
 /*
  * Unmap a previously-mapped user I/O request.
  */
 void
-vunmapbuf(struct buf *bp, vsize_t len)
+vunmapbuf(bp, len)
+	struct buf *bp;
+	vsize_t len;
 {
 	vaddr_t kva;
 	vsize_t off;
@@ -160,6 +162,21 @@ cpu_proc_fork(struct proc *p1, struct proc *p2)
 char cpu_forkname[] = "cpu_lwp_fork()";
 #endif
 
+void setfunc_trampoline(void);
+inline void
+cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
+{
+	struct pcb *npcb = &l->l_addr->u_pcb;
+	struct rwindow *rp;
+
+	rp = (struct rwindow *)((u_long)npcb + TOPFRAMEOFF);
+	rp->rw_local[0] = (long)func;		/* Function to call */
+	rp->rw_local[1] = (long)arg;		/* and its argument */
+
+	npcb->pcb_pc = (long)setfunc_trampoline - 8;
+	npcb->pcb_sp = (long)rp - STACK_OFFSET;
+}
+
 /*
  * Finish a fork operation, with lwp l2 nearly set up.
  * Copy and update the pcb and trap frame, making the child ready to run.
@@ -180,10 +197,15 @@ char cpu_forkname[] = "cpu_lwp_fork()";
  */
 void lwp_trampoline(void);
 void
-cpu_lwp_fork(register struct lwp *l1, register struct lwp *l2, void *stack, size_t stacksize, void (*func)(void *), void *arg)
+cpu_lwp_fork(l1, l2, stack, stacksize, func, arg)
+	register struct lwp *l1, *l2;
+	void *stack;
+	size_t stacksize;
+	void (*func)(void *);
+	void *arg;
 {
-	struct pcb *opcb = lwp_getpcb(l1);
-	struct pcb *npcb = lwp_getpcb(l2);
+	struct pcb *opcb = &l1->l_addr->u_pcb;
+	struct pcb *npcb = &l2->l_addr->u_pcb;
 	struct trapframe *tf2;
 	struct rwindow *rp;
 
@@ -212,7 +234,7 @@ cpu_lwp_fork(register struct lwp *l1, register struct lwp *l2, void *stack, size
 		opcb->pcb_cwp = getcwp();
 	}
 #ifdef DIAGNOSTIC
-	else if (l1 != &lwp0)
+	else if (l1 != &lwp0)	/* XXX is this valid? */
 		panic("cpu_lwp_fork: curlwp");
 #endif
 #ifdef DEBUG
@@ -229,6 +251,9 @@ cpu_lwp_fork(register struct lwp *l1, register struct lwp *l2, void *stack, size
 		    sizeof(struct fpstate64));
 	} else
 		l2->l_md.md_fpstate = NULL;
+
+	if (l1->l_proc->p_flag & PK_32)
+		l2->l_proc->p_flag |= PK_32;
 
 	/*
 	 * Setup (kernel) stack frame that will by-pass the child
@@ -310,7 +335,7 @@ fpusave_lwp(struct lwp *l, bool save)
 
 		spincount = 0;
 		while (ci->ci_fplwp == l) {
-			membar_Sync();
+			membar_sync();
 			spincount++;
 			if (spincount > 10000000)
 				panic("fpusave_lwp ipi didn't");
@@ -341,12 +366,90 @@ cpu_lwp_free2(struct lwp *l)
 		pool_cache_put(fpstate_cache, fs);
 }
 
+#ifdef COREDUMP
+/*
+ * cpu_coredump is called to write a core dump header.
+ * (should this be defined elsewhere?  machdep.c?)
+ */
 int
-cpu_lwp_setprivate(lwp_t *l, void *addr)
+cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
 {
-	struct trapframe *tf = l->l_md.md_tf;
+	int error;
+	struct md_coredump md_core;
+	struct coreseg cseg;
 
-	tf->tf_global[7] = (uintptr_t)addr;
+	if (iocookie == NULL) {
+		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
+		chdr->c_hdrsize = ALIGN(sizeof(*chdr));
+		chdr->c_seghdrsize = ALIGN(sizeof(cseg));
+		chdr->c_cpusize = sizeof(md_core);
+		chdr->c_nseg++;
+		return 0;
+	}
 
-	return 0;
+	/* Copy important fields over. */
+	md_core.md_tf.tf_tstate = l->l_md.md_tf->tf_tstate;
+	md_core.md_tf.tf_pc = l->l_md.md_tf->tf_pc;
+	md_core.md_tf.tf_npc = l->l_md.md_tf->tf_npc;
+	md_core.md_tf.tf_y = l->l_md.md_tf->tf_y;
+	md_core.md_tf.tf_tt = l->l_md.md_tf->tf_tt;
+	md_core.md_tf.tf_pil = l->l_md.md_tf->tf_pil;
+	md_core.md_tf.tf_oldpil = l->l_md.md_tf->tf_oldpil;
+
+	md_core.md_tf.tf_global[0] = l->l_md.md_tf->tf_global[0];
+	md_core.md_tf.tf_global[1] = l->l_md.md_tf->tf_global[1];
+	md_core.md_tf.tf_global[2] = l->l_md.md_tf->tf_global[2];
+	md_core.md_tf.tf_global[3] = l->l_md.md_tf->tf_global[3];
+	md_core.md_tf.tf_global[4] = l->l_md.md_tf->tf_global[4];
+	md_core.md_tf.tf_global[5] = l->l_md.md_tf->tf_global[5];
+	md_core.md_tf.tf_global[6] = l->l_md.md_tf->tf_global[6];
+	md_core.md_tf.tf_global[7] = l->l_md.md_tf->tf_global[7];
+
+	md_core.md_tf.tf_out[0] = l->l_md.md_tf->tf_out[0];
+	md_core.md_tf.tf_out[1] = l->l_md.md_tf->tf_out[1];
+	md_core.md_tf.tf_out[2] = l->l_md.md_tf->tf_out[2];
+	md_core.md_tf.tf_out[3] = l->l_md.md_tf->tf_out[3];
+	md_core.md_tf.tf_out[4] = l->l_md.md_tf->tf_out[4];
+	md_core.md_tf.tf_out[5] = l->l_md.md_tf->tf_out[5];
+	md_core.md_tf.tf_out[6] = l->l_md.md_tf->tf_out[6];
+	md_core.md_tf.tf_out[7] = l->l_md.md_tf->tf_out[7];
+
+#ifdef DEBUG
+	md_core.md_tf.tf_local[0] = l->l_md.md_tf->tf_local[0];
+	md_core.md_tf.tf_local[1] = l->l_md.md_tf->tf_local[1];
+	md_core.md_tf.tf_local[2] = l->l_md.md_tf->tf_local[2];
+	md_core.md_tf.tf_local[3] = l->l_md.md_tf->tf_local[3];
+	md_core.md_tf.tf_local[4] = l->l_md.md_tf->tf_local[4];
+	md_core.md_tf.tf_local[5] = l->l_md.md_tf->tf_local[5];
+	md_core.md_tf.tf_local[6] = l->l_md.md_tf->tf_local[6];
+	md_core.md_tf.tf_local[7] = l->l_md.md_tf->tf_local[7];
+
+	md_core.md_tf.tf_in[0] = l->l_md.md_tf->tf_in[0];
+	md_core.md_tf.tf_in[1] = l->l_md.md_tf->tf_in[1];
+	md_core.md_tf.tf_in[2] = l->l_md.md_tf->tf_in[2];
+	md_core.md_tf.tf_in[3] = l->l_md.md_tf->tf_in[3];
+	md_core.md_tf.tf_in[4] = l->l_md.md_tf->tf_in[4];
+	md_core.md_tf.tf_in[5] = l->l_md.md_tf->tf_in[5];
+	md_core.md_tf.tf_in[6] = l->l_md.md_tf->tf_in[6];
+	md_core.md_tf.tf_in[7] = l->l_md.md_tf->tf_in[7];
+#endif
+	if (l->l_md.md_fpstate) {
+		fpusave_lwp(l, true);
+		md_core.md_fpstate = *l->l_md.md_fpstate;
+	} else
+		memset(&md_core.md_fpstate, 0,
+		      sizeof(md_core.md_fpstate));
+
+	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
+	cseg.c_addr = 0;
+	cseg.c_size = chdr->c_cpusize;
+
+	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
+	    chdr->c_seghdrsize);
+	if (error)
+		return error;
+
+	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
+	    sizeof(md_core));
 }
+#endif

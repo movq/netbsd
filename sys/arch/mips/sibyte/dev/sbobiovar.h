@@ -1,4 +1,4 @@
-/* $NetBSD: sbobiovar.h,v 1.4 2011/02/20 07:47:39 matt Exp $ */
+/* $NetBSD: sbobiovar.h,v 1.2 2003/02/07 17:38:49 cgd Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,7 +33,7 @@
  */
 
 /* sbobio pseudo-offset (from base) of an on-board device*/
-typedef u_long sbobio_offset;
+typedef u_int sbobio_offset;
 
 /* type of an on-board device.  Matches table in sbobio.c */
 enum sbobio_device_type {
@@ -51,9 +51,8 @@ struct sbobio_attach_locs {
 	enum sbobio_device_type	sa_type;
 };
 
-/* XXX can probably just get away without separate sbobio_attach_locs ? */
 struct sbobio_attach_args {
 	struct sbobio_attach_locs sa_locs;
 
-	sbobio_offset		sa_base;
+	long			sa_base;
 };

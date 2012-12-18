@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_msg.c,v 1.63 2012/03/13 18:40:54 elad Exp $	*/
+/*	$NetBSD: sysv_msg.c,v 1.58.4.1 2009/02/02 20:00:42 snj Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2006, 2007 The NetBSD Foundation, Inc.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_msg.c,v 1.63 2012/03/13 18:40:54 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_msg.c,v 1.58.4.1 2009/02/02 20:00:42 snj Exp $");
 
 #define SYSVMSG
 
@@ -116,8 +116,8 @@ msginit(void)
 	    ALIGN(msginfo.msgseg * sizeof(struct msgmap)) +
 	    ALIGN(msginfo.msgtql * sizeof(struct __msg)) +
 	    ALIGN(msginfo.msgmni * sizeof(kmsq_t));
-	sz = round_page(sz);
-	v = uvm_km_alloc(kernel_map, sz, 0, UVM_KMF_WIRED|UVM_KMF_ZERO);
+	v = uvm_km_alloc(kernel_map, round_page(sz), 0,
+	    UVM_KMF_WIRED|UVM_KMF_ZERO);
 	if (v == 0)
 		panic("sysv_msg: cannot allocate memory");
 	msgpool = (void *)v;
@@ -154,8 +154,6 @@ msginit(void)
 	mutex_init(&msgmutex, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&msg_realloc_cv, "msgrealc");
 	msg_realloc_state = false;
-
-	sysvipcinit();
 }
 
 static int
@@ -178,8 +176,8 @@ msgrealloc(int newmsgmni, int newmsgseg)
 	    ALIGN(newmsgseg * sizeof(struct msgmap)) +
 	    ALIGN(msginfo.msgtql * sizeof(struct __msg)) +
 	    ALIGN(newmsgmni * sizeof(kmsq_t));
-	sz = round_page(sz);
-	v = uvm_km_alloc(kernel_map, sz, 0, UVM_KMF_WIRED|UVM_KMF_ZERO);
+	v = uvm_km_alloc(kernel_map, round_page(sz), 0,
+	    UVM_KMF_WIRED|UVM_KMF_ZERO);
 	if (v == 0)
 		return ENOMEM;
 
@@ -341,7 +339,6 @@ msgrealloc(int newmsgmni, int newmsgseg)
 	    ALIGN(msginfo.msgseg * sizeof(struct msgmap)) +
 	    ALIGN(msginfo.msgtql * sizeof(struct __msg)) +
 	    ALIGN(msginfo.msgmni * sizeof(kmsq_t));
-	sz = round_page(sz);
 
 	for (i = 0; i < msginfo.msgmni; i++)
 		cv_destroy(&msqs[i].msq_cv);
@@ -395,8 +392,7 @@ msg_freehdr(struct __msg *msghdr)
 }
 
 int
-sys___msgctl50(struct lwp *l, const struct sys___msgctl50_args *uap,
-    register_t *retval)
+sys___msgctl13(struct lwp *l, const struct sys___msgctl13_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) msqid;
@@ -489,10 +485,8 @@ msgctl1(struct lwp *l, int msqid, int cmd, struct msqid_ds *msqbuf)
 		if ((error = ipcperm(cred, &msqptr->msg_perm, IPC_M)))
 			break;
 		if (msqbuf->msg_qbytes > msqptr->msg_qbytes &&
-		    kauth_authorize_system(cred, KAUTH_SYSTEM_SYSVIPC,
-		    KAUTH_REQ_SYSTEM_SYSVIPC_MSGQ_OVERSIZE,
-		    KAUTH_ARG(msqbuf->msg_qbytes),
-		    KAUTH_ARG(msqptr->msg_qbytes), NULL) != 0) {
+		    kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
+		    NULL) != 0) {
 			error = EPERM;
 			break;
 		}
@@ -658,10 +652,6 @@ msgsnd1(struct lwp *l, int msqidr, const char *user_msgp, size_t msgsz,
 
 	MSG_PRINTF(("call to msgsnd(%d, %p, %lld, %d)\n", msqid, user_msgp,
 	    (long long)msgsz, msgflg));
-
-	if ((ssize_t)msgsz < 0)
-		return EINVAL;
-
 restart:
 	msqid = IPCID_TO_IX(msqidr);
 
@@ -968,10 +958,6 @@ msgrcv1(struct lwp *l, int msqidr, char *user_msgp, size_t msgsz, long msgtyp,
 
 	MSG_PRINTF(("call to msgrcv(%d, %p, %lld, %ld, %d)\n", msqid,
 	    user_msgp, (long long)msgsz, msgtyp, msgflg));
-
-	if ((ssize_t)msgsz < 0)
-		return EINVAL;
-
 restart:
 	msqid = IPCID_TO_IX(msqidr);
 

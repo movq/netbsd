@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.14 2011/09/06 18:32:03 joerg Exp $	*/
+/*	$NetBSD: io.c,v 1.12 2006/10/07 17:27:57 elad Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)io.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: io.c,v 1.14 2011/09/06 18:32:03 joerg Exp $");
+__RCSID("$NetBSD: io.c,v 1.12 2006/10/07 17:27:57 elad Exp $");
 #endif /* not lint */
 
 /*
@@ -58,7 +58,7 @@ __RCSID("$NetBSD: io.c,v 1.14 2011/09/06 18:32:03 joerg Exp $");
  * The routine to do the actual talking
  */
 void
-talk(void)
+talk()
 {
 	struct pollfd set[2];
 	int nb;
@@ -113,7 +113,8 @@ talk(void)
  * on the screen and then exits. (i.e. a curses version of perror)
  */
 void
-p_error(const char *string)
+p_error(string) 
+	char *string;
 {
 	wmove(my_win.x_win, current_line%my_win.x_nlines, 0);
 	wprintw(my_win.x_win, "[%s : %s (%d)]\n",
@@ -128,7 +129,8 @@ p_error(const char *string)
  * Display string in the standard location
  */
 void
-message(const char *string)
+message(string)
+	char *string;
 {
 	wmove(my_win.x_win, current_line % my_win.x_nlines, 0);
 	wprintw(my_win.x_win, "[%s]", string);

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.26 2012/11/05 16:53:25 apb Exp $
+#	$NetBSD: Makefile,v 1.21 2008/10/19 22:05:21 apb Exp $
 
 NOMAN=	# defined
 
@@ -25,11 +25,9 @@ RELOC=	4380000
 # XXX make defs arch-indep.
 INCLUDES+=	-I${.OBJDIR} -I${S}/arch -I${S} -I${S}/lib/libsa 
 DEFS+=		-D_STANDALONE -DMC68040 -DSUPPORT_BOOTP -DSUPPORT_DHCP  -DDEBUG -DSD_DEBUG -DSCSI_DEBUG # -DEN_DEBUG   -DNETIF_DEBUG  
-SAMISCCPPFLAGS=	-DSUPPORT_DHCP -DSUPPORT_BOOTP -DSA_EXEC_ANYOWNER # -DBOOTP_DEBUG -DETHER_DEBUG -DNET_DEBUG # -DNETIF_DEBUG -DNFS_DEBUG  -DARP_DEBUG 
+SAMISCCPPFLAGS=	-DSUPPORT_DHCP -DSUPPORT_BOOTP -DINSECURE # -DBOOTP_DEBUG -DETHER_DEBUG -DNET_DEBUG # -DNETIF_DEBUG -DNFS_DEBUG  -DARP_DEBUG 
 WARNS=1
 CFLAGS+=	 -ffreestanding -nostdinc ${INCLUDES} ${DEFS}
-CFLAGS+=	-Wall -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
-AFLAGS+=	${INCLUDES}
 # XXX SHOULD NOT NEED TO DEFINE THESE!
 LIBCRT0=
 LIBC=
@@ -81,7 +79,7 @@ build.c:
 	${HOST_SH} ${.CURDIR}/newvers.sh
 
 vers.c: version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version "next68k"
+	${HOST_SH} ${S}/conf/newvers_stand.sh -MD ${.CURDIR}/version "next68k"
 
 #installboot: ${.CURDIR}/installboot.sh
 #	@rm -f installboot
@@ -90,15 +88,10 @@ vers.c: version
 # utilities
 
 .if !make(obj) && !make(clean) && !make(cleandir)
-.NOPATH: machine ${MACHINE_ARCH}
-.BEGIN: machine ${MACHINE_ARCH}
-
-machine:
-	-rm -f machine
+.BEGIN:
+	rm -f machine
 	ln -s ${S}/arch/${MACHINE}/include machine
-
-${MACHINE_ARCH}:
-	-rm -f ${MACHINE_ARCH}
+	rm -f ${MACHINE_ARCH}
 	ln -s ${S}/arch/${MACHINE_ARCH}/include ${MACHINE_ARCH}
 .endif
 

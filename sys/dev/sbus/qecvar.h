@@ -1,4 +1,4 @@
-/*	$NetBSD: qecvar.h,v 1.14 2009/09/19 04:48:18 tsutsui Exp $	*/
+/*	$NetBSD: qecvar.h,v 1.11 2008/04/28 20:23:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,8 @@
  */
 
 struct qec_softc {
-	device_t sc_dev;		/* us as a device */
+	struct device sc_dev;		/* us as a device */
+	struct sbusdev sc_sd;		/* sbus device */
 	bus_space_tag_t	sc_bustag;	/* bus & DMA tags */
 	bus_dma_tag_t	sc_dmatag;
 	struct	openprom_intr *sc_intr;	/* interrupt info */
@@ -53,8 +54,8 @@ struct qec_ring {
 	bus_addr_t	rb_txddma;	/* DMA address of same */
 	struct	qec_xd	*rb_rxd;	/* Receive descriptors */
 	bus_addr_t	rb_rxddma;	/* DMA address of same */
-	uint8_t		*rb_txbuf;	/* Transmit buffers */
-	uint8_t		*rb_rxbuf;	/* Receive buffers */
+	void *		rb_txbuf;	/* Transmit buffers */
+	void *		rb_rxbuf;	/* Receive buffers */
 	int		rb_ntbuf;	/* # of transmit buffers */
 	int		rb_nrbuf;	/* # of receive buffers */
 

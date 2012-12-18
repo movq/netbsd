@@ -1,4 +1,4 @@
-#	$NetBSD: parselist.awk,v 1.16 2009/04/10 16:16:12 apb Exp $
+#	$NetBSD: parselist.awk,v 1.15.4.1 2009/06/06 22:10:13 bouyer Exp $
 #
 # Copyright (c) 2002 The NetBSD Foundation, Inc.
 # All rights reserved.

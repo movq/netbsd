@@ -1,4 +1,4 @@
-/*	$NetBSD: swapcontext.S,v 1.5 2012/09/12 02:00:52 manu Exp $	*/
+/*	$NetBSD: swapcontext.S,v 1.3 2008/04/28 20:22:56 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,38 +30,40 @@
  */
 
 #include "SYS.h"
-#include "assym.h"
+#include <machine/mcontext.h>
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: swapcontext.S,v 1.5 2012/09/12 02:00:52 manu Exp $")
+	ASMSTR("$NetBSD: swapcontext.S,v 1.3 2008/04/28 20:22:56 martin Exp $")
 #endif /* SYSLIBC_SCCS && !lint */
 
+#ifdef __ABICALLS__
+	.abicalls
+#endif
 	.set	reorder
 	
 NESTED(swapcontext, CALLFRAME_SIZ, ra)
 	.mask	0x80000030, (CALLFRAME_RA - CALLFRAME_SIZ)
-	PTR_SUBU	sp, sp, CALLFRAME_SIZ
-	PTR_S		ra, CALLFRAME_RA(sp)	# save ra
-	PTR_S		a0, 0(sp)		# stash away oucp
-	PTR_S		a1, SZREG(sp)		# stash away ucp
+	subu	sp, sp, CALLFRAME_SIZ
+	sw	ra, CALLFRAME_RA(sp)	# save ra
+	sw	a0, 0(sp)		# stash away oucp
+	sw	a1, 4(sp)		# stash away ucp
 	SYSTRAP(getcontext)
-	PTR_L		ra, CALLFRAME_RA(sp)
-	bne		a3, zero, 1f
+	lw	ra, CALLFRAME_RA(sp)
+	bne	a3, zero, 1f
 
-	PTR_L		v1, 0(sp)		# load oucp again for adjustment
-	PTR_L		a0, SZREG(sp)		# load ucp
-	PTR_ADDIU	v0, sp, CALLFRAME_SIZ
+	lw	v1, 0(sp)		# load oucp again for adjustment
+	lw	a0, 4(sp)		# load ucp
+	addiu	v0, sp, CALLFRAME_SIZ
 	REG_PROLOGUE
-	REG_S		zero, _OFFSETOF_UC_GREGS_V0(v1)
-	REG_S		ra, _OFFSETOF_UC_GREGS_EPC(v1)
-	REG_S		v0, _OFFSETOF_UC_GREGS_SP(v1)
+	REG_S	zero, (_OFFSETOF_UC_GREGS + _REG_V0 * SZREG)(v1)
+	REG_S	ra, (_OFFSETOF_UC_GREGS + _REG_EPC * SZREG)(v1)
+	REG_S	v0, (_OFFSETOF_UC_GREGS + _REG_SP * SZREG)(v1)
 	REG_EPILOGUE
 
-	PIC_TAILCALL(setcontext)
+	SYSTRAP(setcontext)
 	/* NOTREACHED */
 1:
-	PTR_ADDU	sp, sp, CALLFRAME_SIZ
-	SETUP_GPX(t0);
-	SETUP_GP64(t3,swapcontext);
-	PIC_TAILCALL(__cerror)
+	addiu	sp, sp, CALLFRAME_SIZ
+	la	t9, _C_LABEL(__cerror)
+	jr	t9
 END(swapcontext)

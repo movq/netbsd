@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_subr.S,v 1.54 2011/02/01 01:54:14 uwe Exp $	*/
+/*	$NetBSD: locore_subr.S,v 1.48.8.1 2009/06/10 17:15:00 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,6 @@
 #include "opt_cputype.h"
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "opt_modular.h"
 #include "assym.h"
 
 #include <sys/syscall.h>	/* SYS___sigreturn14, SYS_exit */
@@ -40,7 +39,7 @@
 #include <sh3/mmu_sh3.h>
 #include <sh3/mmu_sh4.h>
 
-__KERNEL_RCSID(0, "$NetBSD: locore_subr.S,v 1.54 2011/02/01 01:54:14 uwe Exp $")
+__KERNEL_RCSID(0, "$NetBSD: locore_subr.S,v 1.48.8.1 2009/06/10 17:15:00 bouyer Exp $")
 
 
 /*
@@ -388,6 +387,7 @@ NENTRY(lwp_trampoline)
 	mov	r0, r4		/* previous lwp returned by cpu_switchto */
 	jsr	@r1
 	 mov	r10, r5		/* my struct lwp */
+ALTENTRY(lwp_setfunc_trampoline)
 	jsr	@r12
 	 mov	r11, r4
 	__EXCEPTION_RETURN
@@ -399,7 +399,7 @@ NENTRY(lwp_trampoline)
 	SET_ENTRY_SIZE(lwp_trampoline)
 
 
-#if defined(COMPAT_16) || defined(MODULAR)
+#ifdef COMPAT_16
 /*
  * LINTSTUB: Var: char sigcode[1]
  *	Signal trampoline. copied to top of user stack.
@@ -427,7 +427,7 @@ NENTRY(sigcode)
 .globl	_C_LABEL(esigcode)
 _C_LABEL(esigcode):
 	SET_ENTRY_SIZE(sigcode)
-#endif /* COMPAT_16 || MODULAR */
+#endif /* COMPAT_16 */
 
 
 /*
@@ -448,17 +448,18 @@ ENTRY(copyout)
 	sts.l	pr,	@-r15
 	mov	r15,	r14
 
+	mov	#EFAULT, r0		/* assume there was a problem */
 	mov	r4,	r3
 	mov	r5,	r2
 	mov	r5,	r4
 	add	r6,	r2
 	cmp/hs	r5,	r2		/* bomb if uaddr+len wraps */
-	bf	3f
+	bf	2f
 	mov.l	.L_copyout_VM_MAXUSER_ADDRESS, r1
 	cmp/hi	r1,	r2		/* bomb if uaddr isn't in user space */
-	bt	3f
+	bt	2f
 
-	mov.l	.L_copyout_curpcb, r1	/* set fault handler */
+	mov.l	.L_copyout_curpcb, r1	/* set fault hander */
 	mov.l	@r1,	r2
 	mov.l	.L_copyout_onfault, r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
@@ -479,12 +480,12 @@ ENTRY(copyout)
 	 mov.l	@r15+,	r14
 
 3:
-	bra	2b
+	bra	1b
 	 mov	#EFAULT, r0
 
 	.align 2
 .L_copyout_onfault:
-	.long	1b
+	.long	3b
 .L_copyout_VM_MAXUSER_ADDRESS:
 	.long	VM_MAXUSER_ADDRESS
 .L_copyout_curpcb:
@@ -503,17 +504,18 @@ ENTRY(copyin)
 	sts.l	pr,	@-r15
 	mov	r15,	r14
 
+	mov	#EFAULT, r0		/* assume there was a problem */
 	mov	r4,	r3
 	mov	r5,	r4
 	mov	r3,	r2
 	add	r6,	r2
 	cmp/hs	r3,	r2		/* bomb if uaddr+len wraps */
-	bf	3f
+	bf	2f
 	mov.l	.L_copyin_VM_MAXUSER_ADDRESS, r1
 	cmp/hi	r1,	r2		/* bomb if uaddr isn't in user space */
-	bt	3f
+	bt	2f
 
-	mov.l	.L_copyin_curpcb, r1	/* set fault handler */
+	mov.l	.L_copyin_curpcb, r1	/* set fault hander */
 	mov.l	@r1,	r2
 	mov.l	.L_copyin_onfault, r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
@@ -523,7 +525,7 @@ ENTRY(copyin)
 
 	mov	#0,	r0
 1:
-	mov.l	.L_copyin_curpcb, r1	/* clear fault handler */
+	mov.l	.L_copyin_curpcb, r1	/* clear fault hander */
 	mov.l	@r1,	r2
 	mov	#0,	r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
@@ -534,12 +536,12 @@ ENTRY(copyin)
 	 mov.l	@r15+,	r14
 
 3:
-	bra	2b
+	bra	1b
 	 mov	#EFAULT, r0
 
 	.align 2
 .L_copyin_onfault:
-	.long	1b
+	.long	3b
 .L_copyin_VM_MAXUSER_ADDRESS:
 	.long	VM_MAXUSER_ADDRESS
 .L_copyin_curpcb:
@@ -559,15 +561,16 @@ ENTRY(copyin)
 ENTRY(copyoutstr)
 	mov.l	r8,	@-r15
 
+	mov	#EFAULT, r3		/* assume there was a problem */
 	mov	r4,	r8
 	mov.l	.L_copyoutstr_curpcb, r1	/* set fault handler */
 	mov.l	@r1,	r2
 	mov.l	.L_copyoutstr_onfault, r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
-	mov.l	.L_copyoutstr_VM_MAXUSER_ADDRESS, r3
-	cmp/hi	r3,	r5		/* bomb if udst isn't in user space */
-	bt	5f
-	mov	r3,	r0
+	mov.l	.L_copyoutstr_VM_MAXUSER_ADDRESS, r1
+	cmp/hi	r1,	r5		/* bomb if udst isn't in user space */
+	bt	4f
+	mov	r1,	r0
 	sub	r5,	r0
 	cmp/hi	r6,	r0		/* don't beyond user space */
 	bf	2f
@@ -583,16 +586,16 @@ ENTRY(copyoutstr)
 	tst	r1,	r1
 	bf	2f
 	bra	3f
-	 mov	#0,	r0
-
+	 mov	#0,	r3
 	.align 2
 2:
 	add	#-1,	r0
 	cmp/eq	#-1,	r0
 	bf	1b
-	cmp/hi	r3,	r5
-	bf	6f
-	mov	#0,	r0
+	mov.l	.L_copyoutstr_VM_MAXUSER_ADDRESS, r1
+	cmp/hs	r1,	r5
+	bt	3f
+	mov	#ENAMETOOLONG, r3
 
 3:
 	tst	r7,	r7		/* set lencopied if needed */
@@ -600,26 +603,23 @@ ENTRY(copyoutstr)
 	mov	r4,	r1
 	sub	r8,	r1
 	mov.l	r1,	@r7
-
 4:
 	mov.l	.L_copyoutstr_curpcb, r1	/* clear fault handler */
 	mov.l	@r1,	r2
 	mov	#0,	r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
 
+	mov	r3,	r0
 	rts
 	 mov.l	@r15+,	r8
 
 5:
 	bra	4b
-	 mov	#EFAULT, r0
-
-6:	bra	3b
-	 mov	#ENAMETOOLONG, r0
+	 mov	#EFAULT, r3
 
 	.align 2
 .L_copyoutstr_onfault:
-	.long	4b
+	.long	5b
 .L_copyoutstr_VM_MAXUSER_ADDRESS:
 	.long	VM_MAXUSER_ADDRESS
 .L_copyoutstr_curpcb:
@@ -636,17 +636,17 @@ ENTRY(copyoutstr)
  */
 ENTRY(copyinstr)
 	mov.l	r8,	@-r15
-
+	mov	#EFAULT, r3		/* assume there was a problem */
 	mov	r4,	r8
 	mov.l	.L_copyinstr_curpcb, r1	/* set fault handler */
 	mov.l	@r1,	r2
 	mov.l	.L_copyinstr_onfault, r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
 
-	mov.l	.L_copyinstr_VM_MAXUSER_ADDRESS, r3
-	cmp/hi	r3,	r4		/* bomb if usrc isn't in user space */
+	mov.l	.L_copyinstr_VM_MAXUSER_ADDRESS, r1
+	cmp/hi	r1,	r4		/* bomb if usrc isn't in user space */
 	bt	4f
-	mov	r3,	r0
+	mov	r1,	r0
 	sub	r4,	r0
 	cmp/hi	r6,	r0		/* don't beyond user space */
 	bf	2f
@@ -662,16 +662,16 @@ ENTRY(copyinstr)
 	tst	r1,	r1
 	bf	2f
 	bra	3f
-	 mov	#0,	r0
-
+	 mov	#0,	r3
 	.align 2
 2:
 	add	#-1,	r0
 	cmp/eq	#-1,	r0
 	bf	1b
-	cmp/hi	r3,	r4
-	bf	6f
-	mov	#0,	r0
+	mov.l	.L_copyinstr_VM_MAXUSER_ADDRESS, r1
+	cmp/hs	r1,	r4
+	bt	3f
+	mov	#ENAMETOOLONG, r3
 
 3:
 	tst	r7,	r7		/* set lencopied if needed */
@@ -679,27 +679,23 @@ ENTRY(copyinstr)
 	mov	r4,	r1
 	sub	r8,	r1
 	mov.l	r1,	@r7
-
 4:
 	mov.l	.L_copyinstr_curpcb, r1	/* clear fault handler */
 	mov.l	@r1,	r2
 	mov	#0,	r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
 
+	mov	r3,	r0
 	rts
 	 mov.l	@r15+,	r8
 
 5:
 	bra	4b
-	 mov	#EFAULT, r0
-
-6:
-	bra	3b
-	 mov	#ENAMETOOLONG, r0
+	 mov	#EFAULT, r3
 
 	.align 2
 .L_copyinstr_onfault:
-	.long	4b
+	.long	5b
 .L_copyinstr_VM_MAXUSER_ADDRESS:
 	.long	VM_MAXUSER_ADDRESS
 .L_copyinstr_curpcb:
@@ -1050,9 +1046,13 @@ ENTRY(kcopy)
 	rts
 	 mov.l	@r15+,	r8
 
+2:
+	bra	1b
+	 mov	#EFAULT, r0
+
 	.align 2
 .L_kcopy_onfault:
-	.long	1b
+	.long	2b
 .L_kcopy_curpcb:
 	.long	_C_LABEL(curpcb)
 .L_kcopy_memcpy:

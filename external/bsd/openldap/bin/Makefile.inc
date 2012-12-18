@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.3 2010/03/08 05:23:41 lukem Exp $
+#	$NetBSD: Makefile.inc,v 1.2 2008/08/13 04:43:26 lukem Exp $
 
 .include "../openldap.mk"
 
@@ -7,10 +7,7 @@ BINDIR=	/usr/bin
 .PATH:	${LDAP_DISTDIR}/clients/tools
 .PATH:	${LDAP_SRCDIR}/man
 
-SRCS=	${PROG}.c
-.if !defined(NO_COMMON_C)
-SRCS+=	common.c
-.endif
+SRCS=	${PROG}.c common.c
 
 
 SRCS+=	version.c

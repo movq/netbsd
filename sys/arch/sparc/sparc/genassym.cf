@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.68 2012/11/02 00:01:19 chs Exp $
+#	$NetBSD: genassym.cf,v 1.56.4.2 2011/03/08 17:29:46 riz Exp $
 
 #
 # Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -75,6 +75,7 @@ include <sys/proc.h>
 include <sys/proc.h>
 include <sys/mbuf.h>
 include <sys/msgbuf.h>
+include <sys/user.h>
 include <sys/device.h>
 include <sys/disklabel.h>
 include <sys/disk.h>
@@ -82,7 +83,6 @@ include <sys/mutex.h>
 
 include <uvm/uvm.h>
 
-include <machine/pcb.h>
 include <machine/cpu.h>
 include <machine/oldmon.h>
 include <machine/bsd_openprom.h>
@@ -96,7 +96,7 @@ include <sparc/dev/zsreg.h>
 include <sparc/dev/zsvar.h>
 endif
 
-include <sys/bus.h>
+include <machine/bus.h>
 include <sparc/dev/audioamdvar.h>
 
 include <sparc/dev/fdreg.h>
@@ -106,22 +106,17 @@ include <sparc/dev/fdvar.h>
 define	BSD		BSD
 define	USRSTACK	USRSTACK
 
-# LWP fields and values
-define	L_PCB		offsetof(struct lwp, l_addr)
+# proc fields and values
+define	L_ADDR		offsetof(struct lwp, l_addr)
 define	L_PROC		offsetof(struct lwp, l_proc)
 define	L_STAT		offsetof(struct lwp, l_stat)
 define	L_WCHAN		offsetof(struct lwp, l_wchan)
 define	L_CPU		offsetof(struct lwp, l_cpu)
 define	L_PRIORITY	offsetof(struct lwp, l_priority)
-define	L_TF		offsetof(struct lwp, l_md.md_tf)
-
+define	P_VMSPACE	offsetof(struct proc, p_vmspace)
+define	P_MD_SYSCALL	offsetof(struct proc, p_md.md_syscall)
 define	LSRUN		LSRUN
 define	LSONPROC	LSONPROC
-
-# proc fields
-define	P_VMSPACE	offsetof(struct proc, p_vmspace)
-define	P_RASLIST	offsetof(struct proc, p_raslist)
-define	P_MD_SYSCALL	offsetof(struct proc, p_md.md_syscall)
 
 # VM structure fields
 define	VM_PMAP		offsetof(struct vmspace, vm_map.pmap)
@@ -130,20 +125,14 @@ define	PMAP_CTXNUM	offsetof(struct pmap, pm_ctxnum)
 define	PMAP_CPUSET	offsetof(struct pmap, pm_cpuset)
 
 # interrupt/fault metering
-define	CPUINFO_NINTR	offsetof(struct cpu_info, ci_data.cpu_nintr)
-define	CPUINFO_NSOFT	offsetof(struct cpu_info, ci_data.cpu_nsoft)
-define	CPUINFO_NFAULT	offsetof(struct cpu_info, ci_data.cpu_nfault)
+define	V_INTR		offsetof(struct uvmexp, intrs)
+define	V_SOFT		offsetof(struct uvmexp, softs)
+define	V_FAULTS	offsetof(struct uvmexp, faults)
 define	CPUINFO_LEV14	offsetof(struct cpu_info, ci_sintrcnt[14])
 define	CPUINFO_INTRCNT	offsetof(struct cpu_info, ci_intrcnt)
 define	CPUINFO_SINTRCNT	offsetof(struct cpu_info, ci_sintrcnt)
 define	EV_COUNT	offsetof(struct evcnt, ev_count)
 define	EV_STRUCTSIZE	sizeof(struct evcnt)
-
-# interrupt handler fields
-define	IH_FUN		offsetof(struct intrhand, ih_fun)
-define	IH_ARG		offsetof(struct intrhand, ih_arg)
-define	IH_NEXT		offsetof(struct intrhand, ih_next)
-define	IH_CLASSIPL	offsetof(struct intrhand, ih_classipl)
 
 # CPU info structure
 define	CPUINFO_STRUCTSIZE	sizeof(struct cpu_info)
@@ -176,7 +165,6 @@ define	CPUINFO_MTX_COUNT	offsetof(struct cpu_info, ci_mtx_count)
 define	CPUINFO_MTX_OLDSPL	offsetof(struct cpu_info, ci_mtx_oldspl)
 define	CPUINFO_IDEPTH		offsetof(struct cpu_info, ci_idepth)
 define	CPUINFO_SAVEFPSTATE	offsetof(struct cpu_info, ci_savefpstate)
-define	CPUINFO_SAVEFPSTATE_NULL offsetof(struct cpu_info, ci_savefpstate_null)
 
 # PTE bits and related information
 define	PG_W		PG_W
@@ -223,10 +211,6 @@ define	PCB_SP		offsetof(struct pcb, pcb_sp)
 define	PCB_PC		offsetof(struct pcb, pcb_pc)
 define	PCB_UW		offsetof(struct pcb, pcb_uw)
 define	PCB_WIM		offsetof(struct pcb, pcb_wim)
-
-# trapframe fields
-define	TF_PC		offsetof(struct trapframe, tf_pc)
-define	TF_NPC		offsetof(struct trapframe, tf_npc)
 
 # interrupt enable register PTE
 define	IE_REG_PTE_PG	(PG_V | PG_W | PG_S | PG_NC | PG_OBIO)

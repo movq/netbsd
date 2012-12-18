@@ -1,4 +1,4 @@
-/*	$NetBSD: glxsb.c,v 1.10 2011/11/19 22:51:20 tls Exp $	*/
+/*	$NetBSD: glxsb.c,v 1.6 2008/05/05 11:49:40 xtraeme Exp $	*/
 /* $OpenBSD: glxsb.c,v 1.7 2007/02/12 14:31:45 tom Exp $ */
 
 /*
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: glxsb.c,v 1.10 2011/11/19 22:51:20 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: glxsb.c,v 1.6 2008/05/05 11:49:40 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -34,8 +34,8 @@ __KERNEL_RCSID(0, "$NetBSD: glxsb.c,v 1.10 2011/11/19 22:51:20 tls Exp $");
 #include <sys/mbuf.h>
 #include <sys/types.h>
 #include <sys/callout.h>
+#include <sys/rnd.h>
 #include <sys/bus.h>
-#include <sys/cprng.h>
 
 #include <machine/cpufunc.h>
 
@@ -165,7 +165,7 @@ struct glxsb_softc {
 	int			sc_nsessions;
 	struct glxsb_session	*sc_sessions;
 
-	krndsource_t	sc_rnd_source;
+	rndsource_element_t	sc_rnd_source;
 };
 
 int	glxsb_match(device_t, cfdata_t, void *);
@@ -331,8 +331,8 @@ glxsb_crypto_newsession(void *aux, uint32_t *sidp, struct cryptoini *cri)
 		if (ses == NULL)
 			return (ENOMEM);
 		if (sesn != 0) {
-			memcpy(ses, sc->sc_sessions, sesn * sizeof(*ses));
-			memset(sc->sc_sessions, 0, sesn * sizeof(*ses));
+			bcopy(sc->sc_sessions, ses, sesn * sizeof(*ses));
+			bzero(sc->sc_sessions, sesn * sizeof(*ses));
 			free(sc->sc_sessions, M_DEVBUF);
 		}
 		sc->sc_sessions = ses;
@@ -340,14 +340,14 @@ glxsb_crypto_newsession(void *aux, uint32_t *sidp, struct cryptoini *cri)
 		sc->sc_nsessions++;
 	}
 
-	memset(ses, 0, sizeof(*ses));
+	bzero(ses, sizeof(*ses));
 	ses->ses_used = 1;
 
-	cprng_fast(ses->ses_iv, sizeof(ses->ses_iv));
+	arc4randbytes(ses->ses_iv, sizeof(ses->ses_iv));
 	ses->ses_klen = cri->cri_klen;
 
 	/* Copy the key (Geode LX wants the primary key only) */
-	memcpy(ses->ses_key, cri->cri_key, sizeof(ses->ses_key));
+	bcopy(cri->cri_key, ses->ses_key, sizeof(ses->ses_key));
 
 	*sidp = GLXSB_SID(0, sesn);
 	return (0);
@@ -365,7 +365,7 @@ glxsb_crypto_freesession(void *aux, uint64_t tid)
 	sesn = GLXSB_SESSION(sid);
 	if (sesn >= sc->sc_nsessions)
 		return (EINVAL);
-	memset(&sc->sc_sessions[sesn], 0, sizeof(sc->sc_sessions[sesn]));
+	bzero(&sc->sc_sessions[sesn], sizeof(sc->sc_sessions[sesn]));
 	return (0);
 }
 
@@ -492,9 +492,9 @@ glxsb_crypto_process(void *aux, struct cryptop *crp, int hint)
 	if (crd->crd_flags & CRD_F_ENCRYPT) {
 		control = SB_CTL_ENC;
 		if (crd->crd_flags & CRD_F_IV_EXPLICIT)
-			memcpy(op_iv, crd->crd_iv, sizeof(op_iv));
+			bcopy(crd->crd_iv, op_iv, sizeof(op_iv));
 		else
-			memcpy(op_iv, ses->ses_iv, sizeof(op_iv));
+			bcopy(ses->ses_iv, op_iv, sizeof(op_iv));
 
 		if ((crd->crd_flags & CRD_F_IV_PRESENT) == 0) {
 			if (crp->crp_flags & CRYPTO_F_IMBUF)
@@ -511,7 +511,7 @@ glxsb_crypto_process(void *aux, struct cryptop *crp, int hint)
 	} else {
 		control = SB_CTL_DEC;
 		if (crd->crd_flags & CRD_F_IV_EXPLICIT)
-			memcpy(op_iv, crd->crd_iv, sizeof(op_iv));
+			bcopy(crd->crd_iv, op_iv, sizeof(op_iv));
 		else {
 			if (crp->crp_flags & CRYPTO_F_IMBUF)
 				m_copydata((struct mbuf *)crp->crp_buf,
@@ -557,7 +557,7 @@ glxsb_crypto_process(void *aux, struct cryptop *crp, int hint)
 			cuio_copyback((struct uio *)crp->crp_buf,
 			    crd->crd_skip + offset, len, op_dst);
 		else
-			memcpy((char *)crp->crp_buf + crd->crd_skip + offset, op_dst,
+			bcopy(op_dst, (char *)crp->crp_buf + crd->crd_skip + offset,
 			    len);
 
 		offset += len;
@@ -576,11 +576,11 @@ glxsb_crypto_process(void *aux, struct cryptop *crp, int hint)
 		 * time.
 		 */
 		if (crd->crd_flags & CRD_F_ENCRYPT) {
-			memcpy(piv, op_dst + len - sizeof(op_iv), sizeof(op_iv));
+			bcopy(op_dst + len - sizeof(op_iv), piv, sizeof(op_iv));
 		} else {
 			/* Decryption, only need this if another iteration */
 			if (tlen > 0) {
-				memcpy(piv, op_src + len - sizeof(op_iv),
+				bcopy(op_src + len - sizeof(op_iv), piv,
 				    sizeof(op_iv));
 			}
 		}
@@ -588,7 +588,7 @@ glxsb_crypto_process(void *aux, struct cryptop *crp, int hint)
 
 	/* All AES processing has now been done. */
 
-	memset(sc->sc_dma.dma_vaddr, 0, xlen * 2);
+	bzero(sc->sc_dma.dma_vaddr, xlen * 2);
 out:
 	crp->crp_etype = err;
 	crypto_done(crp);

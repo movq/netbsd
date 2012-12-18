@@ -1,15 +1,7 @@
-#	$NetBSD: Makefile,v 1.8 2011/03/09 23:10:08 joerg Exp $
+#	$NetBSD: Makefile,v 1.4.2.4 2011/01/06 05:20:26 riz Exp $
 
 .include <bsd.own.mk>
 .include <bsd.init.mk>
-
-RTLD_FUNCS	= \
-	_rtld_tls_allocate \
-	_rtld_tls_free \
-
-.for _d in ${RTLD_FUNCS}
-CPPFLAGS+=	-D${_d}=_elf32_${_d}
-.endfor
 
 CPPFLAGS+=	-DELFSIZE=32
 LIB=	ldd_elf32
@@ -24,7 +16,7 @@ LIBISPRIVATE=	yes
 CPPFLAGS+=	-DRTLD_ARCH_SUBDIR=\"${MLIBDIR}\"
 .endif
 
-.if ${MACHINE_ARCH} != "alpha"
+.if ${MACHINE} != "alpha"
 .include "../Makefile.elf"
 .endif
 

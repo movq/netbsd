@@ -1,4 +1,4 @@
-/*	$NetBSD: make_dirs.c,v 1.1.1.2 2011/03/02 19:32:44 tron Exp $	*/
+/*	$NetBSD: make_dirs.c,v 1.1.1.1.2.4 2011/03/24 19:54:09 riz Exp $	*/
 
 /*++
 /* NAME

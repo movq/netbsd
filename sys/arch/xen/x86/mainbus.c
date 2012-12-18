@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.15 2011/09/20 00:12:24 jym Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.5.4.1 2009/01/22 20:17:13 snj Exp $	*/
 /*	NetBSD: mainbus.c,v 1.53 2003/10/27 14:11:47 junyoung Exp 	*/
 
 /*
@@ -32,13 +32,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.15 2011/09/20 00:12:24 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.5.4.1 2009/01/22 20:17:13 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include "hypervisor.h"
 #include "pci.h"
@@ -47,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.15 2011/09/20 00:12:24 jym Exp $");
 #include "opt_mpbios.h"
 #include "opt_pcifixup.h"
 
-#include "acpica.h"
+#include "acpi.h"
 #include "ioapic.h"
 
 #include "ipmi.h"
@@ -62,12 +62,13 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.15 2011/09/20 00:12:24 jym Exp $");
 #include <x86/ipmivar.h>
 #endif
 
-#if NPCI > 0
+#if defined(XEN3) && NPCI > 0
 #include <dev/pci/pcivar.h>
-#if NACPICA > 0
+#if NACPI > 0
 #include <dev/acpi/acpivar.h>
+#include <dev/acpi/acpi_madt.h>       
 #include <xen/mpacpi.h>       
-#endif /* NACPICA > 0 */
+#endif /* NACPI > 0 */
 #ifdef MPBIOS
 #include <machine/mpbiosvar.h>       
 #endif /* MPBIOS */
@@ -78,7 +79,7 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.15 2011/09/20 00:12:24 jym Exp $");
 #endif  
 #endif
 
-#if defined(MPBIOS) || NACPICA > 0
+#if defined(MPBIOS) || NACPI > 0
 struct mp_bus *mp_busses;
 int mp_nbus;
 struct mp_intr_map *mp_intrs;
@@ -94,8 +95,8 @@ int mp_verbose = 1;
 #else /* MPVERBOSE */
 int mp_verbose = 0;
 #endif /* MPVERBOSE */
-#endif /* defined(MPBIOS) || NACPICA > 0 */
-#endif /* NPCI > 0 */
+#endif /* defined(MPBIOS) || NACPI > 0 */
+#endif /* defined(XEN3) && NPCI > 0 */
 
 
 int	mainbus_match(device_t, cfdata_t, void *);
@@ -133,23 +134,30 @@ mainbus_match(device_t parent, cfdata_t match, void *aux)
 void
 mainbus_attach(device_t parent, device_t self, void *aux)
 {
-#if defined(DOM0OPS) && NPCI > 0
-	int mode;
-#endif
 	union mainbus_attach_args mba;
-#if defined(DOM0OPS)
+#if defined(DOM0OPS) && defined(XEN3)
 	int numcpus = 0;
 #ifdef MPBIOS
 	int mpbios_present = 0;
 #endif
+#if NACPI > 0 || defined(MPBIOS)
+	int numioapics = 0;     
+#endif
 #ifdef PCI_BUS_FIXUP
 	int pci_maxbus = 0;
 #endif
-#endif /* defined(DOM0OPS) */
+#endif /* defined(DOM0OPS) && defined(XEN3) */
 
 	aprint_naive("\n");
 	aprint_normal("\n");
 
+#ifndef XEN3
+	memset(&mba.mba_caa, 0, sizeof(mba.mba_caa));
+	mba.mba_caa.cpu_number = 0;
+	mba.mba_caa.cpu_role = CPU_ROLE_SP;
+	mba.mba_caa.cpu_func = 0;
+	config_found_ia(self, "cpubus", &mba.mba_caa, mainbus_print);
+#else /* XEN3 */
 #ifdef DOM0OPS
 	if (xendomain_is_dom0()) {
 #ifdef MPBIOS
@@ -157,9 +165,9 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 #endif
 #if NPCI > 0
 		/* ACPI needs to be able to access PCI configuration space. */
-		mode = pci_mode_detect();
+		pci_mode = pci_mode_detect();
 #ifdef PCI_BUS_FIXUP
-		if (mode != 0) {
+		if (pci_mode != 0) {
 			pci_maxbus = pci_bus_fixup(NULL, 0);
 			aprint_debug_dev(self, "PCI bus max, after "
 			    "pci_bus_fixup: %i\n", pci_maxbus);
@@ -170,16 +178,17 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 #endif /* PCI_ADDR_FIXUP */
 		}
 #endif /* PCI_BUS_FIXUP */
-#if NACPICA > 0
+#if NACPI > 0
 		acpi_present = acpi_probe();
 		if (acpi_present)
-			mpacpi_active = mpacpi_scan_apics(self, &numcpus);
+			mpacpi_active = mpacpi_scan_apics(self,
+			    &numcpus, &numioapics);
 		if (!mpacpi_active)
 #endif
 		{
 #ifdef MPBIOS
 			if (mpbios_present)
-				mpbios_scan(self, &numcpus);       
+				mpbios_scan(self, &numcpus, &numioapics);       
 			else
 #endif
 			if (numcpus == 0) {
@@ -197,11 +206,12 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 #endif /* NPCI */
 	}
 #endif /* DOM0OPS */
+#endif /* XEN3 */
 
 #if NIPMI > 0
 	memset(&mba.mba_ipmi, 0, sizeof(mba.mba_ipmi));
-	mba.mba_ipmi.iaa_iot = x86_bus_space_io;
-	mba.mba_ipmi.iaa_memt = x86_bus_space_mem;
+	mba.mba_ipmi.iaa_iot = X86_BUS_SPACE_IO;
+	mba.mba_ipmi.iaa_memt = X86_BUS_SPACE_MEM;
 	if (ipmi_probe(&mba.mba_ipmi))
 		config_found_ia(self, "ipmibus", &mba.mba_ipmi, 0);
 #endif
@@ -210,11 +220,6 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 	mba.mba_haa.haa_busname = "hypervisor";
 	config_found_ia(self, "hypervisorbus", &mba.mba_haa, mainbus_print);
 #endif
-
-	/* save/restore for Xen */
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "couldn't establish power handler\n");
-
 }
 
 int

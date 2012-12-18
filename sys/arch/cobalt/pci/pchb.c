@@ -1,4 +1,4 @@
-/*	$NetBSD: pchb.c,v 1.11 2011/07/01 20:37:08 dyoung Exp $	*/
+/*	$NetBSD: pchb.c,v 1.10 2008/05/09 10:59:55 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -26,14 +26,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.11 2011/07/01 20:37:08 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.10 2008/05/09 10:59:55 tsutsui Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: v_util.c,v 1.3 2011/03/21 14:53:04 tnozaki Exp $ */
+/*	$NetBSD: v_util.c,v 1.1.1.2.6.1 2009/01/20 02:41:13 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -125,7 +125,7 @@ int
 v_isempty(CHAR_T *p, size_t len)
 {
 	for (; len--; ++p)
-		if (!ISBLANK((UCHAR_T)*p))
+		if (!isblank(*p))
 			return (0);
 	return (1);
 }

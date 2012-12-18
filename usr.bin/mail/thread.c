@@ -1,4 +1,4 @@
-/*	$NetBSD: thread.c,v 1.10 2012/10/21 22:18:16 christos Exp $	*/
+/*	$NetBSD: thread.c,v 1.6 2008/04/28 20:24:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #ifndef __lint__
-__RCSID("$NetBSD: thread.c,v 1.10 2012/10/21 22:18:16 christos Exp $");
+__RCSID("$NetBSD: thread.c,v 1.6 2008/04/28 20:24:14 martin Exp $");
 #endif /* not __lint__ */
 
 #include <assert.h>
@@ -450,11 +450,7 @@ thread_fix_old_links(struct message *nmessage, struct message *message, int omsg
 	message_array.t_head = nmessage; /* for assert check in thread_fix_new_links */
 #endif
 
-# define FIX_LINK(p)	do {\
-	if (p)\
-		p = nmessage + (p - message);\
-  } while (/*CONSTCOND*/0)
-
+# define FIX_LINK(p)	do { if (p) p = nmessage + (p - message); } while(/*CONSTCOND*/0)
 	FIX_LINK(current_thread.t_head);
 	for (i = 0; i < omsgCount; i++) {
 		FIX_LINK(nmessage[i].m_blink);
@@ -462,7 +458,7 @@ thread_fix_old_links(struct message *nmessage, struct message *message, int omsg
 		FIX_LINK(nmessage[i].m_clink);
 		FIX_LINK(nmessage[i].m_plink);
 	}
-	for (i = 0; i < current_thread.t_msgCount; i++)
+	for (i = 0; i < current_thread.t_msgCount; i++ )
 		FIX_LINK(current_thread.t_msgtbl[i]);
 
 # undef FIX_LINK
@@ -666,7 +662,7 @@ flattencmd_core(struct message *mp)
 	size_t mcount;
 	struct message *tp;
 	struct message *nextmp;
-	size_t i;
+	int i;
 
 	if (mp == NULL)
 		return;
@@ -780,11 +776,11 @@ qsort_cmpfn(const void *left, const void *right)
 static void
 link_array(struct key_sort_s *marray, size_t mcount)
 {
-	size_t i;
+	int i;
 	struct message *lastmp;
 	lastmp = NULL;
 	for (i = 0; i < mcount; i++) {
-		marray[i].mp->m_index = (int)i + 1;
+		marray[i].mp->m_index = i + 1;
 		marray[i].mp->m_blink = lastmp;
 		marray[i].mp->m_flink = NULL;
 		if (lastmp)
@@ -798,9 +794,9 @@ link_array(struct key_sort_s *marray, size_t mcount)
 }
 
 static void
-cut_array(struct key_sort_s *marray, size_t beg, size_t end)
+cut_array(struct key_sort_s *marray, int beg, int end)
 {
-	size_t i;
+	int i;
 
 	if (beg + 1 < end) {
 		assert(marray[beg].mp->m_clink == NULL);
@@ -829,7 +825,7 @@ thread_array(struct key_sort_s *marray, size_t mcount, int cutit)
 	link_array(marray, mcount);
 
 	if (cutit) {
-		size_t i, j;
+		int i, j;
 		/*
 		 * Flatten out the array.
 		 */
@@ -934,7 +930,8 @@ thread_on_reference(struct message *mp)
 	} *marray;
 	struct message *parent;
 	state_t oldstate;
-	size_t mcount, i;
+	size_t mcount;
+	int i;
 
 	assert(mp == current_thread.t_head);
 
@@ -984,7 +981,7 @@ thread_on_reference(struct message *mp)
 	for (i = 0; i < mcount; i++) {
 		struct message *child;
 		char *parent_id;
-		size_t j;
+		int j;
 
 		if ((parent_id = marray[i].parent_id) == NULL)
 			continue;
@@ -1002,7 +999,7 @@ thread_on_reference(struct message *mp)
 		 */
 		for (j = 0; j < mcount; j++) {
 			/* message_id will be NULL on mbox files */
-			if (marray[j].message_id == NULL)
+			if (marray[i].message_id == NULL)
 				continue;
 
 			if (equal(marray[j].message_id, parent_id)) {
@@ -1099,7 +1096,7 @@ tagbelowcmd(void *v)
 	if (mp) {
 		depth = mp->m_depth;
 		for (mp = first_message(current_thread.t_head); mp; mp = next_message(mp))
-			if (mp->m_depth > depth) {
+			if (mp->m_depth > depth ) {
 				mp->m_flag |= MTAGGED;
 				touch(mp);
 			}
@@ -1432,7 +1429,7 @@ static void
 field_load(struct key_sort_s *marray, size_t mcount, struct message *mp,
     const char *key, int skin_it)
 {
-	size_t i;
+	int i;
 	for (i = 0; i < mcount; i++) {
 		marray[i].mp = mp;
 		marray[i].key.str =
@@ -1446,14 +1443,14 @@ static void
 subj_load(struct key_sort_s *marray, size_t mcount, struct message *mp,
     const char *key __unused, int flags __unused)
 {
-	size_t i;
+	int i;
 #ifdef __lint__
 	flags = flags;
 	key = key;
 #endif
 	for (i = 0; i < mcount; i++) {
 		char *subj = hfield(key, mp);
-		while (strncasecmp(subj, "Re:", 3) == 0)
+		while( strncasecmp(subj, "Re:", 3) == 0 )
 			subj = skip_WSP(subj + 3);
 		marray[i].mp = mp;
 		marray[i].key.str = subj;
@@ -1467,7 +1464,7 @@ static void
 lines_load(struct key_sort_s *marray, size_t mcount, struct message *mp,
     const char *key __unused, int flags)
 {
-	size_t i;
+	int i;
 	int use_blines;
 	int use_hlines;
 #ifdef __lint__
@@ -1492,7 +1489,7 @@ static void
 size_load(struct key_sort_s *marray, size_t mcount, struct message *mp,
     const char *key __unused, int flags __unused)
 {
-	size_t i;
+	int i;
 #ifdef __lint__
 	flags = flags;
 	key = key;
@@ -1509,7 +1506,7 @@ static void __unused
 date_load(struct key_sort_s *marray, size_t mcount, struct message *mp,
     const char *key __unused, int flags)
 {
-	size_t i;
+	int i;
 	int use_hl_date;
 	int zero_hour_min_sec;
 #ifdef __lint__
@@ -1541,7 +1538,7 @@ static void
 from_load(struct key_sort_s *marray, size_t mcount, struct message *mp,
     const char *key __unused, int flags __unused)
 {
-	size_t i;
+	int i;
 #ifdef __lint__
 	flags = flags;
 	key = key;
@@ -1720,7 +1717,7 @@ deldupscmd(void *v __unused)
 	redepth(&current_thread);
 	depth = current_thread.t_head->m_depth;
 	for (mp = first_message(current_thread.t_head); mp; mp = next_message(mp)) {
-		if (mp->m_depth > depth) {
+		if (mp->m_depth > depth ) {
 			mp->m_flag &= ~(MPRESERVE | MSAVED | MBOX);
 			mp->m_flag |= MDELETED | MTOUCH;
 			touch(mp);

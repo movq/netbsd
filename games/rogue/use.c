@@ -1,4 +1,4 @@
-/*	$NetBSD: use.c,v 1.10 2009/08/12 08:44:45 dholland Exp $	*/
+/*	$NetBSD: use.c,v 1.9 2008/01/14 03:50:03 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)use.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: use.c,v 1.10 2009/08/12 08:44:45 dholland Exp $");
+__RCSID("$NetBSD: use.c,v 1.9 2008/01/14 03:50:03 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -67,13 +67,6 @@ boolean con_mon = 0;
 
 static const char strange_feeling[] = 
 	"you have a strange feeling for a moment, then it passes";
-
-static const char *get_ench_color(void);
-static void go_blind(void);
-static void hold_monster(void);
-static void idntfy(void);
-static void potion_heal(int);
-static void uncurse_all(void);
 
 void
 quaff(void)
@@ -317,7 +310,7 @@ vanish(object *obj, short rm, object *pack)
 	}
 }
 
-static void
+void
 potion_heal(int extra)
 {
 	float ratio;
@@ -363,7 +356,7 @@ potion_heal(int extra)
 	}
 }
 
-static void
+void
 idntfy(void)
 {
 	short ch;
@@ -431,7 +424,7 @@ eat(void)
 	vanish(obj, 1, &rogue.pack);
 }
 
-static void
+void
 hold_monster(void)
 {
 	short i, j;
@@ -555,7 +548,7 @@ take_a_nap(void)
 	messagef(0, "%s", you_can_move_again);
 }
 
-static void
+void
 go_blind(void)
 {
 	short i, j;
@@ -587,7 +580,7 @@ go_blind(void)
 	mvaddch(rogue.row, rogue.col, rogue.fchar);
 }
 
-static const char *
+const char *
 get_ench_color(void)
 {
 	if (halluc) {
@@ -611,7 +604,7 @@ unconfuse(void)
 	messagef(1, "you feel less %s now", (halluc ? "trippy" : "confused"));
 }
 
-static void
+void
 uncurse_all(void)
 {
 	object *obj;

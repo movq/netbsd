@@ -1,4 +1,4 @@
-/* $NetBSD: gcscehci.c,v 1.9 2011/07/01 17:37:26 dyoung Exp $ */
+/* $NetBSD: gcscehci.c,v 1.4 2008/07/06 08:01:15 cegger Exp $ */
 
 /*
  * Copyright (c) 2001, 2002, 2007 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gcscehci.c,v 1.9 2011/07/01 17:37:26 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gcscehci.c,v 1.4 2008/07/06 08:01:15 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: gcscehci.c,v 1.9 2011/07/01 17:37:26 dyoung Exp $");
 #include <sys/proc.h>
 #include <sys/queue.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpufunc.h>
 
 #include <dev/pci/pcidevs.h>
@@ -73,7 +73,7 @@ struct gcscehci_softc {
 };
 
 static int
-gcscehci_match(device_t parent, cfdata_t match, void *aux)
+gcscehci_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -88,7 +88,7 @@ gcscehci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-gcscehci_attach(device_t parent, device_t self, void *aux)
+gcscehci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct gcscehci_softc *sc = device_private(self);
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
@@ -141,8 +141,8 @@ gcscehci_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error("%s: couldn't establish interrupt", devname);
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
 	aprint_normal("%s: interrupting at %s\n", devname, intrstr);

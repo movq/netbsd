@@ -1,4 +1,4 @@
-/*	$NetBSD: SYS.h,v 1.19 2009/12/14 01:07:41 matt Exp $ */
+/*	$NetBSD: SYS.h,v 1.18 2003/10/29 12:28:33 pooka Exp $ */
 
 /*-
  * Copyright (c) 1996 Jonathan Stone
@@ -78,20 +78,12 @@
  */
 #ifdef __ABICALLS__
 	.abicalls
-# if defined(__mips_o32) || defined(__mips_o64)
-#  define PIC_PROLOGUE(x)	SETUP_GP
-#  define PIC_TAILCALL(l)	PTR_LA t9, _C_LABEL(l); jr t9
-#  define PIC_RETURN()		j ra
-# else
-#  define PIC_PROLOGUE(x)	SETUP_GP64(t3, x)
-#  define PIC_TAILCALL(l)	PTR_LA t9, _C_LABEL(l); RESTORE_GP64; jr t9
-#  define PIC_RETURN()		RESTORE_GP64; j ra
-# endif
+# define PIC_PROLOGUE(x,sr)	.set noreorder; .cpload sr; .set reorder
+# define PIC_CALL(l,sr)		la sr, _C_LABEL(l); jr sr
 #else
-# define PIC_PROLOGUE(x)
-# define PIC_TAILCALL(l)	j  _C_LABEL(l)
-# define PIC_RETURN()
-#endif /* __ABICALLS__ */
+# define PIC_PROLOGUE(x,sr)
+# define PIC_CALL(l,sr)		j  _C_LABEL(l)
+#endif
 
 
 #ifdef __STDC__
@@ -132,10 +124,10 @@ LEAF(x);								\
 
 #define PSEUDO(x,y)							\
 LEAF(x);								\
-	PIC_PROLOGUE(x);						\
+	PIC_PROLOGUE(x,t9);						\
 	SYSTRAP(y);							\
 	bne a3,zero,err;						\
-	PIC_RETURN();							\
+	j ra;								\
 err:									\
-	PIC_TAILCALL(__cerror);						\
-END(x)
+	PIC_CALL(__cerror,t9);						\
+	END(x)

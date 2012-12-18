@@ -1,5 +1,4 @@
-#	Id: Makefile.in,v 1.29 2012/03/15 09:22:12 plunky Exp 	
-#	$NetBSD: Makefile.in,v 1.1.1.4 2012/03/26 14:26:42 plunky Exp $
+#	$Id: Makefile.in,v 1.1.1.1 2008/08/24 05:33:01 gmcgarry Exp $
 #
 # Makefile.in for the cc part of pcc.
 #
@@ -19,23 +18,20 @@ strip = @strip@
 CC = @CC@
 EXEEXT = @EXEEXT@
 TARGOS = @targos@
-TARGOSVER = @targosver@
 TARGMACH = @targmach@
 TARGET = @target@
 VERSION = @PACKAGE_VERSION@
 PCCLIBDIR = $(libdir)/pcc/$(TARGET)/$(VERSION)/lib
 PCCINCDIR = $(libdir)/pcc/$(TARGET)/$(VERSION)/include
 CFLAGS = @CFLAGS@ @ADD_CFLAGS@
-CPPFLAGS = @CPPFLAGS@ -DLIBEXECDIR=\"${libexecdir}/\" \
-	@ADD_CPPFLAGS@ -DINCLUDEDIR=\"${includedir}/\" \
+CPPFLAGS = @CPPFLAGS@ -DLIBEXECDIR=\"${libexecdir}/\" -DINCLUDEDIR=\"${includedir}/\" \
 	-DPCCINCDIR=\"${PCCINCDIR}/\" -DPCCLIBDIR=\"${PCCLIBDIR}/\" \
-	-Dos_${TARGOS} -Dmach_${TARGMACH} -DTARGOSVER=${TARGOSVER} \
+	-Dos_${TARGOS} -DTARGMACH=${TARGMACH} -Dmach_${TARGMACH} \
 	-I${top_builddir} -I${top_srcdir}/os/${TARGOS} -I${MIPDIR} -I${MDIR}
 LIBS = @LIBS@
 LDFLAGS = @LDFLAGS@
 INSTALL = @INSTALL@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
-INSTALL_DATA = @INSTALL_DATA@
 
 OBJS=cc.o compat.o
 DEST=@BINPREFIX@pcc$(EXEEXT)
@@ -46,13 +42,13 @@ MDIR=${top_srcdir}/arch/$(TARGMACH)
 all: ${DEST}
 
 ${DEST}: $(OBJS)
-	$(CC) $(LDFLAGS) $(OBJS) -o $@ $(LIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@
 
 .c.o:
-	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
+	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c $<
 
 compat.o: $(MIPDIR)/compat.c
-	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $(MIPDIR)/compat.c
+	$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c -o $@ $(MIPDIR)/compat.c
 
 install:
 	test -z "${DESTDIR}$(bindir)" || mkdir -p "${DESTDIR}$(bindir)"
@@ -62,12 +58,12 @@ install:
 		echo strip ${DESTDIR}${bindir}/${DEST} ;	\
 	fi
 	test -z "${DESTDIR}$(mandir)/man1" || mkdir -p "${DESTDIR}$(mandir)/man1"
-	${INSTALL_DATA} $(srcdir)/cc.1 ${DESTDIR}${mandir}/man1/${DEST}.1
+	${INSTALL} $(srcdir)/cc.1 ${DESTDIR}${mandir}/man1/${DEST}.1
 	test -z "${DESTDIR}$(PCCINCDIR)" || mkdir -p "${DESTDIR}$(PCCINCDIR)"
 	test -z "${DESTDIR}$(PCCLIBDIR)" || mkdir -p "${DESTDIR}$(PCCLIBDIR)"
 
 clean:
-	rm -f  $(OBJS) ${DEST}
+	/bin/rm -f  $(OBJS) ${DEST}
 
 distclean: clean
-	rm -f  Makefile
+	/bin/rm -f  Makefile

@@ -9,6 +9,8 @@
     * 
     *  This file describes the WID register layout.
     *  
+    *  Author:  Mitch Lichtenberg
+    *  
     *********************************************************************  
     *
     *  Copyright 2000,2001,2002,2003

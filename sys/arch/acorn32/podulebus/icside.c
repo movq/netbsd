@@ -1,4 +1,4 @@
-/*	$NetBSD: icside.c,v 1.32 2012/07/31 15:50:31 bouyer Exp $	*/
+/*	$NetBSD: icside.c,v 1.27 2008/03/18 20:46:35 cube Exp $	*/
 
 /*
  * Copyright (c) 1997-1998 Mark Brinicombe
@@ -42,16 +42,16 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: icside.c,v 1.32 2012/07/31 15:50:31 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: icside.c,v 1.27 2008/03/18 20:46:35 cube Exp $");
 
 #include <sys/systm.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <sys/bus.h>
 
 #include <machine/intr.h>
 #include <machine/io.h>
+#include <machine/bus.h>
 #include <acorn32/podulebus/podulebus.h>
 #include <acorn32/podulebus/icsidereg.h>
 
@@ -259,7 +259,6 @@ icside_attach(device_t parent, device_t self, void *aux)
 	sc->sc_wdcdev.sc_atac.atac_nchannels = ide->channels;
 	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16;
 	sc->sc_wdcdev.sc_atac.atac_pio_cap = 0;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 	sc->sc_pa = pa;
 
 	for (channel = 0; channel < ide->channels; ++channel) {
@@ -271,6 +270,7 @@ icside_attach(device_t parent, device_t self, void *aux)
 		cp->ch_channel = channel;
 		cp->ch_atac = &sc->sc_wdcdev.sc_atac;
 		cp->ch_queue = &icp->ic_chqueue;
+		cp->ch_ndrive = 2;
 		wdr->cmd_iot = &sc->sc_tag;
 		wdr->ctl_iot = &sc->sc_tag;
 		if (ide->modspace)
@@ -301,7 +301,7 @@ icside_attach(device_t parent, device_t self, void *aux)
 		icp->ic_irqaddr = pa->pa_podule->irq_addr;
 		icp->ic_irqmask = pa->pa_podule->irq_mask;
 		evcnt_attach_dynamic(&icp->ic_intrcnt, EVCNT_TYPE_INTR, NULL,
-		    device_xname(self), "intr");
+		    self->dv_xname, "intr");
 		icp->ic_ih = podulebus_irq_establish(pa->pa_ih, IPL_BIO,
 		    icside_intr, icp, &icp->ic_intrcnt);
 		if (icp->ic_ih == NULL) {

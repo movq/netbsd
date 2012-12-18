@@ -1,7 +1,8 @@
-#	$NetBSD: Makefile.bootxx,v 1.10 2010/07/06 05:59:57 mrg Exp $
+#	$NetBSD: Makefile.bootxx,v 1.7.4.1 2009/01/16 22:57:33 bouyer Exp $
 
 NOMAN=	# defined
 
+# for OBJECT_FMT
 .include <bsd.own.mk>
 
 PROG=	bootxx
@@ -24,8 +25,7 @@ S_LIBTOS=${S}/arch/atari/stand/tostools/libtos
 
 S_MACHSAOBJ!=	cd ${S_MACHSA} && ${PRINTOBJDIR}
 
-LIBSA=${S_MACHSAOBJ}/lib/sa/libsa.a
-LIBKERN=${S_MACHSAOBJ}/lib/kern/libkern.a
+LIBSA=${S_MACHSAOBJ}/libsa.a
 
 .include "../../Makefile.booters"
 .include "../../xxboot/${BTYPE}_LOADADDR"
@@ -34,7 +34,11 @@ LIBKERN=${S_MACHSAOBJ}/lib/kern/libkern.a
 BOOTXX_MAXSIZE=		6656
 
 CPPFLAGS+=	-I. -I${S_LIBTOS} -I${S_MACHSA} -I${S_KERN} -I${S_SA} -I${S}
+.if ${OBJECT_FMT} == "ELF"
 LINKFLAGS=	-static -N -e start -Ttext ${LOADADDR}
+.else
+LINKFLAGS=	-static -N -Ttext ${LOADADDR}
+.endif
 
 .PATH: ${.CURDIR}/.. ${S_LIBTOS}
 
@@ -43,7 +47,7 @@ LINKFLAGS=	-static -N -e start -Ttext ${LOADADDR}
 #
 SRCS=	start.S bootxx.c filesystem.c
 
-LIBS=	${LIBSA} ${LIBKERN}
+LIBS=	${LIBSA}
 
 beforeinstall:
 	${INSTALL_DIR} ${DESTDIR}${BINDIR}

@@ -1,4 +1,4 @@
-/*	$NetBSD: subr.c,v 1.27 2011/02/17 17:55:36 pooka Exp $	*/
+/*	$NetBSD: subr.c,v 1.23 2008/08/12 19:44:39 pooka Exp $	*/
 
 /*
  * Copyright (c) 2006 Antti Kantee.  All Rights Reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: subr.c,v 1.27 2011/02/17 17:55:36 pooka Exp $");
+__RCSID("$NetBSD: subr.c,v 1.23 2008/08/12 19:44:39 pooka Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -102,12 +102,10 @@ int
 puffs_fsnop_statvfs(struct puffs_usermount *dontuse1, struct statvfs *sbp)
 {
 
-	sbp->f_bsize = sbp->f_frsize = sbp->f_iosize = DEV_BSIZE;
+	sbp->f_bsize = sbp->f_frsize = sbp->f_iosize = 512;
 
 	sbp->f_bfree=sbp->f_bavail=sbp->f_bresvd=sbp->f_blocks = (fsblkcnt_t)0;
 	sbp->f_ffree=sbp->f_favail=sbp->f_fresvd=sbp->f_files = (fsfilcnt_t)0;
-
-	sbp->f_namemax = MAXNAMLEN;
 
 	return 0;
 }
@@ -162,7 +160,7 @@ puffs_setvattr(struct vattr *vap, const struct vattr *sva)
 	SETIFVAL(va_nlink, nlink_t);
 	SETIFVAL(va_uid, uid_t);
 	SETIFVAL(va_gid, gid_t);
-	SETIFVAL(va_fsid, dev_t);
+	SETIFVAL(va_fsid, long);
 	SETIFVAL(va_size, u_quad_t);
 	SETIFVAL(va_fileid, ino_t);
 	SETIFVAL(va_blocksize, long);
@@ -196,7 +194,7 @@ puffs_vattr_null(struct vattr *vap)
 	vap->va_nlink = (nlink_t)PUFFS_VNOVAL;
 	vap->va_uid = (uid_t)PUFFS_VNOVAL;
 	vap->va_gid = (gid_t)PUFFS_VNOVAL;
-	vap->va_fsid = (dev_t)PUFFS_VNOVAL;
+	vap->va_fsid = PUFFS_VNOVAL;
 	vap->va_fileid = (ino_t)PUFFS_VNOVAL;
 	vap->va_size = (u_quad_t)PUFFS_VNOVAL;
 	vap->va_blocksize = sysconf(_SC_PAGESIZE);
@@ -282,7 +280,7 @@ puffs_stat2vattr(struct vattr *va, const struct stat *sb)
 	va->va_gen = sb->st_gen;
 	va->va_flags = sb->st_flags;
 	va->va_rdev = sb->st_rdev;
-	va->va_bytes = sb->st_blocks << DEV_BSHIFT;
+	va->va_bytes = sb->st_blocks * sb->st_blksize;
 	va->va_filerev = 0;
 	va->va_vaflags = 0;
 }
@@ -297,21 +295,6 @@ puffs_addvtype2mode(mode_t mode, enum vtype type)
 		break;
 	case VBLK:
 		mode |= S_IFBLK;
-		break;
-	case VSOCK:
-		mode |= S_IFSOCK;
-		break;
-	case VFIFO:
-		mode |= S_IFIFO;
-		break;
-	case VREG:
-		mode |= S_IFREG;
-		break;
-	case VLNK:
-		mode |= S_IFLNK;
-		break;
-	case VDIR:
-		mode |= S_IFDIR;
 		break;
 	default:
 		break;

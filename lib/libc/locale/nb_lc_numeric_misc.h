@@ -1,4 +1,4 @@
-/* $NetBSD: nb_lc_numeric_misc.h,v 1.3 2010/03/27 15:25:22 tnozaki Exp $ */
+/* $NetBSD: nb_lc_numeric_misc.h,v 1.2.2.2 2009/01/15 03:24:08 snj Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -38,17 +38,12 @@ static __inline void
 _PREFIX(build_cache)(struct _locale_cache_t * __restrict cache,
     _NumericLocale * __restrict data)
 {
-	struct lconv *ldata;
-
 	_DIAGASSERT(cache != NULL);
-	_DIAGASSERT(cache->ldata != NULL);
-	_DIAGASSERT(cache->items != NULL);
 	_DIAGASSERT(data != NULL);
 
-	ldata = cache->ldata;
-	ldata->decimal_point = __UNCONST(data->decimal_point);
-	ldata->thousands_sep = __UNCONST(data->thousands_sep);
-	ldata->grouping      = __UNCONST(data->grouping);
+	cache->ldata.decimal_point = __UNCONST(data->decimal_point);
+	cache->ldata.thousands_sep = __UNCONST(data->thousands_sep);
+	cache->ldata.grouping      = __UNCONST(data->grouping);
 
 	cache->items[(size_t)RADIXCHAR] = data->decimal_point;
 	cache->items[(size_t)THOUSEP  ] = data->thousands_sep;

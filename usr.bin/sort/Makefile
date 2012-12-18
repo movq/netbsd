@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2009/09/10 22:02:40 dsl Exp $
+#	$NetBSD: Makefile,v 1.5.40.1 2009/10/14 20:41:53 sborrill Exp $
 #	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
 
 PROG=	sort

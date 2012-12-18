@@ -1,4 +1,4 @@
-/*	$NetBSD: input.c,v 1.45 2012/03/28 20:11:25 christos Exp $	*/
+/*	$NetBSD: input.c,v 1.41 2008/10/16 14:36:40 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)input.c	8.3 (Berkeley) 6/9/95";
 #else
-__RCSID("$NetBSD: input.c,v 1.45 2012/03/28 20:11:25 christos Exp $");
+__RCSID("$NetBSD: input.c,v 1.41 2008/10/16 14:36:40 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -45,7 +45,6 @@ __RCSID("$NetBSD: input.c,v 1.45 2012/03/28 20:11:25 christos Exp $");
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
-#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -185,7 +184,7 @@ retry:
 		if (rl_cp == NULL)
 			rl_cp = el_gets(el, &el_len);
 		if (rl_cp == NULL)
-			nr = el_len == 0 ? 0 : -1;
+			nr = 0;
 		else {
 			nr = el_len;
 			if (nr > BUFSIZ - 8)
@@ -339,7 +338,7 @@ pushstring(char *s, int len, void *ap)
 	struct strpush *sp;
 
 	INTOFF;
-/*debugprintf("*** calling pushstring: %s, %d\n", s, len);*/
+/*dprintf("*** calling pushstring: %s, %d\n", s, len);*/
 	if (parsefile->strpush) {
 		sp = ckmalloc(sizeof (struct strpush));
 		sp->prev = parsefile->strpush;
@@ -366,7 +365,7 @@ popstring(void)
 	parsenextc = sp->prevstring;
 	parsenleft = sp->prevnleft;
 	parselleft = sp->prevlleft;
-/*debugprintf("*** calling popstring: restoring to '%s'\n", parsenextc);*/
+/*dprintf("*** calling popstring: restoring to '%s'\n", parsenextc);*/
 	if (sp->ap)
 		sp->ap->flag &= ~ALIASINUSE;
 	parsefile->strpush = sp->prev;
@@ -406,7 +405,7 @@ setinputfile(const char *fname, int push)
 	}
 
 	if (fd < 10) {
-		fd2 = copyfd(fd, 10, 0);
+		fd2 = copyfd(fd, 10);
 		close(fd);
 		if (fd2 < 0)
 			error("Out of file descriptors");

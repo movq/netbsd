@@ -1,4 +1,4 @@
-.\"	$NetBSD: getfsent.3,v 1.12 2012/04/07 03:47:30 christos Exp $
+.\"	$NetBSD: getfsent.3,v 1.10 2003/08/07 16:42:49 agc Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)getfsent.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd March 6, 2012
+.Dd June 4, 1993
 .Dt GETFSENT 3
 .Os
 .Sh NAME
@@ -63,7 +63,7 @@ functions
 each return a pointer to an object with the following structure
 containing the broken-out fields of a line in the file system
 description file,
-.In fstab.h .
+.Aq Pa fstab.h .
 .Bd -literal -offset indent
 struct fstab {
 	char	*fs_spec;	/* block special device name */
@@ -128,7 +128,6 @@ returns nothing.
 .It Pa /etc/fstab
 .El
 .Sh SEE ALSO
-.Xr getfsspecname 3 ,
 .Xr fstab 5
 .Sh HISTORY
 The

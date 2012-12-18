@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_conf_time.c,v 1.1.1.2 2011/03/02 19:32:15 tron Exp $	*/
+/*	$NetBSD: mail_conf_time.c,v 1.1.1.1.2.3 2011/01/07 01:24:03 riz Exp $	*/
 
 /*++
 /* NAME
@@ -77,7 +77,7 @@
 
 #include <sys_defs.h>
 #include <stdlib.h>
-#include <stdio.h>			/* BUFSIZ */
+#include <stdio.h>			/* sscanf() */
 #include <ctype.h>
 
 /* Utility library. */

@@ -1,4 +1,4 @@
-/*	$NetBSD: dmover_session.c,v 1.6 2011/05/14 18:24:47 jakllsch Exp $	*/
+/*	$NetBSD: dmover_session.c,v 1.5 2008/01/04 21:17:52 ad Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.
@@ -40,9 +40,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dmover_session.c,v 1.6 2011/05/14 18:24:47 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dmover_session.c,v 1.5 2008/01/04 21:17:52 ad Exp $");
 
 #include <sys/param.h>
+#include <sys/simplelock.h>
 #include <sys/pool.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
@@ -51,17 +52,20 @@ __KERNEL_RCSID(0, "$NetBSD: dmover_session.c,v 1.6 2011/05/14 18:24:47 jakllsch 
 
 struct pool dmover_session_pool;
 
-static bool initialized;
+static int initialized;
+static struct simplelock initialized_slock = SIMPLELOCK_INITIALIZER;
 
 void
 dmover_session_initialize(void)
 {
 
-	KASSERT(initialized == false);
-
-	pool_init(&dmover_session_pool, sizeof(struct dmover_session),
-	    0, 0, 0, "dmses", &pool_allocator_nointr, IPL_NONE);
-	initialized = true;
+	simple_lock(&initialized_slock);
+	if (__predict_true(initialized == 0)) {
+		pool_init(&dmover_session_pool, sizeof(struct dmover_session),
+		    0, 0, 0, "dmses", &pool_allocator_nointr, IPL_NONE);
+		initialized = 1;
+	}
+	simple_unlock(&initialized_slock);
 }
 
 /*
@@ -75,8 +79,10 @@ dmover_session_create(const char *type, struct dmover_session **dsesp)
 	struct dmover_session *dses;
 	int error;
 
-	if (__predict_false(initialized == false)) {
-		error = initialized ? false : ENXIO;
+	if (__predict_false(initialized == 0)) {
+		simple_lock(&initialized_slock);
+		error = initialized ? 0 : ENXIO;
+		simple_unlock(&initialized_slock);
 
 		if (error)
 			return (error);
@@ -109,7 +115,18 @@ void
 dmover_session_destroy(struct dmover_session *dses)
 {
 
-	KASSERT(initialized == true);
+#ifdef DIAGNOSTIC
+	if (__predict_false(initialized == 0)) {
+		int croak;
+
+		simple_lock(&initialized_slock);
+		croak = (initialized == 0);
+		simple_unlock(&initialized_slock);
+
+		if (croak)
+			panic("dmover_session_destroy: not initialized");
+	}
+#endif
 
 	/* XXX */
 	if (dses->__dses_npendreqs)

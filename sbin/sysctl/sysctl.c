@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.c,v 1.149 2012/12/13 05:27:01 msaitoh Exp $ */
+/*	$NetBSD: sysctl.c,v 1.124.2.1 2009/04/01 21:37:02 snj Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993\
 #if 0
 static char sccsid[] = "@(#)sysctl.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: sysctl.c,v 1.149 2012/12/13 05:27:01 msaitoh Exp $");
+__RCSID("$NetBSD: sysctl.c,v 1.124.2.1 2009/04/01 21:37:02 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -80,7 +80,6 @@ __RCSID("$NetBSD: sysctl.c,v 1.149 2012/12/13 05:27:01 msaitoh Exp $");
 #include <sys/stat.h>
 #include <sys/sched.h>
 #include <sys/socket.h>
-#include <sys/bitops.h>
 #include <netinet/in.h>
 #include <netinet/ip_var.h>
 #include <netinet/tcp.h>
@@ -91,6 +90,7 @@ __RCSID("$NetBSD: sysctl.c,v 1.149 2012/12/13 05:27:01 msaitoh Exp $");
 #include <nfs/nfsproto.h>
 #include <nfs/nfs.h>
 #include <machine/cpu.h>
+#include <netkey/key_var.h>
 
 #include <assert.h>
 #include <ctype.h>
@@ -104,8 +104,6 @@ __RCSID("$NetBSD: sysctl.c,v 1.149 2012/12/13 05:27:01 msaitoh Exp $");
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-
-#include "prog_ops.h"
 
 /*
  * this needs to be able to do the printing and the setting
@@ -123,11 +121,10 @@ __RCSID("$NetBSD: sysctl.c,v 1.149 2012/12/13 05:27:01 msaitoh Exp $");
 /*
  * generic routines
  */
-static const struct handlespec *findhandler(const char *, regex_t *, size_t *);
+static const struct handlespec *findhandler(const char *, int);
 static void canonicalize(const char *, char *);
 static void purge_tree(struct sysctlnode *);
-static void print_tree(int *, u_int, struct sysctlnode *, u_int, int, regex_t *,
-    size_t *);
+static void print_tree(int *, u_int, struct sysctlnode *, u_int, int);
 static void write_number(int *, u_int, struct sysctlnode *, char *);
 static void write_string(int *, u_int, struct sysctlnode *, char *);
 static void display_number(const struct sysctlnode *, const char *,
@@ -137,8 +134,8 @@ static void display_string(const struct sysctlnode *, const char *,
 static void display_struct(const struct sysctlnode *, const char *,
 			   const void *, size_t, int);
 static void hex_dump(const unsigned char *, size_t);
-__dead static void usage(void);
-static void parse(char *, regex_t *, size_t *);
+static void usage(void);
+static void parse(char *);
 static void parse_create(char *);
 static void parse_destroy(char *);
 static void parse_describe(char *);
@@ -147,7 +144,7 @@ static void getdesc(int *, u_int, struct sysctlnode *);
 static void trim_whitespace(char *, int);
 static void sysctlerror(int);
 static void sysctlparseerror(u_int, const char *);
-static void sysctlperror(const char *, ...) __printflike(1, 2);
+static void sysctlperror(const char *, ...);
 #define EXIT(n) do { \
 	if (fn == NULL) exit(n); else return; } while (/*CONSTCOND*/0)
 
@@ -172,7 +169,6 @@ static void proc_limit(HANDLER_PROTO);
 static void machdep_diskinfo(HANDLER_PROTO);
 #endif /* CPU_DISKINFO */
 static void mode_bits(HANDLER_PROTO);
-static void reserve(HANDLER_PROTO);
 
 static const struct handlespec {
 	const char *ps_re;
@@ -214,8 +210,6 @@ static const struct handlespec {
 
 	{ "/net/inet.*/tcp.*/deb.*",		printother, NULL, "trpt" },
 
-	{ "/net/inet.*/ip.*/anonportalgo/reserve", reserve, reserve, NULL },
-
 	{ "/net/ns/spp/deb.*",			printother, NULL, "trsp" },
 
 	{ "/hw/diskstats",			printother, NULL, "iostat" },
@@ -253,8 +247,6 @@ char	*fn;
 int	req, stale, errs;
 FILE	*warnfp = stderr;
 
-#define MAXPORTS	0x10000
-
 /*
  * vah-riables n stuff
  */
@@ -276,10 +268,7 @@ main(int argc, char *argv[])
 {
 	int name[CTL_MAXNAME];
 	int ch;
-	size_t lastcompiled = 0;
-	regex_t *re;
 
-	setprogname(argv[0]);
 	while ((ch = getopt(argc, argv, "Aabdef:Mnqrwx")) != -1) {
 		switch (ch) {
 		case 'A':
@@ -325,30 +314,23 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
+	if (qflag && !wflag)
+		usage();
 	if (xflag && rflag)
 		usage();
 	/* if ((xflag || rflag) && wflag)
 		usage(); */
-	/* if (aflag && (Mflag || qflag))
+	/* if (aflag && Mflag)
 		usage(); */
-	if ((aflag || Aflag) && qflag)
-		usage();
 	if ((Aflag || Mflag || dflag) && argc == 0 && fn == NULL)
 		aflag = 1;
-
-	if (prog_init && prog_init() == -1)
-		err(1, "prog init failed");
 
 	if (Aflag)
 		warnfp = stdout;
 	stale = req = 0;
 
-	if ((re = malloc(sizeof(*re) * __arraycount(handlers))) == NULL)
-		err(1, "malloc regex");
-
 	if (aflag) {
-		print_tree(&name[0], 0, NULL, CTLTYPE_NODE, 1,
-		    re, &lastcompiled);
+		print_tree(&name[0], 0, NULL, CTLTYPE_NODE, 1);
 		/* if (argc == 0) */
 		return (0);
 	}
@@ -365,7 +347,7 @@ main(int argc, char *argv[])
 			while ((l = fparseln(fp, NULL, &nr, NULL, 0)) != NULL)
 			{
 				if (*l) {
-					parse(l, re, &lastcompiled);
+					parse(l);
 					free(l);
 				}
 			}
@@ -378,7 +360,7 @@ main(int argc, char *argv[])
 		usage();
 
 	while (argc-- > 0)
-		parse(*argv++, re, &lastcompiled);
+		parse(*argv++);
 
 	return errs ? 1 : 0;
 }
@@ -390,37 +372,38 @@ main(int argc, char *argv[])
  * ********************************************************************
  */
 static const struct handlespec *
-findhandler(const char *s, regex_t *re, size_t *lastcompiled)
+findhandler(const char *s, int w)
 {
 	const struct handlespec *p;
-	size_t i, l;
-	int j;
+	regex_t re;
+	int i, j, l;
 	char eb[64];
-	regmatch_t match;
+	regmatch_t match[1];
 
 	p = &handlers[0];
 	l = strlen(s);
 	for (i = 0; p[i].ps_re != NULL; i++) {
-		if (i >= *lastcompiled) {
-			j = regcomp(&re[i], p[i].ps_re, REG_EXTENDED);
-			if (j != 0) {
-				regerror(j, &re[i], eb, sizeof(eb));
-				errx(1, "regcomp: %s: %s", p[i].ps_re, eb);
-			}
-			*lastcompiled = i + 1;
+		j = regcomp(&re, p[i].ps_re, REG_EXTENDED);
+		if (j != 0) {
+			regerror(j, &re, eb, sizeof(eb));
+			errx(1, "regcomp: %s: %s", p[i].ps_re, eb);
 		}
-		j = regexec(&re[i], s, 1, &match, 0);
+		j = regexec(&re, s, 1, match, 0);
 		if (j == 0) {
-			if (match.rm_so == 0 && match.rm_eo == (int)l)
-				return &p[i];
+			if (match[0].rm_so == 0 && match[0].rm_eo == l &&
+			    (w ? p[i].ps_w : p[i].ps_p) != NULL) {
+				regfree(&re);
+				return (&p[i]);
+			}
 		}
 		else if (j != REG_NOMATCH) {
-			regerror(j, &re[i], eb, sizeof(eb));
+			regerror(j, &re, eb, sizeof(eb));
 			errx(1, "regexec: %s: %s", p[i].ps_re, eb);
 		}
+		regfree(&re);
 	}
 
-	return NULL;
+	return (NULL);
 }
 
 /*
@@ -519,8 +502,6 @@ st(u_int t)
                 return "QUAD";
 	case CTLTYPE_STRUCT:
 		return "STRUCT";
-	case CTLTYPE_BOOL:
-		return "BOOL";
 	}
 
 	return "???";
@@ -557,21 +538,6 @@ purge_tree(struct sysctlnode *rnode)
 	rnode->sysctl_desc = NULL;
 }
 
-static void __attribute__((__format__(__printf__, 3, 4)))
-appendprintf(char **bp, size_t *lbp, const char *fmt, ...)
-{
-	int r;
-	va_list ap;
-
-	va_start(ap, fmt);
-	r = vsnprintf(*bp, *lbp, fmt, ap);
-	va_end(ap);
-	if (r < 0 || (size_t)r > *lbp)
-		r = *lbp;
-	*bp += r;
-	*lbp -= r;
-}
-
 /*
  * ********************************************************************
  * print this node and any others underneath it
@@ -579,35 +545,39 @@ appendprintf(char **bp, size_t *lbp, const char *fmt, ...)
  */
 static void
 print_tree(int *name, u_int namelen, struct sysctlnode *pnode, u_int type,
-   int add, regex_t *re, size_t *lastcompiled)
+	   int add)
 {
 	struct sysctlnode *node;
-	int rc;
-	size_t ni, sz, ldp, lsp;
-	char *sp, *dp, *tsp, *tdp;
+	int rc, ni;
+	size_t sz;
+	char *sp, *dp, n[20];
 	const struct handlespec *p;
 
-	sp = tsp = &gsname[strlen(gsname)];
-	dp = tdp = &gdname[strlen(gdname)];
-	ldp = sizeof(gdname) - (dp - gdname);
-	lsp = sizeof(gsname) - (sp - gsname);
+	sp = &gsname[strlen(gsname)];
+	dp = &gdname[strlen(gdname)];
 
 	if (sp != &gsname[0] && dp == &gdname[0]) {
 		/*
 		 * aw...shucks.  now we must play catch up
 		 */
-		for (ni = 0; ni < namelen; ni++)
-			appendprintf(&tdp, &ldp, "%s%d", ni > 0 ? "." : "",
-			    name[ni]);
+		for (ni = 0; ni < namelen; ni++) {
+			(void)snprintf(n, sizeof(n), "%d", name[ni]);
+			if (ni > 0)
+				strncat(gdname, ".", sizeof(gdname));
+			strncat(gdname, n, sizeof(gdname));
+		}
 	}
 
 	if (pnode == NULL)
 		pnode = &my_root;
 	else if (add) {
-		appendprintf(&tsp, &lsp, "%s%s", namelen > 1 ? sep : "", 
-			pnode->sysctl_name);
-		appendprintf(&tdp, &ldp, "%s%d", namelen > 1 ? "." : "", 
-			pnode->sysctl_num);
+		snprintf(n, sizeof(n), "%d", pnode->sysctl_num);
+		if (namelen > 1) {
+			strncat(gsname, sep, sizeof(gsname));
+			strncat(gdname, ".", sizeof(gdname));
+		}
+		strncat(gsname, pnode->sysctl_name, sizeof(gsname));
+		strncat(gdname, n, sizeof(gdname));
 	}
 
 	if (Mflag && pnode != &my_root) {
@@ -674,13 +644,8 @@ print_tree(int *name, u_int namelen, struct sysctlnode *pnode, u_int type,
 	}
 
 	canonicalize(gsname, canonname);
-	p = findhandler(canonname, re, lastcompiled);
+	p = findhandler(canonname, 0);
 	if (type != CTLTYPE_NODE && p != NULL) {
-		if (p->ps_p == NULL) {
-			sysctlperror("Cannot print `%s': %s\n", gsname, 
-			    strerror(EOPNOTSUPP));
-			exit(1);
-		}
 		(*p->ps_p)(gsname, gdname, NULL, name, namelen, pnode, type,
 			   __UNCONST(p->ps_d));
 		*sp = *dp = '\0';
@@ -688,7 +653,7 @@ print_tree(int *name, u_int namelen, struct sysctlnode *pnode, u_int type,
 	}
 
 	if (type != CTLTYPE_NODE && pnode->sysctl_size == 0) {
-		rc = prog_sysctl(&name[0], namelen, NULL, &sz, NULL, 0);
+		rc = sysctl(&name[0], namelen, NULL, &sz, NULL, 0);
 		if (rc == -1) {
 			sysctlerror(1);
 			*sp = *dp = '\0';
@@ -732,14 +697,14 @@ print_tree(int *name, u_int namelen, struct sysctlnode *pnode, u_int type,
 					continue;
 				print_tree(name, namelen + 1, &node[ni],
 					   SYSCTL_TYPE(node[ni].sysctl_flags),
-					   1, re, lastcompiled);
+					   1);
 			}
 		}
 		break;
 	}
 	case CTLTYPE_INT: {
 		int i;
-		rc = prog_sysctl(name, namelen, &i, &sz, NULL, 0);
+		rc = sysctl(name, namelen, &i, &sz, NULL, 0);
 		if (rc == -1) {
 			sysctlerror(1);
 			break;
@@ -747,28 +712,18 @@ print_tree(int *name, u_int namelen, struct sysctlnode *pnode, u_int type,
 		display_number(pnode, gsname, &i, sizeof(i), DISPLAY_VALUE);
 		break;
 	}
-	case CTLTYPE_BOOL: {
-		bool b;
-		rc = prog_sysctl(name, namelen, &b, &sz, NULL, 0);
-		if (rc == -1) {
-			sysctlerror(1);
-			break;
-		}
-		display_number(pnode, gsname, &b, sizeof(b), DISPLAY_VALUE);
-		break;
-	}
 	case CTLTYPE_STRING: {
 		unsigned char buf[1024], *tbuf;
 		tbuf = buf;
 		sz = sizeof(buf);
-		rc = prog_sysctl(&name[0], namelen, tbuf, &sz, NULL, 0);
+		rc = sysctl(&name[0], namelen, tbuf, &sz, NULL, 0);
 		if (rc == -1 && errno == ENOMEM) {
 			tbuf = malloc(sz);
 			if (tbuf == NULL) {
 				sysctlerror(1);
 				break;
 			}
-			rc = prog_sysctl(&name[0], namelen, tbuf, &sz, NULL, 0);
+			rc = sysctl(&name[0], namelen, tbuf, &sz, NULL, 0);
 		}
 		if (rc == -1)
 			sysctlerror(1);
@@ -781,7 +736,7 @@ print_tree(int *name, u_int namelen, struct sysctlnode *pnode, u_int type,
 	case CTLTYPE_QUAD: {
 		u_quad_t q;
 		sz = sizeof(q);
-		rc = prog_sysctl(&name[0], namelen, &q, &sz, NULL, 0);
+		rc = sysctl(&name[0], namelen, &q, &sz, NULL, 0);
 		if (rc == -1) {
 			sysctlerror(1);
 			break;
@@ -801,7 +756,7 @@ print_tree(int *name, u_int namelen, struct sysctlnode *pnode, u_int type,
 			fprintf(warnfp, "%s: !malloc failed!\n", gsname);
 			break;
 		}
-		rc = prog_sysctl(&name[0], namelen, d, &sz, NULL, 0);
+		rc = sysctl(&name[0], namelen, d, &sz, NULL, 0);
 		if (rc == -1) {
 			sysctlerror(1);
 			break;
@@ -825,7 +780,7 @@ print_tree(int *name, u_int namelen, struct sysctlnode *pnode, u_int type,
  * ********************************************************************
  */
 static void
-parse(char *l, regex_t *re, size_t *lastcompiled)
+parse(char *l)
 {
 	struct sysctlnode *node;
 	const struct handlespec *w;
@@ -898,7 +853,7 @@ parse(char *l, regex_t *re, size_t *lastcompiled)
 	if (value == NULL) {
 		if (dodesc)
 			dflag = 1;
-		print_tree(&name[0], namelen, node, type, 0, re, lastcompiled);
+		print_tree(&name[0], namelen, node, type, 0);
 		if (dodesc)
 			dflag = 0;
 		gsname[0] = '\0';
@@ -914,13 +869,7 @@ parse(char *l, regex_t *re, size_t *lastcompiled)
 	}
 
 	canonicalize(gsname, canonname);
-	if (type != CTLTYPE_NODE && (w = findhandler(canonname, re,
-	    lastcompiled)) != NULL) {
-		if (w->ps_w == NULL) {
-			sysctlperror("Cannot write `%s': %s\n", gsname, 
-			    strerror(EOPNOTSUPP));
-			exit(1);
-		}
+	if (type != CTLTYPE_NODE && (w = findhandler(canonname, 1)) != NULL) {
 		(*w->ps_w)(gsname, gdname, value, name, namelen, node, type,
 			   __UNCONST(w->ps_d));
 		gsname[0] = '\0';
@@ -932,23 +881,23 @@ parse(char *l, regex_t *re, size_t *lastcompiled)
 		/*
 		 * XXX old behavior is to print.  should we error instead?
 		 */
-		print_tree(&name[0], namelen, node, CTLTYPE_NODE, 1, re,
-		    lastcompiled);
+		print_tree(&name[0], namelen, node, CTLTYPE_NODE, 1);
 		break;
 	case CTLTYPE_INT:
-	case CTLTYPE_BOOL:
-	case CTLTYPE_QUAD:
 		write_number(&name[0], namelen, node, value);
 		break;
 	case CTLTYPE_STRING:
 		write_string(&name[0], namelen, node, value);
+		break;
+	case CTLTYPE_QUAD:
+		write_number(&name[0], namelen, node, value);
 		break;
 	case CTLTYPE_STRUCT:
 		/*
 		 * XXX old behavior is to print.  should we error instead?
 		 */
 		/* fprintf(warnfp, "you can't write to %s\n", gsname); */
-		print_tree(&name[0], namelen, node, type, 0, re, lastcompiled);
+		print_tree(&name[0], namelen, node, type, 0);
 		break;
 	}
 }
@@ -963,9 +912,10 @@ parse(char *l, regex_t *re, size_t *lastcompiled)
   [addr=0x####,|symbol=...|value=...]
 
   size is optional for some types.  type must be set before anything
-  else.  nodes can have [rwhp], but nothing else applies.  if no
+  else.  nodes can have [r12whp], but nothing else applies.  if no
   size or type is given, node is asserted.  writeable is the default,
-  with [rw] being read-only and unconditionally writeable
+  with [r12w] being read-only, writeable below securelevel 1,
+  writeable below securelevel 2, and unconditionally writeable
   respectively.  if you specify addr, it is assumed to be the name of
   a kernel symbol, if value, CTLFLAG_OWNDATA will be asserted for
   strings, CTLFLAG_IMMEDIATE for ints and u_quad_ts.  you cannot
@@ -983,7 +933,6 @@ parse_create(char *l)
 	u_int namelen, type;
 	u_quad_t uq;
 	quad_t q;
-	bool b;
 
 	if (!wflag) {
 		sysctlperror("Must specify -w to create nodes\n");
@@ -1009,7 +958,6 @@ parse_create(char *l)
 	 * misc stuff used when constructing
 	 */
 	i = 0;
-	b = false;
 	uq = 0;
 	key = NULL;
 	value = NULL;
@@ -1051,7 +999,7 @@ parse_create(char *l)
 		}
 
 		/*
-		 * note that we (mostly) let the invoker of prog_sysctl(8)
+		 * note that we (mostly) let the invoker of sysctl(8)
 		 * play rampant here and depend on the kernel to tell
 		 * them that they were wrong.  well...within reason.
 		 * we later check the various parameters against each
@@ -1105,10 +1053,6 @@ parse_create(char *l)
 			else if (strcmp(value, "int") == 0) {
 				sz = sizeof(int);
 				type = CTLTYPE_INT;
-			}
-			else if (strcmp(value, "bool") == 0) {
-				sz = sizeof(bool);
-				type = CTLTYPE_BOOL;
 			}
 			else if (strcmp(value, "string") == 0)
 				type = CTLTYPE_STRING;
@@ -1183,9 +1127,6 @@ parse_create(char *l)
 				case 'p':
 					flags |= CTLFLAG_PRIVATE;
 					break;
-				case 'u':
-					flags |= CTLFLAG_UNSIGNED;
-					break;
 				case 'x':
 					flags |= CTLFLAG_HEX;
 					break;
@@ -1251,26 +1192,6 @@ parse_create(char *l)
 				node.sysctl_data = &i;
 			if (sz == 0)
 				sz = sizeof(int);
-			break;
-		case CTLTYPE_BOOL:
-			errno = 0;
-			q = strtoll(data, &t, 0);
-			if (t == data || *t != '\0' || errno != 0 ||
-				(q != 0 && q != 1)) {
-				sysctlperror(
-				    "%s: '%s' is not a valid bool\n",
-				    nname, value);
-				EXIT(1);
-			}
-			b = q == 1;
-			if (!(flags & CTLFLAG_OWNDATA)) {
-				flags |= CTLFLAG_IMMEDIATE;
-				node.sysctl_idata = b;
-			}
-			else
-				node.sysctl_data = &b;
-			if (sz == 0)
-				sz = sizeof(bool);
 			break;
 		case CTLTYPE_STRING:
 			flags |= CTLFLAG_OWNDATA;
@@ -1357,7 +1278,6 @@ parse_create(char *l)
 	 */
 	if (sz != 0) {
 		if ((type == CTLTYPE_INT && sz != sizeof(int)) ||
-		    (type == CTLTYPE_BOOL && sz != sizeof(bool)) ||
 		    (type == CTLTYPE_QUAD && sz != sizeof(u_quad_t)) ||
 		    (type == CTLTYPE_NODE && sz != 0)) {
 			sysctlperror("%s: wrong size for type\n", nname);
@@ -1448,7 +1368,7 @@ parse_create(char *l)
 		name[namelen++] = CTL_CREATE;
 
 	sz = sizeof(node);
-	rc = prog_sysctl(&name[0], namelen, &node, &sz, &node, sizeof(node));
+	rc = sysctl(&name[0], namelen, &node, &sz, &node, sizeof(node));
 
 	if (rc == -1) {
 		sysctlperror("%s: CTL_CREATE failed: %s\n",
@@ -1491,7 +1411,7 @@ parse_destroy(char *l)
 	name[namelen - 1] = CTL_DESTROY;
 
 	sz = sizeof(node);
-	rc = prog_sysctl(&name[0], namelen, &node, &sz, &node, sizeof(node));
+	rc = sysctl(&name[0], namelen, &node, &sz, &node, sizeof(node));
 
 	if (rc == -1) {
 		sysctlperror("%s: CTL_DESTROY failed: %s\n",
@@ -1540,7 +1460,7 @@ parse_describe(char *l)
 	newdesc.sysctl_num = name[namelen - 1];
 	newdesc.sysctl_desc = value;
 	name[namelen - 1] = CTL_DESCRIBE;
-	rc = prog_sysctl(name, namelen, d, &sz, &newdesc, sizeof(newdesc));
+	rc = sysctl(name, namelen, d, &sz, &newdesc, sizeof(newdesc));
 	if (rc == -1)
 		sysctlperror("%s: CTL_DESCRIBE failed: %s\n",
 			     gsname, strerror(errno));
@@ -1567,7 +1487,7 @@ usage(void)
 		      "\t%s %s\n"
 		      "\t%s %s\n"
 		      "\t%s %s\n",
-		      progname, "[-dneq] [-x[x]|-r] variable ...",
+		      progname, "[-dne] [-x[x]|-r] variable ...",
 		      progname, "[-ne] [-q] -w variable=value ...",
 		      progname, "[-dne] -a",
 		      progname, "[-dne] -A",
@@ -1589,7 +1509,7 @@ getdesc1(int *name, u_int namelen, struct sysctlnode *pnode)
 	node.sysctl_flags = SYSCTL_VERSION;
 	node.sysctl_num = name[namelen - 1];
 	name[namelen - 1] = CTL_DESCRIBE;
-	rc = prog_sysctl(name, namelen, d, &sz, &node, sizeof(node));
+	rc = sysctl(name, namelen, d, &sz, &node, sizeof(node));
 
 	if (rc == -1 ||
 	    d->descr_len == 1 ||
@@ -1616,8 +1536,8 @@ getdesc(int *name, u_int namelen, struct sysctlnode *pnode)
 	struct sysctlnode *node = pnode->sysctl_child;
 	struct sysctldesc *d, *p, *plim;
 	char *desc;
-	size_t i, sz;
-	int rc;
+	size_t sz;
+	int rc, i;
 
 	sz = 128 * pnode->sysctl_clen;
 	name[namelen] = CTL_DESCRIBE;
@@ -1631,7 +1551,7 @@ getdesc(int *name, u_int namelen, struct sysctlnode *pnode)
 		d = malloc(sz);
 		if (d == NULL)
 			return;
-		rc = prog_sysctl(name, namelen + 1, d, &sz, NULL, 0);
+		rc = sysctl(name, namelen + 1, d, &sz, NULL, 0);
 		if (rc == -1) {
 			free(d);
 			d = NULL;
@@ -1705,8 +1625,8 @@ sysctlerror(int soft)
 		}
 	}
 
-	if (Aflag || req)
-		sysctlperror("%s: %s\n", gsname, strerror(errno));
+	sysctlperror("%s: sysctl() failed with %s\n",
+		     gsname, strerror(errno));
 	if (!soft)
 		EXIT(1);
 }
@@ -1715,10 +1635,6 @@ void
 sysctlparseerror(u_int namelen, const char *pname)
 {
 
-	if (qflag) {
-		errs++;
-		return;
-	}
 	sysctlperror("%s level name '%s' in '%s' is invalid\n",
 		     lname[namelen], gsname, pname);
 }
@@ -1749,7 +1665,6 @@ write_number(int *name, u_int namelen, struct sysctlnode *node, char *value)
 	u_int ii, io;
 	u_quad_t qi, qo;
 	size_t si, so;
-	bool bi, bo;
 	int rc;
 	void *i, *o;
 	char *t;
@@ -1759,7 +1674,6 @@ write_number(int *name, u_int namelen, struct sysctlnode *node, char *value)
 
 	si = so = 0;
 	i = o = NULL;
-	bi = bo = false;
 	errno = 0;
 	qi = strtouq(value, &t, 0);
 	if (qi == UQUAD_MAX && errno == ERANGE) {
@@ -1784,13 +1698,6 @@ write_number(int *name, u_int namelen, struct sysctlnode *node, char *value)
 		i = &ii;
 		si = sizeof(ii);
 		break;
-	case CTLTYPE_BOOL:
-		bi = (bool)qi;
-		o = &bo;
-		so = sizeof(bo);
-		i = &bi;
-		si = sizeof(bi);
-		break;
 	case CTLTYPE_QUAD:
 		o = &qo;
 		so = sizeof(qo);
@@ -1799,7 +1706,7 @@ write_number(int *name, u_int namelen, struct sysctlnode *node, char *value)
 		break;
 	}
 
-	rc = prog_sysctl(name, namelen, o, &so, i, si);
+	rc = sysctl(name, namelen, o, &so, i, si);
 	if (rc == -1) {
 		sysctlerror(0);
 		return;
@@ -1809,10 +1716,6 @@ write_number(int *name, u_int namelen, struct sysctlnode *node, char *value)
 	case CTLTYPE_INT:
 		display_number(node, gsname, &io, sizeof(io), DISPLAY_OLD);
 		display_number(node, gsname, &ii, sizeof(ii), DISPLAY_NEW);
-		break;
-	case CTLTYPE_BOOL:
-		display_number(node, gsname, &bo, sizeof(bo), DISPLAY_OLD);
-		display_number(node, gsname, &bi, sizeof(bi), DISPLAY_NEW);
 		break;
 	case CTLTYPE_QUAD:
 		display_number(node, gsname, &qo, sizeof(qo), DISPLAY_OLD);
@@ -1841,7 +1744,7 @@ write_string(int *name, u_int namelen, struct sysctlnode *node, char *value)
 		exit(1);
 	}
 
-	rc = prog_sysctl(name, namelen, o, &so, i, si);
+	rc = sysctl(name, namelen, o, &so, i, si);
 	if (rc == -1) {
 		sysctlerror(0);
 		return;
@@ -1862,7 +1765,6 @@ display_number(const struct sysctlnode *node, const char *name,
 	       const void *data, size_t sz, int n)
 {
 	u_quad_t q;
-	bool b;
 	int i;
 
 	if (qflag)
@@ -1896,19 +1798,8 @@ display_number(const struct sysctlnode *node, const char *name,
 			printf("0x%0*x", (int)sz * 2, i);
 		else if (node->sysctl_flags & CTLFLAG_HEX)
 			printf("%#x", i);
-		else if (node->sysctl_flags & CTLFLAG_UNSIGNED)
-			printf("%u", i);
 		else
 			printf("%d", i);
-		break;
-	case CTLTYPE_BOOL:
-		memcpy(&b, data, sz);
-		if (xflag)
-			printf("0x%0*x", (int)sz * 2, b);
-		else if (node->sysctl_flags & CTLFLAG_HEX)
-			printf("%#x", b);
-		else
-			printf("%d", b);
 		break;
 	case CTLTYPE_QUAD:
 		memcpy(&q, data, sz);
@@ -1916,8 +1807,6 @@ display_number(const struct sysctlnode *node, const char *name,
 			printf("0x%0*" PRIx64, (int)sz * 2, q);
 		else if (node->sysctl_flags & CTLFLAG_HEX)
 			printf("%#" PRIx64, q);
-		else if (node->sysctl_flags & CTLFLAG_UNSIGNED)
-			printf("%" PRIu64, q);
 		else
 			printf("%" PRIu64, q);
 		break;
@@ -2035,8 +1924,7 @@ display_struct(const struct sysctlnode *node, const char *name,
 static void
 hex_dump(const unsigned char *buf, size_t len)
 {
-	unsigned int i;
-	int j;
+	int i, j;
 	char line[80], tmp[12];
 
 	memset(line, ' ', sizeof(line));
@@ -2047,7 +1935,7 @@ hex_dump(const unsigned char *buf, size_t len)
 			line[58] = '|';
 			line[77] = '|';
 			line[78] = 0;
-			snprintf(tmp, sizeof(tmp), "%07x", i);
+			snprintf(tmp, sizeof(tmp), "%07d", i);
 			memcpy(&line[0], tmp, 7);
 		}
 		/* copy out hex version of byte */
@@ -2086,14 +1974,14 @@ printother(HANDLER_ARGS)
 	 * okay...you asked for it, so let's give it a go
 	 */
 	while (type != CTLTYPE_NODE && (xflag || rflag)) {
-		rc = prog_sysctl(name, namelen, NULL, &sz1, NULL, 0);
+		rc = sysctl(name, namelen, NULL, &sz1, NULL, 0);
 		if (rc == -1 || sz1 == 0)
 			break;
 		p = malloc(sz1);
 		if (p == NULL)
 			break;
 		sz2 = sz1;
-		rc = prog_sysctl(name, namelen, p, &sz2, NULL, 0);
+		rc = sysctl(name, namelen, p, &sz2, NULL, 0);
 		if (rc == -1 || sz1 != sz2) {
 			free(p);
 			break;
@@ -2145,7 +2033,7 @@ kern_clockrate(HANDLER_ARGS)
 	int rc;
 
 	sz = sizeof(clkinfo);
-	rc = prog_sysctl(name, namelen, &clkinfo, &sz, NULL, 0);
+	rc = sysctl(name, namelen, &clkinfo, &sz, NULL, 0);
 	if (rc == -1) {
 		sysctlerror(1);
 		return;
@@ -2175,7 +2063,7 @@ kern_boottime(HANDLER_ARGS)
 	int rc;
 
 	sz = sizeof(timeval);
-	rc = prog_sysctl(name, namelen, &timeval, &sz, NULL, 0);
+	rc = sysctl(name, namelen, &timeval, &sz, NULL, 0);
 	if (rc == -1) {
 		sysctlerror(1);
 		return;
@@ -2206,7 +2094,7 @@ kern_consdev(HANDLER_ARGS)
 	int rc;
 
 	sz = sizeof(cons);
-	rc = prog_sysctl(name, namelen, &cons, &sz, NULL, 0);
+	rc = sysctl(name, namelen, &cons, &sz, NULL, 0);
 	if (rc == -1) {
 		sysctlerror(1);
 		return;
@@ -2223,7 +2111,7 @@ kern_consdev(HANDLER_ARGS)
 		if (nflag < 2 && (sname = devname(cons, S_IFCHR)) != NULL)
 			printf("%s\n", sname);
 		else
-			printf("0x%llx\n", (unsigned long long)cons);
+			printf("0x%x\n", cons);
 	}
 }
 
@@ -2264,7 +2152,7 @@ kern_cp_time(HANDLER_ARGS)
 	}
 
 	osz = sz;
-	rc = prog_sysctl(name, namelen, cp_time + (n != -1) * CPUSTATES, &osz,
+	rc = sysctl(name, namelen, cp_time + (n != -1) * CPUSTATES, &osz,
 		    NULL, 0);
 
 	if (rc == -1) {
@@ -2340,7 +2228,7 @@ kern_drivers(HANDLER_ARGS)
 	int rc;
 	const char *comma;
 
-	rc = prog_sysctl(name, namelen, NULL, &sz, NULL, 0);
+	rc = sysctl(name, namelen, NULL, &sz, NULL, 0);
 	if (rc == -1) {
 		sysctlerror(1);
 		return;
@@ -2355,10 +2243,9 @@ kern_drivers(HANDLER_ARGS)
 		return;
 	}
 
-	rc = prog_sysctl(name, namelen, kd, &sz, NULL, 0);
+	rc = sysctl(name, namelen, kd, &sz, NULL, 0);
 	if (rc == -1) {
 		sysctlerror(1);
-		free(kd);
 		return;
 	}
 
@@ -2411,7 +2298,7 @@ kern_cp_id(HANDLER_ARGS)
 	}
 
 	osz = sz;
-	rc = prog_sysctl(name, namelen, cp_id, &osz, NULL, 0);
+	rc = sysctl(name, namelen, cp_id, &osz, NULL, 0);
 	if (rc == -1) {
 		sysctlerror(1);
 		free(cp_id);
@@ -2468,7 +2355,7 @@ vm_loadavg(HANDLER_ARGS)
 	int rc;
 
 	sz = sizeof(loadavg);
-	rc = prog_sysctl(name, namelen, &loadavg, &sz, NULL, 0);
+	rc = sysctl(name, namelen, &loadavg, &sz, NULL, 0);
 	if (rc == -1) {
 		sysctlerror(1);
 		return;
@@ -2522,7 +2409,7 @@ proc_limit(HANDLER_ARGS)
 		newp = NULL;
 	}
 
-	rc = prog_sysctl(name, namelen, &olim, &osz, newp, nsz);
+	rc = sysctl(name, namelen, &olim, &osz, newp, nsz);
 	if (rc == -1) {
 		sysctlerror(newp == NULL);
 		return;
@@ -2560,7 +2447,7 @@ machdep_diskinfo(HANDLER_ARGS)
 	size_t sz;
 	uint i, b, lim;
 
-	rc = prog_sysctl(name, namelen, NULL, &sz, NULL, 0);
+	rc = sysctl(name, namelen, NULL, &sz, NULL, 0);
 	if (rc == -1) {
 		sysctlerror(1);
 		return;
@@ -2570,7 +2457,7 @@ machdep_diskinfo(HANDLER_ARGS)
 		sysctlerror(1);
 		return;
 	}
-	rc = prog_sysctl(name, namelen, dl, &sz, NULL, 0);
+	rc = sysctl(name, namelen, dl, &sz, NULL, 0);
 	if (rc == -1) {
 		sysctlerror(1);
 		return;
@@ -2598,12 +2485,11 @@ machdep_diskinfo(HANDLER_ARGS)
 		char t = ':';
 		printf(" %.*s", (int)sizeof ni->ni_devname,
 		       ni->ni_devname);
-		for (b = 0; b < (unsigned int)ni->ni_nmatches; t = ',', b++)
+		for (b = 0; b < ni->ni_nmatches; t = ',', b++)
 			printf("%c%x", t,
 			       bi[ni->ni_biosmatches[b]].bi_dev);
 	}
 	printf("\n");
-	free(dl);
 }
 #endif /* CPU_DISKINFO */
 
@@ -2630,7 +2516,7 @@ mode_bits(HANDLER_ARGS)
 		nsz = sizeof(m);
 		newp = &m;
 		errno = 0;
-		rc = prog_sysctl(name, namelen, &tt, &ttsz, NULL, 0);
+		rc = sysctl(name, namelen, &tt, &ttsz, NULL, 0);
 		if (rc == -1) {
 			sysctlperror("%s: failed query\n", sname);
 			return;
@@ -2658,7 +2544,7 @@ mode_bits(HANDLER_ARGS)
 		newp = NULL;
 	}
 
-	rc = prog_sysctl(name, namelen, &o, &osz, newp, nsz);
+	rc = sysctl(name, namelen, &o, &osz, newp, nsz);
 	if (rc == -1) {
 		sysctlerror(newp == NULL);
 		return;
@@ -2689,102 +2575,6 @@ mode_bits(HANDLER_ARGS)
 			strmode(mm, buf);
 			rc = snprintf(outbuf, sizeof(outbuf), "%04o (%s)", mm, buf + 1);
 			display_string(pnode, sname, outbuf, rc, DISPLAY_NEW);
-		}
-	}
-}
-
-typedef __BITMAP_TYPE(, uint32_t, 0x10000) bitmap;
-
-static char *
-bitmask_print(const bitmap *o)
-{
-	char *s, *os;
-
-	s = os = NULL;
-	for (size_t i = 0; i < MAXPORTS; i++)
-		if (__BITMAP_ISSET(i, o)) {
-			int rv;
-
-			if (os)
-			    	rv = asprintf(&s, "%s,%zu", os, i);
-			else
-			    	rv = asprintf(&s, "%zu", i);
-			if (rv == -1)
-				err(1, "");
-			free(os);
-			os = s;
-		}
-	if (s == NULL && (s = strdup("")) == NULL)
-		err(1, "");
-	return s;
-}
-
-static void
-bitmask_scan(const void *v, bitmap *o)
-{
-	char *s = strdup(v);
-	if (s == NULL)
-		err(1, "");
-
-	__BITMAP_ZERO(o);
-	for (s = strtok(s, ","); s; s = strtok(NULL, ",")) {
-		char *e;
-		errno = 0;
-		unsigned long l = strtoul(s, &e, 0);
-		if ((l == ULONG_MAX && errno == ERANGE) || s == e || *e)
-			errx(1, "Invalid port: %s", s);
-		if (l >= MAXPORTS)
-			errx(1, "Port out of range: %s", s);
-		__BITMAP_SET(l, o);
-	}
-}
-
-
-static void
-reserve(HANDLER_ARGS)
-{
-	int rc;
-	size_t osz, nsz;
-	bitmap o, n;
-
-	if (fn)
-		trim_whitespace(value, 3);
-
-	osz = sizeof(o);
-	if (value) {
-		bitmask_scan(value, &n);
-		value = (char *)&n;
-		nsz = sizeof(n);
-	} else
-		nsz = 0;
-
-	rc = prog_sysctl(name, namelen, &o, &osz, value, nsz);
-	if (rc == -1) {
-		sysctlerror(value == NULL);
-		return;
-	}
-
-	if (value && qflag)
-		return;
-
-	if (rflag || xflag)
-		display_struct(pnode, sname, &o, sizeof(o),
-		    value ? DISPLAY_OLD : DISPLAY_VALUE);
-	else {
-		char *s = bitmask_print(&o);
-		display_string(pnode, sname, s, strlen(s),
-		    value ? DISPLAY_OLD : DISPLAY_VALUE);
-		free(s);
-	}
-
-	if (value) {
-		if (rflag || xflag)
-			display_struct(pnode, sname, &n, sizeof(n),
-			    DISPLAY_NEW);
-		else {
-			char *s = bitmask_print(&n);
-			display_string(pnode, sname, s, strlen(s), DISPLAY_NEW);
-			free(s);
 		}
 	}
 }

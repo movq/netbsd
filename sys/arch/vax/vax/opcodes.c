@@ -446,7 +446,8 @@ static u_int8_t get_byte(long);
 static long skip_operand(long, int);
 
 static __inline__ u_int8_t
-get_byte(long ib)
+get_byte(ib)
+	long    ib;
 {
 	return *((u_int8_t *)ib);
 }

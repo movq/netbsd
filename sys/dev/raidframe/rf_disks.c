@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_disks.c,v 1.83 2012/07/19 22:47:52 pooka Exp $	*/
+/*	$NetBSD: rf_disks.c,v 1.70.10.5 2012/06/13 14:00:49 sborrill Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -60,7 +60,7 @@
  ***************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.83 2012/07/19 22:47:52 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.70.10.5 2012/06/13 14:00:49 sborrill Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -78,7 +78,6 @@ __KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.83 2012/07/19 22:47:52 pooka Exp $");
 #include <sys/ioctl.h>
 #include <sys/fcntl.h>
 #include <sys/vnode.h>
-#include <sys/namei.h> /* for pathbuf */
 #include <sys/kauth.h>
 
 static int rf_AllocDiskStructures(RF_Raid_t *, RF_Config_t *);
@@ -133,14 +132,7 @@ rf_ConfigureDisks(RF_ShutdownList_t **listp, RF_Raid_t *raidPtr,
 			goto fail;
 
 		if (disks[c].status == rf_ds_optimal) {
-			ret = raidfetch_component_label(raidPtr, c);
-			if (ret)
-				goto fail;
-
-			/* mark it as failed if the label looks bogus... */
-			if (!rf_reasonable_label(&raidPtr->raid_cinfo[c].ci_label,0) && !force) {
-				disks[c].status = rf_ds_failed;
-			}
+			raidfetch_component_label(raidPtr, c);
 		}
 
 		if (disks[c].status != rf_ds_optimal) {
@@ -574,7 +566,6 @@ rf_ConfigureDisk(RF_Raid_t *raidPtr, char *bf, RF_RaidDisk_t *diskPtr,
 		 RF_RowCol_t col)
 {
 	char   *p;
-	struct pathbuf *pb;
 	struct vnode *vp;
 	struct vattr va;
 	int     error;
@@ -599,14 +590,7 @@ rf_ConfigureDisk(RF_Raid_t *raidPtr, char *bf, RF_RaidDisk_t *diskPtr,
 		return (0);
 	}
 
-	pb = pathbuf_create(diskPtr->devname);
-	if (pb == NULL) {
-		printf("pathbuf_create for device: %s failed!\n",
-		       diskPtr->devname);
-		return ENOMEM;
-	}
-	error = dk_lookup(pb, curlwp, &vp);
-	pathbuf_destroy(pb);
+	error = dk_lookup(diskPtr->devname, curlwp, &vp, UIO_SYSSPACE);
 	if (error) {
 		printf("dk_lookup on device: %s failed!\n", diskPtr->devname);
 		if (error == ENXIO) {
@@ -618,7 +602,7 @@ rf_ConfigureDisk(RF_Raid_t *raidPtr, char *bf, RF_RaidDisk_t *diskPtr,
 		}
 	}
 
-	if ((error = rf_getdisksize(vp, diskPtr)) != 0)
+	if ((error = rf_getdisksize(vp, curlwp, diskPtr)) != 0)
 		return (error);
 
 	/*
@@ -630,10 +614,7 @@ rf_ConfigureDisk(RF_Raid_t *raidPtr, char *bf, RF_RaidDisk_t *diskPtr,
 		raidPtr->bytesPerSector = diskPtr->blockSize;
 
 	if (diskPtr->status == rf_ds_optimal) {
-		vn_lock(vp, LK_SHARED | LK_RETRY);
-		error = VOP_GETATTR(vp, &va, curlwp->l_cred);
-		VOP_UNLOCK(vp);
-		if (error != 0)
+		if ((error = VOP_GETATTR(vp, &va, curlwp->l_cred)) != 0) 
 			return (error);
 
 		raidPtr->raid_cinfo[col].ci_vp = vp;
@@ -757,14 +738,7 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 	num_ser = 0;
 	num_mod = 0;
 
-	ser_values[0] = ser_values[1] = ser_values[2] = ser_values[3] = 0;
-	ser_count[0] = ser_count[1] = ser_count[2] = ser_count[3] = 0;
-	mod_values[0] = mod_values[1] = mod_values[2] = mod_values[3] = 0;
-	mod_count[0] = mod_count[1] = mod_count[2] = mod_count[3] = 0;
-
 	for (c = 0; c < raidPtr->numCol; c++) {
-		if (raidPtr->Disks[c].status != rf_ds_optimal)
-			continue;
 		ci_label = raidget_component_label(raidPtr, c);
 		found=0;
 		for(i=0;i<num_ser;i++) {
@@ -820,8 +794,6 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 			}
 
 			for (c = 0; c < raidPtr->numCol; c++) {
-				if (raidPtr->Disks[c].status != rf_ds_optimal)
-					continue;
 				ci_label = raidget_component_label(raidPtr, c);
 				if (serial_number != ci_label->serial_number) {
 					hosed_column = c;
@@ -877,9 +849,6 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 			}
 
 			for (c = 0; c < raidPtr->numCol; c++) {
-				if (raidPtr->Disks[c].status != rf_ds_optimal)
-					continue;
-
 				ci_label = raidget_component_label(raidPtr, c);
 				if (mod_number != ci_label->mod_counter) {
 					if (hosed_column == c) {
@@ -940,13 +909,6 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 		fatal_error = 1;
 	}
 
-        for (c = 0; c < raidPtr->numCol; c++) {
-		if (raidPtr->Disks[c].status != rf_ds_optimal) {
-			hosed_column = c;
-			break;
-		}
-	}
-
 	/* we start by assuming the parity will be good, and flee from
 	   that notion at the slightest sign of trouble */
 
@@ -999,12 +961,13 @@ rf_add_hot_spare(RF_Raid_t *raidPtr, RF_SingleComponent_t *sparePtr)
 		return(EINVAL);
 	}
 
-	rf_lock_mutex2(raidPtr->mutex);
-	while (raidPtr->adding_hot_spare == 1) {
-		rf_wait_cond2(raidPtr->adding_hot_spare_cv, raidPtr->mutex);
+	RF_LOCK_MUTEX(raidPtr->mutex);
+	while (raidPtr->adding_hot_spare==1) {
+		ltsleep(&(raidPtr->adding_hot_spare), PRIBIO, "raidhs", 0,
+			&(raidPtr->mutex));
 	}
-	raidPtr->adding_hot_spare = 1;
-	rf_unlock_mutex2(raidPtr->mutex);
+	raidPtr->adding_hot_spare=1;
+	RF_UNLOCK_MUTEX(raidPtr->mutex);
 
 	/* the beginning of the spares... */
 	disks = &raidPtr->Disks[raidPtr->numCol];
@@ -1074,15 +1037,15 @@ rf_add_hot_spare(RF_Raid_t *raidPtr, RF_SingleComponent_t *sparePtr)
 				 &raidPtr->shutdownList,
 				 raidPtr->cleanupList);
 
-	rf_lock_mutex2(raidPtr->mutex);
+	RF_LOCK_MUTEX(raidPtr->mutex);
 	raidPtr->numSpare++;
-	rf_unlock_mutex2(raidPtr->mutex);
+	RF_UNLOCK_MUTEX(raidPtr->mutex);
 
 fail:
-	rf_lock_mutex2(raidPtr->mutex);
-	raidPtr->adding_hot_spare = 0;
-	rf_signal_cond2(raidPtr->adding_hot_spare_cv);
-	rf_unlock_mutex2(raidPtr->mutex);
+	RF_LOCK_MUTEX(raidPtr->mutex);
+	raidPtr->adding_hot_spare=0;
+	wakeup(&(raidPtr->adding_hot_spare));
+	RF_UNLOCK_MUTEX(raidPtr->mutex);
 
 	return(ret);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: fsort.c,v 1.47 2010/02/05 21:58:41 enami Exp $	*/
+/*	$NetBSD: fsort.c,v 1.32.6.2 2010/06/29 18:01:11 riz Exp $	*/
 
 /*-
  * Copyright (c) 2000-2003 The NetBSD Foundation, Inc.
@@ -71,7 +71,10 @@
 #include "sort.h"
 #include "fsort.h"
 
-__RCSID("$NetBSD: fsort.c,v 1.47 2010/02/05 21:58:41 enami Exp $");
+#ifndef lint
+__RCSID("$NetBSD: fsort.c,v 1.32.6.2 2010/06/29 18:01:11 riz Exp $");
+__SCCSID("@(#)fsort.c	8.1 (Berkeley) 6/6/93");
+#endif /* not lint */
 
 #include <stdlib.h>
 #include <string.h>

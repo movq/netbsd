@@ -1,4 +1,4 @@
-.\" $NetBSD: evcnt.9,v 1.21 2011/01/14 18:34:44 dyoung Exp $
+.\" $NetBSD: evcnt.9,v 1.17 2008/02/11 03:49:13 dyoung Exp $
 .\"
 .\" Copyright (c) 2000 Christopher G. Demetriou
 .\" All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\" --(license Id: LICENSE.proto,v 1.1 2000/06/13 21:40:26 cgd Exp )--
 .\"
-.Dd January 14, 2011
+.Dd January 11, 2005
 .Dt EVCNT 9
 .Os
 .Sh NAME
@@ -44,8 +44,7 @@
 .Sh SYNOPSIS
 .In sys/evcnt.h
 .Ft void
-.Fn evcnt_attach_dynamic "struct evcnt *ev" \
-"int type" "const struct evcnt *parent" "const char *group" "const char *name"
+.Fn evcnt_attach_dynamic "struct evcnt *ev" "int type" "const struct evcnt *parent" "const char *group" "const char *name"
 .Ft void
 .Fn evcnt_attach_static "struct evcnt *ev"
 .Ft void
@@ -58,7 +57,7 @@ hierarchical event counting facility, which is useful for tracking
 system events (including device interrupts).
 .Pp
 The fundamental component of this framework is the
-.Em evcnt
+.Nm evcnt
 structure.
 Its user-accessible fields are:
 .Bd -literal
@@ -84,7 +83,7 @@ Each event counter is marked (in the
 .Fa ev_type
 field) with the type of event being counted.
 The following types are currently defined:
-.Bl -tag -offset indent -width EVCNT_TYPE_MISC
+.Bl -tag -offset indent -width EVCNT_TYPE_MISC -compact
 .It Ev EVCNT_TYPE_MISC
 Miscellaneous; doesn't fit into one of the other types.
 .It Ev EVCNT_TYPE_INTR
@@ -144,10 +143,11 @@ The
 and
 .Fa name
 arguments must be constant strings.
-.Sh FUNCTIONS
+.Pp
 The following is a brief description of each function in the framework:
 .Bl -tag -width indent
-.It Fn evcnt_attach_dynamic "ev" "type" "parent" "group" "name"
+.It Fn "void evcnt_attach_dynamic" "struct evcnt *ev" "int type" "const struct evcnt *parent" "const char *group" "const char *name"
+.Pp
 Attach the event counter structure pointed to by
 .Fa ev
 to the system event list.
@@ -161,7 +161,8 @@ The strings specified as the group and
 counter names must persist (with the same value)
 throughout the life of the event counter; they are referenced by,
 not copied into, the counter.
-.It Fn evcnt_attach_static "ev"
+.It Fn "void evcnt_attach_static" "struct evcnt *ev"
+.Pp
 Attach the statically-initialized event counter structure
 pointed to by
 .Fa ev
@@ -171,7 +172,8 @@ The event counter is assumed to be statically initialized using the
 macro.
 This function simply calculates structure elements' values as appropriate
 (e.g., the string lengths), and adds the counter to the system event list.
-.It Fn evcnt_detach "ev"
+.It Fn "void evcnt_detach" "struct evcnt *ev"
+.Pp
 Detach the event counter structure pointed to by
 .Fa ev
 from the system event list.
@@ -193,7 +195,7 @@ be safe to increment every counter, regardless of actual need
 for such a mechanism where the counter is being incremented,
 would be too great.
 On some systems, it might involve a global lock and several function calls.)
-.Sh EXAMPLES
+.Sh USING THE FRAMEWORK
 This section includes a description on basic use of the framework
 and example usage of its functions.
 .Pp
@@ -226,6 +228,7 @@ and
 interrupts) a device driver might use:
 .Bd -literal
 struct foo_softc {
+	struct device sc_dev;		/* generic device information */
 	[ . . . ]
 	struct evcnt sc_ev_intr;	/* interrupt count */
 	struct evcnt sc_ev_intr_rd;	/* 'readable' interrupt count */
@@ -240,19 +243,21 @@ the system using the
 function, using code like:
 .Bd -literal
 void
-fooattach(device_t parent, device_t self, void *aux)
+fooattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct foo_softc *sc = device_private(self);
+	struct foo_softc *sc = (struct foo_softc *)self;
 
 	[ . . . ]
 
 	/* Initialize and attach event counters. */
 	evcnt_attach_dynamic(\*[Am]sc-\*[Gt]sc_ev, EVCNT_TYPE_INTR,
-	    NULL, device_xname(self), "intr");
+	    NULL, sc-\*[Gt]sc_dev.dv_xname, "intr");
 	evcnt_attach_dynamic(\*[Am]sc-\*[Gt]sc_ev_rd, EVCNT_TYPE_INTR,
-	    \*[Am]sc-\*[Gt]sc_ev, device_xname(self), "intr rd");
+	    \*[Am]sc-\*[Gt]sc_ev, sc-\*[Gt]sc_dev.dv_xname, "intr rd");
 	evcnt_attach_dynamic(\*[Am]sc-\*[Gt]sc_ev_wr, EVCNT_TYPE_INTR,
-	    \*[Am]sc-\*[Gt]sc_ev, device_xname(self), "intr wr");
+	    \*[Am]sc-\*[Gt]sc_ev, sc-\*[Gt]sc_dev.dv_xname, "intr wr");
 
 	[ . . . ]
 }
@@ -277,6 +282,13 @@ To attach this event counter, code like the following could be used:
 	evcnt_attach_static(\*[Am]aligntrap_ev);
 .Ed
 .Sh CODE REFERENCES
+This section describes places within the
+.Nx
+source tree where actual
+code implementing or using the event counter framework can be found.
+All pathnames are relative to
+.Pa /usr/src .
+.Pp
 The event counter framework itself is implemented within the file
 .Pa sys/kern/subr_evcnt.c .
 Data structures and function prototypes for the framework are located in

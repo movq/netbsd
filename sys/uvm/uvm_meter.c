@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_meter.c,v 1.60 2012/06/02 21:36:48 dsl Exp $	*/
+/*	$NetBSD: uvm_meter.c,v 1.49.8.1 2011/11/18 22:42:47 sborrill Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -15,7 +15,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor,
+ *      Washington University, and the University of California, Berkeley
+ *      and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,16 +41,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_meter.c,v 1.60 2012/06/02 21:36:48 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_meter.c,v 1.49.8.1 2011/11/18 22:42:47 sborrill Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/cpu.h>
 #include <sys/proc.h>
+#include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/sysctl.h>
 
-#include <uvm/uvm.h>
+#include <uvm/uvm_extern.h>
 #include <uvm/uvm_pdpolicy.h>
 
 /*
@@ -55,7 +59,73 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_meter.c,v 1.60 2012/06/02 21:36:48 dsl Exp $");
 int maxslp = MAXSLP;	/* patchable ... */
 struct loadavg averunnable;
 
+/*
+ * constants for averages over 1, 5, and 15 minutes when sampling at
+ * 5 second intervals.
+ */
+
+static const fixpt_t cexp[3] = {
+	0.9200444146293232 * FSCALE,	/* exp(-1/12) */
+	0.9834714538216174 * FSCALE,	/* exp(-1/60) */
+	0.9944598480048967 * FSCALE,	/* exp(-1/180) */
+};
+
+/*
+ * prototypes
+ */
+
+static void uvm_loadav(struct loadavg *);
 static void uvm_total(struct vmtotal *);
+
+/*
+ * uvm_meter: calculate load average and wake up the swapper (if needed)
+ */
+void
+uvm_meter(void)
+{
+	static int count;
+
+	if (++count >= 5) {
+		count = 0;
+		uvm_loadav(&averunnable);
+	}
+	if (lwp0.l_slptime > (maxslp / 2))
+		uvm_kick_scheduler();
+}
+
+/*
+ * uvm_loadav: compute a tenex style load average of a quantity on
+ * 1, 5, and 15 minute intervals.
+ */
+static void
+uvm_loadav(struct loadavg *avg)
+{
+	int i, nrun;
+	struct lwp *l;
+
+	nrun = 0;
+
+	mutex_enter(proc_lock);
+	LIST_FOREACH(l, &alllwp, l_list) {
+		if ((l->l_flag & (LW_SINTR | LW_SYSTEM)) != 0)
+			continue;
+		switch (l->l_stat) {
+		case LSSLEEP:
+			if (l->l_slptime > 1)
+				continue;
+		/* fall through */
+		case LSRUN:
+		case LSONPROC:
+		case LSIDL:
+			nrun++;
+		}
+	}
+	mutex_exit(proc_lock);
+
+	for (i = 0; i < 3; i++)
+		avg->ldavg[i] = (cexp[i] * avg->ldavg[i] +
+		    nrun * FSCALE * (FSCALE - cexp[i])) >> FSHIFT;
+}
 
 /*
  * sysctl helper routine for the vm.vmmeter node.
@@ -94,8 +164,6 @@ sysctl_vm_uvmexp2(SYSCTLFN_ARGS)
 	struct sysctlnode node;
 	struct uvmexp_sysctl u;
 	int active, inactive;
-	CPU_INFO_ITERATOR cii;
-	struct cpu_info *ci;
 
 	uvm_estimatepageable(&active, &inactive);
 
@@ -123,15 +191,15 @@ sysctl_vm_uvmexp2(SYSCTLFN_ARGS)
 	u.swpginuse = uvmexp.swpginuse;
 	u.swpgonly = uvmexp.swpgonly;
 	u.nswget = uvmexp.nswget;
-	for (CPU_INFO_FOREACH(cii, ci)) {
-		u.faults += ci->ci_data.cpu_nfault;
-		u.traps += ci->ci_data.cpu_ntrap;
-		u.intrs += ci->ci_data.cpu_nintr;
-		u.swtch += ci->ci_data.cpu_nswtch;
-		u.softs += ci->ci_data.cpu_nsoft;
-		u.syscalls += ci->ci_data.cpu_nsyscall;
-	}
+	u.faults = uvmexp.faults;
+	u.traps = uvmexp.traps;
+	u.intrs = uvmexp.intrs;
+	u.swtch = uvmexp.swtch;
+	u.softs = uvmexp.softs;
+	u.syscalls = uvmexp.syscalls;
 	u.pageins = uvmexp.pageins;
+	u.swapins = uvmexp.swapins;
+	u.swapouts = uvmexp.swapouts;
 	u.pgswapin = uvmexp.pgswapin;
 	u.pgswapout = uvmexp.pgswapout;
 	u.forks = uvmexp.forks;
@@ -160,6 +228,7 @@ sysctl_vm_uvmexp2(SYSCTLFN_ARGS)
 	u.flt_przero = uvmexp.flt_przero;
 	u.pdwoke = uvmexp.pdwoke;
 	u.pdrevs = uvmexp.pdrevs;
+	u.pdswout = uvmexp.pdswout;
 	u.pdfreed = uvmexp.pdfreed;
 	u.pdscans = uvmexp.pdscans;
 	u.pdanscan = uvmexp.pdanscan;
@@ -180,8 +249,6 @@ sysctl_vm_uvmexp2(SYSCTLFN_ARGS)
 	node = *rnode;
 	node.sysctl_data = &u;
 	node.sysctl_size = sizeof(u);
-	if (oldlenp)
-		node.sysctl_size = min(*oldlenp, node.sysctl_size);
 	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }
 
@@ -249,6 +316,12 @@ SYSCTL_SETUP(sysctl_vm_setup, "sysctl vm subtree setup")
 		       CTL_VM, VM_UVMEXP, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
+		       CTLTYPE_INT, "nkmempages",
+		       SYSCTL_DESCR("Default number of pages in kmem_map"),
+		       NULL, 0, &nkmempages, 0,
+		       CTL_VM, VM_NKMEMPAGES, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "uvmexp2",
 		       SYSCTL_DESCR("Detailed system-wide virtual memory "
 				    "statistics (MI)"),
@@ -269,7 +342,7 @@ SYSCTL_SETUP(sysctl_vm_setup, "sysctl vm subtree setup")
 		       CTL_VM, VM_USPACE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_BOOL, "idlezero",
+		       CTLTYPE_INT, "idlezero",
 		       SYSCTL_DESCR("Whether try to zero pages in idle loop"),
 		       NULL, 0, &vm_page_zero_enable, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
@@ -306,11 +379,13 @@ uvm_total(struct vmtotal *totalp)
 
 		case LSSLEEP:
 		case LSSTOP:
-			if ((l->l_flag & LW_SINTR) == 0) {
-				totalp->t_dw++;
-			} else if (l->l_slptime < maxslp) {
-				totalp->t_sl++;
-			}
+			if (l->l_flag & LW_INMEM) {
+				if (lwp_eprio(l) <= PZERO)
+					totalp->t_dw++;
+				else if (l->l_slptime < maxslp)
+					totalp->t_sl++;
+			} else if (l->l_slptime < maxslp)
+				totalp->t_sw++;
 			if (l->l_slptime >= maxslp)
 				continue;
 			break;
@@ -318,7 +393,10 @@ uvm_total(struct vmtotal *totalp)
 		case LSRUN:
 		case LSONPROC:
 		case LSIDL:
-			totalp->t_rq++;
+			if (l->l_flag & LW_INMEM)
+				totalp->t_rq++;
+			else
+				totalp->t_sw++;
 			if (l->l_stat == LSIDL)
 				continue;
 			break;
@@ -404,5 +482,5 @@ uvm_pctparam_createsysctlnode(struct uvm_pctparam *pct, const char *name,
 	return sysctl_createv(NULL, 0, NULL, NULL,
 	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 	    CTLTYPE_INT, name, SYSCTL_DESCR(desc),
-	    uvm_sysctlpctparam, 0, (void *)pct, 0, CTL_VM, CTL_CREATE, CTL_EOL);
+	    uvm_sysctlpctparam, 0, pct, 0, CTL_VM, CTL_CREATE, CTL_EOL);
 }

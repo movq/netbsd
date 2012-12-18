@@ -1,4 +1,4 @@
-.\"	$NetBSD: wscons.conf.5,v 1.20 2009/03/11 19:38:08 joerg Exp $
+.\"	$NetBSD: wscons.conf.5,v 1.18 2008/09/22 13:09:22 hubertf Exp $
 .\"
 .\" Copyright (c) 2000-2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd November 22, 2008
+.Dd December 13, 2005
 .Dt WSCONS.CONF 5
 .Os
 .Sh NAME
@@ -44,23 +44,12 @@ Empty lines and lines starting with a hash
 .Pq Dq \&#
 are ignored.
 .Pp
-This configuration file is used by the
-.Pa /etc/rc.d/wscons
-script which parses
-.Pa /etc/wscons.conf
-and runs
-.Xr wsconscfg 8 ,
-.Xr wsconsctl 8 ,
-and/or
-.Xr wsfontload 8
-as configured.
-See
-.Xr rc.conf 5
-for details on enabling the rc.d script.
-.Pp
 The following keywords and arguments are recognized:
 .Bl -tag -width keyboard
-.It Sy font Ar name Ar width Ar height Ar enc Ar file
+.It Sy font Xo
+.Ar name Ar width Ar height
+.Ar enc Ar file
+.Xc
 Used to load a font via
 .Xr wsfontload 8 .
 .Ar name
@@ -162,5 +151,4 @@ documentation of the utilities.
 .Sh SEE ALSO
 .Xr wscons 4 ,
 .Xr wsconscfg 8 ,
-.Xr wsconsctl 8 ,
 .Xr wsfontload 8

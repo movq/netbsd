@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.50 2011/06/30 00:52:57 matt Exp $	*/
+/*	$NetBSD: zs.c,v 1.47.6.1 2008/12/13 21:38:47 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Bill Studenmund
@@ -13,6 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ * 4. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Gordon Ross
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -49,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.50 2011/06/30 00:52:57 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.47.6.1 2008/12/13 21:38:47 bouyer Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -218,7 +223,7 @@ zsc_attach(device_t parent, device_t self, void *aux)
 
 	chip = 0;
 	ca->ca_reg[0] += ca->ca_baseaddr;
-	zsd = mapiodev(ca->ca_reg[0], ca->ca_reg[1], false);
+	zsd = mapiodev(ca->ca_reg[0], ca->ca_reg[1]);
 
 	node = OF_child(ca->ca_node);	/* ch-a */
 
@@ -238,7 +243,7 @@ zsc_attach(device_t parent, device_t self, void *aux)
 		regs[2] += ca->ca_baseaddr;
 		regs[4] += ca->ca_baseaddr;
 #ifdef ZS_TXDMA
-		zsc->zsc_txdmareg[channel] = mapiodev(regs[2], regs[3], false);
+		zsc->zsc_txdmareg[channel] = mapiodev(regs[2], regs[3]);
 		zsc->zsc_txdmacmd[channel] =
 			dbdma_alloc(sizeof(dbdma_command_t) * 3);
 		memset(zsc->zsc_txdmacmd[channel], 0,

@@ -1,4 +1,4 @@
-/*	$NetBSD: tropicvar.h,v 1.14 2012/10/27 17:18:23 chs Exp $	*/
+/*	$NetBSD: tropicvar.h,v 1.12 2007/03/04 06:02:02 christos Exp $	*/
 
 /*
  * Mach Operating System
@@ -51,7 +51,7 @@ struct rbcb {
  *	Token-Ring software status per adapter
  */
 struct	tr_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	void 	*sc_ih;
 	struct ethercom sc_ethercom;
 	struct ifmedia	sc_media;
@@ -113,5 +113,5 @@ void tr_sleep(struct tr_softc *);
 int tr_setspeed(struct tr_softc *, u_int8_t);
 int tr_enable(struct tr_softc *);
 void tr_disable(struct tr_softc *);
-int tr_activate(device_t, enum devact);
-int tr_detach(device_t, int flags);
+int tr_activate(struct device *, enum devact);
+int tr_detach(struct device *, int flags);

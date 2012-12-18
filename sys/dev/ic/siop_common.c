@@ -1,4 +1,4 @@
-/*	$NetBSD: siop_common.c,v 1.53 2010/11/13 13:52:02 uebayasi Exp $	*/
+/*	$NetBSD: siop_common.c,v 1.46 2008/06/11 02:09:16 kiyohara Exp $	*/
 
 /*
  * Copyright (c) 2000, 2002 Manuel Bouyer.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,7 +33,7 @@
 /* SYM53c7/8xx PCI-SCSI I/O Processors driver */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siop_common.c,v 1.53 2010/11/13 13:52:02 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siop_common.c,v 1.46 2008/06/11 02:09:16 kiyohara Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -37,6 +42,8 @@ __KERNEL_RCSID(0, "$NetBSD: siop_common.c,v 1.53 2010/11/13 13:52:02 uebayasi Ex
 #include <sys/buf.h>
 #include <sys/kernel.h>
 #include <sys/scsiio.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/endian.h>
 #include <sys/bus.h>
@@ -57,7 +64,8 @@ __KERNEL_RCSID(0, "$NetBSD: siop_common.c,v 1.53 2010/11/13 13:52:02 uebayasi Ex
 #undef DEBUG_NEG
 
 int
-siop_common_attach(struct siop_common_softc *sc)
+siop_common_attach(sc)
+	struct siop_common_softc *sc;
 {
 	int error, i;
 	bus_dma_segment_t seg;
@@ -70,7 +78,7 @@ siop_common_attach(struct siop_common_softc *sc)
 		error = bus_dmamem_alloc(sc->sc_dmat, PAGE_SIZE,
 		    PAGE_SIZE, 0, &seg, 1, &rseg, BUS_DMA_NOWAIT);
 		if (error) {
-			aprint_error_dev(sc->sc_dev,
+			aprint_error_dev(&sc->sc_dev, 
 			    "unable to allocate script DMA memory, "
 			    "error = %d\n", error);
 			return error;
@@ -79,24 +87,21 @@ siop_common_attach(struct siop_common_softc *sc)
 		    (void **)&sc->sc_script,
 		    BUS_DMA_NOWAIT|BUS_DMA_COHERENT);
 		if (error) {
-			aprint_error_dev(sc->sc_dev,
-			    "unable to map script DMA memory, "
+			aprint_error_dev(&sc->sc_dev, "unable to map script DMA memory, "
 			    "error = %d\n", error);
 			return error;
 		}
 		error = bus_dmamap_create(sc->sc_dmat, PAGE_SIZE, 1,
 		    PAGE_SIZE, 0, BUS_DMA_NOWAIT, &sc->sc_scriptdma);
 		if (error) {
-			aprint_error_dev(sc->sc_dev,
-			    "unable to create script DMA map, "
+			aprint_error_dev(&sc->sc_dev, "unable to create script DMA map, "
 			    "error = %d\n", error);
 			return error;
 		}
 		error = bus_dmamap_load(sc->sc_dmat, sc->sc_scriptdma,
 		    sc->sc_script, PAGE_SIZE, NULL, BUS_DMA_NOWAIT);
 		if (error) {
-			aprint_error_dev(sc->sc_dev,
-			    "unable to load script DMA map, "
+			aprint_error_dev(&sc->sc_dev, "unable to load script DMA map, "
 			    "error = %d\n", error);
 			return error;
 		}
@@ -105,7 +110,7 @@ siop_common_attach(struct siop_common_softc *sc)
 		sc->ram_size = PAGE_SIZE;
 	}
 
-	sc->sc_adapt.adapt_dev = sc->sc_dev;
+	sc->sc_adapt.adapt_dev = &sc->sc_dev;
 	sc->sc_adapt.adapt_nchannels = 1;
 	sc->sc_adapt.adapt_openings = 0;
 	sc->sc_adapt.adapt_ioctl = siop_ioctl;
@@ -133,7 +138,7 @@ siop_common_attach(struct siop_common_softc *sc)
 	sc->dt_maxsync = 0;
 	sc->st_minsync = 255;
 	sc->dt_minsync = 255;
-	for (i = 0; i < __arraycount(scf_period); i++) {
+	for (i = 0; i < sizeof(scf_period) / sizeof(scf_period[0]); i++) {
 		if (sc->clock_period != scf_period[i].clock)
 			continue;
 		if (sc->st_maxsync < scf_period[i].period)
@@ -143,7 +148,7 @@ siop_common_attach(struct siop_common_softc *sc)
 	}
 	if (sc->st_maxsync == 255 || sc->st_minsync == 0)
 		panic("siop: can't find my sync parameters");
-	for (i = 0; i < __arraycount(dt_scf_period); i++) {
+	for (i = 0; i < sizeof(dt_scf_period) / sizeof(dt_scf_period[0]); i++) {
 		if (sc->clock_period != dt_scf_period[i].clock)
 			continue;
 		if (sc->dt_maxsync < dt_scf_period[i].period)
@@ -157,7 +162,8 @@ siop_common_attach(struct siop_common_softc *sc)
 }
 
 void
-siop_common_reset(struct siop_common_softc *sc)
+siop_common_reset(sc)
+	struct siop_common_softc *sc;
 {
 	u_int32_t stest1, stest3;
 
@@ -249,7 +255,8 @@ siop_common_reset(struct siop_common_softc *sc)
 
 /* prepare tables before sending a cmd */
 void
-siop_setuptables(struct siop_common_cmd *siop_cmd)
+siop_setuptables(siop_cmd)
+	struct siop_common_cmd *siop_cmd;
 {
 	int i;
 	struct siop_common_softc *sc = siop_cmd->siop_sc;
@@ -296,9 +303,9 @@ siop_setuptables(struct siop_common_cmd *siop_cmd)
 	siop_cmd->siop_tables->t_msgout.count = siop_htoc32(sc, msgoffset);
 	if (sc->targets[target]->status == TARST_ASYNC) {
 		if ((sc->targets[target]->flags & TARF_DT) &&
-		    (sc->mode == STEST4_MODE_LVD)) {
+			(sc->mode == STEST4_MODE_LVD)) {
 			sc->targets[target]->status = TARST_PPR_NEG;
-			siop_ppr_msg(siop_cmd, msgoffset, sc->dt_minsync,
+			 siop_ppr_msg(siop_cmd, msgoffset, sc->dt_minsync,
 			    sc->maxoff);
 		} else if (sc->targets[target]->flags & TARF_WIDE) {
 			sc->targets[target]->status = TARST_WIDE_NEG;
@@ -333,7 +340,8 @@ siop_setuptables(struct siop_common_cmd *siop_cmd)
 }
 
 int
-siop_wdtr_neg(struct siop_common_cmd *siop_cmd)
+siop_wdtr_neg(siop_cmd)
+	struct siop_common_cmd *siop_cmd;
 {
 	struct siop_common_softc *sc = siop_cmd->siop_sc;
 	struct siop_common_target *siop_target = siop_cmd->siop_target;
@@ -356,7 +364,7 @@ siop_wdtr_neg(struct siop_common_cmd *siop_cmd)
 		/* FALLTHROUGH */
 		default:
 			/*
-			 * hum, we got more than what we can handle, shouldn't
+ 			 * hum, we got more than what we can handle, shouldn't
 			 * happen. Reject, and stay async
 			 */
 			siop_target->flags &= ~TARF_ISWIDE;
@@ -364,8 +372,7 @@ siop_wdtr_neg(struct siop_common_cmd *siop_cmd)
 			siop_target->offset = siop_target->period = 0;
 			siop_update_xfer_mode(sc, target);
 			printf("%s: rejecting invalid wide negotiation from "
-			    "target %d (%d)\n", device_xname(sc->sc_dev),
-			    target,
+			    "target %d (%d)\n", device_xname(&sc->sc_dev), target,
 			    tables->msg_in[3]);
 			tables->t_msgout.count = siop_htoc32(sc, 1);
 			tables->msg_out[0] = MSG_MESSAGE_REJECT;
@@ -413,7 +420,8 @@ siop_wdtr_neg(struct siop_common_cmd *siop_cmd)
 }
 
 int
-siop_ppr_neg(struct siop_common_cmd *siop_cmd)
+siop_ppr_neg(siop_cmd)
+	struct siop_common_cmd *siop_cmd;
 {
 	struct siop_common_softc *sc = siop_cmd->siop_sc;
 	struct siop_common_target *siop_target = siop_cmd->siop_target;
@@ -423,7 +431,7 @@ siop_ppr_neg(struct siop_common_cmd *siop_cmd)
 	int i;
 
 #ifdef DEBUG_NEG
-	printf("%s: answer on ppr negotiation:", device_xname(sc->sc_dev));
+	printf("%s: answer on ppr negotiation:", device_xname(&sc->sc_dev));
 	for (i = 0; i < 8; i++)
 		printf(" 0x%x", tables->msg_in[i]);
 	printf("\n");
@@ -437,7 +445,7 @@ siop_ppr_neg(struct siop_common_cmd *siop_cmd)
 		if (options != MSG_EXT_PPR_DT) {
 			/* should't happen */
 			printf("%s: ppr negotiation for target %d: "
-			    "no DT option\n", device_xname(sc->sc_dev), target);
+			    "no DT option\n", device_xname(&sc->sc_dev), target);
 			siop_target->status = TARST_ASYNC;
 			siop_target->flags &= ~(TARF_DT | TARF_ISDT);
 			siop_target->offset = 0;
@@ -449,13 +457,15 @@ siop_ppr_neg(struct siop_common_cmd *siop_cmd)
 		    sync > sc->dt_maxsync) {
 			printf("%s: ppr negotiation for target %d: "
 			    "offset (%d) or sync (%d) out of range\n",
-			    device_xname(sc->sc_dev), target, offset, sync);
+			    device_xname(&sc->sc_dev), target, offset, sync);
 			/* should not happen */
 			siop_target->offset = 0;
 			siop_target->period = 0;
 			goto reject;
 		} else {
-			for (i = 0; i < __arraycount(dt_scf_period); i++) {
+			for (i = 0; i <
+			    sizeof(dt_scf_period) / sizeof(dt_scf_period[0]);
+			    i++) {
 				if (sc->clock_period != dt_scf_period[i].clock)
 					continue;
 				if (dt_scf_period[i].period == sync) {
@@ -469,7 +479,7 @@ siop_ppr_neg(struct siop_common_cmd *siop_cmd)
 			if ((siop_target->flags & TARF_ISDT) == 0) {
 				printf("%s: ppr negotiation for target %d: "
 				    "sync (%d) incompatible with adapter\n",
-				    device_xname(sc->sc_dev), target, sync);
+				    device_xname(&sc->sc_dev), target, sync);
 				/*
 				 * we didn't find it in our table, do async
 				 * send reject msg, start SDTR/WDTR neg
@@ -484,8 +494,7 @@ siop_ppr_neg(struct siop_common_cmd *siop_cmd)
 		if (tables->msg_in[6] != 1) {
 			printf("%s: ppr negotiation for target %d: "
 			    "transfer width (%d) incompatible with dt\n",
-			    device_xname(sc->sc_dev),
-			    target, tables->msg_in[6]);
+			    device_xname(&sc->sc_dev), target, tables->msg_in[6]);
 			/* DT mode can only be done with wide transfers */
 			siop_target->status = TARST_ASYNC;
 			goto reject;
@@ -511,7 +520,7 @@ siop_ppr_neg(struct siop_common_cmd *siop_cmd)
 	} else {
 		/* target initiated PPR negotiation, shouldn't happen */
 		printf("%s: rejecting invalid PPR negotiation from "
-		    "target %d\n", device_xname(sc->sc_dev), target);
+		    "target %d\n", device_xname(&sc->sc_dev), target);
 reject:
 		tables->t_msgout.count = siop_htoc32(sc, 1);
 		tables->msg_out[0] = MSG_MESSAGE_REJECT;
@@ -520,7 +529,8 @@ reject:
 }
 
 int
-siop_sdtr_neg(struct siop_common_cmd *siop_cmd)
+siop_sdtr_neg(siop_cmd)
+	struct siop_common_cmd *siop_cmd;
 {
 	struct siop_common_softc *sc = siop_cmd->siop_sc;
 	struct siop_common_target *siop_target = siop_cmd->siop_target;
@@ -544,7 +554,8 @@ siop_sdtr_neg(struct siop_common_cmd *siop_cmd)
 		if (offset > maxoffset || sync < sc->st_minsync ||
 			sync > sc->st_maxsync)
 			goto reject;
-		for (i = 0; i < __arraycount(scf_period); i++) {
+		for (i = 0; i < sizeof(scf_period) / sizeof(scf_period[0]);
+		    i++) {
 			if (sc->clock_period != scf_period[i].clock)
 				continue;
 			if (scf_period[i].period == sync) {
@@ -595,7 +606,8 @@ reject:
 		if (sync < sc->st_minsync)
 			sync = sc->st_minsync;
 		/* look for sync period */
-		for (i = 0; i < __arraycount(scf_period); i++) {
+		for (i = 0; i < sizeof(scf_period) / sizeof(scf_period[0]);
+		    i++) {
 			if (sc->clock_period != scf_period[i].clock)
 				continue;
 			if (scf_period[i].period == sync) {
@@ -651,9 +663,11 @@ end:
 }
 
 void
-siop_sdtr_msg(struct siop_common_cmd *siop_cmd, int offset, int ssync, int soff)
+siop_sdtr_msg(siop_cmd, offset, ssync, soff)
+	struct siop_common_cmd *siop_cmd;
+	int offset;
+	int ssync, soff;
 {
-
 	siop_cmd->siop_tables->msg_out[offset + 0] = MSG_EXTENDED;
 	siop_cmd->siop_tables->msg_out[offset + 1] = MSG_EXT_SDTR_LEN;
 	siop_cmd->siop_tables->msg_out[offset + 2] = MSG_EXT_SDTR;
@@ -664,9 +678,11 @@ siop_sdtr_msg(struct siop_common_cmd *siop_cmd, int offset, int ssync, int soff)
 }
 
 void
-siop_wdtr_msg(struct siop_common_cmd *siop_cmd, int offset, int wide)
+siop_wdtr_msg(siop_cmd, offset, wide)
+	struct siop_common_cmd *siop_cmd;
+	int offset;
+	int wide;
 {
-
 	siop_cmd->siop_tables->msg_out[offset + 0] = MSG_EXTENDED;
 	siop_cmd->siop_tables->msg_out[offset + 1] = MSG_EXT_WDTR_LEN;
 	siop_cmd->siop_tables->msg_out[offset + 2] = MSG_EXT_WDTR;
@@ -676,9 +692,11 @@ siop_wdtr_msg(struct siop_common_cmd *siop_cmd, int offset, int wide)
 }
 
 void
-siop_ppr_msg(struct siop_common_cmd *siop_cmd, int offset, int ssync, int soff)
+siop_ppr_msg(siop_cmd, offset, ssync, soff)
+	struct siop_common_cmd *siop_cmd;
+	int offset;
+	int ssync, soff;
 {
-
 	siop_cmd->siop_tables->msg_out[offset + 0] = MSG_EXTENDED;
 	siop_cmd->siop_tables->msg_out[offset + 1] = MSG_EXT_PPR_LEN;
 	siop_cmd->siop_tables->msg_out[offset + 2] = MSG_EXT_PPR;
@@ -692,9 +710,9 @@ siop_ppr_msg(struct siop_common_cmd *siop_cmd, int offset, int ssync, int soff)
 }
 
 void
-siop_minphys(struct buf *bp)
+siop_minphys(bp)
+	struct buf *bp;
 {
-
 	minphys(bp);
 }
 
@@ -702,9 +720,7 @@ int
 siop_ioctl(struct scsipi_channel *chan, u_long cmd, void *arg,
     int flag, struct proc *p)
 {
-	struct siop_common_softc *sc;
-
-	sc = device_private(chan->chan_adapter->adapt_dev);
+	struct siop_common_softc *sc = (void *)chan->chan_adapter->adapt_dev;
 
 	switch (cmd) {
 	case SCBUSIORESET:
@@ -722,7 +738,8 @@ siop_ioctl(struct scsipi_channel *chan, u_long cmd, void *arg,
 }
 
 void
-siop_ma(struct siop_common_cmd *siop_cmd)
+siop_ma(siop_cmd)
+	struct siop_common_cmd *siop_cmd;
 {
 	int offset, dbc, sstat;
 	struct siop_common_softc *sc = siop_cmd->siop_sc;
@@ -738,7 +755,7 @@ siop_ma(struct siop_common_cmd *siop_cmd)
 
 	offset = bus_space_read_1(sc->sc_rt, sc->sc_rh, SIOP_SCRATCHA + 1);
 	if (offset >= SIOP_NSG) {
-		aprint_error_dev(sc->sc_dev, "bad offset in siop_sdp (%d)\n",
+		aprint_error_dev(&sc->sc_dev, "bad offset in siop_sdp (%d)\n",
 		    offset);
 		return;
 	}
@@ -788,7 +805,9 @@ siop_ma(struct siop_common_cmd *siop_cmd)
 }
 
 void
-siop_sdp(struct siop_common_cmd *siop_cmd, int offset)
+siop_sdp(siop_cmd, offset)
+	struct siop_common_cmd *siop_cmd;
+	int offset;
 {
 	struct siop_common_softc *sc = siop_cmd->siop_sc;
 	scr_table_t *table;
@@ -848,7 +867,9 @@ siop_sdp(struct siop_common_cmd *siop_cmd, int offset)
 }
 
 void
-siop_update_resid(struct siop_common_cmd *siop_cmd, int offset)
+siop_update_resid(siop_cmd, offset)
+	struct siop_common_cmd *siop_cmd;
+	int offset;
 {
 	struct siop_common_softc *sc = siop_cmd->siop_sc;
 	scr_table_t *table;
@@ -872,18 +893,18 @@ siop_update_resid(struct siop_common_cmd *siop_cmd, int offset)
 	 */
 	if (siop_cmd->flags & CMDFL_RESID) {
 		table = &siop_cmd->siop_tables->data[offset];
-		siop_cmd->xs->resid -=
+		siop_cmd->xs->resid -= 
 		    siop_ctoh32(sc, table->count) - siop_cmd->resid;
 	}
 }
 
 int
-siop_iwr(struct siop_common_cmd *siop_cmd)
+siop_iwr(siop_cmd)
+	struct siop_common_cmd *siop_cmd;
 {
 	int offset;
 	scr_table_t *table; /* table with IWR */
 	struct siop_common_softc *sc = siop_cmd->siop_sc;
-
 	/* handle ignore wide residue messages */
 
 	/* if target isn't wide, reject */
@@ -931,7 +952,8 @@ siop_iwr(struct siop_common_cmd *siop_cmd)
 }
 
 void
-siop_clearfifo(struct siop_common_softc *sc)
+siop_clearfifo(sc)
+	struct siop_common_softc *sc;
 {
 	int timeout = 0;
 	int ctest3 = bus_space_read_1(sc->sc_rt, sc->sc_rh, SIOP_CTEST3);
@@ -955,11 +977,11 @@ siop_clearfifo(struct siop_common_softc *sc)
 }
 
 int
-siop_modechange(struct siop_common_softc *sc)
+siop_modechange(sc)
+	struct siop_common_softc *sc;
 {
 	int retry;
 	int sist0, sist1, stest2;
-
 	for (retry = 0; retry < 5; retry++) {
 		/*
 		 * datasheet says to wait 100ms and re-read SIST1,
@@ -978,39 +1000,39 @@ siop_modechange(struct siop_common_softc *sc)
 		switch(sc->mode) {
 		case STEST4_MODE_DIF:
 			printf("%s: switching to differential mode\n",
-			    device_xname(sc->sc_dev));
+			    device_xname(&sc->sc_dev));
 			bus_space_write_1(sc->sc_rt, sc->sc_rh, SIOP_STEST2,
 			    stest2 | STEST2_DIF);
 			break;
 		case STEST4_MODE_SE:
 			printf("%s: switching to single-ended mode\n",
-			    device_xname(sc->sc_dev));
+			    device_xname(&sc->sc_dev));
 			bus_space_write_1(sc->sc_rt, sc->sc_rh, SIOP_STEST2,
 			    stest2 & ~STEST2_DIF);
 			break;
 		case STEST4_MODE_LVD:
 			printf("%s: switching to LVD mode\n",
-			    device_xname(sc->sc_dev));
+			    device_xname(&sc->sc_dev));
 			bus_space_write_1(sc->sc_rt, sc->sc_rh, SIOP_STEST2,
 			    stest2 & ~STEST2_DIF);
 			break;
 		default:
-			aprint_error_dev(sc->sc_dev, "invalid SCSI mode 0x%x\n",
+			aprint_error_dev(&sc->sc_dev, "invalid SCSI mode 0x%x\n",
 			    sc->mode);
 			return 0;
 		}
 		return 1;
 	}
 	printf("%s: timeout waiting for DIFFSENSE to stabilise\n",
-	    device_xname(sc->sc_dev));
+	    device_xname(&sc->sc_dev));
 	return 0;
 }
 
 void
-siop_resetbus(struct siop_common_softc *sc)
+siop_resetbus(sc)
+	struct siop_common_softc *sc;
 {
 	int scntl1;
-
 	scntl1 = bus_space_read_1(sc->sc_rt, sc->sc_rh, SIOP_SCNTL1);
 	bus_space_write_1(sc->sc_rt, sc->sc_rh, SIOP_SCNTL1,
 	    scntl1 | SCNTL1_RST);
@@ -1020,7 +1042,9 @@ siop_resetbus(struct siop_common_softc *sc)
 }
 
 void
-siop_update_xfer_mode(struct siop_common_softc *sc, int target)
+siop_update_xfer_mode(sc, target)
+	struct siop_common_softc *sc;
+	int target;
 {
 	struct siop_common_target *siop_target = sc->targets[target];
 	struct scsipi_xfer_mode xm;
@@ -1029,6 +1053,7 @@ siop_update_xfer_mode(struct siop_common_softc *sc, int target)
 	xm.xm_mode = 0;
 	xm.xm_period = 0;
 	xm.xm_offset = 0;
+
 
 	if (siop_target->flags & TARF_ISWIDE)
 		xm.xm_mode |= PERIPH_CAP_WIDE16;

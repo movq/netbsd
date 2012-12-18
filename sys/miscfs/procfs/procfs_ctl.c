@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_ctl.c,v 1.47 2009/10/21 21:12:06 rmind Exp $	*/
+/*	$NetBSD: procfs_ctl.c,v 1.45 2008/04/24 18:39:25 ad Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_ctl.c,v 1.47 2009/10/21 21:12:06 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_ctl.c,v 1.45 2008/04/24 18:39:25 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -132,7 +132,11 @@ static int procfs_control(struct lwp *, struct lwp *, int, int,
     struct pfsnode *);
 
 int
-procfs_control(struct lwp *curl, struct lwp *l, int op, int sig, struct pfsnode *pfs)
+procfs_control(curl, l, op, sig, pfs)
+	struct lwp *curl;
+	struct lwp *l;
+	int op, sig;
+	struct pfsnode *pfs;
 {
 	struct proc *curp = curl->l_proc;
 	struct proc *p = l->l_proc;
@@ -294,8 +298,10 @@ procfs_control(struct lwp *curl, struct lwp *l, int op, int sig, struct pfsnode 
 	case PROCFS_CTL_RUN:
 	case PROCFS_CTL_DETACH:
 #ifdef PT_STEP
+		uvm_lwp_hold(l);
 		/* XXXAD locking? */
 		error = process_sstep(l, op == PROCFS_CTL_STEP);
+		uvm_lwp_rele(l);
 		if (error)
 			break;
 #endif

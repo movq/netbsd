@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_trantcp.c,v 1.44 2011/08/31 18:31:04 plunky Exp $	*/
+/*	$NetBSD: smb_trantcp.c,v 1.38.4.1 2009/02/02 21:04:45 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_trantcp.c,v 1.44 2011/08/31 18:31:04 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_trantcp.c,v 1.38.4.1 2009/02/02 21:04:45 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -96,7 +96,7 @@ __KERNEL_RCSID(0, "$NetBSD: smb_trantcp.c,v 1.44 2011/08/31 18:31:04 plunky Exp 
 
 static int nb_tcpsndbuf = NB_SNDQ;
 static int nb_tcprcvbuf = NB_RCVQ;
-static const struct timespec nb_timo = { 15, 0 };	/* XXX sysctl? */
+static const struct timeval nb_timo = { 15, 0 };	/* XXX sysctl? */
 
 #define nb_sosend(so,m,flags,l) (*(so)->so_send)(so, NULL, (struct uio *)0, \
 					m, (struct mbuf *)0, flags, l)
@@ -113,11 +113,11 @@ nb_setsockopt_int(struct socket *so, int level, int name, int val)
 }
 
 static int
-nbssn_rselect(struct nbpcb *nbp, const struct timespec *ts, int events,
+nbssn_rselect(struct nbpcb *nbp, const struct timeval *tv, int events,
 	struct lwp *l)
 {
 
-	return pollsock(nbp->nbp_tso, ts, events);
+	return pollsock(nbp->nbp_tso, tv, events);
 }
 
 static int
@@ -127,7 +127,7 @@ nb_intr(struct nbpcb *nbp, struct lwp *l)
 }
 
 static void
-nb_upcall(struct socket *so, void *arg, int events, int waitflag)
+nb_upcall(struct socket *so, void *arg, int waitflag)
 {
 	struct nbpcb *nbp = (void *)arg;
 
@@ -393,7 +393,7 @@ nbssn_recv(struct nbpcb *nbp, struct mbuf **mpp, int *lenp,
 		while (resid > 0) {
 			tm = NULL;
 			rcvflg = MSG_WAITALL;
-			memset(&auio, 0, sizeof(auio));
+			bzero(&auio, sizeof(auio));
 			auio.uio_resid = min(resid, NB_SORECEIVE_CHUNK);
 			/* not need to setup uio_vmspace */
 			resid -= auio.uio_resid;
@@ -463,7 +463,8 @@ smb_nbst_create(struct smb_vc *vcp, struct lwp *l)
 {
 	struct nbpcb *nbp;
 
-	nbp = malloc(sizeof *nbp, M_NBDATA, M_WAITOK|M_ZERO);
+	MALLOC(nbp, struct nbpcb *, sizeof *nbp, M_NBDATA, M_WAITOK);
+	memset(nbp, 0, sizeof *nbp);
 	nbp->nbp_state = NBST_CLOSED;
 	nbp->nbp_vc = vcp;
 	vcp->vc_tdata = nbp;
@@ -563,7 +564,7 @@ smb_nbst_disconnect(struct smb_vc *vcp, struct lwp *l)
 		return ENOTCONN;
 	if ((so = nbp->nbp_tso) != NULL) {
 		nbp->nbp_flags &= ~NBF_CONNECTED;
-		nbp->nbp_tso = NULL;
+		nbp->nbp_tso = (struct socket *)NULL;
 		solock(so);
 		soshutdown(so, 2);
 		sounlock(so);
@@ -636,7 +637,6 @@ smb_nbst_intr(struct smb_vc *vcp)
 static int
 smb_nbst_getparam(struct smb_vc *vcp, int param, void *data)
 {
-	struct timeval *tvp;
 	switch (param) {
 	case SMBTP_SNDSZ:
 		*(int*)data = nb_tcpsndbuf;
@@ -645,9 +645,7 @@ smb_nbst_getparam(struct smb_vc *vcp, int param, void *data)
 		*(int*)data = nb_tcprcvbuf;
 		break;
 	case SMBTP_TIMEOUT:
-		tvp = (struct timeval *)data;
-		tvp->tv_sec = nb_timo.tv_sec;
-		tvp->tv_usec = nb_timo.tv_nsec / 1000;
+		*(struct timeval*)data = nb_timo;
 		break;
 	default:
 		return EINVAL;

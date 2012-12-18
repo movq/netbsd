@@ -1,7 +1,6 @@
-/*	$NetBSD: mips3_pte.h,v 1.28 2011/09/22 05:08:52 macallan Exp $	*/
+/*	$NetBSD: mips3_pte.h,v 1.23 2007/10/17 19:55:37 garbled Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -37,9 +36,46 @@
  *
  *	from: @(#)pte.h	8.1 (Berkeley) 6/10/93
  */
+/*
+ * Copyright (c) 1988 University of Utah.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department and Ralph Campbell.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah Hdr: pte.h 1.11 89/09/03
+ *
+ *	from: @(#)pte.h	8.1 (Berkeley) 6/10/93
+ */
 
-#ifndef _MIPS_MIPS3_PTE_H_
-#define _MIPS_MIPS3_PTE_H_
 /*
  * R4000 hardware page table entry
  */
@@ -63,20 +99,25 @@ unsigned int 	pg_g:1,			/* HW: ignore asid bit */
 		pg_prot:2;		/* SW: access control */
 #endif
 };
+
+/*
+ * Structure defining an tlb entry data set.
+ */
+
+struct tlb {
+	int	tlb_mask;
+	int	tlb_hi;		/* XXX should be 64 bits */
+	int	tlb_lo0;	/* XXX maybe 64 bits (only 32 really used) */
+	int	tlb_lo1;	/* XXX maybe 64 bits (only 32 really used) */
+};
 #endif /* _LOCORE */
 
 #define MIPS3_PG_WIRED	0x80000000	/* SW */
 #define MIPS3_PG_RO	0x40000000	/* SW */
 
-#ifdef ENABLE_MIPS_16KB_PAGE
-#define	MIPS3_PG_SVPN	0xffffc000	/* Software page no mask */
-#define	MIPS3_PG_HVPN	0xffff8000	/* Hardware page no mask */
-#define	MIPS3_PG_ODDPG	0x00004000	/* Odd even pte entry */
-#elif defined(ENABLE_MIPS_4KB_PAGE) || 1
 #define	MIPS3_PG_SVPN	0xfffff000	/* Software page no mask */
 #define	MIPS3_PG_HVPN	0xffffe000	/* Hardware page no mask */
 #define	MIPS3_PG_ODDPG	0x00001000	/* Odd even pte entry */
-#endif
 #define	MIPS3_PG_ASID	0x000000ff	/* Address space ID */
 #define	MIPS3_PG_G	0x00000001	/* Global; ignore ASID if in lo0 & lo1 */
 #define	MIPS3_PG_V	0x00000002	/* Valid */
@@ -85,20 +126,12 @@ unsigned int 	pg_g:1,			/* HW: ignore asid bit */
 #define	MIPS3_PG_ATTR	0x0000003f
 
 #define	MIPS3_CCA_TO_PG(cca)	((cca) << 3)
-#define	MIPS3_PG_TO_CCA(cca)	(((cca) >> 3) & 7)
-
-#define	MIPS3_XPHYS_UNCACHED	MIPS_PHYS_TO_XKPHYS(2, 0)
-#define	MIPS3_XPHYS_ACC		MIPS_PHYS_TO_XKPHYS(mips_options.mips3_cca_devmem, 0)
 
 #define	MIPS3_PG_UNCACHED	MIPS3_CCA_TO_PG(2)
-#define	MIPS3_PG_WT		MIPS3_CCA_TO_PG(5)
-#define	MIPS3_PG_ACC		MIPS3_CCA_TO_PG(mips_options.mips3_cca_devmem)
 #ifdef HPCMIPS_L1CACHE_DISABLE		/* MIPS3_L1CACHE_DISABLE */
-#define	MIPS3_DEFAULT_XKPHYS_CACHED	MIPS3_DEFAULT_XKPHYS_UNCACHED
 #define	MIPS3_PG_CACHED		MIPS3_PG_UNCACHED	/* XXX: brain damaged!!! */
 #else /* HPCMIPS_L1CACHE_DISABLE */
-#define	MIPS3_DEFAULT_XKPHYS_CACHED	MIPS_PHYS_TO_XKPHYS(3, 0)
-#define	MIPS3_PG_CACHED		mips_options.mips3_pg_cached
+#define	MIPS3_PG_CACHED		mips3_pg_cached
 #define	MIPS3_DEFAULT_PG_CACHED	MIPS3_CCA_TO_PG(3)
 #endif /* ! HPCMIPS_L1CACHE_DISABLE */
 #define	MIPS3_PG_CACHEMODE	MIPS3_CCA_TO_PG(7)
@@ -112,17 +145,11 @@ unsigned int 	pg_g:1,			/* HW: ignore asid bit */
 /* Not wr-prot not clean not cached */
 #define	MIPS3_PG_RWNCPAGE	(MIPS3_PG_V | MIPS3_PG_D | MIPS3_PG_UNCACHED)
 
-/* Not wr-prot not clean not cached, accel */
-#define	MIPS3_PG_RWAPAGE	(MIPS3_PG_V | MIPS3_PG_D | MIPS3_PG_ACC)
-
 /* Not wr-prot but clean */
 #define	MIPS3_PG_CWPAGE	(MIPS3_PG_V | MIPS3_PG_CACHED)
 
 /* Not wr-prot but clean not cached*/
 #define	MIPS3_PG_CWNCPAGE	(MIPS3_PG_V | MIPS3_PG_UNCACHED)
-
-/* Not wr-prot but clean not cached, accel*/
-#define	MIPS3_PG_CWAPAGE	(MIPS3_PG_V | MIPS3_PG_ACC)
 
 #define	MIPS3_PG_IOPAGE(cca) \
 	(MIPS3_PG_G | MIPS3_PG_V | MIPS3_PG_D | MIPS3_CCA_TO_PG(cca))
@@ -133,7 +160,7 @@ unsigned int 	pg_g:1,			/* HW: ignore asid bit */
 
 /* NEC Vr4100 CPUs have different PFN layout to support 1kbytes/page */
 #if defined(MIPS3_4100)
-#define MIPS3_PG_SHIFT	mips_options.mips3_pg_shift
+#define MIPS3_PG_SHIFT	mips3_pg_shift
 #else
 #define MIPS3_PG_SHIFT	MIPS3_DEFAULT_PG_SHIFT
 #endif
@@ -150,7 +177,7 @@ unsigned int 	pg_g:1,			/* HW: ignore asid bit */
 
 #define MIPS3_PTE_TO_PADDR(pte) (mips3_tlbpfn_to_paddr(pte))
 #define MIPS3_PAGE_IS_RDONLY(pte,va) \
-    (pmap_is_page_ro_p(pmap_kernel(), mips_trunc_page(va), (pte)))
+    (pmap_is_page_ro(pmap_kernel(), mips_trunc_page(va), (pte)))
 
 
 #define	MIPS3_PG_SIZE_4K	0x00000000
@@ -182,4 +209,3 @@ unsigned int 	pg_g:1,			/* HW: ignore asid bit */
 #define	MIPS4100_PG_SIZE_TO_MASK(pg_size)		\
     ((((pg_size) * 2) - 1) & ~0x000007ff)
 
-#endif /* !_MIPS_MIPS3_PTE_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.60 2012/01/21 16:48:56 chs Exp $	*/
+/*	$NetBSD: cpu.h,v 1.58 2008/10/26 00:08:15 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -43,7 +43,7 @@
 
 #ifdef _KERNEL
 
-#if defined(__GNUC__) && !defined(_MODULE)
+#if defined(__GNUC__) && !defined(_LKM)
 static struct cpu_info *x86_curcpu(void);
 static lwp_t *x86_curlwp(void);
 
@@ -81,16 +81,13 @@ cpu_set_curpri(int pri)
 	    "r" (pri)
 	);
 }
-#endif	/* __GNUC__ && !_MODULE */
+#endif	/* __GNUC__ && !_LKM */
 
 #define	CLKF_USERMODE(frame)	USERMODE((frame)->cf_if.if_tf.tf_cs, \
 				    (frame)->cf_if.if_tf.tf_rflags)
 #define CLKF_PC(frame)		((frame)->cf_if.if_tf.tf_rip)
 #define CLKF_INTR(frame)	(curcpu()->ci_idepth > 0)
 #define LWP_PC(l)		((l)->l_md.md_regs->tf_rip)
-
-void	*cpu_uarea_alloc(bool);
-bool	cpu_uarea_free(void *);
 
 #endif	/* _KERNEL */
 

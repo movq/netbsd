@@ -1,4 +1,4 @@
-/*	$NetBSD: dma_sbus.c,v 1.35 2009/09/17 16:28:12 tsutsui Exp $ */
+/*	$NetBSD: dma_sbus.c,v 1.33 2008/05/17 18:09:03 macallan Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dma_sbus.c,v 1.35 2009/09/17 16:28:12 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dma_sbus.c,v 1.33 2008/05/17 18:09:03 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,7 +79,7 @@ __KERNEL_RCSID(0, "$NetBSD: dma_sbus.c,v 1.35 2009/09/17 16:28:12 tsutsui Exp $"
 
 struct dma_softc {
 	struct lsi64854_softc	sc_lsi64854;	/* base device */
-	/* possible sbus specific stuff here */
+	struct sbusdev	sc_sd;			/* sbus device */
 };
 
 int	dmamatch_sbus(device_t, cfdata_t, void *);
@@ -115,7 +115,7 @@ dmaprint_sbus(void *aux, const char *busname)
 }
 
 int
-dmamatch_sbus(device_t parent, cfdata_t cf, void *aux)
+dmamatch_sbus(device_t parent, struct cfdata *cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -199,6 +199,7 @@ dmaattach_sbus(device_t parent, device_t self, void *aux)
 		sc->sc_channel = L64854_CHANNEL_SCSI;
 	}
 
+	sbus_establish(&dsc->sc_sd, self);
 	if ((sbt = bus_space_tag_alloc(sc->sc_bustag, dsc)) == NULL) {
 		aprint_error(": out of memory\n");
 		return;

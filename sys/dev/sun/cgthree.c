@@ -1,4 +1,4 @@
-/*	$NetBSD: cgthree.c,v 1.29 2012/01/11 16:10:14 macallan Exp $ */
+/*	$NetBSD: cgthree.c,v 1.16.6.4 2009/02/26 07:42:06 snj Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgthree.c,v 1.29 2012/01/11 16:10:14 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgthree.c,v 1.16.6.4 2009/02/26 07:42:06 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,12 +69,12 @@ __KERNEL_RCSID(0, "$NetBSD: cgthree.c,v 1.29 2012/01/11 16:10:14 macallan Exp $"
 #include "opt_wsemul.h"
 #endif
 
-#include "ioconf.h"
-
-static void	cgthreeunblank(device_t);
+static void	cgthreeunblank(struct device *);
 static void	cgthreeloadcmap(struct cgthree_softc *, int, int);
 static void	cgthree_set_video(struct cgthree_softc *, int);
 static int	cgthree_get_video(struct cgthree_softc *);
+
+extern struct cfdriver cgthree_cd;
 
 dev_type_open(cgthreeopen);
 dev_type_ioctl(cgthreeioctl);
@@ -82,7 +82,7 @@ dev_type_mmap(cgthreemmap);
 
 const struct cdevsw cgthree_cdevsw = {
 	cgthreeopen, nullclose, noread, nowrite, cgthreeioctl,
-	nostop, notty, nopoll, cgthreemmap, nokqfilter, D_OTHER
+	nostop, notty, nopoll, cgthreemmap, nokqfilter
 };
 
 /* frame buffer generic driver */
@@ -155,7 +155,10 @@ static struct vcons_screen cg3_console_screen;
 #endif /* NWSDISPLAY > 0 */
 
 void
-cgthreeattach(struct cgthree_softc *sc, const char *name, int isconsole)
+cgthreeattach(sc, name, isconsole)
+	struct cgthree_softc *sc;
+	const char *name;
+	int isconsole;
 {
 	int i;
 	struct fbdevice *fb = &sc->sc_fb;
@@ -221,8 +224,6 @@ cgthreeattach(struct cgthree_softc *sc, const char *name, int isconsole)
 		/* we mess with cg3_console_screen only once */
 		vcons_init_screen(&sc->vd, &cg3_console_screen, 1,
 		    &defattr);
-		memset(sc->sc_fb.fb_pixels, (defattr >> 16) & 0xff,
-		    sc->sc_stride * sc->sc_height);
 		cg3_console_screen.scr_flags |= VCONS_SCREEN_IS_STATIC;
 
 		cgthree_defaultscreen.textops = &ri->ri_ops;
@@ -231,12 +232,25 @@ cgthreeattach(struct cgthree_softc *sc, const char *name, int isconsole)
 		cgthree_defaultscreen.ncols = ri->ri_cols;
 		sc->vd.active = &cg3_console_screen;
 		wsdisplay_cnattach(&cgthree_defaultscreen, ri, 0, 0, defattr);
-		vcons_replay_msgbuf(&cg3_console_screen);
 	} else {
 		/* 
 		 * we're not the console so we just clear the screen and don't 
 		 * set up any sort of text display
 		 */
+		if (cgthree_defaultscreen.textops == NULL) {
+			/* 
+			 * ugly, but...
+			 * we want the console settings to win, so we only
+			 * touch anything when we find an untouched screen
+			 * definition. In this case we fill it from fb to
+			 * avoid problems in case no cgthree is the console
+			 */
+			ri = &sc->sc_fb.fb_rinfo;
+			cgthree_defaultscreen.textops = &ri->ri_ops;
+			cgthree_defaultscreen.capabilities = ri->ri_caps;
+			cgthree_defaultscreen.nrows = ri->ri_rows;
+			cgthree_defaultscreen.ncols = ri->ri_cols;
+		}
 	}
 
 	/* Initialize the default color map. */
@@ -246,7 +260,7 @@ cgthreeattach(struct cgthree_softc *sc, const char *name, int isconsole)
 	aa.console = isconsole;
 	aa.accessops = &cgthree_accessops;
 	aa.accesscookie = &sc->vd;
-	config_found(sc->sc_dev, &aa, wsemuldisplaydevprint);
+	config_found(&sc->sc_dev, &aa, wsemuldisplaydevprint);
 #else
 	/* Initialize the default color map. */
 	bt_initcmap(&sc->sc_cmap, 256);
@@ -257,7 +271,10 @@ cgthreeattach(struct cgthree_softc *sc, const char *name, int isconsole)
 
 
 int
-cgthreeopen(dev_t dev, int flags, int mode, struct lwp *l)
+cgthreeopen(dev, flags, mode, l)
+	dev_t dev;
+	int flags, mode;
+	struct lwp *l;
 {
 	int unit = minor(dev);
 
@@ -267,7 +284,12 @@ cgthreeopen(dev_t dev, int flags, int mode, struct lwp *l)
 }
 
 int
-cgthreeioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
+cgthreeioctl(dev, cmd, data, flags, l)
+	dev_t dev;
+	u_long cmd;
+	void *data;
+	int flags;
+	struct lwp *l;
 {
 	struct cgthree_softc *sc = device_lookup_private(&cgthree_cd,
 							 minor(dev));
@@ -325,15 +347,17 @@ cgthreeioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
  * Undo the effect of an FBIOSVIDEO that turns the video off.
  */
 static void
-cgthreeunblank(device_t self)
+cgthreeunblank(dev)
+	struct device *dev;
 {
-	struct cgthree_softc *sc = device_private(self);
 
-	cgthree_set_video(sc, 1);
+	cgthree_set_video(device_private(dev), 1);
 }
 
 static void
-cgthree_set_video(struct cgthree_softc *sc, int enable)
+cgthree_set_video(sc, enable)
+	struct cgthree_softc *sc;
+	int enable;
 {
 
 	if (enable)
@@ -343,7 +367,8 @@ cgthree_set_video(struct cgthree_softc *sc, int enable)
 }
 
 static int
-cgthree_get_video(struct cgthree_softc *sc)
+cgthree_get_video(sc)
+	struct cgthree_softc *sc;
 {
 
 	return ((sc->sc_fbc->fbc_ctrl & FBC_VENAB) != 0);
@@ -353,7 +378,9 @@ cgthree_get_video(struct cgthree_softc *sc)
  * Load a subset of the current (new) colormap into the Brooktree DAC.
  */
 static void
-cgthreeloadcmap(struct cgthree_softc *sc, int start, int ncolors)
+cgthreeloadcmap(sc, start, ncolors)
+	struct cgthree_softc *sc;
+	int start, ncolors;
 {
 	volatile struct bt_regs *bt;
 	u_int *ip;
@@ -382,7 +409,10 @@ cgthreeloadcmap(struct cgthree_softc *sc, int start, int ncolors)
  * mapped in flat mode without the cg4 emulation.
  */
 paddr_t
-cgthreemmap(dev_t dev, off_t off, int prot)
+cgthreemmap(dev, off, prot)
+	dev_t dev;
+	off_t off;
+	int prot;
 {
 	struct cgthree_softc *sc = device_lookup_private(&cgthree_cd,
 							 minor(dev));
@@ -547,8 +577,6 @@ cgthree_init_screen(void *cookie, struct vcons_screen *scr,
 	struct cgthree_softc *sc = cookie;
 	struct rasops_info *ri = &scr->scr_ri;
 
-	scr->scr_flags |= VCONS_DONT_READ;
-
 	ri->ri_depth = 8;
 	ri->ri_width = sc->sc_width;
 	ri->ri_height = sc->sc_height;
@@ -557,7 +585,9 @@ cgthree_init_screen(void *cookie, struct vcons_screen *scr,
 
 	ri->ri_bits = sc->sc_fb.fb_pixels;
 
-	rasops_init(ri, 0, 0);
+	memset(sc->sc_fb.fb_pixels, (*defattr >> 16) & 0xff,
+	    sc->sc_stride * sc->sc_height);
+	rasops_init(ri, sc->sc_height/8, sc->sc_width/8);
 	ri->ri_caps = WSSCREEN_WSCOLORS | WSSCREEN_REVERSE;
 	rasops_reconfig(ri, sc->sc_height / ri->ri_font->fontheight,
 		    sc->sc_width / ri->ri_font->fontwidth);

@@ -1,4 +1,4 @@
-/*	$NetBSD: cacheinfo.h,v 1.13 2011/12/04 17:00:10 chs Exp $	*/
+/*	$NetBSD: cacheinfo.h,v 1.9.8.1 2009/05/18 19:43:55 bouyer Exp $	*/
 
 #ifndef _X86_CACHEINFO_H_
 #define _X86_CACHEINFO_H_
@@ -10,7 +10,7 @@ struct x86_cache_info {
 	u_int		cai_totalsize; /* #entries for TLB, bytes for cache */
 	u_int		cai_linesize;	/* or page size for TLB */
 #ifndef _KERNEL
-	const char	*cai_string;
+	char		*cai_string;
 #endif
 };
 
@@ -26,12 +26,8 @@ struct x86_cache_info {
 #define	CAI_L1_1GBDTLB	9		/* L1 1GB Page data TLB */
 #define CAI_L2_1GBITLB	10		/* L2 1GB Page instruction TLB */
 #define CAI_L2_1GBDTLB	11		/* L2 1GB Page data TLB */
-#define CAI_L2_ITLB	12		/* L2 Instruction TLB (4K pages) */
-#define CAI_L2_ITLB2	13		/* L2 Instruction TLB (2/4M pages) */
-#define CAI_L2_DTLB	14		/* L2 Data TLB (4K pages) */
-#define CAI_L2_DTLB2	15		/* L2 Data TLB (2/4M pages) */
 
-#define	CAI_COUNT	16
+#define	CAI_COUNT	12
 
 /*
  * AMD Cache Info:

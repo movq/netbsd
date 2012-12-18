@@ -1,4 +1,4 @@
-/*	$NetBSD: nullfs.c,v 1.11 2011/12/25 06:09:08 tsutsui Exp $	*/
+/*	$NetBSD: nullfs.c,v 1.9 2005/12/11 12:24:46 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -66,7 +66,7 @@
  * Null filesystem
  */
 
-__compactcall int
+int
 null_open(const char *path, struct open_file *f)
 {
 
@@ -74,7 +74,7 @@ null_open(const char *path, struct open_file *f)
 }
 
 #ifndef LIBSA_NO_FS_CLOSE
-__compactcall int
+int
 null_close(struct open_file *f)
 {
 
@@ -82,7 +82,7 @@ null_close(struct open_file *f)
 }
 #endif
 
-__compactcall int
+int
 null_read(struct open_file *f, void *buf, size_t size, size_t *resid)
 {
 
@@ -90,7 +90,7 @@ null_read(struct open_file *f, void *buf, size_t size, size_t *resid)
 }
 
 #ifndef LIBSA_NO_FS_WRITE
-__compactcall int
+int
 null_write(struct open_file *f, void *buf, size_t size, size_t *resid)
 {
 
@@ -99,7 +99,7 @@ null_write(struct open_file *f, void *buf, size_t size, size_t *resid)
 #endif
 
 #ifndef LIBSA_NO_FS_SEEK
-__compactcall off_t
+off_t
 null_seek(struct open_file *f, off_t offset, int where)
 {
 
@@ -107,18 +107,9 @@ null_seek(struct open_file *f, off_t offset, int where)
 }
 #endif
 
-__compactcall int
+int
 null_stat(struct open_file *f, struct stat *sb)
 {
 
 	return EIO;
 }
-
-#if defined(LIBSA_ENABLE_LS_OP)
-__compactcall void
-null_ls(struct open_file *f, const char *pattern)
-{
-	printf("Currently ls command is unsupported by nullfs\n");
-	return;
-}
-#endif

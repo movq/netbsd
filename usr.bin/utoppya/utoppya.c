@@ -1,4 +1,4 @@
-/*	$NetBSD: utoppya.c,v 1.5 2011/09/05 18:11:53 joerg Exp $	*/
+/*	$NetBSD: utoppya.c,v 1.3 2008/04/28 20:24:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -70,7 +70,7 @@ static void cmd_rename(int, char **);
 static void cmd_get(int, char **);
 static void cmd_put(int, char **);
 
-static const struct toppy_command {
+static struct toppy_command {
 	const char *tc_cmd;
 	void (*tc_handler)(int, char **);
 } toppy_commands[] = {
@@ -84,7 +84,7 @@ static const struct toppy_command {
 	{NULL,		NULL}
 };
 
-__dead static void
+static void
 usage(void)
 {
 
@@ -97,7 +97,7 @@ usage(void)
 int
 main(int argc, char *argv[])
 {
-	const struct toppy_command *tc;
+	struct toppy_command *tc;
 	const char *devpath;
 	int ch;
 
@@ -438,7 +438,7 @@ cmd_get(int argc, char **argv)
 
 		rv = fwrite(buf, 1, l, ofp);
 
-		if (rv != (size_t)l) {
+		if (rv != l) {
 			if (ofp != stdout)
 				fclose(ofp);
 			progressmeter(1);
@@ -552,7 +552,7 @@ cmd_put(int argc, char **argv)
 
 	while ((l = fread(buf, 1, TOPPY_IO_SIZE, ifp)) > 0) {
 		rv = write(toppy_fd, buf, l);
-		if ((size_t)rv != l) {
+		if (rv != l) {
 			fclose(ifp);
 			if (progbar)
 				progressmeter(1);

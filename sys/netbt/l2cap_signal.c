@@ -1,4 +1,4 @@
-/*	$NetBSD: l2cap_signal.c,v 1.15 2011/11/29 13:16:27 plunky Exp $	*/
+/*	$NetBSD: l2cap_signal.c,v 1.9 2007/11/10 23:12:23 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: l2cap_signal.c,v 1.15 2011/11/29 13:16:27 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: l2cap_signal.c,v 1.9 2007/11/10 23:12:23 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -39,6 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD: l2cap_signal.c,v 1.15 2011/11/29 13:16:27 plunky Exp
 #include <sys/proc.h>
 #include <sys/queue.h>
 #include <sys/systm.h>
+
+#include <machine/stdarg.h>
 
 #include <netbt/bluetooth.h>
 #include <netbt/hci.h>
@@ -59,8 +61,6 @@ static void l2cap_recv_disconnect_rsp(struct mbuf *, struct hci_link *);
 static void l2cap_recv_info_req(struct mbuf *, struct hci_link *);
 static int l2cap_send_signal(struct hci_link *, uint8_t, uint8_t, uint16_t, void *);
 static int l2cap_send_command_rej(struct hci_link *, uint8_t, uint16_t, ...);
-static void l2cap_qos_btoh(l2cap_qos_t *, void *);
-static void l2cap_qos_htob(void *, l2cap_qos_t *);
 
 /*
  * process incoming signal packets (CID 0x0001). Can contain multiple
@@ -157,7 +157,10 @@ l2cap_recv_signal(struct mbuf *m, struct hci_link *link)
 			goto reject;
 		}
 	}
+
+#ifdef DIAGNOSTIC
 	panic("impossible!");
+#endif
 
 reject:
 	l2cap_send_command_rej(link, cmd.ident, L2CAP_REJ_NOT_UNDERSTOOD);
@@ -263,7 +266,8 @@ l2cap_recv_connect_req(struct mbuf *m, struct hci_link *link)
 	bdaddr_copy(&raddr.bt_bdaddr, &link->hl_bdaddr);
 
 	LIST_FOREACH(chan, &l2cap_listen_list, lc_ncid) {
-		if (chan->lc_laddr.bt_psm != laddr.bt_psm)
+		if (chan->lc_laddr.bt_psm != laddr.bt_psm
+		    && chan->lc_laddr.bt_psm != L2CAP_PSM_ANY)
 			continue;
 
 		if (!bdaddr_same(&laddr.bt_bdaddr, &chan->lc_laddr.bt_bdaddr)
@@ -520,57 +524,6 @@ l2cap_recv_config_req(struct mbuf *m, struct hci_link *link)
 			break;
 
 		case L2CAP_OPT_QOS:
-			if (rp.result == L2CAP_UNKNOWN_OPTION)
-				break;
-
-			if (opt.length != L2CAP_OPT_QOS_SIZE)
-				goto reject;
-
-			/*
-			 * We don't actually support QoS, but an incoming
-			 * config request is merely advising us of their
-			 * outgoing traffic flow, so be nice.
-			 */
-			m_copydata(m, 0, L2CAP_OPT_QOS_SIZE, &val);
-			switch (val.qos.service_type) {
-			case L2CAP_QOS_NO_TRAFFIC:
-				/*
-				 * "No traffic" means they don't plan to send
-				 * any data and the fields should be ignored.
-				 */
-				chan->lc_iqos = l2cap_default_qos;
-				chan->lc_iqos.service_type = L2CAP_QOS_NO_TRAFFIC;
-				break;
-
-			case L2CAP_QOS_BEST_EFFORT:
-				/*
-				 * "Best effort" is the default, and we may
-				 * choose to ignore the fields, try to satisfy
-				 * the parameters while giving no response, or
-				 * respond with the settings we will try to
-				 * meet.
-				 */
-				l2cap_qos_btoh(&chan->lc_iqos, &val.qos);
-				break;
-
-			case L2CAP_QOS_GUARANTEED:
-			default:
-				/*
-			 	 * Anything else we don't support, so make a
-				 * counter-offer with the current settings.
-				 */
-				if (len + sizeof(opt) + L2CAP_OPT_QOS_SIZE > sizeof(buf))
-					goto reject;
-
-				rp.result = L2CAP_UNACCEPTABLE_PARAMS;
-				memcpy(buf + len, &opt, sizeof(opt));
-				len += sizeof(opt);
-				l2cap_qos_htob(buf + len, &chan->lc_iqos);
-				len += L2CAP_OPT_QOS_SIZE;
-				break;
-			}
-			break;
-
 		default:
 			/* ignore hints */
 			if (opt.type & L2CAP_OPT_HINT_BIT)
@@ -741,27 +694,6 @@ l2cap_recv_config_rsp(struct mbuf *m, struct hci_link *link)
 				goto discon;
 
 			case L2CAP_OPT_QOS:
-				if (opt.length != L2CAP_OPT_QOS_SIZE)
-					goto discon;
-
-				/*
-				 * This may happen even if we haven't sent a
-				 * QoS request, where they need to state their
-				 * preferred incoming traffic flow.
-				 * We don't support anything, but copy in the
-				 * parameters if no action is good enough.
-				 */
-				m_copydata(m, 0, L2CAP_OPT_QOS_SIZE, &val);
-				switch (val.qos.service_type) {
-				case L2CAP_QOS_NO_TRAFFIC:
-				case L2CAP_QOS_BEST_EFFORT:
-					l2cap_qos_btoh(&chan->lc_oqos, &val.qos);
-					break;
-
-				case L2CAP_QOS_GUARANTEED:
-				default:
-					goto discon;
-				}
 				break;
 
 			default:
@@ -883,7 +815,7 @@ l2cap_recv_disconnect_req(struct mbuf *m, struct hci_link *link)
 				sizeof(rp), &rp);
 
 	if (chan->lc_state != L2CAP_CLOSED)
-		l2cap_close(chan, 0);
+		l2cap_close(chan, ECONNRESET);
 }
 
 /*
@@ -926,14 +858,15 @@ l2cap_recv_disconnect_rsp(struct mbuf *m, struct hci_link *link)
 }
 
 /*
- * Process Received Info Request.
+ * Process Received Info Request. We must respond but alas dont
+ * support anything as yet so thats easy.
  */
 static void
 l2cap_recv_info_req(struct mbuf *m, struct hci_link *link)
 {
 	l2cap_cmd_hdr_t cmd;
 	l2cap_info_req_cp cp;
-	uint8_t rsp[12];
+	l2cap_info_rsp_cp rp;
 
 	m_copydata(m, 0, sizeof(cmd), &cmd);
 	m_adj(m, sizeof(cmd));
@@ -941,51 +874,15 @@ l2cap_recv_info_req(struct mbuf *m, struct hci_link *link)
 	m_copydata(m, 0, sizeof(cp), &cp);
 	m_adj(m, sizeof(cp));
 
-	cp.type = le16toh(cp.type);
-	switch(cp.type) {
-	case L2CAP_EXTENDED_FEATURES:
-		/*
-		 * 32-bit data field, unused bits set to zero
-		 *
-		 * octet bit feature
-		 *   0   0   Flow control mode
-		 *   0   1   Retransmission mode
-		 *   0   2   Bi-directional QoS
-		 *   0   3   Enhanced retransmission mode
-		 *   0   4   Streaming mode
-		 *   0   5   FCS option
-		 *   0   6   Extended flow specification for BR/EDR
-		 *   0   7   Fixed channels (SET)
-		 *   1   0   Extended window size
-		 *   1   1   Unicast connectionless data reception
-		 */
-		le16enc(rsp + 0, cp.type);
-		le16enc(rsp + 2, L2CAP_SUCCESS);
-		le32enc(rsp + 4, 0x00000080);
-		l2cap_send_signal(link, L2CAP_INFO_RSP, cmd.ident, 8, rsp);
-		break;
-
-	case L2CAP_FIXED_CHANNELS:
-		/*
-		 * 64-bit data field, unused bits set to zero
-		 *
-		 * octet bit channel
-		 *   0   0   0x0000 Null
-		 *   0   1   0x0001 L2CAP Signalling Channel (SET)
-		 *   0   2   0x0002 Connectionless Reception
-		 *   0   3   0x0003 AMP Manager Protocol Channel
-		 */
-		le16enc(rsp + 0, cp.type);
-		le16enc(rsp + 2, L2CAP_SUCCESS);
-		le64enc(rsp + 4, 0x0000000000000002);
-		l2cap_send_signal(link, L2CAP_INFO_RSP, cmd.ident, 12, rsp);
-		break;
-
+	switch(le16toh(cp.type)) {
 	case L2CAP_CONNLESS_MTU:
+	case L2CAP_EXTENDED_FEATURES:
 	default:
-		le16enc(rsp + 0, cp.type);
-		le16enc(rsp + 2, L2CAP_NOT_SUPPORTED);
-		l2cap_send_signal(link, L2CAP_INFO_RSP, cmd.ident, 4, rsp);
+		rp.type = cp.type;
+		rp.result = htole16(L2CAP_NOT_SUPPORTED);
+
+		l2cap_send_signal(link, L2CAP_INFO_RSP, cmd.ident,
+					sizeof(rp), &rp);
 		break;
 	}
 }
@@ -1001,8 +898,14 @@ l2cap_send_signal(struct hci_link *link, uint8_t code, uint8_t ident,
 	l2cap_hdr_t *hdr;
 	l2cap_cmd_hdr_t *cmd;
 
-	KASSERT(link != NULL);
-	KASSERT(sizeof(l2cap_cmd_hdr_t) + length <= link->hl_mtu);
+#ifdef DIAGNOSTIC
+	if (link == NULL)
+		return ENETDOWN;
+
+	if (sizeof(l2cap_cmd_hdr_t) + length > link->hl_mtu)
+		aprint_error_dev(link->hl_unit->hci_dev,
+		    "exceeding L2CAP Signal MTU for link!\n");
+#endif
 
 	m = m_gethdr(M_DONTWAIT, MT_DATA);
 	if (m == NULL)
@@ -1203,38 +1106,4 @@ l2cap_send_connect_rsp(struct hci_link *link, uint8_t ident, uint16_t dcid, uint
 	cp.result = htole16(result);
 
 	return l2cap_send_signal(link, L2CAP_CONNECT_RSP, ident, sizeof(cp), &cp);
-}
-
-/*
- * copy in QoS buffer to host
- */
-static void
-l2cap_qos_btoh(l2cap_qos_t *qos, void *buf)
-{
-	l2cap_qos_t *src = buf;
-
-	qos->flags = src->flags;
-	qos->service_type = src->service_type;
-	qos->token_rate = le32toh(src->token_rate);
-	qos->token_bucket_size = le32toh(src->token_bucket_size);
-	qos->peak_bandwidth = le32toh(src->peak_bandwidth);
-	qos->latency = le32toh(src->latency);
-	qos->delay_variation = le32toh(src->delay_variation);
-}
-
-/*
- * copy out host QoS to buffer
- */
-static void
-l2cap_qos_htob(void *buf, l2cap_qos_t *qos)
-{
-	l2cap_qos_t *dst = buf;
-
-	dst->flags = qos->flags;
-	dst->service_type = qos->service_type;
-	dst->token_rate = htole32(qos->token_rate);
-	dst->token_bucket_size = htole32(qos->token_bucket_size);
-	dst->peak_bandwidth = htole32(qos->peak_bandwidth);
-	dst->latency = htole32(qos->latency);
-	dst->delay_variation = htole32(qos->delay_variation);
 }

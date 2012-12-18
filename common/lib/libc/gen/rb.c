@@ -1,4 +1,4 @@
-/*	$NetBSD: rb.c,v 1.11 2011/06/20 09:11:16 mrg Exp $	*/
+/* $NetBSD: rb.c,v 1.3 2008/06/30 20:54:19 matt Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -31,6 +31,7 @@
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <sys/types.h>
+#include <sys/types.h>
 #include <stddef.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -39,10 +40,8 @@
 #else
 #define KASSERT(s)	do { } while (/*CONSTCOND*/ 0)
 #endif
-__RCSID("$NetBSD: rb.c,v 1.11 2011/06/20 09:11:16 mrg Exp $");
 #else
 #include <lib/libkern/libkern.h>
-__KERNEL_RCSID(0, "$NetBSD: rb.c,v 1.11 2011/06/20 09:11:16 mrg Exp $");
 #endif
 
 #ifdef _LIBC
@@ -58,13 +57,23 @@ __weak_alias(rb_tree_check, _rb_tree_check)
 __weak_alias(rb_tree_depths, _rb_tree_depths)
 #endif
 
-#include "namespace.h"
+#define	rb_tree_init		_rb_tree_init
+#define	rb_tree_find_node	_rb_tree_find_node
+#define	rb_tree_find_node_geq	_rb_tree_find_node_geq
+#define	rb_tree_find_node_leq	_rb_tree_find_node_leq
+#define	rb_tree_insert_node	_rb_tree_insert_node
+#define	rb_tree_remove_node	_rb_tree_remove_node
+#define	rb_tree_iterate		_rb_tree_iterate
+#ifdef RBDEBUG
+#define	rb_tree_check		_rb_tree_check
+#define	rb_tree_depths		_rb_tree_depths
+#endif
 #endif
 
 #ifdef RBTEST
-#include "rbtree.h"
+#include "rb.h"
 #else
-#include <sys/rbtree.h>
+#include <sys/rb.h>
 #endif
 
 static void rb_tree_insert_rebalance(struct rb_tree *, struct rb_node *);
@@ -79,19 +88,13 @@ static bool rb_tree_check_node(const struct rb_tree *, const struct rb_node *,
 #define	rb_tree_check_node(a, b, c, d)	true
 #endif
 
-#define	RB_NODETOITEM(rbto, rbn)	\
-    ((void *)((uintptr_t)(rbn) - (rbto)->rbto_node_offset))
-#define	RB_ITEMTONODE(rbto, rbn)	\
-    ((rb_node_t *)((uintptr_t)(rbn) + (rbto)->rbto_node_offset))
-
 #define	RB_SENTINEL_NODE	NULL
 
 void
-rb_tree_init(struct rb_tree *rbt, const rb_tree_ops_t *ops)
+rb_tree_init(struct rb_tree *rbt, const struct rb_tree_ops *ops)
 {
-
 	rbt->rbt_ops = ops;
-	rbt->rbt_root = RB_SENTINEL_NODE;
+	*((const struct rb_node **)&rbt->rbt_root) = RB_SENTINEL_NODE;
 	RB_TAILQ_INIT(&rbt->rbt_nodes);
 #ifndef RBSMALL
 	rbt->rbt_minmax[RB_DIR_LEFT] = rbt->rbt_root;	/* minimum node */
@@ -108,73 +111,65 @@ rb_tree_init(struct rb_tree *rbt, const rb_tree_ops_t *ops)
 #endif
 }
 
-void *
+struct rb_node *
 rb_tree_find_node(struct rb_tree *rbt, const void *key)
 {
-	const rb_tree_ops_t *rbto = rbt->rbt_ops;
-	rbto_compare_key_fn compare_key = rbto->rbto_compare_key;
+	rbto_compare_key_fn compare_key = rbt->rbt_ops->rbto_compare_key;
 	struct rb_node *parent = rbt->rbt_root;
 
 	while (!RB_SENTINEL_P(parent)) {
-		void *pobj = RB_NODETOITEM(rbto, parent);
-		const signed int diff = (*compare_key)(rbto->rbto_context,
-		    pobj, key);
+		const signed int diff = (*compare_key)(parent, key);
 		if (diff == 0)
-			return pobj;
-		parent = parent->rb_nodes[diff < 0];
+			return parent;
+		parent = parent->rb_nodes[diff > 0];
 	}
 
 	return NULL;
 }
-
-void *
+ 
+struct rb_node *
 rb_tree_find_node_geq(struct rb_tree *rbt, const void *key)
 {
-	const rb_tree_ops_t *rbto = rbt->rbt_ops;
-	rbto_compare_key_fn compare_key = rbto->rbto_compare_key;
-	struct rb_node *parent = rbt->rbt_root, *last = NULL;
+	rbto_compare_key_fn compare_key = rbt->rbt_ops->rbto_compare_key;
+	struct rb_node *parent = rbt->rbt_root;
+	struct rb_node *last = NULL;
 
 	while (!RB_SENTINEL_P(parent)) {
-		void *pobj = RB_NODETOITEM(rbto, parent);
-		const signed int diff = (*compare_key)(rbto->rbto_context,
-		    pobj, key);
+		const signed int diff = (*compare_key)(parent, key);
 		if (diff == 0)
-			return pobj;
-		if (diff > 0)
-			last = parent;
-		parent = parent->rb_nodes[diff < 0];
-	}
-
-	return RB_NODETOITEM(rbto, last);
-}
-
-void *
-rb_tree_find_node_leq(struct rb_tree *rbt, const void *key)
-{
-	const rb_tree_ops_t *rbto = rbt->rbt_ops;
-	rbto_compare_key_fn compare_key = rbto->rbto_compare_key;
-	struct rb_node *parent = rbt->rbt_root, *last = NULL;
-
-	while (!RB_SENTINEL_P(parent)) {
-		void *pobj = RB_NODETOITEM(rbto, parent);
-		const signed int diff = (*compare_key)(rbto->rbto_context,
-		    pobj, key);
-		if (diff == 0)
-			return pobj;
+			return parent;
 		if (diff < 0)
 			last = parent;
-		parent = parent->rb_nodes[diff < 0];
+		parent = parent->rb_nodes[diff > 0];
 	}
 
-	return RB_NODETOITEM(rbto, last);
+	return last;
 }
-
-void *
-rb_tree_insert_node(struct rb_tree *rbt, void *object)
+ 
+struct rb_node *
+rb_tree_find_node_leq(struct rb_tree *rbt, const void *key)
 {
-	const rb_tree_ops_t *rbto = rbt->rbt_ops;
-	rbto_compare_nodes_fn compare_nodes = rbto->rbto_compare_nodes;
-	struct rb_node *parent, *tmp, *self = RB_ITEMTONODE(rbto, object);
+	rbto_compare_key_fn compare_key = rbt->rbt_ops->rbto_compare_key;
+	struct rb_node *parent = rbt->rbt_root;
+	struct rb_node *last = NULL;
+
+	while (!RB_SENTINEL_P(parent)) {
+		const signed int diff = (*compare_key)(parent, key);
+		if (diff == 0)
+			return parent;
+		if (diff > 0)
+			last = parent;
+		parent = parent->rb_nodes[diff > 0];
+	}
+
+	return last;
+}
+
+bool
+rb_tree_insert_node(struct rb_tree *rbt, struct rb_node *self)
+{
+	rbto_compare_nodes_fn compare_nodes = rbt->rbt_ops->rbto_compare_nodes;
+	struct rb_node *parent, *tmp;
 	unsigned int position;
 	bool rebalance;
 
@@ -195,17 +190,15 @@ rb_tree_insert_node(struct rb_tree *rbt, void *object)
 	 * Find out where to place this new leaf.
 	 */
 	while (!RB_SENTINEL_P(tmp)) {
-		void *tobj = RB_NODETOITEM(rbto, tmp);
-		const signed int diff = (*compare_nodes)(rbto->rbto_context,
-		    tobj, object);
+		const signed int diff = (*compare_nodes)(tmp, self);
 		if (__predict_false(diff == 0)) {
 			/*
-			 * Node already exists; return it.
+			 * Node already exists; don't insert.
 			 */
-			return tobj;
+			return false;
 		}
 		parent = tmp;
-		position = (diff < 0);
+		position = (diff > 0);
 		tmp = parent->rb_nodes[position];
 	}
 
@@ -229,10 +222,8 @@ rb_tree_insert_node(struct rb_tree *rbt, void *object)
 			prev = TAILQ_PREV(next, rb_node_qh, rb_link);
 		KASSERT(prev == NULL || !RB_SENTINEL_P(prev));
 		KASSERT(next == NULL || !RB_SENTINEL_P(next));
-		KASSERT(prev == NULL || (*compare_nodes)(rbto->rbto_context,
-		    RB_NODETOITEM(rbto, prev), RB_NODETOITEM(rbto, self)) < 0);
-		KASSERT(next == NULL || (*compare_nodes)(rbto->rbto_context,
-		    RB_NODETOITEM(rbto, self), RB_NODETOITEM(rbto, next)) < 0);
+		KASSERT(prev == NULL || (*compare_nodes)(prev, self) > 0);
+		KASSERT(next == NULL || (*compare_nodes)(self, next) > 0);
 	}
 #endif
 
@@ -280,14 +271,10 @@ rb_tree_insert_node(struct rb_tree *rbt, void *object)
 	if (RB_ROOT_P(rbt, self)) {
 		RB_TAILQ_INSERT_HEAD(&rbt->rbt_nodes, self, rb_link);
 	} else if (position == RB_DIR_LEFT) {
-		KASSERT((*compare_nodes)(rbto->rbto_context,
-		    RB_NODETOITEM(rbto, self),
-		    RB_NODETOITEM(rbto, RB_FATHER(self))) < 0);
+		KASSERT((*compare_nodes)(self, RB_FATHER(self)) > 0);
 		RB_TAILQ_INSERT_BEFORE(RB_FATHER(self), self, rb_link);
 	} else {
-		KASSERT((*compare_nodes)(rbto->rbto_context,
-		    RB_NODETOITEM(rbto, RB_FATHER(self)),
-		    RB_NODETOITEM(rbto, self)) < 0);
+		KASSERT((*compare_nodes)(RB_FATHER(self), self) > 0);
 		RB_TAILQ_INSERT_AFTER(&rbt->rbt_nodes, RB_FATHER(self),
 		    self, rb_link);
 	}
@@ -302,10 +289,9 @@ rb_tree_insert_node(struct rb_tree *rbt, void *object)
 		KASSERT(rb_tree_check_node(rbt, self, NULL, true));
 	}
 
-	/* Succesfully inserted, return our node pointer. */
-	return object;
+	return true;
 }
-
+
 /*
  * Swap the location and colors of 'self' and its child @ which.  The child
  * can not be a sentinel node.  This is our rotation function.  However,
@@ -331,8 +317,7 @@ rb_tree_reparent_nodes(struct rb_tree *rbt, struct rb_node *old_father,
 
 	KASSERT(rb_tree_check_node(rbt, old_father, NULL, false));
 	KASSERT(rb_tree_check_node(rbt, old_child, NULL, false));
-	KASSERT(RB_ROOT_P(rbt, old_father) ||
-	    rb_tree_check_node(rbt, grandpa, NULL, false));
+	KASSERT(RB_ROOT_P(rbt, old_father) || rb_tree_check_node(rbt, grandpa, NULL, false));
 
 	/*
 	 * Exchange descendant linkages.
@@ -374,10 +359,9 @@ rb_tree_reparent_nodes(struct rb_tree *rbt, struct rb_node *old_father,
 
 	KASSERT(rb_tree_check_node(rbt, new_father, NULL, false));
 	KASSERT(rb_tree_check_node(rbt, new_child, NULL, false));
-	KASSERT(RB_ROOT_P(rbt, new_father) ||
-	    rb_tree_check_node(rbt, grandpa, NULL, false));
+	KASSERT(RB_ROOT_P(rbt, new_father) || rb_tree_check_node(rbt, grandpa, NULL, false));
 }
-
+
 static void
 rb_tree_insert_rebalance(struct rb_tree *rbt, struct rb_node *self)
 {
@@ -483,15 +467,13 @@ rb_tree_insert_rebalance(struct rb_tree *rbt, struct rb_node *self)
 	 */
 	RB_MARK_BLACK(rbt->rbt_root);
 }
-
+
 static void
 rb_tree_prune_node(struct rb_tree *rbt, struct rb_node *self, bool rebalance)
 {
 	const unsigned int which = RB_POSITION(self);
 	struct rb_node *father = RB_FATHER(self);
-#ifndef RBSMALL
 	const bool was_root = RB_ROOT_P(rbt, self);
-#endif
 
 	KASSERT(rebalance || (RB_ROOT_P(rbt, self) || RB_RED_P(self)));
 	KASSERT(!rebalance || RB_BLACK_P(self));
@@ -532,7 +514,7 @@ rb_tree_prune_node(struct rb_tree *rbt, struct rb_node *self, bool rebalance)
 		rb_tree_removal_rebalance(rbt, father, which);
 	KASSERT(was_root || rb_tree_check_node(rbt, father, NULL, true));
 }
-
+
 /*
  * When deleting an interior node
  */
@@ -695,9 +677,7 @@ rb_tree_prune_blackred_branch(struct rb_tree *rbt, struct rb_node *self,
 {
 	struct rb_node *father = RB_FATHER(self);
 	struct rb_node *son = self->rb_nodes[which];
-#ifndef RBSMALL
 	const bool was_root = RB_ROOT_P(rbt, self);
-#endif
 
 	KASSERT(which == RB_DIR_LEFT || which == RB_DIR_RIGHT);
 	KASSERT(RB_BLACK_P(self) && RB_RED_P(son));
@@ -733,12 +713,13 @@ rb_tree_prune_blackred_branch(struct rb_tree *rbt, struct rb_node *self,
 	KASSERT(was_root || rb_tree_check_node(rbt, father, NULL, true));
 	KASSERT(rb_tree_check_node(rbt, son, NULL, true));
 }
-
+/*
+ *
+ */
 void
-rb_tree_remove_node(struct rb_tree *rbt, void *object)
+rb_tree_remove_node(struct rb_tree *rbt, struct rb_node *self)
 {
-	const rb_tree_ops_t *rbto = rbt->rbt_ops;
-	struct rb_node *standin, *self = RB_ITEMTONODE(rbto, object);
+	struct rb_node *standin;
 	unsigned int which;
 
 	KASSERT(!RB_SENTINEL_P(self));
@@ -795,7 +776,7 @@ rb_tree_remove_node(struct rb_tree *rbt, void *object)
 	 * Let's find the node closes to us opposite of our parent
 	 * Now swap it with ourself, "prune" it, and rebalance, if needed.
 	 */
-	standin = RB_ITEMTONODE(rbto, rb_tree_iterate(rbt, object, which));
+	standin = rb_tree_iterate(rbt, self, which);
 	rb_tree_swap_prune_and_rebalance(rbt, self, standin);
 }
 
@@ -950,30 +931,27 @@ rb_tree_removal_rebalance(struct rb_tree *rbt, struct rb_node *parent,
 	KASSERT(rb_tree_check_node(rbt, parent, NULL, true));
 }
 
-void *
-rb_tree_iterate(struct rb_tree *rbt, void *object, const unsigned int direction)
+struct rb_node *
+rb_tree_iterate(struct rb_tree *rbt, struct rb_node *self,
+	const unsigned int direction)
 {
-	const rb_tree_ops_t *rbto = rbt->rbt_ops;
 	const unsigned int other = direction ^ RB_DIR_OTHER;
-	struct rb_node *self;
-
 	KASSERT(direction == RB_DIR_LEFT || direction == RB_DIR_RIGHT);
 
-	if (object == NULL) {
+	if (self == NULL) {
 #ifndef RBSMALL
 		if (RB_SENTINEL_P(rbt->rbt_root))
 			return NULL;
-		return RB_NODETOITEM(rbto, rbt->rbt_minmax[direction]);
+		return rbt->rbt_minmax[direction];
 #else
 		self = rbt->rbt_root;
 		if (RB_SENTINEL_P(self))
 			return NULL;
-		while (!RB_SENTINEL_P(self->rb_nodes[direction]))
-			self = self->rb_nodes[direction];
-		return RB_NODETOITEM(rbto, self);
+		while (!RB_SENTINEL_P(self->rb_nodes[other]))
+			self = self->rb_nodes[other];
+		return self;
 #endif /* !RBSMALL */
 	}
-	self = RB_ITEMTONODE(rbto, object);
 	KASSERT(!RB_SENTINEL_P(self));
 	/*
 	 * We can't go any further in this direction.  We proceed up in the
@@ -982,7 +960,7 @@ rb_tree_iterate(struct rb_tree *rbt, void *object, const unsigned int direction)
 	if (RB_SENTINEL_P(self->rb_nodes[direction])) {
 		while (!RB_ROOT_P(rbt, self)) {
 			if (other == RB_POSITION(self))
-				return RB_NODETOITEM(rbto, RB_FATHER(self));
+				return RB_FATHER(self);
 			self = RB_FATHER(self);
 		}
 		return NULL;
@@ -996,7 +974,7 @@ rb_tree_iterate(struct rb_tree *rbt, void *object, const unsigned int direction)
 	KASSERT(!RB_SENTINEL_P(self));
 	while (!RB_SENTINEL_P(self->rb_nodes[other]))
 		self = self->rb_nodes[other];
-	return RB_NODETOITEM(rbto, self);
+	return self;
 }
 
 #ifdef RBDEBUG
@@ -1016,8 +994,8 @@ rb_tree_iterate_const(const struct rb_tree *rbt, const struct rb_node *self,
 		self = rbt->rbt_root;
 		if (RB_SENTINEL_P(self))
 			return NULL;
-		while (!RB_SENTINEL_P(self->rb_nodes[direction]))
-			self = self->rb_nodes[direction];
+		while (!RB_SENTINEL_P(self->rb_nodes[other]))
+			self = self->rb_nodes[other];
 		return self;
 #endif /* !RBSMALL */
 	}
@@ -1066,12 +1044,10 @@ static bool
 rb_tree_check_node(const struct rb_tree *rbt, const struct rb_node *self,
 	const struct rb_node *prev, bool red_check)
 {
-	const rb_tree_ops_t *rbto = rbt->rbt_ops;
-	rbto_compare_nodes_fn compare_nodes = rbto->rbto_compare_nodes;
+	rbto_compare_nodes_fn compare_nodes = rbt->rbt_ops->rbto_compare_nodes;
 
 	KASSERT(!RB_SENTINEL_P(self));
-	KASSERT(prev == NULL || (*compare_nodes)(rbto->rbto_context,
-	    RB_NODETOITEM(rbto, prev), RB_NODETOITEM(rbto, self)) < 0);
+	KASSERT(prev == NULL || (*compare_nodes)(prev, self) > 0);
 
 	/*
 	 * Verify our relationship to our parent.
@@ -1082,17 +1058,13 @@ rb_tree_check_node(const struct rb_tree *rbt, const struct rb_node *self,
 		KASSERT(RB_FATHER(self)->rb_nodes[RB_DIR_LEFT] == self);
 		KASSERT(RB_FATHER(self) == (const struct rb_node *) &rbt->rbt_root);
 	} else {
-		int diff = (*compare_nodes)(rbto->rbto_context,
-		    RB_NODETOITEM(rbto, self),
-		    RB_NODETOITEM(rbto, RB_FATHER(self)));
-
 		KASSERT(self != rbt->rbt_root);
 		KASSERT(!RB_FATHER_SENTINEL_P(self));
 		if (RB_POSITION(self) == RB_DIR_LEFT) {
-			KASSERT(diff < 0);
+			KASSERT((*compare_nodes)(self, RB_FATHER(self)) > 0);
 			KASSERT(RB_FATHER(self)->rb_nodes[RB_DIR_LEFT] == self);
 		} else {
-			KASSERT(diff > 0);
+			KASSERT((*compare_nodes)(self, RB_FATHER(self)) < 0);
 			KASSERT(RB_FATHER(self)->rb_nodes[RB_DIR_RIGHT] == self);
 		}
 	}

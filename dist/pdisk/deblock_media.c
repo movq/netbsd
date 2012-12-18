@@ -26,7 +26,6 @@
  */
 
 
-#include <stdio.h>
 // for malloc() & free()
 #include <stdlib.h>
 // for memcpy()
@@ -49,8 +48,8 @@ struct deblock_media {
     struct media    m;
     long            need_filtering;
     MEDIA           next_media;
-    uint32_t   next_block_size;
-    uint8_t   *buffer;
+    unsigned long   next_block_size;
+    unsigned char   *buffer;
 };
 
 struct deblock_globals {
@@ -75,8 +74,8 @@ static struct deblock_globals deblock_info;
  */
 void deblock_init(void);
 DEBLOCK_MEDIA new_deblock_media(void);
-long read_deblock_media(MEDIA m, long long offset, uint32_t count, void *address);
-long write_deblock_media(MEDIA m, long long offset, uint32_t count, void *address);
+long read_deblock_media(MEDIA m, long long offset, unsigned long count, void *address);
+long write_deblock_media(MEDIA m, long long offset, unsigned long count, void *address);
 long close_deblock_media(MEDIA m);
 long os_reload_deblock_media(MEDIA m);
 
@@ -104,10 +103,10 @@ new_deblock_media(void)
 
 
 MEDIA
-open_deblock_media(uint32_t new_block_size, MEDIA m)
+open_deblock_media(long new_block_size, MEDIA m)
 {
     DEBLOCK_MEDIA   a;
-    uint32_t block_size;
+    unsigned long   block_size;
     
     if (deblock_inited == 0) {
 	deblock_init();
@@ -161,16 +160,16 @@ open_deblock_media(uint32_t new_block_size, MEDIA m)
 
 
 long
-read_deblock_media(MEDIA m, long long offset, uint32_t count, void *address)
+read_deblock_media(MEDIA m, long long offset, unsigned long count, void *address)
 {
     DEBLOCK_MEDIA a;
     long rtn_value;
-    uint32_t next_size;
-    uint32_t partial_offset;
-    uint32_t partial_count;
+    unsigned long next_size;
+    unsigned long partial_offset;
+    unsigned long partial_count;
     long long cur_offset;
-    uint32_t remainder;
-    uint8_t *addr;
+    unsigned long remainder;
+    unsigned char *addr;
 
     a = (DEBLOCK_MEDIA) m;
     rtn_value = 0;
@@ -228,16 +227,16 @@ read_deblock_media(MEDIA m, long long offset, uint32_t count, void *address)
 
 
 long
-write_deblock_media(MEDIA m, long long offset, uint32_t count, void *address)
+write_deblock_media(MEDIA m, long long offset, unsigned long count, void *address)
 {
     DEBLOCK_MEDIA a;
     long rtn_value;
-    uint32_t next_size;
-    uint32_t partial_offset;
-    uint32_t partial_count;
+    unsigned long next_size;
+    unsigned long partial_offset;
+    unsigned long partial_count;
     long long cur_offset;
-    uint32_t remainder;
-    uint8_t *addr;
+    unsigned long remainder;
+    unsigned char *addr;
     
     a = (DEBLOCK_MEDIA) m;
     rtn_value = 0;

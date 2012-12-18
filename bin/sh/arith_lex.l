@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: arith_lex.l,v 1.16 2012/03/20 18:42:29 matt Exp $	*/
+/*	$NetBSD: arith_lex.l,v 1.14 2007/03/25 06:29:26 apb Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)arith_lex.l	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: arith_lex.l,v 1.16 2012/03/20 18:42:29 matt Exp $");
+__RCSID("$NetBSD: arith_lex.l,v 1.14 2007/03/25 06:29:26 apb Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,9 +53,8 @@ extern const char *arith_buf, *arith_startbuf;
 #undef YY_INPUT
 #define YY_INPUT(buf,result,max) \
 	result = (*buf = *arith_buf++) ? 1 : YY_NULL;
+#define YY_NO_UNPUT
 %}
-
-%option nounput noinput
 
 %%
 [ \t\n]	{ ; }
@@ -96,7 +95,7 @@ extern const char *arith_buf, *arith_startbuf;
 %%
 
 void
-arith_lex_reset(void) {
+arith_lex_reset() {
 #ifdef YY_NEW_FILE
 	YY_NEW_FILE;
 #endif

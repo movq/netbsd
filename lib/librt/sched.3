@@ -1,4 +1,4 @@
-.\"	$NetBSD: sched.3,v 1.11 2011/12/04 21:08:44 jym Exp $
+.\"	$NetBSD: sched.3,v 1.5.4.1 2008/11/12 23:52:00 snj Exp $
 .\"
 .\" Copyright (c) 2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 4, 2011
+.Dd October 31, 2008
 .Dt SCHED 3
 .Os
 .Sh NAME
@@ -61,8 +61,8 @@
 .Ft int
 .Fn sched_yield "void"
 .Sh DESCRIPTION
-This section describes the functions used to get scheduling information
-about processes, and control the scheduling of processes.
+This section describes the functions used to get the scheduling
+information about the processes, and control the scheduling of the process.
 .Pp
 Available scheduling policies (classes) are:
 .Bl -tag -width SCHED_OTHER
@@ -147,22 +147,6 @@ Get the affinity mask of the process specified by
 into the
 .Fa cpuset .
 .El
-.Sh IMPLEMENTATION NOTES
-Setting CPU
-.Xr affinity 3
-requires super-user privileges.
-Ordinary users can be allowed to control CPU affinity
-of their threads via the
-.Pa security.models.extensions.user_set_cpu_affinity
-.Xr sysctl 7 .
-See
-.Xr secmodel_extensions 9 .
-.Pp
-Portable applications should not use the
-.Fn sched_setaffinity_np
-and
-.Fn sched_getaffinity_np
-functions.
 .Sh RETURN VALUES
 .Fn sched_setparam ,
 .Fn sched_getparam ,
@@ -186,6 +170,7 @@ Otherwise, \-1 is returned and
 .Va errno
 is set to indicate the error.
 .Pp
+The
 .Fn sched_get_priority_max
 and
 .Fn sched_get_priority_min
@@ -194,6 +179,7 @@ Otherwise, \-1 is returned and
 .Va errno
 is set to indicate the error.
 .Pp
+The
 .Fn sched_setaffinity_np
 and
 .Fn sched_getaffinity_np
@@ -213,9 +199,9 @@ At least one of the specified scheduling parameters was invalid.
 .It Bq Er EPERM
 The calling process has no appropriate privileges to perform the operation.
 .It Bq Er ESRCH
-No process can be found corresponding to the PID specified by
+No process can be found corresponding to that specified by
 .Fa pid ,
-and the value of
+and value of
 .Fa pid
 is not zero.
 .El
@@ -232,7 +218,7 @@ match the effective user-id of the specified process.
 .It Bq Er ESRCH
 No process can be found corresponding to that specified by
 .Fa pid ,
-and the value of
+and value of
 .Fa pid
 is not zero.
 .El
@@ -254,10 +240,16 @@ function fails if:
 .It Bq Er ESRCH
 No process can be found corresponding to that specified by
 .Fa pid ,
-and the value of
+and value of
 .Fa pid
 is not zero.
 .El
+.Sh NOTES
+Portable applications should not use
+.Fn sched_setaffinity_np
+and
+.Fn sched_getaffinity_np
+functions.
 .Sh SEE ALSO
 .Xr affinity 3 ,
 .Xr cpuset 3 ,

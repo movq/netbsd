@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.43 2012/06/11 16:27:08 tsutsui Exp $	*/
+/*	$NetBSD: machdep.c,v 1.36 2008/04/28 20:23:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2002 The NetBSD Foundation, Inc.
@@ -65,24 +65,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.43 2012/06/11 16:27:08 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.36 2008/04/28 20:23:16 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_memsize.h"
 #include "scif.h"
 #include "opt_kloader.h"
-#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/reboot.h>
 #include <sys/sysctl.h>
 #include <sys/ksyms.h>
-#include <sys/device.h>
-#include <sys/module.h>
 
 #ifdef KGDB
 #include <sys/kgdb.h>
@@ -98,7 +96,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.43 2012/06/11 16:27:08 tsutsui Exp $")
 #include <sh3/bscreg.h>
 #include <machine/intr.h>
 #include <machine/kloader.h>
-#include <machine/pcb.h>
 
 #include <dev/cons.h>
 
@@ -141,6 +138,9 @@ dreamcast_startup(void)
 	pmap_bootstrap();
 
 	/* Debugger. */
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init(0, NULL, NULL);
+#endif
 #if defined(KGDB) && (NSCIF > 0)
 	if (scif_kgdb_init() == 0) {
 		kgdb_debug_init = 1;
@@ -242,8 +242,6 @@ cpu_reboot(int howto, char *bootstr)
  haltsys:
 	doshutdownhooks();
 
-	pmf_system_shutdown(boothowto);
-
 	if (howto & RB_HALT) {
 		printf("\n");
 		printf("The operating system has halted.\n");
@@ -272,8 +270,6 @@ intc_intr(int ssr, int spc, int ssp)
 	struct intc_intrhand *ih;
 	int s, evtcode;
 
-	curcpu()->ci_data.cpu_nintr++;
-
 	evtcode = _reg_read_4(SH4_INTEVT);
 
 	ih = EVTCODE_IH(evtcode);
@@ -294,13 +290,3 @@ intc_intr(int ssr, int spc, int ssp)
 		(*ih->ih_func)(ih->ih_arg);
 	}
 }
-
-#ifdef MODULAR
-/*
- * Push any modules loaded by the bootloader etc.
- */
-void
-module_init_md(void)
-{
-}
-#endif

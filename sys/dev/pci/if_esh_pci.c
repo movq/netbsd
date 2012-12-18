@@ -1,4 +1,4 @@
-/*	$NetBSD: if_esh_pci.c,v 1.30 2012/10/27 17:18:32 chs Exp $	*/
+/*	$NetBSD: if_esh_pci.c,v 1.24 2008/04/28 20:23:55 martin Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_esh_pci.c,v 1.30 2012/10/27 17:18:32 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_esh_pci.c,v 1.24 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,21 +69,22 @@ __KERNEL_RCSID(0, "$NetBSD: if_esh_pci.c,v 1.30 2012/10/27 17:18:32 chs Exp $");
  * XXX These should be in a common file!
  */
 #define PCI_CONN		0x48    /* Connector type */
-#define PCI_CBIO PCI_BAR(0)    /* Configuration Base IO Address */
+#define PCI_CBIO		0x10    /* Configuration Base IO Address */
 
-#define MEM_MAP_REG PCI_BAR(0)
+#define MEM_MAP_REG	0x10
 
-static int	esh_pci_match(device_t, cfdata_t, void *);
-static void	esh_pci_attach(device_t, device_t, void *);
+static int	esh_pci_match(struct device *, struct cfdata *, void *);
+static void	esh_pci_attach(struct device *, struct device *, void *);
 static u_int8_t	esh_pci_bist_read(struct esh_softc *);
 static void	esh_pci_bist_write(struct esh_softc *, u_int8_t);
 
 
-CFATTACH_DECL_NEW(esh_pci, sizeof(struct esh_softc),
+CFATTACH_DECL(esh_pci, sizeof(struct esh_softc),
     esh_pci_match, esh_pci_attach, NULL, NULL);
 
 static int
-esh_pci_match(device_t parent, cfdata_t match, void *aux)
+esh_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -101,9 +102,9 @@ esh_pci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-esh_pci_attach(device_t parent, device_t self, void *aux)
+esh_pci_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct esh_softc *sc = device_private(self);
+	struct esh_softc *sc = (void *)self;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
@@ -119,7 +120,6 @@ esh_pci_attach(device_t parent, device_t self, void *aux)
 	    return;
 	}
 
-	sc->sc_dev = self;
 	sc->sc_dmat = pa->pa_dmat;
 
 	switch (PCI_PRODUCT(pa->pa_id)) {
@@ -148,19 +148,19 @@ esh_pci_attach(device_t parent, device_t self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error_dev(sc->sc_dev, "couldn't map interrupt\n");
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, eshintr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 }
 
 static u_int8_t

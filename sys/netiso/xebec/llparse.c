@@ -1,4 +1,4 @@
-/*	$NetBSD: llparse.c,v 1.14 2009/03/18 10:22:44 cegger Exp $	*/
+/*	$NetBSD: llparse.c,v 1.12 2007/02/22 06:16:03 thorpej Exp $	*/
 
 /*
  * ************************* NOTICE *******************************
@@ -13,7 +13,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: llparse.c,v 1.14 2009/03/18 10:22:44 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: llparse.c,v 1.12 2007/02/22 06:16:03 thorpej Exp $");
 
 #include "xebec.h"
 #include "llparse.h"
@@ -31,7 +31,7 @@ LLtoken		lltoken;
 void		prt_token();
 
 int
-llparse(void)
+llparse()
 {
 	register int		havetoken = false;
 	register int		sym;
@@ -171,7 +171,8 @@ llpushprod(prod) 	/* recognize production prod - push rhs on stack */
 }
 
 int
-llepsilonok(int term)
+llepsilonok(term)
+	int term;
 {
 	register int	ptr;
 	register int	sym;
@@ -224,7 +225,9 @@ llepsilonok(int term)
 
 
 short
-llfindaction(int sym, int term)
+llfindaction(sym, term)
+	int sym;
+	int term;
 {
 	register int	index;
 
@@ -243,7 +246,8 @@ llfindaction(int sym, int term)
 }
 
 void
-llparsererror(LLtoken *token)
+llparsererror(token)
+LLtoken *token;
 {
 	IFDEBUG(L)
 		fprintf(stderr,"llparsererror() enter\n");
@@ -257,7 +261,8 @@ llparsererror(LLtoken *token)
 }
 
 void
-llgettoken(LLtoken *token)
+llgettoken(token)
+	LLtoken *token;
 {
 	llscan(token);
 	token->llstate = NORMAL;
@@ -291,7 +296,8 @@ struct llattr	llattrdesc[LLMAXDESC];
 int	lldescindex = 1;
 
 void
-llsetattr(int n)
+llsetattr(n)
+	int n;
 {
 	register struct llattr *ptr;
 
@@ -314,7 +320,8 @@ llsetattr(int n)
 }
 
 void
-llpushattr(LLattrib attr)
+llpushattr(attr)
+	LLattrib attr;
 {
 	struct llattr *a;
 
@@ -331,7 +338,7 @@ llpushattr(LLattrib attr)
 }
 
 void
-llfinprod(void)
+llfinprod()
 {
 	IFDEBUG(L)
 		printf("llfinprod() enter\n");
@@ -346,7 +353,7 @@ llfinprod(void)
 #ifndef LINT
 #ifdef DEBUG
 void
-dump_parse_stack(void)
+dump_parse_stack()
 {
 	int ind;
 
@@ -362,7 +369,8 @@ dump_parse_stack(void)
 #endif /* !LINT */
 
 void
-prt_token(LLtoken *t)
+prt_token(t)
+	LLtoken *t;
 {
 	fprintf(stdout, "t at %p\n", t);
 	fprintf(stdout, "t->llterm=0x%x\n", t->llterm); (void) fflush(stdout);

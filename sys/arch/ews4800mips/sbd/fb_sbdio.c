@@ -1,4 +1,4 @@
-/*	$NetBSD: fb_sbdio.c,v 1.12 2012/01/11 21:17:33 macallan Exp $	*/
+/*	$NetBSD: fb_sbdio.c,v 1.7 2008/04/28 20:23:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #define WIRED_FB_TLB
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fb_sbdio.c,v 1.12 2012/01/11 21:17:33 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fb_sbdio.c,v 1.7 2008/04/28 20:23:18 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -141,7 +141,6 @@ fb_sbdio_attach(device_t parent, device_t self, void *aux)
 	if (console) {
 		/* already initialized in fb_cnattach() */
 		sc->sc_ri = ri = &fb_console_ri;
-		ri->ri_flg &= ~RI_NO_AUTO;
 		sc->sc_ga = &fb_console_ga;
 		sc->sc_nscreens = 1;
 	} else {
@@ -203,8 +202,6 @@ fb_common_init(struct rasops_info *ri, struct ga *ga)
 	ri->ri_flg = RI_CENTER | RI_CLEAR;
 	if (!ga_active)
 		ri->ri_flg |= RI_FORCEMONO;
-	if (ri == &fb_console_ri)
-		ri->ri_flg |= RI_NO_AUTO;
 
 	ri->ri_depth = 8;
 	ri->ri_width = 1280;
@@ -214,9 +211,9 @@ fb_common_init(struct rasops_info *ri, struct ga *ga)
 
 	wsfont_init();
 	/* prefer 12 pixel wide font */
-	cookie = wsfont_find(NULL, 12, 0, 0, 0, 0, WSFONT_FIND_BITMAP);
+	cookie = wsfont_find(NULL, 12, 0, 0, 0, 0);
 	if (cookie <= 0)
-		cookie = wsfont_find(NULL, 0, 0, 0, 0, 0, WSFONT_FIND_BITMAP);
+		cookie = wsfont_find(NULL, 0, 0, 0, 0, 0);
 	if (cookie <= 0) {
 		printf("sfb: font table is empty\n");
 		return;
@@ -421,7 +418,7 @@ fb_pmap_enter(paddr_t fb_paddr, paddr_t reg_paddr,
 			ROM_MONITOR();
 
 	for (tva = va; pa < epa; pa += PAGE_SIZE, tva += PAGE_SIZE)
-		pmap_kenter_pa(tva, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
+		pmap_kenter_pa(tva, pa, VM_PROT_READ | VM_PROT_WRITE);
 
 	pmap_update(pmap_kernel());
 

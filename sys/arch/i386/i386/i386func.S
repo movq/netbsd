@@ -1,4 +1,4 @@
-/*	$NetBSD: i386func.S,v 1.17 2012/08/29 22:43:35 rmind Exp $	*/
+/*	$NetBSD: i386func.S,v 1.15 2008/05/25 15:56:12 chs Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007, 2008 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: i386func.S,v 1.17 2012/08/29 22:43:35 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i386func.S,v 1.15 2008/05/25 15:56:12 chs Exp $");
 
 #include <machine/specialreg.h>
 #include <machine/segments.h>
@@ -99,16 +99,13 @@ END(lcr3)
  *
  * (the alternatives not quoted above are not an option here.)
  *
- * If PGE is not in use, we reload CR3.  Check for the PGE feature
- * first since i486 does not have CR4.  Note: the feature flag may
- * be present while the actual PGE functionality not yet enabled.
+ * If PGE is not in use, we reload CR3 for the benefit of
+ * pre-P6-family processors.
  */
 ENTRY(tlbflushg)
 	testl	$CPUID_PGE, _C_LABEL(cpu_feature)
 	jz	1f
 	movl	%cr4, %eax
-	testl	$CR4_PGE, %eax
-	jz	1f
 	movl	%eax, %edx
 	andl	$~CR4_PGE, %edx
 	movl	%edx, %cr4

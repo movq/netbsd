@@ -1,12 +1,12 @@
-#	$NetBSD: Makefile,v 1.13 2010/03/30 07:26:23 mrg Exp $
+#	$NetBSD: Makefile,v 1.9 2004/04/23 14:50:00 christos Exp $
 
-.include <bsd.own.mk>
-
-.if (${MACHINE_ARCH} == "alpha" || \
-     ${MACHINE_CPU} == "arm" || \
+WARNS=3
+.if (${MACHINE} == "acorn32" || \
+     ${MACHINE_ARCH} == "alpha" || \
+     ${MACHINE} == "cats" || \
+     ${MACHINE} == "atari" || \
+     ${MACHINE} == "bebox" || \
      ${MACHINE_ARCH} == "i386" || \
-     ${MACHINE_ARCH} == "m68k" || \
-     ${MACHINE_CPU} == "powerpc" || \
      ${MACHINE_ARCH} == "sparc" || \
      ${MACHINE_ARCH} == "sparc64" || \
      ${MACHINE_ARCH} == "x86_64")

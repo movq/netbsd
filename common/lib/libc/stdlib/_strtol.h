@@ -1,4 +1,4 @@
-/* $NetBSD: _strtol.h,v 1.3 2012/03/09 15:41:16 christos Exp $ */
+/* $NetBSD: _strtol.h,v 1.1 2008/08/20 12:42:26 joerg Exp $ */
 
 /*-
  * Copyright (c) 1990, 1993
@@ -57,10 +57,7 @@ _FUNCNAME(const char *nptr, char **endptr, int base)
 	if (base && (base < 2 || base > 36)) {
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 		errno = EINVAL;
-		if (endptr != NULL)
-			/* LINTED interface specification */
-			*endptr = __UNCONST(nptr);
-		return 0;
+		return(0);
 #else
 		panic("%s: invalid base %d", __func__, base);
 #endif
@@ -109,7 +106,7 @@ _FUNCNAME(const char *nptr, char **endptr, int base)
 	 * Set any if any `digits' consumed; make it negative to indicate
 	 * overflow.
 	 */
-	cutoff = (__INT)(neg ? __INT_MIN : __INT_MAX);
+	cutoff = (neg ? __INT_MIN : __INT_MAX);
 	cutlim = (int)(cutoff % base);
 	cutoff /= base;
 	if (neg) {

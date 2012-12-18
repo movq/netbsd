@@ -1,4 +1,4 @@
-/*	$NetBSD: altqd.c,v 1.11 2011/08/29 20:38:54 joerg Exp $	*/
+/*	$NetBSD: altqd.c,v 1.9 2006/11/26 11:38:07 peter Exp $	*/
 /*	$KAME: altqd.c,v 1.10 2002/02/20 10:42:26 kjc Exp $	*/
 /*
  * Copyright (c) 2001 Theo de Raadt
@@ -79,7 +79,7 @@
 
 static volatile sig_atomic_t gotsig_hup, gotsig_int, gotsig_term;
 
-__dead static void usage(void);
+static void usage(void);
 static void sig_handler(int);
 
 static void
@@ -114,7 +114,7 @@ sig_handler(int sig)
 int
 main(int argc, char **argv)
 {
-	int	i, c, maxfd, rval, qpsock, fd;
+	int	i, c, maxfd, rval, qpsock;
 	fd_set	fds, rfds;
 	FILE	*fp, *client[MAX_CLIENT];
 
@@ -216,15 +216,8 @@ main(int argc, char **argv)
 	FD_ZERO(&fds);
 	maxfd = 0;
 	if (fp != NULL) {
-	    fd = fileno(fp);
-	    if (fd == -1)
-		    LOG(LOG_ERR, 0, "bad file descriptor", QUIP_PATH);
-	} else
-		fd = -1;
-
-	if (fd != -1) {
-		FD_SET(fd, &fds);
-		maxfd = MAX(maxfd, fd + 1);
+		FD_SET(fileno(fp), &fds);
+		maxfd = MAX(maxfd, fileno(fp) + 1);
 	}
 	if (qpsock >= 0) {
 		FD_SET(qpsock, &fds);
@@ -259,7 +252,7 @@ main(int argc, char **argv)
 		 * if there is command input, read the input line,
 		 * parse it, and execute.
 		 */
-		if (fp && FD_ISSET(fd, &rfds)) {
+		if (fp && FD_ISSET(fileno(fp), &rfds)) {
 			rval = do_command(fp);
 			if (rval == 0) {
 				/* quit command or eof on input */
@@ -291,18 +284,18 @@ main(int argc, char **argv)
 			 * check input from a client via unix domain socket
 			 */
 			for (i = 0; i < MAX_CLIENT; i++) {
-				int fd1;
+				int fd;
 
 				if (client[i] == NULL)
 					continue;
-				fd1 = fileno(client[i]);
-				if (FD_ISSET(fd1, &rfds)) {
+				fd = fileno(client[i]);
+				if (FD_ISSET(fd, &rfds)) {
 					if (quip_input(client[i]) != 0 ||
 					    fflush(client[i]) != 0) {
 						/* connection closed */
 						fclose(client[i]);
 						client[i] = NULL;
-						FD_CLR(fd1, &fds);
+						FD_CLR(fd, &fds);
 					}
 				}
 			}

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_atw_pci.c,v 1.25 2011/07/26 20:51:24 dyoung Exp $	*/
+/*	$NetBSD: if_atw_pci.c,v 1.20 2008/07/09 20:07:19 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atw_pci.c,v 1.25 2011/07/26 20:51:24 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atw_pci.c,v 1.20 2008/07/09 20:07:19 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,8 +75,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_atw_pci.c,v 1.25 2011/07/26 20:51:24 dyoung Exp $
 /*
  * PCI configuration space registers used by the ADM8211.
  */
-#define ATW_PCI_IOBA PCI_BAR(0)	/* i/o mapped base */
-#define ATW_PCI_MMBA PCI_BAR(1)	/* memory mapped base */
+#define	ATW_PCI_IOBA		0x10	/* i/o mapped base */
+#define	ATW_PCI_MMBA		0x14	/* memory mapped base */
 
 struct atw_pci_softc {
 	struct atw_softc	psc_atw;	/* real ADM8211 softc */
@@ -88,10 +88,8 @@ struct atw_pci_softc {
 	pcitag_t		psc_pcitag;	/* our PCI tag */
 };
 
-static int	atw_pci_match(device_t, cfdata_t, void *);
+static int	atw_pci_match(device_t, struct cfdata *, void *);
 static void	atw_pci_attach(device_t, device_t, void *);
-static bool	atw_pci_suspend(device_t, const pmf_qual_t *);
-static bool	atw_pci_resume(device_t, const pmf_qual_t *);
 
 CFATTACH_DECL_NEW(atw_pci, sizeof(struct atw_pci_softc),
     atw_pci_match, atw_pci_attach, NULL, NULL);
@@ -133,33 +131,31 @@ atw_pci_match(device_t parent, cfdata_t match, void *aux)
 	return (0);
 }
 
-static bool
-atw_pci_resume(device_t self, const pmf_qual_t *qual)
+static int
+atw_pci_enable(struct atw_softc *sc)
 {
-	struct atw_pci_softc *psc = device_private(self);
-	struct atw_softc *sc = &psc->psc_atw;
+	struct atw_pci_softc *psc = (struct atw_pci_softc *)sc;
 
 	/* Establish the interrupt. */
 	psc->psc_intrcookie = pci_intr_establish(psc->psc_pc, psc->psc_ih,
 	    IPL_NET, atw_intr, sc);
 	if (psc->psc_intrcookie == NULL) {
-		aprint_error_dev(sc->sc_dev, "unable to establish interrupt\n");
-		return false;
+		aprint_error_dev(sc->sc_dev,
+		    "unable to establish interrupt\n");
+		return (1);
 	}
 
-	return true;
+	return (0);
 }
 
-static bool
-atw_pci_suspend(device_t self, const pmf_qual_t *qual)
+static void
+atw_pci_disable(struct atw_softc *sc)
 {
-	struct atw_pci_softc *psc = device_private(self);
+	struct atw_pci_softc *psc = (struct atw_pci_softc *)sc;
 
 	/* Unhook the interrupt handler. */
 	pci_intr_disestablish(psc->psc_pc, psc->psc_intrcookie);
 	psc->psc_intrcookie = NULL;
-
-	return atw_suspend(self, qual);
 }
 
 static void
@@ -186,6 +182,12 @@ atw_pci_attach(device_t parent, device_t self, void *aux)
 		printf("\n");
 		panic("atw_pci_attach: impossible");
 	}
+
+	/*
+	 * No power management hooks.
+	 * XXX Maybe we should add some!
+	 */
+	sc->sc_flags |= ATWF_ENABLED;
 
 	/*
 	 * Get revision info, and set some chip-specific variables.
@@ -267,20 +269,11 @@ atw_pci_attach(device_t parent, device_t self, void *aux)
 
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
+	sc->sc_enable = atw_pci_enable;
+	sc->sc_disable = atw_pci_disable;
+
 	/*
-	 * Bus-independent attach.
+	 * Finish off the attach.
 	 */
 	atw_attach(sc);
-
-	if (pmf_device_register1(sc->sc_dev, atw_pci_suspend, atw_pci_resume,
-	    atw_shutdown))
-		pmf_class_network_register(sc->sc_dev, &sc->sc_if);
-	else
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
-
-	/*
-	 * Power down the socket.
-	 */
-	pmf_device_suspend(sc->sc_dev, &sc->sc_qual);
 }

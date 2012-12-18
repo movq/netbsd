@@ -1,4 +1,4 @@
-/* $NetBSD: kill.c,v 1.27 2011/08/29 14:51:18 joerg Exp $ */
+/* $NetBSD: kill.c,v 1.25.4.1 2009/10/03 23:20:05 snj Exp $ */
 
 /*
  * Copyright (c) 1988, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)kill.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: kill.c,v 1.27 2011/08/29 14:51:18 joerg Exp $");
+__RCSID("$NetBSD: kill.c,v 1.25.4.1 2009/10/03 23:20:05 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,15 +58,15 @@ __RCSID("$NetBSD: kill.c,v 1.27 2011/08/29 14:51:18 joerg Exp $");
 #include <sys/ioctl.h>
 
 #ifdef SHELL            /* sh (aka ash) builtin */
-int killcmd(int, char *argv[]);
 #define main killcmd
 #include "../../bin/sh/bltin/bltin.h"
 #endif /* SHELL */ 
 
-__dead static void nosig(char *);
+static void nosig(char *);
 static void printsignals(FILE *);
 static int signame_to_signum(char *);
-__dead static void usage(void);
+static void usage(void);
+int main(int, char *[]);
 
 int
 main(int argc, char *argv[])

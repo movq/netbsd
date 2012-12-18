@@ -1,4 +1,4 @@
-/*	$NetBSD: footbridgevar.h,v 1.7 2011/07/01 19:32:28 dyoung Exp $	*/
+/*	$NetBSD: footbridgevar.h,v 1.5 2007/01/06 16:18:18 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/rtc.h>
 #include <dev/pci/pcivar.h>
 
@@ -45,7 +45,7 @@
  */
 
 struct footbridge_softc {
-	device_t 		sc_dev;	/* device node */
+	struct device 		sc_dev;	/* device node */
 	bus_space_tag_t		sc_iot;	/* bus tag */
 	bus_space_handle_t	sc_ioh;	/* bus handle */
 

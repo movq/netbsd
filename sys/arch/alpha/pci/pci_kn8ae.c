@@ -1,4 +1,4 @@
-/* $NetBSD: pci_kn8ae.c,v 1.27 2012/02/06 02:14:15 matt Exp $ */
+/* $NetBSD: pci_kn8ae.c,v 1.21 2002/05/15 16:57:43 thorpej Exp $ */
 
 /*
  * Copyright (c) 1997 by Matthew Jacob
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_kn8ae.c,v 1.27 2012/02/06 02:14:15 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_kn8ae.c,v 1.21 2002/05/15 16:57:43 thorpej Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -43,6 +43,8 @@ __KERNEL_RCSID(0, "$NetBSD: pci_kn8ae.c,v 1.27 2012/02/06 02:14:15 matt Exp $");
 #include <sys/device.h>
 #include <sys/syslog.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <machine/autoconf.h>
 
 #include <dev/pci/pcireg.h>
@@ -52,31 +54,33 @@ __KERNEL_RCSID(0, "$NetBSD: pci_kn8ae.c,v 1.27 2012/02/06 02:14:15 matt Exp $");
 #include <alpha/pci/dwlpxvar.h>
 #include <alpha/pci/pci_kn8ae.h>
 
-int	dec_kn8ae_intr_map(const struct pci_attach_args *,
-	    pci_intr_handle_t *);
-const char *dec_kn8ae_intr_string(void *, pci_intr_handle_t);
-const struct evcnt *dec_kn8ae_intr_evcnt(void *, pci_intr_handle_t);
-void	*dec_kn8ae_intr_establish(void *, pci_intr_handle_t,
-	    int, int (*func)(void *), void *);
-void	dec_kn8ae_intr_disestablish(void *, void *);
+int	dec_kn8ae_intr_map __P((struct pci_attach_args *,
+	    pci_intr_handle_t *));
+const char *dec_kn8ae_intr_string __P((void *, pci_intr_handle_t));
+const struct evcnt *dec_kn8ae_intr_evcnt __P((void *, pci_intr_handle_t));
+void	*dec_kn8ae_intr_establish __P((void *, pci_intr_handle_t,
+	    int, int (*func)(void *), void *));
+void	dec_kn8ae_intr_disestablish __P((void *, void *));
 
-static uint32_t imaskcache[DWLPX_NIONODE][DWLPX_NHOSE][NHPC];
+static u_int32_t imaskcache[DWLPX_NIONODE][DWLPX_NHOSE][NHPC];
 
-void	kn8ae_spurious(void *, u_long);
-void	kn8ae_enadis_intr(struct dwlpx_config *, pci_intr_handle_t, int);
+void	kn8ae_spurious __P((void *, u_long));
+void	kn8ae_enadis_intr __P((struct dwlpx_config *, pci_intr_handle_t, int));
 
 void
-pci_kn8ae_pickintr(struct dwlpx_config *ccp, int first)
+pci_kn8ae_pickintr(ccp, first)
+	struct dwlpx_config *ccp;
+	int first;
 {
 	int io, hose, dev;
 	pci_chipset_tag_t pc = &ccp->cc_pc;
 
-	pc->pc_intr_v = ccp;
-	pc->pc_intr_map = dec_kn8ae_intr_map;
-	pc->pc_intr_string = dec_kn8ae_intr_string;
+        pc->pc_intr_v = ccp;
+        pc->pc_intr_map = dec_kn8ae_intr_map;
+        pc->pc_intr_string = dec_kn8ae_intr_string;
 	pc->pc_intr_evcnt = dec_kn8ae_intr_evcnt;
-	pc->pc_intr_establish = dec_kn8ae_intr_establish;
-	pc->pc_intr_disestablish = dec_kn8ae_intr_disestablish;
+        pc->pc_intr_establish = dec_kn8ae_intr_establish;
+        pc->pc_intr_disestablish = dec_kn8ae_intr_disestablish;
 
 	/* Not supported on KN8AE. */
 	pc->pc_pciide_compat_intr_establish = NULL;
@@ -101,8 +105,10 @@ pci_kn8ae_pickintr(struct dwlpx_config *ccp, int first)
 #define	IH_DEV(ih)	(((ih) >> 16) & 0xff)
 #define	IH_PIN(ih)	(((ih) >> 24) & 0xff)
 
-int
-dec_kn8ae_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+int     
+dec_kn8ae_intr_map(pa, ihp)
+	struct pci_attach_args *pa;
+        pci_intr_handle_t *ihp;
 {
 	pcitag_t bustag = pa->pa_intrtag;
 	int buspin = pa->pa_intrpin;
@@ -133,17 +139,21 @@ dec_kn8ae_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 }
 
 const char *
-dec_kn8ae_intr_string(void *ccv, pci_intr_handle_t ih)
+dec_kn8ae_intr_string(ccv, ih)
+	void *ccv;
+	pci_intr_handle_t ih;
 {
 	static char irqstr[64];
 
 	sprintf(irqstr, "vector 0x%lx", IH_VEC(ih));
 
-	return (irqstr);
+        return (irqstr);
 }
 
 const struct evcnt *
-dec_kn8ae_intr_evcnt(void *ccv, pci_intr_handle_t ih)
+dec_kn8ae_intr_evcnt(ccv, ih)
+	void *ccv;
+	pci_intr_handle_t ih;
 {
 
 	/* XXX for now, no evcnt parent reported */
@@ -151,13 +161,13 @@ dec_kn8ae_intr_evcnt(void *ccv, pci_intr_handle_t ih)
 }
 
 void *
-dec_kn8ae_intr_establish(
-	void *ccv,
-	pci_intr_handle_t ih,
-	int level,
-	int (*func)(void *),
-	void *arg)
-{
+dec_kn8ae_intr_establish(ccv, ih, level, func, arg)
+        void *ccv;
+        pci_intr_handle_t ih;
+        int level;
+        int (*func) __P((void *));
+	void *arg;
+{           
 	struct dwlpx_config *ccp = ccv;
 	void *cookie;
 	struct scbvec *scb;
@@ -204,8 +214,9 @@ dec_kn8ae_intr_establish(
 	return (cookie);
 }
 
-void
-dec_kn8ae_intr_disestablish(void *ccv, void *cookie)
+void    
+dec_kn8ae_intr_disestablish(ccv, cookie)
+        void *ccv, *cookie;
 {
 	struct dwlpx_config *ccp = ccv;
 	pci_intr_handle_t ih = (u_long) cookie;
@@ -228,11 +239,14 @@ kn8ae_spurious(void *arg, u_long vec)
 }
 
 void
-kn8ae_enadis_intr(struct dwlpx_config *ccp, pci_intr_handle_t irq, int onoff)
+kn8ae_enadis_intr(ccp, irq, onoff)
+	struct dwlpx_config *ccp;
+	pci_intr_handle_t irq;
+	int onoff;
 {
 	struct dwlpx_softc *sc = ccp->cc_sc;
 	unsigned long paddr;
-	uint32_t val;
+	u_int32_t val;
 	int ionode, hose, device, hpc, busp, s;
 
 	ionode = sc->dwlpx_node - 4;

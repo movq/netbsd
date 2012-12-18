@@ -33,7 +33,7 @@
 #include "opt_omap.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio_wdt.c,v 1.6 2012/09/05 00:19:59 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio_wdt.c,v 1.3 2008/08/27 11:03:10 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -44,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: obio_wdt.c,v 1.6 2012/09/05 00:19:59 matt Exp $");
 #include <sys/wdog.h>
 
 #include <machine/param.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <dev/sysmon/sysmonvar.h>
 
 #include <arm/omap/omap2_obiovar.h>
@@ -52,36 +52,35 @@ __KERNEL_RCSID(0, "$NetBSD: obio_wdt.c,v 1.6 2012/09/05 00:19:59 matt Exp $");
 #include <arm/omap/omap_wdtvar.h>
 #include <arm/omap/omap_wdtreg.h>
 
-static int obiowdt32k_match(device_t, cfdata_t, void *);
-static void obiowdt32k_attach(device_t, device_t, void *);
+static int obiowdt32k_match(struct device *, struct cfdata *, void *);
+static void obiowdt32k_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(obiowdt32k, sizeof(struct omapwdt32k_softc),
+CFATTACH_DECL(obiowdt32k, sizeof(struct omapwdt32k_softc),
     obiowdt32k_match, obiowdt32k_attach, NULL, NULL);
 
 static int
-obiowdt32k_match(device_t parent, cfdata_t cf, void *aux)
+obiowdt32k_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	return (1);
 }
 
 static void
-obiowdt32k_attach(device_t parent, device_t self, void *aux)
+obiowdt32k_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct omapwdt32k_softc *sc = device_private(self);
+	struct omapwdt32k_softc *sc = (void *)self;
 	struct obio_attach_args *obio = aux;
 	unsigned int val;
 
-	sc->sc_dev = self;
-	sc->sc_smw.smw_name = device_xname(sc->sc_dev);
+	sc->sc_smw.smw_name = sc->sc_dev.dv_xname;
 	sc->sc_smw.smw_cookie = sc;
 	sc->sc_smw.smw_setmode = omapwdt32k_setmode;
 	sc->sc_smw.smw_tickle = omapwdt32k_tickle;
 	sc->sc_smw.smw_period = OMAPWDT32K_DEFAULT_PERIOD;
 	sc->sc_iot = obio->obio_iot;
 
-	if (bus_space_map(sc->sc_iot, obio->obio_addr, obio->obio_size, 0,
-		&sc->sc_ioh))
-		panic("%s: Cannot map registers", device_xname(self));
+	if (bus_space_map(sc->sc_iot, obio->obio_addr, obio->obio_size,
+			  0, &sc->sc_ioh))
+		panic("%s: Cannot map registers", self->dv_xname);
 
 	val = bus_space_read_4(sc->sc_iot, sc->sc_ioh, WIDR);
 	aprint_normal(": rev %d.%d\n", (val & WD_REV) >> 4,
@@ -89,7 +88,7 @@ obiowdt32k_attach(device_t parent, device_t self, void *aux)
 
 	if (sysmon_wdog_register(&sc->sc_smw) != 0)
 		aprint_error("%s: unable to register with sysmon\n",
-			     device_xname(sc->sc_dev));
+			     sc->sc_dev.dv_xname);
 
 	omapwdt32k_sc = sc;
 

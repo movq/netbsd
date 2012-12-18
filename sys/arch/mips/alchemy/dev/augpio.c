@@ -1,4 +1,4 @@
-/* $NetBSD: augpio.c,v 1.7 2012/01/03 07:36:02 kiyohara Exp $ */
+/* $NetBSD: augpio.c,v 1.5 2006/03/24 18:22:42 gdamore Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */ 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: augpio.c,v 1.7 2012/01/03 07:36:02 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: augpio.c,v 1.5 2006/03/24 18:22:42 gdamore Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -44,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: augpio.c,v 1.7 2012/01/03 07:36:02 kiyohara Exp $");
 
 #include <dev/gpio/gpiovar.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 
 #include <mips/alchemy/include/aubusvar.h>
@@ -53,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: augpio.c,v 1.7 2012/01/03 07:36:02 kiyohara Exp $");
 #include <mips/alchemy/dev/augpiovar.h>
 
 struct augpio_softc {
-	device_t			sc_dev;
+	struct device			sc_dev;
 	struct gpio_chipset_tag		sc_gc;
 	gpio_pin_t			sc_pins[AUGPIO_NPINS];
 	int				sc_npins;
@@ -63,10 +63,10 @@ struct augpio_softc {
 	int				(*sc_getctl)(void *, int);
 };
 
-static int augpio_match(device_t, struct cfdata *, void *);
-static void augpio_attach(device_t, device_t, void *);
+static int augpio_match(struct device *, struct cfdata *, void *);
+static void augpio_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(augpio, sizeof(struct augpio_softc),
+CFATTACH_DECL(augpio, sizeof(struct augpio_softc),
     augpio_match, augpio_attach, NULL, NULL);
 
 #define	GETREG(x)	\
@@ -80,7 +80,7 @@ CFATTACH_DECL_NEW(augpio, sizeof(struct augpio_softc),
 #define	PUTGPIO2(x,v)	PUTREG(GPIO2_BASE + (x), (v))
 
 int
-augpio_match(device_t parent, struct cfdata *match, void *aux)
+augpio_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct aubus_attach_args *aa = (struct aubus_attach_args *)aux;
 
@@ -91,15 +91,14 @@ augpio_match(device_t parent, struct cfdata *match, void *aux)
 }
 
 void
-augpio_attach(device_t parent, device_t self, void *aux)
+augpio_attach(struct device *parent, struct device *self, void *aux)
 {
 	int	pin;
 
-	struct augpio_softc *sc = device_private(self);
+	struct augpio_softc *sc = (struct augpio_softc *)self;
 	struct aubus_attach_args *aa = aux;
 	struct gpiobus_attach_args gba;
 
-	sc->sc_dev = self;
 	sc->sc_bst = aa->aa_st;
 	sc->sc_npins = aa->aa_addrs[1];
 	sc->sc_gc.gp_cookie = sc;
@@ -129,7 +128,7 @@ augpio_attach(device_t parent, device_t self, void *aux)
 		sc->sc_name = "secondary block";
 
 	} else {
-		aprint_error(": unidentified block\n");
+		printf(": unidentified block\n");
 		return;
 	}
 
@@ -146,9 +145,8 @@ augpio_attach(device_t parent, device_t self, void *aux)
 	gba.gba_pins = sc->sc_pins;
 	gba.gba_npins = sc->sc_npins;
 
-	aprint_normal(": Alchemy GPIO, %s\n", sc->sc_name);
-	aprint_naive("\n");
-	config_found_ia(self, "gpiobus", &gba, gpiobus_print);
+	printf(": Alchemy GPIO, %s\n", sc->sc_name);
+	config_found_ia(&sc->sc_dev, "gpiobus", &gba, gpiobus_print);
 }
 
 int

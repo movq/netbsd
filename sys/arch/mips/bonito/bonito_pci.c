@@ -1,4 +1,4 @@
-/*	$NetBSD: bonito_pci.c,v 1.10 2011/08/27 12:59:16 bouyer Exp $	*/
+/*	$NetBSD: bonito_pci.c,v 1.5 2008/04/28 20:23:28 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -35,15 +35,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bonito_pci.c,v 1.10 2011/08/27 12:59:16 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bonito_pci.c,v 1.5 2008/04/28 20:23:28 martin Exp $");
 
 #include <sys/param.h>
-#include <sys/bus.h>
-#include <sys/device.h>
-#include <sys/intr.h>
 #include <sys/systm.h>
+#include <sys/device.h>
 
-#include <mips/locore.h>
+#include <machine/bus.h>
+#include <machine/intr.h>
+#include <machine/locore.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -57,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: bonito_pci.c,v 1.10 2011/08/27 12:59:16 bouyer Exp $
 #define	PCI_CONF_LOCK(s)	(s) = splhigh()
 #define	PCI_CONF_UNLOCK(s)	splx((s))
 
-void		bonito_attach_hook(device_t, device_t,
+void		bonito_attach_hook(struct device *, struct device *,
 		    struct pcibus_attach_args *);
 int		bonito_bus_maxdevs(void *, int);
 pcitag_t	bonito_make_tag(void *, int, int, int);
@@ -66,14 +66,11 @@ pcireg_t	bonito_conf_read(void *, pcitag_t, int);
 void		bonito_conf_write(void *, pcitag_t, int, pcireg_t);
 
 void
-bonito_pci_init(pci_chipset_tag_t pc, const struct bonito_config *bc)
+bonito_pci_init(pci_chipset_tag_t pc, struct bonito_config *bc)
 {
 
-	pc->pc_conf_v = __UNCONST(bc);
-	if (bc->bc_attach_hook != NULL)
-		pc->pc_attach_hook = bc->bc_attach_hook;
-	else
-		pc->pc_attach_hook = bonito_attach_hook;
+	pc->pc_conf_v = bc;
+	pc->pc_attach_hook = bonito_attach_hook;
 	pc->pc_bus_maxdevs = bonito_bus_maxdevs;
 	pc->pc_make_tag = bonito_make_tag;
 	pc->pc_decompose_tag = bonito_decompose_tag;
@@ -82,7 +79,7 @@ bonito_pci_init(pci_chipset_tag_t pc, const struct bonito_config *bc)
 }
 
 void
-bonito_attach_hook(device_t parent, device_t self,
+bonito_attach_hook(struct device *parent, struct device *self,
     struct pcibus_attach_args *pba)
 {
 }
@@ -113,7 +110,7 @@ bonito_decompose_tag(void *v, pcitag_t tag, int *bp, int *dp, int *fp)
 		*fp = (tag >> 8) & 0x7;
 }
 
-static bool
+static int
 bonito_conf_addr(struct bonito_config *bc, pcitag_t tag, int offset,
     u_int32_t *cfgoff, u_int32_t *pcimap_cfg)
 {
@@ -123,15 +120,16 @@ bonito_conf_addr(struct bonito_config *bc, pcitag_t tag, int offset,
 
 	if (b == 0) {
 		if (d > (31 - bc->bc_adbase))
-			return true;
-		*cfgoff = (1UL << (d + bc->bc_adbase)) | (f << 8) | offset;
+			return (1);
+		*cfgoff = (1UL << (d + bc->bc_adbase)) | (f << 8) |
+		    offset;
 		*pcimap_cfg = 0;
 	} else {
 		*cfgoff = tag | offset;
 		*pcimap_cfg = BONITO_PCIMAPCFG_TYPE1;
 	}
 
-	return false;
+	return (0);
 }
 
 pcireg_t

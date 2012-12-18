@@ -1,32 +1,16 @@
-/*	$NetBSD: misc.c,v 1.21 2011/09/01 07:18:50 plunky Exp $	*/
+/*	$NetBSD: misc.c,v 1.15 2008/01/28 06:20:15 dholland Exp $	*/
 
 /*
  * misc.c  Phantasia miscellaneous support routines
  */
 
-#include <errno.h>
-#include <math.h>
-#include <setjmp.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
-#include "macros.h"
-#include "phantdefs.h"
-#include "phantstruct.h"
-#include "phantglobs.h"
-#include "pathnames.h"
-
+#include "include.h"
 #undef bool
 #include <curses.h>
 
 
-static double explevel(double);
-
-static void
-movelevel(void)
+void
+movelevel()
 {
 	const struct charstats *statptr; /* for pointing into Stattable */
 	double  new;		/* new level */
@@ -79,7 +63,9 @@ movelevel(void)
 }
 
 const char   *
-descrlocation(struct player *playerp, phbool shortflag)
+descrlocation(playerp, shortflag)
+	struct player *playerp;
+	phbool  shortflag;
 {
 	double  circle;		/* corresponding circle for coordinates */
 	int     quadrant;	/* quandrant of grid */
@@ -149,17 +135,15 @@ descrlocation(struct player *playerp, phbool shortflag)
 							}
 
 	if (shortflag)
-		snprintf(Databuf, SZ_DATABUF, "%.29s", label);
+		sprintf(Databuf, "%.29s", label);
 	else
-		snprintf(Databuf, SZ_DATABUF, 
-			" is in %s  (%.0f,%.0f)",
-			label, playerp->p_x, playerp->p_y);
+		sprintf(Databuf, " is in %s  (%.0f,%.0f)", label, playerp->p_x, playerp->p_y);
 
 	return (Databuf);
 }
 
 void
-tradingpost(void)
+tradingpost()
 {
 	double  numitems;	/* number of items to purchase */
 	double  cost;		/* cost of purchase */
@@ -416,7 +400,7 @@ tradingpost(void)
 }
 
 void
-displaystats(void)
+displaystats()
 {
 	mvprintw(0, 0, "%s%s\n", Player.p_name, descrlocation(&Player, FALSE));
 	mvprintw(1, 0, "Level :%7.0f   Energy  :%9.0f(%9.0f)  Mana :%9.0f  Users:%3d\n",
@@ -428,7 +412,7 @@ displaystats(void)
 }
 
 void
-allstatslist(void)
+allstatslist()
 {
 	static const char *const flags[] = /* to print value of some bools */
 	{
@@ -461,7 +445,9 @@ allstatslist(void)
 }
 
 const char   *
-descrtype(struct player *playerp, phbool shortflag)
+descrtype(playerp, shortflag)
+	struct player *playerp;
+	phbool  shortflag;
 {
 	int     type;		/* for caluculating result subscript */
 	static const char *const results[] =/* description table */
@@ -523,7 +509,9 @@ descrtype(struct player *playerp, phbool shortflag)
 }
 
 long
-findname(const char *name, struct player *playerp)
+findname(name, playerp)
+	const char   *name;
+	struct player *playerp;
 {
 	long    loc = 0;	/* location in the file */
 
@@ -541,7 +529,7 @@ findname(const char *name, struct player *playerp)
 }
 
 long
-allocrecord(void)
+allocrecord()
 {
 	long    loc = 0L;	/* location in file */
 
@@ -563,7 +551,9 @@ allocrecord(void)
 }
 
 void
-freerecord(struct player *playerp, long loc)
+freerecord(playerp, loc)
+	struct player *playerp;
+	long    loc;
 {
 	playerp->p_name[0] = CH_MARKDELETE;
 	playerp->p_status = S_NOTUSED;
@@ -571,7 +561,7 @@ freerecord(struct player *playerp, long loc)
 }
 
 void
-leavegame(void)
+leavegame()
 {
 
 	if (Player.p_level < 1.0)
@@ -587,7 +577,8 @@ leavegame(void)
 }
 
 void
-death(const char *how)
+death(how)
+	const char   *how;
 {
 	FILE   *fp;		/* for updating various files */
 	int     ch;		/* input */
@@ -691,15 +682,18 @@ death(const char *how)
 }
 
 void
-writerecord(struct player *playerp, long place)
+writerecord(playerp, place)
+	struct player *playerp;
+	long    place;
 {
 	fseek(Playersfp, place, SEEK_SET);
 	fwrite((char *) playerp, SZ_PLAYERSTRUCT, 1, Playersfp);
 	fflush(Playersfp);
 }
 
-static double
-explevel(double experience)
+double
+explevel(experience)
+	double  experience;
 {
 	if (experience < 1.1e7)
 		return (floor(pow((experience / 1000.0), 0.4875)));
@@ -708,7 +702,8 @@ explevel(double experience)
 }
 
 void
-truncstring(char *string)
+truncstring(string)
+	char   *string;
 {
 	int     length;		/* length of string */
 
@@ -718,7 +713,10 @@ truncstring(char *string)
 }
 
 void
-altercoordinates(double xnew, double ynew, int operation)
+altercoordinates(xnew, ynew, operation)
+	double  xnew;
+	double  ynew;
+	int     operation;
 {
 	switch (operation) {
 	case A_FORCED:		/* move with no checks */
@@ -768,14 +766,16 @@ altercoordinates(double xnew, double ynew, int operation)
 }
 
 void
-readrecord(struct player *playerp, long loc)
+readrecord(playerp, loc)
+	struct player *playerp;
+	long    loc;
 {
 	fseek(Playersfp, loc, SEEK_SET);
 	fread((char *) playerp, SZ_PLAYERSTRUCT, 1, Playersfp);
 }
 
 void
-adjuststats(void)
+adjuststats()
 {
 	double  dtemp;		/* for temporary calculations */
 
@@ -866,7 +866,8 @@ adjuststats(void)
 }
 
 void
-initplayer(struct player *playerp)
+initplayer(playerp)
+	struct player *playerp;
 {
 	playerp->p_experience =
 	    playerp->p_level =
@@ -925,7 +926,7 @@ initplayer(struct player *playerp)
 }
 
 void
-readmessage(void)
+readmessage()
 {
 	move(3, 0);
 	clrtoeol();
@@ -935,7 +936,8 @@ readmessage(void)
 }
 
 void
-error(const char *whichfile)
+error(whichfile)
+	const char   *whichfile;
 {
 	int     (*funcp)(const char *,...);
 
@@ -952,7 +954,8 @@ error(const char *whichfile)
 }
 
 double
-distance(double x_1, double x_2, double y_1, double y_2)
+distance(x_1, x_2, y_1, y_2)
+	double  x_1, x_2, y_1, y_2;
 {
 	double  deltax, deltay;
 
@@ -962,7 +965,8 @@ distance(double x_1, double x_2, double y_1, double y_2)
 }
 
 void
-ill_sig(int whichsig)
+ill_sig(whichsig)
+	int     whichsig;
 {
 	clear();
 	if (!(whichsig == SIGINT || whichsig == SIGQUIT))
@@ -972,7 +976,8 @@ ill_sig(int whichsig)
 }
 
 const char *
-descrstatus(struct player *playerp)
+descrstatus(playerp)
+	struct player *playerp;
 {
 	switch (playerp->p_status) {
 	case S_PLAYING:
@@ -1008,7 +1013,7 @@ descrstatus(struct player *playerp)
 }
 
 double
-drandom(void)
+drandom()
 {
 	if (sizeof(int) != 2)
 		/* use only low bits */
@@ -1018,7 +1023,9 @@ drandom(void)
 }
 
 void
-collecttaxes(double gold, double gems)
+collecttaxes(gold, gems)
+	double  gold;
+	double  gems;
 {
 	FILE   *fp;		/* to update Goldfile */
 	double  dtemp;		/* for temporary calculations */

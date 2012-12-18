@@ -1,4 +1,4 @@
-/*      $NetBSD: if_xge.c,v 1.17 2012/10/27 17:18:34 chs Exp $ */
+/*      $NetBSD: if_xge.c,v 1.9 2008/04/10 19:13:37 cegger Exp $ */
 
 /*
  * Copyright (c) 2004, SUNET, Swedish University Computer Network.
@@ -43,8 +43,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.17 2012/10/27 17:18:34 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.9 2008/04/10 19:13:37 cegger Exp $");
 
+#include "bpfilter.h"
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,14 +56,18 @@ __KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.17 2012/10/27 17:18:34 chs Exp $");
 #include <sys/socket.h>
 #include <sys/device.h>
 
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -138,7 +144,7 @@ static uint64_t fix_mac[] = {
 
 
 struct xge_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	struct ethercom sc_ethercom;
 #define sc_if sc_ethercom.ec_if
 	bus_dma_tag_t sc_dmat;
@@ -174,8 +180,8 @@ struct xge_softc {
 #endif
 };
 
-static int xge_match(device_t parent, cfdata_t cf, void *aux);
-static void xge_attach(device_t parent, device_t self, void *aux);
+static int xge_match(struct device *parent, struct cfdata *cf, void *aux);
+static void xge_attach(struct device *parent, struct device *self, void *aux);
 static int xge_alloc_txmem(struct xge_softc *);
 static int xge_alloc_rxmem(struct xge_softc *);
 static void xge_start(struct ifnet *);
@@ -244,10 +250,10 @@ pif_wkey(struct xge_softc *sc, bus_size_t csr, uint64_t val)
 }
 
 
-CFATTACH_DECL_NEW(xge, sizeof(struct xge_softc),
+CFATTACH_DECL(xge, sizeof(struct xge_softc),
     xge_match, xge_attach, NULL, NULL);
 
-#define XNAME device_xname(sc->sc_dev)
+#define XNAME device_xname(&sc->sc_dev)
 
 #define XGE_RXSYNC(desc, what) \
 	bus_dmamap_sync(sc->sc_dmat, sc->sc_rxmap, \
@@ -263,7 +269,7 @@ CFATTACH_DECL_NEW(xge, sizeof(struct xge_softc),
 #define	XGE_IP_MAXPACKET	65535	/* same as IP_MAXPACKET */
 
 static int
-xge_match(device_t parent, cfdata_t cf, void *aux)
+xge_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -275,7 +281,7 @@ xge_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-xge_attach(device_t parent, device_t self, void *aux)
+xge_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	struct xge_softc *sc;
@@ -288,8 +294,8 @@ xge_attach(device_t parent, device_t self, void *aux)
 	uint64_t val;
 	int i;
 
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (struct xge_softc *)self;
+
 	sc->sc_dmat = pa->pa_dmat;
 
 	/* Get BAR0 address */
@@ -517,7 +523,7 @@ xge_attach(device_t parent, device_t self, void *aux)
 	    ether_sprintf(enaddr));
 
 	ifp = &sc->sc_ethercom.ec_if;
-	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_baudrate = 10000000000LL;
 	ifp->if_init = xge_init;
 	ifp->if_stop = xge_stop;
@@ -548,13 +554,13 @@ xge_attach(device_t parent, device_t self, void *aux)
 	 * Setup interrupt vector before initializing.
 	 */
 	if (pci_intr_map(pa, &ih))
-		return aprint_error_dev(sc->sc_dev, "unable to map interrupt\n");
+		return aprint_error_dev(&sc->sc_dev, "unable to map interrupt\n");
 	intrstr = pci_intr_string(pc, ih);
 	if ((sc->sc_ih =
 	    pci_intr_establish(pc, ih, IPL_NET, xge_intr, sc)) == NULL)
-		return aprint_error_dev(sc->sc_dev, "unable to establish interrupt at %s\n",
+		return aprint_error_dev(&sc->sc_dev, "unable to establish interrupt at %s\n",
 		    intrstr ? intrstr : "<unknown>");
-	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 #ifdef XGE_EVENT_COUNTERS
 	evcnt_attach_dynamic(&sc->sc_intr, EVCNT_TYPE_MISC,
@@ -627,7 +633,7 @@ xge_init(struct ifnet *ifp)
 		char buf[200];
 		printf("%s: adapter not quiescent, aborting\n", XNAME);
 		val = (val & QUIESCENT) ^ QUIESCENT;
-		snprintb(buf, sizeof buf, QUIESCENT_BMSK, val);
+		bitmask_snprintf(val, QUIESCENT_BMSK, buf, sizeof buf);
 		printf("%s: ADAPTER_STATUS missing bits %s\n", XNAME, buf);
 		return 1;
 	}
@@ -807,7 +813,10 @@ xge_intr(void *pv)
 				m->m_pkthdr.csum_flags |= M_CSUM_TCP_UDP_BAD;
 		}
 
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif /* NBPFILTER > 0 */
 
 		(*ifp->if_input)(ifp, m);
 
@@ -990,7 +999,10 @@ xge_start(struct ifnet *ifp)
 		TXP_WCSR(TXDL_PAR, par);
 		TXP_WCSR(TXDL_LCR, lcr);
 
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif /* NBPFILTER > 0 */
 
 		sc->sc_nexttx = NEXTTX(nexttx);
 	}

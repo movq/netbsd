@@ -1,4 +1,4 @@
-/* $NetBSD: cia.c,v 1.73 2012/02/06 02:14:14 matt Exp $ */
+/* $NetBSD: cia.c,v 1.65 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -35,17 +35,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -65,13 +65,15 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: cia.c,v 1.73 2012/02/06 02:14:14 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cia.c,v 1.65 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
@@ -102,15 +104,16 @@ __KERNEL_RCSID(0, "$NetBSD: cia.c,v 1.73 2012/02/06 02:14:14 matt Exp $");
 #include <alpha/pci/pci_1000.h>
 #endif
 
-int	ciamatch(device_t, cfdata_t, void *);
-void	ciaattach(device_t, device_t, void *);
+int	ciamatch __P((struct device *, struct cfdata *, void *));
+void	ciaattach __P((struct device *, struct device *, void *));
 
-CFATTACH_DECL_NEW(cia, sizeof(struct cia_softc),
+CFATTACH_DECL(cia, sizeof(struct cia_softc),
     ciamatch, ciaattach, NULL, NULL);
 
 extern struct cfdriver cia_cd;
 
-int	cia_bus_get_window(int, int, struct alpha_bus_space_translation *);
+int	cia_bus_get_window __P((int, int,
+	    struct alpha_bus_space_translation *));
 
 /* There can be only one. */
 int ciafound;
@@ -148,7 +151,10 @@ int	cia_bus_use_bwx = CIA_BUS_USE_BWX;
 int	cia_pyxis_force_bwx = CIA_PYXIS_FORCE_BWX;
 
 int
-ciamatch(device_t parent, cfdata_t match, void *aux)
+ciamatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -166,7 +172,9 @@ ciamatch(device_t parent, cfdata_t match, void *aux)
  * Set up the chipset's function pointers.
  */
 void
-cia_init(struct cia_config *ccp, int mallocsafe)
+cia_init(ccp, mallocsafe)
+	struct cia_config *ccp;
+	int mallocsafe;
 {
 	int pci_use_bwx = cia_pci_use_bwx;
 	int bus_use_bwx = cia_bus_use_bwx;
@@ -207,7 +215,7 @@ cia_init(struct cia_config *ccp, int mallocsafe)
 	if ((pci_use_bwx || bus_use_bwx) &&
 	    (ccp->cc_cnfg & CNFG_BWEN) != 0 &&
 	    (cpu_amask & ALPHA_AMASK_BWX) != 0) {
-		uint32_t ctrl;
+		u_int32_t ctrl;
 
 		if (pci_use_bwx)
 			ccp->cc_flags |= CCF_PCI_USE_BWX;
@@ -261,9 +269,11 @@ cia_init(struct cia_config *ccp, int mallocsafe)
 }
 
 void
-ciaattach(device_t parent, device_t self, void *aux)
+ciaattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct cia_softc *sc = device_private(self);
+	struct cia_softc *sc = (struct cia_softc *)self;
 	struct cia_config *ccp;
 	struct pcibus_attach_args pba;
 	char bits[64];
@@ -272,7 +282,6 @@ ciaattach(device_t parent, device_t self, void *aux)
 
 	/* note that we've attached the chipset; can't have 2 CIAs. */
 	ciafound = 1;
-	sc->sc_dev = self;
 
 	/*
 	 * set up the chipset's info; done once at console init time
@@ -290,12 +299,12 @@ ciaattach(device_t parent, device_t self, void *aux)
 		pass = ccp->cc_rev + 1;
 	}
 
-	aprint_normal(": DECchip 2117x Core Logic Chipset (%s), pass %d\n",
+	printf(": DECchip 2117x Core Logic Chipset (%s), pass %d\n",
 	    name, pass);
-	if (ccp->cc_cnfg) {
-		snprintb(bits, sizeof(bits), CIA_CSR_CNFG_BITS, ccp->cc_cnfg);
-		aprint_normal_dev(self, "extended capabilities: %s\n", bits);
-	}
+	if (ccp->cc_cnfg)
+		printf("%s: extended capabilities: %s\n", self->dv_xname,
+		    bitmask_snprintf(ccp->cc_cnfg, CIA_CSR_CNFG_BITS,
+		    bits, sizeof(bits)));
 
 	switch (ccp->cc_flags & (CCF_PCI_USE_BWX|CCF_BUS_USE_BWX)) {
 	case CCF_PCI_USE_BWX|CCF_BUS_USE_BWX:
@@ -312,7 +321,7 @@ ciaattach(device_t parent, device_t self, void *aux)
 		break;
 	}
 	if (name != NULL)
-		aprint_normal_dev(self, "using BWX for %s access\n", name);
+		printf("%s: using BWX for %s access\n", self->dv_xname, name);
 
 #ifdef DEC_550
 	if (cputype == ST_DEC_550 &&
@@ -337,11 +346,11 @@ ciaattach(device_t parent, device_t self, void *aux)
 		 * XXX WE NEED TO THINK ABOUT HOW TO HANDLE THIS FOR
 		 * XXX SGMAP DMA MAPPINGS!
 		 */
-		uint32_t ctrl;
+		u_int32_t ctrl;
 
 		/* XXX no bets... */
-		aprint_error_dev(self,
-		    "WARNING: Pyxis pass 1 DMA bug; no bets...\n");
+		printf("%s: WARNING: Pyxis pass 1 DMA bug; no bets...\n",
+		    self->dv_xname);
 
 		ccp->cc_flags |= CCF_PYXISBUG;
 
@@ -400,7 +409,7 @@ ciaattach(device_t parent, device_t self, void *aux)
 	pba.pba_pc = &ccp->cc_pc;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
+	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
 	if ((ccp->cc_flags & CCF_PYXISBUG) == 0)
 		pba.pba_flags |= PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY |
 		    PCI_FLAGS_MWI_OKAY;
@@ -408,7 +417,9 @@ ciaattach(device_t parent, device_t self, void *aux)
 }
 
 int
-cia_bus_get_window(int type, int window, struct alpha_bus_space_translation *abst)
+cia_bus_get_window(type, window, abst)
+	int type, window;
+	struct alpha_bus_space_translation *abst;
 {
 	struct cia_config *ccp = &cia_configuration;
 	bus_space_tag_t st;
@@ -430,9 +441,10 @@ cia_bus_get_window(int type, int window, struct alpha_bus_space_translation *abs
 }
 
 void
-cia_pyxis_intr_enable(int irq, int onoff)
+cia_pyxis_intr_enable(irq, onoff)
+	int irq, onoff;
 {
-	uint64_t imask;
+	u_int64_t imask;
 	int s;
 
 #if 0

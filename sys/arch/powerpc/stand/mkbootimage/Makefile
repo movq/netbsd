@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2011/01/26 21:35:14 joerg Exp $
+#	$NetBSD: Makefile,v 1.2 2008/04/30 21:15:33 garbled Exp $
 
 BINDIR=	/usr/mdec
 PROG=	mkbootimage
@@ -7,15 +7,14 @@ NOMAN=	# defined
 
 # We don't use libbfd, but we do use the BFD ELF header files because
 # they are somewhat more portable than NetBSD's own elf.h.
-BFDTOP=	${NETBSDSRCDIR}/external/gpl3/binutils/dist
+BFDTOP=	${NETBSDSRCDIR}/gnu/dist/binutils
 
 LIBSA=${.CURDIR}/../../../../lib/libsa
 
 .PATH.c: ${LIBSA}
 
 CPPFLAGS= -I${LIBSA} -I${.CURDIR} -I${BFDTOP}/include
-CPPFLAGS+=	-DATTRIBUTE_PACKED=
-DPADD+=	${LIBZ}
-LDADD+=	-lz
+DPADD=	${LIBZ}
+LDADD=	-lz
 
 .include <bsd.prog.mk>

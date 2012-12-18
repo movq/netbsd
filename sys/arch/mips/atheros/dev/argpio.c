@@ -1,4 +1,4 @@
-/* $NetBSD: argpio.c,v 1.6 2011/07/17 01:29:25 dyoung Exp $ */
+/* $NetBSD: argpio.c,v 1.3 2006/09/04 05:17:26 gdamore Exp $ */
 
 /*-
  * Copyright (c) 2006 Garrett D'Amore
@@ -32,16 +32,17 @@
  */ 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: argpio.c,v 1.6 2011/07/17 01:29:25 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: argpio.c,v 1.3 2006/09/04 05:17:26 gdamore Exp $");
 
 #include <sys/param.h>
-#include <sys/bus.h>
 #include <sys/conf.h>
-#include <sys/device.h>
-#include <sys/gpio.h>
-#include <sys/intr.h>
 #include <sys/kernel.h>
 #include <sys/types.h>
+#include <sys/device.h>
+#include <sys/gpio.h>
+
+#include <machine/bus.h>
+#include <machine/intr.h>
 
 #include <mips/atheros/include/arbusvar.h>
 
@@ -59,7 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: argpio.c,v 1.6 2011/07/17 01:29:25 dyoung Exp $");
  */
 
 struct argpio_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 	struct gpio_chipset_tag	sc_gc;
 	gpio_pin_t		sc_pins[ARGPIO_NPINS];
 	int			sc_npins;
@@ -73,15 +74,15 @@ struct argpio_softc {
 	int			sc_ledpin;
 };
 
-static int argpio_match(device_t, cfdata_t, void *);
-static void argpio_attach(device_t, device_t, void *);
+static int argpio_match(struct device *, struct cfdata *, void *);
+static void argpio_attach(struct device *, struct device *, void *);
 static int argpio_intr(void *);
 static void argpio_reset_pressed(void *);
 static void argpio_ctl(void *, int, int);
 static void argpio_write(void *, int, int);
 static int argpio_read(void *, int);
 
-CFATTACH_DECL_NEW(argpio, sizeof (struct argpio_softc), argpio_match,
+CFATTACH_DECL(argpio, sizeof (struct argpio_softc), argpio_match,
     argpio_attach, NULL, NULL);
 
 #define	INPUT(pin)	(1 << (pin))		/* input bit */
@@ -94,7 +95,7 @@ CFATTACH_DECL_NEW(argpio, sizeof (struct argpio_softc), argpio_match,
 				0, 12, BUS_SPACE_BARRIER_SYNC)
 
 int
-argpio_match(device_t parent, cfdata_t match, void *aux)
+argpio_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct arbus_attach_args *aa = aux;
 
@@ -102,16 +103,15 @@ argpio_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-argpio_attach(device_t parent, device_t self, void *aux)
+argpio_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct argpio_softc *sc = device_private(self);
+	struct argpio_softc *sc = (struct argpio_softc *)self;
 	struct arbus_attach_args *aa = aux;
 	struct gpiobus_attach_args gba;
 	prop_number_t	pn;
 	int i;
 	uint32_t reg;
 
-	sc->sc_dev = self;
 	sc->sc_st = aa->aa_bst;
 	sc->sc_npins = ARGPIO_NPINS;
 	sc->sc_size = aa->aa_size;
@@ -130,39 +130,38 @@ argpio_attach(device_t parent, device_t self, void *aux)
 	sc->sc_gc.gp_pin_ctl = argpio_ctl;
 
 	aprint_normal(": Atheros AR531X GPIO");
-	pn = prop_dictionary_get(device_properties(sc->sc_dev), "reset-pin");
+	pn = prop_dictionary_get(device_properties(&sc->sc_dev), "reset-pin");
 	if (pn != NULL) {
 		KASSERT(prop_object_type(pn) == PROP_TYPE_NUMBER);
 		sc->sc_rstpin = (int)prop_number_integer_value(pn);
 		aprint_normal(", reset button pin %d", sc->sc_rstpin);
 	}
-	pn = prop_dictionary_get(device_properties(sc->sc_dev), "sysled-pin");
+	pn = prop_dictionary_get(device_properties(&sc->sc_dev), "sysled-pin");
 	if (pn != NULL) {
 		KASSERT(prop_object_type(pn) == PROP_TYPE_NUMBER);
 		sc->sc_ledpin = (int)prop_number_integer_value(pn);
 		aprint_normal(", system led pin %d", sc->sc_ledpin);
 	}
 
-	aprint_normal("\n");
+	printf("\n");
 
 	if (sc->sc_ledpin) {
 		sc->sc_ih = arbus_intr_establish(aa->aa_cirq, aa->aa_mirq,
 		    argpio_intr, sc);
 		if (sc->sc_ih == NULL) {
-			aprint_error_dev(sc->sc_dev,
-			    "couldn't establish interrupt\n");
+			aprint_error("%s: couldn't establish interrupt\n",
+			    sc->sc_dev.dv_xname);
 		}
 	}
 
 	if (sc->sc_ih) {
 		sysmon_task_queue_init();
 
-		sc->sc_resetbtn.smpsw_name = device_xname(sc->sc_dev);
+		sc->sc_resetbtn.smpsw_name = sc->sc_dev.dv_xname;
 		sc->sc_resetbtn.smpsw_type = PSWITCH_TYPE_RESET;
-		if (sysmon_pswitch_register(&sc->sc_resetbtn) != 0) {
-			aprint_normal_dev(sc->sc_dev,
-			    "unable to register reset button\n");
-		}
+		if (sysmon_pswitch_register(&sc->sc_resetbtn) != 0)
+			printf("%s: unable to register reset button\n",
+			    sc->sc_dev.dv_xname);
 	}
 
 	reg = GETREG(sc, GPIO_CR);
@@ -205,7 +204,7 @@ argpio_attach(device_t parent, device_t self, void *aux)
 	gba.gba_gc = &sc->sc_gc;
 	gba.gba_pins = sc->sc_pins;
 	gba.gba_npins = sc->sc_npins;
-	config_found_ia(sc->sc_dev, "gpiobus", &gba, gpiobus_print);
+	config_found_ia(&sc->sc_dev, "gpiobus", &gba, gpiobus_print);
 }
 
 void

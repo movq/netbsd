@@ -1,11 +1,11 @@
-/*	$NetBSD: opl.c,v 1.39 2012/04/09 10:18:16 plunky Exp $	*/
+/*	$NetBSD: opl.c,v 1.34 2008/04/28 20:23:51 martin Exp $	*/
 
 /*
- * Copyright (c) 1998, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Lennart Augustsson (augustss@NetBSD.org), and by Andrew Doran.
+ * by Lennart Augustsson (augustss@NetBSD.org).
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opl.c,v 1.39 2012/04/09 10:18:16 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opl.c,v 1.34 2008/04/28 20:23:51 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: opl.c,v 1.39 2012/04/09 10:18:16 plunky Exp $");
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/select.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 
 #include <sys/cpu.h>
 #include <sys/bus.h>
@@ -138,58 +138,51 @@ struct midisyn_methods opl3_midi = {
 };
 
 void
-opl_attach(struct opl_softc *sc)
+opl_attach(sc)
+	struct opl_softc *sc;
 {
 	int i;
 
-	KASSERT(sc->dev != NULL);
-	KASSERT(sc->lock != NULL);
-
-	mutex_enter(sc->lock);
-	i = opl_find(sc);
-	mutex_exit(sc->lock);
-	if (i == 0) {
+	if (!opl_find(sc)) {
 		printf("\nopl: find failed\n");
 		return;
 	}
-
-	mutex_enter(sc->lock);
-	opl_reset(sc);
-	mutex_exit(sc->lock);
 
 	sc->syn.mets = &opl3_midi;
 	snprintf(sc->syn.name, sizeof(sc->syn.name), "%sYamaha OPL%d",
 	    sc->syn.name, sc->model);
 	sc->syn.data = sc;
 	sc->syn.nvoice = sc->model == OPL_2 ? OPL2_NVOICE : OPL3_NVOICE;
-	sc->syn.lock = sc->lock;
-	midisyn_init(&sc->syn);
+	midisyn_attach(&sc->mididev, &sc->syn);
 
 	/* Set up voice table */
 	for (i = 0; i < OPL3_NVOICE; i++)
 		sc->voices[i] = voicetab[i];
 
-	aprint_normal(": model OPL%d", sc->model);
+	opl_reset(sc);
+
+	printf(": model OPL%d", sc->model);
 
 	/* Set up panpot */
 	sc->panl = OPL_VOICE_TO_LEFT;
 	sc->panr = OPL_VOICE_TO_RIGHT;
 	if (sc->model == OPL_3 &&
-	    device_cfdata(sc->dev)->cf_flags & OPL_FLAGS_SWAP_LR) {
+	    device_cfdata(sc->mididev.dev)->cf_flags & OPL_FLAGS_SWAP_LR) {
 		sc->panl = OPL_VOICE_TO_RIGHT;
 		sc->panr = OPL_VOICE_TO_LEFT;
-		aprint_normal(": LR swapped");
+		printf(": LR swapped");
 	}
 
-	aprint_normal("\n");
-	aprint_naive("\n");
+	printf("\n");
 
 	sc->sc_mididev =
-	    midi_attach_mi(&midisyn_hw_if, &sc->syn, sc->dev);
+	    midi_attach_mi(&midisyn_hw_if, &sc->syn, sc->mididev.dev);
 }
 
 int
-opl_detach(struct opl_softc *sc, int flags)
+opl_detach(sc, flags)
+	struct opl_softc *sc;
+	int flags;
 {
 	int rv = 0;
 
@@ -200,13 +193,13 @@ opl_detach(struct opl_softc *sc, int flags)
 }
 
 static void
-opl_command(struct opl_softc *sc, int offs, int addr, int data)
+opl_command(sc, offs, addr, data)
+	struct opl_softc *sc;
+	int offs;
+	int addr, data;
 {
 	DPRINTFN(4, ("opl_command: sc=%p, offs=%d addr=0x%02x data=0x%02x\n",
 		     sc, offs, addr, data));
-
-	KASSERT(!sc->lock || mutex_owned(sc->lock));
-
 	offs += sc->offs;
 	bus_space_write_1(sc->iot, sc->ioh, OPL_ADDR+offs, addr);
 	if (sc->model == OPL_2)
@@ -226,17 +219,18 @@ opl_match(bus_space_tag_t iot, bus_space_handle_t ioh, int offs)
 	struct opl_softc *sc;
 	int rv;
 
-	sc = kmem_zalloc(sizeof(*sc), KM_SLEEP);
+	sc = malloc(sizeof(*sc), M_TEMP, M_WAITOK|M_ZERO);
 	sc->iot = iot;
 	sc->ioh = ioh;
 	sc->offs = offs;
 	rv = opl_find(sc);
-	kmem_free(sc, sizeof(*sc));
+	free(sc, M_TEMP);
 	return rv;
 }
 
 int
-opl_find(struct opl_softc *sc)
+opl_find(sc)
+	struct opl_softc *sc;
 {
 	u_int8_t status1, status2;
 
@@ -295,32 +289,35 @@ opl_find(struct opl_softc *sc)
  *       any necessary sequences of register access expected by the hardware...
  */
 void
-opl_set_op_reg(struct opl_softc *sc, int base, int voice, int op, u_char value)
+opl_set_op_reg(sc, base, voice, op, value)
+	struct opl_softc *sc;
+	int base;
+	int voice;
+	int op;
+	u_char value;
 {
 	struct opl_voice *v = &sc->voices[voice];
-
-	KASSERT(mutex_owned(sc->lock));
-
 	opl_command(sc, v->iooffs, base + v->op[op], value);
 }
 
 void
-opl_set_ch_reg(struct opl_softc *sc, int base, int voice, u_char value)
+opl_set_ch_reg(sc, base, voice, value)
+	struct opl_softc *sc;
+	int base;
+	int voice;
+	u_char value;
 {
 	struct opl_voice *v = &sc->voices[voice];
-
-	KASSERT(mutex_owned(sc->lock));
-
 	opl_command(sc, v->iooffs, base + v->voiceno, value);
 }
 
 
 void
-opl_load_patch(struct opl_softc *sc, int v)
+opl_load_patch(sc, v)
+	struct opl_softc *sc;
+	int v;
 {
 	const struct opl_operators *p = sc->voices[v].patch;
-
-	KASSERT(mutex_owned(sc->lock));
 
 	opl_set_op_reg(sc, OPL_AM_VIB,          v, 0, p->ops[OO_CHARS+0]);
 	opl_set_op_reg(sc, OPL_AM_VIB,          v, 1, p->ops[OO_CHARS+1]);
@@ -375,11 +372,10 @@ opl_get_block_fnum(midipitch_t mp)
 
 
 void
-opl_reset(struct opl_softc *sc)
+opl_reset(sc)
+	struct opl_softc *sc;
 {
 	int i;
-
-	KASSERT(mutex_owned(sc->lock));
 
 	for (i = 1; i <= OPL_MAXREG; i++)
 		opl_command(sc, OPL_L, OPL_KEYON_BLOCK + i, 0);
@@ -400,8 +396,6 @@ oplsyn_open(midisyn *ms, int flags)
 {
 	struct opl_softc *sc = ms->data;
 
-	KASSERT(mutex_owned(sc->lock));
-
 	DPRINTFN(2, ("oplsyn_open: %d\n", flags));
 
 #ifndef AUDIO_NO_POWER_CTL
@@ -415,13 +409,12 @@ oplsyn_open(midisyn *ms, int flags)
 }
 
 void
-oplsyn_close(midisyn *ms)
+oplsyn_close(ms)
+	midisyn *ms;
 {
 	struct opl_softc *sc = ms->data;
 
 	DPRINTFN(2, ("oplsyn_close:\n"));
-
-	KASSERT(mutex_owned(sc->lock));
 
 	/*opl_reset(ms->data);*/
 	if (sc->spkrctl)
@@ -434,7 +427,9 @@ oplsyn_close(midisyn *ms)
 
 #if 0
 void
-oplsyn_getinfo(void *addr, struct synth_dev *sd)
+oplsyn_getinfo(addr, sd)
+	void *addr;
+	struct synth_dev *sd;
 {
 	struct opl_softc *sc = addr;
 
@@ -447,12 +442,10 @@ oplsyn_getinfo(void *addr, struct synth_dev *sd)
 #endif
 
 void
-oplsyn_reset(void *addr)
+oplsyn_reset(addr)
+	void *addr;
 {
 	struct opl_softc *sc = addr;
-
-	KASSERT(mutex_owned(sc->lock));
-
 	DPRINTFN(3, ("oplsyn_reset:\n"));
 	opl_reset(sc);
 }
@@ -517,8 +510,6 @@ oplsyn_setv(midisyn *ms,
 	u_int8_t chars0, chars1, ksl0, ksl1, fbc;
 	u_int8_t r20m, r20c, r40m, r40c, rA0, rB0;
 	u_int8_t vol0, vol1;
-
-	KASSERT(mutex_owned(sc->lock));
 
 	DPRINTFN(3, ("%s: %p %d %u %d\n", __func__, sc, voice,
 		     mp, level_cB));
@@ -616,8 +607,6 @@ oplsyn_releasev(midisyn *ms, uint_fast16_t voice, uint_fast8_t vel)
 {
 	struct opl_softc *sc = ms->data;
 	struct opl_voice *v;
-
-	KASSERT(mutex_owned(sc->lock));
 
 	DPRINTFN(1, ("%s: %p %d\n", __func__, sc, voice));
 

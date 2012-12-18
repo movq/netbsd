@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.89 2011/07/09 15:02:49 mrg Exp $ */
+/*	$NetBSD: db_interface.c,v 1.79.4.3 2011/03/08 17:29:46 riz Exp $ */
 
 /*
  * Mach Operating System
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.89 2011/07/09 15:02:49 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.79.4.3 2011/03/08 17:29:46 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -41,13 +41,14 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.89 2011/07/09 15:02:49 mrg Exp $"
 
 #include <sys/param.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
 #include <sys/simplelock.h>
 
 #include <dev/cons.h>
 
-#include <uvm/uvm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/db_machdep.h>
 
@@ -165,8 +166,8 @@ const struct db_variable db_regs[] = {
 	{ "i3",		dbregfr(arg[3]),	db_sparc_regop, },
 	{ "i4",		dbregfr(arg[4]),	db_sparc_regop, },
 	{ "i5",		dbregfr(arg[5]),	db_sparc_regop, },
-	{ "i6",		dbregfr(fp),		db_sparc_regop, },
-	{ "i7",		dbregfr(pc),		db_sparc_regop, },
+	{ "i6",		dbregfr(arg[6]),	db_sparc_regop, },
+	{ "i7",		dbregfr(arg[7]),	db_sparc_regop, },
 };
 const struct db_variable * const db_eregs =
     db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
@@ -377,10 +378,10 @@ db_proc_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	db_printf("maxsaddr:%p ssiz:%d pg or %llxB\n",
 		  p->p_vmspace->vm_maxsaddr, p->p_vmspace->vm_ssize,
 		  (unsigned long long)ctob(p->p_vmspace->vm_ssize));
-	db_printf("profile timer: %lld sec %ld nsec\n",
+	db_printf("profile timer: %ld sec %ld usec\n",
 		  p->p_stats->p_timer[ITIMER_PROF].it_value.tv_sec,
-		  p->p_stats->p_timer[ITIMER_PROF].it_value.tv_nsec);
-	db_printf("pcb: %p\n", lwp_getpcb(l));
+		  p->p_stats->p_timer[ITIMER_PROF].it_value.tv_usec);
+	db_printf("pcb: %p\n", &l->l_addr->u_pcb);
 	return;
 }
 
@@ -396,10 +397,10 @@ db_dump_pcb(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	else
 		pcb = curcpu()->curpcb;
 
-	snprintb(bits, sizeof(bits), PSR_BITS, pcb->pcb_psr);
 	db_printf("pcb@%p sp:%p pc:%p psr:%s onfault:%p\nfull windows:\n",
 		  pcb, (void *)(long)pcb->pcb_sp, (void *)(long)pcb->pcb_pc,
-		  bits, (void *)pcb->pcb_onfault);
+		  bitmask_snprintf(pcb->pcb_psr, PSR_BITS, bits, sizeof(bits)),
+		  (void *)pcb->pcb_onfault);
 
 	for (i=0; i<pcb->pcb_nsaved; i++) {
 		db_printf("win %d: at %llx local, in\n", i,
@@ -491,25 +492,15 @@ db_xcall_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 #endif /* MULTIPROCESSOR */
 
 const struct db_command db_machine_command_table[] = {
-	{ DDB_ADD_CMD("prom",	db_prom_cmd,	0,
-	  "Enter the Sun PROM monitor.",NULL,NULL) },
-	{ DDB_ADD_CMD("proc",	db_proc_cmd,	0,
-	  "Display some information about an LWP",
-	  "[addr]","   addr:\tstruct lwp address (curlwp otherwise)") },
-	{ DDB_ADD_CMD("pcb",	db_dump_pcb,	0,
-	  "Display information about a struct pcb",
-	  "[address]",
-	  "   address:\tthe struct pcb to print (curpcb otherwise)") },
-	{ DDB_ADD_CMD("page",	db_page_cmd,	0,
-	  "Display the address of a struct vm_page given a physical address",
-	   "pa", "   pa:\tphysical address to look up") },
+	{ DDB_ADD_CMD("prom",	db_prom_cmd,	0,	NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("proc",	db_proc_cmd,	0,	NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("pcb",	db_dump_pcb,	0,	NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("page",	db_page_cmd,	0,	NULL,NULL,NULL) },
 #ifdef MULTIPROCESSOR
-	{ DDB_ADD_CMD("cpu",	db_cpu_cmd,	0,
-	  "switch to another cpu's registers", "cpu-no", NULL) },
-	{ DDB_ADD_CMD("xcall",	db_xcall_cmd,	0,
-	  "show xcall information on all cpus", NULL, NULL) },
+	{ DDB_ADD_CMD("cpu",	db_cpu_cmd,	0,	NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("xcall",	db_xcall_cmd,	0,	NULL,NULL,NULL) },
 #endif
-	{ DDB_ADD_CMD(NULL,     NULL,           0,	NULL,NULL,NULL) }
+	{ DDB_ADD_CMD(NULL,     NULL,           0,NULL,NULL,NULL) }
 };
 #endif /* DDB */
 

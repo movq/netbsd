@@ -1,4 +1,4 @@
-/*      $NetBSD: raidctl.c,v 1.55 2011/10/12 16:45:37 christos Exp $   */
+/*      $NetBSD: raidctl.c,v 1.39.4.4 2012/06/13 14:00:48 sborrill Exp $   */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: raidctl.c,v 1.55 2011/10/12 16:45:37 christos Exp $");
+__RCSID("$NetBSD: raidctl.c,v 1.39.4.4 2012/06/13 14:00:48 sborrill Exp $");
 #endif
 
 
@@ -61,7 +61,6 @@ __RCSID("$NetBSD: raidctl.c,v 1.55 2011/10/12 16:45:37 christos Exp $");
 #include <dev/raidframe/raidframevar.h>
 #include <dev/raidframe/raidframeio.h>
 #include "rf_configure.h"
-#include "prog_ops.h"
 
 void	do_ioctl(int, u_long, void *, const char *);
 static  void rf_configure(int, char*, int);
@@ -70,7 +69,7 @@ static  void rf_get_device_status(int);
 static	void rf_output_configuration(int, const char *);
 static  void get_component_number(int, char *, int *, int *);
 static  void rf_fail_disk(int, char *, int);
-__dead static  void usage(void);
+static  void usage(void);
 static  void get_component_label(int, char *);
 static  void set_component_label(int, char *);
 static  void init_component_labels(int, int);
@@ -257,18 +256,23 @@ main(int argc,char *argv[])
 	if ((num_options > 1) || (argc == 0)) 
 		usage();
 
-	if (prog_init && prog_init() == -1)
-		err(1, "init failed");
-
 	strlcpy(name, argv[0], sizeof(name));
-	fd = opendisk1(name, openmode, dev_name, sizeof(dev_name), 0,
-	    prog_open);
-	if (fd == -1)
-		err(1, "Unable to open device file: %s", name);
-	if (prog_fstat(fd, &st) == -1)
-		err(1, "stat failure on: %s", dev_name);
-	if (!S_ISBLK(st.st_mode) && !S_ISCHR(st.st_mode))
-		err(1, "invalid device: %s", dev_name);
+	fd = opendisk(name, openmode, dev_name, sizeof(dev_name), 0);
+	if (fd == -1) {
+		fprintf(stderr, "%s: unable to open device file: %s\n",
+			getprogname(), name);
+		exit(1);
+	}
+	if (fstat(fd, &st) != 0) {
+		fprintf(stderr,"%s: stat failure on: %s\n",
+			getprogname(), dev_name);
+		exit(1);
+	}
+	if (!S_ISBLK(st.st_mode) && !S_ISCHR(st.st_mode)) {
+		fprintf(stderr,"%s: invalid device: %s\n",
+			getprogname(), dev_name);
+		exit(1);
+	}
 
 	raidID = DISKUNIT(st.st_rdev);
 
@@ -344,15 +348,17 @@ main(int argc,char *argv[])
 		break;
 	}
 
-	prog_close(fd);
+	close(fd);
 	exit(0);
 }
 
 void
 do_ioctl(int fd, unsigned long command, void *arg, const char *ioctl_name)
 {
-	if (prog_ioctl(fd, command, arg) == -1)
-		err(1, "ioctl (%s) failed", ioctl_name);
+	if (ioctl(fd, command, arg) < 0) {
+		warn("ioctl (%s) failed", ioctl_name);
+		exit(1);
+	}
 }
 
 
@@ -362,8 +368,11 @@ rf_configure(int fd, char *config_file, int force)
 	void *generic;
 	RF_Config_t cfg;
 
-	if (rf_MakeConfig( config_file, &cfg ) != 0)
-		err(1, "Unable to create RAIDframe configuration structure");
+	if (rf_MakeConfig( config_file, &cfg ) != 0) {
+		fprintf(stderr,"%s: unable to create RAIDframe %s\n",
+			getprogname(), "configuration structure\n");
+		exit(1);
+	}
 	
 	cfg.force = force;
 
@@ -373,7 +382,7 @@ rf_configure(int fd, char *config_file, int force)
 	 * the configuration structure. 
 	 */
 
-	generic = &cfg;
+	generic = (void *) &cfg;
 	do_ioctl(fd, RAIDFRAME_CONFIGURE, &generic, "RAIDFRAME_CONFIGURE");
 }
 
@@ -476,19 +485,12 @@ static void
 rf_output_pmstat(int fd, int raidID)
 {
 	char srs[7];
-	unsigned int i, j;
-	int dis, dr;
+	int i, j, dr;
+	int dis;
 	struct rf_pmstat st;
 
-	if (prog_ioctl(fd, RAIDFRAME_PARITYMAP_STATUS, &st) == -1) {
-		if (errno == EINVAL) {
-			printf("raid%d: has no parity; parity map disabled\n",
-				raidID);
-			return;
-		}
-		err(1, "ioctl (%s) failed", "RAIDFRAME_PARITYMAP_STATUS");
-	}
-
+	do_ioctl(fd, RAIDFRAME_PARITYMAP_STATUS, &st,
+	    "RAIDFRAME_PARITYMAP_STATUS");
 	if (st.enabled) {
 		if (0 > humanize_number(srs, 7, st.region_size * DEV_BSIZE, 
 			"B", HN_AUTOSCALE, HN_NOSPACE))
@@ -504,7 +506,7 @@ rf_output_pmstat(int fd, int raidID)
 		    st.ctrs.nwrite, st.ctrs.ncachesync, st.ctrs.nclearing);
 
 		dr = 0;
-		for (i = 0; i < st.params.regions; i++)
+		for (i = 0; i < RF_PARITYMAP_NREG; i++)
 			if (isset(st.dirty, i))
 				dr++;
 		printf("raid%d: %d dirty region%s\n", raidID, dr,
@@ -565,8 +567,11 @@ rf_pm_configure(int fd, int raidID, char *parityconf, int parityparams[])
 
 		return;
 		/* XXX the control flow here could be prettier. */
-	} else
-		err(1, "`%s' is not a valid parity map command", parityconf);
+	} else {
+		fprintf(stderr, "%s: \"%s\" is not a valid parity map command"
+		    "\n", getprogname(), parityconf);
+		exit(1);
+	}
 
 	do_ioctl(fd, RAIDFRAME_PARITYMAP_SET_DISABLE, &dis,
 	    "RAIDFRAME_PARITYMAP_SET_DISABLE");
@@ -682,8 +687,11 @@ get_component_number(int fd, char *component_name, int *component_number,
 		}
 	}
 
-	if (!found)
-		err(1,"%s is not a component of this device", component_name);
+	if (!found) {
+		fprintf(stderr,"%s: %s is not a component %s", getprogname(), 
+			component_name, "of this device\n");
+		exit(1);
+	}
 }
 
 static void
@@ -734,7 +742,7 @@ get_component_label(int fd, char *component)
 	printf("   Row: %d, Column: %d, Num Rows: %d, Num Columns: %d\n",
 	       component_label.row, component_label.column, 
 	       component_label.num_rows, component_label.num_columns);
-	printf("   Version: %d, Serial Number: %u, Mod Counter: %d\n",
+	printf("   Version: %d, Serial Number: %d, Mod Counter: %d\n",
 	       component_label.version, component_label.serial_number,
 	       component_label.mod_counter);
 	printf("   Clean: %s, Status: %d\n",
@@ -988,11 +996,14 @@ do_meter(int fd, u_long option)
 	double rate;
 	RF_uint64 amount;
 	int tbit_value;
+	char buffer[1024];
 	char bar_buffer[1024];
 	char eta_buffer[1024];
 
-	if (gettimeofday(&start_time,NULL) == -1)
-		err(1, "gettimeofday failed!?!?");
+	if (gettimeofday(&start_time,NULL)) {
+		fprintf(stderr,"%s: gettimeofday failed!?!?\n", getprogname());
+		exit(errno);
+	}
 	memset(&progressInfo, 0, sizeof(RF_ProgressInfo_t));
 	pInfoPtr=&progressInfo;
 
@@ -1048,8 +1059,10 @@ do_meter(int fd, u_long option)
 
 		get_time_string(eta_buffer, simple_eta);
 
-		fprintf(stdout,"\r%3d%% |%s| ETA: %s %c",
-			percent_done,bar_buffer,eta_buffer,tbits[tbit_value]);
+		snprintf(buffer,1024,"\r%3d%% |%s| ETA: %s %c",
+			 percent_done,bar_buffer,eta_buffer,tbits[tbit_value]);
+
+		write(fileno(stdout),buffer,strlen(buffer));
 		fflush(stdout);
 
 		if (++tbit_value>3) 
@@ -1057,8 +1070,11 @@ do_meter(int fd, u_long option)
 
 		sleep(2);
 
-		if (gettimeofday(&current_time,NULL) == -1)
-			err(1, "gettimeofday failed!?!?");
+		if (gettimeofday(&current_time,NULL)) {
+			fprintf(stderr,"%s: gettimeofday failed!?!?\n",
+				getprogname());
+			exit(errno);
+		}
 
 		do_ioctl( fd, option, &pInfoPtr, "");
 		

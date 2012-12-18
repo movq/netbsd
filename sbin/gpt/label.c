@@ -29,7 +29,7 @@
 __FBSDID("$FreeBSD: src/sbin/gpt/label.c,v 1.3 2006/10/04 18:20:25 marcel Exp $");
 #endif
 #ifdef __RCSID
-__RCSID("$NetBSD: label.c,v 1.8 2011/08/27 17:38:16 joerg Exp $");
+__RCSID("$NetBSD: label.c,v 1.6 2007/12/19 05:48:34 dogcow Exp $");
 #endif
 
 #include <sys/types.h>
@@ -54,7 +54,7 @@ const char labelmsg1[] = "label -a <-l label | -f file> device ...";
 const char labelmsg2[] = "label [-b lba] [-i index] [-s lba]";
 const char labelmsg3[] = "      [-t uuid] <-l label | -f file> device ...";
 
-__dead static void
+static void
 usage_label(void)
 {
 	fprintf(stderr,
@@ -148,7 +148,7 @@ label(int fd)
 		printf("%sp%u labeled\n", device_name, m->map_index);
 #endif
 #ifdef __NetBSD__
-		printf("partition %d on %s labeled %s\n", m->map_index,
+		printf("parition %d on %s labeled %s\n", m->map_index,
 		    device_name, name);
 #endif
 	}

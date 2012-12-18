@@ -1,4 +1,4 @@
-/*	$NetBSD: pat_rep.c,v 1.29 2009/04/07 19:52:35 perry Exp $	*/
+/*	$NetBSD: pat_rep.c,v 1.28.8.1 2009/04/13 20:42:59 snj Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)pat_rep.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: pat_rep.c,v 1.29 2009/04/07 19:52:35 perry Exp $");
+__RCSID("$NetBSD: pat_rep.c,v 1.28.8.1 2009/04/13 20:42:59 snj Exp $");
 #endif
 #endif /* not lint */
 

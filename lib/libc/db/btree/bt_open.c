@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_open.c,v 1.26 2012/03/13 21:13:32 christos Exp $	*/
+/*	$NetBSD: bt_open.c,v 1.24.4.1 2011/05/19 19:45:46 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,7 +37,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bt_open.c,v 1.26 2012/03/13 21:13:32 christos Exp $");
+__RCSID("$NetBSD: bt_open.c,v 1.24.4.1 2011/05/19 19:45:46 bouyer Exp $");
 
 /*
  * Implementation of btree access method for 4.4BSD.
@@ -304,11 +304,9 @@ __bt_open(const char *fname, int flags, mode_t mode, const BTREEINFO *openinfo,
 	    (sizeof(indx_t) + NBLEAFDBT(0, 0));
 	_DBFIT(temp, indx_t);
 	t->bt_ovflsize = (indx_t)temp;
-	if (t->bt_ovflsize < NBLEAFDBT(NOVFLSIZE, NOVFLSIZE) + sizeof(indx_t)) {
-		size_t l = NBLEAFDBT(NOVFLSIZE, NOVFLSIZE) + sizeof(indx_t);
-		_DBFIT(l, indx_t);
-		t->bt_ovflsize = (indx_t)l;
-	}
+	if (t->bt_ovflsize < NBLEAFDBT(NOVFLSIZE, NOVFLSIZE) + sizeof(indx_t))
+		t->bt_ovflsize =
+		    NBLEAFDBT(NOVFLSIZE, NOVFLSIZE) + sizeof(indx_t);
 
 	/* Initialize the buffer pool. */
 	if ((t->bt_mp =

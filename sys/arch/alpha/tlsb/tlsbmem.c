@@ -1,4 +1,4 @@
-/* $NetBSD: tlsbmem.c,v 1.11 2011/06/14 15:34:23 matt Exp $ */
+/* $NetBSD: tlsbmem.c,v 1.8 2002/10/02 04:06:40 thorpej Exp $ */
 
 /*
  * Copyright (c) 1997 by Matthew Jacob
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: tlsbmem.c,v 1.11 2011/06/14 15:34:23 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tlsbmem.c,v 1.8 2002/10/02 04:06:40 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,19 +52,21 @@ __KERNEL_RCSID(0, "$NetBSD: tlsbmem.c,v 1.11 2011/06/14 15:34:23 matt Exp $");
 #include <alpha/tlsb/tlsbvar.h>
 
 struct tlsbmem_softc {
-	device_t	sc_dev;
+	struct device	sc_dv;
 	int		sc_node;	/* TLSB node */
-	uint16_t	sc_dtype;	/* device type */
+	u_int16_t	sc_dtype;	/* device type */
 };
 
-static int	tlsbmemmatch(device_t, cfdata_t, void *);
-static void	tlsbmemattach(device_t, device_t, void *);
-
-CFATTACH_DECL_NEW(tlsbmem, sizeof (struct tlsbmem_softc),
+static int	tlsbmemmatch __P((struct device *, struct cfdata *, void *));
+static void	tlsbmemattach __P((struct device *, struct device *, void *));
+CFATTACH_DECL(tlsbmem, sizeof (struct tlsbmem_softc),
     tlsbmemmatch, tlsbmemattach, NULL, NULL);
 
 static int
-tlsbmemmatch(device_t parent, cfdata_t cf, void *aux)
+tlsbmemmatch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct tlsb_dev_attach_args *ta = aux;
 	if (TLDEV_ISMEM(ta->ta_dtype))
@@ -73,14 +75,16 @@ tlsbmemmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-tlsbmemattach(device_t parent, device_t self, void *aux)
+tlsbmemattach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct tlsb_dev_attach_args *ta = aux;
-	struct tlsbmem_softc *sc = device_private(self);
+	struct tlsbmem_softc *sc = (struct tlsbmem_softc *)self;
 
-	sc->sc_dev = self;
 	sc->sc_node = ta->ta_node;
 	sc->sc_dtype = ta->ta_dtype;
 
-	aprint_normal("\n");
+	printf("\n");
 }

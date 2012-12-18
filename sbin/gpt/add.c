@@ -29,7 +29,7 @@
 __FBSDID("$FreeBSD: src/sbin/gpt/add.c,v 1.14 2006/06/22 22:05:28 marcel Exp $");
 #endif
 #ifdef __RCSID
-__RCSID("$NetBSD: add.c,v 1.11 2011/08/27 17:38:16 joerg Exp $");
+__RCSID("$NetBSD: add.c,v 1.6 2007/12/28 19:53:10 riz Exp $");
 #endif
 
 #include <sys/types.h>
@@ -49,10 +49,10 @@ static uuid_t type;
 static off_t block, size;
 static unsigned int entry;
 
-const char addmsg[] = "add [-b lba] [-i index] [-s lba] [-t type] "
+const char addmsg[] = "add [-b lba] [-i index] [-s lba] [-t uuid] "
 	"device ...";
 
-__dead static void
+static void
 usage_add(void)
 {
 
@@ -163,8 +163,8 @@ add(int fd)
 #endif
 #ifdef __NetBSD__
 	printf("Partition added, use:\n");
-	printf("\tdkctl %s addwedge <wedgename> %" PRIu64 " %" PRIu64
-	    " <type>\n", device_arg, map->map_start, map->map_size);
+	printf("\tdkctl %s addwedge dk<N> %" PRIu64 " %" PRIu64 " <type>\n",
+	    device_name, map->map_start, map->map_size);
 	printf("to create a wedge for it\n");
 #endif
 }
@@ -213,10 +213,10 @@ cmd_add(int argc, char *argv[])
 	if (argc == optind)
 		usage_add();
 
-	/* Create NetBSD FFS partitions by default. */
+	/* Create UFS partitions by default. */
 	if (uuid_is_nil(&type, NULL)) {
-		uuid_t nb_ffs = GPT_ENT_TYPE_NETBSD_FFS;
-		type = nb_ffs;
+		uuid_t ufs = GPT_ENT_TYPE_NETBSD_FFS;
+		type = ufs;
 	}
 
 	while (optind < argc) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: fb_elb.c,v 1.13 2011/07/01 19:02:32 dyoung Exp $	*/
+/*	$NetBSD: fb_elb.c,v 1.9 2008/04/28 20:23:17 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fb_elb.c,v 1.13 2011/07/01 19:02:32 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fb_elb.c,v 1.9 2008/04/28 20:23:17 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -44,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: fb_elb.c,v 1.13 2011/07/01 19:02:32 dyoung Exp $");
 #include <dev/rasops/rasops.h>
 
 #include <machine/explora.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <evbppc/explora/dev/elbvar.h>
 
@@ -58,13 +58,13 @@ struct fb_dev {
 };
 
 struct fb_elb_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	struct fb_dev *sc_fb;
 	int sc_nscreens;
 };
 
-static int	fb_elb_probe(device_t, cfdata_t, void *);
-static void	fb_elb_attach(device_t, device_t, void *);
+static int	fb_elb_probe(struct device *, struct cfdata *, void *);
+static void	fb_elb_attach(struct device *, struct device *, void *);
 void		fb_cnattach(bus_space_tag_t, bus_addr_t, void *);
 static void	fb_init(struct fb_dev *, int);
 static int	fb_ioctl(void *, void *, u_long, void *, int, struct lwp *);
@@ -108,14 +108,14 @@ static const struct wsscreen_descr *scrlist[] = {
 };
 
 static struct wsscreen_list screenlist = {
-	__arraycount(scrlist), scrlist
+	sizeof(scrlist)/sizeof(scrlist[0]), scrlist
 };
 
-CFATTACH_DECL_NEW(fb_elb, sizeof(struct fb_elb_softc),
+CFATTACH_DECL(fb_elb, sizeof(struct fb_elb_softc),
     fb_elb_probe, fb_elb_attach, NULL, NULL);
 
 static int
-fb_elb_probe(device_t parent, cfdata_t cf, void *aux)
+fb_elb_probe(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct elb_attach_args *oaa = aux;
 
@@ -126,22 +126,19 @@ fb_elb_probe(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-fb_elb_attach(device_t parent, device_t self, void *aux)
+fb_elb_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct fb_elb_softc *sc = device_private(self);
+	struct fb_elb_softc *sc = (void *)self;
 	struct elb_attach_args *eaa = aux;
 	struct wsemuldisplaydev_attach_args waa;
 	struct rasops_info *ri;
 	bus_space_handle_t ioh;
 	int is_console;
 
-	sc->sc_dev = self;
-
 	is_console = ((void *)eaa->elb_base == console_dev.fb_vram);
 
 	if (is_console) {
 		sc->sc_fb = &console_dev;
-		sc->sc_fb->fb_ri.ri_flg &= ~RI_NO_AUTO;
 	} else {
 		sc->sc_fb = malloc(sizeof(struct fb_dev), M_DEVBUF, M_WAITOK);
 		memset(sc->sc_fb, 0, sizeof(struct fb_dev));
@@ -179,8 +176,6 @@ fb_init(struct fb_dev *fb, int full)
 		ri->ri_stride = ri->ri_width;
 		ri->ri_bits = fb->fb_vram;
 		ri->ri_flg = RI_CENTER;
-		if (ri == &console_dev.fb_ri)
-			ri->ri_flg |= RI_NO_AUTO;
 
 		rasops_init(ri, 500, 500);
 	} else {

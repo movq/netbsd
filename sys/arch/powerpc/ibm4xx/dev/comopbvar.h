@@ -1,4 +1,4 @@
-/*	$NetBSD: comopbvar.h,v 1.3 2011/06/17 19:03:01 matt Exp $	*/
+/*	$NetBSD: comopbvar.h,v 1.2 2005/12/11 12:18:42 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 Shigeyuki Fukushima.
@@ -37,6 +37,6 @@
 #include <sys/device.h>
 
 extern void com_opb_cnattach(int, int, int, int);
-extern void com_opb_device_register(device_t, int);
+extern void com_opb_device_register(struct device *, int);
 
 #endif	/* __IBM4XX_COMOPBVAR_H__ */

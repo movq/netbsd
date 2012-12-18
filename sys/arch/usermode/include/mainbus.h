@@ -1,4 +1,4 @@
-/* $NetBSD: mainbus.h,v 1.7 2011/12/29 21:22:49 jmcneill Exp $ */
+/* $NetBSD: mainbus.h,v 1.1 2007/12/29 14:38:34 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,6 +12,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *        This product includes software developed by Jared D. McNeill.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,28 +40,6 @@ struct thunkbus_attach_args {
 #define THUNKBUS_TYPE_CPU	0
 #define THUNKBUS_TYPE_CLOCK	1
 #define THUNKBUS_TYPE_TTYCONS	2
-#define	THUNKBUS_TYPE_DISKIMAGE	3
-#define THUNKBUS_TYPE_VNCFB	4
-#define THUNKBUS_TYPE_VETH	5
-#define THUNKBUS_TYPE_VAUDIO	6
-
-	union {
-		struct {
-			const char *path;
-		} diskimage;
-		struct {
-			const char *device;
-			const char *eaddr;
-		} veth;
-		struct {
-			const char *device;
-		} vaudio;
-		struct {
-			unsigned int width;
-			unsigned int height;
-			uint16_t port;
-		} vnc;
-	} u;
 };
 
 #endif /* !_ARCH_USERMODE_INCLUDE_MAINBUS_H */

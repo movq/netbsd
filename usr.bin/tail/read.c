@@ -1,4 +1,4 @@
-/*	$NetBSD: read.c,v 1.17 2011/09/03 10:59:10 christos Exp $	*/
+/*	$NetBSD: read.c,v 1.14 2008/09/30 04:03:37 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)read.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: read.c,v 1.17 2011/09/03 10:59:10 christos Exp $");
+__RCSID("$NetBSD: read.c,v 1.14 2008/09/30 04:03:37 dholland Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -51,7 +51,7 @@ __RCSID("$NetBSD: read.c,v 1.17 2011/09/03 10:59:10 christos Exp $");
 #include "extern.h"
 
 /*
- * displaybytes -- read bytes to an offset from the end and display.
+ * bytes -- read bytes to an offset from the end and display.
  *
  * This is the function that reads to a byte offset from the end of the input,
  * storing the data in a wrap-around buffer which is then displayed.  If the
@@ -63,7 +63,7 @@ __RCSID("$NetBSD: read.c,v 1.17 2011/09/03 10:59:10 christos Exp $");
  * Non-zero return means than a (non-fatal) error occurred.
  */
 int
-displaybytes(FILE *fp, off_t off)
+bytes(FILE *fp, off_t off)
 {
 	int ch, len, tlen;
 	char *ep, *p, *t;
@@ -71,7 +71,7 @@ displaybytes(FILE *fp, off_t off)
 	char *sp;
 
 	if ((sp = p = malloc(off)) == NULL)
-		xerr(1, "malloc");
+		err(1, "%s", strerror(errno));
 
 	for (wrap = 0, ep = p + off; (ch = getc(fp)) != EOF;) {
 		*p = ch;
@@ -82,7 +82,7 @@ displaybytes(FILE *fp, off_t off)
 	}
 	if (ferror(fp)) {
 		ierr();
-		return 1;
+		return (1);
 	}
 
 	if (rflag) {
@@ -115,11 +115,11 @@ displaybytes(FILE *fp, off_t off)
 		if ((len = p - sp) != 0)
 			WR(sp, len);
 	}
-	return 0;
+	return (0);
 }
 
 /*
- * displaylines -- read lines to an offset from the end and display.
+ * lines -- read lines to an offset from the end and display.
  *
  * This is the function that reads to a line offset from the end of the input,
  * storing the data in an array of buffers which is then displayed.  If the
@@ -131,11 +131,11 @@ displaybytes(FILE *fp, off_t off)
  * Non-zero return means than a (non-fatal) error occurred.
  */
 int
-displaylines(FILE *fp, off_t off)
+lines(FILE *fp, off_t off)
 {
 	struct {
-		int blen;
-		int len;
+		u_int blen;
+		u_int len;
 		char *l;
 	} *lines;
 	int ch;
@@ -145,7 +145,7 @@ displaylines(FILE *fp, off_t off)
 
 	p = NULL;
 	if ((lines = malloc(off * sizeof(*lines))) == NULL)
-		xerr(1, "malloc");
+		err(1, "%s", strerror(errno));
 
 	memset(lines, 0, sizeof(*lines) * off);
 
@@ -155,7 +155,7 @@ displaylines(FILE *fp, off_t off)
 	while ((ch = getc(fp)) != EOF) {
 		if (++cnt > blen) {
 			if ((n = realloc(sp, blen + 1024)) == NULL)
-				xerr(1, "realloc");
+				err(1, "%s", strerror(errno));
 			sp = n;
 			blen += 1024;
 			p = sp + cnt - 1;
@@ -165,7 +165,7 @@ displaylines(FILE *fp, off_t off)
 			if (lines[recno].blen < cnt) {
 				if ((n = realloc(lines[recno].l,
 				    cnt + 256)) == NULL)
-					xerr(1, "realloc");
+					err(1, "%s", strerror(errno));
 				lines[recno].l = n;
 				lines[recno].blen = cnt + 256;
 			}
@@ -181,7 +181,7 @@ displaylines(FILE *fp, off_t off)
 	if (ferror(fp)) {
 		free(lines);
 		ierr();
-		return 1;
+		return (1);
 	}
 	if (cnt) {
 		lines[recno].l = sp;
@@ -206,5 +206,5 @@ displaylines(FILE *fp, off_t off)
 			WR(lines[cnt].l, lines[cnt].len);
 	}
 	free(lines);
-	return 0;
+	return (0);
 }

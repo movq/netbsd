@@ -1,9 +1,9 @@
-/*	$NetBSD: frame.h,v 1.12 2011/01/22 19:35:48 skrll Exp $	*/
+/*	$NetBSD: frame.h,v 1.7 2007/12/22 14:06:47 skrll Exp $	*/
 
 /*	$OpenBSD: frame.h,v 1.11 1999/11/25 18:28:06 mickey Exp $	*/
 
 /*
- * Copyright (c) 1999-2004 Michael Shalayeff
+ * Copyright (c) 1999 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,6 +14,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Michael Shalayeff.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -93,8 +98,8 @@ struct trapframe {
 	/* here starts the `virtual' part */
 	u_int	tf_sar;		/* cr11 */
 	u_int	tf_r1;
-	u_int	tf_rp;		/* r2 */
-	u_int	tf_r3;		/* frame pointer when -g */
+	u_int	tf_rp;          /* r2 */
+	u_int	tf_r3;          /* frame pointer when -g */
 	u_int	tf_r4;
 	u_int	tf_r5;
 	u_int	tf_r6;
@@ -132,13 +137,12 @@ struct trapframe {
 	u_int	tf_rctr;	/* cr0 */
 	u_int	tf_ccr;		/* cr10 */
 	u_int	tf_eirr;	/* cr23 - DDB */
-	u_int	tf_cr24;	/* cr24 - DDB */
+	u_int	tf_hptm;	/* cr24 - DDB */
 	u_int	tf_vtop;	/* cr25 - DDB */
-	u_int	tf_cr27;	/*      - DDB */
 	u_int	tf_cr28;	/*      - DDB */
-	u_int	tf_cr30;	/* fpregs */
+	u_int	tf_cr30;	/* uaddr */
 
-	u_int	tf_pad[2];	/* pad to 256 bytes */
+	u_int	tf_pad[3];	/* pad to 256 bytes */
 };
 
 #endif /* !__ASSEMBLER__ */

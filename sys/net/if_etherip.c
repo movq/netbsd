@@ -1,4 +1,4 @@
-/*      $NetBSD: if_etherip.c,v 1.33 2012/07/28 00:43:24 matt Exp $        */
+/*      $NetBSD: if_etherip.c,v 1.22.4.2 2008/11/19 03:40:27 snj Exp $        */
 
 /*
  *  Copyright (c) 2006, Hans Rosenfeld <rosenfeld@grumpf.hope-2000.org>
@@ -86,9 +86,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_etherip.c,v 1.33 2012/07/28 00:43:24 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_etherip.c,v 1.22.4.2 2008/11/19 03:40:27 snj Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -100,6 +101,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_etherip.c,v 1.33 2012/07/28 00:43:24 matt Exp $")
 #include <sys/time.h>
 #include <sys/sysctl.h>
 #include <sys/queue.h>
+#include <sys/kauth.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/intr.h>
@@ -110,7 +112,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_etherip.c,v 1.33 2012/07/28 00:43:24 matt Exp $")
 #include <net/if_media.h>
 #include <net/route.h>
 #include <net/if_etherip.h>
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -133,8 +137,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_etherip.c,v 1.33 2012/07/28 00:43:24 matt Exp $")
 #endif /* INET6 */
 
 #include <compat/sys/sockio.h>
-
-struct etherip_softc_list etherip_softc_list;
 
 static int etherip_node;
 static int etherip_sysctl_handler(SYSCTLFN_PROTO);
@@ -277,7 +279,7 @@ etherip_attach(device_t parent, device_t self, void *aux)
 	 */
 	error = sysctl_createv(NULL, 0, NULL, &node, CTLFLAG_READWRITE, 
 			       CTLTYPE_STRING, device_xname(self), NULL,
-			       etherip_sysctl_handler, 0, (void *)sc, 18, CTL_NET,
+			       etherip_sysctl_handler, 0, sc, 18, CTL_NET,
 			       AF_LINK, etherip_node, device_unit(self),
 			       CTL_EOL);
 	if (error)
@@ -374,7 +376,10 @@ etheripintr(void *arg)
 		if (m == NULL)
 			break;
 		
-		bpf_mtap(ifp, m);
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 		
 		ifp->if_opackets++;
 		if (sc->sc_src && sc->sc_dst) {
@@ -514,8 +519,8 @@ etherip_set_tunnel(struct ifnet *ifp,
 		    sc2->sc_src->sa_len    != src->sa_len)
 			continue;
 		/* can't configure same pair of address onto two tunnels */
-		if (memcmp(sc2->sc_dst, dst, dst->sa_len) == 0 &&
-		    memcmp(sc2->sc_src, src, src->sa_len) == 0) {
+		if (bcmp(sc2->sc_dst, dst, dst->sa_len) == 0 &&
+		    bcmp(sc2->sc_src, src, src->sa_len) == 0) {
 			error = EADDRNOTAVAIL;
 			goto out;
 		}
@@ -606,7 +611,7 @@ etherip_clone_create(struct if_clone *ifc, int unit)
 {
 	cfdata_t cf;
 
-	cf = malloc(sizeof(struct cfdata), M_DEVBUF, M_WAITOK);
+	MALLOC(cf, cfdata_t, sizeof(struct cfdata), M_DEVBUF, M_WAITOK);
 	cf->cf_name   = etherip_cd.cd_name;
 	cf->cf_atname = etherip_ca.ca_name;
 	cf->cf_unit   = unit;
@@ -630,7 +635,7 @@ etherip_clone_destroy(struct ifnet *ifp)
 
 	if ((error = config_detach(sc->sc_dev, 0)) != 0)
 		aprint_error_dev(sc->sc_dev, "unable to detach instance\n");
-	free(cf, M_DEVBUF);
+	FREE(cf, M_DEVBUF);
 
 	return error;
 }
@@ -692,10 +697,10 @@ etherip_sysctl_handler(SYSCTLFN_ARGS)
 		return EINVAL;
 
 	/* Commit change */
-	if (ether_aton_r(enaddr, sizeof(enaddr), addr) != 0)
+	if (ether_nonstatic_aton(enaddr, addr) != 0)
 		return EINVAL;
 
-	if_set_sadl(ifp, enaddr, ETHER_ADDR_LEN, false);
+	if_set_sadl(ifp, enaddr, ETHER_ADDR_LEN);
 	return error;
 }
 

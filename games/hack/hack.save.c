@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.save.c,v 1.16 2011/08/06 20:42:43 dholland Exp $	*/
+/*	$NetBSD: hack.save.c,v 1.10 2008/01/28 06:55:42 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.save.c,v 1.16 2011/08/06 20:42:43 dholland Exp $");
+__RCSID("$NetBSD: hack.save.c,v 1.10 2008/01/28 06:55:42 dholland Exp $");
 #endif				/* not lint */
 
 #include <signal.h>
@@ -73,10 +73,9 @@ __RCSID("$NetBSD: hack.save.c,v 1.16 2011/08/06 20:42:43 dholland Exp $");
 #include "hack.h"
 #include "extern.h"
 
-static int dosave0(int);
 
 int
-dosave(void)
+dosave()
 {
 	if (dosave0(0)) {
 		settty("Be seeing you ...\n");
@@ -87,7 +86,8 @@ dosave(void)
 
 #ifndef NOSAVEONHANGUP
 void
-hang_up(int n __unused)
+hangup(n)
+	int n __unused;
 {
 	(void) dosave0(1);
 	exit(1);
@@ -95,8 +95,9 @@ hang_up(int n __unused)
 #endif	/* NOSAVEONHANGUP */
 
 /* returns 1 if save successful */
-static int
-dosave0(int hu)
+int
+dosave0(hu)
+	int             hu;
 {
 	int		fd, ofd;
 	int             tmp;	/* not ! */
@@ -116,17 +117,17 @@ dosave0(int hu)
 	saveobjchn(fd, fcobj);
 	savemonchn(fd, fallen_down);
 	tmp = getuid();
-	bwrite(fd, &tmp, sizeof tmp);
-	bwrite(fd, &flags, sizeof(struct flag));
-	bwrite(fd, &dlevel, sizeof dlevel);
-	bwrite(fd, &maxdlevel, sizeof maxdlevel);
-	bwrite(fd, &moves, sizeof moves);
-	bwrite(fd, &u, sizeof(struct you));
+	bwrite(fd, (char *) &tmp, sizeof tmp);
+	bwrite(fd, (char *) &flags, sizeof(struct flag));
+	bwrite(fd, (char *) &dlevel, sizeof dlevel);
+	bwrite(fd, (char *) &maxdlevel, sizeof maxdlevel);
+	bwrite(fd, (char *) &moves, sizeof moves);
+	bwrite(fd, (char *) &u, sizeof(struct you));
 	if (u.ustuck)
-		bwrite(fd, &(u.ustuck->m_id), sizeof u.ustuck->m_id);
-	bwrite(fd, pl_character, sizeof pl_character);
-	bwrite(fd, genocided, sizeof genocided);
-	bwrite(fd, fut_geno, sizeof fut_geno);
+		bwrite(fd, (char *) &(u.ustuck->m_id), sizeof u.ustuck->m_id);
+	bwrite(fd, (char *) pl_character, sizeof pl_character);
+	bwrite(fd, (char *) genocided, sizeof genocided);
+	bwrite(fd, (char *) fut_geno, sizeof fut_geno);
 	savenames(fd);
 	for (tmp = 1; tmp <= maxdlevel; tmp++) {
 
@@ -144,7 +145,7 @@ dosave0(int hu)
 		}
 		getlev(ofd, hackpid, tmp);
 		(void) close(ofd);
-		bwrite(fd, &tmp, sizeof tmp);	/* level number */
+		bwrite(fd, (char *) &tmp, sizeof tmp);	/* level number */
 		savelev(fd, tmp);	/* actual level */
 		(void) unlink(lock);
 	}
@@ -157,7 +158,8 @@ dosave0(int hu)
 }
 
 int
-dorecover(int fd)
+dorecover(fd)
+	int fd;
 {
 	int nfd;
 	int             tmp;	/* not a ! */
@@ -172,7 +174,7 @@ dorecover(int fd)
 			setworn(otmp, otmp->owornmask);
 	fcobj = restobjchn(fd);
 	fallen_down = restmonchn(fd);
-	mread(fd, &tmp, sizeof tmp);
+	mread(fd, (char *) &tmp, sizeof tmp);
 	if (tmp != (int) getuid()) {	/* strange ... */
 		(void) close(fd);
 		(void) unlink(SAVEF);
@@ -180,19 +182,19 @@ dorecover(int fd)
 		restoring = FALSE;
 		return (0);
 	}
-	mread(fd, &flags, sizeof(struct flag));
-	mread(fd, &dlevel, sizeof dlevel);
-	mread(fd, &maxdlevel, sizeof maxdlevel);
-	mread(fd, &moves, sizeof moves);
-	mread(fd, &u, sizeof(struct you));
+	mread(fd, (char *) &flags, sizeof(struct flag));
+	mread(fd, (char *) &dlevel, sizeof dlevel);
+	mread(fd, (char *) &maxdlevel, sizeof maxdlevel);
+	mread(fd, (char *) &moves, sizeof moves);
+	mread(fd, (char *) &u, sizeof(struct you));
 	if (u.ustuck)
-		mread(fd, &mid, sizeof mid);
-	mread(fd, pl_character, sizeof pl_character);
-	mread(fd, genocided, sizeof genocided);
-	mread(fd, fut_geno, sizeof fut_geno);
+		mread(fd, (char *) &mid, sizeof mid);
+	mread(fd, (char *) pl_character, sizeof pl_character);
+	mread(fd, (char *) genocided, sizeof genocided);
+	mread(fd, (char *) fut_geno, sizeof fut_geno);
 	restnames(fd);
 	while (1) {
-		if (read(fd, &tmp, sizeof tmp) != sizeof tmp)
+		if (read(fd, (char *) &tmp, sizeof tmp) != sizeof tmp)
 			break;
 		getlev(fd, 0, tmp);
 		glo(tmp);
@@ -241,13 +243,14 @@ monfnd:
 }
 
 struct obj     *
-restobjchn(int fd)
+restobjchn(fd)
+	int fd;
 {
 	struct obj     *otmp, *otmp2 = NULL;
 	struct obj     *first = 0;
 	int             xl;
 	while (1) {
-		mread(fd, &xl, sizeof(xl));
+		mread(fd, (char *) &xl, sizeof(xl));
 		if (xl == -1)
 			break;
 		otmp = newobj(xl);
@@ -255,7 +258,7 @@ restobjchn(int fd)
 			first = otmp;
 		else
 			otmp2->nobj = otmp;
-		mread(fd, otmp, (unsigned) xl + sizeof(struct obj));
+		mread(fd, (char *) otmp, (unsigned) xl + sizeof(struct obj));
 		if (!otmp->o_id)
 			otmp->o_id = flags.ident++;
 		otmp2 = otmp;
@@ -268,7 +271,8 @@ restobjchn(int fd)
 }
 
 struct monst   *
-restmonchn(int fd)
+restmonchn(fd)
+	int fd;
 {
 	struct monst   *mtmp, *mtmp2 = NULL;
 	struct monst   *first = 0;
@@ -277,7 +281,7 @@ restmonchn(int fd)
 	struct permonst *monbegin;
 	long            differ;
 
-	mread(fd, &monbegin, sizeof(monbegin));
+	mread(fd, (char *) &monbegin, sizeof(monbegin));
 	differ = (const char *) (&mons[0]) - (const char *) (monbegin);
 
 #ifdef lint
@@ -285,7 +289,7 @@ restmonchn(int fd)
 	mtmp2 = 0;
 #endif	/* lint */
 	while (1) {
-		mread(fd, &xl, sizeof(xl));
+		mread(fd, (char *) &xl, sizeof(xl));
 		if (xl == -1)
 			break;
 		mtmp = newmonst(xl);
@@ -293,7 +297,7 @@ restmonchn(int fd)
 			first = mtmp;
 		else
 			mtmp2->nmon = mtmp;
-		mread(fd, mtmp, (unsigned) xl + sizeof(struct monst));
+		mread(fd, (char *) mtmp, (unsigned) xl + sizeof(struct monst));
 		if (!mtmp->m_id)
 			mtmp->m_id = flags.ident++;
 		mtmp->data = (const struct permonst *)

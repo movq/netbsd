@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_vfsops.c,v 1.87 2011/11/14 18:35:13 hannken Exp $	*/
+/*	$NetBSD: ntfs_vfsops.c,v 1.72.6.1 2009/09/10 07:33:24 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 Semen Ustimenko
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ntfs_vfsops.c,v 1.87 2011/11/14 18:35:13 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ntfs_vfsops.c,v 1.72.6.1 2009/09/10 07:33:24 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,7 +92,7 @@ static const struct genfs_ops ntfs_genfsops = {
 static struct sysctllog *ntfs_sysctl_log;
 
 static int
-ntfs_mountroot(void)
+ntfs_mountroot()
 {
 	struct mount *mp;
 	struct lwp *l = curlwp;	/* XXX */
@@ -127,7 +127,7 @@ ntfs_mountroot(void)
 }
 
 static void
-ntfs_init(void)
+ntfs_init()
 {
 
 	malloc_type_attach(M_NTFSMNT);
@@ -143,13 +143,13 @@ ntfs_init(void)
 }
 
 static void
-ntfs_reinit(void)
+ntfs_reinit()
 {
 	ntfs_nthashreinit();
 }
 
 static void
-ntfs_done(void)
+ntfs_done()
 {
 	ntfs_nthashdone();
 	malloc_type_detach(M_NTFSMNT);
@@ -169,7 +169,9 @@ ntfs_mount (
 	void *data,
 	size_t *data_len)
 {
+	struct nameidata nd;
 	struct lwp *l = curlwp;
+	struct nameidata *ndp = &nd;
 	int		err = 0, flags;
 	struct vnode	*devvp;
 	struct ntfs_args *args = data;
@@ -208,12 +210,14 @@ ntfs_mount (
 	 * Not an update, or updating the name: look up the name
 	 * and verify that it refers to a sensible block device.
 	 */
-	err = namei_simple_user(args->fspec,
-				NSM_FOLLOW_NOEMULROOT, &devvp);
+	NDINIT(ndp, LOOKUP, FOLLOW, UIO_USERSPACE, args->fspec);
+	err = namei(ndp);
 	if (err) {
 		/* can't get devvp!*/
 		return (err);
 	}
+
+	devvp = ndp->ni_vp;
 
 	if (devvp->v_type != VBLK) {
 		err = ENOTBLK;
@@ -270,16 +274,14 @@ ntfs_mount (
 			flags = FREAD;
 		else
 			flags = FREAD|FWRITE;
-		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 		err = VOP_OPEN(devvp, flags, FSCRED);
-		VOP_UNLOCK(devvp);
 		if (err)
 			goto fail;
 		err = ntfs_mountfs(devvp, mp, args, l);
 		if (err) {
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 			(void)VOP_CLOSE(devvp, flags, NOCRED);
-			VOP_UNLOCK(devvp);
+			VOP_UNLOCK(devvp, 0);
 			goto fail;
 		}
 	}
@@ -302,7 +304,11 @@ fail:
  * Common code for mount and mountroot
  */
 int
-ntfs_mountfs(struct vnode *devvp, struct mount *mp, struct ntfs_args *argsp, struct lwp *l)
+ntfs_mountfs(devvp, mp, argsp, l)
+	struct vnode *devvp;
+	struct mount *mp;
+	struct ntfs_args *argsp;
+	struct lwp *l;
 {
 	struct buf *bp;
 	struct ntfsmount *ntmp;
@@ -317,7 +323,7 @@ ntfs_mountfs(struct vnode *devvp, struct mount *mp, struct ntfs_args *argsp, str
 	 */
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = vinvalbuf(devvp, V_SAVE, l->l_cred, l, 0, 0);
-	VOP_UNLOCK(devvp);
+	VOP_UNLOCK(devvp, 0);
 	if (error)
 		return (error);
 
@@ -328,8 +334,9 @@ ntfs_mountfs(struct vnode *devvp, struct mount *mp, struct ntfs_args *argsp, str
 	error = bread(devvp, BBLOCK, BBSIZE, NOCRED, 0, &bp);
 	if (error)
 		goto out;
-	ntmp = malloc( sizeof *ntmp, M_NTFSMNT, M_WAITOK|M_ZERO);
-	memcpy( &ntmp->ntm_bootfile,  bp->b_data, sizeof(struct bootfile) );
+	ntmp = malloc( sizeof *ntmp, M_NTFSMNT, M_WAITOK );
+	bzero( ntmp, sizeof *ntmp );
+	bcopy( bp->b_data, &ntmp->ntm_bootfile, sizeof(struct bootfile) );
 	brelse( bp , 0 );
 	bp = NULL;
 
@@ -382,7 +389,7 @@ ntfs_mountfs(struct vnode *devvp, struct mount *mp, struct ntfs_args *argsp, str
 			if(error)
 				goto out1;
 			ntmp->ntm_sysvn[pi[i]]->v_vflag |= VV_SYSTEM;
-			vref(ntmp->ntm_sysvn[pi[i]]);
+			VREF(ntmp->ntm_sysvn[pi[i]]);
 			vput(ntmp->ntm_sysvn[pi[i]]);
 		}
 	}
@@ -541,7 +548,7 @@ ntfs_unmount(
 	error = VOP_CLOSE(ntmp->ntm_devvp, ronly ? FREAD : FREAD|FWRITE,
 		NOCRED);
 	KASSERT(error == 0);
-	VOP_UNLOCK(ntmp->ntm_devvp);
+	VOP_UNLOCK(ntmp->ntm_devvp, 0);
 
 	vrele(ntmp->ntm_devvp);
 
@@ -552,7 +559,7 @@ ntfs_unmount(
 	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
 	free(ntmp->ntm_ad, M_NTFSMNT);
-	free(ntmp, M_NTFSMNT);
+	FREE(ntmp, M_NTFSMNT);
 	return (0);
 }
 
@@ -661,7 +668,7 @@ ntfs_fhtovp(
 	    (unsigned long long)ntfh.ntfid_ino));
 
 	error = ntfs_vgetex(mp, ntfh.ntfid_ino, ntfh.ntfid_attr, NULL,
-			LK_EXCLUSIVE, 0, vpp);
+			LK_EXCLUSIVE | LK_RETRY, 0, vpp);
 	if (error != 0) {
 		*vpp = NULLVP;
 		return (error);
@@ -728,7 +735,6 @@ ntfs_vgetex(
 	ntmp = VFSTONTFS(mp);
 	*vpp = NULL;
 
-loop:
 	/* Get ntnode */
 	error = ntfs_ntlookup(ntmp, ino, &ip);
 	if (error) {
@@ -781,40 +787,22 @@ loop:
 	 * lock has to be acquired first.
 	 * ntfs_fget() bumped ntnode usecount, so ntnode won't be recycled
 	 * prematurely.
-	 * Take v_interlock before releasing ntnode lock to avoid races.
 	 */
-	vp = FTOV(fp);
-	if (vp) {
-		mutex_enter(vp->v_interlock);
-		ntfs_ntput(ip);
-		if (vget(vp, lkflags) != 0)
-			goto loop;
-		*vpp = vp;
-		return 0;
-	}
 	ntfs_ntput(ip);
 
-	error = getnewvnode(VT_NTFS, ntmp->ntm_mountp, ntfs_vnodeop_p,
-	    NULL, &vp);
+	if (FTOV(fp)) {
+		/* vget() returns error if the vnode has been recycled */
+		if (vget(FTOV(fp), lkflags) == 0) {
+			*vpp = FTOV(fp);
+			return (0);
+		}
+	}
+
+	error = getnewvnode(VT_NTFS, ntmp->ntm_mountp, ntfs_vnodeop_p, &vp);
 	if(error) {
 		ntfs_frele(fp);
-		return (error);
-	}
-	ntfs_ntget(ip);
-	error = ntfs_fget(ntmp, ip, attrtype, attrname, &fp);
-	if (error) {
-		printf("ntfs_vget: ntfs_fget failed\n");
 		ntfs_ntput(ip);
 		return (error);
-	}
-	if (FTOV(fp)) {
-		/*
-		 * Another thread beat us, put back freshly allocated
-		 * vnode and retry.
-		 */
-		ntfs_ntput(ip);
-		ungetnewvnode(vp);
-		goto loop;
 	}
 	dprintf(("ntfs_vget: vnode: %p for ntnode: %llu\n", vp,
 	    (unsigned long long)ino));
@@ -828,9 +816,7 @@ loop:
 	if (ino == NTFS_ROOTINO)
 		vp->v_vflag |= VV_ROOT;
 
-	ntfs_ntput(ip);
-
-	if (lkflags & (LK_EXCLUSIVE | LK_SHARED)) {
+	if (lkflags & LK_TYPE_MASK) {
 		error = vn_lock(vp, lkflags);
 		if (error) {
 			vput(vp);
@@ -839,7 +825,7 @@ loop:
 	}
 
 	uvm_vnp_setsize(vp, fp->f_size); /* XXX: mess, cf. ntfs_lookupfile() */
-	vref(ip->i_devvp);
+	VREF(ip->i_devvp);
 	*vpp = vp;
 	return (0);
 }
@@ -850,7 +836,8 @@ ntfs_vget(
 	ino_t ino,
 	struct vnode **vpp)
 {
-	return ntfs_vgetex(mp, ino, NTFS_A_DATA, NULL, LK_EXCLUSIVE, 0, vpp);
+	return ntfs_vgetex(mp, ino, NTFS_A_DATA, NULL,
+			LK_EXCLUSIVE | LK_RETRY, 0, vpp);
 }
 
 extern const struct vnodeopv_desc ntfs_vnodeop_opv_desc;

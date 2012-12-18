@@ -1,4 +1,4 @@
-.\"	$NetBSD: hardware,v 1.14 2009/04/23 01:56:50 snj Exp $
+.\"	$NetBSD: hardware,v 1.13.20.1 2009/04/25 23:16:35 snj Exp $
 .
 .Nx*M
 is aimed to run on MIPS-based computers manufactured by 

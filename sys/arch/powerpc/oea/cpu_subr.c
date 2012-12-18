@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_subr.c,v 1.76 2012/10/20 14:42:15 kiyohara Exp $	*/
+/*	$NetBSD: cpu_subr.c,v 1.50 2008/10/14 22:54:22 macallan Exp $	*/
 
 /*-
  * Copyright (c) 2001 Matt Thomas.
@@ -34,10 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_subr.c,v 1.76 2012/10/20 14:42:15 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_subr.c,v 1.50 2008/10/14 22:54:22 macallan Exp $");
 
 #include "opt_ppcparam.h"
-#include "opt_ppccache.h"
 #include "opt_multiprocessor.h"
 #include "opt_altivec.h"
 #include "sysmon_envsys.h"
@@ -47,16 +46,14 @@ __KERNEL_RCSID(0, "$NetBSD: cpu_subr.c,v 1.76 2012/10/20 14:42:15 kiyohara Exp $
 #include <sys/device.h>
 #include <sys/types.h>
 #include <sys/lwp.h>
-#include <sys/xcall.h>
+#include <sys/user.h>
+#include <sys/malloc.h>
 
-#include <uvm/uvm.h>
+#include <uvm/uvm_extern.h>
 
-#include <powerpc/pcb.h>
-#include <powerpc/psl.h>
-#include <powerpc/spr.h>
 #include <powerpc/oea/hid.h>
 #include <powerpc/oea/hid_601.h>
-#include <powerpc/oea/spr.h>
+#include <powerpc/spr.h>
 #include <powerpc/oea/cpufeat.h>
 
 #include <dev/sysmon/sysmonvar.h>
@@ -67,7 +64,6 @@ static void cpu_config_l2cr(int);
 static void cpu_config_l3cr(int);
 static void cpu_probe_speed(struct cpu_info *);
 static void cpu_idlespin(void);
-static void cpu_set_dfs_xcall(void *, void *);
 #if NSYSMON_ENVSYS > 0
 static void cpu_tau_setup(struct cpu_info *);
 static void cpu_tau_refresh(struct sysmon_envsys *, envsys_data_t *);
@@ -212,7 +208,6 @@ static const struct cputab models[] = {
 	{ "620",	MPC620,  	REVFMT_HEX },
 	{ "750",	MPC750,		REVFMT_MAJMIN },
 	{ "750FX",	IBM750FX,	REVFMT_MAJMIN },
-	{ "750GX",	IBM750GX,	REVFMT_MAJMIN },
 	{ "7400",	MPC7400,	REVFMT_MAJMIN },
 	{ "7410",	MPC7410,	REVFMT_MAJMIN },
 	{ "7450",	MPC7450,	REVFMT_MAJMIN },
@@ -230,31 +225,20 @@ static const struct cputab models[] = {
 };
 
 #ifdef MULTIPROCESSOR
-struct cpu_info cpu_info[CPU_MAXNUM] = {
-    [0] = {
-	.ci_curlwp = &lwp0,
-    },
-};
+struct cpu_info cpu_info[CPU_MAXNUM] = { { .ci_curlwp = &lwp0, }, }; 
 volatile struct cpu_hatch_data *cpu_hatch_data;
 volatile int cpu_hatch_stack;
-#define HATCH_STACK_SIZE 0x1000
 extern int ticks_per_intr;
 #include <powerpc/oea/bat.h>
-#include <powerpc/pic/picvar.h>
-#include <powerpc/pic/ipivar.h>
+#include <arch/powerpc/pic/picvar.h>
+#include <arch/powerpc/pic/ipivar.h>
 extern struct bat battable[];
 #else
-struct cpu_info cpu_info[1] = {
-    [0] = {
-	.ci_curlwp = &lwp0,
-    },
-};
+struct cpu_info cpu_info[1] = { { .ci_curlwp = &lwp0, }, }; 
 #endif /*MULTIPROCESSOR*/
 
 int cpu_altivec;
-register_t cpu_psluserset;
-register_t cpu_pslusermod;
-register_t cpu_pslusermask = 0xffff;
+int cpu_psluserset, cpu_pslusermod;
 char cpu_model[80];
 
 /* This is to be called from locore.S, and nowhere else. */
@@ -268,29 +252,16 @@ cpu_model_init(void)
 	vers = pvr >> 16;
 
 	oeacpufeat = 0;
-
+	
 	if ((vers >= IBMRS64II && vers <= IBM970GX) || vers == MPC620 ||
-		vers == IBMCELL || vers == IBMPOWER6P5) {
-		oeacpufeat |= OEACPU_64;
-		oeacpufeat |= OEACPU_64_BRIDGE;
-		oeacpufeat |= OEACPU_NOBAT;
-
-	} else if (vers == MPC601) {
+		vers == IBMCELL || vers == IBMPOWER6P5)
+		oeacpufeat |= OEACPU_64 | OEACPU_64_BRIDGE | OEACPU_NOBAT;
+	
+	else if (vers == MPC601)
 		oeacpufeat |= OEACPU_601;
 
-	} else if (MPC745X_P(vers) && vers != MPC7450) {
-		oeacpufeat |= OEACPU_HIGHSPRG;
-		oeacpufeat |= OEACPU_XBSEN;
-		oeacpufeat |= OEACPU_HIGHBAT;
-		/* Enable more and larger BAT registers */
-		register_t hid0 = mfspr(SPR_HID0);
-		hid0 |= HID0_XBSEN;
-		hid0 |= HID0_HIGH_BAT_EN;
-		mtspr(SPR_HID0, hid0);
-
-	} else if (vers == IBM750FX || vers == IBM750GX) {
-		oeacpufeat |= OEACPU_HIGHBAT;
-	}
+	else if (MPC745X_P(vers) && vers != MPC7450)
+		oeacpufeat |= OEACPU_XBSEN | OEACPU_HIGHBAT | OEACPU_HIGHSPRG;
 }
 
 void
@@ -338,7 +309,6 @@ cpu_probe_cache(void)
 	switch (vers) {
 #define	K	*1024
 	case IBM750FX:
-	case IBM750GX:
 	case MPC601:
 	case MPC750:
 	case MPC7400:
@@ -403,7 +373,7 @@ cpu_probe_cache(void)
 }
 
 struct cpu_info *
-cpu_attach_common(device_t self, int id)
+cpu_attach_common(struct device *self, int id)
 {
 	struct cpu_info *ci;
 	u_int pvr, vers;
@@ -415,17 +385,15 @@ cpu_attach_common(device_t self, int id)
 	 * and just bail out.
 	 */
 	if (id != 0) {
-		aprint_naive("\n");
 		aprint_normal(": ID %d\n", id);
-		aprint_normal_dev(self,
-		    "processor off-line; "
-		    "multiprocessor support not present in kernel\n");
+		aprint_normal("%s: processor off-line; multiprocessor support "
+		    "not present in kernel\n", self->dv_xname);
 		return (NULL);
 	}
 #endif
 
 	ci->ci_cpuid = id;
-	ci->ci_idepth = -1;
+	ci->ci_intrdepth = -1;
 	ci->ci_dev = self;
 	ci->ci_idlespin = cpu_idlespin;
 
@@ -452,7 +420,6 @@ cpu_attach_common(device_t self, int id)
 		cpu_setup(self, ci);
 		break;
 	default:
-		aprint_naive("\n");
 		if (id >= CPU_MAXNUM) {
 			aprint_normal(": more than %d cpus?\n", CPU_MAXNUM);
 			panic("cpuattach");
@@ -469,10 +436,11 @@ cpu_attach_common(device_t self, int id)
 }
 
 void
-cpu_setup(device_t self, struct cpu_info *ci)
+cpu_setup(self, ci)
+	struct device *self;
+	struct cpu_info *ci;
 {
 	u_int hid0, hid0_save, pvr, vers;
-	const char * const xname = device_xname(self);
 	const char *bitmask;
 	char hidbuf[128];
 	char model[80];
@@ -481,7 +449,6 @@ cpu_setup(device_t self, struct cpu_info *ci)
 	vers = (pvr >> 16) & 0xffff;
 
 	cpu_identify(model, sizeof(model));
-	aprint_naive("\n");
 	aprint_normal(": %s, ID %d%s\n", model,  cpu_number(),
 	    cpu_number() == 0 ? " (primary)" : "");
 
@@ -508,6 +475,8 @@ cpu_setup(device_t self, struct cpu_info *ci)
 	case MPC603:
 	case MPC603e:
 	case MPC603ev:
+	case MPC750:
+	case IBM750FX:
 	case MPC7400:
 	case MPC7410:
 	case MPC8240:
@@ -519,15 +488,6 @@ cpu_setup(device_t self, struct cpu_info *ci)
 		powersave = 1;
 		break;
 
-	case MPC750:
-	case IBM750FX:
-	case IBM750GX:
-		/* Select NAP mode. */
-		hid0 &= ~(HID0_DOZE | HID0_NAP | HID0_SLEEP);
-		hid0 |= HID0_NAP | HID0_DPM;
-		powersave = 1;
-		break;
-
 	case MPC7447A:
 	case MPC7448:
 	case MPC7457:
@@ -536,6 +496,11 @@ cpu_setup(device_t self, struct cpu_info *ci)
 		/* Enable the 7450 branch caches */
 		hid0 |= HID0_SGE | HID0_BTIC;
 		hid0 |= HID0_LRSTK | HID0_FOLD | HID0_BHT;
+		/* Enable more and larger BAT registers */
+		if (oeacpufeat & OEACPU_XBSEN)
+			hid0 |= HID0_XBSEN;
+		if (oeacpufeat & OEACPU_HIGHBAT)
+			hid0 |= HID0_HIGH_BAT_EN;
 		/* Disable BTIC on 7450 Rev 2.0 or earlier */
 		if (vers == MPC7450 && (pvr & 0xFFFF) <= 0x0200)
 			hid0 &= ~HID0_BTIC;
@@ -556,7 +521,6 @@ cpu_setup(device_t self, struct cpu_info *ci)
 #ifdef NAPMODE
 	switch (vers) {
 	case IBM750FX:
-	case IBM750GX:
 	case MPC750:
 	case MPC7400:
 		/* Select NAP mode. */
@@ -568,7 +532,6 @@ cpu_setup(device_t self, struct cpu_info *ci)
 
 	switch (vers) {
 	case IBM750FX:
-	case IBM750GX:
 	case MPC750:
 		hid0 &= ~HID0_DBP;		/* XXX correct? */
 		hid0 |= HID0_EMCP | HID0_BTIC | HID0_SGE | HID0_BHT;
@@ -581,13 +544,6 @@ cpu_setup(device_t self, struct cpu_info *ci)
 		hid0 |= HID0_EIEC;
 		break;
 	}
-
-#ifdef MULTIPROCESSOR
-	switch (vers) {
-	case MPC603e:
-		hid0 |= HID0_ABE;
-	}
-#endif
 
 	if (hid0 != hid0_save) {
 		mtspr(SPR_HID0, hid0);
@@ -613,8 +569,9 @@ cpu_setup(device_t self, struct cpu_info *ci)
 		bitmask = HID0_BITMASK;
 		break;
 	}
-	snprintb(hidbuf, sizeof hidbuf, bitmask, hid0);
-	aprint_normal_dev(self, "HID0 %s, powersave: %d\n", hidbuf, powersave);
+	bitmask_snprintf(hid0, bitmask, hidbuf, sizeof hidbuf);
+	aprint_normal("%s: HID0 %s, powersave: %d\n", self->dv_xname, hidbuf,
+	    powersave);
 
 	ci->ci_khz = 0;
 
@@ -627,7 +584,6 @@ cpu_setup(device_t self, struct cpu_info *ci)
 	case MPC604ev:
 	case MPC750:
 	case IBM750FX:
-	case IBM750GX:
 	case MPC7400:
 	case MPC7410:
 	case MPC7447A:
@@ -635,7 +591,7 @@ cpu_setup(device_t self, struct cpu_info *ci)
 	case MPC7450:
 	case MPC7455:
 	case MPC7457:
-		aprint_normal_dev(self, "");
+		aprint_normal("%s: ", self->dv_xname);
 		cpu_probe_speed(ci);
 		aprint_normal("%u.%02u MHz",
 			      ci->ci_khz / 1000, (ci->ci_khz / 10) % 100);
@@ -646,7 +602,6 @@ cpu_setup(device_t self, struct cpu_info *ci)
 			cpu_config_l3cr(vers);
 			break;
 		case IBM750FX:
-		case IBM750GX:
 		case MPC750:
 		case MPC7400:
 		case MPC7410:
@@ -665,53 +620,59 @@ cpu_setup(device_t self, struct cpu_info *ci)
 	/*
 	 * Attach MPC750 temperature sensor to the envsys subsystem.
 	 * XXX the 74xx series also has this sensor, but it is not
-	 * XXX supported by Motorola and may return values that are off by
+	 * XXX supported by Motorola and may return values that are off by 
 	 * XXX 35-55 degrees C.
 	 */
-	if (vers == MPC750 || vers == IBM750FX || vers == IBM750GX)
+	if (vers == MPC750 || vers == IBM750FX)
 		cpu_tau_setup(ci);
 #endif
 
 	evcnt_attach_dynamic(&ci->ci_ev_clock, EVCNT_TYPE_INTR,
-		NULL, xname, "clock");
+		NULL, self->dv_xname, "clock");
+	evcnt_attach_dynamic(&ci->ci_ev_softclock, EVCNT_TYPE_INTR,
+		NULL, self->dv_xname, "soft clock");
+	evcnt_attach_dynamic(&ci->ci_ev_softnet, EVCNT_TYPE_INTR,
+		NULL, self->dv_xname, "soft net");
+	evcnt_attach_dynamic(&ci->ci_ev_softserial, EVCNT_TYPE_INTR,
+		NULL, self->dv_xname, "soft serial");
 	evcnt_attach_dynamic(&ci->ci_ev_traps, EVCNT_TYPE_TRAP,
-		NULL, xname, "traps");
+		NULL, self->dv_xname, "traps");
 	evcnt_attach_dynamic(&ci->ci_ev_kdsi, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_traps, xname, "kernel DSI traps");
+		&ci->ci_ev_traps, self->dv_xname, "kernel DSI traps");
 	evcnt_attach_dynamic(&ci->ci_ev_udsi, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_traps, xname, "user DSI traps");
+		&ci->ci_ev_traps, self->dv_xname, "user DSI traps");
 	evcnt_attach_dynamic(&ci->ci_ev_udsi_fatal, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_udsi, xname, "user DSI failures");
+		&ci->ci_ev_udsi, self->dv_xname, "user DSI failures");
 	evcnt_attach_dynamic(&ci->ci_ev_kisi, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_traps, xname, "kernel ISI traps");
+		&ci->ci_ev_traps, self->dv_xname, "kernel ISI traps");
 	evcnt_attach_dynamic(&ci->ci_ev_isi, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_traps, xname, "user ISI traps");
+		&ci->ci_ev_traps, self->dv_xname, "user ISI traps");
 	evcnt_attach_dynamic(&ci->ci_ev_isi_fatal, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_isi, xname, "user ISI failures");
+		&ci->ci_ev_isi, self->dv_xname, "user ISI failures");
 	evcnt_attach_dynamic(&ci->ci_ev_scalls, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_traps, xname, "system call traps");
+		&ci->ci_ev_traps, self->dv_xname, "system call traps");
 	evcnt_attach_dynamic(&ci->ci_ev_pgm, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_traps, xname, "PGM traps");
+		&ci->ci_ev_traps, self->dv_xname, "PGM traps");
 	evcnt_attach_dynamic(&ci->ci_ev_fpu, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_traps, xname, "FPU unavailable traps");
+		&ci->ci_ev_traps, self->dv_xname, "FPU unavailable traps");
 	evcnt_attach_dynamic(&ci->ci_ev_fpusw, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_fpu, xname, "FPU context switches");
+		&ci->ci_ev_fpu, self->dv_xname, "FPU context switches");
 	evcnt_attach_dynamic(&ci->ci_ev_ali, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_traps, xname, "user alignment traps");
+		&ci->ci_ev_traps, self->dv_xname, "user alignment traps");
 	evcnt_attach_dynamic(&ci->ci_ev_ali_fatal, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_ali, xname, "user alignment traps");
+		&ci->ci_ev_ali, self->dv_xname, "user alignment traps");
 	evcnt_attach_dynamic(&ci->ci_ev_umchk, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_umchk, xname, "user MCHK failures");
+		&ci->ci_ev_umchk, self->dv_xname, "user MCHK failures");
 	evcnt_attach_dynamic(&ci->ci_ev_vec, EVCNT_TYPE_TRAP,
-		&ci->ci_ev_traps, xname, "AltiVec unavailable");
+		&ci->ci_ev_traps, self->dv_xname, "AltiVec unavailable");
 #ifdef ALTIVEC
 	if (cpu_altivec) {
 		evcnt_attach_dynamic(&ci->ci_ev_vecsw, EVCNT_TYPE_TRAP,
-		    &ci->ci_ev_vec, xname, "AltiVec context switches");
+		    &ci->ci_ev_vec, self->dv_xname, "AltiVec context switches");
 	}
 #endif
 	evcnt_attach_dynamic(&ci->ci_ev_ipi, EVCNT_TYPE_INTR,
-		NULL, xname, "IPIs");
+		NULL, self->dv_xname, "IPIs");
 }
 
 /*
@@ -808,7 +769,7 @@ cpu_enable_l2cr(register_t l2cr)
 	uint16_t vers;
 
 	vers = mfpvr() >> 16;
-
+	
 	/* Disable interrupts and set the cache config bits. */
 	msr = mfmsr();
 	mtmsr(msr & ~PSL_EE);
@@ -847,7 +808,7 @@ cpu_enable_l3cr(register_t l3cr)
 	register_t x;
 
 	/* By The Book (numbered steps from section 3.7.1.3 of MPC7450UM) */
-
+				
 	/*
 	 * 1: Set all L3CR bits for final config except L3E, L3I, L3PE, and
 	 *    L3CLKEN.  (also mask off reserved bits in case they were included
@@ -871,7 +832,7 @@ cpu_enable_l3cr(register_t l3cr)
 	do {
 		x = mfspr(SPR_L3CR);
 	} while (x & L3CR_L3I);
-
+	
 	/* 6: Clear L3CLKEN to 0 */
 	l3cr &= ~L3CR_L3CLKEN;
 	mtspr(SPR_L3CR, l3cr);
@@ -922,7 +883,6 @@ cpu_config_l2cr(int pvr)
 
 	switch (vers) {
 	case IBM750FX:
-	case IBM750GX:
 		cpu_fmttab_print(cpu_ibm750_l2cr_formats, l2cr);
 		break;
 	case MPC750:
@@ -973,7 +933,7 @@ cpu_config_l3cr(int vers)
 		cpu_enable_l2cr(l2cr_config);
 		l2cr = mfspr(SPR_L2CR);
 	}
-
+	
 	aprint_normal(",");
 	switch (vers) {
 	case MPC7447A:
@@ -1006,7 +966,7 @@ cpu_config_l3cr(int vers)
 		cpu_enable_l3cr(l3cr_config);
 		l3cr = mfspr(SPR_L3CR);
 	}
-
+	
 	if (l3cr & L3CR_L3E) {
 		aprint_normal(",");
 		cpu_fmttab_print(cpu_7450_l3cr_formats, l3cr);
@@ -1026,94 +986,7 @@ cpu_probe_speed(struct cpu_info *ci)
 
 	mtspr(SPR_MMCR0, MMCR0_FC);
 
-	ci->ci_khz = (cps * cpu_get_dfs()) / 1000;
-}
-
-/*
- * Read the Dynamic Frequency Switching state and return a divisor for
- * the maximum frequency.
- */
-int
-cpu_get_dfs(void)
-{
-	u_int pvr, vers;
-
-	pvr = mfpvr();
-	vers = pvr >> 16;
-
-	switch (vers) {
-	case MPC7448:
-		if (mfspr(SPR_HID1) & HID1_DFS4)
-			return 4;
-	case MPC7447A:
-		if (mfspr(SPR_HID1) & HID1_DFS2)
-			return 2;
-	}
-	return 1;
-}
-
-/*
- * Set the Dynamic Frequency Switching divisor the same for all cpus.
- */
-void
-cpu_set_dfs(int div)
-{
-	uint64_t where;
-	u_int dfs_mask, pvr, vers;
-
-	pvr = mfpvr();
-	vers = pvr >> 16;
-	dfs_mask = 0;
-
-	switch (vers) {
-	case MPC7448:
-		dfs_mask |= HID1_DFS4;
-	case MPC7447A:
-		dfs_mask |= HID1_DFS2;
-		break;
-	default:
-		printf("cpu_set_dfs: DFS not supported\n");
-		return;
-
-	}
-
-	where = xc_broadcast(0, (xcfunc_t)cpu_set_dfs_xcall, &div, &dfs_mask);
-	xc_wait(where);
-}
-
-static void
-cpu_set_dfs_xcall(void *arg1, void *arg2)
-{
-	u_int dfs_mask, hid1, old_hid1;
-	int *divisor, s;
-
-	divisor = arg1;
-	dfs_mask = *(u_int *)arg2;
-
-	s = splhigh();
-	hid1 = old_hid1 = mfspr(SPR_HID1);
-
-	switch (*divisor) {
-	case 1:
-		hid1 &= ~dfs_mask;
-		break;
-	case 2:
-		hid1 &= ~(dfs_mask & HID1_DFS4);
-		hid1 |= dfs_mask & HID1_DFS2;
-		break;
-	case 4:
-		hid1 &= ~(dfs_mask & HID1_DFS2);
-		hid1 |= dfs_mask & HID1_DFS4;
-		break;
-	}
-
-	if (hid1 != old_hid1) {
-		__asm volatile("sync");
-		mtspr(SPR_HID1, hid1);
-		__asm volatile("sync;isync");
-	}
-
-	splx(s);
+	ci->ci_khz = cps / 1000;
 }
 
 #if NSYSMON_ENVSYS > 0
@@ -1132,26 +1005,25 @@ cpu_tau_setup(struct cpu_info *ci)
 	 */
 
 	therm_delay = ci->ci_khz / 40;		/* 25us just to be safe */
-
-        mtspr(SPR_THRM3, SPR_THRM_TIMER(therm_delay) | SPR_THRM_ENABLE);
+	
+        mtspr(SPR_THRM3, SPR_THRM_TIMER(therm_delay) | SPR_THRM_ENABLE); 
 
 	sme = sysmon_envsys_create();
 
 	sensor.units = ENVSYS_STEMP;
-	sensor.state = ENVSYS_SINVALID;
 	(void)strlcpy(sensor.desc, "CPU Temp", sizeof(sensor.desc));
 	if (sysmon_envsys_sensor_attach(sme, &sensor)) {
 		sysmon_envsys_destroy(sme);
 		return;
 	}
 
-	sme->sme_name = device_xname(ci->ci_dev);
+	sme->sme_name = ci->ci_dev->dv_xname;	
 	sme->sme_cookie = ci;
 	sme->sme_refresh = cpu_tau_refresh;
 
 	if ((error = sysmon_envsys_register(sme)) != 0) {
-		aprint_error_dev(ci->ci_dev,
-		    " unable to register with sysmon (%d)\n", error);
+		aprint_error("%s: unable to register with sysmon (%d)\n",
+		    ci->ci_dev->dv_xname, error);
 		sysmon_envsys_destroy(sme);
 	}
 }
@@ -1170,23 +1042,24 @@ cpu_tau_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 	 * Unit in the MPC750 Microprocessor".
 	 */
 	for (i = 5; i >= 0 ; i--) {
-		mtspr(SPR_THRM1,
+		mtspr(SPR_THRM1, 
 		    SPR_THRM_THRESHOLD(threshold) | SPR_THRM_VALID);
 		count = 0;
-		while ((count < 100000) &&
+		while ((count < 100000) && 
 		    ((mfspr(SPR_THRM1) & SPR_THRM_TIV) == 0)) {
 			count++;
 			delay(1);
 		}
 		if (mfspr(SPR_THRM1) & SPR_THRM_TIN) {
-			/* The interrupt bit was set, meaning the
-			 * temperature was above the threshold
+			/* The interrupt bit was set, meaning the 
+			 * temperature was above the threshold 
 			 */
 			threshold += 1 << i;
 		} else {
 			/* Temperature was below the threshold */
 			threshold -= 1 << i;
 		}
+		
 	}
 	threshold += 2;
 
@@ -1197,22 +1070,41 @@ cpu_tau_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 #endif /* NSYSMON_ENVSYS > 0 */
 
 #ifdef MULTIPROCESSOR
-volatile u_int cpu_spinstart_ack, cpu_spinstart_cpunum;
+extern volatile u_int cpu_spinstart_ack;
 
 int
-cpu_spinup(device_t self, struct cpu_info *ci)
+cpu_spinup(struct device *self, struct cpu_info *ci)
 {
 	volatile struct cpu_hatch_data hatch_data, *h = &hatch_data;
 	struct pglist mlist;
 	int i, error, pvr, vers;
-	char *hp;
+	char *cp, *hp;
 
 	pvr = mfpvr();
 	vers = pvr >> 16;
 	KASSERT(ci != curcpu());
 
+	/*
+	 * Allocate some contiguous pages for the intteup PCB and stack
+	 * from the lowest 256MB (because bat0 always maps it va == pa).
+	 * Must be 16 byte aligned.
+	 */
+	error = uvm_pglistalloc(INTSTK, 0x10000, 0x10000000, 16, 0,
+	    &mlist, 1, 1);
+	if (error) {
+		aprint_error(": unable to allocate idle stack\n");
+		return -1;
+	}
+
+	KASSERT(ci != &cpu_info[0]);
+
+	cp = (void *)VM_PAGE_TO_PHYS(TAILQ_FIRST(&mlist));
+	memset(cp, 0, INTSTK);
+
+	ci->ci_intstk = cp;
+
 	/* Now allocate a hatch stack */
-	error = uvm_pglistalloc(HATCH_STACK_SIZE, 0x10000, 0x10000000, 16, 0,
+	error = uvm_pglistalloc(0x1000, 0x10000, 0x10000000, 16, 0,
 	    &mlist, 1, 1);
 	if (error) {
 		aprint_error(": unable to allocate hatch stack\n");
@@ -1220,53 +1112,45 @@ cpu_spinup(device_t self, struct cpu_info *ci)
 	}
 
 	hp = (void *)VM_PAGE_TO_PHYS(TAILQ_FIRST(&mlist));
-	memset(hp, 0, HATCH_STACK_SIZE);
+	memset(hp, 0, 0x1000);
 
 	/* Initialize secondary cpu's initial lwp to its idlelwp. */
 	ci->ci_curlwp = ci->ci_data.cpu_idlelwp;
-	ci->ci_curpcb = lwp_getpcb(ci->ci_curlwp);
+	ci->ci_curpcb = &ci->ci_curlwp->l_addr->u_pcb;
 	ci->ci_curpm = ci->ci_curpcb->pcb_pm;
 
 	cpu_hatch_data = h;
-	h->hatch_running = 0;
-	h->hatch_self = self;
-	h->hatch_ci = ci;
-	h->hatch_pir = ci->ci_cpuid;
+	h->running = 0;
+	h->self = self;
+	h->ci = ci;
+	h->pir = ci->ci_cpuid;
 
-	cpu_hatch_stack = (uint32_t)hp + HATCH_STACK_SIZE - CALLFRAMELEN;
+	cpu_hatch_stack = (uint32_t)hp;
 	ci->ci_lasttb = cpu_info[0].ci_lasttb;
 
 	/* copy special registers */
 
-	h->hatch_hid0 = mfspr(SPR_HID0);
-
-	__asm volatile ("mfsdr1 %0" : "=r"(h->hatch_sdr1));
+	h->hid0 = mfspr(SPR_HID0);
+	
+	__asm volatile ("mfsdr1 %0" : "=r"(h->sdr1));
 	for (i = 0; i < 16; i++) {
-		__asm ("mfsrin %0,%1" : "=r"(h->hatch_sr[i]) :
+		__asm ("mfsrin %0,%1" : "=r"(h->sr[i]) :
 		       "r"(i << ADDR_SR_SHFT));
 	}
 	if (oeacpufeat & OEACPU_64)
-		h->hatch_asr = mfspr(SPR_ASR);
+		h->asr = mfspr(SPR_ASR);
 	else
-		h->hatch_asr = 0;
+		h->asr = 0;
 
 	/* copy the bat regs */
-	__asm volatile ("mfibatu %0,0" : "=r"(h->hatch_ibatu[0]));
-	__asm volatile ("mfibatl %0,0" : "=r"(h->hatch_ibatl[0]));
-	__asm volatile ("mfibatu %0,1" : "=r"(h->hatch_ibatu[1]));
-	__asm volatile ("mfibatl %0,1" : "=r"(h->hatch_ibatl[1]));
-	__asm volatile ("mfibatu %0,2" : "=r"(h->hatch_ibatu[2]));
-	__asm volatile ("mfibatl %0,2" : "=r"(h->hatch_ibatl[2]));
-	__asm volatile ("mfibatu %0,3" : "=r"(h->hatch_ibatu[3]));
-	__asm volatile ("mfibatl %0,3" : "=r"(h->hatch_ibatl[3]));
-	__asm volatile ("mfdbatu %0,0" : "=r"(h->hatch_dbatu[0]));
-	__asm volatile ("mfdbatl %0,0" : "=r"(h->hatch_dbatl[0]));
-	__asm volatile ("mfdbatu %0,1" : "=r"(h->hatch_dbatu[1]));
-	__asm volatile ("mfdbatl %0,1" : "=r"(h->hatch_dbatl[1]));
-	__asm volatile ("mfdbatu %0,2" : "=r"(h->hatch_dbatu[2]));
-	__asm volatile ("mfdbatl %0,2" : "=r"(h->hatch_dbatl[2]));
-	__asm volatile ("mfdbatu %0,3" : "=r"(h->hatch_dbatu[3]));
-	__asm volatile ("mfdbatl %0,3" : "=r"(h->hatch_dbatl[3]));
+	__asm volatile ("mfibatu %0,0" : "=r"(h->batu[0]));
+	__asm volatile ("mfibatl %0,0" : "=r"(h->batl[0]));
+	__asm volatile ("mfibatu %0,1" : "=r"(h->batu[1]));
+	__asm volatile ("mfibatl %0,1" : "=r"(h->batl[1]));
+	__asm volatile ("mfibatu %0,2" : "=r"(h->batu[2]));
+	__asm volatile ("mfibatl %0,2" : "=r"(h->batl[2]));
+	__asm volatile ("mfibatu %0,3" : "=r"(h->batu[3]));
+	__asm volatile ("mfibatl %0,3" : "=r"(h->batl[3]));
 	__asm volatile ("sync; isync");
 
 	if (md_setup_trampoline(h, ci) == -1)
@@ -1278,19 +1162,7 @@ cpu_spinup(device_t self, struct cpu_info *ci)
 
 	delay(200000);
 
-#ifdef CACHE_PROTO_MEI
-	__asm volatile ("dcbi 0,%0"::"r"(&h->hatch_running):"memory");
-	__asm volatile ("sync; isync");
-	__asm volatile ("dcbst 0,%0"::"r"(&h->hatch_running):"memory");
-	__asm volatile ("sync; isync");
-#endif
-	if (h->hatch_running < 1) {
-#ifdef CACHE_PROTO_MEI
-		__asm volatile ("dcbi 0,%0"::"r"(&cpu_spinstart_ack):"memory");
-		__asm volatile ("sync; isync");
-		__asm volatile ("dcbst 0,%0"::"r"(&cpu_spinstart_ack):"memory");
-		__asm volatile ("sync; isync");
-#endif
+	if (h->running < 1) {
 		aprint_error("%d:CPU %d didn't start %d\n", cpu_spinstart_ack,
 		    ci->ci_cpuid, cpu_spinstart_ack);
 		Debugger();
@@ -1305,13 +1177,13 @@ cpu_spinup(device_t self, struct cpu_info *ci)
 }
 
 static volatile int start_secondary_cpu;
+extern void tlbia(void);
 
 register_t
 cpu_hatch(void)
 {
 	volatile struct cpu_hatch_data *h = cpu_hatch_data;
-	struct cpu_info * const ci = h->hatch_ci;
-	struct pcb *pcb;
+	struct cpu_info * const ci = h->ci;
 	u_int msr;
 	int i;
 
@@ -1325,52 +1197,43 @@ cpu_hatch(void)
 	 */
 
 	msr = mfspr(SPR_PIR);
-	if (msr != h->hatch_pir)
-		mtspr(SPR_PIR, h->hatch_pir);
-
-	__asm volatile ("mtsprg0 %0" :: "r"(ci));
-	curlwp = ci->ci_curlwp;
+	if (msr != h->pir)
+		mtspr(SPR_PIR, h->pir);
+	
+	__asm volatile ("mtsprg 0,%0" :: "r"(ci));
 	cpu_spinstart_ack = 0;
 
 	/* Initialize MMU. */
-	__asm ("mtibatu 0,%0" :: "r"(h->hatch_ibatu[0]));
-	__asm ("mtibatl 0,%0" :: "r"(h->hatch_ibatl[0]));
-	__asm ("mtibatu 1,%0" :: "r"(h->hatch_ibatu[1]));
-	__asm ("mtibatl 1,%0" :: "r"(h->hatch_ibatl[1]));
-	__asm ("mtibatu 2,%0" :: "r"(h->hatch_ibatu[2]));
-	__asm ("mtibatl 2,%0" :: "r"(h->hatch_ibatl[2]));
-	__asm ("mtibatu 3,%0" :: "r"(h->hatch_ibatu[3]));
-	__asm ("mtibatl 3,%0" :: "r"(h->hatch_ibatl[3]));
-	__asm ("mtdbatu 0,%0" :: "r"(h->hatch_dbatu[0]));
-	__asm ("mtdbatl 0,%0" :: "r"(h->hatch_dbatl[0]));
-	__asm ("mtdbatu 1,%0" :: "r"(h->hatch_dbatu[1]));
-	__asm ("mtdbatl 1,%0" :: "r"(h->hatch_dbatl[1]));
-	__asm ("mtdbatu 2,%0" :: "r"(h->hatch_dbatu[2]));
-	__asm ("mtdbatl 2,%0" :: "r"(h->hatch_dbatl[2]));
-	__asm ("mtdbatu 3,%0" :: "r"(h->hatch_dbatu[3]));
-	__asm ("mtdbatl 3,%0" :: "r"(h->hatch_dbatl[3]));
+	__asm ("mtibatu 0,%0" :: "r"(h->batu[0]));
+	__asm ("mtibatl 0,%0" :: "r"(h->batl[0]));
+	__asm ("mtibatu 1,%0" :: "r"(h->batu[1]));
+	__asm ("mtibatl 1,%0" :: "r"(h->batl[1]));
+	__asm ("mtibatu 2,%0" :: "r"(h->batu[2]));
+	__asm ("mtibatl 2,%0" :: "r"(h->batl[2]));
+	__asm ("mtibatu 3,%0" :: "r"(h->batu[3]));
+	__asm ("mtibatl 3,%0" :: "r"(h->batl[3]));
 
-	mtspr(SPR_HID0, h->hatch_hid0);
+	mtspr(SPR_HID0, h->hid0);
 
 	__asm ("mtibatl 0,%0; mtibatu 0,%1; mtdbatl 0,%0; mtdbatu 0,%1;"
 	    :: "r"(battable[0].batl), "r"(battable[0].batu));
 
 	__asm volatile ("sync");
 	for (i = 0; i < 16; i++)
-		__asm ("mtsrin %0,%1" :: "r"(h->hatch_sr[i]), "r"(i << ADDR_SR_SHFT));
+		__asm ("mtsrin %0,%1" :: "r"(h->sr[i]), "r"(i << ADDR_SR_SHFT));
 	__asm volatile ("sync; isync");
 
 	if (oeacpufeat & OEACPU_64)
-		mtspr(SPR_ASR, h->hatch_asr);
+		mtspr(SPR_ASR, h->asr);
 
 	cpu_spinstart_ack = 1;
 	__asm ("ptesync");
-	__asm ("mtsdr1 %0" :: "r"(h->hatch_sdr1));
+	__asm ("mtsdr1 %0" :: "r"(h->sdr1));
 	__asm volatile ("sync; isync");
 
 	cpu_spinstart_ack = 5;
 	for (i = 0; i < 16; i++)
-		__asm ("mfsrin %0,%1" : "=r"(h->hatch_sr[i]) :
+		__asm ("mfsrin %0,%1" : "=r"(h->sr[i]) :
 		       "r"(i << ADDR_SR_SHFT));
 
 	/* Enable I/D address translations. */
@@ -1382,9 +1245,9 @@ cpu_hatch(void)
 
 	md_sync_timebase(h);
 
-	cpu_setup(h->hatch_self, ci);
+	cpu_setup(h->self, ci);
 
-	h->hatch_running = 1;
+	h->running = 1;
 	__asm volatile ("sync; isync");
 
 	while (start_secondary_cpu == 0)
@@ -1401,12 +1264,11 @@ cpu_hatch(void)
 	ci->ci_cpl = 0;
 
 	mtmsr(mfmsr() | PSL_EE);
-	pcb = lwp_getpcb(ci->ci_data.cpu_idlelwp);
-	return pcb->pcb_sp;
+	return ci->ci_data.cpu_idlelwp->l_addr->u_pcb.pcb_sp;
 }
 
 void
-cpu_boot_secondary_processors(void)
+cpu_boot_secondary_processors()
 {
 	start_secondary_cpu = 1;
 	__asm volatile ("sync");

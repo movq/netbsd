@@ -1,4 +1,4 @@
-/*	$NetBSD: scif.c,v 1.61 2012/02/02 19:43:00 tls Exp $ */
+/*	$NetBSD: scif.c,v 1.57 2008/04/28 20:23:35 martin Exp $ */
 
 /*-
  * Copyright (C) 1999 T.Horiuchi and SAITOH Masanobu.  All rights reserved.
@@ -93,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scif.c,v 1.61 2012/02/02 19:43:00 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scif.c,v 1.57 2008/04/28 20:23:35 martin Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_scif.h"
@@ -480,7 +480,7 @@ scif_attach(device_t parent, device_t self, void *aux)
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, scifsoft, sc);
 	SET(sc->sc_hwflags, SCIF_HW_DEV_OK);
 
-	tp = tty_alloc();
+	tp = ttymalloc();
 	tp->t_oproc = scifstart;
 	tp->t_param = scifparam;
 	tp->t_hwiflow = NULL;
@@ -494,10 +494,6 @@ scif_attach(device_t parent, device_t self, void *aux)
 	sc->sc_ebuf = sc->sc_rbuf + (scif_rbuf_size << 1);
 
 	tty_attach(tp);
-
-	/* XXX: TODO */
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 /*
@@ -1401,7 +1397,7 @@ scifintr(void *arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#ifdef RND_SCIF
+#if NRND > 0 && defined(RND_SCIF)
 	rnd_add_uint32(&sc->rnd_source, iir | lsr);
 #endif
 
@@ -1458,7 +1454,7 @@ scifcnputc(dev_t dev, int c)
 
 #ifdef KGDB
 int
-scif_kgdb_init(void)
+scif_kgdb_init()
 {
 
 	if (strcmp(kgdb_devname, "scif") != 0)

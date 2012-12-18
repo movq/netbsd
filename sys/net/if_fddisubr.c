@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fddisubr.c,v 1.82 2012/10/11 20:05:50 christos Exp $	*/
+/*	$NetBSD: if_fddisubr.c,v 1.76.8.1 2009/11/21 19:43:41 snj Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -96,15 +96,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_fddisubr.c,v 1.82 2012/10/11 20:05:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_fddisubr.c,v 1.76.8.1 2009/11/21 19:43:41 snj Exp $");
 
-#include "opt_gateway.h"
 #include "opt_inet.h"
 #include "opt_atalk.h"
 #include "opt_iso.h"
 #include "opt_ipx.h"
 #include "opt_mbuftrace.h"
 
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -126,7 +126,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_fddisubr.c,v 1.82 2012/10/11 20:05:50 christos Ex
 #include <net/if_dl.h>
 #include <net/if_types.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -180,6 +182,7 @@ extern u_char	aarp_org_code[ 3 ];
 #endif /* NETATALK */
 
 
+#include "bpfilter.h"
 
 #define senderr(e) { error = (e); goto bad;}
 
@@ -443,6 +446,7 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 		break;
 	}
 
+#if NBPFILTER > 0
 	case AF_IMPLINK:
 	{
 		fh = mtod(m, struct fddi_header *);
@@ -476,6 +480,7 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 			m->m_flags |= (M_BCAST|M_MCAST);
 		goto queue_it;
 	}
+#endif
 	default:
 		printf("%s: can't handle af%d\n", ifp->if_xname,
 		       dst->sa_family);
@@ -506,7 +511,9 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 	fh = mtod(m, struct fddi_header *);
 	fh->fddi_fc = FDDIFC_LLC_ASYNC|FDDIFC_LLC_PRIO4;
  	memcpy(fh->fddi_dhost, edst, sizeof (edst));
+#if NBPFILTER > 0
   queue_it:
+#endif
 	if (hdrcmplt)
 		memcpy(fh->fddi_shost, esrc, sizeof(fh->fddi_shost));
 	else
@@ -514,8 +521,7 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 
 #if NCARP > 0
 	if (ifp0 != ifp && ifp0->if_type == IFT_CARP) {
-		if_set_sadl(ifp0, fh->fddi_shost, sizeof(fh->fddi_shost),
-		    false);
+		if_set_sadl(ifp0, fh->fddi_shost, sizeof(fh->fddi_shost));
 	}
 
 	if (ifp != ifp0)
@@ -648,7 +654,7 @@ fddi_input(struct ifnet *ifp, struct mbuf *m)
 #ifdef INET6
 		case ETHERTYPE_IPV6:
 #ifdef GATEWAY  
-			if (ip6flow_fastforward(&m))
+			if (ip6flow_fastforward(m))
 				return;
 #endif
 			schednetisr(NETISR_IPV6);
@@ -780,10 +786,12 @@ fddi_ifattach(struct ifnet *ifp, void *lla)
 		max_linkhdr = ALIGN(ifp->if_hdrlen);
 
 	LIST_INIT(&ec->ec_multiaddrs);
-	if_set_sadl(ifp, lla, 6, true);
+	if_set_sadl(ifp, lla, 6);
 
 	ifp->if_broadcastaddr = fddibroadcastaddr;
-	bpf_attach(ifp, DLT_FDDI, sizeof(struct fddi_header));
+#if NBPFILTER > 0
+	bpfattach(ifp, DLT_FDDI, sizeof(struct fddi_header));
+#endif /* NBPFILTER > 0 */
 #ifdef MBUFTRACE
 	strlcpy(ec->ec_tx_mowner.mo_name, ifp->if_xname,
 	    sizeof(ec->ec_tx_mowner.mo_name));

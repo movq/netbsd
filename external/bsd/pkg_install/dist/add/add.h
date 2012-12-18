@@ -1,4 +1,4 @@
-/* $NetBSD: add.h,v 1.1.1.7 2011/02/18 22:32:27 aymeric Exp $ */
+/* $NetBSD: add.h,v 1.1.1.1.6.3 2010/02/03 00:38:21 snj Exp $ */
 
 /* from FreeBSD Id: add.h,v 1.8 1997/02/22 16:09:15 peter Exp  */
 
@@ -40,7 +40,6 @@ extern int Replace;
 extern int ReplaceSame;
 
 extern Boolean ForceDepends;
-extern Boolean ForceDepending;
 
 int     make_hierarchy(char *);
 void    apply_perms(char *, char **, int);

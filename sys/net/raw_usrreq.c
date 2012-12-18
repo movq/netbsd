@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_usrreq.c,v 1.37 2011/07/17 20:54:52 joerg Exp $	*/
+/*	$NetBSD: raw_usrreq.c,v 1.35.8.1 2011/01/16 13:04:33 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: raw_usrreq.c,v 1.37 2011/07/17 20:54:52 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: raw_usrreq.c,v 1.35.8.1 2011/01/16 13:04:33 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -49,6 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD: raw_usrreq.c,v 1.37 2011/07/17 20:54:52 joerg Exp $"
 #include <net/route.h>
 #include <net/netisr.h>
 #include <net/raw_cb.h>
+
+#include <machine/stdarg.h>
 
 /*
  * Initialize raw connection block q.

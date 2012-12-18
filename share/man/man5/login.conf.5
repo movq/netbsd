@@ -1,4 +1,4 @@
-.\"	$NetBSD: login.conf.5,v 1.26 2012/04/30 11:07:28 njoly Exp $
+.\"	$NetBSD: login.conf.5,v 1.21 2008/02/25 23:52:48 lukem Exp $
 .\"
 .\" Copyright (c) 1995,1996,1997 Berkeley Software Design, Inc.
 .\" All rights reserved.
@@ -33,7 +33,7 @@
 .\"
 .\" BSDI login.conf.5,v 2.19 1998/02/19 23:39:39 prb Exp
 .\"
-.Dd November 18, 2008
+.Dd February 26, 2008
 .Dt LOGIN.CONF 5
 .Os
 .Sh NAME
@@ -66,7 +66,7 @@ A special class called
 will be used (if it exists) if the field in the password file is empty.
 .Sh CAPABILITIES
 Refer to
-.Xr capfile 5
+.Xr getcap 3
 for a description of the file layout.
 An example entry is:
 .Bd -literal -offset indent
@@ -83,14 +83,11 @@ file are either boolean or use a `=' to separate the capability
 from the value.
 The types are described after the capability table.
 .Bl -column minpasswordlen program default
-.It Sy Name	Type	Default	Description
+.Sy Name	Type	Default	Description
 .\"
 .sp
 .It Sy copyright Ta file Ta "" Ta
 File containing additional copyright information.
-(If the file exists,
-.Xr login 1
-displays it before the welcome message.)
 .\"
 .sp
 .It Sy coredumpsize Ta size Ta "" Ta
@@ -116,7 +113,7 @@ Access is instead denied from any hosts preceded
 by
 .Sq Li \&! .
 Patterns can contain the
-.Xr sh 1 Ns -style
+.Xr sh 1 -style
 .Sq Li *
 and
 .Sq Li \&?
@@ -164,7 +161,7 @@ Number of login attempts after which to start random back-off.
 .\"
 .sp
 .It Sy maxproc Ta number Ta "" Ta
-Maximum number of processes.
+Maximum number of process.
 .\"
 .sp
 .It Sy memorylocked Ta size Ta "" Ta
@@ -195,8 +192,8 @@ Maximum number of open file descriptors per process.
 .\"XX Length of time a password may be expired but not quite dead yet.
 .\"XX When set (for both the client and remote server machine when doing
 .\"XX remote authentication), a user is allowed to log in just one more
-.\"XX time after their password (but not account) has expired.
-.\"XX This allows a grace period for updating their password.
+.\"XX time after their password (but not account) has expired.  This allows
+.\"XX a grace period for updating their password.
 .\"
 .sp
 .It Sy passwordtime Ta time Ta "" Ta
@@ -268,10 +265,6 @@ See
 .sp
 .It Sy welcome Ta file Ta Li /etc/motd Ta
 File containing welcome message.
-.Xr login 1
-displays this and
-.Xr sshd 8
-sends this.
 .El
 .Pp
 The resource limit entries
@@ -305,7 +298,7 @@ and
 will never define capabilities which start with
 .Li x-
 or
-.Li X- ;
+.Li X- ,
 these are reserved for external use (unless included through contributed
 software).
 .Pp
@@ -323,8 +316,7 @@ Path name to a text file.
 A comma or whitespace separated list of values.
 .\"
 .It Sy number
-A number.
-A leading
+A number.  A leading
 .Li 0x
 implies the number is expressed in hexadecimal.
 A leading
@@ -396,8 +388,8 @@ hashed database built with
 .Sh SEE ALSO
 .Xr cap_mkdb 1 ,
 .Xr login 1 ,
+.Xr getcap 3 ,
 .Xr login_cap 3 ,
-.Xr capfile 5 ,
 .Xr ttys 5 ,
 .Xr ftpd 8 ,
 .Xr sshd 8

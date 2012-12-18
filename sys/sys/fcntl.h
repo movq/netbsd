@@ -1,4 +1,4 @@
-/*	$NetBSD: fcntl.h,v 1.44 2012/12/01 08:20:55 skrll Exp $	*/
+/*	$NetBSD: fcntl.h,v 1.34.64.2 2011/09/17 18:47:47 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1990, 1993
@@ -98,9 +98,6 @@
 #define	O_TRUNC		0x00000400	/* truncate to zero length */
 #define	O_EXCL		0x00000800	/* error if already exists */
 
-/* defined by POSIX 1003.1; BSD default, but required to be bitwise distinct */
-#define	O_NOCTTY	0x00008000	/* don't assign controlling terminal */
-
 #if (_POSIX_C_SOURCE - 0) >= 199309L || (_XOPEN_SOURCE - 0) >= 500 || \
     defined(_NETBSD_SOURCE)
 #define	O_DSYNC		0x00010000	/* write: I/O data completion */
@@ -112,15 +109,8 @@
 #define	O_DIRECT	0x00080000	/* direct I/O hint */
 #endif
 
-#define	O_DIRECTORY	0x00200000	/* fail if not a directory */
-#define	O_CLOEXEC	0x00400000	/* set close on exec */
-#if (_POSIX_C_SOURCE - 0) >= 200809L || (_XOPEN_SOURCE - 0 >= 700) || \
-    defined(_INCOMPLETE_XOPEN_C063) || defined(_NETBSD_SOURCE)
-#define	O_SEARCH	0x00800000	/* skip search permission checks */
-#endif
-#if defined(_NETBSD_SOURCE)
-#define	O_NOSIGPIPE	0x01000000	/* don't deliver sigpipe */
-#endif
+/* defined by POSIX 1003.1; BSD default, but required to be bitwise distinct */
+#define	O_NOCTTY	0x00008000	/* don't assign controlling terminal */
 
 #ifdef _KERNEL
 /* convert from open() flags to/from fflags; convert O_RD/WR to FREAD/FWRITE */
@@ -130,18 +120,16 @@
 /* all bits settable during open(2) */
 #define	O_MASK		(O_ACCMODE|O_NONBLOCK|O_APPEND|O_SHLOCK|O_EXLOCK|\
 			 O_ASYNC|O_SYNC|O_CREAT|O_TRUNC|O_EXCL|O_DSYNC|\
-			 O_RSYNC|O_NOCTTY|O_ALT_IO|O_NOFOLLOW|O_DIRECT|\
-			 O_DIRECTORY|O_CLOEXEC|O_NOSIGPIPE|O_SEARCH)
+			 O_RSYNC|O_NOCTTY|O_ALT_IO|O_NOFOLLOW|O_DIRECT)
 
 #define	FMARK		0x00001000	/* mark during gc() */
 #define	FDEFER		0x00002000	/* defer for next gc pass */
 #define	FHASLOCK	0x00004000	/* descriptor holds advisory lock */
 #define	FSCAN		0x00100000	/* scan during gc passes */
-#define	FSILENT		0x40000000	/* suppress kernel error messages */
 #define	FKIOCTL		0x80000000	/* kernel originated ioctl */
 /* bits settable by fcntl(F_SETFL, ...) */
 #define	FCNTLFLAGS	(FAPPEND|FASYNC|FFSYNC|FNONBLOCK|FDSYNC|FRSYNC|FALTIO|\
-			 FDIRECT|FNOSIGPIPE|FSEARCH)
+			 FDIRECT)
 /* bits to save after open(2) */
 #define	FMASK		(FREAD|FWRITE|FCNTLFLAGS)
 #endif /* _KERNEL */
@@ -159,14 +147,12 @@
 #define	O_NDELAY	O_NONBLOCK	/* compat */
 #endif
 #if defined(_KERNEL)
-#define	FNOSIGPIPE	O_NOSIGPIPE	/* kernel */
 #define	FNONBLOCK	O_NONBLOCK	/* kernel */
 #define	FFSYNC		O_SYNC		/* kernel */
 #define	FDSYNC		O_DSYNC		/* kernel */
 #define	FRSYNC		O_RSYNC		/* kernel */
 #define	FALTIO		O_ALT_IO	/* kernel */
 #define	FDIRECT		O_DIRECT	/* kernel */
-#define	FSEARCH		O_SEARCH	/* kernel */
 #endif
 
 /*
@@ -190,9 +176,6 @@
 #if defined(_NETBSD_SOURCE)
 #define	F_CLOSEM	10		/* close all fds >= to the one given */
 #define	F_MAXFD		11		/* return the max open fd */
-#define	F_DUPFD_CLOEXEC	12		/* close on exec duplicated fd */
-#define	F_GETNOSIGPIPE	13		/* get SIGPIPE disposition */
-#define	F_SETNOSIGPIPE	14		/* set SIGPIPE disposition */
 #endif
 
 /* file descriptor flags (F_GETFD, F_SETFD) */
@@ -291,13 +274,9 @@ struct flock {
 /*
  * Constants for X/Open Extended API set 2 (a.k.a. C063)
  */
-#if (_POSIX_C_SOURCE - 0) >= 200809L || (_XOPEN_SOURCE - 0 >= 700) || \
-    defined(_INCOMPLETE_XOPEN_C063) || defined(_NETBSD_SOURCE)
-#define	AT_FDCWD		-100	/* Use cwd for relative link target */
-#define	AT_EACCESS		0x100	/* Use euig/egid for access checks */
-#define	AT_SYMLINK_NOFOLLOW	0x200	/* Do not follow symlinks */
-#define	AT_SYMLINK_FOLLOW	0x400	/* Follow symlinks */
-#define	AT_REMOVEDIR		0x800	/* Remove directory only */
+#if defined(_INCOMPLETE_XOPEN_C063) || defined(_KERNEL)
+#define AT_FDCWD		-100	/* Use cwd for relative link target */
+#define AT_SYMLINK_FOLLOW	0x400	/* Follow symlinks */
 #endif
 
 
@@ -312,14 +291,6 @@ int	fcntl(int, int, ...);
 int	flock(int, int);
 #endif /* _NETBSD_SOURCE */
 int	posix_fadvise(int, off_t, off_t, int);
-
-/*
- * X/Open Extended API set 2 (a.k.a. C063)
- */
-#if (_POSIX_C_SOURCE - 0) >= 200809L || (_XOPEN_SOURCE - 0 >= 700) || \
-    defined(_INCOMPLETE_XOPEN_C063) || defined(_NETBSD_SOURCE)
-int	openat(int, const char *, int oflags, ...);
-#endif
 __END_DECLS
 #endif /* !_KERNEL */
 

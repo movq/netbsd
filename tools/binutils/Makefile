@@ -1,20 +1,11 @@
-#	$NetBSD: Makefile,v 1.22 2012/04/15 08:37:32 mrg Exp $
+#	$NetBSD: Makefile,v 1.12 2007/11/19 05:54:03 uebayasi Exp $
 
 .include <bsd.own.mk>
 
 MODULE=		binutils
 
-GNUHOSTDIST=	${.CURDIR}/../../external/gpl3/binutils/dist
-
-BRANDING?=	\
-	--with-pkgversion="NetBSD Binutils nb1" \
-	--with-bugurl="http://www.NetBSD.org/support/send-pr.html" \
-	--with-lib-path="=/usr/lib" --with-sysroot
-
 CONFIGURE_ARGS=	--target=${MACHINE_GNU_PLATFORM} --disable-nls \
-		--program-transform-name="s,^,${MACHINE_GNU_PLATFORM}-," \
-		--disable-werror \
-		${BRANDING}
+		--program-transform-name="s,^,${MACHINE_GNU_PLATFORM}-,"
 
 MAKE_ARGS=	MACHINE= MAKEINFO=${TOOL_MAKEINFO:Q}
 
@@ -28,9 +19,6 @@ INSTALL_TARGET+=install-gprof
 .include "${.CURDIR}/../Makefile.gnuhost"
 
 CCADDFLAGS=	-I${DESTDIR}/usr/include -L${DESTDIR}/lib -L${DESTDIR}/usr/lib -B${DESTDIR}/usr/lib/
-
-# Force avoiding possibly non-executable install-sh.
-CONFIGURE_ENV+= ac_cv_path_mkdir="${TOOLDIR}/bin/${MACHINE_GNU_PLATFORM}-install -d"
 
 NEWCONFIGDIR?=	${.CURDIR}/../..
 MKNATIVE?=	${.CURDIR}/mknative-binutils
@@ -57,9 +45,7 @@ native-binutils: .native/.configure_done
 			${HOST_SH} ${GNUHOSTDIST}/configure \
 			--build=`${GNUHOSTDIST}/config.guess` \
 			--host=${MACHINE_GNU_PLATFORM} \
-			--target=${MACHINE_GNU_PLATFORM} \
-			${BRANDING} \
-		)
+			--target=${MACHINE_GNU_PLATFORM})
 	PATH=${TOOLDIR}/bin:$$PATH; export PATH; \
 		(cd .native && ${MAKE} configure-host)
 	PATH=${TOOLDIR}/bin:$$PATH; export PATH; \

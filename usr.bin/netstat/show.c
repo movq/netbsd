@@ -1,4 +1,4 @@
-/*	$NetBSD: show.c,v 1.15 2011/11/11 15:09:33 gdt Exp $	*/
+/*	$NetBSD: show.c,v 1.6 2006/12/23 11:05:14 jdc Exp $	*/
 /*	$OpenBSD: show.c,v 1.1 2006/05/27 19:16:37 claudio Exp $	*/
 
 /*
@@ -44,7 +44,6 @@
 #include <net/route.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
-#include <netmpls/mpls.h>
 #include <arpa/inet.h>
 
 #include <err.h>
@@ -57,10 +56,13 @@
 #include <unistd.h>
 
 #include "netstat.h"
-#include "prog_ops.h"
 
 char	*any_ntoa(const struct sockaddr *);
 char	*link_print(struct sockaddr *);
+
+#define ROUNDUP(a) \
+	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
+#define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
 
 #define PFKEYV2_CHUNK sizeof(u_int64_t)
 
@@ -90,23 +92,22 @@ static const struct bits bits[] = {
 	/* { RTF_PROTO3,	'3' }, */
 	{ RTF_CLONED,	'c' },
 	/* { RTF_JUMBO,	'J' }, */
-	{ RTF_ANNOUNCE,	'p' },
-	{ 0, 0 }
+	{ 0 }
 };
 
 void	 pr_rthdr(int, int);
 void	 p_rtentry(struct rt_msghdr *);
 void	 pr_family(int);
 void	 p_sockaddr(struct sockaddr *, struct sockaddr *, int, int);
+void	 p_flags(int, char *);
 char	*routename4(in_addr_t);
 char	*routename6(struct sockaddr_in6 *);
-static void p_tag(const struct sockaddr *sa);
 
 /*
  * Print routing tables.
  */
 void
-p_rttables(int paf)
+p_rttables(int af)
 {
 	struct rt_msghdr *rtm;
 	char *buf = NULL, *next, *lim = NULL;
@@ -117,15 +118,15 @@ p_rttables(int paf)
 	mib[0] = CTL_NET;
 	mib[1] = PF_ROUTE;
 	mib[2] = 0;
-	mib[3] = paf;
+	mib[3] = af;
 	mib[4] = NET_RT_DUMP;
 	mib[5] = 0;
-	if (prog_sysctl(mib, 6, NULL, &needed, NULL, 0) < 0)
+	if (sysctl(mib, 6, NULL, &needed, NULL, 0) < 0)
 		err(1, "route-sysctl-estimate");
 	if (needed > 0) {
 		if ((buf = malloc(needed)) == 0)
 			err(1, NULL);
-		if (prog_sysctl(mib, 6, buf, &needed, NULL, 0) < 0)
+		if (sysctl(mib, 6, buf, &needed, NULL, 0) < 0)
 			err(1, "sysctl of routing table");
 		lim = buf + needed;
 	}
@@ -136,7 +137,7 @@ p_rttables(int paf)
 		for (next = buf; next < lim; next += rtm->rtm_msglen) {
 			rtm = (struct rt_msghdr *)next;
 			sa = (struct sockaddr *)(rtm + 1);
-			if (paf != AF_UNSPEC && sa->sa_family != paf)
+			if (af != AF_UNSPEC && sa->sa_family != af)
 				continue;
 			p_rtentry(rtm);
 		}
@@ -144,17 +145,17 @@ p_rttables(int paf)
 		buf = NULL;
 	}
 
-	if (paf != 0 && paf != PF_KEY)
+	if (af != 0 && af != PF_KEY)
 		return;
 
-#if 0 /* XXX-elad */
+#ifdef notyet /* XXX elad */
 	mib[0] = CTL_NET;
 	mib[1] = PF_KEY;
 	mib[2] = PF_KEY_V2;
 	mib[3] = NET_KEY_SPD_DUMP;
 	mib[4] = mib[5] = 0;
 
-	if (prog_sysctl(mib, 4, NULL, &needed, NULL, 0) == -1) {
+	if (sysctl(mib, 4, NULL, &needed, NULL, 0) == -1) {
 		if (errno == ENOPROTOOPT)
 			return;
 		err(1, "spd-sysctl-estimate");
@@ -162,7 +163,7 @@ p_rttables(int paf)
 	if (needed > 0) {
 		if ((buf = malloc(needed)) == 0)
 			err(1, NULL);
-		if (prog_sysctl(mib, 4, buf, &needed, NULL, 0) == -1)
+		if (sysctl(mib, 4, buf, &needed, NULL, 0) == -1)
 			err(1,"sysctl of spd");
 		lim = buf + needed;
 	}
@@ -180,7 +181,7 @@ p_rttables(int paf)
 		free(buf);
 		buf = NULL;
 	}
-#endif /* 0 */
+#endif
 }
 
 /* 
@@ -195,22 +196,16 @@ p_rttables(int paf)
  * Print header for routing table columns.
  */
 void
-pr_rthdr(int paf, int pAflag)
+pr_rthdr(int af, int Aflag)
 {
-	if (pAflag)
+	if (Aflag)
 		printf("%-*.*s ", PLEN, PLEN, "Address");
-	if (paf != PF_KEY) {
-		if (tagflag == 1)
-			printf("%-*.*s %-*.*s %-6.6s %6.6s %8.8s %6.6s %7.7s"
-			    " %s\n", WID_DST(paf), WID_DST(paf), "Destination",
-			    WID_GW(paf), WID_GW(paf), "Gateway",
-			    "Flags", "Refs", "Use", "Mtu", "Tag", "Interface");
-		else
-			printf("%-*.*s %-*.*s %-6.6s %6.6s %8.8s %6.6s %s\n",
-			    WID_DST(paf), WID_DST(paf), "Destination",
-			    WID_GW(paf), WID_GW(paf), "Gateway",
-			    "Flags", "Refs", "Use", "Mtu", "Interface");
-	} else
+	if (af != PF_KEY)
+		printf("%-*.*s %-*.*s %-6.6s %6.6s %8.8s %6.6s  %s\n",
+		    WID_DST(af), WID_DST(af), "Destination",
+		    WID_GW(af), WID_GW(af), "Gateway",
+		    "Flags", "Refs", "Use", "Mtu", "Interface");
+	else
 		printf("%-18s %-5s %-18s %-5s %-5s %-22s\n",
 		    "Source", "Port", "Destination",
 		    "Port", "Proto", "SA(Address/Proto/Type/Direction)");
@@ -225,7 +220,7 @@ get_rtaddrs(int addrs, struct sockaddr *sa, struct sockaddr **rti_info)
 		if (addrs & (1 << i)) {
 			rti_info[i] = sa;
 			sa = (struct sockaddr *)((char *)(sa) +
-			    RT_ROUNDUP(sa->sa_len));
+			    ROUNDUP(sa->sa_len));
 		} else
 			rti_info[i] = NULL;
 	}
@@ -258,19 +253,17 @@ p_rtentry(struct rt_msghdr *rtm)
 	p_sockaddr(rti_info[RTAX_GATEWAY], NULL, RTF_HOST,
 	    WID_GW(sa->sa_family));
 	p_flags(rtm->rtm_flags, "%-6.6s ");
-#if 0 /* XXX-elad */
-	printf("%6d %8"PRId64" ", (int)rtm->rtm_rmx.rmx_refcnt,
+#ifdef notyet /* XXX: elad */
+	printf("%6d %8ld ", (int)rtm->rtm_rmx.rmx_refcnt,
 	    rtm->rtm_rmx.rmx_pksent);
 #else
 	printf("%6s %8s ", "-", "-");
 #endif
 	if (rtm->rtm_rmx.rmx_mtu)
-		printf("%6"PRId64, rtm->rtm_rmx.rmx_mtu);
+		printf("%6ld", rtm->rtm_rmx.rmx_mtu);
 	else
 		printf("%6s", "-");
 	putchar((rtm->rtm_rmx.rmx_locks & RTV_MTU) ? 'L' : ' ');
-	if (tagflag == 1)
-		p_tag(rti_info[RTAX_TAG]);
 	printf(" %.16s", if_indextoname(rtm->rtm_index, ifbuf));
 	putchar('\n');
 }
@@ -279,11 +272,11 @@ p_rtentry(struct rt_msghdr *rtm)
  * Print address family header before a section of the routing table.
  */
 void
-pr_family(int paf)
+pr_family(int af)
 {
-	const char *afname;
+	char *afname;
 
-	switch (paf) {
+	switch (af) {
 	case AF_INET:
 		afname = "Internet";
 		break;
@@ -296,9 +289,6 @@ pr_family(int paf)
 	case AF_APPLETALK:
 		afname = "AppleTalk";
 		break;
-	case AF_MPLS:
-		afname = "MPLS";
-		break;
 	default:
 		afname = NULL;
 		break;
@@ -306,7 +296,7 @@ pr_family(int paf)
 	if (afname)
 		printf("\n%s:\n", afname);
 	else
-		printf("\nProtocol Family %d:\n", paf);
+		printf("\nProtocol Family %d:\n", af);
 }
 
 void
@@ -316,9 +306,9 @@ p_addr(struct sockaddr *sa, struct sockaddr *mask, int flags)
 }
 
 void
-p_gwaddr(struct sockaddr *sa, int gwaf)
+p_gwaddr(struct sockaddr *sa, int af)
 {
-	p_sockaddr(sa, 0, RTF_HOST, WID_GW(gwaf));
+	p_sockaddr(sa, 0, RTF_HOST, WID_GW(af));
 }
 
 void
@@ -367,7 +357,7 @@ p_sockaddr(struct sockaddr *sa, struct sockaddr *mask, int flags, int width)
 }
 
 void
-p_flags(int f, const char *format)
+p_flags(int f, char *format)
 {
 	char name[33], *flags;
 	const struct bits *p = bits;
@@ -377,22 +367,6 @@ p_flags(int f, const char *format)
 			*flags++ = p->b_val;
 	*flags = '\0';
 	printf(format, name);
-}
-
-static void
-p_tag(const struct sockaddr *sa)
-{
-	char *line;
-
-	if (sa == NULL || sa->sa_family != AF_MPLS) {
-		printf("%7s", "-");
-		return;
-	}
-	line = mpls_ntoa(sa);
-	if (strlen(line) < 7)
-		printf("%7s", line);
-	else
-		printf("%s", line);
 }
 
 static char line[MAXHOSTNAMELEN];
@@ -447,10 +421,7 @@ routename(struct sockaddr *sa)
 	case AF_LINK:
 		return (link_print(sa));
 
-	case AF_MPLS:
-		return mpls_ntoa(sa);
-
-#if 0 /* XXX-elad */
+#ifdef notyet /* XXX elad */
 	case AF_UNSPEC:
 		if (sa->sa_len == sizeof(struct sockaddr_rtlabel)) {
 			static char name[RTLABEL_LEN];
@@ -473,7 +444,7 @@ routename(struct sockaddr *sa)
 char *
 routename4(in_addr_t in)
 {
-	const char	*cp = NULL;
+	char		*cp = NULL;
 	struct in_addr	 ina;
 	struct hostent	*hp;
 
@@ -482,10 +453,9 @@ routename4(in_addr_t in)
 	if (!cp && !nflag) {
 		if ((hp = gethostbyaddr((char *)&in,
 		    sizeof(in), AF_INET)) != NULL) {
-			char *p;
-			if ((p = strchr(hp->h_name, '.')) &&
-			    !strcmp(p + 1, domain))
-				*p = '\0';
+			if ((cp = strchr(hp->h_name, '.')) &&
+			    !strcmp(cp + 1, domain))
+				*cp = '\0';
 			cp = hp->h_name;
 		}
 	}
@@ -519,7 +489,7 @@ routename6(struct sockaddr_in6 *sin6)
 char *
 netname4(in_addr_t in, in_addr_t mask)
 {
-	const char *cp = NULL;
+	char *cp = NULL;
 	struct netent *np = NULL;
 	int mbits;
 
@@ -568,7 +538,7 @@ netname6(struct sockaddr_in6 *sa6, struct sockaddr_in6 *mask)
 		lim = mask->sin6_len - offsetof(struct sockaddr_in6, sin6_addr);
 		if (lim < 0)
 			lim = 0;
-		else if (lim > (int)sizeof(struct in6_addr))
+		else if (lim > sizeof(struct in6_addr))
 			lim = sizeof(struct in6_addr);
 		for (p = (u_char *)&mask->sin6_addr, i = 0; i < lim; p++) {
 			if (final && *p) {
@@ -623,15 +593,13 @@ netname6(struct sockaddr_in6 *sa6, struct sockaddr_in6 *mask)
 			else
 				sin6.sin6_addr.s6_addr[i++] = 0x00;
 		}
-		while (i < (int)sizeof(struct in6_addr))
+		while (i < sizeof(struct in6_addr))
 			sin6.sin6_addr.s6_addr[i++] = 0x00;
 	} else
 		masklen = 128;
 
-	if (masklen == 0 && IN6_IS_ADDR_UNSPECIFIED(&sin6.sin6_addr)) {
-		snprintf(line, sizeof(line), "default");
-		return (line);
-	}
+	if (masklen == 0 && IN6_IS_ADDR_UNSPECIFIED(&sin6.sin6_addr))
+		return ("default");
 
 	if (illegal)
 		warnx("illegal prefixlen");
@@ -713,27 +681,4 @@ link_print(struct sockaddr *sa)
 	default:
 		return (link_ntoa(sdl));
 	}
-}
-
-char *
-mpls_ntoa(const struct sockaddr *sa)
-{
-	static char obuf[16];
-	const union mpls_shim *pms;
-	union mpls_shim ms;
-	int psize = sizeof(struct sockaddr_mpls);
-
-	pms = &((const struct sockaddr_mpls*)sa)->smpls_addr;
-	ms.s_addr = ntohl(pms->s_addr);
-
-	snprintf(obuf, sizeof(obuf), "%u", ms.shim.label);
-
-	while(psize < sa->sa_len) {
-		pms++;
-		ms.s_addr = ntohl(pms->s_addr);
-		snprintf(obuf, sizeof(obuf), "%s,%u", obuf,
-		    ms.shim.label);
-		psize+=sizeof(ms);
-	}
-	return obuf;
 }

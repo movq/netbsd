@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsmount.h,v 1.51 2011/01/22 22:26:10 matt Exp $	*/
+/*	$NetBSD: nfsmount.h,v 1.48 2008/10/22 12:29:35 matt Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,13 +37,12 @@
 
 #ifndef _NFS_NFSMOUNT_H_
 #define _NFS_NFSMOUNT_H_
-
-#if defined(_KERNEL) && !defined(NFS_ARGS_ONLY)
+#ifdef _KERNEL
 #include <sys/condvar.h>
 #include <sys/rwlock.h>
 #include <sys/mutex.h>
 #include <sys/disk.h>
-#include <sys/rbtree.h>
+#include <sys/rb.h>
 #endif
 
 /*
@@ -122,7 +121,7 @@ struct nfs_args {
 #define NFSMNT_STALEWRITEVERF	0x00008000  /* Write verifier is changing */
 #define NFSMNT_WCCKLUDGE	0x00010000  /* see nfs_check_wccdata() */
 
-#if defined(_KERNEL) && !defined(NFS_ARGS_ONLY)
+#ifdef _KERNEL
 /*
  * Mount structure.
  * One allocated on every NFS mount.
@@ -189,16 +188,16 @@ struct	nfsmount {
  */
 VFS_PROTOS(nfs);
 
-int	mountnfs(struct nfs_args *argp, struct mount *mp,
+int	mountnfs __P((struct nfs_args *argp, struct mount *mp,
 		struct mbuf *nam, const char *pth, const char *hst,
-		struct vnode **vpp, struct lwp *p);
-void	nfs_decode_args(struct nfsmount *, struct nfs_args *,
-		struct lwp *l);
-int	nfs_fsinfo(struct nfsmount *, struct vnode *, kauth_cred_t,
-			struct lwp *);
+		struct vnode **vpp, struct lwp *p));
+void	nfs_decode_args __P((struct nfsmount *, struct nfs_args *,
+		struct lwp *l));
+int	nfs_fsinfo __P((struct nfsmount *, struct vnode *, kauth_cred_t,
+			struct lwp *));
 
-void	nfs_vfs_init(void);
-void	nfs_vfs_done(void);
+void	nfs_vfs_init __P((void));
+void	nfs_vfs_done __P((void));
 
 #endif /* _KERNEL */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: crunchgen.c,v 1.80 2011/08/30 23:10:45 joerg Exp $	*/
+/*	$NetBSD: crunchgen.c,v 1.74 2008/10/19 22:10:05 apb Exp $	*/
 /*
  * Copyright (c) 1994 University of Maryland
  * All Rights Reserved.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: crunchgen.c,v 1.80 2011/08/30 23:10:45 joerg Exp $");
+__RCSID("$NetBSD: crunchgen.c,v 1.74 2008/10/19 22:10:05 apb Exp $");
 #endif
 
 #include <stdlib.h>
@@ -83,45 +83,45 @@ typedef struct prog {
 
 /* global state */
 
-static strlst_t *srcdirs = NULL;
-static strlst_t *libs    = NULL;
-static strlst_t *vars	  = NULL;
-static prog_t   *progs   = NULL;
+strlst_t *srcdirs = NULL;
+strlst_t *libs    = NULL;
+strlst_t *vars	  = NULL;
+prog_t   *progs   = NULL;
 
-static char line[MAXLINELEN];
+char line[MAXLINELEN];
 
-static char confname[MAXPATHLEN], infilename[MAXPATHLEN];
-static char outmkname[MAXPATHLEN], outcfname[MAXPATHLEN], execfname[MAXPATHLEN];
-static char cachename[MAXPATHLEN], curfilename[MAXPATHLEN];
-static char curdir[MAXPATHLEN];
-static char topdir[MAXPATHLEN];
-static char libdir[MAXPATHLEN] = "/usr/lib";
-static char dbg[MAXPATHLEN] = "-Os";
-static int linenum = -1;
-static int goterror = 0;
+char confname[MAXPATHLEN], infilename[MAXPATHLEN];
+char outmkname[MAXPATHLEN], outcfname[MAXPATHLEN], execfname[MAXPATHLEN];
+char cachename[MAXPATHLEN], curfilename[MAXPATHLEN];
+char curdir[MAXPATHLEN];
+char topdir[MAXPATHLEN];
+char libdir[MAXPATHLEN] = "/usr/lib";
+char dbg[MAXPATHLEN] = "-Os";
+int linenum = -1;
+int goterror = 0;
 
-static const char *pname = "crunchgen";
+char *pname = "crunchgen";
 
-static int verbose, readcache, useobjs, oneobj;	/* options */
-static int reading_cache;
-static char *machine;
-static char *makeobjdirprefix;
-static char *makebin;
-static char *makeflags;
+int verbose, readcache, useobjs, oneobj;	/* options */
+int reading_cache;
+char *machine;
+char *makeobjdirprefix;
+char *makebin;
+char *makeflags;
 
 /* general library routines */
 
-static void status(const char *str);
-__dead static void out_of_memory(void);
-static void add_string(strlst_t **listp, char *str);
-static int is_dir(const char *pathname);
-static int is_nonempty_file(const char *pathname);
+void status(char *str);
+void out_of_memory(void);
+void add_string(strlst_t **listp, char *str);
+int is_dir(char *pathname);
+int is_nonempty_file(char *pathname);
 
 /* helper routines for main() */
 
-__dead static void usage(void);
-static void parse_conf_file(void);
-static void gen_outputs(void);
+void usage(void);			
+void parse_conf_file(void);
+void gen_outputs(void);
 
 extern char *crunched_skel[];
 
@@ -234,19 +234,19 @@ usage(void)
 
 /* helper routines for parse_conf_file */
 
-static void parse_one_file(char *filename);
-static void parse_line(char *line, int *fc, char **fv, int nf); 
-static void add_srcdirs(int argc, char **argv);
-static void add_progs(int argc, char **argv);
-static void add_link(int argc, char **argv);
-static void add_libs(int argc, char **argv);
-static void add_special(int argc, char **argv);
+void parse_one_file(char *filename);
+void parse_line(char *line, int *fc, char **fv, int nf); 
+void add_srcdirs(int argc, char **argv);
+void add_progs(int argc, char **argv);
+void add_link(int argc, char **argv);
+void add_libs(int argc, char **argv);
+void add_special(int argc, char **argv);
 
-static prog_t *find_prog(char *str);
-static void add_prog(char *progname);
+prog_t *find_prog(char *str);
+void add_prog(char *progname);
 
 
-static void 
+void 
 parse_conf_file(void)
 {
     if (!is_nonempty_file(infilename)) {
@@ -262,7 +262,7 @@ parse_conf_file(void)
 }
 
 
-static void 
+void 
 parse_one_file(char *filename)
 {
     char *fieldv[MAXFIELDS];
@@ -315,12 +315,12 @@ parse_one_file(char *filename)
 }
 
 
-static void 
-parse_line(char *pline, int *fc, char **fv, int nf)
+void 
+parse_line(char *line, int *fc, char **fv, int nf)
 {
     char *p;
 
-    p = pline;
+    p = line;
     *fc = 0;
     for (;;) {
 	while (isspace((unsigned char)*p))
@@ -341,7 +341,7 @@ parse_line(char *pline, int *fc, char **fv, int nf)
 }
 
 
-static void 
+void 
 add_srcdirs(int argc, char **argv)
 {
     int i;
@@ -369,7 +369,7 @@ add_srcdirs(int argc, char **argv)
 }
 
 
-static void 
+void 
 add_progs(int argc, char **argv)
 {
     int i;
@@ -379,7 +379,7 @@ add_progs(int argc, char **argv)
 }
 
 
-static void 
+void 
 add_prog(char *progname)
 {
     prog_t *p1, *p2;
@@ -408,7 +408,7 @@ add_prog(char *progname)
 }
 
 
-static void 
+void 
 add_link(int argc, char **argv)
 {
     int i;
@@ -426,7 +426,7 @@ add_link(int argc, char **argv)
 }
 
 
-static void 
+void 
 add_libs(int argc, char **argv)
 {
     int i;
@@ -436,7 +436,7 @@ add_libs(int argc, char **argv)
 }
 
 
-static void 
+void 
 add_special(int argc, char **argv)
 {
     int i;
@@ -521,7 +521,7 @@ add_special(int argc, char **argv)
 }
 
 
-static prog_t *
+prog_t *
 find_prog(char *str)
 {
     prog_t *p;
@@ -542,22 +542,22 @@ find_prog(char *str)
 
 /* helper subroutines */
 
-static void remove_error_progs(void);
-static void fillin_program(prog_t *p);
-static void gen_specials_cache(void);
-static void gen_output_makefile(void);
-static void gen_output_cfile(void);
+void remove_error_progs(void);
+void fillin_program(prog_t *p);
+void gen_specials_cache(void);
+void gen_output_makefile(void);
+void gen_output_cfile(void);
 
-static void fillin_program_objs(prog_t *p, char *path);
-static void top_makefile_rules(FILE *outmk);
-static void bottom_makefile_rules(FILE *outmk);
-static void prog_makefile_rules(FILE *outmk, prog_t *p);
-static void output_strlst(FILE *outf, strlst_t *lst);
-static char *genident(char *str);
-static char *dir_search(char *progname);
+void fillin_program_objs(prog_t *p, char *path);
+void top_makefile_rules(FILE *outmk);
+void bottom_makefile_rules(FILE *outmk);
+void prog_makefile_rules(FILE *outmk, prog_t *p);
+void output_strlst(FILE *outf, strlst_t *lst);
+char *genident(char *str);
+char *dir_search(char *progname);
 
 
-static void
+void
 gen_outputs(void)
 {
     prog_t *p;
@@ -576,7 +576,7 @@ gen_outputs(void)
 }
 
 
-static void
+void
 fillin_program(prog_t *p)
 {
     char path[MAXPATHLEN];
@@ -668,7 +668,7 @@ fillin_program(prog_t *p)
     }
 }
 
-static void
+void
 fillin_program_objs(prog_t *p, char *dirpath)
 {
     char *obj, *cp;
@@ -738,7 +738,7 @@ fillin_program_objs(prog_t *p, char *dirpath)
     unlink(tempfname);
 }
 
-static void
+void
 remove_error_progs(void)
 {
     prog_t *p1, *p2;
@@ -760,7 +760,7 @@ remove_error_progs(void)
     }
 }
 
-static void
+void
 gen_specials_cache(void)
 {
     FILE *cachef;
@@ -797,7 +797,7 @@ gen_specials_cache(void)
 }
 
 
-static void
+void
 gen_output_makefile(void)
 {
     prog_t *p;
@@ -829,7 +829,7 @@ gen_output_makefile(void)
 }
 
 
-static void
+void
 gen_output_cfile(void)
 {
     char **cp;
@@ -855,10 +855,9 @@ gen_output_cfile(void)
 	fprintf(outcf, "%s\n", *cp);
 
     for (p = progs; p != NULL; p = p->next)
-	fprintf(outcf, "extern int _crunched_%s_stub(int, char **, char **);\n",
-	    p->ident);
+	fprintf(outcf, "extern int _crunched_%s_stub();\n", p->ident);
 
-    fprintf(outcf, "\nstatic const struct stub entry_points[] = {\n");
+    fprintf(outcf, "\nstruct stub entry_points[] = {\n");
     for (p = progs; p != NULL; p = p->next) {
 	fprintf(outcf, "\t{ \"%s\", _crunched_%s_stub },\n",
 		p->name, p->ident);
@@ -873,7 +872,7 @@ gen_output_cfile(void)
 }
 
 
-static char *
+char *
 genident(char *str)
 {
     char *n,*s,*d;
@@ -898,7 +897,7 @@ genident(char *str)
 }
 
 
-static char *
+char *
 dir_search(char *progname)
 {
     char path[MAXPATHLEN];
@@ -913,7 +912,7 @@ dir_search(char *progname)
 }
 
 
-static void
+void
 top_makefile_rules(FILE *outmk)
 {
     prog_t *p;
@@ -947,7 +946,6 @@ top_makefile_rules(FILE *outmk)
 	fprintf(outmk, " %s_make", p->ident);
     fprintf(outmk, "\n\n");
 
-    fprintf(outmk, "LDSTATIC=-static\n\n");
     fprintf(outmk, "PROG=%s\n\n", execfname);
     
     fprintf(outmk, "all: ${PROG}.crunched\n");
@@ -966,13 +964,14 @@ top_makefile_rules(FILE *outmk)
 	    execfname);
 }
 
-static void
+void
 bottom_makefile_rules(FILE *outmk)
 {
+    fprintf(outmk, "LDSTATIC=-static\n");
 }
 
 
-static void
+void
 prog_makefile_rules(FILE *outmk, prog_t *p)
 {
     strlst_t *lst;
@@ -994,6 +993,7 @@ prog_makefile_rules(FILE *outmk, prog_t *p)
 	    fprintf(outmk, "%s_OBJS=", p->ident);
 	    output_strlst(outmk, p->objs);
 	}
+	fprintf(outmk, "%s:\n\t mkdir %s\n", p->ident, p->ident);
 	fprintf(outmk, "%s_make: %s .PHONY\n", p->ident, p->ident);
 	fprintf(outmk, "\t( cd %s; printf '.PATH: ${%s_SRCDIR}\\n"
 	    ".CURDIR:= ${%s_SRCDIR}\\n"
@@ -1002,9 +1002,7 @@ prog_makefile_rules(FILE *outmk, prog_t *p)
 	for (lst = vars; lst != NULL; lst = lst->next)
 	    fprintf(outmk, "%s\\n", lst->str);
 	fprintf(outmk, "'\\\n");
-#define MAKECMD \
-    "\t| ${MAKE} -f- CRUNCHEDPROG=1 DBG=\"${DBG}\" LDSTATIC=\"${LDSTATIC}\" "
-	fprintf(outmk, MAKECMD "depend");
+	fprintf(outmk, "\t| ${MAKE} -f- CRUNCHEDPROG=1 DBG=\"${DBG}\" depend");
 	fprintf(outmk, " )\n");
 	fprintf(outmk, "\t( cd %s; printf '.PATH: ${%s_SRCDIR}\\n"
 	    ".CURDIR:= ${%s_SRCDIR}\\n"
@@ -1013,7 +1011,7 @@ prog_makefile_rules(FILE *outmk, prog_t *p)
 	for (lst = vars; lst != NULL; lst = lst->next)
 	    fprintf(outmk, "%s\\n", lst->str);
 	fprintf(outmk, "'\\\n");
-	fprintf(outmk, MAKECMD);
+	fprintf(outmk, "\t| ${MAKE} -f- CRUNCHEDPROG=1 DBG=\"${DBG}\" ");
 	if (p->objs)
 	    fprintf(outmk, "${%s_OBJS} ) \n\n", p->ident);
 	else
@@ -1022,9 +1020,6 @@ prog_makefile_rules(FILE *outmk, prog_t *p)
         fprintf(outmk, "%s_make:\n\t@echo \"** Using existing objs for %s\"\n\n", 
 		p->ident, p->name);
 
-#ifdef NEW_TOOLCHAIN
-    fprintf(outmk, "%s:\n\t mkdir %s\n", p->ident, p->ident);
-#endif
     fprintf(outmk, "%s.cro: %s .WAIT ${%s_OBJPATHS}\n",
 	p->name, p->ident, p->ident);
 
@@ -1060,7 +1055,7 @@ prog_makefile_rules(FILE *outmk, prog_t *p)
 #endif
 }
 
-static void
+void
 output_strlst(FILE *outf, strlst_t *lst)
 {
     for (; lst != NULL; lst = lst->next)
@@ -1075,8 +1070,8 @@ output_strlst(FILE *outf, strlst_t *lst)
  *
  */
 
-static void
-status(const char *str)
+void
+status(char *str)
 {
     static int lastlen = 0;
     int len, spaces;
@@ -1095,7 +1090,7 @@ status(const char *str)
 }
 
 
-static void
+void
 out_of_memory(void)
 {
     fprintf(stderr, "%s: %d: out of memory, stopping.\n", infilename, linenum);
@@ -1103,7 +1098,7 @@ out_of_memory(void)
 }
 
 
-static void
+void
 add_string(strlst_t **listp, char *str)
 {
     strlst_t *p1, *p2;
@@ -1128,8 +1123,8 @@ add_string(strlst_t **listp, char *str)
 }
 
 
-static int
-is_dir(const char *pathname)
+int
+is_dir(char *pathname)
 {
     struct stat buf;
 
@@ -1138,8 +1133,8 @@ is_dir(const char *pathname)
     return S_ISDIR(buf.st_mode);
 }
 
-static int
-is_nonempty_file(const char *pathname)
+int
+is_nonempty_file(char *pathname)
 {
     struct stat buf;
 

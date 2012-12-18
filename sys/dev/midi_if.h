@@ -1,4 +1,4 @@
-/*	$NetBSD: midi_if.h,v 1.25 2012/04/09 10:18:16 plunky Exp $	*/
+/*	$NetBSD: midi_if.h,v 1.21 2008/04/28 20:23:47 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -32,8 +32,6 @@
 #ifndef _SYS_DEV_MIDI_IF_H_
 #define _SYS_DEV_MIDI_IF_H_
 
-#include <sys/mutex.h>
-
 struct midi_info {
 	const char *name;		/* Name of MIDI hardware */
 	int	props;
@@ -41,22 +39,6 @@ struct midi_info {
 #define MIDI_PROP_OUT_INTR  1
 #define MIDI_PROP_CAN_INPUT 2
 #define MIDI_PROP_NO_OUTPUT 4
-
-/*
- * XXX expand
- *
- * List of hardware interface methods, and when locks are held by each
- * called by this module:
- *
- *	METHOD			INTR	NOTES
- *	----------------------- ------- -------------------------
- *	open 			-	
- *	close 			-	
- *	output 			-	
- *	getinfo 		-	Called at attach time
- *	ioctl 			-	
- *	get_locks 		-	Called at attach time
- */
 
 struct midi_softc;
 
@@ -69,7 +51,6 @@ struct midi_hw_if {
 	int	(*output)(void *, int);	/* output a byte */
 	void	(*getinfo)(void *, struct midi_info *);
 	int	(*ioctl)(void *, u_long, void *, int, struct lwp *);
-	void	(*get_locks)(void *, kmutex_t **, kmutex_t **);
 };
 
 /*
@@ -102,8 +83,7 @@ struct midi_hw_if_ext {
 };
 void midi_register_hw_if_ext(struct midi_hw_if_ext *);
 
-void	midi_attach(struct midi_softc *);
-int	mididetach(device_t, int);
+void	midi_attach(struct midi_softc *, device_t);
 device_t midi_attach_mi(const struct midi_hw_if *, void *, device_t);
 
 int	midi_unit_count(void);

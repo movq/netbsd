@@ -1,4 +1,4 @@
-/*	$NetBSD: reverse.c,v 1.23 2011/09/03 10:59:11 christos Exp $	*/
+/*	$NetBSD: reverse.c,v 1.19 2006/04/09 19:39:17 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)reverse.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: reverse.c,v 1.23 2011/09/03 10:59:11 christos Exp $");
+__RCSID("$NetBSD: reverse.c,v 1.19 2006/04/09 19:39:17 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -85,11 +85,11 @@ reverse(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 		switch(style) {
 		case FBYTES:
 		case RBYTES:
-			(void)displaybytes(fp, off);
+			(void)bytes(fp, off);
 			break;
 		case FLINES:
 		case RLINES:
-			(void)displaylines(fp, off);
+			(void)lines(fp, off);
 			break;
 		case REVERSE:
 			r_buf(fp);
@@ -113,16 +113,14 @@ r_reg(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 	if (!(size = sbp->st_size))
 		return;
 
-	if ((uint64_t)size > SIZE_T_MAX) {
-			/* XXX: need a cleaner way to check this on amd64 */
-		errno = EFBIG;
-		xerr(0, "%s", fname);
+	if (size > SIZE_T_MAX) {
+		err(0, "%s: %s", fname, strerror(EFBIG));
 		return;
 	}
 
 	if ((start = mmap(NULL, (size_t)size, PROT_READ,
-	    MAP_FILE|MAP_SHARED, fileno(fp), (off_t)0)) == MAP_FAILED) {
-		xerr(0, "%s", fname);
+	    MAP_FILE|MAP_SHARED, fileno(fp), (off_t)0)) == (caddr_t)-1) {
+		err(0, "%s: %s", fname, strerror(EFBIG));
 		return;
 	}
 	p = start + size - 1;
@@ -143,7 +141,7 @@ r_reg(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 	if (llen)
 		WR(p, llen);
 	if (munmap(start, (size_t)sbp->st_size))
-		xerr(0, "%s", fname);
+		err(0, "%s: %s", fname, strerror(errno));
 }
 
 typedef struct bf {
@@ -182,17 +180,17 @@ r_buf(FILE *fp)
 		if (enomem) {
 			if (!mark) {
 				errno = ENOMEM;
-				xerr(1, NULL);
+				err(1, NULL);
 			}
 			tl = tl->next;
 			enomem += tl->len;
-		} else if ((tl = malloc(sizeof(*tl))) == NULL ||
+		} else if ((tl = malloc(sizeof(BF))) == NULL ||
 		    (tl->l = malloc(BSZ)) == NULL) {
 			if (tl)
 				free(tl);
 			if (!mark) {
 				errno = ENOMEM;
-				xerr(1, NULL);
+				err(1, NULL);
 			}
 			tl = mark;
 			enomem += tl->len;
@@ -229,7 +227,9 @@ r_buf(FILE *fp)
 	}
 
 	if (enomem) {
-		xerrx(0, "Warning: %lld bytes discarded", (long long)enomem);
+		(void)fprintf(stderr,
+		    "tail: warning: %lld bytes discarded\n", (long long)enomem);
+		rval = 1;
 	}
 
 	/*

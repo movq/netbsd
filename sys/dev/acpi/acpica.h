@@ -1,4 +1,4 @@
-/*	$NetBSD: acpica.h,v 1.5 2011/02/17 07:34:42 jruoho Exp $	*/
+/*	$NetBSD: acpica.h,v 1.2 2006/03/23 13:46:13 kochi Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -35,15 +35,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _SYS_DEV_ACPI_ACPICA_H
-#define _SYS_DEV_ACPI_ACPICA_H
-
 /*
  * Header file glue for ACPICA -- include this to get the ACPICA
  * headers.
  */
 
-#include <external/bsd/acpica/dist/include/acpi.h>
-#include <external/bsd/acpica/dist/include/accommon.h>
-
-#endif	/* !_SYS_DEV_ACPI_ACPICA_H */
+#include <dist/acpica/acpi.h>

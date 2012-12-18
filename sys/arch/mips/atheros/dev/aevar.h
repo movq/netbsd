@@ -1,4 +1,4 @@
-/*	$NetBSD: aevar.h,v 1.6 2012/10/27 17:18:02 chs Exp $	*/
+/*	$NetBSD: aevar.h,v 1.3 2008/04/28 20:23:28 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -33,10 +33,14 @@
 #ifndef _MIPS_ATHEROS_DEV_AEVAR_H_
 #define	_MIPS_ATHEROS_DEV_AEVAR_H_
 
+#include "rnd.h"
+
 #include <sys/queue.h>
 #include <sys/callout.h>
 
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 /*
  * Misc. definitions for the Digital Semiconductor ``Tulip'' (21x4x)
@@ -124,7 +128,7 @@ struct ae_stats {
  * Software state per device.
  */
 struct ae_softc {
-	device_t sc_dev;		/* generic device information */
+	struct device sc_dev;		/* generic device information */
 	bus_space_tag_t sc_st;		/* bus space tag */
 	bus_space_handle_t sc_sh;	/* bus space handle */
 	bus_size_t sc_size;		/* bus space size */
@@ -182,7 +186,9 @@ struct ae_softc {
 
 	int	sc_rxptr;		/* next ready RX descriptor/descsoft */
 
-	krndsource_t sc_rnd_source; /* random source */
+#if NRND > 0
+	rndsource_element_t sc_rnd_source; /* random source */
+#endif
 };
 #endif
 

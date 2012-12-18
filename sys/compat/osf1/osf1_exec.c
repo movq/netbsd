@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_exec.c,v 1.44 2012/02/19 21:06:43 rmind Exp $ */
+/* $NetBSD: osf1_exec.c,v 1.41 2007/12/04 18:40:20 dsl Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_exec.c,v 1.44 2012/02/19 21:06:43 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_exec.c,v 1.41 2007/12/04 18:40:20 dsl Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -60,42 +60,40 @@ void syscall(void);
 
 struct uvm_object *emul_osf1_object;
 
-struct emul emul_osf1 = {
-	.e_name =		"osf1",
-	.e_path =		"/emul/osf1",
+const struct emul emul_osf1 = {
+	"osf1",
+	"/emul/osf1",
 #ifndef __HAVE_MINIMAL_EMUL
-	.e_flags =		0,
-	.e_errno =		native_to_osf1_errno,
-	.e_nosys =		OSF1_SYS_syscall,
-	.e_nsysent =		OSF1_SYS_NSYSENT,
+	0,
+	(int *)native_to_osf1_errno,
+	OSF1_SYS_syscall,
+	OSF1_SYS_NSYSENT,
 #endif
-	.e_sysent =		osf1_sysent,
+	osf1_sysent,
 #ifdef SYSCALL_DEBUG
-	.e_syscallnames =	osf1_syscallnames,
+	osf1_syscallnames,
 #else
-	.e_syscallnames =	NULL,
+	NULL,
 #endif
-	.e_sendsig =		sendsig_sigcontext,
-	.e_trapsignal =		trapsignal,
-	.e_tracesig =		NULL,
-	.e_sigcode =		osf1_sigcode,
-	.e_esigcode =		osf1_esigcode,
-	.e_sigobject =		&emul_osf1_object,
-	.e_setregs =		setregs,
-	.e_proc_exec =		NULL,
-	.e_proc_fork =		NULL,
-	.e_proc_exit =		NULL,
-	.e_lwp_fork =		NULL,
-	.e_lwp_exit =		NULL,
+	sendsig_sigcontext,
+	trapsignal,
+	NULL,
+	osf1_sigcode,
+	osf1_esigcode,
+	&emul_osf1_object,
+	setregs,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
 #ifdef __HAVE_SYSCALL_INTERN
-	.e_syscall_intern =	osf1_syscall_intern,
+	osf1_syscall_intern,
 #else
-	.e_syscall_intern =	syscall,
+	syscall,
 #endif
-	.e_sysctlovly =		NULL,
-	.e_fault =		NULL,
-	.e_vm_default_addr =	uvm_default_mapaddr,
-	.e_usertrap =		NULL,
-	.e_ucsize =		0,
-	.e_startlwp =		NULL
+	NULL,
+	NULL,
+
+	uvm_default_mapaddr,
 };

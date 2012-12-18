@@ -1,4 +1,4 @@
-/*	$NetBSD: term.c,v 1.17 2011/09/06 18:34:12 joerg Exp $	*/
+/*	$NetBSD: term.c,v 1.15 2003/08/07 11:16:49 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)term.c	8.1 (Berkeley) 6/9/93";
 #endif
-__RCSID("$NetBSD: term.c,v 1.17 2011/09/06 18:34:12 joerg Exp $");
+__RCSID("$NetBSD: term.c,v 1.15 2003/08/07 11:16:49 agc Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -43,24 +43,32 @@ __RCSID("$NetBSD: term.c,v 1.17 2011/09/06 18:34:12 joerg Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <term.h>
+#include <termcap.h>
 #include <ttyent.h>
 #include <unistd.h>
 #include "extern.h"
 
-static const	char *askuser(const char *);
+char    *tbuf;      		/* Termcap entry. */
+
+const	char *askuser __P((const char *));
+char	*ttys __P((char *));
 
 /*
  * Figure out what kind of terminal we're dealing with, and then read in
  * its termcap entry.
  */
 const char *
-get_terminfo_entry(const char *userarg)
+get_termcap_entry(userarg, tcapbufp, extended)
+	const char *userarg;
+	char **tcapbufp;
+	int extended;
 {
 	struct ttyent *t;
 	int rval;
 	char *p, *ttypath;
 	const char *ttype;
+	char zz[1024], *zz_ptr;
+	char *ext_tc, *newptr;
 
 	if (userarg) {
 		ttype = userarg;
@@ -88,7 +96,13 @@ get_terminfo_entry(const char *userarg)
 
 map:	ttype = mapped(ttype);
 
-found:
+	/*
+	 * If not a path, remove TERMCAP from the environment so we get a
+	 * real entry from /etc/termcap.  This prevents us from being fooled
+	 * by out of date stuff in the environment.
+	 */
+found:	if ((p = getenv("TERMCAP")) != NULL && *p != '/')
+		unsetenv("TERMCAP");
 
 	/*
 	 * ttype now contains a pointer to the type of the terminal.
@@ -100,29 +114,48 @@ found:
 		else
 			ttype = askuser(NULL);
 	}
+	/* Find the termcap entry.  If it doesn't exist, ask the user. */
+	if ((tbuf = (char *) malloc(1024)) == NULL) {
+		fprintf(stderr, "Could not malloc termcap buffer\n");
+		exit(1);
+	}
 	
-	while (setupterm(ttype, 0, &rval) == ERR) {
-		switch (rval) {
-		case 1:
-			warnx("terminal type %s is hardcopy", ttype);
-			break;
-		case 0:
-			warnx("terminal type %s is unknown", ttype);
-			break;
-		default:
-			if (!errno)
-				errno = ENOENT;
-			err(1, NULL);
-		}
+	while ((rval = tgetent(tbuf, ttype)) == 0) {
+		warnx("terminal type %s is unknown", ttype);
 		ttype = askuser(NULL);
 	}
+	if (rval == -1) {
+		if (!errno)
+			errno = ENOENT;
+		err(1, NULL);
+	}
 
+	  /* check if we get a truncated termcap entry, fish back the full
+	   * one if need be and the user has asked for it.
+	   */
+	zz_ptr = zz;
+	if ((extended == 1) && (tgetstr("ZZ", &zz_ptr) != NULL)) {
+			  /* it was, fish back the full termcap */
+		sscanf(zz, "%p", &ext_tc);
+		if ((newptr = (char *) realloc(tbuf, strlen(ext_tc) + 1))
+		    == NULL) {
+			fprintf(stderr,
+				"reallocate of termcap falied\n");
+			exit (1);
+		}
+
+		strcpy(newptr, ext_tc);
+		tbuf = newptr;
+	}
+	
+	*tcapbufp = tbuf;
 	return (ttype);
 }
 
 /* Prompt the user for a terminal type. */
-static const char *
-askuser(const char *dflt)
+const char *
+askuser(dflt)
+	const char *dflt;
 {
 	static char answer[256];
 	char *p;

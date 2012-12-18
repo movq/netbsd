@@ -1,4 +1,4 @@
-/* $NetBSD: lfs_cleanerd.c,v 1.31 2012/04/16 10:48:27 joerg Exp $	 */
+/* $NetBSD: lfs_cleanerd.c,v 1.15 2008/05/16 09:21:59 hannken Exp $	 */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -45,7 +45,6 @@
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <semaphore.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,8 +57,6 @@
 #include "lfs_user.h"
 #include "fdfs.h"
 #include "cleaner.h"
-#include "kernelops.h"
-#include "mount_lfs.h"
 
 /*
  * Global variables.
@@ -67,7 +64,7 @@
 /* XXX these top few should really be fs-specific */
 int use_fs_idle;	/* Use fs idle rather than cpu idle time */
 int use_bytes;		/* Use bytes written rather than segments cleaned */
-double load_threshold;	/* How idle is idle (CPU idle) */
+int load_threshold;	/* How idle is idle (CPU idle) */
 int atatime;		/* How many segments (bytes) to clean at a time */
 
 int nfss;		/* Number of filesystems monitored by this cleanerd */
@@ -102,7 +99,7 @@ void pwarn(const char *unused, ...) { /* Does nothing */ };
  * Log a message if debugging is turned on.
  */
 void
-dlog(const char *fmt, ...)
+dlog(char *fmt, ...)
 {
 	va_list ap;
 
@@ -119,12 +116,12 @@ dlog(const char *fmt, ...)
  * become unmounted or other error condition.
  */
 void
-handle_error(struct clfs **cfsp, int n)
+handle_error(struct clfs **fsp, int n)
 {
-	syslog(LOG_NOTICE, "%s: detaching cleaner", cfsp[n]->lfs_fsmnt);
-	free(cfsp[n]);
+	syslog(LOG_NOTICE, "%s: detaching cleaner", fsp[n]->lfs_fsmnt);
+	free(fsp[n]);
 	if (n != nfss - 1)
-		cfsp[n] = cfsp[nfss - 1];
+		fsp[n] = fsp[nfss - 1];
 	--nfss;
 }
 
@@ -137,8 +134,8 @@ reinit_fs(struct clfs *fs)
 	char fsname[MNAMELEN];
 
 	strncpy(fsname, (char *)fs->lfs_fsmnt, MNAMELEN);
-	kops.ko_close(fs->clfs_ifilefd);
-	kops.ko_close(fs->clfs_devfd);
+	close(fs->clfs_ifilefd);
+	close(fs->clfs_devfd);
 	fd_reclaim(fs->clfs_devvp);
 	fd_reclaim(fs->lfs_ivnode);
 	free(fs->clfs_dev);
@@ -160,7 +157,7 @@ init_unmounted_fs(struct clfs *fs, char *fsname)
 	int i;
 	
 	fs->clfs_dev = fsname;
-	if ((fs->clfs_devfd = kops.ko_open(fs->clfs_dev, O_RDWR)) < 0) {
+	if ((fs->clfs_devfd = open(fs->clfs_dev, O_RDWR)) < 0) {
 		syslog(LOG_ERR, "couldn't open device %s read/write",
 		       fs->clfs_dev);
 		return -1;
@@ -204,56 +201,40 @@ init_fs(struct clfs *fs, char *fsname)
 	struct statvfs sf;
 	int rootfd;
 	int i;
-	void *sbuf;
-	char *bn;
 
 	/*
 	 * Get the raw device from the block device.
 	 * XXX this is ugly.  Is there a way to discover the raw device
 	 * XXX for a given mount point?
 	 */
-	if (kops.ko_statvfs(fsname, &sf, ST_WAIT) < 0)
+	if (statvfs(fsname, &sf) < 0)
 		return -1;
 	fs->clfs_dev = malloc(strlen(sf.f_mntfromname) + 2);
 	if (fs->clfs_dev == NULL) {
 		syslog(LOG_ERR, "couldn't malloc device name string: %m");
 		return -1;
 	}
-	bn = strrchr(sf.f_mntfromname, '/');
-	bn = bn ? bn+1 : sf.f_mntfromname;
-	strlcpy(fs->clfs_dev, sf.f_mntfromname, bn - sf.f_mntfromname + 1);
-	strcat(fs->clfs_dev, "r");
-	strcat(fs->clfs_dev, bn);
-	if ((fs->clfs_devfd = kops.ko_open(fs->clfs_dev, O_RDONLY, 0)) < 0) {
+	sprintf(fs->clfs_dev, "/dev/r%s", sf.f_mntfromname + 5);
+	if ((fs->clfs_devfd = open(fs->clfs_dev, O_RDONLY)) < 0) {
 		syslog(LOG_ERR, "couldn't open device %s for reading",
 			fs->clfs_dev);
 		return -1;
 	}
 
 	/* Find the Ifile and open it */
-	if ((rootfd = kops.ko_open(fsname, O_RDONLY, 0)) < 0)
+	if ((rootfd = open(fsname, O_RDONLY)) < 0)
 		return -2;
-	if (kops.ko_fcntl(rootfd, LFCNIFILEFH, &fs->clfs_ifilefh) < 0)
+	if (fcntl(rootfd, LFCNIFILEFH, &fs->clfs_ifilefh) < 0)
 		return -3;
-	if ((fs->clfs_ifilefd = kops.ko_fhopen(&fs->clfs_ifilefh,
+	if ((fs->clfs_ifilefd = fhopen(&fs->clfs_ifilefh,
 	    sizeof(fs->clfs_ifilefh), O_RDONLY)) < 0)
 		return -4;
-	kops.ko_close(rootfd);
-
-	sbuf = malloc(LFS_SBPAD);
-	if (sbuf == NULL) {
-		syslog(LOG_ERR, "couldn't malloc superblock buffer");
-		return -1;
-	}
+	close(rootfd);
 
 	/* Load in the superblock */
-	if (kops.ko_pread(fs->clfs_devfd, sbuf, LFS_SBPAD, LFS_LABELPAD) < 0) {
-		free(sbuf);
+	if (pread(fs->clfs_devfd, &(fs->lfs_dlfs), sizeof(struct dlfs),
+		  LFS_LABELPAD) < 0)
 		return -1;
-	}
-
-	memcpy(&(fs->lfs_dlfs), sbuf, sizeof(struct dlfs));
-	free(sbuf);
 
 	/* If this is not a version 2 filesystem, complain and exit */
 	if (fs->lfs_version != 2) {
@@ -618,7 +599,7 @@ log_segment_read(struct clfs *fs, int sn)
 
         fp = fopen(copylog_filename, "ab");
         if (fp != NULL) {
-                if (fwrite(cp, (size_t)fs->lfs_ssize, 1, fp) != 1) {
+                if (fwrite(cp, (size_t)fs->lfs_ssize, 1, fp) < 0) {
                         perror("writing segment to copy log");
                 }
         }
@@ -703,7 +684,7 @@ calc_cb(struct clfs *fs, int sn, struct clfs_seguse *t)
 		return;
 	}
 
-	if (t->nbytes > fs->lfs_ssize) {
+	if (t->nbytes < 0 || t->nbytes > fs->lfs_ssize) {
 		/* Another type of error */
 		syslog(LOG_WARNING, "segment %d: bad seguse count %d",
 		       sn, t->nbytes);
@@ -744,10 +725,10 @@ calc_cb(struct clfs *fs, int sn, struct clfs_seguse *t)
 static int
 bi_comparator(const void *va, const void *vb)
 {
-	const BLOCK_INFO *a, *b;
+	BLOCK_INFO *a, *b;
 
-	a = (const BLOCK_INFO *)va;
-	b = (const BLOCK_INFO *)vb;
+	a = (BLOCK_INFO *)va;
+	b = (BLOCK_INFO *)vb;
 
 	/* Check for out-of-place block */
 	if (a->bi_segcreate == a->bi_daddr &&
@@ -784,10 +765,10 @@ bi_comparator(const void *va, const void *vb)
 static int
 cb_comparator(const void *va, const void *vb)
 {
-	const struct clfs_seguse *a, *b;
+	struct clfs_seguse *a, *b;
 
-	a = *(const struct clfs_seguse * const *)va;
-	b = *(const struct clfs_seguse * const *)vb;
+	a = *(struct clfs_seguse **)va;
+	b = *(struct clfs_seguse **)vb;
 	return a->priority > b->priority ? -1 : 1;
 }
 
@@ -817,7 +798,7 @@ toss_old_blocks(struct clfs *fs, BLOCK_INFO **bipp, int *bic, int *sizep)
 	/* Use bmapv to locate the blocks */
 	lim.blkiov = bip;
 	lim.blkcnt = *bic;
-	if ((r = kops.ko_fcntl(fs->clfs_ifilefd, LFCNBMAPV, &lim)) < 0) {
+	if ((r = fcntl(fs->clfs_ifilefd, LFCNBMAPV, &lim)) < 0) {
 		syslog(LOG_WARNING, "%s: bmapv returned %d (%m)",
 		       fs->lfs_fsmnt, r);
 		return;
@@ -835,7 +816,7 @@ toss_old_blocks(struct clfs *fs, BLOCK_INFO **bipp, int *bic, int *sizep)
 		if (sizep)
 			*sizep += bip[i].bi_size;
 	}
-	*bic = i; /* XXX should we shrink bip? */
+	*bic = i; /* XXX realloc bip? */
 	*bipp = bip;
 
 	return;
@@ -878,7 +859,7 @@ invalidate_segment(struct clfs *fs, int sn)
 	 */
 	lim.blkiov = bip;
 	lim.blkcnt = bic;
-	if ((r = kops.ko_fcntl(fs->clfs_ifilefd, LFCNMARKV, &lim)) < 0) {
+	if ((r = fcntl(fs->clfs_ifilefd, LFCNMARKV, &lim)) < 0) {
 		syslog(LOG_WARNING, "%s: markv returned %d (%m) "
 		       "for seg %d", fs->lfs_fsmnt, r, sn);
 		return r;
@@ -887,7 +868,7 @@ invalidate_segment(struct clfs *fs, int sn)
 	/*
 	 * Finally call invalidate to invalidate the segment.
 	 */
-	if ((r = kops.ko_fcntl(fs->clfs_ifilefd, LFCNINVAL, &sn)) < 0) {
+	if ((r = fcntl(fs->clfs_ifilefd, LFCNINVAL, &sn)) < 0) {
 		syslog(LOG_WARNING, "%s: inval returned %d (%m) "
 		       "for seg %d", fs->lfs_fsmnt, r, sn);
 		return r;
@@ -928,7 +909,7 @@ check_or_add(ino_t ino, int32_t lbn, BLOCK_INFO *bip, int bic, BLOCK_INFO **ebip
 	++ebic;
 	t = realloc(ebip, ebic * sizeof(BLOCK_INFO));
 	if (t == NULL)
-		return 1; /* Note *ebicp is unchanged */
+		return 1; /* Note *ebipc is not updated */
 
 	ebip = t;
 	ebip[ebic - 1].bi_inode = ino;
@@ -1148,19 +1129,10 @@ clean_fs(struct clfs *fs, CLEANERINFO *cip)
 		}
 #endif /* TEST_PATTERN */
 		dlog("sending blocks %d-%d", mc, mc + lim.blkcnt - 1);
-		if ((r = kops.ko_fcntl(fs->clfs_ifilefd, LFCNMARKV, &lim))<0) {
-			int oerrno = errno;
-			syslog(LOG_WARNING, "%s: markv returned %d (errno %d, %m)",
-			       fs->lfs_fsmnt, r, errno);
-			if (oerrno != EAGAIN && oerrno != ESHUTDOWN) {
-				syslog(LOG_DEBUG, "%s: errno %d, returning",
-				       fs->lfs_fsmnt, oerrno);
-				fd_release_all(fs->clfs_devvp);
-				return r;
-			}
-			if (oerrno == ESHUTDOWN) {
-				syslog(LOG_NOTICE, "%s: filesystem unmounted",
-				       fs->lfs_fsmnt);
+		if ((r = fcntl(fs->clfs_ifilefd, LFCNMARKV, &lim)) < 0) {
+			syslog(LOG_WARNING, "%s: markv returned %d (%m)",
+			       fs->lfs_fsmnt, r);
+			if (errno != EAGAIN && errno != ESHUTDOWN) {
 				fd_release_all(fs->clfs_devvp);
 				return r;
 			}
@@ -1186,7 +1158,7 @@ clean_fs(struct clfs *fs, CLEANERINFO *cip)
 	/*
 	 * Finally call reclaim to prompt cleaning of the segments.
 	 */
-	kops.ko_fcntl(fs->clfs_ifilefd, LFCNRECLAIM, NULL);
+	fcntl(fs->clfs_ifilefd, LFCNRECLAIM, NULL);
 
 	fd_release_all(fs->clfs_devvp);
 	return 0;
@@ -1337,24 +1309,14 @@ usage(void)
 	     "[-n nsegs] [-r report_freq] [-t timeout] fs_name ...");
 }
 
-#ifndef LFS_CLEANER_AS_LIB
 /*
  * Main.
  */
 int
 main(int argc, char **argv)
 {
-
-	return lfs_cleaner_main(argc, argv);
-}
-#endif
-
-int
-lfs_cleaner_main(int argc, char **argv)
-{
-	int i, opt, error, r, loopcount, nodetach;
+	int i, opt, error, r, loopcount;
 	struct timeval tv;
-	sem_t *semaddr = NULL;
 	CLEANERINFO ci;
 #ifndef USE_CLIENT_SERVER
 	char *cp, *pidname;
@@ -1369,12 +1331,11 @@ lfs_cleaner_main(int argc, char **argv)
 	stat_report	= 0;
 	inval_segment	= -1;
 	copylog_filename = NULL;
-	nodetach        = 0;
 
 	/*
 	 * Parse command-line arguments
 	 */
-	while ((opt = getopt(argc, argv, "bC:cdDfi:l:mn:qr:sS:t:")) != -1) {
+	while ((opt = getopt(argc, argv, "bC:cdfi:l:mn:qr:st:")) != -1) {
 		switch (opt) {
 		    case 'b':	/* Use bytes written, not segments read */
 			    use_bytes = 1;
@@ -1386,11 +1347,7 @@ lfs_cleaner_main(int argc, char **argv)
 			    do_coalesce++;
 			    break;
 		    case 'd':	/* Debug mode. */
-			    nodetach++;
 			    debug++;
-			    break;
-		    case 'D':	/* stay-on-foreground */
-			    nodetach++;
 			    break;
 		    case 'f':	/* Use fs idle time rather than cpu idle */
 			    use_fs_idle = 1;
@@ -1414,13 +1371,6 @@ lfs_cleaner_main(int argc, char **argv)
 			    break;
 		    case 's':	/* Small writes */
 			    do_small = 1;
-			    break;
-		    case 'S':	/* semaphore */
-#ifndef LFS_CLEANER_AS_LIB
-			    usage();
-			    /*NOTREACHED*/
-#endif
-			    semaddr = (void*)(uintptr_t)strtoull(optarg,NULL,0);
 			    break;
 		    case 't':	/* timeout */
 			    segwait_timeout = atoi(optarg);
@@ -1447,9 +1397,9 @@ lfs_cleaner_main(int argc, char **argv)
 	}
 
 	/*
-	 * Set up daemon mode or foreground mode
+	 * Set up daemon mode or verbose debug mode
 	 */
-	if (nodetach) {
+	if (debug) {
 		openlog("lfs_cleanerd", LOG_NDELAY | LOG_PID | LOG_PERROR,
 			LOG_DAEMON);
 		signal(SIGINT, sig_report);
@@ -1553,11 +1503,6 @@ lfs_cleaner_main(int argc, char **argv)
 	 * Main cleaning loop.
 	 */
 	loopcount = 0;
-#ifdef LFS_CLEANER_AS_LIB
-	if (semaddr)
-		sem_post(semaddr);
-#endif
-	error = 0;
 	while (nfss > 0) {
 		int cleaned_one;
 		do {
@@ -1567,8 +1512,6 @@ lfs_cleaner_main(int argc, char **argv)
 			cleaned_one = 0;
 			for (i = 0; i < nfss; i++) {
 				if ((error = needs_cleaning(fsp[i], &ci)) < 0) {
-					syslog(LOG_DEBUG, "%s: needs_cleaning returned %d",
-					       getprogname(), error);
 					handle_error(fsp, i);
 					continue;
 				}
@@ -1576,9 +1519,7 @@ lfs_cleaner_main(int argc, char **argv)
 					continue;
 				
 				reload_ifile(fsp[i]);
-				if ((error = clean_fs(fsp[i], &ci)) < 0) {
-					syslog(LOG_DEBUG, "%s: clean_fs returned %d",
-					       getprogname(), error);
+				if (clean_fs(fsp[i], &ci) < 0) {
 					handle_error(fsp, i);
 					continue;
 				}
@@ -1592,27 +1533,9 @@ lfs_cleaner_main(int argc, char **argv)
 		} while(cleaned_one);
 		tv.tv_sec = segwait_timeout;
 		tv.tv_usec = 0;
-		/* XXX: why couldn't others work if fsp socket is shutdown? */
-		error = kops.ko_fcntl(fsp[0]->clfs_ifilefd,LFCNSEGWAITALL,&tv);
-		if (error) {
-			if (errno == ESHUTDOWN) {
-				for (i = 0; i < nfss; i++) {
-					syslog(LOG_INFO, "%s: shutdown",
-					       getprogname());
-					handle_error(fsp, i);
-					assert(nfss == 0);
-				}
-			} else {
-#ifdef LFS_CLEANER_AS_LIB
-				error = ESHUTDOWN;
-				break;
-#else
-				err(1, "LFCNSEGWAITALL");
-#endif
-			}
-		}
+		fcntl(fsp[0]->clfs_ifilefd, LFCNSEGWAITALL, &tv);
 	}
 
 	/* NOTREACHED */
-	return error;
+	return 0;
 }

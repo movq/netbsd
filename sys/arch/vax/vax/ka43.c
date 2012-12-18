@@ -1,4 +1,4 @@
-/*	$NetBSD: ka43.c,v 1.35 2010/12/14 23:44:49 matt Exp $ */
+/*	$NetBSD: ka43.c,v 1.33 2008/03/11 05:34:03 matt Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -33,16 +33,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka43.c,v 1.35 2010/12/14 23:44:49 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka43.c,v 1.33 2008/03/11 05:34:03 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/cpu.h>
+#include <sys/types.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
+#include <sys/systm.h>
 
+#include <uvm/uvm_extern.h>
+
+#include <machine/pte.h>
+#include <machine/cpu.h>
+#include <machine/mtpr.h>
 #include <machine/sid.h>
+#include <machine/pmap.h>
 #include <machine/nexus.h>
+#include <machine/uvax.h>
 #include <machine/vsbus.h>
 #include <machine/ka43.h>
 #include <machine/clock.h>
@@ -181,10 +188,10 @@ ka43_memerr(void)
 
 	printf("memory error!\n");
 
-	snprintb(sbuf, sizeof(sbuf), KA43_PCSTS_BITS, mfpr(PR_PCSTS));
+	bitmask_snprintf(mfpr(PR_PCSTS), KA43_PCSTS_BITS, sbuf, sizeof(sbuf));
 	printf("primary cache status: %s\n", sbuf);
 
-	snprintb(sbuf, sizeof(sbuf), KA43_SESR_BITS, *ka43_creg);
+	bitmask_snprintf(*ka43_creg, KA43_SESR_BITS, sbuf, sizeof(sbuf));
 	printf("secondary cache status: %s\n", sbuf);
 }
 
@@ -219,10 +226,10 @@ ka43_cache_reset(void)
 	ka43_cache_invalidate();
 	ka43_cache_enable();
 
-	snprintb(sbuf, sizeof(sbuf), KA43_PCSTS_BITS, mfpr(PR_PCSTS));
+	bitmask_snprintf(mfpr(PR_PCSTS), KA43_PCSTS_BITS, sbuf, sizeof(sbuf));
 	printf("primary cache status: %s\n", sbuf);
 
-	snprintb(sbuf, sizeof(sbuf), KA43_SESR_BITS, *ka43_creg);
+	bitmask_snprintf(*ka43_creg, KA43_SESR_BITS, sbuf, sizeof(sbuf));
 	printf("secondary cache status: %s\n", sbuf);
 
 	return (0);

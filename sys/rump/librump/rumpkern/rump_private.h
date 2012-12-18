@@ -1,7 +1,9 @@
-/*	$NetBSD: rump_private.h,v 1.71 2012/10/09 13:35:50 pooka Exp $	*/
+/*	$NetBSD: rump_private.h,v 1.13 2008/10/13 18:17:07 pooka Exp $	*/
 
 /*
- * Copyright (c) 2007-2011 Antti Kantee.  All Rights Reserved.
+ * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
+ *
+ * Development of this software was supported by Google Summer of Code.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,108 +31,63 @@
 #define _SYS_RUMP_PRIVATE_H_
 
 #include <sys/param.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
-#include <sys/lwp.h>
-#include <sys/proc.h>
-#include <sys/systm.h>
 #include <sys/types.h>
+
+#include <sys/disklabel.h>
+#include <sys/mount.h>
+#include <sys/vnode.h>
 
 #include <uvm/uvm.h>
 #include <uvm/uvm_object.h>
 #include <uvm/uvm_page.h>
 
 #include <rump/rump.h>
-#include <rump/rumpuser.h>
 
-#include "rumpkern_if_priv.h"
+#if 0
+#define DPRINTF(x) printf x
+#else
+#define DPRINTF(x)
+#endif
 
-extern struct rumpuser_mtx *rump_giantlock;
+struct lwp;
+extern kauth_cred_t rump_cred;
+extern struct vmspace rump_vmspace;
+
+extern kmutex_t rump_giantlock;
+
+#define UIO_VMSPACE_SYS (&rump_vmspace)
+
+struct rump_specpriv {
+	char	rsp_path[MAXPATHLEN+1];
+	int	rsp_fd;
+
+	struct partition *rsp_curpi;
+	struct partition rsp_pi;
+	struct disklabel rsp_dl;
+};
+
+#define RUMP_UBC_MAGIC_WINDOW (void *)0x37
+#define RUMP_LMUTEX_MAGIC ((kmutex_t *)0x101)
 
 extern int rump_threads;
-extern struct device rump_rootdev;
 
-extern struct sysent rump_sysent[];
+void abort(void) __dead;
 
-enum rump_component_type {
-	RUMP_COMPONENT_DEV,
-	RUMP_COMPONENT_NET,
-		RUMP_COMPONENT_NET_ROUTE,
-		RUMP_COMPONENT_NET_IF,
-		RUMP_COMPONENT_NET_IFCFG,
-	RUMP_COMPONENT_VFS,
-	RUMP_COMPONENT_KERN,
-		RUMP_COMPONENT_KERN_VFS,
-	RUMP_COMPONENT_MAX,
-};
-struct rump_component {
-	enum rump_component_type rc_type;
-	void (*rc_init)(void);
-};
-#define RUMP_COMPONENT(type)				\
-static void rumpcompinit##type(void);			\
-static const struct rump_component rumpcomp##type = {	\
-	.rc_type = type,				\
-	.rc_init = rumpcompinit##type,			\
-};							\
-__link_set_add_rodata(rump_components, rumpcomp##type);	\
-static void rumpcompinit##type(void)
+void	rump_putnode(struct vnode *);
+int	rump_recyclenode(struct vnode *);
 
-#define FLAWLESSCALL(call)						\
-do {									\
-	int att_error;							\
-	if ((att_error = call) != 0)					\
-		panic("\"%s\" failed", #call);				\
-} while (/*CONSTCOND*/0)
+struct ubc_window;
+int	rump_ubc_magic_uiomove(void *, size_t, struct uio *, int *,
+			       struct ubc_window *);
 
-#define RUMPMEM_UNLIMITED ((unsigned long)-1)
-extern unsigned long rump_physmemlimit;
+void		rumpvm_init(void);
+void		rumpvfs_init(void);
+void		rump_sleepers_init(void);
+struct vm_page	*rumpvm_makepage(struct uvm_object *, voff_t);
 
-#define RUMP_LOCALPROC_P(p) (p->p_vmspace == vmspace_kernel())
+void		rumpvm_enterva(vaddr_t addr, struct vm_page *);
+void		rumpvm_flushva(void);
 
-void		rump_component_init(enum rump_component_type);
-int		rump_component_count(enum rump_component_type);
-
-typedef void	(*rump_proc_vfs_init_fn)(struct proc *);
-typedef void	(*rump_proc_vfs_release_fn)(struct proc *);
-extern rump_proc_vfs_init_fn rump_proc_vfs_init;
-extern rump_proc_vfs_release_fn rump_proc_vfs_release;
-
-extern struct cpu_info *rump_cpu;
-
-extern bool rump_ttycomponent;
-
-struct lwp *	rump__lwproc_alloclwp(struct proc *);
-
-void	rump_cpus_bootstrap(int *);
-void	rump_biglock_init(void);
-void	rump_scheduler_init(int);
-void	rump_schedule(void);
-void	rump_unschedule(void);
-void 	rump_schedule_cpu(struct lwp *);
-void 	rump_schedule_cpu_interlock(struct lwp *, void *);
-void	rump_unschedule_cpu(struct lwp *);
-void	rump_unschedule_cpu_interlock(struct lwp *, void *);
-void	rump_unschedule_cpu1(struct lwp *, void *);
-
-void	rump_schedlock_cv_wait(struct rumpuser_cv *);
-int	rump_schedlock_cv_timedwait(struct rumpuser_cv *,
-				    const struct timespec *);
-
-void	rump_user_schedule(int, void *);
-void	rump_user_unschedule(int, int *, void *);
-
-void	rump_cpu_attach(struct cpu_info *);
-
-void	rump_kernel_bigwrap(int *);
-void	rump_kernel_bigunwrap(int);
-
-void	rump_tsleep_init(void);
-
-void	rump_intr_init(int);
-void	rump_softint_run(struct cpu_info *);
-
-void	*rump_hypermalloc(size_t, int, bool, const char *);
-void	rump_hyperfree(void *, size_t);
+lwpid_t		rump_nextlid(void);
 
 #endif /* _SYS_RUMP_PRIVATE_H_ */

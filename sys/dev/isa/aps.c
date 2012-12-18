@@ -1,9 +1,8 @@
-/*	$NetBSD: aps.c,v 1.15 2012/08/14 14:36:43 jruoho Exp $	*/
+/*	$NetBSD: aps.c,v 1.8 2008/04/04 09:41:40 xtraeme Exp $	*/
 /*	$OpenBSD: aps.c,v 1.15 2007/05/19 19:14:11 tedu Exp $	*/
-/*	$OpenBSD: aps.c,v 1.17 2008/06/27 06:08:43 canacar Exp $	*/
+
 /*
  * Copyright (c) 2005 Jonathan Gray <jsg@openbsd.org>
- * Copyright (c) 2008 Can Erkin Acar <canacar@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -24,14 +23,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aps.c,v 1.15 2012/08/14 14:36:43 jruoho Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aps.c,v 1.8 2008/04/04 09:41:40 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/callout.h>
-#include <sys/module.h>
 
 #include <sys/bus.h>
 
@@ -46,62 +44,23 @@ __KERNEL_RCSID(0, "$NetBSD: aps.c,v 1.15 2012/08/14 14:36:43 jruoho Exp $");
 #define DPRINTF(x)
 #endif
 
+#define APS_ACCEL_STATE		0x04
+#define APS_INIT		0x10
+#define APS_STATE		0x11
+#define	APS_XACCEL		0x12
+#define APS_YACCEL		0x14
+#define APS_TEMP		0x16
+#define	APS_XVAR		0x17
+#define APS_YVAR		0x19
+#define APS_TEMP2		0x1b
+#define APS_UNKNOWN		0x1c
+#define APS_INPUT		0x1d
+#define APS_CMD			0x1f
 
-/*
- * EC interface on Thinkpad Laptops, from Linux HDAPS driver notes.
- * From Renesans H8S/2140B Group Hardware Manual
- * http://documentation.renesas.com/eng/products/mpumcu/rej09b0300_2140bhm.pdf
- *
- * EC uses LPC Channel 3 registers TWR0..15
- */
+#define	APS_STATE_NEWDATA	0x50
 
-/* STR3 status register */
-#define APS_STR3		0x04
+#define APS_CMD_START		0x01
 
-#define APS_STR3_IBF3B	0x80	/* Input buffer full (host->slave) */
-#define APS_STR3_OBF3B	0x40	/* Output buffer full (slave->host)*/
-#define APS_STR3_MWMF	0x20	/* Master write mode */
-#define APS_STR3_SWMF	0x10	/* Slave write mode */
-
-
-/* Base address of TWR registers */
-#define APS_TWR_BASE		0x10
-#define APS_TWR_RET		0x1f
-
-/* TWR registers */
-#define APS_CMD			0x00
-#define APS_ARG1		0x01
-#define APS_ARG2		0x02
-#define APS_ARG3		0x03
-#define APS_RET			0x0f
-
-/* Sensor values */
-#define APS_STATE		0x01
-#define	APS_XACCEL		0x02
-#define APS_YACCEL		0x04
-#define APS_TEMP		0x06
-#define	APS_XVAR		0x07
-#define APS_YVAR		0x09
-#define APS_TEMP2		0x0b
-#define APS_UNKNOWN		0x0c
-#define APS_INPUT		0x0d
-
-/* write masks for I/O, send command + 0-3 arguments*/
-#define APS_WRITE_0		0x0001
-#define APS_WRITE_1		0x0003
-#define APS_WRITE_2		0x0007
-#define APS_WRITE_3		0x000f
-
-/* read masks for I/O, read 0-3 values (skip command byte) */
-#define APS_READ_0		0x0000
-#define APS_READ_1		0x0002
-#define APS_READ_2		0x0006
-#define APS_READ_3		0x000e
-
-#define APS_READ_RET		0x8000
-#define APS_READ_ALL		0xffff
-
-/* Bit definitions for APS_INPUT value */
 #define APS_INPUT_KB		(1 << 5)
 #define APS_INPUT_MS		(1 << 6)
 #define APS_INPUT_LIDOPEN	(1 << 7)
@@ -136,7 +95,6 @@ enum aps_sensors {
 struct aps_softc {
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
-	bool sc_bus_space_valid;
 
 	struct sysmon_envsys *sc_sme;
 	envsys_data_t sc_sensor[APS_NUM_SENSORS];
@@ -150,84 +108,15 @@ static void 	aps_attach(device_t, device_t, void *);
 static int	aps_detach(device_t, int);
 
 static int 	aps_init(struct aps_softc *);
-static int	aps_read_data(struct aps_softc *);
-static void 	aps_refresh_sensor_data(struct aps_softc *);
+static uint8_t  aps_mem_read_1(bus_space_tag_t, bus_space_handle_t,
+			       int, uint8_t);
+static void 	aps_refresh_sensor_data(struct aps_softc *sc);
 static void 	aps_refresh(void *);
-static int	aps_do_io(bus_space_tag_t, bus_space_handle_t,
-			  unsigned char *, int, int);
-static bool 	aps_suspend(device_t, const pmf_qual_t *);
-static bool 	aps_resume(device_t, const pmf_qual_t *);
+static bool 	aps_suspend(device_t PMF_FN_PROTO);
+static bool 	aps_resume(device_t PMF_FN_PROTO);
 
 CFATTACH_DECL_NEW(aps, sizeof(struct aps_softc),
 	      aps_match, aps_attach, aps_detach, NULL);
-
-/* properly communicate with the controller, writing a set of memory
- * locations and reading back another set  */
-static int
-aps_do_io(bus_space_tag_t iot, bus_space_handle_t ioh,
-	  unsigned char *buf, int wmask, int rmask)
-{
-	int bp, stat, n;
-
-	DPRINTF(("aps_do_io: CMD: 0x%02x, wmask: 0x%04x, rmask: 0x%04x\n",
-	    buf[0], wmask, rmask));
-
-	/* write init byte using arbitration */
-	for (n = 0; n < 100; n++) {
-		stat = bus_space_read_1(iot, ioh, APS_STR3);
-		if (stat & (APS_STR3_OBF3B | APS_STR3_SWMF)) {
-			bus_space_read_1(iot, ioh, APS_TWR_RET);
-			continue;
-		}
-		bus_space_write_1(iot, ioh, APS_TWR_BASE, buf[0]);
-		stat = bus_space_read_1(iot, ioh, APS_STR3);
-		if (stat & (APS_STR3_MWMF))
-			break;
-		delay(1);
-	}
-
-	if (n == 100) {
-		DPRINTF(("aps_do_io: Failed to get bus\n"));
-		return 1;
-	}
-
-	/* write data bytes, init already sent */
-	/* make sure last bye is always written as this will trigger slave */
-	wmask |= APS_READ_RET;
-	buf[APS_RET] = 0x01;
-
-	for (n = 1, bp = 2; n < 16; bp <<= 1, n++) {
-		if (wmask & bp) {
-			bus_space_write_1(iot, ioh, APS_TWR_BASE + n, buf[n]);
-			DPRINTF(("aps_do_io:  write %2d 0x%02x\n", n, buf[n]));
-		}
-	}
-
-	for (n = 0; n < 100; n++) {
-		stat = bus_space_read_1(iot, ioh, APS_STR3);
-		if (stat & (APS_STR3_OBF3B))
-			break;
-		delay(5 * 100);
-	}
-
-	if (n == 100) {
-		DPRINTF(("aps_do_io: timeout waiting response\n"));
-		return 1;
-	}
-	/* wait for data available */
-	/* make sure to read the final byte to clear status */
-	rmask |= APS_READ_RET;
-
-	/* read cmd and data bytes */
-	for (n = 0, bp = 1; n < 16; bp <<= 1, n++) {
-		if (rmask & bp) {
-			buf[n] = bus_space_read_1(iot, ioh, APS_TWR_BASE + n);
-			DPRINTF(("aps_do_io:  read %2d 0x%02x\n", n, buf[n]));
-		}
-	}
-
-	return 0;
-}
 
 static int
 aps_match(device_t parent, cfdata_t match, void *aux)
@@ -235,8 +124,7 @@ aps_match(device_t parent, cfdata_t match, void *aux)
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
-	unsigned char iobuf[16];
-	int iobase;
+	int iobase, i;
 	uint8_t cr;
 
 	/* Must supply an address */
@@ -256,12 +144,16 @@ aps_match(device_t parent, cfdata_t match, void *aux)
 		return 0;
 	}
 
-
 	/* See if this machine has APS */
+	bus_space_write_1(iot, ioh, APS_INIT, 0x13);
+	bus_space_write_1(iot, ioh, APS_CMD, 0x01);
 
-	/* get APS mode */
-	iobuf[APS_CMD] = 0x13;
-	if (aps_do_io(iot, ioh, iobuf, APS_WRITE_0, APS_READ_1)) {
+	/* ask again as the X40 is slightly deaf in one ear */
+	bus_space_read_1(iot, ioh, APS_CMD);
+	bus_space_write_1(iot, ioh, APS_INIT, 0x13);
+	bus_space_write_1(iot, ioh, APS_CMD, 0x01);
+
+	if (!aps_mem_read_1(iot, ioh, APS_CMD, 0x00)) {
 		bus_space_unmap(iot, ioh, APS_ADDR_SIZE);
 		return 0;
 	}
@@ -271,15 +163,17 @@ aps_match(device_t parent, cfdata_t match, void *aux)
 	 * 0x01: T42
 	 * 0x02: chip already initialised
 	 * 0x03: T41
-	 * 0x05: T61
 	 */
-
-	cr = iobuf[APS_ARG1];
-
+	for (i = 0; i < 10; i++) {
+		cr = bus_space_read_1(iot, ioh, APS_STATE);
+		if (cr > 0 && cr < 6)
+			break;
+		delay(5 * 1000);
+	}
+	
 	bus_space_unmap(iot, ioh, APS_ADDR_SIZE);
 	DPRINTF(("aps: state register 0x%x\n", cr));
-
-	if (iobuf[APS_RET] != 0 || cr < 1 || cr > 5) {
+	if (cr < 1 || cr > 5) {
 		DPRINTF(("aps0: unsupported state %d\n", cr));
 		return 0;
 	}
@@ -303,20 +197,16 @@ aps_attach(device_t parent, device_t self, void *aux)
 	sc->sc_iot = ia->ia_iot;
 	iobase = ia->ia_io[0].ir_addr;
 
-	callout_init(&sc->sc_callout, 0);
-	callout_setfunc(&sc->sc_callout, aps_refresh, sc);
-
 	if (bus_space_map(sc->sc_iot, iobase, APS_ADDR_SIZE, 0, &sc->sc_ioh)) {
 		aprint_error(": can't map i/o space\n");
 		return;
 	}
-	sc->sc_bus_space_valid = true;
 
 	aprint_naive("\n");
-	aprint_normal(": Thinkpad Active Protection System\n");
+	aprint_normal("\n");
 
-	if (aps_init(sc)) {
-		aprint_error_dev(self, "failed to initialize\n");
+	if (!aps_init(sc)) {
+		aprint_error_dev(self, "failed to initialise\n");
 		goto out;
 	}
 
@@ -326,27 +216,21 @@ aps_attach(device_t parent, device_t self, void *aux)
 	strlcpy(sc->sc_sensor[idx].desc, string,			\
 	    sizeof(sc->sc_sensor[idx].desc));
 
-	INITDATA(APS_SENSOR_XACCEL, ENVSYS_INTEGER, "x-acceleration");
-	INITDATA(APS_SENSOR_YACCEL, ENVSYS_INTEGER, "y-acceleration");
-	INITDATA(APS_SENSOR_TEMP1, ENVSYS_STEMP, "temperature 1");
-	INITDATA(APS_SENSOR_TEMP2, ENVSYS_STEMP, "temperature 2");
-	INITDATA(APS_SENSOR_XVAR, ENVSYS_INTEGER, "x-variable");
-	INITDATA(APS_SENSOR_YVAR, ENVSYS_INTEGER, "y-variable");
-	INITDATA(APS_SENSOR_KBACT, ENVSYS_INDICATOR, "keyboard active");
-	INITDATA(APS_SENSOR_MSACT, ENVSYS_INDICATOR, "mouse active");
-	INITDATA(APS_SENSOR_LIDOPEN, ENVSYS_INDICATOR, "lid open");
+	INITDATA(APS_SENSOR_XACCEL, ENVSYS_INTEGER, "X_ACCEL");
+	INITDATA(APS_SENSOR_YACCEL, ENVSYS_INTEGER, "Y_ACCEL");
+	INITDATA(APS_SENSOR_TEMP1, ENVSYS_STEMP, "TEMP_1");
+	INITDATA(APS_SENSOR_TEMP2, ENVSYS_STEMP, "TEMP_2");
+	INITDATA(APS_SENSOR_XVAR, ENVSYS_INTEGER, "X_VAR");
+	INITDATA(APS_SENSOR_YVAR, ENVSYS_INTEGER, "Y_VAR");
+	INITDATA(APS_SENSOR_KBACT, ENVSYS_INDICATOR, "Keyboard Active");
+	INITDATA(APS_SENSOR_MSACT, ENVSYS_INDICATOR, "Mouse Active");
+	INITDATA(APS_SENSOR_LIDOPEN, ENVSYS_INDICATOR, "Lid Open");
 
 	sc->sc_sme = sysmon_envsys_create();
-
 	for (i = 0; i < APS_NUM_SENSORS; i++) {
-
 		sc->sc_sensor[i].state = ENVSYS_SVALID;
-
-		if (sc->sc_sensor[i].units == ENVSYS_INTEGER)
-			sc->sc_sensor[i].flags = ENVSYS_FHAS_ENTROPY;
-
 		if (sysmon_envsys_sensor_attach(sc->sc_sme,
-			&sc->sc_sensor[i])) {
+						&sc->sc_sensor[i])) {
 			sysmon_envsys_destroy(sc->sc_sme);
 			goto out;
 		}
@@ -368,8 +252,11 @@ aps_attach(device_t parent, device_t self, void *aux)
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	/* Refresh sensor data every 0.5 seconds */
+	callout_init(&sc->sc_callout, 0);
+	callout_setfunc(&sc->sc_callout, aps_refresh, sc);
 	callout_schedule(&sc->sc_callout, (hz) / 2);
 
+        aprint_normal_dev(self, "Thinkpad Active Protection System\n");
 	return;
 
 out:
@@ -379,49 +266,38 @@ out:
 static int
 aps_init(struct aps_softc *sc)
 {
-	unsigned char iobuf[16];
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_INIT, 0x17);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_STATE, 0x81);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_CMD, 0x01);
+	if (!aps_mem_read_1(sc->sc_iot, sc->sc_ioh, APS_CMD, 0x00))
+		return 0;
+	if (!aps_mem_read_1(sc->sc_iot, sc->sc_ioh, APS_STATE, 0x00))
+		return 0;
+	if (!aps_mem_read_1(sc->sc_iot, sc->sc_ioh, APS_XACCEL, 0x60))
+		return 0;
+	if (!aps_mem_read_1(sc->sc_iot, sc->sc_ioh, APS_XACCEL + 1, 0x00))
+		return 0;
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_INIT, 0x14);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_STATE, 0x01);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_CMD, 0x01);
+	if (!aps_mem_read_1(sc->sc_iot, sc->sc_ioh, APS_CMD, 0x00))
+		return 0;
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_INIT, 0x10);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_STATE, 0xc8);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_XACCEL, 0x00);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_XACCEL + 1, 0x02);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_CMD, 0x01);
+	if (!aps_mem_read_1(sc->sc_iot, sc->sc_ioh, APS_CMD, 0x00))
+		return 0;
+	/* refresh data */
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_INIT, 0x11);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_CMD, 0x01);
+	if (!aps_mem_read_1(sc->sc_iot, sc->sc_ioh, APS_ACCEL_STATE, 0x50))
+		return 0;
+	if (!aps_mem_read_1(sc->sc_iot, sc->sc_ioh, APS_STATE, 0x00))
+		return 0;
 
-	/* command 0x17/0x81: check EC */
-	iobuf[APS_CMD] = 0x17;
-	iobuf[APS_ARG1] = 0x81;
-
-	if (aps_do_io(sc->sc_iot, sc->sc_ioh, iobuf, APS_WRITE_1, APS_READ_3))
-		return 1;
-	if (iobuf[APS_RET] != 0 ||iobuf[APS_ARG3] != 0)
-		return 1;
-
-	/* Test values from the Linux driver */
-	if ((iobuf[APS_ARG1] != 0 || iobuf[APS_ARG2] != 0x60) &&
-	    (iobuf[APS_ARG1] != 1 || iobuf[APS_ARG2] != 0))
-		return 1;
-
-	/* command 0x14: set power */
-	iobuf[APS_CMD] = 0x14;
-	iobuf[APS_ARG1] = 0x01;
-
-	if (aps_do_io(sc->sc_iot, sc->sc_ioh, iobuf, APS_WRITE_1, APS_READ_0))
-		return 1;
-
-	if (iobuf[APS_RET] != 0)
-		return 1;
-
-	/* command 0x10: set config (sample rate and order) */
-	iobuf[APS_CMD] = 0x10;
-	iobuf[APS_ARG1] = 0xc8;
-	iobuf[APS_ARG2] = 0x00;
-	iobuf[APS_ARG3] = 0x02;
-
-	if (aps_do_io(sc->sc_iot, sc->sc_ioh, iobuf, APS_WRITE_3, APS_READ_0))
-		return 1;
-
-	/* command 0x11: refresh data */
-	iobuf[APS_CMD] = 0x11;
-	if (aps_do_io(sc->sc_iot, sc->sc_ioh, iobuf, APS_WRITE_0, APS_READ_1))
-		return 1;
-	if (iobuf[APS_ARG1] != 0)
-		return 1;
-
-	return 0;
+	return 1;
 }
 
 static int
@@ -431,33 +307,27 @@ aps_detach(device_t self, int flags)
 
         callout_stop(&sc->sc_callout);
         callout_destroy(&sc->sc_callout);
-
-	if (sc->sc_sme)
-		sysmon_envsys_unregister(sc->sc_sme);
-	if (sc->sc_bus_space_valid == true)
-		bus_space_unmap(sc->sc_iot, sc->sc_ioh, APS_ADDR_SIZE);
+	sysmon_envsys_unregister(sc->sc_sme);
+	bus_space_unmap(sc->sc_iot, sc->sc_ioh, APS_ADDR_SIZE);
 
 	return 0;
 }
 
-static int
-aps_read_data(struct aps_softc *sc)
+static uint8_t
+aps_mem_read_1(bus_space_tag_t iot, bus_space_handle_t ioh, int reg,
+	       uint8_t val)
 {
-	unsigned char iobuf[16];
+	int i;
+	uint8_t cr;
+	/* should take no longer than 50 microseconds */
+	for (i = 0; i < 10; i++) {
+		cr = bus_space_read_1(iot, ioh, reg);
+		if (cr == val)
+			return 1;
+		delay(5 * 1000);
+	}
 
-	iobuf[APS_CMD] = 0x11;
-	if (aps_do_io(sc->sc_iot, sc->sc_ioh, iobuf, APS_WRITE_0, APS_READ_ALL))
-		return 1;
-
-	sc->aps_data.state = iobuf[APS_STATE];
-	sc->aps_data.x_accel = iobuf[APS_XACCEL] + 256 * iobuf[APS_XACCEL + 1];
-	sc->aps_data.y_accel = iobuf[APS_YACCEL] + 256 * iobuf[APS_YACCEL + 1];
-	sc->aps_data.temp1 = iobuf[APS_TEMP];
-	sc->aps_data.x_var = iobuf[APS_XVAR] + 256 * iobuf[APS_XVAR + 1];
-	sc->aps_data.y_var = iobuf[APS_YVAR] + 256 * iobuf[APS_YVAR + 1];
-	sc->aps_data.temp2 = iobuf[APS_TEMP2];
-	sc->aps_data.input = iobuf[APS_INPUT];
-
+	DPRINTF(("aps: reg 0x%x not val 0x%x!\n", reg, val));
 	return 0;
 }
 
@@ -466,35 +336,50 @@ aps_refresh_sensor_data(struct aps_softc *sc)
 {
 	int64_t temp;
 
-	if (aps_read_data(sc)) {
-		printf("aps0: read data failed\n");
+	/* ask for new data */
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_INIT, 0x11);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_CMD, 0x01);
+	if (!aps_mem_read_1(sc->sc_iot, sc->sc_ioh, APS_ACCEL_STATE, 0x50))
 		return;
-	}
+
+	sc->aps_data.state =
+	    bus_space_read_1(sc->sc_iot, sc->sc_ioh, APS_STATE);
+	sc->aps_data.x_accel =
+	    bus_space_read_2(sc->sc_iot, sc->sc_ioh, APS_XACCEL);
+	sc->aps_data.y_accel =
+	    bus_space_read_2(sc->sc_iot, sc->sc_ioh, APS_YACCEL);
+	sc->aps_data.temp1 =
+	    bus_space_read_1(sc->sc_iot, sc->sc_ioh, APS_TEMP);
+	sc->aps_data.x_var =
+	    bus_space_read_2(sc->sc_iot, sc->sc_ioh, APS_XVAR);
+	sc->aps_data.y_var =
+	    bus_space_read_2(sc->sc_iot, sc->sc_ioh, APS_YVAR);
+	sc->aps_data.temp2 =
+	    bus_space_read_1(sc->sc_iot, sc->sc_ioh, APS_TEMP2);
+	sc->aps_data.input =
+	    bus_space_read_1(sc->sc_iot, sc->sc_ioh, APS_INPUT);
+
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_INIT, 0x11);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_CMD, 0x01);
+
+	/* tell accelerometer we're done reading from it */
+	bus_space_read_1(sc->sc_iot, sc->sc_ioh, APS_CMD);
+	bus_space_read_1(sc->sc_iot, sc->sc_ioh, APS_ACCEL_STATE);
 
 	sc->sc_sensor[APS_SENSOR_XACCEL].value_cur = sc->aps_data.x_accel;
 	sc->sc_sensor[APS_SENSOR_YACCEL].value_cur = sc->aps_data.y_accel;
 
-	if (sc->aps_data.temp1 == 0xff)
-		sc->sc_sensor[APS_SENSOR_TEMP1].state = ENVSYS_SINVALID;
-	else {
-		/* convert to micro (mu) degrees */
-		temp = sc->aps_data.temp1 * 1000000;	
-		/* convert to kelvin */
-		temp += 273150000; 
-		sc->sc_sensor[APS_SENSOR_TEMP1].value_cur = temp;
-		sc->sc_sensor[APS_SENSOR_TEMP1].state = ENVSYS_SVALID;
-	}
+	/* convert to micro (mu) degrees */
+	temp = sc->aps_data.temp1 * 1000000;	
+	/* convert to kelvin */
+	temp += 273150000; 
+	sc->sc_sensor[APS_SENSOR_TEMP1].value_cur = temp;
 
-	if (sc->aps_data.temp2 == 0xff)
-		sc->sc_sensor[APS_SENSOR_TEMP2].state = ENVSYS_SINVALID;
-	else {
-		/* convert to micro (mu) degrees */
-		temp = sc->aps_data.temp2 * 1000000;	
-		/* convert to kelvin */
-		temp += 273150000; 
-		sc->sc_sensor[APS_SENSOR_TEMP2].value_cur = temp;
-		sc->sc_sensor[APS_SENSOR_TEMP2].state = ENVSYS_SVALID;
-	}
+	/* convert to micro (mu) degrees */
+	temp = sc->aps_data.temp2 * 1000000;	
+	/* convert to kelvin */
+	temp += 273150000; 
+	sc->sc_sensor[APS_SENSOR_TEMP2].value_cur = temp;
 
 	sc->sc_sensor[APS_SENSOR_XVAR].value_cur = sc->aps_data.x_var;
 	sc->sc_sensor[APS_SENSOR_YVAR].value_cur = sc->aps_data.y_var;
@@ -516,7 +401,7 @@ aps_refresh(void *arg)
 }
 
 static bool
-aps_suspend(device_t dv, const pmf_qual_t *qual)
+aps_suspend(device_t dv PMF_FN_ARGS)
 {
 	struct aps_softc *sc = device_private(dv);
 
@@ -526,52 +411,25 @@ aps_suspend(device_t dv, const pmf_qual_t *qual)
 }
 
 static bool
-aps_resume(device_t dv, const pmf_qual_t *qual)
+aps_resume(device_t dv PMF_FN_ARGS)
 {
 	struct aps_softc *sc = device_private(dv);
-	unsigned char iobuf[16];
 
 	/*
 	 * Redo the init sequence on resume, because APS is 
 	 * as forgetful as it is deaf.
 	 */
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_INIT, 0x13);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_CMD, 0x01);
+	bus_space_read_1(sc->sc_iot, sc->sc_ioh, APS_CMD);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_INIT, 0x13);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, APS_CMD, 0x01);
 
-	/* get APS mode */
-	iobuf[APS_CMD] = 0x13;
-	if (aps_do_io(sc->sc_iot, sc->sc_ioh, iobuf, APS_WRITE_0, APS_READ_1)
-	    || aps_init(sc))
-		aprint_error_dev(dv, "failed to wake up\n");
-	else
+	if (aps_mem_read_1(sc->sc_iot, sc->sc_ioh, APS_CMD, 0x00) &&
+	    aps_init(sc))
 		callout_schedule(&sc->sc_callout, (hz) / 2);
+	else
+		aprint_error_dev(dv, "failed to wake up\n");
 
 	return true;
-}
-
-MODULE(MODULE_CLASS_DRIVER, aps, NULL);
-
-#ifdef _MODULE
-#include "ioconf.c"
-#endif
-
-static int
-aps_modcmd(modcmd_t cmd, void *opaque)
-{
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-#ifdef _MODULE
-		return config_init_component(cfdriver_ioconf_aps,
-		    cfattach_ioconf_aps, cfdata_ioconf_aps);
-#else
-		return 0;
-#endif
-	case MODULE_CMD_FINI:
-#ifdef _MODULE
-		return config_fini_component(cfdriver_ioconf_aps,
-		    cfattach_ioconf_aps, cfdata_ioconf_aps);
-#else
-		return 0;
-#endif
-	default:
-		return ENOTTY;
-	}
 }

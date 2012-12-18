@@ -1,4 +1,4 @@
-/* $NetBSD: fdc_acpi.c,v 1.42 2012/02/02 19:43:02 tls Exp $ */
+/* $NetBSD: fdc_acpi.c,v 1.34.14.1 2009/05/01 01:38:16 snj Exp $ */
 
 /*
  * Copyright (c) 2002 Jared D. McNeill <jmcneill@invisible.ca>
@@ -31,27 +31,37 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdc_acpi.c,v 1.42 2012/02/02 19:43:02 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdc_acpi.c,v 1.34.14.1 2009/05/01 01:38:16 snj Exp $");
+
+#include "rnd.h"
 
 #include <sys/param.h>
-#include <sys/device.h>
-#include <sys/disk.h>
 #include <sys/systm.h>
-
+#include <sys/callout.h>
+#include <sys/device.h>
+#include <sys/buf.h>
+#include <sys/bufq.h>
+#include <sys/queue.h>
+#include <sys/disk.h>
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
+#include <sys/bus.h>
+#include <sys/intr.h>
+
+#include <dev/isa/isavar.h>
+#include <dev/isa/isadmavar.h>
+
+#include <dev/acpi/acpica.h>
 #include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 
-#include <dev/isa/isadmavar.h>
 #include <dev/isa/fdcvar.h>
 #include <dev/isa/fdvar.h>
 #include <dev/isa/fdreg.h>
 
 #include <dev/acpi/fdc_acpireg.h>
-
-#define _COMPONENT          ACPI_RESOURCE_COMPONENT
-ACPI_MODULE_NAME            ("fdc_acpi")
 
 static int	fdc_acpi_match(device_t, cfdata_t, void *);
 static void	fdc_acpi_attach(device_t, device_t, void *);
@@ -204,8 +214,10 @@ fdc_acpi_attach(device_t parent, device_t self, void *aux)
 		 * XXX if there is no _FDE control method, attempt to
 		 * probe without pnp
 		 */
+#ifdef ACPI_FDC_DEBUG
 		aprint_debug_dev(sc->sc_dev,
 		    "unable to enumerate, attempting normal probe\n");
+#endif
 	}
 
 	fdcattach(sc);
@@ -221,40 +233,43 @@ fdc_acpi_enumerate(struct fdc_acpi_softc *asc)
 	ACPI_OBJECT *fde;
 	ACPI_BUFFER abuf;
 	ACPI_STATUS rv;
-	uint32_t *p;
+	UINT32 *p;
 	int i, drives = -1;
 
 	rv = acpi_eval_struct(asc->sc_node->ad_handle, "_FDE", &abuf);
-
 	if (ACPI_FAILURE(rv)) {
+#ifdef ACPI_FDC_DEBUG
 		aprint_normal_dev(sc->sc_dev, "failed to evaluate _FDE: %s\n",
 		    AcpiFormatException(rv));
+#endif
 		return drives;
 	}
-	fde = abuf.Pointer;
+	fde = (ACPI_OBJECT *)abuf.Pointer;
 	if (fde->Type != ACPI_TYPE_BUFFER) {
-		aprint_error_dev(sc->sc_dev, "expected BUFFER, got %u\n",
+		aprint_error_dev(sc->sc_dev, "expected BUFFER, got %d\n",
 		    fde->Type);
 		goto out;
 	}
-	if (fde->Buffer.Length < 5 * sizeof(uint32_t)) {
+	if (fde->Buffer.Length < 5 * sizeof(UINT32)) {
 		aprint_error_dev(sc->sc_dev,
-		    "expected buffer len of %lu, got %u\n",
-		    (unsigned long)(5 * sizeof(uint32_t)), fde->Buffer.Length);
+		    "expected buffer len of %lu, got %d\n",
+		    (unsigned long)(5 * sizeof(UINT32)), fde->Buffer.Length);
 		goto out;
 	}
 
-	p = (uint32_t *)fde->Buffer.Pointer;
+	p = (UINT32 *) fde->Buffer.Pointer;
 
 	/*
-	 * Indexes 0 through 3 are each uint32_t booleans. True if a drive
+	 * Indexes 0 through 3 are each UINT32 booleans. True if a drive
 	 * is present.
 	 */
 	drives = 0;
 	for (i = 0; i < 4; i++) {
 		if (p[i]) drives |= (1 << i);
+#ifdef ACPI_FDC_DEBUG
 		aprint_normal_dev(sc->sc_dev, "drive %d %sattached\n", i,
 		    p[i] ? "" : "not ");
+#endif
 	}
 
 	/*
@@ -268,7 +283,7 @@ fdc_acpi_enumerate(struct fdc_acpi_softc *asc)
 	 */
 
 out:
-	ACPI_FREE(abuf.Pointer);
+	AcpiOsFree(abuf.Pointer);
 	return drives;
 }
 
@@ -286,17 +301,19 @@ fdc_acpi_getknownfds(struct fdc_acpi_softc *asc)
 			continue;
 		rv = acpi_eval_struct(asc->sc_node->ad_handle, "_FDI", &abuf);
 		if (ACPI_FAILURE(rv)) {
+#ifdef ACPI_FDC_DEBUG
 			aprint_normal_dev(sc->sc_dev,
 			    "failed to evaluate _FDI: %s on drive %d\n",
 			    AcpiFormatException(rv), i);
+#endif
 			/* XXX if _FDI fails, assume 1.44MB floppy */
 			sc->sc_knownfds[i] = &fdc_acpi_fdtypes[0];
 			continue;
 		}
-		fdi = abuf.Pointer;
+		fdi = (ACPI_OBJECT *)abuf.Pointer;
 		if (fdi->Type != ACPI_TYPE_PACKAGE) {
 			aprint_error_dev(sc->sc_dev,
-			    "expected PACKAGE, got %u\n", fdi->Type);
+			    "expected PACKAGE, got %d\n", fdi->Type);
 			goto out;
 		}
 		e = fdi->Package.Elements;
@@ -309,7 +326,7 @@ fdc_acpi_getknownfds(struct fdc_acpi_softc *asc)
 			sc->sc_present &= ~(1 << i);
 
 out:
-		ACPI_FREE(abuf.Pointer);
+		AcpiOsFree(abuf.Pointer);
 	}
 }
 
@@ -333,8 +350,10 @@ fdc_acpi_nvtotype(const char *fdc, int nvraminfo, int drive)
 	case ACPI_FDC_DISKETTE_720K:
 		return &fdc_acpi_fdtypes[4];
 	default:
+#ifdef ACPI_FDC_DEBUG
 		aprint_normal("%s: drive %d: unknown device type 0x%x\n",
 		    fdc, drive, type);
+#endif
 		return NULL;
 	}
 }

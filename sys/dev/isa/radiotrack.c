@@ -1,4 +1,4 @@
-/* $NetBSD: radiotrack.c,v 1.19 2012/10/27 17:18:25 chs Exp $ */
+/* $NetBSD: radiotrack.c,v 1.16 2008/04/08 20:08:50 cegger Exp $ */
 /* $OpenBSD: radiotrack.c,v 1.1 2001/12/05 10:27:06 mickey Exp $ */
 /* $RuOBSD: radiotrack.c,v 1.3 2001/10/18 16:51:36 pva Exp $ */
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radiotrack.c,v 1.19 2012/10/27 17:18:25 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radiotrack.c,v 1.16 2008/04/08 20:08:50 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -90,8 +90,8 @@ __KERNEL_RCSID(0, "$NetBSD: radiotrack.c,v 1.19 2012/10/27 17:18:25 chs Exp $");
 #define RT_VOLUME_STEADY	(3 << 6)
 #define RT_VOLUME_DELAY		100000
 
-int	rt_probe(device_t, cfdata_t, void *);
-void	rt_attach(device_t, device_t  self, void *);
+int	rt_probe(struct device *, struct cfdata *, void *);
+void	rt_attach(struct device *, struct device * self, void *);
 int	rt_get_info(void *, struct radio_info *);
 int	rt_set_info(void *, struct radio_info *);
 
@@ -104,6 +104,8 @@ const struct radio_hw_if rt_hw_if = {
 };
 
 struct rt_softc {
+	struct device	sc_dev;
+
 	int		mute;
 	u_int8_t	vol;
 	u_int8_t	cardtype;
@@ -114,7 +116,7 @@ struct rt_softc {
 	struct lm700x_t	lm;
 };
 
-CFATTACH_DECL_NEW(rt, sizeof(struct rt_softc),
+CFATTACH_DECL(rt, sizeof(struct rt_softc),
     rt_probe, rt_attach, NULL, NULL);
 
 int	rt_find(bus_space_tag_t, bus_space_handle_t);
@@ -129,7 +131,7 @@ u_int8_t	rt_conv_vol(u_int8_t);
 u_int8_t	rt_unconv_vol(u_int8_t);
 
 int
-rt_probe(device_t parent, cfdata_t cf, void *aux)
+rt_probe(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -172,9 +174,9 @@ rt_probe(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-rt_attach(device_t parent, device_t self, void *aux)
+rt_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct rt_softc *sc = device_private(self);
+	struct rt_softc *sc = (void *) self;
 	struct isa_attach_args *ia = aux;
 
 	sc->lm.iot = ia->ia_iot;
@@ -187,7 +189,7 @@ rt_attach(device_t parent, device_t self, void *aux)
 	/* remap I/O */
 	if (bus_space_map(sc->lm.iot, ia->ia_io[0].ir_addr,
 	    ia->ia_io[0].ir_size, 0, &sc->lm.ioh))
-		panic(": bus_space_map() of %s failed", device_xname(self));
+		panic(": bus_space_map() of %s failed", device_xname(&sc->sc_dev));
 
 	switch (ia->ia_io[0].ir_addr) {
 	case 0x20C:
@@ -221,7 +223,7 @@ rt_attach(device_t parent, device_t self, void *aux)
 
 	rt_set_freq(sc, sc->freq);
 
-	radio_attach_mi(&rt_hw_if, sc, self);
+	radio_attach_mi(&rt_hw_if, sc, &sc->sc_dev);
 }
 
 /*

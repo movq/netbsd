@@ -1,11 +1,11 @@
-/*	$NetBSD: display.h,v 1.7 2009/03/15 03:33:56 dholland Exp $	*/
+/*	$NetBSD: display.h,v 1.3 2008/04/28 20:22:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by
+ * by 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,16 +29,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdbool.h>
+#ifdef SIGTSTP
+#define SCREENTEST()	(initscr() != NULL && signal(SIGTSTP, SIG_DFL) != SIG_ERR && STAT_R < COLS && SCROLL_Y > 0)
+#else
+#define SCREENTEST()	(initscr() != NULL && STAT_R < COLS && SCROLL_Y > 0)
+#endif
 
-void display_set_obp(int which, bool show);
-void display_set_dbp(int which, bool show);
+extern WINDOW *view_w;
+extern WINDOW *slot_w;
+extern WINDOW *scroll_w;
+extern WINDOW *stat_w;
+extern WINDOW *turn_w;
 
-void display_scroll_pageup(void);
-void display_scroll_pagedown(void);
-void display_adjust_view(void);
-
-void display_hide_prompt(void);
-void display_reshow_prompt(void);
-void display_force_full_redraw(void);
-void display_redraw(void);

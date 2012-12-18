@@ -1,4 +1,4 @@
-/*	$NetBSD: resolv_mt.h,v 1.1.1.3 2009/04/12 16:35:44 christos Exp $	*/
+/*	$NetBSD: resolv_mt.h,v 1.1.1.2.22.1 2011/01/06 21:42:47 riz Exp $	*/
 
 #ifndef _RESOLV_MT_H
 #define _RESOLV_MT_H

@@ -1,4 +1,4 @@
-/*	$NetBSD: computer.c,v 1.16 2009/08/12 08:54:54 dholland Exp $	*/
+/*	$NetBSD: computer.c,v 1.11 2007/12/15 19:44:44 perry Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)computer.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: computer.c,v 1.16 2009/08/12 08:54:54 dholland Exp $");
+__RCSID("$NetBSD: computer.c,v 1.11 2007/12/15 19:44:44 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -90,7 +90,8 @@ __RCSID("$NetBSD: computer.c,v 1.16 2009/08/12 08:54:54 dholland Exp $");
 **	command processor.
 */
 
-static struct cvntab Cputab[] = {
+struct cvntab	Cputab[] =
+{
 	{ "ch",		"art",			(cmdfun)1,		0 },
 	{ "t",		"rajectory",		(cmdfun)2,		0 },
 	{ "c",		"ourse",		(cmdfun)3,		0 },
@@ -108,7 +109,8 @@ static void prkalc(int, double);
 
 /*ARGSUSED*/
 void
-computer(int v __unused)
+computer(v)
+	int v __unused;
 {
 	int		ix, iy;
 	int		i, j;
@@ -123,23 +125,26 @@ computer(int v __unused)
 
 	if (check_out(COMPUTER))
 		return;
-	while (1) {
+	while (1)
+	{
 		r = getcodpar("\nRequest", Cputab);
-		switch ((long)r->value) {
+		switch ((long)r->value)
+		{
 
 		  case 1:			/* star chart */
-			printf("Computer record of galaxy for all long range "
-			       "sensor scans\n\n");
+			printf("Computer record of galaxy for all long range sensor scans\n\n");
 			printf("  ");
 			/* print top header */
 			for (i = 0; i < NQUADS; i++)
 				printf("-%d- ", i);
 			printf("\n");
-			for (i = 0; i < NQUADS; i++) {
+			for (i = 0; i < NQUADS; i++)
+			{
 				printf("%d ", i);
-				for (j = 0; j < NQUADS; j++) {
-					if (i == Ship.quadx &&
-					    j == Ship.quady) {
+				for (j = 0; j < NQUADS; j++)
+				{
+					if (i == Ship.quadx && j == Ship.quady)
+					{
 						printf("$$$ ");
 						continue;
 					}
@@ -154,8 +159,7 @@ computer(int v __unused)
 						if (q->scanned < 0)
 							printf("... ");
 						else
-							printf("%3d ",
-								q->scanned);
+							printf("%3d ", q->scanned);
 				}
 				printf("%d\n", i);
 			}
@@ -167,29 +171,32 @@ computer(int v __unused)
 			break;
 
 		  case 2:			/* trajectory */
-			if (check_out(SRSCAN)) {
+			if (check_out(SRSCAN))
+			{
 				break;
 			}
-			if (Etc.nkling <= 0) {
+			if (Etc.nkling <= 0)
+			{
 				printf("No Klingons in this quadrant\n");
 				break;
 			}
 			/* for each Klingon, give the course & distance */
-			for (i = 0; i < Etc.nkling; i++) {
-				printf("Klingon at %d,%d",
-					Etc.klingon[i].x, Etc.klingon[i].y);
-				course = kalc(Ship.quadx, Ship.quady,
-					      Etc.klingon[i].x,
-					      Etc.klingon[i].y, &dist);
+			for (i = 0; i < Etc.nkling; i++)
+			{
+				printf("Klingon at %d,%d", Etc.klingon[i].x, Etc.klingon[i].y);
+				course = kalc(Ship.quadx, Ship.quady, Etc.klingon[i].x, Etc.klingon[i].y, &dist);
 				prkalc(course, dist);
 			}
 			break;
 
 		  case 3:			/* course calculation */
-			if (readdelim('/')) {
+			if (readdelim('/'))
+			{
 				tqx = Ship.quadx;
 				tqy = Ship.quady;
-			} else {
+			}
+			else
+			{
 				ix = getintpar("Quadrant");
 				if (ix < 0 || ix >= NSECTS)
 					break;
@@ -206,13 +213,13 @@ computer(int v __unused)
 			if (iy < 0 || iy >= NSECTS)
 				break;
 			course = kalc(tqx, tqy, ix, iy, &dist);
-			if (r->value2) {
+			if (r->value2)
+			{
 				warp(-1, course, dist);
 				break;
 			}
 			printf("%d,%d/%d,%d to %d,%d/%d,%d",
-				Ship.quadx, Ship.quady, Ship.sectx, Ship.secty,
-				tqx, tqy, ix, iy);
+				Ship.quadx, Ship.quady, Ship.sectx, Ship.secty, tqx, tqy, ix, iy);
 			prkalc(course, dist);
 			break;
 
@@ -226,8 +233,7 @@ computer(int v __unused)
 				break;
 			dist *= 10.0;
 			cost = pow(0.90, dist) * 98.0 + 0.5;
-			printf("Phasers are %d%% effective at that range\n",
-				cost);
+			printf("Phasers are %d%% effective at that range\n", cost);
 			break;
 
 		  case 6:			/* warp cost (time/energy) */
@@ -239,8 +245,7 @@ computer(int v __unused)
 				warpfact = Ship.warp;
 			cost = (dist + 0.05) * warpfact * warpfact * warpfact;
 			time = Param.warptime * dist / (warpfact * warpfact);
-			printf("Warp %.2f distance %.2f cost %.2f "
-			       "stardates %d (%d w/ shlds up) units\n",
+			printf("Warp %.2f distance %.2f cost %.2f stardates %d (%d w/ shlds up) units\n",
 				warpfact, dist, time, cost, cost + cost);
 			break;
 
@@ -258,26 +263,25 @@ computer(int v __unused)
 			j = 1;
 			printf("\n");
 			/* scan the event list */
-			for (i = 0; i < MAXEVENTS; i++) {
+			for (i = 0; i < MAXEVENTS; i++)
+			{
 				e = &Event[i];
 				/* ignore hidden entries */
 				if (e->evcode & E_HIDDEN)
 					continue;
-				switch (e->evcode & E_EVENT) {
+				switch (e->evcode & E_EVENT)
+				{
 
 				  case E_KDESB:
-					printf("Klingon is attacking starbase "
-					       "in quadrant %d,%d\n",
+					printf("Klingon is attacking starbase in quadrant %d,%d\n",
 						e->x, e->y);
 					j = 0;
 					break;
 
 				  case E_ENSLV:
 				  case E_REPRO:
-					printf("Starsystem %s in quadrant "
-					       "%d,%d is distressed\n",
-						Systemname[e->systemname],
-						e->x, e->y);
+					printf("Starsystem %s in quadrant %d,%d is distressed\n",
+						Systemname[e->systemname], e->x, e->y);
 					j = 0;
 					break;
 				}
@@ -288,15 +292,15 @@ computer(int v __unused)
 
 		}
 
-		/*
-		 * Skip to next semicolon or newline.  Semicolon
+		/* skip to next semicolon or newline.  Semicolon
 		 * means get new computer request; newline means
-		 * exit computer mode.
-		 */
-		while ((i = getchar()) != ';') {
-			if (i == EOF)
+		 * exit computer mode. */
+		while ((i = cgetc(0)) != ';')
+		{
+			if (i == '\0')
 				exit(1);
-			if (i == '\n') {
+			if (i == '\n')
+			{
 				ungetc(i, stdin);
 				return;
 			}
@@ -313,7 +317,12 @@ computer(int v __unused)
 */
 
 static int
-kalc(int tqx, int tqy, int tsx, int tsy, double *dist)
+kalc(tqx, tqy, tsx, tsy, dist)
+int	tqx;
+int	tqy;
+int	tsx;
+int	tsy;
+double	*dist;
 {
 	double			dx, dy;
 	double			quadsize;
@@ -338,7 +347,9 @@ kalc(int tqx, int tqy, int tsx, int tsy, double *dist)
 }
 
 static void
-prkalc(int course, double dist)
+prkalc(course, dist)
+int	course;
+double	dist;
 {
 	printf(": course %d  dist %.3f\n", course, dist);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ahdilbl.h,v 1.5 2011/10/01 15:59:00 chs Exp $	*/
+/*	$NetBSD: ahdilbl.h,v 1.3 2001/07/26 23:07:57 wiz Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Leo Weppelman.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -60,8 +65,8 @@ struct bootblock {
 						/* second-stage boot loader*/
 };
 
-#define BBGETLABEL(bb, dl)	memcpy((dl), (bb)->bb_label, sizeof (struct disklabel))
-#define BBSETLABEL(bb, dl)	memcpy((bb)->bb_label, (dl), sizeof (struct disklabel))
+#define	BBGETLABEL(bb, dl)	*(dl) = *((struct disklabel *)(bb)->bb_label)
+#define	BBSETLABEL(bb, dl)	*((struct disklabel *)(bb)->bb_label) = *(dl)
 
 /***** from src/sys/arch/atari/include/ahdilabel.h *************************/
 

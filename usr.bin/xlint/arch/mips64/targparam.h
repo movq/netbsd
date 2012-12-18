@@ -1,4 +1,4 @@
-/*	$NetBSD: targparam.h,v 1.4 2012/03/29 08:52:31 macallan Exp $	*/
+/*	$NetBSD: targparam.h,v 1.1 2006/08/25 23:35:04 matt Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -34,12 +34,9 @@
 /*
  * Machine-dependent target parameters for lint1.
  */
-#include "schar.h"
-#ifdef _LP64
+
 #include "lp64.h"
-#else
-#include "ilp32.h"
-#endif
+
 /*    
  * Should be set to 1 if the difference of two pointers is of type long
  * or the value of sizeof is of type unsigned long.  Note this MUST be
@@ -52,6 +49,6 @@
 
 #define	FLOAT_SIZE		(4 * CHAR_BIT)
 #define	DOUBLE_SIZE		(8 * CHAR_BIT)
-#define	LDOUBLE_SIZE		(16 * CHAR_BIT)
+#define	LDOUBLE_SIZE		(8 * CHAR_BIT)
 
 #define	ENUM_SIZE		(4 * CHAR_BIT)

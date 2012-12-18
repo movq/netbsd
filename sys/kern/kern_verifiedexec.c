@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_verifiedexec.c,v 1.129 2012/03/13 18:40:52 elad Exp $	*/
+/*	$NetBSD: kern_verifiedexec.c,v 1.111.4.1 2008/12/18 00:56:27 snj Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 Elad Efrat <elad@NetBSD.org>
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_verifiedexec.c,v 1.129 2012/03/13 18:40:52 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_verifiedexec.c,v 1.111.4.1 2008/12/18 00:56:27 snj Exp $");
 
 #include "opt_veriexec.h"
 
@@ -113,7 +113,7 @@ struct veriexec_table_entry {
 };
 
 static int veriexec_verbose;
-static int veriexec_strict;
+int veriexec_strict;
 static int veriexec_bypass = 1;
 
 static char *veriexec_fp_names = NULL;
@@ -145,52 +145,39 @@ static krwlock_t veriexec_op_lock;
  * Sysctl helper routine for Veriexec.
  */
 static int
-sysctl_kern_veriexec_algorithms(SYSCTLFN_ARGS)
+sysctl_kern_veriexec(SYSCTLFN_ARGS)
 {
-	size_t len;
-	int error;
-	const char *p;
-
-	if (newp != NULL)
-		return EPERM;
-
-	if (namelen != 0)
-		return EINVAL;
-
-	p = veriexec_fp_names == NULL ? "" : veriexec_fp_names;
-
-	len = strlen(p) + 1;
-
-	if (*oldlenp < len && oldp)
-		return ENOMEM;
-
-	if (oldp && (error = copyout(p, oldp, len)) != 0)
-		return error;
-
-	*oldlenp = len;
-	return 0;
-}
-
-static int
-sysctl_kern_veriexec_strict(SYSCTLFN_ARGS)
-{
+	int newval, error;
+	int *var = NULL, raise_only = 0;
 	struct sysctlnode node;
-	int error, newval;
 
 	node = *rnode;
+
+	if (strcmp(rnode->sysctl_name, "strict") == 0) {
+		raise_only = 1;
+		var = &veriexec_strict;
+	} else if (strcmp(rnode->sysctl_name, "algorithms") == 0) {
+		node.sysctl_data = veriexec_fp_names;
+		node.sysctl_size = strlen(veriexec_fp_names) + 1;
+		return (sysctl_lookup(SYSCTLFN_CALL(&node)));
+	} else {
+		return (EINVAL);
+	}
+
+	newval = *var;
+
 	node.sysctl_data = &newval;
-
-	newval = veriexec_strict;
 	error = sysctl_lookup(SYSCTLFN_CALL(&node));
-	if (error || newp == NULL)
-		return error;
+	if (error || newp == NULL) {
+		return (error);
+	}
 
-	if (newval < veriexec_strict)
-		return EPERM;
+	if (raise_only && (newval < *var))
+		return (EPERM);
 
-	veriexec_strict = newval;
+	*var = newval;
 
-	return 0;
+	return (error);
 }
 
 SYSCTL_SETUP(sysctl_kern_veriexec_setup, "sysctl kern.veriexec setup")
@@ -220,14 +207,14 @@ SYSCTL_SETUP(sysctl_kern_veriexec_setup, "sysctl kern.veriexec setup")
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "strict",
 		       SYSCTL_DESCR("Veriexec strict level"),
-		       sysctl_kern_veriexec_strict, 0, NULL, 0,
+		       sysctl_kern_veriexec, 0, NULL, 0,
 		       CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, &rnode, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRING, "algorithms",
 		       SYSCTL_DESCR("Veriexec supported hashing "
 				    "algorithms"),
-		       sysctl_kern_veriexec_algorithms, 0, NULL, 0,
+		       sysctl_kern_veriexec, 0, NULL, 0,
 		       CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, &rnode, &veriexec_count_node,
 		       CTLFLAG_PERMANENT,
@@ -315,30 +302,6 @@ veriexec_mountspecific_dtor(void *v)
 	kmem_free(vte, sizeof(*vte));
 }
 
-static int
-veriexec_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
-    void *arg0, void *arg1, void *arg2, void *arg3)
-{
-	int result;
-	enum kauth_system_req req;
-
-	if (action != KAUTH_SYSTEM_VERIEXEC)
-		return KAUTH_RESULT_DEFER;
-
-	result = KAUTH_RESULT_DEFER;
-	req = (enum kauth_system_req)arg0;
-
-	if (req == KAUTH_REQ_SYSTEM_VERIEXEC_MODIFY &&
-	    veriexec_strict > VERIEXEC_LEARNING) {
-		log(LOG_WARNING, "Veriexec: Strict mode, modifying "
-		    "tables not permitted.\n");
-
-		result = KAUTH_RESULT_DENY;
-	}
-
-	return result;
-}
-
 /*
  * Initialise Veriexec.
  */
@@ -362,10 +325,6 @@ veriexec_init(void)
 	    veriexec_mountspecific_dtor);
 	if (error)
 		panic("Veriexec: Can't create mountspecific key");
-
-	if (kauth_listen_scope(KAUTH_SCOPE_SYSTEM, veriexec_listener_cb,
-	    NULL) == NULL)
-		panic("Veriexec: Can't listen on system scope");
 
 	rw_init(&veriexec_op_lock);
 
@@ -439,11 +398,7 @@ veriexec_fp_calc(struct lwp *l, struct vnode *vp, int lock_state,
 	size_t resid, npages;
 	int error, do_perpage, pagen;
 
-	if (lock_state == VERIEXEC_UNLOCKED)
-		vn_lock(vp, LK_SHARED | LK_RETRY);
 	error = VOP_GETATTR(vp, &va, l->l_cred);
-	if (lock_state == VERIEXEC_UNLOCKED)
-		VOP_UNLOCK(vp);
 	if (error)
 		return (error);
 
@@ -674,8 +629,7 @@ veriexec_file_verify(struct lwp *l, struct vnode *vp, const u_char *name,
 			    name, NULL, REPORT_ALWAYS);
 			kmem_free(digest, vfe->ops->hash_len);
 			rw_exit(&vfe->lock);
-			if (lockstate == VERIEXEC_UNLOCKED)
-				rw_exit(&veriexec_op_lock);
+			rw_exit(&veriexec_op_lock);
 			return (error);
 		}
 
@@ -696,8 +650,7 @@ veriexec_file_verify(struct lwp *l, struct vnode *vp, const u_char *name,
 		/* IPS mode: Enforce access type. */
 		if (veriexec_strict >= VERIEXEC_IPS) {
 			rw_exit(&vfe->lock);
-			if (lockstate == VERIEXEC_UNLOCKED)
-				rw_exit(&veriexec_op_lock);
+			rw_exit(&veriexec_op_lock);
 			return (EPERM);
 		}
 	}
@@ -726,8 +679,7 @@ veriexec_file_verify(struct lwp *l, struct vnode *vp, const u_char *name,
 	case FINGERPRINT_NOTEVAL:
 		/* Should not happen. */
 		rw_exit(&vfe->lock);
-		if (lockstate == VERIEXEC_UNLOCKED)
-			rw_exit(&veriexec_op_lock);
+		rw_exit(&veriexec_op_lock);
 		veriexec_file_report(vfe, "Not-evaluated status "
 		    "post evaluation; inconsistency detected.", name,
 		    NULL, REPORT_ALWAYS|REPORT_PANIC);
@@ -757,8 +709,7 @@ veriexec_file_verify(struct lwp *l, struct vnode *vp, const u_char *name,
 	default:
 		/* Should never happen. */
 		rw_exit(&vfe->lock);
-		if (lockstate == VERIEXEC_UNLOCKED)
-			rw_exit(&veriexec_op_lock);
+		rw_exit(&veriexec_op_lock);
 		veriexec_file_report(vfe, "Invalid status "
 		    "post evaluation.", name, NULL, REPORT_ALWAYS|REPORT_PANIC);
         }
@@ -814,9 +765,8 @@ veriexec_page_verify(struct veriexec_file_entry *vfe, struct vm_page *pg,
 
 	ctx = kmem_alloc(vfe->ops->context_size, KM_SLEEP);
 	fp = kmem_alloc(vfe->ops->hash_len, KM_SLEEP);
-	kva = uvm_km_alloc(kernel_map, PAGE_SIZE, VM_PGCOLOR_BUCKET(pg),
-	    UVM_KMF_COLORMATCH | UVM_KMF_VAONLY | UVM_KMF_WAITVA);
-	pmap_kenter_pa(kva, VM_PAGE_TO_PHYS(pg), VM_PROT_READ, 0);
+	kva = uvm_km_alloc(kernel_map, PAGE_SIZE, 0, UVM_KMF_VAONLY | UVM_KMF_WAITVA);
+	pmap_kenter_pa(kva, VM_PAGE_TO_PHYS(pg), VM_PROT_READ);
 	pmap_update(pmap_kernel());
 
 	page_fp = (u_char *) vfe->page_fp + (vfe->ops->hash_len * idx);
@@ -903,7 +853,7 @@ veriexec_removechk(struct lwp *l, struct vnode *vp, const char *pathbuf)
 }
 
 /*
- * Veriexec rename policy.
+ * Veriexe rename policy.
  *
  * XXX: Once there's a way to hook after a successful rename, it would be
  * XXX: nice to update vfe->filename to the new name if it's not NULL and
@@ -963,12 +913,9 @@ veriexec_renamechk(struct lwp *l, struct vnode *fromvp, const char *fromname,
 			 * entries so we can destroy the object.
 			 */
 
-			if (vfe->filename_len > 0)
-				kmem_free(vfe->filename, vfe->filename_len);
-
+			kmem_free(vfe->filename, vfe->filename_len);
 			vfe->filename = NULL;
 			vfe->filename_len = 0;
-
 			rw_downgrade(&veriexec_op_lock);
 		}
 
@@ -1083,7 +1030,8 @@ veriexec_raw_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
 	switch (action) {
 	case KAUTH_DEVICE_RAWIO_SPEC: {
 		struct vnode *vp, *bvp;
-		int error;
+		dev_t dev;
+		int d_type;
 
 		if (req == KAUTH_REQ_DEVICE_RAWIO_SPEC_READ) {
 			result = KAUTH_RESULT_DEFER;
@@ -1093,22 +1041,60 @@ veriexec_raw_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
 		vp = arg1;
 		KASSERT(vp != NULL);
 
+		dev = vp->v_rdev;
+		d_type = D_OTHER;
+		bvp = NULL;
+
 		/* Handle /dev/mem and /dev/kmem. */
-		if (iskmemvp(vp)) {
+		if ((vp->v_type == VCHR) && iskmemdev(dev)) {
 			if (veriexec_strict < VERIEXEC_IPS)
 				result = KAUTH_RESULT_DEFER;
 
 			break;
 		}
 
-		error = rawdev_mounted(vp, &bvp);
-		if (error == EINVAL) {
+		switch (vp->v_type) {
+		case VCHR: {
+			const struct cdevsw *cdev;
+
+			cdev = cdevsw_lookup(dev);
+			if (cdev != NULL) {
+				dev_t blkdev;
+
+				blkdev = devsw_chr2blk(dev);
+				if (blkdev != NODEV) {
+					vfinddev(blkdev, VBLK, &bvp);
+					if (bvp != NULL)
+						d_type = cdev->d_flag &
+						    D_TYPEMASK;
+				}
+			}
+
+			break;
+			}
+		case VBLK: {
+			const struct bdevsw *bdev;
+
+			bdev = bdevsw_lookup(dev);
+			if (bdev != NULL)
+				d_type = bdev->d_flag & D_TYPEMASK;
+
+			bvp = vp;
+
+			break;
+			}
+		default:
+			result = KAUTH_RESULT_DEFER;
+			break;
+		}
+
+		if (d_type != D_DISK) {
 			result = KAUTH_RESULT_DEFER;
 			break;
 		}
 
 		/*
-		 * XXX: See vfs_mountedon() comment in rawdev_mounted().
+		 * XXX: See vfs_mountedon() comment in secmodel/bsd44.
 		 */
 		vte = veriexec_table_lookup(bvp->v_mount);
 		if (vte == NULL) {
@@ -1195,19 +1181,20 @@ veriexec_file_add(struct lwp *l, prop_dictionary_t dict)
 {
 	struct veriexec_table_entry *vte;
 	struct veriexec_file_entry *vfe = NULL, *hh;
-	struct vnode *vp;
+	struct nameidata nid;
 	const char *file, *fp_type;
 	int error;
 
 	if (!prop_dictionary_get_cstring_nocopy(dict, "file", &file))
 		return (EINVAL);
 
-	error = namei_simple_kernel(file, NSM_FOLLOW_NOEMULROOT, &vp);
+	NDINIT(&nid, LOOKUP, FOLLOW, UIO_SYSSPACE, file);
+	error = namei(&nid);
 	if (error)
 		return (error);
 
 	/* Add only regular files. */
-	if (vp->v_type != VREG) {
+	if (nid.ni_vp->v_type != VREG) {
 		log(LOG_ERR, "Veriexec: Not adding `%s': Not a regular file.\n",
 		    file);
 
@@ -1217,8 +1204,6 @@ veriexec_file_add(struct lwp *l, prop_dictionary_t dict)
 	}
 
 	vfe = kmem_zalloc(sizeof(*vfe), KM_SLEEP);
-
-	rw_init(&vfe->lock);
 
 	/* Lookup fingerprint hashing algorithm. */
 	fp_type = prop_string_cstring_nocopy(prop_dictionary_get(dict,
@@ -1252,7 +1237,7 @@ veriexec_file_add(struct lwp *l, prop_dictionary_t dict)
 	 * See if we already have an entry for this file. If we do, then
 	 * let the user know and silently pretend to succeed.
 	 */
-	hh = veriexec_get(vp);
+	hh = veriexec_get(nid.ni_vp);
 	if (hh != NULL) {
 		bool fp_mismatch;
 
@@ -1308,14 +1293,15 @@ veriexec_file_add(struct lwp *l, prop_dictionary_t dict)
 	vfe->page_fp_status = PAGE_FP_NONE;
 	vfe->npages = 0;
 	vfe->last_page_size = 0;
+	rw_init(&vfe->lock);
 
-	vte = veriexec_table_lookup(vp->v_mount);
+	vte = veriexec_table_lookup(nid.ni_vp->v_mount);
 	if (vte == NULL)
-		vte = veriexec_table_add(l, vp->v_mount);
+		vte = veriexec_table_add(l, nid.ni_vp->v_mount);
 
 	/* XXX if we bail below this, we might want to gc newly created vtes. */
 
-	error = fileassoc_add(vp, veriexec_hook, vfe);
+	error = fileassoc_add(nid.ni_vp, veriexec_hook, vfe);
 	if (error)
 		goto unlock_out;
 
@@ -1327,7 +1313,7 @@ veriexec_file_add(struct lwp *l, prop_dictionary_t dict)
 
 		digest = kmem_zalloc(vfe->ops->hash_len, KM_SLEEP);
 
-		error = veriexec_fp_calc(l, vp, VERIEXEC_UNLOCKED,
+		error = veriexec_fp_calc(l, nid.ni_vp, VERIEXEC_UNLOCKED,
 					 vfe, digest);
 		if (error) {
 			kmem_free(digest, vfe->ops->hash_len);
@@ -1349,7 +1335,7 @@ veriexec_file_add(struct lwp *l, prop_dictionary_t dict)
 	rw_exit(&veriexec_op_lock);
 
   out:
-	vrele(vp);
+	vrele(nid.ni_vp);
 	if (error)
 		veriexec_file_free(vfe);
 
@@ -1549,21 +1535,12 @@ veriexec_file_dump(struct veriexec_file_entry *vfe, prop_array_t entries)
 int
 veriexec_dump(struct lwp *l, prop_array_t rarray)
 {
-	struct mount *mp, *nmp;
+	struct mount *mp;
 
-	mutex_enter(&mountlist_lock);
-	for (mp = CIRCLEQ_FIRST(&mountlist); mp != (void *)&mountlist;
-	    mp = nmp) {
-		/* If it fails, the file-system is [being] unmounted. */
-		if (vfs_busy(mp, &nmp) != 0)
-			continue;
-
+	CIRCLEQ_FOREACH(mp, &mountlist, mnt_list) {
 		fileassoc_table_run(mp, veriexec_hook,
 		    (fileassoc_cb_t)veriexec_file_dump, rarray);
-
-		vfs_unbusy(mp, false, &nmp);
 	}
-	mutex_exit(&mountlist_lock);
 
 	return (0);
 }
@@ -1571,25 +1548,16 @@ veriexec_dump(struct lwp *l, prop_array_t rarray)
 int
 veriexec_flush(struct lwp *l)
 {
-	struct mount *mp, *nmp;
+	struct mount *mp;
 	int error = 0;
 
-	mutex_enter(&mountlist_lock);
-	for (mp = CIRCLEQ_FIRST(&mountlist); mp != (void *)&mountlist;
-	    mp = nmp) {
+	CIRCLEQ_FOREACH(mp, &mountlist, mnt_list) {
 		int lerror;
-
-		/* If it fails, the file-system is [being] unmounted. */
-		if (vfs_busy(mp, &nmp) != 0)
-			continue;
 
 		lerror = veriexec_table_delete(l, mp);
 		if (lerror && lerror != ENOENT)
 			error = lerror;
-
-		vfs_unbusy(mp, false, &nmp);
 	}
-	mutex_exit(&mountlist_lock);
 
 	return (error);
 }

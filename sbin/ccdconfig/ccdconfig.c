@@ -1,4 +1,4 @@
-/*	$NetBSD: ccdconfig.c,v 1.51 2011/08/27 16:29:51 joerg Exp $	*/
+/*	$NetBSD: ccdconfig.c,v 1.48 2008/07/20 01:20:21 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #ifndef lint
 __COPYRIGHT("@(#) Copyright (c) 1996, 1997\
  The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: ccdconfig.c,v 1.51 2011/08/27 16:29:51 joerg Exp $");
+__RCSID("$NetBSD: ccdconfig.c,v 1.48 2008/07/20 01:20:21 lukem Exp $");
 #endif
 
 #include <sys/param.h>
@@ -68,7 +68,7 @@ static	const char *ccdconf = _PATH_CCDCONF;
 static	char *core;
 static	char *kernel;
 
-static struct	flagval {
+struct	flagval {
 	const char *fv_flag;
 	int	fv_val;
 } flagvaltab[] = {
@@ -102,7 +102,7 @@ static	int flags_to_val(char *);
 static	int pathtounit(char *, int *);
 static	void print_ccd_info(struct ccd_softc *, kvm_t *);
 static	char *resolve_ccdname(char *);
-__dead static	void usage(void);
+static	void usage(void);
 
 int
 main(int argc, char *argv[])
@@ -199,7 +199,6 @@ do_single(int argc, char **argv, int action)
 	struct ccd_ioctl ccio;
 	char *ccd, *cp, *cp2, **disks;
 	int noflags = 0, i, ileave, flags, j;
-	unsigned int ui;
 
 	flags = 0;
 	memset(&ccio, 0, sizeof(ccio));
@@ -274,10 +273,10 @@ do_single(int argc, char **argv, int action)
 		free(ccd);
 		return (1);
 	}
-	for (ui = 0; argc != 0; ) {
+	for (i = 0; argc != 0; ) {
 		cp = *argv++; --argc;
 		if ((j = checkdev(cp)) == 0)
-			disks[ui++] = cp;
+			disks[i++] = cp;
 		else {
 			warnx("%s: %s", cp, strerror(j));
 			free(ccd);
@@ -288,7 +287,7 @@ do_single(int argc, char **argv, int action)
 
 	/* Fill in the ccio. */
 	ccio.ccio_disks = disks;
-	ccio.ccio_ndisks = ui;
+	ccio.ccio_ndisks = i;
 	ccio.ccio_ileave = ileave;
 	ccio.ccio_flags = flags;
 
@@ -301,14 +300,14 @@ do_single(int argc, char **argv, int action)
 	if (verbose) {
 		printf("ccd%d: %d components ", ccio.ccio_unit,
 		    ccio.ccio_ndisks);
-		for (ui = 0; ui < ccio.ccio_ndisks; ++ui) {
-			if ((cp2 = strrchr(disks[ui], '/')) != NULL)
+		for (i = 0; i < ccio.ccio_ndisks; ++i) {
+			if ((cp2 = strrchr(disks[i], '/')) != NULL)
 				++cp2;
 			else
-				cp2 = disks[ui];
+				cp2 = disks[i];
 			printf("%c%s%c",
-			    ui == 0 ? '(' : ' ', cp2,
-			    ui == ccio.ccio_ndisks - 1 ? ')' : ',');
+			    i == 0 ? '(' : ' ', cp2,
+			    i == ccio.ccio_ndisks - 1 ? ')' : ',');
 		}
 		printf(", %ld blocks ", (long)ccio.ccio_size);
 		if (ccio.ccio_ileave != 0)
@@ -471,11 +470,9 @@ do_io(char *path, u_long cmd, struct ccd_ioctl *cciop)
 			cp = "unknown";
 		}
 		warn("ioctl (%s): %s", cp, path);
-		(void)close(fd);
 		return (1);
 	}
 
-	(void)close(fd);
 	return (0);
 }
 
@@ -546,7 +543,7 @@ dump_ccd(int argc, char **argv, int action)
 		free(vcs);
 		KVM_ABORT(kd, "can't find pointer to configuration data");
 	}
-	if ((size_t)kvm_read(kd, (u_long)kcs, vcs, readsize) != readsize) {
+	if (kvm_read(kd, (u_long)kcs, vcs, readsize) != readsize) {
 		free(vcs);
 		KVM_ABORT(kd, "can't read configuration data");
 	}
@@ -615,7 +612,7 @@ print_ccd_info(struct ccd_softc *cs, kvm_t *kd)
 	struct ccdcinfo *cip;
 	size_t readsize;
 	char path[MAXPATHLEN];
-	unsigned int i;
+	int i;
 
 	if (header_printed == 0 && verbose) {
 		printf("# ccd\t\tileave\tflags\tcompnent devices\n");
@@ -636,7 +633,7 @@ print_ccd_info(struct ccd_softc *cs, kvm_t *kd)
 	fflush(stdout);
 
 	/* Read in the component info. */
-	if ((size_t)kvm_read(kd, (u_long)cs->sc_cinfo, (void *)cip,
+	if (kvm_read(kd, (u_long)cs->sc_cinfo, (void *)cip,
 	    readsize) != readsize) {
 		printf("\n");
 		warnx("can't read component info");
@@ -646,7 +643,7 @@ print_ccd_info(struct ccd_softc *cs, kvm_t *kd)
 
 	/* Read component pathname and display component info. */
 	for (i = 0; i < cs->sc_nccdisks; ++i) {
-		if ((size_t)kvm_read(kd, (u_long)cip[i].ci_path, (void *)path,
+		if (kvm_read(kd, (u_long)cip[i].ci_path, (void *)path,
 		    cip[i].ci_pathlen) != cip[i].ci_pathlen) {
 			printf("\n");
 			warnx("can't read component pathname");

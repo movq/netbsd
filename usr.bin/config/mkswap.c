@@ -1,4 +1,4 @@
-/*	$NetBSD: mkswap.c,v 1.7 2009/01/20 18:20:48 drochner Exp $	*/
+/*	$NetBSD: mkswap.c,v 1.4 2007/12/12 00:03:34 lukem Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -114,7 +114,7 @@ mkoneswap(struct config *cf)
 		    cf->cf_root->nv_str);
 	fprintf(fp, "const char *rootspec = %s;\n", specinfo);
 	fprintf(fp, "dev_t\trootdev = %s;\t/* %s */\n\n",
-		mkdevstr(nv->nv_num),
+		mkdevstr(nv->nv_int),
 		nv->nv_str == s_qmark ? "wildcarded" : nv->nv_str);
 
 	/*
@@ -127,14 +127,20 @@ mkoneswap(struct config *cf)
 		snprintf(specinfo, sizeof(specinfo), "\"%s\"", cf->cf_dump->nv_str);
 	fprintf(fp, "const char *dumpspec = %s;\n", specinfo);
 	fprintf(fp, "dev_t\tdumpdev = %s;\t/* %s */\n\n",
-		nv ? mkdevstr(nv->nv_num) : "NODEV",
+		nv ? mkdevstr(nv->nv_int) : "NODEV",
 		nv ? nv->nv_str : "unspecified");
 
 	/*
 	 * Emit the root file system.
 	 */
-	fprintf(fp, "const char *rootfstype = \"%s\";\n",
-		cf->cf_fstype ? cf->cf_fstype : "?");
+	if (cf->cf_fstype == NULL)
+		strlcpy(specinfo, "NULL", sizeof(specinfo));
+	else {
+		snprintf(specinfo, sizeof(specinfo), "%s_mountroot",
+		    cf->cf_fstype);
+		fprintf(fp, "int %s(void);\n", specinfo);
+	}
+	fprintf(fp, "int (*mountroot)(void) = %s;\n", specinfo);
 
 	fflush(fp);
 	if (ferror(fp))

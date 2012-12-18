@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32.h,v 1.96 2012/10/12 19:45:47 christos Exp $	*/
+/*	$NetBSD: netbsd32.h,v 1.77.4.1 2008/11/25 17:31:26 snj Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001, 2008 Matthew R. Green
@@ -36,7 +36,6 @@
  * NetBSD 32-bit compatibility module.
  */
 
-#include <sys/param.h> /* precautionary upon removal from ucred.h */
 #include <sys/systm.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
@@ -45,7 +44,6 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/ucontext.h>
-#include <sys/ucred.h>
 #include <compat/sys/ucontext.h>
 #include <compat/sys/mount.h>
 
@@ -55,7 +53,6 @@
 
 typedef int32_t netbsd32_long;
 typedef uint32_t netbsd32_u_long;
-typedef int64_t netbsd32_quad;
 
 typedef uint32_t netbsd32_clock_t;
 typedef uint32_t netbsd32_size_t;
@@ -65,10 +62,10 @@ typedef int32_t netbsd32_key_t;
 typedef int32_t netbsd32_intptr_t;
 typedef uint32_t netbsd32_uintptr_t;
 
-/* netbsd32_[u]int64 are machine dependent and defined below */
+/* netbsd32_[u]int64 are machine dependant and defined below */
 
 /*
- * machine dependant section; must define:
+ * machine depedant section; must define:
  *	netbsd32_pointer_t
  *		- 32-bit pointer type, normally uint32_t but can be int32_t
  *		  for platforms which rely on sign-extension of pointers
@@ -88,7 +85,7 @@ typedef uint32_t netbsd32_uintptr_t;
  *	char netbsd32_esigcode[], netbsd32_sigcode[]
  *		- the above are abvious
  *
- * pull in the netbsd32 machine dependent header, that may help with the
+ * pull in the netbsd32 machine dependant header, that may help with the
  * above, or it may be provided via the MD layer itself.
  */
 #include <machine/netbsd32_machdep.h>
@@ -151,10 +148,6 @@ typedef netbsd32_pointer_t netbsd32_lwpidp;
 typedef netbsd32_pointer_t netbsd32_ucontextp;
 typedef netbsd32_pointer_t netbsd32_caddr_t;
 typedef netbsd32_pointer_t netbsd32_lwpctlp;
-typedef netbsd32_pointer_t netbsd32_posix_spawn_file_actionsp;
-typedef netbsd32_pointer_t netbsd32_posix_spawnattrp;
-typedef netbsd32_pointer_t netbsd32_posix_spawn_file_actions_entryp;
-typedef netbsd32_pointer_t netbsd32_pid_tp;
 
 /*
  * now, the compatibility structures and their fake pointer types.
@@ -164,7 +157,6 @@ typedef netbsd32_pointer_t netbsd32_pid_tp;
 typedef netbsd32_pointer_t netbsd32_fd_setp_t;
 typedef netbsd32_intptr_t netbsd32_semid_t;
 typedef netbsd32_pointer_t netbsd32_semidp_t;
-typedef netbsd32_uint64 netbsd32_dev_t;
 
 /* from <sys/uio.h> */
 typedef netbsd32_pointer_t netbsd32_iovecp_t;
@@ -175,31 +167,18 @@ struct netbsd32_iovec {
 
 /* from <sys/time.h> */
 typedef int32_t netbsd32_timer_t;
-typedef	int32_t netbsd32_time50_t;
-typedef	netbsd32_int64 netbsd32_time_t;
+typedef	int32_t netbsd32_time_t;
 typedef netbsd32_pointer_t netbsd32_timerp_t;
-
-typedef netbsd32_pointer_t netbsd32_timespec50p_t;
-struct netbsd32_timespec50 {
-	netbsd32_time50_t tv_sec;			/* seconds */
-	netbsd32_long	tv_nsec;	/* and nanoseconds */
-};
 
 typedef netbsd32_pointer_t netbsd32_timespecp_t;
 struct netbsd32_timespec {
-	netbsd32_time_t tv_sec;			/* seconds */
+	netbsd32_time_t	tv_sec;			/* seconds */
 	netbsd32_long	tv_nsec;	/* and nanoseconds */
-};
-
-typedef netbsd32_pointer_t netbsd32_timeval50p_t;
-struct netbsd32_timeval50 {
-	netbsd32_time50_t	tv_sec;		/* seconds */
-	netbsd32_long		tv_usec;	/* and microseconds */
 };
 
 typedef netbsd32_pointer_t netbsd32_timevalp_t;
 struct netbsd32_timeval {
-	netbsd32_time_t	tv_sec;		/* seconds */
+	netbsd32_long	tv_sec;		/* seconds */
 	netbsd32_long	tv_usec;	/* and microseconds */
 };
 
@@ -209,22 +188,10 @@ struct netbsd32_timezone {
 	int	tz_dsttime;	/* type of dst correction */
 };
 
-typedef netbsd32_pointer_t netbsd32_itimerval50p_t;
-struct	netbsd32_itimerval50 {
-	struct	netbsd32_timeval50 it_interval;	/* timer interval */
-	struct	netbsd32_timeval50 it_value;	/* current value */
-};
-
 typedef netbsd32_pointer_t netbsd32_itimervalp_t;
 struct	netbsd32_itimerval {
 	struct	netbsd32_timeval it_interval;	/* timer interval */
 	struct	netbsd32_timeval it_value;	/* current value */
-};
-
-typedef netbsd32_pointer_t netbsd32_itimerspec50p_t;
-struct netbsd32_itimerspec50 {
-	struct netbsd32_timespec50 it_interval;
-	struct netbsd32_timespec50 it_value;
 };
 
 typedef netbsd32_pointer_t netbsd32_itimerspecp_t;
@@ -258,102 +225,10 @@ struct netbsd32_statfs {
 	char	f_mntfromname[MNAMELEN];  /* mounted file system */
 };
 
-struct netbsd32_export_args30 {
-	int	ex_flags;		/* export related flags */
-	uid_t	ex_root;		/* mapping for root uid */
-	struct	uucred ex_anon;		/* mapping for anonymous user */
-	netbsd32_pointer_t ex_addr;	/* net address to which exported */
-	int	ex_addrlen;		/* and the net address length */
-	netbsd32_pointer_t ex_mask;	/* mask of valid bits in saddr */
-	int	ex_masklen;		/* and the smask length */
-	netbsd32_charp ex_indexfile;	/* index file for WebNFS URLs */ 
-};
-
 /* from <sys/poll.h> */
 typedef netbsd32_pointer_t netbsd32_pollfdp_t;
 
-/* from <sys/quotactl.h> */
-typedef netbsd32_pointer_t netbsd32_quotactlargsp_t;
-struct netbsd32_quotactlargs {
-	unsigned qc_op;
-	union {
-		struct {
-			netbsd32_pointer_t qc_info;
-		} stat;
-		struct {
-			int qc_idtype;
-			netbsd32_pointer_t qc_info;
-		} idtypestat;
-		struct {
-			int qc_objtype;
-			netbsd32_pointer_t qc_info;
-		} objtypestat;
-		struct {
-			netbsd32_pointer_t qc_key;
-			netbsd32_pointer_t qc_val;
-		} get;
-		struct {
-			netbsd32_pointer_t qc_key;
-			netbsd32_pointer_t qc_val;
-		} put;
-		struct {
-			netbsd32_pointer_t qc_key;
-		} delete;
-		struct {
-			netbsd32_pointer_t qc_cursor;
-		} cursoropen;
-		struct {
-			netbsd32_pointer_t qc_cursor;
-		} cursorclose;
-		struct {
-			netbsd32_pointer_t qc_cursor;
-			int qc_idtype;
-		} cursorskipidtype;
-		struct {
-			netbsd32_pointer_t qc_cursor;
-			netbsd32_pointer_t qc_keys;
-			netbsd32_pointer_t qc_vals;
-			unsigned qc_maxnum;
-			netbsd32_pointer_t qc_ret;
-		} cursorget;
-		struct {
-			netbsd32_pointer_t qc_cursor;
-			netbsd32_pointer_t qc_ret;
-		} cursoratend;
-		struct {
-			netbsd32_pointer_t qc_cursor;
-		} cursorrewind;
-		struct {
-			int qc_idtype;
-			netbsd32_pointer_t qc_quotafile;
-		} quotaon;
-		struct {
-			int qc_idtype;
-		} quotaoff;
-	} u;
-};
-
 /* from <sys/resource.h> */
-typedef netbsd32_pointer_t netbsd32_rusage50p_t;
-struct	netbsd32_rusage50 {
-	struct netbsd32_timeval50 ru_utime;/* user time used */
-	struct netbsd32_timeval50 ru_stime;/* system time used */
-	netbsd32_long	ru_maxrss;	/* max resident set size */
-	netbsd32_long	ru_ixrss;	/* integral shared memory size */
-	netbsd32_long	ru_idrss;	/* integral unshared data " */
-	netbsd32_long	ru_isrss;	/* integral unshared stack " */
-	netbsd32_long	ru_minflt;	/* page reclaims */
-	netbsd32_long	ru_majflt;	/* page faults */
-	netbsd32_long	ru_nswap;	/* swaps */
-	netbsd32_long	ru_inblock;	/* block input operations */
-	netbsd32_long	ru_oublock;	/* block output operations */
-	netbsd32_long	ru_msgsnd;	/* messages sent */
-	netbsd32_long	ru_msgrcv;	/* messages received */
-	netbsd32_long	ru_nsignals;	/* signals received */
-	netbsd32_long	ru_nvcsw;	/* voluntary context switches */
-	netbsd32_long	ru_nivcsw;	/* involuntary " */
-};
-
 typedef netbsd32_pointer_t netbsd32_rusagep_t;
 struct	netbsd32_rusage {
 	struct netbsd32_timeval ru_utime;/* user time used */
@@ -415,10 +290,10 @@ struct netbsd32_msg {
 	short	msg_spot;		/* location of start of msg in buffer */
 };
 
+typedef netbsd32_pointer_t netbsd32_msqid_dsp_t;
 typedef uint32_t netbsd32_msgqnum_t;
 typedef netbsd32_size_t netbsd32_msglen_t;
 
-typedef netbsd32_pointer_t netbsd32_msqid_dsp_t;
 struct netbsd32_msqid_ds {
 	struct netbsd32_ipc_perm msg_perm;	/* operation permission strucure */
 	netbsd32_msgqnum_t	msg_qnum;	/* number of messages in the queue */
@@ -437,27 +312,6 @@ struct netbsd32_msqid_ds {
 	netbsd32_msgp_t	_msg_last;	/* last message in the queue */
 	netbsd32_msglen_t _msg_cbytes;	/* # of bytes currently in queue */
 };
-typedef netbsd32_pointer_t netbsd32_msqid_ds50p_t;
-struct netbsd32_msqid_ds50 {
-	struct netbsd32_ipc_perm msg_perm;	/* operation permission strucure */
-	netbsd32_msgqnum_t	msg_qnum;	/* number of messages in the queue */
-	netbsd32_msglen_t	msg_qbytes;	/* max # of bytes in the queue */
-	pid_t		msg_lspid;	/* process ID of last msgsend() */
-	pid_t		msg_lrpid;	/* process ID of last msgrcv() */
-	int32_t		msg_stime;	/* time of last msgsend() */
-	int32_t		msg_rtime;	/* time of last msgrcv() */
-	int32_t		msg_ctime;	/* time of last change */
-
-	/*
-	 * These members are private and used only in the internal
-	 * implementation of this interface.
-	 */
-	netbsd32_msgp_t _msg_first;	/* first message in the queue */
-	netbsd32_msgp_t	_msg_last;	/* last message in the queue */
-	netbsd32_msglen_t _msg_cbytes;	/* # of bytes currently in queue */
-};
-
-typedef netbsd32_pointer_t netbsd32_msqid_ds14p_t;
 struct netbsd32_msqid_ds14 {
 	struct	netbsd32_ipc_perm14 msg_perm;	/* msg queue permission bits */
 	netbsd32_msgp_t	msg_first;	/* first message in the queue */
@@ -467,14 +321,21 @@ struct netbsd32_msqid_ds14 {
 	netbsd32_u_long	msg_qbytes;	/* max # of bytes on the queue */
 	pid_t msg_lspid;		/* pid of last msgsnd() */
 	pid_t msg_lrpid;		/* pid of last msgrcv() */
-	int32_t		msg_stime;	/* time of last msgsnd() */
+	netbsd32_time_t	msg_stime;	/* time of last msgsnd() */
 	netbsd32_long	msg_pad1;
-	int32_t		msg_rtime;	/* time of last msgrcv() */
+	netbsd32_time_t	msg_rtime;	/* time of last msgrcv() */
 	netbsd32_long	msg_pad2;
-	int32_t		msg_ctime;	/* time of last msgctl() */
+	netbsd32_time_t	msg_ctime;	/* time of last msgctl() */
 	netbsd32_long	msg_pad3;
 	netbsd32_long	msg_pad4[4];
 };
+
+/* from  <sys/sa.h> */
+typedef netbsd32_pointer_t netbsd32_sa_upcall_t;
+typedef netbsd32_pointer_t netbsd32_sa_upcallp_t;
+
+void    netbsd32_cpu_upcall(struct lwp *, int, int, int, void *, void *,
+    void *, sa_upcall_t);
 
 /* from <sys/sem.h> */
 typedef netbsd32_pointer_t netbsd32_semp_t;
@@ -493,21 +354,6 @@ struct netbsd32_semid_ds {
 	netbsd32_semp_t	_sem_base;	/* pointer to first semaphore in set */
 };
 
-typedef netbsd32_pointer_t netbsd32_semid_ds50p_t;
-struct netbsd32_semid_ds50 {
-	struct netbsd32_ipc_perm	sem_perm;/* operation permission struct */
-	unsigned short	sem_nsems;	/* number of sems in set */
-	int32_t		sem_otime;	/* last operation time */
-	int32_t		sem_ctime;	/* last change time */
-
-	/*
-	 * These members are private and used only in the internal
-	 * implementation of this interface.
-	 */
-	netbsd32_semp_t	_sem_base;	/* pointer to first semaphore in set */
-};
-
-typedef netbsd32_pointer_t netbsd32_semid_ds14p_t;
 struct netbsd32_semid_ds14 {
 	struct netbsd32_ipc_perm14	sem_perm;/* operation permission struct */
 	netbsd32_semp_t	sem_base;	/* pointer to first semaphore in set */
@@ -517,8 +363,8 @@ struct netbsd32_semid_ds14 {
 	netbsd32_time_t	sem_ctime;	/* last change time */
 					/* Times measured in secs since */
 					/* 00:00:00 GMT, Jan. 1, 1970 */
-	int32_t		sem_pad2;	/* SVABI/386 says I need this here */
-	int32_t		sem_pad3[4];	/* SVABI/386 says I need this here */
+	netbsd32_long	sem_pad2;	/* SVABI/386 says I need this here */
+	netbsd32_long	sem_pad3[4];	/* SVABI/386 says I need this here */
 };
 
 typedef uint32_t netbsd32_semunu_t;
@@ -526,13 +372,6 @@ typedef netbsd32_pointer_t netbsd32_semunp_t;
 union netbsd32_semun {
 	int	val;			/* value for SETVAL */
 	netbsd32_semid_dsp_t buf;	/* buffer for IPC_STAT & IPC_SET */
-	netbsd32_u_shortp array;	/* array for GETALL & SETALL */
-};
-
-typedef netbsd32_pointer_t netbsd32_semun50p_t;
-union netbsd32_semun50 {
-	int	val;			/* value for SETVAL */
-	netbsd32_semid_ds50p_t buf;	/* buffer for IPC_STAT & IPC_SET */
 	netbsd32_u_shortp array;	/* array for GETALL & SETALL */
 };
 
@@ -557,29 +396,15 @@ struct netbsd32_shmid_ds {
 	netbsd32_voidp	_shm_internal;	/* sysv stupidity */
 };
 
-typedef netbsd32_pointer_t netbsd32_shmid_ds50p_t;
-struct netbsd32_shmid_ds50 {
-	struct netbsd32_ipc_perm shm_perm; /* operation permission structure */
-	netbsd32_size_t	shm_segsz;	/* size of segment in bytes */
-	pid_t		shm_lpid;	/* process ID of last shm op */
-	pid_t		shm_cpid;	/* process ID of creator */
-	shmatt_t	shm_nattch;	/* number of current attaches */
-	int32_t		shm_atime;	/* time of last shmat() */
-	int32_t		shm_dtime;	/* time of last shmdt() */
-	int32_t		shm_ctime;	/* time of last change by shmctl() */
-	netbsd32_voidp	_shm_internal;	/* sysv stupidity */
-};
-
-typedef netbsd32_pointer_t netbsd32_shmid_ds14p_t;
 struct netbsd32_shmid_ds14 {
 	struct netbsd32_ipc_perm14 shm_perm; /* operation permission structure */
 	int		shm_segsz;	/* size of segment in bytes */
 	pid_t		shm_lpid;	/* process ID of last shm op */
 	pid_t		shm_cpid;	/* process ID of creator */
 	short		shm_nattch;	/* number of current attaches */
-	int32_t		shm_atime;	/* time of last shmat() */
-	int32_t		shm_dtime;	/* time of last shmdt() */
-	int32_t		shm_ctime;	/* time of last change by shmctl() */
+	netbsd32_time_t	shm_atime;	/* time of last shmat() */
+	netbsd32_time_t	shm_dtime;	/* time of last shmdt() */
+	netbsd32_time_t	shm_ctime;	/* time of last change by shmctl() */
 	netbsd32_voidp	_shm_internal;	/* sysv stupidity */
 };
 
@@ -641,7 +466,6 @@ typedef netbsd32_pointer_t netbsd32_stackp_t;
 /* from <sys/socket.h> */
 typedef netbsd32_pointer_t netbsd32_sockaddrp_t;
 typedef netbsd32_pointer_t netbsd32_osockaddrp_t;
-typedef netbsd32_pointer_t netbsd32_socklenp_t;
 
 typedef netbsd32_pointer_t netbsd32_msghdrp_t;
 struct netbsd32_msghdr {
@@ -667,16 +491,16 @@ struct netbsd32_omsghdr {
 /* from <sys/stat.h> */
 typedef netbsd32_pointer_t netbsd32_stat12p_t;
 struct netbsd32_stat12 {		/* NetBSD-1.2 stat struct */
-	uint32_t	st_dev;		/* inode's device */
+	dev_t		st_dev;		/* inode's device */
 	uint32_t	st_ino;		/* inode's number */
 	uint16_t	st_mode;	/* inode protection mode */
 	uint16_t	st_nlink;	/* number of hard links */
 	uid_t		st_uid;		/* user ID of the file's owner */
 	gid_t		st_gid;		/* group ID of the file's group */
-	uint32_t	st_rdev;	/* device type */
-	struct netbsd32_timespec50 st_atimespec;/* time of last access */
-	struct netbsd32_timespec50 st_mtimespec;/* time of last data modification */
-	struct netbsd32_timespec50 st_ctimespec;/* time of last file status change */
+	dev_t		st_rdev;	/* device type */
+	struct netbsd32_timespec st_atimespec;/* time of last access */
+	struct netbsd32_timespec st_mtimespec;/* time of last data modification */
+	struct netbsd32_timespec st_ctimespec;/* time of last file status change */
 	netbsd32_int64	st_size;	/* file size, in bytes */
 	netbsd32_int64	st_blocks;	/* blocks allocated for file */
 	uint32_t	st_blksize;	/* optimal blocksize for I/O */
@@ -696,9 +520,9 @@ struct netbsd32_stat43 {		/* BSD-4.3 stat struct */
 	uint16_t  st_gid;		/* group ID of the file's group */
 	uint16_t  st_rdev;		/* device type */
 	int32_t	  st_size;		/* file size, in bytes */
-	struct netbsd32_timespec50 st_atimespec;/* time of last access */
-	struct netbsd32_timespec50 st_mtimespec;/* time of last data modification */
-	struct netbsd32_timespec50 st_ctimespec;/* time of last file status change */
+	struct netbsd32_timespec st_atimespec;/* time of last access */
+	struct netbsd32_timespec st_mtimespec;/* time of last data modification */
+	struct netbsd32_timespec st_ctimespec;/* time of last file status change */
 	int32_t	  st_blksize;		/* optimal blocksize for I/O */
 	int32_t	  st_blocks;		/* blocks allocated for file */
 	uint32_t  st_flags;		/* user defined flags for file */
@@ -706,56 +530,35 @@ struct netbsd32_stat43 {		/* BSD-4.3 stat struct */
 };
 typedef netbsd32_pointer_t netbsd32_stat13p_t;
 struct netbsd32_stat13 {
-	uint32_t  st_dev;		/* inode's device */
+	dev_t	  st_dev;		/* inode's device */
 	uint32_t  st_ino;		/* inode's number */
 	mode_t	  st_mode;		/* inode protection mode */
 	nlink_t	  st_nlink;		/* number of hard links */
 	uid_t	  st_uid;		/* user ID of the file's owner */
 	gid_t	  st_gid;		/* group ID of the file's group */
-	uint32_t  st_rdev;		/* device type */
-	struct netbsd32_timespec50 st_atimespec;/* time of last access */
-	struct netbsd32_timespec50 st_mtimespec;/* time of last data modification */
-	struct netbsd32_timespec50 st_ctimespec;/* time of last file status change */
+	dev_t	  st_rdev;		/* device type */
+	struct netbsd32_timespec st_atimespec;/* time of last access */
+	struct netbsd32_timespec st_mtimespec;/* time of last data modification */
+	struct netbsd32_timespec st_ctimespec;/* time of last file status change */
 	netbsd32_int64	  st_size;		/* file size, in bytes */
 	netbsd32_uint64  st_blocks;		/* blocks allocated for file */
 	blksize_t st_blksize;		/* optimal blocksize for I/O */
 	uint32_t  st_flags;		/* user defined flags for file */
 	uint32_t  st_gen;		/* file generation number */
 	uint32_t  st_spare;		/* file generation number */
-	struct	  netbsd32_timespec50 st_birthtimespec;
+	struct	  netbsd32_timespec st_birthtimespec;
 	uint32_t  st_spare2;
-};
-
-typedef netbsd32_pointer_t netbsd32_stat50p_t;
-struct netbsd32_stat50 {
-	uint32_t	st_dev;		/* inode's device */
-	mode_t		st_mode;	/* inode protection mode */
-	netbsd32_uint64	st_ino;		/* inode's number */
-	nlink_t		st_nlink;	/* number of hard links */
-	uid_t		st_uid;		/* user ID of the file's owner */
-	gid_t		st_gid;		/* group ID of the file's group */
-	uint32_t	st_rdev;	/* device type */
-	struct netbsd32_timespec50 st_atimespec;/* time of last access */
-	struct netbsd32_timespec50 st_mtimespec;/* time of last data modification */
-	struct netbsd32_timespec50 st_ctimespec;/* time of last file status change */
-	struct netbsd32_timespec50 st_birthtimespec; /* time of creation */
-	netbsd32_int64	st_size;	/* file size, in bytes */
-	netbsd32_uint64 st_blocks;	/* blocks allocated for file */
-	blksize_t	st_blksize;	/* optimal blocksize for I/O */
-	uint32_t	st_flags;	/* user defined flags for file */
-	uint32_t	st_gen;		/* file generation number */
-	uint32_t	st_spare[2];
 };
 
 typedef netbsd32_pointer_t netbsd32_statp_t;
 struct netbsd32_stat {
-	netbsd32_dev_t	st_dev;		/* inode's device */
+	dev_t		st_dev;		/* inode's device */
 	mode_t		st_mode;	/* inode protection mode */
 	netbsd32_uint64	st_ino;		/* inode's number */
 	nlink_t		st_nlink;	/* number of hard links */
 	uid_t		st_uid;		/* user ID of the file's owner */
 	gid_t		st_gid;		/* group ID of the file's group */
-	netbsd32_dev_t	st_rdev;	/* device type */
+	dev_t		st_rdev;	/* device type */
 	struct netbsd32_timespec st_atimespec;/* time of last access */
 	struct netbsd32_timespec st_mtimespec;/* time of last data modification */
 	struct netbsd32_timespec st_ctimespec;/* time of last file status change */
@@ -799,22 +602,11 @@ struct netbsd32_statvfs {
 
 /* from <sys/timex.h> */
 typedef netbsd32_pointer_t netbsd32_ntptimevalp_t;
-typedef netbsd32_pointer_t netbsd32_ntptimeval30p_t;
-typedef netbsd32_pointer_t netbsd32_ntptimeval50p_t;
-
 struct netbsd32_ntptimeval30 {
-	struct netbsd32_timeval50 time;	/* current time (ro) */
+	struct netbsd32_timeval time;	/* current time (ro) */
 	netbsd32_long maxerror;	/* maximum error (us) (ro) */
 	netbsd32_long esterror;	/* estimated error (us) (ro) */
 };
-struct netbsd32_ntptimeval50 {
-	struct netbsd32_timespec50 time;	/* current time (ro) */
-	netbsd32_long maxerror;	/* maximum error (us) (ro) */
-	netbsd32_long esterror;	/* estimated error (us) (ro) */
-	netbsd32_long tai;	/* TAI offset */
-	int time_state;		/* time status */
-};
-
 struct netbsd32_ntptimeval {
 	struct netbsd32_timespec time;	/* current time (ro) */
 	netbsd32_long maxerror;	/* maximum error (us) (ro) */
@@ -822,6 +614,7 @@ struct netbsd32_ntptimeval {
 	netbsd32_long tai;	/* TAI offset */
 	int time_state;		/* time status */
 };
+
 typedef netbsd32_pointer_t netbsd32_timexp_t;
 struct netbsd32_timex {
 	unsigned int modes;	/* clock mode bits (wo) */
@@ -847,12 +640,6 @@ struct netbsd32_timex {
 	netbsd32_long calcnt;	/* calibration intervals (ro) */
 	netbsd32_long errcnt;	/* calibration errors (ro) */
 	netbsd32_long stbcnt;	/* stability limit exceeded (ro) */
-};
-
-/* <prop/plistref.h> */
-struct netbsd32_plistref {
-	netbsd32_pointer_t pref_plist;
-	netbsd32_size_t pref_len;
 };
 
 /* from <ufs/lfs/lfs.h> */
@@ -891,82 +678,6 @@ struct netbsd32_kevent {
 typedef netbsd32_pointer_t netbsd32_sched_paramp_t;
 typedef netbsd32_pointer_t netbsd32_cpusetp_t;
 
-/* from <fs/cd9660/cd9660_mount.h> */
-struct netbsd32_iso_args {
-	netbsd32_charp fspec;
-	struct export_args30 _pad1;
-	int	flags;
-};
-
-/* from <ufs/ufs/ufs_mount.h> */
-struct netbsd32_ufs_args {
-	netbsd32_charp		fspec;
-};
-
-struct netbsd32_mfs_args {
-	netbsd32_charp		fspec;
-	struct netbsd32_export_args30	_pad1;
-	netbsd32_voidp		base;
-	netbsd32_u_long		size;
-};
-
-/* from <nfs/nfsmount,h> */
-struct netbsd32_nfs_args {
-	int32_t		version;	/* args structure version number */
-	netbsd32_sockaddrp_t addr;	/* file server address */
-	int32_t		addrlen;	/* length of address */
-	int32_t		sotype;		/* Socket type */
-	int32_t		proto;		/* and Protocol */
-	netbsd32_u_charp fh;		/* File handle to be mounted */
-	int32_t		fhsize;		/* Size, in bytes, of fh */
-	int32_t		flags;		/* flags */
-	int32_t		wsize;		/* write size in bytes */
-	int32_t		rsize;		/* read size in bytes */
-	int32_t		readdirsize;	/* readdir size in bytes */
-	int32_t		timeo;		/* initial timeout in .1 secs */
-	int32_t		retrans;	/* times to retry send */
-	int32_t		maxgrouplist;	/* Max. size of group list */
-	int32_t		readahead;	/* # of blocks to readahead */
-	int32_t		leaseterm;	/* Ignored; Term (sec) of lease */
-	int32_t		deadthresh;	/* Retrans threshold */
-	netbsd32_charp	hostname;	/* server's name */
-};
-struct netbsd32_msdosfs_args {
-	netbsd32_charp	fspec;		/* blocks special holding the fs to mount */
-	struct	netbsd32_export_args30 _pad1; /* compat with old userland tools */
-	uid_t	uid;		/* uid that owns msdosfs files */
-	gid_t	gid;		/* gid that owns msdosfs files */
-	mode_t  mask;		/* mask to be applied for msdosfs perms */
-	int	flags;		/* see below */
-
-	/* Following items added after versioning support */
-	int	version;	/* version of the struct */
-	mode_t  dirmask;	/* v2: mask to be applied for msdosfs perms */
-	int	gmtoff;		/* v3: offset from UTC in seconds */
-};
-
-struct netbsd32_posix_spawn_file_actions_entry {
-	enum { FAE32_OPEN, FAE32_DUP2, FAE32_CLOSE } fae_action;
-
-	int fae_fildes;
-	union {
-		struct {
-			netbsd32_charp path;
-			int oflag;
-			mode_t mode;
-		} open;
-		struct {
-			int newfildes;
-		} dup2;
-	} fae_data;
-};
-
-struct netbsd32_posix_spawn_file_actions {
-	unsigned int size;	/* size of fae array */
-	unsigned int len;	/* how many slots are used */
-	netbsd32_posix_spawn_file_actions_entryp fae;
-};
-
 #if 0
 int	netbsd32_kevent(struct lwp *, void *, register_t *);
 #endif
@@ -986,10 +697,10 @@ int	netbsd32_kevent(struct lwp *, void *, register_t *);
 	    SCARG(uap, name) = (type)(long)SCARG(s32uap, name)
 
 /* and some standard versions */
-#define	NETBSD32TO64_UAP(name)		NETBSD32TO64(uap, &ua, name)
-#define	NETBSD32TOP_UAP(name, type)	NETBSD32TOP(uap, &ua, name, type)
-#define	NETBSD32TOX_UAP(name, type)	NETBSD32TOX(uap, &ua, name, type)
-#define	NETBSD32TOX64_UAP(name, type)	NETBSD32TOX64(uap, &ua, name, type)
+#define	NETBSD32TO64_UAP(name)		NETBSD32TO64(uap, &ua, name);
+#define	NETBSD32TOP_UAP(name, type)	NETBSD32TOP(uap, &ua, name, type);
+#define	NETBSD32TOX_UAP(name, type)	NETBSD32TOX(uap, &ua, name, type);
+#define	NETBSD32TOX64_UAP(name, type)	NETBSD32TOX64(uap, &ua, name, type);
 
 #define	SCARG_P32(uap, name) NETBSD32PTR64(SCARG(uap, name))
 
@@ -1008,8 +719,8 @@ void	netbsd32_si_to_si32(siginfo32_t *, const siginfo_t *);
 void	netbsd32_si32_to_si(siginfo_t *, const siginfo32_t *);
 
 void	startlwp32(void *);
-struct compat_50_netbsd32___semctl14_args;
-int	do_netbsd32___semctl14(struct lwp *, const struct compat_50_netbsd32___semctl14_args *, register_t *, void *);
+struct netbsd32___semctl14_args;
+int	do_netbsd32___semctl14(struct lwp *, const struct netbsd32___semctl14_args *, register_t *, void *);
 
 struct iovec *netbsd32_get_iov(struct netbsd32_iovec *, int, struct iovec *,
 	    int);

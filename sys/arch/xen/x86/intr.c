@@ -103,7 +103,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.29 2011/08/13 16:22:15 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.21.4.1 2009/10/04 00:03:19 snj Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_xen.h"
@@ -126,7 +126,8 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.29 2011/08/13 16:22:15 cherry Exp $");
 #include <machine/pio.h>
 #include <xen/evtchn.h>
 
-#include "acpica.h"
+#ifdef XEN3
+#include "acpi.h"
 #include "ioapic.h"
 #include "opt_mpbios.h"
 /* for x86/i8259.c */
@@ -140,7 +141,7 @@ struct intrstub ioapic_level_stubs[MAX_INTR_SOURCES] = {{0,0}};
 int irq2vect[256] = {0};
 int vect2irq[256] = {0};
 #endif /* NIOAPIC */
-#if NACPICA > 0
+#if NACPI > 0
 #include <machine/mpconfig.h>
 #include <machine/mpacpi.h>
 #endif
@@ -151,6 +152,26 @@ int vect2irq[256] = {0};
 #if NPCI > 0
 #include <dev/pci/ppbreg.h>
 #endif
+
+#endif /* XEN3 */
+
+/*
+ * Recalculate the interrupt from scratch for an event source.
+ */
+void
+intr_calculatemasks(struct evtsource *evts)
+{
+	struct intrhand *ih;
+
+	evts->ev_maxlevel = IPL_NONE;
+	evts->ev_imask = 0;
+	for (ih = evts->ev_handlers; ih != NULL; ih = ih->ih_evt_next) {
+		if (ih->ih_level > evts->ev_maxlevel)
+			evts->ev_maxlevel = ih->ih_level;
+		evts->ev_imask |= (1 << ih->ih_level);
+	}
+
+}
 
 /*
  * Fake interrupt handler structures for the benefit of symmetry with
@@ -194,6 +215,7 @@ intr_establish(int legacy_irq, struct pic *pic, int pin,
 	struct pintrhand *ih;
 	int evtchn;
 	char evname[16];
+#ifdef XEN3
 #ifdef DIAGNOSTIC
 	if (legacy_irq != -1 && (legacy_irq < 0 || legacy_irq > 15))
 		panic("intr_establish: bad legacy IRQ value");
@@ -212,6 +234,7 @@ intr_establish(int legacy_irq, struct pic *pic, int pin,
 		return NULL;
 #endif /* NIOAPIC */
 	} else
+#endif /* XEN3 */
 		snprintf(evname, sizeof(evname), "irq%d", legacy_irq);
 
 	evtchn = xen_intr_map(&legacy_irq, type);
@@ -224,6 +247,7 @@ int
 xen_intr_map(int *pirq, int type)
 {
 	int irq = *pirq;
+#ifdef XEN3
 #if NIOAPIC > 0
 	extern struct cpu_info phycpu_info_primary; /* XXX */
 	/*
@@ -233,9 +257,6 @@ xen_intr_map(int *pirq, int type)
 	 * of the next device if this one used this IRQ. The easiest is
 	 * to allocate IRQs top-down, starting with a high number.
 	 * 250 and 230 have been tried, but got rejected by Xen.
-	 *
-	 * Xen 3.5 also rejects 200. Try out all values until Xen accepts
-	 * or none is available.
 	 */
 	static int xen_next_irq = 200;
 	struct ioapic_softc *ioapic = ioapic_find(APIC_IRQ_APIC(*pirq));
@@ -250,16 +271,11 @@ xen_intr_map(int *pirq, int type)
 			irq = APIC_IRQ_LEGACY_IRQ(*pirq);
 			if (irq <= 0 || irq > 15)
 				irq = xen_next_irq--;
-retry:
 			/* allocate vector and route interrupt */
 			op.cmd = PHYSDEVOP_ASSIGN_VECTOR;
 			op.u.irq_op.irq = irq;
-			if (HYPERVISOR_physdev_op(&op) < 0) {
-				irq = xen_next_irq--;
-				if (xen_next_irq == 15)
-					panic("PHYSDEVOP_ASSIGN_VECTOR irq %d", irq);
-				goto retry;
-			}
+			if (HYPERVISOR_physdev_op(&op) < 0)
+				panic("PHYSDEVOP_ASSIGN_VECTOR irq %d", irq);
 			irq2vect[irq] = op.u.irq_op.vector;
 			vect2irq[op.u.irq_op.vector] = irq;
 			pic->pic_addroute(pic, &phycpu_info_primary, pin,
@@ -269,6 +285,7 @@ retry:
 		*pirq |= irq;
 	}
 #endif /* NIOAPIC */
+#endif /* XEN3 */
 	return bind_pirq_to_evtch(irq);
 }
 
@@ -278,7 +295,7 @@ intr_disestablish(struct intrhand *ih)
 	printf("intr_disestablish irq\n");
 }
 
-#if defined(MPBIOS) || NACPICA > 0
+#if defined(MPBIOS) || NACPI > 0
 struct pic *
 intr_findpic(int num)
 {
@@ -296,7 +313,7 @@ intr_findpic(int num)
 }
 #endif
 
-#if NIOAPIC > 0 || NACPICA > 0
+#if NIOAPIC > 0 || NACPI > 0
 struct intr_extra_bus {
 	int bus;
 	pcitag_t *pci_bridge_tag;
@@ -323,7 +340,7 @@ intr_add_pcibus(struct pcibus_attach_args *pba)
 
 static int
 intr_find_pcibridge(int bus, pcitag_t *pci_bridge_tag,
-		    pci_chipset_tag_t *pc)
+		    pci_chipset_tag_t *pci_chipset_tag)
 {
 	struct intr_extra_bus *iebp;
 	struct mp_bus *mpb;
@@ -336,7 +353,7 @@ intr_find_pcibridge(int bus, pcitag_t *pci_bridge_tag,
 		if (mpb->mb_pci_bridge_tag == NULL)
 			return ENOENT;
 		*pci_bridge_tag = *mpb->mb_pci_bridge_tag;
-		*pc = mpb->mb_pci_chipset_tag;
+		*pci_chipset_tag = mpb->mb_pci_chipset_tag;
 		return 0;
 	}
 
@@ -345,7 +362,7 @@ intr_find_pcibridge(int bus, pcitag_t *pci_bridge_tag,
 			if (iebp->pci_bridge_tag == NULL)
 				return ENOENT;
 			*pci_bridge_tag = *iebp->pci_bridge_tag;
-			*pc = iebp->pci_chipset_tag;
+			*pci_chipset_tag = iebp->pci_chipset_tag;
 			return 0;
 		}
 	}
@@ -358,18 +375,18 @@ intr_find_mpmapping(int bus, int pin, struct xen_intr_handle *handle)
 #if NPCI > 0
 	int dev, func;
 	pcitag_t pci_bridge_tag;
-	pci_chipset_tag_t pc;
+	pci_chipset_tag_t pci_chipset_tag;
 #endif
 
 #if NPCI > 0
 	while (intr_scan_bus(bus, pin, handle) != 0) {
 		if (intr_find_pcibridge(bus, &pci_bridge_tag,
-		    &pc) != 0)
+		    &pci_chipset_tag) != 0)
 			return ENOENT;
 		dev = pin >> 2;
 		pin = pin & 3;
 		pin = PPB_INTERRUPT_SWIZZLE(pin + 1, dev) - 1;
-		pci_decompose_tag(pc, pci_bridge_tag, &bus,
+		pci_decompose_tag(pci_chipset_tag, pci_bridge_tag, &bus,
 		    &dev, &func);
 		pin |= (dev << 2);
 	}
@@ -393,7 +410,7 @@ intr_scan_bus(int bus, int pin, struct xen_intr_handle *handle)
 
 	for (mip = intrs; mip != NULL; mip = mip->next) {
 		if (mip->bus_pin == pin) {
-#if NACPICA > 0
+#if NACPI > 0
 			if (mip->linkdev != NULL)
 				if (mpacpi_findintr_linkdev(mip) != 0)
 					continue;
@@ -404,7 +421,7 @@ intr_scan_bus(int bus, int pin, struct xen_intr_handle *handle)
 	}
 	return ENOENT;
 }
-#endif /* NIOAPIC > 0 || NACPICA > 0 */
+#endif /* NIOAPIC > 0 || NACPI > 0 */
 #endif /* NPCI > 0 || NISA > 0 */
 
 
@@ -439,19 +456,3 @@ intr_printconfig(void)
 	}
 }
 #endif
-
-void
-cpu_intr_redistribute(void)
-{
-
-	/* XXX nothing */
-}
-
-u_int
-cpu_intr_count(struct cpu_info *ci)
-{
-
-	KASSERT(ci->ci_nintrhand >= 0);
-
-	return ci->ci_nintrhand;
-}

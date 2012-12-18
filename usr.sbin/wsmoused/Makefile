@@ -1,7 +1,5 @@
-# $NetBSD: Makefile,v 1.9 2009/10/29 14:40:09 christos Exp $
+# $NetBSD: Makefile,v 1.6 2003/08/06 22:11:48 jmmv Exp $
 #
-
-WARNS?= 2	# XXX -Wcast-qual (etc)
 
 PROG=	wsmoused
 SRCS=	wsmoused.c config.c config_yacc.y config_lex.l

@@ -1,4 +1,4 @@
-/*	$NetBSD: match_parent_style.h,v 1.1.1.1 2009/06/23 10:08:47 tron Exp $	*/
+/*	$NetBSD: match_parent_style.h,v 1.1.1.1.2.3 2011/01/07 01:24:04 riz Exp $	*/
 
 #ifndef _MATCH_PARENT_STYLE_H_INCLUDED_
 #define _MATCH_PARENT_STYLE_H_INCLUDED_

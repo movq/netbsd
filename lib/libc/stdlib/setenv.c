@@ -1,4 +1,4 @@
-/*	$NetBSD: setenv.c,v 1.43 2010/11/14 18:11:43 tron Exp $	*/
+/*	$NetBSD: setenv.c,v 1.29 2005/02/17 21:22:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)setenv.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: setenv.c,v 1.43 2010/11/14 18:11:43 tron Exp $");
+__RCSID("$NetBSD: setenv.c,v 1.29 2005/02/17 21:22:25 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -44,14 +44,18 @@ __RCSID("$NetBSD: setenv.c,v 1.43 2010/11/14 18:11:43 tron Exp $");
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "env.h"
-#include "reentrant.h"
 #include "local.h"
+#include "reentrant.h"
 
 #ifdef __weak_alias
 __weak_alias(setenv,_setenv)
 #endif
+
+#ifdef _REENTRANT
+extern rwlock_t __environ_lock;
+#endif
+
+extern char **environ;
 
 /*
  * setenv --
@@ -59,70 +63,66 @@ __weak_alias(setenv,_setenv)
  *	"value".  If rewrite is set, replace any current value.
  */
 int
-setenv(const char *name, const char *value, int rewrite)
+setenv(name, value, rewrite)
+	const char *name;
+	const char *value;
+	int rewrite;
 {
-	size_t l_name, l_value, length;
-	ssize_t offset;
-	char *envvar;
+	static char **saveenv;	/* copy of previously allocated space */
+	char *c, **newenv;
+	const char *cc;
+	size_t l_value, size;
+	int offset;
 
 	_DIAGASSERT(name != NULL);
 	_DIAGASSERT(value != NULL);
 
-	l_name = __envvarnamelen(name, false);
-	if (l_name == 0 || value == NULL) {
-		errno = EINVAL;
-		return -1;
-	}
-
-	if (!__writelockenv())
-		return -1;
-
-	/* Find slot in the enviroment. */
-	offset = __getenvslot(name, l_name, true);
-	if (offset == -1)
-		goto bad;
-
+	if (*value == '=')			/* no `=' in value */
+		++value;
 	l_value = strlen(value);
-	length = l_name + l_value + 2;
-
-	/* Handle overwriting a current environt variable. */
-	envvar = environ[offset];
-	if (envvar != NULL) {
+	rwlock_wrlock(&__environ_lock);
+	/* find if already exists */
+	if ((c = __findenv(name, &offset)) != NULL) {
 		if (!rewrite)
 			goto good;
-		/*
-		 * Check whether the buffer was allocated via setenv(3) and
-		 * whether there is enough space. If so simply overwrite the
-		 * existing value.
-		 */
-		if (__canoverwriteenvvar(envvar, length)) {
-			envvar += l_name + 1;
+		if (strlen(c) >= l_value)	/* old larger; copy over */
 			goto copy;
+	} else {					/* create new slot */
+		size_t cnt;
+
+		for (cnt = 0; environ[cnt]; ++cnt)
+			continue;
+		size = (size_t)(sizeof(char *) * (cnt + 2));
+		if (saveenv == environ) {		/* just increase size */
+			if ((newenv = realloc(saveenv, size)) == NULL)
+				goto bad;
+			saveenv = newenv;
+		} else {				/* get new space */
+			free(saveenv);
+			if ((saveenv = malloc(size)) == NULL)
+				goto bad;
+			(void)memcpy(saveenv, environ, cnt * sizeof(char *));
 		}
+		environ = saveenv;
+		environ[cnt + 1] = NULL;
+		offset = (int)cnt;
 	}
-
-	/* Allocate memory for name + `=' + value + NUL. */
-	if ((envvar = __allocenvvar(length)) == NULL)
+	for (cc = name; *cc && *cc != '='; ++cc)	/* no `=' in name */
+		continue;
+	size = cc - name;
+	/* name + `=' + value */
+	if ((environ[offset] = malloc(size + l_value + 2)) == NULL)
 		goto bad;
-
-	if (environ[offset] != NULL)
-		__freeenvvar(environ[offset]);
-
-	environ[offset] = envvar;
-
-	(void)memcpy(envvar, name, l_name);
-
-	envvar += l_name;
-	*envvar++ = '=';
-
+	c = environ[offset];
+	(void)memcpy(c, name, size);
+	c += size;
+	*c++ = '=';
 copy:
-	(void)memcpy(envvar, value, l_value + 1);
-
+	(void)memcpy(c, value, l_value + 1);
 good:
-	(void)__unlockenv();
+	rwlock_unlock(&__environ_lock);
 	return 0;
-
 bad:
-	(void)__unlockenv();
+	rwlock_unlock(&__environ_lock);
 	return -1;
 }

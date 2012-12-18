@@ -27,7 +27,7 @@
  *	i4b_rbch.c - device driver for raw B channel data
  *	---------------------------------------------------
  *
- *	$Id: i4b_rbch.c,v 1.26 2012/10/27 17:18:40 chs Exp $
+ *	$Id: i4b_rbch.c,v 1.23 2008/03/01 14:16:52 rmind Exp $
  *
  * $FreeBSD$
  *
@@ -36,7 +36,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_rbch.c,v 1.26 2012/10/27 17:18:40 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_rbch.c,v 1.23 2008/03/01 14:16:52 rmind Exp $");
 
 #include "isdnbchan.h"
 
@@ -174,17 +174,17 @@ static void* rbch_get_softc(int unit);
 #ifndef __FreeBSD__
 #define PDEVSTATIC	/* - not static - */
 #define IOCTL_CMD_T	u_long
-void isdnbchanattach(void);
-int isdnbchanopen(dev_t dev, int flag, int fmt, struct lwp *l);
-int isdnbchanclose(dev_t dev, int flag, int fmt, struct lwp *l);
-int isdnbchanread(dev_t dev, struct uio *uio, int ioflag);
-int isdnbchanwrite(dev_t dev, struct uio *uio, int ioflag);
-int isdnbchanioctl(dev_t dev, IOCTL_CMD_T cmd, void *arg, int flag, struct lwp* l);
+void isdnbchanattach __P((void));
+int isdnbchanopen __P((dev_t dev, int flag, int fmt, struct lwp *l));
+int isdnbchanclose __P((dev_t dev, int flag, int fmt, struct lwp *l));
+int isdnbchanread __P((dev_t dev, struct uio *uio, int ioflag));
+int isdnbchanwrite __P((dev_t dev, struct uio *uio, int ioflag));
+int isdnbchanioctl __P((dev_t dev, IOCTL_CMD_T cmd, void *arg, int flag, struct lwp* l));
 #ifdef OS_USES_POLL
-int isdnbchanpoll(dev_t dev, int events, struct lwp *l);
-int isdnbchankqfilter(dev_t dev, struct knote *kn);
+int isdnbchanpoll __P((dev_t dev, int events, struct lwp *l));
+int isdnbchankqfilter __P((dev_t dev, struct knote *kn));
 #else
-PDEVSTATIC int isdnbchanselect(dev_t dev, int rw, struct lwp *l);
+PDEVSTATIC int isdnbchanselect __P((dev_t dev, int rw, struct lwp *l));
 #endif
 #endif
 
@@ -268,7 +268,7 @@ SYSINIT(isdnbchandev, SI_SUB_DRIVERS,
 #endif /* BSD > 199306 && defined(__FreeBSD__) */
 
 #ifdef __bsdi__
-int isdnbchanmatch(device_t parent, cfdata_t cf, void *aux);
+int isdnbchanmatch(struct device *parent, struct cfdata *cf, void *aux);
 void dummy_isdnbchanattach(struct device*, struct device *, void *);
 
 #define CDEV_MAJOR 61
@@ -284,13 +284,13 @@ struct devsw isdnbchansw =
 };
 
 int
-isdnbchanmatch(device_t parent, cfdata_t cf, void *aux)
+isdnbchanmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	printf("isdnbchanmatch: aux=0x%x\n", aux);
 	return 1;
 }
 void
-dummy_isdnbchanattach(device_t parent, device_t self, void *aux)
+dummy_isdnbchanattach(struct device *parent, struct device *self, void *aux)
 {
 	printf("dummy_isdnbchanattach: aux=0x%x\n", aux);
 }
@@ -320,7 +320,7 @@ PDEVSTATIC void
 #ifdef __FreeBSD__
 isdnbchanattach(void *dummy)
 #else
-isdnbchanattach(void)
+isdnbchanattach()
 #endif
 {
 	int i;

@@ -1,4 +1,4 @@
-/*	$NetBSD: usb.h,v 1.96 2012/08/24 09:01:23 msaitoh Exp $	*/
+/*	$NetBSD: usb.h,v 1.82 2008/08/02 23:14:34 jmcneill Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usb.h,v 1.14 1999/11/17 22:33:46 n_hibma Exp $	*/
 
 /*
@@ -41,55 +41,8 @@
 #include <sys/ioctl.h>
 
 #if defined(_KERNEL)
-#include <sys/mallocvar.h>
-
-MALLOC_DECLARE(M_USB);
-MALLOC_DECLARE(M_USBDEV);
-MALLOC_DECLARE(M_USBHC);
-
-#include <sys/device.h>
-
-#endif
-
-#ifdef USB_DEBUG
-#define UKBD_DEBUG 1
-#define UHIDEV_DEBUG 1
-#define UHID_DEBUG 1
-#define OHCI_DEBUG 1
-#define UGEN_DEBUG 1
-#define UHCI_DEBUG 1
-#define UHUB_DEBUG 1
-#define ULPT_DEBUG 1
-#define UCOM_DEBUG 1
-#define UPLCOM_DEBUG 1
-#define UMCT_DEBUG 1
-#define UMODEM_DEBUG 1
-#define UAUDIO_DEBUG 1
-#define AUE_DEBUG 1
-#define CUE_DEBUG 1
-#define KUE_DEBUG 1
-#define URL_DEBUG 1
-#define UVISOR_DEBUG 1
-#define UPL_DEBUG 1
-#define UZCOM_DEBUG 1
-#define URIO_DEBUG 1
-#define UFTDI_DEBUG 1
-#define USCANNER_DEBUG 1
-#define USSCANNER_DEBUG 1
-#define EHCI_DEBUG 1
-#define UIRDA_DEBUG 1
-#define USTIR_DEBUG 1
-#define UISDATA_DEBUG 1
-#define UDSBR_DEBUG 1
-#define UBT_DEBUG 1
-#define AXE_DEBUG 1
-#define UIPAQ_DEBUG 1
-#define UCYCOM_DEBUG 1
-#define UHSO_DEBUG 1
-#define Static
-#else
-#define Static static
-#endif
+#include <dev/usb/usb_port.h>
+#endif /* _KERNEL */
 
 #define USB_STACK_VERSION 2
 
@@ -100,7 +53,6 @@ MALLOC_DECLARE(M_USBHC);
 #define USB_MAX_ENDPOINTS 16
 
 #define USB_FRAMES_PER_SECOND 1000
-#define USB_UFRAMES_PER_FRAME 8
 
 /*
  * The USB records contain some unaligned little-endian word
@@ -124,7 +76,7 @@ typedef u_int8_t uDWord[4];
 		     (w)[3] = (u_int8_t)((v) >> 24))
 #else
 /*
- * On little-endian machines that can handle unaligned accesses
+ * On little-endian machines that can handle unanliged accesses
  * (e.g. i386) these macros can be replaced by the following.
  */
 #define UGETW(w) (*(u_int16_t *)(w))
@@ -191,8 +143,6 @@ typedef struct {
 #define  UDESC_OTHER_SPEED_CONFIGURATION 0x07
 #define  UDESC_INTERFACE_POWER	0x08
 #define  UDESC_OTG		0x09
-#define  UDESC_DEBUG		0x0a
-#define  UDESC_INTERFACE_ASSOC	0x0b
 #define  UDESC_CS_DEVICE	0x21	/* class specific */
 #define  UDESC_CS_CONFIG	0x22
 #define  UDESC_CS_STRING	0x23
@@ -270,18 +220,6 @@ typedef struct {
 	uByte		iInterface;
 } UPACKED usb_interface_descriptor_t;
 #define USB_INTERFACE_DESCRIPTOR_SIZE 9
-
-typedef struct {
-	uByte		bLength;
-	uByte		bDescriptorType;
-	uByte		bFirstInterface;
-	uByte		bInterfaceCount;
-	uByte		bFunctionClass;
-	uByte		bFunctionSubClass;
-	uByte		bFunctionProtocol;
-	uByte		iFunction;
-} UPACKED usb_interface_assoc_descriptor_t;
-#define USB_INTERFACE_ASSOC_DESCRIPTOR_SIZE 8
 
 typedef struct {
 	uByte		bLength;
@@ -403,13 +341,6 @@ typedef struct {
 #define UOTG_A_ALT_HNP_SUPPORT	5
 
 typedef struct {
-	uByte		bLength;
-	uByte		bDescriptorType;
-	uByte		bDebugInEndpoint;
-	uByte		bDebugOutEndpoint;
-} UPACKED usb_debug_descriptor_t;
-
-typedef struct {
 	uWord		wStatus;
 /* Device status flags */
 #define UDS_SELF_POWERED		0x0001
@@ -433,7 +364,6 @@ typedef struct {
 #define UPS_OVERCURRENT_INDICATOR	0x0008
 #define UPS_RESET			0x0010
 #define UPS_PORT_POWER			0x0100
-#define UPS_FULL_SPEED			0x0000	/* for completeness */
 #define UPS_LOW_SPEED			0x0200
 #define UPS_HIGH_SPEED			0x0400
 #define UPS_PORT_TEST			0x0800
@@ -481,14 +411,11 @@ typedef struct {
 #define	 UISUBCLASS_CAPI_CONTROLMODEL		5
 #define	 UISUBCLASS_ETHERNET_NETWORKING_CONTROL_MODEL 6
 #define	 UISUBCLASS_ATM_NETWORKING_CONTROL_MODEL 7
-#define	  UIPROTO_CDC_NOCLASS			0 /* no class specific
-						     protocol required */
 #define   UIPROTO_CDC_AT			1
 
 #define UICLASS_HID		0x03
 #define  UISUBCLASS_BOOT	1
 #define  UIPROTO_BOOT_KEYBOARD	1
-#define  UIPROTO_MOUSE		2
 
 #define UICLASS_PHYSICAL	0x05
 
@@ -545,7 +472,6 @@ typedef struct {
 #define UICLASS_WIRELESS	0xe0
 #define  UISUBCLASS_RF			0x01
 #define   UIPROTO_BLUETOOTH		0x01
-#define   UIPROTO_RNDIS			0x03
 
 #define UICLASS_APPL_SPEC	0xfe
 #define  UISUBCLASS_FIRMWARE_DOWNLOAD	1
@@ -596,27 +522,6 @@ typedef struct {
 
 #define USB_UNCONFIG_NO 0
 #define USB_UNCONFIG_INDEX (-1)
-
-
-/* Packet IDs */
-#define UPID_RESERVED	0xf0
-#define UPID_OUT	0xe1
-#define UPID_ACK	0xd2
-#define UPID_DATA0	0xc3
-#define UPID_PING	0xb4
-#define UPID_SOF	0xa5
-#define UPID_NYET	0x96
-#define UPID_DATA2	0x87
-#define UPID_SPLIT	0x78
-#define UPID_IN		0x69
-#define UPID_NAK	0x5a
-#define UPID_DATA1	0x4b
-#define UPID_ERR	0x3c
-#define UPID_PREAMBLE	0x3c
-#define UPID_SETUP	0x2d
-#define UPID_STALL	0x1e
-#define UPID_MDATA	0x0f
-
 
 /*** ioctl() related stuff ***/
 

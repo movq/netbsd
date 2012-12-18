@@ -1,4 +1,4 @@
-/*	$NetBSD: getent.c,v 1.11 2012/03/21 05:33:27 matt Exp $	*/
+/*	$NetBSD: getent.c,v 1.10 2005/02/06 05:53:07 perry Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)getent.c	8.2 (Berkeley) 12/15/93";
 #else
-__RCSID("$NetBSD: getent.c,v 1.11 2012/03/21 05:33:27 matt Exp $");
+__RCSID("$NetBSD: getent.c,v 1.10 2005/02/06 05:53:07 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,7 +48,8 @@ char *getstr(char *, char **);
 
 /*ARGSUSED*/
 int
-getent(char *cp, char *name)
+getent(cp, name)
+char *cp, *name;
 {
 #ifdef	HAS_CGETENT
 	const char *dba[2];
@@ -64,7 +65,8 @@ getent(char *cp, char *name)
 #ifndef	SOLARIS
 /*ARGSUSED*/
 char *
-getstr(char *id, char **cpp)
+getstr(id, cpp)
+char *id, **cpp;
 {
 # ifdef	HAS_CGETENT
 	char *answer;

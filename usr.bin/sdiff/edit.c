@@ -1,4 +1,4 @@
-/*	$NetBSD: edit.c,v 1.4 2011/09/01 07:18:51 plunky Exp $	*/
+/*	$NetBSD: edit.c,v 1.1 2007/02/18 22:13:42 rmind Exp $	*/
 /*	$OpenBSD: edit.c,v 1.14 2006/05/25 03:20:32 ray Exp $ */
 
 /*
@@ -132,7 +132,8 @@ RIGHT:
 		size_t len;
 
 		len = strlen(text);
-		if ((size_t)write(fd, text, len) != len) {
+		if ((nwritten = write(fd, text, len)) == -1 ||
+		    nwritten != len) {
 			warn("error writing to temp file");
 			cleanup(filename);
 		}

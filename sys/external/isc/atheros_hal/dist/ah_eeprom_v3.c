@@ -14,7 +14,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ah_eeprom_v3.c,v 1.3 2011/03/07 11:25:42 cegger Exp $
+ * $Id: ah_eeprom_v3.c,v 1.2.10.2 2009/08/07 06:43:30 snj Exp $
  */
 #include "opt_ah.h"
 
@@ -1759,7 +1759,7 @@ legacyEepromDetach(struct ath_hal *ah)
 	HAL_EEPROM *ee = AH_PRIVATE(ah)->ah_eeprom;
 
         if (ee->ee_version >= AR_EEPROM_VER4_0 && ee->ee_eepMap == 1)
-		freeEepromRawPowerCalInfo5112(ah, ee);
+		return freeEepromRawPowerCalInfo5112(ah, ee);
 	ath_hal_free(ee);
 	AH_PRIVATE(ah)->ah_eeprom = AH_NULL;
 }

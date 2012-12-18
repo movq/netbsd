@@ -1,5 +1,5 @@
-/*	$Id: mpcsa_machdep.c,v 1.8 2012/10/27 17:17:48 chs Exp $	*/
-/*	$NetBSD: mpcsa_machdep.c,v 1.8 2012/10/27 17:17:48 chs Exp $	*/
+/*	$Id: mpcsa_machdep.c,v 1.2 2008/07/03 01:15:39 matt Exp $	*/
+/*	$NetBSD: mpcsa_machdep.c,v 1.2 2008/07/03 01:15:39 matt Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -73,11 +73,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependent functions for kernel setup for Iyonix.
+ * Machine dependant functions for kernel setup for Iyonix.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpcsa_machdep.c,v 1.8 2012/10/27 17:17:48 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpcsa_machdep.c,v 1.2 2008/07/03 01:15:39 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -104,7 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: mpcsa_machdep.c,v 1.8 2012/10/27 17:17:48 chs Exp $"
 
 #define	DRAM_BLOCKS	1
 #include <machine/bootconfig.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <arm/undefined.h>
@@ -157,6 +157,15 @@ __KERNEL_RCSID(0, "$NetBSD: mpcsa_machdep.c,v 1.8 2012/10/27 17:17:48 chs Exp $"
 #include <arm/at91/at91reg.h>
 #include <arm/at91/at91streg.h>
 
+/*
+ * Address to call from cpu_reset() to reset the machine.
+ * This is machine architecture dependant as it varies depending
+ * on where the ROM appears when you turn the MMU off.
+ */
+
+u_int cpu_reset_address = 0x00000000;
+
+
 /* boot configuration: */
 BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
@@ -192,7 +201,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("\r\n");
 		printf("The operating system has halted.\r\n");
 		printf("Please press any key to reboot.\r\n");
@@ -222,8 +230,6 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -365,7 +371,7 @@ static void mpcsa_device_register(device_t dev, void *aux)
 		device_t twi_dev = 0;
 		i2c_tag_t i2c = 0;
 		if (cd && (twi_dev = device_lookup(cd, 0)) != NULL) {
-			struct at91twi_softc *sc = device_private(twi_dev);
+			struct at91twi_softc *sc = (struct at91twi_softc *)twi_dev;
 			i2c = &sc->sc_i2c;
 		}
 		if (i2c && seeprom_bootstrap_read(i2c, 0x50, 0x00, 4096,
@@ -374,13 +380,14 @@ static void mpcsa_device_register(device_t dev, void *aux)
 				eth_addr, ETHER_ADDR_LEN);
 			KASSERT(pd != NULL);
 			if (prop_dictionary_set(device_properties(dev),
-						"mac-address", pd) == FALSE) {
+						"mac-addr", pd) == FALSE) {
 				printf("WARNING: unable to set mac-addr property "
-				       "for %s\n", device_xname(dev));
+				       "for %s\n", dev->dv_xname);
 			}
 		} else {
 			printf("%s: WARNING: unable to read MAC address from SEEPROM\n",
-			       device_xname(dev));
+			       dev->dv_xname);
 		}
 	}
 }
+

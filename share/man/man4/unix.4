@@ -1,4 +1,4 @@
-.\"	$NetBSD: unix.4,v 1.24 2011/05/29 08:46:42 wiz Exp $
+.\"	$NetBSD: unix.4,v 1.19 2007/08/09 15:23:03 he Exp $
 .\"
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)unix.4	8.1 (Berkeley) 6/9/93
 .\"
-.Dd May 29, 2011
+.Dd October 30, 2006
 .Dt UNIX 4
 .Os
 .Sh NAME
@@ -49,8 +49,7 @@ mechanisms.
 The
 .Tn UNIX Ns -domain
 family supports the
-.Dv SOCK_STREAM ,
-.Dv SOCK_SEQPACKET ,
+.Dv SOCK_STREAM
 and
 .Dv SOCK_DGRAM
 socket types and uses
@@ -60,7 +59,7 @@ filesystem pathnames for addressing.
 addresses are variable-length filesystem pathnames of
 at most 104 characters.
 The include file
-.In sys/un.h
+.Aq Pa sys/un.h
 defines this address:
 .Bd -literal -offset indent
 struct sockaddr_un {
@@ -90,7 +89,7 @@ and
 can be calculated by the macro
 .Fn SUN_LEN
 defined in
-.In sys/un.h .
+.Aq Pa sys/un.h .
 The
 .Ar sun_path
 field must be terminated by a NUL character to be used with
@@ -126,14 +125,11 @@ The
 .Tn UNIX Ns -domain
 protocol family comprises simple
 transport protocols that support the
-.Dv SOCK_STREAM ,
-.Dv SOCK_SEQPACKET ,
+.Dv SOCK_STREAM
 and
 .Dv SOCK_DGRAM
 abstractions.
 .Dv SOCK_STREAM
-and
-.Dv SOCK_SEQPACKET
 sockets also support the communication of
 .Ux
 file descriptors through the use of the
@@ -149,7 +145,7 @@ Any valid descriptor may be sent in a message.
 The file descriptor(s) to be passed are described using a
 .Ar struct cmsghdr
 that is defined in the include file
-.In sys/socket.h .
+.Aq Pa sys/socket.h .
 The type of the message is
 .Dv SCM_RIGHTS ,
 and the data portion of the messages is an array of integers
@@ -172,18 +168,17 @@ Descriptors that are awaiting delivery, or that are
 purposely not received, are automatically closed by the system
 when the destination socket is closed.
 .Pp
-A UNIX-domain socket supports two
+There are two
 .Tn socket-level
-options for use with
-.Xr setsockopt 2
-and
-.Xr getsockopt 2 :
+.Xr setsockopt 2 / Ns Xr getsockopt 2
+option available in the
+.Nm
+domain:
 .Pp
 The
 .Dv LOCAL_CREDS
 option may be enabled on a
-.Dv SOCK_DGRAM ,
-.Dv SOCK_SEQPACKET ,
+.Dv SOCK_DGRAM
 or a
 .Dv SOCK_STREAM
 socket.
@@ -194,7 +189,7 @@ control message.
 The msg_control field in the msghdr structure points
 to a buffer that contains a cmsghdr structure followed by a variable
 length sockcred structure, defined in
-.In sys/socket.h
+.Aq Pa sys/socket.h
 as follows:
 .Bd -literal
 struct sockcred {
@@ -213,8 +208,6 @@ option may be used with
 .Xr getsockopt 2
 to get the PID and effective user and group IDs of a
 .Dv SOCK_STREAM
-or
-.Dv SOCK_SEQPACKET
 peer when it did
 .Xr connect 2
 or
@@ -228,7 +221,7 @@ struct unpcbid {
 };
 .Ed
 as defined in
-.In sys/un.h .
+.Aq Pa sys/un.h .
 .Pp
 The
 .Fn SOCKCREDSIZE
@@ -236,7 +229,7 @@ macro computes the size of the sockcred structure for a specified number
 of groups.
 The cmsghdr fields have the following values:
 .Bd -literal
-cmsg_len = CMSG_LEN(SOCKCREDSIZE(ngroups))
+cmsg_len = sizeof(struct cmsghdr) + SOCKCREDSIZE(ngroups)
 cmsg_level = SOL_SOCKET
 cmsg_type = SCM_CREDS
 .Ed
@@ -272,7 +265,6 @@ macro, the following definition is recommended:
 .Ed
 .Sh SEE ALSO
 .Xr socket 2 ,
-.Xr CMSG_DATA 3 ,
 .Xr intro 4
 .Rs
 .%T "An Introductory 4.4BSD Interprocess Communication Tutorial"

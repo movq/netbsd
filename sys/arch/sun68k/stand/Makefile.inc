@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.18 2011/05/29 10:19:09 tsutsui Exp $
+#	$NetBSD: Makefile.inc,v 1.13 2006/09/17 06:15:40 tsutsui Exp $
 
 # Must have S=/usr/src/sys (or equivalent)
 # But note: this is w.r.t. a subdirectory
@@ -7,8 +7,6 @@ S=	${.CURDIR}/../../../..
 .if defined(SA_PROG)
 
 .include <bsd.own.mk>
-
-WARNS?=	2
 
 LIBSA!=cd ${.CURDIR}/../libsa && ${PRINTOBJDIR}
 
@@ -24,7 +22,7 @@ CFLAGS= -msoft-float
 CPPFLAGS= ${DEFS} ${DEBUG} ${INCL}
 
 SRTOBJ= ${LIBSA}/SRT0.o ${LIBSA}/SRT1.o
-SRTLIB= ${LIBSA}/lib/sa/libsa.a ${LIBSA}/lib/kern/libkern.a
+SRTLIB= ${LIBSA}/libsa.a
 
 CLEANFILES+= ${SA_PROG} ${SA_PROG}.bin
 
@@ -46,10 +44,20 @@ proginstall: ${SA_PROG}.bin
 
 .endif	# defined(SA_PROG)
 
-.include <bsd.klinks.mk>
+CLEANFILES+= machine m68k sun68k
+.if !make(obj) && !make(clean) && !make(cleandir)
+.BEGIN: machine m68k sun68k
+.NOPATH: machine m68k sun68k
+.endif
 
-# XXX SHOULD NOT NEED TO DEFINE THESE!
-LIBCRT0=
-LIBC=
-LIBCRTBEGIN=
-LIBCRTEND=
+machine :
+	-rm -f $@
+	ln -s ${S}/arch/${MACHINE}/include $@
+
+m68k :
+	-rm -f $@
+	ln -s ${S}/arch/m68k/include $@
+
+sun68k :
+	-rm -f $@
+	ln -s ${S}/arch/sun68k/include $@

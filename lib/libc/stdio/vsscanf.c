@@ -1,4 +1,4 @@
-/*	$NetBSD: vsscanf.c,v 1.19 2012/03/27 15:05:42 christos Exp $	*/
+/*	$NetBSD: vsscanf.c,v 1.14 2005/11/29 03:12:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)vsscanf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: vsscanf.c,v 1.19 2012/03/27 15:05:42 christos Exp $");
+__RCSID("$NetBSD: vsscanf.c,v 1.14 2005/11/29 03:12:00 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -48,19 +48,26 @@ __RCSID("$NetBSD: vsscanf.c,v 1.19 2012/03/27 15:05:42 christos Exp $");
 #include "reentrant.h"
 #include "local.h"
 
+static int eofread __P((void *, char *, int));
+
 /* ARGSUSED */
-static ssize_t
-eofread(void *cookie, void *buf, size_t len)
+static int
+eofread(cookie, buf, len)
+	void *cookie;
+	char *buf;
+	int len;
 {
-	return 0;
+	return (0);
 }
 
 int
-vsscanf(const char *str, const char *fmt, va_list ap)
+vsscanf(str, fmt, ap)
+	const char *str;
+	const char *fmt;
+	_BSD_VA_LIST_ ap;
 {
 	FILE f;
 	struct __sfileext fext;
-	size_t len;
 
 	_DIAGASSERT(str != NULL);
 	_DIAGASSERT(fmt != NULL);
@@ -68,10 +75,9 @@ vsscanf(const char *str, const char *fmt, va_list ap)
 	_FILEEXT_SETUP(&f, &fext);
 	f._flags = __SRD;
 	f._bf._base = f._p = __UNCONST(str);
-	len = strlen(str);
-	_DIAGASSERT(__type_fit(int, len));
-	f._bf._size = f._r = (int)len;
+	f._bf._size = f._r = strlen(str);
 	f._read = eofread;
 	_UB(&f)._base = NULL;
-	return __svfscanf_unlocked(&f, fmt, ap);
+	f._lb._base = NULL;
+	return (__svfscanf_unlocked(&f, fmt, ap));
 }

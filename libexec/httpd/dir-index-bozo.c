@@ -1,9 +1,9 @@
-/*	$NetBSD: dir-index-bozo.c,v 1.15 2012/07/19 09:53:06 mrg Exp $	*/
+/*	$NetBSD: dir-index-bozo.c,v 1.4.8.1 2009/02/08 20:30:20 snj Exp $	*/
 
-/*	$eterna: dir-index-bozo.c,v 1.20 2011/11/18 09:21:15 mrg Exp $	*/
+/*	$eterna: dir-index-bozo.c,v 1.10 2008/03/03 03:36:11 mrg Exp $	*/
 
 /*
- * Copyright (c) 1997-2011 Matthew R. Green
+ * Copyright (c) 1997-2008 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -15,6 +15,8 @@
  *    notice, this list of conditions and the following disclaimer and
  *    dedication in the documentation and/or other materials provided
  *    with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,99 +41,91 @@
 #include <dirent.h>
 #include <errno.h>
 #include <string.h>
-#include <stdlib.h>
 #include <time.h>
 #include <assert.h>
 
 #include "bozohttpd.h"
 
+	int	Xflag;		/* do directory indexing */
+	int	Hflag;		/* hide .* */
+
 static void
-directory_hr(bozohttpd_t *httpd)
+directory_hr(void)
 {
 
-	bozo_printf(httpd,
-		"<hr noshade align=\"left\" width=\"80%%\">\r\n\r\n");
+	bozoprintf("<hr noshade align=\"left\" width=\"80%%\">\r\n\r\n");
 }
 
 /*
  * output a directory index.  return 1 if it actually did something..
  */
 int
-bozo_dir_index(bozo_httpreq_t *request, const char *dirname, int isindex)
+directory_index(http_req *request, const char *dirname, int isindex)
 {
-	bozohttpd_t *httpd = request->hr_httpd;
 	struct stat sb;
-	struct dirent **de, **deo;
+	struct dirent *de;
 	struct tm *tm;
 	DIR *dp;
 	char buf[MAXPATHLEN];
 	char spacebuf[48];
-	char *file = NULL;
-	int l, k, j, i;
+	int l, i;
 
-	if (!isindex || !httpd->dir_indexing)
+	if (!isindex || !Xflag)
 		return 0;
 
-	if (strlen(dirname) <= strlen(httpd->index_html))
+	if (strlen(dirname) <= strlen(index_html))
 		dirname = ".";
 	else {
-		file = bozostrdup(httpd, dirname);
+		char *file = bozostrdup(dirname);
 
-		file[strlen(file) - strlen(httpd->index_html)] = '\0';
+		file[strlen(file) - strlen(index_html)] = '\0';
 		dirname = file;
 	}
-	debug((httpd, DEBUG_FAT, "bozo_dir_index: dirname ``%s''", dirname));
+	debug((DEBUG_FAT, "directory_index: dirname ``%s''", dirname));
 	if (stat(dirname, &sb) < 0 ||
 	    (dp = opendir(dirname)) == NULL) {
 		if (errno == EPERM)
-			(void)bozo_http_error(httpd, 403, request,
+			http_error(403, request,
 			    "no permission to open directory");
 		else if (errno == ENOENT)
-			(void)bozo_http_error(httpd, 404, request, "no file");
+			http_error(404, request, "no file");
 		else
-			(void)bozo_http_error(httpd, 500, request,
-					"open directory");
-		goto done;
+			http_error(500, request, "open directory");
 		/* NOTREACHED */
 	}
 
-	bozo_printf(httpd, "%s 200 OK\r\n", request->hr_proto);
+	bozoprintf("%s 200 OK\r\n", request->hr_proto);
 
-	if (request->hr_proto != httpd->consts.http_09) {
-		bozo_print_header(request, NULL, "text/html", "");
-		bozo_printf(httpd, "\r\n");
+	if (request->hr_proto != http_09) {
+		print_header(request, NULL, "text/html", "");
+		bozoprintf("\r\n");
 	}
-	bozo_flush(httpd, stdout);
+	bozoflush(stdout);
 
 	if (request->hr_method == HTTP_HEAD) {
 		closedir(dp);
-		goto done;
+		return 1;
 	}
 
-	bozo_printf(httpd,
-		"<html><head><title>Index of %s</title></head>\r\n",
-		request->hr_file);
-	bozo_printf(httpd, "<body><h1>Index of %s</h1>\r\n",
-		request->hr_file);
-	bozo_printf(httpd, "<pre>\r\n");
+	bozoprintf("<html><head><title>Index of %s</title></head>\r\n",
+	    request->hr_file);
+	bozoprintf("<body><h1>Index of %s</h1>\r\n", request->hr_file);
+	bozoprintf("<pre>\r\n");
 #define NAMELEN 40
 #define LMODLEN 19
-	bozo_printf(httpd, "Name                                     "
+	bozoprintf("Name                                     "
 	    "Last modified          "
 	    "Size\n");
-	bozo_printf(httpd, "</pre>");
-	directory_hr(httpd);
-	bozo_printf(httpd, "<pre>");
+	bozoprintf("</pre>");
+	directory_hr();
+	bozoprintf("<pre>");
 
-	for (j = k = scandir(dirname, &de, NULL, alphasort), deo = de;
-	    j--; de++) {
+	while ((de = readdir(dp)) != NULL) {
 		int nostat = 0;
-		char *name = (*de)->d_name;
-		char *urlname;
+		char *name = de->d_name;
 
-		if (strcmp(name, ".") == 0 ||
-		    (strcmp(name, "..") != 0 &&
-		     httpd->hide_dots && name[0] == '.'))
+		if (strcmp(name, ".") == 0 || 
+		    (strcmp(name, "..") != 0 && Hflag && name[0] == '.'))
 			continue;
 
 		snprintf(buf, sizeof buf, "%s/%s", dirname, name);
@@ -140,69 +134,54 @@ bozo_dir_index(bozo_httpreq_t *request, const char *dirname, int isindex)
 
 		l = 0;
 
-		urlname = escape_rfc3986(httpd, name);
 		if (strcmp(name, "..") == 0) {
-			bozo_printf(httpd, "<a href=\"../\">");
-			l += bozo_printf(httpd, "Parent Directory");
+			bozoprintf("<a href=\"../\">");
+			l += bozoprintf("Parent Directory");
 		} else if (S_ISDIR(sb.st_mode)) {
-			bozo_printf(httpd, "<a href=\"%s/\">", urlname);
-			l += bozo_printf(httpd, "%s/", name);
-		} else if (strchr(name, ':') != NULL) {
-			/* RFC 3986 4.2 */
-			bozo_printf(httpd, "<a href=\"./%s\">", urlname);
-			l += bozo_printf(httpd, "%s", name);
+			bozoprintf("<a href=\"%s/\">", name);
+			l += bozoprintf("%s/", name);
 		} else {
-			bozo_printf(httpd, "<a href=\"%s\">", urlname);
-			l += bozo_printf(httpd, "%s", name);
+			bozoprintf("<a href=\"%s\">", name);
+			l += bozoprintf("%s", name);
 		}
-		bozo_printf(httpd, "</a>");
+		bozoprintf("</a>");
 
 		/* NAMELEN spaces */
-		/*LINTED*/
-		assert(/*CONSTCOND*/sizeof(spacebuf) > NAMELEN);
+		assert(sizeof(spacebuf) > NAMELEN);
 		i = (l < NAMELEN) ? (NAMELEN - l) : 0;
 		i++;
-		memset(spacebuf, ' ', (size_t)i);
+		memset(spacebuf, ' ', i);
 		spacebuf[i] = '\0';
-		bozo_printf(httpd, "%s", spacebuf);
+		bozoprintf(spacebuf);
 		l += i;
 
 		if (nostat)
-			bozo_printf(httpd, "?                         ?");
+			bozoprintf("?                         ?");
 		else {
 			tm = gmtime(&sb.st_mtime);
 			strftime(buf, sizeof buf, "%d-%b-%Y %R", tm);
-			l += bozo_printf(httpd, "%s", buf);
+			l += bozoprintf("%s", buf);
 
 			/* LMODLEN spaces */
-			/*LINTED*/
-			assert(/*CONSTCOND*/sizeof(spacebuf) > LMODLEN);
-			i = (l < (LMODLEN+NAMELEN+1)) ?
-				((LMODLEN+NAMELEN+1) - l) : 0;
+			assert(sizeof(spacebuf) > LMODLEN);
+			i = (l < (LMODLEN+NAMELEN+1)) ? ((LMODLEN+NAMELEN+1) - l) : 0;
 			i++;
-			memset(spacebuf, ' ', (size_t)i);
+			memset(spacebuf, ' ', i);
 			spacebuf[i] = '\0';
-			bozo_printf(httpd, "%s", spacebuf);
+			bozoprintf(spacebuf);
 
-			bozo_printf(httpd, "%7ukB",
-			    ((unsigned)((unsigned)(sb.st_size) >> 10)));
+			bozoprintf("%7ukB",
+			    ((unsigned int)(sb.st_size >> 10)));
 		}
-		bozo_printf(httpd, "\r\n");
+		bozoprintf("\r\n");
 	}
 
 	closedir(dp);
-	while (k--)
-        	free(deo[k]);
-	free(deo);
-	bozo_printf(httpd, "</pre>");
-	directory_hr(httpd);
-	bozo_printf(httpd, "</body></html>\r\n\r\n");
-	bozo_flush(httpd, stdout);
-
-done:
-	if (file)
-		free(file);
+	bozoprintf("</pre>");
+	directory_hr();
+	bozoprintf("</body></html>\r\n\r\n");
+	bozoflush(stdout);
+	
 	return 1;
 }
 #endif /* NO_DIRINDEX_SUPPORT */
-

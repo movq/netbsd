@@ -1,4 +1,4 @@
-/* $NetBSD: splash.h,v 1.5 2011/02/06 23:25:18 jmcneill Exp $ */
+/* $NetBSD: splash.h,v 1.3 2008/05/10 15:31:05 martin Exp $ */
 
 /*-
  * Copyright (c) 2006 Jared D. McNeill <jmcneill@invisible.ca>
@@ -41,7 +41,7 @@
 #ifdef SPLASHSCREEN
 
 #define	SPLASH_CMAP_OFFSET	(16 * 3)
-#define	SPLASH_CMAP_SIZE	64
+#define	SPLASH_CMAP_SIZE	(64 + 32)
 
 struct splash_info {
 	int	si_depth;
@@ -52,6 +52,23 @@ struct splash_info {
 	void	(*si_fillrect)(struct splash_info *, int, int, int, int, int);
 };
 
+#ifdef SPLASHSCREEN_PROGRESS
+struct splash_progress {
+	struct device *sp_dev; /* XXX needed for config_finalize */
+	int	sp_top;
+	int	sp_left;
+	int	sp_width;
+	int	sp_height;
+#define	SPLASH_PROGRESS_NSTATES 5
+	int	sp_state;
+	int	sp_running;
+	int	sp_force;
+
+	struct splash_info *	sp_si;
+	struct callout 		sp_callout;
+};
+#endif /* !SPLASHSCREEN_PROGRESS */
+
 #define	SPLASH_F_NONE	0x00	/* Nothing special */
 #define	SPLASH_F_CENTER	0x01	/* Center splash image */
 #define	SPLASH_F_FILL	0x02	/* Fill the rest of the screen with
@@ -59,9 +76,12 @@ struct splash_info {
 				 * in the splash image
 				 */
 
-int	splash_setimage(const void *, size_t);
-int	splash_render(struct splash_info *, int);
-int	splash_get_cmap(int, uint8_t *, uint8_t *, uint8_t *);
+void	splash_render(struct splash_info *, int);
+
+#ifdef SPLASHSCREEN_PROGRESS
+void	splash_progress_init(struct splash_progress *);
+void	splash_progress_update(struct splash_progress *);
+#endif /* !SPLASHSCREEN_PROGRESS */
 
 #endif /* !SPLASHSCREEN */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: postmap.c,v 1.1.1.1 2009/06/23 10:08:51 tron Exp $	*/
+/*	$NetBSD: postmap.c,v 1.1.1.1.2.3 2011/01/07 01:24:10 riz Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-/* $NetBSD: vr4181aiu.c,v 1.8 2012/10/27 17:17:55 chs Exp $ */
+/* $NetBSD: vr4181aiu.c,v 1.6 2008/06/11 23:53:15 cegger Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vr4181aiu.c,v 1.8 2012/10/27 17:17:55 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vr4181aiu.c,v 1.6 2008/06/11 23:53:15 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -69,6 +69,7 @@ int	vr4181aiu_debug = 0;
 
 
 struct vr4181aiu_softc {
+	struct device		sc_dev;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_dcu1_ioh;
 	bus_space_handle_t	sc_dcu2_ioh;
@@ -82,13 +83,13 @@ struct vr4181aiu_softc {
 	int			sc_status;
 };
 
-static int vr4181aiu_match(device_t, cfdata_t, void *);
-static void vr4181aiu_attach(device_t, device_t, void *);
+static int vr4181aiu_match(struct device *, struct cfdata *, void *);
+static void vr4181aiu_attach(struct device *, struct device *, void *);
 static int vr4181aiu_intr(void *);
 
 extern struct cfdriver vr4181aiu_cd;
 
-CFATTACH_DECL_NEW(vr4181aiu, sizeof(struct vr4181aiu_softc),
+CFATTACH_DECL(vr4181aiu, sizeof(struct vr4181aiu_softc),
 	      vr4181aiu_match, vr4181aiu_attach, NULL, NULL);
 
 dev_type_open(vr4181aiuopen);
@@ -102,7 +103,7 @@ const struct cdevsw vr4181aiu_cdevsw = {
 };
 
 static int
-vr4181aiu_match(device_t parent, cfdata_t cf, void *aux)
+vr4181aiu_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	return 1;
 }
@@ -159,10 +160,10 @@ vr4181aiu_disable(struct vr4181aiu_softc *sc)
 }
 
 static void
-vr4181aiu_attach(device_t parent, device_t self, void *aux)
+vr4181aiu_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct vrip_attach_args	*va = aux;
-	struct vr4181aiu_softc	*sc = device_private(self);
+	struct vr4181aiu_softc	*sc = (void *) self;
 
 	vr4181aiu_init_inbuf(sc);
 	memset(sc->sc_inbuf1, 0x55, INBUFLEN * 2);
@@ -214,7 +215,7 @@ vr4181aiu_attach(device_t parent, device_t self, void *aux)
 	if (vrip_intr_establish(va->va_vc, va->va_unit, 0,
 				IPL_BIO, vr4181aiu_intr, sc) == NULL) {
 		printf("%s: can't establish interrupt\n",
-		       device_xname(self));
+		       sc->sc_dev.dv_xname);
 		return;
 	}
 
@@ -234,7 +235,7 @@ vr4181aiuopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct vr4181aiu_softc	*sc;
 
-	sc = device_lookup_private(&vr4181aiu_cd, minor(dev));
+	sc = device_lookup_private(&vr4181aiu_cd, minor(dev);
 	if (sc == NULL)
 		return ENXIO;
 

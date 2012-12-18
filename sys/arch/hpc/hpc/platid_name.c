@@ -1,4 +1,4 @@
-/*	$NetBSD: platid_name.c,v 1.25 2011/05/18 12:11:46 nonaka Exp $	*/
+/*	$NetBSD: platid_name.c,v 1.22 2008/05/10 15:31:04 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001
@@ -104,8 +104,6 @@ struct platid_name platid_name_table[] = {
 	 TEXT("ARM XSCALE") },
 	{ &platid_mask_CPU_ARM_XSCALE_PXA250,
 	 TEXT("ARM XSCALE PXA250") },
-	{ &platid_mask_CPU_ARM_XSCALE_PXA270,
-	 TEXT("ARM XSCALE PXA270") },
 #endif /* hpcarm */
 #ifdef hpcmips
 	{ &platid_mask_MACH_NEC,
@@ -227,10 +225,9 @@ struct platid_name platid_name_table[] = {
 	{ &platid_mask_MACH_CASIO_CASSIOPEIAA_A55V,
 	 TEXT("CASIO Cassiopeia A-55V") },
 #endif /* hpcsh */
-#if defined(hpcmips) || defined(hpcarm)
+#ifdef hpcmips
 	{ &platid_mask_MACH_SHARP,
 	 TEXT("Sharp") },
-#if defined(hpcmips)
 	{ &platid_mask_MACH_SHARP_TRIPAD,
 	 TEXT("Sharp Tripad") },
 	{ &platid_mask_MACH_SHARP_TRIPAD_PV,
@@ -262,21 +259,6 @@ struct platid_name platid_name_table[] = {
 	{ &platid_mask_MACH_SHARP_MOBILON_HC1200,
 	 TEXT("Sharp Mobilon HC1200") },
 #endif /* hpcmips */
-#if defined(hpcarm)
-	{ &platid_mask_MACH_SHARP_WZERO3,
-	 TEXT("Sharp WZERO3") },
-	{ &platid_mask_MACH_SHARP_WZERO3_WS003SH,
-	 TEXT("Sharp W-ZERO3 (WS003SH)") },
-	{ &platid_mask_MACH_SHARP_WZERO3_WS004SH,
-	 TEXT("Sharp W-ZERO3 (WS004SH)") },
-	{ &platid_mask_MACH_SHARP_WZERO3_WS007SH,
-	 TEXT("Sharp W-ZERO3[es] (WS007SH)") },
-	{ &platid_mask_MACH_SHARP_WZERO3_WS011SH,
-	 TEXT("Sharp Advanced/W-ZERO3[es] (WS011SH)") },
-	{ &platid_mask_MACH_SHARP_WZERO3_WS020SH,
-	 TEXT("Sharp WILLCOM 03 (WS020SH)") },
-#endif /* hpcarm */
-#endif /* hpcmips || hpcarm */
 #ifdef hpcmips
 	{ &platid_mask_MACH_FUJITSU,
 	 TEXT("Fujitsu") },
@@ -519,13 +501,5 @@ struct platid_name platid_name_table[] = {
 	{ &platid_mask_MACH_AGENDA_VR_VR3,
 	 TEXT("AGENDA VR3+") },
 #endif /* hpcmips */
-#ifdef hpcarm
-	{ &platid_mask_MACH_PSIONTEKLOGIX,
-	 TEXT("PSIONTEKLOGIX") },
-	{ &platid_mask_MACH_PSIONTEKLOGIX_NETBOOK,
-	 TEXT("PSIONTEKLOGIX NETBOOK") },
-	{ &platid_mask_MACH_PSIONTEKLOGIX_NETBOOK_PRO,
-	 TEXT("PSIONTEKLOGIX NETBOOK PRO") },
-#endif /* hpcarm */
 };
 int platid_name_table_size = sizeof(platid_name_table)/sizeof(*platid_name_table);

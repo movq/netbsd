@@ -1,4 +1,4 @@
-/*	$NetBSD: lexi.c,v 1.13 2009/04/12 11:09:49 lukem Exp $	*/
+/*	$NetBSD: lexi.c,v 1.12 2003/08/07 11:14:09 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -68,7 +68,7 @@
 #if 0
 static char sccsid[] = "@(#)lexi.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lexi.c,v 1.13 2009/04/12 11:09:49 lukem Exp $");
+__RCSID("$NetBSD: lexi.c,v 1.12 2003/08/07 11:14:09 agc Exp $");
 #endif
 #endif				/* not lint */
 
@@ -89,8 +89,8 @@ __RCSID("$NetBSD: lexi.c,v 1.13 2009/04/12 11:09:49 lukem Exp $");
 #define opchar 3
 
 struct templ {
-	const char	*rwd;
-	int		rwcode;
+	char   *rwd;
+	int     rwcode;
 };
 
 struct templ specials[1000] =
@@ -181,7 +181,8 @@ lexi(void)
 		/*
 		 * we have a character or number
 		 */
-		const char *j;	/* used for searching thru list of
+		char   *j;	/* used for searching thru list of
+				 * 
 				 * reserved words */
 		struct templ *p;
 
@@ -279,17 +280,17 @@ lexi(void)
 		 * This loop will check if the token is a keyword.
 		 */
 		for (p = specials; (j = p->rwd) != 0; p++) {
-			char   *pt = s_token;	/* point at scanned token */
-			if (*j++ != *pt++ || *j++ != *pt++)
+			char   *p = s_token;	/* point at scanned token */
+			if (*j++ != *p++ || *j++ != *p++)
 				continue;	/* This test depends on the
 						 * fact that identifiers are
 						 * always at least 1 character
 						 * long (ie. the first two
 						 * bytes of the identifier are
 						 * always meaningful) */
-			if (pt[-1] == 0)
+			if (p[-1] == 0)
 				break;	/* If its a one-character identifier */
-			while (*pt++ == *j)
+			while (*p++ == *j)
 				if (*j++ == 0)
 					goto found_keyword;	/* I wish that C had a
 								 * multi-level break... */

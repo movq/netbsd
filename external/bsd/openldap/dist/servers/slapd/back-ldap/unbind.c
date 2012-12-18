@@ -1,10 +1,8 @@
-/*	$NetBSD: unbind.c,v 1.1.1.3 2010/12/12 15:23:07 adam Exp $	*/
-
 /* unbind.c - ldap backend unbind function */
-/* OpenLDAP: pkg/ldap/servers/slapd/back-ldap/unbind.c,v 1.33.2.7 2010/04/13 20:23:29 kurt Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/back-ldap/unbind.c,v 1.33.2.4 2008/02/11 23:26:46 kurt Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1999-2010 The OpenLDAP Foundation.
+ * Copyright 1999-2008 The OpenLDAP Foundation.
  * Portions Copyright 1999-2003 Howard Chu.
  * Portions Copyright 2000-2003 Pierangelo Masarati.
  * All rights reserved.
@@ -55,11 +53,11 @@ ldap_back_conn_destroy(
 #endif /* LDAP_BACK_PRINT_CONNTREE */
 	while ( ( lc = avl_delete( &li->li_conninfo.lai_tree, (caddr_t)&lc_curr, ldap_back_conn_cmp ) ) != NULL )
 	{
-		assert( !LDAP_BACK_PCONN_ISPRIV( lc ) );
 		Debug( LDAP_DEBUG_TRACE,
-			"=>ldap_back_conn_destroy: destroying conn %lu "
+			"=>ldap_back_conn_destroy: destroying conn %ld "
 			"refcnt=%d flags=0x%08x\n",
-			lc->lc_conn->c_connid, lc->lc_refcnt, lc->lc_lcflags );
+			LDAP_BACK_PCONN_ID( lc ),
+			lc->lc_refcnt, lc->lc_lcflags );
 
 		if ( lc->lc_refcnt > 0 ) {
 			/* someone else might be accessing the connection;

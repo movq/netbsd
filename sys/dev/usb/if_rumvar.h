@@ -1,4 +1,3 @@
-/*	$NetBSD: if_rumvar.h,v 1.9 2011/02/21 23:50:42 jmcneill Exp $	*/
 /*	$OpenBSD: if_rumvar.h,v 1.7 2006/11/13 20:06:38 damien Exp $	*/
 
 /*-
@@ -19,7 +18,7 @@
  */
 
 #define RUM_RX_LIST_COUNT	1
-#define RUM_TX_LIST_COUNT	8
+#define RUM_TX_LIST_COUNT	1
 
 struct rum_rx_radiotap_header {
 	struct ieee80211_radiotap_header wr_ihdr;
@@ -71,7 +70,7 @@ struct rum_rx_data {
 };
 
 struct rum_softc {
-	device_t			sc_dev;
+	USBBASEDEVICE			sc_dev;
 	struct ethercom			sc_ec;
 #define sc_if	sc_ec.ec_if
 	struct ieee80211com		sc_ic;
@@ -98,7 +97,6 @@ struct rum_softc {
 	usbd_pipe_handle		sc_tx_pipeh;
 
 	enum ieee80211_state		sc_state;
-	int				sc_arg;
 	struct usb_task			sc_task;
 
 	struct ieee80211_amrr		amrr;
@@ -107,12 +105,11 @@ struct rum_softc {
 	struct rum_rx_data		rx_data[RUM_RX_LIST_COUNT];
 	struct rum_tx_data		tx_data[RUM_TX_LIST_COUNT];
 	int				tx_queued;
-	int				tx_cur;
 
 	struct ieee80211_beacon_offsets	sc_bo;
 
-	struct callout			sc_scan_ch;
-	struct callout			sc_amrr_ch;
+	usb_callout_t			sc_scan_ch;
+	usb_callout_t			sc_amrr_ch;
 
 	int				sc_tx_timer;
 
@@ -136,7 +133,8 @@ struct rum_softc {
 	int				sifs;
 	uint8_t				bbp17;
 
-	struct bpf_if *			sc_drvbpf;
+#if NBPFILTER > 0
+	void *				sc_drvbpf;
 
 	union {
 		struct rum_rx_radiotap_header th;
@@ -151,4 +149,5 @@ struct rum_softc {
 	}				sc_txtapu;
 #define sc_txtap	sc_txtapu.th
 	int				sc_txtap_len;
+#endif
 };

@@ -1,7 +1,7 @@
-/*	$NetBSD: ukfs.h,v 1.14 2012/07/19 06:33:03 joerg Exp $	*/
+/*	$NetBSD: ukfs.h,v 1.7 2008/10/07 23:16:59 pooka Exp $	*/
 
 /*
- * Copyright (c) 2007, 2008, 2009  Antti Kantee.  All Rights Reserved.
+ * Copyright (c) 2007, 2008  Antti Kantee.  All Rights Reserved.
  *
  * Development of this software was supported by the
  * Finnish Cultural Foundation.
@@ -41,43 +41,27 @@ struct stat;
 struct timeval;
 
 struct ukfs;
-struct ukfs_dircookie;
-struct ukfs_part;
 
-#define UKFS_DEFAULTMP "/ukfs"
+#define UKFS_DEFAULTMP "/"
 
 #define UKFS_RELFLAG_NOUNMOUNT	0x01
-#define UKFS_RELFLAG_FORCE	0x02
 
-#define UKFS_VERSION	002 /* secret ukfs 002 */
+#define UKFS_VERSION	001 /* sector 001 */
 #define	ukfs_init()	_ukfs_init(UKFS_VERSION)
 
 __BEGIN_DECLS
 
 int		_ukfs_init(int);
 struct ukfs	*ukfs_mount(const char *, const char *, const char *,
-			    int, void *, size_t);
-struct ukfs	*ukfs_mount_disk(const char *, const char *, struct ukfs_part *,
-				 const char *, int, void *, size_t);
-int		ukfs_release(struct ukfs *, int);
+			  int, void *, size_t);
+void		ukfs_release(struct ukfs *, int);
 
-int		ukfs_opendir(struct ukfs *, const char *,
-			     struct ukfs_dircookie **);
 int		ukfs_getdents(struct ukfs *, const char *, off_t *,
 			      uint8_t *, size_t);
-int		ukfs_getdents_cookie(struct ukfs *, struct ukfs_dircookie *,
-				     off_t *, uint8_t *, size_t);
-int		ukfs_closedir(struct ukfs *, struct ukfs_dircookie *);
-
-int		ukfs_open(struct ukfs *, const char *, int);
 ssize_t		ukfs_read(struct ukfs *, const char *, off_t,
 			      uint8_t *, size_t);
-ssize_t		ukfs_read_fd(struct ukfs *, int, off_t, uint8_t *, size_t);
 ssize_t		ukfs_write(struct ukfs *, const char *, off_t,
 			       uint8_t *, size_t);
-ssize_t		ukfs_write_fd(struct ukfs *, int, off_t, uint8_t *, size_t,int);
-int		ukfs_close(struct ukfs *, int);
-
 ssize_t		ukfs_readlink(struct ukfs *, const char *, char *, size_t);
 
 int		ukfs_create(struct ukfs *, const char *, mode_t);
@@ -111,34 +95,6 @@ int		ukfs_lutimes(struct ukfs *, const char *,
 
 struct mount	*ukfs_getmp(struct ukfs *);
 struct vnode	*ukfs_getrvp(struct ukfs *);
-void		ukfs_setspecific(struct ukfs *, void *);
-void *		ukfs_getspecific(struct ukfs *);
-
-/* partition magic in device names */
-extern struct ukfs_part *ukfs_part_none;
-extern struct ukfs_part *ukfs_part_na;
-#define UKFS_PARTITION_SCANMAGIC "%PART:" /* deprecated */
-
-#define UKFS_DISKLABEL_SCANMAGIC "%DISKLABEL:"
-#define UKFS_DISKLABEL_MAGICLEN (sizeof(UKFS_DISKLABEL_SCANMAGIC "a%")-1)
-
-#define UKFS_OFFSET_SCANMAGIC "%OFFSET:"
-#define UKFS_OFFSET_MINLEN (sizeof(UKFS_OFFSET_SCANMAGIC "512,512%")-1)
-
-#define UKFS_DEVICE_MAXSTR 128 /* unexact science ... */
-#define UKFS_DEVICE_MAXPATHLEN (MAXPATHLEN+UKFS_DEVICE_MAXSTR)
-
-#define UKFS_DEVICE_ARGVPROBE(part)					\
-do {									\
-	if (argc < 3)							\
-		*part = NULL;						\
-	else if (ukfs_part_probe(argv[argc-2], part) == -1)		\
-			err(1, "ukfs_part_probe");			\
-} while (/*CONSTCOND*/0)
-
-int		ukfs_part_probe(char *, struct ukfs_part **);
-void		ukfs_part_release(struct ukfs_part *);
-int		ukfs_part_tostring(struct ukfs_part *, char *, size_t);
 
 /* dynamic loading of library modules */
 int		ukfs_modload(const char *);

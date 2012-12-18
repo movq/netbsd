@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_exits.c,v 1.1.1.2 2010/06/17 18:06:52 tron Exp $	*/
+/*	$NetBSD: sys_exits.c,v 1.1.1.1.2.4 2011/01/07 01:24:05 riz Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-.\"	$NetBSD: nsswitch.conf.5,v 1.28 2009/10/25 01:30:48 wiz Exp $
+.\"	$NetBSD: nsswitch.conf.5,v 1.25 2008/05/04 13:56:27 martin Exp $
 .\"
 .\"  Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.
 .\"  All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd October 25, 2009
+.Dd November 23, 2004
 .Dt NSSWITCH.CONF 5
 .Os
 .Sh NAME
@@ -58,8 +58,8 @@ Each criterion consists of one or more status codes, and actions to
 take if that status code occurs.
 .Ss Sources
 The following sources are implemented:
-.Bl -column "multicast_dns" -offset indent -compact
-.It Sy Source	Description
+.Bl -column "compat" -offset indent -compact
+.Sy Source	Description
 .It files	Local files, such as
 .Pa /etc/hosts ,
 and
@@ -67,28 +67,12 @@ and
 .It dns	Internet Domain Name System.
 .Dq hosts
 and
-.Dq networks
+.Sq networks
 use
 .Sy IN
 class entries, all other databases use
 .Sy HS
 class (Hesiod) entries.
-.It mdnsd	Use
-.Xr mdnsd 8
-for
-.Dq hosts
-lookups, acting as both a system-wide cache for normal unicast DNS
-as well as providing multicast DNS
-.Dq ( zeroconf )
-lookups.
-.It multicast_dns	Use
-.Xr mdnsd 8
-only for multicast DNS
-.Dq hosts
-lookups.
-This would normally be used in conjunction with
-.Dq dns ,
-which would then provide unicast DNS resolver functions.
 .It nis	NIS (formerly YP)
 .It compat	support
 .Sq +/-
@@ -102,7 +86,7 @@ If this is present, it must be the only source for that entry.
 .Ss Databases
 The following databases are used by the following C library functions:
 .Bl -column "netgroup" -offset indent -compact
-.It Sy Database	Used by
+.Sy Database	Used by
 .It group Ta Xr getgrent 3
 .It hosts Ta Xr gethostbyname 3
 .It netgroup Ta Xr getnetgrent 3
@@ -113,7 +97,7 @@ The following databases are used by the following C library functions:
 .Ss Status codes
 The following status codes are available:
 .Bl -column "tryagain" -offset indent -compact
-.It Sy Status	Description
+.Sy Status	Description
 .It success	The requested entry was found.
 .It notfound	The entry is not present at this source.
 .It tryagain	The source is busy, and may respond to retries.
@@ -122,7 +106,7 @@ The following status codes are available:
 .Ss Actions
 For each of the status codes, one of two actions is possible:
 .Bl -column "continue" -offset indent -compact
-.It Sy Action	Description
+.Sy Action	Description
 .It continue	Try the next source
 .It return	Return with the current result
 .El
@@ -215,7 +199,7 @@ will default to an entry of
 for the requested database.
 Exceptions are:
 .Bl -column passwd_compat "files dns" -offset indent
-.It Sy Database	Default source list
+.Sy Database	Default source list
 .It group	compat
 .It group_compat	nis
 .It hosts	files dns

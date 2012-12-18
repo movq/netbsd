@@ -1,21 +1,21 @@
-/* $NetBSD: isa_machdep.c,v 1.21 2012/02/06 02:14:13 matt Exp $ */
+/* $NetBSD: isa_machdep.c,v 1.15 2002/10/02 04:06:38 thorpej Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.21 2012/02/06 02:14:13 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.15 2002/10/02 04:06:38 thorpej Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -41,6 +41,8 @@ __KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.21 2012/02/06 02:14:13 matt Exp $"
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/isa/isavar.h>
 
@@ -55,10 +57,10 @@ __KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.21 2012/02/06 02:14:13 matt Exp $"
 #if (NPCPPI > 0)
 #include <dev/isa/pcppivar.h>
 
-int isabeepmatch(device_t, cfdata_t, void *);
-void isabeepattach(device_t, device_t, void *);
+int isabeepmatch __P((struct device *, struct cfdata *, void *));
+void isabeepattach __P((struct device *, struct device *, void *));
 
-CFATTACH_DECL_NEW(isabeep, 0,
+CFATTACH_DECL(isabeep, sizeof(struct device),
     isabeepmatch, isabeepattach, NULL, NULL);
 
 static int ppi_attached;
@@ -66,7 +68,8 @@ static pcppi_tag_t ppicookie;
 #endif /* PCPPI */
 
 int
-isa_display_console(bus_space_tag_t iot, bus_space_tag_t memt)
+isa_display_console(iot, memt)
+	bus_space_tag_t iot, memt;
 {
 	int res = ENXIO;
 #if NVGA_ISA
@@ -79,13 +82,18 @@ isa_display_console(bus_space_tag_t iot, bus_space_tag_t memt)
 
 #if (NPCPPI > 0)
 int
-isabeepmatch(device_t parent, cfdata_t match, void *aux)
+isabeepmatch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	return (!ppi_attached);
 }
 
 void
-isabeepattach(device_t parent, device_t self, void *aux)
+isabeepattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
 	printf("\n");
 
@@ -95,7 +103,8 @@ isabeepattach(device_t parent, device_t self, void *aux)
 #endif
 
 void
-isabeep(int pitch, int period)
+isabeep(pitch, period)
+	int pitch, period;
 {
 #if (NPCPPI > 0)
 	if (ppi_attached)

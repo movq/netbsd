@@ -1,4 +1,4 @@
-.\"	$NetBSD: siop.4,v 1.18 2011/04/28 16:11:37 wiz Exp $
+.\"	$NetBSD: siop.4,v 1.16 2008/04/05 15:59:28 skrll Exp $
 .\"
 .\" Copyright (c) 2000 Manuel Bouyer.
 .\"
@@ -10,6 +10,11 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
+.\" 3. All advertising materials mentioning features or use of this software
+.\"    must display the following acknowledgement:
+.\"	This product includes software developed by Manuel Bouyer.
+.\" 4. The name of the author may not be used to endorse or promote products
+.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -79,9 +84,8 @@ and
 .Tn SCSI )
 .El
 The SIOP_SYMLED option causes the driver to report SCSI activity on the GPIO
-pin 1, which is connected to the activity LED on some adapters.
-At this time only the 53c895 based Symbios and Tekram adapters are
-known to require this.
+pin 1, which is connected to the activity LED on some adapters. At this time
+only the 53c895 based Symbios and Tekram adapters are known to require this.
 .Pp
 If both
 .Nm
@@ -114,7 +118,6 @@ for
 .Nx .
 .Sh BUGS
 .Nm
-supports the 53c1010-33 in Ultra2-wide mode only.
-Use
+supports the 53c1010-33 in Ultra2-wide mode only. Use
 .Xr esiop 4
 for Ultra160 support.

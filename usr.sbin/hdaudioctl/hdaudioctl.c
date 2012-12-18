@@ -1,4 +1,4 @@
-/* $NetBSD: hdaudioctl.c,v 1.1 2009/10/11 08:57:54 sborrill Exp $ */
+/* $NetBSD: hdaudioctl.c,v 1.1.2.2 2009/10/18 16:50:13 bouyer Exp $ */
 
 /*
  * Copyright (c) 2009 Precedence Technologies Ltd <support@precedence.co.uk>

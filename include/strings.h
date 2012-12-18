@@ -1,4 +1,4 @@
-/*	$NetBSD: strings.h,v 1.18 2011/08/22 01:24:15 dholland Exp $	*/
+/*	$NetBSD: strings.h,v 1.13 2008/04/28 20:22:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -46,19 +46,12 @@ typedef	_BSD_SIZE_T_	size_t;
 
 #include <sys/cdefs.h>
 
-#include <machine/int_types.h>
-
 __BEGIN_DECLS
 int	 bcmp(const void *, const void *, size_t);
 void	 bcopy(const void *, void *, size_t);
 void	 bzero(void *, size_t);
 int	 ffs(int);
 char	*index(const char *, int);
-unsigned int	popcount(unsigned int) __constfunc;
-unsigned int	popcountl(unsigned long) __constfunc;
-unsigned int	popcountll(unsigned long long) __constfunc;
-unsigned int	popcount32(__uint32_t) __constfunc;
-unsigned int	popcount64(__uint64_t) __constfunc;
 char	*rindex(const char *, int);
 int	 strcasecmp(const char *, const char *);
 int	 strncasecmp(const char *, const char *, size_t);

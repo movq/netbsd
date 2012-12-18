@@ -1,4 +1,4 @@
-/*	$NetBSD: irframe_tty.c,v 1.58 2009/05/12 14:29:42 cegger Exp $	*/
+/*	$NetBSD: irframe_tty.c,v 1.54.8.1 2009/04/10 18:12:53 snj Exp $	*/
 
 /*
  * TODO
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: irframe_tty.c,v 1.58 2009/05/12 14:29:42 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irframe_tty.c,v 1.54.8.1 2009/04/10 18:12:53 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -196,8 +196,8 @@ static struct linesw irframet_disc = {
 };
 
 /* glue to attach irframe device */
-static void irframet_attach(device_t, device_t, void *);
-static int irframet_detach(device_t, int);
+static void irframet_attach(struct device *, struct device *, void *);
+static int irframet_detach(struct device *, int);
 
 CFATTACH_DECL_NEW(irframet, sizeof(struct irframet_softc),
 	NULL, irframet_attach, irframet_detach, NULL);
@@ -240,7 +240,7 @@ irframet_attach(device_t parent, device_t self, void *aux)
 }
 
 static int
-irframet_detach(device_t dev, int flags)
+irframet_detach(struct device *dev, int flags)
 {
 	struct irframet_softc *sc = device_private(dev);
 	int rc;
@@ -269,7 +269,7 @@ irframetopen(dev_t dev, struct tty *tp)
 	struct lwp *l = curlwp;		/* XXX */
 	struct irframet_softc *sc;
 	int error, s;
-	cfdata_t cfdata;
+	struct cfdata *cfdata;
 	struct ir_attach_args ia;
 	device_t d;
 
@@ -309,7 +309,7 @@ irframetopen(dev_t dev, struct tty *tp)
 	tp->t_sc = sc;
 	sc->sc_tp = tp;
 	aprint_normal("%s attached at tty%02d\n", device_xname(d),
-	    (int)minor(tp->t_dev));
+	    minor(tp->t_dev));
 
 	DPRINTF(("%s: set sc=%p\n", __func__, sc));
 
@@ -349,7 +349,7 @@ irframetclose(struct tty *tp, int flag)
 		irt_buffer(sc, 0);
 		tp->t_sc = NULL;
 		aprint_normal("%s detached from tty%02d\n",
-		    device_xname(sc->sc_irp.sc_dev), (int)minor(tp->t_dev));
+		    device_xname(sc->sc_irp.sc_dev), minor(tp->t_dev));
 
 		if (sc->sc_tp == tp) {
 			cfdata = device_cfdata(sc->sc_irp.sc_dev);

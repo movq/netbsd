@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf_filter.c,v 1.55 2012/10/27 22:36:14 alnsn Exp $	*/
+/*	$NetBSD: bpf_filter.c,v 1.35.4.2 2011/03/20 21:28:08 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bpf_filter.c,v 1.55 2012/10/27 22:36:14 alnsn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bpf_filter.c,v 1.35.4.2 2011/03/20 21:28:08 bouyer Exp $");
 
 #if 0
 #if !(defined(lint) || defined(KERNEL))
@@ -57,7 +57,7 @@ static const char rcsid[] =
 #ifdef _KERNEL
 #include <sys/mbuf.h>
 #define MINDEX(len, m, k) 		\
-{					\
+{ 					\
 	len = m->m_len; 		\
 	while (k >= len) { 		\
 		k -= len; 		\
@@ -65,15 +65,14 @@ static const char rcsid[] =
 		if (m == 0) 		\
 			return 0; 	\
 		len = m->m_len; 	\
-	}				\
+	} 				\
 }
 
-uint32_t m_xword (const struct mbuf *, uint32_t, int *);
-uint32_t m_xhalf (const struct mbuf *, uint32_t, int *);
-uint32_t m_xbyte (const struct mbuf *, uint32_t, int *);
+static int m_xword (struct mbuf *, uint32_t, int *);
+static int m_xhalf (struct mbuf *, uint32_t, int *);
 
-uint32_t
-m_xword(const struct mbuf *m, uint32_t k, int *err)
+static int
+m_xword(struct mbuf *m, uint32_t k, int *err)
 {
 	int len;
 	u_char *cp, *np;
@@ -91,19 +90,21 @@ m_xword(const struct mbuf *m, uint32_t k, int *err)
 		return 0;
 	*err = 0;
 	np = mtod(m0, u_char *);
-
 	switch (len - k) {
+
 	case 1:
 		return (cp[0] << 24) | (np[0] << 16) | (np[1] << 8) | np[2];
+
 	case 2:
 		return (cp[0] << 24) | (cp[1] << 16) | (np[0] << 8) | np[1];
+
 	default:
 		return (cp[0] << 24) | (cp[1] << 16) | (cp[2] << 8) | np[0];
 	}
 }
 
-uint32_t
-m_xhalf(const struct mbuf *m, uint32_t k, int *err)
+static int
+m_xhalf(struct mbuf *m, uint32_t k, int *err)
 {
 	int len;
 	u_char *cp;
@@ -122,16 +123,6 @@ m_xhalf(const struct mbuf *m, uint32_t k, int *err)
 	*err = 0;
 	return (cp[0] << 8) | mtod(m0, u_char *)[0];
 }
-
-uint32_t
-m_xbyte(const struct mbuf *m, uint32_t k, int *err)
-{
-	int len;
-
-	*err = 0;
-	MINDEX(len, m, k);
-	return mtod(m, u_char *)[k];
-}
 #else /* _KERNEL */
 #include <stdlib.h>
 #endif /* !_KERNEL */
@@ -144,27 +135,19 @@ m_xbyte(const struct mbuf *m, uint32_t k, int *err)
  * buflen is the amount of data present
  */
 u_int
-bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
-    u_int buflen)
+bpf_filter(struct bpf_insn *pc, u_char *p, u_int wirelen, u_int buflen)
 {
 	uint32_t A, X, k;
 	uint32_t mem[BPF_MEMWORDS];
 
-	if (pc == 0) {
+	if (pc == 0)
 		/*
 		 * No filter means accept all.
 		 */
 		return (u_int)-1;
-	}
-
-	/*
-	 * Note: safe to leave memwords uninitialised, as the validation
-	 * step ensures that it will not be read, if it was not written.
-	 */
 	A = 0;
 	X = 0;
 	--pc;
-
 	for (;;) {
 		++pc;
 		switch (pc->code) {
@@ -184,13 +167,13 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 
 		case BPF_LD|BPF_W|BPF_ABS:
 			k = pc->k;
-			if (k > buflen || sizeof(int32_t) > buflen - k) {
+			if (k + sizeof(int32_t) > buflen) {
 #ifdef _KERNEL
-				int merr;
+				int merr = 0;	/* XXX: GCC */
 
 				if (buflen != 0)
 					return 0;
-				A = m_xword((const struct mbuf *)p, k, &merr);
+				A = m_xword((struct mbuf *)p, k, &merr);
 				if (merr != 0)
 					return 0;
 				continue;
@@ -203,13 +186,13 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 
 		case BPF_LD|BPF_H|BPF_ABS:
 			k = pc->k;
-			if (k > buflen || sizeof(int16_t) > buflen - k) {
+			if (k + sizeof(int16_t) > buflen) {
 #ifdef _KERNEL
 				int merr;
 
 				if (buflen != 0)
 					return 0;
-				A = m_xhalf((const struct mbuf *)p, k, &merr);
+				A = m_xhalf((struct mbuf *)p, k, &merr);
 				if (merr != 0)
 					return 0;
 				continue;
@@ -224,12 +207,12 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 			k = pc->k;
 			if (k >= buflen) {
 #ifdef _KERNEL
-				const struct mbuf *m;
+				struct mbuf *m;
 				int len;
 
 				if (buflen != 0)
 					return 0;
-				m = (const struct mbuf *)p;
+				m = (struct mbuf *)p;
 				MINDEX(len, m, k);
 				A = mtod(m, u_char *)[k];
 				continue;
@@ -250,14 +233,13 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 
 		case BPF_LD|BPF_W|BPF_IND:
 			k = X + pc->k;
-			if (pc->k > buflen || X > buflen - pc->k ||
-			    sizeof(int32_t) > buflen - k) {
+			if (k + sizeof(int32_t) > buflen) {
 #ifdef _KERNEL
-				int merr;
+				int merr = 0;	/* XXX: GCC */
 
 				if (buflen != 0)
 					return 0;
-				A = m_xword((const struct mbuf *)p, k, &merr);
+				A = m_xword((struct mbuf *)p, k, &merr);
 				if (merr != 0)
 					return 0;
 				continue;
@@ -270,14 +252,13 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 
 		case BPF_LD|BPF_H|BPF_IND:
 			k = X + pc->k;
-			if (pc->k > buflen || X > buflen - pc->k ||
-			    sizeof(int16_t) > buflen - k) {
+			if (k + sizeof(int16_t) > buflen) {
 #ifdef _KERNEL
-				int merr;
+				int merr = 0;	/* XXX: GCC */
 
 				if (buflen != 0)
 					return 0;
-				A = m_xhalf((const struct mbuf *)p, k, &merr);
+				A = m_xhalf((struct mbuf *)p, k, &merr);
 				if (merr != 0)
 					return 0;
 				continue;
@@ -290,14 +271,14 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 
 		case BPF_LD|BPF_B|BPF_IND:
 			k = X + pc->k;
-			if (pc->k >= buflen || X >= buflen - pc->k) {
+			if (k >= buflen) {
 #ifdef _KERNEL
-				const struct mbuf *m;
+				struct mbuf *m;
 				int len;
 
 				if (buflen != 0)
 					return 0;
-				m = (const struct mbuf *)p;
+				m = (struct mbuf *)p;
 				MINDEX(len, m, k);
 				A = mtod(m, u_char *)[k];
 				continue;
@@ -312,12 +293,12 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 			k = pc->k;
 			if (k >= buflen) {
 #ifdef _KERNEL
-				const struct mbuf *m;
+				struct mbuf *m;
 				int len;
 
 				if (buflen != 0)
 					return 0;
-				m = (const struct mbuf *)p;
+				m = (struct mbuf *)p;
 				MINDEX(len, m, k);
 				X = (mtod(m, char *)[k] & 0xf) << 2;
 				continue;
@@ -469,6 +450,7 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 	}
 }
 
+#ifdef _KERNEL
 /*
  * Return true if the 'fcode' is a valid filter program.
  * The constraints are that each jump be forward and to a valid
@@ -480,10 +462,10 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
  * The kernel needs to be able to verify an application's filter code.
  * Otherwise, a bogus program could easily crash the system.
  */
-__CTASSERT(BPF_MEMWORDS == sizeof(uint16_t) * NBBY);
+CTASSERT(BPF_MEMWORDS == sizeof(uint16_t) * NBBY);
 
 int
-bpf_validate(const struct bpf_insn *f, int signed_len)
+bpf_validate(struct bpf_insn *f, int signed_len)
 {
 	u_int i, from, len, ok = 0;
 	const struct bpf_insn *p;
@@ -498,13 +480,13 @@ bpf_validate(const struct bpf_insn *f, int signed_len)
 #if defined(KERNEL) || defined(_KERNEL)
 	if (len > BPF_MAXINSNS)
 		return 0;
-#endif
+#endif 
 	if (BPF_CLASS(f[len - 1].code) != BPF_RET)
 		return 0;
 
 #if defined(KERNEL) || defined(_KERNEL)
 	mem = kmem_zalloc(size = sizeof(*mem) * len, KM_SLEEP);
-	invalid = ~0;	/* All is invalid on startup */
+	invalid = ~0;   /* All is invalid on startup */
 #endif
 
 	for (i = 0; i < len; ++i) {
@@ -595,16 +577,6 @@ bpf_validate(const struct bpf_insn *f, int signed_len)
 			 * We know that len is <= BPF_MAXINSNS, and we
 			 * assume that BPF_MAXINSNS is < the maximum size
 			 * of a u_int, so that i + 1 doesn't overflow.
-			 *
-			 * For userland, we don't know that the from
-			 * or len are <= BPF_MAXINSNS, but we know that
-			 * from <= len, and, except on a 64-bit system,
-			 * it's unlikely that len, if it truly reflects
-			 * the size of the program we've been handed,
-			 * will be anywhere near the maximum size of
-			 * a u_int.  We also don't check for backward
-			 * branches, as we currently support them in
-			 * userland for the protochain operation.
 			 */
 			from = i + 1;
 			switch (BPF_OP(p->code)) {
@@ -626,7 +598,7 @@ bpf_validate(const struct bpf_insn *f, int signed_len)
 			case BPF_JGT:
 			case BPF_JGE:
 			case BPF_JSET:
-				if (from + p->jt >= len || from + p->jf >= len)
+				if (from + p->jt >= len || from + p->jf >= len) 
 					goto out;
 #if defined(KERNEL) || defined(_KERNEL)
 				/*
@@ -657,3 +629,4 @@ out:
 #endif
 	return ok;
 }
+#endif

@@ -1,4 +1,4 @@
-.\"	$NetBSD: uda.4,v 1.15 2010/03/22 18:58:32 joerg Exp $
+.\"	$NetBSD: uda.4,v 1.12 2003/08/07 10:31:14 agc Exp $
 .\"
 .\" Copyright (c) 1980, 1987, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -44,8 +44,8 @@ MSCP disk controller driver
 .Sh DESCRIPTION
 The
 .Nm
-driver is for UNIBUS disk controllers that use MSCP.
-Among these controllers are:
+driver is for UNIBUS
+disk controllers that use MSCP. Among these controllers are:
 .Pp
 .Bl -tag -width xxxx -offset indent -compact
 .It DEC UDA50 UNIBUS ctlr
@@ -59,7 +59,7 @@ communicates with the host through
 a packet protocol known as the Mass Storage Control Protocol
 .Pq Tn MSCP .
 Consult the file
-.In mscp/mscp.h
+.Aq Pa mscp/mscp.h
 for a detailed description of this protocol.
 .Sh SEE ALSO
 .Xr intro 4
@@ -69,7 +69,7 @@ The
 .Nm
 driver appeared in
 .Bx 4.2 .
-.Pp
+.br
 A new
 .Nm
 driver approach showed up in

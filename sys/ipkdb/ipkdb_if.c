@@ -1,4 +1,4 @@
-/*	$NetBSD: ipkdb_if.c,v 1.12 2009/03/14 15:36:22 dsl Exp $	*/
+/*	$NetBSD: ipkdb_if.c,v 1.11 2001/11/12 22:56:04 lukem Exp $	*/
 
 /*
  * Copyright (C) 1993-2000 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipkdb_if.c,v 1.12 2009/03/14 15:36:22 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipkdb_if.c,v 1.11 2001/11/12 22:56:04 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -50,7 +50,8 @@ __KERNEL_RCSID(0, "$NetBSD: ipkdb_if.c,v 1.12 2009/03/14 15:36:22 dsl Exp $");
  * Initialize IPKDB Interface handling
  */
 int
-ipkdbifinit(struct ipkdb_if *kip)
+ipkdbifinit(kip)
+	struct ipkdb_if *kip;
 {
 	u_char *cp;
 

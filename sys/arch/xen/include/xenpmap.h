@@ -1,4 +1,4 @@
-/*	$NetBSD: xenpmap.h,v 1.37 2012/06/30 22:50:36 jym Exp $	*/
+/*	$NetBSD: xenpmap.h,v 1.21.4.1 2009/09/30 00:08:03 snj Exp $	*/
 
 /*
  *
@@ -13,6 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Christian Limpach.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,13 +34,7 @@
 
 #ifndef _XEN_XENPMAP_H_
 #define _XEN_XENPMAP_H_
-
-#ifdef _KERNEL_OPT
 #include "opt_xen.h"
-#endif
-
-#include <sys/types.h>
-#include <sys/kcpuset.h>
 
 #define	INVALID_P2M_ENTRY	(~0UL)
 
@@ -46,83 +45,61 @@ void xpq_queue_pt_switch(paddr_t);
 void xpq_flush_queue(void);
 void xpq_queue_set_ldt(vaddr_t, uint32_t);
 void xpq_queue_tlb_flush(void);
-void xpq_queue_pin_table(paddr_t, int);
+void xpq_queue_pin_table(paddr_t);
 void xpq_queue_unpin_table(paddr_t);
 int  xpq_update_foreign(paddr_t, pt_entry_t, int);
-void xen_vcpu_mcast_invlpg(vaddr_t, vaddr_t, kcpuset_t *);
-void xen_vcpu_bcast_invlpg(vaddr_t, vaddr_t);
-void xen_mcast_tlbflush(kcpuset_t *);
-void xen_bcast_tlbflush(void);
-void xen_mcast_invlpg(vaddr_t, kcpuset_t *);
-void xen_bcast_invlpg(vaddr_t);
-
-void pmap_xen_resume(void);
-void pmap_xen_suspend(void);
-void pmap_map_recursive_entries(void);
-void pmap_unmap_recursive_entries(void);
-
-#if defined(PAE) || defined(__x86_64__)
-void xen_kpm_sync(struct pmap *, int);
-#endif /* PAE || __x86_64__ */
-
-#define xpq_queue_pin_l1_table(pa)	\
-	xpq_queue_pin_table(pa, MMUEXT_PIN_L1_TABLE)
-#define xpq_queue_pin_l2_table(pa)	\
-	xpq_queue_pin_table(pa, MMUEXT_PIN_L2_TABLE)
-#define xpq_queue_pin_l3_table(pa)	\
-	xpq_queue_pin_table(pa, MMUEXT_PIN_L3_TABLE)
-#define xpq_queue_pin_l4_table(pa)	\
-	xpq_queue_pin_table(pa, MMUEXT_PIN_L4_TABLE)
 
 extern unsigned long *xpmap_phys_to_machine_mapping;
+
+/*   
+ * On Xen-2, the start of the day virtual memory starts at KERNTEXTOFF
+ * (0xc0100000). On Xen-3 for domain0 it starts at KERNBASE (0xc0000000).
+ * So the offset between physical and virtual address is different on
+ * Xen-2 and Xen-3 for domain0.
+ * starting with xen-3.0.2, we can add notes so that virtual memory starts
+ * at KERNBASE for domU as well.
+ */  
+#if defined(XEN3) && (defined(DOM0OPS) || !defined(XEN_COMPAT_030001))
+#define XPMAP_OFFSET	0
+#else
+#define	XPMAP_OFFSET	(KERNTEXTOFF - KERNBASE)
+#endif
+
+#define mfn_to_pfn(mfn) (machine_to_phys_mapping[(mfn)])
+#define pfn_to_mfn(pfn) (xpmap_phys_to_machine_mapping[(pfn)])
+
+static __inline paddr_t
+xpmap_mtop(paddr_t mpa)
+{
+	return (
+	    ((paddr_t)machine_to_phys_mapping[mpa >> PAGE_SHIFT] << PAGE_SHIFT)
+	    + XPMAP_OFFSET) | (mpa & ~PG_FRAME);
+}
 
 static __inline paddr_t
 xpmap_mtop_masked(paddr_t mpa)
 {
 	return (
-	    (paddr_t)machine_to_phys_mapping[mpa >> PAGE_SHIFT] << PAGE_SHIFT);
-}
-
-static __inline paddr_t
-xpmap_mtop(paddr_t mpa)
-{
-	return (xpmap_mtop_masked(mpa) | (mpa & ~PG_FRAME));
-}
-
-static __inline paddr_t
-xpmap_ptom_masked(paddr_t ppa)
-{
-	return (
-	    (paddr_t)xpmap_phys_to_machine_mapping[ppa >> PAGE_SHIFT]
-	    << PAGE_SHIFT);
+	    ((paddr_t)machine_to_phys_mapping[mpa >> PAGE_SHIFT] << PAGE_SHIFT)
+	    + XPMAP_OFFSET);
 }
 
 static __inline paddr_t
 xpmap_ptom(paddr_t ppa)
 {
-	return (xpmap_ptom_masked(ppa) | (ppa & ~PG_FRAME));
+	return (((paddr_t)xpmap_phys_to_machine_mapping[(ppa -
+	    XPMAP_OFFSET) >> PAGE_SHIFT]) << PAGE_SHIFT)
+		| (ppa & ~PG_FRAME);
 }
 
-static __inline void
-xpmap_ptom_map(paddr_t ppa, paddr_t mpa)
+static __inline paddr_t
+xpmap_ptom_masked(paddr_t ppa)
 {
-	xpmap_phys_to_machine_mapping[ppa >> PAGE_SHIFT] = mpa >> PAGE_SHIFT;
+	return (((paddr_t)xpmap_phys_to_machine_mapping[(ppa -
+	    XPMAP_OFFSET) >> PAGE_SHIFT]) << PAGE_SHIFT);
 }
 
-static __inline void
-xpmap_ptom_unmap(paddr_t ppa)
-{
-	xpmap_phys_to_machine_mapping[ppa >> PAGE_SHIFT] = INVALID_P2M_ENTRY;
-}
-
-static __inline bool
-xpmap_ptom_isvalid(paddr_t ppa)
-{
-	return (
-	    xpmap_phys_to_machine_mapping[ppa >> PAGE_SHIFT]
-	    != INVALID_P2M_ENTRY);
-}
-
+#ifdef XEN3
 static inline void
 MULTI_update_va_mapping(
 	multicall_entry_t *mcl, vaddr_t va,
@@ -177,5 +154,7 @@ MULTI_update_va_mapping_otherdomain(
 #if defined(__x86_64__)
 void xen_set_user_pgd(paddr_t);
 #endif
+
+#endif /* XEN3 */
 
 #endif /* _XEN_XENPMAP_H_ */

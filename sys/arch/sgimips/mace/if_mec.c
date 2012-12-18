@@ -1,4 +1,4 @@
-/* $NetBSD: if_mec.c,v 1.49 2012/07/22 14:32:53 matt Exp $ */
+/* $NetBSD: if_mec.c,v 1.33 2008/08/23 18:44:51 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 2004, 2008 Izumi Tsutsui.  All rights reserved.
@@ -61,9 +61,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mec.c,v 1.49 2012/07/22 14:32:53 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mec.c,v 1.33 2008/08/23 18:44:51 tsutsui Exp $");
 
 #include "opt_ddb.h"
+#include "bpfilter.h"
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,22 +78,20 @@ __KERNEL_RCSID(0, "$NetBSD: if_mec.c,v 1.49 2012/07/22 14:32:53 matt Exp $");
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/ip.h>
-#include <netinet/tcp.h>
-#include <netinet/udp.h>
-
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/machtype.h>
 
@@ -239,7 +239,6 @@ struct mec_rxdesc {
 #define MEC_RXSTAT_MATCHMAC	0x0000000004000000	/* match MAC */
 #define MEC_RXSTAT_SEQNUM	0x00000000f8000000	/* sequence number */
 #define MEC_RXSTAT_CKSUM	0x0000ffff00000000ULL	/* IP checksum */
-#define  RXSTAT_CKSUM(x)	(((uint64_t)(x) & MEC_RXSTAT_CKSUM) >> 32)
 #define MEC_RXSTAT_UNUSED1	0x7fff000000000000ULL	/* should be zero */
 #define MEC_RXSTAT_RECEIVED	0x8000000000000000ULL	/* set to 1 on RX */
 	uint64_t rxd_pad1[MEC_RXD_NRXPAD];
@@ -287,6 +286,7 @@ struct mec_softc {
 	bus_space_tag_t sc_st;		/* bus_space tag */
 	bus_space_handle_t sc_sh;	/* bus_space handle */
 	bus_dma_tag_t sc_dmat;		/* bus_dma tag */
+	void *sc_sdhook;		/* shutdown hook */
 
 	struct ethercom sc_ethercom;	/* Ethernet common part */
 
@@ -313,7 +313,9 @@ struct mec_softc {
 
 	int sc_rxptr;			/* next ready RX buffer */
 
-	krndsource_t sc_rnd_source; /* random source */
+#if NRND > 0
+	rndsource_element_t sc_rnd_source; /* random source */
+#endif
 #ifdef MEC_EVENT_COUNTERS
 	struct evcnt sc_ev_txpkts;	/* TX packets queued total */
 	struct evcnt sc_ev_txdpad;	/* TX packets padded in txdesc buf */
@@ -390,7 +392,9 @@ static void	mec_attach(device_t, device_t, void *);
 static int	mec_mii_readreg(device_t, int, int);
 static void	mec_mii_writereg(device_t, int, int, int);
 static int	mec_mii_wait(struct mec_softc *);
-static void	mec_statchg(struct ifnet *);
+static void	mec_statchg(device_t);
+
+static void	enaddr_aton(const char *, uint8_t *);
 
 static int	mec_init(struct ifnet * ifp);
 static void	mec_start(struct ifnet *);
@@ -402,10 +406,8 @@ static void	mec_setfilter(struct mec_softc *);
 static int	mec_intr(void *arg);
 static void	mec_stop(struct ifnet *, int);
 static void	mec_rxintr(struct mec_softc *);
-static void	mec_rxcsum(struct mec_softc *, struct mbuf *, uint16_t,
-		    uint32_t);
 static void	mec_txintr(struct mec_softc *, uint32_t);
-static bool	mec_shutdown(device_t, int);
+static void	mec_shutdown(void *);
 
 CFATTACH_DECL_NEW(mec, sizeof(struct mec_softc),
     mec_match, mec_attach, NULL, NULL);
@@ -504,7 +506,7 @@ mec_attach(device_t parent, device_t self, void *aux)
 	callout_init(&sc->sc_tick_ch, 0);
 
 	/* get Ethernet address from ARCBIOS */
-	if ((macaddr = arcbios_GetEnvironmentVariable("eaddr")) == NULL) {
+	if ((macaddr = ARCBIOS->GetEnvironmentVariable("eaddr")) == NULL) {
 		aprint_error(": unable to get MAC address!\n");
 		goto fail_4;
 	}
@@ -518,7 +520,7 @@ mec_attach(device_t parent, device_t self, void *aux)
 	if (strcmp(macaddr, "ff:ff:ff:ff:ff:ff") == 0) {
 		uint32_t ui = 0;
 		const char * netaddr =
-			arcbios_GetEnvironmentVariable("netaddr");
+			ARCBIOS->GetEnvironmentVariable("netaddr");
 
 		/*
 		 * Create a MAC address by abusing the "netaddr" env var
@@ -544,7 +546,7 @@ mec_attach(device_t parent, device_t self, void *aux)
 		memcpy(sc->sc_enaddr+3, ((uint8_t *)&ui)+1, 3);
 	}
 	if (!mac_is_fake)
-		ether_aton_r(sc->sc_enaddr, sizeof(sc->sc_enaddr), macaddr);
+		enaddr_aton(macaddr, sc->sc_enaddr);
 
 	/* set the Ethernet address */
 	address = 0;
@@ -606,9 +608,6 @@ mec_attach(device_t parent, device_t self, void *aux)
 	ifp->if_mtu = ETHERMTU;
 	IFQ_SET_READY(&ifp->if_snd);
 
-	/* mec has dumb RX cksum support */
-	ifp->if_capabilities = IFCAP_CSUM_TCPv4_Rx | IFCAP_CSUM_UDPv4_Rx;
-
 	/* We can support 802.1Q VLAN-sized frames. */
 	sc->sc_ethercom.ec_capabilities |= ETHERCAP_VLAN_MTU;
 
@@ -619,8 +618,10 @@ mec_attach(device_t parent, device_t self, void *aux)
 	/* establish interrupt */
 	cpu_intr_establish(maa->maa_intr, maa->maa_intrmask, mec_intr, sc);
 
+#if NRND > 0
 	rnd_attach_source(&sc->sc_rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
+#endif
 
 #ifdef MEC_EVENT_COUNTERS
 	evcnt_attach_dynamic(&sc->sc_ev_txpkts , EVCNT_TYPE_MISC,
@@ -714,10 +715,7 @@ mec_attach(device_t parent, device_t self, void *aux)
 #endif
 
 	/* set shutdown hook to reset interface on powerdown */
-	if (pmf_device_register1(self, NULL, NULL, mec_shutdown))
-		pmf_class_network_register(self, ifp);
-	else
-		aprint_error_dev(self, "couldn't establish power handler\n");
+	sc->sc_sdhook = shutdownhook_establish(mec_shutdown, sc);
 
 	return;
 
@@ -823,9 +821,9 @@ mec_mii_wait(struct mec_softc *sc)
 }
 
 static void
-mec_statchg(struct ifnet *ifp)
+mec_statchg(device_t self)
 {
-	struct mec_softc *sc = ifp->if_softc;
+	struct mec_softc *sc = device_private(self);
 	bus_space_tag_t st = sc->sc_st;
 	bus_space_handle_t sh = sc->sc_sh;
 	uint32_t control;
@@ -843,6 +841,36 @@ mec_statchg(struct ifnet *ifp)
 	}
 
 	bus_space_write_8(st, sh, MEC_MAC_CONTROL, control);
+}
+
+/*
+ * XXX
+ * maybe this function should be moved to common part
+ * (sgimips/machdep.c or elsewhere) for all on-board network devices.
+ */
+static void
+enaddr_aton(const char *str, uint8_t *eaddr)
+{
+	int i;
+	char c;
+
+	for (i = 0; i < ETHER_ADDR_LEN; i++) {
+		if (*str == ':')
+			str++;
+
+		c = *str++;
+		if (isdigit(c)) {
+			eaddr[i] = (c - '0');
+		} else if (isxdigit(c)) {
+			eaddr[i] = (toupper(c) + 10 - 'A');
+		}
+		c = *str++;
+		if (isdigit(c)) {
+			eaddr[i] = (eaddr[i] << 4) | (c - '0');
+		} else if (isxdigit(c)) {
+			eaddr[i] = (eaddr[i] << 4) | (toupper(c) + 10 - 'A');
+		}
+	}
 }
 
 static int
@@ -958,7 +986,7 @@ mec_start(struct ifnet *ifp)
 	firsttx = MEC_NEXTTX(sc->sc_txlast);
 
 	DPRINTF(MEC_DEBUG_START,
-	    ("%s: opending = %d, firsttx = %d\n", __func__, opending, firsttx));
+	    ("mec_start: opending = %d, firsttx = %d\n", opending, firsttx));
 
 	while (sc->sc_txpending < MEC_NTXDESC - 1) {
 		/* Grab a packet off the queue. */
@@ -985,8 +1013,8 @@ mec_start(struct ifnet *ifp)
 		len = m0->m_pkthdr.len;
 
 		DPRINTF(MEC_DEBUG_START,
-		    ("%s: len = %d, nexttx = %d, txpending = %d\n",
-		    __func__, len, nexttx, sc->sc_txpending));
+		    ("mec_start: len = %d, nexttx = %d, txpending = %d\n",
+		    len, nexttx, sc->sc_txpending));
 
 		if (len <= MEC_TXD_BUFSIZE) {
 			/*
@@ -994,8 +1022,7 @@ mec_start(struct ifnet *ifp)
 			 * just copy it into there. Maybe it's faster than
 			 * checking alignment and calling bus_dma(9) etc.
 			 */
-			DPRINTF(MEC_DEBUG_START, ("%s: short packet\n",
-			    __func__));
+			DPRINTF(MEC_DEBUG_START, ("mec_start: short packet\n"));
 			IFQ_DEQUEUE(&ifp->if_snd, m0);
 
 			/*
@@ -1020,8 +1047,7 @@ mec_start(struct ifnet *ifp)
 			 * If the packet won't fit the static buffer in txdesc,
 			 * we have to use the concatenate pointers to handle it.
 			 */
-			DPRINTF(MEC_DEBUG_START, ("%s: long packet\n",
-			    __func__));
+			DPRINTF(MEC_DEBUG_START, ("mec_start: long packet\n"));
 			txs->txs_flags = MEC_TXS_TXDPTR;
 
 			/*
@@ -1120,7 +1146,7 @@ mec_start(struct ifnet *ifp)
 				 * is uint64_t aligned.
 				 */ 
 				DPRINTF(MEC_DEBUG_START|MEC_DEBUG_TXSEGS,
-				    ("%s: re-allocating mbuf\n", __func__));
+				    ("mec_start: re-allocating mbuf\n"));
 
 				MGETHDR(m, M_DONTWAIT, MT_DATA);
 				if (m == NULL) {
@@ -1287,10 +1313,13 @@ mec_start(struct ifnet *ifp)
 			    len - buflen, BUS_DMASYNC_PREWRITE);
 		}
 
+#if NBPFILTER > 0
 		/*
 		 * Pass packet to bpf if there is a listener.
 		 */
-		bpf_mtap(ifp, m0);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m0);
+#endif
 		MEC_EVCNT_INCR(&sc->sc_ev_txpkts);
 
 		/*
@@ -1312,8 +1341,8 @@ mec_start(struct ifnet *ifp)
 			bus_dma_segment_t *segs = dmamap->dm_segs;
 
 			DPRINTF(MEC_DEBUG_TXSEGS,
-			    ("%s: nsegs = %d, pseg = %d, nptr = %d\n",
-			    __func__, dmamap->dm_nsegs, pseg, nptr));
+			    ("mec_start: nsegs = %d, pseg = %d, nptr = %d\n",
+			    dmamap->dm_nsegs, pseg, nptr));
 
 			switch (nptr) {
 			case 3:
@@ -1358,20 +1387,16 @@ mec_start(struct ifnet *ifp)
 		txd->txd_cmd = txdcmd;
 
 		DPRINTF(MEC_DEBUG_START,
-		    ("%s: txd_cmd    = 0x%016llx\n",
-		    __func__, txd->txd_cmd));
+		    ("mec_start: txd_cmd    = 0x%016llx\n", txd->txd_cmd));
 		DPRINTF(MEC_DEBUG_START,
-		    ("%s: txd_ptr[0] = 0x%016llx\n",
-		    __func__, txd->txd_ptr[0]));
+		    ("mec_start: txd_ptr[0] = 0x%016llx\n", txd->txd_ptr[0]));
 		DPRINTF(MEC_DEBUG_START,
-		    ("%s: txd_ptr[1] = 0x%016llx\n",
-		    __func__, txd->txd_ptr[1]));
+		    ("mec_start: txd_ptr[1] = 0x%016llx\n", txd->txd_ptr[1]));
 		DPRINTF(MEC_DEBUG_START,
-		    ("%s: txd_ptr[2] = 0x%016llx\n",
-		    __func__, txd->txd_ptr[2]));
+		    ("mec_start: txd_ptr[2] = 0x%016llx\n", txd->txd_ptr[2]));
 		DPRINTF(MEC_DEBUG_START,
-		    ("%s: len = %d (0x%04x), buflen = %d (0x%02x)\n",
-		    __func__, len, len, buflen, buflen));
+		    ("mec_start: len = %d (0x%04x), buflen = %d (0x%02x)\n",
+		    len, len, buflen, buflen));
 
 		/* sync TX descriptor */
 		MEC_TXDESCSYNC(sc, nexttx,
@@ -1414,7 +1439,7 @@ mec_stop(struct ifnet *ifp, int disable)
 	struct mec_txsoft *txs;
 	int i;
 
-	DPRINTF(MEC_DEBUG_STOP, ("%s\n", __func__));
+	DPRINTF(MEC_DEBUG_STOP, ("mec_stop\n"));
 
 	ifp->if_timer = 0;
 	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
@@ -1546,7 +1571,7 @@ mec_intr(void *arg)
 	uint32_t statreg, statack, txptr;
 	int handled, sent;
 
-	DPRINTF(MEC_DEBUG_INTR, ("%s: called\n", __func__));
+	DPRINTF(MEC_DEBUG_INTR, ("mec_intr: called\n"));
 
 	handled = sent = 0;
 
@@ -1554,7 +1579,7 @@ mec_intr(void *arg)
 		statreg = bus_space_read_8(st, sh, MEC_INT_STATUS);
 
 		DPRINTF(MEC_DEBUG_INTR,
-		    ("%s: INT_STAT = 0x%08x\n", __func__, statreg));
+		    ("mec_intr: INT_STAT = 0x%08x\n", statreg));
 
 		statack = statreg & MEC_INT_STATUS_MASK;
 		if (statack == 0)
@@ -1584,7 +1609,7 @@ mec_intr(void *arg)
 				 */
 				bus_space_write_8(st, sh, MEC_TX_ALIAS, 0);
 				DPRINTF(MEC_DEBUG_INTR,
-				    ("%s: disable TX_INT\n", __func__));
+				    ("mec_intr: disable TX_INT\n"));
 			}
 #ifdef MEC_EVENT_COUNTERS
 			if ((statack & MEC_INT_TX_EMPTY) != 0)
@@ -1600,8 +1625,8 @@ mec_intr(void *arg)
 		     MEC_INT_TX_ABORT |
 		     MEC_INT_RX_FIFO_UNDERFLOW |
 		     MEC_INT_RX_DMA_UNDERFLOW)) {
-			printf("%s: %s: interrupt status = 0x%08x\n",
-			    device_xname(sc->sc_dev), __func__, statreg);
+			printf("%s: mec_intr: interrupt status = 0x%08x\n",
+			    device_xname(sc->sc_dev), statreg);
 			mec_init(ifp);
 			break;
 		}
@@ -1612,8 +1637,10 @@ mec_intr(void *arg)
 		mec_start(ifp);
 	}
 
+#if NRND > 0
 	if (handled)
 		rnd_add_uint32(&sc->sc_rnd_source, statreg);
+#endif
 
 	return handled;
 }
@@ -1629,9 +1656,8 @@ mec_rxintr(struct mec_softc *sc)
 	uint64_t rxstat;
 	u_int len;
 	int i;
-	uint32_t crc;
 
-	DPRINTF(MEC_DEBUG_RXINTR, ("%s: called\n", __func__));
+	DPRINTF(MEC_DEBUG_RXINTR, ("mec_rxintr: called\n"));
 
 	for (i = sc->sc_rxptr;; i = MEC_NEXTRX(i)) {
 		rxd = &sc->sc_rxdesc[i];
@@ -1640,10 +1666,10 @@ mec_rxintr(struct mec_softc *sc)
 		rxstat = rxd->rxd_stat;
 
 		DPRINTF(MEC_DEBUG_RXINTR,
-		    ("%s: rxstat = 0x%016llx, rxptr = %d\n",
-		    __func__, rxstat, i));
-		DPRINTF(MEC_DEBUG_RXINTR, ("%s: rxfifo = 0x%08x\n",
-		    __func__, (u_int)bus_space_read_8(st, sh, MEC_RX_FIFO)));
+		    ("mec_rxintr: rxstat = 0x%016llx, rxptr = %d\n",
+		    rxstat, i));
+		DPRINTF(MEC_DEBUG_RXINTR, ("mec_rxintr: rxfifo = 0x%08x\n",
+		    (u_int)bus_space_read_8(st, sh, MEC_RX_FIFO)));
 
 		if ((rxstat & MEC_RXSTAT_RECEIVED) == 0) {
 			MEC_RXSTATSYNC(sc, i, BUS_DMASYNC_PREREAD);
@@ -1656,7 +1682,7 @@ mec_rxintr(struct mec_softc *sc)
 		    len > (MCLBYTES - MEC_ETHER_ALIGN)) {
 			/* invalid length packet; drop it. */
 			DPRINTF(MEC_DEBUG_RXINTR,
-			    ("%s: wrong packet\n", __func__));
+			    ("mec_rxintr: wrong packet\n"));
  dropit:
 			ifp->if_ierrors++;
 			rxd->rxd_stat = 0;
@@ -1667,7 +1693,7 @@ mec_rxintr(struct mec_softc *sc)
 		}
 
 		/*
-		 * If 802.1Q VLAN MTU is enabled, ignore the bad packet error.
+		 * If 802.1Q VLAN MTU is enabled, ignore the bad packet errror.
 		 */
 		if ((sc->sc_ethercom.ec_capenable & ETHERCAP_VLAN_MTU) != 0)
 			rxstat &= ~MEC_RXSTAT_BADPACKET;
@@ -1678,7 +1704,7 @@ mec_rxintr(struct mec_softc *sc)
 		     MEC_RXSTAT_INVALID   |
 		     MEC_RXSTAT_CRCERROR  |
 		     MEC_RXSTAT_VIOLATION)) {
-			printf("%s: mec_rxintr: status = 0x%016"PRIx64"\n",
+			printf("%s: mec_rxintr: status = 0x%016llx\n",
 			    device_xname(sc->sc_dev), rxstat);
 			goto dropit;
 		}
@@ -1714,9 +1740,8 @@ mec_rxintr(struct mec_softc *sc)
 		 * Note MEC chip seems to insert 2 byte padding at the top of
 		 * RX buffer, but we copy whole buffer to avoid unaligned copy.
 		 */
-		MEC_RXBUFSYNC(sc, i, len + ETHER_CRC_LEN, BUS_DMASYNC_POSTREAD);
+		MEC_RXBUFSYNC(sc, i, len, BUS_DMASYNC_POSTREAD);
 		memcpy(mtod(m, void *), rxd->rxd_buf, MEC_ETHER_ALIGN + len);
-		crc = be32dec(rxd->rxd_buf + MEC_ETHER_ALIGN + len);
 		MEC_RXBUFSYNC(sc, i, ETHER_MAX_LEN, BUS_DMASYNC_PREREAD);
 		m->m_data += MEC_ETHER_ALIGN;
 
@@ -1727,16 +1752,17 @@ mec_rxintr(struct mec_softc *sc)
 
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
-		if ((ifp->if_csum_flags_rx & (M_CSUM_TCPv4|M_CSUM_UDPv4)) != 0)
-			mec_rxcsum(sc, m, RXSTAT_CKSUM(rxstat), crc);
 
 		ifp->if_ipackets++;
 
+#if NBPFILTER > 0
 		/*
 		 * Pass this up to any BPF listeners, but only
 		 * pass it up the stack if it's for us.
 		 */
-		bpf_mtap(ifp, m);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);
@@ -1744,101 +1770,6 @@ mec_rxintr(struct mec_softc *sc)
 
 	/* update RX pointer */
 	sc->sc_rxptr = i;
-}
-
-static void
-mec_rxcsum(struct mec_softc *sc, struct mbuf *m, uint16_t rxcsum, uint32_t crc)
-{
-	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
-	struct ether_header *eh;
-	struct ip *ip;
-	struct udphdr *uh;
-	u_int len, pktlen, hlen;
-	uint32_t csum_data, dsum;
-	int csum_flags;
-	const uint16_t *dp;
-
-	csum_data = 0;
-	csum_flags = 0;
-
-	len = m->m_len;
-	if (len < ETHER_HDR_LEN + sizeof(struct ip))
-		goto out;
-	pktlen = len - ETHER_HDR_LEN;
-	eh = mtod(m, struct ether_header *);
-	if (ntohs(eh->ether_type) != ETHERTYPE_IP)
-		goto out;
-	ip = (struct ip *)((uint8_t *)eh + ETHER_HDR_LEN);
-	if (ip->ip_v != IPVERSION)
-		goto out;
-
-	hlen = ip->ip_hl << 2;
-	if (hlen < sizeof(struct ip))
-		goto out;
-
-	/*
-	 * Bail if too short, has random trailing garbage, truncated,
-	 * fragment, or has ethernet pad.
-	 */
-	if (ntohs(ip->ip_len) < hlen ||
-	    ntohs(ip->ip_len) != pktlen ||
-	    (ntohs(ip->ip_off) & (IP_MF | IP_OFFMASK)) != 0)
-		goto out;
-
-	switch (ip->ip_p) {
-	case IPPROTO_TCP:
-		if ((ifp->if_csum_flags_rx & M_CSUM_TCPv4) == 0 ||
-		    pktlen < (hlen + sizeof(struct tcphdr)))
-			goto out;
-		csum_flags = M_CSUM_TCPv4 | M_CSUM_DATA | M_CSUM_NO_PSEUDOHDR;
-		break;
-	case IPPROTO_UDP:
-		if ((ifp->if_csum_flags_rx & M_CSUM_UDPv4) == 0 ||
-		    pktlen < (hlen + sizeof(struct udphdr)))
-			goto out;
-		uh = (struct udphdr *)((uint8_t *)ip + hlen);
-		if (uh->uh_sum == 0)
-			goto out;	/* no checksum */
-		csum_flags = M_CSUM_UDPv4 | M_CSUM_DATA | M_CSUM_NO_PSEUDOHDR;
-		break;
-	default:
-		goto out;
-	}
-
-	/*
-	 * The computed checksum includes Ethernet header, IP headers,
-	 * and CRC, so we have to deduct them.
-	 * Note IP header cksum should be 0xffff so we don't have to
-	 * dedecut them.
-	 */
-	dsum = 0;
-
-	/* deduct Ethernet header */
-	dp = (const uint16_t *)eh;
-	for (hlen = 0; hlen < (ETHER_HDR_LEN / sizeof(uint16_t)); hlen++)
-		dsum += ntohs(*dp++);
-
-	/* deduct CRC */
-	if (len & 1) {
-		dsum += (crc >> 24) & 0x00ff;
-		dsum += (crc >>  8) & 0xffff;
-		dsum += (crc <<  8) & 0xff00;
-	} else {
-		dsum += (crc >> 16) & 0xffff;
-		dsum += (crc >>  0) & 0xffff;
-	}
-	while (dsum >> 16)
-		dsum = (dsum >> 16) + (dsum & 0xffff);
-
-	csum_data = rxcsum;
-	csum_data += (uint16_t)~dsum;
-
-	while (csum_data >> 16)
-		csum_data = (csum_data >> 16) + (csum_data & 0xffff);
-
- out:
-	m->m_pkthdr.csum_flags = csum_flags;
-	m->m_pkthdr.csum_data = csum_data;
 }
 
 static void
@@ -1852,7 +1783,7 @@ mec_txintr(struct mec_softc *sc, uint32_t txptr)
 	int i;
 	u_int col;
 
-	DPRINTF(MEC_DEBUG_TXINTR, ("%s: called\n", __func__));
+	DPRINTF(MEC_DEBUG_TXINTR, ("mec_txintr: called\n"));
 
 	for (i = sc->sc_txdirty; i != txptr && sc->sc_txpending != 0;
 	    i = MEC_NEXTTX(i), sc->sc_txpending--) {
@@ -1863,8 +1794,8 @@ mec_txintr(struct mec_softc *sc, uint32_t txptr)
 
 		txstat = txd->txd_stat;
 		DPRINTF(MEC_DEBUG_TXINTR,
-		    ("%s: dirty = %d, txstat = 0x%016llx\n",
-		    __func__, i, txstat));
+		    ("mec_txintr: dirty = %d, txstat = 0x%016llx\n",
+		    i, txstat));
 		if ((txstat & MEC_TXSTAT_SENT) == 0) {
 			MEC_TXCMDSYNC(sc, i, BUS_DMASYNC_PREREAD);
 			break;
@@ -1884,7 +1815,7 @@ mec_txintr(struct mec_softc *sc, uint32_t txptr)
 		ifp->if_collisions += col;
 
 		if ((txstat & MEC_TXSTAT_SUCCESS) == 0) {
-			printf("%s: TX error: txstat = 0x%016"PRIx64"\n",
+			printf("%s: TX error: txstat = 0x%016llx\n",
 			    device_xname(sc->sc_dev), txstat);
 			ifp->if_oerrors++;
 		} else
@@ -1894,8 +1825,8 @@ mec_txintr(struct mec_softc *sc, uint32_t txptr)
 	/* update the dirty TX buffer pointer */
 	sc->sc_txdirty = i;
 	DPRINTF(MEC_DEBUG_INTR,
-	    ("%s: sc_txdirty = %2d, sc_txpending = %2d\n",
-	    __func__, sc->sc_txdirty, sc->sc_txpending));
+	    ("mec_txintr: sc_txdirty = %2d, sc_txpending = %2d\n",
+	    sc->sc_txdirty, sc->sc_txpending));
 
 	/* cancel the watchdog timer if there are no pending TX packets */
 	if (sc->sc_txpending == 0)
@@ -1904,14 +1835,12 @@ mec_txintr(struct mec_softc *sc, uint32_t txptr)
 		ifp->if_flags &= ~IFF_OACTIVE;
 }
 
-static bool
-mec_shutdown(device_t self, int howto)
+static void
+mec_shutdown(void *arg)
 {
-	struct mec_softc *sc = device_private(self);
+	struct mec_softc *sc = arg;
 
 	mec_stop(&sc->sc_ethercom.ec_if, 1);
 	/* make sure to stop DMA etc. */
 	mec_reset(sc);
-
-	return true;
 }

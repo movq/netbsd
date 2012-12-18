@@ -1,4 +1,4 @@
-/*	$NetBSD: coda_namecache.c,v 1.25 2012/08/02 16:06:58 christos Exp $	*/
+/*	$NetBSD: coda_namecache.c,v 1.22 2007/11/22 22:26:18 plunky Exp $	*/
 
 /*
  *
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coda_namecache.c,v 1.25 2012/08/02 16:06:58 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coda_namecache.c,v 1.22 2007/11/22 22:26:18 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -88,7 +88,10 @@ __KERNEL_RCSID(0, "$NetBSD: coda_namecache.c,v 1.25 2012/08/02 16:06:58 christos
 #include <coda/coda.h>
 #include <coda/cnode.h>
 #include <coda/coda_namecache.h>
-#include <coda/coda_subr.h>
+
+#ifdef	DEBUG
+#include <coda/coda_vnops.h>
+#endif
 
 /*
  * Declaration of the name cache data structure.
@@ -199,8 +202,8 @@ coda_nc_find(struct cnode *dcp, const char *name, int namelen,
 			kauth_cred_getrefcnt(cncp->cred),
 			kauth_cred_geteuid(cncp->cred),
 			kauth_cred_getegid(cncp->cred));
-		coda_print_cred(cred);
-		coda_print_cred(cncp->cred);
+		print_cred(cred);
+		print_cred(cncp->cred);
 	    }
 #endif
 	    count++;
@@ -271,7 +274,7 @@ coda_nc_enter(struct cnode *dcp, const char *name, int namelen,
     cncp->namelen = namelen;
     cncp->cred = cred;
 
-    memcpy(cncp->name, name, (unsigned)namelen);
+    bcopy(name, cncp->name, (unsigned)namelen);
 
     /* Insert into the lru and hash chains. */
     TAILQ_INSERT_TAIL(&coda_nc_lru.head, cncp, lru);
@@ -707,7 +710,7 @@ coda_nc_name(struct cnode *cp)
 
 		LIST_FOREACH(cncp, &coda_nc_hash[i].head, hash) {
 			if (cncp->cp == cp) {
-				memcpy(coda_nc_name_buf, cncp->name, cncp->namelen);
+				bcopy(cncp->name, coda_nc_name_buf, cncp->namelen);
 				coda_nc_name_buf[cncp->namelen] = 0;
 				printf(" is %s (%p,%p)@%p",
 					coda_nc_name_buf, cncp->cp, cncp->dcp, cncp);

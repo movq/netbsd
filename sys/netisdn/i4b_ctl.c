@@ -27,7 +27,7 @@
  *	i4b_ctl.c - i4b system control port driver
  *	------------------------------------------
  *
- *	$Id: i4b_ctl.c,v 1.22 2012/10/27 17:18:39 chs Exp $
+ *	$Id: i4b_ctl.c,v 1.19 2007/10/19 12:16:47 ad Exp $
  *
  * $FreeBSD$
  *
@@ -36,7 +36,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_ctl.c,v 1.22 2012/10/27 17:18:39 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_ctl.c,v 1.19 2007/10/19 12:16:47 ad Exp $");
 
 #include "isdnctl.h"
 
@@ -146,10 +146,10 @@ static void *devfs_token;
 
 #ifndef __FreeBSD__
 #define PDEVSTATIC	/* */
-void isdnctlattach(void);
-int isdnctlopen(dev_t dev, int flag, int fmt, struct lwp *l);
-int isdnctlclose(dev_t dev, int flag, int fmt, struct lwp *l);
-int isdnctlioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l);
+void isdnctlattach __P((void));
+int isdnctlopen __P((dev_t dev, int flag, int fmt, struct lwp *l));
+int isdnctlclose __P((dev_t dev, int flag, int fmt, struct lwp *l));
+int isdnctlioctl __P((dev_t dev, u_long cmd, void *data, int flag, struct lwp *l));
 #endif	/* !FreeBSD */
 
 #ifdef __NetBSD__
@@ -179,7 +179,7 @@ SYSINIT(i4bctldev, SI_SUB_DRIVERS,SI_ORDER_MIDDLE+CDEV_MAJOR, &i4bctlinit, NULL)
 #endif /* BSD > 199306 && defined(__FreeBSD__) */
 
 #ifdef __bsdi__
-int i4bctlmatch(device_t parent, cfdata_t cf, void *aux);
+int i4bctlmatch(struct device *parent, struct cfdata *cf, void *aux);
 void dummy_i4bctlattach(struct device*, struct device *, void *);
 
 #define CDEV_MAJOR 64
@@ -195,13 +195,13 @@ struct devsw i4bctlsw =
 };
 
 int
-i4bctlmatch(device_t parent, cfdata_t cf, void *aux)
+i4bctlmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	printf("i4bctlmatch: aux=0x%x\n", aux);
 	return 1;
 }
 void
-dummy_i4bctlattach(device_t parent, device_t self, void *aux)
+dummy_i4bctlattach(struct device *parent, struct device *self, void *aux)
 {
 	printf("dummy_i4bctlattach: aux=0x%x\n", aux);
 }
@@ -213,7 +213,7 @@ PDEVSTATIC void
 #ifdef __FreeBSD__
 isdnctlattach(void *dummy)
 #else
-isdnctlattach(void)
+isdnctlattach()
 #endif
 {
 

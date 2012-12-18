@@ -1,5 +1,4 @@
-/* Id: ccconfig.h,v 1.8 2011/06/04 19:27:26 plunky Exp  */	
-/* $NetBSD: ccconfig.h,v 1.1.1.4 2011/09/01 12:47:17 plunky Exp $ */
+/* $Id: ccconfig.h,v 1.1.1.1 2008/08/24 05:33:10 gmcgarry Exp $ */
 /*-
  * Copyright (c) 2007, 2008
  *	Thorsten Glaser <tg@mirbsd.de>
@@ -24,6 +23,12 @@
  * Configuration for pcc on a MirOS BSD (i386 or sparc) target
  */
 
+/* notes */
+
+/**
+ * On MirBSD, wchar_t is a 16-bit unsigned short UCS-2 value.
+ */
+
 /* === mi part === */
 
 #ifndef LIBDIR
@@ -35,6 +40,8 @@
 	"-D__MirBSD__",				\
 	"-D__OpenBSD__",			\
 	"-D__unix__",				\
+	"-D__STDC_ISO_10646__=200009L",		\
+	"-D__WCHAR_MAX__=65535U",		\
 	"-D__ELF__",				\
 	NULL					\
 }
@@ -89,6 +96,9 @@
 /* C run-time startup */
 #define CRT0FILE		LIBDIR "crt0.o"
 #define STARTLABEL		"__start"
+
+/* debugging info */
+#define STABS
 
 /* === md part === */
 

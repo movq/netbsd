@@ -1,4 +1,4 @@
-/* $NetBSD: arcpp.c,v 1.12 2011/07/19 16:05:10 dyoung Exp $ */
+/* $NetBSD: arcpp.c,v 1.9 2008/06/11 22:07:49 cegger Exp $ */
 
 /*-
  * Copyright (c) 2001 Ben Harris
@@ -52,7 +52,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: arcpp.c,v 1.12 2011/07/19 16:05:10 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arcpp.c,v 1.9 2008/06/11 22:07:49 cegger Exp $");
 
 #include <sys/conf.h>
 #include <sys/device.h>
@@ -60,8 +60,8 @@ __KERNEL_RCSID(0, "$NetBSD: arcpp.c,v 1.12 2011/07/19 16:05:10 dyoung Exp $");
 #include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
 
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/irq.h>
 
@@ -74,7 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: arcpp.c,v 1.12 2011/07/19 16:05:10 dyoung Exp $");
 #include "ioeb.h"
 
 struct arcpp_softc {
-	device_t	sc_dev;
+	struct device	sc_dev;
 	void		*sc_aih;	/* ACK interrupt handler */
 	struct evcnt	sc_aintrcnt;	/* ... and count */
 	void		*sc_bih;	/* BUSY interrupt handler */
@@ -116,17 +116,17 @@ const struct cdevsw arcpp_cdevsw = {
 #define	ARCPPUNIT(s)	(minor(s) & 0x1f)
 #define	ARCPPFLAGS(s)	(minor(s) & 0xe0)
 
-static int arcpp_match(device_t, cfdata_t, void *);
-static void arcpp_attach(device_t, device_t, void *);
+static int arcpp_match(struct device *, struct cfdata *, void *);
+static void arcpp_attach(struct device *, struct device *, void *);
 
 static int arcppintr(void *);
 static int arcpppushbytes(struct arcpp_softc *);
 
-CFATTACH_DECL_NEW(arcpp, sizeof(struct arcpp_softc),
+CFATTACH_DECL(arcpp, sizeof(struct arcpp_softc),
     arcpp_match, arcpp_attach, NULL, NULL);
 
 static int
-arcpp_match(device_t parent, cfdata_t cf, void *aux)
+arcpp_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	/*
@@ -142,32 +142,30 @@ arcpp_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-arcpp_attach(device_t parent, device_t self, void *aux)
+arcpp_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct arcpp_softc *sc = device_private(self);
+	struct arcpp_softc *sc = (void *)self;
 	struct ioc_attach_args *ioc = aux;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
-
-	sc->sc_dev = self;
 
 	iot = sc->sc_iot = ioc->ioc_fast_t;
 	ioh = sc->sc_ioh = ioc->ioc_fast_h;
 
 	evcnt_attach_dynamic(&sc->sc_aintrcnt, EVCNT_TYPE_INTR, NULL,
-	    device_xname(self), "ack intr");
+	    self->dv_xname, "ack intr");
 	evcnt_attach_dynamic(&sc->sc_bintrcnt, EVCNT_TYPE_INTR, NULL,
-	    device_xname(self), "busy intr");
-	sc->sc_aih = irq_establish(IRQ_PACK, IPL_VM, arcppintr, sc,
+	    self->dv_xname, "busy intr");
+	sc->sc_aih = irq_establish(IRQ_PACK, IPL_LPT, arcppintr, sc,
 	    &sc->sc_aintrcnt);
-	sc->sc_bih = irq_establish(IRQ_PBSY, IPL_VM, arcppintr, sc,
+	sc->sc_bih = irq_establish(IRQ_PBSY, IPL_LPT, arcppintr, sc,
 	    &sc->sc_bintrcnt);
 
 	/* We're not interested in interrupts while the device is closed. */
 	irq_disable(sc->sc_aih);
 	irq_disable(sc->sc_bih);
 
-	aprint_normal("\n");
+	printf("\n");
 }
 
 /*
@@ -188,7 +186,7 @@ arcppopen(dev_t dev, int flag, int mode, struct lwp *l)
 
 #ifdef DIAGNOSTIC
 	if (sc->sc_state)
-		printf("%s: stat=0x%x not zero\n", device_xname(sc->sc_dev),
+		printf("%s: stat=0x%x not zero\n", sc->sc_dev.dv_xname,
 		    sc->sc_state);
 #endif
 
@@ -200,7 +198,7 @@ arcppopen(dev_t dev, int flag, int mode, struct lwp *l)
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
 
-	s = splvm();
+	s = spllpt();
 	/* wait till ready (printer running diagnostics) */
 	irq_enable(sc->sc_bih);
 	/* XXX Is it really appropriate to time out? */
@@ -245,7 +243,8 @@ arcppclose(dev_t dev, int flag, int mode, struct lwp *l)
 }
 
 static int
-arcpppushbytes(struct arcpp_softc *sc)
+arcpppushbytes(sc)
+	struct arcpp_softc *sc;
 {
 	int error;
 	int s;
@@ -253,7 +252,7 @@ arcpppushbytes(struct arcpp_softc *sc)
 	while (sc->sc_count > 0) {
 		/* if the printer is ready for a char, give it one */
 		if ((sc->sc_state & ARCPP_OBUSY) == 0) {
-			s = splvm();
+			s = spllpt();
 			arcppintr(sc);
 			splx(s);
 		}

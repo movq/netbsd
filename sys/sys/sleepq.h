@@ -1,7 +1,7 @@
-/*	$NetBSD: sleepq.h,v 1.22 2012/02/19 21:07:00 rmind Exp $	*/
+/*	$NetBSD: sleepq.h,v 1.15 2008/10/10 09:44:35 pooka Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002, 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -52,23 +52,33 @@ TAILQ_HEAD(sleepq, lwp);
 
 typedef struct sleepq sleepq_t;
 
+#ifdef _LP64
 typedef struct sleeptab {
 	struct {
-		kmutex_t	*st_mutex;
+		kmutex_t	st_mutex;
+		sleepq_t	st_queue __aligned(32);
+	} st_queues[SLEEPTAB_HASH_SIZE];
+} __aligned(64) sleeptab_t;
+#else	/* _LP64 */
+typedef struct sleeptab {
+	struct {
+		kmutex_t	st_mutex;
 		sleepq_t	st_queue;
 	} st_queues[SLEEPTAB_HASH_SIZE];
-} sleeptab_t;
+} __aligned(32) sleeptab_t;
+#endif	/* _LP64 */
 
 void	sleepq_init(sleepq_t *);
-void	sleepq_remove(sleepq_t *, lwp_t *);
+int	sleepq_remove(sleepq_t *, lwp_t *);
 void	sleepq_enqueue(sleepq_t *, wchan_t, const char *, syncobj_t *);
-void	sleepq_unsleep(lwp_t *, bool);
+u_int	sleepq_unsleep(lwp_t *, bool);
 void	sleepq_timeout(void *);
 lwp_t	*sleepq_wake(sleepq_t *, wchan_t, u_int, kmutex_t *);
 int	sleepq_abort(kmutex_t *, int);
 void	sleepq_changepri(lwp_t *, pri_t);
 void	sleepq_lendpri(lwp_t *, pri_t);
 int	sleepq_block(int, bool);
+void	sleepq_insert(sleepq_t *, lwp_t *, syncobj_t *);
 
 void	sleeptab_init(sleeptab_t *);
 
@@ -88,7 +98,7 @@ sleepq_dontsleep(lwp_t *l)
 }
 
 /*
- * Find the correct sleep queue for the specified wait channel.  This
+ * Find the correct sleep queue for the the specified wait channel.  This
  * acquires and holds the per-queue interlock.
  */
 static inline sleepq_t *
@@ -97,7 +107,7 @@ sleeptab_lookup(sleeptab_t *st, wchan_t wchan, kmutex_t **mp)
 	sleepq_t *sq;
 
 	sq = &st->st_queues[SLEEPTAB_HASH(wchan)].st_queue;
-	*mp = st->st_queues[SLEEPTAB_HASH(wchan)].st_mutex;
+	*mp = &st->st_queues[SLEEPTAB_HASH(wchan)].st_mutex;
 	mutex_spin_enter(*mp);
 	return sq;
 }
@@ -107,7 +117,7 @@ sleepq_hashlock(wchan_t wchan)
 {
 	kmutex_t *mp;
 
-	mp = sleeptab.st_queues[SLEEPTAB_HASH(wchan)].st_mutex;
+	mp = &sleeptab.st_queues[SLEEPTAB_HASH(wchan)].st_mutex;
 	mutex_spin_enter(mp);
 	return mp;
 }
@@ -119,13 +129,20 @@ sleepq_hashlock(wchan_t wchan)
 static inline void
 sleepq_enter(sleepq_t *sq, lwp_t *l, kmutex_t *mp)
 {
+	kmutex_t *omp;
 
 	/*
-	 * Acquire the per-LWP mutex and lend it ours sleep queue lock.
-	 * Once interlocked, we can release the kernel lock.
+	 * Acquire the per-LWP mutex and lend it ours (the sleep queue
+	 * lock).  Once that's done we're interlocked, and so can release
+	 * the kernel lock.
 	 */
-	lwp_lock(l);
-	lwp_unlock_to(l, mp);
+	omp = l->l_mutex;
+	mutex_spin_enter(omp);
+	if (__predict_false(l->l_mutex != omp)) {
+		omp = lwp_lock_retry(l, omp);
+	}
+	l->l_mutex = mp;
+	mutex_spin_exit(omp);
 	KERNEL_UNLOCK_ALL(NULL, &l->l_biglocks);
 }
 
@@ -147,9 +164,9 @@ typedef struct turnstile {
 } turnstile_t;
 
 typedef struct tschain {
-	kmutex_t		*tc_mutex;	/* mutex on structs & queues */
+	kmutex_t		tc_mutex;	/* mutex on structs & queues */
 	LIST_HEAD(, turnstile)	tc_chain;	/* turnstile chain */
-} tschain_t;
+} __aligned(32) tschain_t;
 
 #define	TS_READER_Q	0		/* reader sleep queue */
 #define	TS_WRITER_Q	1		/* writer sleep queue */
@@ -170,9 +187,8 @@ turnstile_t	*turnstile_lookup(wchan_t);
 void	turnstile_exit(wchan_t);
 void	turnstile_block(turnstile_t *, int, wchan_t, syncobj_t *);
 void	turnstile_wakeup(turnstile_t *, int, int, lwp_t *);
-void	turnstile_print(volatile void *, void (*)(const char *, ...)
-    __printflike(1, 2));
-void	turnstile_unsleep(lwp_t *, bool);
+void	turnstile_print(volatile void *, void (*)(const char *, ...));
+u_int	turnstile_unsleep(lwp_t *, bool);
 void	turnstile_changepri(lwp_t *, pri_t);
 
 extern pool_cache_t turnstile_cache;

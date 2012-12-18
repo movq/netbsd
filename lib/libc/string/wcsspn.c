@@ -1,4 +1,4 @@
-/*	$NetBSD: wcsspn.c,v 1.4 2011/11/21 15:02:48 joerg Exp $	*/
+/*	$NetBSD: wcsspn.c,v 1.3 2001/09/21 16:09:15 yamt Exp $	*/
 
 /*-
  * Copyright (c)1999,2001 Citrus Project,
@@ -29,13 +29,17 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: wcsspn.c,v 1.4 2011/11/21 15:02:48 joerg Exp $");
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: wcsspn.c,v 1.3 2001/09/21 16:09:15 yamt Exp $");
+#endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
 #include <wchar.h>
 
 size_t
-wcsspn(const wchar_t *s, const wchar_t *set)
+wcsspn(s, set)
+	const wchar_t *s;
+	const wchar_t *set;
 {
 	const wchar_t *p;
 	const wchar_t *q;
@@ -43,14 +47,19 @@ wcsspn(const wchar_t *s, const wchar_t *set)
 	_DIAGASSERT(s != NULL);
 	_DIAGASSERT(set != NULL);
 
-	for (p = s; *p; ++p) {
-		for (q = set; *q; ++q) {
+	p = s;
+	while (*p) {
+		q = set;
+		while (*q) {
 			if (*p == *q)
 				break;
+			q++;
 		}
 		if (!*q)
-			break;
+			goto done;
+		p++;
 	}
 
+done:
 	return (p - s);
 }

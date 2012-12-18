@@ -1,5 +1,4 @@
-/*	Id: table.c,v 1.18 2010/11/26 17:06:31 ragge Exp 	*/	
-/*	$NetBSD: table.c,v 1.1.1.4 2011/09/01 12:46:49 plunky Exp $	*/
+/*	$Id: table.c,v 1.1.1.1 2008/08/24 05:33:00 gmcgarry Exp $	*/
 /*-
  * Copyright (c) 2007 Gregory McGarry <g.mcgarry@ieee.org>
  *
@@ -772,7 +771,7 @@ struct optab table[] = {
 		0,	RDEST,
 		"	lis AL," HA16(AR) "\n"
 		"	addi AL,AL," LO16(AR) "\n"
-		"	lis UL," HA16(UR) "\n"
+		"	lis UL," HA16(UR) "\n"\
 		"	addi UL,UL," LO16(UR) "\n", },
 
 { ASSIGN,	FOREFF|INAREG,
@@ -960,7 +959,7 @@ struct optab table[] = {
 { STASG,	INAREG|FOREFF,
 	SOREG|SNAME,	TANY,
 	SAREG,		TPTRTO|TANY,
-		NSPECIAL,	RDEST,
+		NSPECIAL,	RRIGHT,
 		"ZQ", },
 
 { ASSIGN,	FOREFF|INCREG | FEATURE_HARDFLOAT,
@@ -1510,7 +1509,7 @@ struct optab table[] = {
 	SCON,	TANY,
 	SANY,	TANY,
 		0,	RNOP,
-		"	b LL\n", },
+		"	ba LL\n", },
 
 { GOTO, 	FOREFF,
 	SAREG,	TANY,

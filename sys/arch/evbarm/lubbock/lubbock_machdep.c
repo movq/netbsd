@@ -1,4 +1,4 @@
-/*	$NetBSD: lubbock_machdep.c,v 1.31 2012/09/22 00:33:40 matt Exp $ */
+/*	$NetBSD: lubbock_machdep.c,v 1.18 2008/04/27 18:58:46 matt Exp $ */
 
 /*
  * Copyright (c) 2002, 2003, 2005  Genetec Corporation.  All rights reserved.
@@ -28,7 +28,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- * Machine dependent functions for kernel setup for 
+ * Machine dependant functions for kernel setup for 
  * Intel DBPXA250 evaluation board (a.k.a. Lubbock).
  * Based on iq80310_machhdep.c
  */
@@ -100,7 +100,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependent functions for kernel setup for Intel IQ80310 evaluation
+ * Machine dependant functions for kernel setup for Intel IQ80310 evaluation
  * boards using RedBoot firmware.
  */
 
@@ -112,13 +112,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lubbock_machdep.c,v 1.31 2012/09/22 00:33:40 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lubbock_machdep.c,v 1.18 2008/04/27 18:58:46 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_pmap_debug.h"
 #include "opt_md.h"
 #include "opt_com.h"
+#include "md.h"
 #include "lcd.h"
 
 #include <sys/param.h>
@@ -147,7 +148,7 @@ __KERNEL_RCSID(0, "$NetBSD: lubbock_machdep.c,v 1.31 2012/09/22 00:33:40 matt Ex
 #endif
 
 #include <machine/bootconfig.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <arm/undefined.h>
@@ -171,6 +172,20 @@ __KERNEL_RCSID(0, "$NetBSD: lubbock_machdep.c,v 1.31 2012/09/22 00:33:40 matt Ex
  */
 #define KERNEL_VM_SIZE		0x0C000000
 
+
+/*
+ * Address to call from cpu_reset() to reset the machine.
+ * This is machine architecture dependant as it varies depending
+ * on where the ROM appears when you turn the MMU off.
+ */
+
+u_int cpu_reset_address = 0;
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#define UND_STACK_SIZE	1
+
 BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
@@ -180,6 +195,8 @@ vm_offset_t physical_freestart;
 vm_offset_t physical_freeend;
 vm_offset_t physical_end;
 u_int free_pages;
+vm_offset_t pagetables_start;
+int physmem = 0;
 
 /*int debug_flags;*/
 #ifndef PMAP_STATIC_L1S
@@ -187,9 +204,18 @@ int max_processes = 64;			/* Default number */
 #endif	/* !PMAP_STATIC_L1S */
 
 /* Physical and virtual addresses for some global pages */
+pv_addr_t systempage;
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
 pv_addr_t minidataclean;
 
 vm_offset_t msgbufphys;
+
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -204,6 +230,8 @@ extern int pmap_debug_level;
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
+
+struct user *proc0paddr;
 
 /* Prototypes */
 
@@ -275,7 +303,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -306,8 +333,6 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -492,7 +517,7 @@ initarm(void *arg)
 	 * RedBoot's first level page table is at 0xa0004000.  There
 	 * are also 2 second-level tables at 0xa0008000 and
 	 * 0xa0008400.  We will continue to use them until we switch to
-	 * our pagetable by cpu_setttb().
+	 * our pagetable by setttb().
 	 *
 	 */
 
@@ -848,7 +873,7 @@ initarm(void *arg)
 	LEDSTEP();
 
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 	LEDSTEP();
@@ -857,7 +882,8 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+	proc0paddr = (struct user *)kernelstack.pv_va;
+	lwp0.l_addr = proc0paddr;
 
 #ifdef VERBOSE_INIT_ARM
 	printf("bootstrap done.\n");

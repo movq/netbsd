@@ -8,9 +8,11 @@
     *  
     *  SB1250 specification level:  User's manual 1/02/02
     *  
+    *  Author:  Mitch Lichtenberg
+    *  
     *********************************************************************  
     *
-    *  Copyright 2000,2001,2002,2003,2004
+    *  Copyright 2000,2001,2002,2003
     *  Broadcom Corporation. All rights reserved.
     *  
     *  This software is furnished under license and may be used and 
@@ -166,7 +168,6 @@
 #define M_INT_MBOX_1                _SB_MAKEMASK1(K_INT_MBOX_1)
 #define M_INT_MBOX_2                _SB_MAKEMASK1(K_INT_MBOX_2)
 #define M_INT_MBOX_3                _SB_MAKEMASK1(K_INT_MBOX_3)
-#define M_INT_MBOX_ALL              _SB_MAKEMASK(4,K_INT_MBOX_0)
 #if SIBYTE_HDR_FEATURE(1250, PASS2) || SIBYTE_HDR_FEATURE(112x, PASS1)
 #define M_INT_CYCLE_CP0_INT	    _SB_MAKEMASK1(K_INT_CYCLE_CP0_INT)
 #define M_INT_CYCLE_CP1_INT	    _SB_MAKEMASK1(K_INT_CYCLE_CP1_INT)
@@ -261,4 +262,4 @@
 #define M_LDTVECT_RAISEMBOX             0x40
 
 
-#endif	/* 1250/112x */
+#endif

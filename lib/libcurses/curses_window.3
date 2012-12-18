@@ -1,4 +1,4 @@
-.\"	$NetBSD: curses_window.3,v 1.15 2011/09/15 12:01:18 wiz Exp $
+.\"	$NetBSD: curses_window.3,v 1.12 2008/04/14 21:26:16 jdc Exp $
 .\"
 .\" Copyright (c) 2002
 .\"	Brett Lymn (blymn@NetBSD.org, brett_lymn@yahoo.com.au)
@@ -30,7 +30,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd September 15, 2011
+.Dd March 31, 2008
 .Dt CURSES_WINDOW 3
 .Os
 .Sh NAME
@@ -155,28 +155,18 @@ positions are the new origin of the window on the screen.
 If the new position would cause the any part of the window to lie outside
 the screen, it is an error and the window is not moved.
 .Pp
-A mapping of a region relative to the parent window may be created by
-calling the
+A subwindow can be moved relative to the parent window by calling the
 .Fn mvderwin
 function, the
 .Fa y
 and
 .Fa x
 positions are relative to the origin of the parent window.
-The screen offset of
-.Fa win
-is not updated, the characters beginning at
-.Fa y ,
-.Fa x
-for the area the size of
-.Fa win
-will be displayed at the screen offset of
-.Fa win .
 If the given window in
 .Fa win
 is not a subwindow then an error will be returned.
 If the new position would cause the any part of the window to lie outside
-the parent window, it is an error and the mapping is not updated.
+the parent window, it is an error and the window is not moved.
 .Pp
 The
 .Fn newwin
@@ -236,8 +226,7 @@ resizes the specified window to the new number of lines and columns
 given, all internal curses structures are resized.
 Any subwindows of the specified window will also be resized if any part
 of them falls outside the new parent window size.
-The application must redraw the window after it has been resized.
-Note that
+The application must redraw the window after it has been resized.  Note that
 .Dv curscr
 and
 .Dv stdscr
@@ -256,8 +245,8 @@ The function completed successfully.
 An error occurred in the function.
 .El
 .Sh SEE ALSO
-.Xr curses_fileio 3 ,
 .Xr curses_pad 3 ,
+.Xr curses_fileio 3 ,
 .Xr curses_screen 3
 .Sh STANDARDS
 The

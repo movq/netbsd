@@ -1,4 +1,4 @@
-/*	$NetBSD: pcib.c,v 1.24 2011/07/09 16:03:01 matt Exp $	*/
+/*	$NetBSD: pcib.c,v 1.19 2008/04/28 20:23:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -31,20 +31,19 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.24 2011/07/09 16:03:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.19 2008/04/28 20:23:10 martin Exp $");
 
 #include "opt_algor_p5064.h" 
 #include "opt_algor_p6032.h"
 
 #include <sys/param.h>
-#include <sys/bus.h>
-#include <sys/device.h>
-#include <sys/intr.h>
-#include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/systm.h>
+#include <sys/kernel.h>
+#include <sys/device.h>
+#include <sys/malloc.h>
 
-#include <algor/autoconf.h>
+#include <machine/intr.h>
+#include <machine/bus.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -63,7 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.24 2011/07/09 16:03:01 matt Exp $");
 #include <algor/algor/algor_p6032var.h>
 #endif
 
-const char * const pcib_intrnames[16] = {
+const char *pcib_intrnames[16] = {
 	"irq 0",
 	"irq 1",
 	"irq 2",
@@ -83,20 +82,20 @@ const char * const pcib_intrnames[16] = {
 };
 
 struct pcib_intrhead {
-	LIST_HEAD(, evbmips_intrhand) intr_q;
+	LIST_HEAD(, algor_intrhand) intr_q;
 	struct evcnt intr_count;
 	int intr_type;
 };
 
 struct pcib_softc {
-	device_t	sc_dev;
+	struct device	sc_dev;
 
 	bus_space_tag_t	sc_iot;
 	bus_space_handle_t sc_ioh_icu1;
 	bus_space_handle_t sc_ioh_icu2;
 	bus_space_handle_t sc_ioh_elcr;
 
-	struct mips_isa_chipset sc_ic;
+	struct algor_isa_chipset sc_ic;
 
 	struct pcib_intrhead sc_intrtab[16];
 
@@ -112,18 +111,18 @@ struct pcib_softc {
 	void		*sc_ih;
 };
 
-int	pcib_match(device_t, cfdata_t, void *);
-void	pcib_attach(device_t, device_t, void *);
+int	pcib_match(struct device *, struct cfdata *, void *);
+void	pcib_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(pcib, sizeof(struct pcib_softc),
+CFATTACH_DECL(pcib, sizeof(struct pcib_softc),
     pcib_match, pcib_attach, NULL, NULL);
 
-void	pcib_isa_attach_hook(device_t, device_t, struct isabus_attach_args *);
-void	pcib_isa_detach_hook(isa_chipset_tag_t, device_t);
+void	pcib_isa_attach_hook(struct device *, struct device *,
+	    struct isabus_attach_args *);
 
 int	pcib_intr(void *);
 
-void	pcib_bridge_callback(device_t);
+void	pcib_bridge_callback(struct device *);
 
 const struct evcnt *pcib_isa_intr_evcnt(void *, int);
 void	*pcib_isa_intr_establish(void *, int, int, int,
@@ -134,7 +133,7 @@ int	pcib_isa_intr_alloc(void *, int, int, int *);
 void	pcib_set_icus(struct pcib_softc *);
 
 int
-pcib_match(device_t parent, cfdata_t match, void *aux)
+pcib_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -146,29 +145,31 @@ pcib_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-pcib_attach(device_t parent, device_t self, void *aux)
+pcib_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct pcib_softc *sc = device_private(self);
+	struct pcib_softc *sc = (void *) self;
 	struct pci_attach_args *pa = aux;
 	char devinfo[256];
 	int i;
 
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
+	printf(": %s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
 
-	sc->sc_dev = self;
 	sc->sc_iot = pa->pa_iot;
 
 	/*
 	 * Map the PIC/ELCR registers.
 	 */
 	if (bus_space_map(sc->sc_iot, 0x4d0, 2, 0, &sc->sc_ioh_elcr) != 0)
-		aprint_error_dev(self, "unable to map ELCR registers\n");
+		printf("%s: unable to map ELCR registers\n",
+		    sc->sc_dev.dv_xname);
 	if (bus_space_map(sc->sc_iot, IO_ICU1, 2, 0, &sc->sc_ioh_icu1) != 0)
-		aprint_error_dev(self, "unable to map ICU1 registers\n");
+		printf("%s: unable to map ICU1 registers\n",
+		    sc->sc_dev.dv_xname);
 	if (bus_space_map(sc->sc_iot, IO_ICU2, 2, 0, &sc->sc_ioh_icu2) != 0)
-		aprint_error_dev(self, "unable to map ICU2 registers\n");
+		printf("%s: unable to map ICU2 registers\n",
+		    sc->sc_dev.dv_xname);
 
 	/* All interrupts default to "masked off". */
 	sc->sc_imask = 0xffff;
@@ -282,15 +283,16 @@ pcib_attach(device_t parent, device_t self, void *aux)
 #endif
 	if (sc->sc_ih == NULL)
 		printf("%s: WARNING: unable to register interrupt handler\n",
-		    device_xname(sc->sc_dev));
+		    sc->sc_dev.dv_xname);
 
 	config_defer(self, pcib_bridge_callback);
 }
 
 void
-pcib_bridge_callback(device_t self)
+pcib_bridge_callback(self)
+	struct device *self;
 {
-	struct pcib_softc *sc = device_private(self);
+	struct pcib_softc *sc = (struct pcib_softc *)self;
 	struct isabus_attach_args iba;
 
 	memset(&iba, 0, sizeof(iba));
@@ -315,21 +317,13 @@ pcib_bridge_callback(device_t self)
 
 	iba.iba_ic = &sc->sc_ic;
 	iba.iba_ic->ic_attach_hook = pcib_isa_attach_hook;
-	iba.iba_ic->ic_detach_hook = pcib_isa_detach_hook;
 
-	(void) config_found_ia(sc->sc_dev, "isabus", &iba, isabusprint);
+	(void) config_found_ia(&sc->sc_dev, "isabus", &iba, isabusprint);
 }
 
 void
-pcib_isa_attach_hook(device_t parent, device_t self,
+pcib_isa_attach_hook(struct device *parent, struct device *self,
     struct isabus_attach_args *iba)
-{
-
-	/* Nothing to do. */
-}
-
-void
-pcib_isa_detach_hook(isa_chipset_tag_t ic, device_t self)
 {
 
 	/* Nothing to do. */
@@ -360,7 +354,7 @@ int
 pcib_intr(void *v)
 {
 	struct pcib_softc *sc = v;
-	struct evbmips_intrhand *ih;
+	struct algor_intrhand *ih;
 	int irq;
 
 	for (;;) {
@@ -420,7 +414,7 @@ pcib_isa_intr_establish(void *v, int irq, int type, int level,
     int (*func)(void *), void *arg)
 {
 	struct pcib_softc *sc = v;
-	struct evbmips_intrhand *ih;
+	struct algor_intrhand *ih;
 	int s;
 
 	if (irq > 15 || irq == 2 || type == IST_NONE)
@@ -482,7 +476,7 @@ void
 pcib_isa_intr_disestablish(void *v, void *arg)
 {
 	struct pcib_softc *sc = v;
-	struct evbmips_intrhand *ih = arg;
+	struct algor_intrhand *ih = arg;
 	int s;
 
 #if defined(ALGOR_P5064)
@@ -512,7 +506,7 @@ pcib_isa_intr_alloc(void *v, int mask, int type, int *irq)
 {
 	struct pcib_softc *sc = v;
 	int i, tmp, bestirq, count;
-	struct evbmips_intrhand *ih;
+	struct algor_intrhand *ih;
 
 	if (type == IST_NONE)
 		panic("pcib_intr_alloc: bogus type");

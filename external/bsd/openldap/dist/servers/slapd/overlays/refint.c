@@ -1,10 +1,8 @@
-/*	$NetBSD: refint.c,v 1.1.1.4 2010/12/12 15:23:40 adam Exp $	*/
-
 /* refint.c - referential integrity module */
-/* OpenLDAP: pkg/ldap/servers/slapd/overlays/refint.c,v 1.19.2.15 2010/06/17 20:08:31 quanah Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/overlays/refint.c,v 1.19.2.9 2008/05/27 20:18:19 quanah Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2004-2010 The OpenLDAP Foundation.
+ * Copyright 2004-2008 The OpenLDAP Foundation.
  * Portions Copyright 2004 Symas Corporation.
  * All rights reserved.
  *
@@ -78,6 +76,7 @@ typedef struct refint_q {
 } refint_q;
 
 typedef struct refint_data_s {
+	const char *message;			/* breadcrumbs */
 	struct refint_attrs_s *attrs;	/* list of known attrs */
 	BerValue dn;				/* basedn in parent, */
 	BerValue nothing;			/* the nothing value, if needed */
@@ -211,17 +210,21 @@ refint_cf_gen(ConfigArgs *c)
 			rc = 0;
 			break;
 		case REFINT_NOTHING:
-			ch_free( dd->nothing.bv_val );
-			ch_free( dd->nnothing.bv_val );
-			BER_BVZERO( &dd->nothing );
-			BER_BVZERO( &dd->nnothing );
+			if ( dd->nothing.bv_val )
+				ber_memfree ( dd->nothing.bv_val );
+			if ( dd->nnothing.bv_val )
+				ber_memfree ( dd->nnothing.bv_val );
+			dd->nothing.bv_len = 0;
+			dd->nnothing.bv_len = 0;
 			rc = 0;
 			break;
 		case REFINT_MODIFIERSNAME:
-			ch_free( dd->refint_dn.bv_val );
-			ch_free( dd->refint_ndn.bv_val );
-			BER_BVZERO( &dd->refint_dn );
-			BER_BVZERO( &dd->refint_ndn );
+			if ( dd->refint_dn.bv_val )
+				ber_memfree ( dd->refint_dn.bv_val );
+			if ( dd->refint_ndn.bv_val )
+				ber_memfree ( dd->refint_ndn.bv_val );
+			dd->refint_dn.bv_len = 0;
+			dd->refint_ndn.bv_len = 0;
 			rc = 0;
 			break;
 		default:
@@ -253,26 +256,22 @@ refint_cf_gen(ConfigArgs *c)
 			}
 			break;
 		case REFINT_NOTHING:
-			if ( !BER_BVISNULL( &c->value_ndn )) {
-				ch_free ( dd->nothing.bv_val );
-				ch_free ( dd->nnothing.bv_val );
-				dd->nothing = c->value_dn;
-				dd->nnothing = c->value_ndn;
-				rc = 0;
-			} else {
-				rc = ARG_BAD_CONF;
-			}
+			if ( dd->nothing.bv_val )
+				ber_memfree ( dd->nothing.bv_val );
+			if ( dd->nnothing.bv_val )
+				ber_memfree ( dd->nnothing.bv_val );
+			dd->nothing = c->value_dn;
+			dd->nnothing = c->value_ndn;
+			rc = 0;
 			break;
 		case REFINT_MODIFIERSNAME:
-			if ( !BER_BVISNULL( &c->value_ndn )) {
-				ch_free( dd->refint_dn.bv_val );
-				ch_free( dd->refint_ndn.bv_val );
-				dd->refint_dn = c->value_dn;
-				dd->refint_ndn = c->value_ndn;
-				rc = 0;
-			} else {
-				rc = ARG_BAD_CONF;
-			}
+			if ( dd->refint_dn.bv_val )
+				ber_memfree ( dd->refint_dn.bv_val );
+			if ( dd->refint_ndn.bv_val )
+				ber_memfree ( dd->refint_ndn.bv_val );
+			dd->refint_dn = c->value_dn;
+			dd->refint_ndn = c->value_ndn;
+			rc = 0;
 			break;
 		default:
 			abort ();
@@ -300,6 +299,7 @@ refint_db_init(
 	slap_overinst *on = (slap_overinst *)be->bd_info;
 	refint_data *id = ch_calloc(1,sizeof(refint_data));
 
+	id->message = "_init";
 	on->on_bi.bi_private = id;
 	ldap_pvt_thread_mutex_init( &id->qmutex );
 	return(0);
@@ -335,6 +335,7 @@ refint_open(
 {
 	slap_overinst *on	= (slap_overinst *)be->bd_info;
 	refint_data *id	= on->on_bi.bi_private;
+	id->message		= "_open";
 
 	if ( BER_BVISNULL( &id->dn )) {
 		if ( BER_BVISNULL( &be->be_nsuffix[0] ))
@@ -353,6 +354,7 @@ refint_open(
 ** foreach configured attribute:
 **	free it;
 ** free our basedn;
+** (do not) free id->message;
 ** reset on_bi.bi_private;
 ** free our config data;
 **
@@ -367,6 +369,7 @@ refint_close(
 	slap_overinst *on	= (slap_overinst *) be->bd_info;
 	refint_data *id	= on->on_bi.bi_private;
 	refint_attrs *ii, *ij;
+	id->message		= "_close";
 
 	for(ii = id->attrs; ii; ii = ij) {
 		ij = ii->next;
@@ -544,7 +547,7 @@ refint_repair(
 	refint_data	*id,
 	refint_q	*rq )
 {
-	dependent_data	*dp;
+	dependent_data	*dp, *dp_next;
 	int		rc;
 
 	op->o_callback->sc_response = refint_search_cb;
@@ -583,11 +586,13 @@ refint_repair(
 	 *
 	 */
 
-	for ( dp = rq->attrs; dp; dp = dp->next ) {
+	for ( dp = rq->attrs; dp; dp = dp_next ) {
 		Operation	op2 = *op;
 		SlapReply	rs2 = { 0 };
 		refint_attrs	*ra;
-		Modifications	*m;
+		Modifications	*m, *first = NULL;
+
+		dp_next = dp->next;
 
 		op2.o_tag = LDAP_REQ_MODIFY;
 		op2.orm_modlist = NULL;
@@ -598,18 +603,21 @@ refint_repair(
 			Debug( LDAP_DEBUG_TRACE,
 				"refint_repair: no backend for DN %s!\n",
 				dp->dn.bv_val, 0, 0 );
-			continue;
+			return 0;
 		}
 
 		rs2.sr_type = REP_RESULT;
-		for ( ra = dp->attrs; ra; ra = ra->next ) {
+		for ( ra = dp->attrs; ra; ra = dp->attrs ) {
 			size_t	len;
 
+			dp->attrs = ra->next;
 			/* Set our ModifiersName */
 			if ( SLAP_LASTMOD( op->o_bd ) ) {
 				m = op2.o_tmpalloc( sizeof(Modifications) +
 					4*sizeof(BerValue), op2.o_tmpmemctx );
 				m->sml_next = op2.orm_modlist;
+				if ( !first )
+					first = m;
 				op2.orm_modlist = m;
 				m->sml_op = LDAP_MOD_REPLACE;
 				m->sml_flags = SLAP_MOD_INTERNAL;
@@ -634,6 +642,8 @@ refint_repair(
 
 				m = op2.o_tmpalloc( len, op2.o_tmpmemctx );
 				m->sml_next = op2.orm_modlist;
+				if ( !first )
+					first = m;
 				op2.orm_modlist = m;
 				m->sml_op = LDAP_MOD_ADD;
 				m->sml_flags = 0;
@@ -646,6 +656,9 @@ refint_repair(
 					BER_BVZERO( &m->sml_nvalues[1] );
 					m->sml_numvals = 1;
 					if ( BER_BVISEMPTY( &rq->newdn ) ) {
+						op2.o_tmpfree( ra, op2.o_tmpmemctx );
+						ra = dp->attrs;
+						dp->attrs = ra->next;
 						m->sml_values[0] = id->nothing;
 						m->sml_nvalues[0] = id->nnothing;
 					} else {
@@ -667,6 +680,8 @@ refint_repair(
 			m = op2.o_tmpalloc( len, op2.o_tmpmemctx );
 			m->sml_next = op2.orm_modlist;
 			op2.orm_modlist = m;
+			if ( !first )
+				first = m;
 			m->sml_op = LDAP_MOD_DELETE;
 			m->sml_flags = 0;
 			m->sml_desc = ra->attr;
@@ -684,6 +699,7 @@ refint_repair(
 				m->sml_nvalues = ra->old_nvals;
 				m->sml_numvals = ra->ra_numvals;
 			}
+			op2.o_tmpfree( ra, op2.o_tmpmemctx );
 		}
 
 		op2.o_dn = op2.o_bd->be_rootdn;
@@ -697,8 +713,17 @@ refint_repair(
 
 		while ( ( m = op2.orm_modlist ) ) {
 			op2.orm_modlist = m->sml_next;
+			if ( m->sml_values && m->sml_values != (BerVarray)(m+1) ) {
+				ber_bvarray_free_x( m->sml_values, op2.o_tmpmemctx );
+				ber_bvarray_free_x( m->sml_nvalues, op2.o_tmpmemctx );
+			}
 			op2.o_tmpfree( m, op2.o_tmpmemctx );
+			if ( m == first ) break;
 		}
+		slap_mods_free( op2.orm_modlist, 1 );
+		op2.o_tmpfree( dp->ndn.bv_val, op2.o_tmpmemctx );
+		op2.o_tmpfree( dp->dn.bv_val, op2.o_tmpmemctx );
+		op2.o_tmpfree( dp, op2.o_tmpmemctx );
 	}
 
 	return 0;
@@ -751,9 +776,6 @@ refint_qtask( void *ctx, void *arg )
 	}
 
 	for (;;) {
-		dependent_data	*dp, *dp_next;
-		refint_attrs *ra, *ra_next;
-
 		/* Dequeue an op */
 		ldap_pvt_thread_mutex_lock( &id->qmutex );
 		rq = id->qhead;
@@ -807,22 +829,6 @@ refint_qtask( void *ctx, void *arg )
 			}
 		}
 
-		for ( dp = rq->attrs; dp; dp = dp_next ) {
-			dp_next = dp->next;
-			for ( ra = dp->attrs; ra; ra = ra_next ) {
-				ra_next = ra->next;
-				ber_bvarray_free_x( ra->new_nvals, op->o_tmpmemctx );
-				ber_bvarray_free_x( ra->new_vals, op->o_tmpmemctx );
-				ber_bvarray_free_x( ra->old_nvals, op->o_tmpmemctx );
-				ber_bvarray_free_x( ra->old_vals, op->o_tmpmemctx );
-				op->o_tmpfree( ra, op->o_tmpmemctx );
-			}
-			op->o_tmpfree( dp->ndn.bv_val, op->o_tmpmemctx );
-			op->o_tmpfree( dp->dn.bv_val, op->o_tmpmemctx );
-			op->o_tmpfree( dp, op->o_tmpmemctx );
-		}
-		op->o_tmpfree( op->ors_filterstr.bv_val, op->o_tmpmemctx );
-
 		if ( !BER_BVISNULL( &rq->newndn )) {
 			ch_free( rq->newndn.bv_val );
 			ch_free( rq->newdn.bv_val );
@@ -866,6 +872,8 @@ refint_response(
 	refint_q *rq;
 	BackendDB *db = NULL;
 	refint_attrs *ip;
+
+	id->message = "_refint_response";
 
 	/* If the main op failed or is not a Delete or ModRdn, ignore it */
 	if (( op->o_tag != LDAP_REQ_DELETE && op->o_tag != LDAP_REQ_MODRDN ) ||

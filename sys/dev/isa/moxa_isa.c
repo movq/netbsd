@@ -1,4 +1,4 @@
-/*	$NetBSD: moxa_isa.c,v 1.20 2012/10/27 17:18:25 chs Exp $	*/
+/*	$NetBSD: moxa_isa.c,v 1.16 2008/04/08 20:08:50 cegger Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: moxa_isa.c,v 1.20 2012/10/27 17:18:25 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: moxa_isa.c,v 1.16 2008/04/08 20:08:50 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,6 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: moxa_isa.c,v 1.20 2012/10/27 17:18:25 chs Exp $");
 #define	NSLAVES	8
 
 struct moxa_isa_softc {
+	struct device sc_dev;
 	void *sc_ih;
 
 	bus_space_tag_t sc_iot;
@@ -63,15 +64,16 @@ struct moxa_isa_softc {
 	bus_space_handle_t sc_slaveioh[NSLAVES];
 };
 
-int moxa_isaprobe(device_t, cfdata_t, void *);
-void moxa_isaattach(device_t, device_t, void *);
+int moxa_isaprobe(struct device *, struct cfdata *, void *);
+void moxa_isaattach(struct device *, struct device *, void *);
 int moxa_isaintr(void *);
 
-CFATTACH_DECL_NEW(moxa_isa, sizeof(struct moxa_isa_softc),
+CFATTACH_DECL(moxa_isa, sizeof(struct moxa_isa_softc),
     moxa_isaprobe, moxa_isaattach, NULL, NULL);
 
 int
-moxa_isaprobe(device_t parent, cfdata_t self, void *aux)
+moxa_isaprobe(struct device *parent, struct cfdata *self,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -140,9 +142,9 @@ out:
 }
 
 void
-moxa_isaattach(device_t parent, device_t self, void *aux)
+moxa_isaattach(struct device *parent, struct device *self, void *aux)
 {
-	struct moxa_isa_softc *sc = device_private(self);
+	struct moxa_isa_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
 	struct commulti_attach_args ca;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -158,7 +160,7 @@ moxa_isaattach(device_t parent, device_t self, void *aux)
 		if (!com_is_console(iot, iobase, &sc->sc_slaveioh[i]) &&
 		    bus_space_map(iot, iobase, COM_NPORTS, 0,
 			&sc->sc_slaveioh[i])) {
-			aprint_error_dev(self, "can't map i/o space for slave %d\n", i);
+			aprint_error_dev(&sc->sc_dev, "can't map i/o space for slave %d\n", i);
 			return;
 		}
 	}
@@ -180,7 +182,8 @@ moxa_isaattach(device_t parent, device_t self, void *aux)
 }
 
 int
-moxa_isaintr(void *arg)
+moxa_isaintr(arg)
+	void *arg;
 {
 	struct moxa_isa_softc *sc = arg;
 	int bits;

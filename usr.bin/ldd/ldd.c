@@ -1,4 +1,4 @@
-/*	$NetBSD: ldd.c,v 1.20 2012/07/08 00:53:44 matt Exp $	*/
+/*	$NetBSD: ldd.c,v 1.2.12.4 2012/03/17 18:28:31 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -62,13 +62,14 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ldd.c,v 1.20 2012/07/08 00:53:44 matt Exp $");
+__RCSID("$NetBSD: ldd.c,v 1.2.12.4 2012/03/17 18:28:31 bouyer Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
 
+#include <a.out.h>
 #include <dirent.h>
 #include <err.h>
 #include <errno.h>
@@ -89,10 +90,6 @@ __RCSID("$NetBSD: ldd.c,v 1.20 2012/07/08 00:53:44 matt Exp $");
  */
 static char *error_message;	/* Message for dlopen(), or NULL */
 bool _rtld_trust;		/* False for setuid and setgid programs */
-/*
- * This may be ELF64 or ELF32 but since they are used opaquely it doesn't
- * really matter.
- */
 Obj_Entry *_rtld_objlist;	/* Head of linked list of shared objects */
 Obj_Entry **_rtld_objtail = &_rtld_objlist;
 				/* Link field of last object in list */
@@ -100,7 +97,7 @@ u_int _rtld_objcount;		/* Number of shared objects */
 u_int _rtld_objloads;		/* Number of objects loaded */
 
 Obj_Entry *_rtld_objmain;	/* The main program shared object */
-size_t _rtld_pagesz;
+int _rtld_pagesz;
 
 Search_Path *_rtld_default_paths;
 Search_Path *_rtld_paths;
@@ -121,13 +118,13 @@ usage(void)
 int
 main(int argc, char **argv)
 {
-	const char *fmt1 = NULL, *fmt2 = NULL;
+	char *fmt1 = NULL, *fmt2 = NULL;
 	int c;
 
 #ifdef DEBUG
 	debug = 1;
 #endif
-	while ((c = getopt(argc, argv, "f:o")) != -1) {
+	while ((c = getopt(argc, argv, "f:")) != -1) {
 		switch (c) {
 		case 'f':
 			if (fmt1) {
@@ -136,11 +133,6 @@ main(int argc, char **argv)
 				fmt2 = optarg;
 			} else
 				fmt1 = optarg;
-			break;
-		case 'o':
-			if (fmt1 || fmt2)
-				errx(1, "Cannot use -o and -f together");
-			fmt1 = "%a:-l%o.%m => %p\n";
 			break;
 		default:
 			usage();
@@ -163,15 +155,12 @@ main(int argc, char **argv)
 			warn("%s", *argv);
 			continue;
 		}
-		if (elf_ldd(fd, *argv, fmt1, fmt2) == -1
+		if (elf_ldd(fd, *argv, fmt1, fmt2) == -1 &&
 		    /* Alpha never had 32 bit support. */
 #if defined(_LP64) && !defined(__alpha__)
-		    && elf32_ldd(fd, *argv, fmt1, fmt2) == -1
-#ifdef __mips__
-		    && elf32_ldd_compat(fd, *argv, fmt1, fmt2) == -1
+		    elf32_ldd(fd, *argv, fmt1, fmt2) == -1 &&
 #endif
-#endif
-		    )
+		    aout_ldd(fd, *argv, fmt1, fmt2) == -1)
 			warnx("%s", error_message);
 		close(fd);
 	}
@@ -204,31 +193,106 @@ dlerror()
 }
 
 void
-_rtld_die(void)
+fmtprint(const char *libname, Obj_Entry *obj, const char *fmt1,
+    const char *fmt2)
 {
-	const char *msg = dlerror();
+	const char *libpath = obj ? obj->path : "not found";
+	char libnamebuf[200];
+	char *libmajor = NULL;
+	const char *fmt;
+	char *cp;
+	int c;
 
-	if (msg == NULL)
-		msg = "Fatal error";
-	xerrx(1, "%s", msg);
+	if (strncmp(libname, "lib", 3) == 0 &&
+	    (cp = strstr(libname, ".so")) != NULL) {
+		int i = cp - (libname + 3);
+
+		if (i >= sizeof(libnamebuf))
+			i = sizeof(libnamebuf) - 1;
+		(void)memcpy(libnamebuf, libname + 3, i);
+		libnamebuf[i] = '\0';
+		if (cp[3] && isdigit((unsigned char)cp[4]))
+			libmajor = &cp[4];
+		libname = libnamebuf;
+	}
+
+	if (fmt1 == NULL)
+		fmt1 = libmajor != NULL ?
+		    "\t-l%o.%m => %p\n" :
+		    "\t-l%o => %p\n";
+	if (fmt2 == NULL)
+		fmt2 = "\t%o => %p\n";
+
+	fmt = libname == libnamebuf ? fmt1 : fmt2;
+	while ((c = *fmt++) != '\0') {
+		switch (c) {
+		default:
+			putchar(c);
+			continue;
+		case '\\':
+			switch (c = *fmt) {
+			case '\0':
+				continue;
+			case 'n':
+				putchar('\n');
+				break;
+			case 't':
+				putchar('\t');
+				break;
+			}
+			break;
+		case '%':
+			switch (c = *fmt) {
+			case '\0':
+				continue;
+			case '%':
+			default:
+				putchar(c);
+				break;
+			case 'A':
+				printf("%s", main_local);
+				break;
+			case 'a':
+				printf("%s", main_progname);
+				break;
+			case 'o':
+				printf("%s", libname);
+				break;
+			case 'm':
+				printf("%s", libmajor);
+				break;
+			case 'n':
+				/* XXX: not supported for elf */
+				break;
+			case 'p':
+				printf("%s", libpath);
+				break;
+			case 'x':
+				printf("%p", obj ? obj->mapbase : 0);
+				break;
+			}
+			break;
+		}
+		++fmt;
+	}
 }
 
 void
-_rtld_shared_enter(void)
+print_needed(Obj_Entry *obj, const char *fmt1, const char *fmt2)
 {
-}
+	const Needed_Entry *needed;
 
-void
-_rtld_shared_exit(void)
-{
-}
+	for (needed = obj->needed; needed != NULL; needed = needed->next) {
+		const char *libname = obj->strtab + needed->name;
 
-void
-_rtld_exclusive_enter(sigset_t *mask)
-{
-}
-
-void
-_rtld_exclusive_exit(sigset_t *mask)
-{
+		if (needed->obj != NULL) {
+			if (!needed->obj->printed) {
+				fmtprint(libname, needed->obj, fmt1, fmt2);
+				needed->obj->printed = 1;
+				print_needed(needed->obj, fmt1, fmt2);
+			}
+		} else {
+			fmtprint(libname, needed->obj, fmt1, fmt2);
+		}
+	}
 }

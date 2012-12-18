@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_synch.c,v 1.305 2012/09/02 16:00:00 mlelstv Exp $	*/
+/*	$NetBSD: kern_synch.c,v 1.254.2.6 2009/04/23 17:47:13 snj Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2004, 2006, 2007, 2008, 2009
@@ -69,11 +69,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.305 2012/09/02 16:00:00 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.254.2.6 2009/04/23 17:47:13 snj Exp $");
 
 #include "opt_kstack.h"
 #include "opt_perfctrs.h"
-#include "opt_dtrace.h"
+#include "opt_sa.h"
 
 #define	__MUTEX_PRIVATE
 
@@ -85,9 +85,10 @@ __KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.305 2012/09/02 16:00:00 mlelstv Exp
 #include <sys/pmc.h>
 #endif
 #include <sys/cpu.h>
-#include <sys/pserialize.h>
 #include <sys/resourcevar.h>
 #include <sys/sched.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall_stats.h>
 #include <sys/sleepq.h>
 #include <sys/lockdebug.h>
@@ -96,17 +97,12 @@ __KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.305 2012/09/02 16:00:00 mlelstv Exp
 #include <sys/lwpctl.h>
 #include <sys/atomic.h>
 #include <sys/simplelock.h>
-#include <sys/syslog.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <dev/lockstat.h>
 
-#include <sys/dtrace_bsd.h>
-int                             dtrace_vtime_active=0;
-dtrace_vtime_switch_func_t      dtrace_vtime_switch_func;
-
-static void	sched_unsleep(struct lwp *, bool);
+static u_int	sched_unsleep(struct lwp *, bool);
 static void	sched_changepri(struct lwp *, pri_t);
 static void	sched_lendpri(struct lwp *, pri_t);
 static void	resched_cpu(struct lwp *);
@@ -127,21 +123,32 @@ syncobj_t sched_syncobj = {
 	syncobj_noowner,
 };
 
-/* "Lightning bolt": once a second sleep address. */
-kcondvar_t		lbolt			__cacheline_aligned;
+callout_t 	sched_pstats_ch;
+unsigned	sched_pstats_ticks;
+kcondvar_t	lbolt;			/* once a second sleep address */
 
-u_int			sched_pstats_ticks	__cacheline_aligned;
+/* Preemption event counters */
+static struct evcnt kpreempt_ev_crit;
+static struct evcnt kpreempt_ev_klock;
+static struct evcnt kpreempt_ev_immed;
 
-/* Preemption event counters. */
-static struct evcnt	kpreempt_ev_crit	__cacheline_aligned;
-static struct evcnt	kpreempt_ev_klock	__cacheline_aligned;
-static struct evcnt	kpreempt_ev_immed	__cacheline_aligned;
+/*
+ * During autoconfiguration or after a panic, a sleep will simply lower the
+ * priority briefly to allow interrupts, then return.  The priority to be
+ * used (safepri) is machine-dependent, thus this value is initialized and
+ * maintained in the machine-dependent layers.  This priority will typically
+ * be 0, or the lowest priority that is safe for use on the interrupt stack;
+ * it can be made higher to block network software interrupts after panics.
+ */
+int	safepri;
 
 void
-synch_init(void)
+sched_init(void)
 {
 
 	cv_init(&lbolt, "lbolt");
+	callout_init(&sched_pstats_ch, CALLOUT_MPSAFE);
+	callout_setfunc(&sched_pstats_ch, sched_pstats, NULL);
 
 	evcnt_attach_dynamic(&kpreempt_ev_crit, EVCNT_TYPE_MISC, NULL,
 	   "kpreempt", "defer: critical section");
@@ -149,13 +156,15 @@ synch_init(void)
 	   "kpreempt", "defer: kernel_lock");
 	evcnt_attach_dynamic(&kpreempt_ev_immed, EVCNT_TYPE_MISC, NULL,
 	   "kpreempt", "immediate");
+
+	sched_pstats(NULL);
 }
 
 /*
  * OBSOLETE INTERFACE
  *
- * General sleep call.  Suspends the current LWP until a wakeup is
- * performed on the specified identifier.  The LWP will then be made
+ * General sleep call.  Suspends the current process until a wakeup is
+ * performed on the specified identifier.  The process will then be made
  * runnable with the specified priority.  Sleeps at most timo/hz seconds (0
  * means no timeout).  If pri includes PCATCH flag, signals are checked
  * before and after sleeping, else signals are not checked.  Returns 0 if
@@ -163,19 +172,27 @@ synch_init(void)
  * signal needs to be delivered, ERESTART is returned if the current system
  * call should be restarted if possible, and EINTR is returned if the system
  * call should be interrupted by the signal (return EINTR).
+ *
+ * The interlock is held until we are on a sleep queue. The interlock will
+ * be locked before returning back to the caller unless the PNORELOCK flag
+ * is specified, in which case the interlock will always be unlocked upon
+ * return.
  */
 int
-tsleep(wchan_t ident, pri_t priority, const char *wmesg, int timo)
+ltsleep(wchan_t ident, pri_t priority, const char *wmesg, int timo,
+	volatile struct simplelock *interlock)
 {
 	struct lwp *l = curlwp;
 	sleepq_t *sq;
 	kmutex_t *mp;
+	int error;
 
 	KASSERT((l->l_pflag & LP_INTR) == 0);
-	KASSERT(ident != &lbolt);
 
 	if (sleepq_dontsleep(l)) {
 		(void)sleepq_abort(NULL, 0);
+		if ((priority & PNORELOCK) != 0)
+			simple_unlock(interlock);
 		return 0;
 	}
 
@@ -183,7 +200,18 @@ tsleep(wchan_t ident, pri_t priority, const char *wmesg, int timo)
 	sq = sleeptab_lookup(&sleeptab, ident, &mp);
 	sleepq_enter(sq, l, mp);
 	sleepq_enqueue(sq, ident, wmesg, &sleep_syncobj);
-	return sleepq_block(timo, priority & PCATCH);
+
+	if (interlock != NULL) {
+		KASSERT(simple_lock_held(interlock));
+		simple_unlock(interlock);
+	}
+
+	error = sleepq_block(timo, priority & PCATCH);
+
+	if (interlock != NULL && (priority & PNORELOCK) == 0)
+		simple_lock(interlock);
+ 
+	return error;
 }
 
 int
@@ -196,7 +224,6 @@ mtsleep(wchan_t ident, pri_t priority, const char *wmesg, int timo,
 	int error;
 
 	KASSERT((l->l_pflag & LP_INTR) == 0);
-	KASSERT(ident != &lbolt);
 
 	if (sleepq_dontsleep(l)) {
 		(void)sleepq_abort(mtx, (priority & PNORELOCK) != 0);
@@ -212,7 +239,7 @@ mtsleep(wchan_t ident, pri_t priority, const char *wmesg, int timo,
 
 	if ((priority & PNORELOCK) == 0)
 		mutex_enter(mtx);
-
+ 
 	return error;
 }
 
@@ -226,8 +253,6 @@ kpause(const char *wmesg, bool intr, int timo, kmutex_t *mtx)
 	kmutex_t *mp;
 	sleepq_t *sq;
 	int error;
-
-	KASSERT(!(timo == 0 && intr == false));
 
 	if (sleepq_dontsleep(l))
 		return sleepq_abort(NULL, 0);
@@ -245,10 +270,31 @@ kpause(const char *wmesg, bool intr, int timo, kmutex_t *mtx)
 	return error;
 }
 
+#ifdef KERN_SA
+/*
+ * sa_awaken:
+ *
+ *	We believe this lwp is an SA lwp. If it's yielding,
+ * let it know it needs to wake up.
+ *
+ *	We are called and exit with the lwp locked. We are
+ * called in the middle of wakeup operations, so we need
+ * to not touch the locks at all.
+ */
+void
+sa_awaken(struct lwp *l)
+{
+	/* LOCK_ASSERT(lwp_locked(l, NULL)); */
+
+	if (l == l->l_savp->savp_lwp && l->l_flag & LW_SA_YIELD)
+		l->l_flag &= ~LW_SA_IDLE;
+}
+#endif /* KERN_SA */
+
 /*
  * OBSOLETE INTERFACE
  *
- * Make all LWPs sleeping on the specified identifier runnable.
+ * Make all processes sleeping on the specified identifier runnable.
  */
 void
 wakeup(wchan_t ident)
@@ -256,7 +302,7 @@ wakeup(wchan_t ident)
 	sleepq_t *sq;
 	kmutex_t *mp;
 
-	if (__predict_false(cold))
+	if (cold)
 		return;
 
 	sq = sleeptab_lookup(&sleeptab, ident, &mp);
@@ -264,9 +310,29 @@ wakeup(wchan_t ident)
 }
 
 /*
- * General yield call.  Puts the current LWP back on its run queue and
+ * OBSOLETE INTERFACE
+ *
+ * Make the highest priority process first in line on the specified
+ * identifier runnable.
+ */
+void 
+wakeup_one(wchan_t ident)
+{
+	sleepq_t *sq;
+	kmutex_t *mp;
+
+	if (cold)
+		return;
+
+	sq = sleeptab_lookup(&sleeptab, ident, &mp);
+	sleepq_wake(sq, ident, 1, mp);
+}
+
+
+/*
+ * General yield call.  Puts the current process back on its run queue and
  * performs a voluntary context switch.  Should only be called when the
- * current LWP explicitly requests it (eg sched_yield(2)).
+ * current process explicitly requests it (eg sched_yield(2)).
  */
 void
 yield(void)
@@ -283,7 +349,7 @@ yield(void)
 }
 
 /*
- * General preemption call.  Puts the current LWP back on its run queue
+ * General preemption call.  Puts the current process back on its run queue
  * and performs an involuntary context switch.
  */
 void
@@ -317,7 +383,7 @@ kpreempt(uintptr_t where)
 {
 	uintptr_t failed;
 	lwp_t *l;
-	int s, dop, lsflag;
+	int s, dop;
 
 	l = curlwp;
 	failed = 0;
@@ -334,8 +400,8 @@ kpreempt(uintptr_t where)
 		}
 		if (__predict_false((l->l_flag & LW_IDLE) != 0)) {
 			/* Can't preempt idle loop, don't count as failure. */
-			l->l_dopreempt = 0;
-			return true;
+		    	l->l_dopreempt = 0;
+		    	return true;
 		}
 		if (__predict_false(l->l_nopreempt != 0)) {
 			/* LWP holds preemption disabled, explicitly. */
@@ -346,10 +412,10 @@ kpreempt(uintptr_t where)
 			break;
 		}
 		if (__predict_false((l->l_pflag & LP_INTR) != 0)) {
-			/* Can't preempt soft interrupts yet. */
-			l->l_dopreempt = 0;
-			failed = (uintptr_t)&is_softint;
-			break;
+		    	/* Can't preempt soft interrupts yet. */
+		    	l->l_dopreempt = 0;
+		    	failed = (uintptr_t)&is_softint;
+		    	break;
 		}
 		s = splsched();
 		if (__predict_false(l->l_blcnt != 0 ||
@@ -386,27 +452,26 @@ kpreempt(uintptr_t where)
 		l->l_nopreempt--;
 	}
 
-	if (__predict_true(!failed)) {
-		return false;
+	/* Record preemption failure for reporting via lockstat. */
+	if (__predict_false(failed)) {
+		int lsflag = 0;
+		atomic_or_uint(&l->l_dopreempt, DOPREEMPT_COUNTED);
+		LOCKSTAT_ENTER(lsflag);
+		/* Might recurse, make it atomic. */
+		if (__predict_false(lsflag)) {
+			if (where == 0) {
+				where = (uintptr_t)__builtin_return_address(0);
+			}
+			if (atomic_cas_ptr_ni((void *)&l->l_pfailaddr,
+			    NULL, (void *)where) == NULL) {
+				LOCKSTAT_START_TIMER(lsflag, l->l_pfailtime);
+				l->l_pfaillock = failed;
+			}
+		}
+		LOCKSTAT_EXIT(lsflag);
 	}
 
-	/* Record preemption failure for reporting via lockstat. */
-	atomic_or_uint(&l->l_dopreempt, DOPREEMPT_COUNTED);
-	lsflag = 0;
-	LOCKSTAT_ENTER(lsflag);
-	if (__predict_false(lsflag)) {
-		if (where == 0) {
-			where = (uintptr_t)__builtin_return_address(0);
-		}
-		/* Preemption is on, might recurse, so make it atomic. */
-		if (atomic_cas_ptr_ni((void *)&l->l_pfailaddr, NULL,
-		    (void *)where) == NULL) {
-			LOCKSTAT_START_TIMER(lsflag, l->l_pfailtime);
-			l->l_pfaillock = failed;
-		}
-	}
-	LOCKSTAT_EXIT(lsflag);
-	return true;
+	return failed;
 }
 
 /*
@@ -415,7 +480,9 @@ kpreempt(uintptr_t where)
 bool
 kpreempt_disabled(void)
 {
-	const lwp_t *l = curlwp;
+	lwp_t *l;
+
+	l = curlwp;
 
 	return l->l_nopreempt != 0 || l->l_stat == LSZOMB ||
 	    (l->l_flag & LW_IDLE) != 0 || cpu_kpreempt_disabled();
@@ -451,7 +518,7 @@ void
 updatertime(lwp_t *l, const struct bintime *now)
 {
 
-	if (__predict_false(l->l_flag & LW_IDLE))
+	if ((l->l_flag & LW_IDLE) != 0)
 		return;
 
 	/* rtime += now - stime */
@@ -478,8 +545,8 @@ nextlwp(struct cpu_info *ci, struct schedstate_percpu *spc)
 	if (newl != NULL) {
 		sched_dequeue(newl);
 		KASSERT(lwp_locked(newl, spc->spc_mutex));
-		KASSERT(newl->l_cpu == ci);
 		newl->l_stat = LSONPROC;
+		newl->l_cpu = ci;
 		newl->l_pflag |= LP_RUNNING;
 		lwp_setlock(newl, spc->spc_lwplock);
 	} else {
@@ -487,7 +554,7 @@ nextlwp(struct cpu_info *ci, struct schedstate_percpu *spc)
 		newl->l_stat = LSONPROC;
 		newl->l_pflag |= LP_RUNNING;
 	}
-
+	
 	/*
 	 * Only clear want_resched if there are no pending (slow)
 	 * software interrupts.
@@ -518,12 +585,12 @@ mi_switch(lwp_t *l)
 	KASSERT(kpreempt_disabled());
 	LOCKDEBUG_BARRIER(l->l_mutex, 1);
 
+#ifdef KSTACK_CHECK_MAGIC
 	kstack_check_magic(l);
+#endif
 
 	binuptime(&bt);
 
-	KASSERTMSG(l == curlwp, "l %p curlwp %p", l, curlwp);
-	KASSERT((l->l_pflag & LP_RUNNING) != 0);
 	KASSERT(l->l_cpu == curcpu());
 	ci = l->l_cpu;
 	spc = &ci->ci_schedstate;
@@ -585,13 +652,9 @@ mi_switch(lwp_t *l)
 			l->l_stat = LSRUN;
 			lwp_setlock(l, spc->spc_mutex);
 			sched_enqueue(l, true);
-			/*
-			 * Handle migration.  Note that "migrating LWP" may
-			 * be reset here, if interrupt/preemption happens
-			 * early in idle LWP.
-			 */
-			if (l->l_target_cpu != NULL) {
-				KASSERT((l->l_pflag & LP_INTR) == 0);
+			/* Handle migration case */
+			KASSERT(spc->spc_migrating == NULL);
+			if (l->l_target_cpu !=  NULL) {
 				spc->spc_migrating = l;
 			}
 		} else
@@ -662,7 +725,6 @@ mi_switch(lwp_t *l)
 		KASSERT(l->l_ctxswtch == 0);
 		l->l_ctxswtch = 1;
 		l->l_ncsw++;
-		KASSERT((l->l_pflag & LP_RUNNING) != 0);
 		l->l_pflag &= ~LP_RUNNING;
 
 		/*
@@ -670,10 +732,6 @@ mi_switch(lwp_t *l)
 		 * of the last lock - we must remain at IPL_SCHED during
 		 * the context switch.
 		 */
-		KASSERTMSG(ci->ci_mtx_count == -1,
-		    "%s: cpu%u: ci_mtx_count (%d) != -1 "
-		    "(block with spin-mutex held)",
-		     __func__, cpu_index(ci), ci->ci_mtx_count);
 		oldspl = MUTEX_SPIN_OLDSPL(ci);
 		ci->ci_mtx_count--;
 		lwp_unlock(l);
@@ -693,46 +751,25 @@ mi_switch(lwp_t *l)
 			pmap_deactivate(l);
 
 		/*
-		 * We may need to spin-wait if 'newl' is still
+		 * We may need to spin-wait for if 'newl' is still
 		 * context switching on another CPU.
 		 */
-		if (__predict_false(newl->l_ctxswtch != 0)) {
+		if (newl->l_ctxswtch != 0) {
 			u_int count;
 			count = SPINLOCK_BACKOFF_MIN;
 			while (newl->l_ctxswtch)
 				SPINLOCK_BACKOFF(count);
 		}
 
-		/*
-		 * If DTrace has set the active vtime enum to anything
-		 * other than INACTIVE (0), then it should have set the
-		 * function to call.
-		 */
-		if (__predict_false(dtrace_vtime_active)) {
-			(*dtrace_vtime_switch_func)(newl);
-		}
-
 		/* Switch to the new LWP.. */
-#ifdef MULTIPROCESSOR
-		KASSERT(curlwp == ci->ci_curlwp);
-#endif
-		KASSERTMSG(l == curlwp, "l %p curlwp %p", l, curlwp);
 		prevlwp = cpu_switchto(l, newl, returning);
 		ci = curcpu();
-#ifdef MULTIPROCESSOR
-		KASSERT(curlwp == ci->ci_curlwp);
-#endif
-		KASSERTMSG(l == curlwp, "l %p curlwp %p prevlwp %p",
-		    l, curlwp, prevlwp);
 
 		/*
 		 * Switched away - we have new curlwp.
 		 * Restore VM context and IPL.
 		 */
 		pmap_activate(l);
-		uvm_emap_switch(l);
-		pcu_switchpoint(l);
-
 		if (prevlwp != NULL) {
 			/* Normalize the count of the spin-mutexes */
 			ci->ci_mtx_count++;
@@ -747,15 +784,8 @@ mi_switch(lwp_t *l)
 			l->l_lwpctl->lc_pctr++;
 		}
 
-		/* Note trip through cpu_switchto(). */
-		pserialize_switchpoint();
-
 		KASSERT(l->l_cpu == ci);
 		splx(oldspl);
-		/*
-		 * note that, unless the caller disabled preemption,
-		 * we can be preempted at any time after the above splx() call.
-		 */
 		retval = 1;
 	} else {
 		/* Nothing to do - just unlock and return. */
@@ -800,7 +830,9 @@ lwp_exit_switchaway(lwp_t *l)
 	KASSERT(ci == curcpu());
 	LOCKDEBUG_BARRIER(NULL, 0);
 
+#ifdef KSTACK_CHECK_MAGIC
 	kstack_check_magic(l);
+#endif
 
 	/* Count time spent in current system call */
 	SYSCALL_TIME_SLEEP(l);
@@ -860,23 +892,14 @@ lwp_exit_switchaway(lwp_t *l)
 		l->l_lwpctl->lc_curcpu = LWPCTL_CPU_EXITED;
 
 	/*
-	 * We may need to spin-wait if 'newl' is still
+	 * We may need to spin-wait for if 'newl' is still
 	 * context switching on another CPU.
 	 */
-	if (__predict_false(newl->l_ctxswtch != 0)) {
+	if (newl->l_ctxswtch != 0) {
 		u_int count;
 		count = SPINLOCK_BACKOFF_MIN;
 		while (newl->l_ctxswtch)
 			SPINLOCK_BACKOFF(count);
-	}
-
-	/*
-	 * If DTrace has set the active vtime enum to anything
-	 * other than INACTIVE (0), then it should have set the
-	 * function to call.
-	 */
-	if (__predict_false(dtrace_vtime_active)) {
-		(*dtrace_vtime_switch_func)(newl);
 	}
 
 	/* Switch to the new LWP.. */
@@ -887,7 +910,8 @@ lwp_exit_switchaway(lwp_t *l)
 }
 
 /*
- * setrunnable: change LWP state to be runnable, placing it on the run queue.
+ * Change process state to be runnable, placing it on the run queue if it is
+ * in memory, and awakening the swapper if it isn't in memory.
  *
  * Call with the process and LWP locked.  Will return with the LWP unlocked.
  */
@@ -924,8 +948,14 @@ setrunnable(struct lwp *l)
 		panic("setrunnable: lwp %p state was %d", l, l->l_stat);
 	}
 
+#ifdef KERN_SA
+	if (l->l_proc->p_sa)
+		sa_awaken(l);
+#endif /* KERN_SA */
+
 	/*
-	 * If the LWP was sleeping, start it again.
+	 * If the LWP was sleeping interruptably, then it's OK to start it
+	 * again.  If not, mark it as still sleeping.
 	 */
 	if (l->l_wchan != NULL) {
 		l->l_stat = LSSLEEP;
@@ -957,15 +987,24 @@ setrunnable(struct lwp *l)
 	l->l_stat = LSRUN;
 	l->l_slptime = 0;
 
-	sched_enqueue(l, false);
-	resched_cpu(l);
-	lwp_unlock(l);
+	/*
+	 * If thread is swapped out - wake the swapper to bring it back in.
+	 * Otherwise, enter it into a run queue.
+	 */
+	if (l->l_flag & LW_INMEM) {
+		sched_enqueue(l, false);
+		resched_cpu(l);
+		lwp_unlock(l);
+	} else {
+		lwp_unlock(l);
+		uvm_kick_scheduler();
+	}
 }
 
 /*
  * suspendsched:
  *
- *	Convert all non-LW_SYSTEM LSSLEEP or LSRUN LWPs to LSSUSPENDED. 
+ *	Convert all non-L_SYSTEM LSSLEEP or LSRUN LWPs to LSSUSPENDED. 
  */
 void
 suspendsched(void)
@@ -980,6 +1019,9 @@ suspendsched(void)
 	 */
 	mutex_enter(proc_lock);
 	PROCLIST_FOREACH(p, &allproc) {
+		if ((p->p_flag & PK_MARKER) != 0)
+			continue;
+
 		mutex_enter(p->p_lock);
 		if ((p->p_flag & PK_SYSTEM) != 0) {
 			mutex_exit(p->p_lock);
@@ -1035,7 +1077,7 @@ suspendsched(void)
  *	interrupted: for example, if the sleep timed out.  Because of this,
  *	it's not a valid action for running or idle LWPs.
  */
-static void
+static u_int
 sched_unsleep(struct lwp *l, bool cleanup)
 {
 
@@ -1046,7 +1088,7 @@ sched_unsleep(struct lwp *l, bool cleanup)
 static void
 resched_cpu(struct lwp *l)
 {
-	struct cpu_info *ci = l->l_cpu;
+	struct cpu_info *ci = ci = l->l_cpu;
 
 	KASSERT(lwp_locked(l, NULL));
 	if (lwp_eprio(l) > ci->ci_schedstate.spc_curpriority)
@@ -1059,7 +1101,7 @@ sched_changepri(struct lwp *l, pri_t pri)
 
 	KASSERT(lwp_locked(l, NULL));
 
-	if (l->l_stat == LSRUN) {
+	if (l->l_stat == LSRUN && (l->l_flag & LW_INMEM) != 0) {
 		KASSERT(lwp_locked(l, l->l_cpu->ci_schedstate.spc_mutex));
 		sched_dequeue(l);
 		l->l_priority = pri;
@@ -1076,7 +1118,7 @@ sched_lendpri(struct lwp *l, pri_t pri)
 
 	KASSERT(lwp_locked(l, NULL));
 
-	if (l->l_stat == LSRUN) {
+	if (l->l_stat == LSRUN && (l->l_flag & LW_INMEM) != 0) {
 		KASSERT(lwp_locked(l, l->l_cpu->ci_schedstate.spc_mutex));
 		sched_dequeue(l);
 		l->l_inheritedprio = pri;
@@ -1095,76 +1137,49 @@ syncobj_noowner(wchan_t wchan)
 }
 
 /* Decay 95% of proc::p_pctcpu in 60 seconds, ccpu = exp(-1/20) */
-const fixpt_t ccpu = 0.95122942450071400909 * FSCALE;
-
-/*
- * Constants for averages over 1, 5 and 15 minutes when sampling at
- * 5 second intervals.
- */
-static const fixpt_t cexp[ ] = {
-	0.9200444146293232 * FSCALE,	/* exp(-1/12) */
-	0.9834714538216174 * FSCALE,	/* exp(-1/60) */
-	0.9944598480048967 * FSCALE,	/* exp(-1/180) */
-};
+const fixpt_t	ccpu = 0.95122942450071400909 * FSCALE;
 
 /*
  * sched_pstats:
  *
- * => Update process statistics and check CPU resource allocation.
- * => Call scheduler-specific hook to eventually adjust LWP priorities.
- * => Compute load average of a quantity on 1, 5 and 15 minute intervals.
+ * Update process statistics and check CPU resource allocation.
+ * Call scheduler-specific hook to eventually adjust process/LWP
+ * priorities.
  */
+/* ARGSUSED */
 void
-sched_pstats(void)
+sched_pstats(void *arg)
 {
-	extern struct loadavg averunnable;
-	struct loadavg *avg = &averunnable;
 	const int clkhz = (stathz != 0 ? stathz : hz);
-	static bool backwards = false;
-	static u_int lavg_count = 0;
+	static bool backwards;
+	struct rlimit *rlim;
+	struct lwp *l;
 	struct proc *p;
-	int nrun;
+	long runtm;
+	fixpt_t lpctcpu;
+	u_int lcpticks;
+	int sig;
 
 	sched_pstats_ticks++;
-	if (++lavg_count >= 5) {
-		lavg_count = 0;
-		nrun = 0;
-	}
+
 	mutex_enter(proc_lock);
 	PROCLIST_FOREACH(p, &allproc) {
-		struct lwp *l;
-		struct rlimit *rlim;
-		time_t runtm;
-		int sig;
+		if (__predict_false((p->p_flag & PK_MARKER) != 0))
+			continue;
 
-		/* Increment sleep time (if sleeping), ignore overflow. */
+		/*
+		 * Increment time in/out of memory and sleep
+		 * time (if sleeping), ignore overflow.
+		 */
 		mutex_enter(p->p_lock);
 		runtm = p->p_rtime.sec;
 		LIST_FOREACH(l, &p->p_lwps, l_sibling) {
-			fixpt_t lpctcpu;
-			u_int lcpticks;
-
 			if (__predict_false((l->l_flag & LW_IDLE) != 0))
 				continue;
 			lwp_lock(l);
 			runtm += l->l_rtime.sec;
 			l->l_swtime++;
 			sched_lwp_stats(l);
-
-			/* For load average calculation. */
-			if (__predict_false(lavg_count == 0) &&
-			    (l->l_flag & (LW_SINTR | LW_SYSTEM)) == 0) {
-				switch (l->l_stat) {
-				case LSSLEEP:
-					if (l->l_slptime > 1) {
-						break;
-					}
-				case LSRUN:
-				case LSONPROC:
-				case LSIDL:
-					nrun++;
-				}
-			}
 			lwp_unlock(l);
 
 			l->l_pctcpu = (l->l_pctcpu * ccpu) >> FSHIFT;
@@ -1180,56 +1195,35 @@ sched_pstats(void)
 		/* Calculating p_pctcpu only for ps(1) */
 		p->p_pctcpu = (p->p_pctcpu * ccpu) >> FSHIFT;
 
-		if (__predict_false(runtm < 0)) {
-			if (!backwards) {
-				backwards = true;
-				printf("WARNING: negative runtime; "
-				    "monotonic clock has gone backwards\n");
-			}
-			mutex_exit(p->p_lock);
-			continue;
-		}
-
 		/*
 		 * Check if the process exceeds its CPU resource allocation.
-		 * If over the hard limit, kill it with SIGKILL.
-		 * If over the soft limit, send SIGXCPU and raise
-		 * the soft limit a little.
+		 * If over max, kill it.
 		 */
 		rlim = &p->p_rlimit[RLIMIT_CPU];
 		sig = 0;
 		if (__predict_false(runtm >= rlim->rlim_cur)) {
-			if (runtm >= rlim->rlim_max) {
+			if (runtm >= rlim->rlim_max)
 				sig = SIGKILL;
-				log(LOG_NOTICE, "pid %d is killed: %s\n",
-					p->p_pid, "exceeded RLIMIT_CPU");
-				uprintf("pid %d, command %s, is killed: %s\n",
-					p->p_pid, p->p_comm,
-					"exceeded RLIMIT_CPU");
-			} else {
+			else {
 				sig = SIGXCPU;
 				if (rlim->rlim_cur < rlim->rlim_max)
 					rlim->rlim_cur += 5;
 			}
 		}
 		mutex_exit(p->p_lock);
-		if (__predict_false(sig)) {
+		if (__predict_false(runtm < 0)) {
+			if (!backwards) {
+				backwards = true;
+				printf("WARNING: negative runtime; "
+				    "monotonic clock has gone backwards\n");
+			}
+		} else if (__predict_false(sig)) {
 			KASSERT((p->p_flag & PK_SYSTEM) == 0);
 			psignal(p, sig);
 		}
 	}
 	mutex_exit(proc_lock);
-
-	/* Load average calculation. */
-	if (__predict_false(lavg_count == 0)) {
-		int i;
-		CTASSERT(__arraycount(cexp) == __arraycount(avg->ldavg));
-		for (i = 0; i < __arraycount(cexp); i++) {
-			avg->ldavg[i] = (cexp[i] * avg->ldavg[i] +
-			    nrun * FSCALE * (FSCALE - cexp[i])) >> FSHIFT;
-		}
-	}
-
-	/* Lightning bolt. */
-	cv_broadcast(&lbolt);
+	uvm_meter();
+	cv_wakeup(&lbolt);
+	callout_schedule(&sched_pstats_ch, hz);
 }

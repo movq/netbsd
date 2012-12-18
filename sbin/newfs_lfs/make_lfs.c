@@ -1,4 +1,4 @@
-/*	$NetBSD: make_lfs.c,v 1.19 2012/02/16 02:47:54 perseant Exp $	*/
+/*	$NetBSD: make_lfs.c,v 1.13 2008/05/16 09:21:59 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
 #if 0
 static char sccsid[] = "@(#)lfs.c	8.5 (Berkeley) 5/24/95";
 #else
-__RCSID("$NetBSD: make_lfs.c,v 1.19 2012/02/16 02:47:54 perseant Exp $");
+__RCSID("$NetBSD: make_lfs.c,v 1.13 2008/05/16 09:21:59 hannken Exp $");
 #endif
 #endif /* not lint */
 
@@ -232,7 +232,7 @@ make_dinode(ino_t ino, struct ufs1_dinode *dip, int nfrags, struct lfs *fs)
 		nfrags = roundup(nfrags, fs->lfs_frag);
 
 	dip->di_nlink = 1;
-	dip->di_blocks = nfrags;
+	dip->di_blocks = fragstofsb(fs, nfrags);
 
 	dip->di_size = (nfrags << fs->lfs_ffshift);
 	dip->di_atime = dip->di_mtime = dip->di_ctime = fs->lfs_tstamp;
@@ -240,7 +240,7 @@ make_dinode(ino_t ino, struct ufs1_dinode *dip, int nfrags, struct lfs *fs)
 	dip->di_inumber = ino;
 	dip->di_gen = 1;
 
-	fsb_per_blk = blkstofrags(fs, 1);
+	fsb_per_blk = fragstofsb(fs, blkstofrags(fs, 1));
 
 	if (NDADDR < nblocks) {
 		/* Count up how many indirect blocks we need, recursively */
@@ -251,7 +251,7 @@ make_dinode(ino_t ino, struct ufs1_dinode *dip, int nfrags, struct lfs *fs)
 			ifibc += bb;
 			--bb;
 		}
-		dip->di_blocks += blkstofrags(fs, ifibc);
+		dip->di_blocks += fragstofsb(fs, blkstofrags(fs, ifibc));
 	}
 
 	/* Assign the block addresses for the ifile */
@@ -355,20 +355,12 @@ make_lfs(int devfd, uint secsize, struct dkwedge_info *dkw, int minfree,
 		    "expected \"%s\"", dkw->dkw_ptype, DKW_PTYPE_LFS);
 	}
 
-	if (!(bsize = block_size)) {
+	if (!(bsize = block_size))
 		bsize = DFL_LFSBLOCK;
-		if (dkw->dkw_size <= SMALL_FSSIZE)
-			bsize = SMALL_LFSBLOCK;
-	}
-	if (!(fsize = frag_size)) {
+	if (!(fsize = frag_size))
 		fsize = DFL_LFSFRAG;
-		if (dkw->dkw_size <= SMALL_FSSIZE)
-			fsize = SMALL_LFSFRAG;
-	}
 	if (!(ssize = seg_size)) {
 		ssize = DFL_LFSSEG;
-		if (dkw->dkw_size <= SMALL_FSSIZE)
-			ssize = SMALL_LFSSEG;
 	}
 	if (version > 1) {
 		if (ibsize == 0)
@@ -496,7 +488,7 @@ make_lfs(int devfd, uint secsize, struct dkwedge_info *dkw, int minfree,
 	if (fs->lfs_resvseg < MIN_RESV_SEGS)
 		fs->lfs_resvseg = MIN_RESV_SEGS;
 
-	if(fs->lfs_nseg < (4 * fs->lfs_minfreeseg)
+	if(fs->lfs_nseg < fs->lfs_minfreeseg + 1
 	   || fs->lfs_nseg < LFS_MIN_SBINTERVAL + 1)
 	{
 		if(seg_size == 0 && ssize > (bsize<<1)) {
@@ -518,8 +510,6 @@ make_lfs(int devfd, uint secsize, struct dkwedge_info *dkw, int minfree,
 			"size %d and block size %d;\nplease decrease the "
 			"segment size.\n", ssize, fs->lfs_bsize);
 	}
-	if(warned_segtoobig)
-		fprintf(stderr,"Using segment size %d, block size %d, frag size %d.\n", ssize, bsize, fsize);
 
 	/*
 	 * Now that we've determined what we're going to do, announce it
@@ -683,9 +673,9 @@ make_lfs(int devfd, uint secsize, struct dkwedge_info *dkw, int minfree,
 	dip->di_mode = IFDIR | UMASK;
 	VTOI(vp)->i_lfs_osize = dip->di_size = DIRBLKSIZ;
 #ifdef MAKE_LF_DIR
-	VTOI(vp)->i_nlink = dip->di_nlink = 3;
+        VTOI(vp)->i_ffs_effnlink = dip->di_nlink = 3;
 #else
-	VTOI(vp)->i_nlink = dip->di_nlink = 2;
+        VTOI(vp)->i_ffs_effnlink = dip->di_nlink = 2;
 #endif
         VTOI(vp)->i_lfs_effnblks = dip->di_blocks =
 		btofsb(fs, roundup(DIRBLKSIZ,fs->lfs_fsize));
@@ -706,7 +696,7 @@ make_lfs(int devfd, uint secsize, struct dkwedge_info *dkw, int minfree,
 	make_dinode(LOSTFOUNDINO, dip, howmany(DIRBLKSIZ,fs->lfs_fsize), fs);
 	dip->di_mode = IFDIR | UMASK;
 	VTOI(vp)->i_lfs_osize = dip->di_size = DIRBLKSIZ;
-        VTOI(vp)->i_nlink = dip->di_nlink = 2;
+        VTOI(vp)->i_ffs_effnlink = dip->di_nlink = 2;
         VTOI(vp)->i_lfs_effnblks = dip->di_blocks =
 		btofsb(fs, roundup(DIRBLKSIZ,fs->lfs_fsize));
 	for (i = 0; i < NDADDR && i < howmany(DIRBLKSIZ, fs->lfs_bsize); i++)

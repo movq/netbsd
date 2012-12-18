@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_misc.c,v 1.112 2012/10/02 01:44:27 christos Exp $	*/
+/*	$NetBSD: ibcs2_misc.c,v 1.104.6.1 2010/03/17 02:59:51 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -95,7 +95,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_misc.c,v 1.112 2012/10/02 01:44:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_misc.c,v 1.104.6.1 2010/03/17 02:59:51 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -215,7 +215,8 @@ ibcs2_sys_waitsys(struct lwp *l, const struct ibcs2_sys_waitsys_args *uap, regis
 		syscallarg(int) a3;
 	} */
 #endif
-	int error, options, status, pid;
+	int error;
+	int pid, options, status, was_zombie;
 
 #if defined(__i386__)
 #define WAITPID_EFLAGS	0x8c4	/* OF, SF, ZF, PF */
@@ -232,7 +233,7 @@ ibcs2_sys_waitsys(struct lwp *l, const struct ibcs2_sys_waitsys_args *uap, regis
 	}
 #endif
 
-	error = do_sys_wait(&pid, &status, options, NULL);
+	error = do_sys_wait(l, &pid, &status, options, NULL, &was_zombie);
 	retval[0] = pid;
 	retval[1] = status;
 	return error;
@@ -483,7 +484,7 @@ again:
 eof:
 	*retval = SCARG(uap, nbytes) - resid;
 out:
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(tbuf, M_TEMP);
@@ -616,7 +617,7 @@ again:
 eof:
 	*retval = SCARG(uap, nbytes) - resid;
 out:
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(tbuf, M_TEMP);
@@ -640,8 +641,11 @@ ibcs2_sys_mknod(struct lwp *l, const struct ibcs2_sys_mknod_args *uap, register_
 		SCARG(&ap, mode) = SCARG(uap, mode);
 		return sys_mkfifo(l, &ap, retval);
 	} else {
-		return do_sys_mknod(l, SCARG(uap, path), SCARG(uap, mode),
-		    SCARG(uap, dev), retval, UIO_USERSPACE);
+		struct sys_mknod_args ap;
+		SCARG(&ap, path) = SCARG(uap, path);
+		SCARG(&ap, mode) = SCARG(uap, mode);
+		SCARG(&ap, dev) = SCARG(uap, dev);
+		return sys_mknod(l, &ap, retval);
 	}
 }
 
@@ -1082,8 +1086,6 @@ ibcs2_sys_pgrpsys(struct lwp *l, const struct ibcs2_sys_pgrpsys_args *uap, regis
 }
 
 /*
- * See http://docsrv.sco.com:507/en/man/html.S/plock.S.html
- *
  * XXX - need to check for nested calls
  */
 
@@ -1098,12 +1100,9 @@ ibcs2_sys_plock(struct lwp *l, const struct ibcs2_sys_plock_args *uap, register_
 #define IBCS2_TEXTLOCK	2
 #define IBCS2_DATALOCK	4
 
-	/*
-	 * NOTE: This is a privileged operation. Normally it would require root
-	 * access. When implementing, please make sure to use an appropriate
-	 * kauth(9) request. See the man-page for more information.
-	 */
-
+	if (kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL) != 0)
+		return EPERM;
 	switch(SCARG(uap, cmd)) {
 	case IBCS2_UNLOCK:
 	case IBCS2_PROCLOCK:
@@ -1114,9 +1113,6 @@ ibcs2_sys_plock(struct lwp *l, const struct ibcs2_sys_plock_args *uap, register_
 	return EINVAL;
 }
 
-/*
- * See http://docsrv.sco.com:507/en/man/html.S/uadmin.S.html
- */
 int
 ibcs2_sys_uadmin(struct lwp *l, const struct ibcs2_sys_uadmin_args *uap, register_t *retval)
 {
@@ -1168,12 +1164,11 @@ ibcs2_sys_uadmin(struct lwp *l, const struct ibcs2_sys_uadmin_args *uap, registe
 	case SCO_A_CLOCK:
 	case SCO_A_SETCONFIG:
 	case SCO_A_GETDEV:
-		/*
-		 * NOTE: These are all privileged operations, that otherwise
-		 * would require root access or similar. When implementing,
-		 * please use appropriate kauth(9) requests. See the man-page
-		 * for more information.
-		 */
+		/* XXX Use proper kauth(9) requests when updating this. */
+		error = kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, NULL);
+		if (error)
+			return (error);
 
 		if (SCARG(uap, cmd) != SCO_A_GETDEV)
 			return 0;
@@ -1237,7 +1232,7 @@ xenix_sys_chsize(struct lwp *l, const struct xenix_sys_chsize_args *uap, registe
 	struct sys_ftruncate_args sa;
 
 	SCARG(&sa, fd) = SCARG(uap, fd);
-	SCARG(&sa, PAD) = 0;
+	SCARG(&sa, pad) = 0;
 	SCARG(&sa, length) = SCARG(uap, size);
 	return sys_ftruncate(l, &sa, retval);
 }
@@ -1254,7 +1249,7 @@ xenix_sys_nap(struct lwp *l, const struct xenix_sys_nap_args *uap, register_t *r
 
 	rqt.tv_sec = 0;
 	rqt.tv_nsec = SCARG(uap, millisec) * 1000;
-	error = nanosleep1(l, CLOCK_MONOTONIC, 0, &rqt, &rmt);
+	error = nanosleep1(l, &rqt, &rmt);
 	/* If interrupted we can either report EINTR, or the time left */
 	if (error != 0 && error != EINTR)
 		return error;
@@ -1364,11 +1359,11 @@ ibcs2_sys_settimeofday(struct lwp *l, const struct ibcs2_sys_settimeofday_args *
 	/* {
 		syscallarg(struct timeval *) tp;
 	} */
-	struct compat_50_sys_settimeofday_args ap;
+	struct sys_settimeofday_args ap;
 
 	SCARG(&ap, tv) = SCARG(uap, tp);
 	SCARG(&ap, tzp) = NULL;
-	return compat_50_sys_settimeofday(l, &ap, retval);
+	return sys_settimeofday(l, &ap, retval);
 }
 
 int

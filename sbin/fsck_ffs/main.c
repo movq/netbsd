@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.80 2011/08/29 14:34:59 joerg Exp $	*/
+/*	$NetBSD: main.c,v 1.73 2008/10/12 20:49:43 wiz Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\
 #if 0
 static char sccsid[] = "@(#)main.c	8.6 (Berkeley) 5/14/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.80 2011/08/29 14:34:59 joerg Exp $");
+__RCSID("$NetBSD: main.c,v 1.73 2008/10/12 20:49:43 wiz Exp $");
 #endif
 #endif /* not lint */
 
@@ -71,11 +71,12 @@ __RCSID("$NetBSD: main.c,v 1.80 2011/08/29 14:34:59 joerg Exp $");
 #include "snapshot.h"
 
 int	progress = 0;
-volatile sig_atomic_t	returntosingle = 0;
+int	returntosingle = 0;
 
 static int	argtoi(int, const char *, const char *, int);
 static int	checkfilesys(const char *, const char *, int);
-__dead static void	usage(void);
+static void	usage(void);
+static char 	*get_snap_device(char *);
 
 int
 main(int argc, char *argv[])
@@ -85,8 +86,6 @@ main(int argc, char *argv[])
 	int ret = FSCK_EXIT_OK;
 	char *snap_backup = NULL;
 	int snap_internal = 0;
-
-	ckfinish = ckfini;
 
 	if (getrlimit(RLIMIT_DATA, &r) == 0) {
 		r.rlim_cur = r.rlim_max;
@@ -218,28 +217,29 @@ main(int argc, char *argv[])
 
 	while (argc-- > 0) {
 		int nret;
-		char *path;
-
-		if (!forceimage)
-			path = strdup(blockcheck(*argv));
-		else
-			path = strdup(*argv);
+		char *path = strdup(blockcheck(*argv));
 
 		if (path == NULL)
 			pfatal("Can't check %s\n", *argv);
 		
 		if (snap_backup || snap_internal) {
+			char *mpt;
 			char *snap_dev;
 			int snapfd;
 
-			snapfd = snap_open(*argv, snap_backup, NULL, &snap_dev);
+			mpt = get_snap_device(*argv);
+			if (mpt == NULL)
+				goto next;
+			snapfd = snap_open(mpt, snap_backup, NULL, &snap_dev);
 			if (snapfd < 0) {
-				warn("can't take snapshot of %s", *argv);
+				warn("can't take snapshot of %s", mpt);
+				free(mpt);
 				goto next;
 			}
 			nret = checkfilesys(blockcheck(snap_dev), path, 0);
 			if (ret < nret)
 				ret = nret;
+			free(mpt);
 			close(snapfd);
 		} else {
 			nret = checkfilesys(path, path, 0);
@@ -392,11 +392,6 @@ checkfilesys(const char *filesys, const char *origfs, int child)
 		progress_sethighlim(progress_limits[5]);
 #endif /* PROGRESS */
 	pass5();
-	if (uquot_user_hash != NULL) {
-		if (preen == 0)
-			pwarn("** Phase 6 - Check Quotas\n");
-		pass6();
-	}
 
 	/*
 	 * print out summary statistics
@@ -447,7 +442,7 @@ checkfilesys(const char *filesys, const char *origfs, int child)
 		markclean = 0;
 #if LITE2BORKEN
 	if (!hotroot()) {
-		ckfini(1);
+		ckfini();
 	} else {
 		struct statvfs stfs_buf;
 		/*
@@ -459,10 +454,10 @@ checkfilesys(const char *filesys, const char *origfs, int child)
 			flags = 0;
 		if (markclean)
 			markclean = flags & MNT_RDONLY;
-		ckfini(1);
+		ckfini();
 	}
 #else
-	ckfini(1);
+	ckfini();
 #endif
 	for (cylno = 0; cylno < sblock->fs_ncg; cylno++)
 		if (inostathead[cylno].il_stat != NULL)
@@ -516,4 +511,58 @@ usage(void)
 	    "\t[-x snap-backup] [-y | -n] filesystem ...\n",
 	    getprogname());
 	exit(FSCK_EXIT_USAGE);
+}
+
+static 
+char *get_snap_device(char *file)
+{
+	char *mountpoint = NULL;
+	struct statvfs *mntbuf, *fs, fsbuf;
+	struct stat sb;
+
+	/* find the mount point */
+	if (lstat(file, &sb) == -1) {
+		warn("can't stat %s", file);
+		return NULL;
+	}
+	if (S_ISCHR(sb.st_mode) || S_ISBLK(sb.st_mode)) {
+		int mntbufc, i;
+		if ((mntbufc = getmntinfo(&mntbuf, MNT_NOWAIT)) == 0)
+			pfatal("can't get mount list: %s\n", strerror(errno));
+		for (fs = mntbuf, i = 0;
+		     i < mntbufc; i++, fs++) {
+			if (strcmp(fs->f_fstypename, "ufs") != 0 &&
+			    strcmp(fs->f_fstypename, "ffs") != 0)
+				continue;
+			if (fs->f_flag & ST_RDONLY) {
+				warnx("Cannot use -x or -X "
+				     "on read-only filesystem");
+				free(mntbuf);
+				return NULL;
+			}
+			if (strcmp(fs->f_mntfromname, unrawname(file)) == 0) {
+				mountpoint = strdup(fs->f_mntonname);
+				free(mntbuf);
+				return mountpoint;
+			}
+		}
+		warnx("Cannot use -x or -X on unmounted device");
+		free(mntbuf);
+		return NULL;
+	}
+	if (S_ISDIR(sb.st_mode)) {
+		if (statvfs(file, &fsbuf) == -1)
+			pfatal("can't statvfs %s: %s\n", file, strerror(errno));
+		if (strcmp(fsbuf.f_mntonname, file))
+			pfatal("%s is not a mount point\n", file);
+		if (fsbuf.f_flag & ST_RDONLY) {
+			warnx("Cannot use -x or -X "
+			     "on read-only filesystem");
+			return NULL;
+		}
+		mountpoint = strdup(file);
+		return mountpoint;
+	}
+	pfatal("%s is not a mount point\n", file);
+	return NULL;
 }

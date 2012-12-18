@@ -1,10 +1,8 @@
-/*	$NetBSD: init.c,v 1.1.1.3 2010/12/12 15:23:15 adam Exp $	*/
-
 /* init.c - initialize monitor backend */
-/* OpenLDAP: pkg/ldap/servers/slapd/back-monitor/init.c,v 1.125.2.14 2010/04/19 16:53:03 quanah Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/back-monitor/init.c,v 1.125.2.6 2008/04/24 08:13:39 hyc Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2001-2010 The OpenLDAP Foundation.
+ * Copyright 2001-2008 The OpenLDAP Foundation.
  * Portions Copyright 2001-2003 Pierangelo Masarati.
  * All rights reserved.
  *
@@ -324,6 +322,13 @@ monitor_back_register_overlay_info(
 }
 
 int
+monitor_back_register_overlay(
+	BackendDB		*be )
+{
+	return -1;
+}
+
+int
 monitor_back_register_backend_limbo(
 	BackendInfo		*bi )
 {
@@ -333,7 +338,7 @@ monitor_back_register_backend_limbo(
 int
 monitor_back_register_database_limbo(
 	BackendDB		*be,
-	struct berval		*ndn_out )
+	struct berval	*ndn )
 {
 	entry_limbo_t	**elpp, el = { 0 };
 	monitor_info_t 	*mi;
@@ -352,7 +357,7 @@ monitor_back_register_database_limbo(
 	el.el_type = LIMBO_DATABASE;
 
 	el.el_be = be->bd_self;
-	el.el_ndn = ndn_out;
+	el.el_ndn = ndn;
 	
 	for ( elpp = &mi->mi_entry_limbo;
 			*elpp;
@@ -376,41 +381,9 @@ monitor_back_register_overlay_info_limbo(
 
 int
 monitor_back_register_overlay_limbo(
-	BackendDB		*be,
-	struct slap_overinst	*on,
-	struct berval		*ndn_out )
+	BackendDB		*be )
 {
-	entry_limbo_t	**elpp, el = { 0 };
-	monitor_info_t 	*mi;
-
-	if ( be_monitor == NULL ) {
-		Debug( LDAP_DEBUG_ANY,
-			"monitor_back_register_overlay_limbo: "
-			"monitor database not configured.\n",
-			0, 0, 0 );
-		return -1;
-	}
-
-	mi = ( monitor_info_t * )be_monitor->be_private;
-
-
-	el.el_type = LIMBO_OVERLAY;
-
-	el.el_be = be->bd_self;
-	el.el_on = on;
-	el.el_ndn = ndn_out;
-	
-	for ( elpp = &mi->mi_entry_limbo;
-			*elpp;
-			elpp = &(*elpp)->el_next )
-		/* go to last */;
-
-	*elpp = (entry_limbo_t *)ch_malloc( sizeof( entry_limbo_t ) );
-
-	el.el_next = NULL;
-	**elpp = el;
-
-	return 0;
+	return -1;
 }
 
 int
@@ -843,7 +816,7 @@ monitor_search2ndn(
 	}
 
 	thrctx = ldap_pvt_thread_pool_context();
-	connection_fake_init2( &conn, &opbuf, thrctx, 0 );
+	connection_fake_init( &conn, &opbuf, thrctx );
 	op = &opbuf.ob_op;
 
 	op->o_tag = LDAP_REQ_SEARCH;
@@ -895,7 +868,7 @@ monitor_search2ndn(
 
 cleanup:;
 	if ( op->ors_filter != NULL ) {
-		filter_free_x( op, op->ors_filter, 1 );
+		filter_free_x( op, op->ors_filter );
 	}
 	if ( !BER_BVISNULL( &op->ors_filterstr ) ) {
 		op->o_tmpfree( op->ors_filterstr.bv_val, op->o_tmpmemctx );
@@ -1930,15 +1903,6 @@ monitor_back_initialize(
 			"SINGLE-VALUE "
 			"USAGE dSAOperation )", SLAP_AT_HIDE,
 			offsetof(monitor_info_t, mi_ad_monitorRuntimeConfig) },
-		{ "( 1.3.6.1.4.1.4203.666.1.55.30 "
-			"NAME 'monitorSuperiorDN' "
-			"DESC 'monitor superior DN' "
-			/* "SUP distinguishedName " */
-			"EQUALITY distinguishedNameMatch "
-			"SYNTAX 1.3.6.1.4.1.1466.115.121.1.12 "
-			"NO-USER-MODIFICATION "
-			"USAGE dSAOperation )", SLAP_AT_FINAL|SLAP_AT_HIDE,
-			offsetof(monitor_info_t, mi_ad_monitorSuperiorDN) },
 		{ NULL, 0, -1 }
 	};
 
@@ -2063,7 +2027,6 @@ monitor_back_initialize(
 	bi->bi_tool_entry_open = 0;
 	bi->bi_tool_entry_close = 0;
 	bi->bi_tool_entry_first = 0;
-	bi->bi_tool_entry_first_x = 0;
 	bi->bi_tool_entry_next = 0;
 	bi->bi_tool_entry_get = 0;
 	bi->bi_tool_entry_put = 0;
@@ -2210,7 +2173,10 @@ monitor_back_db_open(
 	monitor_entry_t		*mp;
 	int			i;
 	struct berval		bv, rdn = BER_BVC(SLAPD_MONITOR_DN);
-	struct tm		tms;
+	struct tm		*tms;
+#ifdef HAVE_GMTIME_R
+	struct tm		tm_buf;
+#endif
 	static char		tmbuf[ LDAP_LUTIL_GENTIME_BUFSIZE ];
 	struct berval	desc[] = {
 		BER_BVC("This subtree contains monitoring/managing objects."),
@@ -2229,8 +2195,27 @@ monitor_back_db_open(
 	/*
 	 * Start
 	 */
-	ldap_pvt_gmtime( &starttime, &tms );
-	lutil_gentime( tmbuf, sizeof(tmbuf), &tms );
+#ifndef HAVE_GMTIME_R
+	ldap_pvt_thread_mutex_lock( &gmtime_mutex );
+#endif
+#ifdef HACK_LOCAL_TIME
+# ifdef HAVE_LOCALTIME_R
+	tms = localtime_r( &starttime, &tm_buf );
+# else
+	tms = localtime( &starttime );
+# endif /* HAVE_LOCALTIME_R */
+	lutil_localtime( tmbuf, sizeof(tmbuf), tms, -timezone );
+#else /* !HACK_LOCAL_TIME */
+# ifdef HAVE_GMTIME_R
+	tms = gmtime_r( &starttime, &tm_buf );
+# else
+	tms = gmtime( &starttime );
+# endif /* HAVE_GMTIME_R */
+	lutil_gentime( tmbuf, sizeof(tmbuf), tms );
+#endif /* !HACK_LOCAL_TIME */
+#ifndef HAVE_GMTIME_R
+	ldap_pvt_thread_mutex_unlock( &gmtime_mutex );
+#endif
 
 	mi->mi_startTime.bv_val = tmbuf;
 	mi->mi_startTime.bv_len = strlen( tmbuf );
@@ -2371,7 +2356,8 @@ monitor_back_db_open(
 	 * opens the monitor backend subsystems
 	 */
 	for ( ms = monitor_subsys; ms[ 0 ] != NULL; ms++ ) {
-		if ( ms[ 0 ]->mss_open && ms[ 0 ]->mss_open( be, ms[ 0 ] ) ) {
+		if ( ms[ 0 ]->mss_open && ( *ms[ 0 ]->mss_open )( be, ms[ 0 ] ) )
+		{
 			return( -1 );
 		}
 		ms[ 0 ]->mss_flags |= MONITOR_F_OPENED;
@@ -2439,7 +2425,7 @@ monitor_back_db_open(
 				break;
 
 			case LIMBO_OVERLAY:
-				rc = monitor_back_register_overlay( el->el_be, el->el_on, el->el_ndn );
+				rc = monitor_back_register_overlay( el->el_be );
 				break;
 
 			default:

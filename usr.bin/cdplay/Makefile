@@ -1,9 +1,10 @@
-#	$NetBSD: Makefile,v 1.6 2010/02/03 15:34:45 roy Exp $
+#	$NetBSD: Makefile,v 1.4 2005/01/12 16:42:45 xtraeme Exp $
 
+WARNS=	3
 PROG=	cdplay
 SRCS=	cdplay.c
 
-LDADD+= -ledit -lterminfo -lutil
-DPADD+= ${LIBEDIT} ${LIBTERMINFO} ${LIBUTIL}
+LDADD+= -ledit -ltermcap -lutil
+DPADD+= ${LIBEDIT} ${LIBTERMCAP} ${LIBUTIL}
 
 .include <bsd.prog.mk>

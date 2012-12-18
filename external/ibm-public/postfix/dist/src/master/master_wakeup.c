@@ -1,4 +1,4 @@
-/*	$NetBSD: master_wakeup.c,v 1.1.1.1 2009/06/23 10:08:49 tron Exp $	*/
+/*	$NetBSD: master_wakeup.c,v 1.1.1.1.2.3 2011/01/07 01:24:07 riz Exp $	*/
 
 /*++
 /* NAME

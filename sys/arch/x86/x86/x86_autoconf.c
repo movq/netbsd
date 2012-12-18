@@ -1,4 +1,4 @@
-/*	$NetBSD: x86_autoconf.c,v 1.65 2012/07/29 18:05:47 mlelstv Exp $	*/
+/*	$NetBSD: x86_autoconf.c,v 1.35.4.1 2010/02/14 13:35:44 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: x86_autoconf.c,v 1.65 2012/07/29 18:05:47 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: x86_autoconf.c,v 1.35.4.1 2010/02/14 13:35:44 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,22 +50,29 @@ __KERNEL_RCSID(0, "$NetBSD: x86_autoconf.c,v 1.65 2012/07/29 18:05:47 mlelstv Ex
 #include <sys/md5.h>
 #include <sys/kauth.h>
 
-#include <machine/autoconf.h>
 #include <machine/bootinfo.h>
-#include <machine/pio.h>
 
-#include "acpica.h"
-#include "wsdisplay.h"
+#include "pci.h"
 
-#if NACPICA > 0
-#include <dev/acpi/acpivar.h>
+#include <dev/isa/isavar.h>
+#if NPCI > 0
+#include <dev/pci/pcivar.h>
 #endif
 
 struct disklist *x86_alldisks;
 int x86_ndisks;
 
+static void
+handle_wedges(struct device *dv, int par)
+{
+	if (config_handle_wedges(dv, par) == 0)
+		return;
+	booted_device = dv;
+	booted_partition = par;
+}
+
 static int
-is_valid_disk(device_t dv)
+is_valid_disk(struct device *dv)
 {
 
 	if (device_class(dv) != DV_DISK)
@@ -87,8 +94,7 @@ matchbiosdisks(void)
 {
 	struct btinfo_biosgeom *big;
 	struct bi_biosgeom_entry *be;
-	device_t dv;
-	deviter_t di;
+	struct device *dv;
 	int i, ck, error, m, n;
 	struct vnode *tv;
 	char mbr[DEV_BSIZE];
@@ -100,12 +106,10 @@ matchbiosdisks(void)
 	numbig = big ? big->num : 0;
 
 	/* First, count all native disks. */
-	for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST); dv != NULL;
-	     dv = deviter_next(&di)) {
+	TAILQ_FOREACH(dv, &alldevs, dv_list) {
 		if (is_valid_disk(dv))
 			x86_ndisks++;
 	}
-	deviter_release(&di);
 
 	dklist_size = sizeof(struct disklist) + (x86_ndisks - 1) *
 	    sizeof(struct nativedisk_info);
@@ -135,8 +139,7 @@ matchbiosdisks(void)
 
 	/* XXX Code duplication from findroot(). */
 	n = -1;
-	for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST); dv != NULL;
-	     dv = deviter_next(&di)) {
+	TAILQ_FOREACH(dv, &alldevs, dv_list) {
 		if (device_class(dv) != DV_DISK)
 			continue;
 #ifdef GEOM_DEBUG
@@ -145,6 +148,7 @@ matchbiosdisks(void)
 #endif
 		if (is_valid_disk(dv)) {
 			n++;
+			/* XXXJRT why not just dv_xname?? */
 			snprintf(x86_alldisks->dl_nativedisks[n].ni_devname,
 			    sizeof(x86_alldisks->dl_nativedisks[n].ni_devname),
 			    "%s", device_xname(dv));
@@ -190,7 +194,6 @@ matchbiosdisks(void)
 			vput(tv);
 		}
 	}
-	deviter_release(&di);
 }
 
 /*
@@ -198,7 +201,7 @@ matchbiosdisks(void)
  * Return non-zero if wedge device matches bootinfo.
  */
 static int
-match_bootwedge(device_t dv, struct btinfo_bootwedge *biw)
+match_bootwedge(struct device *dv, struct btinfo_bootwedge *biw)
 {
 	MD5_CTX ctx;
 	struct vnode *tmpvn;
@@ -225,8 +228,8 @@ match_bootwedge(device_t dv, struct btinfo_bootwedge *biw)
 		    sizeof(bf), blk * DEV_BSIZE, UIO_SYSSPACE,
 		    0, NOCRED, NULL, NULL);
 		if (error) {
-			printf("findroot: unable to read block %" PRId64 " "
-			    "of dev %s (%d)\n", blk, device_xname(dv), error);
+			printf("findroot: unable to read block %" PRIu64 "\n",
+			    blk);
 			goto closeout;
 		}
 		MD5Update(&ctx, bf, sizeof(bf));
@@ -247,7 +250,7 @@ match_bootwedge(device_t dv, struct btinfo_bootwedge *biw)
  * Return non-zero if disk device matches bootinfo.
  */
 static int
-match_bootdisk(device_t dv, struct btinfo_bootdisk *bid)
+match_bootdisk(struct device *dv, struct btinfo_bootdisk *bid)
 {
 	struct vnode *tmpvn;
 	int error;
@@ -304,7 +307,6 @@ findroot(void)
 	struct btinfo_bootwedge *biw;
 	struct btinfo_biosgeom *big;
 	device_t dv;
-	deviter_t di;
 
 	if (booted_device)
 		return;
@@ -321,10 +323,8 @@ findroot(void)
 	}
 
 	if ((biv = lookup_bootinfo(BTINFO_ROOTDEVICE)) != NULL) {
-		for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
-		     dv != NULL;
-		     dv = deviter_next(&di)) {
-			cfdata_t cd;
+		TAILQ_FOREACH(dv, &alldevs, dv_list) {
+			struct cfdata *cd;
 			size_t len;
 
 			if (device_class(dv) != DV_DISK)
@@ -334,16 +334,11 @@ findroot(void)
 			len = strlen(cd->cf_name);
 
 			if (strncmp(cd->cf_name, biv->devname, len) == 0 &&
-			    biv->devname[len] - '0' == device_unit(dv)) {
-				booted_device = dv;
-				booted_partition = biv->devname[len + 1] - 'a';
-				booted_nblks = 0;
-				break;
+			    biv->devname[len] - '0' == cd->cf_unit) {
+				handle_wedges(dv, biv->devname[len + 1] - 'a');
+				return;
 			}
 		}
-		deviter_release(&di);
-		if (dv != NULL)
-			return;
 	}
 
 	if ((biw = lookup_bootinfo(BTINFO_BOOTWEDGE)) != NULL) {
@@ -354,9 +349,7 @@ findroot(void)
 		 * because lower devices numbers are more likely to be the
 		 * boot device.
 		 */
-		for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
-		     dv != NULL;
-		     dv = deviter_next(&di)) {
+		TAILQ_FOREACH(dv, &alldevs, dv_list) {
 			if (device_class(dv) != DV_DISK)
 				continue;
 
@@ -381,14 +374,10 @@ findroot(void)
 				    device_xname(dv));
 				continue;
 			}
-			booted_device = dv;
-			booted_partition = 0;
-			booted_nblks = biw->nblks;
-			booted_startblk = biw->startblk;
+			dkwedge_set_bootwedge(dv, biw->startblk, biw->nblks);
 		}
-		deviter_release(&di);
 
-		if (booted_nblks)
+		if (booted_wedge)
 			return;
 	}
 
@@ -400,9 +389,7 @@ findroot(void)
 		 * because lower device numbers are more likely to be the
 		 * boot device.
 		 */
-		for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
-		     dv != NULL;
-		     dv = deviter_next(&di)) {
+		TAILQ_FOREACH(dv, &alldevs, dv_list) {
 			if (device_class(dv) != DV_DISK)
 				continue;
 
@@ -441,11 +428,8 @@ findroot(void)
 				    device_xname(dv));
 				continue;
 			}
-			booted_device = dv;
-			booted_partition = bid->partition;
-			booted_nblks = 0;
+			handle_wedges(dv, bid->partition);
 		}
-		deviter_release(&di);
 
 		if (booted_device)
 			return;
@@ -454,38 +438,28 @@ findroot(void)
 		 * No booted device found; check CD-ROM boot at last.
 		 *
 		 * Our bootloader assumes CD-ROM boot if biosdev is larger
-		 * or equal than the number of hard drives recognized by the
-		 * BIOS. The number of drives can be found in BTINFO_BIOSGEOM
-		 * here. For example, if we have wd0, wd1, and cd0:
-		 *
-		 *	big->num = 2 (for wd0 and wd1)
-		 *	bid->biosdev = 0x80 (wd0)
-		 *	bid->biosdev = 0x81 (wd1)
-		 *	bid->biosdev = 0x82 (cd0)
+		 * than the number of hard drives recognized by the BIOS.
+		 * The number of drives can be found in BTINFO_BIOSGEOM here.
 		 *
 		 * See src/sys/arch/i386/stand/boot/devopen.c and
 		 * src/sys/arch/i386/stand/lib/bootinfo_biosgeom.c .
 		 */
 		if ((big = lookup_bootinfo(BTINFO_BIOSGEOM)) != NULL &&
-		    bid->biosdev >= 0x80 + big->num) {
+		    bid->biosdev > 0x80 + big->num) {
 			/*
 			 * XXX
 			 * There is no proper way to detect which unit is
 			 * recognized as a bootable CD-ROM drive by the BIOS.
 			 * Assume the first unit is the one.
 			 */
-			for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
-			     dv != NULL;
-			     dv = deviter_next(&di)) {
+			TAILQ_FOREACH(dv, &alldevs, dv_list) {
 				if (device_class(dv) == DV_DISK &&
 				    device_is_a(dv, "cd")) {
 					booted_device = dv;
 					booted_partition = 0;
-					booted_nblks = 0;
 					break;
 				}
 			}
-			deviter_release(&di);
 		}
 	}
 }
@@ -497,26 +471,77 @@ cpu_rootconf(void)
 	findroot();
 	matchbiosdisks();
 
-	aprint_normal("boot device: %s\n",
-	    booted_device ? device_xname(booted_device) : "<unknown>");
-	rootconf();
+	if (booted_wedge) {
+		KASSERT(booted_device != NULL);
+		aprint_normal("boot device: %s (%s)\n",
+		    device_xname(booted_wedge), device_xname(booted_device));
+		setroot(booted_wedge, 0);
+	} else {
+		aprint_normal("boot device: %s\n",
+		    booted_device ? device_xname(booted_device) : "<unknown>");
+		setroot(booted_device, booted_partition);
+	}
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
-	device_t isaboot, pciboot;
 
-	isaboot = device_isa_register(dev, aux);
-	pciboot = device_pci_register(dev, aux);
+	/*
+	 * Handle network interfaces here, the attachment information is
+	 * not available driver-independently later.
+	 *
+	 * For disks, there is nothing useful available at attach time.
+	 */
+	if (device_class(dev) == DV_IFNET) {
+		struct btinfo_netif *bin = lookup_bootinfo(BTINFO_NETIF);
+		if (bin == NULL)
+			return;
 
-	if (isaboot == NULL && pciboot == NULL)
-		return;
+		/*
+		 * We don't check the driver name against the device name
+		 * passed by the boot ROM.  The ROM should stay usable if
+		 * the driver becomes obsolete.  The physical attachment
+		 * information (checked below) must be sufficient to
+		 * idenfity the device.
+		 */
+		if (bin->bus == BI_BUS_ISA &&
+		    device_is_a(device_parent(dev), "isa")) {
+			struct isa_attach_args *iaa = aux;
 
-	if (booted_device != NULL) {
+			/* Compare IO base address */
+			/* XXXJRT What about multiple IO addrs? */
+			if (iaa->ia_nio > 0 &&
+			    bin->addr.iobase == iaa->ia_io[0].ir_addr)
+			    	goto found;
+		}
+#if NPCI > 0
+		if (bin->bus == BI_BUS_PCI &&
+		    device_is_a(device_parent(dev), "pci")) {
+			struct pci_attach_args *paa = aux;
+			int b, d, f;
+
+			/*
+			 * Calculate BIOS representation of:
+			 *
+			 *	<bus,device,function>
+			 *
+			 * and compare.
+			 */
+			pci_decompose_tag(paa->pa_pc, paa->pa_tag, &b, &d, &f);
+			if (bin->addr.tag == ((b << 8) | (d << 3) | f))
+				goto found;
+		}
+#endif /* NPCI > 0 */
+	}
+	return;
+
+ found:
+	if (booted_device) {
 		/* XXX should be a panic() */
 		printf("WARNING: double match for boot device (%s, %s)\n",
 		    device_xname(booted_device), device_xname(dev));
-	} else
-		booted_device = (isaboot != NULL) ? isaboot : pciboot;
+		return;
+	}
+	booted_device = dev;
 }

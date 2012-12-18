@@ -1,4 +1,4 @@
-/*	$NetBSD: agp_amd.c,v 1.21 2010/11/13 13:52:04 uebayasi Exp $	*/
+/*	$NetBSD: agp_amd.c,v 1.20 2008/06/09 06:49:54 freza Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp_amd.c,v 1.21 2010/11/13 13:52:04 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp_amd.c,v 1.20 2008/06/09 06:49:54 freza Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,6 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD: agp_amd.c,v 1.21 2010/11/13 13:52:04 uebayasi Exp $"
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/agpio.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt.c,v 1.78 2009/11/25 14:28:50 rmind Exp $	*/
+/*	$NetBSD: lpt.c,v 1.75 2008/06/10 22:53:08 cegger Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Charles M. Hannum.
@@ -54,11 +54,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lpt.c,v 1.78 2009/11/25 14:28:50 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lpt.c,v 1.75 2008/06/10 22:53:08 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
 #include <sys/ioctl.h>
@@ -106,7 +107,8 @@ const struct cdevsw lpt_cdevsw = {
 static void	lptsoftintr(void *);
 
 void
-lpt_attach_subr(struct lpt_softc *sc)
+lpt_attach_subr(sc)
+	struct lpt_softc *sc;
 {
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
@@ -217,7 +219,9 @@ lptopen(dev_t dev, int flag, int mode, struct lwp *l)
 }
 
 int
-lptnotready(u_char status, struct lpt_softc *sc)
+lptnotready(status, sc)
+	u_char status;
+	struct lpt_softc *sc;
 {
 	u_char new;
 
@@ -241,12 +245,13 @@ lptnotready(u_char status, struct lpt_softc *sc)
 }
 
 void
-lptwakeup(void *arg)
+lptwakeup(arg)
+	void *arg;
 {
 	struct lpt_softc *sc = arg;
 	int s;
 
-	s = splvm();
+	s = spllpt();
 	lptintr(sc);
 	splx(s);
 
@@ -281,7 +286,8 @@ lptclose(dev_t dev, int flag, int mode,
 }
 
 int
-lptpushbytes(struct lpt_softc *sc)
+lptpushbytes(sc)
+	struct lpt_softc *sc;
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -334,7 +340,7 @@ lptpushbytes(struct lpt_softc *sc)
 				LPRINTF(("%s: write %lu\n",
 				    device_xname(sc->sc_dev),
 				    (u_long)sc->sc_count));
-				s = splvm();
+				s = spllpt();
 				(void) lptintr(sc);
 				splx(s);
 			}
@@ -381,7 +387,8 @@ lptwrite(dev_t dev, struct uio *uio, int flags)
  * another char.
  */
 int
-lptintr(void *arg)
+lptintr(arg)
+	void *arg;
 {
 	struct lpt_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;

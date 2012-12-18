@@ -1,4 +1,4 @@
-/*	$NetBSD: gpio.c,v 1.12 2012/10/27 17:18:00 chs Exp $	*/
+/*	$NetBSD: gpio.c,v 1.9 2008/06/13 11:54:31 cegger Exp $	*/
 
 /*-
  * Copyright (C) 1998	Internet Research Institute, Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gpio.c,v 1.12 2012/10/27 17:18:00 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gpio.c,v 1.9 2008/06/13 11:54:31 cegger Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -47,28 +47,29 @@ __KERNEL_RCSID(0, "$NetBSD: gpio.c,v 1.12 2012/10/27 17:18:00 chs Exp $");
 
 #include "adb.h"
 
-static void gpio_obio_attach (device_t, device_t, void *);
-static int gpio_obio_match (device_t, cfdata_t, void *);
+static void gpio_obio_attach (struct device *, struct device *, void *);
+static int gpio_obio_match (struct device *, struct cfdata *, void *);
 static int gpio_obio_print (void *aux, const char *gpio);
 
-static void gpio_gpio_attach (device_t, device_t, void *);
-static int gpio_gpio_match (device_t, cfdata_t, void *);
+static void gpio_gpio_attach (struct device *, struct device *, void *);
+static int gpio_gpio_match (struct device *, struct cfdata *, void *);
 static int gpio_intr (void *);
 
 struct gpio_softc {
+	struct device sc_dev;
 	u_int8_t *sc_port;
 };
 
-CFATTACH_DECL_NEW(gpio_obio, sizeof(struct gpio_softc),
+CFATTACH_DECL(gpio_obio, sizeof(struct gpio_softc),
     gpio_obio_match, gpio_obio_attach, NULL, NULL);
 
-CFATTACH_DECL_NEW(gpio_gpio, sizeof(struct gpio_softc),
+CFATTACH_DECL(gpio_gpio, sizeof(struct gpio_softc),
     gpio_gpio_match, gpio_gpio_attach, NULL, NULL);
 
 extern struct cfdriver gpio_cd;
 
 int
-gpio_obio_match(device_t parent, cfdata_t cf, void *aux)
+gpio_obio_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -82,7 +83,7 @@ gpio_obio_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-gpio_obio_attach(device_t parent, device_t self, void *aux)
+gpio_obio_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct gpio_softc *sc = device_private(self);
 	struct confargs *ca = aux, ca2;
@@ -94,8 +95,7 @@ gpio_obio_attach(device_t parent, device_t self, void *aux)
 
 	printf("\n");
 
-	sc->sc_port = mapiodev(ca->ca_baseaddr + ca->ca_reg[0], ca->ca_reg[1],
-	    false);
+	sc->sc_port = mapiodev(ca->ca_baseaddr + ca->ca_reg[0], ca->ca_reg[1]);
 
 	ca2.ca_baseaddr = ca->ca_baseaddr;
 	for (child = OF_child(ca->ca_node); child; child = OF_peer(child)) {
@@ -138,7 +138,7 @@ gpio_obio_print(void *aux, const char *gpio)
 }
 
 int
-gpio_gpio_match(device_t parent, cfdata_t cf, void *aux)
+gpio_gpio_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -152,7 +152,7 @@ gpio_gpio_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-gpio_gpio_attach(device_t parent, device_t self, void *aux)
+gpio_gpio_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct gpio_softc *sc = device_private(self);
 	struct confargs *ca = aux;

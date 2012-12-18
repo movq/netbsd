@@ -1,4 +1,4 @@
-/*	$NetBSD: ccd.c,v 1.143 2011/11/13 23:02:46 christos Exp $	*/
+/*	$NetBSD: ccd.c,v 1.129.10.1 2009/04/04 23:04:57 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 1999, 2007, 2009 The NetBSD Foundation, Inc.
@@ -30,7 +30,6 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -47,6 +46,46 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: cd.c 1.6 90/11/28$
+ *
+ *	@(#)cd.c	8.2 (Berkeley) 11/16/93
+ */
+
+/*
+ * Copyright (c) 1988 University of Utah.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -88,7 +127,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.143 2011/11/13 23:02:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.129.10.1 2009/04/04 23:04:57 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,7 +137,6 @@ __KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.143 2011/11/13 23:02:46 christos Exp $");
 #include <sys/buf.h>
 #include <sys/kmem.h>
 #include <sys/pool.h>
-#include <sys/module.h>
 #include <sys/namei.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
@@ -114,8 +152,6 @@ __KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.143 2011/11/13 23:02:46 christos Exp $");
 #include <sys/kauth.h>
 #include <sys/kthread.h>
 #include <sys/bufq.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/ccdvar.h>
 #include <dev/dkvar.h>
@@ -255,13 +291,15 @@ ccdinit(struct ccd_softc *cs, char **cpaths, struct vnode **vpp,
     struct lwp *l)
 {
 	struct ccdcinfo *ci = NULL;
+	size_t size;
 	int ix;
 	struct vattr va;
+	size_t minsize;
+	int maxsecsize;
+	struct partinfo dpart;
 	struct ccdgeom *ccg = &cs->sc_geom;
 	char *tmppath;
 	int error, path_alloced;
-	uint64_t psize, minsize;
-	unsigned secsize, maxsecsize;
 
 #ifdef DEBUG
 	if (ccddebug & (CCDB_FOLLOW|CCDB_INIT))
@@ -288,7 +326,7 @@ ccdinit(struct ccd_softc *cs, char **cpaths, struct vnode **vpp,
 		/*
 		 * Copy in the pathname of the component.
 		 */
-		memset(tmppath, 0, MAXPATHLEN);	/* sanity */
+		memset(tmppath, 0, sizeof(tmppath));	/* sanity */
 		error = copyinstr(cpaths[ix], tmppath,
 		    MAXPATHLEN, &ci->ci_pathlen);
 		if (ci->ci_pathlen == 0)
@@ -308,10 +346,7 @@ ccdinit(struct ccd_softc *cs, char **cpaths, struct vnode **vpp,
 		/*
 		 * XXX: Cache the component's dev_t.
 		 */
-		vn_lock(vpp[ix], LK_SHARED | LK_RETRY);
-		error = VOP_GETATTR(vpp[ix], &va, l->l_cred);
-		VOP_UNLOCK(vpp[ix]);
-		if (error != 0) {
+		if ((error = VOP_GETATTR(vpp[ix], &va, l->l_cred)) != 0) {
 #ifdef DEBUG
 			if (ccddebug & (CCDB_FOLLOW|CCDB_INIT))
 				printf("%s: %s: getattr failed %s = %d\n",
@@ -325,25 +360,40 @@ ccdinit(struct ccd_softc *cs, char **cpaths, struct vnode **vpp,
 		/*
 		 * Get partition information for the component.
 		 */
-		error = getdisksize(vpp[ix], &psize, &secsize);
+		error = VOP_IOCTL(vpp[ix], DIOCGPART, &dpart,
+		    FREAD, l->l_cred);
 		if (error) {
 #ifdef DEBUG
 			if (ccddebug & (CCDB_FOLLOW|CCDB_INIT))
-				 printf("%s: %s: disksize failed, error = %d\n",
+				 printf("%s: %s: ioctl failed, error = %d\n",
 				     cs->sc_xname, ci->ci_path, error);
 #endif
 			goto out;
 		}
 
+/*
+ * This diagnostic test is disabled (for now?) since not all port supports
+ * on-disk BSD disklabel.
+ */
+#if 0 /* def DIAGNOSTIC */
+		/* Check fstype field of component. */
+		if (dpart.part->p_fstype != FS_CCD)
+			printf("%s: WARNING: %s: fstype %d != FS_CCD\n",
+			    cs->sc_xname, ci->ci_path, dpart.part->p_fstype);
+#endif
+
 		/*
 		 * Calculate the size, truncating to an interleave
 		 * boundary if necessary.
 		 */
-		maxsecsize = secsize > maxsecsize ? secsize : maxsecsize;
+		maxsecsize =
+		    ((dpart.disklab->d_secsize > maxsecsize) ?
+		    dpart.disklab->d_secsize : maxsecsize);
+		size = dpart.part->p_size;
 		if (cs->sc_ileave > 1)
-			psize -= psize % cs->sc_ileave;
+			size -= size % cs->sc_ileave;
 
-		if (psize == 0) {
+		if (size == 0) {
 #ifdef DEBUG
 			if (ccddebug & (CCDB_FOLLOW|CCDB_INIT))
 				printf("%s: %s: size == 0\n",
@@ -353,10 +403,10 @@ ccdinit(struct ccd_softc *cs, char **cpaths, struct vnode **vpp,
 			goto out;
 		}
 
-		if (minsize == 0 || psize < minsize)
-			minsize = psize;
-		ci->ci_size = psize;
-		cs->sc_size += psize;
+		if (minsize == 0 || size < minsize)
+			minsize = size;
+		ci->ci_size = size;
+		cs->sc_size += size;
 	}
 
 	/*
@@ -543,7 +593,7 @@ ccdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 
 #ifdef DEBUG
 	if (ccddebug & CCDB_FOLLOW)
-		printf("ccdopen(0x%"PRIx64", 0x%x)\n", dev, flags);
+		printf("ccdopen(0x%x, 0x%x)\n", dev, flags);
 #endif
 	if (unit >= numccd)
 		return (ENXIO);
@@ -604,7 +654,7 @@ ccdclose(dev_t dev, int flags, int fmt, struct lwp *l)
 
 #ifdef DEBUG
 	if (ccddebug & CCDB_FOLLOW)
-		printf("ccdclose(0x%"PRIx64", 0x%x)\n", dev, flags);
+		printf("ccdclose(0x%x, 0x%x)\n", dev, flags);
 #endif
 
 	if (unit >= numccd)
@@ -779,9 +829,9 @@ ccdstart(struct ccd_softc *cs)
 		addr += rcount;
 		vp = cbp->cb_buf.b_vp;
 		if ((cbp->cb_buf.b_flags & B_READ) == 0) {
-			mutex_enter(vp->v_interlock);
+			mutex_enter(&vp->v_interlock);
 			vp->v_numoutput++;
-			mutex_exit(vp->v_interlock);
+			mutex_exit(&vp->v_interlock);
 		}
 		(void)VOP_STRATEGY(vp, &cbp->cb_buf);
 	}
@@ -873,7 +923,7 @@ ccdbuffer(struct ccd_softc *cs, struct buf *bp, daddr_t bn, void *addr,
 	cbp->cb_buf.b_blkno = cbn + cboff;
 	cbp->cb_buf.b_data = addr;
 	cbp->cb_buf.b_vp = ci->ci_vp;
-	cbp->cb_buf.b_objlock = ci->ci_vp->v_interlock;
+	cbp->cb_buf.b_objlock = &ci->ci_vp->v_interlock;
 	if (cs->sc_ileave == 0)
 		cbc = dbtob((u_int64_t)(ci->ci_size - cbn));
 	else
@@ -891,7 +941,7 @@ ccdbuffer(struct ccd_softc *cs, struct buf *bp, daddr_t bn, void *addr,
 
 #ifdef DEBUG
 	if (ccddebug & CCDB_IO)
-		printf(" dev 0x%"PRIx64"(u%lu): cbp %p bn %" PRId64 " addr %p"
+		printf(" dev 0x%x(u%lu): cbp %p bn %" PRId64 " addr %p"
 		       " bcnt %d\n",
 		    ci->ci_dev, (unsigned long) (ci-cs->sc_cinfo), cbp,
 		    cbp->cb_buf.b_blkno, cbp->cb_buf.b_data,
@@ -920,7 +970,7 @@ ccdiodone(struct buf *vbp)
 	if (ccddebug & CCDB_IO) {
 		printf("ccdiodone: bp %p bcount %d resid %d\n",
 		       bp, bp->b_bcount, bp->b_resid);
-		printf(" dev 0x%"PRIx64"(u%d), cbp %p bn %" PRId64 " addr %p"
+		printf(" dev 0x%x(u%d), cbp %p bn %" PRId64 " addr %p"
 		       " bcnt %d\n",
 		       cbp->cb_buf.b_dev, cbp->cb_comp, cbp,
 		       cbp->cb_buf.b_blkno, cbp->cb_buf.b_data,
@@ -973,7 +1023,7 @@ ccdread(dev_t dev, struct uio *uio, int flags)
 
 #ifdef DEBUG
 	if (ccddebug & CCDB_FOLLOW)
-		printf("ccdread(0x%"PRIx64", %p)\n", dev, uio);
+		printf("ccdread(0x%x, %p)\n", dev, uio);
 #endif
 	if (unit >= numccd)
 		return (ENXIO);
@@ -995,7 +1045,7 @@ ccdwrite(dev_t dev, struct uio *uio, int flags)
 
 #ifdef DEBUG
 	if (ccddebug & CCDB_FOLLOW)
-		printf("ccdwrite(0x%"PRIx64", %p)\n", dev, uio);
+		printf("ccdwrite(0x%x, %p)\n", dev, uio);
 #endif
 	if (unit >= numccd)
 		return (ENXIO);
@@ -1018,7 +1068,6 @@ ccdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	struct ccd_ioctl *ccio = (struct ccd_ioctl *)data;
 	kauth_cred_t uc;
 	char **cpp;
-	struct pathbuf *pb;
 	struct vnode **vpp;
 #ifdef __HAVE_OLD_DISKLABEL
 	struct disklabel newlabel;
@@ -1120,12 +1169,8 @@ ccdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 			if (ccddebug & CCDB_INIT)
 				printf("ccdioctl: lookedup = %d\n", lookedup);
 #endif
-			error = pathbuf_copyin(cpp[i], &pb);
-			if (error == 0) {
-				error = dk_lookup(pb, l, &vpp[i]);
-			}
-			pathbuf_destroy(pb);
-			if (error != 0) {
+			if ((error = dk_lookup(cpp[i], l, &vpp[i],
+			    UIO_USERSPACE)) != 0) {
 				for (j = 0; j < lookedup; ++j)
 					(void)vn_close(vpp[j], FREAD|FWRITE,
 					    uc);
@@ -1518,38 +1563,3 @@ printiinfo(struct ccdiinfo *ii)
 	}
 }
 #endif
-
-MODULE(MODULE_CLASS_DRIVER, ccd, NULL);
-
-static int
-ccd_modcmd(modcmd_t cmd, void *arg)
-{
-	int bmajor, cmajor, error = 0;
-
-	bmajor = cmajor = -1;
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-#ifdef _MODULE
-		ccdattach(4);
-
-		return devsw_attach("ccd", &ccd_bdevsw, &bmajor,
-		    &ccd_cdevsw, &cmajor);
-#endif
-		break;
-
-	case MODULE_CMD_FINI:
-#ifdef _MODULE
-		return devsw_detach(&ccd_bdevsw, &ccd_cdevsw);
-#endif
-		break;
-
-	case MODULE_CMD_STAT:
-		return ENOTTY;
-
-	default:
-		return ENOTTY;
-	}
-
-	return error;
-}

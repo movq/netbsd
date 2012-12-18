@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tlvar.h,v 1.16 2012/02/02 19:43:05 tls Exp $	*/
+/*	$NetBSD: if_tlvar.h,v 1.13 2008/06/01 00:38:29 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.  All rights reserved.
@@ -11,6 +11,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *  This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +35,11 @@
  * available from www.ti.com
  */
 
+#include "rnd.h"
+
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #include <dev/i2c/i2cvar.h>
 
@@ -80,7 +89,9 @@ struct tl_softc {
 	int oerr_carrloss;
 	int oerr_mcopy;
 #endif
-	krndsource_t rnd_source;
+#if NRND > 0
+	rndsource_element_t rnd_source;
+#endif
 };
 #define tl_if            tl_ec.ec_if
 #define tl_bpf   tl_if.if_bpf

@@ -1,4 +1,4 @@
-/* $NetBSD: hdaudio_mixer.h,v 1.3 2009/09/07 11:49:27 jmcneill Exp $ */
+/* $NetBSD: hdaudio_mixer.h,v 1.3.4.2 2009/09/26 19:52:10 snj Exp $ */
 
 /*
  * Copyright (c) 2009 Precedence Technologies Ltd <support@precedence.co.uk>

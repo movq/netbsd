@@ -1,4 +1,4 @@
-/*	$NetBSD: watchdog.c,v 1.1.1.2 2011/03/02 19:32:47 tron Exp $	*/
+/*	$NetBSD: watchdog.c,v 1.1.1.1.2.4 2011/03/24 19:54:09 riz Exp $	*/
 
 /*++
 /* NAME

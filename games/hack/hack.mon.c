@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.mon.c,v 1.14 2011/08/07 06:03:45 dholland Exp $	*/
+/*	$NetBSD: hack.mon.c,v 1.8 2008/01/28 06:55:41 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.mon.c,v 1.14 2011/08/07 06:03:45 dholland Exp $");
+__RCSID("$NetBSD: hack.mon.c,v 1.8 2008/01/28 06:55:41 dholland Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -71,22 +71,19 @@ __RCSID("$NetBSD: hack.mon.c,v 1.14 2011/08/07 06:03:45 dholland Exp $");
 #include "extern.h"
 #include "hack.mfndpos.h"
 
-static int warnlevel;	/* used by movemon and dochugw */
-static long lastwarntime;
-static int lastwarnlev;
+#ifndef NULL
+#define	NULL	(char *) 0
+#endif
 
-static const char *const warnings[] = {
+int             warnlevel;	/* used by movemon and dochugw */
+long            lastwarntime;
+int             lastwarnlev;
+const char           *const warnings[] = {
 	"white", "pink", "red", "ruby", "purple", "black"
 };
 
-static int dochugw(struct monst *);
-static void mpickgold(struct monst *);
-static void mpickgems(struct monst *);
-static void dmonsfree(void);
-static int ishuman(struct monst *);
-
 void
-movemon(void)
+movemon()
 {
 	struct monst   *mtmp;
 	int             fr;
@@ -176,7 +173,9 @@ next_mon:
 }
 
 void
-justswld(struct monst *mtmp, const char *name)
+justswld(mtmp, name)
+	struct monst   *mtmp;
+	const char           *name;
 {
 
 	mtmp->mx = u.ux;
@@ -192,7 +191,10 @@ justswld(struct monst *mtmp, const char *name)
 }
 
 void
-youswld(struct monst *mtmp, int dam, unsigned int die, const char *name)
+youswld(mtmp, dam, die, name)
+	struct monst   *mtmp;
+	int		dam, die;
+	const char           *name;
 {
 	if (mtmp != u.ustuck)
 		return;
@@ -209,8 +211,9 @@ youswld(struct monst *mtmp, int dam, unsigned int die, const char *name)
 #endif
 }
 
-static int
-dochugw(struct monst *mtmp)
+int
+dochugw(mtmp)
+	struct monst   *mtmp;
 {
 	int x = mtmp->mx;
 	int y = mtmp->my;
@@ -230,7 +233,8 @@ dochugw(struct monst *mtmp)
 
 /* returns 1 if monster died moving, 0 otherwise */
 int
-dochug(struct monst *mtmp)
+dochug(mtmp)
+	struct monst   *mtmp;
 {
 	const struct permonst *mdat;
 	int tmp = 0, nearby, scared;
@@ -543,8 +547,9 @@ postmov:
 	return (mmoved);
 }
 
-static void
-mpickgold(struct monst *mtmp)
+void
+mpickgold(mtmp)
+	struct monst   *mtmp;
 {
 	struct gold    *gold;
 	while ((gold = g_at(mtmp->mx, mtmp->my)) != NULL) {
@@ -555,8 +560,9 @@ mpickgold(struct monst *mtmp)
 	}
 }
 
-static void
-mpickgems(struct monst *mtmp)
+void
+mpickgems(mtmp)
+	struct monst   *mtmp;
 {
 	struct obj     *otmp;
 	for (otmp = fobj; otmp; otmp = otmp->nobj)
@@ -573,7 +579,10 @@ mpickgems(struct monst *mtmp)
 
 /* return number of acceptable neighbour positions */
 int
-mfndpos(struct monst *mon, coord poss[9], int info[9], int flag)
+mfndpos(mon, poss, info, flag)
+	struct monst   *mon;
+	coord           poss[9];
+	int             info[9], flag;
 {
 	int             x, y, nx, ny, cnt = 0, ntyp;
 	struct monst   *mtmp;
@@ -665,13 +674,15 @@ nexttry:			/* eels prefer the water, but if there is no
 }
 
 int
-dist(int x, int y)
+dist(x, y)
+	int             x, y;
 {
 	return ((x - u.ux) * (x - u.ux) + (y - u.uy) * (y - u.uy));
 }
 
 void
-poisoned(const char *string, const char *pname)
+poisoned(string, pname)
+	const char           *string, *pname;
 {
 	int             i;
 
@@ -699,7 +710,8 @@ poisoned(const char *string, const char *pname)
 }
 
 void
-mondead(struct monst *mtmp)
+mondead(mtmp)
+	struct monst   *mtmp;
 {
 	relobj(mtmp, 1);
 	unpmon(mtmp);
@@ -718,7 +730,8 @@ mondead(struct monst *mtmp)
 
 /* called when monster is moved to larger structure */
 void
-replmon(struct monst *mtmp, struct monst *mtmp2)
+replmon(mtmp, mtmp2)
+	struct monst   *mtmp, *mtmp2;
 {
 	relmon(mtmp);
 	monfree(mtmp);
@@ -733,7 +746,8 @@ replmon(struct monst *mtmp, struct monst *mtmp2)
 }
 
 void
-relmon(struct monst *mon)
+relmon(mon)
+	struct monst   *mon;
 {
 	struct monst   *mtmp;
 
@@ -749,28 +763,30 @@ relmon(struct monst *mon)
  * we do not free monsters immediately, in order to have their name available
  * shortly after their demise
  */
-static struct monst *fdmon;	/* chain of dead monsters, need not to be
+struct monst   *fdmon;		/* chain of dead monsters, need not to be
 				 * saved */
 
 void
-monfree(struct monst *mtmp)
+monfree(mtmp)
+	struct monst   *mtmp;
 {
 	mtmp->nmon = fdmon;
 	fdmon = mtmp;
 }
 
-static void
-dmonsfree(void)
+void
+dmonsfree()
 {
 	struct monst   *mtmp;
 	while ((mtmp = fdmon) != NULL) {
 		fdmon = mtmp->nmon;
-		free(mtmp);
+		free((char *) mtmp);
 	}
 }
 
 void
-unstuck(struct monst *mtmp)
+unstuck(mtmp)
+	struct monst   *mtmp;
 {
 	if (u.ustuck == mtmp) {
 		if (u.uswallow) {
@@ -785,7 +801,8 @@ unstuck(struct monst *mtmp)
 }
 
 void
-killed(struct monst *mtmp)
+killed(mtmp)
+	struct monst   *mtmp;
 {
 #ifdef lint
 #define	NEW_SCORING
@@ -848,7 +865,6 @@ killed(struct monst *mtmp)
 	{
 		int             ul = u.ulevel;
 		int             ml = mdat->mlevel;
-		int tmp2;
 
 		if (ul < 14)	/* points are given based on present and
 				 * future level */
@@ -924,7 +940,7 @@ kludge(const char *str, const char *arg)
 }
 
 void
-rescham(void)
+rescham()
 {				/* force all chameleons to become normal */
 	struct monst   *mtmp;
 
@@ -935,10 +951,11 @@ rescham(void)
 		}
 }
 
-/* make a chameleon look like a new monster */
-/* returns 1 if the monster actually changed */
 int
-newcham(struct monst *mtmp, const struct permonst *mdat)
+newcham(mtmp, mdat)		/* make a chameleon look like a new monster */
+/* returns 1 if the monster actually changed */
+	struct monst   *mtmp;
+	const struct permonst *mdat;
 {
 	int mhp, hpn, hpd;
 
@@ -979,9 +996,10 @@ newcham(struct monst *mtmp, const struct permonst *mdat)
 	return (1);
 }
 
-/* Make monster mtmp next to you (if possible) */
 void
-mnexto(struct monst *mtmp)
+mnexto(mtmp)			/* Make monster mtmp next to you (if
+				 * possible) */
+	struct monst   *mtmp;
 {
 	coord           mm;
 	mm = enexto(u.ux, u.uy);
@@ -990,14 +1008,16 @@ mnexto(struct monst *mtmp)
 	pmon(mtmp);
 }
 
-static int
-ishuman(struct monst *mtmp)
+int
+ishuman(mtmp)
+	struct monst   *mtmp;
 {
 	return (mtmp->data->mlet == '@');
 }
 
 void
-setmangry(struct monst *mtmp)
+setmangry(mtmp)
+	struct monst   *mtmp;
 {
 	if (!mtmp->mpeaceful)
 		return;
@@ -1013,7 +1033,8 @@ setmangry(struct monst *mtmp)
  * object
  */
 int
-canseemon(struct monst *mtmp)
+canseemon(mtmp)
+	struct monst   *mtmp;
 {
 	return ((!mtmp->minvis || See_invisible)
 		&& (!mtmp->mhide || !o_at(mtmp->mx, mtmp->my))

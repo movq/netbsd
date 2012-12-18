@@ -1,4 +1,4 @@
-/* $NetBSD: mainbus.c,v 1.42 2011/07/09 17:32:31 matt Exp $ */
+/* $NetBSD: mainbus.c,v 1.36 2005/12/11 12:18:39 christos Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -29,45 +29,51 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.42 2011/07/09 17:32:31 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.36 2005/12/11 12:18:39 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <pmax/sysconf.h>
-#include <pmax/autoconf.h>
+#include <machine/sysconf.h>
+#include <machine/autoconf.h>
 
 /* Definition of the mainbus driver. */
-static int	mbmatch(device_t, cfdata_t, void *);
-static void	mbattach(device_t, device_t, void *);
-static int	mbprint(void *, const char *);
+static int	mbmatch __P((struct device *, struct cfdata *, void *));
+static void	mbattach __P((struct device *, struct device *, void *));
+static int	mbprint __P((void *, const char *));
 
-CFATTACH_DECL_NEW(mainbus, 0,
+CFATTACH_DECL(mainbus, sizeof(struct device),
     mbmatch, mbattach, NULL, NULL);
 
 static int mainbus_found;
 
 static int
-mbmatch(device_t parent, cfdata_t cf, void *aux)
+mbmatch(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 
 	if (mainbus_found)
-		return 0;
+		return (0);
 
-	return 1;
+	return (1);
 }
 
 int ncpus = 0;	/* only support uniprocessors, for now */
 
 static void
-mbattach(device_t parent, device_t self, void *aux)
+mbattach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
 	struct mainbus_attach_args ma;
 
 	mainbus_found = 1;
 
-	aprint_normal("\n");
+	printf("\n");
 
 	/*
 	 * if we ever support multi-processor DECsystem (5800 family),
@@ -86,10 +92,12 @@ mbattach(device_t parent, device_t self, void *aux)
 }
 
 static int
-mbprint(void *aux, const char *pnp)
+mbprint(aux, pnp)
+	void *aux;
+	const char *pnp;
 {
 
 	if (pnp)
-		return QUIET;
-	return UNCONF;
+		return (QUIET);
+	return (UNCONF);
 }

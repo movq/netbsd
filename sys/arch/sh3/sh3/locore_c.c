@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_c.c,v 1.31 2009/11/27 03:23:13 rmind Exp $	*/
+/*	$NetBSD: locore_c.c,v 1.29 2008/04/28 20:23:35 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2002, 2007 The NetBSD Foundation, Inc.
@@ -104,11 +104,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: locore_c.c,v 1.31 2009/11/27 03:23:13 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore_c.c,v 1.29 2008/04/28 20:23:35 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/cpu.h>
+#include <sys/user.h>
 #include <sys/sched.h>
 #include <sys/proc.h>
 #include <sys/ras.h>
@@ -184,7 +185,7 @@ sh4_switch_setup(struct lwp *l)
 	int i, e;
 
 	md_upte = l->l_md.md_upte;
-	vpn = sh3_trunc_page(uvm_lwp_getuarea(l));
+	vpn = sh3_trunc_page(l->l_addr);
 	e = SH4_UTLB_ENTRY - UPAGES;
 
 	for (i = 0; i < UPAGES; ++i) {

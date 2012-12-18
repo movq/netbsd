@@ -1,4 +1,4 @@
-/* $NetBSD: udf_vnops.c,v 1.74 2012/11/05 17:27:39 dholland Exp $ */
+/* $NetBSD: udf_vnops.c,v 1.30.4.8 2009/09/26 18:38:07 snj Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: udf_vnops.c,v 1.74 2012/11/05 17:27:39 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_vnops.c,v 1.30.4.8 2009/09/26 18:38:07 snj Exp $");
 #endif /* not lint */
 
 
@@ -87,7 +87,7 @@ udf_inactive(void *v)
 
 	if (udf_node == NULL) {
 		DPRINTF(NODE, ("udf_inactive: inactive NULL UDF node\n"));
-		VOP_UNLOCK(vp);
+		VOP_UNLOCK(vp, 0);
 		return 0;
 	}
 
@@ -103,11 +103,8 @@ udf_inactive(void *v)
 		refcnt = udf_rw16(udf_node->efe->link_cnt);
 	}
 
-	if ((refcnt == 0) && (vp->v_vflag & VV_SYSTEM)) {
+	if ((refcnt == 0) && (vp->v_vflag & VV_SYSTEM))
 		DPRINTF(VOLUMES, ("UDF_INACTIVE deleting VV_SYSTEM\n"));
-		/* system nodes are not writen out on inactive, so flush */
-		udf_node->i_flags = 0;
-	}
 
 	*ap->a_recycle = false;
 	if ((refcnt == 0) && ((vp->v_vflag & VV_SYSTEM) == 0)) {
@@ -115,7 +112,7 @@ udf_inactive(void *v)
 		DPRINTF(NODE, ("udf_inactive deleting unlinked file\n"));
 		*ap->a_recycle = true;
 		udf_delete_node(udf_node);
-		VOP_UNLOCK(vp);
+		VOP_UNLOCK(vp, 0);
 		vrecycle(vp, NULL, curlwp);
 		return 0;
 	}
@@ -123,7 +120,7 @@ udf_inactive(void *v)
 	/* write out its node */
 	if (udf_node->i_flags & (IN_CHANGE | IN_UPDATE | IN_MODIFIED))
 		udf_update(vp, NULL, NULL, NULL, 0);
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 
 	return 0;
 }
@@ -159,6 +156,9 @@ udf_reclaim(void *v)
 		tsleep(&udf_node->outstanding_nodedscr, PRIBIO, "recl wait", hz/8);
 	}
 
+	/* purge old data from namei */
+	cache_purge(vp);
+
 	/* dispose all node knowledge */
 	udf_dispose_node(udf_node);
 
@@ -186,7 +186,9 @@ udf_read(void *v)
 	struct extfile_entry *efe;
 	uint64_t file_size;
 	vsize_t len;
+	void *win;
 	int error;
+	int flags;
 
 	/*
 	 * XXX reading from extended attributes not yet implemented. FreeBSD
@@ -226,6 +228,7 @@ udf_read(void *v)
 
 	/* read contents using buffercache */
 	uobj = &vp->v_uobj;
+	flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
 	error = 0;
 	while (uio->uio_resid > 0) {
 		/* reached end? */
@@ -238,8 +241,10 @@ udf_read(void *v)
 			break;
 
 		/* ubc, here we come, prepare to trap */
-		error = ubc_uiomove(uobj, uio, len, advice,
-		    UBC_READ | UBC_PARTIALOK | UBC_UNMAP_FLAG(vp));
+		win = ubc_alloc(uobj, uio->uio_offset, &len,
+				advice, UBC_READ);
+		error = uiomove(win, len, uio);
+		ubc_release(win, flags);
 		if (error)
 			break;
 	}
@@ -274,12 +279,13 @@ udf_write(void *v)
 	struct udf_node      *udf_node = VTOI(vp);
 	struct file_entry    *fe;
 	struct extfile_entry *efe;
+	void *win;
 	uint64_t file_size, old_size, old_offset;
 	vsize_t len;
 	int async = vp->v_mount->mnt_flag & MNT_ASYNC;
 	int aflag = ioflag & IO_SYNC ? B_SYNC : 0;
 	int error;
-	int resid, extended;
+	int flags, resid, extended;
 
 	/*
 	 * XXX writing to extended attributes not yet implemented. FreeBSD has
@@ -334,6 +340,7 @@ udf_write(void *v)
 
 	/* write contents using buffercache */
 	uobj = &vp->v_uobj;
+	flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
 	resid = uio->uio_resid;
 	error = 0;
 
@@ -345,15 +352,16 @@ udf_write(void *v)
 		if (len == 0)
 			break;
 
+		/* ubc, here we come, prepare to trap */
+		win = ubc_alloc(uobj, uio->uio_offset, &len,
+				advice, UBC_WRITE);
 		genfs_node_wrlock(vp);
 		error = GOP_ALLOC(vp, uio->uio_offset, len, aflag, cred);
 		genfs_node_unlock(vp);
-		if (error)
-			break;
 
-		/* ubc, here we come, prepare to trap */
-		error = ubc_uiomove(uobj, uio, len, advice,
-		    UBC_WRITE | UBC_UNMAP_FLAG(vp));
+		if (!error)
+			error = uiomove(win, len, uio);
+		ubc_release(win, flags);
 		if (error)
 			break;
 
@@ -366,10 +374,9 @@ udf_write(void *v)
 		 */
 		if (!async && (vp->v_type != VDIR) &&
 		  (old_offset >> 16 != uio->uio_offset >> 16)) {
-			mutex_enter(vp->v_interlock);
+			mutex_enter(&vp->v_interlock);
 			error = VOP_PUTPAGES(vp, (old_offset >> 16) << 16,
-			    (uio->uio_offset >> 16) << 16,
-			    PGO_CLEANIT | PGO_LAZY);
+			    (uio->uio_offset >> 16) << 16, PGO_CLEANIT);
 			old_offset = uio->uio_offset;
 		}
 	}
@@ -377,8 +384,6 @@ udf_write(void *v)
 
 	/* mark node changed and request update */
 	udf_node->i_flags |= IN_CHANGE | IN_UPDATE;
-	if (vp->v_mount->mnt_flag & MNT_RELATIME)
-		udf_node->i_flags |= IN_ACCESS;
 
 	/*
 	 * XXX TODO FFS has code here to reset setuid & setgid when we're not
@@ -687,11 +692,10 @@ udf_lookup(void *v)
 
 	DPRINTF(LOOKUP, ("\tlooking up cnp->cn_nameptr '%s'\n",
 	    cnp->cn_nameptr));
-	/* look in the namecache */
-	if (cache_lookup(dvp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags, NULL, vpp)) {
-		return *vpp == NULLVP ? ENOENT : 0;
-	}
+	/* look in the nami cache; returns 0 on success!! */
+	error = cache_lookup(dvp, vpp, cnp);
+	if (error >= 0)
+		return error;
 
 	DPRINTF(LOOKUP, ("\tNOT found in cache\n"));
 
@@ -705,7 +709,7 @@ udf_lookup(void *v)
 	if ((cnp->cn_namelen == 1) && (cnp->cn_nameptr[0] == '.')) {
 		DPRINTF(LOOKUP, ("\tlookup '.'\n"));
 		/* special case 1 '.' */
-		vref(dvp);
+		VREF(dvp);
 		*vpp = dvp;
 		/* done */
 	} else if (cnp->cn_flags & ISDOTDOT) {
@@ -723,7 +727,7 @@ udf_lookup(void *v)
 			error = ENOENT;
 
 		/* first unlock parent */
-		VOP_UNLOCK(dvp);
+		VOP_UNLOCK(dvp, 0);
 
 		if (error == 0) {
 			DPRINTF(LOOKUP, ("\tfound '..'\n"));
@@ -763,6 +767,8 @@ udf_lookup(void *v)
 			if (!error) {
 				error = VOP_ACCESS(dvp, VWRITE, cnp->cn_cred);
 				if (!error) {
+					/* keep the component name */
+					cnp->cn_flags |= SAVENAME;
 					error = EJUSTRETURN;
 				}
 			}
@@ -796,9 +802,8 @@ out:
 	 * the file might not be found and thus putting it into the namecache
 	 * might be seen as negative caching.
 	 */
-	if (nameiop != CREATE)
-		cache_enter(dvp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-			    cnp->cn_flags);
+	if ((cnp->cn_flags & MAKEENTRY) && nameiop != CREATE)
+		cache_enter(dvp, *vpp, cnp);
 
 	DPRINTFIF(LOOKUP, error, ("udf_lookup returing error %d\n", error));
 
@@ -883,7 +888,7 @@ udf_getattr(void *v)
 		gid = ump->mount_args.anon_gid;
 
 	/* fill in struct vattr with values from the node */
-	vattr_null(vap);
+	VATTR_NULL(vap);
 	vap->va_type      = vp->v_type;
 	vap->va_mode      = udf_getaccessmode(udf_node);
 	vap->va_nlink     = nlink;
@@ -943,8 +948,9 @@ udf_chown(struct vnode *vp, uid_t new_uid, gid_t new_gid,
 	  kauth_cred_t cred)
 {
 	struct udf_node  *udf_node = VTOI(vp);
-	uid_t uid;
-	gid_t gid;
+	uid_t euid, uid;
+	gid_t egid, gid;
+	int issuperuser, ismember;
 	int error;
 
 #ifdef notyet
@@ -967,24 +973,37 @@ udf_chown(struct vnode *vp, uid_t new_uid, gid_t new_gid,
 		new_gid = gid;
 
 	/* check if we can fit it in an 32 bits */
-	if ((uid_t) ((uint32_t) new_uid) != new_uid)
+	if ((uid_t) ((uint32_t) uid) != uid)
 		return EINVAL;
-	if ((gid_t) ((uint32_t) new_gid) != new_gid)
+	if ((gid_t) ((uint32_t) gid) != gid)
 		return EINVAL;
 
+	/*
+	 * If we don't own the file, are trying to change the owner of the
+	 * file, or are not a member of the target group, the caller's
+	 * credentials must imply super-user privilege or the call fails.
+	 */
+
 	/* check permissions */
-	error = kauth_authorize_vnode(cred, KAUTH_VNODE_CHANGE_OWNERSHIP,
-	    vp, NULL, genfs_can_chown(cred, uid, gid, new_uid, new_gid));
-	if (error)
-		return (error);
+	euid  = kauth_cred_geteuid(cred);
+	egid  = kauth_cred_getegid(cred);
+	if ((error = kauth_cred_ismember_gid(cred, new_gid, &ismember)))
+		return error;
+	error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL);
+	issuperuser = (error == 0);
+
+	if (!issuperuser) {
+		if ((new_uid != uid) || (euid != uid))
+			return EPERM;
+		if ((new_gid != gid) && !(egid == new_gid || ismember)) 
+			return EPERM;
+	}
 
 	/* change the ownership */
 	udf_setownership(udf_node, new_uid, new_gid);
 
 	/* mark node changed */
 	udf_node->i_flags |= IN_CHANGE;
-	if (vp->v_mount->mnt_flag & MNT_RELATIME)
-		udf_node->i_flags |= IN_ACCESS;
 
 	return 0;
 }
@@ -994,8 +1013,9 @@ static int
 udf_chmod(struct vnode *vp, mode_t mode, kauth_cred_t cred)
 {
 	struct udf_node  *udf_node = VTOI(vp);
-	uid_t uid;
-	gid_t gid;
+	uid_t euid, uid;
+	gid_t egid, gid;
+	int issuperuser, ismember;
 	int error;
 
 #ifdef notyet
@@ -1012,18 +1032,28 @@ udf_chmod(struct vnode *vp, mode_t mode, kauth_cred_t cred)
 	udf_getownership(udf_node, &uid, &gid);
 
 	/* check permissions */
-	error = kauth_authorize_vnode(cred, KAUTH_VNODE_WRITE_SECURITY, vp,
-	    NULL, genfs_can_chmod(vp->v_type, cred, uid, gid, mode));
-	if (error)
-		return (error);
+	euid  = kauth_cred_geteuid(cred);
+	egid  = kauth_cred_getegid(cred);
+	if ((error = kauth_cred_ismember_gid(cred, gid, &ismember)))
+		return error;
+	error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL);
+	issuperuser = (error == 0);
+
+	if ((euid != uid) && !issuperuser)
+		return EPERM;
+	if (euid != 0) {
+		if (vp->v_type != VDIR && (mode & S_ISTXT))
+			return EFTYPE;
+
+		if ((!ismember) && (mode & S_ISGID))
+			return EPERM;
+	}
 
 	/* change mode */
 	udf_setaccessmode(udf_node, mode);
 
 	/* mark node changed */
 	udf_node->i_flags |= IN_CHANGE;
-	if (vp->v_mount->mnt_flag & MNT_RELATIME)
-		udf_node->i_flags |= IN_ACCESS;
 
 	return 0;
 }
@@ -1074,8 +1104,6 @@ udf_chsize(struct vnode *vp, u_quad_t newsize, kauth_cred_t cred)
 	if (error == 0) {
 		/* mark change */
 		udf_node->i_flags |= IN_CHANGE | IN_MODIFY;
-		if (vp->v_mount->mnt_flag & MNT_RELATIME)
-			udf_node->i_flags |= IN_ACCESS;
 		VN_KNOTE(vp, NOTE_ATTRIB | (extended ? NOTE_EXTEND : 0));
 		udf_update(vp, NULL, NULL, NULL, 0);
 	}
@@ -1103,8 +1131,9 @@ udf_chtimes(struct vnode *vp,
 	kauth_cred_t cred)
 {
 	struct udf_node  *udf_node = VTOI(vp);
-	uid_t uid;
+	uid_t euid, uid;
 	gid_t gid;
+	int issuperuser;
 	int error;
 
 #ifdef notyet
@@ -1121,20 +1150,26 @@ udf_chtimes(struct vnode *vp,
 	udf_getownership(udf_node, &uid, &gid);
 
 	/* check permissions */
-	error = kauth_authorize_vnode(cred, KAUTH_VNODE_WRITE_TIMES, vp,
-	    NULL, genfs_can_chtimes(vp, setattrflags, uid, cred));
-	if (error)
-		return (error);
+	euid  = kauth_cred_geteuid(cred);
+	error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL);
+	issuperuser = (error == 0);
+
+	if (!issuperuser) {
+		if (euid != uid)
+			return EPERM;
+		if ((setattrflags & VA_UTIMES_NULL) == 0) {
+			error = VOP_ACCESS(vp, VWRITE, cred);
+			if (error)
+				return error;
+		}
+	}
 
 	/* update node flags depending on what times are passed */
 	if (atime->tv_sec != VNOVAL)
 		if (!(vp->v_mount->mnt_flag & MNT_NOATIME))
 			udf_node->i_flags |= IN_ACCESS;
-	if ((mtime->tv_sec != VNOVAL) || (birthtime->tv_sec != VNOVAL)) {
+	if ((mtime->tv_sec != VNOVAL) || (birthtime->tv_sec != VNOVAL))
 		udf_node->i_flags |= IN_CHANGE | IN_UPDATE;
-		if (vp->v_mount->mnt_flag & MNT_RELATIME)
-			udf_node->i_flags |= IN_ACCESS;
-	}
 
 	return udf_update(vp, atime, mtime, birthtime, 0);
 }
@@ -1235,7 +1270,7 @@ udf_pathconf(void *v)
 		*ap->a_retval = (1<<16)-1;	/* 16 bits */
 		return 0;
 	case _PC_NAME_MAX:
-		*ap->a_retval = UDF_MAXNAMLEN;
+		*ap->a_retval = NAME_MAX;
 		return 0;
 	case _PC_PATH_MAX:
 		*ap->a_retval = PATH_MAX;
@@ -1314,16 +1349,16 @@ udf_close(void *v)
 	udf_node = udf_node;	/* shut up gcc */
 
 	if (!async && (vp->v_type != VDIR)) {
-		mutex_enter(vp->v_interlock);
+		mutex_enter(&vp->v_interlock);
 		error = VOP_PUTPAGES(vp, 0, 0, PGO_CLEANIT);
 		if (error)
 			return error;
 	}
 
-	mutex_enter(vp->v_interlock);
+	mutex_enter(&vp->v_interlock);
 		if (vp->v_usecount > 1)
 			udf_itimes(udf_node, NULL, NULL, NULL);
-	mutex_exit(vp->v_interlock);
+	mutex_exit(&vp->v_interlock);
 
 	return 0;
 }
@@ -1331,13 +1366,31 @@ udf_close(void *v)
 
 /* --------------------------------------------------------------------- */
 
-static int
-udf_check_possible(struct vnode *vp, struct vattr *vap, mode_t mode)
+int
+udf_access(void *v)
 {
+	struct vop_access_args /* {
+		struct vnode *a_vp;
+		int a_mode;
+		kauth_cred_t a_cred;
+		struct proc *a_p;
+	} */ *ap = v;
+	struct vnode    *vp   = ap->a_vp;
+	mode_t	         mode = ap->a_mode;
+	kauth_cred_t     cred = ap->a_cred;
+	/* struct udf_node *udf_node = VTOI(vp); */
+	struct vattr vap;
 	int flags;
+	int error;
+
+	DPRINTF(CALL, ("udf_access called\n"));
+
+	error = VOP_GETATTR(vp, &vap, NULL);
+	if (error)
+		return error;
 
 	/* check if we are allowed to write */
-	switch (vap->va_type) {
+	switch (vap.va_type) {
 	case VDIR:
 	case VLNK:
 	case VREG:
@@ -1368,49 +1421,10 @@ udf_check_possible(struct vnode *vp, struct vattr *vap, mode_t mode)
 	if ((mode & VWRITE) && (flags & IMMUTABLE))
 		return EPERM;
 
-	return 0;
-}
-
-static int
-udf_check_permitted(struct vnode *vp, struct vattr *vap, mode_t mode,
-    kauth_cred_t cred)
-{
-
-	/* ask the generic genfs_can_access to advice on security */
-	return kauth_authorize_vnode(cred, kauth_access_action(mode,
-	    vp->v_type, vap->va_mode), vp, NULL, genfs_can_access(vp->v_type,
-	    vap->va_mode, vap->va_uid, vap->va_gid, mode, cred));
-}
-
-int
-udf_access(void *v)
-{
-	struct vop_access_args /* {
-		struct vnode *a_vp;
-		int a_mode;
-		kauth_cred_t a_cred;
-		struct proc *a_p;
-	} */ *ap = v;
-	struct vnode    *vp   = ap->a_vp;
-	mode_t	         mode = ap->a_mode;
-	kauth_cred_t     cred = ap->a_cred;
-	/* struct udf_node *udf_node = VTOI(vp); */
-	struct vattr vap;
-	int error;
-
-	DPRINTF(CALL, ("udf_access called\n"));
-
-	error = VOP_GETATTR(vp, &vap, NULL);
-	if (error)
-		return error;
-
-	error = udf_check_possible(vp, &vap, mode);
-	if (error)
-		return error;
-
-	error = udf_check_permitted(vp, &vap, mode, cred);
-
-	return error;
+	/* ask the generic vaccess to advice on security */
+	return vaccess(vp->v_type,
+			vap.va_mode, vap.va_uid, vap.va_gid,
+			mode, cred);
 }
 
 /* --------------------------------------------------------------------- */
@@ -1433,6 +1447,8 @@ udf_create(void *v)
 	DPRINTF(CALL, ("udf_create called\n"));
 	error = udf_create_node(dvp, vpp, vap, cnp);
 
+	if (error || !(cnp->cn_flags & SAVESTART))
+		PNBUF_PUT(cnp->cn_pnbuf);
 	vput(dvp);
 	return error;
 }
@@ -1457,6 +1473,8 @@ udf_mknod(void *v)
 	DPRINTF(CALL, ("udf_mknod called\n"));
 	error = udf_create_node(dvp, vpp, vap, cnp);
 
+	if (error || !(cnp->cn_flags & SAVESTART))
+		PNBUF_PUT(cnp->cn_pnbuf);
 	vput(dvp);
 	return error;
 }
@@ -1481,6 +1499,8 @@ udf_mkdir(void *v)
 	DPRINTF(CALL, ("udf_mkdir called\n"));
 	error = udf_create_node(dvp, vpp, vap, cnp);
 
+	if (error || !(cnp->cn_flags & SAVESTART))
+		PNBUF_PUT(cnp->cn_pnbuf);
 	vput(dvp);
 	return error;
 }
@@ -1495,9 +1515,15 @@ udf_do_link(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 	int error;
 
 	DPRINTF(CALL, ("udf_link called\n"));
-	KASSERT(dvp != vp);
-	KASSERT(vp->v_type != VDIR);
-	KASSERT(dvp->v_mount == vp->v_mount);
+	error = 0;
+
+	/* some quick checks */
+	if (vp->v_type == VDIR)
+		return EPERM;		/* can't link a directory */
+	if (dvp->v_mount != vp->v_mount)
+		return EXDEV;		/* can't link across devices */
+	if (dvp == vp)
+		return EPERM;		/* can't be the same */
 
 	/* lock node */
 	error = vn_lock(vp, LK_EXCLUSIVE);
@@ -1509,21 +1535,14 @@ udf_do_link(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 	udf_node = VTOI(vp);
 
 	error = VOP_GETATTR(vp, &vap, FSCRED);
-	if (error) {
-		VOP_UNLOCK(vp);
+	if (error)
 		return error;
-	}
 
 	/* check link count overflow */
-	if (vap.va_nlink >= (1<<16)-1) {	/* uint16_t */
-		VOP_UNLOCK(vp);
+	if (vap.va_nlink >= (1<<16)-1)	/* uint16_t */
 		return EMLINK;
-	}
 
-	error = udf_dir_attach(dir_node->ump, dir_node, udf_node, &vap, cnp);
-	if (error)
-		VOP_UNLOCK(vp);
-	return error;
+	return udf_dir_attach(dir_node->ump, dir_node, udf_node, &vap, cnp);
 }
 
 int
@@ -1542,6 +1561,9 @@ udf_link(void *v)
 	error = udf_do_link(dvp, vp, cnp);
 	if (error)
 		VOP_ABORTOP(dvp, cnp);
+
+	if ((vp != dvp) && (VOP_ISLOCKED(vp) == LK_EXCLUSIVE))
+		VOP_UNLOCK(vp, 0);
 
 	VN_KNOTE(vp, NOTE_LINK);
 	VN_KNOTE(dvp, NOTE_WRITE);
@@ -1699,6 +1721,8 @@ udf_symlink(void *v)
 			udf_dir_detach(udf_node->ump, dir_node, udf_node, cnp);
 		}
 	}
+	if (error || !(cnp->cn_flags & SAVESTART))
+		PNBUF_PUT(cnp->cn_pnbuf);
 	vput(dvp);
 	return error;
 }
@@ -1995,15 +2019,13 @@ udf_rename(void *v)
 	}
 
 	/* get info about the node to be moved */
-	vn_lock(fvp, LK_SHARED | LK_RETRY);
 	error = VOP_GETATTR(fvp, &fvap, FSCRED);
-	VOP_UNLOCK(fvp);
 	KASSERT(error == 0);
 
 	/* check when to delete the old already existing entry */
 	if (tvp) {
 		/* get info about the node to be moved to */
-		error = VOP_GETATTR(tvp, &tvap, FSCRED);
+		error = VOP_GETATTR(fvp, &tvap, FSCRED);
 		KASSERT(error == 0);
 
 		/* if both dirs, make sure the destination is empty */
@@ -2052,7 +2074,8 @@ udf_rename(void *v)
 		 * re-lookup tvp since the parent has been unlocked, so could
 		 * have changed/removed in the meantime.
 		 */
-		error = relookup(tdvp, &tvp, tcnp, 0);
+		tcnp->cn_flags &= ~SAVESTART;
+		error = relookup(tdvp, &tvp, tcnp);
 		if (error) {
 			vput(tdvp);
 			goto out;
@@ -2089,7 +2112,7 @@ udf_rename(void *v)
 
 out:
         if (fdnode != tdnode)
-                VOP_UNLOCK(fdvp);
+                VOP_UNLOCK(fdvp, 0);
 
 out_unlocked:
 	VOP_ABORTOP(tdvp, tcnp);
@@ -2121,7 +2144,7 @@ udf_remove(void *v)
 	struct vnode *dvp = ap->a_dvp;
 	struct vnode *vp  = ap->a_vp;
 	struct componentname *cnp = ap->a_cnp;
-	struct udf_node *dir_node = VTOI(dvp);
+	struct udf_node *dir_node = VTOI(dvp);;
 	struct udf_node *udf_node = VTOI(vp);
 	struct udf_mount *ump = dir_node->ump;
 	int error;
@@ -2162,7 +2185,7 @@ udf_rmdir(void *v)
 	struct vnode *vp = ap->a_vp;
 	struct vnode *dvp = ap->a_dvp;
 	struct componentname *cnp = ap->a_cnp;
-	struct udf_node *dir_node = VTOI(dvp);
+	struct udf_node *dir_node = VTOI(dvp);;
 	struct udf_node *udf_node = VTOI(vp);
 	struct udf_mount *ump = dir_node->ump;
 	int refcnt, error;
@@ -2230,9 +2253,7 @@ udf_fsync(void *v)
 
 	/* flush data and wait for it when requested */
 	wait = (ap->a_flags & FSYNC_WAIT) ? UPDATE_WAIT : 0;
-	error = vflushbuf(vp, ap->a_flags);
-	if (error)
-		return error;
+	vflushbuf(vp, wait);
 
 	if (udf_node == NULL) {
 		printf("udf_fsync() called on NULL udf_node!\n");
@@ -2278,12 +2299,12 @@ udf_fsync(void *v)
 	/* wait until vp->v_numoutput reaches zero i.e. is finished */
 	if (wait) {
 		DPRINTF(SYNC, ("udf_fsync %p, waiting\n", udf_node));
-		mutex_enter(vp->v_interlock);
+		mutex_enter(&vp->v_interlock);
 		while (vp->v_numoutput) {
 			DPRINTF(SYNC, ("udf_fsync %p, v_numoutput %d\n", udf_node, vp->v_numoutput));
-			cv_timedwait(&vp->v_cv, vp->v_interlock, hz/8);
+			cv_timedwait(&vp->v_cv, &vp->v_interlock, hz/8);
 		}
-		mutex_exit(vp->v_interlock);
+		mutex_exit(&vp->v_interlock);
 		DPRINTF(SYNC, ("udf_fsync %p, fin wait\n", udf_node));
 	}
 
@@ -2385,3 +2406,4 @@ const struct vnodeopv_entry_desc udf_vnodeop_entries[] = {
 const struct vnodeopv_desc udf_vnodeop_opv_desc = {
 	&udf_vnodeop_p, udf_vnodeop_entries
 };
+

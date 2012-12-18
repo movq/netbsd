@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_paritylog.h,v 1.12 2011/05/11 18:13:12 mrg Exp $	*/
+/*	$NetBSD: rf_paritylog.h,v 1.5 2007/03/04 06:02:38 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -46,8 +46,8 @@ typedef enum RF_ParityRecordType_e {
 }       RF_ParityRecordType_t;
 
 struct RF_CommonLogData_s {
-	rf_declare_mutex2(mutex);	/* protects cnt */
-	int     cnt;			/* when 0, time to call wakeFunc */
+	RF_DECLARE_MUTEX(mutex)	/* protects cnt */
+	int     cnt;		/* when 0, time to call wakeFunc */
 	RF_Raid_t *raidPtr;
 /*   int                    (*wakeFunc)(struct buf *); */
 	int     (*wakeFunc) (RF_DagNode_t * node, int status);
@@ -71,7 +71,7 @@ struct RF_ParityLogData_s {
 };
 
 struct RF_ParityLogAppendQueue_s {
-	rf_declare_mutex2(mutex);
+	RF_DECLARE_MUTEX(mutex)
 };
 
 struct RF_ParityLogRecord_s {
@@ -89,13 +89,13 @@ struct RF_ParityLog_s {
 };
 
 struct RF_ParityLogQueue_s {
-	rf_declare_mutex2(mutex);
+	RF_DECLARE_MUTEX(mutex)
 	RF_ParityLog_t *parityLogs;
 };
 
 struct RF_RegionBufferQueue_s {
-	rf_declare_mutex2(mutex);
-	rf_declare_cond2(cond);
+	RF_DECLARE_MUTEX(mutex)
+	RF_DECLARE_COND(cond)
 	int     bufferSize;
 	int     totalBuffers;	/* size of array 'buffers' */
 	int     availableBuffers;	/* num available 'buffers' */
@@ -109,8 +109,8 @@ struct RF_RegionBufferQueue_s {
 #define RF_PLOG_SHUTDOWN  (1<<3)/* thread is aware and exiting/exited */
 
 struct RF_ParityLogDiskQueue_s {
-	rf_declare_mutex2(mutex);/* protects all vars in this struct */
-	rf_declare_cond2(cond);
+	RF_DECLARE_MUTEX(mutex)	/* protects all vars in this struct */
+	RF_DECLARE_COND(cond)
 	int     threadState;	/* is thread running, should it shutdown  (see
 				 * above) */
 	RF_ParityLog_t *flushQueue;	/* list of parity logs to be flushed
@@ -144,9 +144,9 @@ struct RF_DiskMap_s {
 };
 
 struct RF_RegionInfo_s {
-	rf_declare_mutex2(mutex);	/* protects: diskCount, diskMap,
-					 * loggingEnabled, coreLog */
-	rf_declare_mutex2(reintMutex);	/* protects: reintInProgress */
+	RF_DECLARE_MUTEX(mutex)	/* protects: diskCount, diskMap,
+				 * loggingEnabled, coreLog */
+	RF_DECLARE_MUTEX(reintMutex)	/* protects: reintInProgress */
 	int     reintInProgress;/* flag used to suspend flushing operations */
 	RF_SectorCount_t capacity;	/* capacity of this region in sectors */
 	RF_SectorNum_t regionStartAddr;	/* starting disk address for this

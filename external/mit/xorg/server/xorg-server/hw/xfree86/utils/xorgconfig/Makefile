@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2011/02/21 04:42:17 mrg Exp $
+#	$NetBSD: Makefile,v 1.4.2.2 2009/09/17 04:24:41 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -22,7 +22,7 @@ CPPFLAGS+=	-DCARD_DATABASE_FILE='"${X11USRLIBDIR}/X11/Cards"' \
 		-DFILEMANSUFFIX=\"5\" \
 		-DXVERSIONSTRING=\"1.4.2\"
 
-.if ${MACHINE_ARCH} == "i386" || ${MACHINE} == "cats" || ${MACHINE} == "ofppc"
+.if ${MACHINE_ARCH} == "i386"
 CPPFLAGS+=	-DPCVT_SUPPORT
 .endif
 

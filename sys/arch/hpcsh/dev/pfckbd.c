@@ -1,4 +1,4 @@
-/*	$NetBSD: pfckbd.c,v 1.29 2012/02/12 16:34:08 matt Exp $	*/
+/*	$NetBSD: pfckbd.c,v 1.25 2008/04/28 20:23:22 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  * currently, HP Jornada 680/690, HITACHI PERSONA HPW-50PAD only.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pfckbd.c,v 1.29 2012/02/12 16:34:08 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pfckbd.c,v 1.25 2008/04/28 20:23:22 martin Exp $");
 
 #include "debug_hpcsh.h"
 
@@ -42,8 +42,8 @@ __KERNEL_RCSID(0, "$NetBSD: pfckbd.c,v 1.29 2012/02/12 16:34:08 matt Exp $");
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/callout.h>
-#include <sys/bus.h>
 
+#include <machine/bus.h>
 #include <machine/platid.h>
 #include <machine/platid_mask.h>
 
@@ -101,7 +101,7 @@ static const struct {
 
 
 void
-pfckbd_cnattach(void)
+pfckbd_cnattach()
 {
 	struct pfckbd_core *pc = &pfckbd_core;
 
@@ -147,9 +147,6 @@ pfckbd_attach(device_t parent, device_t self, void *aux)
 	callout_init(&pfckbd_core.pc_soft_ch, 0);
 	callout_reset(&pfckbd_core.pc_soft_ch, 1,
 		      pfckbd_core.pc_callout, &pfckbd_core);
-
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 static void
@@ -230,7 +227,7 @@ pfckbd_input(struct pfckbd_core *pc, int column, uint16_t data)
 
 /* Look up appropriate callback handler */
 static void
-(*pfckbd_callout_lookup(void))(void *)
+(*pfckbd_callout_lookup())(void *)
 {
 	int i, n;
 
@@ -438,7 +435,7 @@ pfckbd_callout_hitachi(void *arg)
 }
 
 void
-pfckbd_poll_hitachi_power(void)
+pfckbd_poll_hitachi_power()
 {
 	static const struct {
 		uint16_t cc, dc, ec; uint8_t c, d, e;

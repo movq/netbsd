@@ -1,4 +1,4 @@
-/*	$NetBSD: get_addrs.c,v 1.10 2011/09/06 18:32:03 joerg Exp $	*/
+/*	$NetBSD: get_addrs.c,v 1.8 2003/08/07 11:16:04 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)get_addrs.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: get_addrs.c,v 1.10 2011/09/06 18:32:03 joerg Exp $");
+__RCSID("$NetBSD: get_addrs.c,v 1.8 2003/08/07 11:16:04 agc Exp $");
 #endif /* not lint */
 
 #include "talk.h"
@@ -45,7 +45,8 @@ __RCSID("$NetBSD: get_addrs.c,v 1.10 2011/09/06 18:32:03 joerg Exp $");
 #include "talk_ctl.h"
 
 void
-get_addrs(const char *my_machine_name, const char *his_machine_name)
+get_addrs(my_machine_name, his_machine_name)
+	const char *my_machine_name, *his_machine_name;
 {
 	struct hostent *hp;
 	struct servent *sp;
@@ -55,7 +56,7 @@ get_addrs(const char *my_machine_name, const char *his_machine_name)
 	hp = gethostbyname(my_machine_name);
 	if (hp == NULL) {
 		fprintf(stderr, "talk: %s: ", my_machine_name);
-		herror(NULL);
+		herror((char *)NULL);
 		exit(1);
 	}
 	memmove((char *)&my_machine_addr, hp->h_addr, hp->h_length);
@@ -67,7 +68,7 @@ get_addrs(const char *my_machine_name, const char *his_machine_name)
 		hp = gethostbyname(his_machine_name);
 		if (hp == NULL) {
 			fprintf(stderr, "talk: %s: ", his_machine_name);
-			herror(NULL);
+			herror((char *)NULL);
 			exit(1);
 		}
 		memmove((char *) &his_machine_addr, hp->h_addr, hp->h_length);

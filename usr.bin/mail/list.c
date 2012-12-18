@@ -1,4 +1,4 @@
-/*	$NetBSD: list.c,v 1.27 2012/04/29 23:50:22 christos Exp $	*/
+/*	$NetBSD: list.c,v 1.23 2007/12/15 19:44:51 perry Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)list.c	8.4 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: list.c,v 1.27 2012/04/29 23:50:22 christos Exp $");
+__RCSID("$NetBSD: list.c,v 1.23 2007/12/15 19:44:51 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -117,7 +117,7 @@ getrawlist(const char line[], char **argv, int argc)
 			if (quotec != '\0') {
 				if (c == quotec)
 					quotec = '\0';
-				else if (quotec != '\'' && c == '\\')
+				else if (c == '\\')
 					switch (c = *cp++) {
 					case '\0':
 						*cp2++ = '\\';
@@ -427,7 +427,7 @@ static void
 regret(int token)
 {
 	if (++regretp >= REGDEP)
-		errx(EXIT_FAILURE, "Too many regrets");
+		errx(1, "Too many regrets");
 	regretstack[regretp] = token;
 	lexstring[sizeof(lexstring) - 1] = '\0';
 	string_stack[regretp] = savestr(lexstring);
@@ -626,7 +626,7 @@ matchbody(int (*cmpfn)(void *, char *, size_t),
 		fp = NULL;
 		if ((fd = mkstemp(tempname)) != -1) {
 			(void)unlink(tempname);
-			if ((fp = Fdopen(fd, "we+")) == NULL)
+			if ((fp = Fdopen(fd, "w+")) == NULL)
 				(void)close(fd);
 		}
 		if (fp == NULL) {
@@ -727,7 +727,7 @@ matchfrom(int (*cmpfn)(void *, char *, size_t),
 #ifdef __lint__
 	fieldname = fieldname;
 #endif
-	(void)readline(setinput(mp), headline, (int)sizeof(headline), 0);
+	(void)mail_readline(setinput(mp), headline, sizeof(headline));
 	field = savestr(headline);
 	if (strncmp(field, "From ", 5) != 0)
 		return 1;
@@ -1286,7 +1286,7 @@ getmsglist(char *buf, int *vector, int flags)
 		if (mp->m_flag & MMARK)
 			*ip++ = get_msgnum(mp);
 	*ip = 0;
-	return (int)(ip - vector);
+	return ip - vector;
 }
 
 /*
@@ -1319,10 +1319,6 @@ PUBLIC int
 show_headers_and_exit(int flags)
 {
 	struct message *mp;
-
-	/* We are exiting anyway, so use the default signal handler. */
-	if (signal(SIGINT, SIG_DFL) == SIG_IGN)
-		(void)signal(SIGINT, SIG_IGN);
 
 	flags &= CMMASK;
 	for (mp = get_message(1); mp; mp = next_message(mp))

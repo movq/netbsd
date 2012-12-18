@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_alloc.c,v 1.43 2012/11/21 23:11:23 jakllsch Exp $	*/
+/*	$NetBSD: ext2fs_alloc.c,v 1.36.8.1 2008/11/29 23:10:18 snj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -43,6 +43,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -60,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_alloc.c,v 1.43 2012/11/21 23:11:23 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_alloc.c,v 1.36.8.1 2008/11/29 23:10:18 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,7 +90,8 @@ static daddr_t	ext2fs_alloccg(struct inode *, int, daddr_t, int);
 static u_long	ext2fs_dirpref(struct m_ext2fs *);
 static void	ext2fs_fserr(struct m_ext2fs *, u_int, const char *);
 static u_long	ext2fs_hashalloc(struct inode *, int, long, int,
-		    daddr_t (*)(struct inode *, int, daddr_t, int));
+				   daddr_t (*)(struct inode *, int, daddr_t,
+						   int));
 static daddr_t	ext2fs_nodealloccg(struct inode *, int, daddr_t, int);
 static daddr_t	ext2fs_mapsearch(struct m_ext2fs *, char *, daddr_t);
 
@@ -122,8 +128,7 @@ ext2fs_alloc(struct inode *ip, daddr_t lbn, daddr_t bpref,
 #endif /* DIAGNOSTIC */
 	if (fs->e2fs.e2fs_fbcount == 0)
 		goto nospace;
-	if (kauth_authorize_system(cred, KAUTH_SYSTEM_FS_RESERVEDSPACE, 0, NULL,
-	    NULL, NULL) != 0 &&
+	if (kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL) != 0 &&
 	    freespace(fs) <= 0)
 		goto nospace;
 	if (bpref >= fs->e2fs.e2fs_bcount)
@@ -133,9 +138,9 @@ ext2fs_alloc(struct inode *ip, daddr_t lbn, daddr_t bpref,
 	else
 		cg = dtog(fs, bpref);
 	bno = (daddr_t)ext2fs_hashalloc(ip, cg, bpref, fs->e2fs_bsize,
-	    ext2fs_alloccg);
+						 ext2fs_alloccg);
 	if (bno > 0) {
-		ext2fs_setnblock(ip, ext2fs_nblock(ip) + btodb(fs->e2fs_bsize));
+		ip->i_e2fs_nblock += btodb(fs->e2fs_bsize);
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
 		*bnp = bno;
 		return (0);
@@ -470,12 +475,16 @@ ext2fs_nodealloccg(struct inode *ip, int cg, daddr_t ipref, int mode)
 		}
 	}
 	i = start + len - loc;
-	map = ibp[i] ^ 0xff;
-	if (map == 0) {
-		printf("fs = %s\n", fs->e2fs_fsmnt);
-		panic("ext2fs_nodealloccg: block not in map");
+	map = ibp[i];
+	ipref = i * NBBY;
+	for (i = 1; i < (1 << NBBY); i <<= 1, ipref++) {
+		if ((map & i) == 0) {
+			goto gotit;
+		}
 	}
-	ipref = i * NBBY + ffs(map) - 1;
+	printf("fs = %s\n", fs->e2fs_fsmnt);
+	panic("ext2fs_nodealloccg: block not in map");
+	/* NOTREACHED */
 gotit:
 	setbit(ibp, ipref);
 	fs->e2fs.e2fs_ficount--;
@@ -520,9 +529,8 @@ ext2fs_blkfree(struct inode *ip, daddr_t bno)
 	bbp = (char *)bp->b_data;
 	bno = dtogd(fs, bno);
 	if (isclr(bbp, bno)) {
-		printf("dev = 0x%llx, block = %lld, fs = %s\n",
-		    (unsigned long long)ip->i_dev, (long long)bno,
-		    fs->e2fs_fsmnt);
+		printf("dev = 0x%x, block = %lld, fs = %s\n",
+			ip->i_dev, (long long)bno, fs->e2fs_fsmnt);
 		panic("blkfree: freeing free block");
 	}
 	clrbit(bbp, bno);
@@ -550,9 +558,8 @@ ext2fs_vfree(struct vnode *pvp, ino_t ino, int mode)
 	pip = VTOI(pvp);
 	fs = pip->i_e2fs;
 	if ((u_int)ino > fs->e2fs.e2fs_icount || (u_int)ino < EXT2_FIRSTINO)
-		panic("ifree: range: dev = 0x%llx, ino = %llu, fs = %s",
-		    (unsigned long long)pip->i_dev, (unsigned long long)ino,
-		    fs->e2fs_fsmnt);
+		panic("ifree: range: dev = 0x%x, ino = %llu, fs = %s",
+			pip->i_dev, (unsigned long long)ino, fs->e2fs_fsmnt);
 	cg = ino_to_cg(fs, ino);
 	error = bread(pip->i_devvp,
 		fsbtodb(fs, fs->e2fs_gd[cg].ext2bgd_i_bitmap),
@@ -564,9 +571,8 @@ ext2fs_vfree(struct vnode *pvp, ino_t ino, int mode)
 	ibp = (char *)bp->b_data;
 	ino = (ino - 1) % fs->e2fs.e2fs_ipg;
 	if (isclr(ibp, ino)) {
-		printf("dev = 0x%llx, ino = %llu, fs = %s\n",
-		    (unsigned long long)pip->i_dev,
-		    (unsigned long long)ino, fs->e2fs_fsmnt);
+		printf("dev = 0x%x, ino = %llu, fs = %s\n",
+		    pip->i_dev, (unsigned long long)ino, fs->e2fs_fsmnt);
 		if (fs->e2fs_ronly == 0)
 			panic("ifree: freeing free inode");
 	}
@@ -591,6 +597,7 @@ ext2fs_vfree(struct vnode *pvp, ino_t ino, int mode)
 static daddr_t
 ext2fs_mapsearch(struct m_ext2fs *fs, char *bbp, daddr_t bpref)
 {
+	daddr_t bno;
 	int start, len, loc, i, map;
 
 	/*
@@ -615,12 +622,15 @@ ext2fs_mapsearch(struct m_ext2fs *fs, char *bbp, daddr_t bpref)
 		}
 	}
 	i = start + len - loc;
-	map = bbp[i] ^ 0xff;
-	if (map == 0) {
-		printf("fs = %s\n", fs->e2fs_fsmnt);
-		panic("ext2fs_mapsearch: block not in map");
+	map = bbp[i];
+	bno = i * NBBY;
+	for (i = 1; i < (1 << NBBY); i <<= 1, bno++) {
+		if ((map & i) == 0)
+			return (bno);
 	}
-	return i * NBBY + ffs(map) - 1;
+	printf("fs = %s\n", fs->e2fs_fsmnt);
+	panic("ext2fs_mapsearch: block not in map");
+	/* NOTREACHED */
 }
 
 /*

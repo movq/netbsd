@@ -1,4 +1,4 @@
-/*	$NetBSD: sl811hs.c,v 1.33 2012/06/10 06:15:52 mrg Exp $	*/
+/*	$NetBSD: sl811hs.c,v 1.21 2008/03/28 17:14:45 drochner Exp $	*/
 
 /*
  * Not (c) 2007 Matthew Orgass
@@ -13,7 +13,7 @@
  * Cypress/ScanLogic SL811HS/T USB Host Controller
  * Datasheet, Errata, and App Note available at www.cypress.com
  *
- * Uses: Ratoc CFU1U PCMCIA USB Host Controller, Nereid X68k USB HC, ISA 
+ * Uses: Ratoc CFU1U PCMCIA USB Host Controller, Nereid Mac 68k USB HC, ISA 
  * HCs.  The Ratoc CFU2 uses a different chip.
  *
  * This chip puts the serial in USB.  It implements USB by means of an eight 
@@ -59,7 +59,9 @@
  * This driver does fine grained locking for its own data structures, however 
  * the general USB code does not yet have locks, some of which would need to 
  * be used in this driver.  This is mostly for debug use on single processor 
- * systems.
+ * systems.  Actual MP use of this driver would be unreliable on ports where 
+ * splipi is above splhigh unless splipi can be safely blocked when 
+ * calculating remaining bus time prior to transfers.
  *
  * The theory of the wait lock is that start is the only function that would 
  * be frequently called from arbitrary processors, so it should not need to 
@@ -84,9 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sl811hs.c,v 1.33 2012/06/10 06:15:52 mrg Exp $");
-
-#include "opt_slhci.h"
+__KERNEL_RCSID(0, "$NetBSD: sl811hs.c,v 1.21 2008/03/28 17:14:45 drochner Exp $");
 
 #include <sys/cdefs.h>
 #include <sys/param.h>
@@ -561,42 +561,35 @@ struct slhci_softc *ssc;
 int slhci_usbdebug = -1; /* value to set usbdebug on attach, -1 = leave alone */
 #endif
 
-/*
- * XXXMRG the SLHCI UVMHIST code has been converted to KERNHIST, but it has
- * not been tested.  the extra instructions to enable it can probably be
- * commited to the kernhist code, and these instructions reduced to simply
- * enabling SLHCI_DEBUG.
- */
-
-/* Add KERNHIST history for debugging: 
+/* Add UVMHIST history for debugging: 
  *
- *   Before kern_hist in sys/kern/subr_kernhist.c add:
- *      KERNHIST_DECL(slhcihist);
+ *   Before uvm_hist in sys/uvm/uvm_stat.c add:
+ *      UVMHIST_DECL(slhcihist);
  *
- *   In kern_hist add:
- *      if ((bitmask & KERNHIST_SLHCI))
+ *   In uvm_hist add:
+ *      if ((bitmask & UVMHIST_SLHCI))
  *              hists[i++] = &slhcihist;
  *
- *   In sys/sys/kernhist.h add KERNHIST_SLHCI define.
+ *   In sys/uvm/uvm_stat.h add UVMHIST_SLHCI define.
  */
 
-#include <sys/kernhist.h>
-KERNHIST_DECL(slhcihist);
+#include <uvm/uvm_stat.h>
+UVMHIST_DECL(slhcihist);
 
-#if !defined(KERNHIST) || !defined(KERNHIST_SLHCI)
-#error "SLHCI_DEBUG requires KERNHIST (with modifications, see sys/dev/ic/sl81hs.c)"
+#if !defined(UVMHIST) || !defined(UVMHIST_SLHCI)
+#error "SLHCI_DEBUG requires UVMHIST (with modifications, see sys/dev/ic/sl81hs.c)"
 #endif
 
 #ifndef SLHCI_NHIST
 #define SLHCI_NHIST 409600
 #endif
-const unsigned int SLHCI_HISTMASK = KERNHIST_SLHCI;
-struct kern_history_ent slhci_he[SLHCI_NHIST];
+const unsigned int SLHCI_HISTMASK = UVMHIST_SLHCI;
+struct uvm_history_ent slhci_he[SLHCI_NHIST];
 
 #define SLHCI_DEXEC(x, y) do { if ((slhci_debug & SLHCI_ ## x)) { y; } \
 } while (/*CONSTCOND*/ 0)
-#define DDOLOG(f, a, b, c, d) do { const char *_kernhist_name = __func__; \
-    u_long _kernhist_call = 0; KERNHIST_LOG(slhcihist, f, a, b, c, d);	     \
+#define DDOLOG(f, a, b, c, d) do { const char *_uvmhist_name = __func__; \
+    u_long _uvmhist_call = 0; UVMHIST_LOG(slhcihist, f, a, b, c, d);	     \
 } while (/*CONSTCOND*/0)
 #define DLOG(x, f, a, b, c, d) SLHCI_DEXEC(x, DDOLOG(f, a, b, c, d))
 /* DLOGFLAG8 is a macro not a function so that flag name expressions are not 
@@ -604,10 +597,10 @@ struct kern_history_ent slhci_he[SLHCI_NHIST];
  * x is debug mask, y is flag identifier, z is flag variable, 
  * a-h are flag names (must evaluate to string constants, msb first). */
 #define DDOLOGFLAG8(y, z, a, b, c, d, e, f, g, h) do { uint8_t _DLF8 = (z);   \
-    const char *_kernhist_name = __func__; u_long _kernhist_call = 0;	      \
-    if (_DLF8 & 0xf0) KERNHIST_LOG(slhcihist, y " %s %s %s %s", _DLF8 & 0x80 ?  \
+    const char *_uvmhist_name = __func__; u_long _uvmhist_call = 0;	      \
+    if (_DLF8 & 0xf0) UVMHIST_LOG(slhcihist, y " %s %s %s %s", _DLF8 & 0x80 ?  \
     (a) : "", _DLF8 & 0x40 ? (b) : "", _DLF8 & 0x20 ? (c) : "", _DLF8 & 0x10 ? \
-    (d) : ""); if (_DLF8 & 0x0f) KERNHIST_LOG(slhcihist, y " %s %s %s %s",      \
+    (d) : ""); if (_DLF8 & 0x0f) UVMHIST_LOG(slhcihist, y " %s %s %s %s",      \
     _DLF8 & 0x08 ? (e) : "", _DLF8 & 0x04 ? (f) : "", _DLF8 & 0x02 ? (g) : "", \
     _DLF8 & 0x01 ? (h) : "");		      				       \
 } while (/*CONSTCOND*/ 0)
@@ -694,7 +687,6 @@ const struct usbd_bus_methods slhci_bus_methods = {
 	slhci_freem,
 	slhci_allocx,
 	slhci_freex,
-	NULL, /* slhci_get_lock */
 };
 
 const struct usbd_pipe_methods slhci_pipe_methods = {
@@ -882,9 +874,9 @@ slhci_transfer(struct usbd_xfer *xfer)
 	 * so start it first.
 	 */
 
-	/* Start next is always done at splusb, so we do this here so 
+	/* Start next is always done at splsoftusb, so we do this here so 
 	 * start functions are always called at softusb. XXX */
-	s = splusb();
+	s = splsoftusb();
 	error = xfer->pipe->methods->start(SIMPLEQ_FIRST(&xfer->pipe->queue));
 	splx(s);
 
@@ -1143,7 +1135,7 @@ slhci_supported_rev(uint8_t rev)
  * Note max_current argument is actual current, but stored as current/2 */
 void
 slhci_preinit(struct slhci_softc *sc, PowerFunc pow, bus_space_tag_t iot, 
-    bus_space_handle_t ioh, uint16_t max_current, uint32_t stride)
+    bus_space_handle_t ioh, uint16_t max_current, uint8_t stride)
 {
 	struct slhci_transfers *t;
 	int i;
@@ -1151,7 +1143,7 @@ slhci_preinit(struct slhci_softc *sc, PowerFunc pow, bus_space_tag_t iot,
 	t = &sc->sc_transfers;
 
 #ifdef SLHCI_DEBUG
-	KERNHIST_INIT_STATIC(slhcihist, slhci_he);
+	UVMHIST_INIT_STATIC(slhcihist, slhci_he);
 #endif
 	simple_lock_init(&sc->sc_lock);
 #ifdef SLHCI_WAITLOCK
@@ -1237,17 +1229,21 @@ slhci_detach(struct slhci_softc *sc, int flags)
 }
 
 int
-slhci_activate(device_t self, enum devact act)
+slhci_activate(struct device *self, enum devact act)
 {
-	struct slhci_softc *sc = device_private(self);
+	struct slhci_softc *sc;
 
-	switch (act) {
-	case DVACT_DEACTIVATE:
-		slhci_lock_call(sc, &slhci_halt, NULL, NULL);
-		return 0;
-	default:
+	sc = device_private(self);
+
+	if (act != DVACT_DEACTIVATE)
 		return EOPNOTSUPP;
-	}
+
+	slhci_lock_call(sc, &slhci_halt, NULL, NULL);
+
+	if (sc->sc_child)
+		return config_deactivate(sc->sc_child);
+	else
+		return 0;
 }
 
 void
@@ -1270,7 +1266,7 @@ slhci_abort(struct usbd_xfer *xfer)
 
 callback:
 	xfer->status = USBD_CANCELLED;
-	/* Abort happens at splusb. */
+	/* Abort happens at splsoftusb. */
 	usb_transfer_complete(xfer);
 }
 
@@ -1383,7 +1379,7 @@ slhci_lock_call(struct slhci_softc *sc, LockCallFunc lcf, struct slhci_pipe
 	usbd_status ret;
 	int x, s;
 
-	x = splusb();
+	x = splsoftusb(); 
 	s = splhardusb();
 	simple_lock(&sc->sc_lock);
 	ret = (*lcf)(sc, spipe, xfer);
@@ -1432,7 +1428,7 @@ slhci_callback_entry(void *arg)
 
 	sc = (struct slhci_softc *)arg;
 
-	x = splusb();
+	x = splsoftusb();
 	s = splhardusb();
 	simple_lock(&sc->sc_lock);
 	t = &sc->sc_transfers;
@@ -1471,6 +1467,7 @@ slhci_do_callback(struct slhci_softc *sc, struct usbd_xfer *xfer, int *s)
 
 	int repeat;
 
+	sc->sc_bus.intr_context++;
 	start_cc_time(&t_callback, (u_int)xfer);
 	simple_unlock(&sc->sc_lock);
 	splx(*s);
@@ -1482,6 +1479,7 @@ slhci_do_callback(struct slhci_softc *sc, struct usbd_xfer *xfer, int *s)
 	*s = splhardusb();
 	simple_lock(&sc->sc_lock);
 	stop_cc_time(&t_callback);
+	sc->sc_bus.intr_context--;
 
 	if (repeat && !sc->sc_bus.use_polling)
 		slhci_do_repeat(sc, xfer);
@@ -2210,8 +2208,8 @@ slhci_tstart(struct slhci_softc *sc)
 	/* We have about 6 us to get from the bus time check to 
 	 * starting the transfer or we might babble or the chip might fail to 
 	 * signal transfer complete.  This leaves no time for any other 
-	 * interrupts.
-	 */
+	 * interrupts.  Some ports have splipi (MP only) higher than splhigh 
+	 * which might cause longer delays. */
 	s = splhigh();
 	remaining_bustime = (int)(slhci_read(sc, SL811_CSOF)) << 6;
 	remaining_bustime -= SLHCI_END_BUSTIME;
@@ -2327,8 +2325,8 @@ slhci_dotransfer(struct slhci_softc *sc)
 	}
 }
 
-/* slhci_callback is called after the lock is taken from splusb.
- * s is pointer to old spl (splusb). */
+/* slhci_callback is called after the lock is taken from splsoftusb.
+ * s is pointer to old spl (splsoftusb). */
 static void
 slhci_callback(struct slhci_softc *sc, int *s)
 {
@@ -2494,7 +2492,7 @@ slhci_do_callback_schedule(struct slhci_softc *sc)
 }
 
 #if 0
-/* must be called with lock taken from splusb */
+/* must be called with lock taken from splsoftusb */
 /* XXX static */ void
 slhci_pollxfer(struct slhci_softc *sc, struct usbd_xfer *xfer, int *s)
 {
@@ -2807,7 +2805,7 @@ slhci_drain(struct slhci_softc *sc)
 	/* Cancel all pipes.  Note that not all of these may be on the 
 	 * callback queue yet; some could be in slhci_start, for example. */
 	FOREACH_AP(q, t, spipe) {
-		spipe->pflags |= PF_GONE;
+		spipe->pflags = PF_GONE;
 		spipe->pipe.repeat = 0;
 		spipe->pipe.aborting = 1;
 		if (spipe->xfer != NULL)
@@ -2834,8 +2832,6 @@ void
 slhci_reset(struct slhci_softc *sc)
 {
 	struct slhci_transfers *t;
-	struct slhci_pipe *spipe;
-	struct gcq *q;
 	uint8_t r, pol, ctrl;
 
 	t = &sc->sc_transfers;
@@ -2922,10 +2918,6 @@ slhci_reset(struct slhci_softc *sc)
 
 	t->flags &= ~(F_UDISABLED|F_RESET);
 	t->flags |= F_CRESET|F_ROOTINTR;
-	FOREACH_AP(q, t, spipe) {
-		spipe->pflags &= ~PF_GONE;
-		spipe->pipe.aborting = 0;
-	}
 	DLOG(D_MSG, "RESET done flags %#x", t->flags, 0,0,0);
 }
 
@@ -3640,7 +3632,7 @@ slhci_print_intr(void)
 
 #if 0
 void
-slhci_log_sc(void)
+slhci_log_sc()
 {
 	struct slhci_transfers *t;
 	int i;
@@ -3659,7 +3651,8 @@ slhci_log_sc(void)
 
 	DDOLOG("frame=%d rootintr=%p", t->frame, t->rootintr, 0,0);
 
-	DDOLOG("use_polling=%d", ssc->sc_bus.use_polling, 0, 0, 0);
+	DDOLOG("use_polling=%d intr_context=%d", ssc->sc_bus.use_polling,
+	    ssc->sc_bus.intr_context, 0,0);
 }
 
 void

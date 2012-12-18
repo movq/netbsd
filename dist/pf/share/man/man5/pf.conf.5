@@ -1,4 +1,4 @@
-.\"	$NetBSD: pf.conf.5,v 1.16 2009/10/14 17:44:25 joerg Exp $
+.\"	$NetBSD: pf.conf.5,v 1.13 2008/06/18 09:06:26 yamt Exp $
 .\"	$OpenBSD: pf.conf.5,v 1.383 2007/07/17 16:27:38 jmc Exp $
 .\"
 .\" Copyright (c) 2002, Daniel Hartmeier
@@ -28,7 +28,7 @@
 .\" ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd June 26, 2007
+.Dd $Mdocdate: June 26 2007 $
 .Dt PF.CONF 5
 .Os
 .Sh NAME
@@ -1407,8 +1407,13 @@ For a list of all the protocol name to number mappings used by
 .Xr pfctl 8 ,
 see the file
 .Em /etc/protocols .
-.It Ar from Ao Ar source Ac Ar port Ao Ar source Ac Ar os Ao Ar source Ac \
-Ar to Ao Ar dest Ac Ar port Aq Ar dest
+.It Xo
+.Ar from Aq Ar source
+.Ar port Aq Ar source
+.Ar os Aq Ar source
+.Ar to Aq Ar dest
+.Ar port Aq Ar dest
+.Xc
 This rule applies only to packets with the specified source and destination
 addresses and ports.
 .Pp
@@ -1587,8 +1592,11 @@ connections:
 block out proto { tcp, udp } all
 pass  out proto { tcp, udp } all user { \*(Lt 1000, dhartmei }
 .Ed
-.It Ar flags Ao Ar a Ac Pf / Ns Ao Ar b Ac No \*(Ba / Ns \
-Ao Ar b Ac No \*(Ba any
+.It Xo Ar flags Aq Ar a
+.Pf / Ns Aq Ar b
+.No \*(Ba / Ns Aq Ar b
+.No \*(Ba any
+.Xc
 This rule only applies to TCP packets that have the flags
 .Aq Ar a
 set out of set
@@ -1640,8 +1648,12 @@ options, or scrubbed with
 .Ar reassemble tcp
 will also not be recoverable from intermediate packets.
 Such connections will stall and time out.
-.It Ar icmp-type Ao Ar type Ac Ar code Ao Ar code Ac
-.It Ar icmp6-type Ao Ar type Ac Ar code Ao Ar code Ac
+.It Xo Ar icmp-type Aq Ar type
+.Ar code Aq Ar code
+.Xc
+.It Xo Ar icmp6-type Aq Ar type
+.Ar code Aq Ar code
+.Xc
 This rule only applies to ICMP or ICMPv6 packets with the specified type
 and code.
 Text names for ICMP types and codes are listed in
@@ -1657,7 +1669,9 @@ or
 .Ar icmp6-type
 .Pc
 must match.
-.It Ar tos Ao Ar string Ac No \*(Ba Aq Ar number
+.It Xo Ar tos Aq Ar string
+.No \*(Ba Aq Ar number
+.Xc
 This rule applies to packets with the specified
 .Em TOS
 bits set.
@@ -1733,7 +1747,10 @@ pass in inet proto tcp from any to 1.2.3.5 \e
 The macro expansion for the
 .Ar label
 directive occurs only at configuration file parse time, not during runtime.
-.It Ar queue Ao Ar queue Ac No \*(Ba ( Ao Ar queue Ac , Aq Ar queue )
+.It Xo Ar queue Aq Ar queue
+.No \*(Ba ( Aq Ar queue ,
+.Aq Ar queue )
+.Xc
 Packets matching this rule will be assigned to the specified queue.
 If two queues are given, packets which have a
 .Em TOS
@@ -2013,7 +2030,9 @@ create state are dropped, until existing states time out.
 .\" Prevent state changes for states created by this rule from appearing on the
 .\" .Xr pfsync 4
 .\" interface.
-.It Ao Ar timeout Ac Aq Ar seconds
+.It Xo Aq Ar timeout
+.Aq Ar seconds
+.Xc
 Changes the timeout values used for states created by this rule.
 For a list of all valid timeout names, see
 .Sx OPTIONS
@@ -2070,7 +2089,9 @@ per source IP.
 .It Ar max-src-conn Aq Ar number
 Limits the maximum number of simultaneous TCP connections which have
 completed the 3-way handshake that a single host can make.
-.It Ar max-src-conn-rate Ao Ar number Ac No / Aq Ar seconds
+.It Xo Ar max-src-conn-rate Aq Ar number
+.No / Aq Ar seconds
+.Xc
 Limit the rate of new connections over a time interval.
 The connection rate is an approximation calculated as a moving average.
 .El
@@ -2351,7 +2372,10 @@ rules in the specified
 .It Ar anchor Aq Ar name
 Evaluates the filter rules in the specified
 .Ar anchor .
-.It Ar load anchor Ao Ar name Ac Ar from Aq Ar file
+.It Xo Ar load anchor
+.Aq Ar name
+.Ar from Aq Ar file
+.Xc
 Loads the rules from the specified file into the
 anchor
 .Ar name .

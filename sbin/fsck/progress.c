@@ -1,4 +1,4 @@
-/*	$NetBSD: progress.c,v 1.5 2009/04/11 06:48:36 lukem Exp $	*/
+/*	$NetBSD: progress.c,v 1.4 2008/04/28 20:23:08 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #ifndef SMALL
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: progress.c,v 1.5 2009/04/11 06:48:36 lukem Exp $");
+__RCSID("$NetBSD: progress.c,v 1.4 2008/04/28 20:23:08 martin Exp $");
 
 /*
  * File system independent fsck progress bar routines.
@@ -47,7 +47,7 @@ __RCSID("$NetBSD: progress.c,v 1.5 2009/04/11 06:48:36 lukem Exp $");
 
 #include "progress.h"
 
-static size_t	ttywidth = 80;
+static int	ttywidth = 80;
 
 static int	progress_onoff;
 static int	progress_lowlim;

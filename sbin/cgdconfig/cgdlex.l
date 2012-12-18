@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: cgdlex.l,v 1.5 2009/10/29 14:49:03 christos Exp $ */
+/* $NetBSD: cgdlex.l,v 1.3 2008/05/11 03:15:21 elric Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: cgdlex.l,v 1.5 2009/10/29 14:49:03 christos Exp $");
+__RCSID("$NetBSD: cgdlex.l,v 1.3 2008/05/11 03:15:21 elric Exp $");
 #endif
 
 #include <err.h>
@@ -86,7 +86,6 @@ int	yylex(void);
 %}
 
 %x quoted
-%option nounput
 
 %%
 

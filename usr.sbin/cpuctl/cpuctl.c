@@ -1,7 +1,7 @@
-/*	$NetBSD: cpuctl.c,v 1.21 2012/08/29 17:13:22 drochner Exp $	*/
+/*	$NetBSD: cpuctl.c,v 1.10.2.3 2009/02/06 01:10:26 snj Exp $	*/
 
 /*-
- * Copyright (c) 2007, 2008, 2009, 2012 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -31,7 +31,7 @@
 
 #ifndef lint
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cpuctl.c,v 1.21 2012/08/29 17:13:22 drochner Exp $");
+__RCSID("$NetBSD: cpuctl.c,v 1.10.2.3 2009/02/06 01:10:26 snj Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -42,7 +42,6 @@ __RCSID("$NetBSD: cpuctl.c,v 1.21 2012/08/29 17:13:22 drochner Exp $");
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <paths.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -54,34 +53,28 @@ __RCSID("$NetBSD: cpuctl.c,v 1.21 2012/08/29 17:13:22 drochner Exp $");
 
 #include "cpuctl.h"
 
-static u_int	getcpuid(char **);
-__dead static void	usage(void);
+u_int	getcpuid(char **);
+int	main(int, char **);
+void	usage(void);
 
-static void	cpu_identify(char **);
-static void	cpu_list(char **);
-static void	cpu_offline(char **);
-static void	cpu_online(char **);
-static void	cpu_intr(char **);
-static void	cpu_nointr(char **);
-static void	cpu_ucode(char **);
+void	cpu_identify(char **);
+void	cpu_list(char **);
+void	cpu_offline(char **);
+void	cpu_online(char **);
 
-static struct cmdtab {
+struct cmdtab {
 	const char	*label;
 	int	takesargs;
-	int	argsoptional;
 	void	(*func)(char **);
 } const cpu_cmdtab[] = {
-	{ "identify", 1, 0, cpu_identify },
-	{ "list", 0, 0, cpu_list },
-	{ "offline", 1, 0, cpu_offline },
-	{ "online", 1, 0, cpu_online },
-	{ "intr", 1, 0, cpu_intr },
-	{ "nointr", 1, 0, cpu_nointr },
-	{ "ucode", 1, 1, cpu_ucode },
-	{ NULL, 0, 0, NULL },
+	{ "identify", 1, cpu_identify },
+	{ "list", 0, cpu_list },
+	{ "offline", 1, cpu_offline },
+	{ "online", 1, cpu_online },
+	{ NULL, 0, NULL },
 };
 
-static int	fd;
+int	fd;
 
 int
 main(int argc, char **argv)
@@ -91,16 +84,13 @@ main(int argc, char **argv)
 	if (argc < 2)
 		usage();
 
-	if ((fd = open(_PATH_CPUCTL, O_RDWR)) < 0)
-		err(EXIT_FAILURE, _PATH_CPUCTL);
+	if ((fd = open("/dev/cpuctl", O_RDWR)) < 0)
+		err(EXIT_FAILURE, "/dev/cpuctl");
 
 	for (ct = cpu_cmdtab; ct->label != NULL; ct++) {
 		if (strcmp(argv[1], ct->label) == 0) {
-			if (!ct->argsoptional &&
-			    ((ct->takesargs == 0) ^ (argv[2] == NULL)))
-			{
-				usage();
-			}
+			if ((ct->takesargs == 0) ^ (argv[2] == NULL))
+			    	usage();
 			(*ct->func)(argv + 2);
 			break;
 		}
@@ -114,7 +104,7 @@ main(int argc, char **argv)
 	/* NOTREACHED */
 }
 
-static void
+void
 usage(void)
 {
 	const char *progname = getprogname();
@@ -123,14 +113,11 @@ usage(void)
 	fprintf(stderr, "       %s list\n", progname);
 	fprintf(stderr, "       %s offline cpuno\n", progname);
 	fprintf(stderr, "       %s online cpuno\n", progname);
-	fprintf(stderr, "       %s intr cpuno\n", progname);
-	fprintf(stderr, "       %s nointr cpuno\n", progname);
-	fprintf(stderr, "       %s ucode [file]\n", progname);
 	exit(EXIT_FAILURE);
 	/* NOTREACHED */
 }
 
-static void
+void
 cpu_online(char **argv)
 {
 	cpustate_t cs;
@@ -143,7 +130,7 @@ cpu_online(char **argv)
 		err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
 }
 
-static void
+void
 cpu_offline(char **argv)
 {
 	cpustate_t cs;
@@ -156,85 +143,7 @@ cpu_offline(char **argv)
 		err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
 }
 
-static void
-cpu_intr(char **argv)
-{
-	cpustate_t cs;
-
-	cs.cs_id = getcpuid(argv);
-	if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
-		err(EXIT_FAILURE, "IOC_CPU_GETSTATE");
-	cs.cs_intr = true;
-	if (ioctl(fd, IOC_CPU_SETSTATE, &cs) < 0)
-		err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
-}
-
-static void
-cpu_nointr(char **argv)
-{
-	cpustate_t cs;
-
-	cs.cs_id = getcpuid(argv);
-	if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
-		err(EXIT_FAILURE, "IOC_CPU_GETSTATE");
-	cs.cs_intr = false;
-	if (ioctl(fd, IOC_CPU_SETSTATE, &cs) < 0) {
-		if (errno == EOPNOTSUPP) {
-			warnx("interrupt control not supported on "
-			    "this platform");
-		} else
-			err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
-	}
-}
-
-static void
-cpu_ucode(char **argv)
-{
-	int error;
-	struct cpu_ucode uc;
-	unsigned long id = 0; /* gcc */
-	char *ep;
-	cpuset_t *cpuset;
-
-	uc.cpu_nr = -1;
-	if (argv[0] != NULL) {
-		id = strtoul(argv[0], &ep, 0);
-		if (id != ULONG_MAX && *ep == '\0') {
-			uc.cpu_nr = id;
-			argv++;
-		}
-	}
-	if (argv[0] != NULL)
-		strlcpy(uc.fwname, argv[0], sizeof(uc.fwname));
-	else
-		memset(uc.fwname, '\0', sizeof(uc.fwname));
-
-	error = ucodeupdate_check(fd, &uc);
-	if (error)
-		errx(EXIT_FAILURE, "unsupported");
-
-	if (uc.cpu_nr == CPU_UCODE_CURRENT_CPU) {
-		cpuset = cpuset_create();
-		if (cpuset == NULL)
-			err(EXIT_FAILURE, "cpuset_create");
-		cpuset_zero(cpuset);
-		cpuset_set(id, cpuset);
-		if (_sched_setaffinity(0, 0, cpuset_size(cpuset), cpuset) < 0) {
-			err(EXIT_FAILURE, "_sched_setaffinity");
-		}
-		cpuset_destroy(cpuset);
-	}
-	error = ioctl(fd, IOC_CPU_UCODE_APPLY, &uc);
-	if (error < 0) {
-		if (uc.fwname[0])
-			err(EXIT_FAILURE, "%s", uc.fwname);
-		else
-			err(EXIT_FAILURE, "IOC_CPU_UCODE_APPLY");
-	}
-}
-
-
-static void
+void
 cpu_identify(char **argv)
 {
 	char name[32];
@@ -262,10 +171,10 @@ cpu_identify(char **argv)
 		}
 		cpuset_destroy(cpuset);
 	}
-	identifycpu(fd, name);
+	identifycpu(name);
 }
 
-static u_int
+u_int
 getcpuid(char **argv)
 {
 	char *argp;
@@ -277,32 +186,29 @@ getcpuid(char **argv)
 		usage();
 
 	np = sysconf(_SC_NPROCESSORS_CONF);
-	if (id >= (u_long)np)
+	if (id >= np)
 		errx(EXIT_FAILURE, "Invalid CPU number");
 
 	return id;
 }
 
-static void
+void
 cpu_list(char **argv)
 {
 	const char *state, *intr;
 	cpustate_t cs;
 	u_int cnt, i;
-	time_t lastmod;
-	char ibuf[16], *ts;
 	
 	if (ioctl(fd, IOC_CPU_GETCOUNT, &cnt) < 0)
 		err(EXIT_FAILURE, "IOC_CPU_GETCOUNT");
 
-	printf(
-"Num  HwId Unbound LWPs Interrupts Last change              #Intr\n"
-"---- ---- ------------ ---------- ------------------------ -----\n");
+	printf("Num  HwId Unbound LWPs Interrupts     Last change\n");
+ 	printf("---- ---- ------------ -------------- ----------------------------\n");
 
 	for (i = 0; i < cnt; i++) {
 		cs.cs_id = i;
 		if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
-			err(EXIT_FAILURE, "IOC_CPU_GETSTATE");
+			err(EXIT_FAILURE, "IOC_CPU_GETINFO");
 		if (ioctl(fd, IOC_CPU_MAPID, &cs.cs_id) < 0)
 			err(EXIT_FAILURE, "IOC_CPU_MAPID");
 		if (cs.cs_online)
@@ -313,18 +219,8 @@ cpu_list(char **argv)
 			intr = "intr";
 		else
 			intr = "nointr";
-		if (cs.cs_intrcnt == 0)
-			strcpy(ibuf, "?");
-		else
-			snprintf(ibuf, sizeof(ibuf), "%d", cs.cs_intrcnt - 1);
-
-		lastmod = (time_t)cs.cs_lastmod |
-		    ((time_t)cs.cs_lastmodhi << 32);
-		ts = asctime(localtime(&lastmod));
-		ts[strlen(ts) - 1] = '\0';
-		printf("%-4d %-4x %-12s %-10s %s %-5s\n",
-		   i, cs.cs_hwid, state,
-		   intr, ts, ibuf);
+		printf("%-4d %-4x %-12s %-12s   %s", i, cs.cs_id, state,
+		   intr, asctime(localtime(&cs.cs_lastmod)));
 	}
 }
 

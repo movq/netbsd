@@ -1,4 +1,4 @@
-/*	$NetBSD: unix_recv_fd.c,v 1.7 2012/01/20 14:08:04 joerg Exp $	*/
+/*	$NetBSD: unix_recv_fd.c,v 1.2.2.4 2011/01/07 01:24:20 riz Exp $	*/
 
 /*++
 /* NAME
@@ -16,7 +16,7 @@
 /*
 /*	Arguments:
 /* .IP fd
-/*	File descriptor that connects the sending and receiving processes.
+/*	File descriptor.
 /* DIAGNOSTICS
 /*	unix_recv_fd() returns -1 upon failure.
 /* LICENSE
@@ -79,7 +79,7 @@ int     unix_recv_fd(int fd)
     if (unix_pass_fd_fix & UNIX_PASS_FD_FIX_CMSG_LEN) {
 	msg.msg_controllen = CMSG_LEN(sizeof(newfd));	/* Fix 200506 */
     } else {
-	msg.msg_controllen = CMSG_SPACE(sizeof(newfd));	/* normal */
+	msg.msg_controllen = sizeof(control_un.control);	/* normal */
     }
 #else
     msg.msg_accrights = (char *) &newfd;

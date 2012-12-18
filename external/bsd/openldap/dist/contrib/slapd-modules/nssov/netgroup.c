@@ -1,11 +1,7 @@
-/*	$NetBSD: netgroup.c,v 1.1.1.3 2010/12/12 15:19:08 adam Exp $	*/
-
 /* netgroup.c - netgroup lookup routines */
-/* OpenLDAP: pkg/ldap/contrib/slapd-modules/nssov/netgroup.c,v 1.1.2.5 2010/04/15 21:32:56 quanah Exp */
-/* This work is part of OpenLDAP Software <http://www.openldap.org/>. 
- *
- * Copyright 2008-2010 The OpenLDAP Foundation.
- * Portions Copyright 2008 by Howard Chu, Symas Corp.
+/* $OpenLDAP: pkg/ldap/contrib/slapd-modules/nssov/netgroup.c,v 1.1.2.1 2008/07/08 18:53:57 quanah Exp $ */
+/*
+ * Copyright 2008 by Howard Chu, Symas Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -16,7 +12,7 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>.
  */
-/* ACKNOWLEDGEMENTS:
+/*
  * This code references portions of the nss-ldapd package
  * written by Arthur de Jong. The nss-ldapd code was forked
  * from the nss-ldap library written by Luke Howard.
@@ -95,7 +91,7 @@ static int write_netgroup_triple(TFILE *fp,const char *triple)
 	/* we should have a bracket now */
 	if (triple[i]!='(')
 	{
-		Debug(LDAP_DEBUG_ANY,"write_netgroup_triple(): entry does not begin with '(' (entry skipped)\n",0,0,0);
+		Debug(LDAP_DEBUG_ANY,"write_netgroup_triple(): entry does not begin with '(' (entry skipped)",0,0,0);
 		return 0;
 	}
 	i++;
@@ -105,7 +101,7 @@ static int write_netgroup_triple(TFILE *fp,const char *triple)
 		/* nothing else to do */ ;
 	if (triple[i]!=',')
 	{
-		Debug(LDAP_DEBUG_ANY,"write_netgroup_triple(): missing ',' (entry skipped)\n",0,0,0);
+		Debug(LDAP_DEBUG_ANY,"write_netgroup_triple(): missing ',' (entry skipped)",0,0,0);
 		return 0;
 	}
 	hoste=i;
@@ -116,7 +112,7 @@ static int write_netgroup_triple(TFILE *fp,const char *triple)
 		/* nothing else to do */ ;
 	if (triple[i]!=',')
 	{
-		Debug(LDAP_DEBUG_ANY,"write_netgroup_triple(): missing ',' (entry skipped)\n",0,0,0);
+		Debug(LDAP_DEBUG_ANY,"write_netgroup_triple(): missing ',' (entry skipped)",0,0,0);
 		return 0;
 	}
 	usere=i;
@@ -127,7 +123,7 @@ static int write_netgroup_triple(TFILE *fp,const char *triple)
 		/* nothing else to do */ ;
 	if (triple[i]!=')')
 	{
-		Debug(LDAP_DEBUG_ANY,"write_netgroup_triple(): missing ')' (entry skipped)\n",0,0,0);
+		Debug(LDAP_DEBUG_ANY,"write_netgroup_triple(): missing ')' (entry skipped)",0,0,0);
 		return 0;
 	}
 	domaine=i;
@@ -138,12 +134,12 @@ static int write_netgroup_triple(TFILE *fp,const char *triple)
 	/* if anything is left in the string we have a problem */
 	if (triple[i]!='\0')
 	{
-		Debug(LDAP_DEBUG_ANY,"write_netgroup_triple(): string contains trailing data (entry skipped)\n",0,0,0);
+		Debug(LDAP_DEBUG_ANY,"write_netgroup_triple(): string contains trailing data (entry skipped)",0,0,0);
 		return 0;
 	}
 	/* write strings */
-	WRITE_INT32(fp,NSLCD_RESULT_BEGIN);
-	WRITE_INT32(fp,NSLCD_NETGROUP_TYPE_TRIPLE);
+	WRITE_INT32(fp,NSLCD_RESULT_SUCCESS);
+	WRITE_INT32(fp,NETGROUP_TYPE_TRIPLE);
 	WRITE_STRING_STRIPSPACE_LEN(fp,triple+hostb,hoste-hostb)
 	WRITE_STRING_STRIPSPACE_LEN(fp,triple+userb,usere-userb)
 	WRITE_STRING_STRIPSPACE_LEN(fp,triple+domainb,domaine-domainb)
@@ -173,9 +169,9 @@ static int write_netgroup(nssov_netgroup_cbp *cbp,Entry *entry)
 		for (i=0;i<a->a_numvals;i++)
 		{
 			/* write the result code */
-			WRITE_INT32(cbp->fp,NSLCD_RESULT_BEGIN);
+			WRITE_INT32(cbp->fp,NSLCD_RESULT_SUCCESS);
 			/* write triple indicator */
-			WRITE_INT32(cbp->fp,NSLCD_NETGROUP_TYPE_NETGROUP);
+			WRITE_INT32(cbp->fp,NETGROUP_TYPE_NETGROUP);
 			/* write netgroup name */
 			if (write_string_stripspace_len(cbp->fp,a->a_vals[i].bv_val,a->a_vals[i].bv_len))
 				return -1;
@@ -192,10 +188,10 @@ NSSOV_HANDLE(
 	char fbuf[1024];
 	struct berval filter = {sizeof(fbuf)};
 	filter.bv_val = fbuf;
-	READ_STRING(fp,cbp.buf);,
+	READ_STRING_BUF2(fp,cbp.buf,sizeof(cbp.buf));,
 	cbp.name.bv_len = tmpint32;
 	cbp.name.bv_val = cbp.buf;
-	Debug(LDAP_DEBUG_TRACE,"nssov_netgroup_byname(%s)\n",cbp.name.bv_val,0,0);,
+	Debug(LDAP_DEBUG_TRACE,"nssov_netgroup_byname(%s)",cbp.name.bv_val,0,0);,
 	NSLCD_ACTION_NETGROUP_BYNAME,
 	nssov_filter_byname(cbp.mi,0,&cbp.name,&filter)
 )

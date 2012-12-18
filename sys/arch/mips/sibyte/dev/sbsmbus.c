@@ -1,4 +1,4 @@
-/* $NetBSD: sbsmbus.c,v 1.16 2011/07/10 23:32:03 matt Exp $ */
+/* $NetBSD: sbsmbus.c,v 1.13 2006/03/28 17:38:25 thorpej Exp $ */
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,13 +36,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbsmbus.c,v 1.16 2011/07/10 23:32:03 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbsmbus.c,v 1.13 2006/03/28 17:38:25 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <sbmips/swarm.h>
+#include <machine/swarm.h>
 #include <mips/sibyte/dev/sbsmbusvar.h>
 
 #include <dev/smbus/x1241reg.h>
@@ -50,11 +50,11 @@ __KERNEL_RCSID(0, "$NetBSD: sbsmbus.c,v 1.16 2011/07/10 23:32:03 matt Exp $");
 
 #include "locators.h"
 
-static int smbus_match(device_t, cfdata_t, void *);
-static void smbus_attach(device_t, device_t, void *);
+static int smbus_match(struct device *, struct cfdata *, void *);
+static void smbus_attach(struct device *, struct device *, void *);
 static int smbus_print(void *, const char *);
 
-CFATTACH_DECL_NEW(smbus, 0,
+CFATTACH_DECL(smbus, sizeof(struct device),
     smbus_match, smbus_attach, NULL, NULL);
 
 /* autoconfiguration match information for zbbus children */
@@ -68,11 +68,12 @@ static const struct smbus_attach_locs smbus_devs[] = {
 	{ X1241_SMBUS_CHAN,	X1241_RTC_SLAVEADDR },
 	{ M41T81_SMBUS_CHAN,	M41T81_SLAVEADDR },
 };
+static const int smbus_dev_count = sizeof smbus_devs / sizeof smbus_devs[0];
 
 static int found = 0;
 
 static int
-smbus_match(device_t parent, cfdata_t match, void *aux)
+smbus_match(struct device *parent, struct cfdata *match, void *aux)
 {
 
 	/* 2 SMBus's on the BCM112x and BCM1250 */
@@ -80,16 +81,16 @@ smbus_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-smbus_attach(device_t parent, device_t self, void *aux)
+smbus_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct smbus_attach_args sa;
 	int i;
 	int locs[SMBUSCF_NLOCS];
 
 	found++;
-	aprint_normal("\n");
+	printf("\n");
 
-	for (i = 0; i < __arraycount(smbus_devs); i++) {
+	for (i = 0; i < smbus_dev_count; i++) {
 		if (device_unit(self) != smbus_devs[i].sa_interface)
 			continue;
 

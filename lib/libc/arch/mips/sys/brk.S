@@ -1,4 +1,4 @@
-/*	$NetBSD: brk.S,v 1.18 2010/12/12 09:00:37 tsutsui Exp $	*/
+/*	$NetBSD: brk.S,v 1.16 2003/08/07 16:42:17 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -35,11 +35,8 @@
 #include "SYS.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-	RCSID("from: @(#)brk.s	8.1 (Berkeley) 6/4/93")
-#else
-	RCSID("$NetBSD: brk.S,v 1.18 2010/12/12 09:00:37 tsutsui Exp $")
-#endif
+	ASMSTR("from: @(#)brk.s	8.1 (Berkeley) 6/4/93")
+	ASMSTR("$NetBSD: brk.S,v 1.16 2003/08/07 16:42:17 agc Exp $")
 #endif /* LIBC_SCCS and not lint */
 
 	.globl	_C_LABEL(__minbrk)
@@ -52,23 +49,26 @@ WEAK_ALIAS(brk, _brk)
 
 	.data
 _C_LABEL(__minbrk):
-	PTR_WORD	_C_LABEL(_end)
+	.word	_C_LABEL(_end)
 	.text
 
 LEAF(_brk)
-	PIC_PROLOGUE(_brk)
-	PTR_LA		t0, _C_LABEL(__minbrk)
-	PTR_L		v0, 0(t0)
-	bgeu		a0, v0, 1f
-	move		a0, v0		# dont allow break < minbrk
+#ifdef __ABICALLS__
+	.set	noreorder
+	.cpload	t9
+	.set	reorder
+#endif
+	lw	v0, _C_LABEL(__minbrk)
+	bgeu	a0, v0, 1f
+	move	a0, v0		# dont allow break < minbrk
 1:
-	li		v0, SYS_break
+	li	v0, SYS_break
 	syscall
-	bne		a3, zero, 2f
-	PTR_LA		t0, _C_LABEL(__curbrk)
-	PTR_S		a0, 0(t0)
-	move		v0, zero
-	PIC_RETURN()
+	bne	a3, zero, 2f
+	sw	a0, _C_LABEL(__curbrk)
+	move	v0, zero
+	j	ra
 2:
-	PIC_TAILCALL(__cerror)
+	la	t9, _C_LABEL(__cerror)
+	jr	t9
 END(_brk)

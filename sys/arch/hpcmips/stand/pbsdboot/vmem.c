@@ -1,4 +1,4 @@
-/*	$NetBSD: vmem.c,v 1.7 2009/03/18 10:22:29 cegger Exp $	*/
+/*	$NetBSD: vmem.c,v 1.6 2007/03/04 05:59:53 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 Shin Takemura.
@@ -118,7 +118,7 @@ vmem_exec(void *entry, int argc, char *argv[], struct bootinfo *bi)
 }
 
 void *
-vmem_alloc(void)
+vmem_alloc()
 {
 	int i, pagesize;
 	struct page_header_s *page;
@@ -372,7 +372,7 @@ vmem_init(void *start, void *end)
 }
 
 void
-vmem_free(void)
+vmem_free()
 {
 	map = NULL;
 	if (heap) {
@@ -386,7 +386,7 @@ vmem_free(void)
 }
 
 void
-vmem_dump_map(void)
+vmem_dump_map()
 {
 	void *addr, page, paddr;
 

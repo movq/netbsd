@@ -1,4 +1,4 @@
-/*	$NetBSD: segments.h,v 1.23 2012/06/16 20:47:04 dsl Exp $	*/
+/*	$NetBSD: segments.h,v 1.19.4.1 2010/09/07 19:38:21 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -209,15 +209,6 @@ struct gate_descriptor {
 } __packed;
 
 /*
- * Generic descriptor
- */
-union descriptor {
-	struct mem_segment_descriptor sd;
-	uint32_t raw[2];
-	uint64_t raw64;
-} __packed;
-
-/*
  * region descriptors, used to load gdt/idt tables before segments yet exist.
  */
 struct region_descriptor {
@@ -245,7 +236,6 @@ void set_sys_segment(struct sys_segment_descriptor *, void *, size_t,
 void set_mem_segment(struct mem_segment_descriptor *, void *, size_t,
 			  int, int, int, int, int);
 void cpu_init_idt(void);
-void update_descriptor(void *, void *);
 
 #if !defined(XEN)
 void idt_init(void);
@@ -256,8 +246,9 @@ void idt_vec_free(int);
 #endif
 
 struct lwp;
-void cpu_fsgs_zero(struct lwp *);
-void cpu_fsgs_reload(struct lwp *, int, int);
+int memseg_baseaddr(struct lwp *, uint64_t, char *, int, uint64_t *);
+int valid_user_selector(struct lwp *, uint64_t, char *, int);
+
 
 #endif /* _KERNEL */
 
@@ -357,9 +348,7 @@ void cpu_fsgs_reload(struct lwp *, int, int);
 #define GPNPBIOSTRAMP_SEL 13
 #define GUCODE32_SEL	14
 #define GUDATA32_SEL	15
-#define GUFS_SEL	16	/* 32-bit Per-thread %fs */
-#define GUGS_SEL	17	/* 32-bit Per-thread %gs */
-#define NGDT_MEM 18
+#define NGDT_MEM 16
 
 #define	GLDT_SEL	0	/* Default LDT descriptor */
 #define NGDT_SYS	1
@@ -395,10 +384,6 @@ void cpu_fsgs_reload(struct lwp *, int, int);
      ((s) & 0xffff) == LSEL(LUDATA32_SEL, SEL_UPL))
 #define VALID_USER_CSEL32(s) \
     ((s) == GSEL(GUCODE32_SEL, SEL_UPL) || (s) == LSEL(LUCODE32_SEL, SEL_UPL))
-#define VALID_USER_FSEL32(s) \
-    (((s) & 0xffff) == GSEL(GUFS_SEL, SEL_UPL))
-#define VALID_USER_GSEL32(s) \
-    (((s) & 0xffff) == GSEL(GUGS_SEL, SEL_UPL))
 
 #define VALID_USER_CSEL(s) \
     ((s) == GSEL(GUCODE_SEL, SEL_UPL) || (s) == LSEL(LUCODE_SEL, SEL_UPL))

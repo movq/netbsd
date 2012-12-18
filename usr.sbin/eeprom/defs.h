@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.13 2009/04/29 09:13:58 nakayama Exp $	*/
+/*	$NetBSD: defs.h,v 1.11 2008/04/28 20:24:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  * the function that handles that value.
  */
 struct	keytabent {
-	const char *kt_keyword;		/* keyword for this entry */
+	char	*kt_keyword;		/* keyword for this entry */
 	u_int	kt_offset;		/* offset into prom of value */
 	void	(*kt_handler) (struct keytabent *, char *);
 					/* handler function for this entry */
@@ -71,7 +71,7 @@ struct	keytabent {
  * vice-versa.
  */
 struct	strvaltabent {
-	const char *sv_str;		/* the string ... */
+	char	*sv_str;		/* the string ... */
 	u_char	sv_val;			/* ... and the value */
 };
 
@@ -83,7 +83,7 @@ struct	opiocdesc;
  * `just print' or don't know how to deal with.
  */
 struct	extabent {
-	const char *ex_keyword;		/* keyword for this entry */
+	char	*ex_keyword;		/* keyword for this entry */
 	void	(*ex_handler) (struct extabent *,
 		    struct opiocdesc *, char *);
 					/* handler function for this entry */
@@ -92,7 +92,7 @@ struct	extabent {
 
 #ifdef USE_OPENFIRM
 struct	extabent {
-	const char *ex_keyword;		/* keyword for this entry */
+	char	*ex_keyword;		/* keyword for this entry */
 	void	(*ex_handler) (struct extabent *,
 		    struct ofiocdesc *, char *);
 					/* handler function for this entry */
@@ -101,7 +101,7 @@ struct	extabent {
 
 #ifdef USE_PREPNVRAM
 struct	extabent {
-	const char *ex_keyword;		/* keyword for this entry */
+	char	*ex_keyword;		/* keyword for this entry */
 	void	(*ex_handler) (struct extabent *,
 		    struct pnviocdesc *, char *);
 					/* handler function for this entry */

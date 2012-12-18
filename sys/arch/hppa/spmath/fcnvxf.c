@@ -1,4 +1,4 @@
-/*	$NetBSD: fcnvxf.c,v 1.4 2012/02/04 17:03:10 skrll Exp $	*/
+/*	$NetBSD: fcnvxf.c,v 1.3 2005/12/11 12:17:40 christos Exp $	*/
 
 /*	$OpenBSD: fcnvxf.c,v 1.5 2001/03/29 03:58:18 mickey Exp $	*/
 
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fcnvxf.c,v 1.4 2012/02/04 17:03:10 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fcnvxf.c,v 1.3 2005/12/11 12:17:40 christos Exp $");
 
 #include "../spmath/float.h"
 #include "../spmath/sgl_float.h"
@@ -53,8 +53,11 @@ __KERNEL_RCSID(0, "$NetBSD: fcnvxf.c,v 1.4 2012/02/04 17:03:10 skrll Exp $");
  *  Convert single fixed-point to single floating-point format
  */
 int
-sgl_to_sgl_fcnvxf(int *srcptr, sgl_floating_point *dstptr,
-    unsigned int *status)
+sgl_to_sgl_fcnvxf(srcptr,dstptr,status)
+
+int *srcptr;
+sgl_floating_point *dstptr;
+unsigned int *status;
 {
 	register int src, dst_exponent;
 	register unsigned int result = 0;
@@ -120,8 +123,11 @@ sgl_to_sgl_fcnvxf(int *srcptr, sgl_floating_point *dstptr,
  *  Single Fixed-point to Double Floating-point
  */
 int
-sgl_to_dbl_fcnvxf(int *srcptr, dbl_floating_point *dstptr,
-    unsigned int *status)
+sgl_to_dbl_fcnvxf(srcptr,dstptr,status)
+
+int *srcptr;
+dbl_floating_point *dstptr;
+unsigned int *status;
 {
 	register int src, dst_exponent;
 	register unsigned int resultp1 = 0, resultp2 = 0;
@@ -167,8 +173,11 @@ sgl_to_dbl_fcnvxf(int *srcptr, dbl_floating_point *dstptr,
  *  Double Fixed-point to Single Floating-point
  */
 int
-dbl_to_sgl_fcnvxf(dbl_integer *srcptr, sgl_floating_point *dstptr,
-    unsigned int *status)
+dbl_to_sgl_fcnvxf(srcptr,dstptr,status)
+
+dbl_integer *srcptr;
+sgl_floating_point *dstptr;
+unsigned int *status;
 {
 	int dst_exponent, srcp1;
 	unsigned int result = 0, srcp2;
@@ -268,8 +277,11 @@ dbl_to_sgl_fcnvxf(dbl_integer *srcptr, sgl_floating_point *dstptr,
  *  Double Fixed-point to Double Floating-point
  */
 int
-dbl_to_dbl_fcnvxf(dbl_integer *srcptr, dbl_floating_point *dstptr,
-    unsigned int *status)
+dbl_to_dbl_fcnvxf(srcptr,dstptr,status)
+
+dbl_integer *srcptr;
+dbl_floating_point *dstptr;
+unsigned int *status;
 {
 	register int srcp1, dst_exponent;
 	register unsigned int srcp2, resultp1 = 0, resultp2 = 0;

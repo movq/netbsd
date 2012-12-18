@@ -1,4 +1,4 @@
-/*	$NetBSD: display.c,v 1.9 2011/09/06 18:32:03 joerg Exp $	*/
+/*	$NetBSD: display.c,v 1.7 2003/08/07 11:16:04 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)display.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: display.c,v 1.9 2011/09/06 18:32:03 joerg Exp $");
+__RCSID("$NetBSD: display.c,v 1.7 2003/08/07 11:16:04 agc Exp $");
 #endif /* not lint */
 
 /*
@@ -55,7 +55,8 @@ int	curses_initialized = 0;
  * a argument of the form --foo at least once.
  */
 int
-max(int a, int b)
+max(a,b)
+	int a, b;
 {
 
 	return (a > b ? a : b);
@@ -66,7 +67,10 @@ max(int a, int b)
  * characters while we are at it.
  */
 void
-display(xwin_t *win, char *text, int size)
+display(win, text, size)
+	xwin_t *win;
+	char *text;
+	int size;
 {
 	int i;
 	char cch;
@@ -93,7 +97,7 @@ display(xwin_t *win, char *text, int size)
 		 * the line.
 		 */
 		if (*text == win->werase) {
-			int endcol, xcol, j, c;
+			int endcol, xcol, i, c;
 
 			endcol = win->x_col;
 			xcol = endcol - 1;
@@ -110,7 +114,7 @@ display(xwin_t *win, char *text, int size)
 				xcol--;
 			}
 			wmove(win->x_win, win->x_line, xcol + 1);
-			for (j = xcol + 1; j < endcol; j++)
+			for (i = xcol + 1; i < endcol; i++)
 				waddch(win->x_win, ' ');
 			wmove(win->x_win, win->x_line, xcol + 1);
 			getyx(win->x_win, win->x_line, win->x_col);
@@ -159,7 +163,9 @@ display(xwin_t *win, char *text, int size)
  * Read the character at the indicated position in win
  */
 int
-readwin(WINDOW *win, int line, int col)
+readwin(win, line, col)
+	WINDOW *win;
+	int line, col;
 {
 	int oldline, oldcol;
 	int c;
@@ -176,7 +182,9 @@ readwin(WINDOW *win, int line, int col)
  * so that the current position is obvious
  */
 void
-xscroll(xwin_t *win, int flag)
+xscroll(win, flag)
+	xwin_t *win;
+	int flag;
 {
 
 	if (flag == -1) {

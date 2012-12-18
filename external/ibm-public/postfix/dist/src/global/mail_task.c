@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_task.c,v 1.1.1.2 2009/08/31 17:54:01 tron Exp $	*/
+/*	$NetBSD: mail_task.c,v 1.1.1.2.2.3 2011/01/07 01:24:03 riz Exp $	*/
 
 /*++
 /* NAME

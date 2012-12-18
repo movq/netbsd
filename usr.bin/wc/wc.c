@@ -1,4 +1,4 @@
-/*	$NetBSD: wc.c,v 1.35 2011/09/16 15:39:30 joerg Exp $	*/
+/*	$NetBSD: wc.c,v 1.31.4.1 2010/03/06 21:19:11 sborrill Exp $	*/
 
 /*
  * Copyright (c) 1980, 1987, 1991, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1991, 1993\
 #if 0
 static char sccsid[] = "@(#)wc.c	8.2 (Berkeley) 5/2/95";
 #else
-__RCSID("$NetBSD: wc.c,v 1.35 2011/09/16 15:39:30 joerg Exp $");
+__RCSID("$NetBSD: wc.c,v 1.31.4.1 2010/03/06 21:19:11 sborrill Exp $");
 #endif
 #endif /* not lint */
 
@@ -79,9 +79,10 @@ static int 		rval = 0;
 static void	cnt(const char *);
 static void	print_counts(wc_count_t, wc_count_t, wc_count_t, wc_count_t,
 		    const char *);
-__dead static void	usage(void);
+static void	usage(void);
 static size_t	do_mb(wchar_t *, const char *, size_t, mbstate_t *,
 		    size_t *, const char *);
+int	main(int, char *[]);
 
 int
 main(int argc, char *argv[])

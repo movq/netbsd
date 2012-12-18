@@ -1,4 +1,4 @@
-/*	$NetBSD: sdvar.h,v 1.34 2012/02/02 19:43:06 tls Exp $	*/
+/*	$NetBSD: sdvar.h,v 1.31 2008/07/16 18:54:09 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -50,8 +50,10 @@
 #define _DEV_SCSIPI_SDVAR_H_
 
 #include "opt_scsi.h"
-
+#include "rnd.h"
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 #ifndef	SDRETRIES
 #define	SDRETRIES	4
@@ -89,7 +91,11 @@ struct sd_softc {
 	u_int8_t type;
 	char name[16]; /* product name, for default disklabel */
 
-	krndsource_t rnd_source;
+	void *sc_sdhook;		/* our shutdown hook */
+
+#if NRND > 0
+	rndsource_element_t rnd_source;
+#endif
 };
 
 #define	SDGP_RESULT_OK		0	/* parameters obtained */

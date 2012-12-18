@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_lwp.c,v 1.14 2012/07/20 02:27:36 christos Exp $	*/
+/*	$NetBSD: netbsd32_lwp.c,v 1.10 2008/04/29 06:53:02 martin Exp $	*/
 
 /*
  *  Copyright (c) 2005, 2006, 2007 The NetBSD Foundation.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_lwp.c,v 1.14 2012/07/20 02:27:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_lwp.c,v 1.10 2008/04/29 06:53:02 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -53,40 +53,13 @@ netbsd32__lwp_create(struct lwp *l, const struct netbsd32__lwp_create_args *uap,
 		syscallarg(netbsd32_u_long) flags;
 		syscallarg(netbsd32_lwpidp) new_lwp;
 	} */
-	struct proc *p = l->l_proc;
-	ucontext32_t *newuc = NULL;
-	lwpid_t lid;
-	int error;
+	struct sys__lwp_create_args ua;
 
-	KASSERT(p->p_emul->e_ucsize == sizeof(*newuc));
+	NETBSD32TOP_UAP(ucp, const ucontext_t);
+	NETBSD32TO64_UAP(flags);
+	NETBSD32TOP_UAP(new_lwp, lwpid_t);
 
-	newuc = kmem_alloc(sizeof(ucontext_t), KM_SLEEP);
-	error = copyin(SCARG_P32(uap, ucp), newuc, p->p_emul->e_ucsize);
-	if (error)
-		goto fail;
-
-	/* validate the ucontext */
-	if ((newuc->uc_flags & _UC_CPU) == 0) {
-		error = EINVAL;
-		goto fail;
-	}
-	error = cpu_mcontext32_validate(l, &newuc->uc_mcontext);
-	if (error)
-		goto fail;
-
-	error = do_lwp_create(l, newuc, SCARG(uap, flags), &lid);
-	if (error)
-		goto fail;
-
-	/*
-	 * do not free ucontext in case of an error here,
-	 * the lwp will actually run and access it
-	 */
-	return copyout(&lid, SCARG_P32(uap, new_lwp), sizeof(lid));
-
-fail:
-	kmem_free(newuc, sizeof(ucontext_t));
-	return error;
+	return sys__lwp_create(l, &ua, retval);
 }
 
 int
@@ -152,11 +125,10 @@ netbsd32__lwp_setprivate(struct lwp *l, const struct netbsd32__lwp_setprivate_ar
 }
 
 int
-netbsd32____lwp_park50(struct lwp *l,
-    const struct netbsd32____lwp_park50_args *uap, register_t *retval)
+netbsd32__lwp_park(struct lwp *l, const struct netbsd32__lwp_park_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(const netbsd32_timespec50p) ts;
+		syscallarg(const netbsd32_timespecp) ts;
 		syscallarg(lwpid_t) unpark;
 		syscallarg(netbsd32_voidp) hint;
 		syscallarg(netbsd32_voidp) unparkhint;

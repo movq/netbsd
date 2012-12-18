@@ -1,7 +1,7 @@
-/* $NetBSD: acpipmtimer.c,v 1.8 2009/08/18 17:47:46 dyoung Exp $ */
+/* $NetBSD: acpipmtimer.c,v 1.6 2008/04/08 12:07:25 cegger Exp $ */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpipmtimer.c,v 1.8 2009/08/18 17:47:46 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpipmtimer.c,v 1.6 2008/04/08 12:07:25 cegger Exp $");
 
 #include <sys/types.h>
 
@@ -26,16 +26,16 @@ struct hwtc {
 static u_int acpihwtimer_read_safe(struct timecounter *);
 static u_int acpihwtimer_read_fast(struct timecounter *);
 
-acpipmtimer_t
-acpipmtimer_attach(device_t dev,
+int
+acpipmtimer_attach(struct device *dev,
 		   bus_space_tag_t t, bus_space_handle_t h, bus_size_t off,
 		   int flags)
 {
 	struct hwtc *tc;
 
 	tc = malloc(sizeof(struct hwtc), M_DEVBUF, M_WAITOK|M_ZERO);
-	if (tc == NULL)
-		return NULL;
+	if (!tc)
+		return (-1);
 
 	tc->tc.tc_name = device_xname(dev);
 	tc->tc.tc_frequency = ACPI_PM_TIMER_FREQUENCY;
@@ -59,15 +59,7 @@ acpipmtimer_attach(device_t dev,
 	tc_init(&tc->tc);
 	aprint_normal("%s: %d-bit timer\n", tc->tc.tc_name,
 		      (flags & ACPIPMT_32BIT ? 32 : 24));
-	return tc;
-}
-
-int
-acpipmtimer_detach(acpipmtimer_t timer, int flags)
-{
-	struct hwtc *tc = timer;
-
-	return tc_detach(&tc->tc);
+	return (0);
 }
 
 #define r(h) bus_space_read_4(h->t, h->h, h->off)

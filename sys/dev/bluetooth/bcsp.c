@@ -1,4 +1,4 @@
-/*	$NetBSD: bcsp.c,v 1.21 2012/06/02 21:36:43 dsl Exp $	*/
+/*	$NetBSD: bcsp.c,v 1.13 2008/06/12 21:47:11 cegger Exp $	*/
 /*
  * Copyright (c) 2007 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcsp.c,v 1.21 2012/06/02 21:36:43 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcsp.c,v 1.13 2008/06/12 21:47:11 cegger Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -132,7 +132,7 @@ struct bcsp_softc {
 #define	BCSP_ENABLED	(1 << 1)	/* is enabled */
 
 void bcspattach(int);
-static int bcsp_match(device_t, cfdata_t, void *);
+static int bcsp_match(device_t, struct cfdata *, void *);
 static void bcsp_attach(device_t, device_t, void *);
 static int bcsp_detach(device_t, int);
 
@@ -246,7 +246,7 @@ bcspattach(int num __unused)
  */
 /* ARGSUSED */
 static int
-bcsp_match(device_t self __unused, cfdata_t cfdata __unused,
+bcsp_match(device_t self __unused, struct cfdata *cfdata __unused,
 	   void *arg __unused)
 {
 
@@ -300,7 +300,7 @@ bcsp_attach(device_t parent __unused, device_t self, void *aux __unused)
 	}
 	bcsp_node_num = node->sysctl_num;
 	if ((rc = sysctl_createv(&sc->sc_log, 0, NULL, &node,
-	    CTLFLAG_READWRITE, CTLTYPE_BOOL,
+	    CTLFLAG_READWRITE, CTLTYPE_INT,
 	    "muzzled", SYSCTL_DESCR("muzzled for Link-establishment Layer"),
 	    NULL, 0, &sc->sc_le_muzzled,
 	    0, CTL_HW, bcsp_node_num, CTL_CREATE, CTL_EOL)) != 0) {
@@ -373,15 +373,14 @@ bcspopen(dev_t device __unused, struct tty *tp)
 {
 	struct bcsp_softc *sc;
 	device_t dev;
-	cfdata_t cfdata;
+	struct cfdata *cfdata;
 	struct lwp *l = curlwp;		/* XXX */
 	int error, unit, s;
 	static char name[] = "bcsp";
 
-	error = kauth_authorize_device(l->l_cred, KAUTH_DEVICE_BLUETOOTH_BCSP,
-	    KAUTH_ARG(KAUTH_REQ_DEVICE_BLUETOOTH_BCSP_ADD), NULL, NULL, NULL);
-	if (error)
-		return (error);
+	if ((error = kauth_authorize_device_tty(l->l_cred,
+	    KAUTH_GENERIC_ISSUSER, tp)) != 0)
+		return error;
 
 	s = spltty();
 
@@ -404,9 +403,8 @@ bcspopen(dev_t device __unused, struct tty *tp)
 	cfdata->cf_unit = unit;
 	cfdata->cf_fstate = FSTATE_STAR;
 
-	aprint_normal("%s%d at tty major %llu minor %llu",
-	    name, unit, (unsigned long long)major(tp->t_dev),
-	    (unsigned long long)minor(tp->t_dev));
+	aprint_normal("%s%d at tty major %d minor %d",
+	    name, unit, major(tp->t_dev), minor(tp->t_dev));
 	dev = config_attach_pseudo(cfdata);
 	if (dev == NULL) {
 		splx(s);
@@ -436,7 +434,7 @@ static int
 bcspclose(struct tty *tp, int flag __unused)
 {
 	struct bcsp_softc *sc = tp->t_sc;
-	cfdata_t cfdata;
+	struct cfdata *cfdata;
 	int s;
 
 	/* terminate link-establishment */
@@ -999,7 +997,7 @@ bcsp_send_ack_command(struct bcsp_softc *sc)
 }
 
 static __inline struct mbuf *
-bcsp_create_ackpkt(void)
+bcsp_create_ackpkt()
 {
 	struct mbuf *m;
 	bcsp_hdr_t *hdrp;

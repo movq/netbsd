@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_tape.c,v 1.6 2011/07/17 20:54:48 joerg Exp $	*/
+/*	$NetBSD: dev_tape.c,v 1.4 2008/04/28 20:23:39 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -41,6 +41,7 @@
 
 #include <sys/types.h>
 #include <machine/mon.h>
+#include <machine/stdarg.h>
 #include <stand.h>
 
 #include "libsa.h"
@@ -62,6 +63,7 @@ int
 devopen(struct open_file *f, const char *fname,	char **file)
 {
 	struct devsw *dp;
+	int error;
 
 	*file = (char *)fname;
 	dp = &devsw[0];

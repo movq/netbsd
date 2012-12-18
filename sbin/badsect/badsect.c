@@ -1,4 +1,4 @@
-/*	$NetBSD: badsect.c,v 1.32 2009/03/16 12:53:30 lukem Exp $	*/
+/*	$NetBSD: badsect.c,v 1.30 2008/07/20 01:20:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1981, 1983, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1981, 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)badsect.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: badsect.c,v 1.32 2009/03/16 12:53:30 lukem Exp $");
+__RCSID("$NetBSD: badsect.c,v 1.30 2008/07/20 01:20:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -130,8 +130,8 @@ main(int argc, char *argv[])
 	}
 
 	if (dp == NULL)
-		errx(1, "Cannot find dev 0%llo corresponding to %s", 
-		    (long long)stbuf.st_rdev, argv[1]);
+		errx(1, "Cannot find dev 0%o corresponding to %s", 
+		    stbuf.st_rdev, argv[1]);
 
 	/*
 	 * The filesystem is mounted; use the character device instead.
@@ -250,7 +250,7 @@ chkuse(off_t blkno, int cnt)
 static void
 rdfs(off_t bno, size_t size, void *bf)
 {
-	ssize_t n;
+	int n;
 
 	if (lseek(fsi, bno * dev_bsize, SEEK_SET) == -1)
 		err(1, "seek error at block %lld", (long long)bno);
@@ -261,7 +261,7 @@ rdfs(off_t bno, size_t size, void *bf)
 		break;
 
 	default:
-		if ((size_t)n == size)
+		if (n == size)
 			return;
 		errx(1, "incomplete read at block %lld", (long long)bno);
 	}

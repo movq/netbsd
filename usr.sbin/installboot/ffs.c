@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs.c,v 1.29 2010/01/14 16:27:49 tsutsui Exp $	*/
+/*	$NetBSD: ffs.c,v 1.26 2008/10/12 16:03:27 apb Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -34,8 +34,8 @@
 #endif
 
 #include <sys/cdefs.h>
-#if !defined(__lint)
-__RCSID("$NetBSD: ffs.c,v 1.29 2010/01/14 16:27:49 tsutsui Exp $");
+#if defined(__RCSID) && !defined(__lint)
+__RCSID("$NetBSD: ffs.c,v 1.26 2008/10/12 16:03:27 apb Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
@@ -97,7 +97,7 @@ ffs_read_disk_block(ib_params *params, uint64_t blkno, int size, char blk[])
 	assert(size > 0);
 	assert(blk != NULL);
 
-	rv = pread(params->fsfd, blk, size, blkno * params->sectorsize);
+	rv = pread(params->fsfd, blk, size, blkno * DEV_BSIZE);
 	if (rv == -1) {
 		warn("Reading block %llu in `%s'", 
 		    (unsigned long long)blkno, params->filesystem);
@@ -232,7 +232,7 @@ ffs_find_disk_blocks_ufs1(ib_params *params, ino_t ino,
 #endif
 		rv = (*callback)(params, state, 
 		    fsbtodb(fs, blk) + params->fstype->offset,
-		    sblksize(fs, (int64_t)inode->di_size, lblk));
+		    sblksize(fs, inode->di_size, lblk));
 		lblk++;
 		nblk--;
 		if (rv != 1)
@@ -263,7 +263,7 @@ ffs_find_disk_blocks_ufs2(ib_params *params, ino_t ino,
 	char		inodebuf[MAXBSIZE];
 	struct ufs2_dinode	*inode;
 	int		level_i;
-	int64_t		blk, lblk, nblk;
+	int64_t	blk, lblk, nblk;
 	int		rv;
 #define LEVELS 4
 	struct {
@@ -368,7 +368,7 @@ ffs_find_disk_blocks_ufs2(ib_params *params, ino_t ino,
 #endif
 		rv = (*callback)(params, state, 
 		    fsbtodb(fs, blk) + params->fstype->offset,
-		    sblksize(fs, (int64_t)inode->di_size, lblk));
+		    sblksize(fs, inode->di_size, lblk));
 		lblk++;
 		nblk--;
 		if (rv != 1)
@@ -475,10 +475,10 @@ int
 raid_match(ib_params *params)
 {
 	/* XXX Assumes 512 bytes / sector */
-	if (params->sectorsize != 512) {
+	if (DEV_BSIZE != 512) {
 		warnx("Media is %d bytes/sector."
 			"  RAID is only supported on 512 bytes/sector media.",
-			params->sectorsize);
+			DEV_BSIZE);
 		return 0;
 	}
 	return ffs_match_common(params, (off_t) RF_PROTECTED_SECTORS);
@@ -497,7 +497,7 @@ ffs_match_common(ib_params *params, off_t offset)
 
 	fs = (struct fs *)sbbuf;
 	for (i = 0; sblock_try[i] != -1; i++) {
-		loc = sblock_try[i] / params->sectorsize + offset;
+		loc = sblock_try[i] / DEV_BSIZE + offset;
 		if (!ffs_read_disk_block(params, loc, SBLOCKSIZE, sbbuf))
 			continue;
 		switch (fs->fs_magic) {

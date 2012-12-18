@@ -1,4 +1,4 @@
-/*	$NetBSD: ahb.c,v 1.60 2012/10/27 17:18:16 chs Exp $	*/
+/*	$NetBSD: ahb.c,v 1.51 2008/04/28 20:23:48 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahb.c,v 1.60 2012/10/27 17:18:16 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahb.c,v 1.51 2008/04/28 20:23:48 martin Exp $");
 
 #include "opt_ddb.h"
 
@@ -61,6 +61,9 @@ __KERNEL_RCSID(0, "$NetBSD: ahb.c,v 1.60 2012/10/27 17:18:16 chs Exp $");
 #include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
+#include <sys/user.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -86,7 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: ahb.c,v 1.60 2012/10/27 17:18:16 chs Exp $");
 #define AHB_MAXXFER	((AHB_NSEG - 1) << PGSHIFT)
 
 struct ahb_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
@@ -134,10 +137,10 @@ static int	ahb_create_ecbs(struct ahb_softc *, struct ahb_ecb *, int);
 
 static int	ahb_init_ecb(struct ahb_softc *, struct ahb_ecb *);
 
-static int	ahbmatch(device_t, cfdata_t, void *);
-static void	ahbattach(device_t, device_t, void *);
+static int	ahbmatch(struct device *, struct cfdata *, void *);
+static void	ahbattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(ahb, sizeof(struct ahb_softc),
+CFATTACH_DECL(ahb, sizeof(struct ahb_softc),
     ahbmatch, ahbattach, NULL, NULL);
 
 #define	AHB_ABORT_TIMEOUT	2000	/* time to wait for abort (mSec) */
@@ -148,7 +151,7 @@ CFATTACH_DECL_NEW(ahb, sizeof(struct ahb_softc),
  * the actual probe routine to check it out.
  */
 static int
-ahbmatch(device_t parent, cfdata_t match,
+ahbmatch(struct device *parent, struct cfdata *match,
     void *aux)
 {
 	struct eisa_attach_args *ea = aux;
@@ -179,7 +182,7 @@ ahbmatch(device_t parent, cfdata_t match,
  * Attach all the sub-devices we can find
  */
 static void
-ahbattach(device_t parent, device_t self, void *aux)
+ahbattach(struct device *parent, struct device *self, void *aux)
 {
 	struct eisa_attach_args *ea = aux;
 	struct ahb_softc *sc = device_private(self);
@@ -191,8 +194,6 @@ ahbattach(device_t parent, device_t self, void *aux)
 	struct ahb_probe_data apd;
 	struct scsipi_adapter *adapt = &sc->sc_adapter;
 	struct scsipi_channel *chan = &sc->sc_channel;
-
-	sc->sc_dev = self;
 
 	if (!strcmp(ea->ea_idstring, "ADP0000"))
 		model = EISA_PRODUCT_ADP0000;
@@ -223,7 +224,7 @@ ahbattach(device_t parent, device_t self, void *aux)
 	 * Fill in the scsipi_adapter.
 	 */
 	memset(adapt, 0, sizeof(*adapt));
-	adapt->adapt_dev = sc->sc_dev;
+	adapt->adapt_dev = &sc->sc_dev;
 	adapt->adapt_nchannels = 1;
 	/* adapt_openings initialized below */
 	adapt->adapt_max_periph = 4;		/* XXX arbitrary? */
@@ -247,7 +248,7 @@ ahbattach(device_t parent, device_t self, void *aux)
 	}
 
 	if (eisa_intr_map(ec, apd.sc_irq, &ih)) {
-		aprint_error_dev(sc->sc_dev, "couldn't map interrupt (%d)\n",
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt (%d)\n",
 		    apd.sc_irq);
 		return;
 	}
@@ -255,14 +256,14 @@ ahbattach(device_t parent, device_t self, void *aux)
 	sc->sc_ih = eisa_intr_establish(ec, ih, IST_LEVEL, IPL_BIO,
 	    ahbintr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			printf(" at %s", intrstr);
+		printf("\n");
 		return;
 	}
 	if (intrstr != NULL)
-		aprint_normal_dev(sc->sc_dev, "interrupting at %s\n",
+		printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev),
 		    intrstr);
 
 	/*
@@ -288,7 +289,7 @@ ahb_send_mbox(struct ahb_softc *sc, int opcode, struct ahb_ecb *ecb)
 		delay(10);
 	}
 	if (!wait) {
-		printf("%s: board not responding\n", device_xname(sc->sc_dev));
+		printf("%s: board not responding\n", device_xname(&sc->sc_dev));
 		Debugger();
 	}
 
@@ -323,7 +324,7 @@ ahb_send_immed(struct ahb_softc *sc, u_int32_t cmd, struct ahb_ecb *ecb)
 		delay(10);
 	}
 	if (!wait) {
-		printf("%s: board not responding\n", device_xname(sc->sc_dev));
+		printf("%s: board not responding\n", device_xname(&sc->sc_dev));
 		Debugger();
 	}
 
@@ -351,7 +352,7 @@ ahbintr(void *arg)
 	u_int32_t mboxval;
 
 #ifdef	AHBDEBUG
-	printf("%s: ahbintr ", device_xname(sc->sc_dev));
+	printf("%s: ahbintr ", device_xname(&sc->sc_dev));
 #endif /* AHBDEBUG */
 
 	if ((bus_space_read_1(iot, ioh, G2STAT) & G2STAT_INT_PEND) == 0)
@@ -379,7 +380,7 @@ ahbintr(void *arg)
 		case AHB_ECB_ERR:
 			ecb = ahb_ecb_phys_kv(sc, mboxval);
 			if (!ecb) {
-				aprint_error_dev(sc->sc_dev, "BAD ECB RETURNED!\n");
+				aprint_error_dev(&sc->sc_dev, "BAD ECB RETURNED!\n");
 				goto next;	/* whatever it was, it'll timeout */
 			}
 			break;
@@ -396,7 +397,7 @@ ahbintr(void *arg)
 			break;
 
 		default:
-			aprint_error_dev(sc->sc_dev, "unexpected interrupt %x\n",
+			aprint_error_dev(&sc->sc_dev, "unexpected interrupt %x\n",
 			    ahbstat);
 			goto next;
 		}
@@ -447,7 +448,7 @@ ahb_init_ecb(struct ahb_softc *sc, struct ahb_ecb *ecb)
 	error = bus_dmamap_create(dmat, AHB_MAXXFER, AHB_NSEG, AHB_MAXXFER,
 	    0, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW, &ecb->dmamap_xfer);
 	if (error) {
-		aprint_error_dev(sc->sc_dev, "can't create ecb dmamap_xfer\n");
+		aprint_error_dev(&sc->sc_dev, "can't create ecb dmamap_xfer\n");
 		return (error);
 	}
 
@@ -470,11 +471,11 @@ ahb_create_ecbs(struct ahb_softc *sc, struct ahb_ecb *ecbstore, int count)
 	struct ahb_ecb *ecb;
 	int i, error;
 
-	memset(ecbstore, 0, sizeof(struct ahb_ecb) * count);
+	bzero(ecbstore, sizeof(struct ahb_ecb) * count);
 	for (i = 0; i < count; i++) {
 		ecb = &ecbstore[i];
 		if ((error = ahb_init_ecb(sc, ecb)) != 0) {
-			aprint_error_dev(sc->sc_dev, "unable to initialize ecb, error = %d\n",
+			aprint_error_dev(&sc->sc_dev, "unable to initialize ecb, error = %d\n",
 			    error);
 			goto out;
 		}
@@ -557,7 +558,7 @@ ahb_done(struct ahb_softc *sc, struct ahb_ecb *ecb)
 	 * into the xfer and call whoever started it
 	 */
 	if ((ecb->flags & ECB_ALLOC) == 0) {
-		aprint_error_dev(sc->sc_dev, "exiting ecb not allocated!\n");
+		aprint_error_dev(&sc->sc_dev, "exiting ecb not allocated!\n");
 		Debugger();
 	}
 	if (ecb->flags & ECB_IMMED) {
@@ -573,7 +574,7 @@ ahb_done(struct ahb_softc *sc, struct ahb_ecb *ecb)
 				break;
 			default:	/* Other scsi protocol messes */
 				printf("%s: host_stat %x\n",
-				    device_xname(sc->sc_dev), ecb->ecb_status.host_stat);
+				    device_xname(&sc->sc_dev), ecb->ecb_status.host_stat);
 				xs->error = XS_DRIVER_STUFFUP;
 			}
 		} else if (ecb->ecb_status.target_stat != SCSI_OK) {
@@ -589,7 +590,7 @@ ahb_done(struct ahb_softc *sc, struct ahb_ecb *ecb)
 				break;
 			default:
 				printf("%s: target_stat %x\n",
-				    device_xname(sc->sc_dev), ecb->ecb_status.target_stat);
+				    device_xname(&sc->sc_dev), ecb->ecb_status.target_stat);
 				xs->error = XS_DRIVER_STUFFUP;
 			}
 		} else
@@ -704,14 +705,14 @@ ahb_init(struct ahb_softc *sc)
 	 */
 	if ((error = bus_dmamem_alloc(sc->sc_dmat, ECBSIZE,
 	    PAGE_SIZE, 0, &seg, 1, &rseg, BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to allocate ecbs, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to allocate ecbs, error = %d\n",
 		    error);
 		return (error);
 	}
 	if ((error = bus_dmamem_map(sc->sc_dmat, &seg, rseg,
 	    ECBSIZE, (void **)&sc->sc_ecbs,
 	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to map ecbs, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to map ecbs, error = %d\n",
 		    error);
 		return (error);
 	}
@@ -721,13 +722,13 @@ ahb_init(struct ahb_softc *sc)
 	 */
 	if ((error = bus_dmamap_create(sc->sc_dmat, ECBSIZE,
 	    1, ECBSIZE, 0, BUS_DMA_NOWAIT, &sc->sc_dmamap_ecb)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to create ecb DMA map, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to create ecb DMA map, error = %d\n",
 		    error);
 		return (error);
 	}
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_dmamap_ecb,
 	    sc->sc_ecbs, ECBSIZE, NULL, BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to load ecb DMA map, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to load ecb DMA map, error = %d\n",
 		    error);
 		return (error);
 	}
@@ -739,11 +740,11 @@ ahb_init(struct ahb_softc *sc)
 	 */
 	i = ahb_create_ecbs(sc, sc->sc_ecbs, AHB_ECB_MAX);
 	if (i == 0) {
-		aprint_error_dev(sc->sc_dev, "unable to create ecbs\n");
+		aprint_error_dev(&sc->sc_dev, "unable to create ecbs\n");
 		return (ENOMEM);
 	} else if (i != AHB_ECB_MAX) {
 		printf("%s: WARNING: only %d of %d ecbs created\n",
-		    device_xname(sc->sc_dev), i, AHB_ECB_MAX);
+		    device_xname(&sc->sc_dev), i, AHB_ECB_MAX);
 	}
 
 	sc->sc_adapter.adapt_openings = i;
@@ -770,7 +771,7 @@ ahb_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 {
 	struct scsipi_xfer *xs;
 	struct scsipi_periph *periph;
-	struct ahb_softc *sc = device_private(chan->chan_adapter->adapt_dev);
+	struct ahb_softc *sc = (void *)chan->chan_adapter->adapt_dev;
 	bus_dma_tag_t dmat = sc->sc_dmat;
 	struct ahb_ecb *ecb;
 	int error, seg, flags, s;
@@ -835,7 +836,7 @@ ahb_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 		 * Put all the arguments for the xfer in the ecb
 		 */
 		if (xs->cmdlen > sizeof(ecb->scsi_cmd)) {
-			aprint_error_dev(sc->sc_dev, "cmdlen %d too large for ECB\n",
+			aprint_error_dev(&sc->sc_dev, "cmdlen %d too large for ECB\n",
 			    xs->cmdlen);
 			xs->error = XS_DRIVER_STUFFUP;
 			goto out_bad;
@@ -843,7 +844,7 @@ ahb_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 		ecb->opcode = ECB_SCSI_OP;
 		ecb->opt1 = ECB_SES /*| ECB_DSB*/ | ECB_ARS;
 		ecb->opt2 = periph->periph_lun | ECB_NRB;
-		memcpy(&ecb->scsi_cmd, xs->cmd,
+		bcopy(xs->cmd, &ecb->scsi_cmd,
 		    ecb->scsi_cmd_length = xs->cmdlen);
 		ecb->sense_ptr = sc->sc_dmamap_ecb->dm_segs[0].ds_addr +
 		    AHB_ECB_OFF(ecb) + offsetof(struct ahb_ecb, ecb_sense);
@@ -881,7 +882,7 @@ ahb_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 
 			default:
 				xs->error = XS_DRIVER_STUFFUP;
-				aprint_error_dev(sc->sc_dev, "error %d loading DMA map\n",
+				aprint_error_dev(&sc->sc_dev, "error %d loading DMA map\n",
 				    error);
  out_bad:
 				ahb_free_ecb(sc, ecb);
@@ -979,7 +980,7 @@ ahb_timeout(void *arg)
 	struct scsipi_xfer *xs = ecb->xs;
 	struct scsipi_periph *periph = xs->xs_periph;
 	struct ahb_softc *sc =
-	    device_private(periph->periph_channel->chan_adapter->adapt_dev);
+	    (void *)periph->periph_channel->chan_adapter->adapt_dev;
 	int s;
 
 	scsipi_printaddr(periph);

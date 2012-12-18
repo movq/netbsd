@@ -1,4 +1,4 @@
-/*	$NetBSD: md4c.c,v 1.5 2012/03/20 16:21:41 matt Exp $	*/
+/*	$NetBSD: md4c.c,v 1.3 2008/02/16 17:37:13 apb Exp $	*/
 
 /*
  * This file is derived from the RSA Data Security, Inc. MD4 Message-Digest
@@ -31,7 +31,7 @@
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: md4c.c,v 1.5 2012/03/20 16:21:41 matt Exp $");
+__RCSID("$NetBSD: md4c.c,v 1.3 2008/02/16 17:37:13 apb Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -76,10 +76,10 @@ typedef uint32_t UINT4;
 #define S33 11
 #define S34 15
 
-static void MD4Transform(UINT4 [4], const unsigned char [64]);
+static void MD4Transform __P((UINT4 [4], const unsigned char [64]));
 
-static void Encode(unsigned char *, UINT4 *, unsigned int);
-static void Decode(UINT4 *, const unsigned char *, unsigned int);
+static void Encode __P((unsigned char *, UINT4 *, unsigned int));
+static void Decode __P((UINT4 *, const unsigned char *, unsigned int));
 
 static const unsigned char PADDING[64] = {
 	0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -129,7 +129,8 @@ __weak_alias(MD4Transform,_MD4Transform)
  * MD4 initialization. Begins an MD4 operation, writing a new context.
  */
 void
-MD4Init(MD4_CTX *context)		/* context */
+MD4Init(context)
+	MD4_CTX *context;		/* context */
 {
 
 	_DIAGASSERT(context != 0);
@@ -149,9 +150,10 @@ MD4Init(MD4_CTX *context)		/* context */
  * context.
  */
 void
-MD4Update (MD4_CTX *context,		/* context */
-	const unsigned char *input,	/* input block */
-	unsigned int inputLen)		/* length of input block */
+MD4Update (context, input, inputLen)
+	MD4_CTX *context;		/* context */
+	const unsigned char *input;	/* input block */
+	unsigned int inputLen;		/* length of input block */
 {
 	unsigned int i, idx, partLen;
 
@@ -190,8 +192,9 @@ MD4Update (MD4_CTX *context,		/* context */
  * message digest and zeroing the context.
  */
 void
-MD4Final (unsigned char digest[16],	/* message digest */
-	MD4_CTX *context)		/* context */
+MD4Final (digest, context)
+	unsigned char digest[16];	/* message digest */
+	MD4_CTX *context;		/* context */
 {
 	unsigned char bits[8];
 	unsigned int idx, padLen;
@@ -221,7 +224,9 @@ MD4Final (unsigned char digest[16],	/* message digest */
  * MD4 basic transformation.  Transforms state based on block.
  */
 static void
-MD4Transform (UINT4 state[4], const unsigned char block[64])
+MD4Transform (state, block)
+	UINT4 state[4];
+	const unsigned char block[64];
 {
 	UINT4 a = state[0], b = state[1], c = state[2], d = state[3], x[16];
 
@@ -295,7 +300,10 @@ MD4Transform (UINT4 state[4], const unsigned char block[64])
  * a multiple of 4.
  */
 static void
-Encode(unsigned char *output, UINT4 *input, unsigned int len)
+Encode(output, input, len)
+	unsigned char *output;
+	UINT4 *input;
+	unsigned int len;
 {
 	unsigned int i, j;
 
@@ -312,7 +320,10 @@ Encode(unsigned char *output, UINT4 *input, unsigned int len)
  * a multiple of 4.
  */
 static void
-Decode(UINT4 *output, const unsigned char *input, unsigned int len)
+Decode(output, input, len)
+	UINT4 *output;
+	const unsigned char *input;
+	unsigned int len;
 {
 	unsigned int i, j;
 

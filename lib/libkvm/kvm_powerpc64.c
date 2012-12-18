@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_powerpc64.c,v 1.4 2010/09/20 23:23:16 jym Exp $	*/
+/*	$NetBSD: kvm_powerpc64.c,v 1.2 2006/07/05 18:33:18 ross Exp $	*/
 
 /*
  * Copyright (c) 2005 Wasabi Systems, Inc.
@@ -71,7 +71,6 @@
 
 #include <sys/param.h>
 #include <sys/exec.h>
-#include <sys/types.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -91,7 +90,8 @@
 #include <powerpc/oea/pte.h>
 
 void
-_kvm_freevtop(kvm_t *kd)
+_kvm_freevtop(kd)
+	kvm_t *kd;
 {
 	if (kd->vmst != 0)
 		free(kd->vmst);
@@ -99,7 +99,8 @@ _kvm_freevtop(kvm_t *kd)
 
 /*ARGSUSED*/
 int
-_kvm_initvtop(kvm_t *kd)
+_kvm_initvtop(kd)
+	kvm_t *kd;
 {
 
 	return 0;
@@ -113,7 +114,10 @@ _kvm_initvtop(kvm_t *kd)
  * Translate a KVA to a PA
  */
 int
-_kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
+_kvm_kvatop(kd, va, pa)
+	kvm_t *kd;
+	u_long va;
+	u_long *pa;
 {
 	cpu_kcore_hdr_t	*cpu_kh;
 	uint32_t	pvr;
@@ -134,7 +138,9 @@ _kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 }
 
 off_t
-_kvm_pa2off(kvm_t *kd, paddr_t pa)
+_kvm_pa2off(kd, pa)
+	kvm_t *kd;
+	u_long pa;
 {
 	cpu_kcore_hdr_t	*cpu_kh;
 	phys_ram_seg_t	*ram;
@@ -163,7 +169,8 @@ _kvm_pa2off(kvm_t *kd, paddr_t pa)
  * have to deal with these NOT being constants!  (i.e. m68k)
  */
 int
-_kvm_mdopen(kvm_t *kd)
+_kvm_mdopen(kd)
+	kvm_t	*kd;
 {
 	uintptr_t max_uva;
 	extern struct ps_strings *__ps_strings;

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmppc_locore.S,v 1.11 2011/06/20 19:56:11 matt Exp $	*/
+/*	$NetBSD: pmppc_locore.S,v 1.3 2008/02/05 22:31:49 garbled Exp $	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
 /*
@@ -34,6 +34,7 @@
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
+#include "fs_kernfs.h"
 #include "opt_ipkdb.h"
 #include "opt_multiprocessor.h"
 #include "opt_openpic.h"
@@ -43,12 +44,14 @@
 #include <sys/syscall.h>
 
 #include <machine/param.h>
+#include <machine/vmparam.h>
+#include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
+#define _NOREGNAMES
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
-#include <powerpc/oea/spr.h>
 #include <powerpc/oea/hid.h>
 
 #include "ksyms.h"
@@ -65,6 +68,8 @@ GLOBAL(startsym)
 	.long	0			/* start symbol table */
 GLOBAL(endsym)
 	.long	0			/* end symbol table */
+GLOBAL(proc0paddr)
+	.long	0			/* proc0 p_addr */
 GLOBAL(oeacpufeat)
 	.long	0			/* cpu features */
 /*
@@ -97,7 +102,7 @@ __start:
 	lis	4,_C_LABEL(end)@ha
 	addi	4,4,_C_LABEL(end)@l
 
-	INIT_CPUINFO(4,1,9,5)
+	INIT_CPUINFO(4,1,9,0)
 
 	lis	3,__start@ha
 	addi	3,3,__start@l
@@ -139,7 +144,7 @@ _C_LABEL(disable_intr):
 #include <powerpc/powerpc/locore_subr.S>
 
 /*
- * Include common trap / exception code
+ * Include common trap / execption code
  */
 #include <powerpc/powerpc/trap_subr.S>
 

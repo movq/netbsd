@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_time.c,v 1.42 2012/10/02 01:44:28 christos Exp $	*/
+/*	$NetBSD: netbsd32_time.c,v 1.34 2008/07/15 16:18:08 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_time.c,v 1.42 2012/10/02 01:44:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_time.c,v 1.34 2008/07/15 16:18:08 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ntp.h"
@@ -40,6 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_time.c,v 1.42 2012/10/02 01:44:28 christos 
 #include <sys/time.h>
 #include <sys/timex.h>
 #include <sys/timevar.h>
+#include <sys/timetc.h>
 #include <sys/proc.h>
 #include <sys/pool.h>
 #include <sys/resourcevar.h>
@@ -53,8 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_time.c,v 1.42 2012/10/02 01:44:28 christos 
 #ifdef NTP
 
 int
-netbsd32___ntp_gettime50(struct lwp *l, 
-    const struct netbsd32___ntp_gettime50_args *uap, register_t *retval)
+netbsd32_ntp_gettime(struct lwp *l, const struct netbsd32_ntp_gettime_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(netbsd32_ntptimevalp_t) ntvp;
@@ -80,37 +80,6 @@ netbsd32___ntp_gettime50(struct lwp *l,
 
 	return (error);
 }
-
-#ifdef COMPAT_50
-int
-compat_50_netbsd32_ntp_gettime(struct lwp *l, 
-    const struct compat_50_netbsd32_ntp_gettime_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(netbsd32_ntptimeval50p_t) ntvp;
-	} */
-	struct netbsd32_ntptimeval50 ntv32;
-	struct ntptimeval ntv;
-	int error = 0;
-
-	if (SCARG_P32(uap, ntvp)) {
-		ntp_gettime(&ntv);
-
-		ntv32.time.tv_sec = (int32_t)ntv.time.tv_sec;
-		ntv32.time.tv_nsec = ntv.time.tv_nsec;
-		ntv32.maxerror = (netbsd32_long)ntv.maxerror;
-		ntv32.esterror = (netbsd32_long)ntv.esterror;
-		ntv32.tai = (netbsd32_long)ntv.tai;
-		ntv32.time_state = ntv.time_state;
-		error = copyout(&ntv32, SCARG_P32(uap, ntvp), sizeof(ntv32));
-	}
-	if (!error) {
-		*retval = ntp_timestatus();
-	}
-
-	return (error);
-}
-#endif
 
 #ifdef COMPAT_30
 int
@@ -176,10 +145,33 @@ netbsd32_ntp_adjtime(struct lwp *l, const struct netbsd32_ntp_adjtime_args *uap,
 	}
 	return error;
 }
+#else /* !NTP */
+int
+netbsd32_ntp_gettime(struct lwp *l, const struct netbsd32_ntp_gettime_args *uap, register_t *retval)
+{
+
+	return (ENOSYS);
+}
+
+#ifdef COMPAT_30
+int
+compat_30_netbsd32_ntp_gettime(struct lwp *l, const struct compat_30_netbsd32_ntp_gettime_args *uap, register_t *retval)
+{
+
+	return (ENOSYS);
+}
+#endif
+
+int
+netbsd32_ntp_adjtime(struct lwp *l, const struct netbsd32_ntp_adjtime_args *uap, register_t *retval)
+{
+
+	return (ENOSYS);
+}
 #endif /* NTP */
 
 int
-netbsd32___setitimer50(struct lwp *l, const struct netbsd32___setitimer50_args *uap, register_t *retval)
+netbsd32_setitimer(struct lwp *l, const struct netbsd32_setitimer_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) which;
@@ -189,7 +181,7 @@ netbsd32___setitimer50(struct lwp *l, const struct netbsd32___setitimer50_args *
 	struct proc *p = l->l_proc;
 	struct netbsd32_itimerval s32it, *itv32;
 	int which = SCARG(uap, which);
-	struct netbsd32___getitimer50_args getargs;
+	struct netbsd32_getitimer_args getargs;
 	struct itimerval aitv;
 	int error;
 
@@ -204,7 +196,7 @@ netbsd32___setitimer50(struct lwp *l, const struct netbsd32___setitimer50_args *
 	if (SCARG_P32(uap, oitv) != 0) {
 		SCARG(&getargs, which) = which;
 		SCARG(&getargs, itv) = SCARG(uap, oitv);
-		if ((error = netbsd32___getitimer50(l, &getargs, retval)) != 0)
+		if ((error = netbsd32_getitimer(l, &getargs, retval)) != 0)
 			return (error);
 	}
 	if (itv32 == 0)
@@ -214,7 +206,7 @@ netbsd32___setitimer50(struct lwp *l, const struct netbsd32___setitimer50_args *
 }
 
 int
-netbsd32___getitimer50(struct lwp *l, const struct netbsd32___getitimer50_args *uap, register_t *retval)
+netbsd32_getitimer(struct lwp *l, const struct netbsd32_getitimer_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) which;
@@ -234,7 +226,7 @@ netbsd32___getitimer50(struct lwp *l, const struct netbsd32___getitimer50_args *
 }
 
 int
-netbsd32___gettimeofday50(struct lwp *l, const struct netbsd32___gettimeofday50_args *uap, register_t *retval)
+netbsd32_gettimeofday(struct lwp *l, const struct netbsd32_gettimeofday_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(netbsd32_timevalp_t) tp;
@@ -265,7 +257,7 @@ netbsd32___gettimeofday50(struct lwp *l, const struct netbsd32___gettimeofday50_
 }
 
 int
-netbsd32___settimeofday50(struct lwp *l, const struct netbsd32___settimeofday50_args *uap, register_t *retval)
+netbsd32_settimeofday(struct lwp *l, const struct netbsd32_settimeofday_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const netbsd32_timevalp_t) tv;
@@ -299,7 +291,7 @@ netbsd32___settimeofday50(struct lwp *l, const struct netbsd32___settimeofday50_
 }
 
 int
-netbsd32___adjtime50(struct lwp *l, const struct netbsd32___adjtime50_args *uap, register_t *retval)
+netbsd32_adjtime(struct lwp *l, const struct netbsd32_adjtime_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const netbsd32_timevalp_t) delta;
@@ -347,117 +339,127 @@ netbsd32___adjtime50(struct lwp *l, const struct netbsd32___adjtime50_args *uap,
 }
 
 int
-netbsd32___clock_gettime50(struct lwp *l, const struct netbsd32___clock_gettime50_args *uap, register_t *retval)
+netbsd32_clock_gettime(struct lwp *l, const struct netbsd32_clock_gettime_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(netbsd32_clockid_t) clock_id;
 		syscallarg(netbsd32_timespecp_t) tp;
 	} */
-	int error;
+	clockid_t clock_id;
 	struct timespec ats;
 	struct netbsd32_timespec ts32;
 
-	error = clock_gettime1(SCARG(uap, clock_id), &ats);
-	if (error != 0)
-		return error;
+	clock_id = SCARG(uap, clock_id);
+	if (clock_id != CLOCK_REALTIME)
+		return (EINVAL);
 
+	nanotime(&ats);
 	netbsd32_from_timespec(&ats, &ts32);
+
 	return copyout(&ts32, SCARG_P32(uap, tp), sizeof(ts32));
 }
 
 int
-netbsd32___clock_settime50(struct lwp *l, const struct netbsd32___clock_settime50_args *uap, register_t *retval)
+netbsd32_clock_settime(struct lwp *l, const struct netbsd32_clock_settime_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(netbsd32_clockid_t) clock_id;
 		syscallarg(const netbsd32_timespecp_t) tp;
 	} */
 	struct netbsd32_timespec ts32;
+	clockid_t clock_id;
 	struct timespec ats;
 	int error;
+
+	clock_id = SCARG(uap, clock_id);
+	if (clock_id != CLOCK_REALTIME)
+		return (EINVAL);
 
 	if ((error = copyin(SCARG_P32(uap, tp), &ts32, sizeof(ts32))) != 0)
 		return (error);
 
 	netbsd32_to_timespec(&ts32, &ats);
-	return clock_settime1(l->l_proc, SCARG(uap, clock_id), &ats, true);
+	return settime(l->l_proc, &ats);
 }
 
 int
-netbsd32___clock_getres50(struct lwp *l, const struct netbsd32___clock_getres50_args *uap, register_t *retval)
+netbsd32_clock_getres(struct lwp *l, const struct netbsd32_clock_getres_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(netbsd32_clockid_t) clock_id;
 		syscallarg(netbsd32_timespecp_t) tp;
 	} */
 	struct netbsd32_timespec ts32;
+	clockid_t clock_id;
 	struct timespec ts;
 	int error = 0;
 
-	error = clock_getres1(SCARG(uap, clock_id), &ts);
-	if (error != 0)
-		return error;
+	clock_id = SCARG(uap, clock_id);
+	if (clock_id != CLOCK_REALTIME)
+		return (EINVAL);
 
 	if (SCARG_P32(uap, tp)) {
+		ts.tv_sec = 0;
+		ts.tv_nsec = 1000000000 / hz;
+
 		netbsd32_from_timespec(&ts, &ts32);
-		error = copyout(&ts32, SCARG_P32(uap, tp), sizeof(ts32));
+		error = copyout(&ts, SCARG_P32(uap, tp), sizeof(ts));
 	}
 
 	return error;
 }
 
 int
-netbsd32___nanosleep50(struct lwp *l, const struct netbsd32___nanosleep50_args *uap, register_t *retval)
+netbsd32_nanosleep(struct lwp *l, const struct netbsd32_nanosleep_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const netbsd32_timespecp_t) rqtp;
 		syscallarg(netbsd32_timespecp_t) rmtp;
 	} */
+	static int nanowait;
 	struct netbsd32_timespec ts32;
-	struct timespec rqt, rmt;
-	int error, error1;
+	struct timespec rqt, ctime, rmt;
+	int error, timo;
 
 	error = copyin(SCARG_P32(uap, rqtp), &ts32, sizeof(ts32));
 	if (error)
 		return (error);
+
 	netbsd32_to_timespec(&ts32, &rqt);
+	if (itimespecfix(&rqt))
+		return (EINVAL);
 
-	error = nanosleep1(l, CLOCK_MONOTONIC, 0, &rqt,
-	    SCARG_P32(uap, rmtp) ? &rmt : NULL);
-	if (SCARG_P32(uap, rmtp) == NULL || (error != 0 && error != EINTR))
-		return error;
+	getnanotime(&ctime);
+	timespecadd(&rqt, &ctime, &rqt);
+	timo = tshzto(&rqt);
+	/*
+	 * Avoid inadvertantly sleeping forever
+	 */
+	if (timo == 0)
+		timo = 1;
 
-	netbsd32_from_timespec(&rmt, &ts32);
-	error1 = copyout(&ts32, SCARG_P32(uap, rmtp), sizeof(ts32));
-	return error1 ? error1 : error;
-}
+	error = tsleep(&nanowait, PWAIT | PCATCH, "nanosleep", timo);
+	if (error == ERESTART)
+		error = EINTR;
+	if (error == EWOULDBLOCK)
+		error = 0;
 
-int
-netbsd32_clock_nanosleep(struct lwp *l, const struct netbsd32_clock_nanosleep_args *uap, register_t *retval)
-{
-	/* {
-		clockid_t clock_id;
-		int flags;
-		syscallarg(const netbsd32_timespecp_t) rqtp;
-		syscallarg(netbsd32_timespecp_t) rmtp;
-	} */
-	struct netbsd32_timespec ts32;
-	struct timespec rqt, rmt;
-	int error, error1;
+	if (SCARG_P32(uap, rmtp)) {
+		int error1;
 
-	error = copyin(SCARG_P32(uap, rqtp), &ts32, sizeof(ts32));
-	if (error)
-		return (error);
-	netbsd32_to_timespec(&ts32, &rqt);
+		getnanotime(&rmt);
 
-	error = nanosleep1(l, SCARG(uap, clock_id), SCARG(uap, flags),
-	    &rqt, SCARG_P32(uap, rmtp) ? &rmt : NULL);
-	if (SCARG_P32(uap, rmtp) == NULL || (error != 0 && error != EINTR))
-		return error;
+		timespecsub(&rqt, &rmt, &rmt);
+		if (rmt.tv_sec < 0)
+			timespecclear(&rmt);
 
-	netbsd32_from_timespec(&rmt, &ts32);
-	error1 = copyout(&ts32, SCARG_P32(uap, rmtp), sizeof(ts32));
-	return error1 ? error1 : error;
+		netbsd32_from_timespec(&rmt, &ts32);
+		error1 = copyout(&ts32, SCARG_P32(uap,rmtp), sizeof(ts32));
+		if (error1)
+			return (error1);
+	}
+
+	return error;
 }
 
 static int
@@ -502,7 +504,7 @@ netbsd32_timer_delete(struct lwp *l, const struct netbsd32_timer_delete_args *ua
 }
 
 int
-netbsd32___timer_settime50(struct lwp *l, const struct netbsd32___timer_settime50_args *uap, register_t *retval)
+netbsd32_timer_settime(struct lwp *l, const struct netbsd32_timer_settime_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(netbsd32_timer_t) timerid;
@@ -535,7 +537,7 @@ netbsd32___timer_settime50(struct lwp *l, const struct netbsd32___timer_settime5
 }
 
 int
-netbsd32___timer_gettime50(struct lwp *l, const struct netbsd32___timer_gettime50_args *uap, register_t *retval)
+netbsd32_timer_gettime(struct lwp *l, const struct netbsd32_timer_gettime_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(netbsd32_timer_t) timerid;

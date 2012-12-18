@@ -1,4 +1,4 @@
-.\"	$NetBSD: dk.4,v 1.6 2012/07/13 22:58:45 abs Exp $
+.\"	$NetBSD: dk.4,v 1.4 2008/04/30 13:10:53 martin Exp $
 .\"
 .\" Copyright (c) 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -29,12 +29,12 @@
 .\"
 .\" Jonathan A. Kollasch used vnd(4) as the template for this man page.
 .\"
-.Dd May 19, 2010
+.Dd August 13, 2006
 .Dt DK 4
 .Os
 .Sh NAME
 .Nm dk
-.Nd disk partition
+.Nd Disk partition
 .Pq wedge
 driver
 .Sh SYNOPSIS
@@ -45,9 +45,7 @@ driver
 .Sh DESCRIPTION
 The
 .Nm
-driver provides a disk-like interface, or
-.Em wedge ,
-to an area of a physical disk.
+driver provides a disk-like interface to an area of a physical disk.
 Wedges may be configured manually with
 .Xr dkctl 8
 or automatically by the kernel upon the attachment of the physical disk.
@@ -72,11 +70,10 @@ device special files.
 .El
 .Sh SEE ALSO
 .Xr config 1 ,
+.Xr MAKEDEV 8 ,
 .Xr disklabel 8 ,
 .Xr dkctl 8 ,
-.Xr fdisk 8 ,
-.Xr gpt 8 ,
-.Xr MAKEDEV 8
+.Xr fdisk 8
 .Sh HISTORY
 The
 .Nm

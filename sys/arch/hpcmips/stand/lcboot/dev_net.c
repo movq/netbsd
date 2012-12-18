@@ -1,4 +1,4 @@
-/* $NetBSD: dev_net.c,v 1.4 2011/07/17 20:54:41 joerg Exp $ */
+/* $NetBSD: dev_net.c,v 1.3 2005/12/11 12:17:34 christos Exp $ */
 
 /*
  * Copyright (c) 2003 Naoto Shimazaki.
@@ -26,7 +26,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dev_net.c,v 1.4 2011/07/17 20:54:41 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dev_net.c,v 1.3 2005/12/11 12:17:34 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -35,6 +35,7 @@ __KERNEL_RCSID(0, "$NetBSD: dev_net.c,v 1.4 2011/07/17 20:54:41 joerg Exp $");
 #include <lib/libsa/stand.h>
 #include <lib/libsa/bootp.h>
 #include <lib/libkern/libkern.h>
+#include <machine/stdarg.h>
 
 #include "extern.h"
 

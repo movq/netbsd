@@ -1,10 +1,5 @@
-#	$NetBSD: Makefile,v 1.114 2012/08/23 21:21:15 joerg Exp $
-#
-# NOTE: when changing ld.so, ensure that ldd still compiles.
-#
-
-WARNS?=4
-
+#	$NetBSD: Makefile,v 1.87.2.2 2012/03/17 18:28:33 bouyer Exp $
+  
 # This needs to be before bsd.init.mk
 .if defined(BSD_MK_COMPAT_FILE)
 .include <${BSD_MK_COMPAT_FILE}>
@@ -13,7 +8,7 @@ WARNS?=4
 # We are not building this with PIE
 PIE_CFLAGS=
 PIE_LDFLAGS=
-.include <bsd.init.mk>			# for MKPIC definition
+.include <bsd.init.mk>			# for OBJECT_FMT definition
 .include <bsd.shlib.mk>			# for SHLINKINSTALLDIR definition
 
 .if defined(LDELFSO_MACHINE_CPU) && !empty(LDELFSO_MACHINE_CPU) && \
@@ -36,14 +31,10 @@ M=		${.CURDIR}/arch/${ARCHSUBDIR}
      (${MACHINE_ARCH} == "sparc64") ||					\
      (${MACHINE_ARCH} == "x86_64") ||					\
      (${MACHINE_ARCH} == "vax")) &&					\
-    ${MKPIC} != "no"
+    ${OBJECT_FMT} == "ELF" && ${MKPIC} != "no"
 
-LDFLAGS+=	${${ACTIVE_CC} == "clang":? -Wl,-Bsymbolic : -symbolic} \
-		-shared -nostartfiles -nodefaultlibs
+LDFLAGS+=	-shared -symbolic -nostartfiles
 LDFLAGS+=	-Wl,-static
-LDFLAGS+=	-Wl,--warn-shared-textrel
-
-COPTS+=		-fvisibility=hidden
 
 # Adds SRCS, CPPFLAGS, LDFLAGS, etc.  Must go first so MD startup source
 # is first.
@@ -62,8 +53,7 @@ PROG=		ld.elf_so
 CLIBOBJ!=	cd ${NETBSDSRCDIR}/lib/libc && ${PRINTOBJDIR}
 
 SRCS+=		rtld.c reloc.c symbol.c xmalloc.c xprintf.c debug.c \
-		map_object.c load.c search.c headers.c paths.c expand.c \
-		tls.c symver.c diagassert.c
+		map_object.c load.c search.c headers.c paths.c expand.c
 
 .if ${USE_FORT} == "yes"
 .PATH.c: ${NETBSDSRCDIR}/lib/libc/misc
@@ -73,18 +63,10 @@ SRCS+=		stack_protector.c
 .PATH.c: ${NETBSDSRCDIR}/lib/libc/stdlib
 SRCS+=		exit.c
 
-errlist_concat.h: ${NETBSDSRCDIR}/lib/libc/gen/errlist.awk ${NETBSDSRCDIR}/sys/sys/errno.h
-	${TOOL_AWK} -v concat=1 -f ${.ALLSRC} > ${.TARGET}.tmp && \
-	mv -f ${.TARGET}.tmp ${.TARGET}
-
-xprintf.c: errlist_concat.h
-
-CLEANFILES+=	errlist_concat.h
-
 BINDIR=		${SHLINKINSTALLDIR}
 
 CPPFLAGS+=	-DLIBDIR=\"${LIBDIR}\" -D_PATH_RTLD=\"${BINDIR}/${PROG}\"
-CPPFLAGS+=	-I${.CURDIR} -I.
+CPPFLAGS+=	-I${.CURDIR}
 CPPFLAGS+=	-DRTLD_LOADER
 CPPFLAGS+=	-D_RTLD_SOURCE
 CPPFLAGS+=	-DCOMBRELOC
@@ -92,12 +74,7 @@ CPPFLAGS+=	-DCOMBRELOC
 #CPPFLAGS+=	-DRTLD_DEBUG
 #CPPFLAGS+=	-DRTLD_DEBUG_RELOC
 #DBG=		-g
-COPTS=		-O3 -fomit-frame-pointer
-
-.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
-COPTS+=		-mno-3dnow -mno-mmx -mno-sse -mno-sse2 -mno-sse3
-.endif
-
+DBG=		-O3 -fomit-frame-pointer
 
 .if ${SHLIBDIR} != ${LIBDIR}
 CPPFLAGS+=	-DRTLD_DEFAULT_LIBRARY_PATH=\"${SHLIBDIR}:${LIBDIR}\"
@@ -117,12 +94,6 @@ DPADD+=		${CLIBOBJ}/libc_pic.a
 .else
 LDADD+=		-lc
 DPADD+=		${CLIBOBJ}/libc.a
-.endif
-
-.if ${MACHINE_CPU} == "hppa" || ${MACHINE_CPU} == "sh3"
-# for $$divU, $$remU etc. (millicode)
-LDADD+=		-lgcc
-DPADD+=		${LIBGCC}
 .endif
 
 STRIPFLAG=

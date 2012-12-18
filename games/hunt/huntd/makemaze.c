@@ -1,4 +1,4 @@
-/*	$NetBSD: makemaze.c,v 1.8 2011/05/23 22:58:44 joerg Exp $	*/
+/*	$NetBSD: makemaze.c,v 1.4 2004/01/27 20:30:29 jsm Exp $	*/
 /*
  * Copyright (c) 1983-2003, Regents of the University of California.
  * All rights reserved.
@@ -32,26 +32,24 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: makemaze.c,v 1.8 2011/05/23 22:58:44 joerg Exp $");
+__RCSID("$NetBSD: makemaze.c,v 1.4 2004/01/27 20:30:29 jsm Exp $");
 #endif /* not lint */
 
-#include "hunt.h"
+# include	"hunt.h"
 
-#define ISCLEAR(y,x)	(Maze[y][x] == SPACE)
-#define ODD(n)		((n) & 01)
+# define	ISCLEAR(y,x)	(Maze[y][x] == SPACE)
+# define	ODD(n)		((n) & 01)
 
-#if 0
-static int candig(int, int);
-static void dig(int, int);
-#endif
-static void dig_maze(int, int);
-static void remap(void);
+static	int	candig(int, int);
+static	void	dig(int, int);
+static	void	dig_maze(int, int);
+static	void	remap(void);
 
 void
-makemaze(void)
+makemaze()
 {
-	char *sp;
-	int y, x;
+	char	*sp;
+	int	y, x;
 
 	/*
 	 * fill maze with walls
@@ -66,31 +64,30 @@ makemaze(void)
 	remap();
 }
 
-#define NPERM	24
-#define NDIR	4
+# define	NPERM	24
+# define	NDIR	4
 
-#if 0
-static int dirs[NPERM][NDIR] = {
-	{0,1,2,3},	{3,0,1,2},	{0,2,3,1},	{0,3,2,1},
-	{1,0,2,3},	{2,3,0,1},	{0,2,1,3},	{2,3,1,0},
-	{1,0,3,2},	{1,2,0,3},	{3,1,2,0},	{2,0,3,1},
-	{1,3,0,2},	{0,3,1,2},	{1,3,2,0},	{2,0,1,3},
-	{0,1,3,2},	{3,1,0,2},	{2,1,0,3},	{1,2,3,0},
-	{2,1,3,0},	{3,0,2,1},	{3,2,0,1},	{3,2,1,0}
-};
+int	dirs[NPERM][NDIR] = {
+		{0,1,2,3},	{3,0,1,2},	{0,2,3,1},	{0,3,2,1},
+		{1,0,2,3},	{2,3,0,1},	{0,2,1,3},	{2,3,1,0},
+		{1,0,3,2},	{1,2,0,3},	{3,1,2,0},	{2,0,3,1},
+		{1,3,0,2},	{0,3,1,2},	{1,3,2,0},	{2,0,1,3},
+		{0,1,3,2},	{3,1,0,2},	{2,1,0,3},	{1,2,3,0},
+		{2,1,3,0},	{3,0,2,1},	{3,2,0,1},	{3,2,1,0}
+	};
 
-static int incr[NDIR][2] = {
-	{0, 1}, {1, 0}, {0, -1}, {-1, 0}
-};
-
+int	incr[NDIR][2] = {
+		{0, 1}, {1, 0}, {0, -1}, {-1, 0}
+	};
 
 static void
-dig(int y, int x)
+dig(y, x)
+	int	y, x;
 {
-	int *dp;
-	int *ip;
-	int ny, nx;
-	int *endp;
+	int	*dp;
+	int	*ip;
+	int	ny, nx;
+	int	*endp;
 
 	Maze[y][x] = SPACE;			/* Clear this spot */
 	dp = dirs[rand_num(NPERM)];
@@ -109,9 +106,10 @@ dig(int y, int x)
  *	Is it legal to clear this spot?
  */
 static int
-candig(int y, int x)
+candig(y, x)
+	int	y, x;
 {
-	int i;
+	int	i;
 
 	if (ODD(x) && ODD(y))
 		return FALSE;		/* can't touch ODD spots */
@@ -137,18 +135,18 @@ candig(int y, int x)
 
 	return TRUE;			/* OK */
 }
-#endif
 
 void
-dig_maze(int x, int y)
+dig_maze(x, y)
+	int	x, y;
 {
-	int tx, ty;
-	int i, j;
-	int order[4];
-#define MNORTH	0x1
-#define MSOUTH	0x2
-#define MEAST	0x4
-#define MWEST	0x8
+	int	tx, ty;
+	int	i, j;
+	int	order[4];
+#define	MNORTH	0x1
+#define	MSOUTH	0x2
+#define	MEAST	0x4
+#define	MWEST	0x8
 
 	tx = ty = 0;
 	Maze[y][x] = SPACE;
@@ -187,11 +185,11 @@ dig_maze(int x, int y)
 }
 
 void
-remap(void)
+remap()
 {
-	int y, x;
-	char *sp;
-	int stat;
+	int	y, x;
+	char	*sp;
+	int	stat;
 
 	for (y = 0; y < HEIGHT; y++)
 		for (x = 0; x < WIDTH; x++) {
@@ -219,12 +217,12 @@ remap(void)
 				*sp = WALL2;
 				break;
 			  case 0:
-#ifdef RANDOM
+# ifdef RANDOM
 				*sp = DOOR;
-#endif
-#ifdef REFLECT
+# endif
+# ifdef REFLECT
 				*sp = rand_num(2) ? WALL4 : WALL5;
-#endif
+# endif
 				break;
 			  default:
 				*sp = WALL3;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ypserv_proc.c,v 1.16 2011/08/30 17:06:22 plunky Exp $	*/
+/*	$NetBSD: ypserv_proc.c,v 1.12 2007/08/22 16:49:17 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Mats O Jansson
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -28,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypserv_proc.c,v 1.16 2011/08/30 17:06:22 plunky Exp $");
+__RCSID("$NetBSD: ypserv_proc.c,v 1.12 2007/08/22 16:49:17 christos Exp $");
 #endif
 
 #include <sys/stat.h>
@@ -337,7 +342,7 @@ ypproc_all_2_svc(void *argp, struct svc_req *rqstp)
 
 	case 0:
 		/* CHILD: send result, then exit */
-		if (!svc_sendreply(rqstp->rq_xprt, (xdrproc_t)ypdb_xdr_get_all, (void *)k))
+		if (!svc_sendreply(rqstp->rq_xprt, ypdb_xdr_get_all, (void *)k))
 			svcerr_systemerr(rqstp->rq_xprt);
 
 		/* Note: no need to free args; we're exiting. */
@@ -352,7 +357,7 @@ void *
 ypproc_master_2_svc(void *argp, struct svc_req *rqstp)
 {
 	static struct ypresp_master res;
-	static const char *nopeer = "";
+	static char *nopeer = "";
 	struct sockaddr *caller = svc_getrpccaller(rqstp->rq_xprt)->buf;
 	struct ypreq_nokey *k = argp;
 	int secure;
@@ -384,7 +389,7 @@ ypproc_master_2_svc(void *argp, struct svc_req *rqstp)
 	 * xdr_string in ypserv_xdr.c may be a better place?
 	 */
 	if (res.master == NULL)
-		res.master = __UNCONST(nopeer);
+		res.master = nopeer;
 
 	return ((void *)&res);
 }
@@ -476,12 +481,14 @@ ypproc_maplist_2_svc(void *argp, struct svc_req *rqstp)
 		suffix = (char *)&dp->d_name[dp->d_namlen - 3];
 		if (strcmp(suffix, ".db") == 0) {
 			/* Found one. */
-			m = calloc(1, sizeof(struct ypmaplist));
+			m = (struct ypmaplist *)
+			    malloc(sizeof(struct ypmaplist));
 			if (m == NULL) {
 				status = YP_YPERR;
 				goto out;
 			}
 
+			(void)memset(m, 0, sizeof(m));
 			(void)strlcpy(m->ypml_name, dp->d_name,
 			    (size_t)(dp->d_namlen - 2));
 			m->ypml_next = res.list;

@@ -1,4 +1,4 @@
-.\"	$NetBSD: tzset.3,v 1.25 2010/12/17 01:29:45 wiz Exp $
+.\"	$NetBSD: tzset.3,v 1.22 2003/04/16 13:34:58 wiz Exp $
 .Dd April 1, 2001
 .Dt TZSET 3
 .Os
@@ -151,6 +151,7 @@ Each
 .Cm time
 field describes when, in current local time, the change to the other
 time is made.
+.IP
 The format of
 .Fa date
 is one of the following:
@@ -171,7 +172,9 @@ The zero-based Julian day (0\ \*[Le]
 Leap days are counted, and it is possible to refer to
 February 29.
 .Sm off
-.It Cm M Ns Ar m No . Ar n No . Ar d
+.It Xo Cm M Ns Ar m
+.No . Ar n No . Ar d
+.Xc
 .Sm on
 The
 .Ar d Ns 'th
@@ -260,9 +263,7 @@ is absent, UTC leap seconds are loaded from
 .Xr tzfile 5
 .Sh STANDARDS
 The
-.Fn tzset
+tzset()
 function conforms to
 .St -p1003.1-88 .
-.\" @(#)newtzset.3	8.2
-.\" This file is in the public domain, so clarified as of
-.\" 2009-05-17 by Arthur David Olson.
+.\" @(#)newtzset.3	7.5

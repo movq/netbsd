@@ -1,7 +1,7 @@
-/*	$NetBSD: mutex.h,v 1.20 2010/02/08 09:54:27 skrll Exp $	*/
+/*	$NetBSD: mutex.h,v 1.16 2008/04/28 20:24:11 martin Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002, 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -128,8 +128,9 @@
  *	mutex_exit()
  *
  * Two additional stubs may be implemented that handle only the spinlock
- * case, primarily for the scheduler.  __HAVE_SPIN_MUTEX_STUBS should be
- * defined if these are provided:
+ * case, primarily for the scheduler.  These should not be documented for
+ * or used by device drivers.  __HAVE_SPIN_MUTEX_STUBS should be defined
+ * if these are provided:
  *
  *	mutex_spin_enter()
  *	mutex_spin_exit()
@@ -160,12 +161,7 @@ typedef struct kmutex kmutex_t;
 
 #define	MUTEX_BIT_SPIN			0x01
 #define	MUTEX_BIT_WAITERS		0x02
-
-#if defined(LOCKDEBUG)
-#define	MUTEX_BIT_NODEBUG		0x04	/* LOCKDEBUG disabled */
-#else
-#define	MUTEX_BIT_NODEBUG		0x00	/* do nothing */
-#endif	/* LOCKDEBUG */
+#define	MUTEX_BIT_DEBUG			0x04
 
 #define	MUTEX_SPIN_IPL(mtx)		((mtx)->mtx_ipl)
 #define	MUTEX_SPIN_OLDSPL(ci)		((ci)->ci_mtx_oldspl)

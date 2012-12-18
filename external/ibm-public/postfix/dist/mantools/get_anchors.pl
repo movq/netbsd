@@ -3,9 +3,9 @@
 # Copyright (c) 2004 Liviu Daia <Liviu.Daia@imar.ro>
 # All rights reserved.
 #
-# Revision
-# Id
-# Source
+# $Revision: 1.1.1.1.2.3 $
+# $Id: get_anchors.pl,v 1.1.1.1.2.3 2011/01/07 01:23:58 riz Exp $
+# $Source: /home/mike/src/cvs/netbsd/src/external/ibm-public/postfix/dist/mantools/get_anchors.pl,v $
 #
 
 use HTML::Parser;

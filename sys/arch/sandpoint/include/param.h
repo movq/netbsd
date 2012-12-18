@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.5 2011/06/20 06:29:54 matt Exp $	*/
+/*	$NetBSD: param.h,v 1.4 2001/06/21 16:30:05 briggs Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -31,15 +31,20 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef	_KERNEL
+#ifndef	_LOCORE
+#include <machine/cpu.h>
+#endif	/* _LOCORE */
+#endif
+
 /*
  * Machine dependent constants for PowerPC (32-bit only currently)
  */
-#if defined(_KERNEL) && !defined(_MODULE)
+#define	MACHINE		"sandpoint"
 
-#define	MACHINE			"sandpoint"
-#define	KERNBASE		0x3100		/* EXC_AST + 0x100 */
 #define	__NO_FIXED_MSGBUF
 
-#endif /* _KERNEL && !_MODULE */
+#define	KERNBASE	0x3100
 
 #include <powerpc/param.h>
+

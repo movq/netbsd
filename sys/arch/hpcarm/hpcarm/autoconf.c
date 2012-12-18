@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.22 2012/10/27 17:17:52 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.17 2008/06/13 13:24:10 rafal Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -36,31 +36,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.22 2012/10/27 17:17:52 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.17 2008/06/13 13:24:10 rafal Exp $");
 
 #include "opt_md.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/conf.h>
-#include <sys/device.h>
+#include <sys/reboot.h>
 #include <sys/disklabel.h>
-#include <sys/intr.h>
+#include <sys/device.h>
+#include <sys/conf.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
-#include <sys/reboot.h>
-
-#include <uvm/uvm_extern.h>
-
-#include <arm/arm32/machdep.h>
 
 #include <machine/bootconfig.h>
 #include <machine/config_hook.h>
+#include <machine/intr.h>
+#include <arm/arm32/machdep.h>
 
-#include "opt_cputypes.h"
-#if defined(CPU_SA1100) || defined(CPU_SA1110)
 #include "sacom.h"
-#endif
 
 extern dev_t dumpdev;
 
@@ -130,9 +124,9 @@ cpu_rootconf(void)
 	set_root_device();
 
 	printf("boot device: %s\n",
-	    booted_device != NULL ? device_xname(booted_device) : "<unknown>");
+	    booted_device != NULL ? booted_device->dv_xname : "<unknown>");
 #endif
-	rootconf();
+	setroot(booted_device, booted_partition);
 }
 
 
@@ -169,18 +163,16 @@ cpu_configure(void)
 		panic("configure: mainbus not configured");
 
 	/* Debugging information */
-#if defined(DIAGNOSTIC)
-#if defined(CPU_SA1100) || defined(CPU_SA1110)
+#ifdef 	DIAGNOSTIC
 	dump_spl_masks();
 #endif
-#endif	/* DIAGNOSTIC */
 
 	/* Time to start taking interrupts so lets open the flood gates .... */
 	(void)spl0();
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 }
 
@@ -191,20 +183,14 @@ device_register(device_t dev, void *aux)
  * known algorithm unless we see a pressing need otherwise.
  */
 
-#include "biconsdev.h"
-
 #include <dev/cons.h>
 
+cons_decl(com);   
 cons_decl(sacom);
-#define biconscnpollc	nullcnpollc
-cons_decl(bicons);   
 
 struct consdev constab[] = {
 #if (NSACOM > 0)
 	cons_init(sacom),
-#endif
-#if (NBICONSDEV > 0)
-	cons_init(bicons),
 #endif
 	{ NULL },
 };

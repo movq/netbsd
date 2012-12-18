@@ -1,4 +1,4 @@
-/*	$NetBSD: smc91cxxvar.h,v 1.19 2012/10/27 17:18:22 chs Exp $	*/
+/*	$NetBSD: smc91cxxvar.h,v 1.15 2008/04/28 22:00:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -30,10 +30,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "rnd.h"
+
+#if NRND > 0
 #include <sys/rnd.h>
+#endif
 
 struct smc91cxx_softc {
-	device_t sc_dev;		/* generic device glue */
+	struct	device sc_dev;		/* generic device glue */
 	struct	ethercom sc_ec;		/* ethernet common glue */
 
 	struct mii_data sc_mii;		/* MII/media control		*/
@@ -56,8 +60,9 @@ struct smc91cxx_softc {
 
 	uint8_t		sc_intmask;
 	uint8_t		sc_txpacketno;		/* cached packetno */
-
-	krndsource_t rnd_source;
+#if NRND > 0
+	rndsource_element_t rnd_source;
+#endif
 };
 
 #define	SMC_SELECT_BANK(sc, x)						\
@@ -68,5 +73,5 @@ void	smc91cxx_attach(struct smc91cxx_softc *, u_int8_t *);
 int	smc91cxx_intr(void *);
 int	smc91cxx_enable(struct smc91cxx_softc *);
 void	smc91cxx_disable(struct smc91cxx_softc *);
-int	smc91cxx_activate(device_t, enum devact);
-int	smc91cxx_detach(device_t, int);
+int	smc91cxx_activate(struct device *, enum devact);
+int	smc91cxx_detach(struct device *, int);

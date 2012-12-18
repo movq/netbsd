@@ -1,4 +1,4 @@
-/*	$NetBSD: isa.c,v 1.138 2010/08/21 17:08:15 jmcneill Exp $	*/
+/*	$NetBSD: isa.c,v 1.134 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa.c,v 1.138 2010/08/21 17:08:15 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa.c,v 1.134 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,13 +56,12 @@ __KERNEL_RCSID(0, "$NetBSD: isa.c,v 1.138 2010/08/21 17:08:15 jmcneill Exp $");
 
 int	isamatch(device_t, cfdata_t, void *);
 void	isaattach(device_t, device_t, void *);
-int	isadetach(device_t, int);
 int	isarescan(device_t, const char *, const int *);
 void	isachilddetached(device_t, device_t);
 int	isaprint(void *, const char *);
 
 CFATTACH_DECL2_NEW(isa, sizeof(struct isa_softc),
-    isamatch, isaattach, isadetach, NULL, isarescan, isachilddetached);
+    isamatch, isaattach, NULL, NULL, isarescan, isachilddetached);
 
 void	isa_attach_knowndevs(struct isa_softc *);
 void	isa_free_knowndevs(struct isa_softc *);
@@ -131,7 +130,7 @@ isaattach(device_t parent, device_t self, void *aux)
 	if (sc->sc_dynamicdevs == 0)
 		isa_free_knowndevs(sc);
 
-	/* Attach all indirect-config children. */
+	/* Attach all indrect-config children. */
 	isarescan(self, "isa", wildcard);
 
 	if (!pmf_device_register(self, NULL, NULL))
@@ -139,39 +138,9 @@ isaattach(device_t parent, device_t self, void *aux)
 }
 
 int
-isadetach(device_t self, int flags)
-{
-	struct isa_softc *sc = device_private(self);
-	int rc;
-
-	if ((rc = config_detach_children(self, flags)) != 0)
-		return rc;
-
-	pmf_device_deregister(self);
-
-	isa_free_knowndevs(sc);
-
-#if NISADMA > 0
-	isa_dmadestroy(sc->sc_ic);
-#endif
-	isa_detach_hook(sc->sc_ic, self);
-
-	return 0;
-}
-
-int
 isarescan(device_t self, const char *ifattr, const int *locators)
 {
-	prop_dictionary_t dict;
 	int locs[ISACF_NLOCS];
-	bool no_legacy_devices = false;
-
-	dict = device_properties(self);
-	if (prop_dictionary_get_bool(dict, "no-legacy-devices",
-	    &no_legacy_devices) == true) {
-		aprint_debug_dev(self, "platform reports no legacy devices\n");
-		return 0;
-	}
 
 	memcpy(locs, locators, sizeof(locs));
 
@@ -193,13 +162,7 @@ isarescan(device_t self, const char *ifattr, const int *locators)
 void
 isachilddetached(device_t self, device_t child)
 {
-	struct isa_knowndev *ik;
-	struct isa_softc *sc = device_private(self);
-
-	TAILQ_FOREACH(ik, &sc->sc_knowndevs, ik_list) {
-		if (ik->ik_claimed == child)
-			ik->ik_claimed = NULL;
-	}
+	/* nothing to do */
 }
 
 void

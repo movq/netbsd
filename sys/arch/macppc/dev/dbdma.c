@@ -1,4 +1,4 @@
-/*	$NetBSD: dbdma.c,v 1.11 2012/05/23 21:47:23 macallan Exp $	*/
+/*	$NetBSD: dbdma.c,v 1.8 2007/10/17 19:55:18 garbled Exp $	*/
 
 /*
  * Copyright 1991-1998 by Open Software Foundation, Inc. 
@@ -23,13 +23,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dbdma.c,v 1.11 2012/05/23 21:47:23 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dbdma.c,v 1.8 2007/10/17 19:55:18 garbled Exp $");
 
 #include <sys/param.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/systm.h>
-
-#include <prop/proplib.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -40,12 +38,14 @@ __KERNEL_RCSID(0, "$NetBSD: dbdma.c,v 1.11 2012/05/23 21:47:23 macallan Exp $");
 dbdma_command_t	*dbdma_alloc_commands = NULL;
 
 void
-dbdma_start(dbdma_regmap_t *dmap, dbdma_command_t *commands)
+dbdma_start(dmap, commands)
+	dbdma_regmap_t *dmap;
+	dbdma_command_t *commands;
 {
 	unsigned long addr = vtophys((vaddr_t)commands);
 
 	if (addr & 0xf)
-		panic("dbdma_start command structure not 16-byte aligned %08x %08x", (uint32_t)commands, (uint32_t)addr);
+		panic("dbdma_start command structure not 16-byte aligned");
 
 	dmap->d_intselect = 0xff;  /* Endian magic - clear out interrupts */
 	DBDMA_ST4_ENDIAN(&dmap->d_control, 
@@ -66,7 +66,8 @@ dbdma_start(dbdma_regmap_t *dmap, dbdma_command_t *commands)
 }
 
 void
-dbdma_stop(dbdma_regmap_t *dmap)
+dbdma_stop(dmap)
+	dbdma_regmap_t *dmap;
 {
 	out32rb(&dmap->d_control, DBDMA_CLEAR_CNTRL(DBDMA_CNTRL_RUN) |
 			  DBDMA_SET_CNTRL(DBDMA_CNTRL_FLUSH));
@@ -76,7 +77,8 @@ dbdma_stop(dbdma_regmap_t *dmap)
 }
 
 void
-dbdma_flush(dbdma_regmap_t *dmap)
+dbdma_flush(dmap)
+	dbdma_regmap_t *dmap;
 {
 	out32rb(&dmap->d_control, DBDMA_SET_CNTRL(DBDMA_CNTRL_FLUSH));
 
@@ -84,7 +86,8 @@ dbdma_flush(dbdma_regmap_t *dmap)
 }
 
 void
-dbdma_reset(dbdma_regmap_t *dmap)
+dbdma_reset(dmap)
+	dbdma_regmap_t *dmap;
 {
 	out32rb(&dmap->d_control, 
 			 DBDMA_CLEAR_CNTRL( (DBDMA_CNTRL_ACTIVE	|
@@ -98,7 +101,8 @@ dbdma_reset(dbdma_regmap_t *dmap)
 }
 
 void
-dbdma_continue(dbdma_regmap_t *dmap)
+dbdma_continue(dmap)
+	dbdma_regmap_t *dmap;
 {
 	out32rb(&dmap->d_control,
 		DBDMA_SET_CNTRL(DBDMA_CNTRL_RUN | DBDMA_CNTRL_WAKE) |
@@ -106,7 +110,8 @@ dbdma_continue(dbdma_regmap_t *dmap)
 }
 
 void
-dbdma_pause(dbdma_regmap_t *dmap)
+dbdma_pause(dmap)
+	dbdma_regmap_t *dmap;
 {
 	DBDMA_ST4_ENDIAN(&dmap->d_control,DBDMA_SET_CNTRL(DBDMA_CNTRL_PAUSE));
 
@@ -115,11 +120,12 @@ dbdma_pause(dbdma_regmap_t *dmap)
 }
 
 dbdma_command_t	*
-dbdma_alloc(int size)
+dbdma_alloc(size)
+	int size;
 {
 	u_int buf;
 
-	buf = (u_int)kmem_alloc(size + 0x0f, KM_SLEEP);
+	buf = (u_int)malloc(size + 0x0f, M_DEVBUF, M_WAITOK);
 	buf = (buf + 0x0f) & ~0x0f;
 
 	return (dbdma_command_t *)buf;

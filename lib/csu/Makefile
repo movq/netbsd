@@ -1,46 +1,26 @@
-#	$NetBSD: Makefile,v 1.31 2012/06/16 19:19:14 joerg Exp $
+#	$NetBSD: Makefile,v 1.24.40.1 2011/01/06 05:20:23 riz Exp $
 
 .include <bsd.own.mk>
 
-.if ${USE_COMPILERCRTSTUFF} != "yes"
-
-.if defined(CSU_MACHINE_ARCH)
-.  if !exists(${.CURDIR}/arch/${CSU_MACHINE_ARCH}/Makefile.inc)
-.  error CSU_MACHINE_ARCH (${CSU_MACHINE_ARCH}) is unsupported
-.  endif
-.elif exists(${.CURDIR}/arch/${MACHINE_ARCH}/Makefile.inc)
-CSU_MACHINE_ARCH=	${MACHINE_ARCH}
-.elif exists(${.CURDIR}/arch/${MACHINE_CPU}/Makefile.inc)
-CSU_MACHINE_ARCH=	${MACHINE_CPU}
-.else
-.error Architecture (${MACHINE_ARCH} or ${MACHINE_CPU}) unsupported
-.endif
-
-ARCHDIR:=	${.CURDIR}/arch/${CSU_MACHINE_ARCH}
-
-.PATH:	${ARCHDIR}
-.  include "${ARCHDIR}/Makefile.inc"
-
-.  include "${.CURDIR}/common/Makefile.inc"
-
-.else
-
-CSU_MACHINE_ARCH?=	${MACHINE_ARCH}
-
-.  if exists(${CSU_MACHINE_ARCH}_elf/Makefile)
+.if ${OBJECT_FMT} == "ELF" && exists(${CSU_MACHINE_ARCH}_elf)
 SUBDIR=	${CSU_MACHINE_ARCH}_elf
-.  elif exists(${CSU_MACHINE_ARCH}/Makefile)
-SUBDIR=	${CSU_MACHINE_ARCH}
-.  elif exists(${MACHINE_CPU}_elf/Makefile)
+.elif ${OBJECT_FMT} == "ELF" && exists(${MACHINE_ARCH}_elf)
+SUBDIR=	${MACHINE_ARCH}_elf
+.elif ${OBJECT_FMT} == "ELF" && exists(${MACHINE_CPU}_elf)
 SUBDIR=	${MACHINE_CPU}_elf
-.  elif exists(${MACHINE_CPU}/Makefile)
+.elif exists(${MACHINE_ARCH})
+SUBDIR=	${MACHINE_ARCH}
+.elif exists(${MACHINE_CPU})
 SUBDIR=	${MACHINE_CPU}
-.  else
+.else
 .BEGIN:
 	@echo no SUBDIR for ${MACHINE_ARCH}_elf, ${MACHINE_ARCH} nor \
 	    ${MACHINE_CPU}
 	@false
-.  endif
-
-.  include <bsd.subdir.mk>
 .endif
+
+.if (${OBJECT_FMT} != "ELF")
+SUBDIR+= c++
+.endif
+
+.include <bsd.subdir.mk>

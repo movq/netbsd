@@ -1,5 +1,5 @@
-/*	$Id: mpcsa_usart.c,v 1.4 2012/10/27 17:17:48 chs Exp $	*/
-/*	$NetBSD: mpcsa_usart.c,v 1.4 2012/10/27 17:17:48 chs Exp $	*/
+/*	$Id: mpcsa_usart.c,v 1.2 2008/07/03 01:15:39 matt Exp $	*/
+/*	$NetBSD: mpcsa_usart.c,v 1.2 2008/07/03 01:15:39 matt Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy. All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpcsa_usart.c,v 1.4 2012/10/27 17:17:48 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpcsa_usart.c,v 1.2 2008/07/03 01:15:39 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -60,10 +60,10 @@ struct mpcsa_usart_softc {
 	int sc_tx_busy, sc_rx_busy;
 };
 
-static int mpcsa_usart_match(device_t, cfdata_t, void *);
-static void mpcsa_usart_attach(device_t, device_t, void *);
+static int mpcsa_usart_match(struct device *, struct cfdata *, void *);
+static void mpcsa_usart_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(mpcsa_usart, sizeof(struct mpcsa_usart_softc),
+CFATTACH_DECL(mpcsa_usart, sizeof(struct mpcsa_usart_softc),
 	      mpcsa_usart_match, mpcsa_usart_attach, NULL, NULL);
 
 static int mpcsa_usart_enable(struct at91usart_softc *sc);
@@ -96,7 +96,7 @@ conn_led(struct mpcsa_usart_softc *mpsc, int count)
 }
 
 static int
-mpcsa_usart_match(device_t parent, cfdata_t match, void *aux)
+mpcsa_usart_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	if (strcmp(match->cf_name, "at91usart") == 0 && strcmp(match->cf_atname, "mpcsa_usart") == 0)
 		return 2;
@@ -105,12 +105,10 @@ mpcsa_usart_match(device_t parent, cfdata_t match, void *aux)
 
 
 static void
-mpcsa_usart_attach(device_t parent, device_t self, void *aux)
+mpcsa_usart_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct mpcsa_usart_softc *sc = device_private(self);
+	struct mpcsa_usart_softc *sc = (struct mpcsa_usart_softc *)self;
 	struct at91bus_attach_args *sa = aux;
-
-	sc->sc_dev.sc_dev = self;
 
 	// initialize softc
 	if ((sc->sc_pioa = at91pio_sc(AT91_PIOA)) == NULL) {
@@ -223,9 +221,9 @@ mpcsa_usart_enable(struct at91usart_softc *dev)
 	case PID_US3:
 		/* turn gsm on */
 		at91pio_clear(sc->sc_pioa, PA_GSMOFF);
-		kpause("gsmond", false, 4 * hz, NULL);
+		ltsleep(sc, 0, "gsmond", 4 * hz, NULL);
 		at91pio_set(sc->sc_pioa, PA_GSMON);
-		kpause("gsmon", false, 2 * hz, NULL);
+		ltsleep(sc, 0, "gsmon", 2 * hz, NULL);
 		at91pio_clear(sc->sc_pioa, PA_GSMON);
 		/* then attach pins to devices etc */
 		at91pio_per(sc->sc_pioa, PA_TXD4, 1);
@@ -255,14 +253,14 @@ mpcsa_usart_disable(struct at91usart_softc *dev)
 		at91pio_intr_disestablish(sc->sc_piob, PB_CTS4, sc->sc_cts_ih);
 
 		at91pio_clear(sc->sc_pioa, PA_GSMON);
-		kpause("gsmoffd", false, (hz * 350 + 999) / 1000, NULL);
+		ltsleep(sc, 0, "gsmoffd", (hz * 350 + 999) / 1000, NULL);
 
 		at91pio_per(sc->sc_pioa, PA_TXD4, -1);
 		at91pio_in(sc->sc_piob, PB_RTS4);
 		at91pio_in(sc->sc_piod, PD_DTR4);
 		
 		at91pio_set(sc->sc_pioa, PA_GSMOFF);
-		kpause("gsmoff", false, hz * 4, NULL);
+		ltsleep(sc, 0, "gsmoff", hz * 4, NULL);
 		at91pio_clear(sc->sc_pioa, PA_GSMOFF);
 
 		break;

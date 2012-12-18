@@ -1,4 +1,4 @@
-/*	$NetBSD: worms.c,v 1.22 2012/06/19 05:46:09 dholland Exp $	*/
+/*	$NetBSD: worms.c,v 1.19 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)worms.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: worms.c,v 1.22 2012/06/19 05:46:09 dholland Exp $");
+__RCSID("$NetBSD: worms.c,v 1.19 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
@@ -177,14 +177,16 @@ static struct	worm {
 	short *xpos, *ypos;
 } *worm;
 
-static volatile sig_atomic_t sig_caught = 0;
+volatile sig_atomic_t sig_caught = 0;
 
 int	 main(int, char **);
-static void nomem(void) __dead;
-static void onsig(int);
+void	 nomem(void) __dead;
+void	 onsig(int);
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	int x, y, h, n;
 	struct worm *w;
@@ -204,7 +206,7 @@ main(int argc, char *argv[])
 	while ((ch = getopt(argc, argv, "d:fl:n:t")) != -1)
 		switch(ch) {
 		case 'd':
-			if ((delay = (unsigned int)strtoul(optarg, NULL, 10)) < 1 || delay > 1000)
+			if ((delay = (unsigned int)strtoul(optarg, (char **)NULL, 10)) < 1 || delay > 1000)
 				errx(1, "invalid delay (1-1000)");
 			delay *= 1000;  /* ms -> us */
 			break;
@@ -337,14 +339,15 @@ main(int argc, char *argv[])
 	}
 }
 
-static void
-onsig(int signo __unused)
+void
+onsig(signo)
+	int signo __unused;
 {
 	sig_caught = 1;
 }
 
-static void
-nomem(void)
+void
+nomem()
 {
 	errx(1, "not enough memory.");
 }

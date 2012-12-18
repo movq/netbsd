@@ -1,7 +1,5 @@
-/*	$NetBSD: memberof.c,v 1.1.1.4 2010/12/12 15:23:36 adam Exp $	*/
-
 /* memberof.c - back-reference for group membership */
-/* OpenLDAP: pkg/ldap/servers/slapd/overlays/memberof.c,v 1.2.2.21 2010/04/15 20:11:24 quanah Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/overlays/memberof.c,v 1.2.2.15 2008/07/10 00:00:31 quanah Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
  * Copyright 2005-2007 Pierangelo Masarati <ando@sys-net.it>
@@ -180,19 +178,74 @@ typedef enum memberof_is_t {
 	MEMBEROF_IS_BOTH = (MEMBEROF_IS_GROUP|MEMBEROF_IS_MEMBER)
 } memberof_is_t;
 
+/*
+ * failover storage for member attribute values of groups being deleted
+ * handles [no]thread cases.
+ */
+static BerVarray	saved_member_vals;
+static BerVarray	saved_memberof_vals;
+
+static void
+memberof_saved_member_free( void *key, void *data )
+{
+	ber_bvarray_free( (BerVarray)data );
+}
+
+static BerVarray
+memberof_saved_member_get( Operation *op, void *keyp )
+{
+	void		*vals;
+	BerVarray	*key = (BerVarray *)keyp;
+
+	assert( op != NULL );
+
+	if ( op->o_threadctx == NULL ) {
+		vals = *key;
+		*key = NULL;
+
+	} else {
+		ldap_pvt_thread_pool_setkey( op->o_threadctx,
+				key, NULL, 0, &vals, NULL );
+	}
+
+	return vals;
+}
+
+static void
+memberof_saved_member_set( Operation *op, void *keyp, BerVarray vals )
+{
+	BerVarray	saved_vals = NULL;
+	BerVarray	*key = (BerVarray*)keyp;
+
+	assert( op != NULL );
+
+	if ( vals ) {
+		ber_bvarray_dup_x( &saved_vals, vals, NULL );
+	}
+
+	if ( op->o_threadctx == NULL ) {
+		if ( *key ) {
+			ber_bvarray_free( *key );
+		}
+		*key = saved_vals;
+
+	} else {
+		void	*old_vals = NULL;
+
+		ldap_pvt_thread_pool_setkey( op->o_threadctx, key,
+				saved_vals, memberof_saved_member_free, &old_vals, NULL );
+		if ( old_vals != NULL ) {
+			ber_bvarray_free( old_vals );
+		}
+	}
+}
+
 typedef struct memberof_cookie_t {
 	AttributeDescription	*ad;
-	BerVarray		vals;
+	void			*key;
 	int			foundit;
 } memberof_cookie_t;
 
-typedef struct memberof_cbinfo_t {
-	slap_overinst *on;
-	BerVarray member;
-	BerVarray memberof;
-	memberof_is_t what;
-} memberof_cbinfo_t;
-	
 static int
 memberof_isGroupOrMember_cb( Operation *op, SlapReply *rs )
 {
@@ -216,6 +269,7 @@ memberof_saveMember_cb( Operation *op, SlapReply *rs )
 	if ( rs->sr_type == REP_SEARCH ) {
 		memberof_cookie_t	*mc;
 		Attribute		*a;
+		BerVarray		vals = NULL;
 
 		mc = (memberof_cookie_t *)op->o_callback->sc_private;
 		mc->foundit = 1;
@@ -225,9 +279,19 @@ memberof_saveMember_cb( Operation *op, SlapReply *rs )
 
 		a = attr_find( rs->sr_entry->e_attrs, mc->ad );
 		if ( a != NULL ) {
-			ber_bvarray_dup_x( &mc->vals, a->a_nvals, op->o_tmpmemctx );
+			vals = a->a_nvals;
+		}
 
-			assert( attr_find( a->a_next, mc->ad ) == NULL );
+		memberof_saved_member_set( op, mc->key, vals );
+
+		if ( a && attr_find( a->a_next, mc->ad ) != NULL ) {
+			Debug( LDAP_DEBUG_ANY,
+				"%s: memberof_saveMember_cb(\"%s\"): "
+				"more than one occurrence of \"%s\" "
+				"attribute.\n",
+				op->o_log_prefix,
+				rs->sr_entry->e_name.bv_val,
+				mc->ad->ad_cname.bv_val );
 		}
 	}
 
@@ -239,21 +303,21 @@ memberof_saveMember_cb( Operation *op, SlapReply *rs )
  * attribute values of groups being deleted.
  */
 static int
-memberof_isGroupOrMember( Operation *op, memberof_cbinfo_t *mci )
+memberof_isGroupOrMember( Operation *op, memberof_is_t *iswhatp )
 {
-	slap_overinst		*on = mci->on;
+	slap_overinst		*on = (slap_overinst *)op->o_bd->bd_info;
 	memberof_t		*mo = (memberof_t *)on->on_bi.bi_private;
 
 	Operation		op2 = *op;
 	SlapReply		rs2 = { REP_RESULT };
 	slap_callback		cb = { 0 };
-	BackendInfo	*bi = op->o_bd->bd_info;
+	memberof_cookie_t	mc;
 	AttributeName		an[ 2 ];
 
 	memberof_is_t		iswhat = MEMBEROF_IS_NONE;
-	memberof_cookie_t	mc;
 
-	assert( mci->what != MEMBEROF_IS_NONE );
+	assert( iswhatp != NULL );
+	assert( *iswhatp != MEMBEROF_IS_NONE );
 
 	cb.sc_private = &mc;
 	if ( op->o_tag == LDAP_REQ_DELETE ) {
@@ -277,10 +341,10 @@ memberof_isGroupOrMember( Operation *op, memberof_cbinfo_t *mci )
 	op2.ors_slimit = 1;
 	op2.ors_tlimit = SLAP_NO_LIMIT;
 
-	if ( mci->what & MEMBEROF_IS_GROUP ) {
+	if ( *iswhatp & MEMBEROF_IS_GROUP ) {
 		mc.ad = mo->mo_ad_member;
+		mc.key = &saved_member_vals;
 		mc.foundit = 0;
-		mc.vals = NULL;
 		an[ 0 ].an_desc = mo->mo_ad_member;
 		an[ 0 ].an_name = an[ 0 ].an_desc->ad_cname;
 		op2.ors_filterstr = mo->mo_groupFilterstr;
@@ -288,19 +352,20 @@ memberof_isGroupOrMember( Operation *op, memberof_cbinfo_t *mci )
 
 		op2.o_bd->bd_info = (BackendInfo *)on->on_info;
 		(void)op->o_bd->be_search( &op2, &rs2 );
-		op2.o_bd->bd_info = bi;
+		op2.o_bd->bd_info = (BackendInfo *)on;
 
 		if ( mc.foundit ) {
 			iswhat |= MEMBEROF_IS_GROUP;
-			if ( mc.vals ) mci->member = mc.vals;
 
+		} else {
+			memberof_saved_member_set( op, mc.key, NULL );
 		}
 	}
 
-	if ( mci->what & MEMBEROF_IS_MEMBER ) {
+	if ( *iswhatp & MEMBEROF_IS_MEMBER ) {
 		mc.ad = mo->mo_ad_memberof;
+		mc.key = &saved_memberof_vals;
 		mc.foundit = 0;
-		mc.vals = NULL;
 		an[ 0 ].an_desc = mo->mo_ad_memberof;
 		an[ 0 ].an_name = an[ 0 ].an_desc->ad_cname;
 		op2.ors_filterstr = mo->mo_memberFilterstr;
@@ -308,16 +373,17 @@ memberof_isGroupOrMember( Operation *op, memberof_cbinfo_t *mci )
 
 		op2.o_bd->bd_info = (BackendInfo *)on->on_info;
 		(void)op->o_bd->be_search( &op2, &rs2 );
-		op2.o_bd->bd_info = bi;
+		op2.o_bd->bd_info = (BackendInfo *)on;
 
 		if ( mc.foundit ) {
 			iswhat |= MEMBEROF_IS_MEMBER;
-			if ( mc.vals ) mci->memberof = mc.vals;
 
+		} else {
+			memberof_saved_member_set( op, mc.key, NULL );
 		}
 	}
 
-	mci->what = iswhat;
+	*iswhatp = iswhat;
 
 	return LDAP_SUCCESS;
 }
@@ -336,8 +402,7 @@ memberof_value_modify(
 	struct berval		*new_dn,
 	struct berval		*new_ndn )
 {
-	memberof_cbinfo_t *mci = op->o_callback->sc_private;
-	slap_overinst	*on = mci->on;
+	slap_overinst	*on = (slap_overinst *)op->o_bd->bd_info;
 	memberof_t	*mo = (memberof_t *)on->on_bi.bi_private;
 
 	Operation	op2 = *op;
@@ -351,6 +416,8 @@ memberof_value_modify(
 
 	op2.o_req_dn = *ndn;
 	op2.o_req_ndn = *ndn;
+
+	op2.o_bd->bd_info = (BackendInfo *)on->on_info;
 
 	op2.o_callback = &cb;
 	op2.o_dn = op->o_bd->be_rootdn;
@@ -387,7 +454,6 @@ memberof_value_modify(
 	ml->sml_flags = SLAP_MOD_INTERNAL;
 	ml->sml_next = op2.orm_modlist;
 	op2.orm_modlist = ml;
-	op2.orm_no_opattrs = 0;
 
 	if ( new_ndn != NULL ) {
 		assert( !BER_BVISNULL( new_dn ) );
@@ -461,28 +527,10 @@ memberof_value_modify(
 	 * not optimal in terms of performance.  At least it would
 	 * move towards self-repairing capabilities. */
 
+	op2.o_bd->bd_info = (BackendInfo *)on;
+
 	return rs2.sr_err;
 }
-
-static int
-memberof_cleanup( Operation *op, SlapReply *rs )
-{
-	slap_callback *sc = op->o_callback;
-	memberof_cbinfo_t *mci = sc->sc_private;
-
-	op->o_callback = sc->sc_next;
-	if ( mci->memberof )
-		ber_bvarray_free_x( mci->memberof, op->o_tmpmemctx );
-	if ( mci->member )
-		ber_bvarray_free_x( mci->member, op->o_tmpmemctx );
-	op->o_tmpfree( sc, op->o_tmpmemctx );
-	return 0;
-}
-
-static int memberof_res_add( Operation *op, SlapReply *rs );
-static int memberof_res_delete( Operation *op, SlapReply *rs );
-static int memberof_res_modify( Operation *op, SlapReply *rs );
-static int memberof_res_modrdn( Operation *op, SlapReply *rs );
 
 static int
 memberof_op_add( Operation *op, SlapReply *rs )
@@ -494,8 +542,6 @@ memberof_op_add( Operation *op, SlapReply *rs )
 	int		rc = SLAP_CB_CONTINUE;
 	int		i;
 	struct berval	save_dn, save_ndn;
-	slap_callback *sc;
-	memberof_cbinfo_t *mci;
 
 	if ( op->ora_e->e_attrs == NULL ) {
 		/* FIXME: global overlay; need to deal with */
@@ -525,7 +571,7 @@ memberof_op_add( Operation *op, SlapReply *rs )
 			&& is_entry_objectclass_or_sub( op->ora_e, mo->mo_oc_group ) )
 	{
 		op->o_dn = op->o_bd->be_rootdn;
-		op->o_ndn = op->o_bd->be_rootndn;
+		op->o_dn = op->o_bd->be_rootndn;
 		op->o_bd->bd_info = (BackendInfo *)on->on_info;
 
 		for ( ap = &op->ora_e->e_attrs; *ap; ) {
@@ -582,7 +628,6 @@ memberof_op_add( Operation *op, SlapReply *rs )
 							sizeof( struct berval ) * ( j - i ) );
 					}
 					i--;
-					a->a_numvals--;
 				}
 			}
 
@@ -688,18 +733,7 @@ memberof_op_add( Operation *op, SlapReply *rs )
 	}
 
 	rc = SLAP_CB_CONTINUE;
-
-	sc = op->o_tmpalloc( sizeof(slap_callback)+sizeof(*mci), op->o_tmpmemctx );
-	sc->sc_private = sc+1;
-	sc->sc_response = memberof_res_add;
-	sc->sc_cleanup = memberof_cleanup;
-	mci = sc->sc_private;
-	mci->on = on;
-	mci->member = NULL;
-	mci->memberof = NULL;
-	sc->sc_next = op->o_callback;
-	op->o_callback = sc;
-
+	
 done:;
 	op->o_dn = save_dn;
 	op->o_ndn = save_ndn;
@@ -714,27 +748,13 @@ memberof_op_delete( Operation *op, SlapReply *rs )
 	slap_overinst	*on = (slap_overinst *)op->o_bd->bd_info;
 	memberof_t	*mo = (memberof_t *)on->on_bi.bi_private;
 
-	slap_callback *sc;
-	memberof_cbinfo_t *mci;
+	memberof_is_t	iswhat = MEMBEROF_IS_GROUP;
 
-
-	sc = op->o_tmpalloc( sizeof(slap_callback)+sizeof(*mci), op->o_tmpmemctx );
-	sc->sc_private = sc+1;
-	sc->sc_response = memberof_res_delete;
-	sc->sc_cleanup = memberof_cleanup;
-	mci = sc->sc_private;
-	mci->on = on;
-	mci->member = NULL;
-	mci->memberof = NULL;
-	mci->what = MEMBEROF_IS_GROUP;
 	if ( MEMBEROF_REFINT( mo ) ) {
-		mci->what = MEMBEROF_IS_BOTH;
+		iswhat = MEMBEROF_IS_BOTH;
 	}
 
-	memberof_isGroupOrMember( op, mci );
-
-	sc->sc_next = op->o_callback;
-	op->o_callback = sc;
+	memberof_isGroupOrMember( op, &iswhat );
 
 	return SLAP_CB_CONTINUE;
 }
@@ -746,10 +766,9 @@ memberof_op_modify( Operation *op, SlapReply *rs )
 	memberof_t	*mo = (memberof_t *)on->on_bi.bi_private;
 
 	Modifications	**mlp, **mmlp = NULL;
-	int		rc = SLAP_CB_CONTINUE, save_member = 0;
+	int		rc = SLAP_CB_CONTINUE;
 	struct berval	save_dn, save_ndn;
-	slap_callback *sc;
-	memberof_cbinfo_t *mci, mcis;
+	memberof_is_t	iswhat = MEMBEROF_IS_GROUP;
 
 	if ( MEMBEROF_REVERSE( mo ) ) {
 		for ( mlp = &op->orm_modlist; *mlp; mlp = &(*mlp)->sml_next ) {
@@ -764,13 +783,12 @@ memberof_op_modify( Operation *op, SlapReply *rs )
 
 	save_dn = op->o_dn;
 	save_ndn = op->o_ndn;
-	mcis.on = on;
-	mcis.what = MEMBEROF_IS_GROUP;
 
-	if ( memberof_isGroupOrMember( op, &mcis ) == LDAP_SUCCESS
-		&& ( mcis.what & MEMBEROF_IS_GROUP ) )
+	if ( memberof_isGroupOrMember( op, &iswhat ) == LDAP_SUCCESS
+		&& ( iswhat & MEMBEROF_IS_GROUP ) )
 	{
 		Modifications *ml;
+		int save_member = 0;
 
 		for ( ml = op->orm_modlist; ml; ml = ml->sml_next ) {
 			if ( ml->sml_desc == mo->mo_ad_member ) {
@@ -783,12 +801,26 @@ memberof_op_modify( Operation *op, SlapReply *rs )
 			}
 		}
 
+		if ( save_member ) {
+			BerVarray	vals = NULL;
+
+			op->o_dn = op->o_bd->be_rootdn;
+			op->o_dn = op->o_bd->be_rootndn;
+			op->o_bd->bd_info = (BackendInfo *)on->on_info;
+			rc = backend_attribute( op, NULL, &op->o_req_ndn,
+					mo->mo_ad_member, &vals, ACL_READ );
+			op->o_bd->bd_info = (BackendInfo *)on;
+			if ( rc == LDAP_SUCCESS && vals != NULL ) {
+				memberof_saved_member_set( op, &saved_member_vals, vals );
+				ber_bvarray_free_x( vals, op->o_tmpmemctx );
+			}
+		}
 
 		if ( MEMBEROF_DANGLING_CHECK( mo )
 				&& !get_relax( op ) )
 		{
 			op->o_dn = op->o_bd->be_rootdn;
-			op->o_ndn = op->o_bd->be_rootndn;
+			op->o_dn = op->o_bd->be_rootndn;
 			op->o_bd->bd_info = (BackendInfo *)on->on_info;
 		
 			assert( op->orm_modlist != NULL );
@@ -1115,28 +1147,6 @@ done2:;
 		op->o_bd->bd_info = (BackendInfo *)on;
 	}
 
-	sc = op->o_tmpalloc( sizeof(slap_callback)+sizeof(*mci), op->o_tmpmemctx );
-	sc->sc_private = sc+1;
-	sc->sc_response = memberof_res_modify;
-	sc->sc_cleanup = memberof_cleanup;
-	mci = sc->sc_private;
-	mci->on = on;
-	mci->member = NULL;
-	mci->memberof = NULL;
-	mci->what = mcis.what;
-
-	if ( save_member ) {
-		op->o_dn = op->o_bd->be_rootdn;
-		op->o_ndn = op->o_bd->be_rootndn;
-		op->o_bd->bd_info = (BackendInfo *)on->on_info;
-		rc = backend_attribute( op, NULL, &op->o_req_ndn,
-				mo->mo_ad_member, &mci->member, ACL_READ );
-		op->o_bd->bd_info = (BackendInfo *)on;
-	}
-
-	sc->sc_next = op->o_callback;
-	op->o_callback = sc;
-
 	rc = SLAP_CB_CONTINUE;
 
 done:;
@@ -1147,60 +1157,34 @@ done:;
 	return rc;
 }
 
-static int
-memberof_op_modrdn( Operation *op, SlapReply *rs )
-{
-	slap_overinst	*on = (slap_overinst *)op->o_bd->bd_info;
-	slap_callback *sc;
-	memberof_cbinfo_t *mci;
-
-	sc = op->o_tmpalloc( sizeof(slap_callback)+sizeof(*mci), op->o_tmpmemctx );
-	sc->sc_private = sc+1;
-	sc->sc_response = memberof_res_modrdn;
-	sc->sc_cleanup = memberof_cleanup;
-	mci = sc->sc_private;
-	mci->on = on;
-	mci->member = NULL;
-	mci->memberof = NULL;
-
-	sc->sc_next = op->o_callback;
-	op->o_callback = sc;
-
-	return SLAP_CB_CONTINUE;
-}
-
 /*
  * response callback that adds memberof values when a group is added.
  */
 static int
 memberof_res_add( Operation *op, SlapReply *rs )
 {
-	memberof_cbinfo_t *mci = op->o_callback->sc_private;
-	slap_overinst	*on = mci->on;
+	slap_overinst	*on = (slap_overinst *)op->o_bd->bd_info;
 	memberof_t	*mo = (memberof_t *)on->on_bi.bi_private;
 
 	int		i;
-
-	if ( rs->sr_err != LDAP_SUCCESS ) {
-		return SLAP_CB_CONTINUE;
-	}
 
 	if ( MEMBEROF_REVERSE( mo ) ) {
 		Attribute	*ma;
 
 		ma = attr_find( op->ora_e->e_attrs, mo->mo_ad_memberof );
 		if ( ma != NULL ) {
-			char relax = op->o_relax;
+			Operation	op2 = *op;
+			SlapReply	rs2 = { 0 };
 
 			/* relax is required to allow to add
 			 * a non-existing member */
-			op->o_relax = SLAP_CONTROL_CRITICAL;
+			op2.o_relax = SLAP_CONTROL_CRITICAL;
 
 			for ( i = 0; !BER_BVISNULL( &ma->a_nvals[ i ] ); i++ ) {
 		
 				/* the modification is attempted
 				 * with the original identity */
-				(void)memberof_value_modify( op, rs,
+				(void)memberof_value_modify( &op2, &rs2,
 					&ma->a_nvals[ i ], mo->mo_ad_member,
 					NULL, NULL, &op->o_req_dn, &op->o_req_ndn );
 			}
@@ -1234,18 +1218,13 @@ memberof_res_add( Operation *op, SlapReply *rs )
 static int
 memberof_res_delete( Operation *op, SlapReply *rs )
 {
-	memberof_cbinfo_t *mci = op->o_callback->sc_private;
-	slap_overinst	*on = mci->on;
+	slap_overinst	*on = (slap_overinst *)op->o_bd->bd_info;
 	memberof_t	*mo = (memberof_t *)on->on_bi.bi_private;
 
  	BerVarray	vals;
 	int		i;
 
-	if ( rs->sr_err != LDAP_SUCCESS ) {
-		return SLAP_CB_CONTINUE;
-	}
-
-	vals = mci->member;
+	vals = memberof_saved_member_get( op, &saved_member_vals );
 	if ( vals != NULL ) {
 		for ( i = 0; !BER_BVISNULL( &vals[ i ] ); i++ ) {
 			(void)memberof_value_modify( op, rs,
@@ -1253,10 +1232,13 @@ memberof_res_delete( Operation *op, SlapReply *rs )
 					&op->o_req_dn, &op->o_req_ndn,
 					NULL, NULL );
 		}
+
+		memberof_saved_member_set( op, &saved_memberof_vals, NULL );
+ 		ber_bvarray_free( vals );
 	}
 
 	if ( MEMBEROF_REFINT( mo ) ) {
-		vals = mci->memberof;
+		vals = memberof_saved_member_get( op, &saved_memberof_vals );
 		if ( vals != NULL ) {
 			for ( i = 0; !BER_BVISNULL( &vals[ i ] ); i++ ) {
 				(void)memberof_value_modify( op, rs,
@@ -1264,6 +1246,9 @@ memberof_res_delete( Operation *op, SlapReply *rs )
 						&op->o_req_dn, &op->o_req_ndn,
 						NULL, NULL );
 			}
+
+			memberof_saved_member_set( op, &saved_member_vals, NULL );
+	 		ber_bvarray_free( vals );
 		}
 	}
 
@@ -1277,17 +1262,13 @@ memberof_res_delete( Operation *op, SlapReply *rs )
 static int
 memberof_res_modify( Operation *op, SlapReply *rs )
 {
-	memberof_cbinfo_t *mci = op->o_callback->sc_private;
-	slap_overinst	*on = mci->on;
+	slap_overinst	*on = (slap_overinst *)op->o_bd->bd_info;
 	memberof_t	*mo = (memberof_t *)on->on_bi.bi_private;
 
 	int		i, rc;
 	Modifications	*ml, *mml = NULL;
 	BerVarray	vals;
-
-	if ( rs->sr_err != LDAP_SUCCESS ) {
-		return SLAP_CB_CONTINUE;
-	}
+	memberof_is_t	iswhat = MEMBEROF_IS_GROUP;
 
 	if ( MEMBEROF_REVERSE( mo ) ) {
 		for ( ml = op->orm_modlist; ml; ml = ml->sml_next ) {
@@ -1351,7 +1332,8 @@ memberof_res_modify( Operation *op, SlapReply *rs )
 		}
 	}
 
-	if ( mci->what & MEMBEROF_IS_GROUP )
+	if ( memberof_isGroupOrMember( op, &iswhat ) == LDAP_SUCCESS
+			&& ( iswhat & MEMBEROF_IS_GROUP ) )
 	{
 		for ( ml = op->orm_modlist; ml; ml = ml->sml_next ) {
 			if ( ml->sml_desc != mo->mo_ad_member ) {
@@ -1373,7 +1355,7 @@ memberof_res_modify( Operation *op, SlapReply *rs )
 				/* fall thru */
 	
 			case LDAP_MOD_REPLACE:
-				vals = mci->member;
+				vals = memberof_saved_member_get( op, &saved_member_vals );
 
 				/* delete all ... */
 				if ( vals != NULL ) {
@@ -1383,6 +1365,7 @@ memberof_res_modify( Operation *op, SlapReply *rs )
 								&op->o_req_dn, &op->o_req_ndn,
 								NULL, NULL );
 					}
+					ber_bvarray_free_x( vals, op->o_tmpmemctx );
 				}
 	
 				if ( ml->sml_op == LDAP_MOD_DELETE || !ml->sml_values ) {
@@ -1412,13 +1395,12 @@ memberof_res_modify( Operation *op, SlapReply *rs )
 
 /*
  * response callback that adds/deletes member values when a group member
- * is renamed.
+ * is modified.
  */
 static int
-memberof_res_modrdn( Operation *op, SlapReply *rs )
+memberof_res_rename( Operation *op, SlapReply *rs )
 {
-	memberof_cbinfo_t *mci = op->o_callback->sc_private;
-	slap_overinst	*on = mci->on;
+	slap_overinst	*on = (slap_overinst *)op->o_bd->bd_info;
 	memberof_t	*mo = (memberof_t *)on->on_bi.bi_private;
 
 	struct berval	newPDN, newDN = BER_BVNULL, newPNDN, newNDN;
@@ -1426,14 +1408,10 @@ memberof_res_modrdn( Operation *op, SlapReply *rs )
 	BerVarray	vals;
 
 	struct berval	save_dn, save_ndn;
+	memberof_is_t	iswhat = MEMBEROF_IS_GROUP;
 
-	if ( rs->sr_err != LDAP_SUCCESS ) {
-		return SLAP_CB_CONTINUE;
-	}
-
-	mci->what = MEMBEROF_IS_GROUP;
 	if ( MEMBEROF_REFINT( mo ) ) {
-		mci->what |= MEMBEROF_IS_MEMBER;
+		iswhat |= MEMBEROF_IS_MEMBER;
 	}
 
 	if ( op->orr_nnewSup ) {
@@ -1450,11 +1428,11 @@ memberof_res_modrdn( Operation *op, SlapReply *rs )
 
 	op->o_req_dn = newNDN;
 	op->o_req_ndn = newNDN;
-	rc = memberof_isGroupOrMember( op, mci );
+	rc = memberof_isGroupOrMember( op, &iswhat );
 	op->o_req_dn = save_dn;
 	op->o_req_ndn = save_ndn;
 
-	if ( rc != LDAP_SUCCESS || mci->what == MEMBEROF_IS_NONE ) {
+	if ( rc != LDAP_SUCCESS || iswhat == MEMBEROF_IS_NONE ) {
 		goto done;
 	}
 
@@ -1467,7 +1445,7 @@ memberof_res_modrdn( Operation *op, SlapReply *rs )
 
 	build_new_dn( &newDN, &newPDN, &op->orr_newrdn, op->o_tmpmemctx ); 
 
-	if ( mci->what & MEMBEROF_IS_GROUP ) {
+	if ( iswhat & MEMBEROF_IS_GROUP ) {
 		op->o_bd->bd_info = (BackendInfo *)on->on_info;
 		rc = backend_attribute( op, NULL, &newNDN,
 				mo->mo_ad_member, &vals, ACL_READ );
@@ -1484,7 +1462,7 @@ memberof_res_modrdn( Operation *op, SlapReply *rs )
 		}
 	}
 
-	if ( MEMBEROF_REFINT( mo ) && ( mci->what & MEMBEROF_IS_MEMBER ) ) {
+	if ( MEMBEROF_REFINT( mo ) && ( iswhat & MEMBEROF_IS_MEMBER ) ) {
 		op->o_bd->bd_info = (BackendInfo *)on->on_info;
 		rc = backend_attribute( op, NULL, &newNDN,
 				mo->mo_ad_memberof, &vals, ACL_READ );
@@ -1510,6 +1488,30 @@ done:;
 	return SLAP_CB_CONTINUE;
 }
 
+static int
+memberof_response( Operation *op, SlapReply *rs )
+{
+	if ( rs->sr_err != LDAP_SUCCESS ) {
+		return SLAP_CB_CONTINUE;
+	}
+
+	switch ( op->o_tag ) {
+	case LDAP_REQ_ADD:
+		return memberof_res_add( op, rs );
+
+	case LDAP_REQ_DELETE:
+		return memberof_res_delete( op, rs );
+
+	case LDAP_REQ_MODIFY:
+		return memberof_res_modify( op, rs );
+
+	case LDAP_REQ_MODDN:
+		return memberof_res_rename( op, rs );
+
+	default:
+		return SLAP_CB_CONTINUE;
+	}
+}
 
 static int
 memberof_db_init(
@@ -2055,7 +2057,8 @@ memberof_initialize( void )
 	memberof.on_bi.bi_op_add = memberof_op_add;
 	memberof.on_bi.bi_op_delete = memberof_op_delete;
 	memberof.on_bi.bi_op_modify = memberof_op_modify;
-	memberof.on_bi.bi_op_modrdn = memberof_op_modrdn;
+
+	memberof.on_response = memberof_response;
 
 	memberof.on_bi.bi_cf_ocs = mo_ocs;
 

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.24 2011/07/28 20:30:07 dyoung Exp $
+#	$NetBSD: Makefile,v 1.21.2.1 2011/01/06 05:20:24 riz Exp $
 
 # These should always be a MACHINE_CPU value
 ARCHDIRS= alpha arm i386 m68k sparc x86_64

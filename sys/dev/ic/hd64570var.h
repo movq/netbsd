@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64570var.h,v 1.11 2012/10/27 17:18:20 chs Exp $	*/
+/*	$NetBSD: hd64570var.h,v 1.8 2007/03/04 06:01:55 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Christian E. Hopps
@@ -39,6 +39,8 @@
 
 #ifndef _DEV_IC_HD64570VAR_H_
 #define _DEV_IC_HD64570VAR_H_
+
+#include "bpfilter.h"
 
 #define SCA_USE_FASTQ		/* use a split queue, one for fast traffic */
 
@@ -106,9 +108,9 @@ struct sca_port {
 	 * of mapped memory described by sc_memt/sc_memh.
 	 */
 	u_int sp_ntxdesc;		/* number of tx descriptors */
-	bus_addr_t sp_txdesc_p;		/* paddress of first tx desc */
+	u_int32_t sp_txdesc_p;		/* paddress of first tx desc */
 	sca_desc_t *sp_txdesc;		/* vaddress of first tx desc */
-	bus_addr_t sp_txbuf_p;		/* paddress of first tx buffer */
+	u_int32_t sp_txbuf_p;		/* paddress of first tx buffer */
 	u_int8_t *sp_txbuf;		/* vaddress of first tx buffer */
 
 	volatile u_int sp_txcur;	/* last descriptor in chain */
@@ -116,9 +118,9 @@ struct sca_port {
 	volatile u_int sp_txstart;	/* start descriptor */
 
 	u_int sp_nrxdesc;		/* number of rx descriptors */
-	bus_addr_t sp_rxdesc_p;		/* paddress of first rx desc */
+	u_int32_t sp_rxdesc_p;		/* paddress of first rx desc */
 	sca_desc_t *sp_rxdesc;		/* vaddress of first rx desc */
-	bus_addr_t sp_rxbuf_p;		/* paddress of first rx buffer */
+	u_int32_t sp_rxbuf_p;		/* paddress of first rx buffer */
 	u_int8_t *sp_rxbuf;		/* vaddress of first rx buffer */
 
 	u_int sp_rxstart;		/* index of first descriptor */
@@ -137,7 +139,7 @@ struct sca_port {
  * softc structure for the chip itself
  */
 struct sca_softc {
-	device_t	sc_parent;	/* our parent device, or NULL */
+	struct device	*sc_parent;	/* our parent device, or NULL */
 	int		sc_numports;	/* number of ports present */
 	u_int32_t	sc_baseclock;	/* the base operating clock */
 

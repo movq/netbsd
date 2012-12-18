@@ -1,4 +1,4 @@
-/*	$NetBSD: grfabs_et.h,v 1.4 2011/10/04 04:50:20 chs Exp $	*/
+/*	$NetBSD: grfabs_et.h,v 1.1 1996/10/11 21:02:48 leo Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Leo Weppelman.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +36,7 @@
 typedef struct {
 	u_char	misc_output;
 	u_char	crt[25];	/* Std. VGA crt registers	*/
-	u_char	attr[25];	/* Std. VGA attr. registers	*/
+	u_char	attr[21];	/* Std. VGA attr. registers	*/
 	u_char	grf[9];		/* Std. VGA grf. registers	*/
 	u_char	seq[5];		/* Std. VGA seq. registers	*/
 
@@ -52,7 +57,7 @@ typedef struct {
 	/* actually longer... */
 } save_area_t;
 
-void	et_hwrest(et_sv_reg_t *);
-void	et_hwsave(et_sv_reg_t *);
-int	et_probe_card(void);
-void	et_probe_video(MODES *);
+void	et_hwrest __P((et_sv_reg_t *));
+void	et_hwsave __P((et_sv_reg_t *));
+int	et_probe_card __P((void));
+void	et_probe_video __P((MODES *));

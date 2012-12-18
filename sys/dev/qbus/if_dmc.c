@@ -1,4 +1,4 @@
-/*	$NetBSD: if_dmc.c,v 1.21 2012/10/27 17:18:37 chs Exp $	*/
+/*	$NetBSD: if_dmc.c,v 1.16 2008/04/05 19:16:49 cegger Exp $	*/
 /*
  * Copyright (c) 1982, 1986 Regents of the University of California.
  * All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_dmc.c,v 1.21 2012/10/27 17:18:37 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_dmc.c,v 1.16 2008/04/05 19:16:49 cegger Exp $");
 
 #undef DMCDEBUG	/* for base table dump on fatal error */
 
@@ -134,7 +134,7 @@ struct dmcbufs {
  * efficiently.
  */
 struct dmc_softc {
-	device_t sc_dev;		/* Configuration common part */
+	struct	device sc_dev;		/* Configuration common part */
 	struct	ifnet sc_if;		/* network-visible interface */
 	short	sc_oused;		/* output buffers currently in use */
 	short	sc_iused;		/* input buffers given to DMC */
@@ -168,8 +168,8 @@ struct dmc_softc {
 	} dmc_base;
 };
 
-static  int dmcmatch(device_t, cfdata_t, void *);
-static  void dmcattach(device_t, device_t, void *);
+static  int dmcmatch(struct device *, struct cfdata *, void *);
+static  void dmcattach(struct device *, struct device *, void *);
 static  int dmcinit(struct ifnet *);
 static  void dmcrint(void *);
 static  void dmcxint(void *);
@@ -181,9 +181,9 @@ static  void dmctimeout(struct ifnet *);
 static  int dmcioctl(struct ifnet *, u_long, void *);
 static  int dmcoutput(struct ifnet *, struct mbuf *, struct sockaddr *,
 	struct rtentry *);
-static  void dmcreset(device_t);
+static  void dmcreset(struct device *);
 
-CFATTACH_DECL_NEW(dmc, sizeof(struct dmc_softc),
+CFATTACH_DECL(dmc, sizeof(struct dmc_softc),
     dmcmatch, dmcattach, NULL, NULL);
 
 /* flags */
@@ -214,7 +214,7 @@ CFATTACH_DECL_NEW(dmc, sizeof(struct dmc_softc),
 		(tail) = (head)
 
 int
-dmcmatch(device_t parent, cfdata_t cf, void *aux)
+dmcmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct uba_attach_args *ua = aux;
 	struct dmc_softc ssc;
@@ -247,17 +247,16 @@ dmcmatch(device_t parent, cfdata_t cf, void *aux)
  * to accept packets.
  */
 void
-dmcattach(device_t parent, device_t self, void *aux)
+dmcattach(struct device *parent, struct device *self, void *aux)
 {
 	struct uba_attach_args *ua = aux;
 	struct dmc_softc *sc = device_private(self);
 
-	sc->sc_dev = self;
 	sc->sc_iot = ua->ua_iot;
 	sc->sc_ioh = ua->ua_ioh;
 	sc->sc_dmat = ua->ua_dmat;
 
-	strlcpy(sc->sc_if.if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
+	strlcpy(sc->sc_if.if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	sc->sc_if.if_mtu = DMCMTU;
 	sc->sc_if.if_init = dmcinit;
 	sc->sc_if.if_output = dmcoutput;
@@ -271,11 +270,11 @@ dmcattach(device_t parent, device_t self, void *aux)
 	    &sc->sc_rintrcnt);
 	uba_intr_establish(ua->ua_icookie, ua->ua_cvec+4, dmcxint, sc,
 	    &sc->sc_tintrcnt);
-	uba_reset_establish(dmcreset, sc->sc_dev);
+	uba_reset_establish(dmcreset, &sc->sc_dev);
 	evcnt_attach_dynamic(&sc->sc_rintrcnt, EVCNT_TYPE_INTR, ua->ua_evcnt,
-	    device_xname(sc->sc_dev), "intr");
+	    device_xname(&sc->sc_dev), "intr");
 	evcnt_attach_dynamic(&sc->sc_tintrcnt, EVCNT_TYPE_INTR, ua->ua_evcnt,
-	    device_xname(sc->sc_dev), "intr");
+	    device_xname(&sc->sc_dev), "intr");
 
 	if_attach(&sc->sc_if);
 }
@@ -285,9 +284,9 @@ dmcattach(device_t parent, device_t self, void *aux)
  * If interface is on specified UBA, reset its state.
  */
 void
-dmcreset(device_t dev)
+dmcreset(struct device *dev)
 {
-	struct dmc_softc *sc = device_private(dev);
+	struct dmc_softc *sc = (struct dmc_softc *)dev;
 
 	sc->sc_flag = 0;
 	sc->sc_if.if_flags &= ~IFF_RUNNING;
@@ -306,7 +305,7 @@ dmcinit(struct ifnet *ifp)
 	struct dmcbufs *rp;
 	struct dmc_command *qp;
 	struct ifaddr *ifa;
-	cfdata_t ui = device_cfdata(sc->sc_dev);
+	struct cfdata *ui = device_cfdata(&sc->sc_dev);
 	int base;
 	int s;
 
@@ -329,17 +328,17 @@ dmcinit(struct ifnet *ifp)
 	if ((sc->sc_flag & DMC_BMAPPED) == 0) {
 		sc->sc_ui.ui_size = sizeof(struct dmc_base);
 		sc->sc_ui.ui_vaddr = (void *)&sc->dmc_base;
-		uballoc(device_private(device_parent(sc->sc_dev)), &sc->sc_ui, 0);
+		uballoc((void *)device_parent(&sc->sc_dev), &sc->sc_ui, 0);
 		sc->sc_flag |= DMC_BMAPPED;
 	}
 	/* initialize UNIBUS resources */
 	sc->sc_iused = sc->sc_oused = 0;
 	if ((ifp->if_flags & IFF_RUNNING) == 0) {
 		if (if_ubaminit(&sc->sc_ifuba,
-		    device_private(device_parent(sc->sc_dev)),
+		    (void *)device_parent(&sc->sc_dev),
 		    sizeof(struct dmc_header) + DMCMTU,
 		    sc->sc_ifr, NRCV, sc->sc_ifw, NXMT) == 0) {
-			aprint_error_dev(sc->sc_dev, "can't allocate uba resources\n");
+			aprint_error_dev(&sc->sc_dev, "can't allocate uba resources\n");
 			ifp->if_flags &= ~IFF_UP;
 			return 0;
 		}
@@ -503,7 +502,7 @@ dmcrint(void *arg)
 	int n;
 
 	if ((qp = sc->sc_qactive) == (struct dmc_command *) 0) {
-		printf("%s: dmcrint no command\n", device_xname(sc->sc_dev));
+		printf("%s: dmcrint no command\n", device_xname(&sc->sc_dev));
 		return;
 	}
 	while (DMC_RBYTE(DMC_BSEL0) & DMC_RDYI) {
@@ -590,14 +589,14 @@ dmcxint(void *a)
 			if (rp >= &sc->sc_rbufs[NRCV])
 				panic("dmc rcv");
 			if ((rp->flags & DBUF_DMCS) == 0)
-				aprint_error_dev(sc->sc_dev, "done unalloc rbuf\n");
+				aprint_error_dev(&sc->sc_dev, "done unalloc rbuf\n");
 
 			len = (arg & DMC_CCOUNT) - sizeof (struct dmc_header);
 			if (len < 0 || len > DMCMTU) {
 				ifp->if_ierrors++;
 #ifdef DMCDEBUG
 				printd("%s: bad rcv pkt addr 0x%x len 0x%x\n",
-				    device_xname(sc->sc_dev), pkaddr, len);
+				    device_xname(&sc->sc_dev), pkaddr, len);
 #endif
 				goto setup;
 			}
@@ -666,12 +665,12 @@ dmcxint(void *a)
 				ifxp++;
 			}
 			if (rp >= &sc->sc_xbufs[NXMT]) {
-				aprint_error_dev(sc->sc_dev, "bad packet address 0x%x\n",
+				aprint_error_dev(&sc->sc_dev, "bad packet address 0x%x\n",
 				    pkaddr);
 				break;
 			}
 			if ((rp->flags & DBUF_DMCS) == 0)
-				aprint_error_dev(sc->sc_dev, "unallocated packet 0x%x\n",
+				aprint_error_dev(&sc->sc_dev, "unallocated packet 0x%x\n",
 				    pkaddr);
 			/* mark buffer free */
 			if_ubaend(&sc->sc_ifuba, ifxp);
@@ -696,11 +695,11 @@ dmcxint(void *a)
 			arg &= DMC_CNTMASK;
 			if (arg & DMC_FATAL) {
 				if (arg != DMC_START) {
-					snprintb(buf, sizeof(buf), CNTLO_BITS,
-					    arg);
+					bitmask_snprintf(arg, CNTLO_BITS,
+					    buf, sizeof(buf));
 					log(LOG_ERR,
 					    "%s: fatal error, flags=%s\n",
-					    device_xname(sc->sc_dev), buf);
+					    device_xname(&sc->sc_dev), buf);
 				}
 				dmcrestart(sc);
 				break;
@@ -731,9 +730,9 @@ dmcxint(void *a)
 			break;
 		report:
 #ifdef DMCDEBUG
-			snprintb(buf, sizeof(buf), CNTLO_BITS, arg);
+			bitmask_snprintf(arg, CNTLO_BITS, buf, sizeof(buf));
 			printd("%s: soft error, flags=%s\n",
-			    device_xname(sc->sc_dev), buf);
+			    device_xname(&sc->sc_dev), buf);
 #endif
 			if ((sc->sc_flag & DMC_RESTART) == 0) {
 				/*
@@ -749,7 +748,7 @@ dmcxint(void *a)
 
 		default:
 			printf("%s: bad control %o\n",
-			    device_xname(sc->sc_dev), cmd);
+			    device_xname(&sc->sc_dev), cmd);
 			break;
 		}
 	}
@@ -842,7 +841,7 @@ dmcioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 		if ((ifp->if_flags & IFF_RUNNING) == 0)
 			dmcinit(ifp);
@@ -854,8 +853,6 @@ dmcioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
 		if ((ifp->if_flags & IFF_UP) == 0 &&
 		    sc->sc_flag & DMC_RUNNING)
 			dmcdown(sc);
@@ -865,7 +862,7 @@ dmcioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ifioctl_common(ifp, cmd, data);
+		error = EINVAL;
 	}
 	splx(s);
 	return (error);
@@ -882,7 +879,7 @@ dmcrestart(struct dmc_softc *sc)
 
 #ifdef DMCDEBUG
 	/* dump base table */
-	printf("%s base table:\n", device_xname(sc->sc_dev));
+	printf("%s base table:\n", device_xname(&sc->sc_dev));
 	for (i = 0; i < sizeof (struct dmc_base); i++)
 		printf("%o\n" ,dmc_base[unit].d_base[i]);
 #endif
@@ -897,7 +894,7 @@ dmcrestart(struct dmc_softc *sc)
 		;
 	/* Did the timer expire or did the DMR finish? */
 	if ((DMC_RBYTE(DMC_BSEL1) & DMC_RUN) == 0) {
-		log(LOG_ERR, "%s: M820 Test Failed\n", device_xname(sc->sc_dev));
+		log(LOG_ERR, "%s: M820 Test Failed\n", device_xname(&sc->sc_dev));
 		return;
 	}
 
@@ -945,12 +942,12 @@ dmctimeout(struct ifnet *ifp)
 	char buf1[64], buf2[64];
 
 	if (sc->sc_flag & DMC_ONLINE) {
-		snprintb(buf1, sizeof(buf1), DMC0BITS,
-		    DMC_RBYTE(DMC_BSEL0) & 0xff);
-		snprintb(buf2, sizeof(buf2), DMC2BITS,
-		    DMC_RBYTE(DMC_BSEL2) & 0xff);
+		bitmask_snprintf(DMC_RBYTE(DMC_BSEL0) & 0xff, DMC0BITS,
+		    buf1, sizeof(buf1));
+		bitmask_snprintf(DMC_RBYTE(DMC_BSEL2) & 0xff, DMC2BITS,
+		    buf2, sizeof(buf2));
 		log(LOG_ERR, "%s: output timeout, bsel0=%s bsel2=%s\n",
-		    device_xname(sc->sc_dev), buf1, buf2);
+		    device_xname(&sc->sc_dev), buf1, buf2);
 		dmcrestart(sc);
 	}
 }

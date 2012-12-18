@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_map.c,v 1.42 2012/05/06 03:13:11 christos Exp $	*/
+/*	$NetBSD: procfs_map.c,v 1.36 2008/07/25 18:36:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.42 2012/05/06 03:13:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.36 2008/07/25 18:36:50 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -120,8 +120,6 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 	dev_t dev;
 	long fileid;
 	size_t pos;
-	int width = (int)((curl->l_proc->p_flag & PK_32) ? sizeof(int32_t) : 
-	    sizeof(void *)) * 2;
 
 	if (uio->uio_rw != UIO_READ)
 		return EOPNOTSUPP;
@@ -164,9 +162,7 @@ again:
 			if (UVM_ET_ISOBJ(entry) &&
 			    UVM_OBJ_IS_VNODE(entry->object.uvm_obj)) {
 				vp = (struct vnode *)entry->object.uvm_obj;
-				vn_lock(vp, LK_SHARED | LK_RETRY);
 				error = VOP_GETATTR(vp, &va, curl->l_cred);
-				VOP_UNLOCK(vp);
 				if (error == 0 && vp != pfs->pfs_vnode) {
 					fileid = va.va_fileid;
 					dev = va.va_fsid;
@@ -175,21 +171,19 @@ again:
 				}
 			}
 			pos += snprintf(buffer + pos, bufsize - pos,
-			    "%.*"PRIxVADDR"-%.*"PRIxVADDR" %c%c%c%c "
-			    "%.*lx %.2llx:%.2llx %-8ld %25.s %s\n",
-			    width, entry->start,
-			    width, entry->end,
+			    "%0*lx-%0*lx %c%c%c%c %0*lx %02x:%02x %ld     %s\n",
+			    (int)sizeof(void *) * 2,(unsigned long)entry->start,
+			    (int)sizeof(void *) * 2,(unsigned long)entry->end,
 			    (entry->protection & VM_PROT_READ) ? 'r' : '-',
 			    (entry->protection & VM_PROT_WRITE) ? 'w' : '-',
 			    (entry->protection & VM_PROT_EXECUTE) ? 'x' : '-',
 			    (entry->etype & UVM_ET_COPYONWRITE) ? 'p' : 's',
-			    width, (unsigned long)entry->offset,
-			    (unsigned long long)major(dev),
-			    (unsigned long long)minor(dev), fileid, "", path);
+			    (int)sizeof(void *) * 2,
+			    (unsigned long)entry->offset,
+			    major(dev), minor(dev), fileid, path);
 		} else {
 			pos += snprintf(buffer + pos, bufsize - pos,
-			    "%#"PRIxVADDR" %#"PRIxVADDR" "
-			    "%c%c%c %c%c%c %s %s %d %d %d\n",
+			    "0x%lx 0x%lx %c%c%c %c%c%c %s %s %d %d %d\n",
 			    entry->start, entry->end,
 			    (entry->protection & VM_PROT_READ) ? 'r' : '-',
 			    (entry->protection & VM_PROT_WRITE) ? 'w' : '-',

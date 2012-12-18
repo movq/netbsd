@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: scan.l,v 1.17 2012/03/20 20:34:57 matt Exp $	*/
+/*	$NetBSD: scan.l,v 1.11 2008/10/09 07:18:15 dholland Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -105,10 +105,9 @@ static int endinclude(void);
 static int getincludepath(void);
 static int getcurifdef(void);
 
+#define	yywrap() 1
 
 %}
-
-%option  noyywrap
 
 PATH	[A-Za-z_0-9]*[./][-A-Za-z_0-9./]*
 QCHARS	([^"\n]|\\\")+
@@ -145,8 +144,6 @@ file		return XFILE;
 file-system	return FILE_SYSTEM;
 flags		return FLAGS;
 ident		return IDENT;
-ioconf		return IOCONF;
-linkzero	return LINKZERO;
 machine		return XMACHINE;
 major		return MAJOR;
 makeoptions	return MAKEOPTIONS;
@@ -162,12 +159,9 @@ on		return ON;
 options		return OPTIONS;
 prefix		return PREFIX;
 pseudo-device	return PSEUDO_DEVICE;
-pseudo-root	return PSEUDO_ROOT;
 root		return ROOT;
-single		return SINGLE;
 source		return SOURCE;
 type		return TYPE;
-vector 		return VECTOR;
 version 	return VERSION;
 with		return WITH;
 
@@ -418,7 +412,7 @@ curdir_pop(void)
 	if (SLIST_EMPTY(&curdirs))
 		panic("curdirs is empty");
 	/* LINTED cast away const (pf_prefix is malloc'd for curdirs) */
-	free((void *)__UNCONST(pf->pf_prefix));
+	free((void *)pf->pf_prefix);
 	free(pf);
 }
 
@@ -541,7 +535,7 @@ include(const char *fname, int ateof, int conditional, int direct)
  * Extract the pathname from a include/cinclude/package into curinclpath
  */
 static int
-getincludepath(void)
+getincludepath()
 {
 	const char *p = yytext;
 	ptrdiff_t len;
@@ -565,7 +559,7 @@ getincludepath(void)
 	}
 
 	len = e-p;
-	if (len > (ptrdiff_t)sizeof(curinclpath)-1)
+	if (len > sizeof(curinclpath)-1)
 		len = sizeof(curinclpath)-1;
 	strncpy(curinclpath, p, sizeof(curinclpath));
 	curinclpath[len] = '\0';

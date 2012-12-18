@@ -1,4 +1,4 @@
-/*	$NetBSD: dead_vnops.c,v 1.51 2011/06/12 03:35:57 rmind Exp $	*/
+/*	$NetBSD: dead_vnops.c,v 1.47 2008/01/25 14:32:15 ad Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dead_vnops.c,v 1.51 2011/06/12 03:35:57 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dead_vnops.c,v 1.47 2008/01/25 14:32:15 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,17 +60,17 @@ int	dead_poll(void *);
 #define dead_inactive	genfs_nullop
 #define dead_reclaim	genfs_nullop
 int	dead_lock(void *);
-#define dead_unlock	genfs_unlock
+#define dead_unlock	genfs_nullop
 int	dead_bmap(void *);
 int	dead_strategy(void *);
 int	dead_print(void *);
-#define dead_islocked	genfs_islocked
+#define dead_islocked	genfs_nullop
 #define dead_bwrite	genfs_nullop
 #define dead_revoke	genfs_nullop
 int	dead_getpages(void *);
 #define dead_putpages	genfs_null_putpages
 
-int	chkvnlock(struct vnode *);
+int	chkvnlock(struct vnode *, bool);
 int	dead_default_error(void *);
 
 int (**dead_vnodeop_p)(void *);
@@ -126,7 +126,8 @@ dead_open(void *v)
  */
 /* ARGSUSED */
 int
-dead_read(void *v)
+dead_read(v)
+	void *v;
 {
 	struct vop_read_args /* {
 		struct vnode *a_vp;
@@ -135,7 +136,7 @@ dead_read(void *v)
 		kauth_cred_t a_cred;
 	} */ *ap = v;
 
-	if (chkvnlock(ap->a_vp))
+	if (chkvnlock(ap->a_vp, false))
 		panic("dead_read: lock");
 	/*
 	 * Return EOF for tty devices, EIO for others
@@ -150,7 +151,8 @@ dead_read(void *v)
  */
 /* ARGSUSED */
 int
-dead_write(void *v)
+dead_write(v)
+	void *v;
 {
 	struct vop_write_args /* {
 		struct vnode *a_vp;
@@ -159,7 +161,7 @@ dead_write(void *v)
 		kauth_cred_t a_cred;
 	} */ *ap = v;
 
-	if (chkvnlock(ap->a_vp))
+	if (chkvnlock(ap->a_vp, false))
 		panic("dead_write: lock");
 	return (EIO);
 }
@@ -169,7 +171,8 @@ dead_write(void *v)
  */
 /* ARGSUSED */
 int
-dead_ioctl(void *v)
+dead_ioctl(v)
+	void *v;
 {
 	struct vop_ioctl_args /* {
 		struct vnode *a_vp;
@@ -180,14 +183,15 @@ dead_ioctl(void *v)
 		struct lwp *a_l;
 	} */ *ap = v;
 
-	if (!chkvnlock(ap->a_vp))
+	if (!chkvnlock(ap->a_vp, false))
 		return (EBADF);
 	return (VCALL(ap->a_vp, VOFFSET(vop_ioctl), ap));
 }
 
 /* ARGSUSED */
 int
-dead_poll(void *v)
+dead_poll(v)
+	void *v;
 {
 	struct vop_poll_args /* {
 		struct vnode *a_vp;
@@ -205,7 +209,8 @@ dead_poll(void *v)
  * Just call the device strategy routine
  */
 int
-dead_strategy(void *v)
+dead_strategy(v)
+	void *v;
 {
 
 	struct vop_strategy_args /* {
@@ -213,7 +218,7 @@ dead_strategy(void *v)
 		struct buf *a_bp;
 	} */ *ap = v;
 	struct buf *bp;
-	if (ap->a_vp == NULL || !chkvnlock(ap->a_vp)) {
+	if (ap->a_vp == NULL || !chkvnlock(ap->a_vp, false)) {
 		bp = ap->a_bp;
 		bp->b_error = EIO;
 		bp->b_resid = bp->b_bcount;
@@ -227,17 +232,23 @@ dead_strategy(void *v)
  * Wait until the vnode has finished changing state.
  */
 int
-dead_lock(void *v)
+dead_lock(v)
+	void *v;
 {
 	struct vop_lock_args /* {
 		struct vnode *a_vp;
 		int a_flags;
 		struct proc *a_p;
 	} */ *ap = v;
+	bool interlock;
 
-	if (!chkvnlock(ap->a_vp)) {
-		return genfs_lock(v);
-	}
+	if (ap->a_flags & LK_INTERLOCK) {
+		interlock = true;
+		ap->a_flags &= ~LK_INTERLOCK;
+	} else
+		interlock = false;
+	if (!chkvnlock(ap->a_vp, interlock))
+		return (0);
 	return (VCALL(ap->a_vp, VOFFSET(vop_lock), ap));
 }
 
@@ -245,7 +256,8 @@ dead_lock(void *v)
  * Wait until the vnode has finished changing state.
  */
 int
-dead_bmap(void *v)
+dead_bmap(v)
+	void *v;
 {
 	struct vop_bmap_args /* {
 		struct vnode *a_vp;
@@ -255,7 +267,7 @@ dead_bmap(void *v)
 		int *a_runp;
 	} */ *ap = v;
 
-	if (!chkvnlock(ap->a_vp))
+	if (!chkvnlock(ap->a_vp, false))
 		return (EIO);
 	return (VOP_BMAP(ap->a_vp, ap->a_bn, ap->a_vpp, ap->a_bnp, ap->a_runp));
 }
@@ -286,7 +298,7 @@ dead_getpages(void *v)
 	} */ *ap = v;
 
 	if ((ap->a_flags & PGO_LOCKED) == 0)
-		mutex_exit(ap->a_vp->v_interlock);
+		mutex_exit(&ap->a_vp->v_interlock);
 
 	return (EFAULT);
 }
@@ -296,16 +308,19 @@ dead_getpages(void *v)
  * in a state of change.
  */
 int
-chkvnlock(struct vnode *vp)
+chkvnlock(vp, interlock)
+	struct vnode *vp;
+	bool interlock;
 {
 	int locked = 0;
 
-	mutex_enter(vp->v_interlock);
+	if (!interlock)
+		mutex_enter(&vp->v_interlock);
 	while (vp->v_iflag & VI_XLOCK) {
 		vwait(vp, VI_XLOCK);
 		locked = 1;
 	}
-	mutex_exit(vp->v_interlock);
+	mutex_exit(&vp->v_interlock);
 
 	return (locked);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: rcsdiff.c,v 1.8 2012/01/06 15:16:03 joerg Exp $	*/
+/*	$NetBSD: rcsdiff.c,v 1.5 1999/07/22 01:48:09 hubertf Exp $	*/
 
 /* Compare RCS revisions.  */
 
@@ -31,15 +31,6 @@ Report problems and direct all questions to:
 
 /*
  * $Log: rcsdiff.c,v $
- * Revision 1.8  2012/01/06 15:16:03  joerg
- * Don't use dangling elses.
- *
- * Revision 1.7  2011/05/15 14:33:12  christos
- * register c -> int c
- *
- * Revision 1.6  2009/11/06 22:02:35  enami
- * Accept -U num.  Nowadays, diff(1) rejects -u0 etc by default.
- *
  * Revision 1.5  1999/07/22 01:48:09  hubertf
  * Allow -L on both files, not only one.
  *
@@ -196,7 +187,7 @@ mainProg(rcsdiffId, "rcsdiff", "Id: rcsdiff.c,v 5.19 1995/06/16 06:19:24 eggert 
     struct hshentry * target;
     char *a, *dcp, **newargv;
     int no_diff_means_no_output;
-    int c;
+    register c;
 
     exitstatus = DIFF_SUCCESS;
 
@@ -234,7 +225,7 @@ mainProg(rcsdiffId, "rcsdiff", "Id: rcsdiff.c,v 5.19 1995/06/16 06:19:24 eggert 
 	    case '-': case 'D':
 		    no_diff_means_no_output = false;
 		    /* fall into */
-	    case 'C': case 'F': case 'I': case 'L': case 'W': case 'U':
+	    case 'C': case 'F': case 'I': case 'L': case 'W':
 #if DIFF_L
 		    if (c == 'L'  &&  file_labels++ == 2)
 			faterror("too many -L options");
@@ -384,14 +375,13 @@ mainProg(rcsdiffId, "rcsdiff", "Id: rcsdiff.c,v 5.19 1995/06/16 06:19:24 eggert 
 		    lexpandarg = "-kkvl";
 	    Izclose(&workptr);
 #if DIFF_L
-	    if (diff_label2) {
+	    if (diff_label2)
 		if (revnums == 2)
 		    *diff_label2 = setup_label(&labelbuf[1], target->num, target->date);
 		else {
 		    time2date(workstat.st_mtime, date2);
 		    *diff_label2 = setup_label(&labelbuf[1], (char*)0, date2);
 		}
-	    }
 #endif
 
 	    diagnose("retrieving revision %s\n", xrev1);

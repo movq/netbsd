@@ -1,4 +1,4 @@
-/* $NetBSD: smdk2410_kbd.c,v 1.8 2012/10/27 17:17:49 chs Exp $ */
+/* $NetBSD: smdk2410_kbd.c,v 1.5 2008/01/06 01:37:58 matt Exp $ */
 
 /*
  * Copyright (c) 2004  Genetec Corporation.  All rights reserved.
@@ -40,13 +40,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smdk2410_kbd.c,v 1.8 2012/10/27 17:17:49 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smdk2410_kbd.c,v 1.5 2008/01/06 01:37:58 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 
 #include <dev/wscons/wsconsio.h>
@@ -201,9 +201,9 @@ const struct wskbd_mapdata sskbd_keymapdata = {
  * SMDK2410 keyboard driver.
  */
 struct sskbd_softc {
-        device_t sc_dev;
+        struct  device dev;
 
-	device_t wskbddev;
+	struct device *wskbddev;
 	void *atn_ih;			/* interrupt handler for nATN */
 	void *spi_ih;			/* interrupt handler for SPI rx */
 
@@ -222,10 +222,10 @@ struct sskbd_softc {
 };
 
 
-int sskbd_match(device_t, cfdata_t, void *);
-void sskbd_attach(device_t, device_t, void *);
+int sskbd_match(struct device *, struct cfdata *, void *);
+void sskbd_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(sskbd, sizeof(struct sskbd_softc),
+CFATTACH_DECL(sskbd, sizeof(struct sskbd_softc),
     sskbd_match, sskbd_attach, NULL, NULL);
 
 static  int	sskbd_enable(void *, int);
@@ -254,22 +254,20 @@ const struct wskbd_consops sskbd_consops = {
 #endif
 
 int
-sskbd_match(device_t parent, cfdata_t cf, void *aux)
+sskbd_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	return 1;
 }
 
 void
-sskbd_attach(device_t parent, device_t self, void *aux)
+sskbd_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct sskbd_softc *sc = device_private(self);
+	struct sskbd_softc *sc = (void *)self;
 	struct ssspi_attach_args *spia = aux;
 	uint32_t reg;
 	bus_space_handle_t gpioh;
 	bus_space_tag_t iot;
 	struct wskbddev_attach_args a;
-
-	sc->sc_dev = self;
 
 	aprint_normal("\n");
 
@@ -325,10 +323,11 @@ sskbd_attach(device_t parent, device_t self, void *aux)
 	sc->soft_ih = softint_establish(SOFTINT_SERIAL, sskbd_soft_intr, sc);
 
 	if (sc->atn_ih == NULL || sc->spi_ih == NULL)
-		aprint_error_dev(self, "can't establish interrupt handler\n");
+		aprint_error("%s: can't establish interrupt handler\n",
+		    sc->dev.dv_xname);
 
 	/* setup SPI control register, and prescaler */
-	s3c24x0_spi_setup(device_private(device_parent(self)), 
+	s3c24x0_spi_setup((struct ssspi_softc *)device_parent(self), 
 			  SPCON_SMOD_INT | SPCON_ENSCK | 
 			  SPCON_MSTR | SPCON_IDLELOW_RISING,
 			  100*1000, 0);
@@ -449,7 +448,7 @@ sskbd_enable(void *v, int on)
 	struct sskbd_softc *sc = v;
 
 #ifdef KBD_DEBUG
-	printf("%s: enable\n", device_xname(sc->sc_dev));
+	printf("%s: enable\n", sc->dev.dv_xname);
 #endif
 
 #if 0

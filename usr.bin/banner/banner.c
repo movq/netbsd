@@ -1,4 +1,4 @@
-/*	$NetBSD: banner.c,v 1.15 2012/02/29 08:55:25 wiz Exp $	*/
+/*	$NetBSD: banner.c,v 1.12 2008/07/21 14:19:21 lukem Exp $	*/
 
 /*
  *	Changes for banner(1)
@@ -58,7 +58,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)printjob.c	8.2 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: banner.c,v 1.15 2012/02/29 08:55:25 wiz Exp $");
+__RCSID("$NetBSD: banner.c,v 1.12 2008/07/21 14:19:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -82,7 +82,7 @@ static int Drop = 0;				/* 3 for the LPD font */
 static	int	dropit (int);
 static	void	scan_out (int, char *, int);
 static	char   *scnline (int, char *, int);
-__dead static	void	usage(void);
+static	void	usage(void);
 
 /* the char gen code below is lifted from lpd */
 
@@ -202,10 +202,10 @@ main(int argc, char **argv)
 	exit(0);
 }
 
-static void
+void
 usage(void)
 {
-    fprintf(stderr, "usage: %s [-l] [-b bg] [-f fg] string ...\n",
+    fprintf(stderr, "usage: %s [-f fgchar] [-b bgchar] [-l] message...\n",
 	getprogname());
     exit(1);
 }

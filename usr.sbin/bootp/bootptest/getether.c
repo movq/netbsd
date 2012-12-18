@@ -1,8 +1,8 @@
-/*	$NetBSD: getether.c,v 1.9 2009/04/15 00:23:29 lukem Exp $	*/
+/*	$NetBSD: getether.c,v 1.8 2007/05/27 16:31:42 tls Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: getether.c,v 1.9 2009/04/15 00:23:29 lukem Exp $");
+__RCSID("$NetBSD: getether.c,v 1.8 2007/05/27 16:31:42 tls Exp $");
 #endif
 
 /*
@@ -141,7 +141,7 @@ getether(char *ifname, char *eap)
 	ifc.ifc_len = sizeof(ibuf);
 	ifc.ifc_buf = (caddr_t) ibuf;
 	if (ioctl(fd, SIOCGIFCONF, (char *) &ifc) < 0 ||
-		ifc.ifc_len < (int)sizeof(struct ifreq)) {
+		ifc.ifc_len < sizeof(struct ifreq)) {
 		report(LOG_ERR, "getether: SIOCGIFCONF: %s", get_errmsg());
 		goto out;
 	}
@@ -159,7 +159,7 @@ getether(char *ifname, char *eap)
 		}
 		/* Bump interface config pointer */
 		n = ifrp->ifr_addr.sa_len + sizeof(ifrp->ifr_name);
-		if (n < (int)sizeof(*ifrp))
+		if (n < sizeof(*ifrp))
 			n = sizeof(*ifrp);
 		ifrp = (struct ifreq *) ((char *) ifrp + n);
 	}

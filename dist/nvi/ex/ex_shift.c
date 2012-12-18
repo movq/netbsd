@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_shift.c,v 1.3 2009/08/07 16:19:54 lukem Exp $ */
+/*	$NetBSD: ex_shift.c,v 1.1.1.2.6.2 2009/10/18 09:58:03 sborrill Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994

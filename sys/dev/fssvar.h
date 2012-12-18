@@ -1,4 +1,4 @@
-/*	$NetBSD: fssvar.h,v 1.27 2011/11/29 20:56:12 bouyer Exp $	*/
+/*	$NetBSD: fssvar.h,v 1.23.4.2 2012/01/25 18:06:27 riz Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2007 The NetBSD Foundation, Inc.
@@ -37,6 +37,12 @@
 #define FSS_UNCONFIG_ON_CLOSE	0x01	/* Unconfigure on last close */
 #define FSS_UNLINK_ON_CREATE	0x02	/* Unlink backing store on create */
 
+struct fss_set50 {
+	char		*fss_mount;	/* Mount point of file system */
+	char		*fss_bstore;	/* Path of backing store */
+	blksize_t	fss_csize;	/* Preferred cluster size */
+};
+
 struct fss_set {
 	char		*fss_mount;	/* Mount point of file system */
 	char		*fss_bstore;	/* Path of backing store */
@@ -57,25 +63,9 @@ struct fss_get {
 #define FSSIOCCLR	_IO('F', 2)			/* Unconfigure */
 #define FSSIOFSET	_IOW('F', 3, int)		/* Set flags */
 #define FSSIOFGET	_IOR('F', 4, int)		/* Get flags */
-#ifdef _KERNEL
-#include <compat/sys/time_types.h>
-
-struct fss_set50 {
-	char		*fss_mount;	/* Mount point of file system */
-	char		*fss_bstore;	/* Path of backing store */
-	blksize_t	fss_csize;	/* Preferred cluster size */
-};
-
-struct fss_get50 {
-	char		fsg_mount[MNAMELEN]; /* Mount point of file system */
-	struct timeval50 fsg_time;	/* Time this snapshot was taken */
-	blksize_t	fsg_csize;	/* Current cluster size */
-	blkcnt_t	fsg_mount_size;	/* # clusters on file system */
-	blkcnt_t	fsg_bs_size;	/* # clusters on backing store */
-};
-
 #define FSSIOCSET50	_IOW('F', 0, struct fss_set50)	/* Old configure */
-#define FSSIOCGET50	_IOR('F', 1, struct fss_get50)	/* Old Status */
+
+#ifdef _KERNEL
 
 #include <sys/bufq.h>
 
@@ -157,6 +147,7 @@ struct fss_softc {
 	struct timeval	sc_time;	/* Time this snapshot was taken */
 	dev_t		sc_bdev;	/* Underlying block device */
 	struct vnode	*sc_bs_vp;	/* Our backing store */
+	off_t		sc_bs_size;	/* Its size in bytes */
 	int		sc_bs_bshift;	/* Shift of backing store block */
 	u_int32_t	sc_bs_bmask;	/* Mask of backing store block */
 	struct lwp	*sc_bs_lwp;	/* Our kernel thread */

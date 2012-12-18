@@ -1,4 +1,4 @@
-/*	$NetBSD: split.c,v 1.26 2011/09/16 15:39:29 joerg Exp $	*/
+/*	$NetBSD: split.c,v 1.24 2008/07/21 14:19:26 lukem Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)split.c	8.3 (Berkeley) 4/25/94";
 #endif
-__RCSID("$NetBSD: split.c,v 1.26 2011/09/16 15:39:29 joerg Exp $");
+__RCSID("$NetBSD: split.c,v 1.24 2008/07/21 14:19:26 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -60,10 +60,11 @@ static int ifd = STDIN_FILENO, ofd = -1; /* Input/output file descriptors. */
 static char *fname;		/* File name prefix. */
 static size_t sfxlen = 2;		/* suffix length. */
 
+int  main(int, char **);
 static void newfile(void);
-static void split1(off_t, int) __dead;
-static void split2(off_t) __dead;
-static void split3(off_t) __dead;
+static void split1(off_t, int);
+static void split2(off_t);
+static void split3(off_t);
 static void usage(void) __dead;
 static size_t bigwrite(int, void const *, size_t);
 
@@ -200,7 +201,7 @@ split1(off_t bytecnt, int maxcnt)
 			if (bcnt + len >= bytecnt) {
 				/* LINTED: bytecnt - bcnt <= len */
 				dist = bytecnt - bcnt;
-				if (bigwrite(ofd, bfr, dist) != (size_t)dist)
+				if (bigwrite(ofd, bfr, dist) != dist)
 					err(1, "write");
 				len -= dist;
 				for (C = bfr + dist; len >= bytecnt;
@@ -212,7 +213,7 @@ split1(off_t bytecnt, int maxcnt)
 					}
 					/* LINTED: as above */
 					if (bigwrite(ofd,
-					    C, bytecnt) != (size_t)bytecnt)
+					    C, bytecnt) != bytecnt)
 						err(1, "write");
 				}
 				if (len) {
@@ -221,7 +222,7 @@ split1(off_t bytecnt, int maxcnt)
 						nfiles++;
 					}
 					/* LINTED: len >= 0 */
-					if (bigwrite(ofd, C, len) != (size_t)len)
+					if (bigwrite(ofd, C, len) != len)
 						err(1, "write");
 				} else
 					file_open = 0;
@@ -229,7 +230,7 @@ split1(off_t bytecnt, int maxcnt)
 			} else {
 				bcnt += len;
 				/* LINTED: len >= 0 */
-				if (bigwrite(ofd, bfr, len) != (size_t)len)
+				if (bigwrite(ofd, bfr, len) != len)
 					err(1, "write");
 			}
 		}
@@ -264,7 +265,7 @@ split2(off_t numlines)
 			for (Cs = Ce = bfr; len--; Ce++)
 				if (*Ce == '\n' && ++lcnt == numlines) {
 					bcnt = Ce - Cs + 1;
-					if (bigwrite(ofd, Cs, bcnt) != (size_t)bcnt)
+					if (bigwrite(ofd, Cs, bcnt) != bcnt)
 						err(1, "write");
 					lcnt = 0;
 					Cs = Ce + 1;
@@ -275,7 +276,7 @@ split2(off_t numlines)
 				}
 			if (Cs < Ce) {
 				bcnt = Ce - Cs;
-				if (bigwrite(ofd, Cs, bcnt) != (size_t)bcnt)
+				if (bigwrite(ofd, Cs, bcnt) != bcnt)
 					err(1, "write");
 			}
 		}

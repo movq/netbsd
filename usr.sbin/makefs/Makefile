@@ -1,33 +1,45 @@
-#	$NetBSD: Makefile,v 1.31 2012/04/19 17:28:25 christos Exp $
+#	$NetBSD: Makefile,v 1.22 2008/08/29 00:02:25 gmcgarry Exp $
 #
-
-WARNS?=	5
 
 .include <bsd.own.mk>
 
 PROG=	makefs
-SRCS=	cd9660.c chfs.c ffs.c v7fs.c \
+SRCS=	buf.c \
+	cd9660.c cd9660_strings.c cd9660_debug.c cd9660_eltorito.c \
+	cd9660_write.c cd9660_conversion.c iso9660_rrip.c \
+	ffs.c ffs_alloc.c ffs_balloc.c ffs_bswap.c ffs_subr.c ffs_tables.c \
 	getid.c \
-	makefs.c misc.c \
+	makefs.c misc.c mkfs.c \
 	pack_dev.c \
 	spec.c \
+	ufs_bmap.c \
 	walk.c
 MAN=	makefs.8
 
 MKNODSRC=	${NETBSDSRCDIR}/sbin/mknod
 MTREESRC=	${NETBSDSRCDIR}/usr.sbin/mtree
+UFSSRC=		${NETBSDSRCDIR}/sys/ufs
+CD9660SRC=	${NETBSDSRCDIR}/sys/fs/cd9660
 
-CPPFLAGS+=	-I${.CURDIR} -I${MKNODSRC} -I${MTREESRC}
-.PATH:		${MKNODSRC} ${MTREESRC}
+CPPFLAGS+=	-I${.CURDIR} \
+		-I${MKNODSRC} -I${MTREESRC} -I${CD9660SRC}
+.PATH:		${.CURDIR}/ffs ${UFSSRC}/ffs \
+		${.CURDIR}/cd9660 ${CD9660SRC} \
+		${MKNODSRC} ${MTREESRC}
 
-.include "${.CURDIR}/cd9660/Makefile.inc"
-.include "${.CURDIR}/chfs/Makefile.inc"
-.include "${.CURDIR}/ffs/Makefile.inc"
-.include "${.CURDIR}/v7fs/Makefile.inc"
-
-.if !defined(HOSTPROG)
+.if (${HOSTPROG:U} == "")
 DPADD+= ${LIBUTIL}
 LDADD+= -lutil
+.endif
+
+WARNS?=	3
+
+.if !defined(HOSTPROGNAME)
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
+.for f in cd9660_debug cd9660_write
+COPTS.${f}.c+=  -Wno-pointer-sign
+.endfor
+.endif
 .endif
 
 .include <bsd.prog.mk>

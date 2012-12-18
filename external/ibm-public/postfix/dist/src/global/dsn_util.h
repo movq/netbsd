@@ -1,4 +1,4 @@
-/*	$NetBSD: dsn_util.h,v 1.1.1.1 2009/06/23 10:08:46 tron Exp $	*/
+/*	$NetBSD: dsn_util.h,v 1.1.1.1.2.3 2011/01/07 01:24:02 riz Exp $	*/
 
 #ifndef _DSN_UTIL_H_INCLUDED_
 #define _DSN_UTIL_H_INCLUDED_

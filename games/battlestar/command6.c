@@ -1,4 +1,4 @@
-/*	$NetBSD: command6.c,v 1.8 2010/04/24 00:38:30 dholland Exp $	*/
+/*	$NetBSD: command6.c,v 1.4 2007/12/15 19:44:39 perry Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,14 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)com6.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: command6.c,v 1.8 2010/04/24 00:38:30 dholland Exp $");
+__RCSID("$NetBSD: command6.c,v 1.4 2007/12/15 19:44:39 perry Exp $");
 #endif
 #endif				/* not lint */
 
 #include "extern.h"
 #include "pathnames.h"
-
-static void post(int);
 
 int
 launch(void)
@@ -116,18 +114,21 @@ open_score_file(void)
 		exit(1);
 }
 
-static void
+void
 post(int ch)
 {
 	time_t tv;
+	char   *date;
 	sigset_t isigset, osigset;
 
 	sigemptyset(&isigset);
 	sigaddset(&isigset, SIGINT);
 	sigprocmask(SIG_BLOCK, &isigset, &osigset);
 	tv = time(NULL);
+	date = ctime(&tv);
+	date[24] = '\0';
 	if (score_fp != NULL) {
-		fprintf(score_fp, "%24.24s  %8s  %c%20s", ctime(&tv), username, 
+		fprintf(score_fp, "%s  %8s  %c%20s", date, username, 
 		    ch, rate());
 		if (wiz)
 			fprintf(score_fp, "   wizard\n");
@@ -137,7 +138,6 @@ post(int ch)
 			else
 				fprintf(score_fp, "\n");
 	}
-	fflush(score_fp);
 	sigprocmask(SIG_SETMASK, &osigset, (sigset_t *) 0);
 }
 

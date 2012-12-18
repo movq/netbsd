@@ -1,4 +1,4 @@
-/* $NetBSD: podulebus.c,v 1.20 2012/05/11 15:39:18 skrll Exp $ */
+/* $NetBSD: podulebus.c,v 1.15 2006/09/30 16:30:10 bjh21 Exp $ */
 
 /*-
  * Copyright (c) 2000 Ben Harris
@@ -28,14 +28,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: podulebus.c,v 1.20 2012/05/11 15:39:18 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: podulebus.c,v 1.15 2006/09/30 16:30:10 bjh21 Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/systm.h>
-#include <sys/bus.h>
 
+#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/irq.h>
 #include <machine/machdep.h>
@@ -55,31 +55,32 @@ __KERNEL_RCSID(0, "$NetBSD: podulebus.c,v 1.20 2012/05/11 15:39:18 skrll Exp $")
 #include <arch/acorn26/podulebus/unixbpvar.h>
 #endif
 
-static int podulebus_match(device_t, cfdata_t, void *);
-static void podulebus_attach(device_t, device_t , void *);
-static void podulebus_probe_podule(device_t, int);
+static int podulebus_match(struct device *, struct cfdata *, void *);
+static void podulebus_attach(struct device *, struct device *, void *);
+static void podulebus_probe_podule(struct device *, int);
 static int podulebus_print(void *, char const *);
-static int podulebus_submatch(device_t, cfdata_t, const int *, void *);
+static int podulebus_submatch(struct device *, struct cfdata *,
+			      const int *, void *);
 static void podulebus_read_chunks(struct podulebus_attach_args *, int);
-static uint8_t *podulebus_get_chunk(struct podulebus_attach_args *, int);
+static u_int8_t *podulebus_get_chunk(struct podulebus_attach_args *pa, int type);
 #if NPODLOADER > 0
 void podloader_read_region(struct podulebus_attach_args *pa, u_int src,
-    uint8_t *dest, size_t length);
+    u_int8_t *dest, size_t length);
 extern register_t _podloader_call(register_t, register_t, register_t,
     void *, int);
 #endif
 
 struct podulebus_softc {
-	device_t sc_dev;
+	struct	device sc_dev;
 	struct	ioc_attach_args sc_ioc;
 };
 
-CFATTACH_DECL_NEW(podulebus, sizeof(struct podulebus_softc),
+CFATTACH_DECL(podulebus, sizeof(struct podulebus_softc),
     podulebus_match, podulebus_attach, NULL, NULL);
 
 /* ARGSUSED */
 static int
-podulebus_match(device_t parent, cfdata_t cf, void *aux)
+podulebus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	/* We can't usefully probe for this */
@@ -87,15 +88,14 @@ podulebus_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-podulebus_attach(device_t parent, device_t self, void *aux)
+podulebus_attach(struct device *parent, struct device *self, void *aux)
 {
 	int i;
-	struct podulebus_softc *sc = device_private(self);
+	struct podulebus_softc *sc = (struct podulebus_softc *)self;
 	struct ioc_attach_args *ioc = aux;
 
-	sc->sc_dev = self;
 	sc->sc_ioc = *ioc;
-	aprint_normal("\n");
+	printf("\n");
 
 	/* Iterate over the podules attaching them */
 	for (i = 0; i < MAX_PODULES; i++)
@@ -103,16 +103,16 @@ podulebus_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-podulebus_probe_podule(device_t self, int slotnum)
+podulebus_probe_podule(struct device *self, int slotnum)
 {
-	struct podulebus_softc *sc = device_private(self);
+	struct podulebus_softc *sc = (struct podulebus_softc *)self;
 	bus_space_tag_t id_bst;
 	bus_space_handle_t id_bsh;
 	int ecid, w;
-	uint8_t extecid[EXTECID_SIZE];
+	u_int8_t extecid[EXTECID_SIZE];
 	struct podulebus_attach_args pa;
 
-	memset(&pa, 0, sizeof(pa));
+	bzero(&pa, sizeof(pa));
 	id_bst = sc->sc_ioc.ioc_sync_t;
 	bus_space_subregion(id_bst, sc->sc_ioc.ioc_sync_h,
 			    slotnum * PODULE_GAP, PODULE_GAP, &id_bsh);
@@ -162,9 +162,9 @@ podulebus_probe_podule(device_t self, int slotnum)
 			w = pa.pa_flags1 & EXTECID_F1_W_MASK;
 			if (w != EXTECID_F1_W_8BIT) {
 				/* RISC OS 3 can't handle this either. */
-				aprint_error("%s:%d: ROM is not 8 bits wide; "
+				printf("%s:%d: ROM is not 8 bits wide; "
 				    "ignoring it\n",
-				    device_xname(self), pa.pa_slotnum);
+				    self->dv_xname, pa.pa_slotnum);
 			} else {
 				podulebus_read_chunks(&pa, 0);
 				pa.pa_descr = podulebus_get_chunk(&pa,
@@ -175,20 +175,20 @@ podulebus_probe_podule(device_t self, int slotnum)
 		config_found_sm_loc(self, "podulebus", NULL, &pa,
 				podulebus_print, podulebus_submatch);
 		if (pa.pa_chunks)
-			free(pa.pa_chunks, M_DEVBUF);
+			FREE(pa.pa_chunks, M_DEVBUF);
 		if (pa.pa_descr)
-			free(pa.pa_descr, M_DEVBUF);
+			FREE(pa.pa_descr, M_DEVBUF);
 		if (pa.pa_loader)
-			free(pa.pa_loader, M_DEVBUF);
+			FREE(pa.pa_loader, M_DEVBUF);
 	} else
-		aprint_normal("%s:%d: non-extended podule ignored.\n",
-		    device_xname(self), slotnum);
+		printf("%s:%d: non-extended podule ignored.\n",
+		       self->dv_xname, slotnum);
 }
 
 static void
 podulebus_read_chunks(struct podulebus_attach_args *pa, int useloader)
 {
-	uint8_t chunk[8];
+	u_int8_t chunk[8];
 	u_int ptr, nchunks, type, length, offset;
 
 	nchunks = pa->pa_nchunks;
@@ -225,12 +225,12 @@ podulebus_read_chunks(struct podulebus_attach_args *pa, int useloader)
 	pa->pa_nchunks = nchunks;
 }
 
-static uint8_t *
+static u_int8_t *
 podulebus_get_chunk(struct podulebus_attach_args *pa, int type)
 {
 	int i;
 	struct podulebus_chunk *pc;
-	uint8_t *chunk;
+	u_int8_t *chunk;
 
 	for (i = 0; i < pa->pa_nchunks; i++) {
 		pc = &pa->pa_chunks[i];
@@ -264,7 +264,7 @@ podulebus_initloader(struct podulebus_attach_args *pa)
 		return -1;
 	podulebus_read_chunks(pa, 1);
 	if (pa->pa_descr)
-		free(pa->pa_descr, M_DEVBUF);
+		FREE(pa->pa_descr, M_DEVBUF);
 	pa->pa_descr = podulebus_get_chunk(pa, CHUNK_DEV_DESCR);
 	return 0;
 }
@@ -312,7 +312,7 @@ podloader_callloader(struct podulebus_attach_args *pa, u_int r0, u_int r1)
 
 void
 podloader_read_region(struct podulebus_attach_args *pa, u_int src,
-    uint8_t *dest, size_t length)
+    u_int8_t *dest, size_t length)
 {
 
 	while (length--)
@@ -345,7 +345,8 @@ podulebus_print(void *aux, char const *pnp)
 }	
 
 static int
-podulebus_submatch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+podulebus_submatch(struct device *parent, struct cfdata *cf,
+		   const int *ldesc, void *aux)
 {
 	struct podulebus_attach_args *pa = aux;
 
@@ -370,7 +371,7 @@ podulebus_irq_establish(podulebus_intr_handle_t slot, int ipl,
 }
 
 void
-podulebus_readcmos(struct podulebus_attach_args *pa, uint8_t *c)
+podulebus_readcmos(struct podulebus_attach_args *pa, u_int8_t *c)
 {
 	int i;
 

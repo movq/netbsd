@@ -1,9 +1,9 @@
-/*	$NetBSD: pdc.c,v 1.41 2012/02/05 21:46:37 skrll Exp $	*/
+/*	$NetBSD: pdc.c,v 1.25.6.1 2009/05/10 20:42:46 snj Exp $	*/
 
 /*	$OpenBSD: pdc.c,v 1.14 2001/04/29 21:05:43 mickey Exp $	*/
 
 /*
- * Copyright (c) 1998-2003 Michael Shalayeff
+ * Copyright (c) 1998-2001 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,28 +14,33 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Michael Shalayeff.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR OR HIS RELATIVES BE LIABLE FOR ANY DIRECT,
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF MIND, USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF MIND,
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pdc.c,v 1.41 2012/02/05 21:46:37 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pdc.c,v 1.25.6.1 2009/05/10 20:42:46 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/tty.h>
+#include <sys/user.h>
 #include <sys/callout.h>
 #include <sys/conf.h>
 #include <sys/kauth.h>
@@ -48,30 +53,25 @@ __KERNEL_RCSID(0, "$NetBSD: pdc.c,v 1.41 2012/02/05 21:46:37 skrll Exp $");
 #include <machine/autoconf.h>
 
 #include <hp700/hp700/machdep.h>
-#include <hp700/dev/cpudevs.h>
 
 typedef
 struct pdc_softc {
-	device_t sc_dv;
+	struct device sc_dv;
 	struct tty *sc_tty;
 	struct callout sc_to;
 } pdcsoftc_t;
 
 pdcio_t pdc;
-
-enum pdc_type pdc_type;
-
-static struct pdc_result pdcret1 PDC_ALIGNMENT;
-static struct pdc_result pdcret2 PDC_ALIGNMENT;
-static char pdc_consbuf[IODC_MINIOSIZ] PDC_ALIGNMENT;
-
+int pdcret[32] PDC_ALIGNMENT;
+char pdc_consbuf[IODC_MINIOSIZ] PDC_ALIGNMENT;
 iodcio_t pdc_cniodc, pdc_kbdiodc;
 pz_device_t *pz_kbd, *pz_cons;
+int CONADDR;
 
-int pdcmatch(device_t, cfdata_t, void *);
-void pdcattach(device_t, device_t, void *);
+int pdcmatch(struct device *, struct cfdata *, void *);
+void pdcattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(pdc, sizeof(pdcsoftc_t),
+CFATTACH_DECL(pdc, sizeof(pdcsoftc_t),
     pdcmatch, pdcattach, NULL, NULL);
 
 extern struct cfdriver pdc_cd;
@@ -99,12 +99,18 @@ int pdccnlookc(dev_t, int *);
 
 static struct cnm_state pdc_cnm_state;
 
-static int pdcgettod(todr_chip_handle_t, struct timeval *);
-static int pdcsettod(todr_chip_handle_t, struct timeval *);
+static int pdcgettod(todr_chip_handle_t, volatile struct timeval *);
+static int pdcsettod(todr_chip_handle_t, volatile struct timeval *);
+
+static struct pdc_tod tod PDC_ALIGNMENT;
 
 void
 pdc_init(void)
 {
+	static struct todr_chip_handle todr = {
+		.todr_settime = pdcsettod,
+		.todr_gettime = pdcgettod,
+	};
 	static int kbd_iodc[IODC_MAXSIZE/sizeof(int)];
 	static int cn_iodc[IODC_MAXSIZE/sizeof(int)];
 	int err;
@@ -112,105 +118,39 @@ pdc_init(void)
 
 	pagezero_cookie = hp700_pagezero_map();
 
+	/* XXX locore've done it XXX pdc = (pdcio_t)PAGE0->mem_pdc; */
 	pz_kbd = &PAGE0->mem_kbd;
 	pz_cons = &PAGE0->mem_cons;
-
-	pdc = (pdcio_t)PAGE0->mem_pdc;
 
 	/* XXX should we reset the console/kbd here?
 	   well, /boot did that for us anyway */
 	if ((err = pdc_call((iodcio_t)pdc, 0, PDC_IODC, PDC_IODC_READ,
-	      &pdcret1, pz_cons->pz_hpa, IODC_IO, cn_iodc, IODC_MAXSIZE)) < 0 ||
+	      pdcret, pz_cons->pz_hpa, IODC_IO, cn_iodc, IODC_MAXSIZE)) < 0 ||
 	    (err = pdc_call((iodcio_t)pdc, 0, PDC_IODC, PDC_IODC_READ,
-	      &pdcret1, pz_kbd->pz_hpa, IODC_IO, kbd_iodc, IODC_MAXSIZE)) < 0) {
+	      pdcret, pz_kbd->pz_hpa, IODC_IO, kbd_iodc, IODC_MAXSIZE)) < 0) {
 #ifdef DEBUG
 		printf("pdc_init: failed reading IODC (%d)\n", err);
 #endif
 	}
-
-	hp700_pagezero_unmap(pagezero_cookie);
 
 	pdc_cniodc = (iodcio_t)cn_iodc;
 	pdc_kbdiodc = (iodcio_t)kbd_iodc;
 
 	/* XXX make pdc current console */
 	cn_tab = &constab[0];
-}
+	/* TODO: detect that we are on cereal, and set CONADDR */
 
-void
-pdc_settype(int modelno)
-{
-	switch (modelno) {
-		/* 720, 750, 730, 735, 755 */
-	case HPPA_BOARD_HP720:
-	case HPPA_BOARD_HP750_66:
-	case HPPA_BOARD_HP730_66:
-	case HPPA_BOARD_HP735_99:
-	case HPPA_BOARD_HP755_99:
-	case HPPA_BOARD_HP755_125:
-	case HPPA_BOARD_HP735_130:
+	cn_init_magic(&pdc_cnm_state);
+	cn_set_magic("+++++");
 
-		/* 710, 705, 7[12]5 */
-	case HPPA_BOARD_HP710:
-	case HPPA_BOARD_HP705:
-	case HPPA_BOARD_HP715_50:
-	case HPPA_BOARD_HP715_33:
-	case HPPA_BOARD_HP715S_50:
-	case HPPA_BOARD_HP715S_33:
-	case HPPA_BOARD_HP715T_50:
-	case HPPA_BOARD_HP715T_33:
-	case HPPA_BOARD_HP715_75:
-	case HPPA_BOARD_HP715_99:
-	case HPPA_BOARD_HP725_50:
-	case HPPA_BOARD_HP725_75:
-	case HPPA_BOARD_HP725_99:
+	hp700_pagezero_unmap(pagezero_cookie);
 
-		/* 745, 742, 747 */
-	case HPPA_BOARD_HP745I_50:
-	case HPPA_BOARD_HP742I_50:
-	case HPPA_BOARD_HP747I_100:
-
-		/* 712/{60,80,100,120}, 715/{64,80,100,...}, etc */
-	case HPPA_BOARD_HP712_60:
-	case HPPA_BOARD_HP712_80:
-	case HPPA_BOARD_HP712_100:
-	case HPPA_BOARD_HP743I_64:
-	case HPPA_BOARD_HP743I_100:
-	case HPPA_BOARD_HP712_120:
-	case HPPA_BOARD_HP715_80:
-	case HPPA_BOARD_HP715_64:
-	case HPPA_BOARD_HP715_100:
-	case HPPA_BOARD_HP715_100XC:
-	case HPPA_BOARD_HP725_100:
-	case HPPA_BOARD_HP725_120:
-	case HPPA_BOARD_HP715_100L:
-	case HPPA_BOARD_HP715_120L:
-	case HPPA_BOARD_HP725_80L:
-	case HPPA_BOARD_HP725_100L:
-	case HPPA_BOARD_HP725_120L:
-	case HPPA_BOARD_HP743_50:
-	case HPPA_BOARD_HP743_100:
-	case HPPA_BOARD_HP715_80M:
-	case HPPA_BOARD_HP811:
-	case HPPA_BOARD_HP801:
-	case HPPA_BOARD_HP743T:
-		pdc_type = PDC_TYPE_SNAKE;
-		break;
-
-	default:
-		pdc_type = PDC_TYPE_UNKNOWN;
-	}
-}
-
-enum pdc_type
-pdc_gettype(void)
-{
-
-	return pdc_type;
+	/* attach the TOD clock */
+	todr_attach(&todr);
 }
 
 int
-pdcmatch(device_t parent, cfdata_t cf, void *aux)
+pdcmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -222,26 +162,16 @@ pdcmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-pdcattach(device_t parent, device_t self, void *aux)
+pdcattach(struct device *parent, struct device *self, void *aux)
 {
-	static struct todr_chip_handle todr = {
-		.todr_settime = pdcsettod,
-		.todr_gettime = pdcgettod,
-	};
-	struct pdc_softc *sc = device_private(self);
+	struct pdc_softc *sc = (struct pdc_softc *)self;
 
-	sc->sc_dv = self;
 	pdc_attached = 1;
 
-	KASSERT(pdc != NULL);
+	if (!pdc)
+		pdc_init();
 
-	cn_init_magic(&pdc_cnm_state);
-	cn_set_magic("+++++");
-
-	/* attach the TOD clock */
-	todr_attach(&todr);
-
-	aprint_normal("\n");
+	printf("\n");
 
 	callout_init(&sc->sc_to, 0);
 }
@@ -260,13 +190,10 @@ pdcopen(dev_t dev, int flag, int mode, struct lwp *l)
 
 	s = spltty();
 
-	if (sc->sc_tty) {
+	if (sc->sc_tty)
 		tp = sc->sc_tty;
-	} else {
-		tp = tty_alloc();
-		sc->sc_tty = tp;
-		tty_attach(tp);
-	}
+	else
+		tty_attach(tp = sc->sc_tty = ttymalloc());
 
 	tp->t_oproc = pdcstart;
 	tp->t_param = pdcparam;
@@ -348,12 +275,12 @@ pdcwrite(dev_t dev, struct uio *uio, int flag)
 
 int
 pdcpoll(dev_t dev, int events, struct lwp *l)
-{
+{  
 	struct pdc_softc *sc = device_lookup_private(&pdc_cd,minor(dev));
 	struct tty *tp = sc->sc_tty;
-
+ 
 	return ((*tp->t_linesw->l_poll)(tp, events, l));
-}
+}  
 
 int
 pdcioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
@@ -465,8 +392,8 @@ pdccnlookc(dev_t dev, int *cp)
 	s = splhigh();
 	pagezero_cookie = hp700_pagezero_map();
 	err = pdc_call(pdc_kbdiodc, 0, pz_kbd->pz_hpa, IODC_IO_CONSIN,
-	    pz_kbd->pz_spa, pz_kbd->pz_layers, &pdcret1, 0, pdc_consbuf, 1, 0);
-	l = pdcret1.result[0];
+	    pz_kbd->pz_spa, pz_kbd->pz_layers, pdcret, 0, pdc_consbuf, 1, 0);
+	l = pdcret[0];
 	*cp = pdc_consbuf[0];
 	hp700_pagezero_unmap(pagezero_cookie);
 	splx(s);
@@ -499,18 +426,19 @@ pdccnputc(dev_t dev, int c)
 	pagezero_cookie = hp700_pagezero_map();
 	*pdc_consbuf = c;
 	err = pdc_call(pdc_cniodc, 0, pz_cons->pz_hpa, IODC_IO_CONSOUT,
-	    pz_cons->pz_spa, pz_cons->pz_layers, &pdcret1, 0, pdc_consbuf, 1, 0);
+	    pz_cons->pz_spa, pz_cons->pz_layers, pdcret, 0, pdc_consbuf, 1, 0);
 	hp700_pagezero_unmap(pagezero_cookie);
 	splx(s);
 
 	if (err < 0) {
 #if defined(DDB) || defined(KGDB)
-		Debugger();
+		__asm volatile ("break        %0, %1"
+			:: "i" (HPPA_BREAK_KERNEL), "i" (HPPA_BREAK_KGDB));
 #endif /* DDB || KGDB */
 		delay(250000);
 #if 0
 		/*
-		 * It's not a good idea to use the output to print
+		 * It's not a good idea to use the output to print 
 		 * an output error.
 		 */
 		printf("pdccnputc: output error: %d\n", err);
@@ -524,467 +452,31 @@ pdccnpollc(dev_t dev, int on)
 }
 
 static int
-pdcgettod(todr_chip_handle_t tch, struct timeval *tvp)
+pdcgettod(todr_chip_handle_t tch, volatile struct timeval *tvp)
 {
-	struct pdc_tod *tod = (struct pdc_tod *)&pdcret1;
-	int error;
-
-	error = pdc_call((iodcio_t)pdc, 1, PDC_TOD, PDC_TOD_READ,
-	    &pdcret1);
-
-	if (error == 0) {
-		tvp->tv_sec = tod->sec;
-		tvp->tv_usec = tod->usec;
-	}
-	return error;
-}
-
-static int
-pdcsettod(todr_chip_handle_t tch, struct timeval *tvp)
-{
-	int error;
-
-	error = pdc_call((iodcio_t)pdc, 1, PDC_TOD, PDC_TOD_WRITE,
-	    tvp->tv_sec, tvp->tv_usec);
-
-	return error;
-}
-
-
-int
-pdcproc_chassis_display(unsigned long disp)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_CHASSIS, PDC_CHASSIS_DISP, disp);
-	
-	return err;
-}
-
-int
-pdcproc_chassis_info(struct pdc_chassis_info *pci, struct pdc_chassis_lcd *pcl)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_CHASSIS, PDC_CHASSIS_INFO,
-	    &pdcret1, &pdcret2 , sizeof(*pcl));
-	if (err < 0)
-		return err;
-
-	memcpy(pci, &pdcret1, sizeof(*pci));
-	memcpy(pcl, &pdcret2, sizeof(*pcl));
-	
-	return err;
-}
-
-int
-pdcproc_pim(int type, struct pdc_pim *pp, void **buf, size_t *sz)
-{
-	static char data[896] __attribute__((__aligned__(8)));
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_PIM, type, &pdcret1, data,
-	    sizeof(data));
-	if (err < 0)
-		return err;
-
-	memcpy(pp, &pdcret1, sizeof(*pp));
-	*buf = data;
-	*sz = sizeof(data);
-
-	return err;
-}
-
-int
-pdcproc_model_info(struct pdc_model *pm)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_MODEL, PDC_MODEL_INFO, &pdcret1);
-	if (err < 0)
-		return err;
-
-	memcpy(pm, &pdcret1, sizeof(*pm));
-
-	return err;
-}
-
-int
-pdcproc_model_cpuid(struct pdc_cpuid *pc)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_MODEL, PDC_MODEL_CPUID, &pdcret1);
-	if (err < 0)
-		return err;
-
-	memcpy(pc, &pdcret1, sizeof(*pc));
-
-	return err;
-}
-
-int
-pdcproc_cache(struct pdc_cache *pc)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_CACHE, PDC_CACHE_DFLT, &pdcret1);
-
-	if (err < 0)
-		return err;
-
-	memcpy(pc, &pdcret1, sizeof(*pc));
-
-	return err;
-}
-
-
-int
-pdcproc_cache_spidbits(struct pdc_spidb *pcs)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_CACHE, PDC_CACHE_GETSPIDB,
-            &pdcret1);
-
-	if (err < 0)
-		return err;
-
-	memcpy(pcs, &pdcret1, sizeof(*pcs));
-
-	return err;
-}
-
-int
-pdcproc_hpa_processor(hppa_hpa_t *hpa)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_HPA, PDC_HPA_DFLT, &pdcret1);
-	if (err < 0)
-		return err;
-
-	*hpa = pdcret1.result[0];
-
-	return err;
-}
-
-int
-pdcproc_coproc(struct pdc_coproc *pc)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_COPROC, PDC_COPROC_DFLT, &pdcret1);
-	if (err < 0)
-		return err;
-
-	memcpy(pc, &pdcret1, sizeof(*pc));
-
-	return err;
-}
-
-int
-pdcproc_iodc_read(hppa_hpa_t hpa, int command, int *actcnt,
-    struct pdc_iodc_read *buf1, size_t sz1, struct iodc_data *buf2,
-    size_t sz2)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_IODC, PDC_IODC_READ,
-	    &pdcret1, hpa, command, &pdcret2, sizeof(pdcret2));
-
-	if (err < 0)
-		return err;
-
-	if (actcnt != NULL) {
-		struct pdc_iodc_read *pir = (struct pdc_iodc_read *)&pdcret1;
-
-		*actcnt = pir->size;
-	}
-
-	memcpy(buf1, &pdcret1, sz1);
-	memcpy(buf2, &pdcret2, sz2);
-
-	return err;
-}
-
-int
-pdcproc_iodc_ninit(struct pdc_iodc_minit *pimi, hppa_hpa_t hpa, int sz)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_IODC, PDC_IODC_NINIT, &pdcret1,
-	    hpa, sz);
-
-	if (err < 0)
-		return err;
-
-	memcpy(pimi, &pdcret1, sizeof(*pimi));
-
-	return err;
-}
-
-int
-pdcproc_instr(unsigned int *mem)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_INSTR, PDC_INSTR_DFLT, &pdcret1);
-	if (err < 0)
-		return err;
-
-	memcpy(mem, &pdcret1, sizeof(*mem));
-
-	return err;
-}
- 
-int
-pdcproc_block_tlb(struct pdc_btlb *pb)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_BLOCK_TLB, PDC_BTLB_DEFAULT,
-	    &pdcret1);
-	if (err < 0)
-		return err;
-
-	memcpy(pb, &pdcret1, sizeof(*pb));
-
-	return err;
-}
-
-int
-pdcproc_btlb_insert(pa_space_t sp, vaddr_t va, paddr_t pa, vsize_t sz,
-    u_int prot, int index)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_BLOCK_TLB, PDC_BTLB_INSERT, sp,
-	    va, pa, sz, prot, index);
-
-	return err;
-}
-
-int
-pdcproc_btlb_purge(pa_space_t sp, vaddr_t va, paddr_t pa, vsize_t sz)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_BLOCK_TLB, PDC_BTLB_PURGE, sp, va,
-	    pa, sz);
-
-	return err;
-}
-
-int
-pdcproc_btlb_purgeall(void)
-{
-	int err;
-
-	err =  pdc_call((iodcio_t)pdc, 0, PDC_BLOCK_TLB, PDC_BTLB_PURGE_ALL);
-
-	return err;
-}
-
-int pdcproc_tlb_info(struct pdc_hwtlb *ph)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_TLB, PDC_TLB_INFO, &pdcret1);
-	if (err < 0)
-		return err;
-
-	memcpy(ph, &pdcret1, sizeof(*ph));
-
-	return err;
-}
-
-int
-pdcproc_tlb_config(struct pdc_hwtlb *ph, unsigned long hpt,
-    unsigned long hptsize, unsigned long type)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_TLB, PDC_TLB_CONFIG, ph, hpt,
-	    hptsize, type);
-
-	return err;
-}
-
-int
-pdcproc_system_map_find_mod(struct pdc_system_map_find_mod *psm,
-    struct device_path *dev, int mod)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_SYSTEM_MAP,
-	    PDC_SYSTEM_MAP_FIND_MOD, &pdcret1, &pdcret2, mod);
-	if (err < 0)
-		return err;
-
-	memcpy(psm, &pdcret1, sizeof(*psm));
-	memcpy(dev, &pdcret2, sizeof(*dev));
-
-	return err;
-}
-
-int
-pdcproc_system_map_find_addr(struct pdc_system_map_find_addr *psm, int mod,
-    int addr)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_SYSTEM_MAP,
-	    PDC_SYSTEM_MAP_FIND_ADDR, &pdcret1, mod, addr);
-	if (err < 0)
-		return err;
-
-	memcpy(psm, &pdcret1, sizeof(*psm));
-
-	return err;
-	
-}
-
-int
-pdcproc_system_map_trans_path(struct pdc_memmap *pmm, struct device_path *dev)
-{
-	int err;
-
-	memcpy(&pdcret2, dev, sizeof(*dev));
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_SYSTEM_MAP,
-	    PDC_SYSTEM_MAP_TRANS_PATH, &pdcret1, &pdcret2);
-	if (err < 0)
-		return err;
-
-	memcpy(pmm, &pdcret1, sizeof(*pmm));
-
-	return err;
-}
-
-int
-pdcproc_soft_power_info(struct pdc_power_info *pspi)
-{
-	int err;
-	
-	err = pdc_call((iodcio_t)pdc, 0, PDC_SOFT_POWER, PDC_SOFT_POWER_INFO,
-	    &pdcret1, 0);
-	if (err < 0)
-		return err;
-
-	memcpy(pspi, &pdcret1, sizeof(*pspi));
-
-	return err;
-}
-
-int
-pdcproc_soft_power_enable(int action)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_SOFT_POWER, PDC_SOFT_POWER_ENABLE,
-	    &pdcret1, action);
-
-	return err;
-}
-
-int
-pdcproc_memmap(struct pdc_memmap *pmm, struct device_path *dev)
-{
-	int err;
-
-	memcpy(&pdcret2, dev, sizeof(*dev));
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_MEMMAP, PDC_MEMMAP_HPA, &pdcret1,
-	    &pdcret2);
-	if (err < 0)
-		return err;
-
-	memcpy(pmm, &pdcret1, sizeof(*pmm));
-
-	return err;
-}
-
-int
-pdcproc_ioclrerrors(void)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_IO, PDC_IO_READ_AND_CLEAR_ERRORS);
-
-	return err;
-}
-
-int
-pdcproc_ioreset(void)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_IO, PDC_IO_RESET_DEVICES);
-
-	return err;
-}
-
-int
-pdcproc_doreset(void)
-{
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_BROADCAST_RESET, PDC_DO_RESET);
-
-	return err;
-}
-
-int
-pdcproc_lan_station_id(char *addr, size_t sz, hppa_hpa_t hpa)
-{
-	struct pdc_lan_station_id *mac = (struct pdc_lan_station_id *)&pdcret1;
-	int err;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_LAN_STATION_ID,
-	    PDC_LAN_STATION_ID_READ, &pdcret1, hpa);
-	if (err < 0)
-		return err;
-
-	memcpy(addr, mac->addr, sz);
-
+	int pagezero_cookie;
+
+	pagezero_cookie = hp700_pagezero_map();
+	pdc_call((iodcio_t)PAGE0->mem_pdc, 1, PDC_TOD, PDC_TOD_READ,
+	    &tod, 0, 0, 0, 0, 0);
+	hp700_pagezero_unmap(pagezero_cookie);
+
+	tvp->tv_sec = tod.sec;
+	tvp->tv_usec = tod.usec;
 	return 0;
 }
 
-int
-pdcproc_pci_inttblsz(int *nentries)
+static int
+pdcsettod(todr_chip_handle_t tch, volatile struct timeval *tvp)
 {
-	struct pdc_pat_io_num *ppio = (struct pdc_pat_io_num *)&pdcret1;
-	int err;
+	int pagezero_cookie;
 
-	err = pdc_call((iodcio_t)pdc, 0, PDC_PCI_INDEX, PDC_PCI_GET_INT_TBL_SZ,
-	    &pdcret1);
+	tod.sec = tvp->tv_sec;
+	tod.usec = tvp->tv_usec;
 
-	*nentries = ppio->num;
-
-	return err;
-}
-
-/* Maximum number of supported interrupt routing entries. */
-#define MAX_INT_TBL_SZ	16
-
-int
-pdcproc_pci_gettable(int nentries, size_t size, void *table)
-{
-	int err;
-	static struct pdc_pat_pci_rt int_tbl[MAX_INT_TBL_SZ] PDC_ALIGNMENT;
-
-	if (nentries > MAX_INT_TBL_SZ)
-		panic("interrupt routing table too big (%d entries)", nentries);
-
-	pdcret1.result[0] = nentries;
-
-	err = pdc_call((iodcio_t)pdc, 0, PDC_PCI_INDEX, PDC_PCI_GET_INT_TBL,
-	    &pdcret1, 0, &int_tbl);
-	if (err < 0)
-		return err;
-	    
-	memcpy(table, int_tbl, size);
-
-	return err;
+	pagezero_cookie = hp700_pagezero_map();
+	pdc_call((iodcio_t)PAGE0->mem_pdc, 1, PDC_TOD, PDC_TOD_WRITE,
+	    tod.sec, tod.usec);
+	hp700_pagezero_unmap(pagezero_cookie);
+	return 0;
 }

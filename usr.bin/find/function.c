@@ -1,4 +1,4 @@
-/*	$NetBSD: function.c,v 1.71 2012/08/26 14:26:37 wiz Exp $	*/
+/*	$NetBSD: function.c,v 1.64 2007/07/19 07:49:30 daniel Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)function.c	8.10 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: function.c,v 1.71 2012/08/26 14:26:37 wiz Exp $");
+__RCSID("$NetBSD: function.c,v 1.64 2007/07/19 07:49:30 daniel Exp $");
 #endif
 #endif /* not lint */
 
@@ -215,7 +215,9 @@ c_amin(char ***argvp, int isok)
  *	file.
  */
 int
-f_anewer(PLAN *plan, FTSENT *entry)
+f_anewer(plan, entry)
+	PLAN *plan;
+	FTSENT *entry;
 {
 
 	return (entry->fts_statp->st_atime > plan->t_data);
@@ -355,7 +357,7 @@ c_ctime(char ***argvp, int isok)
 /*
  * -delete functions --
  *
- *	Always true.  Makes its best shot and continues on regardless.
+ *	True always.  Makes its best shot and continues on regardless.
  */
 int
 f_delete(PLAN *plan __unused, FTSENT *entry)
@@ -451,7 +453,7 @@ f_empty(PLAN *plan, FTSENT *entry)
 		empty = 1;
 		dir = opendir(entry->fts_accpath);
 		if (dir == NULL)
-			return (0);
+			err(1, "%s", entry->fts_accpath);
 		for (dp = readdir(dir); dp; dp = readdir(dir))
 			if (dp->d_name[0] != '.' ||
 			    (dp->d_name[1] != '\0' &&
@@ -497,8 +499,7 @@ c_empty(char ***argvp, int isok)
 int
 f_exec(PLAN *plan, FTSENT *entry)
 {
-	size_t cnt;
-	int l;
+	int cnt, l;
 	pid_t pid;
 	int status;
 
@@ -626,8 +627,7 @@ PLAN *
 c_exec(char ***argvp, int isok)
 {
 	PLAN *new;			/* node returned */
-	size_t cnt;
-	int brace, lastbrace;
+	int cnt, brace, lastbrace;
 	char **argv, **ap, *p;
 
 	isoutput = 1;
@@ -637,8 +637,8 @@ c_exec(char ***argvp, int isok)
 		new->flags |= F_NEEDOK;
 
 	/*
-	 * Terminate if we encounter an arg exactly equal to ";", or an
-	 * arg exactly equal to "+" following an arg exactly equal to
+	 * Terminate if we encounter an arg exacty equal to ";", or an
+	 * arg exacty equal to "+" following an arg exacty equal to
 	 * "{}".
 	 */
 	for (ap = argv = *argvp, brace = 0;; ++ap) {
@@ -646,7 +646,6 @@ c_exec(char ***argvp, int isok)
 			errx(1, "%s: no terminating \";\" or \"+\"",
 			    isok ? "-ok" : "-exec");
 		lastbrace = brace;
-		brace = 0;
 		if (strcmp(*ap, "{}") == 0)
 			brace = 1;
 		if (strcmp(*ap, ";") == 0)
@@ -665,12 +664,12 @@ c_exec(char ***argvp, int isok)
 		errx(1, "-ok: terminating \"+\" not permitted.");
 
 	if (new->flags & F_PLUSSET) {
-		size_t c, bufsize;
+		u_int c, bufsize;
 
 		cnt = ap - *argvp - 1;			/* units are words */
 		new->ep_maxargs = 5000;
-		new->e_argv = emalloc((cnt + new->ep_maxargs)
-		    * sizeof(*new->e_argv));
+		new->e_argv = (char **)emalloc((u_int)(cnt + new->ep_maxargs)
+						* sizeof(char **));
 
 		/* We start stuffing arguments after the user's last one. */
 		new->ep_bxp = &new->e_argv[cnt];
@@ -680,36 +679,34 @@ c_exec(char ***argvp, int isok)
 		 * Count up the space of the user's arguments, and
 		 * subtract that from what we allocate.
 		 */
-#define MAXARG (ARG_MAX - 4 * 1024)
 		for (argv = *argvp, c = 0, cnt = 0;
 		     argv < ap;
 		     ++argv, ++cnt) {
 			c += strlen(*argv) + 1;
-			if (c >= MAXARG)
-				errx(1, "Arguments too long");
 			new->e_argv[cnt] = *argv;
 		}
-		bufsize = MAXARG - c;
+		bufsize = ARG_MAX - 4 * 1024 - c;
+
 
 		/*
 		 * Allocate, and then initialize current, base, and
 		 * end pointers.
 		 */
-		new->ep_p = new->ep_bbp = emalloc(bufsize + 1);
+		new->ep_p = new->ep_bbp = malloc(bufsize + 1);
 		new->ep_ebp = new->ep_bbp + bufsize - 1;
 		new->ep_rval = 0;
 	} else { /* !F_PLUSSET */
 		cnt = ap - *argvp + 1;
-		new->e_argv = emalloc(cnt * sizeof(*new->e_argv));
-		new->e_orig = emalloc(cnt * sizeof(*new->e_orig));
-		new->e_len = emalloc(cnt * sizeof(*new->e_len));
+		new->e_argv = (char **)emalloc((u_int)cnt * sizeof(char *));
+		new->e_orig = (char **)emalloc((u_int)cnt * sizeof(char *));
+		new->e_len = (int *)emalloc((u_int)cnt * sizeof(int));
 
 		for (argv = *argvp, cnt = 0; argv < ap; ++argv, ++cnt) {
 			new->e_orig[cnt] = *argv;
 			for (p = *argv; *p; ++p)
 				if (p[0] == '{' && p[1] == '}') {
 					new->e_argv[cnt] =
-						emalloc(MAXPATHLEN);
+						emalloc((u_int)MAXPATHLEN);
 					new->e_len[cnt] = MAXPATHLEN;
 					break;
 				}
@@ -738,7 +735,7 @@ c_exec(char ***argvp, int isok)
 int
 f_execdir(PLAN *plan, FTSENT *entry)
 {
-	size_t cnt;
+	int cnt;
 	pid_t pid;
 	int status;
 	char *file;
@@ -782,7 +779,7 @@ PLAN *
 c_execdir(char ***argvp, int isok)
 {
 	PLAN *new;			/* node returned */
-	size_t cnt;
+	int cnt;
 	char **argv, **ap, *p;
 
 	ftsoptions &= ~FTS_NOSTAT;
@@ -799,15 +796,15 @@ c_execdir(char ***argvp, int isok)
 	}
 
 	cnt = ap - *argvp + 1;
-	new->e_argv = emalloc(cnt * sizeof(*new->e_argv));
-	new->e_orig = emalloc(cnt * sizeof(*new->e_orig));
-	new->e_len = emalloc(cnt * sizeof(*new->e_len));
+	new->e_argv = (char **)emalloc((u_int)cnt * sizeof(char *));
+	new->e_orig = (char **)emalloc((u_int)cnt * sizeof(char *));
+	new->e_len = (int *)emalloc((u_int)cnt * sizeof(int));
 
 	for (argv = *argvp, cnt = 0; argv < ap; ++argv, ++cnt) {
 		new->e_orig[cnt] = *argv;
 		for (p = *argv; *p; ++p)
 			if (p[0] == '{' && p[1] == '}') {
-				new->e_argv[cnt] = emalloc(MAXPATHLEN);
+				new->e_argv[cnt] = emalloc((u_int)MAXPATHLEN);
 				new->e_len[cnt] = MAXPATHLEN;
 				break;
 			}

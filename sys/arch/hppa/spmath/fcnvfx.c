@@ -1,5 +1,6 @@
+/*	$NetBSD: fcnvfx.c,v 1.4 2007/02/22 05:46:30 thorpej Exp $	*/
 
-/*	$OpenBSD: fcnvfx.c,v 1.8 2010/07/30 18:05:23 kettenis Exp $	*/
+/*	$OpenBSD: fcnvfx.c,v 1.5 2001/03/29 03:58:18 mickey Exp $	*/
 
 /*
  * Copyright 1996 1995 by Open Software Foundation, Inc.
@@ -41,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fcnvfx.c,v 1.6 2012/02/04 17:03:09 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fcnvfx.c,v 1.4 2007/02/22 05:46:30 thorpej Exp $");
 
 #include "../spmath/float.h"
 #include "../spmath/sgl_float.h"
@@ -53,8 +54,11 @@ __KERNEL_RCSID(0, "$NetBSD: fcnvfx.c,v 1.6 2012/02/04 17:03:09 skrll Exp $");
  */
 /*ARGSUSED*/
 int
-sgl_to_sgl_fcnvfx(sgl_floating_point *srcptr, int *dstptr,
-    unsigned int *status)
+sgl_to_sgl_fcnvfx(srcptr,dstptr,status)
+
+sgl_floating_point *srcptr;
+int *dstptr;
+unsigned int *status;
 {
 	register unsigned int src, temp;
 	register int src_exponent, result;
@@ -70,15 +74,12 @@ sgl_to_sgl_fcnvfx(sgl_floating_point *srcptr, int *dstptr,
 		/* check for MININT */
 		if ((src_exponent > SGL_FX_MAX_EXP + 1) ||
 		Sgl_isnotzero_mantissa(src) || Sgl_iszero_sign(src)) {
-			if (Sgl_iszero_sign(src)) result = 0x7fffffff;
-			else result = 0x80000000;
-
-			if (Is_invalidtrap_enabled()) {
-				return(INVALIDEXCEPTION);
-			}
-			Set_invalidflag();
-			*dstptr = result;
-			return(NOEXCEPTION);
+			/*
+			 * Since source is a number which cannot be
+			 * represented in fixed-point format, return
+			 * largest (or smallest) fixed-point number.
+			 */
+			Sgl_return_overflow(src,dstptr);
 		}
 	}
 	/*
@@ -149,8 +150,11 @@ sgl_to_sgl_fcnvfx(sgl_floating_point *srcptr, int *dstptr,
  */
 /*ARGSUSED*/
 int
-sgl_to_dbl_fcnvfx(sgl_floating_point *srcptr, dbl_integer *dstptr,
-    unsigned int *status)
+sgl_to_dbl_fcnvfx(srcptr,dstptr,status)
+
+sgl_floating_point *srcptr;
+dbl_integer *dstptr;
+unsigned int *status;
 {
 	register int src_exponent, resultp1;
 	register unsigned int src, temp, resultp2;
@@ -166,21 +170,12 @@ sgl_to_dbl_fcnvfx(sgl_floating_point *srcptr, dbl_integer *dstptr,
 		/* check for MININT */
 		if ((src_exponent > DBL_FX_MAX_EXP + 1) ||
 		Sgl_isnotzero_mantissa(src) || Sgl_iszero_sign(src)) {
-			if (Sgl_iszero_sign(src)) {
-				resultp1 = 0x7fffffff;
-				resultp2 = 0xffffffff;
-			}
-			else {
-				resultp1 = 0x80000000;
-				resultp2 = 0;
-			}
-
-			if (Is_invalidtrap_enabled()) {
-				return(INVALIDEXCEPTION);
-			}
-			Set_invalidflag();
-			Dint_copytoptr(resultp1,resultp2,dstptr);
-			return(NOEXCEPTION);
+			/*
+			 * Since source is a number which cannot be
+			 * represented in fixed-point format, return
+			 * largest (or smallest) fixed-point number.
+			 */
+			Sgl_return_overflow_dbl(src,dstptr);
 		}
 		Dint_set_minint(resultp1,resultp2);
 		Dint_copytoptr(resultp1,resultp2,dstptr);
@@ -270,8 +265,11 @@ sgl_to_dbl_fcnvfx(sgl_floating_point *srcptr, dbl_integer *dstptr,
  */
 /*ARGSUSED*/
 int
-dbl_to_sgl_fcnvfx(dbl_floating_point *srcptr, int *dstptr,
-   unsigned int *status)
+dbl_to_sgl_fcnvfx(srcptr,dstptr,status)
+
+dbl_floating_point *srcptr;
+int *dstptr;
+unsigned int *status;
 {
 	register unsigned int srcp1,srcp2, tempp1,tempp2;
 	register int src_exponent, result;
@@ -286,15 +284,12 @@ dbl_to_sgl_fcnvfx(dbl_floating_point *srcptr, int *dstptr,
 	if (src_exponent > SGL_FX_MAX_EXP) {
 		/* check for MININT */
 		if (Dbl_isoverflow_to_int(src_exponent,srcp1,srcp2)) {
-			if (Dbl_iszero_sign(srcp1)) result = 0x7fffffff;
-			else result = 0x80000000;
-
-			if (Is_invalidtrap_enabled()) {
-				return(INVALIDEXCEPTION);
-			}
-			Set_invalidflag();
-			*dstptr = result;
-			return(NOEXCEPTION);
+			/*
+			 * Since source is a number which cannot be
+			 * represented in fixed-point format, return
+			 * largest (or smallest) fixed-point number.
+			 */
+			Dbl_return_overflow(srcp1,srcp2,dstptr);
 		}
 	}
 	/*
@@ -315,8 +310,7 @@ dbl_to_sgl_fcnvfx(dbl_floating_point *srcptr, int *dstptr,
 			/*  round result  */
 			switch (Rounding_mode()) {
 			case ROUNDPLUS:
-				if (Dbl_iszero_sign(srcp1))
-					result++;
+			     if (Dbl_iszero_sign(srcp1)) result++;
 			     break;
 			case ROUNDMINUS:
 			     if (Dbl_isone_sign(srcp1)) result--;
@@ -332,24 +326,7 @@ dbl_to_sgl_fcnvfx(dbl_floating_point *srcptr, int *dstptr,
 			/* check for overflow */
 			if ((Dbl_iszero_sign(srcp1) && result < 0) ||
 			    (Dbl_isone_sign(srcp1) && result > 0)) {
-
-				if (Dbl_iszero_sign(srcp1))
-					result = 0x7fffffff;
-				else
-					result = 0x80000000;
-
-			    if (Is_overflowtrap_enabled()) {
-			    if (Is_inexacttrap_enabled())
-			      return(OVERFLOWEXCEPTION|INEXACTEXCEPTION);
-			    else Set_inexactflag();
-			    return(OVERFLOWEXCEPTION);
-			    }
-			  Set_overflowflag();
-			  *dstptr = result;
-			  if (Is_inexacttrap_enabled() )
-				return(INEXACTEXCEPTION);
-			  else Set_inexactflag();
-			  return(NOEXCEPTION);
+				Dbl_return_overflow(srcp1,srcp2,dstptr);
 			}
 		}
 	}
@@ -389,8 +366,11 @@ dbl_to_sgl_fcnvfx(dbl_floating_point *srcptr, int *dstptr,
  */
 /*ARGSUSED*/
 int
-dbl_to_dbl_fcnvfx(dbl_floating_point *srcptr, dbl_integer *dstptr,
-    unsigned int *status)
+dbl_to_dbl_fcnvfx(srcptr,dstptr,status)
+
+dbl_floating_point *srcptr;
+dbl_integer *dstptr;
+unsigned int *status;
 {
 	register int src_exponent, resultp1;
 	register unsigned int srcp1, srcp2, tempp1, tempp2, resultp2;
@@ -406,21 +386,12 @@ dbl_to_dbl_fcnvfx(dbl_floating_point *srcptr, dbl_integer *dstptr,
 		/* check for MININT */
 		if ((src_exponent > DBL_FX_MAX_EXP + 1) ||
 		Dbl_isnotzero_mantissa(srcp1,srcp2) || Dbl_iszero_sign(srcp1)) {
-			if (Dbl_iszero_sign(srcp1)) {
-				resultp1 = 0x7fffffff;
-				resultp2 = 0xffffffff;
-			}
-			else {
-				resultp1 = 0x80000000;
-				resultp2 = 0;
-			}
-
-			if (Is_invalidtrap_enabled()) {
-				return(INVALIDEXCEPTION);
-			}
-			Set_invalidflag();
-			Dint_copytoptr(resultp1,resultp2,dstptr);
-			return(NOEXCEPTION);
+			/*
+			 * Since source is a number which cannot be
+			 * represented in fixed-point format, return
+			 * largest (or smallest) fixed-point number.
+			 */
+			Dbl_return_overflow_dbl(srcp1,srcp2,dstptr);
 		}
 	}
 

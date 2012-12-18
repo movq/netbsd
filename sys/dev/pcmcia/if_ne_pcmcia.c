@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_pcmcia.c,v 1.159 2011/11/26 02:20:29 nonaka Exp $	*/
+/*	$NetBSD: if_ne_pcmcia.c,v 1.155 2008/05/16 20:27:20 jnemeth Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_pcmcia.c,v 1.159 2011/11/26 02:20:29 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_pcmcia.c,v 1.155 2008/05/16 20:27:20 jnemeth Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,6 +80,7 @@ struct ne_pcmcia_softc {
 	struct pcmcia_function *sc_pf;		/* our PCMCIA function */
 	int sc_state;
 #define	NE_PCMCIA_ATTACHED	3
+	void *sc_powerhook;			/* power management hook */
 };
 
 u_int8_t *ne_pcmcia_get_enaddr(struct ne_pcmcia_softc *, int,
@@ -298,10 +299,6 @@ static const struct ne2000dev {
     { PCMCIA_VENDOR_DAYNA, PCMCIA_PRODUCT_DAYNA_COMMUNICARD_E_2,
       PCMCIA_CIS_INVALID,
       0, -1, { 0x00, 0x80, 0x19 }, 0 },
-
-    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
-      PCMCIA_CIS_COREGA_ETHER_CF_TD,
-      0, -1, { 0x00, 0x00, 0xf4 }, 0 },
 
     { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_COREGA_ETHER_PCC_T,
@@ -736,16 +733,11 @@ found:
 	if (ne2000_attach(nsc, enaddr))
 		goto fail2;
 
-	if (!pmf_device_register(self, ne2000_suspend, ne2000_resume)) {
-		aprint_error_dev(self, "cannot set power mgmt handler\n");
-	}
-	/* pmf(9) power hooks */
-	if (pmf_device_register(self, ne2000_suspend, ne2000_resume)) {
-#if 0 /* XXX: notyet: if_stop is NULL! */
-		pmf_class_network_register(self, &dsc->sc_ec.ec_if);
-#endif
-	} else
-		aprint_error_dev(self, "unable to establish power handler\n");
+	psc->sc_powerhook = powerhook_establish(device_xname(self),
+	    ne2000_power, nsc);
+	if (psc->sc_powerhook == NULL)
+		aprint_error_dev(self,
+		   "WARNING: unable to establish power hook\n");
 
 	psc->sc_state = NE_PCMCIA_ATTACHED;
 	ne_pcmcia_disable(dsc);
@@ -767,7 +759,9 @@ ne_pcmcia_detach(device_t self, int flags)
 	if (psc->sc_state != NE_PCMCIA_ATTACHED)
 		return (0);
 
-	pmf_device_deregister(self);
+	if (psc->sc_powerhook != NULL)
+		powerhook_disestablish(psc->sc_powerhook);
+
 	error = ne2000_detach(&psc->sc_ne2000, flags);
 	if (error)
 		return (error);

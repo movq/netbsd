@@ -1,5 +1,5 @@
-/*	$NetBSD: if_bnx.c,v 1.47 2012/07/22 14:33:01 matt Exp $	*/
-/*	$OpenBSD: if_bnx.c,v 1.85 2009/11/09 14:32:41 dlg Exp $ */
+/*	$NetBSD: if_bnx.c,v 1.20.4.2 2010/01/27 22:03:18 sborrill Exp $	*/
+/*      $OpenBSD: if_bnx.c,v 1.85 2009/11/09 14:32:41 dlg Exp $ */
 
 /*-
  * Copyright (c) 2006 Broadcom Corporation
@@ -35,7 +35,7 @@
 #if 0
 __FBSDID("$FreeBSD: src/sys/dev/bce/if_bce.c,v 1.3 2006/04/13 14:12:26 ru Exp $");
 #endif
-__KERNEL_RCSID(0, "$NetBSD: if_bnx.c,v 1.47 2012/07/22 14:33:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bnx.c,v 1.20.4.2 2010/01/27 22:03:18 sborrill Exp $");
 
 /*
  * The following controllers are supported by this driver:
@@ -44,7 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_bnx.c,v 1.47 2012/07/22 14:33:01 matt Exp $");
  *   BCM5708C B1, B2
  *   BCM5708S B1, B2
  *   BCM5709C A1, C0
- *   BCM5709S A1, C0
  *   BCM5716  C0
  *
  * The following controllers are not supported by this driver:
@@ -54,15 +53,13 @@ __KERNEL_RCSID(0, "$NetBSD: if_bnx.c,v 1.47 2012/07/22 14:33:01 matt Exp $");
  *   BCM5708C A0, B0
  *   BCM5708S A0, B0
  *   BCM5709C A0  B0, B1, B2 (pre-production)
- *   BCM5709S A0, B0, B1, B2 (pre-production)
+ *   BCM5709S A0, A1, B0, B1, B2, C0 (pre-production)
  */
 
 #include <sys/callout.h>
 #include <sys/mutex.h>
 
 #include <dev/pci/if_bnxreg.h>
-#include <dev/pci/if_bnxvar.h>
-
 #include <dev/microcode/bnx/bnxfw.h>
 
 /****************************************************************************/
@@ -319,7 +316,7 @@ void	bnx_reg_wr_ind(struct bnx_softc *, u_int32_t, u_int32_t);
 void	bnx_ctx_wr(struct bnx_softc *, u_int32_t, u_int32_t, u_int32_t);
 int	bnx_miibus_read_reg(device_t, int, int);
 void	bnx_miibus_write_reg(device_t, int, int, int);
-void	bnx_miibus_statchg(struct ifnet *);
+void	bnx_miibus_statchg(device_t);
 
 /****************************************************************************/
 /* BNX NVRAM Access Routines                                                */
@@ -346,7 +343,6 @@ int	bnx_nvram_write(struct bnx_softc *, u_int32_t, u_int8_t *, int);
 /*                                                                          */
 /****************************************************************************/
 void	bnx_get_media(struct bnx_softc *);
-void	bnx_init_media(struct bnx_softc *);
 int	bnx_dma_alloc(struct bnx_softc *);
 void	bnx_dma_free(struct bnx_softc *);
 void	bnx_release_resources(struct bnx_softc *);
@@ -397,13 +393,13 @@ void	bnx_stats_update(struct bnx_softc *);
 void	bnx_tick(void *);
 
 struct pool *bnx_tx_pool = NULL;
-void	bnx_alloc_pkts(struct work *, void *);
+int	bnx_alloc_pkts(struct bnx_softc *);
 
 /****************************************************************************/
 /* OpenBSD device dispatch table.                                           */
 /****************************************************************************/
-CFATTACH_DECL3_NEW(bnx, sizeof(struct bnx_softc),
-    bnx_probe, bnx_attach, bnx_detach, NULL, NULL, NULL, DVF_DETACH_SHUTDOWN);
+CFATTACH_DECL_NEW(bnx, sizeof(struct bnx_softc),
+    bnx_probe, bnx_attach, bnx_detach, NULL);
 
 /****************************************************************************/
 /* Device probe function.                                                   */
@@ -460,7 +456,6 @@ bnx_attach(device_t parent, device_t self, void *aux)
 {
 	const struct bnx_product *bp;
 	struct bnx_softc	*sc = device_private(self);
-	prop_dictionary_t	dict;
 	struct pci_attach_args	*pa = aux;
 	pci_chipset_tag_t	pc = pa->pa_pc;
 	pci_intr_handle_t	ih;
@@ -705,30 +700,14 @@ bnx_attach(device_t parent, device_t self, void *aux)
 	}
 	aprint_normal_dev(sc->bnx_dev, "interrupting at %s\n", intrstr);
 
-	/* create workqueue to handle packet allocations */
-	if (workqueue_create(&sc->bnx_wq, device_xname(self),
-	    bnx_alloc_pkts, sc, PRI_NONE, IPL_NET, 0) != 0) {
-		aprint_error_dev(self, "failed to create workqueue\n");
-		goto bnx_attach_fail;
-	}
-
 	sc->bnx_mii.mii_ifp = ifp;
 	sc->bnx_mii.mii_readreg = bnx_miibus_read_reg;
 	sc->bnx_mii.mii_writereg = bnx_miibus_write_reg;
 	sc->bnx_mii.mii_statchg = bnx_miibus_statchg;
 
-	/* Handle any special PHY initialization for SerDes PHYs. */
-	bnx_init_media(sc);
-
 	sc->bnx_ec.ec_mii = &sc->bnx_mii;
 	ifmedia_init(&sc->bnx_mii.mii_media, 0, ether_mediachange,
 	    ether_mediastatus);
-
-	/* set phyflags and chipid before mii_attach() */
-	dict = device_properties(self);
-	prop_dictionary_set_uint32(dict, "phyflags", sc->bnx_phy_flags);
-	prop_dictionary_set_uint32(dict, "chipid", sc->bnx_chipid);
-
 	if (sc->bnx_phy_flags & BNX_PHY_SERDES_FLAG)
 		mii_flags |= MIIF_HAVEFIBER;
 	mii_attach(self, &sc->bnx_mii, 0xffffffff,
@@ -751,10 +730,10 @@ bnx_attach(device_t parent, device_t self, void *aux)
 
 	callout_init(&sc->bnx_timeout, 0);
 
-	if (pmf_device_register(self, NULL, NULL))
-		pmf_class_network_register(self, ifp);
-	else
+	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
+	else
+		pmf_class_network_register(self, ifp);
 
 	/* Print some important debugging info. */
 	DBRUN(BNX_INFO, bnx_dump_driver_state(sc));
@@ -804,13 +783,7 @@ bnx_detach(device_t dev, int flags)
 	splx(s);
 
 	pmf_device_deregister(dev);
-	callout_destroy(&sc->bnx_timeout);
 	ether_ifdetach(ifp);
-	workqueue_destroy(sc->bnx_wq);
-
-	/* Delete all remaining media. */
-	ifmedia_delete_instance(&sc->bnx_mii.mii_media, IFM_INST_ANY);
-
 	if_detach(ifp);
 	mii_detach(&sc->bnx_mii, MII_PHY_ANY, MII_OFFSET_ANY);
 
@@ -939,16 +912,6 @@ bnx_miibus_read_reg(device_t dev, int phy, int reg)
 		return(0);
 	}
 
-	/*
-	 * The BCM5709S PHY is an IEEE Clause 45 PHY
-	 * with special mappings to work with IEEE
-	 * Clause 22 register accesses.
-	 */
-	if ((sc->bnx_phy_flags & BNX_PHY_IEEE_CLAUSE_45_FLAG) != 0) {
-		if (reg >= MII_BMCR && reg <= MII_ANLPRNP)
-			reg += 0x10;
-	}
-
 	if (sc->bnx_phy_flags & BNX_PHY_INT_MODE_AUTO_POLLING_FLAG) {
 		val = REG_RD(sc, BNX_EMAC_MDIO_MODE);
 		val &= ~BNX_EMAC_MDIO_MODE_AUTO_POLL;
@@ -1028,16 +991,6 @@ bnx_miibus_write_reg(device_t dev, int phy, int reg, int val)
 	    "val = 0x%04X\n", __func__,
 	    phy, (u_int16_t) reg & 0xffff, (u_int16_t) val & 0xffff);
 
-	/*
-	 * The BCM5709S PHY is an IEEE Clause 45 PHY
-	 * with special mappings to work with IEEE
-	 * Clause 22 register accesses.
-	 */
-	if ((sc->bnx_phy_flags & BNX_PHY_IEEE_CLAUSE_45_FLAG) != 0) {
-		if (reg >= MII_BMCR && reg <= MII_ANLPRNP)
-			reg += 0x10;
-	}
-
 	if (sc->bnx_phy_flags & BNX_PHY_INT_MODE_AUTO_POLLING_FLAG) {
 		val1 = REG_RD(sc, BNX_EMAC_MDIO_MODE);
 		val1 &= ~BNX_EMAC_MDIO_MODE_AUTO_POLL;
@@ -1089,9 +1042,9 @@ bnx_miibus_write_reg(device_t dev, int phy, int reg, int val)
 /*   Nothing.                                                               */
 /****************************************************************************/
 void
-bnx_miibus_statchg(struct ifnet *ifp)
+bnx_miibus_statchg(device_t dev)
 {
-	struct bnx_softc	*sc = ifp->if_softc;
+	struct bnx_softc	*sc = device_private(dev);
 	struct mii_data		*mii = &sc->bnx_mii;
 	int			val;
 
@@ -2017,7 +1970,6 @@ bnx_get_media(struct bnx_softc *sc)
 				DBPRINT(sc, BNX_INFO_LOAD, 
 					"BCM5709 s/w configured for SerDes.\n");
 				sc->bnx_phy_flags |= BNX_PHY_SERDES_FLAG;
-				break;
 			default:
 				DBPRINT(sc, BNX_INFO_LOAD, 
 					"BCM5709 s/w configured for Copper.\n");
@@ -2030,7 +1982,6 @@ bnx_get_media(struct bnx_softc *sc)
 				DBPRINT(sc, BNX_INFO_LOAD, 
 					"BCM5709 s/w configured for SerDes.\n");
 				sc->bnx_phy_flags |= BNX_PHY_SERDES_FLAG;
-				break;
 			default:
 				DBPRINT(sc, BNX_INFO_LOAD, 
 					"BCM5709 s/w configured for Copper.\n");
@@ -2040,18 +1991,10 @@ bnx_get_media(struct bnx_softc *sc)
 	} else if (BNX_CHIP_BOND_ID(sc) & BNX_CHIP_BOND_ID_SERDES_BIT)
 		sc->bnx_phy_flags |= BNX_PHY_SERDES_FLAG;
 
-	if (sc->bnx_phy_flags & BNX_PHY_SERDES_FLAG) {
+	if (sc->bnx_phy_flags && BNX_PHY_SERDES_FLAG) {
 		u_int32_t val;
  
 		sc->bnx_flags |= BNX_NO_WOL_FLAG;
-
-		if (BNX_CHIP_NUM(sc) == BNX_CHIP_NUM_5709)
-			sc->bnx_phy_flags |= BNX_PHY_IEEE_CLAUSE_45_FLAG;
-
-		/*
-		 * The BCM5708S, BCM5709S, and BCM5716S controllers use a
-		 * separate PHY for SerDes.
-		 */
 		if (BNX_CHIP_NUM(sc) != BNX_CHIP_NUM_5706) {
 			sc->bnx_phy_addr = 2;
 			val = REG_RD_IND(sc, sc->bnx_shmem_base +
@@ -2069,36 +2012,6 @@ bnx_get_media(struct bnx_softc *sc)
 bnx_get_media_exit:
 	DBPRINT(sc, (BNX_INFO_LOAD), 
 		"Using PHY address %d.\n", sc->bnx_phy_addr);
-}
-
-/****************************************************************************/
-/* Performs PHY initialization required before MII drivers access the       */
-/* device.                                                                  */
-/*                                                                          */
-/* Returns:                                                                 */
-/*   Nothing.                                                               */
-/****************************************************************************/
-void
-bnx_init_media(struct bnx_softc *sc)
-{
-	if (sc->bnx_phy_flags & BNX_PHY_IEEE_CLAUSE_45_FLAG) {
-		/*
-		 * Configure the BCM5709S / BCM5716S PHYs to use traditional
-		 * IEEE Clause 22 method. Otherwise we have no way to attach
-		 * the PHY to the mii(4) layer. PHY specific configuration
-		 * is done by the mii(4) layer.
-		 */
-
-		/* Select auto-negotiation MMD of the PHY. */
-		bnx_miibus_write_reg(sc->bnx_dev, sc->bnx_phy_addr,
-		    BRGPHY_BLOCK_ADDR, BRGPHY_BLOCK_ADDR_ADDR_EXT);
-
-		bnx_miibus_write_reg(sc->bnx_dev, sc->bnx_phy_addr,
-		    BRGPHY_ADDR_EXT, BRGPHY_ADDR_EXT_AN_MMD);
-
-		bnx_miibus_write_reg(sc->bnx_dev, sc->bnx_phy_addr,
-		    BRGPHY_BLOCK_ADDR, BRGPHY_BLOCK_ADDR_COMBO_IEEE0);
-	}
 }
 
 /****************************************************************************/
@@ -2262,7 +2175,7 @@ bnx_dma_alloc(struct bnx_softc *sc)
 	}
 
 	sc->status_block_paddr = sc->status_map->dm_segs[0].ds_addr;
-	memset(sc->status_block, 0, BNX_STATUS_BLK_SZ);
+	bzero(sc->status_block, BNX_STATUS_BLK_SZ);
 
 	/* DRC - Fix for 64 bit addresses. */
 	DBPRINT(sc, BNX_INFO, "status_block_paddr = 0x%08X\n",
@@ -2353,7 +2266,7 @@ bnx_dma_alloc(struct bnx_softc *sc)
 	}
 
 	sc->stats_block_paddr = sc->stats_map->dm_segs[0].ds_addr;
-	memset(sc->stats_block, 0, BNX_STATS_BLK_SZ);
+	bzero(sc->stats_block, BNX_STATS_BLK_SZ);
 
 	/* DRC - Fix for 64 bit address. */
 	DBPRINT(sc,BNX_INFO, "stats_block_paddr = 0x%08X\n", 
@@ -2458,7 +2371,7 @@ bnx_dma_alloc(struct bnx_softc *sc)
 			goto bnx_dma_alloc_exit;
 		}
 
-		memset(sc->rx_bd_chain[i], 0, BNX_RX_CHAIN_PAGE_SZ);
+		bzero(sc->rx_bd_chain[i], BNX_RX_CHAIN_PAGE_SZ);
 		sc->rx_bd_chain_paddr[i] =
 		    sc->rx_bd_chain_map[i]->dm_segs[0].ds_addr;
 
@@ -2474,8 +2387,8 @@ bnx_dma_alloc(struct bnx_softc *sc)
 	 * Create DMA maps for the Rx buffer mbufs.
 	 */
 	for (i = 0; i < TOTAL_RX_BD; i++) {
-		if (bus_dmamap_create(sc->bnx_dmatag, BNX_MAX_JUMBO_MRU,
-		    BNX_MAX_SEGMENTS, BNX_MAX_JUMBO_MRU, 0, BUS_DMA_NOWAIT,
+		if (bus_dmamap_create(sc->bnx_dmatag, BNX_MAX_MRU,
+		    BNX_MAX_SEGMENTS, BNX_MAX_MRU, 0, BUS_DMA_NOWAIT,
 		    &sc->rx_mbuf_map[i])) {
 			aprint_error_dev(sc->bnx_dev,
 			    "Could not create Rx mbuf %d DMA map!\n", i);
@@ -2502,6 +2415,7 @@ bnx_dma_alloc(struct bnx_softc *sc)
 void
 bnx_release_resources(struct bnx_softc *sc)
 {
+	int i;
 	struct pci_attach_args	*pa = &(sc->bnx_pa);
 
 	DBPRINT(sc, BNX_VERBOSE_RESET, "Entering %s()\n", __func__);
@@ -2513,6 +2427,10 @@ bnx_release_resources(struct bnx_softc *sc)
 
 	if (sc->bnx_size)
 		bus_space_unmap(sc->bnx_btag, sc->bnx_bhandle, sc->bnx_size);
+
+	for (i = 0; i < TOTAL_RX_BD; i++)
+		if (sc->rx_mbuf_map[i])
+			bus_dmamap_destroy(sc->bnx_dmatag, sc->rx_mbuf_map[i]);
 
 	DBPRINT(sc, BNX_VERBOSE_RESET, "Exiting %s()\n", __func__);
 }
@@ -3183,12 +3101,12 @@ bnx_init_context(struct bnx_softc *sc)
 		vcid_addr = GET_CID_ADDR(96);
 		while (vcid_addr) {
 
-			vcid_addr -= BNX_PHY_CTX_SIZE;
+			vcid_addr -= PHY_CTX_SIZE;
 
 			REG_WR(sc, BNX_CTX_VIRT_ADDR, 0);
 			REG_WR(sc, BNX_CTX_PAGE_TBL, vcid_addr);
 
-			for(offset = 0; offset < BNX_PHY_CTX_SIZE; offset += 4) {
+			for(offset = 0; offset < PHY_CTX_SIZE; offset += 4) {
 				CTX_WR(sc, 0x00, offset, 0);
 			}
 
@@ -3489,7 +3407,7 @@ bnx_chipinit(struct bnx_softc *sc)
 
 	REG_WR(sc, BNX_MQ_CONFIG, val);
 
-	val = 0x10000 + (MAX_CID_CNT * BNX_MB_KERNEL_CTX_SIZE);
+	val = 0x10000 + (MAX_CID_CNT * MB_KERNEL_CTX_SIZE);
 	REG_WR(sc, BNX_MQ_KNL_BYP_WIND_START, val);
 	REG_WR(sc, BNX_MQ_KNL_WIND_END, val);
 
@@ -3687,12 +3605,12 @@ bnx_add_buf(struct bnx_softc *sc, struct mbuf *m_new, u_int16_t *prod,
 	 */
 	rxbd = &sc->rx_bd_chain[RX_PAGE(*chain_prod)][RX_IDX(*chain_prod)];
 
-	addr = (u_int32_t)map->dm_segs[0].ds_addr;
-	rxbd->rx_bd_haddr_lo = addr;
+	addr = (u_int32_t)(map->dm_segs[0].ds_addr);
+	rxbd->rx_bd_haddr_lo = htole32(addr);
 	addr = (u_int32_t)((u_int64_t)map->dm_segs[0].ds_addr >> 32);
-	rxbd->rx_bd_haddr_hi = addr;
-	rxbd->rx_bd_len = map->dm_segs[0].ds_len;
-	rxbd->rx_bd_flags = RX_BD_FLAGS_START;
+	rxbd->rx_bd_haddr_hi = htole32(addr);
+	rxbd->rx_bd_len = htole32(map->dm_segs[0].ds_len);
+	rxbd->rx_bd_flags = htole32(RX_BD_FLAGS_START);
 	*prod_bseq += map->dm_segs[0].ds_len;
 	bus_dmamap_sync(sc->bnx_dmatag,
 	    sc->rx_bd_chain_map[RX_PAGE(*chain_prod)],
@@ -3706,11 +3624,11 @@ bnx_add_buf(struct bnx_softc *sc, struct mbuf *m_new, u_int16_t *prod,
 		rxbd =
 		    &sc->rx_bd_chain[RX_PAGE(*chain_prod)][RX_IDX(*chain_prod)];
 
-		addr = (u_int32_t)map->dm_segs[i].ds_addr;
-		rxbd->rx_bd_haddr_lo = addr;
+		addr = (u_int32_t)(map->dm_segs[i].ds_addr);
+		rxbd->rx_bd_haddr_lo = htole32(addr);
 		addr = (u_int32_t)((u_int64_t)map->dm_segs[i].ds_addr >> 32);
-		rxbd->rx_bd_haddr_hi = addr;
-		rxbd->rx_bd_len = map->dm_segs[i].ds_len;
+		rxbd->rx_bd_haddr_hi = htole32(addr);
+		rxbd->rx_bd_len = htole32(map->dm_segs[i].ds_len);
 		rxbd->rx_bd_flags = 0;
 		*prod_bseq += map->dm_segs[i].ds_len;
 		bus_dmamap_sync(sc->bnx_dmatag,
@@ -3719,7 +3637,7 @@ bnx_add_buf(struct bnx_softc *sc, struct mbuf *m_new, u_int16_t *prod,
 		    sizeof(struct rx_bd), BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 	}
 
-	rxbd->rx_bd_flags |= RX_BD_FLAGS_END;
+	rxbd->rx_bd_flags |= htole32(RX_BD_FLAGS_END);
 	bus_dmamap_sync(sc->bnx_dmatag,
 	    sc->rx_bd_chain_map[RX_PAGE(*chain_prod)],
 	    sizeof(struct rx_bd) * RX_IDX(*chain_prod),
@@ -3778,7 +3696,7 @@ bnx_get_buf(struct bnx_softc *sc, u_int16_t *prod,
 	if (sc->mbuf_alloc_size == MCLBYTES)
 		min_free_bd = (MCLBYTES + PAGE_SIZE - 1) / PAGE_SIZE;
 	else
-		min_free_bd = (BNX_MAX_JUMBO_MRU + PAGE_SIZE - 1) / PAGE_SIZE;
+		min_free_bd = (BNX_MAX_MRU + PAGE_SIZE - 1) / PAGE_SIZE;
 	while (sc->free_rx_bd >= min_free_bd) {
 		/* Simulate an mbuf allocation failure. */
 		DBRUNIF(DB_RANDOMTRUE(bnx_debug_mbuf_allocation_failure),
@@ -3847,22 +3765,21 @@ bnx_get_buf_exit:
 	return(rc);
 }
 
-void
-bnx_alloc_pkts(struct work * unused, void * arg)
+int
+bnx_alloc_pkts(struct bnx_softc *sc)
 {
-	struct bnx_softc *sc = arg;
 	struct ifnet *ifp = &sc->bnx_ec.ec_if;
 	struct bnx_pkt *pkt;
-	int i, s;
+	int i;
 
 	for (i = 0; i < 4; i++) { /* magic! */
-		pkt = pool_get(bnx_tx_pool, PR_WAITOK);
+		pkt = pool_get(bnx_tx_pool, PR_NOWAIT);
 		if (pkt == NULL)
 			break;
 
 		if (bus_dmamap_create(sc->bnx_dmatag,
 		    MCLBYTES * BNX_MAX_SEGMENTS, USABLE_TX_BD,
-		    MCLBYTES, 0, BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW,
+		    MCLBYTES, 0, BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW,
 		    &pkt->pkt_dmamap) != 0)
 			goto put;
 
@@ -3875,23 +3792,13 @@ bnx_alloc_pkts(struct work * unused, void * arg)
 		mutex_exit(&sc->tx_pkt_mtx);
 	}
 
-	mutex_enter(&sc->tx_pkt_mtx);
-	CLR(sc->bnx_flags, BNX_ALLOC_PKTS_FLAG);
-	mutex_exit(&sc->tx_pkt_mtx);
-
-	/* fire-up TX now that allocations have been done */
-	s = splnet();
-	if (!IFQ_IS_EMPTY(&ifp->if_snd))
-		bnx_start(ifp);
-	splx(s);
-
-	return;
+	return (i == 0) ? ENOMEM : 0;
 
 stopping:
 	bus_dmamap_destroy(sc->bnx_dmatag, pkt->pkt_dmamap);
 put:
 	pool_put(bnx_tx_pool, pkt);
-	return;
+	return (i == 0) ? ENOMEM : 0;
 }
 
 /****************************************************************************/
@@ -3952,7 +3859,7 @@ bnx_init_tx_chain(struct bnx_softc *sc)
 	DBPRINT(sc, BNX_VERBOSE_RESET, "Entering %s()\n", __func__);
 
 	/* Force an allocation of some dmamaps for tx up front */
-	bnx_alloc_pkts(NULL, sc);
+	bnx_alloc_pkts(sc);
 
 	/* Set the initial TX producer/consumer indices. */
 	sc->tx_prod = 0;
@@ -3985,10 +3892,10 @@ bnx_init_tx_chain(struct bnx_softc *sc)
 		else
 			j = i + 1;
 
-		addr = (u_int32_t)sc->tx_bd_chain_paddr[j];
-		txbd->tx_bd_haddr_lo = addr;
+		addr = (u_int32_t)(sc->tx_bd_chain_paddr[j]);
+		txbd->tx_bd_haddr_lo = htole32(addr);
 		addr = (u_int32_t)((u_int64_t)sc->tx_bd_chain_paddr[j] >> 32);
-		txbd->tx_bd_haddr_hi = addr;
+		txbd->tx_bd_haddr_hi = htole32(addr);
 		bus_dmamap_sync(sc->bnx_dmatag, sc->tx_bd_chain_map[i], 0,
 		    BNX_TX_CHAIN_PAGE_SZ, BUS_DMASYNC_PREWRITE);
 	}
@@ -4051,7 +3958,7 @@ bnx_free_tx_chain(struct bnx_softc *sc)
 
 	/* Clear each TX chain page. */
 	for (i = 0; i < TX_PAGES; i++) {
-		memset((char *)sc->tx_bd_chain[i], 0, BNX_TX_CHAIN_PAGE_SZ);
+		bzero((char *)sc->tx_bd_chain[i], BNX_TX_CHAIN_PAGE_SZ);
 		bus_dmamap_sync(sc->bnx_dmatag, sc->tx_bd_chain_map[i], 0,
 		    BNX_TX_CHAIN_PAGE_SZ, BUS_DMASYNC_PREWRITE);
 	}
@@ -4153,9 +4060,9 @@ bnx_init_rx_chain(struct bnx_softc *sc)
 
 		/* Setup the chain page pointers. */
 		addr = (u_int32_t)((u_int64_t)sc->rx_bd_chain_paddr[j] >> 32);
-		rxbd->rx_bd_haddr_hi = addr;
-		addr = (u_int32_t)sc->rx_bd_chain_paddr[j];
-		rxbd->rx_bd_haddr_lo = addr;
+		rxbd->rx_bd_haddr_hi = htole32(addr);
+		addr = (u_int32_t)(sc->rx_bd_chain_paddr[j]);
+		rxbd->rx_bd_haddr_lo = htole32(addr);
 		bus_dmamap_sync(sc->bnx_dmatag, sc->rx_bd_chain_map[i],
 		    0, BNX_RX_CHAIN_PAGE_SZ,
 		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
@@ -4223,7 +4130,7 @@ bnx_free_rx_chain(struct bnx_softc *sc)
 
 	/* Clear each RX chain page. */
 	for (i = 0; i < RX_PAGES; i++)
-		memset((char *)sc->rx_bd_chain[i], 0, BNX_RX_CHAIN_PAGE_SZ);
+		bzero((char *)sc->rx_bd_chain[i], BNX_RX_CHAIN_PAGE_SZ);
 
 	sc->free_rx_bd = sc->max_rx_bd;
 
@@ -4542,11 +4449,14 @@ bnx_rx_intr(struct bnx_softc *sc)
 				    continue);
 			}
 
+#if NBPFILTER > 0
 			/*
 			 * Handle BPF listeners. Let the BPF
 			 * user see the packet.
 			 */
-			bpf_mtap(ifp, m);
+			if (ifp->if_bpf)
+				bpf_mtap(ifp->if_bpf, m);
+#endif
 
 			/* Pass the mbuf off to the upper layers. */
 			ifp->if_ipackets++;
@@ -4788,7 +4698,7 @@ bnx_init(struct ifnet *ifp)
 		sc->mbuf_alloc_size = MCLBYTES;
 	} else {
 		ether_mtu = BNX_MAX_JUMBO_ETHER_MTU_VLAN;
-		sc->mbuf_alloc_size = BNX_MAX_JUMBO_MRU;
+		sc->mbuf_alloc_size = BNX_MAX_MRU;
 	}
 
 
@@ -4824,8 +4734,8 @@ bnx_init(struct ifnet *ifp)
 	if ((error = ether_mediachange(ifp)) != 0)
 		goto bnx_init_exit;
 
-	SET(ifp->if_flags, IFF_RUNNING);
-	CLR(ifp->if_flags, IFF_OACTIVE);
+	ifp->if_flags |= IFF_RUNNING;
+	ifp->if_flags &= ~IFF_OACTIVE;
 
 	callout_reset(&sc->bnx_timeout, hz, bnx_tick, sc);
 
@@ -4858,8 +4768,8 @@ bnx_tx_encap(struct bnx_softc *sc, struct mbuf *m)
 	u_int32_t		addr, prod_bseq;
 	int			i, error;
 	struct m_tag		*mtag;
-	static struct work	bnx_wk; /* Dummy work. Statically allocated. */
 
+again:
 	mutex_enter(&sc->tx_pkt_mtx);
 	pkt = TAILQ_FIRST(&sc->tx_free_pkts);
 	if (pkt == NULL) {
@@ -4867,15 +4777,14 @@ bnx_tx_encap(struct bnx_softc *sc, struct mbuf *m)
 			mutex_exit(&sc->tx_pkt_mtx);
 			return ENETDOWN;
 		}
-
-		if (sc->tx_pkt_count <= TOTAL_TX_BD &&
-		    !ISSET(sc->bnx_flags, BNX_ALLOC_PKTS_FLAG)) {
-			workqueue_enqueue(sc->bnx_wq, &bnx_wk, NULL);
-			SET(sc->bnx_flags, BNX_ALLOC_PKTS_FLAG);
+		if (sc->tx_pkt_count <= TOTAL_TX_BD) {
+			mutex_exit(&sc->tx_pkt_mtx);
+			if (bnx_alloc_pkts(sc) == 0)
+				goto again;
+		} else {
+			mutex_exit(&sc->tx_pkt_mtx);
 		}
-
-		mutex_exit(&sc->tx_pkt_mtx);
-		return ENOMEM;
+		return (ENOMEM);
 	}
 	TAILQ_REMOVE(&sc->tx_free_pkts, pkt, pkt_entry);
 	mutex_exit(&sc->tx_pkt_mtx);
@@ -4935,20 +4844,20 @@ bnx_tx_encap(struct bnx_softc *sc, struct mbuf *m)
 		chain_prod = TX_CHAIN_IDX(prod);
 		txbd = &sc->tx_bd_chain[TX_PAGE(chain_prod)][TX_IDX(chain_prod)];
  
-		addr = (u_int32_t)map->dm_segs[i].ds_addr;
-		txbd->tx_bd_haddr_lo = addr;
+		addr = (u_int32_t)(map->dm_segs[i].ds_addr);
+		txbd->tx_bd_haddr_lo = htole32(addr);
 		addr = (u_int32_t)((u_int64_t)map->dm_segs[i].ds_addr >> 32);
-		txbd->tx_bd_haddr_hi = addr;
-		txbd->tx_bd_mss_nbytes = map->dm_segs[i].ds_len;
-		txbd->tx_bd_vlan_tag = vlan_tag;
-		txbd->tx_bd_flags = flags;
+		txbd->tx_bd_haddr_hi = htole32(addr);
+		txbd->tx_bd_mss_nbytes = htole16(map->dm_segs[i].ds_len);
+		txbd->tx_bd_vlan_tag = htole16(vlan_tag);
+		txbd->tx_bd_flags = htole16(flags);
 		prod_bseq += map->dm_segs[i].ds_len;
 		if (i == 0)
-			txbd->tx_bd_flags |= TX_BD_FLAGS_START;
+			txbd->tx_bd_flags |= htole16(TX_BD_FLAGS_START);
 		prod = NEXT_TX_BD(prod);
 	}
 	/* Set the END flag on the last TX buffer descriptor. */
-	txbd->tx_bd_flags |= TX_BD_FLAGS_END;
+	txbd->tx_bd_flags |= htole16(TX_BD_FLAGS_END);
  
 	DBRUN(BNX_INFO_SEND, bnx_dump_tx_chain(sc, debug_prod, map->dm_nsegs));
  
@@ -5050,8 +4959,11 @@ bnx_start(struct ifnet *ifp)
 		IFQ_DEQUEUE(&ifp->if_snd, m_head);
 		count++;
 
+#if NBPFILTER > 0
 		/* Send a copy of the frame to any BPF listeners. */
-		bpf_mtap(ifp, m_head);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m_head);
+#endif
 	}
 
 	if (count == 0) {
@@ -5097,16 +5009,11 @@ bnx_ioctl(struct ifnet *ifp, u_long command, void *data)
 
 	switch (command) {
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, command, data)) != 0)
-			break;
-		/* XXX set an ifflags callback and let ether_ioctl
-		 * handle all of this.
-		 */
-		if (ISSET(ifp->if_flags, IFF_UP)) {
+		if (ifp->if_flags & IFF_UP) {
 			if (ifp->if_flags & IFF_RUNNING)
 				error = ENETRESET;
 			else
-				bnx_init(ifp);
+			    bnx_init(ifp);
 		} else if (ifp->if_flags & IFF_RUNNING)
 			bnx_stop(ifp, 1);
 		break;
@@ -5182,12 +5089,10 @@ bnx_intr(void *xsc)
 	const struct status_block *sblk;
 
 	sc = xsc;
+	if (!device_is_active(sc->bnx_dev))
+		return 0;
 
 	ifp = &sc->bnx_ec.ec_if;
-
-	if (!device_is_active(sc->bnx_dev) ||
-	    (ifp->if_flags & IFF_RUNNING) == 0)
-		return 0;
 
 	DBRUNIF(1, sc->interrupts_generated++);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: tty.c,v 1.43 2011/08/29 11:07:38 christos Exp $	*/
+/*	$NetBSD: tty.c,v 1.40 2007/05/28 15:01:58 blymn Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)tty.c	8.6 (Berkeley) 1/10/95";
 #else
-__RCSID("$NetBSD: tty.c,v 1.43 2011/08/29 11:07:38 christos Exp $");
+__RCSID("$NetBSD: tty.c,v 1.40 2007/05/28 15:01:58 blymn Exp $");
 #endif
 #endif				/* not lint */
 
@@ -56,11 +56,11 @@ __RCSID("$NetBSD: tty.c,v 1.43 2011/08/29 11:07:38 christos Exp $");
  * those attributes at each change, or at least when stopped and restarted.
  * See also the comments in getterm().
  */
-#ifndef TCSASOFT
-#define	TCSASOFT	0
+#ifdef TCSASOFT
+int	__tcaction = 1;			/* Ignore hardware settings. */
+#else
+int	__tcaction = 0;
 #endif
-
-int __tcaction = TCSASOFT != 0;		/* Ignore hardware settings */
 
 #ifndef	OXTABS
 #ifdef	XTABS			/* SMI uses XTABS. */
@@ -115,7 +115,7 @@ _cursesi_gettmode(SCREEN *screen)
 			screen->notty = TRUE;
 			__GT = 0;
 			__NONL = 0;
-			return OK;
+			return (OK);
 		}
 	}
 
@@ -143,7 +143,6 @@ _cursesi_gettmode(SCREEN *screen)
 	screen->rawt.c_oflag &= ~OPOST;
 	screen->rawt.c_lflag &= ~(ISIG | IEXTEN);
 
-#if TCSASOFT == 0
 	/*
 	 * In general, curses should leave hardware-related settings alone.
 	 * This includes parity and word size.  Older versions set the tty
@@ -152,14 +151,15 @@ _cursesi_gettmode(SCREEN *screen)
 	 * parity and word size, the TCSASOFT bit has to be removed from the
 	 * calls that switch to/from "raw" mode.
 	 */
-	screen->rawt.c_iflag &= ~ISTRIP;
-	screen->rawt.c_cflag &= ~(CSIZE | PARENB);
-	screen->rawt.c_cflag |= CS8;
-#endif
+	if (!__tcaction) {
+		screen->rawt.c_iflag &= ~ISTRIP;
+		screen->rawt.c_cflag &= ~(CSIZE | PARENB);
+		screen->rawt.c_cflag |= CS8;
+	}
 
 	screen->curt = &screen->baset;
-	return tcsetattr(fileno(screen->infd), TCSASOFT | TCSADRAIN,
-	    screen->curt) ? ERR : OK;
+	return (tcsetattr(fileno(screen->infd), __tcaction ?
+	    TCSASOFT | TCSADRAIN : TCSADRAIN, screen->curt) ? ERR : OK);
 }
 
 /*
@@ -180,8 +180,9 @@ raw(void)
 	_cursesi_screen->curt = &_cursesi_screen->rawt;
 	if (_cursesi_screen->notty == TRUE)
 		return OK;
-	return tcsetattr(fileno(_cursesi_screen->infd), TCSASOFT | TCSADRAIN,
-	    _cursesi_screen->curt) ? ERR : OK;
+	return (tcsetattr(fileno(_cursesi_screen->infd), __tcaction ?
+			  TCSASOFT | TCSADRAIN : TCSADRAIN,
+			  _cursesi_screen->curt) ? ERR : OK);
 }
 
 /*
@@ -202,8 +203,9 @@ noraw(void)
 	if (_cursesi_screen->notty == TRUE)
 		return OK;
 	_cursesi_screen->curt = &_cursesi_screen->baset;
-	return tcsetattr(fileno(_cursesi_screen->infd), TCSASOFT | TCSADRAIN,
-	    _cursesi_screen->curt) ? ERR : OK;
+	return (tcsetattr(fileno(_cursesi_screen->infd), __tcaction ?
+			  TCSASOFT | TCSADRAIN : TCSADRAIN,
+			  _cursesi_screen->curt) ? ERR : OK);
 }
 
 /*
@@ -225,8 +227,9 @@ cbreak(void)
 		return OK;
 	_cursesi_screen->curt = _cursesi_screen->useraw ?
 		&_cursesi_screen->rawt : &_cursesi_screen->cbreakt;
-	return tcsetattr(fileno(_cursesi_screen->infd), TCSASOFT | TCSADRAIN,
-	    _cursesi_screen->curt) ? ERR : OK;
+	return (tcsetattr(fileno(_cursesi_screen->infd), __tcaction ?
+			  TCSASOFT | TCSADRAIN : TCSADRAIN,
+			  _cursesi_screen->curt) ? ERR : OK);
 }
 
 /*
@@ -254,8 +257,9 @@ nocbreak(void)
 	_cursesi_screen->half_delay = FALSE;
 	_cursesi_screen->curt = _cursesi_screen->useraw ?
 		&_cursesi_screen->rawt : &_cursesi_screen->baset;
-	return tcsetattr(fileno(_cursesi_screen->infd), TCSASOFT | TCSADRAIN,
-	    _cursesi_screen->curt) ? ERR : OK;
+	return (tcsetattr(fileno(_cursesi_screen->infd), __tcaction ?
+			  TCSASOFT | TCSADRAIN : TCSADRAIN,
+			  _cursesi_screen->curt) ? ERR : OK);
 }
 
 /*
@@ -298,13 +302,8 @@ __delay(void)
 	_cursesi_screen->baset.c_cc[VMIN] = 1;
 	_cursesi_screen->baset.c_cc[VTIME] = 0;
 
-	if (tcsetattr(fileno(_cursesi_screen->infd), TCSASOFT | TCSANOW, 
-	    _cursesi_screen->curt)) {
-		__restore_termios();
-		return ERR;
-	}
-
-	return OK;
+	return (tcsetattr(fileno(_cursesi_screen->infd), __tcaction ?
+		TCSASOFT : TCSANOW, _cursesi_screen->curt) ? ERR : OK);
 }
 
 int
@@ -326,13 +325,8 @@ __nodelay(void)
 	_cursesi_screen->baset.c_cc[VMIN] = 0;
 	_cursesi_screen->baset.c_cc[VTIME] = 0;
 
-	if (tcsetattr(fileno(_cursesi_screen->infd), TCSASOFT | TCSANOW,
-	    _cursesi_screen->curt)) {
-		__restore_termios();
-		return ERR;
-	}
-
-	return OK;
+	return (tcsetattr(fileno(_cursesi_screen->infd), __tcaction ?
+		TCSASOFT : TCSANOW, _cursesi_screen->curt) ? ERR : OK);
 }
 
 void
@@ -386,13 +380,9 @@ __timeout(int delay)
 	_cursesi_screen->baset.c_cc[VMIN] = 0;
 	_cursesi_screen->baset.c_cc[VTIME] = delay;
 
-	if (tcsetattr(fileno(_cursesi_screen->infd), TCSASOFT | TCSANOW,
-	    _cursesi_screen->curt)) {
-		__restore_termios();
-		return ERR;
-	}
-
-	return OK;
+	return (tcsetattr(fileno(_cursesi_screen->infd),
+			  __tcaction ? TCSASOFT | TCSANOW : TCSANOW,
+			  _cursesi_screen->curt) ? ERR : OK);
 }
 
 int
@@ -414,8 +404,9 @@ __notimeout(void)
 	_cursesi_screen->baset.c_cc[VMIN] = 1;
 	_cursesi_screen->baset.c_cc[VTIME] = 0;
 
-	return tcsetattr(fileno(_cursesi_screen->infd), TCSASOFT | TCSANOW,
-	    _cursesi_screen->curt) ? ERR : OK;
+	return (tcsetattr(fileno(_cursesi_screen->infd),
+			  __tcaction ? TCSASOFT | TCSANOW : TCSANOW,
+			  _cursesi_screen->curt) ? ERR : OK);
 }
 
 int
@@ -429,7 +420,7 @@ echo(void)
 		__restartwin();
 
 	__echoit = 1;
-	return OK;
+	return (OK);
 }
 
 int
@@ -443,7 +434,7 @@ noecho(void)
 		__restartwin();
 
 	__echoit = 0;
-	return OK;
+	return (OK);
 }
 
 int
@@ -467,8 +458,9 @@ nl(void)
 
 	_cursesi_screen->nl = 1;
 	_cursesi_screen->pfast = _cursesi_screen->rawmode;
-	return tcsetattr(fileno(_cursesi_screen->infd), TCSASOFT | TCSADRAIN,
-	    _cursesi_screen->curt) ? ERR : OK;
+	return (tcsetattr(fileno(_cursesi_screen->infd), __tcaction ?
+			  TCSASOFT | TCSADRAIN : TCSADRAIN,
+			  _cursesi_screen->curt) ? ERR : OK);
 }
 
 int
@@ -492,8 +484,9 @@ nonl(void)
 
 	_cursesi_screen->nl = 0;
 	__pfast = 1;
-	return tcsetattr(fileno(_cursesi_screen->infd), TCSASOFT | TCSADRAIN,
-	    _cursesi_screen->curt) ? ERR : OK;
+	return (tcsetattr(fileno(_cursesi_screen->infd), __tcaction ?
+			  TCSASOFT | TCSADRAIN : TCSADRAIN,
+			  _cursesi_screen->curt) ? ERR : OK);
 }
 
 #ifndef _CURSES_USE_MACROS
@@ -530,8 +523,9 @@ intrflush(WINDOW *win, bool bf)	/*ARGSUSED*/
 	}
 
 	__pfast = 1;
-	return tcsetattr(fileno(_cursesi_screen->infd), TCSASOFT | TCSADRAIN,
-	    _cursesi_screen->curt) ? ERR : OK;
+	return (tcsetattr(fileno(_cursesi_screen->infd), __tcaction ?
+			  TCSASOFT | TCSADRAIN : TCSADRAIN,
+			  _cursesi_screen->curt) ? ERR : OK);
 }
 
 void
@@ -556,13 +550,13 @@ __startwin(SCREEN *screen)
 	}
 	(void) setvbuf(screen->outfd, screen->stdbuf, _IOFBF, screen->len);
 
-	ti_puts(screen->term, t_enter_ca_mode(screen->term), 0,
-		__cputchar_args, (void *) screen->outfd);
-	ti_puts(screen->term, t_cursor_normal(screen->term), 0,
-	    __cputchar_args, (void *) screen->outfd);
+	t_puts(screen->cursesi_genbuf, __tc_ti, 0, __cputchar_args,
+	       (void *) screen->outfd);
+	t_puts(screen->cursesi_genbuf, __tc_vs, 0, __cputchar_args,
+	       (void *) screen->outfd);
 	if (screen->curscr->flags & __KEYPAD)
-		ti_puts(screen->term, t_keypad_xmit(screen->term), 0,
-		    __cputchar_args, (void *) screen->outfd);
+		t_puts(screen->cursesi_genbuf, __tc_ks, 0, __cputchar_args,
+		       (void *) screen->outfd);
 	screen->endwin = 0;
 }
 
@@ -578,14 +572,14 @@ endwin(void)
 bool
 isendwin(void)
 {
-	return _cursesi_screen->endwin ? TRUE : FALSE;
+	return (_cursesi_screen->endwin ? TRUE : FALSE);
 }
 
 int
 flushinp(void)
 {
 	(void) fpurge(_cursesi_screen->infd);
-	return OK;
+	return (OK);
 }
 
 /*
@@ -599,8 +593,8 @@ savetty(void)
 {
 	if (_cursesi_screen->notty == TRUE)
 		return OK;
-	return tcgetattr(fileno(_cursesi_screen->infd),
-	    &_cursesi_screen->savedtty) ? ERR : OK;
+	return (tcgetattr(fileno(_cursesi_screen->infd),
+			  &_cursesi_screen->savedtty) ? ERR : OK);
 }
 
 int
@@ -608,8 +602,9 @@ resetty(void)
 {
 	if (_cursesi_screen->notty == TRUE)
 		return OK;
-	return tcsetattr(fileno(_cursesi_screen->infd), TCSASOFT | TCSADRAIN,
-	    &_cursesi_screen->savedtty) ? ERR : OK;
+	return (tcsetattr(fileno(_cursesi_screen->infd), __tcaction ?
+			  TCSASOFT | TCSADRAIN : TCSADRAIN,
+			  &_cursesi_screen->savedtty) ? ERR : OK);
 }
 
 /*

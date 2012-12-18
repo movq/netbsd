@@ -1,4 +1,4 @@
-/*	$NetBSD: stree.c,v 1.15 2009/10/17 22:26:13 christos Exp $	*/
+/*	$NetBSD: stree.c,v 1.12 2007/12/20 20:17:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -59,13 +59,13 @@
 #include "libc.h"
 #include "c.h"
 
-static TREE *Tmake(const char *);
+static TREE *Tmake(char *);
 static TREE *Trotll(TREE *, TREE *);
 static TREE *Trotlh(TREE *, TREE *);
 static TREE *Trothl(TREE *, TREE *);
 static TREE *Trothh(TREE *, TREE *);
 static void Tbalance(TREE **);
-static TREE *Tinsertavl(TREE **, const char *, int, int *);
+static TREE *Tinsertavl(TREE **, char *, int, int *);
 static int Tsubprocess(TREE *, int, int (*f) (TREE *, void *), void *);
 static int Tprintone(TREE *, void *);
 
@@ -94,7 +94,7 @@ Tfree(TREE ** t)
 }
 
 static TREE *
-Tmake(const char *p)
+Tmake(char *p)
 {
 	TREE *t;
 	t = (TREE *) malloc(sizeof(TREE));
@@ -192,7 +192,7 @@ Tbalance(TREE ** t)
 }
 
 static TREE *
-Tinsertavl(TREE ** t, const char *p, int find, int *dh)
+Tinsertavl(TREE ** t, char *p, int find, int *dh)
 {
 	TREE *newt;
 	int cmp;
@@ -225,7 +225,7 @@ Tinsertavl(TREE ** t, const char *p, int find, int *dh)
 }
 
 TREE *
-Tinsert(TREE ** t, const char *p, int find)
+Tinsert(TREE ** t, char *p, int find)
 {
 	int deltah;
 
@@ -240,7 +240,7 @@ Tinsert(TREE ** t, const char *p, int find)
 }
 
 TREE *
-Tsearch(TREE * t, const char *p)
+Tsearch(TREE * t, char *p)
 {
 	TREE *x;
 	int cmp;
@@ -259,11 +259,10 @@ Tsearch(TREE * t, const char *p)
 }
 
 TREE *
-Tlookup(TREE * t, const char *p)
+Tlookup(TREE * t, char *p)
 {
 	TREE *x;
 	char buf[MAXPATHLEN + 1];
-	char *q;
 
 	if (p == NULL)
 		return (NULL);
@@ -280,16 +279,16 @@ Tlookup(TREE * t, const char *p)
 		return (x);
 	(void) strncpy(buf, p, sizeof(buf) - 1);
 	buf[MAXPATHLEN] = '\0';
-	while ((q = strrchr(buf, '/')) != NULL) {
-		while (q >= buf && *(q - 1) == '/')
-			q--;
-		if (q == buf)
-			*(q + 1) = '\0';
+	while ((p = rindex(buf, '/')) != NULL) {
+		while (p >= buf && *(p - 1) == '/')
+			p--;
+		if (p == buf)
+			*(p + 1) = '\0';
 		else
-			*q = '\0';
+			*p = '\0';
 		if ((x = Tsearch(t, buf)) != NULL)
 			return (x);
-		if (q == buf)
+		if (p == buf)
 			break;
 	}
 	return (NULL);
@@ -338,7 +337,6 @@ Tprocess(TREE * t, int (*f) (TREE *, void *), void *args)
 }
 
 static int 
-/*ARGSUSED*/
 Tprintone(TREE * t, void *v __unused)
 {
 	int i;

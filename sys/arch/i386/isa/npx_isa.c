@@ -1,4 +1,4 @@
-/*	$NetBSD: npx_isa.c,v 1.22 2011/07/01 18:11:24 dyoung Exp $	*/
+/*	$NetBSD: npx_isa.c,v 1.19 2008/04/11 20:42:34 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1991 The Regents of the University of California.
@@ -67,13 +67,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npx_isa.c,v 1.22 2011/07/01 18:11:24 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npx_isa.c,v 1.19 2008/04/11 20:42:34 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpufunc.h>
 #include <machine/intr.h>
 #include <machine/specialreg.h>
@@ -83,15 +83,14 @@ __KERNEL_RCSID(0, "$NetBSD: npx_isa.c,v 1.22 2011/07/01 18:11:24 dyoung Exp $");
 
 #include <i386/isa/npxvar.h>
 
-int npx_isa_probe(device_t, cfdata_t, void *);
+int npx_isa_probe(device_t, struct cfdata *, void *);
 void npx_isa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL3_NEW(npx_isa, sizeof(struct npx_softc),
-    npx_isa_probe, npx_isa_attach, npxdetach, NULL, NULL, NULL,
-    DVF_DETACH_SHUTDOWN);
+CFATTACH_DECL_NEW(npx_isa, sizeof(struct npx_softc),
+    npx_isa_probe, npx_isa_attach, npxdetach, NULL);
 
 int
-npx_isa_probe(device_t parent, cfdata_t match, void *aux)
+npx_isa_probe(device_t parent, struct cfdata *match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_handle_t ioh;

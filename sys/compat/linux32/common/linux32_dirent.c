@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_dirent.c,v 1.13 2011/10/14 09:23:29 hannken Exp $ */
+/*	$NetBSD: linux32_dirent.c,v 1.6.4.1 2010/03/17 02:59:52 snj Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_dirent.c,v 1.13 2011/10/14 09:23:29 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_dirent.c,v 1.6.4.1 2010/03/17 02:59:52 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -65,8 +65,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_dirent.c,v 1.13 2011/10/14 09:23:29 hannken 
 #include <compat/linux/common/linux_misc.h>
 #include <compat/linux/common/linux_oldolduname.h>
 #include <compat/linux/common/linux_dirent.h>
-#include <compat/linux/common/linux_ipc.h>
-#include <compat/linux/common/linux_sem.h>
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/linux32/common/linux32_types.h>
@@ -126,14 +124,11 @@ linux32_sys_getdents(struct lwp *l, const struct linux32_sys_getdents_args *uap,
 
 	vp = (struct vnode *)fp->f_data;
 	if (vp->v_type != VDIR) {
-		error = ENOTDIR;
+		error = EINVAL;
 		goto out1;
 	}
 
-	vn_lock(vp, LK_SHARED | LK_RETRY);
-	error = VOP_GETATTR(vp, &va, l->l_cred);
-	VOP_UNLOCK(vp);
-	if (error)
+	if ((error = VOP_GETATTR(vp, &va, l->l_cred)))
 		goto out1;
 
 	nbytes = SCARG(uap, count);
@@ -216,7 +211,6 @@ again:
 			idb.d_reclen = (u_short)linux32_reclen;
 		}
 		strcpy(idb.d_name, bdp->d_name);
-		idb.d_name[strlen(idb.d_name) + 1] = bdp->d_type;
 		if ((error = copyout((void *)&idb, outp, linux32_reclen)))
 			goto out;
 		/* advance past this real entry */
@@ -247,7 +241,7 @@ again:
 eof:
 	*retval = nbytes - resid;
 out:
-	VOP_UNLOCK(vp);
+	VOP_UNLOCK(vp, 0);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(tbuf, M_TEMP);
@@ -260,9 +254,9 @@ int
 linux32_sys_getdents64(struct lwp *l, const struct linux32_sys_getdents64_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(int) fd;
-		syscallarg(linux32_dirent64p_t) dent;
-		syscallarg(unsigned int) count;
+		syscallcarg(int) fd;
+		syscallcarg(linux32_dirent64p_t) dent;
+		syscallcarg(unsigned int) count;
 	} */
 	struct linux_sys_getdents64_args ua;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.103 2012/11/08 00:34:38 macallan Exp $ */
+/*	$NetBSD: cpu.c,v 1.78.4.1 2010/03/17 02:51:09 snj Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.103 2012/11/08 00:34:38 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.78.4.1 2010/03/17 02:51:09 snj Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -60,9 +60,8 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.103 2012/11/08 00:34:38 macallan Exp $");
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
-#include <sys/reboot.h>
 
-#include <uvm/uvm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
@@ -77,9 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.103 2012/11/08 00:34:38 macallan Exp $");
 int ecache_min_line_size;
 
 /* Linked list of all CPUs in system. */
-#if defined(MULTIPROCESSOR)
 int sparc_ncpus = 0;
-#endif
 struct cpu_info *cpus = NULL;
 
 volatile sparc64_cpuset_t cpus_active;/* set of active cpus */
@@ -94,37 +91,18 @@ char	machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
 char	cpu_model[100];			/* machine model (primary CPU) */
 extern char machine_model[];
 
-/* These are used in locore.s, and are maximums */
-int	dcache_line_size;
-int	dcache_size;
-int	icache_line_size;
-int	icache_size;
-
 #ifdef MULTIPROCESSOR
 static const char *ipi_evcnt_names[IPI_EVCNT_NUM] = IPI_EVCNT_NAMES;
 #endif
 
 static void cpu_reset_fpustate(void);
 
-volatile int sync_tick = 0;
-
 /* The CPU configuration driver. */
-void cpu_attach(device_t, device_t, void *);
-int cpu_match(device_t, cfdata_t, void *);
+void cpu_attach(struct device *, struct device *, void *);
+int cpu_match(struct device *, struct cfdata *, void *);
 
-CFATTACH_DECL_NEW(cpu, 0, cpu_match, cpu_attach, NULL, NULL);
-
-static int
-upaid_from_node(u_int cpu_node)
-{
-	int portid;
-
-	if (OF_getprop(cpu_node, "upa-portid", &portid, sizeof(portid)) <= 0 &&
-	    OF_getprop(cpu_node, "portid", &portid, sizeof(portid)) <= 0)
-		panic("cpu node w/o upa-portid");
-
-	return portid;
-}
+CFATTACH_DECL(cpu, sizeof(struct device),
+    cpu_match, cpu_attach, NULL, NULL);
 
 struct cpu_info *
 alloc_cpuinfo(u_int cpu_node)
@@ -139,7 +117,8 @@ alloc_cpuinfo(u_int cpu_node)
 	/*
 	 * Check for UPAID in the cpus list.
 	 */
-	portid = upaid_from_node(cpu_node);
+	if (OF_getprop(cpu_node, "upa-portid", &portid, sizeof(portid)) <= 0)
+		panic("alloc_cpuinfo: upa-portid");
 
 	for (cpi = cpus; cpi != NULL; cpi = cpi->ci_next)
 		if (cpi->ci_cpuid == portid)
@@ -155,7 +134,7 @@ alloc_cpuinfo(u_int cpu_node)
 	cpu0paddr += sz;
 
 	for (pa = pa0; pa < cpu0paddr; pa += PAGE_SIZE, va += PAGE_SIZE)
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
 
 	pmap_update(pmap_kernel());
 
@@ -173,7 +152,6 @@ alloc_cpuinfo(u_int cpu_node)
 	cpi->ci_curlwp = NULL;
 	cpi->ci_cpuid = portid;
 	cpi->ci_fplwp = NULL;
-	cpi->ci_eintstack = NULL;
 	cpi->ci_spinup = NULL;
 	cpi->ci_paddr = pa0;
 	cpi->ci_self = cpi;
@@ -193,25 +171,11 @@ alloc_cpuinfo(u_int cpu_node)
 }
 
 int
-cpu_match(device_t parent, cfdata_t cf, void *aux)
+cpu_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
-	if (strcmp(cf->cf_name, ma->ma_name) != 0)
-		return 0;
-
-	/*
-	 * If we are going to only attach a single cpu, make sure
-	 * to pick the one we are running on right now.
-	 */
-	if (upaid_from_node(ma->ma_node) != CPU_UPAID) {
-#ifdef MULTIPROCESSOR
-		if (boothowto & RB_MD1)
-#endif
-			return 0;
-	}
-
-	return 1;
+	return (strcmp(cf->cf_name, ma->ma_name) == 0);
 }
 
 static void
@@ -239,10 +203,10 @@ cpu_reset_fpustate(void)
  * (slightly funny place to do it, but this is where it is to be found).
  */
 void
-cpu_attach(device_t parent, device_t dev, void *aux)
+cpu_attach(struct device *parent, struct device *dev, void *aux)
 {
 	int node;
-	long clk, sclk = 0;
+	long clk;
 	struct mainbus_attach_args *ma = aux;
 	struct cpu_info *ci;
 	const char *sep;
@@ -250,7 +214,8 @@ cpu_attach(device_t parent, device_t dev, void *aux)
 	int bigcache, cachesize;
 	char buf[100];
 	int 	totalsize = 0;
-	int 	linesize, dcachesize, icachesize;
+	int 	linesize;
+	static bool passed = false;
 
 	/* tell them what we have */
 	node = ma->ma_node;
@@ -267,24 +232,24 @@ cpu_attach(device_t parent, device_t dev, void *aux)
 	 * For other cpus, we need to call mi_cpu_attach()
 	 * and complete setting up cpcb.
 	 */
-	if (ci->ci_flags & CPUF_PRIMARY) {
+	if (!passed) {
+		passed = true;
 		fpstate_cache = pool_cache_init(sizeof(struct fpstate64),
-					SPARC64_BLOCK_SIZE, 0, 0, "fpstate",
-					NULL, IPL_NONE, NULL, NULL, NULL);
+					BLOCK_SIZE, 0, 0, "fpstate", NULL,
+					IPL_NONE, NULL, NULL, NULL);
 		cpu_reset_fpustate();
 	}
 #ifdef MULTIPROCESSOR
 	else {
 		mi_cpu_attach(ci);
-		ci->ci_cpcb = lwp_getpcb(ci->ci_data.cpu_idlelwp);
+		ci->ci_cpcb = (struct pcb *)ci->ci_data.cpu_idlelwp->l_addr;
 	}
 	for (i = 0; i < IPI_EVCNT_NUM; ++i)
-		evcnt_attach_dynamic(&ci->ci_ipi_evcnt[i], EVCNT_TYPE_INTR,
+		evcnt_attach_dynamic(&ci->ci_ipi_evcnt[i], EVCNT_TYPE_MISC,
 				     NULL, device_xname(dev), ipi_evcnt_names[i]);
 #endif
-	evcnt_attach_dynamic(&ci->ci_tick_evcnt, EVCNT_TYPE_INTR, NULL,
+	evcnt_attach_dynamic(&ci->ci_tick_evcnt, EVCNT_TYPE_MISC, NULL,
 			     device_xname(dev), "timer");
-	mutex_init(&ci->ci_ctx_lock, MUTEX_SPIN, IPL_VM);
 
 	clk = prom_getpropint(node, "clock-frequency", 0);
 	if (clk == 0) {
@@ -299,39 +264,22 @@ cpu_attach(device_t parent, device_t dev, void *aux)
 		ci->ci_cpu_clockrate[1] = clk / 1000000;
 	}
 
-	if (!CPU_IS_HUMMINGBIRD()) {
-		sclk = prom_getpropint(findroot(), "stick-frequency", 0);
-	}
-	ci->ci_system_clockrate[0] = sclk;
-	ci->ci_system_clockrate[1] = sclk / 1000000;
-
 	snprintf(buf, sizeof buf, "%s @ %s MHz",
 		prom_getpropstring(node, "name"), clockfreq(clk));
 	snprintf(cpu_model, sizeof cpu_model, "%s (%s)", machine_model, buf);
 
-	aprint_normal(": %s, UPA id %d\n", buf, ci->ci_cpuid);
-	aprint_naive("\n");
-
-	if (ci->ci_system_clockrate[0] != 0) {
-		aprint_normal_dev(dev, "system tick frequency %d MHz\n", 
-		    (int)ci->ci_system_clockrate[1]);
-	}
-	aprint_normal_dev(dev, "");
+	printf(": %s, UPA id %d\n", buf, ci->ci_cpuid);
+	printf("%s:", device_xname(dev));
 
 	bigcache = 0;
 
-	icachesize = prom_getpropint(node, "icache-size", 0);
-	if (icachesize > icache_size)
-		icache_size = icachesize;
-	linesize = l = prom_getpropint(node, "icache-line-size", 0);
-	if (linesize > icache_line_size)
-		icache_line_size = linesize;
-
+	linesize = l =
+		prom_getpropint(node, "icache-line-size", 0);
 	for (i = 0; (1 << i) < l && l; i++)
 		/* void */;
 	if ((1 << i) != l && l)
 		panic("bad icache line size %d", l);
-	totalsize = icachesize;
+	totalsize = prom_getpropint(node, "icache-size", 0);
 	if (totalsize == 0)
 		totalsize = l *
 			prom_getpropint(node, "icache-nlines", 64) *
@@ -341,26 +289,21 @@ cpu_attach(device_t parent, device_t dev, void *aux)
 	    prom_getpropint(node, "icache-associativity", 1);
 	bigcache = cachesize;
 
-	sep = "";
+	sep = " ";
 	if (totalsize > 0) {
-		aprint_normal("%s%ldK instruction (%ld b/l)", sep,
+		printf("%s%ldK instruction (%ld b/l)", sep,
 		       (long)totalsize/1024,
 		       (long)linesize);
 		sep = ", ";
 	}
 
-	dcachesize = prom_getpropint(node, "dcache-size", 0);
-	if (dcachesize > dcache_size)
-		dcache_size = dcachesize;
-	linesize = l = prom_getpropint(node, "dcache-line-size", 0);
-	if (linesize > dcache_line_size)
-		dcache_line_size = linesize;
-
+	linesize = l =
+		prom_getpropint(node, "dcache-line-size",0);
 	for (i = 0; (1 << i) < l && l; i++)
 		/* void */;
 	if ((1 << i) != l && l)
 		panic("bad dcache line size %d", l);
-	totalsize = dcachesize;
+	totalsize = prom_getpropint(node, "dcache-size", 0);
 	if (totalsize == 0)
 		totalsize = l *
 			prom_getpropint(node, "dcache-nlines", 128) *
@@ -372,7 +315,7 @@ cpu_attach(device_t parent, device_t dev, void *aux)
 		bigcache = cachesize;
 
 	if (totalsize > 0) {
-		aprint_normal("%s%ldK data (%ld b/l)", sep,
+		printf("%s%ldK data (%ld b/l)", sep,
 		       (long)totalsize/1024,
 		       (long)linesize);
 		sep = ", ";
@@ -396,11 +339,11 @@ cpu_attach(device_t parent, device_t dev, void *aux)
 		bigcache = cachesize;
 
 	if (totalsize > 0) {
-		aprint_normal("%s%ldK external (%ld b/l)", sep,
+		printf("%s%ldK external (%ld b/l)", sep,
 		       (long)totalsize/1024,
 		       (long)linesize);
 	}
-	aprint_normal("\n");
+	printf("\n");
 
 	if (ecache_min_line_size == 0 ||
 	    linesize < ecache_min_line_size)
@@ -421,20 +364,12 @@ vaddr_t cpu_spinup_trampoline;
  * Start secondary processors in motion.
  */
 void
-cpu_boot_secondary_processors(void)
+cpu_boot_secondary_processors()
 {
 	int i, pstate;
 	struct cpu_info *ci;
 
-	sync_tick = 0;
-
 	sparc64_ipi_init();
-
-	if (boothowto & RB_MD1) {
-		cpus[0].ci_next = NULL;
-		sparc_ncpus = ncpu = ncpuonline = 1;
-		return;
-	}
 
 	for (ci = cpus; ci != NULL; ci = ci->ci_next) {
 		if (ci->ci_cpuid == CPU_UPAID)
@@ -443,7 +378,7 @@ cpu_boot_secondary_processors(void)
 		cpu_pmap_prepare(ci, false);
 		cpu_args->cb_node = ci->ci_node;
 		cpu_args->cb_cpuinfo = ci->ci_paddr;
-		membar_Sync();
+		membar_sync();
 
 		/* Disable interrupts and start another CPU. */
 		pstate = getpstate();
@@ -452,20 +387,11 @@ cpu_boot_secondary_processors(void)
 		prom_startcpu(ci->ci_node, (void *)cpu_spinup_trampoline, 0);
 
 		for (i = 0; i < 2000; i++) {
-			membar_Sync();
+			membar_sync();
 			if (CPUSET_HAS(cpus_active, ci->ci_index))
 				break;
 			delay(10000);
 		}
-
-		/* synchronize %tick ( to some degree at least ) */
-		delay(1000);
-		sync_tick = 1;
-		membar_Sync();
-		settick(0);
-		if (ci->ci_system_clockrate[0] != 0)
-			setstick(0);
-
 		setpstate(pstate);
 
 		if (!CPUSET_HAS(cpus_active, ci->ci_index))
@@ -474,7 +400,7 @@ cpu_boot_secondary_processors(void)
 }
 
 void
-cpu_hatch(void)
+cpu_hatch()
 {
 	char *v = (char*)CPUINFO_VA;
 	int i;
@@ -486,19 +412,8 @@ cpu_hatch(void)
 	CPUSET_ADD(cpus_active, cpu_number());
 	cpu_reset_fpustate();
 	curlwp = curcpu()->ci_data.cpu_idlelwp;
-	membar_Sync();
-
-	/* wait for the boot CPU to flip the switch */
-	while (sync_tick == 0) {
-		/* we do nothing here */
-	}
-	settick(0);
-	if (curcpu()->ci_system_clockrate[0] != 0) {
-		setstick(0);
-		stickintr_establish(PIL_CLOCK, stickintr);
-	} else {
-		tickintr_establish(PIL_CLOCK, tickintr);
-	}
+	membar_sync();
+	tickintr_establish(PIL_CLOCK, tickintr);
 	spl0();
 }
 #endif /* MULTIPROCESSOR */

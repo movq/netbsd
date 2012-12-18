@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_bsdpty.c,v 1.17 2010/11/19 06:44:43 dholland Exp $	*/
+/*	$NetBSD: tty_bsdpty.c,v 1.14 2008/04/28 20:24:05 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_bsdpty.c,v 1.17 2010/11/19 06:44:43 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_bsdpty.c,v 1.14 2008/04/28 20:24:05 martin Exp $");
 
 #include "opt_ptm.h"
 
@@ -49,6 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: tty_bsdpty.c,v 1.17 2010/11/19 06:44:43 dholland Exp
 #include <sys/filedesc.h>
 #include <sys/conf.h>
 #include <sys/poll.h>
+#include <sys/malloc.h>
 #include <sys/pty.h>
 #include <sys/kauth.h>
 
@@ -117,7 +118,6 @@ pty_allocvp(struct ptm_pty *ptm, struct lwp *l, struct vnode **vp, dev_t dev,
     char ms)
 {
 	int error;
-	struct pathbuf *pb;
 	struct nameidata nd;
 	char name[TTY_NAMESIZE];
 
@@ -125,18 +125,10 @@ pty_allocvp(struct ptm_pty *ptm, struct lwp *l, struct vnode **vp, dev_t dev,
 	if (error)
 		return error;
 
-	pb = pathbuf_create(name);
-	if (pb == NULL) {
-		return ENOMEM;
-	}
-
-	NDINIT(&nd, LOOKUP, NOFOLLOW|LOCKLEAF, pb);
-	if ((error = namei(&nd)) != 0) {
-		pathbuf_destroy(pb);
+	NDINIT(&nd, LOOKUP, NOFOLLOW|LOCKLEAF, UIO_SYSSPACE, name);
+	if ((error = namei(&nd)) != 0)
 		return error;
-	}
 	*vp = nd.ni_vp;
-	pathbuf_destroy(pb);
 	return 0;
 }
 
@@ -145,7 +137,7 @@ static void
 /*ARGSUSED*/
 pty_getvattr(struct ptm_pty *ptm, struct lwp *l, struct vattr *vattr)
 {
-	vattr_null(vattr);
+	VATTR_NULL(vattr);
 	/* get real uid */
 	vattr->va_uid = kauth_cred_getuid(l->l_cred);
 	vattr->va_gid = TTY_GID;

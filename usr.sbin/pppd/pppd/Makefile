@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.42 2012/08/10 12:10:29 joerg Exp $
+#	$NetBSD: Makefile,v 1.39 2008/08/29 00:02:25 gmcgarry Exp $
 
 .include <bsd.own.mk>
 
@@ -33,10 +33,10 @@ DPADD+=${LIBPAM} ${PAM_STATIC_DPADD}
 LDADD+= -lpcap -lcrypt -lutil -Wl,--export-dynamic
 DPADD+= ${LIBPCAP} ${LIBCRYPT} ${LIBUTIL}
 
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 .for f in chap-md5 chap_ms eap
 COPTS.${f}.c+=	-Wno-pointer-sign
 .endfor
-
-CWARNFLAGS.clang+=	-Wno-tautological-compare
+.endif
 
 .include <bsd.prog.mk>

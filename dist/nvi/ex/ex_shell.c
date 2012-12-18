@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_shell.c,v 1.5 2011/03/21 14:53:03 tnozaki Exp $ */
+/*	$NetBSD: ex_shell.c,v 1.1.1.2.6.1 2009/01/20 02:41:12 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -20,7 +20,6 @@ static const char sccsid[] = "Id: ex_shell.c,v 10.42 2003/11/05 17:11:54 skimo E
 #include <sys/wait.h>
 
 #include <bitstring.h>
-#include <ctype.h>
 #include <errno.h>
 #include <limits.h>
 #include <signal.h>
@@ -170,11 +169,11 @@ proc_wait(SCR *sp, long int pid, const char *cmd, int silent, int okpipe)
 	 * exit before reading all of its input.
 	 */
 	if (WIFSIGNALED(pstat) && (!okpipe || WTERMSIG(pstat) != SIGPIPE)) {
-		for (; isblank((unsigned char)*cmd); ++cmd);
+		for (; isblank(*cmd); ++cmd);
 		p = msg_print(sp, cmd, &nf);
 		len = strlen(p);
 		msgq(sp, M_ERR, "%.*s%s: received signal: %s%s",
-		    (int)MIN(len, 20), p, len > 20 ? " ..." : "",
+		    MIN(len, 20), p, len > 20 ? " ..." : "",
 		    sigmsg(WTERMSIG(pstat)),
 		    WCOREDUMP(pstat) ? "; core dumped" : "");
 		if (nf)
@@ -192,11 +191,11 @@ proc_wait(SCR *sp, long int pid, const char *cmd, int silent, int okpipe)
 		 * practice.
 		 */
 		if (!silent) {
-			for (; isblank((unsigned char)*cmd); ++cmd);
+			for (; isblank(*cmd); ++cmd);
 			p = msg_print(sp, cmd, &nf);
 			len = strlen(p);
 			msgq(sp, M_ERR, "%.*s%s: exited with status %d",
-			    (int)MIN(len, 20), p, len > 20 ? " ..." : "",
+			    MIN(len, 20), p, len > 20 ? " ..." : "",
 			    WEXITSTATUS(pstat));
 			if (nf)
 				FREE_SPACE(sp, p, 0);
@@ -360,7 +359,7 @@ sigmsg(int signo)
 {
 	static char buf[40];
 	const SIGS *sigp;
-	size_t n;
+	int n;
 
 	for (n = 0,
 	    sigp = &sigs[0]; n < sizeof(sigs) / sizeof(sigs[0]); ++n, ++sigp)

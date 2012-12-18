@@ -1,4 +1,4 @@
-/*	$NetBSD: pcib.c,v 1.15 2012/04/06 20:38:52 plunky Exp $	*/
+/*	$NetBSD: pcib.c,v 1.7 2008/08/04 06:01:18 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -30,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.15 2012/04/06 20:38:52 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.7 2008/08/04 06:01:18 cegger Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/isa/isavar.h>
 
@@ -50,10 +50,12 @@ __KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.15 2012/04/06 20:38:52 plunky Exp $");
 #include "pcibvar.h"
 
 int	pcibmatch(device_t, cfdata_t, void *);
+void	pcibattach(device_t, device_t, void *);
+int	pcibdetach(device_t, int);
+void	pcibchilddet(device_t, device_t);
 
-CFATTACH_DECL3_NEW(pcib, sizeof(struct pcib_softc),
-    pcibmatch, pcibattach, pcibdetach, NULL, pcibrescan, pcibchilddet,
-    DVF_DETACH_SHUTDOWN);
+CFATTACH_DECL2_NEW(pcib, sizeof(struct pcib_softc),
+    pcibmatch, pcibattach, pcibdetach, NULL, NULL, pcibchilddet);
 
 void	pcib_callback(device_t);
 
@@ -185,18 +187,29 @@ pcibattach(device_t parent, device_t self, void *aux)
 {
 	struct pcib_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
+	char devinfo[256];
+
+	aprint_naive("\n");
+	aprint_normal("\n");
 
 	/*
 	 * Just print out a description and defer configuration
 	 * until all PCI devices have been attached.
 	 */
-	pci_aprint_devinfo(pa, NULL);
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	aprint_normal_dev(self, "%s (rev. 0x%02x)\n", devinfo,
+	    PCI_REVISION(pa->pa_class));
 
 	sc->sc_pc = pa->pa_pc;
 	sc->sc_tag = pa->pa_tag;
 
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "couldn't establish power handler\n");
+	/* If a more specific pcib implementation has already registered a
+	 * power handler, don't overwrite it.
+	 */
+ 	if (!device_pmf_is_registered(self)) {
+ 		if (!pmf_device_register(self, NULL, NULL))
+ 	    		aprint_error_dev(self, "couldn't establish power handler\n");
+	}
 
 	config_defer(self, pcib_callback);
 }
@@ -215,36 +228,22 @@ pcibdetach(device_t self, int flags)
 void
 pcibchilddet(device_t self, device_t child)
 {
-	struct pcib_softc *sc = device_private(self);
-
-	if (sc->sc_isabus == child)
-		sc->sc_isabus = NULL;
-}
-
-int
-pcibrescan(device_t self, const char *ifattr, const int *loc)
-{
-	struct pcib_softc *sc = device_private(self);
-	struct isabus_attach_args iba;
-
-	if (ifattr_match(ifattr, "isabus") && sc->sc_isabus == NULL) {
-		/*
-		 * Attach the ISA bus behind this bridge.
-		 */
-		memset(&iba, 0, sizeof(iba));
-		iba.iba_iot = x86_bus_space_io;
-		iba.iba_memt = x86_bus_space_mem;
-#if NISA > 0
-		iba.iba_dmat = &isa_bus_dma_tag;
-#endif
-		sc->sc_isabus =
-		    config_found_ia(self, "isabus", &iba, isabusprint);
-	}
-	return 0;
+	/* we keep no references to children, so do nothing */
 }
 
 void
 pcib_callback(device_t self)
 {
-	pcibrescan(self, "isabus", NULL);
+	struct isabus_attach_args iba;
+
+	/*
+	 * Attach the ISA bus behind this bridge.
+	 */
+	memset(&iba, 0, sizeof(iba));
+	iba.iba_iot = X86_BUS_SPACE_IO;
+	iba.iba_memt = X86_BUS_SPACE_MEM;
+#if NISA > 0
+	iba.iba_dmat = &isa_bus_dma_tag;
+#endif
+	config_found_ia(self, "isabus", &iba, isabusprint);
 }

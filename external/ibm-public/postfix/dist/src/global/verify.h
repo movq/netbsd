@@ -1,4 +1,4 @@
-/*	$NetBSD: verify.h,v 1.1.1.1 2009/06/23 10:08:48 tron Exp $	*/
+/*	$NetBSD: verify.h,v 1.1.1.1.2.3 2011/01/07 01:24:06 riz Exp $	*/
 
 #ifndef _VERIFY_H_INCLUDED_
 #define _VERIFY_H_INCLUDED_

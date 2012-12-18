@@ -1,4 +1,4 @@
-/* $NetBSD: cgd.c,v 1.78 2012/12/05 02:23:20 christos Exp $ */
+/* $NetBSD: cgd.c,v 1.53.4.3 2010/01/30 19:00:46 snj Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.78 2012/12/05 02:23:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.53.4.3 2010/01/30 19:00:46 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -40,17 +40,14 @@ __KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.78 2012/12/05 02:23:20 christos Exp $");
 #include <sys/buf.h>
 #include <sys/bufq.h>
 #include <sys/malloc.h>
-#include <sys/module.h>
 #include <sys/pool.h>
 #include <sys/ioctl.h>
 #include <sys/device.h>
 #include <sys/disk.h>
 #include <sys/disklabel.h>
 #include <sys/fcntl.h>
-#include <sys/namei.h> /* for pathbuf */
 #include <sys/vnode.h>
 #include <sys/conf.h>
-#include <sys/syslog.h>
 
 #include <dev/dkvar.h>
 #include <dev/cgdvar.h>
@@ -78,20 +75,13 @@ const struct cdevsw cgd_cdevsw = {
 	nostop, notty, nopoll, nommap, nokqfilter, D_DISK
 };
 
-static int cgd_match(device_t, cfdata_t, void *);
-static void cgd_attach(device_t, device_t, void *);
-static int cgd_detach(device_t, int);
-static struct cgd_softc	*cgd_spawn(int);
-static int cgd_destroy(device_t);
-
 /* Internal Functions */
 
 static int	cgdstart(struct dk_softc *, struct buf *);
 static void	cgdiodone(struct buf *);
 
 static int	cgd_ioctl_set(struct cgd_softc *, void *, struct lwp *);
-static int	cgd_ioctl_clr(struct cgd_softc *, struct lwp *);
-static int	cgd_ioctl_get(dev_t, void *, struct lwp *);
+static int	cgd_ioctl_clr(struct cgd_softc *, void *, struct lwp *);
 static int	cgdinit(struct cgd_softc *, const char *, struct vnode *,
 			struct lwp *);
 static void	cgd_cipher(struct cgd_softc *, void *, void *,
@@ -113,10 +103,6 @@ static struct dkdriver cgddkdriver = {
 	.d_strategy = cgdstrategy,
 	.d_minphys = minphys,
 };
-
-CFATTACH_DECL3_NEW(cgd, sizeof(struct cgd_softc),
-    cgd_match, cgd_attach, cgd_detach, NULL, NULL, NULL, DVF_DETACH_SHUTDOWN);
-extern struct cfdriver cgd_cd;
 
 /* DIAGNOSTIC and DEBUG definitions */
 
@@ -153,106 +139,60 @@ static void	hexprint(const char *, void *, int);
 
 /* Global variables */
 
+struct	cgd_softc *cgd_softc;
+int	numcgd = 0;
+
 /* Utility Functions */
 
 #define CGDUNIT(x)		DISKUNIT(x)
 #define GETCGD_SOFTC(_cs, x)	if (!((_cs) = getcgd_softc(x))) return ENXIO
 
-/* The code */
-
 static struct cgd_softc *
 getcgd_softc(dev_t dev)
 {
 	int	unit = CGDUNIT(dev);
-	struct cgd_softc *sc;
 
-	DPRINTF_FOLLOW(("getcgd_softc(0x%"PRIx64"): unit = %d\n", dev, unit));
-
-	sc = device_lookup_private(&cgd_cd, unit);
-	if (sc == NULL)
-		sc = cgd_spawn(unit);
-	return sc;
+	DPRINTF_FOLLOW(("getcgd_softc(0x%x): unit = %d\n", dev, unit));
+	if (unit >= numcgd)
+		return NULL;
+	return &cgd_softc[unit];
 }
 
-static int
-cgd_match(device_t self, cfdata_t cfdata, void *aux)
-{
-
-	return 1;
-}
+/* The code */
 
 static void
-cgd_attach(device_t parent, device_t self, void *aux)
+cgdsoftc_init(struct cgd_softc *cs, int num)
 {
-	struct cgd_softc *sc = device_private(self);
+	char	sbuf[DK_XNAME_SIZE];
 
-	simple_lock_init(&sc->sc_slock);
-	dk_sc_init(&sc->sc_dksc, device_xname(self));
-	sc->sc_dksc.sc_dev = self;
-	disk_init(&sc->sc_dksc.sc_dkdev, sc->sc_dksc.sc_xname, &cgddkdriver);
-
-	 if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "unable to register power management hooks\n");
-}
-
-
-static int
-cgd_detach(device_t self, int flags)
-{
-	int ret;
-	const int pmask = 1 << RAW_PART;
-	struct cgd_softc *sc = device_private(self);
-	struct dk_softc *dksc = &sc->sc_dksc;
-
-	if (DK_BUSY(dksc, pmask))
-		return EBUSY;
-
-	if ((dksc->sc_flags & DKF_INITED) != 0 &&
-	    (ret = cgd_ioctl_clr(sc, curlwp)) != 0)
-		return ret;
-
-	disk_destroy(&dksc->sc_dkdev);
-
-	return 0;
+	memset(cs, 0x0, sizeof(*cs));
+	snprintf(sbuf, DK_XNAME_SIZE, "cgd%d", num);
+	simple_lock_init(&cs->sc_slock);
+	dk_sc_init(&cs->sc_dksc, cs, sbuf);
+	disk_init(&cs->sc_dksc.sc_dkdev, cs->sc_dksc.sc_xname, &cgddkdriver);
 }
 
 void
 cgdattach(int num)
 {
-	int error;
+	int	i;
 
-	error = config_cfattach_attach(cgd_cd.cd_name, &cgd_ca);
-	if (error != 0)
-		aprint_error("%s: unable to register cfattach\n",
-		    cgd_cd.cd_name);
-}
+	DPRINTF_FOLLOW(("cgdattach(%d)\n", num));
+	if (num <= 0) {
+		DIAGPANIC(("cgdattach: count <= 0"));
+		return;
+	}
 
-static struct cgd_softc *
-cgd_spawn(int unit)
-{
-	cfdata_t cf;
+	cgd_softc = (void *)malloc(num * sizeof(*cgd_softc), M_DEVBUF, M_NOWAIT);
+	if (!cgd_softc) {
+		printf("WARNING: unable to malloc(9) memory for crypt disks\n");
+		DIAGPANIC(("cgdattach: cannot malloc(9) enough memory"));
+		return;
+	}
 
-	cf = malloc(sizeof(*cf), M_DEVBUF, M_WAITOK);
-	cf->cf_name = cgd_cd.cd_name;
-	cf->cf_atname = cgd_cd.cd_name;
-	cf->cf_unit = unit;
-	cf->cf_fstate = FSTATE_STAR;
-
-	return device_private(config_attach_pseudo(cf));
-}
-
-static int
-cgd_destroy(device_t dev)
-{
-	int error;
-	cfdata_t cf;
-
-	cf = device_cfdata(dev);
-	error = config_detach(dev, DETACH_QUIET);
-	if (error)
-		return error;
-	free(cf, M_DEVBUF);
-	return 0;
+	numcgd = num;
+	for (i=0; i<num; i++)
+		cgdsoftc_init(&cgd_softc[i], i);
 }
 
 static int
@@ -260,7 +200,7 @@ cgdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 {
 	struct	cgd_softc *cs;
 
-	DPRINTF_FOLLOW(("cgdopen(0x%"PRIx64", %d)\n", dev, flags));
+	DPRINTF_FOLLOW(("cgdopen(%d, %d)\n", dev, flags));
 	GETCGD_SOFTC(cs, dev);
 	return dk_open(di, &cs->sc_dksc, dev, flags, fmt, l);
 }
@@ -268,24 +208,11 @@ cgdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 static int
 cgdclose(dev_t dev, int flags, int fmt, struct lwp *l)
 {
-	int error;
 	struct	cgd_softc *cs;
-	struct	dk_softc *dksc;
 
-	DPRINTF_FOLLOW(("cgdclose(0x%"PRIx64", %d)\n", dev, flags));
+	DPRINTF_FOLLOW(("cgdclose(%d, %d)\n", dev, flags));
 	GETCGD_SOFTC(cs, dev);
-	dksc = &cs->sc_dksc;
-	if ((error =  dk_close(di, dksc, dev, flags, fmt, l)) != 0)
-		return error;
-
-	if ((dksc->sc_flags & DKF_INITED) == 0) {
-		if ((error = cgd_destroy(cs->sc_dksc.sc_dev)) != 0) {
-			aprint_error_dev(dksc->sc_dev,
-			    "unable to detach instance\n");
-			return error;
-		}
-	}
-	return 0;
+	return dk_close(di, &cs->sc_dksc, dev, flags, fmt, l);
 }
 
 static void
@@ -295,21 +222,6 @@ cgdstrategy(struct buf *bp)
 
 	DPRINTF_FOLLOW(("cgdstrategy(%p): b_bcount = %ld\n", bp,
 	    (long)bp->b_bcount));
-
-	/*
-	 * Reject unaligned writes.  We can encrypt and decrypt only
-	 * complete disk sectors, and we let the ciphers require their
-	 * buffers to be aligned to 32-bit boundaries.
-	 */
-	if (bp->b_blkno < 0 ||
-	    (bp->b_bcount % DEV_BSIZE) != 0 ||
-	    ((uintptr_t)bp->b_data & 3) != 0) {
-		bp->b_error = EINVAL;
-		bp->b_resid = bp->b_bcount;
-		biodone(bp);
-		return;
-	}
-
 	/* XXXrcd: Should we test for (cs != NULL)? */
 	dk_strategy(di, &cs->sc_dksc, bp);
 	return;
@@ -320,7 +232,7 @@ cgdsize(dev_t dev)
 {
 	struct cgd_softc *cs = getcgd_softc(dev);
 
-	DPRINTF_FOLLOW(("cgdsize(0x%"PRIx64")\n", dev));
+	DPRINTF_FOLLOW(("cgdsize(%d)\n", dev));
 	if (!cs)
 		return -1;
 	return dk_size(di, &cs->sc_dksc, dev);
@@ -337,7 +249,7 @@ cgdsize(dev_t dev)
 static void *
 cgd_getdata(struct dk_softc *dksc, unsigned long size)
 {
-	struct	cgd_softc *cs = (struct cgd_softc *)dksc;
+	struct	cgd_softc *cs =dksc->sc_osc;
 	void *	data = NULL;
 
 	simple_lock(&cs->sc_slock);
@@ -356,7 +268,7 @@ cgd_getdata(struct dk_softc *dksc, unsigned long size)
 static void
 cgd_putdata(struct dk_softc *dksc, void *data)
 {
-	struct	cgd_softc *cs = (struct cgd_softc *)dksc;
+	struct	cgd_softc *cs =dksc->sc_osc;
 
 	if (data == cs->sc_data) {
 		simple_lock(&cs->sc_slock);
@@ -370,7 +282,7 @@ cgd_putdata(struct dk_softc *dksc, void *data)
 static int
 cgdstart(struct dk_softc *dksc, struct buf *bp)
 {
-	struct	cgd_softc *cs = (struct cgd_softc *)dksc;
+	struct	cgd_softc *cs = dksc->sc_osc;
 	struct	buf *nbp;
 	void *	addr;
 	void *	newaddr;
@@ -424,9 +336,9 @@ cgdstart(struct dk_softc *dksc, struct buf *bp)
 
 	if ((nbp->b_flags & B_READ) == 0) {
 		vp = nbp->b_vp;
-		mutex_enter(vp->v_interlock);
+		mutex_enter(&vp->v_interlock);
 		vp->v_numoutput++;
-		mutex_exit(vp->v_interlock);
+		mutex_exit(&vp->v_interlock);
 	}
 	VOP_STRATEGY(cs->sc_tvn, nbp);
 	return 0;
@@ -445,13 +357,12 @@ cgdiodone(struct buf *nbp)
 	DPRINTF_FOLLOW(("cgdiodone(%p)\n", nbp));
 	DPRINTF(CGDB_IO, ("cgdiodone: bp %p bcount %d resid %d\n",
 	    obp, obp->b_bcount, obp->b_resid));
-	DPRINTF(CGDB_IO, (" dev 0x%"PRIx64", nbp %p bn %" PRId64 " addr %p bcnt %d\n",
+	DPRINTF(CGDB_IO, (" dev 0x%x, nbp %p bn %" PRId64 " addr %p bcnt %d\n",
 	    nbp->b_dev, nbp, nbp->b_blkno, nbp->b_data,
 	    nbp->b_bcount));
 	if (nbp->b_error != 0) {
 		obp->b_error = nbp->b_error;
-		DPRINTF(CGDB_IO, ("%s: error %d\n", dksc->sc_xname,
-		    obp->b_error));
+		printf("%s: error %d\n", dksc->sc_xname, obp->b_error);
 	}
 
 	/* Perform the decryption if we are reading.
@@ -489,8 +400,7 @@ cgdread(dev_t dev, struct uio *uio, int flags)
 	struct	cgd_softc *cs;
 	struct	dk_softc *dksc;
 
-	DPRINTF_FOLLOW(("cgdread(0x%llx, %p, %d)\n",
-	    (unsigned long long)dev, uio, flags));
+	DPRINTF_FOLLOW(("cgdread(%d, %p, %d)\n", dev, uio, flags));
 	GETCGD_SOFTC(cs, dev);
 	dksc = &cs->sc_dksc;
 	if ((dksc->sc_flags & DKF_INITED) == 0)
@@ -505,7 +415,7 @@ cgdwrite(dev_t dev, struct uio *uio, int flags)
 	struct	cgd_softc *cs;
 	struct	dk_softc *dksc;
 
-	DPRINTF_FOLLOW(("cgdwrite(0x%"PRIx64", %p, %d)\n", dev, uio, flags));
+	DPRINTF_FOLLOW(("cgdwrite(%d, %p, %d)\n", dev, uio, flags));
 	GETCGD_SOFTC(cs, dev);
 	dksc = &cs->sc_dksc;
 	if ((dksc->sc_flags & DKF_INITED) == 0)
@@ -519,41 +429,41 @@ cgdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	struct	cgd_softc *cs;
 	struct	dk_softc *dksc;
 	struct	disk *dk;
+	int	ret;
 	int	part = DISKPART(dev);
 	int	pmask = 1 << part;
 
-	DPRINTF_FOLLOW(("cgdioctl(0x%"PRIx64", %ld, %p, %d, %p)\n",
+	DPRINTF_FOLLOW(("cgdioctl(%d, %ld, %p, %d, %p)\n",
 	    dev, cmd, data, flag, l));
-
+	GETCGD_SOFTC(cs, dev);
+	dksc = &cs->sc_dksc;
+	dk = &dksc->sc_dkdev;
 	switch (cmd) {
-	case CGDIOCGET: /* don't call cgd_spawn() if the device isn't there */
-		cs = NULL;
-		dksc = NULL;
-		dk = NULL;
-		break;
 	case CGDIOCSET:
 	case CGDIOCCLR:
 		if ((flag & FWRITE) == 0)
 			return EBADF;
-		/* FALLTHROUGH */
-	default:
-		GETCGD_SOFTC(cs, dev);
-		dksc = &cs->sc_dksc;
-		dk = &dksc->sc_dkdev;
-		break;
 	}
 
 	switch (cmd) {
 	case CGDIOCSET:
 		if (dksc->sc_flags & DKF_INITED)
-			return EBUSY;
-		return cgd_ioctl_set(cs, data, l);
+			ret = EBUSY;
+		else
+			ret = cgd_ioctl_set(cs, data, l);
+		break;
 	case CGDIOCCLR:
-		if (DK_BUSY(&cs->sc_dksc, pmask))
-			return EBUSY;
-		return cgd_ioctl_clr(cs, l);
-	case CGDIOCGET:
-		return cgd_ioctl_get(dev, data, l);
+		if (!(dksc->sc_flags & DKF_INITED)) {
+			ret = ENXIO;
+			break;
+		}
+		if (DK_BUSY(&cs->sc_dksc, pmask)) {
+			ret = EBUSY;
+			break;
+		}
+		ret = cgd_ioctl_clr(cs, data, l);
+		break;
+
 	case DIOCCACHESYNC:
 		/*
 		 * XXX Do we really need to care about having a writable
@@ -565,10 +475,15 @@ cgdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		/*
 		 * We pass this call down to the underlying disk.
 		 */
-		return VOP_IOCTL(cs->sc_tvn, cmd, data, flag, l->l_cred);
+		ret = VOP_IOCTL(cs->sc_tvn, cmd, data, flag, l->l_cred);
+		break;
+
 	default:
-		return dk_ioctl(di, dksc, dev, cmd, data, flag, l);
+		ret = dk_ioctl(di, dksc, dev, cmd, data, flag, l);
+		break;
 	}
+
+	return ret;
 }
 
 static int
@@ -576,8 +491,8 @@ cgddump(dev_t dev, daddr_t blkno, void *va, size_t size)
 {
 	struct	cgd_softc *cs;
 
-	DPRINTF_FOLLOW(("cgddump(0x%"PRIx64", %" PRId64 ", %p, %lu)\n",
-	    dev, blkno, va, (unsigned long)size));
+	DPRINTF_FOLLOW(("cgddump(%d, %" PRId64 ", %p, %lu)\n", dev, blkno, va,
+	    (unsigned long)size));
 	GETCGD_SOFTC(cs, dev);
 	return dk_dump(di, &cs->sc_dksc, dev, blkno, va, size);
 }
@@ -608,20 +523,11 @@ cgd_ioctl_set(struct cgd_softc *cs, void *data, struct lwp *l)
 	size_t	 i;
 	size_t	 keybytes;			/* key length in bytes */
 	const char *cp;
-	struct pathbuf *pb;
 	char	 *inbuf;
 
 	cp = ci->ci_disk;
-
-	ret = pathbuf_copyin(ci->ci_disk, &pb);
-	if (ret != 0) {
+	if ((ret = dk_lookup(cp, l, &vp, UIO_USERSPACE)) != 0)
 		return ret;
-	}
-	ret = dk_lookup(pb, l, &vp);
-	pathbuf_destroy(pb);
-	if (ret != 0) {
-		return ret;
-	}
 
 	inbuf = malloc(MAX_KEYSIZE, M_TEMP, M_WAITOK);
 
@@ -665,15 +571,8 @@ cgd_ioctl_set(struct cgd_softc *cs, void *data, struct lwp *l)
 
 	cs->sc_cdata.cf_blocksize = ci->ci_blocksize;
 	cs->sc_cdata.cf_mode = encblkno[i].v;
-	cs->sc_cdata.cf_keylen = ci->ci_keylen;
 	cs->sc_cdata.cf_priv = cs->sc_cfuncs->cf_init(ci->ci_keylen, inbuf,
 	    &cs->sc_cdata.cf_blocksize);
-	if (cs->sc_cdata.cf_blocksize > CGD_MAXBLOCKSIZE) {
-	    log(LOG_WARNING, "cgd: Disallowed cipher with blocksize %zu > %u\n",
-		cs->sc_cdata.cf_blocksize, CGD_MAXBLOCKSIZE);
-	    cs->sc_cdata.cf_priv = NULL;
-	}
-
 	/*
 	 * The blocksize is supposed to be in bytes. Unfortunately originally
 	 * it was expressed in bits. For compatibility we maintain encblkno
@@ -682,6 +581,7 @@ cgd_ioctl_set(struct cgd_softc *cs, void *data, struct lwp *l)
 	cs->sc_cdata.cf_blocksize /= encblkno[i].d;
 	(void)memset(inbuf, 0, MAX_KEYSIZE);
 	if (!cs->sc_cdata.cf_priv) {
+		printf("cgd: unable to initialize cipher\n");
 		ret = EINVAL;		/* XXX is this the right error? */
 		goto bail;
 	}
@@ -694,13 +594,11 @@ cgd_ioctl_set(struct cgd_softc *cs, void *data, struct lwp *l)
 
 	cs->sc_dksc.sc_flags |= DKF_INITED;
 
-	dk_set_properties(di, &cs->sc_dksc);
-
 	/* Attach the disk. */
 	disk_attach(&cs->sc_dksc.sc_dkdev);
 
 	/* Try and read the disklabel. */
-	dk_getdisklabel(di, &cs->sc_dksc, 0 /* XXX ? (cause of PR 41704) */);
+	dk_getdisklabel(di, &cs->sc_dksc, 0 /* XXX ? */);
 
 	/* Discover wedges on this disk. */
 	dkwedge_discover(&cs->sc_dksc.sc_dkdev);
@@ -715,15 +613,9 @@ bail:
 
 /* ARGSUSED */
 static int
-cgd_ioctl_clr(struct cgd_softc *cs, struct lwp *l)
+cgd_ioctl_clr(struct cgd_softc *cs, void *data, struct lwp *l)
 {
 	int	s;
-	struct	dk_softc *dksc;
-
-	dksc = &cs->sc_dksc;
-
-	if ((dksc->sc_flags & DKF_INITED) == 0)
-		return ENXIO;
 
 	/* Delete all of our wedges. */
 	dkwedge_delall(&cs->sc_dksc.sc_dkdev);
@@ -746,42 +638,26 @@ cgd_ioctl_clr(struct cgd_softc *cs, struct lwp *l)
 }
 
 static int
-cgd_ioctl_get(dev_t dev, void *data, struct lwp *l)
+getsize(struct lwp *l, struct vnode *vp, size_t *size)
 {
-	struct cgd_softc *cs;
-	struct cgd_user *cgu;
-	int unit;
+	struct partinfo dpart;
+	struct dkwedge_info dkw;
+	int ret;
 
-	unit = CGDUNIT(dev);
-	cgu = (struct cgd_user *)data;
-
-	DPRINTF_FOLLOW(("cgd_ioctl_get(0x%"PRIx64", %d, %p, %p)\n",
-			   dev, unit, data, l));
-
-	if (cgu->cgu_unit == -1)
-		cgu->cgu_unit = unit;
-
-	if (cgu->cgu_unit < 0)
-		return EINVAL;	/* XXX: should this be ENXIO? */
-
-	cs = device_lookup_private(&cgd_cd, unit);
-	if (cs == NULL || (cs->sc_dksc.sc_flags & DKF_INITED) == 0) {
-		cgu->cgu_dev = 0;
-		cgu->cgu_alg[0] = '\0';
-		cgu->cgu_blocksize = 0;
-		cgu->cgu_mode = 0;
-		cgu->cgu_keylen = 0;
+	if ((ret = VOP_IOCTL(vp, DIOCGWEDGEINFO, &dkw, FREAD,
+	    l->l_cred)) == 0) {
+		*size = dkw.dkw_size;
+		return 0;
 	}
-	else {
-		cgu->cgu_dev = cs->sc_tdev;
-		strlcpy(cgu->cgu_alg, cs->sc_cfuncs->cf_name,
-		    sizeof(cgu->cgu_alg));
-		cgu->cgu_blocksize = cs->sc_cdata.cf_blocksize;
-		cgu->cgu_mode = cs->sc_cdata.cf_mode;
-		cgu->cgu_keylen = cs->sc_cdata.cf_keylen;
+
+	if ((ret = VOP_IOCTL(vp, DIOCGPART, &dpart, FREAD, l->l_cred)) == 0) {
+		*size = dpart.part->p_size;
+		return 0;
 	}
-	return 0;
+
+	return ret;
 }
+
 
 static int
 cgdinit(struct cgd_softc *cs, const char *cpath, struct vnode *vp,
@@ -789,10 +665,9 @@ cgdinit(struct cgd_softc *cs, const char *cpath, struct vnode *vp,
 {
 	struct	dk_geom *pdg;
 	struct	vattr va;
+	size_t	size;
 	int	ret;
 	char	*tmppath;
-	uint64_t psize;
-	unsigned secsize;
 
 	cs->sc_dksc.sc_size = 0;
 	cs->sc_tvn = vp;
@@ -805,23 +680,20 @@ cgdinit(struct cgd_softc *cs, const char *cpath, struct vnode *vp,
 	cs->sc_tpath = malloc(cs->sc_tpathlen, M_DEVBUF, M_WAITOK);
 	memcpy(cs->sc_tpath, tmppath, cs->sc_tpathlen);
 
-	vn_lock(vp, LK_SHARED | LK_RETRY);
-	ret = VOP_GETATTR(vp, &va, l->l_cred);
-	VOP_UNLOCK(vp);
-	if (ret != 0)
+	if ((ret = VOP_GETATTR(vp, &va, l->l_cred)) != 0)
 		goto bail;
 
 	cs->sc_tdev = va.va_rdev;
 
-	if ((ret = getdisksize(vp, &psize, &secsize)) != 0)
+	if ((ret = getsize(l, vp, &size)) != 0)
 		goto bail;
 
-	if (psize == 0) {
+	if (!size) {
 		ret = ENODEV;
 		goto bail;
 	}
 
-	cs->sc_dksc.sc_size = psize;
+	cs->sc_dksc.sc_size = size;
 
 	/*
 	 * XXX here we should probe the underlying device.  If we
@@ -904,9 +776,9 @@ cgd_cipher(struct cgd_softc *cs, void *dstv, void *srcv,
 	struct iovec	dstiov[2];
 	struct iovec	srciov[2];
 	size_t		blocksize = cs->sc_cdata.cf_blocksize;
-	char		sink[CGD_MAXBLOCKSIZE];
-	char		zero_iv[CGD_MAXBLOCKSIZE];
-	char		blkno_buf[CGD_MAXBLOCKSIZE];
+	char		sink[blocksize];
+	char		zero_iv[blocksize];
+	char		blkno_buf[blocksize];
 
 	DPRINTF_FOLLOW(("cgd_cipher() dir=%d\n", dir));
 
@@ -917,7 +789,7 @@ cgd_cipher(struct cgd_softc *cs, void *dstv, void *srcv,
 	DIAGCONDPANIC(sizeof(daddr_t) > blocksize,
 	    ("cgd_cipher: sizeof(daddr_t) > blocksize"));
 
-	memset(zero_iv, 0x0, blocksize);
+	memset(zero_iv, 0x0, sizeof(zero_iv));
 
 	dstuio.uio_iov = dstiov;
 	dstuio.uio_iovcnt = 2;
@@ -936,13 +808,13 @@ cgd_cipher(struct cgd_softc *cs, void *dstv, void *srcv,
 		dstiov[1].iov_base = dst;
 		srciov[1].iov_base = src;
 
-		memset(blkno_buf, 0x0, blocksize);
+		memset(blkno_buf, 0x0, sizeof(blkno_buf));
 		blkno2blkno_buf(blkno_buf, blkno);
 		if (dir == CGD_CIPHER_DECRYPT) {
 			dstuio.uio_iovcnt = 1;
 			srcuio.uio_iovcnt = 1;
 			IFDEBUG(CGDB_CRYPTO, hexprint("step 0: blkno_buf",
-			    blkno_buf, blocksize));
+			    blkno_buf, sizeof(blkno_buf)));
 			cipher(cs->sc_cdata.cf_priv, &dstuio, &srcuio,
 			    zero_iv, CGD_CIPHER_ENCRYPT);
 			memcpy(blkno_buf, sink, blocksize);
@@ -951,10 +823,10 @@ cgd_cipher(struct cgd_softc *cs, void *dstv, void *srcv,
 		}
 
 		IFDEBUG(CGDB_CRYPTO, hexprint("step 1: blkno_buf",
-		    blkno_buf, blocksize));
+		    blkno_buf, sizeof(blkno_buf)));
 		cipher(cs->sc_cdata.cf_priv, &dstuio, &srcuio, zero_iv, dir);
 		IFDEBUG(CGDB_CRYPTO, hexprint("step 2: sink",
-		    sink, blocksize));
+		    sink, sizeof(sink)));
 
 		dst += secsize;
 		src += secsize;
@@ -974,61 +846,3 @@ hexprint(const char *start, void *buf, int len)
 		printf("%02x", (unsigned char) *c++);
 }
 #endif
-
-MODULE(MODULE_CLASS_DRIVER, cgd, NULL);
-
-#ifdef _MODULE
-CFDRIVER_DECL(cgd, DV_DISK, NULL);
-#endif
-
-static int
-cgd_modcmd(modcmd_t cmd, void *arg)
-{
-	int bmajor, cmajor, error = 0;
-
-	bmajor = cmajor = -1;
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-#ifdef _MODULE
-		error = config_cfdriver_attach(&cgd_cd);
-		if (error)
-			break;
-
-		error = config_cfattach_attach(cgd_cd.cd_name, &cgd_ca);
-	        if (error) {
-			config_cfdriver_detach(&cgd_cd);
-			aprint_error("%s: unable to register cfattach\n",
-			    cgd_cd.cd_name);
-			break;
-		}
-
-		error = devsw_attach("cgd", &cgd_bdevsw, &bmajor,
-		    &cgd_cdevsw, &cmajor);
-		if (error) {
-			config_cfattach_detach(cgd_cd.cd_name, &cgd_ca);
-			config_cfdriver_detach(&cgd_cd);
-			break;
-		}
-#endif
-		break;
-
-	case MODULE_CMD_FINI:
-#ifdef _MODULE
-		error = config_cfattach_detach(cgd_cd.cd_name, &cgd_ca);
-		if (error)
-			break;
-		config_cfdriver_detach(&cgd_cd);
-		devsw_detach(&cgd_bdevsw, &cgd_cdevsw);
-#endif
-		break;
-
-	case MODULE_CMD_STAT:
-		return ENOTTY;
-
-	default:
-		return ENOTTY;
-	}
-
-	return error;
-}

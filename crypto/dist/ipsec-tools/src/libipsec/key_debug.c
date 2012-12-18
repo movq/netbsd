@@ -1,4 +1,4 @@
-/*	$NetBSD: key_debug.c,v 1.10 2012/01/09 15:25:13 drochner Exp $	*/
+/*	$NetBSD: key_debug.c,v 1.8.18.1 2009/02/08 18:42:15 snj Exp $	*/
 
 /*	$KAME: key_debug.c,v 1.29 2001/08/16 14:25:41 itojun Exp $	*/
 
@@ -85,17 +85,10 @@ static void kdebug_sockaddr __P((struct sockaddr *addr));
 #ifdef SADB_X_EXT_NAT_T_TYPE
 static void kdebug_sadb_x_nat_t_type __P((struct sadb_ext *ext));
 static void kdebug_sadb_x_nat_t_port __P((struct sadb_ext *ext));
-#ifdef SADB_X_EXT_NAT_T_FRAG
-static void kdebug_sadb_x_nat_t_frag __P((struct sadb_ext *ext));
-#endif
 #endif
 
 #ifdef SADB_X_EXT_PACKET
 static void kdebug_sadb_x_packet __P((struct sadb_ext *));
-#endif
-
-#ifdef SADB_X_EXT_KMADDRESS
-static void kdebug_sadb_x_kmaddress __P((struct sadb_ext *));
 #endif
 
 #ifdef _KERNEL
@@ -195,20 +188,10 @@ kdebug_sadb(base)
 		case SADB_X_EXT_NAT_T_OA:
 			kdebug_sadb_address(ext);
 			break;
-#ifdef SADB_X_EXT_NAT_T_FRAG
-		case SADB_X_EXT_NAT_T_FRAG:
-			kdebug_sadb_x_nat_t_frag(ext);
-			break;
-#endif
 #endif
 #ifdef SADB_X_EXT_PACKET
 		case SADB_X_EXT_PACKET:
 			kdebug_sadb_x_packet(ext);
-			break;
-#endif
-#ifdef SADB_X_EXT_KMADDRESS
-		case SADB_X_EXT_KMADDRESS:
-			kdebug_sadb_x_kmaddress(ext);
 			break;
 #endif
 		default:
@@ -551,20 +534,6 @@ kdebug_sadb_x_nat_t_port(struct sadb_ext *ext)
 
 	return;
 }
-#ifdef SADB_X_EXT_NAT_T_FRAG
-static void kdebug_sadb_x_nat_t_frag (struct sadb_ext *ext)
-{
-	struct sadb_x_nat_t_frag *esp_frag = (void *)ext;
-
-	/* sanity check */
-	if (ext == NULL)
-		panic("kdebug_sadb_x_nat_t_frag: NULL pointer was passed.\n");
-
-	printf("sadb_x_nat_t_frag{ esp_frag=%u }\n", esp_frag->sadb_x_nat_t_frag_fraglen);
-
-	return;
-}
-#endif
 #endif
 
 #ifdef SADB_X_EXT_PACKET
@@ -584,48 +553,6 @@ kdebug_sadb_x_packet(ext)
 		      pkt->sadb_x_packet_copylen);
 	printf(" }\n");
 	return;
-}
-#endif
-
-#ifdef SADB_X_EXT_KMADDRESS
-static void
-kdebug_sadb_x_kmaddress(ext)
-	struct sadb_ext *ext;
-{
-	struct sadb_x_kmaddress *kma = (struct sadb_x_kmaddress *)ext;
-	struct sockaddr * sa;
-	sa_family_t family;
-	int len, sa_len;
-
-	/* sanity check */
-	if (ext == NULL)
-		panic("kdebug_sadb_x_kmaddress: NULL pointer was passed.\n");
-
-	len = (PFKEY_UNUNIT64(kma->sadb_x_kmaddress_len) - sizeof(*kma));
-
-	printf("sadb_x_kmaddress{ reserved=0x%02x%02x%02x%02x }\n",
-	       ((u_char *)(void *)&kma->sadb_x_kmaddress_reserved)[0],
-	       ((u_char *)(void *)&kma->sadb_x_kmaddress_reserved)[1],
-	       ((u_char *)(void *)&kma->sadb_x_kmaddress_reserved)[2],
-	       ((u_char *)(void *)&kma->sadb_x_kmaddress_reserved)[3]);
-
-	sa = (struct sockaddr *)(kma + 1);
-	if (len < sizeof(struct sockaddr) || (sa_len = sysdep_sa_len(sa)) > len)
-		panic("kdebug_sadb_x_kmaddress: not enough data to read"
-		      " first sockaddr.\n");
-	kdebug_sockaddr((void *)sa); /* local address */
-	family = sa->sa_family;
-
-	len -= sa_len;
-	sa = (struct sockaddr *)((char *)sa + sa_len);
-	if (len < sizeof(struct sockaddr) || sysdep_sa_len(sa) > len)
-		panic("kdebug_sadb_x_kmaddress: not enough data to read"
-		      " second sockaddr.\n");
-	kdebug_sockaddr((void *)sa); /* remote address */
-
-	if (family != sa->sa_family)
-		printf("kdebug_sadb_x_kmaddress:  !!!! Please, note the "
-		       "unexpected mismatch in address family.\n");
 }
 #endif
 

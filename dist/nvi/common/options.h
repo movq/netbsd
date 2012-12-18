@@ -1,4 +1,4 @@
-/*	$NetBSD: options.h,v 1.3 2008/12/05 22:51:42 christos Exp $ */
+/*	$NetBSD: options.h,v 1.2.4.1 2009/01/20 02:41:11 snj Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993, 1994

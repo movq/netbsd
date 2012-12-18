@@ -1,4 +1,4 @@
-/*	$NetBSD: cfg_parser.c,v 1.1.1.2 2011/03/02 19:32:13 tron Exp $	*/
+/*	$NetBSD: cfg_parser.c,v 1.1.1.1.2.3 2011/01/07 01:24:01 riz Exp $	*/
 
 /*++
 /* NAME
@@ -84,8 +84,7 @@
 
 #include "sys_defs.h"
 
-#include <stdlib.h>
-#include <errno.h>
+#include <stdio.h>
 #include <string.h>
 
 #ifdef STRCASECMP_IN_STRINGS_H
@@ -149,14 +148,11 @@ static int get_dict_int(const struct CFG_PARSER *parser,
 		             const char *name, int defval, int min, int max)
 {
     const char *strval;
-    char   *end;
     int     intval;
-    long    longval;
+    char    junk;
 
     if ((strval = (char *) dict_lookup(parser->name, name)) != 0) {
-	errno = 0;
-	intval = longval = strtol(strval, &end, 10);
-	if (*strval == 0 || *end != 0 || errno == ERANGE || longval != intval)
+	if (sscanf(strval, "%d%c", &intval, &junk) != 1)
 	    msg_fatal("%s: bad numerical configuration: %s = %s",
 		      parser->name, name, strval);
     } else

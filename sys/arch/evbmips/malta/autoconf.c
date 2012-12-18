@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.17 2012/10/27 17:17:51 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.12 2008/01/04 22:17:04 ad Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.17 2012/10/27 17:17:51 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.12 2008/01/04 22:17:04 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.17 2012/10/27 17:17:51 chs Exp $");
 static void	findroot(void);
 
 void
-cpu_configure(void)
+cpu_configure()
 {
 
 	intr_init();
@@ -67,14 +67,14 @@ cpu_configure(void)
 }
 
 void
-cpu_rootconf(void)
+cpu_rootconf()
 {
 	findroot();
 
 	printf("boot device: %s\n",
-		booted_device ? device_xname(booted_device) : "<unknown>");
+		booted_device ? booted_device->dv_xname : "<unknown>");
 
-	rootconf();
+	setroot(booted_device, booted_partition);
 }
 
 extern char	bootstring[];
@@ -83,21 +83,17 @@ extern int	netboot;
 static void
 findroot(void)
 {
-	device_t dv;
-	deviter_t di;
+	struct device *dv;
 
 	if (booted_device)
 		return;
 
-	if ((booted_device == NULL) && netboot == 0) {
-		for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST); dv != NULL;
-		     dv = deviter_next(&di)) {
+	if ((booted_device == NULL) && netboot == 0)
+		for (dv = TAILQ_FIRST(&alldevs); dv != NULL;
+		     dv = TAILQ_NEXT(dv, dv_list))
 			if (device_class(dv) == DV_DISK &&
 			    device_is_a(dv, "wd"))
 				    booted_device = dv;
-		}
-		deviter_release(&di);
-	}
 
 	/*
 	 * XXX Match up MBR boot specification with BSD disklabel for root?
@@ -108,7 +104,9 @@ findroot(void)
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(dev, aux)
+	struct device *dev;
+	void *aux;
 {
 	if ((booted_device == NULL) && (netboot == 1))
 		if (device_class(dev) == DV_IFNET)

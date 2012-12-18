@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.27 2012/07/29 18:05:45 mlelstv Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.18 2008/04/09 01:56:19 nisimura Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -35,56 +35,32 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.27 2012/07/29 18:05:45 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.18 2008/04/09 01:56:19 nisimura Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
 #include <sys/device.h>
-
-#include <dev/cons.h>
 #include <dev/pci/pcivar.h>
 
-#include <net/if.h>
-#include <net/if_ether.h>
-
 #include <machine/bootinfo.h>
-#include <machine/pio.h>
 
 static struct btinfo_rootdevice *bi_rdev;
 static struct btinfo_bootpath *bi_path;
-static struct btinfo_net *bi_net;
-static struct btinfo_prodfamily *bi_pfam;
 
-struct i2cdev {
-	const char *family;
-	const char *name;
-	int addr;
-};
+#include <dev/cons.h>
+#include <machine/pio.h>
 
-static struct i2cdev rtcmodel[] = {
-    { "dlink",    "strtc",      0x68 },
-    { "iomega",   "dsrtc",      0x68 },
-    { "kurobox",  "rs5c372rtc", 0x32 },
-    { "kurot4",   "rs5c372rtc", 0x32 },
-    { "nhnas",    "pcf8563rtc", 0x51 },
-    { "qnap",     "s390rtc",    0x30 },
-    { "synology", "rs5c372rtc", 0x32 },
-};
-
-static void add_i2c_child_devices(device_t, const char *);
 
 /*
  * Determine i/o configuration for a machine.
  */
 void
-cpu_configure(void)
+cpu_configure()
 {
 
 	bi_rdev = lookup_bootinfo(BTINFO_ROOTDEVICE);
 	bi_path = lookup_bootinfo(BTINFO_BOOTPATH);
-	bi_net = lookup_bootinfo(BTINFO_NET);
-	bi_pfam = lookup_bootinfo(BTINFO_PRODFAMILY);
 
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("configure: mainbus not configured");
@@ -92,102 +68,66 @@ cpu_configure(void)
 	genppc_cpu_configure();
 }
 
+char *booted_kernel; /* should be a genuine filename */
+
 void
-cpu_rootconf(void)
+cpu_rootconf()
 {
 
 	if (bi_path != NULL)
 		booted_kernel = bi_path->bootpath;
 
 	aprint_normal("boot device: %s\n",
-	    booted_device ? device_xname(booted_device) : "<unknown>");
-	rootconf();
+	    booted_device ? booted_device->dv_xname : "<unknown>");
+	setroot(booted_device, booted_partition);
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
-	struct pci_attach_args *pa;
-	static device_t boot_parent = NULL, net_parent = NULL;
-	static pcitag_t boot_tag, net_tag;
-	pcitag_t tag;
 
-	if (device_is_a(dev, "skc")) {
-		pa = aux;
-		if (bi_rdev != NULL && bi_rdev->cookie == pa->pa_tag) {
-			boot_parent = dev;
-			boot_tag = pa->pa_tag;
-		}
-		if (bi_net != NULL && bi_net->cookie == pa->pa_tag) {
-			net_parent = dev;
-			net_tag = pa->pa_tag;
-		}
-	}
-	else if (device_class(dev) == DV_IFNET) {
-		if (device_is_a(device_parent(dev), "pci")) {
-			pa = aux;
-			tag = pa->pa_tag;
-		} else if (device_parent(dev) == boot_parent)
-			tag = boot_tag;
-		else if (device_parent(dev) == net_parent)
-			tag = net_tag;
-		else
-			tag = 0;
+	if (bi_rdev == NULL)
+		return; /* no clue to determine */
 
-		if (bi_rdev != NULL && device_is_a(dev, bi_rdev->devname)
-		    && bi_rdev->cookie == tag)
+	if (dev->dv_class == DV_IFNET
+	    && device_is_a(dev, bi_rdev->devname)) {
+		struct pci_attach_args *pa = aux;
+
+		if (bi_rdev->cookie == pa->pa_tag)
 			booted_device = dev;
-
-		if (bi_net != NULL && device_is_a(dev, bi_net->devname)
-		    && bi_net->cookie == tag) {
-			prop_data_t pd;
-
-			pd = prop_data_create_data_nocopy(bi_net->mac_address,
-			    ETHER_ADDR_LEN);
-			KASSERT(pd != NULL);
-			if (prop_dictionary_set(device_properties(dev),
-			    "mac-address", pd) == false)
-				printf("WARNING: unable to set mac-addr "
-				    "property for %s\n", device_xname(dev));
-			prop_object_release(pd);
-			bi_net = NULL;	/* do it just once */
-		}
 	}
-	else if (bi_rdev != NULL && device_class(dev) == DV_DISK
-	    && device_is_a(dev, bi_rdev->devname)
-	    && device_unit(dev) == (bi_rdev->cookie >> 8)) {
+	if (dev->dv_class == DV_DISK
+	    && device_is_a(dev, bi_rdev->devname)) {
 		booted_device = dev;
-		booted_partition = bi_rdev->cookie & 0xff;
-	}
-	else if (device_is_a(dev, "ociic") && bi_pfam != NULL) {
-		add_i2c_child_devices(dev, bi_pfam->name);
+		booted_partition = 0;
 	}
 }
 
-static void
-add_i2c_child_devices(device_t self, const char *family)
+#if 0
+void
+findroot(void)
 {
-	struct i2cdev *rtc;
-	prop_dictionary_t pd;
-	prop_array_t pa;
-	int i;
+	int unit, part;
+	device_t dv;
+	const char *name;
 
-	rtc = NULL;
-	for (i = 0; i < (int)(sizeof(rtcmodel)/sizeof(rtcmodel[0])); i++) {
-		if (strcmp(family, rtcmodel[i].family) == 0) {
-			rtc = &rtcmodel[i];
-			goto found;
-		}
+#if 0
+	printf("howto %x bootdev %x ", boothowto, bootdev);
+#endif
+
+	if ((bootdev & B_MAGICMASK) != (u_long)B_DEVMAGIC)
+		return;
+
+	name = devsw_blk2name((bootdev >> B_TYPESHIFT) & B_TYPEMASK);
+	if (name == NULL)
+		return;
+
+	part = (bootdev >> B_PARTITIONSHIFT) & B_PARTITIONMASK;
+	unit = (bootdev >> B_UNITSHIFT) & B_UNITMASK;
+
+	if ((dv = device_find_by_driver_unit(name, unit)) != NULL) {
+		booted_device = dv;
+		booted_partition = part;
 	}
-	return;
-
- found:
-	pd = prop_dictionary_create();
-	pa = prop_array_create();
-	prop_dictionary_set_cstring_nocopy(pd, "name", rtc->name);
-	prop_dictionary_set_uint32(pd, "addr", rtc->addr);
-	prop_array_add(pa, pd);
-	prop_dictionary_set(device_properties(self), "i2c-child-devices", pa);
-	prop_object_release(pd);
-	prop_object_release(pa);
 }
+#endif

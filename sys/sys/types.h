@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.89 2012/03/17 21:30:29 christos Exp $	*/
+/*	$NetBSD: types.h,v 1.80 2008/02/26 13:37:09 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993, 1994
@@ -127,7 +127,7 @@ typedef	int64_t		longlong_t;	/* for XDR */
 typedef	uint64_t	u_longlong_t;	/* for XDR */
 
 typedef	int64_t		blkcnt_t;	/* fs block count */
-typedef	int32_t		blksize_t;	/* fs optimal block size */
+typedef	uint32_t	blksize_t;	/* fs optimal block size */
 
 #ifndef	fsblkcnt_t
 typedef	__fsblkcnt_t	fsblkcnt_t;	/* fs block count (statvfs) */
@@ -154,7 +154,7 @@ typedef	__daddr_t	daddr_t;	/* disk address */
 typedef	int64_t		daddr_t;	/* disk address */
 #endif
 
-typedef	uint64_t	dev_t;		/* device number */
+typedef	uint32_t	dev_t;		/* device number */
 typedef	uint32_t	fixpt_t;	/* fixed point number */
 
 #ifndef	gid_t
@@ -184,7 +184,7 @@ typedef	__pid_t		pid_t;		/* process id */
 #define	pid_t		__pid_t
 #endif
 typedef int32_t		lwpid_t;	/* LWP id */
-typedef uint64_t	rlim_t;		/* resource limit */
+typedef quad_t		rlim_t;		/* resource limit */
 typedef	int32_t		segsz_t;	/* segment size */
 typedef	int32_t		swblk_t;	/* swap offset */
 
@@ -232,7 +232,9 @@ union __semun {
 	struct semid_ds	*buf;		/* buffer for IPC_STAT & IPC_SET */
 	unsigned short	*array;		/* array for GETALL & SETALL */
 };
+/* For the same reason as above */
 #include <sys/stdint.h>
+typedef intptr_t semid_t;
 #endif /* _KERNEL || _LIBC */
 
 /*
@@ -256,13 +258,9 @@ __END_DECLS
 
 #if defined(_NETBSD_SOURCE)
 /* Major, minor numbers, dev_t's. */
-typedef int32_t __devmajor_t, __devminor_t;
-#define devmajor_t __devmajor_t
-#define devminor_t __devminor_t
-#define NODEVMAJOR (-1)
-#define	major(x)	((devmajor_t)(((uint32_t)(x) & 0x000fff00) >>  8))
-#define	minor(x)	((devminor_t)((((uint32_t)(x) & 0xfff00000) >> 12) | \
-				   (((uint32_t)(x) & 0x000000ff) >>  0)))
+#define	major(x)	((int32_t)((((x) & 0x000fff00) >>  8)))
+#define	minor(x)	((int32_t)((((x) & 0xfff00000) >> 12) | \
+				   (((x) & 0x000000ff) >>  0)))
 #define	makedev(x,y)	((dev_t)((((x) <<  8) & 0x000fff00) | \
 				 (((y) << 12) & 0xfff00000) | \
 				 (((y) <<  0) & 0x000000ff)))
@@ -311,8 +309,7 @@ typedef	_BSD_USECONDS_T_	useconds_t;
 
 #ifdef _NETBSD_SOURCE
 #include <sys/fd_set.h>
-
-#define	NBBY			8
+#define	NBBY	__NBBY
 
 typedef struct kauth_cred *kauth_cred_t;
 
@@ -320,7 +317,7 @@ typedef int pri_t;
 
 #endif
 
-#if defined(__STDC__) && (defined(_KERNEL) || defined(_KMEMUSER))
+#if defined(__STDC__) && defined(_KERNEL)
 /*
  * Forward structure declarations for function prototypes.  We include the
  * common structures that cross subsystem boundaries here; others are mostly
@@ -328,6 +325,7 @@ typedef int pri_t;
  */
 struct	lwp;
 typedef struct lwp lwp_t;
+struct	user;
 struct	__ucontext;
 struct	proc;
 typedef struct proc proc_t;

@@ -1,4 +1,4 @@
-/*-
+/*
  * Copyright 2004 The Unichrome Project. All Rights Reserved.
  * Copyright 2005 Thomas Hellstrom. All Rights Reserved.
  *
@@ -27,9 +27,6 @@
  * Don't run this code directly on an AGP buffer. Due to cache problems it will
  * be very slow.
  */
-
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: via_verifier.c,v 1.3 2011/02/18 14:26:10 jmcneill Exp $");
 
 #include "via_3d_reg.h"
 #include "drmP.h"
@@ -253,18 +250,27 @@ eat_words(const uint32_t ** buf, const uint32_t * buf_end, unsigned num_words)
  */
 
 static __inline__ drm_local_map_t *via_drm_lookup_agp_map(drm_via_state_t *seq,
-						    unsigned long offset,
-						    unsigned long size,
-						    struct drm_device * dev)
+							  unsigned long offset,
+							  unsigned long size,
+							  struct drm_device *dev)
 {
+#ifdef __linux__
+	struct drm_map_list *r_list;
+#endif
 	drm_local_map_t *map = seq->map_cache;
 
 	if (map && map->offset <= offset
 	    && (offset + size) <= (map->offset + map->size)) {
 		return map;
 	}
-
+#ifdef __linux__
+	list_for_each_entry(r_list, &dev->maplist, head) {
+		map = r_list->map;
+		if (!map)
+			continue;
+#else
 	TAILQ_FOREACH(map, &dev->maplist, link) {
+#endif
 		if (map->offset <= offset
 		    && (offset + size) <= (map->offset + map->size)
 		    && !(map->flags & _DRM_RESTRICTED)
@@ -343,11 +349,11 @@ static __inline__ int finish_current_sequence(drm_via_state_t * cur_seq)
 }
 
 static __inline__ int
-investigate_hazard(uint32_t cmd, hazard_t haz, drm_via_state_t * cur_seq)
+investigate_hazard(uint32_t cmd, hazard_t hz, drm_via_state_t * cur_seq)
 {
 	register uint32_t tmp, *tmp_addr;
 
-	if (cur_seq->unfinished && (cur_seq->unfinished != seqs[haz])) {
+	if (cur_seq->unfinished && (cur_seq->unfinished != seqs[hz])) {
 		int ret;
 		if ((ret = finish_current_sequence(cur_seq)))
 			return ret;
@@ -625,7 +631,7 @@ via_check_header2(uint32_t const **buffer, const uint32_t * buf_end,
 {
 	uint32_t cmd;
 	int hz_mode;
-	hazard_t haz;
+	hazard_t hz;
 	const uint32_t *buf = *buffer;
 	const hazard_t *hz_table;
 
@@ -692,8 +698,8 @@ via_check_header2(uint32_t const **buffer, const uint32_t * buf_end,
 
 	while (buf < buf_end) {
 		cmd = *buf++;
-		if ((haz = hz_table[cmd >> 24])) {
-			if ((hz_mode = investigate_hazard(cmd, haz, hc_state))) {
+		if ((hz = hz_table[cmd >> 24])) {
+			if ((hz_mode = investigate_hazard(cmd, hz, hc_state))) {
 				if (hz_mode == 1) {
 					buf--;
 					break;

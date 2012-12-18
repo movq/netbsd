@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.es,v 1.9 2011/11/04 11:27:05 martin Exp $	*/
+/*	$NetBSD: msg.md.es,v 1.5 2008/03/15 18:30:13 martin Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,7 +15,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project by
+ *      Piermont Information Systems Inc.
+ * 4. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -37,23 +41,16 @@
 
 
 message md_hello
-{
-}
-
-message md_may_remove_boot_medium
 {Si ha iniciado desde disquette, ahora debería retirar el disco.
+
 }
 
 message dobootblks
 {Instalando bloques de arranque en %s....
 }
 
-message doofwboot
-{Instalando /ofwboot en %s....
-}
-
 message set_kernel_1
 {Núcleo (GENERIC)}
 message set_kernel_2
-{Núcleo (GENERIC.UP)}
+{Núcleo (GENERIC.MP)}
 

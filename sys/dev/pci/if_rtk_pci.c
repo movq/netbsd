@@ -1,4 +1,4 @@
-/*	$NetBSD: if_rtk_pci.c,v 1.43 2012/01/30 19:41:20 drochner Exp $	*/
+/*	$NetBSD: if_rtk_pci.c,v 1.37 2008/08/23 16:56:45 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_rtk_pci.c,v 1.43 2012/01/30 19:41:20 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_rtk_pci.c,v 1.37 2008/08/23 16:56:45 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,7 +82,6 @@ struct rtk_pci_softc {
 
 	/* PCI-specific goo.*/
 	void *sc_ih;
-	pci_chipset_tag_t sc_pc;
 };
 
 static const struct rtk_type rtk_pci_devs[] = {
@@ -108,27 +107,26 @@ static const struct rtk_type rtk_pci_devs[] = {
 		RTK_8139, "D-Link Systems DFE 530TX+" },
 	{ PCI_VENDOR_NORTEL, PCI_PRODUCT_NORTEL_BAYSTACK_21,
 		RTK_8139, "Baystack 21 (MPX EN5038) 10/100BaseTX" },
+	{ 0, 0, 0, NULL }
 };
 
-static int	rtk_pci_match(device_t, cfdata_t, void *);
+static int	rtk_pci_match(device_t, struct cfdata *, void *);
 static void	rtk_pci_attach(device_t, device_t, void *);
-static int	rtk_pci_detach(device_t, int);
 
 CFATTACH_DECL_NEW(rtk_pci, sizeof(struct rtk_pci_softc),
-    rtk_pci_match, rtk_pci_attach, rtk_pci_detach, NULL);
+    rtk_pci_match, rtk_pci_attach, NULL, NULL);
 
 static const struct rtk_type *
 rtk_pci_lookup(const struct pci_attach_args *pa)
 {
-	int i;
+	const struct rtk_type *t;
 
-	for (i = 0; i < __arraycount(rtk_pci_devs); i++) {
-		if (PCI_VENDOR(pa->pa_id) != rtk_pci_devs[i].rtk_vid)
-			continue;
-		if (PCI_PRODUCT(pa->pa_id) == rtk_pci_devs[i].rtk_did)
-			return &rtk_pci_devs[i];
+	for (t = rtk_pci_devs; t->rtk_name != NULL; t++) {
+		if (PCI_VENDOR(pa->pa_id) == t->rtk_vid &&
+		    PCI_PRODUCT(pa->pa_id) == t->rtk_did) {
+			return (t);
+		}
 	}
-
 	return NULL;
 }
 
@@ -157,19 +155,21 @@ rtk_pci_attach(device_t parent, device_t self, void *aux)
 	pci_intr_handle_t ih;
 	bus_space_tag_t iot, memt;
 	bus_space_handle_t ioh, memh;
-	bus_size_t iosize, memsize;
-	pcireg_t csr;
 	const char *intrstr = NULL;
 	const struct rtk_type *t;
-	bool ioh_valid, memh_valid;
+	int ioh_valid, memh_valid;
 
 	sc->sc_dev = self;
-	psc->sc_pc = pa->pa_pc;
 
 	t = rtk_pci_lookup(pa);
-	KASSERT(t != NULL);
+	if (t == NULL) {
+		aprint_normal("\n");
+		panic("%s: impossible", __func__);
+	}
 
-	pci_aprint_devinfo_fancy(pa, NULL, t->rtk_name, 1);
+	aprint_naive("\n");
+	aprint_normal(": %s (rev. 0x%02x)\n",
+	    t->rtk_name, PCI_REVISION(pa->pa_class));
 
 	/*
 	 * Map control/status registers.
@@ -184,23 +184,19 @@ rtk_pci_attach(device_t parent, device_t self, void *aux)
 	 *   on the part of Realtek. Memory mapped mode does appear to
 	 *   work on uniprocessor systems though.
 	 *
-	 * On NetBSD, some ports don't support PCI I/O space properly,
+	 * On NetBSD, some port doesn't support PCI I/O space properly,
 	 * so we try to map both and prefer I/O space to mem space.
 	 */
 	ioh_valid = (pci_mapreg_map(pa, RTK_PCI_LOIO, PCI_MAPREG_TYPE_IO, 0,
-	    &iot, &ioh, NULL, &iosize) == 0);
+	    &iot, &ioh, NULL, NULL) == 0);
 	memh_valid = (pci_mapreg_map(pa, RTK_PCI_LOMEM, PCI_MAPREG_TYPE_MEM, 0,
-	    &memt, &memh, NULL, &memsize) == 0);
+	    &memt, &memh, NULL, NULL) == 0);
 	if (ioh_valid) {
 		sc->rtk_btag = iot;
 		sc->rtk_bhandle = ioh;
-		sc->rtk_bsize = iosize;
-		if (memh_valid)
-			bus_space_unmap(memt, memh, memsize);
 	} else if (memh_valid) {
 		sc->rtk_btag = memt;
 		sc->rtk_bhandle = memh;
-		sc->rtk_bsize = memsize;
 	} else {
 		aprint_error_dev(self, "can't map registers\n");
 		return;
@@ -216,8 +212,8 @@ rtk_pci_attach(device_t parent, device_t self, void *aux)
 	if (psc->sc_ih == NULL) {
 		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
 
@@ -226,44 +222,13 @@ rtk_pci_attach(device_t parent, device_t self, void *aux)
 
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
-	csr = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
-	csr |= PCI_COMMAND_MASTER_ENABLE;
-	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG, csr);
-
 	sc->sc_dmat = pa->pa_dmat;
 	sc->sc_flags |= RTK_ENABLED;
 
-	if (pmf_device_register(self, NULL, NULL))
-		pmf_class_network_register(self, &sc->ethercom.ec_if);
-	else
+	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
+	else
+		pmf_class_network_register(self, &sc->ethercom.ec_if);
 
 	rtk_attach(sc);
-}
-
-static int 
-rtk_pci_detach(device_t self, int flags)
-{
-	struct rtk_pci_softc *psc = device_private(self);
-	struct rtk_softc *sc = &psc->sc_rtk;
-	int rv;
-
-	/* rtk_stop() */
-	sc->ethercom.ec_if.if_stop(&sc->ethercom.ec_if, 0);
-
-	rv = rtk_detach(sc);
-	if (rv)
-		return rv;
-
-	if (psc->sc_ih != NULL) {
-		pci_intr_disestablish(psc->sc_pc, psc->sc_ih);
-		psc->sc_ih = NULL;
-	}
-
-	if (sc->rtk_bsize != 0) {
-		bus_space_unmap(sc->rtk_btag, sc->rtk_bhandle, sc->rtk_bsize);
-		sc->rtk_bsize = 0;
-	}
-
-	return 0;
 }

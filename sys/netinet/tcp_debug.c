@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_debug.c,v 1.28 2009/04/18 14:58:05 tsutsui Exp $	*/
+/*	$NetBSD: tcp_debug.c,v 1.25 2007/03/04 06:03:21 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_debug.c,v 1.28 2009/04/18 14:58:05 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_debug.c,v 1.25 2007/03/04 06:03:21 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_tcp_debug.h"
@@ -127,11 +127,11 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, struct mbuf *m, int req)
 	if (tp)
 		td->td_cb = *tp;
 	else
-		memset((void *)&td->td_cb, 0, sizeof (*tp));
+		bzero((void *)&td->td_cb, sizeof (*tp));
 	td->td_family = tp->t_family;
-	memset((void *)&td->td_ti, 0, sizeof (td->td_ti));
+	bzero((void *)&td->td_ti, sizeof (td->td_ti));
 #ifdef INET6
-	memset((void *)&td->td_ti6, 0, sizeof (td->td_ti6));
+	bzero((void *)&td->td_ti6, sizeof (td->td_ti6));
 #endif
 	th = NULL;
 	if (m) {
@@ -141,7 +141,7 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, struct mbuf *m, int req)
 		case 4:
 			if (m->m_len < sizeof(td->td_ti))
 				break;
-			memcpy(&td->td_ti, mtod(m, void *), sizeof(td->td_ti));
+			bcopy(mtod(m, void *), &td->td_ti, sizeof(td->td_ti));
 			th = (struct tcphdr *)((char *)&td->td_ti + 
 			    sizeof(struct ip));
 			break;
@@ -149,7 +149,7 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, struct mbuf *m, int req)
 		case 6:
 			if (m->m_len < sizeof(td->td_ti6))
 				break;
-			memcpy(&td->td_ti6, mtod(m, void *),
+			bcopy(mtod(m, void *), &td->td_ti6,
 				sizeof(td->td_ti6));
 			th = (struct tcphdr *)((char *)&td->td_ti6 + 
 			    sizeof(struct ip6_hdr));

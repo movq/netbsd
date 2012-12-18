@@ -1,4 +1,4 @@
-/*	$NetBSD: comvar.h,v 1.73 2012/02/02 19:43:03 tls Exp $	*/
+/*	comvar.h,v 1.55.8.3 2008/01/09 01:52:50 matt Exp	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -36,14 +36,13 @@
 #include "opt_com.h"
 #include "opt_kgdb.h"
 
-#ifdef RND_COM
+#if NRND > 0 && defined(RND_COM)
 #include <sys/rnd.h>
 #endif
 
 #include <sys/callout.h>
 #include <sys/timepps.h>
 #include <sys/mutex.h>
-#include <sys/device.h>
 
 #include <dev/ic/comreg.h>	/* for COM_NPORTS */
 
@@ -71,9 +70,7 @@ int com_is_console(bus_space_tag_t, bus_addr_t, bus_space_handle_t *);
 #define	COM_HW_NO_TXPRELOAD	0x200
 
 /* Buffer size for character buffer */
-#ifndef COM_RING_SIZE
 #define	COM_RING_SIZE	2048
-#endif
 
 #ifdef	COM_REGMAP
 #define	COM_REG_RXDATA		0
@@ -144,14 +141,6 @@ struct com_regs {
 	} while (0)
 
 #endif
-
-struct comcons_info {
-	struct com_regs regs;
-	int rate;
-	int frequency;
-	int type;
-	tcflag_t cflag;
-};
 
 struct com_softc {
 	device_t sc_dev;
@@ -227,8 +216,8 @@ struct com_softc {
 
 	struct pps_state sc_pps_state;	/* pps state */
 
-#ifdef RND_COM
-	krndsource_t  rnd_source;
+#if NRND > 0 && defined(RND_COM)
+	rndsource_element_t  rnd_source;
 #endif
 	kmutex_t		sc_lock;
 };
@@ -237,10 +226,11 @@ int comprobe1(bus_space_tag_t, bus_space_handle_t);
 int comintr(void *);
 void com_attach_subr(struct com_softc *);
 int com_probe_subr(struct com_regs *);
-int com_detach(device_t, int);
-bool com_resume(device_t, const pmf_qual_t *);
+int com_detach(struct device *, int);
+bool com_resume(device_t PMF_FN_PROTO);
+int com_activate(struct device *, enum devact);
 bool com_cleanup(device_t, int);
-bool com_suspend(device_t, const pmf_qual_t *);
+bool com_suspend(device_t PMF_FN_PROTO);
 
 #ifndef IPL_SERIAL
 #define	IPL_SERIAL	IPL_TTY

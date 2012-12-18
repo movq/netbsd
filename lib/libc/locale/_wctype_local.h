@@ -1,4 +1,4 @@
-/* $NetBSD: _wctype_local.h,v 1.3 2010/06/02 15:47:25 tnozaki Exp $ */
+/* $NetBSD: _wctype_local.h,v 1.2.2.2 2009/01/15 03:24:07 snj Exp $ */
 
 /*-
  * Copyright (c) 2008 Citrus Project,
@@ -32,6 +32,7 @@
 __BEGIN_DECLS
 _RuneType	_runetype_priv(_RuneLocale const *, wint_t);
 int		_iswctype_priv(_RuneLocale const *, wint_t, _WCTypeEntry const *);
+wint_t		_towctrans_priv(_RuneLocale const *, wint_t, _WCTransEntry const *);
 __END_DECLS
 
 #endif /*_WCTYPE_LOCAL_H_*/

@@ -1,4 +1,4 @@
-/*	$NetBSD: tap.c,v 1.5 2009/05/12 21:21:23 plunky Exp $	*/
+/*	$NetBSD: tap.c,v 1.1.6.1 2009/03/18 05:14:04 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 Iain Hibbert
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: tap.c,v 1.5 2009/05/12 21:21:23 plunky Exp $");
+__RCSID("$NetBSD: tap.c,v 1.1.6.1 2009/03/18 05:14:04 snj Exp $");
 
 #include <sys/ioctl.h>
 #include <sys/uio.h>
@@ -40,10 +40,8 @@ __RCSID("$NetBSD: tap.c,v 1.5 2009/05/12 21:21:23 plunky Exp $");
 
 #include "btpand.h"
 
-static void tap_exit(void);
 static bool tap_send(channel_t *, packet_t *);
 static bool tap_recv(packet_t *);
-static void tap_down(channel_t *);
 
 void
 tap_init(void)
@@ -65,8 +63,6 @@ tap_init(void)
 		log_err("Could not get interface name: %m");
 		exit(EXIT_FAILURE);
 	}
-	interface_name = strndup(ifr.ifr_name, IFNAMSIZ);
-	atexit(tap_exit);
 
 	s = socket(PF_LINK, SOCK_DGRAM, 0);
 	if (s == -1) {
@@ -114,7 +110,6 @@ tap_init(void)
 
 	chan->send = tap_send;
 	chan->recv = tap_recv;
-	chan->down = tap_down;
 	chan->mru = ETHER_HDR_LEN + ETHER_MAX_LEN;
 	memcpy(chan->raddr, LLADDR(sdl), ETHER_ADDR_LEN);
 	memcpy(chan->laddr, LLADDR(sdl), ETHER_ADDR_LEN);
@@ -124,35 +119,6 @@ tap_init(void)
 
 	if (pidfile(ifr.ifr_name) == -1)
 		log_err("pidfile not made");
-}
-
-static void
-tap_exit(void)
-{
-	struct ifreq ifr;
-	int s;
-
-	s = socket(PF_LINK, SOCK_DGRAM, 0);
-	if (s == -1) {
-		log_err("Could not open PF_LINK socket: %m");
-		return;
-	}
-
-	strncpy(ifr.ifr_name, interface_name, IFNAMSIZ);
-	if (ioctl(s, SIOCGIFFLAGS, &ifr) == -1) {
-		log_err("Could not get interface flags: %m");
-		return;
-	}
-
-	if ((ifr.ifr_flags & IFF_UP)) {
-		ifr.ifr_flags &= ~IFF_UP;
-		if (ioctl(s, SIOCSIFFLAGS, &ifr) == -1) {
-			log_err("Could not clear IFF_UP: %m");
-			return;
-		}
-	}
-
-	close(s);
 }
 
 static bool
@@ -172,7 +138,7 @@ tap_send(channel_t *chan, packet_t *pkt)
 
 	/* tap device write never fails */
 	nw = writev(chan->fd, iov, __arraycount(iov));
-	assert(nw > 0);
+	_DIAGASSERT(nw > 0);
 
 	return true;
 }
@@ -192,11 +158,4 @@ tap_recv(packet_t *pkt)
 	packet_adj(pkt, ETHER_TYPE_LEN);
 
 	return true;
-}
-
-static void
-tap_down(channel_t *chan)
-{
-
-	/* we never close the tap channel */
 }

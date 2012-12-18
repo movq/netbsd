@@ -1,4 +1,4 @@
-/*	$NetBSD: in_proto.c,v 1.103 2012/03/22 20:34:38 drochner Exp $	*/
+/*	$NetBSD: in_proto.c,v 1.94 2008/04/24 11:38:37 ad Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.103 2012/03/22 20:34:38 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.94 2008/04/24 11:38:37 ad Exp $");
 
 #include "opt_mrouting.h"
 #include "opt_eon.h"			/* ISO CLNL over IP */
@@ -69,7 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.103 2012/03/22 20:34:38 drochner Exp 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
 #include "opt_pim.h"
-#include "opt_gateway.h"
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -116,6 +115,15 @@ __KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.103 2012/03/22 20:34:38 drochner Exp 
  * TCP/IP protocol family: IP, ICMP, UDP, TCP.
  */
 
+#ifdef IPSEC
+#include <netinet6/ipsec.h>
+#include <netinet6/ah.h>
+#ifdef IPSEC_ESP
+#include <netinet6/esp.h>
+#endif
+#include <netinet6/ipcomp.h>
+#endif /* IPSEC */
+
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
 #include <netipsec/key.h>
@@ -133,12 +141,6 @@ __KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.103 2012/03/22 20:34:38 drochner Exp 
 #include "carp.h"
 #if NCARP > 0
 #include <netinet/ip_carp.h>
-#endif
-
-#include "pfsync.h"
-#if NPFSYNC > 0
-#include <net/pfvar.h>
-#include <net/if_pfsync.h>
 #endif
 
 #include "etherip.h"
@@ -174,7 +176,7 @@ PR_WRAP_CTLOUTPUT(tcp_ctloutput)
 #define	udp_ctloutput	udp_ctloutput_wrapper
 #define	tcp_ctloutput	tcp_ctloutput_wrapper
 
-#if defined(FAST_IPSEC)
+#if defined(IPSEC) || defined(FAST_IPSEC)
 PR_WRAP_CTLINPUT(ah4_ctlinput)
 
 #define	ah4_ctlinput	ah4_ctlinput_wrapper
@@ -206,9 +208,8 @@ const struct protosw inetsw[] = {
 {	.pr_domain = &inetdomain,
 	.pr_init = ip_init,
 	.pr_output = ip_output,
-	.pr_fasttimo = ip_fasttimo,
 	.pr_slowtimo = ip_slowtimo,
-	.pr_drain = ip_drainstub,
+	.pr_drain = ip_drain,
 },
 {	.pr_type = SOCK_DGRAM,
 	.pr_domain = &inetdomain,
@@ -229,9 +230,8 @@ const struct protosw inetsw[] = {
 	.pr_ctloutput = tcp_ctloutput,
 	.pr_usrreq = tcp_usrreq,
 	.pr_init = tcp_init,
-	.pr_fasttimo = tcp_fasttimo,
 	.pr_slowtimo = tcp_slowtimo,
-	.pr_drain = tcp_drainstub,
+	.pr_drain = tcp_drain,
 },
 {	.pr_type = SOCK_RAW,
 	.pr_domain = &inetdomain,
@@ -258,9 +258,35 @@ const struct protosw inetsw[] = {
 {	.pr_domain = &inetdomain,
 	.pr_protocol = IPPROTO_IP,
 	.pr_slowtimo = ipflow_slowtimo,
-	.pr_init = ipflow_poolinit,
 },
 #endif /* GATEWAY */
+#ifdef IPSEC
+{	.pr_type = SOCK_RAW,
+	.pr_domain = &inetdomain,
+	.pr_protocol = IPPROTO_AH,
+	.pr_flags = PR_ATOMIC|PR_ADDR,
+	.pr_input = ah4_input,
+	.pr_ctlinput = ah4_ctlinput,
+	.pr_init = ah4_init,
+},
+#ifdef IPSEC_ESP
+{	.pr_type = SOCK_RAW,
+	.pr_domain = &inetdomain,
+	.pr_protocol = IPPROTO_ESP,
+	.pr_flags = PR_ATOMIC|PR_ADDR,
+	.pr_input = esp4_input,
+	.pr_ctlinput = esp4_ctlinput,
+	.pr_init = esp4_init,
+},
+#endif /* IPSEC_ESP */
+{	.pr_type = SOCK_RAW,
+	.pr_domain = &inetdomain,
+	.pr_protocol = IPPROTO_IPCOMP,
+	.pr_flags = PR_ATOMIC|PR_ADDR,
+	.pr_input = ipcomp4_input,
+	.pr_init = ipcomp4_init,
+},
+#endif /* IPSEC */
 #ifdef FAST_IPSEC
 {	.pr_type = SOCK_RAW,
 	.pr_domain = &inetdomain,
@@ -328,20 +354,8 @@ const struct protosw inetsw[] = {
 	.pr_output = rip_output,
 	.pr_ctloutput = rip_ctloutput,
 	.pr_usrreq = rip_usrreq,
-	.pr_init = carp_init,
 },
 #endif /* NCARP > 0 */
-#if NPFSYNC > 0
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inetdomain,
-	.pr_protocol = IPPROTO_PFSYNC,
-	.pr_flags	 = PR_ATOMIC|PR_ADDR,
-	.pr_input	 = pfsync_input,
-	.pr_output	 = rip_output,
-	.pr_ctloutput = rip_ctloutput,
-	.pr_usrreq	 = rip_usrreq,
-},
-#endif /* NPFSYNC > 0 */
 {	.pr_type = SOCK_RAW,
 	.pr_domain = &inetdomain,
 	.pr_protocol = IPPROTO_IGMP,
@@ -433,9 +447,8 @@ struct domain inetdomain = {
 	.dom_externalize = NULL, .dom_dispose = NULL,
 	.dom_protosw = inetsw,
 	.dom_protoswNPROTOSW = &inetsw[__arraycount(inetsw)],
-	.dom_rtattach = rt_inithead,
-	.dom_rtoffset = 32,
-	.dom_maxrtkey = sizeof(struct ip_pack4),
+	.dom_rtattach = rn_inithead,
+	.dom_rtoffset = 32, .dom_maxrtkey = sizeof(struct sockaddr_in),
 #ifdef IPSELSRC
 	.dom_ifattach = in_domifattach,
 	.dom_ifdetach = in_domifdetach,

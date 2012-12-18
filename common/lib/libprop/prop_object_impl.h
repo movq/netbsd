@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_object_impl.h,v 1.31 2012/07/27 09:10:59 pooka Exp $	*/
+/*	$NetBSD: prop_object_impl.h,v 1.27.4.1 2008/11/30 02:40:01 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -231,15 +231,6 @@ struct _prop_object_iterator {
 	uint32_t	pi_version;
 };
 
-#define _PROP_NOTHREAD_ONCE_DECL(x)	static bool x = false;
-#define _PROP_NOTHREAD_ONCE_RUN(x,f)					\
-	do {								\
-		if ((x) == false) {					\
-			f();						\
-			x = true;					\
-		}							\
-	} while (/*CONSTCOND*/0)
-
 #if defined(_KERNEL)
 
 /*
@@ -250,8 +241,8 @@ struct _prop_object_iterator {
 #include <sys/malloc.h>
 #include <sys/pool.h>
 #include <sys/systm.h>
+#include <sys/simplelock.h>
 #include <sys/rwlock.h>
-#include <sys/once.h>
 
 #define	_PROP_ASSERT(x)			KASSERT(x)
 
@@ -263,25 +254,16 @@ struct _prop_object_iterator {
 #define	_PROP_POOL_GET(p)		pool_get(&(p), PR_WAITOK)
 #define	_PROP_POOL_PUT(p, v)		pool_put(&(p), (v))
 
-struct prop_pool_init {
-	struct pool *pp;
-	size_t size;
-	const char *wchan;
-};
-#define	_PROP_POOL_INIT(pp, size, wchan)				\
-struct pool pp;								\
-static const struct prop_pool_init _link_ ## pp[1] = {			\
-	{ &pp, size, wchan }						\
-};									\
-__link_set_add_rodata(prop_linkpools, _link_ ## pp);
+#define	_PROP_POOL_INIT(p, s, d)					\
+		POOL_INIT(p, s, 0, 0, 0, d, &pool_allocator_nointr, IPL_NONE);
 
 #define	_PROP_MALLOC_DEFINE(t, s, l)					\
 		MALLOC_DEFINE(t, s, l);
 
-#define	_PROP_MUTEX_DECL_STATIC(x)	static kmutex_t x;
-#define	_PROP_MUTEX_INIT(x)		mutex_init(&(x),MUTEX_DEFAULT,IPL_NONE)
-#define	_PROP_MUTEX_LOCK(x)		mutex_enter(&(x))
-#define	_PROP_MUTEX_UNLOCK(x)		mutex_exit(&(x))
+#define	_PROP_MUTEX_DECL_STATIC(x)					\
+		static struct simplelock x = SIMPLELOCK_INITIALIZER;
+#define	_PROP_MUTEX_LOCK(x)		simple_lock(&(x))
+#define	_PROP_MUTEX_UNLOCK(x)		simple_unlock(&(x))
 
 #define	_PROP_RWLOCK_DECL(x)		krwlock_t x ;
 #define	_PROP_RWLOCK_INIT(x)		rw_init(&(x))
@@ -289,16 +271,6 @@ __link_set_add_rodata(prop_linkpools, _link_ ## pp);
 #define	_PROP_RWLOCK_WRLOCK(x)		rw_enter(&(x), RW_WRITER)
 #define	_PROP_RWLOCK_UNLOCK(x)		rw_exit(&(x))
 #define	_PROP_RWLOCK_DESTROY(x)		rw_destroy(&(x))
-
-#define _PROP_ONCE_DECL(x)		static ONCE_DECL(x);
-#define _PROP_ONCE_RUN(x,f)		RUN_ONCE(&(x), f)
-
-#include <sys/atomic.h>
-
-#define _PROP_ATOMIC_INC32(x)		atomic_inc_32(x)
-#define _PROP_ATOMIC_DEC32(x)		atomic_dec_32(x)
-#define _PROP_ATOMIC_INC32_NV(x, v)	v = atomic_inc_32_nv(x)
-#define _PROP_ATOMIC_DEC32_NV(x, v)	v = atomic_dec_32_nv(x)
 
 #elif defined(_STANDALONE)
 
@@ -326,7 +298,6 @@ void *		_prop_standalone_realloc(void *, size_t);
 #define	_PROP_MALLOC_DEFINE(t, s, l)	/* nothing */
 
 #define	_PROP_MUTEX_DECL_STATIC(x)	/* nothing */
-#define	_PROP_MUTEX_INIT(x)		/* nothing */
 #define	_PROP_MUTEX_LOCK(x)		/* nothing */
 #define	_PROP_MUTEX_UNLOCK(x)		/* nothing */
 
@@ -336,14 +307,6 @@ void *		_prop_standalone_realloc(void *, size_t);
 #define	_PROP_RWLOCK_WRLOCK(x)		/* nothing */
 #define	_PROP_RWLOCK_UNLOCK(x)		/* nothing */
 #define	_PROP_RWLOCK_DESTROY(x)		/* nothing */
-
-#define _PROP_ONCE_DECL(x)		_PROP_NOTHREAD_ONCE_DECL(x)
-#define _PROP_ONCE_RUN(x,f)		_PROP_NOTHREAD_ONCE_RUN(x,f)
-
-#define _PROP_ATOMIC_INC32(x)		++*(x)
-#define _PROP_ATOMIC_DEC32(x)		--*(x)
-#define _PROP_ATOMIC_INC32_NV(x, v)	v = ++*(x)
-#define _PROP_ATOMIC_DEC32_NV(x, v)	v = --*(x)
 
 #else
 
@@ -376,10 +339,8 @@ void *		_prop_standalone_realloc(void *, size_t);
  * Use the same mechanism as libc; we get pthread mutexes for threaded
  * programs and do-nothing stubs for non-threaded programs.
  */
-#include <sys/atomic.h>
 #include "reentrant.h"
-#define	_PROP_MUTEX_DECL_STATIC(x)	static mutex_t x;
-#define	_PROP_MUTEX_INIT(x)		mutex_init(&(x), NULL)
+#define	_PROP_MUTEX_DECL_STATIC(x)	static mutex_t x = MUTEX_INITIALIZER;
 #define	_PROP_MUTEX_LOCK(x)		mutex_lock(&(x))
 #define	_PROP_MUTEX_UNLOCK(x)		mutex_unlock(&(x))
 
@@ -389,22 +350,11 @@ void *		_prop_standalone_realloc(void *, size_t);
 #define	_PROP_RWLOCK_WRLOCK(x)		rwlock_wrlock(&(x))
 #define	_PROP_RWLOCK_UNLOCK(x)		rwlock_unlock(&(x))
 #define	_PROP_RWLOCK_DESTROY(x)		rwlock_destroy(&(x))
-
-#define _PROP_ONCE_DECL(x)						\
-	static pthread_once_t x = PTHREAD_ONCE_INIT;
-#define _PROP_ONCE_RUN(x,f)		thr_once(&(x), (void(*)(void))f);
-
-#define _PROP_ATOMIC_INC32(x)		atomic_inc_32(x)
-#define _PROP_ATOMIC_DEC32(x)		atomic_dec_32(x)
-#define _PROP_ATOMIC_INC32_NV(x, v)	v = atomic_inc_32_nv(x)
-#define _PROP_ATOMIC_DEC32_NV(x, v)	v = atomic_dec_32_nv(x)
-
 #elif defined(HAVE_NBTOOL_CONFIG_H)
 /*
  * None of NetBSD's build tools are multi-threaded.
  */
 #define	_PROP_MUTEX_DECL_STATIC(x)	/* nothing */
-#define	_PROP_MUTEX_INIT(x)		/* nothing */
 #define	_PROP_MUTEX_LOCK(x)		/* nothing */
 #define	_PROP_MUTEX_UNLOCK(x)		/* nothing */
 
@@ -414,22 +364,13 @@ void *		_prop_standalone_realloc(void *, size_t);
 #define	_PROP_RWLOCK_WRLOCK(x)		/* nothing */
 #define	_PROP_RWLOCK_UNLOCK(x)		/* nothing */
 #define	_PROP_RWLOCK_DESTROY(x)		/* nothing */
-
-#define _PROP_ONCE_DECL(x)		_PROP_NOTHREAD_ONCE_DECL(x)
-#define _PROP_ONCE_RUN(x,f)		_PROP_NOTHREAD_ONCE_RUN(x,f)
-
-#define _PROP_ATOMIC_INC32(x)		++*(x)
-#define _PROP_ATOMIC_DEC32(x)		--*(x)
-#define _PROP_ATOMIC_INC32_NV(x, v)	v = ++*(x)
-#define _PROP_ATOMIC_DEC32_NV(x, v)	v = --*(x)
-
 #else
 /*
  * Use pthread mutexes everywhere else.
  */
 #include <pthread.h>
-#define	_PROP_MUTEX_DECL_STATIC(x)	static pthread_mutex_t x;
-#define	_PROP_MUTEX_INIT(x)		pthread_mutex_init(&(x), NULL)
+#define	_PROP_MUTEX_DECL_STATIC(x)					\
+		static pthread_mutex_t x = PTHREAD_MUTEX_INITIALIZER;
 #define	_PROP_MUTEX_LOCK(x)		pthread_mutex_lock(&(x))
 #define	_PROP_MUTEX_UNLOCK(x)		pthread_mutex_unlock(&(x))
 
@@ -439,42 +380,8 @@ void *		_prop_standalone_realloc(void *, size_t);
 #define	_PROP_RWLOCK_WRLOCK(x)		pthread_rwlock_wrlock(&(x))
 #define	_PROP_RWLOCK_UNLOCK(x)		pthread_rwlock_unlock(&(x))
 #define	_PROP_RWLOCK_DESTROY(x)		pthread_rwlock_destroy(&(x))
-
-#define _PROP_ONCE_DECL(x)						\
-	static pthread_once_t x = PTHREAD_ONCE_INIT;
-#define _PROP_ONCE_RUN(x,f)		pthread_once(&(x),(void(*)(void))f)
-
-#define _PROP_NEED_REFCNT_MTX
-
-#define _PROP_ATOMIC_INC32(x)						\
-do {									\
-	pthread_mutex_lock(&_prop_refcnt_mtx);				\
-	(*(x))++;							\
-	pthread_mutex_unlock(&_prop_refcnt_mtx);			\
-} while (/*CONSTCOND*/0)
-
-#define _PROP_ATOMIC_DEC32(x)						\
-do {									\
-	pthread_mutex_lock(&_prop_refcnt_mtx);				\
-	(*(x))--;							\
-	pthread_mutex_unlock(&_prop_refcnt_mtx);			\
-} while (/*CONSTCOND*/0)
-
-#define _PROP_ATOMIC_INC32_NV(x, v)					\
-do {									\
-	pthread_mutex_lock(&_prop_refcnt_mtx);				\
-	v = ++(*(x));							\
-	pthread_mutex_unlock(&_prop_refcnt_mtx);			\
-} while (/*CONSTCOND*/0)
-
-#define _PROP_ATOMIC_DEC32_NV(x, v)					\
-do {									\
-	pthread_mutex_lock(&_prop_refcnt_mtx);				\
-	v = --(*(x));							\
-	pthread_mutex_unlock(&_prop_refcnt_mtx);			\
-} while (/*CONSTCOND*/0)
-
 #endif
+
 #endif /* _KERNEL */
 
 /*

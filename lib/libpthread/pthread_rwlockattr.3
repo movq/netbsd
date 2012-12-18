@@ -1,4 +1,4 @@
-.\" $NetBSD: pthread_rwlockattr.3,v 1.8 2010/07/09 08:51:28 jruoho Exp $
+.\" $NetBSD: pthread_rwlockattr.3,v 1.7 2008/05/04 19:43:05 martin Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -48,7 +48,7 @@
 .\"
 .\" $FreeBSD: src/lib/libpthread/man/pthread_rwlockattr_init.3,v 1.7 2002/09/16 19:29:29 mini Exp $
 .\"
-.Dd July 9, 2010
+.Dd January 30, 2003
 .Dt PTHREAD_RWLOCKATTR 3
 .Os
 .Sh NAME
@@ -101,5 +101,9 @@ is invalid.
 .Sh SEE ALSO
 .Xr pthread_rwlock_init 3
 .Sh STANDARDS
-Both functions conform to
-.St -p1003.1-2001 .
+The
+.Fn pthread_rwlockattr_init
+and
+.Fn pthread_rwlockattr_destroy
+functions conform to
+.St -p1003.1-96 .

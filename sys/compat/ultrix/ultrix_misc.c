@@ -1,4 +1,4 @@
-/*	$NetBSD: ultrix_misc.c,v 1.122 2012/02/19 21:06:45 rmind Exp $	*/
+/*	$NetBSD: ultrix_misc.c,v 1.116 2008/10/15 06:51:20 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 1995, 1997 Jonathan Stone (hereinafter referred to as the author)
@@ -76,9 +76,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ultrix_misc.c,v 1.122 2012/02/19 21:06:45 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ultrix_misc.c,v 1.116 2008/10/15 06:51:20 wrstuden Exp $");
 
 #if defined(_KERNEL_OPT)
+#include "opt_nfsserver.h"
 #include "opt_sysv.h"
 #endif
 
@@ -90,6 +91,10 @@ __KERNEL_RCSID(0, "$NetBSD: ultrix_misc.c,v 1.122 2012/02/19 21:06:45 rmind Exp 
  * Ultrix system calls that are implemented differently in BSD are
  * handled here.
  */
+
+#if defined(_KERNEL_OPT)
+#include "fs_nfs.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -123,7 +128,6 @@ __KERNEL_RCSID(0, "$NetBSD: ultrix_misc.c,v 1.122 2012/02/19 21:06:45 rmind Exp 
 #include <compat/ultrix/ultrix_syscall.h>
 #include <compat/ultrix/ultrix_syscallargs.h>
 #include <compat/common/compat_util.h>
-#include <compat/sys/time.h>
 
 #include <netinet/in.h>
 
@@ -158,48 +162,46 @@ struct uvm_object *emul_ultrix_object;
 void	syscall(void);
 #endif
 
-struct emul emul_ultrix = {
-	.e_name =		"ultrix",
-	.e_path =		"/emul/ultrix",
+const struct emul emul_ultrix = {
+	"ultrix",
+	"/emul/ultrix",
 #ifndef __HAVE_MINIMAL_EMUL
-	.e_flags =		0,
-	.e_errno =		NULL,
-	.e_nosys =		ULTRIX_SYS_syscall,
-	.e_nsysent =		ULTRIX_SYS_NSYSENT,
+	0,
+	NULL,
+	ULTRIX_SYS_syscall,
+	ULTRIX_SYS_NSYSENT,
 #endif
-	.e_sysent =		ultrix_sysent,
-#ifdef SYSCALL_DEBUG
-	.e_syscallnames =	ultrix_syscallnames,
-#else
-	.e_syscallnames =	NULL,
-#endif
+	ultrix_sysent,
+	ultrix_syscallnames,
 #ifdef __mips
-	.e_sendsig =		sendsig_sigcontext,
+	sendsig_sigcontext,
 #else /* vax */
-	.e_sendsig =		sendsig,
+	sendsig,
 #endif
-	.e_trapsignal =		trapsignal,
-	.e_tracesig =		NULL,
-	.e_sigcode =		ultrix_sigcode,
-	.e_esigcode =		ultrix_esigcode,
-	.e_sigobject =		&emul_ultrix_object,
-	.e_setregs =		setregs,
-	.e_proc_exec =		NULL,
-	.e_proc_fork =		NULL,
-	.e_proc_exit =		NULL,
-	.e_lwp_fork =		NULL,
-	.e_lwp_exit =		NULL,
+	trapsignal,
+	NULL,
+	ultrix_sigcode,
+	ultrix_esigcode,
+	&emul_ultrix_object,
+	setregs,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
 #ifdef __HAVE_SYSCALL_INTERN
-	.e_syscall_intern =	syscall_intern,
+	syscall_intern,
 #else
-	.e_syscall_intern =	syscall,
+	syscall,
 #endif
-	.e_sysctlovly =		NULL,
-	.e_fault =		NULL,
-	.e_vm_default_addr =	uvm_default_mapaddr,
-	.e_usertrap =		NULL,
-	.e_ucsize =		0,
-	.e_startlwp =		NULL
+	NULL,
+	NULL,
+
+	uvm_default_mapaddr,
+	NULL,
+	NULL,
+	0,
+	NULL
 };
 
 #define GSI_PROG_ENV 1
@@ -233,27 +235,27 @@ ultrix_sys_setsysinfo(struct lwp *l, const struct ultrix_sys_setsysinfo_args *ua
 int
 ultrix_sys_waitpid(struct lwp *l, const struct ultrix_sys_waitpid_args *uap, register_t *retval)
 {
-	struct compat_50_sys_wait4_args ap;
+	struct sys_wait4_args ap;
 
 	SCARG(&ap, pid) = SCARG(uap, pid);
 	SCARG(&ap, status) = SCARG(uap, status);
 	SCARG(&ap, options) = SCARG(uap, options);
 	SCARG(&ap, rusage) = 0;
 
-	return compat_50_sys_wait4(l, &ap, retval);
+	return sys_wait4(l, &ap, retval);
 }
 
 int
 ultrix_sys_wait3(struct lwp *l, const struct ultrix_sys_wait3_args *uap, register_t *retval)
 {
-	struct compat_50_sys_wait4_args ap;
+	struct sys_wait4_args ap;
 
 	SCARG(&ap, pid) = -1;
 	SCARG(&ap, status) = SCARG(uap, status);
 	SCARG(&ap, options) = SCARG(uap, options);
 	SCARG(&ap, rusage) = SCARG(uap, rusage);
 
-	return compat_50_sys_wait4(l, &ap, retval);
+	return sys_wait4(l, &ap, retval);
 }
 
 /*
@@ -266,9 +268,9 @@ ultrix_sys_wait3(struct lwp *l, const struct ultrix_sys_wait3_args *uap, registe
 int
 ultrix_sys_select(struct lwp *l, const struct ultrix_sys_select_args *uap, register_t *retval)
 {
-	struct timeval50 atv;
+	struct timeval atv;
 	int error;
-	struct compat_50_sys_select_args ap;
+	struct sys_select_args ap;
 
 	/* Limit number of FDs selected on to the native maximum */
 
@@ -294,13 +296,26 @@ ultrix_sys_select(struct lwp *l, const struct ultrix_sys_select_args *uap, regis
 #endif
 
 	}
-	error = compat_50_sys_select(l, &ap, retval);
+	error = sys_select(l, &ap, retval);
 	if (error == EINVAL)
 		printf("ultrix select: bad args?\n");
 
 done:
 	return error;
 }
+
+#if defined(NFS)
+int
+async_daemon(struct lwp *l, const void *v, register_t *retval)
+{
+	struct sys_nfssvc_args ouap;
+
+	SCARG(&ouap, flag) = NFSSVC_BIOD;
+	SCARG(&ouap, argp) = NULL;
+
+	return sys_nfssvc(l, &ouap, retval);
+}
+#endif /* NFS */
 
 
 #define	SUN__MAP_NEW	0x80000000	/* if not, old mmap & cannot handle */
@@ -450,6 +465,39 @@ ultrix_sys_setpgrp(struct lwp *l, const struct ultrix_sys_setpgrp_args *uap, reg
 	else
 		return sys_setpgid(l, &ap, retval);
 }
+
+#if defined (NFSSERVER)
+int
+ultrix_sys_nfssvc(struct lwp *l, const struct ultrix_sys_nfssvc_args *uap,
+    register_t *retval)
+{
+
+#if 0	/* XXX */
+	struct emul *e = p->p_emul;
+	struct sys_nfssvc_args outuap;
+	struct sockaddr sa;
+	int error;
+	void *sg = stackgap_init(p, 0);
+
+	memset(&outuap, 0, sizeof outuap);
+	SCARG(&outuap, fd) = SCARG(uap, fd);
+	SCARG(&outuap, mskval) = stackgap_alloc(p, &sg, sizeof sa);
+	SCARG(&outuap, msklen) = sizeof sa;
+	SCARG(&outuap, mtchval) = stackgap_alloc(p, &sg, sizeof sa);
+	SCARG(&outuap, mtchlen) = sizeof sa;
+
+	memset(&sa, 0, sizeof sa);
+	if (error = copyout(&sa, SCARG(&outuap, mskval), SCARG(&outuap, msklen)))
+		return error;
+	if (error = copyout(&sa, SCARG(&outuap, mtchval), SCARG(&outuap, mtchlen)))
+		return error;
+
+	return nfssvc(l, &outuap, retval);
+#else
+	return ENOSYS;
+#endif
+}
+#endif /* NFSSERVER */
 
 struct ultrix_ustat {
 	daddr_t	f_tfree;	/* total free */

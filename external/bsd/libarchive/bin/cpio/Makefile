@@ -1,19 +1,13 @@
-# $NetBSD: Makefile,v 1.6 2011/09/19 01:45:15 christos Exp $
+# $NetBSD: Makefile,v 1.1 2008/09/19 22:01:26 joerg Exp $
 
-PROG=	cpio
-SRCS=	cmdline.c cpio.c
+PROG=	bsdcpio
+SRCS=	cmdline.c cpio.c err.c matching.c pathmatch.c
 
 .include <bsd.init.mk>
 
-.PATH:		${LIBARCHIVEDIR}/cpio
+.PATH: ${LIBARCHIVEDIR}/cpio
 
-CLEANFILES+=	cpio.1
-
-cpio.1: ${LIBARCHIVEDIR}/cpio/bsdcpio.1
-	${TOOL_CAT} ${LIBARCHIVEDIR}/cpio/bsdcpio.1 > $@
-
-SYMLINKS+=${BINDIR}/cpio /usr/bin/cpio
-
-COPTS.cpio.c += -Wno-format-nonliteral
+DPADD=	${LIBARCHIVE} ${LIBBZ2} ${LIBZ}
+LDADD=	-larchive -lbz2 -lz
 
 .include <bsd.prog.mk>

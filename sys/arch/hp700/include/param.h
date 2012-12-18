@@ -1,8 +1,8 @@
-/*	$NetBSD: param.h,v 1.4 2010/01/16 13:49:11 skrll Exp $	*/
+/*	$NetBSD: param.h,v 1.2 2003/04/28 23:16:18 bjh21 Exp $	*/
 
 /*	$OpenBSD: param.h,v 1.12 2001/07/06 02:07:41 provos Exp $	*/
 
-/*
+/* 
  * Copyright (c) 1988-1994, The University of Utah and
  * the Computer Systems Laboratory at the University of Utah (CSL).
  * All rights reserved.
@@ -25,7 +25,9 @@
  * 	Utah $Hdr: param.h 1.18 94/12/16$
  */
 
-#ifdef _KERNEL
+#include <sys/featuretest.h>
+
+#if defined(_NETBSD_SOURCE)
 #include <machine/cpu.h>
 #endif
 

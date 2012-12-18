@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.10 2011/08/30 12:39:53 bouyer Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.7 2005/12/11 12:16:46 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Mark Brinicombe.
@@ -46,9 +46,6 @@
 #ifndef _ARM_DISKLABEL_H_
 #define _ARM_DISKLABEL_H_
 
-#ifndef LABELUSESMBR
-#define LABELUSESMBR	0		/* no MBR partitionning */
-#endif
 #define LABELSECTOR	1		/* sector containing label */
 #define LABELOFFSET	0		/* offset of label in sector */
 #define MAXPARTITIONS	8		/* number of partitions */
@@ -66,7 +63,6 @@
 
 struct cpu_disklabel {
 	struct mbr_partition mbrparts[MBR_PART_COUNT];
-#define __HAVE_DISKLABEL_DKBAD
 	struct dkbad bad;
 };
 
@@ -75,12 +71,12 @@ struct buf;
 struct disklabel;
 
 /* for readdisklabel.  rv != 0 -> matches, msg == NULL -> success */
-int	mbr_label_read(dev_t, void (*)(struct buf *), struct disklabel *,
-	    struct cpu_disklabel *, const char **, int *, int *);
+int	mbr_label_read __P((dev_t, void (*)(struct buf *), struct disklabel *,
+	    struct cpu_disklabel *, const char **, int *, int *));
 
 /* for writedisklabel.  rv == 0 -> dosen't match, rv > 0 -> success */
-int	mbr_label_locate(dev_t, void (*)(struct buf *),
-	    struct disklabel *, struct cpu_disklabel *, int *, int *);
+int	mbr_label_locate __P((dev_t, void (*)(struct buf *),
+	    struct disklabel *, struct cpu_disklabel *, int *, int *));
 #endif /* _KERNEL */
 
 #endif /* _ARM_DISKLABEL_H_ */

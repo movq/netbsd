@@ -1,11 +1,7 @@
-/*	$NetBSD: aria.c,v 1.37 2012/10/27 17:18:23 chs Exp $	*/
+/*	$NetBSD: aria.c,v 1.29 2008/04/08 20:08:49 cegger Exp $	*/
 
 /*-
- * Copyright (c) 1995, 1996, 1998 The NetBSD Foundation, Inc.
- * All rights reserved.
- *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Roland C. Dowdeswell.
+ * Copyright (c) 1995, 1996, 1998 Roland C. Dowdeswell.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,18 +11,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Roland C. Dowdeswell.
+ * 4. The name of the authors may not be used to endorse or promote products
+ *      derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
- * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
- * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 /*-
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.37 2012/10/27 17:18:23 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.29 2008/04/08 20:08:49 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,15 +61,17 @@ __KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.37 2012/10/27 17:18:23 chs Exp $");
 #include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/fcntl.h>
+
 #include <sys/cpu.h>
 #include <sys/bus.h>
-#include <sys/audioio.h>
 
+#include <sys/audioio.h>
 #include <dev/audio_if.h>
 #include <dev/auconv.h>
-#include <dev/mulaw.h>
 
+#include <dev/mulaw.h>
 #include <dev/isa/isavar.h>
+
 #include <dev/isa/ariareg.h>
 
 #ifdef AUDIO_DEBUG
@@ -93,9 +95,7 @@ struct aria_mixmaster {
 };
 
 struct aria_softc {
-	device_t sc_dev;		/* base device */
-	kmutex_t sc_lock;
-	kmutex_t sc_intr_lock;
+	struct	device sc_dev;		/* base device */
 	void	*sc_ih;			/* interrupt vectoring */
 	bus_space_tag_t sc_iot;		/* Tag on 'da bus. */
 	bus_space_handle_t sc_ioh;	/* Handle of iospace */
@@ -134,8 +134,8 @@ struct aria_softc {
 	int	sc_sendcmd_err;
 };
 
-int	ariaprobe(device_t, cfdata_t, void *);
-void	ariaattach(device_t, device_t, void *);
+int	ariaprobe(struct device *, struct cfdata *, void *);
+void	ariaattach(struct device *, struct device *, void *);
 void	ariaclose(void *);
 int	ariaopen(void *, int);
 int	ariareset(bus_space_tag_t, bus_space_handle_t);
@@ -154,7 +154,6 @@ int	aria_commit_settings(void *);
 int	aria_set_params(void *, int, int, audio_params_t *, audio_params_t *,
 			stream_filter_list_t *, stream_filter_list_t *);
 int	aria_get_props(void *);
-void	aria_get_locks(void *, kmutex_t **, kmutex_t **);
 
 int	aria_start_output(void *, void *, int, void (*)(void *), void*);
 int	aria_start_input(void *, void *, int, void (*)(void *), void*);
@@ -179,7 +178,7 @@ int	aria_mixer_set_port(void *, mixer_ctrl_t *);
 int	aria_mixer_get_port(void *, mixer_ctrl_t *);
 int	aria_mixer_query_devinfo(void *, mixer_devinfo_t *);
 
-CFATTACH_DECL_NEW(aria, sizeof(struct aria_softc),
+CFATTACH_DECL(aria, sizeof(struct aria_softc),
     ariaprobe, ariaattach, NULL, NULL);
 
 /* XXX temporary test for 1.3 */
@@ -228,7 +227,7 @@ const struct audio_hw_if aria_hw_if = {
 	NULL,
 	NULL,
 	NULL,
-	aria_get_locks,
+	NULL,
 };
 
 /*
@@ -239,7 +238,7 @@ const struct audio_hw_if aria_hw_if = {
  * Probe for the aria hardware.
  */
 int
-ariaprobe(device_t parent, cfdata_t cf, void *aux)
+ariaprobe(struct device *parent, struct cfdata *cf, void *aux)
 {
 	bus_space_handle_t ioh;
 	struct isa_attach_args *ia;
@@ -396,15 +395,14 @@ aria_do_kludge(
  * pseudo-device driver.
  */
 void
-ariaattach(device_t parent, device_t self, void *aux)
+ariaattach(struct device *parent, struct device *self, void *aux)
 {
 	bus_space_handle_t ioh;
 	struct aria_softc *sc;
 	struct isa_attach_args *ia;
 	u_short i;
 
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (void *)self;
 	ia = aux;
 	if (bus_space_map(ia->ia_iot, ia->ia_io[0].ir_addr, ARIADSP_NPORT,
 	    0, &ioh))
@@ -414,13 +412,10 @@ ariaattach(device_t parent, device_t self, void *aux)
 	sc->sc_ioh = ioh;
 	sc->sc_ic = ia->ia_ic;
 
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
-
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_AUDIO, aria_intr, sc);
 
-	DPRINTF(("isa_intr_establish() returns (%p)\n", sc->sc_ih));
+	DPRINTF(("isa_intr_establish() returns (%x)\n", (unsigned) sc->sc_ih));
 
 	i = aria_getdspmem(sc, ARIAA_HARDWARE_A);
 
@@ -473,7 +468,7 @@ ariaattach(device_t parent, device_t self, void *aux)
 	snprintf(aria_device.version, sizeof(aria_device.version), "%s",
 		ARIA_MODEL & sc->sc_hardware ? "SC18026" : "SC18025");
 
-	audio_attach_mi(&aria_hw_if, (void *)sc, sc->sc_dev);
+	audio_attach_mi(&aria_hw_if, (void *)sc, &sc->sc_dev);
 }
 
 /*
@@ -1070,9 +1065,6 @@ aria_intr(void *arg)
 	u_short address;
 
 	sc = arg;
-
-	mutex_spin_enter(&sc->sc_intr_lock);
-
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
 	pdata = sc->sc_pdiobuffer;
@@ -1080,10 +1072,8 @@ aria_intr(void *arg)
 #if 0 /*  XXX --  BAD BAD BAD (That this is #define'd out */
 	DPRINTF(("Checking to see if this is our intr\n"));
 
-	if ((inw(iobase) & 1) != 0x1) {
-		mutex_spin_exit(&sc->sc_intr_lock);
+	if ((inw(iobase) & 1) != 0x1)
 		return 0;  /* not for us */
-	}
 #endif
 
 	sc->sc_interrupts++;
@@ -1091,7 +1081,7 @@ aria_intr(void *arg)
 	DPRINTF(("aria_intr\n"));
 
 	if ((sc->sc_open & ARIAR_OPEN_PLAY) && (pdata!=NULL)) {
-		DPRINTF(("aria_intr play=(%p)\n", pdata));
+		DPRINTF(("aria_intr play=(%x)\n", (unsigned) pdata));
 		address = 0x8000 - 2*(sc->sc_blocksize);
 		address+= aria_getdspmem(sc, ARIAA_PLAY_FIFO_A);
 		bus_space_write_2(iot, ioh, ARIADSP_DMAADDRESS, address);
@@ -1102,7 +1092,7 @@ aria_intr(void *arg)
 	}
 
 	if ((sc->sc_open & ARIAR_OPEN_RECORD) && (rdata!=NULL)) {
-		DPRINTF(("aria_intr record=(%p)\n", rdata));
+		DPRINTF(("aria_intr record=(%x)\n", (unsigned) rdata));
 		address = 0x8000 - (sc->sc_blocksize);
 		address+= aria_getdspmem(sc, ARIAA_REC_FIFO_A);
 		bus_space_write_2(iot, ioh, ARIADSP_DMAADDRESS, address);
@@ -1114,7 +1104,6 @@ aria_intr(void *arg)
 
 	aria_sendcmd(sc, ARIADSPC_TRANSCOMPLETE, -1, -1, -1);
 
-	mutex_spin_exit(&sc->sc_intr_lock);
 	return 1;
 }
 
@@ -1667,14 +1656,4 @@ mute:
 		/*NOTREACHED*/
 	}
 	return 0;
-}
-
-void
-aria_get_locks(void *addr, kmutex_t **intr, kmutex_t **thread)
-{
-	struct aria_softc *sc;
-
-	sc = addr;
-	*intr = &sc->sc_intr_lock;
-	*thread = &sc->sc_lock;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: mly.c,v 1.45 2012/10/27 17:18:35 chs Exp $	*/
+/*	$NetBSD: mly.c,v 1.39 2008/06/08 12:43:52 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mly.c,v 1.45 2012/10/27 17:18:35 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mly.c,v 1.39 2008/06/08 12:43:52 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,6 +85,8 @@ __KERNEL_RCSID(0, "$NetBSD: mly.c,v 1.45 2012/10/27 17:18:35 chs Exp $");
 #include <sys/scsiio.h>
 #include <sys/kthread.h>
 #include <sys/kauth.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 
@@ -101,8 +103,8 @@ __KERNEL_RCSID(0, "$NetBSD: mly.c,v 1.45 2012/10/27 17:18:35 chs Exp $");
 #include <dev/pci/mlyvar.h>
 #include <dev/pci/mly_tables.h>
 
-static void	mly_attach(device_t, device_t, void *);
-static int	mly_match(device_t, cfdata_t, void *);
+static void	mly_attach(struct device *, struct device *, void *);
+static int	mly_match(struct device *, struct cfdata *, void *);
 static const	struct mly_ident *mly_find_ident(struct pci_attach_args *);
 static int	mly_fwhandshake(struct mly_softc *);
 static int	mly_flush(struct mly_softc *);
@@ -154,7 +156,7 @@ static int	mly_user_health(struct mly_softc *, struct mly_user_health *);
 
 extern struct	cfdriver mly_cd;
 
-CFATTACH_DECL_NEW(mly, sizeof(struct mly_softc),
+CFATTACH_DECL(mly, sizeof(struct mly_softc),
     mly_match, mly_attach, NULL, NULL);
 
 dev_type_open(mlyopen);
@@ -255,7 +257,8 @@ mly_find_ident(struct pci_attach_args *pa)
  * Match a supported board.
  */
 static int
-mly_match(device_t parent, cfdata_t cfdata, void *aux)
+mly_match(struct device *parent, struct cfdata *cfdata,
+    void *aux)
 {
 
 	return (mly_find_ident(aux) != NULL);
@@ -265,7 +268,7 @@ mly_match(device_t parent, cfdata_t cfdata, void *aux)
  * Attach a supported board.
  */
 static void
-mly_attach(device_t parent, device_t self, void *aux)
+mly_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa;
 	struct mly_softc *mly;
@@ -281,8 +284,7 @@ mly_attach(device_t parent, device_t self, void *aux)
 	struct scsipi_adapter *adapt;
 	struct scsipi_channel *chan;
 
-	mly = device_private(self);
-	mly->mly_dv = self;
+	mly = (struct mly_softc *)self;
 	pa = aux;
 	pc = pa->pa_pc;
 	ident = mly_find_ident(pa);
@@ -350,13 +352,13 @@ mly_attach(device_t parent, device_t self, void *aux)
 	if (mly->mly_ih == NULL) {
 		aprint_error_dev(self, "can't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			printf(" at %s", intrstr);
+		printf("\n");
 		return;
 	}
 
 	if (intrstr != NULL)
-		aprint_normal_dev(self, "interrupting at %s\n",
+		printf("%s: interrupting at %s\n", device_xname(&mly->mly_dv),
 		    intrstr);
 
 	/*
@@ -394,7 +396,7 @@ mly_attach(device_t parent, device_t self, void *aux)
 	    &mly->mly_sg_busaddr, &mly->mly_sg_seg);
 	if (rv) {
 		printf("%s: unable to allocate S/G maps\n",
-		    device_xname(self));
+		    device_xname(&mly->mly_dv));
 		goto bad;
 	}
 	state++;
@@ -406,7 +408,7 @@ mly_attach(device_t parent, device_t self, void *aux)
 	    &mly->mly_mmbox_dmamap, (void **)&mly->mly_mmbox,
 	    &mly->mly_mmbox_busaddr, &mly->mly_mmbox_seg);
 	if (rv) {
-		aprint_error_dev(self, "unable to allocate mailboxes\n");
+		aprint_error_dev(&mly->mly_dv, "unable to allocate mailboxes\n");
 		goto bad;
 	}
 	state++;
@@ -428,7 +430,7 @@ mly_attach(device_t parent, device_t self, void *aux)
 	 * platforms where the controller BIOS does not run.
 	 */
 	if (mly_fwhandshake(mly)) {
-		aprint_error_dev(self, "unable to bring controller online\n");
+		aprint_error_dev(&mly->mly_dv, "unable to bring controller online\n");
 		goto bad;
 	}
 
@@ -438,17 +440,17 @@ mly_attach(device_t parent, device_t self, void *aux)
 	 * know how many we want.
 	 */
 	if (mly_alloc_ccbs(mly)) {
-		aprint_error_dev(self, "unable to allocate CCBs\n");
+		aprint_error_dev(&mly->mly_dv, "unable to allocate CCBs\n");
 		goto bad;
 	}
 	state++;
 	if (mly_get_controllerinfo(mly)) {
-		aprint_error_dev(self, "unable to retrieve controller info\n");
+		aprint_error_dev(&mly->mly_dv, "unable to retrieve controller info\n");
 		goto bad;
 	}
 	mly_release_ccbs(mly);
 	if (mly_alloc_ccbs(mly)) {
-		aprint_error_dev(self, "unable to allocate CCBs\n");
+		aprint_error_dev(&mly->mly_dv, "unable to allocate CCBs\n");
 		state--;
 		goto bad;
 	}
@@ -458,7 +460,7 @@ mly_attach(device_t parent, device_t self, void *aux)
 	 * initial health status buffer.
 	 */
 	if (mly_get_eventstatus(mly)) {
-		aprint_error_dev(self, "unable to retrieve event status\n");
+		aprint_error_dev(&mly->mly_dv, "unable to retrieve event status\n");
 		goto bad;
 	}
 
@@ -466,7 +468,7 @@ mly_attach(device_t parent, device_t self, void *aux)
 	 * Enable memory-mailbox mode.
 	 */
 	if (mly_enable_mmbox(mly)) {
-		aprint_error_dev(self, "unable to enable memory mailbox\n");
+		aprint_error_dev(&mly->mly_dv, "unable to enable memory mailbox\n");
 		goto bad;
 	}
 
@@ -476,7 +478,7 @@ mly_attach(device_t parent, device_t self, void *aux)
 	mi = mly->mly_controllerinfo;
 
 	printf("%s: %d physical channel%s, firmware %d.%02d-%d-%02d "
-	    "(%02d%02d%02d%02d), %dMB RAM\n", device_xname(self),
+	    "(%02d%02d%02d%02d), %dMB RAM\n", device_xname(&mly->mly_dv),
 	    mi->physical_channels_present,
 	    (mi->physical_channels_present) > 1 ? "s" : "",
 	    mi->fw_major, mi->fw_minor, mi->fw_turn, mi->fw_build,
@@ -504,7 +506,7 @@ mly_attach(device_t parent, device_t self, void *aux)
 	 */
 	adapt = &mly->mly_adapt;
 	memset(adapt, 0, sizeof(*adapt));
-	adapt->adapt_dev = self;
+	adapt->adapt_dev = &mly->mly_dv;
 	adapt->adapt_nchannels = mly->mly_nchans;
 	adapt->adapt_openings = mly->mly_ncmds - MLY_CCBS_RESV;
 	adapt->adapt_max_periph = mly->mly_ncmds - MLY_CCBS_RESV;
@@ -522,7 +524,7 @@ mly_attach(device_t parent, device_t self, void *aux)
 		chan->chan_nluns = MLY_MAX_LUNS;
 		chan->chan_id = mly->mly_controllerparam->initiator_id;
 		chan->chan_flags = SCSIPI_CHAN_NOSETTLE;
-		config_found(self, chan, scsiprint);
+		config_found(&mly->mly_dv, chan, scsiprint);
 	}
 
 	/*
@@ -535,9 +537,9 @@ mly_attach(device_t parent, device_t self, void *aux)
 	 */
 	mly->mly_state |= MLY_STATE_INITOK;
 	rv = kthread_create(PRI_NONE, 0, NULL, mly_thread, mly,
-	    &mly->mly_thread, "%s", device_xname(self));
+	    &mly->mly_thread, "%s", device_xname(&mly->mly_dv));
  	if (rv != 0)
-		aprint_error_dev(self, "unable to create thread (%d)\n",
+		aprint_error_dev(&mly->mly_dv, "unable to create thread (%d)\n",
 		    rv);
 	return;
 
@@ -586,7 +588,7 @@ mly_shutdown(void *cookie)
 			continue;
 
 		if (mly_flush(mly))
-			aprint_error_dev(mly->mly_dv, "unable to flush cache\n");
+			aprint_error_dev(&mly->mly_dv, "unable to flush cache\n");
 	}
 }
 
@@ -739,7 +741,7 @@ mly_complete_rescan(struct mly_softc *mly, struct mly_ccb *mc)
 #ifdef MLYDEBUG
 			printf("%s: WARNING: BTL rescan (logical) for %d:%d "
 			    "returned data for %d:%d instead\n",
-			   device_xname(mly->mly_dv), bus, target,
+			   device_xname(&mly->mly_dv), bus, target,
 			   MLY_LOGDEV_BUS(mly, tmp),
 			   MLY_LOGDEV_TARGET(mly, tmp));
 #endif
@@ -756,7 +758,7 @@ mly_complete_rescan(struct mly_softc *mly, struct mly_ccb *mc)
 #ifdef MLYDEBUG
 			printf("%s: WARNING: BTL rescan (physical) for %d:%d "
 			    " returned data for %d:%d instead\n",
-			   device_xname(mly->mly_dv),
+			   device_xname(&mly->mly_dv),
 			   bus, target, pdi->channel, pdi->target);
 #endif
 			goto out;
@@ -773,7 +775,7 @@ mly_complete_rescan(struct mly_softc *mly, struct mly_ccb *mc)
 		if (pdi->command_tags != 0)
 			btl.mb_flags |= MLY_BTL_TQING;
 	} else {
-		printf("%s: BTL rescan result invalid\n", device_xname(mly->mly_dv));
+		printf("%s: BTL rescan result invalid\n", device_xname(&mly->mly_dv));
 		goto out;
 	}
 
@@ -1082,7 +1084,7 @@ mly_fetch_event(struct mly_softc *mly)
 	return;
 
  bad:
-	printf("%s: couldn't fetch event %u\n", device_xname(mly->mly_dv), event);
+	printf("%s: couldn't fetch event %u\n", device_xname(&mly->mly_dv), event);
 	free(mc->mc_data, M_DEVBUF);
 	mly_ccb_free(mly, mc);
 }
@@ -1103,7 +1105,7 @@ mly_complete_event(struct mly_softc *mly, struct mly_ccb *mc)
 	if (mc->mc_status == SCSI_OK)
 		mly_process_event(mly, me);
 	else
-		aprint_error_dev(mly->mly_dv, "unable to fetch event; status = 0x%x\n",
+		aprint_error_dev(&mly->mly_dv, "unable to fetch event; status = 0x%x\n",
 		    mc->mc_status);
 
 	free(me, M_DEVBUF);
@@ -1166,7 +1168,7 @@ mly_process_event(struct mly_softc *mly, struct mly_event *me)
 		/*
 		 * Error on physical drive.
 		 */
-		printf("%s: physical device %d:%d %s\n", device_xname(mly->mly_dv),
+		printf("%s: physical device %d:%d %s\n", device_xname(&mly->mly_dv),
 		    me->channel, me->target, tp);
 		if (action == 'r')
 			mly->mly_btl[me->channel][me->target].mb_flags |=
@@ -1180,7 +1182,7 @@ mly_process_event(struct mly_softc *mly, struct mly_event *me)
 	 	 */
 		bus = MLY_LOGDEV_BUS(mly, me->lun);
 		target = MLY_LOGDEV_TARGET(mly, me->lun);
-		printf("%s: logical device %d:%d %s\n", device_xname(mly->mly_dv),
+		printf("%s: logical device %d:%d %s\n", device_xname(&mly->mly_dv),
 		    bus, target, tp);
 		if (action == 'r')
 			mly->mly_btl[bus][target].mb_flags |= MLY_BTL_RESCAN;
@@ -1202,13 +1204,13 @@ mly_process_event(struct mly_softc *mly, struct mly_event *me)
 		/*
 		 * XXX Should translate this if SCSIVERBOSE.
 		 */
-		printf("%s: physical device %d:%d %s\n", device_xname(mly->mly_dv),
+		printf("%s: physical device %d:%d %s\n", device_xname(&mly->mly_dv),
 		    me->channel, me->target, tp);
 		printf("%s:  sense key %d  asc %02x  ascq %02x\n",
-		    device_xname(mly->mly_dv), SSD_SENSE_KEY(ssd->flags),
+		    device_xname(&mly->mly_dv), SSD_SENSE_KEY(ssd->flags),
 		    ssd->asc, ssd->ascq);
 		printf("%s:  info %x%x%x%x  csi %x%x%x%x\n",
-		    device_xname(mly->mly_dv), ssd->info[0], ssd->info[1],
+		    device_xname(&mly->mly_dv), ssd->info[0], ssd->info[1],
 		    ssd->info[2], ssd->info[3], ssd->csi[0],
 		    ssd->csi[1], ssd->csi[2],
 		    ssd->csi[3]);
@@ -1218,16 +1220,16 @@ mly_process_event(struct mly_softc *mly, struct mly_event *me)
 		break;
 
 	case 'e':
-		printf("%s: ", device_xname(mly->mly_dv));
+		printf("%s: ", device_xname(&mly->mly_dv));
 		printf(tp, me->target, me->lun);
 		break;
 
 	case 'c':
-		printf("%s: controller %s\n", device_xname(mly->mly_dv), tp);
+		printf("%s: controller %s\n", device_xname(&mly->mly_dv), tp);
 		break;
 
 	case '?':
-		printf("%s: %s - %d\n", device_xname(mly->mly_dv), tp, event);
+		printf("%s: %s - %d\n", device_xname(&mly->mly_dv), tp, event);
 		break;
 
 	default:
@@ -1450,7 +1452,7 @@ mly_intr(void *cookie)
 		} else {
 			/* Slot 0xffff may mean "extremely bogus command". */
 			printf("%s: got HM completion for illegal slot %u\n",
-			    device_xname(mly->mly_dv), slot);
+			    device_xname(&mly->mly_dv), slot);
 		}
 
 		/* Unconditionally acknowledge status. */
@@ -1489,7 +1491,7 @@ mly_intr(void *cookie)
 				 * command".
 				 */
 				printf("%s: got AM completion for illegal "
-				    "slot %u at %d\n", device_xname(mly->mly_dv),
+				    "slot %u at %d\n", device_xname(&mly->mly_dv),
 				    slot, mly->mly_mmbox_sts_idx);
 			}
 
@@ -1804,7 +1806,7 @@ mly_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 	struct mly_btl *btl;
 	int s, tmp;
 
-	mly = device_private(chan->chan_adapter->adapt_dev);
+	mly = (void *)chan->chan_adapter->adapt_dev;
 
 	switch (req) {
 	case ADAPTER_REQ_RUN_XFER:
@@ -1828,7 +1830,7 @@ mly_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 #ifdef DIAGNOSTIC
 		/* XXX Increase if/when we support large SCSI commands. */
 		if (xs->cmdlen > MLY_CMD_SCSI_SMALL_CDB) {
-			printf("%s: cmd too large\n", device_xname(mly->mly_dv));
+			printf("%s: cmd too large\n", device_xname(&mly->mly_dv));
 			xs->error = XS_DRIVER_STUFFUP;
 			scsipi_done(xs);
 			break;
@@ -1992,7 +1994,7 @@ mly_scsipi_complete(struct mly_softc *mly, struct mly_ccb *mc)
 
 	default:
 		printf("%s: unknown SCSI status 0x%x\n",
-		    device_xname(mly->mly_dv), xs->status);
+		    device_xname(&mly->mly_dv), xs->status);
 		xs->error = XS_DRIVER_STUFFUP;
 		break;
 	}
@@ -2060,7 +2062,7 @@ mly_scsipi_ioctl(struct scsipi_channel *chan, u_long cmd, void *data,
 	struct mly_softc *mly;
 	int rv;
 
-	mly = device_private(chan->chan_adapter->adapt_dev);
+	mly = (struct mly_softc *)chan->chan_adapter->adapt_dev;
 
 	switch (cmd) {
 	case SCBUSIOLLSCAN:
@@ -2095,7 +2097,7 @@ mly_fwhandshake(struct mly_softc *mly)
 		return (0);
 
 	printf("%s: controller initialization started\n",
-	    device_xname(mly->mly_dv));
+	    device_xname(&mly->mly_dv));
 
 	/*
 	 * Spin waiting for initialization to finish, or for a message to be
@@ -2114,36 +2116,36 @@ mly_fwhandshake(struct mly_softc *mly)
 		case MLY_MSG_SPINUP:
 			if (!spinup) {
 				printf("%s: drive spinup in progress\n",
-				    device_xname(mly->mly_dv));
+				    device_xname(&mly->mly_dv));
 				spinup = 1;
 			}
 			break;
 
 		case MLY_MSG_RACE_RECOVERY_FAIL:
 			printf("%s: mirror race recovery failed - \n",
-			    device_xname(mly->mly_dv));
+			    device_xname(&mly->mly_dv));
 			printf("%s: one or more drives offline\n",
-			    device_xname(mly->mly_dv));
+			    device_xname(&mly->mly_dv));
 			break;
 
 		case MLY_MSG_RACE_IN_PROGRESS:
 			printf("%s: mirror race recovery in progress\n",
-			    device_xname(mly->mly_dv));
+			    device_xname(&mly->mly_dv));
 			break;
 
 		case MLY_MSG_RACE_ON_CRITICAL:
 			printf("%s: mirror race recovery on critical drive\n",
-			    device_xname(mly->mly_dv));
+			    device_xname(&mly->mly_dv));
 			break;
 
 		case MLY_MSG_PARITY_ERROR:
 			printf("%s: FATAL MEMORY PARITY ERROR\n",
-			    device_xname(mly->mly_dv));
+			    device_xname(&mly->mly_dv));
 			return (ENXIO);
 
 		default:
 			printf("%s: unknown initialization code 0x%x\n",
-			    device_xname(mly->mly_dv), error);
+			    device_xname(&mly->mly_dv), error);
 			break;
 		}
 	}
@@ -2179,7 +2181,7 @@ mly_dmamem_alloc(struct mly_softc *mly, int size, bus_dmamap_t *dmamap,
 
 	if ((rv = bus_dmamem_alloc(mly->mly_dmat, size, PAGE_SIZE, 0,
 	    seg, 1, &rseg, BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(mly->mly_dv, "dmamem_alloc = %d\n", rv);
+		aprint_error_dev(&mly->mly_dv, "dmamem_alloc = %d\n", rv);
 		goto bad;
 	}
 
@@ -2187,7 +2189,7 @@ mly_dmamem_alloc(struct mly_softc *mly, int size, bus_dmamap_t *dmamap,
 
 	if ((rv = bus_dmamem_map(mly->mly_dmat, seg, 1, size, kva,
 	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
-		aprint_error_dev(mly->mly_dv, "dmamem_map = %d\n", rv);
+		aprint_error_dev(&mly->mly_dv, "dmamem_map = %d\n", rv);
 		goto bad;
 	}
 
@@ -2195,7 +2197,7 @@ mly_dmamem_alloc(struct mly_softc *mly, int size, bus_dmamap_t *dmamap,
 
 	if ((rv = bus_dmamap_create(mly->mly_dmat, size, size, 1, 0,
 	    BUS_DMA_NOWAIT, dmamap)) != 0) {
-		aprint_error_dev(mly->mly_dv, "dmamap_create = %d\n", rv);
+		aprint_error_dev(&mly->mly_dv, "dmamap_create = %d\n", rv);
 		goto bad;
 	}
 
@@ -2203,7 +2205,7 @@ mly_dmamem_alloc(struct mly_softc *mly, int size, bus_dmamap_t *dmamap,
 
 	if ((rv = bus_dmamap_load(mly->mly_dmat, *dmamap, *kva, size,
 	    NULL, BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(mly->mly_dv, "dmamap_load = %d\n", rv);
+		aprint_error_dev(&mly->mly_dv, "dmamap_load = %d\n", rv);
 		goto bad;
 	}
 

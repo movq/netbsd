@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_map.c,v 1.45 2011/05/11 18:13:12 mrg Exp $	*/
+/*	$NetBSD: rf_map.c,v 1.43 2007/03/04 06:02:38 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
  **************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_map.c,v 1.45 2011/05/11 18:13:12 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_map.c,v 1.43 2007/03/04 06:02:38 christos Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -374,7 +374,7 @@ rf_ConfigureMapModule(RF_ShutdownList_t **listp)
 }
 
 RF_AccessStripeMapHeader_t *
-rf_AllocAccessStripeMapHeader(void)
+rf_AllocAccessStripeMapHeader()
 {
 	RF_AccessStripeMapHeader_t *p;
 
@@ -392,7 +392,7 @@ rf_FreeAccessStripeMapHeader(RF_AccessStripeMapHeader_t *p)
 
 
 RF_VoidFunctionPointerListElem_t *
-rf_AllocVFPListElem(void)
+rf_AllocVFPListElem()
 {
 	RF_VoidFunctionPointerListElem_t *p;
 
@@ -411,7 +411,7 @@ rf_FreeVFPListElem(RF_VoidFunctionPointerListElem_t *p)
 
 
 RF_VoidPointerListElem_t *
-rf_AllocVPListElem(void)
+rf_AllocVPListElem()
 {
 	RF_VoidPointerListElem_t *p;
 
@@ -429,7 +429,7 @@ rf_FreeVPListElem(RF_VoidPointerListElem_t *p)
 }
 
 RF_ASMHeaderListElem_t *
-rf_AllocASMHeaderListElem(void)
+rf_AllocASMHeaderListElem()
 {
 	RF_ASMHeaderListElem_t *p;
 
@@ -447,7 +447,7 @@ rf_FreeASMHeaderListElem(RF_ASMHeaderListElem_t *p)
 }
 
 RF_FailedStripe_t *
-rf_AllocFailedStripeStruct(void)
+rf_AllocFailedStripeStruct()
 {
 	RF_FailedStripe_t *p;
 
@@ -468,7 +468,7 @@ rf_FreeFailedStripeStruct(RF_FailedStripe_t *p)
 
 
 RF_PhysDiskAddr_t *
-rf_AllocPhysDiskAddr(void)
+rf_AllocPhysDiskAddr()
 {
 	RF_PhysDiskAddr_t *p;
 
@@ -632,9 +632,9 @@ rf_CheckStripeForFailures(RF_Raid_t *raidPtr, RF_AccessStripeMap_t *asmap)
 	RF_SectorNum_t diskOffset, poffset;
 
 	/* quick out in the fault-free case.  */
-	rf_lock_mutex2(raidPtr->mutex);
+	RF_LOCK_MUTEX(raidPtr->mutex);
 	numFailures = raidPtr->numFailures;
-	rf_unlock_mutex2(raidPtr->mutex);
+	RF_UNLOCK_MUTEX(raidPtr->mutex);
 	if (numFailures == 0)
 		return (0);
 
@@ -683,9 +683,9 @@ rf_NumFailedDataUnitsInStripe(RF_Raid_t *raidPtr, RF_AccessStripeMap_t *asmap)
 	int     numFailures;
 
 	/* quick out in the fault-free case.  */
-	rf_lock_mutex2(raidPtr->mutex);
+	RF_LOCK_MUTEX(raidPtr->mutex);
 	numFailures = raidPtr->numFailures;
-	rf_unlock_mutex2(raidPtr->mutex);
+	RF_UNLOCK_MUTEX(raidPtr->mutex);
 	if (numFailures == 0)
 		return (0);
 	numFailures = 0;

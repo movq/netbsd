@@ -1,4 +1,4 @@
-/* $NetBSD: cp.c,v 1.58 2012/01/04 15:58:37 christos Exp $ */
+/* $NetBSD: cp.c,v 1.51 2008/07/20 00:52:39 lukem Exp $ */
 
 /*
  * Copyright (c) 1988, 1993, 1994
@@ -43,7 +43,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)cp.c	8.5 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: cp.c,v 1.58 2012/01/04 15:58:37 christos Exp $");
+__RCSID("$NetBSD: cp.c,v 1.51 2008/07/20 00:52:39 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -65,12 +65,10 @@ __RCSID("$NetBSD: cp.c,v 1.58 2012/01/04 15:58:37 christos Exp $");
 #include <sys/param.h>
 #include <sys/stat.h>
 
-#include <assert.h>
 #include <err.h>
 #include <errno.h>
 #include <fts.h>
 #include <locale.h>
-#include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -87,20 +85,14 @@ static char empty[] = "";
 PATH_T to = { .p_end = to.p_path, .target_end = empty  };
 
 uid_t myuid;
-int Hflag, Lflag, Rflag, Pflag, fflag, iflag, lflag, pflag, rflag, vflag, Nflag;
+int Hflag, Lflag, Rflag, Pflag, fflag, iflag, pflag, rflag, vflag, Nflag;
 mode_t myumask;
-sig_atomic_t pinfo;
 
 enum op { FILE_TO_FILE, FILE_TO_DIR, DIR_TO_DNE };
 
-static int copy(char *[], enum op, int);
-
-static void
-progress(int sig __unused)
-{
-
-	pinfo++;
-}
+int 	main(int, char *[]);
+int 	copy(char *[], enum op, int);
+int 	mastercmp(const FTSENT **, const FTSENT **);
 
 int
 main(int argc, char *argv[])
@@ -114,7 +106,7 @@ main(int argc, char *argv[])
 	(void)setlocale(LC_ALL, "");
 
 	Hflag = Lflag = Pflag = Rflag = 0;
-	while ((ch = getopt(argc, argv, "HLNPRfailprv")) != -1) 
+	while ((ch = getopt(argc, argv, "HLNPRfiprv")) != -1) 
 		switch (ch) {
 		case 'H':
 			Hflag = 1;
@@ -134,12 +126,6 @@ main(int argc, char *argv[])
 		case 'R':
 			Rflag = 1;
 			break;
-		case 'a':
-			Pflag = 1;
-			pflag = 1;
-			Rflag = 1;
-			Hflag = Lflag = 0;
-			break;
 		case 'f':
 			fflag = 1;
 			iflag = 0;
@@ -147,9 +133,6 @@ main(int argc, char *argv[])
 		case 'i':
 			iflag = isatty(fileno(stdin));
 			fflag = 0;
-			break;
-		case 'l':
-			lflag = 1;
 			break;
 		case 'p':
 			pflag = 1;
@@ -217,8 +200,6 @@ main(int argc, char *argv[])
 
 	/* Set end of argument list for fts(3). */
 	argv[argc] = NULL;     
-	
-	(void)signal(SIGINFO, progress);
 	
 	/*
 	 * Cp has two distinct cases:
@@ -300,27 +281,7 @@ main(int argc, char *argv[])
 	/* NOTREACHED */
 }
 
-static int dnestack[MAXPATHLEN]; /* unlikely we'll have more nested dirs */
-static ssize_t dnesp;
-static void
-pushdne(int dne)
-{
-
-	dnestack[dnesp++] = dne;
-	assert(dnesp < MAXPATHLEN);
-}
-
-static int
-popdne(void)
-{
-	int rv;
-
-	rv = dnestack[--dnesp];
-	assert(dnesp >= 0);
-	return rv;
-}
-
-static int
+int
 copy(char *argv[], enum op type, int fts_options)
 {
 	struct stat to_stat;
@@ -331,9 +292,10 @@ copy(char *argv[], enum op type, int fts_options)
 	size_t nlen;
 	char *p, *target_mid;
 
+	dne = 0;
 	base = 0;	/* XXX gcc -Wuninitialized (see comment below) */
 
-	if ((ftsp = fts_open(argv, fts_options, NULL)) == NULL)
+	if ((ftsp = fts_open(argv, fts_options, mastercmp)) == NULL)
 		err(EXIT_FAILURE, "%s", argv[0]);
 		/* NOTREACHED */
 	for (any_failed = 0; (curr = fts_read(ftsp)) != NULL;) {
@@ -437,7 +399,8 @@ copy(char *argv[], enum op type, int fts_options)
 				this_failed = any_failed = 1;
 				continue;
 			}
-			dne = 0;
+			if (!S_ISDIR(curr->fts_statp->st_mode))
+				dne = 0;
 		}
 
 		switch (curr->fts_statp->st_mode & S_IFMT) {
@@ -477,7 +440,6 @@ copy(char *argv[], enum op type, int fts_options)
 				 * 555) and not causing a permissions race.  If the
 				 * umask blocks owner writes, we fail..
 				 */
-				pushdne(dne);
 				if (dne) {
 					if (mkdir(to.p_path, 
 					    curr->fts_statp->st_mode | S_IRWXU) < 0)
@@ -501,9 +463,16 @@ copy(char *argv[], enum op type, int fts_options)
 				 */
 				if (pflag && setfile(curr->fts_statp, 0))
 					this_failed = any_failed = 1;
-				else if ((dne = popdne()))
+				else if (dne)
 					(void)chmod(to.p_path, 
 					    curr->fts_statp->st_mode);
+
+				/*
+				 * Since this is the second pass, we already
+				 * noted (and acted on) the existence of the
+				 * directory.
+				 */
+				dne = 0;
 			}
 			else
 			{
@@ -545,4 +514,30 @@ copy(char *argv[], enum op type, int fts_options)
 	}
 	(void)fts_close(ftsp);
 	return (any_failed);
+}
+
+/*
+ * mastercmp --
+ *	The comparison function for the copy order.  The order is to copy
+ *	non-directory files before directory files.  The reason for this
+ *	is because files tend to be in the same cylinder group as their
+ *	parent directory, whereas directories tend not to be.  Copying the
+ *	files first reduces seeking.
+ */
+int
+mastercmp(const FTSENT **a, const FTSENT **b)
+{
+	int a_info, b_info;
+
+	a_info = (*a)->fts_info;
+	if (a_info == FTS_ERR || a_info == FTS_NS || a_info == FTS_DNR)
+		return (0);
+	b_info = (*b)->fts_info;
+	if (b_info == FTS_ERR || b_info == FTS_NS || b_info == FTS_DNR)
+		return (0);
+	if (a_info == FTS_D)
+		return (-1);
+	if (b_info == FTS_D)
+		return (1);
+	return (0);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_stub.c,v 1.37 2012/02/19 21:06:54 rmind Exp $	*/
+/*	$NetBSD: kern_stub.c,v 1.11 2008/10/15 16:03:29 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
@@ -62,27 +62,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_stub.c,v 1.37 2012/02/19 21:06:54 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_stub.c,v 1.11 2008/10/15 16:03:29 wrstuden Exp $");
 
 #include "opt_ptrace.h"
 #include "opt_ktrace.h"
+#include "opt_sa.h"
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/fstypes.h>
 #include <sys/signalvar.h>
-#include <sys/syscall.h>
+#include <sys/syscallargs.h>
 #include <sys/ktrace.h>
 #include <sys/intr.h>
 #include <sys/cpu.h>
-#include <sys/module.h>
-#include <sys/bus.h>
-#include <sys/userconf.h>
-
-bool default_bus_space_is_equal(bus_space_tag_t, bus_space_tag_t);
-bool default_bus_space_handle_is_equal(bus_space_tag_t, bus_space_handle_t,
-    bus_space_handle_t);
 
 /*
  * Nonexistent system call-- signal process (may want to handle it).  Flag
@@ -105,13 +98,15 @@ __weak_alias(ktr_mibio,nullop);
 __weak_alias(ktr_namei,nullop);
 __weak_alias(ktr_namei2,nullop);
 __weak_alias(ktr_psig,nullop);
+__weak_alias(ktr_saupcall,nullop);
 __weak_alias(ktr_syscall,nullop);
 __weak_alias(ktr_sysret,nullop);
 __weak_alias(ktr_kuser,nullop);
+__weak_alias(ktr_mmsg,nullop);
 __weak_alias(ktr_mib,nullop);
+__weak_alias(ktr_mool,nullop);
 __weak_alias(ktr_execarg,nullop);
 __weak_alias(ktr_execenv,nullop);
-__weak_alias(ktr_execfd,nullop);
 
 __weak_alias(sys_fktrace,sys_nosys);	/* Syscalls */
 __weak_alias(sys_ktrace,sys_nosys);
@@ -122,35 +117,11 @@ __weak_alias(ktruser,enosys);
 __weak_alias(ktr_point,nullop);
 #endif	/* KTRACE */
 
-__weak_alias(device_register, voidop);
-__weak_alias(device_register_post_config, voidop);
-__weak_alias(spldebug_start, voidop);
-__weak_alias(spldebug_stop, voidop);
-__weak_alias(machdep_init,nullop);
-__weak_alias(pci_chipset_tag_create, eopnotsupp);
-__weak_alias(pci_chipset_tag_destroy, voidop);
-__weak_alias(bus_space_reserve, eopnotsupp);
-__weak_alias(bus_space_reserve_subregion, eopnotsupp);
-__weak_alias(bus_space_release, voidop);
-__weak_alias(bus_space_reservation_map, eopnotsupp);
-__weak_alias(bus_space_reservation_unmap, voidop);
-__weak_alias(bus_dma_tag_create, eopnotsupp);
-__weak_alias(bus_dma_tag_destroy, voidop);
-__weak_alias(bus_space_tag_create, eopnotsupp);
-__weak_alias(bus_space_tag_destroy, voidop);
-__strict_weak_alias(bus_space_is_equal, default_bus_space_is_equal);
-__strict_weak_alias(bus_space_handle_is_equal,
-    default_bus_space_handle_is_equal);
-__weak_alias(userconf_bootinfo, voidop);
-__weak_alias(userconf_init, voidop);
-__weak_alias(userconf_prompt, voidop);
-
-__weak_alias(kobj_renamespace, nullop);
-
 /*
- * Scheduler activations system calls.  These need to remain until libc's
- * major version is bumped.
+ * Scheduler activations system calls.  These need to remain, even when
+ * KERN_SA isn't defined, until libc's major version is bumped.
  */
+#if !defined(KERN_SA)
 __strong_alias(sys_sa_register,sys_nosys);
 __strong_alias(sys_sa_stacks,sys_nosys);
 __strong_alias(sys_sa_enable,sys_nosys);
@@ -158,12 +129,7 @@ __strong_alias(sys_sa_setconcurrency,sys_nosys);
 __strong_alias(sys_sa_yield,sys_nosys);
 __strong_alias(sys_sa_preempt,sys_nosys);
 __strong_alias(sys_sa_unblockyield,sys_nosys);
-
-/*
- * Stubs for compat_netbsd32.
- */
-__strong_alias(dosa_register,sys_nosys);
-__strong_alias(sa_stacks1,sys_nosys);
+#endif
 
 /*
  * Stubs for architectures that do not support kernel preemption.
@@ -194,6 +160,7 @@ cpu_kpreempt_disabled(void)
 # endif
 #endif	/* !__HAVE_PREEMPTION */
 
+/* ARGSUSED */
 int
 sys_nosys(struct lwp *l, const void *v, register_t *retval)
 {
@@ -258,34 +225,12 @@ eopnotsupp(void)
 }
 
 /*
- * Generic null operation, void return value.
- */
-void
-voidop(void)
-{
-}
-
-/*
  * Generic null operation, always returns success.
  */
+/*ARGSUSED*/
 int
 nullop(void *v)
 {
 
 	return (0);
-}
-
-bool
-default_bus_space_handle_is_equal(bus_space_tag_t t,
-    bus_space_handle_t h1, bus_space_handle_t h2)
-{
-
-	return memcmp(&h1, &h2, sizeof(h1)) == 0;
-}
-
-bool
-default_bus_space_is_equal(bus_space_tag_t t1, bus_space_tag_t t2)
-{
-
-	return memcmp(&t1, &t2, sizeof(t1)) == 0;
 }

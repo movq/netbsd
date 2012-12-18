@@ -1,4 +1,4 @@
-/*	$NetBSD: afsc.c,v 1.44 2012/10/27 17:17:26 chs Exp $ */
+/*	$NetBSD: afsc.c,v 1.42 2008/06/13 08:13:37 cegger Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -58,12 +58,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: afsc.c,v 1.44 2012/10/27 17:17:26 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: afsc.c,v 1.42 2008/06/13 08:13:37 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -81,8 +83,8 @@ __KERNEL_RCSID(0, "$NetBSD: afsc.c,v 1.44 2012/10/27 17:17:26 chs Exp $");
 #define badaddr(a)      badaddr_read(a, 2, NULL)
 #endif
 
-void afscattach(device_t, device_t, void *);
-int afscmatch(device_t, cfdata_t, void *);
+void afscattach(struct device *, struct device *, void *);
+int afscmatch(struct device *, struct cfdata *, void *);
 int afsc_dmaintr(void *);
 #ifdef DEBUG
 void afsc_dump(void);
@@ -92,26 +94,26 @@ void afsc_dump(void);
 #ifdef DEBUG
 #endif
 
-CFATTACH_DECL_NEW(afsc, sizeof(struct siop_softc),
+CFATTACH_DECL(afsc, sizeof(struct siop_softc),
     afscmatch, afscattach, NULL, NULL);
 
-CFATTACH_DECL_NEW(aftsc, sizeof(struct siop_softc),
+CFATTACH_DECL(aftsc, sizeof(struct siop_softc),
     afscmatch, afscattach, NULL, NULL);
 
 /*
  * if we are a Commodore Amiga A4091 or possibly an A4000T
  */
 int
-afscmatch(device_t parent, cfdata_t cf, void *aux)
+afscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 	siop_regmap_p rp;
 	u_long temp, scratch;
 
-	zap = aux;
+	zap = auxp;
 	if (zap->manid == 514 && zap->prodid == 84)
 		return(1);		/* It's an A4091 SCSI card */
-	if (!is_a4000() || !matchname("afsc", aux))
+	if (!is_a4000() || !matchname("afsc", auxp))
 		return(0);		/* Not on an A4000 or not A4000T SCSI */
 	rp = ztwomap(0xdd0040);
 	if (badaddr((void *)__UNVOLATILE(&rp->siop_scratch)) || 
@@ -132,9 +134,9 @@ afscmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-afscattach(device_t parent, device_t self, void *aux)
+afscattach(struct device *pdp, struct device *dp, void *auxp)
 {
-	struct siop_softc *sc = device_private(self);
+	struct siop_softc *sc = (struct siop_softc *)dp;
 	struct zbus_args *zap;
 	siop_regmap_p rp;
 	struct scsipi_adapter *adapt = &sc->sc_adapter;
@@ -142,8 +144,7 @@ afscattach(device_t parent, device_t self, void *aux)
 
 	printf("\n");
 
-	sc->sc_dev = self;
-	zap = aux;
+	zap = auxp;
 
 	if (zap->manid == 514 && zap->prodid == 84)
 		sc->sc_siopp = rp = (siop_regmap_p)((char *)zap->va +
@@ -162,7 +163,7 @@ afscattach(device_t parent, device_t self, void *aux)
 	 * Fill in the scsipi_adapter.
 	 */
 	memset(adapt, 0, sizeof(*adapt));
-	adapt->adapt_dev = self;
+	adapt->adapt_dev = &sc->sc_dev;
 	adapt->adapt_nchannels = 1;
 	adapt->adapt_openings = 7;
 	adapt->adapt_max_periph = 1;
@@ -190,7 +191,7 @@ afscattach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(self, chan, scsiprint);
+	config_found(dp, chan, scsiprint);
 }
 
 int

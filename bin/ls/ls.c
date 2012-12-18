@@ -1,4 +1,4 @@
-/*	$NetBSD: ls.c,v 1.70 2012/11/20 12:37:29 abs Exp $	*/
+/*	$NetBSD: ls.c,v 1.65 2008/09/25 23:44:05 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -42,11 +42,10 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)ls.c	8.7 (Berkeley) 8/5/94";
 #else
-__RCSID("$NetBSD: ls.c,v 1.70 2012/11/20 12:37:29 abs Exp $");
+__RCSID("$NetBSD: ls.c,v 1.65 2008/09/25 23:44:05 lukem Exp $");
 #endif
 #endif /* not lint */
 
-#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
@@ -91,7 +90,6 @@ int f_columnacross;		/* columnated format, sorted across */
 int f_flags;			/* show flags associated with a file */
 int f_grouponly;		/* long listing without owner */
 int f_humanize;			/* humanize the size field */
-int f_commas;           /* separate size field with comma */
 int f_inode;			/* print inode */
 int f_listdir;			/* list actual directory, not contents */
 int f_listdot;			/* list files beginning with . */
@@ -111,17 +109,6 @@ int f_stream;			/* stream format */
 int f_type;			/* add type character for non-regular files */
 int f_typedir;			/* add type character for directories */
 int f_whiteout;			/* show whiteout entries */
-
-__dead static void
-usage(void)
-{
-
-	(void)fprintf(stderr,
-	    "usage: %s [-1AaBbCcdFfghikLlMmnopqRrSsTtuWwx] [file ...]\n",
-	    getprogname());
-	exit(EXIT_FAILURE);
-	/* NOTREACHED */
-}
 
 int
 ls_main(int argc, char *argv[])
@@ -149,7 +136,7 @@ ls_main(int argc, char *argv[])
 		f_listdot = 1;
 
 	fts_options = FTS_PHYSICAL;
-	while ((ch = getopt(argc, argv, "1ABCFLMRSTWabcdfghiklmnopqrstuwx")) != -1) {
+	while ((ch = getopt(argc, argv, "1ABCFLRSTWabcdfghiklmnopqrstuwx")) != -1) {
 		switch (ch) {
 		/*
 		 * The -1, -C, -l, -m and -x options all override each other so
@@ -242,11 +229,6 @@ ls_main(int argc, char *argv[])
 		case 'h':
 			f_humanize = 1;
 			kflag = 0;
-			f_commas = 0;
-			break;
-		case 'M':
-			f_humanize = 0;
-			f_commas = 1;
 			break;
 		case 'n':
 			f_numericonly = 1;
@@ -331,7 +313,7 @@ ls_main(int argc, char *argv[])
 		fts_options |= FTS_WHITEOUT;
 #endif
 
-	/* If -i, -l, or -s, figure out block size. */
+	/* If -l or -s, figure out block size. */
 	if (f_inode || f_longform || f_size) {
 		if (!kflag)
 			(void)getbsize(NULL, &blocksize);
@@ -479,14 +461,10 @@ display(FTSENT *p, FTSENT *list)
 	DISPLAY d;
 	FTSENT *cur;
 	NAMES *np;
-	u_int64_t btotal, stotal;
-	off_t maxsize;
-	blkcnt_t maxblock;
+	u_int64_t btotal, stotal, maxblock, maxsize;
 	ino_t maxinode;
-	int maxmajor, maxminor;
-	uint32_t maxnlink;
-	int bcfile, entries, flen, glen, ulen, maxflags, maxgroup;
-	unsigned int maxlen;
+	int maxnlink, maxmajor, maxminor;
+	int bcfile, entries, flen, glen, ulen, maxflags, maxgroup, maxlen;
 	int maxuser, needstats;
 	const char *user, *group;
 	char buf[21];		/* 64 bits == 20 digits, +1 for NUL */
@@ -620,8 +598,6 @@ display(FTSENT *p, FTSENT *list)
 			(void)snprintf(buf, sizeof(buf), "%llu",
 			    (long long)howmany(maxblock, blocksize));
 			d.s_block = strlen(buf);
-			if (f_commas) /* allow for commas before every third digit */
-				d.s_block += (d.s_block - 1) / 3;
 		}
 		d.s_flags = maxflags;
 		d.s_group = maxgroup;
@@ -636,8 +612,6 @@ display(FTSENT *p, FTSENT *list)
 			(void)snprintf(buf, sizeof(buf), "%llu",
 			    (long long)maxsize);
 			d.s_size = strlen(buf);
-			if (f_commas) /* allow for commas before every third digit */
-				d.s_size += (d.s_size - 1) / 3;
 		}
 		d.s_user = maxuser;
 		if (bcfile) {

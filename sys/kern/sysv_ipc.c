@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_ipc.c,v 1.24 2012/03/13 18:40:53 elad Exp $	*/
+/*	$NetBSD: sysv_ipc.c,v 1.21 2008/04/28 20:24:05 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.
@@ -30,10 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_ipc.c,v 1.24 2012/03/13 18:40:53 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_ipc.c,v 1.21 2008/04/28 20:24:05 martin Exp $");
 
 #include "opt_sysv.h"
-#include "opt_compat_netbsd.h"
+
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
@@ -48,43 +48,31 @@ __KERNEL_RCSID(0, "$NetBSD: sysv_ipc.c,v 1.24 2012/03/13 18:40:53 elad Exp $");
 #include <sys/shm.h>
 #endif
 #include <sys/systm.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/vnode.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <sys/kauth.h>
 
-#ifdef COMPAT_50
-#include <compat/sys/ipc.h>
-#endif
+/*
+ * Check for ipc permission
+ */
 
-static kauth_listener_t sysvipc_listener = NULL;
-
-static int
-sysvipc_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
-    void *arg0, void *arg1, void *arg2, void *arg3)
+int
+ipcperm(kauth_cred_t cred, struct ipc_perm *perm, int mode)
 {
 	mode_t mask;
 	int ismember = 0;
-	struct ipc_perm *perm;
-	int mode;
-	enum kauth_system_req req;
 
-	req = (enum kauth_system_req)arg0;
-
-	if (!(action == KAUTH_SYSTEM_SYSVIPC &&
-	      req == KAUTH_REQ_SYSTEM_SYSVIPC_BYPASS))
-		return KAUTH_RESULT_DEFER;
-
-	perm = arg1;
-	mode = (int)(uintptr_t)arg2;
+	if (kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL) == 0)
+		return (0);
 
 	if (mode == IPC_M) {
 		if (kauth_cred_geteuid(cred) == perm->uid ||
 		    kauth_cred_geteuid(cred) == perm->cuid)
-			return (KAUTH_RESULT_ALLOW);
-		return (KAUTH_RESULT_DEFER); /* EPERM */
+			return (0);
+		return (EPERM);
 	}
 
 	mask = 0;
@@ -95,7 +83,7 @@ sysvipc_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
 			mask |= S_IRUSR;
 		if (mode & IPC_W)
 			mask |= S_IWUSR;
-		return ((perm->mode & mask) == mask ? KAUTH_RESULT_ALLOW : KAUTH_RESULT_DEFER /* EACCES */);
+		return ((perm->mode & mask) == mask ? 0 : EACCES);
 	}
 
 	if (kauth_cred_getegid(cred) == perm->gid ||
@@ -106,53 +94,65 @@ sysvipc_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
 			mask |= S_IRGRP;
 		if (mode & IPC_W)
 			mask |= S_IWGRP;
-		return ((perm->mode & mask) == mask ? KAUTH_RESULT_ALLOW : KAUTH_RESULT_DEFER /* EACCES */);
+		return ((perm->mode & mask) == mask ? 0 : EACCES);
 	}
 
 	if (mode & IPC_R)
 		mask |= S_IROTH;
 	if (mode & IPC_W)
 		mask |= S_IWOTH;
-	return ((perm->mode & mask) == mask ? KAUTH_RESULT_ALLOW : KAUTH_RESULT_DEFER /* EACCES */);
+	return ((perm->mode & mask) == mask ? 0 : EACCES);
 }
 
 /*
- * Check for ipc permission
+ * sysctl helper routine for kern.ipc.sysvipc_info subtree.
  */
 
-int
-ipcperm(kauth_cred_t cred, struct ipc_perm *perm, int mode)
-{
-	int error;
+#define FILL_PERM(src, dst) do { \
+	(dst)._key = (src)._key; \
+	(dst).uid = (src).uid; \
+	(dst).gid = (src).gid; \
+	(dst).cuid = (src).cuid; \
+	(dst).cgid = (src).cgid; \
+	(dst).mode = (src).mode; \
+	(dst)._seq = (src)._seq; \
+} while (/*CONSTCOND*/ 0);
 
-	error = kauth_authorize_system(cred, KAUTH_SYSTEM_SYSVIPC,
-	    KAUTH_REQ_SYSTEM_SYSVIPC_BYPASS, perm, KAUTH_ARG(mode), NULL);
-	if (error == 0)
-		return (0);
+#define FILL_MSG(src, dst) do { \
+	FILL_PERM((src).msg_perm, (dst).msg_perm); \
+	(dst).msg_qnum = (src).msg_qnum; \
+	(dst).msg_qbytes = (src).msg_qbytes; \
+	(dst)._msg_cbytes = (src)._msg_cbytes; \
+	(dst).msg_lspid = (src).msg_lspid; \
+	(dst).msg_lrpid = (src).msg_lrpid; \
+	(dst).msg_stime = (src).msg_stime; \
+	(dst).msg_rtime = (src).msg_rtime; \
+	(dst).msg_ctime = (src).msg_ctime; \
+} while (/*CONSTCOND*/ 0)
 
-	/* Adjust EPERM and EACCES errors until there's a better way to do this. */
-	if (mode != IPC_M)
-		error = EACCES;
+#define FILL_SEM(src, dst) do { \
+	FILL_PERM((src).sem_perm, (dst).sem_perm); \
+	(dst).sem_nsems = (src).sem_nsems; \
+	(dst).sem_otime = (src).sem_otime; \
+	(dst).sem_ctime = (src).sem_ctime; \
+} while (/*CONSTCOND*/ 0)
 
-	return error;
-}
-
-void
-sysvipcinit(void)
-{
-
-	if (sysvipc_listener != NULL)
-		return;
-
-	sysvipc_listener = kauth_listen_scope(KAUTH_SCOPE_SYSTEM,
-	    sysvipc_listener_cb, NULL);
-}
+#define FILL_SHM(src, dst) do { \
+	FILL_PERM((src).shm_perm, (dst).shm_perm); \
+	(dst).shm_segsz = (src).shm_segsz; \
+	(dst).shm_lpid = (src).shm_lpid; \
+	(dst).shm_cpid = (src).shm_cpid; \
+	(dst).shm_atime = (src).shm_atime; \
+	(dst).shm_dtime = (src).shm_dtime; \
+	(dst).shm_ctime = (src).shm_ctime; \
+	(dst).shm_nattch = (src).shm_nattch; \
+} while (/*CONSTCOND*/ 0)
 
 static int
 sysctl_kern_sysvipc(SYSCTLFN_ARGS)
 {
 	void *where = oldp;
-	size_t sz, *sizep = oldlenp;
+	size_t *sizep = oldlenp;
 #ifdef SYSVMSG
 	struct msg_sysctl_info *msgsi = NULL;
 #endif
@@ -168,16 +168,6 @@ sysctl_kern_sysvipc(SYSCTLFN_ARGS)
 	int32_t nds;
 	int i, error, ret;
 
-#ifdef COMPAT_50
-	switch ((error = sysctl_kern_sysvipc50(SYSCTLFN_CALL(rnode)))) {
-	case 0:
-		return 0;
-	case EPASSTHROUGH:
-		break;
-	default:
-		return error;
-	}
-#endif
 	if (namelen != 1)
 		return EINVAL;
 
@@ -234,8 +224,7 @@ sysctl_kern_sysvipc(SYSCTLFN_ARGS)
 		*sizep = 0;
 		return ENOMEM;
 	}
-	sz = min(tsize, buflen);
-	bf = kmem_zalloc(sz, KM_SLEEP);
+	bf = malloc(min(tsize, buflen), M_TEMP, M_WAITOK | M_ZERO);
 
 	switch (*name) {
 #ifdef SYSVMSG
@@ -271,18 +260,18 @@ sysctl_kern_sysvipc(SYSCTLFN_ARGS)
 #ifdef SYSVMSG
 			case KERN_SYSVIPC_MSG_INFO:
 				mutex_enter(&msgmutex);
-				SYSCTL_FILL_MSG(msqs[i].msq_u, msgsi->msgids[i]);
+				FILL_MSG(msqs[i].msq_u, msgsi->msgids[i]);
 				mutex_exit(&msgmutex);
 				break;
 #endif
 #ifdef SYSVSEM
 			case KERN_SYSVIPC_SEM_INFO:
-				SYSCTL_FILL_SEM(sema[i], semsi->semids[i]);
+				FILL_SEM(sema[i], semsi->semids[i]);
 				break;
 #endif
 #ifdef SYSVSHM
 			case KERN_SYSVIPC_SHM_INFO:
-				SYSCTL_FILL_SHM(shmsegs[i], shmsi->shmids[i]);
+				FILL_SHM(shmsegs[i], shmsi->shmids[i]);
 				break;
 #endif
 			}
@@ -295,9 +284,14 @@ sysctl_kern_sysvipc(SYSCTLFN_ARGS)
 	if (error == 0)
 		error = ret;
 	if (bf)
-		kmem_free(bf, sz);
+		free(bf, M_TEMP);
 	return error;
 }
+
+#undef FILL_PERM
+#undef FILL_MSG
+#undef FILL_SEM
+#undef FILL_SHM
 
 SYSCTL_SETUP(sysctl_ipc_setup, "sysctl kern.ipc subtree setup")
 {

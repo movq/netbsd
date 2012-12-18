@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.50 2012/08/10 12:10:27 joerg Exp $
+#	$NetBSD: Makefile,v 1.42 2008/08/29 00:02:24 gmcgarry Exp $
 #
 # Copyright (c) 1990 The Regents of the University of California.
 # All rights reserved.
@@ -34,20 +34,17 @@
 #	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
 #
 
-WARNS?=	4	# XXX -Wshadow etc.  fix asap
-CWARNFLAGS.clang+=	-Wno-tautological-compare -Wno-format-security
-
 .include <bsd.own.mk>
 
 USE_FORT?= yes	# network client
 
 PROG=	telnet
 
-CPPFLAGS+=-DKLUDGELINEMODE -DUSE_TERMIO -DENV_HACK
+CPPFLAGS+=-DTERMCAP -DKLUDGELINEMODE -DUSE_TERMIO -DENV_HACK
 CPPFLAGS+=-I${.CURDIR}
 
-LDADD+= -lterminfo ${LIBTELNETDIR}/libtelnet.a
-DPADD+=	${LIBTERMINFO} ${LIBTELNETDIR}/libtelnet.a
+LDADD+= -ltermcap ${LIBTELNETDIR}/libtelnet.a
+DPADD+=	${LIBTERMCAP} ${LIBTELNETDIR}/libtelnet.a
 
 SRCS=	authenc.c commands.c main.c network.c ring.c sys_bsd.c telnet.c \
 	terminal.c tn3270.c utilities.c
@@ -64,24 +61,24 @@ CPPFLAGS+=-DINET6
 LIBTELNETDIR!=	cd ${.CURDIR}/../../lib/libtelnet; ${PRINTOBJDIR}
 
 .if (${USE_KERBEROS} != "no")
-CPPFLAGS+=-DKRB5 -DFORWARD
-LDADD+= -lkrb5 -lasn1 -lcom_err -lroken
-DPADD+=	${LIBKRB5} ${LIBASN1} ${LIBCOM_ERR} ${LIBROKEN}
-.endif
-
-.if (${MKCRYPTO} != "no")
-CPPFLAGS+=-DAUTHENTICATION -DENCRYPTION
-LDADD+= -ldes -lcrypto -lcrypt
-DPADD+=	${LIBDES} ${LIBCRYPTO} ${LIBCRYPT}
-.endif
+CPPFLAGS+=-I${DESTDIR}/usr/include/krb5
+CPPFLAGS+=-DKRB5 -DFORWARD -DAUTHENTICATION -DENCRYPTION
+LDADD+= -lkrb5 -lasn1 -lcrypto -lcrypt
+DPADD+=	${LIBKRB5} ${LIBASN1} ${LIBCRYPTO} ${LIBCRYPT}
 
 .if (${USE_PAM} != "no")
 LDADD+= -lpam ${PAM_STATIC_LDADD}
 DPADD+=	${LIBPAM} ${PAM_STATIC_DPADD}
 .endif
 
+LDADD+= -ldes -lcom_err -lroken
+DPADD+=	${LIBDES} ${LIBCOM_ERR} ${LIBROKEN}
+.endif
+
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 .for f in commands telnet terminal utilities
 COPTS.${f}.c+=  -Wno-pointer-sign
 .endfor
+.endif
 
 .include <bsd.prog.mk>

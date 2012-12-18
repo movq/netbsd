@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2012/12/12 15:08:44 matt Exp $
+#	$NetBSD: Makefile,v 1.1 2008/10/30 06:23:13 cliff Exp $
 
 S=	${.CURDIR}/../../../../..
 
@@ -12,11 +12,8 @@ CPPFLAGS+= -DCONADDR=0x42000000UL
 CPPFLAGS+= -DNS16550_AX4
 CPPFLAGS+= -DNS16550_FREQ=48000000
 
-CPUFLAGS= -march=armv4
-
 LDSCRIPT= ${.CURDIR}/ldscript
 
-# SRCS+=	gemini.c ns16550.c gemini_mem.c
-SRCS+=	gemini.c nullcom.c gemini_mem.c
+SRCS+=	gemini.c ns16550.c gemini_mem.c
 
 .include "${S}/arch/evbarm/stand/gzboot/Makefile.gzboot"

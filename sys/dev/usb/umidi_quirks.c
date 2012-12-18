@@ -1,4 +1,4 @@
-/*	$NetBSD: umidi_quirks.c,v 1.18 2012/05/18 07:52:54 jdc Exp $	*/
+/*	$NetBSD: umidi_quirks.c,v 1.16 2008/07/08 11:34:43 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umidi_quirks.c,v 1.18 2012/05/18 07:52:54 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umidi_quirks.c,v 1.16 2008/07/08 11:34:43 gmcgarry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,7 +49,6 @@ __KERNEL_RCSID(0, "$NetBSD: umidi_quirks.c,v 1.18 2012/05/18 07:52:54 jdc Exp $"
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdi_util.h>
 
-#include <dev/auconv.h>
 #include <dev/usb/usbdevs.h>
 #include <dev/usb/uaudioreg.h>
 #include <dev/usb/umidireg.h>
@@ -516,22 +515,6 @@ UMQ_DEF(ROLAND, ROLAND_SONICCELL, 2) = {
 };
 
 /*
- * ROLAND UM-ONE
- */
-UMQ_FIXED_EP_DATA_DEF(ROLAND, ROLAND_UMONE, ANYIFACE, 1, 1) = {
-	/* out */
-	{ 0, 1 },
-	/* in */
-	{ 1, 1 }
-};
-UMQ_FIXED_EP_DEF(ROLAND, ROLAND_UMONE, ANYIFACE, 1, 1);
-
-UMQ_DEF(ROLAND, ROLAND_UMONE, ANYIFACE) = {
-	UMQ_FIXED_EP_REG(ROLAND, ROLAND_UMONE, ANYIFACE),
-	UMQ_TERMINATOR
-};
-
-/*
  * Midiman Midisport 2x4. This has 2 physical MIDI IN jacks that are read
  * on endpoint 0x81 (descriptor index 0). It has 4 physical MIDI OUT jacks
  * that can be written on endpoints 2 or 4 (at descriptor index 2 or 4,
@@ -604,7 +587,6 @@ static struct umidi_quirk umidi_quirklist[] = {
 	UMQ_REG(ROLAND, ROLAND_UA25, 2),
 	UMQ_REG(ROLAND, ROLAND_UA4FX, 2),
 	UMQ_REG(ROLAND, ROLAND_SONICCELL, 2),
-	UMQ_REG(ROLAND, ROLAND_UMONE, ANYIFACE),
 	UMQ_REG(MIDIMAN, MIDIMAN_MIDISPORT2X4, ANYIFACE),
 	{ .vendor = 0 },
 };

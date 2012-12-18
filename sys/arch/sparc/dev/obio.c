@@ -1,4 +1,4 @@
-/*	$NetBSD: obio.c,v 1.73 2012/10/27 17:18:11 chs Exp $	*/
+/*	$NetBSD: obio.c,v 1.71 2008/05/17 18:11:32 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1997,1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.73 2012/10/27 17:18:11 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.71 2008/05/17 18:11:32 macallan Exp $");
 
 #include "locators.h"
 
@@ -46,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.73 2012/10/27 17:18:11 chs Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <sparc/dev/sbusvar.h>
 #include <machine/autoconf.h>
 #include <machine/oldmon.h>
@@ -63,14 +63,15 @@ struct obio4_softc {
 };
 
 union obio_softc {
+	struct	device sc_dev;		/* base device */
 	struct	obio4_softc sc_obio;	/* sun4 obio */
 	struct	sbus_softc sc_sbus;	/* sun4m obio is another sbus slot */
 };
 
 
 /* autoconfiguration driver */
-static	int obiomatch(device_t, cfdata_t, void *);
-static	void obioattach(device_t, device_t, void *);
+static	int obiomatch(device_t, struct cfdata *, void *);
+static	void obioattach(device_t, struct device *, void *);
 
 CFATTACH_DECL_NEW(obio, sizeof(union obio_softc),
     obiomatch, obioattach, NULL, NULL);
@@ -128,8 +129,8 @@ obioattach(device_t parent, device_t self, void *aux)
 
 	if (CPU_ISSUN4) {
 #if defined(SUN4)
-		union obio_softc *usc = device_private(self);
-		struct obio4_softc *sc = &usc->sc_obio;
+		struct obio4_softc *sc = 
+		    &((union obio_softc *)device_private(self))->sc_obio;
 		struct obio4_busattachargs oa;
 		const char *const *cpp;
 		static const char *const special4[] = {
@@ -167,8 +168,8 @@ obioattach(device_t parent, device_t self, void *aux)
 		 * Attach the on-board I/O bus at on a sun4m.
 		 * In this case we treat the obio bus as another sbus slot.
 		 */
-		union obio_softc *usc = device_private(self);
-		struct sbus_softc *sc = &usc->sc_sbus;
+		struct sbus_softc *sc =
+		    &((union obio_softc *)device_private(self))->sc_sbus;
 
 		static const char *const special4m[] = {
 			/* find these first */

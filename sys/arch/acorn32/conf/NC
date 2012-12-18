@@ -1,4 +1,4 @@
-#	$NetBSD: NC,v 1.57 2012/12/06 06:25:24 msaitoh Exp $
+#	$NetBSD: NC,v 1.47 2008/05/30 20:10:01 tsutsui Exp $
 #
 #	NC - with wscons
 #
@@ -23,6 +23,10 @@ options 	CPU_ARM7	# Support the ARM7 core
 #options 	CPU_ARM8	# Support the ARM8 core
 #options 	ARM6_LATE_ABORT	# ARM6XX late abort support
 
+# FPA options
+
+#options 	ARMFPE		# ARM Ltd FPE
+
 # File systems
 
 #file-system	FFS		# UFS
@@ -37,6 +41,7 @@ file-system	NFS		# Network file system
 #file-system	FILECORE	# Acorn filecore file system
 file-system	KERNFS		# /kern
 #file-system	NULLFS		# loopback file system
+#file-system	PORTAL		# portal filesystem (still experimental)
 file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
@@ -44,8 +49,7 @@ file-system	PROCFS		# /proc
 file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# legacy UFS quotas
-#options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	QUOTA		# UFS quotas
 #options 	NFSSERVER
 
 # Networking options
@@ -90,6 +94,7 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	SHMMAXPGS=1024	# 1024 pages is the default
 
 # Device options
 
@@ -100,6 +105,7 @@ options 	MEMORY_DISK_HOOKS	# boottime setup of ramdisk
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 options 	IRQSTATS	# manage IRQ statistics
+#options 	LKM		# loadable kernel modules
 options 	KMEMSTATS	# kernel memory statistics
 options 	USERCONF	# userconf(4) support
 #options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -150,8 +156,6 @@ vidc0		at mainbus?
 #options 	WSEMUL_NODUMB
 #options 	WSEMUL_SUN
 options 	WSEMUL_VT100
-
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 #options 	FONT_BOLD8x16
 #options 	FONT_GALLANT12x22	# Very nice font
@@ -260,18 +264,19 @@ podulebus0	at root
 #eb0	at podulebus?			# EtherB network slot cards
 ne*	at podulebus?			# NE2000 clone cards
 
-pseudo-device	loop			# network loopback
+pseudo-device	loop	1		# network loopback
 #pseudo-device	bpfilter		# packet filter
 #pseudo-device	sl			# CSLIP
 #pseudo-device	ppp			# PPP
 #pseudo-device	tun			# network tunneling over tty
-#pseudo-device	ipfilter		# ip filter
+#pseudo-device	ipfilter 1		# ip filter
 #pseudo-device	strip			# STRIP
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	vnd			# disk-like interface to files
 #pseudo-device	ccd	2		# concatenated disk devices
-#pseudo-device	fss			# file system snapshot device
-pseudo-device	md			# Ramdisk driver
+#pseudo-device	fss	4		# file system snapshot device
+pseudo-device	md	1		# Ramdisk driver
+pseudo-device	rnd			# /dev/random and /dev/urandom
 pseudo-device	clockctl		# user control of clock subsystem
 
 # a pseudo device needed for SMBFS

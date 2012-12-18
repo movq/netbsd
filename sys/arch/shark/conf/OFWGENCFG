@@ -1,4 +1,4 @@
-#	$NetBSD: OFWGENCFG,v 1.39 2012/12/06 06:25:25 msaitoh Exp $
+#	$NetBSD: OFWGENCFG,v 1.31 2008/05/30 20:10:03 tsutsui Exp $
 #
 #	OFWGENCFG: 'generic' configuration for Open Firmware boards.
 #
@@ -29,6 +29,10 @@ makeoptions	COPTS="-O2 -march=armv4 -mtune=strongarm"
 
 options 	OFWGENCFG	# Enable Open Firmware bits specific to GENERIC configuration
 
+# FPA options
+
+#options 	ARMFPE		# ARM Ltd FPE
+
 # File systems
 
 file-system	FFS		# UFS
@@ -43,14 +47,14 @@ file-system	NFS
 #file-system	FILECORE	# Acorn filecore file system
 file-system	KERNFS		# /kern
 #file-system	NULLFS		# loopback file system
+#file-system	PORTAL		# portal filesystem (still experimental)
 #file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
 #file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# legacy UFS quotas
-#options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	QUOTA		# UFS quotas
 #options 	NFSSERVER
 options 	NFS_BOOT_DHCP	# NFS booting via DHCP
 options 	NFS_BOOT_RWSIZE=1024	# OFW driver can't cope with more
@@ -87,6 +91,7 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	SHMMAXPGS=1024	# 1024 pages is the default
 
 # Device options
 
@@ -96,6 +101,7 @@ options 	SYSVSHM		# System V-like memory sharing
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 options 	IRQSTATS	# manage IRQ statistics
+#options 	LKM		# loadable kernel modules
 options 	KMEMSTATS	# kernel memory statistics
 options 	USERCONF	# userconf(4) support
 #options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -140,8 +146,9 @@ pseudo-device	bpfilter		# packet filter
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	vnd			# disk-like interface to files
 #pseudo-device	ccd	2		# concatenated disk devices
-#pseudo-device	fss			# file system snapshot device
+#pseudo-device	fss	4		# file system snapshot device
+pseudo-device	rnd			# /dev/random and /dev/urandom
 
-#pseudo-device	md			# Ramdisk driver
+#pseudo-device	md	1		# Ramdisk driver
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	openfirm		# /dev/openfirm

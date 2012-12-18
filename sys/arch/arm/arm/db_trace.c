@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.26 2012/11/12 18:00:34 skrll Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.17 2008/07/02 19:49:58 rmind Exp $	*/
 
 /* 
  * Copyright (c) 2000, 2001 Ben Harris
@@ -31,19 +31,17 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.26 2012/11/12 18:00:34 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.17 2008/07/02 19:49:58 rmind Exp $");
 
 #include <sys/proc.h>
+#include <sys/user.h>
 #include <arm/armreg.h>
 #include <arm/cpufunc.h>
-#include <arm/pcb.h>
 #include <machine/db_machdep.h>
-#include <machine/vmparam.h>
 
 #include <ddb/db_access.h>
 #include <ddb/db_interface.h>
 #include <ddb/db_sym.h>
-#include <ddb/db_proc.h>
 #include <ddb/db_output.h>
 
 #define INKERNEL(va)	(((vaddr_t)(va)) >= VM_MIN_KERNEL_ADDRESS)
@@ -82,11 +80,14 @@ __KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.26 2012/11/12 18:00:34 skrll Exp $");
 #define FR_RFP	(-3)
 
 void
-db_stack_trace_print(db_expr_t addr, bool have_addr,
-		db_expr_t count, const char *modif,
-		void (*pr)(const char *, ...))
+db_stack_trace_print(addr, have_addr, count, modif, pr)
+	db_expr_t       addr;
+	bool             have_addr;
+	db_expr_t       count;
+	const char      *modif;
+	void		(*pr) __P((const char *, ...));
 {
-	uint32_t	*frame, *lastframe;
+	u_int32_t	*frame, *lastframe;
 	const char	*cp = modif;
 	char c;
 	bool		kernel_only = true;
@@ -106,65 +107,50 @@ db_stack_trace_print(db_expr_t addr, bool have_addr,
 	}
 
 	if (!have_addr)
-		frame = (uint32_t *)(DDB_REGS->tf_r11);
+		frame = (u_int32_t *)(DDB_REGS->tf_r11);
 	else {
 		if (trace_thread) {
-			struct pcb *pcb;
-			proc_t p;
-			lwp_t l;
-
+			struct proc *p;
+			struct user *u;
+			struct lwp *l;
 			if (lwpaddr) {
-				db_read_bytes(addr, sizeof(l),
-				    (char *)&l);
-				db_read_bytes((db_addr_t)l.l_proc,
-				    sizeof(p), (char *)&p);
-				(*pr)("trace: pid %d ", p.p_pid);
+				l = (struct lwp *)addr;
+				p = l->l_proc;
+				(*pr)("trace: pid %d ", p->p_pid);
 			} else {
-				proc_t	*pp;
-
 				(*pr)("trace: pid %d ", (int)addr);
-				if ((pp = db_proc_find((pid_t)addr)) == 0) {
+				p = p_find(addr, PFIND_LOCKED);
+				if (p == NULL) {
 					(*pr)("not found\n");
 					return;
 				}
-				db_read_bytes((db_addr_t)pp, sizeof(p), (char *)&p);
-				addr = (db_addr_t)p.p_lwps.lh_first;
-				db_read_bytes(addr, sizeof(l), (char *)&l);
+				l = LIST_FIRST(&p->p_lwps);
+				KASSERT(l != NULL);
 			}
-			(*pr)("lid %d ", l.l_lid);
-			pcb = lwp_getpcb(&l);
-#ifndef _KERNEL
-			struct pcb pcbb;
-			db_read_bytes((db_addr_t)pcb, sizeof(*pcb),
-			    (char *)&pcbb);
-			pcb = &pcbb;
-#endif
+			(*pr)("lid %d ", l->l_lid);
+			if (!(l->l_flag & LW_INMEM)) {
+				(*pr)("swapped out\n");
+				return;
+			}
+			u = l->l_addr;
 #ifdef acorn26
-			frame = (uint32_t *)(pcb->pcb_sf->sf_r11);
+			frame = (u_int32_t *)(u->u_pcb.pcb_sf->sf_r11);
 #else
-			frame = (uint32_t *)(pcb->pcb_un.un_32.pcb32_r11);
+			frame = (u_int32_t *)(u->u_pcb.pcb_un.un_32.pcb32_r11);
 #endif
 			(*pr)("at %p\n", frame);
 		} else
-			frame = (uint32_t *)(addr);
+			frame = (u_int32_t *)(addr);
 	}
 	lastframe = NULL;
 	scp_offset = -(get_pc_str_offset() >> 2);
 
 	while (count-- && frame != NULL) {
 		db_addr_t	scp;
-		uint32_t	savecode;
+		u_int32_t	savecode;
 		int		r;
-		uint32_t	*rp;
+		u_int32_t	*rp;
 		const char	*sep;
-
-		lastframe = frame;
-#ifndef _KERNEL
-		uint32_t frameb[4];
-		db_read_bytes((db_addr_t)(frame - 3), sizeof(frameb),
-		    (char *)frameb);
-		frame = frameb + 3;
-#endif
 
 		/*
 		 * In theory, the SCP isn't guaranteed to be in the function
@@ -189,16 +175,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr,
 #endif
 		(*pr)("\trsp=0x%08x rfp=0x%08x", frame[FR_RSP], frame[FR_RFP]);
 
-#ifndef _KERNEL
-		db_read_bytes((db_addr_t)((uint32_t *)scp + scp_offset),
-		    sizeof(savecode), (void *)&savecode);
-#else
-		if ((scp & 3) == 0) {
-			savecode = ((uint32_t *)scp)[scp_offset];
-		} else {
-			savecode = 0;
-		}
-#endif
+		savecode = ((u_int32_t *)scp)[scp_offset];
 		if ((savecode & 0x0e100000) == 0x08000000) {
 			/* Looks like an STM */
 			rp = frame - 4;
@@ -221,7 +198,8 @@ db_stack_trace_print(db_expr_t addr, bool have_addr,
 		if (frame[FR_RFP] == 0)
 			break; /* Top of stack */
 
-		frame = (uint32_t *)(frame[FR_RFP]);
+		lastframe = frame;
+		frame = (u_int32_t *)(frame[FR_RFP]);
 
 		if (INKERNEL((int)frame)) {
 			/* staying in kernel */

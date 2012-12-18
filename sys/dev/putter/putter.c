@@ -1,4 +1,4 @@
-/*	$NetBSD: putter.c,v 1.33 2012/07/26 10:13:33 yamt Exp $	*/
+/*	$NetBSD: putter.c,v 1.16.4.1 2009/04/04 23:36:27 snj Exp $	*/
 
 /*
  * Copyright (c) 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: putter.c,v 1.33 2012/07/26 10:13:33 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: putter.c,v 1.16.4.1 2009/04/04 23:36:27 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,28 +44,10 @@ __KERNEL_RCSID(0, "$NetBSD: putter.c,v 1.33 2012/07/26 10:13:33 yamt Exp $");
 #include <sys/filedesc.h>
 #include <sys/kmem.h>
 #include <sys/poll.h>
-#include <sys/stat.h>
 #include <sys/socketvar.h>
 #include <sys/module.h>
-#include <sys/kauth.h>
 
 #include <dev/putter/putter_sys.h>
-
-/*
- * Device routines.  These are for when /dev/putter is initially
- * opened before it has been cloned.
- */
-
-dev_type_open(puttercdopen);
-dev_type_close(puttercdclose);
-dev_type_ioctl(puttercdioctl);
-
-/* dev */
-const struct cdevsw putter_cdevsw = {
-	puttercdopen,	puttercdclose,	noread,		nowrite,
-	noioctl,	nostop,		notty,		nopoll,
-	nommap,		nokqfilter,	D_OTHER
-};
 
 /*
  * Configuration data.
@@ -129,9 +111,6 @@ struct putter_instance {
 	uint8_t			*pi_curput;
 	size_t			pi_curres;
 	void			*pi_curopaq;
-	struct timespec		pi_atime;
-	struct timespec		pi_mtime;
-	struct timespec		pi_btime;
 
 	TAILQ_ENTRY(putter_instance) pi_entries;
 };
@@ -168,7 +147,7 @@ static kmutex_t pi_mtx;
 void putterattach(void);
 
 void
-putterattach(void)
+putterattach()
 {
 
 	mutex_init(&pi_mtx, MUTEX_DEFAULT, IPL_NONE);
@@ -176,7 +155,7 @@ putterattach(void)
 
 #if 0
 void
-putter_destroy(void)
+putter_destroy()
 {
 
 	mutex_destroy(&pi_mtx);
@@ -192,7 +171,6 @@ static int putter_fop_write(file_t *, off_t *, struct uio *,
 			    kauth_cred_t, int);
 static int putter_fop_ioctl(file_t*, u_long, void *);
 static int putter_fop_poll(file_t *, int);
-static int putter_fop_stat(file_t *, struct stat *);
 static int putter_fop_close(file_t *);
 static int putter_fop_kqfilter(file_t *, struct knote *);
 
@@ -203,10 +181,10 @@ static const struct fileops putter_fileops = {
 	.fo_ioctl = putter_fop_ioctl,
 	.fo_fcntl = fnullop_fcntl,
 	.fo_poll = putter_fop_poll,
-	.fo_stat = putter_fop_stat,
+	.fo_stat = fbadop_stat,
 	.fo_close = putter_fop_close,
 	.fo_kqfilter = putter_fop_kqfilter,
-	.fo_restart = fnullop_restart,
+	.fo_drain = fnullop_drain,
 };
 
 static int
@@ -218,7 +196,6 @@ putter_fop_read(file_t *fp, off_t *off, struct uio *uio,
 	int error;
 
 	KERNEL_LOCK(1, NULL);
-	getnanotime(&pi->pi_atime);
 
 	if (pi->pi_private == PUTTER_EMBRYO || pi->pi_private == PUTTER_DEAD) {
 		printf("putter_fop_read: private %d not inited\n", pi->pi_idx);
@@ -267,7 +244,6 @@ putter_fop_write(file_t *fp, off_t *off, struct uio *uio,
 	int error;
 
 	KERNEL_LOCK(1, NULL);
-	getnanotime(&pi->pi_mtime);
 
 	DPRINTF(("putter_fop_write (%p): writing response, resid %zu\n",
 	    pi->pi_private, uio->uio_resid));
@@ -357,7 +333,7 @@ putter_fop_close(file_t *fp)
  restart:
 	mutex_enter(&pi_mtx);
 	/*
-	 * First check if the driver was never born.  In that case
+	 * First check if the fs was never mounted.  In that case
 	 * remove the instance from the list.  If mount is attempted later,
 	 * it will simply fail.
 	 */
@@ -386,17 +362,11 @@ putter_fop_close(file_t *fp)
 	}
 
 	/*
-	 * So we have a reference.  Proceed to unravel the
-	 * underlying driver.
+	 * So we have a reference.  Proceed to unwrap the file system.
 	 */
 	mutex_exit(&pi_mtx);
 
 	/* hmm?  suspicious locking? */
-	if (pi->pi_curput != NULL) {
-		pi->pi_pop->pop_releaseout(pi->pi_private, pi->pi_curopaq,
-		    ENXIO);
-		pi->pi_curput = NULL;
-	}
 	while ((rv = pi->pi_pop->pop_close(pi->pi_private)) == ERESTART)
 		goto restart;
 
@@ -413,30 +383,12 @@ putter_fop_close(file_t *fp)
 }
 
 static int
-putter_fop_stat(file_t *fp, struct stat *st)
-{
-	struct putter_instance *pi = fp->f_data;
-
-	(void)memset(st, 0, sizeof(*st));
-	KERNEL_LOCK(1, NULL);
-	st->st_dev = makedev(cdevsw_lookup_major(&putter_cdevsw), pi->pi_idx);
-	st->st_atimespec = pi->pi_atime;
-	st->st_mtimespec = pi->pi_mtime;
-	st->st_ctimespec = st->st_birthtimespec = pi->pi_btime;
-	st->st_uid = kauth_cred_geteuid(fp->f_cred);
-	st->st_gid = kauth_cred_getegid(fp->f_cred);
-	st->st_mode = S_IFCHR;
-	KERNEL_UNLOCK_ONE(NULL);
-	return 0;
-}
-
-static int
 putter_fop_ioctl(file_t *fp, u_long cmd, void *data)
 {
 
 	/*
 	 * work already done in sys_ioctl().  skip sanity checks to enable
-	 * setting non-blocking fd on an embryotic driver.
+	 * setting non-blocking fd without yet having mounted the fs
 	 */
 	if (cmd == FIONBIO)
 		return 0;
@@ -515,6 +467,21 @@ putter_fop_kqfilter(file_t *fp, struct knote *kn)
 	return 0;
 }
 
+/*
+ * Device routines.  These are for when /dev/puffs is initially
+ * opened before it has been cloned.
+ */
+
+dev_type_open(puttercdopen);
+dev_type_close(puttercdclose);
+dev_type_ioctl(puttercdioctl);
+
+/* dev */
+const struct cdevsw putter_cdevsw = {
+	puttercdopen,	puttercdclose,	noread,		nowrite,
+	noioctl,	nostop,		notty,		nopoll,
+	nommap,		nokqfilter,	D_OTHER
+};
 int
 puttercdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 {
@@ -533,8 +500,6 @@ puttercdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	pi->pi_curput = NULL;
 	pi->pi_curres = 0;
 	pi->pi_curopaq = NULL;
-	getnanotime(&pi->pi_btime);
-	pi->pi_atime = pi->pi_mtime = pi->pi_btime;
 	selinit(&pi->pi_sel);
 	mutex_exit(&pi_mtx);
 
@@ -612,7 +577,6 @@ putter_detach(struct putter_instance *pi)
 	TAILQ_REMOVE(&putter_ilist, pi, pi_entries);
 	pi->pi_private = PUTTER_DEAD;
 	mutex_exit(&pi_mtx);
-	seldestroy(&pi->pi_sel);
 
 	DPRINTF(("putter_nukebypmp: nuked %p\n", pi));
 }
@@ -650,21 +614,20 @@ get_pi_idx(struct putter_instance *pi_i)
 	return i;
 }
 
-MODULE(MODULE_CLASS_DRIVER, putter, NULL);
+MODULE(MODULE_CLASS_MISC, putter, NULL);
 
 static int
 putter_modcmd(modcmd_t cmd, void *arg)
 {
 #ifdef _MODULE
-	devmajor_t bmajor = NODEVMAJOR, cmajor = NODEVMAJOR;
+	int bmajor = -1, cmajor = -1;
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:
-		putterattach();
 		return devsw_attach("putter", NULL, &bmajor,
 		    &putter_cdevsw, &cmajor);
 	case MODULE_CMD_FINI:
-		return ENOTTY; /* XXX: putterdetach */
+		return devsw_detach(NULL, &putter_cdevsw);
 	default:
 		return ENOTTY;
 	}

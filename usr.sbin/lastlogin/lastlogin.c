@@ -1,4 +1,4 @@
-/*	$NetBSD: lastlogin.c,v 1.15 2011/08/31 13:31:29 joerg Exp $	*/
+/*	$NetBSD: lastlogin.c,v 1.13 2005/04/09 02:13:20 atatat Exp $	*/
 /*
  * Copyright (c) 1996 John M. Vinopal
  * All rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: lastlogin.c,v 1.15 2011/08/31 13:31:29 joerg Exp $");
+__RCSID("$NetBSD: lastlogin.c,v 1.13 2005/04/09 02:13:20 atatat Exp $");
 #endif
 
 #include <sys/types.h>
@@ -66,6 +66,15 @@ struct output {
 	struct output	*next;
 };
 
+static	char *logfile =
+#if defined(SUPPORT_UTMPX)
+    _PATH_LASTLOGX;
+#elif defined(SUPPORT_UTMP)
+    _PATH_LASTLOG;
+#else
+	#error "either SUPPORT_UTMP or SUPPORT_UTMPX must be defined"
+#endif
+
 #define SORT_NONE	0x0000
 #define SORT_REVERSE	0x0001
 #define SORT_TIME	0x0002
@@ -78,6 +87,7 @@ static size_t namelen = UT_NAMESIZE;
 static size_t linelen = UT_LINESIZE;
 static size_t hostlen = UT_HOSTSIZE;
 
+	int	main(int, char **);
 static	int	comparelog(const void *, const void *);
 static	void	output(struct output *);
 #ifdef SUPPORT_UTMP
@@ -91,19 +101,13 @@ static	void	dolastlogx(const char *, int, char *[]);
 static	void	push(struct output *);
 static	const char 	*gethost(struct output *);
 static	void	sortoutput(struct output *);
-__dead static	void	usage(void);
+static	void	usage(void);
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
-	const char *logfile =
-#if defined(SUPPORT_UTMPX)
-	    _PATH_LASTLOGX;
-#elif defined(SUPPORT_UTMP)
-	    _PATH_LASTLOG;
-#else
-	#error "either SUPPORT_UTMP or SUPPORT_UTMPX must be defined"
-#endif
 	int	ch;
 	size_t	len;
 
@@ -406,8 +410,8 @@ sortoutput(struct output *o)
 static int
 comparelog(const void *left, const void *right)
 {
-	const struct output *l = *(const struct output * const *)left;
-	const struct output *r = *(const struct output * const *)right;
+	struct output *l = *(struct output **)left;
+	struct output *r = *(struct output **)right;
 	int order = (sortlog&SORT_REVERSE)?-1:1;
 
 	if (l->o_tv.tv_sec < r->o_tv.tv_sec)

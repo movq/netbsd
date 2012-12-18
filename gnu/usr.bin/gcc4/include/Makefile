@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.5 2011/04/15 13:42:23 joerg Exp $
+#	$NetBSD: Makefile,v 1.3 2008/02/26 10:55:50 drochner Exp $
 
 .include "../Makefile.inc"
 
-.if ${MACHINE_CPU} == "powerpc"
+.if ${MACHINE_ARCH} == "powerpc"
 INCS=	altivec.h
 .elif ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
 INCS=	emmintrin.h mmintrin.h pmmintrin.h xmmintrin.h mm_malloc.h
@@ -14,7 +14,7 @@ mm_malloc.h: ${DIST}/gcc/config/i386/gmm_malloc.h
 CLEANFILES+=	mm_malloc.h
 .endif
 
-INCSDIR=	/usr/include/gcc-4.1
+INCSDIR=	/usr/include
 
 .include <bsd.prog.mk>
 

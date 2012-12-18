@@ -1,4 +1,4 @@
-/*	$NetBSD: footbridge_irqhandler.c,v 1.23 2010/12/20 00:25:27 matt Exp $	*/
+/*	$NetBSD: footbridge_irqhandler.c,v 1.21 2008/04/27 18:58:44 matt Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -40,13 +40,14 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0,"$NetBSD: footbridge_irqhandler.c,v 1.23 2010/12/20 00:25:27 matt Exp $");
+__KERNEL_RCSID(0,"$NetBSD: footbridge_irqhandler.c,v 1.21 2008/04/27 18:58:44 matt Exp $");
 
 #include "opt_irqstats.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/intr.h>
 #include <machine/cpu.h>
@@ -145,6 +146,7 @@ footbridge_intr_calculate_masks(void)
 	 * limited input buffer space/"real-time" requirements) a better
 	 * chance at not dropping data.
 	 */
+	KASSERT(footbridge_imask[IPL_VM] != 0);
 	footbridge_imask[IPL_SCHED] |= footbridge_imask[IPL_VM];
 	footbridge_imask[IPL_HIGH] |= footbridge_imask[IPL_SCHED];
 
@@ -311,7 +313,7 @@ footbridge_intr_dispatch(struct clockframe *frame)
 
 		iq = &footbridge_intrq[irq];
 		iq->iq_ev.ev_count++;
-		ci->ci_data.cpu_nintr++;
+		uvmexp.intrs++;
 		TAILQ_FOREACH(ih, &iq->iq_list, ih_list) {
 			ci->ci_cpl = ih->ih_ipl;
 			oldirqstate = enable_interrupts(I32_bit);

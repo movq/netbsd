@@ -1,4 +1,4 @@
-/*	$NetBSD: m41st84.c,v 1.18 2011/05/28 13:59:31 phx Exp $	*/
+/*	$NetBSD: m41st84.c,v 1.13 2008/06/08 03:49:26 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,9 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: m41st84.c,v 1.18 2011/05/28 13:59:31 phx Exp $");
-
-#include "opt_strtc.h"
+__KERNEL_RCSID(0, "$NetBSD: m41st84.c,v 1.13 2008/06/08 03:49:26 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +51,6 @@ __KERNEL_RCSID(0, "$NetBSD: m41st84.c,v 1.18 2011/05/28 13:59:31 phx Exp $");
 
 #include <dev/i2c/i2cvar.h>
 #include <dev/i2c/m41st84reg.h>
-#include <dev/i2c/m41st84var.h>
 
 struct strtc_softc {
 	device_t sc_dev;
@@ -68,8 +65,6 @@ static int	strtc_match(device_t, cfdata_t, void *);
 
 CFATTACH_DECL_NEW(strtc, sizeof(struct strtc_softc),
     strtc_match, strtc_attach, NULL, NULL);
-
-#ifndef STRTC_NO_USERRAM
 extern struct cfdriver strtc_cd;
 
 dev_type_open(strtc_open);
@@ -81,28 +76,21 @@ const struct cdevsw strtc_cdevsw = {
 	strtc_open, strtc_close, strtc_read, strtc_write, noioctl,
 	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER
 };
-#endif
 
 static int strtc_clock_read(struct strtc_softc *, struct clock_ymdhms *);
 static int strtc_clock_write(struct strtc_softc *, struct clock_ymdhms *);
-static int strtc_gettime(struct todr_chip_handle *, struct timeval *);
-static int strtc_settime(struct todr_chip_handle *, struct timeval *);
+static int strtc_gettime(struct todr_chip_handle *, volatile struct timeval *);
+static int strtc_settime(struct todr_chip_handle *, volatile struct timeval *);
 
 static int
 strtc_match(device_t parent, cfdata_t cf, void *arg)
 {
 	struct i2c_attach_args *ia = arg;
 
-	if (ia->ia_name) {
-		/* direct config - check name */
-		if (strcmp(ia->ia_name, "strtc") == 0)
-			return 1;
-	} else {
-		/* indirect config - check typical address */
-		if (ia->ia_addr == M41ST84_ADDR)
-			return 1;
-	}
-	return 0;
+	if (ia->ia_addr == M41ST84_ADDR)
+		return (1);
+
+	return (0);
 }
 
 static void
@@ -111,13 +99,9 @@ strtc_attach(device_t parent, device_t self, void *arg)
 	struct strtc_softc *sc = device_private(self);
 	struct i2c_attach_args *ia = arg;
 
-#ifndef STRTC_NO_USERRAM
 	aprint_naive(": Real-time Clock/NVRAM\n");
 	aprint_normal(": M41ST84 Real-time Clock/NVRAM\n");
-#else
-	aprint_naive(": Real-time Clock\n");
-	aprint_normal(": M41T8x Real-time Clock\n");
-#endif
+
 	sc->sc_tag = ia->ia_tag;
 	sc->sc_address = ia->ia_addr;
 	sc->sc_dev = self;
@@ -130,7 +114,6 @@ strtc_attach(device_t parent, device_t self, void *arg)
 	todr_attach(&sc->sc_todr);
 }
 
-#ifndef STRTC_NO_USERRAM
 /*ARGSUSED*/
 int
 strtc_open(dev_t dev, int flag, int fmt, struct lwp *l)
@@ -237,10 +220,9 @@ strtc_write(dev_t dev, struct uio *uio, int flags)
 
 	return (error);
 }
-#endif	/* STRTC_NO_USERRAM */
 
 static int
-strtc_gettime(struct todr_chip_handle *ch, struct timeval *tv)
+strtc_gettime(struct todr_chip_handle *ch, volatile struct timeval *tv)
 {
 	struct strtc_softc *sc = ch->cookie;
 	struct clock_ymdhms dt, check;
@@ -266,7 +248,7 @@ strtc_gettime(struct todr_chip_handle *ch, struct timeval *tv)
 }
 
 static int
-strtc_settime(struct todr_chip_handle *ch, struct timeval *tv)
+strtc_settime(struct todr_chip_handle *ch, volatile struct timeval *tv)
 {
 	struct strtc_softc *sc = ch->cookie;
 	struct clock_ymdhms dt;
@@ -432,30 +414,3 @@ strtc_clock_write(struct strtc_softc *sc, struct clock_ymdhms *dt)
 
 	return (1);
 }
-
-#ifndef STRTC_NO_WATCHDOG
-void
-strtc_wdog_config(void *arg, uint8_t wd)
-{
-	struct strtc_softc *sc = arg;
-	uint8_t	cmdbuf[2];
-
-	if (iic_acquire_bus(sc->sc_tag, I2C_F_POLL)) {
-		aprint_error_dev(sc->sc_dev,
-		    "strtc_wdog_config: failed to acquire I2C bus\n");
-		return;
-	}
-
-	cmdbuf[0] = M41ST84_REG_WATCHDOG;
-	cmdbuf[1] = wd;
-
-	if (iic_exec(sc->sc_tag, I2C_OP_WRITE_WITH_STOP, sc->sc_address,
-		     cmdbuf, 1, &cmdbuf[1], 1, I2C_F_POLL)) {
-		aprint_error_dev(sc->sc_dev,
-		    "strtc_wdog_config: failed to write watchdog\n");
-		return;
-	}
-
-	iic_release_bus(sc->sc_tag, I2C_F_POLL);
-}
-#endif	/* STRTC_NO_WATCHDOG */

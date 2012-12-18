@@ -1,4 +1,4 @@
-/*	$NetBSD: arcsisabr.c,v 1.5 2011/07/01 19:25:41 dyoung Exp $	*/
+/*	$NetBSD: arcsisabr.c,v 1.4 2008/07/05 08:46:25 tsutsui Exp $	*/
 /*	$OpenBSD: isabus.c,v 1.15 1998/03/16 09:38:46 pefo Exp $	*/
 /*	NetBSD: isa.c,v 1.33 1995/06/28 04:30:51 cgd Exp 	*/
 
@@ -75,14 +75,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arcsisabr.c,v 1.5 2011/07/01 19:25:41 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arcsisabr.c,v 1.4 2008/07/05 08:46:25 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/platform.h>
 
 #include <dev/isa/isavar.h>

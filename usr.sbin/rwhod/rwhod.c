@@ -1,4 +1,4 @@
-/*	$NetBSD: rwhod.c,v 1.40 2012/11/04 22:32:01 christos Exp $	*/
+/*	$NetBSD: rwhod.c,v 1.37 2008/07/21 13:36:59 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)rwhod.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: rwhod.c,v 1.40 2012/11/04 22:32:01 christos Exp $");
+__RCSID("$NetBSD: rwhod.c,v 1.37 2008/07/21 13:36:59 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,7 +58,6 @@ __RCSID("$NetBSD: rwhod.c,v 1.40 2012/11/04 22:32:01 christos Exp $");
 #include <arpa/inet.h>
 
 #include <ctype.h>
-#include <pwd.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -107,7 +106,7 @@ static void	 getboottime(void);
 static void	 send_host_information(int);
 static void	 sighup(int);
 static void	 handleread(int);
-__dead static void	 quit(const char *);
+static void	 quit(const char *);
 static void	 rt_xaddrs(void *, void *, struct rt_addrinfo *);
 static int	 drop_privs(char *);
 static void	 usage(void) __dead;
@@ -279,7 +278,7 @@ handleread(int s)
 			ntohs(from.sin_port));
 		return;
 	}
-	if (cc < (int)WHDRSIZE) {
+	if (cc < WHDRSIZE) {
 		syslog(LOG_WARNING, "Short packet from %s",
 			inet_ntoa(from.sin_addr));
 		return;

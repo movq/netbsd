@@ -1,4 +1,4 @@
-/*	$NetBSD: ps.c,v 1.78 2012/05/07 13:14:31 joerg Exp $	*/
+/*	$NetBSD: ps.c,v 1.71.4.1 2009/04/01 00:25:20 snj Exp $	*/
 
 /*
  * Copyright (c) 2000-2008 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@ __COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)ps.c	8.4 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: ps.c,v 1.78 2012/05/07 13:14:31 joerg Exp $");
+__RCSID("$NetBSD: ps.c,v 1.71.4.1 2009/04/01 00:25:20 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -128,7 +128,7 @@ static struct kinfo_proc2
 static char	*kludge_oldps_options(char *);
 static int	 pscomp(const void *, const void *);
 static void	 scanvars(void);
-__dead static void	 usage(void);
+static void	 usage(void);
 static int	 parsenum(const char *, const char *);
 int		 main(int, char *[]);
 
@@ -146,60 +146,13 @@ struct varent *Opos = NULL; /* -O flag inserts after this point */
 
 kvm_t *kd;
 
-static long long
-ttyname2dev(const char *ttname, int *xflg, int *what)
-{
-	struct stat sb;
-	const char *ttypath;
-	char pathbuf[MAXPATHLEN];
-
-	ttypath = NULL;
-	if (strcmp(ttname, "?") == 0) {
-		*xflg = 1;
-		return KERN_PROC_TTY_NODEV;
-	}
-	if (strcmp(ttname, "-") == 0)
-		return KERN_PROC_TTY_REVOKE;
-
-	if (strcmp(ttname, "co") == 0)
-		ttypath = _PATH_CONSOLE;
-	else if (strncmp(ttname, "pts/", 4) == 0 ||
-		strncmp(ttname, "tty", 3) == 0) {
-		(void)snprintf(pathbuf,
-		    sizeof(pathbuf), "%s%s", _PATH_DEV, ttname);
-		ttypath = pathbuf;
-	} else if (*ttname != '/') {
-		(void)snprintf(pathbuf,
-		    sizeof(pathbuf), "%s%s", _PATH_TTY, ttname);
-		ttypath = pathbuf;
-	} else
-		ttypath = ttname;
-	*what = KERN_PROC_TTY;
-	if (stat(ttypath, &sb) == -1) {
-		devmajor_t pts = getdevmajor("pts", S_IFCHR);
-
-		if (pts != NODEVMAJOR && strncmp(ttname, "pts/", 4) == 0) {
-			int ptsminor = atoi(ttname + 4);
-
-			snprintf(pathbuf, sizeof(pathbuf), "pts/%d", ptsminor);
-			if (strcmp(pathbuf, ttname) == 0 && ptsminor >= 0)
-				return makedev(pts, ptsminor);
-		}
-		err(1, "%s", ttypath);
-	}
-	if (!S_ISCHR(sb.st_mode))
-		errx(1, "%s: not a terminal", ttypath);
-	return sb.st_rdev;
-}
-
 int
 main(int argc, char *argv[])
 {
 	struct varent *vent;
 	struct winsize ws;
 	struct kinfo_lwp *kl, *l;
-	int ch, i, j, fmt, lineno, nentries, nlwps;
-	long long flag;
+	int ch, flag, i, j, fmt, lineno, nentries, nlwps;
 	int prtheader, wflag, what, xflg, mode, showlwps;
 	char *nlistf, *memf, *swapf, errbuf[_POSIX2_LINE_MAX];
 	char *ttname;
@@ -214,6 +167,8 @@ main(int argc, char *argv[])
 		termwidth = 79;
 	else
 		termwidth = ws.ws_col - 1;
+
+	setncpu();
 
 	if (argc > 1)
 		argv[1] = kludge_oldps_options(argv[1]);
@@ -318,11 +273,44 @@ main(int argc, char *argv[])
 		case 'T':
 			if ((ttname = ttyname(STDIN_FILENO)) == NULL)
 				errx(1, "stdin: not a terminal");
-			flag = ttyname2dev(ttname, &xflg, &what);
-			break;
+			goto tty;
 		case 't':
-			flag = ttyname2dev(optarg, &xflg, &what);
+			ttname = optarg;
+		tty: {
+			struct stat sb;
+			const char *ttypath;
+			char pathbuf[MAXPATHLEN];
+
+			flag = 0;
+			ttypath = NULL;
+			if (strcmp(ttname, "?") == 0) {
+				flag = KERN_PROC_TTY_NODEV;
+				xflg = 1;
+			} else if (strcmp(ttname, "-") == 0)
+				flag = KERN_PROC_TTY_REVOKE;
+			else if (strcmp(ttname, "co") == 0)
+				ttypath = _PATH_CONSOLE;
+			else if (strncmp(ttname, "pts/", 4) == 0 ||
+				strncmp(ttname, "tty", 3) == 0) {
+				(void)snprintf(pathbuf,
+				    sizeof(pathbuf), "%s%s", _PATH_DEV, ttname);
+				ttypath = pathbuf;
+			} else if (*ttname != '/') {
+				(void)snprintf(pathbuf,
+				    sizeof(pathbuf), "%s%s", _PATH_TTY, ttname);
+				ttypath = pathbuf;
+			} else
+				ttypath = ttname;
+			what = KERN_PROC_TTY;
+			if (flag == 0) {
+				if (stat(ttypath, &sb) == -1)
+					err(1, "%s", ttypath);
+				if (!S_ISCHR(sb.st_mode))
+					errx(1, "%s: not a terminal", ttypath);
+				flag = sb.st_rdev;
+			}
 			break;
+		}
 		case 'U':
 			if (*optarg != '\0') {
 				struct passwd *pw;
@@ -426,7 +414,7 @@ main(int argc, char *argv[])
 		for (i = 0; i < nentries; i++) {
 			struct kinfo_proc2 *ki = &kinfo[i];
 
-			if (xflg == 0 && (ki->p_tdev == (uint32_t)NODEV ||
+			if (xflg == 0 && (ki->p_tdev == NODEV ||
 			    (ki->p_flag & P_CONTROLT) == 0))
 				continue;
 
@@ -462,7 +450,7 @@ main(int argc, char *argv[])
 	for (i = lineno = 0; i < nentries; i++) {
 		struct kinfo_proc2 *ki = &kinfo[i];
 
-		if (xflg == 0 && (ki->p_tdev == (uint32_t)NODEV ||
+		if (xflg == 0 && (ki->p_tdev == NODEV ||
 		    (ki->p_flag & P_CONTROLT ) == 0))
 			continue;
 		kl = kvm_getlwps(kd, ki->p_pid, (u_long)ki->p_paddr,
@@ -642,7 +630,7 @@ pscomp(const void *a, const void *b)
 				if (sa->__bits[i] < sb->__bits[i])
 					return -1;
 				i++;
-			} while (i < (int)__arraycount(sa->__bits));
+			} while (i < sizeof sa->__bits / sizeof sa->__bits[0]);
 			continue;
 		case INT64:
 			RDIFF(int64_t);
@@ -774,7 +762,7 @@ usage(void)
 	(void)fprintf(stderr,
 	    "usage:\t%s\n\t   %s\n\t%s\n",
 	    "ps [-AaCcehjlmrSsTuvwx] [-k key] [-M core] [-N system] [-O fmt]",
-	    "[-o fmt] [-p pid] [-t tty] [-U user] [-W swap]",
+	    "[-o fmt] [-p pid] [-t tty] [-U username] [-W swap]",
 	    "ps -L");
 	exit(1);
 	/* NOTREACHED */

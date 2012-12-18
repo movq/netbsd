@@ -1,4 +1,4 @@
-/*	$NetBSD: ieeefp.h,v 1.7 2012/03/19 22:24:07 matt Exp $	*/
+/*	$NetBSD: ieeefp.h,v 1.5 2008/08/05 16:47:42 matt Exp $	*/
 
 /*
  * Written by J.T. Conklin, Apr 11, 1995
@@ -12,13 +12,13 @@
 
 #if defined(_NETBSD_SOURCE) || defined(_ISOC99_SOURCE)
 
-typedef unsigned int fenv_t;
-typedef unsigned int fexcept_t;
+typedef int fenv_t;
+typedef int fexcept_t;
 
 #define	FE_INEXACT	0x01	/* imprecise (loss of precision) */
-#define	FE_UNDERFLOW	0x02	/* underflow exception */
+#define	FE_UNDERFLOW	0x02	/* divide-by-zero exception */
 #define	FE_OVERFLOW	0x04	/* overflow exception */
-#define	FE_DIVBYZERO	0x08	/* divide-by-zero exception */
+#define	FE_DIVBYZERO	0x08	/* underflow exception */
 #define	FE_INVALID	0x10	/* invalid operation exception */
 
 #define	FE_ALL_EXCEPT	0x1f
@@ -30,7 +30,7 @@ typedef unsigned int fexcept_t;
 
 #if !defined(_ISOC99_SOURCE)
 
-typedef unsigned int fp_except;
+typedef int fp_except;
 #define FP_X_IMP	FE_INEXACT	/* imprecise (loss of precision) */
 #define FP_X_UFL	FE_UNDERFLOW	/* underflow exception */
 #define FP_X_OFL	FE_OVERFLOW	/* overflow exception */

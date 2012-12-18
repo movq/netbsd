@@ -1,4 +1,4 @@
-/*	$NetBSD: pic_heathrow.c,v 1.9 2012/05/02 00:55:26 macallan Exp $ */
+/*	$NetBSD: pic_heathrow.c,v 1.4 2008/04/29 06:53:02 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -27,13 +27,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_heathrow.c,v 1.9 2012/05/02 00:55:26 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_heathrow.c,v 1.4 2008/04/29 06:53:02 martin Exp $");
 
 #include "opt_interrupt.h"
 
 #include <sys/param.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/kernel.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/pio.h>
 
@@ -60,7 +62,7 @@ struct heathrow_ops {
 };
 
 static struct heathrow_ops *setup_heathrow(uint32_t);
-static inline void heathrow_read_events(struct heathrow_ops *);
+inline void heathrow_read_events(struct heathrow_ops *);
 
 #define INT_STATE_REG_H		((uint32_t)pic->pic_cookie + 0x10)
 #define INT_ENABLE_REG_H	((uint32_t)pic->pic_cookie + 0x14)
@@ -70,6 +72,7 @@ static inline void heathrow_read_events(struct heathrow_ops *);
 #define INT_ENABLE_REG_L	((uint32_t)pic->pic_cookie + 0x24)
 #define INT_CLEAR_REG_L		((uint32_t)pic->pic_cookie + 0x28)
 #define INT_LEVEL_REG_L		((uint32_t)pic->pic_cookie + 0x2c)
+#define INT_LEVEL_MASK_HEATHROW	0x1ff00000
 
 static const char *compat[] = {
 	"heathrow",
@@ -107,7 +110,7 @@ setup_heathrow(uint32_t addr)
 	struct heathrow_ops *heathrow;
 	struct pic_ops *pic;
 
-	heathrow = kmem_alloc(sizeof(struct heathrow_ops), KM_SLEEP);
+	heathrow = malloc(sizeof(struct heathrow_ops), M_DEVBUF, M_NOWAIT);
 	KASSERT(heathrow != NULL);
 	pic = &heathrow->pic;
 
@@ -192,7 +195,7 @@ heathrow_disable_irq(struct pic_ops *pic, int irq)
 	}
 }
 
-static inline void
+inline void
 heathrow_read_events(struct heathrow_ops *heathrow)
 {
 	struct pic_ops *pic = &heathrow->pic;
@@ -200,10 +203,10 @@ heathrow_read_events(struct heathrow_ops *heathrow)
 
 	/* first the low 32 IRQs */
 	irqs = in32rb(INT_STATE_REG_L);
-	events = irqs & ~heathrow->level_mask_l;
+	events = irqs & ~heathrow->level_mask_l/*INT_LEVEL_MASK_HEATHROW*/;
 
 	levels = in32rb(INT_LEVEL_REG_L) & heathrow->enable_mask_l;
-	events |= levels & heathrow->level_mask_l;
+	events |= levels & heathrow->level_mask_l/*INT_LEVEL_MASK_HEATHROW*/;
 	out32rb(INT_CLEAR_REG_L, events | irqs);
 	heathrow->pending_events_l |= events;
 
@@ -231,14 +234,14 @@ heathrow_get_irq(struct pic_ops *pic, int mode)
 		return 255;
 
 	if (heathrow->pending_events_l != 0) {
-		bit = 31 - __builtin_clz(heathrow->pending_events_l);
+		bit = 31 - cntlzw(heathrow->pending_events_l);
 		mask = 1 << bit;
 		heathrow->pending_events_l &= ~mask;
 		return bit;
 	}
 
 	if (heathrow->pending_events_h != 0) {
-		bit = 31 - __builtin_clz(heathrow->pending_events_h);
+		bit = 31 - cntlzw(heathrow->pending_events_h);
 		mask = 1 << bit;
 		heathrow->pending_events_h &= ~mask;
 		return bit + 32;

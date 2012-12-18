@@ -1,4 +1,4 @@
-/*	$NetBSD: vme_two_isr.c,v 1.16 2012/10/27 17:18:27 chs Exp $	*/
+/*	$NetBSD: vme_two_isr.c,v 1.11 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme_two_isr.c,v 1.16 2012/10/27 17:18:27 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme_two_isr.c,v 1.11 2008/04/28 20:23:54 martin Exp $");
 
 #include "vmetwo.h"
 
@@ -136,7 +136,8 @@ vmetwo_probe(bus_space_tag_t bt, bus_addr_t offset)
 		struct vmetwo_softc *sc;
 
 		/* XXX Should check sc != NULL here... */
-		sc = malloc(sizeof(*sc), M_DEVBUF, M_NOWAIT);
+		MALLOC(sc, struct vmetwo_softc *, sizeof(*sc), M_DEVBUF,
+		    M_NOWAIT);
 
 		sc->sc_mvmebus.sc_bust = bt;
 		sc->sc_lcrh = bh;
@@ -217,7 +218,8 @@ vmetwo_intr_init(struct vmetwo_softc *sc)
 }
 
 static int
-vmetwo_local_isr_trampoline(void *arg)
+vmetwo_local_isr_trampoline(arg)
+	void *arg;
 {
 	struct vme_two_handler *isr;
 	int vec;
@@ -238,7 +240,11 @@ vmetwo_local_isr_trampoline(void *arg)
 }
 
 void
-vmetwo_local_intr_establish(int pri, int vec, int (*hand)(void *), void *arg, struct evcnt *evcnt)
+vmetwo_local_intr_establish(pri, vec, hand, arg, evcnt)
+	int pri, vec;
+	int (*hand)(void *);
+	void *arg;
+	struct evcnt *evcnt;
 {
 
 	vmetwo_intr_establish(vmetwo_sc, pri, pri, vec, 1, hand, arg, evcnt);
@@ -246,7 +252,12 @@ vmetwo_local_intr_establish(int pri, int vec, int (*hand)(void *), void *arg, st
 
 /* ARGSUSED */
 void
-vmetwo_intr_establish(void *csc, int prior, int lvl, int vec, int first, int (*hand)(void *), void *arg, struct evcnt *evcnt)
+vmetwo_intr_establish(csc, prior, lvl, vec, first, hand, arg, evcnt)
+	void *csc;
+	int prior, lvl, vec, first;
+	int (*hand)(void *);
+	void *arg;
+	struct evcnt *evcnt;
 {
 	struct vmetwo_softc *sc = csc;
 	u_int32_t reg;
@@ -300,7 +311,7 @@ vmetwo_intr_establish(void *csc, int prior, int lvl, int vec, int first, int (*h
 		if (evcnt)
 			evcnt_attach_dynamic(evcnt, EVCNT_TYPE_INTR,
 			    (*sc->sc_isrevcnt)(sc->sc_isrcookie, prior),
-			    device_xname(sc->sc_mvmebus.sc_dev),
+			    device_xname(&sc->sc_mvmebus.sc_dev),
 			    mvmebus_irq_name[lvl]);
 #endif
 		iloffset = VME2_ILOFFSET_FROM_VECTOR(bitoff) +
@@ -342,7 +353,10 @@ vmetwo_intr_establish(void *csc, int prior, int lvl, int vec, int first, int (*h
 }
 
 void
-vmetwo_intr_disestablish(void *csc, int lvl, int vec, int last, struct evcnt *evcnt)
+vmetwo_intr_disestablish(csc, lvl, vec, last, evcnt)
+	void *csc;
+	int lvl, vec, last;
+	struct evcnt *evcnt;
 {
 	struct vmetwo_softc *sc = csc;
 	u_int32_t reg;

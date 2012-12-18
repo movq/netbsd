@@ -1,4 +1,4 @@
-/*	$NetBSD: script.c,v 1.21 2011/09/06 18:29:56 joerg Exp $	*/
+/*	$NetBSD: script.c,v 1.16 2008/07/21 14:19:25 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1992, 1993\
 #if 0
 static char sccsid[] = "@(#)script.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: script.c,v 1.21 2011/09/06 18:29:56 joerg Exp $");
+__RCSID("$NetBSD: script.c,v 1.16 2008/07/21 14:19:25 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -73,25 +73,25 @@ struct stamp {
 	uint32_t scr_direction;	/* 'i', 'o', etc (also indicates endianness) */
 };
 
-static FILE	*fscript;
-static int	master, slave;
-static int	child, subchild;
-static int	outcc;
-static int	usesleep, rawout;
-static int	quiet, flush;
-static const char *fname;
+FILE	*fscript;
+int	master, slave;
+int	child, subchild;
+int	outcc;
+int	usesleep, rawout;
+char	*fname;
 
-static struct	termios tt;
+struct	termios tt;
 
-__dead static void	done(void);
-__dead static void	dooutput(void);
-__dead static void	doshell(const char *);
-__dead static void	fail(void);
-static void	finish(int);
-static void	scriptflush(int);
-static void	record(FILE *, char *, size_t, int);
-static void	consume(FILE *, off_t, char *, int);
-__dead static void	playback(FILE *);
+void	done(void);
+void	dooutput(void);
+void	doshell(void);
+void	fail(void);
+void	finish(int);
+int	main(int, char **);
+void	scriptflush(int);
+void	record(FILE *, char *, size_t, int);
+void	consume(FILE *, off_t, char *, int);
+void	playback(FILE *);
 
 int
 main(int argc, char *argv[])
@@ -101,42 +101,28 @@ main(int argc, char *argv[])
 	struct winsize win;
 	int aflg, pflg, ch;
 	char ibuf[BUFSIZ];
-	const char *command;
 
 	aflg = 0;
 	pflg = 0;
 	usesleep = 1;
 	rawout = 0;
-	quiet = 0;
-	flush = 0;
-	command = NULL;
-	while ((ch = getopt(argc, argv, "ac:dfpqr")) != -1)
+	while ((ch = getopt(argc, argv, "adpr")) != -1)
 		switch(ch) {
 		case 'a':
 			aflg = 1;
 			break;
-		case 'c':
-			command = optarg;
-			break;
 		case 'd':
 			usesleep = 0;
 			break;
-		case 'f':
-			flush = 1;
-			break;
 		case 'p':
 			pflg = 1;
-			break;
-		case 'q':
-			quiet = 1;
 			break;
 		case 'r':
 			rawout = 1;
 			break;
 		case '?':
 		default:
-			(void)fprintf(stderr,
-			    "Usage: %s [-c <command>][-adfpqr] [file]\n",
+			(void)fprintf(stderr, "usage: %s [-adpr] [file]\n",
 			    getprogname());
 			exit(1);
 		}
@@ -159,8 +145,7 @@ main(int argc, char *argv[])
 	if (openpty(&master, &slave, NULL, &tt, &win) == -1)
 		err(1, "openpty");
 
-	if (!quiet)
-		(void)printf("Script started, output file is %s\n", fname);
+	(void)printf("Script started, output file is %s\n", fname);
 	rtt = tt;
 	cfmakeraw(&rtt);
 	rtt.c_lflag &= ~ECHO;
@@ -181,7 +166,7 @@ main(int argc, char *argv[])
 		if (child)
 			dooutput();
 		else
-			doshell(command);
+			doshell();
 	}
 
 	if (!rawout)
@@ -196,7 +181,7 @@ main(int argc, char *argv[])
 	return (0);
 }
 
-static void
+void
 finish(int signo)
 {
 	int die, pid, status;
@@ -210,8 +195,8 @@ finish(int signo)
 		done();
 }
 
-static void
-dooutput(void)
+void
+dooutput()
 {
 	struct itimerval value;
 	int cc;
@@ -222,7 +207,7 @@ dooutput(void)
 	tvec = time(NULL);
 	if (rawout)
 		record(fscript, NULL, 0, 's');
-	else if (!quiet)
+	else
 		(void)fprintf(fscript, "Script started on %s", ctime(&tvec));
 
 	(void)signal(SIGALRM, scriptflush);
@@ -240,13 +225,11 @@ dooutput(void)
 		else
 			(void)fwrite(obuf, 1, cc, fscript);
 		outcc += cc;
-		if (flush)
-			(void)fflush(fscript);
 	}
 	done();
 }
 
-static void
+void
 scriptflush(int signo)
 {
 	if (outcc) {
@@ -255,38 +238,33 @@ scriptflush(int signo)
 	}
 }
 
-static void
-doshell(const char *command)
+void
+doshell()
 {
-	const char *shell;
+	char *shell;
+
+	shell = getenv("SHELL");
+	if (shell == NULL)
+		shell = _PATH_BSHELL;
 
 	(void)close(master);
 	(void)fclose(fscript);
 	login_tty(slave);
-	if (command == NULL) {
-		shell = getenv("SHELL");
-		if (shell == NULL)
-			shell = _PATH_BSHELL;
-		execl(shell, shell, "-i", NULL);
-		warn("execl `%s'", shell);
-	} else {
-		if (system(command) == -1)
-			warn("system `%s'", command);
-	}
-
+	execl(shell, shell, "-i", NULL);
+	warn("execl %s", shell);
 	fail();
 }
 
-static void
-fail(void)
+void
+fail()
 {
 
 	(void)kill(0, SIGTERM);
 	done();
 }
 
-static void
-done(void)
+void
+done()
 {
 	time_t tvec;
 
@@ -294,21 +272,20 @@ done(void)
 		tvec = time(NULL);
 		if (rawout)
 			record(fscript, NULL, 0, 'e');
-		else if (!quiet)
+		else
 			(void)fprintf(fscript,"\nScript done on %s",
 			    ctime(&tvec));
 		(void)fclose(fscript);
 		(void)close(master);
 	} else {
 		(void)tcsetattr(STDIN_FILENO, TCSAFLUSH, &tt);
-		if (!quiet)
-			(void)printf("Script done, output file is %s\n", fname);
+		(void)printf("Script done, output file is %s\n", fname);
 	}
 	exit(0);
 }
 
-static void
-record(FILE *fp, char *buf, size_t cc, int direction)
+void
+record(FILE *fscript, char *buf, size_t cc, int direction)
 {
 	struct iovec iov[2];
 	struct stamp stamp;
@@ -323,23 +300,23 @@ record(FILE *fp, char *buf, size_t cc, int direction)
 	iov[0].iov_base = &stamp;
 	iov[1].iov_len = cc;
 	iov[1].iov_base = buf;
-	if (writev(fileno(fp), &iov[0], 2) == -1)
+	if (writev(fileno(fscript), &iov[0], 2) == -1)
 		err(1, "writev");
 }
 
-static void
-consume(FILE *fp, off_t len, char *buf, int reg)
+void
+consume(FILE *fscript, off_t len, char *buf, int reg)
 {
 	size_t l;
 
 	if (reg) {
-		if (fseeko(fp, len, SEEK_CUR) == -1)
+		if (fseeko(fscript, len, SEEK_CUR) == -1)
 			err(1, NULL);
 	}
 	else {
 		while (len > 0) {
 			l = MIN(DEF_BUF, len);
-			if (fread(buf, sizeof(char), l, fp) != l)
+			if (fread(buf, sizeof(char), l, fscript) != l)
 				err(1, "cannot read buffer");
 			len -= l;
 		}
@@ -355,8 +332,8 @@ consume(FILE *fp, off_t len, char *buf, int reg)
 	} \
 } while (0/*CONSTCOND*/)
 
-static void
-playback(FILE *fp)
+void
+playback(FILE *fscript)
 {
 	struct timespec tsi, tso;
 	struct stamp stamp;
@@ -364,16 +341,16 @@ playback(FILE *fp)
 	char buf[DEF_BUF];
 	off_t nread, save_len;
 	size_t l;
-	time_t tclock;
+	time_t clock;
 	int reg;
 
-	if (fstat(fileno(fp), &pst) == -1)
+	if (fstat(fileno(fscript), &pst) == -1)
 		err(1, "fstat failed");	
 
 	reg = S_ISREG(pst.st_mode);
 
 	for (nread = 0; !reg || nread < pst.st_size; nread += save_len) {
-		if (fread(&stamp, sizeof(stamp), 1, fp) != 1) {
+		if (fread(&stamp, sizeof(stamp), 1, fscript) != 1) {
 			if (reg)
 				err(1, "reading playback header");
 			else
@@ -384,30 +361,26 @@ playback(FILE *fp)
 
 		if (reg && stamp.scr_len >
 		    (uint64_t)(pst.st_size - save_len) - nread)
-			errx(1, "invalid stamp");
+			err(1, "invalid stamp");
 
 		save_len += stamp.scr_len;
-		tclock = stamp.scr_sec;
+		clock = stamp.scr_sec;
 		tso.tv_sec = stamp.scr_sec;
 		tso.tv_nsec = stamp.scr_usec * 1000;
 
 		switch (stamp.scr_direction) {
 		case 's':
-			if (!quiet)
-			    (void)printf("Script started on %s",
-				ctime(&tclock));
+			(void)printf("Script started on %s", ctime(&clock));
 			tsi = tso;
-			(void)consume(fp, stamp.scr_len, buf, reg);
+			(void)consume(fscript, stamp.scr_len, buf, reg);
 			break;
 		case 'e':
-			if (!quiet)
-				(void)printf("\nScript done on %s",
-				    ctime(&tclock));
-			(void)consume(fp, stamp.scr_len, buf, reg);
+			(void)printf("\nScript done on %s", ctime(&clock));
+			(void)consume(fscript, stamp.scr_len, buf, reg);
 			break;
 		case 'i':
 			/* throw input away */
-			(void)consume(fp, stamp.scr_len, buf, reg);
+			(void)consume(fscript, stamp.scr_len, buf, reg);
 			break;
 		case 'o':
 			tsi.tv_sec = tso.tv_sec - tsi.tv_sec;
@@ -421,7 +394,7 @@ playback(FILE *fp)
 			tsi = tso;
 			while (stamp.scr_len > 0) {
 				l = MIN(DEF_BUF, stamp.scr_len);
-				if (fread(buf, sizeof(char), l, fp) != l)
+				if (fread(buf, sizeof(char), l, fscript) != l)
 					err(1, "cannot read buffer");
 
 				(void)write(STDOUT_FILENO, buf, l);
@@ -429,9 +402,9 @@ playback(FILE *fp)
 			}
 			break;
 		default:
-			errx(1, "invalid direction");
+			err(1, "invalid direction");
 		}
 	}
-	(void)fclose(fp);
+	(void)fclose(fscript);
 	exit(0);
 }

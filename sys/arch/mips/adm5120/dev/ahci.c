@@ -1,4 +1,4 @@
-/*	$NetBSD: ahci.c,v 1.9 2012/10/27 17:18:01 chs Exp $	*/
+/*	$NetBSD: ahci.c,v 1.4 2008/05/27 21:24:15 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahci.c,v 1.9 2012/10/27 17:18:01 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahci.c,v 1.4 2008/05/27 21:24:15 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,7 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: ahci.c,v 1.9 2012/10/27 17:18:01 chs Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 
 #include <dev/usb/usb.h>
@@ -239,10 +239,10 @@ struct ahci_pipe {
 	u_int32_t toggle;
 };
 
-static int	ahci_match(device_t, cfdata_t, void *);
+static int	ahci_match(device_t, struct cfdata *, void *);
 static void	ahci_attach(device_t, device_t, void *);
 
-CFATTACH_DECL_NEW(ahci, sizeof(struct ahci_softc),
+CFATTACH_DECL(ahci, sizeof(struct ahci_softc),
     ahci_match, ahci_attach, NULL, NULL);
 
 static int
@@ -297,7 +297,7 @@ ahci_attach(device_t parent, device_t self, void *aux)
 
 	SIMPLEQ_INIT(&sc->sc_free_xfers);
 
-	callout_init(&sc->sc_poll_handle, 0);
+	usb_callout_init(sc->sc_poll_handle);
 
 	REG_WRITE(ADMHCD_REG_INTENABLE, 0); /* disable interrupts */
 	REG_WRITE(ADMHCD_REG_CONTROL, ADMHCD_SW_RESET); /* reset */
@@ -349,12 +349,11 @@ ahci_intr(void *arg)
 	}
 
 #ifdef AHCI_DEBUG
-	snprintb(bitbuf, sizeof(bitbuf),
-	    ((sl11read(sc, SL11_CTRL) & SL11_CTRL_SUSPEND)
-	    ? "\20\x8""D+\7RESUME\6INSERT\5SOF\4res\3""BABBLE\2USBB\1USBA"
-	    : "\20\x8""D+\7RESET\6INSERT\5SOF\4res\3""BABBLE\2USBB\1USBA"),
-	    r);
-		
+	bitmask_snprintf(r,
+		(sl11read(sc, SL11_CTRL) & SL11_CTRL_SUSPEND)
+		? "\20\x8""D+\7RESUME\6INSERT\5SOF\4res\3""BABBLE\2USBB\1USBA"
+		: "\20\x8""D+\7RESET\6INSERT\5SOF\4res\3""BABBLE\2USBB\1USBA",
+		bitbuf, sizeof(bitbuf));
 	DPRINTF(D_XFER, ("I=%s ", bitbuf));
 #endif /* AHCI_DEBUG */
 #endif
@@ -437,7 +436,7 @@ ahci_poll_hub(void *arg)
 	static int p0_state=0;
 	static int p1_state=0;
 
-	callout_reset(&sc->sc_poll_handle, sc->sc_interval, ahci_poll_hub, xfer);
+	usb_callout(sc->sc_poll_handle, sc->sc_interval, ahci_poll_hub, xfer);
 
 	/* USB spec 11.13.3 (p.260) */
 	p = KERNADDR(&xfer->dmabuf, 0);
@@ -460,7 +459,9 @@ ahci_poll_hub(void *arg)
 	xfer->actlen = 1;
 	xfer->status = USBD_NORMAL_COMPLETION;
 	s = splusb();
+	xfer->device->bus->intr_context++;
 	usb_transfer_complete(xfer);
+	xfer->device->bus->intr_context--;
 	splx(s);
 }
 
@@ -994,7 +995,7 @@ ahci_root_intr_start(usbd_xfer_handle xfer)
 	DPRINTF(D_TRACE, ("SLRIstart "));
 
 	sc->sc_interval = MS_TO_TICKS(xfer->pipe->endpoint->edesc->bInterval);
-	callout_reset(&sc->sc_poll_handle, sc->sc_interval, ahci_poll_hub, xfer);
+	usb_callout(sc->sc_poll_handle, sc->sc_interval, ahci_poll_hub, xfer);
 	sc->sc_intr_xfer = xfer;
 	return USBD_IN_PROGRESS;
 }
@@ -1012,7 +1013,7 @@ ahci_root_intr_close(usbd_pipe_handle pipe)
 
 	DPRINTF(D_TRACE, ("SLRIclose "));
 
-	callout_stop(&sc->sc_poll_handle);
+	usb_uncallout(sc->sc_poll_handle, ahci_poll_hub, sc->sc_intr_xfer);
 	sc->sc_intr_xfer = NULL;
 }
 
@@ -1241,8 +1242,8 @@ ahci_device_intr_start(usbd_xfer_handle xfer)
 	xfer->hcpriv = sx;
 
 	/* initialize callout */
-	callout_init(&sx->sx_callout_t, 0);
-	callout_reset(&sx->sx_callout_t, 
+	usb_callout_init(sx->sx_callout_t);
+	usb_callout(sx->sx_callout_t, 
 		MS_TO_TICKS(pipe->endpoint->edesc->bInterval),
 		ahci_poll_device, sx);
 
@@ -1267,7 +1268,7 @@ ahci_poll_device(void *arg)
 
 	DPRINTF(D_TRACE, ("pldev"));
 
-	callout_reset(&sx->sx_callout_t,
+	usb_callout(sx->sx_callout_t,
 		MS_TO_TICKS(pipe->endpoint->edesc->bInterval),
 		ahci_poll_device, sx);
 
@@ -1287,7 +1288,9 @@ ahci_poll_device(void *arg)
 
 	xfer->status = USBD_NORMAL_COMPLETION;
 	s = splusb();
+	xfer->device->bus->intr_context++;
 	usb_transfer_complete(xfer);
+	xfer->device->bus->intr_context--;
 	splx(s);
 }
 
@@ -1300,7 +1303,7 @@ ahci_device_intr_abort(usbd_xfer_handle xfer)
 
 	sx = xfer->hcpriv;
 	if (sx) {
-		callout_stop(&sx->sx_callout_t);
+		usb_uncallout(sx->sx_callout_t, ahci_poll_device, sx);
 		free(sx, M_USB);
 		xfer->hcpriv = NULL;
 	} else {
@@ -1629,8 +1632,9 @@ ahci_transaction(struct ahci_softc *sc, usbd_pipe_handle pipe,
 
 	DPRINTF(D_XFER, ("t=%d i=%x ", AHCI_TIMEOUT - timeout, isr));
 #if AHCI_DEBUG
-	snprintb(str, sizeof(str),
-	    "\20\x8STALL\7NAK\6OV\5SETUP\4DATA1\3TIMEOUT\2ERR\1ACK", result);
+	bitmask_snprintf(result,
+		"\20\x8STALL\7NAK\6OV\5SETUP\4DATA1\3TIMEOUT\2ERR\1ACK",
+		str, sizeof(str));
 	DPRINTF(D_XFER, ("STAT=%s ", str));
 #endif
 

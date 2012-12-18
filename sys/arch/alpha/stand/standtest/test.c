@@ -1,4 +1,4 @@
-/* $NetBSD: test.c,v 1.5 2011/01/22 19:19:15 joerg Exp $ */
+/* $NetBSD: test.c,v 1.3 2002/06/08 16:51:38 yamt Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -74,12 +74,12 @@ void	show_pt(const char *buf);
 void	show_rpb(const char *buf);
 
 void
-main(unsigned long pfn, unsigned long ptb, unsigned long bim, unsigned long bip, unsigned long biv)
-	/* pfn:	 first free PFN number */
-	/* ptb:	 PFN of current level 1 page table */
-	/* bim:	 bootinfo magic */
-	/* bip:	 bootinfo pointer */
-	/* biv:	 bootinfo version */
+main(pfn, ptb, bim, bip, biv)
+	unsigned long pfn;	/* first free PFN number */
+	unsigned long ptb;	/* PFN of current level 1 page table */
+	unsigned long bim;	/* bootinfo magic */
+	unsigned long bip;	/* bootinfo pointer */
+	unsigned long biv;	/* bootinfo version */
 {
 	char input_buf[512];
 	static const struct cmdtab toplevel_cmds[] = {
@@ -102,6 +102,7 @@ main(unsigned long pfn, unsigned long ptb, unsigned long bim, unsigned long bip,
 	printf("\n");
 	printf("NetBSD/alpha " NETBSD_VERS
 	    " Standalone Test Program, Revision %s\n", bootprog_rev);
+	printf("(%s, %s)\n", bootprog_maker, bootprog_date);
 	printf("\n");
 
 	arg_pfn = pfn;

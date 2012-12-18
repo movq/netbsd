@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.5 2011/07/18 17:26:56 dyoung Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.2 2008/04/28 20:23:34 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,17 +30,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.5 2011/07/18 17:26:56 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.2 2008/04/28 20:23:34 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/extent.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <sys/bus.h>
 
 #include <machine/autoconf.h>
 #include <powerpc/pio.h>
+#include <machine/bus.h>
 
 #include "mca.h"
 
@@ -48,10 +48,10 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.5 2011/07/18 17:26:56 dyoung Exp $");
 #include <dev/mca/mcavar.h>
 #endif
 
-int	mainbus_match(device_t, cfdata_t, void *);
-void	mainbus_attach(device_t, device_t, void *);
+int	mainbus_match(struct device *, struct cfdata *, void *);
+void	mainbus_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(mainbus, 0,
+CFATTACH_DECL(mainbus, sizeof(struct device),
     mainbus_match, mainbus_attach, NULL, NULL);
 
 int	mainbus_print(void *, const char *);
@@ -70,7 +70,7 @@ int mainbus_found = 0;
  * Probe for the mainbus; always succeeds.
  */
 int
-mainbus_match(device_t parent, cfdata_t match, void *aux)
+mainbus_match(struct device *parent, struct cfdata *match, void *aux)
 {
 
 	if (mainbus_found)
@@ -82,13 +82,12 @@ mainbus_match(device_t parent, cfdata_t match, void *aux)
  * Attach the mainbus.
  */
 void
-mainbus_attach(device_t parent, device_t self, void *aux)
+mainbus_attach(struct device *parent, struct device *self, void *aux)
 {
 	union mainbus_attach_args mba;
 	struct confargs ca;
-#if DEBUG
 	int slot;
-#endif
+
 	mainbus_found = 1;
 
 	aprint_normal("\n");

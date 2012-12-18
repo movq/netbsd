@@ -1,4 +1,4 @@
-/*	$NetBSD: glob.h,v 1.26 2010/09/06 14:38:56 christos Exp $	*/
+/*	$NetBSD: glob.h,v 1.24 2008/09/13 17:05:07 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -93,7 +93,6 @@ typedef struct {
 /*	GLOB_NOESCAPE	0x1000	above */
 #define	GLOB_PERIOD	0x2000	/* Allow metachars to match leading periods. */
 #define	GLOB_NO_DOTDIRS	0x4000	/* Make . and .. vanish from wildcards. */
-#define	GLOB_STAR	0x8000	/* Use glob ** to recurse directories */
 #define	GLOB_QUOTE	0	/* source compatibility */
 
 #define	GLOB_ABEND	GLOB_ABORTED	/* source compatibility */
@@ -104,9 +103,6 @@ __BEGIN_DECLS
 int	glob(const char * __restrict, int,
     int (*)(const char *, int), glob_t * __restrict)	 __RENAME(__glob30);
 void	globfree(glob_t *)				 __RENAME(__globfree30);
-#endif
-#ifdef _NETBSD_SOURCE
-int	glob_pattern_p(const char *, int);
 #endif
 __END_DECLS
 

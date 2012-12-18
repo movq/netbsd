@@ -1,4 +1,4 @@
-/*	$NetBSD: aic6915.c,v 1.30 2012/10/27 17:18:18 chs Exp $	*/
+/*	$NetBSD: aic6915.c,v 1.23 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -35,8 +35,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic6915.c,v 1.30 2012/10/27 17:18:18 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic6915.c,v 1.23 2008/04/28 20:23:49 martin Exp $");
 
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,12 +50,16 @@ __KERNEL_RCSID(0, "$NetBSD: aic6915.c,v 1.30 2012/10/27 17:18:18 chs Exp $");
 #include <sys/errno.h>
 #include <sys/device.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
+#if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -70,7 +75,7 @@ static int	sf_ioctl(struct ifnet *, u_long, void *);
 static int	sf_init(struct ifnet *);
 static void	sf_stop(struct ifnet *, int);
 
-static bool	sf_shutdown(device_t, int);
+static void	sf_shutdown(void *);
 
 static void	sf_txintr(struct sf_softc *);
 static void	sf_rxintr(struct sf_softc *);
@@ -83,9 +88,9 @@ static int	sf_add_rxbuf(struct sf_softc *, int);
 static uint8_t	sf_read_eeprom(struct sf_softc *, int);
 static void	sf_set_filter(struct sf_softc *);
 
-static int	sf_mii_read(device_t, int, int);
-static void	sf_mii_write(device_t, int, int, int);
-static void	sf_mii_statchg(struct ifnet *);
+static int	sf_mii_read(struct device *, int, int);
+static void	sf_mii_write(struct device *, int, int, int);
+static void	sf_mii_statchg(struct device *);
 
 static void	sf_tick(void *);
 
@@ -154,7 +159,7 @@ sf_attach(struct sf_softc *sc)
 	else {
 		if ((error = bus_space_subregion(sc->sc_st, sc->sc_sh,
 		    SF_GENREG_OFFSET, SF_FUNCREG_SIZE, &sc->sc_sh_func)) != 0) {
-			aprint_error_dev(sc->sc_dev, "unable to sub-region functional "
+			aprint_error_dev(&sc->sc_dev, "unable to sub-region functional "
 			    "registers, error = %d\n",
 			    error);
 			return;
@@ -176,7 +181,7 @@ sf_attach(struct sf_softc *sc)
 	if ((error = bus_dmamem_alloc(sc->sc_dmat,
 	    sizeof(struct sf_control_data), PAGE_SIZE, 0, &seg, 1, &rseg,
 	    BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to allocate control data, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to allocate control data, error = %d\n",
 		    error);
 		goto fail_0;
 	}
@@ -184,7 +189,7 @@ sf_attach(struct sf_softc *sc)
 	if ((error = bus_dmamem_map(sc->sc_dmat, &seg, rseg,
 	    sizeof(struct sf_control_data), (void **)&sc->sc_control_data,
 	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to map control data, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to map control data, error = %d\n",
 		    error);
 		goto fail_1;
 	}
@@ -193,7 +198,7 @@ sf_attach(struct sf_softc *sc)
 	    sizeof(struct sf_control_data), 1,
 	    sizeof(struct sf_control_data), 0, BUS_DMA_NOWAIT,
 	    &sc->sc_cddmamap)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to create control data DMA map, "
+		aprint_error_dev(&sc->sc_dev, "unable to create control data DMA map, "
 		    "error = %d\n", error);
 		goto fail_2;
 	}
@@ -201,7 +206,7 @@ sf_attach(struct sf_softc *sc)
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_cddmamap,
 	    sc->sc_control_data, sizeof(struct sf_control_data), NULL,
 	    BUS_DMA_NOWAIT)) != 0) {
-		aprint_error_dev(sc->sc_dev, "unable to load control data DMA map, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "unable to load control data DMA map, error = %d\n",
 		    error);
 		goto fail_3;
 	}
@@ -213,7 +218,7 @@ sf_attach(struct sf_softc *sc)
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES,
 		    SF_NTXFRAGS, MCLBYTES, 0, BUS_DMA_NOWAIT,
 		    &sc->sc_txsoft[i].ds_dmamap)) != 0) {
-			aprint_error_dev(sc->sc_dev, "unable to create tx DMA map %d, "
+			aprint_error_dev(&sc->sc_dev, "unable to create tx DMA map %d, "
 			    "error = %d\n", i, error);
 			goto fail_4;
 		}
@@ -226,7 +231,7 @@ sf_attach(struct sf_softc *sc)
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES, 1,
 		    MCLBYTES, 0, BUS_DMA_NOWAIT,
 		    &sc->sc_rxsoft[i].ds_dmamap)) != 0) {
-			aprint_error_dev(sc->sc_dev, "unable to create rx DMA map %d, "
+			aprint_error_dev(&sc->sc_dev, "unable to create rx DMA map %d, "
 			    "error = %d\n", i, error);
 			goto fail_5;
 		}
@@ -243,11 +248,11 @@ sf_attach(struct sf_softc *sc)
 	for (i = 0; i < ETHER_ADDR_LEN; i++)
 		enaddr[i] = sf_read_eeprom(sc, (15 + (ETHER_ADDR_LEN - 1)) - i);
 
-	printf("%s: Ethernet address %s\n", device_xname(sc->sc_dev),
+	printf("%s: Ethernet address %s\n", device_xname(&sc->sc_dev),
 	    ether_sprintf(enaddr));
 
 	if (sf_funcreg_read(sc, SF_PciDeviceConfig) & PDC_System64)
-		printf("%s: 64-bit PCI slot detected\n", device_xname(sc->sc_dev));
+		printf("%s: 64-bit PCI slot detected\n", device_xname(&sc->sc_dev));
 
 	/*
 	 * Initialize our media structures and probe the MII.
@@ -259,7 +264,7 @@ sf_attach(struct sf_softc *sc)
 	sc->sc_ethercom.ec_mii = &sc->sc_mii;
 	ifmedia_init(&sc->sc_mii.mii_media, IFM_IMASK, ether_mediachange,
 	    ether_mediastatus);
-	mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
+	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 	    MII_OFFSET_ANY, 0);
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL) {
 		ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER|IFM_NONE, 0, NULL);
@@ -267,7 +272,7 @@ sf_attach(struct sf_softc *sc)
 	} else
 		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_AUTO);
 
-	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl = sf_ioctl;
@@ -286,11 +291,9 @@ sf_attach(struct sf_softc *sc)
 	/*
 	 * Make sure the interface is shutdown during reboot.
 	 */
-	if (pmf_device_register1(sc->sc_dev, NULL, NULL, sf_shutdown))
-		pmf_class_network_register(sc->sc_dev, ifp);
-	else
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
+	sc->sc_sdhook = shutdownhook_establish(sf_shutdown, sc);
+	if (sc->sc_sdhook == NULL)
+		aprint_error_dev(&sc->sc_dev, "WARNING: unable to establish shutdown hook\n");
 	return;
 
 	/*
@@ -326,15 +329,12 @@ sf_attach(struct sf_softc *sc)
  *
  *	Shutdown hook -- make sure the interface is stopped at reboot.
  */
-static bool
-sf_shutdown(device_t self, int howto)
+static void
+sf_shutdown(void *arg)
 {
-	struct sf_softc *sc;
+	struct sf_softc *sc = arg;
 
-	sc = device_private(self);
 	sf_stop(&sc->sc_ethercom.ec_if, 1);
-
-	return true;
 }
 
 /*
@@ -395,13 +395,13 @@ sf_start(struct ifnet *ifp)
 		    BUS_DMA_WRITE|BUS_DMA_NOWAIT) != 0) {
 			MGETHDR(m, M_DONTWAIT, MT_DATA);
 			if (m == NULL) {
-				aprint_error_dev(sc->sc_dev, "unable to allocate Tx mbuf\n");
+				aprint_error_dev(&sc->sc_dev, "unable to allocate Tx mbuf\n");
 				break;
 			}
 			if (m0->m_pkthdr.len > MHLEN) {
 				MCLGET(m, M_DONTWAIT);
 				if ((m->m_flags & M_EXT) == 0) {
-					aprint_error_dev(sc->sc_dev, "unable to allocate Tx "
+					aprint_error_dev(&sc->sc_dev, "unable to allocate Tx "
 					    "cluster\n");
 					m_freem(m);
 					break;
@@ -412,7 +412,7 @@ sf_start(struct ifnet *ifp)
 			error = bus_dmamap_load_mbuf(sc->sc_dmat, dmamap,
 			    m, BUS_DMA_WRITE|BUS_DMA_NOWAIT);
 			if (error) {
-				aprint_error_dev(sc->sc_dev, "unable to load Tx buffer, "
+				aprint_error_dev(&sc->sc_dev, "unable to load Tx buffer, "
 				    "error = %d\n", error);
 				break;
 			}
@@ -455,10 +455,13 @@ sf_start(struct ifnet *ifp)
 		last = producer;
 		producer = SF_NEXTTX(producer);
 
+#if NBPFILTER > 0
 		/*
 		 * Pass the packet to any BPF listeners.
 		 */
-		bpf_mtap(ifp, m0);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m0);
+#endif
 	}
 
 	if (sc->sc_txpending == (SF_NTXDESC - 1)) {
@@ -495,7 +498,7 @@ sf_watchdog(struct ifnet *ifp)
 {
 	struct sf_softc *sc = ifp->if_softc;
 
-	printf("%s: device timeout\n", device_xname(sc->sc_dev));
+	printf("%s: device timeout\n", device_xname(&sc->sc_dev));
 	ifp->if_oerrors++;
 
 	(void) sf_init(ifp);
@@ -572,7 +575,7 @@ sf_intr(void *arg)
 			/* DMA errors. */
 			if (isr & IS_DmaErrInt) {
 				wantinit = 1;
-				aprint_error_dev(sc->sc_dev, "WARNING: DMA error\n");
+				aprint_error_dev(&sc->sc_dev, "WARNING: DMA error\n");
 			}
 
 			/* Transmit FIFO underruns. */
@@ -581,7 +584,7 @@ sf_intr(void *arg)
 					sc->sc_txthresh++;
 				printf("%s: transmit FIFO underrun, new "
 				    "threshold: %d bytes\n",
-				    device_xname(sc->sc_dev),
+				    device_xname(&sc->sc_dev),
 				    sc->sc_txthresh * 16);
 				sf_funcreg_write(sc, SF_TransmitFrameCSR,
 				    sc->sc_TransmitFrameCSR |
@@ -638,7 +641,7 @@ sf_txintr(struct sf_softc *sc)
 		txidx = SF_TCD_INDEX_TO_HOST(TCD_INDEX(tcd));
 #ifdef DIAGNOSTIC
 		if ((tcd & TCD_PR) == 0)
-			aprint_error_dev(sc->sc_dev, "Tx queue mismatch, index %d\n",
+			aprint_error_dev(&sc->sc_dev, "Tx queue mismatch, index %d\n",
 			    txidx);
 #endif
 		/*
@@ -785,10 +788,13 @@ sf_rxintr(struct sf_softc *sc)
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 
+#if NBPFILTER > 0
 		/*
 		 * Pass this up to any BPF listeners.
 		 */
-		bpf_mtap(ifp, m);
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif /* NBPFILTER > 0 */
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);
@@ -884,7 +890,7 @@ sf_reset(struct sf_softc *sc)
 	}
 
 	if (i == 1000) {
-		aprint_error_dev(sc->sc_dev, "reset failed to complete\n");
+		aprint_error_dev(&sc->sc_dev, "reset failed to complete\n");
 		sf_funcreg_write(sc, SF_PciDeviceConfig, 0);
 	}
 
@@ -957,7 +963,7 @@ sf_init(struct ifnet *ifp)
 		ds = &sc->sc_rxsoft[i];
 		if (ds->ds_mbuf == NULL) {
 			if ((error = sf_add_rxbuf(sc, i)) != 0) {
-				aprint_error_dev(sc->sc_dev, "unable to allocate or map rx "
+				aprint_error_dev(&sc->sc_dev, "unable to allocate or map rx "
 				    "buffer %d, error = %d\n",
 				    i, error);
 				/*
@@ -1093,7 +1099,7 @@ sf_init(struct ifnet *ifp)
 	if (error) {
 		ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 		ifp->if_timer = 0;
-		printf("%s: interface not running\n", device_xname(sc->sc_dev));
+		printf("%s: interface not running\n", device_xname(&sc->sc_dev));
 	}
 	return (error);
 }
@@ -1211,7 +1217,7 @@ sf_add_rxbuf(struct sf_softc *sc, int idx)
 	    m->m_ext.ext_buf, m->m_ext.ext_size, NULL,
 	    BUS_DMA_READ|BUS_DMA_NOWAIT);
 	if (error) {
-		aprint_error_dev(sc->sc_dev, "can't load rx DMA map %d, error = %d\n",
+		aprint_error_dev(&sc->sc_dev, "can't load rx DMA map %d, error = %d\n",
 		    idx, error);
 		panic("sf_add_rxbuf"); /* XXX */
 	}
@@ -1347,9 +1353,9 @@ sf_set_filter(struct sf_softc *sc)
  *	Read from the MII.
  */
 static int
-sf_mii_read(device_t self, int phy, int reg)
+sf_mii_read(struct device *self, int phy, int reg)
 {
-	struct sf_softc *sc = device_private(self);
+	struct sf_softc *sc = (void *) self;
 	uint32_t v;
 	int i;
 
@@ -1375,9 +1381,9 @@ sf_mii_read(device_t self, int phy, int reg)
  *	Write to the MII.
  */
 static void
-sf_mii_write(device_t self, int phy, int reg, int val)
+sf_mii_write(struct device *self, int phy, int reg, int val)
 {
-	struct sf_softc *sc = device_private(self);
+	struct sf_softc *sc = (void *) self;
 	int i;
 
 	sf_genreg_write(sc, SF_MII_PHY_REG(phy, reg), val);
@@ -1389,7 +1395,7 @@ sf_mii_write(device_t self, int phy, int reg, int val)
 		delay(1);
 	}
 
-	printf("%s: MII write timed out\n", device_xname(sc->sc_dev));
+	printf("%s: MII write timed out\n", device_xname(&sc->sc_dev));
 }
 
 /*
@@ -1398,9 +1404,9 @@ sf_mii_write(device_t self, int phy, int reg, int val)
  *	Callback from the PHY when the media changes.
  */
 static void
-sf_mii_statchg(struct ifnet *ifp)
+sf_mii_statchg(struct device *self)
 {
-	struct sf_softc *sc = ifp->if_softc;
+	struct sf_softc *sc = (void *) self;
 	uint32_t ipg;
 
 	if (sc->sc_mii.mii_media_active & IFM_FDX) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: utilities.c,v 1.22 2011/06/09 19:57:51 christos Exp $	*/
+/*	$NetBSD: utilities.c,v 1.17 2008/03/16 23:17:55 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,6 +40,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -58,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)utilities.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: utilities.c,v 1.22 2011/06/09 19:57:51 christos Exp $");
+__RCSID("$NetBSD: utilities.c,v 1.17 2008/03/16 23:17:55 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -70,7 +75,6 @@ __RCSID("$NetBSD: utilities.c,v 1.22 2011/06/09 19:57:51 christos Exp $");
 #include <ufs/ufs/dinode.h> /* for IFMT & friends */
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
@@ -84,6 +88,8 @@ __RCSID("$NetBSD: utilities.c,v 1.22 2011/06/09 19:57:51 christos Exp $");
 long	diskreads, totalreads;	/* Disk cache statistics */
 
 static void rwerror(const char *, daddr_t);
+
+extern int returntosingle;
 
 int
 ftypeok(struct ext2fs_dinode *dp)
@@ -155,11 +161,9 @@ bufinit(void)
 	if (bufcnt < MINBUFS)
 		bufcnt = MINBUFS;
 	for (i = 0; i < bufcnt; i++) {
-		bp = malloc(sizeof(struct bufarea));
-		bufp = malloc((size_t)sblock.e2fs_bsize);
+		bp = (struct bufarea *)malloc(sizeof(struct bufarea));
+		bufp = malloc((unsigned int)sblock.e2fs_bsize);
 		if (bp == NULL || bufp == NULL) {
-			free(bp);
-			free(bufp);
 			if (i >= MINBUFS)
 				break;
 			errexit("cannot allocate buffer pool");
@@ -279,7 +283,7 @@ ckfini(int markclean)
 		flush(fswritefd, bp);
 		nbp = bp->b_prev;
 		free(bp->b_un.b_buf);
-		free(bp);
+		free((char *)bp);
 	}
 	if (bufhead.b_size != cnt)
 		errexit("Panic: lost %d buffers", bufhead.b_size - cnt);
@@ -457,6 +461,39 @@ getpathname(char *namebuf, size_t namebuflen, ino_t curdir, ino_t ino)
 	if (ino != EXT2_ROOTINO)
 		*--cp = '?';
 	memcpy(namebuf, cp, (size_t)(&namebuf[MAXPATHLEN] - cp));
+}
+
+void
+catch(int n)
+{
+	ckfini(0);
+	exit(FSCK_EXIT_SIGNALLED);
+}
+
+/*
+ * When preening, allow a single quit to signal
+ * a special exit after filesystem checks complete
+ * so that reboot sequence may be interrupted.
+ */
+void
+catchquit(int n)
+{
+	printf("returning to single-user after filesystem check\n");
+	returntosingle = 1;
+	(void)signal(SIGQUIT, SIG_DFL);
+}
+
+/*
+ * Ignore a single quit signal; wait and flush just in case.
+ * Used by child processes in preen.
+ */
+void
+voidquit(int n)
+{
+
+	sleep(1);
+	(void)signal(SIGQUIT, SIG_IGN);
+	(void)signal(SIGQUIT, SIG_DFL);
 }
 
 /*

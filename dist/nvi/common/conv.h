@@ -1,4 +1,4 @@
-/*	$NetBSD: conv.h,v 1.4 2009/04/19 02:28:19 tnozaki Exp $ */
+/*	$NetBSD: conv.h,v 1.1.1.2.6.2 2009/04/19 15:48:09 snj Exp $ */
 
 #define KEY_COL(sp, ch)							\
 	(INTISWIDE(ch) ? 						\

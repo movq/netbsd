@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_net.c,v 1.26 2011/07/17 20:54:52 joerg Exp $	*/
+/*	$NetBSD: dev_net.c,v 1.23 2008/04/28 20:24:06 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -47,6 +47,7 @@
  * for use by the NFS open code (NFS/lookup).
  */
 
+#include <machine/stdarg.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <net/if.h>
@@ -70,7 +71,7 @@ extern int nfs_root_node[];	/* XXX - get from nfs_mount() */
 static int netdev_sock = -1;
 static int netdev_opens;
 
-static int net_getparams(int);
+static int net_getparams __P((int));
 
 /*
  * Called by devopen after it sets f->f_dev to our devsw entry.
@@ -117,7 +118,7 @@ net_open(struct open_file *f, ...)
 			/* Get the NFS file handle (mountd). */
 			error = nfs_mount(netdev_sock, rootip, rootpath);
 			if (error) {
-				printf("NFS mount error=%d\n", errno);
+				printf("NFS mount error=%d\n", error);
 				rootip.s_addr = 0;
 			fail:
 				netif_close(netdev_sock);

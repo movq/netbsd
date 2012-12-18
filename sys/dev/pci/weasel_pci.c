@@ -1,4 +1,4 @@
-/*	$NetBSD: weasel_pci.c,v 1.14 2009/03/18 16:00:19 cegger Exp $	*/
+/*	$NetBSD: weasel_pci.c,v 1.13 2008/07/09 14:51:11 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: weasel_pci.c,v 1.14 2009/03/18 16:00:19 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: weasel_pci.c,v 1.13 2008/07/09 14:51:11 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -190,7 +190,7 @@ weasel_pci_attach(device_t parent, device_t self, void *aux)
 		if (v>7)
 			printf("%s: weird length for version string(%d).\n",
 			    device_xname(self), v);
-		memset(buf, 0, sizeof(buf));
+		bzero(buf, sizeof(buf));
 		for (cp = buf; v != 0; v--) {
 			if (weasel_wait_response(sc)) {
 				printf("%s: Weasel stopped providing version\n",

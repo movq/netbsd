@@ -1,4 +1,4 @@
-.\"	$NetBSD: ale.4,v 1.5 2012/11/29 00:12:21 jdf Exp $
+.\"	$NetBSD: ale.4,v 1.2.2.3 2009/05/07 00:28:30 snj Exp $
 .\"	$OpenBSD: ale.4,v 1.2 2009/02/25 03:15:50 deraadt Exp $
 .\"
 .\" Copyright (c) 2009 Kevin Lo <kevlo@openbsd.org>
@@ -54,9 +54,9 @@ Set 1000Mbps (Gigabit Ethernet) operation.
 For more information on configuring this device, see
 .Xr ifconfig 8 .
 To view a list of media types and options supported by the card, try
-.Ic ifconfig Fl m Ao Ic device Ac .
+.Ic ifconfig Ao Ic device Ac Ic media .
 For example,
-.Ic ifconfig Fl m Ic ale0 .
+.Ic ifconfig ale0 media .
 .Sh SEE ALSO
 .Xr arp 4 ,
 .Xr atphy 4 ,
@@ -90,4 +90,4 @@ then ported to
 by
 .An Christoph Egger
 .Aq cegger@NetBSD.org
-and Kevin Lahey.
+and Kevin Lahey .

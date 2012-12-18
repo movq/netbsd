@@ -1,5 +1,4 @@
-/*	Id: local2.c,v 1.25 2008/12/03 22:23:38 gmcgarry Exp 	 */	
-/*	$NetBSD: local2.c,v 1.1.1.3 2010/06/03 18:57:19 plunky Exp $	 */
+/*	$Id: local2.c,v 1.1.1.1 2008/08/24 05:32:56 gmcgarry Exp $	 */
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -69,7 +68,7 @@ offcalc(struct interpass_prolog * ipp)
 
 	addto = p2maxautooff;
 
-	for (i = ipp->ipp_regs[0], j = 0; i; i >>= 1, j++) {
+	for (i = ipp->ipp_regs, j = 0; i; i >>= 1, j++) {
 		if (i & 1) {
 			addto += SZINT / SZCHAR;
 			regoff[j] = addto;
@@ -132,7 +131,7 @@ prologue(struct interpass_prolog * ipp)
 	if (addto)
 		printf("\tsubu %s,%s,%d\n", rnames[SP], rnames[SP], addto);
 
-	for (i = ipp->ipp_regs[0], j = 0; i; i >>= 1, j++)
+	for (i = ipp->ipp_regs, j = 0; i; i >>= 1, j++)
 		if (i & 1)
 			fprintf(stdout, "\tsw %s,-%d(%s) # save permanent\n",
 				rnames[j], regoff[j], rnames[FP]);
@@ -151,7 +150,7 @@ eoftn(struct interpass_prolog * ipp)
 		return;		/* no code needs to be generated */
 
 	/* return from function code */
-	for (i = ipp->ipp_regs[0], j = 0; i; i >>= 1, j++) {
+	for (i = ipp->ipp_regs, j = 0; i; i >>= 1, j++) {
 		if (i & 1)
 			fprintf(stdout, "\tlw %s,-%d(%s)\n\tnop\n",
 				rnames[j], regoff[j], rnames[FP]);
@@ -592,7 +591,7 @@ static void
 twollcomp(NODE *p)
 {
 	int o = p->n_op;
-	int s = getlab2();
+	int s = getlab();
 	int e = p->n_label;
 	int cb1, cb2;
 
@@ -794,7 +793,7 @@ flshape(NODE * p)
 
 	if (o == OREG || o == REG || o == NAME)
 		return SRDIR;	/* Direct match */
-	if (o == UMUL && shumul(p->n_left, SOREG))
+	if (o == UMUL && shumul(p->n_left))
 		return SROREG;	/* Convert into oreg */
 	return SRREG;		/* put it into a register */
 }
@@ -980,7 +979,7 @@ myreader(struct interpass * ipole)
 static int stacksize;
 
 static void
-calcstacksize(NODE *p, void *arg)
+calcstacksize(NODE *p)
 {
 	int sz;
 
@@ -1006,7 +1005,7 @@ calcstacksize(NODE *p, void *arg)
  * offset changed to point to the correct bytes in memory.
  */
 static void
-offchg(NODE *p, void *arg)
+offchg(NODE *p)
 {
 	NODE *l;
 
@@ -1053,7 +1052,7 @@ offchg(NODE *p, void *arg)
  * Remove some PCONVs after OREGs are created.
  */
 static void
-pconv2(NODE * p, void *arg)
+pconv2(NODE * p)
 {
 	NODE *q;
 
@@ -1078,7 +1077,7 @@ pconv2(NODE * p, void *arg)
 void
 mycanon(NODE * p)
 {
-	walkf(p, pconv2, 0);
+	walkf(p, pconv2);
 }
 
 void
@@ -1099,9 +1098,9 @@ myoptim(struct interpass * ipole)
 		if (ip->type != IP_NODE)
 			continue;
 		if (bigendian)
-			walkf(ip->ip_node, offchg, 0);
+			walkf(ip->ip_node, offchg);
 #if 0
-		walkf(ip->ip_node, calcstacksize, 0);
+		walkf(ip->ip_node, calcstacksize);
 #endif
 	}
 }

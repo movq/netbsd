@@ -1,4 +1,4 @@
-/*	$NetBSD: mfc.c,v 1.55 2012/10/27 17:17:30 chs Exp $ */
+/*	$NetBSD: mfc.c,v 1.50 2008/06/11 12:59:10 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -55,7 +55,7 @@
 #include "opt_kgdb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mfc.c,v 1.55 2012/10/27 17:17:30 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mfc.c,v 1.50 2008/06/11 12:59:10 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,6 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: mfc.c,v 1.55 2012/10/27 17:17:30 chs Exp $");
 #include <sys/tty.h>
 #include <sys/proc.h>
 #include <sys/file.h>
+#include <sys/malloc.h>
 #include <sys/uio.h>
 #include <sys/syslog.h>
 #include <sys/queue.h>
@@ -159,7 +160,7 @@ struct duart_regs {
 };
 
 struct mfc_softc {
-	device_t sc_dev;
+	struct	device sc_dev;
 	struct	isr sc_isr;
 	struct	mfc_regs *sc_regs;
 	u_long	clk_frq;
@@ -172,7 +173,7 @@ struct mfc_softc {
 
 #if NMFCS > 0
 struct mfcs_softc {
-	device_t sc_dev;
+	struct	device sc_dev;
 	struct	tty *sc_tty;
 	struct	duart_regs *sc_duart;
 	struct	mfc_regs *sc_regs;
@@ -184,8 +185,7 @@ struct mfcs_softc {
 	u_short	inbuf[SERIBUF_SIZE];
 	char	*ptr, *end;
 	char	outbuf[SEROBUF_SIZE];
-	struct	vbl_node vbl_node;
-	void	*mfcs_si;
+	struct vbl_node vbl_node;
 };
 #endif
 
@@ -200,13 +200,13 @@ struct mfc_args {
 	char	unit;
 };
 
-int	mfcprint(void *, const char *);
-void	mfcattach(device_t, device_t, void *);
-int	mfcmatch(device_t, cfdata_t, void *);
+int	mfcprint(void *auxp, const char *);
+void	mfcattach(struct device *, struct device *, void *);
+int	mfcmatch(struct device *, struct cfdata *, void *);
 
 #if NMFCS > 0
-int	mfcsmatch(device_t, cfdata_t, void *);
-void	mfcsattach(device_t, device_t, void *);
+int	mfcsmatch(struct device *, struct cfdata *, void *);
+void	mfcsattach(struct device *, struct device *, void *);
 int	mfcsparam( struct tty *, struct termios *);
 int	mfcshwiflow(struct tty *, int);
 void	mfcsstart(struct tty *);
@@ -214,27 +214,26 @@ int	mfcsmctl(dev_t, int, int);
 void	mfcsxintr(int);
 void	mfcseint(int, int);
 void	mfcsmint(register int);
-void	mfcs_intr_soft(void *);
 #endif
 
 #if NMFCP > 0
-void mfcpattach(device_t, device_t, void *);
-int mfcpmatch(device_t, cfdata_t, void *);
+void mfcpattach(struct device *, struct device *, void *);
+int mfcpmatch(struct device *, struct cfdata *, void *);
 #endif
 int mfcintr(void *);
 
-CFATTACH_DECL_NEW(mfc, sizeof(struct mfc_softc),
+CFATTACH_DECL(mfc, sizeof(struct mfc_softc),
     mfcmatch, mfcattach, NULL, NULL);
 
 #if NMFCS > 0
-CFATTACH_DECL_NEW(mfcs, sizeof(struct mfcs_softc),
+CFATTACH_DECL(mfcs, sizeof(struct mfcs_softc),
     mfcsmatch, mfcsattach, NULL, NULL);
 
 extern struct cfdriver mfcs_cd;
 #endif
 
 #if NMFCP > 0
-CFATTACH_DECL_NEW(mfcp, sizeof(struct mfcp_softc),
+CFATTACH_DECL(mfcp, sizeof(struct mfcp_softc),
     mfcpmatch, mfcpattach, NULL, NULL);
 #endif
 
@@ -342,11 +341,11 @@ const struct speedtab mfcs2speedtab2[] = {
  * if we are an bsc/Alf Data MultFaceCard (I, II, and III)
  */
 int
-mfcmatch(device_t parent, cfdata_t cf, void *aux)
+mfcmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 	if (zap->manid == 2092 &&
 	    (zap->prodid == 16 || zap->prodid == 17 || zap->prodid == 18))
 
@@ -355,7 +354,7 @@ mfcmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-mfcattach(device_t parent, device_t self, void *aux)
+mfcattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	struct mfc_softc *scc;
 	struct zbus_args *zap;
@@ -363,13 +362,12 @@ mfcattach(device_t parent, device_t self, void *aux)
 	int unit;
 	struct mfc_regs *rp;
 
-	zap = aux;
+	zap = auxp;
 
 	printf ("\n");
 
-	scc = device_private(self);
-	scc->sc_dev = self;
-	unit = device_unit(self);
+	scc = (struct mfc_softc *)dp;
+	unit = device_unit(&scc->sc_dev);
 	scc->sc_regs = rp = zap->va;
 	if (zap->prodid == 18)
 		scc->mfc_iii = 3;
@@ -405,33 +403,33 @@ mfcattach(device_t parent, device_t self, void *aux)
 	add_isr(&scc->sc_isr);
 
 	/* configure ports */
-	memcpy(&ma.zargs, zap, sizeof(struct zbus_args));
+	bcopy(zap, &ma.zargs, sizeof(struct zbus_args));
 	ma.subdev = "mfcs";
 	ma.unit = unit * 2;
-	config_found(self, &ma, mfcprint);
+	config_found(dp, &ma, mfcprint);
 	ma.unit = unit * 2 + 1;
-	config_found(self, &ma, mfcprint);
+	config_found(dp, &ma, mfcprint);
 	ma.subdev = "mfcp";
 	ma.unit = unit;
-	config_found(self, &ma, mfcprint);
+	config_found(dp, &ma, mfcprint);
 }
 
 /*
  *
  */
 int
-mfcsmatch(device_t parent, cfdata_t cf, void *aux)
+mfcsmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct mfc_args *ma;
 
-	ma = aux;
+	ma = auxp;
 	if (strcmp(ma->subdev, "mfcs") == 0)
 		return (1);
 	return (0);
 }
 
 void
-mfcsattach(device_t parent, device_t self, void *aux)
+mfcsattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	int unit;
 	struct mfcs_softc *sc;
@@ -439,13 +437,15 @@ mfcsattach(device_t parent, device_t self, void *aux)
 	struct mfc_args *ma;
 	struct mfc_regs *rp;
 
-	sc = device_private(self);
-	sc->sc_dev = self;
-	scc = device_private(parent);
-	ma = aux;
+	sc = device_private(dp);
+	scc = device_private(pdp);
+	ma = auxp;
 
-	printf (": input fifo %d output fifo %d\n", SERIBUF_SIZE,
-	    SEROBUF_SIZE);
+	if (dp) {
+		printf (": input fifo %d output fifo %d\n", SERIBUF_SIZE,
+		    SEROBUF_SIZE);
+		alloc_sicallback();
+	}
 
 	unit = ma->unit;
 	mfcs_active |= 1 << unit;
@@ -454,7 +454,6 @@ mfcsattach(device_t parent, device_t self, void *aux)
 	sc->sc_regs = rp = scc->sc_regs;
 	sc->sc_duart = (struct duart_regs *) ((unit & 1) ? 
 	    __UNVOLATILE(&rp->du_mr1b) : __UNVOLATILE(&rp->du_mr1a));
-	sc->mfcs_si = softint_establish(SOFTINT_SERIAL, mfcs_intr_soft, sc);
 	/*
 	 * should have only one vbl routine to handle all ports?
 	 */
@@ -467,7 +466,7 @@ mfcsattach(device_t parent, device_t self, void *aux)
  * print diag if pnp is NULL else just extra
  */
 int
-mfcprint(void *aux, const char *pnp)
+mfcprint(void *auxp, const char *pnp)
 {
 	if (pnp == NULL)
 		return(UNCONF);
@@ -491,7 +490,7 @@ mfcsopen(dev_t dev, int flag, int mode, struct lwp *l)
 	if (sc->sc_tty)
 		tp = sc->sc_tty;
 	else {
-		tp = sc->sc_tty = tty_alloc();
+		tp = sc->sc_tty = ttymalloc();
 		tty_attach(tp);
 	}
 
@@ -604,7 +603,7 @@ mfcsclose(dev_t dev, int flag, int mode, struct lwp *l)
 #if not_yet
 	if (tp != &mfcs_cons) {
 		remove_vbl_function(&sc->vbl_node);
-		tty_free(tp);
+		ttyfree(tp);
 		sc->sc_tty = (struct tty *) NULL;
 	}
 #endif
@@ -952,7 +951,7 @@ mfcintr(void *arg)
 	istat = regs->du_isr & scc->imask;
 	if (istat == 0)
 		return (0);
-	unit = device_unit(scc->sc_dev) * 2;
+	unit = device_unit(&scc->sc_dev) * 2;
 	if (istat & 0x02) {		/* channel A receive interrupt */
 		sc = device_lookup_private(&mfcs_cd, unit);
 		while (1) {
@@ -1002,7 +1001,10 @@ mfcintr(void *arg)
 			tp->t_state &= ~(TS_BUSY | TS_FLUSH);
 			scc->imask &= ~0x01;
 			regs->du_imr = scc->imask;
-			softint_schedule(sc->mfcs_si);
+			add_sicallback (tp->t_linesw ?
+			    (sifunc_t)tp->t_linesw->l_start
+			    : (sifunc_t)mfcsstart, tp, NULL);
+
 		}
 		else
 			regs->du_tba = *sc->ptr++;
@@ -1014,14 +1016,16 @@ mfcintr(void *arg)
 			tp->t_state &= ~(TS_BUSY | TS_FLUSH);
 			scc->imask &= ~0x10;
 			regs->du_imr = scc->imask;
-			softint_schedule(sc->mfcs_si);
+			add_sicallback (tp->t_linesw ?
+			    (sifunc_t)tp->t_linesw->l_start
+			    : (sifunc_t)mfcsstart, tp, NULL);
 		}
 		else
 			regs->du_tbb = *sc->ptr++;
 	}
 	if (istat & 0x80) {		/* input port change interrupt */
 		c = regs->du_ipcr;
-		printf ("%s: ipcr %02x", device_xname(scc->sc_dev), c);
+		printf ("%s: ipcr %02x", scc->sc_dev.dv_xname, c);
 	}
 	return(1);
 }
@@ -1062,7 +1066,7 @@ mfcsxintr(int unit)
 		splx(s2);
 		if (ovfl != 0)
 			log(LOG_WARNING, "%s: %d buffer overflow!\n",
-			    device_xname(sc->sc_dev), ovfl);
+			    sc->sc_dev.dv_xname, ovfl);
 	}
 	if (sc->incnt == 0 && (tp->t_state & TS_TBLOCK) == 0) {
 		sc->sc_regs->du_btst = 1 << unit;	/* XXXX */
@@ -1154,16 +1158,4 @@ mfcsmint(int unit)
 			sc->sc_regs->du_btrst = 0x0a << (unit & 1);
 		}
 	}
-}
-
-void
-mfcs_intr_soft(void *arg)
-{
-	struct mfcs_softc *sc = (struct mfcs_softc *)arg;
-	struct tty *tp = sc->sc_tty;
-
-	if (tp->t_linesw)
-		tp->t_linesw->l_start(tp);
-	else
-		mfcsstart(tp);
 }

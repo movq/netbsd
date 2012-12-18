@@ -1,4 +1,4 @@
-/* $NetBSD: mklocaledb.c,v 1.2 2009/01/05 02:55:34 dogcow Exp $ */
+/* $NetBSD: mklocaledb.c,v 1.2.2.3 2009/01/15 03:57:38 snj Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: mklocaledb.c,v 1.2 2009/01/05 02:55:34 dogcow Exp $");
+__RCSID("$NetBSD: mklocaledb.c,v 1.2.2.3 2009/01/15 03:57:38 snj Exp $");
 #endif /* not lint */
 
 #include <assert.h>

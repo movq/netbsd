@@ -1,4 +1,4 @@
-/*	$NetBSD: sockstat.c,v 1.17 2011/05/29 04:45:08 manu Exp $ */
+/*	$NetBSD: sockstat.c,v 1.14 2008/04/29 06:53:03 martin Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: sockstat.c,v 1.17 2011/05/29 04:45:08 manu Exp $");
+__RCSID("$NetBSD: sockstat.c,v 1.14 2008/04/29 06:53:03 martin Exp $");
 #endif
 
 #include <sys/types.h>
@@ -67,8 +67,6 @@ __RCSID("$NetBSD: sockstat.c,v 1.17 2011/05/29 04:45:08 manu Exp $");
 #include <unistd.h>
 #include <util.h>
 
-#include "prog_ops.h"
-
 #define satosun(sa)	((struct sockaddr_un *)(sa))
 #define satosin(sa)	((struct sockaddr_in *)(sa))
 #ifdef INET6
@@ -99,7 +97,7 @@ struct sockitem {
 };
 
 struct kinfo_file *flist;
-size_t flistc;
+u_int nfiles;
 
 int pf_list, only, nonames;
 bitstr_t *portmap;
@@ -116,8 +114,7 @@ int
 main(int argc, char *argv[])
 {
 	struct kinfo_pcb *kp;
-	int ch;
-	size_t i;
+	int i, ch;
 	struct kinfo_proc2 p;
 
 	pf_list = only = 0;
@@ -174,9 +171,6 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (prog_init && prog_init() == -1)
-		err(1, "init");
-
 	if ((portmap != NULL) && (pf_list == 0)) {
 		pf_list = PF_LIST_INET;
 #ifdef INET6
@@ -210,14 +204,13 @@ main(int argc, char *argv[])
 
 	if (pf_list & PF_LIST_LOCAL) {
 		get_sockets("net.local.stream.pcblist");
-		get_sockets("net.local.seqpacket.pcblist");
 		get_sockets("net.local.dgram.pcblist");
 	}
 
 	get_files();
 
 	p.p_pid = 0;
-	for (i = 0; i < flistc; i++)
+	for (i = 0; i < nfiles; i++)
 		if ((kp = pick_socket(&flist[i])) != NULL &&
 		    get_proc(&p, flist[i].ki_pid) == 0)
 			print_socket(&flist[i], kp, &p);
@@ -333,9 +326,9 @@ get_files(void)
 
 	sysctl_sucker(&name[0], namelen, &v, &sz);
 	flist = v;
-	flistc = sz / sizeof(struct kinfo_file);
+	nfiles = sz / sizeof(struct kinfo_file);
 
-	qsort(flist, flistc, sizeof(*flist), sort_files);
+	qsort(flist, nfiles, sizeof(*flist), sort_files);
 }
 
 int
@@ -361,7 +354,7 @@ sysctl_sucker(int *name, u_int namelen, void **vp, size_t *szp)
 	v = NULL;
 	sz = 0;
 	do {
-		rc = prog_sysctl(&name[0], namelen, v, &sz, NULL, 0);
+		rc = sysctl(&name[0], namelen, v, &sz, NULL, 0);
 		if (rc == -1 && errno != ENOMEM)
 			err(1, "sysctl");
 		if (rc == -1 && v != NULL) {
@@ -540,7 +533,7 @@ get_proc(struct kinfo_proc2 *p, int pid)
 	name[namelen++] = sz;
 	name[namelen++] = 1;
 
-	return (prog_sysctl(&name[0], namelen, p, &sz, NULL, 0));
+	return (sysctl(&name[0], namelen, p, &sz, NULL, 0));
 }
 
 int

@@ -1,4 +1,4 @@
-/* $NetBSD: pcppivar.h,v 1.11 2011/11/23 23:07:32 jmcneill Exp $ */
+/* $NetBSD: pcppivar.h,v 1.9.14.1 2011/06/18 16:24:10 bouyer Exp $ */
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
@@ -44,11 +44,14 @@ struct pcppi_softc {
 	bus_size_t sc_size;
 	device_t sc_timer;
         
+	struct callout sc_bell_ch;
+
 	int sc_bellactive, sc_bellpitch;
+	int sc_slp;
 	int sc_timeout;
 
-	kcondvar_t sc_slp;
-	callout_t sc_bell_ch;
+	kmutex_t sc_lock;
+	kcondvar_t sc_stop_cv;
 };
 
 void pcppi_attach(struct pcppi_softc *);
@@ -58,6 +61,5 @@ int pcppi_detach(device_t, int);
 #define	PCPPI_BELL_POLL		0x02	/* synchronous; poll for complete */
 
 void pcppi_bell(pcppi_tag_t, int, int, int);
-void pcppi_bell_locked(pcppi_tag_t, int, int, int);
 
 #endif /* ! _PCPPIVAR_H_ */

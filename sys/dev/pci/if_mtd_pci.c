@@ -1,4 +1,4 @@
-/* $NetBSD: if_mtd_pci.c,v 1.18 2012/10/27 17:18:33 chs Exp $ */
+/* $NetBSD: if_mtd_pci.c,v 1.13 2008/04/28 20:23:55 martin Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
 /* TODO: Check why in IO space, the MII won't work. Memory mapped works */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mtd_pci.c,v 1.18 2012/10/27 17:18:33 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mtd_pci.c,v 1.13 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -54,8 +54,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_mtd_pci.c,v 1.18 2012/10/27 17:18:33 chs Exp $");
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 
-#define PCI_IO_MAP_REG PCI_BAR(0)
-#define PCI_MEM_MAP_REG PCI_BAR(1)
+#define PCI_IO_MAP_REG		0x10
+#define PCI_MEM_MAP_REG		0x14
 
 struct mtd_pci_device_id {
 	pci_vendor_id_t		vendor;		/* PCI vendor ID */
@@ -67,14 +67,14 @@ static struct mtd_pci_device_id mtd_ids[] = {
 	{ 0, 0 }
 };
 
-static int	mtd_pci_match(device_t, cfdata_t, void *);
+static int	mtd_pci_match(device_t, struct cfdata *, void *);
 static void	mtd_pci_attach(device_t, device_t, void *);
 
-CFATTACH_DECL_NEW(mtd_pci, sizeof(struct mtd_softc), mtd_pci_match, mtd_pci_attach,
+CFATTACH_DECL(mtd_pci, sizeof(struct mtd_softc), mtd_pci_match, mtd_pci_attach,
     NULL, NULL);
 
 static int
-mtd_pci_match(device_t parent, cfdata_t match, void *aux)
+mtd_pci_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	struct mtd_pci_device_id *id;
@@ -97,9 +97,10 @@ mtd_pci_attach(device_t parent, device_t self, void *aux)
 	bus_space_tag_t iot, memt;
 	bus_space_handle_t ioh, memh;
 	int io_valid, mem_valid;
+	char devinfo[256];
 
-	sc->dev = self;
-	pci_aprint_devinfo(pa, NULL);
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	printf(": %s (rev. 0x%02x)\n", devinfo, PCI_REVISION(pa->pa_class));
 
 	io_valid = (pci_mapreg_map(pa, PCI_IO_MAP_REG, PCI_MAPREG_TYPE_IO,
 			0, &iot, &ioh, NULL, NULL) == 0);
@@ -114,7 +115,7 @@ mtd_pci_attach(device_t parent, device_t self, void *aux)
 		sc->bus_tag = iot;
 		sc->bus_handle = ioh;
 	} else {
-		aprint_error_dev(sc->dev, "could not map memory or i/o space\n");
+		aprint_error_dev(&sc->dev, "could not map memory or i/o space\n");
 		return;
 	}
 	sc->dma_tag = pa->pa_dmat;
@@ -123,19 +124,20 @@ mtd_pci_attach(device_t parent, device_t self, void *aux)
 	mtd_config(sc);
 
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error_dev(sc->dev, "could not map interrupt\n");
+		aprint_error_dev(&sc->dev, "could not map interrupt\n");
 		return;
 	}
 	intrstring = pci_intr_string(pa->pa_pc, ih);
 
 	if (pci_intr_establish(pa->pa_pc, ih, IPL_NET, mtd_irq_h, sc) == NULL) {
-		aprint_error_dev(sc->dev, "could not establish interrupt");
+		aprint_error_dev(&sc->dev, "could not establish interrupt");
 		if (intrstring != NULL)
-			aprint_error(" at %s", intrstring);
-		aprint_error("\n");
+			printf(" at %s", intrstring);
+		printf("\n");
 		return;
 	} else {
-		aprint_normal_dev(sc->dev, "using %s for interrupt\n",
+		printf("%s: using %s for interrupt\n",
+			device_xname(&sc->dev),
 			intrstring ? intrstring : "unknown interrupt");
 	}
 }

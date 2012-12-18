@@ -1,4 +1,4 @@
-/*	$NetBSD: mime_header.c,v 1.8 2009/04/10 13:08:25 christos Exp $	*/
+/*	$NetBSD: mime_header.c,v 1.6 2008/04/28 20:24:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -39,10 +39,9 @@
 
 #include <sys/cdefs.h>
 #ifndef __lint__
-__RCSID("$NetBSD: mime_header.c,v 1.8 2009/04/10 13:08:25 christos Exp $");
+__RCSID("$NetBSD: mime_header.c,v 1.6 2008/04/28 20:24:14 martin Exp $");
 #endif /* not __lint__ */
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -92,17 +91,16 @@ mime_QPh_decode(char *outbuf, size_t outlen, const char *inbuf, size_t inlen)
 		if (*p == '=') {
 			p++;
 			if (p + 1 < inend) {
-				size_t c;
+				int c;
 				char *bufend;
 				char buf[3];
-
 				buf[0] = *p++;
 				buf[1] = *p;
 				buf[2] = '\0';
 				c = strtol(buf, &bufend, 16);
 				if (bufend != &buf[2])
 					return -1;
-				*q++ = (char)c;
+				*q++ = c;
 			}
 			else
 				return -1;
@@ -183,12 +181,8 @@ decode_word(const char **ibuf, char **obuf, char *oend, const char *to_cs)
 	if (iend > *ibuf + 75)
 		return -1;
 
-	if (oend < *obuf + 1) {
-		assert(/*CONSTCOND*/ 0);	/* We have a coding error! */
-		return -1;
-	}
 	dstend = to_cs ? decword : *obuf;
-	dstlen = (to_cs ? sizeof(decword) : (size_t)(oend - *obuf)) - 1;
+	dstlen = (to_cs ? sizeof(decword): oend - *obuf) - 1;
 
 	if (enctype == 'B' || enctype == 'b')
 		declen = mime_B64_decode(dstend, dstlen, encword, enclen);

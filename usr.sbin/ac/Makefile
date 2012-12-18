@@ -1,6 +1,7 @@
-#	$NetBSD: Makefile,v 1.7 2009/04/22 15:23:01 lukem Exp $
+#	$NetBSD: Makefile,v 1.6 2005/03/16 01:41:20 xtraeme Exp $
 
 PROG=	ac
 MAN=	ac.8
+WARNS=  3
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: cac_eisa.c,v 1.22 2012/10/27 17:18:16 chs Exp $	*/
+/*	$NetBSD: cac_eisa.c,v 1.19 2008/04/28 20:23:48 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cac_eisa.c,v 1.22 2012/10/27 17:18:16 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cac_eisa.c,v 1.19 2008/04/28 20:23:48 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,8 +80,8 @@ __KERNEL_RCSID(0, "$NetBSD: cac_eisa.c,v 1.22 2012/10/27 17:18:16 chs Exp $");
 #define CAC_EISA_IOSIZE			0x0017
 #define CAC_EISA_IOCONF			0x38
 
-static void	cac_eisa_attach(device_t, device_t, void *);
-static int	cac_eisa_match(device_t, cfdata_t, void *);
+static void	cac_eisa_attach(struct device *, struct device *, void *);
+static int	cac_eisa_match(struct device *, struct cfdata *, void *);
 
 static struct	cac_ccb *cac_eisa_l0_completed(struct cac_softc *);
 static int	cac_eisa_l0_fifo_full(struct cac_softc *);
@@ -89,7 +89,7 @@ static void	cac_eisa_l0_intr_enable(struct cac_softc *, int);
 static int	cac_eisa_l0_intr_pending(struct cac_softc *);
 static void	cac_eisa_l0_submit(struct cac_softc *, struct cac_ccb *);
 
-CFATTACH_DECL_NEW(cac_eisa, sizeof(struct cac_softc),
+CFATTACH_DECL(cac_eisa, sizeof(struct cac_softc),
     cac_eisa_match, cac_eisa_attach, NULL, NULL);
 
 static const struct cac_linkage cac_eisa_l0 = {
@@ -113,7 +113,7 @@ static struct cac_eisa_type {
 };
 
 static int
-cac_eisa_match(device_t parent, cfdata_t match,
+cac_eisa_match(struct device *parent, struct cfdata *match,
     void *aux)
 {
 	struct eisa_attach_args *ea;
@@ -129,7 +129,7 @@ cac_eisa_match(device_t parent, cfdata_t match,
 }
 
 static void
-cac_eisa_attach(device_t parent, device_t self, void *aux)
+cac_eisa_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct eisa_attach_args *ea;
 	bus_space_handle_t ioh;
@@ -151,7 +151,6 @@ cac_eisa_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 
-	sc->sc_dev = self;
 	sc->sc_iot = iot;
 	sc->sc_ioh = ioh;
 	sc->sc_dmat = ea->ea_dmat;

@@ -1,4 +1,4 @@
-/*$NetBSD: at91st.c,v 1.6 2012/11/12 18:00:36 skrll Exp $*/
+/*$NetBSD: at91st.c,v 1.2 2008/07/03 01:15:38 matt Exp $*/
 
 /*
  * AT91RM9200 clock functions
@@ -20,6 +20,13 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *This product includes software developed by the NetBSD
+ *Foundation, Inc. and its contributors.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91st.c,v 1.6 2012/11/12 18:00:36 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91st.c,v 1.2 2008/07/03 01:15:38 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -51,7 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: at91st.c,v 1.6 2012/11/12 18:00:36 skrll Exp $");
 
 #include <dev/clock_subr.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -79,6 +86,7 @@ void rtcinit(void);
 static int at91st_intr(void* arg);
 
 struct at91st_softc {
+	struct device	sc_dev;
 	bus_space_tag_t	sc_iot;
 	bus_space_handle_t sc_ioh;
 	int		sc_pid;
@@ -146,7 +154,7 @@ static uint32_t usec_to_timer_count(uint32_t usec)
 
 
 
-CFATTACH_DECL_NEW(at91st, sizeof(struct at91st_softc), at91st_match, at91st_attach, NULL, NULL);
+CFATTACH_DECL(at91st, sizeof(struct at91st_softc), at91st_match, at91st_attach, NULL, NULL);
 
 
 
@@ -161,8 +169,8 @@ at91st_match(device_t parent, cfdata_t match, void *aux)
 static void
 at91st_attach(device_t parent, device_t self, void *aux)
 {
-    struct at91st_softc *sc = device_private(self);
-    struct at91bus_attach_args *sa = aux;
+    struct at91st_softc *sc = (struct at91st_softc*) self;
+    struct at91bus_attach_args *sa = (struct at91bus_attach_args*) aux;
 
     printf("\n");
     
@@ -174,7 +182,7 @@ at91st_attach(device_t parent, device_t self, void *aux)
 
     /* map bus space and get handle */
     if (bus_space_map(sc->sc_iot, sa->sa_addr, sa->sa_size, 0, &sc->sc_ioh) != 0)
-        panic("%s: Cannot map registers", device_xname(self));
+        panic("%s: Cannot map registers", self->dv_xname);
 #endif
 
     if (at91st_sc == NULL)
@@ -336,7 +344,7 @@ microtime(register struct timeval *tvp)
 extern int hardclock_ticks;
 static void tdelay(unsigned int ticks)
 {
-    uint32_t   start, end, current;
+    u_int32_t   start, end, current;
     
     current = hardclock_ticks;
     start = current;
@@ -351,7 +359,7 @@ static void tdelay(unsigned int ticks)
 static void udelay(unsigned int usec)
 {
 //    struct at91st_softc *sc = at91st_sc;
-    uint32_t crtv, t, diff;
+    u_int32_t crtv, t, diff;
 
     usec = (usec * 1000 + AT91_SCLK - 1) / AT91_SCLK + 1;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: panel.c,v 1.2 2011/02/16 23:44:19 jmcneill Exp $ */
+/*	$NetBSD: panel.c,v 1.1.4.2 2009/09/26 18:03:06 snj Exp $ */
 
 /*-
  * Copyright (c) 2009 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: panel.c,v 1.2 2011/02/16 23:44:19 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: panel.c,v 1.1.4.2 2009/09/26 18:03:06 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,11 +71,6 @@ CFATTACH_DECL_NEW(panel, sizeof(struct panel_softc),
 static int
 panel_match(device_t parent, cfdata_t match, void *aux)
 {
-	struct hpc_attach_args *ha = aux;
-
-	if (strcmp(ha->ha_name, match->cf_name) != 0)
-		return 0;
-
 	if (mach_type == MACH_SGI_IP22)
 		return 1;
 

@@ -1,4 +1,4 @@
-/* $NetBSD: chk.c,v 1.22 2011/10/17 16:31:14 mbalmer Exp $ */
+/* $NetBSD: chk.c,v 1.19 2008/04/26 19:38:30 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -38,11 +38,10 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: chk.c,v 1.22 2011/10/17 16:31:14 mbalmer Exp $");
+__RCSID("$NetBSD: chk.c,v 1.19 2008/04/26 19:38:30 christos Exp $");
 #endif
 
 #include <ctype.h>
-#include <string.h>
 #include <limits.h>
 #include <stdlib.h>
 
@@ -237,7 +236,8 @@ chkvtui(hte_t *hte, sym_t *def, sym_t *decl)
 	fcall_t	*call;
 	char	*pos1;
 	type_t	*tp1, *tp2;
-	int	dowarn, eq;
+	/* LINTED (automatic hides external declaration: warn) */
+	int	warn, eq;
 	tspec_t	t1;
 
 	if (hte->h_calls == NULL)
@@ -251,7 +251,7 @@ chkvtui(hte_t *hte, sym_t *def, sym_t *decl)
 	t1 = (tp1 = TP(def->s_type)->t_subt)->t_tspec;
 	for (call = hte->h_calls; call != NULL; call = call->f_nxt) {
 		tp2 = TP(call->f_type)->t_subt;
-		eq = eqtype(tp1, tp2, 1, 0, 0, (dowarn = 0, &dowarn));
+		eq = eqtype(tp1, tp2, 1, 0, 0, (warn = 0, &warn));
 		if (!call->f_rused) {
 			/* no return value used */
 			if ((t1 == STRUCT || t1 == UNION) && !eq) {
@@ -277,7 +277,7 @@ chkvtui(hte_t *hte, sym_t *def, sym_t *decl)
 			}
 			continue;
 		}
-		if (!eq || (sflag && dowarn)) {
+		if (!eq || (sflag && warn)) {
 			pos1 = xstrdup(mkpos(&def->s_pos));
 			/* %s value used inconsistenty\t%s  ::  %s */
 			msg(4, hte->h_name, pos1, mkpos(&call->f_pos));
@@ -296,7 +296,8 @@ chkvtdi(hte_t *hte, sym_t *def, sym_t *decl)
 {
 	sym_t	*sym;
 	type_t	*tp1, *tp2;
-	int	eq, dowarn;
+	/* LINTED (automatic hides external declaration: warn) */
+	int	eq, warn;
 	char	*pos1;
 
 	if (def == NULL)
@@ -310,14 +311,14 @@ chkvtdi(hte_t *hte, sym_t *def, sym_t *decl)
 		if (sym == def)
 			continue;
 		tp2 = TP(sym->s_type);
-		dowarn = 0;
+		warn = 0;
 		if (tp1->t_tspec == FUNC && tp2->t_tspec == FUNC) {
 			eq = eqtype(xt1 = tp1->t_subt, xt2 = tp2->t_subt,
-			    1, 0, 0, &dowarn);
+			    1, 0, 0, &warn);
 		} else {
-			eq = eqtype(xt1 = tp1, xt2 = tp2, 0, 0, 0, &dowarn);
+			eq = eqtype(xt1 = tp1, xt2 = tp2, 0, 0, 0, &warn);
 		}
-		if (!eq || (sflag && dowarn)) {
+		if (!eq || (sflag && warn)) {
 			char b1[64], b2[64];
 			pos1 = xstrdup(mkpos(&def->s_pos));
 			/* %s value declared inconsistently\t%s  ::  %s */
@@ -446,7 +447,8 @@ static void
 chkau(hte_t *hte, int n, sym_t *def, sym_t *decl, pos_t *pos1p,
 	fcall_t *call1, fcall_t *call, type_t *arg1, type_t *arg2)
 {
-	int	promote, asgn, dowarn;
+	/* LINTED (automatic hides external declaration: warn) */
+	int	promote, asgn, warn;
 	tspec_t	t1, t2;
 	arginf_t *ai, *ai1;
 	char	*pos1;
@@ -471,8 +473,8 @@ chkau(hte_t *hte, int n, sym_t *def, sym_t *decl, pos_t *pos1p,
 	 */
 	asgn = def != NULL || (decl != NULL && TP(decl->s_type)->t_proto);
 
-	dowarn = 0;
-	if (eqtype(arg1, arg2, 1, promote, asgn, &dowarn) && (!sflag || !dowarn))
+	warn = 0;
+	if (eqtype(arg1, arg2, 1, promote, asgn, &warn) && (!sflag || !warn))
 		return;
 
 	/*
@@ -1046,19 +1048,6 @@ tomanyarg(hte_t *hte, fcall_t *call)
 	msg(16, hte->h_name, mkpos(&call->f_pos));
 }
 
-/*
- * List of functions where we usually don't care about their result.
- * NB: Must be sorted.
- */
-static const char ignorelist[][8] = {
-	"memcpy",
-	"memmove",
-	"memset",
-	"printf",
-	"strcat",
-	"strcpy",
-	"vprintf",
-};
 
 /*
  * Print warnings for return values which are used, but not returned,
@@ -1071,38 +1060,33 @@ chkrvu(hte_t *hte, sym_t *def)
 	int	used, ignored;
 
 	if (def == NULL)
-		/* don't know whether or not the functions returns a value */
+		/* don't know wheter or not the functions returns a value */
 		return;
 
 	if (hte->h_calls == NULL)
 		return;
 
 	if (def->s_rval) {
-		/*
-		 * XXX as soon as we are able to disable single warnings
-		 * the following dependencies from hflag should be removed.
-		 * but for now I do'nt want to be botherd by this warnings
-		 * which are almost always useless.
-		 */
-		if (hflag == 0)
-			return;
-		if (hflag == 1 && bsearch(hte->h_name, ignorelist,
-		    __arraycount(ignorelist), sizeof(ignorelist[0]),
-		    (int (*)(const void *, const void *))strcmp) != NULL)
-			return;
-
 		/* function has return value */
 		used = ignored = 0;
 		for (call = hte->h_calls; call != NULL; call = call->f_nxt) {
 			used |= call->f_rused || call->f_rdisc;
 			ignored |= !call->f_rused && !call->f_rdisc;
 		}
+		/*
+		 * XXX as soon as we are able to disable single warnings
+		 * the following dependencies from hflag should be removed.
+		 * but for now I do'nt want to be botherd by this warnings
+		 * which are almost always useless.
+		 */
 		if (!used && ignored) {
-			/* %s returns value which is always ignored */
-			msg(8, hte->h_name);
+			if (hflag)
+				/* %s returns value which is always ignored */
+				msg(8, hte->h_name);
 		} else if (used && ignored) {
-			/* %s returns value which is sometimes ign. */
-			msg(9, hte->h_name);
+			if (hflag)
+				/* %s returns value which is sometimes ign. */
+				msg(9, hte->h_name);
 		}
 	} else {
 		/* function has no return value */
@@ -1120,7 +1104,8 @@ chkrvu(hte_t *hte, sym_t *def)
 static void
 chkadecl(hte_t *hte, sym_t *def, sym_t *decl)
 {
-	int	osdef, eq, dowarn, n;
+	/* LINTED (automatic hides external declaration: warn) */
+	int	osdef, eq, warn, n;
 	sym_t	*sym1, *sym;
 	type_t	**ap1, **ap2, *tp1, *tp2;
 	char	*pos1;
@@ -1151,9 +1136,9 @@ chkadecl(hte_t *hte, sym_t *def, sym_t *decl)
 		n = 0;
 		while (*ap1 != NULL && *ap2 != NULL) {
 			type_t *xt1, *xt2;
-			dowarn = 0;
-			eq = eqtype(xt1 = *ap1, xt2 = *ap2, 1, osdef, 0, &dowarn);
-			if (!eq || dowarn) {
+			warn = 0;
+			eq = eqtype(xt1 = *ap1, xt2 = *ap2, 1, osdef, 0, &warn);
+			if (!eq || warn) {
 				char b1[64], b2[64];
 				pos1 = xstrdup(mkpos(&sym1->s_pos));
 				pos2 = mkpos(&sym->s_pos);
@@ -1197,11 +1182,11 @@ chkadecl(hte_t *hte, sym_t *def, sym_t *decl)
  * asgn		left indirected type must have at least the same qualifiers
  *		like right indirected type (for assignments and function
  *		arguments)
- * *dowarn	set to 1 if an old style declaration was compared with
+ * *warn	set to 1 if an old style declaration was compared with
  *		an incompatible prototype declaration
  */
 static int
-eqtype(type_t *tp1, type_t *tp2, int ignqual, int promot, int asgn, int *dowarn)
+eqtype(type_t *tp1, type_t *tp2, int ignqual, int promot, int asgn, int *warn)
 {
 	tspec_t	t, to;
 	int	indir;
@@ -1301,13 +1286,13 @@ eqtype(type_t *tp1, type_t *tp2, int ignqual, int promot, int asgn, int *dowarn)
 
 		if (t == FUNC) {
 			if (tp1->t_proto && tp2->t_proto) {
-				if (!eqargs(tp1, tp2, dowarn))
+				if (!eqargs(tp1, tp2, warn))
 					return (0);
 			} else if (tp1->t_proto) {
-				if (!mnoarg(tp1, dowarn))
+				if (!mnoarg(tp1, warn))
 					return (0);
 			} else if (tp2->t_proto) {
-				if (!mnoarg(tp2, dowarn))
+				if (!mnoarg(tp2, warn))
 					return (0);
 			}
 		}
@@ -1327,7 +1312,7 @@ eqtype(type_t *tp1, type_t *tp2, int ignqual, int promot, int asgn, int *dowarn)
  * Compares arguments of two prototypes
  */
 static int
-eqargs(type_t *tp1, type_t *tp2, int *dowarn)
+eqargs(type_t *tp1, type_t *tp2, int *warn)
 {
 	type_t	**a1, **a2;
 
@@ -1339,7 +1324,7 @@ eqargs(type_t *tp1, type_t *tp2, int *dowarn)
 
 	while (*a1 != NULL && *a2 != NULL) {
 
-		if (eqtype(*a1, *a2, 1, 0, 0, dowarn) == 0)
+		if (eqtype(*a1, *a2, 1, 0, 0, warn) == 0)
 			return (0);
 
 		a1++;
@@ -1361,13 +1346,13 @@ eqargs(type_t *tp1, type_t *tp2, int *dowarn)
  *	   is applied on it
  */
 static int
-mnoarg(type_t *tp, int *dowarn)
+mnoarg(type_t *tp, int *warn)
 {
 	type_t	**arg;
 	tspec_t	t;
 
-	if (tp->t_vararg && dowarn != NULL)
-		*dowarn = 1;
+	if (tp->t_vararg && warn != NULL)
+		*warn = 1;
 	for (arg = tp->t_args; *arg != NULL; arg++) {
 		if ((t = (*arg)->t_tspec) == FLOAT)
 			return (0);

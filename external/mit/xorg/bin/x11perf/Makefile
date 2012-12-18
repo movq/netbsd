@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2011/11/20 21:02:23 dholland Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2008/07/29 05:01:22 mrg Exp $
 
 .include <bsd.own.mk>
 
@@ -12,19 +12,15 @@ CPPFLAGS+=	-DXFT -DXFREE86_FT2 -I${DESTDIR}${X11INCDIR}/freetype2
 
 MAN=	Xmark.1 x11perf.1 x11perfcomp.1
 
-x11perfcomp: x11perfcomp.in
-	${TOOL_SED} \
-		-e "s,@x11perfcompdir@,${X11LIBDIR}/x11perfcomp,;" \
-		-e "s,@MKTEMP@,/usr/bin/mktemp,;" \
-		< ${.ALLSRC} > ${.TARGET}
+BUILDSYMLINKS=	x11pcomp.cpp x11perfcomp.cpp
 
+CPPSCRIPTS=		x11perfcomp
+CPPSCRIPTFLAGS=		-DLIBPATH=${X11LIBDIR}/x11perfcomp
 SCRIPTS=		x11perfcomp Xmark \
 			fillblnk perfboth perfratio
 SCRIPTSDIR_fillblnk.sh=	${X11LIBDIR}/x11perfcomp
 SCRIPTSDIR_perfboth.sh=	${X11LIBDIR}/x11perfcomp
 SCRIPTSDIR_perfratio.sh=${X11LIBDIR}/x11perfcomp
-
-CLEANFILES+=	x11perfcomp
 
 LDADD+=	-lXft -lfontconfig -lfreetype -lexpat -lXrender
 DPADD+=	${LIBXFT} ${LIBFONTCONFIG} ${LIBFREETYPE} ${LIBEXPAT} ${LIBXRENDER}
@@ -32,7 +28,6 @@ LDADD+=	-lXmuu -lXt -lSM -lICE -lXext -lX11 -lm
 DPADD+=	${LIBXMUU} ${LIBXT} ${LIBSM} ${LIBICE} ${LIBXEXT} ${LIBX11} ${LIBM}
 
 .PATH:	${X11SRCDIR.${PROG}}
-.PATH:	${X11SRCDIR.${PROG}}/man
 
 .include <bsd.x11.mk>
 .include <bsd.prog.mk>

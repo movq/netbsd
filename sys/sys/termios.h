@@ -1,4 +1,4 @@
-/*	$NetBSD: termios.h,v 1.31 2009/12/26 19:31:34 mrg Exp $	*/
+/*	$NetBSD: termios.h,v 1.29 2005/12/11 12:25:21 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1993, 1994
@@ -78,7 +78,7 @@
 #endif
 #define	NCCS		20
 
-#define _POSIX_VDISABLE	__CAST(unsigned char, '\377')
+#define _POSIX_VDISABLE	((unsigned char)'\377')
 
 #if defined(_NETBSD_SOURCE)
 #define CCEQ(val, c)	(c == val ? val != _POSIX_VDISABLE : 0)
@@ -88,7 +88,7 @@
  * Input flags - software input processing
  */
 #define	IGNBRK		0x00000001	/* ignore BREAK condition */
-#define	BRKINT		0x00000002	/* map BREAK to SIGINT */
+#define	BRKINT		0x00000002	/* map BREAK to SIGINTR */
 #define	IGNPAR		0x00000004	/* ignore (discard) parity errors */
 #define	PARMRK		0x00000008	/* mark parity and framing errors */
 #define	INPCK		0x00000010	/* enable checking of parity errors */
@@ -168,7 +168,7 @@
 #define	ECHOPRT		0x00000020	/* visual erase mode for hardcopy */
 #define ECHOCTL  	0x00000040	/* echo control chars as ^(Char) */
 #endif  /* defined(_NETBSD_SOURCE) */
-#define	ISIG		0x00000080	/* enable signals INT, QUIT, [D]SUSP */
+#define	ISIG		0x00000080	/* enable signals INTR, QUIT, [D]SUSP */
 #define	ICANON		0x00000100	/* canonicalize input lines */
 #if defined(_NETBSD_SOURCE)
 #define ALTWERASE	0x00000200	/* use alternate WERASE algorithm */

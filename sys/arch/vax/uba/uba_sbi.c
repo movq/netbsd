@@ -1,4 +1,4 @@
-/*	$NetBSD: uba_sbi.c,v 1.29 2010/12/14 23:38:30 matt Exp $	   */
+/*	$NetBSD: uba_sbi.c,v 1.24.14.1 2008/11/22 04:59:18 snj Exp $	   */
 /*
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -67,26 +67,19 @@
  *	@(#)autoconf.c	7.20 (Berkeley) 5/9/91
  */
 
-/*
- * Abus support added by Johnny Billquist 2010
- * Changed UBA code to need to know less of the innards of the
- * actual machine at the same time. Information passed down from
- * the SBI bus instead.
- */
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uba_sbi.c,v 1.29 2010/12/14 23:38:30 matt Exp $");
-
-#define _VAX_BUS_DMA_PRIVATE
+__KERNEL_RCSID(0, "$NetBSD: uba_sbi.c,v 1.24.14.1 2008/11/22 04:59:18 snj Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/bus.h>
-#include <sys/cpu.h>
 #include <sys/device.h>
+#include <sys/systm.h>
 #include <sys/kernel.h>
 
+#define _VAX_BUS_DMA_PRIVATE
+#include <machine/bus.h>
+#include <machine/mtpr.h>
 #include <machine/nexus.h>
+#include <machine/cpu.h>
 #include <machine/sgmap.h>
 #include <machine/scb.h>
 
@@ -99,7 +92,8 @@ __KERNEL_RCSID(0, "$NetBSD: uba_sbi.c,v 1.29 2010/12/14 23:38:30 matt Exp $");
 
 /* Some SBI-specific defines */
 #define UBASIZE		(UBAPAGES * VAX_NBPG)
-#define UMEM(sa,i) ((sa->sa_base)+0x100000+(i)*0x40000)
+#define UMEMA8600(i)   	(0x20100000+(i)*0x40000)
+#define	UMEMB8600(i)	(0x22100000+(i)*0x40000)
 
 /*
  * Some status registers.
@@ -175,7 +169,6 @@ dw780_attach(device_t parent, device_t self, void *aux)
 	struct sbi_attach_args * const sa = aux;
 	int ubaddr = sa->sa_type & 3;
 
-	aprint_naive(": DW780\n");
 	aprint_normal(": DW780\n");
 
 	/*
@@ -221,7 +214,8 @@ dw780_attach(device_t parent, device_t self, void *aux)
 	sc->uv_size = UBASIZE;		/* Size in bytes of Unibus space */
 
 	uba_dma_init(sc);
-	uba_attach(&sc->uv_sc, UMEM(sa,ubaddr) + (UBAPAGES * VAX_NBPG));
+	uba_attach(&sc->uv_sc, (sa->sa_sbinum ? UMEMB8600(ubaddr) :
+	    UMEMA8600(ubaddr)) + (UBAPAGES * VAX_NBPG));
 }
 
 void
@@ -315,7 +309,9 @@ dw780_init(struct uba_softc *sc)
 
 #ifdef notyet
 void
-dw780_purge(struct uba_softc *sc, int bdp)
+dw780_purge(sc, bdp)
+	struct uba_softc *sc;
+	int bdp;
 {
 	struct uba_vsoftc *vc = (void *)sc;
 
@@ -360,14 +356,15 @@ ubaerror(struct uba_softc *uh, int *ipl, int *uvec)
 			    "too many zero vectors (%d in <%d sec)\n",
 			    vc->uh_zvcnt, (int)dt + 1);
 
-			snprintb(sbuf, sizeof(sbuf), UBACNFGR_BITS,
-			    uba->uba_cnfgr & ~0xff);
+			bitmask_snprintf(uba->uba_cnfgr&(~0xff), UBACNFGR_BITS,
+			    sbuf, sizeof(sbuf));
 			aprint_error(
 			    "\tIPL 0x%x\n"
 			    "\tcnfgr: %s\tAdapter Code: 0x%x\n",
 			    *ipl, sbuf, uba->uba_cnfgr&0xff);
 
-			snprintb(sbuf, sizeof(sbuf), ubasr_bits, uba->uba_sr);
+			bitmask_snprintf(uba->uba_sr, ubasr_bits,
+			    sbuf, sizeof(sbuf));
 			aprint_error(
 			    "\tsr: %s\n"
 			    "\tdcr: %x (MIC %sOK)\n",
@@ -379,8 +376,8 @@ ubaerror(struct uba_softc *uh, int *ipl, int *uvec)
 		return;
 	}
 	if (uba->uba_cnfgr & NEX_CFGFLT) {
-		snprintb(sbuf, sizeof(sbuf), ubasr_bits, uba->uba_sr);
-		snprintb(sbuf2, sizeof(sbuf2), NEXFLT_BITS, uba->uba_cnfgr);
+		bitmask_snprintf(uba->uba_sr, ubasr_bits, sbuf, sizeof(sbuf));
+		bitmask_snprintf(uba->uba_cnfgr, NEXFLT_BITS, sbuf2, sizeof(sbuf2));
 		aprint_error_dev(vc->uv_sc.uh_dev,
 		    "sbi fault sr=%s cnfgr=%s\n", sbuf, sbuf2);
 		ubareset(&vc->uv_sc);
@@ -389,7 +386,7 @@ ubaerror(struct uba_softc *uh, int *ipl, int *uvec)
 	}
 	sr = uba->uba_sr;
 	s = spluba();
-	snprintb(sbuf, sizeof(sbuf), ubasr_bits, uba->uba_sr);
+	bitmask_snprintf(uba->uba_sr, ubasr_bits, sbuf, sizeof(sbuf));
 	aprint_error_dev(vc->uv_sc.uh_dev,
 	    "uba error sr=%s fmer=%x fubar=%o\n",
 	    sbuf, uba->uba_fmer, 4*uba->uba_fubar);

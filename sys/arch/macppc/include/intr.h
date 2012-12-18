@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.30 2011/06/17 23:36:17 matt Exp $	*/
+/*	$NetBSD: intr.h,v 1.27 2008/04/28 20:23:27 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -32,6 +32,8 @@
 #ifndef _MACPPC_INTR_H_
 #define _MACPPC_INTR_H_
 
+#include <powerpc/intr.h>
+
 #ifdef _KERNEL_OPT
 #include "opt_multiprocessor.h"
 #endif
@@ -42,21 +44,14 @@
 
 #ifdef MULTIPROCESSOR
 struct cpu_info;
-
-#include <powerpc/pic/ipivar.h>
 #endif /* MULTIPROCESSOR */
 
-
-#ifdef _KERNEL
+#endif /* _LOCORE */
 
 /* probe for a PIC and set it up, return TRUE on success */
 int init_ohare(void);
 int init_heathrow(void);
 int init_grandcentral(void);
 void setup_hammerhead_ipi(void);
-#endif
-#endif /* _LOCORE */
-
-#include <powerpc/intr.h>
 
 #endif /* _MACPPC_INTR_H_ */

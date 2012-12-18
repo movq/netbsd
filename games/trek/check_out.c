@@ -1,4 +1,4 @@
-/*	$NetBSD: check_out.c,v 1.6 2009/05/24 19:18:44 dholland Exp $	*/
+/*	$NetBSD: check_out.c,v 1.5 2003/08/07 09:37:50 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)check_out.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: check_out.c,v 1.6 2009/05/24 19:18:44 dholland Exp $");
+__RCSID("$NetBSD: check_out.c,v 1.5 2003/08/07 09:37:50 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,7 +53,8 @@ __RCSID("$NetBSD: check_out.c,v 1.6 2009/05/24 19:18:44 dholland Exp $");
 */
 
 int
-check_out(int device)
+check_out(device)
+int	device;
 {
 	int	dev;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: dz_vsbus.c,v 1.43 2012/06/28 13:58:21 abs Exp $ */
+/*	$NetBSD: dz_vsbus.c,v 1.40.14.1 2010/11/21 21:27:37 riz Exp $ */
 /*
  * Copyright (c) 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -31,22 +31,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dz_vsbus.c,v 1.43 2012/06/28 13:58:21 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dz_vsbus.c,v 1.40.14.1 2010/11/21 21:27:37 riz Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/conf.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
-#include <sys/file.h>
-#include <sys/ioctl.h>
 #include <sys/proc.h>
+#include <sys/systm.h>
+#include <sys/ioctl.h>
 #include <sys/tty.h>
+#include <sys/file.h>
+#include <sys/conf.h>
+#include <sys/device.h>
+#include <sys/reboot.h>
 
 #include <dev/cons.h>
 
+#include <machine/mtpr.h>
 #include <machine/sid.h>
+#include <machine/uvax.h>
 #include <machine/vsbus.h>
+#include <machine/cpu.h>
 #include <machine/scb.h>
 
 #include <arch/vax/vax/gencons.h>
@@ -123,7 +126,7 @@ dz_vsbus_match(device_t parent, cfdata_t cf, void *aux)
 
 #if VAX53 || VAX49 || VAXANY
 	if (vax_boardtype == VAX_BTYP_53 || vax_boardtype == VAX_BTYP_49)
-		if (cf->cf_loc[VSBUSCF_CSR] != DZ_CSR_KA49)
+		if (cf->cf_loc[VSBUSCF_CSR] != 0x25000000)
 			return 0; /* Ugly */
 #endif
 
@@ -262,12 +265,12 @@ dzcnprobe(struct consdev *cndev)
 		break;
 
 	case VAX_BTYP_49:
-		ioaddr = DZ_CSR_KA49;
+		ioaddr = 0x25000000;
 		diagcons = (vax_confdata & 8 ? 3 : 0);
 		break;
 
 	case VAX_BTYP_53:
-		ioaddr = DZ_CSR_KA49;
+		ioaddr = 0x25000000;
 		diagcons = 3;
 		break;
 

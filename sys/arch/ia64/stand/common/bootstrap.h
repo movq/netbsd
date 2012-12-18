@@ -1,4 +1,4 @@
-/*	$NetBSD: bootstrap.h,v 1.7 2011/06/30 20:09:31 wiz Exp $	*/
+/*	$NetBSD: bootstrap.h,v 1.5 2007/03/04 06:00:03 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
@@ -35,7 +35,7 @@
 #include <sys/queue.h>
 
 /*
- * Generic device specifier; architecture-dependent 
+ * Generic device specifier; architecture-dependant 
  * versions may be larger, but should be allowed to
  * overlap.
  */
@@ -191,7 +191,7 @@ struct preloaded_file
     vaddr_t			f_addr;		/* load address */
     size_t			f_size;		/* file size */
     struct preloaded_file	*f_next;	/* next file */
-    u_long                      marks[MARK_MAX];/* filled by loadfile() */
+    u_long                      *marks;         /* filled by loadfile() */
 };
 
 struct file_format

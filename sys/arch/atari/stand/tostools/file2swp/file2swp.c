@@ -1,4 +1,4 @@
-/*	$NetBSD: file2swp.c,v 1.6 2009/03/18 10:22:26 cegger Exp $	*/
+/*	$NetBSD: file2swp.c,v 1.3 2008/04/28 20:23:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 #include "cread.h"
 
 char		*Infile = "minifs.gz";
-const char	version[] = "$Revision: 1.6 $";
+const char	version[] = "$Revision: 1.3 $";
 
 extern const char	*program_name;
 
@@ -48,7 +48,7 @@ static int	readdisklabel PROTO((disk_t *, u_int32_t *, u_int32_t *));
 static void	usage PROTO((void)) NORETURN;
 
 static void
-usage(void)
+usage()
 {
 	eprintf("Usage: %s [OPTIONS] DISK\n"
 		"where OPTIONS are:\n"
@@ -70,7 +70,9 @@ usage(void)
 }
 
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int		argc;
+	char		**argv;
 {
 	extern int	optind;
 	extern char	*optarg;
@@ -150,7 +152,9 @@ main(int argc, char **argv)
 }
 
 static int
-check_bsdlabel(disk_t *dd, u_int32_t offset, u_int32_t *start, u_int32_t *end)
+check_bsdlabel(dd, offset, start, end)
+	disk_t	*dd;
+	u_int32_t	offset, *start, *end;
 {
 	struct disklabel	dl;
 	int					err;
@@ -174,7 +178,9 @@ check_bsdlabel(disk_t *dd, u_int32_t offset, u_int32_t *start, u_int32_t *end)
 }
 
 static int
-readdisklabel(disk_t *dd, u_int32_t *start, u_int32_t *end)
+readdisklabel(dd, start, end)
+	disk_t		*dd;
+	u_int32_t	*start, *end;
 {
 	ptable_t		pt;
 	int				err, i;

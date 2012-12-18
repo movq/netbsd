@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_script.c,v 1.5 2011/11/23 19:18:53 tnozaki Exp $ */
+/*	$NetBSD: ex_script.c,v 1.2.6.1 2009/01/20 02:41:12 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -210,7 +210,7 @@ sscr_getprompt(SCR *sp)
 	fd_set fdset;
 	db_recno_t lline;
 	size_t llen, len;
-	e_key_t value;
+	u_int value;
 	int nr;
 
 	FD_ZERO(&fdset);
@@ -302,8 +302,7 @@ sscr_exec(SCR *sp, db_recno_t lno)
 	SCRIPT *sc;
 	db_recno_t last_lno;
 	size_t blen, len, last_len, tlen;
-	int isempty, matchprompt, rval;
-	ssize_t nw;
+	int isempty, matchprompt, nw, rval;
 	CHAR_T *bp = NULL;
 	CHAR_T *p;
 
@@ -342,7 +341,7 @@ empty:			msgq(sp, M_BERR, "151|No command to execute");
 
 	/* Push the line to the shell. */
 	sc = sp->script;
-	if ((size_t)(nw = write(sc->sh_master, p, len)) != len)
+	if ((nw = write(sc->sh_master, p, len)) != len)
 		goto err2;
 	rval = 0;
 	if (write(sc->sh_master, "\n", 1) != 1) {
@@ -472,7 +471,7 @@ sscr_insert(SCR *sp)
 	fd_set rdfd;
 	db_recno_t lno;
 	size_t blen, len = 0, tlen;
-	e_key_t value;
+	u_int value;
 	int nr, rval;
 	CHAR_T *bp;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: tftp.c,v 1.34 2012/07/16 09:20:26 he Exp $	*/
+/*	$NetBSD: tftp.c,v 1.28 2006/10/22 16:45:35 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)tftp.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: tftp.c,v 1.34 2012/07/16 09:20:26 he Exp $");
+__RCSID("$NetBSD: tftp.c,v 1.28 2006/10/22 16:45:35 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -67,10 +67,9 @@ __RCSID("$NetBSD: tftp.c,v 1.34 2012/07/16 09:20:26 he Exp $");
 #include "extern.h"
 #include "tftpsubs.h"
 
-extern jmp_buf	toplevel;
-
 char    ackbuf[PKTSIZE];
 int	timeout;
+jmp_buf	toplevel;
 jmp_buf	timeoutbuf;
 
 static void nak __P((int, struct sockaddr *));
@@ -78,7 +77,7 @@ static int makerequest __P((int, const char *, struct tftphdr *, const char *, o
 static void printstats __P((const char *, unsigned long));
 static void startclock __P((void));
 static void stopclock __P((void));
-__dead static void timer __P((int));
+static void timer __P((int));
 static void tpacket __P((const char *, struct tftphdr *, int));
 static int cmpport __P((struct sockaddr *, struct sockaddr *));
 
@@ -140,12 +139,12 @@ get_options(struct tftphdr *ap, int size)
 			strlcpy(multicast, valp, sizeof(multicast));
 			pmulticast = multicast;
 			addr = strsep(&pmulticast, ",");
-			if (pmulticast == NULL)
+			if (multicast == NULL)
 				continue; /* Report error? */
 			mcport = atoi(strsep(&pmulticast, ","));
-			if (pmulticast == NULL)
+			if (multicast == NULL)
 				continue; /* Report error? */
-			mcmasterslave = atoi(pmulticast);
+			mcmasterslave = atoi(multicast);
 			mcaddr = inet_addr(addr);
 			if (mcaddr == INADDR_NONE)
 				continue; /* Report error? */
@@ -219,7 +218,10 @@ tftp_igmp_leave(int fd)
  * Send the requested file.
  */
 void
-sendfile(int fd, const char *name, const char *mode)
+sendfile(fd, name, mode)
+	int fd;
+	char *name;
+	char *mode;
 {
 	struct tftphdr *ap;	   /* data and ack packets */
 	struct tftphdr *dp;
@@ -356,7 +358,7 @@ send_data:
 		if (block > 0)
 			amount += size;
 		block++;
-	} while ((size_t)size == blksize || block == 1);
+	} while (size == blksize || block == 1);
 abort:
 	(void)fclose(file);
 	stopclock();
@@ -368,7 +370,10 @@ abort:
  * Receive a file.
  */
 void
-recvfile(int fd, const char *name, const char *mode)
+recvfile(fd, name, mode)
+	int fd;
+	char *name;
+	char *mode;
 {
 	struct tftphdr *ap;
 	struct tftphdr *dp;
@@ -508,7 +513,7 @@ skip_ack:
 			break;
 		}
 		amount += size;
-	} while ((size_t)size == blksize);
+	} while (size == blksize);
 abort:						/* ok to ack, since user */
 	ap->th_opcode = htons((u_short)ACK);	/* has seen err msg */
 	ap->th_block = htons((u_short)block);
@@ -532,8 +537,12 @@ abort:						/* ok to ack, since user */
 }
 
 static int
-makerequest(int request, const char *name, struct tftphdr *tp, const char *mode,
-	off_t filesize)
+makerequest(request, name, tp, mode, filesize)
+	int request;
+	const char *name;
+	struct tftphdr *tp;
+	const char *mode;
+	off_t filesize;
 {
 	char *cp;
 
@@ -599,7 +608,9 @@ const struct errmsg {
  * offset by 100.
  */
 static void
-nak(int error, struct sockaddr *peer)
+nak(error, peer)
+	int error;
+	struct sockaddr *peer;
 {
 	const struct errmsg *pe;
 	struct tftphdr *tp;
@@ -623,12 +634,15 @@ nak(int error, struct sockaddr *peer)
 	msglen = &tp->th_msg[length + 1] - ackbuf;
 	if (trace)
 		tpacket("sent", tp, (int)msglen);
-	if ((size_t)sendto(f, ackbuf, msglen, 0, peer, (socklen_t)peer->sa_len) != msglen)
+	if (sendto(f, ackbuf, msglen, 0, peer, (socklen_t)peer->sa_len) != msglen)
 		warn("nak");
 }
 
 static void
-tpacket(const char *s, struct tftphdr *tp, int n)
+tpacket(s, tp, n)
+	const char *s;
+	struct tftphdr *tp;
+	int n;
 {
 	static const char *opcodes[] =
 	   { "#0", "RRQ", "WRQ", "DATA", "ACK", "ERROR", "OACK" };
@@ -715,21 +729,23 @@ struct timeval tstart;
 struct timeval tstop;
 
 static void
-startclock(void)
+startclock()
 {
 
 	(void)gettimeofday(&tstart, NULL);
 }
 
 static void
-stopclock(void)
+stopclock()
 {
 
 	(void)gettimeofday(&tstop, NULL);
 }
 
 static void
-printstats(const char *direction, unsigned long amount)
+printstats(direction, amount)
+	const char *direction;
+	unsigned long amount;
 {
 	double delta;
 
@@ -745,19 +761,22 @@ printstats(const char *direction, unsigned long amount)
 
 static void
 /*ARGSUSED*/
-timer(int sig)
+timer(sig)
+	int sig;
 {
 
 	timeout += rexmtval;
 	if (timeout >= maxtimeout) {
-		(void)printf("Transfer timed out.");
+		(void)printf("Transfer timed out.\n");
 		longjmp(toplevel, -1);
 	}
 	longjmp(timeoutbuf, 1);
 }
 
 static int
-cmpport(struct sockaddr *sa, struct sockaddr *sb)
+cmpport(sa, sb)
+	struct sockaddr *sa;
+	struct sockaddr *sb;
 {
 	char a[NI_MAXSERV], b[NI_MAXSERV];
 

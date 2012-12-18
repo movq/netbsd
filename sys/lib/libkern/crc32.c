@@ -1,4 +1,4 @@
-/*	$NetBSD: crc32.c,v 1.4 2009/03/26 22:18:14 he Exp $	*/
+/*	$NetBSD: crc32.c,v 1.4.4.5 2009/05/03 22:25:25 snj Exp $	*/
 
 /* crc32.c -- compute the CRC-32 of a data stream
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_machdep.c,v 1.43 2012/09/11 00:15:19 matt Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.32.12.1 2011/02/16 21:16:13 bouyer Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,8 +32,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.43 2012/09/11 00:15:19 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.32.12.1 2011/02/16 21:16:13 bouyer Exp $");
 
+#include "opt_compat_netbsd.h"
 #include "opt_ppcarch.h"
 #include "opt_altivec.h"
 
@@ -43,23 +44,20 @@ __KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.43 2012/09/11 00:15:19 matt Exp $"
 #include <sys/syscallargs.h>
 #include <sys/systm.h>
 #include <sys/ucontext.h>
-
-#include <uvm/uvm_extern.h>
+#include <sys/user.h>
 
 #include <powerpc/fpu.h>
 #include <powerpc/altivec.h>
-#include <powerpc/pcb.h>
-#include <powerpc/psl.h>
 
 /*
  * Send a signal to process.
  */
 void
-sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
+sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
 	struct lwp * const l = curlwp;
 	struct proc * const p = l->l_proc;
-	struct trapframe * const tf = l->l_md.md_utf;
+	struct trapframe * const tf = trapframe(l);
 	struct sigaltstack * const ss = &l->l_sigstk;
 	const struct sigact_sigdesc * const sd =
 	    &p->p_sigacts->sa_sigdesc[ksi->ksi_signo];
@@ -69,12 +67,21 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	vaddr_t sp, sip, ucp;
 	int onstack, error;
 
+	if (sd->sd_vers < 2) {
+#ifdef COMPAT_16
+		sendsig_sigcontext(ksi->ksi_signo, mask, KSI_TRAPCODE(ksi));
+		return;
+#else
+		goto nosupport;
+#endif
+	}
+
 	/* Do we need to jump onto the signal stack? */
 	onstack = (ss->ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
 	    (sd->sd_sigact.sa_flags & SA_ONSTACK) != 0;
 
 	/* Find top of stack.  */
-	sp = (onstack ? (vaddr_t)ss->ss_sp + ss->ss_size : tf->tf_fixreg[1]);
+	sp = (onstack ? (vaddr_t)ss->ss_sp + ss->ss_size : tf->fixreg[1]);
 	sp &= ~(CALLFRAMELEN-1);
 
 	/* Allocate space for the ucontext.  */
@@ -118,14 +125,14 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	 */
 	switch (sd->sd_vers) {
 	case 2:		/* siginfo sigtramp */
-		tf->tf_fixreg[1]  = (register_t)sp - CALLFRAMELEN;
-		tf->tf_fixreg[3]  = (register_t)ksi->ksi_signo;
-		tf->tf_fixreg[4]  = (register_t)sip;
-		tf->tf_fixreg[5]  = (register_t)ucp;
+		tf->fixreg[1]  = (register_t)sp - CALLFRAMELEN;
+		tf->fixreg[3]  = (register_t)ksi->ksi_signo;
+		tf->fixreg[4]  = (register_t)sip;
+		tf->fixreg[5]  = (register_t)ucp;
 		/* Preserve ucp across call to signal function */
-		tf->tf_fixreg[30] = (register_t)ucp;
-		tf->tf_lr         = (register_t)sd->sd_tramp;
-		tf->tf_srr0       = (register_t)handler;
+		tf->fixreg[30] = (register_t)ucp;
+		tf->lr         = (register_t)sd->sd_tramp;
+		tf->srr0       = (register_t)handler;
 		break;
 
 	default:
@@ -148,118 +155,125 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 void
 cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flagp)
 {
-	const struct trapframe * const tf = l->l_md.md_utf;
-	__greg_t * const gr = mcp->__gregs;
-#if defined(PPC_HAVE_FPU)
-	struct pcb * const pcb = lwp_getpcb(l);
+	const struct trapframe *tf = trapframe(l);
+	__greg_t *gr = mcp->__gregs;
+#if defined(PPC_HAVE_FPU) || defined(ALTIVEC)
+	struct pcb *pcb = &l->l_addr->u_pcb;
 #endif
 
 	/* Save GPR context. */
-	(void)memcpy(gr, &tf->tf_fixreg, 32 * sizeof (gr[0])); /* GR0-31 */
-	gr[_REG_CR]  = tf->tf_cr;
-	gr[_REG_LR]  = tf->tf_lr;
-	gr[_REG_PC]  = tf->tf_srr0;
-	gr[_REG_MSR] = tf->tf_srr1 & PSL_USERSRR1;
+	(void)memcpy(gr, &tf->fixreg, 32 * sizeof (gr[0])); /* GR0-31 */
+	gr[_REG_CR]  = tf->cr;
+	gr[_REG_LR]  = tf->lr;
+	gr[_REG_PC]  = tf->srr0;
+	gr[_REG_MSR] = tf->srr1 & PSL_USERSRR1;
 #ifdef PPC_HAVE_FPU
 	gr[_REG_MSR] |= pcb->pcb_flags & (PCB_FE0|PCB_FE1);
 #endif
-	gr[_REG_CTR] = tf->tf_ctr;
-	gr[_REG_XER] = tf->tf_xer;
+#ifdef ALTIVEC
+	gr[_REG_MSR] |= pcb->pcb_flags & PCB_ALTIVEC ? PSL_VEC : 0;
+#endif
+	gr[_REG_CTR] = tf->ctr;
+	gr[_REG_XER] = tf->xer;
 #ifdef PPC_OEA
-	gr[_REG_MQ]  = tf->tf_mq;
+	gr[_REG_MQ]  = tf->tf_xtra[TF_MQ];
 #else
 	gr[_REG_MQ]  = 0;
 #endif
-
 	*flagp |= _UC_CPU;
-	if (gr[_REG_R2] == (uintptr_t)l->l_private)
-		*flagp |= _UC_TLSBASE;
 
 #ifdef PPC_HAVE_FPU
-	/* Save FPU context, if any. */
-	if (!fpu_save_to_mcontext(l, mcp, flagp))
+	/* Save FPR context, if any. */
+	if ((pcb->pcb_flags & PCB_FPU) != 0) {
+		/* If we're the FPU owner, dump its context to the PCB first. */
+		if (pcb->pcb_fpcpu)
+			save_fpu_lwp(l, FPU_SAVE);
+		(void)memcpy(mcp->__fpregs.__fpu_regs, pcb->pcb_fpu.fpreg,
+		    sizeof (mcp->__fpregs.__fpu_regs));
+		mcp->__fpregs.__fpu_fpscr =
+		    ((int *)&pcb->pcb_fpu.fpscr)[_QUAD_LOWWORD];
+		mcp->__fpregs.__fpu_valid = 1;
+		*flagp |= _UC_FPU;
+	} else
 #endif
 		memset(&mcp->__fpregs, 0, sizeof(mcp->__fpregs));
 
-#if defined(ALTIVEC) || defined(PPC_HAVE_SPE)
-	/* Save vector context, if any. */
-	if (!vec_save_to_mcontext(l, mcp, flagp))
+#ifdef ALTIVEC
+	/* Save AltiVec context, if any. */
+	if ((pcb->pcb_flags & PCB_ALTIVEC) != 0) {
+		/*
+		 * If we're the AltiVec owner, dump its context
+		 * to the PCB first.
+		 */
+		if (pcb->pcb_veccpu)
+			save_vec_lwp(l, ALTIVEC_SAVE);
+		(void)memcpy(mcp->__vrf.__vrs, pcb->pcb_vr.vreg,
+		    sizeof (mcp->__vrf.__vrs));
+		mcp->__vrf.__vscr = pcb->pcb_vr.vscr;
+		mcp->__vrf.__vrsave = pcb->pcb_vr.vrsave;
+		*flagp |= _UC_POWERPC_VEC;
+	} else
 #endif
 		memset(&mcp->__vrf, 0, sizeof (mcp->__vrf));
 }
 
 int
-cpu_mcontext_validate(struct lwp *l, const mcontext_t *mcp)
-{
-	return 0;
-}
-
-int
 cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 {
-	struct trapframe * const tf = l->l_md.md_utf;
-	const __greg_t * const gr = mcp->__gregs;
-	int error;
+	struct trapframe *tf = trapframe(l);
+	const __greg_t *gr = mcp->__gregs;
+#ifdef PPC_HAVE_FPU
+	struct pcb *pcb = &l->l_addr->u_pcb;
+#endif
 
 	/* Restore GPR context, if any. */
 	if (flags & _UC_CPU) {
-		error = cpu_mcontext_validate(l, mcp);
-		if (error)
-			return error;
-
 #ifdef PPC_HAVE_FPU
 		/*
 		 * Always save the FP exception mode in the PCB.
 		 */
-		struct pcb * const pcb = lwp_getpcb(l);
 		pcb->pcb_flags &= ~(PCB_FE0|PCB_FE1);
 		pcb->pcb_flags |= gr[_REG_MSR] & (PCB_FE0|PCB_FE1);
 #endif
 
-		(void)memcpy(&tf->tf_fixreg, gr, 32 * sizeof (gr[0]));
-		tf->tf_cr   = gr[_REG_CR];
-		tf->tf_lr   = gr[_REG_LR];
-		tf->tf_srr0 = gr[_REG_PC];
+		(void)memcpy(&tf->fixreg, gr, 32 * sizeof (gr[0]));
+		tf->cr   = gr[_REG_CR];
+		tf->lr   = gr[_REG_LR];
+		tf->srr0 = gr[_REG_PC];
 		/*
 		 * Accept all user-settable bits without complaint;
 		 * userland should not need to know the machine-specific
 		 * MSR value.
 		 */
-		tf->tf_srr1 = (gr[_REG_MSR] & PSL_USERMOD) | PSL_USERSET;
-		tf->tf_ctr  = gr[_REG_CTR];
-		tf->tf_xer  = gr[_REG_XER];
+		tf->srr1 = (gr[_REG_MSR] & PSL_USERMOD) | PSL_USERSET;
+		tf->ctr  = gr[_REG_CTR];
+		tf->xer  = gr[_REG_XER];
 #ifdef PPC_OEA
-		tf->tf_mq = gr[_REG_MQ];
+		tf->tf_xtra[TF_MQ] = gr[_REG_MQ];
 #endif
-		/*
-		 * If R2 contains the TLS base, make sure to update l->l_private.
-		 * If not, restore R2 from l->l_private if not null.  Since setcontext
-		 * existed before the TCB code, a static program could expect R2 to
-		 * the small data pointer.
-		 */
-		if (flags & _UC_TLSBASE) {
-			l->l_private = (void *) tf->tf_fixreg[_REG_R2];
-		} else if (l->l_private) {
-			tf->tf_fixreg[_REG_R2] = (uintptr_t)l->l_private;
-		}
 	}
 
-#ifdef PPC_HAVE_FPU
-	/* Restore FPU context, if any. */
-	if (flags & _UC_FPU)
-		fpu_restore_from_mcontext(l, mcp);
+#ifdef PPC_HAVE_FPU /* Restore FPR context, if any. */
+	if ((flags & _UC_FPU) && mcp->__fpregs.__fpu_valid != 0) {
+		/* we don't need to save the state, just drop it */
+		save_fpu_lwp(l, FPU_DISCARD);
+		(void)memcpy(&pcb->pcb_fpu.fpreg, &mcp->__fpregs.__fpu_regs,
+		    sizeof (pcb->pcb_fpu.fpreg));
+		((int *)&pcb->pcb_fpu.fpscr)[_QUAD_LOWWORD] = 
+		    mcp->__fpregs.__fpu_fpscr;
+	}
 #endif
 
 #ifdef ALTIVEC
 	/* Restore AltiVec context, if any. */
-	if (flags & _UC_POWERPC_VEC)
-		vec_restore_from_mcontext(l, mcp);
-#endif
-
-#ifdef PPC_HAVE_SPE
-	/* Restore SPE context, if any. */
-	if (flags & _UC_POWERPC_SPE)
-		vec_restore_from_mcontext(l, mcp);
+	if (flags & _UC_POWERPC_VEC) {
+		/* we don't need to save the state, just drop it */
+		save_vec_lwp(l, ALTIVEC_DISCARD);
+		(void)memcpy(pcb->pcb_vr.vreg, &mcp->__vrf.__vrs,
+		    sizeof (pcb->pcb_vr.vreg));
+		pcb->pcb_vr.vscr = mcp->__vrf.__vscr;
+		pcb->pcb_vr.vrsave = mcp->__vrf.__vrsave;
+	}
 #endif
 
 	return (0);

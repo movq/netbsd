@@ -1,4 +1,4 @@
-/*	$NetBSD: syscallvar.h,v 1.5 2009/06/02 23:21:38 pooka Exp $	*/
+/*	$NetBSD: syscallvar.h,v 1.2 2008/10/21 12:22:00 ad Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -39,18 +39,6 @@
 #include <sys/systm.h>
 #include <sys/proc.h>
 
-extern struct emul emul_netbsd;
-
-struct syscall_package {
-	u_short		sp_code;
-	u_short		sp_flags;
-	sy_call_t	*sp_call;
-};
-
-void	syscall_init(void);
-int	syscall_establish(const struct emul *, const struct syscall_package *);
-int	syscall_disestablish(const struct emul *, const struct syscall_package *);
-
 static inline int
 sy_call(const struct sysent *sy, struct lwp *l, const void *uap,
 	register_t *rval)
@@ -63,8 +51,5 @@ sy_call(const struct sysent *sy, struct lwp *l, const void *uap,
 
 	return error;
 }
-
-/* inclusion in the kernel currently depends on SYSCALL_DEBUG */
-extern const char * const syscallnames[];
 
 #endif	/* _SYS_SYSCALLVAR_H_ */

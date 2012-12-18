@@ -1,4 +1,4 @@
-/*	$NetBSD: tty.h,v 1.90 2011/09/24 00:05:38 christos Exp $	*/
+/*	$NetBSD: tty.h,v 1.82.8.1 2009/02/06 02:05:18 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -126,7 +126,6 @@ struct tty {
 	int	t_state;		/* Device and driver (TS*) state. */
 	int	t_wopen;		/* Processes waiting for open. */
 	int	t_flags;		/* Tty flags. */
-	int	t_qsize;		/* Tty character queue size */
 	struct	pgrp *t_pgrp;		/* Foreground process group. */
 	struct	session *t_session;	/* Enclosing session. */
 	struct	selinfo t_rsel;		/* Tty read/oob select. */
@@ -142,8 +141,8 @@ struct tty {
 	void	*t_sc;			/* XXX: net/if_sl.c:sl_softc. */
 	short	t_column;		/* Tty output column. */
 	short	t_rocount, t_rocol;	/* Tty. */
-	int	t_hiwat;		/* High water mark. */
-	int	t_lowat;		/* Low water mark. */
+	short	t_hiwat;		/* High water mark. */
+	short	t_lowat;		/* Low water mark. */
 	short	t_gen;			/* Generation number. */
 	sigset_t t_sigs[TTYSIG_COUNT];	/* Pending signals */
 	int	t_sigcount;		/* # pending signals */
@@ -163,14 +162,13 @@ struct tty {
 
 #define	TTMASK	15
 #define	OBUFSIZ	100
-#define	TTYHOG	tp->t_qsize
+#define	TTYHOG	1024
 
 #ifdef _KERNEL
-#define	TTMAXHIWAT	roundup(tp->t_qsize << 1, 64)
-#define	TTMINHIWAT	roundup(tp->t_qsize >> 3, 64)
-#define	TTMAXLOWAT	(tp->t_qsize >> 2)
-#define	TTMINLOWAT	(tp->t_qsize >> 5)
-#define	TTROUND		64
+#define	TTMAXHIWAT	roundup(2048, CBSIZE)
+#define	TTMINHIWAT	roundup(100, CBSIZE)
+#define	TTMAXLOWAT	256
+#define	TTMINLOWAT	32
 #endif /* _KERNEL */
 
 /* These flags are kept in t_state. */
@@ -235,8 +233,11 @@ struct speedtab {
 TAILQ_HEAD(ttylist_head, tty);		/* the ttylist is a TAILQ */
 
 #ifdef _KERNEL
+#include <sys/mallocvar.h>
 
 extern kmutex_t	tty_lock;
+
+MALLOC_DECLARE(M_TTYS);
 
 extern	int tty_count;			/* number of ttys in global ttylist */
 extern	struct ttychars ttydefaults;
@@ -284,7 +285,6 @@ void	 ttypend(struct tty *);
 void	 ttyretype(struct tty *);
 void	 ttyrub(int, struct tty *);
 int	 ttysleep(struct tty *, kcondvar_t *, bool, int);
-int	 ttypause(struct tty *, int);
 int	 ttywait(struct tty *);
 int	 ttywflush(struct tty *);
 void	 ttysig(struct tty *, enum ttysigtype, int);
@@ -292,15 +292,27 @@ void	 tty_attach(struct tty *);
 void	 tty_detach(struct tty *);
 void	 tty_init(void);
 struct tty
-	*tty_alloc(void);
-void	 tty_free(struct tty *);
+	*ttymalloc(void);
+void	 ttyfree(struct tty *);
 u_char	*firstc(struct clist *, int *);
 bool	 ttypull(struct tty *);
 
 int	clalloc(struct clist *, int, int);
 void	clfree(struct clist *);
 
-extern int (*ttcompatvec)(struct tty *, u_long, void *, int, struct lwp *);
+#if defined(_KERNEL_OPT)
+#include "opt_compat_freebsd.h"
+#include "opt_compat_sunos.h"
+#include "opt_compat_svr4.h"
+#include "opt_compat_43.h"
+#include "opt_compat_osf1.h"
+#endif
+
+#if defined(COMPAT_43) || defined(COMPAT_SUNOS) || defined(COMPAT_SVR4) || \
+    defined(COMPAT_FREEBSD) || defined(COMPAT_OSF1) || defined(LKM)
+# define COMPAT_OLDTTY
+int 	ttcompat(struct tty *, u_long, void *, int, struct lwp *);
+#endif
 
 #endif /* _KERNEL */
 

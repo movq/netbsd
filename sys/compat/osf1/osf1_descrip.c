@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_descrip.c,v 1.29 2010/04/23 15:19:20 rmind Exp $ */
+/* $NetBSD: osf1_descrip.c,v 1.26 2008/03/21 21:54:58 ad Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_descrip.c,v 1.29 2010/04/23 15:19:20 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_descrip.c,v 1.26 2008/03/21 21:54:58 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,6 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_descrip.c,v 1.29 2010/04/23 15:19:20 rmind Exp 
 #include <sys/stat.h>
 #include <sys/filedesc.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
 #include <sys/signal.h>
@@ -215,11 +216,16 @@ osf1_sys_fpathconf(struct lwp *l, const struct osf1_sys_fpathconf_args *uap, reg
 int
 osf1_sys_fstat(struct lwp *l, const struct osf1_sys_fstat_args *uap, register_t *retval)
 {
+	file_t *fp;
 	struct stat ub;
 	struct osf1_stat oub;
 	int error;
 
-	error = do_sys_fstat(SCARG(uap, fd), &ub);
+	if ((fp = fd_getfile(SCARG(uap, fd))) == NULL)
+		return (EBADF);
+	error = (*fp->f_ops->fo_stat)(fp, &ub);
+	fd_putfile(SCARG(uap, fd));
+
 	osf1_cvt_stat_from_native(&ub, &oub);
 	if (error == 0)
 		error = copyout(&oub, SCARG(uap, sb), sizeof(oub));
@@ -233,11 +239,16 @@ osf1_sys_fstat(struct lwp *l, const struct osf1_sys_fstat_args *uap, register_t 
 int
 osf1_sys_fstat2(struct lwp *l, const struct osf1_sys_fstat2_args *uap, register_t *retval)
 {
+	file_t *fp;
 	struct stat ub;
 	struct osf1_stat2 oub;
 	int error;
 
-	error = do_sys_fstat(SCARG(uap, fd), &ub);
+	if ((fp = fd_getfile(SCARG(uap, fd))) == NULL)
+		return (EBADF);
+	error = (*fp->f_ops->fo_stat)(fp, &ub);
+	fd_putfile(SCARG(uap, fd));
+
 	osf1_cvt_stat2_from_native(&ub, &oub);
 	if (error == 0)
 		error = copyout(&oub, SCARG(uap, sb), sizeof(oub));
@@ -251,7 +262,7 @@ osf1_sys_ftruncate(struct lwp *l, const struct osf1_sys_ftruncate_args *uap, reg
 	struct sys_ftruncate_args a;
 
 	SCARG(&a, fd) = SCARG(uap, fd);
-	SCARG(&a, PAD) = 0;
+	SCARG(&a, pad) = 0;
 	SCARG(&a, length) = SCARG(uap, length);
 
 	return sys_ftruncate(l, &a, retval);
@@ -263,7 +274,7 @@ osf1_sys_lseek(struct lwp *l, const struct osf1_sys_lseek_args *uap, register_t 
 	struct sys_lseek_args a;
 
 	SCARG(&a, fd) = SCARG(uap, fd);
-	SCARG(&a, PAD) = 0;
+	SCARG(&a, pad) = 0;
 	SCARG(&a, offset) = SCARG(uap, offset);
 	SCARG(&a, whence) = SCARG(uap, whence);
 

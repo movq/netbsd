@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: sysdb,v 1.24 2012/06/03 21:42:45 joerg Exp $
+# $NetBSD: sysdb,v 1.20 2007/08/26 23:55:50 dyoung Exp $
 #
 
 # PROVIDE: sysdb
@@ -31,7 +31,7 @@ sysdb_start()
 	$services_cmd
 	$netgroup_cmd
 	$password_cmd
-	echo "."
+	echo " done"
 }
 
 check_file()
@@ -52,7 +52,7 @@ check_file()
 
 build_services()
 {
-	check_file /etc/services /var/db/services.cdb services_mkdb -q
+	check_file /etc/services /var/db/services.db services_mkdb -q
 }
 
 build_netgroup()
@@ -63,13 +63,12 @@ build_netgroup()
 build_devdb()
 {
 	check_file /dev /var/run/dev.db dev_mkdb
-	check_file /dev /var/run/dev.cdb dev_mkdb
 }
 
 build_password()
 {
 	local p=/etc/master.passwd
-	check_file $p /etc/spwd.db pwd_mkdb -w $p
+	check_file $p /etc/spwd.db pwd_mkdb $p
 }
 
 build_utmp()

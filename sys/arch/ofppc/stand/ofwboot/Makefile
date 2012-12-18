@@ -1,20 +1,14 @@
-#	$NetBSD: Makefile,v 1.27 2011/01/24 19:27:18 joerg Exp $
+#	$NetBSD: Makefile,v 1.23 2008/02/13 20:11:38 garbled Exp $
 
 S!=	cd ${.CURDIR}/../../../.. ; pwd
 
 PROG=		ofwboot
-NOMAN=		# defined
-SRCS=		ofwstart.S Locore.c boot.c ofdev.c net.c netif_of.c
-SRCS+=		mbr.c rdb.c vers.c
+SRCS=		ofwstart.S Locore.c boot.c ofdev.c net.c netif_of.c vers.c
 CFLAGS+=	-msoft-float -Wno-main -ffreestanding
-CFLAGS+=	-Wall -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
 #CPPFLAGS+=	-g -DALLOC_TRACE -DDEBUG #-DOFW_DEBUG -DNETIF_DEBUG
 #CPPFLAGS+=	-DOFWDUMP
 CPPFLAGS+=	-D_STANDALONE -DSUPPORT_DHCP -I${.CURDIR}
 CPPFLAGS+=	-DHEAP_VARIABLE
-
-.include <bsd.own.mk>
-
 DBG=		-Os -mmultiple
 
 SRCS+=		ofwmagic.S
@@ -23,6 +17,7 @@ SRCS+=		ofwmagic.S
 SRCS+=		byteorder.c
 .PATH:		${S}/lib/libsa
 
+NOMAN=		# defined
 STRIPFLAG=
 BINMODE=	444
 
@@ -72,8 +67,7 @@ LIBSA=		${SALIB}
 
 .PHONY: vers.c
 vers.c: version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
-	    ${.CURDIR}/version "ofppc" ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version "ofppc" ${NEWVERSWHAT}
 
 ${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
 	${LD} -s -N -T ${.CURDIR}/ldscript -Ttext ${RELOC} -Bstatic \

@@ -1,4 +1,4 @@
-/*	$NetBSD: readdir.c,v 1.26 2012/06/25 22:32:43 abs Exp $	*/
+/*	$NetBSD: readdir.c,v 1.24 2008/05/04 18:53:26 tonnerre Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)readdir.c	8.3 (Berkeley) 9/29/94";
 #else
-__RCSID("$NetBSD: readdir.c,v 1.26 2012/06/25 22:32:43 abs Exp $");
+__RCSID("$NetBSD: readdir.c,v 1.24 2008/05/04 18:53:26 tonnerre Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -57,6 +57,7 @@ struct dirent *
 _readdir_unlocked(DIR *dirp, int skipdeleted)
 {
 	struct dirent *dp;
+
 
 	for (;;) {
 		if (dirp->dd_loc >= dirp->dd_size) {
@@ -88,7 +89,8 @@ _readdir_unlocked(DIR *dirp, int skipdeleted)
 }
 
 struct dirent *
-readdir(DIR *dirp)
+readdir(dirp)
+	DIR *dirp;
 {
 	struct dirent	*dp;
 
@@ -105,7 +107,10 @@ readdir(DIR *dirp)
 }
 
 int
-readdir_r(DIR *dirp, struct dirent *entry, struct dirent **result)
+readdir_r(dirp, entry, result)
+	DIR *dirp;
+	struct dirent *entry;
+	struct dirent **result;
 {
 	struct dirent *dp;
 	int saved_errno;

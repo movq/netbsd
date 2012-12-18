@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_subr.c,v 1.19 2012/11/02 15:44:07 jdc Exp $	*/
+/*	$NetBSD: ofw_subr.c,v 1.13 2007/11/07 19:26:45 garbled Exp $	*/
 
 /*
  * Copyright 1998
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_subr.c,v 1.19 2012/11/02 15:44:07 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_subr.c,v 1.13 2007/11/07 19:26:45 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,7 +64,8 @@ __KERNEL_RCSID(0, "$NetBSD: ofw_subr.c,v 1.19 2012/11/02 15:44:07 jdc Exp $");
  *	None.
  */
 int
-of_decode_int(const unsigned char *p)
+of_decode_int(p)
+	const unsigned char *p;
 {
 	unsigned int i = *p++ << 8;
 	i = (i + *p++) << 8;
@@ -283,101 +284,11 @@ of_to_dataprop(prop_dictionary_t dict, int node, const char *ofname,
 	prop_data_t data;
 	int len;
 	uint8_t prop[256];
-	boolean_t res;
 
 	len = OF_getprop(node, ofname, prop, 256);
 	if (len < 1)
 		return FALSE;
 
 	data = prop_data_create_data(prop, len);
-	res = prop_dictionary_set(dict, propname, data);
-	prop_object_release(data);
-	return res;
-}
-
-/*
- * look at output-device, see if there's a Sun-typical video mode specifier as
- * in screen:r1024x768x60 attached. If found copy it into *buffer, otherwise
- * return NULL
- */
-
-char *
-of_get_mode_string(char *buffer, int len)
-{
-	int options;
-	char *pos, output_device[256];
-
-	/*
-	 * finally, let's see if there's a video mode specified in
-	 * output-device and pass it on so there's at least some way
-	 * to program video modes
-	 */
-	options = OF_finddevice("/options");
-	if ((options == 0) || (options == -1))
-		return NULL;
-	if (OF_getprop(options, "output-device", output_device, 256) == 0)
-		return NULL;
-
-	/* find the mode string if there is one */
-	pos = strstr(output_device, ":r");
-	if (pos == NULL)
-		return NULL;
-	strncpy(buffer, pos + 2, len);
-	return buffer;
-}
-
-/*
- * Iterate over the subtree of a i2c controller node.
- * Add all sub-devices into an array as part of the controller's
- * device properties.
- * This is used by the i2c bus attach code to do direct configuration.
- */
-void
-of_enter_i2c_devs(prop_dictionary_t props, int ofnode, size_t cell_size)
-{
-	int node, len;
-	char name[32];
-	uint64_t reg64;
-	uint32_t reg32;
-	uint64_t addr;
-	prop_array_t array = NULL;
-	prop_dictionary_t dev;
-
-	for (node = OF_child(ofnode); node; node = OF_peer(node)) {
-		if (OF_getprop(node, "name", name, sizeof(name)) <= 0)
-			continue;
-		len = OF_getproplen(node, "reg");
-		addr = 0;
-		if (cell_size == 8 && len >= sizeof(reg64)) {
-			if (OF_getprop(node, "reg", &reg64, sizeof(reg64))
-			    < sizeof(reg64))
-				continue;
-			addr = reg64;
-		} else if (cell_size == 4 && len >= sizeof(reg32)) {
-			if (OF_getprop(node, "reg", &reg32, sizeof(reg32))
-			    < sizeof(reg32))
-				continue;
-			addr = reg32;
-		} else {
-			continue;
-		}
-		addr >>= 1;
-		if (addr == 0) continue;
-
-		if (array == NULL)
-			array = prop_array_create();
-
-		dev = prop_dictionary_create();
-		prop_dictionary_set_cstring(dev, "name", name);
-		prop_dictionary_set_uint32(dev, "addr", addr);
-		prop_dictionary_set_uint64(dev, "cookie", node);
-		of_to_dataprop(dev, node, "compatible", "compatible");
-		prop_array_add(array, dev);
-		prop_object_release(dev);
-	}
-
-	if (array != NULL) {
-		prop_dictionary_set(props, "i2c-child-devices", array);
-		prop_object_release(array);
-	}
+	return(prop_dictionary_set(dict, propname, data));
 }

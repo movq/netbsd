@@ -1,4 +1,4 @@
-/*	$NetBSD: pnode.c,v 1.13 2012/08/16 09:25:43 manu Exp $	*/
+/*	$NetBSD: pnode.c,v 1.10 2008/08/12 19:44:39 pooka Exp $	*/
 
 /*
  * Copyright (c) 2006 Antti Kantee.  All Rights Reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: pnode.c,v 1.13 2012/08/16 09:25:43 manu Exp $");
+__RCSID("$NetBSD: pnode.c,v 1.10 2008/08/12 19:44:39 pooka Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -59,8 +59,6 @@ puffs_pn_new(struct puffs_usermount *pu, void *privdata)
 	puffs_vattr_null(&pn->pn_va);
 
 	LIST_INSERT_HEAD(&pu->pu_pnodelst, pn, pn_entries);
-
-	pu->pu_flags |= PUFFS_FLAG_PNCOOKIE;
 
 	return pn;
 }
@@ -176,27 +174,3 @@ puffs_newinfo_setrdev(struct puffs_newinfo *pni, dev_t rdev)
 
 	*pni->pni_rdev = rdev;
 }
-
-void
-puffs_newinfo_setva(struct puffs_newinfo *pni, struct vattr *va)
-{
-
-	(void)memcpy(pni->pni_va, va, sizeof(struct vattr));
-}
-
-void
-puffs_newinfo_setvattl(struct puffs_newinfo *pni, struct timespec *va_ttl)
-{
-
-	pni->pni_va_ttl->tv_sec = va_ttl->tv_sec;
-	pni->pni_va_ttl->tv_nsec = va_ttl->tv_nsec;
-}
-
-void
-puffs_newinfo_setcnttl(struct puffs_newinfo *pni, struct timespec *cn_ttl)
-{
-
-	pni->pni_cn_ttl->tv_sec = cn_ttl->tv_sec;
-	pni->pni_cn_ttl->tv_nsec = cn_ttl->tv_nsec;
-}
-

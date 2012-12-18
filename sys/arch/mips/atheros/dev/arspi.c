@@ -1,4 +1,4 @@
-/* $NetBSD: arspi.c,v 1.10 2012/10/27 17:18:02 chs Exp $ */
+/* $NetBSD: arspi.c,v 1.5 2007/02/28 04:21:53 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
@@ -42,21 +42,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arspi.c,v 1.10 2012/10/27 17:18:02 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arspi.c,v 1.5 2007/02/28 04:21:53 thorpej Exp $");
 
 #include "locators.h"
 
 #include <sys/param.h>
-#include <sys/bus.h>
-#include <sys/cpu.h>
+#include <sys/systm.h>
+#include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/errno.h>
-#include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/proc.h>
-#include <sys/systm.h>
+#include <sys/queue.h>
+
+#include <machine/bus.h>
+#include <machine/cpu.h>
 
 #include <mips/atheros/include/ar5315reg.h>
+#include <mips/atheros/include/ar531xvar.h>
 #include <mips/atheros/include/arbusvar.h>
 
 #include <mips/atheros/dev/arspireg.h>
@@ -94,6 +97,7 @@ struct arspi_job {
 #define	JOB_WREN		0x10	/* WREN needed */
 
 struct arspi_softc {
+	struct device		sc_dev;
 	struct spi_controller	sc_spi;
 	void			*sc_ih;
 	bool			sc_interrupts;
@@ -108,9 +112,9 @@ struct arspi_softc {
 
 #define	STATIC
 
-STATIC int arspi_match(device_t, cfdata_t, void *);
-STATIC void arspi_attach(device_t, device_t, void *);
-STATIC void arspi_interrupts(device_t);
+STATIC int arspi_match(struct device *, struct cfdata *, void *);
+STATIC void arspi_attach(struct device *, struct device *, void *);
+STATIC void arspi_interrupts(struct device *);
 STATIC int arspi_intr(void *);
 /* SPI service routines */
 STATIC int arspi_configure(void *, int, int, int);
@@ -126,14 +130,14 @@ STATIC void arspi_update_job(struct spi_transfer *);
 STATIC void arspi_finish_job(struct spi_transfer *);
 
 
-CFATTACH_DECL_NEW(arspi, sizeof(struct arspi_softc),
+CFATTACH_DECL(arspi, sizeof(struct arspi_softc),
     arspi_match, arspi_attach, NULL, NULL);
 
 #define	GETREG(sc, o)		bus_space_read_4(sc->sc_st, sc->sc_sh, o)
 #define	PUTREG(sc, o, v)	bus_space_write_4(sc->sc_st, sc->sc_sh, o, v)
 
 int
-arspi_match(device_t parent, cfdata_t cf, void *aux)
+arspi_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct arbus_attach_args *aa = aux;
 
@@ -143,7 +147,7 @@ arspi_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-arspi_attach(device_t parent, device_t self, void *aux)
+arspi_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct arspi_softc *sc = device_private(self);
 	struct spibus_attach_args sba;
@@ -192,11 +196,11 @@ arspi_attach(device_t parent, device_t self, void *aux)
 	 * Initialize and attach bus attach.
 	 */
 	sba.sba_controller = &sc->sc_spi;
-	(void) config_found_ia(self, "spibus", &sba, spibus_print);
+	(void) config_found_ia(&sc->sc_dev, "spibus", &sba, spibus_print);
 }
 
 void
-arspi_interrupts(device_t self)
+arspi_interrupts(struct device *self)
 {
 	/*
 	 * we never leave polling mode, because, apparently, we 
@@ -207,7 +211,7 @@ arspi_interrupts(device_t self)
 	struct arspi_softc *sc = device_private(self);
 	int	s;
 
-	s = splbio();
+	s = splserial();
 	sc->sc_interrupts = true;
 	splx(s);
 #endif
@@ -266,7 +270,7 @@ arspi_transfer(void *cookie, struct spi_transfer *st)
 		return rv;
 	}
 
-	s = splbio();
+	s = splserial();
 	spi_transq_enqueue(&sc->sc_transq, st);
 	if (sc->sc_transfer == NULL) {
 		arspi_sched(sc);

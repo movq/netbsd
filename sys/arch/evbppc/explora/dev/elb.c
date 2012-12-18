@@ -1,4 +1,4 @@
-/*	$NetBSD: elb.c,v 1.9 2011/07/01 19:02:32 dyoung Exp $	*/
+/*	$NetBSD: elb.c,v 1.6 2008/04/28 20:23:17 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: elb.c,v 1.9 2011/07/01 19:02:32 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: elb.c,v 1.6 2008/04/28 20:23:17 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -40,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: elb.c,v 1.9 2011/07/01 19:02:32 dyoung Exp $");
 
 #include <machine/explora.h>
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <powerpc/ibm4xx/dcr403cgx.h>
 
@@ -54,8 +54,8 @@ struct elb_dev {
 	bus_space_tag_t elb_bt;
 };
 
-static int	elb_match(device_t, cfdata_t, void *);
-static void	elb_attach(device_t, device_t, void *);
+static int	elb_match(struct device *, struct cfdata *, void *);
+static void	elb_attach(struct device *, struct device *, void *);
 static int	elb_print(void *, const char *);
 
 static struct powerpc_bus_space elb_tag = {
@@ -64,20 +64,19 @@ static struct powerpc_bus_space elb_tag = {
 	BASE_PCKBC,
 	BASE_PCKBC + 0x6ff
 };
+static char elb_ex_storage[EXTENT_FIXED_STORAGE_SIZE(8)]
+    __attribute__((aligned(8)));
+static int elb_tag_init_done;
+
 static struct powerpc_bus_space elb_fb_tag = {
 	_BUS_SPACE_LITTLE_ENDIAN | _BUS_SPACE_MEM_TYPE,
 	0x00000000,
 	BASE_FB,
 	BASE_FB2 + SIZE_FB - 1
 };
-
-static char elb_ex_storage[EXTENT_FIXED_STORAGE_SIZE(8)]
-    __attribute__((aligned(8)));
 static char elbfb_ex_storage[EXTENT_FIXED_STORAGE_SIZE(8)]
     __attribute__((aligned(8)));
-
-static bool elb_tag_init_done;
-static bool elbfb_tag_init_done;
+static int elbfb_tag_init_done;
 
 /*
  * DMA struct, nothing special.
@@ -101,7 +100,7 @@ static struct powerpc_bus_dma_tag elb_bus_dma_tag = {
 	_bus_dma_bus_mem_to_phys_generic,
 };
 
-static const struct elb_dev elb_devs[] = {
+static struct elb_dev elb_devs[] = {
 	{ "cpu",	0,		0,		-1, NULL },
 	{ "pckbc",	BASE_PCKBC,	BASE_PCKBC2,	31, &elb_tag },
 	{ "com",	BASE_COM,	0,		30, &elb_tag },
@@ -110,14 +109,14 @@ static const struct elb_dev elb_devs[] = {
 	{ "le",		BASE_LE,	0,		28, &elb_fb_tag },
 };
 
-CFATTACH_DECL_NEW(elb, 0,
+CFATTACH_DECL(elb, sizeof(struct device),
     elb_match, elb_attach, NULL, NULL);
 
 /*
  * Probe for the elb; always succeeds.
  */
 static int
-elb_match(device_t parent, cfdata_t cf, void *aux)
+elb_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	return (1);
 }
@@ -126,20 +125,19 @@ elb_match(device_t parent, cfdata_t cf, void *aux)
  * Attach the Explora local bus.
  */
 static void
-elb_attach(device_t parent, device_t self, void *aux)
+elb_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct elb_attach_args eaa;
-	const struct elb_dev *elb;
-	size_t i;
+	int i;
 
 	printf("\n");
-	for (i = 0, elb = elb_devs; i < __arraycount(elb_devs); i++, elb++) {
-		eaa.elb_name = elb->elb_name;
-		eaa.elb_bt = elb_get_bus_space_tag(elb->elb_addr);
+	for (i = 0; i < sizeof(elb_devs)/sizeof(elb_devs[0]); i++) {
+		eaa.elb_name = elb_devs[i].elb_name;
+		eaa.elb_bt = elb_get_bus_space_tag(elb_devs[i].elb_addr);
 		eaa.elb_dmat = &elb_bus_dma_tag;
-		eaa.elb_base = elb->elb_addr;
-		eaa.elb_base2 = elb->elb_addr2;
-		eaa.elb_irq = elb->elb_irq;
+		eaa.elb_base = elb_devs[i].elb_addr;
+		eaa.elb_base2 = elb_devs[i].elb_addr2;
+		eaa.elb_irq = elb_devs[i].elb_irq;
 
 		(void) config_found(self, &eaa, elb_print);
 	}
@@ -168,7 +166,7 @@ elb_get_bus_space_tag(bus_addr_t addr)
 			    elb_ex_storage, sizeof(elb_ex_storage)))
 				panic("elb_get_bus_space_tag: elb_tag");
 
-			elb_tag_init_done = true;
+			elb_tag_init_done = 1;
 		}
 		return (&elb_tag);
 	} else {
@@ -177,7 +175,7 @@ elb_get_bus_space_tag(bus_addr_t addr)
 			    elbfb_ex_storage, sizeof(elbfb_ex_storage)))
 				panic("elb_get_bus_space_tag: elb_fb_tag");
 
-			elbfb_tag_init_done = true;
+			elbfb_tag_init_done = 1;
 		}
 		return (&elb_fb_tag);
 	}

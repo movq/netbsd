@@ -1,4 +1,4 @@
-/*	$NetBSD: machfbreg.h,v 1.5 2012/08/15 15:39:23 macallan Exp $	*/
+/*	$NetBSD: machfbreg.h,v 1.3 2005/12/11 12:22:50 christos Exp $	*/
 
 /*
  * Copyright 1992,1993,1994,1995,1996,1997 by Kevin E. Martin, Chapel Hill, North Carolina.
@@ -26,11 +26,6 @@
  * Modified for the Mach32 by Kevin E. Martin (martin@cs.unc.edu)
  * Modified for the Mach64 by Kevin E. Martin (martin@cs.unc.edu)
  */
-
-/* BARs */
-#define MACH64_BAR_APERTURE	0x10 /* all mach64 have this */
-#define MACH64_BAR_IO		0x14 /* most mach64 have this */
-#define MACH64_BAR_MMIO		0x18 /* Rage Pro and newer */
 
 /* NON-GUI MEMORY MAPPED Registers - expressed in BYTE offsets */
 
@@ -259,13 +254,9 @@
 #define AUTO_BLKWRT_DIS         0x000002000
 
 /* BUS_CNTL register constants */
-#define BUS_APER_REG_DIS        0x00000010	/* register block 0 */
-#define BUS_EXTRA_PIPE_DIS	0x00000020	/* disable extra pipeline */
-#define BUS_DISABLE_MASTER	0x00000040	/* disable busmaster */
-#define BUS_WRITE_ROM_EN	0x00000080	/* write to flash ROM */
 #define BUS_FIFO_ERR_ACK        0x00200000
 #define BUS_HOST_ERR_ACK        0x00800000
-#define BUS_EXT_REG_EN		0x08000000	/* register block 1 */
+#define BUS_APER_REG_DIS        0x00000010
 
 /* GEN_TEST_CNTL register constants */
 #define GEN_OVR_OUTPUT_EN       0x20
@@ -286,17 +277,13 @@
 #define CTD_FIFO5               0x01000000
 
 /* CLOCK_CNTL register constants */
-#define CLOCK_SEL		0x0000000f
-#define CLOCK_DIV		0x00000030
-#define CLOCK_DIV1		0x00000000
-#define CLOCK_DIV2		0x00000010
-#define CLOCK_DIV4		0x00000020
-#define CLOCK_STROBE		0x00000040
-#define PLL_WR_EN		0x00000200
-#define PLL_ADDR		0x0000fc00
-#define PLL_ADDR_SHIFT		10
-#define PLL_DATA		0x00ff0000
-#define PLL_DATA_SHIFT		16
+#define CLOCK_SEL		0x0f
+#define CLOCK_DIV		0x30
+#define CLOCK_DIV1		0x00
+#define CLOCK_DIV2		0x10
+#define CLOCK_DIV4		0x20
+#define CLOCK_STROBE		0x40
+#define PLL_WR_EN		0x02
 
 /* PLL registers */
 #define PLL_MACRO_CNTL		0x01
@@ -304,7 +291,6 @@
 #define PLL_GEN_CNTL		0x03
 #define MCLK_FB_DIV		0x04
 #define PLL_VCLK_CNTL		0x05
-  #define PLL_VCLK_RESET		0x04
 #define VCLK_POST_DIV		0x06
 #define VCLK0_FB_DIV		0x07
 #define VCLK1_FB_DIV		0x08

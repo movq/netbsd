@@ -1,4 +1,4 @@
-/*	$NetBSD: head.c,v 1.23 2010/03/31 21:55:23 joerg Exp $	*/
+/*	$NetBSD: head.c,v 1.19 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1987, 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1992, 1993\
 #if 0
 static char sccsid[] = "@(#)head.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: head.c,v 1.23 2010/03/31 21:55:23 joerg Exp $");
+__RCSID("$NetBSD: head.c,v 1.19 2008/07/21 14:19:23 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,7 +48,6 @@ __RCSID("$NetBSD: head.c,v 1.23 2010/03/31 21:55:23 joerg Exp $");
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
-#include <inttypes.h>
 #include <limits.h>
 #include <locale.h>
 #include <stdio.h>
@@ -62,21 +61,24 @@ __RCSID("$NetBSD: head.c,v 1.23 2010/03/31 21:55:23 joerg Exp $");
  * Bill Joy UCB August 24, 1977
  */
 
-static void head(FILE *, intmax_t, intmax_t);
-static void obsolete(char *[]);
-__dead static void usage(void);
+void head __P((FILE *, long, long));
+void obsolete __P((char *[]));
+void usage __P((void));
+int main __P((int, char *[]));
 
+int eval = 0;
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	int ch;
 	FILE *fp;
 	int first;
-	uintmax_t linecnt;
-	uintmax_t bytecnt;
+	long linecnt;
+	long bytecnt;
 	char *ep;
-	int eval = 0;
 	int qflag = 0;
 	int vflag = 0;
 
@@ -88,17 +90,21 @@ main(int argc, char *argv[])
 		switch(ch) {
 		case 'c':
 			errno = 0;
-			bytecnt = strtoimax(optarg, &ep, 10);
-			if ((bytecnt == INTMAX_MAX && errno == ERANGE) ||
-			    *ep || bytecnt <= 0)
+			bytecnt = strtol(optarg, &ep, 10);
+			if ((bytecnt == LONG_MIN || bytecnt == LONG_MAX) &&
+			    errno == ERANGE)
+				err(1, "illegal byte count -- %s", optarg);
+			else if (*ep || bytecnt <= 0)
 				errx(1, "illegal byte count -- %s", optarg);
 			break;
 
 		case 'n':
 			errno = 0;
-			linecnt = strtoimax(optarg, &ep, 10);
-			if ((linecnt == INTMAX_MAX && errno == ERANGE) ||
-			    *ep || linecnt <= 0)
+			linecnt = strtol(optarg, &ep, 10);
+			if ((linecnt == LONG_MIN || linecnt == LONG_MAX) &&
+			    errno == ERANGE)
+				err(1, "illegal line count -- %s", optarg);
+			else if (*ep || linecnt <= 0)
 				errx(1, "illegal line count -- %s", optarg);
 			break;
 
@@ -139,44 +145,28 @@ main(int argc, char *argv[])
 	exit(eval);
 }
 
-static void
-head(FILE *fp, intmax_t cnt, intmax_t bytecnt)
+void
+head(fp, cnt, bytecnt)
+	FILE *fp;
+	long cnt;
+	long bytecnt;
 {
-	char buf[65536];
-	size_t len, rv, rv2;
 	int ch;
 
-	if (bytecnt) {
-		while (bytecnt) {
-			len = sizeof(buf);
-			if (bytecnt > (intmax_t)sizeof(buf))
-				len = sizeof(buf);
-			else
-				len = bytecnt;
-			rv = fread(buf, 1, len, fp);
-			if (rv == 0)
-				break; /* Distinguish EOF and error? */
-			rv2 = fwrite(buf, 1, rv, stdout);
-			if (rv2 != rv) {
-				if (feof(stdout))
-					errx(1, "EOF on stdout");
-				else
-					err(1, "failure writing to stdout");
-			}
-			bytecnt -= rv;
-		}
-	} else {
+	if (bytecnt)
+		cnt = bytecnt;
+	while (cnt--)
 		while ((ch = getc(fp)) != EOF) {
 			if (putchar(ch) == EOF)
 				err(1, "stdout");
-			if (ch == '\n' && --cnt == 0)
+			if (ch == '\n' || bytecnt)
 				break;
 		}
-	}
 }
 
-static void
-obsolete(char *argv[])
+void
+obsolete(argv)
+	char *argv[];
 {
 	char *ap;
 
@@ -194,8 +184,8 @@ obsolete(char *argv[])
 	}
 }
 
-static void
-usage(void)
+void
+usage()
 {
 
 	(void)fprintf(stderr, "usage: %s [-n lines] [file ...]\n",

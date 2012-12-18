@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ep_eisa.c,v 1.42 2010/01/18 19:00:58 pooka Exp $	*/
+/*	$NetBSD: if_ep_eisa.c,v 1.39.4.1 2009/02/02 20:48:00 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -64,9 +64,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ep_eisa.c,v 1.42 2010/01/18 19:00:58 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ep_eisa.c,v 1.39.4.1 2009/02/02 20:48:00 snj Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,6 +90,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_ep_eisa.c,v 1.42 2010/01/18 19:00:58 pooka Exp $"
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/if_inarp.h>
+#endif
+
+
+#if NBPFILTER > 0
+#include <net/bpf.h>
+#include <net/bpfdesc.h>
 #endif
 
 #include <sys/cpu.h>
@@ -259,12 +266,13 @@ ep_eisa_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			printf(" at %s", intrstr);
+		printf("\n");
 		return;
 	}
 	if (intrstr != NULL)
-		aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+		printf("%s: interrupting at %s\n", device_xname(sc->sc_dev),
+		    intrstr);
 
 	epconfig(sc, eep->eep_chipset, NULL);
 }

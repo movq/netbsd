@@ -1,4 +1,4 @@
-/*	$NetBSD: ppp_tty.c,v 1.57 2010/04/05 07:22:24 joerg Exp $	*/
+/*	$NetBSD: ppp_tty.c,v 1.53 2008/05/25 19:22:21 ad Exp $	*/
 /*	Id: ppp_tty.c,v 1.3 1996/07/01 01:04:11 paulus Exp 	*/
 
 /*
@@ -93,7 +93,7 @@
 /* from NetBSD: if_ppp.c,v 1.15.2.2 1994/07/28 05:17:58 cgd Exp */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ppp_tty.c,v 1.57 2010/04/05 07:22:24 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ppp_tty.c,v 1.53 2008/05/25 19:22:21 ad Exp $");
 
 #include "ppp.h"
 
@@ -125,7 +125,10 @@ __KERNEL_RCSID(0, "$NetBSD: ppp_tty.c,v 1.57 2010/04/05 07:22:24 joerg Exp $");
 #include <net/slcompress.h>
 #endif
 
+#include "bpfilter.h"
+#if NBPFILTER > 0 || defined(PPP_FILTER)
 #include <net/bpf.h>
+#endif
 #include <net/ppp_defs.h>
 #include <net/if_ppp.h>
 #include <net/if_pppvar.h>
@@ -205,9 +208,8 @@ pppopen(dev_t dev, struct tty *tp)
     struct ppp_softc *sc;
     int error, s;
 
-    error = kauth_authorize_network(l->l_cred, KAUTH_NETWORK_INTERFACE_PPP,
-	KAUTH_REQ_NETWORK_INTERFACE_PPP_ADD, NULL, NULL, NULL);
-    if (error)
+    if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	NULL)) != 0)
 	return (error);
 
     s = spltty();
@@ -228,8 +230,10 @@ pppopen(dev_t dev, struct tty *tp)
     if (sc->sc_relinq)
 	(*sc->sc_relinq)(sc);	/* get previous owner to relinquish the unit */
 
+#if NBPFILTER > 0
     /* Switch DLT to PPP-over-serial. */
     bpf_change_type(&sc->sc_if, DLT_PPP_SERIAL, PPP_HDRLEN);
+#endif
 
     sc->sc_ilen = 0;
     sc->sc_m = NULL;
@@ -293,8 +297,10 @@ pppasyncrelinq(struct ppp_softc *sc)
 {
     int s;
 
+#if NBPFILTER > 0
     /* Change DLT to back none. */
     bpf_change_type(&sc->sc_if, DLT_NULL, 0);
+#endif
 
     s = spltty();
     if (sc->sc_outm) {
@@ -448,8 +454,8 @@ ppptioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	break;
 
     case PPPIOCSASYNCMAP:
-	if ((error = kauth_authorize_device_tty(l->l_cred,
- 	  KAUTH_DEVICE_TTY_PRIVSET, tp)) != 0)
+	if ((error = kauth_authorize_generic(l->l_cred,
+ 	  KAUTH_GENERIC_ISSUSER, NULL)) != 0)
 	    break;
 	sc->sc_asyncmap[0] = *(u_int *)data;
 	break;
@@ -459,8 +465,8 @@ ppptioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	break;
 
     case PPPIOCSRASYNCMAP:
-	if ((error = kauth_authorize_device_tty(l->l_cred,
-	  KAUTH_DEVICE_TTY_PRIVSET, tp)) != 0)
+	if ((error = kauth_authorize_generic(l->l_cred,
+	  KAUTH_GENERIC_ISSUSER, NULL)) != 0)
 	    break;
 	sc->sc_rasyncmap = *(u_int *)data;
 	break;
@@ -470,8 +476,8 @@ ppptioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	break;
 
     case PPPIOCSXASYNCMAP:
-	if ((error = kauth_authorize_device_tty(l->l_cred,
-	  KAUTH_DEVICE_TTY_PRIVSET, tp)) != 0)
+	if ((error = kauth_authorize_generic(l->l_cred,
+	  KAUTH_GENERIC_ISSUSER, NULL)) != 0)
 	    break;
 	s = spltty();
 	bcopy(data, sc->sc_asyncmap, sizeof(sc->sc_asyncmap));

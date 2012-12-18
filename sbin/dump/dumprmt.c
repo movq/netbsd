@@ -1,4 +1,4 @@
-/*	$NetBSD: dumprmt.c,v 1.34 2011/08/29 14:34:59 joerg Exp $	*/
+/*	$NetBSD: dumprmt.c,v 1.32 2006/12/18 20:07:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)dumprmt.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: dumprmt.c,v 1.34 2011/08/29 14:34:59 joerg Exp $");
+__RCSID("$NetBSD: dumprmt.c,v 1.32 2006/12/18 20:07:32 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -75,7 +75,7 @@ static	char *rmtpeer;
 
 static	int	okname(char *);
 static	int	rmtcall(const char *, const char *, int);
-__dead static	void	rmtconnaborted(int);
+static	void	rmtconnaborted(int);
 static	int	rmtgetb(void);
 static	void	rmtgetconn(void);
 static	void	rmtgets(char *, int);
@@ -291,7 +291,7 @@ static int
 rmtcall(const char *cmd, const char *buf, int verbose)
 {
 
-	if ((size_t)write(rmtape, buf, strlen(buf)) != strlen(buf))
+	if (write(rmtape, buf, strlen(buf)) != strlen(buf))
 		rmtconnaborted(0);
 	return (rmtreply(cmd, verbose));
 }

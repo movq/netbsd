@@ -1,4 +1,4 @@
-/*	$NetBSD: usbhid.c,v 1.36 2011/09/16 15:39:30 joerg Exp $	*/
+/*	$NetBSD: usbhid.c,v 1.34 2008/04/28 20:24:15 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: usbhid.c,v 1.36 2011/09/16 15:39:30 joerg Exp $");
+__RCSID("$NetBSD: usbhid.c,v 1.34 2008/04/28 20:24:15 martin Exp $");
 #endif
 
 #include <sys/types.h>
@@ -54,7 +54,7 @@ __RCSID("$NetBSD: usbhid.c,v 1.36 2011/09/16 15:39:30 joerg Exp $");
  * Zero if not in a verbose mode.  Greater levels of verbosity
  * are indicated by values larger than one.
  */
-static unsigned int verbose;
+unsigned int verbose;
 
 /* Parser tokens */
 #define DELIM_USAGE '.'
@@ -213,7 +213,7 @@ hidtestrule(struct Susbvar *var, struct usagedata *cache)
 		if (numpage >= 0) {
 			/* Valid numeric */
 
-			if (numpage != (int)HID_PAGE(usage_id))
+			if (numpage != HID_PAGE(usage_id))
 				/* Numeric didn't match page ID */
 				return -1;
 		} else {
@@ -251,7 +251,7 @@ hidtestrule(struct Susbvar *var, struct usagedata *cache)
 	if (numusage >= 0) {
 		/* Valid numeric */
 
-		if (numusage != (int)HID_USAGE(usage_id))
+		if (numusage != HID_USAGE(usage_id))
 			/* Numeric didn't match usage ID */
 			return -1;
 	} else {
@@ -621,7 +621,7 @@ varop_report(struct hid_item *item, struct Susbvar *var,
 	return 0;
 }
 
-__dead static void
+static void
 devloop(int hidfd, report_desc_t rd, struct Susbvar *varlist, size_t vlsize)
 {
 	u_char *dbuf;
@@ -798,7 +798,7 @@ devshow(int hidfd, report_desc_t rd, struct Susbvar *varlist, size_t vlsize,
 	}
 }
 
-__dead static void
+static void
 usage(void)
 {
 	const char *progname = getprogname();

@@ -1,9 +1,7 @@
-/*	$NetBSD: modify.c,v 1.1.1.3 2010/12/12 15:22:33 adam Exp $	*/
-
-/* OpenLDAP: pkg/ldap/servers/slapd/modify.c,v 1.276.2.15 2010/04/19 16:53:02 quanah Exp */
+/* $OpenLDAP: pkg/ldap/servers/slapd/modify.c,v 1.276.2.9 2008/04/14 22:05:06 quanah Exp $ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2010 The OpenLDAP Foundation.
+ * Copyright 1998-2008 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -270,7 +268,6 @@ fe_op_modify( Operation *op, SlapReply *rs )
 	if ( op->orm_increment && !SLAP_INCREMENT( op->o_bd ) ) {
 		send_ldap_error( op, rs, LDAP_UNWILLING_TO_PERFORM,
 			"modify/increment not supported in context" );
-		goto cleanup;
 	}
 
 	/*
@@ -692,7 +689,7 @@ slap_sort_vals(
 #define	SWAP(a,b,tmp)	tmp=(a);(a)=(b);(b)=tmp
 #define	COMP(a,b)	match=0; rc = ordered_value_match( &match, \
 						ad, mr, SLAP_MR_EQUALITY \
-								| SLAP_MR_VALUE_OF_ASSERTION_SYNTAX \
+								| SLAP_MR_VALUE_OF_ATTRIBUTE_SYNTAX \
 								| SLAP_MR_ASSERTED_VALUE_NORMALIZED_MATCH \
 								| SLAP_MR_ATTRIBUTE_VALUE_NORMALIZED_MATCH, \
 								&(a), &(b), text );
@@ -810,7 +807,7 @@ slap_sort_vals(
 		}
 	}
 	done:
-	if ( match == 0 && i >= 0 )
+	if ( i >= 0 )
 		*dup = ix[i];
 
 	/* For sorted attributes, put the values in index order */
@@ -850,11 +847,21 @@ slap_sort_vals(
  */
 void slap_timestamp( time_t *tm, struct berval *bv )
 {
-	struct tm ltm;
+	struct tm *ltm;
+#ifdef HAVE_GMTIME_R
+	struct tm ltm_buf;
 
-	ldap_pvt_gmtime( tm, &ltm );
+	ltm = gmtime_r( tm, &ltm_buf );
+#else
+	ldap_pvt_thread_mutex_lock( &gmtime_mutex );
+	ltm = gmtime( tm );
+#endif
 
-	bv->bv_len = lutil_gentime( bv->bv_val, bv->bv_len, &ltm );
+	bv->bv_len = lutil_gentime( bv->bv_val, bv->bv_len, ltm );
+
+#ifndef HAVE_GMTIME_R
+	ldap_pvt_thread_mutex_unlock( &gmtime_mutex );
+#endif
 }
 
 /* Called for all modify and modrdn ops. If the current op was replicated
@@ -868,7 +875,7 @@ void slap_mods_opattrs(
 	struct berval name, timestamp, csn = BER_BVNULL;
 	struct berval nname;
 	char timebuf[ LDAP_LUTIL_GENTIME_BUFSIZE ];
-	char csnbuf[ LDAP_PVT_CSNSTR_BUFSIZE ];
+	char csnbuf[ LDAP_LUTIL_CSNSTR_BUFSIZE ];
 	Modifications *mod, **modtail, *modlast;
 	int gotcsn = 0, gotmname = 0, gotmtime = 0;
 

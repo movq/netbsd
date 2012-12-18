@@ -1,4 +1,4 @@
-/*	$NetBSD: bfs.c,v 1.16 2012/06/11 21:11:40 agc Exp $	*/
+/*	$NetBSD: bfs.c,v 1.11 2008/04/28 20:24:02 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: bfs.c,v 1.16 2012/06/11 21:11:40 agc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bfs.c,v 1.11 2008/04/28 20:24:02 martin Exp $");
 #define	BFS_DEBUG
 
 #include <sys/param.h>
@@ -256,12 +256,10 @@ bfs_file_read(const struct bfs *bfs, const char *fname, void *buf, size_t bufsz,
 
 	p = buf;
 	n = end - start;
-	if (!bfs->io->read_n(bfs->io, p, start, n))
-		return EIO;
+	bfs->io->read_n(bfs->io, p, start, n);
 	/* last sector */
 	n *= DEV_BSIZE;
-	if (!bfs->io->read(bfs->io, tmpbuf, end))
-		return EIO;
+	bfs->io->read(bfs->io, tmpbuf, end);
 	memcpy(p + n, tmpbuf, sz - n);
 
 	if (read_size)
@@ -337,6 +335,10 @@ bfs_file_rename(struct bfs *bfs, const char *from_name, const char *to_name)
 	struct bfs_dirent *dirent;
 	int err = 0;
 
+	if (strlen(to_name) > BFS_FILENAME_MAXLEN) {
+		err =  ENAMETOOLONG;
+		goto out;
+	}
 	if (!bfs_dirent_lookup_by_name(bfs, from_name, &dirent)) {
 		err = ENOENT;
 		goto out;
@@ -629,7 +631,7 @@ bfs_inode_set_attr(const struct bfs *bfs, struct bfs_inode *inode,
 	if (from != NULL) {
 		if (from->uid != (uid_t)-1)
 			to->uid = from->uid;
-		if (from->gid != (gid_t)-1)
+		if (from->gid != (uid_t)-1)
 			to->gid = from->gid;
 		if (from->mode != (mode_t)-1)
 			to->mode = from->mode;

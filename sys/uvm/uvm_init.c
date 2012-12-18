@@ -1,6 +1,7 @@
-/*	$NetBSD: uvm_init.c,v 1.44 2012/02/17 23:41:02 matt Exp $	*/
+/*	$NetBSD: uvm_init.c,v 1.34 2008/10/18 03:46:22 rmind Exp $	*/
 
 /*
+ *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -12,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor and
+ *      Washington University.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.44 2012/02/17 23:41:02 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.34 2008/10/18 03:46:22 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,6 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.44 2012/02/17 23:41:02 matt Exp $");
 #include <sys/resourcevar.h>
 #include <sys/kmem.h>
 #include <sys/mman.h>
+#include <sys/proc.h>
+#include <sys/malloc.h>
 #include <sys/vnode.h>
 
 #include <uvm/uvm.h>
@@ -57,16 +66,11 @@ struct uvm uvm;		/* decl */
 struct uvmexp uvmexp;	/* decl */
 struct uvm_object *uvm_kernel_object;
 
-#if defined(__uvmexp_pagesize)
-const int * const uvmexp_pagesize = &uvmexp.pagesize;
-const int * const uvmexp_pagemask = &uvmexp.pagemask;
-const int * const uvmexp_pageshift = &uvmexp.pageshift;
-#endif
-
 kmutex_t uvm_pageqlock;
 kmutex_t uvm_fpageqlock;
 kmutex_t uvm_kentry_lock;
 kmutex_t uvm_swap_data_lock;
+kmutex_t uvm_scheduler_mutex;
 
 /*
  * uvm_init: init the VM system.   called from kern/init_main.c.
@@ -78,87 +82,92 @@ uvm_init(void)
 	vaddr_t kvm_start, kvm_end;
 
 	/*
-	 * Ensure that the hardware set the page size, zero the UVM structure.
+	 * step 0: ensure that the hardware set the page size
 	 */
 
 	if (uvmexp.pagesize == 0) {
 		panic("uvm_init: page size not set");
 	}
 
+	/*
+	 * step 1: zero the uvm structure
+	 */
+
 	memset(&uvm, 0, sizeof(uvm));
 	averunnable.fscale = FSCALE;
+	uvm_amap_init();
 
 	/*
-	 * Init the page sub-system.  This includes allocating the vm_page
-	 * structures, and setting up all the page queues (and locks).
-	 * Available memory will be put in the "free" queue, kvm_start and
-	 * kvm_end will be set to the area of kernel virtual memory which
-	 * is available for general use.
+	 * step 2: init the page sub-system.  this includes allocating the
+	 * vm_page structures, and setting up all the page queues (and
+	 * locks).  available memory will be put in the "free" queue.
+	 * kvm_start and kvm_end will be set to the area of kernel virtual
+	 * memory which is available for general use.
 	 */
 
 	uvm_page_init(&kvm_start, &kvm_end);
 
 	/*
-	 * Init the map sub-system.
+	 * step 3: init the map sub-system.  allocates the static pool of
+	 * vm_map_entry structures that are used for "special" kernel maps
+	 * (e.g. kernel_map, kmem_map, etc...).
 	 */
 
 	uvm_map_init();
 
 	/*
-	 * Setup the kernel's virtual memory data structures.  This includes
-	 * setting up the kernel_map/kernel_object.  Bootstrap all kernel
-	 * memory allocators.
+	 * step 4: setup the kernel's virtual memory data structures.  this
+	 * includes setting up the kernel_map/kernel_object.
 	 */
 
-	uao_init();
-	uvm_km_bootstrap(kvm_start, kvm_end);
+	uvm_km_init(kvm_start, kvm_end);
 
 	/*
-	 * Setup uvm_map caches and init the amap.
-	 */
-
-	uvm_map_init_caches();
-	uvm_amap_init();
-
-	/*
-	 * Init the pmap module.  The pmap module is free to allocate
+	 * step 5: init the pmap module.   the pmap module is free to allocate
 	 * memory for its private use (e.g. pvlists).
 	 */
 
 	pmap_init();
 
 	/*
-	 * Init the kernel maps virtual address caches.  Make kernel memory
-	 * allocator ready for use.  After this call the pool/kmem memory
-	 * allocators can be used.
+	 * step 6: init the kernel memory allocator.   after this call the
+	 * kernel memory allocator (malloc) can be used. this includes
+	 * setting up the kmem_map.
 	 */
 
-	uvm_km_init();
+	kmeminit();
 
 #ifdef DEBUG
 	debug_init();
 #endif
 
 	/*
-	 * Init all pagers and the pager_map.
+	 * step 7: init all pagers and the pager_map.
 	 */
 
 	uvm_pager_init();
 
 	/*
-	 * Initialize the uvm_loan() facility.
+	 * step 8: init the uvm_loan() facility.
 	 */
 
 	uvm_loan_init();
 
 	/*
-	 * Init emap subsystem.
+	 * Initialize pools.  This must be done before anyone manipulates
+	 * any vm_maps because we use a pool for some map entry structures.
 	 */
 
-	uvm_emap_sysinit();
+	pool_subsystem_init();
 
 	/*
-	 * The VM system is now up!  Now that kmem is up we can resize the
+	 * init slab memory allocator kmem(9).
+	 */
+
+	kmem_init();
+
+	/*
+	 * the VM system is now up!  now that kmem is up we can resize the
 	 * <obj,off> => <page> hash table for general use and enable paging
 	 * of kernel objects.
 	 */
@@ -169,7 +178,7 @@ uvm_init(void)
 	uvmpdpol_reinit();
 
 	/*
-	 * Init anonymous memory systems.
+	 * init anonymous memory systems
 	 */
 
 	uvm_anon_init();
@@ -177,7 +186,7 @@ uvm_init(void)
 	uvm_uarea_init();
 
 	/*
-	 * Init readahead mechanism.
+	 * init readahead module
 	 */
 
 	uvm_ra_init();

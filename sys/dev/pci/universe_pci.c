@@ -1,4 +1,4 @@
-/* $NetBSD: universe_pci.c,v 1.11 2009/11/26 15:17:10 njoly Exp $ */
+/* $NetBSD: universe_pci.c,v 1.8 2007/10/19 12:00:56 ad Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: universe_pci.c,v 1.11 2009/11/26 15:17:10 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: universe_pci.c,v 1.8 2007/10/19 12:00:56 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,7 +87,12 @@ static int vmeslvoffsets[8] = {
    vmeslvoffsets[idx] + offsetof(struct universe_vmeslvimg, reg), val)
 
 int
-univ_pci_attach(struct univ_pci_data *d, struct pci_attach_args *pa, const char *name, void (*inthdl)(void *, int, int), void *intcookie)
+univ_pci_attach(d, pa, name, inthdl, intcookie)
+	struct univ_pci_data *d;
+	struct pci_attach_args *pa;
+	const char *name;
+	void (*inthdl)(void *, int, int);
+	void *intcookie;
 {
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
@@ -149,8 +154,8 @@ univ_pci_attach(struct univ_pci_data *d, struct pci_attach_args *pa, const char 
 	if (d->ih == NULL) {
 		aprint_error("%s: couldn't establish interrupt", name);
 		if (intrstr != NULL)
-			aprint_error(" at %s", intrstr);
-		aprint_error("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return (-1);
 	}
 	aprint_normal("%s: interrupting at %s\n", name, intrstr);
@@ -165,7 +170,14 @@ univ_pci_attach(struct univ_pci_data *d, struct pci_attach_args *pa, const char 
 }
 
 int
-univ_pci_mapvme(struct univ_pci_data *d, int wnd, vme_addr_t vmebase, u_int32_t len, vme_am_t am, vme_datasize_t datawidth, u_int32_t pcibase)
+univ_pci_mapvme(d, wnd, vmebase, len, am, datawidth, pcibase)
+	struct univ_pci_data *d;
+	int wnd;
+	vme_addr_t vmebase;
+	u_int32_t len;
+	vme_am_t am;
+	vme_datasize_t datawidth;
+	u_int32_t pcibase;
 {
 	u_int32_t ctl = 0x80000000;
 
@@ -205,7 +217,9 @@ univ_pci_mapvme(struct univ_pci_data *d, int wnd, vme_addr_t vmebase, u_int32_t 
 }
 
 void
-univ_pci_unmapvme(struct univ_pci_data *d, int wnd)
+univ_pci_unmapvme(d, wnd)
+	struct univ_pci_data *d;
+	int wnd;
 {
 #ifdef UNIV_DEBUG
 	printf("%s: unmap VME wnd %d\n", d->devname, wnd);
@@ -215,7 +229,13 @@ univ_pci_unmapvme(struct univ_pci_data *d, int wnd)
 
 
 int
-univ_pci_mappci(struct univ_pci_data *d, int wnd, u_int32_t pcibase, u_int32_t len, vme_addr_t vmebase, vme_am_t am)
+univ_pci_mappci(d, wnd, pcibase, len, vmebase, am)
+	struct univ_pci_data *d;
+	int wnd;
+	u_int32_t pcibase;
+	u_int32_t len;
+	vme_addr_t vmebase;
+	vme_am_t am;
 {
 	u_int32_t ctl = 0x80000000;
 
@@ -253,7 +273,9 @@ univ_pci_mappci(struct univ_pci_data *d, int wnd, u_int32_t pcibase, u_int32_t l
 }
 
 void
-univ_pci_unmappci(struct univ_pci_data *d, int wnd)
+univ_pci_unmappci(d, wnd)
+	struct univ_pci_data *d;
+	int wnd;
 {
 #ifdef UNIV_DEBUG
 	printf("%s: unmap PCI wnd %d\n", d->devname, wnd);
@@ -262,7 +284,9 @@ univ_pci_unmappci(struct univ_pci_data *d, int wnd)
 }
 
 int
-univ_pci_vmebuserr(struct univ_pci_data *d, int clear)
+univ_pci_vmebuserr(d, clear)
+	struct univ_pci_data *d;
+	int clear;
 {
 	u_int32_t pcicsr;
 
@@ -273,7 +297,8 @@ univ_pci_vmebuserr(struct univ_pci_data *d, int clear)
 }
 
 int
-univ_pci_intr(void *v)
+univ_pci_intr(v)
+	void *v;
 {
 	struct univ_pci_data *d = v;
 	u_int32_t intcsr;

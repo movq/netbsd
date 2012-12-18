@@ -1,6 +1,4 @@
-# $NetBSD: Makefile,v 1.13 2012/01/04 15:55:36 drochner Exp $
-
-WARNS?=	3	# XXX: sign-compare issues
+# $NetBSD: Makefile,v 1.9 2005/12/16 16:25:07 jmc Exp $
 
 .include <bsd.own.mk>
 
@@ -15,6 +13,7 @@ DIST=	${NETBSDSRCDIR}/crypto/dist/ipsec-tools
 CPPFLAGS+= -I${DIST}/src/setkey -I${DIST}/src/libipsec
 CPPFLAGS+= -I${NETBSDSRCDIR}/lib/libipsec -I.
 CPPFLAGS+= -DIPSEC_DEBUG -DHAVE_CONFIG_H
+CPPFLAGS+= -DSADB_X_EALG_AESCBC=SADB_X_EALG_AES
 
 LDADD+= -ll -ly -lipsec
 DPADD+=	${LIBL} ${LIBY} ${LIBIPSEC}

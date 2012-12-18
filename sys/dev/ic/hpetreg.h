@@ -1,4 +1,4 @@
-/* $NetBSD: hpetreg.h,v 1.4 2011/10/31 12:47:15 yamt Exp $ */
+/* $NetBSD: hpetreg.h,v 1.3.20.1 2012/01/25 21:18:14 riz Exp $ */
 
 /*
  * Copyright (c) 2006 Nicolas Joly

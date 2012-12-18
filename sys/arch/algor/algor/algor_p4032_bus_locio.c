@@ -1,4 +1,4 @@
-/*	$NetBSD: algor_p4032_bus_locio.c,v 1.6 2011/07/09 16:03:00 matt Exp $	*/
+/*	$NetBSD: algor_p4032_bus_locio.c,v 1.4 2008/04/28 20:23:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: algor_p4032_bus_locio.c,v 1.6 2011/07/09 16:03:00 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: algor_p4032_bus_locio.c,v 1.4 2008/04/28 20:23:10 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,21 +44,20 @@ __KERNEL_RCSID(0, "$NetBSD: algor_p4032_bus_locio.c,v 1.6 2011/07/09 16:03:00 ma
 
 #include <uvm/uvm_extern.h>
 
-#include <mips/locore.h>
+#include <machine/locore.h>
 
 #include <algor/algor/algor_p4032reg.h>
 #include <algor/algor/algor_p4032var.h>
 
 #define	CHIP		algor_p4032loc
-#define	CHIP_IO
 
 /* log2(4) */
 #define	CHIP_ALIGN_STRIDE	2
 
 /* IO region 1 */
-#define	CHIP_W1_BUS_START(v)	0x00000000UL
-#define	CHIP_W1_BUS_END(v)	0xffffffffUL
-#define	CHIP_W1_SYS_START(v)	0
-#define	CHIP_W1_SYS_END(v)	CHIP_W1_BUS_END(v)
+#define	CHIP_IO_W1_BUS_START(v)	0x00000000UL
+#define	CHIP_IO_W1_BUS_END(v)	0xffffffffUL
+#define	CHIP_IO_W1_SYS_START(v)	0
+#define	CHIP_IO_W1_SYS_END(v)	CHIP_IO_W1_BUS_END(v)
 
-#include <mips/mips/bus_space_alignstride_chipdep.c>
+#include <algor/pci/pci_alignstride_bus_io_chipdep.c>

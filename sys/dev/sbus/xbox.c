@@ -1,4 +1,4 @@
-/*	$NetBSD: xbox.c,v 1.21 2011/07/18 00:58:52 mrg Exp $ */
+/*	$NetBSD: xbox.c,v 1.15 2008/04/28 20:23:57 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xbox.c,v 1.21 2011/07/18 00:58:52 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xbox.c,v 1.15 2008/04/28 20:23:57 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -86,19 +86,22 @@ __KERNEL_RCSID(0, "$NetBSD: xbox.c,v 1.21 2011/07/18 00:58:52 mrg Exp $");
 #define XBOX_NREG		13
 
 struct xbox_softc {
+	struct device	sc_dev;		/* base device */
 	int		sc_key;		/* this xbox's unique key */
 };
 
 /* autoconfiguration driver */
-int	xbox_match(device_t, cfdata_t, void *);
-void	xbox_attach(device_t, device_t, void *);
-int	xbox_print(void *, const char *);
+int	xbox_match(struct device *, struct cfdata *, void *);
+void	xbox_attach(struct device *, struct device *, void *);
+int	xbox_print( void *, const char *);
 
-CFATTACH_DECL_NEW(xbox, sizeof(struct xbox_softc),
+CFATTACH_DECL(xbox, sizeof(struct xbox_softc),
     xbox_match, xbox_attach, NULL, NULL);
 
 int
-xbox_print(void *args, const char *busname)
+xbox_print(args, busname)
+	void *args;
+	const char *busname;
 {
 	struct xbox_attach_args *xa = args;
 
@@ -108,7 +111,10 @@ xbox_print(void *args, const char *busname)
 }
 
 int
-xbox_match(device_t parent, cfdata_t cf, void *aux)
+xbox_match(parent, cf, aux)
+	struct device *parent;
+	struct cfdata *cf;
+	void *aux;
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -119,9 +125,12 @@ xbox_match(device_t parent, cfdata_t cf, void *aux)
  * Attach an Xbox.
  */
 void
-xbox_attach(device_t parent, device_t self, void *aux)
+xbox_attach(parent, self, aux)
+	struct device *parent;
+	struct device *self;
+	void *aux;
 {
-	struct xbox_softc *sc = device_private(self);
+	struct xbox_softc *sc = (struct xbox_softc *)self;
 	struct sbus_attach_args *sa = aux;
 	int node = sa->sa_node;
 	struct xbox_attach_args xa;
@@ -143,11 +152,11 @@ xbox_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * Now pretend to be another Sbus.
 	 */
-	memset(&xa, 0, sizeof xa);
+	bzero(&xa, sizeof xa);
 	xa.xa_name = "sbus";
 	xa.xa_node = node;
 	xa.xa_bustag = sa->sa_bustag;
 	xa.xa_dmatag = sa->sa_dmatag;
 
-	(void) config_found(self, (void *)&xa, xbox_print);
+	(void) config_found(&sc->sc_dev, (void *)&xa, xbox_print);
 }

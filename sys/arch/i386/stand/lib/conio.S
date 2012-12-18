@@ -1,4 +1,4 @@
-/*	$NetBSD: conio.S,v 1.7 2011/06/16 13:27:59 joerg Exp $	*/
+/*	$NetBSD: conio.S,v 1.6 2008/05/21 01:51:34 ad Exp $	*/
 
 /* PC console handling
   originally from: FreeBSD:sys/i386/boot/netboot/start2.S
@@ -12,7 +12,14 @@
 CLR - Clear screen
 **************************************************************************/
 ENTRY(conclr)
-	pusha
+	push	%ebp
+	mov	%esp,%ebp
+	push	%ecx
+	push	%ebx
+	push	%esi
+	push	%edi
+
+	movb	8(%ebp),%cl
 
 	call	_C_LABEL(prot_to_real)	# enter real mode
 	.code16
@@ -33,35 +40,53 @@ ENTRY(conclr)
 	calll	_C_LABEL(real_to_prot) # back to protected mode
 	.code32
 
-	popa
+	pop	%edi
+	pop	%esi
+	pop	%ebx
+	pop	%ecx
+	pop	%ebp
 	ret
 
 /**************************************************************************
 PUTC - Print a character
 **************************************************************************/
 ENTRY(conputc)
-	pusha
+	push	%ebp
+	mov	%esp,%ebp
+	push	%ecx
+	push	%ebx
+	push	%esi
+	push	%edi
+
+	movb	8(%ebp),%cl
 
 	call	_C_LABEL(prot_to_real)	# enter real mode
 	.code16
 
+	movb	%cl,%al
 	movw	$1,%bx
 	movb	$0x0e,%ah
-	movb	%al, %cl
 	int	$0x10
 
 	calll	_C_LABEL(real_to_prot) # back to protected mode
 	.code32
 
-	popa
+	pop	%edi
+	pop	%esi
+	pop	%ebx
+	pop	%ecx
+	pop	%ebp
 	ret
 
 /**************************************************************************
 GETC - Get a character
 **************************************************************************/
 ENTRY(congetc)
-	xorl	%eax, %eax
-	pusha
+	push	%ebp
+	mov	%esp,%ebp
+	push	%ebx
+	push	%esi
+	push	%edi
 
 	call	_C_LABEL(prot_to_real)	# enter real mode
 	.code16
@@ -73,17 +98,24 @@ ENTRY(congetc)
 	calll	_C_LABEL(real_to_prot) # back to protected mode
 	.code32
 
-	movb	%bl, 28(%esp)
+	xor	%eax,%eax
+	movb	%bl,%al
 
-	popa
+	pop	%edi
+	pop	%esi
+	pop	%ebx
+	pop	%ebp
 	ret
 
 /**************************************************************************
 ISSHIFT - Check for keyboard interrupt; via shift key
 **************************************************************************/
 ENTRY(conisshift)
-	xorl	%eax, %eax
-	pusha
+	push	%ebp
+	mov	%esp,%ebp
+	push	%ebx
+	push	%esi
+	push	%edi
 
 	call	_C_LABEL(prot_to_real)	# enter real mode
 	.code16
@@ -97,17 +129,24 @@ ENTRY(conisshift)
 	calll	_C_LABEL(real_to_prot) # back to protected mode
 	.code32
 
-	movb	%bl, 28(%esp)
+	xor	%eax,%eax
+	movb	%bl,%al
 
-	popa
+	pop	%edi
+	pop	%esi
+	pop	%ebx
+	pop	%ebp
 	ret
 
 /**************************************************************************
 ISKEY - Check for keyboard input
 **************************************************************************/
 ENTRY(coniskey)
-	xorl	%eax, %eax
-	pusha
+	push	%ebp
+	mov	%esp,%ebp
+	push	%ebx
+	push	%esi
+	push	%edi
 
 	call	_C_LABEL(prot_to_real)	# enter real mode
 	.code16
@@ -120,7 +159,11 @@ ENTRY(coniskey)
 	calll	_C_LABEL(real_to_prot) # back to protected mode
 	.code32
 
-	movb	%bl, 28(%esp)
+	xor	%eax,%eax
+	movb	%bl,%al
 
-	popa
+	pop	%edi
+	pop	%esi
+	pop	%ebx
+	pop	%ebp
 	ret

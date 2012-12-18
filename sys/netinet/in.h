@@ -1,4 +1,4 @@
-/*	$NetBSD: in.h,v 1.87 2012/06/22 14:54:35 christos Exp $	*/
+/*	$NetBSD: in.h,v 1.83 2008/01/25 21:12:14 joerg Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -103,7 +103,6 @@ typedef __sa_family_t	sa_family_t;
 #define	IPPROTO_IPCOMP		108		/* IP Payload Comp. Protocol */
 #define	IPPROTO_VRRP		112		/* VRRP RFC 2338 */
 #define	IPPROTO_CARP		112		/* Common Address Resolution Protocol */
-#define IPPROTO_PFSYNC      240     /* PFSYNC */
 #define	IPPROTO_RAW		255		/* raw IP packet */
 #define	IPPROTO_MAX		256
 
@@ -277,15 +276,12 @@ struct ip_opts {
 #define	IP_MULTICAST_LOOP	11   /* u_char; set/get IP multicast loopback */
 #define	IP_ADD_MEMBERSHIP	12   /* ip_mreq; add an IP group membership */
 #define	IP_DROP_MEMBERSHIP	13   /* ip_mreq; drop an IP group membership */
-#define	IP_PORTALGO		18   /* int; port selection algo (rfc6056) */
 #define	IP_PORTRANGE		19   /* int; range to use for ephemeral port */
 #define	IP_RECVIF		20   /* bool; receive reception if w/dgram */
 #define	IP_ERRORMTU		21   /* int; get MTU of last xmit = EMSGSIZE */
 #if 1 /*IPSEC*/
 #define	IP_IPSEC_POLICY		22 /* struct; get/set security policy */
 #endif
-#define	IP_RECVTTL		23   /* bool; receive IP TTL w/dgram */
-#define	IP_MINTTL		24   /* minimum TTL for packet or drop */
 
 /*
  * Defaults and limits for options

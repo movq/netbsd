@@ -1,4 +1,4 @@
-/*	$NetBSD: synapticsreg.h,v 1.7 2011/09/10 18:38:20 jakllsch Exp $	*/
+/*	$NetBSD: synapticsreg.h,v 1.5.56.1 2010/11/20 01:19:01 riz Exp $	*/
 
 /*
  * Copyright (c) 2005, Steve C. Woodford
@@ -95,8 +95,6 @@
 #define	SYNAPTICS_WIDTH_TWO_FINGERS	0
 #define	SYNAPTICS_WIDTH_THREE_OR_MORE	1
 #define	SYNAPTICS_WIDTH_PEN		2
-#define	SYNAPTICS_WIDTH_ADVANCEDGESTURE	2
-#define	SYNAPTICS_WIDTH_PASSTHROUGH	3
 #define	SYNAPTICS_WIDTH_FINGER_MIN	4
 #define	SYNAPTICS_WIDTH_FINGER_NORMAL	5
 #define	SYNAPTICS_WIDTH_FINGER_MAX	7

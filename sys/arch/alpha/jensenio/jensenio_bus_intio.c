@@ -1,4 +1,4 @@
-/* $NetBSD: jensenio_bus_intio.c,v 1.5 2012/02/06 02:14:14 matt Exp $ */
+/* $NetBSD: jensenio_bus_intio.c,v 1.2 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: jensenio_bus_intio.c,v 1.5 2012/02/06 02:14:14 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: jensenio_bus_intio.c,v 1.2 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,7 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: jensenio_bus_intio.c,v 1.5 2012/02/06 02:14:14 matt 
 #include <sys/device.h>
 #include <sys/extent.h>
 
-#include <sys/bus.h>
+#include <machine/bus.h>
 
 #include <dev/eisa/eisavar.h>
 
@@ -60,33 +60,33 @@ int		jensenio_intio_subregion(void *, bus_space_handle_t,
 	/* Not supported for Internal space */
 
 /* barrier */
-static inline void	jensenio_intio_barrier(void *, bus_space_handle_t,
+inline void	jensenio_intio_barrier(void *, bus_space_handle_t,
 		    bus_size_t, bus_size_t, int);
 
 /* read (single) */
-static inline uint8_t	jensenio_intio_read_1(void *, bus_space_handle_t, bus_size_t);
+inline u_int8_t	jensenio_intio_read_1(void *, bus_space_handle_t, bus_size_t);
 
 /* read multiple */
 void		jensenio_intio_read_multi_1(void *, bus_space_handle_t,
-		    bus_size_t, uint8_t *, bus_size_t);
+		    bus_size_t, u_int8_t *, bus_size_t);
 
 /* read region */
 	/* Not supported for Internal space */
 
 /* write (single) */
-static inline void	jensenio_intio_write_1(void *, bus_space_handle_t,
-		    bus_size_t, uint8_t);
+inline void	jensenio_intio_write_1(void *, bus_space_handle_t,
+		    bus_size_t, u_int8_t);
 
 /* write multiple */
 void		jensenio_intio_write_multi_1(void *, bus_space_handle_t,
-		    bus_size_t, const uint8_t *, bus_size_t);
+		    bus_size_t, const u_int8_t *, bus_size_t);
 
 /* write region */
 	/* Not supported for Internal space */
 
 /* set multiple */
 void		jensenio_intio_set_multi_1(void *, bus_space_handle_t,
-		    bus_size_t, uint8_t, bus_size_t);
+		    bus_size_t, u_int8_t, bus_size_t);
 
 /* set region */
 	/* Not supported for Internal space */
@@ -211,7 +211,7 @@ jensenio_intio_subregion(void *v, bus_space_handle_t ioh, bus_size_t offset,
 	return (0);
 }
 
-static inline void
+inline void
 jensenio_intio_barrier(void *v, bus_space_handle_t h, bus_size_t o,
     bus_size_t l, int f)
 {
@@ -222,20 +222,20 @@ jensenio_intio_barrier(void *v, bus_space_handle_t h, bus_size_t o,
 		alpha_wmb();
 }
 
-static inline uint8_t
+inline u_int8_t
 jensenio_intio_read_1(void *v, bus_space_handle_t ioh, bus_size_t off)
 {
-	register uint32_t *port;
+	register u_int32_t *port;
 
 	alpha_mb();
 
-	port = (uint32_t *)(ioh + (off << 9));
+	port = (u_int32_t *)(ioh + (off << 9));
 	return (*port & 0xff);
 }
 
 void
 jensenio_intio_read_multi_1(void *v, bus_space_handle_t h, bus_size_t o,
-    uint8_t *a, bus_size_t c)
+    u_int8_t *a, bus_size_t c)
 {
 
 	while (c-- > 0) {
@@ -245,20 +245,20 @@ jensenio_intio_read_multi_1(void *v, bus_space_handle_t h, bus_size_t o,
 	}
 }
 
-static inline void
+inline void
 jensenio_intio_write_1(void *v, bus_space_handle_t ioh, bus_size_t off,
-    uint8_t val)
+    u_int8_t val)
 {
-	register uint32_t *port;
+	register u_int32_t *port;
 
-	port = (uint32_t *)(ioh + (off << 9));
+	port = (u_int32_t *)(ioh + (off << 9));
 	*port = val;
 	alpha_mb();
 }
 
 void
 jensenio_intio_write_multi_1(void *v, bus_space_handle_t h, bus_size_t o,
-    const uint8_t *a, bus_size_t c)
+    const u_int8_t *a, bus_size_t c)
 {
 
 	while (c-- > 0) {
@@ -270,7 +270,7 @@ jensenio_intio_write_multi_1(void *v, bus_space_handle_t h, bus_size_t o,
 
 void
 jensenio_intio_set_multi_1(void *v, bus_space_handle_t h, bus_size_t o,
-    uint8_t val, bus_size_t c)
+    u_int8_t val, bus_size_t c)
 {
 
 	while (c-- > 0) {

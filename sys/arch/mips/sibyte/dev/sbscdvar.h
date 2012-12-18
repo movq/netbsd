@@ -1,4 +1,4 @@
-/* $NetBSD: sbscdvar.h,v 1.4 2011/02/20 07:47:39 matt Exp $ */
+/* $NetBSD: sbscdvar.h,v 1.2 2003/02/07 17:38:49 cgd Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,7 +33,7 @@
  */
 
 /* sbscd pseudo-offset (from base) of an SCD sub-device */
-typedef u_long sbscd_offset;
+typedef u_int sbscd_offset;
 
 /* type of an on-board device.  Matches table in sbscd.c */
 enum sbscd_device_type {
@@ -53,5 +53,5 @@ struct sbscd_attach_locs {
 struct sbscd_attach_args {
 	struct sbscd_attach_locs sa_locs;
 
-	sbscd_offset		sa_base;
+	long			sa_base;
 };

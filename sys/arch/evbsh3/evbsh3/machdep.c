@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.74 2011/07/19 15:44:52 dyoung Exp $	*/
+/*	$NetBSD: machdep.c,v 1.60 2008/04/28 20:23:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -65,24 +65,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.74 2011/07/19 15:44:52 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.60 2008/04/28 20:23:18 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_memsize.h"
 #include "opt_initbsc.h"
-#include "opt_kloader.h"
-#include "opt_kloader_kernel_path.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/reboot.h>
 #include <sys/sysctl.h>
 #include <sys/ksyms.h>
-#include <sys/device.h>
-#include <sys/bus.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -94,16 +91,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.74 2011/07/19 15:44:52 dyoung Exp $");
 #include <sh3/cache_sh4.h>
 #include <sh3/exception.h>
 
+#include <machine/bus.h>
 #include <machine/intr.h>
-#include <machine/pcb.h>
 
 #ifdef DDB
 #include <machine/db_machdep.h>
 #include <ddb/db_extern.h>
-#endif
-
-#ifdef KLOADER
-#include <machine/kloader.h>
 #endif
 
 #include "ksyms.h"
@@ -112,13 +105,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.74 2011/07/19 15:44:52 dyoung Exp $");
 char machine[] = MACHINE;		/* evbsh3 */
 char machine_arch[] = MACHINE_ARCH;	/* sh3eb or sh3el */
 
-#ifdef KLOADER
-struct kloader_bootinfo kbootinfo;
-#endif
-
-void initSH3(void *);
-void LoadAndReset(const char *);
-void XLoadAndReset(char *);
+void initSH3 __P((void *));
+void LoadAndReset __P((const char *));
+void XLoadAndReset __P((char *));
 
 /*
  * Machine-dependent startup code
@@ -126,7 +115,7 @@ void XLoadAndReset(char *);
  * This is called from main() in kern/main.c.
  */
 void
-cpu_startup(void)
+cpu_startup()
 {
 
 	sh_startup();
@@ -178,7 +167,9 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 }
 
 void
-cpu_reboot(int howto, char *bootstr)
+cpu_reboot(howto, bootstr)
+	int howto;
+	char *bootstr;
 {
 	static int waittime = -1;
 
@@ -186,19 +177,6 @@ cpu_reboot(int howto, char *bootstr)
 		howto |= RB_HALT;
 		goto haltsys;
 	}
-
-#ifdef KLOADER
-	if ((howto & RB_HALT) == 0) {
-		if ((howto & RB_STRING) && (bootstr != NULL)) {
-			kloader_reboot_setup(bootstr);
-		}
-#ifdef KLOADER_KERNEL_PATH
-		else {
-			kloader_reboot_setup(KLOADER_KERNEL_PATH);
-		}
-#endif
-	}
-#endif
 
 	boothowto = howto;
 	if ((howto & RB_NOSYNC) == 0 && waittime < 0) {
@@ -221,29 +199,17 @@ cpu_reboot(int howto, char *bootstr)
 haltsys:
 	doshutdownhooks();
 
-	pmf_system_shutdown(boothowto);
-
 	if (howto & RB_HALT) {
 		printf("\n");
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
 	}
-#ifdef KLOADER
-	else {
-		delay(1 * 1000 * 1000);
-		kloader_reboot();
-		printf("\n");
-		printf("Failed to load a new kernel.\n");
-		printf("Please press any key to reboot.\n\n");
-		cngetc();
-	}
-#endif
 
 	printf("rebooting...\n");
 	cpu_reset();
 	for(;;)
-		continue;
+		;
 	/*NOTREACHED*/
 }
 
@@ -270,8 +236,6 @@ initSH3(void *pc)	/* XXX return address */
 	sh_cpu_init(CPU_ARCH_SH3, CPU_PRODUCT_7709);
 #elif defined(SH7709A)
 	sh_cpu_init(CPU_ARCH_SH3, CPU_PRODUCT_7709A);
-#elif defined(SH7706)
-	sh_cpu_init(CPU_ARCH_SH3, CPU_PRODUCT_7706);
 #else
 #error "unsupported SH3 variants"
 #endif
@@ -280,12 +244,6 @@ initSH3(void *pc)	/* XXX return address */
 	sh_cpu_init(CPU_ARCH_SH4, CPU_PRODUCT_7750);	
 #elif defined(SH7750S)
 	sh_cpu_init(CPU_ARCH_SH4, CPU_PRODUCT_7750S);
-#elif defined(SH7750R)
-	sh_cpu_init(CPU_ARCH_SH4, CPU_PRODUCT_7750R);
-#elif defined(SH7751)
-	sh_cpu_init(CPU_ARCH_SH4, CPU_PRODUCT_7751);
-#elif defined(SH7751R)
-	sh_cpu_init(CPU_ARCH_SH4, CPU_PRODUCT_7751R);
 #else
 #error "unsupported SH4 variants"
 #endif
@@ -294,11 +252,6 @@ initSH3(void *pc)	/* XXX return address */
 #endif
 	/* Console */
 	consinit();
-
-#ifdef KLOADER
-	/* copy boot parameter for kloader */
-	kloader_bootinfo_set(&kbootinfo, 0, NULL, NULL, true);
-#endif
 
 	/* Load memory to UVM */
 	kernend = atop(round_page(SH3_P1SEG_TO_PHYS(end)));
@@ -313,6 +266,10 @@ initSH3(void *pc)	/* XXX return address */
 
 	/* Initialize pmap and start to address translation */
 	pmap_bootstrap();
+
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init(0, NULL, NULL);
+#endif
 
 	/*
 	 * XXX We can't return here, because we change stack pointer.
@@ -331,7 +288,7 @@ initSH3(void *pc)	/* XXX return address */
  * it shouldn't be called from init386 either.
  */
 void
-consinit(void)
+consinit()
 {
 	static int initted;
 
@@ -342,15 +299,262 @@ consinit(void)
 	cninit();
 }
 
+int
+bus_space_map (t, addr, size, flags, bshp)
+	bus_space_tag_t t;
+	bus_addr_t addr;
+	bus_size_t size;
+	int flags;
+	bus_space_handle_t *bshp;
+{
+
+	*bshp = (bus_space_handle_t)addr;
+
+	return 0;
+}
+
+int
+sh_memio_subregion(t, bsh, offset, size, nbshp)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t offset, size;
+	bus_space_handle_t *nbshp;
+{
+
+	*nbshp = bsh + offset;
+	return (0);
+}
+
+int
+sh_memio_alloc(t, rstart, rend, size, alignment, boundary, flags,
+	       bpap, bshp)
+	bus_space_tag_t t;
+	bus_addr_t rstart, rend;
+	bus_size_t size, alignment, boundary;
+	int flags;
+	bus_addr_t *bpap;
+	bus_space_handle_t *bshp;
+{
+	*bshp = *bpap = rstart;
+
+	return (0);
+}
+
+void
+sh_memio_free(t, bsh, size)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
+{
+
+}
+
+void
+sh_memio_unmap(t, bsh, size)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
+{
+	return;
+}
+
+#ifdef SH4_PCMCIA
+
+int
+shpcmcia_memio_map(t, bpa, size, flags, bshp)
+	bus_space_tag_t t;
+	bus_addr_t bpa;
+	bus_size_t size;
+	int flags;
+	bus_space_handle_t *bshp;
+{
+	int error;
+	struct extent *ex;
+	bus_space_tag_t pt = t & ~SH3_BUS_SPACE_PCMCIA_8BIT;
+
+	if (pt != SH3_BUS_SPACE_PCMCIA_IO && 
+	    pt != SH3_BUS_SPACE_PCMCIA_MEM &&
+	    pt != SH3_BUS_SPACE_PCMCIA_ATT) {
+		*bshp = (bus_space_handle_t)bpa;
+
+		return 0;
+	}
+
+	ex = iomem_ex;
+
+#if 0
+	/*
+	 * Before we go any further, let's make sure that this
+	 * region is available.
+	 */
+	error = extent_alloc_region(ex, bpa, size,
+				    EX_NOWAIT | EX_MALLOCOK );
+	if (error){
+		printf("sh3_pcmcia_memio_map:extent_alloc_region error\n");
+		return (error);
+	}
+#endif
+
+	/*
+	 * For memory space, map the bus physical address to
+	 * a kernel virtual address.
+	 */
+	error = shpcmcia_mem_add_mapping(bpa, size, (int)t, bshp );
+#if 0
+	if (error) {
+		if (extent_free(ex, bpa, size, EX_NOWAIT | EX_MALLOCOK )) {
+			printf("sh3_pcmcia_memio_map: pa 0x%lx, size 0x%lx\n",
+			       bpa, size);
+			printf("sh3_pcmcia_memio_map: can't free region\n");
+		}
+	}
+#endif
+
+	return (error);
+}
+
+int
+shpcmcia_mem_add_mapping(bpa, size, type, bshp)
+	bus_addr_t bpa;
+	bus_size_t size;
+	int type;
+	bus_space_handle_t *bshp;
+{
+	u_long pa, endpa;
+	vaddr_t va;
+	pt_entry_t *pte;
+	unsigned int m = 0;
+	int io_type = type & ~SH3_BUS_SPACE_PCMCIA_8BIT;
+
+	pa = sh3_trunc_page(bpa);
+	endpa = sh3_round_page(bpa + size);
+
+#ifdef DIAGNOSTIC
+	if (endpa <= pa)
+		panic("sh3_pcmcia_mem_add_mapping: overflow");
+#endif
+
+	va = uvm_km_alloc(kernel_map, endpa - pa, 0,
+	    UVM_KMF_VAONLY | UVM_KMF_NOWAIT);
+	if (va == 0){
+		printf("shpcmcia_add_mapping: nomem \n");
+		return (ENOMEM);
+	}
+
+	*bshp = (bus_space_handle_t)(va + (bpa & PGOFSET));
+
+#define MODE(t, s)							\
+	(t) & SH3_BUS_SPACE_PCMCIA_8BIT ?				\
+		_PG_PCMCIA_ ## s ## 8 :					\
+		_PG_PCMCIA_ ## s ## 16
+	switch (io_type) {
+	default:
+		panic("unknown pcmcia space.");
+		/* NOTREACHED */
+	case SH3_BUS_SPACE_PCMCIA_IO:
+		m = MODE(type, IO);
+		break;
+	case SH3_BUS_SPACE_PCMCIA_MEM:
+		m = MODE(type, MEM);
+		break;
+	case SH3_BUS_SPACE_PCMCIA_ATT:
+		m = MODE(type, ATTR);
+		break;
+	}
+#undef MODE
+
+	for (; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
+		pte = __pmap_kpte_lookup(va);
+		KDASSERT(pte);
+		*pte |= m;  /* PTEA PCMCIA assistant bit */
+		sh_tlb_update(0, va, *pte);
+	}
+
+	return 0;
+}
+
+void
+shpcmcia_memio_unmap(t, bsh, size)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
+{
+	struct extent *ex;
+	u_long va, endva;
+	bus_addr_t bpa;
+	bus_space_tag_t pt = t & ~SH3_BUS_SPACE_PCMCIA_8BIT;
+
+	if (pt != SH3_BUS_SPACE_PCMCIA_IO && 
+	    pt != SH3_BUS_SPACE_PCMCIA_MEM &&
+	    pt != SH3_BUS_SPACE_PCMCIA_ATT) {
+		return ;
+	}
+
+	ex = iomem_ex;
+
+	va = sh3_trunc_page(bsh);
+	endva = sh3_round_page(bsh + size);
+
+#ifdef DIAGNOSTIC
+	if (endva <= va)
+		panic("sh3_pcmcia_memio_unmap: overflow");
+#endif
+
+	pmap_extract(pmap_kernel(), va, &bpa);
+	bpa += bsh & PGOFSET;
+
+	/*
+	 * Free the kernel virtual mapping.
+	 */
+	pmap_kremove(va, endva - va);
+	pmap_update(pmap_kernel());
+	uvm_km_free(kernel_map, va, endva - va, UVM_KMF_VAONLY);
+
+#if 0
+	if (extent_free(ex, bpa, size,
+			EX_NOWAIT | EX_MALLOCOK)) {
+		printf("sh3_pcmcia_memio_unmap: %s 0x%lx, size 0x%lx\n",
+		       "pa", bpa, size);
+		printf("sh3_pcmcia_memio_unmap: can't free region\n");
+	}
+#endif
+}
+
+void    
+shpcmcia_memio_free(t, bsh, size)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t size;
+{
+
+	/* sh3_pcmcia_memio_unmap() does all that we need to do. */
+	shpcmcia_memio_unmap(t, bsh, size);
+}
+
+int
+shpcmcia_memio_subregion(t, bsh, offset, size, nbshp)
+	bus_space_tag_t t;
+	bus_space_handle_t bsh;
+	bus_size_t offset, size;
+	bus_space_handle_t *nbshp;
+{
+
+	*nbshp = bsh + offset;
+	return (0);
+}
+
+#endif /* SH4_PCMCIA */
+
 #if !defined(DONT_INIT_BSC)
 /*
  * InitializeBsc
  * : BSC(Bus State Controller)
  */
-void InitializeBsc(void);
+void InitializeBsc __P((void));
 
 void
-InitializeBsc(void)
+InitializeBsc()
 {
 
 	/*
@@ -487,7 +691,8 @@ InitializeBsc(void)
 #define OSIMAGE_BUF_ADDR	(IOM_RAM_BEGIN + 0x00400000)
 
 void
-LoadAndReset(const char *osimage)
+LoadAndReset(osimage)
+	const char *osimage;
 {
 	void *buf_addr;
 	u_long size;
@@ -531,8 +736,6 @@ intc_intr(int ssr, int spc, int ssp)
 	struct clockframe cf;
 	int s, evtcode;
 
-	curcpu()->ci_data.cpu_nintr++;
-
 	switch (cpu_product) {
 	case CPU_PRODUCT_7708:
 	case CPU_PRODUCT_7708S:
@@ -541,14 +744,10 @@ intc_intr(int ssr, int spc, int ssp)
 		break;
 	case CPU_PRODUCT_7709:
 	case CPU_PRODUCT_7709A:
-	case CPU_PRODUCT_7706:
 		evtcode = _reg_read_4(SH7709_INTEVT2);
 		break;
 	case CPU_PRODUCT_7750:
 	case CPU_PRODUCT_7750S:
-	case CPU_PRODUCT_7750R:
-	case CPU_PRODUCT_7751:
-	case CPU_PRODUCT_7751R:
 		evtcode = _reg_read_4(SH4_INTEVT);
 		break;
 	default:
@@ -583,3 +782,4 @@ intc_intr(int ssr, int spc, int ssp)
 		break;
 	}
 }
+

@@ -1,4 +1,4 @@
-/*	$NetBSD: edvar.h,v 1.16 2012/10/27 17:18:26 chs Exp $	*/
+/*	$NetBSD: edvar.h,v 1.13 2008/05/04 13:11:14 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 struct edc_mca_softc;
 
 struct ed_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 
 	/* General disk infos */
 	struct disk sc_dk;
@@ -60,5 +60,7 @@ struct ed_softc {
 	u_int8_t spares;	/* spares per cylinder */
 	u_int32_t rba;		/* # of RBAs */
 
-	krndsource_t	rnd_source;
+#if NRND > 0
+	rndsource_element_t	rnd_source;
+#endif
 };

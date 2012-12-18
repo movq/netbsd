@@ -1,4 +1,4 @@
-/* $NetBSD: vme.c,v 1.26 2012/10/27 17:18:38 chs Exp $ */
+/* $NetBSD: vme.c,v 1.19 2007/10/19 12:01:23 ad Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.26 2012/10/27 17:18:38 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.19 2007/10/19 12:01:23 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,19 +41,25 @@ __KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.26 2012/10/27 17:18:38 chs Exp $");
 #include <dev/vme/vmereg.h>
 #include <dev/vme/vmevar.h>
 
-static void vme_extractlocators(int*, struct vme_attach_args *);
-static int vmeprint(struct vme_attach_args *, char *);
-static int vmesubmatch1(device_t, cfdata_t, const int *, void *);
-static int vmesubmatch(device_t, cfdata_t, const int *, void *);
-int vmematch(device_t, cfdata_t, void *);
-void vmeattach(device_t, device_t, void *);
+static void vme_extractlocators(int*, struct vme_attach_args*);
+static int vmeprint(struct vme_attach_args*, char*);
+static int vmesubmatch1(struct device*, struct cfdata*,
+			     const int *, void*);
+static int vmesubmatch(struct device*, struct cfdata*,
+			    const int *, void*);
+int vmematch(struct device *, struct cfdata *, void *);
+void vmeattach(struct device*, struct device*,void*);
 static struct extent *vme_select_map(struct vmebus_softc*, vme_am_t);
+
+#ifdef notyet
+int vmedetach(struct device*);
+#endif
 
 #define VME_SLAVE_DUMMYDRV "vme_slv"
 
 #define VME_NUMCFRANGES 3 /* cf. "files.vme" */
 
-CFATTACH_DECL_NEW(vme, sizeof(struct vmebus_softc),
+CFATTACH_DECL(vme, sizeof(struct vmebus_softc),
     vmematch, vmeattach, NULL, NULL);
 
 const struct cfattach vme_slv_ca = {
@@ -61,7 +67,9 @@ const struct cfattach vme_slv_ca = {
 };
 
 static void
-vme_extractlocators(int *loc, struct vme_attach_args *aa)
+vme_extractlocators(loc, aa)
+	int *loc;
+	struct vme_attach_args *aa;
 {
 	int i = 0;
 
@@ -80,7 +88,9 @@ vme_extractlocators(int *loc, struct vme_attach_args *aa)
 }
 
 static int
-vmeprint(struct vme_attach_args *v, char *dummy)
+vmeprint(v, dummy)
+	struct vme_attach_args *v;
+	char *dummy;
 {
 	int i;
 
@@ -117,9 +127,13 @@ vmeprint(struct vme_attach_args *v, char *dummy)
  * devices are attached.
  */
 static int
-vmesubmatch1(device_t bus, cfdata_t dev, const int *ldesc, void *aux)
+vmesubmatch1(bus, dev, ldesc, aux)
+	struct device *bus;
+	struct cfdata *dev;
+	const int *ldesc;
+	void *aux;
 {
-	struct vmebus_softc *sc = device_private(bus);
+	struct vmebus_softc *sc = (struct vmebus_softc*)bus;
 	struct vme_attach_args v;
 
 	if (strcmp(dev->cf_name, VME_SLAVE_DUMMYDRV))
@@ -134,9 +148,13 @@ vmesubmatch1(device_t bus, cfdata_t dev, const int *ldesc, void *aux)
 }
 
 static int
-vmesubmatch(device_t bus, cfdata_t dev, const int *ldesc, void *aux)
+vmesubmatch(bus, dev, ldesc, aux)
+	struct device *bus;
+	struct cfdata *dev;
+	const int *ldesc;
+	void *aux;
 {
-	struct vmebus_softc *sc = device_private(bus);
+	struct vmebus_softc *sc = (struct vmebus_softc*)bus;
 	struct vme_attach_args v;
 
 	if (!strcmp(dev->cf_name, VME_SLAVE_DUMMYDRV))
@@ -155,17 +173,23 @@ vmesubmatch(device_t bus, cfdata_t dev, const int *ldesc, void *aux)
 }
 
 int
-vmematch(device_t parent, cfdata_t match, void *aux)
+vmematch(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	return (1);
 }
 
 void
-vmeattach(device_t parent, device_t self, void *aux)
+vmeattach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct vmebus_softc *sc = device_private(self);
+	struct vmebus_softc *sc = (struct vmebus_softc *)self;
 
-	struct vmebus_attach_args *aa = aux;
+	struct vmebus_attach_args *aa =
+	    (struct vmebus_attach_args*)aux;
 
 	sc->sc_vct = aa->va_vct;
 	sc->sc_bdt = aa->va_bdt;
@@ -180,19 +204,22 @@ vmeattach(device_t parent, device_t self, void *aux)
 	/*
 	 * set up address space accounting - assume incomplete decoding
 	 */
-	sc->vme32ext = extent_create("vme32", 0, 0xffffffff, 0, 0, 0);
+	sc->vme32ext = extent_create("vme32", 0, 0xffffffff,
+				     M_DEVBUF, 0, 0, 0);
 	if (!sc->vme32ext) {
 		printf("error creating A32 map\n");
 		return;
 	}
 
-	sc->vme24ext = extent_create("vme24", 0, 0x00ffffff, 0, 0, 0);
+	sc->vme24ext = extent_create("vme24", 0, 0x00ffffff,
+				     M_DEVBUF, 0, 0, 0);
 	if (!sc->vme24ext) {
 		printf("error creating A24 map\n");
 		return;
 	}
 
-	sc->vme16ext = extent_create("vme16", 0, 0x0000ffff, 0, 0, 0);
+	sc->vme16ext = extent_create("vme16", 0, 0x0000ffff,
+				     M_DEVBUF, 0, 0, 0);
 	if (!sc->vme16ext) {
 		printf("error creating A16 map\n");
 		return;
@@ -217,9 +244,10 @@ vmeattach(device_t parent, device_t self, void *aux)
 
 #ifdef notyet
 int
-vmedetach(device_t dev)
+vmedetach(dev)
+	struct device *dev;
 {
-	struct vmebus_softc *sc = device_private(dev);
+	struct vmebus_softc *sc = (struct vmebus_softc*)dev;
 
 	if (sc->slaveconfig) {
 		/* allow bus master to free its bus ressources */
@@ -252,7 +280,9 @@ vmedetach(device_t dev)
 #endif
 
 static struct extent *
-vme_select_map(struct vmebus_softc *sc, vme_am_t ams)
+vme_select_map(sc, ams)
+	struct vmebus_softc *sc;
+	vme_am_t ams;
 {
 	if ((ams & VME_AM_ADRSIZEMASK) == VME_AM_A32)
 		return (sc->vme32ext);
@@ -265,7 +295,11 @@ vme_select_map(struct vmebus_softc *sc, vme_am_t ams)
 }
 
 int
-_vme_space_alloc(struct vmebus_softc *sc, vme_addr_t addr, vme_size_t len, vme_am_t ams)
+_vme_space_alloc(sc, addr, len, ams)
+	struct vmebus_softc *sc;
+	vme_addr_t addr;
+	vme_size_t len;
+	vme_am_t ams;
 {
 	struct extent *ex;
 
@@ -277,7 +311,11 @@ _vme_space_alloc(struct vmebus_softc *sc, vme_addr_t addr, vme_size_t len, vme_a
 }
 
 void
-_vme_space_free(struct vmebus_softc *sc, vme_addr_t addr, vme_size_t len, vme_am_t ams)
+_vme_space_free(sc, addr, len, ams)
+	struct vmebus_softc *sc;
+	vme_addr_t addr;
+	vme_size_t len;
+	vme_am_t ams;
 {
 	struct extent *ex;
 
@@ -291,7 +329,12 @@ _vme_space_free(struct vmebus_softc *sc, vme_addr_t addr, vme_size_t len, vme_am
 }
 
 int
-_vme_space_get(struct vmebus_softc *sc, vme_size_t len, vme_am_t ams, u_long align, vme_addr_t *addr)
+_vme_space_get(sc, len, ams, align, addr)
+	struct vmebus_softc *sc;
+	vme_size_t len;
+	vme_am_t ams;
+	u_long align;
+	vme_addr_t *addr;
 {
 	struct extent *ex;
 	u_long help;

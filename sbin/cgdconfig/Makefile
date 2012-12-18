@@ -1,16 +1,16 @@
-# $NetBSD: Makefile,v 1.14 2010/12/14 17:46:21 pooka Exp $
+# $NetBSD: Makefile,v 1.10 2008/07/24 05:32:45 dholland Exp $
 
-RUMPPRG=cgdconfig
+PROG=	cgdconfig
 MAN=	cgdconfig.8
 
-SRCS+=	cgdconfig.c		\
+SRCS=	cgdconfig.c		\
 	cgdlex.l		\
 	cgdparse.y		\
 	pkcs5_pbkdf2.c		\
 	params.c		\
 	utils.c
 
-CPPFLAGS+= -I${.CURDIR} -I. -DYY_NO_INPUT
+CPPFLAGS+= -I${.CURDIR} -I.
 
 YHEADER=1
 

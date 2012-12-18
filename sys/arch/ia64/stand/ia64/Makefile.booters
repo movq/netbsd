@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.booters,v 1.4 2010/05/27 06:58:14 dholland Exp $
+#	$NetBSD: Makefile.booters,v 1.2 2008/04/06 07:50:04 kochi Exp $
 
 .include <bsd.own.mk>
 
@@ -16,7 +16,7 @@ IA64_STAND_DIR?= $S/arch/ia64/stand
 
 .PATH: ${IA64_STAND_DIR}/efi
 
-CPPFLAGS += -nostdlib -nostdinc -I${.OBJDIR} -I${IA64_STAND_DIR} -I${IA64_STAND_DIR}/efi/include
+CPPFLAGS += -nostdlib -nostdinc -I${.OBJDIR} -I${IA64_STAND_DIR} -I${IA64_STAND_DIR}/efi/include 
 
 # Options used when building standalone components
 CFLAGS+=	-ffreestanding -fshort-wchar -Wformat -D_STANDALONE
@@ -24,12 +24,12 @@ LDFLAGS+=	#-nostdlib
 CPPFLAGS+=	-D_STANDALONE
 
 .if !make(obj) && !make(clean) && !make(cleandir)
-.BEGIN: machine
+.BEGIN: machine 
 .NOPATH: machine
 .endif
 
 realdepend realall: machine lib
-CLEANFILES= machine
+CLEANFILES+= machine
 
 machine:
 	-rm -f $@
@@ -63,7 +63,7 @@ SAMISCMAKEFLAGS+="SA_USE_LOADFILE=yes" "SA_INCLUDE_NET=no"
 LIBSA=		${SALIB}
 
 
-cleandir distclean: .WAIT cleanlibdir
+cleandir distclean: cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib

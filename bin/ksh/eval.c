@@ -1,4 +1,4 @@
-/*	$NetBSD: eval.c,v 1.14 2011/08/21 21:24:34 dholland Exp $	*/
+/*	$NetBSD: eval.c,v 1.10 2007/01/28 22:30:12 cbiere Exp $	*/
 
 /*
  * Expansion - quoting, separation, substitution, globbing
@@ -6,13 +6,12 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: eval.c,v 1.14 2011/08/21 21:24:34 dholland Exp $");
+__RCSID("$NetBSD: eval.c,v 1.10 2007/01/28 22:30:12 cbiere Exp $");
 #endif
 
-#include <stdint.h>
-#include <pwd.h>
 
 #include "sh.h"
+#include <pwd.h>
 #include "ksh_dir.h"
 #include "ksh_stat.h"
 
@@ -186,7 +185,6 @@ expand(cp, wp, f)
 
 	x.split = 0;	/* XXX gcc */
 	x.str = NULL;	/* XXX gcc */
-	x.u.strv = NULL;/* XXX gcc */
 	if (cp == NULL)
 		internal_errorf(1, "expand(NULL)");
 	/* for alias, readonly, set, typeset commands */
@@ -607,6 +605,21 @@ expand(cp, wp, f)
 			if (!quote)
 				switch (c) {
 				  case '[':
+					{
+						const char *p = sp;
+						bool_t special = FALSE;
+						while (*p != EOS) {
+							if (p[0] == CHAR &&
+								p[1] == ']') {
+								special = TRUE;
+								break;
+							}
+								
+							p += 2;
+						}
+						if (!special)
+							break;
+					}
 				  case NOT:
 				  case '-':
 				  case ']':
@@ -716,7 +729,7 @@ varsub(xp, sp, word, stypep, slenp)
 	if (sp[0] == '\0')	/* Bad variable name */
 		return -1;
 
-	xp->var = NULL;
+	xp->var = (struct tbl *) 0;
 
 	/* ${#var}, string length or array size */
 	if (sp[0] == '#' && (c = sp[1]) != '\0') {
@@ -787,12 +800,10 @@ varsub(xp, sp, word, stypep, slenp)
 			return -1;
 		}
 		if (e->loc->argc == 0) {
-			xp->u.strv = NULL;
 			xp->str = null;
 			state = c == '@' ? XNULLSUB : XSUB;
 		} else {
-			char **t = &e->loc->argv[1];
-			xp->u.strv = (void *)(uintptr_t)t;
+			xp->u.strv = (const char **) e->loc->argv + 1;
 			xp->str = *xp->u.strv++;
 			xp->split = c == '@'; /* $@ */
 			state = XARG;
@@ -1197,10 +1208,10 @@ debunk(dp, sp, dlen)
 	char *d, *s;
 
 	if ((s = strchr(sp, MAGIC))) {
-		if (s - sp >= (ptrdiff_t)dlen)
+		if (s - sp >= dlen)
 			return dp;
 		memcpy(dp, sp, s - sp);
-		for (d = dp + (s - sp); *s && (d - dp < (ptrdiff_t)dlen); s++)
+		for (d = dp + (s - sp); *s && (d - dp < dlen); s++)
 			if (!ISMAGIC(*s) || !(*++s & 0x80)
 			    || !strchr("*+?@! ", *s & 0x7f))
 				*d++ = *s;
@@ -1208,7 +1219,7 @@ debunk(dp, sp, dlen)
 				/* extended pattern operators: *+?@! */
 				if ((*s & 0x7f) != ' ')
 					*d++ = *s & 0x7f;
-				if (d - dp < (ptrdiff_t)dlen)
+				if (d - dp < dlen)
 					*d++ = '(';
 			}
 		*d = '\0';

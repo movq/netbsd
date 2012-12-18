@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.c,v 1.40 2012/10/13 17:58:54 jdc Exp $	*/
+/*	$NetBSD: isa_machdep.c,v 1.30 2007/01/24 13:08:13 hubertf Exp $	*/
 
 /*
  * Copyright (c) 1997 Leo Weppelman.  All rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.40 2012/10/13 17:58:54 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.30 2007/01/24 13:08:13 hubertf Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -40,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.40 2012/10/13 17:58:54 jdc Exp $")
 #include <sys/device.h>
 
 #define _ATARI_BUS_DMA_PRIVATE
-#include <sys/bus.h>
+#include <machine/bus.h>
 #include <dev/isa/isavar.h>
 #include <dev/isa/isareg.h>
 
@@ -67,16 +67,16 @@ struct atari_bus_dma_tag isa_bus_dma_tag = {
 };
 #endif /* NISADMA == 0 */
 
-static int	atariisabusprint(void *, const char *);
-static int	isabusmatch(device_t, cfdata_t, void *);
-static void	isabusattach(device_t, device_t, void *);
+static int	atariisabusprint __P((void *auxp, const char *));
+static int	isabusmatch __P((struct device *, struct cfdata *, void *));
+static void	isabusattach __P((struct device *, struct device *, void *));
 
 struct isabus_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	struct atari_isa_chipset sc_chipset;
 };
 
-CFATTACH_DECL_NEW(isab, sizeof(struct isabus_softc),
+CFATTACH_DECL(isab, sizeof(struct isabus_softc),
     isabusmatch, isabusattach, NULL, NULL);
 
 /*
@@ -86,37 +86,40 @@ CFATTACH_DECL_NEW(isab, sizeof(struct isabus_softc),
 static struct atari_bus_space	bs_storage[2];	/* 1 iot, 1 memt */
 
 int
-isabusmatch(device_t parent, cfdata_t cf, void *aux)
+isabusmatch(pdp, cfp, auxp)
+struct device	*pdp;
+struct cfdata	*cfp;
+void		*auxp;
 {
 	static int	nmatched = 0;
 
-	if (strcmp((char *)aux, "isab"))
-		return 0; /* Wrong number... */
+	if (strcmp((char *)auxp, "isab"))
+		return (0); /* Wrong number... */
 
-	if (atari_realconfig == 0)
-		return 1;
+	if(atari_realconfig == 0)
+		return (1);
 
 	if (machineid & (ATARI_HADES|ATARI_MILAN)) {
 		/*
 		 * The Hades and Milan have only one pci bus
 		 */
 		if (nmatched)
-			return 0;
+			return (0);
 		nmatched++;
-		return 1;
+		return (1);
 	}
-	return 0;
+	return(0);
 }
 
 void
-isabusattach(device_t parent, device_t self, void *aux)
+isabusattach(pdp, dp, auxp)
+struct device	*pdp, *dp;
+void		*auxp;
 {
-	struct isabus_softc *sc = device_private(self);
+	struct isabus_softc *sc = (struct isabus_softc *)dp;
 	struct isabus_attach_args	iba;
 	extern struct atari_bus_dma_tag isa_bus_dma_tag;
 	extern void isa_bus_init(void);
-
-	sc->sc_dev = self;
 
 	iba.iba_dmat	= &isa_bus_dma_tag;
 	iba.iba_iot     = leb_alloc_bus_space_tag(&bs_storage[0]);
@@ -132,33 +135,31 @@ isabusattach(device_t parent, device_t self, void *aux)
 	if (machineid & ATARI_HADES)
 	    MFP->mf_aer |= (IO_ISA1|IO_ISA2); /* ISA interrupts: LOW->HIGH */
 	isa_bus_init();
-	if (self == NULL) { /* Early init */
+	if (dp == NULL) { /* Early init */
 #if (NPCKBC > 0)
-		pckbc_cnattach(iba.iba_iot, IO_KBD, KBCMDP, PCKBC_KBD_SLOT, 0);
+		pckbc_cnattach(iba.iba_iot, IO_KBD, KBCMDP, PCKBC_KBD_SLOT);
 #endif
 		return;
 	}
 
 	printf("\n");
-	config_found_ia(self, "isabus", &iba, atariisabusprint);
+	config_found_ia(dp, "isabus", &iba, atariisabusprint);
 }
 
 int
-atariisabusprint(void *aux, const char *name)
+atariisabusprint(auxp, name)
+void		*auxp;
+const char	*name;
 {
-
-	if (name == NULL)
-		return UNCONF;
-	return QUIET;
+	if(name == NULL)
+		return(UNCONF);
+	return(QUIET);
 }
 
 void
-isa_attach_hook(device_t parent, device_t self, struct isabus_attach_args *iba)
-{
-}
-
-void
-isa_detach_hook(isa_chipset_tag_t ic, device_t self)
+isa_attach_hook(parent, self, iba)
+	struct device		  *parent, *self;
+	struct isabus_attach_args *iba;
 {
 }
 

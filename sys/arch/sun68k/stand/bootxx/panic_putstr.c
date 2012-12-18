@@ -1,6 +1,7 @@
-/*	$NetBSD: panic_putstr.c,v 1.3 2011/07/17 20:54:48 joerg Exp $	*/
+/*	$NetBSD: panic_putstr.c,v 1.2 2002/06/03 00:18:26 fredette Exp $	*/
 
 
+#include <machine/stdarg.h>
 #include <stand.h>
 #include "libsa.h"
 

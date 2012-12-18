@@ -1,4 +1,4 @@
-/*	$NetBSD: kcore.h,v 1.4 2011/01/18 08:17:39 matt Exp $	*/
+/*	$NetBSD: kcore.h,v 1.2 2005/12/26 18:41:36 perry Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.
@@ -12,6 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Leo Weppelman.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,7 +44,7 @@
  * Description of a memory segment. To make this suitable for sharing
  * between all architectures, u_quad_t seems to be the necessary type...
  */
-typedef struct phys_ram_seg {
+typedef struct {
 	u_quad_t	start;		/* Physical start address	*/
 	u_quad_t	size;		/* Size in bytes		*/
 } phys_ram_seg_t;

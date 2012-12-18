@@ -1,4 +1,4 @@
-/*	$NetBSD: targparam.h,v 1.5 2012/03/27 19:24:01 christos Exp $	*/
+/*	$NetBSD: targparam.h,v 1.3 2003/05/29 18:12:13 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -34,7 +34,7 @@
 /*
  * Machine-dependent target parameters for lint1.
  */
-#include "uchar.h"
+
 #include "ilp32.h"
 
 /*    
@@ -43,13 +43,23 @@
  * kept in sync with the compiler!
  */     
 
+#if defined(TARGET_OBJFMT_ELF)
 #define	PTRDIFF_IS_LONG		1
 #define	SIZEOF_IS_ULONG		1
 #define	INTPTR_IS_LONG		1
+#else
+#define	PTRDIFF_IS_LONG		0
+#define	SIZEOF_IS_ULONG		0
+#define	INTPTR_IS_LONG		0
+#endif
 
 #define	FLOAT_SIZE		(4 * CHAR_BIT)
 #define	DOUBLE_SIZE		(8 * CHAR_BIT)
 #define	LDOUBLE_SIZE		(8 * CHAR_BIT)
 
+#if defined(TARGET_OBJFMT_ELF)
 /* XXX ARM ELF ABI says packed enums -- variable size! */
 #define	ENUM_SIZE		(4 * CHAR_BIT)
+#else
+#define	ENUM_SIZE		(4 * CHAR_BIT)
+#endif

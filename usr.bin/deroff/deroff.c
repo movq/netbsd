@@ -1,4 +1,4 @@
-/*	$NetBSD: deroff.c,v 1.9 2011/08/31 13:38:19 joerg Exp $	*/
+/*	$NetBSD: deroff.c,v 1.5 2007/12/15 19:44:50 perry Exp $	*/
 
 /* taken from: OpenBSD: deroff.c,v 1.6 2004/06/02 14:58:46 tom Exp */
 
@@ -74,14 +74,13 @@ static const char copyright[] =
 #if 0
 static const char sccsid[] = "@(#)deroff.c	8.1 (Berkeley) 6/6/93";
 #else
-static const char rcsid[] = "$NetBSD: deroff.c,v 1.9 2011/08/31 13:38:19 joerg Exp $";
+static const char rcsid[] = "$NetBSD: deroff.c,v 1.5 2007/12/15 19:44:50 perry Exp $";
 #endif
 #endif /* not lint */
 
 #include <sys/cdefs.h>
 #include <err.h>
 #include <limits.h>
-#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -126,7 +125,7 @@ static const char rcsid[] = "$NetBSD: deroff.c,v 1.9 2011/08/31 13:38:19 joerg E
 #define	MA 3	/* -man */
 
 #ifdef DEBUG
-static char *mactab[] = { "-ms", "-mm", "-me", "-ma" };
+char *mactab[] = { "-ms", "-mm", "-me", "-ma" };
 #endif /* DEBUG */
 
 #define	ONE 1
@@ -251,7 +250,7 @@ static int	 macsort(const void *, const void *);
 static int	 sizetab(const struct mactab *);
 static void	 getfname(void);
 static void	 textline(char *, int);
-static void	 work(void) __dead;
+static void	 work(void);
 static void	 regline(void (*)(char *, int), int);
 static void	 macro(void);
 static void	 tbl(void);
@@ -437,8 +436,7 @@ getfname(void)
 	while (C == ' ')
 		;	/* nothing */
 
-	for (p = fname ; p - fname < (ptrdiff_t)sizeof(fname) &&
-	    (*p = c) != '\n' &&
+	for (p = fname ; p - fname < sizeof(fname) && (*p = c) != '\n' &&
 	    c != ' ' && c != '\t' && c != '\\'; ++p)
 		C;
 	*p = '\0';
@@ -474,7 +472,7 @@ textline(char *str, int constant)
 	puts(str);
 }
 
-static void
+void
 work(void)
 {
 
@@ -496,7 +494,7 @@ regline(void (*pfunc)(char *, int), int constant)
 
 	line[0] = c;
 	lp = line;
-	while (lp - line < (ptrdiff_t)sizeof(line)) {
+	while (lp - line < sizeof(line)) {
 		if (c == '\\') {
 			*lp = ' ';
 			backsl();
@@ -825,14 +823,14 @@ static int
 _C1(void)
 {
 
-	return C1get;
+	return C1get);
 }
 
 static int
 _C(void)
 {
 
-	return Cget;
+	return Cget);
 }
 #endif /* DEBUG */
 
@@ -998,7 +996,7 @@ meputmac(char *cp, int constant)
 		 */
 		if (((np - cp) > constant) &&
 		    (inquote || (chars[(unsigned char)cp[0]] == LETTER))) {
-			for (; cp < np; cp++)
+			for (cp = cp; cp < np; cp++)
 				putchar(*cp);
 			last = np[-1];
 			found++;
@@ -1171,7 +1169,7 @@ outtbl(pacmac unused)
 	return 0;
 }
 
-static int
+int
 /*ARGSUSED*/
 so(pacmac unused)
 {

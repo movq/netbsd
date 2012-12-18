@@ -1,6 +1,7 @@
-/*	$NetBSD: natm.c,v 1.24 2011/03/09 22:06:42 dyoung Exp $	*/
+/*	$NetBSD: natm.c,v 1.16 2008/05/22 00:59:19 dyoung Exp $	*/
 
 /*
+ *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -12,6 +13,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles D. Cranor and
+ *      Washington University.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: natm.c,v 1.24 2011/03/09 22:06:42 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: natm.c,v 1.16 2008/05/22 00:59:19 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,12 +70,22 @@ u_long natm0_recvspace = 16*1024;
  * user requests
  */
 
+#if defined(__NetBSD__)
 int natm_usrreq(so, req, m, nam, control, l)
+#elif defined(__OpenBSD__)
+int natm_usrreq(so, req, m, nam, control, p)
+#elif defined(__FreeBSD__)
+int natm_usrreq(so, req, m, nam, control)
+#endif
 
 struct socket *so;
 int req;
 struct mbuf *m, *nam, *control;
+#if defined(__NetBSD__)
 struct lwp *l;
+#elif deifned(__OpenBSD__)
+struct proc *p;
+#endif
 
 {
   int error = 0, s, s2;
@@ -183,7 +200,7 @@ struct lwp *l;
       ATM_PH_SETVCI(&api.aph, npcb->npcb_vci);
       api.rxhand = npcb;
       s2 = splnet();
-      if (ifp->if_ioctl(ifp, SIOCATMENA, &api) != 0) {
+      if (ifp->if_ioctl == NULL || ifp->if_ioctl(ifp, SIOCATMENA, &api) != 0) {
 	splx(s2);
 	npcb_free(npcb, NPCB_REMOVE);
         error = EIO;
@@ -213,7 +230,8 @@ struct lwp *l;
       ATM_PH_SETVCI(&api.aph, npcb->npcb_vci);
       api.rxhand = npcb;
       s2 = splnet();
-      ifp->if_ioctl(ifp, SIOCATMDIS, &api);
+      if (ifp->if_ioctl != NULL)
+	  ifp->if_ioctl(ifp, SIOCATMDIS, &api);
       splx(s);
 
       npcb_free(npcb, NPCB_REMOVE);
@@ -257,10 +275,15 @@ struct lwp *l;
 
     case PRU_PEERADDR:			/* fetch peer's address */
       snatm = mtod(nam, struct sockaddr_natm *);
-      memset(snatm, 0, sizeof(*snatm));
+      bzero(snatm, sizeof(*snatm));
       nam->m_len = snatm->snatm_len = sizeof(*snatm);
       snatm->snatm_family = AF_NATM;
-      memcpy(snatm->snatm_if, npcb->npcb_ifp->if_xname, sizeof(snatm->snatm_if));
+#if defined(__NetBSD__) || defined(__OpenBSD__)
+      bcopy(npcb->npcb_ifp->if_xname, snatm->snatm_if, sizeof(snatm->snatm_if));
+#elif defined(__FreeBSD__)
+      snprintf(snatm->snatm_if, sizeof(snatm->snatm_if), "%s%d",
+          npcb->npcb_ifp->if_name, npcb->npcb_ifp->if_unit);
+#endif
       snatm->snatm_vci = npcb->npcb_vci;
       snatm->snatm_vpi = npcb->npcb_vpi;
       break;
@@ -328,7 +351,7 @@ done:
  */
 
 void
-natmintr(void)
+natmintr()
 
 {
   int s;
@@ -361,7 +384,7 @@ next:
   if (npcb->npcb_flags & NPCB_DRAIN) {
     m_freem(m);
     if (npcb->npcb_inq == 0)
-      free(npcb, M_PCB);			/* done! */
+      FREE(npcb, M_PCB);			/* done! */
     goto next;
   }
 
@@ -396,3 +419,52 @@ m->m_pkthdr.rcvif = NULL;	/* null it out to be safe */
 
   goto next;
 }
+
+#if defined(__FreeBSD__)
+NETISR_SET(NETISR_NATM, natmintr);
+#endif
+
+
+#ifdef notyet
+/*
+ * natm0_sysctl: not used, but here in case we want to add something
+ * later...
+ */
+
+int natm0_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
+
+int *name;
+u_int namelen;
+void *oldp;
+size_t *oldlenp;
+void *newp;
+size_t newlen;
+
+{
+  /* All sysctl names at this level are terminal. */
+  if (namelen != 1)
+    return (ENOTDIR);
+  return (ENOPROTOOPT);
+}
+
+/*
+ * natm5_sysctl: not used, but here in case we want to add something
+ * later...
+ */
+
+int natm5_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
+
+int *name;
+u_int namelen;
+void *oldp;
+size_t *oldlenp;
+void *newp;
+size_t newlen;
+
+{
+  /* All sysctl names at this level are terminal. */
+  if (namelen != 1)
+    return (ENOTDIR);
+  return (ENOPROTOOPT);
+}
+#endif

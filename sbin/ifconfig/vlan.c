@@ -1,4 +1,4 @@
-/*	$NetBSD: vlan.c,v 1.13 2009/07/28 18:22:33 dyoung Exp $	*/
+/*	$NetBSD: vlan.c,v 1.12.2.1 2009/08/14 20:45:42 snj Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: vlan.c,v 1.13 2009/07/28 18:22:33 dyoung Exp $");
+__RCSID("$NetBSD: vlan.c,v 1.12.2.1 2009/08/14 20:45:42 snj Exp $");
 #endif /* not lint */
 
 #include <sys/param.h> 

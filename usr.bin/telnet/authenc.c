@@ -1,4 +1,4 @@
-/*	$NetBSD: authenc.c,v 1.13 2012/01/09 16:08:55 christos Exp $	*/
+/*	$NetBSD: authenc.c,v 1.12 2003/08/07 11:16:07 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)authenc.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: authenc.c,v 1.13 2012/01/09 16:08:55 christos Exp $");
+__RCSID("$NetBSD: authenc.c,v 1.12 2003/08/07 11:16:07 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -87,7 +87,7 @@ telnet_getenv(char *val)
 }
 
 char *
-telnet_gets(char *prmpt, char *result, int length, int echo)
+telnet_gets(char *prompt, char *result, int length, int echo)
 {
 	extern int globalmode;
 	int om = globalmode;
@@ -95,9 +95,9 @@ telnet_gets(char *prmpt, char *result, int length, int echo)
 
 	TerminalNewMode(-1);
 	if (echo) {
-		printf("%s", prmpt);
+		printf("%s", prompt);
 		res = fgets(result, length, stdin);
-	} else if ((res = getpass(prmpt)) != NULL) {
+	} else if ((res = getpass(prompt)) != NULL) {
 		strlcpy(result, res, length);
 		res = result;
 	}

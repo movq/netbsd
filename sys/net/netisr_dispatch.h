@@ -1,11 +1,11 @@
-/* $NetBSD: netisr_dispatch.h,v 1.16 2011/06/30 20:09:41 wiz Exp $ */
+/* $NetBSD: netisr_dispatch.h,v 1.14 2007/07/14 21:02:42 ad Exp $ */
 
 #ifndef _NET_NETISR_DISPATCH_H_
 #define _NET_NETISR_DISPATCH_H_
 
 /*
  * netisr_dispatch: This file is included by the
- *	machine dependent softnet function.  The
+ *	machine dependant softnet function.  The
  *	DONETISR macro should be set before including
  *	this file.  i.e.:
  *
@@ -41,9 +41,6 @@
 #endif
 #ifdef ISO
 	DONETISR(NETISR_ISO,clnlintr);
-#endif
-#ifdef MPLS
-	DONETISR(NETISR_MPLS,mplsintr);
 #endif
 #ifdef NATM
 	DONETISR(NETISR_NATM,natmintr);

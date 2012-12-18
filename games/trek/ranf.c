@@ -1,4 +1,4 @@
-/*	$NetBSD: ranf.c,v 1.7 2009/05/25 00:37:27 dholland Exp $	*/
+/*	$NetBSD: ranf.c,v 1.5 2003/08/07 09:37:53 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)ranf.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: ranf.c,v 1.7 2009/05/25 00:37:27 dholland Exp $");
+__RCSID("$NetBSD: ranf.c,v 1.5 2003/08/07 09:37:53 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -43,16 +43,21 @@ __RCSID("$NetBSD: ranf.c,v 1.7 2009/05/25 00:37:27 dholland Exp $");
 #include "trek.h"
 
 int
-ranf(int max)
+ranf(max)
+int	max;
 {
+	int	t;
+
 	if (max <= 0)
 		return (0);
-	return (random() % max);
+	t = rand() >> 5;
+	return (t % max);
 }
 
 
-double
-franf(void)
+double franf()
 {
-	return random() / (double)RANDOM_MAX;
+	double		t;
+	t = rand() & 077777;
+	return (t / 32767.0);
 }

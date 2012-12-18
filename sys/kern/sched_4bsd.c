@@ -1,4 +1,4 @@
-/*	$NetBSD: sched_4bsd.c,v 1.28 2011/12/02 12:29:35 yamt Exp $	*/
+/*	$NetBSD: sched_4bsd.c,v 1.24.4.1 2009/06/06 22:12:44 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2004, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sched_4bsd.c,v 1.28 2011/12/02 12:29:35 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sched_4bsd.c,v 1.24.4.1 2009/06/06 22:12:44 bouyer Exp $");
 
 #include "opt_ddb.h"
 #include "opt_lockdebug.h"
@@ -88,6 +88,8 @@ __KERNEL_RCSID(0, "$NetBSD: sched_4bsd.c,v 1.28 2011/12/02 12:29:35 yamt Exp $")
 #include <sys/lockdebug.h>
 #include <sys/kmem.h>
 #include <sys/intr.h>
+
+#include <uvm/uvm_extern.h>
 
 static void updatepri(struct lwp *);
 static void resetpriority(struct lwp *);
@@ -234,7 +236,7 @@ sched_tick(struct cpu_info *ci)
  */
 
 /* calculations for digital decay to forget 90% of usage in 5*loadav sec */
-#define	loadfactor(loadav)	(2 * (loadav) / ncpu)
+#define	loadfactor(loadav)	(2 * (loadav))
 
 static fixpt_t
 decay_cpu(fixpt_t loadfac, fixpt_t estcpu)
@@ -374,17 +376,18 @@ resetpriority(struct lwp *l)
 }
 
 /*
- * We adjust the priority of the current LWP.  The priority of a LWP
+ * We adjust the priority of the current process.  The priority of a process
  * gets worse as it accumulates CPU time.  The CPU usage estimator (l_estcpu)
- * is increased here.  The formula for computing priorities will compute a
- * different value each time l_estcpu increases. This can cause a switch,
- * but unless the priority crosses a PPQ boundary the actual queue will not
- * change.  The CPU usage estimator ramps up quite quickly when the process
- * is running (linearly), and decays away exponentially, at a rate which is
- * proportionally slower when the system is busy.  The basic principle is
- * that the system will 90% forget that the process used a lot of CPU time
- * in 5 * loadav seconds.  This causes the system to favor processes which
- * haven't run much recently, and to round-robin among other processes.
+ * is increased here.  The formula for computing priorities (in kern_synch.c)
+ * will compute a different value each time l_estcpu increases. This can
+ * cause a switch, but unless the priority crosses a PPQ boundary the actual
+ * queue will not change.  The CPU usage estimator ramps up quite quickly
+ * when the process is running (linearly), and decays away exponentially, at
+ * a rate which is proportionally slower when the system is busy.  The basic
+ * principle is that the system will 90% forget that the process used a lot
+ * of CPU time in 5 * loadav seconds.  This causes the system to favor
+ * processes which haven't run much recently, and to round-robin among other
+ * processes.
  */
 
 void

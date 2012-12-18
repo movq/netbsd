@@ -1,4 +1,4 @@
-/* $Id: pbms.c,v 1.13 2012/10/27 17:18:00 chs Exp $ */
+/* $Id: pbms.c,v 1.7.30.2 2010/01/11 00:52:47 snj Exp $ */
 
 /*
  * Copyright (c) 2005, Johan Wallén
@@ -67,11 +67,10 @@
  *   2, 7, 12, 17, 22, 27, 32, 37, 4, 9, 14, 19, 24, 29, 34, 39, 42,
  *   47, 52, 57, 62, 67, 72, 77, 44 and 49;
  * 
- * In the Y direction, the sensors correspond to byte positions
+ * in the Y direction, the sensors correspond to byte positions
  *
  *   1, 6, 11, 16, 21, 26, 31, 36, 3, 8, 13, 18, 23, 28, 33 and 38.
  *
- * On 12 inch iBooks only the 9 first sensors in Y-direction are used.
  * The change in the sensor values over time is more interesting than
  * their absolute values: if the pressure increases, we know that the
  * finger has just moved there.
@@ -129,10 +128,41 @@
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdevs.h>
 #include <dev/usb/uhidev.h>
-#include <dev/usb/hid.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsmousevar.h>
+
+
+/*
+ * Debugging output.
+ */
+
+
+/* XXX Should be redone, and its use should be added back. */
+
+#ifdef PBMS_DEBUG
+
+/*
+ * Print the error message (preceded by the driver and function)
+ * specified by the string literal fmt (followed by newline) if
+ * pbmsdebug is greater than n. The macro may only be used in the
+ * scope of sc, which must be castable to struct device *. There must
+ * be at least one vararg. Do not define PBMS_DEBUG on non-C99
+ * compilers.
+ */
+
+#define DPRINTFN(n, fmt, ...)						      \
+do {									      \
+	if (pbmsdebug > (n))						      \
+		logprintf("%s: %s: " fmt "\n",				      \
+			  ((struct device *) sc)->dv_xname,		      \
+			  __func__, __VA_ARGS__);			      \
+} while ( /* CONSTCOND */ 0)
+
+int pbmsdebug = 0;
+
+#endif /* PBMS_DEBUG */
+
 
 /*
  * Magic numbers.
@@ -208,9 +238,8 @@ static struct pbms_dev pbms_devices[] =
 		.y_factor = (y_fact),					      \
 		.y_sensors = 16						      \
        }
-       /* 12 inch PowerBooks/iBooks */
+       /* 12 inch PowerBooks */
        POWERBOOK_TOUCHPAD(12, 0x030a, 69, 16, 52), /* XXX Not tested. */
-       POWERBOOK_TOUCHPAD(12, 0x030b, 73, 15, 96),
        /* 15 inch PowerBooks */
        POWERBOOK_TOUCHPAD(15, 0x020e, 85, 16, 57), /* XXX Not tested. */
        POWERBOOK_TOUCHPAD(15, 0x020f, 85, 16, 57),
@@ -231,15 +260,13 @@ static struct pbms_dev pbms_devices[] =
 
 /* Device data. */
 struct pbms_softc {
-	struct uhidev sc_hdev;	      /* USB parent */
+	struct uhidev sc_hdev;	      /* USB parent (got the struct device). */
 	int is_geyser2;
-	int sc_datalen;		      /* Size of a data packet */
-	int sc_bufusage;	      /* Number of bytes in sc_databuf */
+	int sc_datalen;
 	int sc_acc[PBMS_SENSORS];     /* Accumulated sensor values. */
 	unsigned char sc_prev[PBMS_SENSORS];   /* Previous sample. */
 	unsigned char sc_sample[PBMS_SENSORS]; /* Current sample. */
-	uint8_t sc_databuf[PBMS_DATA_LEN];     /* Buffer for a data packet */
-	device_t sc_wsmousedev; /* WSMouse device. */
+	struct device *sc_wsmousedev; /* WSMouse device. */
 	int sc_noise;		      /* Amount of noise. */
 	int sc_theshold;	      /* Threshold value. */
 	int sc_x;		      /* Virtual position in horizontal 
@@ -278,14 +305,8 @@ const struct wsmouse_accessops pbms_accessops = {
 };
 
 /* This take cares also of the basic device registration. */
-int pbms_match(device_t, cfdata_t, void *);
-void pbms_attach(device_t, device_t, void *);
-int pbms_detach(device_t, int);
-void pbms_childdet(device_t, device_t);
-int pbms_activate(device_t, enum devact);
-extern struct cfdriver pbms_cd;
-CFATTACH_DECL2_NEW(pbms, sizeof(struct pbms_softc), pbms_match, pbms_attach,
-    pbms_detach, pbms_activate, NULL, pbms_childdet);
+USB_DECLARE_DRIVER(pbms);
+
 
 /*
  * Basic driver. 
@@ -295,7 +316,7 @@ CFATTACH_DECL2_NEW(pbms, sizeof(struct pbms_softc), pbms_match, pbms_attach,
 /* Try to match the device at some uhidev. */
 
 int 
-pbms_match(device_t parent, cfdata_t match, void *aux)
+pbms_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct uhidev_attach_arg *uha = aux;
 	usb_device_descriptor_t *udd;
@@ -306,8 +327,7 @@ pbms_match(device_t parent, cfdata_t match, void *aux)
 	 * We just check if the vendor and product IDs have the magic numbers
 	 * we expect. 
 	 */
-	if (uha->uaa->proto == UIPROTO_MOUSE &&
-	    (udd = usbd_get_device_descriptor(uha->parent->sc_udev)) != NULL) {
+	if ((udd = usbd_get_device_descriptor(uha->parent->sc_udev)) != NULL) {
 		vendor = UGETW(udd->idVendor);
 		product = UGETW(udd->idProduct);
 		for (i = 0; i < PBMS_NUM_DEVICES; i++) {
@@ -323,7 +343,7 @@ pbms_match(device_t parent, cfdata_t match, void *aux)
 /* Attach the device. */
 
 void
-pbms_attach(device_t parent, device_t self, void *aux)
+pbms_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct wsmousedev_attach_args a;
 	struct uhidev_attach_arg *uha = aux;
@@ -359,8 +379,6 @@ pbms_attach(device_t parent, device_t self, void *aux)
 					sc->sc_datalen = 64;
 					sc->sc_y_sensors = 9;
 				}
-				else if (product == 0x030b)
-					sc->sc_y_sensors = 9;
 				break;
 			}
 		}
@@ -375,41 +393,43 @@ pbms_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_wsmousedev = config_found(self, &a, wsmousedevprint);
 
-	return;
+	USB_ATTACH_SUCCESS_RETURN;
 }
 
 
 /* Detach the device. */
 
-void
-pbms_childdet(device_t self, device_t child)
+int
+pbms_detach(struct device *self, int flags)
 {
 	struct pbms_softc *sc = device_private(self);
+	int ret;
 
-	if (sc->sc_wsmousedev == child)
-		sc->sc_wsmousedev = NULL;
-}
+	/* The wsmouse driver does all the work. */
+	ret = 0;
+	if (sc->sc_wsmousedev != NULL)
+		ret = config_detach(sc->sc_wsmousedev, flags);
 
-int
-pbms_detach(device_t self, int flags)
-{
-	/* XXX This could not possibly be sufficient! */
-	return config_detach_children(self, flags);
+	return ret;
 }
 
 
 /* Activate the device. */
 
 int
-pbms_activate(device_t self, enum devact act)
+pbms_activate(device_ptr_t self, enum devact act)
 {
 	struct pbms_softc *sc = device_private(self);
+	int ret;
 
-	if (act != DVACT_DEACTIVATE)
-		return EOPNOTSUPP;
-
-	sc->sc_status |= PBMS_DYING;
-	return 0;
+	if (act == DVACT_DEACTIVATE) {
+		ret = 0;
+		if (sc->sc_wsmousedev != NULL)
+			ret = config_deactivate(sc->sc_wsmousedev);
+		sc->sc_status |= PBMS_DYING;
+		return ret;
+	}
+	return EOPNOTSUPP;
 }
 
 
@@ -428,7 +448,6 @@ pbms_enable(void *v)
 
 	sc->sc_status |= PBMS_ENABLED;
 	sc->sc_status &= ~PBMS_VALID;
-	sc->sc_bufusage = 0;
 	sc->sc_buttons = 0;
 	memset(sc->sc_sample, 0, sizeof(sc->sc_sample));
 
@@ -471,39 +490,20 @@ void
 pbms_intr(struct uhidev *addr, void *ibuf, unsigned int len)
 {
 	struct pbms_softc *sc = (struct pbms_softc *)addr;
-	uint8_t *data;
+	unsigned char *data;
 	int dx, dy, dz, i, s;
 	uint32_t buttons;
 
-	/*
-	 * We may have to construct the full data packet over two or three
-	 * sequential interrupts, as the device only sends us chunks of
-	 * 32 or 64 bytes of data.
-	 * This also requires some synchronization, to make sure we place
-	 * the first protocol-byte at the first byte in the bufffer.
-	 */
-	if (sc->is_geyser2) {
-		/* XXX Need to check this. */
-	} else {
-		/* the last chunk is always 17 bytes */
-		if (len == 17 && sc->sc_bufusage + len != sc->sc_datalen) {
-			sc->sc_bufusage = 0;	/* discard bad packet */
-			return;
-		}
-	}
+	/* Ignore incomplete data packets. */
+	if (len != sc->sc_datalen)
+		return;
+	data = ibuf;
 
-	memcpy(sc->sc_databuf + sc->sc_bufusage, ibuf, len);
-	sc->sc_bufusage += len;
-	if (sc->sc_bufusage != sc->sc_datalen)
-		return;		/* wait until packet is complete */
-
-	/* process the now complete protocol and clear the buffer */
-	data = sc->sc_databuf;
-	sc->sc_bufusage = 0;
 #if 0
-	for (i = 0; i < sc->sc_datalen; i++)
-		printf(" %02x", data[i]);
-	printf("\n");
+	printf("(");
+	for (i = 0; i < len; i++)
+		printf(" %d", data[i]);
+	printf(" )\n");
 #endif
 
 	/* The last byte is 1 if the button is pressed and 0 otherwise. */

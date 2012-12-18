@@ -1,4 +1,4 @@
-/*	$NetBSD: getifaddrs.c,v 1.15 2012/03/13 21:13:40 christos Exp $	*/
+/*	$NetBSD: getifaddrs.c,v 1.11.12.1 2009/05/03 13:17:52 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1995, 1999
@@ -27,12 +27,10 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getifaddrs.c,v 1.15 2012/03/13 21:13:40 christos Exp $");
+__RCSID("$NetBSD: getifaddrs.c,v 1.11.12.1 2009/05/03 13:17:52 bouyer Exp $");
 #endif /* LIBC_SCCS and not lint */
 
-#ifndef RUMP_ACTION
 #include "namespace.h"
-#endif
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -48,32 +46,21 @@ __RCSID("$NetBSD: getifaddrs.c,v 1.15 2012/03/13 21:13:40 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__weak_alias) && !defined(RUMP_ACTION)
+#ifdef __weak_alias
 __weak_alias(getifaddrs,_getifaddrs)
 __weak_alias(freeifaddrs,_freeifaddrs)
 #endif
 
-#ifdef RUMP_ACTION
-#include <rump/rump_syscalls.h>
-#define sysctl(a,b,c,d,e,f) rump_sys___sysctl(a,b,c,d,e,f)
-#endif
-
-#define	SA_RLEN(sa)	RT_ROUNDUP((sa)->sa_len)
+#define	SALIGN	(sizeof(long) - 1)
+#define	SA_RLEN(sa)	((sa)->sa_len ? (((sa)->sa_len + SALIGN) & ~SALIGN) : (SALIGN + 1))
 
 int
 getifaddrs(struct ifaddrs **pif)
 {
-	size_t icnt = 1;
-	size_t dcnt = 0;
-	size_t ncnt = 0;
-	static const int mib[] = {
-		CTL_NET,
-		PF_ROUTE,
-		0,			/* protocol */
-		0,			/* wildcard address family */
-		NET_RT_IFLIST,
-		0			/* no flags */
-	};
+	int icnt = 1;
+	int dcnt = 0;
+	int ncnt = 0;
+	int mib[6];
 	size_t needed;
 	char *buf;
 	char *next;
@@ -92,11 +79,17 @@ getifaddrs(struct ifaddrs **pif)
 
 	_DIAGASSERT(pif != NULL);
 
-	if (sysctl(mib, (u_int)__arraycount(mib), NULL, &needed, NULL, 0) < 0)
+	mib[0] = CTL_NET;
+	mib[1] = PF_ROUTE;
+	mib[2] = 0;             /* protocol */
+	mib[3] = 0;             /* wildcard address family */
+	mib[4] = NET_RT_IFLIST;
+	mib[5] = 0;             /* no flags */
+	if (sysctl(mib, __arraycount(mib), NULL, &needed, NULL, 0) < 0)
 		return (-1);
 	if ((buf = malloc(needed)) == NULL)
 		return (-1);
-	if (sysctl(mib, (u_int)__arraycount(mib), buf, &needed, NULL, 0) < 0) {
+	if (sysctl(mib, __arraycount(mib), buf, &needed, NULL, 0) < 0) {
 		free(buf);
 		return (-1);
 	}

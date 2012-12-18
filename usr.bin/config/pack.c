@@ -1,4 +1,4 @@
-/*	$NetBSD: pack.c,v 1.8 2010/03/08 10:19:14 pooka Exp $	*/
+/*	$NetBSD: pack.c,v 1.5 2007/01/13 23:47:36 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -132,7 +132,7 @@ pack(void)
 /*
  * Pack device instances together wherever possible.
  */
-static void
+void
 packdevi(void)
 {
 	struct devi *firststar, *i, **ip, *l, *p;
@@ -187,8 +187,7 @@ packdevi(void)
 		for (i = d->d_ihead; i != NULL; i = i->i_bsame) {
 			m = n;
 			for (l = i; l != NULL; l = l->i_alias) {
-				if (l->i_active != DEVI_ACTIVE
-				    || i->i_pseudoroot)
+				if (l->i_active != DEVI_ACTIVE)
 					continue;
 				l->i_locoff = -1;
 				/* try to find an equivalent for l */
@@ -289,9 +288,9 @@ findvec(const void *ptr, int hash, int len, vec_cmp_func cmp, int nextplace)
 static int
 samelocs(const void *ptr, int off, int len)
 {
-	const char * const *p, * const *q;
+	const char **p, **q;
 
-	for (p = &locators.vec[off], q = (const char * const *)ptr; --len >= 0;)
+	for (p = &locators.vec[off], q = (const char **)ptr; --len >= 0;)
 		if (*p++ != *q++)
 			return (0);	/* different */
 	return (1);			/* same */
@@ -324,10 +323,10 @@ loclencmp(const void *a, const void *b)
 	const struct pspec *p1, *p2;
 	int l1, l2;
 
-	p1 = (*(const struct devi * const *)a)->i_pspec;
+	p1 = (*(const struct devi **)a)->i_pspec;
 	l1 = p1 != NULL ? p1->p_iattr->a_loclen : 0;
 
-	p2 = (*(const struct devi * const *)b)->i_pspec;
+	p2 = (*(const struct devi **)b)->i_pspec;
 	l2 = p2 != NULL ? p2->p_iattr->a_loclen : 0;
 
 	return (l2 - l1);

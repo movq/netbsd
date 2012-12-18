@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.114 2012/10/27 17:17:26 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.99 2008/06/13 08:17:24 cegger Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.114 2012/10/27 17:17:26 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.99 2008/06/13 08:17:24 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,17 +46,11 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.114 2012/10/27 17:17:26 chs Exp $");
 #include <amiga/amiga/cfdev.h>
 #include <amiga/amiga/device.h>
 #include <amiga/amiga/custom.h>
-#ifdef DRACO
-#include <amiga/amiga/drcustom.h>
-#endif
-#ifdef P5PB_CONSOLE
-#include <amiga/pci/p5pbvar.h>
-#endif /* P5PB_CONSOLE */
 
 static void findroot(void);
-void mbattach(device_t, device_t, void *);
+void mbattach(struct device *, struct device *, void *);
 int mbprint(void *, const char *);
-int mbmatch(device_t, cfdata_t, void *);
+int mbmatch(struct device *, struct cfdata *, void *);
 
 #include <sys/kernel.h>
 
@@ -68,7 +62,7 @@ int amiga_realconfig;
  * called at boot time, configure all devices on system
  */
 void
-cpu_configure(void)
+cpu_configure()
 {
 	int s;
 #ifdef DEBUG_KERNEL_START
@@ -121,31 +115,37 @@ cpu_configure(void)
 }
 
 void
-cpu_rootconf(void)
+cpu_rootconf()
 {
 	findroot();
 #ifdef DEBUG_KERNEL_START
 	printf("survived findroot()\n");
 #endif
-	rootconf();
+	setroot(booted_device, booted_partition);
+#ifdef DEBUG_KERNEL_START
+	printf("survived setroot()\n");
+#endif
 }
 
 /*ARGSUSED*/
 int
-simple_devprint(void *aux, const char *pnp)
+simple_devprint(auxp, pnp)
+	void *auxp;
+	const char *pnp;
 {
 	return(QUIET);
 }
 
 int
-matchname(const char *fp, const char *sp)
+matchname(fp, sp)
+	const char *fp, *sp;
 {
 	int len;
 
 	len = strlen(fp);
 	if (strlen(sp) != len)
 		return(0);
-	if (memcmp(fp, sp, len) == 0)
+	if (bcmp(fp, sp, len) == 0)
 		return(1);
 	return(0);
 }
@@ -157,33 +157,37 @@ matchname(const char *fp, const char *sp)
  * by checking for NULL.
  */
 int
-amiga_config_found(cfdata_t pcfp, device_t parent, void *aux, cfprint_t pfn)
+amiga_config_found(pcfp, pdp, auxp, pfn)
+	struct cfdata *pcfp;
+	struct device *pdp;
+	void *auxp;
+	cfprint_t pfn;
 {
 	struct device temp;
-	cfdata_t cf;
+	struct cfdata *cf;
 	const struct cfattach *ca;
 
 	if (amiga_realconfig)
-		return(config_found(parent, aux, pfn) != NULL);
+		return(config_found(pdp, auxp, pfn) != NULL);
 
-	if (parent == NULL) {
+	if (pdp == NULL) {
 		memset(&temp, 0, sizeof temp);
-		parent = &temp;
+		pdp = &temp;
 	}
 
-	parent->dv_cfdata = pcfp;
-	parent->dv_cfdriver = config_cfdriver_lookup(pcfp->cf_name);
-	parent->dv_unit = pcfp->cf_unit;
+	pdp->dv_cfdata = pcfp;
+	pdp->dv_cfdriver = config_cfdriver_lookup(pcfp->cf_name);
+	pdp->dv_unit = pcfp->cf_unit;
 
-	if ((cf = config_search_ia(NULL, parent, NULL, aux)) != NULL) {
+	if ((cf = config_search_ia(NULL, pdp, NULL, auxp)) != NULL) {
 		ca = config_cfattach_lookup(cf->cf_name, cf->cf_atname);
 		if (ca != NULL) {
-			(*ca->ca_attach)(parent, NULL, aux);
-			parent->dv_cfdata = NULL;
+			(*ca->ca_attach)(pdp, NULL, auxp);
+			pdp->dv_cfdata = NULL;
 			return(1);
 		}
 	}
-	parent->dv_cfdata = NULL;
+	pdp->dv_cfdata = NULL;
 	return(0);
 }
 
@@ -193,9 +197,9 @@ amiga_config_found(cfdata_t pcfp, device_t parent, void *aux, cfprint_t pfn)
  * the console. Kinda hacky but it works.
  */
 void
-config_console(void)
+config_console()
 {
-	cfdata_t cf;
+	struct cfdata *cf;
 
 	config_init();
 
@@ -206,7 +210,6 @@ config_console(void)
 	if (cf == NULL) {
 		panic("no mainbus");
 	}
-
 	/*
 	 * delay clock calibration.
 	 */
@@ -230,11 +233,14 @@ config_console(void)
 /*
  * mainbus driver
  */
-CFATTACH_DECL_NEW(mainbus, 0,
+CFATTACH_DECL(mainbus, sizeof(struct device),
     mbmatch, mbattach, NULL, NULL);
 
 int
-mbmatch(device_t parent, cfdata_t cf, void *aux)
+mbmatch(pdp, cfp, auxp)
+	struct device	*pdp;
+	struct cfdata	*cfp;
+	void		*auxp;
 {
 #if 0	/*
 	 * XXX is this right? but we need to be found twice
@@ -255,59 +261,63 @@ mbmatch(device_t parent, cfdata_t cf, void *aux)
  * "find" all the things that should be there.
  */
 void
-mbattach(device_t parent, device_t self, void *aux)
+mbattach(pdp, dp, auxp)
+	struct device *pdp, *dp;
+	void *auxp;
 {
 	printf("\n");
-	config_found(self, __UNCONST("clock"), simple_devprint);
+	config_found(dp, __UNCONST("clock"), simple_devprint);
 	if (is_a3000() || is_a4000()) {
-		config_found(self, __UNCONST("a34kbbc"), simple_devprint);
+		config_found(dp, __UNCONST("a34kbbc"), simple_devprint);
 	} else
 #ifdef DRACO
 	if (!is_draco())
 #endif
 	{
-		config_found(self, __UNCONST("a2kbbc"), simple_devprint);
+		config_found(dp, __UNCONST("a2kbbc"), simple_devprint);
 	}
 #ifdef DRACO
 	if (is_draco()) {
-		config_found(self, __UNCONST("drbbc"), simple_devprint);
-		config_found(self, __UNCONST("kbd"), simple_devprint);
-		config_found(self, __UNCONST("drsc"), simple_devprint);
-		config_found(self, __UNCONST("drsupio"), simple_devprint);
+		config_found(dp, __UNCONST("drbbc"), simple_devprint);
+		config_found(dp, __UNCONST("kbd"), simple_devprint);
+		config_found(dp, __UNCONST("drsc"), simple_devprint);
+		config_found(dp, __UNCONST("drsupio"), simple_devprint);
 	} else
 #endif
 	{
-		config_found(self, __UNCONST("ser"), simple_devprint);
-		config_found(self, __UNCONST("par"), simple_devprint);
-		config_found(self, __UNCONST("kbd"), simple_devprint);
-		config_found(self, __UNCONST("ms"), simple_devprint);
-		config_found(self, __UNCONST("grfcc"), simple_devprint);
-		config_found(self, __UNCONST("amidisplaycc"), simple_devprint);
-		config_found(self, __UNCONST("fdc"), simple_devprint);
+		config_found(dp, __UNCONST("ser"), simple_devprint);
+		config_found(dp, __UNCONST("par"), simple_devprint);
+		config_found(dp, __UNCONST("kbd"), simple_devprint);
+		config_found(dp, __UNCONST("ms"), simple_devprint);
+		config_found(dp, __UNCONST("grfcc"), simple_devprint);
+		config_found(dp, __UNCONST("amidisplaycc"), simple_devprint);
+		config_found(dp, __UNCONST("fdc"), simple_devprint);
 	}
-	if (is_a4000() || is_a1200() || is_a600())
-		config_found(self, __UNCONST("wdc"), simple_devprint);
+	if (is_a4000() || is_a1200()) {
+		config_found(dp, __UNCONST("wdc"), simple_devprint);
+		config_found(dp, __UNCONST("idesc"), simple_devprint);
+	}
 	if (is_a4000())			/* Try to configure A4000T SCSI */
-		config_found(self, __UNCONST("afsc"), simple_devprint);
+		config_found(dp, __UNCONST("afsc"), simple_devprint);
 	if (is_a3000())
-		config_found(self, __UNCONST("ahsc"), simple_devprint);
-	if (is_a600() || is_a1200())
-		config_found(self, __UNCONST("pccard"), simple_devprint);
-	if (is_a1200())
-		config_found(self, __UNCONST("a1k2cp"), simple_devprint);
+		config_found(dp, __UNCONST("ahsc"), simple_devprint);
+	if (/*is_a600() || */is_a1200())
+		config_found(dp, __UNCONST("pccard"), simple_devprint);
 #ifdef DRACO
 	if (!is_draco())
 #endif
-		config_found(self, __UNCONST("aucc"), simple_devprint);
+		config_found(dp, __UNCONST("aucc"), simple_devprint);
 
-	config_found(self, __UNCONST("zbus"), simple_devprint);
+	config_found(dp, __UNCONST("zbus"), simple_devprint);
 }
 
 int
-mbprint(void *aux, const char *pnp)
+mbprint(auxp, pnp)
+	void *auxp;
+	const char *pnp;
 {
 	if (pnp)
-		aprint_normal("%s at %s", (char *)aux, pnp);
+		aprint_normal("%s at %s", (char *)auxp, pnp);
 	return(UNCONF);
 }
 
@@ -389,7 +399,7 @@ findroot(void)
 			 * Find the disk corresponding to the current
 			 * device.
 			 */
-			devs = sd_cd.cd_devs;
+			devs = (device_t *)sd_cd.cd_devs;
 			if ((dkp = disk_find(device_xname(device_lookup(&sd_cd, unit)))) == NULL)
 				continue;
 
@@ -500,7 +510,7 @@ int a4000_flag = 0;		/* patchable */
 #endif
 
 int
-is_a3000(void)
+is_a3000()
 {
 	/* this is a dirty kludge.. but how do you do this RIGHT ? :-) */
 	extern long boot_fphystart;
@@ -545,7 +555,7 @@ is_a3000(void)
 }
 
 int
-is_a4000(void)
+is_a4000()
 {
 	if ((machineid >> 16) == 4000)
 		return (1);		/* It's an A4000 */
@@ -568,25 +578,9 @@ is_a4000(void)
 }
 
 int
-is_a1200(void)
+is_a1200()
 {
 	if ((machineid >> 16) == 1200)
 		return (1);		/* It's an A1200 */
 	return (0);			/* Machine type not set */
-}
-
-int
-is_a600(void)
-{
-	if ((machineid >> 16) == 600)
-		return (1);		/* It's an A600 */
-	return (0);			/* Machine type not set */
-}
-
-void
-device_register(device_t dev, void *aux) 
-{
-#ifdef P5PB_CONSOLE
-	p5pb_device_register(dev, aux);
-#endif /* P5PB_CONSOLE */
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.11 2011/08/30 12:39:56 bouyer Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.9 2005/12/11 12:18:17 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Dale Rahn.
@@ -12,7 +12,10 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *   This product includes software developed by Dale Rahn.
+ * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -33,7 +36,6 @@
 /* number of boot pieces , ie xxboot bootxx */
 #define NUMBOOT		0
 
-#define LABELUSESMBR	0			/* no MBR partitionning */
 #define LABELSECTOR     0                       /* sector containing label */
 #define LABELOFFSET	0			/* offset of label in sector */
 #define MAXPARTITIONS	8			/* number of partitions */

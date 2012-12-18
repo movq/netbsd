@@ -1,4 +1,4 @@
-/*	$NetBSD: if.h,v 1.10 2012/12/13 15:36:36 roy Exp $	*/
+/*	$NetBSD: if.h,v 1.7 2006/03/05 23:47:08 rpaulo Exp $	*/
 /*	$KAME: if.h,v 1.12 2003/09/21 07:17:03 itojun Exp $	*/
 
 /*
@@ -32,23 +32,26 @@
 
 #define RTADV_TYPE2BITMASK(type) (0x1 << type)
 
+extern struct if_msghdr **iflist;
+extern size_t ifblock_size;
+extern char *ifblock;
+
 struct nd_opt_hdr;
-struct sockaddr_dl *if_nametosdl(const char *);
-int if_getmtu(const char *);
-int if_getflags(int, int);
-int lladdropt_length(struct sockaddr_dl *);
-void lladdropt_fill(struct sockaddr_dl *, struct nd_opt_hdr *);
-char *get_next_msg(char *, char *, int, size_t *, int);
-struct in6_addr *get_addr(char *);
-int get_rtm_ifindex(char *);
-int get_ifm_ifindex(char *);
-int get_ifam_ifindex(char *);
-int get_ifm_flags(char *);
-#ifdef RTM_IFANNOUNCE
-int get_ifan_ifindex(char *);
-int get_ifan_what(char *);
-#endif
-int get_prefixlen(char *);
-int prefixlen(const unsigned char *, const unsigned char *);
-int rtmsg_type(char *);
-int rtmsg_len(char *);
+struct sockaddr_dl *if_nametosdl __P((char *));
+int if_getmtu __P((char *));
+int if_getflags __P((int, int));
+int lladdropt_length __P((struct sockaddr_dl *));
+void lladdropt_fill __P((struct sockaddr_dl *, struct nd_opt_hdr *));
+char *get_next_msg __P((char *, char *, int, size_t *, int));
+struct in6_addr *get_addr __P((char *));
+int get_rtm_ifindex __P((char *));
+int get_ifm_ifindex __P((char *));
+int get_ifam_ifindex __P((char *));
+int get_ifm_flags __P((char *));
+int get_prefixlen __P((char *));
+int prefixlen __P((u_char *, u_char *));
+int rtmsg_type __P((char *));
+int ifmsg_type __P((char *));
+int rtmsg_len __P((char *));
+int ifmsg_len __P((char *));
+void init_iflist __P((void));

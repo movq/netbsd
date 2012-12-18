@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_md.h,v 1.8 2011/01/25 19:12:06 christos Exp $ */
+/*	$NetBSD: pthread_md.h,v 1.6 2008/10/27 00:52:07 uwe Exp $ */
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -38,16 +38,17 @@
 #ifndef _LIB_PTHREAD_SH3_MD_H
 #define _LIB_PTHREAD_SH3_MD_H
 
-static inline unsigned long
+static inline long
 pthread__sp(void)
 {
-	unsigned long ret;
+	long ret;
 	__asm("mov r15, %0" : "=r" (ret));
 
 	return ret;
 }
 
 #define pthread__uc_sp(ucp) ((ucp)->uc_mcontext.__gregs[_REG_R15])
+#define pthread__uc_pc(ucp) ((ucp)->uc_mcontext.__gregs[_REG_PC])
 
 /*
  * Set initial, sane values for registers whose values aren't just
@@ -55,6 +56,83 @@ pthread__sp(void)
  */
 #define _INITCONTEXT_U_MD(ucp)						\
 	(ucp)->uc_mcontext.__gregs[_REG_SR] = 0;
+
+/*
+ * SH3 requires no extra stack space
+ */
+#define STACKSPACE	0
+
+
+/*
+ * Conversions between struct reg and struct mcontext. Used by
+ * libpthread_dbg.
+ */
+
+#define PTHREAD_UCONTEXT_TO_REG(reg, uc) do {				\
+	(reg)->r_spc = (uc)->uc_mcontext.__gregs[_REG_PC];		\
+	(reg)->r_ssr = (uc)->uc_mcontext.__gregs[_REG_SR];		\
+	(reg)->r_pr = (uc)->uc_mcontext.__gregs[_REG_PR];		\
+	(reg)->r_mach = (uc)->uc_mcontext.__gregs[_REG_MACH];		\
+	(reg)->r_macl = (uc)->uc_mcontext.__gregs[_REG_MACL];		\
+	(reg)->r_r15 = (uc)->uc_mcontext.__gregs[_REG_R15];		\
+	(reg)->r_r14 = (uc)->uc_mcontext.__gregs[_REG_R14];		\
+	(reg)->r_r13 = (uc)->uc_mcontext.__gregs[_REG_R13];		\
+	(reg)->r_r12 = (uc)->uc_mcontext.__gregs[_REG_R12];		\
+	(reg)->r_r11 = (uc)->uc_mcontext.__gregs[_REG_R11];		\
+	(reg)->r_r10 = (uc)->uc_mcontext.__gregs[_REG_R10];		\
+	(reg)->r_r9 = (uc)->uc_mcontext.__gregs[_REG_R9];		\
+	(reg)->r_r8 = (uc)->uc_mcontext.__gregs[_REG_R8];		\
+	(reg)->r_r7 = (uc)->uc_mcontext.__gregs[_REG_R7];		\
+	(reg)->r_r6 = (uc)->uc_mcontext.__gregs[_REG_R6];		\
+	(reg)->r_r5 = (uc)->uc_mcontext.__gregs[_REG_R5];		\
+	(reg)->r_r4 = (uc)->uc_mcontext.__gregs[_REG_R4];		\
+	(reg)->r_r3 = (uc)->uc_mcontext.__gregs[_REG_R3];		\
+	(reg)->r_r2 = (uc)->uc_mcontext.__gregs[_REG_R2];		\
+	(reg)->r_r1 = (uc)->uc_mcontext.__gregs[_REG_R1];		\
+	(reg)->r_r0 = (uc)->uc_mcontext.__gregs[_REG_R0];		\
+	(reg)->r_gbr = (uc)->uc_mcontext.__gregs[_REG_GBR];		\
+	} while (/*CONSTCOND*/0)
+
+#define PTHREAD_REG_TO_UCONTEXT(uc, reg) do {				\
+	(uc)->uc_mcontext.__gregs[_REG_GBR] = (reg)->r_gbr;		\
+	(uc)->uc_mcontext.__gregs[_REG_PC] = (reg)->r_spc;		\
+	(uc)->uc_mcontext.__gregs[_REG_SR] = (reg)->r_ssr;		\
+	(uc)->uc_mcontext.__gregs[_REG_PR] = (reg)->r_pr; 		\
+	(uc)->uc_mcontext.__gregs[_REG_MACH] = (reg)->r_mach;		\
+	(uc)->uc_mcontext.__gregs[_REG_MACL] = (reg)->r_macl;		\
+	(uc)->uc_mcontext.__gregs[_REG_R15] = (reg)->r_r15;		\
+	(uc)->uc_mcontext.__gregs[_REG_R14] = (reg)->r_r14;		\
+	(uc)->uc_mcontext.__gregs[_REG_R13] = (reg)->r_r13;		\
+	(uc)->uc_mcontext.__gregs[_REG_R12] = (reg)->r_r12;		\
+	(uc)->uc_mcontext.__gregs[_REG_R11] = (reg)->r_r11;		\
+	(uc)->uc_mcontext.__gregs[_REG_R10] = (reg)->r_r10;		\
+	(uc)->uc_mcontext.__gregs[_REG_R9] = (reg)->r_r9;		\
+	(uc)->uc_mcontext.__gregs[_REG_R8] = (reg)->r_r8;		\
+	(uc)->uc_mcontext.__gregs[_REG_R7] = (reg)->r_r7;		\
+	(uc)->uc_mcontext.__gregs[_REG_R6] = (reg)->r_r6;		\
+	(uc)->uc_mcontext.__gregs[_REG_R5] = (reg)->r_r5;		\
+	(uc)->uc_mcontext.__gregs[_REG_R4] = (reg)->r_r4;		\
+	(uc)->uc_mcontext.__gregs[_REG_R3] = (reg)->r_r3;		\
+	(uc)->uc_mcontext.__gregs[_REG_R2] = (reg)->r_r2;		\
+	(uc)->uc_mcontext.__gregs[_REG_R1] = (reg)->r_r1;		\
+	(uc)->uc_mcontext.__gregs[_REG_R0] = (reg)->r_r0;		\
+									\
+	(uc)->uc_flags = ((uc)->uc_flags | _UC_CPU) & ~_UC_USER;	\
+	} while (/*CONSTCOND*/0)
+
+#if 0 /* no struct fpreg!!! */
+#define PTHREAD_UCONTEXT_TO_FPREG(freg, uc)       			\
+	memcpy((freg), &(uc)->uc_mcontext.__fpregs, sizeof(*(freg)));
+
+#define PTHREAD_FPREG_TO_UCONTEXT(uc, freg) do {       	       		\
+	memcpy(&(uc)->uc_mcontext.__fpregs, (freg), sizeof(*(freg)));	\
+	(uc)->uc_flags = ((uc)->uc_flags | _UC_FPU) & ~_UC_USER;       	\
+	} while (/*CONSTCOND*/0)
+
+#else  /* stubs */
+#define PTHREAD_UCONTEXT_TO_FPREG(freg, uc)
+#define PTHREAD_FPREG_TO_UCONTEXT(uc, freg)
+#endif
 
 /* sh3 will not go SMP */
 #define	PTHREAD__ATOMIC_IS_MEMBAR
