@@ -1,4 +1,4 @@
-/*	$NetBSD: msg_rate_delay.c,v 1.1 2013/01/02 18:59:13 tron Exp $	*/
+/*	$NetBSD: msg_rate_delay.c,v 1.1.1.1 2013/01/02 18:59:13 tron Exp $	*/
 
 /*++
 /* NAME

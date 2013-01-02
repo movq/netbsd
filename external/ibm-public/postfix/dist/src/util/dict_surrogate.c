@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_surrogate.c,v 1.1 2013/01/02 18:59:12 tron Exp $	*/
+/*	$NetBSD: dict_surrogate.c,v 1.1.1.1 2013/01/02 18:59:12 tron Exp $	*/
 
 /*++
 /* NAME

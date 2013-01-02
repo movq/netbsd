@@ -1,4 +1,4 @@
-/*	$NetBSD: server_acl.h,v 1.1 2013/01/02 18:59:00 tron Exp $	*/
+/*	$NetBSD: server_acl.h,v 1.1.1.1 2013/01/02 18:59:00 tron Exp $	*/
 
 #ifndef _SERVER_ACL_INCLUDED_
 #define _SERVER_ACL_INCLUDED_

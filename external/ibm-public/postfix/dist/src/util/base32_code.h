@@ -1,4 +1,4 @@
-/*	$NetBSD: base32_code.h,v 1.1 2013/01/02 18:59:11 tron Exp $	*/
+/*	$NetBSD: base32_code.h,v 1.1.1.1 2013/01/02 18:59:11 tron Exp $	*/
 
 #ifndef _BASE32_CODE_H_INCLUDED_
 #define _BASE32_CODE_H_INCLUDED_

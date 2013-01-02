@@ -1,4 +1,4 @@
-/*	$NetBSD: warn_stat.h,v 1.1 2013/01/02 18:59:15 tron Exp $	*/
+/*	$NetBSD: warn_stat.h,v 1.1.1.1 2013/01/02 18:59:15 tron Exp $	*/
 
 #ifndef _WARN_STAT_H_
 #define _WARN_STAT_H_

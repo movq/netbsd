@@ -1,4 +1,4 @@
-/*	$NetBSD: base32_code.c,v 1.1 2013/01/02 18:59:11 tron Exp $	*/
+/*	$NetBSD: base32_code.c,v 1.1.1.1 2013/01/02 18:59:11 tron Exp $	*/
 
 /*++
 /* NAME
