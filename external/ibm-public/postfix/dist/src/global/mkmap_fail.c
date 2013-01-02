@@ -1,4 +1,4 @@
-/*	$NetBSD: mkmap_fail.c,v 1.1 2013/01/02 18:58:59 tron Exp $	*/
+/*	$NetBSD: mkmap_fail.c,v 1.1.1.1 2013/01/02 18:58:59 tron Exp $	*/
 
 /*++
 /* NAME

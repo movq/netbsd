@@ -1,4 +1,4 @@
-/*	$NetBSD: postconf.h,v 1.1 2013/01/02 18:59:03 tron Exp $	*/
+/*	$NetBSD: postconf.h,v 1.1.1.1 2013/01/02 18:59:03 tron Exp $	*/
 
 /*++
 /* NAME

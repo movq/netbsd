@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_memcache.h,v 1.1 2013/01/02 18:58:57 tron Exp $	*/
+/*	$NetBSD: dict_memcache.h,v 1.1.1.1 2013/01/02 18:58:57 tron Exp $	*/
 
 #ifndef _DICT_MEMCACHE_INCLUDED_
 #define _DICT_MEMCACHE_INCLUDED_

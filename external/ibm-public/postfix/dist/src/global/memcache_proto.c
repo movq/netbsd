@@ -1,4 +1,4 @@
-/*	$NetBSD: memcache_proto.c,v 1.1 2013/01/02 18:58:59 tron Exp $	*/
+/*	$NetBSD: memcache_proto.c,v 1.1.1.1 2013/01/02 18:58:59 tron Exp $	*/
 
 /*++
 /* NAME

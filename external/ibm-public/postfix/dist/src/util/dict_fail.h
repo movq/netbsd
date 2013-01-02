@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_fail.h,v 1.1 2013/01/02 18:59:12 tron Exp $	*/
+/*	$NetBSD: dict_fail.h,v 1.1.1.1 2013/01/02 18:59:12 tron Exp $	*/
 
 #ifndef _DICT_FAIL_H_INCLUDED_
 #define _DICT_FAIL_H_INCLUDED_

@@ -1,4 +1,4 @@
-/*	$NetBSD: memcache_proto.h,v 1.1 2013/01/02 18:58:59 tron Exp $	*/
+/*	$NetBSD: memcache_proto.h,v 1.1.1.1 2013/01/02 18:58:59 tron Exp $	*/
 
 #ifndef _MEMCACHE_PROTO_H_INCLUDED_
 #define _MEMCACHE_PROTO_H_INCLUDED_

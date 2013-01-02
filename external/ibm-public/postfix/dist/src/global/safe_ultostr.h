@@ -1,4 +1,4 @@
-/*	$NetBSD: safe_ultostr.h,v 1.1 2013/01/02 18:59:00 tron Exp $	*/
+/*	$NetBSD: safe_ultostr.h,v 1.1.1.1 2013/01/02 18:59:00 tron Exp $	*/
 
 #ifndef _SAFE_ULTOSTR_H_INCLUDED_
 #define _SAFE_ULTOSTR_H_INCLUDED_
