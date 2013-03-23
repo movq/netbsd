@@ -1,14 +1,15 @@
 /*
  * cvt_pt.c
  *
- *	Covert partition type.	$Revision: 1.1 $
+ *	Covert partition type.	$Revision: 1.1.1.1 $
  *
  *	Copyright (c)  1999, Eryk Vershen
  * 
  * History:
  * $Log: cvt_pt.c,v $
- * Revision 1.1  2013/03/23 15:36:33  christos
- * Initial revision
+ * Revision 1.1.1.1  2013/03/23 15:36:33  christos
+ * from:
+ * http://cantaforda.com/cfcl/eryk/linux/pdisk/dist/pdisk.20000516.src.tar
  *
  * Revision 1.2  2000/05/16 13:56:11  eryk
  * Minor fixes
