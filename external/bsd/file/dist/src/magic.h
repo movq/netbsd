@@ -1,4 +1,4 @@
-/*	$NetBSD: magic.h,v 1.1.1.3 2012/02/22 17:48:18 christos Exp $	*/
+/*	$NetBSD: magic.h,v 1.1.1.4 2013/03/23 15:49:14 christos Exp $	*/
 
 /*
  * Copyright (c) Christos Zoulas 2003.
@@ -76,6 +76,8 @@
 #define	MAGIC_NO_CHECK_FORTRAN	0x000000 /* Don't check ascii/fortran */
 #define	MAGIC_NO_CHECK_TROFF	0x000000 /* Don't check ascii/troff */
 
+#define MAGIC_VERSION		514	/* This implementation */
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -93,6 +95,7 @@ const char *magic_buffer(magic_t, const void *, size_t);
 const char *magic_error(magic_t);
 int magic_setflags(magic_t, int);
 
+int magic_version(void);
 int magic_load(magic_t, const char *);
 int magic_compile(magic_t, const char *);
 int magic_check(magic_t, const char *);
