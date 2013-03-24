@@ -1,4 +1,4 @@
-/*	$NetBSD: dhcp.h,v 1.1 2013/03/24 15:45:49 christos Exp $	*/
+/*	$NetBSD: dhcp.h,v 1.1.1.1 2013/03/24 15:45:49 christos Exp $	*/
 
 /* dhcp.h
 

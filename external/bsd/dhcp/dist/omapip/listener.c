@@ -1,4 +1,4 @@
-/*	$NetBSD: listener.c,v 1.1 2013/03/24 15:45:57 christos Exp $	*/
+/*	$NetBSD: listener.c,v 1.1.1.1 2013/03/24 15:45:57 christos Exp $	*/
 
 /* listener.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: listener.c,v 1.1 2013/03/24 15:45:57 christos Exp $");
+__RCSID("$NetBSD: listener.c,v 1.1.1.1 2013/03/24 15:45:57 christos Exp $");
 
 #include "dhcpd.h"
 

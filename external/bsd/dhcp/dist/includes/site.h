@@ -1,4 +1,4 @@
-/*	$NetBSD: site.h,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+/*	$NetBSD: site.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $	*/
 
 /* Site-specific definitions.
 

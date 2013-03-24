@@ -1,4 +1,4 @@
-/*	$NetBSD: test_alloc.c,v 1.1 2013/03/24 15:45:55 christos Exp $	*/
+/*	$NetBSD: test_alloc.c,v 1.1.1.1 2013/03/24 15:45:55 christos Exp $	*/
 
 /*
  * We test the functions provided in alloc.c here. These are very 

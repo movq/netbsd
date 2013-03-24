@@ -1,4 +1,4 @@
-/*	$NetBSD: comapi.c,v 1.1 2013/03/24 15:45:52 christos Exp $	*/
+/*	$NetBSD: comapi.c,v 1.1.1.1 2013/03/24 15:45:52 christos Exp $	*/
 
 /* omapi.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: comapi.c,v 1.1 2013/03/24 15:45:52 christos Exp $");
+__RCSID("$NetBSD: comapi.c,v 1.1.1.1 2013/03/24 15:45:52 christos Exp $");
 
 /* Many, many thanks to Brian Murrell and BCtel for this code - BCtel
    provided the funding that resulted in this code and the entire

@@ -1,4 +1,4 @@
-/*	$NetBSD: buffer.c,v 1.1 2013/03/24 15:45:56 christos Exp $	*/
+/*	$NetBSD: buffer.c,v 1.1.1.1 2013/03/24 15:45:56 christos Exp $	*/
 
 /* buffer.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: buffer.c,v 1.1 2013/03/24 15:45:56 christos Exp $");
+__RCSID("$NetBSD: buffer.c,v 1.1.1.1 2013/03/24 15:45:56 christos Exp $");
 
 #include "dhcpd.h"
 

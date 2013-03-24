@@ -1,4 +1,4 @@
-/*	$NetBSD: ldap.c,v 1.1 2013/03/24 15:46:05 christos Exp $	*/
+/*	$NetBSD: ldap.c,v 1.1.1.1 2013/03/24 15:46:05 christos Exp $	*/
 
 /* ldap.c
 

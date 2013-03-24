@@ -1,4 +1,4 @@
-/*	$NetBSD: tree.c,v 1.1 2013/03/24 15:45:55 christos Exp $	*/
+/*	$NetBSD: tree.c,v 1.1.1.1 2013/03/24 15:45:55 christos Exp $	*/
 
 /* tree.c
 
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: tree.c,v 1.1 2013/03/24 15:45:55 christos Exp $");
+__RCSID("$NetBSD: tree.c,v 1.1.1.1 2013/03/24 15:45:55 christos Exp $");
 
 #include "dhcpd.h"
 #include <omapip/omapip_p.h>

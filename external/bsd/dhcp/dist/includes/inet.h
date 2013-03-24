@@ -1,4 +1,4 @@
-/*	$NetBSD: inet.h,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+/*	$NetBSD: inet.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $	*/
 
 /* inet.h
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: inet.h,v 1.1 2013/03/24 15:45:50 christos Exp $");
+__RCSID("$NetBSD: inet.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $");
 
 /* An internet address of up to 128 bits. */
 

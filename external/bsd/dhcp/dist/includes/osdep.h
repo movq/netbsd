@@ -1,4 +1,4 @@
-/*	$NetBSD: osdep.h,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+/*	$NetBSD: osdep.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $	*/
 
 /* osdep.h
 
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: osdep.h,v 1.1 2013/03/24 15:45:50 christos Exp $");
+__RCSID("$NetBSD: osdep.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $");
 
 #if !defined (__ISC_DHCP_OSDEP_H__)
 #define __ISC_DHCP_OSDEP_H__

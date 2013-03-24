@@ -1,4 +1,4 @@
-/*	$NetBSD: bootp.c,v 1.1 2013/03/24 15:46:01 christos Exp $	*/
+/*	$NetBSD: bootp.c,v 1.1.1.1 2013/03/24 15:46:01 christos Exp $	*/
 
 /* bootp.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bootp.c,v 1.1 2013/03/24 15:46:01 christos Exp $");
+__RCSID("$NetBSD: bootp.c,v 1.1.1.1 2013/03/24 15:46:01 christos Exp $");
 
 #include "dhcpd.h"
 #include <errno.h>

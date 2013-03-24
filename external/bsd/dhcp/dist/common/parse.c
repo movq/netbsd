@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.c,v 1.1 2013/03/24 15:45:54 christos Exp $	*/
+/*	$NetBSD: parse.c,v 1.1.1.1 2013/03/24 15:45:54 christos Exp $	*/
 
 /* parse.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: parse.c,v 1.1 2013/03/24 15:45:54 christos Exp $");
+__RCSID("$NetBSD: parse.c,v 1.1.1.1 2013/03/24 15:45:54 christos Exp $");
 
 #include "dhcpd.h"
 #include <syslog.h>

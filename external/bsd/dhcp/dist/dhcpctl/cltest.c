@@ -1,4 +1,4 @@
-/*	$NetBSD: cltest.c,v 1.1 2013/03/24 15:45:48 christos Exp $	*/
+/*	$NetBSD: cltest.c,v 1.1.1.1 2013/03/24 15:45:48 christos Exp $	*/
 
 /* cltest.c
 

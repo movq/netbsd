@@ -1,4 +1,4 @@
-/*	$NetBSD: dhcrelay.c,v 1.1 2013/03/24 15:46:00 christos Exp $	*/
+/*	$NetBSD: dhcrelay.c,v 1.1.1.1 2013/03/24 15:46:00 christos Exp $	*/
 
 /* dhcrelay.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhcrelay.c,v 1.1 2013/03/24 15:46:00 christos Exp $");
+__RCSID("$NetBSD: dhcrelay.c,v 1.1.1.1 2013/03/24 15:46:00 christos Exp $");
 
 #include "dhcpd.h"
 #include <syslog.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: isclib.c,v 1.1 2013/03/24 15:45:57 christos Exp $	*/
+/*	$NetBSD: isclib.c,v 1.1.1.1 2013/03/24 15:45:57 christos Exp $	*/
 
 /*
  * Copyright(c) 2009-2010 by Internet Systems Consortium, Inc.("ISC")
