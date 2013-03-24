@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_addr.c,v 1.1 2013/03/24 15:45:56 christos Exp $	*/
+/*	$NetBSD: inet_addr.c,v 1.1.1.1 2013/03/24 15:45:56 christos Exp $	*/
 
 /*	NetBSD: inet_addr.c,v 1.6 1996/02/02 15:22:23 mrg Exp 	*/
 

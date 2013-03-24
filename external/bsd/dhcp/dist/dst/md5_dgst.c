@@ -1,4 +1,4 @@
-/*	$NetBSD: md5_dgst.c,v 1.1 2013/03/24 15:45:56 christos Exp $	*/
+/*	$NetBSD: md5_dgst.c,v 1.1.1.1 2013/03/24 15:45:56 christos Exp $	*/
 
 /* crypto/md/md5_dgst.c */
 /* Copyright (C) 1995-1997 Eric Young (eay@cryptsoft.com)

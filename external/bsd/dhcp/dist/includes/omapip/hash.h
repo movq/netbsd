@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.h,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+/*	$NetBSD: hash.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $	*/
 
 /* hash.h
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: hash.h,v 1.1 2013/03/24 15:45:50 christos Exp $");
+__RCSID("$NetBSD: hash.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $");
 
 #ifndef OMAPI_HASH_H
 #define OMAPI_HASH_H

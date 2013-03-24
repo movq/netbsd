@@ -1,4 +1,4 @@
-/*	$NetBSD: mdb6.c,v 1.1 2013/03/24 15:46:04 christos Exp $	*/
+/*	$NetBSD: mdb6.c,v 1.1.1.1 2013/03/24 15:46:04 christos Exp $	*/
 
 /*
  * Copyright (C) 2007-2011 by Internet Systems Consortium, Inc. ("ISC")

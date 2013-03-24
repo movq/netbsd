@@ -1,4 +1,4 @@
-/*	$NetBSD: dst_api.c,v 1.1 2013/03/24 15:45:56 christos Exp $	*/
+/*	$NetBSD: dst_api.c,v 1.1.1.1 2013/03/24 15:45:56 christos Exp $	*/
 
 #ifndef LINT
 static const char rcsid[] = "Header: /proj/cvs/prod/DHCP/dst/dst_api.c,v 1.9 2009-10-29 00:46:48 sar Exp ";

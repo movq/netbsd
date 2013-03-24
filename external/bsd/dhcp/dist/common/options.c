@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.1 2013/03/24 15:45:54 christos Exp $	*/
+/*	$NetBSD: options.c,v 1.1.1.1 2013/03/24 15:45:54 christos Exp $	*/
 
 /* options.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: options.c,v 1.1 2013/03/24 15:45:54 christos Exp $");
+__RCSID("$NetBSD: options.c,v 1.1.1.1 2013/03/24 15:45:54 christos Exp $");
 
 #define DHCP_OPTION_DATA
 #include "dhcpd.h"

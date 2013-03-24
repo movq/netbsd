@@ -1,4 +1,4 @@
-/*	$NetBSD: prandom.c,v 1.1 2013/03/24 15:45:56 christos Exp $	*/
+/*	$NetBSD: prandom.c,v 1.1.1.1 2013/03/24 15:45:56 christos Exp $	*/
 
 #ifndef LINT
 static const char rcsid[] = "Header: /proj/cvs/prod/DHCP/dst/prandom.c,v 1.8.6.1 2009-11-20 01:49:01 sar Exp ";

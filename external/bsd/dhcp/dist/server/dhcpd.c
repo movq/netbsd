@@ -1,4 +1,4 @@
-/*	$NetBSD: dhcpd.c,v 1.1 2013/03/24 15:46:00 christos Exp $	*/
+/*	$NetBSD: dhcpd.c,v 1.1.1.1 2013/03/24 15:46:00 christos Exp $	*/
 
 /* dhcpd.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhcpd.c,v 1.1 2013/03/24 15:46:00 christos Exp $");
+__RCSID("$NetBSD: dhcpd.c,v 1.1.1.1 2013/03/24 15:46:00 christos Exp $");
 
 static const char copyright[] =
 "Copyright 2004-2011 Internet Systems Consortium.";

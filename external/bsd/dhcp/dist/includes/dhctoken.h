@@ -1,4 +1,4 @@
-/*	$NetBSD: dhctoken.h,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+/*	$NetBSD: dhctoken.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $	*/
 
 /* dhctoken.h
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhctoken.h,v 1.1 2013/03/24 15:45:50 christos Exp $");
+__RCSID("$NetBSD: dhctoken.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $");
 
 enum dhcp_token {
 	SEMI = ';',

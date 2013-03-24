@@ -1,4 +1,4 @@
-/*	$NetBSD: alloc.c,v 1.1 2013/03/24 15:45:56 christos Exp $	*/
+/*	$NetBSD: alloc.c,v 1.1.1.1 2013/03/24 15:45:56 christos Exp $	*/
 
 /* alloc.c
 
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: alloc.c,v 1.1 2013/03/24 15:45:56 christos Exp $");
+__RCSID("$NetBSD: alloc.c,v 1.1.1.1 2013/03/24 15:45:56 christos Exp $");
 
 #include "dhcpd.h"
 

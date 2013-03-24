@@ -1,4 +1,4 @@
-/*	$NetBSD: dst_support.c,v 1.1 2013/03/24 15:45:55 christos Exp $	*/
+/*	$NetBSD: dst_support.c,v 1.1.1.1 2013/03/24 15:45:55 christos Exp $	*/
 
 static const char rcsid[] = "Header: /proj/cvs/prod/DHCP/dst/dst_support.c,v 1.6.6.1 2009-11-20 01:49:01 sar Exp ";
 

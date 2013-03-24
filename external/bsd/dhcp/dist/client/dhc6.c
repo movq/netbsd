@@ -1,4 +1,4 @@
-/*	$NetBSD: dhc6.c,v 1.1 2013/03/24 15:45:59 christos Exp $	*/
+/*	$NetBSD: dhc6.c,v 1.1.1.1 2013/03/24 15:45:59 christos Exp $	*/
 
 /* dhc6.c - DHCPv6 client routines. */
 

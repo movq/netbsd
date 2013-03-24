@@ -1,4 +1,4 @@
-/*	$NetBSD: dhclient.c,v 1.1 2013/03/24 15:45:58 christos Exp $	*/
+/*	$NetBSD: dhclient.c,v 1.1.1.1 2013/03/24 15:45:58 christos Exp $	*/
 
 /* dhclient.c
 

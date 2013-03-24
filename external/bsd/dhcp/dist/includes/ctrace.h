@@ -1,4 +1,4 @@
-/*	$NetBSD: ctrace.h,v 1.1 2013/03/24 15:45:49 christos Exp $	*/
+/*	$NetBSD: ctrace.h,v 1.1.1.1 2013/03/24 15:45:49 christos Exp $	*/
 
 /* trace.h
 
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ctrace.h,v 1.1 2013/03/24 15:45:49 christos Exp $");
+__RCSID("$NetBSD: ctrace.h,v 1.1.1.1 2013/03/24 15:45:49 christos Exp $");
 
 typedef struct {
 	struct in_addr primary_address;

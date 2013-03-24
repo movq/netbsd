@@ -1,4 +1,4 @@
-/*	$NetBSD: omapip_p.h,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+/*	$NetBSD: omapip_p.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $	*/
 
 /* omapip_p.h
 
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: omapip_p.h,v 1.1 2013/03/24 15:45:50 christos Exp $");
+__RCSID("$NetBSD: omapip_p.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $");
 
 #ifndef __OMAPIP_OMAPIP_P_H__
 #define __OMAPIP_OMAPIP_P_H__

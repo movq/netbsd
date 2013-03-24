@@ -1,4 +1,4 @@
-/*	$NetBSD: failover.h,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+/*	$NetBSD: failover.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $	*/
 
 /* failover.h
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: failover.h,v 1.1 2013/03/24 15:45:50 christos Exp $");
+__RCSID("$NetBSD: failover.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $");
 
 #if defined (FAILOVER_PROTOCOL)
 struct failover_option_info {

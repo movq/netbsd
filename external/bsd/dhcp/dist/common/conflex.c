@@ -1,4 +1,4 @@
-/*	$NetBSD: conflex.c,v 1.1 2013/03/24 15:45:52 christos Exp $	*/
+/*	$NetBSD: conflex.c,v 1.1.1.1 2013/03/24 15:45:52 christos Exp $	*/
 
 /* conflex.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: conflex.c,v 1.1 2013/03/24 15:45:52 christos Exp $");
+__RCSID("$NetBSD: conflex.c,v 1.1.1.1 2013/03/24 15:45:52 christos Exp $");
 
 #include "dhcpd.h"
 #include <ctype.h>

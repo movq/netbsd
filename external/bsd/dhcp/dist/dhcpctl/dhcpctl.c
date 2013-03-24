@@ -1,4 +1,4 @@
-/*	$NetBSD: dhcpctl.c,v 1.1 2013/03/24 15:45:48 christos Exp $	*/
+/*	$NetBSD: dhcpctl.c,v 1.1.1.1 2013/03/24 15:45:48 christos Exp $	*/
 
 /* dhcpctl.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhcpctl.c,v 1.1 2013/03/24 15:45:48 christos Exp $");
+__RCSID("$NetBSD: dhcpctl.c,v 1.1.1.1 2013/03/24 15:45:48 christos Exp $");
 
 #include "dhcpd.h"
 #include <omapip/omapip_p.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: memory.c,v 1.1 2013/03/24 15:45:53 christos Exp $	*/
+/*	$NetBSD: memory.c,v 1.1.1.1 2013/03/24 15:45:53 christos Exp $	*/
 
 /* memory.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: memory.c,v 1.1 2013/03/24 15:45:53 christos Exp $");
+__RCSID("$NetBSD: memory.c,v 1.1.1.1 2013/03/24 15:45:53 christos Exp $");
 
 #include "dhcpd.h"
 

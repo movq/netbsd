@@ -1,4 +1,4 @@
-/*	$NetBSD: ldap_casa.c,v 1.1 2013/03/24 15:46:03 christos Exp $	*/
+/*	$NetBSD: ldap_casa.c,v 1.1.1.1 2013/03/24 15:46:03 christos Exp $	*/
 
 /* ldap_casa.c
    

@@ -1,4 +1,4 @@
-/*	$NetBSD: failover.c,v 1.1 2013/03/24 15:46:02 christos Exp $	*/
+/*	$NetBSD: failover.c,v 1.1.1.1 2013/03/24 15:46:02 christos Exp $	*/
 
 /* failover.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: failover.c,v 1.1 2013/03/24 15:46:02 christos Exp $");
+__RCSID("$NetBSD: failover.c,v 1.1.1.1 2013/03/24 15:46:02 christos Exp $");
 
 #include "dhcpd.h"
 #include <omapip/omapip_p.h>

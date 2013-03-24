@@ -1,4 +1,4 @@
-/*	$NetBSD: alloc.h,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+/*	$NetBSD: alloc.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $	*/
 
 /* alloc.h
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: alloc.h,v 1.1 2013/03/24 15:45:50 christos Exp $");
+__RCSID("$NetBSD: alloc.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $");
 
 isc_result_t omapi_buffer_new (omapi_buffer_t **, const char *, int);
 isc_result_t omapi_buffer_reference (omapi_buffer_t **,

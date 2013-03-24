@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf.c,v 1.1 2013/03/24 15:45:52 christos Exp $	*/
+/*	$NetBSD: bpf.c,v 1.1.1.1 2013/03/24 15:45:52 christos Exp $	*/
 
 /* bpf.c
 

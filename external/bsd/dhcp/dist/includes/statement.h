@@ -1,4 +1,4 @@
-/*	$NetBSD: statement.h,v 1.1 2013/03/24 15:45:50 christos Exp $	*/
+/*	$NetBSD: statement.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $	*/
 
 /* statement.h
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: statement.h,v 1.1 2013/03/24 15:45:50 christos Exp $");
+__RCSID("$NetBSD: statement.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $");
 
 struct executable_statement {
 	int refcnt;
