@@ -1,4 +1,4 @@
-/*	$NetBSD: openpam_features.h,v 1.1 2013/04/06 01:23:30 christos Exp $	*/
+/*	$NetBSD: openpam_features.h,v 1.1.1.1 2013/04/06 01:23:30 christos Exp $	*/
 
 /*-
  * Copyright (c) 2012 Dag-Erling Smørgrav

@@ -1,4 +1,4 @@
-/*	$NetBSD: t_openpam_readword.c,v 1.1 2013/04/06 01:23:33 christos Exp $	*/
+/*	$NetBSD: t_openpam_readword.c,v 1.1.1.1 2013/04/06 01:23:33 christos Exp $	*/
 
 /*-
  * Copyright (c) 2012 Dag-Erling Smørgrav
