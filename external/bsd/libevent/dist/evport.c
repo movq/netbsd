@@ -1,4 +1,4 @@
-/*	$NetBSD: evport.c,v 1.1 2013/04/11 16:43:25 christos Exp $	*/
+/*	$NetBSD: evport.c,v 1.1.1.1 2013/04/11 16:43:25 christos Exp $	*/
 /*
  * Submitted by David Pacheco (dp.spambait@gmail.com)
  *
@@ -56,7 +56,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: evport.c,v 1.1 2013/04/11 16:43:25 christos Exp $");
+__RCSID("$NetBSD: evport.c,v 1.1.1.1 2013/04/11 16:43:25 christos Exp $");
 
 #include <sys/time.h>
 #include <sys/queue.h>

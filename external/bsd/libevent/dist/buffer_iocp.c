@@ -1,4 +1,4 @@
-/*	$NetBSD: buffer_iocp.c,v 1.1 2013/04/11 16:43:25 christos Exp $	*/
+/*	$NetBSD: buffer_iocp.c,v 1.1.1.1 2013/04/11 16:43:25 christos Exp $	*/
 /*
  * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson
  *
@@ -38,7 +38,7 @@
 #include "event2/thread.h"
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: buffer_iocp.c,v 1.1 2013/04/11 16:43:25 christos Exp $");
+__RCSID("$NetBSD: buffer_iocp.c,v 1.1.1.1 2013/04/11 16:43:25 christos Exp $");
 #include "util-internal.h"
 #include "evthread-internal.h"
 #include "evbuffer-internal.h"
