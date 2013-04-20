@@ -1,4 +1,4 @@
-/*	$NetBSD: n900_acad.c,v 1.4 2013/04/18 02:08:11 khorben Exp $ */
+/*	$NetBSD: n900_acad.c,v 1.5 2013/04/20 03:37:55 khorben Exp $ */
 
 /*
  * AC adapter driver for the Nokia N900.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: n900_acad.c,v 1.4 2013/04/18 02:08:11 khorben Exp $");
+__KERNEL_RCSID(0, "$NetBSD: n900_acad.c,v 1.5 2013/04/20 03:37:55 khorben Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -113,7 +113,7 @@ n900acad_attach(device_t parent, device_t self, void *aux)
 	sc->sc_map.pm_map = sc->sc_map_pins;
 	if (gpio_pin_map(sc->sc_gpio, ga->ga_offset, ga->ga_mask,
 				&sc->sc_map)) {
-		aprint_error(": could not map the pins\n");
+		aprint_error(": couldn't map the pins\n");
 		return;
 	}
 
@@ -130,7 +130,7 @@ n900acad_attach(device_t parent, device_t self, void *aux)
 	sc->sc_intr = intr_establish(N900ACAD_GPIO_BASE + ga->ga_offset, IPL_VM,
 			IST_EDGE_RISING, n900acad_intr, sc);
 	if (sc->sc_intr == NULL) {
-		aprint_error(": could not establish interrupt\n");
+		aprint_error(": couldn't establish interrupt\n");
 		gpio_pin_unmap(sc->sc_gpio, &sc->sc_map);
 		return;
 	}
@@ -140,7 +140,7 @@ n900acad_attach(device_t parent, device_t self, void *aux)
 
 	if (!pmf_device_register(sc->sc_dev, NULL, NULL)) {
 		aprint_error_dev(sc->sc_dev,
-		    "could not establish power handler\n");
+		    "couldn't establish power handler\n");
 	}
 
 	sc->sc_smpsw.smpsw_name = device_xname(self);
